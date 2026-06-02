@@ -3,7 +3,7 @@
   "version": "0.1.2",
   "type": "module",
   "bin": {
-    "mipham": "./bin/mipham"
+    "mipham": "bin/mipham"
   },
   "scripts": {
     "dev": "bun run bin/mipham.ts",
