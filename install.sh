@@ -14,7 +14,7 @@ YELLOW="\033[0;33m"
 RED="\033[0;31m"
 RESET="\033[0m"
 
-PACKAGE="@mipham/cli"
+PACKAGE="@onemipham/cli"
 BUN_MIN_VERSION="1.2.0"
 NODE_MIN_VERSION="22.0.0"
 

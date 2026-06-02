@@ -1,5 +1,5 @@
 {
-  "name": "@mipham/cli",
+  "name": "@onemipham/cli",
   "version": "0.1.0",
   "type": "module",
   "bin": {
@@ -12,7 +12,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@mipham/shared": "workspace:*",
     "commander": "^13.0.0",
     "ink": "^5.0.0",
     "ink-text-input": "^6.0.0",
