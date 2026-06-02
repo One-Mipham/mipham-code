@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react'
 import { Box, Text, useInput } from 'ink'
-import type { MiphamConfig, ProviderConfig, ModelInfo } from '@mipham/shared'
+import type { MiphamConfig, ProviderConfig, ModelInfo } from './shared/index.ts'
 
 interface PickerProps {
   config: MiphamConfig

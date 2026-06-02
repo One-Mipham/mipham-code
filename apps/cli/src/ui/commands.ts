@@ -5,7 +5,7 @@
  * Commands marked [stub] are recognized but indicate WIP status.
  */
 import type { QueryEngine } from '../core/engine'
-import type { MiphamConfig } from '@mipham/shared'
+import type { MiphamConfig } from './shared/index.ts'
 
 export interface CommandContext {
   engine: QueryEngine

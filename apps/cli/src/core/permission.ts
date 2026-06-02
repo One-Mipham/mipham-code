@@ -1,4 +1,4 @@
-import type { ToolDefinition, ToolPermission, PermissionLevel } from '@mipham/shared'
+import type { ToolDefinition, ToolPermission, PermissionLevel } from './shared/index.ts'
 
 export class PermissionSystem {
   private rules = new Map<string, PermissionLevel>()

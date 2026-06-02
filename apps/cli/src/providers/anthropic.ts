@@ -1,4 +1,4 @@
-import type { ProviderConfig, ModelInfo, Message, StreamChunk, ContentBlock } from '@mipham/shared'
+import type { ProviderConfig, ModelInfo, Message, StreamChunk, ContentBlock } from './shared/index.ts'
 import type { ProviderInstance, ChatRequest } from './registry'
 
 interface AnthropicContentBlock {

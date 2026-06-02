@@ -1,4 +1,4 @@
-import type { Message, StreamChunk, ToolDefinition, ToolResult } from '@mipham/shared'
+import type { Message, StreamChunk, ToolDefinition, ToolResult } from './shared/index.ts'
 import { ProviderRegistry } from '../providers/registry'
 import { ContextManager } from './context'
 

@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react'
 import { Box, Text, useInput } from 'ink'
 import type { QueryEngine } from '../core/engine'
-import type { MiphamConfig } from '@mipham/shared'
+import type { MiphamConfig } from './shared/index.ts'
 import { ChatPanel } from './chat'
 import { InputBar } from './input'
 import { ModelPicker } from './picker'

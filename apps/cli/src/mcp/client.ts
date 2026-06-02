@@ -1,4 +1,4 @@
-import type { McpServerConfig } from '@mipham/shared'
+import type { McpServerConfig } from './shared/index.ts'
 
 interface McpTool {
   name: string

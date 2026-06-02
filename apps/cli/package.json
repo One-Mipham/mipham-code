@@ -1,9 +1,9 @@
 {
   "name": "@onemipham/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "bin": {
-    "mipham": "./bin/mipham.ts"
+    "mipham": "./bin/mipham.js"
   },
   "scripts": {
     "dev": "bun run bin/mipham.ts",

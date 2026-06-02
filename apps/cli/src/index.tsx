@@ -5,7 +5,7 @@ import { bootstrapProviders } from './providers/bootstrap'
 import { InstructionsLoader } from './core/instructions'
 import { ContextManager } from './core/context'
 import { QueryEngine } from './core/engine'
-import type { ToolDefinition } from '@mipham/shared'
+import type { ToolDefinition } from './shared/index.ts'
 
 interface RunOptions {
   model?: string

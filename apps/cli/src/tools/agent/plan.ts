@@ -1,4 +1,4 @@
-import type { ToolDefinition } from '@mipham/shared'
+import type { ToolDefinition } from './shared/index.ts'
 
 export const planTool: ToolDefinition = {
   name: 'Plan',

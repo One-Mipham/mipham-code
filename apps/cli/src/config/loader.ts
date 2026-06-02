@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse as parseYaml } from 'yaml'
-import type { MiphamConfig } from '@mipham/shared'
+import type { MiphamConfig } from './shared/index.ts'
 import { DEFAULT_CONFIG } from './defaults'
 
 export function loadConfig(cwd: string = process.cwd()): MiphamConfig {

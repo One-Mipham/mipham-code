@@ -1,5 +1,5 @@
-import type { MiphamConfig } from '@mipham/shared'
-import { DEFAULT_PROVIDERS } from '@mipham/shared'
+import type { MiphamConfig } from './shared/index.ts'
+import { DEFAULT_PROVIDERS } from './shared/index.ts'
 
 export const DEFAULT_CONFIG: MiphamConfig = {
   version: '0.1.0',

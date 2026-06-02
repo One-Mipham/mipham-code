@@ -1,6 +1,6 @@
 import { readFileSync, existsSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
-import type { ToolDefinition } from '@mipham/shared'
+import type { ToolDefinition } from './shared/index.ts'
 
 export const readTool: ToolDefinition = {
   name: 'Read',

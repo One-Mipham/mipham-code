@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse as parseYaml, stringify } from 'yaml'
-import type { ToolDefinition } from '@mipham/shared'
+import type { ToolDefinition } from './shared/index.ts'
 
 const MIPHAM_DIR = join(process.env.HOME || '~', '.mipham')
 const USER_CONFIG = join(MIPHAM_DIR, 'config.yml')

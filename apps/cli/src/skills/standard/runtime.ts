@@ -1,4 +1,4 @@
-import type { SkillDefinition } from '@mipham/shared'
+import type { SkillDefinition } from './shared/index.ts'
 
 export interface StandardRuntimeContext {
   skill: SkillDefinition

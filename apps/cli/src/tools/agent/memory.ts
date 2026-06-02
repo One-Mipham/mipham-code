@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import type { ToolDefinition } from '@mipham/shared'
+import type { ToolDefinition } from './shared/index.ts'
 
 const MEMORY_DIR = join(process.env.HOME || '~', '.mipham', 'memory')
 

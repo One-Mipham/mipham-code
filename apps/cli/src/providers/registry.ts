@@ -1,4 +1,4 @@
-import type { ProviderConfig, ModelInfo, Message, StreamChunk } from '@mipham/shared'
+import type { ProviderConfig, ModelInfo, Message, StreamChunk } from './shared/index.ts'
 
 export interface ProviderInstance {
   config: ProviderConfig

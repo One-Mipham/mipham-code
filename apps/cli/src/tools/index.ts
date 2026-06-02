@@ -1,4 +1,4 @@
-import type { ToolDefinition } from '@mipham/shared'
+import type { ToolDefinition } from './shared/index.ts'
 import { readTool } from './file/read'
 import { writeTool } from './file/write'
 import { editTool } from './file/edit'

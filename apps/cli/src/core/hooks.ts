@@ -4,7 +4,7 @@ import type {
   HookContext,
   HookResult,
   ToolResult,
-} from '@mipham/shared'
+} from './shared/index.ts'
 
 export class HookEngine {
   private hooks: HookDefinition[] = []
