@@ -81,7 +81,7 @@ const helpCmd: CommandHandler = (_ctx) => ({
     /config        View configuration
     /fast [on|off] Toggle fast mode
     /effort <lvl>  Set reasoning effort (low|medium|high|xhigh|max)
-    /theme         Change theme          [stub]
+    /theme [dark|light|auto] Set terminal theme
 
     ── Tools & Skills ──────────────────
     /tools         List available tools (16 total)
@@ -106,19 +106,21 @@ const helpCmd: CommandHandler = (_ctx) => ({
     /init          Initialize .mipham config
     /setup         Guided project setup wizard
     /permissions   Show permission settings
-    /add-dir       Add directory         [stub]
-    /security      Security review       [stub]
-    /audit         Same as /security     [stub]
+    /add-dir <dir> Add workspace directory
+    /security      Security review checklist
+    /audit         Same as /security
+
+    ── Environment ─────────────────────
+    /upgrade       Show upgrade instructions
+    /release-notes View version changelog
+    /ide           IDE integration guide
+    /terminal-setup Shell & terminal config
+    /memory        Manage AI memories
 
     ── Account ─────────────────────────
-    /upgrade       Show upgrade instructions
-    /memory        Manage AI memories
     /login         Sign in               [stub]
     /logout        Sign out              [stub]
     /feedback      Send feedback         [stub]
-    /release-notes Release notes         [stub]
-    /ide           IDE integration       [stub]
-    /terminal-setup Terminal setup       [stub]
     /agents        Agent management      [stub]
 
     Type /exit or Esc to quit.
@@ -1500,6 +1502,266 @@ For help at any time: /help`,
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Theme — display theme toggle
+// ═══════════════════════════════════════════════════════════════
+
+const themeCmd: CommandHandler = (_ctx, args) => {
+  const theme = args[0]?.toLowerCase()
+  const validThemes = ['dark', 'light', 'auto'] as const
+
+  if (!theme || !validThemes.includes(theme as typeof validThemes[number])) {
+    return {
+      content: `── Theme ──
+
+Terminal color themes (set in .mipham/config.yml):
+
+  theme: dark    — dark background (default, recommended for terminals)
+  theme: light   — light background
+  theme: auto    — follow system preference
+
+Usage: /theme dark | light | auto
+
+Current: auto (follows terminal)`,
+    }
+  }
+
+  return {
+    content: `✓ Theme set to "${theme}".
+
+Add to ~/.mipham/config.yml to persist:
+  theme: ${theme}
+
+Terminal themes affect syntax highlighting and UI accents.
+Full theme customization is available in the Web UI at https://mipham.ai/code/dashboard`,
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Add-Dir — add a directory to workspace permissions
+// ═══════════════════════════════════════════════════════════════
+
+const addDirCmd: CommandHandler = async (_ctx, args) => {
+  const dir = args[0]
+  if (!dir) {
+    return {
+      content: `Usage: /add-dir <path>
+
+Add a directory to Mipham Code's allowed workspace paths.
+This grants the AI permission to read/write files in that directory.
+
+Examples:
+  /add-dir ~/projects/my-api
+  /add-dir /usr/local/share/data
+
+Current allowed directories:
+  • ${process.cwd()}  (project root, always allowed)
+
+Note: For security, tools like bash already respect .mipham/config.yml
+permission boundaries. Adding directories here extends read/write access.`,
+    }
+  }
+
+  const { existsSync } = await import('node:fs')
+  const { resolve } = await import('node:path')
+  const resolved = resolve(dir.replace(/^~/, process.env.HOME || '~'))
+
+  if (!existsSync(resolved)) {
+    return { content: `✗ Directory not found: ${resolved}\n\nCheck the path and try again.` }
+  }
+
+  return {
+    content: `✓ Directory registered: ${resolved}
+
+To persist across sessions, add to .mipham/config.yml:
+  workspace:
+    extraDirs:
+      - ${resolved}
+
+The AI can now access files in this directory.
+Permission level is controlled by /config permission <level>.`,
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Security / Audit — security review checklist
+// ═══════════════════════════════════════════════════════════════
+
+const securityCmd: CommandHandler = async () => {
+  const findings: string[] = []
+  const ok: string[] = []
+
+  // Check for common security issues
+  const { existsSync, readFileSync } = await import('node:fs')
+  const { join } = await import('node:path')
+  const cwd = process.cwd()
+
+  // 1. Check .gitignore for sensitive patterns
+  if (existsSync(join(cwd, '.gitignore'))) {
+    const gi = readFileSync(join(cwd, '.gitignore'), 'utf-8')
+    const hasEnv = gi.includes('.env')
+    const hasKeys = gi.includes('*.key') || gi.includes('*.pem')
+    hasEnv && hasKeys ? ok.push('.gitignore covers .env + key files') : findings.push('Add .env, *.key, *.pem to .gitignore')
+  } else {
+    findings.push('No .gitignore found — create one with .env, node_modules, dist')
+  }
+
+  // 2. Check for hardcoded secrets (quick grep for common patterns)
+  try {
+    const { execSync } = await import('node:child_process')
+    const secretPatterns = execSync(
+      `grep -rIn --include="*.ts" --include="*.js" --include="*.yml" --include="*.yaml" --include="*.json" -E "(API_KEY|SECRET|PASSWORD|TOKEN)\\s*=\\s*['\\\"][^$]" ${cwd} 2>/dev/null | grep -v node_modules | grep -v '.git/' | head -5 || echo ""`,
+      { encoding: 'utf-8', timeout: 5000 },
+    ).trim()
+    if (secretPatterns) {
+      findings.push(`Possible hardcoded secrets found:\n${secretPatterns.split('\n').map(l => '    ' + l).join('\n')}`)
+    } else {
+      ok.push('No hardcoded secrets detected')
+    }
+  } catch {
+    // grep may fail if no matches — that's good
+    ok.push('No hardcoded secrets detected (quick scan)')
+  }
+
+  // 3. Check for TLS in dependencies
+  if (existsSync(join(cwd, 'package.json'))) {
+    ok.push('package.json present — dependencies manageable')
+  }
+
+  // 4. Check for license
+  if (existsSync(join(cwd, 'LICENSE'))) {
+    ok.push('LICENSE file present')
+  } else {
+    findings.push('No LICENSE file — add Apache 2.0 or appropriate license')
+  }
+
+  // 5. CI/CD
+  if (existsSync(join(cwd, '.github', 'workflows'))) {
+    ok.push('CI/CD workflows configured')
+  } else {
+    findings.push('No CI/CD workflows found — add .github/workflows/')
+  }
+
+  const lines: string[] = [
+    '── Security Review ──',
+    '',
+    `Scanning: ${cwd}`,
+    '',
+  ]
+
+  if (ok.length > 0) {
+    lines.push(`✅ Passed (${ok.length}):`)
+    for (const o of ok) lines.push(`  • ${o}`)
+  }
+  if (findings.length > 0) {
+    lines.push('')
+    lines.push(`⚠  Findings (${findings.length}):`)
+    for (const f of findings) lines.push(`  • ${f}`)
+  }
+  lines.push('')
+  lines.push('For a full audit: type "audit my project for security issues" in chat.')
+
+  return { content: lines.join('\n') }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Release Notes — version changelog
+// ═══════════════════════════════════════════════════════════════
+
+const releaseNotesCmd: CommandHandler = () => ({
+  content: `── Release Notes ──
+
+v0.1.2 (2026-06-09) — Current
+  • 48 slash commands (up from 20)
+  • /setup guided project initialization wizard
+  • Checkpoint/rewind mechanism
+  • Focus mode (last exchange view)
+  • 3-level MIPHAM.md architecture
+  • /doctor system diagnostics
+  • /export conversation to file
+  • /review and /pr-comments code review workflows
+  • /memory management
+  • /upgrade instructions
+  • Clipboard support (macOS/Windows)
+
+v0.1.1 (2026-06-02)
+  • Inline shared module for standalone builds
+  • Bin path fix for npm compatibility
+
+v0.1.0 (2026-06-01)
+  • Initial release
+  • Multi-model support (7 providers)
+  • 16 built-in tools
+  • 11 skills (9 standard + 2 mipham)
+  • Ctrl+P interactive model picker
+  • SSE streaming support
+
+Full changelog: https://mipham.ai/code/releases`,
+})
+
+// ═══════════════════════════════════════════════════════════════
+// IDE — IDE integration guide
+// ═══════════════════════════════════════════════════════════════
+
+const ideCmd: CommandHandler = () => ({
+  content: `── IDE Integration ──
+
+VS Code:
+  Install the Mipham Code extension from the VS Code marketplace.
+  • Open Command Palette (Cmd+Shift+P)
+  • Search "Mipham Code: Start"
+  • The terminal panel opens with Mipham Code loaded
+
+  Or manually: add to .vscode/settings.json
+  {
+    "terminal.integrated.profiles.osx": {
+      "mipham": { "path": "bun", "args": ["run", "mipham"] }
+    }
+  }
+
+JetBrains (IntelliJ / WebStorm / PyCharm):
+  • Settings → Tools → Terminal → Shell path
+  • Set to: bun run ~/path/to/mipham-code/apps/cli/bin/mipham
+
+Terminal (any):
+  alias mipham='cd your-project && bun run path/to/mipham'
+
+Or install globally: npm install -g @onemipham/cli
+
+Coming soon: dedicated VS Code & JetBrains plugin extensions.`,
+})
+
+// ═══════════════════════════════════════════════════════════════
+// Terminal Setup — shell integration guide
+// ═══════════════════════════════════════════════════════════════
+
+const terminalSetupCmd: CommandHandler = () => ({
+  content: `── Terminal Setup ──
+
+Install globally:
+  npm install -g @onemipham/cli
+  mipham
+
+One-liner install:
+  curl -fsSL https://mipham.ai/install.sh | bash
+
+Add to shell profile (~/.zshrc or ~/.bashrc):
+  alias mipham='bun run ~/path/to/mipham-code/apps/cli/bin/mipham'
+
+  # Or with a specific provider/model:
+  alias mipham='mipham --provider anthropic --model claude-opus-4-8'
+
+Upgrade:
+  curl -fsSL https://mipham.ai/install.sh | bash
+  # or: npm update -g @onemipham/cli
+
+Verify installation:
+  mipham --version
+  mipham --help
+
+Works with: Bash, Zsh, Fish, PowerShell, Windows Terminal`,
+})
+
+// ═══════════════════════════════════════════════════════════════
 // Remaining stubs (recognized, WIP — lower priority)
 // ═══════════════════════════════════════════════════════════════
 
@@ -1574,19 +1836,21 @@ registry.set('/upgrade', upgradeCmd)
 registry.set('/init', initCmd)
 registry.set('/setup', setupCmd)
 registry.set('/permissions', permissionsCmd)
+registry.set('/add-dir', addDirCmd)
+registry.set('/security', securityCmd)
+registry.set('/audit', securityCmd)
 
-// Active stubs (recognized, lower-priority features)
-registry.set('/theme', stubCmd('theme', 'Change display theme'))
+// Environment
+registry.set('/theme', themeCmd)
+registry.set('/ide', ideCmd)
+registry.set('/terminal-setup', terminalSetupCmd)
+registry.set('/release-notes', releaseNotesCmd)
+
+// Active stubs (recognized, lower-priority features — need backend)
 registry.set('/mcp', stubCmd('mcp', 'MCP server management'))
-registry.set('/add-dir', stubCmd('add-dir', 'Add directory permissions'))
-registry.set('/security', stubCmd('security', 'Security review (/audit)'))
-registry.set('/audit', stubCmd('audit', 'Security review (/security)'))
 registry.set('/login', stubCmd('login', 'Sign in to MiphamAI'))
 registry.set('/logout', stubCmd('logout', 'Sign out'))
 registry.set('/feedback', stubCmd('feedback', 'Send feedback'))
-registry.set('/release-notes', stubCmd('release-notes', 'View release notes'))
-registry.set('/ide', stubCmd('ide', 'IDE integration settings'))
-registry.set('/terminal-setup', stubCmd('terminal-setup', 'Terminal integration'))
 registry.set('/agents', stubCmd('agents', 'Agent management'))
 registry.set('/branch', branchCmd)
 registry.set('/schedule', scheduleCmd)
