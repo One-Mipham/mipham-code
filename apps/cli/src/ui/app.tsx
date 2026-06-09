@@ -34,6 +34,11 @@ export function App({ engine, config, initialProvider, initialModel, lang }: App
   const [providerId, setProviderId] = useState(initialProvider || config.defaultProvider)
   const [modelId, setModelId] = useState(initialModel || config.defaultModel)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [sessionTitle, setSessionTitle] = useState('')
+  const [fastMode, setFastMode] = useState(false)
+  const [effort, setEffort] = useState('high')
+  const [focusMode, setFocusMode] = useState(false)
+  const [goalText, setGoalText] = useState('')
 
   const mkCtx = useCallback(
     (): CommandContext => ({
@@ -42,6 +47,11 @@ export function App({ engine, config, initialProvider, initialModel, lang }: App
       providerId,
       modelId,
       version: VERSION,
+      setSessionTitle: (title: string) => setSessionTitle(title),
+      setFastMode: (on: boolean) => setFastMode(on),
+      setEffort: (level: string) => setEffort(level),
+      setFocusMode: (on: boolean) => setFocusMode(on),
+      setGoal: (text: string) => setGoalText(text),
     }),
     [engine, config, providerId, modelId],
   )
@@ -75,6 +85,20 @@ export function App({ engine, config, initialProvider, initialModel, lang }: App
           process.exit(0)
         }
 
+        // /focus toggle
+        if (command === '/focus') {
+          const nextFocus = !focusMode
+          setFocusMode(nextFocus)
+          setMessages(prev => [
+            ...prev,
+            { role: 'user', content: input },
+            { role: 'system', content: nextFocus
+              ? '✓ Focus mode ON — showing only the most recent exchange. Type /focus again to show all.'
+              : '✓ Focus mode OFF — showing all messages.' },
+          ])
+          return
+        }
+
         const handler = getCommand(command)
         if (handler) {
           const result = await handler(mkCtx(), args)
@@ -83,6 +107,20 @@ export function App({ engine, config, initialProvider, initialModel, lang }: App
           if (result.nextProvider) setProviderId(result.nextProvider)
           if (result.nextModel) setModelId(result.nextModel)
           if (result.exit) process.exit(0)
+          if (result.copyContent) {
+            // Copy to clipboard via pbcopy (macOS) or clip (Windows)
+            try {
+              const { execSync } = await import('node:child_process')
+              if (process.platform === 'darwin') {
+                execSync('pbcopy', { input: result.copyContent })
+              } else if (process.platform === 'win32') {
+                execSync('clip', { input: result.copyContent })
+              }
+              // Linux: xclip or wl-copy not attempted to avoid dependency issues
+            } catch {
+              // Silent fail — content is still displayed
+            }
+          }
         }
         // Unknown slash command or handler returned: proceed to normal AI processing
         return
@@ -142,6 +180,10 @@ export function App({ engine, config, initialProvider, initialModel, lang }: App
         ])
       } finally {
         setIsLoading(false)
+        // Auto-save checkpoint after each AI response
+        if (assistantContent) {
+          engine.getContext().saveCheckpoint('post-turn')
+        }
       }
     },
     [engine, mkCtx],
@@ -170,16 +212,26 @@ export function App({ engine, config, initialProvider, initialModel, lang }: App
         <Box flexDirection="row">
           <Text bold color="cyan">Mipham Code</Text>
           <Text dimColor> v0.1.0</Text>
-          <Text dimColor> — MiphamAI</Text>
+          {sessionTitle ? <Text color="yellow"> — {sessionTitle}</Text> : <Text dimColor> — MiphamAI</Text>}
         </Box>
-        <Text dimColor>
-          {modelId} ({providerId})
-          {' · '}Ctrl+P pick · /help · Esc exit
-        </Text>
+        <Box flexDirection="row">
+          <Text dimColor>
+            {modelId} ({providerId})
+            {fastMode && ' ⚡'}
+            {effort !== 'high' && ` 🧠${effort}`}
+            {focusMode && ' 🔍focus'}
+            {' · '}Ctrl+P pick · /help · Esc exit
+          </Text>
+        </Box>
+        {goalText && (
+          <Box>
+            <Text color="green">🎯 Goal: {goalText}</Text>
+          </Box>
+        )}
       </Box>
 
       {/* Chat panel */}
-      <ChatPanel messages={messages} />
+      <ChatPanel messages={messages} focusMode={focusMode} />
 
       {/* Model picker (replaces input when open) */}
       {pickerOpen ? (

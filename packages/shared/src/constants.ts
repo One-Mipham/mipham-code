@@ -53,9 +53,9 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     id: 'mipham', name: 'MiphamAI', protocol: 'openai-compatible',
     baseUrl: 'https://api.mipham.ai/v1', apiKey: '${MIPHAM_API_KEY}',
     models: [
-      { id: 'om-v5-flash', name: 'OM V5 Flash', providerId: 'mipham', contextWindow: 1_000_000, maxOutput: 128_000, vision: false, status: 'upcoming' },
-      { id: 'om-v5-pro', name: 'OM V5 Pro', providerId: 'mipham', contextWindow: 1_000_000, maxOutput: 128_000, vision: false, status: 'upcoming' },
-      { id: 'om-v5-image', name: 'OM V5 Image', providerId: 'mipham', contextWindow: 200_000, maxOutput: 32_000, vision: true, status: 'upcoming' },
+      { id: 'om-V5-Flash', name: 'OM V5 Flash', providerId: 'mipham', contextWindow: 1_000_000, maxOutput: 128_000, vision: false, status: 'upcoming' },
+      { id: 'om-V5-Pro', name: 'OM V5 Pro', providerId: 'mipham', contextWindow: 1_000_000, maxOutput: 128_000, vision: false, status: 'upcoming' },
+      { id: 'om-V5-Visual', name: 'OM V5 Visual', providerId: 'mipham', contextWindow: 200_000, maxOutput: 32_000, vision: true, status: 'upcoming' },
     ],
     status: 'upcoming',
   },

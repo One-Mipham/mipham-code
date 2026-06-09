@@ -521,9 +521,9 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     baseUrl: 'https://api.mipham.ai/v1',
     apiKey: '${MIPHAM_API_KEY}',
     models: [
-      { id: 'om-v5-pro', name: 'OM V5 Pro', providerId: 'mipham', contextWindow: 1_000_000, maxOutput: 128_000, vision: false, status: 'upcoming' },
-      { id: 'om-v5-flash', name: 'OM V5 Flash', providerId: 'mipham', contextWindow: 1_000_000, maxOutput: 128_000, vision: false, status: 'upcoming' },
-      { id: 'om-v5-image', name: 'OM V5 Image', providerId: 'mipham', contextWindow: 200_000, maxOutput: 32_000, vision: true, status: 'upcoming' },
+      { id: 'om-V5-Pro', name: 'OM V5 Pro', providerId: 'mipham', contextWindow: 1_000_000, maxOutput: 128_000, vision: false, status: 'upcoming' },
+      { id: 'om-V5-Flash', name: 'OM V5 Flash', providerId: 'mipham', contextWindow: 1_000_000, maxOutput: 128_000, vision: false, status: 'upcoming' },
+      { id: 'om-V5-Visual', name: 'OM V5 Visual', providerId: 'mipham', contextWindow: 200_000, maxOutput: 32_000, vision: true, status: 'upcoming' },
     ],
     status: 'upcoming',
   },
@@ -3352,7 +3352,7 @@ const FEATURES = [
   {
     emoji: '🚀',
     title: 'Phase 2: om-V5 Series',
-    desc: 'Coming soon — MiphamAI proprietary models: om-v5-pro, om-v5-flash, om-v5-image.',
+    desc: 'Coming soon — MiphamAI proprietary models: om-V5-Pro, om-V5-Flash, om-V5-Visual.',
   },
 ]
 
@@ -3378,7 +3378,7 @@ export function Features() {
 
 ```tsx
 const PROVIDER_MODELS = [
-  { provider: 'MiphamAI', models: ['om-v5-pro', 'om-v5-flash', 'om-v5-image'], status: 'Phase 2', color: 'text-purple-400' },
+  { provider: 'MiphamAI', models: ['om-V5-Pro', 'om-V5-Flash', 'om-V5-Visual'], status: 'Phase 2', color: 'text-purple-400' },
   { provider: 'Anthropic', models: ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5'], status: 'Active', color: 'text-cyan-400' },
   { provider: 'OpenAI', models: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex'], status: 'Active', color: 'text-green-400' },
   { provider: 'DeepSeek', models: ['deepseek-v4-pro', 'deepseek-v4-flash'], status: 'Active', color: 'text-blue-400' },

@@ -3,7 +3,7 @@ const supportedModels = [
   { provider: 'OpenAI', models: ['GPT-5.5', 'GPT-5.4', 'GPT-5.4 Mini', 'GPT-5.3 Codex'], status: 'Active' },
   { provider: 'DeepSeek', models: ['DeepSeek V4 Pro', 'DeepSeek V4 Flash'], status: 'Active' },
   { provider: 'Qwen (通义千问)', models: ['Qwen Plus', 'Qwen Max'], status: 'Active' },
-  { provider: 'MiphamAI', models: ['OM V5 Pro', 'OM V5 Flash', 'OM V5 Image'], status: 'Upcoming' },
+  { provider: 'MiphamAI', models: ['OM V5 Pro', 'OM V5 Flash', 'OM V5 Visual'], status: 'Upcoming' },
 ]
 
 export function ModelsSection() {

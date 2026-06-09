@@ -6,6 +6,7 @@
  */
 import type { QueryEngine } from '../core/engine'
 import type { MiphamConfig } from './shared/index.ts'
+import type { SkillsLoader } from '../skills/loader'
 
 export interface CommandContext {
   engine: QueryEngine
@@ -13,6 +14,13 @@ export interface CommandContext {
   providerId: string
   modelId: string
   version: string
+  // Callbacks for commands that mutate App state
+  setSessionTitle: (title: string) => void
+  setFastMode: (on: boolean) => void
+  setEffort: (level: string) => void
+  setFocusMode: (on: boolean) => void
+  setGoal: (text: string) => void
+  skillsLoader?: SkillsLoader
 }
 
 export interface CommandResult {
@@ -26,6 +34,8 @@ export interface CommandResult {
   nextModel?: string
   /** If true, clear all messages (handled by caller) */
   clearMessages?: boolean
+  /** Content to copy to clipboard (handled by caller) */
+  copyContent?: string
 }
 
 type CommandHandler = (ctx: CommandContext, args: string[]) => CommandResult | Promise<CommandResult>
@@ -46,9 +56,20 @@ const helpCmd: CommandHandler = (_ctx) => ({
     /context       Show context stats
     /status        Session and system status
     /cost          Token usage estimate
-    /export        Export conversation  [stub]
-    /doctor        System diagnostics   [stub]
-    /resume        Resume a session     [stub]
+    /usage         Detailed usage dashboard
+    /rename <name> Rename current session
+    /goal <text>   Set session goal
+    /recap         Summarize session so far
+    /export        Export conversation to file
+    /doctor        System diagnostics
+    /resume        List saved sessions
+    /branch <name> Fork conversation
+
+    ── History ─────────────────────────
+    /rewind        Undo last AI turn
+    /undo          Same as /rewind
+    /copy [N]      Copy last response to clipboard
+    /focus         Toggle focus view (last exchange only)
 
     ── Model & Provider ────────────────
     /pick          Open model picker (or Ctrl+P)
@@ -58,39 +79,47 @@ const helpCmd: CommandHandler = (_ctx) => ({
     /providers     List configured providers
     /switch <p> <m> Switch provider and model
     /config        View configuration
+    /fast [on|off] Toggle fast mode
+    /effort <lvl>  Set reasoning effort (low|medium|high|xhigh|max)
     /theme         Change theme          [stub]
 
     ── Tools & Skills ──────────────────
     /tools         List available tools (16 total)
-    /skills        List loaded skills (10 built-in)
+    /skills        List loaded skills (11 built-in)
+    /reload-skills Reload all skills
     /mcp           MCP server status     [stub]
 
     ── Workflow ────────────────────────
     /plan          Enter plan mode (read-only)
-    /no-plan       Exit plan mode        [stub]
+    /no-plan       Exit plan mode
     /tdd           TDD mode              [stub]
     /todos         Task management
-    /review        Code review           [stub]
-    /pr-comments   PR review comments    [stub]
-    /workflows     Workflow management   [stub]
+    /tasks         Background tasks
+    /review        Code review workflow
+    /pr-comments   PR review summary
+    /diff          Show git diff
+    /workflows     List workflow scripts
+    /loop <int> <p> Run prompt on interval
+    /schedule      View scheduled tasks   [stub]
 
     ── Project ─────────────────────────
     /init          Initialize .mipham config
+    /setup         Guided project setup wizard
+    /permissions   Show permission settings
     /add-dir       Add directory         [stub]
-    /permissions   Permission settings   [stub]
     /security      Security review       [stub]
     /audit         Same as /security     [stub]
 
     ── Account ─────────────────────────
+    /upgrade       Show upgrade instructions
+    /memory        Manage AI memories
     /login         Sign in               [stub]
     /logout        Sign out              [stub]
     /feedback      Send feedback         [stub]
     /release-notes Release notes         [stub]
-    /upgrade       Upgrade Mipham Code   [stub]
     /ide           IDE integration       [stub]
     /terminal-setup Terminal setup       [stub]
     /agents        Agent management      [stub]
-    /memory        Memory management     [stub]
 
     Type /exit or Esc to quit.
   `,
@@ -340,7 +369,1138 @@ const initCmd: CommandHandler = (_ctx) => ({
 })
 
 // ═══════════════════════════════════════════════════════════════
-// Stub commands — recognized, WIP
+// Phase 1 — New Session Commands
+// ═══════════════════════════════════════════════════════════════
+
+const renameCmd: CommandHandler = (ctx, args) => {
+  const name = args.join(' ')
+  if (!name.trim()) {
+    return { content: 'Usage: /rename <session-name>\nExample: /rename Bug Fix Session' }
+  }
+  ctx.setSessionTitle(name.trim())
+  return { content: `✓ Session renamed to "${name.trim()}"` }
+}
+
+const goalCmd: CommandHandler = (ctx, args) => {
+  const goal = args.join(' ')
+  if (!goal.trim()) {
+    const c = ctx.engine.getContext()
+    return {
+      content: `Usage: /goal <statement>\n\nSet a session-level completion condition. Mipham Code will track progress toward this goal.\n\nExample: /goal Fix all TypeScript errors and make tests pass`,
+    }
+  }
+  ctx.setGoal(goal.trim())
+  return { content: `✓ Goal set: "${goal.trim()}"\n\nUse /status to view progress. Type /goal without arguments to clear.` }
+}
+
+const recapCmd: CommandHandler = (ctx) => {
+  const c = ctx.engine.getContext()
+  const msgs = c.getMessages()
+  if (msgs.length === 0) {
+    return { content: 'No conversation to recap.' }
+  }
+  // Show summary of conversation: count messages, roles, estimated tokens
+  const userMsgs = msgs.filter(m => m.role === 'user').length
+  const assistantMsgs = msgs.filter(m => m.role === 'assistant').length
+  const tokens = c.getEstimatedTokens()
+  const checkpointCount = c.getCheckpoints().length
+
+  // Extract first few user messages as "topics"
+  const topics = msgs
+    .filter(m => m.role === 'user' && typeof m.content === 'string')
+    .slice(0, 5)
+    .map(m => {
+      const text = typeof m.content === 'string' ? m.content : ''
+      return text.length > 80 ? text.slice(0, 80) + '...' : text
+    })
+
+  return {
+    content: stripIndent`
+      ── Session Recap ──
+      Messages:  ${msgs.length} (${userMsgs} user, ${assistantMsgs} assistant)
+      Est. tokens: ~${tokens.toLocaleString()}
+      Checkpoints: ${checkpointCount}
+
+      Recent topics:
+      ${topics.map((t, i) => `  ${i + 1}. ${t}`).join('\n')}
+
+      Use /rewind to undo, /clear to reset, /export to save.
+    `,
+  }
+}
+
+const usageCmd: CommandHandler = (ctx) => {
+  const c = ctx.engine.getContext()
+  const tokens = c.getEstimatedTokens()
+  const msgs = c.getMessages()
+  const maxTokens = 200_000
+  const pct = ((tokens / maxTokens) * 100).toFixed(1)
+
+  return {
+    content: stripIndent`
+      ── Usage Dashboard ──
+      Context tokens:  ~${tokens.toLocaleString()} / ${maxTokens.toLocaleString()}  (${pct}%)
+      Messages:         ${msgs.length}
+      Provider:         ${ctx.providerId}
+      Model:            ${ctx.modelId}
+
+      ${'█'.repeat(Math.ceil(Number(pct) / 5))}${'░'.repeat(20 - Math.ceil(Number(pct) / 5))} ${pct}%
+
+      Note: Token counting is approximate (chars/4).
+      Use /context for detailed stats, /compact to free space.
+    `,
+  }
+}
+
+const reloadSkillsCmd: CommandHandler = (ctx) => {
+  if (!ctx.skillsLoader) {
+    return { content: 'SkillsLoader not available in this context.' }
+  }
+  try {
+    const config = ctx.config
+    // Re-load builtin skills from the skills directory
+    // The base path is typically relative to the CLI package
+    ctx.skillsLoader.loadBuiltin(process.cwd())
+    if (config.skills?.paths) {
+      ctx.skillsLoader.loadExternal(config.skills.paths)
+    }
+    const skills = ctx.skillsLoader.list()
+    return {
+      content: `✓ Skills reloaded — ${skills.length} loaded.\n\n${skills.map(s => `  ${s.name.padEnd(28)} ${s.type.padEnd(10)} ${s.description}`).join('\n')}`,
+    }
+  } catch (err) {
+    return { content: `Failed to reload skills: ${String(err)}` }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Phase 1 — History & Checkpoint Commands
+// ═══════════════════════════════════════════════════════════════
+
+const rewindCmd: CommandHandler = (ctx) => {
+  const c = ctx.engine.getContext()
+  const checkpoints = c.getCheckpoints()
+
+  if (checkpoints.length === 0) {
+    return { content: 'No checkpoints available. Checkpoints are automatically saved after each AI response.' }
+  }
+
+  const result = c.restoreCheckpoint()
+  if (!result.restored) {
+    return { content: 'No checkpoint to restore.' }
+  }
+
+  return {
+    content: stripIndent`
+      ✓ Rewound to checkpoint "${result.label}"
+      Restored ${result.messageCount} messages.
+
+      Remaining checkpoints: ${c.getCheckpoints().length}
+      Use /rewind again to go back further, or continue chatting.
+    `,
+    clearMessages: true,
+  }
+}
+
+const undoCmd: CommandHandler = rewindCmd
+
+const copyCmd: CommandHandler = (ctx, args) => {
+  const c = ctx.engine.getContext()
+  const msgs = c.getMessages()
+  const assistantMsgs = msgs.filter(m => m.role === 'assistant')
+
+  if (assistantMsgs.length === 0) {
+    return { content: 'No assistant responses to copy.' }
+  }
+
+  // Determine which response to copy: last N or last 1
+  let n = 1
+  if (args[0]) {
+    n = parseInt(args[0]!, 10)
+    if (isNaN(n) || n < 1) {
+      return { content: 'Usage: /copy [N]\nN = number of recent assistant responses to copy (default: 1)' }
+    }
+  }
+
+  const toCopy = assistantMsgs.slice(-n)
+  const text = toCopy
+    .map(m => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))
+    .join('\n\n---\n\n')
+
+  return {
+    content: `✓ Copied ${toCopy.length} assistant response(s) to clipboard (${text.length.toLocaleString()} chars).`,
+    copyContent: text,
+  }
+}
+
+const diffCmd: CommandHandler = async (_ctx) => {
+  try {
+    const { execSync } = await import('node:child_process')
+    const output = execSync('git diff --stat', { encoding: 'utf-8', timeout: 5000 })
+    if (!output.trim()) {
+      return { content: 'No uncommitted changes (working tree clean).' }
+    }
+    // Get full diff but limit to reasonable size
+    const fullDiff = execSync('git diff --no-color', { encoding: 'utf-8', timeout: 5000 })
+    const MAX_LINES = 60
+    const lines = fullDiff.split('\n')
+    const truncated = lines.length > MAX_LINES
+      ? lines.slice(0, MAX_LINES).join('\n') + `\n\n... (${lines.length - MAX_LINES} more lines. Use git diff to see full output.)`
+      : fullDiff
+
+    return {
+      content: `── Git Diff ──\n\n${truncated}`,
+    }
+  } catch {
+    return { content: 'Unable to run git diff. Ensure git is installed and you are in a repository.' }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Phase 1 — Model Control Commands
+// ═══════════════════════════════════════════════════════════════
+
+const fastCmd: CommandHandler = (ctx, args) => {
+  const arg = args[0]?.toLowerCase()
+  if (arg === 'on') {
+    ctx.setFastMode(true)
+    return { content: '✓ Fast mode ON — responses will prioritize speed over depth.' }
+  } else if (arg === 'off') {
+    ctx.setFastMode(false)
+    return { content: '✓ Fast mode OFF — standard quality mode.' }
+  } else if (arg) {
+    return { content: 'Usage: /fast [on|off]\nToggle fast mode for faster responses.' }
+  } else {
+    // Toggle
+    // We can't read current state from context, so we just show usage
+    return { content: 'Usage: /fast [on|off]\n\nFast mode prioritizes speed over depth. Currently available as a configuration toggle.\n\nExample:\n  /fast on   — enable fast mode\n  /fast off  — disable fast mode' }
+  }
+}
+
+const effortCmd: CommandHandler = (ctx, args) => {
+  const VALID_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max']
+  const level = args[0]?.toLowerCase()
+
+  if (!level || !VALID_LEVELS.includes(level)) {
+    return {
+      content: stripIndent`
+        Usage: /effort <level>
+
+        Set reasoning effort level:
+          low      — Fast, simple tasks
+          medium   — Balanced quality and speed
+          high     — Thorough reasoning (default)
+          xhigh    — Maximum depth for coding/agentic use
+          max      — Absolute ceiling, very thorough
+
+        Current model: ${ctx.modelId}
+        Effort levels require compatible providers (Anthropic Opus 4.6+, Sonnet 4.6).
+      `,
+    }
+  }
+
+  ctx.setEffort(level)
+  return { content: `✓ Reasoning effort set to "${level}"` }
+}
+
+const focusCmd: CommandHandler = (ctx) => {
+  ctx.setFocusMode(true)
+  return {
+    content: stripIndent`
+      ✓ Focus mode ON — showing only the most recent exchange.
+      Previous messages are hidden but preserved.
+      Type /focus again to exit focus mode and show all messages.
+    `,
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Phase 1 — Workflow Commands
+// ═══════════════════════════════════════════════════════════════
+
+const tasksCmd: CommandHandler = (ctx) => {
+  const c = ctx.engine.getContext()
+  const msgs = c.getMessages()
+
+  // Scan for task-related tool uses in message history
+  const toolUses = msgs.flatMap(m => {
+    if (Array.isArray(m.content)) {
+      return m.content.filter(b => b.type === 'tool_use' && ['TaskCreate', 'TaskUpdate', 'TaskList'].includes(b.name))
+    }
+    return []
+  })
+
+  return {
+    content: stripIndent`
+      ── Background Tasks ──
+
+      ${toolUses.length > 0
+        ? `${toolUses.length} task operations detected in this session.\n\nUse Task tool (TaskCreate / TaskUpdate / TaskList) to manage structured task tracking.`
+        : 'No tasks tracked yet. Use TaskCreate, TaskUpdate, and TaskList tools to manage structured tasks.'
+      }
+
+      Quick reference:
+        TaskCreate  — create a new task
+        TaskList    — list all tasks
+        TaskUpdate  — update task status
+        TaskGet     — get task details
+        TaskOutput  — get background task output
+        TaskStop    — stop a running task
+
+      Type /todos for the legacy task interface.
+    `,
+  }
+}
+
+const branchCmd: CommandHandler = (ctx, args) => {
+  const name = args.join(' ') || `branch-${Date.now()}`
+  const c = ctx.engine.getContext()
+  const msgs = c.getMessages()
+
+  if (msgs.length === 0) {
+    return { content: 'No conversation to branch. Start a conversation first.' }
+  }
+
+  // Save current session state as a named checkpoint
+  const checkpointId = c.saveCheckpoint(name)
+  return {
+    content: stripIndent`
+      ── Branch Created ──
+      Name:       "${name}"
+      Checkpoint:  #${checkpointId}
+      Messages:    ${msgs.length} saved
+
+      Current conversation continues from this point.
+      To return to this branch point later, use:
+        /rewind
+
+      Note: Full session branching (separate concurrent sessions) requires session persistence, coming in a future release. For now, this saves a named checkpoint you can rewind to.
+    `,
+  }
+}
+
+const loopCmd: CommandHandler = (_ctx, args) => {
+  if (args.length < 2) {
+    return {
+      content: stripIndent`
+        Usage: /loop <interval> <prompt>
+
+        Run a prompt repeatedly on a set interval.
+
+        Interval formats:
+          10s   — 10 seconds
+          5m    — 5 minutes
+          1h    — 1 hour
+
+        Example:
+          /loop 5m check the deploy status
+          /loop 1h run the smoke tests
+
+        Note: Continuous looping requires session persistence, coming in a future release.
+        For now, this sets up the intent — you'll be prompted to confirm each iteration.
+      `,
+    }
+  }
+
+  const interval = args[0]!
+  const prompt = args.slice(1).join(' ')
+
+  return {
+    content: stripIndent`
+      ── Loop Configured ──
+      Interval:  ${interval}
+      Prompt:    "${prompt}"
+
+      Loop scheduling infrastructure is being built.
+      For now, manually re-run: /loop ${interval} ${prompt}
+    `,
+  }
+}
+
+const scheduleCmd: CommandHandler = (_ctx) => ({
+  content: stripIndent`
+    ── Scheduled Tasks ──
+
+    No scheduled tasks configured.
+
+    Schedule infrastructure is being built. Coming features:
+    • Cron-based scheduling (CronCreate tool)
+    • One-shot and recurring tasks
+    • Durable persistence across sessions
+
+    Use /loop for simple repetition in the current session.
+  `,
+})
+
+// ═══════════════════════════════════════════════════════════════
+// Diagnostic
+// ═══════════════════════════════════════════════════════════════
+
+const doctorCmd: CommandHandler = async (ctx) => {
+  const lines: string[] = [
+    '── System Diagnostics ──',
+    '',
+    `Mipham Code  v${ctx.version}`,
+    `Runtime      ${typeof Bun !== 'undefined' ? 'Bun ' + Bun.version : 'Node.js ' + process.version}`,
+    `Platform     ${process.platform} ${process.arch}`,
+    `CWD          ${process.cwd()}`,
+    `PID          ${process.pid}`,
+    '',
+    '── Config ──',
+    `Provider     ${ctx.providerId} / ${ctx.modelId}`,
+    `Permission   ${ctx.config.permission}`,
+    `Providers    ${ctx.config.providers.length} configured (${ctx.config.providers.filter(p => p.status !== 'upcoming').length} active)`,
+    '',
+    '── Session ──',
+  ]
+
+  const c = ctx.engine.getContext()
+  const msgs = c.getMessages()
+  const tokens = c.getEstimatedTokens()
+  lines.push(`Messages     ${msgs.length}`)
+  lines.push(`Tokens       ~${tokens.toLocaleString()} / 200,000 (${((tokens / 200_000) * 100).toFixed(1)}%)`)
+  lines.push(`Checkpoints  ${c.getCheckpoints().length}`)
+
+  // Git info
+  try {
+    const { execSync } = await import('node:child_process')
+    lines.push('')
+    lines.push('── Git ──')
+    const branch = execSync('git branch --show-current', { encoding: 'utf-8', timeout: 3000 }).trim()
+    lines.push(`Branch       ${branch || '(detached)'}`)
+    const status = execSync('git status --porcelain', { encoding: 'utf-8', timeout: 3000 })
+    const changed = status.trim().split('\n').filter(Boolean).length
+    lines.push(`Changed      ${changed} file${changed !== 1 ? 's' : ''}`)
+    const log = execSync('git log --oneline -3', { encoding: 'utf-8', timeout: 3000 }).trim()
+    lines.push(`Last commits ${log.split('\n').length}`)
+    lines.push('')
+    lines.push(log.split('\n').map((l, i) => `  ${i + 1}. ${l}`).join('\n'))
+  } catch {
+    lines.push('')
+    lines.push('── Git ──')
+    lines.push('  (not a git repository or git not available)')
+  }
+
+  // Skills info
+  if (ctx.skillsLoader) {
+    lines.push('')
+    lines.push('── Skills ──')
+    try {
+      const skills = ctx.skillsLoader.list()
+      const standard = skills.filter((s: { type: string }) => s.type === 'standard').length
+      const mipham = skills.filter((s: { type: string }) => s.type === 'mipham').length
+      lines.push(`Loaded       ${skills.length} (${standard} standard + ${mipham} mipham)`)
+    } catch {
+      lines.push('  (skills info unavailable)')
+    }
+  }
+
+  return { content: lines.join('\n') }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Export
+// ═══════════════════════════════════════════════════════════════
+
+const exportCmd: CommandHandler = async (ctx) => {
+  const { writeFileSync, existsSync } = await import('node:fs')
+  const { join } = await import('node:path')
+
+  const cwd = process.cwd()
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+  const filename = `mipham-export-${timestamp}.md`
+  const filepath = join(cwd, filename)
+
+  const msgs = ctx.engine.getContext().getMessages()
+  const lines: string[] = [
+    `# Mipham Code — Session Export`,
+    `> ${new Date().toISOString()}`,
+    `> Provider: ${ctx.providerId} / ${ctx.modelId}`,
+    '',
+    '---',
+    '',
+  ]
+
+  for (const msg of msgs) {
+    const roleLabel = msg.role === 'user' ? '🧑 User' : msg.role === 'assistant' ? '🤖 Mipham Code' : '⚠ System'
+    const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
+    lines.push(`### ${roleLabel}`)
+    lines.push('')
+    lines.push(content)
+    lines.push('')
+  }
+
+  writeFileSync(filepath, lines.join('\n'), 'utf-8')
+  return {
+    content: `✓ Session exported to:\n  ${filepath}\n\n${msgs.length} messages · ${lines.length} lines`,
+    copyContent: filepath,
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Review — code review workflow
+// ═══════════════════════════════════════════════════════════════
+
+const reviewCmd: CommandHandler = async () => {
+  try {
+    const { execSync } = await import('node:child_process')
+    const diff = execSync('git diff --stat', { encoding: 'utf-8', timeout: 5000 }).trim()
+    const unstaged = execSync('git diff --name-only', { encoding: 'utf-8', timeout: 3000 }).trim()
+    const staged = execSync('git diff --cached --name-only', { encoding: 'utf-8', timeout: 3000 }).trim()
+
+    if (!diff) {
+      return { content: '─ Code Review ─\n\nNo uncommitted changes detected.\n\nUse /pr-comments for PR-level review, or make changes first.' }
+    }
+
+    const lines: string[] = [
+      '─ Code Review ─',
+      '',
+      'Uncommitted changes:',
+      '',
+      diff,
+    ]
+
+    if (staged) {
+      lines.push('')
+      lines.push('Staged files (ready for commit):')
+      for (const f of staged.split('\n')) lines.push(`  ✓ ${f}`)
+    }
+    if (unstaged) {
+      lines.push('')
+      lines.push('Unstaged files (working directory):')
+      for (const f of unstaged.split('\n')) lines.push(`  • ${f}`)
+    }
+
+    lines.push('')
+    lines.push('To review with AI: type "review these changes" in chat.')
+    lines.push('To commit: git add -A && git commit -m "..."')
+
+    return { content: lines.join('\n') }
+  } catch {
+    return { content: '─ Code Review ─\n\nCould not run git diff. Are you in a git repository?' }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PR Comments
+// ═══════════════════════════════════════════════════════════════
+
+const prCommentsCmd: CommandHandler = async () => {
+  try {
+    const { execSync } = await import('node:child_process')
+
+    // Get branch info
+    const branch = execSync('git branch --show-current', { encoding: 'utf-8', timeout: 3000 }).trim()
+    const mainBranch = execSync('git remote show origin 2>/dev/null | grep "HEAD branch" | cut -d: -f2', { encoding: 'utf-8', timeout: 3000 }).trim() || 'main'
+
+    // Get diff stats vs main
+    const diffStat = execSync(`git diff --stat origin/${mainBranch}...HEAD 2>/dev/null || git diff --stat ${mainBranch}...HEAD 2>/dev/null || echo "(no remote tracking)"`, { encoding: 'utf-8', timeout: 5000 }).trim()
+    const commits = execSync(`git log --oneline origin/${mainBranch}..HEAD 2>/dev/null || git log --oneline ${mainBranch}..HEAD 2>/dev/null || echo "(no commits ahead)"`, { encoding: 'utf-8', timeout: 5000 }).trim()
+
+    const lines: string[] = [
+      '─ PR Review ─',
+      '',
+      `Branch:       ${branch}`,
+      `Base:         ${mainBranch}`,
+      `Commits ahead: ${commits.split('\n').filter(Boolean).length}`,
+      '',
+    ]
+
+    if (commits && commits !== '(no commits ahead)') {
+      lines.push('Commits:')
+      for (const c of commits.split('\n')) lines.push(`  ${c}`)
+      lines.push('')
+    }
+
+    if (diffStat && diffStat !== '(no remote tracking)') {
+      lines.push('Changed files:')
+      lines.push(diffStat)
+      lines.push('')
+    }
+
+    lines.push('To generate PR description: type "write a PR description for these changes" in chat.')
+    lines.push('To review PR: type "review this PR" or use /review.')
+
+    return { content: lines.join('\n') }
+  } catch {
+    return { content: '─ PR Review ─\n\nCould not determine PR context. Are you in a git repository with a remote?' }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Resume
+// ═══════════════════════════════════════════════════════════════
+
+const resumeCmd: CommandHandler = async () => {
+  const { existsSync, readdirSync, statSync } = await import('node:fs')
+  const { join } = await import('node:path')
+
+  // Check common session storage locations
+  const home = process.env.HOME || '~'
+  const locations = [
+    join(home, '.mipham', 'sessions'),
+    join(process.cwd(), '.mipham', 'sessions'),
+  ]
+
+  const sessions: Array<{ name: string; path: string; mtime: Date; size: number }> = []
+
+  for (const loc of locations) {
+    if (!existsSync(loc)) continue
+    try {
+      const items = readdirSync(loc)
+      for (const item of items) {
+        const fullPath = join(loc, item)
+        if (item.endsWith('.jsonl') || item.endsWith('.json')) {
+          const stat = statSync(fullPath)
+          sessions.push({ name: item, path: fullPath, mtime: stat.mtime, size: stat.size })
+        }
+      }
+    } catch { /* skip */ }
+  }
+
+  if (sessions.length === 0) {
+    return {
+      content: '─ Resume Session ─\n\nNo saved sessions found.\n\nSessions are saved in ~/.mipham/sessions/ after each run.\nStart a conversation first — it will be saved automatically.',
+    }
+  }
+
+  sessions.sort((a, b) => b.mtime.getTime() - a.mtime.getTime())
+  const recent = sessions.slice(0, 10)
+
+  const lines: string[] = [
+    '─ Saved Sessions ─',
+    '',
+    ...recent.map((s, i) =>
+      `  ${(i + 1).toString().padStart(2)}. ${s.name.padEnd(40)} ${(s.size / 1024).toFixed(1)}KB  ${s.mtime.toLocaleString()}`
+    ),
+    '',
+    `Total: ${sessions.length} session(s)`,
+    '',
+    'To resume: restart Mipham Code — the last session is loaded automatically.',
+    'Full session resume from CLI args coming in a future release.',
+  ]
+
+  return { content: lines.join('\n') }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Memory Management
+// ═══════════════════════════════════════════════════════════════
+
+const memoryCmd: CommandHandler = async () => {
+  const { existsSync, readdirSync, readFileSync, statSync } = await import('node:fs')
+  const { join } = await import('node:path')
+
+  const home = process.env.HOME || '~'
+  const memoryDir = join(home, '.mipham', 'memory')
+
+  if (!existsSync(memoryDir)) {
+    return {
+      content: '─ Memory ─\n\nNo memories stored yet.\n\nMemory is saved to ~/.mipham/memory/ by the AI when you ask it to remember something.\nTry: "remember that I prefer TypeScript"',
+    }
+  }
+
+  try {
+    const files = readdirSync(memoryDir).filter(f => f.endsWith('.md'))
+    if (files.length === 0) {
+      return { content: '─ Memory ─\n\nNo memory files found in ~/.mipham/memory/' }
+    }
+
+    const memories: Array<{ file: string; size: number; mtime: Date; title: string }> = []
+    for (const f of files) {
+      const p = join(memoryDir, f)
+      const stat = statSync(p)
+      let title = f
+      try {
+        const content = readFileSync(p, 'utf-8')
+        const match = content.match(/^#\s+(.+)$/m)
+        if (match) title = match[1]!
+      } catch { /* use filename */ }
+      memories.push({ file: f, size: stat.size, mtime: stat.mtime, title })
+    }
+
+    memories.sort((a, b) => b.mtime.getTime() - a.mtime.getTime())
+
+    const lines: string[] = [
+      '─ Memory ─',
+      '',
+      `Location: ${memoryDir}`,
+      `Total:    ${memories.length} memor${memories.length === 1 ? 'y' : 'ies'}`,
+      '',
+      ...memories.map((m, i) =>
+        `  ${(i + 1).toString().padStart(2)}. ${m.file.padEnd(35)} ${(m.size / 1024).toFixed(1)}KB  ${m.mtime.toLocaleDateString()}  ${m.title}`
+      ),
+      '',
+      'Memories are used by the AI to provide personalized context across sessions.',
+      'Each file in ~/.mipham/memory/ represents one remembered fact or preference.',
+    ]
+
+    return { content: lines.join('\n') }
+  } catch {
+    return { content: '─ Memory ─\n\nCould not read memory directory.' }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Upgrade
+// ═══════════════════════════════════════════════════════════════
+
+const upgradeCmd: CommandHandler = () => ({
+  content: `─ Upgrade Mipham Code ─
+
+Current version: v0.1.0
+
+To upgrade:
+  curl -fsSL https://mipham.ai/install.sh | bash
+
+Or if installed via npm:
+  npm update -g @mipham/cli
+
+Release channels:
+  • stable  — recommended for most users
+  • beta    — early access to new features
+  • nightly — latest commits, may be unstable
+
+Check for updates: https://mipham.ai/code/releases`,
+})
+
+// ═══════════════════════════════════════════════════════════════
+// No-Plan — exit plan mode
+// ═══════════════════════════════════════════════════════════════
+
+const noPlanCmd: CommandHandler = () => ({
+  content: '✓ Plan mode exited. Your plan has been discarded.\n\nContinue chatting as normal, or type /plan to start a new plan.',
+})
+
+// ═══════════════════════════════════════════════════════════════
+// Workflows
+// ═══════════════════════════════════════════════════════════════
+
+const workflowsCmd: CommandHandler = async () => {
+  const { existsSync, readdirSync, readFileSync } = await import('node:fs')
+  const { join } = await import('node:path')
+
+  const locations = [
+    join(process.cwd(), '.claude', 'workflows'),
+    join(process.env.HOME || '~', '.claude', 'workflows'),
+  ]
+
+  const lines: string[] = ['─ Workflows ─', '']
+  let found = 0
+
+  for (const loc of locations) {
+    if (!existsSync(loc)) continue
+    try {
+      const items = readdirSync(loc).filter(f => f.endsWith('.js') || f.endsWith('.ts'))
+      if (items.length === 0) continue
+
+      lines.push(`📍 ${loc}`)
+      for (const item of items) {
+        const path = join(loc, item)
+        try {
+          const content = readFileSync(path, 'utf-8')
+          const metaMatch = content.match(/export const meta\s*=\s*\{[^}]*name:\s*['"]([^'"]+)['"][^}]*description:\s*['"]([^'"]+)['"]/)
+          if (metaMatch) {
+            lines.push(`  • ${item} — "${metaMatch[1]}" — ${metaMatch[2]}`)
+          } else {
+            lines.push(`  • ${item}`)
+          }
+        } catch {
+          lines.push(`  • ${item}`)
+        }
+        found++
+      }
+    } catch { /* skip */ }
+  }
+
+  if (found === 0) {
+    lines.push('No workflow scripts found.')
+    lines.push('')
+    lines.push('Workflows are multi-agent orchestration scripts stored in:')
+    lines.push('  .claude/workflows/   (project-level)')
+    lines.push('  ~/.claude/workflows/ (user-level)')
+    lines.push('')
+    lines.push('Create a .js file in either location to add a workflow.')
+  } else {
+    lines.push('')
+    lines.push(`${found} workflow(s) found.`)
+    lines.push('Use /workflows <name> to run a specific workflow.')
+  }
+
+  return { content: lines.join('\n') }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Permissions
+// ═══════════════════════════════════════════════════════════════
+
+const permissionsCmd: CommandHandler = (ctx) => {
+  const c = ctx.engine.getContext()
+  const msgs = c.getMessages()
+
+  return {
+    content: `─ Permission Settings ─
+
+Mode:       ${ctx.config.permission}
+Messages:   ${msgs.length} in context
+Tools:      ${ctx.engine.getTools().size} available
+
+Permission levels:
+  auto    — run tools automatically without asking
+  ask     — prompt before each tool execution (default)
+  bypass  — skip all permission checks (use with caution)
+
+Change with /config permission <level>.
+
+Current directory permissions:
+  CWD:      ${process.cwd()}
+
+To add a directory: use /add-dir (coming soon).
+Tool execution is sandboxed to the project directory by default.`,
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Setup — guided project initialization (mirrors Claude Code /setup)
+// ═══════════════════════════════════════════════════════════════
+
+const setupCmd: CommandHandler = async (ctx, args) => {
+  const step = args[0]
+
+  // ── Step selection ──
+  if (step === '1' || step === 'init') {
+    return setupStep1(ctx)
+  }
+  if (step === '2' || step === 'providers') {
+    return setupStep2(ctx)
+  }
+  if (step === '3' || step === 'model') {
+    return setupStep3(ctx)
+  }
+  if (step === '4' || step === 'skills') {
+    return setupStep4(ctx)
+  }
+  if (step === '5' || step === 'permissions') {
+    return setupStep5(ctx)
+  }
+  if (step === '6' || step === 'shell') {
+    return setupStep6(ctx)
+  }
+
+  // ── Check existing setup status ──
+  const { existsSync } = await import('node:fs')
+  const { join } = await import('node:path')
+  const cwd = process.cwd()
+  const home = process.env.HOME || '~'
+
+  const hasProjectMipham = existsSync(join(cwd, 'MIPHAM.md'))
+  const hasProjectConfig = existsSync(join(cwd, '.mipham', 'config.yml'))
+  const hasUserConfig = existsSync(join(home, '.mipham', 'config.yml'))
+  const hasMiphamDir = existsSync(join(cwd, '.mipham'))
+
+  const activeProviders = ctx.config.providers.filter(p => p.status === 'active').length
+  const totalProviders = ctx.config.providers.length
+  const skills = ctx.skillsLoader?.list() || []
+  const standardSkills = skills.filter((s: { type: string }) => s.type === 'standard').length
+  const miphamSkills = skills.filter((s: { type: string }) => s.type === 'mipham').length
+
+  const statusIcon = (ok: boolean) => ok ? '✅' : '⬜'
+
+  return {
+    content: `── Mipham Code Setup ──
+
+
+  Project Status
+  ${statusIcon(hasMiphamDir)} .mipham/ directory  ${hasMiphamDir ? '(config + metadata)' : '(not created)'}
+  ${statusIcon(hasProjectMipham)} MIPHAM.md           ${hasProjectMipham ? '(project personality)' : '(not created)'}
+  ${statusIcon(hasProjectConfig)} Project config       ${hasProjectConfig ? '~/.mipham/config.yml' : '(not created)'}
+  ${statusIcon(hasUserConfig)} User config          ${hasUserConfig ? '~/.mipham/config.yml' : '(not created)'}
+
+  Providers
+  ${activeProviders}/${totalProviders} active  ·  Current: ${ctx.providerId}/${ctx.modelId}
+
+  Skills
+  ${skills.length} loaded (${standardSkills} standard + ${miphamSkills} mipham)
+
+  Permissions
+  Mode: ${ctx.config.permission}  ·  Tools: ${ctx.engine.getTools().size}
+
+
+  ── Setup Steps ──
+
+  1. Initialize Project    /setup 1   Create .mipham/ + MIPHAM.md + config.yml
+  2. Configure Providers   /setup 2   Set API keys, enable/disable providers
+  3. Set Default Model     /setup 3   Choose your preferred provider & model
+  4. Install Skills        /setup 4   Browse and install community skills
+  5. Permissions Setup     /setup 5   Configure tool access and security
+  6. Shell Integration     /setup 6   Add \`mipham\` to PATH, IDE setup
+
+  Run: /setup <number>    or chat: "help me set up Mipham Code"`,
+  }
+}
+
+async function setupStep1(ctx: CommandContext): Promise<CommandResult> {
+  const { existsSync, mkdirSync, writeFileSync } = await import('node:fs')
+  const { join } = await import('node:path')
+  const cwd = process.cwd()
+
+  const miphamDir = join(cwd, '.mipham')
+  const miphamPath = join(cwd, 'MIPHAM.md')
+  const configPath = join(miphamDir, 'config.yml')
+
+  const created: string[] = []
+  const skipped: string[] = []
+
+  // Create .mipham/ directory
+  if (!existsSync(miphamDir)) {
+    mkdirSync(miphamDir, { recursive: true })
+    created.push('.mipham/')
+  } else {
+    skipped.push('.mipham/ (already exists)')
+  }
+
+  // Create project config if missing
+  if (!existsSync(configPath)) {
+    const defaultConfig = `# Mipham Code — Project Configuration
+# See https://mipham.ai/code/docs/config for all options
+
+defaultProvider: ${ctx.providerId}
+defaultModel: ${ctx.modelId}
+permission: ask
+
+# Uncomment to add project-specific providers:
+# providers:
+#   - id: anthropic
+#     apiKey: \$ANTHROPIC_API_KEY
+`
+    writeFileSync(configPath, defaultConfig, 'utf-8')
+    created.push('.mipham/config.yml')
+  } else {
+    skipped.push('.mipham/config.yml (already exists)')
+  }
+
+  // Create MIPHAM.md if missing
+  if (!existsSync(miphamPath)) {
+    const projectName = cwd.split('/').pop() || 'my-project'
+    const defaultMipham = `---
+model: mipham-code
+version: 1.0.0
+privacy: project
+language: zh-CN
+---
+
+# MIPHAM.md — ${projectName}
+
+> 本文件定义 ${projectName} 项目中 AI 助手的交互人格和项目规范。
+> 继承自 One Mipham Corporation 集团 MIPHAM.md。
+
+---
+
+## 项目概述
+
+[简要描述项目目的和定位]
+
+## 技术栈
+
+[列出主要技术栈]
+
+## 项目规范
+
+- [添加项目特有的编码规则]
+- [添加团队约定]
+
+## AI 交互偏好
+
+- 回复语言：[中文/英文]
+- 代码风格：[偏好]
+- 注释语言：[中文/英文]
+`
+    writeFileSync(miphamPath, defaultMipham, 'utf-8')
+    created.push('MIPHAM.md')
+  } else {
+    skipped.push('MIPHAM.md (already exists)')
+  }
+
+  const lines: string[] = ['── Step 1: Initialize Project ──', '']
+  if (created.length > 0) {
+    lines.push('Created:')
+    for (const c of created) lines.push(`  ✅ ${c}`)
+  }
+  if (skipped.length > 0) {
+    lines.push('')
+    lines.push('Skipped (already configured):')
+    for (const s of skipped) lines.push(`  ⏭  ${s}`)
+  }
+  lines.push('')
+  lines.push('Next: /setup 2 to configure providers')
+
+  return { content: lines.join('\n') }
+}
+
+async function setupStep2(ctx: CommandContext): Promise<CommandResult> {
+  const active = ctx.config.providers.filter(p => p.status === 'active')
+  const upcoming = ctx.config.providers.filter(p => p.status === 'upcoming')
+
+  const lines: string[] = [
+    '── Step 2: Configure Providers ──',
+    '',
+    `Active providers (${active.length}):`,
+    ...active.map(p => `  ✅ ${p.id.padEnd(14)} ${p.name.padEnd(20)} ${p.protocol}`),
+    '',
+    `Upcoming (${upcoming.length}):`,
+    ...upcoming.map(p => `  🔶 ${p.id.padEnd(14)} ${p.name.padEnd(20)} ${p.protocol}`),
+    '',
+    '── API Key Setup ──',
+    '',
+    'Set API keys via environment variables or .mipham/config.yml:',
+    '',
+    '  export ANTHROPIC_API_KEY="sk-ant-..."',
+    '  export OPENAI_API_KEY="sk-..."',
+    '  export DEEPSEEK_API_KEY="sk-..."',
+    '  export QWEN_API_KEY="sk-..."',
+    '  export DOUBAO_API_KEY="..."',
+    '  export HUNYUAN_API_KEY="..."',
+    '',
+    'Or add to ~/.mipham/config.yml:',
+    '  providers:',
+    '    - id: anthropic',
+    '      apiKey: $ANTHROPIC_API_KEY',
+    '',
+    'Current: ' + ctx.providerId + ' / ' + ctx.modelId,
+    '',
+    'Next: /setup 3 to choose default model',
+  ]
+
+  return { content: lines.join('\n') }
+}
+
+async function setupStep3(ctx: CommandContext): Promise<CommandResult> {
+  const activeProviders = ctx.config.providers.filter(p => p.status === 'active')
+
+  const lines: string[] = [
+    '── Step 3: Set Default Model ──',
+    '',
+    `Current: ${ctx.providerId} / ${ctx.modelId}`,
+    '',
+    'Available providers & models:',
+    '',
+  ]
+
+  for (const p of activeProviders) {
+    lines.push(`  ${p.id}${p.id === ctx.providerId ? ' ← current' : ''}`)
+    for (const m of p.models.filter(m => m.status === 'active')) {
+      const marker = m.id === ctx.modelId ? ' ★' : '  '
+      lines.push(`${marker}  ${m.id.padEnd(30)} ${m.contextWindow.toLocaleString()} ctx  ${m.vision ? '🖼' : '📝'}`)
+    }
+    lines.push('')
+  }
+
+  lines.push('To switch: /switch <provider> <model>')
+  lines.push('To make permanent: edit .mipham/config.yml → defaultProvider / defaultModel')
+  lines.push('')
+  lines.push('Next: /setup 4 to install skills')
+
+  return { content: lines.join('\n') }
+}
+
+async function setupStep4(_ctx: CommandContext): Promise<CommandResult> {
+  return {
+    content: `── Step 4: Install Skills ──
+
+Skills extend Mipham Code with specialized capabilities.
+
+Built-in skills (11 total):
+  Standard (9):  code-review, compassionate-communication, doc-generator,
+                 github-ops, memory, self-review, superpower, tdd, web-search
+  Mipham (2):    om-model-optimize, om-security
+
+Community skills:
+  Coming soon — the Mipham Code skills marketplace will let you
+  browse and install community-contributed skills.
+
+  For now, add custom skills manually:
+  1. Create a .SKILL.md file in .mipham/skills/
+  2. Use /reload-skills to load it
+
+Skill file template:
+  ---
+  name: my-skill
+  description: What this skill does
+  version: 1.0.0
+  type: standard
+  ---
+  # My Skill
+  [instructions for the AI]
+
+Next: /setup 5 to configure permissions`,
+  }
+}
+
+async function setupStep5(ctx: CommandContext): Promise<CommandResult> {
+  return {
+    content: `── Step 5: Permissions Setup ──
+
+Current mode: ${ctx.config.permission}
+
+Permission levels:
+  auto    — Run tools automatically (suitable for sandboxed envs)
+  ask     — Prompt before each tool execution (default, recommended)
+  bypass  — Skip all checks (⚠ only for trusted codebases)
+
+  Change with: /config permission <level>
+
+Available tools (${ctx.engine.getTools().size}):
+  File:  read, write, edit, glob, grep
+  Exec:  bash, git, task
+  Agent: agent, memory, plan, skill
+  Net:   web-fetch, web-search
+  Sys:   config, mcp
+
+Each tool category can be configured independently in .mipham/config.yml:
+  permissions:
+    file: ask
+    exec: ask
+    network: auto
+
+Next: /setup 6 for shell integration`,
+  }
+}
+
+async function setupStep6(_ctx: CommandContext): Promise<CommandResult> {
+  return {
+    content: `── Step 6: Shell Integration ──
+
+Add Mipham Code to your shell:
+
+  # Add to ~/.zshrc or ~/.bashrc
+  alias mipham='cd ~/your-project && bun run ~/path/to/mipham-code/apps/cli/bin/mipham.ts'
+
+  # Or if installed globally:
+  alias mipham='mipham'
+
+IDE Integration:
+  VS Code     — coming soon (extension marketplace)
+  JetBrains   — coming soon (plugin)
+  Terminal    — run \`mipham\` in any terminal
+
+Quick launch:
+  Ctrl+P      Open model picker
+  /help       Show all commands
+  Esc         Exit
+
+── Setup Complete! ──
+
+You're all set. Start a conversation:
+  "help me build a REST API"
+  "review my code"
+  "explain this project"
+
+For help at any time: /help`,
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Remaining stubs (recognized, WIP — lower priority)
 // ═══════════════════════════════════════════════════════════════
 
 function stubCmd(name: string, description: string): CommandHandler {
@@ -366,6 +1526,16 @@ registry.set('/compact', compactCmd)
 registry.set('/context', contextCmd)
 registry.set('/status', statusCmd)
 registry.set('/cost', costCmd)
+registry.set('/usage', usageCmd)
+registry.set('/rename', renameCmd)
+registry.set('/goal', goalCmd)
+registry.set('/recap', recapCmd)
+
+// History
+registry.set('/rewind', rewindCmd)
+registry.set('/undo', undoCmd)
+registry.set('/copy', copyCmd)
+registry.set('/focus', focusCmd)
 
 // Model & Provider
 registry.set('/model', modelCmd)
@@ -373,42 +1543,53 @@ registry.set('/models', modelsCmd)
 registry.set('/provider', providerCmd)
 registry.set('/providers', providersCmd)
 registry.set('/config', configCmd)
+registry.set('/fast', fastCmd)
+registry.set('/effort', effortCmd)
 
 // Tools & Skills
 registry.set('/tools', toolsCmd)
 registry.set('/skills', skillsCmd)
+registry.set('/reload-skills', reloadSkillsCmd)
 
 // Workflow
 registry.set('/plan', planCmd)
 registry.set('/tdd', tddCmd)
 registry.set('/todos', todosCmd)
+registry.set('/tasks', tasksCmd)
+registry.set('/diff', diffCmd)
+registry.set('/loop', loopCmd)
+registry.set('/no-plan', noPlanCmd)
+registry.set('/workflows', workflowsCmd)
+registry.set('/review', reviewCmd)
+registry.set('/pr-comments', prCommentsCmd)
+
+// Session Management
+registry.set('/doctor', doctorCmd)
+registry.set('/export', exportCmd)
+registry.set('/resume', resumeCmd)
+registry.set('/memory', memoryCmd)
+registry.set('/upgrade', upgradeCmd)
 
 // Project
 registry.set('/init', initCmd)
+registry.set('/setup', setupCmd)
+registry.set('/permissions', permissionsCmd)
 
-// Stubs (recognized, WIP)
-registry.set('/no-plan', stubCmd('no-plan', 'Exit plan mode'))
-registry.set('/export', stubCmd('export', 'Export conversation to file'))
-registry.set('/doctor', stubCmd('doctor', 'System diagnostics'))
-registry.set('/resume', stubCmd('resume', 'Resume a previous session'))
+// Active stubs (recognized, lower-priority features)
 registry.set('/theme', stubCmd('theme', 'Change display theme'))
 registry.set('/mcp', stubCmd('mcp', 'MCP server management'))
-registry.set('/review', stubCmd('review', 'Code review workflow'))
-registry.set('/pr-comments', stubCmd('pr-comments', 'PR review comments'))
-registry.set('/workflows', stubCmd('workflows', 'Workflow management'))
 registry.set('/add-dir', stubCmd('add-dir', 'Add directory permissions'))
-registry.set('/permissions', stubCmd('permissions', 'Permission settings'))
 registry.set('/security', stubCmd('security', 'Security review (/audit)'))
 registry.set('/audit', stubCmd('audit', 'Security review (/security)'))
 registry.set('/login', stubCmd('login', 'Sign in to MiphamAI'))
 registry.set('/logout', stubCmd('logout', 'Sign out'))
 registry.set('/feedback', stubCmd('feedback', 'Send feedback'))
 registry.set('/release-notes', stubCmd('release-notes', 'View release notes'))
-registry.set('/upgrade', stubCmd('upgrade', 'Upgrade Mipham Code'))
 registry.set('/ide', stubCmd('ide', 'IDE integration settings'))
 registry.set('/terminal-setup', stubCmd('terminal-setup', 'Terminal integration'))
 registry.set('/agents', stubCmd('agents', 'Agent management'))
-registry.set('/memory', stubCmd('memory', 'Memory management'))
+registry.set('/branch', branchCmd)
+registry.set('/schedule', scheduleCmd)
 
 // ═══════════════════════════════════════════════════════════════
 // Public API

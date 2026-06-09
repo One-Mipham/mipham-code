@@ -25,14 +25,17 @@ export class InstructionsLoader {
   loadAll(cwd: string): void {
     this.instructions = []
 
-    // Tier 1: Group-level (parent CLAUDE.md)
-    this.tryLoad(join(cwd, '..', 'CLAUDE.md'), 'group')
-    // Higher group level (../../CLAUDE.md)
+    // Tier 1: Ancestor-level CLAUDE.md (for Claude Code compatibility)
+    // ../../ = Rismed_Ronxin_Capital
     this.tryLoad(join(cwd, '..', '..', 'CLAUDE.md'), 'group')
+    // ../ = One_Mipham_Corporation
+    this.tryLoad(join(cwd, '..', 'CLAUDE.md'), 'company')
 
-    // Tier 2: Project MIPHAM.md
+    // Tier 1b: Group-level MIPHAM.md — One_Mipham_Corporation is the root
+    this.tryLoad(join(cwd, '..', 'MIPHAM.md'), 'group')
+
+    // Tier 2: Project-level (CLAUDE.md + MIPHAM.md at cwd)
     this.tryLoad(join(cwd, 'MIPHAM.md'), 'project')
-    // Also check CLAUDE.md at project root
     this.tryLoad(join(cwd, 'CLAUDE.md'), 'project')
 
     // Tier 2b: Directory-level MIPHAM.md (recursive, up to 3 levels)
@@ -49,6 +52,7 @@ export class InstructionsLoader {
     for (const inst of this.instructions) {
       const levelLabel: Record<string, string> = {
         group: 'Group Policy',
+        company: 'Company Policy',
         project: 'Project Rules',
         directory: 'Directory Rules',
         user: 'User Preferences',

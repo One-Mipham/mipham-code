@@ -210,4 +210,154 @@ describe('ContextManager', () => {
 
     expect(ctx.getEstimatedTokens()).toBe(55)
   })
+
+  // ═══════════════════════════════════════════
+  // Checkpoint / Rewind
+  // ═══════════════════════════════════════════
+
+  it('should save and list checkpoints', () => {
+    const ctx = makeContext()
+    ctx.addMessage(makeTextMessage('user', 'hello'))
+    ctx.addMessage(makeTextMessage('assistant', 'hi'))
+
+    ctx.saveCheckpoint('test-checkpoint')
+    const cps = ctx.getCheckpoints()
+
+    expect(cps).toHaveLength(1)
+    expect(cps[0]!.label).toBe('test-checkpoint')
+    expect(cps[0]!.messageCount).toBe(2)
+  })
+
+  it('should auto-increment checkpoint IDs', () => {
+    const ctx = makeContext()
+    const id1 = ctx.saveCheckpoint('first')
+    const id2 = ctx.saveCheckpoint('second')
+    expect(id2).toBeGreaterThan(id1)
+  })
+
+  it('should restore to a checkpoint', () => {
+    const ctx = makeContext()
+    ctx.addMessage(makeTextMessage('user', 'msg1'))
+    ctx.addMessage(makeTextMessage('assistant', 'reply1'))
+    ctx.saveCheckpoint('after-msg1')
+
+    // Add more messages
+    ctx.addMessage(makeTextMessage('user', 'msg2'))
+    ctx.addMessage(makeTextMessage('assistant', 'reply2'))
+
+    const result = ctx.restoreCheckpoint()
+    expect(result.restored).toBe(true)
+    expect(result.messageCount).toBe(2)
+    expect(result.label).toBe('after-msg1')
+
+    const msgs = ctx.getMessages()
+    expect(msgs).toHaveLength(2)
+    expect((msgs[0]!.content as string)).toBe('msg1')
+  })
+
+  it('should restore specific checkpoint by ID', () => {
+    const ctx = makeContext()
+    ctx.addMessage(makeTextMessage('user', 'msg1'))
+    const id1 = ctx.saveCheckpoint('first')
+
+    ctx.addMessage(makeTextMessage('user', 'msg2'))
+    ctx.saveCheckpoint('second')
+
+    ctx.addMessage(makeTextMessage('user', 'msg3'))
+
+    // Restore to first checkpoint
+    const result = ctx.restoreCheckpoint(id1)
+    expect(result.restored).toBe(true)
+    expect(result.label).toBe('first')
+
+    const msgs = ctx.getMessages()
+    expect(msgs).toHaveLength(1)
+    expect((msgs[0]!.content as string)).toBe('msg1')
+  })
+
+  it('should report failure when no checkpoints exist', () => {
+    const ctx = makeContext()
+    ctx.addMessage(makeTextMessage('user', 'hello'))
+
+    const result = ctx.restoreCheckpoint()
+    expect(result.restored).toBe(false)
+    expect(result.messageCount).toBe(1)
+  })
+
+  it('should restore tokens alongside messages', () => {
+    const ctx = makeContext()
+    ctx.setSystemPrompt('sys') // 3 chars → 1 token
+    ctx.addMessage(makeTextMessage('user', 'hello')) // 5 chars → 2 tokens
+
+    ctx.saveCheckpoint('token-check')
+
+    ctx.addMessage(makeTextMessage('user', 'additional content here')) // +tokens
+
+    const beforeRestore = ctx.getEstimatedTokens()
+    expect(beforeRestore).toBeGreaterThan(3) // > 1+2=3
+
+    ctx.restoreCheckpoint()
+    expect(ctx.getEstimatedTokens()).toBe(3) // back to system+original msg
+  })
+
+  it('should keep only last 10 checkpoints', () => {
+    const ctx = makeContext()
+    for (let i = 0; i < 15; i++) {
+      ctx.saveCheckpoint(`cp-${i}`)
+    }
+
+    const cps = ctx.getCheckpoints()
+    expect(cps).toHaveLength(10)
+    expect(cps[0]!.label).toBe('cp-5') // first 5 were dropped
+    expect(cps[9]!.label).toBe('cp-14')
+  })
+
+  it('should deep-clone messages on save and not mutate on restore', () => {
+    const ctx = makeContext()
+    ctx.addMessage(makeTextMessage('user', 'original'))
+    ctx.saveCheckpoint('deep-clone')
+
+    // Modify after checkpoint
+    ctx.addMessage(makeTextMessage('user', 'modified'))
+    expect(ctx.getMessages()).toHaveLength(2)
+
+    // Restore
+    ctx.restoreCheckpoint()
+    expect(ctx.getMessages()).toHaveLength(1)
+    expect((ctx.getMessages()[0]!.content as string)).toBe('original')
+
+    // Save another checkpoint and verify original is still intact
+    ctx.saveCheckpoint('after-restore')
+    ctx.addMessage(makeTextMessage('user', 'new-msg'))
+    ctx.restoreCheckpoint()
+    expect(ctx.getMessages()).toHaveLength(1)
+    expect((ctx.getMessages()[0]!.content as string)).toBe('original')
+  })
+
+  it('should clear checkpoints on clear()', () => {
+    const ctx = makeContext()
+    ctx.addMessage(makeTextMessage('user', 'hello'))
+    ctx.saveCheckpoint('pre-clear')
+    expect(ctx.getCheckpoints()).toHaveLength(1)
+
+    ctx.clear()
+    expect(ctx.getCheckpoints()).toHaveLength(0)
+    expect(ctx.getMessages()).toHaveLength(0)
+  })
+
+  it('should return getMessageCount', () => {
+    const ctx = makeContext()
+    expect(ctx.getMessageCount()).toBe(0)
+    ctx.addMessage(makeTextMessage('user', 'a'))
+    ctx.addMessage(makeTextMessage('assistant', 'b'))
+    expect(ctx.getMessageCount()).toBe(2)
+  })
+
+  it('should getLastCheckpointId when checkpoints exist', () => {
+    const ctx = makeContext()
+    expect(ctx.getLastCheckpointId()).toBeUndefined()
+
+    const id = ctx.saveCheckpoint('test')
+    expect(ctx.getLastCheckpointId()).toBe(id)
+  })
 })

@@ -5,10 +5,20 @@ interface ContextConfig {
   compactionThreshold: number // e.g. 0.9 → compact at 90% usage
 }
 
+interface Checkpoint {
+  id: number
+  messages: Message[]
+  estimatedTokens: number
+  timestamp: Date
+  label: string
+}
+
 export class ContextManager {
   private messages: Message[] = []
   private systemPrompt = ''
   private estimatedTokens = 0
+  private checkpoints: Checkpoint[] = []
+  private checkpointCounter = 0
 
   constructor(private config: ContextConfig) {}
 
@@ -58,7 +68,60 @@ export class ContextManager {
 
   clear(): void {
     this.messages = []
+    this.checkpoints = []
+    this.checkpointCounter = 0
     this.estimatedTokens = this.estimateTokens(this.systemPrompt)
+  }
+
+  getMessageCount(): number {
+    return this.messages.length
+  }
+
+  // ── Checkpoint / Rewind ──
+
+  saveCheckpoint(label = 'auto'): number {
+    this.checkpointCounter++
+    const checkpoint: Checkpoint = {
+      id: this.checkpointCounter,
+      messages: structuredClone(this.messages),
+      estimatedTokens: this.estimatedTokens,
+      timestamp: new Date(),
+      label,
+    }
+    this.checkpoints.push(checkpoint)
+    // Keep only last 10 checkpoints
+    if (this.checkpoints.length > 10) {
+      this.checkpoints = this.checkpoints.slice(-10)
+    }
+    return checkpoint.id
+  }
+
+  restoreCheckpoint(checkpointId?: number): { restored: boolean; messageCount: number; label: string } {
+    // If no id given, restore the most recent checkpoint
+    const target = checkpointId
+      ? this.checkpoints.find(cp => cp.id === checkpointId)
+      : this.checkpoints.at(-1)
+
+    if (!target) {
+      return { restored: false, messageCount: this.messages.length, label: '' }
+    }
+
+    this.messages = structuredClone(target.messages)
+    this.estimatedTokens = target.estimatedTokens
+    return { restored: true, messageCount: this.messages.length, label: target.label }
+  }
+
+  getCheckpoints(): Array<{ id: number; messageCount: number; timestamp: Date; label: string }> {
+    return this.checkpoints.map(cp => ({
+      id: cp.id,
+      messageCount: cp.messages.length,
+      timestamp: cp.timestamp,
+      label: cp.label,
+    }))
+  }
+
+  getLastCheckpointId(): number | undefined {
+    return this.checkpoints.at(-1)?.id
   }
 
   private estimateTokens(text: string): number {

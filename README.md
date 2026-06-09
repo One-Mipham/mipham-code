@@ -122,7 +122,7 @@ Or project-level `.mipham/config.yml` in your repository.
 | 豆包 (字节跳动) | Seed 2.0 Pro/Code/Lite/Mini, Seed 1.6/Flash | 256K | Active |
 | 腾讯混元 | Hy3 Preview, 2.0 Think/Instruct, TurboS, T1, A13B, Lite | 32K–256K | Active |
 | 通义千问 | Qwen Plus, Qwen Max | 128K | Active |
-| MiphamAI | OM V5 Pro, OM V5 Flash, OM V5 Image | 200K–1M | Upcoming |
+| MiphamAI | OM V5 Pro, OM V5 Flash, OM V5 Visual | 200K–1M | Upcoming |
 
 **共 7 家提供商，40+ 模型。** 设置 API Key 即可使用：
 

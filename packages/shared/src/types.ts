@@ -104,7 +104,7 @@ export interface HookResult { allowed: boolean; reason?: string; modifiedInput?:
 // ── Instruction Types ──
 export interface InstructionFile {
   path: string
-  level: 'group' | 'project' | 'directory' | 'user'
+  level: 'group' | 'company' | 'project' | 'directory' | 'user'
   privacy: 'public' | 'project' | 'private'
   language: string
   content: string
