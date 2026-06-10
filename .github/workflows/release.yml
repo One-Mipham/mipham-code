@@ -60,13 +60,9 @@ jobs:
         with:
           bun-version: latest
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
+      - run: bun install
 
-      - run: pnpm install --frozen-lockfile
-
-      - run: pnpm test
+      - run: bun test
 
   # ── Stage 3: npm Publish ──
   publish:
