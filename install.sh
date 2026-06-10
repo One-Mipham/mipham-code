@@ -98,7 +98,37 @@ fi
 
 # ── Install Mipham Code ──
 echo ""
-echo -e "  Installing ${BOLD}$PACKAGE${RESET}..."
+
+# Try direct binary download first (fastest, no dependencies)
+RELEASE_URL="https://github.com/onemipham/mipham-code/releases/latest/download"
+BINARY_NAME=""
+case "$OS" in
+  Darwin)
+    ARCH="$(uname -m)"
+    if [ "$ARCH" = "arm64" ]; then
+      BINARY_NAME="mipham-darwin-arm64"
+    else
+      BINARY_NAME="mipham-darwin-x64"
+    fi
+    ;;
+  Linux)
+    BINARY_NAME="mipham-linux-x64"
+    ;;
+esac
+
+if [ -n "$BINARY_NAME" ]; then
+  echo -e "  Downloading binary: ${BOLD}$BINARY_NAME${RESET}..."
+  BINARY_URL="$RELEASE_URL/$BINARY_NAME"
+  if command -v curl &>/dev/null; then
+    curl -fsSL "$BINARY_URL" -o /tmp/mipham 2>/dev/null && chmod +x /tmp/mipham && mv /tmp/mipham /usr/local/bin/mipham 2>/dev/null && {
+      echo -e "  ${GREEN}✓ Binary installed to /usr/local/bin/mipham${RESET}"
+      RUNTIME="binary"
+    } || echo -e "  ${YELLOW}⚠ Binary download failed, falling back to npm...${RESET}"
+  fi
+fi
+
+if [ "$RUNTIME" != "binary" ]; then
+  echo -e "  Installing ${BOLD}$PACKAGE${RESET}..."
 
 if [ "$RUNTIME" = "bun" ]; then
   bun install -g "$PACKAGE" 2>&1 || {
@@ -111,6 +141,7 @@ else
     echo -e "${RED}✗ Installation failed.${RESET}"
     exit 1
   }
+fi
 fi
 
 # ── Verify ──

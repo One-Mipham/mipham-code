@@ -37,7 +37,7 @@
   },
   "scripts": {
     "dev": "bun run bin/mipham.ts",
-    "build": "bun build --compile --minify ./bin/mipham.ts --outfile dist/mipham",
+    "build": "bun build --compile --minify --external react-devtools-core ./bin/mipham.ts --outfile dist/mipham",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

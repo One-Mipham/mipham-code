@@ -59,8 +59,24 @@ try {
 
 Write-Host ""
 
+# ── Try binary download first ──
+$releaseUrl = "https://github.com/onemipham/mipham-code/releases/latest/download"
+$binaryName = if ($OS -eq "windows") { "mipham-win-x64.exe" } elseif ($OS -eq "macos") { "mipham-darwin-arm64" } else { "mipham-linux-x64" }
+
+Write-Host "── Downloading binary: $binaryName ──" -ForegroundColor Yellow
+try {
+  Invoke-WebRequest -Uri "$releaseUrl/$binaryName" -OutFile "$env:LOCALAPPDATA\mipham.exe" -ErrorAction Stop
+  Write-Host "✓ Binary installed to $env:LOCALAPPDATA\mipham.exe" -ForegroundColor Green
+  $installedBinary = $true
+} catch {
+  Write-Host "⚠ Binary download failed, falling back to package manager..." -ForegroundColor Yellow
+  $installedBinary = $false
+}
+
 # ── Install Method ──
-if ($hasNpm) {
+if ($installedBinary) {
+  Write-Host ""
+} elseif ($hasNpm) {
   Write-Host "── Installing via npm ──" -ForegroundColor Yellow
   Write-Host ""
   Write-Host "Running: npm install -g @onemipham/cli"
