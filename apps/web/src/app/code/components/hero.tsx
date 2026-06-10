@@ -10,7 +10,10 @@ export function HeroSection() {
           Built for developers who demand power, speed, and flexibility.
         </p>
         <p className="text-mipham-300 mb-8">
-          Powered by One Mipham Corporation | mipham.ai
+          Powered by One Mipham Corporation | 北京华安麦逄科技有限公司
+        </p>
+        <p className="text-mipham-400 text-sm mb-8">
+          International: mipham.ai &nbsp;|&nbsp; 中国大陆: onemipham.com
         </p>
         <div className="flex gap-4 justify-center">
           <a
