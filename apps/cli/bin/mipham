@@ -16,7 +16,7 @@ if (runtime === 'bun') {
   const nodeVersion = process.versions.node
   const [major] = nodeVersion.split('.').map(Number)
 
-  if (major! < 22) {
+  if (!major || major < 22) {
     console.error(`
 \`mipham\` requires Node.js 22+ or Bun 1.2+.
 
