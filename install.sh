@@ -4,7 +4,8 @@ set -euo pipefail
 # ============================================================
 # Mipham Code — Official Installer
 # ============================================================
-# One-liner: curl -fsSL https://onemipham.com/install.sh | bash
+# International: curl -fsSL https://mipham.ai/install.sh | bash
+# China mainland: curl -fsSL https://onemipham.com/install.sh | bash
 # ============================================================
 
 BOLD="\033[1m"
@@ -37,6 +38,13 @@ case "$OS" in
 esac
 
 echo -e "  Detected: ${GREEN}$OS_NAME${RESET}"
+echo ""
+echo -e "  ${BOLD}Install options:${RESET}"
+echo -e "    • npm install -g @onemipham/cli  (recommended, all platforms)"
+echo -e "    • curl -fsSL https://mipham.ai/install.sh | bash  (international)"
+echo -e "    • curl -fsSL https://onemipham.com/install.sh | bash  (China mainland)"
+echo -e "    • Direct download: https://mipham.ai/code/install"
+echo ""
 
 # ── Runtime Detection ──
 RUNTIME=""
@@ -113,6 +121,7 @@ if command -v mipham &>/dev/null; then
   echo ""
   echo -e "  Run ${BOLD}mipham${RESET} to start."
   echo -e "  Run ${BOLD}mipham --help${RESET} for options."
+  echo -e "  Docs: ${CYAN}https://mipham.ai/code/docs${RESET}"
   echo ""
 else
   echo -e "${YELLOW}⚠ Installation may have succeeded, but 'mipham' not found in PATH.${RESET}"
