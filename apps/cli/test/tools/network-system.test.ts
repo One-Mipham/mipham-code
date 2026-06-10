@@ -355,30 +355,28 @@ describe('MCP tool definition', () => {
 })
 
 describe('MCP tool execution', () => {
-  it('returns MCP call stub', async () => {
+  it('returns error when server is not configured', async () => {
     const result = await mcpTool.execute(
-      { server: 'github', tool: 'search-repos' },
+      { server: 'nonexistent-server', tool: 'some-tool' },
       ctx,
     )
-    expect(result.success).toBe(true)
-    expect(result.content).toContain('MCP call')
-    expect(result.content).toContain('github/search-repos')
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('not configured')
   })
 
-  it('mentions full MCP client integration', async () => {
+  it('mentions .mipham/config.yml in error', async () => {
     const result = await mcpTool.execute(
       { server: 'test-server', tool: 'test-tool' },
       ctx,
     )
-    expect(result.content).toContain('MCP client')
+    expect(result.error).toContain('.mipham/config.yml')
   })
 
-  it('includes server and tool in response', async () => {
+  it('requires server and tool parameters', async () => {
     const result = await mcpTool.execute(
-      { server: 'playwright', tool: 'navigate' },
+      { server: 'unconfigured', tool: 'navigate' },
       ctx,
     )
-    expect(result.content).toContain('playwright')
-    expect(result.content).toContain('navigate')
+    expect(result.success).toBe(false)
   })
 })

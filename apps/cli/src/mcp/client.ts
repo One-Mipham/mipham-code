@@ -1,93 +1,166 @@
-import type { McpServerConfig } from './shared/index.ts'
+import type { McpServerConfig } from '../shared/types'
+import type {
+  ConnectionStatus,
+  ConnectionInfo,
+  ToolDefinition,
+  ToolCallResult,
+  InitializeResult,
+} from './types'
+import { StdioTransport } from './transport'
+import { McpProtocol } from './protocol'
 
-interface McpTool {
-  name: string
-  description: string
-  inputSchema: Record<string, unknown>
-}
-
-interface McpClientConnection {
+interface ActiveConnection {
   config: McpServerConfig
-  status: 'disconnected' | 'connecting' | 'connected' | 'error'
-  tools: McpTool[]
+  transport: StdioTransport
+  protocol: McpProtocol
+  status: ConnectionStatus
+  tools: ToolDefinition[]
+  serverInfo?: { name: string; version: string }
   error?: string
 }
 
 /**
- * MCP (Model Context Protocol) client.
- * Connects to MCP servers via stdio and discovers/executes tools.
- * Phase 1: stub implementation with connection tracking.
+ * Singleton MCP client — manages connections to multiple MCP servers.
+ *
+ * Lifecycle:
+ *   1. connect(config) — spawn process, initialize, discover tools
+ *   2. callTool(server, tool, params) — execute tool on connected server
+ *   3. disconnect(name) or closeAll() — kill subprocess, clean up
+ *
+ * Backward-compatible with the previous stub McpClient API.
  */
 export class McpClient {
-  private connections = new Map<string, McpClientConnection>()
+  private static instance: McpClient | null = null
+  private connections = new Map<string, ActiveConnection>()
+
+  /** Get or create the singleton instance. */
+  static getInstance(): McpClient {
+    if (!McpClient.instance) {
+      McpClient.instance = new McpClient()
+    }
+    return McpClient.instance
+  }
+
+  /** Reset the singleton (useful for testing). */
+  static resetInstance(): void {
+    McpClient.instance = null
+  }
 
   async connect(config: McpServerConfig): Promise<void> {
+    // Skip if already connected
     const existing = this.connections.get(config.name)
     if (existing?.status === 'connected') return
 
-    this.connections.set(config.name, {
+    const transport = new StdioTransport()
+    const protocol = new McpProtocol(transport)
+
+    const connection: ActiveConnection = {
       config,
+      transport,
+      protocol,
       status: 'connecting',
       tools: [],
-    })
+    }
+
+    this.connections.set(config.name, connection)
 
     try {
-      // Phase 1: stub — mark as connected
-      // Phase 2 will implement full stdio MCP protocol:
-      //   - Spawn the command process
-      //   - Send initialize request
-      //   - Discover tools via tools/list
-      //   - Handle bidirectional JSON-RPC messages
-      this.connections.set(config.name, {
-        config,
-        status: 'connected',
-        tools: [],
-      })
+      const initResult: InitializeResult = await protocol.initialize(
+        config.command,
+        config.args,
+        config.env,
+      )
+
+      connection.status = 'connected'
+      connection.serverInfo = initResult.serverInfo
+
+      // Discover tools
+      if (initResult.capabilities.tools) {
+        connection.tools = await protocol.listTools()
+      }
     } catch (err) {
-      this.connections.set(config.name, {
-        config,
-        status: 'error',
-        tools: [],
-        error: String(err),
-      })
+      connection.status = 'error'
+      connection.error = String(err)
       throw err
     }
   }
 
   disconnect(name: string): void {
+    const conn = this.connections.get(name)
+    if (!conn) return
+
+    try {
+      conn.transport.close()
+    } catch { /* best effort */ }
     this.connections.delete(name)
   }
 
-  getConnection(name: string): McpClientConnection | undefined {
-    return this.connections.get(name)
+  async closeAll(): Promise<void> {
+    const names = Array.from(this.connections.keys())
+    for (const name of names) {
+      try {
+        await this.connections.get(name)?.transport.close()
+      } catch { /* best effort */ }
+      this.connections.delete(name)
+    }
+    McpClient.instance = null
   }
 
-  listConnections(): McpClientConnection[] {
-    return Array.from(this.connections.values())
+  getConnection(name: string): ConnectionInfo | undefined {
+    const conn = this.connections.get(name)
+    if (!conn) return undefined
+
+    return {
+      config: {
+        name: conn.config.name,
+        command: conn.config.command,
+        args: conn.config.args,
+      },
+      status: conn.status,
+      tools: conn.tools,
+      error: conn.error,
+      serverInfo: conn.serverInfo,
+    }
   }
 
-  getTools(name: string): McpTool[] {
+  listConnections(): ConnectionInfo[] {
+    return Array.from(this.connections.values()).map(conn => ({
+      config: {
+        name: conn.config.name,
+        command: conn.config.command,
+        args: conn.config.args,
+      },
+      status: conn.status,
+      tools: conn.tools,
+      error: conn.error,
+      serverInfo: conn.serverInfo,
+    }))
+  }
+
+  getTools(name: string): ToolDefinition[] {
     return this.connections.get(name)?.tools || []
   }
 
   async callTool(
     serverName: string,
     toolName: string,
-    params: Record<string, unknown>,
-  ): Promise<{ success: boolean; content: string; error?: string }> {
+    params?: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
     const conn = this.connections.get(serverName)
     if (!conn || conn.status !== 'connected') {
       return {
-        success: false,
-        content: '',
-        error: `MCP server "${serverName}" not connected`,
+        content: [{ type: 'text', text: `Error: MCP server "${serverName}" not connected` }],
+        isError: true,
       }
     }
 
-    // Phase 1: stub
-    return {
-      success: true,
-      content: `[MCP ${serverName}/${toolName}] Called with params: ${JSON.stringify(params)}`,
+    try {
+      return await conn.protocol.callTool(toolName, params)
+    } catch (err) {
+      return {
+        content: [{ type: 'text', text: `MCP tool error: ${String(err)}` }],
+        isError: true,
+      }
     }
   }
 }
