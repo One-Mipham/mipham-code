@@ -48,7 +48,8 @@ describe('Read tool definition', () => {
 
 describe('Read tool execution', () => {
   it('returns error for non-existent file', async () => {
-    const result = await readTool.execute({ file_path: '/nonexistent/file.txt' }, ctx)
+    const nonExistent = join(tmpDir, 'does-not-exist.txt')
+    const result = await readTool.execute({ file_path: nonExistent }, ctx)
     expect(result.success).toBe(false)
     expect(result.error).toContain('File not found')
   })

@@ -87,7 +87,7 @@ const helpCmd: CommandHandler = (_ctx) => ({
     /tools         List available tools (16 total)
     /skills        List loaded skills (11 built-in)
     /reload-skills Reload all skills
-    /mcp           MCP server status     [stub]
+    /mcp           MCP server status
 
     ── Workflow ────────────────────────
     /plan          Enter plan mode (read-only)
@@ -118,10 +118,10 @@ const helpCmd: CommandHandler = (_ctx) => ({
     /memory        Manage AI memories
 
     ── Account ─────────────────────────
-    /login         Sign in               [stub]
-    /logout        Sign out              [stub]
-    /feedback      Send feedback         [stub]
-    /agents        Agent management      [stub]
+    /login         Show API key status
+    /logout        Clear credentials guide
+    /feedback      Send feedback
+    /agents        Agent management
 
     Type /exit or Esc to quit.
   `,
@@ -1762,14 +1762,255 @@ Works with: Bash, Zsh, Fish, PowerShell, Windows Terminal`,
 })
 
 // ═══════════════════════════════════════════════════════════════
-// Remaining stubs (recognized, WIP — lower priority)
+// Phase 4 — MCP Server Management
 // ═══════════════════════════════════════════════════════════════
 
-function stubCmd(name: string, description: string): CommandHandler {
-  return () => ({
-    content: `[stub] /${name} — ${description}\nComing in a future release.`,
-  })
+const mcpCmd: CommandHandler = (ctx) => {
+  const mcpServers = ctx.config.skills?.mcpServers ?? []
+
+  const lines: string[] = [
+    '── MCP Servers ──',
+    '',
+  ]
+
+  if (mcpServers.length > 0) {
+    lines.push(`Configured servers (${mcpServers.length}):`)
+    lines.push('')
+    for (const s of mcpServers) {
+      const envKeys = s.env ? Object.keys(s.env).join(', ') : '(none)'
+      lines.push(`  📡 ${s.name}`)
+      lines.push(`     Command: ${s.command} ${s.args.join(' ')}`)
+      lines.push(`     Env vars: ${envKeys}`)
+      lines.push('')
+    }
+  } else {
+    lines.push('No MCP servers configured.')
+    lines.push('')
+    lines.push('── Configuration ──')
+    lines.push('')
+    lines.push('Add MCP servers to .mipham/config.yml:')
+    lines.push('')
+    lines.push('  skills:')
+    lines.push('    mcpServers:')
+    lines.push('      - name: filesystem')
+    lines.push('        command: npx')
+    lines.push('        args: ["-y", "@anthropic/mcp-filesystem", "/path"]')
+    lines.push('        env:')
+    lines.push('          HOME: $HOME')
+    lines.push('')
+    lines.push('      - name: github')
+    lines.push('        command: npx')
+    lines.push('        args: ["-y", "@anthropic/mcp-github"]')
+    lines.push('        env:')
+    lines.push('          GITHUB_TOKEN: $GITHUB_TOKEN')
+    lines.push('')
+    lines.push('After configuring, restart Mipham Code to connect.')
+    lines.push('Use the MCP tool (Tool 16) to call server tools.')
+  }
+
+  lines.push('')
+  lines.push('── Status ──')
+  lines.push('MCP stdio protocol: full implementation in M3 milestone.')
+  lines.push('Current: config parsing + server registry ready.')
+  lines.push('')
+  lines.push('MCP enables AI to interact with external tools via standardized servers.')
+  lines.push('Learn more: https://modelcontextprotocol.io')
+
+  return { content: lines.join('\n') }
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Phase 4 — Login / API Key Management
+// ═══════════════════════════════════════════════════════════════
+
+const loginCmd: CommandHandler = (ctx) => {
+  const activeProviders = ctx.config.providers.filter(p => p.status === 'active')
+
+  // Map provider IDs to their expected env var names
+  const providerEnvMap: Record<string, string> = {
+    anthropic: 'ANTHROPIC_API_KEY',
+    openai: 'OPENAI_API_KEY',
+    deepseek: 'DEEPSEEK_API_KEY',
+    google: 'GEMINI_API_KEY',
+    qwen: 'QWEN_API_KEY',
+    doubao: 'DOUBAO_API_KEY',
+    hunyuan: 'HUNYUAN_API_KEY',
+  }
+
+  const lines: string[] = [
+    '── Authentication ──',
+    '',
+    'Mipham Code uses API keys for authentication — no account login needed.',
+    'Each provider requires its own API key, set via environment variable or config file.',
+    '',
+    '── Provider API Keys ──',
+    '',
+  ]
+
+  for (const p of activeProviders) {
+    const envVar = providerEnvMap[p.id] ?? `${p.id.toUpperCase()}_API_KEY`
+    const isSet = typeof process !== 'undefined' && !!process.env[envVar]
+    const icon = isSet ? '✅' : '⬜'
+    lines.push(`  ${icon} ${p.id.padEnd(14)} $${envVar}${isSet ? ' (set)' : ''}`)
+  }
+
+  lines.push('')
+  lines.push('── Setup ──')
+  lines.push('')
+  lines.push('  # Option 1: Environment variables (recommended)')
+  lines.push('  export ANTHROPIC_API_KEY="sk-ant-..."')
+  lines.push('  export OPENAI_API_KEY="sk-..."')
+  lines.push('')
+  lines.push('  # Option 2: Config file (~/.mipham/config.yml)')
+  lines.push('  providers:')
+  lines.push('    - id: anthropic')
+  lines.push('      apiKey: $ANTHROPIC_API_KEY')
+  lines.push('')
+  lines.push('Current provider: ' + ctx.providerId + ' / ' + ctx.modelId)
+  lines.push('')
+  lines.push('Get API keys from each provider\'s developer console.')
+  lines.push('Dashboard: https://mipham.ai/code/dashboard')
+
+  return { content: lines.join('\n') }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Phase 4 — Logout / Clear Credentials
+// ═══════════════════════════════════════════════════════════════
+
+const logoutCmd: CommandHandler = async () => {
+  const { existsSync } = await import('node:fs')
+  const { join } = await import('node:path')
+
+  const home = process.env.HOME || '~'
+  const userConfig = join(home, '.mipham', 'config.yml')
+  const hasUserConfig = existsSync(userConfig)
+
+  return {
+    content: `── Sign Out ──
+
+Mipham Code uses API keys (not sessions), so there is no persistent login to "log out" of.
+
+To clear your credentials:
+
+1. Unset environment variables (current session only):
+     unset ANTHROPIC_API_KEY
+     unset OPENAI_API_KEY
+     unset DEEPSEEK_API_KEY
+     # ... and others
+
+2. Remove from shell profile (permanent):
+     Edit ~/.zshrc or ~/.bashrc and remove the export lines.
+
+3. User config: ${hasUserConfig ? '⚠  ~/.mipham/config.yml exists — check for stored keys' : '✅ ~/.mipham/config.yml not found (no stored keys)'}
+
+Note: Clearing keys will prevent Mipham Code from making API calls
+until you set them again with /login or manually.
+
+To switch providers without clearing keys, use /switch <provider> <model>.`,
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Phase 4 — Feedback
+// ═══════════════════════════════════════════════════════════════
+
+const feedbackCmd: CommandHandler = (ctx, args) => {
+  const message = args.join(' ').trim()
+
+  const lines: string[] = [
+    '── Feedback ──',
+    '',
+  ]
+
+  if (message) {
+    lines.push('Your feedback:')
+    lines.push('')
+    lines.push('  """')
+    for (const line of message.split('\n')) {
+      lines.push('  ' + line)
+    }
+    lines.push('  """')
+    lines.push('')
+    lines.push('── Preview Complete ──')
+    lines.push('')
+    lines.push('Copy the above and submit via one of the channels below.')
+    lines.push('')
+  }
+
+  lines.push('── Feedback Channels ──')
+  lines.push('')
+  lines.push('  🐛 Bug Reports')
+  lines.push('     GitHub Issues: https://github.com/onemipham/mipham-code/issues')
+  lines.push('     Template:      Bug Report (include version + reproduction steps)')
+  lines.push('')
+  lines.push('  💡 Feature Requests')
+  lines.push('     GitHub Issues: https://github.com/onemipham/mipham-code/issues')
+  lines.push('     Template:      Feature Request')
+  lines.push('')
+  lines.push('  📧 General Feedback')
+  lines.push('     Email:         feedback@mipham.ai')
+  lines.push('     Community:     https://github.com/onemipham/mipham-code/discussions')
+  lines.push('')
+  lines.push('── System Info (include with bug reports) ──')
+  lines.push(`  Version:    v${ctx.version}`)
+  lines.push(`  Provider:   ${ctx.providerId} / ${ctx.modelId}`)
+  lines.push(`  Platform:   ${process.platform} ${process.arch}`)
+  lines.push(`  Runtime:    ${typeof Bun !== 'undefined' ? 'Bun ' + Bun.version : 'Node.js ' + process.version}`)
+  lines.push(`  Node:       ${process.version}`)
+
+  return { content: lines.join('\n') }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Phase 4 — Agent Management
+// ═══════════════════════════════════════════════════════════════
+
+const agentsCmd: CommandHandler = () => ({
+  content: `── Agent System ──
+
+Mipham Code includes 4 agent-type tools for structured workflows:
+
+  ┌──────────┬──────────────────────────────────────┬──────────┬──────────────────────────┐
+  │ Agent    │ Category │ Permission │ Parameters                     │
+  ├──────────┼──────────┼────────────┼────────────────────────────────┤
+  │ Agent    │ agent    │ ask        │ description*, prompt*,          │
+  │          │          │            │ subagent_type (optional)        │
+  │ Skill    │ agent    │ auto       │ skill*, args (optional)         │
+  │ Plan     │ agent    │ auto       │ (no required params)            │
+  │ Memory   │ agent    │ auto       │ action* (read|write|list),      │
+  │          │          │            │ name, content                   │
+  └──────────┴──────────┴────────────┴────────────────────────────────┘
+
+── Agent Descriptions ──
+
+  Agent    Launch a sub-agent for complex, multi-step tasks.
+           Types: general-purpose, Explore, Plan, code-reviewer, etc.
+
+  Skill    Invoke a named skill (11 built-in, custom via .SKILL.md).
+           Skills extend AI capabilities with specialized instructions.
+
+  Plan     Enter plan mode — read-only analysis and design.
+           Use before complex changes. Exit with /no-plan.
+
+  Memory   Persistent memory read/write across sessions.
+           Stored in ~/.mipham/memory/ as markdown files.
+
+── Architecture ──
+
+  User → QueryEngine → Agent Tool → Sub-agent → Tool Results → User
+
+  Agent tools are dispatched by the AI during conversations.
+  The AI decides when to use them — you can also request them directly.
+
+  Full multi-agent orchestration (Workflow tool) is in the M3 milestone.
+
+  Use /tools to see all 16 tools, including the 4 agent tools.`,
+})
+
+// ═══════════════════════════════════════════════════════════════
+// Remaining low-priority stubs (backend not yet available)
+// ═══════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════
 // Command Registry
@@ -1846,12 +2087,14 @@ registry.set('/ide', ideCmd)
 registry.set('/terminal-setup', terminalSetupCmd)
 registry.set('/release-notes', releaseNotesCmd)
 
-// Active stubs (recognized, lower-priority features — need backend)
-registry.set('/mcp', stubCmd('mcp', 'MCP server management'))
-registry.set('/login', stubCmd('login', 'Sign in to MiphamAI'))
-registry.set('/logout', stubCmd('logout', 'Sign out'))
-registry.set('/feedback', stubCmd('feedback', 'Send feedback'))
-registry.set('/agents', stubCmd('agents', 'Agent management'))
+// Phase 4 — MCP, Auth, Feedback, Agents
+registry.set('/mcp', mcpCmd)
+registry.set('/login', loginCmd)
+registry.set('/logout', logoutCmd)
+registry.set('/feedback', feedbackCmd)
+registry.set('/agents', agentsCmd)
+
+// Lower-priority semi-stubs (WIP, backend pending)
 registry.set('/branch', branchCmd)
 registry.set('/schedule', scheduleCmd)
 
@@ -1896,7 +2139,4 @@ function stripIndent(strings: TemplateStringsArray, ...values: unknown[]): strin
   return result.trim()
 }
 
-// Handle /switch specially — it takes args
-const origSwitch = registry.get('/switch')
-registry.delete('/switch')
 export { switchCmd as handleSwitch }

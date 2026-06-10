@@ -1,4 +1,5 @@
-import type { ToolDefinition } from './shared/index.ts'
+import type { ToolDefinition } from '../shared/index.ts'
+import { validateUrl } from '../../security/url'
 
 export const webFetchTool: ToolDefinition = {
   name: 'WebFetch',
@@ -15,11 +16,25 @@ export const webFetchTool: ToolDefinition = {
   },
   async execute(params, _ctx) {
     const url = params.url as string
+
+    // SSRF protection: validate URL before fetching
+    const validationError = validateUrl(url)
+    if (validationError) {
+      return { success: false, content: '', error: validationError }
+    }
+
     try {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 30_000) // 30s timeout
+
       const response = await fetch(url, {
         headers: { 'User-Agent': 'Mipham-Code/0.1.0' },
         redirect: 'follow',
+        signal: controller.signal,
       })
+
+      clearTimeout(timer)
+
       if (!response.ok) {
         return {
           success: false,
@@ -36,7 +51,10 @@ export const webFetchTool: ToolDefinition = {
         .slice(0, 50_000)
       return { success: true, content: text }
     } catch (err) {
-      return { success: false, content: '', error: `Fetch failed: ${String(err)}` }
+      const message = err instanceof Error && err.name === 'AbortError'
+        ? 'Request timed out (30s)'
+        : `Fetch failed: ${String(err)}`
+      return { success: false, content: '', error: message }
     }
   },
 }

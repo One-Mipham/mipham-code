@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs'
-import { resolve } from 'node:path'
-import type { ToolDefinition } from './shared/index.ts'
+import type { ToolDefinition } from '../shared/index.ts'
+import { resolveSafe } from '../../security/path'
 
 export const editTool: ToolDefinition = {
   name: 'Edit',
@@ -19,7 +19,7 @@ export const editTool: ToolDefinition = {
     required: ['file_path', 'old_string', 'new_string'],
   },
   async execute(params, ctx) {
-    const filePath = resolve(ctx.cwd, params.file_path as string)
+    const filePath = resolveSafe(ctx.cwd, params.file_path as string)
     const oldStr = params.old_string as string
     const newStr = params.new_string as string
     const replaceAll = params.replace_all as boolean

@@ -1,6 +1,7 @@
 import { writeFileSync, mkdirSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
-import type { ToolDefinition } from './shared/index.ts'
+import { dirname } from 'node:path'
+import type { ToolDefinition } from '../shared/index.ts'
+import { resolveSafe } from '../../security/path'
 
 export const writeTool: ToolDefinition = {
   name: 'Write',
@@ -16,7 +17,7 @@ export const writeTool: ToolDefinition = {
     required: ['file_path', 'content'],
   },
   async execute(params, ctx) {
-    const filePath = resolve(ctx.cwd, params.file_path as string)
+    const filePath = resolveSafe(ctx.cwd, params.file_path as string)
     const content = params.content as string
     mkdirSync(dirname(filePath), { recursive: true })
     writeFileSync(filePath, content, 'utf-8')

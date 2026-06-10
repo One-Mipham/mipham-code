@@ -1,6 +1,6 @@
 import { $ } from 'bun'
-import { resolve } from 'node:path'
-import type { ToolDefinition } from './shared/index.ts'
+import type { ToolDefinition } from '../shared/index.ts'
+import { resolveSafe } from '../../security/path'
 
 export const grepTool: ToolDefinition = {
   name: 'Grep',
@@ -18,7 +18,7 @@ export const grepTool: ToolDefinition = {
   },
   async execute(params, ctx) {
     const pattern = params.pattern as string
-    const searchPath = resolve(ctx.cwd, (params.path as string) || '.')
+    const searchPath = resolveSafe(ctx.cwd, (params.path as string) || '.')
     const include = params.include as string | undefined
 
     try {

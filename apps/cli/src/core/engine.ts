@@ -1,13 +1,19 @@
 import type { Message, StreamChunk, ToolDefinition, ToolResult } from './shared/index.ts'
 import { ProviderRegistry } from '../providers/registry'
 import { ContextManager } from './context'
+import { PermissionSystem } from './permission'
 
 export class QueryEngine {
   constructor(
     private registry: ProviderRegistry,
     private context: ContextManager,
     private tools: Map<string, ToolDefinition>,
+    private permission: PermissionSystem = new PermissionSystem('bypass'),
   ) {}
+
+  getPermission(): PermissionSystem {
+    return this.permission
+  }
 
   async *process(userInput: string): AsyncGenerator<StreamChunk> {
     // Add user message to context
@@ -152,6 +158,15 @@ export class QueryEngine {
     const tool = this.tools.get(name)
     if (!tool) {
       return { success: false, content: '', error: `Unknown tool: ${name}` }
+    }
+
+    // Security: check permission before executing
+    if (this.permission.needsApproval(tool, params)) {
+      return {
+        success: false,
+        content: '',
+        error: `Tool "${name}" requires user approval (permission: ask). The tool was not executed.`,
+      }
     }
 
     try {

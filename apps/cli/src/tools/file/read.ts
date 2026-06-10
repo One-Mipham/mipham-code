@@ -1,6 +1,6 @@
 import { readFileSync, existsSync, statSync } from 'node:fs'
-import { resolve } from 'node:path'
-import type { ToolDefinition } from './shared/index.ts'
+import type { ToolDefinition } from '../shared/index.ts'
+import { resolveSafe } from '../../security/path'
 
 export const readTool: ToolDefinition = {
   name: 'Read',
@@ -17,7 +17,7 @@ export const readTool: ToolDefinition = {
     required: ['file_path'],
   },
   async execute(params, ctx) {
-    const filePath = resolve(ctx.cwd, params.file_path as string)
+    const filePath = resolveSafe(ctx.cwd, params.file_path as string)
     if (!existsSync(filePath)) {
       return { success: false, content: '', error: `File not found: ${filePath}` }
     }
