@@ -62,7 +62,7 @@ jobs:
 
       - run: bun install
 
-      - run: bun test
+      - run: bunx vitest run
 
   # ── Stage 3: npm Publish ──
   publish:
