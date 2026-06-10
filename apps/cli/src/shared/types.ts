@@ -37,7 +37,7 @@ export interface Message {
 export type ToolPermission = 'auto' | 'ask' | 'bypass'
 export type ToolCategory = 'file' | 'exec' | 'agent' | 'network' | 'system'
 
-export interface ToolContext { cwd: string; sessionId: string; provider: string; model: string }
+export interface ToolContext { cwd: string; sessionId: string; provider: string; model: string; skillsLoader?: import('../skills/loader').SkillsLoader; registry?: import('../providers/registry').ProviderRegistry }
 
 export interface ToolResult { success: boolean; content: string; error?: string }
 

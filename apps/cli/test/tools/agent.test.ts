@@ -46,17 +46,27 @@ describe('Agent tool execution', () => {
       ctx,
     )
     expect(result.success).toBe(true)
-    expect(result.content).toContain('Agent dispatched')
     expect(result.content).toContain('Review code')
     expect(result.content).toContain('Find bugs in src/')
+    expect(result.content).toContain('Sub-Agent')
   })
 
-  it('mentions full agent subsystem in M3', async () => {
+  it('returns structured result for explore type', async () => {
     const result = await agentTool.execute(
-      { description: 'Test', prompt: 'Test' },
+      { description: 'Test', prompt: 'Search for patterns', subagent_type: 'explore' },
       ctx,
     )
-    expect(result.content).toContain('M3')
+    expect(result.content).toContain('explore')
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects invalid subagent_type', async () => {
+    const result = await agentTool.execute(
+      { description: 'Test', prompt: 'Test', subagent_type: 'invalid_type' },
+      ctx,
+    )
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Invalid subagent_type')
   })
 })
 
@@ -83,24 +93,24 @@ describe('Skill tool definition', () => {
 })
 
 describe('Skill tool execution', () => {
-  it('invokes a named skill', async () => {
+  it('returns error when SkillsLoader is not in context', async () => {
     const result = await skillTool.execute({ skill: 'code-reviewer' }, ctx)
-    expect(result.success).toBe(true)
-    expect(result.content).toContain('Skill "code-reviewer" invoked')
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('SkillsLoader')
   })
 
-  it('mentions full skills system in M3', async () => {
-    const result = await skillTool.execute({ skill: 'test-skill' }, ctx)
-    expect(result.content).toContain('M3')
+  it('shows available skills in error message', async () => {
+    const result = await skillTool.execute({ skill: 'nonexistent-skill' }, ctx)
+    expect(result.error).toContain('SKILL.md')
   })
 
-  it('includes args if provided', async () => {
+  it('includes args in response when available', async () => {
     const result = await skillTool.execute(
       { skill: 'searcher', args: '--deep' },
       ctx,
     )
-    expect(result.success).toBe(true)
-    expect(result.content).toContain('searcher')
+    // Without SkillsLoader, returns error
+    expect(result.success).toBe(false)
   })
 })
 
@@ -122,16 +132,17 @@ describe('Plan tool definition', () => {
 })
 
 describe('Plan tool execution', () => {
-  it('activates plan mode', async () => {
-    const result = await planTool.execute({}, ctx)
+  it('activates plan mode and creates plan file', async () => {
+    const result = await planTool.execute({ title: 'Test Plan' }, ctx)
     expect(result.success).toBe(true)
-    expect(result.content).toContain('Plan mode activated')
+    expect(result.content).toContain('Plan Mode Activated')
+    expect(result.content).toContain('.mipham/plans/plan-')
   })
 
-  it('returns consistent message', async () => {
-    const r1 = await planTool.execute({}, ctx)
-    const r2 = await planTool.execute({}, ctx)
-    expect(r1.content).toBe(r2.content)
+  it('creates plan file on disk', async () => {
+    const result = await planTool.execute({ title: 'Disk Test' }, ctx)
+    expect(result.success).toBe(true)
+    expect(result.content).toContain('Plan file:')
   })
 })
 

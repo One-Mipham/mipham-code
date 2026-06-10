@@ -1,17 +1,51 @@
 #!/usr/bin/env node
-// Mipham Code v0.1.2 — @onemipham/cli
-// This is a launcher stub. For full functionality, use curl install:
-//   curl -fsSL https://onemipham.com/install.sh | bash
+/**
+ * Mipham Code v0.2.0 — @onemipham/cli
+ * Multi-model open-core intelligent coding terminal by MiphamAI
+ * License: Apache-2.0 | https://mipham.ai/code
+ */
 
-console.log(`
-[0;36m[1m✦ Mipham Code v0.1.2[0m
-[0;36m  @onemipham/cli — Multi-model coding agent by 华安麦逄科技[0m
+// Detect runtime and launch accordingly
+const runtime = typeof Bun !== 'undefined' ? 'bun' : 'node'
 
-Run the installer for full setup:
-  [0;32mcurl -fsSL https://onemipham.com/install.sh | bash[0m
+if (runtime === 'bun') {
+  // Bun runtime — import TS source directly
+  import('../src/index.tsx').then(m => m.runApp({}))
+} else {
+  // Node.js runtime — prompt to use Bun for best experience
+  const nodeVersion = process.versions.node
+  const [major] = nodeVersion.split('.').map(Number)
 
-Or run directly with Bun:
-  [0;32mbunx @onemipham/cli[0m
+  if (major! < 22) {
+    console.error(`
+\`mipham\` requires Node.js 22+ or Bun 1.2+.
 
-Docs: [0;34mhttps://www.onemipham.com/try[0m
-`);
+Current Node.js: ${nodeVersion}
+
+Quick install:
+  npm install -g bun
+  mipham
+
+Or:
+  curl -fsSL https://mipham.ai/install.sh | bash
+`)
+    process.exit(1)
+  }
+
+  console.log(`
+\x1b[0;36m\x1b[1m✦ Mipham Code v0.2.0\x1b[0m
+\x1b[0;36m  @onemipham/cli — Multi-model coding agent by MiphamAI\x1b[0m
+
+\x1b[0;33m⚠  Bun runtime is recommended for the best Mipham Code experience.\x1b[0m
+
+Quick install Bun:
+  \x1b[0;32mnpm install -g bun\x1b[0m
+
+Then run:
+  \x1b[0;32mmipham\x1b[0m
+
+Install: \x1b[0;34mhttps://mipham.ai/code/install\x1b[0m
+Docs:    \x1b[0;34mhttps://mipham.ai/code/docs\x1b[0m
+`)
+  process.exit(0)
+}

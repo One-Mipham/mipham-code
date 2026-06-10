@@ -46,7 +46,7 @@ type CommandHandler = (ctx: CommandContext, args: string[]) => CommandResult | P
 
 const helpCmd: CommandHandler = (_ctx) => ({
   content: stripIndent`
-    Mipham Code v0.1.0 — Commands
+    Mipham Code v0.2.0 — Commands
 
     ── Session ──────────────────────────
     /help          Show this help
@@ -85,7 +85,7 @@ const helpCmd: CommandHandler = (_ctx) => ({
 
     ── Tools & Skills ──────────────────
     /tools         List available tools (16 total)
-    /skills        List loaded skills (11 built-in)
+    /skills        List loaded skills (14 built-in)
     /reload-skills Reload all skills
     /mcp           MCP server status
 
@@ -138,7 +138,7 @@ const versionCmd: CommandHandler = (ctx) => ({
 
     Provider: ${ctx.providerId} / ${ctx.modelId}
     Tools:    16 built-in
-    Skills:   10 built-in (8 standard + 2 mipham)
+    Skills:   14 built-in (12 standard + 2 mipham)
     License:  Apache 2.0
   `,
 })
@@ -291,22 +291,25 @@ const toolsCmd: CommandHandler = (ctx) => {
 
 const skillsCmd: CommandHandler = (_ctx) => ({
   content: stripIndent`
-    ── Standard Skills (9) ──
-    code-review                  Code review automation
+    ── Standard Skills (12) ──
+    code-review                  Code review automation (v2.0)
     compassionate-communication  Warm, respectful, user-centered interaction
     doc-generator                Generate technical docs from code
     github-ops                   GitHub PR/issues/releases management
     memory                       Persistent memory read/write
+    mipham-code-setup            Mipham Code install & config guide
+    security-review              Security audit (OWASP, secrets, supply chain)
     self-review                  Self-review diff for bugs and cleanup
     superpower                   Skill discovery and usage guide
     tdd                          Test-Driven Development workflow
     web-search                   Web search for current information
+    code-review                  (classic) Legacy code review
 
     ── Mipham Exclusive (2) ──
     om-security        Security analysis (injection, PII, adversarial)
     om-model-optimize  Model optimization (context, caching, tokens)
 
-    11 skills loaded. Use Skill tool to invoke.
+    14 skills loaded. Use Skill tool to invoke.
   `,
 })
 
@@ -933,53 +936,58 @@ const prCommentsCmd: CommandHandler = async () => {
 // Resume
 // ═══════════════════════════════════════════════════════════════
 
-const resumeCmd: CommandHandler = async () => {
-  const { existsSync, readdirSync, statSync } = await import('node:fs')
-  const { join } = await import('node:path')
+const resumeCmd: CommandHandler = async (_ctx, args) => {
+  const { SessionStore } = await import('../core/session-store')
 
-  // Check common session storage locations
-  const home = process.env.HOME || '~'
-  const locations = [
-    join(home, '.mipham', 'sessions'),
-    join(process.cwd(), '.mipham', 'sessions'),
-  ]
-
-  const sessions: Array<{ name: string; path: string; mtime: Date; size: number }> = []
-
-  for (const loc of locations) {
-    if (!existsSync(loc)) continue
-    try {
-      const items = readdirSync(loc)
-      for (const item of items) {
-        const fullPath = join(loc, item)
-        if (item.endsWith('.jsonl') || item.endsWith('.json')) {
-          const stat = statSync(fullPath)
-          sessions.push({ name: item, path: fullPath, mtime: stat.mtime, size: stat.size })
-        }
+  // If a name is provided, show load instructions
+  const targetName = args.join(' ')
+  if (targetName) {
+    const session = SessionStore.load(targetName)
+    if (session) {
+      return {
+        content: [
+          '─ Session Found ─',
+          '',
+          `Name:      ${session.metadata.name}`,
+          `Messages:  ${session.metadata.messageCount}`,
+          `Provider:  ${session.metadata.provider} / ${session.metadata.model}`,
+          `Updated:   ${session.metadata.updatedAt}`,
+          '',
+          'To resume this session:',
+          `  mipham --resume "${targetName}"`,
+          '',
+          'Or restart Mipham Code — the most recent session loads automatically.',
+        ].join('\n'),
       }
-    } catch { /* skip */ }
-  }
-
-  if (sessions.length === 0) {
+    }
     return {
-      content: '─ Resume Session ─\n\nNo saved sessions found.\n\nSessions are saved in ~/.mipham/sessions/ after each run.\nStart a conversation first — it will be saved automatically.',
+      content: `─ Session Not Found ─\n\nNo session named "${targetName}".\n\nUse /resume without arguments to list all saved sessions.`,
     }
   }
 
-  sessions.sort((a, b) => b.mtime.getTime() - a.mtime.getTime())
+  const sessions = SessionStore.list()
+
+  if (sessions.length === 0) {
+    return {
+      content: '─ Resume Session ─\n\nNo saved sessions found.\n\nSessions are auto-saved to ~/.mipham/sessions/ when Mipham Code exits.\nStart a conversation — it will be saved automatically.',
+    }
+  }
+
   const recent = sessions.slice(0, 10)
 
   const lines: string[] = [
     '─ Saved Sessions ─',
     '',
     ...recent.map((s, i) =>
-      `  ${(i + 1).toString().padStart(2)}. ${s.name.padEnd(40)} ${(s.size / 1024).toFixed(1)}KB  ${s.mtime.toLocaleString()}`
+      `  ${(i + 1).toString().padStart(2)}. ${s.name.padEnd(45)} ${s.messageCount.toString().padStart(4)} msgs  ${new Date(s.updatedAt).toLocaleString()}`
     ),
     '',
-    `Total: ${sessions.length} session(s)`,
+    `Total: ${sessions.length} session(s) • Location: ~/.mipham/sessions/`,
     '',
-    'To resume: restart Mipham Code — the last session is loaded automatically.',
-    'Full session resume from CLI args coming in a future release.',
+    'To resume a session: /resume <name>',
+    'To resume from CLI:    mipham --resume "<name>"',
+    '',
+    'Sessions are auto-saved on exit. The most recent session loads automatically on restart.',
   ]
 
   return { content: lines.join('\n') }

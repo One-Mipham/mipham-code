@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react'
 import { Box, Text, useInput } from 'ink'
 import type { QueryEngine } from '../core/engine'
 import type { MiphamConfig } from './shared/index.ts'
+import type { SkillsLoader } from '../skills/loader'
 import { ChatPanel } from './chat'
 import { InputBar } from './input'
 import { ModelPicker } from './picker'
@@ -19,6 +20,7 @@ interface AppProps {
   initialProvider?: string
   initialModel?: string
   lang?: string
+  skillsLoader?: SkillsLoader
 }
 
 export interface ChatMessage {
@@ -26,9 +28,18 @@ export interface ChatMessage {
   content: string
 }
 
-const VERSION = '0.1.0'
+const VERSION = '0.2.0'
 
-export function App({ engine, config, initialProvider, initialModel, lang }: AppProps) {
+type PermissionMode = 'auto' | 'ask' | 'bypass'
+
+const PERMISSION_MODES: PermissionMode[] = ['auto', 'ask', 'bypass']
+const PERMISSION_LABELS: Record<PermissionMode, string> = {
+  auto: 'auto mode on',
+  ask: 'ask mode (confirm each action)',
+  bypass: 'bypass mode (skip all checks)',
+}
+
+export function App({ engine, config, initialProvider, initialModel, lang, skillsLoader }: AppProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [providerId, setProviderId] = useState(initialProvider || config.defaultProvider)
@@ -39,6 +50,7 @@ export function App({ engine, config, initialProvider, initialModel, lang }: App
   const [effort, setEffort] = useState('high')
   const [focusMode, setFocusMode] = useState(false)
   const [goalText, setGoalText] = useState('')
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>('auto')
 
   const mkCtx = useCallback(
     (): CommandContext => ({
@@ -52,8 +64,9 @@ export function App({ engine, config, initialProvider, initialModel, lang }: App
       setEffort: (level: string) => setEffort(level),
       setFocusMode: (on: boolean) => setFocusMode(on),
       setGoal: (text: string) => setGoalText(text),
+      skillsLoader,
     }),
-    [engine, config, providerId, modelId],
+    [engine, config, providerId, modelId, skillsLoader],
   )
 
   const handleSubmit = useCallback(
@@ -203,6 +216,17 @@ export function App({ engine, config, initialProvider, initialModel, lang }: App
       setPickerOpen(prev => !prev)
       return
     }
+    // Shift+Tab → cycle permission mode (auto → ask → bypass → auto)
+    if (key.shift && key.tab) {
+      setPermissionMode(prev => {
+        const idx = PERMISSION_MODES.indexOf(prev)
+        const next = PERMISSION_MODES[(idx + 1) % PERMISSION_MODES.length]!
+        // Sync to engine
+        engine.getPermission().setDefaultLevel(next)
+        return next
+      })
+      return
+    }
   })
 
   return (
@@ -211,7 +235,7 @@ export function App({ engine, config, initialProvider, initialModel, lang }: App
       <Box marginBottom={1} flexDirection="column">
         <Box flexDirection="row">
           <Text bold color="cyan">Mipham Code</Text>
-          <Text dimColor> v0.1.0</Text>
+          <Text dimColor> v0.2.0</Text>
           {sessionTitle ? <Text color="yellow"> — {sessionTitle}</Text> : <Text dimColor> — MiphamAI</Text>}
         </Box>
         <Box flexDirection="row">
@@ -220,8 +244,14 @@ export function App({ engine, config, initialProvider, initialModel, lang }: App
             {fastMode && ' ⚡'}
             {effort !== 'high' && ` 🧠${effort}`}
             {focusMode && ' 🔍focus'}
-            {' · '}Ctrl+P pick · /help · Esc exit
           </Text>
+        </Box>
+        <Box flexDirection="row">
+          <Text color={permissionMode === 'auto' ? 'green' : permissionMode === 'ask' ? 'yellow' : 'red'}>
+            ● {PERMISSION_LABELS[permissionMode]}
+          </Text>
+          <Text dimColor> (Shift+Tab to cycle)</Text>
+          <Text dimColor> · Ctrl+P pick · /help · Esc exit</Text>
         </Box>
         {goalText && (
           <Box>

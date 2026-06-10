@@ -1,9 +1,39 @@
 {
   "name": "@onemipham/cli",
-  "version": "0.1.2",
+  "version": "0.2.0",
+  "description": "Mipham Code — Multi-model open-core intelligent coding terminal by MiphamAI",
+  "keywords": [
+    "ai",
+    "coding",
+    "terminal",
+    "cli",
+    "claude",
+    "openai",
+    "deepseek",
+    "mcp",
+    "mipham",
+    "agent",
+    "developer-tools"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/onemipham/mipham-code"
+  },
+  "homepage": "https://mipham.ai/code",
+  "license": "Apache-2.0",
   "type": "module",
   "bin": {
     "mipham": "bin/mipham"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "skills/",
+    "assets/",
+    "dist/"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
   },
   "scripts": {
     "dev": "bun run bin/mipham.ts",

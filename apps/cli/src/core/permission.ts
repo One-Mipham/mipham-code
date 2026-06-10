@@ -5,6 +5,14 @@ export class PermissionSystem {
 
   constructor(private defaultLevel: ToolPermission = 'auto') {}
 
+  setDefaultLevel(level: PermissionLevel): void {
+    this.defaultLevel = level
+  }
+
+  getDefaultLevel(): PermissionLevel {
+    return this.defaultLevel
+  }
+
   setRule(toolName: string, level: PermissionLevel): void {
     this.rules.set(toolName, level)
   }

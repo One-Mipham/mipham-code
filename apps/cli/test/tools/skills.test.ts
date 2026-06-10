@@ -409,16 +409,16 @@ describe('MiphamRuntime', () => {
 // ============================================================
 
 describe('Built-in skills', () => {
-  it('loads all 10 built-in skills', () => {
+  it('loads all built-in skills', () => {
     const loader = new SkillsLoader()
     const projectRoot = join(import.meta.dirname, '..', '..')
     loader.loadBuiltin(projectRoot)
 
     const all = loader.list()
-    expect(all.length).toBe(11)
+    expect(all.length).toBe(13) // 11 standard + 2 mipham
 
     const standard = loader.listByType('standard')
-    expect(standard.length).toBe(9)
+    expect(standard.length).toBe(11)
 
     const mipham = loader.listByType('mipham')
     expect(mipham.length).toBe(2)
@@ -451,6 +451,8 @@ describe('Built-in skills', () => {
       'doc-generator',
       'github-ops',
       'memory',
+      'mipham-code-setup',
+      'security-review',
       'self-review',
       'superpower',
       'tdd',

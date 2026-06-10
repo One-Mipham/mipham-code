@@ -5,13 +5,16 @@ import { bootstrapProviders } from './providers/bootstrap'
 import { InstructionsLoader } from './core/instructions'
 import { ContextManager } from './core/context'
 import { QueryEngine } from './core/engine'
-import type { ToolDefinition } from './shared/index.ts'
+import { SessionStore } from './core/session-store'
+import { SkillsLoader } from './skills/loader'
+import { createToolRegistry } from './tools'
 
 interface RunOptions {
   model?: string
   provider?: string
   lang?: string
   permission?: string
+  resume?: string
 }
 
 export async function runApp(options: RunOptions): Promise<void> {
@@ -30,15 +33,54 @@ export async function runApp(options: RunOptions): Promise<void> {
   const instructions = new InstructionsLoader()
   instructions.loadAll(process.cwd())
 
-  // Initialize context
-  const context = new ContextManager({ maxTokens: 200_000, compactionThreshold: 0.9 })
-  context.setSystemPrompt(instructions.buildSystemPrompt())
+  // Load skills
+  const skillsLoader = new SkillsLoader()
+  skillsLoader.loadBuiltin(process.cwd())
+  if (config.skills?.paths) {
+    skillsLoader.loadExternal(config.skills.paths)
+  }
 
-  // Create query engine (tools added in M2)
-  const engine = new QueryEngine(registry, context, new Map<string, ToolDefinition>())
+  // Initialize context — restore saved session if available
+  const context = new ContextManager({ maxTokens: 200_000, compactionThreshold: 0.9 })
+
+  if (options.resume) {
+    const saved = SessionStore.load(options.resume)
+    if (saved) {
+      for (const msg of saved.messages) {
+        context.addMessage(msg)
+      }
+      context.setSystemPrompt(instructions.buildSystemPrompt())
+    }
+  }
+
+  if (context.getMessageCount() === 0) {
+    context.setSystemPrompt(instructions.buildSystemPrompt())
+  }
+
+  // Create tool registry with all 16 tools
+  const tools = createToolRegistry()
+
+  // Create query engine
+  const engine = new QueryEngine(registry, context, tools)
+
+  // Auto-save session on exit
+  let autoSaveName: string | undefined
+  const saveAndExit = () => {
+    if (context.getMessageCount() > 0) {
+      autoSaveName = SessionStore.autoSave(context.getMessages(), {
+        provider: defaultProvider,
+        model: defaultModel,
+      })
+    }
+    process.exit(0)
+  }
+
+  process.on('SIGINT', saveAndExit)
+  process.on('SIGTERM', saveAndExit)
 
   const { waitUntilExit } = render(
-    <App engine={engine} config={config} initialProvider={defaultProvider} initialModel={defaultModel} lang={options.lang} />,
+    <App engine={engine} config={config} initialProvider={defaultProvider} initialModel={defaultModel} lang={options.lang} skillsLoader={skillsLoader} />,
   )
   await waitUntilExit()
+  saveAndExit()
 }
