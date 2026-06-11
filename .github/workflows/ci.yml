@@ -16,8 +16,6 @@ jobs:
         with:
           bun-version: latest
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r typecheck
 
@@ -30,8 +28,6 @@ jobs:
         with:
           bun-version: latest
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
 
@@ -44,8 +40,6 @@ jobs:
         with:
           bun-version: latest
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - run: pnpm install --frozen-lockfile
       - run: pnpm format --check
 
@@ -58,8 +52,6 @@ jobs:
         with:
           bun-version: latest
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @mipham/cli build
 
@@ -72,7 +64,5 @@ jobs:
         with:
           bun-version: latest
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r test
