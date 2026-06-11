@@ -5,7 +5,7 @@
  * Commands marked [stub] are recognized but indicate WIP status.
  */
 import type { QueryEngine } from '../core/engine'
-import type { MiphamConfig } from './shared/index.ts'
+import type { MiphamConfig } from '../shared/index.ts'
 import type { SkillsLoader } from '../skills/loader'
 
 export interface CommandContext {
@@ -38,7 +38,10 @@ export interface CommandResult {
   copyContent?: string
 }
 
-type CommandHandler = (ctx: CommandContext, args: string[]) => CommandResult | Promise<CommandResult>
+type CommandHandler = (
+  ctx: CommandContext,
+  args: string[],
+) => CommandResult | Promise<CommandResult>
 
 // ═══════════════════════════════════════════════════════════════
 // Session & Identity
@@ -226,8 +229,15 @@ const modelCmd: CommandHandler = (ctx) => ({
 
 const modelsCmd: CommandHandler = (ctx) => {
   const lines = ctx.config.providers
-    .filter(p => p.status !== 'upcoming')
-    .flatMap(p => p.models.filter(m => m.status === 'active').map(m => `  ${p.id.padEnd(12)} ${m.id.padEnd(30)} ${m.contextWindow.toLocaleString()} ctx  ${m.vision ? '🖼' : '📝'}`))
+    .filter((p) => p.status !== 'upcoming')
+    .flatMap((p) =>
+      p.models
+        .filter((m) => m.status === 'active')
+        .map(
+          (m) =>
+            `  ${p.id.padEnd(12)} ${m.id.padEnd(30)} ${m.contextWindow.toLocaleString()} ctx  ${m.vision ? '🖼' : '📝'}`,
+        ),
+    )
 
   return {
     content: `Available models (${lines.length} active):\n\nProvider      Model                          Context     Vision\n${'-'.repeat(80)}\n${lines.join('\n')}\n\nUse /switch <provider> <model> to change.\nSee /providers for upcoming models.`,
@@ -240,7 +250,8 @@ const providerCmd: CommandHandler = (ctx) => ({
 
 const providersCmd: CommandHandler = (ctx) => {
   const lines = ctx.config.providers.map(
-    p => `  ${p.id.padEnd(14)} ${p.name.padEnd(20)} ${p.protocol.padEnd(18)} ${p.models.length} models  ${p.status === 'upcoming' ? '[upcoming]' : '✓'}`,
+    (p) =>
+      `  ${p.id.padEnd(14)} ${p.name.padEnd(20)} ${p.protocol.padEnd(18)} ${p.models.length} models  ${p.status === 'upcoming' ? '[upcoming]' : '✓'}`,
   )
   return {
     content: `Configured providers:\n\n${lines.join('\n')}\n\nCurrent: ${ctx.providerId}/${ctx.modelId}`,
@@ -250,7 +261,9 @@ const providersCmd: CommandHandler = (ctx) => {
 const switchCmd: CommandHandler = (ctx, args) => {
   const [newProvider, newModel] = args
   if (!newProvider || !newModel) {
-    return { content: 'Usage: /switch <provider> <model>\nExample: /switch deepseek deepseek-v4-pro' }
+    return {
+      content: 'Usage: /switch <provider> <model>\nExample: /switch deepseek deepseek-v4-pro',
+    }
   }
   ctx.engine.switchProvider(newProvider, newModel)
   return {
@@ -269,7 +282,9 @@ const configCmd: CommandHandler = (ctx) => {
     `permission:       ${c.permission}`,
     `providers:        ${c.providers.length} configured`,
   ]
-  return { content: `── Configuration ──\n${lines.join('\n')}\n\nEdit: ~/.mipham/config.yml or .mipham/config.yml` }
+  return {
+    content: `── Configuration ──\n${lines.join('\n')}\n\nEdit: ~/.mipham/config.yml or .mipham/config.yml`,
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -278,9 +293,17 @@ const configCmd: CommandHandler = (ctx) => {
 
 const toolsCmd: CommandHandler = (ctx) => {
   const tools = ctx.engine.getTools()
-  const categories: Record<string, string[]> = { file: [], exec: [], agent: [], network: [], system: [] }
+  const categories: Record<string, string[]> = {
+    file: [],
+    exec: [],
+    agent: [],
+    network: [],
+    system: [],
+  }
   for (const [name, tool] of tools) {
-    categories[tool.category]?.push(`  ${name.padEnd(14)} ${tool.permission.padEnd(8)} ${tool.description}`)
+    categories[tool.category]?.push(
+      `  ${name.padEnd(14)} ${tool.permission.padEnd(8)} ${tool.description}`,
+    )
   }
   const sections = Object.entries(categories)
     .filter(([, v]) => v!.length > 0)
@@ -395,7 +418,9 @@ const goalCmd: CommandHandler = (ctx, args) => {
     }
   }
   ctx.setGoal(goal.trim())
-  return { content: `✓ Goal set: "${goal.trim()}"\n\nUse /status to view progress. Type /goal without arguments to clear.` }
+  return {
+    content: `✓ Goal set: "${goal.trim()}"\n\nUse /status to view progress. Type /goal without arguments to clear.`,
+  }
 }
 
 const recapCmd: CommandHandler = (ctx) => {
@@ -405,16 +430,16 @@ const recapCmd: CommandHandler = (ctx) => {
     return { content: 'No conversation to recap.' }
   }
   // Show summary of conversation: count messages, roles, estimated tokens
-  const userMsgs = msgs.filter(m => m.role === 'user').length
-  const assistantMsgs = msgs.filter(m => m.role === 'assistant').length
+  const userMsgs = msgs.filter((m) => m.role === 'user').length
+  const assistantMsgs = msgs.filter((m) => m.role === 'assistant').length
   const tokens = c.getEstimatedTokens()
   const checkpointCount = c.getCheckpoints().length
 
   // Extract first few user messages as "topics"
   const topics = msgs
-    .filter(m => m.role === 'user' && typeof m.content === 'string')
+    .filter((m) => m.role === 'user' && typeof m.content === 'string')
     .slice(0, 5)
-    .map(m => {
+    .map((m) => {
       const text = typeof m.content === 'string' ? m.content : ''
       return text.length > 80 ? text.slice(0, 80) + '...' : text
     })
@@ -471,7 +496,7 @@ const reloadSkillsCmd: CommandHandler = (ctx) => {
     }
     const skills = ctx.skillsLoader.list()
     return {
-      content: `✓ Skills reloaded — ${skills.length} loaded.\n\n${skills.map(s => `  ${s.name.padEnd(28)} ${s.type.padEnd(10)} ${s.description}`).join('\n')}`,
+      content: `✓ Skills reloaded — ${skills.length} loaded.\n\n${skills.map((s) => `  ${s.name.padEnd(28)} ${s.type.padEnd(10)} ${s.description}`).join('\n')}`,
     }
   } catch (err) {
     return { content: `Failed to reload skills: ${String(err)}` }
@@ -487,7 +512,10 @@ const rewindCmd: CommandHandler = (ctx) => {
   const checkpoints = c.getCheckpoints()
 
   if (checkpoints.length === 0) {
-    return { content: 'No checkpoints available. Checkpoints are automatically saved after each AI response.' }
+    return {
+      content:
+        'No checkpoints available. Checkpoints are automatically saved after each AI response.',
+    }
   }
 
   const result = c.restoreCheckpoint()
@@ -512,7 +540,7 @@ const undoCmd: CommandHandler = rewindCmd
 const copyCmd: CommandHandler = (ctx, args) => {
   const c = ctx.engine.getContext()
   const msgs = c.getMessages()
-  const assistantMsgs = msgs.filter(m => m.role === 'assistant')
+  const assistantMsgs = msgs.filter((m) => m.role === 'assistant')
 
   if (assistantMsgs.length === 0) {
     return { content: 'No assistant responses to copy.' }
@@ -523,13 +551,15 @@ const copyCmd: CommandHandler = (ctx, args) => {
   if (args[0]) {
     n = parseInt(args[0]!, 10)
     if (isNaN(n) || n < 1) {
-      return { content: 'Usage: /copy [N]\nN = number of recent assistant responses to copy (default: 1)' }
+      return {
+        content: 'Usage: /copy [N]\nN = number of recent assistant responses to copy (default: 1)',
+      }
     }
   }
 
   const toCopy = assistantMsgs.slice(-n)
   const text = toCopy
-    .map(m => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))
+    .map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))
     .join('\n\n---\n\n')
 
   return {
@@ -549,15 +579,19 @@ const diffCmd: CommandHandler = async (_ctx) => {
     const fullDiff = execSync('git diff --no-color', { encoding: 'utf-8', timeout: 5000 })
     const MAX_LINES = 60
     const lines = fullDiff.split('\n')
-    const truncated = lines.length > MAX_LINES
-      ? lines.slice(0, MAX_LINES).join('\n') + `\n\n... (${lines.length - MAX_LINES} more lines. Use git diff to see full output.)`
-      : fullDiff
+    const truncated =
+      lines.length > MAX_LINES
+        ? lines.slice(0, MAX_LINES).join('\n') +
+          `\n\n... (${lines.length - MAX_LINES} more lines. Use git diff to see full output.)`
+        : fullDiff
 
     return {
       content: `── Git Diff ──\n\n${truncated}`,
     }
   } catch {
-    return { content: 'Unable to run git diff. Ensure git is installed and you are in a repository.' }
+    return {
+      content: 'Unable to run git diff. Ensure git is installed and you are in a repository.',
+    }
   }
 }
 
@@ -578,7 +612,10 @@ const fastCmd: CommandHandler = (ctx, args) => {
   } else {
     // Toggle
     // We can't read current state from context, so we just show usage
-    return { content: 'Usage: /fast [on|off]\n\nFast mode prioritizes speed over depth. Currently available as a configuration toggle.\n\nExample:\n  /fast on   — enable fast mode\n  /fast off  — disable fast mode' }
+    return {
+      content:
+        'Usage: /fast [on|off]\n\nFast mode prioritizes speed over depth. Currently available as a configuration toggle.\n\nExample:\n  /fast on   — enable fast mode\n  /fast off  — disable fast mode',
+    }
   }
 }
 
@@ -628,9 +665,11 @@ const tasksCmd: CommandHandler = (ctx) => {
   const msgs = c.getMessages()
 
   // Scan for task-related tool uses in message history
-  const toolUses = msgs.flatMap(m => {
+  const toolUses = msgs.flatMap((m) => {
     if (Array.isArray(m.content)) {
-      return m.content.filter(b => b.type === 'tool_use' && ['TaskCreate', 'TaskUpdate', 'TaskList'].includes(b.name))
+      return m.content.filter(
+        (b) => b.type === 'tool_use' && ['TaskCreate', 'TaskUpdate', 'TaskList'].includes(b.name),
+      )
     }
     return []
   })
@@ -639,9 +678,10 @@ const tasksCmd: CommandHandler = (ctx) => {
     content: stripIndent`
       ── Background Tasks ──
 
-      ${toolUses.length > 0
-        ? `${toolUses.length} task operations detected in this session.\n\nUse Task tool (TaskCreate / TaskUpdate / TaskList) to manage structured task tracking.`
-        : 'No tasks tracked yet. Use TaskCreate, TaskUpdate, and TaskList tools to manage structured tasks.'
+      ${
+        toolUses.length > 0
+          ? `${toolUses.length} task operations detected in this session.\n\nUse Task tool (TaskCreate / TaskUpdate / TaskList) to manage structured task tracking.`
+          : 'No tasks tracked yet. Use TaskCreate, TaskUpdate, and TaskList tools to manage structured tasks.'
       }
 
       Quick reference:
@@ -754,7 +794,7 @@ const doctorCmd: CommandHandler = async (ctx) => {
     '── Config ──',
     `Provider     ${ctx.providerId} / ${ctx.modelId}`,
     `Permission   ${ctx.config.permission}`,
-    `Providers    ${ctx.config.providers.length} configured (${ctx.config.providers.filter(p => p.status !== 'upcoming').length} active)`,
+    `Providers    ${ctx.config.providers.length} configured (${ctx.config.providers.filter((p) => p.status !== 'upcoming').length} active)`,
     '',
     '── Session ──',
   ]
@@ -763,7 +803,9 @@ const doctorCmd: CommandHandler = async (ctx) => {
   const msgs = c.getMessages()
   const tokens = c.getEstimatedTokens()
   lines.push(`Messages     ${msgs.length}`)
-  lines.push(`Tokens       ~${tokens.toLocaleString()} / 200,000 (${((tokens / 200_000) * 100).toFixed(1)}%)`)
+  lines.push(
+    `Tokens       ~${tokens.toLocaleString()} / 200,000 (${((tokens / 200_000) * 100).toFixed(1)}%)`,
+  )
   lines.push(`Checkpoints  ${c.getCheckpoints().length}`)
 
   // Git info
@@ -771,7 +813,10 @@ const doctorCmd: CommandHandler = async (ctx) => {
     const { execSync } = await import('node:child_process')
     lines.push('')
     lines.push('── Git ──')
-    const branch = execSync('git branch --show-current', { encoding: 'utf-8', timeout: 3000 }).trim()
+    const branch = execSync('git branch --show-current', {
+      encoding: 'utf-8',
+      timeout: 3000,
+    }).trim()
     lines.push(`Branch       ${branch || '(detached)'}`)
     const status = execSync('git status --porcelain', { encoding: 'utf-8', timeout: 3000 })
     const changed = status.trim().split('\n').filter(Boolean).length
@@ -779,7 +824,12 @@ const doctorCmd: CommandHandler = async (ctx) => {
     const log = execSync('git log --oneline -3', { encoding: 'utf-8', timeout: 3000 }).trim()
     lines.push(`Last commits ${log.split('\n').length}`)
     lines.push('')
-    lines.push(log.split('\n').map((l, i) => `  ${i + 1}. ${l}`).join('\n'))
+    lines.push(
+      log
+        .split('\n')
+        .map((l, i) => `  ${i + 1}. ${l}`)
+        .join('\n'),
+    )
   } catch {
     lines.push('')
     lines.push('── Git ──')
@@ -827,7 +877,8 @@ const exportCmd: CommandHandler = async (ctx) => {
   ]
 
   for (const msg of msgs) {
-    const roleLabel = msg.role === 'user' ? '🧑 User' : msg.role === 'assistant' ? '🤖 Mipham Code' : '⚠ System'
+    const roleLabel =
+      msg.role === 'user' ? '🧑 User' : msg.role === 'assistant' ? '🤖 Mipham Code' : '⚠ System'
     const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
     lines.push(`### ${roleLabel}`)
     lines.push('')
@@ -851,19 +902,19 @@ const reviewCmd: CommandHandler = async () => {
     const { execSync } = await import('node:child_process')
     const diff = execSync('git diff --stat', { encoding: 'utf-8', timeout: 5000 }).trim()
     const unstaged = execSync('git diff --name-only', { encoding: 'utf-8', timeout: 3000 }).trim()
-    const staged = execSync('git diff --cached --name-only', { encoding: 'utf-8', timeout: 3000 }).trim()
+    const staged = execSync('git diff --cached --name-only', {
+      encoding: 'utf-8',
+      timeout: 3000,
+    }).trim()
 
     if (!diff) {
-      return { content: '─ Code Review ─\n\nNo uncommitted changes detected.\n\nUse /pr-comments for PR-level review, or make changes first.' }
+      return {
+        content:
+          '─ Code Review ─\n\nNo uncommitted changes detected.\n\nUse /pr-comments for PR-level review, or make changes first.',
+      }
     }
 
-    const lines: string[] = [
-      '─ Code Review ─',
-      '',
-      'Uncommitted changes:',
-      '',
-      diff,
-    ]
+    const lines: string[] = ['─ Code Review ─', '', 'Uncommitted changes:', '', diff]
 
     if (staged) {
       lines.push('')
@@ -895,12 +946,25 @@ const prCommentsCmd: CommandHandler = async () => {
     const { execSync } = await import('node:child_process')
 
     // Get branch info
-    const branch = execSync('git branch --show-current', { encoding: 'utf-8', timeout: 3000 }).trim()
-    const mainBranch = execSync('git remote show origin 2>/dev/null | grep "HEAD branch" | cut -d: -f2', { encoding: 'utf-8', timeout: 3000 }).trim() || 'main'
+    const branch = execSync('git branch --show-current', {
+      encoding: 'utf-8',
+      timeout: 3000,
+    }).trim()
+    const mainBranch =
+      execSync('git remote show origin 2>/dev/null | grep "HEAD branch" | cut -d: -f2', {
+        encoding: 'utf-8',
+        timeout: 3000,
+      }).trim() || 'main'
 
     // Get diff stats vs main
-    const diffStat = execSync(`git diff --stat origin/${mainBranch}...HEAD 2>/dev/null || git diff --stat ${mainBranch}...HEAD 2>/dev/null || echo "(no remote tracking)"`, { encoding: 'utf-8', timeout: 5000 }).trim()
-    const commits = execSync(`git log --oneline origin/${mainBranch}..HEAD 2>/dev/null || git log --oneline ${mainBranch}..HEAD 2>/dev/null || echo "(no commits ahead)"`, { encoding: 'utf-8', timeout: 5000 }).trim()
+    const diffStat = execSync(
+      `git diff --stat origin/${mainBranch}...HEAD 2>/dev/null || git diff --stat ${mainBranch}...HEAD 2>/dev/null || echo "(no remote tracking)"`,
+      { encoding: 'utf-8', timeout: 5000 },
+    ).trim()
+    const commits = execSync(
+      `git log --oneline origin/${mainBranch}..HEAD 2>/dev/null || git log --oneline ${mainBranch}..HEAD 2>/dev/null || echo "(no commits ahead)"`,
+      { encoding: 'utf-8', timeout: 5000 },
+    ).trim()
 
     const lines: string[] = [
       '─ PR Review ─',
@@ -923,12 +987,17 @@ const prCommentsCmd: CommandHandler = async () => {
       lines.push('')
     }
 
-    lines.push('To generate PR description: type "write a PR description for these changes" in chat.')
+    lines.push(
+      'To generate PR description: type "write a PR description for these changes" in chat.',
+    )
     lines.push('To review PR: type "review this PR" or use /review.')
 
     return { content: lines.join('\n') }
   } catch {
-    return { content: '─ PR Review ─\n\nCould not determine PR context. Are you in a git repository with a remote?' }
+    return {
+      content:
+        '─ PR Review ─\n\nCould not determine PR context. Are you in a git repository with a remote?',
+    }
   }
 }
 
@@ -969,7 +1038,8 @@ const resumeCmd: CommandHandler = async (_ctx, args) => {
 
   if (sessions.length === 0) {
     return {
-      content: '─ Resume Session ─\n\nNo saved sessions found.\n\nSessions are auto-saved to ~/.mipham/sessions/ when Mipham Code exits.\nStart a conversation — it will be saved automatically.',
+      content:
+        '─ Resume Session ─\n\nNo saved sessions found.\n\nSessions are auto-saved to ~/.mipham/sessions/ when Mipham Code exits.\nStart a conversation — it will be saved automatically.',
     }
   }
 
@@ -978,8 +1048,9 @@ const resumeCmd: CommandHandler = async (_ctx, args) => {
   const lines: string[] = [
     '─ Saved Sessions ─',
     '',
-    ...recent.map((s, i) =>
-      `  ${(i + 1).toString().padStart(2)}. ${s.name.padEnd(45)} ${s.messageCount.toString().padStart(4)} msgs  ${new Date(s.updatedAt).toLocaleString()}`
+    ...recent.map(
+      (s, i) =>
+        `  ${(i + 1).toString().padStart(2)}. ${s.name.padEnd(45)} ${s.messageCount.toString().padStart(4)} msgs  ${new Date(s.updatedAt).toLocaleString()}`,
     ),
     '',
     `Total: ${sessions.length} session(s) • Location: ~/.mipham/sessions/`,
@@ -1006,12 +1077,13 @@ const memoryCmd: CommandHandler = async () => {
 
   if (!existsSync(memoryDir)) {
     return {
-      content: '─ Memory ─\n\nNo memories stored yet.\n\nMemory is saved to ~/.mipham/memory/ by the AI when you ask it to remember something.\nTry: "remember that I prefer TypeScript"',
+      content:
+        '─ Memory ─\n\nNo memories stored yet.\n\nMemory is saved to ~/.mipham/memory/ by the AI when you ask it to remember something.\nTry: "remember that I prefer TypeScript"',
     }
   }
 
   try {
-    const files = readdirSync(memoryDir).filter(f => f.endsWith('.md'))
+    const files = readdirSync(memoryDir).filter((f) => f.endsWith('.md'))
     if (files.length === 0) {
       return { content: '─ Memory ─\n\nNo memory files found in ~/.mipham/memory/' }
     }
@@ -1025,7 +1097,9 @@ const memoryCmd: CommandHandler = async () => {
         const content = readFileSync(p, 'utf-8')
         const match = content.match(/^#\s+(.+)$/m)
         if (match) title = match[1]!
-      } catch { /* use filename */ }
+      } catch {
+        /* use filename */
+      }
       memories.push({ file: f, size: stat.size, mtime: stat.mtime, title })
     }
 
@@ -1037,8 +1111,9 @@ const memoryCmd: CommandHandler = async () => {
       `Location: ${memoryDir}`,
       `Total:    ${memories.length} memor${memories.length === 1 ? 'y' : 'ies'}`,
       '',
-      ...memories.map((m, i) =>
-        `  ${(i + 1).toString().padStart(2)}. ${m.file.padEnd(35)} ${(m.size / 1024).toFixed(1)}KB  ${m.mtime.toLocaleDateString()}  ${m.title}`
+      ...memories.map(
+        (m, i) =>
+          `  ${(i + 1).toString().padStart(2)}. ${m.file.padEnd(35)} ${(m.size / 1024).toFixed(1)}KB  ${m.mtime.toLocaleDateString()}  ${m.title}`,
       ),
       '',
       'Memories are used by the AI to provide personalized context across sessions.',
@@ -1079,7 +1154,8 @@ Check for updates: https://mipham.ai/code/releases`,
 // ═══════════════════════════════════════════════════════════════
 
 const noPlanCmd: CommandHandler = () => ({
-  content: '✓ Plan mode exited. Your plan has been discarded.\n\nContinue chatting as normal, or type /plan to start a new plan.',
+  content:
+    '✓ Plan mode exited. Your plan has been discarded.\n\nContinue chatting as normal, or type /plan to start a new plan.',
 })
 
 // ═══════════════════════════════════════════════════════════════
@@ -1101,7 +1177,7 @@ const workflowsCmd: CommandHandler = async () => {
   for (const loc of locations) {
     if (!existsSync(loc)) continue
     try {
-      const items = readdirSync(loc).filter(f => f.endsWith('.js') || f.endsWith('.ts'))
+      const items = readdirSync(loc).filter((f) => f.endsWith('.js') || f.endsWith('.ts'))
       if (items.length === 0) continue
 
       lines.push(`📍 ${loc}`)
@@ -1109,7 +1185,9 @@ const workflowsCmd: CommandHandler = async () => {
         const path = join(loc, item)
         try {
           const content = readFileSync(path, 'utf-8')
-          const metaMatch = content.match(/export const meta\s*=\s*\{[^}]*name:\s*['"]([^'"]+)['"][^}]*description:\s*['"]([^'"]+)['"]/)
+          const metaMatch = content.match(
+            /export const meta\s*=\s*\{[^}]*name:\s*['"]([^'"]+)['"][^}]*description:\s*['"]([^'"]+)['"]/,
+          )
           if (metaMatch) {
             lines.push(`  • ${item} — "${metaMatch[1]}" — ${metaMatch[2]}`)
           } else {
@@ -1120,7 +1198,9 @@ const workflowsCmd: CommandHandler = async () => {
         }
         found++
       }
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
   }
 
   if (found === 0) {
@@ -1208,13 +1288,13 @@ const setupCmd: CommandHandler = async (ctx, args) => {
   const hasUserConfig = existsSync(join(home, '.mipham', 'config.yml'))
   const hasMiphamDir = existsSync(join(cwd, '.mipham'))
 
-  const activeProviders = ctx.config.providers.filter(p => p.status === 'active').length
+  const activeProviders = ctx.config.providers.filter((p) => p.status === 'active').length
   const totalProviders = ctx.config.providers.length
   const skills = ctx.skillsLoader?.list() || []
   const standardSkills = skills.filter((s: { type: string }) => s.type === 'standard').length
   const miphamSkills = skills.filter((s: { type: string }) => s.type === 'mipham').length
 
-  const statusIcon = (ok: boolean) => ok ? '✅' : '⬜'
+  const statusIcon = (ok: boolean) => (ok ? '✅' : '⬜')
 
   return {
     content: `── Mipham Code Setup ──
@@ -1348,17 +1428,17 @@ language: zh-CN
 }
 
 async function setupStep2(ctx: CommandContext): Promise<CommandResult> {
-  const active = ctx.config.providers.filter(p => p.status === 'active')
-  const upcoming = ctx.config.providers.filter(p => p.status === 'upcoming')
+  const active = ctx.config.providers.filter((p) => p.status === 'active')
+  const upcoming = ctx.config.providers.filter((p) => p.status === 'upcoming')
 
   const lines: string[] = [
     '── Step 2: Configure Providers ──',
     '',
     `Active providers (${active.length}):`,
-    ...active.map(p => `  ✅ ${p.id.padEnd(14)} ${p.name.padEnd(20)} ${p.protocol}`),
+    ...active.map((p) => `  ✅ ${p.id.padEnd(14)} ${p.name.padEnd(20)} ${p.protocol}`),
     '',
     `Upcoming (${upcoming.length}):`,
-    ...upcoming.map(p => `  🔶 ${p.id.padEnd(14)} ${p.name.padEnd(20)} ${p.protocol}`),
+    ...upcoming.map((p) => `  🔶 ${p.id.padEnd(14)} ${p.name.padEnd(20)} ${p.protocol}`),
     '',
     '── API Key Setup ──',
     '',
@@ -1385,7 +1465,7 @@ async function setupStep2(ctx: CommandContext): Promise<CommandResult> {
 }
 
 async function setupStep3(ctx: CommandContext): Promise<CommandResult> {
-  const activeProviders = ctx.config.providers.filter(p => p.status === 'active')
+  const activeProviders = ctx.config.providers.filter((p) => p.status === 'active')
 
   const lines: string[] = [
     '── Step 3: Set Default Model ──',
@@ -1398,9 +1478,11 @@ async function setupStep3(ctx: CommandContext): Promise<CommandResult> {
 
   for (const p of activeProviders) {
     lines.push(`  ${p.id}${p.id === ctx.providerId ? ' ← current' : ''}`)
-    for (const m of p.models.filter(m => m.status === 'active')) {
+    for (const m of p.models.filter((m) => m.status === 'active')) {
       const marker = m.id === ctx.modelId ? ' ★' : '  '
-      lines.push(`${marker}  ${m.id.padEnd(30)} ${m.contextWindow.toLocaleString()} ctx  ${m.vision ? '🖼' : '📝'}`)
+      lines.push(
+        `${marker}  ${m.id.padEnd(30)} ${m.contextWindow.toLocaleString()} ctx  ${m.vision ? '🖼' : '📝'}`,
+      )
     }
     lines.push('')
   }
@@ -1517,7 +1599,7 @@ const themeCmd: CommandHandler = (_ctx, args) => {
   const theme = args[0]?.toLowerCase()
   const validThemes = ['dark', 'light', 'auto'] as const
 
-  if (!theme || !validThemes.includes(theme as typeof validThemes[number])) {
+  if (!theme || !validThemes.includes(theme as (typeof validThemes)[number])) {
     return {
       content: `── Theme ──
 
@@ -1608,7 +1690,9 @@ const securityCmd: CommandHandler = async () => {
     const gi = readFileSync(join(cwd, '.gitignore'), 'utf-8')
     const hasEnv = gi.includes('.env')
     const hasKeys = gi.includes('*.key') || gi.includes('*.pem')
-    hasEnv && hasKeys ? ok.push('.gitignore covers .env + key files') : findings.push('Add .env, *.key, *.pem to .gitignore')
+    hasEnv && hasKeys
+      ? ok.push('.gitignore covers .env + key files')
+      : findings.push('Add .env, *.key, *.pem to .gitignore')
   } else {
     findings.push('No .gitignore found — create one with .env, node_modules, dist')
   }
@@ -1621,7 +1705,12 @@ const securityCmd: CommandHandler = async () => {
       { encoding: 'utf-8', timeout: 5000 },
     ).trim()
     if (secretPatterns) {
-      findings.push(`Possible hardcoded secrets found:\n${secretPatterns.split('\n').map(l => '    ' + l).join('\n')}`)
+      findings.push(
+        `Possible hardcoded secrets found:\n${secretPatterns
+          .split('\n')
+          .map((l) => '    ' + l)
+          .join('\n')}`,
+      )
     } else {
       ok.push('No hardcoded secrets detected')
     }
@@ -1649,12 +1738,7 @@ const securityCmd: CommandHandler = async () => {
     findings.push('No CI/CD workflows found — add .github/workflows/')
   }
 
-  const lines: string[] = [
-    '── Security Review ──',
-    '',
-    `Scanning: ${cwd}`,
-    '',
-  ]
+  const lines: string[] = ['── Security Review ──', '', `Scanning: ${cwd}`, '']
 
   if (ok.length > 0) {
     lines.push(`✅ Passed (${ok.length}):`)
@@ -1776,10 +1860,7 @@ Works with: Bash, Zsh, Fish, PowerShell, Windows Terminal`,
 const mcpCmd: CommandHandler = (ctx) => {
   const mcpServers = ctx.config.skills?.mcpServers ?? []
 
-  const lines: string[] = [
-    '── MCP Servers ──',
-    '',
-  ]
+  const lines: string[] = ['── MCP Servers ──', '']
 
   if (mcpServers.length > 0) {
     lines.push(`Configured servers (${mcpServers.length}):`)
@@ -1832,7 +1913,7 @@ const mcpCmd: CommandHandler = (ctx) => {
 // ═══════════════════════════════════════════════════════════════
 
 const loginCmd: CommandHandler = (ctx) => {
-  const activeProviders = ctx.config.providers.filter(p => p.status === 'active')
+  const activeProviders = ctx.config.providers.filter((p) => p.status === 'active')
 
   // Map provider IDs to their expected env var names
   const providerEnvMap: Record<string, string> = {
@@ -1876,7 +1957,7 @@ const loginCmd: CommandHandler = (ctx) => {
   lines.push('')
   lines.push('Current provider: ' + ctx.providerId + ' / ' + ctx.modelId)
   lines.push('')
-  lines.push('Get API keys from each provider\'s developer console.')
+  lines.push("Get API keys from each provider's developer console.")
   lines.push('Dashboard: https://mipham.ai/code/dashboard')
 
   return { content: lines.join('\n') }
@@ -1926,10 +2007,7 @@ To switch providers without clearing keys, use /switch <provider> <model>.`,
 const feedbackCmd: CommandHandler = (ctx, args) => {
   const message = args.join(' ').trim()
 
-  const lines: string[] = [
-    '── Feedback ──',
-    '',
-  ]
+  const lines: string[] = ['── Feedback ──', '']
 
   if (message) {
     lines.push('Your feedback:')
@@ -1964,7 +2042,9 @@ const feedbackCmd: CommandHandler = (ctx, args) => {
   lines.push(`  Version:    v${ctx.version}`)
   lines.push(`  Provider:   ${ctx.providerId} / ${ctx.modelId}`)
   lines.push(`  Platform:   ${process.platform} ${process.arch}`)
-  lines.push(`  Runtime:    ${typeof Bun !== 'undefined' ? 'Bun ' + Bun.version : 'Node.js ' + process.version}`)
+  lines.push(
+    `  Runtime:    ${typeof Bun !== 'undefined' ? 'Bun ' + Bun.version : 'Node.js ' + process.version}`,
+  )
   lines.push(`  Node:       ${process.version}`)
 
   return { content: lines.join('\n') }
@@ -2141,7 +2221,7 @@ function stripIndent(strings: TemplateStringsArray, ...values: unknown[]): strin
     const indent = match[1].length
     result = result
       .split('\n')
-      .map(line => line.slice(indent))
+      .map((line) => line.slice(indent))
       .join('\n')
   }
   return result.trim()

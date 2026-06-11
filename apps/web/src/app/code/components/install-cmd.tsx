@@ -22,7 +22,8 @@ export function InstallSection() {
         </div>
         <p className="text-mipham-500 text-xs mb-1">International · 国际站</p>
         <div className="bg-mipham-950 rounded-lg p-4 font-mono text-sm text-left text-mipham-200 mb-6 max-w-md mx-auto overflow-x-auto">
-          <span className="text-mipham-400">$</span> curl -fsSL https://onemipham.com/install.sh | bash
+          <span className="text-mipham-400">$</span> curl -fsSL https://onemipham.com/install.sh |
+          bash
         </div>
         <p className="text-mipham-500 text-xs mb-6">中国大陆 · China mainland</p>
 

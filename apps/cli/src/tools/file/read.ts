@@ -1,5 +1,5 @@
 import { readFileSync, existsSync, statSync } from 'node:fs'
-import type { ToolDefinition } from '../shared/index.ts'
+import type { ToolDefinition } from '../../shared/index.ts'
 import { resolveSafe } from '../../security/path'
 
 export const readTool: ToolDefinition = {

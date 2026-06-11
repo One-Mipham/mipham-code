@@ -4,7 +4,7 @@ import type {
   HookContext,
   HookResult,
   ToolResult,
-} from './shared/index.ts'
+} from '../shared/index.ts'
 
 export class HookEngine {
   private hooks: HookDefinition[] = []
@@ -15,7 +15,7 @@ export class HookEngine {
 
   unregister(event: HookEvent, toolName?: string): void {
     this.hooks = this.hooks.filter(
-      h => !(h.event === event && (!toolName || h.toolName === toolName)),
+      (h) => !(h.event === event && (!toolName || h.toolName === toolName)),
     )
   }
 
@@ -69,10 +69,7 @@ export class HookEngine {
     return this.runHooks('SessionEnd', undefined, ctx)
   }
 
-  async executeNotification(
-    message: string,
-    sessionId: string,
-  ): Promise<HookResult> {
+  async executeNotification(message: string, sessionId: string): Promise<HookResult> {
     const ctx: HookContext = {
       event: 'Notification',
       sessionId,
@@ -88,7 +85,7 @@ export class HookEngine {
     ctx: HookContext,
   ): Promise<HookResult> {
     const matching = this.hooks.filter(
-      h => h.event === event && (!toolName || !h.toolName || h.toolName === toolName),
+      (h) => h.event === event && (!toolName || !h.toolName || h.toolName === toolName),
     )
 
     let result: HookResult = { allowed: true }

@@ -1,4 +1,10 @@
-import type { ProviderConfig, ModelInfo, Message, StreamChunk, ContentBlock } from './shared/index.ts'
+import type {
+  ProviderConfig,
+  ModelInfo,
+  Message,
+  StreamChunk,
+  ContentBlock,
+} from '../shared/index.ts'
 import type { ProviderInstance, ChatRequest } from './registry'
 
 interface AnthropicContentBlock {
@@ -59,7 +65,7 @@ export class AnthropicProvider implements ProviderInstance {
     }
 
     if (req.tools && req.tools.length > 0) {
-      body.tools = req.tools.map(t => ({
+      body.tools = req.tools.map((t) => ({
         name: t.name,
         description: t.description,
         input_schema: t.parameters || t.input_schema || { type: 'object', properties: {} },
@@ -190,7 +196,7 @@ export class AnthropicProvider implements ProviderInstance {
   }
 
   async listModels(): Promise<ModelInfo[]> {
-    return this.config.models.filter(m => m.status === 'active')
+    return this.config.models.filter((m) => m.status === 'active')
   }
 
   async healthCheck(): Promise<boolean> {
@@ -213,7 +219,7 @@ export class AnthropicProvider implements ProviderInstance {
           content: [{ type: 'text', text: msg.content }],
         })
       } else {
-        const blocks = (msg.content as ContentBlock[]).map(block => {
+        const blocks = (msg.content as ContentBlock[]).map((block) => {
           switch (block.type) {
             case 'text':
               return { type: 'text', text: block.text }

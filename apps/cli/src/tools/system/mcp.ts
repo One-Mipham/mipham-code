@@ -1,4 +1,4 @@
-import type { ToolDefinition } from '../shared/index.ts'
+import type { ToolDefinition } from '../../shared/index.ts'
 import { McpClient } from '../../mcp/client'
 
 export const mcpTool: ToolDefinition = {
@@ -44,9 +44,9 @@ export const mcpTool: ToolDefinition = {
     }
 
     // Check if the requested tool exists on this server
-    const toolExists = connection.tools.some(t => t.name === toolName)
+    const toolExists = connection.tools.some((t) => t.name === toolName)
     if (!toolExists) {
-      const availableTools = connection.tools.map(t => `  • ${t.name}`).join('\n')
+      const availableTools = connection.tools.map((t) => `  • ${t.name}`).join('\n')
       return {
         success: false,
         content: '',
@@ -59,7 +59,7 @@ export const mcpTool: ToolDefinition = {
 
     // Format the result content
     const text = result.content
-      .map(c => {
+      .map((c) => {
         if (c.type === 'text' && c.text) return c.text
         if (c.type === 'image') return `[Image: ${c.mimeType || 'unknown'}]`
         return JSON.stringify(c)

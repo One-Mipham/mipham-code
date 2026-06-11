@@ -9,12 +9,14 @@ version: 1.0.0
 Use WebSearch tool to find current information.
 
 ## When to Use
+
 - Up-to-date documentation for libraries and frameworks
 - Current events and news
 - Technical troubleshooting with recent solutions
 - API reference and version-specific features
 
 ## Best Practices
+
 - Be specific with search queries
 - Use allowed_domains to focus results
 - Verify information from multiple sources

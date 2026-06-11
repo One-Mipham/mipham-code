@@ -41,11 +41,9 @@ export function FeaturesSection() {
   return (
     <section className="py-20 px-6 bg-white">
       <div className="max-w-6xl mx-auto">
-        <h2 className="text-3xl font-bold text-center mb-12">
-          Why Mipham Code?
-        </h2>
+        <h2 className="text-3xl font-bold text-center mb-12">Why Mipham Code?</h2>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {features.map(f => (
+          {features.map((f) => (
             <div
               key={f.title}
               className="p-6 rounded-xl border border-gray-200 hover:border-mipham-300 hover:shadow-lg transition-all"

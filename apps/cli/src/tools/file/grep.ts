@@ -1,5 +1,5 @@
 import { $ } from 'bun'
-import type { ToolDefinition } from '../shared/index.ts'
+import type { ToolDefinition } from '../../shared/index.ts'
 import { resolveSafe } from '../../security/path'
 
 export const grepTool: ToolDefinition = {
@@ -35,10 +35,7 @@ export const grepTool: ToolDefinition = {
       }
       // Fallback to grep
       try {
-        const content = await $`grep -rn ${pattern} ${searchPath}`
-          .cwd(ctx.cwd)
-          .quiet()
-          .text()
+        const content = await $`grep -rn ${pattern} ${searchPath}`.cwd(ctx.cwd).quiet().text()
         return {
           success: true,
           content: content.slice(0, 50000) || '(no matches)',

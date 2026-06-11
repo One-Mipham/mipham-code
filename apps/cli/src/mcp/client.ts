@@ -91,7 +91,9 @@ export class McpClient {
 
     try {
       conn.transport.close()
-    } catch { /* best effort */ }
+    } catch {
+      /* best effort */
+    }
     this.connections.delete(name)
   }
 
@@ -100,7 +102,9 @@ export class McpClient {
     for (const name of names) {
       try {
         await this.connections.get(name)?.transport.close()
-      } catch { /* best effort */ }
+      } catch {
+        /* best effort */
+      }
       this.connections.delete(name)
     }
     McpClient.instance = null
@@ -124,7 +128,7 @@ export class McpClient {
   }
 
   listConnections(): ConnectionInfo[] {
-    return Array.from(this.connections.values()).map(conn => ({
+    return Array.from(this.connections.values()).map((conn) => ({
       config: {
         name: conn.config.name,
         command: conn.config.command,

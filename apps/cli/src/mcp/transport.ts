@@ -15,7 +15,14 @@ const REQUEST_TIMEOUT_MS = 30_000
 export class StdioTransport {
   private proc: ChildProcess | null = null
   private msgId = 0
-  private pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>()
+  private pending = new Map<
+    number,
+    {
+      resolve: (v: unknown) => void
+      reject: (e: Error) => void
+      timer: ReturnType<typeof setTimeout>
+    }
+  >()
   private notificationHandlers: NotificationHandler[] = []
   private buffer = ''
   private closed = false
@@ -59,7 +66,9 @@ export class StdioTransport {
                 clearTimeout(entry.timer)
                 this.pending.delete(response.id)
                 if (response.error) {
-                  entry.reject(new Error(`MCP error ${response.error.code}: ${response.error.message}`))
+                  entry.reject(
+                    new Error(`MCP error ${response.error.code}: ${response.error.message}`),
+                  )
                 } else {
                   entry.resolve(response.result)
                 }
@@ -146,7 +155,9 @@ export class StdioTransport {
     if (this.proc) {
       try {
         this.proc.stdin?.end()
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
       this.proc.kill()
       this.proc = null
     }

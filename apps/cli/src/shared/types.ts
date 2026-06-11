@@ -22,10 +22,25 @@ export interface ProviderConfig {
 }
 
 // ── Message Types ──
-export interface TextContent { type: 'text'; text: string }
-export interface ImageContent { type: 'image_url'; image_url: { url: string } }
-export interface ToolUseContent { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
-export interface ToolResultContent { type: 'tool_result'; tool_use_id: string; content: string }
+export interface TextContent {
+  type: 'text'
+  text: string
+}
+export interface ImageContent {
+  type: 'image_url'
+  image_url: { url: string }
+}
+export interface ToolUseContent {
+  type: 'tool_use'
+  id: string
+  name: string
+  input: Record<string, unknown>
+}
+export interface ToolResultContent {
+  type: 'tool_result'
+  tool_use_id: string
+  content: string
+}
 export type ContentBlock = TextContent | ImageContent | ToolUseContent | ToolResultContent
 
 export interface Message {
@@ -37,9 +52,20 @@ export interface Message {
 export type ToolPermission = 'auto' | 'ask' | 'bypass'
 export type ToolCategory = 'file' | 'exec' | 'agent' | 'network' | 'system'
 
-export interface ToolContext { cwd: string; sessionId: string; provider: string; model: string; skillsLoader?: import('../skills/loader').SkillsLoader; registry?: import('../providers/registry').ProviderRegistry }
+export interface ToolContext {
+  cwd: string
+  sessionId: string
+  provider: string
+  model: string
+  skillsLoader?: import('../skills/loader').SkillsLoader
+  registry?: import('../providers/registry').ProviderRegistry
+}
 
-export interface ToolResult { success: boolean; content: string; error?: string }
+export interface ToolResult {
+  success: boolean
+  content: string
+  error?: string
+}
 
 export interface ToolDefinition {
   name: string
@@ -69,7 +95,12 @@ export interface MiphamConfig {
   skills?: { paths: string[]; mcpServers: McpServerConfig[] }
 }
 
-export interface McpServerConfig { name: string; command: string; args: string[]; env?: Record<string, string> }
+export interface McpServerConfig {
+  name: string
+  command: string
+  args: string[]
+  env?: Record<string, string>
+}
 
 // ── Skill Types ──
 export interface SkillDefinition {
@@ -83,7 +114,12 @@ export interface SkillDefinition {
 }
 
 // ── Hook Types ──
-export type HookEvent = 'PreToolUse' | 'PostToolUse' | 'SessionStart' | 'SessionEnd' | 'Notification'
+export type HookEvent =
+  | 'PreToolUse'
+  | 'PostToolUse'
+  | 'SessionStart'
+  | 'SessionEnd'
+  | 'Notification'
 
 export interface HookDefinition {
   event: HookEvent
@@ -99,12 +135,16 @@ export interface HookContext {
   sessionId: string
 }
 
-export interface HookResult { allowed: boolean; reason?: string; modifiedInput?: Record<string, unknown> }
+export interface HookResult {
+  allowed: boolean
+  reason?: string
+  modifiedInput?: Record<string, unknown>
+}
 
 // ── Instruction Types ──
 export interface InstructionFile {
   path: string
-  level: 'group' | 'project' | 'directory' | 'user'
+  level: 'group' | 'company' | 'project' | 'directory' | 'user'
   privacy: 'public' | 'project' | 'private'
   language: string
   content: string
@@ -114,4 +154,8 @@ export interface InstructionFile {
 // ── Permission Types ──
 export type PermissionLevel = 'auto' | 'ask' | 'bypass'
 
-export interface PermissionRule { toolName: string; level: PermissionLevel; pattern?: string }
+export interface PermissionRule {
+  toolName: string
+  level: PermissionLevel
+  pattern?: string
+}

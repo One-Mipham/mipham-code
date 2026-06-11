@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { ToolDefinition } from '../shared/index.ts'
+import type { ToolDefinition } from '../../shared/index.ts'
 
 export const planTool: ToolDefinition = {
   name: 'Plan',

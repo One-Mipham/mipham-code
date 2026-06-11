@@ -129,12 +129,7 @@ describe('HookEngine', () => {
     engine.register(makeHook('PostToolUse', handler))
 
     const toolResult = makeResult(true, 'file contents')
-    const result = await engine.executePostToolUse(
-      'read',
-      { file: 'a.ts' },
-      toolResult,
-      's1',
-    )
+    const result = await engine.executePostToolUse('read', { file: 'a.ts' }, toolResult, 's1')
 
     expect(result.allowed).toBe(true)
     expect(handler).toHaveBeenCalledWith(
@@ -150,12 +145,7 @@ describe('HookEngine', () => {
     const engine = new HookEngine()
     engine.register(makeHook('PostToolUse', makeDenyHandler('post-deny')))
 
-    const result = await engine.executePostToolUse(
-      'read',
-      {},
-      makeResult(),
-      's1',
-    )
+    const result = await engine.executePostToolUse('read', {}, makeResult(), 's1')
 
     expect(result.allowed).toBe(false)
   })
@@ -319,9 +309,7 @@ describe('HookEngine', () => {
 
   it('should return allowed:true when all hooks throw', async () => {
     const engine = new HookEngine()
-    engine.register(
-      makeHook('PreToolUse', vi.fn().mockRejectedValue(new Error('boom'))),
-    )
+    engine.register(makeHook('PreToolUse', vi.fn().mockRejectedValue(new Error('boom'))))
 
     const result = await engine.executePreToolUse('read', {}, 's1')
 

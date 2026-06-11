@@ -9,13 +9,13 @@ import { execSync } from 'node:child_process'
 // ── Glob matching ──
 function matchGlob(filepath: string, glob: string): boolean {
   let regexStr = glob
-    .replace(/\*\*/g, '<<GLOBSTAR>>')        // protect ** from * replacement
-    .replace(/\*/g, '[^/]*')                  // * → any non-slash chars
+    .replace(/\*\*/g, '<<GLOBSTAR>>') // protect ** from * replacement
+    .replace(/\*/g, '[^/]*') // * → any non-slash chars
     .replace(/<<GLOBSTAR>>/g, '<<PROTECT_DOT_STAR>>') // avoid . being escaped
-    .replace(/\?/g, '<<PROTECT_DOT>>')        // protect ? → . from escaping
-    .replace(/\./g, '\\.')                    // escape literal dots
-    .replace(/<<PROTECT_DOT_STAR>>/g, '.*')   // restore globstar regex
-    .replace(/<<PROTECT_DOT>>/g, '.')         // restore ? regex
+    .replace(/\?/g, '<<PROTECT_DOT>>') // protect ? → . from escaping
+    .replace(/\./g, '\\.') // escape literal dots
+    .replace(/<<PROTECT_DOT_STAR>>/g, '.*') // restore globstar regex
+    .replace(/<<PROTECT_DOT>>/g, '.') // restore ? regex
   if (!regexStr.startsWith('^')) regexStr = '^' + regexStr
   if (!regexStr.endsWith('$')) regexStr += '$'
   try {
@@ -50,9 +50,13 @@ export class Glob {
                 results.push(opts.absolute ? resolve(full) : full)
               }
             }
-          } catch { /* skip */ }
+          } catch {
+            /* skip */
+          }
         }
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
       return results
     }
 
@@ -84,13 +88,23 @@ export function $(strings: TemplateStringsArray, ...values: unknown[]) {
   let _cwd: string | undefined
 
   const chain = {
-    cwd(dir: string) { _cwd = dir; return chain },
-    quiet() { return chain },
-    nothrow() { return chain },
+    cwd(dir: string) {
+      _cwd = dir
+      return chain
+    },
+    quiet() {
+      return chain
+    },
+    nothrow() {
+      return chain
+    },
     async text(): Promise<string> {
       try {
         return execSync(cmd, {
-          encoding: 'utf-8', cwd: _cwd, maxBuffer: 50 * 1024 * 1024, timeout: 30_000,
+          encoding: 'utf-8',
+          cwd: _cwd,
+          maxBuffer: 50 * 1024 * 1024,
+          timeout: 30_000,
         }).toString()
       } catch (e: unknown) {
         const err = e as { stdout?: Buffer; stderr?: Buffer; status?: number }
@@ -101,8 +115,12 @@ export function $(strings: TemplateStringsArray, ...values: unknown[]) {
         throw exitErr
       }
     },
-    async lines(): Promise<string[]> { return (await chain.text()).split('\n') },
-    async json(): Promise<unknown> { return JSON.parse(await chain.text()) },
+    async lines(): Promise<string[]> {
+      return (await chain.text()).split('\n')
+    },
+    async json(): Promise<unknown> {
+      return JSON.parse(await chain.text())
+    },
   }
   return chain
 }

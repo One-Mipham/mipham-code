@@ -80,7 +80,9 @@ async function main() {
           }
         } else if (msg.method === 'resources/list') {
           respond(msg.id, {
-            resources: [{ uri: 'file:///test/data.txt', name: 'Test Data', mimeType: 'text/plain' }],
+            resources: [
+              { uri: 'file:///test/data.txt', name: 'Test Data', mimeType: 'text/plain' },
+            ],
           })
         } else {
           error(msg.id, -32601, `Unknown method: ${msg.method}`)

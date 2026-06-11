@@ -11,6 +11,7 @@ Analyzes code changes for bugs, security risks, performance issues, and code qua
 ## Review Dimensions
 
 ### 1. Correctness (Bug Detection)
+
 - Logic errors: off-by-one, inverted conditions, missing null checks
 - Type safety: implicit any, missing generics, unsafe casts
 - Error handling: swallowed exceptions, missing try/catch, unhandled promise rejections
@@ -18,6 +19,7 @@ Analyzes code changes for bugs, security risks, performance issues, and code qua
 - Race conditions: async/await ordering, shared mutable state
 
 ### 2. Security (OWASP Top 10)
+
 - Injection vulnerabilities (SQL, NoSQL, command, template)
 - XSS vectors (innerHTML, dangerouslySetInnerHTML, unescaped output)
 - Authentication/authorization bypass
@@ -26,6 +28,7 @@ Analyzes code changes for bugs, security risks, performance issues, and code qua
 - Insecure deserialization
 
 ### 3. Performance
+
 - N+1 queries (database in loops, repeated API calls)
 - Memory leaks (unclosed connections, event listeners, timers)
 - Unnecessary re-renders (React) or re-computations
@@ -33,6 +36,7 @@ Analyzes code changes for bugs, security risks, performance issues, and code qua
 - Missing caching or memoization where beneficial
 
 ### 4. Code Quality
+
 - SOLID principles violations
 - Code duplication (DRY violations)
 - Cyclomatic complexity > 10
@@ -42,6 +46,7 @@ Analyzes code changes for bugs, security risks, performance issues, and code qua
 - Unclear naming
 
 ### 5. Architecture & Design
+
 - Tight coupling between modules
 - Circular dependencies
 - Missing abstraction layers (when needed)
@@ -49,6 +54,7 @@ Analyzes code changes for bugs, security risks, performance issues, and code qua
 - God objects / classes with too many responsibilities
 
 ### 6. Testing
+
 - Missing tests for new code
 - Test coverage gaps for edge cases
 - Flaky tests (non-deterministic)
@@ -58,6 +64,7 @@ Analyzes code changes for bugs, security risks, performance issues, and code qua
 ### 7. Language-Specific Checks
 
 **TypeScript/JavaScript:**
+
 - Prefer `const` over `let`; avoid `var`
 - Use optional chaining (`?.`) and nullish coalescing (`??`)
 - Async functions should have try/catch
@@ -65,12 +72,14 @@ Analyzes code changes for bugs, security risks, performance issues, and code qua
 - Prefer `interface` over `type` for object shapes
 
 **Python:**
+
 - Type hints on function signatures
 - Context managers for resources (`with` statements)
 - List comprehensions over `map`/`filter` with lambdas
 - No mutable default arguments
 
 **Go:**
+
 - Error handling (never ignore errors)
 - Goroutine lifecycle (no leaks)
 - defer for cleanup

@@ -9,10 +9,12 @@ version: 1.0.0
 Review changed code for reuse, simplification, efficiency, and altitude cleanups. Quality only — it does not hunt for bugs.
 
 ## Review Focus
+
 - Code reuse opportunities
 - Simplification: reduce complexity
 - Efficiency: performance improvements
 - Altitude: architectural alignment
 
 ## Output
+
 Apply fixes where appropriate. Explain reasoning for each change.

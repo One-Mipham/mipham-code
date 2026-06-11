@@ -1,4 +1,4 @@
-import type { ProviderConfig } from './shared/index.ts'
+import type { ProviderConfig } from '../shared/index.ts'
 import { ProviderRegistry } from './registry'
 import { OpenAICompatProvider } from './openai-compat'
 import { AnthropicProvider } from './anthropic'

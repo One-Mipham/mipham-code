@@ -9,7 +9,9 @@ export default function InstallPage() {
       {/* Prerequisites */}
       <h2 className="text-2xl font-semibold mb-4">Prerequisites</h2>
       <ul className="list-disc pl-6 mb-8 space-y-2">
-        <li><strong>Bun 1.2+</strong> (recommended) or <strong>Node.js 22+</strong></li>
+        <li>
+          <strong>Bun 1.2+</strong> (recommended) or <strong>Node.js 22+</strong>
+        </li>
         <li>macOS, Linux, or Windows (PowerShell)</li>
         <li>At least one AI provider API key (e.g., Anthropic, OpenAI)</li>
       </ul>
@@ -62,10 +64,22 @@ export default function InstallPage() {
             </tr>
           </thead>
           <tbody>
-            <tr className="border-b"><td className="py-2 pr-4">macOS (Apple Silicon)</td><td className="py-2 font-mono text-sm">mipham-darwin-arm64</td></tr>
-            <tr className="border-b"><td className="py-2 pr-4">macOS (Intel)</td><td className="py-2 font-mono text-sm">mipham-darwin-x64</td></tr>
-            <tr className="border-b"><td className="py-2 pr-4">Linux (x64)</td><td className="py-2 font-mono text-sm">mipham-linux-x64</td></tr>
-            <tr className="border-b"><td className="py-2 pr-4">Windows (x64)</td><td className="py-2 font-mono text-sm">mipham-win-x64.exe</td></tr>
+            <tr className="border-b">
+              <td className="py-2 pr-4">macOS (Apple Silicon)</td>
+              <td className="py-2 font-mono text-sm">mipham-darwin-arm64</td>
+            </tr>
+            <tr className="border-b">
+              <td className="py-2 pr-4">macOS (Intel)</td>
+              <td className="py-2 font-mono text-sm">mipham-darwin-x64</td>
+            </tr>
+            <tr className="border-b">
+              <td className="py-2 pr-4">Linux (x64)</td>
+              <td className="py-2 font-mono text-sm">mipham-linux-x64</td>
+            </tr>
+            <tr className="border-b">
+              <td className="py-2 pr-4">Windows (x64)</td>
+              <td className="py-2 font-mono text-sm">mipham-win-x64.exe</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -78,9 +92,7 @@ export default function InstallPage() {
 
       {/* Start */}
       <h2 className="text-2xl font-semibold mb-4">Start Mipham Code</h2>
-      <pre className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg mb-8 overflow-x-auto">
-        mipham
-      </pre>
+      <pre className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg mb-8 overflow-x-auto">mipham</pre>
       <p className="text-gray-600 mb-8">
         On first launch, the interactive setup wizard (<code>/setup</code>) will guide you through
         provider configuration, model selection, skills installation, and permissions.
@@ -90,7 +102,7 @@ export default function InstallPage() {
       <h2 className="text-2xl font-semibold mb-4">Set API Keys</h2>
       <p className="mb-2 text-gray-600">Export your provider API keys as environment variables:</p>
       <pre className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg overflow-x-auto">
-{`export ANTHROPIC_API_KEY="sk-ant-..."
+        {`export ANTHROPIC_API_KEY="sk-ant-..."
 export OPENAI_API_KEY="sk-..."
 export DEEPSEEK_API_KEY="sk-..."
 export QWEN_API_KEY="sk-..."

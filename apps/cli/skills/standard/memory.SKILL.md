@@ -9,11 +9,13 @@ version: 1.0.0
 Manage persistent memory using the Memory tool.
 
 ## Usage
+
 - Use `Memory list` to see existing memories
 - Use `Memory read <name>` to read a specific memory
 - Use `Memory write <name> <content>` to create/update a memory
 
 ## Best Practices
+
 - One fact per memory file
 - Use descriptive kebab-case names
 - Link related memories

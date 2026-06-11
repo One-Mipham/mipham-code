@@ -7,7 +7,11 @@ describe('McpProtocol', () => {
   let protocol: McpProtocol
 
   afterEach(async () => {
-    try { await protocol?.close() } catch { /* ok */ }
+    try {
+      await protocol?.close()
+    } catch {
+      /* ok */
+    }
   })
 
   async function connect() {
@@ -43,7 +47,7 @@ describe('McpProtocol', () => {
     it('tool has schema', async () => {
       await connect()
       const tools = await protocol.listTools()
-      const echo = tools.find(t => t.name === 'echo')
+      const echo = tools.find((t) => t.name === 'echo')
       expect(echo).toBeDefined()
       expect(echo!.inputSchema.type).toBe('object')
       expect(echo!.inputSchema.required).toContain('message')

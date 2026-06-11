@@ -37,7 +37,9 @@ function validateParams(
   }
 
   // Check types for provided fields
-  const properties = schema.properties as Record<string, { type: string; enum?: string[] }> | undefined
+  const properties = schema.properties as
+    | Record<string, { type: string; enum?: string[] }>
+    | undefined
   if (properties) {
     for (const [key, def] of Object.entries(properties)) {
       const value = params[key]

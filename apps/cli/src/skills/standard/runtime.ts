@@ -1,4 +1,4 @@
-import type { SkillDefinition } from './shared/index.ts'
+import type { SkillDefinition } from '../../shared/index.ts'
 
 export interface StandardRuntimeContext {
   skill: SkillDefinition
@@ -41,10 +41,7 @@ export class StandardRuntime {
    * Execute a named prompt from the skill.
    * Returns the prompt text with any variable substitution applied.
    */
-  async executePrompt(
-    name: string,
-    variables?: Record<string, string>,
-  ): Promise<string> {
+  async executePrompt(name: string, variables?: Record<string, string>): Promise<string> {
     const prompt = this.getPrompt(name)
     if (!prompt) {
       throw new Error(`Prompt "${name}" not found in skill "${this.context.skill.name}"`)

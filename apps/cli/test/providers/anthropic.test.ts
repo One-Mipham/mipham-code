@@ -43,9 +43,7 @@ function makeConfig(overrides: Partial<ProviderConfig> = {}): ProviderConfig {
   }
 }
 
-async function collectChunks(
-  gen: AsyncGenerator<StreamChunk>,
-): Promise<StreamChunk[]> {
+async function collectChunks(gen: AsyncGenerator<StreamChunk>): Promise<StreamChunk[]> {
   const chunks: StreamChunk[] = []
   for await (const c of gen) chunks.push(c)
   return chunks
@@ -80,16 +78,18 @@ describe('AnthropicProvider', () => {
   // ═══════════════════════════════════════════
 
   it('should stream text from content_block_delta events', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      makeSSEResponse([
-        'data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}',
-        'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}',
-        'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" world"}}',
-        'data: {"type":"content_block_stop","index":0}',
-        'data: {"type":"message_stop"}',
-      ]),
-    )
-    globalThis.fetch = fetchMock as typeof fetch
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        makeSSEResponse([
+          'data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}',
+          'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}',
+          'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" world"}}',
+          'data: {"type":"content_block_stop","index":0}',
+          'data: {"type":"message_stop"}',
+        ]),
+      )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const provider = new AnthropicProvider(makeConfig())
     const chunks = await collectChunks(
@@ -99,11 +99,11 @@ describe('AnthropicProvider', () => {
       }),
     )
 
-    const textChunks = chunks.filter(c => c.type === 'text')
+    const textChunks = chunks.filter((c) => c.type === 'text')
     expect(textChunks).toHaveLength(2)
     expect(textChunks[0]!.content).toBe('Hello')
     expect(textChunks[1]!.content).toBe(' world')
-    expect(chunks.some(c => c.type === 'stop')).toBe(true)
+    expect(chunks.some((c) => c.type === 'stop')).toBe(true)
   })
 
   it('should ignore system-role messages in messages array', async () => {
@@ -112,7 +112,7 @@ describe('AnthropicProvider', () => {
       capturedBody = JSON.parse(opts.body as string)
       return makeSSEResponse(['data: {"type":"message_stop"}'])
     })
-    globalThis.fetch = fetchMock as typeof fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const provider = new AnthropicProvider(makeConfig())
     await collectChunks(
@@ -136,7 +136,7 @@ describe('AnthropicProvider', () => {
       capturedBody = JSON.parse(opts.body as string)
       return makeSSEResponse(['data: {"type":"message_stop"}'])
     })
-    globalThis.fetch = fetchMock as typeof fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const provider = new AnthropicProvider(makeConfig())
     await collectChunks(
@@ -156,7 +156,7 @@ describe('AnthropicProvider', () => {
       capturedBody = JSON.parse(opts.body as string)
       return makeSSEResponse(['data: {"type":"message_stop"}'])
     })
-    globalThis.fetch = fetchMock as typeof fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const provider = new AnthropicProvider(makeConfig())
     await collectChunks(
@@ -164,7 +164,11 @@ describe('AnthropicProvider', () => {
         model: 'claude-sonnet-4-6',
         messages: [],
         tools: [
-          { name: 'read', description: 'Read file', parameters: { type: 'object', properties: {} } },
+          {
+            name: 'read',
+            description: 'Read file',
+            parameters: { type: 'object', properties: {} },
+          },
         ],
       }),
     )
@@ -180,16 +184,18 @@ describe('AnthropicProvider', () => {
   // ═══════════════════════════════════════════
 
   it('should yield tool_use on content_block_stop with accumulated input', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      makeSSEResponse([
-        'data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_001","name":"read"}}',
-        'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"file\\":\\""}}',
-        'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"test.ts\\"}"}}',
-        'data: {"type":"content_block_stop","index":0}',
-        'data: {"type":"message_stop"}',
-      ]),
-    )
-    globalThis.fetch = fetchMock as typeof fetch
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        makeSSEResponse([
+          'data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_001","name":"read"}}',
+          'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"file\\":\\""}}',
+          'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"test.ts\\"}"}}',
+          'data: {"type":"content_block_stop","index":0}',
+          'data: {"type":"message_stop"}',
+        ]),
+      )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const provider = new AnthropicProvider(makeConfig())
     const chunks = await collectChunks(
@@ -199,7 +205,7 @@ describe('AnthropicProvider', () => {
       }),
     )
 
-    const toolUses = chunks.filter(c => c.type === 'tool_use')
+    const toolUses = chunks.filter((c) => c.type === 'tool_use')
     expect(toolUses).toHaveLength(1)
     expect(toolUses[0]!.toolUse!.name).toBe('read')
     expect(toolUses[0]!.toolUse!.id).toBe('toolu_001')
@@ -207,22 +213,22 @@ describe('AnthropicProvider', () => {
   })
 
   it('should handle malformed JSON in tool input gracefully', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      makeSSEResponse([
-        'data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"t1","name":"bash"}}',
-        'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"not valid json"}}',
-        'data: {"type":"content_block_stop","index":0}',
-        'data: {"type":"message_stop"}',
-      ]),
-    )
-    globalThis.fetch = fetchMock as typeof fetch
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        makeSSEResponse([
+          'data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"t1","name":"bash"}}',
+          'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"not valid json"}}',
+          'data: {"type":"content_block_stop","index":0}',
+          'data: {"type":"message_stop"}',
+        ]),
+      )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const provider = new AnthropicProvider(makeConfig())
-    const chunks = await collectChunks(
-      provider.chat({ model: 'claude-sonnet-4-6', messages: [] }),
-    )
+    const chunks = await collectChunks(provider.chat({ model: 'claude-sonnet-4-6', messages: [] }))
 
-    const toolUses = chunks.filter(c => c.type === 'tool_use')
+    const toolUses = chunks.filter((c) => c.type === 'tool_use')
     expect(toolUses).toHaveLength(1)
     // Should fall back to _raw
     expect(toolUses[0]!.toolUse!.input).toEqual({ _raw: 'not valid json' })
@@ -238,7 +244,7 @@ describe('AnthropicProvider', () => {
       capturedBody = JSON.parse(opts.body as string)
       return makeSSEResponse(['data: {"type":"message_stop"}'])
     })
-    globalThis.fetch = fetchMock as typeof fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const provider = new AnthropicProvider(makeConfig())
     await collectChunks(
@@ -261,7 +267,7 @@ describe('AnthropicProvider', () => {
       capturedBody = JSON.parse(opts.body as string)
       return makeSSEResponse(['data: {"type":"message_stop"}'])
     })
-    globalThis.fetch = fetchMock as typeof fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const provider = new AnthropicProvider(makeConfig())
     await collectChunks(
@@ -297,7 +303,7 @@ describe('AnthropicProvider', () => {
       capturedBody = JSON.parse(opts.body as string)
       return makeSSEResponse(['data: {"type":"message_stop"}'])
     })
-    globalThis.fetch = fetchMock as typeof fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const provider = new AnthropicProvider(makeConfig())
     await collectChunks(
@@ -306,9 +312,7 @@ describe('AnthropicProvider', () => {
         messages: [
           {
             role: 'user',
-            content: [
-              { type: 'image_url', image_url: { url: 'https://example.com/photo.png' } },
-            ],
+            content: [{ type: 'image_url', image_url: { url: 'https://example.com/photo.png' } }],
           },
         ],
       }),
@@ -329,7 +333,7 @@ describe('AnthropicProvider', () => {
       capturedBody = JSON.parse(opts.body as string)
       return makeSSEResponse(['data: {"type":"message_stop"}'])
     })
-    globalThis.fetch = fetchMock as typeof fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const provider = new AnthropicProvider(makeConfig())
     await collectChunks(
@@ -367,7 +371,7 @@ describe('AnthropicProvider', () => {
       capturedBody = JSON.parse(opts.body as string)
       return makeSSEResponse(['data: {"type":"message_stop"}'])
     })
-    globalThis.fetch = fetchMock as typeof fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const provider = new AnthropicProvider(makeConfig())
     await collectChunks(
@@ -402,15 +406,13 @@ describe('AnthropicProvider', () => {
   // ═══════════════════════════════════════════
 
   it('should yield error on non-OK HTTP response', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response('{"error":{"message":"Invalid API key"}}', { status: 401 }),
-    )
-    globalThis.fetch = fetchMock as typeof fetch
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response('{"error":{"message":"Invalid API key"}}', { status: 401 }))
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const provider = new AnthropicProvider(makeConfig())
-    const chunks = await collectChunks(
-      provider.chat({ model: 'claude-sonnet-4-6', messages: [] }),
-    )
+    const chunks = await collectChunks(provider.chat({ model: 'claude-sonnet-4-6', messages: [] }))
 
     expect(chunks).toHaveLength(1)
     expect(chunks[0]!.type).toBe('error')
@@ -418,33 +420,29 @@ describe('AnthropicProvider', () => {
   })
 
   it('should yield error when response body is null', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(null, { status: 200 }),
-    )
-    globalThis.fetch = fetchMock as typeof fetch
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }))
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const provider = new AnthropicProvider(makeConfig())
-    const chunks = await collectChunks(
-      provider.chat({ model: 'claude-sonnet-4-6', messages: [] }),
-    )
+    const chunks = await collectChunks(provider.chat({ model: 'claude-sonnet-4-6', messages: [] }))
 
     expect(chunks[0]!.type).toBe('error')
   })
 
   it('should yield error on SSE error event', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      makeSSEResponse([
-        'data: {"type":"error","error":{"type":"overloaded","message":"Server overloaded"}}',
-      ]),
-    )
-    globalThis.fetch = fetchMock as typeof fetch
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        makeSSEResponse([
+          'data: {"type":"error","error":{"type":"overloaded","message":"Server overloaded"}}',
+        ]),
+      )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const provider = new AnthropicProvider(makeConfig())
-    const chunks = await collectChunks(
-      provider.chat({ model: 'claude-sonnet-4-6', messages: [] }),
-    )
+    const chunks = await collectChunks(provider.chat({ model: 'claude-sonnet-4-6', messages: [] }))
 
-    const errors = chunks.filter(c => c.type === 'error')
+    const errors = chunks.filter((c) => c.type === 'error')
     expect(errors).toHaveLength(1)
     expect(errors[0]!.error).toBe('Server overloaded')
   })
@@ -460,14 +458,10 @@ describe('AnthropicProvider', () => {
       capturedHeaders = (opts.headers || {}) as Record<string, string>
       return makeSSEResponse(['data: {"type":"message_stop"}'])
     })
-    globalThis.fetch = fetchMock as typeof fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
-    const provider = new AnthropicProvider(
-      makeConfig({ apiKey: '${ANTHROPIC_KEY}' }),
-    )
-    await collectChunks(
-      provider.chat({ model: 'claude-sonnet-4-6', messages: [] }),
-    )
+    const provider = new AnthropicProvider(makeConfig({ apiKey: '${ANTHROPIC_KEY}' }))
+    await collectChunks(provider.chat({ model: 'claude-sonnet-4-6', messages: [] }))
 
     expect(capturedHeaders['x-api-key']).toBe('sk-ant-env-key')
   })
@@ -478,14 +472,10 @@ describe('AnthropicProvider', () => {
       capturedHeaders = (opts.headers || {}) as Record<string, string>
       return makeSSEResponse(['data: {"type":"message_stop"}'])
     })
-    globalThis.fetch = fetchMock as typeof fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
-    const provider = new AnthropicProvider(
-      makeConfig({ apiKey: 'sk-ant-direct' }),
-    )
-    await collectChunks(
-      provider.chat({ model: 'claude-sonnet-4-6', messages: [] }),
-    )
+    const provider = new AnthropicProvider(makeConfig({ apiKey: 'sk-ant-direct' }))
+    await collectChunks(provider.chat({ model: 'claude-sonnet-4-6', messages: [] }))
 
     expect(capturedHeaders['x-api-key']).toBe('sk-ant-direct')
   })
@@ -496,12 +486,10 @@ describe('AnthropicProvider', () => {
       capturedHeaders = (opts.headers || {}) as Record<string, string>
       return makeSSEResponse(['data: {"type":"message_stop"}'])
     })
-    globalThis.fetch = fetchMock as typeof fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const provider = new AnthropicProvider(makeConfig())
-    await collectChunks(
-      provider.chat({ model: 'claude-sonnet-4-6', messages: [] }),
-    )
+    await collectChunks(provider.chat({ model: 'claude-sonnet-4-6', messages: [] }))
 
     expect(capturedHeaders['anthropic-version']).toBe('2023-06-01')
     expect(capturedHeaders['anthropic-beta']).toBe('prompt-caching-2024-07-31')
@@ -516,14 +504,14 @@ describe('AnthropicProvider', () => {
     const models = await provider.listModels()
 
     expect(models).toHaveLength(2)
-    expect(models.every(m => m.status === 'active')).toBe(true)
+    expect(models.every((m) => m.status === 'active')).toBe(true)
   })
 
   it('should exclude deprecated models', async () => {
     const provider = new AnthropicProvider(makeConfig())
     const models = await provider.listModels()
 
-    const deprecated = models.find(m => m.id === 'claude-opus-4')
+    const deprecated = models.find((m) => m.id === 'claude-opus-4')
     expect(deprecated).toBeUndefined()
   })
 

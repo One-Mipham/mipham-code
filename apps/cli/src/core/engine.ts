@@ -1,4 +1,4 @@
-import type { Message, StreamChunk, ToolDefinition, ToolResult } from './shared/index.ts'
+import type { Message, StreamChunk, ToolDefinition, ToolResult } from '../shared/index.ts'
 import { ProviderRegistry } from '../providers/registry'
 import { ContextManager } from './context'
 import { PermissionSystem } from './permission'
@@ -77,15 +77,11 @@ export class QueryEngine {
       // Add tool use + result to context
       this.context.addMessage({
         role: 'assistant',
-        content: [
-          { type: 'tool_use', id: toolUse.id, name: toolUse.name, input: toolUse.input },
-        ],
+        content: [{ type: 'tool_use', id: toolUse.id, name: toolUse.name, input: toolUse.input }],
       })
       this.context.addMessage({
         role: 'user',
-        content: [
-          { type: 'tool_result', tool_use_id: toolUse.id, content: result.content },
-        ],
+        content: [{ type: 'tool_result', tool_use_id: toolUse.id, content: result.content }],
       })
     }
 
@@ -138,23 +134,16 @@ export class QueryEngine {
 
       this.context.addMessage({
         role: 'assistant',
-        content: [
-          { type: 'tool_use', id: toolUse.id, name: toolUse.name, input: toolUse.input },
-        ],
+        content: [{ type: 'tool_use', id: toolUse.id, name: toolUse.name, input: toolUse.input }],
       })
       this.context.addMessage({
         role: 'user',
-        content: [
-          { type: 'tool_result', tool_use_id: toolUse.id, content: result.content },
-        ],
+        content: [{ type: 'tool_result', tool_use_id: toolUse.id, content: result.content }],
       })
     }
   }
 
-  private async executeTool(
-    name: string,
-    params: Record<string, unknown>,
-  ): Promise<ToolResult> {
+  private async executeTool(name: string, params: Record<string, unknown>): Promise<ToolResult> {
     const tool = this.tools.get(name)
     if (!tool) {
       return { success: false, content: '', error: `Unknown tool: ${name}` }
@@ -182,7 +171,7 @@ export class QueryEngine {
   }
 
   private getToolDefinitions(): Record<string, unknown>[] {
-    return Array.from(this.tools.values()).map(t => ({
+    return Array.from(this.tools.values()).map((t) => ({
       name: t.name,
       description: t.description,
       parameters: t.parameters,

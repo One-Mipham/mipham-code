@@ -12,6 +12,7 @@ mipham
 ```
 
 Or via curl:
+
 ```bash
 # International
 curl -fsSL https://mipham.ai/install.sh | bash
@@ -51,14 +52,14 @@ export OPENAI_API_KEY="sk-..."
 
 ## Commands
 
-| Category | Commands |
-|----------|----------|
-| Session | `/help` `/clear` `/compact` `/context` `/status` `/rename` `/goal` `/recap` `/export` `/doctor` `/resume` |
-| Model | `/pick` `/model` `/models` `/provider` `/providers` `/switch` `/fast` `/effort` |
-| Tools | `/tools` `/skills` `/reload-skills` `/mcp` |
-| Workflow | `/plan` `/review` `/diff` `/todos` `/tasks` `/workflows` |
-| Security | `/security` `/audit` `/permissions` `/add-dir` |
-| Setup | `/setup` `/init` `/config` `/theme` `/ide` `/terminal-setup` |
+| Category | Commands                                                                                                  |
+| -------- | --------------------------------------------------------------------------------------------------------- |
+| Session  | `/help` `/clear` `/compact` `/context` `/status` `/rename` `/goal` `/recap` `/export` `/doctor` `/resume` |
+| Model    | `/pick` `/model` `/models` `/provider` `/providers` `/switch` `/fast` `/effort`                           |
+| Tools    | `/tools` `/skills` `/reload-skills` `/mcp`                                                                |
+| Workflow | `/plan` `/review` `/diff` `/todos` `/tasks` `/workflows`                                                  |
+| Security | `/security` `/audit` `/permissions` `/add-dir`                                                            |
+| Setup    | `/setup` `/init` `/config` `/theme` `/ide` `/terminal-setup`                                              |
 
 Press **Ctrl+P** for interactive model picker · **Shift+Tab** to cycle permission mode
 

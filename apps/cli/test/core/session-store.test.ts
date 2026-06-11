@@ -31,7 +31,10 @@ describe('SessionStore', () => {
         { role: 'assistant' as const, content: 'Hi there!' },
       ]
 
-      SessionStore.save('test-save-load', messages, { provider: 'anthropic', model: 'claude-sonnet-4-6' })
+      SessionStore.save('test-save-load', messages, {
+        provider: 'anthropic',
+        model: 'claude-sonnet-4-6',
+      })
 
       const loaded = SessionStore.load('test-save-load')
       expect(loaded).toBeDefined()
@@ -54,21 +57,21 @@ describe('SessionStore', () => {
       SessionStore.save('test-list-b', [{ role: 'user', content: 'b' }])
 
       const list = SessionStore.list()
-      const names = list.map(s => s.name)
+      const names = list.map((s) => s.name)
       expect(names).toContain('test-list-a')
       expect(names).toContain('test-list-b')
     })
 
     it('includes message count in metadata', () => {
       const messages = [
-        { role: 'user', content: '1' },
-        { role: 'assistant', content: '2' },
-        { role: 'user', content: '3' },
+        { role: 'user' as const, content: '1' },
+        { role: 'assistant' as const, content: '2' },
+        { role: 'user' as const, content: '3' },
       ]
       SessionStore.save('test-count', messages)
 
       const list = SessionStore.list()
-      const session = list.find(s => s.name === 'test-count')
+      const session = list.find((s) => s.name === 'test-count')
       expect(session).toBeDefined()
       expect(session!.messageCount).toBe(3)
     })
@@ -91,10 +94,9 @@ describe('SessionStore', () => {
 
   describe('autoSave', () => {
     it('auto-saves with timestamp name', () => {
-      const name = SessionStore.autoSave(
-        [{ role: 'user', content: 'auto-save test' }],
-        { provider: 'openai' },
-      )
+      const name = SessionStore.autoSave([{ role: 'user', content: 'auto-save test' }], {
+        provider: 'openai',
+      })
       expect(name).toMatch(/^session-\d{4}-\d{2}-\d{2}T/)
       expect(SessionStore.load(name)).toBeDefined()
 

@@ -45,9 +45,7 @@ function makeConfig(overrides: Partial<ProviderConfig> = {}): ProviderConfig {
   }
 }
 
-async function* makeMockChat(
-  chunks: StreamChunk[],
-): AsyncGenerator<StreamChunk> {
+async function* makeMockChat(chunks: StreamChunk[]): AsyncGenerator<StreamChunk> {
   for (const chunk of chunks) {
     yield chunk
   }
@@ -56,15 +54,12 @@ async function* makeMockChat(
 function makeMockProvider(config: ProviderConfig): ProviderInstance {
   return {
     config,
-    chat: vi.fn().mockImplementation((_req: ChatRequest) =>
-      makeMockChat([
-        { type: 'text', content: 'Hello!' },
-        { type: 'stop' },
-      ]),
-    ),
-    listModels: vi.fn().mockResolvedValue(
-      config.models.filter(m => m.status === 'active'),
-    ),
+    chat: vi
+      .fn()
+      .mockImplementation((_req: ChatRequest) =>
+        makeMockChat([{ type: 'text', content: 'Hello!' }, { type: 'stop' }]),
+      ),
+    listModels: vi.fn().mockResolvedValue(config.models.filter((m) => m.status === 'active')),
     healthCheck: vi.fn().mockResolvedValue(true),
   }
 }
@@ -119,11 +114,7 @@ describe('ProviderRegistry', () => {
     it('should switch active provider and model', () => {
       const config1 = makeConfig({ id: 'provider-1', name: 'Provider 1' })
       const config2 = makeConfig({ id: 'provider-2', name: 'Provider 2' })
-      const registry = new ProviderRegistry(
-        [config1, config2],
-        'provider-1',
-        'model-1',
-      )
+      const registry = new ProviderRegistry([config1, config2], 'provider-1', 'model-1')
 
       const p1 = makeMockProvider(config1)
       const p2 = makeMockProvider(config2)
@@ -141,9 +132,7 @@ describe('ProviderRegistry', () => {
       const p = makeMockProvider(config)
       registry.register(config.id, p)
 
-      expect(() => registry.switchProvider('missing')).toThrow(
-        'not registered',
-      )
+      expect(() => registry.switchProvider('missing')).toThrow('not registered')
     })
 
     it('should keep current model when no modelId provided', () => {
@@ -190,7 +179,7 @@ describe('ProviderRegistry', () => {
 
       const models = registry.listModels()
       expect(models).toHaveLength(2)
-      expect(models.every(m => m.status === 'active')).toBe(true)
+      expect(models.every((m) => m.status === 'active')).toBe(true)
     })
 
     it('should exclude deprecated models', () => {
@@ -199,7 +188,7 @@ describe('ProviderRegistry', () => {
       registry.register(config.id, makeMockProvider(config))
 
       const models = registry.listModels()
-      const deprecated = models.find(m => m.status === 'deprecated')
+      const deprecated = models.find((m) => m.status === 'deprecated')
       expect(deprecated).toBeUndefined()
     })
   })
@@ -238,9 +227,7 @@ describe('ProviderRegistry', () => {
         // consume
       }
 
-      expect(provider.chat).toHaveBeenCalledWith(
-        expect.objectContaining({ model: 'test-model-1' }),
-      )
+      expect(provider.chat).toHaveBeenCalledWith(expect.objectContaining({ model: 'test-model-1' }))
     })
   })
 })

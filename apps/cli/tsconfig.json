@@ -3,7 +3,9 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": ".",
+    "noEmit": true,
     "jsx": "react-jsx",
+    "allowImportingTsExtensions": true,
     "types": ["node", "bun"]
   },
   "include": ["bin", "src", "test"]

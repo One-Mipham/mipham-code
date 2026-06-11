@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -45,21 +45,15 @@ describe('resolveSafe', () => {
     })
 
     it('rejects absolute system paths', () => {
-      expect(() => resolveSafe(tmpDir, '/etc/hosts')).toThrow(
-        'outside the project workspace',
-      )
+      expect(() => resolveSafe(tmpDir, '/etc/hosts')).toThrow('outside the project workspace')
     })
 
     it('rejects /etc/passwd', () => {
-      expect(() => resolveSafe(tmpDir, '/etc/passwd')).toThrow(
-        'outside the project workspace',
-      )
+      expect(() => resolveSafe(tmpDir, '/etc/passwd')).toThrow('outside the project workspace')
     })
 
     it('rejects /proc/self/environ', () => {
-      expect(() => resolveSafe(tmpDir, '/proc/self/environ')).toThrow(
-        /outside|protected/,
-      )
+      expect(() => resolveSafe(tmpDir, '/proc/self/environ')).toThrow(/outside|protected/)
     })
   })
 
@@ -67,9 +61,7 @@ describe('resolveSafe', () => {
     it('rejects symlinks pointing outside workspace', () => {
       // Create a symlink inside workspace pointing to /etc
       symlinkSync('/etc', join(tmpDir, 'link-to-etc'))
-      expect(() => resolveSafe(tmpDir, 'link-to-etc')).toThrow(
-        /outside|protected/,
-      )
+      expect(() => resolveSafe(tmpDir, 'link-to-etc')).toThrow(/outside|protected/)
     })
 
     it('allows symlinks within workspace', () => {

@@ -1,4 +1,4 @@
-import type { SkillDefinition } from './shared/index.ts'
+import type { SkillDefinition } from '../../shared/index.ts'
 
 export interface MiphamRuntimeContext {
   skill: SkillDefinition
@@ -39,10 +39,7 @@ export class MiphamRuntime {
   /**
    * Execute a named prompt with Mipham-specific context.
    */
-  async executePrompt(
-    name: string,
-    variables?: Record<string, string>,
-  ): Promise<string> {
+  async executePrompt(name: string, variables?: Record<string, string>): Promise<string> {
     const prompt = this.context.skill.prompts?.[name]
     if (!prompt) {
       throw new Error(`Prompt "${name}" not found in skill "${this.context.skill.name}"`)

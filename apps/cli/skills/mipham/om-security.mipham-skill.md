@@ -9,6 +9,7 @@ version: 1.0.0
 Mipham-exclusive security analysis skill.
 
 ## Features
+
 - Prompt injection detection and prevention
 - Adversarial input robustness checking
 - Data leak prevention for PII and secrets
@@ -16,4 +17,5 @@ Mipham-exclusive security analysis skill.
 - Rate limiting and abuse detection
 
 ## Usage
+
 Automatically invoked for security-sensitive operations or when user requests security analysis.

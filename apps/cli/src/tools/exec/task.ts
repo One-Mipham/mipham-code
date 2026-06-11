@@ -1,4 +1,4 @@
-import type { ToolDefinition } from './shared/index.ts'
+import type { ToolDefinition } from '../../shared/index.ts'
 
 interface Task {
   id: string
@@ -51,7 +51,7 @@ export const taskTool: ToolDefinition = {
 
     if (action === 'list') {
       const list = Array.from(tasks.values())
-        .map(t => `[${t.status}] #${t.id}: ${t.subject}`)
+        .map((t) => `[${t.status}] #${t.id}: ${t.subject}`)
         .join('\n')
       return { success: true, content: list || '(no tasks)' }
     }

@@ -73,26 +73,28 @@ describe('OpenAICompatProvider', () => {
   // ═══════════════════════════════════════════
 
   it('should stream text chunks from SSE response', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      makeSSEResponse([
-        'data: {"choices":[{"delta":{"content":"Hello"},"index":0}]}',
-        'data: {"choices":[{"delta":{"content":" world"},"index":0}]}',
-        'data: {"choices":[{"finish_reason":"stop"}],"index":0}',
-        'data: [DONE]',
-      ]),
-    )
-    globalThis.fetch = fetchMock as typeof fetch
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        makeSSEResponse([
+          'data: {"choices":[{"delta":{"content":"Hello"},"index":0}]}',
+          'data: {"choices":[{"delta":{"content":" world"},"index":0}]}',
+          'data: {"choices":[{"finish_reason":"stop"}],"index":0}',
+          'data: [DONE]',
+        ]),
+      )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const provider = new OpenAICompatProvider(makeConfig())
     const chunks = await collectChunks(
       provider.chat({ model: 'gpt-5', messages: [{ role: 'user', content: 'hi' }] }),
     )
 
-    const textChunks = chunks.filter(c => c.type === 'text')
+    const textChunks = chunks.filter((c) => c.type === 'text')
     expect(textChunks).toHaveLength(2)
     expect(textChunks[0]!.content).toBe('Hello')
     expect(textChunks[1]!.content).toBe(' world')
-    expect(chunks.some(c => c.type === 'stop')).toBe(true)
+    expect(chunks.some((c) => c.type === 'stop')).toBe(true)
   })
 
   it('should send system prompt as system message', async () => {
@@ -101,7 +103,7 @@ describe('OpenAICompatProvider', () => {
       capturedBody = JSON.parse(opts.body as string)
       return makeSSEResponse(['data: [DONE]'])
     })
-    globalThis.fetch = fetchMock as typeof fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const provider = new OpenAICompatProvider(makeConfig())
     await collectChunks(
@@ -122,7 +124,7 @@ describe('OpenAICompatProvider', () => {
       capturedBody = JSON.parse(opts.body as string)
       return makeSSEResponse(['data: [DONE]'])
     })
-    globalThis.fetch = fetchMock as typeof fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const provider = new OpenAICompatProvider(makeConfig())
     await collectChunks(
@@ -148,7 +150,7 @@ describe('OpenAICompatProvider', () => {
       capturedBody = JSON.parse(opts.body as string)
       return makeSSEResponse(['data: [DONE]'])
     })
-    globalThis.fetch = fetchMock as typeof fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const provider = new OpenAICompatProvider(makeConfig())
     await collectChunks(
@@ -185,20 +187,20 @@ describe('OpenAICompatProvider', () => {
   // ═══════════════════════════════════════════
 
   it('should yield tool_use for tool_calls in SSE delta', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      makeSSEResponse([
-        'data: {"choices":[{"delta":{"tool_calls":[{"id":"call_1","function":{"name":"read","arguments":"{\\"file\\":\\"a.ts\\"}"}}]},"index":0}]}',
-        'data: [DONE]',
-      ]),
-    )
-    globalThis.fetch = fetchMock as typeof fetch
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        makeSSEResponse([
+          'data: {"choices":[{"delta":{"tool_calls":[{"id":"call_1","function":{"name":"read","arguments":"{\\"file\\":\\"a.ts\\"}"}}]},"index":0}]}',
+          'data: [DONE]',
+        ]),
+      )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const provider = new OpenAICompatProvider(makeConfig())
-    const chunks = await collectChunks(
-      provider.chat({ model: 'gpt-5', messages: [] }),
-    )
+    const chunks = await collectChunks(provider.chat({ model: 'gpt-5', messages: [] }))
 
-    const toolUses = chunks.filter(c => c.type === 'tool_use')
+    const toolUses = chunks.filter((c) => c.type === 'tool_use')
     expect(toolUses).toHaveLength(1)
     expect(toolUses[0]!.toolUse!.name).toBe('read')
     expect(toolUses[0]!.toolUse!.input).toEqual({ file: 'a.ts' })
@@ -209,15 +211,11 @@ describe('OpenAICompatProvider', () => {
   // ═══════════════════════════════════════════
 
   it('should yield error on non-OK response', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response('Unauthorized', { status: 401 }),
-    )
-    globalThis.fetch = fetchMock as typeof fetch
+    const fetchMock = vi.fn().mockResolvedValue(new Response('Unauthorized', { status: 401 }))
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const provider = new OpenAICompatProvider(makeConfig())
-    const chunks = await collectChunks(
-      provider.chat({ model: 'gpt-5', messages: [] }),
-    )
+    const chunks = await collectChunks(provider.chat({ model: 'gpt-5', messages: [] }))
 
     expect(chunks).toHaveLength(1)
     expect(chunks[0]!.type).toBe('error')
@@ -225,15 +223,11 @@ describe('OpenAICompatProvider', () => {
   })
 
   it('should yield error when response body is null', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(null, { status: 200 }),
-    )
-    globalThis.fetch = fetchMock as typeof fetch
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }))
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const provider = new OpenAICompatProvider(makeConfig())
-    const chunks = await collectChunks(
-      provider.chat({ model: 'gpt-5', messages: [] }),
-    )
+    const chunks = await collectChunks(provider.chat({ model: 'gpt-5', messages: [] }))
 
     expect(chunks).toHaveLength(1)
     expect(chunks[0]!.type).toBe('error')
@@ -251,11 +245,9 @@ describe('OpenAICompatProvider', () => {
       capturedHeaders = (opts.headers || {}) as Record<string, string>
       return makeSSEResponse(['data: [DONE]'])
     })
-    globalThis.fetch = fetchMock as typeof fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
-    const provider = new OpenAICompatProvider(
-      makeConfig({ apiKey: '${TEST_KEY}' }),
-    )
+    const provider = new OpenAICompatProvider(makeConfig({ apiKey: '${TEST_KEY}' }))
     await collectChunks(provider.chat({ model: 'gpt-5', messages: [] }))
 
     expect(capturedHeaders['Authorization']).toBe('Bearer resolved-key')
@@ -267,11 +259,9 @@ describe('OpenAICompatProvider', () => {
       capturedHeaders = (opts.headers || {}) as Record<string, string>
       return makeSSEResponse(['data: [DONE]'])
     })
-    globalThis.fetch = fetchMock as typeof fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
-    const provider = new OpenAICompatProvider(
-      makeConfig({ apiKey: 'sk-direct-key' }),
-    )
+    const provider = new OpenAICompatProvider(makeConfig({ apiKey: 'sk-direct-key' }))
     await collectChunks(provider.chat({ model: 'gpt-5', messages: [] }))
 
     expect(capturedHeaders['Authorization']).toBe('Bearer sk-direct-key')
@@ -284,11 +274,9 @@ describe('OpenAICompatProvider', () => {
       capturedHeaders = (opts.headers || {}) as Record<string, string>
       return makeSSEResponse(['data: [DONE]'])
     })
-    globalThis.fetch = fetchMock as typeof fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
-    const provider = new OpenAICompatProvider(
-      makeConfig({ apiKey: '${MISSING_KEY}' }),
-    )
+    const provider = new OpenAICompatProvider(makeConfig({ apiKey: '${MISSING_KEY}' }))
     await collectChunks(provider.chat({ model: 'gpt-5', messages: [] }))
 
     expect(capturedHeaders['Authorization']).toBe('Bearer ')
@@ -311,7 +299,7 @@ describe('OpenAICompatProvider', () => {
     const provider = new OpenAICompatProvider(makeConfig())
     const models = await provider.listModels()
 
-    const deprecated = models.find(m => m.status === 'deprecated')
+    const deprecated = models.find((m) => m.status === 'deprecated')
     expect(deprecated).toBeUndefined()
   })
 
@@ -321,7 +309,7 @@ describe('OpenAICompatProvider', () => {
 
   it('should return true on successful health check', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }))
-    globalThis.fetch = fetchMock as typeof fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const provider = new OpenAICompatProvider(makeConfig())
     const healthy = await provider.healthCheck()
@@ -340,7 +328,7 @@ describe('OpenAICompatProvider', () => {
 
   it('should return false when fetch throws', async () => {
     const fetchMock = vi.fn().mockRejectedValue(new Error('Network error'))
-    globalThis.fetch = fetchMock as typeof fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const provider = new OpenAICompatProvider(makeConfig())
     const healthy = await provider.healthCheck()
@@ -350,7 +338,7 @@ describe('OpenAICompatProvider', () => {
 
   it('should return false on non-200 response', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 500 }))
-    globalThis.fetch = fetchMock as typeof fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const provider = new OpenAICompatProvider(makeConfig())
     const healthy = await provider.healthCheck()
@@ -374,11 +362,9 @@ describe('OpenAICompatProvider', () => {
       capturedUrl = url as string
       return makeSSEResponse(['data: [DONE]'])
     })
-    globalThis.fetch = fetchMock as typeof fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
-    const provider = new OpenAICompatProvider(
-      makeConfig({ baseUrl: 'https://api.test.com/v1///' }),
-    )
+    const provider = new OpenAICompatProvider(makeConfig({ baseUrl: 'https://api.test.com/v1///' }))
     await collectChunks(provider.chat({ model: 'gpt-5', messages: [] }))
 
     expect(capturedUrl).toBe('https://api.test.com/v1/chat/completions')

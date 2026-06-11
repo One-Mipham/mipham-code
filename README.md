@@ -22,6 +22,7 @@ Mipham Code is an open-core, multi-model intelligent coding terminal built with 
 ## Quick Start
 
 ### Prerequisites
+
 - **Bun 1.2+** (recommended) or Node.js 22+
 - macOS, Linux, or WSL2
 
@@ -88,23 +89,23 @@ pnpm monorepo
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `Ctrl+P` or `/pick` | **Interactive model picker** (two-level: provider → model) |
-| `/help` | Show all available commands (40+) |
-| `/model` | Show current model |
-| `/models` | List available models |
-| `/providers` | List configured providers |
-| `/switch <provider> <model>` | Switch provider and model |
-| `/clear` | Clear conversation history |
-| `/exit` | Exit Mipham Code |
+| Command                      | Description                                                |
+| ---------------------------- | ---------------------------------------------------------- |
+| `Ctrl+P` or `/pick`          | **Interactive model picker** (two-level: provider → model) |
+| `/help`                      | Show all available commands (40+)                          |
+| `/model`                     | Show current model                                         |
+| `/models`                    | List available models                                      |
+| `/providers`                 | List configured providers                                  |
+| `/switch <provider> <model>` | Switch provider and model                                  |
+| `/clear`                     | Clear conversation history                                 |
+| `/exit`                      | Exit Mipham Code                                           |
 
 ## Configuration
 
 Create `~/.mipham/config.yml`:
 
 ```yaml
-version: "0.1.0"
+version: '0.1.0'
 defaultProvider: anthropic
 defaultModel: claude-sonnet-4-6
 permission: auto
@@ -114,15 +115,15 @@ Or project-level `.mipham/config.yml` in your repository.
 
 ## Supported Models
 
-| Provider | Models | Context | Status |
-|----------|--------|---------|--------|
-| Anthropic | Claude Opus 4.8, Sonnet 4.6, Haiku 4.5 | 200K–1M | Active |
-| OpenAI | GPT-5.5, GPT-5.4, GPT-5.4 Mini, GPT-5.3 Codex | 400K–1.05M | Active |
-| DeepSeek | V4 Pro, V4 Flash | 1M | Active |
-| 豆包 (字节跳动) | Seed 2.0 Pro/Code/Lite/Mini, Seed 1.6/Flash | 256K | Active |
-| 腾讯混元 | Hy3 Preview, 2.0 Think/Instruct, TurboS, T1, A13B, Lite | 32K–256K | Active |
-| 通义千问 | Qwen Plus, Qwen Max | 128K | Active |
-| MiphamAI | OM V5 Pro, OM V5 Flash, OM V5 Visual | 200K–1M | Upcoming |
+| Provider        | Models                                                  | Context    | Status   |
+| --------------- | ------------------------------------------------------- | ---------- | -------- |
+| Anthropic       | Claude Opus 4.8, Sonnet 4.6, Haiku 4.5                  | 200K–1M    | Active   |
+| OpenAI          | GPT-5.5, GPT-5.4, GPT-5.4 Mini, GPT-5.3 Codex           | 400K–1.05M | Active   |
+| DeepSeek        | V4 Pro, V4 Flash                                        | 1M         | Active   |
+| 豆包 (字节跳动) | Seed 2.0 Pro/Code/Lite/Mini, Seed 1.6/Flash             | 256K       | Active   |
+| 腾讯混元        | Hy3 Preview, 2.0 Think/Instruct, TurboS, T1, A13B, Lite | 32K–256K   | Active   |
+| 通义千问        | Qwen Plus, Qwen Max                                     | 128K       | Active   |
+| MiphamAI        | OM V5 Pro, OM V5 Flash, OM V5 Visual                    | 200K–1M    | Upcoming |
 
 **共 7 家提供商，40+ 模型。** 设置 API Key 即可使用：
 

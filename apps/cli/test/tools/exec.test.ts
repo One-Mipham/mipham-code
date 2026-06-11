@@ -60,7 +60,7 @@ describe('Bash tool execution', () => {
       exited: mockExit,
       kill: vi.fn(),
     }
-    globalThis.Bun = { spawn: vi.fn(() => mockProc) }
+    globalThis.Bun = { spawn: vi.fn(() => mockProc) } as unknown as typeof Bun
     return mockProc
   }
 
@@ -94,8 +94,16 @@ describe('Bash tool execution', () => {
     let receivedOpts: { cwd?: string } | undefined
     const mockExit = Promise.resolve(0)
     const mockProc = {
-      stdout: new ReadableStream({ start(c) { c.close() } }),
-      stderr: new ReadableStream({ start(c) { c.close() } }),
+      stdout: new ReadableStream({
+        start(c) {
+          c.close()
+        },
+      }),
+      stderr: new ReadableStream({
+        start(c) {
+          c.close()
+        },
+      }),
       exited: mockExit,
       kill: vi.fn(),
     }
@@ -105,7 +113,7 @@ describe('Bash tool execution', () => {
         receivedOpts = opts
         return mockProc
       }),
-    }
+    } as unknown as typeof Bun
 
     await bashTool.execute({ command: 'pwd' }, ctx)
     expect(receivedOpts?.cwd).toBe(ctx.cwd)
@@ -116,14 +124,21 @@ describe('Bash tool execution', () => {
     const mockExit = Promise.resolve(0)
     const mockProc = {
       stdout: new ReadableStream({
-        start(c) { c.enqueue(new TextEncoder().encode(longText)); c.close() },
+        start(c) {
+          c.enqueue(new TextEncoder().encode(longText))
+          c.close()
+        },
       }),
-      stderr: new ReadableStream({ start(c) { c.close() } }),
+      stderr: new ReadableStream({
+        start(c) {
+          c.close()
+        },
+      }),
       exited: mockExit,
       kill: vi.fn(),
     }
 
-    globalThis.Bun = { spawn: vi.fn(() => mockProc) }
+    globalThis.Bun = { spawn: vi.fn(() => mockProc) } as unknown as typeof Bun
 
     const result = await bashTool.execute({ command: 'cat bigfile' }, ctx)
     expect(result.success).toBe(true)
@@ -167,7 +182,7 @@ describe('Git tool execution', () => {
       exited: mockExit,
       kill: vi.fn(),
     }
-    globalThis.Bun = { spawn: vi.fn(() => mockProc) }
+    globalThis.Bun = { spawn: vi.fn(() => mockProc) } as unknown as typeof Bun
     return mockProc
   }
 
@@ -200,7 +215,7 @@ describe('Git tool execution', () => {
       spawn: vi.fn(() => {
         throw new Error('Spawn failed')
       }),
-    }
+    } as unknown as typeof Bun
 
     const result = await gitTool.execute({ command: 'status' }, ctx)
     expect(result.success).toBe(false)
@@ -246,10 +261,7 @@ describe('Task tool execution', () => {
     expect(r1.success).toBe(true)
     expect(r1.content).toContain('Task #1 created')
 
-    const r2 = await taskTool.execute(
-      { action: 'create', subject: 'Second task' },
-      ctx,
-    )
+    const r2 = await taskTool.execute({ action: 'create', subject: 'Second task' }, ctx)
     expect(r2.success).toBe(true)
     expect(r2.content).toContain('Task #2 created')
   })
@@ -280,18 +292,12 @@ describe('Task tool execution', () => {
   })
 
   it('updates task status', async () => {
-    const create = await taskTool.execute(
-      { action: 'create', subject: 'Update me' },
-      ctx,
-    )
+    const create = await taskTool.execute({ action: 'create', subject: 'Update me' }, ctx)
     // Extract task ID from response
     const idMatch = create.content.match(/#(\d+)/)
     const taskId = idMatch?.[1] ?? '1'
 
-    const update = await taskTool.execute(
-      { action: 'update', taskId, status: 'in_progress' },
-      ctx,
-    )
+    const update = await taskTool.execute({ action: 'update', taskId, status: 'in_progress' }, ctx)
     expect(update.success).toBe(true)
     expect(update.content).toContain('in_progress')
 

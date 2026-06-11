@@ -1,6 +1,6 @@
 import { writeFileSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
-import type { ToolDefinition } from '../shared/index.ts'
+import type { ToolDefinition } from '../../shared/index.ts'
 import { resolveSafe } from '../../security/path'
 
 export const writeTool: ToolDefinition = {

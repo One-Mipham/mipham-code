@@ -195,7 +195,11 @@ describe('SkillsLoader', () => {
       mkdirSync(mDir, { recursive: true })
 
       createSkillFile(stdDir, 'std.SKILL.md', { name: 'std', description: 'S', version: '1.0.0' })
-      createSkillFile(mDir, 'om.mipham-skill.md', { name: 'om', description: 'M', version: '1.0.0' })
+      createSkillFile(mDir, 'om.mipham-skill.md', {
+        name: 'om',
+        description: 'M',
+        version: '1.0.0',
+      })
 
       const loader = new SkillsLoader()
       loader.loadBuiltin(tmpDir)
@@ -274,8 +278,17 @@ describe('StandardRuntime', () => {
       greet: 'Hello, ${name}!',
       analyze: 'Analyze ${file} with focus on ${aspect}.',
     },
-    tools: [{ name: 'tool-a', description: 'Tool A' }],
-    hooks: [{ type: 'post-execute', action: 'log' }],
+    tools: [
+      {
+        name: 'tool-a',
+        description: 'Tool A',
+        category: 'system',
+        permission: 'auto',
+        parameters: {},
+        execute: async () => ({ success: true, content: '' }),
+      },
+    ],
+    hooks: [{ event: 'PostToolUse', handler: async () => ({ allowed: true }) }],
   })
 
   const runtime = new StandardRuntime({
@@ -349,7 +362,8 @@ describe('MiphamRuntime', () => {
     name: 'om-test',
     type: 'mipham',
     prompts: {
-      analyze: 'Provider: ${provider}, Model: ${model}, Session: ${session}, CWD: ${cwd}, Custom: ${custom}',
+      analyze:
+        'Provider: ${provider}, Model: ${model}, Session: ${session}, CWD: ${cwd}, Custom: ${custom}',
     },
   })
 
@@ -392,12 +406,24 @@ describe('MiphamRuntime', () => {
     const skillWithTools = makeSkill({
       name: 'om-with-tools',
       type: 'mipham',
-      tools: [{ name: 'mipham-tool', description: 'A Mipham tool' }],
-      hooks: [{ type: 'pre-execute', action: 'audit' }],
+      tools: [
+        {
+          name: 'mipham-tool',
+          description: 'A Mipham tool',
+          category: 'system',
+          permission: 'auto',
+          parameters: {},
+          execute: async () => ({ success: true, content: '' }),
+        },
+      ],
+      hooks: [{ event: 'PostToolUse', handler: async () => ({ allowed: true }) }],
     })
     const rt = new MiphamRuntime({
       skill: skillWithTools,
-      cwd: '/', sessionId: 'x', providerId: 'p', modelId: 'm',
+      cwd: '/',
+      sessionId: 'x',
+      providerId: 'p',
+      modelId: 'm',
     })
     expect(rt.getTools()).toHaveLength(1)
     expect(rt.getHooks()).toHaveLength(1)
@@ -444,7 +470,10 @@ describe('Built-in skills', () => {
     const projectRoot = join(import.meta.dirname, '..', '..')
     loader.loadBuiltin(projectRoot)
 
-    const names = loader.listByType('standard').map(s => s.name).sort()
+    const names = loader
+      .listByType('standard')
+      .map((s) => s.name)
+      .sort()
     expect(names).toEqual([
       'code-review',
       'compassionate-communication',
@@ -465,11 +494,11 @@ describe('Built-in skills', () => {
     const projectRoot = join(import.meta.dirname, '..', '..')
     loader.loadBuiltin(projectRoot)
 
-    const names = loader.listByType('mipham').map(s => s.name).sort()
-    expect(names).toEqual([
-      'om-model-optimize',
-      'om-security',
-    ])
+    const names = loader
+      .listByType('mipham')
+      .map((s) => s.name)
+      .sort()
+    expect(names).toEqual(['om-model-optimize', 'om-security'])
   })
 
   it('standard skills are loaded from files ending in .SKILL.md', () => {

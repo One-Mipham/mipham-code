@@ -1,4 +1,4 @@
-import type { ProviderConfig, ModelInfo, Message, StreamChunk } from './shared/index.ts'
+import type { ProviderConfig, ModelInfo, Message, StreamChunk } from '../shared/index.ts'
 
 export interface ProviderInstance {
   config: ProviderConfig
@@ -46,7 +46,9 @@ export class ProviderRegistry {
 
   switchProvider(providerId: string, modelId?: string): void {
     if (!this.providers.has(providerId)) {
-      throw new Error(`Provider "${providerId}" not registered. Available: ${this.listIds().join(', ')}`)
+      throw new Error(
+        `Provider "${providerId}" not registered. Available: ${this.listIds().join(', ')}`,
+      )
     }
     this.activeProviderId = providerId
     if (modelId) this.activeModelId = modelId
@@ -58,7 +60,7 @@ export class ProviderRegistry {
 
   listModels(): ModelInfo[] {
     const provider = this.getActive()
-    return provider.config.models.filter(m => m.status === 'active')
+    return provider.config.models.filter((m) => m.status === 'active')
   }
 
   async *chat(req: ChatRequest): AsyncGenerator<StreamChunk> {

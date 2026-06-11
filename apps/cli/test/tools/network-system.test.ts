@@ -52,12 +52,9 @@ describe('WebFetch tool execution', () => {
       text: () => Promise.resolve(mockHtml),
       status: 200,
       statusText: 'OK',
-    })
+    }) as unknown as typeof fetch
 
-    const result = await webFetchTool.execute(
-      { url: 'https://example.com' },
-      ctx,
-    )
+    const result = await webFetchTool.execute({ url: 'https://example.com' }, ctx)
     expect(result.success).toBe(true)
     expect(result.content).toContain('Hello')
     expect(result.content).toContain('World')
@@ -71,10 +68,10 @@ describe('WebFetch tool execution', () => {
       text: () => Promise.resolve('ok'),
       status: 200,
       statusText: 'OK',
-    })
+    }) as unknown as typeof fetch
 
     await webFetchTool.execute({ url: 'https://example.com' }, ctx)
-    const callArgs = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    const callArgs = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!
     expect(callArgs[0]).toBe('https://example.com')
     expect(callArgs[1]?.headers?.['User-Agent']).toContain('Mipham-Code')
   })
@@ -84,23 +81,19 @@ describe('WebFetch tool execution', () => {
       ok: false,
       status: 404,
       statusText: 'Not Found',
-    })
+    }) as unknown as typeof fetch
 
-    const result = await webFetchTool.execute(
-      { url: 'https://example.com/missing' },
-      ctx,
-    )
+    const result = await webFetchTool.execute({ url: 'https://example.com/missing' }, ctx)
     expect(result.success).toBe(false)
     expect(result.error).toContain('HTTP 404')
   })
 
   it('handles fetch errors gracefully', async () => {
-    globalThis.fetch = vi.fn().mockRejectedValue(new Error('Network error'))
+    globalThis.fetch = vi
+      .fn()
+      .mockRejectedValue(new Error('Network error')) as unknown as typeof fetch
 
-    const result = await webFetchTool.execute(
-      { url: 'https://invalid.test' },
-      ctx,
-    )
+    const result = await webFetchTool.execute({ url: 'https://invalid.test' }, ctx)
     expect(result.success).toBe(false)
     expect(result.error).toContain('Fetch failed')
   })
@@ -112,12 +105,9 @@ describe('WebFetch tool execution', () => {
       text: () => Promise.resolve(longText),
       status: 200,
       statusText: 'OK',
-    })
+    }) as unknown as typeof fetch
 
-    const result = await webFetchTool.execute(
-      { url: 'https://example.com/large' },
-      ctx,
-    )
+    const result = await webFetchTool.execute({ url: 'https://example.com/large' }, ctx)
     expect(result.success).toBe(true)
     expect(result.content.length).toBeLessThanOrEqual(50_000)
   })
@@ -154,10 +144,7 @@ describe('WebSearch tool definition', () => {
 
 describe('WebSearch tool execution', () => {
   it('returns search result stub', async () => {
-    const result = await webSearchTool.execute(
-      { query: 'vitest tutorial' },
-      ctx,
-    )
+    const result = await webSearchTool.execute({ query: 'vitest tutorial' }, ctx)
     expect(result.success).toBe(true)
     expect(result.content).toContain('vitest tutorial')
     expect(result.content).toContain('search API')
@@ -169,10 +156,7 @@ describe('WebSearch tool execution', () => {
   })
 
   it('passes query correctly to response', async () => {
-    const result = await webSearchTool.execute(
-      { query: 'TypeScript decorators' },
-      ctx,
-    )
+    const result = await webSearchTool.execute({ query: 'TypeScript decorators' }, ctx)
     expect(result.content).toContain('TypeScript decorators')
   })
 })
@@ -212,7 +196,11 @@ describe('Config tool execution', () => {
   const CONFIG_FILE = join(CONFIG_DIR, 'config.yml')
 
   function cleanConfig() {
-    try { rmSync(CONFIG_FILE, { force: true }) } catch { /* ok */ }
+    try {
+      rmSync(CONFIG_FILE, { force: true })
+    } catch {
+      /* ok */
+    }
   }
 
   beforeEach(() => {
@@ -231,60 +219,36 @@ describe('Config tool execution', () => {
   })
 
   it('sets and gets a config value', async () => {
-    await configTool.execute(
-      { action: 'set', key: 'theme', value: 'dark' },
-      ctx,
-    )
-    const result = await configTool.execute(
-      { action: 'get', key: 'theme' },
-      ctx,
-    )
+    await configTool.execute({ action: 'set', key: 'theme', value: 'dark' }, ctx)
+    const result = await configTool.execute({ action: 'get', key: 'theme' }, ctx)
     expect(result.success).toBe(true)
     // JSON.stringify wraps in quotes
     expect(result.content).toContain('dark')
   })
 
   it('supports dot notation for nested config', async () => {
-    await configTool.execute(
-      { action: 'set', key: 'editor.fontSize', value: '14' },
-      ctx,
-    )
-    const result = await configTool.execute(
-      { action: 'get', key: 'editor.fontSize' },
-      ctx,
-    )
+    await configTool.execute({ action: 'set', key: 'editor.fontSize', value: '14' }, ctx)
+    const result = await configTool.execute({ action: 'get', key: 'editor.fontSize' }, ctx)
     expect(result.success).toBe(true)
     expect(result.content).toContain('14')
   })
 
   it('gets multiple levels of nesting', async () => {
-    await configTool.execute(
-      { action: 'set', key: 'a.b.c', value: 'deep' },
-      ctx,
-    )
-    const result = await configTool.execute(
-      { action: 'get', key: 'a.b.c' },
-      ctx,
-    )
+    await configTool.execute({ action: 'set', key: 'a.b.c', value: 'deep' }, ctx)
+    const result = await configTool.execute({ action: 'get', key: 'a.b.c' }, ctx)
     expect(result.success).toBe(true)
     expect(result.content).toContain('deep')
   })
 
   it('lists config after setting values', async () => {
-    await configTool.execute(
-      { action: 'set', key: 'name', value: 'Mipham' },
-      ctx,
-    )
+    await configTool.execute({ action: 'set', key: 'name', value: 'Mipham' }, ctx)
     const result = await configTool.execute({ action: 'list' }, ctx)
     expect(result.success).toBe(true)
     expect(result.content).toContain('Mipham')
   })
 
   it('returns null for non-existent key', async () => {
-    const result = await configTool.execute(
-      { action: 'get', key: 'nonexistent' },
-      ctx,
-    )
+    const result = await configTool.execute({ action: 'get', key: 'nonexistent' }, ctx)
     expect(result.success).toBe(true)
     // JSON.stringify(undefined) returns undefined (not valid JSON),
     // but the tool stringifies the value via reduce — undefined values
@@ -298,36 +262,21 @@ describe('Config tool execution', () => {
   })
 
   it('errors when key is missing for set', async () => {
-    const result = await configTool.execute(
-      { action: 'set', value: 'something' },
-      ctx,
-    )
+    const result = await configTool.execute({ action: 'set', value: 'something' }, ctx)
     expect(result.success).toBe(false)
     expect(result.error).toContain('key is required')
   })
 
   it('errors for unknown action (when key is provided)', async () => {
-    const result = await configTool.execute(
-      { action: 'delete', key: 'some-key' },
-      ctx,
-    )
+    const result = await configTool.execute({ action: 'delete', key: 'some-key' }, ctx)
     expect(result.success).toBe(false)
     expect(result.error).toContain('Unknown action')
   })
 
   it('overwrites existing config value', async () => {
-    await configTool.execute(
-      { action: 'set', key: 'version', value: '1.0' },
-      ctx,
-    )
-    await configTool.execute(
-      { action: 'set', key: 'version', value: '2.0' },
-      ctx,
-    )
-    const result = await configTool.execute(
-      { action: 'get', key: 'version' },
-      ctx,
-    )
+    await configTool.execute({ action: 'set', key: 'version', value: '1.0' }, ctx)
+    await configTool.execute({ action: 'set', key: 'version', value: '2.0' }, ctx)
+    const result = await configTool.execute({ action: 'get', key: 'version' }, ctx)
     expect(result.content).toContain('2.0')
   })
 })
@@ -356,27 +305,18 @@ describe('MCP tool definition', () => {
 
 describe('MCP tool execution', () => {
   it('returns error when server is not configured', async () => {
-    const result = await mcpTool.execute(
-      { server: 'nonexistent-server', tool: 'some-tool' },
-      ctx,
-    )
+    const result = await mcpTool.execute({ server: 'nonexistent-server', tool: 'some-tool' }, ctx)
     expect(result.success).toBe(false)
     expect(result.error).toContain('not configured')
   })
 
   it('mentions .mipham/config.yml in error', async () => {
-    const result = await mcpTool.execute(
-      { server: 'test-server', tool: 'test-tool' },
-      ctx,
-    )
+    const result = await mcpTool.execute({ server: 'test-server', tool: 'test-tool' }, ctx)
     expect(result.error).toContain('.mipham/config.yml')
   })
 
   it('requires server and tool parameters', async () => {
-    const result = await mcpTool.execute(
-      { server: 'unconfigured', tool: 'navigate' },
-      ctx,
-    )
+    const result = await mcpTool.execute({ server: 'unconfigured', tool: 'navigate' }, ctx)
     expect(result.success).toBe(false)
   })
 })

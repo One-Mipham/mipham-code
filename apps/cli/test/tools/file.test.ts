@@ -73,10 +73,7 @@ describe('Read tool execution', () => {
 
   it('supports offset parameter', async () => {
     writeFileSync(join(tmpDir, 'test.txt'), 'line1\nline2\nline3\nline4\nline5')
-    const result = await readTool.execute(
-      { file_path: join(tmpDir, 'test.txt'), offset: 2 },
-      ctx,
-    )
+    const result = await readTool.execute({ file_path: join(tmpDir, 'test.txt'), offset: 2 }, ctx)
     expect(result.success).toBe(true)
     const lines = result.content.split('\n')
     expect(lines.length).toBeLessThanOrEqual(3) // lines 3,4,5
@@ -86,10 +83,7 @@ describe('Read tool execution', () => {
 
   it('supports limit parameter', async () => {
     writeFileSync(join(tmpDir, 'test.txt'), 'a\nb\nc\nd\ne\nf\ng\nh')
-    const result = await readTool.execute(
-      { file_path: join(tmpDir, 'test.txt'), limit: 2 },
-      ctx,
-    )
+    const result = await readTool.execute({ file_path: join(tmpDir, 'test.txt'), limit: 2 }, ctx)
     expect(result.success).toBe(true)
     const lines = result.content.split('\n')
     expect(lines.length).toBeLessThanOrEqual(2)
@@ -123,10 +117,7 @@ describe('Write tool definition', () => {
 describe('Write tool execution', () => {
   it('writes content to a file', async () => {
     const dest = join(tmpDir, 'output.txt')
-    const result = await writeTool.execute(
-      { file_path: dest, content: 'Hello Mipham' },
-      ctx,
-    )
+    const result = await writeTool.execute({ file_path: dest, content: 'Hello Mipham' }, ctx)
     expect(result.success).toBe(true)
     expect(result.content).toContain('Wrote')
     expect(result.content).toContain(dest)
@@ -136,10 +127,7 @@ describe('Write tool execution', () => {
 
   it('creates parent directories automatically', async () => {
     const dest = join(tmpDir, 'deep', 'nested', 'folder', 'output.txt')
-    const result = await writeTool.execute(
-      { file_path: dest, content: 'nested content' },
-      ctx,
-    )
+    const result = await writeTool.execute({ file_path: dest, content: 'nested content' }, ctx)
     expect(result.success).toBe(true)
     const written = readFileSync(dest, 'utf-8')
     expect(written).toBe('nested content')
@@ -298,10 +286,7 @@ describe('Glob tool execution', () => {
   })
 
   it('returns (no matches) for empty results', async () => {
-    const result = await globTool.execute(
-      { pattern: '**/*.nonexistent', path: tmpDir },
-      ctx,
-    )
+    const result = await globTool.execute({ pattern: '**/*.nonexistent', path: tmpDir }, ctx)
     expect(result.success).toBe(true)
     expect(result.content).toBe('(no matches)')
   })
@@ -339,30 +324,21 @@ describe('Grep tool definition', () => {
 describe('Grep tool execution', () => {
   it('finds pattern in files', async () => {
     writeFileSync(join(tmpDir, 'test.txt'), 'hello world\nfoo bar\nhello again')
-    const result = await grepTool.execute(
-      { pattern: 'hello', path: tmpDir },
-      ctx,
-    )
+    const result = await grepTool.execute({ pattern: 'hello', path: tmpDir }, ctx)
     expect(result.success).toBe(true)
     expect(result.content).toContain('hello')
   })
 
   it('returns (no matches) when pattern not found', async () => {
     writeFileSync(join(tmpDir, 'empty.txt'), 'nothing here')
-    const result = await grepTool.execute(
-      { pattern: 'ZZZZZNOTEXIST', path: tmpDir },
-      ctx,
-    )
+    const result = await grepTool.execute({ pattern: 'ZZZZZNOTEXIST', path: tmpDir }, ctx)
     expect(result.success).toBe(true)
   })
 
   it('searches with include filter', async () => {
     writeFileSync(join(tmpDir, 'a.ts'), 'export const x = 1')
     writeFileSync(join(tmpDir, 'b.txt'), 'export const x = 1')
-    const result = await grepTool.execute(
-      { pattern: 'export', path: tmpDir, include: '*.ts' },
-      ctx,
-    )
+    const result = await grepTool.execute({ pattern: 'export', path: tmpDir, include: '*.ts' }, ctx)
     expect(result.success).toBe(true)
     // Should find in .ts but exclude .txt
     expect(result.content).toContain('a.ts')

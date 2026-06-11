@@ -186,16 +186,14 @@ describe('PermissionSystem', () => {
 
     const fileTools = ps.getByCategory(tools, 'file')
     expect(fileTools).toHaveLength(2)
-    expect(fileTools.map(t => t.name)).toContain('read')
-    expect(fileTools.map(t => t.name)).toContain('write')
+    expect(fileTools.map((t) => t.name)).toContain('read')
+    expect(fileTools.map((t) => t.name)).toContain('write')
   })
 
   it('should apply rule overrides in category results', () => {
     const ps = new PermissionSystem()
     ps.setRule('read', 'ask')
-    const tools = new Map<string, ToolDefinition>([
-      ['read', makeTool('read', 'auto', 'file')],
-    ])
+    const tools = new Map<string, ToolDefinition>([['read', makeTool('read', 'auto', 'file')]])
 
     const results = ps.getByCategory(tools, 'file')
     expect(results[0]!.level).toBe('ask') // overridden
@@ -203,9 +201,7 @@ describe('PermissionSystem', () => {
 
   it('should return empty array for category with no matches', () => {
     const ps = new PermissionSystem()
-    const tools = new Map<string, ToolDefinition>([
-      ['read', makeTool('read', 'auto', 'file')],
-    ])
+    const tools = new Map<string, ToolDefinition>([['read', makeTool('read', 'auto', 'file')]])
 
     expect(ps.getByCategory(tools, 'network')).toHaveLength(0)
   })

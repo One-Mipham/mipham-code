@@ -1,4 +1,4 @@
-import type { ToolDefinition } from '../shared/index.ts'
+import type { ToolDefinition } from '../../shared/index.ts'
 
 // ── Dangerous command patterns ──
 const BLOCKED_PATTERNS = [
@@ -20,8 +20,13 @@ const BLOCKED_PATTERNS = [
 
 const BLOCKED_COMMANDS = [
   'mkfs',
-  'mkfs.ext2', 'mkfs.ext3', 'mkfs.ext4',
-  'mkfs.xfs', 'mkfs.btrfs', 'mkfs.fat', 'mkfs.vfat',
+  'mkfs.ext2',
+  'mkfs.ext3',
+  'mkfs.ext4',
+  'mkfs.xfs',
+  'mkfs.btrfs',
+  'mkfs.fat',
+  'mkfs.vfat',
   'mkswap',
 ]
 

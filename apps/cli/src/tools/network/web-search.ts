@@ -1,4 +1,4 @@
-import type { ToolDefinition } from './shared/index.ts'
+import type { ToolDefinition } from '../../shared/index.ts'
 
 export const webSearchTool: ToolDefinition = {
   name: 'WebSearch',

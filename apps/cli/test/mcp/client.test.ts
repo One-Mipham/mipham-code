@@ -32,8 +32,8 @@ describe('McpClient', () => {
 
       const tools = client.getTools('mock')
       expect(tools).toHaveLength(2)
-      expect(tools.map(t => t.name)).toContain('echo')
-      expect(tools.map(t => t.name)).toContain('add')
+      expect(tools.map((t) => t.name)).toContain('echo')
+      expect(tools.map((t) => t.name)).toContain('add')
     })
 
     it('disconnects a server', async () => {
@@ -95,8 +95,8 @@ describe('McpClient', () => {
 
       const connections = client.listConnections()
       expect(connections).toHaveLength(2)
-      expect(connections.map(c => c.config.name)).toContain('server-a')
-      expect(connections.map(c => c.config.name)).toContain('server-b')
+      expect(connections.map((c) => c.config.name)).toContain('server-a')
+      expect(connections.map((c) => c.config.name)).toContain('server-b')
 
       client.disconnect('server-a')
       expect(client.listConnections()).toHaveLength(1)

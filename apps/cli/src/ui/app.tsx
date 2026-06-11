@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react'
 import { Box, Text, useInput } from 'ink'
 import type { QueryEngine } from '../core/engine'
-import type { MiphamConfig } from './shared/index.ts'
+import type { MiphamConfig } from '../shared/index.ts'
 import type { SkillsLoader } from '../skills/loader'
 import { ChatPanel } from './chat'
 import { InputBar } from './input'
@@ -39,7 +39,14 @@ const PERMISSION_LABELS: Record<PermissionMode, string> = {
   bypass: 'bypass mode (skip all checks)',
 }
 
-export function App({ engine, config, initialProvider, initialModel, lang, skillsLoader }: AppProps) {
+export function App({
+  engine,
+  config,
+  initialProvider,
+  initialModel,
+  lang,
+  skillsLoader,
+}: AppProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [providerId, setProviderId] = useState(initialProvider || config.defaultProvider)
@@ -80,7 +87,11 @@ export function App({ engine, config, initialProvider, initialModel, lang, skill
         // /switch takes args, handled separately
         if (command === '/switch') {
           const result = await handleSwitch(mkCtx(), args)
-          setMessages(prev => [...prev, { role: 'user', content: input }, { role: 'system', content: result.content }])
+          setMessages((prev) => [
+            ...prev,
+            { role: 'user', content: input },
+            { role: 'system', content: result.content },
+          ])
           if (result.nextProvider) setProviderId(result.nextProvider)
           if (result.nextModel) setModelId(result.nextModel)
           if (result.exit) process.exit(0)
@@ -102,12 +113,15 @@ export function App({ engine, config, initialProvider, initialModel, lang, skill
         if (command === '/focus') {
           const nextFocus = !focusMode
           setFocusMode(nextFocus)
-          setMessages(prev => [
+          setMessages((prev) => [
             ...prev,
             { role: 'user', content: input },
-            { role: 'system', content: nextFocus
-              ? '✓ Focus mode ON — showing only the most recent exchange. Type /focus again to show all.'
-              : '✓ Focus mode OFF — showing all messages.' },
+            {
+              role: 'system',
+              content: nextFocus
+                ? '✓ Focus mode ON — showing only the most recent exchange. Type /focus again to show all.'
+                : '✓ Focus mode OFF — showing all messages.',
+            },
           ])
           return
         }
@@ -115,7 +129,11 @@ export function App({ engine, config, initialProvider, initialModel, lang, skill
         const handler = getCommand(command)
         if (handler) {
           const result = await handler(mkCtx(), args)
-          setMessages(prev => [...prev, { role: 'user', content: input }, { role: 'system', content: result.content }])
+          setMessages((prev) => [
+            ...prev,
+            { role: 'user', content: input },
+            { role: 'system', content: result.content },
+          ])
           if (result.clearMessages) setMessages([])
           if (result.nextProvider) setProviderId(result.nextProvider)
           if (result.nextModel) setModelId(result.nextModel)
@@ -140,7 +158,7 @@ export function App({ engine, config, initialProvider, initialModel, lang, skill
       }
 
       // ── Normal message processing (AI chat) ──
-      setMessages(prev => [...prev, { role: 'user', content: input }])
+      setMessages((prev) => [...prev, { role: 'user', content: input }])
       setIsLoading(true)
 
       let assistantContent = ''
@@ -149,7 +167,7 @@ export function App({ engine, config, initialProvider, initialModel, lang, skill
         for await (const chunk of engine.process(input)) {
           if (chunk.type === 'text' && chunk.content) {
             assistantContent += chunk.content
-            setMessages(prev => {
+            setMessages((prev) => {
               const updated = [...prev]
               const last = updated[updated.length - 1]
               if (last?.role === 'assistant') {
@@ -162,9 +180,12 @@ export function App({ engine, config, initialProvider, initialModel, lang, skill
           }
 
           if (chunk.type === 'tool_use' && chunk.toolUse) {
-            setMessages(prev => [
+            setMessages((prev) => [
               ...prev,
-              { role: 'system', content: `🔧 Using tool: ${chunk.toolUse!.name}(${JSON.stringify(chunk.toolUse!.input)})` },
+              {
+                role: 'system',
+                content: `🔧 Using tool: ${chunk.toolUse!.name}(${JSON.stringify(chunk.toolUse!.input)})`,
+              },
             ])
           }
 
@@ -173,24 +194,21 @@ export function App({ engine, config, initialProvider, initialModel, lang, skill
               chunk.content && chunk.content.length > 200
                 ? chunk.content.slice(0, 200) + '...'
                 : chunk.content || '(empty)'
-            setMessages(prev => [
+            setMessages((prev) => [
               ...prev,
               { role: 'system', content: `📋 Tool result: ${resultPreview}` },
             ])
           }
 
           if (chunk.type === 'error') {
-            setMessages(prev => [
+            setMessages((prev) => [
               ...prev,
               { role: 'system', content: `❌ Error: ${chunk.error}` },
             ])
           }
         }
       } catch (err) {
-        setMessages(prev => [
-          ...prev,
-          { role: 'system', content: `Error: ${String(err)}` },
-        ])
+        setMessages((prev) => [...prev, { role: 'system', content: `Error: ${String(err)}` }])
       } finally {
         setIsLoading(false)
         // Auto-save checkpoint after each AI response
@@ -213,12 +231,12 @@ export function App({ engine, config, initialProvider, initialModel, lang, skill
     }
     // Ctrl+P → open model picker
     if (_input === '\x10') {
-      setPickerOpen(prev => !prev)
+      setPickerOpen((prev) => !prev)
       return
     }
     // Shift+Tab → cycle permission mode (auto → ask → bypass → auto)
     if (key.shift && key.tab) {
-      setPermissionMode(prev => {
+      setPermissionMode((prev) => {
         const idx = PERMISSION_MODES.indexOf(prev)
         const next = PERMISSION_MODES[(idx + 1) % PERMISSION_MODES.length]!
         // Sync to engine
@@ -234,20 +252,29 @@ export function App({ engine, config, initialProvider, initialModel, lang, skill
       {/* Header — brand mark + status line */}
       <Box marginBottom={1} flexDirection="column">
         <Box flexDirection="row">
-          <Text bold color="cyan">Mipham Code</Text>
+          <Text bold color="cyan">
+            Mipham Code
+          </Text>
           <Text dimColor> v0.2.0</Text>
-          {sessionTitle ? <Text color="yellow"> — {sessionTitle}</Text> : <Text dimColor> — MiphamAI</Text>}
+          {sessionTitle ? (
+            <Text color="yellow"> — {sessionTitle}</Text>
+          ) : (
+            <Text dimColor> — MiphamAI</Text>
+          )}
         </Box>
         <Box flexDirection="row">
           <Text dimColor>
-            {modelId} ({providerId})
-            {fastMode && ' ⚡'}
+            {modelId} ({providerId}){fastMode && ' ⚡'}
             {effort !== 'high' && ` 🧠${effort}`}
             {focusMode && ' 🔍focus'}
           </Text>
         </Box>
         <Box flexDirection="row">
-          <Text color={permissionMode === 'auto' ? 'green' : permissionMode === 'ask' ? 'yellow' : 'red'}>
+          <Text
+            color={
+              permissionMode === 'auto' ? 'green' : permissionMode === 'ask' ? 'yellow' : 'red'
+            }
+          >
             ● {PERMISSION_LABELS[permissionMode]}
           </Text>
           <Text dimColor> (Shift+Tab to cycle)</Text>
@@ -274,7 +301,7 @@ export function App({ engine, config, initialProvider, initialModel, lang, skill
             setProviderId(newProvider)
             setModelId(newModel)
             setPickerOpen(false)
-            setMessages(prev => [
+            setMessages((prev) => [
               ...prev,
               { role: 'system', content: `✓ Switched to ${newProvider}/${newModel}` },
             ])

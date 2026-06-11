@@ -1,4 +1,4 @@
-import type { ToolDefinition } from '../shared/index.ts'
+import type { ToolDefinition } from '../../shared/index.ts'
 import { validateUrl } from '../../security/url'
 
 export const webFetchTool: ToolDefinition = {
@@ -51,9 +51,10 @@ export const webFetchTool: ToolDefinition = {
         .slice(0, 50_000)
       return { success: true, content: text }
     } catch (err) {
-      const message = err instanceof Error && err.name === 'AbortError'
-        ? 'Request timed out (30s)'
-        : `Fetch failed: ${String(err)}`
+      const message =
+        err instanceof Error && err.name === 'AbortError'
+          ? 'Request timed out (30s)'
+          : `Fetch failed: ${String(err)}`
       return { success: false, content: '', error: message }
     }
   },

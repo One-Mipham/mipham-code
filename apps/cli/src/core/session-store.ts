@@ -1,4 +1,11 @@
-import { mkdirSync, readdirSync, readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs'
+import {
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+  unlinkSync,
+  existsSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import type { Message } from '../shared/types'
 
@@ -82,7 +89,7 @@ export class SessionStore {
   static list(): SessionMetadata[] {
     ensureDir()
     try {
-      const files = readdirSync(SESSIONS_DIR).filter(f => f.endsWith('.jsonl'))
+      const files = readdirSync(SESSIONS_DIR).filter((f) => f.endsWith('.jsonl'))
 
       const sessions: SessionMetadata[] = []
       for (const file of files) {
@@ -97,9 +104,7 @@ export class SessionStore {
         }
       }
 
-      sessions.sort(
-        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-      )
+      sessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
       return sessions
     } catch {
       return []

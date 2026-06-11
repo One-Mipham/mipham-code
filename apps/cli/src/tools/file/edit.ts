@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from 'node:fs'
-import type { ToolDefinition } from '../shared/index.ts'
+import type { ToolDefinition } from '../../shared/index.ts'
 import { resolveSafe } from '../../security/path'
 
 export const editTool: ToolDefinition = {
@@ -45,8 +45,7 @@ export const editTool: ToolDefinition = {
       return {
         success: false,
         content: '',
-        error:
-          'old_string is not unique in file. Use replace_all or make it more specific.',
+        error: 'old_string is not unique in file. Use replace_all or make it more specific.',
       }
     }
 

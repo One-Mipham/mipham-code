@@ -10,7 +10,9 @@ mipham --model claude-sonnet-4-6`}
         </pre>
 
         <h2>Configuration</h2>
-        <p>Create <code>~/.mipham/config.yml</code>:</p>
+        <p>
+          Create <code>~/.mipham/config.yml</code>:
+        </p>
         <pre className="bg-gray-100 p-4 rounded-lg">
           {`version: "0.1.0"
 defaultProvider: anthropic
@@ -20,11 +22,21 @@ permission: auto`}
 
         <h2>Commands</h2>
         <ul>
-          <li><code>/help</code> — Show help</li>
-          <li><code>/model</code> — Show current model</li>
-          <li><code>/switch &lt;provider&gt; &lt;model&gt;</code> — Switch model</li>
-          <li><code>/clear</code> — Clear conversation</li>
-          <li><code>/exit</code> — Exit Mipham Code</li>
+          <li>
+            <code>/help</code> — Show help
+          </li>
+          <li>
+            <code>/model</code> — Show current model
+          </li>
+          <li>
+            <code>/switch &lt;provider&gt; &lt;model&gt;</code> — Switch model
+          </li>
+          <li>
+            <code>/clear</code> — Clear conversation
+          </li>
+          <li>
+            <code>/exit</code> — Exit Mipham Code
+          </li>
         </ul>
       </div>
     </div>

@@ -79,10 +79,7 @@ describe('bootstrapProviders', () => {
   })
 
   it('should register multiple providers of different protocols', () => {
-    const configs = [
-      makeOpenAICompatConfig(),
-      makeAnthropicConfig(),
-    ]
+    const configs = [makeOpenAICompatConfig(), makeAnthropicConfig()]
     const registry = bootstrapProviders(configs, 'test-openai', 'm1')
 
     expect(registry.get('test-openai')).toBeInstanceOf(OpenAICompatProvider)
@@ -129,10 +126,7 @@ describe('bootstrapProviders', () => {
   })
 
   it('should use the defaultProvider as active', () => {
-    const configs = [
-      makeOpenAICompatConfig({ id: 'p1' }),
-      makeAnthropicConfig({ id: 'p2' }),
-    ]
+    const configs = [makeOpenAICompatConfig({ id: 'p1' }), makeAnthropicConfig({ id: 'p2' })]
     const registry = bootstrapProviders(configs, 'p2', 'claude-sonnet')
 
     // p2 should be active

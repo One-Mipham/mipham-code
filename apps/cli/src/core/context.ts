@@ -1,4 +1,4 @@
-import type { Message } from './shared/index.ts'
+import type { Message } from '../shared/index.ts'
 
 interface ContextConfig {
   maxTokens: number
@@ -96,10 +96,14 @@ export class ContextManager {
     return checkpoint.id
   }
 
-  restoreCheckpoint(checkpointId?: number): { restored: boolean; messageCount: number; label: string } {
+  restoreCheckpoint(checkpointId?: number): {
+    restored: boolean
+    messageCount: number
+    label: string
+  } {
     // If no id given, restore the most recent checkpoint
     const target = checkpointId
-      ? this.checkpoints.find(cp => cp.id === checkpointId)
+      ? this.checkpoints.find((cp) => cp.id === checkpointId)
       : this.checkpoints.at(-1)
 
     if (!target) {
@@ -112,7 +116,7 @@ export class ContextManager {
   }
 
   getCheckpoints(): Array<{ id: number; messageCount: number; timestamp: Date; label: string }> {
-    return this.checkpoints.map(cp => ({
+    return this.checkpoints.map((cp) => ({
       id: cp.id,
       messageCount: cp.messages.length,
       timestamp: cp.timestamp,

@@ -10,7 +10,7 @@ const runtime = typeof Bun !== 'undefined' ? 'bun' : 'node'
 
 if (runtime === 'bun') {
   // Bun runtime — import TS source directly
-  import('../src/index.tsx').then(m => m.runApp({}))
+  import('../src/index.tsx').then((m) => m.runApp({}))
 } else {
   // Node.js runtime — prompt to use Bun for best experience
   const nodeVersion = process.versions.node

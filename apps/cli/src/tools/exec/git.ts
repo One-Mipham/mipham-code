@@ -1,16 +1,10 @@
-import type { ToolDefinition } from './shared/index.ts'
+import type { ToolDefinition } from '../../shared/index.ts'
 
-const DANGEROUS_COMMANDS = [
-  'push --force',
-  'reset --hard',
-  'clean -fd',
-  'branch -D',
-]
+const DANGEROUS_COMMANDS = ['push --force', 'reset --hard', 'clean -fd', 'branch -D']
 
 export const gitTool: ToolDefinition = {
   name: 'Git',
-  description:
-    'Execute git commands. Dangerous operations (force push, hard reset) are blocked.',
+  description: 'Execute git commands. Dangerous operations (force push, hard reset) are blocked.',
   category: 'exec',
   permission: 'auto',
   parameters: {

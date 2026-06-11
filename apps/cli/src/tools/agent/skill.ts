@@ -1,8 +1,9 @@
-import type { ToolDefinition } from '../shared/index.ts'
+import type { ToolDefinition } from '../../shared/index.ts'
 
 export const skillTool: ToolDefinition = {
   name: 'Skill',
-  description: 'Execute a skill (.SKILL.md or .mipham-skill.md) by name. Skills extend AI capabilities with specialized instructions.',
+  description:
+    'Execute a skill (.SKILL.md or .mipham-skill.md) by name. Skills extend AI capabilities with specialized instructions.',
   category: 'agent',
   permission: 'auto',
   parameters: {
@@ -22,7 +23,10 @@ export const skillTool: ToolDefinition = {
     if (loader) {
       const skill = loader.get(skillName)
       if (!skill) {
-        const available = loader.list().map(s => `  • ${s.name} (${s.type})`).join('\n')
+        const available = loader
+          .list()
+          .map((s) => `  • ${s.name} (${s.type})`)
+          .join('\n')
         return {
           success: false,
           content: '',

@@ -97,7 +97,9 @@ describeIf('E2E: Basic Conversation', () => {
   })
 
   it('responds to a simple greeting', async () => {
-    const result = await collectStream(engine.process('Hello! Just say "Hi there" and nothing else.'))
+    const result = await collectStream(
+      engine.process('Hello! Just say "Hi there" and nothing else.'),
+    )
 
     expect(result.errors).toHaveLength(0)
     expect(result.text.length).toBeGreaterThan(0)
@@ -115,7 +117,9 @@ describeIf('E2E: Basic Conversation', () => {
 
   it('responds to a code question', async () => {
     const result = await collectStream(
-      engine.process('Write a one-line TypeScript function that adds two numbers. Output ONLY the code, no explanation.'),
+      engine.process(
+        'Write a one-line TypeScript function that adds two numbers. Output ONLY the code, no explanation.',
+      ),
     )
 
     expect(result.errors).toHaveLength(0)
@@ -158,9 +162,7 @@ describeIf('E2E: Tool Usage', () => {
     writeFileSync(testFile, 'Hello from Mipham E2E test!')
 
     const result = await collectStream(
-      engine.process(
-        `Read the file at "${testFile}" and tell me what it says. Use the Read tool.`,
-      ),
+      engine.process(`Read the file at "${testFile}" and tell me what it says. Use the Read tool.`),
     )
 
     expect(result.errors).toHaveLength(0)
@@ -205,9 +207,7 @@ describeIf('E2E: Tool Usage', () => {
     expect(r1.text.toLowerCase()).toContain('alice')
 
     // Second turn — model should remember context
-    const r2 = await collectStream(
-      engine.process('What is my name? Reply with just my name.'),
-    )
+    const r2 = await collectStream(engine.process('What is my name? Reply with just my name.'))
     expect(r2.errors).toHaveLength(0)
     expect(r2.text.toLowerCase()).toContain('alice')
   }, 60_000)

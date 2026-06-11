@@ -5,7 +5,11 @@ describe('StdioTransport', () => {
   let transport: StdioTransport
 
   afterEach(async () => {
-    try { await transport?.close() } catch { /* ok */ }
+    try {
+      await transport?.close()
+    } catch {
+      /* ok */
+    }
   })
 
   describe('start and close', () => {
@@ -67,8 +71,8 @@ describe('StdioTransport', () => {
       const result = await transport.sendRequest('tools/list')
       const r = result as { tools: Array<{ name: string }> }
       expect(r.tools).toHaveLength(2)
-      expect(r.tools.map(t => t.name)).toContain('echo')
-      expect(r.tools.map(t => t.name)).toContain('add')
+      expect(r.tools.map((t) => t.name)).toContain('echo')
+      expect(r.tools.map((t) => t.name)).toContain('add')
 
       await transport.close()
     })
@@ -113,7 +117,7 @@ describe('StdioTransport', () => {
       transport.sendNotification('notifications/initialized')
 
       // Allow time for notification to be processed
-      await new Promise(r => setTimeout(r, 100))
+      await new Promise((r) => setTimeout(r, 100))
 
       await transport.close()
     })

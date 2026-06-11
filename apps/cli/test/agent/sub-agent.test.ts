@@ -3,7 +3,9 @@ import { SubAgent } from '../../src/agent/sub-agent'
 
 describe('SubAgent', () => {
   // SubAgent without a provider registry runs in simulation mode
-  const sub = new SubAgent(null as unknown as import('../../src/providers/registry').ProviderRegistry)
+  const sub = new SubAgent(
+    null as unknown as import('../../src/providers/registry').ProviderRegistry,
+  )
 
   describe('execute (simulation mode)', () => {
     it('returns result for general type', async () => {

@@ -11,17 +11,20 @@ Comprehensive setup and configuration guide for Mipham Code.
 ## Installation
 
 **Quick install (recommended):**
+
 ```bash
 curl -fsSL https://mipham.ai/install.sh | bash
 ```
 
 **npm global install:**
+
 ```bash
 npm install -g @onemipham/cli
 mipham
 ```
 
 **From source:**
+
 ```bash
 git clone https://github.com/onemipham/mipham-code
 cd mipham-code/apps/cli
@@ -39,6 +42,7 @@ mkdir -p .mipham
 ```
 
 `.mipham/config.yml`:
+
 ```yaml
 defaultProvider: anthropic
 defaultModel: claude-sonnet-4-6
@@ -58,6 +62,7 @@ export GEMINI_API_KEY="..."
 ```
 
 Or add to `~/.mipham/config.yml`:
+
 ```yaml
 providers:
   - id: anthropic
@@ -67,6 +72,7 @@ providers:
 ### 3. Project personality (MIPHAM.md)
 
 Create `MIPHAM.md` in project root to define AI interaction style:
+
 - Code preferences
 - Language (zh-CN / en)
 - Project-specific rules
@@ -82,15 +88,15 @@ Use `/doctor` in Mipham Code for system diagnostics.
 
 ## Supported Providers
 
-| Provider | Type | Models |
-|----------|------|--------|
-| Anthropic | Native SDK | Claude Haiku 4.5, Sonnet 4.6, Opus 4.8 |
-| OpenAI | OpenAI Compat | GPT-5.4 Mini, GPT-5.4, GPT-5.5, Codex |
-| DeepSeek | OpenAI Compat | V4 Flash, V4 Pro |
-| Google Gemini | OpenAI Compat | 3.0 Flash/Pro, 2.5 Pro |
-| Qwen | OpenAI Compat | Qwen Plus, Qwen Max |
-| Doubao | OpenAI Compat | Seed 1.6/2.0 series |
-| Hunyuan | OpenAI Compat | Lite, TurboS, 2.0, T1 |
+| Provider      | Type          | Models                                 |
+| ------------- | ------------- | -------------------------------------- |
+| Anthropic     | Native SDK    | Claude Haiku 4.5, Sonnet 4.6, Opus 4.8 |
+| OpenAI        | OpenAI Compat | GPT-5.4 Mini, GPT-5.4, GPT-5.5, Codex  |
+| DeepSeek      | OpenAI Compat | V4 Flash, V4 Pro                       |
+| Google Gemini | OpenAI Compat | 3.0 Flash/Pro, 2.5 Pro                 |
+| Qwen          | OpenAI Compat | Qwen Plus, Qwen Max                    |
+| Doubao        | OpenAI Compat | Seed 1.6/2.0 series                    |
+| Hunyuan       | OpenAI Compat | Lite, TurboS, 2.0, T1                  |
 
 ## Slash Commands (60 total)
 

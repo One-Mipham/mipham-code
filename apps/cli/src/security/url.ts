@@ -1,4 +1,10 @@
-import { lookupSync } from 'node:dns'
+import dns from 'node:dns'
+const { lookupSync } = dns as unknown as {
+  lookupSync: (
+    hostname: string,
+    options?: { all?: boolean },
+  ) => Array<{ address: string; family: number }>
+}
 
 // ── Protocol allow-list ──
 const ALLOWED_PROTOCOLS = ['http:', 'https:']
@@ -67,22 +73,21 @@ function isBlockedIPv4(ip: string): boolean {
   const parts = ip.split('.')
   if (parts.length !== 4) return false
 
-  const nums = parts.map(p => parseInt(p, 10))
-  if (nums.some(n => isNaN(n) || n < 0 || n > 255)) return false
+  const nums = parts.map((p) => parseInt(p, 10))
+  if (nums.some((n) => isNaN(n) || n < 0 || n > 255)) return false
 
   // Use >>> 0 to avoid signed 32-bit overflow for octets > 127
   const asInt = ((nums[0]! << 24) | (nums[1]! << 16) | (nums[2]! << 8) | nums[3]!) >>> 0
 
-  return IPV4_BLOCKED.some(
-    ({ prefix, mask }) => ((asInt & mask) >>> 0) === (prefix >>> 0),
-  )
+  return IPV4_BLOCKED.some(({ prefix, mask }) => (asInt & mask) >>> 0 === prefix >>> 0)
 }
 
 function isBlockedIPv6(ip: string): boolean {
   // IPv6 loopback
   if (ip === '::1' || ip === '0:0:0:0:0:0:0:1') return true
   // IPv6 link-local (fe80::/10)
-  if (ip.startsWith('fe8') || ip.startsWith('fe9') || ip.startsWith('fea') || ip.startsWith('feb')) return true
+  if (ip.startsWith('fe8') || ip.startsWith('fe9') || ip.startsWith('fea') || ip.startsWith('feb'))
+    return true
   // IPv6 unique local (fc00::/7)
   if (ip.startsWith('fc') || ip.startsWith('fd')) return true
   // IPv6 unspecified

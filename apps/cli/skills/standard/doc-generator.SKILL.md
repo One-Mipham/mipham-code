@@ -9,6 +9,7 @@ version: 1.0.0
 Generate comprehensive technical documentation.
 
 ## Document Types
+
 - API documentation from TypeScript types and JSDoc
 - README files with setup instructions
 - Architecture decision records (ADRs)
@@ -16,4 +17,5 @@ Generate comprehensive technical documentation.
 - Contributing guides
 
 ## Output Format
+
 Clean, well-structured markdown with code examples and cross-references.

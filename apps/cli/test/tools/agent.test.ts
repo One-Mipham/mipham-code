@@ -105,10 +105,7 @@ describe('Skill tool execution', () => {
   })
 
   it('includes args in response when available', async () => {
-    const result = await skillTool.execute(
-      { skill: 'searcher', args: '--deep' },
-      ctx,
-    )
+    const result = await skillTool.execute({ skill: 'searcher', args: '--deep' }, ctx)
     // Without SkillsLoader, returns error
     expect(result.success).toBe(false)
   })
@@ -173,7 +170,11 @@ describe('Memory tool execution', () => {
   const MEM_DIR = join(process.env.HOME || tmpdir(), '.mipham', 'memory')
 
   function cleanMemDir() {
-    try { rmSync(MEM_DIR, { recursive: true, force: true }) } catch { /* ok */ }
+    try {
+      rmSync(MEM_DIR, { recursive: true, force: true })
+    } catch {
+      /* ok */
+    }
   }
 
   beforeEach(() => {
@@ -199,32 +200,20 @@ describe('Memory tool execution', () => {
       ctx,
     )
 
-    const result = await memoryTool.execute(
-      { action: 'read', name: 'readable' },
-      ctx,
-    )
+    const result = await memoryTool.execute({ action: 'read', name: 'readable' }, ctx)
     expect(result.success).toBe(true)
     expect(result.content).toBe('readable content')
   })
 
   it('errors when reading non-existent memory', async () => {
-    const result = await memoryTool.execute(
-      { action: 'read', name: 'nonexistent' },
-      ctx,
-    )
+    const result = await memoryTool.execute({ action: 'read', name: 'nonexistent' }, ctx)
     expect(result.success).toBe(false)
     expect(result.error).toContain('not found')
   })
 
   it('lists all memories', async () => {
-    await memoryTool.execute(
-      { action: 'write', name: 'alpha', content: 'a' },
-      ctx,
-    )
-    await memoryTool.execute(
-      { action: 'write', name: 'beta', content: 'b' },
-      ctx,
-    )
+    await memoryTool.execute({ action: 'write', name: 'alpha', content: 'a' }, ctx)
+    await memoryTool.execute({ action: 'write', name: 'beta', content: 'b' }, ctx)
 
     const result = await memoryTool.execute({ action: 'list' }, ctx)
     expect(result.success).toBe(true)
@@ -245,36 +234,21 @@ describe('Memory tool execution', () => {
   })
 
   it('errors when name is missing for write', async () => {
-    const result = await memoryTool.execute(
-      { action: 'write', content: 'stuff' },
-      ctx,
-    )
+    const result = await memoryTool.execute({ action: 'write', content: 'stuff' }, ctx)
     expect(result.success).toBe(false)
     expect(result.error).toContain('name is required')
   })
 
   it('errors for unknown action (when name is provided)', async () => {
-    const result = await memoryTool.execute(
-      { action: 'delete', name: 'some-name' },
-      ctx,
-    )
+    const result = await memoryTool.execute({ action: 'delete', name: 'some-name' }, ctx)
     expect(result.success).toBe(false)
     expect(result.error).toContain('Unknown action')
   })
 
   it('overwrites existing memory', async () => {
-    await memoryTool.execute(
-      { action: 'write', name: 'overwrite', content: 'original' },
-      ctx,
-    )
-    await memoryTool.execute(
-      { action: 'write', name: 'overwrite', content: 'updated' },
-      ctx,
-    )
-    const result = await memoryTool.execute(
-      { action: 'read', name: 'overwrite' },
-      ctx,
-    )
+    await memoryTool.execute({ action: 'write', name: 'overwrite', content: 'original' }, ctx)
+    await memoryTool.execute({ action: 'write', name: 'overwrite', content: 'updated' }, ctx)
+    const result = await memoryTool.execute({ action: 'read', name: 'overwrite' }, ctx)
     expect(result.content).toBe('updated')
   })
 })

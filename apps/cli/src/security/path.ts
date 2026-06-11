@@ -35,9 +35,7 @@ export function resolveSafe(cwd: string, inputPath: string): string {
     // reconstruct the full path.
     const existingParent = findExistingParent(normalized)
     if (!existingParent) {
-      throw new Error(
-        `Path rejected: no existing parent directory found for "${inputPath}"`,
-      )
+      throw new Error(`Path rejected: no existing parent directory found for "${inputPath}"`)
     }
     const realParent = realpathSync(existingParent)
     const relative = normalized.slice(existingParent.length)

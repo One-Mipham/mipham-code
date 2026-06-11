@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import type { ToolDefinition } from './shared/index.ts'
+import type { ToolDefinition } from '../../shared/index.ts'
 
 const MEMORY_DIR = join(process.env.HOME || '~', '.mipham', 'memory')
 
@@ -27,7 +27,7 @@ export const memoryTool: ToolDefinition = {
     mkdirSync(MEMORY_DIR, { recursive: true })
 
     if (action === 'list') {
-      const files = readdirSync(MEMORY_DIR).filter(f => f.endsWith('.md'))
+      const files = readdirSync(MEMORY_DIR).filter((f) => f.endsWith('.md'))
       return { success: true, content: files.join('\n') || '(no memories)' }
     }
 

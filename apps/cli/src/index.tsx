@@ -79,7 +79,14 @@ export async function runApp(options: RunOptions): Promise<void> {
   process.on('SIGTERM', saveAndExit)
 
   const { waitUntilExit } = render(
-    <App engine={engine} config={config} initialProvider={defaultProvider} initialModel={defaultModel} lang={options.lang} skillsLoader={skillsLoader} />,
+    <App
+      engine={engine}
+      config={config}
+      initialProvider={defaultProvider}
+      initialModel={defaultModel}
+      lang={options.lang}
+      skillsLoader={skillsLoader}
+    />,
   )
   await waitUntilExit()
   saveAndExit()

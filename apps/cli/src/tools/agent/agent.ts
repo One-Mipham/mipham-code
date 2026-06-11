@@ -1,4 +1,4 @@
-import type { ToolDefinition } from '../shared/index.ts'
+import type { ToolDefinition } from '../../shared/index.ts'
 import { SubAgent, type SubAgentType } from '../../agent/sub-agent'
 
 const VALID_TYPES: SubAgentType[] = ['general', 'explore', 'plan', 'code-review']
@@ -37,7 +37,9 @@ export const agentTool: ToolDefinition = {
     const registry = ctx.registry
     if (!registry) {
       // No registry in context — return structured simulation
-      const sub = new SubAgent(null as unknown as import('../../providers/registry').ProviderRegistry)
+      const sub = new SubAgent(
+        null as unknown as import('../../providers/registry').ProviderRegistry,
+      )
       const result = await sub.execute(prompt, description, { type: agentType })
       return { success: true, content: result }
     }

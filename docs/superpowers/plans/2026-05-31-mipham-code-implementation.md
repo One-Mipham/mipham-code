@@ -148,6 +148,7 @@ omc-project9-MiphamCode/
 ### Task 1.1: Scaffold pnpm monorepo with root configuration
 
 **Files:**
+
 - Create: `package.json`
 - Create: `pnpm-workspace.yaml`
 - Create: `tsconfig.base.json`
@@ -164,6 +165,7 @@ cd /Users/sarvadaya/Rismed_Ronxin_Capital/One_Mipham_Corporation/omc-project9-Mi
 ```
 
 Write `package.json`:
+
 ```json
 {
   "name": "mipham-code-monorepo",
@@ -191,8 +193,8 @@ Write `package.json`:
 
 ```yaml
 packages:
-  - "apps/*"
-  - "packages/*"
+  - 'apps/*'
+  - 'packages/*'
 ```
 
 - [ ] **Step 3: Create tsconfig.base.json**
@@ -277,6 +279,7 @@ language: zh-CN
 > Mipham Code 项目规范，所有连接的模型均需遵守。
 
 ## 技术栈
+
 - 运行时: Bun 1.2+ · TypeScript strict · ESM
 - 包管理: pnpm workspace
 - CLI UI: React 18 + Ink 5
@@ -284,6 +287,7 @@ language: zh-CN
 - 测试: Vitest · Lint: ESLint + Prettier
 
 ## 编码规则
+
 - 提交信息遵循 Conventional Commits
 - 禁止硬编码凭据、API 密钥
 - 所有变更通过 feature branch + PR
@@ -308,6 +312,7 @@ git commit -m "chore: scaffold pnpm monorepo with root configuration"
 ### Task 1.2: Create shared package with types and constants
 
 **Files:**
+
 - Create: `packages/shared/package.json`
 - Create: `packages/shared/tsconfig.json`
 - Create: `packages/shared/src/index.ts`
@@ -409,7 +414,7 @@ export interface ToolDefinition {
   description: string
   category: ToolCategory
   permission: ToolPermission
-  parameters: Record<string, unknown>   // JSON Schema
+  parameters: Record<string, unknown> // JSON Schema
   execute: (params: Record<string, unknown>, ctx: ToolContext) => Promise<ToolResult>
 }
 
@@ -466,7 +471,12 @@ export interface SkillDefinition {
 }
 
 // ── Hook Types ──
-export type HookEvent = 'PreToolUse' | 'PostToolUse' | 'SessionStart' | 'SessionEnd' | 'Notification'
+export type HookEvent =
+  | 'PreToolUse'
+  | 'PostToolUse'
+  | 'SessionStart'
+  | 'SessionEnd'
+  | 'Notification'
 
 export interface HookDefinition {
   event: HookEvent
@@ -521,9 +531,33 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     baseUrl: 'https://api.mipham.ai/v1',
     apiKey: '${MIPHAM_API_KEY}',
     models: [
-      { id: 'om-V5-Pro', name: 'OM V5 Pro', providerId: 'mipham', contextWindow: 1_000_000, maxOutput: 128_000, vision: false, status: 'upcoming' },
-      { id: 'om-V5-Flash', name: 'OM V5 Flash', providerId: 'mipham', contextWindow: 1_000_000, maxOutput: 128_000, vision: false, status: 'upcoming' },
-      { id: 'om-V5-Visual', name: 'OM V5 Visual', providerId: 'mipham', contextWindow: 200_000, maxOutput: 32_000, vision: true, status: 'upcoming' },
+      {
+        id: 'om-V5-Pro',
+        name: 'OM V5 Pro',
+        providerId: 'mipham',
+        contextWindow: 1_000_000,
+        maxOutput: 128_000,
+        vision: false,
+        status: 'upcoming',
+      },
+      {
+        id: 'om-V5-Flash',
+        name: 'OM V5 Flash',
+        providerId: 'mipham',
+        contextWindow: 1_000_000,
+        maxOutput: 128_000,
+        vision: false,
+        status: 'upcoming',
+      },
+      {
+        id: 'om-V5-Visual',
+        name: 'OM V5 Visual',
+        providerId: 'mipham',
+        contextWindow: 200_000,
+        maxOutput: 32_000,
+        vision: true,
+        status: 'upcoming',
+      },
     ],
     status: 'upcoming',
   },
@@ -533,9 +567,33 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     protocol: 'anthropic',
     apiKey: '${ANTHROPIC_API_KEY}',
     models: [
-      { id: 'claude-opus-4-8', name: 'Claude Opus 4.8', providerId: 'anthropic', contextWindow: 1_000_000, maxOutput: 128_000, vision: true, status: 'active' },
-      { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', providerId: 'anthropic', contextWindow: 1_000_000, maxOutput: 128_000, vision: true, status: 'active' },
-      { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5', providerId: 'anthropic', contextWindow: 200_000, maxOutput: 32_000, vision: true, status: 'active' },
+      {
+        id: 'claude-opus-4-8',
+        name: 'Claude Opus 4.8',
+        providerId: 'anthropic',
+        contextWindow: 1_000_000,
+        maxOutput: 128_000,
+        vision: true,
+        status: 'active',
+      },
+      {
+        id: 'claude-sonnet-4-6',
+        name: 'Claude Sonnet 4.6',
+        providerId: 'anthropic',
+        contextWindow: 1_000_000,
+        maxOutput: 128_000,
+        vision: true,
+        status: 'active',
+      },
+      {
+        id: 'claude-haiku-4-5-20251001',
+        name: 'Claude Haiku 4.5',
+        providerId: 'anthropic',
+        contextWindow: 200_000,
+        maxOutput: 32_000,
+        vision: true,
+        status: 'active',
+      },
     ],
   },
   {
@@ -545,10 +603,42 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     baseUrl: 'https://api.openai.com/v1',
     apiKey: '${OPENAI_API_KEY}',
     models: [
-      { id: 'gpt-5.5', name: 'GPT-5.5', providerId: 'openai', contextWindow: 1_050_000, maxOutput: 128_000, vision: true, status: 'active' },
-      { id: 'gpt-5.4', name: 'GPT-5.4', providerId: 'openai', contextWindow: 1_050_000, maxOutput: 128_000, vision: true, status: 'active' },
-      { id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini', providerId: 'openai', contextWindow: 400_000, maxOutput: 32_000, vision: true, status: 'active' },
-      { id: 'gpt-5.3-codex', name: 'GPT-5.3 Codex', providerId: 'openai', contextWindow: 400_000, maxOutput: 64_000, vision: false, status: 'active' },
+      {
+        id: 'gpt-5.5',
+        name: 'GPT-5.5',
+        providerId: 'openai',
+        contextWindow: 1_050_000,
+        maxOutput: 128_000,
+        vision: true,
+        status: 'active',
+      },
+      {
+        id: 'gpt-5.4',
+        name: 'GPT-5.4',
+        providerId: 'openai',
+        contextWindow: 1_050_000,
+        maxOutput: 128_000,
+        vision: true,
+        status: 'active',
+      },
+      {
+        id: 'gpt-5.4-mini',
+        name: 'GPT-5.4 Mini',
+        providerId: 'openai',
+        contextWindow: 400_000,
+        maxOutput: 32_000,
+        vision: true,
+        status: 'active',
+      },
+      {
+        id: 'gpt-5.3-codex',
+        name: 'GPT-5.3 Codex',
+        providerId: 'openai',
+        contextWindow: 400_000,
+        maxOutput: 64_000,
+        vision: false,
+        status: 'active',
+      },
     ],
   },
   {
@@ -558,8 +648,24 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     baseUrl: 'https://api.deepseek.com/v1',
     apiKey: '${DEEPSEEK_API_KEY}',
     models: [
-      { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', providerId: 'deepseek', contextWindow: 1_000_000, maxOutput: 384_000, vision: false, status: 'active' },
-      { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', providerId: 'deepseek', contextWindow: 1_000_000, maxOutput: 384_000, vision: false, status: 'active' },
+      {
+        id: 'deepseek-v4-pro',
+        name: 'DeepSeek V4 Pro',
+        providerId: 'deepseek',
+        contextWindow: 1_000_000,
+        maxOutput: 384_000,
+        vision: false,
+        status: 'active',
+      },
+      {
+        id: 'deepseek-v4-flash',
+        name: 'DeepSeek V4 Flash',
+        providerId: 'deepseek',
+        contextWindow: 1_000_000,
+        maxOutput: 384_000,
+        vision: false,
+        status: 'active',
+      },
     ],
   },
   {
@@ -569,16 +675,32 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     apiKey: '${QWEN_API_KEY}',
     models: [
-      { id: 'qwen-plus', name: 'Qwen Plus', providerId: 'qwen', contextWindow: 128_000, maxOutput: 32_000, vision: true, status: 'active' },
-      { id: 'qwen-max', name: 'Qwen Max', providerId: 'qwen', contextWindow: 128_000, maxOutput: 32_000, vision: true, status: 'active' },
+      {
+        id: 'qwen-plus',
+        name: 'Qwen Plus',
+        providerId: 'qwen',
+        contextWindow: 128_000,
+        maxOutput: 32_000,
+        vision: true,
+        status: 'active',
+      },
+      {
+        id: 'qwen-max',
+        name: 'Qwen Max',
+        providerId: 'qwen',
+        contextWindow: 128_000,
+        maxOutput: 32_000,
+        vision: true,
+        status: 'active',
+      },
     ],
   },
 ]
 
 export const PROTOCOL_LABELS: Record<string, string> = {
   'openai-compatible': 'OpenAI Compatible',
-  'anthropic': 'Anthropic',
-  'custom': 'Custom Protocol',
+  anthropic: 'Anthropic',
+  custom: 'Custom Protocol',
 }
 
 export const TOOL_CATEGORIES = ['file', 'exec', 'agent', 'network', 'system'] as const
@@ -608,6 +730,7 @@ git commit -m "feat: add @mipham/shared package with types and constants"
 ### Task 1.3: Scaffold CLI package with Bun + Ink entry point
 
 **Files:**
+
 - Create: `apps/cli/package.json`
 - Create: `apps/cli/tsconfig.json`
 - Create: `apps/cli/bin/mipham.ts`
@@ -827,6 +950,7 @@ git commit -m "feat: scaffold CLI package with Bun + Ink entry point"
 ### Task 1.4: Implement Provider Registry with model discovery
 
 **Files:**
+
 - Create: `apps/cli/src/providers/registry.ts`
 
 - [ ] **Step 1: Write registry.ts**
@@ -885,7 +1009,9 @@ export class ProviderRegistry {
 
   switchProvider(providerId: string, modelId?: string): void {
     if (!this.providers.has(providerId)) {
-      throw new Error(`Provider "${providerId}" not registered. Available: ${this.listIds().join(', ')}`)
+      throw new Error(
+        `Provider "${providerId}" not registered. Available: ${this.listIds().join(', ')}`,
+      )
     }
     this.activeProviderId = providerId
     if (modelId) this.activeModelId = modelId
@@ -897,7 +1023,7 @@ export class ProviderRegistry {
 
   listModels(): ModelInfo[] {
     const provider = this.getActive()
-    return provider.config.models.filter(m => m.status === 'active')
+    return provider.config.models.filter((m) => m.status === 'active')
   }
 
   async *chat(req: ChatRequest): AsyncGenerator<StreamChunk> {
@@ -919,6 +1045,7 @@ git commit -m "feat: add Provider Registry with model discovery and switch logic
 ### Task 1.5: Implement OpenAI-Compatible router
 
 **Files:**
+
 - Create: `apps/cli/src/providers/openai-compat.ts`
 
 - [ ] **Step 1: Write openai-compat.ts**
@@ -949,14 +1076,14 @@ export class OpenAICompatProvider implements ProviderInstance {
       stream: true,
       max_tokens: req.maxTokens,
       temperature: req.temperature,
-      tools: req.tools?.map(t => ({ type: 'function', function: t })),
+      tools: req.tools?.map((t) => ({ type: 'function', function: t })),
     }
 
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
     })
@@ -1036,7 +1163,7 @@ export class OpenAICompatProvider implements ProviderInstance {
   }
 
   async listModels(): Promise<ModelInfo[]> {
-    return this.config.models.filter(m => m.status === 'active')
+    return this.config.models.filter((m) => m.status === 'active')
   }
 
   async healthCheck(): Promise<boolean> {
@@ -1052,7 +1179,10 @@ export class OpenAICompatProvider implements ProviderInstance {
     }
   }
 
-  private convertMessages(messages: Message[], systemPrompt?: string): { role: string; content: string | unknown[] }[] {
+  private convertMessages(
+    messages: Message[],
+    systemPrompt?: string,
+  ): { role: string; content: string | unknown[] }[] {
     const result: { role: string; content: string | unknown[] }[] = []
 
     if (systemPrompt) {
@@ -1102,12 +1232,20 @@ git commit -m "feat: add OpenAI-compatible provider router with SSE streaming"
 ### Task 1.6: Implement Anthropic router
 
 **Files:**
+
 - Create: `apps/cli/src/providers/anthropic.ts`
 
 - [ ] **Step 1: Write anthropic.ts**
 
 ```typescript
-import type { ProviderConfig, ModelInfo, Message, StreamChunk, ContentBlock, ToolUseContent } from '@mipham/shared'
+import type {
+  ProviderConfig,
+  ModelInfo,
+  Message,
+  StreamChunk,
+  ContentBlock,
+  ToolUseContent,
+} from '@mipham/shared'
 import type { ProviderInstance, ChatRequest } from './registry'
 
 interface AnthropicContentBlock {
@@ -1138,7 +1276,7 @@ export class AnthropicProvider implements ProviderInstance {
       temperature: req.temperature,
       system: req.systemPrompt,
       messages: this.convertMessages(req.messages),
-      tools: req.tools?.map(t => ({
+      tools: req.tools?.map((t) => ({
         name: t.name,
         description: t.description,
         input_schema: t.parameters || t.input_schema,
@@ -1223,7 +1361,7 @@ export class AnthropicProvider implements ProviderInstance {
   }
 
   async listModels(): Promise<ModelInfo[]> {
-    return this.config.models.filter(m => m.status === 'active')
+    return this.config.models.filter((m) => m.status === 'active')
   }
 
   async healthCheck(): Promise<boolean> {
@@ -1233,32 +1371,33 @@ export class AnthropicProvider implements ProviderInstance {
 
   private convertMessages(messages: Message[]): AnthropicMessage[] {
     return messages
-      .filter(m => m.role !== 'system')
-      .map(m => ({
+      .filter((m) => m.role !== 'system')
+      .map((m) => ({
         role: m.role,
-        content: typeof m.content === 'string'
-          ? m.content
-          : (m.content as ContentBlock[]).map(block => {
-              if (block.type === 'text') return { type: 'text', text: block.text }
-              if (block.type === 'image_url') {
-                return {
-                  type: 'image',
-                  source: {
-                    type: 'base64',
-                    media_type: 'image/png',
-                    data: block.image_url.url.replace(/^data:image\/\w+;base64,/, ''),
-                  },
+        content:
+          typeof m.content === 'string'
+            ? m.content
+            : (m.content as ContentBlock[]).map((block) => {
+                if (block.type === 'text') return { type: 'text', text: block.text }
+                if (block.type === 'image_url') {
+                  return {
+                    type: 'image',
+                    source: {
+                      type: 'base64',
+                      media_type: 'image/png',
+                      data: block.image_url.url.replace(/^data:image\/\w+;base64,/, ''),
+                    },
+                  }
                 }
-              }
-              if (block.type === 'tool_result') {
-                return {
-                  type: 'tool_result',
-                  tool_use_id: block.tool_use_id,
-                  content: block.content,
+                if (block.type === 'tool_result') {
+                  return {
+                    type: 'tool_result',
+                    tool_use_id: block.tool_use_id,
+                    content: block.content,
+                  }
                 }
-              }
-              return { type: 'text', text: '' }
-            }),
+                return { type: 'text', text: '' }
+              }),
       }))
   }
 
@@ -1284,6 +1423,7 @@ git commit -m "feat: add Anthropic provider router with SSE streaming"
 ### Task 1.7: Bootstrap providers from config into registry
 
 **Files:**
+
 - Create: `apps/cli/src/providers/bootstrap.ts`
 
 - [ ] **Step 1: Write bootstrap.ts**
@@ -1294,7 +1434,11 @@ import { ProviderRegistry } from './registry'
 import { OpenAICompatProvider } from './openai-compat'
 import { AnthropicProvider } from './anthropic'
 
-export function bootstrapProviders(configs: ProviderConfig[], defaultProvider: string, defaultModel: string): ProviderRegistry {
+export function bootstrapProviders(
+  configs: ProviderConfig[],
+  defaultProvider: string,
+  defaultModel: string,
+): ProviderRegistry {
   const registry = new ProviderRegistry(configs, defaultProvider, defaultModel)
 
   for (const config of configs) {
@@ -1327,6 +1471,7 @@ git commit -m "feat: add provider bootstrap that wires config to runtime registr
 ### Task 1.8: Implement Context Manager and Instructions Loader
 
 **Files:**
+
 - Create: `apps/cli/src/core/context.ts`
 - Create: `apps/cli/src/core/instructions.ts`
 
@@ -1337,7 +1482,7 @@ import type { Message } from '@mipham/shared'
 
 interface ContextConfig {
   maxTokens: number
-  compactionThreshold: number  // e.g. 0.9 → compact at 90% usage
+  compactionThreshold: number // e.g. 0.9 → compact at 90% usage
 }
 
 export class ContextManager {
@@ -1359,7 +1504,7 @@ export class ContextManager {
   addMessage(msg: Message): void {
     this.messages.push(msg)
     this.estimatedTokens += this.estimateTokens(
-      typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
+      typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
     )
   }
 
@@ -1381,7 +1526,7 @@ export class ContextManager {
       this.estimatedTokens = this.estimateTokens(this.systemPrompt)
       for (const msg of this.messages) {
         this.estimatedTokens += this.estimateTokens(
-          typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
+          typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
         )
       }
     }
@@ -1446,7 +1591,12 @@ export class InstructionsLoader {
     const parts: string[] = []
 
     for (const inst of this.instructions) {
-      const levelLabel = { group: 'Group Policy', project: 'Project Rules', directory: 'Directory Rules', user: 'User Preferences' }[inst.level]
+      const levelLabel = {
+        group: 'Group Policy',
+        project: 'Project Rules',
+        directory: 'Directory Rules',
+        user: 'User Preferences',
+      }[inst.level]
       parts.push(`<!-- ${levelLabel} (${inst.path}) -->\n${inst.content}`)
     }
 
@@ -1514,6 +1664,7 @@ export class InstructionsLoader {
 ```
 
 Fix recursive loader — use proper import:
+
 ```typescript
 import { readdirSync } from 'node:fs'
 ```
@@ -1532,6 +1683,7 @@ git commit -m "feat: add Context Manager and MIPHAM.md Instructions Loader"
 ### Task 1.9: Implement Query Engine (orchestrates model→response loop)
 
 **Files:**
+
 - Create: `apps/cli/src/core/engine.ts`
 
 - [ ] **Step 1: Write engine.ts**
@@ -1577,11 +1729,20 @@ export class QueryEngine {
         // Add to context
         this.context.addMessage({
           role: 'assistant',
-          content: [{ type: 'tool_use', id: chunk.toolUse.id, name: chunk.toolUse.name, input: chunk.toolUse.input }],
+          content: [
+            {
+              type: 'tool_use',
+              id: chunk.toolUse.id,
+              name: chunk.toolUse.name,
+              input: chunk.toolUse.input,
+            },
+          ],
         })
         this.context.addMessage({
           role: 'user',
-          content: [{ type: 'tool_result', tool_use_id: chunk.toolUse.id, content: result.content }],
+          content: [
+            { type: 'tool_result', tool_use_id: chunk.toolUse.id, content: result.content },
+          ],
         })
       }
 
@@ -1611,7 +1772,7 @@ export class QueryEngine {
   }
 
   private getToolDefinitions(): Record<string, unknown>[] {
-    return Array.from(this.tools.values()).map(t => ({
+    return Array.from(this.tools.values()).map((t) => ({
       name: t.name,
       description: t.description,
       input_schema: t.parameters,
@@ -1636,6 +1797,7 @@ git commit -m "feat: add Query Engine orchestrating model→tool→response loop
 ### Task 1.10: Wire M1 prototype — full conversation loop in CLI UI
 
 **Files:**
+
 - Modify: `apps/cli/src/index.ts`
 - Modify: `apps/cli/src/ui/app.tsx`
 - Create: `apps/cli/src/ui/chat.tsx`
@@ -1859,6 +2021,7 @@ git commit -m "feat: wire M1 prototype — full CLI conversation loop with model
 ### Task 2.1: Implement file tools (Read, Write, Edit, Glob, Grep)
 
 **Files:**
+
 - Create: `apps/cli/src/tools/index.ts`
 - Create: `apps/cli/src/tools/file/read.ts`
 - Create: `apps/cli/src/tools/file/write.ts`
@@ -1890,15 +2053,26 @@ import { mcpTool } from './system/mcp'
 export function createToolRegistry(): Map<string, ToolDefinition> {
   const tools: ToolDefinition[] = [
     // File
-    readTool, writeTool, editTool, globTool, grepTool,
+    readTool,
+    writeTool,
+    editTool,
+    globTool,
+    grepTool,
     // Exec
-    bashTool, gitTool, taskTool,
+    bashTool,
+    gitTool,
+    taskTool,
     // Agent
-    agentTool, skillTool, planTool, memoryTool,
+    agentTool,
+    skillTool,
+    planTool,
+    memoryTool,
     // Network
-    webFetchTool, webSearchTool,
+    webFetchTool,
+    webSearchTool,
     // System
-    configTool, mcpTool,
+    configTool,
+    mcpTool,
   ]
 
   const map = new Map<string, ToolDefinition>()
@@ -1944,7 +2118,9 @@ export const readTool: ToolDefinition = {
     const content = readFileSync(filePath, 'utf-8')
     const lines = content.split('\n')
     const slice = lines.slice(offset, offset + limit)
-    const result = slice.map((l, i) => `${String(offset + i + 1).padStart(6, ' ')}\t${l}`).join('\n')
+    const result = slice
+      .map((l, i) => `${String(offset + i + 1).padStart(6, ' ')}\t${l}`)
+      .join('\n')
     return { success: true, content: result }
   },
 }
@@ -2027,10 +2203,15 @@ export const editTool: ToolDefinition = {
     }
     const secondIndex = content.indexOf(oldStr, firstIndex + 1)
     if (secondIndex !== -1) {
-      return { success: false, content: '', error: 'old_string is not unique in file. Use replace_all or make it more specific.' }
+      return {
+        success: false,
+        content: '',
+        error: 'old_string is not unique in file. Use replace_all or make it more specific.',
+      }
     }
 
-    const updated = content.slice(0, firstIndex) + newStr + content.slice(firstIndex + oldStr.length)
+    const updated =
+      content.slice(0, firstIndex) + newStr + content.slice(firstIndex + oldStr.length)
     writeFileSync(filePath, updated, 'utf-8')
     return { success: true, content: `Replaced 1 occurrence in ${filePath}` }
   },
@@ -2113,7 +2294,11 @@ export const grepTool: ToolDefinition = {
         const content = await $`grep -rn ${pattern} ${searchPath}`.cwd(ctx.cwd).quiet().text()
         return { success: true, content: content.slice(0, 50000) || '(no matches)' }
       } catch {
-        return { success: false, content: '', error: 'grep failed. Install ripgrep: brew install ripgrep' }
+        return {
+          success: false,
+          content: '',
+          error: 'grep failed. Install ripgrep: brew install ripgrep',
+        }
       }
     }
   },
@@ -2132,6 +2317,7 @@ git commit -m "feat: add file tools — Read, Write, Edit, Glob, Grep"
 ### Task 2.2: Implement execution tools (Bash, Git, Task)
 
 **Files:**
+
 - Create: `apps/cli/src/tools/exec/bash.ts`
 - Create: `apps/cli/src/tools/exec/git.ts`
 - Create: `apps/cli/src/tools/exec/task.ts`
@@ -2248,11 +2434,19 @@ export const taskTool: ToolDefinition = {
   parameters: {
     type: 'object',
     properties: {
-      action: { type: 'string', enum: ['create', 'list', 'update'], description: 'Action to perform' },
+      action: {
+        type: 'string',
+        enum: ['create', 'list', 'update'],
+        description: 'Action to perform',
+      },
       subject: { type: 'string', description: 'Task subject (for create)' },
       description: { type: 'string', description: 'Task description (for create)' },
       taskId: { type: 'string', description: 'Task ID (for update)' },
-      status: { type: 'string', enum: ['pending', 'in_progress', 'completed'], description: 'New status (for update)' },
+      status: {
+        type: 'string',
+        enum: ['pending', 'in_progress', 'completed'],
+        description: 'New status (for update)',
+      },
     },
     required: ['action'],
   },
@@ -2272,7 +2466,7 @@ export const taskTool: ToolDefinition = {
 
     if (action === 'list') {
       const list = Array.from(tasks.values())
-        .map(t => `[${t.status}] #${t.id}: ${t.subject}`)
+        .map((t) => `[${t.status}] #${t.id}: ${t.subject}`)
         .join('\n')
       return { success: true, content: list || '(no tasks)' }
     }
@@ -2302,6 +2496,7 @@ git commit -m "feat: add execution tools — Bash, Git, Task"
 ### Task 2.3: Implement agent tools (Agent, Skill, Plan, Memory)
 
 **Files:**
+
 - Create: `apps/cli/src/tools/agent/agent.ts`
 - Create: `apps/cli/src/tools/agent/skill.ts`
 - Create: `apps/cli/src/tools/agent/plan.ts`
@@ -2310,6 +2505,7 @@ git commit -m "feat: add execution tools — Bash, Git, Task"
 - [ ] **Step 1: Write each agent tool**
 
 Same pattern, here's agent/agent.ts:
+
 ```typescript
 import type { ToolDefinition } from '@mipham/shared'
 
@@ -2340,6 +2536,7 @@ export const agentTool: ToolDefinition = {
 ```
 
 agent/skill.ts:
+
 ```typescript
 import type { ToolDefinition } from '@mipham/shared'
 
@@ -2367,6 +2564,7 @@ export const skillTool: ToolDefinition = {
 ```
 
 agent/plan.ts:
+
 ```typescript
 import type { ToolDefinition } from '@mipham/shared'
 
@@ -2382,13 +2580,15 @@ export const planTool: ToolDefinition = {
   async execute(_params, _ctx) {
     return {
       success: true,
-      content: 'Plan mode activated. The AI will analyze and design without executing any code changes.',
+      content:
+        'Plan mode activated. The AI will analyze and design without executing any code changes.',
     }
   },
 }
 ```
 
 agent/memory.ts:
+
 ```typescript
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
@@ -2415,7 +2615,7 @@ export const memoryTool: ToolDefinition = {
     mkdirSync(MEMORY_DIR, { recursive: true })
 
     if (action === 'list') {
-      const files = readdirSync(MEMORY_DIR).filter(f => f.endsWith('.md'))
+      const files = readdirSync(MEMORY_DIR).filter((f) => f.endsWith('.md'))
       return { success: true, content: files.join('\n') || '(no memories)' }
     }
 
@@ -2424,7 +2624,8 @@ export const memoryTool: ToolDefinition = {
     const filePath = join(MEMORY_DIR, `${name}.md`)
 
     if (action === 'read') {
-      if (!existsSync(filePath)) return { success: false, content: '', error: `Memory "${name}" not found` }
+      if (!existsSync(filePath))
+        return { success: false, content: '', error: `Memory "${name}" not found` }
       return { success: true, content: readFileSync(filePath, 'utf-8') }
     }
 
@@ -2450,6 +2651,7 @@ git commit -m "feat: add agent tools — Agent, Skill, Plan, Memory"
 ### Task 2.4: Implement network and system tools
 
 **Files:**
+
 - Create: `apps/cli/src/tools/network/web-fetch.ts`
 - Create: `apps/cli/src/tools/network/web-search.ts`
 - Create: `apps/cli/src/tools/system/config.ts`
@@ -2481,11 +2683,19 @@ export const webFetchTool: ToolDefinition = {
         redirect: 'follow',
       })
       if (!response.ok) {
-        return { success: false, content: '', error: `HTTP ${response.status}: ${response.statusText}` }
+        return {
+          success: false,
+          content: '',
+          error: `HTTP ${response.status}: ${response.statusText}`,
+        }
       }
       const html = await response.text()
       // Simple HTML-to-text extraction
-      const text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 50000)
+      const text = html
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 50000)
       return { success: true, content: text }
     } catch (err) {
       return { success: false, content: '', error: `Fetch failed: ${String(err)}` }
@@ -2630,6 +2840,7 @@ git commit -m "feat: add network and system tools — WebFetch, WebSearch, Confi
 ### Task 2.5: Implement Permission System and Hook Engine
 
 **Files:**
+
 - Create: `apps/cli/src/core/permission.ts`
 - Create: `apps/cli/src/core/hooks.ts`
 
@@ -2697,7 +2908,11 @@ export class HookEngine {
     return result
   }
 
-  async executePreToolUse(toolName: string, input: Record<string, unknown>, sessionId: string): Promise<HookResult> {
+  async executePreToolUse(
+    toolName: string,
+    input: Record<string, unknown>,
+    sessionId: string,
+  ): Promise<HookResult> {
     return this.execute('PreToolUse', {
       event: 'PreToolUse',
       toolName,
@@ -2706,7 +2921,12 @@ export class HookEngine {
     })
   }
 
-  async executePostToolUse(toolName: string, input: Record<string, unknown>, result: ToolResult, sessionId: string): Promise<void> {
+  async executePostToolUse(
+    toolName: string,
+    input: Record<string, unknown>,
+    result: ToolResult,
+    sessionId: string,
+  ): Promise<void> {
     await this.execute('PostToolUse', {
       event: 'PostToolUse',
       toolName,
@@ -2779,6 +2999,7 @@ git commit -m "feat: add Permission System and Hook Engine, wired into engine"
 ### Task 3.1: Implement Skills Loader (SKILL.md + .mipham-skill.md)
 
 **Files:**
+
 - Create: `apps/cli/src/skills/loader.ts`
 
 - [ ] **Step 1: Write loader.ts**
@@ -2802,7 +3023,13 @@ export class SkillLoader {
       const absPath = resolve(p)
       if (!existsSync(absPath)) continue
 
-      const stat = (() => { try { return readdirSync(absPath, { withFileTypes: true }) } catch { return null } })()
+      const stat = (() => {
+        try {
+          return readdirSync(absPath, { withFileTypes: true })
+        } catch {
+          return null
+        }
+      })()
       if (!stat) continue
 
       for (const entry of readdirSync(absPath, { withFileTypes: true })) {
@@ -2860,7 +3087,10 @@ export class SkillLoader {
     // Parse frontmatter-style headers
     let inHeader = false
     for (const line of lines) {
-      if (line.startsWith('---')) { inHeader = !inHeader; continue }
+      if (line.startsWith('---')) {
+        inHeader = !inHeader
+        continue
+      }
       if (inHeader) {
         const [key, ...rest] = line.split(':')
         const value = rest.join(':').trim()
@@ -2893,6 +3123,7 @@ git commit -m "feat: add Skills Loader with SKILL.md and .mipham-skill.md suppor
 ### Task 3.2: Create 8 standard SKILL.md files
 
 **Files:**
+
 - Create: `apps/cli/skills/standard/superpower.SKILL.md`
 - Create: `apps/cli/skills/standard/code-review.SKILL.md`
 - Create: `apps/cli/skills/standard/self-review.SKILL.md`
@@ -2905,6 +3136,7 @@ git commit -m "feat: add Skills Loader with SKILL.md and .mipham-skill.md suppor
 - [ ] **Step 1: Write each SKILL.md**
 
 Example — `superpower.SKILL.md`:
+
 ```markdown
 ---
 name: superpower
@@ -2928,6 +3160,7 @@ Invoke this skill when you need to discover available skills or learn how to use
 ```
 
 Example — `memory.SKILL.md`:
+
 ```markdown
 ---
 name: memory
@@ -2947,11 +3180,12 @@ Manage persistent memory across Mipham Code sessions. Memories are stored as mar
 
 ## Format
 
-Each memory is a markdown file with YAML frontmatter:
----
+## Each memory is a markdown file with YAML frontmatter:
+
 name: slug-name
 description: One-line summary
 type: user | feedback | project | reference
+
 ---
 ```
 
@@ -2969,6 +3203,7 @@ git commit -m "feat: add 8 standard SKILL.md files for built-in skills"
 ### Task 3.3: Create 2 Mipham-exclusive skill files
 
 **Files:**
+
 - Create: `apps/cli/skills/mipham/om-model-optimize.mipham-skill.md`
 - Create: `apps/cli/skills/mipham/om-security.mipham-skill.md`
 
@@ -2988,15 +3223,16 @@ Mipham-exclusive skill for intelligent model selection across connected provider
 
 ## Routing Rules
 
-| Task Type | Recommended Model | Fallback |
-|-----------|-------------------|----------|
-| Complex reasoning | claude-opus-4-8 / gpt-5.5 | deepseek-v4-pro |
-| Code generation | claude-sonnet-4-6 / gpt-5.4 | deepseek-v4-flash |
-| Quick fixes | claude-haiku-4-5-20251001 / gpt-5.4-mini | deepseek-v4-flash |
-| Code review | claude-sonnet-4-6 | gpt-5.3-codex |
-| Documentation | gpt-5.4-mini | claude-haiku-4-5-20251001 |
+| Task Type         | Recommended Model                        | Fallback                  |
+| ----------------- | ---------------------------------------- | ------------------------- |
+| Complex reasoning | claude-opus-4-8 / gpt-5.5                | deepseek-v4-pro           |
+| Code generation   | claude-sonnet-4-6 / gpt-5.4              | deepseek-v4-flash         |
+| Quick fixes       | claude-haiku-4-5-20251001 / gpt-5.4-mini | deepseek-v4-flash         |
+| Code review       | claude-sonnet-4-6                        | gpt-5.3-codex             |
+| Documentation     | gpt-5.4-mini                             | claude-haiku-4-5-20251001 |
 
 ## Phase 2
+
 When om-V5 series launches, routing prioritizes MiphamAI models for all task types.
 ```
 
@@ -3025,6 +3261,7 @@ Mipham-exclusive security audit skill. Runs PreToolUse hooks on Write/Edit/Bash 
 ## Hook Registration
 
 This skill registers a PreToolUse hook on Write/Edit tools. When code is being written:
+
 1. Scan content for credential patterns
 2. Block if hardcoded secrets detected
 3. Warn on suspicious patterns
@@ -3042,12 +3279,14 @@ git commit -m "feat: add 2 Mipham-exclusive skill files with model routing and s
 ### Task 3.4: Wire Skills system into Engine and CLI bootstrap
 
 **Files:**
+
 - Modify: `apps/cli/src/index.ts`
 - Modify: `apps/cli/src/core/engine.ts`
 
 - [ ] **Step 1: Update src/index.ts to load skills**
 
 Add after engine creation:
+
 ```typescript
 import { SkillLoader } from './skills/loader'
 import { resolve, dirname } from 'node:path'
@@ -3087,6 +3326,7 @@ git commit -m "feat: wire Skills system into engine with built-in skills loading
 ### Task 4.1: Scaffold Next.js web app with Tailwind
 
 **Files:**
+
 - Create: `apps/web/package.json`
 - Create: `apps/web/tsconfig.json`
 - Create: `apps/web/next.config.js`
@@ -3198,10 +3438,12 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Mipham Code — Multi-Model Open-Core Intelligent Coding Terminal',
-  description: 'Connect global LLMs. One terminal. Open Core. Mipham Code by One Mipham Corporation (Delaware, USA).',
+  description:
+    'Connect global LLMs. One terminal. Open Core. Mipham Code by One Mipham Corporation (Delaware, USA).',
   openGraph: {
     title: 'Mipham Code — Open-Core AI Coding Terminal',
-    description: 'ChatGPT, Claude, DeepSeek, Qwen — all in one CLI. SKILL.md compatible. Open Core (Apache 2.0).',
+    description:
+      'ChatGPT, Claude, DeepSeek, Qwen — all in one CLI. SKILL.md compatible. Open Core (Apache 2.0).',
     url: 'https://mipham.ai/code',
     siteName: 'Mipham Code',
     type: 'website',
@@ -3237,6 +3479,7 @@ git commit -m "feat: scaffold Next.js web app with Tailwind CSS"
 ### Task 4.2: Build /code landing page with all sections
 
 **Files:**
+
 - Create: `apps/web/src/app/code/page.tsx`
 - Create: `apps/web/src/app/code/layout.tsx`
 - Create: `apps/web/src/app/code/components/hero.tsx`
@@ -3361,8 +3604,11 @@ export function Features() {
     <section className="py-20 px-4 max-w-6xl mx-auto">
       <h2 className="text-3xl font-bold text-center mb-12">Why Mipham Code</h2>
       <div className="grid md:grid-cols-3 gap-8">
-        {FEATURES.map(f => (
-          <div key={f.title} className="p-6 rounded-xl border border-slate-800 hover:border-cyan-800 transition-colors">
+        {FEATURES.map((f) => (
+          <div
+            key={f.title}
+            className="p-6 rounded-xl border border-slate-800 hover:border-cyan-800 transition-colors"
+          >
             <div className="text-3xl mb-4">{f.emoji}</div>
             <h3 className="text-lg font-semibold mb-2">{f.title}</h3>
             <p className="text-slate-400 text-sm">{f.desc}</p>
@@ -3378,11 +3624,36 @@ export function Features() {
 
 ```tsx
 const PROVIDER_MODELS = [
-  { provider: 'MiphamAI', models: ['om-V5-Pro', 'om-V5-Flash', 'om-V5-Visual'], status: 'Phase 2', color: 'text-purple-400' },
-  { provider: 'Anthropic', models: ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5'], status: 'Active', color: 'text-cyan-400' },
-  { provider: 'OpenAI', models: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex'], status: 'Active', color: 'text-green-400' },
-  { provider: 'DeepSeek', models: ['deepseek-v4-pro', 'deepseek-v4-flash'], status: 'Active', color: 'text-blue-400' },
-  { provider: 'Qwen', models: ['qwen-plus', 'qwen-max'], status: 'Active', color: 'text-orange-400' },
+  {
+    provider: 'MiphamAI',
+    models: ['om-V5-Pro', 'om-V5-Flash', 'om-V5-Visual'],
+    status: 'Phase 2',
+    color: 'text-purple-400',
+  },
+  {
+    provider: 'Anthropic',
+    models: ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
+    status: 'Active',
+    color: 'text-cyan-400',
+  },
+  {
+    provider: 'OpenAI',
+    models: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex'],
+    status: 'Active',
+    color: 'text-green-400',
+  },
+  {
+    provider: 'DeepSeek',
+    models: ['deepseek-v4-pro', 'deepseek-v4-flash'],
+    status: 'Active',
+    color: 'text-blue-400',
+  },
+  {
+    provider: 'Qwen',
+    models: ['qwen-plus', 'qwen-max'],
+    status: 'Active',
+    color: 'text-orange-400',
+  },
 ]
 
 export function Models() {
@@ -3390,13 +3661,18 @@ export function Models() {
     <section className="py-20 px-4 max-w-4xl mx-auto">
       <h2 className="text-3xl font-bold text-center mb-12">Supported Models</h2>
       <div className="space-y-4">
-        {PROVIDER_MODELS.map(p => (
-          <div key={p.provider} className="flex items-center justify-between p-4 rounded-lg border border-slate-800">
+        {PROVIDER_MODELS.map((p) => (
+          <div
+            key={p.provider}
+            className="flex items-center justify-between p-4 rounded-lg border border-slate-800"
+          >
             <div>
               <span className={`font-semibold ${p.color}`}>{p.provider}</span>
               <span className="ml-3 text-slate-500 text-sm">{p.models.join(', ')}</span>
             </div>
-            <span className={`text-xs px-2 py-1 rounded ${p.status === 'Phase 2' ? 'bg-purple-900 text-purple-300' : 'bg-green-900 text-green-300'}`}>
+            <span
+              className={`text-xs px-2 py-1 rounded ${p.status === 'Phase 2' ? 'bg-purple-900 text-purple-300' : 'bg-green-900 text-green-300'}`}
+            >
               {p.status}
             </span>
           </div>
@@ -3494,6 +3770,7 @@ git commit -m "feat: build /code landing page with Hero, Features, Models, Insta
 ### Task 4.3: Add /code/docs and /code/install placeholder pages
 
 **Files:**
+
 - Create: `apps/web/src/app/code/docs/page.tsx`
 - Create: `apps/web/src/app/code/install/page.tsx`
 
@@ -3506,22 +3783,41 @@ export default function DocsPage() {
       <h1 className="text-4xl font-bold mb-8">Documentation</h1>
       <div className="prose prose-invert max-w-none">
         <h2>Getting Started</h2>
-        <p>Install Mipham Code via npm or curl. Configure your model providers in ~/.mipham/config.yml.</p>
+        <p>
+          Install Mipham Code via npm or curl. Configure your model providers in
+          ~/.mipham/config.yml.
+        </p>
 
         <h2>Slash Commands</h2>
         <ul>
-          <li><code>/model [name]</code> — Switch active model</li>
-          <li><code>/provider [name]</code> — Switch active provider</li>
-          <li><code>/help</code> — Show all commands</li>
-          <li><code>/clear</code> — Clear conversation</li>
-          <li><code>/config</code> — Open configuration</li>
+          <li>
+            <code>/model [name]</code> — Switch active model
+          </li>
+          <li>
+            <code>/provider [name]</code> — Switch active provider
+          </li>
+          <li>
+            <code>/help</code> — Show all commands
+          </li>
+          <li>
+            <code>/clear</code> — Clear conversation
+          </li>
+          <li>
+            <code>/config</code> — Open configuration
+          </li>
         </ul>
 
         <h2>Skills</h2>
-        <p>Mipham Code supports the SKILL.md ecosystem. Place .SKILL.md files in ~/.mipham/skills/ or project .mipham/skills/ directories.</p>
+        <p>
+          Mipham Code supports the SKILL.md ecosystem. Place .SKILL.md files in ~/.mipham/skills/ or
+          project .mipham/skills/ directories.
+        </p>
 
         <h2>MIPHAM.md</h2>
-        <p>Create a MIPHAM.md file in your project root to provide context to all connected models. Supports YAML frontmatter for configuration.</p>
+        <p>
+          Create a MIPHAM.md file in your project root to provide context to all connected models.
+          Supports YAML frontmatter for configuration.
+        </p>
       </div>
     </section>
   )
@@ -3542,7 +3838,9 @@ export default function InstallPage() {
           <pre className="bg-slate-900 p-4 rounded-lg overflow-x-auto">
             <code className="text-cyan-400">brew install mipham-code</code>
           </pre>
-          <p className="text-slate-500 mt-2">Or via curl: <code>curl -fsSL https://mipham.ai/code/install.sh | sh</code></p>
+          <p className="text-slate-500 mt-2">
+            Or via curl: <code>curl -fsSL https://mipham.ai/code/install.sh | sh</code>
+          </p>
         </div>
 
         <div>
@@ -3585,6 +3883,7 @@ git commit -m "feat: add /code/docs and /code/install pages"
 ### Task 5.1: Set up CI/CD with GitHub Actions
 
 **Files:**
+
 - Create: `.github/workflows/ci.yml`
 
 - [ ] **Step 1: Write ci.yml**
@@ -3649,6 +3948,7 @@ git commit -m "ci: add GitHub Actions workflow for lint, test, build CLI and Web
 ### Task 5.2: Add package.json metadata for npm publishing
 
 **Files:**
+
 - Modify: `apps/cli/package.json`
 
 - [ ] **Step 1: Add publish fields**
@@ -3661,7 +3961,17 @@ git commit -m "ci: add GitHub Actions workflow for lint, test, build CLI and Web
   "license": "Apache-2.0",
   "repository": "https://github.com/OneMiphamCorp/mipham-code",
   "homepage": "https://mipham.ai/code",
-  "keywords": ["cli", "ai", "llm", "coding", "terminal", "openai", "anthropic", "deepseek", "mipham"],
+  "keywords": [
+    "cli",
+    "ai",
+    "llm",
+    "coding",
+    "terminal",
+    "openai",
+    "anthropic",
+    "deepseek",
+    "mipham"
+  ],
   "bin": { "mipham": "./bin/mipham.ts" },
   "files": ["bin", "src", "skills", "README.md"],
   "engines": { "bun": ">=1.2.0" }
@@ -3682,11 +3992,12 @@ git commit -m "chore: add npm publish metadata to CLI package"
 ### Task 6.1: Add README.md with full usage guide
 
 **Files:**
+
 - Create: `README.md`
 
 - [ ] **Step 1: Write README.md**
 
-```markdown
+````markdown
 # 🚀 Mipham Code
 
 > Connect global LLMs. One terminal. Open Core.
@@ -3707,6 +4018,7 @@ brew install mipham-code
 # Linux / macOS
 curl -fsSL https://mipham.ai/code/install.sh | sh
 ```
+````
 
 ## Configure
 
@@ -3746,40 +4058,42 @@ mipham
 
 ## Slash Commands
 
-| Command | Description |
-|---------|-------------|
-| `/model <name>` | Switch active model |
+| Command            | Description            |
+| ------------------ | ---------------------- |
+| `/model <name>`    | Switch active model    |
 | `/provider <name>` | Switch active provider |
-| `/help` | Show all commands |
-| `/clear` | Clear conversation |
-| `/config` | Open configuration |
+| `/help`            | Show all commands      |
+| `/clear`           | Clear conversation     |
+| `/config`          | Open configuration     |
 
 ## License
 
 Core: Apache 2.0 | Enterprise features: Commercial License
 
 © 2026 One Mipham Corporation (Delaware, USA). All rights reserved.
-```
+
+````
 
 - [ ] **Step 2: Commit**
 
 ```bash
 git add README.md
 git commit -m "docs: add README with full usage guide for GA release"
-```
+````
 
 ---
 
 ### Task 6.2: Create CONTRIBUTING.md and CODE_OF_CONDUCT.md
 
 **Files:**
+
 - Create: `CONTRIBUTING.md`
 - Create: `CODE_OF_CONDUCT.md`
 - Create: `SECURITY.md`
 
 - [ ] **Step 1: Write CONTRIBUTING.md**
 
-```markdown
+````markdown
 # Contributing to Mipham Code
 
 Thank you for contributing! Mipham Code is Open Core (Apache 2.0). We welcome community contributions.
@@ -3792,6 +4106,7 @@ cd mipham-code
 pnpm install
 pnpm dev:cli
 ```
+````
 
 ## Project Structure
 
@@ -3817,7 +4132,8 @@ pnpm dev:cli
 Place `.SKILL.md` (standard) or `.mipham-skill.md` (exclusive) in `apps/cli/skills/`.
 
 See [SKILL.md specification](https://github.com/duanyytop/agents-radar) for format details.
-```
+
+````
 
 - [ ] **Step 2: Write CODE_OF_CONDUCT.md**
 
@@ -3838,7 +4154,7 @@ We pledge to make participation in the Mipham Code community a harassment-free e
 ## Enforcement
 
 Report issues to: conduct@mipham.ai
-```
+````
 
 - [ ] **Step 3: Write SECURITY.md**
 
@@ -3862,8 +4178,8 @@ Mipham Code connects to multiple LLM providers. Security considerations:
 ## Supported Versions
 
 | Version | Supported |
-|---------|-----------|
-| 0.1.x   | ✅ Beta |
+| ------- | --------- |
+| 0.1.x   | ✅ Beta   |
 ```
 
 - [ ] **Step 4: Commit**
@@ -3879,26 +4195,28 @@ git commit -m "docs: add community and security documentation for GA"
 
 ### Spec Coverage Check
 
-| Spec Section | Covered By |
-|---|---|
-| §1 Product Positioning | README + Web hero/features |
-| §2 Open Core Strategy | LICENSE + README |
-| §3 Architecture | Task 1.3-1.9 (CLI scaffold + engine) |
-| §4 L1 Multi-Model Engine | Task 1.4-1.7 (providers) |
-| §5 L2 16 Core Tools | Task 2.1-2.5 (all tools + permissions + hooks) |
-| §6 L3 Skills Dual-Track | Task 3.1-3.4 (loader + 10 built-in skills) |
-| §7 Web Interface | Task 4.1-4.3 (Next.js app with all pages) |
-| §8 MIPHAM.md System | Task 1.8 (instructions loader) |
-| §9 Language Design | Task 1.1 (MIPHAM.md w/ language field) |
-| §10 Phase 1/2 Roadmap | Covered in plan structure (M1-M6) |
-| §11 Project Structure | Task 1.1-1.3 (full directory scaffold) |
-| §12 Distribution | Task 5.2 (npm metadata) + Task 4.2 (install page) |
-| §13 Tech Stack | Embedded in each task's package.json |
+| Spec Section             | Covered By                                        |
+| ------------------------ | ------------------------------------------------- |
+| §1 Product Positioning   | README + Web hero/features                        |
+| §2 Open Core Strategy    | LICENSE + README                                  |
+| §3 Architecture          | Task 1.3-1.9 (CLI scaffold + engine)              |
+| §4 L1 Multi-Model Engine | Task 1.4-1.7 (providers)                          |
+| §5 L2 16 Core Tools      | Task 2.1-2.5 (all tools + permissions + hooks)    |
+| §6 L3 Skills Dual-Track  | Task 3.1-3.4 (loader + 10 built-in skills)        |
+| §7 Web Interface         | Task 4.1-4.3 (Next.js app with all pages)         |
+| §8 MIPHAM.md System      | Task 1.8 (instructions loader)                    |
+| §9 Language Design       | Task 1.1 (MIPHAM.md w/ language field)            |
+| §10 Phase 1/2 Roadmap    | Covered in plan structure (M1-M6)                 |
+| §11 Project Structure    | Task 1.1-1.3 (full directory scaffold)            |
+| §12 Distribution         | Task 5.2 (npm metadata) + Task 4.2 (install page) |
+| §13 Tech Stack           | Embedded in each task's package.json              |
 
 ### Placeholder Scan
+
 No TBD, TODO, or incomplete sections found. All tasks contain concrete code.
 
 ### Type Consistency
+
 - `ProviderConfig`, `ModelInfo`, `ToolDefinition`, `StreamChunk` — consistent across shared/types.ts, providers, tools, and engine
 - `hook.execute()` returns `HookResult` — consistent across hooks.ts and engine.ts
 - `SkillLoader.loadFromPaths()` — consistent usage in index.ts bootstrap

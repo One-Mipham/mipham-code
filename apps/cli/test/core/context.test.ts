@@ -137,8 +137,8 @@ describe('ContextManager', () => {
     const msgs = ctx.getMessages()
     expect(msgs).toHaveLength(20)
     // Should keep the LAST 20 (msg 15-34)
-    expect((msgs[0]!.content as string)).toBe('msg 15')
-    expect((msgs[19]!.content as string)).toBe('msg 34')
+    expect(msgs[0]!.content as string).toBe('msg 15')
+    expect(msgs[19]!.content as string).toBe('msg 34')
   })
 
   it('should not truncate when <=30 messages', async () => {
@@ -252,7 +252,7 @@ describe('ContextManager', () => {
 
     const msgs = ctx.getMessages()
     expect(msgs).toHaveLength(2)
-    expect((msgs[0]!.content as string)).toBe('msg1')
+    expect(msgs[0]!.content as string).toBe('msg1')
   })
 
   it('should restore specific checkpoint by ID', () => {
@@ -272,7 +272,7 @@ describe('ContextManager', () => {
 
     const msgs = ctx.getMessages()
     expect(msgs).toHaveLength(1)
-    expect((msgs[0]!.content as string)).toBe('msg1')
+    expect(msgs[0]!.content as string).toBe('msg1')
   })
 
   it('should report failure when no checkpoints exist', () => {
@@ -324,14 +324,14 @@ describe('ContextManager', () => {
     // Restore
     ctx.restoreCheckpoint()
     expect(ctx.getMessages()).toHaveLength(1)
-    expect((ctx.getMessages()[0]!.content as string)).toBe('original')
+    expect(ctx.getMessages()[0]!.content as string).toBe('original')
 
     // Save another checkpoint and verify original is still intact
     ctx.saveCheckpoint('after-restore')
     ctx.addMessage(makeTextMessage('user', 'new-msg'))
     ctx.restoreCheckpoint()
     expect(ctx.getMessages()).toHaveLength(1)
-    expect((ctx.getMessages()[0]!.content as string)).toBe('original')
+    expect(ctx.getMessages()[0]!.content as string).toBe('original')
   })
 
   it('should clear checkpoints on clear()', () => {

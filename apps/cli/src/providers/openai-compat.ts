@@ -1,4 +1,10 @@
-import type { ProviderConfig, ModelInfo, Message, StreamChunk, ContentBlock } from './shared/index.ts'
+import type {
+  ProviderConfig,
+  ModelInfo,
+  Message,
+  StreamChunk,
+  ContentBlock,
+} from '../shared/index.ts'
 import type { ProviderInstance, ChatRequest } from './registry'
 
 export class OpenAICompatProvider implements ProviderInstance {
@@ -14,14 +20,14 @@ export class OpenAICompatProvider implements ProviderInstance {
       stream: true,
       max_tokens: req.maxTokens,
       temperature: req.temperature,
-      tools: req.tools?.map(t => ({ type: 'function', function: t })),
+      tools: req.tools?.map((t) => ({ type: 'function', function: t })),
     }
 
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
     })
@@ -97,7 +103,7 @@ export class OpenAICompatProvider implements ProviderInstance {
   }
 
   async listModels(): Promise<ModelInfo[]> {
-    return this.config.models.filter(m => m.status === 'active')
+    return this.config.models.filter((m) => m.status === 'active')
   }
 
   async healthCheck(): Promise<boolean> {
@@ -113,7 +119,10 @@ export class OpenAICompatProvider implements ProviderInstance {
     }
   }
 
-  private convertMessages(messages: Message[], systemPrompt?: string): { role: string; content: string | unknown[] }[] {
+  private convertMessages(
+    messages: Message[],
+    systemPrompt?: string,
+  ): { role: string; content: string | unknown[] }[] {
     const result: { role: string; content: string | unknown[] }[] = []
 
     if (systemPrompt) {

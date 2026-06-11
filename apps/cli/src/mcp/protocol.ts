@@ -14,16 +14,23 @@ const MCP_VERSION = '2024-11-05'
  * lifecycle on top of a StdioTransport.
  */
 export class McpProtocol {
-  private serverCapabilities: { tools?: { listChanged?: boolean }; resources?: { subscribe?: boolean; listChanged?: boolean } } = {}
+  private serverCapabilities: {
+    tools?: { listChanged?: boolean }
+    resources?: { subscribe?: boolean; listChanged?: boolean }
+  } = {}
 
   constructor(private transport: StdioTransport) {}
 
-  async initialize(serverCommand: string, serverArgs: string[], env?: Record<string, string>): Promise<InitializeResult> {
+  async initialize(
+    serverCommand: string,
+    serverArgs: string[],
+    env?: Record<string, string>,
+  ): Promise<InitializeResult> {
     // Start transport
     await this.transport.start(serverCommand, serverArgs, env)
 
     // Send initialize request
-    const result = await this.transport.sendRequest('initialize', {
+    const result = (await this.transport.sendRequest('initialize', {
       protocolVersion: MCP_VERSION,
       capabilities: {
         tools: {},
@@ -33,7 +40,7 @@ export class McpProtocol {
         name: 'Mipham Code',
         version: '0.2.0',
       },
-    }) as InitializeResult
+    })) as InitializeResult
 
     // Send initialized notification
     this.transport.sendNotification('notifications/initialized')
@@ -44,15 +51,15 @@ export class McpProtocol {
   }
 
   async listTools(): Promise<ToolDefinition[]> {
-    const result = await this.transport.sendRequest('tools/list') as { tools: ToolDefinition[] }
+    const result = (await this.transport.sendRequest('tools/list')) as { tools: ToolDefinition[] }
     return result.tools || []
   }
 
   async callTool(name: string, args?: Record<string, unknown>): Promise<ToolCallResult> {
-    const result = await this.transport.sendRequest('tools/call', {
+    const result = (await this.transport.sendRequest('tools/call', {
       name,
       arguments: args || {},
-    }) as ToolCallResult
+    })) as ToolCallResult
     return result
   }
 
@@ -60,12 +67,16 @@ export class McpProtocol {
     if (!this.serverCapabilities.resources) {
       return []
     }
-    const result = await this.transport.sendRequest('resources/list') as { resources: ResourceDefinition[] }
+    const result = (await this.transport.sendRequest('resources/list')) as {
+      resources: ResourceDefinition[]
+    }
     return result.resources || []
   }
 
   async readResource(uri: string): Promise<ResourceReadResult> {
-    const result = await this.transport.sendRequest('resources/read', { uri }) as ResourceReadResult
+    const result = (await this.transport.sendRequest('resources/read', {
+      uri,
+    })) as ResourceReadResult
     return result
   }
 

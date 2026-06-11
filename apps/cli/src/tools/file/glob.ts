@@ -1,5 +1,5 @@
 import { Glob } from 'bun'
-import type { ToolDefinition } from '../shared/index.ts'
+import type { ToolDefinition } from '../../shared/index.ts'
 import { resolveSafe } from '../../security/path'
 
 export const globTool: ToolDefinition = {

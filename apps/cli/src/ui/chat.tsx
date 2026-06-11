@@ -9,16 +9,15 @@ interface ChatPanelProps {
 
 export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
   // In focus mode, show only the last user+assistant exchange
-  const displayMessages = focusMode
-    ? getLastExchange(messages)
-    : messages
+  const displayMessages = focusMode ? getLastExchange(messages) : messages
 
   return (
     <Box flexDirection="column" marginY={1} flexGrow={1}>
       {focusMode && messages.length > 0 && (
         <Box marginBottom={1}>
           <Text dimColor>
-            🔍 Focus mode — showing last exchange only ({displayMessages.length} of {messages.length} messages hidden)
+            🔍 Focus mode — showing last exchange only ({displayMessages.length} of{' '}
+            {messages.length} messages hidden)
           </Text>
         </Box>
       )}
@@ -30,15 +29,12 @@ export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
             </Text>
             <Text dimColor> — AI-Powered Programming Assistant</Text>
           </Box>
-          <Text dimColor>
-            Multi-model · Multi-provider · Skills & Tools · Open-core
-          </Text>
+          <Text dimColor>Multi-model · Multi-provider · Skills & Tools · Open-core</Text>
           <Box marginTop={1}>
             <Text dimColor>
-              Type a message to start.{' '}
-              <Text color="yellow">/help</Text> for commands ·{' '}
-              <Text color="yellow">Ctrl+P</Text> pick model ·{' '}
-              <Text color="yellow">Esc</Text> to exit
+              Type a message to start. <Text color="yellow">/help</Text> for commands ·{' '}
+              <Text color="yellow">Ctrl+P</Text> pick model · <Text color="yellow">Esc</Text> to
+              exit
             </Text>
           </Box>
         </Box>
@@ -47,20 +43,9 @@ export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
         <Box key={i} flexDirection="column" marginY={1}>
           <Text
             bold
-            color={
-              msg.role === 'user'
-                ? 'green'
-                : msg.role === 'system'
-                  ? 'yellow'
-                  : 'blue'
-            }
+            color={msg.role === 'user' ? 'green' : msg.role === 'system' ? 'yellow' : 'blue'}
           >
-            {msg.role === 'user'
-              ? '▸ You'
-              : msg.role === 'assistant'
-                ? 'Mipham Code'
-                : '⚠ System'}
-            :
+            {msg.role === 'user' ? '▸ You' : msg.role === 'assistant' ? 'Mipham Code' : '⚠ System'}:
           </Text>
           <Text>{msg.content}</Text>
         </Box>

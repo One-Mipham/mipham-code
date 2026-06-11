@@ -1,7 +1,7 @@
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs'
 import { join, extname } from 'node:path'
 import { parse as parseYaml } from 'yaml'
-import type { SkillDefinition } from './shared/index.ts'
+import type { SkillDefinition } from '../shared/index.ts'
 
 interface FrontmatterResult {
   data: Record<string, unknown>
@@ -58,7 +58,7 @@ export class SkillsLoader {
   }
 
   listByType(type: 'standard' | 'mipham'): SkillDefinition[] {
-    return Array.from(this.skills.values()).filter(s => s.type === type)
+    return Array.from(this.skills.values()).filter((s) => s.type === type)
   }
 
   has(name: string): boolean {
@@ -70,8 +70,7 @@ export class SkillsLoader {
       const entries = readdirSync(dir)
       for (const entry of entries) {
         const fullPath = join(dir, entry)
-        const isSkillFile =
-          entry.endsWith('.SKILL.md') || entry.endsWith('.mipham-skill.md')
+        const isSkillFile = entry.endsWith('.SKILL.md') || entry.endsWith('.mipham-skill.md')
 
         if (isSkillFile) {
           this.tryLoad(fullPath, type)
