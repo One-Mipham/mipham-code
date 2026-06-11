@@ -65,4 +65,6 @@ jobs:
           bun-version: latest
       - uses: pnpm/action-setup@v4
       - run: pnpm install --frozen-lockfile
+      - name: Install ripgrep
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
       - run: pnpm -r test
