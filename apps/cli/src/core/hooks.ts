@@ -88,7 +88,7 @@ export class HookEngine {
       (h) => h.event === event && (!toolName || !h.toolName || h.toolName === toolName),
     )
 
-    let result: HookResult = { allowed: true }
+    const result: HookResult = { allowed: true }
 
     for (const hook of matching) {
       try {

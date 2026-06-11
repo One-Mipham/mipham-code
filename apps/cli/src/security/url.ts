@@ -34,7 +34,7 @@ export function validateUrl(urlStr: string): string | null {
   }
 
   // Hostname may include brackets for IPv6 (e.g. "[::1]") — strip them for checks
-  let hostname = parsed.hostname
+  const hostname = parsed.hostname
 
   // 2. Check for raw IPv4 in hostname
   if (isBlockedIPv4(hostname)) {

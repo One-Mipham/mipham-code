@@ -29,7 +29,7 @@ export class QueryEngine {
     const toolDefs = this.getToolDefinitions()
 
     let assistantContent = ''
-    let toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
+    const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
 
     // Stream model response
     for await (const chunk of this.registry.chat({
@@ -97,7 +97,7 @@ export class QueryEngine {
     const toolDefs = this.getToolDefinitions()
 
     let assistantContent = ''
-    let toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
+    const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
 
     for await (const chunk of this.registry.chat({
       model: this.registry.getActiveModel(),

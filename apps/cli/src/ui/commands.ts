@@ -1690,9 +1690,11 @@ const securityCmd: CommandHandler = async () => {
     const gi = readFileSync(join(cwd, '.gitignore'), 'utf-8')
     const hasEnv = gi.includes('.env')
     const hasKeys = gi.includes('*.key') || gi.includes('*.pem')
-    hasEnv && hasKeys
-      ? ok.push('.gitignore covers .env + key files')
-      : findings.push('Add .env, *.key, *.pem to .gitignore')
+    if (hasEnv && hasKeys) {
+      ok.push('.gitignore covers .env + key files')
+    } else {
+      findings.push('Add .env, *.key, *.pem to .gitignore')
+    }
   } else {
     findings.push('No .gitignore found — create one with .env, node_modules, dist')
   }

@@ -31,6 +31,7 @@ export class Glob {
 
   async *scan(opts: { cwd?: string; absolute?: boolean } = {}) {
     const base = opts.cwd || '.'
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this
 
     function walk(dir: string, root: string): string[] {
