@@ -10,7 +10,22 @@ const supportedModels = [
     status: 'Active',
   },
   { provider: 'DeepSeek', models: ['DeepSeek V4 Pro', 'DeepSeek V4 Flash'], status: 'Active' },
+  {
+    provider: 'Google',
+    models: ['Gemini 3.0 Pro', 'Gemini 3.0 Flash', 'Gemini 2.5 Pro'],
+    status: 'Active',
+  },
   { provider: 'Qwen (通义千问)', models: ['Qwen Plus', 'Qwen Max'], status: 'Active' },
+  {
+    provider: 'Doubao (豆包)',
+    models: ['豆包 Seed 2.0 Pro', '豆包 Seed 2.0 Lite', '豆包 Seed 1.6'],
+    status: 'Active',
+  },
+  {
+    provider: 'Hunyuan (腾讯混元)',
+    models: ['混元 Hy3 Preview', '混元 2.0 Think', '混元 T1'],
+    status: 'Active',
+  },
   {
     provider: 'MiphamAI',
     models: ['OM V5 Pro', 'OM V5 Flash', 'OM V5 Visual'],

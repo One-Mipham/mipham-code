@@ -5,7 +5,7 @@ export default function DocsPage() {
       <div className="prose max-w-none">
         <h2>Quick Start</h2>
         <pre className="bg-gray-100 p-4 rounded-lg">
-          {`npm install -g mipham-code
+          {`npm install -g @onemipham/cli
 mipham --model claude-sonnet-4-6`}
         </pre>
 
@@ -14,7 +14,7 @@ mipham --model claude-sonnet-4-6`}
           Create <code>~/.mipham/config.yml</code>:
         </p>
         <pre className="bg-gray-100 p-4 rounded-lg">
-          {`version: "0.1.0"
+          {`version: "0.2.2"
 defaultProvider: anthropic
 defaultModel: claude-sonnet-4-6
 permission: auto`}
