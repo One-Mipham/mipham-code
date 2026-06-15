@@ -1,6 +1,6 @@
 {
-  "name": "@onemipham/cli",
-  "version": "0.2.2",
+  "name": "@mipham/cli",
+  "version": "0.2.3",
   "description": "Mipham Code — Multi-model open-core intelligent coding terminal by MiphamAI",
   "keywords": [
     "ai",
@@ -17,7 +17,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/onemipham/mipham-code"
+    "url": "https://github.com/One-Mipham/mipham-code"
   },
   "homepage": "https://mipham.ai/code",
   "license": "Apache-2.0",

@@ -15,7 +15,7 @@ YELLOW="\033[0;33m"
 RED="\033[0;31m"
 RESET="\033[0m"
 
-PACKAGE="@onemipham/cli"
+PACKAGE="@mipham/cli"
 BUN_MIN_VERSION="1.2.0"
 NODE_MIN_VERSION="22.0.0"
 
@@ -40,7 +40,7 @@ esac
 echo -e "  Detected: ${GREEN}$OS_NAME${RESET}"
 echo ""
 echo -e "  ${BOLD}Install options:${RESET}"
-echo -e "    • npm install -g @onemipham/cli  (recommended, all platforms)"
+echo -e "    • npm install -g @mipham/cli  (recommended, all platforms)"
 echo -e "    • curl -fsSL https://mipham.ai/install.sh | bash  (international)"
 echo -e "    • curl -fsSL https://onemipham.com/install.sh | bash  (China mainland)"
 echo -e "    • Direct download: https://mipham.ai/code/install"

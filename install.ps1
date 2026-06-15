@@ -79,13 +79,13 @@ if ($installedBinary) {
 } elseif ($hasNpm) {
   Write-Host "── Installing via npm ──" -ForegroundColor Yellow
   Write-Host ""
-  Write-Host "Running: npm install -g @onemipham/cli"
-  npm install -g @onemipham/cli
+  Write-Host "Running: npm install -g @mipham/cli"
+  npm install -g @mipham/cli
 } elseif ($hasBun) {
   Write-Host "── Installing via Bun ──" -ForegroundColor Yellow
   Write-Host ""
-  Write-Host "Running: bun install -g @onemipham/cli"
-  bun install -g @onemipham/cli
+  Write-Host "Running: bun install -g @mipham/cli"
+  bun install -g @mipham/cli
 } else {
   Write-Host "── Prerequisites needed ──" -ForegroundColor Yellow
   Write-Host ""

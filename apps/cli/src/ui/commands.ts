@@ -1819,7 +1819,7 @@ JetBrains (IntelliJ / WebStorm / PyCharm):
 Terminal (any):
   alias mipham='cd your-project && bun run path/to/mipham'
 
-Or install globally: npm install -g @onemipham/cli
+Or install globally: npm install -g @mipham/cli
 
 Coming soon: dedicated VS Code & JetBrains plugin extensions.`,
 })
@@ -1832,7 +1832,7 @@ const terminalSetupCmd: CommandHandler = () => ({
   content: `── Terminal Setup ──
 
 Install globally:
-  npm install -g @onemipham/cli
+  npm install -g @mipham/cli
   mipham
 
 One-liner install:
@@ -1846,7 +1846,7 @@ Add to shell profile (~/.zshrc or ~/.bashrc):
 
 Upgrade:
   curl -fsSL https://mipham.ai/install.sh | bash
-  # or: npm update -g @onemipham/cli
+  # or: npm update -g @mipham/cli
 
 Verify installation:
   mipham --version

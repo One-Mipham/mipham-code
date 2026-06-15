@@ -37,7 +37,7 @@ curl -fsSL https://mipham.ai/install.sh | bash
 **方式二：npm 全局安装**
 
 ```bash
-npm install -g @onemipham/cli
+npm install -g @mipham/cli
 ```
 
 **方式三：Homebrew（仅 macOS）**

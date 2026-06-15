@@ -7,7 +7,7 @@ Built by [One Mipham Corporation](https://onemipham.com) (北京华安麦逄科�
 ## Quick Install
 
 ```bash
-npm install -g @onemipham/cli
+npm install -g @mipham/cli
 mipham
 ```
 

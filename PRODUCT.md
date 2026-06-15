@@ -44,7 +44,7 @@ China Mainland: https://onemipham.com/code     (中国大陆，访问更快)
 ### 2.1 npm (Recommended 推荐)
 
 ```bash
-npm install -g @onemipham/cli
+npm install -g @mipham/cli
 mipham
 ```
 
@@ -496,7 +496,7 @@ Triggered on push/PR to main branch via GitHub Actions.
 | Phase 5   | Security hardening (path sandbox, SSRF, bash blacklist, permission gate) | 2026-06-10 |
 | Phase 6   | Full MCP stdio implementation (JSON-RPC 2.0 transport + protocol)        | 2026-06-10 |
 | Phase 7   | Agent subsystem + session persistence + 3 new skills                     | 2026-06-10 |
-| Phase 8   | npm publish (`@onemipham/cli` v0.2.2), multi-platform install, auto mode UI | 2026-06-10 |
+| Phase 8   | npm publish (`@mipham/cli` v0.2.2), multi-platform install, auto mode UI | 2026-06-10 |
 | Phase 9   | CI/CD auto-release pipeline + binary build                               | 2026-06-10 |
 
 ### In Progress 🔶
