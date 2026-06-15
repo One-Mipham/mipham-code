@@ -15,7 +15,7 @@ Mipham Code is an open-core, multi-model intelligent coding terminal built with 
 - **Multi-Model**: Connect to Claude, GPT, DeepSeek, Qwen, and MiphamAI models
 - **Open-Core**: Apache 2.0 licensed — free and open-source
 - **16 Built-in Tools**: File ops, shell commands, git, web search, MCP protocol, agents
-- **Skills System**: 10 built-in skills + dual-track runtime (standard / Mipham exclusive)
+- **Skills System**: 13 built-in skills (11 standard + 2 Mipham exclusive) + dual-track runtime
 - **Streaming**: Real-time SSE streaming with tool use support
 - **Fast**: Built on Bun runtime, sub-millisecond tool execution
 
@@ -37,7 +37,7 @@ curl -fsSL https://mipham.ai/install.sh | bash
 **方式二：npm 全局安装**
 
 ```bash
-npm install -g @mipham/cli
+npm install -g @onemipham/cli
 ```
 
 **方式三：Homebrew（仅 macOS）**
@@ -53,7 +53,7 @@ brew install mipham
 
 ```bash
 mipham --version
-# → 0.1.0
+# → 0.2.2
 ```
 
 ### Run
@@ -69,7 +69,7 @@ mipham --provider deepseek --model deepseek-v4-pro
 
 # 启动 OpenAI
 export OPENAI_API_KEY="sk-proj-..."
-mipham --provider openai --model gpt-5.3-codex
+mipham --provider openai --model gpt-5.4
 ```
 
 ## Architecture
@@ -105,7 +105,7 @@ pnpm monorepo
 Create `~/.mipham/config.yml`:
 
 ```yaml
-version: '0.1.0'
+version: '0.2.0'
 defaultProvider: anthropic
 defaultModel: claude-sonnet-4-6
 permission: auto
@@ -118,18 +118,20 @@ Or project-level `.mipham/config.yml` in your repository.
 | Provider        | Models                                                  | Context    | Status   |
 | --------------- | ------------------------------------------------------- | ---------- | -------- |
 | Anthropic       | Claude Opus 4.8, Sonnet 4.6, Haiku 4.5                  | 200K–1M    | Active   |
-| OpenAI          | GPT-5.5, GPT-5.4, GPT-5.4 Mini, GPT-5.3 Codex           | 400K–1.05M | Active   |
+| OpenAI          | GPT-5.5, GPT-5.4, GPT-5.4 Mini                          | 400K–1.05M | Active   |
+| Google Gemini   | Gemini 3.0 Pro, 3.0 Flash, 2.5 Pro                      | 128K–2M    | Active   |
 | DeepSeek        | V4 Pro, V4 Flash                                        | 1M         | Active   |
 | 豆包 (字节跳动) | Seed 2.0 Pro/Code/Lite/Mini, Seed 1.6/Flash             | 256K       | Active   |
 | 腾讯混元        | Hy3 Preview, 2.0 Think/Instruct, TurboS, T1, A13B, Lite | 32K–256K   | Active   |
 | 通义千问        | Qwen Plus, Qwen Max                                     | 128K       | Active   |
 | MiphamAI        | OM V5 Pro, OM V5 Flash, OM V5 Visual                    | 200K–1M    | Upcoming |
 
-**共 7 家提供商，40+ 模型。** 设置 API Key 即可使用：
+**共 8 家提供商，40+ 模型。** 设置 API Key 即可使用：
 
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."      # Anthropic Claude
 export OPENAI_API_KEY="sk-proj-..."        # OpenAI GPT
+export GEMINI_API_KEY="..."                # Google Gemini
 export DEEPSEEK_API_KEY="sk-..."           # DeepSeek
 export DOUBAO_API_KEY="..."                # 豆包 (火山引擎)
 export HUNYUAN_API_KEY="..."               # 腾讯混元
@@ -139,8 +141,8 @@ export QWEN_API_KEY="sk-..."               # 通义千问 (阿里云)
 ## Development
 
 ```bash
-git clone https://github.com/mipham-ai/mipham-code.git
-cd omc-project9-MiphamCode
+git clone https://github.com/One-Mipham/mipham-code.git
+cd mipham-code
 pnpm install
 pnpm dev:cli    # Start CLI in development mode
 pnpm dev:web    # Start web frontend
@@ -157,4 +159,4 @@ Apache 2.0 — see [LICENSE](./LICENSE)
 
 - **Website**: [mipham.ai/code](https://mipham.ai/code)
 - **Documentation**: [mipham.ai/code/docs](https://mipham.ai/code/docs)
-- **GitHub**: [github.com/mipham-ai/mipham-code](https://github.com/mipham-ai/mipham-code)
+- **GitHub**: [github.com/One-Mipham/mipham-code](https://github.com/One-Mipham/mipham-code)
