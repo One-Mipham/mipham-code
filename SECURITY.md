@@ -39,7 +39,7 @@ Mipham Code follows the security requirements defined in One Mipham Corporation'
 
 | Version | Supported             |
 | ------- | --------------------- |
-| 0.1.x   | ✅ Active development |
+| 0.2.x   | ✅ Active development |
 | < 0.1   | ❌ Unreleased         |
 
 ## Security Best Practices for Users

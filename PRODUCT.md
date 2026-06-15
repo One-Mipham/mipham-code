@@ -16,11 +16,11 @@ Mipham Code 是一个**开源核心、多模型智能编程终端**，通过 Rea
 
 | Capability              | Description                                                                                          |
 | ----------------------- | ---------------------------------------------------------------------------------------------------- |
-| **Multi-Model**         | 7 providers, 28+ models via unified API (Anthropic, OpenAI, DeepSeek, Google, Qwen, Doubao, Hunyuan) |
+| **Multi-Model**         | 8 providers (7 active + 1 upcoming), 28+ models via unified API (Anthropic, OpenAI, DeepSeek, Google, Qwen, Doubao, Hunyuan, MiphamAI) |
 | **16 Built-in Tools**   | File operations, shell execution, agent dispatch, MCP integration, web search                        |
 | **60 Slash Commands**   | Full Claude Code-compatible command set with zero re-learning                                        |
 | **MCP Protocol**        | Full JSON-RPC 2.0 stdio transport — connect to any MCP-compatible server                             |
-| **14 Skills**           | 12 standard + 2 Mipham-exclusive skills with dual-runtime architecture                               |
+| **13 Skills**           | 11 standard + 2 Mipham-exclusive skills with dual-runtime architecture                               |
 | **Security Hardened**   | Path sandbox, SSRF protection, Bash command blacklist, permission gating, parameter validation       |
 | **Session Persistence** | Auto-save/restore across CLI sessions via JSONL store                                                |
 | **Cross-Platform**      | macOS, Linux, Windows via npm / curl / PowerShell / direct download                                  |
@@ -96,7 +96,7 @@ irm https://onemipham.com/install.ps1 | iex
 │              UI Layer (React/Ink)             │
 │    app.tsx · chat.tsx · input.tsx · picker    │
 ├─────────────────────────────────────────────┤
-│    Commands (60)    │    Skills (14)          │
+│    Commands (60)    │    Skills (13)          │
 │    commands.ts       │    skills/standard/     │
 │                      │    skills/mipham/       │
 ├─────────────────────────────────────────────┤
@@ -104,7 +104,7 @@ irm https://onemipham.com/install.ps1 | iex
 │  engine.ts · context.ts · permission.ts       │
 │  hooks.ts · instructions.ts · session-store   │
 ├──────────────┬──────────────────────────────┤
-│  Tools (16)  │  Providers (7)                │
+│  Tools (16)  │  Providers (8)                │
 │  file/exec/  │  anthropic (native SDK)       │
 │  agent/net/  │  openai-compat × 5            │
 │  system/     │  mipham (upcoming)            │
@@ -126,7 +126,7 @@ irm https://onemipham.com/install.ps1 | iex
 1. **Simplicity First** — Minimal code, no premature abstraction
 2. **Surgical Changes** — Only modify what's required, match existing style
 3. **Security by Default** — Path sandbox, permission gates, SSRF protection built-in
-4. **Multi-Model First** — Every feature works across all 7 providers
+4. **Multi-Model First** — Every feature works across all 8 providers
 5. **Zero Re-Learning** — Commands mirror Claude Code UX
 
 ---
@@ -246,7 +246,7 @@ Every tool execution is gated by:
 | Command                      | Description       |
 | ---------------------------- | ----------------- |
 | `/tools`                     | List 16 tools     |
-| `/skills`                    | List 14 skills    |
+| `/skills`                    | List 13 skills    |
 | `/reload-skills`             | Reload skills     |
 | `/mcp`                       | MCP server status |
 | `/theme [dark\|light\|auto]` | Theme settings    |
@@ -294,7 +294,7 @@ Every tool execution is gated by:
 
 ## 7. Skills System 技能系统
 
-### 7.1 Standard Skills (12)
+### 7.1 Standard Skills (11)
 
 | Skill                         | Version | Description                                           |
 | ----------------------------- | ------- | ----------------------------------------------------- |
@@ -323,7 +323,7 @@ Every tool execution is gated by:
 skills/
 ├── standard/           # Community-open *.SKILL.md files
 │   ├── code-review.SKILL.md
-│   └── ... (12 files)
+│   └── ... (11 files)
 ├── mipham/             # MiphamAI proprietary *.mipham-skill.md files
 │   ├── om-security.mipham-skill.md
 │   └── om-model-optimize.mipham-skill.md
@@ -524,7 +524,7 @@ Triggered on push/PR to main branch via GitHub Actions.
 ### 14.1 Development Setup
 
 ```bash
-git clone https://github.com/onemipham/mipham-code
+git clone https://github.com/One-Mipham/mipham-code
 cd mipham-code/apps/cli
 bun install
 bun dev
@@ -556,8 +556,8 @@ docs: description
 
 | Channel       | Link                                                 |
 | ------------- | ---------------------------------------------------- |
-| GitHub Issues | https://github.com/onemipham/mipham-code/issues      |
-| Discussions   | https://github.com/onemipham/mipham-code/discussions |
+| GitHub Issues | https://github.com/One-Mipham/mipham-code/issues      |
+| Discussions   | https://github.com/One-Mipham/mipham-code/discussions |
 | Email         | feedback@mipham.ai                                   |
 | International | https://mipham.ai/code                               |
 | 中国大陆      | https://onemipham.com/code                           |
