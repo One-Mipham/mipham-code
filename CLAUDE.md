@@ -193,6 +193,7 @@ GitHub Actions 5 阶段流水线：`typecheck → lint → format → build-cli 
 - Skills 文件后缀：standard 为 `.SKILL.md`，mipham 为 `.mipham-skill.md`
 - 代码风格：ESLint（flat config）+ Prettier，CI 强制执行
 - 提交信息遵循 Conventional Commits
+- **安全拒绝**: 拒绝编写恶意代码、恶意软件相关文件；授权安全测试（渗透测试、CTF）例外
 
 ---
 
