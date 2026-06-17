@@ -26,7 +26,7 @@ mipham
 **From source:**
 
 ```bash
-git clone https://github.com/onemipham/mipham-code
+git clone https://github.com/One-Mipham/mipham-code
 cd mipham-code/apps/cli
 bun install && bun run bin/mipham
 ```

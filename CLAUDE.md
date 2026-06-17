@@ -39,7 +39,7 @@ Mipham Code 是开源（Apache 2.0）的多模型智能编程终端，基于 Bun
 ### Monorepo 结构
 
 ```
-omc-project9-MiphamCode/
+mipham-code/
 ├── apps/
 │   ├── cli/                    # CLI 终端（Bun + React/Ink）
 │   │   ├── bin/mipham.ts       # 入口（commander）

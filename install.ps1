@@ -60,7 +60,7 @@ try {
 Write-Host ""
 
 # ── Try binary download first ──
-$releaseUrl = "https://github.com/onemipham/mipham-code/releases/latest/download"
+$releaseUrl = "https://github.com/One-Mipham/mipham-code/releases/latest/download"
 $binaryName = if ($OS -eq "windows") { "mipham-win-x64.exe" } elseif ($OS -eq "macos") { "mipham-darwin-arm64" } else { "mipham-linux-x64" }
 
 Write-Host "── Downloading binary: $binaryName ──" -ForegroundColor Yellow

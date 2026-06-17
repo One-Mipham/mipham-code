@@ -100,7 +100,7 @@ fi
 echo ""
 
 # Try direct binary download first (fastest, no dependencies)
-RELEASE_URL="https://github.com/onemipham/mipham-code/releases/latest/download"
+RELEASE_URL="https://github.com/One-Mipham/mipham-code/releases/latest/download"
 BINARY_NAME=""
 case "$OS" in
   Darwin)

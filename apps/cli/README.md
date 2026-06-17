@@ -65,11 +65,11 @@ Press **Ctrl+P** for interactive model picker · **Shift+Tab** to cycle permissi
 
 ## Documentation
 
-- [Product Specification](https://github.com/onemipham/mipham-code/blob/main/PRODUCT.md)
+- [Product Specification](https://github.com/One-Mipham/mipham-code/blob/main/PRODUCT.md)
 - [Install Guide](https://mipham.ai/code/install) (International)
 - [国内站](https://onemipham.com/mipham-code) (China mainland)
-- [GitHub](https://github.com/onemipham/mipham-code)
-- [Issues & Feedback](https://github.com/onemipham/mipham-code/issues)
+- [GitHub](https://github.com/One-Mipham/mipham-code)
+- [Issues & Feedback](https://github.com/One-Mipham/mipham-code/issues)
 
 ## License
 
