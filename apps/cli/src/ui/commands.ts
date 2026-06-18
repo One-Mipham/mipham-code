@@ -7,6 +7,14 @@
 import type { QueryEngine } from '../core/engine'
 import type { MiphamConfig } from '../shared/index.ts'
 import type { SkillsLoader } from '../skills/loader'
+import {
+  PACKAGE_NAME,
+  NPM_INSTALL_COMMAND,
+  NPM_UPDATE_COMMAND,
+  NPM_URL,
+  PRODUCT_URL_INTERNATIONAL,
+  PRODUCT_URL_CHINA,
+} from '@mipham/shared'
 
 export interface CommandContext {
   engine: QueryEngine
@@ -1139,7 +1147,7 @@ To upgrade:
   curl -fsSL https://mipham.ai/install.sh | bash
 
 Or if installed via npm:
-  npm update -g @miphamai/cli
+    ${NPM_UPDATE_COMMAND}
 
 Release channels:
   • stable  — recommended for most users
@@ -1819,7 +1827,7 @@ JetBrains (IntelliJ / WebStorm / PyCharm):
 Terminal (any):
   alias mipham='cd your-project && bun run path/to/mipham'
 
-Or install globally: npm install -g @miphamai/cli
+Or install globally: ${NPM_INSTALL_COMMAND}
 
 Coming soon: dedicated VS Code & JetBrains plugin extensions.`,
 })
@@ -1832,7 +1840,7 @@ const terminalSetupCmd: CommandHandler = () => ({
   content: `── Terminal Setup ──
 
 Install globally:
-  npm install -g @miphamai/cli
+  ${NPM_INSTALL_COMMAND}
   mipham
 
 One-liner install:
@@ -1846,7 +1854,7 @@ Add to shell profile (~/.zshrc or ~/.bashrc):
 
 Upgrade:
   curl -fsSL https://mipham.ai/install.sh | bash
-  # or: npm update -g @miphamai/cli
+  # or:   ${NPM_UPDATE_COMMAND}
 
 Verify installation:
   mipham --version

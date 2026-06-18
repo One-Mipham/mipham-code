@@ -1,3 +1,5 @@
+import { PACKAGE_NAME } from '@mipham/shared'
+
 export default function InstallPage() {
   return (
     <div className="max-w-3xl mx-auto py-16 px-6">
@@ -20,7 +22,7 @@ export default function InstallPage() {
       <h2 className="text-2xl font-semibold mb-4">1. npm Install (Recommended)</h2>
       <p className="mb-2 text-gray-600">Works on all platforms — macOS, Linux, Windows.</p>
       <pre className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg mb-8 overflow-x-auto">
-        npm install -g @miphamai/cli
+        npm install -g {PACKAGE_NAME}
       </pre>
 
       {/* curl macOS/Linux */}

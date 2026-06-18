@@ -1,0 +1,18 @@
+{
+  "PACKAGE_NAME": "@miphamai/cli",
+  "PACKAGE_VERSION": "0.2.3",
+  "NPM_INSTALL_COMMAND": "npm install -g @miphamai/cli",
+  "NPM_UPDATE_COMMAND": "npm update -g @miphamai/cli",
+  "NPM_URL": "https://www.npmjs.com/package/@miphamai/cli",
+  "NPM_DOWNLOADS_API": "https://api.npmjs.org/downloads/point/last-month/@miphamai/cli",
+  "INSTALL_CURL_INTERNATIONAL": "curl -fsSL https://mipham.ai/install.sh | bash",
+  "INSTALL_CURL_CHINA": "curl -fsSL https://onemipham.com/install.sh | bash",
+  "PRODUCT_URL_INTERNATIONAL": "https://mipham.ai/code",
+  "PRODUCT_URL_CHINA": "https://onemipham.com/mipham-code",
+  "GITHUB_REPO": "https://github.com/One-Mipham/mipham-code",
+  "BRAND_NAME": "MiphamAI",
+  "PRODUCT_NAME": "Mipham Code",
+  "COMPANY_NAME_EN": "One Mipham Corporation",
+  "COMPANY_NAME_ZH": "北京华安麦逄科技有限公司",
+  "COMPANY_SHORT": "华安麦逄科技"
+}

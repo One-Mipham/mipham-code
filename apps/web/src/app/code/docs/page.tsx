@@ -1,3 +1,5 @@
+import { PACKAGE_NAME } from '@mipham/shared'
+
 export default function DocsPage() {
   return (
     <div className="max-w-3xl mx-auto py-16 px-6">
@@ -5,7 +7,7 @@ export default function DocsPage() {
       <div className="prose max-w-none">
         <h2>Quick Start</h2>
         <pre className="bg-gray-100 p-4 rounded-lg">
-          {`npm install -g @miphamai/cli
+          {`npm install -g {PACKAGE_NAME}
 mipham --model claude-sonnet-4-6`}
         </pre>
 

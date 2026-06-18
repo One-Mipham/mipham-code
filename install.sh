@@ -15,6 +15,8 @@ YELLOW="\033[0;33m"
 RED="\033[0;31m"
 RESET="\033[0m"
 
+# ⚠️ 包名与 packages/shared/src/package-info.ts 保持同步
+#    修改包名时请同时更新: packages/shared/src/package-info.ts + packages/shared/package-info.json
 PACKAGE="@miphamai/cli"
 BUN_MIN_VERSION="1.2.0"
 NODE_MIN_VERSION="22.0.0"
