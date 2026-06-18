@@ -233,6 +233,46 @@ GitHub Actions 5 阶段流水线：`typecheck → lint → format → build-cli 
 
 ---
 
+## 🏗️ 邻居项目（跨项目操作必读）
+
+> ⚠️ 本仓库不是孤岛。以下 4 个项目与本项目紧密相关，操作前必须了解彼此关系。
+
+| 项目 | 目录 | 角色 | 部署方式 |
+|------|------|------|---------|
+| **omc-project0** | `../websites/omc-project0/` | 国内官网 onemipham.com | `deploy.sh` → 腾讯云 |
+| **omc-project00** | `../websites/omc-project00/` | 国际官网 mipham.ai | `vercel deploy --prod` |
+| **omc-project2** | `../websites/omc-project2/` | Marketplace 应用 | `deploy-cn.sh` + Vercel |
+| **omc-project3** | `../websites/omc-project3/` | Developer 平台 | `deploy-cn.sh` + Vercel |
+
+### 共享数据源
+
+```
+packages/shared/src/package-info.ts   ← 包名/版本/安装命令 单一数据源
+packages/shared/package-info.json     ← JSON 版本，供网站读取
+```
+
+**修改规则**：包名或版本号变更时，只需改上面两个文件。网站项目通过部署脚本自动同步（`deploy.sh` 和 `vercel.json buildCommand` 含 `cp` 步骤）。
+
+### 部署依赖链
+
+```
+mipham-code 变更（包名/版本）
+    ↓
+1. 更新 packages/shared/package-info.ts + .json
+2. npm publish（如新版本）
+    ↓
+3. omc-project0:  bash deploy.sh（自动同步 JSON + 构建 + rsync）
+4. omc-project00: vercel deploy --prod（buildCommand 自动同步 JSON）
+```
+
+### 禁止事项
+
+- ❌ 不要在网站项目中硬编码 `@miphamai/cli` 包名——应从 `@/config/package-info.json` 读取
+- ❌ 不要手动修改网站中的安装命令——改 `package-info.ts` 后自动传播
+- ❌ 不要在 omc-project0/00 中直接修改 marketplace/developer 页面——它们在 omc-project2/3 中
+
+---
+
 ## 下一步计划
 
 1. **npm 发布** — @miphamai/cli 已发布至 npm registry
