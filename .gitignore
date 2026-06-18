@@ -6,3 +6,5 @@ out/
 .env
 .env.local
 .mipham/memory/
+.playwright-mcp/
+*.tgz
