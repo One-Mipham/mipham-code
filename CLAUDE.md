@@ -167,7 +167,7 @@ GitHub Actions 5 阶段流水线：`typecheck → lint → format → build-cli 
 | 渠道          | 状态 | 说明                                                      |
 | ------------- | ---- | --------------------------------------------------------- |
 | curl 一键安装 | ✅   | `curl -fsSL https://mipham.ai/install.sh \| bash`         |
-| npm 全局安装  | 🔶   | `npm install -g @mipham/cli`（待发布）                    |
+| npm 全局安装  | ✅   | `npm install -g @miphamai/cli`                            |
 | Homebrew      | 🔶   | formula 已写好（`infrastructure/brew/mipham.rb`），审核中 |
 | macOS .app    | 🔶   | .icns 已准备，待打包                                      |
 
@@ -235,7 +235,7 @@ GitHub Actions 5 阶段流水线：`typecheck → lint → format → build-cli 
 
 ## 下一步计划
 
-1. **npm 发布** — @mipham/cli 发布至 npm registry
+1. **npm 发布** — @miphamai/cli 已发布至 npm registry
 2. **MCP 客户端** — 完整 stdio 实现
 3. **Web UI** — 完善产品页内容
 4. **macOS .app** — 将 CLI 打包为 macOS 应用包（.icns 已就绪）

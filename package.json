@@ -4,7 +4,7 @@
   "private": true,
   "description": "Mipham Code — Multi-model open-core intelligent coding terminal",
   "scripts": {
-    "dev:cli": "pnpm --filter @mipham/cli dev",
+    "dev:cli": "pnpm --filter @miphamai/cli dev",
     "dev:web": "pnpm --filter @mipham/web dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",

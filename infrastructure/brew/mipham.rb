@@ -10,7 +10,7 @@
 class Mipham < Formula
   desc "Multi-model open-core intelligent coding terminal"
   homepage "https://mipham.ai/code"
-  url "https://registry.npmjs.org/@mipham/cli/-/cli-0.1.0.tgz"
+  url "https://registry.npmjs.org/@miphamai/cli/-/cli-0.1.0.tgz"
   sha256 "PLACEHOLDER" # Run: curl -sL <url> | shasum -a 256
   license "Apache-2.0"
   version "0.1.0"
@@ -20,7 +20,7 @@ class Mipham < Formula
 
   def install
     # Install the npm package globally into the prefix
-    system "npm", "install", "-g", "--prefix", prefix, "@mipham/cli@#{version}"
+    system "npm", "install", "-g", "--prefix", prefix, "@miphamai/cli@#{version}"
 
     # Create symlink from bin/mipham to the npm global bin
     bin.install_symlink Dir[prefix/"bin/mipham"]

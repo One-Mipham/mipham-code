@@ -37,7 +37,7 @@ curl -fsSL https://mipham.ai/install.sh | bash
 **方式二：npm 全局安装**
 
 ```bash
-npm install -g @mipham/cli
+npm install -g @miphamai/cli
 ```
 
 **方式三：Homebrew（仅 macOS）**
@@ -77,7 +77,7 @@ mipham --provider openai --model gpt-5.4
 ```
 pnpm monorepo
 ├── packages/shared/     # @mipham/shared — types and constants
-├── apps/cli/            # @mipham/cli — Bun + Ink CLI
+├── apps/cli/            # @miphamai/cli — Bun + Ink CLI
 │   ├── src/core/        # Engine, context, permission, hooks, instructions
 │   ├── src/providers/   # Anthropic, OpenAI-compat, provider registry
 │   ├── src/tools/       # 16 tools: file, exec, agent, network, system

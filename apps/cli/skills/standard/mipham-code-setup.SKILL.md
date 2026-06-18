@@ -19,7 +19,7 @@ curl -fsSL https://mipham.ai/install.sh | bash
 **npm global install:**
 
 ```bash
-npm install -g @mipham/cli
+npm install -g @miphamai/cli
 mipham
 ```
 

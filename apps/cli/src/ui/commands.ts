@@ -1139,7 +1139,7 @@ To upgrade:
   curl -fsSL https://mipham.ai/install.sh | bash
 
 Or if installed via npm:
-  npm update -g @mipham/cli
+  npm update -g @miphamai/cli
 
 Release channels:
   • stable  — recommended for most users
@@ -1819,7 +1819,7 @@ JetBrains (IntelliJ / WebStorm / PyCharm):
 Terminal (any):
   alias mipham='cd your-project && bun run path/to/mipham'
 
-Or install globally: npm install -g @mipham/cli
+Or install globally: npm install -g @miphamai/cli
 
 Coming soon: dedicated VS Code & JetBrains plugin extensions.`,
 })
@@ -1832,7 +1832,7 @@ const terminalSetupCmd: CommandHandler = () => ({
   content: `── Terminal Setup ──
 
 Install globally:
-  npm install -g @mipham/cli
+  npm install -g @miphamai/cli
   mipham
 
 One-liner install:
@@ -1846,7 +1846,7 @@ Add to shell profile (~/.zshrc or ~/.bashrc):
 
 Upgrade:
   curl -fsSL https://mipham.ai/install.sh | bash
-  # or: npm update -g @mipham/cli
+  # or: npm update -g @miphamai/cli
 
 Verify installation:
   mipham --version

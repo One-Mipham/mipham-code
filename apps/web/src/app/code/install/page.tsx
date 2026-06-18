@@ -20,7 +20,7 @@ export default function InstallPage() {
       <h2 className="text-2xl font-semibold mb-4">1. npm Install (Recommended)</h2>
       <p className="mb-2 text-gray-600">Works on all platforms — macOS, Linux, Windows.</p>
       <pre className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg mb-8 overflow-x-auto">
-        npm install -g @mipham/cli
+        npm install -g @miphamai/cli
       </pre>
 
       {/* curl macOS/Linux */}

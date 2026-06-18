@@ -10,7 +10,7 @@ export function InstallSection() {
         {/* npm */}
         <h3 className="text-lg font-semibold text-mipham-200 mb-2">npm (recommended)</h3>
         <div className="bg-mipham-950 rounded-lg p-4 font-mono text-sm text-left text-mipham-200 mb-6 max-w-md mx-auto overflow-x-auto">
-          <span className="text-mipham-400">$</span> npm install -g @mipham/cli
+          <span className="text-mipham-400">$</span> npm install -g @miphamai/cli
           <br />
           <span className="text-mipham-400">$</span> mipham
         </div>
