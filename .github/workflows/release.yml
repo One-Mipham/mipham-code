@@ -25,9 +25,6 @@ jobs:
           - target: bun-windows-x64
             runner: windows-latest
             binary: mipham-win-x64.exe
-    defaults:
-      run:
-        working-directory: apps/cli
     steps:
       - uses: actions/checkout@v4
 
@@ -38,6 +35,7 @@ jobs:
       - run: bun install
 
       - name: Build binary
+        working-directory: apps/cli
         run: bun build --compile --minify --external react-devtools-core --target=${{ matrix.target }} ./bin/mipham.ts --outfile dist/${{ matrix.binary }}
 
       - name: Upload artifact
@@ -51,9 +49,6 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     continue-on-error: true
-    defaults:
-      run:
-        working-directory: apps/cli
     steps:
       - uses: actions/checkout@v4
 
@@ -63,16 +58,14 @@ jobs:
 
       - run: bun install
 
-      - run: bunx vitest run
+      - working-directory: apps/cli
+        run: bunx vitest run
 
   # ── Stage 3: npm Publish ──
   publish:
     name: npm Publish
     runs-on: ubuntu-latest
     needs: [test]
-    defaults:
-      run:
-        working-directory: apps/cli
     steps:
       - uses: actions/checkout@v4
 
@@ -86,13 +79,14 @@ jobs:
         run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
 
       - name: Publish to npm
+        working-directory: apps/cli
         run: npm publish --access public
 
   # ── Stage 4: GitHub Release ──
   release:
     name: GitHub Release
     runs-on: ubuntu-latest
-    needs: [build, test, publish]
+    needs: [build, test]
     steps:
       - uses: actions/checkout@v4
 
