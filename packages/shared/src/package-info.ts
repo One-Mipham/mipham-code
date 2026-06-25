@@ -13,7 +13,7 @@
 export const PACKAGE_NAME = '@miphamai/cli' as const
 
 /** 当前发布版本 */
-export const PACKAGE_VERSION = '0.2.3' as const
+export const PACKAGE_VERSION = '0.2.4' as const
 
 /** npm install 全局安装命令 */
 export const NPM_INSTALL_COMMAND = `npm install -g ${PACKAGE_NAME}` as const
@@ -36,7 +36,7 @@ export const INSTALL_CURL_CHINA =
   'curl -fsSL https://onemipham.com/install.sh | bash' as const
 
 /** 国际站产品页 */
-export const PRODUCT_URL_INTERNATIONAL = 'https://mipham.ai/code' as const
+export const PRODUCT_URL_INTERNATIONAL = 'https://mipham.ai/mipham-code' as const
 
 /** 国内站产品页 */
 export const PRODUCT_URL_CHINA = 'https://onemipham.com/mipham-code' as const
