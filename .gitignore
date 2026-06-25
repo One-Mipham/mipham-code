@@ -8,3 +8,4 @@ out/
 .mipham/memory/
 .playwright-mcp/
 *.tgz
+.vercel
