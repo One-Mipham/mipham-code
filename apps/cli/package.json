@@ -53,8 +53,8 @@
   "devDependencies": {
     "@mipham/shared": "workspace:*",
     "@types/bun": "^1.3.14",
-    "@types/node": "^25.9.1",
+    "@types/node": "^22.0.0",
     "@types/react": "^18.3.0",
-    "vitest": "^3.0.0"
+    "vitest": "^4.1.7"
   }
 }

@@ -1,39 +1,26 @@
-const supportedModels = [
-  {
-    provider: 'Anthropic',
-    models: ['Claude Opus 4.8', 'Claude Sonnet 4.6', 'Claude Haiku 4.5'],
-    status: 'Active',
-  },
-  {
-    provider: 'OpenAI',
-    models: ['GPT-5.5', 'GPT-5.4', 'GPT-5.4 Mini', 'GPT-5.3 Codex'],
-    status: 'Active',
-  },
-  { provider: 'DeepSeek', models: ['DeepSeek V4 Pro', 'DeepSeek V4 Flash'], status: 'Active' },
-  {
-    provider: 'Google',
-    models: ['Gemini 3.0 Pro', 'Gemini 3.0 Flash', 'Gemini 2.5 Pro'],
-    status: 'Active',
-  },
-  { provider: 'Qwen (通义千问)', models: ['Qwen Plus', 'Qwen Max'], status: 'Active' },
-  {
-    provider: 'Doubao (豆包)',
-    models: ['豆包 Seed 2.0 Pro', '豆包 Seed 2.0 Lite', '豆包 Seed 1.6'],
-    status: 'Active',
-  },
-  {
-    provider: 'Hunyuan (腾讯混元)',
-    models: ['混元 Hy3 Preview', '混元 2.0 Think', '混元 T1'],
-    status: 'Active',
-  },
-  {
-    provider: 'MiphamAI',
-    models: ['OM V5 Pro', 'OM V5 Flash', 'OM V5 Visual'],
-    status: 'Upcoming',
-  },
-]
+import { DEFAULT_PROVIDERS } from '@mipham/shared'
+
+// Derive display data from the shared source of truth.
+// Select the top ~3 active models per provider for the marketing overview.
+function getDisplayModels(): Array<{
+  provider: string
+  models: string[]
+  status: string
+}> {
+  return DEFAULT_PROVIDERS.map((p) => {
+    const active = p.models.filter((m) => m.status !== 'deprecated')
+    // Take top models (max 4 for providers with many models, 2-3 for others)
+    const top = active.slice(0, p.id === 'hunyuan' || p.id === 'doubao' ? 4 : 3)
+    return {
+      provider: p.name,
+      models: top.map((m) => m.name),
+      status: p.status === 'upcoming' ? 'Upcoming' : 'Active',
+    }
+  })
+}
 
 export function ModelsSection() {
+  const supportedModels = getDisplayModels()
   return (
     <section className="py-20 px-6 bg-gray-50">
       <div className="max-w-4xl mx-auto">

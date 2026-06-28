@@ -4,6 +4,7 @@ import {
   readFileSync,
   writeFileSync,
   unlinkSync,
+  renameSync,
   existsSync,
 } from 'node:fs'
 import { join } from 'node:path'
@@ -60,7 +61,10 @@ export class SessionStore {
       messages,
     }
 
-    writeFileSync(path, JSON.stringify(session) + '\n', 'utf-8')
+    // Atomic write: write to temp file, then rename (same-fs rename is atomic)
+    const tmp = path + '.tmp'
+    writeFileSync(tmp, JSON.stringify(session) + '\n', 'utf-8')
+    renameSync(tmp, path)
   }
 
   /**

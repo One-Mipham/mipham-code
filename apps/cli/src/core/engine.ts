@@ -140,55 +140,63 @@ export class QueryEngine {
   }
 
   private async *continueWithTools(): AsyncGenerator<StreamChunk> {
-    const systemPrompt = this.context.getSystemPrompt()
-    const messages = this.context.getMessages()
+    const MAX_TURNS = 10
     const toolDefs = this.getToolDefinitions()
 
-    let assistantContent = ''
-    const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
+    for (let turn = 0; turn < MAX_TURNS; turn++) {
+      const systemPrompt = this.context.getSystemPrompt()
+      const messages = this.context.getMessages()
 
-    for await (const chunk of this.registry.chat({
-      model: this.registry.getActiveModel(),
-      messages,
-      systemPrompt,
-      tools: toolDefs.length > 0 ? toolDefs : undefined,
-    })) {
-      yield chunk
+      let assistantContent = ''
+      const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
 
-      if (chunk.type === 'error') return
-      if (chunk.type === 'text' && chunk.content) assistantContent += chunk.content
+      for await (const chunk of this.registry.chat({
+        model: this.registry.getActiveModel(),
+        messages,
+        systemPrompt,
+        tools: toolDefs.length > 0 ? toolDefs : undefined,
+      })) {
+        yield chunk
 
-      if (chunk.type === 'tool_use' && chunk.toolUse) {
-        toolUses.push({
-          id: chunk.toolUse.id,
-          name: chunk.toolUse.name,
-          input: chunk.toolUse.input,
+        if (chunk.type === 'error') return
+        if (chunk.type === 'text' && chunk.content) assistantContent += chunk.content
+
+        if (chunk.type === 'tool_use' && chunk.toolUse) {
+          toolUses.push({
+            id: chunk.toolUse.id,
+            name: chunk.toolUse.name,
+            input: chunk.toolUse.input,
+          })
+        }
+      }
+
+      if (assistantContent) {
+        this.context.addMessage({ role: 'assistant', content: assistantContent })
+      }
+
+      // No more tool calls — conversation complete
+      if (toolUses.length === 0) return
+
+      // Execute tools and feed results back to the model for the next turn
+      for (const toolUse of toolUses) {
+        const result = await this.executeTool(toolUse.name, toolUse.input)
+        yield {
+          type: 'tool_result',
+          tool_use_id: toolUse.id,
+          content: result.content,
+        }
+
+        this.context.addMessage({
+          role: 'assistant',
+          content: [{ type: 'tool_use', id: toolUse.id, name: toolUse.name, input: toolUse.input }],
+        })
+        this.context.addMessage({
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: toolUse.id, content: result.content }],
         })
       }
     }
-
-    if (assistantContent) {
-      this.context.addMessage({ role: 'assistant', content: assistantContent })
-    }
-
-    // Execute tools (max 1 level of recursion to prevent infinite loops)
-    for (const toolUse of toolUses) {
-      const result = await this.executeTool(toolUse.name, toolUse.input)
-      yield {
-        type: 'tool_result',
-        tool_use_id: toolUse.id,
-        content: result.content,
-      }
-
-      this.context.addMessage({
-        role: 'assistant',
-        content: [{ type: 'tool_use', id: toolUse.id, name: toolUse.name, input: toolUse.input }],
-      })
-      this.context.addMessage({
-        role: 'user',
-        content: [{ type: 'tool_result', tool_use_id: toolUse.id, content: result.content }],
-      })
-    }
+    // Max turns reached — safety limit, stop gracefully
   }
 
   private async executeTool(name: string, params: Record<string, unknown>): Promise<ToolResult> {
