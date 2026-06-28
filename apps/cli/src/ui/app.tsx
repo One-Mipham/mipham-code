@@ -42,7 +42,7 @@ interface AgentProgress {
   startTime: number
 }
 
-const VERSION = '0.2.0'
+const VERSION = '0.3.0'
 
 type PermissionMode = 'auto' | 'ask' | 'bypass'
 
@@ -343,7 +343,7 @@ export function App({
           <Text bold color="cyan">
             Mipham Code
           </Text>
-          <Text dimColor> v0.2.0</Text>
+          <Text dimColor> v0.3.0</Text>
           {sessionTitle ? (
             <Text color="yellow"> — {sessionTitle}</Text>
           ) : (
