@@ -1,11 +1,16 @@
-import { PACKAGE_NAME } from '@mipham/shared'
+import { PACKAGE_NAME, PACKAGE_VERSION, GITHUB_REPO } from '@mipham/shared'
+
+const REL_DL = `${GITHUB_REPO}/releases/latest/download`
 
 export default function InstallPage() {
   return (
     <div className="max-w-3xl mx-auto py-16 px-6">
       <h1 className="text-4xl font-bold mb-4">Installation</h1>
+      <p className="text-gray-500 mb-4">
+        Current version: <strong>v{PACKAGE_VERSION}</strong>. Choose your platform and preferred install method.
+      </p>
       <p className="text-gray-500 mb-8">
-        Choose your platform and preferred install method. All methods install the same Mipham Code.
+        All methods install the same Mipham Code.
       </p>
 
       {/* Prerequisites */}
@@ -68,19 +73,35 @@ export default function InstallPage() {
           <tbody>
             <tr className="border-b">
               <td className="py-2 pr-4">macOS (Apple Silicon)</td>
-              <td className="py-2 font-mono text-sm">mipham-darwin-arm64</td>
+              <td className="py-2">
+                <a href={`${REL_DL}/mipham-darwin-arm64`} className="text-mipham-600 hover:underline font-mono text-sm">
+                  mipham-darwin-arm64 ↓
+                </a>
+              </td>
             </tr>
             <tr className="border-b">
               <td className="py-2 pr-4">macOS (Intel)</td>
-              <td className="py-2 font-mono text-sm">mipham-darwin-x64</td>
+              <td className="py-2">
+                <a href={`${REL_DL}/mipham-darwin-x64`} className="text-mipham-600 hover:underline font-mono text-sm">
+                  mipham-darwin-x64 ↓
+                </a>
+              </td>
             </tr>
             <tr className="border-b">
               <td className="py-2 pr-4">Linux (x64)</td>
-              <td className="py-2 font-mono text-sm">mipham-linux-x64</td>
+              <td className="py-2">
+                <a href={`${REL_DL}/mipham-linux-x64`} className="text-mipham-600 hover:underline font-mono text-sm">
+                  mipham-linux-x64 ↓
+                </a>
+              </td>
             </tr>
             <tr className="border-b">
               <td className="py-2 pr-4">Windows (x64)</td>
-              <td className="py-2 font-mono text-sm">mipham-win-x64.exe</td>
+              <td className="py-2">
+                <a href={`${REL_DL}/mipham-win-x64.exe`} className="text-mipham-600 hover:underline font-mono text-sm">
+                  mipham-win-x64.exe ↓
+                </a>
+              </td>
             </tr>
           </tbody>
         </table>
