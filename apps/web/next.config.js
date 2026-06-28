@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'export',
-  basePath: '/code',
+  basePath: '/mipham-code',
   images: { unoptimized: true },
   eslint: { ignoreDuringBuilds: true }, // ESLint 10 incompatibility with Next.js 14 built-in config
 }

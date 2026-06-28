@@ -5,15 +5,15 @@
 # 用法: ./deploy-cn.sh [--skip-build]
 #
 # 服务器: 82.156.254.121 (与 onemipham.com 主站同一服务器)
-# 部署路径: /www/wwwroot/onemipham.com/code/
-# 访问: https://onemipham.com/code
+# 部署路径: /www/wwwroot/onemipham.com/mipham-code/
+# 访问: https://onemipham.com/mipham-code
 #
 # 部署方式: 本地构建 → rsync 静态文件
 # ================================================================
 set -e
 
 SERVER="root@82.156.254.121"
-REMOTE_DIR="/www/wwwroot/onemipham.com/code"
+REMOTE_DIR="/www/wwwroot/onemipham.com/mipham-code"
 SKIP_BUILD=false
 
 RED='\033[0;31m'
@@ -56,8 +56,8 @@ else
   echo "[1/3] 跳过构建 (--skip-build)"
 fi
 
-if [ ! -d "apps/web/out/code" ]; then
-  err "apps/web/out/code 不存在，请先构建"
+if [ ! -d "apps/web/out/mipham-code" ]; then
+  err "apps/web/out/mipham-code 不存在，请先构建"
   exit 1
 fi
 
@@ -71,7 +71,7 @@ echo "  commit: $CURRENT_HASH"
 ssh "$SERVER" "mkdir -p $REMOTE_DIR"
 
 rsync -avz --delete \
-  apps/web/out/code/ \
+  apps/web/out/mipham-code/ \
   "$SERVER:$REMOTE_DIR/"
 
 log "同步完成 ($CURRENT_HASH)"
@@ -80,7 +80,7 @@ log "同步完成 ($CURRENT_HASH)"
 echo ""
 echo "[3/3] 健康检查..."
 
-STATUS=$(ssh "$SERVER" "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1/code/" 2>/dev/null || echo "000")
+STATUS=$(ssh "$SERVER" "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1/mipham-code/" 2>/dev/null || echo "000")
 if [ "$STATUS" = "200" ] || [ "$STATUS" = "304" ]; then
   log "HTTP $STATUS — 部署成功"
 else
@@ -90,6 +90,6 @@ fi
 
 echo ""
 echo "========================================="
-echo "  部署完成 → https://onemipham.com/code"
+echo "  部署完成 → https://onemipham.com/mipham-code"
 echo "  Commit: $CURRENT_HASH"
 echo "========================================="
