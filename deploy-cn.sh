@@ -56,8 +56,8 @@ else
   echo "[1/3] 跳过构建 (--skip-build)"
 fi
 
-if [ ! -d "apps/web/out/mipham-code" ]; then
-  err "apps/web/out/mipham-code 不存在，请先构建"
+if [ ! -d "apps/web/out/code" ]; then
+  err "apps/web/out/code 不存在，请先构建"
   exit 1
 fi
 
@@ -71,7 +71,7 @@ echo "  commit: $CURRENT_HASH"
 ssh "$SERVER" "mkdir -p $REMOTE_DIR"
 
 rsync -avz --delete \
-  apps/web/out/mipham-code/ \
+  apps/web/out/code/ \
   "$SERVER:$REMOTE_DIR/"
 
 log "同步完成 ($CURRENT_HASH)"
