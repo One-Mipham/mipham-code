@@ -63,7 +63,7 @@ export class QueryEngine {
     return this.permission
   }
 
-  async *process(userInput: string): AsyncGenerator<StreamChunk> {
+  async *process(userInput: string, signal?: AbortSignal): AsyncGenerator<StreamChunk> {
     // Add user message to context
     this.context.addMessage({ role: 'user', content: userInput })
 
@@ -80,11 +80,13 @@ export class QueryEngine {
     const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
 
     // Stream model response
+    try {
     for await (const chunk of this.registry.chat({
       model: this.registry.getActiveModel(),
       messages,
       systemPrompt,
       tools: toolDefs.length > 0 ? toolDefs : undefined,
+      signal,
     })) {
       yield chunk
 
@@ -112,6 +114,18 @@ export class QueryEngine {
         }
       }
     }
+    } catch (err) {
+      if (isAbortError(err)) {
+        // User interrupted — keep partial content, stop gracefully
+        if (assistantContent) {
+          this.context.addMessage({ role: 'assistant', content: assistantContent })
+        }
+        yield { type: 'stop' }
+        return
+      }
+      yield { type: 'error', error: String(err) }
+      return
+    }
 
     // Execute any tools that were requested
     for (const toolUse of toolUses) {
@@ -135,11 +149,11 @@ export class QueryEngine {
 
     // If tools were executed, recursively continue the conversation
     if (toolUses.length > 0) {
-      yield* this.continueWithTools()
+      yield* this.continueWithTools(signal)
     }
   }
 
-  private async *continueWithTools(): AsyncGenerator<StreamChunk> {
+  private async *continueWithTools(signal?: AbortSignal): AsyncGenerator<StreamChunk> {
     const MAX_TURNS = 10
     const toolDefs = this.getToolDefinitions()
 
@@ -150,11 +164,13 @@ export class QueryEngine {
       let assistantContent = ''
       const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
 
+      try {
       for await (const chunk of this.registry.chat({
         model: this.registry.getActiveModel(),
         messages,
         systemPrompt,
         tools: toolDefs.length > 0 ? toolDefs : undefined,
+        signal,
       })) {
         yield chunk
 
@@ -168,6 +184,16 @@ export class QueryEngine {
             input: chunk.toolUse.input,
           })
         }
+      }
+      } catch (err) {
+        if (isAbortError(err)) {
+          if (assistantContent) {
+            this.context.addMessage({ role: 'assistant', content: assistantContent })
+          }
+          yield { type: 'stop' }
+          return
+        }
+        return
       }
 
       if (assistantContent) {
@@ -273,4 +299,10 @@ export class QueryEngine {
   switchProvider(providerId: string, modelId?: string): void {
     this.registry.switchProvider(providerId, modelId)
   }
+}
+
+function isAbortError(err: unknown): boolean {
+  if (err instanceof Error && err.name === 'AbortError') return true
+  if (typeof DOMException !== 'undefined' && err instanceof DOMException && err.name === 'AbortError') return true
+  return false
 }

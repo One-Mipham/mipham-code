@@ -37,17 +37,35 @@ export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
               exit
             </Text>
           </Box>
+          <Box marginTop={1}>
+            <Text dimColor>
+              Tip: Use <Text color="yellow">/clear</Text> to start fresh when switching topics
+              and free up context
+            </Text>
+          </Box>
         </Box>
       )}
       {displayMessages.map((msg, i) => (
         <Box key={i} flexDirection="column" marginY={1}>
-          <Text
-            bold
-            color={msg.role === 'user' ? 'green' : msg.role === 'system' ? 'yellow' : 'blue'}
-          >
-            {msg.role === 'user' ? '▸ You' : msg.role === 'assistant' ? 'Mipham Code' : '⚠ System'}:
-          </Text>
-          <Text>{msg.content}</Text>
+          {msg.toolMeta ? (
+            <Box flexDirection="column">
+              <Text color="yellow">
+                {msg.toolMeta.collapsed ? '⏺' : '⏺ ▼'}{' '}
+                {msg.toolMeta.name}
+              </Text>
+              <Text dimColor>{msg.content}</Text>
+            </Box>
+          ) : (
+            <>
+              <Text
+                bold
+                color={msg.role === 'user' ? 'green' : msg.role === 'system' ? 'yellow' : 'blue'}
+              >
+                {msg.role === 'user' ? '▸ You' : msg.role === 'assistant' ? 'Mipham Code' : '⚠ System'}:
+              </Text>
+              <Text>{msg.content}</Text>
+            </>
+          )}
         </Box>
       ))}
     </Box>

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useRef } from 'react'
 import { Box, Text, useInput } from 'ink'
 import type { QueryEngine } from '../core/engine'
 import type { MiphamConfig } from '../shared/index.ts'
@@ -23,9 +23,23 @@ interface AppProps {
   skillsLoader?: SkillsLoader
 }
 
+export interface ToolMeta {
+  name: string
+  input: string
+  output?: string
+  collapsed: boolean
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system'
   content: string
+  toolMeta?: ToolMeta
+}
+
+interface AgentProgress {
+  name: string
+  description: string
+  startTime: number
 }
 
 const VERSION = '0.2.0'
@@ -58,6 +72,18 @@ export function App({
   const [focusMode, setFocusMode] = useState(false)
   const [goalText, setGoalText] = useState('')
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('auto')
+  const abortRef = useRef<AbortController | null>(null)
+  const [agentProgress, setAgentProgress] = useState<AgentProgress | null>(null)
+  const [agentElapsed, setAgentElapsed] = useState(0)
+
+  // Agent elapsed timer
+  React.useEffect(() => {
+    if (!agentProgress) { setAgentElapsed(0); return }
+    const interval = setInterval(() => {
+      setAgentElapsed(Math.floor((Date.now() - agentProgress.startTime) / 1000))
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [agentProgress])
 
   const mkCtx = useCallback(
     (): CommandContext => ({
@@ -161,10 +187,13 @@ export function App({
       setMessages((prev) => [...prev, { role: 'user', content: input }])
       setIsLoading(true)
 
+      const controller = new AbortController()
+      abortRef.current = controller
+
       let assistantContent = ''
 
       try {
-        for await (const chunk of engine.process(input)) {
+        for await (const chunk of engine.process(input, controller.signal)) {
           if (chunk.type === 'text' && chunk.content) {
             assistantContent += chunk.content
             setMessages((prev) => {
@@ -180,24 +209,50 @@ export function App({
           }
 
           if (chunk.type === 'tool_use' && chunk.toolUse) {
+            const toolName = chunk.toolUse.name
+            const inputStr = JSON.stringify(chunk.toolUse.input)
+            const isAgent = toolName === 'Agent' || toolName === 'Task'
+
+            if (isAgent) {
+              setAgentProgress({
+                name: (chunk.toolUse.input.subagent_type as string) || 'General-purpose',
+                description: (chunk.toolUse.input.description as string) ||
+                  (chunk.toolUse.input.prompt as string) || '',
+                startTime: Date.now(),
+              })
+            }
+
+            const collapsed = toolName !== 'Agent' // agents always expanded
             setMessages((prev) => [
               ...prev,
               {
                 role: 'system',
-                content: `🔧 Using tool: ${chunk.toolUse!.name}(${JSON.stringify(chunk.toolUse!.input)})`,
+                content: collapsed
+                  ? `⏺ ${toolName} · ${inputStr.slice(0, 50)}${inputStr.length > 50 ? '...' : ''} (Ctrl+O to expand)`
+                  : `🔧 ${toolName}: ${inputStr.slice(0, 200)}`,
+                toolMeta: { name: toolName, input: inputStr, collapsed },
               },
             ])
           }
 
           if (chunk.type === 'tool_result') {
-            const resultPreview =
-              chunk.content && chunk.content.length > 200
-                ? chunk.content.slice(0, 200) + '...'
-                : chunk.content || '(empty)'
-            setMessages((prev) => [
-              ...prev,
-              { role: 'system', content: `📋 Tool result: ${resultPreview}` },
-            ])
+            setAgentProgress(null)
+            setMessages((prev) => {
+              const updated = [...prev]
+              for (let i = updated.length - 1; i >= 0; i--) {
+                if (updated[i]?.toolMeta && !updated[i]!.toolMeta!.output) {
+                  updated[i] = {
+                    ...updated[i]!,
+                    content: updated[i]!.toolMeta!.collapsed
+                      ? updated[i]!.content
+                      : `📋 ${updated[i]!.toolMeta!.name} result: ${(chunk.content || '(empty)').slice(0, 200)}`,
+                    toolMeta: { ...updated[i]!.toolMeta!, output: chunk.content || '' },
+                  }
+                  break
+                }
+              }
+              return updated
+            })
           }
 
           if (chunk.type === 'error') {
@@ -211,6 +266,7 @@ export function App({
         setMessages((prev) => [...prev, { role: 'system', content: `Error: ${String(err)}` }])
       } finally {
         setIsLoading(false)
+        abortRef.current = null
         // Auto-save checkpoint after each AI response
         if (assistantContent) {
           engine.getContext().saveCheckpoint('post-turn')
@@ -227,11 +283,43 @@ export function App({
         setPickerOpen(false)
         return
       }
+      if (isLoading && abortRef.current) {
+        abortRef.current.abort()
+        return
+      }
       process.exit(0)
     }
     // Ctrl+P → open model picker
     if (_input === '\x10') {
       setPickerOpen((prev) => !prev)
+      return
+    }
+    // Ctrl+O → toggle last tool call expand/collapse
+    if (_input === '\x0f') {
+      setMessages((prev) => {
+        const msgs = [...prev]
+        for (let i = msgs.length - 1; i >= 0; i--) {
+          if (msgs[i]?.toolMeta) {
+            const meta = msgs[i]!.toolMeta!
+            if (meta.collapsed) {
+              msgs[i] = {
+                ...msgs[i]!,
+                content: `🔧 ${meta.name}: ${meta.input}\n📋 Result: ${meta.output || '(pending)'}`,
+                toolMeta: { ...meta, collapsed: false },
+              }
+            } else {
+              const short = meta.input.length > 50 ? meta.input.slice(0, 50) + '...' : meta.input
+              msgs[i] = {
+                ...msgs[i]!,
+                content: `⏺ ${meta.name} · ${short} (Ctrl+O to expand)`,
+                toolMeta: { ...meta, collapsed: true },
+              }
+            }
+            break
+          }
+        }
+        return msgs
+      })
       return
     }
     // Shift+Tab → cycle permission mode (auto → ask → bypass → auto)
@@ -278,7 +366,7 @@ export function App({
             ● {PERMISSION_LABELS[permissionMode]}
           </Text>
           <Text dimColor> (Shift+Tab to cycle)</Text>
-          <Text dimColor> · Ctrl+P pick · /help · Esc exit</Text>
+          <Text dimColor> · Ctrl+P pick · /help · Esc cancel</Text>
         </Box>
         {goalText && (
           <Box>
@@ -286,6 +374,21 @@ export function App({
           </Box>
         )}
       </Box>
+
+      {/* Agent progress banner */}
+      {agentProgress && (
+        <Box flexDirection="column" marginY={1}>
+          <Text color="cyan" bold>
+            ⏺ {agentProgress.name}{' '}
+            <Text color="yellow">{agentElapsed}s</Text>
+          </Text>
+          <Text dimColor>
+            {agentProgress.description.length > 100
+              ? `"${agentProgress.description.slice(0, 100)}..."`
+              : `"${agentProgress.description}"`}
+          </Text>
+        </Box>
+      )}
 
       {/* Chat panel */}
       <ChatPanel messages={messages} focusMode={focusMode} />

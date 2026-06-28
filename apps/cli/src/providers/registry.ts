@@ -14,6 +14,7 @@ export interface ChatRequest {
   tools?: Record<string, unknown>[]
   maxTokens?: number
   temperature?: number
+  signal?: AbortSignal
 }
 
 export class ProviderRegistry {

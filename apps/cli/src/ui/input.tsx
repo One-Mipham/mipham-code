@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Box, Text } from 'ink'
 import TextInput from 'ink-text-input'
 
@@ -7,32 +7,37 @@ interface InputBarProps {
   isLoading: boolean
 }
 
-// ── Creative status messages (inspired by Claude Code's whimsical verbs) ──
+// ── Status verbs — English (Claude Code-aligned) + Chinese (Mipham originals) ──
 
-const STATUS_VERBS = [
-  '思忖中', // Pondering
-  '推演中', // Deducting
-  '凝炼中', // Condensing
-  '熬煮中', // Simmering
-  '锻造中', // Forging
-  '研磨中', // Grinding
-  '解构中', // Deconstructing
-  '冥思中', // Contemplating
-  '编织中', // Weaving
-  '萃取中', // Extracting
-  '烹制中', // Cooking
-  '淬火中', // Quenching
-  '雕琢中', // Chiseling
-  '融汇中', // Fusing
-  '觉照中', // Illuminating
-  '运转中', // Operating
-  '参详中', // Studying
-  '化合中', // Synthesizing
-  '浸润中', // Infusing
-  '焙烤中', // Baking
+const STATUS_EN = [
+  'Doodling', 'Forging', 'Germinating', 'Mosmosing', 'Cerebrating',
+  'Boogieing', 'Finagling', 'Misting', 'Recombobulating', 'Slithering',
+  'Effecting', 'Roosting', 'Crystallizing', 'Canoodling', 'Billowing',
+  'Warping', 'Improvising', 'Metamorphing', 'Gusting', 'Whiring',
+  'Topsy-turvying', 'Flibbertigibetting', 'Wibbling', 'Thundering',
+  'Moseying', 'Julienning', 'Evaporating', 'Ruminating', 'Whisking',
+  'Scampering', 'Meandering', 'Concoting', 'Gesticulating', 'Flamebeing',
+  'Quantumizing', 'Waddling', 'Fluttering', 'Sprouting', 'Elucidating',
+  'Embellishing', 'Razzmatizing', 'Pondering', 'Cogitating', 'Garnishing',
+  'Actualizing', 'Zigzagging', 'Mustering', 'Frolicking', 'Hullaballooing',
+  'Doing', 'Fermenting', 'Considering', 'Skedaddling', 'Actioning',
+  'Orbiting', 'Perambulating', 'Drizzling', 'Schlepping', 'Ionizing',
+  'Scurrying',
 ]
 
-const STATUS_EMOJI = ['🔮', '⚙️', '💎', '🔥', '🧪', '🌊', '⚡', '🌀', '🎯', '💡']
+const STATUS_CN = [
+  '思忖中', '推演中', '凝炼中', '熬煮中', '锻造中',
+  '研磨中', '解构中', '冥思中', '编织中', '萃取中',
+  '烹制中', '淬火中', '雕琢中', '融汇中', '觉照中',
+  '运转中', '参详中', '化合中', '浸润中', '焙烤中',
+]
+
+// Merge both — bilingual status verbs
+const STATUS_GERUNDS = [...STATUS_EN, ...STATUS_CN]
+
+const STATUS_PAST = [
+  'Brewed', 'Churned', 'Cooked', 'Sautéed', 'Cogitated', 'Crunched',
+]
 
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]!
@@ -40,25 +45,35 @@ function pick<T>(arr: T[]): T {
 
 export function InputBar({ onSubmit, isLoading }: InputBarProps) {
   const [value, setValue] = useState('')
-  const [verb, setVerb] = useState(() => pick(STATUS_VERBS))
-  const [emoji, setEmoji] = useState(() => pick(STATUS_EMOJI))
+  const [verb, setVerb] = useState(() => pick(STATUS_GERUNDS))
+  const [completionVerb, setCompletionVerb] = useState<string | null>(null)
+  const prevLoading = useRef(isLoading)
 
-  // Rotate status messages while loading
+  // Rotate gerunds while loading
   useEffect(() => {
     if (!isLoading) return
     const interval = setInterval(() => {
-      setVerb(pick(STATUS_VERBS))
-      setEmoji(pick(STATUS_EMOJI))
-    }, 2000)
+      setVerb(pick(STATUS_GERUNDS))
+    }, 1200)
     return () => clearInterval(interval)
   }, [isLoading])
 
-  // Reset when loading starts
+  // Pick a fresh gerund when loading starts
   useEffect(() => {
     if (isLoading) {
-      setVerb(pick(STATUS_VERBS))
-      setEmoji(pick(STATUS_EMOJI))
+      setVerb(pick(STATUS_GERUNDS))
+      setCompletionVerb(null)
     }
+  }, [isLoading])
+
+  // Flash a past participle when loading stops
+  useEffect(() => {
+    if (prevLoading.current === true && isLoading === false) {
+      setCompletionVerb(pick(STATUS_PAST))
+      const timer = setTimeout(() => setCompletionVerb(null), 1500)
+      return () => clearTimeout(timer)
+    }
+    prevLoading.current = isLoading
   }, [isLoading])
 
   const handleSubmit = (val: string) => {
@@ -70,13 +85,19 @@ export function InputBar({ onSubmit, isLoading }: InputBarProps) {
   return (
     <Box marginTop={1}>
       <Box marginRight={1}>
-        <Text color={isLoading ? 'yellow' : 'cyan'}>{isLoading ? `${emoji}` : '▸'}</Text>
+        <Text color={isLoading ? 'yellow' : 'cyan'}>{'>'}</Text>
       </Box>
       <TextInput
         value={value}
         onChange={setValue}
         onSubmit={handleSubmit}
-        placeholder={isLoading ? `${verb}...` : 'Type a message (Esc to exit)...'}
+        placeholder={
+          isLoading
+            ? `${verb}...`
+            : completionVerb
+              ? completionVerb
+              : 'Type a message (Esc to cancel)...'
+        }
       />
     </Box>
   )
