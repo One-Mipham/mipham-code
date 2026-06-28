@@ -7,6 +7,7 @@
 import type { QueryEngine } from '../core/engine'
 import type { MiphamConfig } from '../shared/index.ts'
 import type { SkillsLoader } from '../skills/loader'
+import { McpClient } from '../mcp/client'
 import {
   PACKAGE_NAME,
   NPM_INSTALL_COMMAND,
@@ -1868,18 +1869,40 @@ Works with: Bash, Zsh, Fish, PowerShell, Windows Terminal`,
 // ═══════════════════════════════════════════════════════════════
 
 const mcpCmd: CommandHandler = (ctx) => {
-  const mcpServers = ctx.config.skills?.mcpServers ?? []
+  const configuredServers = ctx.config.skills?.mcpServers ?? []
+  const liveConnections = McpClient.getInstance().listConnections()
 
   const lines: string[] = ['── MCP Servers ──', '']
 
-  if (mcpServers.length > 0) {
-    lines.push(`Configured servers (${mcpServers.length}):`)
+  if (configuredServers.length > 0) {
+    lines.push(`Configured servers (${configuredServers.length}):`)
     lines.push('')
-    for (const s of mcpServers) {
+    for (const s of configuredServers) {
+      const live = liveConnections.find((c) => c.config.name === s.name)
+      const statusIcon = live
+        ? live.status === 'connected'
+          ? '🟢'
+          : live.status === 'connecting'
+            ? '🟡'
+            : live.status === 'error'
+              ? '🔴'
+              : '⚪'
+        : '⚪'
+      const statusLabel = live ? live.status : 'not started'
       const envKeys = s.env ? Object.keys(s.env).join(', ') : '(none)'
-      lines.push(`  📡 ${s.name}`)
+
+      lines.push(`  ${statusIcon} ${s.name}  [${statusLabel}]`)
       lines.push(`     Command: ${s.command} ${s.args.join(' ')}`)
       lines.push(`     Env vars: ${envKeys}`)
+      if (live?.tools && live.tools.length > 0) {
+        lines.push(`     Tools: ${live.tools.map((t) => t.name).join(', ')}`)
+      }
+      if (live?.error) {
+        lines.push(`     Error: ${live.error}`)
+      }
+      if (live?.serverInfo) {
+        lines.push(`     Server: ${live.serverInfo.name} v${live.serverInfo.version}`)
+      }
       lines.push('')
     }
   } else {
@@ -1908,11 +1931,10 @@ const mcpCmd: CommandHandler = (ctx) => {
   }
 
   lines.push('')
-  lines.push('── Status ──')
-  lines.push('MCP stdio protocol: full implementation in M3 milestone.')
-  lines.push('Current: config parsing + server registry ready.')
+  lines.push('── Protocol ──')
+  lines.push('MCP stdio transport (JSON-RPC 2.0) — fully implemented.')
+  lines.push('Servers auto-connect on startup when configured.')
   lines.push('')
-  lines.push('MCP enables AI to interact with external tools via standardized servers.')
   lines.push('Learn more: https://modelcontextprotocol.io')
 
   return { content: lines.join('\n') }

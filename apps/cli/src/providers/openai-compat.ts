@@ -6,6 +6,7 @@ import type {
   ContentBlock,
 } from '../shared/index.ts'
 import type { ProviderInstance, ChatRequest } from './registry'
+import { fetchWithRetry } from './fetch-utils'
 
 export class OpenAICompatProvider implements ProviderInstance {
   constructor(public config: ProviderConfig) {}
@@ -23,7 +24,7 @@ export class OpenAICompatProvider implements ProviderInstance {
       tools: req.tools?.map((t) => ({ type: 'function', function: t })),
     }
 
-    const response = await fetch(`${baseUrl}/chat/completions`, {
+    const response = await fetchWithRetry(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -47,6 +48,12 @@ export class OpenAICompatProvider implements ProviderInstance {
     const decoder = new TextDecoder()
     let buffer = ''
 
+    // Track incremental tool calls across streaming deltas
+    const pendingToolCalls = new Map<
+      number,
+      { id: string; name: string; arguments: string }
+    >()
+
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
@@ -60,6 +67,18 @@ export class OpenAICompatProvider implements ProviderInstance {
         if (!trimmed || !trimmed.startsWith('data: ')) continue
         const data = trimmed.slice(6)
         if (data === '[DONE]') {
+          // Emit any pending tool calls before stopping
+          for (const [, tc] of pendingToolCalls) {
+            yield {
+              type: 'tool_use',
+              toolUse: {
+                type: 'tool_use',
+                id: tc.id,
+                name: tc.name,
+                input: this.safeParseJson(tc.arguments),
+              },
+            }
+          }
           yield { type: 'stop' }
           return
         }
@@ -73,21 +92,39 @@ export class OpenAICompatProvider implements ProviderInstance {
 
           if (delta?.tool_calls) {
             for (const tc of delta.tool_calls) {
+              const idx = tc.index ?? 0
+              const pending = pendingToolCalls.get(idx) || {
+                id: '',
+                name: '',
+                arguments: '',
+              }
+
+              if (tc.id) pending.id = tc.id
+              if (tc.function?.name) pending.name = tc.function.name
+              if (tc.function?.arguments) pending.arguments += tc.function.arguments
+
+              pendingToolCalls.set(idx, pending)
+            }
+          }
+
+          if (delta?.content) {
+            yield { type: 'text', content: delta.content }
+          }
+
+          if (choice.finish_reason === 'tool_calls') {
+            // Emit fully accumulated tool calls
+            for (const [, tc] of pendingToolCalls) {
               yield {
                 type: 'tool_use',
                 toolUse: {
                   type: 'tool_use',
                   id: tc.id || `call_${Date.now()}`,
-                  name: tc.function?.name || '',
-                  input: tc.function?.arguments ? JSON.parse(tc.function.arguments) : {},
+                  name: tc.name,
+                  input: this.safeParseJson(tc.arguments),
                 },
               }
             }
-            continue
-          }
-
-          if (delta?.content) {
-            yield { type: 'text', content: delta.content }
+            pendingToolCalls.clear()
           }
 
           if (choice.finish_reason === 'stop') {
@@ -146,6 +183,16 @@ export class OpenAICompatProvider implements ProviderInstance {
     }
 
     return result
+  }
+
+  /** Safely parse JSON, returning an empty object on failure. */
+  private safeParseJson(raw: string): Record<string, unknown> {
+    if (!raw) return {}
+    try {
+      return JSON.parse(raw)
+    } catch {
+      return { _raw: raw }
+    }
   }
 
   private resolveApiKey(keyTemplate: string): string {

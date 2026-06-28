@@ -14,16 +14,16 @@ Mipham Code 是一个**开源核心、多模型智能编程终端**，通过 Rea
 
 ### 1.1 Key Capabilities 核心能力
 
-| Capability              | Description                                                                                          |
-| ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| Capability              | Description                                                                                                                            |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | **Multi-Model**         | 8 providers (7 active + 1 upcoming), 28+ models via unified API (Anthropic, OpenAI, DeepSeek, Google, Qwen, Doubao, Hunyuan, MiphamAI) |
-| **16 Built-in Tools**   | File operations, shell execution, agent dispatch, MCP integration, web search                        |
-| **60 Slash Commands**   | Full Claude Code-compatible command set with zero re-learning                                        |
-| **MCP Protocol**        | Full JSON-RPC 2.0 stdio transport — connect to any MCP-compatible server                             |
-| **13 Skills**           | 11 standard + 2 Mipham-exclusive skills with dual-runtime architecture                               |
-| **Security Hardened**   | Path sandbox, SSRF protection, Bash command blacklist, permission gating, parameter validation       |
-| **Session Persistence** | Auto-save/restore across CLI sessions via JSONL store                                                |
-| **Cross-Platform**      | macOS, Linux, Windows via npm / curl / PowerShell / direct download                                  |
+| **16 Built-in Tools**   | File operations, shell execution, agent dispatch, MCP integration, web search                                                          |
+| **60 Slash Commands**   | Full Claude Code-compatible command set with zero re-learning                                                                          |
+| **MCP Protocol**        | Full JSON-RPC 2.0 stdio transport — connect to any MCP-compatible server                                                               |
+| **13 Skills**           | 11 standard + 2 Mipham-exclusive skills with dual-runtime architecture                                                                 |
+| **Security Hardened**   | Path sandbox, SSRF protection, Bash command blacklist, permission gating, parameter validation                                         |
+| **Session Persistence** | Auto-save/restore across CLI sessions via JSONL store                                                                                  |
+| **Cross-Platform**      | macOS, Linux, Windows via npm / curl / PowerShell / direct download                                                                    |
 
 ### 1.2 Brand Positioning 品牌定位
 
@@ -489,15 +489,15 @@ Triggered on push/PR to main branch via GitHub Actions.
 
 ### Completed ✅
 
-| Phase     | Milestone                                                                | Date       |
-| --------- | ------------------------------------------------------------------------ | ---------- |
-| Phase 1-3 | 55 slash commands + /setup wizard                                        | 2026-06-09 |
-| Phase 4   | 5 stub→full commands (mcp, login, logout, feedback, agents)              | 2026-06-09 |
-| Phase 5   | Security hardening (path sandbox, SSRF, bash blacklist, permission gate) | 2026-06-10 |
-| Phase 6   | Full MCP stdio implementation (JSON-RPC 2.0 transport + protocol)        | 2026-06-10 |
-| Phase 7   | Agent subsystem + session persistence + 3 new skills                     | 2026-06-10 |
+| Phase     | Milestone                                                                  | Date       |
+| --------- | -------------------------------------------------------------------------- | ---------- |
+| Phase 1-3 | 55 slash commands + /setup wizard                                          | 2026-06-09 |
+| Phase 4   | 5 stub→full commands (mcp, login, logout, feedback, agents)                | 2026-06-09 |
+| Phase 5   | Security hardening (path sandbox, SSRF, bash blacklist, permission gate)   | 2026-06-10 |
+| Phase 6   | Full MCP stdio implementation (JSON-RPC 2.0 transport + protocol)          | 2026-06-10 |
+| Phase 7   | Agent subsystem + session persistence + 3 new skills                       | 2026-06-10 |
 | Phase 8   | npm publish (`@miphamai/cli` v0.2.2), multi-platform install, auto mode UI | 2026-06-10 |
-| Phase 9   | CI/CD auto-release pipeline + binary build                               | 2026-06-10 |
+| Phase 9   | CI/CD auto-release pipeline + binary build                                 | 2026-06-10 |
 
 ### In Progress 🔶
 
@@ -509,12 +509,12 @@ Triggered on push/PR to main branch via GitHub Actions.
 
 ### Planned 🔷
 
-| Milestone          | Description                                   |
-| ------------------ | --------------------------------------------- |
-| macOS .app         | Bundle CLI as native macOS application        |
-| Web UI             | Complete product pages at mipham.ai/code      |
-| VS Code Extension  | Mipham Code in editor sidebar                 |
-| JetBrains Plugin   | IntelliJ/WebStorm integration                 |
+| Milestone         | Description                              |
+| ----------------- | ---------------------------------------- |
+| macOS .app        | Bundle CLI as native macOS application   |
+| Web UI            | Complete product pages at mipham.ai/code |
+| VS Code Extension | Mipham Code in editor sidebar            |
+| JetBrains Plugin  | IntelliJ/WebStorm integration            |
 
 ---
 
@@ -553,13 +553,13 @@ docs: description
 
 ## 15. Support 支持
 
-| Channel       | Link                                                 |
-| ------------- | ---------------------------------------------------- |
+| Channel       | Link                                                  |
+| ------------- | ----------------------------------------------------- |
 | GitHub Issues | https://github.com/One-Mipham/mipham-code/issues      |
 | Discussions   | https://github.com/One-Mipham/mipham-code/discussions |
-| Email         | feedback@mipham.ai                                   |
-| International | https://mipham.ai/code                               |
-| 中国大陆      | https://onemipham.com/code                           |
+| Email         | feedback@mipham.ai                                    |
+| International | https://mipham.ai/code                                |
+| 中国大陆      | https://onemipham.com/code                            |
 
 ---
 

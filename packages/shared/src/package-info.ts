@@ -25,15 +25,14 @@ export const NPM_UPDATE_COMMAND = `npm update -g ${PACKAGE_NAME}` as const
 export const NPM_URL = `https://www.npmjs.com/package/${PACKAGE_NAME}` as const
 
 /** npm 下载量 API */
-export const NPM_DOWNLOADS_API = `https://api.npmjs.org/downloads/point/last-month/${PACKAGE_NAME}` as const
+export const NPM_DOWNLOADS_API =
+  `https://api.npmjs.org/downloads/point/last-month/${PACKAGE_NAME}` as const
 
 /** 国际站 — curl 一键安装 */
-export const INSTALL_CURL_INTERNATIONAL =
-  'curl -fsSL https://mipham.ai/install.sh | bash' as const
+export const INSTALL_CURL_INTERNATIONAL = 'curl -fsSL https://mipham.ai/install.sh | bash' as const
 
 /** 国内站 — curl 一键安装 */
-export const INSTALL_CURL_CHINA =
-  'curl -fsSL https://onemipham.com/install.sh | bash' as const
+export const INSTALL_CURL_CHINA = 'curl -fsSL https://onemipham.com/install.sh | bash' as const
 
 /** 国际站产品页 */
 export const PRODUCT_URL_INTERNATIONAL = 'https://mipham.ai/mipham-code' as const

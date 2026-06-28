@@ -2,14 +2,62 @@ import type { Message, StreamChunk, ToolDefinition, ToolResult } from '../shared
 import { ProviderRegistry } from '../providers/registry'
 import { ContextManager } from './context'
 import { PermissionSystem } from './permission'
+import type { HookEngine } from './hooks'
 
 export class QueryEngine {
+  private hookEngine?: HookEngine
+
   constructor(
     private registry: ProviderRegistry,
     private context: ContextManager,
     private tools: Map<string, ToolDefinition>,
     private permission: PermissionSystem = new PermissionSystem('bypass'),
   ) {}
+
+  /** Register a hook engine for pre/post tool-use lifecycle events. */
+  setHookEngine(hooks: HookEngine): void {
+    this.hookEngine = hooks
+  }
+
+  /** Wire LLM-based conversation summarization into the context manager. */
+  setupContextSummarizer(): void {
+    this.context.setSummarizer(async (messages, heading) => {
+      const text = messages
+        .map((m) => {
+          const role = m.role
+          const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
+          return `[${role}]: ${content.slice(0, 500)}`
+        })
+        .join('\n')
+
+      // Build a minimal system prompt for summarization
+      const summaryPrompt =
+        `You are a conversation summarizer. Create a concise summary (1-3 paragraphs) of this conversation excerpt. Focus on: key topics discussed, decisions made, code changes mentioned, and open questions. Heading: ${heading}`
+
+      // Collect full summary text from streaming response
+      let summary = ''
+      try {
+        for await (const chunk of this.registry.chat({
+          model: this.registry.getActiveModel(),
+          messages: [
+            { role: 'system', content: summaryPrompt },
+            { role: 'user', content: text },
+          ],
+          maxTokens: 300,
+        })) {
+          if (chunk.type === 'text' && chunk.content) {
+            summary += chunk.content
+          }
+          if (chunk.type === 'stop') break
+          if (chunk.type === 'error') break
+        }
+      } catch {
+        // Return a minimal summary on failure
+      }
+
+      return summary.slice(0, 2000) || 'Prior conversation context omitted.'
+    })
+  }
 
   getPermission(): PermissionSystem {
     return this.permission
@@ -71,7 +119,7 @@ export class QueryEngine {
       yield {
         type: 'tool_result',
         tool_use_id: toolUse.id,
-        content: result.content,
+        content: result.success ? result.content : (result.error || result.content),
       }
 
       // Add tool use + result to context
@@ -158,13 +206,40 @@ export class QueryEngine {
       }
     }
 
+    // Run PreToolUse hooks
+    let effectiveParams = params
+    if (this.hookEngine) {
+      const preResult = await this.hookEngine.executePreToolUse(
+        name,
+        params,
+        'session-1',
+      )
+      if (!preResult.allowed) {
+        return {
+          success: false,
+          content: '',
+          error: preResult.reason || `Tool "${name}" blocked by hook`,
+        }
+      }
+      if (preResult.modifiedInput) {
+        effectiveParams = { ...params, ...preResult.modifiedInput }
+      }
+    }
+
     try {
-      return await tool.execute(params, {
+      const result = await tool.execute(effectiveParams, {
         cwd: process.cwd(),
         sessionId: 'session-1',
         provider: this.registry.getActive().config.id,
         model: this.registry.getActiveModel(),
       })
+
+      // Run PostToolUse hooks
+      if (this.hookEngine) {
+        await this.hookEngine.executePostToolUse(name, effectiveParams, result, 'session-1')
+      }
+
+      return result
     } catch (err) {
       return { success: false, content: '', error: String(err) }
     }

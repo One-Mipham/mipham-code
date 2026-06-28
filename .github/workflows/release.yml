@@ -32,7 +32,9 @@ jobs:
         with:
           bun-version: latest
 
-      - run: bun install
+      - uses: pnpm/action-setup@v4
+
+      - run: pnpm install --frozen-lockfile
 
       - name: Build binary
         working-directory: apps/cli
@@ -48,7 +50,6 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -56,7 +57,12 @@ jobs:
         with:
           bun-version: latest
 
-      - run: bun install
+      - uses: pnpm/action-setup@v4
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install ripgrep
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
 
       - working-directory: apps/cli
         run: bunx vitest run
@@ -69,11 +75,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
+      - uses: pnpm/action-setup@v4
 
-      - run: bun install
+      - run: pnpm install --frozen-lockfile
 
       - name: Setup npm auth
         run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
@@ -86,7 +90,7 @@ jobs:
   release:
     name: GitHub Release
     runs-on: ubuntu-latest
-    needs: [build]
+    needs: [build, test]
     permissions:
       contents: write
     steps:

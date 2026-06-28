@@ -8,6 +8,8 @@ import { QueryEngine } from './core/engine'
 import { SessionStore } from './core/session-store'
 import { SkillsLoader } from './skills/loader'
 import { createToolRegistry } from './tools'
+import { McpClient } from './mcp/client'
+import { HookEngine } from './core/hooks'
 
 interface RunOptions {
   model?: string
@@ -23,6 +25,17 @@ export async function runApp(options: RunOptions): Promise<void> {
 
   // Load configuration
   const config = loadConfig()
+
+  // Connect MCP servers (fire-and-forget — do not block startup)
+  const mcpServers = config.skills?.mcpServers ?? []
+  if (mcpServers.length > 0) {
+    const mcp = McpClient.getInstance()
+    for (const server of mcpServers) {
+      mcp.connect(server).catch((err) => {
+        process.stderr.write(`[mcp] Failed to connect "${server.name}": ${String(err)}\n`)
+      })
+    }
+  }
 
   // Bootstrap providers
   const defaultProvider = options.provider || config.defaultProvider
@@ -60,8 +73,20 @@ export async function runApp(options: RunOptions): Promise<void> {
   // Create tool registry with all 16 tools
   const tools = createToolRegistry()
 
+  // Initialize hook engine — register skill-defined hooks
+  const hookEngine = new HookEngine()
+  for (const skill of skillsLoader.list()) {
+    if (skill.hooks) {
+      for (const hook of skill.hooks) {
+        hookEngine.register(hook)
+      }
+    }
+  }
+
   // Create query engine
   const engine = new QueryEngine(registry, context, tools)
+  engine.setHookEngine(hookEngine)
+  engine.setupContextSummarizer()
 
   // Auto-save session on exit
   let autoSaveName: string | undefined

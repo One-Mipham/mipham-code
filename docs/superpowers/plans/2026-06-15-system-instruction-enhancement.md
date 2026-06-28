@@ -13,6 +13,7 @@
 ### Task 1: Add Security Refusal Rules to MIPHAM.md
 
 **Files:**
+
 - Modify: `MIPHAM.md` — insert new subsection after §一 (交互人格), before §二 (技术栈)
 
 - [ ] **Step 1: Insert §二 安全红线 after the 交互人格 section**
@@ -20,7 +21,6 @@
 The new section goes between the current §一 (交互人格) end marker and §二 (技术栈). Insert at the exact location:
 
 ```markdown
-
 ---
 
 ## 二、安全红线（强制性）
@@ -35,10 +35,10 @@ The new section goes between the current §一 (交互人格) end marker and §�
 **授权安全场景例外**: 在明确授权的渗透测试、CTF 竞赛、安全研究、防御性安全场景中，可以协助安全测试。
 
 **执行规则**:
+
 - 发现代码中的安全漏洞时提醒用户，而非利用
 - 如果用户请求涉及恶意目的，礼貌拒绝并解释原因
 - 不确定是否为恶意场景时，向用户澄清意图
-
 ```
 
 - [ ] **Step 2: Renumber existing sections**
@@ -48,21 +48,25 @@ The old §二 (技术栈) becomes §三, old §三 (编码规则) becomes §四.
 Update the section headers:
 
 Old:
+
 ```
 ## 二、技术栈
 ```
 
 New:
+
 ```
 ## 三、技术栈
 ```
 
 Old:
+
 ```
 ## 三、编码规则
 ```
 
 New:
+
 ```
 ## 四、编码规则
 ```
@@ -77,6 +81,7 @@ Expected: Clean insertion of the new security section, section numbers increment
 ### Task 2: Add Task Process Section to MIPHAM.md
 
 **Files:**
+
 - Modify: `MIPHAM.md` — insert new section after renumbered §四 (编码规则)
 
 - [ ] **Step 1: Insert §五 任务执行规范**
@@ -84,7 +89,6 @@ Expected: Clean insertion of the new security section, section numbers increment
 Insert after the 编码规则 section (after line `- 只改被要求修改的内容，不顺手改进相邻代码`):
 
 ```markdown
-
 ---
 
 ## 五、任务执行规范
@@ -111,7 +115,6 @@ Insert after the 编码规则 section (after line `- 只改被要求修改的内
 - "修 bug" → 先写复现 bug 的测试，再修复
 - "重构 X" → 确保测试在重构前后均通过
 - 多步骤任务先陈述简要计划，每步带验证点
-
 ```
 
 - [ ] **Step 2: Verify with git diff**
@@ -124,6 +127,7 @@ Expected: Task Process section inserted after 编码规则.
 ### Task 3: Add Tool Usage Rules to MIPHAM.md
 
 **Files:**
+
 - Modify: `MIPHAM.md` — insert new section after §五 (任务执行规范)
 
 - [ ] **Step 1: Insert §六 工具使用规则**
@@ -131,7 +135,6 @@ Expected: Task Process section inserted after 编码规则.
 Insert after the 任务执行规范 section:
 
 ```markdown
-
 ---
 
 ## 六、工具使用规则
@@ -156,7 +159,6 @@ Insert after the 任务执行规范 section:
 - 创建新组件前先查看现有组件，遵循相同的结构和命名
 - 不假设某个库或工具已可用 — 先验证
 - 匹配现有注释密度、命名习惯和代码组织方式
-
 ```
 
 - [ ] **Step 2: Verify with git diff**
@@ -169,6 +171,7 @@ Expected: Tool Usage section inserted after 任务执行规范.
 ### Task 4: Add Security Rules to CLAUDE.md
 
 **Files:**
+
 - Modify: `CLAUDE.md` — add security refusal clause to 关键约束 section
 
 - [ ] **Step 1: Add security rule to 关键约束**
@@ -189,6 +192,7 @@ Expected: One new line added to 关键约束.
 ### Task 5: Final Verification
 
 **Files:**
+
 - Verify: `MIPHAM.md` section numbering is sequential (一 → 二 → 三 → 四 → 五 → 六)
 - Verify: `CLAUDE.md` security rule is present
 
@@ -196,6 +200,7 @@ Expected: One new line added to 关键约束.
 
 Run: `grep "^## " MIPHAM.md`
 Expected output:
+
 ```
 ## 〇、身份定义（强制性）
 ## 一、交互人格（强制性）
@@ -232,10 +237,10 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ### Impact Summary
 
-| Change | File | Tokens Added (est.) | User-Visible Effect |
-|--------|------|---------------------|---------------------|
-| Security refusal rules | MIPHAM.md | ~150 | AI refuses malicious requests |
-| Task process | MIPHAM.md | ~200 | AI follows structured workflow |
-| Tool usage rules | MIPHAM.md | ~200 | AI uses tools more efficiently |
-| Security constraint | CLAUDE.md | ~20 | Documented in technical ref |
-| **Total** | | **~570 tokens** | Better safety + efficiency |
+| Change                 | File      | Tokens Added (est.) | User-Visible Effect            |
+| ---------------------- | --------- | ------------------- | ------------------------------ |
+| Security refusal rules | MIPHAM.md | ~150                | AI refuses malicious requests  |
+| Task process           | MIPHAM.md | ~200                | AI follows structured workflow |
+| Tool usage rules       | MIPHAM.md | ~200                | AI uses tools more efficiently |
+| Security constraint    | CLAUDE.md | ~20                 | Documented in technical ref    |
+| **Total**              |           | **~570 tokens**     | Better safety + efficiency     |

@@ -201,35 +201,35 @@ GitHub Actions 5 阶段流水线：`typecheck → lint → format → build-cli 
 
 > 共 27 个 commit，从独立仓库初始化至今。早期内联开发阶段的 15 个 commit 在迁移 squash 中压缩为 `27609bf`。
 
-| 日期       | Commit    | 说明                                                                      |
-| ---------- | --------- | ------------------------------------------------------------------------- |
-| 2026-06-15 | `f745a48` | docs: 增强系统指令 — 安全红线、任务执行规范、工具使用规则                 |
-| 2026-06-11 | `812e162` | docs: 更新 Mipham Code Web 页面内容                                       |
-| 2026-06-11 | `46a1726` | fix: CI 安装 ripgrep 以支持 grep 工具测试                                 |
-| 2026-06-11 | `3988d7a` | fix: ESLint flat config, 修复 lint 错误, passWithNoTests                  |
-| 2026-06-11 | `81fe590` | fix: 解决全部 CI 类型错误 — import paths, mock types, tsconfig            |
-| 2026-06-11 | `04180c9` | fix: 移除 CI 中显式 pnpm 版本号以解决 packageManager 冲突                 |
-| 2026-06-10 | `df58e06` | fix: 使用 .npmrc 替代 NODE_AUTH_TOKEN 环境变量                            |
-| 2026-06-10 | `aa39c9b` | fix: 测试 job 设为非阻塞（continue-on-error）用于发布流水线               |
-| 2026-06-10 | `6b03aa0` | fix: 使用 bunx vitest run 替代 bun test 以兼容 mock                       |
-| 2026-06-10 | `b834e7f` | fix: 发布流水线中使用 bun test 替代 pnpm                                  |
-| 2026-06-10 | `d3862d2` | feat: Phase 9 — CI/CD 自动发布流水线 + 二进制构建                         |
-| 2026-06-10 | `438bbe2` | chore: 版本号升至 v0.2.1, 添加 CLI README 用于 npm 页面                  |
-| 2026-06-10 | `c36b188` | fix: 移除 bin/mipham 中 TS 非空断言语法（JS 文件）                       |
-| 2026-06-10 | `6f148b5` | feat: 双站点安装脚本 + 产品规格文档                                       |
-| 2026-06-10 | `52855cd` | feat: Web 产品页双站点安装 URL, 修复包名, 4 种安装方式                    |
+| 日期       | Commit    | 说明                                                                                          |
+| ---------- | --------- | --------------------------------------------------------------------------------------------- |
+| 2026-06-15 | `f745a48` | docs: 增强系统指令 — 安全红线、任务执行规范、工具使用规则                                     |
+| 2026-06-11 | `812e162` | docs: 更新 Mipham Code Web 页面内容                                                           |
+| 2026-06-11 | `46a1726` | fix: CI 安装 ripgrep 以支持 grep 工具测试                                                     |
+| 2026-06-11 | `3988d7a` | fix: ESLint flat config, 修复 lint 错误, passWithNoTests                                      |
+| 2026-06-11 | `81fe590` | fix: 解决全部 CI 类型错误 — import paths, mock types, tsconfig                                |
+| 2026-06-11 | `04180c9` | fix: 移除 CI 中显式 pnpm 版本号以解决 packageManager 冲突                                     |
+| 2026-06-10 | `df58e06` | fix: 使用 .npmrc 替代 NODE_AUTH_TOKEN 环境变量                                                |
+| 2026-06-10 | `aa39c9b` | fix: 测试 job 设为非阻塞（continue-on-error）用于发布流水线                                   |
+| 2026-06-10 | `6b03aa0` | fix: 使用 bunx vitest run 替代 bun test 以兼容 mock                                           |
+| 2026-06-10 | `b834e7f` | fix: 发布流水线中使用 bun test 替代 pnpm                                                      |
+| 2026-06-10 | `d3862d2` | feat: Phase 9 — CI/CD 自动发布流水线 + 二进制构建                                             |
+| 2026-06-10 | `438bbe2` | chore: 版本号升至 v0.2.1, 添加 CLI README 用于 npm 页面                                       |
+| 2026-06-10 | `c36b188` | fix: 移除 bin/mipham 中 TS 非空断言语法（JS 文件）                                            |
+| 2026-06-10 | `6f148b5` | feat: 双站点安装脚本 + 产品规格文档                                                           |
+| 2026-06-10 | `52855cd` | feat: Web 产品页双站点安装 URL, 修复包名, 4 种安装方式                                        |
 | 2026-06-10 | `55f8eff` | feat: Phase 7+8 — Agent 子系统, 会话持久化, 新 skills, npm 发布就绪, 多平台安装, auto mode UI |
-| 2026-06-10 | `9cc8584` | feat: Phase 6 — 完整 MCP stdio 实现（JSON-RPC 2.0 transport + protocol）   |
-| 2026-06-10 | `ed125d5` | feat: Phase 5 — 安全加固（路径沙箱, SSRF, Bash 黑名单, 权限门控, 参数校验） |
-| 2026-06-09 | `758901a` | feat: Phase 3 — 实现 6 个 slash commands（共 55 个）                      |
-| 2026-06-09 | `44c67ef` | feat: Phase 1+2 — 48 个 slash commands 完整实现 + /setup 向导             |
-| 2026-06-02 | `18aef07` | fix: 移除 bin path 的 ./ 前缀以适应 npm 规范                              |
-| 2026-06-02 | `6ea4cc3` | fix: 重命名 bin/mipham.js → bin/mipham（无扩展名）以适应 npm              |
-| 2026-06-02 | `c44d74c` | fix: 使 bin/mipham.js 可执行以支持 npm publish                            |
-| 2026-06-02 | `fbcdc5e` | fix: 移除旧的 bin/mipham.ts, 版本升至 v0.1.2                              |
-| 2026-06-02 | `95b6d7a` | fix: 内联 shared 模块, 修复 bin 为 .js, 版本升至 v0.1.1                   |
-| 2026-06-02 | `3b72c9c` | fix: 更新 install.sh PACKAGE 为 @onemipham/cli, 重命名 CLI 包             |
-| 2026-06-02 | `27609bf` | feat: Mipham Code v0.1.0 — 多模型开源智能编程终端（初始 squash 迁移）     |
+| 2026-06-10 | `9cc8584` | feat: Phase 6 — 完整 MCP stdio 实现（JSON-RPC 2.0 transport + protocol）                      |
+| 2026-06-10 | `ed125d5` | feat: Phase 5 — 安全加固（路径沙箱, SSRF, Bash 黑名单, 权限门控, 参数校验）                   |
+| 2026-06-09 | `758901a` | feat: Phase 3 — 实现 6 个 slash commands（共 55 个）                                          |
+| 2026-06-09 | `44c67ef` | feat: Phase 1+2 — 48 个 slash commands 完整实现 + /setup 向导                                 |
+| 2026-06-02 | `18aef07` | fix: 移除 bin path 的 ./ 前缀以适应 npm 规范                                                  |
+| 2026-06-02 | `6ea4cc3` | fix: 重命名 bin/mipham.js → bin/mipham（无扩展名）以适应 npm                                  |
+| 2026-06-02 | `c44d74c` | fix: 使 bin/mipham.js 可执行以支持 npm publish                                                |
+| 2026-06-02 | `fbcdc5e` | fix: 移除旧的 bin/mipham.ts, 版本升至 v0.1.2                                                  |
+| 2026-06-02 | `95b6d7a` | fix: 内联 shared 模块, 修复 bin 为 .js, 版本升至 v0.1.1                                       |
+| 2026-06-02 | `3b72c9c` | fix: 更新 install.sh PACKAGE 为 @onemipham/cli, 重命名 CLI 包                                 |
+| 2026-06-02 | `27609bf` | feat: Mipham Code v0.1.0 — 多模型开源智能编程终端（初始 squash 迁移）                         |
 
 ---
 
@@ -237,12 +237,12 @@ GitHub Actions 5 阶段流水线：`typecheck → lint → format → build-cli 
 
 > ⚠️ 本仓库不是孤岛。以下 4 个项目与本项目紧密相关，操作前必须了解彼此关系。
 
-| 项目 | 目录 | 角色 | 部署方式 |
-|------|------|------|---------|
-| **omc-project0** | `../websites/omc-project0/` | 国内官网 onemipham.com | `deploy.sh` → 腾讯云 |
-| **omc-project00** | `../websites/omc-project00/` | 国际官网 mipham.ai | `vercel deploy --prod` |
-| **omc-project2** | `../websites/omc-project2/` | Marketplace 应用 | `deploy-cn.sh` + Vercel |
-| **omc-project3** | `../websites/omc-project3/` | Developer 平台 | `deploy-cn.sh` + Vercel |
+| 项目              | 目录                         | 角色                   | 部署方式                |
+| ----------------- | ---------------------------- | ---------------------- | ----------------------- |
+| **omc-project0**  | `../websites/omc-project0/`  | 国内官网 onemipham.com | `deploy.sh` → 腾讯云    |
+| **omc-project00** | `../websites/omc-project00/` | 国际官网 mipham.ai     | `vercel deploy --prod`  |
+| **omc-project2**  | `../websites/omc-project2/`  | Marketplace 应用       | `deploy-cn.sh` + Vercel |
+| **omc-project3**  | `../websites/omc-project3/`  | Developer 平台         | `deploy-cn.sh` + Vercel |
 
 ### 共享数据源
 
@@ -285,7 +285,7 @@ mipham-code 变更（包名/版本）
 
 ### 修订历史
 
-| 版本  | 日期       | 变更内容                                                                             | 维护人     |
-| ----- | ---------- | ------------------------------------------------------------------------------------ | ---------- |
-| 1.1.0 | 2026-06-15 | 更新最近提交表为实际 git 历史（27 commits），补充迁移说明 | 技术委员会 |
+| 版本  | 日期       | 变更内容                                                             | 维护人     |
+| ----- | ---------- | -------------------------------------------------------------------- | ---------- |
+| 1.1.0 | 2026-06-15 | 更新最近提交表为实际 git 历史（27 commits），补充迁移说明            | 技术委员会 |
 | 1.0.0 | 2026-06-02 | 初始创建：完整架构、测试矩阵、Provider 表、Skills 清单、CI/CD 流水线 | 技术委员会 |

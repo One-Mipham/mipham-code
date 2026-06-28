@@ -6,16 +6,21 @@ on:
   pull_request:
     branches: [master, main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   typecheck:
     name: Type Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
       - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r typecheck
 
@@ -24,10 +29,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
       - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
 
@@ -36,12 +42,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
       - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
-      - run: pnpm format --check
+      - run: pnpm format:check
 
   build-cli:
     name: Build CLI
@@ -52,8 +59,25 @@ jobs:
         with:
           bun-version: latest
       - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @mipham/cli build
+
+  build-web:
+    name: Build Web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @mipham/web build
 
   test:
     name: Test
@@ -64,6 +88,10 @@ jobs:
         with:
           bun-version: latest
       - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
       - name: Install ripgrep
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep

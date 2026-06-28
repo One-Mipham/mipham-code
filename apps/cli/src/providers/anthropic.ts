@@ -6,6 +6,7 @@ import type {
   ContentBlock,
 } from '../shared/index.ts'
 import type { ProviderInstance, ChatRequest } from './registry'
+import { fetchWithRetry } from './fetch-utils'
 
 interface AnthropicContentBlock {
   type: string
@@ -72,7 +73,7 @@ export class AnthropicProvider implements ProviderInstance {
       }))
     }
 
-    const response = await fetch(`${this.baseUrl}/messages`, {
+    const response = await fetchWithRetry(`${this.baseUrl}/messages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
