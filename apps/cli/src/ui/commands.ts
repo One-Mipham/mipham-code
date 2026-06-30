@@ -2172,11 +2172,13 @@ const artifactListCmd: CommandHandler = async (_ctx, _args) => {
 
   const lines = ['── Artifacts ──', '']
   for (const e of entries) {
+    const ver = e.versions && e.versions.length > 1 ? ` v${e.versions.length}` : ''
     lines.push(
-      `  ${e.name.padEnd(24)} ${e.type.padEnd(6)} ${(e.size / 1024).toFixed(1).padStart(8)}KB  ${e.createdAt.slice(0, 16).replace('T', ' ')}`,
+      `  ${e.name.padEnd(24)} ${(e.type + ver).padEnd(8)} ${(e.size / 1024).toFixed(1).padStart(8)}KB  ${e.createdAt.slice(0, 16).replace('T', ' ')}`,
     )
   }
-  lines.push('', `  ${entries.length} artifact(s) — use /artifact open <name> to view`)
+  lines.push('', `  ${entries.length} artifact(s) — /artifact open <name> to view`)
+  lines.push(`  Gallery: http://localhost:9876`)
 
   return { content: lines.join('\n') }
 }

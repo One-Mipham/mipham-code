@@ -1,8 +1,8 @@
-import { writeFileSync, mkdirSync } from 'node:fs'
+import { writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ToolDefinition } from '../../shared/index.ts'
 import { ARTIFACTS_DIR, ARTIFACT_MAX_SIZE } from '../../shared/constants'
-import { addToManifest } from '../../artifacts/manifest'
+import { addToManifest, readManifest, archiveVersion } from '../../artifacts/manifest'
 
 const NAME_PATTERN = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/
 
@@ -74,6 +74,17 @@ export const artifactTool: ToolDefinition = {
       port = ctx.artifactServer.getPort()
     }
 
+    // Archive previous version if this artifact already exists
+    let archivedVersion: string | undefined
+    const isUpdate = existsSync(filepath)
+    if (isUpdate) {
+      const manifest = readManifest(baseDir)
+      const existing = manifest.artifacts.find((a) => a.name === name && a.sessionId === ctx.sessionId)
+      if (existing) {
+        archivedVersion = archiveVersion(baseDir, existing)
+      }
+    }
+
     // Write artifact
     writeFileSync(filepath, content, 'utf-8')
 
@@ -81,6 +92,11 @@ export const artifactTool: ToolDefinition = {
     const url = port
       ? `http://localhost:${port}/${ctx.sessionId}/${filename}`
       : `file://${filepath}`
+
+    // Preserve existing version count
+    const manifestPre = readManifest(baseDir)
+    const prev = manifestPre.artifacts.find((a) => a.name === name && a.sessionId === ctx.sessionId)
+    const versionCount = prev?.versionCount || (isUpdate ? 1 : undefined)
 
     addToManifest(
       baseDir,
@@ -92,20 +108,33 @@ export const artifactTool: ToolDefinition = {
         type: type as 'html' | 'svg',
         createdAt: new Date().toISOString(),
         sessionId: ctx.sessionId,
+        versions: prev?.versions,
+        versionCount,
       },
       port,
     )
 
+    // Notify SSE clients to refresh Gallery
+    if (ctx.artifactServer) {
+      ctx.artifactServer.notifyReload()
+    }
+
+    const galleryUrl = port ? `http://localhost:${port}` : undefined
+    const versionLine = archivedVersion ? `   Prev archived as: ${archivedVersion}` : ''
+    const galleryLine = galleryUrl ? `Gallery: ${galleryUrl}` : ''
+
     return {
       success: true,
       content: [
-        `✓ Artifact "${name}" saved.`,
+        `✓ Artifact "${name}" saved${isUpdate ? ' (updated)' : ''}.`,
         `   URL:  ${url}`,
         `   Size: ${size.toLocaleString()} bytes`,
-        ``,
+        versionLine,
+        galleryLine,
+        '',
         `Open in browser: /artifact open ${name}`,
         `List all:         /artifact list`,
-      ].join('\n'),
+      ].filter(Boolean).join('\n'),
     }
   },
 }

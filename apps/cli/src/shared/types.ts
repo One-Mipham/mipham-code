@@ -71,6 +71,8 @@ export interface ArtifactEntry {
   type: 'html' | 'svg'
   createdAt: string
   sessionId: string
+  versions?: string[] // version tags e.g. ['v1', 'v2']
+  versionCount?: number
 }
 
 export interface ArtifactManifest {
