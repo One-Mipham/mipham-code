@@ -2124,6 +2124,83 @@ Mipham Code includes 4 agent-type tools for structured workflows:
 })
 
 // ═══════════════════════════════════════════════════════════════
+// Artifacts
+// ═══════════════════════════════════════════════════════════════
+
+async function openBrowser(url: string): Promise<void> {
+  const cmd =
+    process.platform === 'darwin'
+      ? `open "${url}"`
+      : process.platform === 'win32'
+        ? `start "" "${url}"`
+        : `xdg-open "${url}"`
+  const { exec } = await import('node:child_process')
+  exec(cmd, () => {
+    /* fire-and-forget */
+  })
+}
+
+const artifactOpenCmd: CommandHandler = async (ctx, args) => {
+  const name = args[0]
+  if (!name) {
+    return { content: 'Usage: /artifact open <name>\nExample: /artifact open dashboard' }
+  }
+
+  const sessionId = 'session-1' // default session
+  const port = 9876
+  const ext = name.endsWith('.svg') ? '' : '.html'
+  const url = `http://localhost:${port}/${sessionId}/${name}${ext}`
+
+  try {
+    await openBrowser(url)
+    return { content: `✓ Opening artifact "${name}" in browser...\n   ${url}` }
+  } catch (err) {
+    return { content: `✗ Failed to open browser: ${String(err)}\n   URL: ${url}` }
+  }
+}
+
+const artifactListCmd: CommandHandler = async (_ctx, _args) => {
+  const { getSessionArtifacts } = await import('../artifacts/manifest')
+  const { join } = await import('node:path')
+  const { ARTIFACTS_DIR } = await import('../shared/constants')
+
+  const dir = join(process.cwd(), ARTIFACTS_DIR)
+  const entries = getSessionArtifacts(dir, 'session-1')
+
+  if (entries.length === 0) {
+    return { content: 'No artifacts created yet. Ask the AI to generate one with the Artifact tool.' }
+  }
+
+  const lines = ['── Artifacts ──', '']
+  for (const e of entries) {
+    lines.push(
+      `  ${e.name.padEnd(24)} ${e.type.padEnd(6)} ${(e.size / 1024).toFixed(1).padStart(8)}KB  ${e.createdAt.slice(0, 16).replace('T', ' ')}`,
+    )
+  }
+  lines.push('', `  ${entries.length} artifact(s) — use /artifact open <name> to view`)
+
+  return { content: lines.join('\n') }
+}
+
+const artifactServerCmd: CommandHandler = async (_ctx, _args) => {
+  const url = 'http://localhost:9876'
+  return {
+    content: `── Artifact Server ──\n\n  URL:  ${url}\n  Port: 9876\n\nArtifacts are served locally. No external network access.`,
+  }
+}
+
+const artifactBaseCmd: CommandHandler = (ctx, args) => {
+  const sub = args[0]
+  if (sub === 'open') return artifactOpenCmd(ctx, args.slice(1))
+  if (sub === 'list') return artifactListCmd(ctx, [])
+  if (sub === 'server') return artifactServerCmd(ctx, [])
+  return {
+    content:
+      'Usage: /artifact <open|list|server> [name]\n\n  /artifact open <name>  Open artifact in browser\n  /artifact list        List all artifacts\n  /artifact server      Show server status',
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Remaining low-priority stubs (backend not yet available)
 // ═══════════════════════════════════════════════════════════════
 
@@ -2208,6 +2285,9 @@ registry.set('/login', loginCmd)
 registry.set('/logout', logoutCmd)
 registry.set('/feedback', feedbackCmd)
 registry.set('/agents', agentsCmd)
+
+// Artifacts
+registry.set('/artifact', artifactBaseCmd)
 
 // Lower-priority semi-stubs (WIP, backend pending)
 registry.set('/branch', branchCmd)

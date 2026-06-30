@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import { render } from 'ink'
 import { App } from './ui/app'
 import { loadConfig } from './config/loader'
@@ -10,6 +11,8 @@ import { SkillsLoader } from './skills/loader'
 import { createToolRegistry } from './tools'
 import { McpClient } from './mcp/client'
 import { HookEngine } from './core/hooks'
+import { ArtifactServer } from './artifacts/server'
+import { ARTIFACTS_DIR, ARTIFACT_PORT, MIPHAM_DIR } from './shared/constants'
 
 interface RunOptions {
   model?: string
@@ -83,13 +86,19 @@ export async function runApp(options: RunOptions): Promise<void> {
     }
   }
 
+  // Start artifact server (lazy — first artifact creation triggers listening)
+  const artifactsDir = join(process.cwd(), MIPHAM_DIR, ARTIFACTS_DIR)
+  const artifactServer = new ArtifactServer(artifactsDir, ARTIFACT_PORT)
+
   // Create query engine
   const engine = new QueryEngine(registry, context, tools)
   engine.setHookEngine(hookEngine)
+  engine.setArtifactServer(artifactServer)
   engine.setupContextSummarizer()
 
   // Auto-save session on exit
   const saveAndExit = () => {
+    artifactServer.stop()
     if (context.getMessageCount() > 0) {
       SessionStore.autoSave(context.getMessages(), {
         provider: defaultProvider,

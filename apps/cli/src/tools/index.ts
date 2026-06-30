@@ -15,6 +15,7 @@ import { webFetchTool } from './network/web-fetch'
 import { webSearchTool } from './network/web-search'
 import { configTool } from './system/config'
 import { mcpTool } from './system/mcp'
+import { artifactTool } from './artifact/artifact'
 
 /**
  * Validate tool parameters against the tool's JSON Schema definition.
@@ -116,6 +117,8 @@ export function createToolRegistry(): Map<string, ToolDefinition> {
     // System tools
     withValidation(configTool),
     withValidation(mcpTool),
+    // Artifact tools
+    withValidation(artifactTool),
   ]
 
   const map = new Map<string, ToolDefinition>()

@@ -3,9 +3,11 @@ import { ProviderRegistry } from '../providers/registry'
 import { ContextManager } from './context'
 import { PermissionSystem } from './permission'
 import type { HookEngine } from './hooks'
+import type { ArtifactServer } from '../artifacts/server'
 
 export class QueryEngine {
   private hookEngine?: HookEngine
+  private artifactServer?: ArtifactServer
 
   constructor(
     private registry: ProviderRegistry,
@@ -17,6 +19,11 @@ export class QueryEngine {
   /** Register a hook engine for pre/post tool-use lifecycle events. */
   setHookEngine(hooks: HookEngine): void {
     this.hookEngine = hooks
+  }
+
+  /** Register the artifact server for tool context. */
+  setArtifactServer(server: ArtifactServer): void {
+    this.artifactServer = server
   }
 
   /** Wire LLM-based conversation summarization into the context manager. */
@@ -261,6 +268,7 @@ export class QueryEngine {
         sessionId: 'session-1',
         provider: this.registry.getActive().config.id,
         model: this.registry.getActiveModel(),
+        artifactServer: this.artifactServer,
       })
 
       // Run PostToolUse hooks

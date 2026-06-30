@@ -50,7 +50,7 @@ export interface Message {
 
 // ── Tool Types ──
 export type ToolPermission = 'auto' | 'ask' | 'bypass'
-export type ToolCategory = 'file' | 'exec' | 'agent' | 'network' | 'system'
+export type ToolCategory = 'file' | 'exec' | 'agent' | 'network' | 'system' | 'artifact'
 
 export interface ToolContext {
   cwd: string
@@ -59,6 +59,24 @@ export interface ToolContext {
   model: string
   skillsLoader?: import('../skills/loader').SkillsLoader
   registry?: import('../providers/registry').ProviderRegistry
+  artifactServer?: import('../artifacts/server').ArtifactServer
+}
+
+// ── Artifact Types ──
+export interface ArtifactEntry {
+  name: string
+  path: string
+  url: string
+  size: number
+  type: 'html' | 'svg'
+  createdAt: string
+  sessionId: string
+}
+
+export interface ArtifactManifest {
+  version: 1
+  artifacts: ArtifactEntry[]
+  port?: number
 }
 
 export interface ToolResult {

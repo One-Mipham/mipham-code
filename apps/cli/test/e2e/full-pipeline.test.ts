@@ -178,8 +178,8 @@ describeIf('E2E: Tool Usage', () => {
     const tools = createToolRegistry()
     const toolNames = Array.from(tools.keys())
 
-    // Verify all 16 tools are registered
-    expect(toolNames.length).toBe(16)
+    // Verify all 17 tools are registered
+    expect(toolNames.length).toBe(17)
     expect(toolNames).toContain('Read')
     expect(toolNames).toContain('Write')
     expect(toolNames).toContain('Edit')

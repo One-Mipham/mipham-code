@@ -361,8 +361,15 @@ export const PROTOCOL_LABELS: Record<string, string> = {
   custom: 'Custom Protocol',
 }
 
-export const TOOL_CATEGORIES = ['file', 'exec', 'agent', 'network', 'system'] as const
+export const TOOL_CATEGORIES = ['file', 'exec', 'agent', 'network', 'system', 'artifact'] as const
 export const CONFIG_FILE_NAME = 'config.yml'
 export const MIPHAM_DIR = '.mipham'
 export const USER_CONFIG_DIR = '.mipham'
 export const MEMORY_DIR = 'memory'
+
+// ── Artifact Constants ──
+export const ARTIFACTS_DIR = 'artifacts'
+export const ARTIFACT_PORT = 9876
+export const ARTIFACT_MAX_PORT_TRIES = 10
+export const ARTIFACT_MAX_SIZE = 5 * 1024 * 1024 // 5MB
+export const ARTIFACT_ALLOWED_EXTENSIONS = ['.html', '.svg']
