@@ -8,10 +8,7 @@ import type { QueryEngine } from '../core/engine'
 import type { MiphamConfig } from '../shared/index.ts'
 import type { SkillsLoader } from '../skills/loader'
 import { McpClient } from '../mcp/client'
-import {
-  NPM_INSTALL_COMMAND,
-  NPM_UPDATE_COMMAND,
-} from '@mipham/shared'
+import { NPM_INSTALL_COMMAND, NPM_UPDATE_COMMAND } from '@mipham/shared'
 
 export interface CommandContext {
   engine: QueryEngine
@@ -2168,7 +2165,9 @@ const artifactListCmd: CommandHandler = async (_ctx, _args) => {
   const entries = getSessionArtifacts(dir, 'session-1')
 
   if (entries.length === 0) {
-    return { content: 'No artifacts created yet. Ask the AI to generate one with the Artifact tool.' }
+    return {
+      content: 'No artifacts created yet. Ask the AI to generate one with the Artifact tool.',
+    }
   }
 
   const lines = ['── Artifacts ──', '']

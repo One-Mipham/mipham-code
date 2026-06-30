@@ -1,9 +1,4 @@
-import type {
-  ProviderConfig,
-  ModelInfo,
-  Message,
-  StreamChunk,
-} from '../shared/index.ts'
+import type { ProviderConfig, ModelInfo, Message, StreamChunk } from '../shared/index.ts'
 import type { ProviderInstance, ChatRequest } from './registry'
 import { fetchWithRetry } from './fetch-utils'
 
