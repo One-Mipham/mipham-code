@@ -4,6 +4,8 @@
  * Used by MCP transport/protocol/client tests.
  */
 
+export {} // ensure module scope (prevents global name collisions)
+
 const TOOLS = [
   {
     name: 'echo',

@@ -4,6 +4,8 @@
  * Used by `bun build --compile` to produce standalone executables.
  */
 
+export {} // ensure module scope (prevents global name collisions)
+
 async function main() {
   try {
     const { runApp } = await import('../src/index')

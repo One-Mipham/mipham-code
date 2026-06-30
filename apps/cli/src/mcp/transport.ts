@@ -6,6 +6,47 @@ type NotificationHandler = (notification: JsonRpcNotification) => void
 
 const REQUEST_TIMEOUT_MS = 30_000
 
+// ── Environment variable security: block sensitive vars from MCP subprocess ──
+//
+// By default, MCP servers receive a sanitised copy of the parent environment.
+// Sensitive values (API keys, tokens, secrets, cloud credentials) are stripped
+// to prevent data exfiltration by third-party MCP plugins.
+//
+// The `env` parameter on `start()` allows explicit overrides — use it to
+// intentionally pass specific values to a trusted MCP server.
+const SENSITIVE_ENV_PATTERNS = [
+  /_API_KEY$/i,           // ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.
+  /_SECRET$/i,            // STRIPE_SECRET, etc.
+  /_TOKEN$/i,             // GITHUB_TOKEN, NPM_TOKEN, etc.
+  /_PASSWORD$/i,          // DB_PASSWORD, etc.
+  /_CREDENTIALS?$/i,      // GOOGLE_APPLICATION_CREDENTIALS, etc.
+  /^AWS_/,                // AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, etc.
+  /^GCLOUD_/,             // GCP credentials
+  /^AZURE_/,              // Azure credentials
+  /^DOCKER_/,             // DOCKER_TOKEN, DOCKER_PASSWORD
+]
+
+/**
+ * Build a sanitised environment for MCP subprocesses.
+ * Strips sensitive vars; allows explicit overrides via `extra`.
+ */
+function buildProcEnv(extra?: Record<string, string>): Record<string, string> {
+  const sanitized: Record<string, string> = {}
+
+  for (const [key, value] of Object.entries(process.env as Record<string, string>)) {
+    if (value === undefined) continue
+    if (SENSITIVE_ENV_PATTERNS.some((p) => p.test(key))) continue
+    sanitized[key] = value
+  }
+
+  // Explicit overrides take precedence (for intentionally shared secrets)
+  if (extra) {
+    Object.assign(sanitized, extra)
+  }
+
+  return sanitized
+}
+
 /**
  * MCP stdio transport — spawns a subprocess and communicates via
  * newline-delimited JSON-RPC 2.0 messages on stdin/stdout.
@@ -30,10 +71,7 @@ export class StdioTransport {
   async start(command: string, args: string[], env?: Record<string, string>): Promise<void> {
     this.closed = false
 
-    const procEnv: Record<string, string> = {
-      ...(process.env as Record<string, string>),
-      ...env,
-    }
+    const procEnv = buildProcEnv(env)
 
     return new Promise((resolve, reject) => {
       const child = spawn(command, args, {
