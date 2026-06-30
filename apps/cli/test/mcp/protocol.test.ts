@@ -22,7 +22,7 @@ describe('McpProtocol', () => {
 
   describe('initialize', () => {
     it('completes the initialize handshake', async () => {
-      const result = await connect()
+      await connect()
       // connect() doesn't return the init result; let's check capabilities
       expect(protocol.hasTools()).toBe(true)
       expect(protocol.getCapabilities().tools).toBeDefined()

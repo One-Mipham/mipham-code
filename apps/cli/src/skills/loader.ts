@@ -1,5 +1,5 @@
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs'
-import { join, extname } from 'node:path'
+import { join } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 import type { SkillDefinition } from '../shared/index.ts'
 
@@ -84,7 +84,7 @@ export class SkillsLoader {
   private tryLoad(path: string, type: 'standard' | 'mipham'): void {
     try {
       const raw = readFileSync(path, 'utf-8')
-      const { data, content } = parseFrontmatter(raw)
+      const { data } = parseFrontmatter(raw)
 
       const skill: SkillDefinition = {
         name: (data.name as string) || this.nameFromPath(path),

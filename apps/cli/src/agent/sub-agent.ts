@@ -1,6 +1,5 @@
 import { ContextManager } from '../core/context'
 import type { ProviderRegistry } from '../providers/registry'
-import type { Message } from '../shared/types'
 
 export type SubAgentType = 'general' | 'explore' | 'plan' | 'code-review'
 

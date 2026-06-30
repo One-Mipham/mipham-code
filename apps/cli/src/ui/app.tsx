@@ -58,7 +58,7 @@ export function App({
   config,
   initialProvider,
   initialModel,
-  lang,
+  lang: _lang,
   skillsLoader,
 }: AppProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -78,7 +78,10 @@ export function App({
 
   // Agent elapsed timer
   React.useEffect(() => {
-    if (!agentProgress) { setAgentElapsed(0); return }
+    if (!agentProgress) {
+      setAgentElapsed(0)
+      return
+    }
     const interval = setInterval(() => {
       setAgentElapsed(Math.floor((Date.now() - agentProgress.startTime) / 1000))
     }, 1000)
@@ -216,8 +219,10 @@ export function App({
             if (isAgent) {
               setAgentProgress({
                 name: (chunk.toolUse.input.subagent_type as string) || 'General-purpose',
-                description: (chunk.toolUse.input.description as string) ||
-                  (chunk.toolUse.input.prompt as string) || '',
+                description:
+                  (chunk.toolUse.input.description as string) ||
+                  (chunk.toolUse.input.prompt as string) ||
+                  '',
                 startTime: Date.now(),
               })
             }
@@ -379,8 +384,7 @@ export function App({
       {agentProgress && (
         <Box flexDirection="column" marginY={1}>
           <Text color="cyan" bold>
-            ⏺ {agentProgress.name}{' '}
-            <Text color="yellow">{agentElapsed}s</Text>
+            ⏺ {agentProgress.name} <Text color="yellow">{agentElapsed}s</Text>
           </Text>
           <Text dimColor>
             {agentProgress.description.length > 100

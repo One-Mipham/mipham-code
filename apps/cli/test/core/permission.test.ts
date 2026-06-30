@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { ToolDefinition, PermissionLevel } from '@mipham/shared'
+import type { ToolDefinition } from '@mipham/shared'
 import { PermissionSystem } from '../../src/core/permission'
 
 // ── Helpers ──

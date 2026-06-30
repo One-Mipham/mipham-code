@@ -1,4 +1,4 @@
-import type { Message, StreamChunk, ToolDefinition, ToolResult } from '../shared/index.ts'
+import type { StreamChunk, ToolDefinition, ToolResult } from '../shared/index.ts'
 import { ProviderRegistry } from '../providers/registry'
 import { ContextManager } from './context'
 import { PermissionSystem } from './permission'
@@ -31,8 +31,7 @@ export class QueryEngine {
         .join('\n')
 
       // Build a minimal system prompt for summarization
-      const summaryPrompt =
-        `You are a conversation summarizer. Create a concise summary (1-3 paragraphs) of this conversation excerpt. Focus on: key topics discussed, decisions made, code changes mentioned, and open questions. Heading: ${heading}`
+      const summaryPrompt = `You are a conversation summarizer. Create a concise summary (1-3 paragraphs) of this conversation excerpt. Focus on: key topics discussed, decisions made, code changes mentioned, and open questions. Heading: ${heading}`
 
       // Collect full summary text from streaming response
       let summary = ''
@@ -81,39 +80,39 @@ export class QueryEngine {
 
     // Stream model response
     try {
-    for await (const chunk of this.registry.chat({
-      model: this.registry.getActiveModel(),
-      messages,
-      systemPrompt,
-      tools: toolDefs.length > 0 ? toolDefs : undefined,
-      signal,
-    })) {
-      yield chunk
+      for await (const chunk of this.registry.chat({
+        model: this.registry.getActiveModel(),
+        messages,
+        systemPrompt,
+        tools: toolDefs.length > 0 ? toolDefs : undefined,
+        signal,
+      })) {
+        yield chunk
 
-      if (chunk.type === 'error') {
-        this.context.addMessage({ role: 'assistant', content: `Error: ${chunk.error}` })
-        return
-      }
+        if (chunk.type === 'error') {
+          this.context.addMessage({ role: 'assistant', content: `Error: ${chunk.error}` })
+          return
+        }
 
-      if (chunk.type === 'text' && chunk.content) {
-        assistantContent += chunk.content
-      }
+        if (chunk.type === 'text' && chunk.content) {
+          assistantContent += chunk.content
+        }
 
-      if (chunk.type === 'tool_use' && chunk.toolUse) {
-        toolUses.push({
-          id: chunk.toolUse.id,
-          name: chunk.toolUse.name,
-          input: chunk.toolUse.input,
-        })
-      }
+        if (chunk.type === 'tool_use' && chunk.toolUse) {
+          toolUses.push({
+            id: chunk.toolUse.id,
+            name: chunk.toolUse.name,
+            input: chunk.toolUse.input,
+          })
+        }
 
-      if (chunk.type === 'stop') {
-        // Add assistant response to context
-        if (assistantContent) {
-          this.context.addMessage({ role: 'assistant', content: assistantContent })
+        if (chunk.type === 'stop') {
+          // Add assistant response to context
+          if (assistantContent) {
+            this.context.addMessage({ role: 'assistant', content: assistantContent })
+          }
         }
       }
-    }
     } catch (err) {
       if (isAbortError(err)) {
         // User interrupted — keep partial content, stop gracefully
@@ -133,7 +132,7 @@ export class QueryEngine {
       yield {
         type: 'tool_result',
         tool_use_id: toolUse.id,
-        content: result.success ? result.content : (result.error || result.content),
+        content: result.success ? result.content : result.error || result.content,
       }
 
       // Add tool use + result to context
@@ -165,26 +164,26 @@ export class QueryEngine {
       const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
 
       try {
-      for await (const chunk of this.registry.chat({
-        model: this.registry.getActiveModel(),
-        messages,
-        systemPrompt,
-        tools: toolDefs.length > 0 ? toolDefs : undefined,
-        signal,
-      })) {
-        yield chunk
+        for await (const chunk of this.registry.chat({
+          model: this.registry.getActiveModel(),
+          messages,
+          systemPrompt,
+          tools: toolDefs.length > 0 ? toolDefs : undefined,
+          signal,
+        })) {
+          yield chunk
 
-        if (chunk.type === 'error') return
-        if (chunk.type === 'text' && chunk.content) assistantContent += chunk.content
+          if (chunk.type === 'error') return
+          if (chunk.type === 'text' && chunk.content) assistantContent += chunk.content
 
-        if (chunk.type === 'tool_use' && chunk.toolUse) {
-          toolUses.push({
-            id: chunk.toolUse.id,
-            name: chunk.toolUse.name,
-            input: chunk.toolUse.input,
-          })
+          if (chunk.type === 'tool_use' && chunk.toolUse) {
+            toolUses.push({
+              id: chunk.toolUse.id,
+              name: chunk.toolUse.name,
+              input: chunk.toolUse.input,
+            })
+          }
         }
-      }
       } catch (err) {
         if (isAbortError(err)) {
           if (assistantContent) {
@@ -243,11 +242,7 @@ export class QueryEngine {
     // Run PreToolUse hooks
     let effectiveParams = params
     if (this.hookEngine) {
-      const preResult = await this.hookEngine.executePreToolUse(
-        name,
-        params,
-        'session-1',
-      )
+      const preResult = await this.hookEngine.executePreToolUse(name, params, 'session-1')
       if (!preResult.allowed) {
         return {
           success: false,
@@ -303,6 +298,11 @@ export class QueryEngine {
 
 function isAbortError(err: unknown): boolean {
   if (err instanceof Error && err.name === 'AbortError') return true
-  if (typeof DOMException !== 'undefined' && err instanceof DOMException && err.name === 'AbortError') return true
+  if (
+    typeof DOMException !== 'undefined' &&
+    err instanceof DOMException &&
+    err.name === 'AbortError'
+  )
+    return true
   return false
 }

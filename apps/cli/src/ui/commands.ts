@@ -9,12 +9,8 @@ import type { MiphamConfig } from '../shared/index.ts'
 import type { SkillsLoader } from '../skills/loader'
 import { McpClient } from '../mcp/client'
 import {
-  PACKAGE_NAME,
   NPM_INSTALL_COMMAND,
   NPM_UPDATE_COMMAND,
-  NPM_URL,
-  PRODUCT_URL_INTERNATIONAL,
-  PRODUCT_URL_CHINA,
 } from '@mipham/shared'
 
 export interface CommandContext {
@@ -421,7 +417,6 @@ const renameCmd: CommandHandler = (ctx, args) => {
 const goalCmd: CommandHandler = (ctx, args) => {
   const goal = args.join(' ')
   if (!goal.trim()) {
-    const c = ctx.engine.getContext()
     return {
       content: `Usage: /goal <statement>\n\nSet a session-level completion condition. Mipham Code will track progress toward this goal.\n\nExample: /goal Fix all TypeScript errors and make tests pass`,
     }
@@ -867,7 +862,7 @@ const doctorCmd: CommandHandler = async (ctx) => {
 // ═══════════════════════════════════════════════════════════════
 
 const exportCmd: CommandHandler = async (ctx) => {
-  const { writeFileSync, existsSync } = await import('node:fs')
+  const { writeFileSync } = await import('node:fs')
   const { join } = await import('node:path')
 
   const cwd = process.cwd()

@@ -2,6 +2,7 @@
   "name": "mipham-code-monorepo",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Mipham Code — Multi-model open-core intelligent coding terminal",
   "scripts": {
     "dev:cli": "pnpm --filter @miphamai/cli dev",

@@ -89,10 +89,9 @@ export async function runApp(options: RunOptions): Promise<void> {
   engine.setupContextSummarizer()
 
   // Auto-save session on exit
-  let autoSaveName: string | undefined
   const saveAndExit = () => {
     if (context.getMessageCount() > 0) {
-      autoSaveName = SessionStore.autoSave(context.getMessages(), {
+      SessionStore.autoSave(context.getMessages(), {
         provider: defaultProvider,
         model: defaultModel,
       })

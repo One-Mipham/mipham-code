@@ -48,6 +48,7 @@ Review your own code changes before committing or merging. Focus on quality impr
 ## Output
 
 After each pass, either:
+
 - Apply the improvement directly (for clear wins)
 - Note the observation with a recommendation (for trade-off decisions)
 

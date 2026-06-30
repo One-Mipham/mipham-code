@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { StreamChunk, ToolDefinition, ToolResult, Message } from '../../src/shared/index.ts'
+import { describe, it, expect } from 'vitest'
+import type { StreamChunk, ToolDefinition, ToolResult } from '../../src/shared/index.ts'
 import { QueryEngine } from '../../src/core/engine'
 import { ContextManager } from '../../src/core/context'
 import { PermissionSystem } from '../../src/core/permission'
@@ -16,11 +16,19 @@ function mockProviderRegistry(chatImpl?: () => AsyncGenerator<StreamChunk>) {
   )
 
   const mockProvider = {
-    config: { id: 'test', name: 'Test', protocol: 'openai-compatible' as const, apiKey: 'key', models: [] },
-    chat: chatImpl || (async function* () {
-      yield { type: 'text' as const, content: 'Hello!' }
-      yield { type: 'stop' as const }
-    }),
+    config: {
+      id: 'test',
+      name: 'Test',
+      protocol: 'openai-compatible' as const,
+      apiKey: 'key',
+      models: [],
+    },
+    chat:
+      chatImpl ||
+      async function* () {
+        yield { type: 'text' as const, content: 'Hello!' }
+        yield { type: 'stop' as const }
+      },
     listModels: async () => [],
     healthCheck: async () => true,
   }
@@ -32,7 +40,10 @@ function mockContext(): ContextManager {
   return new ContextManager({ maxTokens: 100_000, compactionThreshold: 0.9 })
 }
 
-function mockTool(name: string, impl?: (params: Record<string, unknown>) => Promise<ToolResult>): ToolDefinition {
+function mockTool(
+  name: string,
+  impl?: (params: Record<string, unknown>) => Promise<ToolResult>,
+): ToolDefinition {
   return {
     name,
     description: `Tool: ${name}`,
@@ -78,8 +89,16 @@ describe('QueryEngine', () => {
       const registry = mockProviderRegistry()
       // Register a second provider
       registry.register('other', {
-        config: { id: 'other', name: 'Other', protocol: 'openai-compatible', apiKey: 'k', models: [] },
-        chat: async function* () { yield { type: 'stop' as const } },
+        config: {
+          id: 'other',
+          name: 'Other',
+          protocol: 'openai-compatible',
+          apiKey: 'k',
+          models: [],
+        },
+        chat: async function* () {
+          yield { type: 'stop' as const }
+        },
         listModels: async () => [],
         healthCheck: async () => true,
       })
@@ -124,7 +143,9 @@ describe('QueryEngine', () => {
       const engine = new QueryEngine(registry, context, makeToolMap([]))
 
       // consume all chunks
-      for await (const _ of engine.process('user input')) { /* drain */ }
+      for await (const _ of engine.process('user input')) {
+        /* drain */
+      }
 
       const messages = context.getMessages()
       expect(messages).toHaveLength(2)
@@ -142,7 +163,9 @@ describe('QueryEngine', () => {
       const context = mockContext()
       const engine = new QueryEngine(registry, context, makeToolMap([]))
 
-      for await (const _ of engine.process('hi')) { /* drain */ }
+      for await (const _ of engine.process('hi')) {
+        /* drain */
+      }
 
       const msgs = context.getMessages()
       expect(msgs[1]?.content).toBe('Part 1 Part 2')
@@ -273,7 +296,9 @@ describe('QueryEngine', () => {
       const engine = new QueryEngine(registry, mockContext(), makeToolMap([tool]))
       engine.setHookEngine(hooks)
 
-      for await (const _ of engine.process('read')) { /* drain */ }
+      for await (const _ of engine.process('read')) {
+        /* drain */
+      }
 
       expect(hookCalled).toBe(true)
     })
@@ -330,7 +355,9 @@ describe('QueryEngine', () => {
       const engine = new QueryEngine(registry, mockContext(), makeToolMap([tool]))
       engine.setHookEngine(hooks)
 
-      for await (const _ of engine.process('read')) { /* drain */ }
+      for await (const _ of engine.process('read')) {
+        /* drain */
+      }
 
       expect(postCalled).toBe(true)
     })
@@ -365,7 +392,9 @@ describe('QueryEngine', () => {
       const engine = new QueryEngine(registry, mockContext(), makeToolMap([tool]))
       engine.setHookEngine(hooks)
 
-      for await (const _ of engine.process('write')) { /* drain */ }
+      for await (const _ of engine.process('write')) {
+        /* drain */
+      }
 
       expect(receivedParams).toMatchObject({ path: '/tmp/x', safe: true })
     })
@@ -387,7 +416,9 @@ describe('QueryEngine', () => {
 
       const engine = new QueryEngine(registry, context, makeToolMap([]))
 
-      for await (const _ of engine.process('hi')) { /* drain */ }
+      for await (const _ of engine.process('hi')) {
+        /* drain */
+      }
 
       // After compaction + new messages, should be ≤ 22 (20 kept + user + assistant)
       expect(context.getMessageCount()).toBeLessThanOrEqual(22)
@@ -408,7 +439,9 @@ describe('QueryEngine', () => {
       const ctx = mockContext()
       const engine = new QueryEngine(registry, ctx, makeToolMap([tool]))
 
-      for await (const _ of engine.process('read')) { /* drain */ }
+      for await (const _ of engine.process('read')) {
+        /* drain */
+      }
 
       const msgs = ctx.getMessages()
       // user + [assistant with tool_use] + [user with tool_result]

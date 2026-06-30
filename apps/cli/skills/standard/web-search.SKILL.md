@@ -44,6 +44,7 @@ Use `WebSearch` tool to find current, accurate information from the web.
 ### Domain Filtering
 
 Use `allowed_domains` for authoritative sources:
+
 - `docs.github.com` — GitHub documentation
 - `nextjs.org` — Next.js official docs
 - `developer.mozilla.org` — MDN Web Docs
@@ -59,8 +60,10 @@ Use `allowed_domains` for authoritative sources:
 ## Source Attribution
 
 After answering from search results, end with:
+
 ```markdown
 Sources:
+
 - [Title](URL) — brief note
 - [Title](URL) — brief note
 ```

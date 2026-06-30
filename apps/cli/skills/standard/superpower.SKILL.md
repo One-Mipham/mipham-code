@@ -37,13 +37,13 @@ Skills are listed in `<system-reminder>` messages. Scan this list when receiving
 
 These thoughts mean STOP — you're rationalizing:
 
-| Thought | Reality |
-|---------|---------|
-| "This is just a simple question" | Questions are tasks. Check skills. |
-| "I need more context first" | Skill check comes BEFORE clarifying questions. |
-| "Let me explore the codebase first" | Skills tell you HOW to explore. |
-| "I remember this skill" | Skills evolve. Read current version. |
-| "The skill is overkill" | Simple things become complex. Use it. |
+| Thought                             | Reality                                        |
+| ----------------------------------- | ---------------------------------------------- |
+| "This is just a simple question"    | Questions are tasks. Check skills.             |
+| "I need more context first"         | Skill check comes BEFORE clarifying questions. |
+| "Let me explore the codebase first" | Skills tell you HOW to explore.                |
+| "I remember this skill"             | Skills evolve. Read current version.           |
+| "The skill is overkill"             | Simple things become complex. Use it.          |
 
 ## Skill Types
 

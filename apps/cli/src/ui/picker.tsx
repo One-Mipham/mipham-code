@@ -1,6 +1,6 @@
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback } from 'react'
 import { Box, Text, useInput } from 'ink'
-import type { MiphamConfig, ProviderConfig, ModelInfo } from '../shared/index.ts'
+import type { MiphamConfig, ProviderConfig } from '../shared/index.ts'
 
 interface PickerProps {
   config: MiphamConfig
@@ -112,9 +112,6 @@ export function ModelPicker({
 
   // Provider labels
   const providerColor = (p: ProviderConfig) => (p.id === currentProvider ? 'green' : 'white')
-
-  const modelColor = (m: ModelInfo) =>
-    selectedProvider?.id === currentProvider && m.id === currentModel ? 'green' : 'white'
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor="cyan" padding={1}>

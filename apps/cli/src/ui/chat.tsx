@@ -39,8 +39,8 @@ export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
           </Box>
           <Box marginTop={1}>
             <Text dimColor>
-              Tip: Use <Text color="yellow">/clear</Text> to start fresh when switching topics
-              and free up context
+              Tip: Use <Text color="yellow">/clear</Text> to start fresh when switching topics and
+              free up context
             </Text>
           </Box>
         </Box>
@@ -50,8 +50,7 @@ export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
           {msg.toolMeta ? (
             <Box flexDirection="column">
               <Text color="yellow">
-                {msg.toolMeta.collapsed ? '⏺' : '⏺ ▼'}{' '}
-                {msg.toolMeta.name}
+                {msg.toolMeta.collapsed ? '⏺' : '⏺ ▼'} {msg.toolMeta.name}
               </Text>
               <Text dimColor>{msg.content}</Text>
             </Box>
@@ -61,7 +60,12 @@ export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
                 bold
                 color={msg.role === 'user' ? 'green' : msg.role === 'system' ? 'yellow' : 'blue'}
               >
-                {msg.role === 'user' ? '▸ You' : msg.role === 'assistant' ? 'Mipham Code' : '⚠ System'}:
+                {msg.role === 'user'
+                  ? '▸ You'
+                  : msg.role === 'assistant'
+                    ? 'Mipham Code'
+                    : '⚠ System'}
+                :
               </Text>
               <Text>{msg.content}</Text>
             </>

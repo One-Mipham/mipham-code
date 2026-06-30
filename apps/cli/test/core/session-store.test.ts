@@ -1,8 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { rmSync } from 'node:fs'
 import { SessionStore } from '../../src/core/session-store'
-
-const TEST_SESSIONS_DIR = `${process.env.HOME}/.mipham/sessions`
 
 describe('SessionStore', () => {
   beforeEach(() => {

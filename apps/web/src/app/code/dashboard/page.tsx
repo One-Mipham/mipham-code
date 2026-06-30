@@ -6,13 +6,11 @@ export default function DashboardPage() {
       <div className="max-w-lg mx-auto mb-12">
         <div className="p-8 bg-gradient-to-br from-mipham-50 to-white rounded-2xl border border-mipham-100">
           <div className="text-6xl mb-4">🚧</div>
-          <h2 className="text-2xl font-semibold text-mipham-800 mb-3">
-            Coming Soon
-          </h2>
+          <h2 className="text-2xl font-semibold text-mipham-800 mb-3">Coming Soon</h2>
           <p className="text-gray-600 leading-relaxed">
-            The Mipham Code dashboard will show your usage analytics —
-            session history, token consumption, most-used models and tools,
-            and skill activity. We&apos;re building this now.
+            The Mipham Code dashboard will show your usage analytics — session history, token
+            consumption, most-used models and tools, and skill activity. We&apos;re building this
+            now.
           </p>
         </div>
       </div>

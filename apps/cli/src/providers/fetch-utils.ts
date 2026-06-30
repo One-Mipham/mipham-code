@@ -39,9 +39,7 @@ export async function fetchWithRetry(
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeout)
-    const signal = init.signal
-      ? anySignal([init.signal, controller.signal])
-      : controller.signal
+    const signal = init.signal ? anySignal([init.signal, controller.signal]) : controller.signal
 
     try {
       const response = await fetch(url, { ...init, signal })

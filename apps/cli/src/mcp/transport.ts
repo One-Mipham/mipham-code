@@ -1,7 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import type { JsonRpcRequest, JsonRpcResponse, JsonRpcNotification } from './types'
 
-type ResponseHandler = (response: JsonRpcResponse) => void
 type NotificationHandler = (notification: JsonRpcNotification) => void
 
 const REQUEST_TIMEOUT_MS = 30_000
@@ -15,15 +14,15 @@ const REQUEST_TIMEOUT_MS = 30_000
 // The `env` parameter on `start()` allows explicit overrides — use it to
 // intentionally pass specific values to a trusted MCP server.
 const SENSITIVE_ENV_PATTERNS = [
-  /_API_KEY$/i,           // ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.
-  /_SECRET$/i,            // STRIPE_SECRET, etc.
-  /_TOKEN$/i,             // GITHUB_TOKEN, NPM_TOKEN, etc.
-  /_PASSWORD$/i,          // DB_PASSWORD, etc.
-  /_CREDENTIALS?$/i,      // GOOGLE_APPLICATION_CREDENTIALS, etc.
-  /^AWS_/,                // AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, etc.
-  /^GCLOUD_/,             // GCP credentials
-  /^AZURE_/,              // Azure credentials
-  /^DOCKER_/,             // DOCKER_TOKEN, DOCKER_PASSWORD
+  /_API_KEY$/i, // ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.
+  /_SECRET$/i, // STRIPE_SECRET, etc.
+  /_TOKEN$/i, // GITHUB_TOKEN, NPM_TOKEN, etc.
+  /_PASSWORD$/i, // DB_PASSWORD, etc.
+  /_CREDENTIALS?$/i, // GOOGLE_APPLICATION_CREDENTIALS, etc.
+  /^AWS_/, // AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, etc.
+  /^GCLOUD_/, // GCP credentials
+  /^AZURE_/, // Azure credentials
+  /^DOCKER_/, // DOCKER_TOKEN, DOCKER_PASSWORD
 ]
 
 /**

@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { ProviderConfig, StreamChunk } from '@mipham/shared'
 import { OpenAICompatProvider } from '../../src/providers/openai-compat'
-import type { ChatRequest } from '../../src/providers/registry'
 
 // ── Helpers ──
 

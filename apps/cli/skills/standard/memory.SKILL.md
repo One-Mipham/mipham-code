@@ -37,6 +37,7 @@ metadata:
 ### List Memories
 
 Scan `MEMORY.md` index for available memories. The index has one line per memory:
+
 ```markdown
 - [Title](file.md) — brief hook
 ```

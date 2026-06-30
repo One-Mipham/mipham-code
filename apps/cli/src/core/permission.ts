@@ -1,4 +1,9 @@
-import type { ToolDefinition, ToolPermission, PermissionLevel, PermissionRule } from '../shared/index.ts'
+import type {
+  ToolDefinition,
+  ToolPermission,
+  PermissionLevel,
+  PermissionRule,
+} from '../shared/index.ts'
 
 export class PermissionSystem {
   private rules = new Map<string, PermissionLevel>()
@@ -36,7 +41,7 @@ export class PermissionSystem {
    *
    * Fallback chain: exact rule → pattern rule → tool permission → system default
    */
-  check(tool: ToolDefinition, input: Record<string, unknown>): PermissionLevel {
+  check(tool: ToolDefinition, _input: Record<string, unknown>): PermissionLevel {
     // 1. Exact-name rule wins
     const ruleLevel = this.rules.get(tool.name)
     if (ruleLevel) return ruleLevel

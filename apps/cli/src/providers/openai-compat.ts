@@ -3,7 +3,6 @@ import type {
   ModelInfo,
   Message,
   StreamChunk,
-  ContentBlock,
 } from '../shared/index.ts'
 import type { ProviderInstance, ChatRequest } from './registry'
 import { fetchWithRetry } from './fetch-utils'
@@ -49,10 +48,7 @@ export class OpenAICompatProvider implements ProviderInstance {
     let buffer = ''
 
     // Track incremental tool calls across streaming deltas
-    const pendingToolCalls = new Map<
-      number,
-      { id: string; name: string; arguments: string }
-    >()
+    const pendingToolCalls = new Map<number, { id: string; name: string; arguments: string }>()
 
     while (true) {
       const { done, value } = await reader.read()

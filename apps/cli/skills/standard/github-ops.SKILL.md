@@ -19,6 +19,7 @@ Types: feat, fix, chore, docs, test, refactor, ci, perf, style, revert
 ```
 
 Co-author AI contributions:
+
 ```
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```
@@ -35,16 +36,20 @@ gh pr create --title "feat: add feature X" --body "## Summary\n\n..." --base mai
 
 ```markdown
 ## Summary
+
 Brief description of changes
 
 ## Type
-- [ ] feat  [ ] fix  [ ] chore  [ ] docs  [ ] refactor
+
+- [ ] feat [ ] fix [ ] chore [ ] docs [ ] refactor
 
 ## Testing
+
 - [ ] Unit tests pass
 - [ ] Manual verification performed
 
 ## Checklist
+
 - [ ] Conventional Commits
 - [ ] No unrelated changes
 ```
@@ -66,13 +71,13 @@ gh issue create --title "bug: description" --body "## Steps\n1.\n\n## Expected\n
 
 ### Label Taxonomy
 
-| Label | Usage |
-|-------|-------|
-| `bug` | Confirmed defect |
-| `enhancement` | Feature request |
-| `docs` | Documentation |
+| Label              | Usage             |
+| ------------------ | ----------------- |
+| `bug`              | Confirmed defect  |
+| `enhancement`      | Feature request   |
+| `docs`             | Documentation     |
 | `good first issue` | Beginner-friendly |
-| `help wanted` | Open to community |
+| `help wanted`      | Open to community |
 
 ## Releases
 

@@ -21,13 +21,14 @@ Extract from TypeScript types and JSDoc:
 5. Include usage examples from test files when available
 
 Template:
+
 ```markdown
 ## `functionName(params)`
 
 **Description** — extracted from JSDoc
 
 | Param | Type | Description |
-|-------|------|-------------|
+| ----- | ---- | ----------- |
 | x     | T    | ...         |
 
 **Returns**: `ReturnType` — description
@@ -45,6 +46,7 @@ Required sections: title + badge → one-liner → install → quick start → A
 ### Architecture Decision Records (ADR)
 
 Format:
+
 ```markdown
 # ADR-NNN: Title
 
@@ -52,13 +54,16 @@ Format:
 **Status**: proposed | accepted | deprecated | superseded
 
 ## Context
+
 ## Decision
+
 ## Consequences
 ```
 
 ### Changelog
 
 Generate from `git log` with Conventional Commits filtering:
+
 ```bash
 git log --pretty=format:'- %s (%h)' v0.1.0..HEAD
 ```

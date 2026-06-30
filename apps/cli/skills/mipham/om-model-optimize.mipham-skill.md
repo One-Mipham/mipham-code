@@ -22,6 +22,7 @@ When context approaches the model's window limit:
 ### Token Budgeting
 
 Track token usage per session:
+
 - Input tokens consumed per request
 - Output tokens generated per response
 - Cumulative session total
@@ -32,6 +33,7 @@ Track token usage per session:
 ### Anthropic Prompt Caching
 
 Mark reusable content blocks (system prompts, long tool results) with `cache_control`:
+
 - Minimum cacheable tokens: 1024 (Claude Sonnet), 2048 (Claude Haiku)
 - Cache TTL: ~5 minutes; refresh on each use
 - Priority targets: system prompt, large file contents, tool definitions
@@ -44,12 +46,12 @@ OpenAI automatically caches the longest prefix match; ensure consistent message 
 
 Route tasks to the appropriate model tier:
 
-| Task Complexity | Recommended Tier | Example Models |
-|----------------|-----------------|----------------|
-| Simple (1-2 steps) | Flash / Lite | Claude Haiku, GPT Flash, Qwen Flash |
-| Moderate (multi-step) | Plus / Pro | Claude Sonnet, GPT-4o, DeepSeek V3 |
-| Complex (reasoning) | Ultra / Max | Claude Opus, GPT-5, DeepSeek-R1 |
-| Vision tasks | Visual tier | Claude Sonnet (vision), GPT-4o (vision) |
+| Task Complexity       | Recommended Tier | Example Models                          |
+| --------------------- | ---------------- | --------------------------------------- |
+| Simple (1-2 steps)    | Flash / Lite     | Claude Haiku, GPT Flash, Qwen Flash     |
+| Moderate (multi-step) | Plus / Pro       | Claude Sonnet, GPT-4o, DeepSeek V3      |
+| Complex (reasoning)   | Ultra / Max      | Claude Opus, GPT-5, DeepSeek-R1         |
+| Vision tasks          | Visual tier      | Claude Sonnet (vision), GPT-4o (vision) |
 
 ### Decision Factors
 
@@ -61,6 +63,7 @@ Route tasks to the appropriate model tier:
 ## Usage
 
 Automatically invoked when:
+
 - Token usage exceeds 80% of context window
 - User explicitly requests optimization (`/optimize` or "optimize model usage")
 - Switching between models of different capability tiers
