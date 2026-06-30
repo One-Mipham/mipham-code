@@ -79,7 +79,9 @@ export const artifactTool: ToolDefinition = {
     const isUpdate = existsSync(filepath)
     if (isUpdate) {
       const manifest = readManifest(baseDir)
-      const existing = manifest.artifacts.find((a) => a.name === name && a.sessionId === ctx.sessionId)
+      const existing = manifest.artifacts.find(
+        (a) => a.name === name && a.sessionId === ctx.sessionId,
+      )
       if (existing) {
         archivedVersion = archiveVersion(baseDir, existing)
       }
@@ -134,7 +136,9 @@ export const artifactTool: ToolDefinition = {
         '',
         `Open in browser: /artifact open ${name}`,
         `List all:         /artifact list`,
-      ].filter(Boolean).join('\n'),
+      ]
+        .filter(Boolean)
+        .join('\n'),
     }
   },
 }

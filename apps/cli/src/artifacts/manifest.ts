@@ -1,4 +1,12 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, copyFileSync, unlinkSync } from 'node:fs'
+import {
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  mkdirSync,
+  renameSync,
+  copyFileSync,
+  unlinkSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import type { ArtifactManifest, ArtifactEntry } from '../shared/types'
 

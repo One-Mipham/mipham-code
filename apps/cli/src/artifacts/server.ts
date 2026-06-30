@@ -59,15 +59,17 @@ export class ArtifactServer {
       }
     }
 
-    throw new Error(
-      `Artifact server could not find an available port after ${maxTries} attempts.`,
-    )
+    throw new Error(`Artifact server could not find an available port after ${maxTries} attempts.`)
   }
 
   stop(): void {
     // Close all SSE connections
     for (const client of this.sseClients) {
-      try { client.res.end() } catch { /* ignore */ }
+      try {
+        client.res.end()
+      } catch {
+        /* ignore */
+      }
     }
     this.sseClients = []
 
@@ -78,8 +80,12 @@ export class ArtifactServer {
     }
   }
 
-  getPort(): number { return this.port }
-  isRunning(): boolean { return this.started }
+  getPort(): number {
+    return this.port
+  }
+  isRunning(): boolean {
+    return this.started
+  }
 
   resolveFile(urlPath: string): { filePath: string; error?: string; status?: number } {
     const cleaned = urlPath.replace(/^\/+/, '')
@@ -165,13 +171,14 @@ export class ArtifactServer {
     const manifest = readManifest(this.artifactsDir)
     const artifacts = manifest.artifacts
 
-    const cards = artifacts.length === 0
-      ? `<div style="grid-column: 1/-1; text-align: center; padding: 60px 20px; color: #666;">
+    const cards =
+      artifacts.length === 0
+        ? `<div style="grid-column: 1/-1; text-align: center; padding: 60px 20px; color: #666;">
            <p style="font-size: 48px; margin: 0 0 16px 0;">🎨</p>
            <p style="font-size: 16px;">No artifacts yet.</p>
            <p style="font-size: 13px; color: #555;">Ask the AI to create one with the Artifact tool.</p>
          </div>`
-      : artifacts.map((a) => this.artifactCard(a)).join('\n')
+        : artifacts.map((a) => this.artifactCard(a)).join('\n')
 
     const html = `<!DOCTYPE html>
 <html lang="en">
@@ -263,13 +270,17 @@ export class ArtifactServer {
 
   private artifactCard(a: ArtifactEntry): string {
     const icon = a.type === 'svg' ? '🖼' : '📊'
-    const sizeStr = a.size < 1024 ? `${a.size}B`
-      : a.size < 1_048_576 ? `${(a.size / 1024).toFixed(1)}KB`
-      : `${(a.size / 1_048_576).toFixed(1)}MB`
+    const sizeStr =
+      a.size < 1024
+        ? `${a.size}B`
+        : a.size < 1_048_576
+          ? `${(a.size / 1024).toFixed(1)}KB`
+          : `${(a.size / 1_048_576).toFixed(1)}MB`
     const date = a.createdAt.slice(0, 16).replace('T', ' ')
-    const versionInfo = a.versions && a.versions.length > 1
-      ? `<span class="badge badge-version">${a.versions.length} versions</span>`
-      : ''
+    const versionInfo =
+      a.versions && a.versions.length > 1
+        ? `<span class="badge badge-version">${a.versions.length} versions</span>`
+        : ''
 
     return `<a class="card" href="/${a.sessionId}/${a.name}.${a.type === 'svg' ? 'svg' : 'html'}">
   <div class="icon">${icon}</div>
