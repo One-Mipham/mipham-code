@@ -56,17 +56,20 @@ export function createSandbox(
     },
   })
 
-  // Block crypto.randomUUID (if available)
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    sandbox.crypto = new Proxy(crypto, {
+  // Block crypto.randomUUID
+  const globalCrypto = (globalThis as Record<string, unknown>).crypto as
+    | { randomUUID?: unknown; [key: string]: unknown }
+    | undefined
+  if (globalCrypto) {
+    sandbox.crypto = new Proxy(globalCrypto, {
       get(_target, prop) {
         if (prop === 'randomUUID') {
-          throw new Error(
-            'crypto.randomUUID() is disabled in workflow sandbox.',
-          )
+          throw new Error('crypto.randomUUID() is disabled in workflow sandbox.')
         }
-        const val = (crypto as unknown as Record<string, unknown>)[prop as string]
-        return typeof val === 'function' ? (val as Function).bind(crypto) : val
+        const val = (globalCrypto as Record<string, unknown>)[prop as string]
+        return typeof val === 'function'
+          ? (val as Function).bind(globalCrypto)
+          : val
       },
     })
   }
