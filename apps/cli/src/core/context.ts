@@ -102,6 +102,21 @@ export class ContextManager {
     return this.messages.length
   }
 
+  /**
+   * Replace all messages atomically (used by compaction layers).
+   * Preserves system prompt. Does NOT trigger compaction checks.
+   */
+  replaceMessages(messages: Message[]): void {
+    this.messages = messages
+    // Re-estimate tokens
+    this.estimatedTokens = this.estimateTokens(this.systemPrompt)
+    for (const msg of messages) {
+      this.estimatedTokens += this.estimateTokens(
+        typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+      )
+    }
+  }
+
   // ── Checkpoint / Rewind ──
 
   saveCheckpoint(label = 'auto'): number {
