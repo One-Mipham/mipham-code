@@ -1,8 +1,9 @@
-import React, { useState, useCallback, useRef } from 'react'
+import React, { useState, useCallback, useRef, useMemo } from 'react'
 import { Box, Text, useInput } from 'ink'
 import type { QueryEngine } from '../core/engine'
 import type { MiphamConfig } from '../shared/index.ts'
 import type { SkillsLoader } from '../skills/loader'
+import { AgentRegistry } from '../agent/agent-registry'
 import { ChatPanel } from './chat'
 import { InputBar } from './input'
 import { ModelPicker } from './picker'
@@ -87,6 +88,14 @@ export function App({
     }, 1000)
     return () => clearInterval(interval)
   }, [agentProgress])
+
+  // Initialize agent registry (one-time, on mount)
+  useMemo(() => {
+    const agentRegistry = new AgentRegistry()
+    agentRegistry.loadUserAgents()
+    agentRegistry.loadProjectAgents(process.cwd())
+    engine.setAgentRegistry(agentRegistry)
+  }, [])
 
   const mkCtx = useCallback(
     (): CommandContext => ({

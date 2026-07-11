@@ -45,9 +45,12 @@ export const agentTool: ToolDefinition = {
       }
     }
 
+    // Resolve agent definition from registry (custom > builtin)
+    const agentDef = ctx.agentRegistry?.resolve(agentType)
+
     try {
       const sub = new SubAgent(registry, toolRegistry)
-      const result = await sub.execute(prompt, description, { type: agentType })
+      const result = await sub.execute(prompt, description, { type: agentType, agentDef })
       return { success: true, content: result }
     } catch (err) {
       return { success: false, content: '', error: String(err) }

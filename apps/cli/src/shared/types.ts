@@ -61,6 +61,7 @@ export interface ToolContext {
   registry?: import('../providers/registry').ProviderRegistry
   toolRegistry?: Map<string, ToolDefinition>
   artifactServer?: import('../artifacts/server').ArtifactServer
+  agentRegistry?: import('../agent/agent-registry').AgentRegistry
 }
 
 // ── Artifact Types ──

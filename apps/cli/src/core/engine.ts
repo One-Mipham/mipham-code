@@ -4,10 +4,12 @@ import { ContextManager } from './context'
 import { PermissionSystem } from './permission'
 import type { HookEngine } from './hooks'
 import type { ArtifactServer } from '../artifacts/server'
+import type { AgentRegistry } from '../agent/agent-registry'
 
 export class QueryEngine {
   private hookEngine?: HookEngine
   private artifactServer?: ArtifactServer
+  private agentRegistry?: AgentRegistry
 
   constructor(
     private registry: ProviderRegistry,
@@ -24,6 +26,16 @@ export class QueryEngine {
   /** Register the artifact server for tool context. */
   setArtifactServer(server: ArtifactServer): void {
     this.artifactServer = server
+  }
+
+  /** Register the agent registry for custom agent definitions. */
+  setAgentRegistry(reg: AgentRegistry): void {
+    this.agentRegistry = reg
+  }
+
+  /** Get the registered agent registry (may be undefined if not wired). */
+  getAgentRegistry(): AgentRegistry | undefined {
+    return this.agentRegistry
   }
 
   /** Wire LLM-based conversation summarization into the context manager. */
@@ -271,6 +283,7 @@ export class QueryEngine {
         registry: this.registry,
         toolRegistry: this.tools,
         artifactServer: this.artifactServer,
+        agentRegistry: this.agentRegistry,
       })
 
       // Run PostToolUse hooks
