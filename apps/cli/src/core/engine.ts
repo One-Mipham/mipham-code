@@ -7,11 +7,13 @@ import type { ArtifactServer } from '../artifacts/server'
 import type { AgentRegistry } from '../agent/agent-registry'
 import { analyzeForMemory } from './memory/memory-writer'
 import { getMemoryManager } from './memory/memory-loader'
+import type { AgentViewManager } from '../agent-view/agent-view-manager'
 
 export class QueryEngine {
   private hookEngine?: HookEngine
   private artifactServer?: ArtifactServer
   private agentRegistry?: AgentRegistry
+  private agentViewManager?: AgentViewManager
 
   constructor(
     private registry: ProviderRegistry,
@@ -38,6 +40,16 @@ export class QueryEngine {
   /** Get the registered agent registry (may be undefined if not wired). */
   getAgentRegistry(): AgentRegistry | undefined {
     return this.agentRegistry
+  }
+
+  /** Register the AgentViewManager for background agent session management. */
+  setAgentViewManager(mgr: AgentViewManager): void {
+    this.agentViewManager = mgr
+  }
+
+  /** Get the AgentViewManager (may be undefined if not wired). */
+  getAgentViewManager(): AgentViewManager | undefined {
+    return this.agentViewManager
   }
 
   /** Wire LLM-based conversation summarization into the context manager. */
@@ -344,6 +356,10 @@ export class QueryEngine {
 
   getContext(): ContextManager {
     return this.context
+  }
+
+  getRegistry(): ProviderRegistry {
+    return this.registry
   }
 
   getTools(): Map<string, ToolDefinition> {
