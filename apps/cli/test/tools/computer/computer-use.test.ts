@@ -96,8 +96,9 @@ describe('ComputerUse tool execution', () => {
 
     it('returns success with screenshot data', async () => {
       // Make execSync write a minimal PNG to the temp file path
+      // Works cross-platform: macOS screencapture, Linux import, Windows powershell
       mockExecSync.mockImplementation((cmd: string) => {
-        const match = cmd.toString().match(/screencapture -x (.+)/)
+        const match = cmd.toString().match(/(?:screencapture -x|import -window root)\s+(\S+)/)
         if (match) {
           writeFileSync(match[1]!, Buffer.from(MINIMAL_PNG_BASE64, 'base64'))
         }
