@@ -210,7 +210,29 @@ export interface InstructionFile {
 }
 
 // ── Permission Types ──
-export type PermissionLevel = 'auto' | 'ask' | 'bypass'
+/** Six explicit permission modes matching Claude Code's permission architecture */
+export type PermissionMode =
+  | 'default'
+  | 'acceptEdits'
+  | 'plan'
+  | 'auto'
+  | 'dontAsk'
+  | 'bypassPermissions'
+
+/** Backward-compatible alias: PermissionMode plus legacy 'ask' and 'bypass' */
+export type PermissionLevel = PermissionMode | 'ask' | 'bypass'
+
+export interface PermissionConfig {
+  mode: PermissionMode
+  allow: string[]
+  deny: string[]
+}
+
+export interface PermissionRuleEntry {
+  pattern: string     // e.g., "Bash(git:*)"
+  level: 'allow' | 'deny' | 'ask'
+  compiled: RegExp
+}
 
 export interface PermissionRule {
   toolName: string

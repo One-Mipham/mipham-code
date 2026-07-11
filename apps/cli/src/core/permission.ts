@@ -1,6 +1,5 @@
 import type {
   ToolDefinition,
-  ToolPermission,
   PermissionLevel,
   PermissionRule,
 } from '../shared/index.ts'
@@ -9,7 +8,7 @@ export class PermissionSystem {
   private rules = new Map<string, PermissionLevel>()
   private patternRules: Array<{ pattern: RegExp; level: PermissionLevel }> = []
 
-  constructor(private defaultLevel: ToolPermission = 'auto') {}
+  constructor(private defaultLevel: PermissionLevel = 'auto') {}
 
   setDefaultLevel(level: PermissionLevel): void {
     this.defaultLevel = level
