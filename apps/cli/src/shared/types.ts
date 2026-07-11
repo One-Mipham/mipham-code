@@ -59,6 +59,7 @@ export interface ToolContext {
   model: string
   skillsLoader?: import('../skills/loader').SkillsLoader
   registry?: import('../providers/registry').ProviderRegistry
+  toolRegistry?: Map<string, ToolDefinition>
   artifactServer?: import('../artifacts/server').ArtifactServer
 }
 

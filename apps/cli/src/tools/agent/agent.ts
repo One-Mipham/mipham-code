@@ -1,5 +1,6 @@
 import type { ToolDefinition } from '../../shared/index.ts'
-import { SubAgent, type SubAgentType } from '../../agent/sub-agent'
+import { SubAgent } from '../../agent/sub-agent'
+import type { SubAgentType } from '../../agent/types'
 
 const VALID_TYPES: SubAgentType[] = ['general', 'explore', 'plan', 'code-review']
 
@@ -35,17 +36,21 @@ export const agentTool: ToolDefinition = {
     }
 
     const registry = ctx.registry
-    if (!registry) {
-      // No registry in context — return structured simulation
-      const sub = new SubAgent(
-        null as unknown as import('../../providers/registry').ProviderRegistry,
-      )
-      const result = await sub.execute(prompt, description, { type: agentType })
-      return { success: true, content: result }
+    const toolRegistry = ctx.toolRegistry
+    if (!registry || !toolRegistry) {
+      return {
+        success: false,
+        content: '',
+        error: 'Sub-agent execution requires an active provider and tool registry. Connect a provider API key first.',
+      }
     }
 
-    const sub = new SubAgent(registry)
-    const result = await sub.execute(prompt, description, { type: agentType })
-    return { success: true, content: result }
+    try {
+      const sub = new SubAgent(registry, toolRegistry)
+      const result = await sub.execute(prompt, description, { type: agentType })
+      return { success: true, content: result }
+    } catch (err) {
+      return { success: false, content: '', error: String(err) }
+    }
   },
 }

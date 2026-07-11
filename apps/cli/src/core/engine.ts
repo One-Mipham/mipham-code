@@ -268,6 +268,8 @@ export class QueryEngine {
         sessionId: 'session-1',
         provider: this.registry.getActive().config.id,
         model: this.registry.getActiveModel(),
+        registry: this.registry,
+        toolRegistry: this.tools,
         artifactServer: this.artifactServer,
       })
 

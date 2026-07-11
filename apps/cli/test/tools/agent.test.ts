@@ -40,24 +40,22 @@ describe('Agent tool definition', () => {
 })
 
 describe('Agent tool execution', () => {
-  it('dispatches agent with description and prompt', async () => {
+  it('returns error when no provider registry is available', async () => {
     const result = await agentTool.execute(
       { description: 'Review code', prompt: 'Find bugs in src/' },
       ctx,
     )
-    expect(result.success).toBe(true)
-    expect(result.content).toContain('Review code')
-    expect(result.content).toContain('Find bugs in src/')
-    expect(result.content).toContain('Sub-Agent')
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('provider')
   })
 
-  it('returns structured result for explore type', async () => {
+  it('returns error for explore type without provider', async () => {
     const result = await agentTool.execute(
       { description: 'Test', prompt: 'Search for patterns', subagent_type: 'explore' },
       ctx,
     )
-    expect(result.content).toContain('explore')
-    expect(result.success).toBe(true)
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('provider')
   })
 
   it('rejects invalid subagent_type', async () => {

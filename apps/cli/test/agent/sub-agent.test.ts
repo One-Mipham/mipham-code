@@ -1,61 +1,155 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { SubAgent } from '../../src/agent/sub-agent'
+import type { ProviderRegistry, ProviderInstance, ChatRequest } from '../../src/providers/registry'
+import type { ToolDefinition, StreamChunk } from '../../src/shared/index.ts'
+
+function createMockProvider(chunks: StreamChunk[]): ProviderInstance {
+  return {
+    config: { id: 'mock', name: 'Mock', protocol: 'openai-compatible', apiKey: '', models: [] },
+    async *chat(_req: ChatRequest): AsyncGenerator<StreamChunk> {
+      for (const chunk of chunks) {
+        yield chunk
+      }
+    },
+    async listModels() { return [] },
+    async healthCheck() { return true },
+  }
+}
+
+function createMockRegistry(provider: ProviderInstance): ProviderRegistry {
+  const registry = {
+    getActive: () => provider,
+    getActiveModel: () => 'mock-model',
+  } as unknown as ProviderRegistry
+  return registry
+}
+
+const TOOLS = new Map<string, ToolDefinition>()
 
 describe('SubAgent', () => {
-  // SubAgent without a provider registry runs in simulation mode
-  const sub = new SubAgent(
-    null as unknown as import('../../src/providers/registry').ProviderRegistry,
-  )
+  it('returns AI-generated text for general type', async () => {
+    const provider = createMockProvider([
+      { type: 'text', content: 'Task analysis complete.' },
+      { type: 'stop' },
+    ])
+    const registry = createMockRegistry(provider)
 
-  describe('execute (simulation mode)', () => {
-    it('returns result for general type', async () => {
-      const result = await sub.execute('Test task', 'Do something', { type: 'general' })
-      expect(result).toContain('Sub-Agent Result')
-      expect(result).toContain('Do something')
-      expect(result).toContain('Test task')
-    })
+    const sub = new SubAgent(registry, TOOLS)
+    const result = await sub.execute('analyze this', 'analysis task', { type: 'general' })
 
-    it('returns explore-specific response', async () => {
-      const result = await sub.execute('Find patterns', 'Search codebase', { type: 'explore' })
-      expect(result).toContain('exploration')
-      expect(result).toContain('Search codebase')
-    })
-
-    it('returns plan-specific response', async () => {
-      const result = await sub.execute('Plan auth system', 'Design auth flow', { type: 'plan' })
-      expect(result).toContain('plan')
-      expect(result).toContain('/plan mode')
-    })
-
-    it('returns code-review-specific response', async () => {
-      const result = await sub.execute('Review app.ts', 'Check for bugs', { type: 'code-review' })
-      expect(result).toContain('code review')
-      expect(result).toContain('/review')
-    })
-
-    it('defaults to general when no type specified', async () => {
-      const result = await sub.execute('Something', 'A task')
-      expect(result).toContain('Sub-Agent Result')
-      expect(result).toContain('(general)')
-    })
-
-    it('truncates long prompts in output', async () => {
-      const longPrompt = 'x'.repeat(300)
-      const result = await sub.execute(longPrompt, 'Long task')
-      expect(result).toContain('...')
-      expect(result.length).toBeLessThan(longPrompt.length + 500)
-    })
+    expect(result).toContain('Task analysis complete.')
   })
 
-  describe('type system prompts', () => {
-    it('general prompt includes "focused sub-agent"', async () => {
-      const result = await sub.execute('x', 'y', { type: 'general' })
-      expect(result).toBeTruthy()
-    })
+  it('throws when no active provider is available', async () => {
+    const registry = {
+      getActive: () => undefined,
+      getActiveModel: () => '',
+    } as unknown as ProviderRegistry
 
-    it('explore prompt includes "structured findings"', async () => {
-      const result = await sub.execute('x', 'y', { type: 'explore' })
-      expect(result).toBeTruthy()
-    })
+    const sub = new SubAgent(registry, TOOLS)
+    await expect(
+      sub.execute('test', 'test task', { type: 'general' })
+    ).rejects.toThrow('No active provider')
+  })
+
+  it('throws on API error chunk', async () => {
+    const provider = createMockProvider([
+      { type: 'error', error: 'API rate limit exceeded' },
+    ])
+    const registry = createMockRegistry(provider)
+
+    const sub = new SubAgent(registry, TOOLS)
+    await expect(
+      sub.execute('test', 'test task', { type: 'general' })
+    ).rejects.toThrow('API rate limit exceeded')
+  })
+
+  it('uses agent definition system prompt when provided', async () => {
+    let receivedSystemPrompt = ''
+    const provider = createMockProvider([
+      { type: 'text', content: 'ok' },
+      { type: 'stop' },
+    ])
+    // Spy on chat to capture system prompt
+    const originalChat = provider.chat
+    provider.chat = async function*(req) {
+      receivedSystemPrompt = req.systemPrompt || ''
+      yield* originalChat.call(provider, req)
+    }
+
+    const registry = createMockRegistry(provider)
+    const agentDef = {
+      name: 'custom',
+      description: 'custom agent',
+      systemPrompt: 'You are a custom agent. Be concise.',
+      model: 'inherit',
+      permissionMode: 'inherit',
+      background: false,
+      source: 'project' as const,
+    }
+
+    const sub = new SubAgent(registry, TOOLS)
+    await sub.execute('test', 'test task', { agentDef })
+
+    expect(receivedSystemPrompt).toBe('You are a custom agent. Be concise.')
+  })
+
+  it('scopes tools based on agent definition allowlist', async () => {
+    let receivedTools: Record<string, unknown>[] | undefined
+    const provider = createMockProvider([
+      { type: 'text', content: 'ok' },
+      { type: 'stop' },
+    ])
+    const originalChat = provider.chat
+    provider.chat = async function*(req) {
+      receivedTools = req.tools
+      yield* originalChat.call(provider, req)
+    }
+
+    const registry = createMockRegistry(provider)
+
+    const readTool: ToolDefinition = {
+      name: 'Read', description: 'read', category: 'file', permission: 'auto',
+      parameters: {}, execute: async () => ({ success: true, content: '' }),
+    }
+    const writeTool: ToolDefinition = {
+      name: 'Write', description: 'write', category: 'file', permission: 'ask',
+      parameters: {}, execute: async () => ({ success: true, content: '' }),
+    }
+    const tools = new Map([['Read', readTool], ['Write', writeTool]])
+
+    const agentDef = {
+      name: 'reader',
+      description: 'read only',
+      systemPrompt: 'Read only.',
+      tools: 'Read',
+      model: 'inherit',
+      permissionMode: 'inherit',
+      background: false,
+      source: 'project' as const,
+    }
+
+    const sub = new SubAgent(registry, tools)
+    await sub.execute('test', 'test task', { agentDef })
+
+    expect(receivedTools).toBeDefined()
+    expect(receivedTools!).toHaveLength(1)
+    expect(receivedTools![0]!.name).toBe('Read')
+  })
+
+  it('does not return simulate-style template text', async () => {
+    const provider = createMockProvider([
+      { type: 'text', content: 'Real AI response.' },
+      { type: 'stop' },
+    ])
+    const registry = createMockRegistry(provider)
+
+    const sub = new SubAgent(registry, TOOLS)
+    const result = await sub.execute('test', 'test task', { type: 'explore' })
+
+    // Must NOT contain simulation template markers
+    expect(result).not.toContain('Sub-Agent Result')
+    expect(result).not.toContain('simulation mode')
+    expect(result).not.toContain('would search the codebase')
   })
 })
