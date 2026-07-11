@@ -3,6 +3,7 @@ import { createReadStream, existsSync, statSync } from 'node:fs'
 import { join, normalize, extname } from 'node:path'
 import { ARTIFACT_ALLOWED_EXTENSIONS } from '../shared/constants'
 import { readManifest } from './manifest'
+import { ArtifactVersioning } from './versioning'
 import type { ArtifactEntry } from '../shared/types'
 
 // ── SSE client tracking ──
@@ -27,10 +28,12 @@ export class ArtifactServer {
   private started = false
   private sseClients: SseClient[] = []
   private sseIdCounter = 0
+  private versioning: ArtifactVersioning
 
   constructor(artifactsDir: string, preferredPort: number) {
     this.artifactsDir = artifactsDir
     this.port = preferredPort
+    this.versioning = new ArtifactVersioning(artifactsDir)
   }
 
   /** Notify all connected SSE clients to reload. Called after artifact changes. */
@@ -133,6 +136,15 @@ export class ArtifactServer {
       return
     }
 
+    // Name-based SSE endpoint: GET /:name/sse
+    if (urlPath.endsWith('/sse') && urlPath.length > 4) {
+      const name = urlPath.slice(1, -4) // strip leading '/' and trailing '/sse'
+      if (name.length > 0 && !name.includes('/')) {
+        this.handleNameSse(name, res)
+        return
+      }
+    }
+
     // Gallery page
     if (urlPath === '/' || urlPath === '/index.html') {
       this.serveGallery(res)
@@ -163,6 +175,25 @@ export class ArtifactServer {
     res.on('close', () => {
       this.sseClients = this.sseClients.filter((c) => c.id !== client.id)
     })
+  }
+
+  /** Per-artifact SSE stream: pushes content updates to connected browsers every 500ms. */
+  private handleNameSse(name: string, res: any): void {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+    })
+
+    const interval = setInterval(() => {
+      const content = this.versioning.getVersion(name)
+      if (content) {
+        res.write(`data: ${JSON.stringify({ type: 'update', name, content })}\n\n`)
+      }
+    }, 500)
+
+    res.on('close', () => clearInterval(interval))
   }
 
   // ── Gallery Page ──
