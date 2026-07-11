@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Box, Text } from 'ink'
+import { Box, Text, useInput } from 'ink'
 import TextInput from 'ink-text-input'
+import { VimMotionEngine, type VimMode } from './vim-motions.js'
 
 interface InputBarProps {
   onSubmit: (input: string) => void
@@ -137,6 +138,49 @@ export function InputBar({ onSubmit, isLoading }: InputBarProps) {
     prevLoading.current = isLoading
   }, [isLoading])
 
+  const [vimMode, setVimMode] = useState<VimMode>('insert')
+  const vimEngine = useRef(new VimMotionEngine())
+  const vimPending = useRef<string | null>(null)
+
+  // ── Vim motions: intercept keys in normal mode ──
+
+  useInput((input, key) => {
+    // Escape toggles between insert and normal mode
+    if (key.escape) {
+      setVimMode((prev) => (prev === 'insert' ? 'normal' : 'insert'))
+      vimEngine.current.mode = vimEngine.current.mode === 'insert' ? 'normal' : 'insert'
+      return
+    }
+
+    if (vimEngine.current.mode !== 'normal') return
+
+    // Handle pending two-key sequences (dd, yy)
+    if (vimPending.current === 'd' && input === 'd') {
+      const action = vimEngine.current.handleDD(value)
+      setValue(action.text ?? value)
+      vimPending.current = null
+      return
+    }
+    if (vimPending.current === 'y' && input === 'y') {
+      vimEngine.current.handleYY(value)
+      vimPending.current = null
+      return
+    }
+
+    // Handle single-key motions
+    const action = vimEngine.current.handleNormal(input, value, value.length)
+    if (!action) return
+
+    if (action.pending) {
+      vimPending.current = action.pending
+      return
+    }
+
+    if (action.text !== undefined) {
+      setValue(action.text)
+    }
+  })
+
   const handleSubmit = (val: string) => {
     if (!val.trim() || isLoading) return
     onSubmit(val)
@@ -146,18 +190,22 @@ export function InputBar({ onSubmit, isLoading }: InputBarProps) {
   return (
     <Box marginTop={1}>
       <Box marginRight={1}>
-        <Text color={isLoading ? 'yellow' : 'cyan'}>{'>'}</Text>
+        <Text color={vimMode === 'normal' ? 'magenta' : isLoading ? 'yellow' : 'cyan'}>
+          {vimMode === 'normal' ? ':' : '>'}
+        </Text>
       </Box>
       <TextInput
         value={value}
         onChange={setValue}
         onSubmit={handleSubmit}
         placeholder={
-          isLoading
-            ? `${verb}...`
-            : completionVerb
-              ? completionVerb
-              : 'Type a message (Esc to cancel)...'
+          vimMode === 'normal'
+            ? '[NORMAL] h/j/k/l w/b 0/$ dd yy p u /search (Esc to insert)'
+            : isLoading
+              ? `${verb}...`
+              : completionVerb
+                ? completionVerb
+                : 'Type a message (Esc to cancel)...'
         }
       />
     </Box>
