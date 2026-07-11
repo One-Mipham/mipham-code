@@ -95,8 +95,101 @@ async function runWorkflowCLI(): Promise<boolean> {
   return true
 }
 
+async function runPluginCLI(): Promise<boolean> {
+  const args = process.argv.slice(2)
+  if (args[0] !== 'plugin') return false
+
+  const { Command } = await import('commander')
+  const program = new Command()
+
+  program
+    .name('mipham plugin')
+    .description('Plugin management commands')
+
+  program
+    .command('install <path>')
+    .description('Install a plugin from a directory path')
+    .action(async (sourcePath: string) => {
+      const { PluginManager } = await import('../src/plugin/plugin-manager')
+      const manager = new PluginManager()
+      const result = manager.install(sourcePath)
+      console.log(result.message)
+      process.exit(result.success ? 0 : 1)
+    })
+
+  program
+    .command('list')
+    .description('List installed plugins')
+    .action(async () => {
+      const { PluginManager } = await import('../src/plugin/plugin-manager')
+      const manager = new PluginManager()
+      const plugins = manager.list()
+      if (plugins.length === 0) {
+        console.log('No plugins installed.')
+      } else {
+        for (const p of plugins) {
+          const status = p.enabled ? 'enabled' : 'disabled'
+          console.log(`${p.name} v${p.version} [${status}] — ${p.installedAt}`)
+        }
+      }
+      process.exit(0)
+    })
+
+  program
+    .command('remove <name>')
+    .description('Remove an installed plugin')
+    .action(async (name: string) => {
+      const { PluginManager } = await import('../src/plugin/plugin-manager')
+      const manager = new PluginManager()
+      const removed = manager.remove(name)
+      if (removed) {
+        console.log(`Plugin "${name}" removed.`)
+      } else {
+        console.log(`Plugin "${name}" not found.`)
+      }
+      process.exit(removed ? 0 : 1)
+    })
+
+  program
+    .command('enable <name>')
+    .description('Enable a disabled plugin')
+    .action(async (name: string) => {
+      const { PluginManager } = await import('../src/plugin/plugin-manager')
+      const manager = new PluginManager()
+      const enabled = manager.enable(name)
+      if (enabled) {
+        console.log(`Plugin "${name}" enabled.`)
+      } else {
+        console.log(`Plugin "${name}" not found.`)
+      }
+      process.exit(enabled ? 0 : 1)
+    })
+
+  program
+    .command('disable <name>')
+    .description('Disable an enabled plugin')
+    .action(async (name: string) => {
+      const { PluginManager } = await import('../src/plugin/plugin-manager')
+      const manager = new PluginManager()
+      const disabled = manager.disable(name)
+      if (disabled) {
+        console.log(`Plugin "${name}" disabled.`)
+      } else {
+        console.log(`Plugin "${name}" not found.`)
+      }
+      process.exit(disabled ? 0 : 1)
+    })
+
+  await program.parseAsync(process.argv)
+  return true
+}
+
 async function main() {
-  // Check for workflow subcommands first
+  // Check for plugin subcommands first
+  const handledPlugin = await runPluginCLI()
+  if (handledPlugin) return
+
+  // Check for workflow subcommands next
   const handled = await runWorkflowCLI()
   if (handled) return
 
