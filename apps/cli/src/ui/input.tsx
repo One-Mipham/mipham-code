@@ -139,14 +139,29 @@ export function InputBar({ onSubmit, isLoading }: InputBarProps) {
   }, [isLoading])
 
   const [vimMode, setVimMode] = useState<VimMode>('insert')
+  // NOTE: Dual mode state — React state (vimMode) drives UI re-renders (prompt color,
+  // placeholder); engine mode (vimEngine.current.mode) drives logic inside useInput so
+  // the handler always reads the authoritative mode without stale-closure risk.
   const vimEngine = useRef(new VimMotionEngine())
   const vimPending = useRef<string | null>(null)
+  const [searchMode, setSearchMode] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
 
   // ── Vim motions: intercept keys in normal mode ──
 
   useInput((input, key) => {
     // Escape toggles between insert and normal mode
     if (key.escape) {
+      // Cancel search mode if active
+      if (searchMode) {
+        setSearchMode(false)
+        setSearchQuery('')
+        return
+      }
+      // Clear any pending multi-key sequence
+      if (vimPending.current) {
+        vimPending.current = null
+      }
       setVimMode((prev) => (prev === 'insert' ? 'normal' : 'insert'))
       vimEngine.current.mode = vimEngine.current.mode === 'insert' ? 'normal' : 'insert'
       return
@@ -154,20 +169,62 @@ export function InputBar({ onSubmit, isLoading }: InputBarProps) {
 
     if (vimEngine.current.mode !== 'normal') return
 
-    // Handle pending two-key sequences (dd, yy)
-    if (vimPending.current === 'd' && input === 'd') {
-      const action = vimEngine.current.handleDD(value)
-      setValue(action.text ?? value)
-      vimPending.current = null
+    // Handle search mode — collect query characters
+    if (searchMode) {
+      if (key.return) {
+        const action = vimEngine.current.handleSearch(value, searchQuery)
+        if (action.text !== undefined) setValue(action.text)
+        // NOTE: action.cursor is not settable on ink-text-input — user repositions manually
+        setSearchMode(false)
+        setSearchQuery('')
+        return
+      }
+      if (key.backspace || key.delete) {
+        setSearchQuery((q) => q.slice(0, -1))
+        return
+      }
+      // Accumulate printable characters
+      if (input && input.length === 1 && !key.escape && !key.return) {
+        setSearchQuery((q) => q + input)
+      }
       return
     }
-    if (vimPending.current === 'y' && input === 'y') {
-      vimEngine.current.handleYY(value)
+
+    // Handle pending two-key sequences (dd, yy)
+    if (vimPending.current !== null) {
+      if (vimPending.current === 'd' && input === 'd') {
+        const action = vimEngine.current.handleDD(value)
+        setValue(action.text ?? value)
+      } else if (vimPending.current === 'y' && input === 'y') {
+        vimEngine.current.handleYY(value)
+      }
+      // Always clear pending — even when second key doesn't match
       vimPending.current = null
       return
     }
 
-    // Handle single-key motions
+    // Handle p (paste) — pastes clipboard at cursor position
+    if (input === 'p') {
+      const action = vimEngine.current.handlePaste(value, value.length)
+      if (action.text !== undefined) setValue(action.text)
+      return
+    }
+
+    // Handle u (undo)
+    if (input === 'u') {
+      const action = vimEngine.current.handleUndo(value)
+      if (action.text !== undefined) setValue(action.text)
+      return
+    }
+
+    // Handle / (enter search mode)
+    if (input === '/') {
+      setSearchMode(true)
+      setSearchQuery('')
+      return
+    }
+
+    // Handle single-key motions (h, j, k, l, w, b, 0, $, d, y)
     const action = vimEngine.current.handleNormal(input, value, value.length)
     if (!action) return
 
@@ -179,6 +236,10 @@ export function InputBar({ onSubmit, isLoading }: InputBarProps) {
     if (action.text !== undefined) {
       setValue(action.text)
     }
+
+    // NOTE: action.cursor is returned by motions (h/j/k/l/w/b/0/$) but
+    // ink-text-input does not expose a programmatic cursor-position API.
+    // The cursor hint is informational only; the user repositions manually.
   })
 
   const handleSubmit = (val: string) => {
@@ -196,16 +257,22 @@ export function InputBar({ onSubmit, isLoading }: InputBarProps) {
       </Box>
       <TextInput
         value={value}
-        onChange={setValue}
+        onChange={(val) => {
+          // Block text changes during search mode — keys go to search query
+          if (searchMode) return
+          setValue(val)
+        }}
         onSubmit={handleSubmit}
         placeholder={
-          vimMode === 'normal'
-            ? '[NORMAL] h/j/k/l w/b 0/$ dd yy p u /search (Esc to insert)'
-            : isLoading
-              ? `${verb}...`
-              : completionVerb
-                ? completionVerb
-                : 'Type a message (Esc to cancel)...'
+          searchMode
+            ? `/${searchQuery}`
+            : vimMode === 'normal'
+              ? '[NORMAL] h/j/k/l w/b 0/$ dd yy p u / (Esc to insert)'
+              : isLoading
+                ? `${verb}...`
+                : completionVerb
+                  ? completionVerb
+                  : 'Type a message (Esc to cancel)...'
         }
       />
     </Box>

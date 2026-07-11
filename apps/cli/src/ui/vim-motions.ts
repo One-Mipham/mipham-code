@@ -4,15 +4,16 @@ export class VimMotionEngine {
   mode: VimMode = 'insert'
   private clipboard = ''
   private undoStack: string[] = []
-  private redoStack: string[] = []
-  private history: string[] = []
-  private historyIdx = -1
 
   /** Handle a keypress in normal mode. Returns new cursor position delta and any text mutation. */
   handleNormal(key: string, text: string, cursor: number): VimAction | null {
     switch (key) {
       case 'h':
         return { cursor: cursor - 1 }
+      case 'j':
+        return { cursor: text.length }  // end of line (like $)
+      case 'k':
+        return { cursor: 0 }  // start of line (like 0)
       case 'l':
         return { cursor: cursor + 1 }
       case '0':
@@ -56,7 +57,6 @@ export class VimMotionEngine {
   handleUndo(text: string): VimAction {
     const prev = this.undoStack.pop()
     if (prev !== undefined) {
-      this.redoStack.push(text)
       return { text: prev, cursor: prev.length }
     }
     return { cursor: text.length }
@@ -66,12 +66,6 @@ export class VimMotionEngine {
   handleSearch(text: string, query: string): VimAction {
     const idx = text.indexOf(query)
     return idx >= 0 ? { cursor: idx } : { cursor: 0 }
-  }
-
-  /** Repeat last f/F/t/T motion */
-  handleRepeat(text: string, lastFind: string, cursor: number): VimAction {
-    const idx = text.indexOf(lastFind, cursor + 1)
-    return idx >= 0 ? { cursor: idx } : { cursor }
   }
 
   private nextWord(text: string, cursor: number): number {

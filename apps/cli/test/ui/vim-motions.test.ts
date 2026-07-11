@@ -233,23 +233,6 @@ describe('VimMotionEngine', () => {
   })
 
   // ═══════════════════════════════════════════
-  // Repeat find: ; / ,
-  // ═══════════════════════════════════════════
-
-  it('should repeat last find forward', () => {
-    const e = engine()
-    // "hello world hello" — find next 'o' after cursor at 0
-    const action = e.handleRepeat('hello world hello', 'o', 0)
-    expect(action).toEqual({ cursor: 4 }) // 'o' in 'hello'
-  })
-
-  it('should stay at cursor when repeat find misses', () => {
-    const e = engine()
-    const action = e.handleRepeat('hello world', 'z', 0)
-    expect(action).toEqual({ cursor: 0 })
-  })
-
-  // ═══════════════════════════════════════════
   // Unknown keys
   // ═══════════════════════════════════════════
 
