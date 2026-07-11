@@ -5,6 +5,8 @@ import { PermissionSystem } from './permission'
 import type { HookEngine } from './hooks'
 import type { ArtifactServer } from '../artifacts/server'
 import type { AgentRegistry } from '../agent/agent-registry'
+import { analyzeForMemory } from './memory/memory-writer'
+import { getMemoryManager } from './memory/memory-loader'
 
 export class QueryEngine {
   private hookEngine?: HookEngine
@@ -161,6 +163,15 @@ export class QueryEngine {
       }
       yield { type: 'error', error: String(err) }
       return
+    }
+
+    // Analyze user message for memory-worthy content after AI response
+    if (assistantContent && userInput) {
+      try {
+        analyzeForMemory(userInput, getMemoryManager())
+      } catch {
+        // memory analysis is non-critical
+      }
     }
 
     // Execute any tools that were requested
