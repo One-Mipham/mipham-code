@@ -35,7 +35,9 @@ export function createSandbox(
         throw new Error('Date.now() is disabled in workflow sandbox. Pass timestamps via args.')
       }
       const val = (OriginalDate as unknown as Record<string, unknown>)[prop as string]
-      return typeof val === 'function' ? (val as (...args: unknown[]) => unknown).bind(OriginalDate) : val
+      return typeof val === 'function'
+        ? (val as (...args: unknown[]) => unknown).bind(OriginalDate)
+        : val
     },
   })
 
@@ -61,7 +63,9 @@ export function createSandbox(
           throw new Error('crypto.randomUUID() is disabled in workflow sandbox.')
         }
         const val = (globalCrypto as Record<string, unknown>)[prop as string]
-        return typeof val === 'function' ? (val as (...args: unknown[]) => unknown).bind(globalCrypto) : val
+        return typeof val === 'function'
+          ? (val as (...args: unknown[]) => unknown).bind(globalCrypto)
+          : val
       },
     })
   }
