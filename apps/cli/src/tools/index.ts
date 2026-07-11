@@ -16,6 +16,7 @@ import { webSearchTool } from './network/web-search'
 import { configTool } from './system/config'
 import { mcpTool } from './system/mcp'
 import { artifactTool } from './artifact/artifact'
+import { computerUseTool } from './computer/computer-use'
 
 /**
  * Validate tool parameters against the tool's JSON Schema definition.
@@ -119,6 +120,8 @@ export function createToolRegistry(): Map<string, ToolDefinition> {
     withValidation(mcpTool),
     // Artifact tools
     withValidation(artifactTool),
+    // Computer Use tools
+    withValidation(computerUseTool),
   ]
 
   const map = new Map<string, ToolDefinition>()

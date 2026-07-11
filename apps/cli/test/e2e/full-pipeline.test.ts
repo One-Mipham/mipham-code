@@ -178,8 +178,8 @@ describeIf('E2E: Tool Usage', () => {
     const tools = createToolRegistry()
     const toolNames = Array.from(tools.keys())
 
-    // Verify all 17 tools are registered
-    expect(toolNames.length).toBe(17)
+    // Verify all 18 tools are registered
+    expect(toolNames.length).toBe(18)
     expect(toolNames).toContain('Read')
     expect(toolNames).toContain('Write')
     expect(toolNames).toContain('Edit')
@@ -196,6 +196,8 @@ describeIf('E2E: Tool Usage', () => {
     expect(toolNames).toContain('WebSearch')
     expect(toolNames).toContain('Config')
     expect(toolNames).toContain('MCP')
+    expect(toolNames).toContain('Artifact')
+    expect(toolNames).toContain('ComputerUse')
   })
 
   it('responds to a multi-turn conversation', async () => {
