@@ -36,7 +36,12 @@ export async function runWorkflow(
 
   // Wrap primitives with journal recording
   const agent = async (prompt: string, opts?: Record<string, unknown>) => {
-    const result = await workflowAgent(prompt, registry, toolRegistry, opts as Record<string, unknown>)
+    const result = await workflowAgent(
+      prompt,
+      registry,
+      toolRegistry,
+      opts as Record<string, unknown>,
+    )
     appendJournal(runId, {
       type: 'agent',
       prompt,

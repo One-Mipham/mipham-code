@@ -119,10 +119,7 @@ export class MemoryManager {
     const relevant = this.recall(context, 10)
     if (relevant.length === 0) return ''
 
-    const lines: string[] = [
-      '<system-reminder>',
-      'Relevant memories from previous sessions:',
-    ]
+    const lines: string[] = ['<system-reminder>', 'Relevant memories from previous sessions:']
 
     let tokenBudget = 50 // opening tags
     for (const entry of relevant) {
@@ -180,11 +177,7 @@ export class MemoryManager {
     }
   }
 
-  private formatMemoryFile(
-    name: string,
-    metadata: MemoryMetadata,
-    content: string,
-  ): string {
+  private formatMemoryFile(name: string, metadata: MemoryMetadata, content: string): string {
     return `---
 name: ${name}
 description: ${metadata.relevance.join(', ')}

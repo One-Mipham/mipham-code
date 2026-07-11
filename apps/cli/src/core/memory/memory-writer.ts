@@ -22,10 +22,7 @@ const MEMORY_TRIGGERS = [
 /**
  * Analyze the user's message for memory-worthy content and persist it.
  */
-export function analyzeForMemory(
-  userMessage: string,
-  memoryManager: MemoryManager,
-): void {
+export function analyzeForMemory(userMessage: string, memoryManager: MemoryManager): void {
   for (const trigger of MEMORY_TRIGGERS) {
     const match = userMessage.match(trigger.pattern)
     if (match?.[1]) {

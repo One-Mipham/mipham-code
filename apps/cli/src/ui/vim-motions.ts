@@ -11,9 +11,9 @@ export class VimMotionEngine {
       case 'h':
         return { cursor: cursor - 1 }
       case 'j':
-        return { cursor: text.length }  // end of line (like $)
+        return { cursor: text.length } // end of line (like $)
       case 'k':
-        return { cursor: 0 }  // start of line (like 0)
+        return { cursor: 0 } // start of line (like 0)
       case 'l':
         return { cursor: cursor + 1 }
       case '0':

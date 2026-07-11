@@ -33,7 +33,10 @@ export class PluginManager {
 
     const destDir = join(this.pluginDir, validation.manifest.name)
     if (existsSync(destDir)) {
-      return { success: false, message: `Plugin "${validation.manifest.name}" is already installed` }
+      return {
+        success: false,
+        message: `Plugin "${validation.manifest.name}" is already installed`,
+      }
     }
 
     // Copy plugin directory
@@ -49,7 +52,10 @@ export class PluginManager {
     })
 
     this.saveState()
-    return { success: true, message: `Plugin "${validation.manifest.name}" v${validation.manifest.version} installed` }
+    return {
+      success: true,
+      message: `Plugin "${validation.manifest.name}" v${validation.manifest.version} installed`,
+    }
   }
 
   list(): InstalledPlugin[] {

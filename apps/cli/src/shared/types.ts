@@ -229,7 +229,7 @@ export interface PermissionConfig {
 }
 
 export interface PermissionRuleEntry {
-  pattern: string     // e.g., "Bash(git:*)"
+  pattern: string // e.g., "Bash(git:*)"
   level: 'allow' | 'deny' | 'ask'
   compiled: RegExp
 }

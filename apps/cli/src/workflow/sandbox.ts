@@ -24,9 +24,7 @@ export function createSandbox(
   sandbox.Date = new Proxy(OriginalDate, {
     construct(_target, constructorArgs) {
       if (constructorArgs.length === 0) {
-        throw new Error(
-          'new Date() is disabled in workflow sandbox. Pass timestamps via args.',
-        )
+        throw new Error('new Date() is disabled in workflow sandbox. Pass timestamps via args.')
       }
       return new (OriginalDate as unknown as new (...a: unknown[]) => Date)(
         ...(constructorArgs as [number]),
@@ -34,9 +32,7 @@ export function createSandbox(
     },
     get(_target, prop) {
       if (prop === 'now') {
-        throw new Error(
-          'Date.now() is disabled in workflow sandbox. Pass timestamps via args.',
-        )
+        throw new Error('Date.now() is disabled in workflow sandbox. Pass timestamps via args.')
       }
       const val = (OriginalDate as unknown as Record<string, unknown>)[prop as string]
       return typeof val === 'function' ? (val as Function).bind(OriginalDate) : val
@@ -47,9 +43,7 @@ export function createSandbox(
   sandbox.Math = new Proxy(Math, {
     get(_target, prop) {
       if (prop === 'random') {
-        throw new Error(
-          'Math.random() is disabled in workflow sandbox. Use a seed from args.',
-        )
+        throw new Error('Math.random() is disabled in workflow sandbox. Use a seed from args.')
       }
       const val = (Math as unknown as Record<string, unknown>)[prop as string]
       return typeof val === 'function' ? (val as Function).bind(Math) : val
@@ -67,9 +61,7 @@ export function createSandbox(
           throw new Error('crypto.randomUUID() is disabled in workflow sandbox.')
         }
         const val = (globalCrypto as Record<string, unknown>)[prop as string]
-        return typeof val === 'function'
-          ? (val as Function).bind(globalCrypto)
-          : val
+        return typeof val === 'function' ? (val as Function).bind(globalCrypto) : val
       },
     })
   }

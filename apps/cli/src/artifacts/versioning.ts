@@ -1,11 +1,4 @@
-import {
-  mkdirSync,
-  writeFileSync,
-  readFileSync,
-  existsSync,
-  readdirSync,
-  statSync,
-} from 'node:fs'
+import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 
@@ -44,8 +37,7 @@ export class ArtifactVersioning {
 
     // Determine next version number
     const existing = this.listVersions(name)
-    const nextVersion =
-      (existing.length > 0 ? Math.max(...existing.map((v) => v.version)) : 0) + 1
+    const nextVersion = (existing.length > 0 ? Math.max(...existing.map((v) => v.version)) : 0) + 1
 
     // Save versioned file
     const versionPath = join(versionsDir, `v${nextVersion}.html`)

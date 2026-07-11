@@ -41,22 +41,26 @@ export function matchBashRule(
 }
 
 export function wildcardMatch(pattern: string, input: string): boolean {
-  const regexStr = '^' + pattern
-    .replace(/[.+^${}()|[\]\\*?]/g, '\\$&')  // escape regex specials (incl. * and ?)
-    .replace(/:/g, '[:\\s]')                   // : → match colon or whitespace
-    .replace(/\\\*/g, '.*')                    // * → .*
-    .replace(/\\\?/g, '.')                     // ? → .
-    + '$'
+  const regexStr =
+    '^' +
+    pattern
+      .replace(/[.+^${}()|[\]\\*?]/g, '\\$&') // escape regex specials (incl. * and ?)
+      .replace(/:/g, '[:\\s]') // : → match colon or whitespace
+      .replace(/\\\*/g, '.*') // * → .*
+      .replace(/\\\?/g, '.') + // ? → .
+    '$'
   return new RegExp(regexStr).test(input)
 }
 
 /** Compile a rule pattern string into a PermissionRuleEntry. */
 export function compileRule(pattern: string, level: 'allow' | 'deny' | 'ask'): PermissionRuleEntry {
-  const regexStr = '^' + pattern
-    .replace(/[.+^${}()|[\]\\*?]/g, '\\$&')
-    .replace(/:/g, '[:\\s]')
-    .replace(/\\\*/g, '.*')
-    .replace(/\\\?/g, '.')
-    + '$'
+  const regexStr =
+    '^' +
+    pattern
+      .replace(/[.+^${}()|[\]\\*?]/g, '\\$&')
+      .replace(/:/g, '[:\\s]')
+      .replace(/\\\*/g, '.*')
+      .replace(/\\\?/g, '.') +
+    '$'
   return { pattern, level, compiled: new RegExp(regexStr) }
 }

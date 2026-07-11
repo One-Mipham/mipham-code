@@ -35,11 +35,7 @@ export function createJournal(runId: string, script: string): string {
 
   writeFileSync(join(dir, 'script.js'), script, 'utf-8')
   writeFileSync(join(dir, 'journal.jsonl'), '', 'utf-8')
-  writeFileSync(
-    join(dir, 'state.json'),
-    JSON.stringify({ seq: 0, phases: [] }),
-    'utf-8',
-  )
+  writeFileSync(join(dir, 'state.json'), JSON.stringify({ seq: 0, phases: [] }), 'utf-8')
 
   return dir
 }
@@ -47,10 +43,7 @@ export function createJournal(runId: string, script: string): string {
 /**
  * Append an agent call to the journal. Returns the new sequence number.
  */
-export function appendJournal(
-  runId: string,
-  entry: Omit<JournalEntry, 'seq'>,
-): number {
+export function appendJournal(runId: string, entry: Omit<JournalEntry, 'seq'>): number {
   const dir = join(WORKFLOW_DIR, runId)
   const state = readState(runId)
 

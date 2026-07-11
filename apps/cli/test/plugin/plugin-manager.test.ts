@@ -22,7 +22,10 @@ describe('PluginManager', () => {
   let testPluginDir: string
 
   beforeEach(() => {
-    testPluginDir = join(TEST_HOME, 'plugins-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8))
+    testPluginDir = join(
+      TEST_HOME,
+      'plugins-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+    )
     mkdirSync(testPluginDir, { recursive: true })
     manager = new PluginManager(testPluginDir)
   })
@@ -77,11 +80,7 @@ describe('PluginManager', () => {
     it('should reject a plugin without version', () => {
       const dir = join(TEST_HOME, 'source', 'no-version')
       mkdirSync(dir, { recursive: true })
-      writeFileSync(
-        join(dir, 'plugin.json'),
-        JSON.stringify({ name: 'no-version' }),
-        'utf-8',
-      )
+      writeFileSync(join(dir, 'plugin.json'), JSON.stringify({ name: 'no-version' }), 'utf-8')
       const result = manager.install(dir)
 
       expect(result.success).toBe(false)

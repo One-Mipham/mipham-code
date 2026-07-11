@@ -89,10 +89,7 @@ describe('Runtime', () => {
   })
 
   it('passes args into the workflow script', async () => {
-    const provider = createMockProvider([
-      { type: 'text', content: 'done' },
-      { type: 'stop' },
-    ])
+    const provider = createMockProvider([{ type: 'text', content: 'done' }, { type: 'stop' }])
     const engine = createMockEngine(provider)
 
     const script = `
@@ -104,10 +101,7 @@ describe('Runtime', () => {
   })
 
   it('captures errors from the workflow script', async () => {
-    const provider = createMockProvider([
-      { type: 'text', content: 'ok' },
-      { type: 'stop' },
-    ])
+    const provider = createMockProvider([{ type: 'text', content: 'ok' }, { type: 'stop' }])
     const engine = createMockEngine(provider)
 
     const script = `

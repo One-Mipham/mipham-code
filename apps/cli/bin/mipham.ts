@@ -13,9 +13,7 @@ async function runWorkflowCLI(): Promise<boolean> {
   const { Command } = await import('commander')
   const program = new Command()
 
-  program
-    .name('mipham workflow')
-    .description('Workflow orchestration commands')
+  program.name('mipham workflow').description('Workflow orchestration commands')
 
   program
     .command('run <script>')
@@ -73,9 +71,7 @@ async function runWorkflowCLI(): Promise<boolean> {
       if (entries.length === 0) {
         console.log(`No journal found for run: ${runId}`)
       } else {
-        console.log(
-          `Resuming workflow ${runId} with ${entries.length} journal entries...`,
-        )
+        console.log(`Resuming workflow ${runId} with ${entries.length} journal entries...`)
         // Replay completed agents, continue from last state
       }
       process.exit(0)
@@ -102,9 +98,7 @@ async function runPluginCLI(): Promise<boolean> {
   const { Command } = await import('commander')
   const program = new Command()
 
-  program
-    .name('mipham plugin')
-    .description('Plugin management commands')
+  program.name('mipham plugin').description('Plugin management commands')
 
   program
     .command('install <path>')

@@ -8,7 +8,11 @@ export interface PluginManifest {
   hooks?: Record<string, unknown>
 }
 
-export function validatePlugin(dir: string): { valid: boolean; errors: string[]; manifest?: PluginManifest } {
+export function validatePlugin(dir: string): {
+  valid: boolean
+  errors: string[]
+  manifest?: PluginManifest
+} {
   const errors: string[] = []
 
   try {

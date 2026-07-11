@@ -156,8 +156,12 @@ export class PermissionSystem {
       case 'acceptEdits':
         // Reads + file edits free; Bash requires approval
         return tool.category === 'file'
-          ? (['Bash'].includes(tool.name) ? 'ask' : 'bypass')
-          : (tool.name === 'Bash' ? 'ask' : 'ask')
+          ? ['Bash'].includes(tool.name)
+            ? 'ask'
+            : 'bypass'
+          : tool.name === 'Bash'
+            ? 'ask'
+            : 'ask'
 
       case 'plan':
         // Only reads, no writes or executes

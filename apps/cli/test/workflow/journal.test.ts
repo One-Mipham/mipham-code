@@ -2,7 +2,13 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { rmSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
-import { createJournal, appendJournal, loadJournal, listRuns, loadScript } from '../../src/workflow/journal'
+import {
+  createJournal,
+  appendJournal,
+  loadJournal,
+  listRuns,
+  loadScript,
+} from '../../src/workflow/journal'
 
 const WORKFLOW_DIR = join(homedir(), '.mipham', 'workflows')
 const TEST_RUN_ID = 'test-run-journal-001'

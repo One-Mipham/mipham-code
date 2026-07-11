@@ -2,7 +2,11 @@ import type { PluginManager } from './plugin-manager'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 
-export function loadPlugins(pluginManager: PluginManager, engine: unknown, skillsLoader: unknown): void {
+export function loadPlugins(
+  pluginManager: PluginManager,
+  engine: unknown,
+  skillsLoader: unknown,
+): void {
   for (const plugin of pluginManager.getEnabled()) {
     // Load custom agents
     const agentsDir = join(plugin.path, 'agents')
