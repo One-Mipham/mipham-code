@@ -14,6 +14,9 @@ export class QueryEngine {
   private artifactServer?: ArtifactServer
   private agentRegistry?: AgentRegistry
   private agentViewManager?: AgentViewManager
+  private goal?: string
+  private maxGoalLoops = 20
+  private lastAssistantContent?: string
 
   constructor(
     private registry: ProviderRegistry,
@@ -50,6 +53,16 @@ export class QueryEngine {
   /** Get the AgentViewManager (may be undefined if not wired). */
   getAgentViewManager(): AgentViewManager | undefined {
     return this.agentViewManager
+  }
+
+  /** Set the session goal for goal-driven execution. */
+  setGoal(goal: string): void {
+    this.goal = goal
+  }
+
+  /** Get the last assistant text content. */
+  getLastAssistantContent(): string | undefined {
+    return this.lastAssistantContent
   }
 
   /** Wire LLM-based conversation summarization into the context manager. */
@@ -177,6 +190,11 @@ export class QueryEngine {
       return
     }
 
+    // Track last assistant content for goal checking
+    if (assistantContent) {
+      this.lastAssistantContent = assistantContent
+    }
+
     // Analyze user message for memory-worthy content after AI response
     if (assistantContent && userInput) {
       try {
@@ -214,6 +232,22 @@ export class QueryEngine {
 
     // Fire Stop hooks when AI finishes with no tool calls
     yield* this.checkStopHook(signal)
+  }
+
+  async *processWithGoal(input: string, signal?: AbortSignal): AsyncGenerator<StreamChunk> {
+    let loop = 0
+    while (loop < this.maxGoalLoops) {
+      yield* this.process(input, signal)
+      loop++
+
+      if (!this.goal) break
+
+      // Ask AI to check the goal condition
+      const checkMsg = `Has this goal been achieved? "${this.goal}" Answer YES or NO with reason.`
+      yield* this.process(checkMsg, signal)
+      // If AI responds "YES", break
+      if (this.lastAssistantContent?.includes('YES')) break
+    }
   }
 
   private async *continueWithTools(signal?: AbortSignal): AsyncGenerator<StreamChunk> {

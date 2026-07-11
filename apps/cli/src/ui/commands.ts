@@ -422,6 +422,7 @@ const goalCmd: CommandHandler = (ctx, args) => {
     }
   }
   ctx.setGoal(goal.trim())
+  ctx.engine.setGoal(goal.trim())
   return {
     content: `✓ Goal set: "${goal.trim()}"\n\nUse /status to view progress. Type /goal without arguments to clear.`,
   }

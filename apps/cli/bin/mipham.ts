@@ -100,6 +100,12 @@ async function main() {
   const handled = await runWorkflowCLI()
   if (handled) return
 
+  // Parse --safe-mode flag: skip custom agents, skills, hooks, plugins
+  const safeModeFlag = process.argv.includes('--safe-mode')
+  if (safeModeFlag) {
+    process.env.MIPHAM_SAFE_MODE = '1'
+  }
+
   try {
     const { runApp } = await import('../src/index')
     await runApp({})
