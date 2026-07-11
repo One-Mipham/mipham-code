@@ -126,7 +126,10 @@ const helpCmd: CommandHandler = (_ctx) => ({
     /login         Show API key status
     /logout        Clear credentials guide
     /feedback      Send feedback
-    /agents        Agent management
+
+    ── Agents ──────────────────────────
+    /agents        Agent view dashboard
+    /bg <prompt>   Run a background agent task
 
     Type /exit or Esc to quit.
   `,
@@ -2078,47 +2081,111 @@ const feedbackCmd: CommandHandler = (ctx, args) => {
 // Phase 4 — Agent Management
 // ═══════════════════════════════════════════════════════════════
 
-const agentsCmd: CommandHandler = () => ({
-  content: `── Agent System ──
+const agentsCmd: CommandHandler = (ctx) => {
+  const agentViewManager = ctx.engine.getAgentViewManager?.()
+  if (!agentViewManager) {
+    return { content: 'Agent View dashboard is initializing...' }
+  }
+  const counts = agentViewManager.countByStatus()
+  const total = counts['needs-input'] + counts.working + counts.completed + counts.failed
 
-Mipham Code includes 4 agent-type tools for structured workflows:
+  if (total === 0) {
+    return {
+      content: `── Agent View ──
 
-  ┌──────────┬──────────────────────────────────────┬──────────┬──────────────────────────┐
-  │ Agent    │ Category │ Permission │ Parameters                     │
-  ├──────────┼──────────┼────────────┼────────────────────────────────┤
-  │ Agent    │ agent    │ ask        │ description*, prompt*,          │
-  │          │          │            │ subagent_type (optional)        │
-  │ Skill    │ agent    │ auto       │ skill*, args (optional)         │
-  │ Plan     │ agent    │ auto       │ (no required params)            │
-  │ Memory   │ agent    │ auto       │ action* (read|write|list),      │
-  │          │          │            │ name, content                   │
-  └──────────┴──────────┴────────────┴────────────────────────────────┘
+No background agents running.
 
-── Agent Descriptions ──
+Use /bg <prompt> to spawn a background agent session.
 
-  Agent    Launch a sub-agent for complex, multi-step tasks.
-           Types: general-purpose, Explore, Plan, code-reviewer, etc.
+Example:
+  /bg Fix all TypeScript errors in the project
+  /bg Review the auth module for security issues
 
-  Skill    Invoke a named skill (11 built-in, custom via .SKILL.md).
-           Skills extend AI capabilities with specialized instructions.
+Or use the Agent tool in a conversation to launch a sub-agent.`,
+    }
+  }
 
-  Plan     Enter plan mode — read-only analysis and design.
-           Use before complex changes. Exit with /no-plan.
+  const lines: string[] = [
+    '── Agent View ──',
+    '',
+    `  ${total} session(s):`,
+    `  🟡 Needs input: ${counts['needs-input']}`,
+    `  🔵 Working:     ${counts.working}`,
+    `  🟢 Completed:   ${counts.completed}`,
+    `  🔴 Failed:      ${counts.failed}`,
+    '',
+    'Sessions:',
+  ]
 
-  Memory   Persistent memory read/write across sessions.
-           Stored in ~/.mipham/memory/ as markdown files.
+  const all = agentViewManager.list()
+  for (const s of all.slice(0, 10)) {
+    const statusIcon: Record<string, string> = {
+      'needs-input': '🟡',
+      working: '🔵',
+      completed: '🟢',
+      failed: '🔴',
+    }
+    const elapsed =
+      s.elapsedMs < 1000
+        ? '<1s'
+        : s.elapsedMs < 60000
+          ? `${Math.floor(s.elapsedMs / 1000)}s`
+          : `${Math.floor(s.elapsedMs / 60000)}m`
+    lines.push(
+      `  ${statusIcon[s.status] || '⚪'} ${s.id} · ${s.provider}/${s.model} · ${elapsed} · ${s.task.slice(0, 50)}`,
+    )
+  }
 
-── Architecture ──
+  if (total > 10) {
+    lines.push(`  ... and ${total - 10} more`)
+  }
 
-  User → QueryEngine → Agent Tool → Sub-agent → Tool Results → User
+  lines.push('', 'Run `mipham agents` for the full interactive dashboard with j/k navigation.')
 
-  Agent tools are dispatched by the AI during conversations.
-  The AI decides when to use them — you can also request them directly.
+  return { content: lines.join('\n') }
+}
 
-  Full multi-agent orchestration (Workflow tool) is in the M3 milestone.
+const bgCmd: CommandHandler = (ctx, args) => {
+  const prompt = args.join(' ')
+  if (!prompt.trim()) {
+    return {
+      content: `Usage: /bg <prompt>
 
-  Use /tools to see all 16 tools, including the 4 agent tools.`,
-})
+Spawn a background agent to work on a task while you continue chatting.
+
+Examples:
+  /bg Run the full test suite and report failures
+  /bg Audit the src/ directory for security issues
+  /bg Generate API documentation from JSDoc comments
+
+Background agents appear in the Agent View dashboard (/agents).`,
+    }
+  }
+
+  const agentViewManager = ctx.engine.getAgentViewManager?.()
+  if (!agentViewManager) {
+    return { content: 'Agent View manager is initializing...' }
+  }
+
+  const session = agentViewManager.create(prompt, prompt, {
+    provider: ctx.providerId,
+    model: ctx.modelId,
+  })
+
+  agentViewManager.addMessage(session.id, { role: 'user', content: prompt })
+  agentViewManager.updateStatus(session.id, 'working')
+
+  return {
+    content: `✓ Background agent spawned: ${session.id}
+
+  Task:     ${session.task.slice(0, 80)}
+  Provider: ${session.provider} / ${session.model}
+  Status:   working
+
+Use /agents to view all background sessions.
+Run \`mipham agents\` for the interactive dashboard.`,
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════
 // Artifacts
@@ -2286,6 +2353,7 @@ registry.set('/login', loginCmd)
 registry.set('/logout', logoutCmd)
 registry.set('/feedback', feedbackCmd)
 registry.set('/agents', agentsCmd)
+registry.set('/bg', bgCmd)
 
 // Artifacts
 registry.set('/artifact', artifactBaseCmd)

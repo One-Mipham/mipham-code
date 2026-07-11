@@ -13,6 +13,8 @@ import { McpClient } from './mcp/client'
 import { HookEngine } from './core/hooks'
 import { ArtifactServer } from './artifacts/server'
 import { ARTIFACTS_DIR, ARTIFACT_PORT, MIPHAM_DIR } from './shared/constants'
+import { AgentViewManager } from './agent-view/agent-view-manager'
+import { AgentViewDashboard } from './agent-view/dashboard'
 
 interface RunOptions {
   model?: string
@@ -23,6 +25,23 @@ interface RunOptions {
 }
 
 export async function runApp(options: RunOptions): Promise<void> {
+  // Handle `mipham agents` subcommand — launch standalone dashboard
+  const args = process.argv.slice(2)
+  if (args[0] === 'agents') {
+    const agentViewManager = new AgentViewManager()
+    const { waitUntilExit } = render(
+      <AgentViewDashboard
+        manager={agentViewManager}
+        onAttach={() => {}}
+        onExit={() => process.exit(0)}
+      />,
+    )
+    await waitUntilExit()
+    process.exit(0)
+  }
+
+  // Create AgentViewManager for the full app (shared across the session)
+  const agentViewManager = new AgentViewManager()
   // Set terminal window title
   process.stdout.write('\x1b]0;Mipham Code\x07')
 
@@ -94,6 +113,7 @@ export async function runApp(options: RunOptions): Promise<void> {
   const engine = new QueryEngine(registry, context, tools)
   engine.setHookEngine(hookEngine)
   engine.setArtifactServer(artifactServer)
+  engine.setAgentViewManager(agentViewManager)
   engine.setupContextSummarizer()
 
   // Auto-save session on exit
