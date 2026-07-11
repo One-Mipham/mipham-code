@@ -13,9 +13,7 @@ function makeMessages(count: number): Message[] {
     })
     msgs.push({
       role: 'user',
-      content: [
-        { type: 'tool_result', tool_use_id: `${i}`, content: 'x'.repeat(500) },
-      ],
+      content: [{ type: 'tool_result', tool_use_id: `${i}`, content: 'x'.repeat(500) }],
     })
   }
   return msgs
@@ -59,7 +57,12 @@ describe('microcompact', () => {
     const messages = makeMessages(5)
     const cache = {
       isInCache: () => true,
-      getStatus: () => ({ totalMessages: 0, cachedMessages: 0, cachedTokens: 0, uncachedTokens: 0 }),
+      getStatus: () => ({
+        totalMessages: 0,
+        cachedMessages: 0,
+        cachedTokens: 0,
+        uncachedTokens: 0,
+      }),
       invalidate: () => {},
     }
     const result = microcompact(messages, cache, { keepRecent: 1 })
@@ -68,7 +71,11 @@ describe('microcompact', () => {
     for (const msg of result.messages) {
       if (Array.isArray(msg.content)) {
         for (const block of msg.content) {
-          if (block && typeof block === 'object' && (block as unknown as Record<string, unknown>).type === 'tool_result') {
+          if (
+            block &&
+            typeof block === 'object' &&
+            (block as unknown as Record<string, unknown>).type === 'tool_result'
+          ) {
             const b = block as { content: string }
             expect(b.content).not.toBe('[earlier result omitted]')
           }

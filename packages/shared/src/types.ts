@@ -118,6 +118,25 @@ export type HookEvent =
   | 'SessionStart'
   | 'SessionEnd'
   | 'Notification'
+  | 'Stop'
+  | 'UserPromptSubmit'
+  | 'PreCompact'
+  | 'PostCompact'
+  | 'ConfigChange'
+
+export type HookType = 'command' | 'http' | 'code' | 'mcp_tool'
+
+export interface HookConfig {
+  type: HookType
+  command?: string
+  args?: string[]
+  url?: string
+  method?: 'GET' | 'POST'
+  headers?: Record<string, string>
+  mcpServer?: string
+  mcpTool?: string
+  continueOnBlock?: boolean
+}
 
 export interface HookDefinition {
   event: HookEvent
@@ -131,12 +150,19 @@ export interface HookContext {
   toolInput?: Record<string, unknown>
   toolResult?: ToolResult
   sessionId: string
+  userPrompt?: string
+  configKey?: string
+  configValue?: unknown
 }
 
 export interface HookResult {
   allowed: boolean
   reason?: string
   modifiedInput?: Record<string, unknown>
+  decision?: 'allow' | 'block'
+  permissionDecision?: 'allow' | 'deny' | 'ask' | 'defer'
+  additionalContext?: string
+  updatedOutput?: string
 }
 
 // ── Instruction Types ──
