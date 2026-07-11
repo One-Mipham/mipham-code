@@ -1,7 +1,8 @@
 import { readFileSync, existsSync, readdirSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join, extname } from 'node:path'
 import { parse as parseYaml } from 'yaml'
-import type { AgentDefinition, AgentFrontmatter, SubAgentType } from './types'
+import type { AgentDefinition, SubAgentType } from './types'
 
 interface FrontmatterResult {
   data: Record<string, unknown>
@@ -44,6 +45,7 @@ export class AgentRegistry {
     try {
       entries = readdirSync(dir)
     } catch {
+      // Permission errors, missing dir, etc.
       return
     }
 
@@ -84,7 +86,7 @@ export class AgentRegistry {
 
   /** Load user-level agents from ~/.mipham/agents/ */
   loadUserAgents(): void {
-    const home = process.env.HOME || '~'
+    const home = homedir()
     this.loadDirectory(join(home, '.mipham', 'agents'), 'user')
   }
 
