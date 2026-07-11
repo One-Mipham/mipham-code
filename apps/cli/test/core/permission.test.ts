@@ -205,4 +205,62 @@ describe('PermissionSystem', () => {
 
     expect(ps.getByCategory(tools, 'network')).toHaveLength(0)
   })
+
+  // ═══════════════════════════════════════════
+  // Tier 2: 6-mode refactored PermissionSystem
+  // ═══════════════════════════════════════════
+
+  it('cycles through all 6 modes', () => {
+    const ps = new PermissionSystem('default')
+    expect(ps.getMode()).toBe('default')
+    ps.cycleMode()
+    expect(ps.getMode()).toBe('acceptEdits')
+    ps.cycleMode() // plan
+    ps.cycleMode() // auto
+    ps.cycleMode() // dontAsk
+    ps.cycleMode() // bypassPermissions
+    ps.cycleMode() // back to default
+    expect(ps.getMode()).toBe('default')
+  })
+
+  it('deny rule blocks even when mode is bypassPermissions', () => {
+    const ps = new PermissionSystem('bypassPermissions')
+    ps.deny('Bash(rm -rf *)')
+    const tool = makeTool('Bash', 'auto', 'exec')
+    expect(ps.needsApproval(tool, { command: 'rm -rf /' })).toBe(true)
+  })
+
+  it('allow rule permits in dontAsk mode', () => {
+    const ps = new PermissionSystem('dontAsk')
+    ps.allow('Read')
+    const tool = makeTool('Read', 'auto', 'file')
+    expect(ps.isBypassed(tool, {})).toBe(true)
+  })
+
+  it('dontAsk mode blocks non-allowlisted tools', () => {
+    const ps = new PermissionSystem('dontAsk')
+    const tool = makeTool('Bash', 'auto', 'exec')
+    expect(ps.needsApproval(tool, { command: 'ls' })).toBe(true)
+  })
+
+  it('plan mode allows reads only', () => {
+    const ps = new PermissionSystem('plan')
+    const readTool = makeTool('Read', 'auto', 'file')
+    const bashTool = makeTool('Bash', 'auto', 'exec')
+    expect(ps.isBypassed(readTool, {})).toBe(true)
+    expect(ps.needsApproval(bashTool, {})).toBe(true)
+  })
+
+  it('loads config from settings JSON format', () => {
+    const ps = new PermissionSystem()
+    ps.loadConfig({
+      mode: 'acceptEdits',
+      allow: ['Read', 'Write', 'Bash(git:*)'],
+      deny: ['Bash(rm *)'],
+    })
+    expect(ps.getMode()).toBe('acceptEdits')
+    const gitTool = makeTool('Bash', 'auto', 'exec')
+    expect(ps.isBypassed(gitTool, { command: 'git status' })).toBe(true)
+    expect(ps.needsApproval(gitTool, { command: 'rm -rf /' })).toBe(true)
+  })
 })
