@@ -34,16 +34,22 @@ export function createAgentContext(
 
   if (agentDef.tools) {
     const allowSet = new Set(
-      agentDef.tools.split(',').map(s => s.trim()).filter(Boolean)
+      agentDef.tools
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
     )
-    allowedTools = allowedTools.filter(t => allowSet.has(t.name))
+    allowedTools = allowedTools.filter((t) => allowSet.has(t.name))
   }
 
   if (agentDef.disallowedTools) {
     const denySet = new Set(
-      agentDef.disallowedTools.split(',').map(s => s.trim()).filter(Boolean)
+      agentDef.disallowedTools
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
     )
-    allowedTools = allowedTools.filter(t => !denySet.has(t.name))
+    allowedTools = allowedTools.filter((t) => !denySet.has(t.name))
   }
 
   return { context, allowedTools }

@@ -1,4 +1,5 @@
-import type { ToolDefinition } from '../../shared/index.ts'
+import type { ToolDefinition, SkillDefinition, ToolResult } from '../../shared/index.ts'
+import { executeForkedSkill } from '../../skills/fork-executor'
 
 export const skillTool: ToolDefinition = {
   name: 'Skill',
@@ -34,7 +35,36 @@ export const skillTool: ToolDefinition = {
         }
       }
 
-      // Build skill invocation content
+      // Check if skill has context: fork — execute in isolated subagent
+      if (skill.context === 'fork') {
+        const registry = ctx.registry
+        if (!registry) {
+          return {
+            success: false,
+            content: '',
+            error: 'Provider registry not available for forked skill execution.',
+          }
+        }
+
+        try {
+          const result = await executeForkedSkill(
+            skill,
+            args,
+            registry,
+            ctx.toolRegistry || new Map(),
+          )
+          // Return to AI as internal context
+          return { success: true, content: `[Forked skill "${skillName}" result]:\n${result}` }
+        } catch (err) {
+          return {
+            success: false,
+            content: '',
+            error: `Forked skill execution failed: ${String(err)}`,
+          }
+        }
+      }
+
+      // Standard inline execution — return metadata for AI to follow
       const lines: string[] = [
         `── Skill Invoked: ${skill.name} ──`,
         `Type: ${skill.type} | Version: ${skill.version}`,

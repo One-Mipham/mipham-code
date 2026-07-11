@@ -98,7 +98,12 @@ export class HookEngine {
 
   /** ConfigChange: fires when configuration changes. */
   async executeConfigChange(key: string, value: unknown, sessionId: string): Promise<HookResult> {
-    const ctx: HookContext = { event: 'ConfigChange', sessionId, configKey: key, configValue: value }
+    const ctx: HookContext = {
+      event: 'ConfigChange',
+      sessionId,
+      configKey: key,
+      configValue: value,
+    }
     return this.runHooks('ConfigChange', undefined, ctx)
   }
 

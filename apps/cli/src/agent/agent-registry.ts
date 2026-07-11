@@ -22,9 +22,11 @@ function parseFrontmatter(raw: string): FrontmatterResult {
 
 const BUILTIN_SYSTEM_PROMPTS: Record<SubAgentType, string> = {
   general: 'You are a focused sub-agent. Complete the assigned task thoroughly and return results.',
-  explore: 'You are an exploration sub-agent. Search, read, and analyze code. Return structured findings with file paths and line numbers.',
+  explore:
+    'You are an exploration sub-agent. Search, read, and analyze code. Return structured findings with file paths and line numbers.',
   plan: 'You are a planning sub-agent. Design implementation approaches. Return a step-by-step plan with files to modify.',
-  'code-review': 'You are a code review sub-agent. Find bugs, security issues, and code quality problems. Return findings by severity.',
+  'code-review':
+    'You are a code review sub-agent. Find bugs, security issues, and code quality problems. Return findings by severity.',
 }
 
 const BUILTIN_DESCRIPTIONS: Record<SubAgentType, string> = {
@@ -66,7 +68,11 @@ export class AgentRegistry {
           model: (data.model as string) || 'inherit',
           permissionMode: (data.permissionMode as string) || 'inherit',
           maxTurns: data.maxTurns as number | undefined,
-          skills: data.skills ? String(data.skills).split(',').map(s => s.trim()) : undefined,
+          skills: data.skills
+            ? String(data.skills)
+                .split(',')
+                .map((s) => s.trim())
+            : undefined,
           background: (data.background as boolean) || false,
           source,
           filePath: fullPath,

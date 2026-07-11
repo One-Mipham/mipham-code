@@ -41,7 +41,8 @@ export const agentTool: ToolDefinition = {
       return {
         success: false,
         content: '',
-        error: 'Sub-agent execution requires an active provider and tool registry. Connect a provider API key first.',
+        error:
+          'Sub-agent execution requires an active provider and tool registry. Connect a provider API key first.',
       }
     }
 

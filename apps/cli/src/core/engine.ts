@@ -82,12 +82,30 @@ export class QueryEngine {
   }
 
   async *process(userInput: string, signal?: AbortSignal): AsyncGenerator<StreamChunk> {
+    // Fire UserPromptSubmit hooks before processing
+    if (this.hookEngine) {
+      const submitResult = await this.hookEngine.executeUserPromptSubmit(userInput, 'session-1')
+      if (submitResult.additionalContext) {
+        this.context.addMessage({
+          role: 'user',
+          content: `[Hook context]: ${submitResult.additionalContext}`,
+        })
+      }
+      if (!submitResult.allowed) {
+        yield {
+          type: 'error',
+          error: submitResult.reason || 'User input blocked by hook.',
+        }
+        return
+      }
+    }
+
     // Add user message to context
     this.context.addMessage({ role: 'user', content: userInput })
 
     // Check compaction before processing
     if (this.context.needsCompaction()) {
-      await this.context.compact('conversation summary')
+      await this.compactWithHooks('conversation summary')
     }
 
     const systemPrompt = this.context.getSystemPrompt()
@@ -168,7 +186,11 @@ export class QueryEngine {
     // If tools were executed, recursively continue the conversation
     if (toolUses.length > 0) {
       yield* this.continueWithTools(signal)
+      return
     }
+
+    // Fire Stop hooks when AI finishes with no tool calls
+    yield* this.checkStopHook(signal)
   }
 
   private async *continueWithTools(signal?: AbortSignal): AsyncGenerator<StreamChunk> {
@@ -218,8 +240,11 @@ export class QueryEngine {
         this.context.addMessage({ role: 'assistant', content: assistantContent })
       }
 
-      // No more tool calls — conversation complete
-      if (toolUses.length === 0) return
+      // No more tool calls — fire Stop hook and potentially continue
+      if (toolUses.length === 0) {
+        yield* this.checkStopHook(signal)
+        return
+      }
 
       // Execute tools and feed results back to the model for the next turn
       for (const toolUse of toolUses) {
@@ -316,6 +341,46 @@ export class QueryEngine {
 
   switchProvider(providerId: string, modelId?: string): void {
     this.registry.switchProvider(providerId, modelId)
+  }
+
+  /** Wrap context compaction with PreCompact/PostCompact hooks. */
+  private async compactWithHooks(heading: string): Promise<void> {
+    if (this.hookEngine) {
+      const preResult = await this.hookEngine.executePreCompact('session-1')
+      if (preResult.additionalContext) {
+        this.context.addMessage({
+          role: 'user',
+          content: `[Pre-compact context]: ${preResult.additionalContext}`,
+        })
+      }
+    }
+
+    await this.context.compact(heading)
+
+    if (this.hookEngine) {
+      const postResult = await this.hookEngine.executePostCompact('session-1')
+      if (postResult.additionalContext) {
+        this.context.addMessage({
+          role: 'user',
+          content: `[Post-compact context]: ${postResult.additionalContext}`,
+        })
+      }
+    }
+  }
+
+  /** Fire Stop hook. If blocked, feed the reason back to the AI and continue. */
+  private async *checkStopHook(signal?: AbortSignal): AsyncGenerator<StreamChunk> {
+    if (!this.hookEngine) return
+
+    const stopResult = await this.hookEngine.executeStop('session-1')
+    if (stopResult.decision === 'block') {
+      // Feed the block reason back to the AI and continue
+      this.context.addMessage({
+        role: 'user',
+        content: `[The Stop hook blocked completion]: ${stopResult.reason || 'Continue working.'}`,
+      })
+      yield* this.continueWithTools(signal)
+    }
   }
 }
 

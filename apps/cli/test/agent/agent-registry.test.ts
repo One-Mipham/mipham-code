@@ -21,14 +21,18 @@ afterEach(() => {
 
 describe('AgentRegistry', () => {
   it('loads a valid agent markdown file', () => {
-    writeAgent(TEST_DIR, 'test-agent', `---
+    writeAgent(
+      TEST_DIR,
+      'test-agent',
+      `---
 name: test-agent
 description: A test agent for unit tests.
 tools: Read, Grep
 model: haiku
 ---
 
-You are a test agent. Do test things.`)
+You are a test agent. Do test things.`,
+    )
 
     const registry = new AgentRegistry()
     registry.loadDirectory(TEST_DIR, 'project')
@@ -49,32 +53,44 @@ You are a test agent. Do test things.`)
   })
 
   it('lists all loaded agents', () => {
-    writeAgent(TEST_DIR, 'agent-a', `---
+    writeAgent(
+      TEST_DIR,
+      'agent-a',
+      `---
 name: agent-a
 description: First agent.
 ---
-Body A`)
+Body A`,
+    )
 
-    writeAgent(TEST_DIR, 'agent-b', `---
+    writeAgent(
+      TEST_DIR,
+      'agent-b',
+      `---
 name: agent-b
 description: Second agent.
 ---
-Body B`)
+Body B`,
+    )
 
     const registry = new AgentRegistry()
     registry.loadDirectory(TEST_DIR, 'project')
 
     const list = registry.list()
     expect(list).toHaveLength(2)
-    expect(list.map(a => a.name).sort()).toEqual(['agent-a', 'agent-b'])
+    expect(list.map((a) => a.name).sort()).toEqual(['agent-a', 'agent-b'])
   })
 
   it('applies defaults for missing frontmatter fields', () => {
-    writeAgent(TEST_DIR, 'minimal', `---
+    writeAgent(
+      TEST_DIR,
+      'minimal',
+      `---
 name: minimal
 description: Minimal agent.
 ---
-Minimal body.`)
+Minimal body.`,
+    )
 
     const registry = new AgentRegistry()
     registry.loadDirectory(TEST_DIR, 'project')
@@ -90,17 +106,25 @@ Minimal body.`)
     const projectDir = join(TEST_DIR, 'project')
     const userDir = join(TEST_DIR, 'user')
 
-    writeAgent(projectDir, 'same-name', `---
+    writeAgent(
+      projectDir,
+      'same-name',
+      `---
 name: same-name
 description: Project version.
 ---
-Project body.`)
+Project body.`,
+    )
 
-    writeAgent(userDir, 'same-name', `---
+    writeAgent(
+      userDir,
+      'same-name',
+      `---
 name: same-name
 description: User version.
 ---
-User body.`)
+User body.`,
+    )
 
     const registry = new AgentRegistry()
     registry.loadDirectory(userDir, 'user')
@@ -118,11 +142,15 @@ User body.`)
   })
 
   it('skips files without .md extension', () => {
-    writeAgent(TEST_DIR, 'agent', `---
+    writeAgent(
+      TEST_DIR,
+      'agent',
+      `---
 name: agent
 description: Test.
 ---
-Body`)
+Body`,
+    )
     writeFileSync(join(TEST_DIR, 'readme.txt'), 'not an agent', 'utf-8')
 
     const registry = new AgentRegistry()

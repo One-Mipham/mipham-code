@@ -48,7 +48,11 @@ function isOnlyToolUse(msg: Message): boolean {
   if (!Array.isArray(msg.content)) return false
   const nonToolUse = msg.content.filter(
     (block: unknown) =>
-      !(block && typeof block === 'object' && (block as Record<string, unknown>).type === 'tool_use'),
+      !(
+        block &&
+        typeof block === 'object' &&
+        (block as Record<string, unknown>).type === 'tool_use'
+      ),
   )
   // Must have at least one tool_use and nothing else substantial
   const hasToolUse = msg.content.some(

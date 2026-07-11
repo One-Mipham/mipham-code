@@ -11,8 +11,12 @@ function createMockProvider(chunks: StreamChunk[]): ProviderInstance {
         yield chunk
       }
     },
-    async listModels() { return [] },
-    async healthCheck() { return true },
+    async listModels() {
+      return []
+    },
+    async healthCheck() {
+      return true
+    },
   }
 }
 
@@ -47,32 +51,27 @@ describe('SubAgent', () => {
     } as unknown as ProviderRegistry
 
     const sub = new SubAgent(registry, TOOLS)
-    await expect(
-      sub.execute('test', 'test task', { type: 'general' })
-    ).rejects.toThrow('No active provider')
+    await expect(sub.execute('test', 'test task', { type: 'general' })).rejects.toThrow(
+      'No active provider',
+    )
   })
 
   it('throws on API error chunk', async () => {
-    const provider = createMockProvider([
-      { type: 'error', error: 'API rate limit exceeded' },
-    ])
+    const provider = createMockProvider([{ type: 'error', error: 'API rate limit exceeded' }])
     const registry = createMockRegistry(provider)
 
     const sub = new SubAgent(registry, TOOLS)
-    await expect(
-      sub.execute('test', 'test task', { type: 'general' })
-    ).rejects.toThrow('API rate limit exceeded')
+    await expect(sub.execute('test', 'test task', { type: 'general' })).rejects.toThrow(
+      'API rate limit exceeded',
+    )
   })
 
   it('uses agent definition system prompt when provided', async () => {
     let receivedSystemPrompt = ''
-    const provider = createMockProvider([
-      { type: 'text', content: 'ok' },
-      { type: 'stop' },
-    ])
+    const provider = createMockProvider([{ type: 'text', content: 'ok' }, { type: 'stop' }])
     // Spy on chat to capture system prompt
     const originalChat = provider.chat
-    provider.chat = async function*(req) {
+    provider.chat = async function* (req) {
       receivedSystemPrompt = req.systemPrompt || ''
       yield* originalChat.call(provider, req)
     }
@@ -96,12 +95,9 @@ describe('SubAgent', () => {
 
   it('scopes tools based on agent definition allowlist', async () => {
     let receivedTools: Record<string, unknown>[] | undefined
-    const provider = createMockProvider([
-      { type: 'text', content: 'ok' },
-      { type: 'stop' },
-    ])
+    const provider = createMockProvider([{ type: 'text', content: 'ok' }, { type: 'stop' }])
     const originalChat = provider.chat
-    provider.chat = async function*(req) {
+    provider.chat = async function* (req) {
       receivedTools = req.tools
       yield* originalChat.call(provider, req)
     }
@@ -109,14 +105,25 @@ describe('SubAgent', () => {
     const registry = createMockRegistry(provider)
 
     const readTool: ToolDefinition = {
-      name: 'Read', description: 'read', category: 'file', permission: 'auto',
-      parameters: {}, execute: async () => ({ success: true, content: '' }),
+      name: 'Read',
+      description: 'read',
+      category: 'file',
+      permission: 'auto',
+      parameters: {},
+      execute: async () => ({ success: true, content: '' }),
     }
     const writeTool: ToolDefinition = {
-      name: 'Write', description: 'write', category: 'file', permission: 'ask',
-      parameters: {}, execute: async () => ({ success: true, content: '' }),
+      name: 'Write',
+      description: 'write',
+      category: 'file',
+      permission: 'ask',
+      parameters: {},
+      execute: async () => ({ success: true, content: '' }),
     }
-    const tools = new Map([['Read', readTool], ['Write', writeTool]])
+    const tools = new Map([
+      ['Read', readTool],
+      ['Write', writeTool],
+    ])
 
     const agentDef = {
       name: 'reader',

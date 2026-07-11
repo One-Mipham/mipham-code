@@ -21,6 +21,7 @@ function parseFrontmatter(raw: string): FrontmatterResult {
 
 export class InstructionsLoader {
   private instructions: InstructionFile[] = []
+  private skillsReminder = ''
 
   loadAll(cwd: string): void {
     this.instructions = []
@@ -60,7 +61,17 @@ export class InstructionsLoader {
       parts.push(`<!-- ${levelLabel[inst.level] || inst.level} (${inst.path}) -->\n${inst.content}`)
     }
 
+    // Append skills reminder after all instructions
+    if (this.skillsReminder) {
+      parts.push(this.skillsReminder)
+    }
+
     return parts.join('\n\n---\n\n')
+  }
+
+  /** Set the skills system-reminder block to inject into the system prompt. */
+  setSkillsReminder(reminder: string): void {
+    this.skillsReminder = reminder
   }
 
   list(): InstructionFile[] {

@@ -5,9 +5,9 @@ export type SubAgentType = 'general' | 'explore' | 'plan' | 'code-review'
 export interface AgentFrontmatter {
   name: string
   description: string
-  tools?: string        // comma-separated allowlist
+  tools?: string // comma-separated allowlist
   disallowedTools?: string
-  model?: string        // 'sonnet' | 'opus' | 'haiku' | 'inherit' | full model ID
+  model?: string // 'sonnet' | 'opus' | 'haiku' | 'inherit' | full model ID
   permissionMode?: 'default' | 'acceptEdits' | 'auto' | 'bypass' | 'plan'
   maxTurns?: number
   skills?: string
@@ -17,7 +17,7 @@ export interface AgentFrontmatter {
 export interface AgentDefinition {
   name: string
   description: string
-  systemPrompt: string   // markdown body after frontmatter
+  systemPrompt: string // markdown body after frontmatter
   tools?: string
   disallowedTools?: string
   model: string

@@ -5,9 +5,11 @@ import { createAgentContext } from './agent-context'
 
 const TYPE_SYSTEM_PROMPTS: Record<SubAgentType, string> = {
   general: 'You are a focused sub-agent. Complete the assigned task thoroughly and return results.',
-  explore: 'You are an exploration sub-agent. Search, read, and analyze code. Return structured findings with file paths and line numbers.',
+  explore:
+    'You are an exploration sub-agent. Search, read, and analyze code. Return structured findings with file paths and line numbers.',
   plan: 'You are a planning sub-agent. Design implementation approaches. Return a step-by-step plan with files to modify.',
-  'code-review': 'You are a code review sub-agent. Find bugs, security issues, and code quality problems. Return findings by severity.',
+  'code-review':
+    'You are a code review sub-agent. Find bugs, security issues, and code quality problems. Return findings by severity.',
 }
 
 /**
@@ -36,10 +38,7 @@ export class SubAgent {
     const agentDef = options.agentDef
 
     // Resolve system prompt: agentDef > options.systemPrompt > builtin type
-    const systemPrompt =
-      agentDef?.systemPrompt ||
-      options.systemPrompt ||
-      TYPE_SYSTEM_PROMPTS[type]
+    const systemPrompt = agentDef?.systemPrompt || options.systemPrompt || TYPE_SYSTEM_PROMPTS[type]
 
     // Create isolated context with tool scoping
     const resolvedDef: AgentDefinition = agentDef || {
@@ -61,14 +60,15 @@ export class SubAgent {
     context.addMessage({ role: 'user', content: prompt })
 
     const messages = context.getMessages()
-    const toolDefs = allowedTools.length > 0
-      ? allowedTools.map(t => ({
-          name: t.name,
-          description: t.description,
-          parameters: t.parameters,
-          input_schema: t.parameters,
-        }))
-      : undefined
+    const toolDefs =
+      allowedTools.length > 0
+        ? allowedTools.map((t) => ({
+            name: t.name,
+            description: t.description,
+            parameters: t.parameters,
+            input_schema: t.parameters,
+          }))
+        : undefined
 
     const modelToUse = options.modelOverride || agentDef?.model || model
     // 'inherit' means use parent model

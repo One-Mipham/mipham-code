@@ -1,5 +1,6 @@
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { homedir } from 'node:os'
 import { parse as parseYaml } from 'yaml'
 import type { SkillDefinition } from '../shared/index.ts'
 
@@ -94,12 +95,57 @@ export class SkillsLoader {
         tools: data.tools as SkillDefinition['tools'],
         hooks: data.hooks as SkillDefinition['hooks'],
         prompts: data.prompts as SkillDefinition['prompts'],
+        // NEW: frontmatter fields for fork/auto-trigger support
+        context: data.context as string | undefined,
+        model: data.model as string | undefined,
+        allowedTools: data['allowed-tools'] as string[] | undefined,
+        disableModelInvocation: data['disable-model-invocation'] as boolean | undefined,
+        userInvocable: data['user-invocable'] as boolean | undefined,
       }
 
       this.skills.set(skill.name, skill)
     } catch {
       // skip unparseable
     }
+  }
+
+  /**
+   * Build the system-reminder block for AI auto-triggering.
+   * Injects available skill names + descriptions so the AI can match
+   * user requests to relevant skills.
+   */
+  buildSystemReminder(maxTokens: number = 5000): string {
+    const skills = this.list().filter((s) => {
+      // Skip skills that disable model invocation
+      return !s.disableModelInvocation
+    })
+
+    if (skills.length === 0) return ''
+
+    const lines: string[] = [
+      '<system-reminder>',
+      'The following skills are available. Invoke via the Skill tool when relevant:',
+    ]
+
+    let tokenBudget = 0
+    for (const skill of skills) {
+      const entry = `- ${skill.name}: ${skill.description}`
+      const entryTokens = Math.ceil(entry.length / 4) + 1 // rough estimate
+      if (tokenBudget + entryTokens > maxTokens) break
+
+      lines.push(entry)
+      tokenBudget += entryTokens
+    }
+
+    lines.push('</system-reminder>')
+    return lines.join('\n')
+  }
+
+  /** Load skills from ~/.mipham/skills/ (user home directory). */
+  loadUserSkills(): void {
+    const home = homedir()
+    const userSkillsPath = join(home, '.mipham', 'skills')
+    this.loadExternal([userSkillsPath])
   }
 
   private nameFromPath(path: string): string {
