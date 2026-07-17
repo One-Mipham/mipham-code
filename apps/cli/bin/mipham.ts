@@ -179,6 +179,13 @@ async function runPluginCLI(): Promise<boolean> {
 }
 
 async function main() {
+  // ── Version flag ──────────────────────────────────────────────────────────
+  if (process.argv.includes('--version') || process.argv.includes('-v') || process.argv.includes('-V')) {
+    const pkg = await import('../package.json')
+    console.log(`${pkg.name} v${pkg.version}`)
+    process.exit(0)
+  }
+
   // Check for plugin subcommands first
   const handledPlugin = await runPluginCLI()
   if (handledPlugin) return
