@@ -1,19 +1,22 @@
 /**
- * Mipham Code — 集中化包元数据
+ * Mipham Code — package metadata (bundled version)
  *
- * **单一数据源**：所有包名、版本、安装命令和 URL 在此集中管理。
- * CLI 代码和网站页面必须从此文件导入，**严禁硬编码**。
- *
- * 当发布新版本或更改包名时，只需修改此文件。
- *
- * @packageDocumentation
+ * Reads directly from the CLI's own package.json at runtime
+ * so npm consumers don't need the @mipham/shared workspace package.
  */
 
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+
+// resolve package.json relative to this source file
+const PKG_PATH = path.join(import.meta.dirname!, '..', '..', 'package.json')
+const pkg = JSON.parse(readFileSync(PKG_PATH, 'utf-8'))
+
 /** npm 包全名（含 scope） */
-export const PACKAGE_NAME = '@miphamai/cli' as const
+export const PACKAGE_NAME: string = pkg.name
 
 /** 当前发布版本 */
-export const PACKAGE_VERSION = '0.5.2' as const
+export const PACKAGE_VERSION: string = pkg.version
 
 /** npm install 全局安装命令 */
 export const NPM_INSTALL_COMMAND = `npm install -g ${PACKAGE_NAME}` as const

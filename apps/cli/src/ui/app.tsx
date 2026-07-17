@@ -43,7 +43,7 @@ interface AgentProgress {
   startTime: number
 }
 
-import { PACKAGE_VERSION } from '@mipham/shared'
+import { PACKAGE_VERSION } from '../shared/index.ts'
 
 const VERSION = PACKAGE_VERSION
 

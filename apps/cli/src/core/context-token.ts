@@ -1,4 +1,4 @@
-import type { Message } from '@mipham/shared'
+import type { Message } from '../shared/index.ts'
 
 export interface CacheStatus {
   totalMessages: number

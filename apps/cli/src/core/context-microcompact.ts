@@ -1,4 +1,4 @@
-import type { Message, ToolResultContent } from '@mipham/shared'
+import type { Message, ToolResultContent } from '../shared/index.ts'
 import type { CacheTracker } from './context-token'
 import { estimateMessageTokens } from './context-token'
 
