@@ -367,21 +367,19 @@ export function App({
         </Box>
       )}
 
-      {/* Brand mark — centered header above chat */}
-      <Box flexDirection="row" justifyContent="center" marginTop={1}>
-        <Text dimColor>╺━</Text>
+      {/* Header — left-aligned */}
+      <Box flexDirection="column" marginBottom={1}>
         <Text color="#FFD700" bold>
-          {' '}
-          Mipham Code{' '}
+          Mipham Code
         </Text>
         <Text dimColor>v{VERSION}</Text>
-        <Text dimColor> ━╸</Text>
+        <Text dimColor>{modelId}</Text>
       </Box>
 
       {/* Chat panel */}
       <ChatPanel messages={messages} focusMode={focusMode} />
 
-      {/* Model picker (replaces input when open) */}
+      {/* Input with separator lines */}
       {pickerOpen ? (
         <ModelPicker
           config={config}
@@ -401,23 +399,20 @@ export function App({
         />
       ) : (
         /* Input bar (hidden when picker is open) */
-        <InputBar onSubmit={handleSubmit} isLoading={isLoading} />
+        <Box flexDirection="column">
+          <Text dimColor>──────────────────────────────</Text>
+          <InputBar onSubmit={handleSubmit} isLoading={isLoading} />
+          <Text dimColor>──────────────────────────────</Text>
+        </Box>
       )}
 
-      {/* Footer — brand mark + status line */}
+      {/* Status line */}
       <Box marginTop={1} flexDirection="column">
         {goalText && (
           <Box>
             <Text color="green">🎯 Goal: {goalText}</Text>
           </Box>
         )}
-        <Box flexDirection="row">
-          <Text dimColor>
-            {modelId} ({providerId}){fastMode && ' ⚡'}
-            {effort !== 'high' && ` 🧠${effort}`}
-            {focusMode && ' 🔍focus'}
-          </Text>
-        </Box>
         <Box flexDirection="row">
           <Text
             color={
