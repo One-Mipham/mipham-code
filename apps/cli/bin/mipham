@@ -1,45 +1,73 @@
 #!/usr/bin/env node
 /**
- * Mipham Code v0.2.0 — @onemipham/cli
+ * Mipham Code — @miphamai/cli
  * Multi-model open-core intelligent coding terminal by MiphamAI
  * License: Apache-2.0 | https://mipham.ai/code
+ *
+ * Node.js wrapper: detects Bun and re-launches with it for the full
+ * interactive experience. Version and package name are read from
+ * package.json (single source of truth).
  */
 
-// Detect runtime and launch accordingly
-const runtime = typeof Bun !== 'undefined' ? 'bun' : 'node'
+import { spawnSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import path from 'node:path'
 
-if (runtime === 'bun') {
-  // Bun runtime — import TS source directly
-  import('../src/index.tsx').then((m) => m.runApp({}))
-} else {
-  // Node.js runtime — prompt to use Bun for best experience
-  const nodeVersion = process.versions.node
-  const [major] = nodeVersion.split('.').map(Number)
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const pkg = JSON.parse(readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'))
+const VERSION = pkg.version
+const PKG_NAME = pkg.name
 
-  if (!major || major < 22) {
-    console.error(`
+// ── Check whether Bun is available ──────────────────────────────────────────
+function hasBun() {
+  try {
+    const result = spawnSync('bun', ['--version'], { stdio: 'pipe', timeout: 5000 })
+    return result.status === 0
+  } catch {
+    return false
+  }
+}
+
+// ── Bun available: re-launch with Bun for the full TUI ──────────────────────
+if (hasBun()) {
+  const tsEntry = path.join(__dirname, 'mipham.ts')
+  const result = spawnSync('bun', ['run', tsEntry, ...process.argv.slice(2)], {
+    stdio: 'inherit',
+    env: process.env,
+  })
+  process.exit(result.status ?? 0)
+}
+
+// ── No Bun: show version info and install guidance ─────────────────────────
+const nodeVersion = process.versions.node
+const [major] = nodeVersion.split('.').map(Number)
+
+if (!major || major < 22) {
+  process.stderr.write(`
 \`mipham\` requires Node.js 22+ or Bun 1.2+.
 
 Current Node.js: ${nodeVersion}
 
-Quick install:
-  npm install -g bun
+Quick install Bun:
+  curl -fsSL https://bun.sh/install | bash
+
+Then run:
   mipham
 
-Or:
-  curl -fsSL https://mipham.ai/install.sh | bash
+Docs: https://mipham.ai/code/docs
 `)
-    process.exit(1)
-  }
+  process.exit(1)
+}
 
-  console.log(`
-\x1b[0;36m\x1b[1m✦ Mipham Code v0.2.0\x1b[0m
-\x1b[0;36m  @onemipham/cli — Multi-model coding agent by MiphamAI\x1b[0m
+process.stdout.write(`
+\x1b[0;36m\x1b[1m✦ Mipham Code v${VERSION}\x1b[0m
+\x1b[0;36m  ${PKG_NAME} — Multi-model coding agent by MiphamAI\x1b[0m
 
 \x1b[0;33m⚠  Bun runtime is recommended for the best Mipham Code experience.\x1b[0m
 
 Quick install Bun:
-  \x1b[0;32mnpm install -g bun\x1b[0m
+  \x1b[0;32mcurl -fsSL https://bun.sh/install | bash\x1b[0m
 
 Then run:
   \x1b[0;32mmipham\x1b[0m
@@ -47,5 +75,4 @@ Then run:
 Install: \x1b[0;34mhttps://mipham.ai/code/install\x1b[0m
 Docs:    \x1b[0;34mhttps://mipham.ai/code/docs\x1b[0m
 `)
-  process.exit(0)
-}
+process.exit(0)

@@ -28,7 +28,7 @@ export const webFetchTool: ToolDefinition = {
       const timer = setTimeout(() => controller.abort(), 30_000) // 30s timeout
 
       const response = await fetch(url, {
-        headers: { 'User-Agent': 'Mipham-Code/0.1.0' },
+        headers: { 'User-Agent': 'Mipham-Code/0.5.0' },
         redirect: 'follow',
         signal: controller.signal,
       })

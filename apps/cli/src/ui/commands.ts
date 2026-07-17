@@ -8,7 +8,7 @@ import type { QueryEngine } from '../core/engine'
 import type { MiphamConfig } from '../shared/index.ts'
 import type { SkillsLoader } from '../skills/loader'
 import { McpClient } from '../mcp/client'
-import { NPM_INSTALL_COMMAND, NPM_UPDATE_COMMAND } from '@mipham/shared'
+import { NPM_INSTALL_COMMAND, NPM_UPDATE_COMMAND, PACKAGE_VERSION } from '@mipham/shared'
 
 export interface CommandContext {
   engine: QueryEngine
@@ -51,7 +51,7 @@ type CommandHandler = (
 
 const helpCmd: CommandHandler = (_ctx) => ({
   content: stripIndent`
-    Mipham Code v0.2.0 — Commands
+    Mipham Code v${PACKAGE_VERSION} — Commands
 
     ── Session ──────────────────────────
     /help          Show this help

@@ -43,7 +43,9 @@ interface AgentProgress {
   startTime: number
 }
 
-const VERSION = '0.3.0'
+import { PACKAGE_VERSION } from '@mipham/shared'
+
+const VERSION = PACKAGE_VERSION
 
 type PermissionMode = 'auto' | 'ask' | 'bypass'
 
@@ -357,7 +359,7 @@ export function App({
           <Text bold color="cyan">
             Mipham Code
           </Text>
-          <Text dimColor> v0.3.0</Text>
+          <Text dimColor> v{VERSION}</Text>
           {sessionTitle ? (
             <Text color="yellow"> — {sessionTitle}</Text>
           ) : (
