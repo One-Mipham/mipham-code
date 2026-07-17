@@ -367,6 +367,14 @@ export function App({
         </Box>
       )}
 
+      {/* Brand mark — centered header above chat */}
+      <Box flexDirection="row" justifyContent="center" marginTop={1}>
+        <Text dimColor>╺━</Text>
+        <Text color="#FFD700" bold> Mipham Code </Text>
+        <Text dimColor>v{VERSION}</Text>
+        <Text dimColor> ━╸</Text>
+      </Box>
+
       {/* Chat panel */}
       <ChatPanel messages={messages} focusMode={focusMode} />
 
