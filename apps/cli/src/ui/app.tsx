@@ -353,44 +353,6 @@ export function App({
 
   return (
     <Box flexDirection="column" padding={1} height="100%">
-      {/* Header — brand mark + status line */}
-      <Box marginBottom={1} flexDirection="column">
-        <Box flexDirection="row">
-          <Text bold color="cyan">
-            Mipham Code
-          </Text>
-          <Text dimColor> v{VERSION}</Text>
-          {sessionTitle ? (
-            <Text color="yellow"> — {sessionTitle}</Text>
-          ) : (
-            <Text dimColor> — MiphamAI</Text>
-          )}
-        </Box>
-        <Box flexDirection="row">
-          <Text dimColor>
-            {modelId} ({providerId}){fastMode && ' ⚡'}
-            {effort !== 'high' && ` 🧠${effort}`}
-            {focusMode && ' 🔍focus'}
-          </Text>
-        </Box>
-        <Box flexDirection="row">
-          <Text
-            color={
-              permissionMode === 'auto' ? 'green' : permissionMode === 'ask' ? 'yellow' : 'red'
-            }
-          >
-            ● {PERMISSION_LABELS[permissionMode]}
-          </Text>
-          <Text dimColor> (Shift+Tab to cycle)</Text>
-          <Text dimColor> · Ctrl+P pick · /help · Esc cancel</Text>
-        </Box>
-        {goalText && (
-          <Box>
-            <Text color="green">🎯 Goal: {goalText}</Text>
-          </Box>
-        )}
-      </Box>
-
       {/* Agent progress banner */}
       {agentProgress && (
         <Box flexDirection="column" marginY={1}>
@@ -430,6 +392,33 @@ export function App({
         /* Input bar (hidden when picker is open) */
         <InputBar onSubmit={handleSubmit} isLoading={isLoading} />
       )}
+
+      {/* Footer — brand mark + status line */}
+      <Box marginTop={1} flexDirection="column">
+        {goalText && (
+          <Box>
+            <Text color="green">🎯 Goal: {goalText}</Text>
+          </Box>
+        )}
+        <Box flexDirection="row">
+          <Text dimColor>
+            {modelId} ({providerId}){fastMode && ' ⚡'}
+            {effort !== 'high' && ` 🧠${effort}`}
+            {focusMode && ' 🔍focus'}
+          </Text>
+        </Box>
+        <Box flexDirection="row">
+          <Text
+            color={
+              permissionMode === 'auto' ? 'green' : permissionMode === 'ask' ? 'yellow' : 'red'
+            }
+          >
+            ● {PERMISSION_LABELS[permissionMode]}
+          </Text>
+          <Text dimColor> (Shift+Tab to cycle)</Text>
+          <Text dimColor> · Ctrl+P pick · /help · Esc cancel</Text>
+        </Box>
+      </Box>
     </Box>
   )
 }
