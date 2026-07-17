@@ -370,7 +370,10 @@ export function App({
       {/* Brand mark — centered header above chat */}
       <Box flexDirection="row" justifyContent="center" marginTop={1}>
         <Text dimColor>╺━</Text>
-        <Text color="#FFD700" bold> Mipham Code </Text>
+        <Text color="#FFD700" bold>
+          {' '}
+          Mipham Code{' '}
+        </Text>
         <Text dimColor>v{VERSION}</Text>
         <Text dimColor> ━╸</Text>
       </Box>
