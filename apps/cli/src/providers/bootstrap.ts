@@ -13,8 +13,10 @@ export function bootstrapProviders(
   for (const config of configs) {
     if (config.status === 'upcoming') continue
 
-    switch (config.protocol) {
+    const protocol = config.protocol?.toLowerCase()
+    switch (protocol) {
       case 'openai-compatible':
+      case 'openai-compat': // common user typo
         registry.register(config.id, new OpenAICompatProvider(config))
         break
       case 'anthropic':

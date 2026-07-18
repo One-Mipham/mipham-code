@@ -6,7 +6,9 @@ export class OpenAICompatProvider implements ProviderInstance {
   constructor(public config: ProviderConfig) {}
 
   async *chat(req: ChatRequest): AsyncGenerator<StreamChunk> {
-    const baseUrl = this.config.baseUrl?.replace(/\/+$/, '') || 'https://api.openai.com/v1'
+    // Accept both baseUrl and baseURL (common YAML typo)
+    const rawBase = (this.config as any).baseUrl || (this.config as any).baseURL
+    const baseUrl = rawBase?.replace(/\/+$/, '') || 'https://api.openai.com/v1'
     const apiKey = this.resolveApiKey(this.config.apiKey)
 
     const body = {
@@ -136,7 +138,8 @@ export class OpenAICompatProvider implements ProviderInstance {
 
   async healthCheck(): Promise<boolean> {
     try {
-      const baseUrl = this.config.baseUrl?.replace(/\/+$/, '') || 'https://api.openai.com/v1'
+      const rawBase = (this.config as any).baseUrl || (this.config as any).baseURL
+      const baseUrl = rawBase?.replace(/\/+$/, '') || 'https://api.openai.com/v1'
       const apiKey = this.resolveApiKey(this.config.apiKey)
       const res = await fetch(`${baseUrl}/models`, {
         headers: { Authorization: `Bearer ${apiKey}` },
@@ -187,7 +190,9 @@ export class OpenAICompatProvider implements ProviderInstance {
   }
 
   private resolveApiKey(keyTemplate: string): string {
-    const match = keyTemplate.match(/^\$\{(.+)\}$/)
+    // Accept both ${VAR} and $VAR syntax
+    let match = keyTemplate.match(/^\$\{(.+)\}$/)
+    if (!match) match = keyTemplate.match(/^\$([A-Z_][A-Z0-9_]*)$/)
     if (match?.[1]) {
       return process.env[match[1]] || ''
     }

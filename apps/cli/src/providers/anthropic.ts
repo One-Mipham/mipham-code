@@ -278,7 +278,9 @@ export class AnthropicProvider implements ProviderInstance {
   }
 
   private resolveApiKey(keyTemplate: string): string {
-    const match = keyTemplate.match(/^\$\{(.+)\}$/)
+    // Accept both ${VAR} and $VAR syntax
+    let match = keyTemplate.match(/^\$\{(.+)\}$/)
+    if (!match) match = keyTemplate.match(/^\$([A-Z_][A-Z0-9_]*)$/)
     if (match?.[1]) {
       return process.env[match[1]] || ''
     }
