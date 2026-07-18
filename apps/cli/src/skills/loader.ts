@@ -66,6 +66,19 @@ export class SkillsLoader {
     return this.skills.has(name)
   }
 
+  countByType(): { standard: number; mipham: number; total: number } {
+    const all = this.list()
+    return {
+      standard: all.filter((s) => s.type === 'standard').length,
+      mipham: all.filter((s) => s.type === 'mipham').length,
+      total: all.length,
+    }
+  }
+
+  getNamesByType(type: 'standard' | 'mipham'): string[] {
+    return this.listByType(type).map((s) => s.name)
+  }
+
   private loadDirectory(dir: string, type: 'standard' | 'mipham'): void {
     try {
       const entries = readdirSync(dir)

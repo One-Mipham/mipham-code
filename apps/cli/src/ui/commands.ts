@@ -49,107 +49,123 @@ type CommandHandler = (
 // Session & Identity
 // ═══════════════════════════════════════════════════════════════
 
-const helpCmd: CommandHandler = (_ctx) => ({
-  content: stripIndent`
-    Mipham Code v${PACKAGE_VERSION} — Commands
+const helpCmd: CommandHandler = (ctx) => {
+  const skillCount = ctx.skillsLoader?.list().length ?? 14
+  const toolsCount = ctx.engine.getTools().size
+  const cmdCount = getCommandNames().length
 
-    ── Session ──────────────────────────
-    /help          Show this help
-    /version       Show version info
-    /clear         Clear conversation
-    /compact       Compact context window
-    /context       Show context stats
-    /status        Session and system status
-    /cost          Token usage estimate
-    /usage         Detailed usage dashboard
-    /rename <name> Rename current session
-    /goal <text>   Set session goal
-    /recap         Summarize session so far
-    /export        Export conversation to file
-    /doctor        System diagnostics
-    /resume        List saved sessions
-    /branch <name> Fork conversation
+  return {
+    content: stripIndent`
+      Mipham Code v${PACKAGE_VERSION} — Commands
 
-    ── History ─────────────────────────
-    /rewind        Undo last AI turn
-    /undo          Same as /rewind
-    /copy [N]      Copy last response to clipboard
-    /focus         Toggle focus view (last exchange only)
+      ── Session ──────────────────────────
+      /help          Show this help
+      /commands      List all ${cmdCount} commands
+      /version       Show version info
+      /clear         Clear conversation
+      /compact       Compact context window
+      /context       Show context stats
+      /status        Session and system status
+      /cost          Token usage estimate
+      /usage         Detailed usage dashboard
+      /rename <name> Rename current session
+      /goal <text>   Set session goal
+      /recap         Summarize session so far
+      /export        Export conversation to file
+      /doctor        System diagnostics
+      /resume        List saved sessions
+      /branch <name> Fork conversation
 
-    ── Model & Provider ────────────────
-    /pick          Open model picker (or Ctrl+P)
-    /model         Show current model
-    /models        List all available models
-    /provider      Show current provider
-    /providers     List configured providers
-    /switch <p> <m> Switch provider and model
-    /config        View configuration
-    /fast [on|off] Toggle fast mode
-    /effort <lvl>  Set reasoning effort (low|medium|high|xhigh|max)
-    /theme [dark|light|auto] Set terminal theme
+      ── History ─────────────────────────
+      /rewind        Undo last AI turn
+      /undo          Same as /rewind
+      /copy [N]      Copy last response to clipboard
+      /focus         Toggle focus view (last exchange only)
 
-    ── Tools & Skills ──────────────────
-    /tools         List available tools (16 total)
-    /skills        List loaded skills (14 built-in)
-    /reload-skills Reload all skills
-    /mcp           MCP server status
+      ── Model & Provider ────────────────
+      /pick          Open model picker (or Ctrl+P)
+      /model         Show current model
+      /models        List all available models
+      /provider      Show current provider
+      /providers     List configured providers
+      /switch <p> <m> Switch provider and model
+      /config        View configuration
+      /fast [on|off] Toggle fast mode
+      /effort <lvl>  Set reasoning effort (low|medium|high|xhigh|max)
+      /theme [dark|light|auto] Set terminal theme
 
-    ── Workflow ────────────────────────
-    /plan          Enter plan mode (read-only)
-    /no-plan       Exit plan mode
-    /tdd           TDD mode              [stub]
-    /todos         Task management
-    /tasks         Background tasks
-    /review        Code review workflow
-    /pr-comments   PR review summary
-    /diff          Show git diff
-    /workflows     List workflow scripts
-    /loop <int> <p> Run prompt on interval
-    /schedule      View scheduled tasks   [stub]
+      ── Tools & Skills ──────────────────
+      /tools         List available tools (${toolsCount} total)
+      /skills        List loaded skills (${skillCount} built-in)
+      /reload-skills Reload all skills
+      /commands      List all slash commands
+      /mcp           MCP server status
 
-    ── Project ─────────────────────────
-    /init          Initialize .mipham config
-    /setup         Guided project setup wizard
-    /permissions   Show permission settings
-    /add-dir <dir> Add workspace directory
-    /security      Security review checklist
-    /audit         Same as /security
+      ── Workflow ────────────────────────
+      /plan          Enter plan mode (read-only)
+      /no-plan       Exit plan mode
+      /tdd           TDD mode              [stub]
+      /todos         Task management
+      /tasks         Background tasks
+      /review        Code review workflow
+      /pr-comments   PR review summary
+      /diff          Show git diff
+      /workflows     List workflow scripts
+      /loop <int> <p> Run prompt on interval
+      /schedule      View scheduled tasks   [stub]
 
-    ── Environment ─────────────────────
-    /upgrade       Show upgrade instructions
-    /release-notes View version changelog
-    /ide           IDE integration guide
-    /terminal-setup Shell & terminal config
-    /memory        Manage AI memories
+      ── Project ─────────────────────────
+      /init          Initialize .mipham config
+      /setup         Guided project setup wizard
+      /permissions   Show permission settings
+      /add-dir <dir> Add workspace directory
+      /security      Security review checklist
+      /audit         Same as /security
 
-    ── Account ─────────────────────────
-    /login         Show API key status
-    /logout        Clear credentials guide
-    /feedback      Send feedback
+      ── Environment ─────────────────────
+      /upgrade       Show upgrade instructions
+      /release-notes View version changelog
+      /ide           IDE integration guide
+      /terminal-setup Shell & terminal config
+      /memory        Manage AI memories
 
-    ── Agents ──────────────────────────
-    /agents        Agent view dashboard
-    /bg <prompt>   Run a background agent task
+      ── Account ─────────────────────────
+      /login         Show API key status
+      /logout        Clear credentials guide
+      /feedback      Send feedback
 
-    Type /exit or Esc to quit.
-  `,
-})
+      ── Agents ──────────────────────────
+      /agents        Agent view dashboard
+      /bg <prompt>   Run a background agent task
 
-const versionCmd: CommandHandler = (ctx) => ({
-  content: stripIndent`
-    Mipham Code v${ctx.version}
+      Type /exit or Esc to quit.
+    `,
+  }
+}
 
-    Runtime:  Bun ${typeof Bun !== 'undefined' ? Bun.version : '(Node.js)'}
-    Platform: ${process.platform} ${process.arch}
-    Node:     ${process.version}
-    CWD:      ${process.cwd()}
+const versionCmd: CommandHandler = (ctx) => {
+  const skillCounts = ctx.skillsLoader?.countByType()
+  const skillsLine = skillCounts
+    ? `Skills:   ${skillCounts.total} built-in (${skillCounts.standard} standard + ${skillCounts.mipham} mipham)`
+    : `Skills:   (loader unavailable)`
+  const toolsCount = ctx.engine.getTools().size
 
-    Provider: ${ctx.providerId} / ${ctx.modelId}
-    Tools:    16 built-in
-    Skills:   14 built-in (12 standard + 2 mipham)
-    License:  Apache 2.0
-  `,
-})
+  return {
+    content: stripIndent`
+      Mipham Code v${ctx.version}
+
+      Runtime:  Bun ${typeof Bun !== 'undefined' ? Bun.version : '(Node.js)'}
+      Platform: ${process.platform} ${process.arch}
+      Node:     ${process.version}
+      CWD:      ${process.cwd()}
+
+      Provider: ${ctx.providerId} / ${ctx.modelId}
+      Tools:    ${toolsCount} built-in
+      ${skillsLine}
+      License:  Apache 2.0
+    `,
+  }
+}
 
 const clearCmd: CommandHandler = (ctx) => {
   ctx.engine.getContext().clear()
@@ -317,29 +333,25 @@ const toolsCmd: CommandHandler = (ctx) => {
   return { content: `Available tools (${tools.size}):\n\n${sections.join('\n\n')}` }
 }
 
-const skillsCmd: CommandHandler = (_ctx) => ({
-  content: stripIndent`
-    ── Standard Skills (12) ──
-    code-review                  Code review automation (v2.0)
-    compassionate-communication  Warm, respectful, user-centered interaction
-    doc-generator                Generate technical docs from code
-    github-ops                   GitHub PR/issues/releases management
-    memory                       Persistent memory read/write
-    mipham-code-setup            Mipham Code install & config guide
-    security-review              Security audit (OWASP, secrets, supply chain)
-    self-review                  Self-review diff for bugs and cleanup
-    superpower                   Skill discovery and usage guide
-    tdd                          Test-Driven Development workflow
-    web-search                   Web search for current information
-    code-review                  (classic) Legacy code review
+const skillsCmd: CommandHandler = (ctx) => {
+  if (!ctx.skillsLoader) {
+    return { content: 'SkillsLoader not available.' }
+  }
+  const counts = ctx.skillsLoader.countByType()
+  const standard = ctx.skillsLoader.listByType('standard')
+  const mipham = ctx.skillsLoader.listByType('mipham')
 
-    ── Mipham Exclusive (2) ──
-    om-security        Security analysis (injection, PII, adversarial)
-    om-model-optimize  Model optimization (context, caching, tokens)
-
-    14 skills loaded. Use Skill tool to invoke.
-  `,
-})
+  const lines: string[] = [
+    `── Standard Skills (${counts.standard}) ──`,
+    ...standard.map((s) => `  ${s.name.padEnd(28)} ${s.description}`),
+    '',
+    `── Mipham Exclusive (${counts.mipham}) ──`,
+    ...mipham.map((s) => `  ${s.name.padEnd(20)} ${s.description}`),
+    '',
+    `${counts.total} skills loaded. Use Skill tool to invoke.`,
+  ]
+  return { content: lines.join('\n') }
+}
 
 // ═══════════════════════════════════════════════════════════════
 // Workflow
@@ -1500,16 +1512,19 @@ async function setupStep3(ctx: CommandContext): Promise<CommandResult> {
   return { content: lines.join('\n') }
 }
 
-async function setupStep4(_ctx: CommandContext): Promise<CommandResult> {
+async function setupStep4(ctx: CommandContext): Promise<CommandResult> {
+  const counts = ctx.skillsLoader?.countByType() ?? { standard: 0, mipham: 0, total: 0 }
+  const standardNames = ctx.skillsLoader?.getNamesByType('standard') ?? []
+  const miphamNames = ctx.skillsLoader?.getNamesByType('mipham') ?? []
+
   return {
     content: `── Step 4: Install Skills ──
 
 Skills extend Mipham Code with specialized capabilities.
 
-Built-in skills (11 total):
-  Standard (9):  code-review, compassionate-communication, doc-generator,
-                 github-ops, memory, self-review, superpower, tdd, web-search
-  Mipham (2):    om-model-optimize, om-security
+Built-in skills (${counts.total} total):
+  Standard (${counts.standard}):  ${standardNames.join(', ')}
+  Mipham (${counts.mipham}):    ${miphamNames.join(', ')}
 
 Community skills:
   Coming soon — the Mipham Code skills marketplace will let you
@@ -2274,6 +2289,114 @@ const artifactBaseCmd: CommandHandler = (ctx, args) => {
 // ═══════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════
+// Commands — list all registered slash commands
+// ═══════════════════════════════════════════════════════════════
+
+const commandsListCmd: CommandHandler = () => {
+  const names = getCommandNames()
+  const categories: Record<string, string[]> = {
+    'Session & Identity': [],
+    History: [],
+    'Model & Provider': [],
+    'Tools & Skills': [],
+    Workflow: [],
+    Project: [],
+    Environment: [],
+    Account: [],
+    Agents: [],
+    Artifacts: [],
+    Other: [],
+  }
+
+  const catMap: Record<string, string> = {
+    '/help': 'Session & Identity',
+    '/version': 'Session & Identity',
+    '/clear': 'Session & Identity',
+    '/exit': 'Session & Identity',
+    '/quit': 'Session & Identity',
+    '/compact': 'Session & Identity',
+    '/context': 'Session & Identity',
+    '/status': 'Session & Identity',
+    '/cost': 'Session & Identity',
+    '/usage': 'Session & Identity',
+    '/rename': 'Session & Identity',
+    '/goal': 'Session & Identity',
+    '/recap': 'Session & Identity',
+    '/export': 'Session & Identity',
+    '/doctor': 'Session & Identity',
+    '/resume': 'Session & Identity',
+    '/branch': 'Session & Identity',
+    '/rewind': 'History',
+    '/undo': 'History',
+    '/copy': 'History',
+    '/focus': 'History',
+    '/pick': 'Model & Provider',
+    '/model': 'Model & Provider',
+    '/models': 'Model & Provider',
+    '/provider': 'Model & Provider',
+    '/providers': 'Model & Provider',
+    '/switch': 'Model & Provider',
+    '/config': 'Model & Provider',
+    '/fast': 'Model & Provider',
+    '/effort': 'Model & Provider',
+    '/theme': 'Model & Provider',
+    '/upgrade': 'Model & Provider',
+    '/tools': 'Tools & Skills',
+    '/skills': 'Tools & Skills',
+    '/reload-skills': 'Tools & Skills',
+    '/mcp': 'Tools & Skills',
+    '/commands': 'Tools & Skills',
+    '/plan': 'Workflow',
+    '/no-plan': 'Workflow',
+    '/tdd': 'Workflow',
+    '/todos': 'Workflow',
+    '/tasks': 'Workflow',
+    '/review': 'Workflow',
+    '/pr-comments': 'Workflow',
+    '/diff': 'Workflow',
+    '/workflows': 'Workflow',
+    '/loop': 'Workflow',
+    '/init': 'Project',
+    '/setup': 'Project',
+    '/permissions': 'Project',
+    '/add-dir': 'Project',
+    '/security': 'Project',
+    '/audit': 'Project',
+    '/ide': 'Environment',
+    '/terminal-setup': 'Environment',
+    '/memory': 'Environment',
+    '/release-notes': 'Environment',
+    '/login': 'Account',
+    '/logout': 'Account',
+    '/feedback': 'Account',
+    '/agents': 'Agents',
+    '/bg': 'Agents',
+    '/artifact': 'Artifacts',
+    '/schedule': 'Other',
+  }
+
+  for (const name of names) {
+    const cat = catMap[name] ?? 'Other'
+    categories[cat]?.push(name)
+  }
+
+  const lines: string[] = [`── All Slash Commands (${names.length}) ──`, '']
+
+  for (const [cat, cmds] of Object.entries(categories)) {
+    if (cmds.length === 0) continue
+    lines.push(`── ${cat} (${cmds.length}) ──`)
+    for (const c of cmds) {
+      lines.push(`  ${c}`)
+    }
+    lines.push('')
+  }
+
+  lines.push('Type /help for details, or /<command> to run.')
+
+  return { content: lines.join('\n') }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Command Registry
 // ═══════════════════════════════════════════════════════════════
 
@@ -2314,6 +2437,7 @@ registry.set('/effort', effortCmd)
 registry.set('/tools', toolsCmd)
 registry.set('/skills', skillsCmd)
 registry.set('/reload-skills', reloadSkillsCmd)
+registry.set('/commands', commandsListCmd)
 
 // Workflow
 registry.set('/plan', planCmd)
@@ -2373,6 +2497,85 @@ export function getCommand(name: string): CommandHandler | undefined {
 
 export function getCommandNames(): string[] {
   return Array.from(registry.keys()).sort()
+}
+
+export interface CommandEntry {
+  name: string
+  description: string
+}
+
+const COMMAND_DESCRIPTIONS: Record<string, string> = {
+  '/help': 'Show help',
+  '/commands': 'List all slash commands',
+  '/version': 'Show version info',
+  '/clear': 'Clear conversation',
+  '/exit': 'Exit Mipham Code',
+  '/quit': 'Exit Mipham Code',
+  '/compact': 'Compact context window',
+  '/context': 'Show context stats',
+  '/status': 'Session and system status',
+  '/cost': 'Token usage estimate',
+  '/usage': 'Detailed usage dashboard',
+  '/rename': 'Rename current session',
+  '/goal': 'Set session goal',
+  '/recap': 'Summarize session so far',
+  '/export': 'Export conversation to file',
+  '/doctor': 'System diagnostics',
+  '/resume': 'List saved sessions',
+  '/branch': 'Fork conversation',
+  '/rewind': 'Undo last AI turn',
+  '/undo': 'Same as /rewind',
+  '/copy': 'Copy last response to clipboard',
+  '/focus': 'Toggle focus view',
+  '/pick': 'Open model picker',
+  '/model': 'Show current model',
+  '/models': 'List all available models',
+  '/provider': 'Show current provider',
+  '/providers': 'List configured providers',
+  '/switch': 'Switch provider and model',
+  '/config': 'View configuration',
+  '/fast': 'Toggle fast mode',
+  '/effort': 'Set reasoning effort',
+  '/theme': 'Set terminal theme',
+  '/tools': 'List available tools',
+  '/skills': 'List loaded skills',
+  '/reload-skills': 'Reload all skills',
+  '/mcp': 'MCP server status',
+  '/plan': 'Enter plan mode',
+  '/no-plan': 'Exit plan mode',
+  '/tdd': 'TDD mode',
+  '/todos': 'Task management',
+  '/tasks': 'Background tasks',
+  '/review': 'Code review workflow',
+  '/pr-comments': 'PR review summary',
+  '/diff': 'Show git diff',
+  '/workflows': 'List workflow scripts',
+  '/loop': 'Run prompt on interval',
+  '/init': 'Initialize .mipham config',
+  '/setup': 'Guided project setup wizard',
+  '/permissions': 'Show permission settings',
+  '/add-dir': 'Add workspace directory',
+  '/security': 'Security review checklist',
+  '/audit': 'Same as /security',
+  '/ide': 'IDE integration guide',
+  '/terminal-setup': 'Shell & terminal config',
+  '/memory': 'Manage AI memories',
+  '/release-notes': 'View version changelog',
+  '/upgrade': 'Show upgrade instructions',
+  '/login': 'Show API key status',
+  '/logout': 'Clear credentials guide',
+  '/feedback': 'Send feedback',
+  '/agents': 'Agent view dashboard',
+  '/bg': 'Run a background agent task',
+  '/artifact': 'Manage artifacts',
+  '/schedule': 'View scheduled tasks',
+}
+
+export function getCommandList(): CommandEntry[] {
+  return getCommandNames().map((name) => ({
+    name,
+    description: COMMAND_DESCRIPTIONS[name] ?? '',
+  }))
 }
 
 export function looksLikeSlashCommand(input: string): boolean {

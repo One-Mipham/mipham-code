@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { Box, Text, useInput } from 'ink'
 import TextInput from 'ink-text-input'
 import { VimMotionEngine, type VimMode } from './vim-motions.js'
+import { getCommandList, type CommandEntry } from './commands.js'
 
 interface InputBarProps {
   onSubmit: (input: string) => void
@@ -110,6 +111,15 @@ export function InputBar({ onSubmit, isLoading }: InputBarProps) {
   const [verb, setVerb] = useState(() => pick(STATUS_GERUNDS))
   const [completionVerb, setCompletionVerb] = useState<string | null>(null)
   const prevLoading = useRef(isLoading)
+
+  // ── Slash command hints ──
+  const allCommands = useMemo(() => getCommandList(), [])
+  const slashHints = useMemo(() => {
+    if (!value.startsWith('/')) return []
+    const filter = value.slice(1).toLowerCase()
+    if (!filter) return allCommands.slice(0, 12) // show first 12 when just "/"
+    return allCommands.filter((c) => c.name.toLowerCase().includes(filter)).slice(0, 8)
+  }, [value, allCommands])
 
   // Rotate gerunds while loading
   useEffect(() => {
@@ -249,32 +259,54 @@ export function InputBar({ onSubmit, isLoading }: InputBarProps) {
   }
 
   return (
-    <Box marginTop={1}>
-      <Box marginRight={1}>
-        <Text color={vimMode === 'normal' ? 'magenta' : isLoading ? 'yellow' : 'cyan'}>
-          {vimMode === 'normal' ? ':' : '>'}
-        </Text>
+    <Box flexDirection="column" marginTop={1}>
+      <Box>
+        <Box marginRight={1}>
+          <Text color={vimMode === 'normal' ? 'magenta' : isLoading ? 'yellow' : 'cyan'}>
+            {vimMode === 'normal' ? ':' : '>'}
+          </Text>
+        </Box>
+        <TextInput
+          value={value}
+          onChange={(val) => {
+            // Block text changes during search mode — keys go to search query
+            if (searchMode) return
+            setValue(val)
+          }}
+          onSubmit={handleSubmit}
+          placeholder={
+            searchMode
+              ? `/${searchQuery}`
+              : vimMode === 'normal'
+                ? '[NORMAL] h/j/k/l w/b 0/$ dd yy p u / (Esc to insert)'
+                : isLoading
+                  ? `${verb}...`
+                  : completionVerb
+                    ? completionVerb
+                    : 'Type a message (Esc to cancel)...'
+          }
+        />
       </Box>
-      <TextInput
-        value={value}
-        onChange={(val) => {
-          // Block text changes during search mode — keys go to search query
-          if (searchMode) return
-          setValue(val)
-        }}
-        onSubmit={handleSubmit}
-        placeholder={
-          searchMode
-            ? `/${searchQuery}`
-            : vimMode === 'normal'
-              ? '[NORMAL] h/j/k/l w/b 0/$ dd yy p u / (Esc to insert)'
-              : isLoading
-                ? `${verb}...`
-                : completionVerb
-                  ? completionVerb
-                  : 'Type a message (Esc to cancel)...'
-        }
-      />
+      {/* Slash command hints — shown when typing / in INSERT mode */}
+      {slashHints.length > 0 && vimMode === 'insert' && (
+        <Box marginTop={1} flexDirection="row" gap={1}>
+          <Text dimColor>Commands: </Text>
+          {slashHints.map((cmd, i) => (
+            <Text key={cmd.name} color="cyan">
+              {i > 0 ? '  ' : ''}
+              {cmd.name}
+            </Text>
+          ))}
+          <Text dimColor>
+            {' '}
+            (
+            {slashHints.length === allCommands.length
+              ? 'all'
+              : `${slashHints.length} of ${allCommands.length}`}
+            )
+          </Text>
+        </Box>
+      )}
     </Box>
   )
 }

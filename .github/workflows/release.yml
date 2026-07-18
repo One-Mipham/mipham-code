@@ -95,6 +95,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -112,7 +114,12 @@ jobs:
         run: |
           TAG=${GITHUB_REF#refs/tags/}
           echo "tag=$TAG" >> $GITHUB_OUTPUT
-          git log $(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo HEAD~5)..HEAD --pretty=format:'- %s' > /tmp/changelog.txt || echo "- $TAG" > /tmp/changelog.txt
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            git log "${PREV_TAG}..HEAD" --pretty=format:'- %s' > /tmp/changelog.txt
+          else
+            echo "- ${TAG}" > /tmp/changelog.txt
+          fi
 
       - name: Create Release
         uses: softprops/action-gh-release@v2

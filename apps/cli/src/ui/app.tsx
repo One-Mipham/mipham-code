@@ -423,7 +423,7 @@ export function App({
           </Text>
           <Text dimColor> · ⏵⏵ accept edits on</Text>
           <Text dimColor> (Shift+Tab to cycle)</Text>
-          <Text dimColor> · Ctrl+P pick · /help · Esc cancel</Text>
+          <Text dimColor> · Ctrl+P pick · /help /commands · Esc cancel</Text>
           <Text dimColor> · ← agents</Text>
         </Box>
       </Box>
