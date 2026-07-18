@@ -12,6 +12,15 @@
 # ================================================================
 set -e
 
+# ── Pre-deploy guard — prevent Nginx config overwrites ──
+GUARD_SCRIPT="$(cd "$(dirname "$0")" && pwd)/../websites/domestic/deploy-guard.sh"
+if [ -f "$GUARD_SCRIPT" ]; then
+  source "$GUARD_SCRIPT"
+  guard_check_nginx "mipham-code"
+else
+  echo "⚠️  deploy-guard.sh 未找到，跳过 Nginx 预检"
+fi
+
 SERVER="root@82.156.254.121"
 REMOTE_DIR="/www/wwwroot/onemipham.com/mipham-code"
 SKIP_BUILD=false
