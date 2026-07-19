@@ -261,6 +261,15 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
         status: 'active',
       },
       {
+        id: 'kimi-k3',
+        name: 'Kimi K3',
+        providerId: 'kimi',
+        contextWindow: 128_000,
+        maxOutput: 16_000,
+        vision: true,
+        status: 'active',
+      },
+      {
         id: 'moonshot-v1-8k',
         name: 'Moonshot v1 8K',
         providerId: 'kimi',
