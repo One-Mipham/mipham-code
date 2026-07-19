@@ -1,6 +1,6 @@
-# Mipham Code v0.5.8 — 你的全能 AI 编程终端，正式发布
+# Mipham Code v0.5.9 — 你的全能 AI 编程终端，正式发布
 
-> 多模型 · 开源核心 · 安全加固 · 62 条命令 · 14 项技能 · 8 家 AI 厂商一键切换
+> 多模型 · 开源核心 · 安全加固 · 66 条命令 · 14 项技能 · 9 家 AI 厂商一键切换 · 一键自更新
 > 北京华安麦逄科技有限公司 | 品牌: MiphamAI
 
 ---
@@ -32,7 +32,7 @@ mipham
 
 ## 核心特性
 
-### 🤖 8 家 AI 模型，一键切换
+### 🤖 9 家 AI 模型，一键切换
 
 | 厂商             | 代表模型                          | 接入方式    |
 | ---------------- | --------------------------------- | ----------- |
@@ -42,6 +42,7 @@ mipham
 | 通义千问 (Qwen)  | Plus · Max                        | OpenAI 兼容 |
 | 豆包 (ByteDance) | Seed 2.0 系列 (6 个)              | OpenAI 兼容 |
 | 腾讯混元         | TurboS · 2.0 · T1 (8 个)          | OpenAI 兼容 |
+| Kimi (月之暗面)  | Kimi Latest · Moonshot v1 系列    | OpenAI 兼容 |
 | Google Gemini    | 3.0 Flash/Pro · 2.5 Pro           | OpenAI 兼容 |
 | MiphamAI         | OM V5 Flash/Pro/Visual            | 即将上线    |
 
@@ -55,16 +56,37 @@ mipham
 系统:      Config · MCP
 ```
 
-### ⌨ 62 条斜杠命令
+### ⌨ 66 条斜杠命令 + 交互式选择器
 
-完全对齐 Claude Code 体验，零重新学习成本。输入 `/` 自动提示可用命令：
+完全对齐 Claude Code 体验，零重新学习成本。输入 `/` 弹出交互式命令选择器，↑↓ 光标选择，Enter 确认，支持实时过滤：
 
 ```
 /help · /commands · /clear · /compact · /context · /status
 /model · /models · /switch · /pick · /tools · /skills
 /review · /pr-comments · /diff · /plan · /setup · /doctor
-/export · /resume · /memory · /mcp · /agents · /bg
+/browse-skills · /install-skill · /remove-skill · /recommend
+/upgrade · /agents · /bg · /export · /resume · /memory
 ```
+
+🆕 v0.5.9 新增：`/browse-skills`（社区技能市场）、`/install-skill`（一键安装技能）、`/recommend`（智能项目分析推荐）
+
+### 🎯 14 个内置技能 + 社区技能市场
+
+内置技能（11 standard + 3 mipham）: code-review、security-review、tdd、doc-generator……
+
+🆕 **技能市场**：`/browse-skills` 浏览社区技能，`/install-skill <name>` 一键安装。首批 8 个社区技能（含 Anthropic 官方 systematic-debugging、TDD、frontend-design）
+
+### 🔄 一键自更新
+
+`mipham update` 或 `/upgrade` 命令自动检查 npm registry 最新版本，备份配置文件，执行升级。升级过程中 `~/.mipham/config.yml`（含 API Key）自动保护不丢失。
+
+### 🛡 配置容错 + 安全加固
+
+- YAML 语法错误不崩溃，损坏时自动从备份恢复
+- 启动时自动备份配置（保留 5 份历史）
+- API Key 未设置或环境变量缺失时友好提示
+- `/init` 一键生成预配置 9 家 provider 的 config.yml
+- 命令注入防护、SSRF 防护、密钥输出脱敏
 
 ### 🎯 14 个内置技能
 
@@ -114,7 +136,7 @@ irm https://onemipham.com/install.ps1 | iex
 ### 直接下载二进制
 
 macOS / Linux / Windows 二进制文件：
-👉 [GitHub Releases (v0.5.8)](https://github.com/One-Mipham/mipham-code/releases)
+👉 [GitHub Releases (v0.5.9)](https://github.com/One-Mipham/mipham-code/releases)
 
 ---
 
