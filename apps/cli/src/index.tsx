@@ -22,6 +22,7 @@ interface RunOptions {
   lang?: string
   permission?: string
   resume?: string
+  version?: string
 }
 
 export async function runApp(options: RunOptions): Promise<void> {
@@ -139,6 +140,7 @@ export async function runApp(options: RunOptions): Promise<void> {
       initialModel={defaultModel}
       lang={options.lang}
       skillsLoader={skillsLoader}
+      version={options.version}
     />,
   )
   await waitUntilExit()

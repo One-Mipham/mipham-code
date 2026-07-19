@@ -270,13 +270,25 @@ async function runUpdate(): Promise<boolean> {
 }
 
 async function main() {
+  // ── Read version fresh from package.json at startup (bypasses Bun module cache) ──
+  const { readFileSync } = await import('node:fs')
+  const { join } = await import('node:path')
+  let APP_VERSION = '0.0.0'
+  try {
+    const pkgPath = join(import.meta.dirname!, '..', 'package.json')
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
+    APP_VERSION = pkg.version
+  } catch {
+    // fallback — version will be '0.0.0'
+  }
+
   // ── Version flag ──────────────────────────────────────────────────────────
   if (
     process.argv.includes('--version') ||
     process.argv.includes('-v') ||
     process.argv.includes('-V')
   ) {
-    const pkg = await import('../package.json')
+    const pkg = JSON.parse(readFileSync(join(import.meta.dirname!, '..', 'package.json'), 'utf-8'))
     console.log(`${pkg.name} v${pkg.version}`)
     process.exit(0)
   }
@@ -301,7 +313,7 @@ async function main() {
 
   try {
     const { runApp } = await import('../src/index')
-    await runApp({})
+    await runApp({ version: APP_VERSION })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     if (msg.includes('react-devtools-core')) {

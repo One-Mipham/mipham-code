@@ -22,6 +22,7 @@ interface AppProps {
   initialModel?: string
   lang?: string
   skillsLoader?: SkillsLoader
+  version?: string
 }
 
 export interface ToolMeta {
@@ -43,9 +44,8 @@ interface AgentProgress {
   startTime: number
 }
 
-import { PACKAGE_VERSION } from '../shared/index.ts'
-
-const VERSION = PACKAGE_VERSION
+// Version is read fresh from package.json at startup via runApp prop
+// (bypasses Bun module caching after npm update)
 
 type PermissionMode = 'auto' | 'ask' | 'bypass'
 
@@ -63,6 +63,7 @@ export function App({
   initialModel,
   lang: _lang,
   skillsLoader,
+  version,
 }: AppProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -105,7 +106,7 @@ export function App({
       config,
       providerId,
       modelId,
-      version: VERSION,
+      version: version || '0.0.0',
       setSessionTitle: (title: string) => setSessionTitle(title),
       setFastMode: (on: boolean) => setFastMode(on),
       setEffort: (level: string) => setEffort(level),
@@ -356,7 +357,7 @@ export function App({
         <Text color="#FFD700" bold>
           Mipham Code
         </Text>
-        <Text dimColor>v{VERSION}</Text>
+        <Text dimColor>v{version || '0.0.0'}</Text>
         <Text dimColor>{modelId}</Text>
       </Box>
 

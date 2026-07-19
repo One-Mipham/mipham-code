@@ -4,8 +4,8 @@ import { PACKAGE_VERSION } from '../shared/index.ts'
 
 export const DEFAULT_CONFIG: MiphamConfig = {
   version: PACKAGE_VERSION,
-  defaultProvider: 'anthropic',
-  defaultModel: 'claude-sonnet-4-6',
+  defaultProvider: 'deepseek',
+  defaultModel: 'deepseek-v4-pro',
   permission: 'auto',
   providers: DEFAULT_PROVIDERS,
 }
