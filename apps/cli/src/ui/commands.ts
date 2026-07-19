@@ -411,24 +411,26 @@ const initCmd: CommandHandler = async (ctx) => {
     mkdirSync(join(home, '.mipham'), { recursive: true })
 
     const activeProviders = ctx.config.providers.filter((p) => p.status === 'active')
-    const providerYaml = activeProviders.map((p) => {
-      const tips: Record<string, string> = {
-        anthropic: '# Get key: https://console.anthropic.com/',
-        openai: '# Get key: https://platform.openai.com/api-keys',
-        deepseek: '# Get key: https://platform.deepseek.com/api_keys',
-        kimi: '# Get key: https://platform.moonshot.cn/',
-        doubao: '# Get key: https://console.volcengine.com/ark',
-        hunyuan: '# Get key: https://console.cloud.tencent.com/hunyuan',
-        qwen: '# Get key: https://dashscope.console.aliyun.com/apiKey',
-        google: '# Get key: https://aistudio.google.com/apikey',
-      }
-      const comment = tips[p.id] || ''
-      const baseUrlLine = p.baseUrl ? `\n    baseUrl: "${p.baseUrl}"` : ''
-      return `  ${comment}
+    const providerYaml = activeProviders
+      .map((p) => {
+        const tips: Record<string, string> = {
+          anthropic: '# Get key: https://console.anthropic.com/',
+          openai: '# Get key: https://platform.openai.com/api-keys',
+          deepseek: '# Get key: https://platform.deepseek.com/api_keys',
+          kimi: '# Get key: https://platform.moonshot.cn/',
+          doubao: '# Get key: https://console.volcengine.com/ark',
+          hunyuan: '# Get key: https://console.cloud.tencent.com/hunyuan',
+          qwen: '# Get key: https://dashscope.console.aliyun.com/apiKey',
+          google: '# Get key: https://aistudio.google.com/apikey',
+        }
+        const comment = tips[p.id] || ''
+        const baseUrlLine = p.baseUrl ? `\n    baseUrl: "${p.baseUrl}"` : ''
+        return `  ${comment}
   - id: ${p.id}
     name: "${p.name}"${baseUrlLine}
     apiKey: "\${${p.id.toUpperCase()}_API_KEY}"`
-    }).join('\n\n')
+      })
+      .join('\n\n')
 
     const configContent = `# Mipham Code — User Configuration
 # Location: ~/.mipham/config.yml
@@ -594,7 +596,9 @@ const reloadSkillsCmd: CommandHandler = (ctx) => {
 const browseSkillsCmd: CommandHandler = async () => {
   const { getAvailableSkills, listInstalledSkills } = await import('../skills/registry')
   const available = getAvailableSkills()
-  const installed = new Set(listInstalledSkills().map((f: string) => f.replace(/\.(SKILL\.)?md$/i, '')))
+  const installed = new Set(
+    listInstalledSkills().map((f: string) => f.replace(/\.(SKILL\.)?md$/i, '')),
+  )
 
   const categories = new Map<string, string[]>()
   for (const s of available) {
@@ -644,9 +648,7 @@ const installSkillCmd: CommandHandler = async (_ctx, args) => {
   }
 
   return {
-    content: result.success
-      ? `✅ ${result.message}`
-      : `❌ ${result.message}`,
+    content: result.success ? `✅ ${result.message}` : `❌ ${result.message}`,
   }
 }
 
@@ -660,9 +662,7 @@ const removeSkillCmd: CommandHandler = async (_ctx, args) => {
 
   const result = removeSkill(name)
   return {
-    content: result.success
-      ? `✅ ${result.message}`
-      : `❌ ${result.message}`,
+    content: result.success ? `✅ ${result.message}` : `❌ ${result.message}`,
   }
 }
 
@@ -1472,12 +1472,7 @@ const recommendCmd: CommandHandler = async (ctx) => {
   const { getAvailableSkills } = await import('../skills/registry')
 
   const cwd = process.cwd()
-  const lines: string[] = [
-    '── Mipham Code: Setup Recommendations ──',
-    '',
-    `Project: ${cwd}`,
-    '',
-  ]
+  const lines: string[] = ['── Mipham Code: Setup Recommendations ──', '', `Project: ${cwd}`, '']
 
   // ── Detect project type ──
   const hasPackageJson = existsSync(join(cwd, 'package.json'))
@@ -1486,17 +1481,25 @@ const recommendCmd: CommandHandler = async (ctx) => {
   const hasRequirements = existsSync(join(cwd, 'requirements.txt'))
   const hasDockerfile = existsSync(join(cwd, 'Dockerfile'))
   const hasGitHubActions = existsSync(join(cwd, '.github', 'workflows'))
-  const hasNextConfig = existsSync(join(cwd, 'next.config.js')) || existsSync(join(cwd, 'next.config.ts'))
-  const hasVueConfig = existsSync(join(cwd, 'vite.config.ts')) || existsSync(join(cwd, 'vite.config.js'))
-  const hasTailwind = existsSync(join(cwd, 'tailwind.config.ts')) || existsSync(join(cwd, 'tailwind.config.js'))
+  const hasNextConfig =
+    existsSync(join(cwd, 'next.config.js')) || existsSync(join(cwd, 'next.config.ts'))
+  const hasVueConfig =
+    existsSync(join(cwd, 'vite.config.ts')) || existsSync(join(cwd, 'vite.config.js'))
+  const hasTailwind =
+    existsSync(join(cwd, 'tailwind.config.ts')) || existsSync(join(cwd, 'tailwind.config.js'))
 
   let pkgData: Record<string, unknown> = {}
   if (hasPackageJson) {
     try {
       pkgData = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf-8'))
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
-  const deps = { ...(pkgData.dependencies as Record<string, string> || {}), ...(pkgData.devDependencies as Record<string, string> || {}) }
+  const deps = {
+    ...((pkgData.dependencies as Record<string, string>) || {}),
+    ...((pkgData.devDependencies as Record<string, string>) || {}),
+  }
   const isTypeScript = hasTsConfig || 'typescript' in deps
   const isReact = 'react' in deps || 'next' in deps
   const isVue = 'vue' in deps
@@ -1724,30 +1727,33 @@ async function setupStep1(ctx: CommandContext): Promise<CommandResult> {
     // Generate a user-friendly config with all providers pre-populated.
     // Users just need to replace the API key placeholders with their real keys.
     const activeProviders = ctx.config.providers.filter((p) => p.status === 'active')
-    const providerYaml = activeProviders.map((p) => {
-      const comment = p.id === 'anthropic'
-        ? '# Get key: https://console.anthropic.com/'
-        : p.id === 'openai'
-        ? '# Get key: https://platform.openai.com/api-keys'
-        : p.id === 'deepseek'
-        ? '# Get key: https://platform.deepseek.com/api_keys'
-        : p.id === 'kimi'
-        ? '# Get key: https://platform.moonshot.cn/'
-        : p.id === 'doubao'
-        ? '# Get key: https://console.volcengine.com/ark'
-        : p.id === 'hunyuan'
-        ? '# Get key: https://console.cloud.tencent.com/hunyuan'
-        : p.id === 'qwen'
-        ? '# Get key: https://dashscope.console.aliyun.com/apiKey'
-        : p.id === 'google'
-        ? '# Get key: https://aistudio.google.com/apikey'
-        : ''
-      const baseUrlLine = p.baseUrl ? `\n    baseUrl: "${p.baseUrl}"` : ''
-      return `  ${comment}
+    const providerYaml = activeProviders
+      .map((p) => {
+        const comment =
+          p.id === 'anthropic'
+            ? '# Get key: https://console.anthropic.com/'
+            : p.id === 'openai'
+              ? '# Get key: https://platform.openai.com/api-keys'
+              : p.id === 'deepseek'
+                ? '# Get key: https://platform.deepseek.com/api_keys'
+                : p.id === 'kimi'
+                  ? '# Get key: https://platform.moonshot.cn/'
+                  : p.id === 'doubao'
+                    ? '# Get key: https://console.volcengine.com/ark'
+                    : p.id === 'hunyuan'
+                      ? '# Get key: https://console.cloud.tencent.com/hunyuan'
+                      : p.id === 'qwen'
+                        ? '# Get key: https://dashscope.console.aliyun.com/apiKey'
+                        : p.id === 'google'
+                          ? '# Get key: https://aistudio.google.com/apikey'
+                          : ''
+        const baseUrlLine = p.baseUrl ? `\n    baseUrl: "${p.baseUrl}"` : ''
+        return `  ${comment}
   - id: ${p.id}
     name: "${p.name}"${baseUrlLine}
     apiKey: "\${${p.id.toUpperCase()}_API_KEY}"`
-    }).join('\n\n')
+      })
+      .join('\n\n')
 
     const defaultConfig = `# Mipham Code — User Configuration
 # Location: ~/.mipham/config.yml

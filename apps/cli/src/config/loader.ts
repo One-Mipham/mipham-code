@@ -1,4 +1,12 @@
-import { readFileSync, existsSync, copyFileSync, mkdirSync, readdirSync, unlinkSync, chmodSync } from 'node:fs'
+import {
+  readFileSync,
+  existsSync,
+  copyFileSync,
+  mkdirSync,
+  readdirSync,
+  unlinkSync,
+  chmodSync,
+} from 'node:fs'
 import { join, dirname } from 'node:path'
 import { homedir } from 'node:os'
 import { parse as parseYaml } from 'yaml'
@@ -119,9 +127,7 @@ function tryRestoreFromBackup(configPath: string): boolean {
 
     const latestBackup = join(MIPHAM_HOME, files[0]!)
     copyFileSync(latestBackup, configPath)
-    process.stderr.write(
-      `⚠ Mipham Code: restored config from backup (${files[0]})\n`,
-    )
+    process.stderr.write(`⚠ Mipham Code: restored config from backup (${files[0]})\n`)
     return true
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -142,13 +148,9 @@ export function loadConfig(cwd: string = process.cwd()): MiphamConfig {
     config = mergeConfig(config, projectConfig)
   } else if (existsSync(configPath)) {
     // File exists but failed to parse — try to restore from backup
-    process.stderr.write(
-      `⚠ Mipham Code: project config is corrupted, attempting recovery...\n`,
-    )
+    process.stderr.write(`⚠ Mipham Code: project config is corrupted, attempting recovery...\n`)
     if (!tryRestoreFromBackup(configPath)) {
-      process.stderr.write(
-        `⚠ Mipham Code: no backup available for project config. Skipping.\n`,
-      )
+      process.stderr.write(`⚠ Mipham Code: no backup available for project config. Skipping.\n`)
     } else {
       // Retry parsing after restore
       const restored = safeParseYaml(configPath, 'restored project config')
@@ -164,13 +166,9 @@ export function loadConfig(cwd: string = process.cwd()): MiphamConfig {
     config = mergeConfig(config, userConfig)
   } else if (existsSync(userConfigPath)) {
     // File exists but failed to parse — try to restore from backup
-    process.stderr.write(
-      `⚠ Mipham Code: user config is corrupted, attempting recovery...\n`,
-    )
+    process.stderr.write(`⚠ Mipham Code: user config is corrupted, attempting recovery...\n`)
     if (!tryRestoreFromBackup(userConfigPath)) {
-      process.stderr.write(
-        `⚠ Mipham Code: no backup available for user config. Skipping.\n`,
-      )
+      process.stderr.write(`⚠ Mipham Code: no backup available for user config. Skipping.\n`)
     } else {
       // Retry parsing after restore
       const restored = safeParseYaml(userConfigPath, 'restored user config')

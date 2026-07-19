@@ -196,7 +196,11 @@ export function installSkill(skillName: string): InstallResult {
  */
 export function installSkillFromUrl(url: string): InstallResult {
   // Derive skill name from URL
-  const name = url.split('/').pop()?.replace(/\.(SKILL\.)?md$/i, '') || 'custom-skill'
+  const name =
+    url
+      .split('/')
+      .pop()
+      ?.replace(/\.(SKILL\.)?md$/i, '') || 'custom-skill'
 
   const destDir = join(SKILLS_DIR)
   const destPath = join(destDir, `${name}.SKILL.md`)
@@ -247,7 +251,11 @@ export function removeSkill(skillName: string): InstallResult {
   }
   try {
     unlinkSync(destPath)
-    return { success: true, name: skillName, message: `Skill "${skillName}" removed. Run /reload-skills to refresh.` }
+    return {
+      success: true,
+      name: skillName,
+      message: `Skill "${skillName}" removed. Run /reload-skills to refresh.`,
+    }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     return { success: false, name: skillName, message: `Failed to remove: ${msg}` }

@@ -38,8 +38,7 @@ export function CommandPicker({
     const q = filter.startsWith('/') ? filter.slice(1).toLowerCase() : filter.toLowerCase()
     if (!q) return allCommands
     return allCommands.filter(
-      (cmd) =>
-        cmd.name.toLowerCase().includes(q) || cmd.description.toLowerCase().includes(q),
+      (cmd) => cmd.name.toLowerCase().includes(q) || cmd.description.toLowerCase().includes(q),
     )
   }, [filter, allCommands])
 
@@ -100,9 +99,7 @@ export function CommandPicker({
 
       {/* Command list */}
       <Box flexDirection="column" marginBottom={1}>
-        {visible.length === 0 && (
-          <Text dimColor>  No commands match "{filter}"</Text>
-        )}
+        {visible.length === 0 && <Text dimColor> No commands match "{filter}"</Text>}
         {visible.map((cmd, i) => {
           const globalIdx = i + scrollStart
           const isCursor = globalIdx === cursorIdx

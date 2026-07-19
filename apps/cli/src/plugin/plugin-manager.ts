@@ -126,7 +126,11 @@ export class PluginManager {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       // Clean up on failure
-      try { rmSync(destDir, { recursive: true, force: true }) } catch { /* ok */ }
+      try {
+        rmSync(destDir, { recursive: true, force: true })
+      } catch {
+        /* ok */
+      }
       return { success: false, message: `npm install failed: ${msg}` }
     }
   }
