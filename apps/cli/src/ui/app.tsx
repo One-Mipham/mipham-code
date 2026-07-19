@@ -205,26 +205,34 @@ export function App({
       abortRef.current = controller
 
       let assistantContent = ''
+      // Track whether we've started a new assistant turn — reset accumulator per turn
+      let turnContent = ''
+      let isNewTurn = true
 
       try {
         for await (const chunk of engine.process(input, controller.signal)) {
           if (chunk.type === 'text' && chunk.content) {
+            // New turn: reset per-turn accumulator and push a fresh assistant message
+            if (isNewTurn) {
+              turnContent = chunk.content
+              isNewTurn = false
+              setMessages((prev) => [...prev, { role: 'assistant', content: turnContent }])
+            } else {
+              turnContent += chunk.content
+              setMessages((prev) => {
+                const updated = [...prev]
+                const last = updated[updated.length - 1]
+                if (last?.role === 'assistant') {
+                  last.content = turnContent
+                }
+                return updated
+              })
+            }
             assistantContent += chunk.content
-            setMessages((prev) => {
-              const updated = [...prev]
-              const last = updated[updated.length - 1]
-              if (last?.role === 'assistant') {
-                last.content = assistantContent
-              } else {
-                updated.push({ role: 'assistant', content: assistantContent })
-              }
-              return updated
-            })
           }
 
           if (chunk.type === 'tool_use' && chunk.toolUse) {
             const toolName = chunk.toolUse.name
-            const inputStr = JSON.stringify(chunk.toolUse.input)
             const isAgent = toolName === 'Agent' || toolName === 'Task'
 
             if (isAgent) {
@@ -237,38 +245,14 @@ export function App({
                 startTime: Date.now(),
               })
             }
-
-            const collapsed = toolName !== 'Agent' // agents always expanded
-            setMessages((prev) => [
-              ...prev,
-              {
-                role: 'system',
-                content: collapsed
-                  ? `⏺ ${toolName} · ${inputStr.slice(0, 50)}${inputStr.length > 50 ? '...' : ''} (Ctrl+O to expand)`
-                  : `🔧 ${toolName}: ${inputStr.slice(0, 200)}`,
-                toolMeta: { name: toolName, input: inputStr, collapsed },
-              },
-            ])
+            // Silent tools: don't show Bash/Glob/Read/etc lines — just the spinner
+            // Mark that next text chunk starts a new turn
+            isNewTurn = true
           }
 
           if (chunk.type === 'tool_result') {
             setAgentProgress(null)
-            setMessages((prev) => {
-              const updated = [...prev]
-              for (let i = updated.length - 1; i >= 0; i--) {
-                if (updated[i]?.toolMeta && !updated[i]!.toolMeta!.output) {
-                  updated[i] = {
-                    ...updated[i]!,
-                    content: updated[i]!.toolMeta!.collapsed
-                      ? updated[i]!.content
-                      : `📋 ${updated[i]!.toolMeta!.name} result: ${(chunk.content || '(empty)').slice(0, 200)}`,
-                    toolMeta: { ...updated[i]!.toolMeta!, output: chunk.content || '' },
-                  }
-                  break
-                }
-              }
-              return updated
-            })
+            // Silent: tool results don't need visible lines
           }
 
           if (chunk.type === 'error') {
