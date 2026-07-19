@@ -56,15 +56,15 @@ mipham update
 
 ## Commands
 
-| Category | Commands |
-|----------|----------|
-| Session | `/help` `/version` `/clear` `/exit` `/quit` `/compact` `/context` `/status` `/cost` `/rename` `/goal` `/recap` `/export` `/doctor` `/resume` |
-| Model | `/pick` `/model` `/models` `/provider` `/providers` `/switch` `/fast` `/effort` `/theme` `/upgrade` |
-| Skills | `/skills` `/browse-skills` `/install-skill` `/remove-skill` `/reload-skills` |
-| Tools | `/tools` `/commands` `/mcp` |
-| Workflow | `/plan` `/no-plan` `/review` `/diff` `/todos` `/tasks` `/workflows` `/loop` `/agents` |
-| Project | `/init` `/setup` `/recommend` `/security` `/audit` `/permissions` `/add-dir` |
-| History | `/rewind` `/undo` `/copy` `/focus` |
+| Category | Commands                                                                                                                                     |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Session  | `/help` `/version` `/clear` `/exit` `/quit` `/compact` `/context` `/status` `/cost` `/rename` `/goal` `/recap` `/export` `/doctor` `/resume` |
+| Model    | `/pick` `/model` `/models` `/provider` `/providers` `/switch` `/fast` `/effort` `/theme` `/upgrade`                                          |
+| Skills   | `/skills` `/browse-skills` `/install-skill` `/remove-skill` `/reload-skills`                                                                 |
+| Tools    | `/tools` `/commands` `/mcp`                                                                                                                  |
+| Workflow | `/plan` `/no-plan` `/review` `/diff` `/todos` `/tasks` `/workflows` `/loop` `/agents`                                                        |
+| Project  | `/init` `/setup` `/recommend` `/security` `/audit` `/permissions` `/add-dir`                                                                 |
+| History  | `/rewind` `/undo` `/copy` `/focus`                                                                                                           |
 
 Press **Ctrl+P** for model picker · **Shift+Tab** to cycle permission mode · **/** for command picker
 
