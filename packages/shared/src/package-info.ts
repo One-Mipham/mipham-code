@@ -13,7 +13,7 @@
 export const PACKAGE_NAME = '@miphamai/cli' as const
 
 /** 当前发布版本 */
-export const PACKAGE_VERSION = '0.5.10' as const
+export const PACKAGE_VERSION = '0.5.11' as const
 
 /** npm install 全局安装命令 */
 export const NPM_INSTALL_COMMAND = `npm install -g ${PACKAGE_NAME}` as const
