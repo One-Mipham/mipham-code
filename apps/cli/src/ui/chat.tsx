@@ -56,7 +56,12 @@ export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
         </Box>
       )}
       {displayMessages.map((msg, i) => (
-        <Box key={i} flexDirection="column" marginTop={msg.toolMeta ? 0 : 1} marginBottom={msg.toolMeta ? 0 : 1}>
+        <Box
+          key={i}
+          flexDirection="column"
+          marginTop={msg.toolMeta ? 0 : 1}
+          marginBottom={msg.toolMeta ? 0 : 1}
+        >
           {msg.toolMeta ? (
             <Box flexDirection="column">
               <Text color="yellow">
