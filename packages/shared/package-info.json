@@ -1,6 +1,6 @@
 {
   "PACKAGE_NAME": "@miphamai/cli",
-  "PACKAGE_VERSION": "0.5.8",
+  "PACKAGE_VERSION": "0.5.9",
   "NPM_INSTALL_COMMAND": "npm install -g @miphamai/cli",
   "NPM_UPDATE_COMMAND": "npm update -g @miphamai/cli",
   "NPM_URL": "https://www.npmjs.com/package/@miphamai/cli",
