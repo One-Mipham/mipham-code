@@ -98,6 +98,9 @@ const helpCmd: CommandHandler = (ctx) => {
       /tools         List available tools (${toolsCount} total)
       /skills        List loaded skills (${skillCount} built-in)
       /reload-skills Reload all skills
+      /browse-skills Browse community skill marketplace
+      /install-skill Install a skill by name or URL
+      /remove-skill  Remove an installed skill
       /commands      List all slash commands
       /mcp           MCP server status
 
@@ -117,6 +120,7 @@ const helpCmd: CommandHandler = (ctx) => {
       ── Project ─────────────────────────
       /init          Initialize .mipham config
       /setup         Guided project setup wizard
+      /recommend     Analyze project + recommend setup
       /permissions   Show permission settings
       /add-dir <dir> Add workspace directory
       /security      Security review checklist
@@ -394,24 +398,87 @@ const todosCmd: CommandHandler = (_ctx) => ({
 // Project
 // ═══════════════════════════════════════════════════════════════
 
-const initCmd: CommandHandler = (_ctx) => ({
-  content: stripIndent`
-    ── Initialize Mipham Code ──
+const initCmd: CommandHandler = async (ctx) => {
+  const { existsSync, mkdirSync, writeFileSync } = await import('node:fs')
+  const { join } = await import('node:path')
+  const { homedir } = await import('node:os')
 
-    To initialize a project:
+  const home = homedir()
+  const userConfigPath = join(home, '.mipham', 'config.yml')
 
-    1. Create .mipham/config.yml:
-       version: "0.1.0"
-       defaultProvider: anthropic
-       defaultModel: claude-sonnet-4-6
-       permission: auto
+  // Generate user-friendly config if it doesn't exist yet
+  if (!existsSync(userConfigPath)) {
+    mkdirSync(join(home, '.mipham'), { recursive: true })
 
-    2. Or use the Config tool:
-       Config set defaultProvider anthropic
+    const activeProviders = ctx.config.providers.filter((p) => p.status === 'active')
+    const providerYaml = activeProviders.map((p) => {
+      const tips: Record<string, string> = {
+        anthropic: '# Get key: https://console.anthropic.com/',
+        openai: '# Get key: https://platform.openai.com/api-keys',
+        deepseek: '# Get key: https://platform.deepseek.com/api_keys',
+        kimi: '# Get key: https://platform.moonshot.cn/',
+        doubao: '# Get key: https://console.volcengine.com/ark',
+        hunyuan: '# Get key: https://console.cloud.tencent.com/hunyuan',
+        qwen: '# Get key: https://dashscope.console.aliyun.com/apiKey',
+        google: '# Get key: https://aistudio.google.com/apikey',
+      }
+      const comment = tips[p.id] || ''
+      const baseUrlLine = p.baseUrl ? `\n    baseUrl: "${p.baseUrl}"` : ''
+      return `  ${comment}
+  - id: ${p.id}
+    name: "${p.name}"${baseUrlLine}
+    apiKey: "\${${p.id.toUpperCase()}_API_KEY}"`
+    }).join('\n\n')
 
-    Run /config to view current configuration.
-  `,
-})
+    const configContent = `# Mipham Code — User Configuration
+# Location: ~/.mipham/config.yml
+# Docs:     https://mipham.ai/code/docs/config
+#
+# ═══ Quick Start ═══
+# 1. Replace the API key placeholders below with your real keys
+# 2. Save the file
+# 3. Run 'mipham' — it auto-detects configured providers
+#
+# ═══ Environment Variables (Alternative) ═══
+# Instead of editing this file, you can set env vars:
+#   export ANTHROPIC_API_KEY="sk-ant-..."
+#   export OPENAI_API_KEY="sk-..."
+#   (The \${VAR} syntax below reads from environment variables)
+
+# ── Defaults ──
+defaultProvider: ${ctx.providerId}
+defaultModel: ${ctx.modelId}
+permission: ask
+
+# ── Providers (${activeProviders.length} pre-configured — just add your API keys) ──
+providers:
+${providerYaml}
+`
+
+    writeFileSync(userConfigPath, configContent, 'utf-8')
+    return {
+      content: `✅ Mipham Code initialized!
+
+Created: ~/.mipham/config.yml (${activeProviders.length} providers pre-configured)
+
+Next steps:
+  1. Edit ~/.mipham/config.yml — replace API key placeholders with your real keys
+  2. Run mipham to start
+
+Providers configured:
+${activeProviders.map((p) => `  • ${p.name} — ${p.id.toUpperCase()}_API_KEY`).join('\n')}
+
+Tip: /setup for the full 6-step wizard.`,
+    }
+  }
+
+  // Config already exists — show status
+  return {
+    content: `~/.mipham/config.yml already exists.
+
+Run /setup for the full wizard, or /config to view current settings.`,
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════
 // Phase 1 — New Session Commands
@@ -517,6 +584,85 @@ const reloadSkillsCmd: CommandHandler = (ctx) => {
     }
   } catch (err) {
     return { content: `Failed to reload skills: ${String(err)}` }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Skill Marketplace — Community skill registry + installation
+// ═══════════════════════════════════════════════════════════════
+
+const browseSkillsCmd: CommandHandler = async () => {
+  const { getAvailableSkills, listInstalledSkills } = await import('../skills/registry')
+  const available = getAvailableSkills()
+  const installed = new Set(listInstalledSkills().map((f: string) => f.replace(/\.(SKILL\.)?md$/i, '')))
+
+  const categories = new Map<string, string[]>()
+  for (const s of available) {
+    const list = categories.get(s.category) || []
+    list.push(s.name)
+    categories.set(s.category, list)
+  }
+
+  const lines: string[] = [
+    '── Community Skills ──',
+    '',
+    `${available.length} skills available · ${installed.size} installed`,
+    '',
+  ]
+
+  for (const [cat, names] of categories) {
+    lines.push(`  ${cat}:`)
+    for (const name of names) {
+      const entry = available.find((s) => s.name === name)!
+      const marker = installed.has(name) ? '✅' : '⬜'
+      lines.push(`    ${marker} /${name.padEnd(26)} ${entry.description}`)
+    }
+    lines.push('')
+  }
+
+  lines.push('Install: /install-skill <name>')
+  lines.push('Install from URL: /install-skill <github-url>')
+  lines.push('Remove:  /remove-skill <name>')
+
+  return { content: lines.join('\n') }
+}
+
+const installSkillCmd: CommandHandler = async (_ctx, args) => {
+  const { installSkill, installSkillFromUrl } = await import('../skills/registry')
+
+  const target = args[0]
+  if (!target) {
+    return { content: 'Usage: /install-skill <skill-name> or /install-skill <url>' }
+  }
+
+  let result: { success: boolean; name: string; message: string }
+
+  if (target.startsWith('http://') || target.startsWith('https://')) {
+    result = installSkillFromUrl(target)
+  } else {
+    result = installSkill(target)
+  }
+
+  return {
+    content: result.success
+      ? `✅ ${result.message}`
+      : `❌ ${result.message}`,
+  }
+}
+
+const removeSkillCmd: CommandHandler = async (_ctx, args) => {
+  const { removeSkill } = await import('../skills/registry')
+
+  const name = args[0]
+  if (!name) {
+    return { content: 'Usage: /remove-skill <skill-name>' }
+  }
+
+  const result = removeSkill(name)
+  return {
+    content: result.success
+      ? `✅ ${result.message}`
+      : `❌ ${result.message}`,
   }
 }
 
@@ -1147,24 +1293,72 @@ const memoryCmd: CommandHandler = async () => {
 // Upgrade
 // ═══════════════════════════════════════════════════════════════
 
-const upgradeCmd: CommandHandler = () => ({
-  content: `─ Upgrade Mipham Code ─
+const upgradeCmd: CommandHandler = async () => {
+  const { checkForUpdates, backupConfig, performUpdate, restoreConfig, getConfigPath } =
+    await import('../shared/update')
 
-Current version: v0.1.0
+  const update = checkForUpdates()
 
-To upgrade:
-  curl -fsSL https://mipham.ai/install.sh | bash
+  if (!update.available) {
+    return {
+      content: `── Upgrade Mipham Code ──
 
-Or if installed via npm:
-    ${NPM_UPDATE_COMMAND}
+Current version: v${update.current}
+Latest:          v${update.latest}
 
-Release channels:
-  • stable  — recommended for most users
-  • beta    — early access to new features
-  • nightly — latest commits, may be unstable
+✓ Already up to date.
 
-Check for updates: https://mipham.ai/code/releases`,
-})
+To check manually: https://www.npmjs.com/package/@miphamai/cli`,
+    }
+  }
+
+  // Update available — back up config and perform the upgrade
+  const backupPath = backupConfig(`upgrade-v${update.current}`)
+
+  const lines: string[] = [
+    '── Upgrade Mipham Code ──',
+    '',
+    `Current version: v${update.current}`,
+    `Latest:          v${update.latest}`,
+    '',
+    `→ New version available! Updating...`,
+    '',
+  ]
+
+  if (backupPath) {
+    lines.push(`Config backed up to: ${backupPath}`)
+  }
+
+  const ok = performUpdate(update.latest)
+
+  if (ok) {
+    const configPath = getConfigPath()
+    const { existsSync } = await import('node:fs')
+    lines.push('')
+    lines.push(`✓ Updated to @miphamai/cli v${update.latest}`)
+
+    if (existsSync(configPath)) {
+      lines.push(`✓ Config preserved: ${configPath}`)
+    } else if (backupPath) {
+      if (restoreConfig(backupPath)) {
+        lines.push('✓ Config restored from backup.')
+      }
+    }
+
+    lines.push('')
+    lines.push('⚠ The running Mipham Code process is still the old version.')
+    lines.push('  Run `mipham` again to use the new version, or `mipham --version` to verify.')
+  } else {
+    lines.push('')
+    lines.push('✗ Update failed.')
+    lines.push(`  Try manually: ${NPM_UPDATE_COMMAND}`)
+    if (backupPath) {
+      lines.push(`  Your config backup is at: ${backupPath}`)
+    }
+  }
+
+  return { content: lines.join('\n') }
+}
 
 // ═══════════════════════════════════════════════════════════════
 // No-Plan — exit plan mode
@@ -1268,6 +1462,165 @@ Tool execution is sandboxed to the project directory by default.`,
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Recommend — analyze project and recommend setup (like Claude Code
+// automation recommender)
+// ═══════════════════════════════════════════════════════════════
+
+const recommendCmd: CommandHandler = async (ctx) => {
+  const { existsSync, readFileSync } = await import('node:fs')
+  const { join } = await import('node:path')
+  const { getAvailableSkills } = await import('../skills/registry')
+
+  const cwd = process.cwd()
+  const lines: string[] = [
+    '── Mipham Code: Setup Recommendations ──',
+    '',
+    `Project: ${cwd}`,
+    '',
+  ]
+
+  // ── Detect project type ──
+  const hasPackageJson = existsSync(join(cwd, 'package.json'))
+  const hasTsConfig = existsSync(join(cwd, 'tsconfig.json'))
+  const hasPyProject = existsSync(join(cwd, 'pyproject.toml'))
+  const hasRequirements = existsSync(join(cwd, 'requirements.txt'))
+  const hasDockerfile = existsSync(join(cwd, 'Dockerfile'))
+  const hasGitHubActions = existsSync(join(cwd, '.github', 'workflows'))
+  const hasNextConfig = existsSync(join(cwd, 'next.config.js')) || existsSync(join(cwd, 'next.config.ts'))
+  const hasVueConfig = existsSync(join(cwd, 'vite.config.ts')) || existsSync(join(cwd, 'vite.config.js'))
+  const hasTailwind = existsSync(join(cwd, 'tailwind.config.ts')) || existsSync(join(cwd, 'tailwind.config.js'))
+
+  let pkgData: Record<string, unknown> = {}
+  if (hasPackageJson) {
+    try {
+      pkgData = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf-8'))
+    } catch { /* ignore */ }
+  }
+  const deps = { ...(pkgData.dependencies as Record<string, string> || {}), ...(pkgData.devDependencies as Record<string, string> || {}) }
+  const isTypeScript = hasTsConfig || 'typescript' in deps
+  const isReact = 'react' in deps || 'next' in deps
+  const isVue = 'vue' in deps
+  const isNode = hasPackageJson
+  const isPython = hasPyProject || hasRequirements
+  const isFastAPI = 'fastapi' in deps
+  const isNextJS = 'next' in deps
+  const isExpress = 'express' in deps || 'fastify' in deps
+  const isDocker = hasDockerfile
+
+  // ── Detection summary ──
+  const tags: string[] = []
+  if (isTypeScript) tags.push('TypeScript')
+  if (isReact) tags.push('React')
+  if (isVue) tags.push('Vue')
+  if (isNextJS) tags.push('Next.js')
+  if (isExpress) tags.push('Node.js API')
+  if (isFastAPI) tags.push('FastAPI')
+  if (isPython) tags.push('Python')
+  if (isDocker) tags.push('Docker')
+  if (hasTailwind) tags.push('Tailwind CSS')
+  if (hasGitHubActions) tags.push('CI/CD')
+
+  lines.push('── Detected Stack ──')
+  lines.push('')
+  if (tags.length > 0) {
+    lines.push(`  ${tags.join(' · ')}`)
+  } else {
+    lines.push('  (generic project — no specific framework detected)')
+  }
+  lines.push('')
+
+  // ── Skill recommendations ──
+  const communitySkills = getAvailableSkills()
+  const recommendedSkills: string[] = []
+
+  // Always useful
+  recommendedSkills.push('code-review')
+  recommendedSkills.push('systematic-debugging')
+
+  if (isTypeScript || isNode) {
+    recommendedSkills.push('github-ops')
+  }
+  if (isReact || isVue || isNextJS) {
+    recommendedSkills.push('frontend-design')
+  }
+  if (hasGitHubActions) {
+    recommendedSkills.push('security-review')
+  }
+  if (isPython) {
+    recommendedSkills.push('doc-generator')
+  }
+
+  // Filter to only those in the registry
+  const available = recommendedSkills.filter((name) => communitySkills.some((s) => s.name === name))
+
+  lines.push('── Recommended Skills ──')
+  lines.push('')
+  if (available.length > 0) {
+    for (const name of available) {
+      const entry = communitySkills.find((s) => s.name === name)!
+      lines.push(`  /install-skill ${name.padEnd(26)} ${entry.description}`)
+    }
+  }
+  lines.push('  /browse-skills           Browse all community skills')
+  lines.push('')
+
+  // ── Provider recommendations ──
+  const activeProviders = ctx.config.providers.filter((p) => p.status === 'active')
+  const configured = activeProviders.filter((p) => p.apiKey && p.apiKey.trim() !== '')
+
+  lines.push('── Provider Status ──')
+  lines.push('')
+  if (configured.length === 0) {
+    lines.push('  ⚠ No providers have API keys configured.')
+    lines.push('  Run /setup 2 to configure providers.')
+    lines.push('')
+    lines.push('  Recommended for this project:')
+    if (isTypeScript || isNode || isReact) {
+      lines.push('    • anthropic — Claude (code generation, review)')
+      lines.push('    • openai   — GPT-5 (general purpose)')
+    }
+    if (isPython) {
+      lines.push('    • anthropic — Claude (data science, ML)')
+    }
+  } else {
+    lines.push(`  ${configured.length}/${activeProviders.length} providers configured`)
+    for (const p of configured) {
+      lines.push(`    ✅ ${p.id.padEnd(14)} ${p.name}`)
+    }
+  }
+  lines.push('')
+
+  // ── Config recommendations ──
+  lines.push('── Configuration Tips ──')
+  lines.push('')
+
+  const hasProjectMipham = existsSync(join(cwd, '.mipham'))
+  if (!hasProjectMipham) {
+    lines.push('  /setup 1     Initialize .mipham/ + MIPHAM.md + config.yml')
+  }
+
+  const { listInstalledSkills } = await import('../skills/registry')
+  const installed = listInstalledSkills()
+  if (installed.length === 0 && available.length > 0) {
+    lines.push('  Tip:         Install recommended skills above for better AI assistance')
+  }
+
+  if (isDocker && !hasProjectMipham) {
+    lines.push('  Tip:         Add .mipham/ to .dockerignore for smaller images')
+  }
+
+  if (hasGitHubActions) {
+    lines.push('  /setup 5     Configure tool permissions for CI/CD safety')
+  }
+
+  lines.push('  /setup       Full setup wizard (6 steps)')
+  lines.push('  /help        All commands')
+  lines.push('')
+
+  return { content: lines.join('\n') }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Setup — guided project initialization (mirrors Claude Code /setup)
 // ═══════════════════════════════════════════════════════════════
 
@@ -1368,17 +1721,57 @@ async function setupStep1(ctx: CommandContext): Promise<CommandResult> {
 
   // Create project config if missing
   if (!existsSync(configPath)) {
-    const defaultConfig = `# Mipham Code — Project Configuration
-# See https://mipham.ai/code/docs/config for all options
+    // Generate a user-friendly config with all providers pre-populated.
+    // Users just need to replace the API key placeholders with their real keys.
+    const activeProviders = ctx.config.providers.filter((p) => p.status === 'active')
+    const providerYaml = activeProviders.map((p) => {
+      const comment = p.id === 'anthropic'
+        ? '# Get key: https://console.anthropic.com/'
+        : p.id === 'openai'
+        ? '# Get key: https://platform.openai.com/api-keys'
+        : p.id === 'deepseek'
+        ? '# Get key: https://platform.deepseek.com/api_keys'
+        : p.id === 'kimi'
+        ? '# Get key: https://platform.moonshot.cn/'
+        : p.id === 'doubao'
+        ? '# Get key: https://console.volcengine.com/ark'
+        : p.id === 'hunyuan'
+        ? '# Get key: https://console.cloud.tencent.com/hunyuan'
+        : p.id === 'qwen'
+        ? '# Get key: https://dashscope.console.aliyun.com/apiKey'
+        : p.id === 'google'
+        ? '# Get key: https://aistudio.google.com/apikey'
+        : ''
+      const baseUrlLine = p.baseUrl ? `\n    baseUrl: "${p.baseUrl}"` : ''
+      return `  ${comment}
+  - id: ${p.id}
+    name: "${p.name}"${baseUrlLine}
+    apiKey: "\${${p.id.toUpperCase()}_API_KEY}"`
+    }).join('\n\n')
 
+    const defaultConfig = `# Mipham Code — User Configuration
+# Location: ~/.mipham/config.yml
+# Docs:     https://mipham.ai/code/docs/config
+#
+# ═══ Quick Start ═══
+# 1. Set your API keys below (replace the placeholder values)
+# 2. Save the file
+# 3. Run 'mipham' — it auto-detects configured providers
+#
+# ═══ Environment Variables ═══
+# Instead of editing this file, you can set env vars:
+#   export ANTHROPIC_API_KEY="sk-ant-..."
+#   export OPENAI_API_KEY="sk-..."
+#   (The \${VAR} syntax below reads from environment variables)
+
+# ── Defaults ──
 defaultProvider: ${ctx.providerId}
 defaultModel: ${ctx.modelId}
 permission: ask
 
-# Uncomment to add project-specific providers:
-# providers:
-#   - id: anthropic
-#     apiKey: \$ANTHROPIC_API_KEY
+# ── Providers (8 configured, just add your API keys) ──
+providers:
+${providerYaml}
 `
     writeFileSync(configPath, defaultConfig, 'utf-8')
     created.push('.mipham/config.yml')
@@ -1720,6 +2113,7 @@ const securityCmd: CommandHandler = async () => {
   }
 
   // 2. Check for hardcoded secrets (quick grep for common patterns)
+  // ⚠ Security: results are redacted — only file:line locations are shown, never values
   try {
     const { execSync } = await import('node:child_process')
     const secretPatterns = execSync(
@@ -1727,11 +2121,20 @@ const securityCmd: CommandHandler = async () => {
       { encoding: 'utf-8', timeout: 5000 },
     ).trim()
     if (secretPatterns) {
+      // Redact the actual values — only show file:line locations
+      const redacted = secretPatterns
+        .split('\n')
+        .map((l) => {
+          const colonIdx = l.indexOf(':')
+          const secondColon = l.indexOf(':', colonIdx + 1)
+          if (secondColon > 0) {
+            return '    ' + l.slice(0, secondColon) + ' [VALUE REDACTED]'
+          }
+          return '    ' + l + ' [REDACTED]'
+        })
+        .join('\n')
       findings.push(
-        `Possible hardcoded secrets found:\n${secretPatterns
-          .split('\n')
-          .map((l) => '    ' + l)
-          .join('\n')}`,
+        `⚠ Hardcoded secrets detected (values redacted for security):\n${redacted}\n\n  Replace with env vars: \${VAR_NAME} syntax`,
       )
     } else {
       ok.push('No hardcoded secrets detected')
@@ -2344,6 +2747,9 @@ const commandsListCmd: CommandHandler = () => {
     '/tools': 'Tools & Skills',
     '/skills': 'Tools & Skills',
     '/reload-skills': 'Tools & Skills',
+    '/browse-skills': 'Tools & Skills',
+    '/install-skill': 'Tools & Skills',
+    '/remove-skill': 'Tools & Skills',
     '/mcp': 'Tools & Skills',
     '/commands': 'Tools & Skills',
     '/plan': 'Workflow',
@@ -2360,6 +2766,7 @@ const commandsListCmd: CommandHandler = () => {
     '/setup': 'Project',
     '/permissions': 'Project',
     '/add-dir': 'Project',
+    '/recommend': 'Project',
     '/security': 'Project',
     '/audit': 'Project',
     '/ide': 'Environment',
@@ -2437,6 +2844,9 @@ registry.set('/effort', effortCmd)
 registry.set('/tools', toolsCmd)
 registry.set('/skills', skillsCmd)
 registry.set('/reload-skills', reloadSkillsCmd)
+registry.set('/browse-skills', browseSkillsCmd)
+registry.set('/install-skill', installSkillCmd)
+registry.set('/remove-skill', removeSkillCmd)
 registry.set('/commands', commandsListCmd)
 
 // Workflow
@@ -2461,6 +2871,7 @@ registry.set('/upgrade', upgradeCmd)
 // Project
 registry.set('/init', initCmd)
 registry.set('/setup', setupCmd)
+registry.set('/recommend', recommendCmd)
 registry.set('/permissions', permissionsCmd)
 registry.set('/add-dir', addDirCmd)
 registry.set('/security', securityCmd)
@@ -2540,6 +2951,9 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/tools': 'List available tools',
   '/skills': 'List loaded skills',
   '/reload-skills': 'Reload all skills',
+  '/browse-skills': 'Browse community skill marketplace',
+  '/install-skill': 'Install a skill by name or URL',
+  '/remove-skill': 'Remove an installed skill',
   '/mcp': 'MCP server status',
   '/plan': 'Enter plan mode',
   '/no-plan': 'Exit plan mode',
@@ -2555,6 +2969,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/setup': 'Guided project setup wizard',
   '/permissions': 'Show permission settings',
   '/add-dir': 'Add workspace directory',
+  '/recommend': 'Analyze project + recommend skills & setup',
   '/security': 'Security review checklist',
   '/audit': 'Same as /security',
   '/ide': 'IDE integration guide',

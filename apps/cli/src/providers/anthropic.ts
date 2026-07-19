@@ -282,7 +282,15 @@ export class AnthropicProvider implements ProviderInstance {
     let match = keyTemplate.match(/^\$\{(.+)\}$/)
     if (!match) match = keyTemplate.match(/^\$([A-Z_][A-Z0-9_]*)$/)
     if (match?.[1]) {
-      return process.env[match[1]] || ''
+      const varName = match[1]
+      const value = process.env[varName]
+      if (!value) {
+        process.stderr.write(
+          `⚠ Anthropic provider: apiKey references $${varName} but that environment variable is not set\n`,
+        )
+        return ''
+      }
+      return value
     }
     return keyTemplate
   }

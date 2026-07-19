@@ -19,14 +19,17 @@ import type { StreamChunk } from '@mipham/shared'
 // ── Detect available provider ──
 
 function getAvailableProvider(): { provider: string; model: string; envVar: string } | null {
-  // Check in priority order
-  if (process.env.ANTHROPIC_API_KEY) {
+  // Check in priority order — validate API key format, not just existence
+  const antKey = process.env.ANTHROPIC_API_KEY
+  if (antKey && antKey.startsWith('sk-ant-') && antKey.length > 20) {
     return { provider: 'anthropic', model: 'claude-sonnet-4-6', envVar: 'ANTHROPIC_API_KEY' }
   }
-  if (process.env.DEEPSEEK_API_KEY) {
+  const dsKey = process.env.DEEPSEEK_API_KEY
+  if (dsKey && dsKey.startsWith('sk-') && dsKey.length > 20) {
     return { provider: 'deepseek', model: 'deepseek-v4-pro', envVar: 'DEEPSEEK_API_KEY' }
   }
-  if (process.env.OPENAI_API_KEY) {
+  const oaKey = process.env.OPENAI_API_KEY
+  if (oaKey && oaKey.startsWith('sk-') && oaKey.length > 20) {
     return { provider: 'openai', model: 'gpt-5.3-codex', envVar: 'OPENAI_API_KEY' }
   }
   return null

@@ -7,6 +7,16 @@ interface ChatPanelProps {
   focusMode?: boolean
 }
 
+/** Format cwd for display: replace HOME with ~, truncate if too long */
+function displayCwd(): string {
+  const cwd = process.cwd()
+  const home = process.env.HOME || ''
+  if (home && cwd.startsWith(home)) {
+    return '~' + cwd.slice(home.length)
+  }
+  return cwd
+}
+
 export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
   // In focus mode, show only the last user+assistant exchange
   const displayMessages = focusMode ? getLastExchange(messages) : messages
@@ -61,7 +71,7 @@ export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
                 color={msg.role === 'user' ? 'green' : msg.role === 'system' ? 'yellow' : 'blue'}
               >
                 {msg.role === 'user'
-                  ? '▸ You'
+                  ? `▸ ${displayCwd()}`
                   : msg.role === 'assistant'
                     ? 'Mipham Code'
                     : '⚠ System'}

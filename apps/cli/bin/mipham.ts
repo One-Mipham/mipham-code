@@ -178,6 +178,97 @@ async function runPluginCLI(): Promise<boolean> {
   return true
 }
 
+// ── Update self ────────────────────────────────────────────────────────────────
+
+async function runUpdate(): Promise<boolean> {
+  const args = process.argv.slice(2)
+  if (args[0] !== 'update' && args[0] !== 'upgrade') return false
+
+  const { getCurrentVersion, backupConfig, performUpdate, restoreConfig, getConfigPath } =
+    await import('../src/shared/update')
+
+  const { existsSync } = await import('node:fs')
+
+  const PACKAGE = '@miphamai/cli'
+
+  const currentVersion = getCurrentVersion()
+  console.log(`Mipham Code update`)
+  console.log(`  Current: v${currentVersion}`)
+  console.log(`  Checking npm registry for latest version...`)
+  console.log()
+
+  // Check latest version from npm
+  let latestVersion = ''
+  try {
+    const { execSync } = await import('node:child_process')
+    const result = execSync(`npm view ${PACKAGE} version --json`, {
+      encoding: 'utf-8',
+      timeout: 10_000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim()
+    latestVersion = result.replace(/"/g, '')
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.log(`✗ Failed to check latest version: ${msg}`)
+    console.log(`  Check manually: https://www.npmjs.com/package/${PACKAGE}`)
+    process.exit(1)
+  }
+
+  if (!latestVersion) {
+    console.log('✗ Could not determine latest version.')
+    process.exit(1)
+  }
+
+  console.log(`  Latest:  v${latestVersion}`)
+  console.log()
+
+  // Compare versions
+  if (currentVersion === latestVersion) {
+    console.log(`✓ Already up to date (v${currentVersion})`)
+    process.exit(0)
+  }
+
+  console.log(`→ New version available: v${currentVersion} → v${latestVersion}`)
+  console.log()
+
+  // Backup config before updating
+  const backupPath = backupConfig(`update-v${currentVersion}`)
+  if (backupPath) {
+    console.log(`✓ Config backed up to: ${backupPath}`)
+  }
+
+  console.log()
+  console.log(`Updating ${PACKAGE} to v${latestVersion}...`)
+
+  const ok = performUpdate(latestVersion)
+  if (!ok) {
+    console.log()
+    console.log(`✗ Update failed.`)
+    if (backupPath && existsSync(backupPath)) {
+      console.log(`  Your config backup is at: ${backupPath}`)
+    }
+    process.exit(1)
+  }
+
+  // Verify config survived
+  const configPath = getConfigPath()
+  if (existsSync(configPath)) {
+    console.log()
+    console.log(`✓ Config preserved: ${configPath}`)
+  } else if (backupPath && existsSync(backupPath)) {
+    console.log()
+    console.log('⚠ Config was removed during update. Restoring from backup...')
+    if (restoreConfig(backupPath)) {
+      console.log(`✓ Config restored.`)
+    }
+  }
+
+  console.log()
+  console.log(`✓ Updated to ${PACKAGE} v${latestVersion}`)
+  console.log(`  Run 'mipham --version' to verify.`)
+  process.exit(0)
+}
+
 async function main() {
   // ── Version flag ──────────────────────────────────────────────────────────
   if (
@@ -189,6 +280,10 @@ async function main() {
     console.log(`${pkg.name} v${pkg.version}`)
     process.exit(0)
   }
+
+  // ── Update / upgrade ──────────────────────────────────────────────────────
+  const handledUpdate = await runUpdate()
+  if (handledUpdate) return
 
   // Check for plugin subcommands first
   const handledPlugin = await runPluginCLI()

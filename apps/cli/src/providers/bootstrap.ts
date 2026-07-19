@@ -13,6 +13,14 @@ export function bootstrapProviders(
   for (const config of configs) {
     if (config.status === 'upcoming') continue
 
+    // Warn if apiKey is empty (will cause API errors at runtime)
+    if (!config.apiKey || config.apiKey.trim() === '') {
+      process.stderr.write(
+        `⚠ Provider "${config.name}" (${config.id}): apiKey not set. ` +
+          `Set it in ~/.mipham/config.yml or via environment variable.\n`,
+      )
+    }
+
     const protocol = config.protocol?.toLowerCase()
     switch (protocol) {
       case 'openai-compatible':

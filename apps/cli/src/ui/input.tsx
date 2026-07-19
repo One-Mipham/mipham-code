@@ -3,6 +3,7 @@ import { Box, Text, useInput } from 'ink'
 import TextInput from 'ink-text-input'
 import { VimMotionEngine, type VimMode } from './vim-motions.js'
 import { getCommandList, type CommandEntry } from './commands.js'
+import { CommandPicker } from './command-picker.js'
 
 interface InputBarProps {
   onSubmit: (input: string) => void
@@ -252,10 +253,48 @@ export function InputBar({ onSubmit, isLoading }: InputBarProps) {
     // The cursor hint is informational only; the user repositions manually.
   })
 
+  // ── Command picker state ──
+  const [pickerActive, setPickerActive] = useState(false)
+  const prevValueRef = useRef(value)
+
+  // Auto-activate picker when user types "/"
+  useEffect(() => {
+    if (value.startsWith('/') && !prevValueRef.current.startsWith('/') && vimMode === 'insert') {
+      setPickerActive(true)
+    }
+    // Dismiss picker when user clears the / prefix
+    if (!value.startsWith('/') && pickerActive) {
+      setPickerActive(false)
+    }
+    prevValueRef.current = value
+  }, [value, vimMode])
+
   const handleSubmit = (val: string) => {
     if (!val.trim() || isLoading) return
     onSubmit(val)
     setValue('')
+    setPickerActive(false)
+  }
+
+  // ── Picker mode: CommandPicker overlay ──
+  if (pickerActive && vimMode === 'insert') {
+    return (
+      <Box flexDirection="column" marginTop={1}>
+        <CommandPicker
+          initialFilter={value}
+          onSelect={(cmdName) => {
+            // Fill the command name and submit
+            onSubmit(cmdName)
+            setValue('')
+            setPickerActive(false)
+          }}
+          onClose={() => {
+            setPickerActive(false)
+            // Keep the current typed text so user can continue
+          }}
+        />
+      </Box>
+    )
   }
 
   return (
@@ -287,18 +326,16 @@ export function InputBar({ onSubmit, isLoading }: InputBarProps) {
           }
         />
       </Box>
-      {/* Slash command hints — shown when typing / in INSERT mode */}
-      {slashHints.length > 0 && vimMode === 'insert' && (
-        <Box marginTop={1} flexDirection="row" gap={1}>
+      {/* Slash command hints — shown when typing / in INSERT mode (only when picker is NOT active) */}
+      {slashHints.length > 0 && vimMode === 'insert' && !pickerActive && (
+        <Box marginTop={1} flexDirection="column" gap={1}>
           <Text dimColor>Commands: </Text>
           {slashHints.map((cmd, i) => (
             <Text key={cmd.name} color="cyan">
-              {i > 0 ? '  ' : ''}
               {cmd.name}
             </Text>
           ))}
           <Text dimColor>
-            {' '}
             (
             {slashHints.length === allCommands.length
               ? 'all'
