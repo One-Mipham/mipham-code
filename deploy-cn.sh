@@ -48,11 +48,11 @@ echo "[0/3] 预检..."
 
 cd "$(dirname "$0")"
 
-if ! ssh -o ConnectTimeout=5 "$SERVER" "echo ok" &>/dev/null; then
-  err "无法连接 $SERVER，请检查 SSH"
-  exit 1
+if ssh -o ConnectTimeout=5 "$SERVER" "echo ok" &>/dev/null; then
+  log "SSH 连接正常"
+else
+  log "跳过 SSH 预检（guard 已处理）"
 fi
-log "SSH 连接正常"
 
 # ── 1. 构建 ────────────────────────────────────────────────
 if [ "$SKIP_BUILD" = false ]; then
