@@ -2,37 +2,37 @@ const features = [
   {
     title: 'Multi-Model',
     description:
-      'Connect to Claude, GPT, DeepSeek, Qwen, and more through a unified interface. Switch models on the fly.',
+      'Connect to Claude, GPT, DeepSeek, Qwen, Kimi, and more through a unified interface. Switch models on the fly with Ctrl+P.',
     icon: '🔄',
   },
   {
-    title: 'Open-Core',
+    title: '85 Slash Commands',
     description:
-      'Free and open-source core with Apache 2.0 license. Extend with plugins, skills, and custom providers.',
-    icon: '📖',
-  },
-  {
-    title: 'Blazing Fast',
-    description:
-      'Built on Bun runtime with SSE streaming. Sub-millisecond tool execution. Zero-config startup.',
+      'Full Claude Code parity: /commit, /pr, /simplify, /lint, /loop init, /browse-plugins — all 85 commands with zero learning curve.',
     icon: '⚡',
   },
   {
-    title: '16 Built-in Tools',
+    title: 'Plugin Marketplace',
     description:
-      'File operations, shell commands, git, web search, MCP protocol, and agent orchestration.',
-    icon: '🛠️',
+      'Install plugins from npm or local paths. Discover community plugins including NotebookLM MCP integration.',
+    icon: '📦',
   },
   {
-    title: 'Skills System',
+    title: 'LoopKit Vault',
     description:
-      'Extensible skill framework with dual-track runtime: open-standard SKILL.md and Mipham-exclusive capabilities.',
-    icon: '🎯',
+      '/loop init scaffolds a complete project structure: .mipham/ config, hooks, agents, 9-domain skills, .mcp.json, and more.',
+    icon: '🏗️',
   },
   {
-    title: 'Enterprise Ready',
+    title: 'MCP Protocol',
     description:
-      'Production security with TLS 1.3, AES-256-GCM encryption, and comprehensive permission system.',
+      'Full Model Context Protocol support with stdio transport. Connect to NotebookLM, filesystem, GitHub, and custom MCP servers.',
+    icon: '🔌',
+  },
+  {
+    title: 'Open-Core & Secure',
+    description:
+      'Apache 2.0 license. TLS 1.3, AES-256-GCM encryption, comprehensive permission system. Enterprise security out of the box.',
     icon: '🔒',
   },
 ]
