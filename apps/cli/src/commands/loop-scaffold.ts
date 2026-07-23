@@ -30,7 +30,7 @@ const SKILL_DOMAINS = [
   'git-ops',
 ]
 
-function ensureDir(dir: string, created: string[], skipped: string[]): void {
+function ensureDir(dir: string, created: string[], _skipped: string[]): void {
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true })
     created.push(dir)

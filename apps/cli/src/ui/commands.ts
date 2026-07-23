@@ -1510,7 +1510,7 @@ const lintCmd: CommandHandler = async () => {
 
 const filesCmd: CommandHandler = async () => {
   const { readdirSync, statSync } = await import('node:fs')
-  const { join, relative } = await import('node:path')
+  const { join } = await import('node:path')
   const cwd = process.cwd()
 
   try {
@@ -1644,7 +1644,7 @@ const cdCmd: CommandHandler = async (_ctx, args) => {
 }
 
 const hooksCmd: CommandHandler = async () => {
-  const { existsSync, readdirSync, readFileSync } = await import('node:fs')
+  const { existsSync, readdirSync } = await import('node:fs')
   const { join } = await import('node:path')
   const cwd = process.cwd()
   const hooksDir = join(cwd, '.mipham', 'hooks')
