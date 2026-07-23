@@ -21,7 +21,7 @@ else
   echo "⚠️  deploy-guard.sh 未找到，跳过 Nginx 预检"
 fi
 
-SERVER="root@82.156.254.121"
+SERVER="onemipham"
 REMOTE_DIR="/www/wwwroot/onemipham.com/mipham-code"
 SKIP_BUILD=false
 
@@ -48,7 +48,7 @@ echo "[0/3] 预检..."
 
 cd "$(dirname "$0")"
 
-if ! ssh -o ConnectTimeout=5 -o BatchMode=yes "$SERVER" "echo ok" &>/dev/null; then
+if ! ssh -o ConnectTimeout=5 "$SERVER" "echo ok" &>/dev/null; then
   err "无法连接 $SERVER，请检查 SSH"
   exit 1
 fi
