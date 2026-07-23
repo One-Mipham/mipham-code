@@ -441,10 +441,10 @@ describe('Built-in skills', () => {
     loader.loadBuiltin(projectRoot)
 
     const all = loader.list()
-    expect(all.length).toBe(14) // 11 standard + 3 mipham
+    expect(all.length).toBe(15) // 12 standard + 3 mipham
 
     const standard = loader.listByType('standard')
-    expect(standard.length).toBe(11)
+    expect(standard.length).toBe(12)
 
     const mipham = loader.listByType('mipham')
     expect(mipham.length).toBe(3)
@@ -485,6 +485,7 @@ describe('Built-in skills', () => {
       'self-review',
       'superpower',
       'tdd',
+      'web-access',
       'web-search',
     ])
   })

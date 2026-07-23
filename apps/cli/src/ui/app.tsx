@@ -3,6 +3,7 @@ import { Box, Text, useInput } from 'ink'
 import type { QueryEngine } from '../core/engine'
 import type { MiphamConfig } from '../shared/index.ts'
 import type { SkillsLoader } from '../skills/loader'
+import type { PluginManager } from '../plugin/plugin-manager'
 import { AgentRegistry } from '../agent/agent-registry'
 import { ChatPanel } from './chat'
 import { InputBar } from './input'
@@ -22,6 +23,7 @@ interface AppProps {
   initialModel?: string
   lang?: string
   skillsLoader?: SkillsLoader
+  pluginManager?: PluginManager
   version?: string
 }
 
@@ -63,6 +65,7 @@ export function App({
   initialModel,
   lang: _lang,
   skillsLoader,
+  pluginManager,
   version,
 }: AppProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -113,8 +116,9 @@ export function App({
       setFocusMode: (on: boolean) => setFocusMode(on),
       setGoal: (text: string) => setGoalText(text),
       skillsLoader,
+      pluginManager,
     }),
-    [engine, config, providerId, modelId, skillsLoader],
+    [engine, config, providerId, modelId, skillsLoader, pluginManager],
   )
 
   const handleSubmit = useCallback(

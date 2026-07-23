@@ -7,6 +7,7 @@
 import type { QueryEngine } from '../core/engine'
 import type { MiphamConfig } from '../shared/index.ts'
 import type { SkillsLoader } from '../skills/loader'
+import type { PluginManager } from '../plugin/plugin-manager'
 import { McpClient } from '../mcp/client'
 import { NPM_INSTALL_COMMAND, NPM_UPDATE_COMMAND, PACKAGE_VERSION } from '../shared/index.ts'
 
@@ -23,6 +24,7 @@ export interface CommandContext {
   setFocusMode: (on: boolean) => void
   setGoal: (text: string) => void
   skillsLoader?: SkillsLoader
+  pluginManager?: PluginManager
 }
 
 export interface CommandResult {
@@ -71,6 +73,10 @@ const helpCmd: CommandHandler = (ctx) => {
       /rename <name> Rename current session
       /goal <text>   Set session goal
       /recap         Summarize session so far
+      /summary       Generate session summary
+      /stats         Session usage statistics
+      /files         List files in CWD
+      /cd <path>     Change working directory
       /export        Export conversation to file
       /doctor        System diagnostics
       /resume        List saved sessions
@@ -103,6 +109,12 @@ const helpCmd: CommandHandler = (ctx) => {
       /remove-skill  Remove an installed skill
       /commands      List all slash commands
       /mcp           MCP server status
+      /plugins       List installed plugins
+      /browse-plugins Browse community plugins
+      /install-plugin Install plugin from npm or path
+      /remove-plugin  Remove an installed plugin
+      /plugin-enable  Enable a disabled plugin
+      /plugin-disable  Disable an enabled plugin
 
       ── Workflow ────────────────────────
       /plan          Enter plan mode (read-only)
@@ -115,7 +127,20 @@ const helpCmd: CommandHandler = (ctx) => {
       /diff          Show git diff
       /workflows     List workflow scripts
       /loop <int> <p> Run prompt on interval
+      /loop init      Scaffold .mipham/ vault structure
+      /batch          Apply changes across files
+      /hooks          Manage lifecycle hook scripts
       /schedule      View scheduled tasks   [stub]
+
+      ── Git & GitHub ─────────────────────
+      /commit        Review staged changes + commit
+      /push          Push current branch
+      /pr            Create a pull request
+      /issue         File a GitHub issue
+
+      ── Code Quality ─────────────────────
+      /simplify      Review for reuse, quality, simplification
+      /lint          Run project linter
 
       ── Project ─────────────────────────
       /init          Initialize .mipham config
@@ -618,8 +643,9 @@ const browseSkillsCmd: CommandHandler = async () => {
     lines.push(`  ${cat}:`)
     for (const name of names) {
       const entry = available.find((s) => s.name === name)!
-      const marker = installed.has(name) ? '✅' : '⬜'
-      lines.push(`    ${marker} /${name.padEnd(26)} ${entry.description}`)
+      const marker = entry.builtin ? '🏠' : installed.has(name) ? '✅' : '⬜'
+      const status = entry.builtin ? ' (built-in)' : installed.has(name) ? ' (installed)' : ''
+      lines.push(`    ${marker} /${name.padEnd(26)} ${entry.description}${status}`)
     }
     lines.push('')
   }
@@ -663,6 +689,183 @@ const removeSkillCmd: CommandHandler = async (_ctx, args) => {
   const result = removeSkill(name)
   return {
     content: result.success ? `✅ ${result.message}` : `❌ ${result.message}`,
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Plugins — Community plugin marketplace + local management
+// ═══════════════════════════════════════════════════════════════
+
+const pluginsCmd: CommandHandler = (ctx) => {
+  const manager = ctx.pluginManager
+  if (!manager) {
+    return { content: 'PluginManager not available in this session.' }
+  }
+
+  const plugins = manager.list()
+  if (plugins.length === 0) {
+    return {
+      content: [
+        '── Installed Plugins ──',
+        '',
+        'No plugins installed.',
+        '',
+        'Install plugins:',
+        '  /install-plugin <npm-package>    Install from npm registry',
+        '  /browse-plugins                  Browse community plugins',
+        '  mipham plugin install <path>    Install from local directory',
+      ].join('\n'),
+    }
+  }
+
+  const lines: string[] = [
+    '── Installed Plugins ──',
+    '',
+    ...plugins.map((p) => {
+      const status = p.enabled ? '✅ enabled' : '⛔ disabled'
+      return `  ${p.name.padEnd(24)} v${p.version.padEnd(10)} ${status}  ${p.installedAt ? new Date(p.installedAt).toLocaleDateString() : ''}`
+    }),
+    '',
+    `${plugins.length} plugin(s) installed.`,
+    '',
+    'Manage: /install-plugin | /remove-plugin | /plugin-enable | /plugin-disable',
+  ]
+  return { content: lines.join('\n') }
+}
+
+const browsePluginsCmd: CommandHandler = async (ctx) => {
+  const { getAvailablePlugins } = await import('../plugin/plugin-registry')
+  const available = getAvailablePlugins()
+  const installed = new Set(
+    (ctx.pluginManager?.list() ?? []).map((p) => p.name),
+  )
+
+  const categories = new Map<string, string[]>()
+  for (const p of available) {
+    const list = categories.get(p.category) || []
+    list.push(p.name)
+    categories.set(p.category, list)
+  }
+
+  const lines: string[] = [
+    '── Community Plugins ──',
+    '',
+    `${available.length} plugins available · ${installed.size} installed`,
+    '',
+  ]
+
+  for (const [cat, names] of categories) {
+    lines.push(`  ${cat}:`)
+    for (const name of names) {
+      const entry = available.find((p) => p.name === name)!
+      const marker = installed.has(name) ? '✅' : '⬜'
+      lines.push(`    ${marker} ${name.padEnd(22)} ${entry.description}`)
+      lines.push(`       npm: ${entry.npmPackage}`)
+    }
+    lines.push('')
+  }
+
+  lines.push('Install: /install-plugin <npm-package>')
+  lines.push('Remove:  /remove-plugin <name>')
+
+  return { content: lines.join('\n') }
+}
+
+const installPluginCmd: CommandHandler = async (ctx, args) => {
+  const target = args[0]
+  if (!target) {
+    return {
+      content: [
+        'Usage: /install-plugin <npm-package> or /install-plugin <local-path>',
+        '',
+        'Examples:',
+        '  /install-plugin @roomi-fields/notebooklm-mcp',
+        '  /install-plugin mipham-plugin-security',
+        '  /install-plugin ~/my-custom-plugin/',
+        '',
+        'Use /browse-plugins to see available community plugins.',
+      ].join('\n'),
+    }
+  }
+
+  const manager = ctx.pluginManager
+  if (!manager) {
+    return { content: '❌ PluginManager not available in this session.' }
+  }
+
+  // Determine if it's a local path or npm package
+  const isLocalPath = target.startsWith('./') || target.startsWith('/') || target.startsWith('~/')
+
+  let result: { success: boolean; message: string }
+
+  if (isLocalPath) {
+    const { resolve } = await import('node:path')
+    const resolved = resolve(target.replace(/^~/, process.env.HOME || '~'))
+    result = manager.install(resolved)
+  } else {
+    // Treat as npm package name
+    result = manager.installFromNpm(target)
+  }
+
+  return {
+    content: result.success ? `✅ ${result.message}` : `❌ ${result.message}`,
+  }
+}
+
+const removePluginCmd: CommandHandler = (ctx, args) => {
+  const name = args[0]
+  if (!name) {
+    return { content: 'Usage: /remove-plugin <name>\n\nUse /plugins to see installed plugins.' }
+  }
+
+  const manager = ctx.pluginManager
+  if (!manager) {
+    return { content: '❌ PluginManager not available in this session.' }
+  }
+
+  const ok = manager.remove(name)
+  return {
+    content: ok
+      ? `✅ Plugin "${name}" removed.`
+      : `❌ Plugin "${name}" not found. Use /plugins to list installed plugins.`,
+  }
+}
+
+const pluginEnableCmd: CommandHandler = (ctx, args) => {
+  const name = args[0]
+  if (!name) {
+    return { content: 'Usage: /plugin-enable <name>\n\nUse /plugins to see installed plugins.' }
+  }
+
+  const manager = ctx.pluginManager
+  if (!manager) {
+    return { content: '❌ PluginManager not available in this session.' }
+  }
+
+  const ok = manager.enable(name)
+  return {
+    content: ok
+      ? `✅ Plugin "${name}" enabled.`
+      : `❌ Plugin "${name}" not found. Use /plugins to list installed plugins.`,
+  }
+}
+
+const pluginDisableCmd: CommandHandler = (ctx, args) => {
+  const name = args[0]
+  if (!name) {
+    return { content: 'Usage: /plugin-disable <name>\n\nUse /plugins to see installed plugins.' }
+  }
+
+  const manager = ctx.pluginManager
+  if (!manager) {
+    return { content: '❌ PluginManager not available in this session.' }
+  }
+
+  const ok = manager.disable(name)
+  return {
+    content: ok
+      ? `✅ Plugin "${name}" disabled.`
+      : `❌ Plugin "${name}" not found. Use /plugins to list installed plugins.`,
   }
 }
 
@@ -887,13 +1090,79 @@ const branchCmd: CommandHandler = (ctx, args) => {
   }
 }
 
-const loopCmd: CommandHandler = (_ctx, args) => {
+const loopCmd: CommandHandler = async (_ctx, args) => {
+  const sub = args[0]
+
+  // ── /loop init — scaffold project vault ──
+  if (sub === 'init' || sub === 'scaffold') {
+    const targetPath = args[1] || process.cwd()
+    const { scaffoldLoopKit } = await import('../commands/loop-scaffold')
+    const { created, skipped } = scaffoldLoopKit(targetPath)
+    const { resolve } = await import('node:path')
+    const resolved = resolve(targetPath.replace(/^~/, process.env.HOME || '~'))
+
+    const lines: string[] = [
+      '── LoopKit Vault Created ──',
+      '',
+      `Location: ${resolved}`,
+      '',
+    ]
+
+    if (created.length > 0) {
+      lines.push(`Created (${created.length}):`)
+      for (const c of created.slice(0, 12)) {
+        const rel = c.replace(resolved + '/', '')
+        lines.push(`  ✅ ${rel}`)
+      }
+      if (created.length > 12) {
+        lines.push(`  ... and ${created.length - 12} more`)
+      }
+    }
+
+    if (skipped.length > 0) {
+      lines.push('')
+      lines.push(`Skipped (${skipped.length} — already exist):`)
+      for (const s of skipped.slice(0, 5)) {
+        const rel = s.replace(resolved + '/', '')
+        lines.push(`  ⏭  ${rel}`)
+      }
+      if (skipped.length > 5) {
+        lines.push(`  ... and ${skipped.length - 5} more`)
+      }
+    }
+
+    lines.push('')
+    lines.push('── Structure ──')
+    lines.push('')
+    lines.push('  .mipham/          Mipham Code config directory')
+    lines.push('  ├── CLAUDE.md      Project AI instructions')
+    lines.push('  ├── settings.json  Permission & hook settings')
+    lines.push('  ├── hooks/         Lifecycle hook scripts (3)')
+    lines.push('  ├── agents/        Custom sub-agents')
+    lines.push('  └── skills/        9 domain-sorted skill directories')
+    lines.push('')
+    lines.push('  .mcp.json          MCP server configuration')
+    lines.push('  MEMORY.md          AI persistent memory')
+    lines.push('  run.sh / install.sh Project scripts')
+    lines.push('')
+    lines.push('Edit .mipham/CLAUDE.md to customize AI behavior.')
+    lines.push('Add skills to .mipham/skills/<domain>/ directories.')
+    lines.push('Configure MCP servers in .mcp.json.')
+    lines.push('')
+    lines.push('/loop init <path> to scaffold in a different location.')
+
+    return { content: lines.join('\n') }
+  }
+
+  // ── /loop <interval> <prompt> — recurring prompt ──
   if (args.length < 2) {
     return {
       content: stripIndent`
         Usage: /loop <interval> <prompt>
+           or: /loop init [path]     Scaffold project vault structure
 
-        Run a prompt repeatedly on a set interval.
+        Run a prompt repeatedly on a set interval, or initialize
+        a LoopKit Vault project structure with Mipham Code config.
 
         Interval formats:
           10s   — 10 seconds
@@ -902,10 +1171,10 @@ const loopCmd: CommandHandler = (_ctx, args) => {
 
         Example:
           /loop 5m check the deploy status
-          /loop 1h run the smoke tests
+          /loop init              Create vault in current directory
+          /loop init ~/my-project Create vault in specific directory
 
         Note: Continuous looping requires session persistence, coming in a future release.
-        For now, this sets up the intent — you'll be prompted to confirm each iteration.
       `,
     }
   }
@@ -1014,6 +1283,414 @@ const doctorCmd: CommandHandler = async (ctx) => {
   }
 
   return { content: lines.join('\n') }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GitHub & Git Workflow Commands (Claude Code parity)
+// ═══════════════════════════════════════════════════════════════
+
+const commitCmd: CommandHandler = async () => {
+  try {
+    const { execSync } = await import('node:child_process')
+    const diff = execSync('git diff --cached --stat', { encoding: 'utf-8', timeout: 5000 }).trim()
+    const unstaged = execSync('git diff --name-only', { encoding: 'utf-8', timeout: 5000 }).trim()
+
+    if (!diff) {
+      let msg = '── Git Commit ──\n\nNo staged changes found.\n\n'
+      if (unstaged) {
+        msg += 'Unstaged changes exist:\n' + unstaged.split('\n').map(f => '  • ' + f).join('\n') + '\n\n'
+      }
+      msg += 'Run: git add <files> to stage changes first.\nOr type: "commit these changes" for AI assistance.'
+      return { content: msg }
+    }
+
+    return {
+      content: [
+        '── Git Commit ──',
+        '',
+        'Staged changes:',
+        diff,
+        '',
+        'To generate a commit message, type: "write a commit message for these changes"',
+        'To commit: git commit -m "your message"',
+        '',
+        'Tip: Use Conventional Commits format (feat:, fix:, chore:, docs:)',
+      ].join('\n'),
+    }
+  } catch {
+    return { content: '── Git Commit ──\n\nCould not run git. Are you in a git repository?' }
+  }
+}
+
+const pushCmd: CommandHandler = async () => {
+  try {
+    const { execSync } = await import('node:child_process')
+    const branch = execSync('git branch --show-current', { encoding: 'utf-8', timeout: 3000 }).trim()
+    const ahead = execSync(`git rev-list --count origin/${branch}..HEAD 2>/dev/null || echo 0`, {
+      encoding: 'utf-8',
+      timeout: 3000,
+    }).trim()
+
+    return {
+      content: [
+        '── Git Push ──',
+        '',
+        `Branch: ${branch || '(unknown)'}`,
+        `Commits ahead of remote: ${ahead}`,
+        '',
+        ahead !== '0'
+          ? `Ready to push ${ahead} commit(s). Run: git push origin ${branch}`
+          : 'Nothing to push (up to date).',
+        '',
+        'Or type: "push my changes" for AI assistance.',
+      ].join('\n'),
+    }
+  } catch {
+    return { content: '── Git Push ──\n\nCould not determine git status.' }
+  }
+}
+
+const prCmd: CommandHandler = async () => {
+  try {
+    const { execSync } = await import('node:child_process')
+    const branch = execSync('git branch --show-current', { encoding: 'utf-8', timeout: 3000 }).trim()
+    const mainBranch =
+      execSync(
+        'git remote show origin 2>/dev/null | grep "HEAD branch" | cut -d: -f2',
+        { encoding: 'utf-8', timeout: 3000 },
+      ).trim() || 'main'
+
+    const diff = execSync(
+      `git diff --stat origin/${mainBranch}...HEAD 2>/dev/null || git diff --stat ${mainBranch}...HEAD 2>/dev/null || echo ""`,
+      { encoding: 'utf-8', timeout: 5000 },
+    ).trim()
+
+    const commits = execSync(
+      `git log --oneline origin/${mainBranch}..HEAD 2>/dev/null || git log --oneline ${mainBranch}..HEAD 2>/dev/null || echo ""`,
+      { encoding: 'utf-8', timeout: 5000 },
+    ).trim()
+
+    return {
+      content: [
+        '── Create Pull Request ──',
+        '',
+        `Branch: ${branch} → ${mainBranch}`,
+        '',
+        commits ? `Commits:\n${commits.split('\n').map(c => '  ' + c).join('\n')}` : 'No commits ahead.',
+        '',
+        diff ? `Changes:\n${diff}` : '',
+        '',
+        'To create PR: type "create a pull request" for AI assistance.',
+        'Or use: gh pr create --base ' + mainBranch + ' --head ' + branch,
+      ].join('\n'),
+    }
+  } catch {
+    return { content: '── Create Pull Request ──\n\nCould not determine PR context.' }
+  }
+}
+
+const issueCmd: CommandHandler = async () => {
+  return {
+    content: [
+      '── GitHub Issues ──',
+      '',
+      'To file an issue, type: "create a GitHub issue for [description]"',
+      '',
+      'Quick commands:',
+      '  gh issue create --title "..." --body "..."',
+      '  gh issue list',
+      '',
+      'Use /github-ops skill for advanced GitHub automation.',
+    ].join('\n'),
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Code Quality Commands (Claude Code parity)
+// ═══════════════════════════════════════════════════════════════
+
+const simplifyCmd: CommandHandler = async () => {
+  try {
+    const { execSync } = await import('node:child_process')
+    const diff = execSync('git diff --stat', { encoding: 'utf-8', timeout: 5000 }).trim()
+    const changed = execSync('git diff --name-only', { encoding: 'utf-8', timeout: 3000 }).trim()
+
+    if (!diff) {
+      return { content: '── Simplify ──\n\nNo uncommitted changes to review.\n\nRun /simplify after making changes to review for reuse, simplification, and quality improvements.' }
+    }
+
+    return {
+      content: [
+        '── Simplify Review ──',
+        '',
+        'Changed files:',
+        diff,
+        '',
+        'To run simplification review, type: "review these changes for simplification and quality"',
+        '',
+        'This will check for:',
+        '  • Code reuse opportunities',
+        '  • Overly complex logic',
+        '  • Dead code removal',
+        '  • Style and consistency',
+        '',
+        `Files to review: ${changed.split('\n').length}`,
+      ].join('\n'),
+    }
+  } catch {
+    return { content: '── Simplify ──\n\nCould not detect changes. Are you in a git repository?' }
+  }
+}
+
+const lintCmd: CommandHandler = async () => {
+  try {
+    const { execSync } = await import('node:child_process')
+    const { existsSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const cwd = process.cwd()
+
+    const hasPackageJson = existsSync(join(cwd, 'package.json'))
+
+    let lintOutput = ''
+    if (hasPackageJson) {
+      try {
+        lintOutput = execSync('npx eslint . --ext .ts,.tsx,.js,.jsx --max-warnings 0 2>&1 || true', {
+          encoding: 'utf-8',
+          timeout: 30000,
+          cwd,
+        }).trim()
+      } catch {
+        lintOutput = '(ESLint not configured or not found)'
+      }
+    } else {
+      lintOutput = '(No package.json found — not a Node.js project)'
+    }
+
+    const lines = lintOutput.split('\n').slice(0, 40)
+    const truncated = lines.length >= 40 ? lines.join('\n') + '\n... (truncated)' : lines.join('\n')
+
+    return {
+      content: [
+        '── Lint Results ──',
+        '',
+        truncated || '(no issues found)',
+        '',
+        hasPackageJson
+          ? 'To fix: type "fix the lint errors"'
+          : 'Set up linting: https://mipham.ai/code/docs/linting',
+      ].join('\n'),
+    }
+  } catch {
+    return { content: '── Lint ──\n\nCould not run linter. Ensure ESLint is installed and configured.' }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Session Enhancement Commands (Claude Code parity)
+// ═══════════════════════════════════════════════════════════════
+
+const filesCmd: CommandHandler = async () => {
+  const { readdirSync, statSync } = await import('node:fs')
+  const { join, relative } = await import('node:path')
+  const cwd = process.cwd()
+
+  try {
+    const entries = readdirSync(cwd, { withFileTypes: true })
+    const items = entries
+      .filter((e) => !e.name.startsWith('.') || e.name === '.mipham' || e.name === '.mcp.json')
+      .slice(0, 40)
+      .map((e) => {
+        const icon = e.isDirectory() ? '📁' : '📄'
+        try {
+          const stat = statSync(join(cwd, e.name))
+          const size = stat.isFile() ? ` ${(stat.size / 1024).toFixed(1)}KB` : ''
+          return `  ${icon} ${e.name}${size}`
+        } catch {
+          return `  ${icon} ${e.name}`
+        }
+      })
+
+    return {
+      content: [
+        '── Project Files ──',
+        '',
+        `CWD: ${cwd}`,
+        '',
+        ...items,
+        entries.length > 40 ? `  ... and ${entries.length - 40} more files` : '',
+        '',
+        'Use Read/Glob/Grep tools to examine files.',
+      ].join('\n'),
+    }
+  } catch {
+    return { content: '── Files ──\n\nCould not read directory.' }
+  }
+}
+
+const statsCmd: CommandHandler = (ctx) => {
+  const c = ctx.engine.getContext()
+  const msgs = c.getMessages()
+  const tokens = c.getEstimatedTokens()
+  const tools = ctx.engine.getTools()
+
+  const userMsgs = msgs.filter((m) => m.role === 'user').length
+  const assistantMsgs = msgs.filter((m) => m.role === 'assistant').length
+  const systemMsgs = msgs.filter((m) => m.role === 'system').length
+
+  return {
+    content: [
+      '── Session Stats ──',
+      '',
+      `Messages:        ${msgs.length} (${userMsgs} user, ${assistantMsgs} AI, ${systemMsgs} system)`,
+      `Tokens:          ~${tokens.toLocaleString()} / 200,000`,
+      `Tools available:  ${tools.size}`,
+      `Provider:         ${ctx.providerId}`,
+      `Model:            ${ctx.modelId}`,
+      `Permission:       ${ctx.config.permission}`,
+      '',
+      `Usage:            ${((tokens / 200_000) * 100).toFixed(1)}% of context window`,
+    ].join('\n'),
+  }
+}
+
+const summaryCmd: CommandHandler = (ctx) => {
+  const c = ctx.engine.getContext()
+  const msgs = c.getMessages()
+
+  if (msgs.length === 0) {
+    return { content: '── Summary ──\n\nNo conversation to summarize.' }
+  }
+
+  const userMsgs = msgs
+    .filter((m) => m.role === 'user' && typeof m.content === 'string')
+    .slice(0, 5)
+    .map((m) => {
+      const text = typeof m.content === 'string' ? m.content : ''
+      return text.length > 100 ? text.slice(0, 100) + '...' : text
+    })
+
+  return {
+    content: [
+      '── Session Summary ──',
+      '',
+      `Total messages: ${msgs.length}`,
+      `Est. tokens:    ~${c.getEstimatedTokens().toLocaleString()}`,
+      '',
+      'Recent topics:',
+      ...userMsgs.map((t, i) => `  ${i + 1}. ${t}`),
+      '',
+      'Use /export to save, /clear to reset.',
+    ].join('\n'),
+  }
+}
+
+const cdCmd: CommandHandler = async (_ctx, args) => {
+  const target = args[0]
+  if (!target) {
+    return {
+      content: [
+        'Usage: /cd <path>',
+        '',
+        'Change the session working directory.',
+        'Example: /cd ~/projects/my-app',
+        '',
+        `Current: ${process.cwd()}`,
+      ].join('\n'),
+    }
+  }
+
+  const { existsSync } = await import('node:fs')
+  const { resolve } = await import('node:path')
+  const resolved = resolve(target.replace(/^~/, process.env.HOME || '~'))
+
+  if (!existsSync(resolved)) {
+    return { content: `❌ Directory not found: ${resolved}` }
+  }
+
+  try {
+    process.chdir(resolved)
+    return {
+      content: [
+        '── Directory Changed ──',
+        '',
+        `New CWD: ${resolved}`,
+        '',
+        'The AI will now work relative to this directory.',
+        'Note: This changes the filesystem root for tools like Read, Write, Bash.',
+      ].join('\n'),
+    }
+  } catch (err) {
+    return { content: `❌ Failed to change directory: ${(err as Error).message}` }
+  }
+}
+
+const hooksCmd: CommandHandler = async () => {
+  const { existsSync, readdirSync, readFileSync } = await import('node:fs')
+  const { join } = await import('node:path')
+  const cwd = process.cwd()
+  const hooksDir = join(cwd, '.mipham', 'hooks')
+
+  if (!existsSync(hooksDir)) {
+    return {
+      content: [
+        '── Hooks ──',
+        '',
+        'No hooks configured.',
+        '',
+        'Create hook scripts in .mipham/hooks/:',
+        '  pre-tool-use.sh   — runs before each tool',
+        '  post-tool-use.sh  — runs after each tool',
+        '  stop.sh           — runs when session ends',
+        '',
+        'Use /loop init to scaffold hooks directory.',
+      ].join('\n'),
+    }
+  }
+
+  try {
+    const files = readdirSync(hooksDir).filter((f) => f.endsWith('.sh'))
+    const lines: string[] = ['── Hooks ──', '', `Location: ${hooksDir}`, '']
+
+    for (const f of files) {
+      try {
+        const stat = (await import('node:fs')).statSync(join(hooksDir, f))
+        const isExec = (stat.mode & 0o111) !== 0
+        lines.push(`  ${isExec ? '✅' : '⚠️'} ${f}${isExec ? '' : ' (not executable — run chmod +x)'}`)
+      } catch {
+        lines.push(`  📄 ${f}`)
+      }
+    }
+
+    lines.push('')
+    lines.push(`${files.length} hook(s) found.`)
+    return { content: lines.join('\n') }
+  } catch {
+    return { content: '── Hooks ──\n\nCould not read hooks directory.' }
+  }
+}
+
+const batchCmd: CommandHandler = async () => {
+  return {
+    content: [
+      '── Batch Operations ──',
+      '',
+      'Apply a change across multiple files or directories.',
+      '',
+      'Usage: type "apply this change to all .ts files in src/"',
+      '',
+      'The AI will:',
+      '  1. Understand your change description',
+      '  2. Find all matching files',
+      '  3. Apply the change consistently',
+      '  4. Report what was modified',
+      '',
+      'Use this for:',
+      '  • Renaming symbols across codebase',
+      '  • Updating import patterns',
+      '  • Applying consistent formatting changes',
+      '  • Bulk config updates',
+    ].join('\n'),
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2708,6 +3385,7 @@ const commandsListCmd: CommandHandler = () => {
     History: [],
     'Model & Provider': [],
     'Tools & Skills': [],
+    Plugins: [],
     Workflow: [],
     Project: [],
     Environment: [],
@@ -2757,6 +3435,12 @@ const commandsListCmd: CommandHandler = () => {
     '/install-skill': 'Tools & Skills',
     '/remove-skill': 'Tools & Skills',
     '/mcp': 'Tools & Skills',
+    '/plugins': 'Plugins',
+    '/browse-plugins': 'Plugins',
+    '/install-plugin': 'Plugins',
+    '/remove-plugin': 'Plugins',
+    '/plugin-enable': 'Plugins',
+    '/plugin-disable': 'Plugins',
     '/commands': 'Tools & Skills',
     '/plan': 'Workflow',
     '/no-plan': 'Workflow',
@@ -2786,6 +3470,18 @@ const commandsListCmd: CommandHandler = () => {
     '/bg': 'Agents',
     '/artifact': 'Artifacts',
     '/schedule': 'Other',
+    '/commit': 'Workflow',
+    '/push': 'Workflow',
+    '/pr': 'Workflow',
+    '/issue': 'Workflow',
+    '/simplify': 'Workflow',
+    '/lint': 'Workflow',
+    '/files': 'Session & Identity',
+    '/stats': 'Session & Identity',
+    '/summary': 'Session & Identity',
+    '/cd': 'Session & Identity',
+    '/hooks': 'Workflow',
+    '/batch': 'Workflow',
   }
 
   for (const name of names) {
@@ -2853,6 +3549,12 @@ registry.set('/reload-skills', reloadSkillsCmd)
 registry.set('/browse-skills', browseSkillsCmd)
 registry.set('/install-skill', installSkillCmd)
 registry.set('/remove-skill', removeSkillCmd)
+registry.set('/plugins', pluginsCmd)
+registry.set('/browse-plugins', browsePluginsCmd)
+registry.set('/install-plugin', installPluginCmd)
+registry.set('/remove-plugin', removePluginCmd)
+registry.set('/plugin-enable', pluginEnableCmd)
+registry.set('/plugin-disable', pluginDisableCmd)
 registry.set('/commands', commandsListCmd)
 
 // Workflow
@@ -2903,6 +3605,24 @@ registry.set('/artifact', artifactBaseCmd)
 // Lower-priority semi-stubs (WIP, backend pending)
 registry.set('/branch', branchCmd)
 registry.set('/schedule', scheduleCmd)
+
+// GitHub & Git Workflow (Claude Code parity)
+registry.set('/commit', commitCmd)
+registry.set('/push', pushCmd)
+registry.set('/pr', prCmd)
+registry.set('/issue', issueCmd)
+
+// Code Quality (Claude Code parity)
+registry.set('/simplify', simplifyCmd)
+registry.set('/lint', lintCmd)
+
+// Session Enhancement (Claude Code parity)
+registry.set('/files', filesCmd)
+registry.set('/stats', statsCmd)
+registry.set('/summary', summaryCmd)
+registry.set('/cd', cdCmd)
+registry.set('/hooks', hooksCmd)
+registry.set('/batch', batchCmd)
 
 // ═══════════════════════════════════════════════════════════════
 // Public API
@@ -2961,6 +3681,12 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/install-skill': 'Install a skill by name or URL',
   '/remove-skill': 'Remove an installed skill',
   '/mcp': 'MCP server status',
+  '/plugins': 'List installed plugins',
+  '/browse-plugins': 'Browse community plugin marketplace',
+  '/install-plugin': 'Install a plugin from npm or local path',
+  '/remove-plugin': 'Remove an installed plugin',
+  '/plugin-enable': 'Enable a disabled plugin',
+  '/plugin-disable': 'Disable an enabled plugin',
   '/plan': 'Enter plan mode',
   '/no-plan': 'Exit plan mode',
   '/tdd': 'TDD mode',
@@ -2990,6 +3716,18 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/bg': 'Run a background agent task',
   '/artifact': 'Manage artifacts',
   '/schedule': 'View scheduled tasks',
+  '/commit': 'Generate commit message and review staged changes',
+  '/push': 'Push the current branch',
+  '/pr': 'Create a pull request',
+  '/issue': 'File a GitHub issue',
+  '/simplify': 'Review code for reuse, simplification, and quality',
+  '/lint': 'Run linting on the project',
+  '/files': 'List files in current working directory',
+  '/stats': 'Show session usage statistics',
+  '/summary': 'Generate session summary',
+  '/cd': 'Change session working directory',
+  '/hooks': 'Manage lifecycle hook scripts',
+  '/batch': 'Apply changes across multiple files',
 }
 
 export function getCommandList(): CommandEntry[] {

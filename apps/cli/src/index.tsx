@@ -8,6 +8,7 @@ import { ContextManager } from './core/context'
 import { QueryEngine } from './core/engine'
 import { SessionStore } from './core/session-store'
 import { SkillsLoader } from './skills/loader'
+import { PluginManager } from './plugin/plugin-manager'
 import { createToolRegistry } from './tools'
 import { McpClient } from './mcp/client'
 import { HookEngine } from './core/hooks'
@@ -76,6 +77,9 @@ export async function runApp(options: RunOptions): Promise<void> {
     skillsLoader.loadExternal(config.skills.paths)
   }
 
+  // Initialize plugin manager
+  const pluginManager = new PluginManager()
+
   // Initialize context — restore saved session if available
   const context = new ContextManager({ maxTokens: 200_000, compactionThreshold: 0.9 })
 
@@ -140,6 +144,7 @@ export async function runApp(options: RunOptions): Promise<void> {
       initialModel={defaultModel}
       lang={options.lang}
       skillsLoader={skillsLoader}
+      pluginManager={pluginManager}
       version={options.version}
     />,
   )

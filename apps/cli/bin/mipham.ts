@@ -174,6 +174,17 @@ async function runPluginCLI(): Promise<boolean> {
       process.exit(disabled ? 0 : 1)
     })
 
+  program
+    .command('install-npm <package>')
+    .description('Install a plugin from the npm registry')
+    .action(async (packageName: string) => {
+      const { PluginManager } = await import('../src/plugin/plugin-manager')
+      const manager = new PluginManager()
+      const result = manager.installFromNpm(packageName)
+      console.log(result.message)
+      process.exit(result.success ? 0 : 1)
+    })
+
   await program.parseAsync(process.argv)
   return true
 }

@@ -30,6 +30,8 @@ export interface SkillEntry {
   category: string
   /** Author */
   author: string
+  /** If true, skill is already built-in — no download needed */
+  builtin?: boolean
 }
 
 /**
@@ -39,11 +41,12 @@ export interface SkillEntry {
 const COMMUNITY_SKILLS: SkillEntry[] = [
   {
     name: 'code-review',
-    description: 'Automated code review with multiple dimensions',
+    description: 'Automated code review with multiple dimensions — complexity, security, performance, quality',
     url: 'https://github.com/One-Mipham/skill-code-review',
     file: 'code-review.SKILL.md',
     category: 'Development',
     author: 'MiphamAI',
+    builtin: true,
   },
   {
     name: 'systematic-debugging',
@@ -60,42 +63,47 @@ const COMMUNITY_SKILLS: SkillEntry[] = [
     file: 'test-driven-development.SKILL.md',
     category: 'Development',
     author: 'Anthropic',
+    builtin: true,
   },
   {
     name: 'web-access',
-    description: 'Web search, scraping, and browser automation',
+    description: 'Web search, scraping, and browser automation — search engines, page fetching, authenticated sites',
     url: 'https://github.com/One-Mipham/skill-web-access',
     file: 'web-access.SKILL.md',
     category: 'Network',
     author: 'MiphamAI',
+    builtin: true,
   },
   {
     name: 'doc-generator',
-    description: 'Generate API docs, READMEs, and changelogs',
+    description: 'Generate API docs, READMEs, and changelogs from code analysis',
     url: 'https://github.com/One-Mipham/skill-doc-generator',
     file: 'doc-generator.SKILL.md',
     category: 'Documentation',
     author: 'MiphamAI',
+    builtin: true,
   },
   {
     name: 'github-ops',
-    description: 'GitHub PR/issue management and automation',
+    description: 'GitHub PR/issue management and automation — labels, milestones, reviews',
     url: 'https://github.com/One-Mipham/skill-github-ops',
     file: 'github-ops.SKILL.md',
     category: 'DevOps',
     author: 'MiphamAI',
+    builtin: true,
   },
   {
     name: 'security-review',
-    description: 'Security audit and vulnerability scanning for code changes',
+    description: 'Security audit and vulnerability scanning for code changes — OWASP, secrets, supply chain',
     url: 'https://github.com/One-Mipham/skill-security-review',
     file: 'security-review.SKILL.md',
     category: 'Security',
     author: 'MiphamAI',
+    builtin: true,
   },
   {
     name: 'frontend-design',
-    description: 'Distinctive visual design guidance for UI components',
+    description: 'Distinctive visual design guidance for UI components — typography, color, layout',
     url: 'https://github.com/anthropics/skills',
     file: 'frontend-design.SKILL.md',
     category: 'Design',
@@ -143,6 +151,15 @@ export function installSkill(skillName: string): InstallResult {
       success: false,
       name: skillName,
       message: `Skill "${skillName}" not found in the registry. Use /browse-skills to see available skills.`,
+    }
+  }
+
+  // Built-in skills are already available — no download needed
+  if (entry.builtin) {
+    return {
+      success: true,
+      name: skillName,
+      message: `Skill "${skillName}" is already built-in and ready to use. No installation needed.`,
     }
   }
 

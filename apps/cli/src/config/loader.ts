@@ -10,7 +10,7 @@ import {
 import { join, dirname } from 'node:path'
 import { homedir } from 'node:os'
 import { parse as parseYaml } from 'yaml'
-import type { MiphamConfig, ProviderConfig } from '../shared/index.ts'
+import type { MiphamConfig, ProviderConfig, McpServerConfig } from '../shared/index.ts'
 import { DEFAULT_CONFIG } from './defaults'
 
 const MIPHAM_HOME = join(homedir(), '.mipham')
@@ -136,6 +136,51 @@ function tryRestoreFromBackup(configPath: string): boolean {
   }
 }
 
+/**
+ * Load MCP servers from a .mcp.json file (Claude Code convention).
+ *
+ * Format:
+ *   { "mcpServers": { "name": { "command": "...", "args": [...], "env": {...} } } }
+ *
+ * Scans both project-level (.mipham/mcp.json) and user-level (~/.mipham/mcp.json).
+ * Config.yml entries take precedence over .mcp.json entries with the same name.
+ */
+function loadMcpJson(cwd: string): McpServerConfig[] {
+  const servers: McpServerConfig[] = []
+  const searchPaths = [
+    join(cwd, '.mipham', 'mcp.json'),
+    join(cwd, '.mcp.json'),
+    join(MIPHAM_HOME, 'mcp.json'),
+  ]
+
+  for (const path of searchPaths) {
+    try {
+      if (!existsSync(path)) continue
+      const raw = readFileSync(path, 'utf-8')
+      const parsed = JSON.parse(raw) as {
+        mcpServers?: Record<string, { command: string; args?: string[]; env?: Record<string, string> }>
+      }
+
+      if (parsed.mcpServers) {
+        for (const [name, cfg] of Object.entries(parsed.mcpServers)) {
+          // Avoid duplicates by name
+          if (servers.some((s) => s.name === name)) continue
+          servers.push({
+            name,
+            command: cfg.command,
+            args: cfg.args || [],
+            env: cfg.env,
+          })
+        }
+      }
+    } catch {
+      // Silently skip malformed or missing .mcp.json files
+    }
+  }
+
+  return servers
+}
+
 export function loadConfig(cwd: string = process.cwd()): MiphamConfig {
   const configPath = join(cwd, '.mipham', 'config.yml')
   const userConfigPath = join(MIPHAM_HOME, 'config.yml')
@@ -182,6 +227,22 @@ export function loadConfig(cwd: string = process.cwd()): MiphamConfig {
       mkdirSync(MIPHAM_HOME, { recursive: true })
     } catch {
       // best-effort
+    }
+  }
+
+  // ── Load .mcp.json servers (project + user level) ──
+  const mcpJsonServers = loadMcpJson(cwd)
+  if (mcpJsonServers.length > 0) {
+    const existingServers = config.skills?.mcpServers ?? []
+    // Merge: config.yml servers take precedence by name
+    const existingNames = new Set(existingServers.map((s) => s.name))
+    const newFromJson = mcpJsonServers.filter((s) => !existingNames.has(s.name))
+    config = {
+      ...config,
+      skills: {
+        paths: config.skills?.paths ?? [],
+        mcpServers: [...existingServers, ...newFromJson],
+      },
     }
   }
 
