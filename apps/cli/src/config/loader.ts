@@ -158,7 +158,10 @@ function loadMcpJson(cwd: string): McpServerConfig[] {
       if (!existsSync(path)) continue
       const raw = readFileSync(path, 'utf-8')
       const parsed = JSON.parse(raw) as {
-        mcpServers?: Record<string, { command: string; args?: string[]; env?: Record<string, string> }>
+        mcpServers?: Record<
+          string,
+          { command: string; args?: string[]; env?: Record<string, string> }
+        >
       }
 
       if (parsed.mcpServers) {

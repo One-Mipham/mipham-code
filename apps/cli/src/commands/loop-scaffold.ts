@@ -9,12 +9,7 @@
  *   .mcp.json, MEMORY.md, run.sh, install.sh, README.md
  */
 
-import {
-  mkdirSync,
-  writeFileSync,
-  existsSync,
-  chmodSync,
-} from 'node:fs'
+import { mkdirSync, writeFileSync, existsSync, chmodSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 export interface ScaffoldResult {
@@ -103,22 +98,10 @@ export function scaffoldLoopKit(basePath: string): ScaffoldResult {
   ensureDir(miphamDir, created, skipped)
 
   // ── .mipham/CLAUDE.md ──
-  writeTemplate(
-    join(miphamDir, 'CLAUDE.md'),
-    TEMPLATES.claudeMd,
-    false,
-    created,
-    skipped,
-  )
+  writeTemplate(join(miphamDir, 'CLAUDE.md'), TEMPLATES.claudeMd, false, created, skipped)
 
   // ── .mipham/settings.json ──
-  writeTemplate(
-    join(miphamDir, 'settings.json'),
-    TEMPLATES.settingsJson,
-    false,
-    created,
-    skipped,
-  )
+  writeTemplate(join(miphamDir, 'settings.json'), TEMPLATES.settingsJson, false, created, skipped)
 
   // ── .mipham/hooks/ ──
   const hooksDir = join(miphamDir, 'hooks')
@@ -189,24 +172,25 @@ const TEMPLATES = {
 - Testing: [always write tests / only for critical paths]
 `,
 
-  settingsJson: JSON.stringify(
-    {
-      permissions: {
-        allow: [],
-        deny: [],
+  settingsJson:
+    JSON.stringify(
+      {
+        permissions: {
+          allow: [],
+          deny: [],
+        },
+        hooks: {
+          PreToolUse: [],
+          PostToolUse: [],
+          Stop: [],
+          SessionStart: [],
+          UserPromptSubmit: [],
+          Notification: [],
+        },
       },
-      hooks: {
-        PreToolUse: [],
-        PostToolUse: [],
-        Stop: [],
-        SessionStart: [],
-        UserPromptSubmit: [],
-        Notification: [],
-      },
-    },
-    null,
-    2,
-  ) + '\n',
+      null,
+      2,
+    ) + '\n',
 
   preToolUse: `#!/bin/bash
 # PreToolUse hook — runs before each tool execution.
@@ -261,18 +245,19 @@ Verify staged changes against coding standards, security rules, and best practic
 4. Return verdict: pass, needs-fix, or block
 `,
 
-  mcpJson: JSON.stringify(
-    {
-      mcpServers: {
-        filesystem: {
-          command: 'npx',
-          args: ['-y', '@modelcontextprotocol/server-filesystem', '.'],
+  mcpJson:
+    JSON.stringify(
+      {
+        mcpServers: {
+          filesystem: {
+            command: 'npx',
+            args: ['-y', '@modelcontextprotocol/server-filesystem', '.'],
+          },
         },
       },
-    },
-    null,
-    2,
-  ) + '\n',
+      null,
+      2,
+    ) + '\n',
 
   memoryMd: `# MEMORY.md
 

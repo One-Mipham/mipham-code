@@ -736,9 +736,7 @@ const pluginsCmd: CommandHandler = (ctx) => {
 const browsePluginsCmd: CommandHandler = async (ctx) => {
   const { getAvailablePlugins } = await import('../plugin/plugin-registry')
   const available = getAvailablePlugins()
-  const installed = new Set(
-    (ctx.pluginManager?.list() ?? []).map((p) => p.name),
-  )
+  const installed = new Set((ctx.pluginManager?.list() ?? []).map((p) => p.name))
 
   const categories = new Map<string, string[]>()
   for (const p of available) {
@@ -1101,12 +1099,7 @@ const loopCmd: CommandHandler = async (_ctx, args) => {
     const { resolve } = await import('node:path')
     const resolved = resolve(targetPath.replace(/^~/, process.env.HOME || '~'))
 
-    const lines: string[] = [
-      '── LoopKit Vault Created ──',
-      '',
-      `Location: ${resolved}`,
-      '',
-    ]
+    const lines: string[] = ['── LoopKit Vault Created ──', '', `Location: ${resolved}`, '']
 
     if (created.length > 0) {
       lines.push(`Created (${created.length}):`)
@@ -1298,9 +1291,16 @@ const commitCmd: CommandHandler = async () => {
     if (!diff) {
       let msg = '── Git Commit ──\n\nNo staged changes found.\n\n'
       if (unstaged) {
-        msg += 'Unstaged changes exist:\n' + unstaged.split('\n').map(f => '  • ' + f).join('\n') + '\n\n'
+        msg +=
+          'Unstaged changes exist:\n' +
+          unstaged
+            .split('\n')
+            .map((f) => '  • ' + f)
+            .join('\n') +
+          '\n\n'
       }
-      msg += 'Run: git add <files> to stage changes first.\nOr type: "commit these changes" for AI assistance.'
+      msg +=
+        'Run: git add <files> to stage changes first.\nOr type: "commit these changes" for AI assistance.'
       return { content: msg }
     }
 
@@ -1325,7 +1325,10 @@ const commitCmd: CommandHandler = async () => {
 const pushCmd: CommandHandler = async () => {
   try {
     const { execSync } = await import('node:child_process')
-    const branch = execSync('git branch --show-current', { encoding: 'utf-8', timeout: 3000 }).trim()
+    const branch = execSync('git branch --show-current', {
+      encoding: 'utf-8',
+      timeout: 3000,
+    }).trim()
     const ahead = execSync(`git rev-list --count origin/${branch}..HEAD 2>/dev/null || echo 0`, {
       encoding: 'utf-8',
       timeout: 3000,
@@ -1353,12 +1356,15 @@ const pushCmd: CommandHandler = async () => {
 const prCmd: CommandHandler = async () => {
   try {
     const { execSync } = await import('node:child_process')
-    const branch = execSync('git branch --show-current', { encoding: 'utf-8', timeout: 3000 }).trim()
+    const branch = execSync('git branch --show-current', {
+      encoding: 'utf-8',
+      timeout: 3000,
+    }).trim()
     const mainBranch =
-      execSync(
-        'git remote show origin 2>/dev/null | grep "HEAD branch" | cut -d: -f2',
-        { encoding: 'utf-8', timeout: 3000 },
-      ).trim() || 'main'
+      execSync('git remote show origin 2>/dev/null | grep "HEAD branch" | cut -d: -f2', {
+        encoding: 'utf-8',
+        timeout: 3000,
+      }).trim() || 'main'
 
     const diff = execSync(
       `git diff --stat origin/${mainBranch}...HEAD 2>/dev/null || git diff --stat ${mainBranch}...HEAD 2>/dev/null || echo ""`,
@@ -1376,7 +1382,12 @@ const prCmd: CommandHandler = async () => {
         '',
         `Branch: ${branch} → ${mainBranch}`,
         '',
-        commits ? `Commits:\n${commits.split('\n').map(c => '  ' + c).join('\n')}` : 'No commits ahead.',
+        commits
+          ? `Commits:\n${commits
+              .split('\n')
+              .map((c) => '  ' + c)
+              .join('\n')}`
+          : 'No commits ahead.',
         '',
         diff ? `Changes:\n${diff}` : '',
         '',
@@ -1416,7 +1427,10 @@ const simplifyCmd: CommandHandler = async () => {
     const changed = execSync('git diff --name-only', { encoding: 'utf-8', timeout: 3000 }).trim()
 
     if (!diff) {
-      return { content: '── Simplify ──\n\nNo uncommitted changes to review.\n\nRun /simplify after making changes to review for reuse, simplification, and quality improvements.' }
+      return {
+        content:
+          '── Simplify ──\n\nNo uncommitted changes to review.\n\nRun /simplify after making changes to review for reuse, simplification, and quality improvements.',
+      }
     }
 
     return {
@@ -1454,11 +1468,14 @@ const lintCmd: CommandHandler = async () => {
     let lintOutput = ''
     if (hasPackageJson) {
       try {
-        lintOutput = execSync('npx eslint . --ext .ts,.tsx,.js,.jsx --max-warnings 0 2>&1 || true', {
-          encoding: 'utf-8',
-          timeout: 30000,
-          cwd,
-        }).trim()
+        lintOutput = execSync(
+          'npx eslint . --ext .ts,.tsx,.js,.jsx --max-warnings 0 2>&1 || true',
+          {
+            encoding: 'utf-8',
+            timeout: 30000,
+            cwd,
+          },
+        ).trim()
       } catch {
         lintOutput = '(ESLint not configured or not found)'
       }
@@ -1481,7 +1498,9 @@ const lintCmd: CommandHandler = async () => {
       ].join('\n'),
     }
   } catch {
-    return { content: '── Lint ──\n\nCould not run linter. Ensure ESLint is installed and configured.' }
+    return {
+      content: '── Lint ──\n\nCould not run linter. Ensure ESLint is installed and configured.',
+    }
   }
 }
 
@@ -1655,7 +1674,9 @@ const hooksCmd: CommandHandler = async () => {
       try {
         const stat = (await import('node:fs')).statSync(join(hooksDir, f))
         const isExec = (stat.mode & 0o111) !== 0
-        lines.push(`  ${isExec ? '✅' : '⚠️'} ${f}${isExec ? '' : ' (not executable — run chmod +x)'}`)
+        lines.push(
+          `  ${isExec ? '✅' : '⚠️'} ${f}${isExec ? '' : ' (not executable — run chmod +x)'}`,
+        )
       } catch {
         lines.push(`  📄 ${f}`)
       }

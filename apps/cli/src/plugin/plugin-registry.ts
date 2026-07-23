@@ -21,7 +21,8 @@ export interface CommunityPlugin {
 const COMMUNITY_PLUGINS: CommunityPlugin[] = [
   {
     name: 'notebooklm',
-    description: 'Google NotebookLM integration — citation-backed Q&A, content generation, 31 tools',
+    description:
+      'Google NotebookLM integration — citation-backed Q&A, content generation, 31 tools',
     npmPackage: '@roomi-fields/notebooklm-mcp',
     category: 'AI & Data',
     author: 'roomi-fields',

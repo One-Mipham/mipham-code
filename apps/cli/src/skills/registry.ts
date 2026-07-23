@@ -41,7 +41,8 @@ export interface SkillEntry {
 const COMMUNITY_SKILLS: SkillEntry[] = [
   {
     name: 'code-review',
-    description: 'Automated code review with multiple dimensions — complexity, security, performance, quality',
+    description:
+      'Automated code review with multiple dimensions — complexity, security, performance, quality',
     url: 'https://github.com/One-Mipham/skill-code-review',
     file: 'code-review.SKILL.md',
     category: 'Development',
@@ -67,7 +68,8 @@ const COMMUNITY_SKILLS: SkillEntry[] = [
   },
   {
     name: 'web-access',
-    description: 'Web search, scraping, and browser automation — search engines, page fetching, authenticated sites',
+    description:
+      'Web search, scraping, and browser automation — search engines, page fetching, authenticated sites',
     url: 'https://github.com/One-Mipham/skill-web-access',
     file: 'web-access.SKILL.md',
     category: 'Network',
@@ -94,7 +96,8 @@ const COMMUNITY_SKILLS: SkillEntry[] = [
   },
   {
     name: 'security-review',
-    description: 'Security audit and vulnerability scanning for code changes — OWASP, secrets, supply chain',
+    description:
+      'Security audit and vulnerability scanning for code changes — OWASP, secrets, supply chain',
     url: 'https://github.com/One-Mipham/skill-security-review',
     file: 'security-review.SKILL.md',
     category: 'Security',
