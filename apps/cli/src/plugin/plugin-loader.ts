@@ -6,7 +6,8 @@ import type { SkillsLoader } from '../skills/loader'
 import type { HookEngine } from '../core/hooks'
 import type { McpClient } from '../mcp/client'
 import { registerMcpServerTools } from '../mcp/registry'
-import type { McpServerConfig, ToolDefinition, HookDefinition } from '../shared/types'
+import { executeHook } from '../core/hooks-executor'
+import type { McpServerConfig, ToolDefinition, HookConfig, HookEvent } from '../shared/types'
 
 /**
  * Activate all enabled plugins — load their agents, skills, MCP servers, and hooks.
@@ -86,14 +87,22 @@ export function loadPlugins(
     }
 
     // ── Hooks from plugin.json ──
+    // Plugin hooks are HookConfig objects (type + command/url), not HookDefinition
+    // (which requires a handler function). Convert them via executeHook wrapper.
     try {
       const manifestPath = join(plugin.path, 'plugin.json')
       if (existsSync(manifestPath)) {
         const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'))
         if (manifest.hooks && Array.isArray(manifest.hooks)) {
-          for (const hook of manifest.hooks as HookDefinition[]) {
-            if (hook.event) {
-              hookEngine.register(hook)
+          for (const hookCfg of manifest.hooks as HookConfig[]) {
+            if (hookCfg.type && hookCfg) {
+              const event = (hookCfg as unknown as Record<string, unknown>).event as HookEvent | undefined
+              if (event) {
+                hookEngine.register({
+                  event,
+                  handler: async (ctx) => executeHook(hookCfg, ctx),
+                })
+              }
             }
           }
         }

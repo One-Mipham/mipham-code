@@ -75,24 +75,97 @@ export class SubAgent {
     const resolvedModel = modelToUse === 'inherit' ? model : modelToUse
 
     const chunks: string[] = []
+    const MAX_TOOL_TURNS = options.maxTurns || 5
+
+    let currentMessages = messages
+    let currentSystemPrompt = systemPrompt
 
     try {
-      for await (const chunk of provider.chat({
-        model: resolvedModel,
-        messages,
-        systemPrompt,
-        tools: toolDefs,
-        maxTokens: 4096,
-      })) {
-        if (chunk.type === 'text' && chunk.content) {
-          chunks.push(chunk.content)
+      for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
+        const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
+        let turnText = ''
+
+        for await (const chunk of provider.chat({
+          model: resolvedModel,
+          messages: currentMessages,
+          systemPrompt: currentSystemPrompt,
+          tools: toolDefs,
+          maxTokens: 4096,
+        })) {
+          if (chunk.type === 'text' && chunk.content) {
+            turnText += chunk.content
+          }
+          if (chunk.type === 'tool_use' && chunk.toolUse) {
+            toolUses.push({
+              id: chunk.toolUse.id,
+              name: chunk.toolUse.name,
+              input: chunk.toolUse.input,
+            })
+          }
+          if (chunk.type === 'error') {
+            throw new Error(`Sub-agent execution failed: ${chunk.error}`)
+          }
+          if (chunk.type === 'stop') {
+            break
+          }
         }
-        if (chunk.type === 'error') {
-          throw new Error(`Sub-agent execution failed: ${chunk.error}`)
+
+        chunks.push(turnText)
+
+        // No tools used — we're done
+        if (toolUses.length === 0) break
+
+        // Execute tools and build follow-up messages
+        currentMessages = [
+          ...currentMessages,
+          {
+            role: 'assistant' as const,
+            content: turnText || 'Executing tools...',
+          },
+        ]
+
+        for (const tu of toolUses) {
+          const tool = this.toolRegistry.get(tu.name)
+          if (!tool) {
+            currentMessages.push({
+              role: 'user' as const,
+              content: `Error: Unknown tool "${tu.name}"`,
+            })
+            continue
+          }
+
+          try {
+            const result = await tool.execute(tu.input, {
+              cwd: process.cwd(),
+              sessionId: 'sub-agent',
+              provider: '',
+              model: resolvedModel,
+            })
+
+            currentMessages.push({
+              role: 'assistant' as const,
+              content: [{ type: 'tool_use' as const, id: tu.id, name: tu.name, input: tu.input }],
+            })
+            currentMessages.push({
+              role: 'user' as const,
+              content: [
+                {
+                  type: 'tool_result' as const,
+                  tool_use_id: tu.id,
+                  content: result.success ? result.content : result.error || result.content,
+                },
+              ],
+            })
+          } catch (err) {
+            currentMessages.push({
+              role: 'user' as const,
+              content: `Tool "${tu.name}" execution error: ${String(err)}`,
+            })
+          }
         }
-        if (chunk.type === 'stop') {
-          break
-        }
+
+        // Don't send system prompt on subsequent turns
+        currentSystemPrompt = ''
       }
     } catch (err) {
       if (err instanceof Error && err.message.startsWith('Sub-agent')) {

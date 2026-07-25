@@ -36,4 +36,6 @@ export interface SubAgentOptions {
   maxContextMessages?: number
   allowedTools?: string[]
   modelOverride?: string
+  /** Maximum tool-calling turns (default: 5) to prevent infinite loops. */
+  maxTurns?: number
 }
