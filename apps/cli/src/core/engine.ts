@@ -261,7 +261,13 @@ export class QueryEngine {
       })
       this.context.addMessage({
         role: 'user',
-        content: [{ type: 'tool_result', tool_use_id: toolUse.id, content: result.success ? result.content : result.error || result.content }],
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: toolUse.id,
+            content: result.success ? result.content : result.error || result.content,
+          },
+        ],
       })
     }
 
@@ -403,7 +409,13 @@ export class QueryEngine {
         })
         this.context.addMessage({
           role: 'user',
-          content: [{ type: 'tool_result', tool_use_id: toolUse.id, content: result.success ? result.content : result.error || result.content }],
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: toolUse.id,
+              content: result.success ? result.content : result.error || result.content,
+            },
+          ],
         })
       }
     }
