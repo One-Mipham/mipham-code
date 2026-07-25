@@ -261,7 +261,7 @@ export class QueryEngine {
       })
       this.context.addMessage({
         role: 'user',
-        content: [{ type: 'tool_result', tool_use_id: toolUse.id, content: result.content }],
+        content: [{ type: 'tool_result', tool_use_id: toolUse.id, content: result.success ? result.content : result.error || result.content }],
       })
     }
 
@@ -373,6 +373,15 @@ export class QueryEngine {
         this.context.addMessage(msg)
       }
 
+      // Safety: prevent silent truncation when max turns reached
+      if (turn === MAX_TURNS - 1 && toolUses.length > 0) {
+        yield {
+          type: 'error',
+          error: `Max tool-calling turns (${MAX_TURNS}) reached. Some tool calls were not executed.`,
+        }
+        return
+      }
+
       // No more tool calls — fire Stop hook and potentially continue
       if (toolUses.length === 0) {
         yield* this.checkStopHook(signal)
@@ -394,7 +403,7 @@ export class QueryEngine {
         })
         this.context.addMessage({
           role: 'user',
-          content: [{ type: 'tool_result', tool_use_id: toolUse.id, content: result.content }],
+          content: [{ type: 'tool_result', tool_use_id: toolUse.id, content: result.success ? result.content : result.error || result.content }],
         })
       }
     }

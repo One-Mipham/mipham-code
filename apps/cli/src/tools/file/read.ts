@@ -25,6 +25,15 @@ export const readTool: ToolDefinition = {
     if (stat.isDirectory()) {
       return { success: false, content: '', error: `Path is a directory: ${filePath}` }
     }
+    // Prevent OOM on single-line files (e.g. 500MB JSON blob)
+    const MAX_FILE_SIZE = 50_000_000 // 50 MB
+    if (stat.size > MAX_FILE_SIZE) {
+      return {
+        success: false,
+        content: '',
+        error: `File too large (${(stat.size / 1e6).toFixed(1)} MB). Max: 50 MB. Use offset/limit for large files.`,
+      }
+    }
     const offset = (params.offset as number) || 0
     const limit = (params.limit as number) || 2000
     const content = readFileSync(filePath, 'utf-8')

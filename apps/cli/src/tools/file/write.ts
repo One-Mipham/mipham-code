@@ -19,6 +19,16 @@ export const writeTool: ToolDefinition = {
   async execute(params, ctx) {
     const filePath = resolveSafe(ctx.cwd, params.file_path as string)
     const content = params.content as string
+
+    const MAX_CONTENT_SIZE = 10_000_000 // 10 MB
+    if (content.length > MAX_CONTENT_SIZE) {
+      return {
+        success: false,
+        content: '',
+        error: `Content too large (${(content.length / 1e6).toFixed(1)} MB). Max: 10 MB.`,
+      }
+    }
+
     mkdirSync(dirname(filePath), { recursive: true })
     writeFileSync(filePath, content, 'utf-8')
     const lines = content.split('\n').length

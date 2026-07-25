@@ -24,7 +24,24 @@ export const editTool: ToolDefinition = {
     const newStr = params.new_string as string
     const replaceAll = params.replace_all as boolean
 
+    const MAX_FILE_SIZE = 10_000_000 // 10 MB
+    const MAX_STRING_SIZE = 5_000_000 // 5 MB
+    if (oldStr.length > MAX_STRING_SIZE || newStr.length > MAX_STRING_SIZE) {
+      return {
+        success: false,
+        content: '',
+        error: `String too large. Max: 5 MB per string.`,
+      }
+    }
+
     const content = readFileSync(filePath, 'utf-8')
+    if (content.length > MAX_FILE_SIZE) {
+      return {
+        success: false,
+        content: '',
+        error: `File too large (${(content.length / 1e6).toFixed(1)} MB). Max: 10 MB.`,
+      }
+    }
 
     if (replaceAll) {
       if (!content.includes(oldStr)) {
