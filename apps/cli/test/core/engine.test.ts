@@ -258,7 +258,7 @@ describe('QueryEngine', () => {
         yield { type: 'stop' }
       })
 
-      const permission = new PermissionSystem('auto')
+      const permission = new PermissionSystem('default')
       const engine = new QueryEngine(registry, mockContext(), makeToolMap([tool]), permission)
 
       const chunks: StreamChunk[] = []

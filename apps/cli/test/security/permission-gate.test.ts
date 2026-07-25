@@ -49,8 +49,10 @@ describe('PermissionSystem', () => {
       expect(ps.needsApproval(autoTool, {})).toBe(false)
     })
 
-    it('ask tool DOES need approval', () => {
-      expect(ps.needsApproval(askTool, {})).toBe(true)
+    // In auto mode, safety is handled by PreToolUse hooks.
+    // The permission system bypasses all tools — even those with permission: 'ask'.
+    it('ask tool does NOT need approval (hooks handle safety)', () => {
+      expect(ps.needsApproval(askTool, {})).toBe(false)
     })
 
     it('bypass tool does NOT need approval', () => {
@@ -58,12 +60,12 @@ describe('PermissionSystem', () => {
       expect(ps.isBypassed(bypassTool, {})).toBe(true)
     })
 
-    it('check returns tool permission (auto)', () => {
-      expect(ps.check(autoTool, {})).toBe('auto')
+    it('all tools bypass in auto mode', () => {
+      expect(ps.check(autoTool, {})).toBe('bypass')
     })
 
-    it('check returns tool permission (ask)', () => {
-      expect(ps.check(askTool, {})).toBe('ask')
+    it('even ask tools bypass in auto mode', () => {
+      expect(ps.check(askTool, {})).toBe('bypass')
     })
   })
 
@@ -93,7 +95,7 @@ describe('PermissionSystem', () => {
 
   describe('per-tool rule overrides', () => {
     it('tool rule overrides default level', () => {
-      const ps = new PermissionSystem('auto')
+      const ps = new PermissionSystem('default')
       // Make Bash (ask tool) bypass
       ps.setRule('Bash', 'bypass')
       expect(ps.needsApproval(askTool, {})).toBe(false)
@@ -101,7 +103,7 @@ describe('PermissionSystem', () => {
     })
 
     it('tool rule can be removed', () => {
-      const ps = new PermissionSystem('auto')
+      const ps = new PermissionSystem('default')
       ps.setRule('Bash', 'bypass')
       expect(ps.needsApproval(askTool, {})).toBe(false)
 

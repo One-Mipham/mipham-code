@@ -170,8 +170,9 @@ export class PermissionSystem {
           : 'ask'
 
       case 'auto':
-        // Respect tool-level permissions; safety checks handled by hook layer
-        return 'mode-baseline'
+        // Safety checks handled by hook layer (PreToolUse hooks).
+        // Bypass the static permission system so hooks are the sole gate.
+        return 'bypass'
 
       case 'dontAsk':
         // Only allowlisted tools free (already handled above); everything else requires approval
