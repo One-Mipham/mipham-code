@@ -13,7 +13,8 @@ export const workflowTool: ToolDefinition = {
     properties: {
       script: {
         type: 'string',
-        description: 'JavaScript workflow script using agent/parallel/pipeline/phase/log/args/budget primitives',
+        description:
+          'JavaScript workflow script using agent/parallel/pipeline/phase/log/args/budget primitives',
       },
       args: {
         type: 'object',

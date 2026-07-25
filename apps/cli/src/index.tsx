@@ -96,9 +96,7 @@ export async function runApp(options: RunOptions): Promise<void> {
   if (context.getMessageCount() === 0) {
     const basePrompt = instructions.buildSystemPrompt()
     const memoryReminder = loadSessionMemories(basePrompt)
-    context.setSystemPrompt(
-      memoryReminder ? `${basePrompt}\n\n${memoryReminder}` : basePrompt,
-    )
+    context.setSystemPrompt(memoryReminder ? `${basePrompt}\n\n${memoryReminder}` : basePrompt)
   }
 
   // Create tool registry with all built-in tools

@@ -44,8 +44,7 @@ export const memoryTool: ToolDefinition = {
     mkdirSync(MEMORY_DIR, { recursive: true })
 
     if (action === 'list') {
-      const files = readdirSync(MEMORY_DIR)
-        .filter((f) => f.endsWith('.md') && f !== 'MEMORY.md')
+      const files = readdirSync(MEMORY_DIR).filter((f) => f.endsWith('.md') && f !== 'MEMORY.md')
       return { success: true, content: files.join('\n') || '(no memories)' }
     }
 
