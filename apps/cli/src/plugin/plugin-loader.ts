@@ -58,18 +58,21 @@ export function loadPlugins(
             const raw = readFileSync(join(mcpDir, entry), 'utf-8')
             const cfg = JSON.parse(raw) as McpServerConfig
             if (cfg.name && cfg.command) {
-              mcpClient.connect(cfg).then(() => {
-                const count = registerMcpServerTools(cfg.name, toolsMap)
-                if (count > 0) {
+              mcpClient
+                .connect(cfg)
+                .then(() => {
+                  const count = registerMcpServerTools(cfg.name, toolsMap)
+                  if (count > 0) {
+                    process.stderr.write(
+                      `[plugin] "${plugin.name}": registered ${count} MCP tools from "${cfg.name}"\n`,
+                    )
+                  }
+                })
+                .catch((err: unknown) => {
                   process.stderr.write(
-                    `[plugin] "${plugin.name}": registered ${count} MCP tools from "${cfg.name}"\n`,
+                    `[plugin] Failed to connect MCP "${cfg.name}" from "${plugin.name}": ${String(err)}\n`,
                   )
-                }
-              }).catch((err: unknown) => {
-                process.stderr.write(
-                  `[plugin] Failed to connect MCP "${cfg.name}" from "${plugin.name}": ${String(err)}\n`,
-                )
-              })
+                })
             }
           } catch {
             // skip unparseable MCP config files
@@ -96,9 +99,7 @@ export function loadPlugins(
         }
       }
     } catch (err) {
-      process.stderr.write(
-        `[plugin] Failed to load hooks from "${plugin.name}": ${String(err)}\n`,
-      )
+      process.stderr.write(`[plugin] Failed to load hooks from "${plugin.name}": ${String(err)}\n`)
     }
   }
 }

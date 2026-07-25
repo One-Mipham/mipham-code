@@ -151,7 +151,14 @@ export async function runApp(options: RunOptions): Promise<void> {
   agentRegistry.loadProjectAgents(process.cwd())
   engine.setAgentRegistry(agentRegistry)
 
-  loadPlugins(pluginManager, agentRegistry, skillsLoader, hookEngine, McpClient.getInstance(), tools)
+  loadPlugins(
+    pluginManager,
+    agentRegistry,
+    skillsLoader,
+    hookEngine,
+    McpClient.getInstance(),
+    tools,
+  )
 
   engine.setupContextSummarizer()
 
