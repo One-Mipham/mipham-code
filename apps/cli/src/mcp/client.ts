@@ -85,16 +85,22 @@ export class McpClient {
     }
   }
 
-  disconnect(name: string): void {
+  /**
+   * Disconnect an MCP server and return the names of its registered tools
+   * so the caller can unregister them from the central tool registry.
+   */
+  disconnect(name: string): string[] {
     const conn = this.connections.get(name)
-    if (!conn) return
+    if (!conn) return []
 
     try {
       conn.transport.close()
     } catch {
       /* best effort */
     }
+    const toolNames = conn.tools.map((t) => t.name)
     this.connections.delete(name)
+    return toolNames
   }
 
   async closeAll(): Promise<void> {

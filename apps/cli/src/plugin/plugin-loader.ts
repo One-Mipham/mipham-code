@@ -24,6 +24,9 @@ export function loadPlugins(
   toolsMap: Map<string, ToolDefinition>,
 ): void {
   for (const plugin of pluginManager.getEnabled()) {
+    const mcpServers: string[] = []
+    const hookEvents: HookEvent[] = []
+
     // ── Custom agents ──
     const agentsDir = join(plugin.path, 'agents')
     if (existsSync(agentsDir)) {
@@ -59,6 +62,7 @@ export function loadPlugins(
             const raw = readFileSync(join(mcpDir, entry), 'utf-8')
             const cfg = JSON.parse(raw) as McpServerConfig
             if (cfg.name && cfg.command) {
+              mcpServers.push(cfg.name)
               mcpClient
                 .connect(cfg)
                 .then(() => {
@@ -87,8 +91,6 @@ export function loadPlugins(
     }
 
     // ── Hooks from plugin.json ──
-    // Plugin hooks are HookConfig objects (type + command/url), not HookDefinition
-    // (which requires a handler function). Convert them via executeHook wrapper.
     try {
       const manifestPath = join(plugin.path, 'plugin.json')
       if (existsSync(manifestPath)) {
@@ -100,6 +102,7 @@ export function loadPlugins(
                 | HookEvent
                 | undefined
               if (event) {
+                hookEvents.push(event)
                 hookEngine.register({
                   event,
                   handler: async (ctx) => executeHook(hookCfg, ctx),
@@ -112,5 +115,28 @@ export function loadPlugins(
     } catch (err) {
       process.stderr.write(`[plugin] Failed to load hooks from "${plugin.name}": ${String(err)}\n`)
     }
+
+    // ── Register cleanup callback ──
+    pluginManager.onRemove(plugin.name, () => {
+      // Disconnect MCP servers and unregister their tools
+      for (const serverName of mcpServers) {
+        try {
+          const toolNames = mcpClient.disconnect(serverName)
+          for (const toolName of toolNames) {
+            toolsMap.delete(`mcp__${serverName}__${toolName}`)
+          }
+        } catch {
+          /* best effort */
+        }
+      }
+      // Unregister hooks
+      for (const event of hookEvents) {
+        try {
+          hookEngine.unregister(event)
+        } catch {
+          /* best effort */
+        }
+      }
+    })
   }
 }

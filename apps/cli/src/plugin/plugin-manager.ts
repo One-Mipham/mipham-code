@@ -18,6 +18,7 @@ export class PluginManager {
   private plugins: InstalledPlugin[] = []
   private pluginDir: string
   private statePath: string
+  private cleanupCallbacks = new Map<string, () => void>()
 
   constructor(pluginDir?: string) {
     this.pluginDir = pluginDir ?? PLUGIN_DIR
@@ -139,9 +140,29 @@ export class PluginManager {
     return [...this.plugins]
   }
 
+  /**
+   * Register a cleanup callback that will be invoked when the named plugin is removed.
+   * This allows the plugin loader to tear down hooks, agents, MCP connections, and tools.
+   */
+  onRemove(name: string, cleanup: () => void): void {
+    this.cleanupCallbacks.set(name, cleanup)
+  }
+
   remove(name: string): boolean {
     const plugin = this.plugins.find((p) => p.name === name)
     if (!plugin) return false
+
+    // Run registered cleanup: disconnect MCP, unregister hooks/agents/tools
+    const cleanup = this.cleanupCallbacks.get(name)
+    if (cleanup) {
+      try {
+        cleanup()
+      } catch {
+        /* cleanup is best-effort */
+      }
+      this.cleanupCallbacks.delete(name)
+    }
+
     try {
       rmSync(plugin.path, { recursive: true, force: true })
     } catch {
