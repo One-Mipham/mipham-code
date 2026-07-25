@@ -220,12 +220,36 @@ export function App({
 
       try {
         for await (const chunk of engine.process(input, controller.signal)) {
+          // Show thinking indicator when model is reasoning (DeepSeek V4 thinking mode)
+          if (chunk.reasoning_content && turnContent === '') {
+            setMessages((prev) => {
+              const updated = [...prev]
+              const last = updated[updated.length - 1]
+              if (last?.role === 'assistant' && last.content === '') {
+                last.content = '💭 思考中…'
+              } else if (!last || last.role !== 'assistant' || last.content !== '💭 思考中…') {
+                updated.push({ role: 'assistant', content: '💭 思考中…' })
+              }
+              return updated
+            })
+          }
+
           if (chunk.type === 'text' && chunk.content) {
             // New turn: reset per-turn accumulator and push a fresh assistant message
             if (isNewTurn) {
               turnContent = chunk.content
               isNewTurn = false
-              setMessages((prev) => [...prev, { role: 'assistant', content: turnContent }])
+              setMessages((prev) => {
+                const updated = [...prev]
+                const last = updated[updated.length - 1]
+                // Replace "thinking" placeholder with real content
+                if (last?.role === 'assistant' && last.content === '💭 思考中…') {
+                  last.content = turnContent
+                } else {
+                  updated.push({ role: 'assistant', content: turnContent })
+                }
+                return updated
+              })
             } else {
               turnContent += chunk.content
               setMessages((prev) => {
