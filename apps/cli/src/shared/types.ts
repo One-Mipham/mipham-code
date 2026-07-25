@@ -41,7 +41,11 @@ export interface ToolResultContent {
   tool_use_id: string
   content: string
 }
-export type ContentBlock = TextContent | ImageContent | ToolUseContent | ToolResultContent
+export interface ThinkingContent {
+  type: 'thinking'
+  thinking: string
+}
+export type ContentBlock = TextContent | ImageContent | ToolUseContent | ToolResultContent | ThinkingContent
 
 export interface Message {
   role: 'system' | 'user' | 'assistant'
@@ -102,13 +106,15 @@ export interface ToolDefinition {
 
 // ── Stream Types ──
 export interface StreamChunk {
-  type: 'text' | 'tool_use' | 'tool_result' | 'stop' | 'error'
+  type: 'text' | 'tool_use' | 'tool_result' | 'thinking' | 'stop' | 'error'
   content?: string
   toolUse?: ToolUseContent
   tool_use_id?: string
   error?: string
   /** DeepSeek reasoning tokens accumulated during this stream. */
   reasoning_content?: string
+  /** Anthropic thinking block content (DeepSeek Anthropic endpoint). */
+  thinking?: string
 }
 
 // ── Config Types ──

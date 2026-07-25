@@ -11,6 +11,7 @@ import { fetchWithRetry } from './fetch-utils'
 interface AnthropicContentBlock {
   type: string
   text?: string
+  thinking?: string
   id?: string
   name?: string
   input?: Record<string, unknown>
@@ -30,6 +31,7 @@ interface AnthropicSSEEvent {
   delta?: {
     type: string
     text?: string
+    thinking?: string
     partial_json?: string
   }
   error?: { type: string; message: string }
@@ -134,6 +136,10 @@ export class AnthropicProvider implements ProviderInstance {
 
               if (delta.type === 'text_delta' && delta.text) {
                 yield { type: 'text', content: delta.text }
+              }
+
+              if (delta.type === 'thinking_delta' && delta.text) {
+                yield { type: 'thinking', thinking: delta.text }
               }
 
               if (delta.type === 'input_json_delta' && delta.partial_json) {
@@ -249,6 +255,12 @@ export class AnthropicProvider implements ProviderInstance {
                 },
               }
             }
+
+            case 'thinking':
+              return {
+                type: 'thinking',
+                thinking: block.thinking,
+              }
 
             case 'tool_use':
               return {
