@@ -44,8 +44,9 @@ export class OpenAICompatProvider implements ProviderInstance {
     const decoder = new TextDecoder()
     let buffer = ''
 
-    // Track incremental tool calls across streaming deltas
+    // Track incremental tool calls and reasoning content across streaming deltas
     const pendingToolCalls = new Map<number, { id: string; name: string; arguments: string }>()
+    let reasoningContent = ''
 
     while (true) {
       const { done, value } = await reader.read()
@@ -72,7 +73,7 @@ export class OpenAICompatProvider implements ProviderInstance {
               },
             }
           }
-          yield { type: 'stop' }
+          yield { type: 'stop', reasoning_content: reasoningContent }
           return
         }
 
@@ -104,6 +105,10 @@ export class OpenAICompatProvider implements ProviderInstance {
             yield { type: 'text', content: delta.content }
           }
 
+          if (delta?.reasoning_content) {
+            reasoningContent += delta.reasoning_content
+          }
+
           if (choice.finish_reason === 'tool_calls') {
             // Emit fully accumulated tool calls
             for (const [, tc] of pendingToolCalls) {
@@ -121,7 +126,7 @@ export class OpenAICompatProvider implements ProviderInstance {
           }
 
           if (choice.finish_reason === 'stop') {
-            yield { type: 'stop' }
+            yield { type: 'stop', reasoning_content: reasoningContent }
           }
         } catch {
           // skip unparseable chunks
@@ -129,7 +134,7 @@ export class OpenAICompatProvider implements ProviderInstance {
       }
     }
 
-    yield { type: 'stop' }
+    yield { type: 'stop', reasoning_content: reasoningContent }
   }
 
   async listModels(): Promise<ModelInfo[]> {
@@ -174,7 +179,7 @@ export class OpenAICompatProvider implements ProviderInstance {
           next.content.some((b) => b.type === 'tool_use')
         ) {
           const toolUses = next.content.filter((b) => b.type === 'tool_use')
-          result.push({
+          const combinedMsg: Record<string, unknown> = {
             role: 'assistant',
             content: msg.content,
             tool_calls: toolUses.map((tu) => ({
@@ -185,12 +190,20 @@ export class OpenAICompatProvider implements ProviderInstance {
                 arguments: JSON.stringify(tu.input),
               },
             })),
-          })
+          }
+          if (msg.reasoning_content) {
+            combinedMsg.reasoning_content = msg.reasoning_content
+          }
+          result.push(combinedMsg)
           i++ // skip the next message (consumed)
           continue
         }
 
-        result.push({ role: msg.role, content: msg.content })
+        const standaloneMsg: Record<string, unknown> = { role: msg.role, content: msg.content }
+        if (msg.role === 'assistant' && msg.reasoning_content) {
+          standaloneMsg.reasoning_content = msg.reasoning_content
+        }
+        result.push(standaloneMsg)
         continue
       }
 
@@ -207,7 +220,7 @@ export class OpenAICompatProvider implements ProviderInstance {
             .map((b) => (b.type === 'text' ? b.text : ''))
             .join('') || null
 
-        result.push({
+        const toolUseMsg: Record<string, unknown> = {
           role: 'assistant',
           content: textContent,
           tool_calls: toolUses.map((tu) => ({
@@ -218,7 +231,11 @@ export class OpenAICompatProvider implements ProviderInstance {
               arguments: JSON.stringify(tu.input),
             },
           })),
-        })
+        }
+        if (msg.reasoning_content) {
+          toolUseMsg.reasoning_content = msg.reasoning_content
+        }
+        result.push(toolUseMsg)
         continue
       }
 

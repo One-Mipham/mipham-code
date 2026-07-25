@@ -46,6 +46,8 @@ export type ContentBlock = TextContent | ImageContent | ToolUseContent | ToolRes
 export interface Message {
   role: 'system' | 'user' | 'assistant'
   content: string | ContentBlock[]
+  /** DeepSeek reasoning tokens — must be passed back to the API in multi-turn conversations. */
+  reasoning_content?: string
 }
 
 // ── Tool Types ──
@@ -105,6 +107,8 @@ export interface StreamChunk {
   toolUse?: ToolUseContent
   tool_use_id?: string
   error?: string
+  /** DeepSeek reasoning tokens accumulated during this stream. */
+  reasoning_content?: string
 }
 
 // ── Config Types ──

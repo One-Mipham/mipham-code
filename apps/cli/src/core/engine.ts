@@ -140,6 +140,7 @@ export class QueryEngine {
     const toolDefs = this.getToolDefinitions()
 
     let assistantContent = ''
+    let reasoningContent = ''
     const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
 
     // Stream model response
@@ -162,6 +163,10 @@ export class QueryEngine {
           assistantContent += chunk.content
         }
 
+        if (chunk.reasoning_content) {
+          reasoningContent += chunk.reasoning_content
+        }
+
         if (chunk.type === 'tool_use' && chunk.toolUse) {
           toolUses.push({
             id: chunk.toolUse.id,
@@ -172,16 +177,26 @@ export class QueryEngine {
 
         if (chunk.type === 'stop') {
           // Add assistant response to context
-          if (assistantContent) {
-            this.context.addMessage({ role: 'assistant', content: assistantContent })
+          if (assistantContent || reasoningContent) {
+            const msg: import('../shared/types').Message = {
+              role: 'assistant',
+              content: assistantContent || '',
+            }
+            if (reasoningContent) msg.reasoning_content = reasoningContent
+            this.context.addMessage(msg)
           }
         }
       }
     } catch (err) {
       if (isAbortError(err)) {
         // User interrupted — keep partial content, stop gracefully
-        if (assistantContent) {
-          this.context.addMessage({ role: 'assistant', content: assistantContent })
+        if (assistantContent || reasoningContent) {
+          const msg: import('../shared/types').Message = {
+            role: 'assistant',
+            content: assistantContent || '',
+          }
+          if (reasoningContent) msg.reasoning_content = reasoningContent
+          this.context.addMessage(msg)
         }
         yield { type: 'stop' }
         return
@@ -259,6 +274,7 @@ export class QueryEngine {
       const messages = this.context.getMessages()
 
       let assistantContent = ''
+      let reasoningContent = ''
       const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
 
       try {
@@ -274,6 +290,10 @@ export class QueryEngine {
           if (chunk.type === 'error') return
           if (chunk.type === 'text' && chunk.content) assistantContent += chunk.content
 
+          if (chunk.reasoning_content) {
+            reasoningContent += chunk.reasoning_content
+          }
+
           if (chunk.type === 'tool_use' && chunk.toolUse) {
             toolUses.push({
               id: chunk.toolUse.id,
@@ -284,8 +304,13 @@ export class QueryEngine {
         }
       } catch (err) {
         if (isAbortError(err)) {
-          if (assistantContent) {
-            this.context.addMessage({ role: 'assistant', content: assistantContent })
+          if (assistantContent || reasoningContent) {
+            const msg: import('../shared/types').Message = {
+              role: 'assistant',
+              content: assistantContent || '',
+            }
+            if (reasoningContent) msg.reasoning_content = reasoningContent
+            this.context.addMessage(msg)
           }
           yield { type: 'stop' }
           return
@@ -294,8 +319,13 @@ export class QueryEngine {
         return
       }
 
-      if (assistantContent) {
-        this.context.addMessage({ role: 'assistant', content: assistantContent })
+      if (assistantContent || reasoningContent) {
+        const msg: import('../shared/types').Message = {
+          role: 'assistant',
+          content: assistantContent || '',
+        }
+        if (reasoningContent) msg.reasoning_content = reasoningContent
+        this.context.addMessage(msg)
       }
 
       // No more tool calls — fire Stop hook and potentially continue
