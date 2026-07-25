@@ -41,10 +41,7 @@ function buildToolName(serverName: string, toolName: string): string {
  * Convert an MCP server ToolDefinition into the main ToolDefinition format
  * that can be registered in the central tool registry.
  */
-export function convertMcpTool(
-  serverName: string,
-  mcpTool: McpToolDefinition,
-): ToolDefinition {
+export function convertMcpTool(serverName: string, mcpTool: McpToolDefinition): ToolDefinition {
   const toolName = buildToolName(serverName, mcpTool.name)
 
   // Build parameters schema — pass through MCP inputSchema as-is
