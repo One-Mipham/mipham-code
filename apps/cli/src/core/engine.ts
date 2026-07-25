@@ -431,6 +431,27 @@ export class QueryEngine {
     return this.tools
   }
 
+  /** Register a tool dynamically (used by MCP auto-registration). */
+  registerTool(tool: ToolDefinition): void {
+    if (this.tools.has(tool.name)) {
+      process.stderr.write(`[mcp] Tool collision: "${tool.name}" already registered. Skipping.\n`)
+      return
+    }
+    this.tools.set(tool.name, tool)
+  }
+
+  /** Remove a dynamically registered tool by name. */
+  unregisterTool(name: string): void {
+    this.tools.delete(name)
+  }
+
+  /** Register multiple tools at once. */
+  registerTools(tools: ToolDefinition[]): void {
+    for (const tool of tools) {
+      this.tools.set(tool.name, tool)
+    }
+  }
+
   switchProvider(providerId: string, modelId?: string): void {
     this.registry.switchProvider(providerId, modelId)
   }

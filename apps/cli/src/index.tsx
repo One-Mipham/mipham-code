@@ -11,6 +11,7 @@ import { SkillsLoader } from './skills/loader'
 import { PluginManager } from './plugin/plugin-manager'
 import { createToolRegistry } from './tools'
 import { McpClient } from './mcp/client'
+import { registerMcpServerTools } from './mcp/registry'
 import { HookEngine } from './core/hooks'
 import { ArtifactServer } from './artifacts/server'
 import { ARTIFACTS_DIR, ARTIFACT_PORT, MIPHAM_DIR } from './shared/constants'
@@ -50,17 +51,6 @@ export async function runApp(options: RunOptions): Promise<void> {
   // Load configuration
   const config = loadConfig()
 
-  // Connect MCP servers (fire-and-forget — do not block startup)
-  const mcpServers = config.skills?.mcpServers ?? []
-  if (mcpServers.length > 0) {
-    const mcp = McpClient.getInstance()
-    for (const server of mcpServers) {
-      mcp.connect(server).catch((err) => {
-        process.stderr.write(`[mcp] Failed to connect "${server.name}": ${String(err)}\n`)
-      })
-    }
-  }
-
   // Bootstrap providers
   const defaultProvider = options.provider || config.defaultProvider
   const defaultModel = options.model || config.defaultModel
@@ -97,8 +87,33 @@ export async function runApp(options: RunOptions): Promise<void> {
     context.setSystemPrompt(instructions.buildSystemPrompt())
   }
 
-  // Create tool registry with all 16 tools
+  // Create tool registry with all built-in tools
   const tools = createToolRegistry()
+
+  // Connect MCP servers and register their tools into the tool registry.
+  // Uses Promise.allSettled for parallel connection — failures are non-fatal.
+  const mcpServers = config.skills?.mcpServers ?? []
+  if (mcpServers.length > 0) {
+    const mcp = McpClient.getInstance()
+    const results = await Promise.allSettled(
+      mcpServers.map(async (server) => {
+        await mcp.connect(server)
+        const count = registerMcpServerTools(server.name, tools)
+        if (count > 0) {
+          process.stderr.write(`[mcp] "${server.name}": registered ${count} tools\n`)
+        }
+      }),
+    )
+    // Log failures (non-fatal — app starts without that server's tools)
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i]!
+      if (result.status === 'rejected') {
+        process.stderr.write(
+          `[mcp] Failed to connect "${mcpServers[i]!.name}": ${String(result.reason)}\n`,
+        )
+      }
+    }
+  }
 
   // Initialize hook engine — register skill-defined hooks
   const hookEngine = new HookEngine()
