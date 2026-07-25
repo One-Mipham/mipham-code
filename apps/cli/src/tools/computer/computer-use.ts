@@ -35,9 +35,15 @@ export const computerUseTool: ToolDefinition = {
     switch (action) {
       case 'screenshot': {
         const result = await takeScreenshot()
-        return result.success
-          ? { success: true, content: `Screenshot captured: ${result.data!.slice(0, 100)}...` }
-          : { success: false, content: '', error: result.error }
+        if (!result.success) {
+          return { success: false, content: '', error: result.error }
+        }
+        const dataUrl = result.data!
+        const sizeKB = Math.round((dataUrl.length * 0.75) / 1024) // base64 → bytes estimate
+        return {
+          success: true,
+          content: `Screenshot captured (${sizeKB}KB).\n\n${dataUrl}`,
+        }
       }
       case 'launch': {
         const result = launchApp(target)
