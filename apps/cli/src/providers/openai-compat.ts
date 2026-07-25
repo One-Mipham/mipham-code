@@ -172,7 +172,7 @@ export class OpenAICompatProvider implements ProviderInstance {
         const next: Message | undefined = messages[i + 1]
         if (
           msg.role === 'assistant' &&
-          msg.content.length > 0 &&
+          (msg.content.length > 0 || msg.reasoning_content) &&
           next &&
           next.role === 'assistant' &&
           typeof next.content !== 'string' &&
@@ -214,11 +214,12 @@ export class OpenAICompatProvider implements ProviderInstance {
 
       // ── Assistant tool_use → OpenAI tool_calls ──
       if (toolUses.length > 0 && msg.role === 'assistant') {
-        const textContent =
-          blocks
-            .filter((b) => b.type === 'text')
-            .map((b) => (b.type === 'text' ? b.text : ''))
-            .join('') || null
+        const textParts: string[] = []
+        for (const b of blocks) {
+          if (b.type === 'text') textParts.push(b.text)
+          if (b.type === 'thinking') textParts.push(`[Thinking: ${b.thinking}]`)
+        }
+        const textContent = textParts.join('') || null
 
         const toolUseMsg: Record<string, unknown> = {
           role: 'assistant',
@@ -241,6 +242,16 @@ export class OpenAICompatProvider implements ProviderInstance {
 
       // ── Tool result → OpenAI tool role ──
       if (toolResults.length > 0) {
+        // Emit companion text blocks as a user message before tool results
+        const textContent =
+          blocks
+            .filter((b) => b.type === 'text')
+            .map((b) => (b.type === 'text' ? b.text : ''))
+            .join('') || null
+        if (textContent) {
+          result.push({ role: 'user', content: textContent })
+        }
+
         for (const tr of toolResults) {
           result.push({
             role: 'tool',
