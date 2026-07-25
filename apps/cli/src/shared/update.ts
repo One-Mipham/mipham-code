@@ -49,7 +49,7 @@ export function getCurrentVersion(): string {
 function fetchLatestVersion(): string {
   const result = execSync(`npm view ${PACKAGE} version --json`, {
     encoding: 'utf-8',
-    timeout: 10_000,
+    timeout: 30_000,
     stdio: ['pipe', 'pipe', 'pipe'],
   }).trim()
   return result.replace(/"/g, '')
