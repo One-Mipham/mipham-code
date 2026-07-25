@@ -98,13 +98,14 @@ export class SkillsLoader {
   private tryLoad(path: string, type: 'standard' | 'mipham'): void {
     try {
       const raw = readFileSync(path, 'utf-8')
-      const { data } = parseFrontmatter(raw)
+      const { data, content } = parseFrontmatter(raw)
 
       const skill: SkillDefinition = {
         name: (data.name as string) || this.nameFromPath(path),
         description: (data.description as string) || '',
         version: (data.version as string) || '0.1.0',
         type,
+        body: content.trim() || undefined,
         tools: data.tools as SkillDefinition['tools'],
         hooks: data.hooks as SkillDefinition['hooks'],
         prompts: data.prompts as SkillDefinition['prompts'],

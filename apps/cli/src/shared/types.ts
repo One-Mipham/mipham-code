@@ -147,6 +147,8 @@ export interface SkillDefinition {
   disableModelInvocation?: boolean
   /** When true, users can invoke this skill directly via /<name> */
   userInvocable?: boolean
+  /** The markdown body content of the skill file (instructions for the AI to follow). */
+  body?: string
 }
 
 // ── Hook Types ──

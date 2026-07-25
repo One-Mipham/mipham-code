@@ -64,15 +64,16 @@ export const skillTool: ToolDefinition = {
         }
       }
 
-      // Standard inline execution — return metadata for AI to follow
+      // Standard inline execution — return skill body for AI to follow
       const lines: string[] = [
         `── Skill Invoked: ${skill.name} ──`,
         `Type: ${skill.type} | Version: ${skill.version}`,
         skill.description ? `Description: ${skill.description}` : '',
         args ? `Arguments: ${args}` : '',
         '',
-        'The AI should now follow the instructions from this skill.',
-        'Skill content has been loaded into context.',
+        'The AI should now follow these instructions:',
+        '',
+        skill.body || '(no instructions body)',
       ].filter(Boolean)
 
       return { success: true, content: lines.join('\n') }

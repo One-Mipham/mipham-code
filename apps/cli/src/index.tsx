@@ -63,8 +63,15 @@ export async function runApp(options: RunOptions): Promise<void> {
   // Load skills
   const skillsLoader = new SkillsLoader()
   skillsLoader.loadBuiltin(process.cwd())
+  skillsLoader.loadUserSkills()
   if (config.skills?.paths) {
     skillsLoader.loadExternal(config.skills.paths)
+  }
+
+  // Inject skills system-reminder into system prompt for AI auto-triggering
+  const skillsReminder = skillsLoader.buildSystemReminder()
+  if (skillsReminder) {
+    instructions.setSkillsReminder(skillsReminder)
   }
 
   // Initialize plugin manager
@@ -134,6 +141,7 @@ export async function runApp(options: RunOptions): Promise<void> {
   engine.setHookEngine(hookEngine)
   engine.setArtifactServer(artifactServer)
   engine.setAgentViewManager(agentViewManager)
+  engine.setSkillsLoader(skillsLoader)
   engine.setupContextSummarizer()
 
   // Auto-save session on exit

@@ -8,12 +8,14 @@ import type { AgentRegistry } from '../agent/agent-registry'
 import { analyzeForMemory } from './memory/memory-writer'
 import { getMemoryManager } from './memory/memory-loader'
 import type { AgentViewManager } from '../agent-view/agent-view-manager'
+import type { SkillsLoader } from '../skills/loader'
 
 export class QueryEngine {
   private hookEngine?: HookEngine
   private artifactServer?: ArtifactServer
   private agentRegistry?: AgentRegistry
   private agentViewManager?: AgentViewManager
+  private skillsLoader?: SkillsLoader
   private goal?: string
   private maxGoalLoops = 20
   private lastAssistantContent?: string
@@ -53,6 +55,11 @@ export class QueryEngine {
   /** Get the AgentViewManager (may be undefined if not wired). */
   getAgentViewManager(): AgentViewManager | undefined {
     return this.agentViewManager
+  }
+
+  /** Register the SkillsLoader for Skill tool context injection. */
+  setSkillsLoader(loader: SkillsLoader): void {
+    this.skillsLoader = loader
   }
 
   /** Set the session goal for goal-driven execution. */
@@ -393,6 +400,7 @@ export class QueryEngine {
         sessionId: 'session-1',
         provider: this.registry.getActive().config.id,
         model: this.registry.getActiveModel(),
+        skillsLoader: this.skillsLoader,
         registry: this.registry,
         toolRegistry: this.tools,
         artifactServer: this.artifactServer,
