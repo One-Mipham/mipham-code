@@ -9,9 +9,11 @@ import { QueryEngine } from './core/engine'
 import { SessionStore } from './core/session-store'
 import { SkillsLoader } from './skills/loader'
 import { PluginManager } from './plugin/plugin-manager'
+import { loadPlugins } from './plugin/plugin-loader'
 import { createToolRegistry } from './tools'
 import { McpClient } from './mcp/client'
 import { registerMcpServerTools } from './mcp/registry'
+import { AgentRegistry } from './agent/agent-registry'
 import { HookEngine } from './core/hooks'
 import { ArtifactServer } from './artifacts/server'
 import { ARTIFACTS_DIR, ARTIFACT_PORT, MIPHAM_DIR } from './shared/constants'
@@ -142,6 +144,15 @@ export async function runApp(options: RunOptions): Promise<void> {
   engine.setArtifactServer(artifactServer)
   engine.setAgentViewManager(agentViewManager)
   engine.setSkillsLoader(skillsLoader)
+
+  // Initialize agent registry and load plugin agents/skills/MCP/hooks
+  const agentRegistry = new AgentRegistry()
+  agentRegistry.loadUserAgents()
+  agentRegistry.loadProjectAgents(process.cwd())
+  engine.setAgentRegistry(agentRegistry)
+
+  loadPlugins(pluginManager, agentRegistry, skillsLoader, hookEngine, McpClient.getInstance(), tools)
+
   engine.setupContextSummarizer()
 
   // Auto-save session on exit

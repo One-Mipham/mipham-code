@@ -1,36 +1,104 @@
-import type { PluginManager } from './plugin-manager'
 import { join } from 'node:path'
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import type { PluginManager } from './plugin-manager'
+import type { AgentRegistry } from '../agent/agent-registry'
+import type { SkillsLoader } from '../skills/loader'
+import type { HookEngine } from '../core/hooks'
+import type { McpClient } from '../mcp/client'
+import { registerMcpServerTools } from '../mcp/registry'
+import type { McpServerConfig, ToolDefinition, HookDefinition } from '../shared/types'
 
+/**
+ * Activate all enabled plugins — load their agents, skills, MCP servers, and hooks.
+ *
+ * Called once at startup after the core subsystems (agent registry, skills loader,
+ * hook engine, MCP client, tool registry) are initialized.
+ */
 export function loadPlugins(
   pluginManager: PluginManager,
-  engine: unknown,
-  skillsLoader: unknown,
+  agentRegistry: AgentRegistry,
+  skillsLoader: SkillsLoader,
+  hookEngine: HookEngine,
+  mcpClient: McpClient,
+  toolsMap: Map<string, ToolDefinition>,
 ): void {
   for (const plugin of pluginManager.getEnabled()) {
-    // Load custom agents
+    // ── Custom agents ──
     const agentsDir = join(plugin.path, 'agents')
     if (existsSync(agentsDir)) {
-      // → register with AgentRegistry
+      try {
+        agentRegistry.loadDirectory(agentsDir, 'user')
+      } catch (err) {
+        process.stderr.write(
+          `[plugin] Failed to load agents from "${plugin.name}": ${String(err)}\n`,
+        )
+      }
     }
 
-    // Load custom skills
+    // ── Custom skills ──
     const skillsDir = join(plugin.path, 'skills')
     if (existsSync(skillsDir)) {
-      // → register with SkillsLoader
+      try {
+        skillsLoader.loadExternal([skillsDir])
+      } catch (err) {
+        process.stderr.write(
+          `[plugin] Failed to load skills from "${plugin.name}": ${String(err)}\n`,
+        )
+      }
     }
 
-    // Load MCP servers
+    // ── MCP servers ──
     const mcpDir = join(plugin.path, 'mcp-servers')
     if (existsSync(mcpDir)) {
-      // → register MCP configs
+      try {
+        const entries = readdirSync(mcpDir)
+        for (const entry of entries) {
+          if (!entry.endsWith('.json')) continue
+          try {
+            const raw = readFileSync(join(mcpDir, entry), 'utf-8')
+            const cfg = JSON.parse(raw) as McpServerConfig
+            if (cfg.name && cfg.command) {
+              mcpClient.connect(cfg).then(() => {
+                const count = registerMcpServerTools(cfg.name, toolsMap)
+                if (count > 0) {
+                  process.stderr.write(
+                    `[plugin] "${plugin.name}": registered ${count} MCP tools from "${cfg.name}"\n`,
+                  )
+                }
+              }).catch((err: unknown) => {
+                process.stderr.write(
+                  `[plugin] Failed to connect MCP "${cfg.name}" from "${plugin.name}": ${String(err)}\n`,
+                )
+              })
+            }
+          } catch {
+            // skip unparseable MCP config files
+          }
+        }
+      } catch (err) {
+        process.stderr.write(
+          `[plugin] Failed to load MCP configs from "${plugin.name}": ${String(err)}\n`,
+        )
+      }
     }
 
-    // Load hooks
-    // → parse plugin.json hooks → register with HookEngine
+    // ── Hooks from plugin.json ──
+    try {
+      const manifestPath = join(plugin.path, 'plugin.json')
+      if (existsSync(manifestPath)) {
+        const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'))
+        if (manifest.hooks && Array.isArray(manifest.hooks)) {
+          for (const hook of manifest.hooks as HookDefinition[]) {
+            if (hook.event) {
+              hookEngine.register(hook)
+            }
+          }
+        }
+      }
+    } catch (err) {
+      process.stderr.write(
+        `[plugin] Failed to load hooks from "${plugin.name}": ${String(err)}\n`,
+      )
+    }
   }
-
-  // Suppress unused parameter warnings — these are wiring stubs for future phases
-  void engine
-  void skillsLoader
 }

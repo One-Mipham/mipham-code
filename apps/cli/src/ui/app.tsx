@@ -97,10 +97,14 @@ export function App({
 
   // Initialize agent registry (one-time, on mount)
   useMemo(() => {
-    const agentRegistry = new AgentRegistry()
-    agentRegistry.loadUserAgents()
-    agentRegistry.loadProjectAgents(process.cwd())
-    engine.setAgentRegistry(agentRegistry)
+    // Agent registry may already be initialized in index.tsx (for plugin loading).
+    // Only create a fresh one if not already set on the engine.
+    if (!engine.getAgentRegistry()) {
+      const agentRegistry = new AgentRegistry()
+      agentRegistry.loadUserAgents()
+      agentRegistry.loadProjectAgents(process.cwd())
+      engine.setAgentRegistry(agentRegistry)
+    }
   }, [])
 
   const mkCtx = useCallback(
