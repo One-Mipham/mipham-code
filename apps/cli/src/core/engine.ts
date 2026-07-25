@@ -290,6 +290,7 @@ export class QueryEngine {
           yield { type: 'stop' }
           return
         }
+        yield { type: 'error', error: String(err) }
         return
       }
 

@@ -153,27 +153,100 @@ export class OpenAICompatProvider implements ProviderInstance {
   private convertMessages(
     messages: Message[],
     systemPrompt?: string,
-  ): { role: string; content: string | unknown[] }[] {
-    const result: { role: string; content: string | unknown[] }[] = []
+  ): Record<string, unknown>[] {
+    const result: Record<string, unknown>[] = []
 
     if (systemPrompt) {
       result.push({ role: 'system', content: systemPrompt })
     }
 
-    for (const msg of messages) {
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i]!
+      if (!msg) continue
+
+      // ── String content ──
       if (typeof msg.content === 'string') {
-        result.push({ role: msg.role, content: msg.content })
-      } else {
-        const parts: unknown[] = []
-        for (const block of msg.content) {
-          if (block.type === 'text') {
-            parts.push({ type: 'text', text: block.text })
-          } else if (block.type === 'image_url') {
-            parts.push({ type: 'image_url', image_url: block.image_url })
-          }
+        // Combine: assistant text + next assistant message with tool_use blocks
+        const next: Message | undefined = messages[i + 1]
+        if (
+          msg.role === 'assistant' &&
+          msg.content.length > 0 &&
+          next &&
+          next.role === 'assistant' &&
+          typeof next.content !== 'string' &&
+          next.content.some((b) => b.type === 'tool_use')
+        ) {
+          const toolUses = next.content.filter((b) => b.type === 'tool_use')
+          result.push({
+            role: 'assistant',
+            content: msg.content,
+            tool_calls: toolUses.map((tu) => ({
+              id: tu.id,
+              type: 'function',
+              function: {
+                name: tu.name,
+                arguments: JSON.stringify(tu.input),
+              },
+            })),
+          })
+          i++ // skip the next message (consumed)
+          continue
         }
-        result.push({ role: msg.role, content: parts })
+
+        result.push({ role: msg.role, content: msg.content })
+        continue
       }
+
+      // ── ContentBlock[] ──
+      const blocks = msg.content
+      const toolUses = blocks.filter((b) => b.type === 'tool_use')
+      const toolResults = blocks.filter((b) => b.type === 'tool_result')
+
+      // ── Assistant tool_use → OpenAI tool_calls ──
+      if (toolUses.length > 0 && msg.role === 'assistant') {
+        const textContent =
+          blocks
+            .filter((b) => b.type === 'text')
+            .map((b) => (b.type === 'text' ? b.text : ''))
+            .join('') || null
+
+        result.push({
+          role: 'assistant',
+          content: textContent,
+          tool_calls: toolUses.map((tu) => ({
+            id: tu.id,
+            type: 'function',
+            function: {
+              name: tu.name,
+              arguments: JSON.stringify(tu.input),
+            },
+          })),
+        })
+        continue
+      }
+
+      // ── Tool result → OpenAI tool role ──
+      if (toolResults.length > 0) {
+        for (const tr of toolResults) {
+          result.push({
+            role: 'tool',
+            tool_call_id: tr.tool_use_id,
+            content: tr.content,
+          })
+        }
+        continue
+      }
+
+      // ── Regular content blocks (text, image) ──
+      const parts: unknown[] = []
+      for (const block of blocks) {
+        if (block.type === 'text') {
+          parts.push({ type: 'text', text: block.text })
+        } else if (block.type === 'image_url') {
+          parts.push({ type: 'image_url', image_url: block.image_url })
+        }
+      }
+      result.push({ role: msg.role, content: parts })
     }
 
     return result
