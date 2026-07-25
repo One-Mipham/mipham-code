@@ -300,7 +300,7 @@ export class QueryEngine {
   }
 
   private async *continueWithTools(signal?: AbortSignal): AsyncGenerator<StreamChunk> {
-    const MAX_TURNS = 10
+    const MAX_TURNS = 20
     const toolDefs = this.getToolDefinitions()
 
     for (let turn = 0; turn < MAX_TURNS; turn++) {
@@ -381,11 +381,34 @@ export class QueryEngine {
         this.context.addMessage(msg)
       }
 
-      // Safety: prevent silent truncation when max turns reached
+      // Safety: when max turns reached with pending tools, ask model to summarize
       if (turn === MAX_TURNS - 1 && toolUses.length > 0) {
-        yield {
-          type: 'error',
-          error: `Max tool-calling turns (${MAX_TURNS}) reached. Some tool calls were not executed.`,
+        this.context.addMessage({
+          role: 'user',
+          content:
+            `You've reached the maximum of ${MAX_TURNS} tool-calling rounds. ` +
+            `${toolUses.length} tool call(s) were not executed. ` +
+            'Please summarize what you found so far and any next steps the user should take.',
+        })
+        // Give model one final chance to respond with a summary
+        try {
+          const finalSystemPrompt = this.context.getSystemPrompt()
+          const finalMessages = this.context.getMessages()
+          for await (const chunk of this.registry.chat({
+            model: this.registry.getActiveModel(),
+            messages: finalMessages,
+            systemPrompt: finalSystemPrompt,
+            tools: undefined, // no tools — force text-only summary
+            signal,
+          })) {
+            yield chunk
+            if (chunk.type === 'error') return
+          }
+        } catch {
+          yield {
+            type: 'error',
+            error: `Max tool-calling turns (${MAX_TURNS}) reached. Some tool calls were not executed.`,
+          }
         }
         return
       }
