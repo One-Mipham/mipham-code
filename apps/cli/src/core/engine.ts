@@ -199,7 +199,7 @@ export class QueryEngine {
             }
             const msg: import('../shared/types').Message = {
               role: 'assistant',
-              content: thinkingContent ? contentBlocks : (assistantContent || ''),
+              content: thinkingContent ? contentBlocks : assistantContent || '',
             }
             if (reasoningContent) msg.reasoning_content = reasoningContent
             this.context.addMessage(msg)
@@ -219,7 +219,7 @@ export class QueryEngine {
           }
           const msg: import('../shared/types').Message = {
             role: 'assistant',
-            content: thinkingContent ? contentBlocks : (assistantContent || ''),
+            content: thinkingContent ? contentBlocks : assistantContent || '',
           }
           if (reasoningContent) msg.reasoning_content = reasoningContent
           this.context.addMessage(msg)
@@ -321,9 +321,9 @@ export class QueryEngine {
             reasoningContent += chunk.reasoning_content
           }
 
-        if (chunk.type === 'thinking' && chunk.thinking) {
-          thinkingContent += chunk.thinking
-        }
+          if (chunk.type === 'thinking' && chunk.thinking) {
+            thinkingContent += chunk.thinking
+          }
 
           if (chunk.type === 'tool_use' && chunk.toolUse) {
             toolUses.push({
@@ -345,7 +345,7 @@ export class QueryEngine {
             }
             const msg: import('../shared/types').Message = {
               role: 'assistant',
-              content: thinkingContent ? contentBlocks : (assistantContent || ''),
+              content: thinkingContent ? contentBlocks : assistantContent || '',
             }
             if (reasoningContent) msg.reasoning_content = reasoningContent
             this.context.addMessage(msg)
@@ -367,7 +367,7 @@ export class QueryEngine {
         }
         const msg: import('../shared/types').Message = {
           role: 'assistant',
-          content: thinkingContent ? contentBlocks : (assistantContent || ''),
+          content: thinkingContent ? contentBlocks : assistantContent || '',
         }
         if (reasoningContent) msg.reasoning_content = reasoningContent
         this.context.addMessage(msg)
