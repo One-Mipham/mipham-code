@@ -150,10 +150,7 @@ export class OpenAICompatProvider implements ProviderInstance {
     }
   }
 
-  private convertMessages(
-    messages: Message[],
-    systemPrompt?: string,
-  ): Record<string, unknown>[] {
+  private convertMessages(messages: Message[], systemPrompt?: string): Record<string, unknown>[] {
     const result: Record<string, unknown>[] = []
 
     if (systemPrompt) {
