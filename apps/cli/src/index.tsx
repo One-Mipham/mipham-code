@@ -8,6 +8,7 @@ import { loadSessionMemories } from './core/memory/memory-loader'
 import { ContextManager } from './core/context'
 import { QueryEngine } from './core/engine'
 import { SessionStore } from './core/session-store'
+import type { PermissionLevel } from './shared/types'
 import { SkillsLoader } from './skills/loader'
 import { PluginManager } from './plugin/plugin-manager'
 import { loadPlugins } from './plugin/plugin-loader'
@@ -147,6 +148,11 @@ export async function runApp(options: RunOptions): Promise<void> {
   engine.setArtifactServer(artifactServer)
   engine.setAgentViewManager(agentViewManager)
   engine.setSkillsLoader(skillsLoader)
+
+  // Sync engine permission with config (fix: UI shows "auto" but engine defaulted to bypass-legacy)
+  if (config.permission) {
+    engine.getPermission().setDefaultLevel(config.permission as PermissionLevel)
+  }
 
   // Initialize agent registry and load plugin agents/skills/MCP/hooks
   const agentRegistry = new AgentRegistry()
