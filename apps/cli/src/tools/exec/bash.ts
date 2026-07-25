@@ -5,17 +5,46 @@ const BLOCKED_PATTERNS = [
   // Recursive root deletion without preserve-root safeguard
   /\brm\s+-rf\s+\/(\s|$)/,
   /\brm\s+-rf\s+\/\*\s*$/,
+  /\bsudo\s+rm\s+.*\//,
   // Filesystem manipulation
   /\bmkfs\./,
   /\bdd\s+if=/,
   // Fork bomb
   /:\s*\(\s*\)\s*\{\s*:\s*\|/,
   // Recursive root chmod
-  /\bchmod\s+.*777\s+\//,
+  /\bchmod\s+.*(?:777|o\+w|a\+w)\s+\//,
   // Direct block device write
   />\s*\/dev\/sd[a-z]/,
   // SSH private key theft
   /\bcat\s+.*\/\.ssh\/id_/,
+  // Shell command substitution (commonly used for obfuscation/evasion)
+  /\$\(/,
+  // Backtick command substitution
+  /`[^`]+`/,
+  // Interpreter code execution (bypass vector)
+  /\bpython3?\s+-c\b/,
+  /\bpython3?\s+-m\b/,
+  /\bperl\s+-[ep]\b/,
+  /\bruby\s+-e\b/,
+  /\bnode\s+-e\b/,
+  // Reverse shell patterns
+  /\bnc\s+.*-e\b/,
+  /\bncat\s+.*-e\b/,
+  /\bexec\s+\d+<>/,
+  // Download + pipe to interpreter
+  /\bcurl\s+.*\|\s*(?:ba)?sh\b/,
+  /\bwget\s+.*\|\s*(?:ba)?sh\b/,
+  /\bcurl\s+.*\|\s*python/,
+  /\bwget\s+.*\|\s*python/,
+  // Download + execute
+  /\bcurl\s+.*-O\s+\/tmp\/.*\s*&&/,
+  /\bwget\s+.*-O\s+\/tmp\/.*\s*&&/,
+  // Data exfiltration via curl file://
+  /\bcurl\s+file:\/\//,
+  // SCP exfiltration of sensitive files
+  /\bscp\s+.*(?:\.ssh|\.aws|\.env)/,
+  // Write to system paths
+  />\s*\/(?:etc|usr|boot|sys|proc)\//,
 ]
 
 const BLOCKED_COMMANDS = [
@@ -28,6 +57,13 @@ const BLOCKED_COMMANDS = [
   'mkfs.fat',
   'mkfs.vfat',
   'mkswap',
+  'shutdown',
+  'reboot',
+  'halt',
+  'poweroff',
+  'init',
+  'telinit',
+  'systemctl',
 ]
 
 function isBlocked(command: string): string | null {
