@@ -11,6 +11,7 @@ import { agentTool } from './agent/agent'
 import { skillTool } from './agent/skill'
 import { planTool } from './agent/plan'
 import { memoryTool } from './agent/memory'
+import { workflowTool } from './agent/workflow'
 import { webFetchTool } from './network/web-fetch'
 import { webSearchTool } from './network/web-search'
 import { configTool } from './system/config'
@@ -112,6 +113,7 @@ export function createToolRegistry(): Map<string, ToolDefinition> {
     withValidation(skillTool),
     withValidation(planTool),
     withValidation(memoryTool),
+    withValidation(workflowTool),
     // Network tools
     withValidation(webFetchTool),
     withValidation(webSearchTool),

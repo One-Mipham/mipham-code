@@ -200,7 +200,7 @@ describe('Memory tool execution', () => {
 
     const result = await memoryTool.execute({ action: 'read', name: 'readable' }, ctx)
     expect(result.success).toBe(true)
-    expect(result.content).toBe('readable content')
+    expect(result.content).toContain('readable content')
   })
 
   it('errors when reading non-existent memory', async () => {
@@ -247,6 +247,6 @@ describe('Memory tool execution', () => {
     await memoryTool.execute({ action: 'write', name: 'overwrite', content: 'original' }, ctx)
     await memoryTool.execute({ action: 'write', name: 'overwrite', content: 'updated' }, ctx)
     const result = await memoryTool.execute({ action: 'read', name: 'overwrite' }, ctx)
-    expect(result.content).toBe('updated')
+    expect(result.content).toContain('updated')
   })
 })

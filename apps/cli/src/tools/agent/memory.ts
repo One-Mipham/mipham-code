@@ -4,6 +4,23 @@ import type { ToolDefinition } from '../../shared/index.ts'
 
 const MEMORY_DIR = join(process.env.HOME || '~', '.mipham', 'memory')
 
+/**
+ * Format a memory file with frontmatter, compatible with MemoryManager.parseMemoryFile.
+ */
+function formatMemory(name: string, content: string): string {
+  const desc = content.slice(0, 80).replace(/\n/g, ' ')
+  return `---
+name: ${name}
+description: ${desc}
+metadata:
+  type: reference
+  relevance: []
+---
+
+${content}
+`
+}
+
 export const memoryTool: ToolDefinition = {
   name: 'Memory',
   description: 'Read and write persistent memory files in ~/.mipham/memory/.',
@@ -27,7 +44,8 @@ export const memoryTool: ToolDefinition = {
     mkdirSync(MEMORY_DIR, { recursive: true })
 
     if (action === 'list') {
-      const files = readdirSync(MEMORY_DIR).filter((f) => f.endsWith('.md'))
+      const files = readdirSync(MEMORY_DIR)
+        .filter((f) => f.endsWith('.md') && f !== 'MEMORY.md')
       return { success: true, content: files.join('\n') || '(no memories)' }
     }
 
@@ -42,7 +60,8 @@ export const memoryTool: ToolDefinition = {
     }
 
     if (action === 'write') {
-      writeFileSync(filePath, params.content as string, 'utf-8')
+      const body = formatMemory(name, params.content as string)
+      writeFileSync(filePath, body, 'utf-8')
       return { success: true, content: `Memory "${name}" written` }
     }
 

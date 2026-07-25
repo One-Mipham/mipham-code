@@ -4,6 +4,7 @@ import { App } from './ui/app'
 import { loadConfig } from './config/loader'
 import { bootstrapProviders } from './providers/bootstrap'
 import { InstructionsLoader } from './core/instructions'
+import { loadSessionMemories } from './core/memory/memory-loader'
 import { ContextManager } from './core/context'
 import { QueryEngine } from './core/engine'
 import { SessionStore } from './core/session-store'
@@ -93,7 +94,11 @@ export async function runApp(options: RunOptions): Promise<void> {
   }
 
   if (context.getMessageCount() === 0) {
-    context.setSystemPrompt(instructions.buildSystemPrompt())
+    const basePrompt = instructions.buildSystemPrompt()
+    const memoryReminder = loadSessionMemories(basePrompt)
+    context.setSystemPrompt(
+      memoryReminder ? `${basePrompt}\n\n${memoryReminder}` : basePrompt,
+    )
   }
 
   // Create tool registry with all built-in tools
