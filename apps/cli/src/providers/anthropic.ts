@@ -101,8 +101,23 @@ export class AnthropicProvider implements ProviderInstance {
     const decoder = new TextDecoder()
     let buffer = ''
 
+    // Streaming read timeout: if no data arrives for 90s, abort to prevent UI freeze.
+    const STREAM_READ_TIMEOUT_MS = 90_000
+
     while (true) {
-      const { done, value } = await reader.read()
+      let readResult: Awaited<ReturnType<typeof reader.read>>
+      try {
+        readResult = await Promise.race([
+          reader.read(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Stream read timeout — no data for 90s')), STREAM_READ_TIMEOUT_MS),
+          ),
+        ])
+      } catch (err) {
+        yield { type: 'error', error: `Stream stalled: ${String(err)}` }
+        return
+      }
+      const { done, value } = readResult
       if (done) break
 
       buffer += decoder.decode(value, { stream: true })

@@ -48,8 +48,24 @@ export class OpenAICompatProvider implements ProviderInstance {
     const pendingToolCalls = new Map<number, { id: string; name: string; arguments: string }>()
     let reasoningContent = ''
 
+    // Streaming read timeout: if no data arrives for 90s, abort to prevent UI freeze.
+    // DeepSeek V4 thinking mode can take 30-60s between chunks — 90s is a generous ceiling.
+    const STREAM_READ_TIMEOUT_MS = 90_000
+
     while (true) {
-      const { done, value } = await reader.read()
+      let readResult: Awaited<ReturnType<typeof reader.read>>
+      try {
+        readResult = await Promise.race([
+          reader.read(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Stream read timeout — no data for 90s')), STREAM_READ_TIMEOUT_MS),
+          ),
+        ])
+      } catch (err) {
+        yield { type: 'error', error: `Stream stalled: ${String(err)}` }
+        return
+      }
+      const { done, value } = readResult
       if (done) break
 
       buffer += decoder.decode(value, { stream: true })
