@@ -110,7 +110,10 @@ export class AnthropicProvider implements ProviderInstance {
         readResult = await Promise.race([
           reader.read(),
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Stream read timeout — no data for 90s')), STREAM_READ_TIMEOUT_MS),
+            setTimeout(
+              () => reject(new Error('Stream read timeout — no data for 90s')),
+              STREAM_READ_TIMEOUT_MS,
+            ),
           ),
         ])
       } catch (err) {
