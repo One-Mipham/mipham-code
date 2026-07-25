@@ -190,9 +190,8 @@ export class OpenAICompatProvider implements ProviderInstance {
                 arguments: JSON.stringify(tu.input),
               },
             })),
-          }
-          if (msg.reasoning_content) {
-            combinedMsg.reasoning_content = msg.reasoning_content
+            // DeepSeek V4 thinking mode: every assistant message needs reasoning_content
+            reasoning_content: msg.reasoning_content || '',
           }
           result.push(combinedMsg)
           i++ // skip the next message (consumed)
@@ -200,8 +199,9 @@ export class OpenAICompatProvider implements ProviderInstance {
         }
 
         const standaloneMsg: Record<string, unknown> = { role: msg.role, content: msg.content }
-        if (msg.role === 'assistant' && msg.reasoning_content) {
-          standaloneMsg.reasoning_content = msg.reasoning_content
+        // DeepSeek V4 thinking mode: every assistant message needs reasoning_content
+        if (msg.role === 'assistant') {
+          standaloneMsg.reasoning_content = msg.reasoning_content || ''
         }
         result.push(standaloneMsg)
         continue
@@ -232,9 +232,8 @@ export class OpenAICompatProvider implements ProviderInstance {
               arguments: JSON.stringify(tu.input),
             },
           })),
-        }
-        if (msg.reasoning_content) {
-          toolUseMsg.reasoning_content = msg.reasoning_content
+          // DeepSeek V4 thinking mode: every assistant message needs reasoning_content
+          reasoning_content: msg.reasoning_content || '',
         }
         result.push(toolUseMsg)
         continue

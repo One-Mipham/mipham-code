@@ -359,7 +359,10 @@ describe('AnthropicProvider', () => {
       role: string
       content: Array<{ type: string; id: string; name: string; input: unknown }>
     }>
-    const toolUseBlock = messages[0]!.content[0]!
+    // DeepSeek V4 thinking mode: every assistant message gets an empty thinking block
+    const thinkingBlock = messages[0]!.content[0]!
+    expect(thinkingBlock.type).toBe('thinking')
+    const toolUseBlock = messages[0]!.content[1]!
     expect(toolUseBlock.type).toBe('tool_use')
     expect(toolUseBlock.id).toBe('call_1')
     expect(toolUseBlock.input).toEqual({ file_path: '/tmp/x.ts' })

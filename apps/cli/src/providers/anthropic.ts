@@ -221,9 +221,16 @@ export class AnthropicProvider implements ProviderInstance {
       if (msg.role === 'system') continue
 
       if (typeof msg.content === 'string') {
+        const content: unknown[] = [{ type: 'text', text: msg.content }]
+        // DeepSeek V4 thinking mode via Anthropic endpoint: every assistant
+        // message must contain a thinking block if any message in history does.
+        if (msg.role === 'assistant') {
+          const thinkingText = (msg as any).reasoning_content || ''
+          content.unshift({ type: 'thinking', thinking: thinkingText })
+        }
         result.push({
           role: msg.role,
-          content: [{ type: 'text', text: msg.content }],
+          content,
         })
       } else {
         const blocks = (msg.content as ContentBlock[]).map((block) => {
@@ -282,6 +289,11 @@ export class AnthropicProvider implements ProviderInstance {
           }
         })
 
+        // DeepSeek V4 thinking mode via Anthropic endpoint: every assistant
+        // message must contain a thinking block if any message in history does.
+        if (msg.role === 'assistant' && !blocks.some((b: any) => b.type === 'thinking')) {
+          blocks.unshift({ type: 'thinking', thinking: '' })
+        }
         result.push({ role: msg.role, content: blocks })
       }
     }

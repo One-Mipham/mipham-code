@@ -255,9 +255,11 @@ export class QueryEngine {
       }
 
       // Add tool use + result to context
+      // DeepSeek V4 thinking mode requires reasoning_content on every assistant message
       this.context.addMessage({
         role: 'assistant',
         content: [{ type: 'tool_use', id: toolUse.id, name: toolUse.name, input: toolUse.input }],
+        reasoning_content: '',
       })
       this.context.addMessage({
         role: 'user',
@@ -403,9 +405,11 @@ export class QueryEngine {
           content: result.content,
         }
 
+        // DeepSeek V4 thinking mode requires reasoning_content on every assistant message
         this.context.addMessage({
           role: 'assistant',
           content: [{ type: 'tool_use', id: toolUse.id, name: toolUse.name, input: toolUse.input }],
+          reasoning_content: '',
         })
         this.context.addMessage({
           role: 'user',
