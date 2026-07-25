@@ -3,7 +3,7 @@ import type { JsonRpcRequest, JsonRpcResponse, JsonRpcNotification } from './typ
 
 type NotificationHandler = (notification: JsonRpcNotification) => void
 
-const REQUEST_TIMEOUT_MS = 30_000
+const REQUEST_TIMEOUT_MS = 60_000
 
 // ── Environment variable security: block sensitive vars from MCP subprocess ──
 //
