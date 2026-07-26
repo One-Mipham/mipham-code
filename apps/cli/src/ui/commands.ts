@@ -1454,38 +1454,48 @@ function gitDiffBridgeCmd(opts: {
         forwardToAI: opts.forwardToAI,
       }
     } catch {
-      return { content: `─ ${opts.label} ─\n\nCould not detect changes. Are you in a git repository?` }
+      return {
+        content: `─ ${opts.label} ─\n\nCould not detect changes. Are you in a git repository?`,
+      }
     }
   }
 }
 
 const codeReviewCmd = gitDiffBridgeCmd({
   label: 'Code Review',
-  noChangesHint: 'No uncommitted changes to review.\n\nTo review a specific file: /code-review path/to/file.ts',
-  runningMsg: 'Reviewing uncommitted changes with the code-review skill (7 dimensions: correctness, security, performance, code quality, architecture, testing, language-specific)...',
-  forwardToAI: 'use the code-review skill to review all uncommitted changes. Check all 7 dimensions: correctness, security, performance, code quality, architecture & design, testing, and language-specific issues.',
+  noChangesHint:
+    'No uncommitted changes to review.\n\nTo review a specific file: /code-review path/to/file.ts',
+  runningMsg:
+    'Reviewing uncommitted changes with the code-review skill (7 dimensions: correctness, security, performance, code quality, architecture, testing, language-specific)...',
+  forwardToAI:
+    'use the code-review skill to review all uncommitted changes. Check all 7 dimensions: correctness, security, performance, code quality, architecture & design, testing, and language-specific issues.',
 })
 
 const simplifyCmd = gitDiffBridgeCmd({
   label: 'Simplify',
-  noChangesHint: 'No uncommitted changes to simplify.\n\nMake changes first, then run /simplify for cleanup review.',
-  runningMsg: 'Running cleanup review — 4 passes: reuse, simplification, efficiency, abstraction level...',
-  forwardToAI: 'use the self-review skill to review these uncommitted changes. Focus on 4 cleanup passes: 1) Reuse — find duplicated logic, replace with existing helpers; 2) Simplification — flatten nesting, remove redundant state and dead code; 3) Efficiency — fix repeated object creation, unnecessary I/O, memory issues; 4) Abstraction Level — ensure code sits at the right architectural layer. Apply equivalent transformations only — do NOT change logic or fix bugs.',
+  noChangesHint:
+    'No uncommitted changes to simplify.\n\nMake changes first, then run /simplify for cleanup review.',
+  runningMsg:
+    'Running cleanup review — 4 passes: reuse, simplification, efficiency, abstraction level...',
+  forwardToAI:
+    'use the self-review skill to review these uncommitted changes. Focus on 4 cleanup passes: 1) Reuse — find duplicated logic, replace with existing helpers; 2) Simplification — flatten nesting, remove redundant state and dead code; 3) Efficiency — fix repeated object creation, unnecessary I/O, memory issues; 4) Abstraction Level — ensure code sits at the right architectural layer. Apply equivalent transformations only — do NOT change logic or fix bugs.',
 })
 
 const verifyCmd = gitDiffBridgeCmd({
   label: 'Verify',
-  noChangesHint: 'No uncommitted changes to verify.\n\nMake changes first, then run /verify for runtime verification.',
-  runningMsg: 'Running runtime verification — observing actual execution behavior (not tests, not typecheck)...',
-  forwardToAI: 'verify these uncommitted changes through runtime observation only. For each change: 1) Find the user-facing surface (CLI command, API endpoint, UI interaction); 2) Drive the changed code to execute; 3) Push boundaries — pass null, repeated values, wrong types, interrupt mid-flow (Ctrl-C), resize window; 4) Report verdict per change: PASS (works as expected), FAIL (does not work or breaks something), BLOCKED (cannot reach observable state), SKIP (no runtime surface, e.g. pure documentation). Do NOT run the test suite — observe real execution behavior only.',
+  noChangesHint:
+    'No uncommitted changes to verify.\n\nMake changes first, then run /verify for runtime verification.',
+  runningMsg:
+    'Running runtime verification — observing actual execution behavior (not tests, not typecheck)...',
+  forwardToAI:
+    'verify these uncommitted changes through runtime observation only. For each change: 1) Find the user-facing surface (CLI command, API endpoint, UI interaction); 2) Drive the changed code to execute; 3) Push boundaries — pass null, repeated values, wrong types, interrupt mid-flow (Ctrl-C), resize window; 4) Report verdict per change: PASS (works as expected), FAIL (does not work or breaks something), BLOCKED (cannot reach observable state), SKIP (no runtime surface, e.g. pure documentation). Do NOT run the test suite — observe real execution behavior only.',
 })
 
 const designCmd: CommandHandler = (_ctx, args) => {
   const topic = args.join(' ') || 'the current task'
   return {
     content: `─ Design ─\n\nStarting architectural design session for: ${topic}\n\nExploring approaches, trade-offs, component breakdown, data flow...`,
-    forwardToAI:
-      `help me design the architecture for ${topic}. Explore 2-3 approaches with trade-offs, then present a design covering: component breakdown, data flow, interfaces between components, error handling strategy, and testing approach. Use the plan sub-agent if deeper analysis would help. Prefer simplicity — YAGNI.`,
+    forwardToAI: `help me design the architecture for ${topic}. Explore 2-3 approaches with trade-offs, then present a design covering: component breakdown, data flow, interfaces between components, error handling strategy, and testing approach. Use the plan sub-agent if deeper analysis would help. Prefer simplicity — YAGNI.`,
   }
 }
 

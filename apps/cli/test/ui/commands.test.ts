@@ -14,24 +14,29 @@ vi.mock('node:child_process', () => ({ execSync: mockExecSync }))
 // Dynamic import so the mock takes effect
 const commandsModule = await import('../../src/ui/commands')
 
-const {
-  getCommand,
-  getCommandNames,
-  getCommandList,
-  looksLikeSlashCommand,
-  parseSlashCommand,
-} = commandsModule as {
-  getCommand: (name: string) => ((ctx: unknown, args: string[]) => { content: string; forwardToAI?: string }) | undefined
-  getCommandNames: () => string[]
-  getCommandList: () => { name: string; description: string }[]
-  looksLikeSlashCommand: (input: string) => boolean
-  parseSlashCommand: (input: string) => { command: string; args: string[] }
-}
+const { getCommand, getCommandNames, getCommandList, looksLikeSlashCommand, parseSlashCommand } =
+  commandsModule as {
+    getCommand: (
+      name: string,
+    ) => ((ctx: unknown, args: string[]) => { content: string; forwardToAI?: string }) | undefined
+    getCommandNames: () => string[]
+    getCommandList: () => { name: string; description: string }[]
+    looksLikeSlashCommand: (input: string) => boolean
+    parseSlashCommand: (input: string) => { command: string; args: string[] }
+  }
 
 // Minimal CommandContext stub
 const mkCtx = () =>
   ({
-    engine: { getTools: () => new Map(), getContext: () => ({ getMessages: () => [], getEstimatedTokens: () => 0, getCheckpoints: () => [] }), setGoal: vi.fn() },
+    engine: {
+      getTools: () => new Map(),
+      getContext: () => ({
+        getMessages: () => [],
+        getEstimatedTokens: () => 0,
+        getCheckpoints: () => [],
+      }),
+      setGoal: vi.fn(),
+    },
     config: { providers: {} },
     providerId: 'test',
     modelId: 'test-model',
@@ -100,7 +105,9 @@ describe('git-diff bridge commands (/code-review, /simplify, /verify)', () => {
   for (const cmd of bridgeCommands) {
     describe(cmd, () => {
       it('returns forwardToAI when git diff has changes', async () => {
-        mockExecSync.mockReturnValue(' file.ts | 5 +++--\n 1 file changed, 3 insertions(+), 2 deletions(-)')
+        mockExecSync.mockReturnValue(
+          ' file.ts | 5 +++--\n 1 file changed, 3 insertions(+), 2 deletions(-)',
+        )
         const handler = getCommand(cmd)!
         const result = await handler(mkCtx(), [])
         expect(result.forwardToAI).toBeDefined()
@@ -246,7 +253,10 @@ describe('slash command public API', () => {
 
   it('parseSlashCommand splits command and args', () => {
     expect(parseSlashCommand('/code-review')).toEqual({ command: '/code-review', args: [] })
-    expect(parseSlashCommand('/design auth module')).toEqual({ command: '/design', args: ['auth', 'module'] })
+    expect(parseSlashCommand('/design auth module')).toEqual({
+      command: '/design',
+      args: ['auth', 'module'],
+    })
   })
 
   it('getCommand returns undefined for unknown commands', () => {
