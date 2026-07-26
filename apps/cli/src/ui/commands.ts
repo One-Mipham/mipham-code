@@ -1196,8 +1196,7 @@ const loopCmd: CommandHandler = async (_ctx, args) => {
 
   return {
     content: `── Loop Started ──\n\nInterval: ${interval} (${seconds}s)\nPrompt:   "${prompt}"\n\nScheduling via ScheduleWakeup — the prompt will re-schedule itself each cycle.\nUse /schedule to view active loops.`,
-    injectMessage:
-      `use ScheduleWakeup to set up a recurring loop. delaySeconds=${seconds}, prompt: "${prompt}". Include at the end of the prompt: "Then call ScheduleWakeup again with delaySeconds=${seconds} and the same prompt to continue the loop."`,
+    injectMessage: `use ScheduleWakeup to set up a recurring loop. delaySeconds=${seconds}, prompt: "${prompt}". Include at the end of the prompt: "Then call ScheduleWakeup again with delaySeconds=${seconds} and the same prompt to continue the loop."`,
   }
 }
 
