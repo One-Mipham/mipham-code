@@ -217,7 +217,11 @@ async function runUpdate(): Promise<boolean> {
     const attempts: Array<{ label: string; registry: string; timeout: number }> = [
       { label: 'npm registry', registry: 'https://registry.npmjs.org/', timeout: 10_000 },
       { label: 'npm registry (retry)', registry: 'https://registry.npmjs.org/', timeout: 20_000 },
-      { label: 'npmmirror (China mirror)', registry: 'https://registry.npmmirror.com/', timeout: 15_000 },
+      {
+        label: 'npmmirror (China mirror)',
+        registry: 'https://registry.npmmirror.com/',
+        timeout: 15_000,
+      },
     ]
 
     let lastError: Error | null = null

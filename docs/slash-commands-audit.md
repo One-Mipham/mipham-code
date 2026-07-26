@@ -63,17 +63,17 @@
 
 ## 第三组: Model & Provider (模型与提供商) — 9 条
 
-| #   | 命令              | 实现状态 | 分析                                                            |
-| --- | ----------------- | -------- | --------------------------------------------------------------- |
-| 24  | `/pick`           | ✅ 完整  | v0.7.9 修复：显示当前提供商+模型统计，app.tsx 拦截打开交互式选择器 |
-| 25  | `/model`          | ✅ 完整  | 显示当前模型和提供商                                            |
-| 26  | `/models`         | ✅ 完整  | 列出所有活跃模型（含上下文窗口、视觉支持）                      |
-| 27  | `/provider`       | ✅ 完整  | 显示当前提供商                                                  |
-| 28  | `/providers`      | ✅ 完整  | 列出所有已配置提供商及状态                                      |
+| #   | 命令              | 实现状态 | 分析                                                                   |
+| --- | ----------------- | -------- | ---------------------------------------------------------------------- |
+| 24  | `/pick`           | ✅ 完整  | v0.7.9 修复：显示当前提供商+模型统计，app.tsx 拦截打开交互式选择器     |
+| 25  | `/model`          | ✅ 完整  | 显示当前模型和提供商                                                   |
+| 26  | `/models`         | ✅ 完整  | 列出所有活跃模型（含上下文窗口、视觉支持）                             |
+| 27  | `/provider`       | ✅ 完整  | 显示当前提供商                                                         |
+| 28  | `/providers`      | ✅ 完整  | 列出所有已配置提供商及状态                                             |
 | 29  | `/switch <p> <m>` | ✅ 完整  | v0.7.9 修复：已注册到 registry（`registry.set('/switch', switchCmd)`） |
-| 30  | `/config`         | ✅ 完整  | 显示当前配置（版本、默认提供商、权限等）                        |
-| 31  | `/fast [on\|off]` | ✅ 完整  | 切换快速模式                                                    |
-| 32  | `/effort <level>` | ✅ 完整  | 设置推理力度（low/medium/high/xhigh/max）                       |
+| 30  | `/config`         | ✅ 完整  | 显示当前配置（版本、默认提供商、权限等）                               |
+| 31  | `/fast [on\|off]` | ✅ 完整  | 切换快速模式                                                           |
+| 32  | `/effort <level>` | ✅ 完整  | 设置推理力度（low/medium/high/xhigh/max）                              |
 
 **第三组结论**: 9/9 全部完整实现 ✅ (v0.7.9 修复后)
 
@@ -104,21 +104,21 @@
 
 ## 第五组: Workflow (工作流) — 13 条
 
-| #   | 命令                        | 实现状态 | 分析                                                                           |
-| --- | --------------------------- | -------- | ------------------------------------------------------------------------------ |
-| 47  | `/plan`                     | 📋 文档  | 显示计划模式说明，实际通过 forwardToAI 桥接                                    |
-| 48  | `/no-plan`                  | 📋 文档  | 显示"退出计划模式"消息                                                         |
-| 49  | `/tdd [goal]`               | 🌉 桥接  | v0.7.9 修复：forwardToAI 桥接 — RED (写失败测试) → GREEN (最小代码) → REFACTOR |
+| #   | 命令                        | 实现状态 | 分析                                                                                |
+| --- | --------------------------- | -------- | ----------------------------------------------------------------------------------- |
+| 47  | `/plan`                     | 📋 文档  | 显示计划模式说明，实际通过 forwardToAI 桥接                                         |
+| 48  | `/no-plan`                  | 📋 文档  | 显示"退出计划模式"消息                                                              |
+| 49  | `/tdd [goal]`               | 🌉 桥接  | v0.7.9 修复：forwardToAI 桥接 — RED (写失败测试) → GREEN (最小代码) → REFACTOR      |
 | 50  | `/todos [list\|create]`     | 🌉 桥接  | v0.7.9 修复：forwardToAI 桥接 — /todos list (TaskList) / /todos create (TaskCreate) |
-| 51  | `/tasks`                    | ✅ 完整  | 扫描消息历史中的任务操作，显示后台任务参考                                     |
-| 52  | `/review`                   | ✅ 完整  | 显示未提交变更概览（staged/unstaged），引导 AI 审查                            |
-| 53  | `/pr-comments`              | ✅ 完整  | 显示 PR 上下文（分支、提交、变更文件）                                         |
-| 54  | `/diff`                     | ✅ 完整  | 运行 `git diff --stat` 显示变更摘要                                            |
-| 55  | `/workflows`                | ✅ 完整  | 扫描 .claude/workflows/ 列出工作流脚本（含元数据）                             |
-| 56  | `/loop <interval> <prompt>` | ✅ 完整  | 解析间隔(10s/5m/1h)，通过 forwardToAI + ScheduleWakeup 调度                    |
-| 57  | `/loop init [path]`         | ✅ 完整  | 搭建 .mipham/ LoopKit Vault 项目结构                                           |
-| 58  | `/hooks`                    | ✅ 完整  | 列出 .mipham/hooks/ 中的生命周期钩子脚本                                       |
-| 59  | `/batch`                    | 📋 文档  | 说明批量操作的使用方法，引导 AI 执行                                           |
+| 51  | `/tasks`                    | ✅ 完整  | 扫描消息历史中的任务操作，显示后台任务参考                                          |
+| 52  | `/review`                   | ✅ 完整  | 显示未提交变更概览（staged/unstaged），引导 AI 审查                                 |
+| 53  | `/pr-comments`              | ✅ 完整  | 显示 PR 上下文（分支、提交、变更文件）                                              |
+| 54  | `/diff`                     | ✅ 完整  | 运行 `git diff --stat` 显示变更摘要                                                 |
+| 55  | `/workflows`                | ✅ 完整  | 扫描 .claude/workflows/ 列出工作流脚本（含元数据）                                  |
+| 56  | `/loop <interval> <prompt>` | ✅ 完整  | 解析间隔(10s/5m/1h)，通过 forwardToAI + ScheduleWakeup 调度                         |
+| 57  | `/loop init [path]`         | ✅ 完整  | 搭建 .mipham/ LoopKit Vault 项目结构                                                |
+| 58  | `/hooks`                    | ✅ 完整  | 列出 .mipham/hooks/ 中的生命周期钩子脚本                                            |
+| 59  | `/batch`                    | 📋 文档  | 说明批量操作的使用方法，引导 AI 执行                                                |
 
 **第五组结论**: 13/13 全部可用 ✅ (v0.7.9 修复后: 2 个 stub 转为 bridge)
 
@@ -167,16 +167,17 @@
 
 ## 第八组: Agents, Artifacts & Environment (代理/工件/环境) — 9 条
 
-| #   | 命令                    | 实现状态    | 分析                                                        |
-| --- | ----------------------- | ----------- | ----------------------------------------------------------- |
-| 83  | `/agents`               | ✅ 完整     | 显示 Agent View 仪表板（按状态计数+会话列表）               |
-| 84  | `/bg <prompt>`          | ✅ 完整     | 创建后台代理会话，立即开始工作                              |
-| 85  | `/artifact open <name>` | ✅ 完整     | 在浏览器中打开工件（localhost:9876）                        |
-| 86  | `/artifact list`        | ✅ 完整     | 列出所有会话工件（含版本、大小、日期）                      |
-| 87  | `/artifact server`      | ✅ 完整     | 显示工件服务器状态                                          |
-| 88  | `/ide`                  | ✅ 完整     | IDE 集成指南（VS Code/JetBrains/终端）                      |
-| 89  | `/terminal-setup`       | ✅ 完整     | Shell 集成指南（安装、别名、升级）                          |
-| 90  | `/release-notes`        | ✅ 完整     | 显示版本更新日志                                            |
+| #   | 命令                    | 实现状态 | 分析                                          |
+| --- | ----------------------- | -------- | --------------------------------------------- |
+| 83  | `/agents`               | ✅ 完整  | 显示 Agent View 仪表板（按状态计数+会话列表） |
+| 84  | `/bg <prompt>`          | ✅ 完整  | 创建后台代理会话，立即开始工作                |
+| 85  | `/artifact open <name>` | ✅ 完整  | 在浏览器中打开工件（localhost:9876）          |
+| 86  | `/artifact list`        | ✅ 完整  | 列出所有会话工件（含版本、大小、日期）        |
+| 87  | `/artifact server`      | ✅ 完整  | 显示工件服务器状态                            |
+| 88  | `/ide`                  | ✅ 完整  | IDE 集成指南（VS Code/JetBrains/终端）        |
+| 89  | `/terminal-setup`       | ✅ 完整  | Shell 集成指南（安装、别名、升级）            |
+| 90  | `/release-notes`        | ✅ 完整  | 显示版本更新日志                              |
+
 **第八组结论**: 8/8 全部完整实现 ✅
 
 ---
@@ -196,26 +197,27 @@
 
 ### v0.7.9 修复记录
 
-| # | 命令       | 修复前              | 修复后         | 方法                                          |
-|---|-----------|--------------------|----------------|----------------------------------------------|
-| 1 | `/switch` | ❌ 已实现但未注册    | ✅ 注册到 registry | `registry.set('/switch', switchCmd)`          |
-| 2 | `/pick`   | ⚠️ 半桩（仅文本提示）| ✅ 完整         | 重写 handler 为 `pickCmd`                      |
-| 3 | `/tdd`    | ⚠️ [stub] 未实现    | 🌉 AI 桥接      | forwardToAI: RED→GREEN→REFACTOR               |
-| 4 | `/todos`  | ⚠️ 半桩（仅指引）    | 🌉 AI 桥接      | forwardToAI: list/create 子命令                |
-| 5 | `/schedule` | ⚠️ 仅说明文字      | 🌉 AI 桥接      | forwardToAI: CronList 调用                     |
+| #   | 命令        | 修复前                | 修复后             | 方法                                 |
+| --- | ----------- | --------------------- | ------------------ | ------------------------------------ |
+| 1   | `/switch`   | ❌ 已实现但未注册     | ✅ 注册到 registry | `registry.set('/switch', switchCmd)` |
+| 2   | `/pick`     | ⚠️ 半桩（仅文本提示） | ✅ 完整            | 重写 handler 为 `pickCmd`            |
+| 3   | `/tdd`      | ⚠️ [stub] 未实现      | 🌉 AI 桥接         | forwardToAI: RED→GREEN→REFACTOR      |
+| 4   | `/todos`    | ⚠️ 半桩（仅指引）     | 🌉 AI 桥接         | forwardToAI: list/create 子命令      |
+| 5   | `/schedule` | ⚠️ 仅说明文字         | 🌉 AI 桥接         | forwardToAI: CronList 调用           |
 
 ### 各组完成度 (v0.7.9 修复后)
 
-| 组别                                    | 完成率       |
-| --------------------------------------- | ------------ |
-| 第一组: Session & Identity              | 100% (13/13) |
-| 第二组: History & Diagnostics           | 100% (10/10) |
-| 第三组: Model & Provider                | **100% (9/9)** ✅ |
-| 第四组: Tools, Skills & Plugins         | 100% (14/14) |
+| 组别                                    | 完成率              |
+| --------------------------------------- | ------------------- |
+| 第一组: Session & Identity              | 100% (13/13)        |
+| 第二组: History & Diagnostics           | 100% (10/10)        |
+| 第三组: Model & Provider                | **100% (9/9)** ✅   |
+| 第四组: Tools, Skills & Plugins         | 100% (14/14)        |
 | 第五组: Workflow                        | **100% (13/13)** ✅ |
-| 第六组: Project & Environment           | 100% (8/8)   |
+| 第六组: Project & Environment           | 100% (8/8)          |
 | 第七组: Git, Code Quality & Account     | **100% (14/14)** ✅ |
-| 第八组: Agents, Artifacts & Environment | **100% (8/8)** ✅ |
+| 第八组: Agents, Artifacts & Environment | **100% (8/8)** ✅   |
 
 **综合完成度: ~99%** (74 完整 + 7 桥接 + 3 别名 = 84 可用 / 85 唯一)
+
 > 仅 `/plan`、`/no-plan`、`/batch` 为指引性命令，功能通过 AI 对话实现
