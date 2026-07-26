@@ -1437,7 +1437,8 @@ const codeReviewCmd: CommandHandler = async () => {
       }
     }
     return {
-      content: '─ Code Review ─\n\nReviewing uncommitted changes with the code-review skill (7 dimensions: correctness, security, performance, code quality, architecture, testing, language-specific)...',
+      content:
+        '─ Code Review ─\n\nReviewing uncommitted changes with the code-review skill (7 dimensions: correctness, security, performance, code quality, architecture, testing, language-specific)...',
       injectMessage:
         'use the code-review skill to review all uncommitted changes. Check all 7 dimensions: correctness, security, performance, code quality, architecture & design, testing, and language-specific issues.',
     }
@@ -1457,7 +1458,8 @@ const simplifyCmd: CommandHandler = async () => {
       }
     }
     return {
-      content: '─ Simplify ─\n\nRunning cleanup review — 4 passes: reuse, simplification, efficiency, abstraction level...',
+      content:
+        '─ Simplify ─\n\nRunning cleanup review — 4 passes: reuse, simplification, efficiency, abstraction level...',
       injectMessage:
         'use the self-review skill to review these uncommitted changes. Focus on 4 cleanup passes: 1) Reuse — find duplicated logic, replace with existing helpers; 2) Simplification — flatten nesting, remove redundant state and dead code; 3) Efficiency — fix repeated object creation, unnecessary I/O, memory issues; 4) Abstraction Level — ensure code sits at the right architectural layer. Apply equivalent transformations only — do NOT change logic or fix bugs.',
     }
@@ -1477,7 +1479,8 @@ const verifyCmd: CommandHandler = async () => {
       }
     }
     return {
-      content: '─ Verify ─\n\nRunning runtime verification — observing actual execution behavior (not tests, not typecheck)...',
+      content:
+        '─ Verify ─\n\nRunning runtime verification — observing actual execution behavior (not tests, not typecheck)...',
       injectMessage:
         'verify these uncommitted changes through runtime observation only. For each change: 1) Find the user-facing surface (CLI command, API endpoint, UI interaction); 2) Drive the changed code to execute; 3) Push boundaries — pass null, repeated values, wrong types, interrupt mid-flow (Ctrl-C), resize window; 4) Report verdict per change: PASS (works as expected), FAIL (does not work or breaks something), BLOCKED (cannot reach observable state), SKIP (no runtime surface, e.g. pure documentation). Do NOT run the test suite — observe real execution behavior only.',
     }
@@ -1490,8 +1493,7 @@ const designCmd: CommandHandler = async (_ctx, args) => {
   const topic = args.join(' ') || 'the current task'
   return {
     content: `─ Design ─\n\nStarting architectural design session for: ${topic}\n\nExploring approaches, trade-offs, component breakdown, data flow...`,
-    injectMessage:
-      `help me design the architecture for ${topic}. Explore 2-3 approaches with trade-offs, then present a design covering: component breakdown, data flow, interfaces between components, error handling strategy, and testing approach. Use the plan sub-agent if deeper analysis would help. Prefer simplicity — YAGNI.`,
+    injectMessage: `help me design the architecture for ${topic}. Explore 2-3 approaches with trade-offs, then present a design covering: component breakdown, data flow, interfaces between components, error handling strategy, and testing approach. Use the plan sub-agent if deeper analysis would help. Prefer simplicity — YAGNI.`,
   }
 }
 
