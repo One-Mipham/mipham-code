@@ -208,25 +208,48 @@ async function runUpdate(): Promise<boolean> {
   console.log(`  Checking npm registry for latest version...`)
   console.log()
 
-  // Check latest version from npm
+  // Check latest version from npm with retry + mirror fallback
   let latestVersion = ''
   try {
     const { execSync } = await import('node:child_process')
-    const result = execSync(`npm view ${PACKAGE} version --json`, {
-      encoding: 'utf-8',
-      timeout: 10_000,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim()
-    latestVersion = result.replace(/"/g, '')
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
-    console.log(`✗ Failed to check latest version: ${msg}`)
-    console.log(`  Check manually: https://www.npmjs.com/package/${PACKAGE}`)
+
+    // Registry fallback chain: npm default → npmmirror (China mirror)
+    const attempts: Array<{ label: string; registry: string; timeout: number }> = [
+      { label: 'npm registry', registry: 'https://registry.npmjs.org/', timeout: 10_000 },
+      { label: 'npm registry (retry)', registry: 'https://registry.npmjs.org/', timeout: 20_000 },
+      { label: 'npmmirror (China mirror)', registry: 'https://registry.npmmirror.com/', timeout: 15_000 },
+    ]
+
+    let lastError: Error | null = null
+
+    for (const attempt of attempts) {
+      try {
+        const result = execSync(
+          `npm view ${PACKAGE} version --json --registry=${attempt.registry}`,
+          { encoding: 'utf-8', timeout: attempt.timeout, stdio: ['pipe', 'pipe', 'pipe'] },
+        ).trim()
+        latestVersion = result.replace(/"/g, '')
+        if (latestVersion) break
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err))
+        // Continue to next attempt
+      }
+    }
+
+    if (!latestVersion && lastError) throw lastError
+  } catch (_err: unknown) {
+    console.log(`✗ Could not reach npm registry (network timeout)`)
+    console.log()
+    console.log(`  Manual update:`)
+    console.log(`    npm install -g ${PACKAGE}@latest`)
+    console.log()
+    console.log(`  Or check: https://www.npmjs.com/package/${PACKAGE}`)
     process.exit(1)
   }
 
   if (!latestVersion) {
     console.log('✗ Could not determine latest version.')
+    console.log(`  Check manually: https://www.npmjs.com/package/${PACKAGE}`)
     process.exit(1)
   }
 

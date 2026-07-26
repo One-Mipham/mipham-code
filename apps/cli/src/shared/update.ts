@@ -16,6 +16,12 @@ const HOME = homedir()
 const MIPHAM_HOME = join(HOME, '.mipham')
 const CONFIG_PATH = join(MIPHAM_HOME, 'config.yml')
 
+// Registry fallback chain: npm default → npmmirror (China mirror)
+const REGISTRIES = [
+  { name: 'npm', url: 'https://registry.npmjs.org/' },
+  { name: 'npmmirror', url: 'https://registry.npmmirror.com/' },
+]
+
 export interface UpdateCheck {
   /** Current installed version */
   current: string
@@ -43,16 +49,47 @@ export function getCurrentVersion(): string {
 }
 
 /**
- * Fetch the latest version from the npm registry.
+ * Run `npm view` against a specific registry with a given timeout.
  * Returns the version string, or throws on failure.
  */
-function fetchLatestVersion(): string {
-  const result = execSync(`npm view ${PACKAGE} version --json`, {
+function tryRegistry(registry: string, timeoutMs: number): string {
+  const result = execSync(`npm view ${PACKAGE} version --json --registry=${registry}`, {
     encoding: 'utf-8',
-    timeout: 30_000,
+    timeout: timeoutMs,
     stdio: ['pipe', 'pipe', 'pipe'],
   }).trim()
   return result.replace(/"/g, '')
+}
+
+/**
+ * Fetch the latest version from the npm registry with retry + mirror fallback.
+ *
+ * Strategy:
+ *   1. Try npm default registry (10s timeout)
+ *   2. Retry npm default registry (20s timeout)
+ *   3. Fall back to npmmirror.com — China mirror (15s timeout)
+ *
+ * Returns the version string, or throws on all failures.
+ */
+function fetchLatestVersion(): string {
+  const attempts: Array<{ registry: string; timeout: number }> = [
+    { registry: REGISTRIES[0]!.url, timeout: 10_000 },
+    { registry: REGISTRIES[0]!.url, timeout: 20_000 },
+    { registry: REGISTRIES[1]!.url, timeout: 15_000 },
+  ]
+
+  let lastError: Error | null = null
+
+  for (const attempt of attempts) {
+    try {
+      return tryRegistry(attempt.registry, attempt.timeout)
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err))
+      // Continue to next attempt
+    }
+  }
+
+  throw lastError ?? new Error('Failed to fetch latest version')
 }
 
 /**
