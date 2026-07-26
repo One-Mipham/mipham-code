@@ -175,9 +175,12 @@ export function App({
           return
         }
 
+        let injectMessage: string | undefined
+
         const handler = getCommand(command)
         if (handler) {
           const result = await handler(mkCtx(), args)
+          injectMessage = result.injectMessage
           setMessages((prev) => [
             ...prev,
             { role: 'user', content: input },
@@ -202,8 +205,15 @@ export function App({
             }
           }
         }
-        // Unknown slash command or handler returned: proceed to normal AI processing
-        return
+
+        // Bridge: if command set injectMessage, route to AI processing
+        if (injectMessage) {
+          input = injectMessage
+          // fall through to normal AI processing below
+        } else {
+          // Unknown slash command or handler returned: proceed to normal AI processing
+          return
+        }
       }
 
       // ── Normal message processing (AI chat) ──

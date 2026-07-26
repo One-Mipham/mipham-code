@@ -40,6 +40,8 @@ export interface CommandResult {
   clearMessages?: boolean
   /** Content to copy to clipboard (handled by caller) */
   copyContent?: string
+  /** If set, inject this as a user message and route to AI processing (bridges slash commands → skills) */
+  injectMessage?: string
 }
 
 type CommandHandler = (
@@ -1420,39 +1422,76 @@ const issueCmd: CommandHandler = async () => {
 // Code Quality Commands (Claude Code parity)
 // ═══════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════
+// Code Quality — bridge slash commands to skills (Claude Code parity)
+// ═══════════════════════════════════════════════════════════════
+
+const codeReviewCmd: CommandHandler = async () => {
+  try {
+    const { execSync } = await import('node:child_process')
+    const diff = execSync('git diff --stat', { encoding: 'utf-8', timeout: 5000 }).trim()
+    if (!diff) {
+      return {
+        content:
+          '─ Code Review ─\n\nNo uncommitted changes to review.\n\nTo review a specific file: /code-review path/to/file.ts',
+      }
+    }
+    return {
+      content: '─ Code Review ─\n\nReviewing uncommitted changes with the code-review skill (7 dimensions: correctness, security, performance, code quality, architecture, testing, language-specific)...',
+      injectMessage:
+        'use the code-review skill to review all uncommitted changes. Check all 7 dimensions: correctness, security, performance, code quality, architecture & design, testing, and language-specific issues.',
+    }
+  } catch {
+    return { content: '─ Code Review ─\n\nCould not detect changes. Are you in a git repository?' }
+  }
+}
+
 const simplifyCmd: CommandHandler = async () => {
   try {
     const { execSync } = await import('node:child_process')
     const diff = execSync('git diff --stat', { encoding: 'utf-8', timeout: 5000 }).trim()
-    const changed = execSync('git diff --name-only', { encoding: 'utf-8', timeout: 3000 }).trim()
-
     if (!diff) {
       return {
         content:
-          '── Simplify ──\n\nNo uncommitted changes to review.\n\nRun /simplify after making changes to review for reuse, simplification, and quality improvements.',
+          '─ Simplify ─\n\nNo uncommitted changes to simplify.\n\nMake changes first, then run /simplify for cleanup review.',
       }
     }
-
     return {
-      content: [
-        '── Simplify Review ──',
-        '',
-        'Changed files:',
-        diff,
-        '',
-        'To run simplification review, type: "review these changes for simplification and quality"',
-        '',
-        'This will check for:',
-        '  • Code reuse opportunities',
-        '  • Overly complex logic',
-        '  • Dead code removal',
-        '  • Style and consistency',
-        '',
-        `Files to review: ${changed.split('\n').length}`,
-      ].join('\n'),
+      content: '─ Simplify ─\n\nRunning cleanup review — 4 passes: reuse, simplification, efficiency, abstraction level...',
+      injectMessage:
+        'use the self-review skill to review these uncommitted changes. Focus on 4 cleanup passes: 1) Reuse — find duplicated logic, replace with existing helpers; 2) Simplification — flatten nesting, remove redundant state and dead code; 3) Efficiency — fix repeated object creation, unnecessary I/O, memory issues; 4) Abstraction Level — ensure code sits at the right architectural layer. Apply equivalent transformations only — do NOT change logic or fix bugs.',
     }
   } catch {
-    return { content: '── Simplify ──\n\nCould not detect changes. Are you in a git repository?' }
+    return { content: '─ Simplify ─\n\nCould not detect changes. Are you in a git repository?' }
+  }
+}
+
+const verifyCmd: CommandHandler = async () => {
+  try {
+    const { execSync } = await import('node:child_process')
+    const diff = execSync('git diff --stat', { encoding: 'utf-8', timeout: 5000 }).trim()
+    if (!diff) {
+      return {
+        content:
+          '─ Verify ─\n\nNo uncommitted changes to verify.\n\nMake changes first, then run /verify for runtime verification.',
+      }
+    }
+    return {
+      content: '─ Verify ─\n\nRunning runtime verification — observing actual execution behavior (not tests, not typecheck)...',
+      injectMessage:
+        'verify these uncommitted changes through runtime observation only. For each change: 1) Find the user-facing surface (CLI command, API endpoint, UI interaction); 2) Drive the changed code to execute; 3) Push boundaries — pass null, repeated values, wrong types, interrupt mid-flow (Ctrl-C), resize window; 4) Report verdict per change: PASS (works as expected), FAIL (does not work or breaks something), BLOCKED (cannot reach observable state), SKIP (no runtime surface, e.g. pure documentation). Do NOT run the test suite — observe real execution behavior only.',
+    }
+  } catch {
+    return { content: '─ Verify ─\n\nCould not detect changes. Are you in a git repository?' }
+  }
+}
+
+const designCmd: CommandHandler = async (_ctx, args) => {
+  const topic = args.join(' ') || 'the current task'
+  return {
+    content: `─ Design ─\n\nStarting architectural design session for: ${topic}\n\nExploring approaches, trade-offs, component breakdown, data flow...`,
+    injectMessage:
+      `help me design the architecture for ${topic}. Explore 2-3 approaches with trade-offs, then present a design covering: component breakdown, data flow, interfaces between components, error handling strategy, and testing approach. Use the plan sub-agent if deeper analysis would help. Prefer simplicity — YAGNI.`,
   }
 }
 
@@ -3495,8 +3534,11 @@ const commandsListCmd: CommandHandler = () => {
     '/push': 'Workflow',
     '/pr': 'Workflow',
     '/issue': 'Workflow',
-    '/simplify': 'Workflow',
-    '/lint': 'Workflow',
+    '/code-review': 'Code Quality',
+    '/simplify': 'Code Quality',
+    '/verify': 'Code Quality',
+    '/design': 'Code Quality',
+    '/lint': 'Code Quality',
     '/files': 'Session & Identity',
     '/stats': 'Session & Identity',
     '/summary': 'Session & Identity',
@@ -3634,7 +3676,10 @@ registry.set('/pr', prCmd)
 registry.set('/issue', issueCmd)
 
 // Code Quality (Claude Code parity)
+registry.set('/code-review', codeReviewCmd)
 registry.set('/simplify', simplifyCmd)
+registry.set('/verify', verifyCmd)
+registry.set('/design', designCmd)
 registry.set('/lint', lintCmd)
 
 // Session Enhancement (Claude Code parity)
@@ -3741,7 +3786,10 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/push': 'Push the current branch',
   '/pr': 'Create a pull request',
   '/issue': 'File a GitHub issue',
-  '/simplify': 'Review code for reuse, simplification, and quality',
+  '/code-review': 'Review code for bugs, security, performance (7 dimensions)',
+  '/simplify': 'Cleanup-only review: reuse, simplification, efficiency, abstraction',
+  '/verify': 'Runtime verification — observe actual execution, not tests',
+  '/design': 'Start architectural design session — explore approaches and trade-offs',
   '/lint': 'Run linting on the project',
   '/files': 'List files in current working directory',
   '/stats': 'Show session usage statistics',
