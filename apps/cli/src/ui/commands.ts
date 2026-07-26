@@ -1090,6 +1090,18 @@ const branchCmd: CommandHandler = (ctx, args) => {
   }
 }
 
+/** Parse human-readable interval to seconds. Returns null if invalid. */
+function parseInterval(raw: string): number | null {
+  const m = raw.trim().match(/^(\d+)\s*(s|sec|m|min|h|hr|hour)$/i)
+  if (!m) return null
+  const n = parseInt(m[1]!, 10)
+  const unit = m[2]!.toLowerCase()
+  if (unit === 's' || unit === 'sec') return n
+  if (unit === 'm' || unit === 'min') return n * 60
+  if (unit === 'h' || unit === 'hr' || unit === 'hour') return n * 3600
+  return null
+}
+
 const loopCmd: CommandHandler = async (_ctx, args) => {
   const sub = args[0]
 
@@ -1168,24 +1180,24 @@ const loopCmd: CommandHandler = async (_ctx, args) => {
           /loop 5m check the deploy status
           /loop init              Create vault in current directory
           /loop init ~/my-project Create vault in specific directory
-
-        Note: Continuous looping requires session persistence, coming in a future release.
       `,
     }
   }
 
   const interval = args[0]!
   const prompt = args.slice(1).join(' ')
+  const seconds = parseInterval(interval)
+
+  if (seconds === null) {
+    return {
+      content: `── Invalid Interval ──\n\n"${interval}" is not a recognised interval.\n\nUse formats like: 10s, 5m, 1h, 30min, 2hr`,
+    }
+  }
 
   return {
-    content: stripIndent`
-      ── Loop Configured ──
-      Interval:  ${interval}
-      Prompt:    "${prompt}"
-
-      Loop scheduling infrastructure is being built.
-      For now, manually re-run: /loop ${interval} ${prompt}
-    `,
+    content: `── Loop Started ──\n\nInterval: ${interval} (${seconds}s)\nPrompt:   "${prompt}"\n\nScheduling via ScheduleWakeup — the prompt will re-schedule itself each cycle.\nUse /schedule to view active loops.`,
+    injectMessage:
+      `use ScheduleWakeup to set up a recurring loop. delaySeconds=${seconds}, prompt: "${prompt}". Include at the end of the prompt: "Then call ScheduleWakeup again with delaySeconds=${seconds} and the same prompt to continue the loop."`,
   }
 }
 
@@ -1193,14 +1205,15 @@ const scheduleCmd: CommandHandler = (_ctx) => ({
   content: stripIndent`
     ── Scheduled Tasks ──
 
-    No scheduled tasks configured.
+    Active loops are managed via ScheduleWakeup (in-session) and
+    CronCreate (durable, survives restarts).
 
-    Schedule infrastructure is being built. Coming features:
-    • Cron-based scheduling (CronCreate tool)
-    • One-shot and recurring tasks
-    • Durable persistence across sessions
+    Use /loop <interval> <prompt> to start a recurring task.
+    Use CronList to view all scheduled jobs.
+    Use CronDelete <id> to cancel a durable job.
 
-    Use /loop for simple repetition in the current session.
+    The ScheduleWakeup mechanism automatically re-schedules on
+    each wake, creating a self-perpetuating loop within the session.
   `,
 })
 
