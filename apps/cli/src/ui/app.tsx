@@ -175,12 +175,12 @@ export function App({
           return
         }
 
-        let injectMessage: string | undefined
+        let forwardToAI: string | undefined
 
         const handler = getCommand(command)
         if (handler) {
           const result = await handler(mkCtx(), args)
-          injectMessage = result.injectMessage
+          forwardToAI = result.forwardToAI
           setMessages((prev) => [
             ...prev,
             { role: 'user', content: input },
@@ -206,12 +206,12 @@ export function App({
           }
         }
 
-        // Bridge: if command set injectMessage, route to AI processing
-        if (injectMessage) {
-          input = injectMessage
+        // Bridge: if command set forwardToAI, route the message to AI processing
+        if (forwardToAI) {
+          input = forwardToAI
           // fall through to normal AI processing below
         } else {
-          // Unknown slash command or handler returned: proceed to normal AI processing
+          // No handler matched or handler didn't request AI routing — stop here
           return
         }
       }

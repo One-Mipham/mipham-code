@@ -40,8 +40,9 @@ export interface CommandResult {
   clearMessages?: boolean
   /** Content to copy to clipboard (handled by caller) */
   copyContent?: string
-  /** If set, inject this as a user message and route to AI processing (bridges slash commands → skills) */
-  injectMessage?: string
+  /** If set, route this message to the AI engine — bridges slash commands → skill/agent invocation.
+   *  The app layer replaces the user input with this string and falls through to AI processing. */
+  forwardToAI?: string
 }
 
 type CommandHandler = (
@@ -1196,7 +1197,7 @@ const loopCmd: CommandHandler = async (_ctx, args) => {
 
   return {
     content: `── Loop Started ──\n\nInterval: ${interval} (${seconds}s)\nPrompt:   "${prompt}"\n\nScheduling via ScheduleWakeup — the prompt will re-schedule itself each cycle.\nUse /schedule to view active loops.`,
-    injectMessage: `use ScheduleWakeup to set up a recurring loop. delaySeconds=${seconds}, prompt: "${prompt}". Include at the end of the prompt: "Then call ScheduleWakeup again with delaySeconds=${seconds} and the same prompt to continue the loop."`,
+    forwardToAI: `use ScheduleWakeup to set up a recurring loop. delaySeconds=${seconds}, prompt: "${prompt}". Include at the end of the prompt: "Then call ScheduleWakeup again with delaySeconds=${seconds} and the same prompt to continue the loop."`,
   }
 }
 
@@ -1431,81 +1432,60 @@ const issueCmd: CommandHandler = async () => {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Code Quality Commands (Claude Code parity)
-// ═══════════════════════════════════════════════════════════════
-
-// ═══════════════════════════════════════════════════════════════
 // Code Quality — bridge slash commands to skills (Claude Code parity)
 // ═══════════════════════════════════════════════════════════════
 
-const codeReviewCmd: CommandHandler = async () => {
-  try {
-    const { execSync } = await import('node:child_process')
-    const diff = execSync('git diff --stat', { encoding: 'utf-8', timeout: 5000 }).trim()
-    if (!diff) {
-      return {
-        content:
-          '─ Code Review ─\n\nNo uncommitted changes to review.\n\nTo review a specific file: /code-review path/to/file.ts',
+/** Factory for git-diff-based commands that bridge to AI skills via forwardToAI. */
+function gitDiffBridgeCmd(opts: {
+  label: string
+  noChangesHint: string
+  runningMsg: string
+  forwardToAI: string
+}): CommandHandler {
+  return async () => {
+    try {
+      const { execSync } = await import('node:child_process')
+      const diff = execSync('git diff --stat', { encoding: 'utf-8', timeout: 5000 }).trim()
+      if (!diff) {
+        return { content: `─ ${opts.label} ─\n\n${opts.noChangesHint}` }
       }
+      return {
+        content: `─ ${opts.label} ─\n\n${opts.runningMsg}\n\nChanged files:\n${diff}`,
+        forwardToAI: opts.forwardToAI,
+      }
+    } catch {
+      return { content: `─ ${opts.label} ─\n\nCould not detect changes. Are you in a git repository?` }
     }
-    return {
-      content:
-        '─ Code Review ─\n\nReviewing uncommitted changes with the code-review skill (7 dimensions: correctness, security, performance, code quality, architecture, testing, language-specific)...',
-      injectMessage:
-        'use the code-review skill to review all uncommitted changes. Check all 7 dimensions: correctness, security, performance, code quality, architecture & design, testing, and language-specific issues.',
-    }
-  } catch {
-    return { content: '─ Code Review ─\n\nCould not detect changes. Are you in a git repository?' }
   }
 }
 
-const simplifyCmd: CommandHandler = async () => {
-  try {
-    const { execSync } = await import('node:child_process')
-    const diff = execSync('git diff --stat', { encoding: 'utf-8', timeout: 5000 }).trim()
-    if (!diff) {
-      return {
-        content:
-          '─ Simplify ─\n\nNo uncommitted changes to simplify.\n\nMake changes first, then run /simplify for cleanup review.',
-      }
-    }
-    return {
-      content:
-        '─ Simplify ─\n\nRunning cleanup review — 4 passes: reuse, simplification, efficiency, abstraction level...',
-      injectMessage:
-        'use the self-review skill to review these uncommitted changes. Focus on 4 cleanup passes: 1) Reuse — find duplicated logic, replace with existing helpers; 2) Simplification — flatten nesting, remove redundant state and dead code; 3) Efficiency — fix repeated object creation, unnecessary I/O, memory issues; 4) Abstraction Level — ensure code sits at the right architectural layer. Apply equivalent transformations only — do NOT change logic or fix bugs.',
-    }
-  } catch {
-    return { content: '─ Simplify ─\n\nCould not detect changes. Are you in a git repository?' }
-  }
-}
+const codeReviewCmd = gitDiffBridgeCmd({
+  label: 'Code Review',
+  noChangesHint: 'No uncommitted changes to review.\n\nTo review a specific file: /code-review path/to/file.ts',
+  runningMsg: 'Reviewing uncommitted changes with the code-review skill (7 dimensions: correctness, security, performance, code quality, architecture, testing, language-specific)...',
+  forwardToAI: 'use the code-review skill to review all uncommitted changes. Check all 7 dimensions: correctness, security, performance, code quality, architecture & design, testing, and language-specific issues.',
+})
 
-const verifyCmd: CommandHandler = async () => {
-  try {
-    const { execSync } = await import('node:child_process')
-    const diff = execSync('git diff --stat', { encoding: 'utf-8', timeout: 5000 }).trim()
-    if (!diff) {
-      return {
-        content:
-          '─ Verify ─\n\nNo uncommitted changes to verify.\n\nMake changes first, then run /verify for runtime verification.',
-      }
-    }
-    return {
-      content:
-        '─ Verify ─\n\nRunning runtime verification — observing actual execution behavior (not tests, not typecheck)...',
-      injectMessage:
-        'verify these uncommitted changes through runtime observation only. For each change: 1) Find the user-facing surface (CLI command, API endpoint, UI interaction); 2) Drive the changed code to execute; 3) Push boundaries — pass null, repeated values, wrong types, interrupt mid-flow (Ctrl-C), resize window; 4) Report verdict per change: PASS (works as expected), FAIL (does not work or breaks something), BLOCKED (cannot reach observable state), SKIP (no runtime surface, e.g. pure documentation). Do NOT run the test suite — observe real execution behavior only.',
-    }
-  } catch {
-    return { content: '─ Verify ─\n\nCould not detect changes. Are you in a git repository?' }
-  }
-}
+const simplifyCmd = gitDiffBridgeCmd({
+  label: 'Simplify',
+  noChangesHint: 'No uncommitted changes to simplify.\n\nMake changes first, then run /simplify for cleanup review.',
+  runningMsg: 'Running cleanup review — 4 passes: reuse, simplification, efficiency, abstraction level...',
+  forwardToAI: 'use the self-review skill to review these uncommitted changes. Focus on 4 cleanup passes: 1) Reuse — find duplicated logic, replace with existing helpers; 2) Simplification — flatten nesting, remove redundant state and dead code; 3) Efficiency — fix repeated object creation, unnecessary I/O, memory issues; 4) Abstraction Level — ensure code sits at the right architectural layer. Apply equivalent transformations only — do NOT change logic or fix bugs.',
+})
 
-const designCmd: CommandHandler = async (_ctx, args) => {
+const verifyCmd = gitDiffBridgeCmd({
+  label: 'Verify',
+  noChangesHint: 'No uncommitted changes to verify.\n\nMake changes first, then run /verify for runtime verification.',
+  runningMsg: 'Running runtime verification — observing actual execution behavior (not tests, not typecheck)...',
+  forwardToAI: 'verify these uncommitted changes through runtime observation only. For each change: 1) Find the user-facing surface (CLI command, API endpoint, UI interaction); 2) Drive the changed code to execute; 3) Push boundaries — pass null, repeated values, wrong types, interrupt mid-flow (Ctrl-C), resize window; 4) Report verdict per change: PASS (works as expected), FAIL (does not work or breaks something), BLOCKED (cannot reach observable state), SKIP (no runtime surface, e.g. pure documentation). Do NOT run the test suite — observe real execution behavior only.',
+})
+
+const designCmd: CommandHandler = (_ctx, args) => {
   const topic = args.join(' ') || 'the current task'
   return {
     content: `─ Design ─\n\nStarting architectural design session for: ${topic}\n\nExploring approaches, trade-offs, component breakdown, data flow...`,
-    injectMessage: `help me design the architecture for ${topic}. Explore 2-3 approaches with trade-offs, then present a design covering: component breakdown, data flow, interfaces between components, error handling strategy, and testing approach. Use the plan sub-agent if deeper analysis would help. Prefer simplicity — YAGNI.`,
+    forwardToAI:
+      `help me design the architecture for ${topic}. Explore 2-3 approaches with trade-offs, then present a design covering: component breakdown, data flow, interfaces between components, error handling strategy, and testing approach. Use the plan sub-agent if deeper analysis would help. Prefer simplicity — YAGNI.`,
   }
 }
 
