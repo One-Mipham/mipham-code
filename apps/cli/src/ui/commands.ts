@@ -122,8 +122,8 @@ const helpCmd: CommandHandler = (ctx) => {
       ── Workflow ────────────────────────
       /plan          Enter plan mode (read-only)
       /no-plan       Exit plan mode
-      /tdd           TDD mode              [stub]
-      /todos         Task management
+      /tdd [goal]    Test-Driven Development workflow
+      /todos [list|create] Task management
       /tasks         Background tasks
       /review        Code review workflow
       /pr-comments   PR review summary
@@ -133,7 +133,7 @@ const helpCmd: CommandHandler = (ctx) => {
       /loop init      Scaffold .mipham/ vault structure
       /batch          Apply changes across files
       /hooks          Manage lifecycle hook scripts
-      /schedule      View scheduled tasks   [stub]
+      /schedule      View scheduled tasks
 
       ── Git & GitHub ─────────────────────
       /commit        Review staged changes + commit
@@ -402,25 +402,69 @@ const planCmd: CommandHandler = (_ctx) => ({
   `,
 })
 
-const tddCmd: CommandHandler = (_ctx) => ({
-  content: stripIndent`
-    ── TDD Mode ──  [stub]
-    Test-Driven Development workflow: RED → GREEN → REFACTOR.
-    Full TDD integration coming in a future release.
-  `,
-})
+const tddCmd: CommandHandler = (_ctx, args) => {
+  const target = args.join(' ') || 'the current task'
+  return {
+    content: stripIndent`
+      ── TDD Mode ──
+      Starting Test-Driven Development workflow for: ${target}
 
-const todosCmd: CommandHandler = (_ctx) => ({
-  content: stripIndent`
-    ── Task Management ──
-    Use the Task tool for structured task tracking:
-    • Create: Task tool with action=create
-    • List:   Task tool with action=list
-    • Update: Task tool with action=update
+      Cycle: 🔴 RED → 🟢 GREEN → 🔵 REFACTOR
+        RED:   Write a failing test first
+        GREEN: Write minimal code to pass
+        REFACTOR: Clean up while keeping tests green
 
-    Full /todos integration coming in a future release.
-  `,
-})
+      The AI will guide you through each cycle.
+    `,
+    forwardToAI: `Follow the Test-Driven Development workflow for ${target}:
+1. RED — Write a failing test that defines the expected behavior. Use the project's test framework (Vitest/Jest/pytest). Show me the test code and confirm it fails.
+2. GREEN — Write the minimum code needed to make the test pass. Run the test to verify it passes.
+3. REFACTOR — Clean up both test and implementation code. Remove duplication, improve names, simplify. Keep tests green.
+Repeat for each behavior. Do NOT write implementation before tests.`,
+  }
+}
+
+const todosCmd: CommandHandler = (_ctx, args) => {
+  const sub = args[0]
+  if (sub === 'create') {
+    const title = args.slice(1).join(' ')
+    if (!title.trim()) {
+      return {
+        content: 'Usage: /todos create <task-title>\n\nExample: /todos create Add user authentication',
+      }
+    }
+    return {
+      content: `── Create Task ──\n\nCreating task: "${title.trim()}"\n\nPassing to AI for structured task creation with TaskCreate...`,
+      forwardToAI: `Create a new task using TaskCreate with subject "${title.trim()}". Set a clear description and activeForm.`,
+    }
+  }
+
+  if (sub === 'list' || !sub) {
+    return {
+      content: stripIndent`
+        ── Task Management ──
+        Fetching current task list...
+
+        Shortcuts:
+          /todos list           Show all tasks
+          /todos create <title> Create a new task
+      `,
+      forwardToAI: 'Use TaskList to show all current tasks. Present them in a clear summary grouped by status (pending/in_progress/completed). If there are no tasks, suggest creating one.',
+    }
+  }
+
+  return {
+    content: stripIndent`
+      ── Task Management ──
+      /todos list           Show all tasks
+      /todos create <title> Create a new task
+
+      The AI manages task state via TaskCreate, TaskList, TaskUpdate, and TaskGet tools.
+      Tasks appear in the /tasks view and persist across the session.
+    `,
+    forwardToAI: 'Use TaskList to show all current tasks, then present them clearly.',
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════
 // Project
@@ -1205,16 +1249,17 @@ const scheduleCmd: CommandHandler = (_ctx) => ({
   content: stripIndent`
     ── Scheduled Tasks ──
 
+    Fetching active scheduled tasks and loops...
+
     Active loops are managed via ScheduleWakeup (in-session) and
     CronCreate (durable, survives restarts).
 
     Use /loop <interval> <prompt> to start a recurring task.
     Use CronList to view all scheduled jobs.
     Use CronDelete <id> to cancel a durable job.
-
-    The ScheduleWakeup mechanism automatically re-schedules on
-    each wake, creating a self-perpetuating loop within the session.
   `,
+  forwardToAI:
+    'Use CronList to show all currently scheduled cron jobs (both durable and session-only). Present them in a clear table with: name/ID, schedule (cron expression), type (recurring vs one-shot), and status. Also note any active ScheduleWakeup loops if visible in the current session. If no scheduled tasks exist, suggest: "No scheduled tasks. Use /loop <interval> <prompt> to create a recurring task."',
 })
 
 // ═══════════════════════════════════════════════════════════════
@@ -3580,7 +3625,17 @@ const registry = new Map<string, CommandHandler>()
 
 // Session
 registry.set('/help', helpCmd)
-registry.set('/pick', () => ({ content: 'Opening model picker... (use Ctrl+P or /pick)' }))
+const pickCmd: CommandHandler = (ctx) => ({
+  content: `── Model Picker ──
+
+Use ↑↓ to navigate, Enter to select, Esc to close.
+
+Current: ${ctx.providerId} / ${ctx.modelId}
+Available: ${ctx.config.providers.filter((p) => p.status === 'active').length} providers, ${ctx.config.providers.flatMap((p) => p.models.filter((m) => m.status === 'active')).length} models
+
+Tip: Press Ctrl+P or type /pick from the chat input.`,
+})
+registry.set('/pick', pickCmd)
 registry.set('/version', versionCmd)
 registry.set('/clear', clearCmd)
 registry.set('/exit', exitCmd)
@@ -3608,6 +3663,7 @@ registry.set('/providers', providersCmd)
 registry.set('/config', configCmd)
 registry.set('/fast', fastCmd)
 registry.set('/effort', effortCmd)
+registry.set('/switch', switchCmd)
 
 // Tools & Skills
 registry.set('/tools', toolsCmd)
@@ -3759,8 +3815,8 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/plugin-disable': 'Disable an enabled plugin',
   '/plan': 'Enter plan mode',
   '/no-plan': 'Exit plan mode',
-  '/tdd': 'TDD mode',
-  '/todos': 'Task management',
+  '/tdd': 'Test-Driven Development workflow (RED → GREEN → REFACTOR)',
+  '/todos': 'Task management (list/create tasks)',
   '/tasks': 'Background tasks',
   '/review': 'Code review workflow',
   '/pr-comments': 'PR review summary',
@@ -3785,7 +3841,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/agents': 'Agent view dashboard',
   '/bg': 'Run a background agent task',
   '/artifact': 'Manage artifacts',
-  '/schedule': 'View scheduled tasks',
+  '/schedule': 'View scheduled tasks and cron jobs',
   '/commit': 'Generate commit message and review staged changes',
   '/push': 'Push the current branch',
   '/pr': 'Create a pull request',

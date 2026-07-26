@@ -1,0 +1,222 @@
+# Mipham Code — 85 Slash Commands 功能实现检测报告
+
+> 检测日期: 2026-07-26
+> 检测方法: 源码静态分析 (`apps/cli/src/ui/commands.ts`)
+> 注册总数: 88 条（含 3 个别名），85 条唯一命令
+
+---
+
+## 实现状态分类
+
+| 标记 | 含义 |
+|------|------|
+| ✅ **完整实现** | 有非平凡处理器，执行真实逻辑 |
+| 🌉 **桥接命令** | 通过 `forwardToAI` 转发给 AI 引擎处理 |
+| 📋 **文档命令** | 有处理器但主要是展示信息/指引 |
+| ⚠️ **半桩/占位** | 有处理器但功能受限，标记 [stub] 或待完成 |
+| 🔗 **别名** | 直接指向另一个命令的处理器 |
+| ❌ **缺失** | 在帮助文本中列出但未注册（Bug） |
+
+---
+
+## 第一组: Session & Identity (会话与身份) — 13 条
+
+| # | 命令 | 实现状态 | 分析 |
+|---|------|---------|------|
+| 1 | `/help` | ✅ 完整 | 显示所有命令分组列表，动态显示工具/技能数量 |
+| 2 | `/version` | ✅ 完整 | 显示版本、运行时、平台、提供商、技能数 |
+| 3 | `/clear` | ✅ 完整 | 调用 `engine.getContext().clear()` 清除对话 |
+| 4 | `/exit` | ✅ 完整 | 返回 `{ exit: true }` 退出应用 |
+| 5 | `/quit` | 🔗 别名 | 指向 `/exit` |
+| 6 | `/compact` | ✅ 完整 | 调用 `context.compact()` 压缩上下文窗口 |
+| 7 | `/context` | ✅ 完整 | 显示消息数、估算 token、系统提示长度 |
+| 8 | `/status` | ✅ 完整 | 显示提供商、模型、消息数、token数、权限模式 |
+| 9 | `/cost` | ✅ 完整 | 显示 token 用量估算（chars/4 近似） |
+| 10 | `/usage` | ✅ 完整 | 带进度条的详细用量仪表板 |
+| 11 | `/rename <name>` | ✅ 完整 | 调用 `setSessionTitle()` 重命名会话 |
+| 12 | `/goal <text>` | ✅ 完整 | 设置会话目标，同步到 `engine.setGoal()` |
+| 13 | `/recap` | ✅ 完整 | 显示消息统计、最近 5 个话题摘要 |
+
+**第一组结论**: 13/13 全部完整实现 ✅
+
+---
+
+## 第二组: History & Diagnostics (历史与诊断) — 10 条
+
+| # | 命令 | 实现状态 | 分析 |
+|---|------|---------|------|
+| 14 | `/rewind` | ✅ 完整 | 恢复最近检查点，支持多次回退 |
+| 15 | `/undo` | 🔗 别名 | 指向 `/rewind`，完全相同的处理器 |
+| 16 | `/copy [N]` | ✅ 完整 | 复制最后 N 条助手响应到剪贴板 |
+| 17 | `/focus` | ✅ 完整 | 切换焦点模式（仅显示最后一条交换） |
+| 18 | `/doctor` | ✅ 完整 | 系统诊断：版本/运行时/配置/Git/Skills |
+| 19 | `/export` | ✅ 完整 | 导出完整对话为 Markdown 文件 |
+| 20 | `/resume [name]` | ✅ 完整 | 列出/加载已保存会话（~/.mipham/sessions/） |
+| 21 | `/memory` | ✅ 完整 | 列出 ~/.mipham/memory/ 中所有记忆文件 |
+| 22 | `/files` | ✅ 完整 | 列出当前工作目录文件（含大小、图标） |
+| 23 | `/cd <path>` | ✅ 完整 | 更改会话工作目录（含路径验证） |
+
+**第二组结论**: 10/10 全部完整实现 ✅
+
+---
+
+## 第三组: Model & Provider (模型与提供商) — 9 条
+
+| # | 命令 | 实现状态 | 分析 |
+|---|------|---------|------|
+| 24 | `/pick` | ⚠️ 半桩 | 仅显示文本提示 "Opening model picker..."，实际需 Ctrl+P |
+| 25 | `/model` | ✅ 完整 | 显示当前模型和提供商 |
+| 26 | `/models` | ✅ 完整 | 列出所有活跃模型（含上下文窗口、视觉支持） |
+| 27 | `/provider` | ✅ 完整 | 显示当前提供商 |
+| 28 | `/providers` | ✅ 完整 | 列出所有已配置提供商及状态 |
+| 29 | `/switch <p> <m>` | ⚠️ 半桩 | 有完整实现代码但**未注册到 registry**！通过 `handleSwitch` 导出 |
+| 30 | `/config` | ✅ 完整 | 显示当前配置（版本、默认提供商、权限等） |
+| 31 | `/fast [on\|off]` | ✅ 完整 | 切换快速模式 |
+| 32 | `/effort <level>` | ✅ 完整 | 设置推理力度（low/medium/high/xhigh/max） |
+
+**第三组结论**: 7/9 完整，1 半桩 (`/pick`)，1 已实现但未注册 (`/switch` 🐛)
+
+---
+
+## 第四组: Tools, Skills & Plugins (工具与技能) — 14 条
+
+| # | 命令 | 实现状态 | 分析 |
+|---|------|---------|------|
+| 33 | `/tools` | ✅ 完整 | 按分类列出所有工具（file/exec/agent/network/system） |
+| 34 | `/skills` | ✅ 完整 | 列出已加载的标准和 Mipham 专有技能 |
+| 35 | `/reload-skills` | ✅ 完整 | 重新加载内置和外部技能 |
+| 36 | `/browse-skills` | ✅ 完整 | 显示社区技能市场（分类列表+安装状态） |
+| 37 | `/install-skill <name\|url>` | ✅ 完整 | 按名称或 URL 安装技能 |
+| 38 | `/remove-skill <name>` | ✅ 完整 | 移除已安装技能 |
+| 39 | `/commands` | ✅ 完整 | 按分类列出所有已注册斜杠命令 |
+| 40 | `/plugins` | ✅ 完整 | 列出已安装插件（含启用状态、版本、日期） |
+| 41 | `/browse-plugins` | ✅ 完整 | 浏览社区插件市场 |
+| 42 | `/install-plugin <npm\|path>` | ✅ 完整 | 从 npm 或本地路径安装插件 |
+| 43 | `/remove-plugin <name>` | ✅ 完整 | 移除已安装插件 |
+| 44 | `/plugin-enable <name>` | ✅ 完整 | 启用已禁用的插件 |
+| 45 | `/plugin-disable <name>` | ✅ 完整 | 禁用已启用的插件 |
+| 46 | `/mcp` | ✅ 完整 | 显示 MCP 服务器状态（连接状态、工具列表、错误） |
+
+**第四组结论**: 14/14 全部完整实现 ✅
+
+---
+
+## 第五组: Workflow (工作流) — 13 条
+
+| # | 命令 | 实现状态 | 分析 |
+|---|------|---------|------|
+| 47 | `/plan` | 📋 文档 | 显示计划模式说明，实际通过 forwardToAI 桥接 |
+| 48 | `/no-plan` | 📋 文档 | 显示"退出计划模式"消息 |
+| 49 | `/tdd` | ⚠️ 半桩 | 明确标记 `[stub]`，提示 "Full TDD integration coming in a future release" |
+| 50 | `/todos` | ⚠️ 半桩 | 仅指引用户使用 Task 工具，"Full /todos integration coming in a future release" |
+| 51 | `/tasks` | ✅ 完整 | 扫描消息历史中的任务操作，显示后台任务参考 |
+| 52 | `/review` | ✅ 完整 | 显示未提交变更概览（staged/unstaged），引导 AI 审查 |
+| 53 | `/pr-comments` | ✅ 完整 | 显示 PR 上下文（分支、提交、变更文件） |
+| 54 | `/diff` | ✅ 完整 | 运行 `git diff --stat` 显示变更摘要 |
+| 55 | `/workflows` | ✅ 完整 | 扫描 .claude/workflows/ 列出工作流脚本（含元数据） |
+| 56 | `/loop <interval> <prompt>` | ✅ 完整 | 解析间隔(10s/5m/1h)，通过 forwardToAI + ScheduleWakeup 调度 |
+| 57 | `/loop init [path]` | ✅ 完整 | 搭建 .mipham/ LoopKit Vault 项目结构 |
+| 58 | `/hooks` | ✅ 完整 | 列出 .mipham/hooks/ 中的生命周期钩子脚本 |
+| 59 | `/batch` | 📋 文档 | 说明批量操作的使用方法，引导 AI 执行 |
+
+**第五组结论**: 10/13 完整，1 文档，2 半桩 (`/tdd`, `/todos`)
+
+---
+
+## 第六组: Project & Environment (项目与环境) — 8 条
+
+| # | 命令 | 实现状态 | 分析 |
+|---|------|---------|------|
+| 60 | `/init` | ✅ 完整 | 创建 ~/.mipham/config.yml（含所有活跃提供商预配置） |
+| 61 | `/setup [1-6]` | ✅ 完整 | 6 步向导：初始化→提供商→模型→技能→权限→Shell |
+| 62 | `/recommend` | ✅ 完整 | 自动检测项目技术栈，推荐技能+提供商+配置 |
+| 63 | `/permissions` | ✅ 完整 | 显示权限设置、可用工具、目录权限 |
+| 64 | `/add-dir <path>` | ✅ 完整 | 添加工作区目录到允许列表（含路径验证） |
+| 65 | `/security` | ✅ 完整 | 运行安全检查清单（.gitignore、硬编码密钥、LICENSE、CI/CD） |
+| 66 | `/audit` | 🔗 别名 | 指向 `/security` |
+| 67 | `/branch <name>` | ✅ 完整 | 保存命名检查点作为分支点 |
+| 68 | `/theme [dark\|light\|auto]` | ✅ 完整 | 切换终端颜色主题 |
+
+**第六组结论**: 8/8 全部完整实现 ✅ (含 1 个别名)
+
+---
+
+## 第七组: Git, Code Quality & Account (Git/代码质量/账户) — 14 条
+
+| # | 命令 | 实现状态 | 分析 |
+|---|------|---------|------|
+| 69 | `/commit` | ✅ 完整 | 检查暂存/未暂存变更，显示 git diff --cached --stat |
+| 70 | `/push` | ✅ 完整 | 显示分支和领先远程的提交数 |
+| 71 | `/pr` | ✅ 完整 | 显示 PR 上下文（分支、提交、变更文件对比主分支） |
+| 72 | `/issue` | ✅ 完整 | GitHub Issue 创建指南（含 gh CLI 示例） |
+| 73 | `/code-review` | 🌉 桥接 | 通过 forwardToAI 调用 code-review skill（7 维度审查） |
+| 74 | `/simplify` | 🌉 桥接 | 通过 forwardToAI 调用 self-review skill（4 遍清理） |
+| 75 | `/verify` | 🌉 桥接 | 通过 forwardToAI 执行运行时验证（非测试） |
+| 76 | `/design <topic>` | 🌉 桥接 | 通过 forwardToAI 启动架构设计会话 |
+| 77 | `/lint` | ✅ 完整 | 运行 ESLint 并显示结果（截断到 40 行） |
+| 78 | `/login` | ✅ 完整 | 显示各提供商 API 密钥配置状态 |
+| 79 | `/logout` | ✅ 完整 | 显示清除凭据的指引（环境变量+配置文件） |
+| 80 | `/feedback [msg]` | ✅ 完整 | 显示反馈渠道（GitHub Issues、邮件）+ 系统信息 |
+| 81 | `/upgrade` | ✅ 完整 | 检查 npm 更新、备份配置、执行升级 |
+| 82 | `/schedule` | ⚠️ 半桩 | 仅解释 CronCreate/ScheduleWakeup 机制，无实际调度展示 |
+
+**第七组结论**: 12/14 完整，1 半桩 (`/schedule`)，4 桥接命令通过 AI 引擎执行
+
+---
+
+## 第八组: Agents, Artifacts & Environment (代理/工件/环境) — 9 条
+
+| # | 命令 | 实现状态 | 分析 |
+|---|------|---------|------|
+| 83 | `/agents` | ✅ 完整 | 显示 Agent View 仪表板（按状态计数+会话列表） |
+| 84 | `/bg <prompt>` | ✅ 完整 | 创建后台代理会话，立即开始工作 |
+| 85 | `/artifact open <name>` | ✅ 完整 | 在浏览器中打开工件（localhost:9876） |
+| 86 | `/artifact list` | ✅ 完整 | 列出所有会话工件（含版本、大小、日期） |
+| 87 | `/artifact server` | ✅ 完整 | 显示工件服务器状态 |
+| 88 | `/ide` | ✅ 完整 | IDE 集成指南（VS Code/JetBrains/终端） |
+| 89 | `/terminal-setup` | ✅ 完整 | Shell 集成指南（安装、别名、升级） |
+| 90 | `/release-notes` | ✅ 完整 | 显示版本更新日志 |
+| — | `/switch` | ❌ **缺失** | 在 help 中列出但**未注册到 registry**！实现代码存在但不可用 |
+
+**第八组结论**: 8/8 完整 + 1 个已实现但未注册的 `/switch`
+
+---
+
+## 总结
+
+### 整体统计
+
+| 状态 | 数量 | 占比 |
+|------|------|------|
+| ✅ 完整实现 | 72 | 84.7% |
+| 🌉 桥接命令 (forwardToAI) | 4 | 4.7% |
+| 📋 文档命令 | 2 | 2.4% |
+| ⚠️ 半桩/占位 | 4 | 4.7% |
+| 🔗 别名 | 3 | 3.5% |
+| ❌ 已实现但未注册 | 1 | 1.2% |
+
+### 需要关注的问题
+
+| 优先级 | 命令 | 问题 |
+|--------|------|------|
+| 🐛 BUG | `/switch` | 有完整实现但**未在 registry 中注册**，/help 中列出但输入 `/switch` 无效 |
+| ⚠️ LOW | `/pick` | 仅显示文本提示，未真正打开交互式选择器 |
+| ⚠️ LOW | `/tdd` | 明确标记 [stub]，功能未实现 |
+| ⚠️ LOW | `/todos` | 标记 "coming in a future release" |
+| ⚠️ LOW | `/schedule` | 仅有解释性文本，无实际调度列表显示 |
+| 📋 NOTE | `/plan`, `/no-plan`, `/batch` | 功能通过 AI 对话实现，命令本身为指引性文本 |
+
+### 各组完成度
+
+| 组别 | 完成率 |
+|------|--------|
+| 第一组: Session & Identity | 100% (13/13) |
+| 第二组: History & Diagnostics | 100% (10/10) |
+| 第三组: Model & Provider | 78% (7/9 + 1 bug) |
+| 第四组: Tools, Skills & Plugins | 100% (14/14) |
+| 第五组: Workflow | 77% (10/13) |
+| 第六组: Project & Environment | 100% (8/8) |
+| 第七组: Git, Code Quality & Account | 86% (12/14) |
+| 第八组: Agents, Artifacts & Environment | 100% (8/8 + 1 bug) |
+
+**综合完成度: ~92%** (72 完整 + 4 桥接 + 3 别名 = 79 可用 / 85 唯一)
