@@ -430,7 +430,8 @@ const todosCmd: CommandHandler = (_ctx, args) => {
     const title = args.slice(1).join(' ')
     if (!title.trim()) {
       return {
-        content: 'Usage: /todos create <task-title>\n\nExample: /todos create Add user authentication',
+        content:
+          'Usage: /todos create <task-title>\n\nExample: /todos create Add user authentication',
       }
     }
     return {
@@ -449,7 +450,8 @@ const todosCmd: CommandHandler = (_ctx, args) => {
           /todos list           Show all tasks
           /todos create <title> Create a new task
       `,
-      forwardToAI: 'Use TaskList to show all current tasks. Present them in a clear summary grouped by status (pending/in_progress/completed). If there are no tasks, suggest creating one.',
+      forwardToAI:
+        'Use TaskList to show all current tasks. Present them in a clear summary grouped by status (pending/in_progress/completed). If there are no tasks, suggest creating one.',
     }
   }
 
