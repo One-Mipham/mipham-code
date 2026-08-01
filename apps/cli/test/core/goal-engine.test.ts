@@ -1,37 +1,35 @@
 import { describe, it, expect } from 'vitest'
 
-// ── Unit tests for goal state management (no provider needed) ──
-// We test the goal state logic via the engine's public API.
+type GoalOpts = { verifyScript?: string; verifySkill?: string; decompose?: boolean }
 
 describe('Goal state management', () => {
   it('setGoal with verifyScript option', () => {
-    // Simulate engine behavior — test the options parsing
-    const opts = { verifyScript: './check.sh' }
+    const opts: GoalOpts = { verifyScript: './check.sh' }
     expect(opts.verifyScript).toBe('./check.sh')
     expect(opts.verifySkill).toBeUndefined()
     expect(opts.decompose).toBeUndefined()
   })
 
   it('setGoal with verifySkill option', () => {
-    const opts = { verifySkill: 'security-review' }
+    const opts: GoalOpts = { verifySkill: 'security-review' }
     expect(opts.verifySkill).toBe('security-review')
     expect(opts.verifyScript).toBeUndefined()
   })
 
   it('setGoal with decompose option', () => {
-    const opts = { decompose: true }
+    const opts: GoalOpts = { decompose: true }
     expect(opts.decompose).toBe(true)
   })
 
   it('setGoal with all options', () => {
-    const opts = { verifyScript: './test.sh', verifySkill: 'tdd', decompose: true }
+    const opts: GoalOpts = { verifyScript: './test.sh', verifySkill: 'tdd', decompose: true }
     expect(opts.verifyScript).toBe('./test.sh')
     expect(opts.verifySkill).toBe('tdd')
     expect(opts.decompose).toBe(true)
   })
 
   it('setGoal with no options (default behavior)', () => {
-    const opts = {}
+    const opts: GoalOpts = {}
     expect(opts.verifyScript).toBeUndefined()
     expect(opts.verifySkill).toBeUndefined()
     expect(opts.decompose).toBeUndefined()

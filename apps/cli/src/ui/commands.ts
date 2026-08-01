@@ -129,8 +129,11 @@ const helpCmd: CommandHandler = (ctx) => {
       /pr-comments   PR review summary
       /diff          Show git diff
       /workflows     List workflow scripts
-      /loop <int> <p> Run prompt on interval
-      /loop init      Scaffold .mipham/ vault structure
+      /loop <int> <p>  Run prompt on interval
+      /loop auto <p>   Autonomous self-paced loop
+      /loop stop        Stop active autonomous loop
+      /loop init        Scaffold .mipham/ vault structure
+      /loop status      Show autonomous loop progress
       /batch          Apply changes across files
       /hooks          Manage lifecycle hook scripts
       /schedule      View scheduled tasks
@@ -1275,25 +1278,92 @@ const loopCmd: CommandHandler = async (_ctx, args) => {
     return { content: lines.join('\n') }
   }
 
-  // ── /loop <interval> <prompt> — recurring prompt ──
+  // ── /loop stop — stop autonomous loop ──
+  if (sub === 'stop') {
+    const { completeAutoloopJournal, listActiveAutoloops } = await import('../commands/autoloop-journal.js')
+    const active = listActiveAutoloops()
+    if (active.length === 0) {
+      return { content: 'No active autonomous loops to stop.' }
+    }
+    for (const j of active) completeAutoloopJournal(j.sessionId, 'stopped')
+    return { content: `Stopped ${active.length} autonomous loop(s).` }
+  }
+
+  // ── /loop status — show autonomous loop progress ──
+  if (sub === 'status') {
+    const { listActiveAutoloops, getAutoloopStatus } = await import('../commands/autoloop-journal.js')
+    const active = listActiveAutoloops()
+    if (active.length === 0) {
+      return { content: 'No active autonomous loops.\n\nUse /loop auto <prompt> to start one.' }
+    }
+    const lines = active.map((j) => getAutoloopStatus(j.sessionId))
+    return { content: lines.join('\n\n') }
+  }
+
+  // ── /loop auto <prompt> — autonomous self-paced loop ──
+  if (sub === 'auto') {
+    const prompt = args.slice(1).join(' ')
+    if (!prompt.trim()) {
+      return {
+        content:
+          'Usage: /loop auto <prompt>\n\n' +
+          'Start an autonomous self-paced loop. The AI will:\n' +
+          '1. Work on the task\n' +
+          '2. Decide how long to wait before the next iteration\n' +
+          '3. Use ScheduleWakeup to self-schedule\n' +
+          '4. Use ScheduleWakeup(stop:true) when the goal is reached\n\n' +
+          'Use /loop status to view progress.\n' +
+          'Use /loop stop to stop the loop.',
+      }
+    }
+
+    const sessionId = `autoloop-${Date.now()}`
+    const { createAutoloopJournal } = await import('../commands/autoloop-journal.js')
+    createAutoloopJournal(sessionId, prompt)
+
+    const autoPrompt =
+      `## Autonomous Loop — ${sessionId}\n\n` +
+      `Task: ${prompt}\n\n` +
+      `You are in an autonomous loop. Each iteration:\n` +
+      `1. Make progress on the task above\n` +
+      `2. When you need to wait (e.g., for a deploy, CI, external event), call ScheduleWakeup with:\n` +
+      `   - delaySeconds: your best estimate of how long to wait (60-3600)\n` +
+      `   - reason: one sentence explaining why\n` +
+      `   - prompt: include this full autonomous loop ID: ${sessionId}\n` +
+      `3. When the task is COMPLETE, call ScheduleWakeup with stop:true\n\n` +
+      `After each iteration, log progress by reading/writing the journal at ~/.mipham/autoloop/${sessionId}.json.\n` +
+      `Use the autoloop-journal module: logAutoloopIteration("${sessionId}", "<summary>").`
+
+    return {
+      content:
+        `── Autonomous Loop Started ──\n\n` +
+        `ID:      ${sessionId}\n` +
+        `Prompt:  "${prompt.slice(0, 100)}${prompt.length > 100 ? '...' : ''}"\n\n` +
+        `The AI will self-pace. Use /loop status to view progress.\n` +
+        `Use /loop stop to stop.`,
+      forwardToAI: autoPrompt,
+    }
+  }
+
+  // ── /loop <interval> <prompt> — recurring prompt (or auto-detect autonomous) ──
   if (args.length < 2) {
     return {
       content: stripIndent`
-        Usage: /loop <interval> <prompt>
-           or: /loop init [path]     Scaffold project vault structure
+        Usage: /loop <interval> <prompt>     Fixed-interval loop
+           or: /loop auto <prompt>           Autonomous self-paced loop
+           or: /loop stop                     Stop active autonomous loop
+           or: /loop status                   Show autonomous loop progress
+           or: /loop init [path]              Scaffold project vault structure
 
-        Run a prompt repeatedly on a set interval, or initialize
-        a LoopKit Vault project structure with Mipham Code config.
-
-        Interval formats:
+        Fixed interval formats:
           10s   — 10 seconds
           5m    — 5 minutes
           1h    — 1 hour
 
-        Example:
+        Examples:
           /loop 5m check the deploy status
-          /loop init              Create vault in current directory
-          /loop init ~/my-project Create vault in specific directory
+          /loop auto monitor CI and fix failing tests
+          /loop init                  Create vault in current directory
       `,
     }
   }
@@ -1302,13 +1372,40 @@ const loopCmd: CommandHandler = async (_ctx, args) => {
   const prompt = args.slice(1).join(' ')
   const seconds = parseInterval(interval)
 
+  // Auto-detect: if first arg is not a valid interval, assume autonomous mode
   if (seconds === null) {
+    // Could be: /loop <full prompt without interval>
+    const fullPrompt = args.join(' ')
+    if (fullPrompt.length > 0) {
+      const sessionId = `autoloop-${Date.now()}`
+      const { createAutoloopJournal } = await import('../commands/autoloop-journal.js')
+      createAutoloopJournal(sessionId, fullPrompt)
+
+      const autoPrompt =
+        `## Autonomous Loop — ${sessionId}\n\n` +
+        `Task: ${fullPrompt}\n\n` +
+        `You are in an autonomous loop (auto-detected — no interval specified). Each iteration:\n` +
+        `1. Make progress on the task above\n` +
+        `2. When you need to wait, call ScheduleWakeup with your chosen delaySeconds and this loop ID: ${sessionId}\n` +
+        `3. When COMPLETE, call ScheduleWakeup with stop:true\n\n` +
+        `Log progress using logAutoloopIteration("${sessionId}", "<summary>").`
+
+      return {
+        content:
+          `── Autonomous Loop Started (auto-detected) ──\n\n` +
+          `ID:      ${sessionId}\n` +
+          `Prompt:  "${fullPrompt.slice(0, 100)}${fullPrompt.length > 100 ? '...' : ''}"\n\n` +
+          `No interval specified — using autonomous self-paced mode.\n` +
+          `Use /loop stop to stop.`,
+        forwardToAI: autoPrompt,
+      }
+    }
     return {
-      content: `── Invalid Interval ──\n\n"${interval}" is not a recognised interval.\n\nUse formats like: 10s, 5m, 1h, 30min, 2hr`,
+      content: `── Invalid Interval ──\n\n"${interval}" is not a recognised interval.\n\nUse formats like: 10s, 5m, 1h, 30min, 2hr\nOr use /loop auto <prompt> for autonomous mode.`,
     }
   }
 
-  // Directly invoke ScheduleWakeup tool (no forwardToAI bridge)
+  // Fixed-interval loop — directly invoke ScheduleWakeup
   try {
     const { scheduleWakeupTool } = await import('../tools/scheduling/schedule-wakeup.js')
     const result = await scheduleWakeupTool.execute(
