@@ -1280,7 +1280,8 @@ const loopCmd: CommandHandler = async (_ctx, args) => {
 
   // ── /loop stop — stop autonomous loop ──
   if (sub === 'stop') {
-    const { completeAutoloopJournal, listActiveAutoloops } = await import('../commands/autoloop-journal.js')
+    const { completeAutoloopJournal, listActiveAutoloops } =
+      await import('../commands/autoloop-journal.js')
     const active = listActiveAutoloops()
     if (active.length === 0) {
       return { content: 'No active autonomous loops to stop.' }
@@ -1291,7 +1292,8 @@ const loopCmd: CommandHandler = async (_ctx, args) => {
 
   // ── /loop status — show autonomous loop progress ──
   if (sub === 'status') {
-    const { listActiveAutoloops, getAutoloopStatus } = await import('../commands/autoloop-journal.js')
+    const { listActiveAutoloops, getAutoloopStatus } =
+      await import('../commands/autoloop-journal.js')
     const active = listActiveAutoloops()
     if (active.length === 0) {
       return { content: 'No active autonomous loops.\n\nUse /loop auto <prompt> to start one.' }
