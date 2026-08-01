@@ -101,7 +101,7 @@ export const taskTool: ToolDefinition = {
 
       const lines: string[] = []
       for (const status of ['in_progress', 'pending', 'completed'] as const) {
-        const group = groups[status]
+        const group = groups[status]!
         if (group.length === 0) continue
         const emoji = status === 'in_progress' ? '🔄' : status === 'pending' ? '📋' : '✅'
         lines.push(`${emoji} ${status.replace('_', ' ')} (${group.length}):`)

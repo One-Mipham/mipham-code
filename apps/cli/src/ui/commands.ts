@@ -1241,28 +1241,33 @@ const loopCmd: CommandHandler = async (_ctx, args) => {
     }
   }
 
-  return {
-    content: `── Loop Started ──\n\nInterval: ${interval} (${seconds}s)\nPrompt:   "${prompt}"\n\nScheduling via ScheduleWakeup — the prompt will re-schedule itself each cycle.\nUse /schedule to view active loops.`,
-    forwardToAI: `use ScheduleWakeup to set up a recurring loop. delaySeconds=${seconds}, prompt: "${prompt}". Include at the end of the prompt: "Then call ScheduleWakeup again with delaySeconds=${seconds} and the same prompt to continue the loop."`,
+  // Directly invoke ScheduleWakeup tool (no forwardToAI bridge)
+  try {
+    const { scheduleWakeupTool } = await import('../tools/scheduling/schedule-wakeup.js')
+    const result = await scheduleWakeupTool.execute(
+      { delaySeconds: seconds, reason: `Loop: ${prompt.slice(0, 40)}`, prompt },
+      { cwd: process.cwd(), sessionId: 'loop-session', provider: '', model: '' },
+    )
+    return result.success
+      ? { content: result.content }
+      : { content: `Loop failed: ${result.error || 'unknown error'}` }
+  } catch (e) {
+    return { content: `Loop failed: ${e instanceof Error ? e.message : String(e)}` }
   }
 }
 
-const scheduleCmd: CommandHandler = (_ctx) => ({
-  content: stripIndent`
-    ── Scheduled Tasks ──
-
-    Fetching active scheduled tasks and loops...
-
-    Active loops are managed via ScheduleWakeup (in-session) and
-    CronCreate (durable, survives restarts).
-
-    Use /loop <interval> <prompt> to start a recurring task.
-    Use CronList to view all scheduled jobs.
-    Use CronDelete <id> to cancel a durable job.
-  `,
-  forwardToAI:
-    'Use CronList to show all currently scheduled cron jobs (both durable and session-only). Present them in a clear table with: name/ID, schedule (cron expression), type (recurring vs one-shot), and status. Also note any active ScheduleWakeup loops if visible in the current session. If no scheduled tasks exist, suggest: "No scheduled tasks. Use /loop <interval> <prompt> to create a recurring task."',
-})
+const scheduleCmd: CommandHandler = async (_ctx) => {
+  try {
+    const { cronListTool } = await import('../tools/scheduling/cron.js')
+    const result = await cronListTool.execute(
+      {},
+      { cwd: process.cwd(), sessionId: 'schedule-view', provider: '', model: '' },
+    )
+    return { content: result.content }
+  } catch (e) {
+    return { content: `Schedule check failed: ${e instanceof Error ? e.message : String(e)}` }
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════
 // Diagnostic
