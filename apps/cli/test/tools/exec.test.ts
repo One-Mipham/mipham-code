@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { ToolContext } from '@mipham/shared'
 import { bashTool } from '../../src/tools/exec/bash'
 import { gitTool } from '../../src/tools/exec/git'
@@ -11,6 +11,43 @@ const ctx: ToolContext = {
   sessionId: 'test-session',
   provider: 'test',
   model: 'test-model',
+}
+
+// ============================================================
+// Mock helper — uses vi.spyOn instead of readonly globalThis.Bun
+// ============================================================
+
+type MockedProc = {
+  stdout: ReadableStream
+  stderr: ReadableStream
+  exited: Promise<number>
+  kill: ReturnType<typeof vi.fn>
+}
+
+function createMockProc(stdoutText = '', stderrText = '', exitCode = 0): MockedProc {
+  return {
+    stdout: new ReadableStream({
+      start(c) {
+        if (stdoutText) c.enqueue(new TextEncoder().encode(stdoutText))
+        c.close()
+      },
+    }),
+    stderr: new ReadableStream({
+      start(c) {
+        if (stderrText) c.enqueue(new TextEncoder().encode(stderrText))
+        c.close()
+      },
+    }),
+    exited: Promise.resolve(exitCode),
+    kill: vi.fn(),
+  }
+}
+
+function mockSpawn(stdoutText = '', stderrText = '', exitCode = 0): MockedProc {
+  const proc = createMockProc(stdoutText, stderrText, exitCode)
+  // @ts-expect-error Bun.spawn return type is complex; mock return is fine for tests
+  vi.spyOn(Bun, 'spawn').mockReturnValue(proc as any)
+  return proc
 }
 
 // ============================================================
@@ -37,32 +74,9 @@ describe('Bash tool definition', () => {
 })
 
 describe('Bash tool execution', () => {
-  beforeEach(() => {
+  afterEach(() => {
     vi.restoreAllMocks()
   })
-
-  // helper to create a mock Bun.spawn that returns resolved streams
-  function mockSpawn(stdoutText = '', stderrText = '', exitCode = 0) {
-    const mockExit = Promise.resolve(exitCode)
-    const mockProc = {
-      stdout: new ReadableStream({
-        start(c) {
-          if (stdoutText) c.enqueue(new TextEncoder().encode(stdoutText))
-          c.close()
-        },
-      }),
-      stderr: new ReadableStream({
-        start(c) {
-          if (stderrText) c.enqueue(new TextEncoder().encode(stderrText))
-          c.close()
-        },
-      }),
-      exited: mockExit,
-      kill: vi.fn(),
-    }
-    globalThis.Bun = { spawn: vi.fn(() => mockProc) } as unknown as typeof Bun
-    return mockProc
-  }
 
   it('executes a simple command successfully', async () => {
     mockSpawn('hello world\n')
@@ -81,7 +95,7 @@ describe('Bash tool execution', () => {
   it('respects custom timeout parameter', async () => {
     mockSpawn()
     await bashTool.execute({ command: 'sleep 1', timeout: 5000 }, ctx)
-    expect(globalThis.Bun.spawn).toHaveBeenCalled()
+    expect(Bun.spawn).toHaveBeenCalled()
   })
 
   it('caps timeout at 600000ms', async () => {
@@ -91,54 +105,20 @@ describe('Bash tool execution', () => {
   })
 
   it('passes cwd to spawned process', async () => {
-    let receivedOpts: { cwd?: string } | undefined
-    const mockExit = Promise.resolve(0)
-    const mockProc = {
-      stdout: new ReadableStream({
-        start(c) {
-          c.close()
-        },
-      }),
-      stderr: new ReadableStream({
-        start(c) {
-          c.close()
-        },
-      }),
-      exited: mockExit,
-      kill: vi.fn(),
-    }
-
-    globalThis.Bun = {
-      spawn: vi.fn((_cmd: string[], opts: { cwd?: string }) => {
-        receivedOpts = opts
-        return mockProc
-      }),
-    } as unknown as typeof Bun
-
+    const proc = createMockProc()
+    // @ts-expect-error mock
+    vi.spyOn(Bun, 'spawn').mockImplementation((_cmd: any, opts: any) => {
+      expect(opts.cwd).toBe(ctx.cwd)
+      return proc as any
+    })
     await bashTool.execute({ command: 'pwd' }, ctx)
-    expect(receivedOpts?.cwd).toBe(ctx.cwd)
   })
 
   it('truncates long output', async () => {
     const longText = 'x'.repeat(200_000)
-    const mockExit = Promise.resolve(0)
-    const mockProc = {
-      stdout: new ReadableStream({
-        start(c) {
-          c.enqueue(new TextEncoder().encode(longText))
-          c.close()
-        },
-      }),
-      stderr: new ReadableStream({
-        start(c) {
-          c.close()
-        },
-      }),
-      exited: mockExit,
-      kill: vi.fn(),
-    }
-
-    globalThis.Bun = { spawn: vi.fn(() => mockProc) } as unknown as typeof Bun
+    const proc = createMockProc(longText)
+    // @ts-expect-error mock
+    vi.spyOn(Bun, 'spawn').mockReturnValue(proc as any)
 
     const result = await bashTool.execute({ command: 'cat bigfile' }, ctx)
     expect(result.success).toBe(true)
@@ -164,26 +144,15 @@ describe('Git tool definition', () => {
 })
 
 describe('Git tool execution', () => {
-  function mockGitSpawn(stdoutText = '', stderrText = '', exitCode = 0) {
-    const mockExit = Promise.resolve(exitCode)
-    const mockProc = {
-      stdout: new ReadableStream({
-        start(c) {
-          if (stdoutText) c.enqueue(new TextEncoder().encode(stdoutText))
-          c.close()
-        },
-      }),
-      stderr: new ReadableStream({
-        start(c) {
-          if (stderrText) c.enqueue(new TextEncoder().encode(stderrText))
-          c.close()
-        },
-      }),
-      exited: mockExit,
-      kill: vi.fn(),
-    }
-    globalThis.Bun = { spawn: vi.fn(() => mockProc) } as unknown as typeof Bun
-    return mockProc
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  function mockGitSpawn(stdoutText = '', stderrText = '', exitCode = 0): MockedProc {
+    const proc = createMockProc(stdoutText, stderrText, exitCode)
+    // @ts-expect-error mock
+    vi.spyOn(Bun, 'spawn').mockReturnValue(proc as any)
+    return proc
   }
 
   it('blocks dangerous commands', async () => {
@@ -211,11 +180,10 @@ describe('Git tool execution', () => {
   })
 
   it('handles spawn errors gracefully', async () => {
-    globalThis.Bun = {
-      spawn: vi.fn(() => {
-        throw new Error('Spawn failed')
-      }),
-    } as unknown as typeof Bun
+    // @ts-expect-error mock
+    vi.spyOn(Bun, 'spawn').mockImplementation(() => {
+      throw new Error('Spawn failed')
+    })
 
     const result = await gitTool.execute({ command: 'status' }, ctx)
     expect(result.success).toBe(false)

@@ -3,8 +3,8 @@
 > **项目**: omc-project9 — Mipham Code（AI 编程终端）
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 1.1.0
-> **最后更新**: 2026-06-15
+> **版本**: 1.2.0
+> **最后更新**: 2026-06-15 — 修正 Slash 命令数为 89、Skills 数为 15、补充记忆系统、更新下一步计划
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -52,7 +52,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 11 个内置技能（9 standard + 2 mipham）
-│   │   ├── test/               # 14 个测试文件，295 个测试
+│   │   ├── test/               # 44 个测试文件，529 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -118,13 +118,24 @@ pnpm format       # Prettier
 | Network（2） | web-fetch, web-search         |
 | System（2）  | config, mcp                   |
 
-### Skills 系统（11 个内置技能）
+### Skills 系统（15 个内置技能）
 
-**Standard（9）**: code-review, compassionate-communication, doc-generator, github-ops, memory, self-review, superpower, tdd, web-search
+**Standard（12）**: code-review, compassionate-communication, doc-generator, github-ops, memory, mipham-code-setup, security-review, self-review, superpower, tdd, web-access, web-search
 
-**Mipham Exclusive（2）**: om-model-optimize, om-security
+**Mipham Exclusive（3）**: om-artifact, om-model-optimize, om-security
 
 双轨运行时：standard 轨用于社区 Skills，mipham 轨用于 MiphamAI 专有功能。
+
+### Slash 命令系统（89 个）
+
+按分类分布：Session & Identity（21）、Workflow（16）、Tools & Skills（13）、Model & Provider（11）、Project（7）、Code Quality（5）、History（4）、GitHub（4）、Environment（4）、Account（3）、Agents（2）、Artifact（1）、Other（1）。
+
+### 记忆系统
+
+- **Memory 工具** — AI 可自主 `read`/`write`/`list` 持久化记忆
+- **`/memory` 命令** — 用户查看所有已存记忆
+- **自动分析引擎** — 对话后自动识别值得持久化的信息
+- 存储位置：`~/.mipham/memory/*.md`（YAML frontmatter + Markdown）
 
 ### 核心引擎
 
@@ -148,7 +159,8 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Core     | 3      | 60      | context, hooks, permission                    |
 | Tools    | 5      | 132     | agent, exec, file, network-system, skills     |
 | E2E      | 1      | 8       | full-pipeline                                 |
-| **合计** | **14** | **295** | **0 失败**                                    |
+| Other    | 31     | 263     | commands, skills, scheduling, ui, memory 等    |
+| **合计** | **44** | **529** | **16 失败, 7 错误**（WIP）                    |
 
 测试框架: Vitest 3，mock: `test/__mocks__/bun.ts`
 
@@ -275,11 +287,10 @@ mipham-code 变更（包名/版本）
 
 ## 下一步计划
 
-1. **npm 发布** — @miphamai/cli 已发布至 npm registry
-2. **MCP 客户端** — 完整 stdio 实现
-3. **Web UI** — 完善产品页内容
-4. **macOS .app** — 将 CLI 打包为 macOS 应用包（.icns 已就绪）
-5. **CI/CD** — 接入自动化发布流水线
+1. **Web UI** — 完善产品页内容
+2. **macOS .app** — 将 CLI 打包为 macOS 应用包（.icns 已就绪）
+3. **MCP 生态扩展** — 更多 MCP Server 集成
+4. **多语言国际化** — CLI 和 Web 的 i18n 支持
 
 ---
 
@@ -287,5 +298,6 @@ mipham-code 变更（包名/版本）
 
 | 版本  | 日期       | 变更内容                                                             | 维护人     |
 | ----- | ---------- | -------------------------------------------------------------------- | ---------- |
+| 1.2.0 | 2026-06-15 | 修正 Slash 命令（54→89）、Skills（11→15）、补充记忆系统、更新下一步计划 | 技术委员会 |
 | 1.1.0 | 2026-06-15 | 更新最近提交表为实际 git 历史（27 commits），补充迁移说明            | 技术委员会 |
 | 1.0.0 | 2026-06-02 | 初始创建：完整架构、测试矩阵、Provider 表、Skills 清单、CI/CD 流水线 | 技术委员会 |
