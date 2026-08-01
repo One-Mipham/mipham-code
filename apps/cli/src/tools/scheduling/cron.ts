@@ -1,4 +1,11 @@
-import { mkdirSync, readFileSync, writeFileSync, unlinkSync, readdirSync, existsSync } from 'node:fs'
+import {
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  unlinkSync,
+  readdirSync,
+  existsSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
@@ -54,7 +61,8 @@ export const cronCreateTool: ToolDefinition = {
     properties: {
       cron: {
         type: 'string',
-        description: 'Standard 5-field cron expression: "M H DoM Mon DoW" (e.g. "*/5 * * * *" = every 5 min).',
+        description:
+          'Standard 5-field cron expression: "M H DoM Mon DoW" (e.g. "*/5 * * * *" = every 5 min).',
       },
       prompt: {
         type: 'string',
@@ -62,7 +70,8 @@ export const cronCreateTool: ToolDefinition = {
       },
       recurring: {
         type: 'boolean',
-        description: 'true (default) = fire on every cron match. false = fire once then auto-delete.',
+        description:
+          'true (default) = fire on every cron match. false = fire once then auto-delete.',
       },
     },
     required: ['cron', 'prompt'],
@@ -99,7 +108,8 @@ export const cronCreateTool: ToolDefinition = {
 
 export const cronDeleteTool: ToolDefinition = {
   name: 'CronDelete',
-  description: 'Cancel a cron job previously scheduled with CronCreate. Removes from ~/.mipham/cron/.',
+  description:
+    'Cancel a cron job previously scheduled with CronCreate. Removes from ~/.mipham/cron/.',
   category: 'scheduling',
   permission: 'auto',
   parameters: {

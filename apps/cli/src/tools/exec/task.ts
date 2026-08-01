@@ -37,11 +37,15 @@ export const taskTool: ToolDefinition = {
       action: {
         type: 'string',
         enum: ['create', 'list', 'update', 'get', 'delete'],
-        description: 'Action: create a task, list all, update status/fields, get one by ID, or delete.',
+        description:
+          'Action: create a task, list all, update status/fields, get one by ID, or delete.',
       },
       subject: { type: 'string', description: 'A brief, actionable title (for create/update).' },
       description: { type: 'string', description: 'What needs to be done (for create/update).' },
-      activeForm: { type: 'string', description: 'Present continuous form shown during work (for create/update).' },
+      activeForm: {
+        type: 'string',
+        description: 'Present continuous form shown during work (for create/update).',
+      },
       taskId: { type: 'string', description: 'Task ID (for update/get/delete).' },
       status: {
         type: 'string',
@@ -157,7 +161,10 @@ export const taskTool: ToolDefinition = {
 
       // Merge metadata
       if (params.metadata && typeof params.metadata === 'object') {
-        task.metadata = { ...(task.metadata || {}), ...(params.metadata as Record<string, unknown>) }
+        task.metadata = {
+          ...(task.metadata || {}),
+          ...(params.metadata as Record<string, unknown>),
+        }
       }
 
       return { success: true, content: `Task #${taskId} updated.\n${formatTask(task)}` }

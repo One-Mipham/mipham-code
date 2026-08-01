@@ -53,19 +53,13 @@ describe('ScheduleWakeup execution', () => {
   })
 
   it('stop=true cancels pending wakeups', async () => {
-    const result = await scheduleWakeupTool.execute(
-      { stop: true },
-      ctx,
-    )
+    const result = await scheduleWakeupTool.execute({ stop: true }, ctx)
     expect(result.success).toBe(true)
     expect(result.content).toContain('Loop ended')
   })
 
   it('rejects missing delaySeconds', async () => {
-    const result = await scheduleWakeupTool.execute(
-      { reason: 'test', prompt: 'check' },
-      ctx,
-    )
+    const result = await scheduleWakeupTool.execute({ reason: 'test', prompt: 'check' }, ctx)
     expect(result.success).toBe(false)
   })
 })
