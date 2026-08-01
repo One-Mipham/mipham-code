@@ -200,14 +200,14 @@ describe('/loop', () => {
 
   it('parses seconds correctly', async () => {
     const handler = getCommand('/loop')!
-    const result = await handler(mkCtx(), ['2m', 'ping'])  // 120s — within [60,3600]
+    const result = await handler(mkCtx(), ['2m', 'ping']) // 120s — within [60,3600]
     expect(result.content).toContain('2m')
     expect(result.content).toContain('ping')
   })
 
   it('parses hours correctly', async () => {
     const handler = getCommand('/loop')!
-    const result = await handler(mkCtx(), ['30min', 'full audit'])  // 1800s — within [60,3600]
+    const result = await handler(mkCtx(), ['30min', 'full audit']) // 1800s — within [60,3600]
     expect(result.content).toContain('30m')
     expect(result.content).toContain('full audit')
   })
