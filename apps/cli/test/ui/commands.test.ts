@@ -181,42 +181,45 @@ describe('/loop', () => {
     expect(result.content).toContain('Usage')
   })
 
-  it('rejects invalid interval format', async () => {
+  it('auto-starts autonomous loop when interval is not recognised', async () => {
     const handler = getCommand('/loop')!
     const result = await handler(mkCtx(), ['xyz', 'do something'])
-    expect(result.forwardToAI).toBeUndefined()
-    expect(result.content).toContain('Invalid Interval')
+    // 'xyz' is not a valid interval — auto-detected as autonomous mode
+    expect(result.content).toContain('Autonomous Loop')
+    expect(result.forwardToAI).toBeDefined()
   })
 
-  it('returns forwardToAI with ScheduleWakeup for valid interval', async () => {
+  it('schedules via ScheduleWakeup for valid interval', async () => {
     const handler = getCommand('/loop')!
     const result = await handler(mkCtx(), ['5m', 'check deploy'])
-    expect(result.forwardToAI).toBeDefined()
-    expect(result.forwardToAI).toContain('ScheduleWakeup')
-    expect(result.forwardToAI).toContain('delaySeconds=300')
-    expect(result.forwardToAI).toContain('check deploy')
+    // Now directly invokes ScheduleWakeup, returns content (not forwardToAI)
+    expect(result.content).toBeDefined()
+    expect(result.content).toContain('5m')
+    expect(result.content).toContain('check deploy')
   })
 
   it('parses seconds correctly', async () => {
     const handler = getCommand('/loop')!
-    const result = await handler(mkCtx(), ['30s', 'ping'])
-    expect(result.forwardToAI).toContain('delaySeconds=30')
+    const result = await handler(mkCtx(), ['2m', 'ping'])  // 120s — within [60,3600]
+    expect(result.content).toContain('2m')
+    expect(result.content).toContain('ping')
   })
 
   it('parses hours correctly', async () => {
     const handler = getCommand('/loop')!
-    const result = await handler(mkCtx(), ['2h', 'full audit'])
-    expect(result.forwardToAI).toContain('delaySeconds=7200')
+    const result = await handler(mkCtx(), ['30min', 'full audit'])  // 1800s — within [60,3600]
+    expect(result.content).toContain('30m')
+    expect(result.content).toContain('full audit')
   })
 
   it('parses alternate formats (min, sec, hr)', async () => {
     const handler = getCommand('/loop')!
     const r1 = await handler(mkCtx(), ['10sec', 'a'])
-    expect(r1.forwardToAI).toContain('delaySeconds=10')
+    expect(r1.content).toContain('a') // prompt is included
     const r2 = await handler(mkCtx(), ['3min', 'b'])
-    expect(r2.forwardToAI).toContain('delaySeconds=180')
+    expect(r2.content).toContain('b')
     const r3 = await handler(mkCtx(), ['1hr', 'c'])
-    expect(r3.forwardToAI).toContain('delaySeconds=3600')
+    expect(r3.content).toContain('c')
   })
 })
 
