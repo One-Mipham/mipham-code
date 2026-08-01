@@ -71,7 +71,10 @@ export class QueryEngine {
   }
 
   /** Set the session goal for goal-driven execution. */
-  setGoal(goal: string, opts?: { verifyScript?: string; verifySkill?: string; decompose?: boolean }): void {
+  setGoal(
+    goal: string,
+    opts?: { verifyScript?: string; verifySkill?: string; decompose?: boolean },
+  ): void {
     this.goal = goal
     this.goalVerifyScript = opts?.verifyScript
     this.goalVerifySkill = opts?.verifySkill
@@ -80,7 +83,13 @@ export class QueryEngine {
   }
 
   /** Get current goal state for status display. */
-  getGoalState(): { goal?: string; verifyScript?: string; verifySkill?: string; decompose: boolean; subtasks: string[] } {
+  getGoalState(): {
+    goal?: string
+    verifyScript?: string
+    verifySkill?: string
+    decompose: boolean
+    subtasks: string[]
+  } {
     return {
       goal: this.goal,
       verifyScript: this.goalVerifyScript,
@@ -348,7 +357,10 @@ export class QueryEngine {
     }
 
     if (loop >= this.maxGoalLoops) {
-      yield { type: 'text', content: `⚠ Max goal loops (${this.maxGoalLoops}) reached — goal may not be achieved.` }
+      yield {
+        type: 'text',
+        content: `⚠ Max goal loops (${this.maxGoalLoops}) reached — goal may not be achieved.`,
+      }
     }
   }
 
