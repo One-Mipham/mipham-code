@@ -255,7 +255,10 @@ describe('slash command public API', () => {
   })
 
   it('parseSlashCommand splits command and args', () => {
-    expect(parseSlashCommand('/code-review')).toEqual({ command: '/code-review', args: [] })
+    expect(parseSlashCommand('/code-review')).toEqual({
+      command: '/code-review',
+      args: [],
+    })
     expect(parseSlashCommand('/design auth module')).toEqual({
       command: '/design',
       args: ['auth', 'module'],
