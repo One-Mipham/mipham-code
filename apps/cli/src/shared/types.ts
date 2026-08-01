@@ -61,7 +61,7 @@ export interface Message {
 
 // ── Tool Types ──
 export type ToolPermission = 'auto' | 'ask' | 'bypass'
-export type ToolCategory = 'file' | 'exec' | 'agent' | 'network' | 'system' | 'artifact'
+export type ToolCategory = 'file' | 'exec' | 'agent' | 'network' | 'system' | 'artifact' | 'scheduling'
 
 export interface ToolContext {
   cwd: string

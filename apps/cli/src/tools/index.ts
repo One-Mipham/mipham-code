@@ -18,6 +18,8 @@ import { configTool } from './system/config'
 import { mcpTool } from './system/mcp'
 import { artifactTool } from './artifact/artifact'
 import { computerUseTool } from './computer/computer-use'
+import { scheduleWakeupTool } from './scheduling/schedule-wakeup.js'
+import { cronCreateTool, cronDeleteTool, cronListTool } from './scheduling/cron.js'
 
 /**
  * Validate tool parameters against the tool's JSON Schema definition.
@@ -124,6 +126,11 @@ export function createToolRegistry(): Map<string, ToolDefinition> {
     withValidation(artifactTool),
     // Computer Use tools
     withValidation(computerUseTool),
+    // Scheduling tools
+    withValidation(scheduleWakeupTool),
+    withValidation(cronCreateTool),
+    withValidation(cronDeleteTool),
+    withValidation(cronListTool),
   ]
 
   const map = new Map<string, ToolDefinition>()
