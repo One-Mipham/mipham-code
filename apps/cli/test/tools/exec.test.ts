@@ -245,10 +245,10 @@ describe('Task tool definition', () => {
     expect(params.required).toEqual(['action'])
   })
 
-  it('accepts action enum: create, list, update', () => {
+  it('accepts action enum: create, list, update, get, delete', () => {
     const params = taskTool.parameters as { properties: Record<string, unknown> }
     const action = params.properties.action as { enum: string[] }
-    expect(action.enum).toEqual(['create', 'list', 'update'])
+    expect(action.enum).toEqual(['create', 'list', 'update', 'get', 'delete'])
   })
 })
 
@@ -316,7 +316,7 @@ describe('Task tool execution', () => {
   })
 
   it('errors for unknown action', async () => {
-    const r = await taskTool.execute({ action: 'delete' }, ctx)
+    const r = await taskTool.execute({ action: 'nonexistent' }, ctx)
     expect(r.success).toBe(false)
     expect(r.error).toContain('Unknown action')
   })
