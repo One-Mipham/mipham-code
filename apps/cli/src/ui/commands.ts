@@ -74,7 +74,7 @@ const helpCmd: CommandHandler = (ctx) => {
       /cost          Token usage estimate
       /usage         Detailed usage dashboard
       /rename <name> Rename current session
-      /goal <text>   Set session goal
+      /goal <text> [--decompose] [--verify-script <path>] [--verify-skill <name>]   Set session goal with verification
       /recap         Summarize session so far
       /summary       Generate session summary
       /stats         Session usage statistics
@@ -570,17 +570,84 @@ const renameCmd: CommandHandler = (ctx, args) => {
 }
 
 const goalCmd: CommandHandler = (ctx, args) => {
-  const goal = args.join(' ')
-  if (!goal.trim()) {
+  const input = args.join(' ')
+
+  // ── Show goal status ──
+  if (!input.trim()) {
+    const state = ctx.engine.getGoalState?.() || { goal: undefined, decompose: false, subtasks: [] }
+    if (!state.goal) {
+      return {
+        content:
+          `Usage: /goal <statement> [options]\n\n` +
+          `Set a session-level completion condition with optional verification.\n\n` +
+          `Options:\n` +
+          `  --decompose              Auto-decompose goal into subtasks\n` +
+          `  --verify-script <path>   Run a shell script to check completion\n` +
+          `  --verify-skill <name>    Use a skill for verification\n\n` +
+          `Examples:\n` +
+          `  /goal Fix all TS errors and make tests pass --decompose\n` +
+          `  /goal Complete the build --verify-script ./check-build.sh\n` +
+          `  /goal Security audit passes --verify-skill security-review`,
+      }
+    }
+    const lines = [`── Goal Status ──`, '', `🎯 Goal: ${state.goal}`]
+    if (state.verifyScript) lines.push(`📜 Verification: ${state.verifyScript}`)
+    if (state.verifySkill) lines.push(`🛠  Verification skill: ${state.verifySkill}`)
+    if (state.decompose) lines.push(`📋 Decompose: enabled (${state.subtasks.length} subtasks)`)
+    lines.push('', 'Type /goal without arguments to clear.')
+    return { content: lines.join('\n') }
+  }
+
+  // ── Parse options ──
+  let goal = input
+  let decompose = false
+  let verifyScript: string | undefined
+  let verifySkill: string | undefined
+
+  // Extract --decompose
+  if (goal.includes(' --decompose')) {
+    decompose = true
+    goal = goal.replace(' --decompose', '')
+  }
+
+  // Extract --verify-script <path>
+  const scriptMatch = goal.match(/ --verify-script\s+(\S+)/)
+  if (scriptMatch) {
+    verifyScript = scriptMatch[1]!
+    goal = goal.replace(` --verify-script ${verifyScript}`, '')
+  }
+
+  // Extract --verify-skill <name>
+  const skillMatch = goal.match(/ --verify-skill\s+(\S+)/)
+  if (skillMatch) {
+    verifySkill = skillMatch[1]!
+    goal = goal.replace(` --verify-skill ${verifySkill}`, '')
+  }
+
+  goal = goal.trim()
+  if (!goal) {
+    return { content: 'Goal text is required. Use /goal without arguments to see usage.' }
+  }
+
+  ctx.setGoal(goal)
+  ctx.engine.setGoal(goal, { verifyScript, verifySkill, decompose })
+
+  const lines = [`✓ Goal set: "${goal}"`]
+  if (decompose) {
+    lines.push('📋 Decomposition: enabled — AI will break goal into subtasks')
+    // Decompose by creating initial subtasks
+    const decomposeMsg = `Break down this goal into 3-5 subtasks: "${goal}". For each subtask, use TaskCreate with the subject and description. Mark each as blocked by the previous one to create a dependency chain.`
     return {
-      content: `Usage: /goal <statement>\n\nSet a session-level completion condition. Mipham Code will track progress toward this goal.\n\nExample: /goal Fix all TypeScript errors and make tests pass`,
+      content: lines.join('\n'),
+      forwardToAI: decomposeMsg,
     }
   }
-  ctx.setGoal(goal.trim())
-  ctx.engine.setGoal(goal.trim())
-  return {
-    content: `✓ Goal set: "${goal.trim()}"\n\nUse /status to view progress. Type /goal without arguments to clear.`,
-  }
+  if (verifyScript) lines.push(`📜 Verification: ${verifyScript}`)
+  if (verifySkill) lines.push(`🛠  Verification skill: ${verifySkill}`)
+  lines.push('')
+  lines.push('Use /status to view progress. Type /goal without arguments to clear.')
+
+  return { content: lines.join('\n') }
 }
 
 const recapCmd: CommandHandler = (ctx) => {

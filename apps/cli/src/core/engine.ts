@@ -19,6 +19,14 @@ export class QueryEngine {
   private goal?: string
   private maxGoalLoops = 20
   private lastAssistantContent?: string
+  /** Custom verification shell script path for goal checking. */
+  private goalVerifyScript?: string
+  /** Custom verification skill name for goal checking. */
+  private goalVerifySkill?: string
+  /** Whether to auto-decompose goal into subtasks. */
+  private goalDecompose = false
+  /** Subtask IDs created via decomposition. */
+  private goalSubtasks: string[] = []
 
   constructor(
     private registry: ProviderRegistry,
@@ -63,8 +71,28 @@ export class QueryEngine {
   }
 
   /** Set the session goal for goal-driven execution. */
-  setGoal(goal: string): void {
+  setGoal(goal: string, opts?: { verifyScript?: string; verifySkill?: string; decompose?: boolean }): void {
     this.goal = goal
+    this.goalVerifyScript = opts?.verifyScript
+    this.goalVerifySkill = opts?.verifySkill
+    this.goalDecompose = opts?.decompose ?? false
+    this.goalSubtasks = []
+  }
+
+  /** Get current goal state for status display. */
+  getGoalState(): { goal?: string; verifyScript?: string; verifySkill?: string; decompose: boolean; subtasks: string[] } {
+    return {
+      goal: this.goal,
+      verifyScript: this.goalVerifyScript,
+      verifySkill: this.goalVerifySkill,
+      decompose: this.goalDecompose,
+      subtasks: this.goalSubtasks,
+    }
+  }
+
+  /** Register subtasks created via decomposition. */
+  addGoalSubtask(taskId: string): void {
+    this.goalSubtasks.push(taskId)
   }
 
   /** Get the last assistant text content. */
@@ -291,11 +319,59 @@ export class QueryEngine {
 
       if (!this.goal) break
 
-      // Ask AI to check the goal condition
-      const checkMsg = `Has this goal been achieved? "${this.goal}" Answer YES or NO with reason.`
+      // Build verification prompt based on mode
+      const checkMsg = this.buildGoalCheckMessage()
+
+      // If using script verification, run the script instead of asking AI
+      if (this.goalVerifyScript) {
+        const passed = await this.runScriptVerification()
+        if (passed) {
+          yield { type: 'text', content: `✅ Goal verification passed: ${this.goalVerifyScript}` }
+          break
+        }
+        // Script failed — continue looping
+        yield { type: 'text', content: `🔄 Verification script failed — continuing (loop ${loop})` }
+        continue
+      }
+
+      // If using skill verification, delegate to the skill
+      if (this.goalVerifySkill) {
+        yield { type: 'text', content: `🔍 Running verification skill: ${this.goalVerifySkill}` }
+        yield* this.process(checkMsg, signal)
+        if (this.lastAssistantContent?.includes('VERIFIED')) break
+        continue
+      }
+
+      // Default: ask AI YES/NO
       yield* this.process(checkMsg, signal)
-      // If AI responds "YES", break
       if (this.lastAssistantContent?.includes('YES')) break
+    }
+
+    if (loop >= this.maxGoalLoops) {
+      yield { type: 'text', content: `⚠ Max goal loops (${this.maxGoalLoops}) reached — goal may not be achieved.` }
+    }
+  }
+
+  /** Build the goal verification prompt. */
+  private buildGoalCheckMessage(): string {
+    if (this.goalVerifyScript) {
+      return `Run the verification script "${this.goalVerifyScript}" to check: ${this.goal}`
+    }
+    if (this.goalVerifySkill) {
+      return `Use the skill "${this.goalVerifySkill}" to verify: ${this.goal}. If the goal is achieved, respond with VERIFIED. Otherwise explain what's missing.`
+    }
+    return `Has this goal been achieved? "${this.goal}" Answer YES or NO with reason.`
+  }
+
+  /** Run a shell script for goal verification. */
+  private async runScriptVerification(): Promise<boolean> {
+    if (!this.goalVerifyScript) return false
+    try {
+      const { execSync } = await import('node:child_process')
+      execSync(this.goalVerifyScript, { timeout: 30000, stdio: 'pipe' })
+      return true // exit code 0 = success
+    } catch {
+      return false // non-zero exit = not yet achieved
     }
   }
 
