@@ -181,8 +181,8 @@ describeIf('E2E: Tool Usage', () => {
     const tools = createToolRegistry()
     const toolNames = Array.from(tools.keys())
 
-    // Verify all 19 tools are registered (16 built-in + MCP + Workflow + Agent)
-    expect(toolNames.length).toBe(19)
+    // Verify all tools are registered (16 built-in + MCP + Workflow + Agent + Scheduling)
+    expect(toolNames.length).toBe(23)
     expect(toolNames).toContain('Read')
     expect(toolNames).toContain('Write')
     expect(toolNames).toContain('Edit')
