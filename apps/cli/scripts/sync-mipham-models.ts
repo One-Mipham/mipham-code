@@ -125,9 +125,7 @@ async function main() {
     status: 'active',
   }
   try {
-    const existing: SnapshotFile = JSON.parse(
-      readFileSync(OUTPUT_FILE, 'utf-8'),
-    )
+    const existing: SnapshotFile = JSON.parse(readFileSync(OUTPUT_FILE, 'utf-8'))
     provider = existing.provider
   } catch {
     // Use defaults
@@ -135,7 +133,7 @@ async function main() {
 
   const snapshot: SnapshotFile = {
     _comment:
-      "Mipham model definitions — synced from Engine GET /v1/mipham-models. " +
+      'Mipham model definitions — synced from Engine GET /v1/mipham-models. ' +
       "Run 'bun run scripts/sync-mipham-models.ts' to update.",
     provider,
     models,
@@ -143,9 +141,7 @@ async function main() {
   }
 
   writeFileSync(OUTPUT_FILE, JSON.stringify(snapshot, null, 2) + '\n')
-  console.log(
-    `✅ Synced ${models.length} Mipham models → packages/shared/src/mipham-models.json`,
-  )
+  console.log(`✅ Synced ${models.length} Mipham models → packages/shared/src/mipham-models.json`)
   console.log(`   Synced at: ${snapshot.synced_at}`)
   for (const m of models) {
     console.log(`   • ${m.id} (ctx=${m.contextWindow.toLocaleString()}, status=${m.status})`)
