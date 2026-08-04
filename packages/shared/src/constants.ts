@@ -1,4 +1,28 @@
-import type { ProviderConfig } from './types'
+import type { ProviderConfig, ModelInfo } from './types'
+import miphamModelsSnapshot from './mipham-models.json' with { type: 'json' }
+
+// Build MiphamAI provider from synced model definitions.
+// Source of truth: Engine GET /v1/mipham-models → packages/shared/src/mipham-models.json
+// Run `bun run scripts/sync-mipham-models.ts` to update from Engine.
+const MIPHAM_MODELS: ModelInfo[] = miphamModelsSnapshot.models.map((m) => ({
+  id: m.id,
+  name: m.name,
+  providerId: m.providerId,
+  contextWindow: m.contextWindow,
+  maxOutput: m.maxOutput,
+  vision: m.vision,
+  status: m.status as 'active' | 'upcoming' | 'deprecated',
+}))
+
+const MIPHAM_PROVIDER: ProviderConfig = {
+  id: miphamModelsSnapshot.provider.id,
+  name: miphamModelsSnapshot.provider.name,
+  protocol: miphamModelsSnapshot.provider.protocol as 'openai-compatible',
+  baseUrl: miphamModelsSnapshot.provider.baseUrl,
+  apiKey: miphamModelsSnapshot.provider.apiKey,
+  models: MIPHAM_MODELS,
+  status: miphamModelsSnapshot.provider.status as 'active' | 'upcoming',
+}
 
 // Providers: alphabetical by id. Models: Lite/Flash → Text → Vision → Code → Pro/Think
 export const DEFAULT_PROVIDERS: ProviderConfig[] = [
@@ -244,52 +268,7 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
       },
     ],
   },
-  {
-    id: 'mipham',
-    name: 'MiphamAI',
-    protocol: 'openai-compatible',
-    baseUrl: 'https://api.mipham.ai/v1',
-    apiKey: '${MIPHAM_API_KEY}',
-    models: [
-      {
-        id: 'om-V5-Flash',
-        name: 'OM V5 Flash',
-        providerId: 'mipham',
-        contextWindow: 1_000_000,
-        maxOutput: 128_000,
-        vision: false,
-        status: 'active',
-      },
-      {
-        id: 'om-V5-Pro',
-        name: 'OM V5 Pro',
-        providerId: 'mipham',
-        contextWindow: 1_000_000,
-        maxOutput: 128_000,
-        vision: false,
-        status: 'active',
-      },
-      {
-        id: 'om-V5-Visual',
-        name: 'OM V5 Visual',
-        providerId: 'mipham',
-        contextWindow: 200_000,
-        maxOutput: 32_000,
-        vision: true,
-        status: 'active',
-      },
-      {
-        id: 'om-V5-Apex',
-        name: 'OM V5 Apex',
-        providerId: 'mipham',
-        contextWindow: 200_000,
-        maxOutput: 32_768,
-        vision: false,
-        status: 'active',
-      },
-    ],
-    status: 'active',
-  },
+  MIPHAM_PROVIDER,
   {
     id: 'openai',
     name: 'OpenAI',
