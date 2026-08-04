@@ -45,7 +45,6 @@ function createMockProc(stdoutText = '', stderrText = '', exitCode = 0): MockedP
 
 function mockSpawn(stdoutText = '', stderrText = '', exitCode = 0): MockedProc {
   const proc = createMockProc(stdoutText, stderrText, exitCode)
-  // @ts-expect-error Bun.spawn return type is complex; mock return is fine for tests
   vi.spyOn(Bun, 'spawn').mockReturnValue(proc as any)
   return proc
 }
@@ -106,7 +105,6 @@ describe('Bash tool execution', () => {
 
   it('passes cwd to spawned process', async () => {
     const proc = createMockProc()
-    // @ts-expect-error mock
     vi.spyOn(Bun, 'spawn').mockImplementation((_cmd: any, opts: any) => {
       expect(opts.cwd).toBe(ctx.cwd)
       return proc as any
@@ -117,7 +115,6 @@ describe('Bash tool execution', () => {
   it('truncates long output', async () => {
     const longText = 'x'.repeat(200_000)
     const proc = createMockProc(longText)
-    // @ts-expect-error mock
     vi.spyOn(Bun, 'spawn').mockReturnValue(proc as any)
 
     const result = await bashTool.execute({ command: 'cat bigfile' }, ctx)
@@ -150,7 +147,6 @@ describe('Git tool execution', () => {
 
   function mockGitSpawn(stdoutText = '', stderrText = '', exitCode = 0): MockedProc {
     const proc = createMockProc(stdoutText, stderrText, exitCode)
-    // @ts-expect-error mock
     vi.spyOn(Bun, 'spawn').mockReturnValue(proc as any)
     return proc
   }
@@ -180,7 +176,6 @@ describe('Git tool execution', () => {
   })
 
   it('handles spawn errors gracefully', async () => {
-    // @ts-expect-error mock
     vi.spyOn(Bun, 'spawn').mockImplementation(() => {
       throw new Error('Spawn failed')
     })
