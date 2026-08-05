@@ -77,7 +77,8 @@ export class SubAgent {
     const agentDef = options.agentDef
 
     // Resolve system prompt: agentDef > options.systemPrompt > builtin type
-    const systemPrompt = agentDef?.systemPrompt || options.systemPrompt || TYPE_SYSTEM_PROMPTS[agentType]
+    const systemPrompt =
+      agentDef?.systemPrompt || options.systemPrompt || TYPE_SYSTEM_PROMPTS[agentType]
 
     // Create isolated context with tool scoping
     const resolvedDef: AgentDefinition = agentDef || {

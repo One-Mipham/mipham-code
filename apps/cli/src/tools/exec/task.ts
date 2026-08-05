@@ -73,17 +73,20 @@ export const taskTool: ToolDefinition = {
       status: {
         type: 'string',
         enum: ['pending', 'in_progress', 'completed', 'deleted', 'failed'],
-        description: 'New status. "deleted" permanently removes the task, "failed" marks as failed.',
+        description:
+          'New status. "deleted" permanently removes the task, "failed" marks as failed.',
       },
       addBlocks: {
         type: 'array',
         items: { type: 'string' },
-        description: 'Task IDs that this task blocks (they depend on this one). Use for create or update.',
+        description:
+          'Task IDs that this task blocks (they depend on this one). Use for create or update.',
       },
       addBlockedBy: {
         type: 'array',
         items: { type: 'string' },
-        description: 'Task IDs that block this task (this one depends on them). Use for create or update.',
+        description:
+          'Task IDs that block this task (this one depends on them). Use for create or update.',
       },
       owner: { type: 'string', description: 'Agent or user name assigned to this task.' },
       metadata: {
@@ -216,7 +219,9 @@ export const taskTool: ToolDefinition = {
       if (task.blockedBy.length) {
         const blocking = getBlockingIds(task)
         if (blocking.length > 0) {
-          lines.push(`Blocked by: ${task.blockedBy.join(', ')} (active blockers: ${blocking.join(', ')})`)
+          lines.push(
+            `Blocked by: ${task.blockedBy.join(', ')} (active blockers: ${blocking.join(', ')})`,
+          )
         } else {
           lines.push(`Blocked by: ${task.blockedBy.join(', ')} (all resolved ✓)`)
         }
@@ -272,7 +277,10 @@ export const taskTool: ToolDefinition = {
         ? ` (blocked — waiting on: ${getBlockingIds(task).join(', ')})`
         : ''
 
-      return { success: true, content: `Task #${taskId} updated.\n${formatTask(task)}${blockedNote}` }
+      return {
+        success: true,
+        content: `Task #${taskId} updated.\n${formatTask(task)}${blockedNote}`,
+      }
     }
 
     // ── DELETE ──
