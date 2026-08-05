@@ -152,7 +152,7 @@ pnpm format       # Prettier
 - `permission.ts` — 权限控制（6 级：default/acceptEdits/plan/auto/dontAsk/bypassPermissions）
 - `hooks.ts` — 生命周期钩子（13 种事件，含 SubagentStart/Stop/PostToolUseFailure）
 - `instructions.ts` — 指令加载链（Rismed_Ronxin → One_Mipham → mipham-code）
-- `rules-loader.ts` — 路径作用域规则（.mipham/rules/*.md → glob 匹配 → 自动注入）
+- `rules-loader.ts` — 路径作用域规则（.mipham/rules/\*.md → glob 匹配 → 自动注入）
 
 ### Agent 系统
 
@@ -230,7 +230,7 @@ GitHub Actions 5 阶段流水线：`typecheck → lint → format → build-cli 
 
 | 日期       | Commit    | 说明                                                                              |
 | ---------- | --------- | --------------------------------------------------------------------------------- |
-| 2026-08-05 | `e2be832` | feat: Sprint 5 — Rules 系统、Agent Memory 三级、MCP Tool Search、VS Code 扩展      |
+| 2026-08-05 | `e2be832` | feat: Sprint 5 — Rules 系统、Agent Memory 三级、MCP Tool Search、VS Code 扩展     |
 | 2026-08-05 | `8640a42` | chore: auto-format before push                                                    |
 | 2026-08-05 | `8dd6abd` | chore: bump version to 0.10.0 — 五 Sprint 交付                                    |
 | 2026-08-05 | `6a90174` | feat: Sprint 3 — plan mode, 6 permissions, subagent hooks, agent view             |
@@ -291,10 +291,10 @@ mipham-code 变更（包名/版本）
 
 ### 修订历史
 
-| 版本  | 日期       | 变更内容                                                                        | 维护人     |
-| ----- | ---------- | ------------------------------------------------------------------------------- | ---------- |
+| 版本  | 日期       | 变更内容                                                                          | 维护人     |
+| ----- | ---------- | --------------------------------------------------------------------------------- | ---------- |
 | 1.4.0 | 2026-08-05 | Sprint 5：Rules 系统、Agent Memory 三级、MCP Tool Search（30 工具）、VS Code 扩展 | 技术委员会 |
-| 1.3.0 | 2026-08-05 | v0.10.0 Sprint 1-4：29 工具、后台 Agent、Worktree、Plan Mode、6 级权限、642 测试 | 技术委员会 |
-| 1.2.0 | 2026-06-15 | 修正 Slash 命令（54→89）、Skills（11→15）、补充记忆系统、更新下一步计划         | 技术委员会 |
-| 1.1.0 | 2026-06-15 | 更新最近提交表为实际 git 历史（27 commits），补充迁移说明                       | 技术委员会 |
-| 1.0.0 | 2026-06-02 | 初始创建：完整架构、测试矩阵、Provider 表、Skills 清单、CI/CD 流水线            | 技术委员会 |
+| 1.3.0 | 2026-08-05 | v0.10.0 Sprint 1-4：29 工具、后台 Agent、Worktree、Plan Mode、6 级权限、642 测试  | 技术委员会 |
+| 1.2.0 | 2026-06-15 | 修正 Slash 命令（54→89）、Skills（11→15）、补充记忆系统、更新下一步计划           | 技术委员会 |
+| 1.1.0 | 2026-06-15 | 更新最近提交表为实际 git 历史（27 commits），补充迁移说明                         | 技术委员会 |
+| 1.0.0 | 2026-06-02 | 初始创建：完整架构、测试矩阵、Provider 表、Skills 清单、CI/CD 流水线              | 技术委员会 |
