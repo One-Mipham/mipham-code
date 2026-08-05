@@ -12,6 +12,8 @@ import { exitWorktreeTool } from './exec/exit-worktree'
 import { agentTool } from './agent/agent'
 import { skillTool } from './agent/skill'
 import { planTool } from './agent/plan'
+import { enterPlanModeTool } from './agent/enter-plan'
+import { exitPlanModeTool } from './agent/exit-plan'
 import { memoryTool } from './agent/memory'
 import { workflowTool } from './agent/workflow'
 import { webFetchTool } from './network/web-fetch'
@@ -120,6 +122,8 @@ export function createToolRegistry(): Map<string, ToolDefinition> {
     withValidation(agentTool),
     withValidation(skillTool),
     withValidation(planTool),
+    withValidation(enterPlanModeTool),
+    withValidation(exitPlanModeTool),
     withValidation(memoryTool),
     withValidation(workflowTool),
     withValidation(reportFindingsTool),

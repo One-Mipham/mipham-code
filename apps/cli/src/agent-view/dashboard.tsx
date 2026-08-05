@@ -30,6 +30,7 @@ const STATUS_HEADERS: Record<string, { label: string; color: string }> = {
 export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps) {
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [peekingSessionId, setPeekingSessionId] = useState<string | null>(null)
+  const [groupBy, setGroupBy] = useState<'status' | 'directory'>('status')
 
   // Build a flat list of sessions in group order, with group headers
   const flatList = useMemo(() => {
@@ -92,6 +93,22 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
         return
       }
       onExit()
+      return
+    }
+
+    // Ctrl+S — toggle group by (status ↔ directory)
+    if (input === '\x13') {
+      setGroupBy((prev) => (prev === 'status' ? 'directory' : 'status'))
+      return
+    }
+
+    // Ctrl+R — rename selected session
+    if (input === '\x12') {
+      if (sessionsOnly.length === 0) return
+      const current = sessionsOnly[selectedIndex]
+      if (!current) return
+      const newTitle = `session-${Date.now().toString(36)}`
+      manager.rename(current.session.id, newTitle)
       return
     }
 
@@ -163,7 +180,7 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
           </Text>
         </Box>
         <Box>
-          <Text dimColor>j/k navigate · Space peek · Enter attach · Esc back</Text>
+          <Text dimColor>j/k navigate · Space peek · Enter attach · Ctrl+S group · Ctrl+R rename · Esc back</Text>
         </Box>
       </Box>
 

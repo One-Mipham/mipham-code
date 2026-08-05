@@ -107,6 +107,56 @@ export class HookEngine {
     return this.runHooks('ConfigChange', undefined, ctx)
   }
 
+  /** SubagentStart: fires when a sub-agent begins execution. */
+  async executeSubagentStart(
+    agentType: string,
+    description: string,
+    sessionId: string,
+  ): Promise<HookResult> {
+    const ctx: HookContext = {
+      event: 'SubagentStart',
+      sessionId,
+      toolInput: { agentType, description },
+    }
+    return this.runHooks('SubagentStart', undefined, ctx)
+  }
+
+  /** SubagentStop: fires when a sub-agent completes (success or failure). */
+  async executeSubagentStop(
+    agentType: string,
+    description: string,
+    sessionId: string,
+    success: boolean,
+    result?: string,
+  ): Promise<HookResult> {
+    const ctx: HookContext = {
+      event: 'SubagentStop',
+      sessionId,
+      toolInput: { agentType, description, success },
+      toolResult: result
+        ? { success, content: result.slice(0, 2000) }
+        : undefined,
+    }
+    return this.runHooks('SubagentStop', undefined, ctx)
+  }
+
+  /** PostToolUseFailure: fires when a tool call fails. */
+  async executePostToolUseFailure(
+    toolName: string,
+    toolInput: Record<string, unknown>,
+    error: string,
+    sessionId: string,
+  ): Promise<HookResult> {
+    const ctx: HookContext = {
+      event: 'PostToolUseFailure',
+      toolName,
+      toolInput,
+      toolResult: { success: false, content: '', error },
+      sessionId,
+    }
+    return this.runHooks('PostToolUseFailure', toolName, ctx)
+  }
+
   // ── Core execution ──
 
   private async runHooks(

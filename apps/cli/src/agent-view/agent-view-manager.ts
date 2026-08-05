@@ -201,6 +201,16 @@ export class AgentViewManager {
   }
 
   /**
+   * Rename a session's title. Returns true if found and renamed.
+   */
+  rename(id: string, newTitle: string): boolean {
+    const session = this.sessions.get(id)
+    if (!session) return false
+    session.title = newTitle
+    return true
+  }
+
+  /**
    * Remove all completed and failed sessions (cleanup).
    */
   prune(): number {

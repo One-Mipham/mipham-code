@@ -3,6 +3,7 @@ import type { ToolDefinition } from '../shared/index.ts'
 import type { SubAgentType, SubAgentOptions, AgentDefinition } from './types'
 import { createAgentContext } from './agent-context'
 import { getBackgroundAgentRegistry } from './background-registry'
+import type { HookEngine } from '../core/hooks'
 
 const TYPE_SYSTEM_PROMPTS: Record<SubAgentType, string> = {
   general: 'You are a focused sub-agent. Complete the assigned task thoroughly and return results.',
@@ -26,6 +27,7 @@ export class SubAgent {
   constructor(
     private registry: ProviderRegistry,
     private toolRegistry: Map<string, ToolDefinition>,
+    private hookEngine?: HookEngine,
   ) {}
 
   /**
@@ -41,22 +43,57 @@ export class SubAgent {
     description: string,
     options: SubAgentOptions = {},
   ): Promise<string> {
+    const agentType = options.type || 'general'
+
+    // ── Fire SubagentStart hook ──
+    if (this.hookEngine) {
+      await this.hookEngine.executeSubagentStart(agentType, description, 'sub-agent')
+    }
+
     // ── Background execution path ──
     if (options.runInBackground) {
       const bgRegistry = getBackgroundAgentRegistry()
-      const type = options.type || 'general'
-      const agentDef = options.agentDef
 
-      const taskId = bgRegistry.spawn(description, type, async (signal) => {
+      const taskId = bgRegistry.spawn(description, agentType, async (signal) => {
         // Run the synchronous execution inside the background executor
         return this.runExecution(prompt, options, signal)
+      })
+
+      // Register completion callback for hook firing
+      bgRegistry.onComplete(taskId, (task) => {
+        if (this.hookEngine) {
+          this.hookEngine.executeSubagentStop(
+            agentType,
+            description,
+            taskId,
+            task.status === 'completed',
+            task.result || task.error,
+          )
+        }
       })
 
       return `[background-task:${taskId}]`
     }
 
     // ── Synchronous execution path ──
-    return this.runExecution(prompt, options)
+    try {
+      const result = await this.runExecution(prompt, options)
+      if (this.hookEngine) {
+        await this.hookEngine.executeSubagentStop(agentType, description, 'sub-agent', true, result)
+      }
+      return result
+    } catch (err) {
+      if (this.hookEngine) {
+        await this.hookEngine.executeSubagentStop(
+          agentType,
+          description,
+          'sub-agent',
+          false,
+          String(err),
+        )
+      }
+      throw err
+    }
   }
 
   /**

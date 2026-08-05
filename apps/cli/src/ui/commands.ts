@@ -392,18 +392,15 @@ const skillsCmd: CommandHandler = (ctx) => {
 // Workflow
 // ═══════════════════════════════════════════════════════════════
 
-const planCmd: CommandHandler = (_ctx) => ({
-  content: stripIndent`
-    ── Plan Mode ──
-    Plan mode activated — read-only analysis and design.
-    No code will be modified. Use /no-plan to exit.
-
-    In plan mode you can:
-    • Explore codebase and analyze architecture
-    • Design implementation approaches
-    • Create structured plans before coding
-  `,
-})
+const planCmd: CommandHandler = (_ctx, args) => {
+  const description = args.join(' ') || undefined
+  return {
+    content: '── Plan Mode ──\n\nEntering plan mode — read-only analysis and design.\nUse EnterPlanMode to start, ExitPlanMode to submit for approval.',
+    forwardToAI: description
+      ? `Use EnterPlanMode with description: "${description}". Then explore, design, and use ExitPlanMode when ready for approval.`
+      : 'Use EnterPlanMode to enter plan mode. Explore the codebase, design an approach, then use ExitPlanMode to submit for approval.',
+  }
+}
 
 const tddCmd: CommandHandler = (_ctx, args) => {
   const target = args.join(' ') || 'the current task'

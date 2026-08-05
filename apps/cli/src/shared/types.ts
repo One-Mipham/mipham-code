@@ -185,6 +185,7 @@ export interface SkillDefinition {
 export type HookEvent =
   | 'PreToolUse'
   | 'PostToolUse'
+  | 'PostToolUseFailure'
   | 'SessionStart'
   | 'SessionEnd'
   | 'Notification'
@@ -193,6 +194,8 @@ export type HookEvent =
   | 'PreCompact'
   | 'PostCompact'
   | 'ConfigChange'
+  | 'SubagentStart'
+  | 'SubagentStop'
 
 export type HookType = 'command' | 'http' | 'code' | 'mcp_tool'
 

@@ -15,6 +15,7 @@ import {
   handleSwitch,
   type CommandContext,
 } from './commands'
+import type { PermissionMode } from '../shared/index.ts'
 
 interface AppProps {
   engine: QueryEngine
@@ -49,13 +50,29 @@ interface AgentProgress {
 // Version is read fresh from package.json at startup via runApp prop
 // (bypasses Bun module caching after npm update)
 
-type PermissionMode = 'auto' | 'ask' | 'bypass'
-
-const PERMISSION_MODES: PermissionMode[] = ['auto', 'ask', 'bypass']
+const PERMISSION_MODES: PermissionMode[] = [
+  'default',
+  'acceptEdits',
+  'plan',
+  'auto',
+  'dontAsk',
+  'bypassPermissions',
+]
 const PERMISSION_LABELS: Record<PermissionMode, string> = {
-  auto: 'auto mode on',
-  ask: 'ask mode (confirm each action)',
-  bypass: 'bypass mode (skip all checks)',
+  default: 'default · reads free',
+  acceptEdits: 'accept edits · reads + edits free',
+  plan: 'plan mode · read-only',
+  auto: 'auto mode · hooks gate',
+  dontAsk: "don't ask · pre-approved only",
+  bypassPermissions: 'bypass · skip all checks',
+}
+const PERMISSION_COLORS: Record<PermissionMode, string> = {
+  default: 'white',
+  acceptEdits: 'blue',
+  plan: 'yellow',
+  auto: 'green',
+  dontAsk: 'cyan',
+  bypassPermissions: 'red',
 }
 
 export function App({
@@ -78,7 +95,7 @@ export function App({
   const [effort, setEffort] = useState('high')
   const [focusMode, setFocusMode] = useState(false)
   const [goalText, setGoalText] = useState('')
-  const [permissionMode, setPermissionMode] = useState<PermissionMode>('auto')
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>('default')
   const abortRef = useRef<AbortController | null>(null)
   const [agentProgress, setAgentProgress] = useState<AgentProgress | null>(null)
   const [agentElapsed, setAgentElapsed] = useState(0)
@@ -383,13 +400,13 @@ export function App({
       })
       return
     }
-    // Shift+Tab → cycle permission mode (auto → ask → bypass → auto)
+    // Shift+Tab → cycle through all 6 permission modes
     if (key.shift && key.tab) {
       setPermissionMode((prev) => {
         const idx = PERMISSION_MODES.indexOf(prev)
         const next = PERMISSION_MODES[(idx + 1) % PERMISSION_MODES.length]!
-        // Sync to engine
-        engine.getPermission().setDefaultLevel(next)
+        // Sync to engine — use setMode for proper mode semantics
+        engine.getPermission().setMode(next)
         return next
       })
       return
@@ -459,17 +476,12 @@ export function App({
           </Box>
         )}
         <Box flexDirection="row">
-          <Text
-            color={
-              permissionMode === 'auto' ? 'green' : permissionMode === 'ask' ? 'yellow' : 'red'
-            }
-          >
+          <Text color={PERMISSION_COLORS[permissionMode]}>
             ● {PERMISSION_LABELS[permissionMode]}
           </Text>
-          <Text dimColor> · ⏵⏵ accept edits on</Text>
-          <Text dimColor> (Shift+Tab to cycle)</Text>
-          <Text dimColor> · Ctrl+P pick · /help /commands · Esc cancel</Text>
-          <Text dimColor> · ← agents</Text>
+          <Text dimColor> · Shift+Tab mode</Text>
+          <Text dimColor> · Ctrl+P model · Ctrl+O expand</Text>
+          <Text dimColor> · Esc cancel · /help · ← agents</Text>
         </Box>
       </Box>
     </Box>
