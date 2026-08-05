@@ -245,10 +245,7 @@ export class MetricsRegistry {
       'Number of CLI invocations',
     )
 
-    this.toolCalls = this.counter(
-      'mipham_code_tool_calls_total',
-      'Number of tool invocations',
-    )
+    this.toolCalls = this.counter('mipham_code_tool_calls_total', 'Number of tool invocations')
 
     this.modelRequests = this.counter(
       'mipham_code_model_requests_total',
@@ -266,10 +263,7 @@ export class MetricsRegistry {
       [50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000],
     )
 
-    this.activeSessions = this.gauge(
-      'mipham_code_active_sessions',
-      'Number of active CLI sessions',
-    )
+    this.activeSessions = this.gauge('mipham_code_active_sessions', 'Number of active CLI sessions')
   }
 
   // ── Factory methods ─────────────────────────────────────────────
@@ -288,12 +282,7 @@ export class MetricsRegistry {
     return g
   }
 
-  histogram(
-    name: string,
-    help: string,
-    buckets?: number[],
-    labels?: MetricLabels,
-  ): Histogram {
+  histogram(name: string, help: string, buckets?: number[], labels?: MetricLabels): Histogram {
     const h = new Histogram(name, help, buckets, labels)
     if (this._histograms.has(h.key)) return this._histograms.get(h.key)!
     this._histograms.set(h.key, h)
