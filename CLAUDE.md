@@ -4,8 +4,8 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 1.3.0
-> **最后更新**: 2026-08-05 — v0.10.0 三 Sprint 交付：29 工具、后台 Agent、Worktree、Plan Mode、6 级权限
+> **版本**: 1.4.0
+> **最后更新**: 2026-08-05 — v0.10.0 五 Sprint 交付：30 工具、Rules、Agent Memory、MCP Tool Search、VS Code 扩展
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -45,22 +45,26 @@ mipham-code/
 │   ├── cli/                    # CLI 终端（Bun + React/Ink）
 │   │   ├── bin/mipham.ts       # 入口（commander）
 │   │   ├── src/
-│   │   │   ├── core/           # engine, context, permission, hooks, instructions
+│   │   │   ├── core/           # engine, context, permission, hooks, instructions, rules-loader
 │   │   │   ├── providers/      # anthropic, openai-compat, registry, bootstrap
-│   │   │   ├── tools/          # 16 个工具（file/exec/agent/network/system）
+│   │   │   ├── tools/          # 30 个工具（file/exec/agent/network/system/scheduling/artifact/computer）
 │   │   │   ├── skills/         # loader + standard/mipham 双轨运行时
-│   │   │   ├── mcp/            # MCP 客户端（stub）
+│   │   │   ├── mcp/            # MCP 客户端 + Tool Search
+│   │   │   ├── agent/          # 后台 Agent、消息总线、类型定义
+│   │   │   ├── agent-view/     # Agent 会话管理 UI
+│   │   │   ├── workflow/       # Workflow 运行时 + Schema 验证
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
-│   │   ├── skills/             # 11 个内置技能（9 standard + 2 mipham）
-│   │   ├── test/               # 44 个测试文件，529 个测试
+│   │   ├── skills/             # 15 个内置技能（12 standard + 3 mipham）
+│   │   ├── test/               # 57 个测试文件，642 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
 ├── packages/
 │   └── shared/                 # 共享类型、常量（@mipham/shared）
 ├── infrastructure/
-│   └── brew/mipham.rb          # Homebrew formula
+│   ├── brew/mipham.rb          # Homebrew formula
+│   └── vscode/                 # VS Code 扩展（package.json + extension.js）
 ├── docs/superpowers/           # 设计规格 + 实施计划
 ├── install.sh                  # 一键安装脚本
 └── MIPHAM.md                   # AI 人格定义 v2.0（compassionate communication）
@@ -109,7 +113,7 @@ pnpm format       # Prettier
 
 模型按能力等级排序（Ultra → Pro → Plus → Flash → Lite），Ctrl+P 调用两级选择器。
 
-### 工具层（29 个工具）
+### 工具层（30 个工具）
 
 | 分类            | 工具                                                                                           |
 | --------------- | ---------------------------------------------------------------------------------------------- |
@@ -117,7 +121,7 @@ pnpm format       # Prettier
 | Exec（5）       | bash, git, task, EnterWorktree, ExitWorktree                                                   |
 | Agent（9）      | agent, skill, plan, memory, workflow, EnterPlanMode, ExitPlanMode, ReportFindings, SendMessage |
 | Network（2）    | web-fetch, web-search                                                                          |
-| System（2）     | config, mcp                                                                                    |
+| System（3）     | config, mcp, tool-search                                                                       |
 | Artifact（1）   | artifact                                                                                       |
 | Computer（1）   | computer-use                                                                                   |
 | Scheduling（4） | schedule-wakeup, cron-create, cron-delete, cron-list                                           |
@@ -143,11 +147,20 @@ pnpm format       # Prettier
 
 ### 核心引擎
 
-- `engine.ts` — 对话引擎（消息管理、工具调用编排、SSE 流式输出）
+- `engine.ts` — 对话引擎（消息管理、工具调用编排、SSE 流式输出、Rules 注入、后台任务通知）
 - `context.ts` — 上下文管理（系统提示、历史压缩）
-- `permission.ts` — 权限控制（工具执行许可）
-- `hooks.ts` — 生命周期钩子
+- `permission.ts` — 权限控制（6 级：default/acceptEdits/plan/auto/dontAsk/bypassPermissions）
+- `hooks.ts` — 生命周期钩子（13 种事件，含 SubagentStart/Stop/PostToolUseFailure）
 - `instructions.ts` — 指令加载链（Rismed_Ronxin → One_Mipham → mipham-code）
+- `rules-loader.ts` — 路径作用域规则（.mipham/rules/*.md → glob 匹配 → 自动注入）
+
+### Agent 系统
+
+- `sub-agent.ts` — 子代理执行（同步 + 后台异步，AbortController）
+- `background-registry.ts` — 后台代理生命周期管理（spawn/get/list/stop/onComplete）
+- `message-bus.ts` — 代理间消息队列（post/poll/read/unreadCount）
+- `agent-context.ts` — 代理上下文 + 三级记忆加载（user/project/local）
+- `types.ts` — AgentDefinition（含 memory 字段：user|project|local）
 
 ### MIPHAM.md 人格系统
 
@@ -164,7 +177,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5      | 132     | agent, exec, file, network-system, skills     |
 | E2E      | 1      | 8       | full-pipeline                                 |
 | Other    | 31     | 263     | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **44** | **642** | **0 失败** ✅                                 |
+| **合计** | **57** | **642** | **0 失败** ✅                                 |
 
 测试框架: Vitest 3，mock: `test/__mocks__/bun.ts`
 
@@ -217,7 +230,9 @@ GitHub Actions 5 阶段流水线：`typecheck → lint → format → build-cli 
 
 | 日期       | Commit    | 说明                                                                              |
 | ---------- | --------- | --------------------------------------------------------------------------------- |
-| 2026-08-05 | `8dd6abd` | chore: bump version to 0.10.0 — 三 Sprint 交付                                    |
+| 2026-08-05 | `e2be832` | feat: Sprint 5 — Rules 系统、Agent Memory 三级、MCP Tool Search、VS Code 扩展      |
+| 2026-08-05 | `8640a42` | chore: auto-format before push                                                    |
+| 2026-08-05 | `8dd6abd` | chore: bump version to 0.10.0 — 五 Sprint 交付                                    |
 | 2026-08-05 | `6a90174` | feat: Sprint 3 — plan mode, 6 permissions, subagent hooks, agent view             |
 | 2026-08-05 | `40a22ca` | feat: Sprint 2 — workflow resume, worktree isolation, SendMessage, ReportFindings |
 | 2026-08-05 | `f35d387` | feat: Sprint 1 — background agents, task deps, workflow schema validation         |
@@ -265,11 +280,12 @@ mipham-code 变更（包名/版本）
 
 ## 下一步计划
 
-1. **IDE 集成** — VS Code 扩展 + JetBrains 插件
-2. **MCP 深度集成** — Tool Search、动态工具更新、OAuth 认证
-3. **1M 上下文窗口** — 对标 Claude Code Sonnet 5
-4. **macOS .app** — 将 CLI 打包为 macOS 应用包（.icns 已就绪）
-5. **多语言国际化** — CLI 和 Web 的 i18n 支持
+1. **VS Code 扩展发布** — 发布到 VS Code Marketplace
+2. **JetBrains 插件** — IntelliJ/WebStorm 终端集成
+3. **MCP 深度集成** — OAuth 认证、动态工具更新、Tool Search 增强
+4. **1M 上下文窗口** — 对标 Claude Code Sonnet 5
+5. **macOS .app** — 将 CLI 打包为 macOS 应用包（.icns 已就绪）
+6. **多语言国际化** — CLI 和 Web 的 i18n 支持
 
 ---
 
@@ -277,7 +293,8 @@ mipham-code 变更（包名/版本）
 
 | 版本  | 日期       | 变更内容                                                                        | 维护人     |
 | ----- | ---------- | ------------------------------------------------------------------------------- | ---------- |
-| 1.3.0 | 2026-08-05 | v0.10.0 三 Sprint：29 工具、后台 Agent、Worktree、Plan Mode、6 级权限、642 测试 | 技术委员会 |
+| 1.4.0 | 2026-08-05 | Sprint 5：Rules 系统、Agent Memory 三级、MCP Tool Search（30 工具）、VS Code 扩展 | 技术委员会 |
+| 1.3.0 | 2026-08-05 | v0.10.0 Sprint 1-4：29 工具、后台 Agent、Worktree、Plan Mode、6 级权限、642 测试 | 技术委员会 |
 | 1.2.0 | 2026-06-15 | 修正 Slash 命令（54→89）、Skills（11→15）、补充记忆系统、更新下一步计划         | 技术委员会 |
 | 1.1.0 | 2026-06-15 | 更新最近提交表为实际 git 历史（27 commits），补充迁移说明                       | 技术委员会 |
 | 1.0.0 | 2026-06-02 | 初始创建：完整架构、测试矩阵、Provider 表、Skills 清单、CI/CD 流水线            | 技术委员会 |
