@@ -74,6 +74,7 @@ export class AgentRegistry {
                 .map((s) => s.trim())
             : undefined,
           background: (data.background as boolean) || false,
+          memory: data.memory as 'user' | 'project' | 'local' | undefined,
           source,
           filePath: fullPath,
         }

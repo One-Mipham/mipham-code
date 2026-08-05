@@ -20,6 +20,7 @@ import { webFetchTool } from './network/web-fetch'
 import { webSearchTool } from './network/web-search'
 import { configTool } from './system/config'
 import { mcpTool } from './system/mcp'
+import { toolSearchTool } from './system/tool-search'
 import { artifactTool } from './artifact/artifact'
 import { reportFindingsTool } from './agent/report-findings'
 import { sendMessageTool } from './agent/send-message'
@@ -134,6 +135,7 @@ export function createToolRegistry(): Map<string, ToolDefinition> {
     // System tools
     withValidation(configTool),
     withValidation(mcpTool),
+    withValidation(toolSearchTool),
     // Artifact tools
     withValidation(artifactTool),
     // Computer Use tools

@@ -10,6 +10,7 @@ import { getMemoryManager } from './memory/memory-loader'
 import type { AgentViewManager } from '../agent-view/agent-view-manager'
 import type { SkillsLoader } from '../skills/loader'
 import { getBackgroundAgentRegistry } from '../agent/background-registry'
+import { RulesLoader } from './rules-loader'
 
 export class QueryEngine {
   private hookEngine?: HookEngine
@@ -71,8 +72,39 @@ export class QueryEngine {
     this.skillsLoader = loader
   }
 
+  /** Rules loader for path-scoped rules injection. */
+  private rulesLoader?: RulesLoader
+  /** Files touched in the current turn (for rules matching). */
+  private touchedFiles: Set<string> = new Set()
+
+  /** Register the rules loader. */
+  setRulesLoader(loader: RulesLoader): void {
+    this.rulesLoader = loader
+    this.rulesLoader.load()
+  }
+
   /** Pending task notifications from background agents (cleared after draining). */
   private pendingTaskNotifications: Array<StreamChunk> = []
+
+  /** Track files touched by tools for rules matching. */
+  private trackTouchedFile(toolName: string, params: Record<string, unknown>): void {
+    const fileTools = ['Read', 'Write', 'Edit', 'Glob', 'Grep']
+    if (!fileTools.includes(toolName)) return
+    const filePath = (params.file_path || params.path || params.file) as string | undefined
+    if (filePath && typeof filePath === 'string') {
+      this.touchedFiles.add(filePath)
+    }
+  }
+
+  /** Inject matching rules as context after tool execution. */
+  private injectRules(): void {
+    if (!this.rulesLoader || this.touchedFiles.size === 0) return
+    const files = Array.from(this.touchedFiles)
+    const block = this.rulesLoader.buildContextBlock(files)
+    if (!block) return
+    this.context.addMessage({ role: 'user', content: block })
+    this.touchedFiles.clear()
+  }
 
   /**
    * Drain pending background task notifications.
@@ -350,6 +382,9 @@ export class QueryEngine {
         ],
       })
     }
+
+    // Inject path-scoped rules for touched files
+    this.injectRules()
 
     // Drain task notifications after tool execution
     for (const chunk of this.drainTaskNotifications()) {
@@ -633,7 +668,10 @@ export class QueryEngine {
         backgroundAgentRegistry: getBackgroundAgentRegistry(),
       })
 
-      // Run PostToolUse hooks
+      // Track touched files for rules matching
+    this.trackTouchedFile(name, effectiveParams)
+
+    // Run PostToolUse hooks
       if (this.hookEngine) {
         await this.hookEngine.executePostToolUse(name, effectiveParams, result, 'session-1')
       }

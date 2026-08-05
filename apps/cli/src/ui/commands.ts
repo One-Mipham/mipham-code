@@ -3182,64 +3182,181 @@ Full changelog: https://mipham.ai/code/releases`,
 // IDE — IDE integration guide
 // ═══════════════════════════════════════════════════════════════
 
-const ideCmd: CommandHandler = () => ({
-  content: `── IDE Integration ──
+const ideCmd: CommandHandler = async (_ctx) => {
+  const { mkdirSync, writeFileSync, existsSync } = await import('node:fs')
+  const { join } = await import('node:path')
 
-VS Code:
-  Install the Mipham Code extension from the VS Code marketplace.
-  • Open Command Palette (Cmd+Shift+P)
-  • Search "Mipham Code: Start"
-  • The terminal panel opens with Mipham Code loaded
+  const cwd = process.cwd()
+  const vscodeDir = join(cwd, '.vscode')
+  mkdirSync(vscodeDir, { recursive: true })
 
-  Or manually: add to .vscode/settings.json
-  {
-    "terminal.integrated.profiles.osx": {
-      "mipham": { "path": "bun", "args": ["run", "mipham"] }
-    }
+  const files: string[] = []
+
+  // ── Detect bun path ──
+  let bunPath = '/opt/homebrew/bin/bun'
+  try {
+    const { execSync } = await import('node:child_process')
+    const detected = execSync('which bun 2>/dev/null || echo /opt/homebrew/bin/bun', {
+      encoding: 'utf-8',
+    }).trim()
+    if (detected) bunPath = detected
+  } catch {
+    // Use default
   }
 
-JetBrains (IntelliJ / WebStorm / PyCharm):
-  • Settings → Tools → Terminal → Shell path
-  • Set to: bun run ~/path/to/mipham-code/apps/cli/bin/mipham
+  // ── settings.json: terminal profile ──
+  const settingsPath = join(vscodeDir, 'settings.json')
+  const settings = {
+    'terminal.integrated.profiles.osx': {
+      mipham: {
+        path: bunPath,
+        args: ['run', 'mipham'],
+        cwd: '${workspaceFolder}',
+      },
+    },
+  }
+  writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8')
+  files.push('.vscode/settings.json')
 
-Terminal (any):
-  alias mipham='cd your-project && bun run path/to/mipham'
+  // ── keybindings.json: Cmd+Esc launch ──
+  const keybindingsPath = join(vscodeDir, 'keybindings.json')
+  const keybindings = [
+    {
+      key: 'cmd+escape',
+      command: 'workbench.action.terminal.focus',
+      when: 'terminalProcessSupported',
+    },
+    {
+      key: 'cmd+shift+m',
+      command: 'workbench.action.terminal.new',
+    },
+  ]
+  writeFileSync(keybindingsPath, JSON.stringify(keybindings, null, 2) + '\n', 'utf-8')
+  files.push('.vscode/keybindings.json')
 
-Or install globally: ${NPM_INSTALL_COMMAND}
+  // ── extensions.json: recommended ──
+  const extensionsPath = join(vscodeDir, 'extensions.json')
+  const extensions = {
+    recommendations: ['miphamai.mipham-code'],
+  }
+  writeFileSync(extensionsPath, JSON.stringify(extensions, null, 2) + '\n', 'utf-8')
+  files.push('.vscode/extensions.json')
 
-Coming soon: dedicated VS Code & JetBrains plugin extensions.`,
-})
+  return {
+    content: [
+      '── VS Code Integration ──',
+      '',
+      `Generated in ${vscodeDir}:`,
+      ...files.map((f) => `  ✅ ${f}`),
+      '',
+      'What was configured:',
+      '  • Terminal profile "mipham" — opens Mipham Code in integrated terminal',
+      '  • Keyboard shortcut Cmd+Esc — focus terminal',
+      '  • Cmd+Shift+M — new terminal',
+      '',
+      'To use:',
+      '  1. Restart VS Code (or reload window: Cmd+Shift+P → Reload Window)',
+      '  2. Open terminal: Ctrl+` or Cmd+Esc',
+      '  3. Select "mipham" profile from the terminal dropdown',
+      '',
+      'Install the VS Code extension for full integration:',
+      `  code --install-extension miphamai.mipham-code`,
+      '',
+      'JetBrains: Settings → Tools → Terminal → Shell path → bun run mipham',
+    ].join('\n'),
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════
 // Terminal Setup — shell integration guide
 // ═══════════════════════════════════════════════════════════════
 
-const terminalSetupCmd: CommandHandler = () => ({
-  content: `── Terminal Setup ──
+const terminalSetupCmd: CommandHandler = async () => {
+  const { writeFileSync, appendFileSync, existsSync, mkdirSync } = await import('node:fs')
+  const { join } = await import('node:path')
+  const { homedir } = await import('node:os')
 
-Install globally:
-  ${NPM_INSTALL_COMMAND}
-  mipham
+  const home = homedir()
+  const lines: string[] = ['── Terminal Setup ──', '']
 
-One-liner install:
-  curl -fsSL https://mipham.ai/install.sh | bash
+  // ── 1. Generate standalone shell setup script ──
+  const miphamDir = join(home, '.mipham')
+  mkdirSync(miphamDir, { recursive: true })
 
-Add to shell profile (~/.zshrc or ~/.bashrc):
-  alias mipham='bun run ~/path/to/mipham-code/apps/cli/bin/mipham'
+  const shellScript = join(miphamDir, 'shell-setup.sh')
+  const shellContent = [
+    '#!/bin/bash',
+    '# Mipham Code — Shell Integration',
+    '# Source this file in your shell profile:',
+    '#   source ~/.mipham/shell-setup.sh',
+    '',
+    `export MIPHAM_HOME="${home}/.mipham"`,
+    '',
+    '# Alias: launch Mipham Code in current directory',
+    `alias mipham='cd $(pwd) && ${NPM_INSTALL_COMMAND} > /dev/null 2>&1; mipham'`,
+    '',
+    '# Or use the local development version:',
+    '# alias mipham="bun run /path/to/mipham-code/apps/cli/bin/mipham"',
+    '',
+    '# Auto-detect provider from config',
+    'if [ -f ~/.mipham/config.yml ]; then',
+    '  export MIPHAM_PROVIDER=$(grep "defaultProvider:" ~/.mipham/config.yml | awk "{print \$2}")',
+    'fi',
+  ].join('\n')
+  writeFileSync(shellScript, shellContent + '\n', 'utf-8')
+  lines.push(`  ✅ Generated: ${shellScript}`)
 
-  # Or with a specific provider/model:
-  alias mipham='mipham --provider anthropic --model claude-opus-4-8'
+  // ── 2. Append to shell profile ──
+  const shell = process.env.SHELL || '/bin/zsh'
+  const profileName = shell.includes('zsh') ? '.zshrc' : '.bashrc'
+  const profilePath = join(home, profileName)
+  const sourceLine = `\n# Mipham Code shell integration\n[ -f ~/.mipham/shell-setup.sh ] && source ~/.mipham/shell-setup.sh\n`
 
-Upgrade:
-  curl -fsSL https://mipham.ai/install.sh | bash
-  # or:   ${NPM_UPDATE_COMMAND}
+  try {
+    const existing = existsSync(profilePath) ? require('node:fs').readFileSync(profilePath, 'utf-8') : ''
+    if (existing.includes('shell-setup.sh')) {
+      lines.push(`  ⏭  ${profileName} already has Mipham Code integration`)
+    } else {
+      appendFileSync(profilePath, sourceLine, 'utf-8')
+      lines.push(`  ✅ Added to ~/${profileName}`)
+    }
+  } catch {
+    lines.push(`  ⚠️  Could not update ~/${profileName}. Add manually:`)
+    lines.push(`     echo '${sourceLine.trim()}' >> ~/${profileName}`)
+  }
 
-Verify installation:
-  mipham --version
-  mipham --help
+  // ── 3. Global install check ──
+  lines.push('')
+  lines.push('── Installation ──')
+  try {
+    const { execSync } = await import('node:child_process')
+    const miphamPath = execSync('which mipham 2>/dev/null || echo ""', { encoding: 'utf-8' }).trim()
+    if (miphamPath) {
+      lines.push(`  ✅ mipham found at: ${miphamPath}`)
+      const version = execSync('mipham --version 2>/dev/null || echo "unknown"', {
+        encoding: 'utf-8',
+      }).trim()
+      lines.push(`  📦 Version: ${version}`)
+    } else {
+      lines.push(`  ⚠️  mipham not in PATH. Install globally:`)
+      lines.push(`     ${NPM_INSTALL_COMMAND}`)
+      lines.push(`     or: curl -fsSL https://mipham.ai/install.sh | bash`)
+    }
+  } catch {
+    lines.push(`  💡 Install: ${NPM_INSTALL_COMMAND}`)
+  }
 
-Works with: Bash, Zsh, Fish, PowerShell, Windows Terminal`,
-})
+  // ── 4. Verify ──
+  lines.push('')
+  lines.push('── Next Steps ──')
+  lines.push('  1. Restart your terminal or run: source ~/.mipham/shell-setup.sh')
+  lines.push('  2. Run: mipham --version')
+  lines.push('  3. Start coding: cd your-project && mipham')
+  lines.push('')
+  lines.push(`Works with: Zsh, Bash. Shell: ${shell}`)
+
+  return { content: lines.join('\n') }
+}
 
 // ═══════════════════════════════════════════════════════════════
 // Phase 4 — MCP Server Management

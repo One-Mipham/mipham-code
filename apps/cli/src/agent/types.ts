@@ -12,6 +12,7 @@ export interface AgentFrontmatter {
   maxTurns?: number
   skills?: string
   background?: boolean
+  memory?: 'user' | 'project' | 'local' // agent memory scope
 }
 
 export interface AgentDefinition {
@@ -27,6 +28,7 @@ export interface AgentDefinition {
   background: boolean
   source: 'builtin' | 'project' | 'user'
   filePath?: string
+  memory?: 'user' | 'project' | 'local' // agent memory scope
 }
 
 export interface SubAgentOptions {

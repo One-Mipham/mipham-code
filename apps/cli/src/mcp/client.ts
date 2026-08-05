@@ -151,6 +151,15 @@ export class McpClient {
     return this.connections.get(name)?.tools || []
   }
 
+  /** List all currently connected MCP server names. */
+  getConnectedServers(): string[] {
+    const names: string[] = []
+    for (const [name, conn] of this.connections) {
+      if (conn.status === 'connected') names.push(name)
+    }
+    return names
+  }
+
   async callTool(
     serverName: string,
     toolName: string,

@@ -1,0 +1,78 @@
+{
+  "name": "mipham-code",
+  "displayName": "Mipham Code",
+  "description": "Multi-model AI coding terminal for VS Code — 29 tools, 7 providers, background agents, plan mode",
+  "version": "0.10.0",
+  "publisher": "miphamai",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/One-Mipham/mipham-code",
+  "icon": "icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Chat"
+  ],
+  "keywords": [
+    "ai",
+    "coding",
+    "terminal",
+    "claude",
+    "openai",
+    "deepseek",
+    "mipham"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "mipham-code.start",
+        "title": "Mipham Code: Start"
+      },
+      {
+        "command": "mipham-code.focus",
+        "title": "Mipham Code: Focus Terminal"
+      },
+      {
+        "command": "mipham-code.openConfig",
+        "title": "Mipham Code: Open Config"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "mipham-code.start",
+        "key": "ctrl+escape",
+        "mac": "cmd+escape"
+      },
+      {
+        "command": "mipham-code.focus",
+        "key": "ctrl+shift+m",
+        "mac": "cmd+shift+m"
+      }
+    ],
+    "configuration": {
+      "title": "Mipham Code",
+      "properties": {
+        "mipham-code.bunPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the bun runtime. Auto-detected if empty."
+        },
+        "mipham-code.provider": {
+          "type": "string",
+          "default": "",
+          "description": "Default provider ID (e.g., deepseek, anthropic, openai)."
+        },
+        "mipham-code.model": {
+          "type": "string",
+          "default": "",
+          "description": "Default model ID."
+        }
+      }
+    }
+  }
+}
