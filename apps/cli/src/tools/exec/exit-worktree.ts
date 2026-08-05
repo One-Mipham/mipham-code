@@ -13,8 +13,7 @@ export const exitWorktreeTool: ToolDefinition = {
     properties: {
       path: {
         type: 'string',
-        description:
-          'Absolute path to the worktree to exit. Must be under .claude/worktrees/.',
+        description: 'Absolute path to the worktree to exit. Must be under .claude/worktrees/.',
       },
       action: {
         type: 'string',
@@ -40,10 +39,11 @@ export const exitWorktreeTool: ToolDefinition = {
 
     try {
       // Verify the worktree exists in git's worktree list
-      const listProc = Bun.spawn(
-        ['git', 'worktree', 'list', '--porcelain'],
-        { cwd, stdout: 'pipe', stderr: 'pipe' },
-      )
+      const listProc = Bun.spawn(['git', 'worktree', 'list', '--porcelain'], {
+        cwd,
+        stdout: 'pipe',
+        stderr: 'pipe',
+      })
       const listOutput = await new Response(listProc.stdout).text()
 
       if (!listOutput.includes(worktreePath)) {
@@ -71,19 +71,18 @@ export const exitWorktreeTool: ToolDefinition = {
 
       // action === 'remove' — check for uncommitted changes
       if (!discardChanges) {
-        const statusProc = Bun.spawn(
-          ['git', '-C', worktreePath, 'status', '--porcelain'],
-          { cwd, stdout: 'pipe', stderr: 'pipe' },
-        )
+        const statusProc = Bun.spawn(['git', '-C', worktreePath, 'status', '--porcelain'], {
+          cwd,
+          stdout: 'pipe',
+          stderr: 'pipe',
+        })
         const statusOutput = await new Response(statusProc.stdout).text()
         const changedFiles = statusOutput.trim().split('\n').filter(Boolean)
 
         if (changedFiles.length > 0) {
           const preview = changedFiles.slice(0, 10).join('\n')
           const extra =
-            changedFiles.length > 10
-              ? `\n... and ${changedFiles.length - 10} more files`
-              : ''
+            changedFiles.length > 10 ? `\n... and ${changedFiles.length - 10} more files` : ''
           return {
             success: false,
             content: '',
@@ -132,10 +131,11 @@ export const exitWorktreeTool: ToolDefinition = {
       // Clean up the branch if we have its name
       if (branchName && branchName !== 'HEAD') {
         try {
-          const branchProc = Bun.spawn(
-            ['git', 'branch', '-D', branchName],
-            { cwd, stdout: 'pipe', stderr: 'pipe' },
-          )
+          const branchProc = Bun.spawn(['git', 'branch', '-D', branchName], {
+            cwd,
+            stdout: 'pipe',
+            stderr: 'pipe',
+          })
           await branchProc.exited
           // Best-effort — branch cleanup failure is not fatal
         } catch {

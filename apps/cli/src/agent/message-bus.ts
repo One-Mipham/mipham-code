@@ -97,9 +97,7 @@ export class AgentMessageBus {
   prune(maxAgeMs: number = 60 * 60 * 1000): number {
     const now = Date.now()
     const before = this.messages.length
-    this.messages = this.messages.filter(
-      (m) => now - m.timestamp.getTime() < maxAgeMs,
-    )
+    this.messages = this.messages.filter((m) => now - m.timestamp.getTime() < maxAgeMs)
     return before - this.messages.length
   }
 }

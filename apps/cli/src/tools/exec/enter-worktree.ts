@@ -66,10 +66,11 @@ export const enterWorktreeTool: ToolDefinition = {
       }
 
       // Check if worktree already exists
-      const checkProc = Bun.spawn(
-        ['git', 'worktree', 'list', '--porcelain'],
-        { cwd, stdout: 'pipe', stderr: 'pipe' },
-      )
+      const checkProc = Bun.spawn(['git', 'worktree', 'list', '--porcelain'], {
+        cwd,
+        stdout: 'pipe',
+        stderr: 'pipe',
+      })
       const existingWorktrees = await new Response(checkProc.stdout).text()
       if (existingWorktrees.includes(worktreePath)) {
         return {
@@ -88,10 +89,11 @@ export const enterWorktreeTool: ToolDefinition = {
       let resolvedBaseRef = baseRef
       if (baseRef === 'HEAD') {
         try {
-          const branchProc = Bun.spawn(
-            ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
-            { cwd, stdout: 'pipe', stderr: 'pipe' },
-          )
+          const branchProc = Bun.spawn(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], {
+            cwd,
+            stdout: 'pipe',
+            stderr: 'pipe',
+          })
           const branch = (await new Response(branchProc.stdout).text()).trim()
           resolvedBaseRef = branch || 'HEAD'
         } catch {

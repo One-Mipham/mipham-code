@@ -101,10 +101,7 @@ export const reportFindingsTool: ToolDefinition = {
       if (f.verdict && !['CONFIRMED', 'PLAUSIBLE'].includes(f.verdict as string)) {
         errors.push(`findings[${i}]: "verdict" must be CONFIRMED or PLAUSIBLE`)
       }
-      if (
-        f.outcome &&
-        !['fixed', 'skipped', 'no_change_needed'].includes(f.outcome as string)
-      ) {
+      if (f.outcome && !['fixed', 'skipped', 'no_change_needed'].includes(f.outcome as string)) {
         errors.push(`findings[${i}]: "outcome" must be fixed, skipped, or no_change_needed`)
       }
     }

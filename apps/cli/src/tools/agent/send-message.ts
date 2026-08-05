@@ -20,8 +20,7 @@ export const sendMessageTool: ToolDefinition = {
       },
       summary: {
         type: 'string',
-        description:
-          'A 5-10 word summary shown as a one-line preview (max 200 chars).',
+        description: 'A 5-10 word summary shown as a one-line preview (max 200 chars).',
       },
       message: {
         type: 'string',
@@ -36,9 +35,10 @@ export const sendMessageTool: ToolDefinition = {
     const message = params.message as string
 
     // Determine sender: use sessionId or 'main'
-    const from = ctx.sessionId === 'sub-agent'
-      ? `sub-agent-${Date.now().toString(36)}`
-      : ctx.sessionId || 'main'
+    const from =
+      ctx.sessionId === 'sub-agent'
+        ? `sub-agent-${Date.now().toString(36)}`
+        : ctx.sessionId || 'main'
 
     try {
       const bus = getMessageBus()
