@@ -111,16 +111,16 @@ pnpm format       # Prettier
 
 ### 工具层（29 个工具）
 
-| 分类            | 工具                          |
-| --------------- | ----------------------------- |
-| File（5）       | read, write, edit, glob, grep |
-| Exec（5）       | bash, git, task, EnterWorktree, ExitWorktree |
+| 分类            | 工具                                                                                           |
+| --------------- | ---------------------------------------------------------------------------------------------- |
+| File（5）       | read, write, edit, glob, grep                                                                  |
+| Exec（5）       | bash, git, task, EnterWorktree, ExitWorktree                                                   |
 | Agent（9）      | agent, skill, plan, memory, workflow, EnterPlanMode, ExitPlanMode, ReportFindings, SendMessage |
-| Network（2）    | web-fetch, web-search         |
-| System（2）     | config, mcp                   |
-| Artifact（1）   | artifact                      |
-| Computer（1）   | computer-use                  |
-| Scheduling（4） | schedule-wakeup, cron-create, cron-delete, cron-list |
+| Network（2）    | web-fetch, web-search                                                                          |
+| System（2）     | config, mcp                                                                                    |
+| Artifact（1）   | artifact                                                                                       |
+| Computer（1）   | computer-use                                                                                   |
+| Scheduling（4） | schedule-wakeup, cron-create, cron-delete, cron-list                                           |
 
 ### Skills 系统（15 个内置技能）
 
@@ -164,7 +164,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5      | 132     | agent, exec, file, network-system, skills     |
 | E2E      | 1      | 8       | full-pipeline                                 |
 | Other    | 31     | 263     | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **44** | **642** | **0 失败** ✅ |
+| **合计** | **44** | **642** | **0 失败** ✅                                 |
 
 测试框架: Vitest 3，mock: `test/__mocks__/bun.ts`
 
@@ -215,14 +215,14 @@ GitHub Actions 5 阶段流水线：`typecheck → lint → format → build-cli 
 
 ## 最近提交
 
-| 日期       | Commit    | 说明                                                                                          |
-| ---------- | --------- | --------------------------------------------------------------------------------------------- |
-| 2026-08-05 | `8dd6abd` | chore: bump version to 0.10.0 — 三 Sprint 交付                                                |
-| 2026-08-05 | `6a90174` | feat: Sprint 3 — plan mode, 6 permissions, subagent hooks, agent view                         |
-| 2026-08-05 | `40a22ca` | feat: Sprint 2 — workflow resume, worktree isolation, SendMessage, ReportFindings             |
-| 2026-08-05 | `f35d387` | feat: Sprint 1 — background agents, task deps, workflow schema validation                     |
-| 2026-08-01 | `df0eabf` | chore: auto-format before push                                                                |
-| 2026-07-25 | `f201f3a` | feat(mipham-code): Phase 3.1b — unified model config from Engine                              |
+| 日期       | Commit    | 说明                                                                              |
+| ---------- | --------- | --------------------------------------------------------------------------------- |
+| 2026-08-05 | `8dd6abd` | chore: bump version to 0.10.0 — 三 Sprint 交付                                    |
+| 2026-08-05 | `6a90174` | feat: Sprint 3 — plan mode, 6 permissions, subagent hooks, agent view             |
+| 2026-08-05 | `40a22ca` | feat: Sprint 2 — workflow resume, worktree isolation, SendMessage, ReportFindings |
+| 2026-08-05 | `f35d387` | feat: Sprint 1 — background agents, task deps, workflow schema validation         |
+| 2026-08-01 | `df0eabf` | chore: auto-format before push                                                    |
+| 2026-07-25 | `f201f3a` | feat(mipham-code): Phase 3.1b — unified model config from Engine                  |
 
 ---
 
@@ -230,10 +230,10 @@ GitHub Actions 5 阶段流水线：`typecheck → lint → format → build-cli 
 
 > ⚠️ 本仓库不是孤岛。以下项目与本项目紧密相关。
 
-| 项目           | 目录                                       | 角色                   | 部署方式                |
-| -------------- | ------------------------------------------ | ---------------------- | ----------------------- |
-| **国内官网**   | `../websites/domestic/`                    | onemipham.com          | `deploy-cn.sh` → 腾讯云 |
-| **国际官网**   | `../websites/international/`               | mipham.ai              | `vercel deploy --prod`  |
+| 项目         | 目录                         | 角色          | 部署方式                |
+| ------------ | ---------------------------- | ------------- | ----------------------- |
+| **国内官网** | `../websites/domestic/`      | onemipham.com | `deploy-cn.sh` → 腾讯云 |
+| **国际官网** | `../websites/international/` | mipham.ai     | `vercel deploy --prod`  |
 
 ### 共享数据源
 
@@ -275,9 +275,9 @@ mipham-code 变更（包名/版本）
 
 ### 修订历史
 
-| 版本  | 日期       | 变更内容                                                                | 维护人     |
-| ----- | ---------- | ----------------------------------------------------------------------- | ---------- |
+| 版本  | 日期       | 变更内容                                                                        | 维护人     |
+| ----- | ---------- | ------------------------------------------------------------------------------- | ---------- |
 | 1.3.0 | 2026-08-05 | v0.10.0 三 Sprint：29 工具、后台 Agent、Worktree、Plan Mode、6 级权限、642 测试 | 技术委员会 |
-| 1.2.0 | 2026-06-15 | 修正 Slash 命令（54→89）、Skills（11→15）、补充记忆系统、更新下一步计划 | 技术委员会 |
-| 1.1.0 | 2026-06-15 | 更新最近提交表为实际 git 历史（27 commits），补充迁移说明               | 技术委员会 |
-| 1.0.0 | 2026-06-02 | 初始创建：完整架构、测试矩阵、Provider 表、Skills 清单、CI/CD 流水线    | 技术委员会 |
+| 1.2.0 | 2026-06-15 | 修正 Slash 命令（54→89）、Skills（11→15）、补充记忆系统、更新下一步计划         | 技术委员会 |
+| 1.1.0 | 2026-06-15 | 更新最近提交表为实际 git 历史（27 commits），补充迁移说明                       | 技术委员会 |
+| 1.0.0 | 2026-06-02 | 初始创建：完整架构、测试矩阵、Provider 表、Skills 清单、CI/CD 流水线            | 技术委员会 |
