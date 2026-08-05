@@ -13,6 +13,7 @@ export default [
       '**/.next/**',
       '**/out/**',
       '**/.playwright-mcp/**',
+      '**/infrastructure/vscode/**',
     ],
   },
   ...compat.extends('plugin:@typescript-eslint/recommended'),
