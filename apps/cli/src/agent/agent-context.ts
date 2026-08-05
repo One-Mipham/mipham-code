@@ -49,10 +49,7 @@ function loadAgentMemory(agentName: string, scope: 'user' | 'project' | 'local')
     }
 
     if (contents.length === 0) return ''
-    return [
-      `[Agent Memory — ${scope} scope]`,
-      ...contents,
-    ].join('\n\n')
+    return [`[Agent Memory — ${scope} scope]`, ...contents].join('\n\n')
   } catch {
     return ''
   }

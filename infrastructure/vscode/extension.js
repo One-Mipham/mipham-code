@@ -127,10 +127,7 @@ function openMiphamTerminal() {
  */
 function updateStatusBar() {
   if (!statusBarItem) {
-    statusBarItem = vscode.window.createStatusBarItem(
-      vscode.StatusBarAlignment.Right,
-      100,
-    )
+    statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100)
     statusBarItem.command = 'mipham-code.focus'
     statusBarItem.tooltip = 'Click to focus Mipham Code terminal'
   }
@@ -161,9 +158,7 @@ function activate(context) {
 
   const configCmd = vscode.commands.registerCommand('mipham-code.openConfig', () => {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri?.fsPath || process.cwd()
-    const configPath = vscode.Uri.file(
-      require('path').join(workspaceRoot, '.mipham', 'config.yml'),
-    )
+    const configPath = vscode.Uri.file(require('path').join(workspaceRoot, '.mipham', 'config.yml'))
     vscode.window.showTextDocument(configPath).then(
       () => {},
       () => {
@@ -173,9 +168,10 @@ function activate(context) {
         )
         vscode.window.showTextDocument(userConfig).then(
           () => {},
-          () => vscode.window.showInformationMessage(
-            'No Mipham Code config found. Run "mipham /init" to create one.',
-          ),
+          () =>
+            vscode.window.showInformationMessage(
+              'No Mipham Code config found. Run "mipham /init" to create one.',
+            ),
         )
       },
     )
@@ -194,13 +190,11 @@ function activate(context) {
   // Show welcome message on first activation
   const hasShown = context.globalState.get('miphamCode.welcomeShown', false)
   if (!hasShown) {
-    vscode.window.showInformationMessage(
-      'Mipham Code is ready. Press Cmd+Esc to start.',
-      'Start',
-      'Dismiss',
-    ).then((choice) => {
-      if (choice === 'Start') openMiphamTerminal()
-    })
+    vscode.window
+      .showInformationMessage('Mipham Code is ready. Press Cmd+Esc to start.', 'Start', 'Dismiss')
+      .then((choice) => {
+        if (choice === 'Start') openMiphamTerminal()
+      })
     context.globalState.update('miphamCode.welcomeShown', true)
   }
 

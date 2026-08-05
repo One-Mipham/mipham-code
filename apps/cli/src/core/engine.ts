@@ -669,9 +669,9 @@ export class QueryEngine {
       })
 
       // Track touched files for rules matching
-    this.trackTouchedFile(name, effectiveParams)
+      this.trackTouchedFile(name, effectiveParams)
 
-    // Run PostToolUse hooks
+      // Run PostToolUse hooks
       if (this.hookEngine) {
         await this.hookEngine.executePostToolUse(name, effectiveParams, result, 'session-1')
       }

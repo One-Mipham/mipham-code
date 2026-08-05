@@ -12,6 +12,7 @@ Multi-model AI coding terminal integrated into VS Code.
 ## Installation
 
 ### From local monorepo
+
 ```bash
 # Symlink into VS Code extensions
 ln -s $(pwd)/infrastructure/vscode ~/.vscode/extensions/miphamai.mipham-code
@@ -23,12 +24,14 @@ code --install-extension mipham-code-0.10.0.vsix
 ```
 
 ### Prerequisites
+
 - [Bun](https://bun.sh) runtime (auto-detected)
 - Mipham Code installed globally: `npm install -g @miphamai/cli`
 
 ## Configuration
 
 In VS Code `settings.json`:
+
 ```json
 {
   "mipham-code.provider": "deepseek",
@@ -39,8 +42,8 @@ In VS Code `settings.json`:
 
 ## Commands
 
-| Command | Shortcut | Description |
-|---------|----------|-------------|
-| Mipham Code: Start | Cmd+Esc | Open terminal with Mipham Code |
-| Mipham Code: Focus Terminal | Cmd+Shift+M | Focus existing terminal |
-| Mipham Code: Open Config | — | Open config file |
+| Command                     | Shortcut    | Description                    |
+| --------------------------- | ----------- | ------------------------------ |
+| Mipham Code: Start          | Cmd+Esc     | Open terminal with Mipham Code |
+| Mipham Code: Focus Terminal | Cmd+Shift+M | Focus existing terminal        |
+| Mipham Code: Open Config    | —           | Open config file               |

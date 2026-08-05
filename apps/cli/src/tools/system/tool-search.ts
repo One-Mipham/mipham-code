@@ -83,8 +83,7 @@ export const toolSearchTool: ToolDefinition = {
         const tools = client.getTools(serverName)
         for (const tool of tools) {
           const nameMatch = !query || tool.name.toLowerCase().includes(query)
-          const descMatch =
-            !query || (tool.description || '').toLowerCase().includes(query)
+          const descMatch = !query || (tool.description || '').toLowerCase().includes(query)
           if (nameMatch || descMatch) {
             matches.push({
               server: serverName,

@@ -3313,7 +3313,9 @@ const terminalSetupCmd: CommandHandler = async () => {
   const sourceLine = `\n# Mipham Code shell integration\n[ -f ~/.mipham/shell-setup.sh ] && source ~/.mipham/shell-setup.sh\n`
 
   try {
-    const existing = existsSync(profilePath) ? require('node:fs').readFileSync(profilePath, 'utf-8') : ''
+    const existing = existsSync(profilePath)
+      ? require('node:fs').readFileSync(profilePath, 'utf-8')
+      : ''
     if (existing.includes('shell-setup.sh')) {
       lines.push(`  ⏭  ${profileName} already has Mipham Code integration`)
     } else {
