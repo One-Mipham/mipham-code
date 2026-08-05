@@ -304,6 +304,24 @@ export function App({
               { role: 'system', content: `❌ Error: ${chunk.error}` },
             ])
           }
+
+          if (chunk.type === 'task_notification' && chunk.taskNotification) {
+            const tn = chunk.taskNotification
+            const emoji = tn.status === 'completed' ? '✅' : '❌'
+            const label = tn.status === 'completed' ? 'completed' : 'failed'
+            const preview = tn.content
+              ? tn.content.slice(0, 120) + (tn.content.length > 120 ? '...' : '')
+              : tn.error
+                ? `Error: ${tn.error.slice(0, 120)}`
+                : '(no output)'
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: 'system',
+                content: `${emoji} Background Agent ${label}: ${tn.description}\n   ID: ${tn.taskId}\n   ${preview}`,
+              },
+            ])
+          }
         }
       } catch (err) {
         setMessages((prev) => [...prev, { role: 'system', content: `Error: ${String(err)}` }])

@@ -1,13 +1,17 @@
 import type { ToolDefinition } from '../../shared/index.ts'
 import { SubAgent } from '../../agent/sub-agent'
 import type { SubAgentType } from '../../agent/types'
+import { getBackgroundAgentRegistry } from '../../agent/background-registry'
 
 const VALID_TYPES: SubAgentType[] = ['general', 'explore', 'plan', 'code-review']
 
 export const agentTool: ToolDefinition = {
   name: 'Agent',
   description:
-    'Launch a sub-agent to handle complex, multi-step tasks independently. Available types: general, explore, plan, code-review.',
+    'Launch a sub-agent to handle complex, multi-step tasks independently. ' +
+    'Available types: general (default), explore (code search), plan (design), code-review. ' +
+    'Set run_in_background: true to execute asynchronously — returns a task ID immediately; ' +
+    'results are retrievable via the Task tool (output action) or Agent View.',
   category: 'agent',
   permission: 'ask',
   parameters: {
@@ -19,6 +23,11 @@ export const agentTool: ToolDefinition = {
         type: 'string',
         description: 'Type: general (default), explore (code search), plan (design), code-review',
       },
+      run_in_background: {
+        type: 'boolean',
+        description:
+          'When true, execute asynchronously and return a task ID immediately. Use Task output to retrieve results. Default: false.',
+      },
     },
     required: ['description', 'prompt'],
   },
@@ -26,6 +35,7 @@ export const agentTool: ToolDefinition = {
     const description = params.description as string
     const prompt = params.prompt as string
     const agentType = (params.subagent_type as SubAgentType) || 'general'
+    const runInBackground = params.run_in_background === true
 
     if (!VALID_TYPES.includes(agentType)) {
       return {
@@ -51,7 +61,36 @@ export const agentTool: ToolDefinition = {
 
     try {
       const sub = new SubAgent(registry, toolRegistry)
-      const result = await sub.execute(prompt, description, { type: agentType, agentDef })
+      const result = await sub.execute(prompt, description, {
+        type: agentType,
+        agentDef,
+        runInBackground,
+      })
+
+      // If background execution, also register in the task system for Task tool integration
+      if (runInBackground) {
+        const bgMatch = result.match(/\[background-task:(.+?)\]/)
+        if (bgMatch) {
+          const bgTaskId = bgMatch[1]!
+          const bgRegistry = getBackgroundAgentRegistry()
+          const bgTask = bgRegistry.get(bgTaskId)
+
+          return {
+            success: true,
+            content:
+              `── Background Agent Started ──\n\n` +
+              `Task ID:   ${bgTaskId}\n` +
+              `Type:      ${agentType}\n` +
+              `Task:      ${description}\n` +
+              `Status:    ${bgTask?.status || 'running'}\n\n` +
+              `The agent is running in the background. You can continue working.\n` +
+              `Use Task output taskId="${bgTaskId}" to check results.\n` +
+              `Use Task stop taskId="${bgTaskId}" to cancel.\n` +
+              `Use /agents to view in Agent View dashboard.`,
+          }
+        }
+      }
+
       return { success: true, content: result }
     } catch (err) {
       return { success: false, content: '', error: String(err) }

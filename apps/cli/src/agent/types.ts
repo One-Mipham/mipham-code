@@ -38,4 +38,8 @@ export interface SubAgentOptions {
   modelOverride?: string
   /** Maximum tool-calling turns (default: 5) to prevent infinite loops. */
   maxTurns?: number
+  /** When true, execute in background and return immediately with a task ID. */
+  runInBackground?: boolean
+  /** Optional callback for streaming progress chunks during background execution. */
+  onProgress?: (chunk: string) => void
 }

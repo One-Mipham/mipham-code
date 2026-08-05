@@ -9,6 +9,7 @@ import { analyzeForMemory } from './memory/memory-writer'
 import { getMemoryManager } from './memory/memory-loader'
 import type { AgentViewManager } from '../agent-view/agent-view-manager'
 import type { SkillsLoader } from '../skills/loader'
+import { getBackgroundAgentRegistry } from '../agent/background-registry'
 
 export class QueryEngine {
   private hookEngine?: HookEngine
@@ -68,6 +69,46 @@ export class QueryEngine {
   /** Register the SkillsLoader for Skill tool context injection. */
   setSkillsLoader(loader: SkillsLoader): void {
     this.skillsLoader = loader
+  }
+
+  /** Pending task notifications from background agents (cleared after draining). */
+  private pendingTaskNotifications: Array<StreamChunk> = []
+
+  /**
+   * Drain pending background task notifications.
+   * Call this after tool execution to surface completed/failed background agent results.
+   * Returns an array of StreamChunks that can be yielded in a generator.
+   */
+  drainTaskNotifications(): StreamChunk[] {
+    const bgRegistry = getBackgroundAgentRegistry()
+    const tasks = bgRegistry.list()
+    const chunks: StreamChunk[] = []
+
+    for (const task of tasks) {
+      if (task.status === 'running') continue
+
+      // Check if we've already notified for this task
+      const alreadyNotified = this.pendingTaskNotifications.some(
+        (n) => n.taskNotification?.taskId === task.id,
+      )
+      if (alreadyNotified) continue
+
+      const chunk: StreamChunk = {
+        type: 'task_notification',
+        taskNotification: {
+          taskId: task.id,
+          status: task.status as 'completed' | 'failed',
+          description: task.description,
+          content: task.result,
+          error: task.error,
+        },
+      }
+
+      this.pendingTaskNotifications.push(chunk)
+      chunks.push(chunk)
+    }
+
+    return chunks
   }
 
   /** Set the session goal for goal-driven execution. */
@@ -310,6 +351,11 @@ export class QueryEngine {
       })
     }
 
+    // Drain task notifications after tool execution
+    for (const chunk of this.drainTaskNotifications()) {
+      yield chunk
+    }
+
     // If tools were executed, recursively continue the conversation
     if (toolUses.length > 0) {
       yield* this.continueWithTools(signal)
@@ -318,6 +364,11 @@ export class QueryEngine {
 
     // Fire Stop hooks when AI finishes with no tool calls
     yield* this.checkStopHook(signal)
+
+    // Final drain of task notifications
+    for (const chunk of this.drainTaskNotifications()) {
+      yield chunk
+    }
   }
 
   async *processWithGoal(input: string, signal?: AbortSignal): AsyncGenerator<StreamChunk> {
@@ -579,6 +630,7 @@ export class QueryEngine {
         toolRegistry: this.tools,
         artifactServer: this.artifactServer,
         agentRegistry: this.agentRegistry,
+        backgroundAgentRegistry: getBackgroundAgentRegistry(),
       })
 
       // Run PostToolUse hooks

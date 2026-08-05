@@ -211,7 +211,7 @@ describe('Task tool definition', () => {
   it('accepts action enum: create, list, update, get, delete', () => {
     const params = taskTool.parameters as { properties: Record<string, unknown> }
     const action = params.properties.action as { enum: string[] }
-    expect(action.enum).toEqual(['create', 'list', 'update', 'get', 'delete'])
+    expect(action.enum).toEqual(['create', 'list', 'update', 'get', 'delete', 'output', 'stop'])
   })
 })
 

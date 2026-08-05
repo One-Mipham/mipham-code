@@ -87,7 +87,7 @@ export interface ToolDefinition {
 
 // ── Stream Types ──
 export interface StreamChunk {
-  type: 'text' | 'tool_use' | 'tool_result' | 'thinking' | 'stop' | 'error'
+  type: 'text' | 'tool_use' | 'tool_result' | 'thinking' | 'stop' | 'error' | 'task_notification'
   content?: string
   toolUse?: ToolUseContent
   tool_use_id?: string
@@ -96,6 +96,14 @@ export interface StreamChunk {
   reasoning_content?: string
   /** Anthropic thinking block content (DeepSeek Anthropic endpoint). */
   thinking?: string
+  /** Background task notification payload (type: 'task_notification'). */
+  taskNotification?: {
+    taskId: string
+    status: 'started' | 'completed' | 'failed'
+    description: string
+    content?: string
+    error?: string
+  }
 }
 
 // ── Config Types ──

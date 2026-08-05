@@ -80,6 +80,7 @@ export interface ToolContext {
   toolRegistry?: Map<string, ToolDefinition>
   artifactServer?: import('../artifacts/server').ArtifactServer
   agentRegistry?: import('../agent/agent-registry').AgentRegistry
+  backgroundAgentRegistry?: import('../agent/background-registry').BackgroundAgentRegistry
 }
 
 // ── Artifact Types ──
@@ -116,9 +117,18 @@ export interface ToolDefinition {
   execute: (params: Record<string, unknown>, ctx: ToolContext) => Promise<ToolResult>
 }
 
+// ── Task Notification Types ──
+export interface TaskNotification {
+  taskId: string
+  status: 'started' | 'completed' | 'failed'
+  description: string
+  content?: string
+  error?: string
+}
+
 // ── Stream Types ──
 export interface StreamChunk {
-  type: 'text' | 'tool_use' | 'tool_result' | 'thinking' | 'stop' | 'error'
+  type: 'text' | 'tool_use' | 'tool_result' | 'thinking' | 'stop' | 'error' | 'task_notification'
   content?: string
   toolUse?: ToolUseContent
   tool_use_id?: string
@@ -127,6 +137,8 @@ export interface StreamChunk {
   reasoning_content?: string
   /** Anthropic thinking block content (DeepSeek Anthropic endpoint). */
   thinking?: string
+  /** Background task notification payload (type: 'task_notification'). */
+  taskNotification?: TaskNotification
 }
 
 // ── Config Types ──

@@ -2,6 +2,7 @@ import type { ProviderRegistry, ProviderInstance } from '../providers/registry'
 import type { ToolDefinition } from '../shared/index.ts'
 import type { SubAgentType, SubAgentOptions, AgentDefinition } from './types'
 import { createAgentContext } from './agent-context'
+import { getBackgroundAgentRegistry } from './background-registry'
 
 const TYPE_SYSTEM_PROMPTS: Record<SubAgentType, string> = {
   general: 'You are a focused sub-agent. Complete the assigned task thoroughly and return results.',
@@ -16,6 +17,10 @@ const TYPE_SYSTEM_PROMPTS: Record<SubAgentType, string> = {
  * Sub-agent engine — creates an isolated conversation context and processes
  * a single prompt independently via the active AI provider. Returns the
  * consolidated result text.
+ *
+ * Supports background execution via `runInBackground` option — when true,
+ * execution is spawned as a detached promise and the method returns immediately
+ * with a `[background-task:<id>]` marker.
  */
 export class SubAgent {
   constructor(
@@ -23,10 +28,44 @@ export class SubAgent {
     private toolRegistry: Map<string, ToolDefinition>,
   ) {}
 
+  /**
+   * Execute a sub-agent task.
+   *
+   * When `options.runInBackground` is true:
+   *   - The task runs asynchronously in BackgroundAgentRegistry
+   *   - Returns immediately with `[background-task:<id>]`
+   *   - Results are retrievable via Task output or Agent View
+   */
   async execute(
     prompt: string,
     description: string,
     options: SubAgentOptions = {},
+  ): Promise<string> {
+    // ── Background execution path ──
+    if (options.runInBackground) {
+      const bgRegistry = getBackgroundAgentRegistry()
+      const type = options.type || 'general'
+      const agentDef = options.agentDef
+
+      const taskId = bgRegistry.spawn(description, type, async (signal) => {
+        // Run the synchronous execution inside the background executor
+        return this.runExecution(prompt, options, signal)
+      })
+
+      return `[background-task:${taskId}]`
+    }
+
+    // ── Synchronous execution path ──
+    return this.runExecution(prompt, options)
+  }
+
+  /**
+   * Internal execution method — shared by sync and background paths.
+   */
+  private async runExecution(
+    prompt: string,
+    options: SubAgentOptions,
+    signal?: AbortSignal,
   ): Promise<string> {
     const provider = this.registry.getActive()
     if (!provider) {
@@ -34,15 +73,15 @@ export class SubAgent {
     }
 
     const model = this.registry.getActiveModel()
-    const type = options.type || 'general'
+    const agentType = options.type || 'general'
     const agentDef = options.agentDef
 
     // Resolve system prompt: agentDef > options.systemPrompt > builtin type
-    const systemPrompt = agentDef?.systemPrompt || options.systemPrompt || TYPE_SYSTEM_PROMPTS[type]
+    const systemPrompt = agentDef?.systemPrompt || options.systemPrompt || TYPE_SYSTEM_PROMPTS[agentType]
 
     // Create isolated context with tool scoping
     const resolvedDef: AgentDefinition = agentDef || {
-      name: type,
+      name: agentType,
       description: '',
       systemPrompt,
       model: options.modelOverride || 'inherit',
@@ -82,6 +121,11 @@ export class SubAgent {
 
     try {
       for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
+        // Check abort signal
+        if (signal?.aborted) {
+          throw new DOMException('Aborted', 'AbortError')
+        }
+
         const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
         let turnText = ''
 
@@ -92,8 +136,17 @@ export class SubAgent {
           tools: toolDefs,
           maxTokens: 4096,
         })) {
+          // Check abort signal mid-stream
+          if (signal?.aborted) {
+            throw new DOMException('Aborted', 'AbortError')
+          }
+
           if (chunk.type === 'text' && chunk.content) {
             turnText += chunk.content
+            // Stream progress to callback if provided
+            if (options.onProgress) {
+              options.onProgress(chunk.content)
+            }
           }
           if (chunk.type === 'tool_use' && chunk.toolUse) {
             toolUses.push({
@@ -125,6 +178,10 @@ export class SubAgent {
         ]
 
         for (const tu of toolUses) {
+          if (signal?.aborted) {
+            throw new DOMException('Aborted', 'AbortError')
+          }
+
           const tool = this.toolRegistry.get(tu.name)
           if (!tool) {
             currentMessages.push({
@@ -168,6 +225,9 @@ export class SubAgent {
         currentSystemPrompt = ''
       }
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        throw err
+      }
       if (err instanceof Error && err.message.startsWith('Sub-agent')) {
         throw err
       }
