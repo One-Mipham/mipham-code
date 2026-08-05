@@ -16,7 +16,8 @@ export const enterPlanModeTool: ToolDefinition = {
     properties: {
       description: {
         type: 'string',
-        description: 'Brief description of what you are planning (e.g., "Add user authentication flow")',
+        description:
+          'Brief description of what you are planning (e.g., "Add user authentication flow")',
       },
     },
     required: [],

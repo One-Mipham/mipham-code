@@ -133,9 +133,7 @@ export class HookEngine {
       event: 'SubagentStop',
       sessionId,
       toolInput: { agentType, description, success },
-      toolResult: result
-        ? { success, content: result.slice(0, 2000) }
-        : undefined,
+      toolResult: result ? { success, content: result.slice(0, 2000) } : undefined,
     }
     return this.runHooks('SubagentStop', undefined, ctx)
   }

@@ -180,7 +180,9 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
           </Text>
         </Box>
         <Box>
-          <Text dimColor>j/k navigate · Space peek · Enter attach · Ctrl+S group · Ctrl+R rename · Esc back</Text>
+          <Text dimColor>
+            j/k navigate · Space peek · Enter attach · Ctrl+S group · Ctrl+R rename · Esc back
+          </Text>
         </Box>
       </Box>
 
