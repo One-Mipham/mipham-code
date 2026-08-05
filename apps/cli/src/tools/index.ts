@@ -7,6 +7,8 @@ import { grepTool } from './file/grep'
 import { bashTool } from './exec/bash'
 import { gitTool } from './exec/git'
 import { taskTool } from './exec/task'
+import { enterWorktreeTool } from './exec/enter-worktree'
+import { exitWorktreeTool } from './exec/exit-worktree'
 import { agentTool } from './agent/agent'
 import { skillTool } from './agent/skill'
 import { planTool } from './agent/plan'
@@ -17,6 +19,8 @@ import { webSearchTool } from './network/web-search'
 import { configTool } from './system/config'
 import { mcpTool } from './system/mcp'
 import { artifactTool } from './artifact/artifact'
+import { reportFindingsTool } from './agent/report-findings'
+import { sendMessageTool } from './agent/send-message'
 import { computerUseTool } from './computer/computer-use'
 import { scheduleWakeupTool } from './scheduling/schedule-wakeup.js'
 import { cronCreateTool, cronDeleteTool, cronListTool } from './scheduling/cron.js'
@@ -110,12 +114,16 @@ export function createToolRegistry(): Map<string, ToolDefinition> {
     withValidation(bashTool),
     withValidation(gitTool),
     withValidation(taskTool),
+    withValidation(enterWorktreeTool),
+    withValidation(exitWorktreeTool),
     // Agent tools
     withValidation(agentTool),
     withValidation(skillTool),
     withValidation(planTool),
     withValidation(memoryTool),
     withValidation(workflowTool),
+    withValidation(reportFindingsTool),
+    withValidation(sendMessageTool),
     // Network tools
     withValidation(webFetchTool),
     withValidation(webSearchTool),
