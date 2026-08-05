@@ -5,6 +5,7 @@ import { ARTIFACT_ALLOWED_EXTENSIONS } from '../shared/constants'
 import { readManifest } from './manifest'
 import { ArtifactVersioning } from './versioning'
 import type { ArtifactEntry } from '../shared/types'
+import { getMetrics } from '../core/metrics'
 
 // ── SSE client tracking ──
 interface SseClient {
@@ -151,8 +152,46 @@ export class ArtifactServer {
       return
     }
 
+    // Metrics endpoint — Prometheus text format
+    if (urlPath === '/metrics') {
+      this.serveMetrics(res, 'prometheus')
+      return
+    }
+
+    // Metrics endpoint — JSON format
+    if (urlPath === '/metrics/json') {
+      this.serveMetrics(res, 'json')
+      return
+    }
+
     // Artifact file
     this.serveArtifact(urlPath, res)
+  }
+
+  // ── Metrics ──
+
+  private serveMetrics(res: any, format: 'prometheus' | 'json'): void {
+    try {
+      const metrics = getMetrics()
+      if (format === 'json') {
+        const body = JSON.stringify(metrics.toJSON(), null, 2)
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        })
+        res.end(body)
+      } else {
+        const body = metrics.toPrometheusText()
+        res.writeHead(200, {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Access-Control-Allow-Origin': '*',
+        })
+        res.end(body)
+      }
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'text/plain' })
+      res.end(`Metrics error: ${err instanceof Error ? err.message : 'unknown'}`)
+    }
   }
 
   // ── SSE ──

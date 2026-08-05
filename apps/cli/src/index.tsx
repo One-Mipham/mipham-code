@@ -18,6 +18,7 @@ import { registerMcpServerTools } from './mcp/registry'
 import { AgentRegistry } from './agent/agent-registry'
 import { HookEngine } from './core/hooks'
 import { ArtifactServer } from './artifacts/server'
+import { getMetrics } from './core/metrics'
 import { ARTIFACTS_DIR, ARTIFACT_PORT, MIPHAM_DIR } from './shared/constants'
 import { AgentViewManager } from './agent-view/agent-view-manager'
 import { AgentViewDashboard } from './agent-view/dashboard'
@@ -32,6 +33,9 @@ interface RunOptions {
 }
 
 export async function runApp(options: RunOptions): Promise<void> {
+  // Metrics: count CLI invocation
+  getMetrics().cliInvocations.inc()
+
   // Handle `mipham agents` subcommand — launch standalone dashboard
   const args = process.argv.slice(2)
   if (args[0] === 'agents') {
