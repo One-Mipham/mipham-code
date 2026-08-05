@@ -3272,7 +3272,8 @@ const ideCmd: CommandHandler = async (_ctx) => {
 // ═══════════════════════════════════════════════════════════════
 
 const terminalSetupCmd: CommandHandler = async () => {
-  const { writeFileSync, appendFileSync, existsSync, mkdirSync, readFileSync } = await import('node:fs')
+  const { writeFileSync, appendFileSync, existsSync, mkdirSync, readFileSync } =
+    await import('node:fs')
   const { join } = await import('node:path')
   const { homedir } = await import('node:os')
 
@@ -3313,9 +3314,7 @@ const terminalSetupCmd: CommandHandler = async () => {
   const sourceLine = `\n# Mipham Code shell integration\n[ -f ~/.mipham/shell-setup.sh ] && source ~/.mipham/shell-setup.sh\n`
 
   try {
-    const existing = existsSync(profilePath)
-      ? readFileSync(profilePath, 'utf-8')
-      : ''
+    const existing = existsSync(profilePath) ? readFileSync(profilePath, 'utf-8') : ''
     if (existing.includes('shell-setup.sh')) {
       lines.push(`  ⏭  ${profileName} already has Mipham Code integration`)
     } else {
