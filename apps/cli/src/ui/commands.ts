@@ -3052,6 +3052,209 @@ Permission level is controlled by /config permission <level>.`,
 // Security / Audit — security review checklist
 // ═══════════════════════════════════════════════════════════════
 
+const promptAuditCmd: CommandHandler = async () => {
+  const { existsSync, readFileSync, readdirSync, statSync } = await import('node:fs')
+  const { join, extname, basename } = await import('node:path')
+  const cwd = process.cwd()
+
+  // Patterns that suggest prompts written for older/less-capable models
+  const AUDIT_RULES: Array<{
+    id: string
+    pattern: RegExp
+    severity: 'low' | 'medium' | 'high'
+    message: string
+    suggestion: string
+  }> = [
+    {
+      id: 'over-explaining',
+      pattern: /you are (a|an) (helpful |friendly |knowledgeable )?(AI |language model |assistant)/i,
+      severity: 'low',
+      message: 'Self-identification preamble ("You are a...")',
+      suggestion: 'Modern models don\'t need role preamble. Remove or shorten to 1 line.',
+    },
+    {
+      id: 'step-by-step',
+      pattern: /(think|reason|work) (step[ -]?by[ -]?step|through this|carefully about this)/i,
+      severity: 'low',
+      message: 'Step-by-step reasoning prompt',
+      suggestion: 'Reasoning models handle this natively. Remove for token savings.',
+    },
+    {
+      id: 'do-not-list',
+      pattern: /(do not|never|you must not|don't|under no circumstances).*\n.*(do not|never|you must not|don't)/i,
+      severity: 'medium',
+      message: 'Multiple "do not" constraints',
+      suggestion: 'Modern models need fewer prohibitions. Consolidate to 1-2 key constraints.',
+    },
+    {
+      id: 'token-waste',
+      pattern: /(remember|keep in mind|it is important to note|please note that|i want to emphasize)/i,
+      severity: 'low',
+      message: 'Filler emphasis phrases ("remember", "please note")',
+      suggestion: 'Remove filler. State the instruction directly.',
+    },
+    {
+      id: 'format-over-spec',
+      pattern: /(you must (always |only )?respond (in|with|using) (JSON|XML|YAML|markdown|HTML))/i,
+      severity: 'low',
+      message: 'Over-specified output format',
+      suggestion: 'Modern models follow format instructions with fewer words. Shorten.',
+    },
+    {
+      id: 'example-overload',
+      pattern: /((?:example|for instance|e\.g\.,).*\n){3,}/i,
+      severity: 'low',
+      message: 'Three or more examples in sequence',
+      suggestion: '1-2 examples suffice for modern models. Remove redundant ones.',
+    },
+    {
+      id: 'old-model-ref',
+      pattern: /(GPT-3|GPT-3\.5|Claude\s*[12][^3]|text-davinci|command-r|llama\s*2)/i,
+      severity: 'high',
+      message: 'Reference to older model',
+      suggestion: 'Update model references to current generation (Sonnet 5, Opus 5, GPT-5, etc.).',
+    },
+    {
+      id: 'long-preamble',
+      pattern: /^.{200,}$/m,
+      severity: 'medium',
+      message: 'Very long single-line instructions (200+ chars)',
+      suggestion: 'Break into bullet points. Modern models parse structured prompts better.',
+    },
+    {
+      id: 'verbose-constraint',
+      pattern: /you (must|should|shall) (always |only |never )?(ensure|guarantee|verify|validate|confirm|cross-check|double-check)/i,
+      severity: 'medium',
+      message: 'Overly verbose constraint language',
+      suggestion: 'Replace "you must ensure that" with imperative: "Ensure".',
+    },
+  ]
+
+  // Files to scan
+  const scanDirs = [
+    join(cwd, '.mipham', 'skills'),
+    join(cwd, '.mipham', 'rules'),
+    join(cwd, '.claude'),
+  ]
+  const skillFiles: string[] = []
+  // Also check standard project files
+  const projectFiles = [
+    join(cwd, 'CLAUDE.md'),
+    join(cwd, 'MIPHAM.md'),
+    join(cwd, 'PRODUCT.md'),
+  ]
+
+  // Collect skill/rules files
+  for (const dir of scanDirs) {
+    try {
+      if (!existsSync(dir)) continue
+      const walk = (d: string) => {
+        const entries = readdirSync(d)
+        for (const e of entries) {
+          const fp = join(d, e)
+          const st = statSync(fp)
+          if (st.isDirectory()) { walk(fp); continue }
+          if (['.md', '.SKILL.md', '.mipham-skill.md', '.txt'].some((ext) => fp.endsWith(ext))) {
+            skillFiles.push(fp)
+          }
+        }
+      }
+      walk(dir)
+    } catch { /* skip */ }
+  }
+
+  const allFiles = [...new Set([...projectFiles.filter((f) => existsSync(f)), ...skillFiles])]
+
+  if (allFiles.length === 0) {
+    return {
+      content: [
+        '🔍 Prompt Audit',
+        '',
+        'No prompt files found to audit.',
+        'Place skills in .mipham/skills/ and rules in .mipham/rules/.',
+      ].join('\n'),
+    }
+  }
+
+  // Scan each file
+  const results: Array<{ file: string; line: number; ruleId: string; severity: string; message: string; suggestion: string }> = []
+
+  for (const fp of allFiles) {
+    try {
+      const content = readFileSync(fp, 'utf-8')
+      const lines = content.split('\n')
+      for (const rule of AUDIT_RULES) {
+        // Multi-line pattern: check full content
+        if (rule.id === 'do-not-list' || rule.id === 'example-overload') {
+          if (rule.pattern.test(content)) {
+            // Find approx line
+            const match = rule.pattern.exec(content)
+            const idx = match ? content.slice(0, match.index).split('\n').length : 1
+            results.push({
+              file: fp.replace(cwd + '/', ''),
+              line: idx,
+              ruleId: rule.id,
+              severity: rule.severity,
+              message: rule.message,
+              suggestion: rule.suggestion,
+            })
+          }
+          continue
+        }
+
+        // Line-by-line patterns
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i]!
+          if (rule.pattern.test(line)) {
+            results.push({
+              file: fp.replace(cwd + '/', ''),
+              line: i + 1,
+              ruleId: rule.id,
+              severity: rule.severity,
+              message: rule.message,
+              suggestion: rule.suggestion,
+            })
+          }
+        }
+      }
+    } catch { /* skip unreadable files */ }
+  }
+
+  // Format output
+  const severityIcon: Record<string, string> = { high: '🔴', medium: '🟡', low: '🟢' }
+  const grouped: Record<string, typeof results> = {}
+  for (const r of results) {
+    const key = r.file
+    if (!grouped[key]) grouped[key] = []
+    grouped[key]!.push(r)
+  }
+
+  const output: string[] = [
+    `🔍 Prompt Audit — ${allFiles.length} file(s) scanned, ${results.length} finding(s)`,
+    '',
+  ]
+
+  if (results.length === 0) {
+    output.push('✅ All prompts look optimized for modern models. No issues found.')
+  } else {
+    for (const [file, items] of Object.entries(grouped)) {
+      output.push(`📄 ${file} (${items!.length} finding${items!.length > 1 ? 's' : ''})`)
+      for (const item of items!) {
+        output.push(
+          `  ${severityIcon[item.severity] || '⚪'} L${item.line}: [${item.ruleId}] ${item.message}`,
+        )
+        output.push(`     → ${item.suggestion}`)
+      }
+      output.push('')
+    }
+  }
+
+  output.push('─'.repeat(60))
+  output.push('Scanned: ' + allFiles.map((f) => basename(f)).join(', '))
+
+  return { content: output.join('\n') }
+}
+
 const securityCmd: CommandHandler = async () => {
   const findings: string[] = []
   const ok: string[] = []
@@ -3979,6 +4182,7 @@ const commandsListCmd: CommandHandler = () => {
     '/recommend': 'Project',
     '/security': 'Project',
     '/audit': 'Project',
+    '/prompt-audit': 'Code Quality',
     '/ide': 'Environment',
     '/terminal-setup': 'Environment',
     '/memory': 'Environment',
@@ -4119,6 +4323,7 @@ registry.set('/permissions', permissionsCmd)
 registry.set('/add-dir', addDirCmd)
 registry.set('/security', securityCmd)
 registry.set('/audit', securityCmd)
+registry.set('/prompt-audit', promptAuditCmd)
 
 // Environment
 registry.set('/theme', themeCmd)
@@ -4243,6 +4448,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/recommend': 'Analyze project + recommend skills & setup',
   '/security': 'Security review checklist',
   '/audit': 'Same as /security',
+  '/prompt-audit': 'Audit prompts for modern model optimization',
   '/ide': 'IDE integration guide',
   '/terminal-setup': 'Shell & terminal config',
   '/memory': 'Manage AI memories',
