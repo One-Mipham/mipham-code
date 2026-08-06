@@ -26,8 +26,8 @@ export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
       {focusMode && messages.length > 0 && (
         <Box marginBottom={1}>
           <Text dimColor>
-            🔍 Focus — {countHidden(messages, displayMessages)} hidden · /focus to toggle · Ctrl+O to
-            expand
+            🔍 Focus — {countHidden(messages, displayMessages)} hidden · /focus to toggle · Ctrl+O
+            to expand
           </Text>
         </Box>
       )}

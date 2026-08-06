@@ -485,10 +485,7 @@ export function App({
             ● {PERMISSION_LABELS[permissionMode]}
           </Text>
           <Text dimColor> · Shift+Tab mode</Text>
-          <Text dimColor>
-            {' '}
-            · Ctrl+P model · Ctrl+F focus · Ctrl+O expand
-          </Text>
+          <Text dimColor> · Ctrl+P model · Ctrl+F focus · Ctrl+O expand</Text>
           <Text dimColor> · Esc cancel · /help · ← agents</Text>
         </Box>
       </Box>
