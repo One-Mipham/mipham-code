@@ -45,9 +45,28 @@ export const enterWorktreeTool: ToolDefinition = {
           'Worktree name may only contain letters, digits, dots, underscores, dashes, and slashes.',
       }
     }
+    // Prevent path traversal via .. segments
+    if (name.includes('..')) {
+      return {
+        success: false,
+        content: '',
+        error: 'Worktree name may not contain ".." path segments.',
+      }
+    }
 
     const cwd = ctx.cwd
-    const worktreePath = `${cwd}/.claude/worktrees/${name}`
+    const { resolve } = await import('node:path')
+    const worktreePath = resolve(`${cwd}/.claude/worktrees/${name}`)
+    const allowedPrefix = resolve(`${cwd}/.claude/worktrees/`)
+
+    // Defense-in-depth: verify resolved path is within .claude/worktrees/
+    if (!worktreePath.startsWith(allowedPrefix + '/') && worktreePath !== allowedPrefix.slice(0, -1)) {
+      return {
+        success: false,
+        content: '',
+        error: 'Worktree path must be within .claude/worktrees/.',
+      }
+    }
 
     try {
       // Validate we're in a git repo

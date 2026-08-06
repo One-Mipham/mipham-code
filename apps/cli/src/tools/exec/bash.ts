@@ -28,9 +28,9 @@ const BLOCKED_PATTERNS = [
   /\$\(/,
   // Backtick command substitution
   /`[^`]+`/,
-  // Interpreter code execution (bypass vector)
-  /\bpython3?\s+-c\b/,
-  /\bpython3?\s+-m\b/,
+  // Interpreter code execution (bypass vector) — covers python, python2, python3
+  /\bpython[23]?\s+-c\b/,
+  /\bpython[23]?\s+-m\b/,
   /\bperl\s+-[ep]\b/,
   /\bruby\s+-e\b/,
   /\bnode\s+-e\b/,

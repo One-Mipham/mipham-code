@@ -36,6 +36,19 @@ export const exitWorktreeTool: ToolDefinition = {
 
     // Validate the path is under .claude/worktrees
     const cwd = ctx.cwd
+    const { resolve } = await import('node:path')
+    const resolvedPath = resolve(worktreePath)
+    const allowedPrefix = resolve(`${cwd}/.claude/worktrees/`)
+
+    if (!resolvedPath.startsWith(allowedPrefix)) {
+      return {
+        success: false,
+        content: '',
+        error:
+          `Path "${worktreePath}" is not under .claude/worktrees/. ` +
+          `Only worktrees created by EnterWorktree can be managed here.`,
+      }
+    }
 
     try {
       // Verify the worktree exists in git's worktree list
