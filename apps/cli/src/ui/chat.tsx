@@ -18,16 +18,16 @@ function displayCwd(): string {
 }
 
 export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
-  // In focus mode, show only the last user+assistant exchange
-  const displayMessages = focusMode ? getLastExchange(messages) : messages
+  // In focus mode, compact tool activity into summary lines
+  const displayMessages = focusMode ? compactForFocus(messages) : messages
 
   return (
     <Box flexDirection="column" marginY={1} flexGrow={1}>
       {focusMode && messages.length > 0 && (
         <Box marginBottom={1}>
           <Text dimColor>
-            🔍 Focus mode — showing last exchange only ({displayMessages.length} of{' '}
-            {messages.length} messages hidden)
+            🔍 Focus — {countHidden(messages, displayMessages)} hidden · /focus to toggle · Ctrl+O to
+            expand
           </Text>
         </Box>
       )}
@@ -92,22 +92,55 @@ export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
 }
 
 /**
- * In focus mode, show only the last user→assistant exchange.
- * Walk backwards from the end to find the last user message, then include
- * everything from that point onward.
+ * Compact messages for focus view:
+ * - Groups consecutive tool calls into [▶ N tools] ↳ name1 ↳ name2 summary lines
+ * - Keeps all user, assistant, and system messages intact
  */
-function getLastExchange(messages: ChatMessage[]): ChatMessage[] {
-  if (messages.length <= 2) return messages
+function compactForFocus(messages: ChatMessage[]): ChatMessage[] {
+  const result: ChatMessage[] = []
+  let toolGroup: ChatMessage[] = []
 
-  // Find the last user message index
-  let lastUserIdx = -1
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i]!.role === 'user') {
-      lastUserIdx = i
-      break
+  for (const msg of messages) {
+    if (msg.toolMeta) {
+      toolGroup.push(msg)
+    } else {
+      // Flush pending tool group
+      if (toolGroup.length > 0) {
+        result.push(summarizeToolGroup(toolGroup))
+        toolGroup = []
+      }
+      result.push(msg)
     }
   }
+  // Flush remaining
+  if (toolGroup.length > 0) {
+    result.push(summarizeToolGroup(toolGroup))
+  }
 
-  if (lastUserIdx === -1) return messages
-  return messages.slice(lastUserIdx)
+  return result
+}
+
+/** Summarize a group of tool calls into a single compact message. */
+function summarizeToolGroup(tools: ChatMessage[]): ChatMessage {
+  const names = tools.map((t) => t.toolMeta!.name)
+  const uniqueNames = [...new Set(names)]
+  const toolList = uniqueNames.map((n) => `↳ ${n}`).join('  ')
+  return {
+    role: 'system',
+    content: `[▶ ${tools.length} tool${tools.length > 1 ? 's' : ''}]  ${toolList}`,
+    toolMeta: {
+      name: `tools (${tools.length})`,
+      input: '',
+      output: tools.map((t) => t.content).join('\n'),
+      collapsed: true,
+    },
+  }
+}
+
+/** Count how many messages are hidden in focus mode. */
+function countHidden(all: ChatMessage[], compacted: ChatMessage[]): string {
+  const toolCount = all.filter((m) => m.toolMeta).length
+  const hidden = all.length - compacted.length
+  if (hidden <= 0) return `showing all ${all.length} messages`
+  return `${hidden} tool outputs folded (${toolCount} total tool calls)`
 }

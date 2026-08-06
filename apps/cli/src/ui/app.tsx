@@ -372,6 +372,11 @@ export function App({
       setPickerOpen((prev) => !prev)
       return
     }
+    // Ctrl+F → toggle focus mode
+    if (_input === '\x06') {
+      setFocusMode((prev) => !prev)
+      return
+    }
     // Ctrl+O → toggle last tool call expand/collapse
     if (_input === '\x0f') {
       setMessages((prev) => {
@@ -480,7 +485,10 @@ export function App({
             ● {PERMISSION_LABELS[permissionMode]}
           </Text>
           <Text dimColor> · Shift+Tab mode</Text>
-          <Text dimColor> · Ctrl+P model · Ctrl+O expand</Text>
+          <Text dimColor>
+            {' '}
+            · Ctrl+P model · Ctrl+F focus · Ctrl+O expand
+          </Text>
           <Text dimColor> · Esc cancel · /help · ← agents</Text>
         </Box>
       </Box>
