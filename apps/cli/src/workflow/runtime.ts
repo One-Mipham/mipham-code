@@ -5,6 +5,7 @@ import { workflowAgent } from './primitives/agent'
 import { parallel } from './primitives/parallel'
 import { pipeline } from './primitives/pipeline'
 import { phase as phasePrimitive } from './primitives/phase'
+import { verify, judge } from './primitives/verify'
 import type { ProviderRegistry } from '../providers/registry'
 import type { QueryEngine } from '../core/engine'
 
@@ -147,6 +148,8 @@ export async function runWorkflow(
     'agent',
     'parallel',
     'pipeline',
+    'verify',
+    'judge',
     'phase',
     'log',
     'args',
@@ -154,7 +157,7 @@ export async function runWorkflow(
     wrappedScript,
   )
 
-  const result = await scriptFn(agent, parallel, pipeline, wrappedPhase, log, args, budget)
+  const result = await scriptFn(agent, parallel, pipeline, verify, judge, wrappedPhase, log, args, budget)
 
   // Count journal entries from state
   const priorEntries = loadJournal(runId)
