@@ -11,6 +11,8 @@
  *   const unread = bus.poll('bg-1')  // messages addressed TO bg-1
  */
 
+export type AgentMessageType = 'message' | 'warning' | 'error'
+
 export interface AgentMessage {
   id: string
   from: string
@@ -19,6 +21,7 @@ export interface AgentMessage {
   message: string
   timestamp: Date
   read: boolean
+  type: AgentMessageType
 }
 
 export class AgentMessageBus {
@@ -29,7 +32,7 @@ export class AgentMessageBus {
    * Post a message from one agent to another.
    * Returns the message ID.
    */
-  post(from: string, to: string, summary: string, message: string): string {
+  post(from: string, to: string, summary: string, message: string, type: AgentMessageType = 'message'): string {
     const id = `msg-${++this.idCounter}`
     this.messages.push({
       id,
@@ -39,6 +42,7 @@ export class AgentMessageBus {
       message,
       timestamp: new Date(),
       read: false,
+      type,
     })
     return id
   }
@@ -89,6 +93,14 @@ export class AgentMessageBus {
    */
   unreadCount(agentId: string): number {
     return this.messages.filter((m) => m.to === agentId && !m.read).length
+  }
+
+  /**
+   * Get all unread warning messages for an agent.
+   * Does NOT mark them as read — use markRead() for that.
+   */
+  getWarnings(agentId: string): AgentMessage[] {
+    return this.messages.filter((m) => m.to === agentId && m.type === 'warning' && !m.read)
   }
 
   /**

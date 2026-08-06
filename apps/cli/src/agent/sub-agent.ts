@@ -3,6 +3,7 @@ import type { ToolDefinition } from '../shared/index.ts'
 import type { SubAgentType, SubAgentOptions, AgentDefinition } from './types'
 import { createAgentContext } from './agent-context'
 import { getBackgroundAgentRegistry } from './background-registry'
+import { getMessageBus } from './message-bus'
 import type { HookEngine } from '../core/hooks'
 import type { PermissionSystem } from '../core/permission'
 
@@ -162,9 +163,13 @@ export class SubAgent {
       const availableModels = this.registry.listModels()
       const modelExists = availableModels.some((m) => m.id === resolvedModel)
       if (!modelExists) {
-        console.warn(
-          `Warning: model "${resolvedModel}" not found in provider registry. Falling back to "${model}".`,
-        )
+        const warnMsg = `Warning: model "${resolvedModel}" not found in provider registry. Falling back to "${model}".`
+        console.warn(warnMsg)
+
+        // Post warning to message bus for UI display
+        const bus = getMessageBus()
+        bus.post('system', 'main', `Sub-agent model fallback: ${resolvedModel} → ${model}`, warnMsg, 'warning')
+
         finalModel = model
       }
     }

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { SubAgent } from '../../src/agent/sub-agent'
+import { getMessageBus } from '../../src/agent/message-bus'
 import type { ProviderRegistry, ProviderInstance, ChatRequest } from '../../src/providers/registry'
 import type { ToolDefinition, StreamChunk } from '../../src/shared/index.ts'
 
@@ -252,5 +253,32 @@ describe('SubAgent', () => {
 
     expect(receivedModel).toBe('claude-sonnet')
     expect(result).toContain('ok')
+  })
+
+  it('posts warning to message bus when model fallback occurs', async () => {
+    const provider = createMockProvider([{ type: 'text', content: 'ok' }, { type: 'stop' }])
+
+    const knownModels = [
+      { id: 'mock-model', name: 'Mock Model', providerId: 'mock', contextWindow: 128000, maxOutput: 4096 },
+    ]
+    const registry = createMockRegistry(provider, { models: knownModels })
+
+    const bus = getMessageBus()
+    // Clear any pre-existing messages to isolate this test
+    bus.markAllRead('main')
+
+    const sub = new SubAgent(registry, TOOLS)
+    const result = await sub.execute('test', 'test task', { modelOverride: 'unknown-model-xyz' })
+
+    expect(result).toContain('ok')
+
+    const warnings = bus.getWarnings('main')
+    expect(warnings.length).toBeGreaterThanOrEqual(1)
+
+    const warningMsg = warnings.find((m) => m.type === 'warning' && m.from === 'system')
+    expect(warningMsg).toBeDefined()
+    expect(warningMsg!.summary).toContain('unknown-model-xyz')
+    expect(warningMsg!.summary).toContain('mock-model')
+    expect(warningMsg!.type).toBe('warning')
   })
 })
