@@ -64,6 +64,14 @@ export class ProviderRegistry {
     return provider.config.models.filter((m) => m.status === 'active')
   }
 
+  findModel(modelId: string): ModelInfo | undefined {
+    for (const provider of this.providers.values()) {
+      const model = provider.config.models.find((m) => m.id === modelId)
+      if (model) return model
+    }
+    return undefined
+  }
+
   async *chat(req: ChatRequest): AsyncGenerator<StreamChunk> {
     const provider = this.getActive()
     yield* provider.chat({ ...req, model: req.model || this.activeModelId })

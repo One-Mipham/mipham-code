@@ -90,7 +90,21 @@ export async function runApp(options: RunOptions): Promise<void> {
   const sessionName = options.resume || `session-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`
 
   // Initialize context — restore saved session if available
-  const context = new ContextManager({ maxTokens: 200_000, compactionThreshold: 0.9 })
+  // Read the active model's context window for dynamic max-token sizing.
+  // MIPHAM_DISABLE_1M_CONTEXT=1 caps the effective window at 200K even for
+  // models that support larger contexts (e.g. 1M).
+  const activeModel = registry.findModel(defaultModel)
+  const modelContextWindow = activeModel?.contextWindow || 200_000
+  const DISABLE_1M = process.env.MIPHAM_DISABLE_1M_CONTEXT === '1'
+  const contextMaxTokens = (DISABLE_1M && modelContextWindow > 200_000)
+    ? 200_000
+    : modelContextWindow
+
+  if (DISABLE_1M && modelContextWindow <= 200_000) {
+    console.error('[mipham] ⚠ MIPHAM_DISABLE_1M_CONTEXT is set but auto-compaction is not holding the session to 200K — model context window is already ≤ 200K')
+  }
+
+  const context = new ContextManager({ maxTokens: contextMaxTokens, compactionThreshold: 0.9 })
 
   if (options.resume) {
     const saved = SessionStore.load(options.resume)

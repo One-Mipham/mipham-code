@@ -360,4 +360,44 @@ describe('ContextManager', () => {
     const id = ctx.saveCheckpoint('test')
     expect(ctx.getLastCheckpointId()).toBe(id)
   })
+
+  // ═══════════════════════════════════════════
+  // updateMaxTokens / getMaxTokens
+  // ═══════════════════════════════════════════
+
+  it('should update max tokens dynamically', () => {
+    const ctx = makeContext(100_000)
+    expect(ctx.getMaxTokens()).toBe(100_000)
+
+    ctx.updateMaxTokens(500_000)
+    expect(ctx.getMaxTokens()).toBe(500_000)
+  })
+
+  it('should update max tokens to 1M for large context windows', () => {
+    const ctx = makeContext(200_000)
+    expect(ctx.getMaxTokens()).toBe(200_000)
+
+    ctx.updateMaxTokens(1_000_000)
+    expect(ctx.getMaxTokens()).toBe(1_000_000)
+  })
+
+  it('should respect compaction threshold after max tokens update', () => {
+    const ctx = makeContext(200_000, 0.9)
+    // At 200K tokens max, threshold = 180K → won't compact with small content
+    ctx.setSystemPrompt('small prompt')
+    expect(ctx.needsCompaction()).toBe(false)
+
+    // Update to a tiny max — should now need compaction
+    ctx.updateMaxTokens(10)
+    // threshold = 9 tokens, 'small prompt' = 12 chars → ceil(12/4) = 3 → still under
+    // But needsCompaction checks >, not >=, so 3 > 9 is false
+    ctx.setSystemPrompt('larger prompt content here') // ~28 chars → 7 tokens, > 9? no
+    // Use a really large prompt to trigger
+    ctx.setSystemPrompt('A'.repeat(1000)) // 250 tokens > 9 threshold → true
+    expect(ctx.needsCompaction()).toBe(true)
+
+    // Restore to large max
+    ctx.updateMaxTokens(1_000_000)
+    expect(ctx.needsCompaction()).toBe(false)
+  })
 })
