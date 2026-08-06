@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+# bump-version.sh — Bump Mipham Code version across all files, sync lockfile, verify CI.
+#
+# Usage: ./scripts/bump-version.sh <new-version>
+# Example: ./scripts/bump-version.sh 0.16.2
+#
+# Updates:
+#   1. apps/cli/package.json           — "version" field
+#   2. packages/shared/src/package-info.ts  — PACKAGE_VERSION constant
+#   3. packages/shared/package-info.json    — PACKAGE_VERSION field
+#   4. pnpm-lock.yaml                  — regenerated from package.json changes
+#   5. Runs CI checks locally: typecheck → lint → format → build → test
+
+set -euo pipefail
+
+NEW_VERSION="${1:-}"
+if [ -z "$NEW_VERSION" ]; then
+  echo "Usage: $0 <new-version>"
+  echo "Example: $0 0.16.2"
+  exit 1
+fi
+
+# Validate semver-ish format
+if ! echo "$NEW_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$'; then
+  echo "❌ Invalid version format: $NEW_VERSION (expected X.Y.Z or X.Y.Z-prerelease)"
+  exit 1
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$ROOT"
+
+# ── Step 0: Check clean working tree ──
+if ! git diff-index --quiet HEAD -- 2>/dev/null; then
+  echo "❌ Working tree is dirty. Please commit or stash changes first."
+  exit 1
+fi
+
+# ── Step 1: Get current version ──
+CURRENT=$(node -e "console.log(require('./apps/cli/package.json').version)")
+echo "📦 Bumping: $CURRENT → $NEW_VERSION"
+echo ""
+
+# ── Step 2: Update apps/cli/package.json ──
+echo "  [1/6] apps/cli/package.json"
+node -e "
+const fs = require('fs');
+const pkg = JSON.parse(fs.readFileSync('apps/cli/package.json','utf8'));
+pkg.version = '$NEW_VERSION';
+fs.writeFileSync('apps/cli/package.json', JSON.stringify(pkg, null, 2) + '\n');
+"
+echo "         ✓ $NEW_VERSION"
+
+# ── Step 3: Update packages/shared/src/package-info.ts ──
+echo "  [2/6] packages/shared/src/package-info.ts"
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  sed -i '' "s/PACKAGE_VERSION = '[^']*'/PACKAGE_VERSION = '$NEW_VERSION'/" packages/shared/src/package-info.ts
+else
+  sed -i "s/PACKAGE_VERSION = '[^']*'/PACKAGE_VERSION = '$NEW_VERSION'/" packages/shared/src/package-info.ts
+fi
+echo "         ✓ $NEW_VERSION"
+
+# ── Step 4: Update packages/shared/package-info.json ──
+echo "  [3/6] packages/shared/package-info.json"
+node -e "
+const fs = require('fs');
+const info = JSON.parse(fs.readFileSync('packages/shared/package-info.json','utf8'));
+info.PACKAGE_VERSION = '$NEW_VERSION';
+fs.writeFileSync('packages/shared/package-info.json', JSON.stringify(info, null, 2) + '\n');
+"
+echo "         ✓ $NEW_VERSION"
+
+# ── Step 5: Sync lockfile ──
+echo "  [4/6] pnpm install (sync lockfile)..."
+pnpm install --no-frozen-lockfile --silent 2>&1 | tail -1
+echo "         ✓ lockfile synced"
+
+# ── Step 6: Format lockfile ──
+echo "  [5/6] prettier pnpm-lock.yaml..."
+pnpm prettier --write pnpm-lock.yaml --log-level silent 2>/dev/null || true
+echo "         ✓ formatted"
+
+# ── Step 7: Verify ──
+echo "  [6/6] CI checks..."
+echo ""
+FAILED=0
+
+echo -n "    typecheck ... "
+if pnpm -r typecheck >/dev/null 2>&1; then
+  echo "✓"
+else
+  echo "❌"
+  FAILED=1
+fi
+
+echo -n "    lint ..... "
+if pnpm lint >/dev/null 2>&1; then
+  echo "✓"
+else
+  echo "❌"
+  FAILED=1
+fi
+
+echo -n "    format ... "
+if pnpm format:check >/dev/null 2>&1; then
+  echo "✓"
+else
+  echo "❌"
+  FAILED=1
+fi
+
+echo -n "    build .... "
+if pnpm -r build >/dev/null 2>&1; then
+  echo "✓"
+else
+  echo "❌"
+  FAILED=1
+fi
+
+echo -n "    test ..... "
+if pnpm -r test >/dev/null 2>&1; then
+  echo "✓"
+else
+  echo "❌"
+  FAILED=1
+fi
+
+echo ""
+
+if [ $FAILED -eq 0 ]; then
+  echo "✅ All checks passed! Ready to commit:"
+  echo ""
+  echo "   git add apps/cli/package.json packages/shared/src/package-info.ts packages/shared/package-info.json pnpm-lock.yaml"
+  echo "   git commit -m \"chore: bump version to $NEW_VERSION\""
+  echo "   git push origin main"
+  echo ""
+  echo "   Then: cd apps/cli && npm publish --access public"
+  echo "   Then: gh release create v$NEW_VERSION --repo One-Mipham/mipham-code ..."
+else
+  echo "❌ Some checks failed. Review errors above before committing."
+  exit 1
+fi
