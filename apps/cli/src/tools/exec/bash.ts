@@ -52,6 +52,18 @@ const BLOCKED_PATTERNS = [
   /\bscp\s+.*(?:\.ssh|\.aws|\.env)/,
   // Write to system paths
   />\s*\/(?:etc|usr|boot|sys|proc)\//,
+  // P0 hardening — ANSI-C quoting bypass (e.g. $'\x72\x6d' = rm)
+  /\$'\\x[0-9a-fA-F]{2}/,
+  // P0 hardening — nested interpreter invocation
+  /\b(?:bash|sh|zsh|dash|ksh)\s+-c\b/,
+  // P0 hardening — eval builtin (obfuscation vector)
+  /\beval\s+/,
+  // P0 hardening — exec redirect bypass (e.g. exec >/dev/sda)
+  /\bexec\s+\d*>/,
+  // P0 hardening — source/dot builtin (script sourcing)
+  /\bsource\s+/,
+  // P0 hardening — base64 decode + pipe
+  /\bbase64\s+(?:-d|--decode)\b/,
 ]
 
 const BLOCKED_COMMANDS = [
@@ -71,18 +83,38 @@ const BLOCKED_COMMANDS = [
   'init',
   'telinit',
   'systemctl',
+  'eval',
+  'exec',
+  'source',
+  '.',
 ]
 
+/**
+ * Normalize ANSI-C escape sequences ($'...') in a command string.
+ * Converts hex escapes (\xHH) back to literal characters so that
+ * existing patterns (e.g. rm -rf /) still catch obfuscated payloads.
+ */
+function normalizeEscapes(command: string): string {
+  return command.replace(/\$'([^']*)'/g, (_, inner: string) =>
+    inner.replace(/\\x([0-9a-fA-F]{2})/g, (_, hex: string) =>
+      String.fromCharCode(parseInt(hex, 16)),
+    ),
+  )
+}
+
 function isBlocked(command: string): string | null {
-  // Check exact blocked commands
-  const firstWord = command.trim().split(/\s+/)[0]
+  // Normalize ANSI-C escape sequences for defense-in-depth
+  const normalized = normalizeEscapes(command)
+
+  // Check exact blocked commands (on normalized command)
+  const firstWord = normalized.trim().split(/\s+/)[0]
   if (firstWord && BLOCKED_COMMANDS.includes(firstWord)) {
-    return `Command "${firstWord}" is blocked (destructive filesystem operation).`
+    return `Command "${firstWord}" rejected by security policy.`
   }
 
-  // Check dangerous patterns
+  // Check dangerous patterns (on both original and normalized)
   for (const pattern of BLOCKED_PATTERNS) {
-    if (pattern.test(command)) {
+    if (pattern.test(command) || pattern.test(normalized)) {
       return `Command rejected by security policy. Pattern matched: ${pattern.source.slice(0, 40)}...`
     }
   }
