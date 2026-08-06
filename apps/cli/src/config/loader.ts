@@ -15,8 +15,13 @@ import type {
   ProviderConfig,
   McpServerConfig,
   InferenceHookConfig,
+  CredentialMaskingConfig,
 } from '../shared/index.ts'
-import { DEFAULT_CONFIG, DEFAULT_INFERENCE_HOOK_CONFIG } from './defaults'
+import {
+  DEFAULT_CONFIG,
+  DEFAULT_INFERENCE_HOOK_CONFIG,
+  DEFAULT_CREDENTIAL_MASKING_CONFIG,
+} from './defaults'
 
 const MIPHAM_HOME = join(homedir(), '.mipham')
 const BACKUP_PREFIX = 'config.backup-'
@@ -293,6 +298,47 @@ export function loadInferenceHookConfig(cwd: string = process.cwd()): InferenceH
       }
     } catch {
       // Silently skip malformed configs — main loadConfig already warns
+    }
+  }
+
+  return merged
+}
+
+/**
+ * Load credential masking configuration from the same config sources.
+ * Merges project-level over user-level. Returns defaults if no section present.
+ */
+export function loadCredentialMaskingConfig(
+  cwd: string = process.cwd(),
+): CredentialMaskingConfig {
+  const configPath = join(cwd, '.mipham', 'config.yml')
+  const userConfigPath = join(MIPHAM_HOME, 'config.yml')
+
+  let merged = { ...DEFAULT_CREDENTIAL_MASKING_CONFIG }
+
+  const paths = [userConfigPath, configPath] // project wins (loaded last)
+  for (const path of paths) {
+    try {
+      if (!existsSync(path)) continue
+      const raw = readFileSync(path, 'utf-8')
+      const parsed = parseYaml(raw) as Record<string, unknown>
+      const section = parsed.credential_masking as Partial<CredentialMaskingConfig> | undefined
+      if (section) {
+        merged = {
+          enabled: section.enabled ?? merged.enabled,
+          files: section.files ?? merged.files,
+          output_scrubbing: {
+            enabled: section.output_scrubbing?.enabled ?? merged.output_scrubbing.enabled,
+            patterns: section.output_scrubbing?.patterns ?? merged.output_scrubbing.patterns,
+          },
+          env_filter: {
+            enabled: section.env_filter?.enabled ?? merged.env_filter.enabled,
+            patterns: section.env_filter?.patterns ?? merged.env_filter.patterns,
+          },
+        }
+      }
+    } catch {
+      // Silently skip malformed configs
     }
   }
 

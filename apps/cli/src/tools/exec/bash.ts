@@ -1,4 +1,11 @@
-import type { ToolDefinition } from '../../shared/index.ts'
+import type { ToolDefinition, CredentialMaskingConfig } from '../../shared/index.ts'
+
+// Injected at startup — set via index.tsx
+let credentialConfig: CredentialMaskingConfig | undefined
+
+export function setCredentialMaskingConfigForBash(config: CredentialMaskingConfig): void {
+  credentialConfig = config
+}
 
 // ── Dangerous command patterns ──
 const BLOCKED_PATTERNS = [
@@ -115,19 +122,37 @@ export const bashTool: ToolDefinition = {
     }
 
     try {
+      // ── Credential masking: filter sensitive env vars ──
+      let spawnEnv: Record<string, string | undefined> | undefined
+      if (credentialConfig?.enabled && credentialConfig.env_filter.enabled) {
+        const { filterEnv } = await import('../../core/credential-masker')
+        spawnEnv = filterEnv(process.env as Record<string, string | undefined>, credentialConfig)
+      }
+
       const proc = Bun.spawn(['bash', '-c', command], {
         cwd: ctx.cwd,
         stdout: 'pipe',
         stderr: 'pipe',
+        env: spawnEnv,
       })
 
       const timer = setTimeout(() => proc.kill(), timeout)
-      const output = await new Response(proc.stdout).text()
+      const rawOutput = await new Response(proc.stdout).text()
       const exitCode = await proc.exited
       clearTimeout(timer)
 
+      // ── Credential masking: scrub output ──
+      let output = rawOutput
+      if (credentialConfig?.enabled && credentialConfig.output_scrubbing.enabled) {
+        const { maskOutput } = await import('../../core/credential-masker')
+        output = maskOutput(rawOutput, credentialConfig)
+      }
+
       if (exitCode !== 0) {
-        const stderr = await new Response(proc.stderr).text()
+        const rawStderr = await new Response(proc.stderr).text()
+        const stderr = credentialConfig?.enabled && credentialConfig.output_scrubbing.enabled
+          ? (await import('../../core/credential-masker')).maskOutput(rawStderr, credentialConfig)
+          : rawStderr
         return {
           success: false,
           content: output.slice(0, 5_000),

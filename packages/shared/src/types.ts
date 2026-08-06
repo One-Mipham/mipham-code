@@ -257,3 +257,34 @@ export interface InferenceCheckResponse {
   verdict: 'allow' | 'deny'
   reason?: string
 }
+
+// ── Credential Masking Types ──
+
+export interface CredentialFullMaskRule {
+  path: string
+  mode: 'full'
+}
+
+export interface CredentialExtractRule {
+  path: string
+  mode: 'extract'
+  extract: Array<{
+    pattern: string
+    replacement?: string
+  }>
+}
+
+export type CredentialFileRule = CredentialFullMaskRule | CredentialExtractRule
+
+export interface CredentialMaskingConfig {
+  enabled: boolean
+  files: CredentialFileRule[]
+  output_scrubbing: {
+    enabled: boolean
+    patterns: string[]
+  }
+  env_filter: {
+    enabled: boolean
+    patterns: string[]
+  }
+}

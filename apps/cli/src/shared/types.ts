@@ -335,3 +335,37 @@ export interface InferenceCheckResponse {
   verdict: 'allow' | 'deny'
   reason?: string
 }
+
+// ── Credential Masking Types ──
+
+/** Full-file masking rule: entire file content replaced with sentinel. */
+export interface CredentialFullMaskRule {
+  path: string
+  mode: 'full'
+}
+
+/** Extract-based masking rule: only regex-matched tokens are replaced. */
+export interface CredentialExtractRule {
+  path: string
+  mode: 'extract'
+  extract: Array<{
+    pattern: string
+    replacement?: string
+  }>
+}
+
+export type CredentialFileRule = CredentialFullMaskRule | CredentialExtractRule
+
+/** Configuration for credential masking, loaded from config.yml. */
+export interface CredentialMaskingConfig {
+  enabled: boolean
+  files: CredentialFileRule[]
+  output_scrubbing: {
+    enabled: boolean
+    patterns: string[]
+  }
+  env_filter: {
+    enabled: boolean
+    patterns: string[]
+  }
+}

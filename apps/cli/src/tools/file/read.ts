@@ -1,6 +1,13 @@
 import { readFileSync, existsSync, statSync } from 'node:fs'
-import type { ToolDefinition } from '../../shared/index.ts'
+import type { ToolDefinition, CredentialMaskingConfig } from '../../shared/index.ts'
 import { resolveSafe } from '../../security/path'
+
+// Injected at startup — set via index.tsx
+let credentialConfig: CredentialMaskingConfig | undefined
+
+export function setCredentialMaskingConfigForRead(config: CredentialMaskingConfig): void {
+  credentialConfig = config
+}
 
 export const readTool: ToolDefinition = {
   name: 'Read',
@@ -37,6 +44,29 @@ export const readTool: ToolDefinition = {
     const offset = (params.offset as number) || 0
     const limit = (params.limit as number) || 2000
     const content = readFileSync(filePath, 'utf-8')
+
+    // ── Credential masking ──
+    if (credentialConfig) {
+      const { matchCredentialFile, maskContent, CREDENTIAL_SENTINEL } = await import(
+        '../../core/credential-masker'
+      )
+      const rule = matchCredentialFile(filePath, credentialConfig)
+      if (rule) {
+        const masked = maskContent(content, rule)
+        // Full-file mask: return sentinel immediately (offset/limit don't apply)
+        if (masked === CREDENTIAL_SENTINEL) {
+          return { success: true, content: masked }
+        }
+        // Extract mode: apply offset/limit on masked content
+        const maskedLines = masked.split('\n')
+        const maskedSlice = maskedLines.slice(offset, offset + limit)
+        const maskedResult = maskedSlice
+          .map((l, i) => `${String(offset + i + 1).padStart(6, ' ')}\t${l}`)
+          .join('\n')
+        return { success: true, content: maskedResult }
+      }
+    }
+
     const lines = content.split('\n')
     const slice = lines.slice(offset, offset + limit)
     const result = slice

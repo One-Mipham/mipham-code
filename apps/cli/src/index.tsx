@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { render } from 'ink'
 import { App } from './ui/app'
-import { loadConfig, loadInferenceHookConfig } from './config/loader'
+import { loadConfig, loadInferenceHookConfig, loadCredentialMaskingConfig } from './config/loader'
 import { bootstrapProviders } from './providers/bootstrap'
 import { InstructionsLoader } from './core/instructions'
 import { loadSessionMemories } from './core/memory/memory-loader'
@@ -156,6 +156,13 @@ export async function runApp(options: RunOptions): Promise<void> {
   // Wire inference hooks (DLP) configuration
   const inferenceHookConfig = loadInferenceHookConfig()
   engine.setInferenceHookConfig(inferenceHookConfig)
+
+  // Wire credential masking configuration into tools
+  const credentialMaskingConfig = loadCredentialMaskingConfig()
+  const { setCredentialMaskingConfigForRead } = await import('./tools/file/read')
+  const { setCredentialMaskingConfigForBash } = await import('./tools/exec/bash')
+  setCredentialMaskingConfigForRead(credentialMaskingConfig)
+  setCredentialMaskingConfigForBash(credentialMaskingConfig)
 
   // Sync engine permission with config (fix: UI shows "auto" but engine defaulted to bypass-legacy)
   if (config.permission) {

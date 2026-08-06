@@ -1,4 +1,4 @@
-import type { MiphamConfig, InferenceHookConfig } from '../shared/index.ts'
+import type { MiphamConfig, InferenceHookConfig, CredentialMaskingConfig } from '../shared/index.ts'
 import { DEFAULT_PROVIDERS } from '../shared/index.ts'
 import { PACKAGE_VERSION } from '../shared/index.ts'
 
@@ -17,4 +17,19 @@ export const DEFAULT_INFERENCE_HOOK_CONFIG: InferenceHookConfig = {
   on_failure: 'fail-closed',
   organization_id: '',
   headers: {},
+}
+
+export const DEFAULT_CREDENTIAL_MASKING_CONFIG: CredentialMaskingConfig = {
+  enabled: true,
+  files: [],
+  output_scrubbing: {
+    enabled: true,
+    patterns: [
+      '(?i)(api[_-]?key|secret|token|password|credential)\\s*[:=]\\s*\\S+',
+    ],
+  },
+  env_filter: {
+    enabled: true,
+    patterns: ['(?i)(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH)$'],
+  },
 }
