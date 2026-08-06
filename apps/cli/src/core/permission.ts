@@ -20,6 +20,17 @@ export class PermissionSystem {
   private legacyDefaultFallback: PermissionLevel | null = null
   private mode: PermissionMode = 'default'
 
+  // ── Permission cache (P2) ──
+  /** Short-lived cache: toolName+input → permissionLevel. Invalidated on rule/mode change. */
+  private checkCache = new Map<string, PermissionLevel>()
+  private cacheMode: PermissionMode | null = null
+
+  /** Invalidate the permission cache (called on any rule/mode change). */
+  private invalidateCache(): void {
+    this.checkCache.clear()
+    this.cacheMode = null
+  }
+
   constructor(modeOrLevel: PermissionLevel = 'default') {
     if (VALID_MODES.has(modeOrLevel)) {
       this.mode = modeOrLevel as PermissionMode
@@ -34,6 +45,7 @@ export class PermissionSystem {
 
   setMode(mode: PermissionMode): void {
     this.mode = mode
+    this.invalidateCache()
   }
 
   getMode(): PermissionMode {
@@ -75,6 +87,8 @@ export class PermissionSystem {
     for (const rule of config.deny) {
       this.denyRules.push(compileRule(rule, 'deny'))
     }
+
+    this.invalidateCache()
   }
 
   // ── Permission check ──
@@ -91,37 +105,74 @@ export class PermissionSystem {
    * 8. System default → 'ask'
    */
   check(tool: ToolDefinition, input: Record<string, unknown>): PermissionLevel {
+    // ── Cache lookup (P2): reuse decision for same tool+mode+input ──
+    const cacheKey = tool.name + '|' + JSON.stringify(input, Object.keys(input).sort())
+    if (this.cacheMode === this.mode) {
+      const cached = this.checkCache.get(cacheKey)
+      if (cached !== undefined) return cached
+    } else {
+      // Mode changed — invalidate entire cache
+      this.checkCache.clear()
+      this.cacheMode = this.mode
+    }
+
     // 1. Check deny rules (always win)
     for (const rule of this.denyRules) {
-      if (this.ruleMatches(rule, tool, input)) return 'ask'
+      if (this.ruleMatches(rule, tool, input)) {
+        const result: PermissionLevel = 'ask'
+        this.checkCache.set(cacheKey, result)
+        return result
+      }
     }
 
     // 2. Check ask rules
     for (const rule of this.askRules) {
-      if (this.ruleMatches(rule, tool, input)) return 'ask'
+      if (this.ruleMatches(rule, tool, input)) {
+        const result: PermissionLevel = 'ask'
+        this.checkCache.set(cacheKey, result)
+        return result
+      }
     }
 
     // 3. Check allow rules
     for (const rule of this.allowRules) {
-      if (this.ruleMatches(rule, tool, input)) return 'bypass'
+      if (this.ruleMatches(rule, tool, input)) {
+        const result: PermissionLevel = 'bypass'
+        this.checkCache.set(cacheKey, result)
+        return result
+      }
     }
 
     // 4. Legacy exact-name rules (backward compat)
     const legacyLevel = this.legacyRules.get(tool.name)
-    if (legacyLevel !== undefined) return legacyLevel
+    if (legacyLevel !== undefined) {
+      this.checkCache.set(cacheKey, legacyLevel)
+      return legacyLevel
+    }
 
     // 5. Mode baseline
     const baseline = this.modeBaseline(tool)
-    if (baseline !== 'mode-baseline') return baseline
+    if (baseline !== 'mode-baseline') {
+      this.checkCache.set(cacheKey, baseline)
+      return baseline
+    }
 
     // 6. Tool's own permission level (backward compat fallback)
-    if (tool.permission) return tool.permission
+    if (tool.permission) {
+      this.checkCache.set(cacheKey, tool.permission)
+      return tool.permission
+    }
 
     // 7. Legacy constructor fallback
-    if (this.legacyDefaultFallback) return this.legacyDefaultFallback
+    if (this.legacyDefaultFallback) {
+      this.checkCache.set(cacheKey, this.legacyDefaultFallback)
+      return this.legacyDefaultFallback
+    }
 
     // 8. System default
-    return 'ask'
+    const result: PermissionLevel = 'ask'
+    this.checkCache.set(cacheKey, result)
+    return result
   }
 
   needsApproval(tool: ToolDefinition, input: Record<string, unknown>): boolean {
@@ -193,6 +244,7 @@ export class PermissionSystem {
     if (level === 'auto') this.mode = 'auto'
     else if (level === 'bypass') this.mode = 'bypassPermissions'
     else this.mode = 'default'
+    this.invalidateCache()
   }
 
   getDefaultLevel(): PermissionLevel {
@@ -229,11 +281,13 @@ export class PermissionSystem {
         else if (rule.level === 'ask') this.ask(rule.toolName)
       }
     }
+    this.invalidateCache()
   }
 
   removeRule(toolName: string): void {
     this.legacyRules.delete(toolName)
     this.removeRuleFromArrays(toolName)
+    this.invalidateCache()
   }
 
   private removeRuleFromArrays(toolName: string): void {

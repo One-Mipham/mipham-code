@@ -45,6 +45,7 @@ export class PluginManager {
     mkdirSync(destDir, { recursive: true })
     this.copyDir(sourcePath, destDir)
 
+    const similarWarning = this.findSimilarWarning(validation.manifest.name)
     this.plugins.push({
       name: validation.manifest.name,
       version: validation.manifest.version,
@@ -56,7 +57,9 @@ export class PluginManager {
     this.saveState()
     return {
       success: true,
-      message: `Plugin "${validation.manifest.name}" v${validation.manifest.version} installed`,
+      message:
+        `Plugin "${validation.manifest.name}" v${validation.manifest.version} installed` +
+        (similarWarning ? `\n⚠ ${similarWarning}` : ''),
     }
   }
 
@@ -120,9 +123,12 @@ export class PluginManager {
       })
 
       this.saveState()
+      const similarWarning = this.findSimilarWarning(pluginName)
       return {
         success: true,
-        message: `Plugin "${pluginName}" installed from npm`,
+        message:
+          `Plugin "${pluginName}" installed from npm` +
+          (similarWarning ? `\n⚠ ${similarWarning}` : ''),
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -138,6 +144,37 @@ export class PluginManager {
 
   list(): InstalledPlugin[] {
     return [...this.plugins]
+  }
+
+  /**
+   * Check if the new plugin name is similar to any existing installed plugin.
+   * Warns about potential name squatting / confusion.
+   * Returns a warning string or empty string.
+   */
+  private findSimilarWarning(newName: string): string {
+    const existing = this.plugins.map((p) => p.name)
+    const similar = existing.filter((name) => this.areNamesSimilar(newName, name))
+    if (similar.length === 0) return ''
+    return `Similar plugin${similar.length > 1 ? 's' : ''} already installed: ${similar.join(', ')}. Verify you trust this source.`
+  }
+
+  /**
+   * Two names are "similar" if:
+   * - One is a prefix of the other (e.g. "auth" vs "auth-pro")
+   * - They differ by ≤ 2 characters (Levenshtein distance)
+   */
+  private areNamesSimilar(a: string, b: string): boolean {
+    if (a === b) return false // exact match is handled by "already installed" check
+    if (a.startsWith(b) || b.startsWith(a)) return true
+
+    // Simple edit-distance approximation: count differing chars
+    const maxLen = Math.max(a.length, b.length)
+    let diffs = 0
+    for (let i = 0; i < maxLen; i++) {
+      if (a[i] !== b[i]) diffs++
+      if (diffs > 2) return false
+    }
+    return diffs <= 2
   }
 
   /**
