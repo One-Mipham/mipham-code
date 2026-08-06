@@ -10,6 +10,7 @@ import type { SkillsLoader } from '../skills/loader'
 import type { PluginManager } from '../plugin/plugin-manager'
 import { McpClient } from '../mcp/client'
 import { NPM_INSTALL_COMMAND, NPM_UPDATE_COMMAND, PACKAGE_VERSION } from '../shared/index.ts'
+import { getPreference } from '../config/preferences'
 
 export interface CommandContext {
   engine: QueryEngine
@@ -1682,7 +1683,7 @@ function gitDiffBridgeCmd(opts: {
   label: string
   noChangesHint: string
   runningMsg: string
-  forwardToAI: string
+  forwardToAI: string | (() => string)
 }): CommandHandler {
   return async () => {
     try {
@@ -1693,7 +1694,7 @@ function gitDiffBridgeCmd(opts: {
       }
       return {
         content: `─ ${opts.label} ─\n\n${opts.runningMsg}\n\nChanged files:\n${diff}`,
-        forwardToAI: opts.forwardToAI,
+        forwardToAI: typeof opts.forwardToAI === 'function' ? opts.forwardToAI() : opts.forwardToAI,
       }
     } catch {
       return {
@@ -1709,8 +1710,8 @@ const codeReviewCmd = gitDiffBridgeCmd({
     'No uncommitted changes to review.\n\nTo review a specific file: /code-review path/to/file.ts',
   runningMsg:
     'Reviewing uncommitted changes with the code-review skill (7 dimensions: correctness, security, performance, code quality, architecture, testing, language-specific)...',
-  forwardToAI:
-    'use the code-review skill to review all uncommitted changes. Check all 7 dimensions: correctness, security, performance, code quality, architecture & design, testing, and language-specific issues.',
+  forwardToAI: () =>
+    `use the code-review skill to review all uncommitted changes. Check all 7 dimensions: correctness, security, performance, code quality, architecture & design, testing, and language-specific issues. Use effort level: ${getPreference('lastCodeReviewEffort', 'high')}.`,
 })
 
 const simplifyCmd = gitDiffBridgeCmd({

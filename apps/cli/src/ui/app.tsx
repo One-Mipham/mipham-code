@@ -1,9 +1,10 @@
-import React, { useState, useCallback, useRef, useMemo } from 'react'
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { Box, Text, useInput } from 'ink'
 import type { QueryEngine } from '../core/engine'
 import type { MiphamConfig } from '../shared/index.ts'
 import type { SkillsLoader } from '../skills/loader'
 import type { PluginManager } from '../plugin/plugin-manager'
+import { getPreference, setPreference } from '../config/preferences'
 import { AgentRegistry } from '../agent/agent-registry'
 import { ChatPanel } from './chat'
 import { InputBar } from './input'
@@ -102,6 +103,12 @@ export function App({
   const [agentProgress, setAgentProgress] = useState<AgentProgress | null>(null)
   const [agentElapsed, setAgentElapsed] = useState(0)
 
+  // Load persisted effort on mount
+  useEffect(() => {
+    const saved = getPreference('lastCodeReviewEffort', 'high')
+    setEffort(saved)
+  }, [])
+
   // Agent elapsed timer
   React.useEffect(() => {
     if (!agentProgress) {
@@ -136,7 +143,10 @@ export function App({
       sessionId: sessionId || '',
       setSessionTitle: (title: string) => setSessionTitle(title),
       setFastMode: (on: boolean) => setFastMode(on),
-      setEffort: (level: string) => setEffort(level),
+      setEffort: (level: string) => {
+        setEffort(level)
+        setPreference('lastCodeReviewEffort', level)
+      },
       setFocusMode: (on: boolean) => setFocusMode(on),
       setGoal: (text: string) => setGoalText(text),
       skillsLoader,
