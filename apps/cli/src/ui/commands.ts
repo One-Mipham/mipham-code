@@ -3691,6 +3691,99 @@ Run \`mipham agents\` for the interactive dashboard.`,
 // Artifacts
 // ═══════════════════════════════════════════════════════════════
 
+const forkCmd: CommandHandler = async (ctx, args) => {
+  const prompt = args.join(' ')
+  if (!prompt.trim()) {
+    return {
+      content: [
+        'Usage: /fork <task description>',
+        '',
+        'Fork a task into an isolated worktree with auto commit/push.',
+        '',
+        'Workflow:',
+        '  1. Creates a new git worktree on branch worktree/<slug>',
+        '  2. Spawns a background agent to work on the task',
+        '  3. Auto-commits changes with Co-Authored-By on completion',
+        '  4. Auto-pushes to origin',
+        '  5. Reports branch and worktree path in the result',
+        '',
+        'Examples:',
+        '  /fork Refactor the auth module',
+        '  /fork Add input validation to all API endpoints',
+      ].join('\n'),
+    }
+  }
+
+  const { execSync } = await import('node:child_process')
+  const { join } = await import('node:path')
+
+  try {
+    execSync('git rev-parse --git-dir', { stdio: 'ignore' })
+  } catch {
+    return { content: '/fork requires a git repository.' }
+  }
+
+  const agentViewManager = ctx.engine.getAgentViewManager?.()
+  if (!agentViewManager) {
+    return { content: 'Agent View manager is initializing...' }
+  }
+
+  const slug = prompt.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)
+  const name = `${slug}-${Date.now().toString(36)}`
+  const branch = `worktree/${name}`
+  const wtPath = join(process.cwd(), '.claude', 'worktrees', name)
+
+  try {
+    execSync(`git worktree add -b ${branch} ${wtPath} HEAD`, { stdio: 'ignore', timeout: 30_000 })
+  } catch (err) {
+    try { execSync(`git worktree remove --force ${wtPath}`, { stdio: 'ignore' }) } catch { /* ok */ }
+    try { execSync(`git branch -D ${branch}`, { stdio: 'ignore' }) } catch { /* ok */ }
+    return { content: `Worktree creation failed: ${err instanceof Error ? err.message : String(err)}` }
+  }
+
+  const session = agentViewManager.create(prompt, prompt, { provider: ctx.providerId, model: ctx.modelId })
+  agentViewManager.addMessage(session.id, { role: 'user', content: prompt })
+  agentViewManager.updateStatus(session.id, 'working')
+  session.worktree = wtPath
+  session.branch = branch
+  session.kind = 'forked'
+
+  const bgReg = (await import('../agent/background-registry')).getBackgroundAgentRegistry()
+  bgReg.spawn(
+    prompt,
+    'general',
+    async (_signal) => {
+      const { SubAgent } = await import('../agent/sub-agent')
+      const sa = new SubAgent(ctx.engine.getRegistry(), ctx.engine.getTools())
+      const result = await sa.execute(prompt, 'fork: ' + prompt.slice(0, 60), {})
+      try {
+        const { execSync: ex } = await import('node:child_process')
+        ex(`git -C ${wtPath} add -A`, { stdio: 'ignore', timeout: 10_000 })
+        const st = ex(`git -C ${wtPath} status --porcelain`, { encoding: 'utf-8', timeout: 10_000 })
+        if (st.trim()) {
+          ex(`git -C ${wtPath} commit -m "feat: ${prompt.slice(0, 60)}\n\nCo-Authored-By: Claude <noreply@anthropic.com>"`, { stdio: 'ignore', timeout: 10_000 })
+          ex(`git push origin ${branch}`, { stdio: 'ignore', timeout: 30_000 })
+        }
+      } catch { /* best-effort */ }
+      return [`## Fork done: ${prompt}`, '', `Branch: \`${branch}\``, `Worktree: \`${wtPath}\``, '', result || '(no output)'].join('\n')
+    },
+    'forked',
+  )
+
+  return {
+    content: [
+      `✓ Forked: ${session.id}`,
+      `  Task: ${prompt.slice(0, 80)}`,
+      `  Branch: ${branch}`,
+      `  Worktree: ${wtPath}`,
+      `  Status: working`,
+      '',
+      'Agent will auto-commit + push on completion.',
+      'Use /agents to track.',
+    ].join('\n'),
+  }
+}
+
 async function openBrowser(url: string): Promise<void> {
   const cmd =
     process.platform === 'darwin'
@@ -3866,6 +3959,7 @@ const commandsListCmd: CommandHandler = () => {
     '/feedback': 'Account',
     '/agents': 'Agents',
     '/bg': 'Agents',
+    '/fork': 'Agents',
     '/artifact': 'Artifacts',
     '/schedule': 'Other',
     '/commit': 'Workflow',
@@ -4010,6 +4104,7 @@ registry.set('/logout', logoutCmd)
 registry.set('/feedback', feedbackCmd)
 registry.set('/agents', agentsCmd)
 registry.set('/bg', bgCmd)
+registry.set('/fork', forkCmd)
 
 // Artifacts
 registry.set('/artifact', artifactBaseCmd)
@@ -4129,6 +4224,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/feedback': 'Send feedback',
   '/agents': 'Agent view dashboard',
   '/bg': 'Run a background agent task',
+  '/fork': 'Fork task into isolated worktree',
   '/artifact': 'Manage artifacts',
   '/schedule': 'View scheduled tasks and cron jobs',
   '/commit': 'Generate commit message and review staged changes',

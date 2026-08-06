@@ -13,10 +13,13 @@ export interface SessionMessage {
   content: string
 }
 
+export type SessionKind = 'interactive' | 'forked' | 'attached' | 'unattended'
+
 export interface AgentSession {
   id: string
   title: string
   status: SessionStatus
+  kind: SessionKind
   provider: string
   model: string
   task: string
@@ -25,6 +28,12 @@ export interface AgentSession {
   completedAt?: Date
   elapsedMs: number
   messages: SessionMessage[]
+  /** Git worktree path (forked sessions) */
+  worktree?: string
+  /** Git branch name (forked sessions) */
+  branch?: string
+  /** Created PR URL (if requested) */
+  prUrl?: string
 }
 
 export interface CreateSessionOptions {
@@ -53,6 +62,7 @@ export class AgentViewManager {
       id,
       title,
       status: 'needs-input',
+      kind: 'interactive',
       provider: options.provider ?? 'unknown',
       model: options.model ?? 'unknown',
       task,

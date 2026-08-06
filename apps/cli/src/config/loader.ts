@@ -16,11 +16,13 @@ import type {
   McpServerConfig,
   InferenceHookConfig,
   CredentialMaskingConfig,
+  BackgroundAgentConfig,
 } from '../shared/index.ts'
 import {
   DEFAULT_CONFIG,
   DEFAULT_INFERENCE_HOOK_CONFIG,
   DEFAULT_CREDENTIAL_MASKING_CONFIG,
+  DEFAULT_BACKGROUND_AGENT_CONFIG,
 } from './defaults'
 
 const MIPHAM_HOME = join(homedir(), '.mipham')
@@ -333,6 +335,40 @@ export function loadCredentialMaskingConfig(cwd: string = process.cwd()): Creden
             enabled: section.env_filter?.enabled ?? merged.env_filter.enabled,
             patterns: section.env_filter?.patterns ?? merged.env_filter.patterns,
           },
+        }
+      }
+    } catch {
+      // Silently skip malformed configs
+    }
+  }
+
+  return merged
+}
+
+/**
+ * Load background agent configuration from config sources.
+ */
+export function loadBackgroundAgentConfig(
+  cwd: string = process.cwd(),
+): BackgroundAgentConfig {
+  const configPath = join(cwd, '.mipham', 'config.yml')
+  const userConfigPath = join(MIPHAM_HOME, 'config.yml')
+
+  let merged = { ...DEFAULT_BACKGROUND_AGENT_CONFIG }
+
+  const paths = [userConfigPath, configPath]
+  for (const path of paths) {
+    try {
+      if (!existsSync(path)) continue
+      const raw = readFileSync(path, 'utf-8')
+      const parsed = parseYaml(raw) as Record<string, unknown>
+      const section = parsed.background_agent as Partial<BackgroundAgentConfig> | undefined
+      if (section) {
+        merged = {
+          auto_commit: section.auto_commit ?? merged.auto_commit,
+          auto_push: section.auto_push ?? merged.auto_push,
+          auto_worktree: section.auto_worktree ?? merged.auto_worktree,
+          commit_coauthors: section.commit_coauthors ?? merged.commit_coauthors,
         }
       }
     } catch {

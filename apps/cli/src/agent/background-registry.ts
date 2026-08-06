@@ -6,6 +6,8 @@
  * can be queried via the Task tool (output/stop actions) or the Agent View.
  */
 
+export type BackgroundTaskKind = 'interactive' | 'forked' | 'attached' | 'unattended'
+
 export type BackgroundTaskStatus = 'running' | 'completed' | 'failed'
 
 export interface BackgroundTask {
@@ -13,10 +15,17 @@ export interface BackgroundTask {
   description: string
   agentType: string
   status: BackgroundTaskStatus
+  kind: BackgroundTaskKind
   startedAt: Date
   completedAt?: Date
   result?: string
   error?: string
+  /** Git worktree path (forked tasks) */
+  worktree?: string
+  /** Git branch name (forked tasks) */
+  branch?: string
+  /** Created PR URL (if requested) */
+  prUrl?: string
   abortController: AbortController
 }
 
@@ -39,6 +48,7 @@ export class BackgroundAgentRegistry {
     description: string,
     agentType: string,
     executor: (signal: AbortSignal) => Promise<string>,
+    kind: BackgroundTaskKind = 'interactive',
   ): string {
     const id = `bg-${++this.idCounter}-${Date.now().toString(36)}`
 
@@ -47,6 +57,7 @@ export class BackgroundAgentRegistry {
       description,
       agentType,
       status: 'running',
+      kind,
       startedAt: new Date(),
       abortController: new AbortController(),
     }

@@ -369,3 +369,12 @@ export interface CredentialMaskingConfig {
     patterns: string[]
   }
 }
+
+// ── Background Agent Types ──
+
+export interface BackgroundAgentConfig {
+  auto_commit: boolean
+  auto_push: boolean
+  auto_worktree: boolean
+  commit_coauthors: boolean
+}

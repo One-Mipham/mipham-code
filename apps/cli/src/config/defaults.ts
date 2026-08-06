@@ -1,4 +1,4 @@
-import type { MiphamConfig, InferenceHookConfig, CredentialMaskingConfig } from '../shared/index.ts'
+import type { MiphamConfig, InferenceHookConfig, CredentialMaskingConfig, BackgroundAgentConfig } from '../shared/index.ts'
 import { DEFAULT_PROVIDERS } from '../shared/index.ts'
 import { PACKAGE_VERSION } from '../shared/index.ts'
 
@@ -30,4 +30,11 @@ export const DEFAULT_CREDENTIAL_MASKING_CONFIG: CredentialMaskingConfig = {
     enabled: true,
     patterns: ['(?i)(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH)$'],
   },
+}
+
+export const DEFAULT_BACKGROUND_AGENT_CONFIG: BackgroundAgentConfig = {
+  auto_commit: true,
+  auto_push: true,
+  auto_worktree: true,
+  commit_coauthors: true,
 }
