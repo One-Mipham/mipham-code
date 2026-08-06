@@ -348,9 +348,7 @@ export function loadCredentialMaskingConfig(cwd: string = process.cwd()): Creden
 /**
  * Load background agent configuration from config sources.
  */
-export function loadBackgroundAgentConfig(
-  cwd: string = process.cwd(),
-): BackgroundAgentConfig {
+export function loadBackgroundAgentConfig(cwd: string = process.cwd()): BackgroundAgentConfig {
   const configPath = join(cwd, '.mipham', 'config.yml')
   const userConfigPath = join(MIPHAM_HOME, 'config.yml')
 

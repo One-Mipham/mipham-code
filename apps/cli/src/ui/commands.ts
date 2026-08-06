@@ -3728,7 +3728,11 @@ const forkCmd: CommandHandler = async (ctx, args) => {
     return { content: 'Agent View manager is initializing...' }
   }
 
-  const slug = prompt.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)
+  const slug = prompt
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 40)
   const name = `${slug}-${Date.now().toString(36)}`
   const branch = `worktree/${name}`
   const wtPath = join(process.cwd(), '.claude', 'worktrees', name)
@@ -3736,12 +3740,25 @@ const forkCmd: CommandHandler = async (ctx, args) => {
   try {
     execSync(`git worktree add -b ${branch} ${wtPath} HEAD`, { stdio: 'ignore', timeout: 30_000 })
   } catch (err) {
-    try { execSync(`git worktree remove --force ${wtPath}`, { stdio: 'ignore' }) } catch { /* ok */ }
-    try { execSync(`git branch -D ${branch}`, { stdio: 'ignore' }) } catch { /* ok */ }
-    return { content: `Worktree creation failed: ${err instanceof Error ? err.message : String(err)}` }
+    try {
+      execSync(`git worktree remove --force ${wtPath}`, { stdio: 'ignore' })
+    } catch {
+      /* ok */
+    }
+    try {
+      execSync(`git branch -D ${branch}`, { stdio: 'ignore' })
+    } catch {
+      /* ok */
+    }
+    return {
+      content: `Worktree creation failed: ${err instanceof Error ? err.message : String(err)}`,
+    }
   }
 
-  const session = agentViewManager.create(prompt, prompt, { provider: ctx.providerId, model: ctx.modelId })
+  const session = agentViewManager.create(prompt, prompt, {
+    provider: ctx.providerId,
+    model: ctx.modelId,
+  })
   agentViewManager.addMessage(session.id, { role: 'user', content: prompt })
   agentViewManager.updateStatus(session.id, 'working')
   session.worktree = wtPath
@@ -3761,11 +3778,23 @@ const forkCmd: CommandHandler = async (ctx, args) => {
         ex(`git -C ${wtPath} add -A`, { stdio: 'ignore', timeout: 10_000 })
         const st = ex(`git -C ${wtPath} status --porcelain`, { encoding: 'utf-8', timeout: 10_000 })
         if (st.trim()) {
-          ex(`git -C ${wtPath} commit -m "feat: ${prompt.slice(0, 60)}\n\nCo-Authored-By: Claude <noreply@anthropic.com>"`, { stdio: 'ignore', timeout: 10_000 })
+          ex(
+            `git -C ${wtPath} commit -m "feat: ${prompt.slice(0, 60)}\n\nCo-Authored-By: Claude <noreply@anthropic.com>"`,
+            { stdio: 'ignore', timeout: 10_000 },
+          )
           ex(`git push origin ${branch}`, { stdio: 'ignore', timeout: 30_000 })
         }
-      } catch { /* best-effort */ }
-      return [`## Fork done: ${prompt}`, '', `Branch: \`${branch}\``, `Worktree: \`${wtPath}\``, '', result || '(no output)'].join('\n')
+      } catch {
+        /* best-effort */
+      }
+      return [
+        `## Fork done: ${prompt}`,
+        '',
+        `Branch: \`${branch}\``,
+        `Worktree: \`${wtPath}\``,
+        '',
+        result || '(no output)',
+      ].join('\n')
     },
     'forked',
   )

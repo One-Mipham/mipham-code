@@ -1,4 +1,9 @@
-import type { MiphamConfig, InferenceHookConfig, CredentialMaskingConfig, BackgroundAgentConfig } from '../shared/index.ts'
+import type {
+  MiphamConfig,
+  InferenceHookConfig,
+  CredentialMaskingConfig,
+  BackgroundAgentConfig,
+} from '../shared/index.ts'
 import { DEFAULT_PROVIDERS } from '../shared/index.ts'
 import { PACKAGE_VERSION } from '../shared/index.ts'
 
