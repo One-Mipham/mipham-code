@@ -55,6 +55,15 @@ export class ContextManager {
 
   constructor(private config: ContextConfig) {}
 
+  /** Dynamically update the max token limit (e.g., when switching models). */
+  updateMaxTokens(maxTokens: number): void {
+    this.config.maxTokens = maxTokens
+  }
+
+  getMaxTokens(): number {
+    return this.config.maxTokens
+  }
+
   /** Set an optional LLM summarizer for intelligent compaction. */
   setSummarizer(fn: Summarizer): void {
     this.summarizer = fn

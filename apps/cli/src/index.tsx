@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { existsSync } from 'node:fs'
 import { render } from 'ink'
 import { App } from './ui/app'
 import { loadConfig, loadInferenceHookConfig, loadCredentialMaskingConfig } from './config/loader'
@@ -85,12 +86,53 @@ export async function runApp(options: RunOptions): Promise<void> {
   // Initialize plugin manager
   const pluginManager = new PluginManager()
 
+  // Generate session name for tracking (used by /cd to persist cwd)
+  const sessionName =
+    options.resume || `session-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`
+
   // Initialize context — restore saved session if available
-  const context = new ContextManager({ maxTokens: 200_000, compactionThreshold: 0.9 })
+  // Read the active model's context window for dynamic max-token sizing.
+  // MIPHAM_DISABLE_1M_CONTEXT=1 caps the effective window at 200K even for
+  // models that support larger contexts (e.g. 1M).
+  // When the model is unknown (not in any provider's model list), assume a
+  // conservative 128K context window. Set MIPHAM_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1
+  // to restore the old behavior (default 200K fallback for unknown models).
+  const activeModel = registry.findModel(defaultModel)
+  let modelContextWindow: number
+  if (activeModel) {
+    modelContextWindow = activeModel.contextWindow
+  } else if (process.env.MIPHAM_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT === '1') {
+    modelContextWindow = 200_000 // old behavior: default fallback
+  } else {
+    modelContextWindow = 128_000 // conservative assumption for unknown models
+    console.error(
+      `[mipham] ⚠ Unknown model "${defaultModel}": assuming 128K context window. ` +
+        `Set MIPHAM_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1 to disable.`,
+    )
+  }
+
+  const DISABLE_1M = process.env.MIPHAM_DISABLE_1M_CONTEXT === '1'
+  const contextMaxTokens = DISABLE_1M && modelContextWindow > 200_000 ? 200_000 : modelContextWindow
+
+  if (DISABLE_1M && modelContextWindow <= 200_000) {
+    console.error(
+      '[mipham] ⚠ MIPHAM_DISABLE_1M_CONTEXT is set but auto-compaction is not holding the session to 200K — model context window is already ≤ 200K',
+    )
+  }
+
+  const context = new ContextManager({ maxTokens: contextMaxTokens, compactionThreshold: 0.9 })
 
   if (options.resume) {
     const saved = SessionStore.load(options.resume)
     if (saved) {
+      // Restore working directory if saved
+      if (saved.metadata.cwd && existsSync(saved.metadata.cwd)) {
+        try {
+          process.chdir(saved.metadata.cwd)
+        } catch {
+          // cwd may no longer exist; silently continue
+        }
+      }
       for (const msg of saved.messages) {
         context.addMessage(msg)
       }
@@ -169,6 +211,11 @@ export async function runApp(options: RunOptions): Promise<void> {
     engine.getPermission().setDefaultLevel(config.permission as PermissionLevel)
   }
 
+  // Apply org-level permission restrictions (P0: bypassPermissions policy gap)
+  if (config.permissionRestrictions) {
+    engine.getPermission().setRestrictions(config.permissionRestrictions)
+  }
+
   // Initialize agent registry and load plugin agents/skills/MCP/hooks
   const agentRegistry = new AgentRegistry()
   agentRegistry.loadUserAgents()
@@ -190,9 +237,10 @@ export async function runApp(options: RunOptions): Promise<void> {
   const saveAndExit = () => {
     artifactServer.stop()
     if (context.getMessageCount() > 0) {
-      SessionStore.autoSave(context.getMessages(), {
+      SessionStore.save(sessionName, context.getMessages(), {
         provider: defaultProvider,
         model: defaultModel,
+        cwd: process.cwd(),
       })
     }
     process.exit(0)
@@ -211,6 +259,7 @@ export async function runApp(options: RunOptions): Promise<void> {
       skillsLoader={skillsLoader}
       pluginManager={pluginManager}
       version={options.version}
+      sessionId={sessionName}
     />,
   )
   await waitUntilExit()

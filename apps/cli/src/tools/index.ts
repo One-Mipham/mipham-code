@@ -1,4 +1,5 @@
 import type { ToolDefinition, ToolResult } from '../shared/index.ts'
+import { sanitizeParams } from '../shared/sanitize'
 import { readTool } from './file/read'
 import { writeTool } from './file/write'
 import { editTool } from './file/edit'
@@ -96,11 +97,13 @@ function withValidation(tool: ToolDefinition): ToolDefinition {
   return {
     ...tool,
     async execute(params, ctx): Promise<ToolResult> {
-      const errors = validateParams(schema, params)
+      // Sanitize dangerous Unicode from all inputs
+      const cleanParams = sanitizeParams(params)
+      const errors = validateParams(schema, cleanParams)
       if (errors.length > 0) {
         return { success: false, content: '', error: `Invalid parameters: ${errors.join('; ')}` }
       }
-      return tool.execute(params, ctx)
+      return tool.execute(cleanParams, ctx)
     },
   }
 }

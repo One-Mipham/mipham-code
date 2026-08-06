@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { SubAgent } from '../../src/agent/sub-agent'
+import { getMessageBus } from '../../src/agent/message-bus'
 import type { ProviderRegistry, ProviderInstance, ChatRequest } from '../../src/providers/registry'
 import type { ToolDefinition, StreamChunk } from '../../src/shared/index.ts'
 
@@ -20,10 +21,33 @@ function createMockProvider(chunks: StreamChunk[]): ProviderInstance {
   }
 }
 
-function createMockRegistry(provider: ProviderInstance): ProviderRegistry {
+function createMockRegistry(
+  provider: ProviderInstance,
+  opts?: {
+    models?: Array<{
+      id: string
+      name: string
+      providerId: string
+      contextWindow: number
+      maxOutput: number
+      status?: string
+    }>
+  },
+): ProviderRegistry {
+  const models = opts?.models ?? [
+    {
+      id: 'mock-model',
+      name: 'Mock Model',
+      providerId: 'mock',
+      contextWindow: 128000,
+      maxOutput: 4096,
+    },
+  ]
   const registry = {
     getActive: () => provider,
     getActiveModel: () => 'mock-model',
+    listModels: () => models,
+    findModel: (id: string) => models.find((m) => m.id === id),
   } as unknown as ProviderRegistry
   return registry
 }
@@ -191,5 +215,112 @@ describe('SubAgent', () => {
     await sub.execute('test', 'test', { worktreePath: '/tmp/test-worktree' })
 
     expect(capturedCwd).toBe('/tmp/test-worktree')
+  })
+
+  it('falls back to parent model when modelOverride specifies unknown model', async () => {
+    let receivedModel = ''
+    const provider = createMockProvider([{ type: 'text', content: 'ok' }, { type: 'stop' }])
+    const originalChat = provider.chat
+    provider.chat = async function* (req) {
+      receivedModel = req.model
+      yield* originalChat.call(provider, req)
+    }
+
+    const knownModels = [
+      {
+        id: 'mock-model',
+        name: 'Mock Model',
+        providerId: 'mock',
+        contextWindow: 128000,
+        maxOutput: 4096,
+      },
+      {
+        id: 'claude-sonnet',
+        name: 'Claude Sonnet',
+        providerId: 'mock',
+        contextWindow: 200000,
+        maxOutput: 8192,
+      },
+    ]
+    const registry = createMockRegistry(provider, { models: knownModels })
+
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const sub = new SubAgent(registry, TOOLS)
+    const result = await sub.execute('test', 'test task', { modelOverride: 'unknown-model-xyz' })
+
+    expect(receivedModel).toBe('mock-model')
+    expect(result).toContain('ok')
+    expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('unknown-model-xyz'))
+    expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('mock-model'))
+
+    consoleWarnSpy.mockRestore()
+  })
+
+  it('uses modelOverride when model exists in registry', async () => {
+    let receivedModel = ''
+    const provider = createMockProvider([{ type: 'text', content: 'ok' }, { type: 'stop' }])
+    const originalChat = provider.chat
+    provider.chat = async function* (req) {
+      receivedModel = req.model
+      yield* originalChat.call(provider, req)
+    }
+
+    const knownModels = [
+      {
+        id: 'mock-model',
+        name: 'Mock Model',
+        providerId: 'mock',
+        contextWindow: 128000,
+        maxOutput: 4096,
+      },
+      {
+        id: 'claude-sonnet',
+        name: 'Claude Sonnet',
+        providerId: 'mock',
+        contextWindow: 200000,
+        maxOutput: 8192,
+      },
+    ]
+    const registry = createMockRegistry(provider, { models: knownModels })
+
+    const sub = new SubAgent(registry, TOOLS)
+    const result = await sub.execute('test', 'test task', { modelOverride: 'claude-sonnet' })
+
+    expect(receivedModel).toBe('claude-sonnet')
+    expect(result).toContain('ok')
+  })
+
+  it('posts warning to message bus when model fallback occurs', async () => {
+    const provider = createMockProvider([{ type: 'text', content: 'ok' }, { type: 'stop' }])
+
+    const knownModels = [
+      {
+        id: 'mock-model',
+        name: 'Mock Model',
+        providerId: 'mock',
+        contextWindow: 128000,
+        maxOutput: 4096,
+      },
+    ]
+    const registry = createMockRegistry(provider, { models: knownModels })
+
+    const bus = getMessageBus()
+    // Clear any pre-existing messages to isolate this test
+    bus.markAllRead('main')
+
+    const sub = new SubAgent(registry, TOOLS)
+    const result = await sub.execute('test', 'test task', { modelOverride: 'unknown-model-xyz' })
+
+    expect(result).toContain('ok')
+
+    const warnings = bus.getWarnings('main')
+    expect(warnings.length).toBeGreaterThanOrEqual(1)
+
+    const warningMsg = warnings.find((m) => m.type === 'warning' && m.from === 'system')
+    expect(warningMsg).toBeDefined()
+    expect(warningMsg!.summary).toContain('unknown-model-xyz')
+    expect(warningMsg!.summary).toContain('mock-model')
+    expect(warningMsg!.type).toBe('warning')
   })
 })

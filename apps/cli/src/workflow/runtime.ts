@@ -1,3 +1,4 @@
+import vm from 'node:vm'
 import { createSandbox } from './sandbox'
 import { createJournal, appendJournal, loadJournal, loadScript } from './journal'
 import { createBudget } from './budget'
@@ -47,7 +48,8 @@ function agentCacheKey(prompt: string, opts: Record<string, unknown> = {}): stri
  *   - Returns cacheHits and cacheMisses counts
  *
  * The sandbox blocks non-deterministic APIs (Date.now, Math.random) to make
- * this deterministic replay possible.
+ * this deterministic replay possible. Scripts execute inside a node:vm.Context
+ * that blocks sandbox escape vectors (eval, Function, import, require, process, etc.).
  */
 export async function runWorkflow(
   script: string,
@@ -134,42 +136,28 @@ export async function runWorkflow(
     appendJournal(runId, { type: 'log', message })
   }
 
-  const sandbox = createSandbox(args, budget)
-
   // Build the script wrapper
   const wrappedScript = `
-    return (async () => {
+    (async () => {
       ${script}
     })()
   `
 
-  // Execute in sandboxed context
-  const scriptFn = new Function(
-    'agent',
-    'parallel',
-    'pipeline',
-    'verify',
-    'judge',
-    'loopUntilConvergence',
-    'phase',
-    'log',
-    'args',
-    'budget',
-    wrappedScript,
-  )
+  // Execute in node:vm sandbox — no access to host globals
+  const vmScript = new vm.Script(wrappedScript, { filename: 'workflow.js' })
+  const sandboxCtx = createSandbox(args, budget)
 
-  const result = await scriptFn(
-    agent,
-    parallel,
-    pipeline,
-    verify,
-    judge,
-    loopUntilConvergence,
-    wrappedPhase,
-    log,
-    args,
-    budget,
-  )
+  // Inject primitives into the sandbox context (whitelist approach)
+  sandboxCtx.agent = agent
+  sandboxCtx.parallel = parallel
+  sandboxCtx.pipeline = pipeline
+  sandboxCtx.verify = verify
+  sandboxCtx.judge = judge
+  sandboxCtx.loopUntilConvergence = loopUntilConvergence
+  sandboxCtx.phase = wrappedPhase
+  sandboxCtx.log = log
+
+  const result = await vmScript.runInContext(sandboxCtx, { timeout: 120_000 })
 
   // Count journal entries from state
   const priorEntries = loadJournal(runId)

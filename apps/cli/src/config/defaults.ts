@@ -13,6 +13,10 @@ export const DEFAULT_CONFIG: MiphamConfig = {
   defaultModel: 'deepseek-v4-pro',
   permission: 'auto',
   providers: DEFAULT_PROVIDERS,
+  marketplace: {
+    strictKnownMarketplaces: [],
+    blockedMarketplaces: [],
+  },
 }
 
 export const DEFAULT_INFERENCE_HOOK_CONFIG: InferenceHookConfig = {

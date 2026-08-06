@@ -3,6 +3,7 @@ import type { ToolDefinition } from '../shared/index.ts'
 import type { SubAgentType, SubAgentOptions, AgentDefinition } from './types'
 import { createAgentContext } from './agent-context'
 import { getBackgroundAgentRegistry } from './background-registry'
+import { getMessageBus } from './message-bus'
 import type { HookEngine } from '../core/hooks'
 import type { PermissionSystem } from '../core/permission'
 
@@ -156,6 +157,28 @@ export class SubAgent {
     // 'inherit' means use parent model
     const resolvedModel = modelToUse === 'inherit' ? model : modelToUse
 
+    // Validate resolved model exists in registry; fall back to parent model with warning
+    let finalModel = resolvedModel
+    if (resolvedModel !== model) {
+      const modelExists = this.registry.findModel(resolvedModel) !== undefined
+      if (!modelExists) {
+        const warnMsg = `Warning: model "${resolvedModel}" not found in provider registry. Falling back to "${model}".`
+        console.warn(warnMsg)
+
+        // Post warning to message bus for UI display
+        const bus = getMessageBus()
+        bus.post(
+          'system',
+          'main',
+          `Sub-agent model fallback: ${resolvedModel} → ${model}`,
+          warnMsg,
+          'warning',
+        )
+
+        finalModel = model
+      }
+    }
+
     const chunks: string[] = []
     const MAX_TOOL_TURNS = options.maxTurns || 5
 
@@ -173,7 +196,7 @@ export class SubAgent {
         let turnText = ''
 
         for await (const chunk of provider.chat({
-          model: resolvedModel,
+          model: finalModel,
           messages: currentMessages,
           systemPrompt: currentSystemPrompt,
           tools: toolDefs,
@@ -251,7 +274,7 @@ export class SubAgent {
               cwd: execCwd,
               sessionId: 'sub-agent',
               provider: '',
-              model: resolvedModel,
+              model: finalModel,
             })
 
             currentMessages.push({

@@ -10,6 +10,7 @@ import type { SkillsLoader } from '../skills/loader'
 import type { PluginManager } from '../plugin/plugin-manager'
 import { McpClient } from '../mcp/client'
 import { NPM_INSTALL_COMMAND, NPM_UPDATE_COMMAND, PACKAGE_VERSION } from '../shared/index.ts'
+import { getPreference } from '../config/preferences'
 
 export interface CommandContext {
   engine: QueryEngine
@@ -17,6 +18,7 @@ export interface CommandContext {
   providerId: string
   modelId: string
   version: string
+  sessionId: string
   // Callbacks for commands that mutate App state
   setSessionTitle: (title: string) => void
   setFastMode: (on: boolean) => void
@@ -799,7 +801,7 @@ const browseSkillsCmd: CommandHandler = async () => {
   return { content: lines.join('\n') }
 }
 
-const installSkillCmd: CommandHandler = async (_ctx, args) => {
+const installSkillCmd: CommandHandler = async (ctx, args) => {
   const { installSkill, installSkillFromUrl } = await import('../skills/registry')
 
   const target = args[0]
@@ -807,12 +809,13 @@ const installSkillCmd: CommandHandler = async (_ctx, args) => {
     return { content: 'Usage: /install-skill <skill-name> or /install-skill <url>' }
   }
 
+  const marketplaceConfig = ctx.config.marketplace
   let result: { success: boolean; name: string; message: string }
 
   if (target.startsWith('http://') || target.startsWith('https://')) {
-    result = installSkillFromUrl(target)
+    result = installSkillFromUrl(target, marketplaceConfig)
   } else {
-    result = installSkill(target)
+    result = installSkill(target, marketplaceConfig)
   }
 
   return {
@@ -1681,7 +1684,7 @@ function gitDiffBridgeCmd(opts: {
   label: string
   noChangesHint: string
   runningMsg: string
-  forwardToAI: string
+  forwardToAI: string | (() => string)
 }): CommandHandler {
   return async () => {
     try {
@@ -1692,7 +1695,7 @@ function gitDiffBridgeCmd(opts: {
       }
       return {
         content: `─ ${opts.label} ─\n\n${opts.runningMsg}\n\nChanged files:\n${diff}`,
-        forwardToAI: opts.forwardToAI,
+        forwardToAI: typeof opts.forwardToAI === 'function' ? opts.forwardToAI() : opts.forwardToAI,
       }
     } catch {
       return {
@@ -1708,8 +1711,8 @@ const codeReviewCmd = gitDiffBridgeCmd({
     'No uncommitted changes to review.\n\nTo review a specific file: /code-review path/to/file.ts',
   runningMsg:
     'Reviewing uncommitted changes with the code-review skill (7 dimensions: correctness, security, performance, code quality, architecture, testing, language-specific)...',
-  forwardToAI:
-    'use the code-review skill to review all uncommitted changes. Check all 7 dimensions: correctness, security, performance, code quality, architecture & design, testing, and language-specific issues.',
+  forwardToAI: () =>
+    `use the code-review skill to review all uncommitted changes. Check all 7 dimensions: correctness, security, performance, code quality, architecture & design, testing, and language-specific issues. Use effort level: ${getPreference('lastCodeReviewEffort', 'high')}.`,
 })
 
 const simplifyCmd = gitDiffBridgeCmd({
@@ -1887,7 +1890,7 @@ const summaryCmd: CommandHandler = (ctx) => {
   }
 }
 
-const cdCmd: CommandHandler = async (_ctx, args) => {
+const cdCmd: CommandHandler = async (ctx, args) => {
   const target = args[0]
   if (!target) {
     return {
@@ -1912,6 +1915,22 @@ const cdCmd: CommandHandler = async (_ctx, args) => {
 
   try {
     process.chdir(resolved)
+
+    // Persist cwd to active session (best-effort)
+    try {
+      const { SessionStore } = await import('../core/session-store')
+      const saved = SessionStore.load(ctx.sessionId)
+      if (saved) {
+        SessionStore.save(ctx.sessionId, saved.messages, {
+          provider: saved.metadata.provider,
+          model: saved.metadata.model,
+          cwd: resolved,
+        })
+      }
+    } catch {
+      /* session persistence is best-effort */
+    }
+
     return {
       content: [
         '── Directory Changed ──',
@@ -2039,48 +2058,10 @@ const exportCmd: CommandHandler = async (ctx) => {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Review — code review workflow
+// Review — alias for /code-review (P1: 2026-08-06 polish)
 // ═══════════════════════════════════════════════════════════════
 
-const reviewCmd: CommandHandler = async () => {
-  try {
-    const { execSync } = await import('node:child_process')
-    const diff = execSync('git diff --stat', { encoding: 'utf-8', timeout: 5000 }).trim()
-    const unstaged = execSync('git diff --name-only', { encoding: 'utf-8', timeout: 3000 }).trim()
-    const staged = execSync('git diff --cached --name-only', {
-      encoding: 'utf-8',
-      timeout: 3000,
-    }).trim()
-
-    if (!diff) {
-      return {
-        content:
-          '─ Code Review ─\n\nNo uncommitted changes detected.\n\nUse /pr-comments for PR-level review, or make changes first.',
-      }
-    }
-
-    const lines: string[] = ['─ Code Review ─', '', 'Uncommitted changes:', '', diff]
-
-    if (staged) {
-      lines.push('')
-      lines.push('Staged files (ready for commit):')
-      for (const f of staged.split('\n')) lines.push(`  ✓ ${f}`)
-    }
-    if (unstaged) {
-      lines.push('')
-      lines.push('Unstaged files (working directory):')
-      for (const f of unstaged.split('\n')) lines.push(`  • ${f}`)
-    }
-
-    lines.push('')
-    lines.push('To review with AI: type "review these changes" in chat.')
-    lines.push('To commit: git add -A && git commit -m "..."')
-
-    return { content: lines.join('\n') }
-  } catch {
-    return { content: '─ Code Review ─\n\nCould not run git diff. Are you in a git repository?' }
-  }
-}
+const reviewCmd = codeReviewCmd
 
 // ═══════════════════════════════════════════════════════════════
 // PR Comments
@@ -4320,7 +4301,7 @@ const commandsListCmd: CommandHandler = () => {
     '/tdd': 'Workflow',
     '/todos': 'Workflow',
     '/tasks': 'Workflow',
-    '/review': 'Workflow',
+    '/review': 'Code Quality',
     '/pr-comments': 'Workflow',
     '/diff': 'Workflow',
     '/workflows': 'Workflow',
@@ -4587,7 +4568,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/tdd': 'Test-Driven Development workflow (RED → GREEN → REFACTOR)',
   '/todos': 'Task management (list/create tasks)',
   '/tasks': 'Background tasks',
-  '/review': 'Code review workflow',
+  '/review': 'Review code for bugs, security, performance (alias for /code-review)',
   '/pr-comments': 'PR review summary',
   '/diff': 'Show git diff',
   '/workflows': 'List workflow scripts',

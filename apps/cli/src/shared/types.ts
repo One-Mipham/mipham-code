@@ -160,8 +160,16 @@ export interface MiphamConfig {
   defaultProvider: string
   defaultModel: string
   permission: ToolPermission
+  /** Org-level permission restrictions (forbiddenModes, maxAllowedMode). */
+  permissionRestrictions?: PermissionRestrictions
   providers: ProviderConfig[]
   skills?: { paths: string[]; mcpServers: McpServerConfig[] }
+  marketplace?: {
+    /** If set, only allow installs from matching repos (e.g. ["One-Mipham/*"]) */
+    strictKnownMarketplaces?: string[]
+    /** Block installs from matching repos (e.g. ["malicious-org/*"]) */
+    blockedMarketplaces?: string[]
+  }
 }
 
 export interface McpServerConfig {
@@ -287,10 +295,20 @@ export type PermissionMode =
 /** Backward-compatible alias: PermissionMode plus legacy 'ask' and 'bypass' */
 export type PermissionLevel = PermissionMode | 'ask' | 'bypass'
 
+/** Org-level restrictions that cap or forbid specific permission modes. */
+export interface PermissionRestrictions {
+  /** Modes that may not be entered (cycle skips them). */
+  forbiddenModes?: PermissionMode[]
+  /** Ceiling — modes ranked higher (more permissive) than this are treated as forbidden. */
+  maxAllowedMode?: PermissionMode
+}
+
 export interface PermissionConfig {
   mode: PermissionMode
   allow: string[]
   deny: string[]
+  /** Optional org-level restrictions enforced on every mode transition. */
+  restrictions?: PermissionRestrictions
 }
 
 export interface PermissionRuleEntry {
