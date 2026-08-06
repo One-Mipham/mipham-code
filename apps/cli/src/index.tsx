@@ -169,6 +169,11 @@ export async function runApp(options: RunOptions): Promise<void> {
     engine.getPermission().setDefaultLevel(config.permission as PermissionLevel)
   }
 
+  // Apply org-level permission restrictions (P0: bypassPermissions policy gap)
+  if (config.permissionRestrictions) {
+    engine.getPermission().setRestrictions(config.permissionRestrictions)
+  }
+
   // Initialize agent registry and load plugin agents/skills/MCP/hooks
   const agentRegistry = new AgentRegistry()
   agentRegistry.loadUserAgents()

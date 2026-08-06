@@ -3,10 +3,11 @@ import type {
   PermissionMode,
   PermissionLevel,
   PermissionRule,
+  PermissionRestrictions,
 } from '../shared/index.ts'
 import type { PermissionRuleEntry } from '../shared/index.ts'
 import { matchBashRule, compileRule } from './permission-rules'
-import { loadPermissionConfig, nextMode, MODE_CYCLE } from './permission-config'
+import { loadPermissionConfig, nextMode, clampMode, MODE_CYCLE } from './permission-config'
 
 const VALID_MODES: Set<string> = new Set<string>(MODE_CYCLE)
 
@@ -24,6 +25,9 @@ export class PermissionSystem {
   /** Short-lived cache: toolName+input → permissionLevel. Invalidated on rule/mode change. */
   private checkCache = new Map<string, PermissionLevel>()
   private cacheMode: PermissionMode | null = null
+
+  // ── Org-level restrictions (P0 security) ──
+  private restrictions: PermissionRestrictions | undefined = undefined
 
   /** Invalidate the permission cache (called on any rule/mode change). */
   private invalidateCache(): void {
@@ -44,7 +48,7 @@ export class PermissionSystem {
   // ── Mode management ──
 
   setMode(mode: PermissionMode): void {
-    this.mode = mode
+    this.mode = clampMode(mode, this.restrictions)
     this.invalidateCache()
   }
 
@@ -53,8 +57,24 @@ export class PermissionSystem {
   }
 
   cycleMode(): PermissionMode {
-    this.mode = nextMode(this.mode)
+    this.mode = nextMode(this.mode, this.restrictions)
     return this.mode
+  }
+
+  // ── Restrictions (P0: org-level policy gap) ──
+
+  /** Apply org-level permission restrictions. Overwrites any previous restrictions. */
+  setRestrictions(restrictions: PermissionRestrictions | undefined): void {
+    this.restrictions = restrictions
+    // Re-clamp current mode against new restrictions
+    if (restrictions) {
+      this.mode = clampMode(this.mode, restrictions)
+    }
+    this.invalidateCache()
+  }
+
+  getRestrictions(): PermissionRestrictions | undefined {
+    return this.restrictions
   }
 
   // ── Rule management ──
@@ -71,11 +91,21 @@ export class PermissionSystem {
     this.askRules.push(compileRule(rule, 'ask'))
   }
 
-  loadConfig(raw: { mode?: string; allow?: string[]; deny?: string[] }): void {
+  loadConfig(raw: {
+    mode?: string
+    allow?: string[]
+    deny?: string[]
+    restrictions?: PermissionRestrictions
+  }): void {
     const config = loadPermissionConfig(
-      raw as Partial<{ mode: PermissionMode; allow: string[]; deny: string[] }>,
+      raw as Partial<{
+        mode: PermissionMode
+        allow: string[]
+        deny: string[]
+        restrictions: PermissionRestrictions
+      }>,
     )
-    this.mode = config.mode
+    this.mode = clampMode(config.mode, config.restrictions ?? this.restrictions)
 
     this.allowRules = []
     this.denyRules = []
@@ -86,6 +116,10 @@ export class PermissionSystem {
     }
     for (const rule of config.deny) {
       this.denyRules.push(compileRule(rule, 'deny'))
+    }
+
+    if (config.restrictions) {
+      this.restrictions = config.restrictions
     }
 
     this.invalidateCache()
@@ -246,9 +280,11 @@ export class PermissionSystem {
 
   setDefaultLevel(level: PermissionLevel): void {
     // Map legacy 3-level to new mode
-    if (level === 'auto') this.mode = 'auto'
-    else if (level === 'bypass') this.mode = 'bypassPermissions'
-    else this.mode = 'default'
+    let newMode: PermissionMode
+    if (level === 'auto') newMode = 'auto'
+    else if (level === 'bypass') newMode = 'bypassPermissions'
+    else newMode = 'default'
+    this.mode = clampMode(newMode, this.restrictions)
     this.invalidateCache()
   }
 

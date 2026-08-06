@@ -41,7 +41,7 @@ export class QueryEngine {
     private registry: ProviderRegistry,
     private context: ContextManager,
     private tools: Map<string, ToolDefinition>,
-    private permission: PermissionSystem = new PermissionSystem('bypass'),
+    private permission: PermissionSystem = new PermissionSystem('default'),
   ) {}
 
   /** Register a hook engine for pre/post tool-use lifecycle events. */

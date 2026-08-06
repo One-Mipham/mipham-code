@@ -282,4 +282,137 @@ describe('PermissionSystem', () => {
     // Deny rule takes priority → blocked even in auto mode
     expect(ps.needsApproval(sendMsg, { to: 'other', summary: 'test', message: 'hi' })).toBe(true)
   })
+
+  // ═══════════════════════════════════════════
+  // P0: Permission restrictions (org-level policy)
+  // ═══════════════════════════════════════════
+
+  describe('restrictions — forbiddenModes', () => {
+    it('cycles only through allowed modes when forbiddenModes is set', () => {
+      const ps = new PermissionSystem('default')
+      ps.setRestrictions({ forbiddenModes: ['dontAsk', 'bypassPermissions'] })
+
+      expect(ps.getMode()).toBe('default')
+      ps.cycleMode()
+      expect(ps.getMode()).toBe('acceptEdits')
+      ps.cycleMode()
+      expect(ps.getMode()).toBe('plan')
+      ps.cycleMode()
+      expect(ps.getMode()).toBe('auto')
+      ps.cycleMode()
+      // Should skip dontAsk and bypassPermissions, wrap to default
+      expect(ps.getMode()).toBe('default')
+    })
+
+    it('clamps setMode to allowed modes for forbidden modes', () => {
+      const ps = new PermissionSystem('default')
+      ps.setRestrictions({ forbiddenModes: ['bypassPermissions'] })
+
+      ps.setMode('bypassPermissions')
+      expect(ps.getMode()).toBe('dontAsk') // downgraded to highest allowed
+    })
+
+    it('allows modes not in forbidden list', () => {
+      const ps = new PermissionSystem('default')
+      ps.setRestrictions({ forbiddenModes: ['bypassPermissions'] })
+
+      ps.setMode('auto')
+      expect(ps.getMode()).toBe('auto')
+    })
+  })
+
+  describe('restrictions — maxAllowedMode', () => {
+    it('caps mode at maxAllowedMode and skips higher modes in cycle', () => {
+      const ps = new PermissionSystem('default')
+      ps.setRestrictions({ maxAllowedMode: 'plan' })
+
+      expect(ps.getMode()).toBe('default')
+      ps.cycleMode()
+      expect(ps.getMode()).toBe('acceptEdits')
+      ps.cycleMode()
+      expect(ps.getMode()).toBe('plan')
+      ps.cycleMode()
+      // Should wrap back to default, skipping auto/dontAsk/bypassPermissions
+      expect(ps.getMode()).toBe('default')
+    })
+
+    it('downgrades mode when set above maxAllowedMode', () => {
+      const ps = new PermissionSystem('default')
+      ps.setRestrictions({ maxAllowedMode: 'acceptEdits' })
+
+      ps.setMode('bypassPermissions')
+      expect(ps.getMode()).toBe('acceptEdits')
+    })
+
+    it('re-clamps current mode when restrictions are set', () => {
+      const ps = new PermissionSystem('bypassPermissions')
+      ps.setRestrictions({ maxAllowedMode: 'plan' })
+      expect(ps.getMode()).toBe('plan')
+    })
+
+    it('maxAllowedMode=default allows only default', () => {
+      const ps = new PermissionSystem('default')
+      ps.setRestrictions({ maxAllowedMode: 'default' })
+
+      ps.setMode('auto')
+      expect(ps.getMode()).toBe('default')
+
+      ps.cycleMode()
+      expect(ps.getMode()).toBe('default')
+    })
+  })
+
+  describe('restrictions — combined', () => {
+    it('respects both forbiddenModes and maxAllowedMode', () => {
+      const ps = new PermissionSystem('default')
+      ps.setRestrictions({
+        maxAllowedMode: 'auto',
+        forbiddenModes: ['plan'],
+      })
+
+      // allowed: default, acceptEdits, auto (plan forbidden, dontAsk/bypass above cap)
+      expect(ps.getMode()).toBe('default')
+      ps.cycleMode()
+      expect(ps.getMode()).toBe('acceptEdits')
+      ps.cycleMode()
+      expect(ps.getMode()).toBe('auto')
+      ps.cycleMode()
+      expect(ps.getMode()).toBe('default')
+    })
+  })
+
+  describe('restrictions — API surface', () => {
+    it('getRestrictions returns current restrictions', () => {
+      const ps = new PermissionSystem()
+      expect(ps.getRestrictions()).toBeUndefined()
+
+      ps.setRestrictions({ maxAllowedMode: 'plan' })
+      expect(ps.getRestrictions()).toEqual({ maxAllowedMode: 'plan' })
+    })
+
+    it('setRestrictions(undefined) clears restrictions', () => {
+      const ps = new PermissionSystem('bypassPermissions')
+      ps.setRestrictions({ maxAllowedMode: 'plan' })
+      expect(ps.getMode()).toBe('plan')
+
+      ps.setRestrictions(undefined)
+      expect(ps.getRestrictions()).toBeUndefined()
+      // Current mode is not re-clamped when clearing restrictions
+      expect(ps.getMode()).toBe('plan')
+    })
+
+    it('loadConfig applies restrictions', () => {
+      const ps = new PermissionSystem()
+      ps.loadConfig({
+        mode: 'auto',
+        restrictions: { maxAllowedMode: 'acceptEdits', forbiddenModes: ['plan'] },
+      })
+      // auto is above acceptEdits cap → clamped to acceptEdits
+      expect(ps.getMode()).toBe('acceptEdits')
+      expect(ps.getRestrictions()).toEqual({
+        maxAllowedMode: 'acceptEdits',
+        forbiddenModes: ['plan'],
+      })
+    })
+  })
 })
