@@ -2389,6 +2389,107 @@ const workflowsCmd: CommandHandler = async () => {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// /workflow <task> — auto-generate + execute
+// ═══════════════════════════════════════════════════════════════
+
+const workflowSaveCmd = async (name: string): Promise<CommandResult> => {
+  const { existsSync, mkdirSync, writeFileSync, readFileSync } = await import('node:fs')
+  const { join } = await import('node:path')
+
+  const targetDir = join(process.cwd(), '.claude', 'workflows')
+  if (!existsSync(targetDir)) {
+    mkdirSync(targetDir, { recursive: true })
+  }
+
+  // Read the last-run state persisted by the Workflow tool
+  const stateFile = join(targetDir, '.last-run.json')
+  if (!existsSync(stateFile)) {
+    return { content: 'No recent workflow run found. Run a workflow first with /workflow <task>.' }
+  }
+
+  try {
+    const state = JSON.parse(readFileSync(stateFile, 'utf-8'))
+    const script = state.script as string
+    if (!script) {
+      return { content: 'No script found in last run state.' }
+    }
+
+    const safeName = name.replace(/[^a-zA-Z0-9_-]/g, '-')
+    const scriptPath = join(targetDir, `${safeName}.js`)
+    writeFileSync(scriptPath, script, 'utf-8')
+
+    return { content: `Workflow saved to ${scriptPath}\nUse /workflow run ${safeName} to run it again.` }
+  } catch (err) {
+    return { content: `Failed to save workflow: ${String(err)}` }
+  }
+}
+
+const workflowRunCmd = async (name: string): Promise<CommandResult> => {
+  const { existsSync } = await import('node:fs')
+  const { join } = await import('node:path')
+
+  const safeName = name.replace(/[^a-zA-Z0-9_-]/g, '-')
+
+  const locations = [
+    join(process.cwd(), '.claude', 'workflows'),
+    join(process.env.HOME || '~', '.claude', 'workflows'),
+  ]
+
+  for (const loc of locations) {
+    const scriptPath = join(loc, `${safeName}.js`)
+    if (existsSync(scriptPath)) {
+      return {
+        content: '',
+        forwardToAI:
+          `Read the workflow script at ${scriptPath}, then call the Workflow tool with ` +
+          `the file contents as the "script" parameter to execute it. Report the results.`,
+      }
+    }
+  }
+
+  return { content: `Workflow "${safeName}" not found in .claude/workflows/ or ~/.claude/workflows/` }
+}
+
+const workflowAutoCmd: CommandHandler = async (_ctx, args) => {
+  const task = args.join(' ').trim()
+
+  if (!task) {
+    return {
+      content:
+        'Usage: /workflow <task description>\n\n' +
+        'Describes the task, and the AI will generate a workflow script to execute it.\n' +
+        'Examples:\n' +
+        '  /workflow audit all routes for missing auth\n' +
+        '  /workflow research the impact of React 19 on our codebase\n' +
+        '  /workflow find all hardcoded credentials in the codebase\n\n' +
+        'Sub-commands:\n' +
+        '  /workflow save <name>  — save last successful workflow script\n' +
+        '  /workflow run <name>    — run a saved workflow by name\n' +
+        '  /workflows              — list all saved workflow scripts',
+    }
+  }
+
+  // Sub-commands
+  const firstArg = args[0] || ''
+  if (firstArg === 'save' && args[1]) {
+    return workflowSaveCmd(args.slice(1).join(' '))
+  }
+  if (firstArg === 'run' && args[1]) {
+    return workflowRunCmd(args.slice(1).join(' '))
+  }
+
+  // Default: forward to AI to generate + execute workflow
+  return {
+    content: '',
+    forwardToAI:
+      `Write and execute a workflow script for this task: ${task}\n\n` +
+      `Use the Workflow tool to execute the generated script. ` +
+      `After the workflow completes, summarize the results and offer to save the script ` +
+      `with /workflow save <name> if it is reusable.`,
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Permissions
 // ═══════════════════════════════════════════════════════════════
 
@@ -4318,6 +4419,7 @@ registry.set('/tasks', tasksCmd)
 registry.set('/diff', diffCmd)
 registry.set('/loop', loopCmd)
 registry.set('/no-plan', noPlanCmd)
+registry.set('/workflow', workflowAutoCmd)
 registry.set('/workflows', workflowsCmd)
 registry.set('/review', reviewCmd)
 registry.set('/pr-comments', prCommentsCmd)

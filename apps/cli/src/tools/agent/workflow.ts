@@ -113,6 +113,23 @@ export const workflowTool: ToolDefinition = {
         resumeFromRunId,
       )
 
+      // Persist last-run state for /workflow save
+      try {
+        const { existsSync, mkdirSync, writeFileSync } = await import('node:fs')
+        const { join } = await import('node:path')
+        const workflowsDir = join(process.cwd(), '.claude', 'workflows')
+        if (!existsSync(workflowsDir)) {
+          mkdirSync(workflowsDir, { recursive: true })
+        }
+        writeFileSync(
+          join(workflowsDir, '.last-run.json'),
+          JSON.stringify({ runId, script, timestamp: new Date().toISOString() }),
+          'utf-8',
+        )
+      } catch {
+        // best-effort — don't fail the workflow if state persistence fails
+      }
+
       let content = `Workflow ${runId} completed.\n\n`
       if (resumeFromRunId) {
         content += `Cache: ${cacheHits} hits · ${cacheMisses} live\n\n`
