@@ -93,8 +93,23 @@ export async function runApp(options: RunOptions): Promise<void> {
   // Read the active model's context window for dynamic max-token sizing.
   // MIPHAM_DISABLE_1M_CONTEXT=1 caps the effective window at 200K even for
   // models that support larger contexts (e.g. 1M).
+  // When the model is unknown (not in any provider's model list), assume a
+  // conservative 128K context window. Set MIPHAM_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1
+  // to restore the old behavior (default 200K fallback for unknown models).
   const activeModel = registry.findModel(defaultModel)
-  const modelContextWindow = activeModel?.contextWindow || 200_000
+  let modelContextWindow: number
+  if (activeModel) {
+    modelContextWindow = activeModel.contextWindow
+  } else if (process.env.MIPHAM_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT === '1') {
+    modelContextWindow = 200_000 // old behavior: default fallback
+  } else {
+    modelContextWindow = 128_000 // conservative assumption for unknown models
+    console.error(
+      `[mipham] ⚠ Unknown model "${defaultModel}": assuming 128K context window. ` +
+        `Set MIPHAM_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1 to disable.`,
+    )
+  }
+
   const DISABLE_1M = process.env.MIPHAM_DISABLE_1M_CONTEXT === '1'
   const contextMaxTokens = (DISABLE_1M && modelContextWindow > 200_000)
     ? 200_000
