@@ -83,9 +83,7 @@ export async function loopUntilConvergence<T>(
 
     // VERIFY: optional quality gate
     if (opts.verify) {
-      const judged = await parallel(
-        fresh.map((item) => () => opts.verify!(item)),
-      )
+      const judged = await parallel(fresh.map((item) => () => opts.verify!(item)))
       for (const j of judged) {
         if (j && j.survives) {
           confirmed.push(j.finding as T)

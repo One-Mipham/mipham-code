@@ -2418,7 +2418,9 @@ const workflowSaveCmd = async (name: string): Promise<CommandResult> => {
     const scriptPath = join(targetDir, `${safeName}.js`)
     writeFileSync(scriptPath, script, 'utf-8')
 
-    return { content: `Workflow saved to ${scriptPath}\nUse /workflow run ${safeName} to run it again.` }
+    return {
+      content: `Workflow saved to ${scriptPath}\nUse /workflow run ${safeName} to run it again.`,
+    }
   } catch (err) {
     return { content: `Failed to save workflow: ${String(err)}` }
   }
@@ -2447,7 +2449,9 @@ const workflowRunCmd = async (name: string): Promise<CommandResult> => {
     }
   }
 
-  return { content: `Workflow "${safeName}" not found in .claude/workflows/ or ~/.claude/workflows/` }
+  return {
+    content: `Workflow "${safeName}" not found in .claude/workflows/ or ~/.claude/workflows/`,
+  }
 }
 
 const workflowAutoCmd: CommandHandler = async (_ctx, args) => {

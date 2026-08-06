@@ -12,7 +12,8 @@ describe('verify() — adversarial mode', () => {
     // → 2 skeptics say real, 1 says fake → survives=true, score=0.67
     const { verify } = await import('../../src/workflow/primitives/verify')
 
-    const mockAgent = vi.fn()
+    const mockAgent = vi
+      .fn()
       .mockResolvedValueOnce({ real: true, reason: 'confirmed: the bug is real' })
       .mockResolvedValueOnce({ real: true, reason: 'confirmed: reproduces consistently' })
       .mockResolvedValueOnce({ real: false, reason: 'refuted: expected behavior' })
@@ -23,7 +24,11 @@ describe('verify() — adversarial mode', () => {
         mode: 'adversarial',
         skeptics: 3,
         threshold: 2,
-        schema: { type: 'object', properties: { real: { type: 'boolean' }, reason: { type: 'string' } }, required: ['real', 'reason'] },
+        schema: {
+          type: 'object',
+          properties: { real: { type: 'boolean' }, reason: { type: 'string' } },
+          required: ['real', 'reason'],
+        },
         _mockAgent: mockAgent,
       },
     )
@@ -31,13 +36,14 @@ describe('verify() — adversarial mode', () => {
     expect(result.survives).toBe(true)
     expect(result.score).toBe(2 / 3)
     expect(result.votes).toHaveLength(3)
-    expect(result.votes.filter(v => v.real)).toHaveLength(2)
+    expect(result.votes.filter((v) => v.real)).toHaveLength(2)
   })
 
   it('fails when minority of skeptics vote real', async () => {
     const { verify } = await import('../../src/workflow/primitives/verify')
 
-    const mockAgent = vi.fn()
+    const mockAgent = vi
+      .fn()
       .mockResolvedValueOnce({ real: false, reason: 'cannot reproduce' })
       .mockResolvedValueOnce({ real: true, reason: 'looks real' })
       .mockResolvedValueOnce({ real: false, reason: 'expected behavior per spec' })
@@ -48,7 +54,11 @@ describe('verify() — adversarial mode', () => {
         mode: 'adversarial',
         skeptics: 3,
         threshold: 2,
-        schema: { type: 'object', properties: { real: { type: 'boolean' }, reason: { type: 'string' } }, required: ['real', 'reason'] },
+        schema: {
+          type: 'object',
+          properties: { real: { type: 'boolean' }, reason: { type: 'string' } },
+          required: ['real', 'reason'],
+        },
         _mockAgent: mockAgent,
       },
     )
@@ -60,7 +70,8 @@ describe('verify() — adversarial mode', () => {
   it('handles a failed skeptic (null result)', async () => {
     const { verify } = await import('../../src/workflow/primitives/verify')
 
-    const mockAgent = vi.fn()
+    const mockAgent = vi
+      .fn()
       .mockResolvedValueOnce({ real: true, reason: 'real bug' })
       .mockResolvedValueOnce(null) // simulated agent failure
       .mockResolvedValueOnce({ real: true, reason: 'confirmed' })
@@ -71,7 +82,11 @@ describe('verify() — adversarial mode', () => {
         mode: 'adversarial',
         skeptics: 3,
         threshold: 2,
-        schema: { type: 'object', properties: { real: { type: 'boolean' }, reason: { type: 'string' } }, required: ['real', 'reason'] },
+        schema: {
+          type: 'object',
+          properties: { real: { type: 'boolean' }, reason: { type: 'string' } },
+          required: ['real', 'reason'],
+        },
         _mockAgent: mockAgent,
       },
     )
@@ -86,7 +101,8 @@ describe('verify() — perspective mode', () => {
   it('survives when enough lenses confirm', async () => {
     const { verify } = await import('../../src/workflow/primitives/verify')
 
-    const mockAgent = vi.fn()
+    const mockAgent = vi
+      .fn()
       .mockResolvedValueOnce({ real: true, reason: 'correctness: logic is sound' })
       .mockResolvedValueOnce({ real: true, reason: 'security: no vulnerability' })
       .mockResolvedValueOnce({ real: false, reason: 'performance: O(n²) is slow' })
@@ -98,7 +114,11 @@ describe('verify() — perspective mode', () => {
         mode: 'perspective',
         lenses: ['correctness', 'security', 'performance', 'reproducibility'],
         threshold: 2,
-        schema: { type: 'object', properties: { real: { type: 'boolean' }, reason: { type: 'string' } }, required: ['real', 'reason'] },
+        schema: {
+          type: 'object',
+          properties: { real: { type: 'boolean' }, reason: { type: 'string' } },
+          required: ['real', 'reason'],
+        },
         _mockAgent: mockAgent,
       },
     )
@@ -115,27 +135,47 @@ describe('verify() — consensus mode', () => {
     const { verify } = await import('../../src/workflow/primitives/verify')
 
     // All 3 say real → survives
-    const allReal = vi.fn()
+    const allReal = vi
+      .fn()
       .mockResolvedValueOnce({ real: true, reason: 'ok' })
       .mockResolvedValueOnce({ real: true, reason: 'ok' })
       .mockResolvedValueOnce({ real: true, reason: 'ok' })
 
     const r1 = await verify(
       { title: 'clear bug' },
-      { mode: 'consensus', voters: 3, schema: { type: 'object', properties: { real: { type: 'boolean' }, reason: { type: 'string' } }, required: ['real', 'reason'] }, _mockAgent: allReal },
+      {
+        mode: 'consensus',
+        voters: 3,
+        schema: {
+          type: 'object',
+          properties: { real: { type: 'boolean' }, reason: { type: 'string' } },
+          required: ['real', 'reason'],
+        },
+        _mockAgent: allReal,
+      },
     )
     expect(r1.survives).toBe(true)
     expect(r1.score).toBe(1.0)
 
     // 2 of 3 say real → fails consensus
-    const twoReal = vi.fn()
+    const twoReal = vi
+      .fn()
       .mockResolvedValueOnce({ real: true, reason: 'ok' })
       .mockResolvedValueOnce({ real: true, reason: 'ok' })
       .mockResolvedValueOnce({ real: false, reason: 'nope' })
 
     const r2 = await verify(
       { title: 'debatable' },
-      { mode: 'consensus', voters: 3, schema: { type: 'object', properties: { real: { type: 'boolean' }, reason: { type: 'string' } }, required: ['real', 'reason'] }, _mockAgent: twoReal },
+      {
+        mode: 'consensus',
+        voters: 3,
+        schema: {
+          type: 'object',
+          properties: { real: { type: 'boolean' }, reason: { type: 'string' } },
+          required: ['real', 'reason'],
+        },
+        _mockAgent: twoReal,
+      },
     )
     expect(r2.survives).toBe(false)
   })
@@ -154,13 +194,32 @@ describe('judge()', () => {
     // Judge 0: prefers attempt 0
     // Judge 1: prefers attempt 1
     // Judge 2: prefers attempt 0 → winner = attempt 0
-    const mockAgent = vi.fn()
-      .mockResolvedValueOnce({ scores: { completeness: 8, correctness: 9, elegance: 7 }, notes: 'solid' })
-      .mockResolvedValueOnce({ scores: { completeness: 5, correctness: 6, elegance: 8 }, notes: 'skimpy' })
-      .mockResolvedValueOnce({ scores: { completeness: 6, correctness: 7, elegance: 6 }, notes: 'ok' })
-      .mockResolvedValueOnce({ scores: { completeness: 9, correctness: 8, elegance: 7 }, notes: 'better' })
-      .mockResolvedValueOnce({ scores: { completeness: 8, correctness: 9, elegance: 9 }, notes: 'best' })
-      .mockResolvedValueOnce({ scores: { completeness: 4, correctness: 5, elegance: 6 }, notes: 'weak' })
+    const mockAgent = vi
+      .fn()
+      .mockResolvedValueOnce({
+        scores: { completeness: 8, correctness: 9, elegance: 7 },
+        notes: 'solid',
+      })
+      .mockResolvedValueOnce({
+        scores: { completeness: 5, correctness: 6, elegance: 8 },
+        notes: 'skimpy',
+      })
+      .mockResolvedValueOnce({
+        scores: { completeness: 6, correctness: 7, elegance: 6 },
+        notes: 'ok',
+      })
+      .mockResolvedValueOnce({
+        scores: { completeness: 9, correctness: 8, elegance: 7 },
+        notes: 'better',
+      })
+      .mockResolvedValueOnce({
+        scores: { completeness: 8, correctness: 9, elegance: 9 },
+        notes: 'best',
+      })
+      .mockResolvedValueOnce({
+        scores: { completeness: 4, correctness: 5, elegance: 6 },
+        notes: 'weak',
+      })
 
     const result = await judge(attempts, {
       criteria: ['completeness', 'correctness', 'elegance'],
@@ -195,7 +254,8 @@ describe('judge()', () => {
 
     const attempts = [{ name: 'plan-a' }, { name: 'plan-b' }]
 
-    const mockAgent = vi.fn()
+    const mockAgent = vi
+      .fn()
       // 2 judges × 2 attempts = 4 score calls
       .mockResolvedValueOnce({ scores: { quality: 8 }, notes: 'good' })
       .mockResolvedValueOnce({ scores: { quality: 5 }, notes: 'meh' })
@@ -211,7 +271,11 @@ describe('judge()', () => {
       schema: {
         type: 'object',
         properties: {
-          scores: { type: 'object', properties: { quality: { type: 'number' } }, required: ['quality'] },
+          scores: {
+            type: 'object',
+            properties: { quality: { type: 'number' } },
+            required: ['quality'],
+          },
           notes: { type: 'string' },
         },
         required: ['scores', 'notes'],

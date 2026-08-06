@@ -159,7 +159,18 @@ export async function runWorkflow(
     wrappedScript,
   )
 
-  const result = await scriptFn(agent, parallel, pipeline, verify, judge, loopUntilConvergence, wrappedPhase, log, args, budget)
+  const result = await scriptFn(
+    agent,
+    parallel,
+    pipeline,
+    verify,
+    judge,
+    loopUntilConvergence,
+    wrappedPhase,
+    log,
+    args,
+    budget,
+  )
 
   // Count journal entries from state
   const priorEntries = loadJournal(runId)

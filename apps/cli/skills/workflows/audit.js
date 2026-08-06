@@ -18,12 +18,13 @@ const targets = args.targets || (await agent(
 log(`Auditing ${targets.length} files`)
 
 phase('Audit')
-const findings = (await pipeline(
+const raw = (await pipeline(
   targets,
   t => agent(`Security audit ${t.path}: injection, auth, crypto, secrets, input validation. Return { findings: [{ severity, file, line, summary }] }`,
     { label: `audit:${t.path}`, schema: { type: 'object', properties: { findings: { type: 'array', items: { type: 'object', properties: { severity: { type: 'string', enum: ['critical', 'high', 'medium', 'low'] }, file: { type: 'string' }, line: { type: 'number' }, summary: { type: 'string' } }, required: ['severity', 'file', 'summary'] } } }, required: ['findings'] } },
   )),
-)).flatMap(r => r?.findings || [])
+)
+const findings = raw.flatMap(r => (r && r.findings) || [])
 
 log(`Found ${findings.length} potential issues`)
 

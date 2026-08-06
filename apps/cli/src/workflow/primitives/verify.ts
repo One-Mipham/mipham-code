@@ -81,15 +81,11 @@ function defaultThreshold(mode: VerifyMode, total: number): number {
 
 // ── verify() ──
 
-export async function verify(
-  finding: unknown,
-  opts: VerifyOpts,
-): Promise<VerifyResult> {
+export async function verify(finding: unknown, opts: VerifyOpts): Promise<VerifyResult> {
   // Prefer the test hook (_mockAgent), fall back to workflowAgent.
   // In production sandbox usage, _mockAgent is set to the pre-bound agent
   // function injected by the workflow runtime.
-  const agentFn: AgentFn =
-    opts._mockAgent ?? (workflowAgent as unknown as AgentFn)
+  const agentFn: AgentFn = opts._mockAgent ?? (workflowAgent as unknown as AgentFn)
   const mode = opts.mode
 
   const findingStr = JSON.stringify(finding, null, 2)
@@ -131,8 +127,7 @@ export async function verify(
   // Fan out all agent calls concurrently
   const rawVotes = await parallel(
     prompts.map(
-      (p) => () =>
-        agentFn(p.prompt, { schema: opts.schema as WorkflowAgentOpts['schema'] }),
+      (p) => () => agentFn(p.prompt, { schema: opts.schema as WorkflowAgentOpts['schema'] }),
     ),
   )
 
@@ -164,13 +159,9 @@ export async function verify(
 
 // ── judge() ──
 
-export async function judge(
-  attempts: unknown[],
-  opts: JudgeOpts,
-): Promise<JudgeResult> {
+export async function judge(attempts: unknown[], opts: JudgeOpts): Promise<JudgeResult> {
   // Prefer the test hook, fall back to workflowAgent.
-  const agentFn: AgentFn =
-    opts._mockAgent ?? (workflowAgent as unknown as AgentFn)
+  const agentFn: AgentFn = opts._mockAgent ?? (workflowAgent as unknown as AgentFn)
   const judgeCount = opts.judges ?? 3
   const schemaDesc = JSON.stringify(opts.schema)
 
@@ -201,13 +192,14 @@ export async function judge(
 
   // Fan out all scoring calls concurrently
   const rawScores = await parallel(
-    scorePrompts.map((sp) => () =>
-      agentFn(
-        `You are judge #${sp.judgeIndex + 1}. Score this attempt against the criteria: ${opts.criteria.join(', ')}.\n\n` +
-          `Attempt:\n${JSON.stringify(sp.attempt, null, 2)}\n\n` +
-          `Return JSON matching this schema:\n${schemaDesc}`,
-        { schema: opts.schema as WorkflowAgentOpts['schema'] },
-      ),
+    scorePrompts.map(
+      (sp) => () =>
+        agentFn(
+          `You are judge #${sp.judgeIndex + 1}. Score this attempt against the criteria: ${opts.criteria.join(', ')}.\n\n` +
+            `Attempt:\n${JSON.stringify(sp.attempt, null, 2)}\n\n` +
+            `Return JSON matching this schema:\n${schemaDesc}`,
+          { schema: opts.schema as WorkflowAgentOpts['schema'] },
+        ),
     ),
   )
 
@@ -237,14 +229,8 @@ export async function judge(
   const attemptTotals = new Map<number, number>()
   const attemptCounts = new Map<number, number>()
   for (const s of scores) {
-    attemptTotals.set(
-      s.attemptIndex,
-      (attemptTotals.get(s.attemptIndex) ?? 0) + s.total,
-    )
-    attemptCounts.set(
-      s.attemptIndex,
-      (attemptCounts.get(s.attemptIndex) ?? 0) + 1,
-    )
+    attemptTotals.set(s.attemptIndex, (attemptTotals.get(s.attemptIndex) ?? 0) + s.total)
+    attemptCounts.set(s.attemptIndex, (attemptCounts.get(s.attemptIndex) ?? 0) + 1)
   }
 
   let winnerIndex = 0
@@ -275,11 +261,7 @@ export async function judge(
     const synthResult = await agentFn(synthPrompt)
     if (typeof synthResult === 'string') {
       synthesis = synthResult
-    } else if (
-      synthResult &&
-      typeof synthResult === 'object' &&
-      'synthesis' in synthResult
-    ) {
+    } else if (synthResult && typeof synthResult === 'object' && 'synthesis' in synthResult) {
       synthesis = String((synthResult as Record<string, unknown>).synthesis)
     }
   }

@@ -8,15 +8,12 @@ export const workflowTool: ToolDefinition = {
     'Execute a workflow script that orchestrates multiple subagents deterministically. ' +
     'Workflows run in the background — this tool returns immediately with a task ID, ' +
     'and a <task-notification> arrives when the workflow completes. Use /workflows to watch live progress.\n\n' +
-
     'A workflow structures work across many agents — to be comprehensive (decompose and cover in parallel), ' +
     'to be confident (independent perspectives and adversarial checks before committing), ' +
     'or to take on scale one context cannot hold (migrations, audits, broad sweeps). ' +
     'The script is where you encode that structure: what fans out, what verifies, what synthesizes.\n\n' +
-
     'ONLY call this tool when the task benefits from multi-agent orchestration. ' +
     'For a simple single-agent lookup or edit, use the Agent tool or direct tools instead.\n\n' +
-
     '## Primitives\n\n' +
     '- agent(prompt: string, opts?: {label?, phase?, schema?, model?, effort?, isolation?}): Promise<any> — spawn a subagent. ' +
     'Without schema, returns final text as string. With schema (JSON Schema), returns validated object — retries on mismatch.\n' +
@@ -35,7 +32,6 @@ export const workflowTool: ToolDefinition = {
     '- log(message: string): void — emit progress message\n' +
     '- args: any — verbatim args passed to Workflow tool\n' +
     '- budget: {total, spent(), remaining()} — token budget tracking\n\n' +
-
     '## Topology Selection Guide\n\n' +
     'DEFAULT TO pipeline(). Only reach for a barrier (parallel between stages) when you genuinely ' +
     'need ALL prior-stage results together.\n\n' +
@@ -48,7 +44,6 @@ export const workflowTool: ToolDefinition = {
     '- Loop-until-convergence: unknown-size discovery (bugs, vulnerabilities, edge cases)\n' +
     '- Judge panel: multiple competing approaches, pick best + graft runner-ups\n' +
     '- Verifier-on-edge: quality gates before results reach downstream\n\n' +
-
     '## Critical Rules\n\n' +
     '- EDGE LOGIC IS FREE: flatten, dedupe, filter in plain JavaScript — NOT agent calls. ' +
     'results.flatMap(...) and a Set are deterministic, instant, zero tokens.\n' +
@@ -56,7 +51,6 @@ export const workflowTool: ToolDefinition = {
     '- Each node should have bounded input, validated output (schema), and one clear purpose.\n' +
     '- Model tiering: use cheaper models for repetitive extraction/classification nodes, ' +
     'expensive models for synthesis/judgment nodes.\n\n' +
-
     '## Script Format\n\n' +
     'Every script MUST begin with: export const meta = { name, description, phases: [{title, detail}] }\n' +
     'The meta object must be a PURE LITERAL — no variables, function calls, or template interpolation.\n' +

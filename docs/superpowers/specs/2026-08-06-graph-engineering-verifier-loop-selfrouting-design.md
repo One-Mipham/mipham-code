@@ -9,11 +9,11 @@
 
 Mipham Code v0.13.0 已具备 Workflow 核心引擎（`runtime.ts` + `parallel()` + `pipeline()` + `agent()` + schema validation），但缺少三个关键能力使其成为完整的 Graph Engineering 平台：
 
-| Step | 原语 | 定位 | 解决的问题 |
-|------|------|------|-----------|
-| **09** | `verify()` / `judge()` | 质量闸门 | 没有验证器，graph 只能加速不能提升置信度 |
+| Step   | 原语                     | 定位     | 解决的问题                                         |
+| ------ | ------------------------ | -------- | -------------------------------------------------- |
+| **09** | `verify()` / `judge()`   | 质量闸门 | 没有验证器，graph 只能加速不能提升置信度           |
 | **11** | `loopUntilConvergence()` | 收敛循环 | 未知规模任务无法安全自动化；seen-vs-confirmed 陷阱 |
-| **14** | Self-Routing | 自动编排 | 7 家 provider 的模型都不会写 workflow 脚本 |
+| **14** | Self-Routing             | 自动编排 | 7 家 provider 的模型都不会写 workflow 脚本         |
 
 三个 Step 基于完全相同的已有积木（`parallel()` + `agent()` + `schema`）构建，零新依赖。
 
@@ -37,19 +37,19 @@ interface VerifyOpts {
   mode: 'adversarial' | 'perspective' | 'consensus'
 
   // 对抗式: N 个独立怀疑者
-  skeptics?: number       // default: 3
+  skeptics?: number // default: 3
 
   // 多视角: K 个不同检查维度
-  lenses?: string[]       // e.g. ['correctness', 'security', 'performance']
+  lenses?: string[] // e.g. ['correctness', 'security', 'performance']
 
   // 共识: N 个投票者
-  voters?: number         // default: 3
+  voters?: number // default: 3
 
   // 通过阈值（票数 >= threshold 则 survives）
-  threshold?: number      // default: 2（adversarial/consensus）, 1（perspective）
+  threshold?: number // default: 2（adversarial/consensus）, 1（perspective）
 
   // 输出 schema
-  schema: object          // { real: boolean, reason: string }
+  schema: object // { real: boolean, reason: string }
 }
 
 interface VerifyResult {
@@ -58,13 +58,14 @@ interface VerifyResult {
   votes: Array<{
     real: boolean
     reason: string
-    lens?: string         // perspective 模式下的视角标签
+    lens?: string // perspective 模式下的视角标签
   }>
-  score: number           // 0.0 ~ 1.0（survives 的票数占比）
+  score: number // 0.0 ~ 1.0（survives 的票数占比）
 }
 ```
 
 **内部实现**：
+
 ```
 verify(finding, opts):
   switch mode:
@@ -80,14 +81,14 @@ verify(finding, opts):
 
 ```typescript
 interface JudgeOpts {
-  criteria: string[]        // e.g. ['completeness', 'correctness', 'elegance']
-  judges?: number           // default: 3
-  synthesize?: boolean      // default: true — 综合报告
-  schema: object            // { scores: Record<criteria, number>, notes: string }
+  criteria: string[] // e.g. ['completeness', 'correctness', 'elegance']
+  judges?: number // default: 3
+  synthesize?: boolean // default: true — 综合报告
+  schema: object // { scores: Record<criteria, number>, notes: string }
 }
 
 interface JudgeResult {
-  winner: unknown           // 总得分最高的方案
+  winner: unknown // 总得分最高的方案
   winnerIndex: number
   scores: Array<{
     attemptIndex: number
@@ -96,7 +97,7 @@ interface JudgeResult {
     total: number
     notes: string
   }>
-  synthesis?: string        // 综合报告（从胜者综合 + 嫁接其他方案亮点）
+  synthesis?: string // 综合报告（从胜者综合 + 嫁接其他方案亮点）
 }
 ```
 
@@ -109,16 +110,16 @@ interface JudgeResult {
 
 ### 测试要点
 
-| 测试 | 验证 |
-|------|------|
-| adversarial: 3 skeptics, 2 real → survives=true, score=0.67 |
+| 测试                                                         | 验证 |
+| ------------------------------------------------------------ | ---- |
+| adversarial: 3 skeptics, 2 real → survives=true, score=0.67  |
 | adversarial: 3 skeptics, 1 real → survives=false, score=0.33 |
-| adversarial: 1 agent 失败 → 其余 2 票正常统计 |
-| perspective: 4 lenses, 3 pass → survives=true |
-| consensus: 5 voters, 5 real → survives=true, score=1.0 |
-| judge: 3 attempts × 3 judges → 9 个评分，winner 正确 |
-| judge: synthesize=false → synthesis 字段为 undefined |
-| verify schema 校验失败 → agent 自动重试（复用现有机制）|
+| adversarial: 1 agent 失败 → 其余 2 票正常统计                |
+| perspective: 4 lenses, 3 pass → survives=true                |
+| consensus: 5 voters, 5 real → survives=true, score=1.0       |
+| judge: 3 attempts × 3 judges → 9 个评分，winner 正确         |
+| judge: synthesize=false → synthesis 字段为 undefined         |
+| verify schema 校验失败 → agent 自动重试（复用现有机制）      |
 
 ---
 
@@ -149,22 +150,23 @@ interface LoopUntilConvergenceOpts<T> {
   verify?: (item: T) => Promise<VerifyResult>
 
   // 收敛参数
-  dryRounds?: number    // 连续 N 轮无新发现 → 停止（默认 2）
-  maxRounds?: number    // 安全上限（默认 20）
+  dryRounds?: number // 连续 N 轮无新发现 → 停止（默认 2）
+  maxRounds?: number // 安全上限（默认 20）
 
   // 可选 schema 约束 finder 输出
   schema?: object
 }
 
 interface LoopUntilConvergenceResult<T> {
-  confirmed: T[]         // 通过验证的发现
-  totalSeen: number      // 见过的唯一发现总数（含被否决的）
-  rounds: number         // 实际运行轮数
-  converged: boolean     // true=自然收敛, false=maxRounds 截断
+  confirmed: T[] // 通过验证的发现
+  totalSeen: number // 见过的唯一发现总数（含被否决的）
+  rounds: number // 实际运行轮数
+  converged: boolean // true=自然收敛, false=maxRounds 截断
 }
 ```
 
 **核心算法**：
+
 ```
 loopUntilConvergence(opts):
   seen ← Set()           // ⚠️ seen-set, NOT confirmed-set
@@ -210,28 +212,29 @@ loopUntilConvergence(opts):
 
 ```javascript
 const result = await loopUntilConvergence({
-  finders: SCANNERS.map(s => () => agent(s.prompt, { schema: VULN })),
-  keyFn: v => `${v.file}:${v.line}:${v.type}`,
-  verify: async v => verify(v, {
-    mode: 'adversarial',
-    skeptics: 3,
-    threshold: 2,
-    schema: VERDICT,
-  }),
+  finders: SCANNERS.map((s) => () => agent(s.prompt, { schema: VULN })),
+  keyFn: (v) => `${v.file}:${v.line}:${v.type}`,
+  verify: async (v) =>
+    verify(v, {
+      mode: 'adversarial',
+      skeptics: 3,
+      threshold: 2,
+      schema: VERDICT,
+    }),
   dryRounds: 2,
 })
 ```
 
 ### 测试要点
 
-| 测试 | 验证 |
-|------|------|
-| 自然收敛 | 第 3 轮无新发现 → dry=2 → converged=true, rounds=3 |
-| seen vs confirmed 语义 | finder 返回相同 item + verify=false → seen 拦截 → 不复活 |
-| maxRounds 截断 | finder 每轮返回新 item, maxRounds=5 → rounds=5, converged=false |
-| 空 finder | 第 1 轮就 0 结果 → rounds=1, confirmed=[] |
-| verify 集成 | verify returns survives=false → 不进 confirmed，进 seen |
-| 一个 finder 失败 | parallel 返回 null → filter(Boolean) 过滤 → 其余正常 |
+| 测试                   | 验证                                                            |
+| ---------------------- | --------------------------------------------------------------- |
+| 自然收敛               | 第 3 轮无新发现 → dry=2 → converged=true, rounds=3              |
+| seen vs confirmed 语义 | finder 返回相同 item + verify=false → seen 拦截 → 不复活        |
+| maxRounds 截断         | finder 每轮返回新 item, maxRounds=5 → rounds=5, converged=false |
+| 空 finder              | 第 1 轮就 0 结果 → rounds=1, confirmed=[]                       |
+| verify 集成            | verify returns survives=false → 不进 confirmed，进 seen         |
+| 一个 finder 失败       | parallel 返回 null → filter(Boolean) 过滤 → 其余正常            |
 
 ---
 
@@ -263,6 +266,7 @@ Layer 3: Persistence
 ### Layer 1: 扩展工具描述
 
 **当前** (~50 词):
+
 ```
 'Execute a multi-agent workflow script. The script uses agent(),
 parallel(), pipeline(), phase(), log(), args, budget primitives...'
@@ -321,25 +325,25 @@ When a workflow completes successfully, offer to save it:
 
 `skills/workflows/` 目录，6 个可复用模板：
 
-| 模板 | Topology | 用途 |
-|------|----------|------|
-| `audit.js` | Diamond + verify | 安全检查：fan-out per file → verify → report |
-| `research.js` | Diamond + verify | 深度研究：scope → parallel search → verify → synthesize |
-| `migrate.js` | Pipeline + verify | 代码迁移：discover → fan-out transform → verify → integrate |
-| `review.js` | Fan-out + judge | 代码审查：per dimension → judge panel → report |
-| `hunt.js` | Loop-until-dry + verify | Bug 排查：反复发现 → 对抗式验证 → 收敛 |
-| `judge.js` | Parallel + judge | 方案评审：N attempts × M judges → winner |
+| 模板          | Topology                | 用途                                                        |
+| ------------- | ----------------------- | ----------------------------------------------------------- |
+| `audit.js`    | Diamond + verify        | 安全检查：fan-out per file → verify → report                |
+| `research.js` | Diamond + verify        | 深度研究：scope → parallel search → verify → synthesize     |
+| `migrate.js`  | Pipeline + verify       | 代码迁移：discover → fan-out transform → verify → integrate |
+| `review.js`   | Fan-out + judge         | 代码审查：per dimension → judge panel → report              |
+| `hunt.js`     | Loop-until-dry + verify | Bug 排查：反复发现 → 对抗式验证 → 收敛                      |
+| `judge.js`    | Parallel + judge        | 方案评审：N attempts × M judges → winner                    |
 
 每个模板是独立的 `.js` 文件，有完整的 `export const meta` 头和实现逻辑。既是直接可用的工具，也是模型学习的范例。
 
 ### 关键设计决策
 
-| 决策 | 理由 |
-|------|------|
+| 决策                           | 理由                                               |
+| ------------------------------ | -------------------------------------------------- |
 | 知识放在工具描述而非 CLAUDE.md | 模型是通过工具描述学习工具的。放在别处不会自动关联 |
-| 不抄 Claude Code 描述 | 法律风险。内容等价但措辞独立 |
-| 模板是 .js 而非 .md | 可直接被 `/workflow run` 执行；模型也能读源码学习 |
-| `/workflow save` 不是自动的 | 遵循 Surgical Changes 原则——用户决定什么值得保存 |
+| 不抄 Claude Code 描述          | 法律风险。内容等价但措辞独立                       |
+| 模板是 .js 而非 .md            | 可直接被 `/workflow run` 执行；模型也能读源码学习  |
+| `/workflow save` 不是自动的    | 遵循 Surgical Changes 原则——用户决定什么值得保存   |
 
 ---
 
@@ -347,58 +351,62 @@ When a workflow completes successfully, offer to save it:
 
 ### 新建文件
 
-| 文件 | 行数（估） | 说明 |
-|------|-----------|------|
-| `src/workflow/primitives/verify.ts` | ~200 | verify() + judge() 实现 |
-| `src/workflow/primitives/loop.ts` | ~180 | loopUntilConvergence() 实现 |
-| `skills/workflows/audit.js` | ~60 | Diamond + verify 模板 |
-| `skills/workflows/research.js` | ~60 | Diamond + verify 模板 |
-| `skills/workflows/migrate.js` | ~60 | Pipeline + verify 模板 |
-| `skills/workflows/review.js` | ~60 | Fan-out + judge 模板 |
-| `skills/workflows/hunt.js` | ~60 | Loop-until-dry 模板 |
-| `skills/workflows/judge.js` | ~50 | Judge panel 模板 |
-| `test/workflow/verify.test.ts` | ~150 | verify() + judge() 测试 |
-| `test/workflow/loop.test.ts` | ~120 | loopUntilConvergence() 测试 |
+| 文件                                | 行数（估） | 说明                        |
+| ----------------------------------- | ---------- | --------------------------- |
+| `src/workflow/primitives/verify.ts` | ~200       | verify() + judge() 实现     |
+| `src/workflow/primitives/loop.ts`   | ~180       | loopUntilConvergence() 实现 |
+| `skills/workflows/audit.js`         | ~60        | Diamond + verify 模板       |
+| `skills/workflows/research.js`      | ~60        | Diamond + verify 模板       |
+| `skills/workflows/migrate.js`       | ~60        | Pipeline + verify 模板      |
+| `skills/workflows/review.js`        | ~60        | Fan-out + judge 模板        |
+| `skills/workflows/hunt.js`          | ~60        | Loop-until-dry 模板         |
+| `skills/workflows/judge.js`         | ~50        | Judge panel 模板            |
+| `test/workflow/verify.test.ts`      | ~150       | verify() + judge() 测试     |
+| `test/workflow/loop.test.ts`        | ~120       | loopUntilConvergence() 测试 |
 
 ### 修改文件
 
-| 文件 | 变更 | 说明 |
-|------|------|------|
-| `src/workflow/runtime.ts` | +~30 行 | 注入 verify/judge/loopUntilConvergence/workflow 到沙箱 |
-| `src/tools/agent/workflow.ts` | +~500 行 | 工具描述 50→800 词 + 增加 args/scriptPath/name 参数 |
-| `src/ui/commands.ts` | +~100 行 | `/workflow <task>`, `/workflow save`, `/workflow run` |
-| `src/core/instructions.ts` | +~20 行 | Workflow auto-generation system instruction |
+| 文件                          | 变更     | 说明                                                   |
+| ----------------------------- | -------- | ------------------------------------------------------ |
+| `src/workflow/runtime.ts`     | +~30 行  | 注入 verify/judge/loopUntilConvergence/workflow 到沙箱 |
+| `src/tools/agent/workflow.ts` | +~500 行 | 工具描述 50→800 词 + 增加 args/scriptPath/name 参数    |
+| `src/ui/commands.ts`          | +~100 行 | `/workflow <task>`, `/workflow save`, `/workflow run`  |
+| `src/core/instructions.ts`    | +~20 行  | Workflow auto-generation system instruction            |
 
 ### 统计
 
-| 指标 | 数值 |
-|------|------|
-| 新增代码 | ~1,650 行 |
-| 新建文件 | 10 |
-| 修改文件 | 4 |
-| 测试用例（估） | ~30 |
-| 零新依赖 | ✅ |
+| 指标           | 数值      |
+| -------------- | --------- |
+| 新增代码       | ~1,650 行 |
+| 新建文件       | 10        |
+| 修改文件       | 4         |
+| 测试用例（估） | ~30       |
+| 零新依赖       | ✅        |
 
 ---
 
 ## 自行审查
 
 ### Placeholder 扫描
+
 - 无 TBD/TODO
 - 所有接口定义完整
 - 所有文件路径明确
 
 ### 内部一致性
+
 - Step 09 和 11 通过 `verify` 参数协作，接口对齐
 - Step 14 的教科书内容引用了 Step 09 和 11 的新原语
 - 预置模板使用所有三个 Step 的新原语
 
 ### 范围检查
+
 - 三个 Step 构成一个逻辑整体：质量 → 收敛 → 自动编排
 - 不涉及 CLI UI、Web、MCP、其他工具
 - 纯 workflow 层增强
 
 ### 歧义检查
+
 - `verify()` 的 threshold 默认值按模式区分（adversarial/consensus=2, perspective=1）—— 已明确
 - `loopUntilConvergence()` 的 seen-set 语义通过算法伪代码固化 —— 无歧义
 - 工具描述扩展不改变 Workflow 工具的 API 兼容性 —— 明确

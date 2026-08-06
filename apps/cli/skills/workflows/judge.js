@@ -21,27 +21,35 @@ const validApproaches = approaches.filter(Boolean)
 log(`Generated ${validApproaches.length} approaches`)
 
 phase('Judge')
-const { winner, winnerIndex, scores, synthesis } = await judge(
-  validApproaches,
-  {
-    criteria: ['feasibility', 'impact', 'simplicity', 'risk'],
-    judges: 3,
-    synthesize: true,
-    schema: {
-      type: 'object',
-      properties: {
-        scores: { type: 'object', properties: { feasibility: { type: 'number' }, impact: { type: 'number' }, simplicity: { type: 'number' }, risk: { type: 'number' } }, required: ['feasibility', 'impact', 'simplicity', 'risk'] },
-        notes: { type: 'string' },
+const { winner, winnerIndex, scores, synthesis } = await judge(validApproaches, {
+  criteria: ['feasibility', 'impact', 'simplicity', 'risk'],
+  judges: 3,
+  synthesize: true,
+  schema: {
+    type: 'object',
+    properties: {
+      scores: {
+        type: 'object',
+        properties: {
+          feasibility: { type: 'number' },
+          impact: { type: 'number' },
+          simplicity: { type: 'number' },
+          risk: { type: 'number' },
+        },
+        required: ['feasibility', 'impact', 'simplicity', 'risk'],
       },
-      required: ['scores', 'notes'],
+      notes: { type: 'string' },
     },
+    required: ['scores', 'notes'],
   },
-)
+})
 
 phase('Synthesize')
 return {
   problem,
   winner: `Approach #${winnerIndex + 1}`,
-  scores_summary: scores.map(s => `Judge ${s.judgeIndex + 1}: approach ${s.attemptIndex + 1} = ${s.total}`),
+  scores_summary: scores.map(
+    (s) => `Judge ${s.judgeIndex + 1}: approach ${s.attemptIndex + 1} = ${s.total}`,
+  ),
   synthesis,
 }

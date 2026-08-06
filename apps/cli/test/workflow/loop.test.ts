@@ -55,11 +55,11 @@ describe('loopUntilConvergence()', () => {
     // Round 1: finder returns [x], verify rejects it, x → seen
     // Round 2: finder returns [x], already in seen → fresh=[] → dry++
     // Round 3: fresh=[] → dry++ → stop
-    expect(result.confirmed).toHaveLength(0)    // nothing survived verify
-    expect(result.totalSeen).toBe(1)             // x was seen once
-    expect(result.rounds).toBe(3)                // converged, not infinite
+    expect(result.confirmed).toHaveLength(0) // nothing survived verify
+    expect(result.totalSeen).toBe(1) // x was seen once
+    expect(result.rounds).toBe(3) // converged, not infinite
     expect(result.converged).toBe(true)
-    expect(mockVerify).toHaveBeenCalledTimes(1)  // only called once, not every round
+    expect(mockVerify).toHaveBeenCalledTimes(1) // only called once, not every round
   })
 
   it('stops at maxRounds when finder never runs dry', async () => {
@@ -141,7 +141,9 @@ describe('loopUntilConvergence()', () => {
       return {
         finding: item,
         survives: obj.id === 'real-bug',
-        votes: [{ real: obj.id === 'real-bug', reason: obj.id === 'real-bug' ? 'confirmed' : 'refuted' }],
+        votes: [
+          { real: obj.id === 'real-bug', reason: obj.id === 'real-bug' ? 'confirmed' : 'refuted' },
+        ],
         score: obj.id === 'real-bug' ? 1 : 0,
       }
     })

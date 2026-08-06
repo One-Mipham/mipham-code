@@ -58,9 +58,11 @@ apps/cli/
 ### Task 1.1: Write verify.test.ts
 
 **Files:**
+
 - Create: `apps/cli/test/workflow/verify.test.ts`
 
 **Interfaces:**
+
 - Produces: Test file for `verify()` and `judge()` — imported in Task 1.3
 
 - [ ] **Step 1: Create test file with mock agent infrastructure**
@@ -104,7 +106,8 @@ describe('verify() — adversarial mode', () => {
     // → 2 skeptics say real, 1 says fake → survives=true, score=0.67
     const { verify } = await import('../../src/workflow/primitives/verify')
 
-    const mockAgent = vi.fn()
+    const mockAgent = vi
+      .fn()
       .mockResolvedValueOnce({ real: true, reason: 'confirmed: the bug is real' })
       .mockResolvedValueOnce({ real: true, reason: 'confirmed: reproduces consistently' })
       .mockResolvedValueOnce({ real: false, reason: 'refuted: expected behavior' })
@@ -115,7 +118,11 @@ describe('verify() — adversarial mode', () => {
         mode: 'adversarial',
         skeptics: 3,
         threshold: 2,
-        schema: { type: 'object', properties: { real: { type: 'boolean' }, reason: { type: 'string' } }, required: ['real', 'reason'] },
+        schema: {
+          type: 'object',
+          properties: { real: { type: 'boolean' }, reason: { type: 'string' } },
+          required: ['real', 'reason'],
+        },
         _mockAgent: mockAgent,
       },
     )
@@ -123,13 +130,14 @@ describe('verify() — adversarial mode', () => {
     expect(result.survives).toBe(true)
     expect(result.score).toBe(2 / 3)
     expect(result.votes).toHaveLength(3)
-    expect(result.votes.filter(v => v.real)).toHaveLength(2)
+    expect(result.votes.filter((v) => v.real)).toHaveLength(2)
   })
 
   it('fails when minority of skeptics vote real', async () => {
     const { verify } = await import('../../src/workflow/primitives/verify')
 
-    const mockAgent = vi.fn()
+    const mockAgent = vi
+      .fn()
       .mockResolvedValueOnce({ real: false, reason: 'cannot reproduce' })
       .mockResolvedValueOnce({ real: true, reason: 'looks real' })
       .mockResolvedValueOnce({ real: false, reason: 'expected behavior per spec' })
@@ -140,7 +148,11 @@ describe('verify() — adversarial mode', () => {
         mode: 'adversarial',
         skeptics: 3,
         threshold: 2,
-        schema: { type: 'object', properties: { real: { type: 'boolean' }, reason: { type: 'string' } }, required: ['real', 'reason'] },
+        schema: {
+          type: 'object',
+          properties: { real: { type: 'boolean' }, reason: { type: 'string' } },
+          required: ['real', 'reason'],
+        },
         _mockAgent: mockAgent,
       },
     )
@@ -152,7 +164,8 @@ describe('verify() — adversarial mode', () => {
   it('handles a failed skeptic (null result)', async () => {
     const { verify } = await import('../../src/workflow/primitives/verify')
 
-    const mockAgent = vi.fn()
+    const mockAgent = vi
+      .fn()
       .mockResolvedValueOnce({ real: true, reason: 'real bug' })
       .mockResolvedValueOnce(null) // simulated agent failure
       .mockResolvedValueOnce({ real: true, reason: 'confirmed' })
@@ -163,7 +176,11 @@ describe('verify() — adversarial mode', () => {
         mode: 'adversarial',
         skeptics: 3,
         threshold: 2,
-        schema: { type: 'object', properties: { real: { type: 'boolean' }, reason: { type: 'string' } }, required: ['real', 'reason'] },
+        schema: {
+          type: 'object',
+          properties: { real: { type: 'boolean' }, reason: { type: 'string' } },
+          required: ['real', 'reason'],
+        },
         _mockAgent: mockAgent,
       },
     )
@@ -182,7 +199,8 @@ describe('verify() — perspective mode', () => {
   it('survives when enough lenses confirm', async () => {
     const { verify } = await import('../../src/workflow/primitives/verify')
 
-    const mockAgent = vi.fn()
+    const mockAgent = vi
+      .fn()
       .mockResolvedValueOnce({ real: true, reason: 'correctness: logic is sound' })
       .mockResolvedValueOnce({ real: true, reason: 'security: no vulnerability' })
       .mockResolvedValueOnce({ real: false, reason: 'performance: O(n²) is slow' })
@@ -194,7 +212,11 @@ describe('verify() — perspective mode', () => {
         mode: 'perspective',
         lenses: ['correctness', 'security', 'performance', 'reproducibility'],
         threshold: 2,
-        schema: { type: 'object', properties: { real: { type: 'boolean' }, reason: { type: 'string' } }, required: ['real', 'reason'] },
+        schema: {
+          type: 'object',
+          properties: { real: { type: 'boolean' }, reason: { type: 'string' } },
+          required: ['real', 'reason'],
+        },
         _mockAgent: mockAgent,
       },
     )
@@ -215,27 +237,47 @@ describe('verify() — consensus mode', () => {
     const { verify } = await import('../../src/workflow/primitives/verify')
 
     // All 3 say real → survives
-    const allReal = vi.fn()
+    const allReal = vi
+      .fn()
       .mockResolvedValueOnce({ real: true, reason: 'ok' })
       .mockResolvedValueOnce({ real: true, reason: 'ok' })
       .mockResolvedValueOnce({ real: true, reason: 'ok' })
 
     const r1 = await verify(
       { title: 'clear bug' },
-      { mode: 'consensus', voters: 3, schema: { type: 'object', properties: { real: { type: 'boolean' }, reason: { type: 'string' } }, required: ['real', 'reason'] }, _mockAgent: allReal },
+      {
+        mode: 'consensus',
+        voters: 3,
+        schema: {
+          type: 'object',
+          properties: { real: { type: 'boolean' }, reason: { type: 'string' } },
+          required: ['real', 'reason'],
+        },
+        _mockAgent: allReal,
+      },
     )
     expect(r1.survives).toBe(true)
     expect(r1.score).toBe(1.0)
 
     // 2 of 3 say real → fails consensus
-    const twoReal = vi.fn()
+    const twoReal = vi
+      .fn()
       .mockResolvedValueOnce({ real: true, reason: 'ok' })
       .mockResolvedValueOnce({ real: true, reason: 'ok' })
       .mockResolvedValueOnce({ real: false, reason: 'nope' })
 
     const r2 = await verify(
       { title: 'debatable' },
-      { mode: 'consensus', voters: 3, schema: { type: 'object', properties: { real: { type: 'boolean' }, reason: { type: 'string' } }, required: ['real', 'reason'] }, _mockAgent: mockAgent2 },
+      {
+        mode: 'consensus',
+        voters: 3,
+        schema: {
+          type: 'object',
+          properties: { real: { type: 'boolean' }, reason: { type: 'string' } },
+          required: ['real', 'reason'],
+        },
+        _mockAgent: mockAgent2,
+      },
     )
     expect(r2.survives).toBe(false)
   })
@@ -258,13 +300,32 @@ describe('judge()', () => {
     // Judge 0: prefers attempt 0
     // Judge 1: prefers attempt 1
     // Judge 2: prefers attempt 0 → winner = attempt 0
-    const mockAgent = vi.fn()
-      .mockResolvedValueOnce({ scores: { completeness: 8, correctness: 9, elegance: 7 }, notes: 'solid' })
-      .mockResolvedValueOnce({ scores: { completeness: 5, correctness: 6, elegance: 8 }, notes: 'skimpy' })
-      .mockResolvedValueOnce({ scores: { completeness: 6, correctness: 7, elegance: 6 }, notes: 'ok' })
-      .mockResolvedValueOnce({ scores: { completeness: 9, correctness: 8, elegance: 7 }, notes: 'better' })
-      .mockResolvedValueOnce({ scores: { completeness: 8, correctness: 9, elegance: 9 }, notes: 'best' })
-      .mockResolvedValueOnce({ scores: { completeness: 4, correctness: 5, elegance: 6 }, notes: 'weak' })
+    const mockAgent = vi
+      .fn()
+      .mockResolvedValueOnce({
+        scores: { completeness: 8, correctness: 9, elegance: 7 },
+        notes: 'solid',
+      })
+      .mockResolvedValueOnce({
+        scores: { completeness: 5, correctness: 6, elegance: 8 },
+        notes: 'skimpy',
+      })
+      .mockResolvedValueOnce({
+        scores: { completeness: 6, correctness: 7, elegance: 6 },
+        notes: 'ok',
+      })
+      .mockResolvedValueOnce({
+        scores: { completeness: 9, correctness: 8, elegance: 7 },
+        notes: 'better',
+      })
+      .mockResolvedValueOnce({
+        scores: { completeness: 8, correctness: 9, elegance: 9 },
+        notes: 'best',
+      })
+      .mockResolvedValueOnce({
+        scores: { completeness: 4, correctness: 5, elegance: 6 },
+        notes: 'weak',
+      })
 
     const result = await judge(attempts, {
       criteria: ['completeness', 'correctness', 'elegance'],
@@ -299,7 +360,8 @@ describe('judge()', () => {
 
     const attempts = [{ name: 'plan-a' }, { name: 'plan-b' }]
 
-    const mockAgent = vi.fn()
+    const mockAgent = vi
+      .fn()
       // 2 judges × 2 attempts = 4 score calls
       .mockResolvedValueOnce({ scores: { quality: 8 }, notes: 'good' })
       .mockResolvedValueOnce({ scores: { quality: 5 }, notes: 'meh' })
@@ -315,7 +377,11 @@ describe('judge()', () => {
       schema: {
         type: 'object',
         properties: {
-          scores: { type: 'object', properties: { quality: { type: 'number' } }, required: ['quality'] },
+          scores: {
+            type: 'object',
+            properties: { quality: { type: 'number' } },
+            required: ['quality'],
+          },
           notes: { type: 'string' },
         },
         required: ['scores', 'notes'],
@@ -341,9 +407,11 @@ git commit -m "test: add verify() and judge() test suite (RED)"
 ### Task 1.2: Implement verify.ts
 
 **Files:**
+
 - Create: `apps/cli/src/workflow/primitives/verify.ts`
 
 **Interfaces:**
+
 - Consumes: `workflowAgent` from `./agent`, `parallel` from `./parallel`
 - Produces: `verify(finding, opts)` → `VerifyResult`, `judge(attempts, opts)` → `JudgeResult`
 
@@ -367,12 +435,12 @@ export type VerifyMode = 'adversarial' | 'perspective' | 'consensus'
 
 export interface VerifyOpts {
   mode: VerifyMode
-  skeptics?: number    // adversarial: default 3
-  lenses?: string[]    // perspective: e.g. ['correctness', 'security']
-  voters?: number      // consensus: default 3
+  skeptics?: number // adversarial: default 3
+  lenses?: string[] // perspective: e.g. ['correctness', 'security']
+  voters?: number // consensus: default 3
   threshold?: number
   schema: object
-  _mockAgent?: (prompt: string, opts?: WorkflowAgentOpts) => Promise<unknown>  // test-only
+  _mockAgent?: (prompt: string, opts?: WorkflowAgentOpts) => Promise<unknown> // test-only
 }
 
 interface VerdictVote {
@@ -396,26 +464,23 @@ export interface JudgeResult {
 
 export interface JudgeOpts {
   criteria: string[]
-  judges?: number       // default: 3
-  synthesize?: boolean  // default: true
+  judges?: number // default: 3
+  synthesize?: boolean // default: true
   schema: object
-  _mockAgent?: (prompt: string, opts?: WorkflowAgentOpts) => Promise<unknown>  // test-only
+  _mockAgent?: (prompt: string, opts?: WorkflowAgentOpts) => Promise<unknown> // test-only
 }
 
 // ── Helpers ──
 
 function defaultThreshold(mode: VerifyMode, total: number): number {
-  if (mode === 'consensus') return total   // all must agree
-  if (mode === 'perspective') return 1     // at least one lens confirms
-  return Math.ceil(total / 2)              // adversarial: majority
+  if (mode === 'consensus') return total // all must agree
+  if (mode === 'perspective') return 1 // at least one lens confirms
+  return Math.ceil(total / 2) // adversarial: majority
 }
 
 // ── verify() ──
 
-export async function verify(
-  finding: unknown,
-  opts: VerifyOpts,
-): Promise<VerifyResult> {
+export async function verify(finding: unknown, opts: VerifyOpts): Promise<VerifyResult> {
   const agentFn = opts._mockAgent ?? workflowAgent
   const mode = opts.mode
 
@@ -480,10 +545,7 @@ export async function verify(
 
 // ── judge() ──
 
-export async function judge(
-  attempts: unknown[],
-  opts: JudgeOpts,
-): Promise<JudgeResult> {
+export async function judge(attempts: unknown[], opts: JudgeOpts): Promise<JudgeResult> {
   const agentFn = opts._mockAgent ?? workflowAgent
   const judgeCount = opts.judges ?? 3
   const schemaDesc = JSON.stringify(opts.schema)
@@ -505,11 +567,12 @@ export async function judge(
   }
 
   const rawScores = await parallel(
-    scorePrompts.map((sp) => () =>
-      agentFn(
-        `You are judge #${sp.judgeIndex + 1}. Score this attempt against the criteria: ${opts.criteria.join(', ')}.\n\nAttempt:\n${JSON.stringify(sp.attempt, null, 2)}\n\nReturn JSON matching this schema:\n${schemaDesc}`,
-        { schema: opts.schema },
-      ),
+    scorePrompts.map(
+      (sp) => () =>
+        agentFn(
+          `You are judge #${sp.judgeIndex + 1}. Score this attempt against the criteria: ${opts.criteria.join(', ')}.\n\nAttempt:\n${JSON.stringify(sp.attempt, null, 2)}\n\nReturn JSON matching this schema:\n${schemaDesc}`,
+          { schema: opts.schema },
+        ),
     ),
   )
 
@@ -520,7 +583,10 @@ export async function judge(
     if (raw && typeof raw === 'object') {
       const obj = raw as Record<string, unknown>
       const criteriaObj = (obj.scores as Record<string, number>) ?? {}
-      const total = Object.values(criteriaObj).reduce((sum, v) => sum + (typeof v === 'number' ? v : 0), 0)
+      const total = Object.values(criteriaObj).reduce(
+        (sum, v) => sum + (typeof v === 'number' ? v : 0),
+        0,
+      )
       scores.push({
         attemptIndex: sp.attemptIndex,
         judgeIndex: sp.judgeIndex,
@@ -584,6 +650,7 @@ export async function judge(
 ```bash
 cd apps/cli && pnpm test test/workflow/verify.test.ts
 ```
+
 Expected: All verify/judge tests PASS
 
 - [ ] **Step 3: Commit**
@@ -598,9 +665,11 @@ git commit -m "feat: add verify() and judge() workflow primitives (Step 09)"
 ### Task 1.3: Inject verify + judge into runtime.ts
 
 **Files:**
+
 - Modify: `apps/cli/src/workflow/runtime.ts`
 
 **Interfaces:**
+
 - Consumes: `verify`, `judge` from `./primitives/verify`
 - Produces: `verify` and `judge` available in workflow scripts as globals
 
@@ -609,6 +678,7 @@ git commit -m "feat: add verify() and judge() workflow primitives (Step 09)"
 In `apps/cli/src/workflow/runtime.ts`:
 
 Add import at top (after existing imports):
+
 ```typescript
 import { verify, judge } from './primitives/verify'
 ```
@@ -616,51 +686,63 @@ import { verify, judge } from './primitives/verify'
 In the `runWorkflow` function, add `verify` and `judge` to the sandbox bindings.
 
 Find this block (around lines 139-155):
+
 ```typescript
-  const wrappedScript = `
+const wrappedScript = `
     return (async () => {
       ${script}
     })()
   `
 
-  // Execute in sandboxed context
-  const scriptFn = new Function(
-    'agent',
-    'parallel',
-    'pipeline',
-    'phase',
-    'log',
-    'args',
-    'budget',
-    wrappedScript,
-  )
+// Execute in sandboxed context
+const scriptFn = new Function(
+  'agent',
+  'parallel',
+  'pipeline',
+  'phase',
+  'log',
+  'args',
+  'budget',
+  wrappedScript,
+)
 
-  const result = await scriptFn(agent, parallel, pipeline, wrappedPhase, log, args, budget)
+const result = await scriptFn(agent, parallel, pipeline, wrappedPhase, log, args, budget)
 ```
 
 Replace with:
+
 ```typescript
-  const wrappedScript = `
+const wrappedScript = `
     return (async () => {
       ${script}
     })()
   `
 
-  // Execute in sandboxed context
-  const scriptFn = new Function(
-    'agent',
-    'parallel',
-    'pipeline',
-    'verify',
-    'judge',
-    'phase',
-    'log',
-    'args',
-    'budget',
-    wrappedScript,
-  )
+// Execute in sandboxed context
+const scriptFn = new Function(
+  'agent',
+  'parallel',
+  'pipeline',
+  'verify',
+  'judge',
+  'phase',
+  'log',
+  'args',
+  'budget',
+  wrappedScript,
+)
 
-  const result = await scriptFn(agent, parallel, pipeline, verify, judge, wrappedPhase, log, args, budget)
+const result = await scriptFn(
+  agent,
+  parallel,
+  pipeline,
+  verify,
+  judge,
+  wrappedPhase,
+  log,
+  args,
+  budget,
+)
 ```
 
 - [ ] **Step 2: Run full test suite to check for regressions**
@@ -668,6 +750,7 @@ Replace with:
 ```bash
 cd apps/cli && pnpm test
 ```
+
 Expected: 708 existing tests + new verify tests all PASS
 
 - [ ] **Step 3: Run typecheck**
@@ -675,6 +758,7 @@ Expected: 708 existing tests + new verify tests all PASS
 ```bash
 cd apps/cli && pnpm typecheck
 ```
+
 Expected: zero errors
 
 - [ ] **Step 4: Commit**
@@ -691,9 +775,11 @@ git commit -m "feat: inject verify() and judge() into workflow runtime sandbox"
 ### Task 2.1: Write loop.test.ts
 
 **Files:**
+
 - Create: `apps/cli/test/workflow/loop.test.ts`
 
 **Interfaces:**
+
 - Produces: Test file for `loopUntilConvergence()` — imported in Task 2.2
 
 - [ ] **Step 1: Create test file**
@@ -767,11 +853,11 @@ describe('loopUntilConvergence()', () => {
     // Round 1: finder returns [x], verify rejects it, x → seen
     // Round 2: finder returns [x], already in seen → fresh=[] → dry++
     // Round 3: fresh=[] → dry++ → stop
-    expect(result.confirmed).toHaveLength(0)    // nothing survived verify
-    expect(result.totalSeen).toBe(1)             // x was seen once
-    expect(result.rounds).toBe(3)                // converged, not infinite
+    expect(result.confirmed).toHaveLength(0) // nothing survived verify
+    expect(result.totalSeen).toBe(1) // x was seen once
+    expect(result.rounds).toBe(3) // converged, not infinite
     expect(result.converged).toBe(true)
-    expect(mockVerify).toHaveBeenCalledTimes(1)  // only called once, not every round
+    expect(mockVerify).toHaveBeenCalledTimes(1) // only called once, not every round
   })
 
   it('stops at maxRounds when finder never runs dry', async () => {
@@ -853,7 +939,9 @@ describe('loopUntilConvergence()', () => {
       return {
         finding: item,
         survives: obj.id === 'real-bug',
-        votes: [{ real: obj.id === 'real-bug', reason: obj.id === 'real-bug' ? 'confirmed' : 'refuted' }],
+        votes: [
+          { real: obj.id === 'real-bug', reason: obj.id === 'real-bug' ? 'confirmed' : 'refuted' },
+        ],
         score: obj.id === 'real-bug' ? 1 : 0,
       }
     })
@@ -884,9 +972,11 @@ git commit -m "test: add loopUntilConvergence() test suite (RED)"
 ### Task 2.2: Implement loop.ts
 
 **Files:**
+
 - Create: `apps/cli/src/workflow/primitives/loop.ts`
 
 **Interfaces:**
+
 - Consumes: `parallel` from `./parallel`, optionally `verify` from `./verify` (via callback)
 - Produces: `loopUntilConvergence(opts)` → `LoopUntilConvergenceResult<T>`
 
@@ -901,8 +991,8 @@ export interface LoopUntilConvergenceOpts<T> {
   finders: Array<() => Promise<{ items: T[] } | null>>
   keyFn: (item: T) => string
   verify?: (item: T) => Promise<{ survives: boolean; finding: unknown }>
-  dryRounds?: number   // default: 2
-  maxRounds?: number   // default: 20
+  dryRounds?: number // default: 2
+  maxRounds?: number // default: 20
 }
 
 export interface LoopUntilConvergenceResult<T> {
@@ -956,9 +1046,7 @@ export async function loopUntilConvergence<T>(
 
     // VERIFY: optional quality gate
     if (opts.verify) {
-      const judged = await parallel(
-        fresh.map((item) => () => opts.verify!(item)),
-      )
+      const judged = await parallel(fresh.map((item) => () => opts.verify!(item)))
       for (const j of judged) {
         if (j && j.survives) {
           confirmed.push(j.finding as T)
@@ -983,6 +1071,7 @@ export async function loopUntilConvergence<T>(
 ```bash
 cd apps/cli && pnpm test test/workflow/loop.test.ts
 ```
+
 Expected: All loop tests PASS
 
 - [ ] **Step 3: Commit**
@@ -997,39 +1086,51 @@ git commit -m "feat: add loopUntilConvergence() workflow primitive (Step 11)"
 ### Task 2.3: Inject loopUntilConvergence into runtime.ts
 
 **Files:**
+
 - Modify: `apps/cli/src/workflow/runtime.ts`
 
 **Interfaces:**
+
 - Consumes: `loopUntilConvergence` from `./primitives/loop`
 - Produces: `loopUntilConvergence` available in workflow scripts
 
 - [ ] **Step 1: Add import and injection**
 
 Add import (after the verify/judge import from Phase 1):
+
 ```typescript
 import { loopUntilConvergence } from './primitives/loop'
 ```
 
 Update the `new Function` constructor to include `loopUntilConvergence`:
-```typescript
-  const scriptFn = new Function(
-    'agent',
-    'parallel',
-    'pipeline',
-    'verify',
-    'judge',
-    'loopUntilConvergence',
-    'phase',
-    'log',
-    'args',
-    'budget',
-    wrappedScript,
-  )
 
-  const result = await scriptFn(
-    agent, parallel, pipeline, verify, judge, loopUntilConvergence,
-    wrappedPhase, log, args, budget,
-  )
+```typescript
+const scriptFn = new Function(
+  'agent',
+  'parallel',
+  'pipeline',
+  'verify',
+  'judge',
+  'loopUntilConvergence',
+  'phase',
+  'log',
+  'args',
+  'budget',
+  wrappedScript,
+)
+
+const result = await scriptFn(
+  agent,
+  parallel,
+  pipeline,
+  verify,
+  judge,
+  loopUntilConvergence,
+  wrappedPhase,
+  log,
+  args,
+  budget,
+)
 ```
 
 - [ ] **Step 2: Run full test suite**
@@ -1037,6 +1138,7 @@ Update the `new Function` constructor to include `loopUntilConvergence`:
 ```bash
 cd apps/cli && pnpm test
 ```
+
 Expected: All tests PASS (708 existing + verify + loop)
 
 - [ ] **Step 3: Run typecheck**
@@ -1044,6 +1146,7 @@ Expected: All tests PASS (708 existing + verify + loop)
 ```bash
 cd apps/cli && pnpm typecheck
 ```
+
 Expected: zero errors
 
 - [ ] **Step 4: Commit**
@@ -1060,15 +1163,18 @@ git commit -m "feat: inject loopUntilConvergence() into workflow runtime sandbox
 ### Task 3.1: Expand Workflow tool description
 
 **Files:**
+
 - Modify: `apps/cli/src/tools/agent/workflow.ts`
 
 **Interfaces:**
+
 - Consumes: (none — description is a string literal)
 - Produces: Updated `description` field, added `scriptPath`/`name`/`resumeFromRunId` params
 
 - [ ] **Step 1: Replace the tool description with the expanded guide**
 
 The current `description` field (~50 words) must be replaced. Locate:
+
 ```typescript
 export const workflowTool: ToolDefinition = {
   name: 'Workflow',
@@ -1079,6 +1185,7 @@ export const workflowTool: ToolDefinition = {
 ```
 
 Replace `description` with:
+
 ```typescript
   description:
     'Execute a workflow script that orchestrates multiple subagents deterministically. ' +
@@ -1144,6 +1251,7 @@ Replace `description` with:
 ```bash
 cd apps/cli && pnpm typecheck
 ```
+
 Expected: zero errors (the description is just a string)
 
 - [ ] **Step 3: Run full test suite**
@@ -1151,6 +1259,7 @@ Expected: zero errors (the description is just a string)
 ```bash
 cd apps/cli && pnpm test
 ```
+
 Expected: all tests PASS
 
 - [ ] **Step 4: Commit**
@@ -1165,9 +1274,11 @@ git commit -m "feat: expand Workflow tool description into graph engineering gui
 ### Task 3.2: Enhance /workflow slash commands
 
 **Files:**
+
 - Modify: `apps/cli/src/ui/commands.ts`
 
 **Interfaces:**
+
 - Consumes: existing `workflowsCmd` (listing), command registry
 - Produces: `/workflow <task>`, `/workflow save <name>`, `/workflow run <name>`
 
@@ -1251,7 +1362,9 @@ const workflowSaveCmd = async (name: string, _context: unknown) => {
     const scriptPath = join(targetDir, `${safeName}.js`)
     writeFileSync(scriptPath, script, 'utf-8')
 
-    return { content: `Workflow saved to ${scriptPath}\nUse /workflow run ${safeName} to run it again.` }
+    return {
+      content: `Workflow saved to ${scriptPath}\nUse /workflow run ${safeName} to run it again.`,
+    }
   } catch (err) {
     return { content: `Failed to save workflow: ${String(err)}` }
   }
@@ -1283,7 +1396,9 @@ const workflowRunCmd = async (name: string, _context: unknown) => {
     }
   }
 
-  return { content: `Workflow "${safeName}" not found in .claude/workflows/ or ~/.claude/workflows/` }
+  return {
+    content: `Workflow "${safeName}" not found in .claude/workflows/ or ~/.claude/workflows/`,
+  }
 }
 ```
 
@@ -1294,7 +1409,7 @@ Find the existing `/workflows` registration and update to include the new comman
 ```typescript
 // Replace the existing registry.set('/workflows', workflowsCmd) with:
 registry.set('/workflow', workflowAutoCmd)
-registry.set('/workflows', workflowsCmd)  // keep existing listing command
+registry.set('/workflows', workflowsCmd) // keep existing listing command
 ```
 
 - [ ] **Step 5: Update the last-run state after successful workflow execution**
@@ -1302,6 +1417,7 @@ registry.set('/workflows', workflowsCmd)  // keep existing listing command
 In `apps/cli/src/tools/agent/workflow.ts`, after a successful `runWorkflow()` call, persist the script:
 
 Add this after the `runWorkflow` call succeeds (around line 55-70):
+
 ```typescript
 // Persist last-run state for /workflow save
 try {
@@ -1326,6 +1442,7 @@ try {
 ```bash
 cd apps/cli && pnpm typecheck
 ```
+
 Expected: zero errors
 
 - [ ] **Step 7: Run tests**
@@ -1333,6 +1450,7 @@ Expected: zero errors
 ```bash
 cd apps/cli && pnpm test
 ```
+
 Expected: all tests PASS
 
 - [ ] **Step 8: Commit**
@@ -1347,9 +1465,11 @@ git commit -m "feat: add /workflow <task>, /workflow save, /workflow run command
 ### Task 3.3: Inject workflow auto-generation system instruction
 
 **Files:**
+
 - Modify: `apps/cli/src/core/instructions.ts`
 
 **Interfaces:**
+
 - Consumes: `buildSystemPrompt()` method
 - Produces: Workflow auto-generation rule appended to system prompt
 
@@ -1358,8 +1478,8 @@ git commit -m "feat: add /workflow <task>, /workflow save, /workflow run command
 In `apps/cli/src/core/instructions.ts`, find the `buildSystemPrompt()` method (around line 50). After the `parts.push(...)` for skillsReminder, add:
 
 ```typescript
-    // Inject workflow auto-generation guidance
-    parts.push(`## Workflow Auto-Generation
+// Inject workflow auto-generation guidance
+parts.push(`## Workflow Auto-Generation
 
 When a task involves 3+ independent subtasks, multi-file operations,
 or unknown-size discovery, generate a workflow script and execute it
@@ -1392,6 +1512,7 @@ Script format: export const meta = { name, description, phases: [...] }
 ```bash
 cd apps/cli && pnpm typecheck && pnpm test
 ```
+
 Expected: zero errors, all tests PASS
 
 - [ ] **Step 3: Commit**
@@ -1406,6 +1527,7 @@ git commit -m "feat: inject workflow auto-generation system instruction (Step 14
 ### Task 3.4: Create workflow template scripts
 
 **Files:**
+
 - Create: `apps/cli/skills/workflows/audit.js`
 - Create: `apps/cli/skills/workflows/research.js`
 - Create: `apps/cli/skills/workflows/migrate.js`
@@ -1414,6 +1536,7 @@ git commit -m "feat: inject workflow auto-generation system instruction (Step 14
 - Create: `apps/cli/skills/workflows/judge.js`
 
 **Interfaces:**
+
 - Each produces: A standalone workflow script with `export const meta` header
 - Each is directly executable via `/workflow run <name>` or the Workflow tool with `scriptPath`
 
@@ -1424,6 +1547,7 @@ mkdir -p apps/cli/skills/workflows
 ```
 
 Create `apps/cli/skills/workflows/audit.js`:
+
 ```javascript
 export const meta = {
   name: 'audit',
@@ -1497,30 +1621,69 @@ const topic = args.topic || (await agent('What topic should we research?', { lab
 phase('Research')
 const angles = ['overview', 'technical-details', 'competitors', 'criticism', 'future-trends']
 const raw = await parallel(
-  angles.map(angle => () =>
-    agent(`Research "${topic}" from angle: ${angle}. Return { sources: [{ title, url, keyPoint }] }`,
-      { label: `research:${angle}`, schema: { type: 'object', properties: { sources: { type: 'array', items: { type: 'object', properties: { title: { type: 'string' }, url: { type: 'string' }, keyPoint: { type: 'string' } }, required: ['title', 'keyPoint'] } } }, required: ['sources'] } },
-    )),
+  angles.map(
+    (angle) => () =>
+      agent(
+        `Research "${topic}" from angle: ${angle}. Return { sources: [{ title, url, keyPoint }] }`,
+        {
+          label: `research:${angle}`,
+          schema: {
+            type: 'object',
+            properties: {
+              sources: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    title: { type: 'string' },
+                    url: { type: 'string' },
+                    keyPoint: { type: 'string' },
+                  },
+                  required: ['title', 'keyPoint'],
+                },
+              },
+            },
+            required: ['sources'],
+          },
+        },
+      ),
+  ),
 )
 
-const allSources = raw.filter(Boolean).flatMap(r => r.sources)
+const allSources = raw.filter(Boolean).flatMap((r) => r.sources)
 const seen = new Set()
-const unique = allSources.filter(s => { const k = s.url; if (seen.has(k)) return false; seen.add(k); return true })
+const unique = allSources.filter((s) => {
+  const k = s.url
+  if (seen.has(k)) return false
+  seen.add(k)
+  return true
+})
 log(`Collected ${unique.length} unique sources`)
 
 phase('Verify')
 const verified = await parallel(
-  unique.map(s => () =>
-    verify({ claim: s.keyPoint, source: s.title }, {
-      mode: 'adversarial',
-      skeptics: 2,
-      threshold: 1,
-      schema: { type: 'object', properties: { real: { type: 'boolean' }, reason: { type: 'string' } }, required: ['real', 'reason'] },
-    }),
+  unique.map(
+    (s) => () =>
+      verify(
+        { claim: s.keyPoint, source: s.title },
+        {
+          mode: 'adversarial',
+          skeptics: 2,
+          threshold: 1,
+          schema: {
+            type: 'object',
+            properties: { real: { type: 'boolean' }, reason: { type: 'string' } },
+            required: ['real', 'reason'],
+          },
+        },
+      ),
   ),
 )
 
-const credible = verified.filter(Boolean).filter(v => v.survives).map(v => v.finding)
+const credible = verified
+  .filter(Boolean)
+  .filter((v) => v.survives)
+  .map((v) => v.finding)
 
 phase('Synthesize')
 const report = await agent(
@@ -1544,43 +1707,87 @@ export const meta = {
 }
 
 phase('Discover')
-const pattern = args.pattern || (await agent('What code pattern needs migration? Return { pattern, replacement, reason }',
-  { schema: { type: 'object', properties: { pattern: { type: 'string' }, replacement: { type: 'string' }, reason: { type: 'string' } }, required: ['pattern', 'replacement'] } },
-))
+const pattern =
+  args.pattern ||
+  (await agent('What code pattern needs migration? Return { pattern, replacement, reason }', {
+    schema: {
+      type: 'object',
+      properties: {
+        pattern: { type: 'string' },
+        replacement: { type: 'string' },
+        reason: { type: 'string' },
+      },
+      required: ['pattern', 'replacement'],
+    },
+  }))
 
 const files = await agent(
   `Find all files matching pattern: ${pattern.pattern}. Return { files: [{ path }] }`,
-  { schema: { type: 'object', properties: { files: { type: 'array', items: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } } }, required: ['files'] } },
+  {
+    schema: {
+      type: 'object',
+      properties: {
+        files: {
+          type: 'array',
+          items: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] },
+        },
+      },
+      required: ['files'],
+    },
+  },
 )
 
 log(`Migrating ${files.files.length} files: ${pattern.pattern} → ${pattern.replacement}`)
 
 phase('Transform')
-const results = await pipeline(
-  files.files,
-  f => agent(
+const results = await pipeline(files.files, (f) =>
+  agent(
     `In ${f.path}, migrate "${pattern.pattern}" to "${pattern.replacement}". Reason: ${pattern.reason}. Return { path, changes, success }`,
-    { label: `migrate:${f.path}`, isolation: 'worktree', schema: { type: 'object', properties: { path: { type: 'string' }, changes: { type: 'number' }, success: { type: 'boolean' } }, required: ['path', 'success'] } },
+    {
+      label: `migrate:${f.path}`,
+      isolation: 'worktree',
+      schema: {
+        type: 'object',
+        properties: {
+          path: { type: 'string' },
+          changes: { type: 'number' },
+          success: { type: 'boolean' },
+        },
+        required: ['path', 'success'],
+      },
+    },
   ),
 )
 
-const succeeded = results.filter(Boolean).filter(r => r.success)
-const failed = results.filter(Boolean).filter(r => !r.success)
+const succeeded = results.filter(Boolean).filter((r) => r.success)
+const failed = results.filter(Boolean).filter((r) => !r.success)
 log(`${succeeded.length} migrated, ${failed.length} failed`)
 
 phase('Verify')
 const verified = await parallel(
-  succeeded.map(f => () =>
-    verify({ file: f.path, migration: pattern.replacement }, {
-      mode: 'perspective',
-      lenses: ['correctness', 'style'],
-      threshold: 1,
-      schema: { type: 'object', properties: { real: { type: 'boolean' }, reason: { type: 'string' } }, required: ['real', 'reason'] },
-    }),
+  succeeded.map(
+    (f) => () =>
+      verify(
+        { file: f.path, migration: pattern.replacement },
+        {
+          mode: 'perspective',
+          lenses: ['correctness', 'style'],
+          threshold: 1,
+          schema: {
+            type: 'object',
+            properties: { real: { type: 'boolean' }, reason: { type: 'string' } },
+            required: ['real', 'reason'],
+          },
+        },
+      ),
   ),
 )
 
-return { migrated: succeeded.length, failed: failed.length, verified: verified.filter(Boolean).filter(v => v.survives).length }
+return {
+  migrated: succeeded.length,
+  failed: failed.length,
+  verified: verified.filter(Boolean).filter((v) => v.survives).length,
+}
 ```
 
 - [ ] **Step 4: Create review.js**
@@ -1599,18 +1806,45 @@ export const meta = {
 phase('Review')
 const dimensions = ['correctness', 'security', 'performance', 'maintainability']
 const rawFindings = await parallel(
-  dimensions.map(d => () =>
-    agent(`Review the code from the "${d}" lens. Return { findings: [{ severity, file, line, summary }] }`,
-      { label: `review:${d}`, schema: { type: 'object', properties: { findings: { type: 'array', items: { type: 'object', properties: { severity: { type: 'string', enum: ['blocker', 'high', 'medium', 'low'] }, file: { type: 'string' }, line: { type: 'number' }, summary: { type: 'string' }, dimension: { type: 'string' } }, required: ['severity', 'file', 'summary'] } } }, required: ['findings'] } },
-    )),
+  dimensions.map(
+    (d) => () =>
+      agent(
+        `Review the code from the "${d}" lens. Return { findings: [{ severity, file, line, summary }] }`,
+        {
+          label: `review:${d}`,
+          schema: {
+            type: 'object',
+            properties: {
+              findings: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    severity: { type: 'string', enum: ['blocker', 'high', 'medium', 'low'] },
+                    file: { type: 'string' },
+                    line: { type: 'number' },
+                    summary: { type: 'string' },
+                    dimension: { type: 'string' },
+                  },
+                  required: ['severity', 'file', 'summary'],
+                },
+              },
+            },
+            required: ['findings'],
+          },
+        },
+      ),
+  ),
 )
 
 // Edge logic: dedup across dimensions (pure JS)
-const allFindings = rawFindings.filter(Boolean).flatMap(r => r.findings)
+const allFindings = rawFindings.filter(Boolean).flatMap((r) => r.findings)
 const seen = new Set()
-const uniqueFindings = allFindings.filter(f => {
+const uniqueFindings = allFindings.filter((f) => {
   const k = `${f.file}:${f.line}:${f.summary}`
-  if (seen.has(k)) return false; seen.add(k); return true
+  if (seen.has(k)) return false
+  seen.add(k)
+  return true
 })
 
 log(`${uniqueFindings.length} unique findings across ${dimensions.length} dimensions`)
@@ -1622,7 +1856,7 @@ if (uniqueFindings.length === 0) {
 
 // Judge panel: rank findings by severity
 const judged = await judge(
-  uniqueFindings.map(f => ({ finding: f })),
+  uniqueFindings.map((f) => ({ finding: f })),
   {
     criteria: ['severity', 'actionability', 'confidence'],
     judges: 2,
@@ -1630,7 +1864,15 @@ const judged = await judge(
     schema: {
       type: 'object',
       properties: {
-        scores: { type: 'object', properties: { severity: { type: 'number' }, actionability: { type: 'number' }, confidence: { type: 'number' } }, required: ['severity', 'actionability', 'confidence'] },
+        scores: {
+          type: 'object',
+          properties: {
+            severity: { type: 'number' },
+            actionability: { type: 'number' },
+            confidence: { type: 'number' },
+          },
+          required: ['severity', 'actionability', 'confidence'],
+        },
         notes: { type: 'string' },
       },
       required: ['scores', 'notes'],
@@ -1662,25 +1904,78 @@ const target = args.target || 'this codebase'
 
 const { confirmed, totalSeen, rounds, converged } = await loopUntilConvergence({
   finders: [
-    () => agent(`Find bugs in ${target}. Look for: null safety, race conditions, resource leaks, edge cases. Return { items: [{ file, line, summary, type }] }`,
-      { label: 'hunt:general', schema: { type: 'object', properties: { items: { type: 'array', items: { type: 'object', properties: { file: { type: 'string' }, line: { type: 'number' }, summary: { type: 'string' }, type: { type: 'string' } }, required: ['file', 'summary', 'type'] } } }, required: ['items'] } },
-    ),
-    () => agent(`Find security vulnerabilities in ${target}: injection, auth bypass, insecure crypto, exposed secrets. Return { items: [{ file, line, summary, type }] }`,
-      { label: 'hunt:security', schema: { type: 'object', properties: { items: { type: 'array', items: { type: 'object', properties: { file: { type: 'string' }, line: { type: 'number' }, summary: { type: 'string' }, type: { type: 'string' } }, required: ['file', 'summary', 'type'] } } }, required: ['items'] } },
-    ),
+    () =>
+      agent(
+        `Find bugs in ${target}. Look for: null safety, race conditions, resource leaks, edge cases. Return { items: [{ file, line, summary, type }] }`,
+        {
+          label: 'hunt:general',
+          schema: {
+            type: 'object',
+            properties: {
+              items: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    file: { type: 'string' },
+                    line: { type: 'number' },
+                    summary: { type: 'string' },
+                    type: { type: 'string' },
+                  },
+                  required: ['file', 'summary', 'type'],
+                },
+              },
+            },
+            required: ['items'],
+          },
+        },
+      ),
+    () =>
+      agent(
+        `Find security vulnerabilities in ${target}: injection, auth bypass, insecure crypto, exposed secrets. Return { items: [{ file, line, summary, type }] }`,
+        {
+          label: 'hunt:security',
+          schema: {
+            type: 'object',
+            properties: {
+              items: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    file: { type: 'string' },
+                    line: { type: 'number' },
+                    summary: { type: 'string' },
+                    type: { type: 'string' },
+                  },
+                  required: ['file', 'summary', 'type'],
+                },
+              },
+            },
+            required: ['items'],
+          },
+        },
+      ),
   ],
   keyFn: (bug) => `${bug.file}:${bug.line}:${bug.summary}`,
-  verify: async (bug) => verify(bug, {
-    mode: 'adversarial',
-    skeptics: 3,
-    threshold: 2,
-    schema: { type: 'object', properties: { real: { type: 'boolean' }, reason: { type: 'string' } }, required: ['real', 'reason'] },
-  }),
+  verify: async (bug) =>
+    verify(bug, {
+      mode: 'adversarial',
+      skeptics: 3,
+      threshold: 2,
+      schema: {
+        type: 'object',
+        properties: { real: { type: 'boolean' }, reason: { type: 'string' } },
+        required: ['real', 'reason'],
+      },
+    }),
   dryRounds: 2,
   maxRounds: 10,
 })
 
-log(`${converged ? 'Converged' : 'Max rounds reached'} after ${rounds} rounds. ${totalSeen} unique bugs seen, ${confirmed.length} confirmed.`)
+log(
+  `${converged ? 'Converged' : 'Max rounds reached'} after ${rounds} rounds. ${totalSeen} unique bugs seen, ${confirmed.length} confirmed.`,
+)
 
 phase('Report')
 if (confirmed.length === 0) {
@@ -1718,28 +2013,36 @@ const validApproaches = approaches.filter(Boolean)
 log(`Generated ${validApproaches.length} approaches`)
 
 phase('Judge')
-const { winner, winnerIndex, scores, synthesis } = await judge(
-  validApproaches,
-  {
-    criteria: ['feasibility', 'impact', 'simplicity', 'risk'],
-    judges: 3,
-    synthesize: true,
-    schema: {
-      type: 'object',
-      properties: {
-        scores: { type: 'object', properties: { feasibility: { type: 'number' }, impact: { type: 'number' }, simplicity: { type: 'number' }, risk: { type: 'number' } }, required: ['feasibility', 'impact', 'simplicity', 'risk'] },
-        notes: { type: 'string' },
+const { winner, winnerIndex, scores, synthesis } = await judge(validApproaches, {
+  criteria: ['feasibility', 'impact', 'simplicity', 'risk'],
+  judges: 3,
+  synthesize: true,
+  schema: {
+    type: 'object',
+    properties: {
+      scores: {
+        type: 'object',
+        properties: {
+          feasibility: { type: 'number' },
+          impact: { type: 'number' },
+          simplicity: { type: 'number' },
+          risk: { type: 'number' },
+        },
+        required: ['feasibility', 'impact', 'simplicity', 'risk'],
       },
-      required: ['scores', 'notes'],
+      notes: { type: 'string' },
     },
+    required: ['scores', 'notes'],
   },
-)
+})
 
 phase('Synthesize')
 return {
   problem,
   winner: `Approach #${winnerIndex + 1}`,
-  scores_summary: scores.map(s => `Judge ${s.judgeIndex + 1}: approach ${s.attemptIndex + 1} = ${s.total}`),
+  scores_summary: scores.map(
+    (s) => `Judge ${s.judgeIndex + 1}: approach ${s.attemptIndex + 1} = ${s.total}`,
+  ),
   synthesis,
 }
 ```
@@ -1760,6 +2063,7 @@ git commit -m "feat: add 6 workflow templates (audit, research, migrate, review,
 ```bash
 cd apps/cli && pnpm test
 ```
+
 Expected: ALL tests PASS
 
 - [ ] **Step 2: Run typecheck**
@@ -1767,6 +2071,7 @@ Expected: ALL tests PASS
 ```bash
 cd apps/cli && pnpm typecheck
 ```
+
 Expected: zero errors
 
 - [ ] **Step 3: Run lint + format**
@@ -1774,6 +2079,7 @@ Expected: zero errors
 ```bash
 cd apps/cli && pnpm lint && pnpm format
 ```
+
 Expected: zero lint errors, all files formatted
 
 - [ ] **Step 4: Final commit**
@@ -1789,20 +2095,20 @@ git commit -m "chore: final integration — graph engineering Steps 09/11/14 com
 
 ### 1. Spec Coverage
 
-| Spec requirement | Task |
-|-----------------|------|
-| verify() adversarial/perspective/consensus | Task 1.2 |
-| judge() judge panel + synthesis | Task 1.2 |
-| verify + judge tests (8 cases) | Task 1.1 |
-| loopUntilConvergence() seen-set dedup | Task 2.2 |
-| loopUntilConvergence tests (6 cases) | Task 2.1 |
+| Spec requirement                                      | Task           |
+| ----------------------------------------------------- | -------------- |
+| verify() adversarial/perspective/consensus            | Task 1.2       |
+| judge() judge panel + synthesis                       | Task 1.2       |
+| verify + judge tests (8 cases)                        | Task 1.1       |
+| loopUntilConvergence() seen-set dedup                 | Task 2.2       |
+| loopUntilConvergence tests (6 cases)                  | Task 2.1       |
 | Runtime injection (verify/judge/loopUntilConvergence) | Tasks 1.3, 2.3 |
-| Workflow tool description expansion | Task 3.1 |
-| /workflow <task> command | Task 3.2 |
-| /workflow save <name> | Task 3.2 |
-| /workflow run <name> | Task 3.2 |
-| System instruction injection | Task 3.3 |
-| 6 template workflow scripts | Task 3.4 |
+| Workflow tool description expansion                   | Task 3.1       |
+| /workflow <task> command                              | Task 3.2       |
+| /workflow save <name>                                 | Task 3.2       |
+| /workflow run <name>                                  | Task 3.2       |
+| System instruction injection                          | Task 3.3       |
+| 6 template workflow scripts                           | Task 3.4       |
 
 **Coverage assessment:** All spec requirements have corresponding tasks. ✅
 
@@ -1822,4 +2128,3 @@ git commit -m "chore: final integration — graph engineering Steps 09/11/14 com
 - `verify()` signature consistent across Tasks 1.2, 1.3, 2.1, 2.2, 3.4 ✅
 - `judge()` signature consistent across Tasks 1.2, 1.3, 3.4 ✅
 - `loopUntilConvergence()` signature consistent across Tasks 2.2, 2.3, 3.4 ✅
-
