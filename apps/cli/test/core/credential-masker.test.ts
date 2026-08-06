@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { homedir } from 'node:os'
 import {
   matchCredentialFile,
   maskContent,
@@ -47,7 +48,6 @@ describe('matchCredentialFile', () => {
   })
 
   it('should match with ~ home expansion', () => {
-    const { homedir } = require('node:os')
     const home = homedir()
     const config = makeConfig({ files: [{ path: '~/.aws/credentials', mode: 'full' }] })
     const rule = matchCredentialFile(`${home}/.aws/credentials`, config)
@@ -62,7 +62,6 @@ describe('matchCredentialFile', () => {
 
   it('should match with * wildcard within a segment', () => {
     const config = makeConfig({ files: [{ path: '~/.env*', mode: 'full' }] })
-    const { homedir } = require('node:os')
     const home = homedir()
     expect(matchCredentialFile(`${home}/.env`, config)).not.toBeNull()
     expect(matchCredentialFile(`${home}/.env.local`, config)).not.toBeNull()
