@@ -66,6 +66,34 @@ export class InstructionsLoader {
       parts.push(this.skillsReminder)
     }
 
+    // Inject workflow auto-generation guidance
+    parts.push(`## Workflow Auto-Generation
+
+When a task involves 3+ independent subtasks, multi-file operations,
+or unknown-size discovery, generate a workflow script and execute it
+via the Workflow tool instead of running agents sequentially. The
+orchestration itself is code (zero tokens for inter-agent coordination).
+
+Prefer workflows for: audits across many files, web research with multiple
+sources, code migrations touching many files, security scans, bug hunts
+with unknown scope, multi-dimensional code reviews.
+
+Available primitives: agent(), parallel(), pipeline(), verify(),
+judge(), loopUntilConvergence(), phase(), log(), args, budget.
+
+Key rules:
+- Default to pipeline() — only use parallel() barrier when a stage
+  genuinely needs all prior results at once
+- Edge logic (flatten, dedupe, filter) is plain JS — not agent calls
+- Use verify() on edges where confidence matters
+- Use loopUntilConvergence() for discovery tasks with unknown size
+
+When a workflow completes successfully, offer to save it:
+"Workflow complete. Save this script? /workflow save <name>"
+
+Script format: export const meta = { name, description, phases: [...] }
+// script body using primitives...`)
+
     return parts.join('\n\n---\n\n')
   }
 
