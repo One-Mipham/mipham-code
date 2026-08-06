@@ -15,6 +15,7 @@ export default [
       '**/.playwright-mcp/**',
       '**/infrastructure/vscode/**',
       '**/skills/workflows/*.js',
+      '**/.claude/**',
     ],
   },
   ...compat.extends('plugin:@typescript-eslint/recommended'),

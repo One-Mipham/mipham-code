@@ -6,6 +6,8 @@ out/
 .env
 .env.local
 .mipham/memory/
+.claude/worktrees/
+.claude/plans/
 .playwright-mcp/
 *.tgz
 .vercel
