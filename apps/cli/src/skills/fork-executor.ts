@@ -2,6 +2,7 @@ import { SubAgent } from '../agent/sub-agent'
 import type { ProviderRegistry } from '../providers/registry'
 import type { ToolDefinition, SkillDefinition } from '../shared/index.ts'
 import type { AgentDefinition } from '../agent/types'
+import type { PermissionSystem } from '../core/permission'
 
 /**
  * Execute a skill in an isolated subagent context (context: fork).
@@ -15,6 +16,7 @@ export async function executeForkedSkill(
   args: string,
   registry: ProviderRegistry,
   toolRegistry: Map<string, ToolDefinition>,
+  permissionSystem?: PermissionSystem,
 ): Promise<string> {
   const agentDef: AgentDefinition = {
     name: `skill:${skill.name}`,
@@ -27,7 +29,7 @@ export async function executeForkedSkill(
     source: 'builtin',
   }
 
-  const sub = new SubAgent(registry, toolRegistry)
+  const sub = new SubAgent(registry, toolRegistry, permissionSystem)
   const prompt = args
     ? `Execute the "${skill.name}" skill with arguments: ${args}`
     : `Execute the "${skill.name}" skill.`

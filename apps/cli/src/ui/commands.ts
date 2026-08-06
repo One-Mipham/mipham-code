@@ -689,22 +689,48 @@ const recapCmd: CommandHandler = (ctx) => {
 
 const usageCmd: CommandHandler = (ctx) => {
   const c = ctx.engine.getContext()
-  const tokens = c.getEstimatedTokens()
+  const estTokens = c.getEstimatedTokens()
   const msgs = c.getMessages()
   const maxTokens = 200_000
-  const pct = ((tokens / maxTokens) * 100).toFixed(1)
+  const pct = ((estTokens / maxTokens) * 100).toFixed(1)
+
+  const tracker = ctx.engine.getUsageTracker()
+  const summary = tracker.getSummary()
+
+  // Build per-tool breakdown
+  const toolLines: string[] = []
+  const sortedTools = Object.entries(summary.tools).sort(
+    (a, b) => (b[1].inputTokens + b[1].outputTokens) - (a[1].inputTokens + a[1].outputTokens)
+  )
+  for (const [name, usage] of sortedTools) {
+    const total = usage.inputTokens + usage.outputTokens
+    const prefix = name.startsWith('mcp__') ? '🔌 ' : '  '
+    toolLines.push(
+      `${prefix}${name.padEnd(18)} ${total.toLocaleString().padStart(8)} tokens (${usage.calls} call${usage.calls !== 1 ? 's' : ''})`,
+    )
+  }
+
+  const apiTotal = summary.apiInputTokens + summary.apiOutputTokens
+  const apiLine = summary.apiInputTokens > 0 || summary.apiOutputTokens > 0
+    ? `API tokens:      ${summary.apiInputTokens.toLocaleString().padStart(8)} in / ${summary.apiOutputTokens.toLocaleString().padStart(6)} out (${apiTotal.toLocaleString()} total)`
+    : 'API tokens:      (no API usage data yet)'
+
+  const toolSection = toolLines.length > 0
+    ? `\n── Per-Tool ──\n${toolLines.join('\n')}`
+    : ''
 
   return {
     content: stripIndent`
       ── Usage Dashboard ──
-      Context tokens:  ~${tokens.toLocaleString()} / ${maxTokens.toLocaleString()}  (${pct}%)
+      ${apiLine}
+      Context tokens:  ~${estTokens.toLocaleString()} / ${maxTokens.toLocaleString()}  (${pct}%)
       Messages:         ${msgs.length}
       Provider:         ${ctx.providerId}
       Model:            ${ctx.modelId}
 
       ${'█'.repeat(Math.ceil(Number(pct) / 5))}${'░'.repeat(20 - Math.ceil(Number(pct) / 5))} ${pct}%
+      ${toolSection}
 
-      Note: Token counting is approximate (chars/4).
       Use /context for detailed stats, /compact to free space.
     `,
   }
@@ -4093,8 +4119,8 @@ const forkCmd: CommandHandler = async (ctx, args) => {
     'general',
     async (_signal) => {
       const { SubAgent } = await import('../agent/sub-agent')
-      const sa = new SubAgent(ctx.engine.getRegistry(), ctx.engine.getTools())
-      const result = await sa.execute(prompt, 'fork: ' + prompt.slice(0, 60), {})
+      const sa = new SubAgent(ctx.engine.getRegistry(), ctx.engine.getTools(), ctx.engine.getPermission())
+      const result = await sa.execute(prompt, 'fork: ' + prompt.slice(0, 60), { worktreePath: wtPath })
       try {
         const { execSync: ex } = await import('node:child_process')
         ex(`git -C ${wtPath} add -A`, { stdio: 'ignore', timeout: 10_000 })

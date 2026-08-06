@@ -16,6 +16,7 @@ import type { AgentViewManager } from '../agent-view/agent-view-manager'
 import type { SkillsLoader } from '../skills/loader'
 import { getBackgroundAgentRegistry } from '../agent/background-registry'
 import { RulesLoader } from './rules-loader'
+import { UsageTracker } from './usage-tracker'
 import { buildRequest, sendInferenceCheck, isInferenceHookEnabled } from './inference-hook'
 
 export class QueryEngine {
@@ -82,6 +83,7 @@ export class QueryEngine {
   private rulesLoader?: RulesLoader
   /** Files touched in the current turn (for rules matching). */
   private touchedFiles: Set<string> = new Set()
+  private usageTracker = new UsageTracker()
   /** Inference hook (DLP) configuration. */
   private inferenceHookConfig?: InferenceHookConfig
 
@@ -238,6 +240,10 @@ export class QueryEngine {
     return this.permission
   }
 
+  getUsageTracker(): UsageTracker {
+    return this.usageTracker
+  }
+
   async *process(userInput: string, signal?: AbortSignal): AsyncGenerator<StreamChunk> {
     // Fire UserPromptSubmit hooks before processing
     if (this.hookEngine) {
@@ -293,6 +299,8 @@ export class QueryEngine {
     let assistantContent = ''
     let reasoningContent = ''
     let thinkingContent = ''
+    let turnApiInputTokens = 0
+    let turnApiOutputTokens = 0
     const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
 
     // Stream model response
@@ -329,6 +337,12 @@ export class QueryEngine {
             name: chunk.toolUse.name,
             input: chunk.toolUse.input,
           })
+        }
+
+        if (chunk.type === 'usage' && chunk.inputTokens !== undefined) {
+          // Accumulate API-reported token counts for this turn
+          turnApiInputTokens += chunk.inputTokens
+          turnApiOutputTokens += chunk.outputTokens || 0
         }
 
         if (chunk.type === 'stop') {
@@ -415,6 +429,31 @@ export class QueryEngine {
           },
         ],
       })
+    }
+
+    // Record API token usage for this turn, attributed to executed tools
+    if (turnApiInputTokens > 0 || turnApiOutputTokens > 0) {
+      if (toolUses.length > 0) {
+        // Attribute tokens equally across all tools invoked this turn
+        const perTool = toolUses.length
+        for (const tu of toolUses) {
+          this.usageTracker.recordApiUsage(
+            Math.round(turnApiInputTokens / perTool),
+            Math.round(turnApiOutputTokens / perTool),
+            tu.name,
+          )
+        }
+      } else {
+        this.usageTracker.recordApiUsage(turnApiInputTokens, turnApiOutputTokens, 'chat')
+      }
+    } else {
+      // Fallback: API doesn't report usage — use char-based estimate
+      const estimated = Math.round((assistantContent.length + userInput.length) / 4)
+      if (toolUses.length > 0) {
+        for (const tu of toolUses) {
+          this.usageTracker.recordEstimatedUsage(Math.round(estimated / toolUses.length), tu.name)
+        }
+      }
     }
 
     // Inject path-scoped rules for touched files
@@ -721,6 +760,7 @@ export class QueryEngine {
         artifactServer: this.artifactServer,
         agentRegistry: this.agentRegistry,
         backgroundAgentRegistry: getBackgroundAgentRegistry(),
+        permissionSystem: this.permission,
       })
 
       // Track touched files for rules matching

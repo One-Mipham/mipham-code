@@ -99,6 +99,16 @@ export class OpenAICompatProvider implements ProviderInstance {
         try {
           const parsed = JSON.parse(data)
           const choice = parsed.choices?.[0]
+
+          // Capture token usage when available (final chunk with stream_options.include_usage)
+          if (parsed.usage) {
+            yield {
+              type: 'usage',
+              inputTokens: parsed.usage.prompt_tokens,
+              outputTokens: parsed.usage.completion_tokens,
+            }
+          }
+
           if (!choice) continue
 
           const delta = choice.delta

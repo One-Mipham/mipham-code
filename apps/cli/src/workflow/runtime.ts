@@ -96,6 +96,7 @@ export async function runWorkflow(
 
   const registry: ProviderRegistry = engine.getRegistry()
   const toolRegistry = engine.getTools()
+  const permission = engine.getPermission()
 
   const budget = createBudget(budgetTotal)
 
@@ -115,7 +116,7 @@ export async function runWorkflow(
       prompt,
       registry,
       toolRegistry,
-      opts as Record<string, unknown>,
+      { ...(opts || {}), permissionSystem: permission } as Record<string, unknown>,
     )
     appendJournal(runId, {
       type: 'agent',

@@ -263,4 +263,23 @@ describe('PermissionSystem', () => {
     expect(ps.isBypassed(gitTool, { command: 'git status' })).toBe(true)
     expect(ps.needsApproval(gitTool, { command: 'rm -rf /' })).toBe(true)
   })
+
+  // ── P1: Auto mode SendMessage goes through classifier ──
+  it('routes SendMessage through permission classifier in auto mode', () => {
+    const ps = new PermissionSystem('auto')
+    const sendMsg = makeTool('SendMessage', 'auto', 'agent')
+
+    // SendMessage in auto mode: goes through classifier → falls to tool.permission = 'auto'
+    expect(ps.check(sendMsg, { to: 'other', summary: 'test', message: 'hi' })).toBe('auto')
+    expect(ps.needsApproval(sendMsg, { to: 'other', summary: 'test', message: 'hi' })).toBe(false)
+  })
+
+  it('honors deny rules for SendMessage in auto mode', () => {
+    const ps = new PermissionSystem('auto')
+    ps.deny('SendMessage')
+    const sendMsg = makeTool('SendMessage', 'auto', 'agent')
+
+    // Deny rule takes priority → blocked even in auto mode
+    expect(ps.needsApproval(sendMsg, { to: 'other', summary: 'test', message: 'hi' })).toBe(true)
+  })
 })

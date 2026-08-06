@@ -223,6 +223,11 @@ export class PermissionSystem {
       case 'auto':
         // Safety checks handled by hook layer (PreToolUse hooks).
         // Bypass the static permission system so hooks are the sole gate.
+        // Exception: SendMessage always goes through the permission classifier
+        // so deny/allow rules are honored for cross-session messages.
+        if (tool.name === 'SendMessage') {
+          return 'mode-baseline'
+        }
         return 'bypass'
 
       case 'dontAsk':

@@ -159,4 +159,34 @@ describe('SubAgent', () => {
     expect(result).not.toContain('simulation mode')
     expect(result).not.toContain('would search the codebase')
   })
+
+  it('uses worktreePath as cwd for tool execution', async () => {
+    let capturedCwd = ''
+    const cwdTool: ToolDefinition = {
+      name: 'Bash',
+      description: 'captures cwd',
+      category: 'exec',
+      permission: 'auto',
+      parameters: { type: 'object', properties: {} },
+      execute: async (_params, ctx) => {
+        capturedCwd = ctx.cwd
+        return { success: true, content: capturedCwd }
+      },
+    }
+
+    const provider = createMockProvider([
+      { type: 'tool_use', toolUse: { type: 'tool_use', id: '1', name: 'Bash', input: { command: 'pwd' } } },
+      { type: 'text', content: '' },
+      { type: 'stop' },
+      { type: 'text', content: 'done' },
+      { type: 'stop' },
+    ])
+    const registry = createMockRegistry(provider)
+    const tools = new Map([['Bash', cwdTool]])
+
+    const sub = new SubAgent(registry, tools)
+    await sub.execute('test', 'test', { worktreePath: '/tmp/test-worktree' })
+
+    expect(capturedCwd).toBe('/tmp/test-worktree')
+  })
 })

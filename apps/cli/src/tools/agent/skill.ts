@@ -52,6 +52,7 @@ export const skillTool: ToolDefinition = {
             args,
             registry,
             ctx.toolRegistry || new Map(),
+            ctx.permissionSystem,
           )
           // Return to AI as internal context
           return { success: true, content: `[Forked skill "${skillName}" result]:\n${result}` }

@@ -81,6 +81,7 @@ export interface ToolContext {
   artifactServer?: import('../artifacts/server').ArtifactServer
   agentRegistry?: import('../agent/agent-registry').AgentRegistry
   backgroundAgentRegistry?: import('../agent/background-registry').BackgroundAgentRegistry
+  permissionSystem?: import('../core/permission').PermissionSystem
 }
 
 // ── Artifact Types ──
@@ -128,7 +129,7 @@ export interface TaskNotification {
 
 // ── Stream Types ──
 export interface StreamChunk {
-  type: 'text' | 'tool_use' | 'tool_result' | 'thinking' | 'stop' | 'error' | 'task_notification'
+  type: 'text' | 'tool_use' | 'tool_result' | 'thinking' | 'stop' | 'error' | 'task_notification' | 'usage'
   content?: string
   toolUse?: ToolUseContent
   tool_use_id?: string
@@ -139,6 +140,10 @@ export interface StreamChunk {
   thinking?: string
   /** Background task notification payload (type: 'task_notification'). */
   taskNotification?: TaskNotification
+  /** API-reported input token count (type: 'usage'). */
+  inputTokens?: number
+  /** API-reported output token count (type: 'usage'). */
+  outputTokens?: number
 }
 
 // ── Config Types ──

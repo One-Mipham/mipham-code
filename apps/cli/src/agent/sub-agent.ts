@@ -4,6 +4,7 @@ import type { SubAgentType, SubAgentOptions, AgentDefinition } from './types'
 import { createAgentContext } from './agent-context'
 import { getBackgroundAgentRegistry } from './background-registry'
 import type { HookEngine } from '../core/hooks'
+import type { PermissionSystem } from '../core/permission'
 
 const TYPE_SYSTEM_PROMPTS: Record<SubAgentType, string> = {
   general: 'You are a focused sub-agent. Complete the assigned task thoroughly and return results.',
@@ -27,6 +28,7 @@ export class SubAgent {
   constructor(
     private registry: ProviderRegistry,
     private toolRegistry: Map<string, ToolDefinition>,
+    private permission?: PermissionSystem,
     private hookEngine?: HookEngine,
   ) {}
 
@@ -112,6 +114,9 @@ export class SubAgent {
     const model = this.registry.getActiveModel()
     const agentType = options.type || 'general'
     const agentDef = options.agentDef
+
+    // Resolve execution directory: worktree isolation or process cwd
+    const execCwd = options.worktreePath || process.cwd()
 
     // Resolve system prompt: agentDef > options.systemPrompt > builtin type
     const systemPrompt =
@@ -229,9 +234,21 @@ export class SubAgent {
             continue
           }
 
+          // Security: check permission before executing
+          // Sub-agents run without user interaction — tools requiring approval are rejected
+          if (this.permission?.needsApproval(tool, tu.input)) {
+            currentMessages.push({
+              role: 'user' as const,
+              content:
+                `Tool "${tu.name}" requires user approval (permission: ask). ` +
+                `Cannot execute in non-interactive sub-agent context.`,
+            })
+            continue
+          }
+
           try {
             const result = await tool.execute(tu.input, {
-              cwd: process.cwd(),
+              cwd: execCwd,
               sessionId: 'sub-agent',
               provider: '',
               model: resolvedModel,

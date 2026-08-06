@@ -44,4 +44,6 @@ export interface SubAgentOptions {
   runInBackground?: boolean
   /** Optional callback for streaming progress chunks during background execution. */
   onProgress?: (chunk: string) => void
+  /** When set, tool executions use this path as cwd (git worktree isolation). */
+  worktreePath?: string
 }

@@ -60,7 +60,7 @@ export const agentTool: ToolDefinition = {
     const agentDef = ctx.agentRegistry?.resolve(agentType)
 
     try {
-      const sub = new SubAgent(registry, toolRegistry)
+      const sub = new SubAgent(registry, toolRegistry, ctx.permissionSystem)
       const result = await sub.execute(prompt, description, {
         type: agentType,
         agentDef,

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { runWorkflow } from '../../src/workflow/runtime'
 import { createBudget } from '../../src/workflow/budget'
+import { PermissionSystem } from '../../src/core/permission'
 import type { QueryEngine } from '../../src/core/engine'
 import type { ProviderRegistry, ProviderInstance, ChatRequest } from '../../src/providers/registry'
 import type { StreamChunk, ToolDefinition } from '../../src/shared/index.ts'
@@ -40,6 +41,7 @@ function createMockEngine(provider: ProviderInstance): QueryEngine {
   return {
     getRegistry: () => registry,
     getTools: () => toolRegistry,
+    getPermission: () => new PermissionSystem('auto'),
   } as unknown as QueryEngine
 }
 

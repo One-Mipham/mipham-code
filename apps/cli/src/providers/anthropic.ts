@@ -194,7 +194,15 @@ export class AnthropicProvider implements ProviderInstance {
             }
 
             case 'message_delta': {
-              // Contains stop_reason and usage info
+              // Capture token usage for accurate cost tracking
+              if (event.usage) {
+                yield {
+                  type: 'usage',
+                  inputTokens: event.usage.input_tokens,
+                  outputTokens: event.usage.output_tokens,
+                }
+              }
+              // Contains stop_reason; also handles late input_json_delta
               if (event.delta?.type === 'input_json_delta' && event.delta.partial_json) {
                 accumulatedToolInput += event.delta.partial_json
               }
