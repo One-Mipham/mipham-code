@@ -1,32 +1,41 @@
 # Mipham Code — VS Code Extension
 
-Multi-model AI coding terminal integrated into VS Code.
+Multi-model AI coding terminal integrated into VS Code. 29 tools, 7 AI providers, background agents, plan mode, workflow orchestration — now inside your editor.
 
 ## Features
 
-- **Integrated Terminal** — Cmd+Esc launches Mipham Code in the VS Code terminal
+- **Integrated Terminal** — `Cmd+Esc` launches Mipham Code in the VS Code terminal
 - **Status Bar** — Shows active provider/model, click to focus terminal
-- **Config Command** — "Mipham Code: Open Config" opens your config file
-- **Keybindings** — Cmd+Esc (start), Cmd+Shift+M (focus)
+- **Quick Config** — "Mipham Code: Open Config" opens your `.mipham/config.yml`
+- **File Context** — `MIPHAM_IDE=vscode` env var for workspace-aware AI
+- **Keybindings** — `Cmd+Esc` (start), `Cmd+Shift+M` (focus terminal)
+- **Auto-Detection** — Finds Bun runtime and Mipham Code installation automatically
+
+## Prerequisites
+
+- [Bun](https://bun.sh) runtime (auto-detected from Homebrew, PATH, or `~/.bun/bin/`)
+- Mipham Code CLI installed: `npm install -g @miphamai/cli`
+- Or: `curl -fsSL https://mipham.ai/install.sh | bash`
 
 ## Installation
 
-### From local monorepo
+### From VS Code Marketplace _(coming soon)_
+
+Search "Mipham Code" in the Extensions view (`Cmd+Shift+X`).
+
+### From VSIX (local)
 
 ```bash
-# Symlink into VS Code extensions
-ln -s $(pwd)/infrastructure/vscode ~/.vscode/extensions/miphamai.mipham-code
-
-# Or package and install
 cd infrastructure/vscode
 npx vsce package
-code --install-extension mipham-code-0.10.0.vsix
+code --install-extension mipham-code-0.16.0.vsix
 ```
 
-### Prerequisites
+### Development (symlink)
 
-- [Bun](https://bun.sh) runtime (auto-detected)
-- Mipham Code installed globally: `npm install -g @miphamai/cli`
+```bash
+ln -s $(pwd)/infrastructure/vscode ~/.vscode/extensions/miphamai.mipham-code
+```
 
 ## Configuration
 
@@ -40,10 +49,26 @@ In VS Code `settings.json`:
 }
 ```
 
+All settings are optional — Mipham Code auto-detects everything.
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `mipham-code.bunPath` | string | auto | Path to bun runtime |
+| `mipham-code.provider` | string | `""` | Default provider ID |
+| `mipham-code.model` | string | `""` | Default model ID |
+
 ## Commands
 
-| Command                     | Shortcut    | Description                    |
-| --------------------------- | ----------- | ------------------------------ |
-| Mipham Code: Start          | Cmd+Esc     | Open terminal with Mipham Code |
-| Mipham Code: Focus Terminal | Cmd+Shift+M | Focus existing terminal        |
-| Mipham Code: Open Config    | —           | Open config file               |
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| **Mipham Code: Start** | `Cmd+Esc` / `Ctrl+Esc` | Open terminal with Mipham Code |
+| **Mipham Code: Focus Terminal** | `Cmd+Shift+M` / `Ctrl+Shift+M` | Focus existing terminal |
+| **Mipham Code: Open Config** | — | Open `.mipham/config.yml` |
+
+## Supported Providers
+
+Anthropic · OpenAI · DeepSeek · Qwen · ByteDance Doubao · Tencent Hunyuan · MiphamAI
+
+## License
+
+Apache 2.0 — [Repository](https://github.com/One-Mipham/mipham-code)

@@ -1,0 +1,11 @@
+# Exclude from VSIX package
+.vscode/**
+.git/**
+.gitignore
+*.ts
+!*.js
+node_modules/**
+src/**
+test/**
+tsconfig.json
+*.test.js
