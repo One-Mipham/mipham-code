@@ -1,14 +1,17 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { Box, Text, useInput } from 'ink'
+import { readFileSync } from 'node:fs'
 import type { QueryEngine } from '../core/engine'
 import type { MiphamConfig } from '../shared/index.ts'
 import type { SkillsLoader } from '../skills/loader'
 import type { PluginManager } from '../plugin/plugin-manager'
 import { getPreference, setPreference } from '../config/preferences'
 import { AgentRegistry } from '../agent/agent-registry'
+import { getBackgroundAgentRegistry } from '../agent/background-registry'
 import { ChatPanel } from './chat'
 import { InputBar } from './input'
 import { ModelPicker } from './picker'
+import { AgentFooter, type AgentEntry } from './agent-footer'
 import {
   getCommand,
   looksLikeSlashCommand,
@@ -49,6 +52,8 @@ interface AgentProgress {
   startTime: number
   tokensUsed?: number
   isTask?: boolean
+  /** Unique identifier for multi-agent tracking. */
+  id?: string
 }
 
 // Version is read fresh from package.json at startup via runApp prop
@@ -132,25 +137,76 @@ export function App({
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default')
   const abortRef = useRef<AbortController | null>(null)
   const [agentProgress, setAgentProgress] = useState<AgentProgress | null>(null)
-  const [agentElapsed, setAgentElapsed] = useState(0)
+  // Multi-agent tracking: keyed by agent/task ID, shows all running + recently completed agents
+  const [runningAgents, setRunningAgents] = useState<Record<string, AgentEntry>>({})
+  const [gitBranch, setGitBranch] = useState('')
+  const [agentTick, setAgentTick] = useState(0)
 
-  // Load persisted effort on mount
+  // Detect git branch on mount
   useEffect(() => {
-    const saved = getPreference('lastCodeReviewEffort', 'high')
-    setEffort(saved)
+    try {
+      const head = readFileSync('.git/HEAD', 'utf8').trim()
+      const m = head.match(/^ref: refs\/heads\/(.+)$/)
+      setGitBranch(m ? m[1]! : head.slice(0, 7))
+    } catch {
+      // Not a git repo — leave empty
+    }
   }, [])
 
-  // Agent elapsed timer
-  React.useEffect(() => {
-    if (!agentProgress) {
-      setAgentElapsed(0)
-      return
+  // Tick timer for agent elapsed displays (re-renders every second while agents are running)
+  useEffect(() => {
+    const hasRunning =
+      Object.values(runningAgents).some((a) => a.status === 'running') || agentProgress !== null
+    if (!hasRunning) return
+    const i = setInterval(() => setAgentTick((t) => t + 1), 1000)
+    return () => clearInterval(i)
+  }, [runningAgents, agentProgress])
+
+  // Sync running agents from BackgroundAgentRegistry into React state.
+  // Called after Agent tool results and task notifications to keep the footer current.
+  const syncBgAgents = useCallback(() => {
+    const bgRegistry = getBackgroundAgentRegistry()
+    const all = bgRegistry.list()
+    setRunningAgents((prev) => {
+      const next: Record<string, AgentEntry> = {}
+      for (const task of all) {
+        // Preserve existing entry if it has more data (e.g. tokens accumulated during streaming)
+        const existing = prev[task.id]
+        next[task.id] = {
+          id: task.id,
+          name: existing?.name || (task.agentType.charAt(0).toUpperCase() + task.agentType.slice(1)),
+          description: existing?.description || task.description,
+          startTime: existing?.startTime || task.startedAt.getTime(),
+          tokensUsed: existing?.tokensUsed || 0,
+          status: task.status === 'running' ? 'running' : 'completed',
+        }
+      }
+      return next
+    })
+
+    // Register onComplete for running tasks to auto-dismiss them
+    for (const task of all) {
+      if (task.status === 'running') {
+        bgRegistry.onComplete(task.id, () => {
+          setRunningAgents((prev) => {
+            const next = { ...prev }
+            if (next[task.id]) {
+              next[task.id] = { ...next[task.id], status: 'completed' } as AgentEntry
+            }
+            return next
+          })
+          // Auto-dismiss after 5 seconds
+          setTimeout(() => {
+            setRunningAgents((prev) => {
+              const next = { ...prev }
+              delete next[task.id]
+              return next
+            })
+          }, 5000)
+        })
+      }
     }
-    const interval = setInterval(() => {
-      setAgentElapsed(Math.floor((Date.now() - agentProgress.startTime) / 1000))
-    }, 1000)
-    return () => clearInterval(interval)
-  }, [agentProgress])
+  }, [])
 
   // Initialize agent registry (one-time, on mount)
   useMemo(() => {
@@ -367,6 +423,8 @@ export function App({
 
           if (chunk.type === 'tool_result') {
             setAgentProgress(null)
+            // Sync background agents (e.g. Agent tool may have spawned them)
+            syncBgAgents()
             // Show tool result as a compact indented line
             const output = chunk.content ? String(chunk.content).trim() : ''
             if (output) {
@@ -422,6 +480,8 @@ export function App({
                 },
               },
             ])
+            // Sync agent footer — mark completed background agents
+            syncBgAgents()
           }
         }
       } catch (err) {
@@ -433,9 +493,11 @@ export function App({
         if (assistantContent) {
           engine.getContext().saveCheckpoint('post-turn')
         }
+        // Final sync of background agents after the turn completes
+        syncBgAgents()
       }
     },
-    [engine, mkCtx],
+    [engine, mkCtx, syncBgAgents],
   )
 
   useInput((_input, key) => {
@@ -504,36 +566,6 @@ export function App({
 
   return (
     <Box flexDirection="column" padding={1} height="100%">
-      {/* Agent progress banner — Claude Code style */}
-      {agentProgress && (
-        <Box flexDirection="column" marginY={1}>
-          <Text color="cyan" bold>
-            ◯ {agentProgress.name}{' '}
-            <Text color="yellow">
-              {agentElapsed >= 60
-                ? `${Math.floor(agentElapsed / 60)}m ${agentElapsed % 60}s`
-                : `${agentElapsed}s`}
-            </Text>
-            {agentProgress.tokensUsed ? (
-              <Text color="yellow">
-                {' · ↓ '}
-                {agentProgress.tokensUsed >= 1000
-                  ? `${(agentProgress.tokensUsed / 1000).toFixed(1)}k`
-                  : agentProgress.tokensUsed}{' '}
-                tokens
-              </Text>
-            ) : null}
-          </Text>
-          {agentProgress.description ? (
-            <Text dimColor>
-              {agentProgress.description.length > 100
-                ? `"${agentProgress.description.slice(0, 100)}..."`
-                : `"${agentProgress.description}"`}
-            </Text>
-          ) : null}
-        </Box>
-      )}
-
       {/* Header — left-aligned */}
       <Box flexDirection="column" marginBottom={1}>
         <Text color="#FFD700" bold>
@@ -572,6 +604,13 @@ export function App({
           <Text dimColor>──────────────────────────────</Text>
         </Box>
       )}
+
+      {/* Agent status footer — shows running background agents */}
+      <AgentFooter
+        agents={Object.values(runningAgents)}
+        gitBranch={gitBranch}
+        tick={agentTick}
+      />
 
       {/* Status line */}
       <Box marginTop={1} flexDirection="column">
