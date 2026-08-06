@@ -87,7 +87,8 @@ export async function runApp(options: RunOptions): Promise<void> {
   const pluginManager = new PluginManager()
 
   // Generate session name for tracking (used by /cd to persist cwd)
-  const sessionName = options.resume || `session-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`
+  const sessionName =
+    options.resume || `session-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`
 
   // Initialize context — restore saved session if available
   // Read the active model's context window for dynamic max-token sizing.
@@ -111,12 +112,12 @@ export async function runApp(options: RunOptions): Promise<void> {
   }
 
   const DISABLE_1M = process.env.MIPHAM_DISABLE_1M_CONTEXT === '1'
-  const contextMaxTokens = (DISABLE_1M && modelContextWindow > 200_000)
-    ? 200_000
-    : modelContextWindow
+  const contextMaxTokens = DISABLE_1M && modelContextWindow > 200_000 ? 200_000 : modelContextWindow
 
   if (DISABLE_1M && modelContextWindow <= 200_000) {
-    console.error('[mipham] ⚠ MIPHAM_DISABLE_1M_CONTEXT is set but auto-compaction is not holding the session to 200K — model context window is already ≤ 200K')
+    console.error(
+      '[mipham] ⚠ MIPHAM_DISABLE_1M_CONTEXT is set but auto-compaction is not holding the session to 200K — model context window is already ≤ 200K',
+    )
   }
 
   const context = new ContextManager({ maxTokens: contextMaxTokens, compactionThreshold: 0.9 })

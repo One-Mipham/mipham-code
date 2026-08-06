@@ -163,18 +163,13 @@ describe('workflow sandbox escape prevention', () => {
 
   for (const { name, script } of escapeTests) {
     it(`blocks ${name}`, async () => {
-      await expect(
-        runWorkflow(script, mockEngine),
-      ).rejects.toThrow()
+      await expect(runWorkflow(script, mockEngine)).rejects.toThrow()
     })
   }
 
   it('allows whitelisted APIs (agent, log, args)', async () => {
     // Need a real mock provider for the agent call to work
-    const provider = createMockProvider([
-      { type: 'text', content: 'ok' },
-      { type: 'stop' },
-    ])
+    const provider = createMockProvider([{ type: 'text', content: 'ok' }, { type: 'stop' }])
     const engine = createMockEngine(provider)
 
     const result = await runWorkflow(

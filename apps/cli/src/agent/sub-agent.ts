@@ -167,7 +167,13 @@ export class SubAgent {
 
         // Post warning to message bus for UI display
         const bus = getMessageBus()
-        bus.post('system', 'main', `Sub-agent model fallback: ${resolvedModel} → ${model}`, warnMsg, 'warning')
+        bus.post(
+          'system',
+          'main',
+          `Sub-agent model fallback: ${resolvedModel} → ${model}`,
+          warnMsg,
+          'warning',
+        )
 
         finalModel = model
       }

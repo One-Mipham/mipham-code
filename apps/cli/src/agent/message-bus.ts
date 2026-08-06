@@ -32,7 +32,13 @@ export class AgentMessageBus {
    * Post a message from one agent to another.
    * Returns the message ID.
    */
-  post(from: string, to: string, summary: string, message: string, type: AgentMessageType = 'message'): string {
+  post(
+    from: string,
+    to: string,
+    summary: string,
+    message: string,
+    type: AgentMessageType = 'message',
+  ): string {
     const id = `msg-${++this.idCounter}`
     this.messages.push({
       id,

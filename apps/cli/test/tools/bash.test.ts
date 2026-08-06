@@ -45,7 +45,7 @@ describe('bash security hardening', () => {
     { desc: 'nested sh -c', cmd: "sh -c 'rm -rf /'" },
     { desc: 'nested zsh -c', cmd: "zsh -c 'rm -rf /'" },
     { desc: 'eval obfuscation', cmd: 'eval $(echo rm -rf /)' },
-    { desc: 'exec bypass', cmd: "exec python3 -c 'import os; os.system(\"rm\")'" },
+    { desc: 'exec bypass', cmd: 'exec python3 -c \'import os; os.system("rm")\'' },
     { desc: 'source bypass', cmd: '. /etc/malicious.sh' },
     { desc: 'source builtin bypass', cmd: 'source /etc/malicious.sh' },
     { desc: 'base64 decode execute', cmd: 'echo cm0gLXJmIC8= | base64 -d | bash' },
@@ -55,10 +55,7 @@ describe('bash security hardening', () => {
   for (const { desc, cmd } of blockedVectors) {
     it(`blocks: ${desc}`, async () => {
       mockSafeSpawn()
-      const result = await bashTool.execute(
-        { command: cmd, description: 'test' },
-        ctx,
-      )
+      const result = await bashTool.execute({ command: cmd, description: 'test' }, ctx)
       expect(result.success).toBe(false)
       expect(result.error).toContain('rejected by security policy')
     })

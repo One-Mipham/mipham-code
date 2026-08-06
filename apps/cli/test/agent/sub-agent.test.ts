@@ -23,11 +23,26 @@ function createMockProvider(chunks: StreamChunk[]): ProviderInstance {
 
 function createMockRegistry(
   provider: ProviderInstance,
-  opts?: { models?: Array<{ id: string; name: string; providerId: string; contextWindow: number; maxOutput: number; status?: string }> },
+  opts?: {
+    models?: Array<{
+      id: string
+      name: string
+      providerId: string
+      contextWindow: number
+      maxOutput: number
+      status?: string
+    }>
+  },
 ): ProviderRegistry {
-  const models =
-    opts?.models ??
-    [{ id: 'mock-model', name: 'Mock Model', providerId: 'mock', contextWindow: 128000, maxOutput: 4096 }]
+  const models = opts?.models ?? [
+    {
+      id: 'mock-model',
+      name: 'Mock Model',
+      providerId: 'mock',
+      contextWindow: 128000,
+      maxOutput: 4096,
+    },
+  ]
   const registry = {
     getActive: () => provider,
     getActiveModel: () => 'mock-model',
@@ -212,8 +227,20 @@ describe('SubAgent', () => {
     }
 
     const knownModels = [
-      { id: 'mock-model', name: 'Mock Model', providerId: 'mock', contextWindow: 128000, maxOutput: 4096 },
-      { id: 'claude-sonnet', name: 'Claude Sonnet', providerId: 'mock', contextWindow: 200000, maxOutput: 8192 },
+      {
+        id: 'mock-model',
+        name: 'Mock Model',
+        providerId: 'mock',
+        contextWindow: 128000,
+        maxOutput: 4096,
+      },
+      {
+        id: 'claude-sonnet',
+        name: 'Claude Sonnet',
+        providerId: 'mock',
+        contextWindow: 200000,
+        maxOutput: 8192,
+      },
     ]
     const registry = createMockRegistry(provider, { models: knownModels })
 
@@ -224,12 +251,8 @@ describe('SubAgent', () => {
 
     expect(receivedModel).toBe('mock-model')
     expect(result).toContain('ok')
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('unknown-model-xyz'),
-    )
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('mock-model'),
-    )
+    expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('unknown-model-xyz'))
+    expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('mock-model'))
 
     consoleWarnSpy.mockRestore()
   })
@@ -244,8 +267,20 @@ describe('SubAgent', () => {
     }
 
     const knownModels = [
-      { id: 'mock-model', name: 'Mock Model', providerId: 'mock', contextWindow: 128000, maxOutput: 4096 },
-      { id: 'claude-sonnet', name: 'Claude Sonnet', providerId: 'mock', contextWindow: 200000, maxOutput: 8192 },
+      {
+        id: 'mock-model',
+        name: 'Mock Model',
+        providerId: 'mock',
+        contextWindow: 128000,
+        maxOutput: 4096,
+      },
+      {
+        id: 'claude-sonnet',
+        name: 'Claude Sonnet',
+        providerId: 'mock',
+        contextWindow: 200000,
+        maxOutput: 8192,
+      },
     ]
     const registry = createMockRegistry(provider, { models: knownModels })
 
@@ -260,7 +295,13 @@ describe('SubAgent', () => {
     const provider = createMockProvider([{ type: 'text', content: 'ok' }, { type: 'stop' }])
 
     const knownModels = [
-      { id: 'mock-model', name: 'Mock Model', providerId: 'mock', contextWindow: 128000, maxOutput: 4096 },
+      {
+        id: 'mock-model',
+        name: 'Mock Model',
+        providerId: 'mock',
+        contextWindow: 128000,
+        maxOutput: 4096,
+      },
     ]
     const registry = createMockRegistry(provider, { models: knownModels })
 

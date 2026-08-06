@@ -134,7 +134,10 @@ export class SessionStore {
   /**
    * Auto-save with timestamp-based name.
    */
-  static autoSave(messages: Message[], metadata?: { provider?: string; model?: string; cwd?: string }): string {
+  static autoSave(
+    messages: Message[],
+    metadata?: { provider?: string; model?: string; cwd?: string },
+  ): string {
     const name = `session-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`
     SessionStore.save(name, messages, metadata)
     return name
