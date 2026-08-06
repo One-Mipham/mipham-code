@@ -26,6 +26,7 @@ interface AppProps {
   skillsLoader?: SkillsLoader
   pluginManager?: PluginManager
   version?: string
+  sessionId?: string
 }
 
 export interface ToolMeta {
@@ -84,6 +85,7 @@ export function App({
   skillsLoader,
   pluginManager,
   version,
+  sessionId,
 }: AppProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -131,6 +133,7 @@ export function App({
       providerId,
       modelId,
       version: version || '0.0.0',
+      sessionId: sessionId || '',
       setSessionTitle: (title: string) => setSessionTitle(title),
       setFastMode: (on: boolean) => setFastMode(on),
       setEffort: (level: string) => setEffort(level),
@@ -139,7 +142,7 @@ export function App({
       skillsLoader,
       pluginManager,
     }),
-    [engine, config, providerId, modelId, skillsLoader, pluginManager],
+    [engine, config, providerId, modelId, skillsLoader, pluginManager, sessionId],
   )
 
   const handleSubmit = useCallback(

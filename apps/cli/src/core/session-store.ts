@@ -17,6 +17,7 @@ export interface SessionMetadata {
   provider: string
   model: string
   messageCount: number
+  cwd?: string
 }
 
 export interface StoredSession {
@@ -44,7 +45,7 @@ export class SessionStore {
   static save(
     name: string,
     messages: Message[],
-    metadata?: { provider?: string; model?: string },
+    metadata?: { provider?: string; model?: string; cwd?: string },
   ): void {
     ensureDir()
     const path = filePath(name)
@@ -57,6 +58,7 @@ export class SessionStore {
         provider: metadata?.provider || 'unknown',
         model: metadata?.model || 'unknown',
         messageCount: messages.length,
+        cwd: metadata?.cwd,
       },
       messages,
     }
@@ -132,7 +134,7 @@ export class SessionStore {
   /**
    * Auto-save with timestamp-based name.
    */
-  static autoSave(messages: Message[], metadata?: { provider?: string; model?: string }): string {
+  static autoSave(messages: Message[], metadata?: { provider?: string; model?: string; cwd?: string }): string {
     const name = `session-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`
     SessionStore.save(name, messages, metadata)
     return name

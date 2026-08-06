@@ -17,6 +17,7 @@ export interface CommandContext {
   providerId: string
   modelId: string
   version: string
+  sessionId: string
   // Callbacks for commands that mutate App state
   setSessionTitle: (title: string) => void
   setFastMode: (on: boolean) => void
@@ -1887,7 +1888,7 @@ const summaryCmd: CommandHandler = (ctx) => {
   }
 }
 
-const cdCmd: CommandHandler = async (_ctx, args) => {
+const cdCmd: CommandHandler = async (ctx, args) => {
   const target = args[0]
   if (!target) {
     return {
@@ -1912,6 +1913,22 @@ const cdCmd: CommandHandler = async (_ctx, args) => {
 
   try {
     process.chdir(resolved)
+
+    // Persist cwd to active session (best-effort)
+    try {
+      const { SessionStore } = await import('../core/session-store')
+      const saved = SessionStore.load(ctx.sessionId)
+      if (saved) {
+        SessionStore.save(ctx.sessionId, saved.messages, {
+          provider: saved.metadata.provider,
+          model: saved.metadata.model,
+          cwd: resolved,
+        })
+      }
+    } catch {
+      /* session persistence is best-effort */
+    }
+
     return {
       content: [
         '── Directory Changed ──',

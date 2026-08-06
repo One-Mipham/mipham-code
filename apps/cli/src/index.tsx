@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { existsSync } from 'node:fs'
 import { render } from 'ink'
 import { App } from './ui/app'
 import { loadConfig, loadInferenceHookConfig, loadCredentialMaskingConfig } from './config/loader'
@@ -85,12 +86,23 @@ export async function runApp(options: RunOptions): Promise<void> {
   // Initialize plugin manager
   const pluginManager = new PluginManager()
 
+  // Generate session name for tracking (used by /cd to persist cwd)
+  const sessionName = options.resume || `session-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`
+
   // Initialize context — restore saved session if available
   const context = new ContextManager({ maxTokens: 200_000, compactionThreshold: 0.9 })
 
   if (options.resume) {
     const saved = SessionStore.load(options.resume)
     if (saved) {
+      // Restore working directory if saved
+      if (saved.metadata.cwd && existsSync(saved.metadata.cwd)) {
+        try {
+          process.chdir(saved.metadata.cwd)
+        } catch {
+          // cwd may no longer exist; silently continue
+        }
+      }
       for (const msg of saved.messages) {
         context.addMessage(msg)
       }
@@ -195,9 +207,10 @@ export async function runApp(options: RunOptions): Promise<void> {
   const saveAndExit = () => {
     artifactServer.stop()
     if (context.getMessageCount() > 0) {
-      SessionStore.autoSave(context.getMessages(), {
+      SessionStore.save(sessionName, context.getMessages(), {
         provider: defaultProvider,
         model: defaultModel,
+        cwd: process.cwd(),
       })
     }
     process.exit(0)
@@ -216,6 +229,7 @@ export async function runApp(options: RunOptions): Promise<void> {
       skillsLoader={skillsLoader}
       pluginManager={pluginManager}
       version={options.version}
+      sessionId={sessionName}
     />,
   )
   await waitUntilExit()

@@ -111,4 +111,26 @@ describe('SessionStore', () => {
       expect(loaded).toBeDefined()
     })
   })
+
+  describe('session cwd persistence', () => {
+    it('save and load preserves cwd', () => {
+      const testDir = '/tmp/test-session-cwd'
+      SessionStore.save('test-cwd-save', [], {
+        provider: 'test',
+        model: 'test',
+        cwd: testDir,
+      })
+      const loaded = SessionStore.load('test-cwd-save')
+      expect(loaded?.metadata.cwd).toBe(testDir)
+    })
+
+    it('load session without cwd returns undefined', () => {
+      SessionStore.save('test-no-cwd', [], {
+        provider: 'test',
+        model: 'test',
+      })
+      const loaded = SessionStore.load('test-no-cwd')
+      expect(loaded?.metadata.cwd).toBeUndefined()
+    })
+  })
 })
