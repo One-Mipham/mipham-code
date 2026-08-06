@@ -24,9 +24,7 @@ export const DEFAULT_CREDENTIAL_MASKING_CONFIG: CredentialMaskingConfig = {
   files: [],
   output_scrubbing: {
     enabled: true,
-    patterns: [
-      '(?i)(api[_-]?key|secret|token|password|credential)\\s*[:=]\\s*\\S+',
-    ],
+    patterns: ['(?i)(api[_-]?key|secret|token|password|credential)\\s*[:=]\\s*\\S+'],
   },
   env_filter: {
     enabled: true,

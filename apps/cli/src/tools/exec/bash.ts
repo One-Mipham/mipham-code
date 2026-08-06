@@ -150,9 +150,10 @@ export const bashTool: ToolDefinition = {
 
       if (exitCode !== 0) {
         const rawStderr = await new Response(proc.stderr).text()
-        const stderr = credentialConfig?.enabled && credentialConfig.output_scrubbing.enabled
-          ? (await import('../../core/credential-masker')).maskOutput(rawStderr, credentialConfig)
-          : rawStderr
+        const stderr =
+          credentialConfig?.enabled && credentialConfig.output_scrubbing.enabled
+            ? (await import('../../core/credential-masker')).maskOutput(rawStderr, credentialConfig)
+            : rawStderr
         return {
           success: false,
           content: output.slice(0, 5_000),

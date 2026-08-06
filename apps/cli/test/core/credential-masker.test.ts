@@ -89,7 +89,9 @@ describe('maskContent', () => {
     const result = maskContent(content, {
       path: 'config.yml',
       mode: 'extract',
-      extract: [{ pattern: '(apiKey|secret)\\s*:\\s*"[^"]*"', replacement: '__MIPHAM_CREDENTIAL_MASKED__' }],
+      extract: [
+        { pattern: '(apiKey|secret)\\s*:\\s*"[^"]*"', replacement: '__MIPHAM_CREDENTIAL_MASKED__' },
+      ],
     })
 
     expect(result).not.toContain('sk-abc123')

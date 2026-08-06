@@ -29,10 +29,7 @@ export function matchCredentialFile(
  * - 'full' mode: return sentinel value only
  * - 'extract' mode: replace regex-matched tokens with sentinel
  */
-export function maskContent(
-  content: string,
-  rule: CredentialFileRule,
-): string {
+export function maskContent(content: string, rule: CredentialFileRule): string {
   if (rule.mode === 'full') {
     return CREDENTIAL_SENTINEL
   }
@@ -56,10 +53,7 @@ export function maskContent(
  * Uses the configured output_scrubbing patterns to detect and replace
  * credentials that may have leaked into command output.
  */
-export function maskOutput(
-  output: string,
-  config: CredentialMaskingConfig,
-): string {
+export function maskOutput(output: string, config: CredentialMaskingConfig): string {
   if (!config.enabled || !config.output_scrubbing.enabled) return output
 
   let masked = output

@@ -47,9 +47,8 @@ export const readTool: ToolDefinition = {
 
     // ── Credential masking ──
     if (credentialConfig) {
-      const { matchCredentialFile, maskContent, CREDENTIAL_SENTINEL } = await import(
-        '../../core/credential-masker'
-      )
+      const { matchCredentialFile, maskContent, CREDENTIAL_SENTINEL } =
+        await import('../../core/credential-masker')
       const rule = matchCredentialFile(filePath, credentialConfig)
       if (rule) {
         const masked = maskContent(content, rule)

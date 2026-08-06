@@ -308,9 +308,7 @@ export function loadInferenceHookConfig(cwd: string = process.cwd()): InferenceH
  * Load credential masking configuration from the same config sources.
  * Merges project-level over user-level. Returns defaults if no section present.
  */
-export function loadCredentialMaskingConfig(
-  cwd: string = process.cwd(),
-): CredentialMaskingConfig {
+export function loadCredentialMaskingConfig(cwd: string = process.cwd()): CredentialMaskingConfig {
   const configPath = join(cwd, '.mipham', 'config.yml')
   const userConfigPath = join(MIPHAM_HOME, 'config.yml')
 
