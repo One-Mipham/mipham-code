@@ -12,12 +12,14 @@
 为 Mipham Code 添加企业级 DLP（Data Loss Prevention）推理钩子。在每次模型 API 调用前，将完整对话转录发送到企业 DLP 安全服务器，获得 allow/deny 判决后才决定是否继续推理。
 
 **Phase 1 范围**（本 spec）：
+
 - 新增 `PreInference` hook 事件
 - 对标 Claude Inference Hooks 的 HTTPS POST 协议（HMAC 签名、JSON payload）
 - 可配置超时和 fail-open/fail-closed 策略
 - 架构预留服务端扩展点（Phase 2）
 
 **Phase 2 范围**（后续 spec）：
+
 - 影子模式（observe-only）
 - 百分比灰度
 - 角色排除
@@ -53,6 +55,7 @@
 ```
 
 **关键设计决策**：
+
 - PreInference 在 `UserPromptSubmit` 之后、`registry.chat()` 之前
 - 与 UserPromptSubmit 互补：后者过滤用户输入，前者审查完整对话上下文含工具调用结果
 - endpoint 未配置时自动跳过，零开销
@@ -98,34 +101,38 @@ User-Agent: MiphamCode/<version>
 
 **字段说明**：
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `type` | string | 固定 `"inference_check"` |
-| `id` | string | 事件唯一 ID（UUID，用于去重） |
-| `created_at` | string | ISO 8601 时间戳 |
-| `data.type` | string | 固定 `"pre_inference"` |
-| `data.session_id` | string | 当前会话 ID |
-| `data.organization_id` | string | 组织 ID（从配置读取，可选） |
-| `data.provider` | string | 当前模型 provider |
-| `data.model` | string | 当前模型 ID |
-| `data.messages` | array | 完整对话转录（不含 system role） |
-| `data.tool_calls` | array | 最近一轮工具调用及结果预览（各截断 2000 字符） |
+| 字段                   | 类型   | 说明                                           |
+| ---------------------- | ------ | ---------------------------------------------- |
+| `type`                 | string | 固定 `"inference_check"`                       |
+| `id`                   | string | 事件唯一 ID（UUID，用于去重）                  |
+| `created_at`           | string | ISO 8601 时间戳                                |
+| `data.type`            | string | 固定 `"pre_inference"`                         |
+| `data.session_id`      | string | 当前会话 ID                                    |
+| `data.organization_id` | string | 组织 ID（从配置读取，可选）                    |
+| `data.provider`        | string | 当前模型 provider                              |
+| `data.model`           | string | 当前模型 ID                                    |
+| `data.messages`        | array  | 完整对话转录（不含 system role）               |
+| `data.tool_calls`      | array  | 最近一轮工具调用及结果预览（各截断 2000 字符） |
 
 ### 3.2 响应
 
 **Allow**：
+
 ```json
 { "verdict": "allow" }
 ```
+
 HTTP 200
 
 **Deny**：
+
 ```json
 {
   "verdict": "deny",
   "reason": "SSN pattern detected in prompt"
 }
 ```
+
 HTTP 403
 
 **其他状态码**：按 `on_failure` 策略处理。
@@ -140,7 +147,7 @@ X-Mipham-Signature: t=<unix_timestamp>,v1=<hmac_sha256_hex>
 
 - `t` = Unix 时间戳（秒）
 - `v1` = HMAC-SHA256(signing_secret, `t.<body>`)，hex 编码
-- signing_secret 格式：`mis_<random>`（32+ 字符）
+- signing*secret 格式：`mis*<random>`（32+ 字符）
 - DLP 服务器侧应在 5 分钟内容忍时间戳偏差（防重放）
 
 ---
@@ -152,23 +159,23 @@ X-Mipham-Signature: t=<unix_timestamp>,v1=<hmac_sha256_hex>
 ```yaml
 inference_hooks:
   # DLP 服务器端点（HTTPS 必需，为空则不触发）
-  endpoint: "https://dlp.onemipham.com/dlp/inspect"
+  endpoint: 'https://dlp.onemipham.com/dlp/inspect'
 
   # 签名密钥（格式 mis_<random>）
-  signing_secret: "mis_xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  signing_secret: 'mis_xxxxxxxxxxxxxxxxxxxxxxxxxxxx'
 
   # 超时（毫秒），默认 5000
   timeout: 5000
 
   # DLP 服务器不可用时的策略
-  on_failure: "fail-closed"   # fail-closed | fail-open
+  on_failure: 'fail-closed' # fail-closed | fail-open
 
   # 组织 ID（可选，附加到请求中）
-  organization_id: "org_xxx"
+  organization_id: 'org_xxx'
 
   # 附加自定义头（可选）
   headers:
-    X-Team: "engineering"
+    X-Team: 'engineering'
 ```
 
 **默认值**（`config/defaults.ts`）：
@@ -241,17 +248,17 @@ export interface InferenceCheckResponse {
 
 ## 六、实现文件
 
-| 文件 | 操作 | 说明 |
-|------|------|------|
-| `core/inference-hook.ts` | **新建** | DLP 传输层核心逻辑 |
-| `shared/types.ts` | 修改 | 新增类型定义 |
-| `core/hooks.ts` | 修改 | 新增 `executePreInference()` |
-| `core/hooks-executor.ts` | 修改 | HTTP executor 增强（超时、fail 策略、HMAC） |
-| `core/engine.ts` | 修改 | `process()` 插入 PreInference 检查点 |
-| `config/loader.ts` | 修改 | 解析 `inference_hooks` 段 |
-| `config/defaults.ts` | 修改 | 默认配置 |
-| `core/__tests__/inference-hook.test.ts` | **新建** | 单元测试 |
-| `core/__tests__/hooks.test.ts` | 修改 | PreInference 事件测试 |
+| 文件                                    | 操作     | 说明                                        |
+| --------------------------------------- | -------- | ------------------------------------------- |
+| `core/inference-hook.ts`                | **新建** | DLP 传输层核心逻辑                          |
+| `shared/types.ts`                       | 修改     | 新增类型定义                                |
+| `core/hooks.ts`                         | 修改     | 新增 `executePreInference()`                |
+| `core/hooks-executor.ts`                | 修改     | HTTP executor 增强（超时、fail 策略、HMAC） |
+| `core/engine.ts`                        | 修改     | `process()` 插入 PreInference 检查点        |
+| `config/loader.ts`                      | 修改     | 解析 `inference_hooks` 段                   |
+| `config/defaults.ts`                    | 修改     | 默认配置                                    |
+| `core/__tests__/inference-hook.test.ts` | **新建** | 单元测试                                    |
+| `core/__tests__/hooks.test.ts`          | 修改     | PreInference 事件测试                       |
 
 ---
 
@@ -296,13 +303,13 @@ export interface InferenceCheckResponse {
 
 以下功能在架构上已预留扩展点，本次不实现：
 
-| 功能 | 预留方式 |
-|------|---------|
-| 影子模式 | `InferenceHookConfig.mode: 'enforce' | 'shadow'` 字段预留 |
-| 百分比灰度 | `InferenceHookConfig.rollout_percentage: 0-100` 字段预留 |
-| 角色排除 | `InferenceHookConfig.exclude_roles: string[]` 字段预留 |
-| 服务端拦截 | `InferenceHookTransport` 接口化，客户端实现可替换为服务端代理 |
-| 多 endpoint | `endpoints[]` 数组预留，支持多 DLP 服务器链式调用 |
+| 功能        | 预留方式                                                      |
+| ----------- | ------------------------------------------------------------- | ------------------ |
+| 影子模式    | `InferenceHookConfig.mode: 'enforce'                          | 'shadow'` 字段预留 |
+| 百分比灰度  | `InferenceHookConfig.rollout_percentage: 0-100` 字段预留      |
+| 角色排除    | `InferenceHookConfig.exclude_roles: string[]` 字段预留        |
+| 服务端拦截  | `InferenceHookTransport` 接口化，客户端实现可替换为服务端代理 |
+| 多 endpoint | `endpoints[]` 数组预留，支持多 DLP 服务器链式调用             |
 
 ---
 

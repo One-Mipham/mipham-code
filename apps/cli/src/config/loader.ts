@@ -10,7 +10,12 @@ import {
 import { join, dirname } from 'node:path'
 import { homedir } from 'node:os'
 import { parse as parseYaml } from 'yaml'
-import type { MiphamConfig, ProviderConfig, McpServerConfig, InferenceHookConfig } from '../shared/index.ts'
+import type {
+  MiphamConfig,
+  ProviderConfig,
+  McpServerConfig,
+  InferenceHookConfig,
+} from '../shared/index.ts'
 import { DEFAULT_CONFIG, DEFAULT_INFERENCE_HOOK_CONFIG } from './defaults'
 
 const MIPHAM_HOME = join(homedir(), '.mipham')

@@ -1,4 +1,9 @@
-import type { StreamChunk, ToolDefinition, ToolResult, InferenceHookConfig } from '../shared/index.ts'
+import type {
+  StreamChunk,
+  ToolDefinition,
+  ToolResult,
+  InferenceHookConfig,
+} from '../shared/index.ts'
 import { ProviderRegistry } from '../providers/registry'
 import { ContextManager } from './context'
 import { PermissionSystem } from './permission'
@@ -11,11 +16,7 @@ import type { AgentViewManager } from '../agent-view/agent-view-manager'
 import type { SkillsLoader } from '../skills/loader'
 import { getBackgroundAgentRegistry } from '../agent/background-registry'
 import { RulesLoader } from './rules-loader'
-import {
-  buildRequest,
-  sendInferenceCheck,
-  isInferenceHookEnabled,
-} from './inference-hook'
+import { buildRequest, sendInferenceCheck, isInferenceHookEnabled } from './inference-hook'
 
 export class QueryEngine {
   private hookEngine?: HookEngine

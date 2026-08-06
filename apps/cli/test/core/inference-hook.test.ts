@@ -112,9 +112,7 @@ describe('buildRequest', () => {
       { role: 'user', content: 'test' },
       {
         role: 'assistant',
-        content: [
-          { type: 'tool_use', id: 't1', name: 'Read', input: { file_path: '/f' } },
-        ],
+        content: [{ type: 'tool_use', id: 't1', name: 'Read', input: { file_path: '/f' } }],
       },
       {
         role: 'user',
@@ -162,9 +160,9 @@ describe('isInferenceHookEnabled', () => {
 
 describe('sendInferenceCheck', () => {
   it('should return allowed:true on HTTP 200 with allow verdict', async () => {
-    const mockFetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ verdict: 'allow' }), { status: 200 }),
-    )
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ verdict: 'allow' }), { status: 200 }))
     vi.stubGlobal('fetch', mockFetch)
 
     const config = makeConfig()
@@ -192,9 +190,9 @@ describe('sendInferenceCheck', () => {
   })
 
   it('should include X-Mipham-Signature header when signing_secret is set', async () => {
-    const mockFetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ verdict: 'allow' }), { status: 200 }),
-    )
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ verdict: 'allow' }), { status: 200 }))
     vi.stubGlobal('fetch', mockFetch)
 
     const config = makeConfig()
