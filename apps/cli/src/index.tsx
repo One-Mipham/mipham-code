@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { render } from 'ink'
 import { App } from './ui/app'
-import { loadConfig } from './config/loader'
+import { loadConfig, loadInferenceHookConfig } from './config/loader'
 import { bootstrapProviders } from './providers/bootstrap'
 import { InstructionsLoader } from './core/instructions'
 import { loadSessionMemories } from './core/memory/memory-loader'
@@ -152,6 +152,10 @@ export async function runApp(options: RunOptions): Promise<void> {
   engine.setArtifactServer(artifactServer)
   engine.setAgentViewManager(agentViewManager)
   engine.setSkillsLoader(skillsLoader)
+
+  // Wire inference hooks (DLP) configuration
+  const inferenceHookConfig = loadInferenceHookConfig()
+  engine.setInferenceHookConfig(inferenceHookConfig)
 
   // Sync engine permission with config (fix: UI shows "auto" but engine defaulted to bypass-legacy)
   if (config.permission) {

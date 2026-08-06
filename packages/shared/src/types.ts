@@ -149,6 +149,7 @@ export type HookEvent =
   | 'ConfigChange'
   | 'SubagentStart'
   | 'SubagentStop'
+  | 'PreInference'
 
 export type HookType = 'command' | 'http' | 'code' | 'mcp_tool'
 
@@ -179,6 +180,18 @@ export interface HookContext {
   userPrompt?: string
   configKey?: string
   configValue?: unknown
+  /** PreInference: full conversation messages for DLP inspection. */
+  messages?: Array<{ role: string; content: string }>
+  /** PreInference: recent tool calls and their results. */
+  toolCalls?: Array<{
+    name: string
+    input: Record<string, unknown>
+    resultPreview: string
+  }>
+  /** PreInference: current provider ID. */
+  provider?: string
+  /** PreInference: current model ID. */
+  model?: string
 }
 
 export interface HookResult {
@@ -208,4 +221,39 @@ export interface PermissionRule {
   toolName: string
   level: PermissionLevel
   pattern?: string
+}
+
+// ── Inference Hook (DLP) Types ──
+
+export interface InferenceHookConfig {
+  endpoint: string
+  signing_secret: string
+  timeout: number
+  on_failure: 'fail-closed' | 'fail-open'
+  organization_id: string
+  headers: Record<string, string>
+}
+
+export interface InferenceCheckRequest {
+  type: 'inference_check'
+  id: string
+  created_at: string
+  data: {
+    type: 'pre_inference'
+    session_id: string
+    organization_id?: string
+    provider: string
+    model: string
+    messages: Array<{ role: string; content: string }>
+    tool_calls: Array<{
+      name: string
+      input: Record<string, unknown>
+      result_preview: string
+    }>
+  }
+}
+
+export interface InferenceCheckResponse {
+  verdict: 'allow' | 'deny'
+  reason?: string
 }

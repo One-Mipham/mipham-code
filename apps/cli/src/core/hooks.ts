@@ -155,6 +155,29 @@ export class HookEngine {
     return this.runHooks('PostToolUseFailure', toolName, ctx)
   }
 
+  /** PreInference: fires before every model API call for DLP inspection. */
+  async executePreInference(
+    messages: Array<{ role: string; content: string }>,
+    toolCalls: Array<{
+      name: string
+      input: Record<string, unknown>
+      resultPreview: string
+    }>,
+    sessionId: string,
+    provider: string,
+    model: string,
+  ): Promise<HookResult> {
+    const ctx: HookContext = {
+      event: 'PreInference',
+      sessionId,
+      messages,
+      toolCalls,
+      provider,
+      model,
+    }
+    return this.runHooks('PreInference', undefined, ctx)
+  }
+
   // ── Core execution ──
 
   private async runHooks(

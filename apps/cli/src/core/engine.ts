@@ -1,4 +1,4 @@
-import type { StreamChunk, ToolDefinition, ToolResult } from '../shared/index.ts'
+import type { StreamChunk, ToolDefinition, ToolResult, InferenceHookConfig } from '../shared/index.ts'
 import { ProviderRegistry } from '../providers/registry'
 import { ContextManager } from './context'
 import { PermissionSystem } from './permission'
@@ -11,6 +11,11 @@ import type { AgentViewManager } from '../agent-view/agent-view-manager'
 import type { SkillsLoader } from '../skills/loader'
 import { getBackgroundAgentRegistry } from '../agent/background-registry'
 import { RulesLoader } from './rules-loader'
+import {
+  buildRequest,
+  sendInferenceCheck,
+  isInferenceHookEnabled,
+} from './inference-hook'
 
 export class QueryEngine {
   private hookEngine?: HookEngine
@@ -76,11 +81,18 @@ export class QueryEngine {
   private rulesLoader?: RulesLoader
   /** Files touched in the current turn (for rules matching). */
   private touchedFiles: Set<string> = new Set()
+  /** Inference hook (DLP) configuration. */
+  private inferenceHookConfig?: InferenceHookConfig
 
   /** Register the rules loader. */
   setRulesLoader(loader: RulesLoader): void {
     this.rulesLoader = loader
     this.rulesLoader.load()
+  }
+
+  /** Register inference hook (DLP) configuration. */
+  setInferenceHookConfig(config: InferenceHookConfig): void {
+    this.inferenceHookConfig = config
   }
 
   /** Pending task notifications from background agents (cleared after draining). */
@@ -255,6 +267,27 @@ export class QueryEngine {
     const systemPrompt = this.context.getSystemPrompt()
     const messages = this.context.getMessages()
     const toolDefs = this.getToolDefinitions()
+
+    // ── PreInference DLP checkpoint ──
+    if (isInferenceHookEnabled(this.inferenceHookConfig)) {
+      const provider = this.registry.getActive().config.id
+      const model = this.registry.getActiveModel()
+      const request = buildRequest(
+        messages,
+        'session-1',
+        provider,
+        model,
+        this.inferenceHookConfig!.organization_id,
+      )
+      const verdict = await sendInferenceCheck(this.inferenceHookConfig!, request)
+      if (!verdict.allowed) {
+        yield {
+          type: 'error',
+          error: verdict.reason || 'Request blocked by DLP policy.',
+        }
+        return
+      }
+    }
 
     let assistantContent = ''
     let reasoningContent = ''
@@ -480,6 +513,27 @@ export class QueryEngine {
     for (let turn = 0; turn < MAX_TURNS; turn++) {
       const systemPrompt = this.context.getSystemPrompt()
       const messages = this.context.getMessages()
+
+      // ── PreInference DLP checkpoint (every tool-calling turn) ──
+      if (isInferenceHookEnabled(this.inferenceHookConfig)) {
+        const provider = this.registry.getActive().config.id
+        const model = this.registry.getActiveModel()
+        const request = buildRequest(
+          messages,
+          'session-1',
+          provider,
+          model,
+          this.inferenceHookConfig!.organization_id,
+        )
+        const verdict = await sendInferenceCheck(this.inferenceHookConfig!, request)
+        if (!verdict.allowed) {
+          yield {
+            type: 'error',
+            error: verdict.reason || 'Request blocked by DLP policy.',
+          }
+          return
+        }
+      }
 
       let assistantContent = ''
       let reasoningContent = ''

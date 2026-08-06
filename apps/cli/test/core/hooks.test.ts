@@ -333,4 +333,62 @@ describe('HookEngine', () => {
     const result = await engine.executeSessionStart('s1')
     expect(result).toEqual({ allowed: true })
   })
+
+  // ═══════════════════════════════════════════
+  // PreInference
+  // ═══════════════════════════════════════════
+
+  it('should execute PreInference with messages and tool calls', async () => {
+    const engine = new HookEngine()
+    const handler = vi.fn().mockResolvedValue({ allowed: true })
+    engine.register(makeHook('PreInference', handler))
+
+    const messages = [{ role: 'user', content: 'test' }]
+    const toolCalls = [{ name: 'Read', input: { file_path: '/f' }, resultPreview: 'content' }]
+    const result = await engine.executePreInference(
+      messages,
+      toolCalls,
+      's1',
+      'anthropic',
+      'claude-sonnet-5',
+    )
+
+    expect(result.allowed).toBe(true)
+    expect(handler).toHaveBeenCalledTimes(1)
+    const ctx = handler.mock.calls[0]![0]
+    expect(ctx.event).toBe('PreInference')
+    expect(ctx.messages).toEqual(messages)
+    expect(ctx.toolCalls).toEqual(toolCalls)
+    expect(ctx.provider).toBe('anthropic')
+    expect(ctx.model).toBe('claude-sonnet-5')
+  })
+
+  it('should block on PreInference deny', async () => {
+    const engine = new HookEngine()
+    engine.register(makeHook('PreInference', makeDenyHandler('PII detected')))
+
+    const result = await engine.executePreInference(
+      [{ role: 'user', content: 'test' }],
+      [],
+      's1',
+      'a',
+      'm',
+    )
+
+    expect(result.allowed).toBe(false)
+    expect(result.reason).toBe('PII detected')
+  })
+
+  it('should return allowed:true when no PreInference hooks registered', async () => {
+    const engine = new HookEngine()
+    const result = await engine.executePreInference(
+      [{ role: 'user', content: 'test' }],
+      [],
+      's1',
+      'a',
+      'm',
+    )
+
+    expect(result.allowed).toBe(true)
+  })
 })

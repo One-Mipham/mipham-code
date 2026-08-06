@@ -10,8 +10,8 @@ import {
 import { join, dirname } from 'node:path'
 import { homedir } from 'node:os'
 import { parse as parseYaml } from 'yaml'
-import type { MiphamConfig, ProviderConfig, McpServerConfig } from '../shared/index.ts'
-import { DEFAULT_CONFIG } from './defaults'
+import type { MiphamConfig, ProviderConfig, McpServerConfig, InferenceHookConfig } from '../shared/index.ts'
+import { DEFAULT_CONFIG, DEFAULT_INFERENCE_HOOK_CONFIG } from './defaults'
 
 const MIPHAM_HOME = join(homedir(), '.mipham')
 const BACKUP_PREFIX = 'config.backup-'
@@ -255,4 +255,41 @@ export function loadConfig(cwd: string = process.cwd()): MiphamConfig {
   }
 
   return config
+}
+
+/**
+ * Load inference hooks (DLP) configuration from the same config sources
+ * as the main config. Merges project-level over user-level.
+ *
+ * Returns default (disabled) config if no inference_hooks section is present.
+ */
+export function loadInferenceHookConfig(cwd: string = process.cwd()): InferenceHookConfig {
+  const configPath = join(cwd, '.mipham', 'config.yml')
+  const userConfigPath = join(MIPHAM_HOME, 'config.yml')
+
+  let merged = { ...DEFAULT_INFERENCE_HOOK_CONFIG }
+
+  const paths = [userConfigPath, configPath] // project wins (loaded last)
+  for (const path of paths) {
+    try {
+      if (!existsSync(path)) continue
+      const raw = readFileSync(path, 'utf-8')
+      const parsed = parseYaml(raw) as Record<string, unknown>
+      const section = parsed.inference_hooks as Partial<InferenceHookConfig> | undefined
+      if (section) {
+        merged = {
+          endpoint: section.endpoint ?? merged.endpoint,
+          signing_secret: section.signing_secret ?? merged.signing_secret,
+          timeout: section.timeout ?? merged.timeout,
+          on_failure: section.on_failure ?? merged.on_failure,
+          organization_id: section.organization_id ?? merged.organization_id,
+          headers: { ...merged.headers, ...(section.headers || {}) },
+        }
+      }
+    } catch {
+      // Silently skip malformed configs — main loadConfig already warns
+    }
+  }
+
+  return merged
 }

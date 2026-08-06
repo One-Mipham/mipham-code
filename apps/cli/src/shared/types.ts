@@ -196,6 +196,7 @@ export type HookEvent =
   | 'ConfigChange'
   | 'SubagentStart'
   | 'SubagentStop'
+  | 'PreInference'
 
 export type HookType = 'command' | 'http' | 'code' | 'mcp_tool'
 
@@ -226,6 +227,18 @@ export interface HookContext {
   userPrompt?: string
   configKey?: string
   configValue?: unknown
+  /** PreInference: full conversation messages for DLP inspection. */
+  messages?: Array<{ role: string; content: string }>
+  /** PreInference: recent tool calls and their results. */
+  toolCalls?: Array<{
+    name: string
+    input: Record<string, unknown>
+    resultPreview: string
+  }>
+  /** PreInference: current provider ID. */
+  provider?: string
+  /** PreInference: current model ID. */
+  model?: string
 }
 
 export interface HookResult {
@@ -277,4 +290,48 @@ export interface PermissionRule {
   toolName: string
   level: PermissionLevel
   pattern?: string
+}
+
+// ── Inference Hook (DLP) Types ──
+
+/** Configuration for the PreInference DLP hook, loaded from config.yml. */
+export interface InferenceHookConfig {
+  /** DLP server endpoint (HTTPS). Empty = feature disabled. */
+  endpoint: string
+  /** HMAC signing secret (format: mis_<random>). */
+  signing_secret: string
+  /** Request timeout in milliseconds. Default 5000. */
+  timeout: number
+  /** Failure posture: 'fail-closed' blocks on error, 'fail-open' allows. */
+  on_failure: 'fail-closed' | 'fail-open'
+  /** Organization identifier (optional, sent in payload). */
+  organization_id: string
+  /** Additional custom headers to send with each request. */
+  headers: Record<string, string>
+}
+
+/** Outgoing request to the DLP server. */
+export interface InferenceCheckRequest {
+  type: 'inference_check'
+  id: string
+  created_at: string
+  data: {
+    type: 'pre_inference'
+    session_id: string
+    organization_id?: string
+    provider: string
+    model: string
+    messages: Array<{ role: string; content: string }>
+    tool_calls: Array<{
+      name: string
+      input: Record<string, unknown>
+      result_preview: string
+    }>
+  }
+}
+
+/** Response from the DLP server. */
+export interface InferenceCheckResponse {
+  verdict: 'allow' | 'deny'
+  reason?: string
 }
