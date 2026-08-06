@@ -112,12 +112,10 @@ export async function runWorkflow(
     }
     cacheMisses++
 
-    const result = await workflowAgent(
-      prompt,
-      registry,
-      toolRegistry,
-      { ...(opts || {}), permissionSystem: permission } as Record<string, unknown>,
-    )
+    const result = await workflowAgent(prompt, registry, toolRegistry, {
+      ...(opts || {}),
+      permissionSystem: permission,
+    } as Record<string, unknown>)
     appendJournal(runId, {
       type: 'agent',
       prompt,

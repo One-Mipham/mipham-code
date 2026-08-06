@@ -60,10 +60,10 @@ export async function workflowAgent(
     worktreeBranch = `worktree/${slug}`
     worktreePath = `.claude/worktrees/${slug}`
 
-    const proc = Bun.spawn(
-      ['git', 'worktree', 'add', '-b', worktreeBranch, worktreePath, 'HEAD'],
-      { stdout: 'pipe', stderr: 'pipe' },
-    )
+    const proc = Bun.spawn(['git', 'worktree', 'add', '-b', worktreeBranch, worktreePath, 'HEAD'], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
     const exitCode = await proc.exited
     if (exitCode !== 0) {
       const stderr = await new Response(proc.stderr).text()
@@ -166,13 +166,11 @@ export async function workflowAgent(
         })
         const status = await new Response(statusProc.stdout).text()
         if (status.trim()) {
-          const commitMsg = opts.label
-            ? `workflow: ${opts.label}`
-            : 'workflow: agent changes'
-          const commitProc = Bun.spawn(
-            ['git', '-C', worktreePath, 'commit', '-m', commitMsg],
-            { stdout: 'pipe', stderr: 'pipe' },
-          )
+          const commitMsg = opts.label ? `workflow: ${opts.label}` : 'workflow: agent changes'
+          const commitProc = Bun.spawn(['git', '-C', worktreePath, 'commit', '-m', commitMsg], {
+            stdout: 'pipe',
+            stderr: 'pipe',
+          })
           await commitProc.exited
         }
       } catch {
@@ -181,16 +179,16 @@ export async function workflowAgent(
 
       // Remove worktree and branch
       try {
-        const rmProc = Bun.spawn(
-          ['git', 'worktree', 'remove', '--force', worktreePath],
-          { stdout: 'pipe', stderr: 'pipe' },
-        )
+        const rmProc = Bun.spawn(['git', 'worktree', 'remove', '--force', worktreePath], {
+          stdout: 'pipe',
+          stderr: 'pipe',
+        })
         await rmProc.exited
         if (worktreeBranch) {
-          const brProc = Bun.spawn(
-            ['git', 'branch', '-D', worktreeBranch],
-            { stdout: 'pipe', stderr: 'pipe' },
-          )
+          const brProc = Bun.spawn(['git', 'branch', '-D', worktreeBranch], {
+            stdout: 'pipe',
+            stderr: 'pipe',
+          })
           await brProc.exited
         }
       } catch {

@@ -175,7 +175,10 @@ describe('SubAgent', () => {
     }
 
     const provider = createMockProvider([
-      { type: 'tool_use', toolUse: { type: 'tool_use', id: '1', name: 'Bash', input: { command: 'pwd' } } },
+      {
+        type: 'tool_use',
+        toolUse: { type: 'tool_use', id: '1', name: 'Bash', input: { command: 'pwd' } },
+      },
       { type: 'text', content: '' },
       { type: 'stop' },
       { type: 'text', content: 'done' },

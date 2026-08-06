@@ -129,7 +129,15 @@ export interface TaskNotification {
 
 // ── Stream Types ──
 export interface StreamChunk {
-  type: 'text' | 'tool_use' | 'tool_result' | 'thinking' | 'stop' | 'error' | 'task_notification' | 'usage'
+  type:
+    | 'text'
+    | 'tool_use'
+    | 'tool_result'
+    | 'thinking'
+    | 'stop'
+    | 'error'
+    | 'task_notification'
+    | 'usage'
   content?: string
   toolUse?: ToolUseContent
   tool_use_id?: string

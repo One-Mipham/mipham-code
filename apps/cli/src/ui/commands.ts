@@ -700,7 +700,7 @@ const usageCmd: CommandHandler = (ctx) => {
   // Build per-tool breakdown
   const toolLines: string[] = []
   const sortedTools = Object.entries(summary.tools).sort(
-    (a, b) => (b[1].inputTokens + b[1].outputTokens) - (a[1].inputTokens + a[1].outputTokens)
+    (a, b) => b[1].inputTokens + b[1].outputTokens - (a[1].inputTokens + a[1].outputTokens),
   )
   for (const [name, usage] of sortedTools) {
     const total = usage.inputTokens + usage.outputTokens
@@ -711,13 +711,12 @@ const usageCmd: CommandHandler = (ctx) => {
   }
 
   const apiTotal = summary.apiInputTokens + summary.apiOutputTokens
-  const apiLine = summary.apiInputTokens > 0 || summary.apiOutputTokens > 0
-    ? `API tokens:      ${summary.apiInputTokens.toLocaleString().padStart(8)} in / ${summary.apiOutputTokens.toLocaleString().padStart(6)} out (${apiTotal.toLocaleString()} total)`
-    : 'API tokens:      (no API usage data yet)'
+  const apiLine =
+    summary.apiInputTokens > 0 || summary.apiOutputTokens > 0
+      ? `API tokens:      ${summary.apiInputTokens.toLocaleString().padStart(8)} in / ${summary.apiOutputTokens.toLocaleString().padStart(6)} out (${apiTotal.toLocaleString()} total)`
+      : 'API tokens:      (no API usage data yet)'
 
-  const toolSection = toolLines.length > 0
-    ? `\n── Per-Tool ──\n${toolLines.join('\n')}`
-    : ''
+  const toolSection = toolLines.length > 0 ? `\n── Per-Tool ──\n${toolLines.join('\n')}` : ''
 
   return {
     content: stripIndent`
@@ -4119,8 +4118,14 @@ const forkCmd: CommandHandler = async (ctx, args) => {
     'general',
     async (_signal) => {
       const { SubAgent } = await import('../agent/sub-agent')
-      const sa = new SubAgent(ctx.engine.getRegistry(), ctx.engine.getTools(), ctx.engine.getPermission())
-      const result = await sa.execute(prompt, 'fork: ' + prompt.slice(0, 60), { worktreePath: wtPath })
+      const sa = new SubAgent(
+        ctx.engine.getRegistry(),
+        ctx.engine.getTools(),
+        ctx.engine.getPermission(),
+      )
+      const result = await sa.execute(prompt, 'fork: ' + prompt.slice(0, 60), {
+        worktreePath: wtPath,
+      })
       try {
         const { execSync: ex } = await import('node:child_process')
         ex(`git -C ${wtPath} add -A`, { stdio: 'ignore', timeout: 10_000 })

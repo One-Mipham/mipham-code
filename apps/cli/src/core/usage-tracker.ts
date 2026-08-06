@@ -34,11 +34,7 @@ export class UsageTracker {
   private _toolUsage = new Map<string, ToolUsage>()
 
   /** Record API-reported token usage for a turn, attributed to the given tool. */
-  recordApiUsage(
-    inputTokens: number,
-    outputTokens: number,
-    toolName?: string,
-  ): void {
+  recordApiUsage(inputTokens: number, outputTokens: number, toolName?: string): void {
     this._apiInputTokens += inputTokens
     this._apiOutputTokens += outputTokens
     this._recordTool(toolName || 'chat', inputTokens, outputTokens)
