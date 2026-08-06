@@ -174,7 +174,7 @@ export function App({
         const existing = prev[task.id]
         next[task.id] = {
           id: task.id,
-          name: existing?.name || (task.agentType.charAt(0).toUpperCase() + task.agentType.slice(1)),
+          name: existing?.name || task.agentType.charAt(0).toUpperCase() + task.agentType.slice(1),
           description: existing?.description || task.description,
           startTime: existing?.startTime || task.startedAt.getTime(),
           tokensUsed: existing?.tokensUsed || 0,
@@ -442,8 +442,7 @@ export function App({
           }
 
           if (chunk.type === 'usage' && agentProgress) {
-            const totalTokens =
-              (chunk.inputTokens || 0) + (chunk.outputTokens || 0)
+            const totalTokens = (chunk.inputTokens || 0) + (chunk.outputTokens || 0)
             if (totalTokens > 0) {
               setAgentProgress((prev) =>
                 prev ? { ...prev, tokensUsed: (prev.tokensUsed || 0) + totalTokens } : null,
@@ -606,11 +605,7 @@ export function App({
       )}
 
       {/* Agent status footer — shows running background agents */}
-      <AgentFooter
-        agents={Object.values(runningAgents)}
-        gitBranch={gitBranch}
-        tick={agentTick}
-      />
+      <AgentFooter agents={Object.values(runningAgents)} gitBranch={gitBranch} tick={agentTick} />
 
       {/* Status line */}
       <Box marginTop={1} flexDirection="column">

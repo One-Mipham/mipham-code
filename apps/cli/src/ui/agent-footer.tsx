@@ -58,9 +58,7 @@ export function AgentFooter({ agents, gitBranch, tick: _tick }: AgentFooterProps
 
         // Truncate description to keep lines readable
         const desc =
-          agent.description.length > 80
-            ? agent.description.slice(0, 80) + '...'
-            : agent.description
+          agent.description.length > 80 ? agent.description.slice(0, 80) + '...' : agent.description
 
         return (
           <Box key={agent.id}>
@@ -71,7 +69,7 @@ export function AgentFooter({ agents, gitBranch, tick: _tick }: AgentFooterProps
             <Text bold color={isRunning ? 'cyan' : undefined} dimColor={!isRunning}>
               {agent.name}
             </Text>
-            <Text dimColor>  {desc}</Text>
+            <Text dimColor> {desc}</Text>
             {/* Spacer pushes stats to the right — Ink handles this naturally */}
             <Text dimColor>
               {'  '}

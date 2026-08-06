@@ -62,7 +62,7 @@ const MessageRow = React.memo(
               {msg.toolMeta.input ? `(${msg.toolMeta.input.slice(0, 120)})` : ''}
             </Text>
             {msg.toolMeta.output ? (
-              <Text dimColor>  ⎿  {msg.toolMeta.output.slice(0, 300)}</Text>
+              <Text dimColor> ⎿ {msg.toolMeta.output.slice(0, 300)}</Text>
             ) : msg.content && !msg.toolMeta.collapsed ? (
               <Text dimColor>{msg.content}</Text>
             ) : null}
