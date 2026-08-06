@@ -3067,10 +3067,11 @@ const promptAuditCmd: CommandHandler = async () => {
   }> = [
     {
       id: 'over-explaining',
-      pattern: /you are (a|an) (helpful |friendly |knowledgeable )?(AI |language model |assistant)/i,
+      pattern:
+        /you are (a|an) (helpful |friendly |knowledgeable )?(AI |language model |assistant)/i,
       severity: 'low',
       message: 'Self-identification preamble ("You are a...")',
-      suggestion: 'Modern models don\'t need role preamble. Remove or shorten to 1 line.',
+      suggestion: "Modern models don't need role preamble. Remove or shorten to 1 line.",
     },
     {
       id: 'step-by-step',
@@ -3081,14 +3082,16 @@ const promptAuditCmd: CommandHandler = async () => {
     },
     {
       id: 'do-not-list',
-      pattern: /(do not|never|you must not|don't|under no circumstances).*\n.*(do not|never|you must not|don't)/i,
+      pattern:
+        /(do not|never|you must not|don't|under no circumstances).*\n.*(do not|never|you must not|don't)/i,
       severity: 'medium',
       message: 'Multiple "do not" constraints',
       suggestion: 'Modern models need fewer prohibitions. Consolidate to 1-2 key constraints.',
     },
     {
       id: 'token-waste',
-      pattern: /(remember|keep in mind|it is important to note|please note that|i want to emphasize)/i,
+      pattern:
+        /(remember|keep in mind|it is important to note|please note that|i want to emphasize)/i,
       severity: 'low',
       message: 'Filler emphasis phrases ("remember", "please note")',
       suggestion: 'Remove filler. State the instruction directly.',
@@ -3123,7 +3126,8 @@ const promptAuditCmd: CommandHandler = async () => {
     },
     {
       id: 'verbose-constraint',
-      pattern: /you (must|should|shall) (always |only |never )?(ensure|guarantee|verify|validate|confirm|cross-check|double-check)/i,
+      pattern:
+        /you (must|should|shall) (always |only |never )?(ensure|guarantee|verify|validate|confirm|cross-check|double-check)/i,
       severity: 'medium',
       message: 'Overly verbose constraint language',
       suggestion: 'Replace "you must ensure that" with imperative: "Ensure".',
@@ -3138,11 +3142,7 @@ const promptAuditCmd: CommandHandler = async () => {
   ]
   const skillFiles: string[] = []
   // Also check standard project files
-  const projectFiles = [
-    join(cwd, 'CLAUDE.md'),
-    join(cwd, 'MIPHAM.md'),
-    join(cwd, 'PRODUCT.md'),
-  ]
+  const projectFiles = [join(cwd, 'CLAUDE.md'), join(cwd, 'MIPHAM.md'), join(cwd, 'PRODUCT.md')]
 
   // Collect skill/rules files
   for (const dir of scanDirs) {
@@ -3153,14 +3153,19 @@ const promptAuditCmd: CommandHandler = async () => {
         for (const e of entries) {
           const fp = join(d, e)
           const st = statSync(fp)
-          if (st.isDirectory()) { walk(fp); continue }
+          if (st.isDirectory()) {
+            walk(fp)
+            continue
+          }
           if (['.md', '.SKILL.md', '.mipham-skill.md', '.txt'].some((ext) => fp.endsWith(ext))) {
             skillFiles.push(fp)
           }
         }
       }
       walk(dir)
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
   }
 
   const allFiles = [...new Set([...projectFiles.filter((f) => existsSync(f)), ...skillFiles])]
@@ -3177,7 +3182,14 @@ const promptAuditCmd: CommandHandler = async () => {
   }
 
   // Scan each file
-  const results: Array<{ file: string; line: number; ruleId: string; severity: string; message: string; suggestion: string }> = []
+  const results: Array<{
+    file: string
+    line: number
+    ruleId: string
+    severity: string
+    message: string
+    suggestion: string
+  }> = []
 
   for (const fp of allFiles) {
     try {
@@ -3217,7 +3229,9 @@ const promptAuditCmd: CommandHandler = async () => {
           }
         }
       }
-    } catch { /* skip unreadable files */ }
+    } catch {
+      /* skip unreadable files */
+    }
   }
 
   // Format output
