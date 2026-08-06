@@ -12,7 +12,7 @@ Mipham Code v0.13.0 已具备 Workflow 核心引擎（`runtime.ts` + `parallel()
 | Step | 原语 | 定位 | 解决的问题 |
 |------|------|------|-----------|
 | **09** | `verify()` / `judge()` | 质量闸门 | 没有验证器，graph 只能加速不能提升置信度 |
-| **11** | `loopUntilDry()` | 收敛循环 | 未知规模任务无法安全自动化；seen-vs-confirmed 陷阱 |
+| **11** | `loopUntilConvergence()` | 收敛循环 | 未知规模任务无法安全自动化；seen-vs-confirmed 陷阱 |
 | **14** | Self-Routing | 自动编排 | 7 家 provider 的模型都不会写 workflow 脚本 |
 
 三个 Step 基于完全相同的已有积木（`parallel()` + `agent()` + `schema`）构建，零新依赖。
@@ -122,7 +122,7 @@ interface JudgeResult {
 
 ---
 
-## Step 11: Convergence Loop — `loopUntilDry()`
+## Step 11: Convergence Loop — `loopUntilConvergence()`
 
 ### 动机
 
@@ -138,7 +138,7 @@ interface JudgeResult {
 **文件**: `src/workflow/primitives/loop.ts`（新建）
 
 ```typescript
-interface LoopUntilDryOpts<T> {
+interface LoopUntilConvergenceOpts<T> {
   // 发现者：并行 fan-out，每个返回 { items: T[] }
   finders: Array<() => Promise<{ items: T[] }>>
 
@@ -156,7 +156,7 @@ interface LoopUntilDryOpts<T> {
   schema?: object
 }
 
-interface LoopUntilDryResult<T> {
+interface LoopUntilConvergenceResult<T> {
   confirmed: T[]         // 通过验证的发现
   totalSeen: number      // 见过的唯一发现总数（含被否决的）
   rounds: number         // 实际运行轮数
@@ -166,7 +166,7 @@ interface LoopUntilDryResult<T> {
 
 **核心算法**：
 ```
-loopUntilDry(opts):
+loopUntilConvergence(opts):
   seen ← Set()           // ⚠️ seen-set, NOT confirmed-set
   confirmed ← []
   dry ← 0
@@ -206,10 +206,10 @@ loopUntilDry(opts):
 
 ### 与 Step 09 的协作
 
-`loopUntilDry()` 的 `verify` 参数直接消费 `verify()` 的返回值：
+`loopUntilConvergence()` 的 `verify` 参数直接消费 `verify()` 的返回值：
 
 ```javascript
-const result = await loopUntilDry({
+const result = await loopUntilConvergence({
   finders: SCANNERS.map(s => () => agent(s.prompt, { schema: VULN })),
   keyFn: v => `${v.file}:${v.line}:${v.type}`,
   verify: async v => verify(v, {
@@ -307,7 +307,7 @@ Prefer workflows for: audits, research, migrations, multi-file refactors,
 code reviews across dimensions, security scans, bug hunts.
 
 Available primitives: agent(), parallel(), pipeline(), verify(),
-judge(), loopUntilDry(), phase(), log(), args, budget.
+judge(), loopUntilConvergence(), phase(), log(), args, budget.
 
 When a workflow completes successfully, offer to save it:
 "Workflow complete. Save? /workflow save <name>"
@@ -350,7 +350,7 @@ When a workflow completes successfully, offer to save it:
 | 文件 | 行数（估） | 说明 |
 |------|-----------|------|
 | `src/workflow/primitives/verify.ts` | ~200 | verify() + judge() 实现 |
-| `src/workflow/primitives/loop.ts` | ~180 | loopUntilDry() 实现 |
+| `src/workflow/primitives/loop.ts` | ~180 | loopUntilConvergence() 实现 |
 | `skills/workflows/audit.js` | ~60 | Diamond + verify 模板 |
 | `skills/workflows/research.js` | ~60 | Diamond + verify 模板 |
 | `skills/workflows/migrate.js` | ~60 | Pipeline + verify 模板 |
@@ -358,13 +358,13 @@ When a workflow completes successfully, offer to save it:
 | `skills/workflows/hunt.js` | ~60 | Loop-until-dry 模板 |
 | `skills/workflows/judge.js` | ~50 | Judge panel 模板 |
 | `test/workflow/verify.test.ts` | ~150 | verify() + judge() 测试 |
-| `test/workflow/loop.test.ts` | ~120 | loopUntilDry() 测试 |
+| `test/workflow/loop.test.ts` | ~120 | loopUntilConvergence() 测试 |
 
 ### 修改文件
 
 | 文件 | 变更 | 说明 |
 |------|------|------|
-| `src/workflow/runtime.ts` | +~30 行 | 注入 verify/judge/loopUntilDry/workflow 到沙箱 |
+| `src/workflow/runtime.ts` | +~30 行 | 注入 verify/judge/loopUntilConvergence/workflow 到沙箱 |
 | `src/tools/agent/workflow.ts` | +~500 行 | 工具描述 50→800 词 + 增加 args/scriptPath/name 参数 |
 | `src/ui/commands.ts` | +~100 行 | `/workflow <task>`, `/workflow save`, `/workflow run` |
 | `src/core/instructions.ts` | +~20 行 | Workflow auto-generation system instruction |
@@ -400,7 +400,7 @@ When a workflow completes successfully, offer to save it:
 
 ### 歧义检查
 - `verify()` 的 threshold 默认值按模式区分（adversarial/consensus=2, perspective=1）—— 已明确
-- `loopUntilDry()` 的 seen-set 语义通过算法伪代码固化 —— 无歧义
+- `loopUntilConvergence()` 的 seen-set 语义通过算法伪代码固化 —— 无歧义
 - 工具描述扩展不改变 Workflow 工具的 API 兼容性 —— 明确
 
 ---
@@ -414,7 +414,7 @@ Phase 1: Step 09 (verify + judge)
   → runtime.ts 注入
   → 验证：15 tests green
 
-Phase 2: Step 11 (loopUntilDry)
+Phase 2: Step 11 (loopUntilConvergence)
   → src/workflow/primitives/loop.ts
   → test/workflow/loop.test.ts
   → runtime.ts 注入
