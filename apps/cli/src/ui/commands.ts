@@ -801,7 +801,7 @@ const browseSkillsCmd: CommandHandler = async () => {
   return { content: lines.join('\n') }
 }
 
-const installSkillCmd: CommandHandler = async (_ctx, args) => {
+const installSkillCmd: CommandHandler = async (ctx, args) => {
   const { installSkill, installSkillFromUrl } = await import('../skills/registry')
 
   const target = args[0]
@@ -809,12 +809,13 @@ const installSkillCmd: CommandHandler = async (_ctx, args) => {
     return { content: 'Usage: /install-skill <skill-name> or /install-skill <url>' }
   }
 
+  const marketplaceConfig = ctx.config.marketplace
   let result: { success: boolean; name: string; message: string }
 
   if (target.startsWith('http://') || target.startsWith('https://')) {
-    result = installSkillFromUrl(target)
+    result = installSkillFromUrl(target, marketplaceConfig)
   } else {
-    result = installSkill(target)
+    result = installSkill(target, marketplaceConfig)
   }
 
   return {

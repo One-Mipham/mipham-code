@@ -164,6 +164,12 @@ export interface MiphamConfig {
   permissionRestrictions?: PermissionRestrictions
   providers: ProviderConfig[]
   skills?: { paths: string[]; mcpServers: McpServerConfig[] }
+  marketplace?: {
+    /** If set, only allow installs from matching repos (e.g. ["One-Mipham/*"]) */
+    strictKnownMarketplaces?: string[]
+    /** Block installs from matching repos (e.g. ["malicious-org/*"]) */
+    blockedMarketplaces?: string[]
+  }
 }
 
 export interface McpServerConfig {

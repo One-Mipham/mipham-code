@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { URL } from 'node:url'
+import type { MiphamConfig } from '../shared/types.js'
 
 const SKILLS_DIR = join(homedir(), '.mipham', 'skills')
 
@@ -142,18 +143,72 @@ export function searchSkills(query: string): SkillEntry[] {
 }
 
 /**
+ * Match a marketplace pattern against an owner/repo.
+ *
+ * - "owner/*"  → matches any repo under that owner
+ * - "owner/repo" → exact match
+ */
+function matchOwnerPattern(pattern: string, owner: string, repo: string): boolean {
+  if (pattern.endsWith('/*')) {
+    return pattern.slice(0, -2) === owner
+  }
+  return pattern === repo
+}
+
+/**
+ * Check whether a GitHub URL (or any URL) is allowed by the marketplace config.
+ *
+ * Rules (in order):
+ * 1. No config → allow everything
+ * 2. blockedMarketplaces matched → deny (deny wins over allow)
+ * 3. strictKnownMarketplaces set → deny unless matched
+ * 4. Non-GitHub URL with no strict list → allow
+ * 5. Non-GitHub URL with strict list → deny
+ */
+function isMarketplaceAllowed(url: string, config?: MiphamConfig['marketplace']): boolean {
+  if (!config) return true
+  const { strictKnownMarketplaces, blockedMarketplaces } = config
+  const match = url.match(/github\.com\/([^/]+\/[^/]+)/)
+  if (!match) return !strictKnownMarketplaces?.length // non-GitHub: allow only if no strict list
+  const repo = match[1]! // "owner/repo"
+  const [owner] = repo.split('/')
+
+  // Check blocked first (deny wins)
+  if (blockedMarketplaces?.some((pattern) => matchOwnerPattern(pattern, owner!, repo))) return false
+  // Check strict allowlist
+  if (
+    strictKnownMarketplaces?.length &&
+    !strictKnownMarketplaces.some((pattern) => matchOwnerPattern(pattern, owner!, repo))
+  )
+    return false
+  return true
+}
+
+/**
  * Install a skill from a GitHub repository.
  *
  * Clones the repo to a temp directory, copies the skill file(s),
  * and cleans up.
  */
-export function installSkill(skillName: string): InstallResult {
+export function installSkill(
+  skillName: string,
+  marketplaceConfig?: MiphamConfig['marketplace'],
+): InstallResult {
   const entry = COMMUNITY_SKILLS.find((s) => s.name === skillName)
   if (!entry) {
     return {
       success: false,
       name: skillName,
       message: `Skill "${skillName}" not found in the registry. Use /browse-skills to see available skills.`,
+    }
+  }
+
+  // Check marketplace restrictions
+  if (!isMarketplaceAllowed(entry.url, marketplaceConfig)) {
+    return {
+      success: false,
+      name: skillName,
+      message: `Skill "${skillName}" is from a blocked or unapproved marketplace: ${entry.url}`,
     }
   }
 
@@ -214,7 +269,19 @@ export function installSkill(skillName: string): InstallResult {
 /**
  * Install a skill from a direct URL (GitHub raw, gist, or any HTTP URL).
  */
-export function installSkillFromUrl(url: string): InstallResult {
+export function installSkillFromUrl(
+  url: string,
+  marketplaceConfig?: MiphamConfig['marketplace'],
+): InstallResult {
+  // Check marketplace restrictions
+  if (!isMarketplaceAllowed(url, marketplaceConfig)) {
+    return {
+      success: false,
+      name: url,
+      message: `URL is from a blocked or unapproved marketplace: ${url}`,
+    }
+  }
+
   // Derive skill name from URL
   const name =
     url
