@@ -66,7 +66,6 @@ const commitCmd: CommandHandler = async () => {
   }
 }
 
-
 const pushCmd: CommandHandler = async () => {
   try {
     const branch = await git(['branch', '--show-current'], 3000)
@@ -92,17 +91,18 @@ const pushCmd: CommandHandler = async () => {
   }
 }
 
-
 const prCmd: CommandHandler = async () => {
   try {
     const branch = await git(['branch', '--show-current'], 3000)
     const mainBranchRaw = await git(['remote', 'show', 'origin'], 3000)
-    const mainBranch = (mainBranchRaw.match(/HEAD branch:\s*(\S+)/)?.[1]) || 'main'
+    const mainBranch = mainBranchRaw.match(/HEAD branch:\s*(\S+)/)?.[1] || 'main'
 
-    const diff = (await git(['diff', '--stat', `origin/${mainBranch}...HEAD`], 5000)) ||
+    const diff =
+      (await git(['diff', '--stat', `origin/${mainBranch}...HEAD`], 5000)) ||
       (await git(['diff', '--stat', `${mainBranch}...HEAD`], 5000))
 
-    const commits = (await git(['log', '--oneline', `origin/${mainBranch}..HEAD`], 5000)) ||
+    const commits =
+      (await git(['log', '--oneline', `origin/${mainBranch}..HEAD`], 5000)) ||
       (await git(['log', '--oneline', `${mainBranch}..HEAD`], 5000))
 
     return {
@@ -128,7 +128,6 @@ const prCmd: CommandHandler = async () => {
     return { content: '── Create Pull Request ──\n\nCould not determine PR context.' }
   }
 }
-
 
 const issueCmd: CommandHandler = async () => {
   return {

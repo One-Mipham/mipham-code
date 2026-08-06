@@ -10,7 +10,6 @@ import { stripIndent } from '../ui/strip-indent.js'
 
 export { initCmd, permissionsCmd, recommendCmd, setupCmd, addDirCmd, promptAuditCmd, securityCmd }
 
-
 const initCmd: CommandHandler = async (ctx) => {
   const { existsSync, mkdirSync, writeFileSync } = await import('node:fs')
   const { join } = await import('node:path')
@@ -95,7 +94,6 @@ Run /setup for the full wizard, or /config to view current settings.`,
   }
 }
 
-
 const permissionsCmd: CommandHandler = (ctx) => {
   const c = ctx.engine.getContext()
   const msgs = c.getMessages()
@@ -121,7 +119,6 @@ To add a directory: use /add-dir (coming soon).
 Tool execution is sandboxed to the project directory by default.`,
   }
 }
-
 
 const recommendCmd: CommandHandler = async (ctx) => {
   const { existsSync, readFileSync } = await import('node:fs')
@@ -279,7 +276,6 @@ const recommendCmd: CommandHandler = async (ctx) => {
 
   return { content: lines.join('\n') }
 }
-
 
 const setupCmd: CommandHandler = async (ctx, args) => {
   const step = args[0]
@@ -664,7 +660,6 @@ For help at any time: /help`,
   }
 }
 
-
 const addDirCmd: CommandHandler = async (_ctx, args) => {
   const dir = args[0]
   if (!dir) {
@@ -706,7 +701,6 @@ The AI can now access files in this directory.
 Permission level is controlled by /config permission <level>.`,
   }
 }
-
 
 const promptAuditCmd: CommandHandler = async () => {
   const { existsSync, readFileSync, readdirSync, statSync } = await import('node:fs')
@@ -925,7 +919,6 @@ const promptAuditCmd: CommandHandler = async () => {
   return { content: output.join('\n') }
 }
 
-
 const securityCmd: CommandHandler = async () => {
   const findings: string[] = []
   const ok: string[] = []
@@ -1016,4 +1009,3 @@ const securityCmd: CommandHandler = async () => {
 
   return { content: lines.join('\n') }
 }
-

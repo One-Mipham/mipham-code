@@ -60,7 +60,10 @@ export const enterWorktreeTool: ToolDefinition = {
     const allowedPrefix = resolve(`${cwd}/.claude/worktrees/`)
 
     // Defense-in-depth: verify resolved path is within .claude/worktrees/
-    if (!worktreePath.startsWith(allowedPrefix + '/') && worktreePath !== allowedPrefix.slice(0, -1)) {
+    if (
+      !worktreePath.startsWith(allowedPrefix + '/') &&
+      worktreePath !== allowedPrefix.slice(0, -1)
+    ) {
       return {
         success: false,
         content: '',

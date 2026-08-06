@@ -1571,7 +1571,6 @@ const verifyCmd = gitDiffBridgeCmd({
     'verify these uncommitted changes through runtime observation only. For each change: 1) Find the user-facing surface (CLI command, API endpoint, UI interaction); 2) Drive the changed code to execute; 3) Push boundaries — pass null, repeated values, wrong types, interrupt mid-flow (Ctrl-C), resize window; 4) Report verdict per change: PASS (works as expected), FAIL (does not work or breaks something), BLOCKED (cannot reach observable state), SKIP (no runtime surface, e.g. pure documentation). Do NOT run the test suite — observe real execution behavior only.',
 })
 
-
 const designCmd: CommandHandler = (_ctx, args) => {
   const topic = args.join(' ') || 'the current task'
   return {
@@ -3305,7 +3304,8 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/pr-comments': 'PR review summary',
   '/diff': 'Show git diff',
   '/workflows': 'List workflow scripts',
-  '/deep-research': 'Deep research with multi-agent parallel search, verification, and cited synthesis',
+  '/deep-research':
+    'Deep research with multi-agent parallel search, verification, and cited synthesis',
   '/loop': 'Run prompt on interval',
   '/init': 'Initialize .mipham config',
   '/setup': 'Guided project setup wizard',

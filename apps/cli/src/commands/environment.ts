@@ -10,7 +10,6 @@ import { NPM_INSTALL_COMMAND, NPM_UPDATE_COMMAND, PACKAGE_VERSION } from '../sha
 
 export { themeCmd, releaseNotesCmd, ideCmd, terminalSetupCmd }
 
-
 const themeCmd: CommandHandler = (_ctx, args) => {
   const theme = args[0]?.toLowerCase()
   const validThemes = ['dark', 'light', 'auto'] as const
@@ -54,7 +53,6 @@ Full theme customization is available in the Web UI at https://mipham.ai/code/da
 // Release Notes — version changelog
 // ═══════════════════════════════════════════════════════════════
 
-
 const releaseNotesCmd: CommandHandler = () => ({
   content: `── Release Notes ──
 
@@ -89,7 +87,6 @@ Full changelog: https://mipham.ai/code/releases`,
 // ═══════════════════════════════════════════════════════════════
 // IDE — IDE integration guide
 // ═══════════════════════════════════════════════════════════════
-
 
 const ideCmd: CommandHandler = async (_ctx) => {
   const { mkdirSync, writeFileSync, existsSync } = await import('node:fs')
@@ -179,7 +176,6 @@ const ideCmd: CommandHandler = async (_ctx) => {
 // ═══════════════════════════════════════════════════════════════
 // Terminal Setup — shell integration guide
 // ═══════════════════════════════════════════════════════════════
-
 
 const terminalSetupCmd: CommandHandler = async () => {
   const { writeFileSync, appendFileSync, existsSync, mkdirSync, readFileSync } =
@@ -272,4 +268,3 @@ const terminalSetupCmd: CommandHandler = async () => {
 // ═══════════════════════════════════════════════════════════════
 // Phase 4 — MCP Server Management
 // ═══════════════════════════════════════════════════════════════
-

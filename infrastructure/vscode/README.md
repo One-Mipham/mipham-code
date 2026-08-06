@@ -51,19 +51,19 @@ In VS Code `settings.json`:
 
 All settings are optional — Mipham Code auto-detects everything.
 
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `mipham-code.bunPath` | string | auto | Path to bun runtime |
-| `mipham-code.provider` | string | `""` | Default provider ID |
-| `mipham-code.model` | string | `""` | Default model ID |
+| Setting                | Type   | Default | Description         |
+| ---------------------- | ------ | ------- | ------------------- |
+| `mipham-code.bunPath`  | string | auto    | Path to bun runtime |
+| `mipham-code.provider` | string | `""`    | Default provider ID |
+| `mipham-code.model`    | string | `""`    | Default model ID    |
 
 ## Commands
 
-| Command | Shortcut | Description |
-|---------|----------|-------------|
-| **Mipham Code: Start** | `Cmd+Esc` / `Ctrl+Esc` | Open terminal with Mipham Code |
-| **Mipham Code: Focus Terminal** | `Cmd+Shift+M` / `Ctrl+Shift+M` | Focus existing terminal |
-| **Mipham Code: Open Config** | — | Open `.mipham/config.yml` |
+| Command                         | Shortcut                       | Description                    |
+| ------------------------------- | ------------------------------ | ------------------------------ |
+| **Mipham Code: Start**          | `Cmd+Esc` / `Ctrl+Esc`         | Open terminal with Mipham Code |
+| **Mipham Code: Focus Terminal** | `Cmd+Shift+M` / `Ctrl+Shift+M` | Focus existing terminal        |
+| **Mipham Code: Open Config**    | —                              | Open `.mipham/config.yml`      |
 
 ## Supported Providers
 
