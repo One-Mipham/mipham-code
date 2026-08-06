@@ -17,6 +17,52 @@ function displayCwd(): string {
   return cwd
 }
 
+/**
+ * Memoized single message row — skips re-render when content hasn't changed.
+ * This prevents O(n) re-renders of the entire chat history on every streaming chunk.
+ * The custom comparator returns true (skip render) when content, role, and collapse
+ * state are identical to the previous render.
+ */
+const MessageRow = React.memo(
+  function MessageRow({ msg }: { msg: ChatMessage; isLast: boolean }) {
+    return (
+      <Box
+        flexDirection="column"
+        marginTop={msg.toolMeta ? 0 : 1}
+        marginBottom={msg.toolMeta ? 0 : 1}
+      >
+        {msg.toolMeta ? (
+          <Box flexDirection="column">
+            <Text color="yellow">
+              {msg.toolMeta.collapsed ? '⏺' : '⏺ ▼'} {msg.toolMeta.name}
+            </Text>
+            <Text dimColor>{msg.content}</Text>
+          </Box>
+        ) : (
+          <>
+            <Text
+              bold
+              color={msg.role === 'user' ? 'green' : msg.role === 'system' ? 'yellow' : 'blue'}
+            >
+              {msg.role === 'user'
+                ? `▸ ${displayCwd()}`
+                : msg.role === 'assistant'
+                  ? 'Mipham Code'
+                  : '⚠ System'}
+              :
+            </Text>
+            <Text>{msg.content}</Text>
+          </>
+        )}
+      </Box>
+    )
+  },
+  (prev, next) =>
+    prev.msg.content === next.msg.content &&
+    prev.msg.role === next.msg.role &&
+    prev.msg.toolMeta?.collapsed === next.msg.toolMeta?.collapsed,
+)
+
 export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
   // In focus mode, compact tool activity into summary lines
   const displayMessages = focusMode ? compactForFocus(messages) : messages
@@ -56,36 +102,11 @@ export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
         </Box>
       )}
       {displayMessages.map((msg, i) => (
-        <Box
-          key={i}
-          flexDirection="column"
-          marginTop={msg.toolMeta ? 0 : 1}
-          marginBottom={msg.toolMeta ? 0 : 1}
-        >
-          {msg.toolMeta ? (
-            <Box flexDirection="column">
-              <Text color="yellow">
-                {msg.toolMeta.collapsed ? '⏺' : '⏺ ▼'} {msg.toolMeta.name}
-              </Text>
-              <Text dimColor>{msg.content}</Text>
-            </Box>
-          ) : (
-            <>
-              <Text
-                bold
-                color={msg.role === 'user' ? 'green' : msg.role === 'system' ? 'yellow' : 'blue'}
-              >
-                {msg.role === 'user'
-                  ? `▸ ${displayCwd()}`
-                  : msg.role === 'assistant'
-                    ? 'Mipham Code'
-                    : '⚠ System'}
-                :
-              </Text>
-              <Text>{msg.content}</Text>
-            </>
-          )}
-        </Box>
+        <MessageRow
+          key={`${i}-${msg.role}-${typeof msg.content === 'string' ? msg.content.length : 0}`}
+          msg={msg}
+          isLast={i === displayMessages.length - 1}
+        />
       ))}
     </Box>
   )

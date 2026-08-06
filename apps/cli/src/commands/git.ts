@@ -9,12 +9,28 @@ import { stripIndent } from '../ui/strip-indent.js'
 
 export { commitCmd, pushCmd, prCmd, issueCmd }
 
+/** Run a git command asynchronously — avoids blocking the TUI event loop. */
+async function git(args: string[], timeoutMs = 5000): Promise<string> {
+  const proc = Bun.spawn(['git', ...args], {
+    stdout: 'pipe',
+    stderr: 'pipe',
+  })
+  const exitCode = await Promise.race([
+    proc.exited,
+    new Promise<number>((resolve) => setTimeout(() => resolve(143), timeoutMs)),
+  ])
+  if (exitCode === 143) {
+    proc.kill()
+    return ''
+  }
+  const stdout = await new Response(proc.stdout).text()
+  return exitCode === 0 ? stdout.trim() : ''
+}
 
 const commitCmd: CommandHandler = async () => {
   try {
-    const { execSync } = await import('node:child_process')
-    const diff = execSync('git diff --cached --stat', { encoding: 'utf-8', timeout: 5000 }).trim()
-    const unstaged = execSync('git diff --name-only', { encoding: 'utf-8', timeout: 5000 }).trim()
+    const diff = await git(['diff', '--cached', '--stat'])
+    const unstaged = await git(['diff', '--name-only'])
 
     if (!diff) {
       let msg = '── Git Commit ──\n\nNo staged changes found.\n\n'
@@ -53,15 +69,9 @@ const commitCmd: CommandHandler = async () => {
 
 const pushCmd: CommandHandler = async () => {
   try {
-    const { execSync } = await import('node:child_process')
-    const branch = execSync('git branch --show-current', {
-      encoding: 'utf-8',
-      timeout: 3000,
-    }).trim()
-    const ahead = execSync(`git rev-list --count origin/${branch}..HEAD 2>/dev/null || echo 0`, {
-      encoding: 'utf-8',
-      timeout: 3000,
-    }).trim()
+    const branch = await git(['branch', '--show-current'], 3000)
+    const aheadRaw = await git(['rev-list', '--count', `origin/${branch}..HEAD`], 3000)
+    const ahead = aheadRaw || '0'
 
     return {
       content: [
@@ -85,26 +95,15 @@ const pushCmd: CommandHandler = async () => {
 
 const prCmd: CommandHandler = async () => {
   try {
-    const { execSync } = await import('node:child_process')
-    const branch = execSync('git branch --show-current', {
-      encoding: 'utf-8',
-      timeout: 3000,
-    }).trim()
-    const mainBranch =
-      execSync('git remote show origin 2>/dev/null | grep "HEAD branch" | cut -d: -f2', {
-        encoding: 'utf-8',
-        timeout: 3000,
-      }).trim() || 'main'
+    const branch = await git(['branch', '--show-current'], 3000)
+    const mainBranchRaw = await git(['remote', 'show', 'origin'], 3000)
+    const mainBranch = (mainBranchRaw.match(/HEAD branch:\s*(\S+)/)?.[1]) || 'main'
 
-    const diff = execSync(
-      `git diff --stat origin/${mainBranch}...HEAD 2>/dev/null || git diff --stat ${mainBranch}...HEAD 2>/dev/null || echo ""`,
-      { encoding: 'utf-8', timeout: 5000 },
-    ).trim()
+    const diff = (await git(['diff', '--stat', `origin/${mainBranch}...HEAD`], 5000)) ||
+      (await git(['diff', '--stat', `${mainBranch}...HEAD`], 5000))
 
-    const commits = execSync(
-      `git log --oneline origin/${mainBranch}..HEAD 2>/dev/null || git log --oneline ${mainBranch}..HEAD 2>/dev/null || echo ""`,
-      { encoding: 'utf-8', timeout: 5000 },
-    ).trim()
+    const commits = (await git(['log', '--oneline', `origin/${mainBranch}..HEAD`], 5000)) ||
+      (await git(['log', '--oneline', `${mainBranch}..HEAD`], 5000))
 
     return {
       content: [
