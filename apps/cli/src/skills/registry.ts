@@ -11,6 +11,7 @@ import { homedir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { URL } from 'node:url'
 import type { MiphamConfig } from '../shared/types.js'
+import communitySkills from './community-registry.json'
 
 const SKILLS_DIR = join(homedir(), '.mipham', 'skills')
 
@@ -39,81 +40,7 @@ export interface SkillEntry {
  * Embedded community skill registry.
  * In the future, this can be fetched from a remote URL.
  */
-const COMMUNITY_SKILLS: SkillEntry[] = [
-  {
-    name: 'code-review',
-    description:
-      'Automated code review with multiple dimensions — complexity, security, performance, quality',
-    url: 'https://github.com/One-Mipham/skill-code-review',
-    file: 'code-review.SKILL.md',
-    category: 'Development',
-    author: 'MiphamAI',
-    builtin: true,
-  },
-  {
-    name: 'systematic-debugging',
-    description: 'Systematic debugging workflow — find root cause before fixing',
-    url: 'https://github.com/anthropics/skills',
-    file: 'systematic-debugging.SKILL.md',
-    category: 'Development',
-    author: 'Anthropic',
-  },
-  {
-    name: 'test-driven-development',
-    description: 'TDD workflow — write failing test first, then implement',
-    url: 'https://github.com/anthropics/skills',
-    file: 'test-driven-development.SKILL.md',
-    category: 'Development',
-    author: 'Anthropic',
-    builtin: true,
-  },
-  {
-    name: 'web-access',
-    description:
-      'Web search, scraping, and browser automation — search engines, page fetching, authenticated sites',
-    url: 'https://github.com/One-Mipham/skill-web-access',
-    file: 'web-access.SKILL.md',
-    category: 'Network',
-    author: 'MiphamAI',
-    builtin: true,
-  },
-  {
-    name: 'doc-generator',
-    description: 'Generate API docs, READMEs, and changelogs from code analysis',
-    url: 'https://github.com/One-Mipham/skill-doc-generator',
-    file: 'doc-generator.SKILL.md',
-    category: 'Documentation',
-    author: 'MiphamAI',
-    builtin: true,
-  },
-  {
-    name: 'github-ops',
-    description: 'GitHub PR/issue management and automation — labels, milestones, reviews',
-    url: 'https://github.com/One-Mipham/skill-github-ops',
-    file: 'github-ops.SKILL.md',
-    category: 'DevOps',
-    author: 'MiphamAI',
-    builtin: true,
-  },
-  {
-    name: 'security-review',
-    description:
-      'Security audit and vulnerability scanning for code changes — OWASP, secrets, supply chain',
-    url: 'https://github.com/One-Mipham/skill-security-review',
-    file: 'security-review.SKILL.md',
-    category: 'Security',
-    author: 'MiphamAI',
-    builtin: true,
-  },
-  {
-    name: 'frontend-design',
-    description: 'Distinctive visual design guidance for UI components — typography, color, layout',
-    url: 'https://github.com/anthropics/skills',
-    file: 'frontend-design.SKILL.md',
-    category: 'Design',
-    author: 'Anthropic',
-  },
-]
+const COMMUNITY_SKILLS: SkillEntry[] = communitySkills as SkillEntry[]
 
 // ═══════════════════════════════════════════════════════════════
 // Skill Installer

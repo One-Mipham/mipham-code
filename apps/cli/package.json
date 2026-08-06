@@ -42,13 +42,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "commander": "^13.1.0",
     "ink": "^5.2.1",
     "ink-text-input": "^6.0.0",
     "react": "^18.3.1",
     "react-devtools-core": "^4.28.5",
-    "yaml": "^2.9.0",
-    "zod": "^3.25.76"
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@mipham/shared": "workspace:*",
