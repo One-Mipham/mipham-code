@@ -156,6 +156,19 @@ export class SubAgent {
     // 'inherit' means use parent model
     const resolvedModel = modelToUse === 'inherit' ? model : modelToUse
 
+    // Validate resolved model exists in registry; fall back to parent model with warning
+    let finalModel = resolvedModel
+    if (resolvedModel !== model) {
+      const availableModels = this.registry.listModels()
+      const modelExists = availableModels.some((m) => m.id === resolvedModel)
+      if (!modelExists) {
+        console.warn(
+          `Warning: model "${resolvedModel}" not found in provider registry. Falling back to "${model}".`,
+        )
+        finalModel = model
+      }
+    }
+
     const chunks: string[] = []
     const MAX_TOOL_TURNS = options.maxTurns || 5
 
@@ -173,7 +186,7 @@ export class SubAgent {
         let turnText = ''
 
         for await (const chunk of provider.chat({
-          model: resolvedModel,
+          model: finalModel,
           messages: currentMessages,
           systemPrompt: currentSystemPrompt,
           tools: toolDefs,
@@ -251,7 +264,7 @@ export class SubAgent {
               cwd: execCwd,
               sessionId: 'sub-agent',
               provider: '',
-              model: resolvedModel,
+              model: finalModel,
             })
 
             currentMessages.push({
