@@ -97,6 +97,7 @@ export function App({
   const [fastMode, setFastMode] = useState(false)
   const [effort, setEffort] = useState('high')
   const [focusMode, setFocusMode] = useState(false)
+  const [_ultracodeMode, setUltracodeMode] = useState(false)
   const [goalText, setGoalText] = useState('')
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default')
   const abortRef = useRef<AbortController | null>(null)
@@ -149,6 +150,7 @@ export function App({
       },
       setFocusMode: (on: boolean) => setFocusMode(on),
       setGoal: (text: string) => setGoalText(text),
+      setUltracodeMode: (on: boolean) => setUltracodeMode(on),
       skillsLoader,
       pluginManager,
     }),

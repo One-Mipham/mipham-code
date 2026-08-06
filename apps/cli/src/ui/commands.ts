@@ -25,6 +25,7 @@ export interface CommandContext {
   setEffort: (level: string) => void
   setFocusMode: (on: boolean) => void
   setGoal: (text: string) => void
+  setUltracodeMode: (on: boolean) => void
   skillsLoader?: SkillsLoader
   pluginManager?: PluginManager
 }
@@ -1161,6 +1162,52 @@ const focusCmd: CommandHandler = (ctx) => {
       ✓ Focus mode ON — showing only the most recent exchange.
       Previous messages are hidden but preserved.
       Type /focus again to exit focus mode and show all messages.
+    `,
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Ultracode Mode — toggle multi-agent workflow orchestration
+// ═══════════════════════════════════════════════════════════════
+
+const ultracodeCmd: CommandHandler = (ctx, args) => {
+  const arg = args[0]?.toLowerCase()
+  if (arg === 'on') {
+    ctx.setUltracodeMode(true)
+    return {
+      content:
+        '✓ Ultracode mode ON — multi-agent workflow orchestration enabled.\n\nThe AI will use Workflow tool to fan out, verify, and synthesize for all substantive tasks.',
+      forwardToAI: stripIndent`
+        Ultracode mode is now ACTIVE. For every substantive task:
+        - Use the Workflow tool to orchestrate multi-agent execution
+        - Default to pipeline() for multi-stage work — stages flow independently
+        - Fan out independent work across parallel agents
+        - Apply adversarial verification (verify with skeptics) to findings before accepting them
+        - Synthesize results with a top-tier model pass
+        - Prefer pipeline() over parallel() barriers — don't block stages unnecessarily
+        - Use loopUntilConvergence when discovering unknown-size sets (bugs, issues, edge cases)
+        - EDGE LOGIC IS FREE: flatten, dedupe, filter in plain JavaScript — NOT agent calls
+        Keep responses concise — the workflow graph handles the depth.`,
+    }
+  } else if (arg === 'off') {
+    ctx.setUltracodeMode(false)
+    return {
+      content: '✓ Ultracode mode OFF.',
+      forwardToAI:
+        'Ultracode mode is now OFF. Revert to standard single-agent execution. Do NOT use Workflow tool unless explicitly asked.',
+    }
+  }
+  return {
+    content: stripIndent`
+      Usage: /ultracode [on|off]
+
+      Ultracode mode enables multi-agent workflow orchestration for every substantive task.
+      When ON, the AI uses the Workflow tool to decompose tasks, fan out parallel agents,
+      verify findings adversarially, and synthesize results with a top-tier model.
+
+      Examples:
+        /ultracode on    — enable multi-agent mode
+        /ultracode off   — return to standard single-agent mode
     `,
   }
 }
@@ -2496,6 +2543,72 @@ const workflowAutoCmd: CommandHandler = async (_ctx, args) => {
       `Use the Workflow tool to execute the generated script. ` +
       `After the workflow completes, summarize the results and offer to save the script ` +
       `with /workflow save <name> if it is reusable.`,
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// /deep-research <topic> — multi-agent deep research pipeline
+// ═══════════════════════════════════════════════════════════════
+
+const deepResearchCmd: CommandHandler = (_ctx, args) => {
+  const topic = args.join(' ').trim()
+  if (!topic) {
+    return {
+      content: stripIndent`
+        Usage: /deep-research <topic>
+
+        Conducts multi-agent deep research — 5-angle parallel search, adversarial verification,
+        and top-tier synthesis into a well-cited report.
+
+        Example:
+          /deep-research impact of quantum computing on cryptography
+          /deep-research latest advances in CRISPR gene editing
+      `,
+    }
+  }
+  return {
+    content: stripIndent`
+      ── Deep Research ──
+
+      Topic: "${topic}"
+
+      Orchestrating multi-agent research pipeline:
+        1. Scope — 5 research angles
+        2. Research — parallel web searches
+        3. Reduce — deduplicate + merge
+        4. Verify — adversarial skeptic pass
+        5. Synthesize — cited report, top model
+
+      This may take a few minutes...
+    `,
+    forwardToAI: stripIndent`
+      Conduct deep research on: "${topic}"
+
+      Use the Workflow tool to orchestrate a multi-agent research pipeline:
+
+      **Phase 1 — Scope**: Define 5 research angles covering: overview, technical-details,
+      competitors/alternatives, criticism/limitations, future-trends.
+
+      **Phase 2 — Research**: Fan out parallel web searches across all 5 angles. Each agent
+      searches the web and returns sources with titles, URLs, and key points. Use schema
+      validation to ensure structured output.
+
+      **Phase 3 — Reduce**: Deduplicate sources by URL. Merge overlapping findings. EDGE LOGIC
+      IS FREE — use plain JavaScript, not agent calls.
+
+      **Phase 4 — Verify**: Run adversarial verification (verify with mode: 'adversarial',
+      skeptics: 2, threshold: 1) on each key claim. Discard claims that fail verification.
+
+      **Phase 5 — Synthesize**: Use the best available model to synthesize all verified findings
+      into a comprehensive, well-cited research report. Include:
+      - Executive summary
+      - Key findings with source citations (title, URL)
+      - Competing perspectives and disagreements
+      - Gaps and unknowns
+      - Recommendations for further reading
+
+      Output the final report as a structured markdown document with inline citations.
+    `,
   }
 }
 
@@ -4271,6 +4384,7 @@ const commandsListCmd: CommandHandler = () => {
     '/undo': 'History',
     '/copy': 'History',
     '/focus': 'History',
+    '/ultracode': 'Workflow',
     '/pick': 'Model & Provider',
     '/model': 'Model & Provider',
     '/models': 'Model & Provider',
@@ -4305,6 +4419,7 @@ const commandsListCmd: CommandHandler = () => {
     '/pr-comments': 'Workflow',
     '/diff': 'Workflow',
     '/workflows': 'Workflow',
+    '/deep-research': 'Workflow',
     '/loop': 'Workflow',
     '/init': 'Project',
     '/setup': 'Project',
@@ -4401,6 +4516,7 @@ registry.set('/rewind', rewindCmd)
 registry.set('/undo', undoCmd)
 registry.set('/copy', copyCmd)
 registry.set('/focus', focusCmd)
+registry.set('/ultracode', ultracodeCmd)
 
 // Model & Provider
 registry.set('/model', modelCmd)
@@ -4437,6 +4553,7 @@ registry.set('/loop', loopCmd)
 registry.set('/no-plan', noPlanCmd)
 registry.set('/workflow', workflowAutoCmd)
 registry.set('/workflows', workflowsCmd)
+registry.set('/deep-research', deepResearchCmd)
 registry.set('/review', reviewCmd)
 registry.set('/pr-comments', prCommentsCmd)
 
@@ -4540,6 +4657,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/undo': 'Same as /rewind',
   '/copy': 'Copy last response to clipboard',
   '/focus': 'Toggle focus view',
+  '/ultracode': 'Toggle multi-agent workflow orchestration mode',
   '/pick': 'Open model picker',
   '/model': 'Show current model',
   '/models': 'List all available models',
@@ -4572,6 +4690,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/pr-comments': 'PR review summary',
   '/diff': 'Show git diff',
   '/workflows': 'List workflow scripts',
+  '/deep-research': 'Deep research with multi-agent parallel search, verification, and cited synthesis',
   '/loop': 'Run prompt on interval',
   '/init': 'Initialize .mipham config',
   '/setup': 'Guided project setup wizard',
