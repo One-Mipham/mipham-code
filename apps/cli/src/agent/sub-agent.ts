@@ -160,8 +160,7 @@ export class SubAgent {
     // Validate resolved model exists in registry; fall back to parent model with warning
     let finalModel = resolvedModel
     if (resolvedModel !== model) {
-      const availableModels = this.registry.listModels()
-      const modelExists = availableModels.some((m) => m.id === resolvedModel)
+      const modelExists = this.registry.findModel(resolvedModel) !== undefined
       if (!modelExists) {
         const warnMsg = `Warning: model "${resolvedModel}" not found in provider registry. Falling back to "${model}".`
         console.warn(warnMsg)

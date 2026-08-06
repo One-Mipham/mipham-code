@@ -32,6 +32,7 @@ function createMockRegistry(
     getActive: () => provider,
     getActiveModel: () => 'mock-model',
     listModels: () => models,
+    findModel: (id: string) => models.find((m) => m.id === id),
   } as unknown as ProviderRegistry
   return registry
 }
