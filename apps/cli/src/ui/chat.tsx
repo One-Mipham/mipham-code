@@ -17,6 +17,30 @@ function displayCwd(): string {
   return cwd
 }
 
+/** Map tool names to dot colors — Claude Code parity */
+function toolColor(name: string): string {
+  switch (name) {
+    case 'Bash':
+    case 'Read':
+    case 'Glob':
+    case 'Grep':
+      return 'white'
+    case 'Write':
+    case 'Edit':
+      return 'red'
+    case 'Agent':
+    case 'Task':
+    case 'Skill':
+    case 'Workflow':
+      return 'magenta'
+    case 'WebSearch':
+    case 'WebFetch':
+      return 'blue'
+    default:
+      return 'white'
+  }
+}
+
 /**
  * Memoized single message row — skips re-render when content hasn't changed.
  * This prevents O(n) re-renders of the entire chat history on every streaming chunk.
@@ -33,10 +57,15 @@ const MessageRow = React.memo(
       >
         {msg.toolMeta ? (
           <Box flexDirection="column">
-            <Text color="yellow">
+            <Text color={toolColor(msg.toolMeta.name)}>
               {msg.toolMeta.collapsed ? '⏺' : '⏺ ▼'} {msg.toolMeta.name}
+              {msg.toolMeta.input ? `(${msg.toolMeta.input.slice(0, 120)})` : ''}
             </Text>
-            <Text dimColor>{msg.content}</Text>
+            {msg.toolMeta.output ? (
+              <Text dimColor>  ⎿  {msg.toolMeta.output.slice(0, 300)}</Text>
+            ) : msg.content && !msg.toolMeta.collapsed ? (
+              <Text dimColor>{msg.content}</Text>
+            ) : null}
           </Box>
         ) : (
           <>

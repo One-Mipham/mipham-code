@@ -47,6 +47,8 @@ interface AgentProgress {
   name: string
   description: string
   startTime: number
+  tokensUsed?: number
+  isTask?: boolean
 }
 
 // Version is read fresh from package.json at startup via runApp prop
@@ -75,6 +77,34 @@ const PERMISSION_COLORS: Record<PermissionMode, string> = {
   auto: 'green',
   dontAsk: 'cyan',
   bypassPermissions: 'red',
+}
+
+/** Format a tool's input parameters into a compact one-line detail string. */
+function formatToolDetail(name: string, input: Record<string, unknown>): string {
+  switch (name) {
+    case 'Bash':
+      return (input.command as string) || ''
+    case 'Read':
+      return (input.file_path as string) || ''
+    case 'Write':
+      return (input.file_path as string) || ''
+    case 'Edit':
+      return (input.file_path as string) || ''
+    case 'Grep':
+      return (input.pattern as string) || ''
+    case 'Glob':
+      return (input.pattern as string) || ''
+    case 'Agent':
+      return `${(input.subagent_type as string) || 'general'}, "${((input.description as string) || (input.prompt as string) || '').slice(0, 80)}"`
+    case 'WebSearch':
+      return (input.query as string) || ''
+    case 'WebFetch':
+      return (input.url as string) || ''
+    case 'Task':
+      return `"${(input.subject as string) || ''}"`
+    default:
+      return JSON.stringify(input).slice(0, 80)
+  }
 }
 
 export function App({
@@ -309,10 +339,11 @@ export function App({
           if (chunk.type === 'tool_use' && chunk.toolUse) {
             const toolName = chunk.toolUse.name
             const isAgent = toolName === 'Agent' || toolName === 'Task'
+            const detail = formatToolDetail(toolName, chunk.toolUse.input)
 
             if (isAgent) {
               setAgentProgress({
-                name: (chunk.toolUse.input.subagent_type as string) || 'General-purpose',
+                name: detail || (chunk.toolUse.input.subagent_type as string) || 'General-purpose',
                 description:
                   (chunk.toolUse.input.description as string) ||
                   (chunk.toolUse.input.prompt as string) ||
@@ -320,14 +351,46 @@ export function App({
                 startTime: Date.now(),
               })
             }
-            // Silent tools: don't show Bash/Glob/Read/etc lines — just the spinner
+
+            // Show tool call as a visible, collapsed message
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: 'system' as const,
+                content: detail,
+                toolMeta: { name: toolName, input: detail, collapsed: true },
+              },
+            ])
             // Mark that next text chunk starts a new turn
             isNewTurn = true
           }
 
           if (chunk.type === 'tool_result') {
             setAgentProgress(null)
-            // Silent: tool results don't need visible lines
+            // Show tool result as a compact indented line
+            const output = chunk.content ? String(chunk.content).trim() : ''
+            if (output) {
+              const firstLine = output.split('\n')[0]!.slice(0, 200)
+              const preview = firstLine.length < output.length ? `${firstLine}...` : firstLine
+              setMessages((prev) => [
+                ...prev,
+                {
+                  role: 'system' as const,
+                  content: `  ⎿  ${preview}`,
+                  toolMeta: { name: '', input: '', output: preview, collapsed: true },
+                },
+              ])
+            }
+          }
+
+          if (chunk.type === 'usage' && agentProgress) {
+            const totalTokens =
+              (chunk.inputTokens || 0) + (chunk.outputTokens || 0)
+            if (totalTokens > 0) {
+              setAgentProgress((prev) =>
+                prev ? { ...prev, tokensUsed: (prev.tokensUsed || 0) + totalTokens } : null,
+              )
+            }
           }
 
           if (chunk.type === 'error') {
@@ -339,8 +402,8 @@ export function App({
 
           if (chunk.type === 'task_notification' && chunk.taskNotification) {
             const tn = chunk.taskNotification
-            const emoji = tn.status === 'completed' ? '✅' : '❌'
-            const label = tn.status === 'completed' ? 'completed' : 'failed'
+            const isDone = tn.status === 'completed'
+            const symbol = isDone ? '◼' : '✳'
             const preview = tn.content
               ? tn.content.slice(0, 120) + (tn.content.length > 120 ? '...' : '')
               : tn.error
@@ -350,7 +413,13 @@ export function App({
               ...prev,
               {
                 role: 'system',
-                content: `${emoji} Background Agent ${label}: ${tn.description}\n   ID: ${tn.taskId}\n   ${preview}`,
+                content: `${symbol} ${tn.description}${isDone ? ` · finished` : ''}`,
+                toolMeta: {
+                  name: isDone ? '' : 'task',
+                  input: tn.description || '',
+                  output: preview,
+                  collapsed: isDone,
+                },
               },
             ])
           }
@@ -435,17 +504,33 @@ export function App({
 
   return (
     <Box flexDirection="column" padding={1} height="100%">
-      {/* Agent progress banner */}
+      {/* Agent progress banner — Claude Code style */}
       {agentProgress && (
         <Box flexDirection="column" marginY={1}>
           <Text color="cyan" bold>
-            ⏺ {agentProgress.name} <Text color="yellow">{agentElapsed}s</Text>
+            ◯ {agentProgress.name}{' '}
+            <Text color="yellow">
+              {agentElapsed >= 60
+                ? `${Math.floor(agentElapsed / 60)}m ${agentElapsed % 60}s`
+                : `${agentElapsed}s`}
+            </Text>
+            {agentProgress.tokensUsed ? (
+              <Text color="yellow">
+                {' · ↓ '}
+                {agentProgress.tokensUsed >= 1000
+                  ? `${(agentProgress.tokensUsed / 1000).toFixed(1)}k`
+                  : agentProgress.tokensUsed}{' '}
+                tokens
+              </Text>
+            ) : null}
           </Text>
-          <Text dimColor>
-            {agentProgress.description.length > 100
-              ? `"${agentProgress.description.slice(0, 100)}..."`
-              : `"${agentProgress.description}"`}
-          </Text>
+          {agentProgress.description ? (
+            <Text dimColor>
+              {agentProgress.description.length > 100
+                ? `"${agentProgress.description.slice(0, 100)}..."`
+                : `"${agentProgress.description}"`}
+            </Text>
+          ) : null}
         </Box>
       )}
 
