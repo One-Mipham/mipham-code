@@ -2056,48 +2056,10 @@ const exportCmd: CommandHandler = async (ctx) => {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Review — code review workflow
+// Review — alias for /code-review (P1: 2026-08-06 polish)
 // ═══════════════════════════════════════════════════════════════
 
-const reviewCmd: CommandHandler = async () => {
-  try {
-    const { execSync } = await import('node:child_process')
-    const diff = execSync('git diff --stat', { encoding: 'utf-8', timeout: 5000 }).trim()
-    const unstaged = execSync('git diff --name-only', { encoding: 'utf-8', timeout: 3000 }).trim()
-    const staged = execSync('git diff --cached --name-only', {
-      encoding: 'utf-8',
-      timeout: 3000,
-    }).trim()
-
-    if (!diff) {
-      return {
-        content:
-          '─ Code Review ─\n\nNo uncommitted changes detected.\n\nUse /pr-comments for PR-level review, or make changes first.',
-      }
-    }
-
-    const lines: string[] = ['─ Code Review ─', '', 'Uncommitted changes:', '', diff]
-
-    if (staged) {
-      lines.push('')
-      lines.push('Staged files (ready for commit):')
-      for (const f of staged.split('\n')) lines.push(`  ✓ ${f}`)
-    }
-    if (unstaged) {
-      lines.push('')
-      lines.push('Unstaged files (working directory):')
-      for (const f of unstaged.split('\n')) lines.push(`  • ${f}`)
-    }
-
-    lines.push('')
-    lines.push('To review with AI: type "review these changes" in chat.')
-    lines.push('To commit: git add -A && git commit -m "..."')
-
-    return { content: lines.join('\n') }
-  } catch {
-    return { content: '─ Code Review ─\n\nCould not run git diff. Are you in a git repository?' }
-  }
-}
+const reviewCmd = codeReviewCmd
 
 // ═══════════════════════════════════════════════════════════════
 // PR Comments
