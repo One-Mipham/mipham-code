@@ -20,6 +20,7 @@
 **问题**: `runtime.ts:147` 用 `new Function()` 执行 workflow 脚本，全局作用域全暴露。`eval`、`import()`、`require`、`process`、`Bun`、`fetch` 等均未封堵。
 
 **方案**:
+
 - 用 `vm.Script` + `vm.createContext(sandbox)` 替代 `new Function()`
 - sandbox context 白名单注入：`agent`, `parallel`, `pipeline`, `verify`, `judge`, `loopUntilConvergence`, `phase`, `log`, `args`, `budget`
 - 显式封堵：`eval`, `Function`, `import`, `require`, `process`, `Bun`, `fetch`, `setTimeout`, `setInterval`
@@ -32,6 +33,7 @@
 **问题**: 引擎默认 `bypass`，无组织级禁用机制，`MODE_CYCLE` 始终包含 bypass。
 
 **方案**:
+
 - 新增 `PermissionRestrictions` 类型：`{ forbiddenModes: PermissionMode[], maxAllowedMode: PermissionMode }`
 - 配置加载支持三级限制（组织 > 项目 > 用户，最严格生效）
 - 引擎默认权限从 `'bypass'` 改为 `'ask'`
@@ -46,6 +48,7 @@
 **问题**: `isBlocked()` regex 可被 `$'\x72\x6d'` ANSI-C 转义序列绕过，嵌套 `bash -c`/`eval`/`source` 未封堵。
 
 **方案**:
+
 - 新增 `BLOCKED_PATTERNS` 条目：`\$'` (ANSI-C quoting), `\b(?:bash|sh|zsh)\s+-c\b`, `\beval\b`, `\bexec\b`, `\bsource\b`, `\bbase64\s+-d\b`
 - 新增 `BLOCKED_COMMANDS`：嵌套解释器调用
 - `isBlocked()` 先检查原始命令，再检查展开后的命令
@@ -58,6 +61,7 @@
 **问题**: 全代码库零 Unicode 净化，零宽字符和 bidi 控制字符可通过任何工具输入。
 
 **方案**:
+
 - 新增 `shared/sanitize.ts`：`stripDangerousUnicode(input: string): string`
 - 剥离零宽字符：U+200B/C/D/E/F, U+FEFF, U+2060
 - 剥离 bidi 控制字符：U+202A-E, U+2066-9
@@ -76,6 +80,7 @@
 **问题**: `/cd` 改 `process.chdir()` 但不保存到 SessionStore，恢复会话后工作目录错误。
 
 **方案**:
+
 - `SessionData` 接口新增 `cwd?: string`
 - `/cd` 执行后调用 `sessionStore.patch(sessionId, { cwd: resolved })`
 - `/resume` 加载会话后 `process.chdir(session.cwd)`
@@ -88,6 +93,7 @@
 **问题**: 子代理模型 ID 零验证直传 API，不存在的模型静默失败。
 
 **方案**:
+
 - 模型解析时查 `ProviderRegistry.findModel(modelId)` 验证
 - 不存在时：(a) 回退到父模型，(b) 发出 `model_restriction_warning` 通知
 - workflow/fork 子代理同样适用
@@ -100,6 +106,7 @@
 **问题**: `/review` 只显示 `git diff` 输出，不调用 AI review，与命令描述不符。
 
 **方案**:
+
 - `/review` 改为 `/code-review` 的别名，共享 `gitDiffBridgeCmd` factory
 - 删除旧的只读 git diff 实现
 
@@ -115,6 +122,7 @@
 **问题**: `ContextManager` 硬编码 `maxTokens: 200_000`，忽略模型声明的 `contextWindow`。
 
 **方案**:
+
 - `ContextManager` 构造时读取当前模型的 `contextWindow`
 - 环境变量 `MIPHAM_DISABLE_1M_CONTEXT=1` 时强制 cap 200K
 - 模型切换时动态更新 compaction 阈值
@@ -128,6 +136,7 @@
 **问题**: 不认识的模型 ID 上下文窗口无管控，会话可能膨胀超限。
 
 **方案**:
+
 - 模型不在注册表中时推定 `contextWindow: 128_000`
 - 环境变量 `MIPHAM_ENABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=0` 恢复旧行为
 - 启动时提示 `⚠ Unknown model "xxx": assuming 128K context window`
@@ -140,6 +149,7 @@
 **问题**: effort 不持久化，每次 `/code-review` 默认 `high`。
 
 **方案**:
+
 - `setEffort()` 调用时写入 `config.set('lastCodeReviewEffort', level)`
 - `/code-review` 不带参数时读取 `lastCodeReviewEffort`，默认为 `high`
 - 带参数时（如 `/code-review max`）覆盖并保存
@@ -152,6 +162,7 @@
 **问题**: 无 marketplace 来源管控。
 
 **方案**:
+
 - 新增配置字段 `strictKnownMarketplaces?: string[]` 和 `blockedMarketplaces?: string[]`
 - 支持 `"owner/*"` 通配符匹配 `github.com/owner/*`
 - `installSkill()` 安装前检查来源
@@ -164,6 +175,7 @@
 **问题**: 请求受限模型时静默使用父模型（与 P1 #6 关联）。
 
 **方案**:
+
 - 与 modelOverrides 验证合并实现
 - 受限时通过 message bus 通知父代理
 - UI 层显示警告信息
@@ -175,12 +187,12 @@
 
 ## 汇总
 
-| 优先级 | 数量 | 预估代码量 | 预估测试增量 |
-|--------|------|-----------|------------|
-| P0 | 4 | ~220 行 | ~15 条 |
-| P1 | 3 | ~50 行 | ~4 条 |
-| P2 | 5 | ~110 行 | ~10 条 |
-| **合计** | **12** | **~380 行** | **~29 条** |
+| 优先级   | 数量   | 预估代码量  | 预估测试增量 |
+| -------- | ------ | ----------- | ------------ |
+| P0       | 4      | ~220 行     | ~15 条       |
+| P1       | 3      | ~50 行      | ~4 条        |
+| P2       | 5      | ~110 行     | ~10 条       |
+| **合计** | **12** | **~380 行** | **~29 条**   |
 
 **目标**: 730 → 759 tests, 全通过, v0.16.0
 
@@ -190,12 +202,12 @@
 
 以下 Claude Code v2.1.223 功能 Mipham Code 暂无对应实现，列入后续专项：
 
-| 功能 | 可行性 | 建议时机 |
-|------|--------|---------|
-| Gateway 模型发现 | 需 GCP/AWS SDK 集成 | v0.17+ |
-| Managed settings env 合并 | 简单，可穿插 | v0.16.1 |
-| Linux 沙箱 | 工程量大 | v0.18+ |
-| Fork 代理竞态 guard | 简单 | v0.16.1 |
-| 诊断附件健壮性 | 需 LSP 基础设施 | v0.19+ |
-| Git push 解析 | 简单 | v0.16.1 |
-| Teleport 提示 | 需云端基础设施 | v0.20+ |
+| 功能                      | 可行性              | 建议时机 |
+| ------------------------- | ------------------- | -------- |
+| Gateway 模型发现          | 需 GCP/AWS SDK 集成 | v0.17+   |
+| Managed settings env 合并 | 简单，可穿插        | v0.16.1  |
+| Linux 沙箱                | 工程量大            | v0.18+   |
+| Fork 代理竞态 guard       | 简单                | v0.16.1  |
+| 诊断附件健壮性            | 需 LSP 基础设施     | v0.19+   |
+| Git push 解析             | 简单                | v0.16.1  |
+| Teleport 提示             | 需云端基础设施      | v0.20+   |
