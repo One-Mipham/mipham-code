@@ -277,6 +277,7 @@ export class QueryEngine {
 
     // ── PreInference DLP checkpoint ──
     if (isInferenceHookEnabled(this.inferenceHookConfig)) {
+      const hookConfig = this.inferenceHookConfig!
       const provider = this.registry.getActive().config.id
       const model = this.registry.getActiveModel()
       const request = buildRequest(
@@ -284,9 +285,9 @@ export class QueryEngine {
         'session-1',
         provider,
         model,
-        this.inferenceHookConfig!.organization_id,
+        hookConfig.organization_id,
       )
-      const verdict = await sendInferenceCheck(this.inferenceHookConfig!, request)
+      const verdict = await sendInferenceCheck(hookConfig, request)
       if (!verdict.allowed) {
         yield {
           type: 'error',
@@ -556,6 +557,7 @@ export class QueryEngine {
 
       // ── PreInference DLP checkpoint (every tool-calling turn) ──
       if (isInferenceHookEnabled(this.inferenceHookConfig)) {
+        const hookConfig = this.inferenceHookConfig!
         const provider = this.registry.getActive().config.id
         const model = this.registry.getActiveModel()
         const request = buildRequest(
@@ -563,9 +565,9 @@ export class QueryEngine {
           'session-1',
           provider,
           model,
-          this.inferenceHookConfig!.organization_id,
+          hookConfig.organization_id,
         )
-        const verdict = await sendInferenceCheck(this.inferenceHookConfig!, request)
+        const verdict = await sendInferenceCheck(hookConfig, request)
         if (!verdict.allowed) {
           yield {
             type: 'error',

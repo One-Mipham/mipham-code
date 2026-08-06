@@ -157,7 +157,17 @@ export async function runWorkflow(
   sandboxCtx.phase = wrappedPhase
   sandboxCtx.log = log
 
-  const result = await vmScript.runInContext(sandboxCtx, { timeout: 120_000 })
+  let result: unknown
+  try {
+    result = await vmScript.runInContext(sandboxCtx, { timeout: 120_000 })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    throw new Error(
+      `Workflow script execution failed: ${message}\n\n` +
+        `This is likely a bug in the workflow script, not in Mipham Code itself. ` +
+        `Check the script for syntax errors, undefined references, or unhandled promise rejections.`,
+    )
+  }
 
   // Count journal entries from state
   const priorEntries = loadJournal(runId)

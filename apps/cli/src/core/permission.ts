@@ -139,6 +139,11 @@ export class PermissionSystem {
    * 8. System default → 'ask'
    */
   check(tool: ToolDefinition, input: Record<string, unknown>): PermissionLevel {
+    // ── Guard: reject undefined/null tool (defense-in-depth) ──
+    if (!tool) {
+      return 'ask' // absent tool → safest default
+    }
+
     // ── Cache lookup (P2): reuse decision for same tool+mode+input ──
     const cacheKey = tool.name + '|' + JSON.stringify(input, Object.keys(input).sort())
     if (this.cacheMode === this.mode) {
