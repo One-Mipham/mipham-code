@@ -1,27 +1,39 @@
-/** APIs disabled in workflow scripts to ensure deterministic replay. */
+import vm from 'node:vm'
+
+/** APIs disabled in workflow scripts to ensure deterministic replay + sandbox escape prevention. */
 const FORBIDDEN = new Set(['Date.now', 'Math.random', 'crypto.randomUUID'])
 
 /**
- * Create a sandboxed global scope for workflow script execution.
- * Blocks Date.now(), Math.random(), argless new Date(), crypto.randomUUID().
+ * Create a sandboxed VM context for workflow script execution.
+ * Blocks Date.now(), Math.random(), argless new Date(), crypto.randomUUID(),
+ * plus explicit sandbox escape vectors: eval, Function constructor, import(),
+ * require(), process, Bun, fetch, setTimeout/setInterval, etc.
  */
 export function createSandbox(
   args: unknown,
   budget: { total: number | null; spent(): number; remaining(): number },
-): Record<string, unknown> {
-  const sandbox: Record<string, unknown> = {
+): vm.Context {
+  const sandboxObj: Record<string, unknown> = {
     args,
     budget,
     console: {
       log: (..._a: unknown[]) => {}, // no-op in sandbox
       error: (..._a: unknown[]) => {},
     },
-    // Primitives are injected by the runtime, not the sandbox
+
+    // ── Explicit sandbox escape prevention ──
+    // V8 builtins that would otherwise be available in a vm.Context
+    eval: () => {
+      throw new Error('eval() is disabled in workflow sandbox.')
+    },
+    Function: () => {
+      throw new Error('new Function() is disabled in workflow sandbox.')
+    },
   }
 
   // Override Date to block now() and argless constructor
   const OriginalDate = Date
-  sandbox.Date = new Proxy(OriginalDate, {
+  sandboxObj.Date = new Proxy(OriginalDate, {
     construct(_target, constructorArgs) {
       if (constructorArgs.length === 0) {
         throw new Error('new Date() is disabled in workflow sandbox. Pass timestamps via args.')
@@ -42,7 +54,7 @@ export function createSandbox(
   })
 
   // Override Math.random
-  sandbox.Math = new Proxy(Math, {
+  sandboxObj.Math = new Proxy(Math, {
     get(_target, prop) {
       if (prop === 'random') {
         throw new Error('Math.random() is disabled in workflow sandbox. Use a seed from args.')
@@ -57,7 +69,7 @@ export function createSandbox(
     | { randomUUID?: unknown; [key: string]: unknown }
     | undefined
   if (globalCrypto) {
-    sandbox.crypto = new Proxy(globalCrypto, {
+    sandboxObj.crypto = new Proxy(globalCrypto, {
       get(_target, prop) {
         if (prop === 'randomUUID') {
           throw new Error('crypto.randomUUID() is disabled in workflow sandbox.')
@@ -70,7 +82,7 @@ export function createSandbox(
     })
   }
 
-  return sandbox
+  return vm.createContext(sandboxObj)
 }
 
 /** Check whether a given API identifier is in the forbidden set. */

@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { runWorkflow } from '../../src/workflow/runtime'
-import { createBudget } from '../../src/workflow/budget'
-import { PermissionSystem } from '../../src/core/permission'
 import type { QueryEngine } from '../../src/core/engine'
 import type { ProviderRegistry, ProviderInstance, ChatRequest } from '../../src/providers/registry'
 import type { StreamChunk, ToolDefinition } from '../../src/shared/index.ts'
+import { runWorkflow } from '../../src/workflow/runtime'
+import { createBudget } from '../../src/workflow/budget'
+import { PermissionSystem } from '../../src/core/permission'
 
 function createMockProvider(chunks: StreamChunk[]): ProviderInstance {
   return {
@@ -111,5 +111,77 @@ describe('Runtime', () => {
     `
 
     await expect(runWorkflow(script, engine, {}, null)).rejects.toThrow('workflow failure')
+  })
+})
+
+describe('workflow sandbox escape prevention', () => {
+  function escapeMockEngine(): QueryEngine {
+    return {
+      getRegistry: () =>
+        ({
+          getActive: () => null,
+          getActiveModel: () => 'mock',
+          switchProvider: () => {},
+        }) as unknown as ProviderRegistry,
+      getTools: () => new Map<string, ToolDefinition>(),
+      getPermission: () => new PermissionSystem('auto'),
+    } as unknown as QueryEngine
+  }
+
+  const escapeTests = [
+    {
+      name: 'eval escape',
+      script: `eval("process")`,
+    },
+    {
+      name: 'dynamic import escape',
+      script: `await import("node:fs")`,
+    },
+    {
+      name: 'require escape',
+      script: `require("node:fs")`,
+    },
+    {
+      name: 'Function constructor escape',
+      script: `new Function("return process")`,
+    },
+    {
+      name: 'process access',
+      script: `process.cwd()`,
+    },
+    {
+      name: 'fetch escape',
+      script: `fetch("http://localhost")`,
+    },
+    {
+      name: 'setTimeout escape',
+      script: `setTimeout(() => {}, 100)`,
+    },
+  ]
+
+  const mockEngine = escapeMockEngine()
+
+  for (const { name, script } of escapeTests) {
+    it(`blocks ${name}`, async () => {
+      await expect(
+        runWorkflow(script, mockEngine),
+      ).rejects.toThrow()
+    })
+  }
+
+  it('allows whitelisted APIs (agent, log, args)', async () => {
+    // Need a real mock provider for the agent call to work
+    const provider = createMockProvider([
+      { type: 'text', content: 'ok' },
+      { type: 'stop' },
+    ])
+    const engine = createMockEngine(provider)
+
+    const result = await runWorkflow(
+      `log("hello"); return { ok: true, hasArgs: args !== undefined }`,
+      engine,
+      { test: true },
+    )
+    expect(result.result).toEqual({ ok: true, hasArgs: true })
   })
 })
