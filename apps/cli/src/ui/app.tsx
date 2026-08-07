@@ -353,18 +353,10 @@ export function App({
 
       try {
         for await (const chunk of engine.process(input, controller.signal)) {
-          // Show thinking indicator when model is reasoning (DeepSeek V4 thinking mode)
-          if (chunk.reasoning_content && turnContent === '') {
-            setMessages((prev) => {
-              const updated = [...prev]
-              const last = updated[updated.length - 1]
-              if (last?.role === 'assistant' && last.content === '') {
-                last.content = '💭 思考中…'
-              } else if (!last || last.role !== 'assistant' || last.content !== '💭 思考中…') {
-                updated.push({ role: 'assistant', content: '💭 思考中…' })
-              }
-              return updated
-            })
+          // Reasoning content (DeepSeek V4 thinking mode) — silently consumed,
+          // not shown to user to avoid noise.
+          if (chunk.reasoning_content) {
+            continue
           }
 
           if (chunk.type === 'text' && chunk.content) {
@@ -372,17 +364,10 @@ export function App({
             if (isNewTurn) {
               turnContent = chunk.content
               isNewTurn = false
-              setMessages((prev) => {
-                const updated = [...prev]
-                const last = updated[updated.length - 1]
-                // Replace "thinking" placeholder with real content
-                if (last?.role === 'assistant' && last.content === '💭 思考中…') {
-                  last.content = turnContent
-                } else {
-                  updated.push({ role: 'assistant', content: turnContent })
-                }
-                return updated
-              })
+              setMessages((prev) => [
+                ...prev,
+                { role: 'assistant', content: turnContent },
+              ])
             } else {
               turnContent += chunk.content
               setMessages((prev) => {
@@ -430,9 +415,10 @@ export function App({
             setAgentProgress(null)
             // Sync background agents (e.g. Agent tool may have spawned them)
             syncBgAgents()
-            // Show tool result as a compact indented line
+            // Only show tool results with meaningful content.
+            // Skip empty results, "(no matches)", and other noise.
             const output = chunk.content ? String(chunk.content).trim() : ''
-            if (output) {
+            if (output && output !== '(no matches)' && output.length > 20) {
               const firstLine = output.split('\n')[0]!.slice(0, 200)
               const preview = firstLine.length < output.length ? `${firstLine}...` : firstLine
               setMessages((prev) => [

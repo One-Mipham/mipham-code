@@ -93,8 +93,11 @@ const MessageRow = React.memo(
 )
 
 export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
-  // In focus mode, compact tool activity into summary lines
-  const displayMessages = focusMode ? compactForFocus(messages) : messages
+  // Group consecutive tool calls into compact summaries to reduce visual noise.
+  // In focus mode, use the more aggressive compactForFocus.
+  const displayMessages = focusMode
+    ? compactForFocus(messages)
+    : compactToolGroups(messages)
 
   return (
     <Box flexDirection="column" marginY={1} flexGrow={1}>
@@ -139,6 +142,56 @@ export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
       ))}
     </Box>
   )
+}
+
+/**
+ * Group consecutive tool calls into compact one-liners for the normal view.
+ * Single tools show normally; 2+ consecutive tools get folded:
+ *   ⏺ Read · Glob · Bash (3 tools)
+ */
+function compactToolGroups(messages: ChatMessage[]): ChatMessage[] {
+  const result: ChatMessage[] = []
+  let toolGroup: ChatMessage[] = []
+
+  const flush = () => {
+    if (toolGroup.length === 0) return
+    if (toolGroup.length === 1) {
+      result.push(toolGroup[0]!)
+    } else {
+      const names = toolGroup
+        .filter((t) => t.toolMeta?.name && !t.toolMeta.name.startsWith('tools ('))
+        .map((t) => t.toolMeta!.name)
+      const uniqueNames = [...new Set(names)]
+      result.push({
+        role: 'system',
+        content: `⏺ ${uniqueNames.join(' · ')} (${names.length} tools)`,
+        toolMeta: {
+          name: `tools (${names.length})`,
+          input: uniqueNames.join(', '),
+          collapsed: true,
+        },
+      })
+    }
+    toolGroup = []
+  }
+
+  for (const msg of messages) {
+    // Tool results (no name, has output) get folded into the preceding tool group
+    if (msg.toolMeta && !msg.toolMeta.name && msg.toolMeta.output) {
+      toolGroup.push(msg)
+      continue
+    }
+    // Tool calls with a name
+    if (msg.toolMeta?.name && !msg.toolMeta.name.startsWith('tools (')) {
+      toolGroup.push(msg)
+      continue
+    }
+    // Already-grouped or non-tool message
+    flush()
+    result.push(msg)
+  }
+  flush()
+  return result
 }
 
 /**
