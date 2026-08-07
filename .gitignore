@@ -11,3 +11,4 @@ out/
 .playwright-mcp/
 *.tgz
 .vercel
+.worktrees/
