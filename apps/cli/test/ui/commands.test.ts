@@ -269,3 +269,73 @@ describe('slash command public API', () => {
     expect(getCommand('/nonexistent-command-xyz')).toBeUndefined()
   })
 })
+
+// ═══════════════════════════════════════════════════════════════
+// /resume, /resume last, /resume delete (Task 2.2)
+// ═══════════════════════════════════════════════════════════════
+
+describe('/resume commands (Task 2.2)', () => {
+  it('registers /resume', () => {
+    expect(getCommand('/resume')).toBeDefined()
+  })
+
+  it('registers /resume last', () => {
+    expect(getCommand('/resume last')).toBeDefined()
+  })
+
+  it('registers /resume delete', () => {
+    expect(getCommand('/resume delete')).toBeDefined()
+  })
+
+  it('all three resume commands appear in getCommandNames()', () => {
+    const names = getCommandNames()
+    expect(names).toContain('/resume')
+    expect(names).toContain('/resume last')
+    expect(names).toContain('/resume delete')
+  })
+
+  it('all three resume commands have descriptions', () => {
+    const list = getCommandList()
+    const byName: Record<string, string> = {}
+    for (const e of list) {
+      byName[e.name] = e.description
+    }
+    expect(byName['/resume']).toBeTruthy()
+    expect(byName['/resume last']).toBeTruthy()
+    expect(byName['/resume delete']).toBeTruthy()
+  })
+
+  it('/resume handles "last" sub-command', async () => {
+    const handler = getCommand('/resume')!
+    const result = await handler(mkCtx(), ['last'])
+    // Without actual SessionStore data, should return "no saved sessions"
+    expect(result.content).toContain('No saved sessions')
+  })
+
+  it('/resume handles "delete" sub-command', async () => {
+    const handler = getCommand('/resume')!
+    const result = await handler(mkCtx(), ['delete'])
+    // Without a name arg, should show usage
+    expect(result.content).toContain('Usage')
+    expect(result.content).toContain('/resume delete')
+  })
+
+  it('/resume delete requires a session name', async () => {
+    const handler = getCommand('/resume')!
+    const result = await handler(mkCtx(), ['delete', 'nonexistent-session'])
+    // Session doesn't exist, so it won't delete
+    expect(result.content).toContain('not found')
+  })
+
+  it('/resume last standalone handler returns no-sessions message', async () => {
+    const handler = getCommand('/resume last')!
+    const result = await handler(mkCtx(), [])
+    expect(result.content).toContain('No saved sessions')
+  })
+
+  it('/resume delete standalone handler shows usage without name', async () => {
+    const handler = getCommand('/resume delete')!
+    const result = await handler(mkCtx(), [])
+    expect(result.content).toContain('Usage')
+  })
+})

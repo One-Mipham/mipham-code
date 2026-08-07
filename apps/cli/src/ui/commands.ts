@@ -8,6 +8,7 @@ import type { QueryEngine } from '../core/engine'
 import type { MiphamConfig } from '../shared/index.ts'
 import type { SkillsLoader } from '../skills/loader'
 import type { PluginManager } from '../plugin/plugin-manager'
+import type { Message } from '../shared/types.js'
 import { McpClient } from '../mcp/client'
 import { NPM_INSTALL_COMMAND, NPM_UPDATE_COMMAND, PACKAGE_VERSION } from '../shared/index.ts'
 import { getPreference } from '../config/preferences'
@@ -58,6 +59,8 @@ export interface CommandResult {
   /** If set, route this message to the AI engine — bridges slash commands → skill/agent invocation.
    *  The app layer replaces the user input with this string and falls through to AI processing. */
   forwardToAI?: string
+  /** If set, restored messages to load into the session (used by /resume last). */
+  forwardedMessages?: Message[]
 }
 
 export type CommandHandler = (
@@ -98,6 +101,8 @@ const helpCmd: CommandHandler = (ctx) => {
       /export        Export conversation to file
       /doctor        System diagnostics
       /resume        List saved sessions
+      /resume last   Restore most recent session
+      /resume delete <name>   Delete a saved session
       /branch <name> Fork conversation
 
       ── History ─────────────────────────
@@ -1967,7 +1972,62 @@ const prCommentsCmd: CommandHandler = async () => {
 // Resume
 // ═══════════════════════════════════════════════════════════════
 
+const resumeLastCmd: CommandHandler = async () => {
+  const { SessionStore } = await import('../core/session-store')
+
+  const latest = SessionStore.getLatest()
+  if (!latest) {
+    return { content: '─ Resume Session ─\n\nNo saved sessions found.\n\nSessions are auto-saved to ~/.mipham/sessions/ when Mipham Code exits.' }
+  }
+
+  const session = SessionStore.load(latest.name)
+  if (!session) {
+    return { content: `─ Load Failed ─\n\nCould not load session "${latest.name}". The file may have been removed.` }
+  }
+
+  const date = new Date(latest.updatedAt).toLocaleString()
+  return {
+    content: [
+      '─ Session Restored ─',
+      '',
+      `Name:      ${latest.name}`,
+      `Messages:  ${session.messages.length}`,
+      `Provider:  ${latest.provider} / ${latest.model}`,
+      `Updated:   ${date}`,
+      '',
+      `${session.messages.length} messages loaded. Context has been restored.`,
+    ].join('\n'),
+    forwardedMessages: session.messages,
+  }
+}
+
+const resumeDeleteCmd: CommandHandler = async (_ctx, args) => {
+  const name = args.join(' ').trim()
+  if (!name) {
+    return { content: 'Usage: /resume delete <session-name>\n\nDelete a saved session. Use /resume to list all sessions.' }
+  }
+
+  const { SessionStore } = await import('../core/session-store')
+  const deleted = SessionStore.delete(name)
+
+  return deleted
+    ? { content: `✓ Session "${name}" deleted.` }
+    : { content: `✗ Session "${name}" not found. Use /resume to list all sessions.` }
+}
+
 const resumeCmd: CommandHandler = async (_ctx, args) => {
+  const sub = args[0]?.toLowerCase()
+
+  // Sub-command: /resume last
+  if (sub === 'last') {
+    return resumeLastCmd(_ctx, args.slice(1))
+  }
+
+  // Sub-command: /resume delete <name>
+  if (sub === 'delete') {
+    return resumeDeleteCmd(_ctx, args.slice(1))
+  }
+
   const { SessionStore } = await import('../core/session-store')
 
   // If a name is provided, show load instructions
@@ -1985,6 +2045,7 @@ const resumeCmd: CommandHandler = async (_ctx, args) => {
           `Updated:   ${session.metadata.updatedAt}`,
           '',
           'To resume this session:',
+          `  /resume last    — restore the most recent session`,
           `  mipham --resume "${targetName}"`,
           '',
           'Or restart Mipham Code — the most recent session loads automatically.',
@@ -2017,8 +2078,10 @@ const resumeCmd: CommandHandler = async (_ctx, args) => {
     '',
     `Total: ${sessions.length} session(s) • Location: ~/.mipham/sessions/`,
     '',
-    'To resume a session: /resume <name>',
-    'To resume from CLI:    mipham --resume "<name>"',
+    'To resume a session:   /resume <name>',
+    'To resume most recent:  /resume last',
+    'To delete a session:    /resume delete <name>',
+    'To resume from CLI:     mipham --resume "<name>"',
     '',
     'Sessions are auto-saved on exit. The most recent session loads automatically on restart.',
   ]
@@ -2993,6 +3056,8 @@ const commandsListCmd: CommandHandler = () => {
     '/export': 'Session & Identity',
     '/doctor': 'Session & Identity',
     '/resume': 'Session & Identity',
+    '/resume last': 'Session & Identity',
+    '/resume delete': 'Session & Identity',
     '/branch': 'Session & Identity',
     '/rewind': 'History',
     '/undo': 'History',
@@ -3175,6 +3240,8 @@ registry.set('/pr-comments', prCommentsCmd)
 registry.set('/doctor', doctorCmd)
 registry.set('/export', exportCmd)
 registry.set('/resume', resumeCmd)
+registry.set('/resume last', resumeLastCmd)
+registry.set('/resume delete', resumeDeleteCmd)
 registry.set('/memory', memoryCmd)
 registry.set('/upgrade', upgradeCmd)
 
@@ -3266,6 +3333,8 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/export': 'Export conversation to file',
   '/doctor': 'System diagnostics',
   '/resume': 'List saved sessions',
+  '/resume last': 'Restore the most recent saved session',
+  '/resume delete': 'Delete a saved session',
   '/branch': 'Fork conversation',
   '/rewind': 'Undo last AI turn',
   '/undo': 'Same as /rewind',
