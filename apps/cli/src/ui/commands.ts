@@ -39,6 +39,7 @@ import {
 import { themeCmd, releaseNotesCmd, ideCmd, terminalSetupCmd } from '../commands/environment.js'
 import { commitCmd, pushCmd, prCmd, issueCmd } from '../commands/git.js'
 import { keysCmd } from '../commands/keys'
+import { workflowViewCmd, workflowWatchCmd } from '../commands/workflow-view.js'
 
 export interface CommandContext {
   engine: QueryEngine
@@ -3080,6 +3081,8 @@ const commandsListCmd: CommandHandler = () => {
     '/pr-comments': 'Workflow',
     '/diff': 'Workflow',
     '/workflows': 'Workflow',
+    '/workflow view': 'Workflow',
+    '/workflow watch': 'Workflow',
     '/deep-research': 'Workflow',
     '/loop': 'Workflow',
     '/init': 'Project',
@@ -3217,6 +3220,8 @@ registry.set('/loop', loopCmd)
 registry.set('/no-plan', noPlanCmd)
 registry.set('/workflow', workflowAutoCmd)
 registry.set('/workflows', workflowsCmd)
+registry.set('/workflow view', workflowViewCmd)
+registry.set('/workflow watch', workflowWatchCmd)
 registry.set('/deep-research', deepResearchCmd)
 registry.set('/review', reviewCmd)
 registry.set('/pr-comments', prCommentsCmd)
@@ -3363,6 +3368,8 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/pr-comments': 'PR review summary',
   '/diff': 'Show git diff',
   '/workflows': 'List workflow scripts',
+  '/workflow view': 'View workflow run details or list runs',
+  '/workflow watch': 'Monitor active workflow execution',
   '/deep-research':
     'Deep research with multi-agent parallel search, verification, and cited synthesis',
   '/loop': 'Run prompt on interval',
