@@ -447,7 +447,9 @@
       "title": "Mipham Code",
       "subtitle": "AI 驱动的编程助手",
       "tagline": "多模型 / 多提供商 / 技能与工具 / 开源核心",
-      "start_message": "输入消息开始。 /help 查看命令"
+      "start_message": "输入消息开始。 /help 查看命令",
+      "controls_hint": "Ctrl+P 选择模型 · Esc 退出",
+      "tip_clear": "提示：使用 /clear 可在切换话题时重新开始并释放上下文"
     },
     "permission": {
       "manual": "手动模式",
@@ -483,7 +485,13 @@
       "illuminating": "启明中",
       "manifesting": "呈现中",
       "transmogrifying": "变形中",
-      "actualizing": "实现中"
+      "actualizing": "实现中",
+      "completed_brewed": "已完成",
+      "completed_churned": "已生成",
+      "completed_cooked": "已处理",
+      "completed_sauteed": "已完成",
+      "completed_cogitated": "已思考",
+      "completed_crunched": "已计算"
     },
     "agent": {
       "running": "运行中",

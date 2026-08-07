@@ -447,7 +447,9 @@
       "title": "Mipham Code",
       "subtitle": "AI-Powered Programming Assistant",
       "tagline": "Multi-model / Multi-provider / Skills & Tools / Open-core",
-      "start_message": "Type a message to start. /help for commands"
+      "start_message": "Type a message to start. /help for commands",
+      "controls_hint": "Ctrl+P pick model · Esc to exit",
+      "tip_clear": "Tip: Use /clear to start fresh when switching topics and free up context"
     },
     "permission": {
       "manual": "manual mode",
@@ -483,7 +485,13 @@
       "illuminating": "Illuminating",
       "manifesting": "Manifesting",
       "transmogrifying": "Transmogrifying",
-      "actualizing": "Actualizing"
+      "actualizing": "Actualizing",
+      "completed_brewed": "Brewed",
+      "completed_churned": "Churned",
+      "completed_cooked": "Cooked",
+      "completed_sauteed": "Sautéed",
+      "completed_cogitated": "Cogitated",
+      "completed_crunched": "Crunched"
     },
     "agent": {
       "running": "running",

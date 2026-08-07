@@ -52,6 +52,15 @@ const LOADING_KEYS = [
   'ui.loading.actualizing',
 ]
 
+const COMPLETED_KEYS = [
+  'ui.loading.completed_brewed',
+  'ui.loading.completed_churned',
+  'ui.loading.completed_cooked',
+  'ui.loading.completed_sauteed',
+  'ui.loading.completed_cogitated',
+  'ui.loading.completed_crunched',
+]
+
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]!
 }
@@ -68,6 +77,8 @@ export function InputBar({
   const { t } = useI18n()
   const [value, setValue] = useState('')
   const [verb, setVerb] = useState(() => t(pick(LOADING_KEYS)))
+  const [completionVerb, setCompletionVerb] = useState<string | null>(null)
+  const prevLoading = useRef(isLoading)
 
   // ── Slash command hints ──
   const allCommands = useMemo(() => getCommandList(), [])
@@ -91,7 +102,18 @@ export function InputBar({
   useEffect(() => {
     if (isLoading) {
       setVerb(t(pick(LOADING_KEYS)))
+      setCompletionVerb(null)
     }
+  }, [isLoading, t])
+
+  // Flash a past participle when loading stops
+  useEffect(() => {
+    if (prevLoading.current === true && isLoading === false) {
+      setCompletionVerb(t(pick(COMPLETED_KEYS)))
+      const timer = setTimeout(() => setCompletionVerb(null), 1500)
+      return () => clearTimeout(timer)
+    }
+    prevLoading.current = isLoading
   }, [isLoading, t])
 
   const [vimMode, setVimMode] = useState<VimMode>('insert')
@@ -306,7 +328,9 @@ export function InputBar({
                 ? t('ui.input.vim_help')
                 : isLoading
                   ? `${verb}...`
-                  : t('ui.input.placeholder')
+                  : completionVerb
+                    ? completionVerb
+                    : t('ui.input.placeholder')
           }
         />
       </Box>

@@ -123,6 +123,16 @@ export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
               {t('ui.banner.start_message')} <Text color="yellow">/help</Text>
             </Text>
           </Box>
+          <Box marginTop={1}>
+            <Text dimColor>
+              {t('ui.banner.controls_hint')}
+            </Text>
+          </Box>
+          <Box marginTop={1}>
+            <Text dimColor>
+              {t('ui.banner.tip_clear')}
+            </Text>
+          </Box>
         </Box>
       )}
       {displayMessages.map((msg, i) => (
