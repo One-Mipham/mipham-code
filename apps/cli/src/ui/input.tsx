@@ -8,6 +8,16 @@ import { CommandPicker } from './command-picker.js'
 interface InputBarProps {
   onSubmit: (input: string) => void
   isLoading: boolean
+  /** Ctrl+P → open model picker */
+  onTogglePicker?: () => void
+  /** Ctrl+F → toggle focus mode */
+  onToggleFocus?: () => void
+  /** Ctrl+O → expand last tool call */
+  onToggleExpand?: () => void
+  /** Shift+Tab → cycle permission mode */
+  onCyclePermission?: () => void
+  /** Escape → cancel loading (when input is empty) */
+  onCancel?: () => void
 }
 
 // ── Status verbs — English (Claude Code-aligned) + Chinese (Mipham originals) ──
@@ -107,7 +117,15 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]!
 }
 
-export function InputBar({ onSubmit, isLoading }: InputBarProps) {
+export function InputBar({
+  onSubmit,
+  isLoading,
+  onTogglePicker,
+  onToggleFocus,
+  onToggleExpand,
+  onCyclePermission,
+  onCancel,
+}: InputBarProps) {
   const [value, setValue] = useState('')
   const [verb, setVerb] = useState(() => pick(STATUS_GERUNDS))
   const [completionVerb, setCompletionVerb] = useState<string | null>(null)
@@ -158,15 +176,29 @@ export function InputBar({ onSubmit, isLoading }: InputBarProps) {
   const [searchMode, setSearchMode] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
+  // Track pre-shortcut value so we can revert ink-text-input's Ctrl-key insertions.
+  // ink-text-input inserts 'p'/'f'/'o' for Ctrl+P/F/O (Ink normalizes control chars
+  // to their letter names before passing to useInput).
+  const valueBeforeShortcut = useRef(value)
+  // Keep the ref in sync with state on every change that isn't a Ctrl shortcut revert.
+  useEffect(() => {
+    valueBeforeShortcut.current = value
+  }, [value])
+
   // ── Vim motions: intercept keys in normal mode ──
 
   useInput((input, key) => {
-    // Escape toggles between insert and normal mode
+    // ── Escape: cancel loading → toggle vim mode ──
     if (key.escape) {
       // Cancel search mode if active
       if (searchMode) {
         setSearchMode(false)
         setSearchQuery('')
+        return
+      }
+      // Escape while loading → abort (priority over vim toggle)
+      if (isLoading) {
+        onCancel?.()
         return
       }
       // Clear any pending multi-key sequence
@@ -175,6 +207,33 @@ export function InputBar({ onSubmit, isLoading }: InputBarProps) {
       }
       setVimMode((prev) => (prev === 'insert' ? 'normal' : 'insert'))
       vimEngine.current.mode = vimEngine.current.mode === 'insert' ? 'normal' : 'insert'
+      return
+    }
+
+    // ── Global hotkeys (work in both insert and normal modes) ──
+    // Shift+Tab → cycle permission mode
+    if (key.shift && key.tab) {
+      onCyclePermission?.()
+      return
+    }
+    // Ctrl+P → toggle model picker
+    // NOTE: Ink passes input=keypress.name (just 'p') when ctrl is true, not raw \x10.
+    // ink-text-input inserts 'p' as literal text — revert it.
+    if (key.ctrl && input === 'p') {
+      setValue(valueBeforeShortcut.current)
+      onTogglePicker?.()
+      return
+    }
+    // Ctrl+F → toggle focus mode
+    if (key.ctrl && input === 'f') {
+      setValue(valueBeforeShortcut.current)
+      onToggleFocus?.()
+      return
+    }
+    // Ctrl+O → expand/collapse last tool call
+    if (key.ctrl && input === 'o') {
+      setValue(valueBeforeShortcut.current)
+      onToggleExpand?.()
       return
     }
 

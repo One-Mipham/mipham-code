@@ -68,12 +68,12 @@ const PERMISSION_MODES: PermissionMode[] = [
   'bypassPermissions',
 ]
 const PERMISSION_LABELS: Record<PermissionMode, string> = {
-  default: 'default · reads free',
-  acceptEdits: 'accept edits · reads + edits free',
+  default: 'reads free',
+  acceptEdits: 'accept edits on',
   plan: 'plan mode · read-only',
-  auto: 'auto mode · hooks gate',
-  dontAsk: "don't ask · pre-approved only",
-  bypassPermissions: 'bypass · skip all checks',
+  auto: 'auto mode',
+  dontAsk: "don't ask",
+  bypassPermissions: 'bypass',
 }
 const PERMISSION_COLORS: Record<PermissionMode, string> = {
   default: 'white',
@@ -500,7 +500,8 @@ export function App({
   )
 
   useInput((_input, key) => {
-    // Global hotkeys
+    // Escape: close picker → abort loading (does NOT exit app)
+    // Vim mode toggle is handled by InputBar
     if (key.escape) {
       if (pickerOpen) {
         setPickerOpen(false)
@@ -510,57 +511,12 @@ export function App({
         abortRef.current.abort()
         return
       }
-      process.exit(0)
-    }
-    // Ctrl+P → open model picker
-    if (_input === '\x10') {
-      setPickerOpen((prev) => !prev)
+      // When input is empty and not loading, let InputBar handle Escape
+      // (it toggles vim mode or clears pending sequences)
       return
     }
-    // Ctrl+F → toggle focus mode
-    if (_input === '\x06') {
-      setFocusMode((prev) => !prev)
-      return
-    }
-    // Ctrl+O → toggle last tool call expand/collapse
-    if (_input === '\x0f') {
-      setMessages((prev) => {
-        const msgs = [...prev]
-        for (let i = msgs.length - 1; i >= 0; i--) {
-          if (msgs[i]?.toolMeta) {
-            const meta = msgs[i]!.toolMeta!
-            if (meta.collapsed) {
-              msgs[i] = {
-                ...msgs[i]!,
-                content: `🔧 ${meta.name}: ${meta.input}\n📋 Result: ${meta.output || '(pending)'}`,
-                toolMeta: { ...meta, collapsed: false },
-              }
-            } else {
-              const short = meta.input.length > 50 ? meta.input.slice(0, 50) + '...' : meta.input
-              msgs[i] = {
-                ...msgs[i]!,
-                content: `⏺ ${meta.name} · ${short} (Ctrl+O to expand)`,
-                toolMeta: { ...meta, collapsed: true },
-              }
-            }
-            break
-          }
-        }
-        return msgs
-      })
-      return
-    }
-    // Shift+Tab → cycle through all 6 permission modes
-    if (key.shift && key.tab) {
-      setPermissionMode((prev) => {
-        const idx = PERMISSION_MODES.indexOf(prev)
-        const next = PERMISSION_MODES[(idx + 1) % PERMISSION_MODES.length]!
-        // Sync to engine — use setMode for proper mode semantics
-        engine.getPermission().setMode(next)
-        return next
-      })
-      return
-    }
+    // All other global hotkeys (Shift+Tab, Ctrl+P, Ctrl+F, Ctrl+O)
+    // are handled in InputBar to avoid ink-text-input conflicts
   })
 
   return (
@@ -599,7 +555,52 @@ export function App({
         /* Input bar (hidden when picker is open) */
         <Box flexDirection="column">
           <Text dimColor>──────────────────────────────</Text>
-          <InputBar onSubmit={handleSubmit} isLoading={isLoading} />
+          <InputBar
+            onSubmit={handleSubmit}
+            isLoading={isLoading}
+            onTogglePicker={() => setPickerOpen((prev) => !prev)}
+            onToggleFocus={() => setFocusMode((prev) => !prev)}
+            onToggleExpand={() => {
+              setMessages((prev) => {
+                const msgs = [...prev]
+                for (let i = msgs.length - 1; i >= 0; i--) {
+                  if (msgs[i]?.toolMeta) {
+                    const meta = msgs[i]!.toolMeta!
+                    if (meta.collapsed) {
+                      msgs[i] = {
+                        ...msgs[i]!,
+                        content: `🔧 ${meta.name}: ${meta.input}\n📋 Result: ${meta.output || '(pending)'}`,
+                        toolMeta: { ...meta, collapsed: false },
+                      }
+                    } else {
+                      const short =
+                        meta.input.length > 50 ? meta.input.slice(0, 50) + '...' : meta.input
+                      msgs[i] = {
+                        ...msgs[i]!,
+                        content: `⏺ ${meta.name} · ${short} (Ctrl+O to expand)`,
+                        toolMeta: { ...meta, collapsed: true },
+                      }
+                    }
+                    break
+                  }
+                }
+                return msgs
+              })
+            }}
+            onCyclePermission={() => {
+              setPermissionMode((prev) => {
+                const idx = PERMISSION_MODES.indexOf(prev)
+                const next = PERMISSION_MODES[(idx + 1) % PERMISSION_MODES.length]!
+                engine.getPermission().setMode(next)
+                return next
+              })
+            }}
+            onCancel={() => {
+              if (abortRef.current) {
+                abortRef.current.abort()
+              }
+            }}
+          />
           <Text dimColor>──────────────────────────────</Text>
         </Box>
       )}
@@ -607,7 +608,7 @@ export function App({
       {/* Agent status footer — shows running background agents */}
       <AgentFooter agents={Object.values(runningAgents)} gitBranch={gitBranch} tick={agentTick} />
 
-      {/* Status line */}
+      {/* Status line — Claude Code style: compact, action-oriented */}
       <Box marginTop={1} flexDirection="column">
         {goalText && (
           <Box>
@@ -616,11 +617,10 @@ export function App({
         )}
         <Box flexDirection="row">
           <Text color={PERMISSION_COLORS[permissionMode]}>
-            ● {PERMISSION_LABELS[permissionMode]}
+            ⏵⏵ {PERMISSION_LABELS[permissionMode]} (shift+tab to cycle)
           </Text>
-          <Text dimColor> · Shift+Tab mode</Text>
-          <Text dimColor> · Ctrl+P model · Ctrl+F focus · Ctrl+O expand</Text>
-          <Text dimColor> · Esc cancel · /help · ← agents</Text>
+          <Text dimColor> · Esc to interrupt</Text>
+          <Text dimColor> · ← agents</Text>
         </Box>
       </Box>
     </Box>
