@@ -2,8 +2,127 @@
   "hello": "你好",
   "greeting": "你好 {name}",
   "commands": {
-    "clear": {
-      "confirmed": "✓ 对话已清除，上下文已重置。"
+    "clear": { "confirmed": "✓ 对话已清除，上下文已重置。" },
+    "compact": { "confirmed": "✓ 上下文已压缩。" },
+    "status": {
+      "title": "── 系统诊断 ──",
+      "config": "── 配置 ──",
+      "session": "── 会话 ──",
+      "git": "── Git ──",
+      "skills": "── 技能 ──"
+    },
+    "switch": { "confirmed": "已切换到 {model}" },
+    "goal": { "set": "目标已设置：{goal}" },
+    "plan": { "entered": "已进入计划模式。" },
+    "diff": { "clean": "没有未提交的更改（工作区干净）。" },
+    "copy": { "confirmed": "✓ 已复制 {count} 条助手回复到剪贴板。" },
+    "resume": {
+      "no_sessions": "没有已保存的会话。",
+      "restored": "─ 会话已恢复 ─",
+      "not_found": "未找到会话 \"{name}\"。"
+    },
+    "help": { "title": "── Mipham Code 帮助 ──" },
+    "lang": { "current": "当前语言：{locale}", "set": "语言已设置为 {locale}。重启 Mipham Code 生效。" },
+    "exit": {}
+  },
+  "ui": {
+    "banner": {
+      "title": "Mipham Code",
+      "subtitle": "AI 驱动的编程助手",
+      "tagline": "多模型 / 多提供商 / 技能与工具 / 开源核心",
+      "start_message": "输入消息开始。 /help 查看命令"
+    },
+    "permission": {
+      "manual": "手动模式",
+      "accept_edits": "接受编辑",
+      "plan_mode": "计划模式 / 只读",
+      "auto": "自动模式",
+      "dont_ask": "不再询问",
+      "bypass": "绕过权限"
+    },
+    "loading": {
+      "doodling": "涂鸦中",
+      "forging": "锻造中",
+      "cerebrating": "深思中",
+      "recombobulating": "重组中",
+      "thinking": "思考中",
+      "computing": "计算中",
+      "processing": "处理中",
+      "analyzing": "分析中",
+      "generating": "生成中",
+      "dreaming": "构想中",
+      "pondering": "沉思中",
+      "ruminating": "反复思考中",
+      "deliberating": "审议中",
+      "contemplating": "考量中",
+      "synthesizing": "综合中",
+      "calculating": "演算中",
+      "inferring": "推理中",
+      "optimizing": "优化中",
+      "compiling": "编译中",
+      "orchestrating": "编排中",
+      "harmonizing": "协调中",
+      "galvanizing": "激发中",
+      "illuminating": "启明中",
+      "manifesting": "呈现中",
+      "transmogrifying": "变形中",
+      "actualizing": "实现中"
+    },
+    "agent": {
+      "running": "运行中",
+      "finished": "已完成",
+      "status_label": "代理"
+    },
+    "system": { "role_label": "系统" },
+    "assistant": { "role_label": "Mipham Code" },
+    "user": { "role_label": "用户" }
+  },
+  "tools": {
+    "bash": { "name": "Bash", "description": "执行 Shell 命令" },
+    "read": { "name": "Read", "description": "从文件系统读取文件" },
+    "write": { "name": "Write", "description": "写入内容到文件" },
+    "edit": { "name": "Edit", "description": "通过字符串替换编辑文件" },
+    "glob": { "name": "Glob", "description": "查找匹配模式的文件" },
+    "grep": { "name": "Grep", "description": "使用正则表达式搜索文件内容" },
+    "web_fetch": { "name": "WebFetch", "description": "获取 URL 并解析内容" },
+    "web_search": { "name": "WebSearch", "description": "搜索网页" },
+    "agent": { "name": "Agent", "description": "启动子代理执行复杂任务" },
+    "task": { "name": "Task", "description": "创建和跟踪任务" },
+    "skill": { "name": "Skill", "description": "调用命名技能" },
+    "memory": { "name": "Memory", "description": "读写持久记忆" },
+    "workflow": { "name": "Workflow", "description": "执行多代理工作流" },
+    "plan": { "name": "Plan", "description": "进入计划模式进行结构化思考" },
+    "config": { "name": "Config", "description": "查看和修改配置" },
+    "mcp": { "name": "MCP", "description": "管理 MCP 服务器连接" }
+  },
+  "errors": {
+    "tool_not_allowed": "工具 \"{name}\" 需要用户批准（权限：ask），未执行。",
+    "tool_blocked": "工具 \"{name}\" 被钩子拦截",
+    "user_input_blocked": "用户输入被钩子拦截。",
+    "dlp_blocked": "请求被 DLP 策略阻止。",
+    "model_error": "错误：{error}",
+    "tool_collision": "[mcp] 工具冲突：\"{name}\" 已注册，跳过。"
+  },
+  "system": {
+    "mcp": {
+      "connecting": "[mcp] 正在连接 \"{name}\"...",
+      "connected": "[mcp] 已连接到 \"{name}\"",
+      "failed": "[mcp] 连接 \"{name}\" 失败：{reason}",
+      "registered": "[mcp] \"{name}\"：已注册 {count} 个工具",
+      "disconnected": "[mcp] 已断开 \"{name}\"",
+      "reloaded": "[mcp] 已重新加载 \"{name}\""
+    },
+    "context": {
+      "omitted": "之前的对话上下文已省略。",
+      "summary_heading": "[之前的对话摘要 — {heading}]"
+    },
+    "goal": {
+      "verified": "✅ 目标验证通过：{script}",
+      "failed_continuing": "🔄 验证脚本失败 — 继续（第 {loop} 轮）",
+      "running_skill": "🔍 正在运行验证技能：{skill}"
+    },
+    "welcome": {
+      "unknown_model": "[mipham] ⚠ 未知模型 \"{model}\"：假定 {k}k 上下文窗口。"
     }
   }
 }

@@ -2,8 +2,127 @@
   "hello": "Hello",
   "greeting": "Hello {name}",
   "commands": {
-    "clear": {
-      "confirmed": "✓ Conversation cleared. Context reset."
+    "clear": { "confirmed": "✓ Conversation cleared. Context reset." },
+    "compact": { "confirmed": "✓ Context compacted." },
+    "status": {
+      "title": "── System Diagnostics ──",
+      "config": "── Config ──",
+      "session": "── Session ──",
+      "git": "── Git ──",
+      "skills": "── Skills ──"
+    },
+    "switch": { "confirmed": "Switched to {model}" },
+    "goal": { "set": "Goal set: {goal}" },
+    "plan": { "entered": "Entered plan mode." },
+    "diff": { "clean": "No uncommitted changes (working tree clean)." },
+    "copy": { "confirmed": "✓ Copied {count} assistant response(s) to clipboard." },
+    "resume": {
+      "no_sessions": "No saved sessions.",
+      "restored": "─ Session Restored ─",
+      "not_found": "Session \"{name}\" not found."
+    },
+    "help": { "title": "── Mipham Code Help ──" },
+    "lang": { "current": "Current: {locale}", "set": "Language set to {locale}. Restart Mipham Code to apply." },
+    "exit": {}
+  },
+  "ui": {
+    "banner": {
+      "title": "Mipham Code",
+      "subtitle": "AI-Powered Programming Assistant",
+      "tagline": "Multi-model / Multi-provider / Skills & Tools / Open-core",
+      "start_message": "Type a message to start. /help for commands"
+    },
+    "permission": {
+      "manual": "manual mode",
+      "accept_edits": "accept edits on",
+      "plan_mode": "plan mode / read-only",
+      "auto": "auto mode",
+      "dont_ask": "don't ask",
+      "bypass": "bypass"
+    },
+    "loading": {
+      "doodling": "Doodling",
+      "forging": "Forging",
+      "cerebrating": "Cerebrating",
+      "recombobulating": "Recombobulating",
+      "thinking": "Thinking",
+      "computing": "Computing",
+      "processing": "Processing",
+      "analyzing": "Analyzing",
+      "generating": "Generating",
+      "dreaming": "Dreaming",
+      "pondering": "Pondering",
+      "ruminating": "Ruminating",
+      "deliberating": "Deliberating",
+      "contemplating": "Contemplating",
+      "synthesizing": "Synthesizing",
+      "calculating": "Calculating",
+      "inferring": "Inferring",
+      "optimizing": "Optimizing",
+      "compiling": "Compiling",
+      "orchestrating": "Orchestrating",
+      "harmonizing": "Harmonizing",
+      "galvanizing": "Galvanizing",
+      "illuminating": "Illuminating",
+      "manifesting": "Manifesting",
+      "transmogrifying": "Transmogrifying",
+      "actualizing": "Actualizing"
+    },
+    "agent": {
+      "running": "running",
+      "finished": "finished",
+      "status_label": "Agents"
+    },
+    "system": { "role_label": "System" },
+    "assistant": { "role_label": "Mipham Code" },
+    "user": { "role_label": "User" }
+  },
+  "tools": {
+    "bash": { "name": "Bash", "description": "Execute shell commands" },
+    "read": { "name": "Read", "description": "Read a file from the filesystem" },
+    "write": { "name": "Write", "description": "Write content to a file" },
+    "edit": { "name": "Edit", "description": "Edit a file with string replacement" },
+    "glob": { "name": "Glob", "description": "Find files matching a pattern" },
+    "grep": { "name": "Grep", "description": "Search file contents with regex" },
+    "web_fetch": { "name": "WebFetch", "description": "Fetch a URL and parse content" },
+    "web_search": { "name": "WebSearch", "description": "Search the web" },
+    "agent": { "name": "Agent", "description": "Launch a sub-agent for complex tasks" },
+    "task": { "name": "Task", "description": "Create and track tasks" },
+    "skill": { "name": "Skill", "description": "Invoke a named skill" },
+    "memory": { "name": "Memory", "description": "Read/write persistent memory" },
+    "workflow": { "name": "Workflow", "description": "Execute a multi-agent workflow" },
+    "plan": { "name": "Plan", "description": "Enter plan mode for structured thinking" },
+    "config": { "name": "Config", "description": "View and modify configuration" },
+    "mcp": { "name": "MCP", "description": "Manage MCP server connections" }
+  },
+  "errors": {
+    "tool_not_allowed": "Tool \"{name}\" requires user approval (permission: ask).",
+    "tool_blocked": "Tool \"{name}\" blocked by hook",
+    "user_input_blocked": "User input blocked by hook.",
+    "dlp_blocked": "Request blocked by DLP policy.",
+    "model_error": "Error: {error}",
+    "tool_collision": "[mcp] Tool collision: \"{name}\" already registered. Skipping."
+  },
+  "system": {
+    "mcp": {
+      "connecting": "[mcp] Connecting to \"{name}\"...",
+      "connected": "[mcp] Connected to \"{name}\"",
+      "failed": "[mcp] Failed to connect \"{name}\": {reason}",
+      "registered": "[mcp] \"{name}\": registered {count} tools",
+      "disconnected": "[mcp] Disconnected \"{name}\"",
+      "reloaded": "[mcp] Reloaded \"{name}\""
+    },
+    "context": {
+      "omitted": "Prior conversation context omitted.",
+      "summary_heading": "[Earlier conversation summary — {heading}]"
+    },
+    "goal": {
+      "verified": "✅ Goal verification passed: {script}",
+      "failed_continuing": "🔄 Verification script failed — continuing (loop {loop})",
+      "running_skill": "🔍 Running verification skill: {skill}"
+    },
+    "welcome": {
+      "unknown_model": "[mipham] ⚠ Unknown model \"{model}\": assuming {k}k context window."
     }
   }
 }
