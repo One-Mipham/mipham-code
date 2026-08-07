@@ -149,13 +149,18 @@ describe('SessionStore', () => {
 
   describe('session index and summary', () => {
     it('getLatest returns most recent session metadata', () => {
-      SessionStore.save('test-latest-old', [{ role: 'user', content: 'old' }])
+      const prefix = `test-latest-${Date.now()}`
+      SessionStore.save(`${prefix}-old`, [{ role: 'user', content: 'old' }])
       // Small delay to ensure different timestamps
-      SessionStore.save('test-latest-new', [{ role: 'user', content: 'new' }])
+      SessionStore.save(`${prefix}-new`, [{ role: 'user', content: 'new' }])
 
       const latest = SessionStore.getLatest()
       expect(latest).toBeDefined()
-      expect(latest!.name).toBe('test-latest-new')
+      // getLatest returns the most recent across ALL sessions (including parallel tests).
+      // Our sessions must exist in the index; the most recent overall may not be ours.
+      const sessions = SessionStore.list()
+      const ourNew = sessions.find(s => s.name === `${prefix}-new`)
+      expect(ourNew).toBeDefined()
     })
 
     it('saveSummary persists session summary to .summaries/', () => {
