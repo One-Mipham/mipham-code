@@ -5,6 +5,7 @@ import {
   writeFileSync,
   unlinkSync,
   existsSync,
+  statSync,
 } from 'node:fs'
 import { join, extname } from 'node:path'
 
@@ -205,12 +206,18 @@ export class MemoryManager {
       const whyMatch = bullet.match(/\*\*Why:\*\*\s*(.+?)(?:\s*\*\*How to apply:|$)/)
       const howMatch = bullet.match(/\*\*How to apply:\*\*\s*(.+)$/)
 
-      const content = bullet.trim()
+      // Strip Why/How markers from content — they're passed as metadata fields
+      // and formatMemoryBody appends them, so leaving them in duplicates the text
+      const stripped = bullet
+        .trim()
+        .replace(/\s*\*\*Why:\*\*.*/, '')
+        .replace(/\s*\*\*How to apply:\*\*.*/, '')
+        .trim()
       const slug = `auto-${sessionId}-${results.length}`
 
-      this.write(slug, content, {
+      this.write(slug, stripped, {
         type: 'feedback',
-        relevance: this.extractKeywords(content),
+        relevance: this.extractKeywords(stripped),
         why: whyMatch?.[1]?.trim(),
         howToApply: howMatch?.[1]?.trim(),
       })
@@ -347,7 +354,7 @@ export class MemoryManager {
       },
       content,
       filePath,
-      updatedAt: new Date(),
+      updatedAt: statSync(filePath).mtime,
     }
   }
 
