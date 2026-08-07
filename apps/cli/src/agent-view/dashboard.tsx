@@ -30,7 +30,7 @@ const STATUS_HEADERS: Record<string, { label: string; color: string }> = {
 export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps) {
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [peekingSessionId, setPeekingSessionId] = useState<string | null>(null)
-  const [groupBy, setGroupBy] = useState<'status' | 'directory'>('status')
+  const [_groupBy, setGroupBy] = useState<'status' | 'directory'>('status')
 
   // Build a flat list of sessions in group order, with group headers
   const flatList = useMemo(() => {
@@ -202,7 +202,7 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
       ) : (
         <Box flexDirection="column">
           {/* Session list with group headers */}
-          {flatList.map((item, flatIdx) => {
+          {flatList.map((item, _flatIdx) => {
             if (item.type === 'header') {
               return (
                 <Box key={`h-${item.status}`} marginY={1}>

@@ -18,7 +18,7 @@
  */
 
 import { readdirSync, readFileSync, existsSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { join } from 'node:path'
 
 interface RuleFile {
   name: string
@@ -146,7 +146,7 @@ export class RulesLoader {
    */
   private parseRule(
     raw: string,
-    filename: string,
+    _filename: string,
   ): { paths: string[]; description: string; content: string } {
     const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/)
     if (!match) {

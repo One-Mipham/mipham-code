@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { Box, Text, useInput } from 'ink'
 import TextInput from 'ink-text-input'
 import { VimMotionEngine, type VimMode } from './vim-motions.js'
-import { getCommandList, type CommandEntry } from './commands.js'
+import { getCommandList } from './commands.js'
 import { CommandPicker } from './command-picker.js'
 
 interface InputBarProps {
@@ -389,7 +389,7 @@ export function InputBar({
       {slashHints.length > 0 && vimMode === 'insert' && !pickerActive && (
         <Box marginTop={1} flexDirection="column" gap={1}>
           <Text dimColor>Commands: </Text>
-          {slashHints.map((cmd, i) => (
+          {slashHints.map((cmd, _i) => (
             <Text key={cmd.name} color="cyan">
               {cmd.name}
             </Text>

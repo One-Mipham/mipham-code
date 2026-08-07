@@ -5,7 +5,7 @@ import type { QueryEngine } from '../core/engine'
 import type { MiphamConfig } from '../shared/index.ts'
 import type { SkillsLoader } from '../skills/loader'
 import type { PluginManager } from '../plugin/plugin-manager'
-import { getPreference, setPreference } from '../config/preferences'
+import { setPreference } from '../config/preferences'
 import { AgentRegistry } from '../agent/agent-registry'
 import { getBackgroundAgentRegistry } from '../agent/background-registry'
 import { ChatPanel } from './chat'
@@ -133,9 +133,9 @@ export function App({
   const [providerId, setProviderId] = useState(initialProvider || config.defaultProvider)
   const [modelId, setModelId] = useState(initialModel || config.defaultModel)
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [sessionTitle, setSessionTitle] = useState('')
-  const [fastMode, setFastMode] = useState(false)
-  const [effort, setEffort] = useState('high')
+  const [_sessionTitle, setSessionTitle] = useState('')
+  const [_fastMode, setFastMode] = useState(false)
+  const [_effort, setEffort] = useState('high')
   const [focusMode, setFocusMode] = useState(false)
   const [_ultracodeMode, setUltracodeMode] = useState(false)
   const [goalText, setGoalText] = useState('')

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { executeForkedSkill } from '../../src/skills/fork-executor'
 import type { SkillDefinition } from '../../src/shared/index.ts'
 import type { ProviderRegistry, ProviderInstance } from '../../src/providers/registry'

@@ -5,7 +5,6 @@
  * Handlers for: /commit, /push, /pr, /issue
  */
 import type { CommandHandler } from '../ui/commands.js'
-import { stripIndent } from '../ui/strip-indent.js'
 
 export { commitCmd, pushCmd, prCmd, issueCmd }
 

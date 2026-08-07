@@ -5,7 +5,7 @@
  * from remote sources (GitHub repos, direct URLs).
  */
 
-import { existsSync, mkdirSync, writeFileSync, readdirSync, unlinkSync, chmodSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync, readdirSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { spawnSync } from 'node:child_process'

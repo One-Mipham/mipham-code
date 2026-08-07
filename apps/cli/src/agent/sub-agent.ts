@@ -1,4 +1,4 @@
-import type { ProviderRegistry, ProviderInstance } from '../providers/registry'
+import type { ProviderRegistry } from '../providers/registry'
 import type { ToolDefinition } from '../shared/index.ts'
 import type { SubAgentType, SubAgentOptions, AgentDefinition } from './types'
 import { createAgentContext } from './agent-context'

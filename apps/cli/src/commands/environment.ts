@@ -5,8 +5,7 @@
  * Handlers for: /theme, /release-notes, /ide, /terminal-setup
  */
 import type { CommandHandler } from '../ui/commands.js'
-import { stripIndent } from '../ui/strip-indent.js'
-import { NPM_INSTALL_COMMAND, NPM_UPDATE_COMMAND, PACKAGE_VERSION } from '../shared/index.ts'
+import { NPM_INSTALL_COMMAND } from '../shared/index.ts'
 
 export { themeCmd, releaseNotesCmd, ideCmd, terminalSetupCmd }
 
@@ -89,7 +88,7 @@ Full changelog: https://mipham.ai/code/releases`,
 // ═══════════════════════════════════════════════════════════════
 
 const ideCmd: CommandHandler = async (_ctx) => {
-  const { mkdirSync, writeFileSync, existsSync } = await import('node:fs')
+  const { mkdirSync, writeFileSync } = await import('node:fs')
   const { join } = await import('node:path')
 
   const cwd = process.cwd()

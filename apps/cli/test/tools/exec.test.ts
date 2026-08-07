@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import type { ToolContext } from '@mipham/shared'
 import { bashTool } from '../../src/tools/exec/bash'
 import { gitTool } from '../../src/tools/exec/git'

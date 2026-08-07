@@ -129,7 +129,7 @@ export const enterWorktreeTool: ToolDefinition = {
         ['git', 'worktree', 'add', '-b', branchName, worktreePath, resolvedBaseRef],
         { cwd, stdout: 'pipe', stderr: 'pipe' },
       )
-      const stdout = await new Response(proc.stdout).text()
+      const _stdout = await new Response(proc.stdout).text()
       const exitCode = await proc.exited
 
       if (exitCode !== 0) {

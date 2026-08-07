@@ -1,4 +1,3 @@
-import { relative, isAbsolute } from 'node:path'
 import { homedir } from 'node:os'
 import type { CredentialMaskingConfig, CredentialFileRule } from '../shared/index.ts'
 

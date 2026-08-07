@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { existsSync, rmSync, readdirSync, unlinkSync } from 'node:fs'
+import { existsSync, rmSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { SessionStore } from '../../src/core/session-store'
 

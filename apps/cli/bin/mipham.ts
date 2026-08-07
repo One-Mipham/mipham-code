@@ -241,7 +241,7 @@ async function runUpdate(): Promise<boolean> {
     }
 
     if (!latestVersion && lastError) throw lastError
-  } catch (_err: unknown) {
+  } catch {
     console.log(`✗ Could not reach npm registry (network timeout)`)
     console.log()
     console.log(`  Manual update:`)

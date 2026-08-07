@@ -6,7 +6,6 @@
  * /security, /audit, /prompt-audit
  */
 import type { CommandHandler, CommandContext, CommandResult } from '../ui/commands.js'
-import { stripIndent } from '../ui/strip-indent.js'
 
 export { initCmd, permissionsCmd, recommendCmd, setupCmd, addDirCmd, promptAuditCmd, securityCmd }
 
@@ -135,10 +134,6 @@ const recommendCmd: CommandHandler = async (ctx) => {
   const hasRequirements = existsSync(join(cwd, 'requirements.txt'))
   const hasDockerfile = existsSync(join(cwd, 'Dockerfile'))
   const hasGitHubActions = existsSync(join(cwd, '.github', 'workflows'))
-  const hasNextConfig =
-    existsSync(join(cwd, 'next.config.js')) || existsSync(join(cwd, 'next.config.ts'))
-  const hasVueConfig =
-    existsSync(join(cwd, 'vite.config.ts')) || existsSync(join(cwd, 'vite.config.js'))
   const hasTailwind =
     existsSync(join(cwd, 'tailwind.config.ts')) || existsSync(join(cwd, 'tailwind.config.js'))
 
@@ -704,7 +699,7 @@ Permission level is controlled by /config permission <level>.`,
 
 const promptAuditCmd: CommandHandler = async () => {
   const { existsSync, readFileSync, readdirSync, statSync } = await import('node:fs')
-  const { join, extname, basename } = await import('node:path')
+  const { join, basename } = await import('node:path')
   const cwd = process.cwd()
 
   // Patterns that suggest prompts written for older/less-capable models

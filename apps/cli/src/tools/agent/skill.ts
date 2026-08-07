@@ -1,4 +1,4 @@
-import type { ToolDefinition, SkillDefinition, ToolResult } from '../../shared/index.ts'
+import type { ToolDefinition } from '../../shared/index.ts'
 import { executeForkedSkill } from '../../skills/fork-executor'
 
 export const skillTool: ToolDefinition = {

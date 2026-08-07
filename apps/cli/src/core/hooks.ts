@@ -4,7 +4,6 @@ import type {
   HookContext,
   HookResult,
   ToolResult,
-  HookConfig,
 } from '../shared/index.ts'
 
 /**

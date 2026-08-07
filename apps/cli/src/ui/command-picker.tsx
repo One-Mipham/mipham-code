@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import { Box, Text, useInput } from 'ink'
 import TextInput from 'ink-text-input'
-import { getCommandList, type CommandEntry } from './commands.js'
+import { getCommandList } from './commands.js'
 
 interface CommandPickerProps {
   /** Text already typed (e.g. "/", "/age") — used as initial filter */
@@ -53,7 +53,7 @@ export function CommandPicker({
     Math.min(cursorIdx - Math.floor(maxVisible / 2), filtered.length - maxVisible),
   )
   const visible = filtered.slice(scrollStart, scrollStart + maxVisible)
-  const adjustedCursor = cursorIdx - scrollStart
+  const _adjustedCursor = cursorIdx - scrollStart
 
   // Wrap cursor safely
   const safeCursor = (i: number) =>

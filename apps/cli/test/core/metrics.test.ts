@@ -3,7 +3,6 @@ import {
   Counter,
   Gauge,
   Histogram,
-  MetricsRegistry,
   getMetrics,
   resetMetrics,
 } from '../../src/core/metrics'
