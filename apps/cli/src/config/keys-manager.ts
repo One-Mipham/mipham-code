@@ -4,6 +4,7 @@ import { homedir } from 'node:os'
 
 const MIPHAM_DIR = join(homedir(), '.mipham')
 const KEYS_FILE = join(MIPHAM_DIR, 'keys.json')
+const EXPIRY_DAYS = 90
 
 export interface KeyEntry {
   createdAt: string
@@ -62,7 +63,7 @@ export class KeyManager {
       lastRotated: entry.lastRotated,
       rotationCount: entry.rotationCount,
       ageDays: daysSince(entry.lastRotated),
-      expired: daysSince(entry.lastRotated) > 90,
+      expired: daysSince(entry.lastRotated) > EXPIRY_DAYS,
     }))
   }
 
@@ -114,8 +115,22 @@ export class KeyManager {
     if (expired.length === 0) return null
 
     const lines = expired.map(
-      (k) => `  - ${k.provider}: last rotated ${k.ageDays} days ago (90-day threshold exceeded)`,
+      (k) => `  - ${k.provider}: last rotated ${k.ageDays} days ago (${EXPIRY_DAYS}-day threshold exceeded)`,
     )
     return `⚠️  API key rotation overdue:\n${lines.join('\n')}\n\nRun /keys rotate <provider> to rotate.`
+  }
+
+  ensureEntry(provider: string): void {
+    const data = loadKeys()
+    if (!data[provider]) {
+      const now = new Date().toISOString()
+      data[provider] = {
+        provider,
+        createdAt: now,
+        lastRotated: now,
+        rotationCount: 0,
+      }
+      saveKeys(data)
+    }
   }
 }

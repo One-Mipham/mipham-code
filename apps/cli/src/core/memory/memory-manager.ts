@@ -26,6 +26,7 @@ export interface MemoryEntry {
 }
 
 const INDEX_FILE = 'MEMORY.md'
+const LINKS_FILE = 'links.json'
 
 export class MemoryManager {
   private memories = new Map<string, MemoryEntry>()
@@ -48,7 +49,7 @@ export class MemoryManager {
     }
 
     for (const entry of entries) {
-      if (entry === INDEX_FILE || extname(entry) !== '.md') continue
+      if (entry === INDEX_FILE || entry === LINKS_FILE || extname(entry) !== '.md') continue
       const filePath = join(this.memoryDir, entry)
       try {
         const raw = readFileSync(filePath, 'utf-8')
@@ -60,7 +61,11 @@ export class MemoryManager {
         // skip unparseable
       }
     }
-    this.rebuildLinkGraph()
+
+    // Try cached link graph first, fall back to rebuild
+    if (!this.loadLinkGraph()) {
+      this.rebuildLinkGraph()
+    }
   }
 
   write(name: string, content: string, metadata: MemoryMetadata): void {
@@ -172,6 +177,8 @@ export class MemoryManager {
       // file may already be gone
     }
     this.memories.delete(name)
+    this.linkGraph.delete(name)
+    this.saveLinkGraph()
     this.updateIndex()
   }
 
@@ -318,6 +325,8 @@ export class MemoryManager {
         this.linkGraph.set(otherName, otherSet)
       }
     }
+
+    this.saveLinkGraph()
   }
 
   private rebuildLinkGraph(): void {
@@ -340,6 +349,33 @@ export class MemoryManager {
           this.linkGraph.set(target, new Set([name]))
         }
       }
+    }
+  }
+
+  private saveLinkGraph(): void {
+    const obj: Record<string, string[]> = {}
+    for (const [k, v] of this.linkGraph) {
+      obj[k] = Array.from(v)
+    }
+    try {
+      writeFileSync(join(this.memoryDir, LINKS_FILE), JSON.stringify(obj, null, 2), 'utf-8')
+    } catch {
+      // best-effort — never block on cache write
+    }
+  }
+
+  private loadLinkGraph(): boolean {
+    const path = join(this.memoryDir, LINKS_FILE)
+    if (!existsSync(path)) return false
+    try {
+      const raw = JSON.parse(readFileSync(path, 'utf-8'))
+      for (const [k, v] of Object.entries(raw)) {
+        this.linkGraph.set(k, new Set(v as string[]))
+      }
+      return this.linkGraph.size > 0
+    } catch {
+      // corrupt file — rebuild from source
+      return false
     }
   }
 
