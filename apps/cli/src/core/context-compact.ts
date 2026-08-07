@@ -27,8 +27,7 @@ export async function reactiveCompact(
   keepRecent?: number,
 ): Promise<void> {
   // Use explicit override, or adaptive default based on context window
-  const effectiveKeepRecent =
-    keepRecent ?? getKeepRecent(context.getMaxTokens())
+  const effectiveKeepRecent = keepRecent ?? getKeepRecent(context.getMaxTokens())
   const messages = context.getMessages()
 
   if (messages.length <= effectiveKeepRecent + 4) return
