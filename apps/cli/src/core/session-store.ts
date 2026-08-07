@@ -27,6 +27,21 @@ export interface StoredSession {
 
 const HOME = process.env.HOME || '~'
 const SESSIONS_DIR = join(HOME, '.mipham', 'sessions')
+const INDEX_FILE = join(SESSIONS_DIR, '.index.json')
+const SUMMARIES_DIR = join(SESSIONS_DIR, '.summaries')
+
+export interface SessionIndexEntry {
+  name: string
+  createdAt: string
+  updatedAt: string
+  provider: string
+  model: string
+  messageCount: number
+  tokenCount: number
+  cwd?: string
+  summary?: string
+  tags?: string[]
+}
 
 function ensureDir(): void {
   mkdirSync(SESSIONS_DIR, { recursive: true })
@@ -67,6 +82,9 @@ export class SessionStore {
     const tmp = path + '.tmp'
     writeFileSync(tmp, JSON.stringify(session) + '\n', 'utf-8')
     renameSync(tmp, path)
+
+    // Update index after each save
+    SessionStore.updateIndex()
   }
 
   /**
@@ -141,5 +159,80 @@ export class SessionStore {
     const name = `session-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`
     SessionStore.save(name, messages, metadata)
     return name
+  }
+
+  /**
+   * Write .index.json with all session metadata, merging existing summary/tags.
+   */
+  static updateIndex(): void {
+    ensureDir()
+    const sessions = SessionStore.list()
+    const index: SessionIndexEntry[] = sessions.map((s) => ({
+      name: s.name,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+      provider: s.provider,
+      model: s.model,
+      messageCount: s.messageCount,
+      tokenCount: 0,
+      cwd: s.cwd,
+    }))
+
+    // Merge with existing summaries and tags from prior index
+    const existing = SessionStore.loadIndexRaw()
+    for (const entry of index) {
+      const prev = existing.find((e) => e.name === entry.name)
+      if (prev) {
+        entry.summary = prev.summary
+        entry.tags = prev.tags
+        entry.tokenCount = prev.tokenCount || 0
+      }
+    }
+
+    writeFileSync(INDEX_FILE, JSON.stringify(index, null, 2), 'utf-8')
+  }
+
+  /**
+   * Persist an LLM-generated summary for a session.
+   * Writes a markdown file to .summaries/ and updates the index entry.
+   */
+  static saveSummary(name: string, summary: string, tags: string[]): void {
+    ensureDir()
+    mkdirSync(SUMMARIES_DIR, { recursive: true })
+
+    const safe = name.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 100)
+    const summaryPath = join(SUMMARIES_DIR, `${safe}.md`)
+    writeFileSync(summaryPath, `# ${name}\n\n${summary}\n\nTags: ${tags.join(', ')}\n`, 'utf-8')
+
+    // Update index entry
+    const index = SessionStore.loadIndexRaw()
+    const entry = index.find((e) => e.name === name)
+    if (entry) {
+      entry.summary = summary
+      entry.tags = tags
+    }
+    writeFileSync(INDEX_FILE, JSON.stringify(index, null, 2), 'utf-8')
+  }
+
+  /**
+   * Return the most recent session from the index, or null if none exist.
+   */
+  static getLatest(): SessionIndexEntry | null {
+    const index = SessionStore.loadIndexRaw()
+    if (index.length === 0) return null
+    index.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    return index[0]!
+  }
+
+  /**
+   * Read the raw index file, returning empty array if missing or corrupt.
+   */
+  private static loadIndexRaw(): SessionIndexEntry[] {
+    if (!existsSync(INDEX_FILE)) return []
+    try {
+      return JSON.parse(readFileSync(INDEX_FILE, 'utf-8'))
+    } catch {
+      return []
+    }
   }
 }

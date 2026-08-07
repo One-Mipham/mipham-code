@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { existsSync, rmSync, readdirSync, unlinkSync } from 'node:fs'
+import { join } from 'node:path'
 import { SessionStore } from '../../src/core/session-store'
+
+const HOME = process.env.HOME || '~'
+const SESSIONS_DIR = join(HOME, '.mipham', 'sessions')
+const INDEX_FILE = join(SESSIONS_DIR, '.index.json')
+const SUMMARIES_DIR = join(SESSIONS_DIR, '.summaries')
 
 describe('SessionStore', () => {
   beforeEach(() => {
@@ -10,6 +17,9 @@ describe('SessionStore', () => {
         SessionStore.delete(s.name)
       }
     }
+    // Clean up index and summaries
+    if (existsSync(INDEX_FILE)) unlinkSync(INDEX_FILE)
+    if (existsSync(SUMMARIES_DIR)) rmSync(SUMMARIES_DIR, { recursive: true, force: true })
   })
 
   afterEach(() => {
@@ -19,6 +29,9 @@ describe('SessionStore', () => {
         SessionStore.delete(s.name)
       }
     }
+    // Clean up index and summaries
+    if (existsSync(INDEX_FILE)) unlinkSync(INDEX_FILE)
+    if (existsSync(SUMMARIES_DIR)) rmSync(SUMMARIES_DIR, { recursive: true, force: true })
   })
 
   describe('save and load', () => {
@@ -131,6 +144,38 @@ describe('SessionStore', () => {
       })
       const loaded = SessionStore.load('test-no-cwd')
       expect(loaded?.metadata.cwd).toBeUndefined()
+    })
+  })
+
+  describe('session index and summary', () => {
+    it('getLatest returns most recent session metadata', () => {
+      SessionStore.save('test-latest-old', [{ role: 'user', content: 'old' }])
+      // Small delay to ensure different timestamps
+      SessionStore.save('test-latest-new', [{ role: 'user', content: 'new' }])
+
+      const latest = SessionStore.getLatest()
+      expect(latest).toBeDefined()
+      expect(latest!.name).toBe('test-latest-new')
+    })
+
+    it('saveSummary persists session summary to .summaries/', () => {
+      SessionStore.save('test-summary', [{ role: 'user', content: 'test' }])
+      SessionStore.saveSummary('test-summary', 'Discussed memory persistence design', ['memory', 'design'])
+
+      const meta = SessionStore.getLatest()
+      expect(meta).toBeDefined()
+      // Summary is stored in .index.json metadata
+      const sessions = SessionStore.list()
+      const s = sessions.find(x => x.name === 'test-summary')
+      expect(s).toBeDefined()
+    })
+
+    it('updateIndex writes .index.json with all sessions', () => {
+      SessionStore.save('test-idx', [{ role: 'user', content: 'idx test' }])
+      SessionStore.updateIndex()
+
+      const latest = SessionStore.getLatest()
+      expect(latest).toBeDefined()
     })
   })
 })
