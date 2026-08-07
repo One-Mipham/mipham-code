@@ -59,13 +59,15 @@ interface AgentProgress {
 // Version is read fresh from package.json at startup via runApp prop
 // (bypasses Bun module caching after npm update)
 
+// Cycle order: Claude Code modes first (manual → accept edits → bypass),
+// then Mipham-specific modes (plan → auto → dont ask).
 const PERMISSION_MODES: PermissionMode[] = [
   'default',
   'acceptEdits',
+  'bypassPermissions',
   'plan',
   'auto',
   'dontAsk',
-  'bypassPermissions',
 ]
 // Labels aligned with Claude Code terminology: describe behavior, not capability.
 // Claude Code modes: manual mode → accept edits on → bypass
