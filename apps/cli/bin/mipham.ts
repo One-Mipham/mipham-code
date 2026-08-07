@@ -331,6 +331,32 @@ async function main() {
     process.exit(0)
   }
 
+  // ── Help flag ─────────────────────────────────────────────────────────────
+  if (
+    process.argv.includes('--help') ||
+    process.argv.includes('-h') ||
+    process.argv.slice(2).some((a) => a === 'help')
+  ) {
+    console.log(`Mipham Code — AI-powered coding terminal
+
+Usage:
+  mipham                     Launch interactive CLI
+  mipham update              Update to the latest version
+  mipham upgrade             Same as 'mipham update'
+  mipham plugin <cmd>        Plugin management (install, list, remove, etc.)
+  mipham workflow <cmd>      Workflow orchestration (run, list, resume, etc.)
+  mipham --version           Print version and exit
+  mipham --help              Show this help
+
+Flags:
+  --safe-mode                Skip custom agents, skills, hooks, plugins
+  --version, -v, -V          Print version
+
+Docs: https://mipham.ai/code
+npm:  https://www.npmjs.com/package/@miphamai/cli`)
+    process.exit(0)
+  }
+
   // ── Update / upgrade ──────────────────────────────────────────────────────
   const handledUpdate = await runUpdate()
   if (handledUpdate) return
@@ -342,6 +368,41 @@ async function main() {
   // Check for workflow subcommands next
   const handled = await runWorkflowCLI()
   if (handled) return
+
+  // ── Unknown command detection ──────────────────────────────────────────────
+  // After all known subcommands are checked, any remaining positional argument
+  // is probably a typo. Show error + suggestions instead of silently launching CLI.
+  const KNOWN_COMMANDS = ['update', 'upgrade', 'plugin', 'workflow', 'help']
+  const firstArg = process.argv.slice(2).find((a) => !a.startsWith('-'))
+  if (firstArg) {
+    // Levenshtein distance to find closest match
+    const distance = (a: string, b: string): number => {
+      const m = a.length
+      const n = b.length
+      const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0))
+      for (let i = 0; i <= m; i++) dp[i]![0] = i
+      for (let j = 0; j <= n; j++) dp[0]![j] = j
+      for (let i = 1; i <= m; i++)
+        for (let j = 1; j <= n; j++)
+          dp[i]![j] =
+            a[i - 1] === b[j - 1]
+              ? dp[i - 1]![j - 1]!
+              : 1 + Math.min(dp[i - 1]![j]!, dp[i]![j - 1]!, dp[i - 1]![j - 1]!)
+      return dp[m]![n]!
+    }
+
+    const best = KNOWN_COMMANDS.map((cmd) => ({ cmd, dist: distance(firstArg, cmd) }))
+      .filter((c) => c.dist <= 3)
+      .sort((a, b) => a.dist - b.dist)
+    const suggestions = best.map((c) => `'mipham ${c.cmd}'`).join(', ')
+
+    console.error(`Unknown command: mipham ${firstArg}`)
+    if (suggestions) {
+      console.error(`Did you mean: ${suggestions}?`)
+    }
+    console.error(`Run 'mipham --help' for usage.`)
+    process.exit(1)
+  }
 
   // Parse --safe-mode flag: skip custom agents, skills, hooks, plugins
   const safeModeFlag = process.argv.includes('--safe-mode')
