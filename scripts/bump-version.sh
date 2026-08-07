@@ -1,24 +1,34 @@
 #!/usr/bin/env bash
-# bump-version.sh — Bump Mipham Code version across all files, sync lockfile, verify CI.
+# bump-version.sh — Bump Mipham Code version across all files, sync lockfile.
 #
-# Usage: ./scripts/bump-version.sh <new-version> [--skip-ci]
-# Example: ./scripts/bump-version.sh 0.16.2
-# Example: ./scripts/bump-version.sh 0.16.2 --skip-ci  (skip CI when already verified)
+# Usage: ./scripts/bump-version.sh <new-version> [--ci]
+# Example: ./scripts/bump-version.sh 0.16.3          # fast: bump only
+# Example: ./scripts/bump-version.sh 0.16.3 --ci     # slow: also run local CI checks
+#
+# By default, CI checks are SKIPPED — GitHub Actions is the real CI.
+# Use --ci only when you want pre-push verification locally.
+#
+# Updates:
+#   1. apps/cli/package.json              — "version" field
+#   2. packages/shared/src/package-info.ts — PACKAGE_VERSION constant
+#   3. packages/shared/package-info.json   — PACKAGE_VERSION field
+#   4. pnpm-lock.yaml                     — regenerated from package.json changes
+#   5. Optionally: local CI checks (with --ci flag)
 
 set -euo pipefail
 
-SKIP_CI=false
+RUN_CI=false
 for arg in "$@"; do
   case "$arg" in
-    --skip-ci) SKIP_CI=true ;;
+    --ci) RUN_CI=true ;;
     *) NEW_VERSION="${NEW_VERSION:-$arg}" ;;
   esac
 done
 
 if [ -z "${NEW_VERSION:-}" ]; then
-  echo "Usage: $0 <new-version> [--skip-ci]"
-  echo "Example: $0 0.16.2"
-  echo "Example: $0 0.16.2 --skip-ci"
+  echo "Usage: $0 <new-version> [--ci]"
+  echo "Example: $0 0.16.3"
+  echo "Example: $0 0.16.3 --ci  (also run local CI checks)"
   exit 1
 fi
 
@@ -82,18 +92,8 @@ echo "  [5/6] prettier pnpm-lock.yaml..."
 pnpm prettier --write pnpm-lock.yaml --log-level silent 2>/dev/null || true
 echo "         ✓ formatted"
 
-# ── Step 7: Verify (skip with --skip-ci) ──
-if $SKIP_CI; then
-  echo "  [6/6] CI checks... ⏭ skipped (--skip-ci)"
-  echo ""
-  echo "✅ Version bumped! Ready to commit:"
-  echo ""
-  echo "   git add apps/cli/package.json packages/shared/src/package-info.ts packages/shared/package-info.json pnpm-lock.yaml"
-  echo "   git commit -m \"chore: bump version to $NEW_VERSION\""
-  echo "   git push origin main"
-  echo ""
-  echo "   Then: gh release create v$NEW_VERSION --repo One-Mipham/mipham-code ..."
-else
+# ── Step 7: CI checks (only with --ci; GitHub Actions is the real CI) ──
+if $RUN_CI; then
   echo "  [6/6] CI checks..."
   echo ""
   FAILED=0
@@ -141,16 +141,26 @@ else
   echo ""
 
   if [ $FAILED -eq 0 ]; then
-    echo "✅ All checks passed! Ready to commit:"
+    echo "✅ Local CI passed! Ready to commit:"
     echo ""
     echo "   git add apps/cli/package.json packages/shared/src/package-info.ts packages/shared/package-info.json pnpm-lock.yaml"
     echo "   git commit -m \"chore: bump version to $NEW_VERSION\""
     echo "   git push origin main"
     echo ""
-    echo "   Then: cd apps/cli && npm publish --access public"
     echo "   Then: gh release create v$NEW_VERSION --repo One-Mipham/mipham-code ..."
   else
     echo "❌ Some checks failed. Review errors above before committing."
     exit 1
   fi
+else
+  echo "  [6/6] CI checks... ⏭ skipped (add --ci for local verification)"
+  echo "         GitHub Actions CI will run on push."
+  echo ""
+  echo "✅ Version bumped! Ready to commit:"
+  echo ""
+  echo "   git add apps/cli/package.json packages/shared/src/package-info.ts packages/shared/package-info.json pnpm-lock.yaml"
+  echo "   git commit -m \"chore: bump version to $NEW_VERSION\""
+  echo "   git push origin main"
+  echo ""
+  echo "   Then: gh release create v$NEW_VERSION --repo One-Mipham/mipham-code ..."
 fi
