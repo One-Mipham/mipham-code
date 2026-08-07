@@ -25,46 +25,47 @@
 
 ## File Map
 
-| File | Role |
-|------|------|
-| `packages/shared/src/i18n/types.ts` | Locale type, TranslationMap, I18nBundle |
-| `packages/shared/src/i18n/t.ts` | `createT()` factory + `getNested()` helper |
-| `packages/shared/src/i18n/detect.ts` | `detectLocale()` 5-tier priority chain |
-| `packages/shared/src/i18n/locales/en-US.json` | English fallback translations |
-| `packages/shared/src/i18n/locales/zh-CN.json` | Simplified Chinese translations |
-| `packages/shared/src/i18n/index.ts` | Re-exports: types, createT, detectLocale |
-| `apps/cli/src/i18n-context.tsx` | `I18nProvider` + `useI18n()` React Context |
-| `apps/cli/src/index.tsx` | Bootstrap: detect locale, load JSON, inject Provider |
-| `apps/cli/src/ui/commands.ts` | Migrate 74+ slash command response strings |
-| `apps/cli/src/ui/app.tsx` | Migrate permission labels, status, errors |
-| `apps/cli/src/ui/chat.tsx` | Migrate role labels, welcome banner |
-| `apps/cli/src/ui/input.tsx` | Migrate loading verbs, vim mode labels |
-| `apps/cli/src/ui/picker.tsx` | Migrate model picker labels |
-| `apps/cli/src/ui/command-picker.tsx` | Migrate command picker labels |
-| `apps/cli/src/ui/agent-footer.tsx` | Migrate agent status labels |
-| `apps/cli/src/commands/environment.ts` | Migrate theme, IDE, terminal setup strings |
-| `apps/cli/src/commands/git.ts` | Migrate git command output strings |
-| `apps/cli/src/commands/project.ts` | Migrate project/init/setup strings |
-| `apps/cli/src/commands/keys.ts` | Migrate key management strings |
-| `apps/cli/src/commands/loop-scaffold.ts` | Migrate scaffold output strings |
-| `apps/cli/src/core/engine.ts` | Migrate error/block/goal-verify messages |
-| `apps/cli/src/tools/**/*.ts` | Migrate tool name/description strings (25 tools) |
-| `apps/cli/src/mcp/oauth.ts` | Migrate OAuth HTML page strings |
-| `apps/cli/src/mcp/client.ts` | Migrate connection status strings |
-| `apps/web/src/i18n/context.tsx` | Web I18nProvider + useI18n() |
-| `apps/web/src/i18n/index.ts` | Bundled translations for SSG |
-| `apps/web/src/app/code/layout.tsx` | Dynamic `<html lang>` + Provider |
-| `apps/web/src/app/code/components/*.tsx` | Migrate 5 web components |
-| `apps/web/src/app/code/**/page.tsx` | Migrate 4 page components |
-| `install.sh` | Shell-based i18n with case branches |
-| `infrastructure/vscode/extension.js` | Migrate status bar + notification strings |
-| `apps/cli/test/core/i18n.test.ts` | Unit tests for t(), detect, Context |
+| File                                          | Role                                                 |
+| --------------------------------------------- | ---------------------------------------------------- |
+| `packages/shared/src/i18n/types.ts`           | Locale type, TranslationMap, I18nBundle              |
+| `packages/shared/src/i18n/t.ts`               | `createT()` factory + `getNested()` helper           |
+| `packages/shared/src/i18n/detect.ts`          | `detectLocale()` 5-tier priority chain               |
+| `packages/shared/src/i18n/locales/en-US.json` | English fallback translations                        |
+| `packages/shared/src/i18n/locales/zh-CN.json` | Simplified Chinese translations                      |
+| `packages/shared/src/i18n/index.ts`           | Re-exports: types, createT, detectLocale             |
+| `apps/cli/src/i18n-context.tsx`               | `I18nProvider` + `useI18n()` React Context           |
+| `apps/cli/src/index.tsx`                      | Bootstrap: detect locale, load JSON, inject Provider |
+| `apps/cli/src/ui/commands.ts`                 | Migrate 74+ slash command response strings           |
+| `apps/cli/src/ui/app.tsx`                     | Migrate permission labels, status, errors            |
+| `apps/cli/src/ui/chat.tsx`                    | Migrate role labels, welcome banner                  |
+| `apps/cli/src/ui/input.tsx`                   | Migrate loading verbs, vim mode labels               |
+| `apps/cli/src/ui/picker.tsx`                  | Migrate model picker labels                          |
+| `apps/cli/src/ui/command-picker.tsx`          | Migrate command picker labels                        |
+| `apps/cli/src/ui/agent-footer.tsx`            | Migrate agent status labels                          |
+| `apps/cli/src/commands/environment.ts`        | Migrate theme, IDE, terminal setup strings           |
+| `apps/cli/src/commands/git.ts`                | Migrate git command output strings                   |
+| `apps/cli/src/commands/project.ts`            | Migrate project/init/setup strings                   |
+| `apps/cli/src/commands/keys.ts`               | Migrate key management strings                       |
+| `apps/cli/src/commands/loop-scaffold.ts`      | Migrate scaffold output strings                      |
+| `apps/cli/src/core/engine.ts`                 | Migrate error/block/goal-verify messages             |
+| `apps/cli/src/tools/**/*.ts`                  | Migrate tool name/description strings (25 tools)     |
+| `apps/cli/src/mcp/oauth.ts`                   | Migrate OAuth HTML page strings                      |
+| `apps/cli/src/mcp/client.ts`                  | Migrate connection status strings                    |
+| `apps/web/src/i18n/context.tsx`               | Web I18nProvider + useI18n()                         |
+| `apps/web/src/i18n/index.ts`                  | Bundled translations for SSG                         |
+| `apps/web/src/app/code/layout.tsx`            | Dynamic `<html lang>` + Provider                     |
+| `apps/web/src/app/code/components/*.tsx`      | Migrate 5 web components                             |
+| `apps/web/src/app/code/**/page.tsx`           | Migrate 4 page components                            |
+| `install.sh`                                  | Shell-based i18n with case branches                  |
+| `infrastructure/vscode/extension.js`          | Migrate status bar + notification strings            |
+| `apps/cli/test/core/i18n.test.ts`             | Unit tests for t(), detect, Context                  |
 
 ---
 
 ### Task 1: Core i18n Infrastructure
 
 **Files:**
+
 - Create: `packages/shared/src/i18n/types.ts`
 - Create: `packages/shared/src/i18n/t.ts`
 - Create: `packages/shared/src/i18n/detect.ts`
@@ -74,6 +75,7 @@
 - Create: `apps/cli/test/core/i18n.test.ts`
 
 **Interfaces:**
+
 - Produces: `type Locale = 'en-US' | 'zh-CN'`, `type TranslationMap = Record<string, string | TranslationMap>`, `createT(current: TranslationMap, fallback: TranslationMap) => (key: string, params?: Record<string, string>) => string`, `detectLocale(opts?: { lang?: string; cwd?: string }) => Locale`
 
 - [ ] **Step 1: Write the types file**
@@ -334,11 +336,13 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 2: CLI React Context + Bootstrap Integration
 
 **Files:**
+
 - Create: `apps/cli/src/i18n-context.tsx`
 - Modify: `apps/cli/src/index.tsx:36-42, 123-127, 299-314`
 - Test: `apps/cli/test/core/i18n.test.ts` (add Context tests)
 
 **Interfaces:**
+
 - Consumes: `createT(current, fallback) => t()`, `detectLocale(opts) => Locale`, `TranslationMap` type, locale JSON files
 - Produces: `<I18nProvider locale={locale} t={t} children>` , `useI18n() => { locale, t }`, `/lang <locale>` slash command
 
@@ -365,11 +369,7 @@ export function I18nProvider({
   t: (key: string, params?: Record<string, string>) => string
   children: React.ReactNode
 }) {
-  return React.createElement(
-    I18nContext.Provider,
-    { value: { locale, t } },
-    children,
-  )
+  return React.createElement(I18nContext.Provider, { value: { locale, t } }, children)
 }
 
 export function useI18n(): I18nContextValue {
@@ -404,9 +404,7 @@ describe('I18nProvider + useI18n', () => {
       return React.createElement(Text, {}, `${locale}:${translate('test')}`)
     }
     const { lastFrame } = render(
-      React.createElement(I18nProvider, { locale: 'zh-CN', t },
-        React.createElement(Child),
-      ),
+      React.createElement(I18nProvider, { locale: 'zh-CN', t }, React.createElement(Child)),
     )
     expect(lastFrame()).toContain('zh-CN:translated:test')
   })
@@ -437,7 +435,10 @@ import type { TranslationMap } from '@mipham/shared/i18n/types'
 
 // After config load (~line 61), add:
 const locale = detectLocale({ lang: options.lang })
-const localeBundles: Record<string, TranslationMap> = { 'en-US': enUS as TranslationMap, 'zh-CN': zhCN as TranslationMap }
+const localeBundles: Record<string, TranslationMap> = {
+  'en-US': enUS as TranslationMap,
+  'zh-CN': zhCN as TranslationMap,
+}
 const t = createT(localeBundles[locale] || enUS, enUS)
 
 // Wrap the render call (~line 299) with I18nProvider:
@@ -512,10 +513,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 3: Core Locale JSON — All Skeleton Keys
 
 **Files:**
+
 - Modify: `packages/shared/src/i18n/locales/en-US.json` (expand from skeleton to full)
 - Modify: `packages/shared/src/i18n/locales/zh-CN.json` (expand from skeleton to full)
 
 **Interfaces:**
+
 - Consumes: TranslationMap type from Task 1
 - Produces: Complete translation key skeleton (en-US as authoritative, zh-CN as initial translations)
 
@@ -546,7 +549,10 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
       "not_found": "Session \"{name}\" not found."
     },
     "help": { "title": "── Mipham Code Help ──" },
-    "lang": { "current": "Current: {locale}", "set": "Language set to {locale}. Restart Mipham Code to apply." },
+    "lang": {
+      "current": "Current: {locale}",
+      "set": "Language set to {locale}. Restart Mipham Code to apply."
+    },
     "exit": {}
   },
   "ui": {
@@ -679,7 +685,10 @@ Same key structure as en-US.json, with Chinese values. Key examples:
       "not_found": "未找到会话 \"{name}\"。"
     },
     "help": { "title": "── Mipham Code 帮助 ──" },
-    "lang": { "current": "当前语言：{locale}", "set": "语言已设置为 {locale}。重启 Mipham Code 生效。" }
+    "lang": {
+      "current": "当前语言：{locale}",
+      "set": "语言已设置为 {locale}。重启 Mipham Code 生效。"
+    }
   },
   "ui": {
     "banner": {
@@ -745,6 +754,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 4: Migrate CLI Slash Commands
 
 **Files:**
+
 - Modify: `apps/cli/src/ui/commands.ts` — ~74 response strings → `t()` calls
 - Modify: `apps/cli/src/commands/environment.ts` — ~74 strings → `t()` calls
 - Modify: `apps/cli/src/commands/git.ts` — ~42 strings → `t()` calls
@@ -753,6 +763,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Modify: `packages/shared/src/i18n/locales/zh-CN.json` — add commands.* keys
 
 **Interfaces:**
+
 - Consumes: `useI18n()` from Task 2, locale JSON from Task 3
 - Produces: All slash commands output translated strings
 
@@ -781,12 +792,16 @@ Change `/compact`:
 
 ```typescript
 // Before
-return { content: stripIndent`
+return {
+  content: stripIndent`
   ✓ Context compacted.
   Tokens: ${before} → ${after}
-  Reduction: ${pct}%` }
+  Reduction: ${pct}%`,
+}
 // After
-return { content: t('commands.compact.confirmed') + `\nTokens: ${before} → ${after}\nReduction: ${pct}%` }
+return {
+  content: t('commands.compact.confirmed') + `\nTokens: ${before} → ${after}\nReduction: ${pct}%`,
+}
 ```
 
 - [ ] **Step 2: Add missing keys to both locale JSON files**
@@ -827,6 +842,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 5: Migrate CLI UI Components
 
 **Files:**
+
 - Modify: `apps/cli/src/ui/app.tsx` — permission labels, status text
 - Modify: `apps/cli/src/ui/chat.tsx` — role labels, welcome banner
 - Modify: `apps/cli/src/ui/input.tsx` — loading verbs, vim mode labels
@@ -837,6 +853,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Modify: `packages/shared/src/i18n/locales/zh-CN.json` — add ui.* keys
 
 **Interfaces:**
+
 - Consumes: `useI18n()` from Task 2
 - Produces: All UI components render translated strings
 
@@ -913,7 +930,7 @@ const { t } = useI18n()
 const statusText = entry.status === 'running' ? t('ui.agent.running') : t('ui.agent.finished')
 ```
 
-- [ ] **Step 5: Add all ui.* keys to both locale JSON files**
+- [ ] _*Step 5: Add all ui.* keys to both locale JSON files_*
 
 - [ ] **Step 6: Run full test suite**
 
@@ -941,14 +958,16 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 6: Migrate CLI Tools + Engine Messages
 
 **Files:**
+
 - Modify: `apps/cli/src/core/engine.ts` — error/block/goal-verify messages
 - Modify: `apps/cli/src/tools/index.ts` — validation error messages
 - Modify: `apps/cli/src/mcp/oauth.ts` — OAuth HTML page
 - Modify: `apps/cli/src/mcp/client.ts` — connection status messages
-- Modify: `packages/shared/src/i18n/locales/en-US.json` — add tools.*, errors.*, system.* keys
-- Modify: `packages/shared/src/i18n/locales/zh-CN.json` — add tools.*, errors.*, system.* keys
+- Modify: `packages/shared/src/i18n/locales/en-US.json` — add tools._, errors._, system.* keys
+- Modify: `packages/shared/src/i18n/locales/zh-CN.json` — add tools._, errors._, system.* keys
 
 **Interfaces:**
+
 - Consumes: `useI18n()` from Task 2
 - Produces: Engine errors, tool descriptions, MCP messages all translated
 
@@ -998,7 +1017,7 @@ process.stderr.write(`[mcp] Connecting to "${name}"...\n`)
 process.stderr.write(t('system.mcp.connecting', { name }) + '\n')
 ```
 
-- [ ] **Step 4: Add all tools.*, errors.*, system.* keys to both locale JSON files**
+- [ ] _*Step 4: Add all tools.*, errors.*, system.* keys to both locale JSON files_*
 
 - [ ] **Step 5: Run full test suite**
 
@@ -1025,6 +1044,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 7: Web i18n Integration
 
 **Files:**
+
 - Create: `apps/web/src/i18n/context.tsx`
 - Create: `apps/web/src/i18n/index.ts`
 - Modify: `apps/web/src/app/code/layout.tsx` — dynamic `<html lang>` + Provider
@@ -1042,6 +1062,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Modify: `packages/shared/src/i18n/locales/zh-CN.json` — add web.* keys
 
 **Interfaces:**
+
 - Consumes: `createT()` from Task 1, locale JSON from Task 3
 - Produces: All web pages render translated strings
 
@@ -1064,16 +1085,22 @@ interface I18nContextValue {
 
 const I18nContext = createContext<I18nContextValue | null>(null)
 
-export function I18nProvider({ children, initialLocale }: {
+export function I18nProvider({
+  children,
+  initialLocale,
+}: {
   children: React.ReactNode
   initialLocale: Locale
 }) {
   const [locale, setLocale] = useState<Locale>(initialLocale)
-  const value = useMemo(() => ({
-    locale,
-    setLocale,
-    t: createT(bundles[locale] || bundles['en-US'], bundles['en-US']),
-  }), [locale])
+  const value = useMemo(
+    () => ({
+      locale,
+      setLocale,
+      t: createT(bundles[locale] || bundles['en-US'], bundles['en-US']),
+    }),
+    [locale],
+  )
   return React.createElement(I18nContext.Provider, { value }, children)
 }
 
@@ -1115,11 +1142,7 @@ import { I18nProvider } from '@/i18n/context'
 import { detectWebLocale } from '@/i18n/index'
 
 export default function CodeLayout({ children }: { children: React.ReactNode }) {
-  return React.createElement(
-    I18nProvider,
-    { initialLocale: detectWebLocale() },
-    children
-  )
+  return React.createElement(I18nProvider, { initialLocale: detectWebLocale() }, children)
 }
 ```
 
@@ -1141,7 +1164,7 @@ export function Hero() {
 }
 ```
 
-- [ ] **Step 5: Add all web.* keys to both locale JSON files**
+- [ ] _*Step 5: Add all web.* keys to both locale JSON files_*
 
 Example keys:
 
@@ -1155,12 +1178,21 @@ Example keys:
     },
     "features": {
       "title": "Features",
-      "multi_model": { "title": "Multi-Model", "desc": "Support for Claude, GPT, DeepSeek, and more." },
+      "multi_model": {
+        "title": "Multi-Model",
+        "desc": "Support for Claude, GPT, DeepSeek, and more."
+      },
       "skills": { "title": "Skills", "desc": "Extensible skill system with community plugins." },
       "tools": { "title": "30+ Tools", "desc": "File ops, shell exec, web access, scheduling." },
-      "open_source": { "title": "Open Core", "desc": "Apache 2.0 licensed. Free to use and modify." },
+      "open_source": {
+        "title": "Open Core",
+        "desc": "Apache 2.0 licensed. Free to use and modify."
+      },
       "terminal": { "title": "Terminal Native", "desc": "Fast TUI built with React + Ink." },
-      "agents": { "title": "Background Agents", "desc": "Parallel task execution with agent teams." }
+      "agents": {
+        "title": "Background Agents",
+        "desc": "Parallel task execution with agent teams."
+      }
     },
     "footer": {
       "copyright": "© 2026 One Mipham Corporation",
@@ -1201,12 +1233,14 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 8: install.sh + VS Code i18n
 
 **Files:**
+
 - Modify: `install.sh` — add shell-based i18n
 - Modify: `infrastructure/vscode/extension.js` — migrate user-facing messages
-- Modify: `packages/shared/src/i18n/locales/en-US.json` — add install.*, vscode.* keys (reference only; shell reads from inline strings)
-- Modify: `packages/shared/src/i18n/locales/zh-CN.json` — add install.*, vscode.* keys (reference only)
+- Modify: `packages/shared/src/i18n/locales/en-US.json` — add install._, vscode._ keys (reference only; shell reads from inline strings)
+- Modify: `packages/shared/src/i18n/locales/zh-CN.json` — add install._, vscode._ keys (reference only)
 
 **Interfaces:**
+
 - Consumes: None from earlier tasks — standalone implementations
 - Produces: install.sh outputs in detected language, VS Code extension notifications translated
 
@@ -1323,6 +1357,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 9: Remaining Strings + Final Verification
 
 **Files:**
+
 - Modify: `apps/cli/src/agent-view/dashboard.tsx` — remaining UI strings
 - Modify: `apps/cli/src/agent-view/session-row.tsx` — status labels
 - Modify: `apps/cli/src/agent-view/session-peek.tsx` — message preview labels

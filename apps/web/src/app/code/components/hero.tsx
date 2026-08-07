@@ -12,9 +12,7 @@ export function HeroSection() {
           {t('web.hero.title')}{' '}
           <span className="text-mipham-400 text-xl align-top">v{PACKAGE_VERSION}</span>
         </h1>
-        <p className="text-xl text-mipham-200 mb-4 max-w-2xl mx-auto">
-          {t('web.hero.subtitle')}
-        </p>
+        <p className="text-xl text-mipham-200 mb-4 max-w-2xl mx-auto">{t('web.hero.subtitle')}</p>
         <p className="text-mipham-300 mb-8">{t('web.hero.company')}</p>
         <p className="text-mipham-400 text-sm mb-8">{t('web.hero.domains')}</p>
         <div className="flex gap-4 justify-center">

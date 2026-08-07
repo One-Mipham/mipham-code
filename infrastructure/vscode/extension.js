@@ -196,8 +196,7 @@ function activate(context) {
         )
         vscode.window.showTextDocument(userConfig).then(
           () => {},
-          () =>
-            vscode.window.showInformationMessage(t('noConfig')),
+          () => vscode.window.showInformationMessage(t('noConfig')),
         )
       },
     )
@@ -216,11 +215,9 @@ function activate(context) {
   // Show welcome message on first activation
   const hasShown = context.globalState.get('miphamCode.welcomeShown', false)
   if (!hasShown) {
-    vscode.window
-      .showInformationMessage(t('welcome'), t('start'), t('dismiss'))
-      .then((choice) => {
-        if (choice === t('start')) openMiphamTerminal()
-      })
+    vscode.window.showInformationMessage(t('welcome'), t('start'), t('dismiss')).then((choice) => {
+      if (choice === t('start')) openMiphamTerminal()
+    })
     context.globalState.update('miphamCode.welcomeShown', true)
   }
 

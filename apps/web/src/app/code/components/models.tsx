@@ -44,7 +44,9 @@ export function ModelsSection() {
                     : 'bg-yellow-100 text-yellow-700'
                 }`}
               >
-                {p.status === 'Active' ? t('web.models.status_active') : t('web.models.status_upcoming')}
+                {p.status === 'Active'
+                  ? t('web.models.status_active')
+                  : t('web.models.status_upcoming')}
               </span>
             </div>
           ))}

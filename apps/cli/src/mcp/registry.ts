@@ -127,7 +127,11 @@ export function registerMcpServerTools(
       registered++
     } catch (err) {
       process.stderr.write(
-        t('errors.mcp_register_failed', { tool: mcpTool.name, server: serverName, error: String(err) }) + '\n',
+        t('errors.mcp_register_failed', {
+          tool: mcpTool.name,
+          server: serverName,
+          error: String(err),
+        }) + '\n',
       )
     }
   }

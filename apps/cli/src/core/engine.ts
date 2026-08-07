@@ -516,9 +516,9 @@ export class QueryEngine {
         }
         // Script failed — continue looping
         yield {
-            type: 'text',
-            content: t('system.goal.failed_continuing', { loop: String(loop) }),
-          }
+          type: 'text',
+          content: t('system.goal.failed_continuing', { loop: String(loop) }),
+        }
         continue
       }
 

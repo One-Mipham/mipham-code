@@ -101,7 +101,9 @@ export function CommandPicker({
 
       {/* Command list */}
       <Box flexDirection="column" marginBottom={1}>
-        {visible.length === 0 && <Text dimColor> {t('ui.command_picker.no_matches', { filter })}</Text>}
+        {visible.length === 0 && (
+          <Text dimColor> {t('ui.command_picker.no_matches', { filter })}</Text>
+        )}
         {visible.map((cmd, i) => {
           const globalIdx = i + scrollStart
           const isCursor = globalIdx === cursorIdx

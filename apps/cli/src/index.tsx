@@ -69,7 +69,10 @@ export async function runApp(options: RunOptions): Promise<void> {
 
   // Detect locale and create translation function
   const locale = detectLocale({ lang: options.lang })
-  const localeBundles: Record<string, TranslationMap> = { 'en-US': enUS as TranslationMap, 'zh-CN': zhCN as TranslationMap }
+  const localeBundles: Record<string, TranslationMap> = {
+    'en-US': enUS as TranslationMap,
+    'zh-CN': zhCN as TranslationMap,
+  }
   const t = createT(localeBundles[locale] || enUS, enUS)
 
   // Bootstrap providers

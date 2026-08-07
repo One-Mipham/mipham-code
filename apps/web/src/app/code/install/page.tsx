@@ -11,8 +11,8 @@ export default function InstallPage() {
     <div className="max-w-3xl mx-auto py-16 px-6">
       <h1 className="text-4xl font-bold mb-4">{t('web.install_page.title')}</h1>
       <p className="text-gray-500 mb-4">
-        {t('web.install_page.current_version')}{' '}
-        <strong>v{PACKAGE_VERSION}</strong>. {t('web.install_page.choose_platform')}
+        {t('web.install_page.current_version')} <strong>v{PACKAGE_VERSION}</strong>.{' '}
+        {t('web.install_page.choose_platform')}
       </p>
       <p className="text-gray-500 mb-8">{t('web.install_page.all_methods_same')}</p>
 

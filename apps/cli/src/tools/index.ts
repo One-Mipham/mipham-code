@@ -110,7 +110,11 @@ function withValidation(tool: ToolDefinition): ToolDefinition {
       const cleanParams = sanitizeParams(params)
       const errors = validateParams(schema, cleanParams)
       if (errors.length > 0) {
-        return { success: false, content: '', error: t('errors.invalid_params', { errors: errors.join('; ') }) }
+        return {
+          success: false,
+          content: '',
+          error: t('errors.invalid_params', { errors: errors.join('; ') }),
+        }
       }
       return tool.execute(cleanParams, ctx)
     },

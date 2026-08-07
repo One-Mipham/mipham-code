@@ -56,58 +56,50 @@ describe('OAuthClient', () => {
   // Skipped to prevent browser windows from popping up during local test runs.
   // The component-level tests above (generatePkcePair, getValidAccessToken,
   // refreshAccessToken) cover the core PKCE logic. To run: remove .skip.
-  it.skip(
-    'executes full PKCE flow against mock server',
-    async () => {
-      const client = new OAuthClient(new TokenStore(testDir))
-      const mockConfig = {
-        name: 'test-oauth-server',
-        command: 'echo',
-        args: ['test'],
-        auth: {
-          type: 'oauth' as const,
-          authorizationUrl: `http://localhost:${authPort}/authorize`,
-          tokenUrl: `http://localhost:${authPort}/token`,
-          clientId: 'test-client-id',
-          scopes: ['tools.read'],
-          redirectPort: authPort + 1,
-        },
-      }
-      const tokens = await client.executePkceFlow(mockConfig)
-      expect(tokens.accessToken).toBe('mock-access-token-123')
-      expect(tokens.refreshToken).toBe('mock-refresh-token-456')
-    },
-    15000,
-  )
+  it.skip('executes full PKCE flow against mock server', async () => {
+    const client = new OAuthClient(new TokenStore(testDir))
+    const mockConfig = {
+      name: 'test-oauth-server',
+      command: 'echo',
+      args: ['test'],
+      auth: {
+        type: 'oauth' as const,
+        authorizationUrl: `http://localhost:${authPort}/authorize`,
+        tokenUrl: `http://localhost:${authPort}/token`,
+        clientId: 'test-client-id',
+        scopes: ['tools.read'],
+        redirectPort: authPort + 1,
+      },
+    }
+    const tokens = await client.executePkceFlow(mockConfig)
+    expect(tokens.accessToken).toBe('mock-access-token-123')
+    expect(tokens.refreshToken).toBe('mock-refresh-token-456')
+  }, 15000)
 
   // These integration tests require a real browser for the OAuth redirect.
   // Skipped to prevent browser windows from popping up during local test runs.
   // The component-level tests above (generatePkcePair, getValidAccessToken,
   // refreshAccessToken) cover the core PKCE logic. To run: remove .skip.
-  it.skip(
-    'stores tokens via TokenStore after successful flow',
-    async () => {
-      const store = new TokenStore(testDir)
-      const client = new OAuthClient(store)
-      const mockConfig = {
-        name: 'test-oauth-store',
-        command: 'echo',
-        args: ['test'],
-        auth: {
-          type: 'oauth' as const,
-          authorizationUrl: `http://localhost:${authPort}/authorize`,
-          tokenUrl: `http://localhost:${authPort}/token`,
-          clientId: 'test-client-id',
-          redirectPort: authPort + 2,
-        },
-      }
-      await client.executePkceFlow(mockConfig)
-      const saved = store.load('test-oauth-store')
-      expect(saved).not.toBeNull()
-      expect(saved!.accessToken).toBe('mock-access-token-123')
-    },
-    15000,
-  )
+  it.skip('stores tokens via TokenStore after successful flow', async () => {
+    const store = new TokenStore(testDir)
+    const client = new OAuthClient(store)
+    const mockConfig = {
+      name: 'test-oauth-store',
+      command: 'echo',
+      args: ['test'],
+      auth: {
+        type: 'oauth' as const,
+        authorizationUrl: `http://localhost:${authPort}/authorize`,
+        tokenUrl: `http://localhost:${authPort}/token`,
+        clientId: 'test-client-id',
+        redirectPort: authPort + 2,
+      },
+    }
+    await client.executePkceFlow(mockConfig)
+    const saved = store.load('test-oauth-store')
+    expect(saved).not.toBeNull()
+    expect(saved!.accessToken).toBe('mock-access-token-123')
+  }, 15000)
 
   it('getValidAccessToken returns existing non-expired token', async () => {
     const store = new TokenStore(testDir)

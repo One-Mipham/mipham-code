@@ -28,7 +28,9 @@ export function InstallSection() {
         <div className="bg-mipham-950 rounded-lg p-4 font-mono text-sm text-left text-mipham-200 mb-2 max-w-md mx-auto overflow-x-auto">
           <span className="text-mipham-400">$</span> curl -fsSL https://mipham.ai/install.sh | bash
         </div>
-        <p className="text-mipham-500 text-xs mb-1">{t('web.install_section.label_international')}</p>
+        <p className="text-mipham-500 text-xs mb-1">
+          {t('web.install_section.label_international')}
+        </p>
         <div className="bg-mipham-950 rounded-lg p-4 font-mono text-sm text-left text-mipham-200 mb-6 max-w-md mx-auto overflow-x-auto">
           <span className="text-mipham-400">$</span> curl -fsSL https://onemipham.com/install.sh |
           bash
@@ -42,7 +44,9 @@ export function InstallSection() {
         <div className="bg-mipham-950 rounded-lg p-4 font-mono text-sm text-left text-mipham-200 mb-2 max-w-md mx-auto overflow-x-auto">
           <span className="text-mipham-400">&gt;</span> irm https://mipham.ai/install.ps1 | iex
         </div>
-        <p className="text-mipham-500 text-xs mb-1">{t('web.install_section.label_international')}</p>
+        <p className="text-mipham-500 text-xs mb-1">
+          {t('web.install_section.label_international')}
+        </p>
         <div className="bg-mipham-950 rounded-lg p-4 font-mono text-sm text-left text-mipham-200 mb-6 max-w-md mx-auto overflow-x-auto">
           <span className="text-mipham-400">&gt;</span> irm https://onemipham.com/install.ps1 | iex
         </div>

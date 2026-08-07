@@ -105,7 +105,8 @@ export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
       {focusMode && messages.length > 0 && (
         <Box marginBottom={1}>
           <Text dimColor>
-            🔍 {t('ui.chat.focus_hint')} — {countHidden(messages, displayMessages, t)} · {t('ui.chat.toggle_focus_hint')} · {t('ui.chat.expand_hint')}
+            🔍 {t('ui.chat.focus_hint')} — {countHidden(messages, displayMessages, t)} ·{' '}
+            {t('ui.chat.toggle_focus_hint')} · {t('ui.chat.expand_hint')}
           </Text>
         </Box>
       )}
@@ -124,14 +125,10 @@ export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
             </Text>
           </Box>
           <Box marginTop={1}>
-            <Text dimColor>
-              {t('ui.banner.controls_hint')}
-            </Text>
+            <Text dimColor>{t('ui.banner.controls_hint')}</Text>
           </Box>
           <Box marginTop={1}>
-            <Text dimColor>
-              {t('ui.banner.tip_clear')}
-            </Text>
+            <Text dimColor>{t('ui.banner.tip_clear')}</Text>
           </Box>
         </Box>
       )}
@@ -243,7 +240,11 @@ function summarizeToolGroup(tools: ChatMessage[]): ChatMessage {
 }
 
 /** Count how many messages are hidden in focus mode. */
-function countHidden(all: ChatMessage[], compacted: ChatMessage[], t: (key: string, params?: Record<string, string>) => string): string {
+function countHidden(
+  all: ChatMessage[],
+  compacted: ChatMessage[],
+  t: (key: string, params?: Record<string, string>) => string,
+): string {
   const toolCount = all.filter((m) => m.toolMeta).length
   const hidden = all.length - compacted.length
   if (hidden <= 0) return t('ui.chat.showing_all', { count: String(all.length) })

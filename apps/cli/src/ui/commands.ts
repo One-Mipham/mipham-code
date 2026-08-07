@@ -351,7 +351,9 @@ const modelsCmd: CommandHandler = (ctx) => {
 
 const providerCmd: CommandHandler = (ctx) => {
   const t = resolveT(ctx)
-  return { content: t('commands.provider.current', { provider: ctx.providerId, model: ctx.modelId }) }
+  return {
+    content: t('commands.provider.current', { provider: ctx.providerId, model: ctx.modelId }),
+  }
 }
 
 const providersCmd: CommandHandler = (ctx) => {
@@ -417,7 +419,9 @@ const toolsCmd: CommandHandler = (ctx) => {
     .filter(([, v]) => v!.length > 0)
     .map(([cat, items]) => `── ${cat.toUpperCase()} ──\n${items!.join('\n')}`)
 
-  return { content: `${t('commands.tools.title', { count: String(tools.size) })}\n\n${sections.join('\n\n')}` }
+  return {
+    content: `${t('commands.tools.title', { count: String(tools.size) })}\n\n${sections.join('\n\n')}`,
+  }
 }
 
 const skillsCmd: CommandHandler = (ctx) => {
@@ -548,10 +552,17 @@ const goalCmd: CommandHandler = (ctx, args) => {
     if (!state.goal) {
       return { content: t('commands.goal.usage') }
     }
-    const lines = [t('commands.goal.status_title'), '', t('commands.goal.status_goal', { goal: state.goal })]
-    if (state.verifyScript) lines.push(t('commands.goal.status_verify_script', { script: state.verifyScript }))
-    if (state.verifySkill) lines.push(t('commands.goal.status_verify_skill', { skill: state.verifySkill }))
-    if (state.decompose) lines.push(t('commands.goal.status_decompose', { count: String(state.subtasks.length) }))
+    const lines = [
+      t('commands.goal.status_title'),
+      '',
+      t('commands.goal.status_goal', { goal: state.goal }),
+    ]
+    if (state.verifyScript)
+      lines.push(t('commands.goal.status_verify_script', { script: state.verifyScript }))
+    if (state.verifySkill)
+      lines.push(t('commands.goal.status_verify_skill', { skill: state.verifySkill }))
+    if (state.decompose)
+      lines.push(t('commands.goal.status_decompose', { count: String(state.subtasks.length) }))
     lines.push('', t('commands.goal.status_clear_hint'))
     return { content: lines.join('\n') }
   }
@@ -670,10 +681,15 @@ const usageCmd: CommandHandler = (ctx) => {
   const apiTotal = summary.apiInputTokens + summary.apiOutputTokens
   const apiLine =
     summary.apiInputTokens > 0 || summary.apiOutputTokens > 0
-      ? t('commands.usage.api_tokens', { in: summary.apiInputTokens.toLocaleString(), out: summary.apiOutputTokens.toLocaleString(), total: apiTotal.toLocaleString() })
+      ? t('commands.usage.api_tokens', {
+          in: summary.apiInputTokens.toLocaleString(),
+          out: summary.apiOutputTokens.toLocaleString(),
+          total: apiTotal.toLocaleString(),
+        })
       : t('commands.usage.no_api')
 
-  const toolSection = toolLines.length > 0 ? `\n${t('commands.usage.tool_section')}\n${toolLines.join('\n')}` : ''
+  const toolSection =
+    toolLines.length > 0 ? `\n${t('commands.usage.tool_section')}\n${toolLines.join('\n')}` : ''
 
   return {
     content: stripIndent`
@@ -976,7 +992,11 @@ const rewindCmd: CommandHandler = (ctx) => {
   }
 
   return {
-    content: t('commands.rewind.confirmed', { label: result.label, count: String(result.messageCount), remaining: String(c.getCheckpoints().length) }),
+    content: t('commands.rewind.confirmed', {
+      label: result.label,
+      count: String(result.messageCount),
+      remaining: String(c.getCheckpoints().length),
+    }),
     clearMessages: true,
   }
 }
@@ -1164,7 +1184,11 @@ const branchCmd: CommandHandler = (ctx, args) => {
 
   const checkpointId = c.saveCheckpoint(name)
   return {
-    content: t('commands.branch.details', { name, checkpoint: String(checkpointId), messages: String(msgs.length) }),
+    content: t('commands.branch.details', {
+      name,
+      checkpoint: String(checkpointId),
+      messages: String(msgs.length),
+    }),
   }
 }
 
@@ -1575,9 +1599,7 @@ const lintCmd: CommandHandler = async (ctx) => {
         '',
         truncated || '(no issues found)',
         '',
-        hasPackageJson
-          ? t('commands.lint.fix_hint')
-          : t('commands.lint.setup_hint'),
+        hasPackageJson ? t('commands.lint.fix_hint') : t('commands.lint.setup_hint'),
       ].join('\n'),
     }
   } catch {
@@ -1618,7 +1640,9 @@ const filesCmd: CommandHandler = async (ctx) => {
         t('commands.files.cwd', { path: cwd }),
         '',
         ...items,
-        entries.length > 40 ? t('commands.files.more_files', { count: String(entries.length - 40) }) : '',
+        entries.length > 40
+          ? t('commands.files.more_files', { count: String(entries.length - 40) })
+          : '',
         '',
         t('commands.files.hint'),
       ].join('\n'),
@@ -1643,7 +1667,12 @@ const statsCmd: CommandHandler = (ctx) => {
     content: [
       t('commands.stats.title'),
       '',
-      t('commands.stats.messages', { total: String(msgs.length), user: String(userMsgs), assistant: String(assistantMsgs), system: String(systemMsgs) }),
+      t('commands.stats.messages', {
+        total: String(msgs.length),
+        user: String(userMsgs),
+        assistant: String(assistantMsgs),
+        system: String(systemMsgs),
+      }),
       t('commands.stats.tokens', { tokens: tokens.toLocaleString() }),
       t('commands.stats.tools', { count: String(tools.size) }),
       t('commands.stats.provider', { provider: ctx.providerId }),
@@ -1738,7 +1767,12 @@ const hooksCmd: CommandHandler = async (ctx) => {
 
   try {
     const files = readdirSync(hooksDir).filter((f) => f.endsWith('.sh'))
-    const lines: string[] = [t('commands.hooks.title'), '', t('commands.hooks.location', { path: hooksDir }), '']
+    const lines: string[] = [
+      t('commands.hooks.title'),
+      '',
+      t('commands.hooks.location', { path: hooksDir }),
+      '',
+    ]
 
     for (const f of files) {
       try {
@@ -1801,7 +1835,11 @@ const exportCmd: CommandHandler = async (ctx) => {
 
   writeFileSync(filepath, lines.join('\n'), 'utf-8')
   return {
-    content: t('commands.export.confirmed', { path: filepath, count: String(msgs.length), lines: String(lines.length) }),
+    content: t('commands.export.confirmed', {
+      path: filepath,
+      count: String(msgs.length),
+      lines: String(lines.length),
+    }),
     copyContent: filepath,
   }
 }
@@ -1886,7 +1924,9 @@ const resumeLastCmd: CommandHandler = async (ctx) => {
 
   const latest = SessionStore.getLatest()
   if (!latest) {
-    return { content: `${t('commands.resume.restored')}\n\n${t('commands.resume.no_sessions')}\n\n${t('commands.resume.empty_footer')}` }
+    return {
+      content: `${t('commands.resume.restored')}\n\n${t('commands.resume.no_sessions')}\n\n${t('commands.resume.empty_footer')}`,
+    }
   }
 
   const session = SessionStore.load(latest.name)
@@ -1907,10 +1947,20 @@ const resumeLastCmd: CommandHandler = async (ctx) => {
     content: [
       t('commands.resume.restored'),
       '',
-      t('commands.resume.restored_content', { name: latest.name, total: String(session.messages.length), truncated: truncatedStr, provider: latest.provider, model: latest.model, date }),
+      t('commands.resume.restored_content', {
+        name: latest.name,
+        total: String(session.messages.length),
+        truncated: truncatedStr,
+        provider: latest.provider,
+        model: latest.model,
+        date,
+      }),
       '',
       truncated
-        ? t('commands.resume.restored_footer', { loaded: String(messages.length), total: String(session.messages.length) })
+        ? t('commands.resume.restored_footer', {
+            loaded: String(messages.length),
+            total: String(session.messages.length),
+          })
         : t('commands.resume.restored_full_footer', { loaded: String(messages.length) }),
     ].join('\n'),
     forwardedMessages: messages,
@@ -1954,13 +2004,17 @@ const resumeCmd: CommandHandler = async (ctx, args) => {
         content: `${t('commands.resume.found_title')}\n\n${t('commands.resume.found_content', { name: session.metadata.name, messages: String(session.metadata.messageCount), provider: session.metadata.provider, model: session.metadata.model, updated: session.metadata.updatedAt, target: targetName })}`,
       }
     }
-    return { content: `${t('commands.resume.not_found_title')}\n\n${t('commands.resume.not_found_content', { name: targetName })}` }
+    return {
+      content: `${t('commands.resume.not_found_title')}\n\n${t('commands.resume.not_found_content', { name: targetName })}`,
+    }
   }
 
   const sessions = SessionStore.list()
 
   if (sessions.length === 0) {
-    return { content: `${t('commands.resume.restored')}\n\n${t('commands.resume.no_sessions')}\n\n${t('commands.resume.empty_footer')}` }
+    return {
+      content: `${t('commands.resume.restored')}\n\n${t('commands.resume.no_sessions')}\n\n${t('commands.resume.empty_footer')}`,
+    }
   }
 
   const recent = sessions.slice(0, 10)
@@ -2029,7 +2083,10 @@ const memoryCmd: CommandHandler = async (ctx) => {
       t('commands.memories.title'),
       '',
       t('commands.memories.location', { path: memoryDir }),
-      t('commands.memories.total', { count: String(memories.length), plural: memories.length === 1 ? 'y' : 'ies' }),
+      t('commands.memories.total', {
+        count: String(memories.length),
+        plural: memories.length === 1 ? 'y' : 'ies',
+      }),
       '',
       ...memories.map(
         (m, i) =>
@@ -2095,7 +2152,9 @@ const upgradeCmd: CommandHandler = async (ctx) => {
     lines.push(t('commands.upgrade.old_version_warning'))
   } else {
     lines.push('')
-    lines.push(t('commands.upgrade.update_failed', { command: NPM_UPDATE_COMMAND, path: backupPath || '' }))
+    lines.push(
+      t('commands.upgrade.update_failed', { command: NPM_UPDATE_COMMAND, path: backupPath || '' }),
+    )
   }
 
   return { content: lines.join('\n') }

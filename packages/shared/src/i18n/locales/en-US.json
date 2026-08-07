@@ -323,7 +323,10 @@
       "found_content": "Name:      {name}\nMessages:  {messages}\nProvider:  {provider} / {model}\nUpdated:   {updated}\n\nTo resume this session:\n  /resume last    — restore the most recent session\n  mipham --resume \"{target}\"\n\nOr restart Mipham Code — the most recent session loads automatically."
     },
     "help": { "title": "── Mipham Code Help ──" },
-    "lang": { "current": "Language: {locale}", "set": "Language set to {locale}. Restart Mipham Code to apply." },
+    "lang": {
+      "current": "Language: {locale}",
+      "set": "Language set to {locale}. Restart Mipham Code to apply."
+    },
     "exit": {},
     "version": {
       "title": "Mipham Code v{version}",

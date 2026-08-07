@@ -17,11 +17,7 @@ export function I18nProvider({
   t: (key: string, params?: Record<string, string>) => string
   children: React.ReactNode
 }) {
-  return React.createElement(
-    I18nContext.Provider,
-    { value: { locale, t } },
-    children,
-  )
+  return React.createElement(I18nContext.Provider, { value: { locale, t } }, children)
 }
 
 export function useI18n(): I18nContextValue {

@@ -42,9 +42,7 @@ export function FeaturesSection() {
               className="p-6 rounded-xl border border-gray-200 hover:border-mipham-300 hover:shadow-lg transition-all"
             >
               <div className="text-3xl mb-3">{f.icon}</div>
-              <h3 className="text-xl font-semibold mb-2">
-                {t(`web.features.${f.key}.title`)}
-              </h3>
+              <h3 className="text-xl font-semibold mb-2">{t(`web.features.${f.key}.title`)}</h3>
               <p className="text-gray-600">{t(`web.features.${f.key}.desc`)}</p>
             </div>
           ))}

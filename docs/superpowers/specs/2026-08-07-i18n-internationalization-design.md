@@ -15,13 +15,13 @@
 
 ## 二、范围
 
-| 子系统 | 用户可见字符串 | 说明 |
-|--------|--------------|------|
-| CLI UI + Commands | ~3,200 | Ink 终端组件 + 74 条 slash 命令响应 |
-| Web 产品页 | ~120 | Next.js SSG 5 页面 + 5 组件 |
-| install.sh | ~25 | 一键安装脚本 |
-| VS Code / Brew | ~80 | extension.js + package.json + README |
-| **合计** | **~3,400** | |
+| 子系统            | 用户可见字符串 | 说明                                 |
+| ----------------- | -------------- | ------------------------------------ |
+| CLI UI + Commands | ~3,200         | Ink 终端组件 + 74 条 slash 命令响应  |
+| Web 产品页        | ~120           | Next.js SSG 5 页面 + 5 组件          |
+| install.sh        | ~25            | 一键安装脚本                         |
+| VS Code / Brew    | ~80            | extension.js + package.json + README |
+| **合计**          | **~3,400**     |                                      |
 
 ---
 
@@ -57,9 +57,7 @@ export function createT(current: TranslationMap, fallback: TranslationMap) {
   return function t(key: string, params?: Record<string, string>): string {
     const val = getNested(current, key) ?? getNested(fallback, key) ?? key
     if (typeof val !== 'string') return key
-    return params
-      ? val.replace(/\{(\w+)\}/g, (_, k: string) => params[k] ?? '')
-      : val
+    return params ? val.replace(/\{(\w+)\}/g, (_, k: string) => params[k] ?? '') : val
   }
 }
 
@@ -124,6 +122,7 @@ web.footer.copyright         = "© 2026 One Mipham Corporation"
 ```
 
 原则：
+
 - 按源文件分组，key 能直接追溯到定义位置
 - `{param}` 模板变量用花括号
 - 所有 key 英文命名（便于跨语言团队理解）
@@ -244,12 +243,12 @@ echo "$(t MSG_INSTALL_SUCCESS)"
 
 ## 九、VS Code / Brew 国际化
 
-| 文件 | 策略 |
-|------|------|
+| 文件                                       | 策略                                 |
+| ------------------------------------------ | ------------------------------------ |
 | `package.json` `displayName`/`description` | 保持英文（VS Code Marketplace 约定） |
-| `extension.js` 状态栏/通知 | `t()` 函数 + 翻译 JSON import |
-| `README.md` | 保持英文（GitHub 展示） |
-| `mipham.rb` | 保持英文（Homebrew 约定） |
+| `extension.js` 状态栏/通知                 | `t()` 函数 + 翻译 JSON import        |
+| `README.md`                                | 保持英文（GitHub 展示）              |
+| `mipham.rb`                                | 保持英文（Homebrew 约定）            |
 
 市场约定不翻译的保持英文，运行时可翻译的通知消息用 `t()`。
 
@@ -312,36 +311,36 @@ it('falls back to en-US', () => {
 
 ## 十一、实施范围与阶段
 
-| 阶段 | 内容 | 预估字符串 |
-|------|------|-----------|
-| Phase 1: 基础设施 | types.ts + t.ts + detect.ts + locales JSON 骨架 + eslint 插件禁用 key-check | — |
-| Phase 2: CLI Core | i18n-context.tsx + index.tsx 注入 + `/lang` 命令 | ~200 核心字符串 |
-| Phase 3: CLI Slash Commands | ui/commands.ts (~74 条响应) + commands/*.ts (~6 文件) | ~500 |
-| Phase 4: CLI UI Components | ui/*.tsx (app, chat, input, picker, footer, agent-footer) | ~300 |
-| Phase 5: CLI Tools + Engine | tools/** 描述 + core/engine.ts 错误消息 | ~900 |
-| Phase 6: Web 产品页 | 5 页面 + 5 组件全部 | ~120 |
-| Phase 7: install.sh + VS Code | 脚本 + extension.js | ~100 |
-| Phase 8: 补全 + 验证 | 剩余字符串 + 中英文一致性检查 + manual QA | ~1,380 |
+| 阶段                          | 内容                                                                        | 预估字符串      |
+| ----------------------------- | --------------------------------------------------------------------------- | --------------- |
+| Phase 1: 基础设施             | types.ts + t.ts + detect.ts + locales JSON 骨架 + eslint 插件禁用 key-check | —               |
+| Phase 2: CLI Core             | i18n-context.tsx + index.tsx 注入 + `/lang` 命令                            | ~200 核心字符串 |
+| Phase 3: CLI Slash Commands   | ui/commands.ts (~74 条响应) + commands/*.ts (~6 文件)                       | ~500            |
+| Phase 4: CLI UI Components    | ui/*.tsx (app, chat, input, picker, footer, agent-footer)                   | ~300            |
+| Phase 5: CLI Tools + Engine   | tools/** 描述 + core/engine.ts 错误消息                                     | ~900            |
+| Phase 6: Web 产品页           | 5 页面 + 5 组件全部                                                         | ~120            |
+| Phase 7: install.sh + VS Code | 脚本 + extension.js                                                         | ~100            |
+| Phase 8: 补全 + 验证          | 剩余字符串 + 中英文一致性检查 + manual QA                                   | ~1,380          |
 
 ---
 
 ## 十二、技术决策总结
 
-| 决策 | 选项 | 理由 |
-|------|------|------|
-| 框架 | 自研 JSON + t() | 零依赖，CLI 二进制不受影响，~30 行代码 |
-| 类型安全 | 运行时 fallback（非编译期） | 简单，key 拼写错误 fallback 到英文 |
-| 初始语言 | zh-CN + en-US | 覆盖 95% 用户 |
-| CLI 注入 | React Context | 支持热切换 `/lang`，易 mock 测试 |
-| 翻译加载（CLI） | 同步 readFileSync | 启动时一次读 ~100KB，零延迟 |
-| 翻译加载（Web） | 构建时 import 内联 | SSG compatible，零运行时请求 |
-| Key 命名 | 点分隔全小写 | 直观，按文件路径组织 |
-| 回退策略 | en-US → key 本身 | 永远不会空白输出 |
+| 决策            | 选项                        | 理由                                   |
+| --------------- | --------------------------- | -------------------------------------- |
+| 框架            | 自研 JSON + t()             | 零依赖，CLI 二进制不受影响，~30 行代码 |
+| 类型安全        | 运行时 fallback（非编译期） | 简单，key 拼写错误 fallback 到英文     |
+| 初始语言        | zh-CN + en-US               | 覆盖 95% 用户                          |
+| CLI 注入        | React Context               | 支持热切换 `/lang`，易 mock 测试       |
+| 翻译加载（CLI） | 同步 readFileSync           | 启动时一次读 ~100KB，零延迟            |
+| 翻译加载（Web） | 构建时 import 内联          | SSG compatible，零运行时请求           |
+| Key 命名        | 点分隔全小写                | 直观，按文件路径组织                   |
+| 回退策略        | en-US → key 本身            | 永远不会空白输出                       |
 
 ---
 
 ## 十三、修订历史
 
-| 版本 | 日期 | 变更 | 维护人 |
-|------|------|------|--------|
+| 版本  | 日期       | 变更     | 维护人     |
+| ----- | ---------- | -------- | ---------- |
 | 1.0.0 | 2026-08-07 | 初始设计 | 技术委员会 |

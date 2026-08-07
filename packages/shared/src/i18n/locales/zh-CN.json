@@ -323,7 +323,10 @@
       "found_content": "名称:      {name}\n消息数:  {messages}\n提供商:  {provider} / {model}\n更新时间:   {updated}\n\n恢复此会话:\n  /resume last    — 恢复最近的会话\n  mipham --resume \"{target}\"\n\n或重启 Mipham Code — 最近会话将自动加载。"
     },
     "help": { "title": "── Mipham Code 帮助 ──" },
-    "lang": { "current": "当前语言: {locale}", "set": "语言已设置为 {locale}。重启 Mipham Code 生效。" },
+    "lang": {
+      "current": "当前语言: {locale}",
+      "set": "语言已设置为 {locale}。重启 Mipham Code 生效。"
+    },
     "exit": {},
     "version": {
       "title": "Mipham Code v{version}",

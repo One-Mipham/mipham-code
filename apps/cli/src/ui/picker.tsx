@@ -152,7 +152,9 @@ export function ModelPicker({
                   {isCurrent ? '✓' : ' '}
                   {p.name.padEnd(16)}
                 </Text>
-                <Text dimColor>{isUpcoming ? t('ui.picker.coming_soon') : `${activeModels(p).length}m`}</Text>
+                <Text dimColor>
+                  {isUpcoming ? t('ui.picker.coming_soon') : `${activeModels(p).length}m`}
+                </Text>
               </Box>
             )
           })}
