@@ -80,8 +80,6 @@ describe('MemoryManager', () => {
     mm.write('phase-4', 'Phase 4 complete. See also: [[phase-5]] [[service-mesh]]', {
       type: 'project',
       relevance: ['phase-4'],
-      why: 'Service mesh integration done',
-      howToApply: 'Use as baseline for Phase 5',
     })
 
     const linked = mm.getLinkedMemories('phase-4')
@@ -90,14 +88,17 @@ describe('MemoryManager', () => {
     mm.write('phase-5', 'Phase 5 next steps. See also: [[phase-4]]', {
       type: 'project',
       relevance: ['phase-5'],
-      why: 'Nexus/Sentinel deep integration',
-      howToApply: 'Start from Phase 4 baseline',
     })
 
     // Now the link is bidirectional
     const linked2 = mm.getLinkedMemories('phase-4')
     expect(linked2).toHaveLength(1)
     expect(linked2[0]!.name).toBe('phase-5')
+
+    // Verify reverse direction
+    const reverseLinked = mm.getLinkedMemories('phase-5')
+    expect(reverseLinked).toHaveLength(1)
+    expect(reverseLinked[0]!.name).toBe('phase-4')
   })
 
   it('recall includes wikilink-connected memories with lower weight', () => {

@@ -58,8 +58,8 @@ export class MemoryManager {
         // skip unparseable
       }
     }
-    this.rebuildLinkGraph()
     this.loadLinkGraph()
+    this.rebuildLinkGraph()
   }
 
   write(name: string, content: string, metadata: MemoryMetadata): void {
@@ -84,18 +84,8 @@ export class MemoryManager {
     const links = this.extractWikilinks(content)
     if (links.length > 0) {
       this.linkGraph.set(name, new Set(links))
-      // Add reverse links for existing memories that link to this one
-      for (const [existingName, existingEntry] of this.memories) {
-        if (existingName === name) continue
-        const existingLinks = this.extractWikilinks(existingEntry.content)
-        if (existingLinks.includes(name)) {
-          const reverseSet = this.linkGraph.get(existingName) || new Set()
-          reverseSet.add(name)
-          this.linkGraph.set(existingName, reverseSet)
-        }
-      }
     }
-    // Also update reverse links: other memories may now point to this one
+    // Update reverse links: other memories that link to this one
     for (const [existingName, existingEntry] of this.memories) {
       if (existingName === name) continue
       const existingLinks = this.extractWikilinks(existingEntry.content)
