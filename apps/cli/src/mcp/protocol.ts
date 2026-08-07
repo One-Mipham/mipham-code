@@ -18,8 +18,20 @@ export class McpProtocol {
     tools?: { listChanged?: boolean }
     resources?: { subscribe?: boolean; listChanged?: boolean }
   } = {}
+  private handlers = new Map<string, Array<(...args: any[]) => void>>()
 
   constructor(private transport: StdioTransport) {}
+
+  on(event: string, handler: (...args: any[]) => void): void {
+    const list = this.handlers.get(event) || []
+    list.push(handler)
+    this.handlers.set(event, list)
+  }
+
+  private emit(event: string, ...args: any[]): void {
+    const list = this.handlers.get(event) || []
+    for (const h of list) h(...args)
+  }
 
   async initialize(
     serverCommand: string,
@@ -44,6 +56,13 @@ export class McpProtocol {
 
     // Send initialized notification
     this.transport.sendNotification('notifications/initialized')
+
+    // Register notification handler for tools/list_changed
+    this.transport.onNotification((notification) => {
+      if (notification.method === 'notifications/tools/list_changed') {
+        this.emit('tools-changed', notification.params)
+      }
+    })
 
     this.serverCapabilities = result.capabilities
 

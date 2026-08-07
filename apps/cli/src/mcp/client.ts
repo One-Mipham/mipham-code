@@ -34,9 +34,19 @@ interface ActiveConnection {
 export class McpClient {
   private static instance: McpClient | null = null
   private connections = new Map<string, ActiveConnection>()
-  private tokenStore = new TokenStore()
-  private oauthClient = new OAuthClient(this.tokenStore)
+  private _tokenStore: TokenStore | null = null
+  private _oauthClient: OAuthClient | null = null
   private eventHandlers = new Map<string, Array<(...args: any[]) => void>>()
+
+  private get tokenStore(): TokenStore {
+    if (!this._tokenStore) this._tokenStore = new TokenStore()
+    return this._tokenStore
+  }
+
+  private get oauthClient(): OAuthClient {
+    if (!this._oauthClient) this._oauthClient = new OAuthClient(this.tokenStore)
+    return this._oauthClient
+  }
 
   /** Get or create the singleton instance. */
   static getInstance(): McpClient {
@@ -64,6 +74,60 @@ export class McpClient {
       ...config,
       env: { ...config.env, MCP_ACCESS_TOKEN: accessToken },
     })
+  }
+
+  /** Handle tools/list_changed notification — diff and re-register. */
+  async onToolsChanged(name: string): Promise<void> {
+    const connection = this.connections.get(name)
+    if (!connection || connection.status !== 'connected') return
+
+    const oldToolNames = new Set(connection.tools.map((t) => t.name))
+    const newTools = await connection.protocol.listTools()
+    const newToolNames = new Set(newTools.map((t) => t.name))
+
+    const added = newTools.filter((t) => !oldToolNames.has(t.name))
+    const removed = connection.tools.filter((t) => !newToolNames.has(t.name))
+
+    connection.tools = newTools
+
+    if (added.length > 0 || removed.length > 0) {
+      this.emit('tools-changed', name, added, removed)
+    }
+  }
+
+  /** Reconnect with exponential backoff (1s→2s→4s→…max 60s, 10 attempts). */
+  async reconnect(name: string): Promise<void> {
+    const connection = this.connections.get(name)
+    if (!connection) throw new Error(`No connection for "${name}"`)
+
+    const config = connection.config
+    let delay = 1000
+    const maxDelay = 60000
+    const maxAttempts = 10
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        try {
+          connection.transport.close()
+        } catch {
+          /* ok */
+        }
+        this.connections.delete(name)
+
+        await this.connect(config)
+        this.emit('reconnected', name)
+        return
+      } catch (err) {
+        if (attempt === maxAttempts) {
+          connection.status = 'error'
+          connection.error = String(err)
+          this.emit('disconnected', name, err)
+          throw err
+        }
+        await new Promise((resolve) => setTimeout(resolve, delay))
+        delay = Math.min(delay * 2, maxDelay)
+      }
+    }
   }
 
   /** Reset the singleton (useful for testing). */
@@ -98,6 +162,11 @@ export class McpClient {
 
       connection.status = 'connected'
       connection.serverInfo = initResult.serverInfo
+
+      // Wire tools-changed notification
+      protocol.on('tools-changed', async () => {
+        await this.onToolsChanged(config.name)
+      })
 
       // Discover tools
       if (initResult.capabilities.tools) {

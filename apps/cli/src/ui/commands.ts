@@ -2493,9 +2493,66 @@ const deepResearchCmd: CommandHandler = (_ctx, args) => {
 // Theme — display theme toggle
 // ═══════════════════════════════════════════════════════════════
 
-const mcpCmd: CommandHandler = (ctx) => {
+const mcpCmd: CommandHandler = async (ctx, args) => {
+  const client = McpClient.getInstance()
+  const sub = args[0]?.toLowerCase()
+
+  // /mcp connect <name>
+  if (sub === 'connect') {
+    const name = args[1]
+    if (!name) return { content: 'Usage: /mcp connect <server-name>' }
+    const mcpServers = ctx.config.skills?.mcpServers ?? []
+    const config = mcpServers.find((s) => s.name === name)
+    if (!config) {
+      return {
+        content: `Server "${name}" not found in config.\n\nConfigured: ${mcpServers.map((s) => s.name).join(', ') || '(none)'}`,
+      }
+    }
+    if (config.auth?.type === 'oauth') {
+      return {
+        content: [
+          `── MCP Connect: ${name} (OAuth) ──`,
+          '',
+          'Starting OAuth PKCE flow...',
+          `Authorization: ${config.auth.authorizationUrl}`,
+          `Scopes: ${config.auth.scopes?.join(', ') || '(default)'}`,
+        ].join('\n'),
+        forwardToAI: `Connect to MCP server "${name}" using OAuth. Call McpClient.getInstance().connectWithOAuth() with the server config, then register its tools. Report the result.`,
+      }
+    }
+    return {
+      content: `── MCP Connect: ${name} ──\n\nConnecting via stdio...`,
+      forwardToAI: `Connect to MCP server "${name}" using McpClient.getInstance().connect(config), then register its tools. Report the result.`,
+    }
+  }
+
+  // /mcp disconnect <name>
+  if (sub === 'disconnect') {
+    const name = args[1]
+    if (!name) return { content: 'Usage: /mcp disconnect <server-name>' }
+    const tools = client.disconnect(name)
+    return {
+      content: [
+        `── MCP Disconnect: ${name} ──`,
+        '',
+        tools.length > 0
+          ? `Disconnected. ${tools.length} tool(s) removed.`
+          : 'Disconnected (no tools were registered).',
+      ].join('\n'),
+    }
+  }
+
+  // /mcp reload
+  if (sub === 'reload') {
+    return {
+      content: '── MCP Reload ──\n\nDisconnecting all and reconnecting...',
+      forwardToAI: 'Disconnect all MCP servers via McpClient.getInstance().closeAll(), then reconnect all configured servers. Report each status.',
+    }
+  }
+
+  // /mcp (default status)
   const configuredServers = ctx.config.skills?.mcpServers ?? []
-  const liveConnections = McpClient.getInstance().listConnections()
+  const liveConnections = client.listConnections()
 
   const lines: string[] = ['── MCP Servers ──', '']
 
@@ -2514,52 +2571,26 @@ const mcpCmd: CommandHandler = (ctx) => {
               : '⚪'
         : '⚪'
       const statusLabel = live ? live.status : 'not started'
-      const envKeys = s.env ? Object.keys(s.env).join(', ') : '(none)'
-
-      lines.push(`  ${statusIcon} ${s.name}  [${statusLabel}]`)
+      const oauthTag = s.auth?.type === 'oauth' ? ' [OAuth]' : ''
+      lines.push(`  ${statusIcon} ${s.name}${oauthTag}  [${statusLabel}]`)
       lines.push(`     Command: ${s.command} ${s.args.join(' ')}`)
-      lines.push(`     Env vars: ${envKeys}`)
       if (live?.tools && live.tools.length > 0) {
-        lines.push(`     Tools: ${live.tools.map((t) => t.name).join(', ')}`)
+        lines.push(`     Tools: ${live.tools.length} registered`)
       }
-      if (live?.error) {
-        lines.push(`     Error: ${live.error}`)
-      }
-      if (live?.serverInfo) {
-        lines.push(`     Server: ${live.serverInfo.name} v${live.serverInfo.version}`)
-      }
+      if (live?.error) lines.push(`     Error: ${live.error}`)
       lines.push('')
     }
   } else {
     lines.push('No MCP servers configured.')
-    lines.push('')
-    lines.push('── Configuration ──')
-    lines.push('')
-    lines.push('Add MCP servers to .mipham/config.yml:')
-    lines.push('')
-    lines.push('  skills:')
-    lines.push('    mcpServers:')
-    lines.push('      - name: filesystem')
-    lines.push('        command: npx')
-    lines.push('        args: ["-y", "@anthropic/mcp-filesystem", "/path"]')
-    lines.push('        env:')
-    lines.push('          HOME: $HOME')
-    lines.push('')
-    lines.push('      - name: github')
-    lines.push('        command: npx')
-    lines.push('        args: ["-y", "@anthropic/mcp-github"]')
-    lines.push('        env:')
-    lines.push('          GITHUB_TOKEN: $GITHUB_TOKEN')
-    lines.push('')
-    lines.push('After configuring, restart Mipham Code to connect.')
-    lines.push('Use the MCP tool (Tool 16) to call server tools.')
   }
 
+  lines.push('── Commands ──')
+  lines.push('  /mcp connect <name>    Connect to a server (OAuth or stdio)')
+  lines.push('  /mcp disconnect <name>  Disconnect from a server')
+  lines.push('  /mcp reload            Disconnect all and reconnect')
   lines.push('')
   lines.push('── Protocol ──')
   lines.push('MCP stdio transport (JSON-RPC 2.0) — fully implemented.')
-  lines.push('Servers auto-connect on startup when configured.')
-  lines.push('')
   lines.push('Learn more: https://modelcontextprotocol.io')
 
   return { content: lines.join('\n') }
