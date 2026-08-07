@@ -5,6 +5,7 @@
     "rootDir": ".",
     "noEmit": true,
     "jsx": "react-jsx",
+    "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "types": ["node", "bun"]
   },

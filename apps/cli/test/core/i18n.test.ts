@@ -1,7 +1,11 @@
+import React from 'react'
+import { render } from 'ink-testing-library'
+import { Text } from 'ink'
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { createT } from '@mipham/shared/i18n/t'
 import { detectLocale } from '@mipham/shared/i18n/detect'
 import type { TranslationMap } from '@mipham/shared/i18n/types'
+import { I18nProvider, useI18n } from '../../src/i18n-context'
 
 // Prevent detectOSLocale() from leaking the host machine's locale.
 // The static import of execSync in detect.ts is intercepted by vitest.
@@ -93,5 +97,32 @@ describe('detectLocale()', () => {
   it('falls back to en-US when nothing matches', () => {
     process.env.LANG = 'C'
     expect(detectLocale({})).toBe('en-US')
+  })
+})
+
+describe('I18nProvider + useI18n', () => {
+  it('provides locale and t() to children', () => {
+    const t = (k: string) => `translated:${k}`
+    function Child() {
+      const { locale, t: translate } = useI18n()
+      return React.createElement(Text, {}, `${locale}:${translate('test')}`)
+    }
+    const { lastFrame } = render(
+      React.createElement(I18nProvider, {
+        locale: 'zh-CN',
+        t,
+        children: React.createElement(Child),
+      }),
+    )
+    expect(lastFrame()).toContain('zh-CN:translated:test')
+  })
+
+  it('returns fallback en-US when no Provider (test environment)', () => {
+    function Child() {
+      const { locale, t } = useI18n()
+      return React.createElement(Text, {}, `${locale}:${t('test')}`)
+    }
+    const { lastFrame } = render(React.createElement(Child))
+    expect(lastFrame()).toContain('en-US:test')
   })
 })

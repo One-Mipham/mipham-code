@@ -6,6 +6,11 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./i18n/types": "./src/i18n/types.ts",
+    "./i18n/t": "./src/i18n/t.ts",
+    "./i18n/detect": "./src/i18n/detect.ts",
+    "./i18n/locales/en-US.json": "./src/i18n/locales/en-US.json",
+    "./i18n/locales/zh-CN.json": "./src/i18n/locales/zh-CN.json",
     "./i18n/*": "./src/i18n/*"
   },
   "scripts": {

@@ -1,3 +1,4 @@
+import React from 'react'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { render } from 'ink'
@@ -23,6 +24,12 @@ import { getMetrics } from './core/metrics'
 import { ARTIFACTS_DIR, ARTIFACT_PORT, MIPHAM_DIR } from './shared/constants'
 import { AgentViewManager } from './agent-view/agent-view-manager'
 import { AgentViewDashboard } from './agent-view/dashboard'
+import { createT } from '@mipham/shared/i18n/t'
+import { detectLocale } from '@mipham/shared/i18n/detect'
+import { I18nProvider } from './i18n-context'
+import enUS from '@mipham/shared/i18n/locales/en-US.json' with { type: 'json' }
+import zhCN from '@mipham/shared/i18n/locales/zh-CN.json' with { type: 'json' }
+import type { TranslationMap } from '@mipham/shared/i18n/types'
 
 interface RunOptions {
   model?: string
@@ -59,6 +66,11 @@ export async function runApp(options: RunOptions): Promise<void> {
 
   // Load configuration
   const config = loadConfig()
+
+  // Detect locale and create translation function
+  const locale = detectLocale({ lang: options.lang })
+  const localeBundles: Record<string, TranslationMap> = { 'en-US': enUS as TranslationMap, 'zh-CN': zhCN as TranslationMap }
+  const t = createT(localeBundles[locale] || enUS, enUS)
 
   // Bootstrap providers
   const defaultProvider = options.provider || config.defaultProvider
@@ -297,17 +309,21 @@ export async function runApp(options: RunOptions): Promise<void> {
   })
 
   const { waitUntilExit } = render(
-    <App
-      engine={engine}
-      config={config}
-      initialProvider={defaultProvider}
-      initialModel={defaultModel}
-      lang={options.lang}
-      skillsLoader={skillsLoader}
-      pluginManager={pluginManager}
-      version={options.version}
-      sessionId={sessionName}
-    />,
+    React.createElement(I18nProvider, {
+      locale,
+      t,
+      children: React.createElement(App, {
+        engine,
+        config,
+        initialProvider: defaultProvider,
+        initialModel: defaultModel,
+        lang: options.lang,
+        skillsLoader,
+        pluginManager,
+        version: options.version,
+        sessionId: sessionName,
+      }),
+    }),
   )
   await waitUntilExit()
   saveAndExit()

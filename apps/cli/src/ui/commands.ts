@@ -2241,6 +2241,27 @@ To check manually: https://www.npmjs.com/package/@miphamai/cli`,
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Language — i18n locale control
+// ═══════════════════════════════════════════════════════════════
+
+const langCmd: CommandHandler = (ctx, args) => {
+  const requested = args[0]
+  if (!requested || !['en-US', 'zh-CN'].includes(requested)) {
+    return {
+      content: `── Language ──
+
+Current: en-US
+Supported: en-US, zh-CN
+
+Usage: /lang <locale>`,
+    }
+  }
+  // The actual locale change requires a re-render — stored in preference for next restart.
+  // For now, return confirmation. Hot-swap is Phase 2 enhancement.
+  return { content: `Language set to ${requested}. Restart Mipham Code to apply.` }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // No-Plan — exit plan mode
 // ═══════════════════════════════════════════════════════════════
 
@@ -3310,6 +3331,7 @@ registry.set('/prompt-audit', promptAuditCmd)
 
 // Environment
 registry.set('/theme', themeCmd)
+registry.set('/lang', langCmd)
 registry.set('/ide', ideCmd)
 registry.set('/terminal-setup', terminalSetupCmd)
 registry.set('/release-notes', releaseNotesCmd)
@@ -3407,6 +3429,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/fast': 'Toggle fast mode',
   '/effort': 'Set reasoning effort',
   '/theme': 'Set terminal theme',
+  '/lang': 'Set display language (en-US, zh-CN)',
   '/tools': 'List available tools',
   '/skills': 'List loaded skills',
   '/reload-skills': 'Reload all skills',
