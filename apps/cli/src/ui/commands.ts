@@ -1994,19 +1994,25 @@ const resumeLastCmd: CommandHandler = async () => {
     }
   }
 
+  const MAX_RESUME = 30
+  const truncated = session.messages.length > MAX_RESUME
+  const messages = truncated ? session.messages.slice(-MAX_RESUME) : session.messages
+
   const date = new Date(latest.updatedAt).toLocaleString()
   return {
     content: [
       '─ Session Restored ─',
       '',
       `Name:      ${latest.name}`,
-      `Messages:  ${session.messages.length}`,
+      `Messages:  ${session.messages.length} total${truncated ? ` (showing last ${MAX_RESUME})` : ''}`,
       `Provider:  ${latest.provider} / ${latest.model}`,
       `Updated:   ${date}`,
       '',
-      `${session.messages.length} messages loaded. Context has been restored.`,
+      truncated
+        ? `${messages.length} of ${session.messages.length} messages loaded. Older context summarized above.`
+        : `${messages.length} messages loaded. Context has been restored.`,
     ].join('\n'),
-    forwardedMessages: session.messages,
+    forwardedMessages: messages,
   }
 }
 
