@@ -1,22 +1,24 @@
 #!/usr/bin/env bash
 # bump-version.sh — Bump Mipham Code version across all files, sync lockfile, verify CI.
 #
-# Usage: ./scripts/bump-version.sh <new-version>
+# Usage: ./scripts/bump-version.sh <new-version> [--skip-ci]
 # Example: ./scripts/bump-version.sh 0.16.2
-#
-# Updates:
-#   1. apps/cli/package.json           — "version" field
-#   2. packages/shared/src/package-info.ts  — PACKAGE_VERSION constant
-#   3. packages/shared/package-info.json    — PACKAGE_VERSION field
-#   4. pnpm-lock.yaml                  — regenerated from package.json changes
-#   5. Runs CI checks locally: typecheck → lint → format → build → test
+# Example: ./scripts/bump-version.sh 0.16.2 --skip-ci  (skip CI when already verified)
 
 set -euo pipefail
 
-NEW_VERSION="${1:-}"
-if [ -z "$NEW_VERSION" ]; then
-  echo "Usage: $0 <new-version>"
+SKIP_CI=false
+for arg in "$@"; do
+  case "$arg" in
+    --skip-ci) SKIP_CI=true ;;
+    *) NEW_VERSION="${NEW_VERSION:-$arg}" ;;
+  esac
+done
+
+if [ -z "${NEW_VERSION:-}" ]; then
+  echo "Usage: $0 <new-version> [--skip-ci]"
   echo "Example: $0 0.16.2"
+  echo "Example: $0 0.16.2 --skip-ci"
   exit 1
 fi
 
@@ -80,63 +82,75 @@ echo "  [5/6] prettier pnpm-lock.yaml..."
 pnpm prettier --write pnpm-lock.yaml --log-level silent 2>/dev/null || true
 echo "         ✓ formatted"
 
-# ── Step 7: Verify ──
-echo "  [6/6] CI checks..."
-echo ""
-FAILED=0
-
-echo -n "    typecheck ... "
-if pnpm -r typecheck >/dev/null 2>&1; then
-  echo "✓"
-else
-  echo "❌"
-  FAILED=1
-fi
-
-echo -n "    lint ..... "
-if pnpm lint >/dev/null 2>&1; then
-  echo "✓"
-else
-  echo "❌"
-  FAILED=1
-fi
-
-echo -n "    format ... "
-if pnpm format:check >/dev/null 2>&1; then
-  echo "✓"
-else
-  echo "❌"
-  FAILED=1
-fi
-
-echo -n "    build .... "
-if pnpm -r build >/dev/null 2>&1; then
-  echo "✓"
-else
-  echo "❌"
-  FAILED=1
-fi
-
-echo -n "    test ..... "
-if pnpm -r test >/dev/null 2>&1; then
-  echo "✓"
-else
-  echo "❌"
-  FAILED=1
-fi
-
-echo ""
-
-if [ $FAILED -eq 0 ]; then
-  echo "✅ All checks passed! Ready to commit:"
+# ── Step 7: Verify (skip with --skip-ci) ──
+if $SKIP_CI; then
+  echo "  [6/6] CI checks... ⏭ skipped (--skip-ci)"
+  echo ""
+  echo "✅ Version bumped! Ready to commit:"
   echo ""
   echo "   git add apps/cli/package.json packages/shared/src/package-info.ts packages/shared/package-info.json pnpm-lock.yaml"
   echo "   git commit -m \"chore: bump version to $NEW_VERSION\""
   echo "   git push origin main"
   echo ""
-  echo "   Then: cd apps/cli && npm publish --access public"
   echo "   Then: gh release create v$NEW_VERSION --repo One-Mipham/mipham-code ..."
 else
-  echo "❌ Some checks failed. Review errors above before committing."
-  exit 1
+  echo "  [6/6] CI checks..."
+  echo ""
+  FAILED=0
+
+  echo -n "    typecheck ... "
+  if pnpm -r typecheck >/dev/null 2>&1; then
+    echo "✓"
+  else
+    echo "❌"
+    FAILED=1
+  fi
+
+  echo -n "    lint ..... "
+  if pnpm lint >/dev/null 2>&1; then
+    echo "✓"
+  else
+    echo "❌"
+    FAILED=1
+  fi
+
+  echo -n "    format ... "
+  if pnpm format:check >/dev/null 2>&1; then
+    echo "✓"
+  else
+    echo "❌"
+    FAILED=1
+  fi
+
+  echo -n "    build .... "
+  if pnpm -r build >/dev/null 2>&1; then
+    echo "✓"
+  else
+    echo "❌"
+    FAILED=1
+  fi
+
+  echo -n "    test ..... "
+  if pnpm -r test >/dev/null 2>&1; then
+    echo "✓"
+  else
+    echo "❌"
+    FAILED=1
+  fi
+
+  echo ""
+
+  if [ $FAILED -eq 0 ]; then
+    echo "✅ All checks passed! Ready to commit:"
+    echo ""
+    echo "   git add apps/cli/package.json packages/shared/src/package-info.ts packages/shared/package-info.json pnpm-lock.yaml"
+    echo "   git commit -m \"chore: bump version to $NEW_VERSION\""
+    echo "   git push origin main"
+    echo ""
+    echo "   Then: cd apps/cli && npm publish --access public"
+    echo "   Then: gh release create v$NEW_VERSION --repo One-Mipham/mipham-code ..."
+  else
+    echo "❌ Some checks failed. Review errors above before committing."
+    exit 1
+  fi
 fi
