@@ -177,6 +177,14 @@ export interface McpServerConfig {
   command: string
   args: string[]
   env?: Record<string, string>
+  auth?: {
+    type: 'oauth'
+    authorizationUrl: string
+    tokenUrl: string
+    clientId: string
+    scopes?: string[]
+    redirectPort?: number
+  }
 }
 
 // ── Skill Types ──

@@ -8,6 +8,8 @@ import type {
 } from './types'
 import { StdioTransport } from './transport'
 import { McpProtocol } from './protocol'
+import { OAuthClient } from './oauth'
+import { TokenStore } from './token-store'
 
 interface ActiveConnection {
   config: McpServerConfig
@@ -32,6 +34,9 @@ interface ActiveConnection {
 export class McpClient {
   private static instance: McpClient | null = null
   private connections = new Map<string, ActiveConnection>()
+  private tokenStore = new TokenStore()
+  private oauthClient = new OAuthClient(this.tokenStore)
+  private eventHandlers = new Map<string, Array<(...args: any[]) => void>>()
 
   /** Get or create the singleton instance. */
   static getInstance(): McpClient {
@@ -39,6 +44,26 @@ export class McpClient {
       McpClient.instance = new McpClient()
     }
     return McpClient.instance
+  }
+
+  on(event: string, handler: (...args: any[]) => void): void {
+    const list = this.eventHandlers.get(event) || []
+    list.push(handler)
+    this.eventHandlers.set(event, list)
+  }
+
+  private emit(event: string, ...args: any[]): void {
+    const list = this.eventHandlers.get(event) || []
+    for (const h of list) h(...args)
+  }
+
+  /** Connect with OAuth PKCE flow — injects access token into env vars. */
+  async connectWithOAuth(config: McpServerConfig): Promise<void> {
+    const accessToken = await this.oauthClient.getValidAccessToken(config.name, config)
+    return this.connect({
+      ...config,
+      env: { ...config.env, MCP_ACCESS_TOKEN: accessToken },
+    })
   }
 
   /** Reset the singleton (useful for testing). */
