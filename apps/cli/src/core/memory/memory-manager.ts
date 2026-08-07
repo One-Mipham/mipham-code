@@ -11,6 +11,8 @@ import { join, extname } from 'node:path'
 export interface MemoryMetadata {
   type: 'user' | 'feedback' | 'project' | 'reference'
   relevance: string[]
+  why?: string
+  howToApply?: string
 }
 
 export interface MemoryEntry {
@@ -63,6 +65,21 @@ export class MemoryManager {
   }
 
   write(name: string, content: string, metadata: MemoryMetadata): void {
+    // Dedup: same name = update, don't create duplicate
+    const formattedBody = this.formatMemoryBody(metadata, content)
+    const existing = this.memories.get(name)
+    if (existing) {
+      existing.content = formattedBody
+      existing.metadata = metadata
+      existing.description = metadata.relevance.join(', ')
+      existing.updatedAt = new Date()
+      this.memories.set(name, existing)
+      const body = this.formatMemoryFile(name, metadata, content)
+      writeFileSync(existing.filePath, body, 'utf-8')
+      this.updateIndex()
+      return
+    }
+
     const fileName = `${name}.md`
     const filePath = join(this.memoryDir, fileName)
 
@@ -73,7 +90,7 @@ export class MemoryManager {
       name,
       description: metadata.relevance.join(', '),
       metadata,
-      content,
+      content: formattedBody,
       filePath,
       updatedAt: new Date(),
     }
@@ -270,6 +287,7 @@ export class MemoryManager {
   }
 
   private formatMemoryFile(name: string, metadata: MemoryMetadata, content: string): string {
+    const body = this.formatMemoryBody(metadata, content)
     return `---
 name: ${name}
 description: ${metadata.relevance.join(', ')}
@@ -278,7 +296,20 @@ metadata:
   relevance: [${metadata.relevance.join(', ')}]
 ---
 
-${content}
+${body}
 `
+  }
+
+  private formatMemoryBody(metadata: MemoryMetadata, content: string): string {
+    let body = content
+
+    if (metadata.why) {
+      body += `\n\n**Why:** ${metadata.why}`
+    }
+    if (metadata.howToApply) {
+      body += `\n\n**How to apply:** ${metadata.howToApply}`
+    }
+
+    return body
   }
 }

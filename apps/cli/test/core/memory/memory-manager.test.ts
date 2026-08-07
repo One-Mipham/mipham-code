@@ -101,6 +101,39 @@ describe('MemoryManager', () => {
     expect(reverseLinked[0]!.name).toBe('phase-4')
   })
 
+  it('write with why/howToApply stores structured memory', () => {
+    const mm = new MemoryManager(TEST_DIR)
+    mm.write('decision', 'Use pnpm over npm', {
+      type: 'project',
+      relevance: ['tools'],
+      why: 'Faster installs, strict dependency resolution',
+      howToApply: 'Always use pnpm for new projects',
+    })
+
+    const recalled = mm.recall('pnpm decision')
+    expect(recalled).toHaveLength(1)
+    expect(recalled[0]!.content).toContain('**Why:**')
+    expect(recalled[0]!.content).toContain('Faster installs')
+    expect(recalled[0]!.content).toContain('**How to apply:**')
+    expect(recalled[0]!.content).toContain('Always use pnpm')
+  })
+
+  it('write with same name updates instead of duplicating', () => {
+    const mm = new MemoryManager(TEST_DIR)
+    mm.write('same-name', 'Version 1', {
+      type: 'feedback',
+      relevance: ['test'],
+    })
+    mm.write('same-name', 'Version 2', {
+      type: 'feedback',
+      relevance: ['test'],
+    })
+
+    const all = mm.recall('test')
+    expect(all).toHaveLength(1) // not duplicated
+    expect(all[0]!.content).toContain('Version 2')
+  })
+
   it('recall includes wikilink-connected memories with lower weight', () => {
     const mm = new MemoryManager(TEST_DIR)
     mm.write('a', 'Memory A. See also: [[b]]', {
