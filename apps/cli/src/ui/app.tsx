@@ -19,6 +19,7 @@ import {
   handleSwitch,
   type CommandContext,
 } from './commands'
+import { useI18n } from '../i18n-context'
 import type { PermissionMode } from '../shared/index.ts'
 
 interface AppProps {
@@ -128,6 +129,7 @@ export function App({
   version,
   sessionId,
 }: AppProps) {
+  const { t } = useI18n()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [providerId, setProviderId] = useState(initialProvider || config.defaultProvider)
@@ -244,8 +246,9 @@ export function App({
       setUltracodeMode: (on: boolean) => setUltracodeMode(on),
       skillsLoader,
       pluginManager,
+      t,
     }),
-    [engine, config, providerId, modelId, skillsLoader, pluginManager, sessionId],
+    [engine, config, providerId, modelId, skillsLoader, pluginManager, sessionId, t],
   )
 
   const handleSubmit = useCallback(

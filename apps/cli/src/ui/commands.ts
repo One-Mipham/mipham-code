@@ -13,6 +13,20 @@ import { McpClient } from '../mcp/client'
 import { NPM_UPDATE_COMMAND, PACKAGE_VERSION } from '../shared/index.ts'
 import { getPreference } from '../config/preferences'
 import { stripIndent } from './strip-indent.js'
+import { createT } from '@mipham/shared/i18n/t'
+import type { TranslationMap } from '@mipham/shared/i18n/types'
+import enUS from '@mipham/shared/i18n/locales/en-US.json' with { type: 'json' }
+import zhCN from '@mipham/shared/i18n/locales/zh-CN.json' with { type: 'json' }
+
+// Default t() fallback for plain-function contexts (tests, bootstrap).
+// When called from the React tree, ctx.t is populated from useI18n().
+const defaultT = createT(enUS as unknown as TranslationMap, zhCN as unknown as TranslationMap)
+
+/** Resolve the best available t() function: prefer ctx.t (locale-aware from React),
+ *  fall back to module-level defaultT (en-US). */
+function resolveT(ctx: CommandContext): (key: string, params?: Record<string, string>) => string {
+  return ctx.t && typeof ctx.t === 'function' ? ctx.t : defaultT
+}
 import {
   initCmd,
   setupCmd,
@@ -42,6 +56,9 @@ export interface CommandContext {
   setUltracodeMode: (on: boolean) => void
   skillsLoader?: SkillsLoader
   pluginManager?: PluginManager
+  /** i18n translate function — populated from React tree via useI18n().
+   *  Falls back to module-level defaultT (en-US) in tests / bootstrap. */
+  t: (key: string, params?: Record<string, string>) => string
 }
 
 export interface CommandResult {
@@ -228,7 +245,8 @@ const versionCmd: CommandHandler = (ctx) => {
 
 const clearCmd: CommandHandler = (ctx) => {
   ctx.engine.getContext().clear()
-  return { content: '✓ Conversation cleared. Context reset.', clearMessages: true }
+  const t = resolveT(ctx)
+  return { content: t('commands.clear.confirmed'), clearMessages: true }
 }
 
 const exitCmd: CommandHandler = () => ({ content: '', exit: true })
@@ -238,63 +256,68 @@ const exitCmd: CommandHandler = () => ({ content: '', exit: true })
 // ═══════════════════════════════════════════════════════════════
 
 const compactCmd: CommandHandler = async (ctx) => {
+  const t = resolveT(ctx)
   const context = ctx.engine.getContext()
   const before = context.getEstimatedTokens()
   await context.compact('user requested compaction')
   const after = context.getEstimatedTokens()
   return {
-    content: `✓ Context compacted.\nTokens: ${before.toLocaleString()} → ${after.toLocaleString()} (saved ${((1 - after / before) * 100).toFixed(0)}%)`,
+    content: `${t('commands.compact.confirmed')}\n${t('commands.compact.tokens', { before: before.toLocaleString(), after: after.toLocaleString(), saved: ((1 - after / before) * 100).toFixed(0) })}`,
   }
 }
 
 const contextCmd: CommandHandler = (ctx) => {
+  const t = resolveT(ctx)
   const c = ctx.engine.getContext()
   const tokens = c.getEstimatedTokens()
   const msgs = c.getMessages()
   const systemPromptLen = c.getSystemPrompt().length
   return {
     content: stripIndent`
-      ── Context Stats ──
-      Messages:       ${msgs.length}
-      Estimated tokens: ${tokens.toLocaleString()} / 200,000
-      Usage:           ${((tokens / 200_000) * 100).toFixed(1)}%
-      System prompt:   ${systemPromptLen.toLocaleString()} chars (~${Math.ceil(systemPromptLen / 4).toLocaleString()} tokens)
-      Compaction:      at 90% (${(200_000 * 0.9).toLocaleString()} tokens)
+      ${t('commands.context.title')}
+      ${t('commands.context.messages')}       ${msgs.length}
+      ${t('commands.context.estimated_tokens')} ${tokens.toLocaleString()} / 200,000
+      ${t('commands.context.usage_pct')}           ${((tokens / 200_000) * 100).toFixed(1)}%
+      ${t('commands.context.system_prompt')}   ${systemPromptLen.toLocaleString()} chars (~${Math.ceil(systemPromptLen / 4).toLocaleString()} tokens)
+      ${t('commands.context.compaction')}      at 90% (${(200_000 * 0.9).toLocaleString()} tokens)
     `,
   }
 }
 
 const statusCmd: CommandHandler = (ctx) => {
+  const t = resolveT(ctx)
   const c = ctx.engine.getContext()
   const tools = ctx.engine.getTools()
+  const runtime = typeof Bun !== 'undefined' ? 'Bun' : 'Node.js'
+  const runtimeVer = typeof Bun !== 'undefined' ? Bun.version : process.version
   return {
     content: stripIndent`
-      ── Session Status ──
-      Provider:   ${ctx.providerId}
-      Model:      ${ctx.modelId}
-      Messages:   ${c.getMessages().length}
-      Tokens:     ~${c.getEstimatedTokens().toLocaleString()} / 200,000
-      Tools:      ${tools.size} loaded
-      Permission: ${ctx.config.permission}
+      ${t('commands.status.session_title')}
+      ${t('commands.status.provider')}   ${ctx.providerId}
+      ${t('commands.status.model')}      ${ctx.modelId}
+      ${t('commands.status.messages')}   ${c.getMessages().length}
+      ${t('commands.status.tokens')}     ~${c.getEstimatedTokens().toLocaleString()} / 200,000
+      ${t('commands.status.tools')}      ${tools.size} ${t('commands.status.loaded')}
+      ${t('commands.status.permission')} ${ctx.config.permission}
 
-      ── System ──
-      Platform:   ${process.platform} ${process.arch}
-      Runtime:    ${typeof Bun !== 'undefined' ? 'Bun' : 'Node.js'} ${typeof Bun !== 'undefined' ? Bun.version : process.version}
-      CWD:        ${process.cwd()}
+      ${t('commands.status.system_title')}
+      ${t('commands.status.platform')}   ${process.platform} ${process.arch}
+      ${t('commands.status.runtime')}    ${runtime} ${runtimeVer}
+      ${t('commands.status.cwd')}        ${process.cwd()}
     `,
   }
 }
 
 const costCmd: CommandHandler = (ctx) => {
+  const t = resolveT(ctx)
   const tokens = ctx.engine.getContext().getEstimatedTokens()
   return {
     content: stripIndent`
-      ── Token Usage (estimated) ──
-      Context tokens: ~${tokens.toLocaleString()} / 200,000
-      Usage: ${((tokens / 200_000) * 100).toFixed(1)}%
+      ${t('commands.context_tokens.title')}
+      ${t('commands.context_tokens.context_tokens')} ~${tokens.toLocaleString()} / 200,000
+      ${t('commands.context_tokens.usage')} ${((tokens / 200_000) * 100).toFixed(1)}%
 
-      Token counting is approximate (chars/4).
-      Actual API usage depends on provider and model.
+      ${t('commands.context_tokens.footer')}
     `,
   }
 }
@@ -303,11 +326,13 @@ const costCmd: CommandHandler = (ctx) => {
 // Model & Provider
 // ═══════════════════════════════════════════════════════════════
 
-const modelCmd: CommandHandler = (ctx) => ({
-  content: `Current model: ${ctx.modelId}\nProvider: ${ctx.providerId}\n\nUse /switch <provider> <model> to change.`,
-})
+const modelCmd: CommandHandler = (ctx) => {
+  const t = resolveT(ctx)
+  return { content: t('commands.model.current', { model: ctx.modelId, provider: ctx.providerId }) }
+}
 
 const modelsCmd: CommandHandler = (ctx) => {
+  const t = resolveT(ctx)
   const lines = ctx.config.providers
     .filter((p) => p.status !== 'upcoming')
     .flatMap((p) =>
@@ -320,40 +345,42 @@ const modelsCmd: CommandHandler = (ctx) => {
     )
 
   return {
-    content: `Available models (${lines.length} active):\n\nProvider      Model                          Context     Vision\n${'-'.repeat(80)}\n${lines.join('\n')}\n\nUse /switch <provider> <model> to change.\nSee /providers for upcoming models.`,
+    content: `${t('commands.models.title', { count: String(lines.length) })}\n\n${t('commands.models.header')}\n${'-'.repeat(80)}\n${lines.join('\n')}\n\n${t('commands.models.hint')}`,
   }
 }
 
-const providerCmd: CommandHandler = (ctx) => ({
-  content: `Current provider: ${ctx.providerId}\nModel: ${ctx.modelId}`,
-})
+const providerCmd: CommandHandler = (ctx) => {
+  const t = resolveT(ctx)
+  return { content: t('commands.provider.current', { provider: ctx.providerId, model: ctx.modelId }) }
+}
 
 const providersCmd: CommandHandler = (ctx) => {
+  const t = resolveT(ctx)
   const lines = ctx.config.providers.map(
     (p) =>
       `  ${p.id.padEnd(14)} ${p.name.padEnd(20)} ${p.protocol.padEnd(18)} ${p.models.length} models  ${p.status === 'upcoming' ? '[upcoming]' : '✓'}`,
   )
   return {
-    content: `Configured providers:\n\n${lines.join('\n')}\n\nCurrent: ${ctx.providerId}/${ctx.modelId}`,
+    content: `${t('commands.providers.title')}\n\n${lines.join('\n')}\n\n${t('commands.providers.current', { provider: ctx.providerId, model: ctx.modelId })}`,
   }
 }
 
 const switchCmd: CommandHandler = (ctx, args) => {
+  const t = resolveT(ctx)
   const [newProvider, newModel] = args
   if (!newProvider || !newModel) {
-    return {
-      content: 'Usage: /switch <provider> <model>\nExample: /switch deepseek deepseek-v4-pro',
-    }
+    return { content: t('commands.switch.usage') }
   }
   ctx.engine.switchProvider(newProvider, newModel)
   return {
-    content: `✓ Switched to ${newProvider}/${newModel}`,
+    content: t('commands.switch.confirmed', { provider: newProvider, model: newModel }),
     nextProvider: newProvider,
     nextModel: newModel,
   }
 }
 
 const configCmd: CommandHandler = (ctx) => {
+  const t = resolveT(ctx)
   const c = ctx.config
   const lines = [
     `version:          ${c.version}`,
@@ -363,7 +390,7 @@ const configCmd: CommandHandler = (ctx) => {
     `providers:        ${c.providers.length} configured`,
   ]
   return {
-    content: `── Configuration ──\n${lines.join('\n')}\n\nEdit: ~/.mipham/config.yml or .mipham/config.yml`,
+    content: `${t('commands.config.title')}\n${lines.join('\n')}\n\n${t('commands.config.edit')}`,
   }
 }
 
@@ -372,6 +399,7 @@ const configCmd: CommandHandler = (ctx) => {
 // ═══════════════════════════════════════════════════════════════
 
 const toolsCmd: CommandHandler = (ctx) => {
+  const t = resolveT(ctx)
   const tools = ctx.engine.getTools()
   const categories: Record<string, string[]> = {
     file: [],
@@ -389,12 +417,13 @@ const toolsCmd: CommandHandler = (ctx) => {
     .filter(([, v]) => v!.length > 0)
     .map(([cat, items]) => `── ${cat.toUpperCase()} ──\n${items!.join('\n')}`)
 
-  return { content: `Available tools (${tools.size}):\n\n${sections.join('\n\n')}` }
+  return { content: `${t('commands.tools.title', { count: String(tools.size) })}\n\n${sections.join('\n\n')}` }
 }
 
 const skillsCmd: CommandHandler = (ctx) => {
+  const t = resolveT(ctx)
   if (!ctx.skillsLoader) {
-    return { content: 'SkillsLoader not available.' }
+    return { content: t('commands.skills.unavailable') }
   }
   const counts = ctx.skillsLoader.countByType()
   const standard = ctx.skillsLoader.listByType('standard')
@@ -407,7 +436,7 @@ const skillsCmd: CommandHandler = (ctx) => {
     `── Mipham Exclusive (${counts.mipham}) ──`,
     ...mipham.map((s) => `  ${s.name.padEnd(20)} ${s.description}`),
     '',
-    `${counts.total} skills loaded. Use Skill tool to invoke.`,
+    t('commands.skills.loaded', { count: String(counts.total) }),
   ]
   return { content: lines.join('\n') }
 }
@@ -417,10 +446,10 @@ const skillsCmd: CommandHandler = (ctx) => {
 // ═══════════════════════════════════════════════════════════════
 
 const planCmd: CommandHandler = (_ctx, args) => {
+  const t = resolveT(_ctx)
   const description = args.join(' ') || undefined
   return {
-    content:
-      '── Plan Mode ──\n\nEntering plan mode — read-only analysis and design.\nUse EnterPlanMode to start, ExitPlanMode to submit for approval.',
+    content: t('commands.plan.content'),
     forwardToAI: description
       ? `Use EnterPlanMode with description: "${description}". Then explore, design, and use ExitPlanMode when ready for approval.`
       : 'Use EnterPlanMode to enter plan mode. Explore the codebase, design an approach, then use ExitPlanMode to submit for approval.',
@@ -428,18 +457,19 @@ const planCmd: CommandHandler = (_ctx, args) => {
 }
 
 const tddCmd: CommandHandler = (_ctx, args) => {
+  const t = resolveT(_ctx)
   const target = args.join(' ') || 'the current task'
   return {
     content: stripIndent`
-      ── TDD Mode ──
-      Starting Test-Driven Development workflow for: ${target}
+      ${t('commands.tdd.title')}
+      ${t('commands.tdd.start', { target })}
 
-      Cycle: 🔴 RED → 🟢 GREEN → 🔵 REFACTOR
-        RED:   Write a failing test first
-        GREEN: Write minimal code to pass
-        REFACTOR: Clean up while keeping tests green
+      ${t('commands.tdd.cycle')}
+        ${t('commands.tdd.red')}
+        ${t('commands.tdd.green')}
+        ${t('commands.tdd.refactor')}
 
-      The AI will guide you through each cycle.
+      ${t('commands.tdd.guide')}
     `,
     forwardToAI: `Follow the Test-Driven Development workflow for ${target}:
 1. RED — Write a failing test that defines the expected behavior. Use the project's test framework (Vitest/Jest/pytest). Show me the test code and confirm it fails.
@@ -450,17 +480,15 @@ Repeat for each behavior. Do NOT write implementation before tests.`,
 }
 
 const todosCmd: CommandHandler = (_ctx, args) => {
+  const t = resolveT(_ctx)
   const sub = args[0]
   if (sub === 'create') {
     const title = args.slice(1).join(' ')
     if (!title.trim()) {
-      return {
-        content:
-          'Usage: /todos create <task-title>\n\nExample: /todos create Add user authentication',
-      }
+      return { content: t('commands.todos.usage_create') }
     }
     return {
-      content: `── Create Task ──\n\nCreating task: "${title.trim()}"\n\nPassing to AI for structured task creation with TaskCreate...`,
+      content: `${t('commands.todos.create_title')}\n\nCreating task: "${title.trim()}"\n\nPassing to AI for structured task creation with TaskCreate...`,
       forwardToAI: `Create a new task using TaskCreate with subject "${title.trim()}". Set a clear description and activeForm.`,
     }
   }
@@ -468,12 +496,12 @@ const todosCmd: CommandHandler = (_ctx, args) => {
   if (sub === 'list' || !sub) {
     return {
       content: stripIndent`
-        ── Task Management ──
-        Fetching current task list...
+        ${t('commands.todos.list_title')}
+        ${t('commands.todos.list_fetching')}
 
         Shortcuts:
-          /todos list           Show all tasks
-          /todos create <title> Create a new task
+          ${t('commands.todos.item_list')}
+          ${t('commands.todos.item_create')}
       `,
       forwardToAI:
         'Use TaskList to show all current tasks. Present them in a clear summary grouped by status (pending/in_progress/completed). If there are no tasks, suggest creating one.',
@@ -482,12 +510,11 @@ const todosCmd: CommandHandler = (_ctx, args) => {
 
   return {
     content: stripIndent`
-      ── Task Management ──
-      /todos list           Show all tasks
-      /todos create <title> Create a new task
+      ${t('commands.todos.default_title')}
+      ${t('commands.todos.item_list')}
+      ${t('commands.todos.item_create')}
 
-      The AI manages task state via TaskCreate, TaskList, TaskUpdate, and TaskGet tools.
-      Tasks appear in the /tasks view and persist across the session.
+      ${t('commands.todos.default_body')}
     `,
     forwardToAI: 'Use TaskList to show all current tasks, then present them clearly.',
   }
@@ -502,40 +529,30 @@ const todosCmd: CommandHandler = (_ctx, args) => {
 // ═══════════════════════════════════════════════════════════════
 
 const renameCmd: CommandHandler = (ctx, args) => {
+  const t = resolveT(ctx)
   const name = args.join(' ')
   if (!name.trim()) {
-    return { content: 'Usage: /rename <session-name>\nExample: /rename Bug Fix Session' }
+    return { content: t('commands.rename.usage') }
   }
   ctx.setSessionTitle(name.trim())
-  return { content: `✓ Session renamed to "${name.trim()}"` }
+  return { content: t('commands.rename.confirmed', { name: name.trim() }) }
 }
 
 const goalCmd: CommandHandler = (ctx, args) => {
+  const t = resolveT(ctx)
   const input = args.join(' ')
 
   // ── Show goal status ──
   if (!input.trim()) {
     const state = ctx.engine.getGoalState?.() || { goal: undefined, decompose: false, subtasks: [] }
     if (!state.goal) {
-      return {
-        content:
-          `Usage: /goal <statement> [options]\n\n` +
-          `Set a session-level completion condition with optional verification.\n\n` +
-          `Options:\n` +
-          `  --decompose              Auto-decompose goal into subtasks\n` +
-          `  --verify-script <path>   Run a shell script to check completion\n` +
-          `  --verify-skill <name>    Use a skill for verification\n\n` +
-          `Examples:\n` +
-          `  /goal Fix all TS errors and make tests pass --decompose\n` +
-          `  /goal Complete the build --verify-script ./check-build.sh\n` +
-          `  /goal Security audit passes --verify-skill security-review`,
-      }
+      return { content: t('commands.goal.usage') }
     }
-    const lines = [`── Goal Status ──`, '', `🎯 Goal: ${state.goal}`]
-    if (state.verifyScript) lines.push(`📜 Verification: ${state.verifyScript}`)
-    if (state.verifySkill) lines.push(`🛠  Verification skill: ${state.verifySkill}`)
-    if (state.decompose) lines.push(`📋 Decompose: enabled (${state.subtasks.length} subtasks)`)
-    lines.push('', 'Type /goal without arguments to clear.')
+    const lines = [t('commands.goal.status_title'), '', t('commands.goal.status_goal', { goal: state.goal })]
+    if (state.verifyScript) lines.push(t('commands.goal.status_verify_script', { script: state.verifyScript }))
+    if (state.verifySkill) lines.push(t('commands.goal.status_verify_skill', { skill: state.verifySkill }))
+    if (state.decompose) lines.push(t('commands.goal.status_decompose', { count: String(state.subtasks.length) }))
+    lines.push('', t('commands.goal.status_clear_hint'))
     return { content: lines.join('\n') }
   }
 
@@ -567,15 +584,15 @@ const goalCmd: CommandHandler = (ctx, args) => {
 
   goal = goal.trim()
   if (!goal) {
-    return { content: 'Goal text is required. Use /goal without arguments to see usage.' }
+    return { content: t('commands.goal.empty_set') }
   }
 
   ctx.setGoal(goal)
   ctx.engine.setGoal(goal, { verifyScript, verifySkill, decompose })
 
-  const lines = [`✓ Goal set: "${goal}"`]
+  const lines = [t('commands.goal.set', { goal })]
   if (decompose) {
-    lines.push('📋 Decomposition: enabled — AI will break goal into subtasks')
+    lines.push(t('commands.goal.decompose_enabled'))
     // Decompose by creating initial subtasks
     const decomposeMsg = `Break down this goal into 3-5 subtasks: "${goal}". For each subtask, use TaskCreate with the subject and description. Mark each as blocked by the previous one to create a dependency chain.`
     return {
@@ -583,27 +600,26 @@ const goalCmd: CommandHandler = (ctx, args) => {
       forwardToAI: decomposeMsg,
     }
   }
-  if (verifyScript) lines.push(`📜 Verification: ${verifyScript}`)
-  if (verifySkill) lines.push(`🛠  Verification skill: ${verifySkill}`)
+  if (verifyScript) lines.push(t('commands.goal.status_verify_script', { script: verifyScript }))
+  if (verifySkill) lines.push(t('commands.goal.status_verify_skill', { skill: verifySkill }))
   lines.push('')
-  lines.push('Use /status to view progress. Type /goal without arguments to clear.')
+  lines.push(t('commands.goal.status_hint'))
 
   return { content: lines.join('\n') }
 }
 
 const recapCmd: CommandHandler = (ctx) => {
+  const t = resolveT(ctx)
   const c = ctx.engine.getContext()
   const msgs = c.getMessages()
   if (msgs.length === 0) {
-    return { content: 'No conversation to recap.' }
+    return { content: t('commands.recap.no_conversation') }
   }
-  // Show summary of conversation: count messages, roles, estimated tokens
   const userMsgs = msgs.filter((m) => m.role === 'user').length
   const assistantMsgs = msgs.filter((m) => m.role === 'assistant').length
   const tokens = c.getEstimatedTokens()
   const checkpointCount = c.getCheckpoints().length
 
-  // Extract first few user messages as "topics"
   const topics = msgs
     .filter((m) => m.role === 'user' && typeof m.content === 'string')
     .slice(0, 5)
@@ -614,20 +630,21 @@ const recapCmd: CommandHandler = (ctx) => {
 
   return {
     content: stripIndent`
-      ── Session Recap ──
-      Messages:  ${msgs.length} (${userMsgs} user, ${assistantMsgs} assistant)
-      Est. tokens: ~${tokens.toLocaleString()}
-      Checkpoints: ${checkpointCount}
+      ${t('commands.recap.title')}
+      ${t('commands.recap.messages')}  ${msgs.length} (${userMsgs} user, ${assistantMsgs} assistant)
+      ${t('commands.recap.est_tokens')} ~${tokens.toLocaleString()}
+      ${t('commands.recap.checkpoints')} ${checkpointCount}
 
-      Recent topics:
+      ${t('commands.recap.recent_topics')}
       ${topics.map((t, i) => `  ${i + 1}. ${t}`).join('\n')}
 
-      Use /rewind to undo, /clear to reset, /export to save.
+      ${t('commands.recap.footer')}
     `,
   }
 }
 
 const usageCmd: CommandHandler = (ctx) => {
+  const t = resolveT(ctx)
   const c = ctx.engine.getContext()
   const estTokens = c.getEstimatedTokens()
   const msgs = c.getMessages()
@@ -653,46 +670,45 @@ const usageCmd: CommandHandler = (ctx) => {
   const apiTotal = summary.apiInputTokens + summary.apiOutputTokens
   const apiLine =
     summary.apiInputTokens > 0 || summary.apiOutputTokens > 0
-      ? `API tokens:      ${summary.apiInputTokens.toLocaleString().padStart(8)} in / ${summary.apiOutputTokens.toLocaleString().padStart(6)} out (${apiTotal.toLocaleString()} total)`
-      : 'API tokens:      (no API usage data yet)'
+      ? t('commands.usage.api_tokens', { in: summary.apiInputTokens.toLocaleString(), out: summary.apiOutputTokens.toLocaleString(), total: apiTotal.toLocaleString() })
+      : t('commands.usage.no_api')
 
-  const toolSection = toolLines.length > 0 ? `\n── Per-Tool ──\n${toolLines.join('\n')}` : ''
+  const toolSection = toolLines.length > 0 ? `\n${t('commands.usage.tool_section')}\n${toolLines.join('\n')}` : ''
 
   return {
     content: stripIndent`
-      ── Usage Dashboard ──
+      ${t('commands.usage.title')}
       ${apiLine}
-      Context tokens:  ~${estTokens.toLocaleString()} / ${maxTokens.toLocaleString()}  (${pct}%)
-      Messages:         ${msgs.length}
-      Provider:         ${ctx.providerId}
-      Model:            ${ctx.modelId}
+      ${t('commands.usage.context_line', { est: estTokens.toLocaleString(), max: maxTokens.toLocaleString(), pct })}
+      ${t('commands.usage.messages_line', { count: String(msgs.length) })}
+      ${t('commands.usage.provider_line', { provider: ctx.providerId })}
+      ${t('commands.usage.model_line', { model: ctx.modelId })}
 
       ${'█'.repeat(Math.ceil(Number(pct) / 5))}${'░'.repeat(20 - Math.ceil(Number(pct) / 5))} ${pct}%
       ${toolSection}
 
-      Use /context for detailed stats, /compact to free space.
+      ${t('commands.usage.hint')}
     `,
   }
 }
 
 const reloadSkillsCmd: CommandHandler = (ctx) => {
+  const t = resolveT(ctx)
   if (!ctx.skillsLoader) {
-    return { content: 'SkillsLoader not available in this context.' }
+    return { content: t('commands.reload_skills.unavailable') }
   }
   try {
     const config = ctx.config
-    // Re-load builtin skills from the skills directory
-    // The base path is typically relative to the CLI package
     ctx.skillsLoader.loadBuiltin(process.cwd())
     if (config.skills?.paths) {
       ctx.skillsLoader.loadExternal(config.skills.paths)
     }
     const skills = ctx.skillsLoader.list()
     return {
-      content: `✓ Skills reloaded — ${skills.length} loaded.\n\n${skills.map((s) => `  ${s.name.padEnd(28)} ${s.type.padEnd(10)} ${s.description}`).join('\n')}`,
+      content: `${t('commands.reload_skills.confirmed', { count: String(skills.length) })}\n\n${skills.map((s) => `  ${s.name.padEnd(28)} ${s.type.padEnd(10)} ${s.description}`).join('\n')}`,
     }
   } catch (err) {
-    return { content: `Failed to reload skills: ${String(err)}` }
+    return { content: t('commands.reload_skills.failed', { error: String(err) }) }
   }
 }
 
@@ -700,7 +716,8 @@ const reloadSkillsCmd: CommandHandler = (ctx) => {
 // Skill Marketplace — Community skill registry + installation
 // ═══════════════════════════════════════════════════════════════
 
-const browseSkillsCmd: CommandHandler = async () => {
+const browseSkillsCmd: CommandHandler = async (ctx) => {
+  const t = resolveT(ctx)
   const { getAvailableSkills, listInstalledSkills } = await import('../skills/registry')
   const available = getAvailableSkills()
   const installed = new Set(
@@ -780,29 +797,19 @@ const removeSkillCmd: CommandHandler = async (_ctx, args) => {
 // ═══════════════════════════════════════════════════════════════
 
 const pluginsCmd: CommandHandler = (ctx) => {
+  const t = resolveT(ctx)
   const manager = ctx.pluginManager
   if (!manager) {
-    return { content: 'PluginManager not available in this session.' }
+    return { content: t('commands.plugins.unavailable') }
   }
 
   const plugins = manager.list()
   if (plugins.length === 0) {
-    return {
-      content: [
-        '── Installed Plugins ──',
-        '',
-        'No plugins installed.',
-        '',
-        'Install plugins:',
-        '  /install-plugin <npm-package>    Install from npm registry',
-        '  /browse-plugins                  Browse community plugins',
-        '  mipham plugin install <path>    Install from local directory',
-      ].join('\n'),
-    }
+    return { content: t('commands.plugins.none') }
   }
 
   const lines: string[] = [
-    '── Installed Plugins ──',
+    t('commands.plugins.title'),
     '',
     ...plugins.map((p) => {
       const status = p.enabled ? '✅ enabled' : '⛔ disabled'
@@ -955,29 +962,21 @@ const pluginDisableCmd: CommandHandler = (ctx, args) => {
 // ═══════════════════════════════════════════════════════════════
 
 const rewindCmd: CommandHandler = (ctx) => {
+  const t = resolveT(ctx)
   const c = ctx.engine.getContext()
   const checkpoints = c.getCheckpoints()
 
   if (checkpoints.length === 0) {
-    return {
-      content:
-        'No checkpoints available. Checkpoints are automatically saved after each AI response.',
-    }
+    return { content: t('commands.rewind.no_checkpoints') }
   }
 
   const result = c.restoreCheckpoint()
   if (!result.restored) {
-    return { content: 'No checkpoint to restore.' }
+    return { content: t('commands.rewind.no_restore') }
   }
 
   return {
-    content: stripIndent`
-      ✓ Rewound to checkpoint "${result.label}"
-      Restored ${result.messageCount} messages.
-
-      Remaining checkpoints: ${c.getCheckpoints().length}
-      Use /rewind again to go back further, or continue chatting.
-    `,
+    content: t('commands.rewind.confirmed', { label: result.label, count: String(result.messageCount), remaining: String(c.getCheckpoints().length) }),
     clearMessages: true,
   }
 }
@@ -985,12 +984,13 @@ const rewindCmd: CommandHandler = (ctx) => {
 const undoCmd: CommandHandler = rewindCmd
 
 const copyCmd: CommandHandler = (ctx, args) => {
+  const t = resolveT(ctx)
   const c = ctx.engine.getContext()
   const msgs = c.getMessages()
   const assistantMsgs = msgs.filter((m) => m.role === 'assistant')
 
   if (assistantMsgs.length === 0) {
-    return { content: 'No assistant responses to copy.' }
+    return { content: t('commands.copy.no_responses') }
   }
 
   // Determine which response to copy: last N or last 1
@@ -998,9 +998,7 @@ const copyCmd: CommandHandler = (ctx, args) => {
   if (args[0]) {
     n = parseInt(args[0]!, 10)
     if (isNaN(n) || n < 1) {
-      return {
-        content: 'Usage: /copy [N]\nN = number of recent assistant responses to copy (default: 1)',
-      }
+      return { content: t('commands.copy.usage') }
     }
   }
 
@@ -1010,17 +1008,18 @@ const copyCmd: CommandHandler = (ctx, args) => {
     .join('\n\n---\n\n')
 
   return {
-    content: `✓ Copied ${toCopy.length} assistant response(s) to clipboard (${text.length.toLocaleString()} chars).`,
+    content: t('commands.copy.confirmed', { count: String(toCopy.length) }),
     copyContent: text,
   }
 }
 
 const diffCmd: CommandHandler = async (_ctx) => {
+  const t = resolveT(_ctx)
   try {
     const { execSync } = await import('node:child_process')
     const output = execSync('git diff --stat', { encoding: 'utf-8', timeout: 5000 })
     if (!output.trim()) {
-      return { content: 'No uncommitted changes (working tree clean).' }
+      return { content: t('commands.diff.clean') }
     }
     // Get full diff but limit to reasonable size
     const fullDiff = execSync('git diff --no-color', { encoding: 'utf-8', timeout: 5000 })
@@ -1033,11 +1032,11 @@ const diffCmd: CommandHandler = async (_ctx) => {
         : fullDiff
 
     return {
-      content: `── Git Diff ──\n\n${truncated}`,
+      content: `${t('commands.diff.title')}\n\n${truncated}`,
     }
   } catch {
     return {
-      content: 'Unable to run git diff. Ensure git is installed and you are in a repository.',
+      content: t('commands.diff.error'),
     }
   }
 }
@@ -1047,60 +1046,38 @@ const diffCmd: CommandHandler = async (_ctx) => {
 // ═══════════════════════════════════════════════════════════════
 
 const fastCmd: CommandHandler = (ctx, args) => {
+  const t = resolveT(ctx)
   const arg = args[0]?.toLowerCase()
   if (arg === 'on') {
     ctx.setFastMode(true)
-    return { content: '✓ Fast mode ON — responses will prioritize speed over depth.' }
+    return { content: t('commands.fast.on') }
   } else if (arg === 'off') {
     ctx.setFastMode(false)
-    return { content: '✓ Fast mode OFF — standard quality mode.' }
+    return { content: t('commands.fast.off') }
   } else if (arg) {
-    return { content: 'Usage: /fast [on|off]\nToggle fast mode for faster responses.' }
+    return { content: t('commands.fast.usage') }
   } else {
-    // Toggle
-    // We can't read current state from context, so we just show usage
-    return {
-      content:
-        'Usage: /fast [on|off]\n\nFast mode prioritizes speed over depth. Currently available as a configuration toggle.\n\nExample:\n  /fast on   — enable fast mode\n  /fast off  — disable fast mode',
-    }
+    return { content: t('commands.fast.unknown') }
   }
 }
 
 const effortCmd: CommandHandler = (ctx, args) => {
+  const t = resolveT(ctx)
   const VALID_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max']
   const level = args[0]?.toLowerCase()
 
   if (!level || !VALID_LEVELS.includes(level)) {
-    return {
-      content: stripIndent`
-        Usage: /effort <level>
-
-        Set reasoning effort level:
-          low      — Fast, simple tasks
-          medium   — Balanced quality and speed
-          high     — Thorough reasoning (default)
-          xhigh    — Maximum depth for coding/agentic use
-          max      — Absolute ceiling, very thorough
-
-        Current model: ${ctx.modelId}
-        Effort levels require compatible providers (Anthropic Opus 4.6+, Sonnet 4.6).
-      `,
-    }
+    return { content: t('commands.effort.usage', { model: ctx.modelId }) }
   }
 
   ctx.setEffort(level)
-  return { content: `✓ Reasoning effort set to "${level}"` }
+  return { content: t('commands.effort.confirmed', { level }) }
 }
 
 const focusCmd: CommandHandler = (ctx) => {
+  const t = resolveT(ctx)
   ctx.setFocusMode(true)
-  return {
-    content: stripIndent`
-      ✓ Focus mode ON — showing only the most recent exchange.
-      Previous messages are hidden but preserved.
-      Type /focus again to exit focus mode and show all messages.
-    `,
-  }
+  return { content: t('commands.focus.on') }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1108,12 +1085,12 @@ const focusCmd: CommandHandler = (ctx) => {
 // ═══════════════════════════════════════════════════════════════
 
 const ultracodeCmd: CommandHandler = (ctx, args) => {
+  const t = resolveT(ctx)
   const arg = args[0]?.toLowerCase()
   if (arg === 'on') {
     ctx.setUltracodeMode(true)
     return {
-      content:
-        '✓ Ultracode mode ON — multi-agent workflow orchestration enabled.\n\nThe AI will use Workflow tool to fan out, verify, and synthesize for all substantive tasks.',
+      content: t('commands.ultracode.on'),
       forwardToAI: stripIndent`
         Ultracode mode is now ACTIVE. For every substantive task:
         - Use the Workflow tool to orchestrate multi-agent execution
@@ -1129,24 +1106,12 @@ const ultracodeCmd: CommandHandler = (ctx, args) => {
   } else if (arg === 'off') {
     ctx.setUltracodeMode(false)
     return {
-      content: '✓ Ultracode mode OFF.',
+      content: t('commands.ultracode.off'),
       forwardToAI:
         'Ultracode mode is now OFF. Revert to standard single-agent execution. Do NOT use Workflow tool unless explicitly asked.',
     }
   }
-  return {
-    content: stripIndent`
-      Usage: /ultracode [on|off]
-
-      Ultracode mode enables multi-agent workflow orchestration for every substantive task.
-      When ON, the AI uses the Workflow tool to decompose tasks, fan out parallel agents,
-      verify findings adversarially, and synthesize results with a top-tier model.
-
-      Examples:
-        /ultracode on    — enable multi-agent mode
-        /ultracode off   — return to standard single-agent mode
-    `,
-  }
+  return { content: t('commands.ultracode.usage') }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1154,6 +1119,7 @@ const ultracodeCmd: CommandHandler = (ctx, args) => {
 // ═══════════════════════════════════════════════════════════════
 
 const tasksCmd: CommandHandler = (ctx) => {
+  const t = resolveT(ctx)
   const c = ctx.engine.getContext()
   const msgs = c.getMessages()
 
@@ -1169,15 +1135,11 @@ const tasksCmd: CommandHandler = (ctx) => {
 
   return {
     content: stripIndent`
-      ── Background Tasks ──
+      ${t('commands.task_list.title')}
 
-      ${
-        toolUses.length > 0
-          ? `${toolUses.length} task operations detected in this session.\n\nUse Task tool (TaskCreate / TaskUpdate / TaskList) to manage structured task tracking.`
-          : 'No tasks tracked yet. Use TaskCreate, TaskUpdate, and TaskList tools to manage structured tasks.'
-      }
+      ${toolUses.length > 0 ? t('commands.task_list.detected', { count: String(toolUses.length) }) : t('commands.task_list.no_tasks')}
 
-      Quick reference:
+      ${t('commands.task_list.reference')}
         TaskCreate  — create a new task
         TaskList    — list all tasks
         TaskUpdate  — update task status
@@ -1185,35 +1147,24 @@ const tasksCmd: CommandHandler = (ctx) => {
         TaskOutput  — get background task output
         TaskStop    — stop a running task
 
-      Type /todos for the legacy task interface.
+      ${t('commands.task_list.legacy_hint')}
     `,
   }
 }
 
 const branchCmd: CommandHandler = (ctx, args) => {
+  const t = resolveT(ctx)
   const name = args.join(' ') || `branch-${Date.now()}`
   const c = ctx.engine.getContext()
   const msgs = c.getMessages()
 
   if (msgs.length === 0) {
-    return { content: 'No conversation to branch. Start a conversation first.' }
+    return { content: t('commands.branch.no_conversation') }
   }
 
-  // Save current session state as a named checkpoint
   const checkpointId = c.saveCheckpoint(name)
   return {
-    content: stripIndent`
-      ── Branch Created ──
-      Name:       "${name}"
-      Checkpoint:  #${checkpointId}
-      Messages:    ${msgs.length} saved
-
-      Current conversation continues from this point.
-      To return to this branch point later, use:
-        /rewind
-
-      Note: Full session branching (separate concurrent sessions) requires session persistence, coming in a future release. For now, this saves a named checkpoint you can rewind to.
-    `,
+    content: t('commands.branch.details', { name, checkpoint: String(checkpointId), messages: String(msgs.length) }),
   }
 }
 
@@ -1450,8 +1401,9 @@ const scheduleCmd: CommandHandler = async (_ctx) => {
 // ═══════════════════════════════════════════════════════════════
 
 const doctorCmd: CommandHandler = async (ctx) => {
+  const t = resolveT(ctx)
   const lines: string[] = [
-    '── System Diagnostics ──',
+    t('commands.doctor.title'),
     '',
     `Mipham Code  v${ctx.version}`,
     `Runtime      ${typeof Bun !== 'undefined' ? 'Bun ' + Bun.version : 'Node.js ' + process.version}`,
@@ -1459,12 +1411,12 @@ const doctorCmd: CommandHandler = async (ctx) => {
     `CWD          ${process.cwd()}`,
     `PID          ${process.pid}`,
     '',
-    '── Config ──',
+    t('commands.doctor.config_section'),
     `Provider     ${ctx.providerId} / ${ctx.modelId}`,
     `Permission   ${ctx.config.permission}`,
     `Providers    ${ctx.config.providers.length} configured (${ctx.config.providers.filter((p) => p.status !== 'upcoming').length} active)`,
     '',
-    '── Session ──',
+    t('commands.doctor.session_section'),
   ]
 
   const c = ctx.engine.getContext()
@@ -1480,7 +1432,7 @@ const doctorCmd: CommandHandler = async (ctx) => {
   try {
     const { execSync } = await import('node:child_process')
     lines.push('')
-    lines.push('── Git ──')
+    lines.push(t('commands.doctor.git_section'))
     const branch = execSync('git branch --show-current', {
       encoding: 'utf-8',
       timeout: 3000,
@@ -1500,21 +1452,21 @@ const doctorCmd: CommandHandler = async (ctx) => {
     )
   } catch {
     lines.push('')
-    lines.push('── Git ──')
-    lines.push('  (not a git repository or git not available)')
+    lines.push(t('commands.doctor.git_section'))
+    lines.push(t('commands.doctor.no_git'))
   }
 
   // Skills info
   if (ctx.skillsLoader) {
     lines.push('')
-    lines.push('── Skills ──')
+    lines.push(t('commands.doctor.skills_section'))
     try {
       const skills = ctx.skillsLoader.list()
       const standard = skills.filter((s: { type: string }) => s.type === 'standard').length
       const mipham = skills.filter((s: { type: string }) => s.type === 'mipham').length
       lines.push(`Loaded       ${skills.length} (${standard} standard + ${mipham} mipham)`)
     } catch {
-      lines.push('  (skills info unavailable)')
+      lines.push(t('commands.doctor.skills_unavailable'))
     }
   }
 
@@ -1527,68 +1479,67 @@ const doctorCmd: CommandHandler = async (ctx) => {
 
 function gitDiffBridgeCmd(opts: {
   label: string
-  noChangesHint: string
-  runningMsg: string
+  noChangesKey: string
+  runningKey: string
+  errorKey: string
   forwardToAI: string | (() => string)
 }): CommandHandler {
-  return async () => {
+  return async (ctx) => {
+    const t = resolveT(ctx)
     try {
       const { execSync } = await import('node:child_process')
       const diff = execSync('git diff --stat', { encoding: 'utf-8', timeout: 5000 }).trim()
       if (!diff) {
-        return { content: `─ ${opts.label} ─\n\n${opts.noChangesHint}` }
+        return { content: `─ ${opts.label} ─\n\n${t(opts.noChangesKey)}` }
       }
       return {
-        content: `─ ${opts.label} ─\n\n${opts.runningMsg}\n\nChanged files:\n${diff}`,
+        content: `─ ${opts.label} ─\n\n${t(opts.runningKey)}\n\nChanged files:\n${diff}`,
         forwardToAI: typeof opts.forwardToAI === 'function' ? opts.forwardToAI() : opts.forwardToAI,
       }
     } catch {
-      return {
-        content: `─ ${opts.label} ─\n\nCould not detect changes. Are you in a git repository?`,
-      }
+      return { content: `─ ${opts.label} ─\n\n${t(opts.errorKey)}` }
     }
   }
 }
 
 const codeReviewCmd = gitDiffBridgeCmd({
   label: 'Code Review',
-  noChangesHint:
-    'No uncommitted changes to review.\n\nTo review a specific file: /code-review path/to/file.ts',
-  runningMsg:
-    'Reviewing uncommitted changes with the code-review skill (7 dimensions: correctness, security, performance, code quality, architecture, testing, language-specific)...',
+  noChangesKey: 'commands.code_review.no_changes',
+  runningKey: 'commands.code_review.running',
+  errorKey: 'commands.code_review.error',
   forwardToAI: () =>
     `use the code-review skill to review all uncommitted changes. Check all 7 dimensions: correctness, security, performance, code quality, architecture & design, testing, and language-specific issues. Use effort level: ${getPreference('lastCodeReviewEffort', 'high')}.`,
 })
 
 const simplifyCmd = gitDiffBridgeCmd({
   label: 'Simplify',
-  noChangesHint:
-    'No uncommitted changes to simplify.\n\nMake changes first, then run /simplify for cleanup review.',
-  runningMsg:
-    'Running cleanup review — 4 passes: reuse, simplification, efficiency, abstraction level...',
+  noChangesKey: 'commands.simplify.no_changes',
+  runningKey: 'commands.simplify.running',
+  errorKey: 'commands.simplify.error',
   forwardToAI:
     'use the self-review skill to review these uncommitted changes. Focus on 4 cleanup passes: 1) Reuse — find duplicated logic, replace with existing helpers; 2) Simplification — flatten nesting, remove redundant state and dead code; 3) Efficiency — fix repeated object creation, unnecessary I/O, memory issues; 4) Abstraction Level — ensure code sits at the right architectural layer. Apply equivalent transformations only — do NOT change logic or fix bugs.',
 })
 
 const verifyCmd = gitDiffBridgeCmd({
   label: 'Verify',
-  noChangesHint:
-    'No uncommitted changes to verify.\n\nMake changes first, then run /verify for runtime verification.',
-  runningMsg:
-    'Running runtime verification — observing actual execution behavior (not tests, not typecheck)...',
+  noChangesKey: 'commands.verify.no_changes',
+  runningKey: 'commands.verify.running',
+  errorKey: 'commands.verify.error',
   forwardToAI:
     'verify these uncommitted changes through runtime observation only. For each change: 1) Find the user-facing surface (CLI command, API endpoint, UI interaction); 2) Drive the changed code to execute; 3) Push boundaries — pass null, repeated values, wrong types, interrupt mid-flow (Ctrl-C), resize window; 4) Report verdict per change: PASS (works as expected), FAIL (does not work or breaks something), BLOCKED (cannot reach observable state), SKIP (no runtime surface, e.g. pure documentation). Do NOT run the test suite — observe real execution behavior only.',
 })
 
 const designCmd: CommandHandler = (_ctx, args) => {
+  const t = resolveT(_ctx)
   const topic = args.join(' ') || 'the current task'
   return {
-    content: `─ Design ─\n\nStarting architectural design session for: ${topic}\n\nExploring approaches, trade-offs, component breakdown, data flow...`,
+    content: t('commands.design.start', { topic }),
     forwardToAI: `help me design the architecture for ${topic}. Explore 2-3 approaches with trade-offs, then present a design covering: component breakdown, data flow, interfaces between components, error handling strategy, and testing approach. Use the plan sub-agent if deeper analysis would help. Prefer simplicity — YAGNI.`,
   }
 }
 
-const lintCmd: CommandHandler = async () => {
+const lintCmd: CommandHandler = async (ctx) => {
+  const t = resolveT(ctx)
   try {
     const { execSync } = await import('node:child_process')
     const { existsSync } = await import('node:fs')
@@ -1620,19 +1571,17 @@ const lintCmd: CommandHandler = async () => {
 
     return {
       content: [
-        '── Lint Results ──',
+        t('commands.lint.title'),
         '',
         truncated || '(no issues found)',
         '',
         hasPackageJson
-          ? 'To fix: type "fix the lint errors"'
-          : 'Set up linting: https://mipham.ai/code/docs/linting',
+          ? t('commands.lint.fix_hint')
+          : t('commands.lint.setup_hint'),
       ].join('\n'),
     }
   } catch {
-    return {
-      content: '── Lint ──\n\nCould not run linter. Ensure ESLint is installed and configured.',
-    }
+    return { content: t('commands.lint.error') }
   }
 }
 
@@ -1640,7 +1589,8 @@ const lintCmd: CommandHandler = async () => {
 // Session Enhancement Commands (Claude Code parity)
 // ═══════════════════════════════════════════════════════════════
 
-const filesCmd: CommandHandler = async () => {
+const filesCmd: CommandHandler = async (ctx) => {
+  const t = resolveT(ctx)
   const { readdirSync, statSync } = await import('node:fs')
   const { join } = await import('node:path')
   const cwd = process.cwd()
@@ -1663,22 +1613,23 @@ const filesCmd: CommandHandler = async () => {
 
     return {
       content: [
-        '── Project Files ──',
+        t('commands.files.title'),
         '',
-        `CWD: ${cwd}`,
+        t('commands.files.cwd', { path: cwd }),
         '',
         ...items,
-        entries.length > 40 ? `  ... and ${entries.length - 40} more files` : '',
+        entries.length > 40 ? t('commands.files.more_files', { count: String(entries.length - 40) }) : '',
         '',
-        'Use Read/Glob/Grep tools to examine files.',
+        t('commands.files.hint'),
       ].join('\n'),
     }
   } catch {
-    return { content: '── Files ──\n\nCould not read directory.' }
+    return { content: t('commands.files.error') }
   }
 }
 
 const statsCmd: CommandHandler = (ctx) => {
+  const t = resolveT(ctx)
   const c = ctx.engine.getContext()
   const msgs = c.getMessages()
   const tokens = c.getEstimatedTokens()
@@ -1690,26 +1641,27 @@ const statsCmd: CommandHandler = (ctx) => {
 
   return {
     content: [
-      '── Session Stats ──',
+      t('commands.stats.title'),
       '',
-      `Messages:        ${msgs.length} (${userMsgs} user, ${assistantMsgs} AI, ${systemMsgs} system)`,
-      `Tokens:          ~${tokens.toLocaleString()} / 200,000`,
-      `Tools available:  ${tools.size}`,
-      `Provider:         ${ctx.providerId}`,
-      `Model:            ${ctx.modelId}`,
-      `Permission:       ${ctx.config.permission}`,
+      t('commands.stats.messages', { total: String(msgs.length), user: String(userMsgs), assistant: String(assistantMsgs), system: String(systemMsgs) }),
+      t('commands.stats.tokens', { tokens: tokens.toLocaleString() }),
+      t('commands.stats.tools', { count: String(tools.size) }),
+      t('commands.stats.provider', { provider: ctx.providerId }),
+      t('commands.stats.model', { model: ctx.modelId }),
+      t('commands.stats.permission', { permission: ctx.config.permission }),
       '',
-      `Usage:            ${((tokens / 200_000) * 100).toFixed(1)}% of context window`,
+      t('commands.stats.usage', { pct: ((tokens / 200_000) * 100).toFixed(1) }),
     ].join('\n'),
   }
 }
 
 const summaryCmd: CommandHandler = (ctx) => {
+  const t = resolveT(ctx)
   const c = ctx.engine.getContext()
   const msgs = c.getMessages()
 
   if (msgs.length === 0) {
-    return { content: '── Summary ──\n\nNo conversation to summarize.' }
+    return { content: t('commands.summary.no_conversation') }
   }
 
   const userMsgs = msgs
@@ -1722,32 +1674,24 @@ const summaryCmd: CommandHandler = (ctx) => {
 
   return {
     content: [
-      '── Session Summary ──',
+      t('commands.summary.title'),
       '',
-      `Total messages: ${msgs.length}`,
-      `Est. tokens:    ~${c.getEstimatedTokens().toLocaleString()}`,
+      t('commands.summary.total_messages', { count: String(msgs.length) }),
+      t('commands.summary.est_tokens', { tokens: c.getEstimatedTokens().toLocaleString() }),
       '',
-      'Recent topics:',
+      t('commands.summary.recent_topics'),
       ...userMsgs.map((t, i) => `  ${i + 1}. ${t}`),
       '',
-      'Use /export to save, /clear to reset.',
+      t('commands.summary.footer'),
     ].join('\n'),
   }
 }
 
 const cdCmd: CommandHandler = async (ctx, args) => {
+  const t = resolveT(ctx)
   const target = args[0]
   if (!target) {
-    return {
-      content: [
-        'Usage: /cd <path>',
-        '',
-        'Change the session working directory.',
-        'Example: /cd ~/projects/my-app',
-        '',
-        `Current: ${process.cwd()}`,
-      ].join('\n'),
-    }
+    return { content: t('commands.cd.usage', { cwd: process.cwd() }) }
   }
 
   const { existsSync } = await import('node:fs')
@@ -1755,13 +1699,12 @@ const cdCmd: CommandHandler = async (ctx, args) => {
   const resolved = resolve(target.replace(/^~/, process.env.HOME || '~'))
 
   if (!existsSync(resolved)) {
-    return { content: `❌ Directory not found: ${resolved}` }
+    return { content: t('commands.cd.not_found', { path: resolved }) }
   }
 
   try {
     process.chdir(resolved)
 
-    // Persist cwd to active session (best-effort)
     try {
       const { SessionStore } = await import('../core/session-store')
       const saved = SessionStore.load(ctx.sessionId)
@@ -1776,47 +1719,26 @@ const cdCmd: CommandHandler = async (ctx, args) => {
       /* session persistence is best-effort */
     }
 
-    return {
-      content: [
-        '── Directory Changed ──',
-        '',
-        `New CWD: ${resolved}`,
-        '',
-        'The AI will now work relative to this directory.',
-        'Note: This changes the filesystem root for tools like Read, Write, Bash.',
-      ].join('\n'),
-    }
+    return { content: t('commands.cd.content', { path: resolved }) }
   } catch (err) {
-    return { content: `❌ Failed to change directory: ${(err as Error).message}` }
+    return { content: t('commands.cd.failed', { error: (err as Error).message }) }
   }
 }
 
-const hooksCmd: CommandHandler = async () => {
+const hooksCmd: CommandHandler = async (ctx) => {
+  const t = resolveT(ctx)
   const { existsSync, readdirSync } = await import('node:fs')
   const { join } = await import('node:path')
   const cwd = process.cwd()
   const hooksDir = join(cwd, '.mipham', 'hooks')
 
   if (!existsSync(hooksDir)) {
-    return {
-      content: [
-        '── Hooks ──',
-        '',
-        'No hooks configured.',
-        '',
-        'Create hook scripts in .mipham/hooks/:',
-        '  pre-tool-use.sh   — runs before each tool',
-        '  post-tool-use.sh  — runs after each tool',
-        '  stop.sh           — runs when session ends',
-        '',
-        'Use /loop init to scaffold hooks directory.',
-      ].join('\n'),
-    }
+    return { content: t('commands.hooks.no_hooks') }
   }
 
   try {
     const files = readdirSync(hooksDir).filter((f) => f.endsWith('.sh'))
-    const lines: string[] = ['── Hooks ──', '', `Location: ${hooksDir}`, '']
+    const lines: string[] = [t('commands.hooks.title'), '', t('commands.hooks.location', { path: hooksDir }), '']
 
     for (const f of files) {
       try {
@@ -1831,35 +1753,16 @@ const hooksCmd: CommandHandler = async () => {
     }
 
     lines.push('')
-    lines.push(`${files.length} hook(s) found.`)
+    lines.push(t('commands.hooks.found', { count: String(files.length) }))
     return { content: lines.join('\n') }
   } catch {
-    return { content: '── Hooks ──\n\nCould not read hooks directory.' }
+    return { content: t('commands.hooks.error') }
   }
 }
 
-const batchCmd: CommandHandler = async () => {
-  return {
-    content: [
-      '── Batch Operations ──',
-      '',
-      'Apply a change across multiple files or directories.',
-      '',
-      'Usage: type "apply this change to all .ts files in src/"',
-      '',
-      'The AI will:',
-      '  1. Understand your change description',
-      '  2. Find all matching files',
-      '  3. Apply the change consistently',
-      '  4. Report what was modified',
-      '',
-      'Use this for:',
-      '  • Renaming symbols across codebase',
-      '  • Updating import patterns',
-      '  • Applying consistent formatting changes',
-      '  • Bulk config updates',
-    ].join('\n'),
-  }
+const batchCmd: CommandHandler = async (ctx) => {
+  const t = resolveT(ctx)
+  return { content: t('commands.batch.title') }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1867,6 +1770,7 @@ const batchCmd: CommandHandler = async () => {
 // ═══════════════════════════════════════════════════════════════
 
 const exportCmd: CommandHandler = async (ctx) => {
+  const t = resolveT(ctx)
   const { writeFileSync } = await import('node:fs')
   const { join } = await import('node:path')
 
@@ -1897,7 +1801,7 @@ const exportCmd: CommandHandler = async (ctx) => {
 
   writeFileSync(filepath, lines.join('\n'), 'utf-8')
   return {
-    content: `✓ Session exported to:\n  ${filepath}\n\n${msgs.length} messages · ${lines.length} lines`,
+    content: t('commands.export.confirmed', { path: filepath, count: String(msgs.length), lines: String(lines.length) }),
     copyContent: filepath,
   }
 }
@@ -1976,21 +1880,19 @@ const prCommentsCmd: CommandHandler = async () => {
 // Resume
 // ═══════════════════════════════════════════════════════════════
 
-const resumeLastCmd: CommandHandler = async () => {
+const resumeLastCmd: CommandHandler = async (ctx) => {
+  const t = resolveT(ctx)
   const { SessionStore } = await import('../core/session-store')
 
   const latest = SessionStore.getLatest()
   if (!latest) {
-    return {
-      content:
-        '─ Resume Session ─\n\nNo saved sessions found.\n\nSessions are auto-saved to ~/.mipham/sessions/ when Mipham Code exits.',
-    }
+    return { content: `${t('commands.resume.restored')}\n\n${t('commands.resume.no_sessions')}\n\n${t('commands.resume.empty_footer')}` }
   }
 
   const session = SessionStore.load(latest.name)
   if (!session) {
     return {
-      content: `─ Load Failed ─\n\nCould not load session "${latest.name}". The file may have been removed.`,
+      content: `${t('commands.resume.load_failed')}\n\nCould not load session "${latest.name}". The file may have been removed.`,
     }
   }
 
@@ -1999,109 +1901,86 @@ const resumeLastCmd: CommandHandler = async () => {
   const messages = truncated ? session.messages.slice(-MAX_RESUME) : session.messages
 
   const date = new Date(latest.updatedAt).toLocaleString()
+  const truncatedStr = truncated ? ` (showing last ${MAX_RESUME})` : ''
+
   return {
     content: [
-      '─ Session Restored ─',
+      t('commands.resume.restored'),
       '',
-      `Name:      ${latest.name}`,
-      `Messages:  ${session.messages.length} total${truncated ? ` (showing last ${MAX_RESUME})` : ''}`,
-      `Provider:  ${latest.provider} / ${latest.model}`,
-      `Updated:   ${date}`,
+      t('commands.resume.restored_content', { name: latest.name, total: String(session.messages.length), truncated: truncatedStr, provider: latest.provider, model: latest.model, date }),
       '',
       truncated
-        ? `${messages.length} of ${session.messages.length} messages loaded. Older context summarized above.`
-        : `${messages.length} messages loaded. Context has been restored.`,
+        ? t('commands.resume.restored_footer', { loaded: String(messages.length), total: String(session.messages.length) })
+        : t('commands.resume.restored_full_footer', { loaded: String(messages.length) }),
     ].join('\n'),
     forwardedMessages: messages,
   }
 }
 
-const resumeDeleteCmd: CommandHandler = async (_ctx, args) => {
+const resumeDeleteCmd: CommandHandler = async (ctx, args) => {
+  const t = resolveT(ctx)
   const name = args.join(' ').trim()
   if (!name) {
-    return {
-      content:
-        'Usage: /resume delete <session-name>\n\nDelete a saved session. Use /resume to list all sessions.',
-    }
+    return { content: t('commands.resume.delete_usage') }
   }
 
   const { SessionStore } = await import('../core/session-store')
   const deleted = SessionStore.delete(name)
 
   return deleted
-    ? { content: `✓ Session "${name}" deleted.` }
-    : { content: `✗ Session "${name}" not found. Use /resume to list all sessions.` }
+    ? { content: t('commands.resume.delete_confirmed', { name }) }
+    : { content: t('commands.resume.delete_not_found', { name }) }
 }
 
-const resumeCmd: CommandHandler = async (_ctx, args) => {
+const resumeCmd: CommandHandler = async (ctx, args) => {
+  const t = resolveT(ctx)
   const sub = args[0]?.toLowerCase()
 
-  // Sub-command: /resume last
   if (sub === 'last') {
-    return resumeLastCmd(_ctx, args.slice(1))
+    return resumeLastCmd(ctx, args.slice(1))
   }
 
-  // Sub-command: /resume delete <name>
   if (sub === 'delete') {
-    return resumeDeleteCmd(_ctx, args.slice(1))
+    return resumeDeleteCmd(ctx, args.slice(1))
   }
 
   const { SessionStore } = await import('../core/session-store')
 
-  // If a name is provided, show load instructions
   const targetName = args.join(' ')
   if (targetName) {
     const session = SessionStore.load(targetName)
     if (session) {
       return {
-        content: [
-          '─ Session Found ─',
-          '',
-          `Name:      ${session.metadata.name}`,
-          `Messages:  ${session.metadata.messageCount}`,
-          `Provider:  ${session.metadata.provider} / ${session.metadata.model}`,
-          `Updated:   ${session.metadata.updatedAt}`,
-          '',
-          'To resume this session:',
-          `  /resume last    — restore the most recent session`,
-          `  mipham --resume "${targetName}"`,
-          '',
-          'Or restart Mipham Code — the most recent session loads automatically.',
-        ].join('\n'),
+        content: `${t('commands.resume.found_title')}\n\n${t('commands.resume.found_content', { name: session.metadata.name, messages: String(session.metadata.messageCount), provider: session.metadata.provider, model: session.metadata.model, updated: session.metadata.updatedAt, target: targetName })}`,
       }
     }
-    return {
-      content: `─ Session Not Found ─\n\nNo session named "${targetName}".\n\nUse /resume without arguments to list all saved sessions.`,
-    }
+    return { content: `${t('commands.resume.not_found_title')}\n\n${t('commands.resume.not_found_content', { name: targetName })}` }
   }
 
   const sessions = SessionStore.list()
 
   if (sessions.length === 0) {
-    return {
-      content:
-        '─ Resume Session ─\n\nNo saved sessions found.\n\nSessions are auto-saved to ~/.mipham/sessions/ when Mipham Code exits.\nStart a conversation — it will be saved automatically.',
-    }
+    return { content: `${t('commands.resume.restored')}\n\n${t('commands.resume.no_sessions')}\n\n${t('commands.resume.empty_footer')}` }
   }
 
   const recent = sessions.slice(0, 10)
 
   const lines: string[] = [
-    '─ Saved Sessions ─',
+    t('commands.resume.saved_title'),
     '',
     ...recent.map(
       (s, i) =>
         `  ${(i + 1).toString().padStart(2)}. ${s.name.padEnd(45)} ${s.messageCount.toString().padStart(4)} msgs  ${new Date(s.updatedAt).toLocaleString()}`,
     ),
     '',
-    `Total: ${sessions.length} session(s) • Location: ~/.mipham/sessions/`,
+    t('commands.resume.total_footer', { count: String(sessions.length) }),
     '',
-    'To resume a session:   /resume <name>',
-    'To resume most recent:  /resume last',
-    'To delete a session:    /resume delete <name>',
-    'To resume from CLI:     mipham --resume "<name>"',
+    t('commands.resume.resume_hint'),
+    t('commands.resume.resume_last_hint'),
+    t('commands.resume.delete_hint'),
+    t('commands.resume.cli_hint'),
     '',
-    'Sessions are auto-saved on exit. The most recent session loads automatically on restart.',
+    t('commands.resume.auto_save_hint'),
   ]
 
   return { content: lines.join('\n') }
@@ -2111,7 +1990,8 @@ const resumeCmd: CommandHandler = async (_ctx, args) => {
 // Memory Management
 // ═══════════════════════════════════════════════════════════════
 
-const memoryCmd: CommandHandler = async () => {
+const memoryCmd: CommandHandler = async (ctx) => {
+  const t = resolveT(ctx)
   const { existsSync, readdirSync, readFileSync, statSync } = await import('node:fs')
   const { join } = await import('node:path')
 
@@ -2119,16 +1999,13 @@ const memoryCmd: CommandHandler = async () => {
   const memoryDir = join(home, '.mipham', 'memory')
 
   if (!existsSync(memoryDir)) {
-    return {
-      content:
-        '─ Memory ─\n\nNo memories stored yet.\n\nMemory is saved to ~/.mipham/memory/ by the AI when you ask it to remember something.\nTry: "remember that I prefer TypeScript"',
-    }
+    return { content: t('commands.memories.no_memories') }
   }
 
   try {
     const files = readdirSync(memoryDir).filter((f) => f.endsWith('.md'))
     if (files.length === 0) {
-      return { content: '─ Memory ─\n\nNo memory files found in ~/.mipham/memory/' }
+      return { content: t('commands.memories.empty') }
     }
 
     const memories: Array<{ file: string; size: number; mtime: Date; title: string }> = []
@@ -2149,23 +2026,22 @@ const memoryCmd: CommandHandler = async () => {
     memories.sort((a, b) => b.mtime.getTime() - a.mtime.getTime())
 
     const lines: string[] = [
-      '─ Memory ─',
+      t('commands.memories.title'),
       '',
-      `Location: ${memoryDir}`,
-      `Total:    ${memories.length} memor${memories.length === 1 ? 'y' : 'ies'}`,
+      t('commands.memories.location', { path: memoryDir }),
+      t('commands.memories.total', { count: String(memories.length), plural: memories.length === 1 ? 'y' : 'ies' }),
       '',
       ...memories.map(
         (m, i) =>
           `  ${(i + 1).toString().padStart(2)}. ${m.file.padEnd(35)} ${(m.size / 1024).toFixed(1)}KB  ${m.mtime.toLocaleDateString()}  ${m.title}`,
       ),
       '',
-      'Memories are used by the AI to provide personalized context across sessions.',
-      'Each file in ~/.mipham/memory/ represents one remembered fact or preference.',
+      t('commands.memories.footer'),
     ]
 
     return { content: lines.join('\n') }
   } catch {
-    return { content: '─ Memory ─\n\nCould not read memory directory.' }
+    return { content: t('commands.memories.error') }
   }
 }
 
@@ -2173,7 +2049,8 @@ const memoryCmd: CommandHandler = async () => {
 // Upgrade
 // ═══════════════════════════════════════════════════════════════
 
-const upgradeCmd: CommandHandler = async () => {
+const upgradeCmd: CommandHandler = async (ctx) => {
+  const t = resolveT(ctx)
   const { checkForUpdates, backupConfig, performUpdate, restoreConfig, getConfigPath } =
     await import('../shared/update')
 
@@ -2181,27 +2058,16 @@ const upgradeCmd: CommandHandler = async () => {
 
   if (!update.available) {
     return {
-      content: `── Upgrade Mipham Code ──
-
-Current version: v${update.current}
-Latest:          v${update.latest}
-
-✓ Already up to date.
-
-To check manually: https://www.npmjs.com/package/@miphamai/cli`,
+      content: t('commands.upgrade.uptodate', { current: update.current, latest: update.latest }),
     }
   }
 
-  // Update available — back up config and perform the upgrade
   const backupPath = backupConfig(`upgrade-v${update.current}`)
 
   const lines: string[] = [
-    '── Upgrade Mipham Code ──',
+    t('commands.upgrade.title'),
     '',
-    `Current version: v${update.current}`,
-    `Latest:          v${update.latest}`,
-    '',
-    `→ New version available! Updating...`,
+    t('commands.upgrade.available', { current: update.current, latest: update.latest }),
     '',
   ]
 
@@ -2215,26 +2081,21 @@ To check manually: https://www.npmjs.com/package/@miphamai/cli`,
     const configPath = getConfigPath()
     const { existsSync } = await import('node:fs')
     lines.push('')
-    lines.push(`✓ Updated to @miphamai/cli v${update.latest}`)
+    lines.push(t('commands.upgrade.updated', { version: update.latest }))
 
     if (existsSync(configPath)) {
-      lines.push(`✓ Config preserved: ${configPath}`)
+      lines.push(t('commands.upgrade.config_preserved', { path: configPath }))
     } else if (backupPath) {
       if (restoreConfig(backupPath)) {
-        lines.push('✓ Config restored from backup.')
+        lines.push(t('commands.upgrade.config_restored'))
       }
     }
 
     lines.push('')
-    lines.push('⚠ The running Mipham Code process is still the old version.')
-    lines.push('  Run `mipham` again to use the new version, or `mipham --version` to verify.')
+    lines.push(t('commands.upgrade.old_version_warning'))
   } else {
     lines.push('')
-    lines.push('✗ Update failed.')
-    lines.push(`  Try manually: ${NPM_UPDATE_COMMAND}`)
-    if (backupPath) {
-      lines.push(`  Your config backup is at: ${backupPath}`)
-    }
+    lines.push(t('commands.upgrade.update_failed', { command: NPM_UPDATE_COMMAND, path: backupPath || '' }))
   }
 
   return { content: lines.join('\n') }
@@ -2245,30 +2106,22 @@ To check manually: https://www.npmjs.com/package/@miphamai/cli`,
 // ═══════════════════════════════════════════════════════════════
 
 const langCmd: CommandHandler = (ctx, args) => {
+  const t = resolveT(ctx)
   const requested = args[0]
   if (!requested || !['en-US', 'zh-CN'].includes(requested)) {
-    return {
-      content: `── Language ──
-
-Current: en-US
-Supported: en-US, zh-CN
-
-Usage: /lang <locale>`,
-    }
+    return { content: t('commands.lang.current', { locale: 'en-US' }) }
   }
-  // The actual locale change requires a re-render — stored in preference for next restart.
-  // For now, return confirmation. Hot-swap is Phase 2 enhancement.
-  return { content: `Language set to ${requested}. Restart Mipham Code to apply.` }
+  return { content: t('commands.lang.set', { locale: requested }) }
 }
 
 // ═══════════════════════════════════════════════════════════════
 // No-Plan — exit plan mode
 // ═══════════════════════════════════════════════════════════════
 
-const noPlanCmd: CommandHandler = () => ({
-  content:
-    '✓ Plan mode exited. Your plan has been discarded.\n\nContinue chatting as normal, or type /plan to start a new plan.',
-})
+const noPlanCmd: CommandHandler = (ctx) => {
+  const t = resolveT(ctx)
+  return { content: t('commands.no_plan.confirmed') }
+}
 
 // ═══════════════════════════════════════════════════════════════
 // Workflows

@@ -3,27 +3,444 @@
   "greeting": "你好 {name}",
   "commands": {
     "clear": { "confirmed": "✓ 对话已清除，上下文已重置。" },
-    "compact": { "confirmed": "✓ 上下文已压缩。" },
+    "compact": {
+      "confirmed": "✓ 上下文已压缩。",
+      "tokens": "Tokens: {before} → {after} (节省 {saved}%)"
+    },
     "status": {
       "title": "── 系统诊断 ──",
+      "session_title": "── 会话状态 ──",
+      "system_title": "── 系统 ──",
       "config": "── 配置 ──",
       "session": "── 会话 ──",
       "git": "── Git ──",
-      "skills": "── 技能 ──"
+      "skills": "── 技能 ──",
+      "provider": "提供商:",
+      "model": "模型:",
+      "messages": "消息数:",
+      "tokens": "Token:",
+      "tools": "工具:",
+      "loaded": "已加载",
+      "permission": "权限:",
+      "platform": "平台:",
+      "runtime": "运行时:",
+      "cwd": "当前目录:"
     },
-    "switch": { "confirmed": "已切换到 {model}" },
-    "goal": { "set": "目标已设置：{goal}" },
-    "plan": { "entered": "已进入计划模式。" },
-    "diff": { "clean": "没有未提交的更改（工作区干净）。" },
-    "copy": { "confirmed": "✓ 已复制 {count} 条助手回复到剪贴板。" },
+    "switch": {
+      "usage": "用法: /switch <provider> <model>\n示例: /switch deepseek deepseek-v4-pro",
+      "confirmed": "✓ 已切换到 {provider}/{model}"
+    },
+    "goal": {
+      "set": "✓ 目标已设置：\"{goal}\"",
+      "usage": "用法: /goal <statement> [options]\n\n设置会话级别的完成条件，可附带验证。\n\n选项:\n  --decompose              自动将目标分解为子任务\n  --verify-script <path>   运行 Shell 脚本检查完成状态\n  --verify-skill <name>    使用技能进行验证\n\n示例:\n  /goal 修复所有 TS 错误并让测试通过 --decompose\n  /goal 完成构建 --verify-script ./check-build.sh\n  /goal 安全审计通过 --verify-skill security-review",
+      "empty_set": "需要输入目标文本。不带参数运行 /goal 查看用法。",
+      "decompose_enabled": "📋 任务分解：已启用 — AI 将目标分解为子任务",
+      "status_title": "── 目标状态 ──",
+      "status_goal": "🎯 目标: {goal}",
+      "status_verify_script": "📜 验证脚本: {script}",
+      "status_verify_skill": "🛠  验证技能: {skill}",
+      "status_decompose": "📋 分解: 已启用 ({count} 个子任务)",
+      "status_clear_hint": "不带参数运行 /goal 可清除目标。",
+      "status_hint": "使用 /status 查看进度。不带参数运行 /goal 可清除目标。"
+    },
+    "rename": {
+      "usage": "用法: /rename <session-name>\n示例: /rename 修复 Bug 的会话",
+      "confirmed": "✓ 会话重命名为 \"{name}\""
+    },
+    "plan": {
+      "entered": "已进入计划模式。",
+      "content": "── 计划模式 ──\n\n进入计划模式 — 只读分析与设计。\n使用 EnterPlanMode 开始，ExitPlanMode 提交审批。"
+    },
+    "diff": {
+      "clean": "没有未提交的更改（工作区干净）。",
+      "title": "── Git Diff ──",
+      "error": "无法运行 git diff。请确保 git 已安装且当前在代码仓库中。"
+    },
+    "context": {
+      "title": "── 上下文统计 ──",
+      "messages": "消息数:",
+      "estimated_tokens": "估算 Token:",
+      "usage_pct": "使用率:",
+      "system_prompt": "系统提示:",
+      "compaction": "压缩阈值:"
+    },
+    "context_tokens": {
+      "title": "── Token 用量（估算）──",
+      "context_tokens": "上下文 Token:",
+      "usage": "使用率:",
+      "footer": "Token 计数为近似值（字符数/4）。\n实际 API 用量取决于提供商和模型。"
+    },
+    "model": {
+      "current": "当前模型: {model}\n提供商: {provider}\n\n使用 /switch <provider> <model> 切换。"
+    },
+    "models": {
+      "title": "可用模型（{count} 个活跃）:",
+      "header": "提供商        模型                          上下文      视觉",
+      "hint": "使用 /switch <provider> <model> 切换。\n查看 /providers 了解即将上线的模型。"
+    },
+    "provider": {
+      "current": "当前提供商: {provider}\n模型: {model}"
+    },
+    "providers": {
+      "title": "已配置的提供商:",
+      "current": "当前: {provider}/{model}"
+    },
+    "config": {
+      "title": "── 配置 ──",
+      "edit": "编辑: ~/.mipham/config.yml 或 .mipham/config.yml"
+    },
+    "tools": {
+      "title": "可用工具（{count} 个）:"
+    },
+    "skills": {
+      "unavailable": "当前上下文中 SkillsLoader 不可用。",
+      "loaded": "{count} 个技能已加载。使用 Skill 工具调用。"
+    },
+    "tdd": {
+      "title": "── TDD 模式 ──",
+      "start": "启动测试驱动开发工作流：{target}",
+      "cycle": "循环: 🔴 红 → 🟢 绿 → 🔵 重构",
+      "red": "红:   先写一个失败的测试",
+      "green": "绿: 写最少的代码通过测试",
+      "refactor": "重构: 清理代码同时保持测试通过",
+      "guide": "AI 将引导你完成每个循环。"
+    },
+    "todos": {
+      "usage_create": "用法: /todos create <task-title>\n\n示例: /todos create 添加用户认证",
+      "item_list": "/todos list           显示所有任务",
+      "item_create": "/todos create <title> 创建新任务",
+      "list_title": "── 任务管理 ──",
+      "list_fetching": "正在获取当前任务列表...",
+      "create_title": "── 创建任务 ──",
+      "default_title": "── 任务管理 ──",
+      "default_body": "AI 通过 TaskCreate、TaskList、TaskUpdate 和 TaskGet 工具管理任务状态。\n任务显示在 /tasks 视图中，并在会话期间保持。"
+    },
+    "copy": {
+      "confirmed": "✓ 已复制 {count} 条助手回复到剪贴板。",
+      "no_responses": "没有可复制的助手回复。",
+      "usage": "用法: /copy [N]\nN = 要复制的最近助手回复数量（默认: 1）"
+    },
+    "recap": {
+      "title": "── 会话回顾 ──",
+      "no_conversation": "没有可回顾的对话。",
+      "messages": "消息:",
+      "est_tokens": "估算 Token:",
+      "checkpoints": "检查点:",
+      "recent_topics": "最近话题:",
+      "footer": "使用 /rewind 撤销，/clear 重置，/export 导出。"
+    },
+    "task_list": {
+      "title": "── 后台任务 ──",
+      "detected": "在此会话中检测到 {count} 次任务操作。\n\n使用 Task 工具（TaskCreate / TaskUpdate / TaskList）管理结构化任务跟踪。",
+      "no_tasks": "尚未跟踪任何任务。使用 TaskCreate、TaskUpdate 和 TaskList 工具管理结构化任务。",
+      "reference": "快速参考:",
+      "legacy_hint": "输入 /todos 使用旧版任务界面。"
+    },
     "resume": {
       "no_sessions": "没有已保存的会话。",
       "restored": "─ 会话已恢复 ─",
-      "not_found": "未找到会话 \"{name}\"。"
+      "not_found": "未找到会话 \"{name}\"。",
+      "saved_title": "─ 已保存的会话 ─",
+      "found_title": "─ 找到会话 ─",
+      "not_found_title": "─ 未找到会话 ─",
+      "load_failed": "─ 加载失败 ─",
+      "restored_content": "名称:      {name}\n消息数:  {total} 条{truncated}\n提供商:  {provider} / {model}\n更新时间:   {date}",
+      "restored_footer": "已加载 {loaded}/{total} 条消息。较早的上下文已概括。",
+      "restored_full_footer": "已加载 {loaded} 条消息。上下文已恢复。",
+      "delete_usage": "用法: /resume delete <session-name>\n\n删除已保存的会话。使用 /resume 列出所有会话。",
+      "delete_confirmed": "✓ 会话 \"{name}\" 已删除。",
+      "delete_not_found": "✗ 未找到会话 \"{name}\"。使用 /resume 列出所有会话。",
+      "empty_footer": "会话在 Mipham Code 退出时自动保存到 ~/.mipham/sessions/。\n开始对话 — 它将自动保存。",
+      "total_footer": "总计: {count} 个会话 • 位置: ~/.mipham/sessions/",
+      "resume_hint": "恢复会话:   /resume <name>",
+      "resume_last_hint": "恢复最近:  /resume last",
+      "delete_hint": "删除会话:    /resume delete <name>",
+      "cli_hint": "命令行恢复:     mipham --resume \"<name>\"",
+      "auto_save_hint": "会话在退出时自动保存。最近会话在重启时自动加载。",
+      "not_found_content": "未找到名为 \"{name}\" 的会话。\n\n不带参数运行 /resume 列出所有已保存的会话。",
+      "found_content": "名称:      {name}\n消息数:  {messages}\n提供商:  {provider} / {model}\n更新时间:   {updated}\n\n恢复此会话:\n  /resume last    — 恢复最近的会话\n  mipham --resume \"{target}\"\n\n或重启 Mipham Code — 最近会话将自动加载。"
     },
     "help": { "title": "── Mipham Code 帮助 ──" },
-    "lang": { "current": "当前语言：{locale}", "set": "语言已设置为 {locale}。重启 Mipham Code 生效。" },
-    "exit": {}
+    "lang": { "current": "当前语言: {locale}", "set": "语言已设置为 {locale}。重启 Mipham Code 生效。" },
+    "exit": {},
+    "version": {
+      "title": "Mipham Code v{version}",
+      "runtime_label": "运行时:",
+      "platform_label": "平台:",
+      "node_label": "Node:",
+      "cwd_label": "当前目录:",
+      "provider_label": "提供商:",
+      "tools_label": "工具:",
+      "skills_label": "技能:",
+      "skills_details": "{total} 内置（{standard} standard + {mipham} mipham）",
+      "skills_unavailable": "（加载器不可用）",
+      "license": "许可证:  Apache 2.0"
+    },
+    "pick": {
+      "title": "── 模型选择器 ──",
+      "content": "使用 ↑↓ 导航，Enter 选择，Esc 关闭。\n\n当前: {provider} / {model}\n可用: {pcount} 个提供商，{mcount} 个模型\n\n提示: 按 Ctrl+P 或输入 /pick。"
+    },
+    "usage": {
+      "title": "── 用量面板 ──",
+      "api_tokens": "API Token:      {in} in / {out} out ({total} total)",
+      "no_api": "API Token:      （暂无 API 用量数据）",
+      "context_line": "上下文 Token:  ~{est} / {max}  ({pct}%)",
+      "messages_line": "消息数:         {count}",
+      "provider_line": "提供商:         {provider}",
+      "model_line": "模型:            {model}",
+      "tool_section": "── 按工具 ──",
+      "hint": "使用 /context 查看详细统计，/compact 释放空间。"
+    },
+    "reload_skills": {
+      "unavailable": "当前上下文中 SkillsLoader 不可用。",
+      "confirmed": "✓ 技能已重新加载 — {count} 个已加载。",
+      "failed": "重新加载技能失败: {error}"
+    },
+    "rewind": {
+      "no_checkpoints": "没有可用的检查点。检查点在每次 AI 回复后自动保存。",
+      "no_restore": "没有可恢复的检查点。",
+      "confirmed": "✓ 已回退到检查点 \"{label}\"\n已恢复 {count} 条消息。\n\n剩余检查点: {remaining}\n再次使用 /rewind 继续回退，或继续对话。"
+    },
+    "fast": {
+      "on": "✓ 快速模式已开启 — 回复将优先速度而非深度。",
+      "off": "✓ 快速模式已关闭 — 标准质量模式。",
+      "usage": "用法: /fast [on|off]\n切换快速模式以获取更快的回复。",
+      "unknown": "用法: /fast [on|off]\n\n快速模式优先速度而非深度。当前可作为配置开关使用。\n\n示例:\n  /fast on   — 启用快速模式\n  /fast off  — 禁用快速模式"
+    },
+    "effort": {
+      "usage": "用法: /effort <level>\n\n设置推理深度:\n  low      — 快速、简单任务\n  medium   — 质量与速度平衡\n  high     — 深入推理（默认）\n  xhigh    — 编码/Agent 最大深度\n  max      — 绝对上限，非常彻底\n\n当前模型: {model}\n推理深度需要兼容的提供商（Anthropic Opus 4.6+, Sonnet 4.6）。",
+      "confirmed": "✓ 推理深度设置为 \"{level}\""
+    },
+    "focus": {
+      "on": "✓ 聚焦模式已开启 — 仅显示最近一次交流。\n之前的消息已隐藏但保留。\n再次输入 /focus 退出聚焦模式并显示所有消息。"
+    },
+    "ultracode": {
+      "on": "✓ Ultracode 模式已开启 — 多 Agent 工作流编排已启用。\n\nAI 将使用 Workflow 工具对所有实质性任务进行分发、验证和综合。",
+      "off": "✓ Ultracode 模式已关闭。",
+      "usage": "用法: /ultracode [on|off]\n\nUltracode 模式为每个实质性任务启用多 Agent 工作流编排。\n开启时，AI 使用 Workflow 工具分解任务、并行分发 Agent、\n对抗验证结果，并使用顶级模型综合。\n\n示例:\n  /ultracode on    — 启用多 Agent 模式\n  /ultracode off   — 返回标准单 Agent 模式"
+    },
+    "branch": {
+      "no_conversation": "没有可分支的对话。请先开始对话。",
+      "title": "── 分支已创建 ──",
+      "details": "名称:       \"{name}\"\n检查点:  #{checkpoint}\n消息:    {messages} 已保存\n\n当前对话从此刻继续。\n以后返回此分支点，使用:\n  /rewind\n\n注意: 完整会话分支（单独的并发会话）需要会话持久化，将在未来版本中提供。目前这会保存一个可回退的命名检查点。"
+    },
+    "memories": {
+      "title": "─ 记忆 ─",
+      "no_memories": "─ 记忆 ─\n\n尚未存储任何记忆。\n\n当你要求 AI 记住某些内容时，记忆将保存到 ~/.mipham/memory/。\n试试: \"记住我喜欢 TypeScript\"",
+      "empty": "─ 记忆 ─\n\n在 ~/.mipham/memory/ 中未找到记忆文件。",
+      "error": "─ 记忆 ─\n\n无法读取记忆目录。",
+      "location": "位置: {path}",
+      "total": "总计:    {count} 条记忆",
+      "footer": "AI 使用记忆提供跨会话的个性化上下文。\n~/.mipham/memory/ 中每个文件代表一条已记住的事实或偏好。"
+    },
+    "upgrade": {
+      "uptodate": "── 升级 Mipham Code ──\n\n当前版本: v{current}\n最新版本:          v{latest}\n\n✓ 已是最新版本。\n\n手动检查: https://www.npmjs.com/package/@miphamai/cli",
+      "title": "── 升级 Mipham Code ──",
+      "available": "当前版本: v{current}\n最新版本:          v{latest}\n\n→ 发现新版本！正在更新...",
+      "updated": "✓ 已更新至 @miphamai/cli v{version}",
+      "config_preserved": "✓ 配置已保留: {path}",
+      "config_restored": "✓ 配置已从备份恢复。",
+      "old_version_warning": "⚠ 当前运行的 Mipham Code 仍然是旧版本。\n  再次运行 `mipham` 以使用新版本，或 `mipham --version` 验证。",
+      "update_failed": "✗ 更新失败。\n  手动尝试: {command}\n  配置备份位于: {path}"
+    },
+    "no_plan": {
+      "confirmed": "✓ 计划模式已退出。你的计划已丢弃。\n\n继续正常对话，或输入 /plan 开始新计划。"
+    },
+    "mcp": {
+      "usage_connect": "用法: /mcp connect <server-name>",
+      "usage_disconnect": "用法: /mcp disconnect <server-name>",
+      "title": "── MCP 服务器 ──",
+      "configured": "已配置的服务器 ({count}):",
+      "no_servers": "未配置 MCP 服务器。",
+      "commands_title": "── 命令 ──",
+      "commands_body": "  /mcp connect <name>    连接到服务器（OAuth 或 stdio）\n  /mcp disconnect <name>  断开服务器连接\n  /mcp reload            断开所有并重新连接",
+      "protocol_title": "── 协议 ──",
+      "protocol_body": "MCP stdio 传输（JSON-RPC 2.0）— 完全实现。\n了解更多: https://modelcontextprotocol.io",
+      "connect_oauth": "── MCP 连接: {name} (OAuth) ──\n\n启动 OAuth PKCE 流程...\n授权: {auth}\n作用域: {scopes}",
+      "connect_stdio": "── MCP 连接: {name} ──\n\n通过 stdio 连接...",
+      "disconnect_title": "── MCP 断开: {name} ──",
+      "disconnected_tools": "已断开。{count} 个工具已移除。",
+      "disconnected_no_tools": "已断开（无已注册工具）。",
+      "reload_content": "── MCP 重载 ──\n\n断开所有连接并重新连接...",
+      "not_found": "在配置中未找到服务器 \"{name}\"。\n\n已配置: {servers}"
+    },
+    "login": {
+      "title": "── 认证 ──",
+      "intro": "Mipham Code 使用 API Key 认证 — 无需登录账户。\n每个提供商需要各自的 API Key，通过环境变量或配置文件设置。",
+      "section_keys": "── 提供商 API 密钥 ──",
+      "section_setup": "── 设置 ──",
+      "setup_options": "# 方式 1: 环境变量（推荐）\n  export ANTHROPIC_API_KEY=\"sk-ant-...\"\n  export OPENAI_API_KEY=\"sk-...\"\n\n  # 方式 2: 配置文件 (~/.mipham/config.yml)\n  providers:\n    - id: anthropic\n      apiKey: $ANTHROPIC_API_KEY",
+      "current_provider": "当前提供商: {provider} / {model}",
+      "footer": "从各提供商的开发者控制台获取 API 密钥。\n仪表盘: https://mipham.ai/code/dashboard"
+    },
+    "logout": {
+      "title": "── 登出 ──\n\nMipham Code 使用 API 密钥（非会话），因此没有持久登录可\"登出\"。\n\n清除凭据:\n\n1. 取消环境变量（仅当前会话）:\n     unset ANTHROPIC_API_KEY\n     unset OPENAI_API_KEY\n     unset DEEPSEEK_API_KEY\n     # ... 以及其他\n\n2. 从 Shell 配置文件移除（永久）:\n     编辑 ~/.zshrc 或 ~/.bashrc 并删除 export 行。\n\n3. 用户配置: {config_state}\n\n注意: 清除密钥将阻止 Mipham Code 进行 API 调用，\n直到通过 /login 或手动重新设置。\n\n要切换提供商而不清除密钥，使用 /switch <provider> <model>。"
+    },
+    "feedback": {
+      "title": "── 反馈 ──",
+      "preview_title": "── 预览完成 ──",
+      "section_channels": "── 反馈渠道 ──",
+      "section_info": "── 系统信息（提交 Bug 时附上）──"
+    },
+    "agents": {
+      "initializing": "Agent View 仪表盘正在初始化...",
+      "title": "── Agent View ──",
+      "needs_input": "🟡 需要输入: {count}",
+      "working": "🔵 工作中:     {count}",
+      "completed": "🟢 已完成:   {count}",
+      "failed": "🔴 已失败:      {count}",
+      "sessions": "会话:",
+      "more": "  ... 还有 {count} 个",
+      "dashboard_hint": "运行 `mipham agents` 获取完整的交互式仪表盘（j/k 导航）。"
+    },
+    "bg": {
+      "usage": "用法: /bg <prompt>\n\n启动后台 Agent 处理任务，同时继续对话。\n\n示例:\n  /bg 运行完整测试套件并报告失败\n  /bg 审计 src/ 目录的安全问题\n  /bg 从 JSDoc 注释生成 API 文档\n\n后台 Agent 显示在 Agent View 仪表盘（/agents）中。",
+      "initializing": "Agent View 管理器正在初始化...",
+      "spawned": "✓ 后台 Agent 已启动: {id}\n\n  任务:     {task}\n  提供商: {provider} / {model}\n  状态:   working\n\n使用 /agents 查看所有后台会话。\n运行 `mipham agents` 获取交互式仪表盘。"
+    },
+    "fork": {
+      "usage": "用法: /fork <task description>\n\n将任务分叉到隔离的工作树中，自动提交/推送。\n\n工作流:\n  1. 创建新的 git worktree，分支为 worktree/<slug>\n  2. 启动后台 Agent 处理任务\n  3. 完成后自动提交并附带 Co-Authored-By\n  4. 自动推送到 origin\n  5. 在结果中报告分支和工作树路径\n\n示例:\n  /fork 重构认证模块\n  /fork 为所有 API 端点添加输入验证",
+      "no_git": "/fork 需要 git 仓库。",
+      "initializing": "Agent View 管理器正在初始化...",
+      "worktree_failed": "工作树创建失败: {error}",
+      "spawned": "✓ 已分叉: {id}\n  任务: {task}\n  分支: {branch}\n  工作树: {path}\n  状态: working\n\nAgent 完成时将自动提交 + 推送。\n使用 /agents 跟踪。"
+    },
+    "artifact": {
+      "usage": "用法: /artifact <open|list|server> [name]\n\n  /artifact open <name>  在浏览器中打开作品\n  /artifact list        列出所有作品\n  /artifact server      显示服务器状态",
+      "open_usage": "用法: /artifact open <name>\n示例: /artifact open dashboard",
+      "open_confirmed": "✓ 正在浏览器中打开作品 \"{name}\"...\n   {url}",
+      "open_failed": "✗ 打开浏览器失败: {error}\n   URL: {url}",
+      "list_empty": "尚未创建作品。让 AI 使用 Artifact 工具生成一个。",
+      "list_title": "── 作品 ──",
+      "list_footer": "  {count} 个作品 — /artifact open <name> 查看\n  画廊: http://localhost:9876",
+      "server_title": "── 作品服务器 ──\n\n  URL:  {url}\n  端口: 9876\n\n作品在本地提供服务。无外部网络访问。"
+    },
+    "commands_list": {
+      "title": "── 所有 Slash 命令（{count} 个）──",
+      "footer": "输入 /help 查看详情，或 /<command> 运行。"
+    },
+    "workflows": {
+      "title": "─ 工作流 ─",
+      "no_workflows": "未找到工作流脚本。\n\n工作流是多 Agent 编排脚本，存储在:\n  .claude/workflows/   （项目级别）\n  ~/.claude/workflows/ （用户级别）\n\n在任一位置创建 .js 文件以添加工作流。",
+      "found": "找到 {count} 个工作流。\n使用 /workflows <name> 运行特定工作流。"
+    },
+    "workflow": {
+      "usage": "用法: /workflow <task description>\n\n描述任务，AI 将生成工作流脚本执行。\n示例:\n  /workflow 审计所有缺少身份验证的路由\n  /workflow 研究 React 19 对我们代码库的影响\n  /workflow 查找代码库中所有硬编码凭据\n\n子命令:\n  /workflow save <name>  — 保存上次成功的工作流脚本\n  /workflow run <name>    — 按名称运行已保存的工作流\n  /workflows              — 列出所有已保存的工作流脚本",
+      "save_no_recent": "未找到最近的工作流运行。先用 /workflow <task> 运行工作流。",
+      "save_no_script": "上次运行状态中未找到脚本。",
+      "save_confirmed": "工作流已保存到 {path}\n使用 /workflow run {name} 再次运行。",
+      "save_failed": "保存工作流失败: {error}",
+      "run_not_found": "在 .claude/workflows/ 或 ~/.claude/workflows/ 中未找到工作流 \"{name}\""
+    },
+    "deep_research": {
+      "usage": "用法: /deep-research <topic>\n\n进行多 Agent 深度研究 — 5 角度并行搜索、对抗验证，\n以及由顶级模型综合的带引用报告。\n\n示例:\n  /deep-research 量子计算对密码学的影响\n  /deep-research CRISPR 基因编辑的最新进展",
+      "title": "── 深度研究 ──\n\n主题: \"{topic}\"\n\n编排多 Agent 研究管道:\n  1. 范围 — 5 个研究角度\n  2. 研究 — 并行网络搜索\n  3. 消重 — 去重 + 合并\n  4. 验证 — 对抗质疑通道\n  5. 综合 — 带引用报告，顶级模型\n\n这可能需要几分钟..."
+    },
+    "code_review": {
+      "no_changes": "没有未提交的更改可审查。\n\n审查特定文件: /code-review path/to/file.ts",
+      "running": "正在使用 code-review 技能审查未提交的更改（7 个维度: 正确性、安全性、性能、代码质量、架构、测试、语言特定）...",
+      "error": "无法检测更改。您在 git 仓库中吗？"
+    },
+    "simplify": {
+      "no_changes": "没有未提交的更改可简化。\n\n先进行更改，然后运行 /simplify 进行清理审查。",
+      "running": "正在运行清理审查 — 4 个通道: 复用、简化、效率、抽象层级...",
+      "error": "无法检测更改。您在 git 仓库中吗？"
+    },
+    "verify": {
+      "no_changes": "没有未提交的更改可验证。\n\n先进行更改，然后运行 /verify 进行运行时验证。",
+      "running": "正在运行运行时验证 — 观察实际执行行为（非测试、非类型检查）...",
+      "error": "无法检测更改。您在 git 仓库中吗？"
+    },
+    "design": {
+      "start": "─ 设计 ─\n\n开始架构设计会话: {topic}\n\n探索方案、权衡、组件分解、数据流..."
+    },
+    "lint": {
+      "title": "── Lint 结果 ──",
+      "fix_hint": "修复: 输入 \"fix the lint errors\"",
+      "setup_hint": "设置 Lint: https://mipham.ai/code/docs/linting",
+      "error": "── Lint ──\n\n无法运行 Linter。请确保 ESLint 已安装并配置。"
+    },
+    "files": {
+      "title": "── 项目文件 ──",
+      "cwd": "当前目录: {path}",
+      "more_files": "  ... 还有 {count} 个文件",
+      "hint": "使用 Read/Glob/Grep 工具检查文件。",
+      "error": "── 文件 ──\n\n无法读取目录。"
+    },
+    "stats": {
+      "title": "── 会话统计 ──",
+      "messages": "消息:        {total}（{user} 用户, {assistant} AI, {system} 系统）",
+      "tokens": "Token:          ~{tokens} / 200,000",
+      "tools": "可用工具:  {count}",
+      "provider": "提供商:         {provider}",
+      "model": "模型:            {model}",
+      "permission": "权限:       {permission}",
+      "usage": "用量:            {pct}% 上下文窗口"
+    },
+    "summary": {
+      "title": "── 会话摘要 ──",
+      "no_conversation": "── 摘要 ──\n\n没有可总结的对话。",
+      "total_messages": "总消息: {count}",
+      "est_tokens": "估算 Token:    ~{tokens}",
+      "recent_topics": "最近话题:",
+      "footer": "使用 /export 保存，/clear 重置。"
+    },
+    "cd": {
+      "usage": "用法: /cd <path>\n\n更改会话工作目录。\n示例: /cd ~/projects/my-app\n\n当前: {cwd}",
+      "not_found": "❌ 目录未找到: {path}",
+      "failed": "❌ 更改目录失败: {error}",
+      "title": "── 目录已更改 ──",
+      "content": "新目录: {path}\n\nAI 将相对于此目录工作。\n注意: 这会更改 Read、Write、Bash 等工具的文件系统根路径。"
+    },
+    "hooks": {
+      "title": "── 钩子 ──",
+      "no_hooks": "── 钩子 ──\n\n未配置钩子。\n\n在 .mipham/hooks/ 中创建钩子脚本:\n  pre-tool-use.sh   — 在每次工具执行前运行\n  post-tool-use.sh  — 在每次工具执行后运行\n  stop.sh           — 会话结束时运行\n\n使用 /loop init 初始化钩子目录。",
+      "location": "位置: {path}",
+      "found": "找到 {count} 个钩子。",
+      "error": "── 钩子 ──\n\n无法读取钩子目录。"
+    },
+    "batch": {
+      "title": "── 批量操作 ──\n\n跨多个文件或目录应用更改。\n\n用法: 输入 \"apply this change to all .ts files in src/\"\n\nAI 将:\n  1. 理解你的更改描述\n  2. 查找所有匹配文件\n  3. 一致地应用更改\n  4. 报告修改内容\n\n用于:\n  • 跨代码库重命名符号\n  • 更新导入模式\n  • 应用一致的格式更改\n  • 批量配置更新"
+    },
+    "export": {
+      "confirmed": "✓ 会话已导出到:\n  {path}\n\n{count} 条消息 · {lines} 行"
+    },
+    "pr_comments": {
+      "error": "─ PR 审查 ─\n\n无法确定 PR 上下文。您在带有远程仓库的 git 仓库中吗？",
+      "header": "─ PR 审查 ─",
+      "commits_header": "提交:",
+      "changed_header": "更改的文件:",
+      "hint": "生成 PR 描述: 在对话中输入 \"write a PR description for these changes\"。\n审查 PR: 输入 \"review this PR\" 或使用 /review。"
+    },
+    "doctor": {
+      "title": "── 系统诊断 ──",
+      "config_section": "── 配置 ──",
+      "session_section": "── 会话 ──",
+      "git_section": "── Git ──",
+      "no_git": "  （不是 git 仓库或 git 不可用）",
+      "skills_section": "── 技能 ──",
+      "skills_unavailable": "  （技能信息不可用）"
+    },
+    "plugins": {
+      "unavailable": "当前会话中 PluginManager 不可用。",
+      "title": "── 已安装插件 ──",
+      "none": "未安装插件。\n\n安装插件:\n  /install-plugin <npm-package>    从 npm 注册表安装\n  /browse-plugins                  浏览社区插件\n  mipham plugin install <path>    从本地目录安装"
+    },
+    "loop": {
+      "init_title": "── LoopKit Vault 已创建 ──",
+      "stop_no_active": "没有活跃的自主循环可停止。",
+      "stop_confirmed": "已停止 {count} 个自主循环。",
+      "status_no_active": "没有活跃的自主循环。\n\n使用 /loop auto <prompt> 启动一个。",
+      "auto_usage": "用法: /loop auto <prompt>\n\n启动自主自定节奏循环。AI 将:\n1. 处理任务\n2. 决定下次迭代前等待多长时间\n3. 使用 ScheduleWakeup 自行调度\n4. 达到目标时使用 ScheduleWakeup(stop:true)\n\n使用 /loop status 查看进度。\n使用 /loop stop 停止循环。",
+      "auto_title": "── 自主循环已启动 ──",
+      "auto_title_detected": "── 自主循环已启动（自动检测）──",
+      "invalid_interval": "── 无效间隔 ──\n\n\"{interval}\" 不是有效的间隔。\n\n使用格式如: 10s, 5m, 1h, 30min, 2hr\n或使用 /loop auto <prompt> 进行自主模式。",
+      "usage": "用法: /loop <interval> <prompt>     固定间隔循环\n   or: /loop auto <prompt>           自主自定节奏循环\n   or: /loop stop                     停止活跃的自主循环\n   or: /loop status                   显示自主循环进度\n   or: /loop init [path]              初始化项目 vault 结构\n\n固定间隔格式:\n  10s   — 10 秒\n  5m    — 5 分钟\n  1h    — 1 小时\n\n示例:\n  /loop 5m check the deploy status\n  /loop auto monitor CI and fix failing tests\n  /loop init                  在当前目录创建 vault",
+      "failed": "循环失败: {error}"
+    },
+    "schedule": {
+      "failed": "调度检查失败: {error}"
+    }
   },
   "ui": {
     "banner": {

@@ -3,27 +3,444 @@
   "greeting": "Hello {name}",
   "commands": {
     "clear": { "confirmed": "✓ Conversation cleared. Context reset." },
-    "compact": { "confirmed": "✓ Context compacted." },
+    "compact": {
+      "confirmed": "✓ Context compacted.",
+      "tokens": "Tokens: {before} → {after} (saved {saved}%)"
+    },
     "status": {
       "title": "── System Diagnostics ──",
+      "session_title": "── Session Status ──",
+      "system_title": "── System ──",
       "config": "── Config ──",
       "session": "── Session ──",
       "git": "── Git ──",
-      "skills": "── Skills ──"
+      "skills": "── Skills ──",
+      "provider": "Provider:",
+      "model": "Model:",
+      "messages": "Messages:",
+      "tokens": "Tokens:",
+      "tools": "Tools:",
+      "loaded": "loaded",
+      "permission": "Permission:",
+      "platform": "Platform:",
+      "runtime": "Runtime:",
+      "cwd": "CWD:"
     },
-    "switch": { "confirmed": "Switched to {model}" },
-    "goal": { "set": "Goal set: {goal}" },
-    "plan": { "entered": "Entered plan mode." },
-    "diff": { "clean": "No uncommitted changes (working tree clean)." },
-    "copy": { "confirmed": "✓ Copied {count} assistant response(s) to clipboard." },
+    "switch": {
+      "usage": "Usage: /switch <provider> <model>\nExample: /switch deepseek deepseek-v4-pro",
+      "confirmed": "✓ Switched to {provider}/{model}"
+    },
+    "goal": {
+      "set": "✓ Goal set: \"{goal}\"",
+      "usage": "Usage: /goal <statement> [options]\n\nSet a session-level completion condition with optional verification.\n\nOptions:\n  --decompose              Auto-decompose goal into subtasks\n  --verify-script <path>   Run a shell script to check completion\n  --verify-skill <name>    Use a skill for verification\n\nExamples:\n  /goal Fix all TS errors and make tests pass --decompose\n  /goal Complete the build --verify-script ./check-build.sh\n  /goal Security audit passes --verify-skill security-review",
+      "empty_set": "Goal text is required. Use /goal without arguments to see usage.",
+      "decompose_enabled": "📋 Decomposition: enabled — AI will break goal into subtasks",
+      "status_title": "── Goal Status ──",
+      "status_goal": "🎯 Goal: {goal}",
+      "status_verify_script": "📜 Verification: {script}",
+      "status_verify_skill": "🛠  Verification skill: {skill}",
+      "status_decompose": "📋 Decompose: enabled ({count} subtasks)",
+      "status_clear_hint": "Type /goal without arguments to clear.",
+      "status_hint": "Use /status to view progress. Type /goal without arguments to clear."
+    },
+    "rename": {
+      "usage": "Usage: /rename <session-name>\nExample: /rename Bug Fix Session",
+      "confirmed": "✓ Session renamed to \"{name}\""
+    },
+    "plan": {
+      "entered": "Entered plan mode.",
+      "content": "── Plan Mode ──\n\nEntering plan mode — read-only analysis and design.\nUse EnterPlanMode to start, ExitPlanMode to submit for approval."
+    },
+    "diff": {
+      "clean": "No uncommitted changes (working tree clean).",
+      "title": "── Git Diff ──",
+      "error": "Unable to run git diff. Ensure git is installed and you are in a repository."
+    },
+    "context": {
+      "title": "── Context Stats ──",
+      "messages": "Messages:",
+      "estimated_tokens": "Estimated tokens:",
+      "usage_pct": "Usage:",
+      "system_prompt": "System prompt:",
+      "compaction": "Compaction:"
+    },
+    "context_tokens": {
+      "title": "── Token Usage (estimated) ──",
+      "context_tokens": "Context tokens:",
+      "usage": "Usage:",
+      "footer": "Token counting is approximate (chars/4).\nActual API usage depends on provider and model."
+    },
+    "model": {
+      "current": "Current model: {model}\nProvider: {provider}\n\nUse /switch <provider> <model> to change."
+    },
+    "models": {
+      "title": "Available models ({count} active):",
+      "header": "Provider      Model                          Context     Vision",
+      "hint": "Use /switch <provider> <model> to change.\nSee /providers for upcoming models."
+    },
+    "provider": {
+      "current": "Current provider: {provider}\nModel: {model}"
+    },
+    "providers": {
+      "title": "Configured providers:",
+      "current": "Current: {provider}/{model}"
+    },
+    "config": {
+      "title": "── Configuration ──",
+      "edit": "Edit: ~/.mipham/config.yml or .mipham/config.yml"
+    },
+    "tools": {
+      "title": "Available tools ({count}):"
+    },
+    "skills": {
+      "unavailable": "SkillsLoader not available in this context.",
+      "loaded": "{count} skills loaded. Use Skill tool to invoke."
+    },
+    "tdd": {
+      "title": "── TDD Mode ──",
+      "start": "Starting Test-Driven Development workflow for: {target}",
+      "cycle": "Cycle: 🔴 RED → 🟢 GREEN → 🔵 REFACTOR",
+      "red": "RED:   Write a failing test first",
+      "green": "GREEN: Write minimal code to pass",
+      "refactor": "REFACTOR: Clean up while keeping tests green",
+      "guide": "The AI will guide you through each cycle."
+    },
+    "todos": {
+      "usage_create": "Usage: /todos create <task-title>\n\nExample: /todos create Add user authentication",
+      "item_list": "/todos list           Show all tasks",
+      "item_create": "/todos create <title> Create a new task",
+      "list_title": "── Task Management ──",
+      "list_fetching": "Fetching current task list...",
+      "create_title": "── Create Task ──",
+      "default_title": "── Task Management ──",
+      "default_body": "The AI manages task state via TaskCreate, TaskList, TaskUpdate, and TaskGet tools.\nTasks appear in the /tasks view and persist across the session."
+    },
+    "copy": {
+      "confirmed": "✓ Copied {count} assistant response(s) to clipboard.",
+      "no_responses": "No assistant responses to copy.",
+      "usage": "Usage: /copy [N]\nN = number of recent assistant responses to copy (default: 1)"
+    },
+    "recap": {
+      "title": "── Session Recap ──",
+      "no_conversation": "No conversation to recap.",
+      "messages": "Messages:",
+      "est_tokens": "Est. tokens:",
+      "checkpoints": "Checkpoints:",
+      "recent_topics": "Recent topics:",
+      "footer": "Use /rewind to undo, /clear to reset, /export to save."
+    },
+    "task_list": {
+      "title": "── Background Tasks ──",
+      "detected": "{count} task operations detected in this session.\n\nUse Task tool (TaskCreate / TaskUpdate / TaskList) to manage structured task tracking.",
+      "no_tasks": "No tasks tracked yet. Use TaskCreate, TaskUpdate, and TaskList tools to manage structured tasks.",
+      "reference": "Quick reference:",
+      "legacy_hint": "Type /todos for the legacy task interface."
+    },
     "resume": {
       "no_sessions": "No saved sessions.",
       "restored": "─ Session Restored ─",
-      "not_found": "Session \"{name}\" not found."
+      "not_found": "Session \"{name}\" not found.",
+      "saved_title": "─ Saved Sessions ─",
+      "found_title": "─ Session Found ─",
+      "not_found_title": "─ Session Not Found ─",
+      "load_failed": "─ Load Failed ─",
+      "restored_content": "Name:      {name}\nMessages:  {total} total{truncated}\nProvider:  {provider} / {model}\nUpdated:   {date}",
+      "restored_footer": "{loaded} of {total} messages loaded. Older context summarized above.",
+      "restored_full_footer": "{loaded} messages loaded. Context has been restored.",
+      "delete_usage": "Usage: /resume delete <session-name>\n\nDelete a saved session. Use /resume to list all sessions.",
+      "delete_confirmed": "✓ Session \"{name}\" deleted.",
+      "delete_not_found": "✗ Session \"{name}\" not found. Use /resume to list all sessions.",
+      "empty_footer": "Sessions are auto-saved to ~/.mipham/sessions/ when Mipham Code exits.\nStart a conversation — it will be saved automatically.",
+      "total_footer": "Total: {count} session(s) • Location: ~/.mipham/sessions/",
+      "resume_hint": "To resume a session:   /resume <name>",
+      "resume_last_hint": "To resume most recent:  /resume last",
+      "delete_hint": "To delete a session:    /resume delete <name>",
+      "cli_hint": "To resume from CLI:     mipham --resume \"<name>\"",
+      "auto_save_hint": "Sessions are auto-saved on exit. The most recent session loads automatically on restart.",
+      "not_found_content": "No session named \"{name}\".\n\nUse /resume without arguments to list all saved sessions.",
+      "found_content": "Name:      {name}\nMessages:  {messages}\nProvider:  {provider} / {model}\nUpdated:   {updated}\n\nTo resume this session:\n  /resume last    — restore the most recent session\n  mipham --resume \"{target}\"\n\nOr restart Mipham Code — the most recent session loads automatically."
     },
     "help": { "title": "── Mipham Code Help ──" },
-    "lang": { "current": "Current: {locale}", "set": "Language set to {locale}. Restart Mipham Code to apply." },
-    "exit": {}
+    "lang": { "current": "Language: {locale}", "set": "Language set to {locale}. Restart Mipham Code to apply." },
+    "exit": {},
+    "version": {
+      "title": "Mipham Code v{version}",
+      "runtime_label": "Runtime:",
+      "platform_label": "Platform:",
+      "node_label": "Node:",
+      "cwd_label": "CWD:",
+      "provider_label": "Provider:",
+      "tools_label": "Tools:",
+      "skills_label": "Skills:",
+      "skills_details": "{total} built-in ({standard} standard + {mipham} mipham)",
+      "skills_unavailable": "(loader unavailable)",
+      "license": "License:  Apache 2.0"
+    },
+    "pick": {
+      "title": "── Model Picker ──",
+      "content": "Use ↑↓ to navigate, Enter to select, Esc to close.\n\nCurrent: {provider} / {model}\nAvailable: {pcount} providers, {mcount} models\n\nTip: Press Ctrl+P or type /pick from the chat input."
+    },
+    "usage": {
+      "title": "── Usage Dashboard ──",
+      "api_tokens": "API tokens:      {in} in / {out} out ({total} total)",
+      "no_api": "API tokens:      (no API usage data yet)",
+      "context_line": "Context tokens:  ~{est} / {max}  ({pct}%)",
+      "messages_line": "Messages:         {count}",
+      "provider_line": "Provider:         {provider}",
+      "model_line": "Model:            {model}",
+      "tool_section": "── Per-Tool ──",
+      "hint": "Use /context for detailed stats, /compact to free space."
+    },
+    "reload_skills": {
+      "unavailable": "SkillsLoader not available in this context.",
+      "confirmed": "✓ Skills reloaded — {count} loaded.",
+      "failed": "Failed to reload skills: {error}"
+    },
+    "rewind": {
+      "no_checkpoints": "No checkpoints available. Checkpoints are automatically saved after each AI response.",
+      "no_restore": "No checkpoint to restore.",
+      "confirmed": "✓ Rewound to checkpoint \"{label}\"\nRestored {count} messages.\n\nRemaining checkpoints: {remaining}\nUse /rewind again to go back further, or continue chatting."
+    },
+    "fast": {
+      "on": "✓ Fast mode ON — responses will prioritize speed over depth.",
+      "off": "✓ Fast mode OFF — standard quality mode.",
+      "usage": "Usage: /fast [on|off]\nToggle fast mode for faster responses.",
+      "unknown": "Usage: /fast [on|off]\n\nFast mode prioritizes speed over depth. Currently available as a configuration toggle.\n\nExample:\n  /fast on   — enable fast mode\n  /fast off  — disable fast mode"
+    },
+    "effort": {
+      "usage": "Usage: /effort <level>\n\nSet reasoning effort level:\n  low      — Fast, simple tasks\n  medium   — Balanced quality and speed\n  high     — Thorough reasoning (default)\n  xhigh    — Maximum depth for coding/agentic use\n  max      — Absolute ceiling, very thorough\n\nCurrent model: {model}\nEffort levels require compatible providers (Anthropic Opus 4.6+, Sonnet 4.6).",
+      "confirmed": "✓ Reasoning effort set to \"{level}\""
+    },
+    "focus": {
+      "on": "✓ Focus mode ON — showing only the most recent exchange.\nPrevious messages are hidden but preserved.\nType /focus again to exit focus mode and show all messages."
+    },
+    "ultracode": {
+      "on": "✓ Ultracode mode ON — multi-agent workflow orchestration enabled.\n\nThe AI will use Workflow tool to fan out, verify, and synthesize for all substantive tasks.",
+      "off": "✓ Ultracode mode OFF.",
+      "usage": "Usage: /ultracode [on|off]\n\nUltracode mode enables multi-agent workflow orchestration for every substantive task.\nWhen ON, the AI uses the Workflow tool to decompose tasks, fan out parallel agents,\nverify findings adversarially, and synthesize results with a top-tier model.\n\nExamples:\n  /ultracode on    — enable multi-agent mode\n  /ultracode off   — return to standard single-agent mode"
+    },
+    "branch": {
+      "no_conversation": "No conversation to branch. Start a conversation first.",
+      "title": "── Branch Created ──",
+      "details": "Name:       \"{name}\"\nCheckpoint:  #{checkpoint}\nMessages:    {messages} saved\n\nCurrent conversation continues from this point.\nTo return to this branch point later, use:\n  /rewind\n\nNote: Full session branching (separate concurrent sessions) requires session persistence, coming in a future release. For now, this saves a named checkpoint you can rewind to."
+    },
+    "memories": {
+      "title": "─ Memory ─",
+      "no_memories": "─ Memory ─\n\nNo memories stored yet.\n\nMemory is saved to ~/.mipham/memory/ by the AI when you ask it to remember something.\nTry: \"remember that I prefer TypeScript\"",
+      "empty": "─ Memory ─\n\nNo memory files found in ~/.mipham/memory/",
+      "error": "─ Memory ─\n\nCould not read memory directory.",
+      "location": "Location: {path}",
+      "total": "Total:    {count} memor{plural}",
+      "footer": "Memories are used by the AI to provide personalized context across sessions.\nEach file in ~/.mipham/memory/ represents one remembered fact or preference."
+    },
+    "upgrade": {
+      "uptodate": "── Upgrade Mipham Code ──\n\nCurrent version: v{current}\nLatest:          v{latest}\n\n✓ Already up to date.\n\nTo check manually: https://www.npmjs.com/package/@miphamai/cli",
+      "title": "── Upgrade Mipham Code ──",
+      "available": "Current version: v{current}\nLatest:          v{latest}\n\n→ New version available! Updating...",
+      "updated": "✓ Updated to @miphamai/cli v{version}",
+      "config_preserved": "✓ Config preserved: {path}",
+      "config_restored": "✓ Config restored from backup.",
+      "old_version_warning": "⚠ The running Mipham Code process is still the old version.\n  Run `mipham` again to use the new version, or `mipham --version` to verify.",
+      "update_failed": "✗ Update failed.\n  Try manually: {command}\n  Your config backup is at: {path}"
+    },
+    "no_plan": {
+      "confirmed": "✓ Plan mode exited. Your plan has been discarded.\n\nContinue chatting as normal, or type /plan to start a new plan."
+    },
+    "mcp": {
+      "usage_connect": "Usage: /mcp connect <server-name>",
+      "usage_disconnect": "Usage: /mcp disconnect <server-name>",
+      "title": "── MCP Servers ──",
+      "configured": "Configured servers ({count}):",
+      "no_servers": "No MCP servers configured.",
+      "commands_title": "── Commands ──",
+      "commands_body": "  /mcp connect <name>    Connect to a server (OAuth or stdio)\n  /mcp disconnect <name>  Disconnect from a server\n  /mcp reload            Disconnect all and reconnect",
+      "protocol_title": "── Protocol ──",
+      "protocol_body": "MCP stdio transport (JSON-RPC 2.0) — fully implemented.\nLearn more: https://modelcontextprotocol.io",
+      "connect_oauth": "── MCP Connect: {name} (OAuth) ──\n\nStarting OAuth PKCE flow...\nAuthorization: {auth}\nScopes: {scopes}",
+      "connect_stdio": "── MCP Connect: {name} ──\n\nConnecting via stdio...",
+      "disconnect_title": "── MCP Disconnect: {name} ──",
+      "disconnected_tools": "Disconnected. {count} tool(s) removed.",
+      "disconnected_no_tools": "Disconnected (no tools were registered).",
+      "reload_content": "── MCP Reload ──\n\nDisconnecting all and reconnecting...",
+      "not_found": "Server \"{name}\" not found in config.\n\nConfigured: {servers}"
+    },
+    "login": {
+      "title": "── Authentication ──",
+      "intro": "Mipham Code uses API keys for authentication — no account login needed.\nEach provider requires its own API key, set via environment variable or config file.",
+      "section_keys": "── Provider API Keys ──",
+      "section_setup": "── Setup ──",
+      "setup_options": "# Option 1: Environment variables (recommended)\n  export ANTHROPIC_API_KEY=\"sk-ant-...\"\n  export OPENAI_API_KEY=\"sk-...\"\n\n  # Option 2: Config file (~/.mipham/config.yml)\n  providers:\n    - id: anthropic\n      apiKey: $ANTHROPIC_API_KEY",
+      "current_provider": "Current provider: {provider} / {model}",
+      "footer": "Get API keys from each provider's developer console.\nDashboard: https://mipham.ai/code/dashboard"
+    },
+    "logout": {
+      "title": "── Sign Out ──\n\nMipham Code uses API keys (not sessions), so there is no persistent login to \"log out\" of.\n\nTo clear your credentials:\n\n1. Unset environment variables (current session only):\n     unset ANTHROPIC_API_KEY\n     unset OPENAI_API_KEY\n     unset DEEPSEEK_API_KEY\n     # ... and others\n\n2. Remove from shell profile (permanent):\n     Edit ~/.zshrc or ~/.bashrc and remove the export lines.\n\n3. User config: {config_state}\n\nNote: Clearing keys will prevent Mipham Code from making API calls\nuntil you set them again with /login or manually.\n\nTo switch providers without clearing keys, use /switch <provider> <model>."
+    },
+    "feedback": {
+      "title": "── Feedback ──",
+      "preview_title": "── Preview Complete ──",
+      "section_channels": "── Feedback Channels ──",
+      "section_info": "── System Info (include with bug reports) ──"
+    },
+    "agents": {
+      "initializing": "Agent View dashboard is initializing...",
+      "title": "── Agent View ──",
+      "needs_input": "🟡 Needs input: {count}",
+      "working": "🔵 Working:     {count}",
+      "completed": "🟢 Completed:   {count}",
+      "failed": "🔴 Failed:      {count}",
+      "sessions": "Sessions:",
+      "more": "  ... and {count} more",
+      "dashboard_hint": "Run `mipham agents` for the full interactive dashboard with j/k navigation."
+    },
+    "bg": {
+      "usage": "Usage: /bg <prompt>\n\nSpawn a background agent to work on a task while you continue chatting.\n\nExamples:\n  /bg Run the full test suite and report failures\n  /bg Audit the src/ directory for security issues\n  /bg Generate API documentation from JSDoc comments\n\nBackground agents appear in the Agent View dashboard (/agents).",
+      "initializing": "Agent View manager is initializing...",
+      "spawned": "✓ Background agent spawned: {id}\n\n  Task:     {task}\n  Provider: {provider} / {model}\n  Status:   working\n\nUse /agents to view all background sessions.\nRun `mipham agents` for the interactive dashboard."
+    },
+    "fork": {
+      "usage": "Usage: /fork <task description>\n\nFork a task into an isolated worktree with auto commit/push.\n\nWorkflow:\n  1. Creates a new git worktree on branch worktree/<slug>\n  2. Spawns a background agent to work on the task\n  3. Auto-commits changes with Co-Authored-By on completion\n  4. Auto-pushes to origin\n  5. Reports branch and worktree path in the result\n\nExamples:\n  /fork Refactor the auth module\n  /fork Add input validation to all API endpoints",
+      "no_git": "/fork requires a git repository.",
+      "initializing": "Agent View manager is initializing...",
+      "worktree_failed": "Worktree creation failed: {error}",
+      "spawned": "✓ Forked: {id}\n  Task: {task}\n  Branch: {branch}\n  Worktree: {path}\n  Status: working\n\nAgent will auto-commit + push on completion.\nUse /agents to track."
+    },
+    "artifact": {
+      "usage": "Usage: /artifact <open|list|server> [name]\n\n  /artifact open <name>  Open artifact in browser\n  /artifact list        List all artifacts\n  /artifact server      Show server status",
+      "open_usage": "Usage: /artifact open <name>\nExample: /artifact open dashboard",
+      "open_confirmed": "✓ Opening artifact \"{name}\" in browser...\n   {url}",
+      "open_failed": "✗ Failed to open browser: {error}\n   URL: {url}",
+      "list_empty": "No artifacts created yet. Ask the AI to generate one with the Artifact tool.",
+      "list_title": "── Artifacts ──",
+      "list_footer": "  {count} artifact(s) — /artifact open <name> to view\n  Gallery: http://localhost:9876",
+      "server_title": "── Artifact Server ──\n\n  URL:  {url}\n  Port: 9876\n\nArtifacts are served locally. No external network access."
+    },
+    "commands_list": {
+      "title": "── All Slash Commands ({count}) ──",
+      "footer": "Type /help for details, or /<command> to run."
+    },
+    "workflows": {
+      "title": "─ Workflows ─",
+      "no_workflows": "No workflow scripts found.\n\nWorkflows are multi-agent orchestration scripts stored in:\n  .claude/workflows/   (project-level)\n  ~/.claude/workflows/ (user-level)\n\nCreate a .js file in either location to add a workflow.",
+      "found": "{count} workflow(s) found.\nUse /workflows <name> to run a specific workflow."
+    },
+    "workflow": {
+      "usage": "Usage: /workflow <task description>\n\nDescribes the task, and the AI will generate a workflow script to execute it.\nExamples:\n  /workflow audit all routes for missing auth\n  /workflow research the impact of React 19 on our codebase\n  /workflow find all hardcoded credentials in the codebase\n\nSub-commands:\n  /workflow save <name>  — save last successful workflow script\n  /workflow run <name>    — run a saved workflow by name\n  /workflows              — list all saved workflow scripts",
+      "save_no_recent": "No recent workflow run found. Run a workflow first with /workflow <task>.",
+      "save_no_script": "No script found in last run state.",
+      "save_confirmed": "Workflow saved to {path}\nUse /workflow run {name} to run it again.",
+      "save_failed": "Failed to save workflow: {error}",
+      "run_not_found": "Workflow \"{name}\" not found in .claude/workflows/ or ~/.claude/workflows/"
+    },
+    "deep_research": {
+      "usage": "Usage: /deep-research <topic>\n\nConducts multi-agent deep research — 5-angle parallel search, adversarial verification,\nand top-tier synthesis into a well-cited report.\n\nExample:\n  /deep-research impact of quantum computing on cryptography\n  /deep-research latest advances in CRISPR gene editing",
+      "title": "── Deep Research ──\n\nTopic: \"{topic}\"\n\nOrchestrating multi-agent research pipeline:\n  1. Scope — 5 research angles\n  2. Research — parallel web searches\n  3. Reduce — deduplicate + merge\n  4. Verify — adversarial skeptic pass\n  5. Synthesize — cited report, top model\n\nThis may take a few minutes..."
+    },
+    "code_review": {
+      "no_changes": "No uncommitted changes to review.\n\nTo review a specific file: /code-review path/to/file.ts",
+      "running": "Reviewing uncommitted changes with the code-review skill (7 dimensions: correctness, security, performance, code quality, architecture, testing, language-specific)...",
+      "error": "Could not detect changes. Are you in a git repository?"
+    },
+    "simplify": {
+      "no_changes": "No uncommitted changes to simplify.\n\nMake changes first, then run /simplify for cleanup review.",
+      "running": "Running cleanup review — 4 passes: reuse, simplification, efficiency, abstraction level...",
+      "error": "Could not detect changes. Are you in a git repository?"
+    },
+    "verify": {
+      "no_changes": "No uncommitted changes to verify.\n\nMake changes first, then run /verify for runtime verification.",
+      "running": "Running runtime verification — observing actual execution behavior (not tests, not typecheck)...",
+      "error": "Could not detect changes. Are you in a git repository?"
+    },
+    "design": {
+      "start": "─ Design ─\n\nStarting architectural design session for: {topic}\n\nExploring approaches, trade-offs, component breakdown, data flow..."
+    },
+    "lint": {
+      "title": "── Lint Results ──",
+      "fix_hint": "To fix: type \"fix the lint errors\"",
+      "setup_hint": "Set up linting: https://mipham.ai/code/docs/linting",
+      "error": "── Lint ──\n\nCould not run linter. Ensure ESLint is installed and configured."
+    },
+    "files": {
+      "title": "── Project Files ──",
+      "cwd": "CWD: {path}",
+      "more_files": "  ... and {count} more files",
+      "hint": "Use Read/Glob/Grep tools to examine files.",
+      "error": "── Files ──\n\nCould not read directory."
+    },
+    "stats": {
+      "title": "── Session Stats ──",
+      "messages": "Messages:        {total} ({user} user, {assistant} AI, {system} system)",
+      "tokens": "Tokens:          ~{tokens} / 200,000",
+      "tools": "Tools available:  {count}",
+      "provider": "Provider:         {provider}",
+      "model": "Model:            {model}",
+      "permission": "Permission:       {permission}",
+      "usage": "Usage:            {pct}% of context window"
+    },
+    "summary": {
+      "title": "── Session Summary ──",
+      "no_conversation": "── Summary ──\n\nNo conversation to summarize.",
+      "total_messages": "Total messages: {count}",
+      "est_tokens": "Est. tokens:    ~{tokens}",
+      "recent_topics": "Recent topics:",
+      "footer": "Use /export to save, /clear to reset."
+    },
+    "cd": {
+      "usage": "Usage: /cd <path>\n\nChange the session working directory.\nExample: /cd ~/projects/my-app\n\nCurrent: {cwd}",
+      "not_found": "❌ Directory not found: {path}",
+      "failed": "❌ Failed to change directory: {error}",
+      "title": "── Directory Changed ──",
+      "content": "New CWD: {path}\n\nThe AI will now work relative to this directory.\nNote: This changes the filesystem root for tools like Read, Write, Bash."
+    },
+    "hooks": {
+      "title": "── Hooks ──",
+      "no_hooks": "── Hooks ──\n\nNo hooks configured.\n\nCreate hook scripts in .mipham/hooks/:\n  pre-tool-use.sh   — runs before each tool\n  post-tool-use.sh  — runs after each tool\n  stop.sh           — runs when session ends\n\nUse /loop init to scaffold hooks directory.",
+      "location": "Location: {path}",
+      "found": "{count} hook(s) found.",
+      "error": "── Hooks ──\n\nCould not read hooks directory."
+    },
+    "batch": {
+      "title": "── Batch Operations ──\n\nApply a change across multiple files or directories.\n\nUsage: type \"apply this change to all .ts files in src/\"\n\nThe AI will:\n  1. Understand your change description\n  2. Find all matching files\n  3. Apply the change consistently\n  4. Report what was modified\n\nUse this for:\n  • Renaming symbols across codebase\n  • Updating import patterns\n  • Applying consistent formatting changes\n  • Bulk config updates"
+    },
+    "export": {
+      "confirmed": "✓ Session exported to:\n  {path}\n\n{count} messages · {lines} lines"
+    },
+    "pr_comments": {
+      "error": "─ PR Review ─\n\nCould not determine PR context. Are you in a git repository with a remote?",
+      "header": "─ PR Review ─",
+      "commits_header": "Commits:",
+      "changed_header": "Changed files:",
+      "hint": "To generate PR description: type \"write a PR description for these changes\" in chat.\nTo review PR: type \"review this PR\" or use /review."
+    },
+    "doctor": {
+      "title": "── System Diagnostics ──",
+      "config_section": "── Config ──",
+      "session_section": "── Session ──",
+      "git_section": "── Git ──",
+      "no_git": "  (not a git repository or git not available)",
+      "skills_section": "── Skills ──",
+      "skills_unavailable": "  (skills info unavailable)"
+    },
+    "plugins": {
+      "unavailable": "PluginManager not available in this session.",
+      "title": "── Installed Plugins ──",
+      "none": "No plugins installed.\n\nInstall plugins:\n  /install-plugin <npm-package>    Install from npm registry\n  /browse-plugins                  Browse community plugins\n  mipham plugin install <path>    Install from local directory"
+    },
+    "loop": {
+      "init_title": "── LoopKit Vault Created ──",
+      "stop_no_active": "No active autonomous loops to stop.",
+      "stop_confirmed": "Stopped {count} autonomous loop(s).",
+      "status_no_active": "No active autonomous loops.\n\nUse /loop auto <prompt> to start one.",
+      "auto_usage": "Usage: /loop auto <prompt>\n\nStart an autonomous self-paced loop. The AI will:\n1. Work on the task\n2. Decide how long to wait before the next iteration\n3. Use ScheduleWakeup to self-schedule\n4. Use ScheduleWakeup(stop:true) when the goal is reached\n\nUse /loop status to view progress.\nUse /loop stop to stop the loop.",
+      "auto_title": "── Autonomous Loop Started ──",
+      "auto_title_detected": "── Autonomous Loop Started (auto-detected) ──",
+      "invalid_interval": "── Invalid Interval ──\n\n\"{interval}\" is not a recognised interval.\n\nUse formats like: 10s, 5m, 1h, 30min, 2hr\nOr use /loop auto <prompt> for autonomous mode.",
+      "usage": "Usage: /loop <interval> <prompt>     Fixed-interval loop\n   or: /loop auto <prompt>           Autonomous self-paced loop\n   or: /loop stop                     Stop active autonomous loop\n   or: /loop status                   Show autonomous loop progress\n   or: /loop init [path]              Scaffold project vault structure\n\nFixed interval formats:\n  10s   — 10 seconds\n  5m    — 5 minutes\n  1h    — 1 hour\n\nExamples:\n  /loop 5m check the deploy status\n  /loop auto monitor CI and fix failing tests\n  /loop init                  Create vault in current directory",
+      "failed": "Loop failed: {error}"
+    },
+    "schedule": {
+      "failed": "Schedule check failed: {error}"
+    }
   },
   "ui": {
     "banner": {
