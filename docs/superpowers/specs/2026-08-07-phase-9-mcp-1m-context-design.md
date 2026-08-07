@@ -20,25 +20,25 @@
 
 ### MCP 层
 
-| 组件 | 文件 | 能力 |
-|------|------|------|
-| StdioTransport | `mcp/transport.ts` | 子进程 spawn，JSON-RPC 2.0，env sanitization |
-| McpProtocol | `mcp/protocol.ts` | initialize, listTools, callTool, listResources |
-| McpClient | `mcp/client.ts` | 单例，多服务器管理，connect/disconnect |
-| Tool Registry | `mcp/registry.ts` | MCP tool → ToolDefinition 转换，工具注册 |
-| ToolSearch | `tools/system/tool-search.ts` | 按需工具发现 |
+| 组件           | 文件                          | 能力                                           |
+| -------------- | ----------------------------- | ---------------------------------------------- |
+| StdioTransport | `mcp/transport.ts`            | 子进程 spawn，JSON-RPC 2.0，env sanitization   |
+| McpProtocol    | `mcp/protocol.ts`             | initialize, listTools, callTool, listResources |
+| McpClient      | `mcp/client.ts`               | 单例，多服务器管理，connect/disconnect         |
+| Tool Registry  | `mcp/registry.ts`             | MCP tool → ToolDefinition 转换，工具注册       |
+| ToolSearch     | `tools/system/tool-search.ts` | 按需工具发现                                   |
 
 **缺口**: 无 OAuth，无 `list_changed` 处理，无运行时服务器管理，工具仅启动时注册。
 
 ### 上下文层
 
-| 组件 | 文件 | 能力 |
-|------|------|------|
-| ContextManager | `core/context.ts` | 消息管理、四层压缩、chars/4 估算 |
-| context-snip | `core/context-snip.ts` | 零成本空工具对裁剪 |
-| context-microcompact | `core/context-microcompact.ts` | 工具结果压缩，cache-aware |
-| context-compact | `core/context-compact.ts` | LLM 摘要，20 条保留，2000 chars 上限 |
-| context-drain | `core/context-drain.ts` | 413 恢复，四级排水 |
+| 组件                 | 文件                           | 能力                                 |
+| -------------------- | ------------------------------ | ------------------------------------ |
+| ContextManager       | `core/context.ts`              | 消息管理、四层压缩、chars/4 估算     |
+| context-snip         | `core/context-snip.ts`         | 零成本空工具对裁剪                   |
+| context-microcompact | `core/context-microcompact.ts` | 工具结果压缩，cache-aware            |
+| context-compact      | `core/context-compact.ts`      | LLM 摘要，20 条保留，2000 chars 上限 |
+| context-drain        | `core/context-drain.ts`        | 413 恢复，四级排水                   |
 
 **缺口**: chars/4 启发式不准，摘要/截断/记忆预算硬编码偏低，大窗口下阈值不自适应。
 
@@ -103,6 +103,7 @@ auth?: {
 ```
 
 **安全措施**:
+
 - Token 文件 `chmod 600`
 - Token 值使用 AES-256-GCM 加密（密钥从 `~/.mipham/.mcp-key` 读取，若不存在则生成）
 - 加密密钥文件 `chmod 400`
@@ -153,7 +154,10 @@ class McpClient {
   async getAccessToken(name: string): Promise<string>
 
   // 连接状态事件
-  on(event: 'tools-changed', handler: (name: string, added: string[], removed: string[]) => void): void
+  on(
+    event: 'tools-changed',
+    handler: (name: string, added: string[], removed: string[]) => void,
+  ): void
   on(event: 'reconnected', handler: (name: string) => void): void
   on(event: 'disconnected', handler: (name: string, error: Error) => void): void
 }
@@ -163,29 +167,30 @@ class McpClient {
 
 **新增 Slash 命令**（修改 `commands.ts`）:
 
-| 命令 | 行为 |
-|------|------|
-| `/mcp connect <name>` | OAuth 完整流程或 stdio 直连 |
-| `/mcp disconnect <name>` | 断开连接 + 清理注册工具 |
-| `/mcp reload` | 断开所有 + 重新连接所有 |
+| 命令                     | 行为                        |
+| ------------------------ | --------------------------- |
+| `/mcp connect <name>`    | OAuth 完整流程或 stdio 直连 |
+| `/mcp disconnect <name>` | 断开连接 + 清理注册工具     |
+| `/mcp reload`            | 断开所有 + 重新连接所有     |
 
 **现有 `/mcp` 命令增强**:
+
 - 显示 OAuth 状态（是否认证、token 过期时间）
 - 显示工具数量 + 重连状态
 - 运行时可添加/移除服务器配置
 
 ### 3.4 改动文件
 
-| 文件 | 改动类型 | 说明 |
-|------|---------|------|
-| `src/mcp/oauth.ts` | **新建** | OAuth PKCE 流程 + token 管理 |
-| `src/mcp/token-store.ts` | **新建** | 加密 token 持久化 |
-| `src/mcp/protocol.ts` | 修改 | 注册 notification handler |
-| `src/mcp/client.ts` | 修改 | reconnect, oauth, tools-changed 事件 |
-| `src/mcp/registry.ts` | 修改 | 运行时 re-register + diff |
-| `src/shared/types.ts` | 修改 | McpServerConfig.auth 字段 |
-| `src/ui/commands.ts` | 修改 | /mcp connect/disconnect/reload |
-| `src/config/loader.ts` | 修改 | 读取 mcp-tokens 目录 |
+| 文件                     | 改动类型 | 说明                                 |
+| ------------------------ | -------- | ------------------------------------ |
+| `src/mcp/oauth.ts`       | **新建** | OAuth PKCE 流程 + token 管理         |
+| `src/mcp/token-store.ts` | **新建** | 加密 token 持久化                    |
+| `src/mcp/protocol.ts`    | 修改     | 注册 notification handler            |
+| `src/mcp/client.ts`      | 修改     | reconnect, oauth, tools-changed 事件 |
+| `src/mcp/registry.ts`    | 修改     | 运行时 re-register + diff            |
+| `src/shared/types.ts`    | 修改     | McpServerConfig.auth 字段            |
+| `src/ui/commands.ts`     | 修改     | /mcp connect/disconnect/reload       |
+| `src/config/loader.ts`   | 修改     | 读取 mcp-tokens 目录                 |
 
 ### 3.5 测试
 
@@ -221,31 +226,32 @@ export class TokenCounter {
 
 **集成点**:
 
-| 位置 | 当前 | 改为 |
-|------|------|------|
-| `ContextManager.estimateTokens()` | chars/4 启发式（含 CJK 1.5） | `tokenCounter.count(text)` |
-| `context-token.ts estimateMessageTokens()` | 相同启发式 | `tokenCounter.countMessages()` |
-| `ContextManager.addMessage()` | 手动 += | 调用 tokenCounter 更新 running total |
-| `memory-manager.ts` 记忆注入 | 5000 chars → ~1250 tokens 估计 | 精确 token 计数 |
+| 位置                                       | 当前                           | 改为                                 |
+| ------------------------------------------ | ------------------------------ | ------------------------------------ |
+| `ContextManager.estimateTokens()`          | chars/4 启发式（含 CJK 1.5）   | `tokenCounter.count(text)`           |
+| `context-token.ts estimateMessageTokens()` | 相同启发式                     | `tokenCounter.countMessages()`       |
+| `ContextManager.addMessage()`              | 手动 +=                        | 调用 tokenCounter 更新 running total |
+| `memory-manager.ts` 记忆注入               | 5000 chars → ~1250 tokens 估计 | 精确 token 计数                      |
 
 **延迟加载策略**: TokenCounter 在首次 `addMessage()` 时初始化。避免 CLI 启动时的 WASM 加载延迟。
 
 **性能**:
+
 - cl100k_base tokenize: ~1M chars/s（WASM 单线程）
 - 1M 上下文 tokenize: ~1s 首次，后续增量 <1ms/message
 - 消息 token count 缓存（Map<messageId, number>），避免重复计算
 
 ### 4.2 硬编码限制升级
 
-| # | 位置 | 限制项 | 当前值 | 新值 | 理由 |
-|---|------|--------|--------|------|------|
-| L1 | `engine.ts:223` | Summarizer max_tokens | 300 | 2000 | 1M 窗口下摘要需要更多空间 |
-| L2 | `context-compact.ts:46` | Summarizer 输出 cap | 2000 chars | 8000 chars | 与 L1 匹配 |
-| L3 | `engine.ts:207` | 每条消息摘要截断 | 500 chars | 2000 chars | 保留语义完整性 |
-| L4 | `memory-manager.ts:178` | 记忆注入 token 预算 | 5000 | max(contextWindow×0.05, 5000) | 自适应 |
-| L5 | `context-compact.ts:19` | 压缩保留消息数 | 20 | max(20, contextWindow/50000) | 大窗口保更多 |
-| L6 | `context.ts:100` | compact() 最小消息数 | 30 | max(30, contextWindow/33000) | 大上下文晚压缩 |
-| L7 | `context.ts:289` | microcompact 阈值 | 0.7 (70%) | 自适应 | 见 4.3 |
+| #   | 位置                    | 限制项                | 当前值     | 新值                          | 理由                      |
+| --- | ----------------------- | --------------------- | ---------- | ----------------------------- | ------------------------- |
+| L1  | `engine.ts:223`         | Summarizer max_tokens | 300        | 2000                          | 1M 窗口下摘要需要更多空间 |
+| L2  | `context-compact.ts:46` | Summarizer 输出 cap   | 2000 chars | 8000 chars                    | 与 L1 匹配                |
+| L3  | `engine.ts:207`         | 每条消息摘要截断      | 500 chars  | 2000 chars                    | 保留语义完整性            |
+| L4  | `memory-manager.ts:178` | 记忆注入 token 预算   | 5000       | max(contextWindow×0.05, 5000) | 自适应                    |
+| L5  | `context-compact.ts:19` | 压缩保留消息数        | 20         | max(20, contextWindow/50000)  | 大窗口保更多              |
+| L6  | `context.ts:100`        | compact() 最小消息数  | 30         | max(30, contextWindow/33000)  | 大上下文晚压缩            |
+| L7  | `context.ts:289`        | microcompact 阈值     | 0.7 (70%)  | 自适应                        | 见 4.3                    |
 
 ### 4.3 自适应阈值
 
@@ -256,24 +262,24 @@ export class TokenCounter {
 
 // 压缩阈值: 窗口越大越晚压缩
 //   200K → 0.90,  500K → 0.93,  1M → 0.95
-compactionThreshold = Math.max(0.90, 1 - 50000 / maxTokens)
+compactionThreshold = Math.max(0.9, 1 - 50000 / maxTokens)
 
-// 微压缩阈值: 窗口越大越晚微压缩  
+// 微压缩阈值: 窗口越大越晚微压缩
 //   200K → 0.70,  500K → 0.80,  1M → 0.85
-microcompactThreshold = Math.max(0.70, 1 - 150000 / maxTokens)
+microcompactThreshold = Math.max(0.7, 1 - 150000 / maxTokens)
 ```
 
 ### 4.4 改动文件
 
-| 文件 | 改动类型 | 说明 |
-|------|---------|------|
-| `src/core/tokenizer.ts` | **新建** | tiktoken TokenCounter 封装 |
-| `src/core/context.ts` | 修改 | 替换 estimateTokens，自适应阈值 |
-| `src/core/context-token.ts` | 修改 | 替换 estimateMessageTokens |
-| `src/core/engine.ts` | 修改 | L1 summarizer 300→2000，L3 500→2000 |
-| `src/core/context-compact.ts` | 修改 | L2 2000→8000，L5 保留数自适应 |
-| `src/core/memory/memory-manager.ts` | 修改 | L4 预算自适应 |
-| `package.json` (apps/cli) | 修改 | 添加 `js-tiktoken` 依赖 |
+| 文件                                | 改动类型 | 说明                                |
+| ----------------------------------- | -------- | ----------------------------------- |
+| `src/core/tokenizer.ts`             | **新建** | tiktoken TokenCounter 封装          |
+| `src/core/context.ts`               | 修改     | 替换 estimateTokens，自适应阈值     |
+| `src/core/context-token.ts`         | 修改     | 替换 estimateMessageTokens          |
+| `src/core/engine.ts`                | 修改     | L1 summarizer 300→2000，L3 500→2000 |
+| `src/core/context-compact.ts`       | 修改     | L2 2000→8000，L5 保留数自适应       |
+| `src/core/memory/memory-manager.ts` | 修改     | L4 预算自适应                       |
+| `package.json` (apps/cli)           | 修改     | 添加 `js-tiktoken` 依赖             |
 
 ### 4.5 测试
 
@@ -301,24 +307,25 @@ MCP 和 1M 完全独立，可并行实现，同属一个 Phase 9 分支。
 
 ### 预估工作量
 
-| 子系统 | 新建文件 | 修改文件 | 新增代码 | 新增测试 |
-|--------|---------|---------|---------|---------|
-| MCP 深度集成 | 2 | 5 | ~400 lines | ~40 tests |
-| 1M 上下文 | 1 | 5 | ~250 lines | ~25 tests |
-| **合计** | **3** | **10** | **~650 lines** | **~65 tests** |
+| 子系统       | 新建文件 | 修改文件 | 新增代码       | 新增测试      |
+| ------------ | -------- | -------- | -------------- | ------------- |
+| MCP 深度集成 | 2        | 5        | ~400 lines     | ~40 tests     |
+| 1M 上下文    | 1        | 5        | ~250 lines     | ~25 tests     |
+| **合计**     | **3**    | **10**   | **~650 lines** | **~65 tests** |
 
 ---
 
 ## 六、风险与回滚
 
-| 风险 | 缓解 |
-|------|------|
-| js-tiktoken WASM 加载慢 → CLI 启动慢 | 延迟初始化，首条消息时才加载 |
-| OAuth local server 端口冲突 | 可配置 redirectPort，fallback 随机端口 |
-| 动态工具更新触发过于频繁 | 防抖 1 秒，连续通知合并 |
+| 风险                                       | 缓解                                          |
+| ------------------------------------------ | --------------------------------------------- |
+| js-tiktoken WASM 加载慢 → CLI 启动慢       | 延迟初始化，首条消息时才加载                  |
+| OAuth local server 端口冲突                | 可配置 redirectPort，fallback 随机端口        |
+| 动态工具更新触发过于频繁                   | 防抖 1 秒，连续通知合并                       |
 | Token count 变更导致现有上下文管理行为变化 | 保留 chars/4 作为 fallback，feature flag 控制 |
 
 Feature flag: `~/.mipham/config.json` 新增:
+
 - `mcp.oauthEnabled` (default: true)
 - `context.useRealTokenizer` (default: true)
 - `context.adaptiveThresholds` (default: true)
@@ -338,6 +345,6 @@ Feature flag: `~/.mipham/config.json` 新增:
 
 ### 修订历史
 
-| 版本 | 日期 | 变更内容 | 维护人 |
-|------|------|---------|--------|
+| 版本  | 日期       | 变更内容                                         | 维护人     |
+| ----- | ---------- | ------------------------------------------------ | ---------- |
 | 1.0.0 | 2026-08-07 | 初版：MCP OAuth+动态工具 + 1M tokenizer+限制升级 | 技术委员会 |

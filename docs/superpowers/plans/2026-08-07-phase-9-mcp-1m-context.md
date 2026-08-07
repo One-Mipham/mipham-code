@@ -25,10 +25,12 @@
 ### Task 1: MCP Token Store + 加密持久化
 
 **Files:**
+
 - Create: `apps/cli/src/mcp/token-store.ts`
 - Test: `apps/cli/test/mcp/token-store.test.ts`
 
 **Interfaces:**
+
 - Produces: `TokenStore` class — `save(serverName, tokens)`, `load(serverName)`, `delete(serverName)`, `list()`
 
 - [ ] **Step 1: 写 TokenStore 测试**
@@ -122,13 +124,22 @@ describe('TokenStore', () => {
 ```bash
 cd apps/cli && npx vitest run test/mcp/token-store.test.ts
 ```
+
 Expected: FAIL — `TokenStore` 模块不存在
 
 - [ ] **Step 3: 实现 TokenStore**
 
 ```typescript
 // apps/cli/src/mcp/token-store.ts
-import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync, readdirSync, chmodSync } from 'node:fs'
+import {
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  unlinkSync,
+  readdirSync,
+  chmodSync,
+} from 'node:fs'
 import { join, dirname } from 'node:path'
 import { createCipheriv, createDecipheriv, randomBytes, createHash } from 'node:crypto'
 import { homedir } from 'node:os'
@@ -196,7 +207,11 @@ export class TokenStore {
     })
     const encrypted = encrypt(json, this.key)
     writeFileSync(filePath, encrypted, { mode: 0o600 })
-    try { chmodSync(filePath, 0o600) } catch { /* Windows */ }
+    try {
+      chmodSync(filePath, 0o600)
+    } catch {
+      /* Windows */
+    }
   }
 
   load(serverName: string): TokenData | null {
@@ -219,8 +234,8 @@ export class TokenStore {
   list(): string[] {
     if (!existsSync(this.storeDir)) return []
     return readdirSync(this.storeDir)
-      .filter(f => f.endsWith('.enc'))
-      .map(f => f.replace('.enc', ''))
+      .filter((f) => f.endsWith('.enc'))
+      .map((f) => f.replace('.enc', ''))
   }
 }
 ```
@@ -230,6 +245,7 @@ export class TokenStore {
 ```bash
 cd apps/cli && npx vitest run test/mcp/token-store.test.ts
 ```
+
 Expected: 7 tests PASS
 
 - [ ] **Step 5: Typecheck**
@@ -237,6 +253,7 @@ Expected: 7 tests PASS
 ```bash
 pnpm --filter @miphamai/cli typecheck
 ```
+
 Expected: clean
 
 - [ ] **Step 6: Commit**
@@ -253,12 +270,14 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 2: MCP OAuth PKCE 认证流程
 
 **Files:**
+
 - Create: `apps/cli/src/mcp/oauth.ts`
 - Modify: `apps/cli/src/shared/types.ts` — 添加 `McpServerConfig.auth` 字段
 - Modify: `apps/cli/src/mcp/client.ts` — 集成 OAuth connect
 - Test: `apps/cli/test/mcp/oauth.test.ts`
 
 **Interfaces:**
+
 - Consumes: `TokenStore` from Task 1 — `save()`, `load()`, `delete()`
 - Produces: `OAuthClient` class — `executePkceFlow(config: McpServerConfig): Promise<string>`, `refreshAccessToken(config): Promise<string>`, `getValidAccessToken(serverName, config): Promise<string>`
 
@@ -309,15 +328,17 @@ describe('OAuthClient', () => {
         res.end()
       } else if (url.pathname === '/token') {
         res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({
-          access_token: 'mock-access-token-123',
-          refresh_token: 'mock-refresh-token-456',
-          expires_in: 3600,
-          token_type: 'Bearer',
-        }))
+        res.end(
+          JSON.stringify({
+            access_token: 'mock-access-token-123',
+            refresh_token: 'mock-refresh-token-456',
+            expires_in: 3600,
+            token_type: 'Bearer',
+          }),
+        )
       }
     })
-    await new Promise<void>(resolve => mockAuthServer.listen(authPort, resolve))
+    await new Promise<void>((resolve) => mockAuthServer.listen(authPort, resolve))
   })
 
   afterAll(() => {
@@ -383,7 +404,9 @@ describe('OAuthClient', () => {
     })
     const client = new OAuthClient(store)
     const token = await client.getValidAccessToken('cached-srv', {
-      name: 'cached-srv', command: 'echo', args: [],
+      name: 'cached-srv',
+      command: 'echo',
+      args: [],
       auth: { type: 'oauth', authorizationUrl: '', tokenUrl: '', clientId: '' },
     })
     expect(token).toBe('cached-token')
@@ -398,8 +421,15 @@ describe('OAuthClient', () => {
     })
     const client = new OAuthClient(store)
     const token = await client.getValidAccessToken('expired-srv', {
-      name: 'expired-srv', command: 'echo', args: [],
-      auth: { type: 'oauth', authorizationUrl: '', tokenUrl: `http://localhost:${authPort}/token`, clientId: '' },
+      name: 'expired-srv',
+      command: 'echo',
+      args: [],
+      auth: {
+        type: 'oauth',
+        authorizationUrl: '',
+        tokenUrl: `http://localhost:${authPort}/token`,
+        clientId: '',
+      },
     })
     expect(token).toBe('mock-access-token-123')
   })
@@ -411,6 +441,7 @@ describe('OAuthClient', () => {
 ```bash
 cd apps/cli && npx vitest run test/mcp/oauth.test.ts
 ```
+
 Expected: FAIL — `OAuthClient` 模块不存在
 
 - [ ] **Step 4: 实现 OAuthClient**
@@ -436,8 +467,7 @@ interface TokenResponse {
 }
 
 function base64url(buf: Buffer): string {
-  return buf.toString('base64')
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
 export class OAuthClient {
@@ -476,7 +506,9 @@ export class OAuthClient {
             return
           }
           res.writeHead(200, { 'Content-Type': 'text/html' })
-          res.end('<html><body><h1>✅ Authenticated</h1><p>You may close this window.</p></body></html>')
+          res.end(
+            '<html><body><h1>✅ Authenticated</h1><p>You may close this window.</p></body></html>',
+          )
           server.close()
           resolve(receivedCode)
         }
@@ -494,13 +526,16 @@ export class OAuthClient {
           authUrl.searchParams.set('scope', auth.scopes.join(' '))
         }
         // 用 open 命令打开浏览器
-        const cmd = process.platform === 'darwin'
-          ? `open "${authUrl.toString()}"`
-          : process.platform === 'win32'
-            ? `start "" "${authUrl.toString()}"`
-            : `xdg-open "${authUrl.toString()}"`
+        const cmd =
+          process.platform === 'darwin'
+            ? `open "${authUrl.toString()}"`
+            : process.platform === 'win32'
+              ? `start "" "${authUrl.toString()}"`
+              : `xdg-open "${authUrl.toString()}"`
         const { exec } = require('node:child_process')
-        exec(cmd, () => { /* fire-and-forget */ })
+        exec(cmd, () => {
+          /* fire-and-forget */
+        })
       })
       // 超时 5 分钟
       setTimeout(() => {
@@ -527,7 +562,7 @@ export class OAuthClient {
       throw new Error(`Token exchange failed: ${tokenResponse.status} ${body}`)
     }
 
-    const data = await tokenResponse.json() as {
+    const data = (await tokenResponse.json()) as {
       access_token: string
       refresh_token?: string
       expires_in?: number
@@ -582,7 +617,7 @@ export class OAuthClient {
       const fresh = await this.executePkceFlow(config)
       return fresh.accessToken
     }
-    const data = await response.json() as {
+    const data = (await response.json()) as {
       access_token: string
       refresh_token?: string
       expires_in?: number
@@ -635,6 +670,7 @@ async connectWithOAuth(config: McpServerConfig): Promise<ConnectionInfo> {
 ```bash
 cd apps/cli && npx vitest run test/mcp/oauth.test.ts test/mcp/token-store.test.ts
 ```
+
 Expected: 13 tests PASS
 
 - [ ] **Step 7: Typecheck**
@@ -642,6 +678,7 @@ Expected: 13 tests PASS
 ```bash
 pnpm --filter @miphamai/cli typecheck
 ```
+
 Expected: clean
 
 - [ ] **Step 8: Commit**
@@ -658,11 +695,13 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 3: MCP 动态工具更新 + 断线重连
 
 **Files:**
+
 - Modify: `apps/cli/src/mcp/protocol.ts` — 注册 `notifications/tools/list_changed` handler
 - Modify: `apps/cli/src/mcp/client.ts` — `reconnect()`, `onToolsChanged()`, 事件系统
 - Modify: `apps/cli/src/mcp/registry.ts` — 运行时 diff + re-register
 
 **Interfaces:**
+
 - Consumes: `McpClient` from Task 2 — 已有 `connectWithOAuth()`
 - Produces: `McpClient.reconnect()`, `McpClient.onToolsChanged()`, `McpClient.on()/emit()` 事件系统
 
@@ -797,7 +836,7 @@ export function diffAndUpdateTools(
   let removed = 0
   for (const [name] of oldServerTools.entries()) {
     const mcpName = name.replace(sanitizedPrefix, '')
-    if (!newTools.find(t => sanitize(t.name) === mcpName)) {
+    if (!newTools.find((t) => sanitize(t.name) === mcpName)) {
       oldTools.delete(name)
       removed++
     }
@@ -823,6 +862,7 @@ export function diffAndUpdateTools(
 ```bash
 cd apps/cli && npx vitest run test/mcp/
 ```
+
 Expected: 所有已有 MCP 测试仍绿
 
 - [ ] **Step 5: Typecheck + format**
@@ -830,6 +870,7 @@ Expected: 所有已有 MCP 测试仍绿
 ```bash
 pnpm --filter @miphamai/cli typecheck && npx prettier --check apps/cli/src/mcp/
 ```
+
 Expected: clean
 
 - [ ] **Step 6: Commit**
@@ -846,10 +887,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 4: MCP 运行时服务器管理 — Slash 命令
 
 **Files:**
+
 - Modify: `apps/cli/src/ui/commands.ts` — 增强 `/mcp` 命令，新增 `/mcp connect/disconnect/reload`
 - Modify: `apps/cli/src/config/loader.ts` — 运行时 mcp-tokens 读取
 
 **Interfaces:**
+
 - Consumes: `McpClient` — `connectWithOAuth()`, `disconnect()`, `connect()`; `TokenStore` — `list()`, `load()`
 
 - [ ] **Step 1: 重写 mcpCmd 添加 connect/disconnect/reload 子命令**
@@ -868,9 +911,11 @@ const mcpCmd: CommandHandler = async (ctx, args) => {
 
     // 查找配置
     const mcpServers = ctx.config.skills?.mcpServers ?? []
-    const config = mcpServers.find(s => s.name === name)
+    const config = mcpServers.find((s) => s.name === name)
     if (!config) {
-      return { content: `Server "${name}" not found in config.\n\nConfigured servers: ${mcpServers.map(s => s.name).join(', ') || '(none)'}` }
+      return {
+        content: `Server "${name}" not found in config.\n\nConfigured servers: ${mcpServers.map((s) => s.name).join(', ') || '(none)'}`,
+      }
     }
 
     if (config.auth?.type === 'oauth') {
@@ -915,7 +960,8 @@ const mcpCmd: CommandHandler = async (ctx, args) => {
   if (sub === 'reload') {
     return {
       content: '── MCP Reload ──\n\nDisconnecting all servers and reconnecting...',
-      forwardToAI: 'Disconnect all MCP servers via McpClient.getInstance().closeAll(), then reconnect all configured servers. Report each server status.',
+      forwardToAI:
+        'Disconnect all MCP servers via McpClient.getInstance().closeAll(), then reconnect all configured servers. Report each server status.',
     }
   }
 
@@ -930,14 +976,18 @@ const mcpCmd: CommandHandler = async (ctx, args) => {
     lines.push(`Configured servers (${configuredServers.length}):`)
     lines.push('')
     for (const s of configuredServers) {
-      const live = liveConnections.find(c => c.config.name === s.name)
+      const live = liveConnections.find((c) => c.config.name === s.name)
       const statusIcon = live
-        ? live.status === 'connected' ? '🟢' : live.status === 'connecting' ? '🟡' : live.status === 'error' ? '🔴' : '⚪'
+        ? live.status === 'connected'
+          ? '🟢'
+          : live.status === 'connecting'
+            ? '🟡'
+            : live.status === 'error'
+              ? '🔴'
+              : '⚪'
         : '⚪'
       const statusLabel = live ? live.status : 'not started'
-      const oauthStatus = s.auth?.type === 'oauth'
-        ? (tokenStore.load(s.name) ? ' 🔑' : ' 🔒')
-        : ''
+      const oauthStatus = s.auth?.type === 'oauth' ? (tokenStore.load(s.name) ? ' 🔑' : ' 🔒') : ''
       lines.push(`  ${statusIcon} ${s.name}${oauthStatus}  [${statusLabel}]`)
       lines.push(`     Command: ${s.command} ${s.args.join(' ')}`)
       if (live?.tools && live.tools.length > 0) {
@@ -964,6 +1014,7 @@ const mcpCmd: CommandHandler = async (ctx, args) => {
 ```bash
 cd apps/cli && npx vitest run test/mcp/ test/ui/commands.test.ts
 ```
+
 Expected: 所有测试 PASS
 
 - [ ] **Step 3: Typecheck + format**
@@ -971,6 +1022,7 @@ Expected: 所有测试 PASS
 ```bash
 pnpm --filter @miphamai/cli typecheck
 ```
+
 Expected: clean
 
 - [ ] **Step 4: Commit**
@@ -987,12 +1039,14 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 5: 真实 Tokenizer — js-tiktoken 集成
 
 **Files:**
+
 - Create: `apps/cli/src/core/tokenizer.ts`
 - Modify: `apps/cli/src/core/context.ts` — 替换 `estimateTokens()`
 - Modify: `apps/cli/src/core/context-token.ts` — 替换 `estimateMessageTokens()`
 - Modify: `apps/cli/package.json` — 添加 `js-tiktoken` 依赖
 
 **Interfaces:**
+
 - Produces: `TokenCounter` class — `count(text: string): number`, `countMessages(messages: Message[]): number`, `truncateToTokens(text: string, maxTokens: number): string`
 
 - [ ] **Step 1: 安装依赖**
@@ -1138,7 +1192,9 @@ describe('TokenCounter', () => {
     const tokens = await counter.countMessages(msgs)
     expect(tokens).toBeGreaterThan(0)
     // Token count includes content + 4 per message overhead
-    expect(tokens).toBeGreaterThanOrEqual(await counter.count('Hello') + await counter.count('Hi there!') + 8)
+    expect(tokens).toBeGreaterThanOrEqual(
+      (await counter.count('Hello')) + (await counter.count('Hi there!')) + 8,
+    )
   })
 
   it('uses cache for repeated text', async () => {
@@ -1161,6 +1217,7 @@ describe('TokenCounter', () => {
 ```bash
 cd apps/cli && npx vitest run test/core/tokenizer.test.ts
 ```
+
 Expected: FAIL — 文件不存在
 
 - [ ] **Step 5: 运行测试验证通过**
@@ -1168,6 +1225,7 @@ Expected: FAIL — 文件不存在
 ```bash
 cd apps/cli && npx vitest run test/core/tokenizer.test.ts
 ```
+
 Expected: 7 tests PASS
 
 - [ ] **Step 6: 修改 ContextManager.estimateTokens() — 集成 TokenCounter**
@@ -1230,6 +1288,7 @@ export function estimateMessageTokens(msgs: Message[]): number {
 ```bash
 cd apps/cli && npx vitest run
 ```
+
 Expected: 834+ 测试 PASS
 
 - [ ] **Step 9: Commit**
@@ -1246,6 +1305,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 6: 硬编码限制升级
 
 **Files:**
+
 - Modify: `apps/cli/src/core/engine.ts` — L1 summarizer 300→2000, L3 500→2000
 - Modify: `apps/cli/src/core/context-compact.ts` — L2 2000→8000, L5 保留数自适应
 - Modify: `apps/cli/src/core/memory/memory-manager.ts` — L4 预算自适应
@@ -1257,10 +1317,10 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 // 当前: maxTokens: 300
 // 改为: maxTokens: 2000
-const response = await registry.chat(
-  [{ role: 'user', content: summaryPrompt }],
-  { maxTokens: 2000, temperature: 0.3 }
-)
+const response = await registry.chat([{ role: 'user', content: summaryPrompt }], {
+  maxTokens: 2000,
+  temperature: 0.3,
+})
 
 // 当前: const text = typeof m.content === 'string' ? m.content.slice(0, 500) : ''
 // 改为: slice(0, 2000)
@@ -1299,6 +1359,7 @@ const TOKEN_BUDGET = Math.max(5000, Math.floor(contextWindow * 0.05))
 ```bash
 cd apps/cli && npx vitest run
 ```
+
 Expected: 全部 PASS
 
 - [ ] **Step 5: Commit**
@@ -1315,6 +1376,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 7: 自适应阈值
 
 **Files:**
+
 - Modify: `apps/cli/src/core/context.ts` — 动态计算 compactionThreshold 和 microcompactThreshold
 
 - [ ] **Step 1: 修改 ContextManager**
@@ -1353,7 +1415,7 @@ private calculateThresholds(): void {
 const context = new ContextManager({
   maxTokens: contextMaxTokens,
   compactionThreshold: 0.9,
-  contextWindow: modelContextWindow  // 原始模型窗口大小
+  contextWindow: modelContextWindow, // 原始模型窗口大小
 })
 ```
 
@@ -1364,23 +1426,39 @@ const context = new ContextManager({
 
 describe('adaptive thresholds', () => {
   it('1M window gets 0.95 compaction threshold', () => {
-    const ctx = new ContextManager({ maxTokens: 1_000_000, compactionThreshold: 0.9, contextWindow: 1_000_000 })
+    const ctx = new ContextManager({
+      maxTokens: 1_000_000,
+      compactionThreshold: 0.9,
+      contextWindow: 1_000_000,
+    })
     expect(ctx.getCompactionThreshold()).toBeCloseTo(0.95, 2)
   })
 
   it('200K window gets 0.90 compaction threshold', () => {
-    const ctx = new ContextManager({ maxTokens: 200_000, compactionThreshold: 0.9, contextWindow: 200_000 })
-    expect(ctx.getCompactionThreshold()).toBeCloseTo(0.75, 2)  // 1 - 50000/200000 = 0.75, clamped to 0.90
+    const ctx = new ContextManager({
+      maxTokens: 200_000,
+      compactionThreshold: 0.9,
+      contextWindow: 200_000,
+    })
+    expect(ctx.getCompactionThreshold()).toBeCloseTo(0.75, 2) // 1 - 50000/200000 = 0.75, clamped to 0.90
   })
 
   it('128K window gets 0.90 compaction threshold (clamped)', () => {
-    const ctx = new ContextManager({ maxTokens: 128_000, compactionThreshold: 0.9, contextWindow: 128_000 })
-    expect(ctx.getCompactionThreshold()).toBe(0.90)
+    const ctx = new ContextManager({
+      maxTokens: 128_000,
+      compactionThreshold: 0.9,
+      contextWindow: 128_000,
+    })
+    expect(ctx.getCompactionThreshold()).toBe(0.9)
   })
 
   it('500K window gets 0.90 compaction threshold', () => {
-    const ctx = new ContextManager({ maxTokens: 500_000, compactionThreshold: 0.9, contextWindow: 500_000 })
-    expect(ctx.getCompactionThreshold()).toBeCloseTo(0.90, 1)
+    const ctx = new ContextManager({
+      maxTokens: 500_000,
+      compactionThreshold: 0.9,
+      contextWindow: 500_000,
+    })
+    expect(ctx.getCompactionThreshold()).toBeCloseTo(0.9, 1)
   })
 })
 ```
@@ -1390,6 +1468,7 @@ describe('adaptive thresholds', () => {
 ```bash
 cd apps/cli && npx vitest run test/core/context.test.ts
 ```
+
 Expected: 自适应阈值测试 PASS + 原有测试 PASS
 
 - [ ] **Step 5: 运行全部测试**
@@ -1397,6 +1476,7 @@ Expected: 自适应阈值测试 PASS + 原有测试 PASS
 ```bash
 cd apps/cli && npx vitest run
 ```
+
 Expected: 全部 PASS
 
 - [ ] **Step 6: Commit**
@@ -1413,6 +1493,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 8: Phase 9 收尾 — Feature Flags + 最终回归
 
 **Files:**
+
 - Modify: `apps/cli/src/config/defaults.ts` — 添加 Phase 9 feature flags
 - Modify: `apps/cli/src/index.tsx` — 读取并应用 feature flags
 
@@ -1430,7 +1511,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ```typescript
 // 读取 feature flags
-const oauthEnabled = config.features?.mcp?.oauthEnabled !== false  // 默认 true
+const oauthEnabled = config.features?.mcp?.oauthEnabled !== false // 默认 true
 const useRealTokenizer = config.features?.context?.useRealTokenizer !== false
 const adaptiveThresholds = config.features?.context?.adaptiveThresholds !== false
 
@@ -1449,6 +1530,7 @@ const context = new ContextManager({
 ```bash
 cd apps/cli && npx vitest run
 ```
+
 Expected: 834+ 测试全部 PASS
 
 - [ ] **Step 4: Typecheck**
@@ -1456,6 +1538,7 @@ Expected: 834+ 测试全部 PASS
 ```bash
 pnpm --filter @miphamai/cli typecheck
 ```
+
 Expected: clean
 
 - [ ] **Step 5: Commit**
@@ -1471,6 +1554,6 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ### 修订历史
 
-| 版本 | 日期 | 变更内容 | 维护人 |
-|------|------|---------|--------|
+| 版本  | 日期       | 变更内容                               | 维护人     |
+| ----- | ---------- | -------------------------------------- | ---------- |
 | 1.0.0 | 2026-08-07 | 初版：8 任务，MCP 深度集成 + 1M 上下文 | 技术委员会 |
