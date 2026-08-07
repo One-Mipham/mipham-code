@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { Box, Text } from 'ink'
-import { getEventBus } from '../workflow/event-bus'
-import type { WorkflowEvent } from '../workflow/event-bus'
+import { getEventBus } from '../workflow/event-bus.js'
+import type { WorkflowEvent } from '../workflow/event-bus.js'
 
 interface AgentState {
   label: string

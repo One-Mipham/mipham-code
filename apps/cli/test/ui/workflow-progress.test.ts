@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { getEventBus, WorkflowEventBus } from '../../src/workflow/event-bus'
+import { getEventBus, WorkflowEventBus } from '../../src/workflow/event-bus.js'
 
 // We test the state-tracking logic, not the Ink rendering
 // (Ink component testing requires a TTY, so we test the data layer)
