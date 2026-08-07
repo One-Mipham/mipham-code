@@ -6,6 +6,7 @@ import { workflowAgent } from './primitives/agent'
 import { parallel } from './primitives/parallel'
 import { pipeline } from './primitives/pipeline'
 import { phase as phasePrimitive } from './primitives/phase'
+import { getEventBus } from './event-bus'
 import { verify, judge } from './primitives/verify'
 import { loopUntilConvergence } from './primitives/loop'
 import type { ProviderRegistry } from '../providers/registry'
@@ -96,6 +97,9 @@ export async function runWorkflow(
     createJournal(runId, script)
   }
 
+  const bus = getEventBus()
+  bus.startRun(runId)
+
   const registry: ProviderRegistry = engine.getRegistry()
   const toolRegistry = engine.getTools()
   const permission = engine.getPermission()
@@ -114,10 +118,20 @@ export async function runWorkflow(
     }
     cacheMisses++
 
+    const agentId = (opts?.label as string) || `agent-${cacheMisses}`
+    const phase = (opts?.phase as string) || 'default'
+    const startTime = Date.now()
+
+    bus.emitEvent({ type: 'agent:start', agentId, label: agentId, phase })
+
     const result = await workflowAgent(prompt, registry, toolRegistry, {
       ...(opts || {}),
       permissionSystem: permission,
     } as Record<string, unknown>)
+
+    const durationMs = Date.now() - startTime
+    bus.emitEvent({ type: 'agent:end', agentId, label: agentId, success: true, durationMs })
+
     appendJournal(runId, {
       type: 'agent',
       prompt,
@@ -129,10 +143,12 @@ export async function runWorkflow(
 
   const wrappedPhase = (title: string) => {
     phasePrimitive(title)
+    bus.emitEvent({ type: 'phase:start', phase: title, timestamp: Date.now() })
     appendJournal(runId, { type: 'phase', message: title })
   }
 
   const log = (message: string) => {
+    bus.emitEvent({ type: 'log', message })
     appendJournal(runId, { type: 'log', message })
   }
 
@@ -160,8 +176,16 @@ export async function runWorkflow(
   let result: unknown
   try {
     result = await vmScript.runInContext(sandboxCtx, { timeout: 120_000 })
+
+    bus.emitEvent({
+      type: 'done',
+      runId,
+      totalAgents: cacheMisses,
+      cacheHits,
+    })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
+    bus.emitEvent({ type: 'error', message })
     throw new Error(
       `Workflow script execution failed: ${message}\n\n` +
         `This is likely a bug in the workflow script, not in Mipham Code itself. ` +
