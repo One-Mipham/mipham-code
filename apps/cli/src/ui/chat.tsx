@@ -1,5 +1,6 @@
 import React from 'react'
 import { Box, Text } from 'ink'
+import { useI18n } from '../i18n-context'
 import type { ChatMessage } from './app'
 
 interface ChatPanelProps {
@@ -49,6 +50,7 @@ function toolColor(name: string): string {
  */
 const MessageRow = React.memo(
   function MessageRow({ msg }: { msg: ChatMessage; isLast: boolean }) {
+    const { t } = useI18n()
     return (
       <Box
         flexDirection="column"
@@ -76,8 +78,8 @@ const MessageRow = React.memo(
               {msg.role === 'user'
                 ? `▸ ${displayCwd()}`
                 : msg.role === 'assistant'
-                  ? 'Mipham Code'
-                  : '⚠ System'}
+                  ? t('ui.assistant.role_label')
+                  : `⚠ ${t('ui.system.role_label')}`}
               :
             </Text>
             <Text>{msg.content}</Text>
@@ -93,6 +95,7 @@ const MessageRow = React.memo(
 )
 
 export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
+  const { t } = useI18n()
   // Group consecutive tool calls into compact summaries to reduce visual noise.
   // In focus mode, use the more aggressive compactForFocus.
   const displayMessages = focusMode ? compactForFocus(messages) : compactToolGroups(messages)
@@ -102,8 +105,7 @@ export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
       {focusMode && messages.length > 0 && (
         <Box marginBottom={1}>
           <Text dimColor>
-            🔍 Focus — {countHidden(messages, displayMessages)} hidden · /focus to toggle · Ctrl+O
-            to expand
+            🔍 {t('ui.chat.focus_hint')} — {countHidden(messages, displayMessages, t)} · {t('ui.chat.toggle_focus_hint')} · {t('ui.chat.expand_hint')}
           </Text>
         </Box>
       )}
@@ -111,22 +113,14 @@ export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
         <Box flexDirection="column">
           <Box marginBottom={1}>
             <Text color="cyan" bold>
-              Mipham Code
+              {t('ui.banner.title')}
             </Text>
-            <Text dimColor> — AI-Powered Programming Assistant</Text>
+            <Text dimColor> — {t('ui.banner.subtitle')}</Text>
           </Box>
-          <Text dimColor>Multi-model · Multi-provider · Skills & Tools · Open-core</Text>
+          <Text dimColor>{t('ui.banner.tagline')}</Text>
           <Box marginTop={1}>
             <Text dimColor>
-              Type a message to start. <Text color="yellow">/help</Text> for commands ·{' '}
-              <Text color="yellow">Ctrl+P</Text> pick model · <Text color="yellow">Esc</Text> to
-              exit
-            </Text>
-          </Box>
-          <Box marginTop={1}>
-            <Text dimColor>
-              Tip: Use <Text color="yellow">/clear</Text> to start fresh when switching topics and
-              free up context
+              {t('ui.banner.start_message')} <Text color="yellow">/help</Text>
             </Text>
           </Box>
         </Box>
@@ -239,9 +233,9 @@ function summarizeToolGroup(tools: ChatMessage[]): ChatMessage {
 }
 
 /** Count how many messages are hidden in focus mode. */
-function countHidden(all: ChatMessage[], compacted: ChatMessage[]): string {
+function countHidden(all: ChatMessage[], compacted: ChatMessage[], t: (key: string, params?: Record<string, string>) => string): string {
   const toolCount = all.filter((m) => m.toolMeta).length
   const hidden = all.length - compacted.length
-  if (hidden <= 0) return `showing all ${all.length} messages`
-  return `${hidden} tool outputs folded (${toolCount} total tool calls)`
+  if (hidden <= 0) return t('ui.chat.showing_all', { count: String(all.length) })
+  return t('ui.chat.tool_outputs_folded', { hidden: String(hidden), toolCount: String(toolCount) })
 }

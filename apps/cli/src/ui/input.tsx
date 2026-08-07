@@ -4,6 +4,7 @@ import TextInput from 'ink-text-input'
 import { VimMotionEngine, type VimMode } from './vim-motions.js'
 import { getCommandList } from './commands.js'
 import { CommandPicker } from './command-picker.js'
+import { useI18n } from '../i18n-context'
 
 interface InputBarProps {
   onSubmit: (input: string) => void
@@ -20,98 +21,36 @@ interface InputBarProps {
   onCancel?: () => void
 }
 
-// ── Status verbs — English (Claude Code-aligned) + Chinese (Mipham originals) ──
+// ── Loading verb keys (i18n) ──
 
-const STATUS_EN = [
-  'Doodling',
-  'Forging',
-  'Germinating',
-  'Mosmosing',
-  'Cerebrating',
-  'Boogieing',
-  'Finagling',
-  'Misting',
-  'Recombobulating',
-  'Slithering',
-  'Effecting',
-  'Roosting',
-  'Crystallizing',
-  'Canoodling',
-  'Billowing',
-  'Warping',
-  'Improvising',
-  'Metamorphing',
-  'Gusting',
-  'Whiring',
-  'Topsy-turvying',
-  'Flibbertigibetting',
-  'Wibbling',
-  'Thundering',
-  'Moseying',
-  'Julienning',
-  'Evaporating',
-  'Ruminating',
-  'Whisking',
-  'Scampering',
-  'Meandering',
-  'Concoting',
-  'Gesticulating',
-  'Flamebeing',
-  'Quantumizing',
-  'Waddling',
-  'Fluttering',
-  'Sprouting',
-  'Elucidating',
-  'Embellishing',
-  'Razzmatizing',
-  'Pondering',
-  'Cogitating',
-  'Garnishing',
-  'Actualizing',
-  'Zigzagging',
-  'Mustering',
-  'Frolicking',
-  'Hullaballooing',
-  'Doing',
-  'Fermenting',
-  'Considering',
-  'Skedaddling',
-  'Actioning',
-  'Orbiting',
-  'Perambulating',
-  'Drizzling',
-  'Schlepping',
-  'Ionizing',
-  'Scurrying',
+const LOADING_KEYS = [
+  'ui.loading.doodling',
+  'ui.loading.forging',
+  'ui.loading.cerebrating',
+  'ui.loading.recombobulating',
+  'ui.loading.thinking',
+  'ui.loading.computing',
+  'ui.loading.processing',
+  'ui.loading.analyzing',
+  'ui.loading.generating',
+  'ui.loading.dreaming',
+  'ui.loading.pondering',
+  'ui.loading.ruminating',
+  'ui.loading.deliberating',
+  'ui.loading.contemplating',
+  'ui.loading.synthesizing',
+  'ui.loading.calculating',
+  'ui.loading.inferring',
+  'ui.loading.optimizing',
+  'ui.loading.compiling',
+  'ui.loading.orchestrating',
+  'ui.loading.harmonizing',
+  'ui.loading.galvanizing',
+  'ui.loading.illuminating',
+  'ui.loading.manifesting',
+  'ui.loading.transmogrifying',
+  'ui.loading.actualizing',
 ]
-
-const STATUS_CN = [
-  '思忖中',
-  '推演中',
-  '凝炼中',
-  '熬煮中',
-  '锻造中',
-  '研磨中',
-  '解构中',
-  '冥思中',
-  '编织中',
-  '萃取中',
-  '烹制中',
-  '淬火中',
-  '雕琢中',
-  '融汇中',
-  '觉照中',
-  '运转中',
-  '参详中',
-  '化合中',
-  '浸润中',
-  '焙烤中',
-]
-
-// Merge both — bilingual status verbs
-const STATUS_GERUNDS = [...STATUS_EN, ...STATUS_CN]
-
-const STATUS_PAST = ['Brewed', 'Churned', 'Cooked', 'Sautéed', 'Cogitated', 'Crunched']
 
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]!
@@ -126,10 +65,9 @@ export function InputBar({
   onCyclePermission,
   onCancel,
 }: InputBarProps) {
+  const { t } = useI18n()
   const [value, setValue] = useState('')
-  const [verb, setVerb] = useState(() => pick(STATUS_GERUNDS))
-  const [completionVerb, setCompletionVerb] = useState<string | null>(null)
-  const prevLoading = useRef(isLoading)
+  const [verb, setVerb] = useState(() => t(pick(LOADING_KEYS)))
 
   // ── Slash command hints ──
   const allCommands = useMemo(() => getCommandList(), [])
@@ -144,28 +82,17 @@ export function InputBar({
   useEffect(() => {
     if (!isLoading) return
     const interval = setInterval(() => {
-      setVerb(pick(STATUS_GERUNDS))
+      setVerb(t(pick(LOADING_KEYS)))
     }, 1200)
     return () => clearInterval(interval)
-  }, [isLoading])
+  }, [isLoading, t])
 
   // Pick a fresh gerund when loading starts
   useEffect(() => {
     if (isLoading) {
-      setVerb(pick(STATUS_GERUNDS))
-      setCompletionVerb(null)
+      setVerb(t(pick(LOADING_KEYS)))
     }
-  }, [isLoading])
-
-  // Flash a past participle when loading stops
-  useEffect(() => {
-    if (prevLoading.current === true && isLoading === false) {
-      setCompletionVerb(pick(STATUS_PAST))
-      const timer = setTimeout(() => setCompletionVerb(null), 1500)
-      return () => clearTimeout(timer)
-    }
-    prevLoading.current = isLoading
-  }, [isLoading])
+  }, [isLoading, t])
 
   const [vimMode, setVimMode] = useState<VimMode>('insert')
   // NOTE: Dual mode state — React state (vimMode) drives UI re-renders (prompt color,
@@ -376,19 +303,17 @@ export function InputBar({
             searchMode
               ? `/${searchQuery}`
               : vimMode === 'normal'
-                ? '[NORMAL] h/j/k/l w/b 0/$ dd yy p u / (Esc to insert)'
+                ? t('ui.input.vim_help')
                 : isLoading
                   ? `${verb}...`
-                  : completionVerb
-                    ? completionVerb
-                    : 'Type a message (Esc to cancel)...'
+                  : t('ui.input.placeholder')
           }
         />
       </Box>
       {/* Slash command hints — shown when typing / in INSERT mode (only when picker is NOT active) */}
       {slashHints.length > 0 && vimMode === 'insert' && !pickerActive && (
         <Box marginTop={1} flexDirection="column" gap={1}>
-          <Text dimColor>Commands: </Text>
+          <Text dimColor>{t('ui.slash_hints.label')} </Text>
           {slashHints.map((cmd, _i) => (
             <Text key={cmd.name} color="cyan">
               {cmd.name}
@@ -397,8 +322,11 @@ export function InputBar({
           <Text dimColor>
             (
             {slashHints.length === allCommands.length
-              ? 'all'
-              : `${slashHints.length} of ${allCommands.length}`}
+              ? t('ui.slash_hints.all')
+              : t('ui.slash_hints.count', {
+                  shown: String(slashHints.length),
+                  total: String(allCommands.length),
+                })}
             )
           </Text>
         </Box>

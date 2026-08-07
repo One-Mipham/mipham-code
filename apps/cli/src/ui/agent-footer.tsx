@@ -1,5 +1,6 @@
 import React from 'react'
 import { Box, Text } from 'ink'
+import { useI18n } from '../i18n-context'
 
 export interface AgentEntry {
   id: string
@@ -33,6 +34,7 @@ function formatTokens(n: number): string {
 }
 
 export function AgentFooter({ agents, gitBranch, tick: _tick }: AgentFooterProps) {
+  const { t } = useI18n()
   const hasAgents = agents.length > 0
   const hasBranch = gitBranch.length > 0
 
@@ -73,7 +75,7 @@ export function AgentFooter({ agents, gitBranch, tick: _tick }: AgentFooterProps
             {/* Spacer pushes stats to the right — Ink handles this naturally */}
             <Text dimColor>
               {'  '}
-              {isRunning ? formatElapsed(elapsed) : 'finished'}
+              {isRunning ? formatElapsed(elapsed) : t('ui.agent.finished')}
             </Text>
             {isRunning && agent.tokensUsed > 0 && (
               <Text dimColor>

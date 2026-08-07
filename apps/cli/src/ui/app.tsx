@@ -73,14 +73,6 @@ const PERMISSION_MODES: PermissionMode[] = [
 // Labels aligned with Claude Code terminology: describe behavior, not capability.
 // Claude Code modes: manual mode → accept edits on → bypass
 // Mipham extends with 3 extra modes (plan, auto, dontAsk) for finer control.
-const PERMISSION_LABELS: Record<PermissionMode, string> = {
-  default: 'manual mode',
-  acceptEdits: 'accept edits on',
-  plan: 'plan mode · read-only',
-  auto: 'auto mode',
-  dontAsk: "don't ask",
-  bypassPermissions: 'bypass',
-}
 const PERMISSION_COLORS: Record<PermissionMode, string> = {
   default: 'white',
   acceptEdits: 'blue',
@@ -130,6 +122,17 @@ export function App({
   sessionId,
 }: AppProps) {
   const { t } = useI18n()
+  const PERMISSION_LABELS = useMemo<Record<PermissionMode, string>>(
+    () => ({
+      default: t('ui.permission.manual'),
+      acceptEdits: t('ui.permission.accept_edits'),
+      plan: t('ui.permission.plan_mode'),
+      auto: t('ui.permission.auto'),
+      dontAsk: t('ui.permission.dont_ask'),
+      bypassPermissions: t('ui.permission.bypass'),
+    }),
+    [t],
+  )
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [providerId, setProviderId] = useState(initialProvider || config.defaultProvider)
@@ -615,10 +618,10 @@ export function App({
         )}
         <Box flexDirection="row">
           <Text color={PERMISSION_COLORS[permissionMode]}>
-            ⏵⏵ {PERMISSION_LABELS[permissionMode]} (shift+tab to cycle)
+            ⏵⏵ {PERMISSION_LABELS[permissionMode]} ({t('ui.status.shift_tab_cycle')})
           </Text>
-          <Text dimColor> · esc to interrupt</Text>
-          <Text dimColor> · ← for agents</Text>
+          <Text dimColor> · {t('ui.status.esc_to_interrupt')}</Text>
+          <Text dimColor> · {t('ui.status.left_for_agents')}</Text>
         </Box>
       </Box>
     </Box>

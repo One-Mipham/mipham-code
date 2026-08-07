@@ -492,7 +492,46 @@
     },
     "system": { "role_label": "System" },
     "assistant": { "role_label": "Mipham Code" },
-    "user": { "role_label": "User" }
+    "user": { "role_label": "User" },
+    "input": {
+      "placeholder": "Type a message (Esc to cancel)...",
+      "vim_help": "[NORMAL] h/j/k/l w/b 0/$ dd yy p u / (Esc to insert)"
+    },
+    "slash_hints": {
+      "label": "Commands:",
+      "count": "{shown} of {total}",
+      "all": "all"
+    },
+    "picker": {
+      "title": "Select Model",
+      "nav_help": "←→ navigate · ↑↓ move · Enter select · Esc close",
+      "provider_label": "PROVIDER",
+      "models_label": "MODELS",
+      "coming_soon": "[coming]",
+      "no_active_models": "(no active models)",
+      "select_provider_hint": "Select a provider → Enter to see models",
+      "select_model_hint": "Select a model → Enter to switch"
+    },
+    "command_picker": {
+      "title": "Commands",
+      "nav_help": "↑↓ navigate · Enter select · Esc close",
+      "no_matches": "No commands match \"{filter}\"",
+      "scroll_indicator": "{start}–{end} of {total} commands",
+      "placeholder": "Type to filter commands..."
+    },
+    "chat": {
+      "focus_hint": "Focus",
+      "hidden": "hidden",
+      "toggle_focus_hint": "/focus to toggle",
+      "expand_hint": "Ctrl+O to expand",
+      "showing_all": "showing all {count} messages",
+      "tool_outputs_folded": "{hidden} tool outputs folded ({toolCount} total tool calls)"
+    },
+    "status": {
+      "esc_to_interrupt": "esc to interrupt",
+      "shift_tab_cycle": "shift+tab to cycle",
+      "left_for_agents": "← for agents"
+    }
   },
   "tools": {
     "bash": { "name": "Bash", "description": "Execute shell commands" },

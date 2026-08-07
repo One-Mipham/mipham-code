@@ -492,7 +492,46 @@
     },
     "system": { "role_label": "系统" },
     "assistant": { "role_label": "Mipham Code" },
-    "user": { "role_label": "用户" }
+    "user": { "role_label": "用户" },
+    "input": {
+      "placeholder": "输入消息（Esc 取消）...",
+      "vim_help": "[NORMAL] h/j/k/l w/b 0/$ dd yy p u /（Esc 插入）"
+    },
+    "slash_hints": {
+      "label": "命令：",
+      "count": "{shown} / {total}",
+      "all": "全部"
+    },
+    "picker": {
+      "title": "选择模型",
+      "nav_help": "←→ 导航 · ↑↓ 移动 · Enter 选择 · Esc 关闭",
+      "provider_label": "提供商",
+      "models_label": "模型",
+      "coming_soon": "[即将推出]",
+      "no_active_models": "（无可用模型）",
+      "select_provider_hint": "选择提供商 → Enter 查看模型",
+      "select_model_hint": "选择模型 → Enter 切换"
+    },
+    "command_picker": {
+      "title": "命令",
+      "nav_help": "↑↓ 导航 · Enter 选择 · Esc 关闭",
+      "no_matches": "没有匹配 \"{filter}\" 的命令",
+      "scroll_indicator": "{start}–{end} / {total} 个命令",
+      "placeholder": "输入以筛选命令..."
+    },
+    "chat": {
+      "focus_hint": "聚焦",
+      "hidden": "已折叠",
+      "toggle_focus_hint": "/focus 切换",
+      "expand_hint": "Ctrl+O 展开",
+      "showing_all": "显示全部 {count} 条消息",
+      "tool_outputs_folded": "已折叠 {hidden} 个工具输出（共 {toolCount} 个工具调用）"
+    },
+    "status": {
+      "esc_to_interrupt": "Esc 中断",
+      "shift_tab_cycle": "Shift+Tab 切换",
+      "left_for_agents": "← 代理"
+    }
   },
   "tools": {
     "bash": { "name": "Bash", "description": "执行 Shell 命令" },

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import { Box, Text, useInput } from 'ink'
 import TextInput from 'ink-text-input'
+import { useI18n } from '../i18n-context'
 import { getCommandList } from './commands.js'
 
 interface CommandPickerProps {
@@ -29,6 +30,7 @@ export function CommandPicker({
   onClose,
   maxVisible = PAGE_SIZE,
 }: CommandPickerProps) {
+  const { t } = useI18n()
   const allCommands = useMemo(() => getCommandList(), [])
   const [filter, setFilter] = useState(initialFilter)
   const [cursorIdx, setCursorIdx] = useState(0)
@@ -92,14 +94,14 @@ export function CommandPicker({
       {/* Title */}
       <Box marginBottom={1}>
         <Text bold color="cyan">
-          Commands
+          {t('ui.command_picker.title')}
         </Text>
-        <Text dimColor> ↑↓ navigate · Enter select · Esc close</Text>
+        <Text dimColor> {t('ui.command_picker.nav_help')}</Text>
       </Box>
 
       {/* Command list */}
       <Box flexDirection="column" marginBottom={1}>
-        {visible.length === 0 && <Text dimColor> No commands match "{filter}"</Text>}
+        {visible.length === 0 && <Text dimColor> {t('ui.command_picker.no_matches', { filter })}</Text>}
         {visible.map((cmd, i) => {
           const globalIdx = i + scrollStart
           const isCursor = globalIdx === cursorIdx
@@ -119,8 +121,11 @@ export function CommandPicker({
       {filtered.length > maxVisible && (
         <Box marginBottom={1}>
           <Text dimColor>
-            {scrollStart + 1}–{Math.min(scrollStart + maxVisible, filtered.length)} of{' '}
-            {filtered.length} commands
+            {t('ui.command_picker.scroll_indicator', {
+              start: String(scrollStart + 1),
+              end: String(Math.min(scrollStart + maxVisible, filtered.length)),
+              total: String(filtered.length),
+            })}
           </Text>
         </Box>
       )}
@@ -137,7 +142,7 @@ export function CommandPicker({
               onSelect(selected.name)
             }
           }}
-          placeholder="Type to filter commands..."
+          placeholder={t('ui.command_picker.placeholder')}
         />
       </Box>
     </Box>

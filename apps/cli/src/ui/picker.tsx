@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react'
 import { Box, Text, useInput } from 'ink'
+import { useI18n } from '../i18n-context'
 import type { MiphamConfig, ProviderConfig } from '../shared/index.ts'
 
 interface PickerProps {
@@ -19,6 +20,7 @@ export function ModelPicker({
   onSelect,
   onClose,
 }: PickerProps) {
+  const { t } = useI18n()
   // Get active providers only
   const providers = config.providers.filter((p) => p.status !== 'upcoming')
   const activeModels = (p: ProviderConfig) => p.models.filter((m) => m.status === 'active')
@@ -118,9 +120,9 @@ export function ModelPicker({
       {/* Title */}
       <Box marginBottom={1}>
         <Text bold color="cyan">
-          Select Model
+          {t('ui.picker.title')}
         </Text>
-        <Text dimColor> ←→ navigate · ↑↓ move · Enter select · Esc close</Text>
+        <Text dimColor> {t('ui.picker.nav_help')}</Text>
       </Box>
 
       {/* Two-column layout */}
@@ -134,7 +136,7 @@ export function ModelPicker({
           padding={1}
         >
           <Text bold underline dimColor>
-            PROVIDER {activePanel === 'provider' ? '◀' : ''}
+            {t('ui.picker.provider_label')} {activePanel === 'provider' ? '◀' : ''}
           </Text>
           {providers.map((p, i) => {
             const isCurrent = p.id === currentProvider
@@ -150,7 +152,7 @@ export function ModelPicker({
                   {isCurrent ? '✓' : ' '}
                   {p.name.padEnd(16)}
                 </Text>
-                <Text dimColor>{isUpcoming ? '[coming]' : `${activeModels(p).length}m`}</Text>
+                <Text dimColor>{isUpcoming ? t('ui.picker.coming_soon') : `${activeModels(p).length}m`}</Text>
               </Box>
             )
           })}
@@ -165,10 +167,10 @@ export function ModelPicker({
           padding={1}
         >
           <Text bold underline dimColor>
-            MODELS {activePanel === 'model' ? '◀' : ''}
+            {t('ui.picker.models_label')} {activePanel === 'model' ? '◀' : ''}
             {selectedProvider ? ` — ${selectedProvider.name}` : ''}
           </Text>
-          {models.length === 0 && <Text dimColor> (no active models)</Text>}
+          {models.length === 0 && <Text dimColor> {t('ui.picker.no_active_models')}</Text>}
           {models.map((m, i) => {
             const isCurrentModel = selectedProvider?.id === currentProvider && m.id === currentModel
             const isSelected = i === modelIdx
@@ -197,8 +199,8 @@ export function ModelPicker({
       <Box marginTop={1}>
         <Text dimColor>
           {activePanel === 'provider'
-            ? 'Select a provider → Enter to see models'
-            : 'Select a model → Enter to switch'}
+            ? t('ui.picker.select_provider_hint')
+            : t('ui.picker.select_model_hint')}
         </Text>
       </Box>
     </Box>
