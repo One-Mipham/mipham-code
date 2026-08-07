@@ -1,8 +1,14 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterAll } from 'vitest'
 import { SubAgent } from '../../src/agent/sub-agent'
 import { getMessageBus } from '../../src/agent/message-bus'
+import { AgentExperience } from '../../src/agent/agent-experience'
 import type { ProviderRegistry, ProviderInstance, ChatRequest } from '../../src/providers/registry'
 import type { ToolDefinition, StreamChunk } from '../../src/shared/index.ts'
+import { rmSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+
+const AGENT_TEST_DIR = join(tmpdir(), 'mipham-agent-exp-test-' + Date.now())
 
 function createMockProvider(chunks: StreamChunk[]): ProviderInstance {
   return {
@@ -322,5 +328,56 @@ describe('SubAgent', () => {
     expect(warningMsg!.summary).toContain('unknown-model-xyz')
     expect(warningMsg!.summary).toContain('mock-model')
     expect(warningMsg!.type).toBe('warning')
+  })
+})
+
+describe('AgentExperience', () => {
+  afterAll(() => {
+    rmSync(AGENT_TEST_DIR, { recursive: true, force: true })
+  })
+
+  it('logSuccess appends to Success Patterns', () => {
+    const exp = new AgentExperience('test-agent', AGENT_TEST_DIR)
+    exp.logSuccess('Used Grep to find all import cycles', 'Cross-module PR review')
+
+    const content = exp.getExperience()
+    expect(content).toContain('## Success Patterns')
+    expect(content).toContain('Grep to find all import cycles')
+    expect(content).toContain('Cross-module PR review')
+  })
+
+  it('logFailure appends to Failure Patterns', () => {
+    const exp = new AgentExperience('test-agent', AGENT_TEST_DIR)
+    exp.logFailure('Bash timeout on npm install', 'CI build commands with default timeout')
+
+    const content = exp.getExperience()
+    expect(content).toContain('## Failure Patterns')
+    expect(content).toContain('Bash timeout')
+    expect(content).toContain('CI build commands')
+  })
+
+  it('stats track execution counts', () => {
+    const exp = new AgentExperience('test-agent-stats', AGENT_TEST_DIR)
+    exp.logSuccess('Task A complete', 'When doing A')
+    exp.logSuccess('Task B complete', 'When doing B')
+    exp.logFailure('Task C failed', 'Avoid pattern C')
+
+    const content = exp.getExperience()
+    expect(content).toContain('总执行: 3 次')
+    expect(content).toContain('成功: 2')
+    expect(content).toContain('失败: 1')
+  })
+
+  it('getExperience returns empty string for agent with no history', () => {
+    const exp = new AgentExperience('new-agent', AGENT_TEST_DIR)
+    const content = exp.getExperience()
+    expect(content).toBe('')
+  })
+
+  it('reset clears experience', () => {
+    const exp = new AgentExperience('reset-test', AGENT_TEST_DIR)
+    exp.logSuccess('Something', 'Context')
+    exp.reset()
+    expect(exp.getExperience()).toBe('')
   })
 })
