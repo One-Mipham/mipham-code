@@ -1,0 +1,9 @@
+{
+  "hello": "Hello",
+  "greeting": "Hello {name}",
+  "commands": {
+    "clear": {
+      "confirmed": "✓ Conversation cleared. Context reset."
+    }
+  }
+}

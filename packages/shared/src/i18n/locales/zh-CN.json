@@ -1,0 +1,9 @@
+{
+  "hello": "你好",
+  "greeting": "你好 {name}",
+  "commands": {
+    "clear": {
+      "confirmed": "✓ 对话已清除，上下文已重置。"
+    }
+  }
+}
