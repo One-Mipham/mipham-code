@@ -19,6 +19,15 @@
     "bun": ">=1.2.0"
   },
   "packageManager": "pnpm@9.15.0",
+  "pnpm": {
+    "overrides": {
+      "brace-expansion@1": "1.1.18",
+      "brace-expansion@5": "5.0.9",
+      "vite": "8.2.1",
+      "sharp": "0.35.3",
+      "postcss": "8.5.26"
+    }
+  },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",
     "@typescript-eslint/eslint-plugin": "^8.60.0",
