@@ -11,21 +11,21 @@ Multi-model AI coding terminal for all JetBrains IDEs.
 
 ## Usage
 
-| Action | Shortcut | Menu |
-|--------|----------|------|
-| Start Mipham Code | `Cmd+Esc` | Tools → Mipham Code: Start |
-| Focus Terminal | `Cmd+Shift+M` | Tools → Mipham Code: Focus Terminal |
-| Open Settings | — | Tools → Mipham Code: Open Settings |
+| Action            | Shortcut      | Menu                                |
+| ----------------- | ------------- | ----------------------------------- |
+| Start Mipham Code | `Cmd+Esc`     | Tools → Mipham Code: Start          |
+| Focus Terminal    | `Cmd+Shift+M` | Tools → Mipham Code: Focus Terminal |
+| Open Settings     | —             | Tools → Mipham Code: Open Settings  |
 
 ## Settings
 
 **Settings → Tools → Mipham Code**
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| Bun path | _(auto)_ | Path to `bun` executable |
+| Setting          | Default  | Description                                    |
+| ---------------- | -------- | ---------------------------------------------- |
+| Bun path         | _(auto)_ | Path to `bun` executable                       |
 | Default provider | _(none)_ | Provider ID (deepseek, anthropic, openai, ...) |
-| Default model | _(none)_ | Model ID |
+| Default model    | _(none)_ | Model ID                                       |
 
 ## Requirements
 

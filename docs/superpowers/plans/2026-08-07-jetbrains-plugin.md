@@ -40,12 +40,14 @@ infrastructure/jetbrains/           ← NEW directory
 ### Task 1: Gradle 构建骨架
 
 **Files:**
+
 - Create: `infrastructure/jetbrains/settings.gradle.kts`
 - Create: `infrastructure/jetbrains/gradle.properties`
 - Create: `infrastructure/jetbrains/build.gradle.kts`
 - Create: `infrastructure/jetbrains/src/main/resources/META-INF/plugin.xml`
 
 **Interfaces:**
+
 - Produces: Gradle project that compiles with `./gradlew buildPlugin`
 - Produces: `plugin.xml` defining project id `ai.mipham.code`, name "Mipham Code", version 0.21.0
 
@@ -148,10 +150,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 2: MiphamAction.kt — 启动 + 聚焦
 
 **Files:**
+
 - Create: `infrastructure/jetbrains/src/main/kotlin/com/miphamai/plugin/MiphamAction.kt`
 - Modify: `infrastructure/jetbrains/src/main/resources/META-INF/plugin.xml` — register actions
 
 **Interfaces:**
+
 - Consumes: `plugin.xml` from Task 1
 - Produces: `MiphamStartAction`, `MiphamFocusAction`, `MiphamOpenConfigAction` — 3 AnAction classes
 - Produces: Keybindings `Cmd+Esc` (start), `Cmd+Shift+M` (focus)
@@ -291,10 +295,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 3: 配置项 + CHANGELOG
 
 **Files:**
+
 - Modify: `infrastructure/jetbrains/src/main/resources/META-INF/plugin.xml` — add config properties
 - Create: `infrastructure/jetbrains/CHANGELOG.md`
 
 **Interfaces:**
+
 - Consumes: plugin.xml from Task 2, MiphamAction.kt actions
 - Produces: 3 IDE Settings properties (bunPath, provider, model)
 
@@ -478,11 +484,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 4: README + 最终验证
 
 **Files:**
+
 - Create: `infrastructure/jetbrains/README.md`
 
 - [ ] **Step 1: Create README.md**
 
-```markdown
+````markdown
 # Mipham Code — JetBrains Plugin
 
 Multi-model AI coding terminal for all JetBrains IDEs.
@@ -496,21 +503,21 @@ Multi-model AI coding terminal for all JetBrains IDEs.
 
 ## Usage
 
-| Action | Shortcut | Menu |
-|--------|----------|------|
-| Start Mipham Code | `Cmd+Esc` | Tools → Mipham Code: Start |
-| Focus Terminal | `Cmd+Shift+M` | Tools → Mipham Code: Focus Terminal |
-| Open Settings | — | Tools → Mipham Code: Open Settings |
+| Action            | Shortcut      | Menu                                |
+| ----------------- | ------------- | ----------------------------------- |
+| Start Mipham Code | `Cmd+Esc`     | Tools → Mipham Code: Start          |
+| Focus Terminal    | `Cmd+Shift+M` | Tools → Mipham Code: Focus Terminal |
+| Open Settings     | —             | Tools → Mipham Code: Open Settings  |
 
 ## Settings
 
 **Settings → Tools → Mipham Code**
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| Bun path | _(auto)_ | Path to `bun` executable |
+| Setting          | Default  | Description                                    |
+| ---------------- | -------- | ---------------------------------------------- |
+| Bun path         | _(auto)_ | Path to `bun` executable                       |
 | Default provider | _(none)_ | Provider ID (deepseek, anthropic, openai, ...) |
-| Default model | _(none)_ | Model ID |
+| Default model    | _(none)_ | Model ID                                       |
 
 ## Requirements
 
@@ -524,14 +531,16 @@ cd infrastructure/jetbrains
 ./gradlew buildPlugin
 # Output: build/distributions/mipham-code-jetbrains-0.21.0.zip
 ```
-```
+````
+
+````
 
 - [ ] **Step 2: Final build verification**
 
 ```bash
 cd infrastructure/jetbrains && ./gradlew clean buildPlugin
 ls -la build/distributions/
-```
+````
 
 Expected: `.zip` artifact present and non-empty.
 
@@ -548,6 +557,6 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ### 修订历史
 
-| 版本 | 日期 | 变更内容 | 维护人 |
-|------|------|---------|--------|
+| 版本  | 日期       | 变更内容                                         | 维护人     |
+| ----- | ---------- | ------------------------------------------------ | ---------- |
 | 1.0.0 | 2026-08-07 | 初版：4 tasks，Gradle + Kotlin Action + Settings | 技术委员会 |

@@ -39,21 +39,21 @@ infrastructure/jetbrains/
 
 ### 2.2 功能对标 VS Code 扩展
 
-| 功能 | VS Code | JetBrains |
-|------|---------|-----------|
-| 启动 Mipham Code | `mipham-code.start` | `MiphamCode.Start` |
-| 聚焦终端 | `mipham-code.focus` | `MiphamCode.Focus` |
-| 打开配置 | `mipham-code.openConfig` | `MiphamCode.OpenConfig` |
-| 快捷键-启动 | `Cmd+Esc` | `Cmd+Esc` |
-| 快捷键-聚焦 | `Cmd+Shift+M` | `Cmd+Shift+M` |
+| 功能             | VS Code                  | JetBrains               |
+| ---------------- | ------------------------ | ----------------------- |
+| 启动 Mipham Code | `mipham-code.start`      | `MiphamCode.Start`      |
+| 聚焦终端         | `mipham-code.focus`      | `MiphamCode.Focus`      |
+| 打开配置         | `mipham-code.openConfig` | `MiphamCode.OpenConfig` |
+| 快捷键-启动      | `Cmd+Esc`                | `Cmd+Esc`               |
+| 快捷键-聚焦      | `Cmd+Shift+M`            | `Cmd+Shift+M`           |
 
 ### 2.3 配置项（Settings → Tools → Mipham Code）
 
-| 属性 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `mipham-code.bunPath` | string | `""` | bun 路径，空则自动检测 |
-| `mipham-code.provider` | string | `""` | 默认 provider |
-| `mipham-code.model` | string | `""` | 默认 model |
+| 属性                   | 类型   | 默认值 | 说明                   |
+| ---------------------- | ------ | ------ | ---------------------- |
+| `mipham-code.bunPath`  | string | `""`   | bun 路径，空则自动检测 |
+| `mipham-code.provider` | string | `""`   | 默认 provider          |
+| `mipham-code.model`    | string | `""`   | 默认 model             |
 
 ### 2.4 IDE 兼容列表
 
@@ -98,6 +98,6 @@ class MiphamAction : AnAction() {
 
 ### 修订历史
 
-| 版本 | 日期 | 变更内容 | 维护人 |
-|------|------|---------|--------|
-| 1.0.0 | 2026-08-07 | 初版 | 技术委员会 |
+| 版本  | 日期       | 变更内容 | 维护人     |
+| ----- | ---------- | -------- | ---------- |
+| 1.0.0 | 2026-08-07 | 初版     | 技术委员会 |
