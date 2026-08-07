@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { TokenStore } from '../../src/mcp/token-store'
-import { existsSync, rmSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
@@ -36,7 +36,6 @@ describe('TokenStore', () => {
       refreshToken: 'secret-refresh',
       expiresAt: '2026-09-07T10:00:00Z',
     })
-    const { readFileSync } = require('node:fs')
     const raw = readFileSync(join(testDir, 'test-server.enc'), 'utf-8')
     expect(raw).not.toContain('secret-token')
     expect(raw).not.toContain('secret-refresh')
@@ -84,7 +83,6 @@ describe('TokenStore', () => {
       accessToken: 't',
       expiresAt: '2026-09-07T10:00:00Z',
     })
-    const { statSync } = require('node:fs')
     const stat = statSync(join(testDir, 'perm-test.enc'))
     if (process.platform !== 'win32') {
       expect(stat.mode & 0o777).toBe(0o600)

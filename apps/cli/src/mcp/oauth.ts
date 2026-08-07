@@ -1,4 +1,5 @@
 import { randomBytes, createHash } from 'node:crypto'
+import { exec } from 'node:child_process'
 import { createServer, Server } from 'node:http'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { McpServerConfig } from '../shared/types'
@@ -74,7 +75,6 @@ export class OAuthClient {
             : process.platform === 'win32'
               ? `start "" "${authUrl.toString()}"`
               : `xdg-open "${authUrl.toString()}"`
-        const { exec } = require('node:child_process')
         exec(cmd, () => {
           /* fire-and-forget */
         })

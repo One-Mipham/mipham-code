@@ -11,6 +11,16 @@ import { describe, it, expect, vi } from 'vitest'
 const mockExecSync = vi.fn()
 vi.mock('node:child_process', () => ({ execSync: mockExecSync }))
 
+// ── Mock SessionStore to avoid real on-disk sessions leaking into tests ──
+vi.mock('../../src/core/session-store', () => ({
+  SessionStore: {
+    getLatest: vi.fn(() => null),
+    load: vi.fn(() => null),
+    list: vi.fn(() => []),
+    delete: vi.fn(() => false),
+  },
+}))
+
 // Dynamic import so the mock takes effect
 const commandsModule = await import('../../src/ui/commands')
 
