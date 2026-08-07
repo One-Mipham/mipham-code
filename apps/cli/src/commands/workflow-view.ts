@@ -1,5 +1,5 @@
 import type { CommandHandler } from '../ui/commands.js'
-import { listRuns, loadJournal, loadScript } from '../workflow/journal.js'
+import { listRuns, loadJournal } from '../workflow/journal.js'
 
 export const workflowViewCmd: CommandHandler = async (_ctx, args) => {
   const runId = args[0]

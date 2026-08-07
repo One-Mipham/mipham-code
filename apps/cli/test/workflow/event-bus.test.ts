@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { getEventBus, WorkflowEventBus } from '../../src/workflow/event-bus'
+import { getEventBus } from '../../src/workflow/event-bus'
 
 describe('WorkflowEventBus', () => {
   beforeEach(() => {
@@ -18,7 +18,7 @@ describe('WorkflowEventBus', () => {
     bus.emitEvent({ type: 'phase:start', phase: 'Scan', timestamp: Date.now() })
 
     expect(handler).toHaveBeenCalledTimes(1)
-    expect(handler.mock.calls[0][0].phase).toBe('Scan')
+    expect(handler.mock.calls[0]![0].phase).toBe('Scan')
   })
 
   it('emits and receives agent:start and agent:end events', () => {
@@ -34,8 +34,8 @@ describe('WorkflowEventBus', () => {
 
     expect(startHandler).toHaveBeenCalledTimes(1)
     expect(endHandler).toHaveBeenCalledTimes(1)
-    expect(endHandler.mock.calls[0][0].success).toBe(true)
-    expect(endHandler.mock.calls[0][0].durationMs).toBe(1200)
+    expect(endHandler.mock.calls[0]![0].success).toBe(true)
+    expect(endHandler.mock.calls[0]![0].durationMs).toBe(1200)
   })
 
   it('emits done event with summary stats', () => {
@@ -47,7 +47,7 @@ describe('WorkflowEventBus', () => {
     bus.emitEvent({ type: 'done', runId: 'test-run-3', totalAgents: 5, cacheHits: 2 })
 
     expect(handler).toHaveBeenCalledTimes(1)
-    expect(handler.mock.calls[0][0].totalAgents).toBe(5)
+    expect(handler.mock.calls[0]![0].totalAgents).toBe(5)
   })
 
   it('getActiveRunId returns null when no run started', () => {

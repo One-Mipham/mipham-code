@@ -21,7 +21,7 @@ export function WorkflowProgress({ runId }: WorkflowProgressProps) {
   const [agents, setAgents] = useState<Map<string, AgentState>>(new Map())
   const [elapsed, setElapsed] = useState(0)
   const [done, setDone] = useState(false)
-  const [totalAgents, setTotalAgents] = useState(0)
+  const [_totalAgents, setTotalAgents] = useState(0)
   const [cacheHits, setCacheHits] = useState(0)
 
   useEffect(() => {

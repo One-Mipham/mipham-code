@@ -12,6 +12,7 @@ import { ChatPanel } from './chat'
 import { InputBar } from './input'
 import { ModelPicker } from './picker'
 import { AgentFooter, type AgentEntry } from './agent-footer'
+import { WorkflowProgress } from './workflow-progress.js'
 import {
   getCommand,
   looksLikeSlashCommand,
@@ -575,6 +576,9 @@ export function App({
         <Text dimColor>v{version || '0.0.0'}</Text>
         <Text dimColor>{modelId}</Text>
       </Box>
+
+      {/* Workflow progress — auto-detects active workflows, renders nothing when idle */}
+      <WorkflowProgress />
 
       {/* Chat panel */}
       <ChatPanel messages={messages} focusMode={focusMode} />
