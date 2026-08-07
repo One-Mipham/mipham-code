@@ -1,35 +1,139 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { useI18n } from '@/i18n/context'
+import { WorkflowDag } from './WorkflowDag'
+
+interface RunSummary {
+  id: string
+  agentCount: number
+  phaseCount: number
+  logCount: number
+}
+
+interface JournalEntry {
+  seq: number
+  type: 'agent' | 'phase' | 'log'
+  prompt?: string
+  opts?: Record<string, unknown>
+  message?: string
+}
+
+interface RunDetail {
+  id: string
+  script: string
+  entries: JournalEntry[]
+}
 
 export default function DashboardPage() {
   const { t } = useI18n()
-  return (
-    <div className="max-w-4xl mx-auto py-16 px-6 text-center">
-      <h1 className="text-4xl font-bold mb-8">{t('web.dashboard.title')}</h1>
+  const [runs, setRuns] = useState<RunSummary[]>([])
+  const [selectedRun, setSelectedRun] = useState<RunDetail | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-      <div className="max-w-lg mx-auto mb-12">
-        <div className="p-8 bg-gradient-to-br from-mipham-50 to-white rounded-2xl border border-mipham-100">
-          <div className="text-6xl mb-4">{'\u{1F6A7}'}</div>
-          <h2 className="text-2xl font-semibold text-mipham-800 mb-3">
-            {t('web.dashboard.coming_soon')}
-          </h2>
-          <p className="text-gray-600 leading-relaxed">{t('web.dashboard.description')}</p>
+  useEffect(() => {
+    fetch('/api/workflows')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.error) setError(data.error)
+        else setRuns(data.runs || [])
+      })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const loadRun = async (id: string) => {
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/workflows?id=${encodeURIComponent(id)}`)
+      const data = await res.json()
+      if (data.error) setError(data.error)
+      else setSelectedRun(data)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="max-w-6xl mx-auto py-8 px-6">
+      <h1 className="text-3xl font-bold mb-8">{t('web.dashboard.title')}</h1>
+
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+          {error}
+        </div>
+      )}
+
+      {/* Workflow Runs List */}
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold mb-4">Workflow Runs</h2>
+        {loading && !selectedRun && (
+          <p className="text-gray-500">Loading...</p>
+        )}
+        {!loading && runs.length === 0 && (
+          <div className="p-8 bg-gray-50 rounded-xl text-center text-gray-500">
+            <p className="text-lg">No workflow runs yet</p>
+            <p className="text-sm mt-2">
+              Workflow runs appear here after using the Workflow tool in Mipham Code CLI.
+            </p>
+          </div>
+        )}
+        <div className="space-y-2">
+          {runs.map((run) => (
+            <button
+              key={run.id}
+              onClick={() => loadRun(run.id)}
+              className={`w-full text-left p-4 rounded-lg border transition-colors ${
+                selectedRun?.id === run.id
+                  ? 'border-mipham-500 bg-mipham-50'
+                  : 'border-gray-200 hover:border-gray-300 bg-white'
+              }`}
+            >
+              <div className="flex justify-between items-center">
+                <span className="font-mono text-sm">{run.id.slice(0, 24)}...</span>
+                <span className="text-sm text-gray-500">
+                  {run.agentCount} agents · {run.phaseCount} phases
+                </span>
+              </div>
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-6 max-w-2xl mx-auto">
-        <div className="p-6 bg-white rounded-lg border border-gray-200 opacity-60">
-          <div className="text-lg font-medium text-gray-400">{t('web.dashboard.sessions')}</div>
-          <div className="text-sm text-gray-400 mt-1">{t('web.dashboard.sessions_desc')}</div>
+      {/* DAG View */}
+      {selectedRun && (
+        <div className="mb-8">
+          <h2 className="text-xl font-semibold mb-4">
+            DAG: {selectedRun.id.slice(0, 20)}...
+          </h2>
+          <div className="bg-white rounded-xl border border-gray-200 p-6 overflow-x-auto">
+            <WorkflowDag entries={selectedRun.entries} runId={selectedRun.id} />
+          </div>
         </div>
-        <div className="p-6 bg-white rounded-lg border border-gray-200 opacity-60">
-          <div className="text-lg font-medium text-gray-400">{t('web.dashboard.tokens')}</div>
-          <div className="text-sm text-gray-400 mt-1">{t('web.dashboard.tokens_desc')}</div>
+      )}
+
+      {/* Stats Cards */}
+      <div className="grid md:grid-cols-3 gap-6">
+        <div className="p-6 bg-white rounded-lg border border-gray-200">
+          <div className="text-2xl font-bold text-mipham-600">{runs.length}</div>
+          <div className="text-sm text-gray-500 mt-1">Total runs</div>
         </div>
-        <div className="p-6 bg-white rounded-lg border border-gray-200 opacity-60">
-          <div className="text-lg font-medium text-gray-400">{t('web.dashboard.skills')}</div>
-          <div className="text-sm text-gray-400 mt-1">{t('web.dashboard.skills_desc')}</div>
+        <div className="p-6 bg-white rounded-lg border border-gray-200">
+          <div className="text-2xl font-bold text-mipham-600">
+            {runs.reduce((sum, r) => sum + r.agentCount, 0)}
+          </div>
+          <div className="text-sm text-gray-500 mt-1">Total agents executed</div>
+        </div>
+        <div className="p-6 bg-white rounded-lg border border-gray-200">
+          <div className="text-2xl font-bold text-mipham-600">
+            {runs.length > 0
+              ? Math.round(runs.reduce((sum, r) => sum + r.agentCount, 0) / runs.length)
+              : 0}
+          </div>
+          <div className="text-sm text-gray-500 mt-1">Avg agents per run</div>
         </div>
       </div>
     </div>
