@@ -2,9 +2,9 @@ import React from 'react'
 import { render } from 'ink-testing-library'
 import { Text } from 'ink'
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { createT } from '@mipham/shared/i18n/t'
-import { detectLocale } from '@mipham/shared/i18n/detect'
-import type { TranslationMap } from '@mipham/shared/i18n/types'
+import { createT } from '../../src/i18n-core/t'
+import { detectLocale } from '../../src/i18n-core/detect'
+import type { TranslationMap } from '../../src/i18n-core/types'
 import { I18nProvider, useI18n } from '../../src/i18n-context'
 
 // Prevent detectOSLocale() from leaking the host machine's locale.

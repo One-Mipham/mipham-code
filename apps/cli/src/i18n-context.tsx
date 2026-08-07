@@ -1,5 +1,5 @@
 import React, { createContext, useContext } from 'react'
-import type { Locale } from '@mipham/shared/i18n/types'
+import type { Locale } from './i18n-core/types'
 
 export interface I18nContextValue {
   locale: Locale

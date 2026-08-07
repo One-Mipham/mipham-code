@@ -4,10 +4,10 @@ import { createServer, Server } from 'node:http'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { McpServerConfig } from '../shared/types'
 import { TokenStore } from './token-store'
-import { createT } from '@mipham/shared/i18n/t'
-import enUS from '@mipham/shared/i18n/locales/en-US.json'
-import zhCN from '@mipham/shared/i18n/locales/zh-CN.json'
-import type { TranslationMap } from '@mipham/shared/i18n/types'
+import { createT } from '../i18n-core/t'
+import enUS from '../i18n-core/locales/en-US.json'
+import zhCN from '../i18n-core/locales/zh-CN.json'
+import type { TranslationMap } from '../i18n-core/types'
 
 const bundles: Record<string, TranslationMap> = {
   'en-US': enUS as TranslationMap,

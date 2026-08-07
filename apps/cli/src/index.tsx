@@ -24,12 +24,12 @@ import { getMetrics } from './core/metrics'
 import { ARTIFACTS_DIR, ARTIFACT_PORT, MIPHAM_DIR } from './shared/constants'
 import { AgentViewManager } from './agent-view/agent-view-manager'
 import { AgentViewDashboard } from './agent-view/dashboard'
-import { createT } from '@mipham/shared/i18n/t'
-import { detectLocale } from '@mipham/shared/i18n/detect'
+import { createT } from './i18n-core/t'
+import { detectLocale } from './i18n-core/detect'
 import { I18nProvider } from './i18n-context'
-import enUS from '@mipham/shared/i18n/locales/en-US.json' with { type: 'json' }
-import zhCN from '@mipham/shared/i18n/locales/zh-CN.json' with { type: 'json' }
-import type { TranslationMap } from '@mipham/shared/i18n/types'
+import enUS from './i18n-core/locales/en-US.json' with { type: 'json' }
+import zhCN from './i18n-core/locales/zh-CN.json' with { type: 'json' }
+import type { TranslationMap } from './i18n-core/types'
 
 interface RunOptions {
   model?: string

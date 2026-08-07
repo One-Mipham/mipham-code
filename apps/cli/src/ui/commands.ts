@@ -13,10 +13,10 @@ import { McpClient } from '../mcp/client'
 import { NPM_UPDATE_COMMAND, PACKAGE_VERSION } from '../shared/index.ts'
 import { getPreference } from '../config/preferences'
 import { stripIndent } from './strip-indent.js'
-import { createT } from '@mipham/shared/i18n/t'
-import type { TranslationMap } from '@mipham/shared/i18n/types'
-import enUS from '@mipham/shared/i18n/locales/en-US.json' with { type: 'json' }
-import zhCN from '@mipham/shared/i18n/locales/zh-CN.json' with { type: 'json' }
+import { createT } from '../i18n-core/t'
+import type { TranslationMap } from '../i18n-core/types'
+import enUS from '../i18n-core/locales/en-US.json' with { type: 'json' }
+import zhCN from '../i18n-core/locales/zh-CN.json' with { type: 'json' }
 
 // Default t() fallback for plain-function contexts (tests, bootstrap).
 // When called from the React tree, ctx.t is populated from useI18n().
