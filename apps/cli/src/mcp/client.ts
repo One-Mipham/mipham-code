@@ -10,6 +10,16 @@ import { StdioTransport } from './transport'
 import { McpProtocol } from './protocol'
 import { OAuthClient } from './oauth'
 import { TokenStore } from './token-store'
+import { createT } from '@mipham/shared/i18n/t'
+import enUS from '@mipham/shared/i18n/locales/en-US.json'
+import zhCN from '@mipham/shared/i18n/locales/zh-CN.json'
+import type { TranslationMap } from '@mipham/shared/i18n/types'
+
+const bundles: Record<string, TranslationMap> = {
+  'en-US': enUS as TranslationMap,
+  'zh-CN': zhCN as TranslationMap,
+}
+const t = createT(bundles['en-US'] || (enUS as TranslationMap), enUS as TranslationMap)
 
 interface ActiveConnection {
   config: McpServerConfig
@@ -98,7 +108,7 @@ export class McpClient {
   /** Reconnect with exponential backoff (1s→2s→4s→…max 60s, 10 attempts). */
   async reconnect(name: string): Promise<void> {
     const connection = this.connections.get(name)
-    if (!connection) throw new Error(`No connection for "${name}"`)
+    if (!connection) throw new Error(t('errors.mcp_no_connection', { name }))
 
     const config = connection.config
     let delay = 1000
@@ -262,7 +272,7 @@ export class McpClient {
     const conn = this.connections.get(serverName)
     if (!conn || conn.status !== 'connected') {
       return {
-        content: [{ type: 'text', text: `Error: MCP server "${serverName}" not connected` }],
+        content: [{ type: 'text', text: t('errors.mcp_not_connected', { server: serverName }) }],
         isError: true,
       }
     }
@@ -271,7 +281,7 @@ export class McpClient {
       return await conn.protocol.callTool(toolName, params)
     } catch (err) {
       return {
-        content: [{ type: 'text', text: `MCP tool error: ${String(err)}` }],
+        content: [{ type: 'text', text: t('errors.mcp_tool_error', { error: String(err) }) }],
         isError: true,
       }
     }

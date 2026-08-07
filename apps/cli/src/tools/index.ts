@@ -1,5 +1,9 @@
 import type { ToolDefinition, ToolResult } from '../shared/index.ts'
 import { sanitizeParams } from '../shared/sanitize'
+import { createT } from '@mipham/shared/i18n/t'
+import enUS from '@mipham/shared/i18n/locales/en-US.json'
+import zhCN from '@mipham/shared/i18n/locales/zh-CN.json'
+import type { TranslationMap } from '@mipham/shared/i18n/types'
 import { readTool } from './file/read'
 import { writeTool } from './file/write'
 import { editTool } from './file/edit'
@@ -29,6 +33,12 @@ import { computerUseTool } from './computer/computer-use'
 import { scheduleWakeupTool } from './scheduling/schedule-wakeup.js'
 import { cronCreateTool, cronDeleteTool, cronListTool } from './scheduling/cron.js'
 
+const bundles: Record<string, TranslationMap> = {
+  'en-US': enUS as TranslationMap,
+  'zh-CN': zhCN as TranslationMap,
+}
+const t = createT(bundles['en-US'] || (enUS as TranslationMap), enUS as TranslationMap)
+
 /**
  * Validate tool parameters against the tool's JSON Schema definition.
  * Returns an array of error messages (empty = valid).
@@ -44,7 +54,7 @@ function validateParams(
   if (required) {
     for (const field of required) {
       if (params[field] === undefined || params[field] === null) {
-        errors.push(`Missing required parameter: "${field}"`)
+        errors.push(t('errors.missing_param', { param: field }))
       }
     }
   }
@@ -59,25 +69,25 @@ function validateParams(
 
       switch (def.type) {
         case 'string':
-          if (typeof value !== 'string') errors.push(`"${key}" must be a string`)
+          if (typeof value !== 'string') errors.push(t('errors.type_string', { key }))
           else if (def.enum && !def.enum.includes(value)) {
-            errors.push(`"${key}" must be one of: ${def.enum.join(', ')}`)
+            errors.push(t('errors.type_enum', { key, values: def.enum.join(', ') }))
           }
           break
         case 'integer':
         case 'number':
-          if (typeof value !== 'number') errors.push(`"${key}" must be a number`)
+          if (typeof value !== 'number') errors.push(t('errors.type_number', { key }))
           break
         case 'boolean':
-          if (typeof value !== 'boolean') errors.push(`"${key}" must be a boolean`)
+          if (typeof value !== 'boolean') errors.push(t('errors.type_boolean', { key }))
           break
         case 'object':
           if (typeof value !== 'object' || Array.isArray(value)) {
-            errors.push(`"${key}" must be an object`)
+            errors.push(t('errors.type_object', { key }))
           }
           break
         case 'array':
-          if (!Array.isArray(value)) errors.push(`"${key}" must be an array`)
+          if (!Array.isArray(value)) errors.push(t('errors.type_array', { key }))
           break
       }
     }
@@ -100,7 +110,7 @@ function withValidation(tool: ToolDefinition): ToolDefinition {
       const cleanParams = sanitizeParams(params)
       const errors = validateParams(schema, cleanParams)
       if (errors.length > 0) {
-        return { success: false, content: '', error: `Invalid parameters: ${errors.join('; ')}` }
+        return { success: false, content: '', error: t('errors.invalid_params', { errors: errors.join('; ') }) }
       }
       return tool.execute(cleanParams, ctx)
     },

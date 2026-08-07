@@ -560,12 +560,30 @@
     "mcp": { "name": "MCP", "description": "Manage MCP server connections" }
   },
   "errors": {
-    "tool_not_allowed": "Tool \"{name}\" requires user approval (permission: ask).",
+    "tool_not_allowed": "Tool \"{name}\" requires user approval (permission: ask). The tool was not executed.",
     "tool_blocked": "Tool \"{name}\" blocked by hook",
     "user_input_blocked": "User input blocked by hook.",
     "dlp_blocked": "Request blocked by DLP policy.",
     "model_error": "Error: {error}",
-    "tool_collision": "[mcp] Tool collision: \"{name}\" already registered. Skipping."
+    "tool_collision": "[mcp] Tool collision: \"{name}\" already registered. Skipping.",
+    "missing_param": "Missing required parameter: \"{param}\"",
+    "invalid_params": "Invalid parameters: {errors}",
+    "type_string": "\"{key}\" must be a string",
+    "type_number": "\"{key}\" must be a number",
+    "type_boolean": "\"{key}\" must be a boolean",
+    "type_object": "\"{key}\" must be an object",
+    "type_array": "\"{key}\" must be an array",
+    "type_enum": "\"{key}\" must be one of: {values}",
+    "oauth_state_mismatch": "OAuth state mismatch — possible CSRF",
+    "oauth_no_code": "No authorization code received",
+    "oauth_timeout": "OAuth flow timed out (5 minutes)",
+    "mcp_register_collision": "[mcp] Tool collision: \"{name}\" (from server \"{server}\") conflicts with existing tool. Skipping.",
+    "mcp_register_failed": "[mcp] Failed to register tool \"{tool}\" from server \"{server}\": {error}",
+    "max_tool_turns": "Max tool-calling turns ({max}) reached. Some tool calls were not executed.",
+    "max_tool_turns_warning": "You've reached the maximum of {max} tool-calling rounds. {pending} tool call(s) were not executed. Please summarize what you found so far and any next steps the user should take.",
+    "mcp_not_connected": "Error: MCP server \"{server}\" not connected",
+    "mcp_tool_error": "MCP tool error: {error}",
+    "mcp_no_connection": "No connection for \"{name}\""
   },
   "system": {
     "mcp": {
@@ -578,12 +596,18 @@
     },
     "context": {
       "omitted": "Prior conversation context omitted.",
-      "summary_heading": "[Earlier conversation summary — {heading}]"
+      "summary_heading": "[Earlier conversation summary — {heading}]",
+      "stop_blocked": "[The Stop hook blocked completion]: {reason}"
     },
     "goal": {
       "verified": "✅ Goal verification passed: {script}",
       "failed_continuing": "🔄 Verification script failed — continuing (loop {loop})",
-      "running_skill": "🔍 Running verification skill: {skill}"
+      "running_skill": "🔍 Running verification skill: {skill}",
+      "max_loops": "⚠ Max goal loops ({max}) reached — goal may not be achieved."
+    },
+    "oauth": {
+      "authenticated": "Authenticated",
+      "close_window": "You may close this window."
     },
     "welcome": {
       "unknown_model": "[mipham] ⚠ Unknown model \"{model}\": assuming {k}k context window."

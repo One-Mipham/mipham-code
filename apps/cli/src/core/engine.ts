@@ -18,6 +18,16 @@ import { getBackgroundAgentRegistry } from '../agent/background-registry'
 import { RulesLoader } from './rules-loader'
 import { UsageTracker } from './usage-tracker'
 import { buildRequest, sendInferenceCheck, isInferenceHookEnabled } from './inference-hook'
+import { createT } from '@mipham/shared/i18n/t'
+import enUS from '@mipham/shared/i18n/locales/en-US.json'
+import zhCN from '@mipham/shared/i18n/locales/zh-CN.json'
+import type { TranslationMap } from '@mipham/shared/i18n/types'
+
+const bundles: Record<string, TranslationMap> = {
+  'en-US': enUS as TranslationMap,
+  'zh-CN': zhCN as TranslationMap,
+}
+const t = createT(bundles['en-US'] || (enUS as TranslationMap), enUS as TranslationMap)
 
 export class QueryEngine {
   private hookEngine?: HookEngine
@@ -232,7 +242,7 @@ export class QueryEngine {
         // Return a minimal summary on failure
       }
 
-      return summary.slice(0, 8000) || 'Prior conversation context omitted.'
+      return summary.slice(0, 8000) || t('system.context.omitted')
     })
   }
 
@@ -257,7 +267,7 @@ export class QueryEngine {
       if (!submitResult.allowed) {
         yield {
           type: 'error',
-          error: submitResult.reason || 'User input blocked by hook.',
+          error: submitResult.reason || t('errors.user_input_blocked'),
         }
         return
       }
@@ -291,7 +301,7 @@ export class QueryEngine {
       if (!verdict.allowed) {
         yield {
           type: 'error',
-          error: verdict.reason || 'Request blocked by DLP policy.',
+          error: verdict.reason || t('errors.dlp_blocked'),
         }
         return
       }
@@ -316,7 +326,10 @@ export class QueryEngine {
         yield chunk
 
         if (chunk.type === 'error') {
-          this.context.addMessage({ role: 'assistant', content: `Error: ${chunk.error}` })
+          this.context.addMessage({
+            role: 'assistant',
+            content: t('errors.model_error', { error: chunk.error }),
+          })
           return
         }
 
@@ -495,17 +508,26 @@ export class QueryEngine {
       if (this.goalVerifyScript) {
         const passed = await this.runScriptVerification()
         if (passed) {
-          yield { type: 'text', content: `✅ Goal verification passed: ${this.goalVerifyScript}` }
+          yield {
+            type: 'text',
+            content: t('system.goal.verified', { script: this.goalVerifyScript }),
+          }
           break
         }
         // Script failed — continue looping
-        yield { type: 'text', content: `🔄 Verification script failed — continuing (loop ${loop})` }
+        yield {
+            type: 'text',
+            content: t('system.goal.failed_continuing', { loop: String(loop) }),
+          }
         continue
       }
 
       // If using skill verification, delegate to the skill
       if (this.goalVerifySkill) {
-        yield { type: 'text', content: `🔍 Running verification skill: ${this.goalVerifySkill}` }
+        yield {
+          type: 'text',
+          content: t('system.goal.running_skill', { skill: this.goalVerifySkill }),
+        }
         yield* this.process(checkMsg, signal)
         if (this.lastAssistantContent?.includes('VERIFIED')) break
         continue
@@ -519,7 +541,7 @@ export class QueryEngine {
     if (loop >= this.maxGoalLoops) {
       yield {
         type: 'text',
-        content: `⚠ Max goal loops (${this.maxGoalLoops}) reached — goal may not be achieved.`,
+        content: t('system.goal.max_loops', { max: String(this.maxGoalLoops) }),
       }
     }
   }
@@ -571,7 +593,7 @@ export class QueryEngine {
         if (!verdict.allowed) {
           yield {
             type: 'error',
-            error: verdict.reason || 'Request blocked by DLP policy.',
+            error: verdict.reason || t('errors.dlp_blocked'),
           }
           return
         }
@@ -655,10 +677,10 @@ export class QueryEngine {
       if (turn === MAX_TURNS - 1 && toolUses.length > 0) {
         this.context.addMessage({
           role: 'user',
-          content:
-            `You've reached the maximum of ${MAX_TURNS} tool-calling rounds. ` +
-            `${toolUses.length} tool call(s) were not executed. ` +
-            'Please summarize what you found so far and any next steps the user should take.',
+          content: t('errors.max_tool_turns_warning', {
+            max: String(MAX_TURNS),
+            pending: String(toolUses.length),
+          }),
         })
         // Give model one final chance to respond with a summary
         try {
@@ -677,7 +699,7 @@ export class QueryEngine {
         } catch {
           yield {
             type: 'error',
-            error: `Max tool-calling turns (${MAX_TURNS}) reached. Some tool calls were not executed.`,
+            error: t('errors.max_tool_turns', { max: String(MAX_TURNS) }),
           }
         }
         return
@@ -730,7 +752,7 @@ export class QueryEngine {
       return {
         success: false,
         content: '',
-        error: `Tool "${name}" requires user approval (permission: ask). The tool was not executed.`,
+        error: t('errors.tool_not_allowed', { name }),
       }
     }
 
@@ -742,7 +764,7 @@ export class QueryEngine {
         return {
           success: false,
           content: '',
-          error: preResult.reason || `Tool "${name}" blocked by hook`,
+          error: preResult.reason || t('errors.tool_blocked', { name }),
         }
       }
       if (preResult.modifiedInput) {
@@ -803,7 +825,7 @@ export class QueryEngine {
   /** Register a tool dynamically (used by MCP auto-registration). */
   registerTool(tool: ToolDefinition): void {
     if (this.tools.has(tool.name)) {
-      process.stderr.write(`[mcp] Tool collision: "${tool.name}" already registered. Skipping.\n`)
+      process.stderr.write(t('errors.tool_collision', { name: tool.name }) + '\n')
       return
     }
     this.tools.set(tool.name, tool)
@@ -869,7 +891,9 @@ export class QueryEngine {
       // Feed the block reason back to the AI and continue
       this.context.addMessage({
         role: 'user',
-        content: `[The Stop hook blocked completion]: ${stopResult.reason || 'Continue working.'}`,
+        content: t('system.context.stop_blocked', {
+          reason: stopResult.reason || 'Continue working.',
+        }),
       })
       yield* this.continueWithTools(signal)
     }

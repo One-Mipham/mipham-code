@@ -565,7 +565,25 @@
     "user_input_blocked": "用户输入被钩子拦截。",
     "dlp_blocked": "请求被 DLP 策略阻止。",
     "model_error": "错误：{error}",
-    "tool_collision": "[mcp] 工具冲突：\"{name}\" 已注册，跳过。"
+    "tool_collision": "[mcp] 工具冲突：\"{name}\" 已注册，跳过。",
+    "missing_param": "缺少必需参数：\"{param}\"",
+    "invalid_params": "参数无效：{errors}",
+    "type_string": "\"{key}\" 必须是字符串",
+    "type_number": "\"{key}\" 必须是数字",
+    "type_boolean": "\"{key}\" 必须是布尔值",
+    "type_object": "\"{key}\" 必须是对象",
+    "type_array": "\"{key}\" 必须是数组",
+    "type_enum": "\"{key}\" 必须是以下之一：{values}",
+    "oauth_state_mismatch": "OAuth 状态不匹配 — 可能存在 CSRF 攻击",
+    "oauth_no_code": "未收到授权码",
+    "oauth_timeout": "OAuth 流程超时（5 分钟）",
+    "mcp_register_collision": "[mcp] 工具冲突：\"{name}\"（来自服务器 \"{server}\"）与已有工具冲突，跳过。",
+    "mcp_register_failed": "[mcp] 注册工具 \"{tool}\"（来自服务器 \"{server}\"）失败：{error}",
+    "max_tool_turns": "超出最大工具调用轮次（{max}）。部分工具调用未执行。",
+    "max_tool_turns_warning": "已达到最大 {max} 轮工具调用。{pending} 个工具调用未执行。请总结当前发现及后续步骤。",
+    "mcp_not_connected": "错误：MCP 服务器 \"{server}\" 未连接",
+    "mcp_tool_error": "MCP 工具错误：{error}",
+    "mcp_no_connection": "未找到 \"{name}\" 的连接"
   },
   "system": {
     "mcp": {
@@ -578,12 +596,18 @@
     },
     "context": {
       "omitted": "之前的对话上下文已省略。",
-      "summary_heading": "[之前的对话摘要 — {heading}]"
+      "summary_heading": "[之前的对话摘要 — {heading}]",
+      "stop_blocked": "[Stop 钩子阻止完成]：{reason}"
     },
     "goal": {
       "verified": "✅ 目标验证通过：{script}",
       "failed_continuing": "🔄 验证脚本失败 — 继续（第 {loop} 轮）",
-      "running_skill": "🔍 正在运行验证技能：{skill}"
+      "running_skill": "🔍 正在运行验证技能：{skill}",
+      "max_loops": "⚠ 超过最大目标循环次数（{max}）— 目标可能未达成。"
+    },
+    "oauth": {
+      "authenticated": "认证成功",
+      "close_window": "您可以关闭此窗口。"
     },
     "welcome": {
       "unknown_model": "[mipham] ⚠ 未知模型 \"{model}\"：假定 {k}k 上下文窗口。"

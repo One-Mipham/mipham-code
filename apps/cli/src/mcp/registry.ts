@@ -9,6 +9,16 @@
 import type { ToolDefinition as McpToolDefinition, ToolCallResult } from './types'
 import type { ToolDefinition, ToolResult, ToolContext } from '../shared/types'
 import { McpClient } from './client'
+import { createT } from '@mipham/shared/i18n/t'
+import enUS from '@mipham/shared/i18n/locales/en-US.json'
+import zhCN from '@mipham/shared/i18n/locales/zh-CN.json'
+import type { TranslationMap } from '@mipham/shared/i18n/types'
+
+const bundles: Record<string, TranslationMap> = {
+  'en-US': enUS as TranslationMap,
+  'zh-CN': zhCN as TranslationMap,
+}
+const t = createT(bundles['en-US'] || (enUS as TranslationMap), enUS as TranslationMap)
 
 const MCP_TOOL_PREFIX = 'mcp__'
 const MAX_NAME_LENGTH = 128
@@ -108,7 +118,7 @@ export function registerMcpServerTools(
 
       if (toolsMap.has(tool.name)) {
         process.stderr.write(
-          `[mcp] Tool collision: "${tool.name}" (from server "${serverName}") conflicts with existing tool. Skipping.\n`,
+          t('errors.mcp_register_collision', { name: tool.name, server: serverName }) + '\n',
         )
         continue
       }
@@ -117,7 +127,7 @@ export function registerMcpServerTools(
       registered++
     } catch (err) {
       process.stderr.write(
-        `[mcp] Failed to register tool "${mcpTool.name}" from server "${serverName}": ${String(err)}\n`,
+        t('errors.mcp_register_failed', { tool: mcpTool.name, server: serverName, error: String(err) }) + '\n',
       )
     }
   }

@@ -4,6 +4,16 @@ import { createServer, Server } from 'node:http'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { McpServerConfig } from '../shared/types'
 import { TokenStore } from './token-store'
+import { createT } from '@mipham/shared/i18n/t'
+import enUS from '@mipham/shared/i18n/locales/en-US.json'
+import zhCN from '@mipham/shared/i18n/locales/zh-CN.json'
+import type { TranslationMap } from '@mipham/shared/i18n/types'
+
+const bundles: Record<string, TranslationMap> = {
+  'en-US': enUS as TranslationMap,
+  'zh-CN': zhCN as TranslationMap,
+}
+const t = createT(bundles['en-US'] || (enUS as TranslationMap), enUS as TranslationMap)
 
 interface TokenResponse {
   accessToken: string
@@ -41,18 +51,18 @@ export class OAuthClient {
           if (receivedState !== state) {
             res.writeHead(400)
             res.end('State mismatch')
-            reject(new Error('OAuth state mismatch — possible CSRF'))
+            reject(new Error(t('errors.oauth_state_mismatch')))
             return
           }
           if (!receivedCode) {
             res.writeHead(400)
             res.end('No code received')
-            reject(new Error('No authorization code received'))
+            reject(new Error(t('errors.oauth_no_code')))
             return
           }
           res.writeHead(200, { 'Content-Type': 'text/html' })
           res.end(
-            '<html><body><h1>Authenticated</h1><p>You may close this window.</p></body></html>',
+            `<html><body><h1>${t('system.oauth.authenticated')}</h1><p>${t('system.oauth.close_window')}</p></body></html>`,
           )
           server.close()
           resolve(receivedCode)
@@ -81,7 +91,7 @@ export class OAuthClient {
       })
       setTimeout(() => {
         server.close()
-        reject(new Error('OAuth flow timed out (5 minutes)'))
+        reject(new Error(t('errors.oauth_timeout')))
       }, 300_000)
     })
 
