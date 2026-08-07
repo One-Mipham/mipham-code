@@ -24,6 +24,7 @@ import {
 } from '../commands/project.js'
 import { themeCmd, releaseNotesCmd, ideCmd, terminalSetupCmd } from '../commands/environment.js'
 import { commitCmd, pushCmd, prCmd, issueCmd } from '../commands/git.js'
+import { keysCmd } from '../commands/keys'
 
 export interface CommandContext {
   engine: QueryEngine
@@ -187,6 +188,9 @@ const helpCmd: CommandHandler = (ctx) => {
       ── Account ─────────────────────────
       /login         Show API key status
       /logout        Clear credentials guide
+      /keys          List API key rotation status
+      /keys rotate   Rotate an API key
+      /keys audit    Check for expired keys
       /feedback      Send feedback
 
       ── Agents ──────────────────────────
@@ -3122,6 +3126,9 @@ const commandsListCmd: CommandHandler = () => {
     '/release-notes': 'Environment',
     '/login': 'Account',
     '/logout': 'Account',
+    '/keys': 'Account',
+    '/keys rotate': 'Account',
+    '/keys audit': 'Account',
     '/feedback': 'Account',
     '/agents': 'Agents',
     '/bg': 'Agents',
@@ -3273,6 +3280,9 @@ registry.set('/release-notes', releaseNotesCmd)
 registry.set('/mcp', mcpCmd)
 registry.set('/login', loginCmd)
 registry.set('/logout', logoutCmd)
+registry.set('/keys', keysCmd)
+registry.set('/keys rotate', keysCmd)
+registry.set('/keys audit', keysCmd)
 registry.set('/feedback', feedbackCmd)
 registry.set('/agents', agentsCmd)
 registry.set('/bg', bgCmd)
@@ -3399,6 +3409,9 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/upgrade': 'Show upgrade instructions',
   '/login': 'Show API key status',
   '/logout': 'Clear credentials guide',
+  '/keys': 'List API key rotation status',
+  '/keys rotate': 'Rotate an API key',
+  '/keys audit': 'Check for expired keys',
   '/feedback': 'Send feedback',
   '/agents': 'Agent view dashboard',
   '/bg': 'Run a background agent task',

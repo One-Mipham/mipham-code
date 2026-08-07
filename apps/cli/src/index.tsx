@@ -153,6 +153,15 @@ export async function runApp(options: RunOptions): Promise<void> {
     if (latestSession?.summary) {
       prompt = `${prompt}\n\n<system-context name="previous-session">\n# Previous Session Summary\n${latestSession.summary}\n</system-context>`
     }
+
+    // Key expiry reminder (Task 7)
+    const { KeyManager } = await import('./config/keys-manager')
+    const keyManager = new KeyManager()
+    const keyReminder = keyManager.getExpiryReminder()
+    if (keyReminder) {
+      prompt = `${prompt}\n\n<system-reminder name="key-expiry">\n${keyReminder}\n</system-reminder>`
+    }
+
     context.setSystemPrompt(prompt)
   }
 
