@@ -12,24 +12,35 @@ import { snipMessages } from './context-snip'
  * 2. The most recent N messages (kept intact)
  * 3. The system prompt (unchanged)
  */
+/**
+ * Adaptive keep-recent count: scales with context window size.
+ * 128K → 20, 200K → 20, 500K → 40, 1M → 80
+ */
+function getKeepRecent(contextWindow: number): number {
+  return Math.max(20, Math.floor(contextWindow / 12500))
+}
+
 export async function reactiveCompact(
   context: ContextManager,
   summarizer: Summarizer,
   heading: string,
-  keepRecent: number = 20,
+  keepRecent?: number,
 ): Promise<void> {
+  // Use explicit override, or adaptive default based on context window
+  const effectiveKeepRecent =
+    keepRecent ?? getKeepRecent(context.getMaxTokens())
   const messages = context.getMessages()
 
-  if (messages.length <= keepRecent + 4) return
+  if (messages.length <= effectiveKeepRecent + 4) return
 
   // First, run snip to remove empty pairs
   const { messages: snipped } = snipMessages(messages)
 
-  if (snipped.length <= keepRecent + 4) return
+  if (snipped.length <= effectiveKeepRecent + 4) return
 
   // Split: old messages to summarize, recent messages to keep
-  const toSummarize = snipped.slice(0, -keepRecent)
-  const toKeep = snipped.slice(-keepRecent)
+  const toSummarize = snipped.slice(0, -effectiveKeepRecent)
+  const toKeep = snipped.slice(-effectiveKeepRecent)
 
   // Generate summary
   let summary: string

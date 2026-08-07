@@ -31,9 +31,15 @@ const LINKS_FILE = 'links.json'
 export class MemoryManager {
   private memories = new Map<string, MemoryEntry>()
   private linkGraph: Map<string, Set<string>> = new Map()
+  private contextMaxTokens = 200_000
 
   constructor(private memoryDir: string) {
     mkdirSync(memoryDir, { recursive: true })
+  }
+
+  /** Set the model's context window size for adaptive memory budget. */
+  setContextWindow(tokens: number): void {
+    this.contextMaxTokens = tokens
   }
 
   loadAll(): void {
@@ -182,7 +188,10 @@ export class MemoryManager {
     this.updateIndex()
   }
 
-  buildSystemReminder(context: string, maxTokens: number = 15000): string {
+  buildSystemReminder(context: string, maxTokens?: number): string {
+    // Adaptive budget: 5% of context window, min 5000, max 75000
+    const effectiveMaxTokens =
+      maxTokens ?? Math.max(5000, Math.min(75000, Math.floor(this.contextMaxTokens * 0.05)))
     const relevant = this.recall(context, 10)
     if (relevant.length === 0) return ''
 
@@ -192,7 +201,7 @@ export class MemoryManager {
     for (const entry of relevant) {
       const line = `- ${entry.name}: ${entry.content.slice(0, 200)}`
       const lineTokens = Math.ceil(line.length / 4)
-      if (tokenBudget + lineTokens > maxTokens) break
+      if (tokenBudget + lineTokens > effectiveMaxTokens) break
       lines.push(line)
       tokenBudget += lineTokens
     }

@@ -17,6 +17,10 @@ export const DEFAULT_CONFIG: MiphamConfig = {
     strictKnownMarketplaces: [],
     blockedMarketplaces: [],
   },
+  features: {
+    mcp: { oauthEnabled: true },
+    context: { useRealTokenizer: true, adaptiveThresholds: true },
+  },
 }
 
 export const DEFAULT_INFERENCE_HOOK_CONFIG: InferenceHookConfig = {

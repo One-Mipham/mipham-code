@@ -160,6 +160,13 @@ export interface MiphamConfig {
     /** Block installs from matching repos (e.g. ["malicious-org/*"]) */
     blockedMarketplaces?: string[]
   }
+  /** Phase 9 feature flags. All default to true. */
+  features?: Partial<FeatureFlags>
+}
+
+export interface FeatureFlags {
+  mcp: { oauthEnabled: boolean }
+  context: { useRealTokenizer: boolean; adaptiveThresholds: boolean }
 }
 
 export interface McpServerConfig {

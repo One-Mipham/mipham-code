@@ -55,11 +55,24 @@ export class ContextManager {
   private compressionPending = false
 
   constructor(private config: ContextConfig) {
-    // Adaptive thresholds: larger context → later compaction
-    // 200K → 0.90, 500K → 0.93, 1M → 0.95
-    if (config.contextWindow && config.contextWindow > 200_000) {
-      config.compactionThreshold = Math.max(0.9, 1 - 50000 / config.contextWindow)
-    }
+    this.calculateThresholds()
+  }
+
+  /**
+   * Calculate adaptive compaction thresholds based on the model's context window.
+   *
+   * compaction:  200K→0.75(→clamped 0.90), 500K→0.90, 1M→0.95
+   * microcompact: 200K→0.70(→clamped 0.70), 500K→0.80, 1M→0.85
+   */
+  calculateThresholds(): void {
+    const w = this.config.contextWindow
+    if (!w) return
+
+    // compaction: window越大越晚compact，floor at 0.90
+    this.config.compactionThreshold = Math.max(0.9, 1 - 50000 / w)
+
+    // microcompact threshold is computed inline in checkCompression()
+    // using this.config.contextWindow directly
   }
 
   getCompactionThreshold(): number {
@@ -71,8 +84,8 @@ export class ContextManager {
     this.config.maxTokens = maxTokens
     if (contextWindow) {
       this.config.contextWindow = contextWindow
-      this.config.compactionThreshold = Math.max(0.9, 1 - 50000 / contextWindow)
     }
+    this.calculateThresholds()
   }
 
   getMaxTokens(): number {
