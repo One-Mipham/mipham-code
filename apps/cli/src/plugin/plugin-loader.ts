@@ -99,8 +99,7 @@ export function loadPlugins(
           for (const hookCfg of manifest.hooks as HookConfig[]) {
             if (hookCfg.type && hookCfg) {
               const event = (hookCfg as unknown as Record<string, unknown>).event as
-                | HookEvent
-                | undefined
+                HookEvent | undefined
               if (event) {
                 hookEvents.push(event)
                 hookEngine.register({

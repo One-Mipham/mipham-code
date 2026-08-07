@@ -128,13 +128,13 @@ GateResult = { blocked: boolean, reason?: string }
 
 检测模式：
 
-| 模式                               | 正则                          |
+| 模式 | 正则 |
 | ---------------------------------- | ----------------------------- | ---------------- | ------------------------------- | ------------ | ----- | ------------------------ | ------ | ------------ |
 | "ignore all previous instructions" | `/ignore\s+(all\s+)?(previous | prior            | above)\s+(instructions?         | prompts?)/i` |
-| Role impersonation                 | `/^system\s*:\s*(now\s+)?(act | pretend          | you\s+are)/im`                  |
-| Delimiter injection                | `/(^                          | \n)(---\s\*BEGIN | <\|\w+\|>)/`                    |
-| "You are now DAN"                  | `/you\s+are\s+now\s+(dan      | jailbroken       | unrestricted)/i`                |
-| Override attempts                  | `/(disregard                  | override         | supersede)\s+(all\s+)?(previous | prior        | above | system)\s+(instructions? | rules? | prompts?)/i` |
+| Role impersonation | `/^system\s*:\s*(now\s+)?(act | pretend          | you\s+are)/im` |
+| Delimiter injection | `/(^                          | \n)(---\s\*BEGIN | <\|\w+\|>)/` |
+| "You are now DAN" | `/you\s+are\s+now\s+(dan      | jailbroken       | unrestricted)/i` |
+| Override attempts | `/(disregard                  | override         | supersede)\s+(all\s+)?(previous | prior        | above | system)\s+(instructions? | rules? | prompts?)/i` |
 
 返回 `{ blocked: true, reason: 'prompt injection detected: <pattern>' }`。
 

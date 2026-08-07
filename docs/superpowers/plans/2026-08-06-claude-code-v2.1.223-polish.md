@@ -177,8 +177,7 @@ export function createSandbox(
 
   // Block crypto.randomUUID
   const globalCrypto = (globalThis as Record<string, unknown>).crypto as
-    | { randomUUID?: unknown; [key: string]: unknown }
-    | undefined
+    { randomUUID?: unknown; [key: string]: unknown } | undefined
   if (globalCrypto) {
     sandboxObj.crypto = new Proxy(globalCrypto, {
       get(_target, prop) {

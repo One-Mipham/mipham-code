@@ -46,11 +46,7 @@ export interface ThinkingContent {
   thinking: string
 }
 export type ContentBlock =
-  | TextContent
-  | ImageContent
-  | ToolUseContent
-  | ToolResultContent
-  | ThinkingContent
+  TextContent | ImageContent | ToolUseContent | ToolResultContent | ThinkingContent
 
 export interface Message {
   role: 'system' | 'user' | 'assistant'
@@ -62,13 +58,7 @@ export interface Message {
 // ── Tool Types ──
 export type ToolPermission = 'auto' | 'ask' | 'bypass'
 export type ToolCategory =
-  | 'file'
-  | 'exec'
-  | 'agent'
-  | 'network'
-  | 'system'
-  | 'artifact'
-  | 'scheduling'
+  'file' | 'exec' | 'agent' | 'network' | 'system' | 'artifact' | 'scheduling'
 
 export interface ToolContext {
   cwd: string
@@ -293,12 +283,7 @@ export interface InstructionFile {
 // ── Permission Types ──
 /** Six explicit permission modes matching Claude Code's permission architecture */
 export type PermissionMode =
-  | 'default'
-  | 'acceptEdits'
-  | 'plan'
-  | 'auto'
-  | 'dontAsk'
-  | 'bypassPermissions'
+  'default' | 'acceptEdits' | 'plan' | 'auto' | 'dontAsk' | 'bypassPermissions'
 
 /** Backward-compatible alias: PermissionMode plus legacy 'ask' and 'bypass' */
 export type PermissionLevel = PermissionMode | 'ask' | 'bypass'

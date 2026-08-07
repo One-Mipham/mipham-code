@@ -46,11 +46,7 @@ export interface ThinkingContent {
   thinking: string
 }
 export type ContentBlock =
-  | TextContent
-  | ImageContent
-  | ToolUseContent
-  | ToolResultContent
-  | ThinkingContent
+  TextContent | ImageContent | ToolUseContent | ToolResultContent | ThinkingContent
 
 export interface Message {
   role: 'system' | 'user' | 'assistant'

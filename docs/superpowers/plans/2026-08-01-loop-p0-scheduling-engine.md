@@ -76,13 +76,7 @@ Change to:
 
 ```typescript
 export type ToolCategory =
-  | 'file'
-  | 'exec'
-  | 'agent'
-  | 'network'
-  | 'system'
-  | 'artifact'
-  | 'scheduling'
+  'file' | 'exec' | 'agent' | 'network' | 'system' | 'artifact' | 'scheduling'
 ```
 
 - [ ] **Step 2: Create tool registration stubs**

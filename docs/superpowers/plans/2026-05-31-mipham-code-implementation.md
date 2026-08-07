@@ -472,11 +472,7 @@ export interface SkillDefinition {
 
 // ── Hook Types ──
 export type HookEvent =
-  | 'PreToolUse'
-  | 'PostToolUse'
-  | 'SessionStart'
-  | 'SessionEnd'
-  | 'Notification'
+  'PreToolUse' | 'PostToolUse' | 'SessionStart' | 'SessionEnd' | 'Notification'
 
 export interface HookDefinition {
   event: HookEvent

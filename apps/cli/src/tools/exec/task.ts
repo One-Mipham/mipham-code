@@ -362,8 +362,7 @@ export const taskTool: ToolDefinition = {
         // Signal to any background registry that this task should stop
         // The background registry will be injected via the engine context
         const bgRegistry = (_ctx as unknown as Record<string, unknown>).backgroundAgentRegistry as
-          | { stop(id: string): boolean }
-          | undefined
+          { stop(id: string): boolean } | undefined
         if (bgRegistry) {
           bgRegistry.stop(taskId)
         }

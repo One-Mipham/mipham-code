@@ -169,26 +169,28 @@ AI 模型可以通过工具调用直接操作你的项目文件、执行命令�
 ### 内置技能
 
 **Standard 技能（11 个）**：
-| 技能 | 用途 |
-|------|------|
-| `code-review` | 多维度自动化代码审查 |
-| `systematic-debugging` | 系统化调试：先找根因再修复 |
-| `test-driven-development` | TDD 工作流：先写测试再实现 |
-| `security-review` | 安全审计和漏洞扫描 |
-| `doc-generator` | 生成 API 文档、README、Changelog |
-| `github-ops` | GitHub PR/Issue 管理和自动化 |
-| `memory` | 持久化记忆管理 |
-| `web-search` | 联网搜索 |
-| `self-review` | 自我审查和反思 |
-| `superpower` | 超级能力增强 |
-| `compassionate-communication` | 慈悲沟通模式 |
+
+| 技能                          | 用途                             |
+| ----------------------------- | -------------------------------- |
+| `code-review`                 | 多维度自动化代码审查             |
+| `systematic-debugging`        | 系统化调试：先找根因再修复       |
+| `test-driven-development`     | TDD 工作流：先写测试再实现       |
+| `security-review`             | 安全审计和漏洞扫描               |
+| `doc-generator`               | 生成 API 文档、README、Changelog |
+| `github-ops`                  | GitHub PR/Issue 管理和自动化     |
+| `memory`                      | 持久化记忆管理                   |
+| `web-search`                  | 联网搜索                         |
+| `self-review`                 | 自我审查和反思                   |
+| `superpower`                  | 超级能力增强                     |
+| `compassionate-communication` | 慈悲沟通模式                     |
 
 **Mipham 专属技能（3 个）**：
-| 技能 | 用途 |
-|------|------|
-| `om-security` | Prompt 注入检测 + 对抗攻击鲁棒性 + 内容安全过滤 |
-| `om-model-optimize` | 上下文窗口优化 + 缓存策略 + Token 节省 |
-| `om-artifact` | 交互式 HTML/SVG 构件生成和管理 |
+
+| 技能                | 用途                                            |
+| ------------------- | ----------------------------------------------- |
+| `om-security`       | Prompt 注入检测 + 对抗攻击鲁棒性 + 内容安全过滤 |
+| `om-model-optimize` | 上下文窗口优化 + 缓存策略 + Token 节省          |
+| `om-artifact`       | 交互式 HTML/SVG 构件生成和管理                  |
 
 ### 🆕 社区技能市场（v0.5.9）
 

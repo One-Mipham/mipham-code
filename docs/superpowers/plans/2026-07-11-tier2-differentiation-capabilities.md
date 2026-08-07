@@ -91,12 +91,7 @@ Add to `apps/cli/src/shared/types.ts`:
 ```typescript
 // Replace existing PermissionLevel with full type:
 export type PermissionMode =
-  | 'default'
-  | 'acceptEdits'
-  | 'plan'
-  | 'auto'
-  | 'dontAsk'
-  | 'bypassPermissions'
+  'default' | 'acceptEdits' | 'plan' | 'auto' | 'dontAsk' | 'bypassPermissions'
 
 export type PermissionLevel = PermissionMode | 'ask' | 'bypass' // keep backward compat
 

@@ -303,13 +303,13 @@ export interface InferenceCheckResponse {
 
 以下功能在架构上已预留扩展点，本次不实现：
 
-| 功能        | 预留方式                                                      |
+| 功能 | 预留方式 |
 | ----------- | ------------------------------------------------------------- | ------------------ |
-| 影子模式    | `InferenceHookConfig.mode: 'enforce'                          | 'shadow'` 字段预留 |
-| 百分比灰度  | `InferenceHookConfig.rollout_percentage: 0-100` 字段预留      |
-| 角色排除    | `InferenceHookConfig.exclude_roles: string[]` 字段预留        |
-| 服务端拦截  | `InferenceHookTransport` 接口化，客户端实现可替换为服务端代理 |
-| 多 endpoint | `endpoints[]` 数组预留，支持多 DLP 服务器链式调用             |
+| 影子模式 | `InferenceHookConfig.mode: 'enforce'                          | 'shadow'` 字段预留 |
+| 百分比灰度 | `InferenceHookConfig.rollout_percentage: 0-100` 字段预留 |
+| 角色排除 | `InferenceHookConfig.exclude_roles: string[]` 字段预留 |
+| 服务端拦截 | `InferenceHookTransport` 接口化，客户端实现可替换为服务端代理 |
+| 多 endpoint | `endpoints[]` 数组预留，支持多 DLP 服务器链式调用 |
 
 ---
 
