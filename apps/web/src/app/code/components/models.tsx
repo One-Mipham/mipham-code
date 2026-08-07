@@ -1,4 +1,7 @@
+'use client'
+
 import { DEFAULT_PROVIDERS } from '@mipham/shared'
+import { useI18n } from '@/i18n/context'
 
 // Derive display data from the shared source of truth.
 // Select the top ~3 active models per provider for the marketing overview.
@@ -20,11 +23,12 @@ function getDisplayModels(): Array<{
 }
 
 export function ModelsSection() {
+  const { t } = useI18n()
   const supportedModels = getDisplayModels()
   return (
     <section className="py-20 px-6 bg-gray-50">
       <div className="max-w-4xl mx-auto">
-        <h2 className="text-3xl font-bold text-center mb-12">Supported Models</h2>
+        <h2 className="text-3xl font-bold text-center mb-12">{t('web.models.title')}</h2>
         <div className="space-y-4">
           {supportedModels.map((p) => (
             <div
@@ -40,7 +44,7 @@ export function ModelsSection() {
                     : 'bg-yellow-100 text-yellow-700'
                 }`}
               >
-                {p.status}
+                {p.status === 'Active' ? t('web.models.status_active') : t('web.models.status_upcoming')}
               </span>
             </div>
           ))}

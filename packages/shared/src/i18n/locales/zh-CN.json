@@ -1,5 +1,125 @@
 {
   "hello": "你好",
+  "web": {
+    "hero": {
+      "title": "Mipham Code",
+      "subtitle": "多模型开源智能编程终端。为追求性能、速度和灵活性的开发者而打造。",
+      "company": "由 One Mipham Corporation 驱动 | 北京华安麦逄科技有限公司",
+      "domains": "国际站: mipham.ai  |  中国大陆: onemipham.com",
+      "cta_start": "快速开始",
+      "cta_docs": "文档"
+    },
+    "features": {
+      "title": "为什么选择 Mipham Code？",
+      "multi_model": {
+        "title": "多模型支持",
+        "desc": "通过统一接口连接 Claude、GPT、DeepSeek、Qwen、Kimi 等。使用 Ctrl+P 实时切换模型。"
+      },
+      "slash_commands": {
+        "title": "85 个 Slash 命令",
+        "desc": "完全对标 Claude Code：/commit、/pr、/simplify、/lint、/loop init、/browse-plugins — 全部 85 个命令，零学习成本。"
+      },
+      "plugins": {
+        "title": "插件市场",
+        "desc": "从 npm 或本地路径安装插件。探索社区插件，包括 NotebookLM MCP 集成。"
+      },
+      "loopkit": {
+        "title": "LoopKit Vault",
+        "desc": "/loop init 初始化完整的项目结构：.mipham/ 配置、钩子、代理、9 领域技能、.mcp.json 等。"
+      },
+      "mcp": {
+        "title": "MCP 协议",
+        "desc": "完整的 Model Context Protocol 支持，基于 stdio 传输。连接 NotebookLM、文件系统、GitHub 和自定义 MCP 服务器。"
+      },
+      "secure": {
+        "title": "开源核心 · 安全可靠",
+        "desc": "Apache 2.0 许可证。TLS 1.3、AES-256-GCM 加密，全面的权限系统。开箱即用的企业级安全。"
+      }
+    },
+    "models": {
+      "title": "支持的模型",
+      "status_active": "已上线",
+      "status_upcoming": "即将推出"
+    },
+    "install_section": {
+      "title": "秒级安装",
+      "subtitle": "四种安装方式 — 选择适合你的平台。",
+      "npm_recommended": "npm（推荐）",
+      "curl_label": "curl（macOS / Linux）",
+      "powershell_label": "PowerShell（Windows）",
+      "label_international": "International · 国际站",
+      "label_china": "中国大陆 · China mainland",
+      "requirements": "需要 Bun 1.2+ 或 Node.js 22+。支持 macOS、Linux、Windows。",
+      "full_guide": "完整安装指南"
+    },
+    "footer": {
+      "copyright": "© {year} One Mipham Corporation。保留所有权利。",
+      "docs": "文档",
+      "dashboard": "控制台",
+      "github": "GitHub"
+    },
+    "install_page": {
+      "title": "安装指南",
+      "current_version": "当前版本：",
+      "choose_platform": "选择适合你的平台和安装方式。",
+      "all_methods_same": "所有方式安装的是同一个 Mipham Code。",
+      "prerequisites": "前置要求",
+      "prereq_bun": "Bun 1.2+（推荐）或 Node.js 22+",
+      "prereq_os": "macOS、Linux 或 Windows（PowerShell）",
+      "prereq_api_key": "至少一个 AI 提供商的 API 密钥（如 Anthropic、OpenAI）",
+      "npm_title": "1. npm 安装（推荐）",
+      "npm_desc": "适用于所有平台 — macOS、Linux、Windows。",
+      "curl_title": "2. curl 安装（macOS / Linux）",
+      "powershell_title": "3. PowerShell 安装（Windows）",
+      "direct_download": "4. 直接下载",
+      "table_platform": "平台",
+      "table_download": "下载",
+      "platform_mac_arm": "macOS（Apple Silicon）",
+      "platform_mac_intel": "macOS（Intel）",
+      "platform_linux": "Linux（x64）",
+      "platform_windows": "Windows（x64）",
+      "verify_title": "验证安装",
+      "start_title": "启动 Mipham Code",
+      "first_launch": "首次启动时，交互式设置向导（/setup）将引导你完成提供商配置、模型选择、技能安装和权限设置。",
+      "api_keys_title": "设置 API 密钥",
+      "api_keys_desc": "将提供商的 API 密钥导出为环境变量：",
+      "international": "International · 国际站",
+      "china_mainland": "中国大陆 · China mainland"
+    },
+    "docs": {
+      "title": "文档",
+      "quick_start": "快速开始",
+      "configuration": "配置",
+      "commands": "命令",
+      "help": "显示帮助",
+      "model": "显示当前模型",
+      "switch": "切换模型",
+      "clear": "清除对话",
+      "exit": "退出 Mipham Code"
+    },
+    "dashboard": {
+      "title": "控制台",
+      "coming_soon": "即将推出",
+      "description": "Mipham Code 控制台将展示你的使用分析 — 会话历史、Token 消耗、最常用的模型和工具以及技能活动。我们正在开发中。",
+      "sessions": "会话",
+      "sessions_desc": "会话历史与统计",
+      "tokens": "Token",
+      "tokens_desc": "各提供商用量",
+      "skills": "技能",
+      "skills_desc": "活跃技能分析"
+    },
+    "not_found": {
+      "code": "404",
+      "title": "页面未找到",
+      "description": "你要找的页面不存在。",
+      "back": "返回 Mipham Code"
+    },
+    "error": {
+      "title": "出了点问题",
+      "fallback_message": "发生了意外错误。",
+      "try_again": "重试"
+    }
+  },
   "greeting": "你好 {name}",
   "commands": {
     "clear": { "confirmed": "✓ 对话已清除，上下文已重置。" },

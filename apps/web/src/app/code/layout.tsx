@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { I18nLayoutWrapper } from '@/i18n/layout'
 
 export const metadata: Metadata = {
   title: 'Mipham Code — AI Coding Terminal',
@@ -9,8 +10,8 @@ export const metadata: Metadata = {
 
 export default function CodeLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <I18nLayoutWrapper>
       <body className="bg-white text-gray-900 antialiased">{children}</body>
-    </html>
+    </I18nLayoutWrapper>
   )
 }

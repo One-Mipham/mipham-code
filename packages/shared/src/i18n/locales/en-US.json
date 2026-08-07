@@ -1,5 +1,125 @@
 {
   "hello": "Hello",
+  "web": {
+    "hero": {
+      "title": "Mipham Code",
+      "subtitle": "Multi-model open-core intelligent coding terminal. Built for developers who demand power, speed, and flexibility.",
+      "company": "Powered by One Mipham Corporation | 北京华安麦逸科技有限公司",
+      "domains": "International: mipham.ai  |  中国大陆: onemipham.com",
+      "cta_start": "Get Started",
+      "cta_docs": "Documentation"
+    },
+    "features": {
+      "title": "Why Mipham Code?",
+      "multi_model": {
+        "title": "Multi-Model",
+        "desc": "Connect to Claude, GPT, DeepSeek, Qwen, Kimi, and more through a unified interface. Switch models on the fly with Ctrl+P."
+      },
+      "slash_commands": {
+        "title": "85 Slash Commands",
+        "desc": "Full Claude Code parity: /commit, /pr, /simplify, /lint, /loop init, /browse-plugins — all 85 commands with zero learning curve."
+      },
+      "plugins": {
+        "title": "Plugin Marketplace",
+        "desc": "Install plugins from npm or local paths. Discover community plugins including NotebookLM MCP integration."
+      },
+      "loopkit": {
+        "title": "LoopKit Vault",
+        "desc": "/loop init scaffolds a complete project structure: .mipham/ config, hooks, agents, 9-domain skills, .mcp.json, and more."
+      },
+      "mcp": {
+        "title": "MCP Protocol",
+        "desc": "Full Model Context Protocol support with stdio transport. Connect to NotebookLM, filesystem, GitHub, and custom MCP servers."
+      },
+      "secure": {
+        "title": "Open-Core & Secure",
+        "desc": "Apache 2.0 license. TLS 1.3, AES-256-GCM encryption, comprehensive permission system. Enterprise security out of the box."
+      }
+    },
+    "models": {
+      "title": "Supported Models",
+      "status_active": "Active",
+      "status_upcoming": "Upcoming"
+    },
+    "install_section": {
+      "title": "Install in Seconds",
+      "subtitle": "Four ways to install — choose what works for your platform.",
+      "npm_recommended": "npm (recommended)",
+      "curl_label": "curl (macOS / Linux)",
+      "powershell_label": "PowerShell (Windows)",
+      "label_international": "International · 国际站",
+      "label_china": "中国大陆 · China mainland",
+      "requirements": "Requires Bun 1.2+ or Node.js 22+. Supports macOS, Linux, Windows.",
+      "full_guide": "Full installation guide"
+    },
+    "footer": {
+      "copyright": "© {year} One Mipham Corporation. All rights reserved.",
+      "docs": "Docs",
+      "dashboard": "Dashboard",
+      "github": "GitHub"
+    },
+    "install_page": {
+      "title": "Installation",
+      "current_version": "Current version:",
+      "choose_platform": "Choose your platform and preferred install method.",
+      "all_methods_same": "All methods install the same Mipham Code.",
+      "prerequisites": "Prerequisites",
+      "prereq_bun": "Bun 1.2+ (recommended) or Node.js 22+",
+      "prereq_os": "macOS, Linux, or Windows (PowerShell)",
+      "prereq_api_key": "At least one AI provider API key (e.g., Anthropic, OpenAI)",
+      "npm_title": "1. npm Install (Recommended)",
+      "npm_desc": "Works on all platforms — macOS, Linux, Windows.",
+      "curl_title": "2. curl Install (macOS / Linux)",
+      "powershell_title": "3. PowerShell Install (Windows)",
+      "direct_download": "4. Direct Download",
+      "table_platform": "Platform",
+      "table_download": "Download",
+      "platform_mac_arm": "macOS (Apple Silicon)",
+      "platform_mac_intel": "macOS (Intel)",
+      "platform_linux": "Linux (x64)",
+      "platform_windows": "Windows (x64)",
+      "verify_title": "Verify Installation",
+      "start_title": "Start Mipham Code",
+      "first_launch": "On first launch, the interactive setup wizard (/setup) will guide you through provider configuration, model selection, skills installation, and permissions.",
+      "api_keys_title": "Set API Keys",
+      "api_keys_desc": "Export your provider API keys as environment variables:",
+      "international": "International · 国际站",
+      "china_mainland": "中国大陆 · China mainland"
+    },
+    "docs": {
+      "title": "Documentation",
+      "quick_start": "Quick Start",
+      "configuration": "Configuration",
+      "commands": "Commands",
+      "help": "Show help",
+      "model": "Show current model",
+      "switch": "Switch model",
+      "clear": "Clear conversation",
+      "exit": "Exit Mipham Code"
+    },
+    "dashboard": {
+      "title": "Dashboard",
+      "coming_soon": "Coming Soon",
+      "description": "The Mipham Code dashboard will show your usage analytics — session history, token consumption, most-used models and tools, and skill activity. We’re building this now.",
+      "sessions": "Sessions",
+      "sessions_desc": "Session history & stats",
+      "tokens": "Tokens",
+      "tokens_desc": "Usage across providers",
+      "skills": "Skills",
+      "skills_desc": "Active skill analytics"
+    },
+    "not_found": {
+      "code": "404",
+      "title": "Page not found",
+      "description": "The page you’re looking for doesn’t exist.",
+      "back": "Back to Mipham Code"
+    },
+    "error": {
+      "title": "Something went wrong",
+      "fallback_message": "An unexpected error occurred.",
+      "try_again": "Try again"
+    }
+  },
   "greeting": "Hello {name}",
   "commands": {
     "clear": { "confirmed": "✓ Conversation cleared. Context reset." },
