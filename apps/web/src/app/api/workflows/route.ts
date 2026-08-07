@@ -3,8 +3,6 @@ import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
-export const dynamic = 'force-static';
-
 const WORKFLOW_DIR = join(homedir(), '.mipham', 'workflows');
 
 function listRuns(): string[] {
