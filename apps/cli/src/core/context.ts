@@ -10,6 +10,7 @@ export type Summarizer = (messages: Message[], heading: string) => Promise<strin
 interface ContextConfig {
   maxTokens: number
   compactionThreshold: number // e.g. 0.9 → compact at 90% usage
+  contextWindow?: number // model's declared context window (for adaptive thresholds)
 }
 
 export interface CompactionStats {
@@ -53,11 +54,25 @@ export class ContextManager {
   }
   private compressionPending = false
 
-  constructor(private config: ContextConfig) {}
+  constructor(private config: ContextConfig) {
+    // Adaptive thresholds: larger context → later compaction
+    // 200K → 0.90, 500K → 0.93, 1M → 0.95
+    if (config.contextWindow && config.contextWindow > 200_000) {
+      config.compactionThreshold = Math.max(0.9, 1 - 50000 / config.contextWindow)
+    }
+  }
+
+  getCompactionThreshold(): number {
+    return this.config.compactionThreshold
+  }
 
   /** Dynamically update the max token limit (e.g., when switching models). */
-  updateMaxTokens(maxTokens: number): void {
+  updateMaxTokens(maxTokens: number, contextWindow?: number): void {
     this.config.maxTokens = maxTokens
+    if (contextWindow) {
+      this.config.contextWindow = contextWindow
+      this.config.compactionThreshold = Math.max(0.9, 1 - 50000 / contextWindow)
+    }
   }
 
   getMaxTokens(): number {
@@ -286,7 +301,12 @@ export class ContextManager {
 
     const usage = this.estimatedTokens / this.config.maxTokens
 
-    if (usage > 0.7) {
+    // Adaptive microcompact threshold: 200K→0.70, 500K→0.80, 1M→0.85
+    const microThreshold = this.config.contextWindow
+      ? Math.max(0.7, 1 - 150000 / this.config.contextWindow)
+      : 0.7
+
+    if (usage > microThreshold) {
       this.compressionPending = true
       // Schedule microcompact asynchronously (fire-and-forget)
       Promise.resolve().then(() => {

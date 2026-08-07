@@ -43,7 +43,7 @@ export async function reactiveCompact(
   // Rebuild messages: summary + recent
   const summaryMsg = {
     role: 'user' as const,
-    content: `[Earlier conversation summary — ${heading}]: ${summary.slice(0, 2000)}`,
+    content: `[Earlier conversation summary — ${heading}]: ${summary.slice(0, 8000)}`,
   }
 
   context.replaceMessages([summaryMsg, ...toKeep])

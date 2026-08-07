@@ -204,7 +204,7 @@ export class QueryEngine {
         .map((m) => {
           const role = m.role
           const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
-          return `[${role}]: ${content.slice(0, 500)}`
+          return `[${role}]: ${content.slice(0, 2000)}`
         })
         .join('\n')
 
@@ -220,7 +220,7 @@ export class QueryEngine {
             { role: 'system', content: summaryPrompt },
             { role: 'user', content: text },
           ],
-          maxTokens: 300,
+          maxTokens: 2000,
         })) {
           if (chunk.type === 'text' && chunk.content) {
             summary += chunk.content
@@ -232,7 +232,7 @@ export class QueryEngine {
         // Return a minimal summary on failure
       }
 
-      return summary.slice(0, 2000) || 'Prior conversation context omitted.'
+      return summary.slice(0, 8000) || 'Prior conversation context omitted.'
     })
   }
 

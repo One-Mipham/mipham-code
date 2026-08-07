@@ -175,7 +175,7 @@ export class MemoryManager {
     this.updateIndex()
   }
 
-  buildSystemReminder(context: string, maxTokens: number = 5000): string {
+  buildSystemReminder(context: string, maxTokens: number = 15000): string {
     const relevant = this.recall(context, 10)
     if (relevant.length === 0) return ''
 

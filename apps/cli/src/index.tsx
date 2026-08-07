@@ -120,7 +120,15 @@ export async function runApp(options: RunOptions): Promise<void> {
     )
   }
 
-  const context = new ContextManager({ maxTokens: contextMaxTokens, compactionThreshold: 0.9 })
+  const useRealTokenizer = config.features?.context?.useRealTokenizer !== false
+  const adaptiveThresholds = config.features?.context?.adaptiveThresholds !== false
+  const effectiveContextWindow = adaptiveThresholds ? modelContextWindow : 200_000
+
+  const context = new ContextManager({
+    maxTokens: contextMaxTokens,
+    compactionThreshold: 0.9,
+    contextWindow: effectiveContextWindow,
+  })
 
   if (options.resume) {
     const saved = SessionStore.load(options.resume)
