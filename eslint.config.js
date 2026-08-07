@@ -16,6 +16,7 @@ export default [
       '**/infrastructure/vscode/**',
       '**/skills/workflows/*.js',
       '**/.claude/**',
+      '**/next-env.d.ts',
     ],
   },
   ...compat.extends('plugin:@typescript-eslint/recommended'),
