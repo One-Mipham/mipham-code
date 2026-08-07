@@ -18,6 +18,6 @@
     "test": "vitest run --passWithNoTests"
   },
   "devDependencies": {
-    "@types/node": "^22.19.19"
+    "@types/node": "^26.1.2"
   }
 }
