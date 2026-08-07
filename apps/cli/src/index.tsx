@@ -120,14 +120,10 @@ export async function runApp(options: RunOptions): Promise<void> {
     )
   }
 
-  const useRealTokenizer = config.features?.context?.useRealTokenizer !== false
-  const adaptiveThresholds = config.features?.context?.adaptiveThresholds !== false
-  const effectiveContextWindow = adaptiveThresholds ? modelContextWindow : 200_000
-
   const context = new ContextManager({
     maxTokens: contextMaxTokens,
     compactionThreshold: 0.9,
-    contextWindow: effectiveContextWindow,
+    contextWindow: modelContextWindow,
   })
 
   if (options.resume) {

@@ -6,6 +6,7 @@ import {
   unlinkSync,
   renameSync,
   existsSync,
+  statSync,
 } from 'node:fs'
 import { join } from 'node:path'
 import type { Message } from '../shared/types'
