@@ -10,6 +10,34 @@
 
 const vscode = require('vscode')
 
+// ── i18n ──
+const LOCALE = (process.env.LANG || '').startsWith('zh') ? 'zh-CN' : 'en-US'
+
+const MSGS = {
+  'en-US': {
+    statusBar: 'Mipham Code',
+    tooltip: 'Click to focus Mipham Code terminal',
+    welcome: 'Mipham Code is ready. Press Cmd+Esc to start.',
+    noConfig: 'No Mipham Code config found. Run "mipham /init" to create one.',
+    start: 'Start',
+    dismiss: 'Dismiss',
+    terminalName: 'Mipham Code',
+  },
+  'zh-CN': {
+    statusBar: 'Mipham Code',
+    tooltip: '点击聚焦 Mipham Code 终端',
+    welcome: 'Mipham Code 已就绪。按 Cmd+Esc 启动。',
+    noConfig: '未找到 Mipham Code 配置。运行 "mipham /init" 创建。',
+    start: '启动',
+    dismiss: '关闭',
+    terminalName: 'Mipham Code',
+  },
+}
+
+function t(key) {
+  return MSGS[LOCALE]?.[key] || MSGS['en-US'][key] || key
+}
+
 /** Active terminal tracking */
 let miphamTerminal = null
 let statusBarItem = null
@@ -88,7 +116,7 @@ function openMiphamTerminal() {
   const miphamPath = findMiphamPath()
   const flags = buildFlags()
 
-  const terminalName = 'Mipham Code'
+  const terminalName = t('terminalName')
 
   // Create the terminal
   if (miphamPath === 'mipham') {
@@ -129,13 +157,13 @@ function updateStatusBar() {
   if (!statusBarItem) {
     statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100)
     statusBarItem.command = 'mipham-code.focus'
-    statusBarItem.tooltip = 'Click to focus Mipham Code terminal'
+    statusBarItem.tooltip = t('tooltip')
   }
 
   const config = vscode.workspace.getConfiguration('mipham-code')
   const provider = config.get('provider', '') || 'default'
   const model = config.get('model', '') || 'auto'
-  statusBarItem.text = `$(terminal) Mipham Code`
+  statusBarItem.text = `$(terminal) ${t('statusBar')}`
   statusBarItem.show()
 }
 
@@ -169,9 +197,7 @@ function activate(context) {
         vscode.window.showTextDocument(userConfig).then(
           () => {},
           () =>
-            vscode.window.showInformationMessage(
-              'No Mipham Code config found. Run "mipham /init" to create one.',
-            ),
+            vscode.window.showInformationMessage(t('noConfig')),
         )
       },
     )
@@ -191,9 +217,9 @@ function activate(context) {
   const hasShown = context.globalState.get('miphamCode.welcomeShown', false)
   if (!hasShown) {
     vscode.window
-      .showInformationMessage('Mipham Code is ready. Press Cmd+Esc to start.', 'Start', 'Dismiss')
+      .showInformationMessage(t('welcome'), t('start'), t('dismiss'))
       .then((choice) => {
-        if (choice === 'Start') openMiphamTerminal()
+        if (choice === t('start')) openMiphamTerminal()
       })
     context.globalState.update('miphamCode.welcomeShown', true)
   }
