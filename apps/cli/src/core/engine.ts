@@ -328,7 +328,7 @@ export class QueryEngine {
         if (chunk.type === 'error') {
           this.context.addMessage({
             role: 'assistant',
-            content: t('errors.model_error', { error: chunk.error }),
+            content: t('errors.model_error', { error: chunk.error ?? 'Unknown error' }),
           })
           return
         }

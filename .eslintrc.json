@@ -10,5 +10,5 @@
       { "argsIgnorePattern": "^_", "caughtErrorsIgnorePattern": "^_", "varsIgnorePattern": "^_" }
     ]
   },
-  "ignorePatterns": ["node_modules", "dist", ".next", "out"]
+  "ignorePatterns": ["node_modules", "dist", ".next", "out", "**/next-env.d.ts"]
 }

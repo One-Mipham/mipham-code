@@ -717,7 +717,7 @@ const reloadSkillsCmd: CommandHandler = (ctx) => {
 // ═══════════════════════════════════════════════════════════════
 
 const browseSkillsCmd: CommandHandler = async (ctx) => {
-  const t = resolveT(ctx)
+  const _t = resolveT(ctx)
   const { getAvailableSkills, listInstalledSkills } = await import('../skills/registry')
   const available = getAvailableSkills()
   const installed = new Set(
