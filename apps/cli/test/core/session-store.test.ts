@@ -159,19 +159,22 @@ describe('SessionStore', () => {
       // getLatest returns the most recent across ALL sessions (including parallel tests).
       // Our sessions must exist in the index; the most recent overall may not be ours.
       const sessions = SessionStore.list()
-      const ourNew = sessions.find(s => s.name === `${prefix}-new`)
+      const ourNew = sessions.find((s) => s.name === `${prefix}-new`)
       expect(ourNew).toBeDefined()
     })
 
     it('saveSummary persists session summary to .summaries/', () => {
       SessionStore.save('test-summary', [{ role: 'user', content: 'test' }])
-      SessionStore.saveSummary('test-summary', 'Discussed memory persistence design', ['memory', 'design'])
+      SessionStore.saveSummary('test-summary', 'Discussed memory persistence design', [
+        'memory',
+        'design',
+      ])
 
       const meta = SessionStore.getLatest()
       expect(meta).toBeDefined()
       // Summary is stored in .index.json metadata
       const sessions = SessionStore.list()
-      const s = sessions.find(x => x.name === 'test-summary')
+      const s = sessions.find((x) => x.name === 'test-summary')
       expect(s).toBeDefined()
     })
 

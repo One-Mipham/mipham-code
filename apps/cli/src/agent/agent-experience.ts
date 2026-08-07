@@ -60,7 +60,8 @@ export class AgentExperience {
       // Section missing — add before Stats
       const statsIndex = content.indexOf('## Stats')
       if (statsIndex !== -1) {
-        content = content.slice(0, statsIndex) + `${section}\n${entry}\n` + content.slice(statsIndex)
+        content =
+          content.slice(0, statsIndex) + `${section}\n${entry}\n` + content.slice(statsIndex)
       } else {
         content += `\n${section}\n${entry}\n`
       }
@@ -101,5 +102,4 @@ export class AgentExperience {
 
     writeFileSync(this.expFile, content, 'utf-8')
   }
-
 }

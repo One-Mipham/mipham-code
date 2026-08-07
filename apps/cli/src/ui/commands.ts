@@ -1977,12 +1977,17 @@ const resumeLastCmd: CommandHandler = async () => {
 
   const latest = SessionStore.getLatest()
   if (!latest) {
-    return { content: '─ Resume Session ─\n\nNo saved sessions found.\n\nSessions are auto-saved to ~/.mipham/sessions/ when Mipham Code exits.' }
+    return {
+      content:
+        '─ Resume Session ─\n\nNo saved sessions found.\n\nSessions are auto-saved to ~/.mipham/sessions/ when Mipham Code exits.',
+    }
   }
 
   const session = SessionStore.load(latest.name)
   if (!session) {
-    return { content: `─ Load Failed ─\n\nCould not load session "${latest.name}". The file may have been removed.` }
+    return {
+      content: `─ Load Failed ─\n\nCould not load session "${latest.name}". The file may have been removed.`,
+    }
   }
 
   const date = new Date(latest.updatedAt).toLocaleString()
@@ -2004,7 +2009,10 @@ const resumeLastCmd: CommandHandler = async () => {
 const resumeDeleteCmd: CommandHandler = async (_ctx, args) => {
   const name = args.join(' ').trim()
   if (!name) {
-    return { content: 'Usage: /resume delete <session-name>\n\nDelete a saved session. Use /resume to list all sessions.' }
+    return {
+      content:
+        'Usage: /resume delete <session-name>\n\nDelete a saved session. Use /resume to list all sessions.',
+    }
   }
 
   const { SessionStore } = await import('../core/session-store')

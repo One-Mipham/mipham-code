@@ -78,7 +78,12 @@ export class SubAgent {
         if (task.status === 'completed') {
           this.logSuccessExperience(agentType, description, task.result || '', options.agentDef)
         } else {
-          this.logFailureExperience(agentType, description, task.error || 'Unknown error', options.agentDef)
+          this.logFailureExperience(
+            agentType,
+            description,
+            task.error || 'Unknown error',
+            options.agentDef,
+          )
         }
       })
 

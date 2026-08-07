@@ -143,12 +143,12 @@ describe('MemoryManager', () => {
     const entries = mm.distillFromSession(summary, 'session-test-001')
     expect(entries.length).toBeGreaterThanOrEqual(2)
 
-    const tsEntry = entries.find(e => e.content.includes('TypeScript'))
+    const tsEntry = entries.find((e) => e.content.includes('TypeScript'))
     expect(tsEntry).toBeDefined()
     expect(tsEntry!.metadata.type).toBe('feedback')
     expect(tsEntry!.metadata.relevance).toContain('typescript')
 
-    const vitestEntry = entries.find(e => e.content.includes('Vitest'))
+    const vitestEntry = entries.find((e) => e.content.includes('Vitest'))
     expect(vitestEntry).toBeDefined()
     expect(vitestEntry!.content).toContain('**Why:** faster than Jest')
   })
@@ -166,7 +166,7 @@ describe('MemoryManager', () => {
 
     // Search for topic-a — should get both A (direct) and B (via wikilink)
     const results = mm.recall('topic-a')
-    const names = results.map(r => r.name)
+    const names = results.map((r) => r.name)
     expect(names).toContain('a')
     expect(names).toContain('b')
     // 'a' should come first (higher score)

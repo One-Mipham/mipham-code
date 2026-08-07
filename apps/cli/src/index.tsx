@@ -274,7 +274,7 @@ export async function runApp(options: RunOptions): Promise<void> {
       const userMessages = allMessages
         .filter((m) => m.role === 'user')
         .slice(-5)
-        .map((m) => typeof m.content === 'string' ? m.content : JSON.stringify(m.content))
+        .map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))
         .join('\n- ')
       if (userMessages) {
         const summary = `Session highlights:\n- ${userMessages}`

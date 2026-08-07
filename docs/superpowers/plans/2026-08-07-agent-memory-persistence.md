@@ -47,10 +47,12 @@ apps/cli/test/
 ### Task 1.1: MemoryManager — wikilinks 解析与图谱
 
 **Files:**
+
 - Modify: `apps/cli/src/core/memory/memory-manager.ts` (add ~35 lines)
 - Test: `apps/cli/test/core/memory/memory-manager.test.ts` (add 2 tests)
 
 **Interfaces:**
+
 - Consumes: existing `MemoryManager` class, `MemoryEntry` interface
 - Produces: `getLinkedMemories(name: string): MemoryEntry[]`, `links.json` file at `~/.mipham/memory/links.json`
 
@@ -70,7 +72,7 @@ it('extracts wikilinks from content and builds link graph', () => {
 
   const linked = mm.getLinkedMemories('phase-4')
   expect(linked).toHaveLength(0) // phase-5 not written yet, so no resolved links
-  
+
   mm.write('phase-5', 'Phase 5 next steps. See also: [[phase-4]]', {
     type: 'project',
     relevance: ['phase-5'],
@@ -97,7 +99,7 @@ it('recall includes wikilink-connected memories with lower weight', () => {
 
   // Search for topic-a — should get both A (direct) and B (via wikilink)
   const results = mm.recall('topic-a')
-  const names = results.map(r => r.name)
+  const names = results.map((r) => r.name)
   expect(names).toContain('a')
   expect(names).toContain('b')
   // 'a' should come first (higher score)
@@ -110,6 +112,7 @@ it('recall includes wikilink-connected memories with lower weight', () => {
 ```bash
 cd apps/cli && pnpm test -- --reporter=verbose test/core/memory/memory-manager.test.ts
 ```
+
 Expected: 2 new tests FAIL — `getLinkedMemories` not a function, wikilink recall not working.
 
 - [ ] **Step 3: Implement wikilinks parsing and graph**
@@ -158,22 +161,22 @@ Modify `write()` to extract wikilinks and update graph:
 
 ```typescript
 // Inside write(), after setting this.memories.set(name, entry):
-  // Update wikilink graph
-  const links = this.extractWikilinks(content)
-  if (links.length > 0) {
-    this.linkGraph.set(name, new Set(links))
-    // Add reverse links for existing memories that link to this one
-    for (const [existingName, existingEntry] of this.memories) {
-      if (existingName === name) continue
-      const existingLinks = this.extractWikilinks(existingEntry.content)
-      if (existingLinks.includes(name)) {
-        const reverseSet = this.linkGraph.get(existingName) || new Set()
-        reverseSet.add(name)
-        this.linkGraph.set(existingName, reverseSet)
-      }
+// Update wikilink graph
+const links = this.extractWikilinks(content)
+if (links.length > 0) {
+  this.linkGraph.set(name, new Set(links))
+  // Add reverse links for existing memories that link to this one
+  for (const [existingName, existingEntry] of this.memories) {
+    if (existingName === name) continue
+    const existingLinks = this.extractWikilinks(existingEntry.content)
+    if (existingLinks.includes(name)) {
+      const reverseSet = this.linkGraph.get(existingName) || new Set()
+      reverseSet.add(name)
+      this.linkGraph.set(existingName, reverseSet)
     }
-    this.saveLinkGraph()
   }
+  this.saveLinkGraph()
+}
 ```
 
 Save/load link graph helpers:
@@ -208,6 +211,7 @@ Call `loadLinkGraph()` at end of `loadAll()`.
 ```bash
 cd apps/cli && pnpm test -- --reporter=verbose test/core/memory/memory-manager.test.ts
 ```
+
 Expected: ALL tests PASS (6 existing + 2 new = 8 tests)
 
 - [ ] **Step 5: Commit**
@@ -229,10 +233,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 1.2: MemoryManager — 去重写入 + 结构化段落
 
 **Files:**
+
 - Modify: `apps/cli/src/core/memory/memory-manager.ts` (add ~25 lines)
 - Test: `apps/cli/test/core/memory/memory-manager.test.ts` (add 1 test)
 
 **Interfaces:**
+
 - Consumes: `write()` from Task 1.1, `MemoryMetadata` interface
 - Produces: enhanced `write()` with dedup + optional `why`/`howToApply` fields in `MemoryMetadata`
 
@@ -278,6 +284,7 @@ it('write with same name updates instead of duplicating', () => {
 ```bash
 cd apps/cli && pnpm test -- --reporter=verbose test/core/memory/memory-manager.test.ts
 ```
+
 Expected: `/write with why/howToApply/` FAIL — content missing `**Why:**` blocks.
 
 - [ ] **Step 3: Implement dedup + structured paragraphs**
@@ -290,7 +297,7 @@ Extend `MemoryMetadata` interface:
 export interface MemoryMetadata {
   type: 'user' | 'feedback' | 'project' | 'reference'
   relevance: string[]
-  why?: string       // 🆕
+  why?: string // 🆕
   howToApply?: string // 🆕
 }
 ```
@@ -344,6 +351,7 @@ write(name: string, content: string, metadata: MemoryMetadata): void {
 ```bash
 cd apps/cli && pnpm test -- --reporter=verbose test/core/memory/memory-manager.test.ts
 ```
+
 Expected: ALL 10 tests PASS.
 
 - [ ] **Step 5: Commit**
@@ -364,10 +372,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 1.3: MemoryManager — 增强召回 + distillFromSession
 
 **Files:**
+
 - Modify: `apps/cli/src/core/memory/memory-manager.ts` (add ~30 lines)
 - Test: `apps/cli/test/core/memory/memory-manager.test.ts` (add 1 test)
 
 **Interfaces:**
+
 - Consumes: `recall()` from Task 1.2, `write()` from Task 1.2
 - Produces: `distillFromSession(summary: string): MemoryEntry[]`
 
@@ -382,13 +392,13 @@ it('distillFromSession splits summary into individual memories', () => {
 
   const entries = mm.distillFromSession(summary, 'session-test-001')
   expect(entries.length).toBeGreaterThanOrEqual(2)
-  
-  const tsEntry = entries.find(e => e.content.includes('TypeScript'))
+
+  const tsEntry = entries.find((e) => e.content.includes('TypeScript'))
   expect(tsEntry).toBeDefined()
   expect(tsEntry!.metadata.type).toBe('feedback')
   expect(tsEntry!.metadata.relevance).toContain('typescript')
-  
-  const vitestEntry = entries.find(e => e.content.includes('Vitest'))
+
+  const vitestEntry = entries.find((e) => e.content.includes('Vitest'))
   expect(vitestEntry).toBeDefined()
   expect(vitestEntry!.content).toContain('**Why:** faster than Jest')
 })
@@ -399,6 +409,7 @@ it('distillFromSession splits summary into individual memories', () => {
 ```bash
 cd apps/cli && pnpm test -- --reporter=verbose test/core/memory/memory-manager.test.ts
 ```
+
 Expected: `distillFromSession` FAIL — method not defined.
 
 - [ ] **Step 3: Implement distillFromSession and enhanced recall**
@@ -412,22 +423,22 @@ distillFromSession(summary: string, sessionId: string): MemoryEntry[] {
   const results: MemoryEntry[] = []
   // Split on bullet points (both - and *)
   const bullets = summary.split(/\n\s*[-*]\s+/).filter(b => b.trim().length > 20)
-  
+
   for (const bullet of bullets) {
     // Extract Why / How to apply if present
     const whyMatch = bullet.match(/\*\*Why:\*\*\s*(.+?)(?:\s*\*\*How to apply:|$)/)
     const howMatch = bullet.match(/\*\*How to apply:\*\*\s*(.+)$/)
-    
+
     const content = bullet.trim()
     const slug = `auto-${sessionId}-${results.length}`
-    
+
     this.write(slug, content, {
       type: 'feedback',
       relevance: this.extractKeywords(content),
       why: whyMatch?.[1]?.trim(),
       howToApply: howMatch?.[1]?.trim(),
     })
-    
+
     const entry = this.memories.get(slug)
     if (entry) results.push(entry)
   }
@@ -456,6 +467,7 @@ for (const item of scored) {
 ```bash
 cd apps/cli && pnpm test -- --reporter=verbose test/core/memory/memory-manager.test.ts
 ```
+
 Expected: ALL 11 tests PASS.
 
 - [ ] **Step 5: Commit**
@@ -476,10 +488,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 2.1: SessionStore — 索引 + 摘要存储
 
 **Files:**
+
 - Modify: `apps/cli/src/core/session-store.ts` (add ~60 lines)
 - Test: `apps/cli/test/core/session-store.test.ts` (add 3 tests)
 
 **Interfaces:**
+
 - Consumes: existing `SessionStore` static class
 - Produces: `SessionStore.updateIndex()`, `SessionStore.saveSummary()`, `SessionStore.getLatest()`, `.index.json`, `.summaries/`
 
@@ -499,20 +513,23 @@ describe('session index and summary', () => {
 
   it('saveSummary persists session summary to .summaries/', () => {
     SessionStore.save('test-summary', [{ role: 'user', content: 'test' }])
-    SessionStore.saveSummary('test-summary', 'Discussed memory persistence design', ['memory', 'design'])
+    SessionStore.saveSummary('test-summary', 'Discussed memory persistence design', [
+      'memory',
+      'design',
+    ])
 
     const meta = SessionStore.getLatest()
     expect(meta).toBeDefined()
     // Summary is stored in .index.json metadata
     const sessions = SessionStore.list()
-    const s = sessions.find(x => x.name === 'test-summary')
+    const s = sessions.find((x) => x.name === 'test-summary')
     expect(s).toBeDefined()
   })
 
   it('updateIndex writes .index.json with all sessions', () => {
     SessionStore.save('test-idx', [{ role: 'user', content: 'idx test' }])
     SessionStore.updateIndex()
-    
+
     const latest = SessionStore.getLatest()
     expect(latest).toBeDefined()
   })
@@ -524,6 +541,7 @@ describe('session index and summary', () => {
 ```bash
 cd apps/cli && pnpm test -- --reporter=verbose test/core/session-store.test.ts
 ```
+
 Expected: 3 new tests FAIL — methods not defined.
 
 - [ ] **Step 3: Implement index + summary**
@@ -564,7 +582,7 @@ static updateIndex(): void {
     tokenCount: 0, // updated on save
     cwd: s.cwd,
   }))
-  
+
   // Merge with existing summaries
   const existing = SessionStore.loadIndexRaw()
   for (const entry of index) {
@@ -575,17 +593,17 @@ static updateIndex(): void {
       entry.tokenCount = prev.tokenCount || 0
     }
   }
-  
+
   writeFileSync(INDEX_FILE, JSON.stringify(index, null, 2), 'utf-8')
 }
 
 static saveSummary(name: string, summary: string, tags: string[]): void {
   ensureDir()
   mkdirSync(SUMMARIES_DIR, { recursive: true })
-  
+
   const summaryPath = join(SUMMARIES_DIR, `${name}.md`)
   writeFileSync(summaryPath, `# ${name}\n\n${summary}\n\nTags: ${tags.join(', ')}\n`, 'utf-8')
-  
+
   // Update index entry
   const index = SessionStore.loadIndexRaw()
   const entry = index.find(e => e.name === name)
@@ -617,7 +635,7 @@ Update `save()` to also update index:
 
 ```typescript
 // At the end of save(), add:
-  SessionStore.updateIndex()
+SessionStore.updateIndex()
 ```
 
 - [ ] **Step 4: Run tests, all pass**
@@ -625,6 +643,7 @@ Update `save()` to also update index:
 ```bash
 cd apps/cli && pnpm test -- --reporter=verbose test/core/session-store.test.ts
 ```
+
 Expected: ALL existing + new tests PASS.
 
 - [ ] **Step 5: Commit**
@@ -646,10 +665,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 2.2: Commands — 注册 /resume 命令
 
 **Files:**
+
 - Modify: `apps/cli/src/ui/commands.ts` (add ~25 lines)
 - Test: `apps/cli/test/ui/commands.test.ts` (add 1 test — or verify existing commands test covers new registration)
 
 **Interfaces:**
+
 - Consumes: `SessionStore` from Task 2.1, `CommandContext` interface
 - Produces: `/resume`, `/resume last`, `/resume delete` commands
 
@@ -669,6 +690,7 @@ it('/resume command is registered', () => {
 ```bash
 cd apps/cli && pnpm test -- --reporter=verbose test/ui/commands.test.ts
 ```
+
 Expected: FAIL — `/resume` not found.
 
 - [ ] **Step 3: Register /resume commands**
@@ -676,6 +698,7 @@ Expected: FAIL — `/resume` not found.
 In `apps/cli/src/ui/commands.ts`:
 
 Add import:
+
 ```typescript
 import { SessionStore } from '../core/session-store'
 ```
@@ -742,6 +765,7 @@ Add to `getCommands()` return map:
 ```bash
 cd apps/cli && pnpm test -- --reporter=verbose
 ```
+
 Expected: 642 tests PASS (no regressions).
 
 - [ ] **Step 5: Commit**
@@ -762,10 +786,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 2.3: Engine — SessionStart 注入 + 退出自动摘要
 
 **Files:**
+
 - Modify: `apps/cli/src/index.tsx` (add ~15 lines)
 - Modify: `apps/cli/src/core/engine.ts` (add ~10 lines)
 
 **Interfaces:**
+
 - Consumes: `SessionStore.getLatest()` from Task 2.1, `MemoryManager.distillFromSession()` from Task 1.3
 - Produces: SessionStart context injection, exit hook calling distillFromSession
 
@@ -774,6 +800,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ```bash
 cd apps/cli && pnpm test -- --reporter=verbose
 ```
+
 Expected: 642 tests PASS.
 
 - [ ] **Step 2: Implement SessionStart injection**
@@ -823,6 +850,7 @@ process.on('exit', () => {
 ```bash
 cd apps/cli && pnpm test -- --reporter=verbose
 ```
+
 Expected: 642 tests PASS (zero regressions).
 
 - [ ] **Step 5: Commit**
@@ -843,10 +871,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 3.1: AgentExperience — 新建经验管理类
 
 **Files:**
+
 - Create: `apps/cli/src/agent/agent-experience.ts` (~60 lines)
 - Test: add tests to `apps/cli/test/agent/sub-agent.test.ts` (~50 lines for experience tracking)
 
 **Interfaces:**
+
 - Consumes: agent name (string), filesystem (`~/.mipham/agent-memory/<name>/`)
 - Produces: `AgentExperience.logSuccess()`, `AgentExperience.logFailure()`, `AgentExperience.getExperience()`, `AgentExperience.reset()`
 
@@ -870,7 +900,7 @@ describe('AgentExperience', () => {
   it('logSuccess appends to Success Patterns', () => {
     const exp = new AgentExperience('test-agent', AGENT_TEST_DIR)
     exp.logSuccess('Used Grep to find all import cycles', 'Cross-module PR review')
-    
+
     const content = exp.getExperience()
     expect(content).toContain('## Success Patterns')
     expect(content).toContain('Grep to find all import cycles')
@@ -880,7 +910,7 @@ describe('AgentExperience', () => {
   it('logFailure appends to Failure Patterns', () => {
     const exp = new AgentExperience('test-agent', AGENT_TEST_DIR)
     exp.logFailure('Bash timeout on npm install', 'CI build commands with default timeout')
-    
+
     const content = exp.getExperience()
     expect(content).toContain('## Failure Patterns')
     expect(content).toContain('Bash timeout')
@@ -892,7 +922,7 @@ describe('AgentExperience', () => {
     exp.logSuccess('Task A complete', 'When doing A')
     exp.logSuccess('Task B complete', 'When doing B')
     exp.logFailure('Task C failed', 'Avoid pattern C')
-    
+
     const content = exp.getExperience()
     expect(content).toContain('总执行: 3 次')
     expect(content).toContain('成功: 2')
@@ -919,6 +949,7 @@ describe('AgentExperience', () => {
 ```bash
 cd apps/cli && pnpm test -- --reporter=verbose test/agent/sub-agent.test.ts
 ```
+
 Expected: 5 new tests FAIL — `AgentExperience` not found.
 
 - [ ] **Step 3: Implement AgentExperience class**
@@ -977,7 +1008,11 @@ export class AgentExperience {
 
   reset(): void {
     if (existsSync(this.expFile)) {
-      try { unlinkSync(this.expFile) } catch { /* ok */ }
+      try {
+        unlinkSync(this.expFile)
+      } catch {
+        /* ok */
+      }
     }
   }
 
@@ -995,7 +1030,8 @@ export class AgentExperience {
       // Section missing — add before Stats
       const statsIndex = content.indexOf('## Stats')
       if (statsIndex !== -1) {
-        content = content.slice(0, statsIndex) + `${section}\n${entry}\n` + content.slice(statsIndex)
+        content =
+          content.slice(0, statsIndex) + `${section}\n${entry}\n` + content.slice(statsIndex)
       } else {
         content += `\n${section}\n${entry}\n`
       }
@@ -1008,10 +1044,10 @@ export class AgentExperience {
 
     // Trim old entries if over limit
     const lines = content.split('\n')
-    const entries = lines.filter(l => l.startsWith('- ['))
+    const entries = lines.filter((l) => l.startsWith('- ['))
     if (entries.length > MAX_EXPERIENCES) {
       // Remove oldest entry (first one found)
-      const firstEntryIdx = lines.findIndex(l => l.startsWith('- ['))
+      const firstEntryIdx = lines.findIndex((l) => l.startsWith('- ['))
       if (firstEntryIdx !== -1) {
         const nextEntryLine = lines[firstEntryIdx + 1]
         const removeCount = nextEntryLine?.startsWith('  **') ? 2 : 1
@@ -1056,6 +1092,7 @@ export class AgentExperience {
 ```bash
 cd apps/cli && pnpm test -- --reporter=verbose test/agent/sub-agent.test.ts
 ```
+
 Expected: ALL tests PASS (existing + 5 new).
 
 - [ ] **Step 5: Commit**
@@ -1077,9 +1114,11 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 3.2: SubAgent — 执行结束自动记录经验
 
 **Files:**
+
 - Modify: `apps/cli/src/agent/sub-agent.ts` (add ~30 lines)
 
 **Interfaces:**
+
 - Consumes: `AgentExperience` from Task 3.1, existing `SubAgent.execute()` flow
 - Produces: automatic experience logging on sub-agent completion
 
@@ -1088,6 +1127,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ```bash
 cd apps/cli && pnpm test -- --reporter=verbose test/agent/sub-agent.test.ts
 ```
+
 Expected: All existing tests PASS.
 
 - [ ] **Step 2: Implement auto-logging in SubAgent**
@@ -1095,6 +1135,7 @@ Expected: All existing tests PASS.
 In `apps/cli/src/agent/sub-agent.ts`:
 
 Add import:
+
 ```typescript
 import { AgentExperience } from './agent-experience'
 ```
@@ -1103,30 +1144,30 @@ In `execute()` method, after the successful result (line ~83, synchronous path):
 
 ```typescript
 // After successful result, before returning:
-  // Auto-log agent experience
-  try {
-    const exp = new AgentExperience(agentType)
-    if (result && result.trim()) {
-      // Extract a short description from the result
-      const firstLine = result.trim().split('\n')[0]?.slice(0, 150) || 'Task completed'
-      exp.logSuccess(firstLine, description)
-    }
-  } catch {
-    // Never let experience logging break execution
+// Auto-log agent experience
+try {
+  const exp = new AgentExperience(agentType)
+  if (result && result.trim()) {
+    // Extract a short description from the result
+    const firstLine = result.trim().split('\n')[0]?.slice(0, 150) || 'Task completed'
+    exp.logSuccess(firstLine, description)
   }
+} catch {
+  // Never let experience logging break execution
+}
 ```
 
 In the catch block (line ~88):
 
 ```typescript
 // After error handling, before re-throwing:
-  try {
-    const exp = new AgentExperience(agentType)
-    const errMsg = String(err).slice(0, 200)
-    exp.logFailure(errMsg, description)
-  } catch {
-    // Never let experience logging break execution
-  }
+try {
+  const exp = new AgentExperience(agentType)
+  const errMsg = String(err).slice(0, 200)
+  exp.logFailure(errMsg, description)
+} catch {
+  // Never let experience logging break execution
+}
 ```
 
 - [ ] **Step 3: Run full test suite**
@@ -1134,6 +1175,7 @@ In the catch block (line ~88):
 ```bash
 cd apps/cli && pnpm test -- --reporter=verbose
 ```
+
 Expected: 642 tests PASS (zero regressions).
 
 - [ ] **Step 4: Commit**
@@ -1155,9 +1197,11 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 3.3: AgentContext — 经验注入到系统提示
 
 **Files:**
+
 - Modify: `apps/cli/src/agent/agent-context.ts` (add ~25 lines)
 
 **Interfaces:**
+
 - Consumes: `AgentExperience.getExperience()` from Task 3.1
 - Produces: enhanced `createAgentContext()` that injects experience into system prompt
 
@@ -1166,6 +1210,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ```bash
 cd apps/cli && pnpm test -- --reporter=verbose
 ```
+
 Expected: All tests PASS.
 
 - [ ] **Step 2: Implement experience injection**
@@ -1173,6 +1218,7 @@ Expected: All tests PASS.
 In `apps/cli/src/agent/agent-context.ts`:
 
 Add import:
+
 ```typescript
 import { AgentExperience } from './agent-experience'
 ```
@@ -1182,40 +1228,42 @@ In `loadAgentMemory()` function, add experience loading:
 ```typescript
 function loadAgentMemory(agentName: string, scope: 'user' | 'project' | 'local'): string {
   // ... existing static memory loading ...
-  
+
   // 🆕 Also load auto-accumulated experience
   const exp = new AgentExperience(agentName)
   const experienceContent = exp.getExperience()
-  
+
   let result = ''
-  
+
   // Existing static memory
   // ... (keep existing code, collect into `result`) ...
-  
+
   // Append experience (limit to recent N entries to control token usage)
   if (experienceContent) {
     const lines = experienceContent.split('\n')
-    const statsSection = lines.findIndex(l => l.startsWith('## Stats'))
-    const successStart = lines.findIndex(l => l.startsWith('## Success Patterns'))
-    const failureStart = lines.findIndex(l => l.startsWith('## Failure Patterns'))
-    
+    const statsSection = lines.findIndex((l) => l.startsWith('## Stats'))
+    const successStart = lines.findIndex((l) => l.startsWith('## Success Patterns'))
+    const failureStart = lines.findIndex((l) => l.startsWith('## Failure Patterns'))
+
     // Extract: header + last 5 success + last 3 failure + stats
     const header = lines.slice(0, Math.min(successStart, failureStart) || 3).join('\n')
-    const successes = lines.slice(successStart + 1, failureStart > successStart ? failureStart : undefined)
-      .filter(l => l.startsWith('- ['))
+    const successes = lines
+      .slice(successStart + 1, failureStart > successStart ? failureStart : undefined)
+      .filter((l) => l.startsWith('- ['))
       .slice(-5)
-    const failures = lines.slice(failureStart + 1, statsSection > failureStart ? statsSection : undefined)
-      .filter(l => l.startsWith('- ['))
+    const failures = lines
+      .slice(failureStart + 1, statsSection > failureStart ? statsSection : undefined)
+      .filter((l) => l.startsWith('- ['))
       .slice(-3)
     const stats = statsSection !== -1 ? lines.slice(statsSection, statsSection + 3).join('\n') : ''
-    
+
     if (successes.length > 0 || failures.length > 0) {
       result = result
         ? `${result}\n\n---\n\n## Agent Experience\n${header}\n${successes.join('\n')}\n${failures.join('\n')}\n${stats}`
         : `## Agent Experience\n${header}\n${successes.join('\n')}\n${failures.join('\n')}\n${stats}`
     }
   }
-  
+
   return result
 }
 ```
@@ -1225,6 +1273,7 @@ function loadAgentMemory(agentName: string, scope: 'user' | 'project' | 'local')
 ```bash
 cd apps/cli && pnpm test -- --reporter=verbose
 ```
+
 Expected: 642 tests PASS (zero regressions).
 
 - [ ] **Step 4: Commit**
@@ -1250,12 +1299,13 @@ After all 9 tasks complete:
 ```bash
 cd apps/cli
 pnpm typecheck     # Must pass
-pnpm lint          # Must pass  
+pnpm lint          # Must pass
 pnpm format        # Must pass
 pnpm test          # Must pass: 642 + 12 = 654 tests green
 ```
 
 Then back in parent repo:
+
 ```bash
 cd /Users/sarvadaya/Rismed_Ronxin_Capital/One_Mipham_Corporation
 git add mipham-code
@@ -1266,15 +1316,15 @@ git commit -m "chore: bump mipham-code — Phase 7 Agent Memory 持久化"
 
 ## Task Summary
 
-| # | Task | Files | Lines | Tests |
-|---|------|-------|-------|-------|
-| 1.1 | wikilinks + link graph | memory-manager.ts | +35 | +2 |
-| 1.2 | dedup + structured paragraphs | memory-manager.ts | +25 | +2 |
-| 1.3 | distillFromSession + time decay | memory-manager.ts | +30 | +1 |
-| 2.1 | session index + summary | session-store.ts | +60 | +3 |
-| 2.2 | /resume commands | commands.ts | +25 | +1 |
-| 2.3 | SessionStart inject + exit save | index.tsx | +25 | 0 |
-| 3.1 | AgentExperience class | agent-experience.ts (new) | +60 | +5 |
-| 3.2 | sub-agent auto-log | sub-agent.ts | +30 | 0 |
-| 3.3 | experience injection | agent-context.ts | +25 | 0 |
-| **Total** | | **9 files** | **~315** | **+14** |
+| #         | Task                            | Files                     | Lines    | Tests   |
+| --------- | ------------------------------- | ------------------------- | -------- | ------- |
+| 1.1       | wikilinks + link graph          | memory-manager.ts         | +35      | +2      |
+| 1.2       | dedup + structured paragraphs   | memory-manager.ts         | +25      | +2      |
+| 1.3       | distillFromSession + time decay | memory-manager.ts         | +30      | +1      |
+| 2.1       | session index + summary         | session-store.ts          | +60      | +3      |
+| 2.2       | /resume commands                | commands.ts               | +25      | +1      |
+| 2.3       | SessionStart inject + exit save | index.tsx                 | +25      | 0       |
+| 3.1       | AgentExperience class           | agent-experience.ts (new) | +60      | +5      |
+| 3.2       | sub-agent auto-log              | sub-agent.ts              | +30      | 0       |
+| 3.3       | experience injection            | agent-context.ts          | +25      | 0       |
+| **Total** |                                 | **9 files**               | **~315** | **+14** |

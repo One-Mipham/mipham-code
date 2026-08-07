@@ -21,15 +21,15 @@
 
 ## 二、现有系统基线
 
-| 组件 | 文件 | 能力 |
-|------|------|------|
-| `MemoryManager` | `core/memory/memory-manager.ts` | CRUD 记忆文件、关键词召回、`buildSystemReminder()` |
-| `MemoryLoader` | `core/memory/memory-loader.ts` | SessionStart 加载记忆注入 system-reminder |
-| `MemoryWriter` | `core/memory/memory-writer.ts` | 触发词检测（"记住"、"偏好"、"决策"）自动写入 |
-| `MemoryTool` | `tools/agent/memory.ts` | AI 可调用的 read/write/list 工具 |
-| `SessionStore` | `core/session-store.ts` | JSONL 会话 save/load/list/delete |
-| `AgentContext` | `agent/agent-context.ts` | Agent 三级 scope（user/project/local）加载静态 .md |
-| `ContextManager` | `core/context.ts` | 会话消息管理、压缩、checkpoint/rewind |
+| 组件             | 文件                            | 能力                                               |
+| ---------------- | ------------------------------- | -------------------------------------------------- |
+| `MemoryManager`  | `core/memory/memory-manager.ts` | CRUD 记忆文件、关键词召回、`buildSystemReminder()` |
+| `MemoryLoader`   | `core/memory/memory-loader.ts`  | SessionStart 加载记忆注入 system-reminder          |
+| `MemoryWriter`   | `core/memory/memory-writer.ts`  | 触发词检测（"记住"、"偏好"、"决策"）自动写入       |
+| `MemoryTool`     | `tools/agent/memory.ts`         | AI 可调用的 read/write/list 工具                   |
+| `SessionStore`   | `core/session-store.ts`         | JSONL 会话 save/load/list/delete                   |
+| `AgentContext`   | `agent/agent-context.ts`        | Agent 三级 scope（user/project/local）加载静态 .md |
+| `ContextManager` | `core/context.ts`               | 会话消息管理、压缩、checkpoint/rewind              |
 
 **当前缺口**: 会话结束不自动记忆、无法恢复历史会话、Agent 不积累经验。
 
@@ -83,12 +83,14 @@ MemoryManager:
 #### 3.2.3 去重写入
 
 `write()` 调用前：
+
 1. 检查已有记忆中是否存在相同 `name` → 更新内容，保留旧 links
 2. 检查 description 文本相似度 > 0.7（简单 Jaccard） → 视为重复，跳过写入
 
 #### 3.2.4 SessionEnd 蒸馏钩子
 
 新增 `distillFromSession(summary: string)` 方法：
+
 - 接收会话退出时由 LLM 生成的摘要文本
 - 从中提取要点（按 `**Why:**` / `**How to apply:**` 标记分段）
 - 每个要点创建一个独立 memory 文件
@@ -98,19 +100,19 @@ MemoryManager:
 
 `recall()` 评分算法增强：
 
-| 匹配方式 | 权重 |
-|---------|------|
-| 关键词匹配 relevance tags | +3 |
-| 内容词匹配（>3 chars） | +1 |
-| wikilink 追踪（间接关联） | +1 per hop |
-| 时间衰减（>30天的记忆 ×0.5） | 衰减因子 |
+| 匹配方式                     | 权重       |
+| ---------------------------- | ---------- |
+| 关键词匹配 relevance tags    | +3         |
+| 内容词匹配（>3 chars）       | +1         |
+| wikilink 追踪（间接关联）    | +1 per hop |
+| 时间衰减（>30天的记忆 ×0.5） | 衰减因子   |
 
 ### 3.3 改动文件
 
-| 文件 | 改动 | 行数 |
-|------|------|------|
+| 文件                            | 改动                                               | 行数 |
+| ------------------------------- | -------------------------------------------------- | ---- |
 | `core/memory/memory-manager.ts` | wikilinks 解析、去重、召回增强、distillFromSession | +~80 |
-| `core/memory/memory-loader.ts` | 适配新字段 | +~10 |
+| `core/memory/memory-loader.ts`  | 适配新字段                                         | +~10 |
 
 ### 3.4 测试
 
@@ -199,11 +201,11 @@ MemoryManager:
 
 ### 4.3 改动文件
 
-| 文件 | 改动 | 行数 |
-|------|------|------|
+| 文件                    | 改动                                                                    | 行数 |
+| ----------------------- | ----------------------------------------------------------------------- | ---- |
 | `core/session-store.ts` | 新增 `updateIndex()`, `saveSummary()`, `getLatest()`, 增强 token 元数据 | +~60 |
-| `core/engine.ts` | SessionStart 注入、退出摘要触发 | +~20 |
-| `ui/commands.ts` | 注册 `/resume` 命令 | +~20 |
+| `core/engine.ts`        | SessionStart 注入、退出摘要触发                                         | +~20 |
+| `ui/commands.ts`        | 注册 `/resume` 命令                                                     | +~20 |
 
 ### 4.4 测试
 
@@ -270,6 +272,7 @@ Agent 执行完成后（`sub-agent.ts` 退出流程）：
 #### 5.2.2 经验注入
 
 Agent 下次启动时，`agent-context.ts` 在 `loadAgentMemory()` 中：
+
 1. 加载 `manual.md`（用户手动写的，优先）
 2. 加载 `experience.md` 的 Stats + 最近 5 条 Success + 最近 3 条 Failure
 3. 注入到 system prompt 末尾
@@ -280,11 +283,11 @@ Agent 下次启动时，`agent-context.ts` 在 `loadAgentMemory()` 中：
 
 ### 5.3 改动文件
 
-| 文件 | 改动 | 行数 |
-|------|------|------|
-| `agent/agent-experience.ts` | **新文件** — 经验提取、格式读写、Stats 更新 | ~60 |
-| `agent/sub-agent.ts` | 执行结束时调用 `autoLogExperience()` | +~30 |
-| `agent/agent-context.ts` | `loadAgentMemory()` 增加 experience.md 加载 | +~25 |
+| 文件                        | 改动                                        | 行数 |
+| --------------------------- | ------------------------------------------- | ---- |
+| `agent/agent-experience.ts` | **新文件** — 经验提取、格式读写、Stats 更新 | ~60  |
+| `agent/sub-agent.ts`        | 执行结束时调用 `autoLogExperience()`        | +~30 |
+| `agent/agent-context.ts`    | `loadAgentMemory()` 增加 experience.md 加载 | +~25 |
 
 ### 5.4 测试
 
@@ -305,25 +308,26 @@ Agent 下次启动时，`agent-context.ts` 在 `loadAgentMemory()` 中：
     └── 子系统 3 (Agent Experience) — 独立，但复用 MemoryManager 的文件模式
 ```
 
-| 顺序 | 子系统 | 改动量 | 测试增量 |
-|------|--------|--------|---------|
-| 1 | Enhanced MemoryManager | ~90 lines | +4 tests |
-| 2 | Session Resume | ~100 lines | +4 tests |
-| 3 | Agent Experience | ~115 lines | +4 tests |
-| **合计** | | **~305 lines** | **+12 tests** |
+| 顺序     | 子系统                 | 改动量         | 测试增量      |
+| -------- | ---------------------- | -------------- | ------------- |
+| 1        | Enhanced MemoryManager | ~90 lines      | +4 tests      |
+| 2        | Session Resume         | ~100 lines     | +4 tests      |
+| 3        | Agent Experience       | ~115 lines     | +4 tests      |
+| **合计** |                        | **~305 lines** | **+12 tests** |
 
 ---
 
 ## 七、风险与回滚
 
-| 风险 | 缓解 |
-|------|------|
-| LLM 摘要质量不稳定 | 摘要失败时降级为简单截断前 200 字 |
-| 经验文件无限增长 | 硬上限 20 条经验 + Stats 统计不增长 |
-| 会话恢复 token 溢出 | 恢复前 token 检查 + 自动 compact |
-| wikilinks 图过大 | 限制单文件 10 个链接 |
+| 风险                | 缓解                                |
+| ------------------- | ----------------------------------- |
+| LLM 摘要质量不稳定  | 摘要失败时降级为简单截断前 200 字   |
+| 经验文件无限增长    | 硬上限 20 条经验 + Stats 统计不增长 |
+| 会话恢复 token 溢出 | 恢复前 token 检查 + 自动 compact    |
+| wikilinks 图过大    | 限制单文件 10 个链接                |
 
 所有新功能通过 feature flag 控制：
+
 - `~/.mipham/config.json` 新增 `memory.autoDistill`, `memory.sessionResume`, `memory.agentExperience`
 - 默认全部开启，用户可关闭
 
@@ -341,6 +345,6 @@ Agent 下次启动时，`agent-context.ts` 在 `loadAgentMemory()` 中：
 
 ### 修订历史
 
-| 版本 | 日期 | 变更内容 | 维护人 |
-|------|------|---------|--------|
+| 版本  | 日期       | 变更内容                 | 维护人     |
+| ----- | ---------- | ------------------------ | ---------- |
 | 1.0.0 | 2026-08-07 | 初版：三个子系统完整设计 | 技术委员会 |

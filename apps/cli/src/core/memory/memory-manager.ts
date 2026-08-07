@@ -232,9 +232,34 @@ export class MemoryManager {
       .replace(/[^a-z0-9\s]/g, '')
       .split(/\s+/)
     const stopWords = new Set([
-      'the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at',
-      'to', 'for', 'of', 'and', 'or', 'but', 'not', 'this', 'that',
-      'with', 'from', 'by', 'as', 'be', 'has', 'have', 'it', 'its',
+      'the',
+      'a',
+      'an',
+      'is',
+      'are',
+      'was',
+      'were',
+      'in',
+      'on',
+      'at',
+      'to',
+      'for',
+      'of',
+      'and',
+      'or',
+      'but',
+      'not',
+      'this',
+      'that',
+      'with',
+      'from',
+      'by',
+      'as',
+      'be',
+      'has',
+      'have',
+      'it',
+      'its',
     ])
     const seen = new Set<string>()
     const result: string[] = []
