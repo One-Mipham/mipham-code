@@ -5,7 +5,7 @@ import { App } from './ui/app'
 import { loadConfig, loadInferenceHookConfig, loadCredentialMaskingConfig } from './config/loader'
 import { bootstrapProviders } from './providers/bootstrap'
 import { InstructionsLoader } from './core/instructions'
-import { loadSessionMemories } from './core/memory/memory-loader'
+import { loadSessionMemories, getMemoryManager } from './core/memory/memory-loader'
 import { ContextManager } from './core/context'
 import { QueryEngine } from './core/engine'
 import { SessionStore } from './core/session-store'
@@ -269,6 +269,17 @@ export async function runApp(options: RunOptions): Promise<void> {
         model: defaultModel,
         cwd: process.cwd(),
       })
+      // Distill learnings from the last 5 user messages into memory
+      const allMessages = context.getMessages()
+      const userMessages = allMessages
+        .filter((m) => m.role === 'user')
+        .slice(-5)
+        .map((m) => typeof m.content === 'string' ? m.content : JSON.stringify(m.content))
+        .join('\n- ')
+      if (userMessages) {
+        const summary = `Session highlights:\n- ${userMessages}`
+        getMemoryManager().distillFromSession(summary, sessionName)
+      }
     }
   })
 

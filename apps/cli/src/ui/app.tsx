@@ -313,6 +313,13 @@ export function App({
           if (result.nextProvider) setProviderId(result.nextProvider)
           if (result.nextModel) setModelId(result.nextModel)
           if (result.exit) process.exit(0)
+          if (result.forwardedMessages && result.forwardedMessages.length > 0) {
+            const restored: ChatMessage[] = result.forwardedMessages.map((msg) => ({
+              role: msg.role,
+              content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+            }))
+            setMessages((prev) => [...prev, ...restored])
+          }
           if (result.copyContent) {
             // Copy to clipboard via pbcopy (macOS) or clip (Windows)
             try {

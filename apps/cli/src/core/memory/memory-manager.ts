@@ -30,7 +30,6 @@ const INDEX_FILE = 'MEMORY.md'
 export class MemoryManager {
   private memories = new Map<string, MemoryEntry>()
   private linkGraph: Map<string, Set<string>> = new Map()
-  private readonly LINKS_FILE = 'links.json'
 
   constructor(private memoryDir: string) {
     mkdirSync(memoryDir, { recursive: true })
@@ -61,7 +60,6 @@ export class MemoryManager {
         // skip unparseable
       }
     }
-    this.loadLinkGraph()
     this.rebuildLinkGraph()
   }
 
@@ -295,8 +293,6 @@ export class MemoryManager {
         this.linkGraph.set(otherName, otherSet)
       }
     }
-
-    this.saveLinkGraph()
   }
 
   private rebuildLinkGraph(): void {
@@ -307,26 +303,18 @@ export class MemoryManager {
         this.linkGraph.set(name, new Set(links))
       }
     }
-  }
-
-  private saveLinkGraph(): void {
-    const obj: Record<string, string[]> = {}
-    for (const [k, v] of this.linkGraph) {
-      obj[k] = Array.from(v)
-    }
-    writeFileSync(join(this.memoryDir, this.LINKS_FILE), JSON.stringify(obj, null, 2), 'utf-8')
-  }
-
-  private loadLinkGraph(): void {
-    const path = join(this.memoryDir, this.LINKS_FILE)
-    if (!existsSync(path)) return
-    try {
-      const raw = JSON.parse(readFileSync(path, 'utf-8'))
-      for (const [k, v] of Object.entries(raw)) {
-        this.linkGraph.set(k, new Set(v as string[]))
+    // Compute reverse links: other memories that link to each memory
+    for (const [name, entry] of this.memories) {
+      const linked = this.extractWikilinks(entry.content)
+      for (const target of linked) {
+        if (target === name) continue
+        const targetSet = this.linkGraph.get(target)
+        if (targetSet) {
+          targetSet.add(name)
+        } else {
+          this.linkGraph.set(target, new Set([name]))
+        }
       }
-    } catch {
-      // corrupt file, start fresh
     }
   }
 

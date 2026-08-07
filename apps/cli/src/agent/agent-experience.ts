@@ -18,15 +18,13 @@ export class AgentExperience {
   logSuccess(description: string, whenToApply: string): void {
     const date = new Date().toISOString().slice(0, 10)
     const entry = `- [${date}] ${description}\n  **When to apply:** ${whenToApply}\n`
-    this.appendToSection('## Success Patterns', entry)
-    this.incrementStat('success')
+    this.appendToSection('## Success Patterns', entry, 'success')
   }
 
   logFailure(description: string, whenToAvoid: string): void {
     const date = new Date().toISOString().slice(0, 10)
     const entry = `- [${date}] ${description}\n  **When to avoid:** ${whenToAvoid}\n`
-    this.appendToSection('## Failure Patterns', entry)
-    this.incrementStat('failure')
+    this.appendToSection('## Failure Patterns', entry, 'failure')
   }
 
   getExperience(): string {
@@ -48,7 +46,7 @@ export class AgentExperience {
     }
   }
 
-  private appendToSection(section: string, entry: string): void {
+  private appendToSection(section: string, entry: string, type: 'success' | 'failure'): void {
     mkdirSync(this.expDir, { recursive: true })
 
     let content = this.getExperience()
@@ -75,29 +73,22 @@ export class AgentExperience {
 
     // Trim old entries if over limit
     const lines = content.split('\n')
-    const entries = lines.filter((l) => l.startsWith('- ['))
-    if (entries.length > MAX_EXPERIENCES) {
+    let finalEntries = lines.filter((l) => l.startsWith('- ['))
+    while (finalEntries.length > MAX_EXPERIENCES) {
       // Remove oldest entry (first one found)
       const firstEntryIdx = lines.findIndex((l) => l.startsWith('- ['))
       if (firstEntryIdx !== -1) {
         const nextEntryLine = lines[firstEntryIdx + 1]
         const removeCount = nextEntryLine?.startsWith('  **') ? 2 : 1
         lines.splice(firstEntryIdx, removeCount)
-        content = lines.join('\n')
+        finalEntries = lines.filter((l) => l.startsWith('- ['))
+      } else {
+        break
       }
     }
+    content = lines.join('\n')
 
-    writeFileSync(this.expFile, content, 'utf-8')
-  }
-
-  private incrementStat(type: 'success' | 'failure'): void {
-    let content = this.getExperience()
-    if (!content) {
-      // Initialize with headers
-      content = `# Agent Experience — ${this.agentName}\n\n## Success Patterns\n\n## Failure Patterns\n\n## Stats\n- 总执行: 0 次 | 成功: 0 | 失败: 0\n`
-    }
-
-    // Replace stats line
+    // Update stats (merged from incrementStat — single file write)
     content = content.replace(
       /- 总执行: (\d+) 次 \| 成功: (\d+) \| 失败: (\d+)/,
       (_match, total: string, success: string, failure: string) => {
@@ -110,4 +101,5 @@ export class AgentExperience {
 
     writeFileSync(this.expFile, content, 'utf-8')
   }
+
 }

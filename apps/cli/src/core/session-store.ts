@@ -83,8 +83,8 @@ export class SessionStore {
     writeFileSync(tmp, JSON.stringify(session) + '\n', 'utf-8')
     renameSync(tmp, path)
 
-    // Update index after each save
-    SessionStore.updateIndex()
+    // Incremental index update — only touch this session's entry
+    SessionStore.updateIndexEntry(name, session.metadata)
   }
 
   /**
@@ -193,6 +193,34 @@ export class SessionStore {
   }
 
   /**
+   * Incrementally update a single session's entry in the index.
+   * Only modifies one entry — faster than full rebuild. Used by save().
+   */
+  static updateIndexEntry(name: string, metadata: SessionMetadata): void {
+    ensureDir()
+    const index = SessionStore.loadIndexRaw()
+    const existing = index.find((e) => e.name === name)
+    const entry: SessionIndexEntry = {
+      name,
+      createdAt: metadata.createdAt,
+      updatedAt: metadata.updatedAt,
+      provider: metadata.provider,
+      model: metadata.model,
+      messageCount: metadata.messageCount,
+      tokenCount: existing?.tokenCount || 0,
+      cwd: metadata.cwd,
+      summary: existing?.summary,
+      tags: existing?.tags,
+    }
+    if (existing) {
+      Object.assign(existing, entry)
+    } else {
+      index.push(entry)
+    }
+    writeFileSync(INDEX_FILE, JSON.stringify(index, null, 2), 'utf-8')
+  }
+
+  /**
    * Persist an LLM-generated summary for a session.
    * Writes a markdown file to .summaries/ and updates the index entry.
    */
@@ -204,12 +232,24 @@ export class SessionStore {
     const summaryPath = join(SUMMARIES_DIR, `${safe}.md`)
     writeFileSync(summaryPath, `# ${name}\n\n${summary}\n\nTags: ${tags.join(', ')}\n`, 'utf-8')
 
-    // Update index entry
+    // Update index entry — create minimal one if not present
     const index = SessionStore.loadIndexRaw()
     const entry = index.find((e) => e.name === name)
     if (entry) {
       entry.summary = summary
       entry.tags = tags
+    } else {
+      index.push({
+        name,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        provider: 'unknown',
+        model: 'unknown',
+        messageCount: 0,
+        tokenCount: 0,
+        summary,
+        tags,
+      })
     }
     writeFileSync(INDEX_FILE, JSON.stringify(index, null, 2), 'utf-8')
   }

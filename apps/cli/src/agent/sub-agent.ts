@@ -6,6 +6,7 @@ import { getBackgroundAgentRegistry } from './background-registry'
 import { getMessageBus } from './message-bus'
 import type { HookEngine } from '../core/hooks'
 import type { PermissionSystem } from '../core/permission'
+import { AgentExperience } from './agent-experience'
 
 const TYPE_SYSTEM_PROMPTS: Record<SubAgentType, string> = {
   general: 'You are a focused sub-agent. Complete the assigned task thoroughly and return results.',
@@ -73,6 +74,12 @@ export class SubAgent {
             task.result || task.error,
           )
         }
+        // Auto-log agent experience for background tasks
+        if (task.status === 'completed') {
+          this.logSuccessExperience(agentType, description, task.result || '', options.agentDef)
+        } else {
+          this.logFailureExperience(agentType, description, task.error || 'Unknown error', options.agentDef)
+        }
       })
 
       return `[background-task:${taskId}]`
@@ -84,6 +91,7 @@ export class SubAgent {
       if (this.hookEngine) {
         await this.hookEngine.executeSubagentStop(agentType, description, 'sub-agent', true, result)
       }
+      this.logSuccessExperience(agentType, description, result, options.agentDef)
       return result
     } catch (err) {
       if (this.hookEngine) {
@@ -95,6 +103,7 @@ export class SubAgent {
           String(err),
         )
       }
+      this.logFailureExperience(agentType, description, String(err), options.agentDef)
       throw err
     }
   }
@@ -313,5 +322,47 @@ export class SubAgent {
     }
 
     return chunks.join('')
+  }
+
+  /**
+   * Log a successful execution to AgentExperience.
+   * Wrapped in try/catch so it never breaks agent execution.
+   */
+  private logSuccessExperience(
+    agentType: SubAgentType,
+    description: string,
+    result: string,
+    agentDef?: AgentDefinition,
+  ): void {
+    try {
+      const name = agentDef?.name || agentType
+      const exp = new AgentExperience(name)
+      if (result && result.trim()) {
+        const firstLine = result.trim().split('\n')[0]?.slice(0, 150) || 'Task completed'
+        exp.logSuccess(firstLine, description)
+      }
+    } catch {
+      // Never let experience logging break execution
+    }
+  }
+
+  /**
+   * Log a failed execution to AgentExperience.
+   * Wrapped in try/catch so it never breaks agent execution.
+   */
+  private logFailureExperience(
+    agentType: SubAgentType,
+    description: string,
+    errMsg: string,
+    agentDef?: AgentDefinition,
+  ): void {
+    try {
+      const name = agentDef?.name || agentType
+      const exp = new AgentExperience(name)
+      const truncated = errMsg.slice(0, 200)
+      exp.logFailure(truncated, description)
+    } catch {
+      // Never let experience logging break execution
+    }
   }
 }
