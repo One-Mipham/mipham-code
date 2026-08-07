@@ -143,7 +143,17 @@ export async function runApp(options: RunOptions): Promise<void> {
   if (context.getMessageCount() === 0) {
     const basePrompt = instructions.buildSystemPrompt()
     const memoryReminder = loadSessionMemories(basePrompt)
-    context.setSystemPrompt(memoryReminder ? `${basePrompt}\n\n${memoryReminder}` : basePrompt)
+
+    // Inject previous session summary for AI continuity
+    let prompt = basePrompt
+    if (memoryReminder) {
+      prompt = `${prompt}\n\n${memoryReminder}`
+    }
+    const latestSession = SessionStore.getLatest()
+    if (latestSession?.summary) {
+      prompt = `${prompt}\n\n<system-context name="previous-session">\n# Previous Session Summary\n${latestSession.summary}\n</system-context>`
+    }
+    context.setSystemPrompt(prompt)
   }
 
   // Create tool registry with all built-in tools
@@ -234,7 +244,9 @@ export async function runApp(options: RunOptions): Promise<void> {
   engine.setupContextSummarizer()
 
   // Auto-save session on exit
+  let saved = false
   const saveAndExit = () => {
+    saved = true
     artifactServer.stop()
     if (context.getMessageCount() > 0) {
       SessionStore.save(sessionName, context.getMessages(), {
@@ -248,6 +260,17 @@ export async function runApp(options: RunOptions): Promise<void> {
 
   process.on('SIGINT', saveAndExit)
   process.on('SIGTERM', saveAndExit)
+
+  // Safety net: auto-save on exit for paths that bypass saveAndExit
+  process.on('exit', () => {
+    if (!saved && context.getMessageCount() > 0) {
+      SessionStore.autoSave(context.getMessages(), {
+        provider: defaultProvider,
+        model: defaultModel,
+        cwd: process.cwd(),
+      })
+    }
+  })
 
   const { waitUntilExit } = render(
     <App
