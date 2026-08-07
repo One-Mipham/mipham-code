@@ -84,7 +84,11 @@ export class SessionStore {
     renameSync(tmp, path)
 
     // Incremental index update — only touch this session's entry
-    SessionStore.updateIndexEntry(name, session.metadata)
+    try {
+      SessionStore.updateIndexEntry(name, session.metadata)
+    } catch {
+      // Index update is best-effort; .jsonl data is already safe
+    }
   }
 
   /**
@@ -233,25 +237,29 @@ export class SessionStore {
     writeFileSync(summaryPath, `# ${name}\n\n${summary}\n\nTags: ${tags.join(', ')}\n`, 'utf-8')
 
     // Update index entry — create minimal one if not present
-    const index = SessionStore.loadIndexRaw()
-    const entry = index.find((e) => e.name === name)
-    if (entry) {
-      entry.summary = summary
-      entry.tags = tags
-    } else {
-      index.push({
-        name,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        provider: 'unknown',
-        model: 'unknown',
-        messageCount: 0,
-        tokenCount: 0,
-        summary,
-        tags,
-      })
+    try {
+      const index = SessionStore.loadIndexRaw()
+      const entry = index.find((e) => e.name === name)
+      if (entry) {
+        entry.summary = summary
+        entry.tags = tags
+      } else {
+        index.push({
+          name,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          provider: 'unknown',
+          model: 'unknown',
+          messageCount: 0,
+          tokenCount: 0,
+          summary,
+          tags,
+        })
+      }
+      writeFileSync(INDEX_FILE, JSON.stringify(index, null, 2), 'utf-8')
+    } catch {
+      // Index write is best-effort
     }
-    writeFileSync(INDEX_FILE, JSON.stringify(index, null, 2), 'utf-8')
   }
 
   /**
@@ -259,9 +267,40 @@ export class SessionStore {
    */
   static getLatest(): SessionIndexEntry | null {
     const index = SessionStore.loadIndexRaw()
-    if (index.length === 0) return null
-    index.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-    return index[0]!
+    if (index.length > 0) {
+      index.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+      return index[0]!
+    }
+    // Fallback: scan .jsonl files directly when index is missing
+    return SessionStore.scanLatestFromDisk()
+  }
+
+  /** Scan .jsonl files on disk by mtime — fallback when .index.json is missing. */
+  private static scanLatestFromDisk(): SessionIndexEntry | null {
+    ensureDir()
+    const files = readdirSync(SESSIONS_DIR).filter((f) => f.endsWith('.jsonl'))
+    if (files.length === 0) return null
+    let latest: { name: string; mtime: number } | null = null
+    for (const file of files) {
+      const stat = statSync(join(SESSIONS_DIR, file))
+      if (!latest || stat.mtimeMs > latest.mtime) {
+        latest = { name: file.replace('.jsonl', ''), mtime: stat.mtimeMs }
+      }
+    }
+    if (!latest) return null
+    // Load the session to extract metadata
+    const session = SessionStore.load(latest.name)
+    if (!session) return null
+    return {
+      name: latest.name,
+      createdAt: session.metadata.createdAt,
+      updatedAt: session.metadata.updatedAt,
+      provider: session.metadata.provider,
+      model: session.metadata.model,
+      messageCount: session.metadata.messageCount,
+      tokenCount: 0,
+      cwd: session.metadata.cwd,
+    }
   }
 
   /**
