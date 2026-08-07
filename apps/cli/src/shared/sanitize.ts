@@ -3,7 +3,7 @@
  * Strips invisible/control characters that could hide command content
  * from visual inspection or enable homoglyph attacks.
  *
- * Claude Code v2.1.223 parity: hidden command text via tabs/invisible Unicode.
+ * Protects against hidden command text via tabs/invisible Unicode characters.
  */
 
 const DANGEROUS_UNICODE = /[​‌‍‎‏‪‫‬‭‮⁠⁦⁧⁨⁩﻿]/g
