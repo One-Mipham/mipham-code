@@ -5,7 +5,7 @@
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
 > **版本**: 1.4.0
-> **最后更新**: 2026-08-05 — v0.10.0 五 Sprint 交付：30 工具、Rules、Agent Memory、MCP Tool Search、VS Code 扩展
+> **最后更新**: 2026-08-05 — v0.16.5：30 工具、Rules、Agent Memory、MCP Tool Search、VS Code 扩展
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
