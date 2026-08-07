@@ -1,2 +1,3 @@
 apps/cli/skills/workflows
 .claude/
+pnpm-lock.yaml
