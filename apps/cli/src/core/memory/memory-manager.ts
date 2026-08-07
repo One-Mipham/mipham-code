@@ -138,6 +138,16 @@ export class MemoryManager {
       }
     }
 
+    // Apply time decay: memories older than 30 days get 50% weight
+    const now = Date.now()
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
+    for (const item of scored) {
+      const age = now - item.entry.updatedAt.getTime()
+      if (age > THIRTY_DAYS_MS) {
+        item.score *= 0.5
+      }
+    }
+
     scored.sort((a, b) => b.score - a.score)
     return scored.slice(0, limit).map((s) => s.entry)
   }
@@ -183,6 +193,53 @@ export class MemoryManager {
 
     lines.push('</system-reminder>')
     return lines.join('\n')
+  }
+
+  distillFromSession(summary: string, sessionId: string): MemoryEntry[] {
+    const results: MemoryEntry[] = []
+    // Split on bullet points (both - and *)
+    const bullets = summary.split(/\n\s*[-*]\s+/).filter((b) => b.trim().length > 20)
+
+    for (const bullet of bullets) {
+      // Extract Why / How to apply if present
+      const whyMatch = bullet.match(/\*\*Why:\*\*\s*(.+?)(?:\s*\*\*How to apply:|$)/)
+      const howMatch = bullet.match(/\*\*How to apply:\*\*\s*(.+)$/)
+
+      const content = bullet.trim()
+      const slug = `auto-${sessionId}-${results.length}`
+
+      this.write(slug, content, {
+        type: 'feedback',
+        relevance: this.extractKeywords(content),
+        why: whyMatch?.[1]?.trim(),
+        howToApply: howMatch?.[1]?.trim(),
+      })
+
+      const entry = this.memories.get(slug)
+      if (entry) results.push(entry)
+    }
+    return results
+  }
+
+  private extractKeywords(content: string): string[] {
+    const words = content
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, '')
+      .split(/\s+/)
+    const stopWords = new Set([
+      'the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at',
+      'to', 'for', 'of', 'and', 'or', 'but', 'not', 'this', 'that',
+      'with', 'from', 'by', 'as', 'be', 'has', 'have', 'it', 'its',
+    ])
+    const seen = new Set<string>()
+    const result: string[] = []
+    for (const word of words) {
+      if (word.length > 3 && !stopWords.has(word) && !seen.has(word)) {
+        seen.add(word)
+        result.push(word)
+      }
+    }
+    return result.slice(0, 10)
   }
 
   private updateIndex(): void {

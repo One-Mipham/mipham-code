@@ -134,6 +134,25 @@ describe('MemoryManager', () => {
     expect(all[0]!.content).toContain('Version 2')
   })
 
+  it('distillFromSession splits summary into individual memories', () => {
+    const mm = new MemoryManager(TEST_DIR)
+    const summary = `Session summary:
+- User prefers TypeScript strict mode. **Why:** type safety. **How to apply:** enable strict in tsconfig.
+- Decided to use Vitest for testing. **Why:** faster than Jest. **How to apply:** use vitest.config.ts in new projects.`
+
+    const entries = mm.distillFromSession(summary, 'session-test-001')
+    expect(entries.length).toBeGreaterThanOrEqual(2)
+
+    const tsEntry = entries.find(e => e.content.includes('TypeScript'))
+    expect(tsEntry).toBeDefined()
+    expect(tsEntry!.metadata.type).toBe('feedback')
+    expect(tsEntry!.metadata.relevance).toContain('typescript')
+
+    const vitestEntry = entries.find(e => e.content.includes('Vitest'))
+    expect(vitestEntry).toBeDefined()
+    expect(vitestEntry!.content).toContain('**Why:** faster than Jest')
+  })
+
   it('recall includes wikilink-connected memories with lower weight', () => {
     const mm = new MemoryManager(TEST_DIR)
     mm.write('a', 'Memory A. See also: [[b]]', {
