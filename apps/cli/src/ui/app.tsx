@@ -67,8 +67,11 @@ const PERMISSION_MODES: PermissionMode[] = [
   'dontAsk',
   'bypassPermissions',
 ]
+// Labels aligned with Claude Code terminology: describe behavior, not capability.
+// Claude Code modes: manual mode → accept edits on → bypass
+// Mipham extends with 3 extra modes (plan, auto, dontAsk) for finer control.
 const PERMISSION_LABELS: Record<PermissionMode, string> = {
-  default: 'reads free',
+  default: 'manual mode',
   acceptEdits: 'accept edits on',
   plan: 'plan mode · read-only',
   auto: 'auto mode',
@@ -608,7 +611,7 @@ export function App({
       {/* Agent status footer — shows running background agents */}
       <AgentFooter agents={Object.values(runningAgents)} gitBranch={gitBranch} tick={agentTick} />
 
-      {/* Status line — Claude Code style: compact, action-oriented */}
+      {/* Status line — Claude Code style */}
       <Box marginTop={1} flexDirection="column">
         {goalText && (
           <Box>
@@ -619,8 +622,8 @@ export function App({
           <Text color={PERMISSION_COLORS[permissionMode]}>
             ⏵⏵ {PERMISSION_LABELS[permissionMode]} (shift+tab to cycle)
           </Text>
-          <Text dimColor> · Esc to interrupt</Text>
-          <Text dimColor> · ← agents</Text>
+          <Text dimColor> · esc to interrupt</Text>
+          <Text dimColor> · ← for agents</Text>
         </Box>
       </Box>
     </Box>
