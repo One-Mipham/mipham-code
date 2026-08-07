@@ -70,9 +70,7 @@ export default function DashboardPage() {
       {/* Workflow Runs List */}
       <div className="mb-8">
         <h2 className="text-xl font-semibold mb-4">Workflow Runs</h2>
-        {loading && !selectedRun && (
-          <p className="text-gray-500">Loading...</p>
-        )}
+        {loading && !selectedRun && <p className="text-gray-500">Loading...</p>}
         {!loading && runs.length === 0 && (
           <div className="p-8 bg-gray-50 rounded-xl text-center text-gray-500">
             <p className="text-lg">No workflow runs yet</p>
@@ -106,9 +104,7 @@ export default function DashboardPage() {
       {/* DAG View */}
       {selectedRun && (
         <div className="mb-8">
-          <h2 className="text-xl font-semibold mb-4">
-            DAG: {selectedRun.id.slice(0, 20)}...
-          </h2>
+          <h2 className="text-xl font-semibold mb-4">DAG: {selectedRun.id.slice(0, 20)}...</h2>
           <div className="bg-white rounded-xl border border-gray-200 p-6 overflow-x-auto">
             <WorkflowDag entries={selectedRun.entries} runId={selectedRun.id} />
           </div>

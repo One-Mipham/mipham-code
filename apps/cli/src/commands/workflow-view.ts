@@ -9,14 +9,12 @@ export const workflowViewCmd: CommandHandler = async (_ctx, args) => {
     const runs = listRuns()
     if (runs.length === 0) {
       return {
-        content: 'No workflow runs found.\n\nRuns are saved to ~/.mipham/workflows/ after each Workflow tool invocation.',
+        content:
+          'No workflow runs found.\n\nRuns are saved to ~/.mipham/workflows/ after each Workflow tool invocation.',
       }
     }
 
-    const lines: string[] = [
-      '── Recent Workflow Runs ──',
-      '',
-    ]
+    const lines: string[] = ['── Recent Workflow Runs ──', '']
 
     // Show last 10, newest first
     const recent = runs.sort().reverse().slice(0, 10)
@@ -39,10 +37,7 @@ export const workflowViewCmd: CommandHandler = async (_ctx, args) => {
     return { content: `Run "${runId}" not found.\n\nUse /workflow list to see available runs.` }
   }
 
-  const lines: string[] = [
-    `── Workflow: ${runId.slice(0, 30)} ──`,
-    '',
-  ]
+  const lines: string[] = [`── Workflow: ${runId.slice(0, 30)} ──`, '']
 
   let currentPhase = ''
   for (const entry of entries) {

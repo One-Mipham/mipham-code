@@ -30,7 +30,13 @@ describe('WorkflowEventBus', () => {
 
     bus.startRun('test-run-2')
     bus.emitEvent({ type: 'agent:start', agentId: 'a1', label: 'grep', phase: 'Scan' })
-    bus.emitEvent({ type: 'agent:end', agentId: 'a1', label: 'grep', success: true, durationMs: 1200 })
+    bus.emitEvent({
+      type: 'agent:end',
+      agentId: 'a1',
+      label: 'grep',
+      success: true,
+      durationMs: 1200,
+    })
 
     expect(startHandler).toHaveBeenCalledTimes(1)
     expect(endHandler).toHaveBeenCalledTimes(1)

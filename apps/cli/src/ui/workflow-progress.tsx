@@ -59,9 +59,7 @@ export function WorkflowProgress({ runId }: WorkflowProgressProps) {
               })
               // Mark phase as done if all agents in it are done
               const phaseName = existing.phase
-              const allInPhase = Array.from(next.values()).filter(
-                (a) => a.phase === phaseName,
-              )
+              const allInPhase = Array.from(next.values()).filter((a) => a.phase === phaseName)
               const allDone = allInPhase.every((a) => a.status !== 'running')
               if (allDone) {
                 setPhases((prev) =>
@@ -86,8 +84,13 @@ export function WorkflowProgress({ runId }: WorkflowProgressProps) {
 
     // Subscribe to all event types
     const types = [
-      'phase:start', 'agent:start', 'agent:end',
-      'agent:result', 'log', 'error', 'done',
+      'phase:start',
+      'agent:start',
+      'agent:end',
+      'agent:result',
+      'log',
+      'error',
+      'done',
     ]
     for (const type of types) {
       bus.on(type, handleEvent)
@@ -137,11 +140,16 @@ export function WorkflowProgress({ runId }: WorkflowProgressProps) {
           <Box key={i} flexDirection="column" marginTop={1}>
             <Text>
               {phase.done ? '●' : '◌'} Phase: {phase.name}
-              {phaseAgents.length > 0 && ` [${phaseAgents.filter((a) => a.status === 'done').length}/${phaseAgents.length} done]`}
+              {phaseAgents.length > 0 &&
+                ` [${phaseAgents.filter((a) => a.status === 'done').length}/${phaseAgents.length} done]`}
             </Text>
             {phaseAgents.map((agent, j) => (
               <Box key={j} marginLeft={2}>
-                <Text color={agent.status === 'done' ? 'green' : agent.status === 'failed' ? 'red' : 'yellow'}>
+                <Text
+                  color={
+                    agent.status === 'done' ? 'green' : agent.status === 'failed' ? 'red' : 'yellow'
+                  }
+                >
                   {agent.status === 'done' ? '✓' : agent.status === 'failed' ? '✗' : '⏳'}{' '}
                   {agent.label}
                   {agent.status !== 'running' && ` ${formatDuration(agent.durationMs)}`}

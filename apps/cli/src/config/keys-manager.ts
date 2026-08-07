@@ -115,7 +115,8 @@ export class KeyManager {
     if (expired.length === 0) return null
 
     const lines = expired.map(
-      (k) => `  - ${k.provider}: last rotated ${k.ageDays} days ago (${EXPIRY_DAYS}-day threshold exceeded)`,
+      (k) =>
+        `  - ${k.provider}: last rotated ${k.ageDays} days ago (${EXPIRY_DAYS}-day threshold exceeded)`,
     )
     return `⚠️  API key rotation overdue:\n${lines.join('\n')}\n\nRun /keys rotate <provider> to rotate.`
   }

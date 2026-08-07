@@ -51,10 +51,12 @@ apps/web/src/app/api/workflows/
 ### Task 1: WorkflowEventBus
 
 **Files:**
+
 - Create: `apps/cli/src/workflow/event-bus.ts`
 - Test: `apps/cli/test/workflow/event-bus.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing (new leaf module)
 - Produces: `workflowEventBus` singleton (module-level export), `WorkflowEvent` type union, `getEventBus(): WorkflowEventBus`
 
@@ -95,7 +97,13 @@ describe('WorkflowEventBus', () => {
 
     bus.startRun('test-run-2')
     bus.emitEvent({ type: 'agent:start', agentId: 'a1', label: 'grep', phase: 'Scan' })
-    bus.emitEvent({ type: 'agent:end', agentId: 'a1', label: 'grep', success: true, durationMs: 1200 })
+    bus.emitEvent({
+      type: 'agent:end',
+      agentId: 'a1',
+      label: 'grep',
+      success: true,
+      durationMs: 1200,
+    })
 
     expect(startHandler).toHaveBeenCalledTimes(1)
     expect(endHandler).toHaveBeenCalledTimes(1)
@@ -226,9 +234,11 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 2: Integrate EventBus into runtime.ts
 
 **Files:**
+
 - Modify: `apps/cli/src/workflow/runtime.ts:1-177`
 
 **Interfaces:**
+
 - Consumes: `getEventBus()` from Task 1, existing `runWorkflow()` signature
 - Produces: events emitted at execution milestones; existing return type unchanged
 
@@ -253,55 +263,55 @@ import { getEventBus } from './event-bus'
 In `runWorkflow()`, after line 98 (`createJournal(runId, script)`) — add:
 
 ```typescript
-  const bus = getEventBus()
-  bus.startRun(runId)
+const bus = getEventBus()
+bus.startRun(runId)
 ```
 
 In the wrapped `agent` function (after line 117 `const result = await workflowAgent(...)`), add before the journal append:
 
 ```typescript
-    const agentId = (opts?.label as string) || `agent-${Date.now().toString(36)}`
-    const phase = (opts?.phase as string) || 'default'
-    const startTime = Date.now()
+const agentId = (opts?.label as string) || `agent-${Date.now().toString(36)}`
+const phase = (opts?.phase as string) || 'default'
+const startTime = Date.now()
 
-    bus.emitEvent({ type: 'agent:start', agentId, label: agentId, phase })
+bus.emitEvent({ type: 'agent:start', agentId, label: agentId, phase })
 
-    const result = await workflowAgent(prompt, registry, toolRegistry, {
-      ...(opts || {}),
-      permissionSystem: permission,
-    } as Record<string, unknown>)
+const result = await workflowAgent(prompt, registry, toolRegistry, {
+  ...(opts || {}),
+  permissionSystem: permission,
+} as Record<string, unknown>)
 
-    const durationMs = Date.now() - startTime
-    bus.emitEvent({ type: 'agent:end', agentId, label: agentId, success: true, durationMs })
-    bus.emitEvent({ type: 'agent:result', agentId, summary: String(result).slice(0, 200) })
+const durationMs = Date.now() - startTime
+bus.emitEvent({ type: 'agent:end', agentId, label: agentId, success: true, durationMs })
+bus.emitEvent({ type: 'agent:result', agentId, summary: String(result).slice(0, 200) })
 ```
 
 Wait — I need to be more careful. The current code doesn't have `startTime` tracking. Let me re-read the agent wrapper in runtime.ts:
 
 ```typescript
-  const agent = async (prompt: string, opts?: Record<string, unknown>) => {
-    // Check cache first
-    if (resultCache) {
-      const key = agentCacheKey(prompt, opts || {})
-      if (resultCache.has(key)) {
-        cacheHits++
-        return resultCache.get(key)!
-      }
+const agent = async (prompt: string, opts?: Record<string, unknown>) => {
+  // Check cache first
+  if (resultCache) {
+    const key = agentCacheKey(prompt, opts || {})
+    if (resultCache.has(key)) {
+      cacheHits++
+      return resultCache.get(key)!
     }
-    cacheMisses++
-
-    const result = await workflowAgent(prompt, registry, toolRegistry, {
-      ...(opts || {}),
-      permissionSystem: permission,
-    } as Record<string, unknown>)
-    appendJournal(runId, {
-      type: 'agent',
-      prompt,
-      opts: opts as Record<string, unknown> | undefined,
-      result,
-    })
-    return result
   }
+  cacheMisses++
+
+  const result = await workflowAgent(prompt, registry, toolRegistry, {
+    ...(opts || {}),
+    permissionSystem: permission,
+  } as Record<string, unknown>)
+  appendJournal(runId, {
+    type: 'agent',
+    prompt,
+    opts: opts as Record<string, unknown> | undefined,
+    result,
+  })
+  return result
+}
 ```
 
 So the integration needs to be within this wrapper. Let me update the plan step.
@@ -309,75 +319,75 @@ So the integration needs to be within this wrapper. Let me update the plan step.
 In the wrapped `agent` function (lines 106-128), modify to:
 
 ```typescript
-  const agent = async (prompt: string, opts?: Record<string, unknown>) => {
-    // Check cache first
-    if (resultCache) {
-      const key = agentCacheKey(prompt, opts || {})
-      if (resultCache.has(key)) {
-        cacheHits++
-        return resultCache.get(key)!
-      }
+const agent = async (prompt: string, opts?: Record<string, unknown>) => {
+  // Check cache first
+  if (resultCache) {
+    const key = agentCacheKey(prompt, opts || {})
+    if (resultCache.has(key)) {
+      cacheHits++
+      return resultCache.get(key)!
     }
-    cacheMisses++
-
-    const agentId = (opts?.label as string) || `agent-${cacheMisses}`
-    const phase = (opts?.phase as string) || 'default'
-    const startTime = Date.now()
-
-    bus.emitEvent({ type: 'agent:start', agentId, label: agentId, phase })
-
-    const result = await workflowAgent(prompt, registry, toolRegistry, {
-      ...(opts || {}),
-      permissionSystem: permission,
-    } as Record<string, unknown>)
-
-    const durationMs = Date.now() - startTime
-    bus.emitEvent({ type: 'agent:end', agentId, label: agentId, success: true, durationMs })
-
-    appendJournal(runId, {
-      type: 'agent',
-      prompt,
-      opts: opts as Record<string, unknown> | undefined,
-      result,
-    })
-    return result
   }
+  cacheMisses++
+
+  const agentId = (opts?.label as string) || `agent-${cacheMisses}`
+  const phase = (opts?.phase as string) || 'default'
+  const startTime = Date.now()
+
+  bus.emitEvent({ type: 'agent:start', agentId, label: agentId, phase })
+
+  const result = await workflowAgent(prompt, registry, toolRegistry, {
+    ...(opts || {}),
+    permissionSystem: permission,
+  } as Record<string, unknown>)
+
+  const durationMs = Date.now() - startTime
+  bus.emitEvent({ type: 'agent:end', agentId, label: agentId, success: true, durationMs })
+
+  appendJournal(runId, {
+    type: 'agent',
+    prompt,
+    opts: opts as Record<string, unknown> | undefined,
+    result,
+  })
+  return result
+}
 ```
 
 In `wrappedPhase` function (lines 130-133), add event emission:
 
 ```typescript
-  const wrappedPhase = (title: string) => {
-    phasePrimitive(title)
-    bus.emitEvent({ type: 'phase:start', phase: title, timestamp: Date.now() })
-    appendJournal(runId, { type: 'phase', message: title })
-  }
+const wrappedPhase = (title: string) => {
+  phasePrimitive(title)
+  bus.emitEvent({ type: 'phase:start', phase: title, timestamp: Date.now() })
+  appendJournal(runId, { type: 'phase', message: title })
+}
 ```
 
 In the `log` function (lines 135-137), add event emission:
 
 ```typescript
-  const log = (message: string) => {
-    bus.emitEvent({ type: 'log', message })
-    appendJournal(runId, { type: 'log', message })
-  }
+const log = (message: string) => {
+  bus.emitEvent({ type: 'log', message })
+  appendJournal(runId, { type: 'log', message })
+}
 ```
 
 After the `vmScript.runInContext()` call (after line 162, before the return), add done event:
 
 ```typescript
-    bus.emitEvent({
-      type: 'done',
-      runId,
-      totalAgents: cacheMisses,
-      cacheHits,
-    })
+bus.emitEvent({
+  type: 'done',
+  runId,
+  totalAgents: cacheMisses,
+  cacheHits,
+})
 ```
 
 In the catch block, add error event:
 
 ```typescript
-    bus.emitEvent({ type: 'error', message })
+bus.emitEvent({ type: 'error', message })
 ```
 
 - [ ] **Step 3: Run tests to verify no regressions**
@@ -408,10 +418,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 3: CLI WorkflowProgress Ink Component
 
 **Files:**
+
 - Create: `apps/cli/src/ui/workflow-progress.tsx`
 - Test: `apps/cli/test/ui/workflow-progress.test.ts`
 
 **Interfaces:**
+
 - Consumes: `getEventBus()` from Task 1, React/Ink hooks
 - Produces: `<WorkflowProgress />` Ink component — subscribes to EventBus, renders live agent/phase status
 
@@ -435,7 +447,10 @@ describe('WorkflowProgress state', () => {
   })
 
   it('builds agent status map from events', () => {
-    const agents = new Map<string, { label: string; phase: string; status: 'running' | 'done' | 'failed'; durationMs: number }>()
+    const agents = new Map<
+      string,
+      { label: string; phase: string; status: 'running' | 'done' | 'failed'; durationMs: number }
+    >()
 
     bus.on('agent:start', (e) => {
       agents.set(e.agentId, { label: e.label, phase: e.phase, status: 'running', durationMs: 0 })
@@ -451,7 +466,13 @@ describe('WorkflowProgress state', () => {
     bus.startRun('test')
     bus.emitEvent({ type: 'agent:start', agentId: 'a1', label: 'grep', phase: 'Scan' })
     bus.emitEvent({ type: 'agent:start', agentId: 'a2', label: 'lint', phase: 'Scan' })
-    bus.emitEvent({ type: 'agent:end', agentId: 'a1', label: 'grep', success: true, durationMs: 1200 })
+    bus.emitEvent({
+      type: 'agent:end',
+      agentId: 'a1',
+      label: 'grep',
+      success: true,
+      durationMs: 1200,
+    })
 
     expect(agents.get('a1')!.status).toBe('done')
     expect(agents.get('a1')!.durationMs).toBe(1200)
@@ -474,7 +495,9 @@ describe('WorkflowProgress state', () => {
 
   it('detects done event and marks all complete', () => {
     let done = false
-    bus.on('done', () => { done = true })
+    bus.on('done', () => {
+      done = true
+    })
 
     bus.startRun('test')
     bus.emitEvent({ type: 'done', runId: 'test', totalAgents: 3, cacheHits: 1 })
@@ -703,10 +726,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 4: /workflow view Command (Journal Replay)
 
 **Files:**
+
 - Create: `apps/cli/src/commands/workflow-view.ts`
 - Modify: `apps/cli/src/ui/commands.ts` — register `/workflow view`, `/workflow watch`
 
 **Interfaces:**
+
 - Consumes: `listRuns()`, `loadJournal()`, `loadScript()` from `workflow/journal.ts`
 - Produces: `workflowViewCmd: CommandHandler`, `workflowWatchCmd: CommandHandler`
 
@@ -725,13 +750,13 @@ export const workflowViewCmd: CommandHandler = async (_ctx, args) => {
   if (!runId || runId === 'list') {
     const runs = listRuns()
     if (runs.length === 0) {
-      return { content: 'No workflow runs found.\n\nRuns are saved to ~/.mipham/workflows/ after each Workflow tool invocation.' }
+      return {
+        content:
+          'No workflow runs found.\n\nRuns are saved to ~/.mipham/workflows/ after each Workflow tool invocation.',
+      }
     }
 
-    const lines: string[] = [
-      '── Recent Workflow Runs ──',
-      '',
-    ]
+    const lines: string[] = ['── Recent Workflow Runs ──', '']
 
     // Show last 10, newest first
     const recent = runs.sort().reverse().slice(0, 10)
@@ -754,10 +779,7 @@ export const workflowViewCmd: CommandHandler = async (_ctx, args) => {
     return { content: `Run "${runId}" not found.\n\nUse /workflow list to see available runs.` }
   }
 
-  const lines: string[] = [
-    `── Workflow: ${runId.slice(0, 30)} ──`,
-    '',
-  ]
+  const lines: string[] = [`── Workflow: ${runId.slice(0, 30)} ──`, '']
 
   let currentPhase = ''
   for (const entry of entries) {
@@ -845,10 +867,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 5: Web API Routes
 
 **Files:**
+
 - Create: `apps/web/src/app/api/workflows/route.ts`
 - Create: `apps/web/src/app/api/workflows/[id]/route.ts`
 
 **Interfaces:**
+
 - Consumes: `listRuns()`, `loadJournal()`, `loadScript()` from `workflow/journal.ts`
 - Produces: `GET /api/workflows` → `{ runs: Array<{id, agentCount, phaseCount}> }`, `GET /api/workflows/[id]` → `{ id, script, entries: JournalEntry[] }`
 
@@ -905,7 +929,10 @@ function loadJournal(runId: string): Array<{ type: string }> {
   const path = join(WORKFLOW_DIR, runId, 'journal.jsonl')
   if (!existsSync(path)) return []
   const raw = readFileSync(path, 'utf-8')
-  return raw.split('\n').filter(Boolean).map((l) => JSON.parse(l))
+  return raw
+    .split('\n')
+    .filter(Boolean)
+    .map((l) => JSON.parse(l))
 }
 
 export async function GET() {
@@ -944,10 +971,7 @@ import { homedir } from 'node:os'
 
 const WORKFLOW_DIR = join(homedir(), '.mipham', 'workflows')
 
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const runDir = join(WORKFLOW_DIR, id)
 
@@ -961,7 +985,10 @@ export async function GET(
     let entries: Array<Record<string, unknown>> = []
     if (existsSync(journalPath)) {
       const raw = readFileSync(journalPath, 'utf-8')
-      entries = raw.split('\n').filter(Boolean).map((l) => JSON.parse(l))
+      entries = raw
+        .split('\n')
+        .filter(Boolean)
+        .map((l) => JSON.parse(l))
     }
 
     // Load script
@@ -1003,10 +1030,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 6: Web Dashboard — Workflow List + Mermaid DAG
 
 **Files:**
+
 - Create: `apps/web/src/app/code/dashboard/WorkflowDag.tsx`
 - Modify: `apps/web/src/app/code/dashboard/page.tsx`
 
 **Interfaces:**
+
 - Consumes: `GET /api/workflows` and `GET /api/workflows/[id]` from Task 5
 - Produces: Dashboard page with workflow run list and Mermaid DAG viewer
 
@@ -1310,9 +1339,11 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 7: Final Integration — Auto-show WorkflowProgress in CLI
 
 **Files:**
+
 - Modify: `apps/cli/src/ui/app.tsx` — integrate WorkflowProgress near the header area
 
 **Interfaces:**
+
 - Consumes: `WorkflowProgress` from Task 3, `getEventBus()` from Task 1
 - Produces: automatic display of workflow progress when workflow is active
 
@@ -1375,13 +1406,13 @@ git commit -m "chore: bump mipham-code — Workflow Visualization (EventBus + CL
 
 ## Task Summary
 
-| #   | Task                                | Files        | Lines   | Tests |
-|-----|-------------------------------------|-------------|---------|-------|
-| 1   | WorkflowEventBus                    | 2 (1 new)   | ~60     | +7    |
-| 2   | Runtime EventBus integration         | 1 (mod)     | ~20     | 0     |
-| 3   | WorkflowProgress Ink component       | 2 (1 new)   | ~130    | +3    |
-| 4   | /workflow view + watch commands      | 2 (1 new)   | ~80     | 0     |
-| 5   | Web API routes                       | 2 (new)     | ~70     | 0     |
-| 6   | Web Dashboard + Mermaid DAG          | 2 (1 new)   | ~160    | 0     |
-| 7   | Final integration (app.tsx)          | 1 (mod)     | ~5      | 0     |
-|     | **Total**                            | **12 files** | **~525** | **+10** |
+| #   | Task                            | Files        | Lines    | Tests   |
+| --- | ------------------------------- | ------------ | -------- | ------- |
+| 1   | WorkflowEventBus                | 2 (1 new)    | ~60      | +7      |
+| 2   | Runtime EventBus integration    | 1 (mod)      | ~20      | 0       |
+| 3   | WorkflowProgress Ink component  | 2 (1 new)    | ~130     | +3      |
+| 4   | /workflow view + watch commands | 2 (1 new)    | ~80      | 0       |
+| 5   | Web API routes                  | 2 (new)      | ~70      | 0       |
+| 6   | Web Dashboard + Mermaid DAG     | 2 (1 new)    | ~160     | 0       |
+| 7   | Final integration (app.tsx)     | 1 (mod)      | ~5       | 0       |
+|     | **Total**                       | **12 files** | **~525** | **+10** |

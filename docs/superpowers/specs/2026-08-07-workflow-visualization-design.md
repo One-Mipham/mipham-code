@@ -36,6 +36,7 @@
 ```
 
 **核心原则**:
+
 - EventBus 零侵入现有 API（agent/phase/log 签名不变）
 - journal.jsonl 保持不变，Web 端纯文件读取
 - CLI 组件可选开启（`/workflow watch <id>` 或自动检测）
@@ -78,7 +79,7 @@ Ink 组件渲染示意：
 
    Phase: Review          [2/3 agents done]
    ● code-reviewer:grep       ✓ 1.2s
-   ● code-reviewer:lint       ✓ 0.8s  
+   ● code-reviewer:lint       ✓ 0.8s
    ◌ code-reviewer:security   ⏳ running...
 
    Phase: Verify (pending)
@@ -97,13 +98,14 @@ Ink 组件渲染示意：
 - **统计面板**: 总 agent 数、成功率、缓存命中率、总耗时
 
 Mermaid 生成示例：
+
 ```mermaid
 graph TD
     subgraph Scan
         A1[grep ✓] --> A2[lint ✓]
     end
     subgraph Verify
-        B1[injection ✓] 
+        B1[injection ✓]
         B2[path-traversal ✗]
         B3[credential ✓]
     end
@@ -128,18 +130,18 @@ graph TD
 
 ## 四、文件清单
 
-| 层 | 文件 | 操作 | 行数 |
-|----|------|------|------|
-| Core | `workflow/event-bus.ts` | CREATE | ~50 |
-| Core | `workflow/runtime.ts` | MODIFY (注入 EventBus) | +15 |
-| CLI | `ui/workflow-progress.tsx` | CREATE | ~150 |
-| CLI | `ui/commands.ts` | MODIFY (注册 /workflow watch) | +10 |
-| CLI | `ui/commands/workflow-view.ts` | CREATE | ~80 |
-| CLI | `test/ui/workflow-progress.test.ts` | CREATE | ~30 |
-| CLI | `test/workflow/event-bus.test.ts` | CREATE | ~25 |
-| Web | `app/code/dashboard/page.tsx` | MODIFY | ~120 |
-| Web | `app/api/workflows/route.ts` | CREATE | ~40 |
-| Web | `app/api/workflows/[id]/route.ts` | CREATE | ~30 |
+| 层   | 文件                                | 操作                          | 行数 |
+| ---- | ----------------------------------- | ----------------------------- | ---- |
+| Core | `workflow/event-bus.ts`             | CREATE                        | ~50  |
+| Core | `workflow/runtime.ts`               | MODIFY (注入 EventBus)        | +15  |
+| CLI  | `ui/workflow-progress.tsx`          | CREATE                        | ~150 |
+| CLI  | `ui/commands.ts`                    | MODIFY (注册 /workflow watch) | +10  |
+| CLI  | `ui/commands/workflow-view.ts`      | CREATE                        | ~80  |
+| CLI  | `test/ui/workflow-progress.test.ts` | CREATE                        | ~30  |
+| CLI  | `test/workflow/event-bus.test.ts`   | CREATE                        | ~25  |
+| Web  | `app/code/dashboard/page.tsx`       | MODIFY                        | ~120 |
+| Web  | `app/api/workflows/route.ts`        | CREATE                        | ~40  |
+| Web  | `app/api/workflows/[id]/route.ts`   | CREATE                        | ~30  |
 
 ---
 

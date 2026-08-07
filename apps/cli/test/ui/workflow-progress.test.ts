@@ -13,7 +13,10 @@ describe('WorkflowProgress state', () => {
   })
 
   it('builds agent status map from events', () => {
-    const agents = new Map<string, { label: string; phase: string; status: 'running' | 'done' | 'failed'; durationMs: number }>()
+    const agents = new Map<
+      string,
+      { label: string; phase: string; status: 'running' | 'done' | 'failed'; durationMs: number }
+    >()
 
     bus.on('agent:start', (e) => {
       agents.set(e.agentId, { label: e.label, phase: e.phase, status: 'running', durationMs: 0 })
@@ -29,7 +32,13 @@ describe('WorkflowProgress state', () => {
     bus.startRun('test')
     bus.emitEvent({ type: 'agent:start', agentId: 'a1', label: 'grep', phase: 'Scan' })
     bus.emitEvent({ type: 'agent:start', agentId: 'a2', label: 'lint', phase: 'Scan' })
-    bus.emitEvent({ type: 'agent:end', agentId: 'a1', label: 'grep', success: true, durationMs: 1200 })
+    bus.emitEvent({
+      type: 'agent:end',
+      agentId: 'a1',
+      label: 'grep',
+      success: true,
+      durationMs: 1200,
+    })
 
     expect(agents.get('a1')!.status).toBe('done')
     expect(agents.get('a1')!.durationMs).toBe(1200)
@@ -52,7 +61,9 @@ describe('WorkflowProgress state', () => {
 
   it('detects done event and marks all complete', () => {
     let done = false
-    bus.on('done', () => { done = true })
+    bus.on('done', () => {
+      done = true
+    })
 
     bus.startRun('test')
     bus.emitEvent({ type: 'done', runId: 'test', totalAgents: 3, cacheHits: 1 })
