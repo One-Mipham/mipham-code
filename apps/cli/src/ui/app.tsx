@@ -364,10 +364,7 @@ export function App({
             if (isNewTurn) {
               turnContent = chunk.content
               isNewTurn = false
-              setMessages((prev) => [
-                ...prev,
-                { role: 'assistant', content: turnContent },
-              ])
+              setMessages((prev) => [...prev, { role: 'assistant', content: turnContent }])
             } else {
               turnContent += chunk.content
               setMessages((prev) => {

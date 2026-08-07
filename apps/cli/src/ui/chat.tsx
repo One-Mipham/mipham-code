@@ -95,9 +95,7 @@ const MessageRow = React.memo(
 export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
   // Group consecutive tool calls into compact summaries to reduce visual noise.
   // In focus mode, use the more aggressive compactForFocus.
-  const displayMessages = focusMode
-    ? compactForFocus(messages)
-    : compactToolGroups(messages)
+  const displayMessages = focusMode ? compactForFocus(messages) : compactToolGroups(messages)
 
   return (
     <Box flexDirection="column" marginY={1} flexGrow={1}>
