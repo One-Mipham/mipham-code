@@ -76,6 +76,7 @@ export class MemoryManager {
       this.memories.set(name, existing)
       const body = this.formatMemoryFile(name, metadata, content)
       writeFileSync(existing.filePath, body, 'utf-8')
+      this.updateWikilinks(name, content)
       this.updateIndex()
       return
     }
@@ -96,24 +97,7 @@ export class MemoryManager {
     }
 
     this.memories.set(name, entry)
-
-    // Update wikilink graph
-    const links = this.extractWikilinks(content)
-    if (links.length > 0) {
-      this.linkGraph.set(name, new Set(links))
-    }
-    // Update reverse links: other memories that link to this one
-    for (const [existingName, existingEntry] of this.memories) {
-      if (existingName === name) continue
-      const existingLinks = this.extractWikilinks(existingEntry.content)
-      if (existingLinks.includes(name)) {
-        const existingSet = this.linkGraph.get(existingName) || new Set()
-        existingSet.add(name)
-        this.linkGraph.set(existingName, existingSet)
-      }
-    }
-
-    this.saveLinkGraph()
+    this.updateWikilinks(name, content)
     this.updateIndex()
   }
 
@@ -225,6 +209,30 @@ export class MemoryManager {
       links.push(match[1]!)
     }
     return links
+  }
+
+  private updateWikilinks(name: string, content: string): void {
+    // Clear stale outbound links for this memory
+    this.linkGraph.delete(name)
+
+    // Extract outbound wikilinks from content
+    const links = this.extractWikilinks(content)
+    if (links.length > 0) {
+      this.linkGraph.set(name, new Set(links))
+    }
+
+    // Update reverse links: other memories that link to this one
+    for (const [otherName, otherEntry] of this.memories) {
+      if (otherName === name) continue
+      const otherLinks = this.extractWikilinks(otherEntry.content)
+      if (otherLinks.includes(name)) {
+        const otherSet = this.linkGraph.get(otherName) || new Set()
+        otherSet.add(name)
+        this.linkGraph.set(otherName, otherSet)
+      }
+    }
+
+    this.saveLinkGraph()
   }
 
   private rebuildLinkGraph(): void {
