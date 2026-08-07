@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { Box, Text } from 'ink'
 import { useI18n } from '../i18n-context'
 import type { ChatMessage } from './app'
@@ -96,9 +96,14 @@ const MessageRow = React.memo(
 
 export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
   const { t } = useI18n()
-  // Group consecutive tool calls into compact summaries to reduce visual noise.
-  // In focus mode, use the more aggressive compactForFocus.
-  const displayMessages = focusMode ? compactForFocus(messages) : compactToolGroups(messages)
+  // Memoize display message computation to avoid O(n) compact on every render.
+  // During streaming, messages changes on every chunk; without memoization,
+  // compactToolGroups/compactForFocus re-iterates the full message list on each
+  // chunk, saturating the event loop at 20-50 chunks/sec.
+  const displayMessages = useMemo(
+    () => (focusMode ? compactForFocus(messages) : compactToolGroups(messages)),
+    [messages, focusMode],
+  )
 
   return (
     <Box flexDirection="column" marginY={1} flexGrow={1}>

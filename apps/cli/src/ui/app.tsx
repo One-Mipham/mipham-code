@@ -146,6 +146,15 @@ export function App({
   const [goalText, setGoalText] = useState('')
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default')
   const abortRef = useRef<AbortController | null>(null)
+  // Stream buffer: accumulate text chunks and throttle state updates to ~16fps.
+  // Without this, every SSE chunk triggers setMessages → copies full array →
+  // re-renders ChatPanel → re-runs compactToolGroups O(n). At 20-50 chunks/sec
+  // with 200+ messages, this saturates the event loop and freezes the UI.
+  const streamBufferRef = useRef<{
+    turnContent: string
+    isFirst: boolean
+    timer: ReturnType<typeof setTimeout> | null
+  }>({ turnContent: '', isFirst: true, timer: null })
   const [agentProgress, setAgentProgress] = useState<AgentProgress | null>(null)
   // Multi-agent tracking: keyed by agent/task ID, shows all running + recently completed agents
   const [runningAgents, setRunningAgents] = useState<Record<string, AgentEntry>>({})
@@ -364,6 +373,25 @@ export function App({
       let turnContent = ''
       let isNewTurn = true
 
+      // Flush any pending stream buffer to state
+      const flushStreamBuffer = () => {
+        if (streamBufferRef.current.timer) {
+          clearTimeout(streamBufferRef.current.timer)
+          streamBufferRef.current.timer = null
+        }
+        const latest = streamBufferRef.current.turnContent
+        if (latest && !streamBufferRef.current.isFirst) {
+          setMessages((prev) => {
+            const updated = [...prev]
+            const last = updated[updated.length - 1]
+            if (last?.role === 'assistant') {
+              last.content = latest
+            }
+            return updated
+          })
+        }
+      }
+
       try {
         for await (const chunk of engine.process(input, controller.signal)) {
           // Reasoning content (DeepSeek V4 thinking mode) — silently consumed,
@@ -373,21 +401,34 @@ export function App({
           }
 
           if (chunk.type === 'text' && chunk.content) {
-            // New turn: reset per-turn accumulator and push a fresh assistant message
+            // New turn: push fresh assistant message, reset stream buffer
             if (isNewTurn) {
               turnContent = chunk.content
               isNewTurn = false
-              setMessages((prev) => [...prev, { role: 'assistant', content: turnContent }])
+              streamBufferRef.current = { turnContent: chunk.content, isFirst: false, timer: null }
+              setMessages((prev) => [
+                ...prev,
+                { role: 'assistant' as const, content: chunk.content || '' },
+              ])
             } else {
               turnContent += chunk.content
-              setMessages((prev) => {
-                const updated = [...prev]
-                const last = updated[updated.length - 1]
-                if (last?.role === 'assistant') {
-                  last.content = turnContent
-                }
-                return updated
-              })
+              streamBufferRef.current.turnContent = turnContent
+              // Throttle: flush to state at most every 60ms (~16 fps for text).
+              // The ref holds the latest text; state update copies the ref value.
+              if (!streamBufferRef.current.timer) {
+                streamBufferRef.current.timer = setTimeout(() => {
+                  streamBufferRef.current.timer = null
+                  const latest = streamBufferRef.current.turnContent
+                  setMessages((prev) => {
+                    const updated = [...prev]
+                    const last = updated[updated.length - 1]
+                    if (last?.role === 'assistant') {
+                      last.content = latest
+                    }
+                    return updated
+                  })
+                }, 60)
+              }
             }
             assistantContent += chunk.content
           }
@@ -417,6 +458,8 @@ export function App({
                 toolMeta: { name: toolName, input: detail, collapsed: true },
               },
             ])
+            // Flush stream buffer before showing tool card
+            flushStreamBuffer()
             // Mark that next text chunk starts a new turn
             isNewTurn = true
           }
@@ -487,6 +530,8 @@ export function App({
       } catch (err) {
         setMessages((prev) => [...prev, { role: 'system', content: `Error: ${String(err)}` }])
       } finally {
+        // Flush any remaining stream buffer before finishing
+        flushStreamBuffer()
         setIsLoading(false)
         abortRef.current = null
         // Auto-save checkpoint after each AI response
