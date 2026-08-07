@@ -5,7 +5,10 @@
   "plugins": ["@typescript-eslint"],
   "rules": {
     "no-console": "warn",
-    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_", "caughtErrorsIgnorePattern": "^_", "varsIgnorePattern": "^_" }]
+    "@typescript-eslint/no-unused-vars": [
+      "error",
+      { "argsIgnorePattern": "^_", "caughtErrorsIgnorePattern": "^_", "varsIgnorePattern": "^_" }
+    ]
   },
   "ignorePatterns": ["node_modules", "dist", ".next", "out"]
 }

@@ -1,11 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import {
-  Counter,
-  Gauge,
-  Histogram,
-  getMetrics,
-  resetMetrics,
-} from '../../src/core/metrics'
+import { Counter, Gauge, Histogram, getMetrics, resetMetrics } from '../../src/core/metrics'
 
 // ── Counter ──────────────────────────────────────────────────────────────
 
