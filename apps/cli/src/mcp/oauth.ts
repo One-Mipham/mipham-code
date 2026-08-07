@@ -12,11 +12,7 @@ interface TokenResponse {
 }
 
 function base64url(buf: Buffer): string {
-  return buf
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '')
+  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
 export class OAuthClient {
@@ -36,33 +32,31 @@ export class OAuthClient {
     const state = base64url(randomBytes(32))
 
     const code = await new Promise<string>((resolve, reject) => {
-      const server: Server = createServer(
-        async (req: IncomingMessage, res: ServerResponse) => {
-          const url = new URL(req.url || '/', `http://localhost:${port}`)
-          if (url.pathname === '/callback') {
-            const receivedCode = url.searchParams.get('code')
-            const receivedState = url.searchParams.get('state')
-            if (receivedState !== state) {
-              res.writeHead(400)
-              res.end('State mismatch')
-              reject(new Error('OAuth state mismatch — possible CSRF'))
-              return
-            }
-            if (!receivedCode) {
-              res.writeHead(400)
-              res.end('No code received')
-              reject(new Error('No authorization code received'))
-              return
-            }
-            res.writeHead(200, { 'Content-Type': 'text/html' })
-            res.end(
-              '<html><body><h1>Authenticated</h1><p>You may close this window.</p></body></html>',
-            )
-            server.close()
-            resolve(receivedCode)
+      const server: Server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+        const url = new URL(req.url || '/', `http://localhost:${port}`)
+        if (url.pathname === '/callback') {
+          const receivedCode = url.searchParams.get('code')
+          const receivedState = url.searchParams.get('state')
+          if (receivedState !== state) {
+            res.writeHead(400)
+            res.end('State mismatch')
+            reject(new Error('OAuth state mismatch — possible CSRF'))
+            return
           }
-        },
-      )
+          if (!receivedCode) {
+            res.writeHead(400)
+            res.end('No code received')
+            reject(new Error('No authorization code received'))
+            return
+          }
+          res.writeHead(200, { 'Content-Type': 'text/html' })
+          res.end(
+            '<html><body><h1>Authenticated</h1><p>You may close this window.</p></body></html>',
+          )
+          server.close()
+          resolve(receivedCode)
+        }
+      })
       server.listen(port, () => {
         const authUrl = new URL(auth.authorizationUrl)
         authUrl.searchParams.set('response_type', 'code')

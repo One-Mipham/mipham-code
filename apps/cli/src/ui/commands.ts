@@ -2546,7 +2546,8 @@ const mcpCmd: CommandHandler = async (ctx, args) => {
   if (sub === 'reload') {
     return {
       content: '── MCP Reload ──\n\nDisconnecting all and reconnecting...',
-      forwardToAI: 'Disconnect all MCP servers via McpClient.getInstance().closeAll(), then reconnect all configured servers. Report each status.',
+      forwardToAI:
+        'Disconnect all MCP servers via McpClient.getInstance().closeAll(), then reconnect all configured servers. Report each status.',
     }
   }
 
