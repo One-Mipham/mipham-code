@@ -74,4 +74,49 @@ describe('MemoryManager', () => {
     mm.loadAll()
     expect(mm.recall('anything')).toHaveLength(0)
   })
+
+  it('extracts wikilinks from content and builds link graph', () => {
+    const mm = new MemoryManager(TEST_DIR)
+    mm.write('phase-4', 'Phase 4 complete. See also: [[phase-5]] [[service-mesh]]', {
+      type: 'project',
+      relevance: ['phase-4'],
+      why: 'Service mesh integration done',
+      howToApply: 'Use as baseline for Phase 5',
+    })
+
+    const linked = mm.getLinkedMemories('phase-4')
+    expect(linked).toHaveLength(0) // phase-5 not written yet, so no resolved links
+
+    mm.write('phase-5', 'Phase 5 next steps. See also: [[phase-4]]', {
+      type: 'project',
+      relevance: ['phase-5'],
+      why: 'Nexus/Sentinel deep integration',
+      howToApply: 'Start from Phase 4 baseline',
+    })
+
+    // Now the link is bidirectional
+    const linked2 = mm.getLinkedMemories('phase-4')
+    expect(linked2).toHaveLength(1)
+    expect(linked2[0]!.name).toBe('phase-5')
+  })
+
+  it('recall includes wikilink-connected memories with lower weight', () => {
+    const mm = new MemoryManager(TEST_DIR)
+    mm.write('a', 'Memory A. See also: [[b]]', {
+      type: 'project',
+      relevance: ['topic-a'],
+    })
+    mm.write('b', 'Memory B — connected from A', {
+      type: 'project',
+      relevance: ['topic-b'],
+    })
+
+    // Search for topic-a — should get both A (direct) and B (via wikilink)
+    const results = mm.recall('topic-a')
+    const names = results.map(r => r.name)
+    expect(names).toContain('a')
+    expect(names).toContain('b')
+    // 'a' should come first (higher score)
+    expect(names[0]).toBe('a')
+  })
 })

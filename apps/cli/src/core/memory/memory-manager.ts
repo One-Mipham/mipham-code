@@ -26,6 +26,8 @@ const INDEX_FILE = 'MEMORY.md'
 
 export class MemoryManager {
   private memories = new Map<string, MemoryEntry>()
+  private linkGraph: Map<string, Set<string>> = new Map()
+  private readonly LINKS_FILE = 'links.json'
 
   constructor(private memoryDir: string) {
     mkdirSync(memoryDir, { recursive: true })
@@ -33,6 +35,7 @@ export class MemoryManager {
 
   loadAll(): void {
     this.memories.clear()
+    this.linkGraph.clear()
     if (!existsSync(this.memoryDir)) return
 
     let entries: string[] = []
@@ -55,6 +58,8 @@ export class MemoryManager {
         // skip unparseable
       }
     }
+    this.rebuildLinkGraph()
+    this.loadLinkGraph()
   }
 
   write(name: string, content: string, metadata: MemoryMetadata): void {
@@ -74,12 +79,41 @@ export class MemoryManager {
     }
 
     this.memories.set(name, entry)
+
+    // Update wikilink graph
+    const links = this.extractWikilinks(content)
+    if (links.length > 0) {
+      this.linkGraph.set(name, new Set(links))
+      // Add reverse links for existing memories that link to this one
+      for (const [existingName, existingEntry] of this.memories) {
+        if (existingName === name) continue
+        const existingLinks = this.extractWikilinks(existingEntry.content)
+        if (existingLinks.includes(name)) {
+          const reverseSet = this.linkGraph.get(existingName) || new Set()
+          reverseSet.add(name)
+          this.linkGraph.set(existingName, reverseSet)
+        }
+      }
+    }
+    // Also update reverse links: other memories may now point to this one
+    for (const [existingName, existingEntry] of this.memories) {
+      if (existingName === name) continue
+      const existingLinks = this.extractWikilinks(existingEntry.content)
+      if (existingLinks.includes(name)) {
+        const existingSet = this.linkGraph.get(existingName) || new Set()
+        existingSet.add(name)
+        this.linkGraph.set(existingName, existingSet)
+      }
+    }
+
+    this.saveLinkGraph()
     this.updateIndex()
   }
 
   recall(context: string, limit: number = 10): MemoryEntry[] {
     const contextLower = context.toLowerCase()
     const scored: Array<{ entry: MemoryEntry; score: number }> = []
+    const seen = new Set<string>()
 
     for (const entry of this.memories.values()) {
       let score = 0
@@ -95,11 +129,37 @@ export class MemoryManager {
       }
       if (score > 0) {
         scored.push({ entry, score })
+        seen.add(entry.name)
+      }
+    }
+
+    // Boost wikilink-connected memories with lower weight
+    for (const scoredItem of [...scored]) {
+      const linkedNames = this.linkGraph.get(scoredItem.entry.name)
+      if (!linkedNames) continue
+      for (const linkedName of linkedNames) {
+        if (seen.has(linkedName)) continue
+        const linkedEntry = this.memories.get(linkedName)
+        if (linkedEntry) {
+          scored.push({ entry: linkedEntry, score: 1 })
+          seen.add(linkedName)
+        }
       }
     }
 
     scored.sort((a, b) => b.score - a.score)
     return scored.slice(0, limit).map((s) => s.entry)
+  }
+
+  getLinkedMemories(name: string): MemoryEntry[] {
+    const targets = this.linkGraph.get(name)
+    if (!targets || targets.size === 0) return []
+    const results: MemoryEntry[] = []
+    for (const target of targets) {
+      const entry = this.memories.get(target)
+      if (entry) results.push(entry)
+    }
+    return results
   }
 
   delete(name: string): void {
@@ -147,6 +207,48 @@ export class MemoryManager {
     }
 
     writeFileSync(join(this.memoryDir, INDEX_FILE), lines.join('\n') + '\n', 'utf-8')
+  }
+
+  private extractWikilinks(content: string): string[] {
+    const re = /\[\[([^\]]+)\]\]/g
+    const links: string[] = []
+    let match: RegExpExecArray | null
+    while ((match = re.exec(content)) !== null) {
+      if (links.length >= 10) break // hard cap
+      links.push(match[1]!)
+    }
+    return links
+  }
+
+  private rebuildLinkGraph(): void {
+    this.linkGraph.clear()
+    for (const [name, entry] of this.memories) {
+      const links = this.extractWikilinks(entry.content)
+      if (links.length > 0) {
+        this.linkGraph.set(name, new Set(links))
+      }
+    }
+  }
+
+  private saveLinkGraph(): void {
+    const obj: Record<string, string[]> = {}
+    for (const [k, v] of this.linkGraph) {
+      obj[k] = Array.from(v)
+    }
+    writeFileSync(join(this.memoryDir, this.LINKS_FILE), JSON.stringify(obj, null, 2), 'utf-8')
+  }
+
+  private loadLinkGraph(): void {
+    const path = join(this.memoryDir, this.LINKS_FILE)
+    if (!existsSync(path)) return
+    try {
+      const raw = JSON.parse(readFileSync(path, 'utf-8'))
+      for (const [k, v] of Object.entries(raw)) {
+        this.linkGraph.set(k, new Set(v as string[]))
+      }
+    } catch {
+      // corrupt file, start fresh
+    }
   }
 
   private parseMemoryFile(raw: string, filePath: string): MemoryEntry | null {
