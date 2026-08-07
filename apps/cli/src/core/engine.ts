@@ -561,11 +561,14 @@ export class QueryEngine {
   private async runScriptVerification(): Promise<boolean> {
     if (!this.goalVerifyScript) return false
     try {
-      const { execSync } = await import('node:child_process')
-      execSync(this.goalVerifyScript, { timeout: 30000, stdio: 'pipe' })
-      return true // exit code 0 = success
+      const { spawnSync } = await import('node:child_process')
+      const { resolveSafe } = await import('../security/path')
+      // Validate the script path is within the workspace before execution
+      const safePath = resolveSafe(process.cwd(), this.goalVerifyScript)
+      const result = spawnSync(safePath, [], { timeout: 30000, stdio: 'pipe' })
+      return result.status === 0 // exit code 0 = success
     } catch {
-      return false // non-zero exit = not yet achieved
+      return false // non-zero exit or path rejection = not yet achieved
     }
   }
 
@@ -797,7 +800,11 @@ export class QueryEngine {
 
       return result
     } catch (err) {
-      return { success: false, content: '', error: String(err) }
+      // Sanitize error: strip stack traces and internal paths to prevent
+      // information disclosure to the LLM conversation context.
+      const message =
+        err instanceof Error ? err.message : String(err).split('\n')[0] || 'Unknown error'
+      return { success: false, content: '', error: `Tool execution failed: ${message}` }
     }
   }
 

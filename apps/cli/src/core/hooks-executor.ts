@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import type { HookConfig, HookContext, HookResult } from '../shared/index.ts'
 
 /**
@@ -36,21 +36,22 @@ function executeCommand(cfg: HookConfig, ctx: HookContext): HookResult {
   try {
     const args = cfg.args ? cfg.args.map((a) => substituteVars(a, ctx)) : []
 
-    const cmd = [cfg.command, ...args].join(' ')
-
-    execSync(cmd, {
+    // Use spawnSync with array args — no shell, no command injection
+    const result = spawnSync(cfg.command, args, {
       timeout: 30_000,
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'pipe'],
     })
 
     // Exit code 0 = success, allow
-    return { allowed: true }
-  } catch (err) {
-    const stderr = (err as { stderr?: string }).stderr || String(err)
+    if (result.status === 0) {
+      return { allowed: true }
+    }
 
-    // Exit code 2 = block with reason
-    if ((err as { status?: number }).status === 2) {
+    // Non-zero exit: check for block signal (exit code 2)
+    const stderr = result.stderr?.toString() || ''
+
+    if (result.status === 2) {
       return {
         allowed: false,
         reason: stderr.trim() || 'Blocked by hook',
@@ -62,6 +63,15 @@ function executeCommand(cfg: HookConfig, ctx: HookContext): HookResult {
     return {
       allowed: true,
       additionalContext: `Hook warning (${cfg.command}): ${stderr.trim()}`,
+    }
+  } catch (err) {
+    // spawnSync errors (e.g., command not found, timeout, signal)
+    const message = (err as { message?: string }).message || String(err)
+
+    // Timeout/signal: treat as non-blocking warning
+    return {
+      allowed: true,
+      additionalContext: `Hook error (${cfg.command}): ${message}`,
     }
   }
 }

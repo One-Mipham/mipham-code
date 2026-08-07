@@ -42,6 +42,21 @@ export const webFetchTool: ToolDefinition = {
           error: `HTTP ${response.status}: ${response.statusText}`,
         }
       }
+
+      // SSRF defense: re-validate the resolved URL after redirects.
+      // `redirect: 'follow'` may have landed on an internal IP — check again.
+      // Guard: response.url may not exist in some environments (e.g. mocked fetch).
+      if (response.url) {
+        const redirectError = validateUrl(response.url)
+        if (redirectError) {
+          return {
+            success: false,
+            content: '',
+            error: `Redirect blocked: ${redirectError}`,
+          }
+        }
+      }
+
       const html = await response.text()
       // Simple HTML-to-text extraction
       const text = html

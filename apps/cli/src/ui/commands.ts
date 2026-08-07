@@ -2921,16 +2921,15 @@ const forkCmd: CommandHandler = async (ctx, args) => {
 }
 
 async function openBrowser(url: string): Promise<void> {
-  const cmd =
+  const { spawn } = await import('node:child_process')
+  // Use spawn with array args — no shell, no command injection
+  const [cmd, ...args] =
     process.platform === 'darwin'
-      ? `open "${url}"`
+      ? ['open', url]
       : process.platform === 'win32'
-        ? `start "" "${url}"`
-        : `xdg-open "${url}"`
-  const { exec } = await import('node:child_process')
-  exec(cmd, () => {
-    /* fire-and-forget */
-  })
+        ? ['cmd', '/c', 'start', '', url]
+        : ['xdg-open', url]
+  spawn(cmd!, args, { detached: true, stdio: 'ignore' }).unref()
 }
 
 const artifactOpenCmd: CommandHandler = async (ctx, args) => {

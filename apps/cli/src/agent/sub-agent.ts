@@ -271,8 +271,10 @@ export class SubAgent {
             continue
           }
 
-          // Security: check permission before executing
-          // Sub-agents run without user interaction — tools requiring approval are rejected
+          // Security: check permission before executing.
+          // Sub-agents run without user interaction — tools requiring approval are rejected.
+          // When permission system is absent (undefined), allow all tools (backward compat
+          // for tests and headless usage). When present, always enforce approval checks.
           if (this.permission?.needsApproval(tool, tu.input)) {
             currentMessages.push({
               role: 'user' as const,
