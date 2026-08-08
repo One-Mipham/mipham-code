@@ -3,6 +3,7 @@ import type {
   InferenceHookConfig,
   CredentialMaskingConfig,
   BackgroundAgentConfig,
+  CrossSessionConfig,
 } from '../shared/index.ts'
 import { DEFAULT_PROVIDERS } from '../shared/index.ts'
 import { PACKAGE_VERSION } from '../shared/index.ts'
@@ -50,4 +51,9 @@ export const DEFAULT_BACKGROUND_AGENT_CONFIG: BackgroundAgentConfig = {
   auto_push: true,
   auto_worktree: true,
   commit_coauthors: true,
+}
+
+export const DEFAULT_CROSS_SESSION_CONFIG: CrossSessionConfig = {
+  crossSessionInbound: 'ask',
+  dialogExpiry: 300,
 }

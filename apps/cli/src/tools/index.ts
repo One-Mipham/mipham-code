@@ -29,6 +29,7 @@ import { toolSearchTool } from './system/tool-search'
 import { artifactTool } from './artifact/artifact'
 import { reportFindingsTool } from './agent/report-findings'
 import { sendMessageTool } from './agent/send-message'
+import { listAgentsTool } from './agent/list-agents'
 import { computerUseTool } from './computer/computer-use'
 import { scheduleWakeupTool } from './scheduling/schedule-wakeup.js'
 import { cronCreateTool, cronDeleteTool, cronListTool } from './scheduling/cron.js'
@@ -145,6 +146,7 @@ export function createToolRegistry(): Map<string, ToolDefinition> {
     withValidation(workflowTool),
     withValidation(reportFindingsTool),
     withValidation(sendMessageTool),
+    withValidation(listAgentsTool),
     // Network tools
     withValidation(webFetchTool),
     withValidation(webSearchTool),
