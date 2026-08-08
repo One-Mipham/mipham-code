@@ -14,12 +14,12 @@ export interface ExperienceRule {
   createdAt: string             // ISO date
 }
 
-interface FailureEntry {
+export interface FailureEntry {
   date: string
   description: string
 }
 
-function parseFailureEntries(content: string): FailureEntry[] {
+export function parseFailureEntries(content: string): FailureEntry[] {
   const entries: FailureEntry[] = []
   const failureIdx = content.indexOf('## Failure Patterns')
   if (failureIdx === -1) return entries
@@ -38,7 +38,7 @@ function parseFailureEntries(content: string): FailureEntry[] {
   return entries
 }
 
-function categorize(description: string): ExperienceRule['category'] {
+export function categorize(description: string): ExperienceRule['category'] {
   const lower = description.toLowerCase()
   if (lower.includes('timeout')) return 'timeout'
   if (/module_not_found|import|\.js/.test(lower)) return 'import'

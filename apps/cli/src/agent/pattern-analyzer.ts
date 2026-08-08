@@ -2,7 +2,7 @@ import { readdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { AgentExperience } from './agent-experience.js'
-import { ExperienceRuleExtractor, type ExperienceRule } from './experience-rules.js'
+import { parseFailureEntries, categorize, type ExperienceRule } from './experience-rules.js'
 import type { ToolRule } from '../core/rule-engine.js'
 
 export interface Pattern {
@@ -23,13 +23,12 @@ export class PatternAnalyzer {
     const content = exp.getExperience()
     if (!content) return []
 
-    const extractor = new ExperienceRuleExtractor()
-    const allEntries = this._parseAllFailures(content)
+    const allEntries = parseFailureEntries(content)
 
     // Group by category
     const byCategory = new Map<string, { descriptions: string[]; dates: string[] }>()
     for (const entry of allEntries) {
-      const cat = this._categorize(entry.description)
+      const cat = categorize(entry.description)
       const existing = byCategory.get(cat) || { descriptions: [], dates: [] }
       existing.descriptions.push(entry.description)
       existing.dates.push(entry.date)
@@ -45,7 +44,7 @@ export class PatternAnalyzer {
         category: category as Pattern['category'],
         agentName,
         frequency: data.descriptions.length,
-        confidence: data.descriptions.length >= 3 ? 'high' : 'medium',
+        confidence: data.descriptions.length >= 5 ? 'high' : 'medium',
         examples: data.descriptions.slice(0, 5),
         firstSeen: data.dates[0] ?? '',
         lastSeen: data.dates[data.dates.length - 1] ?? '',
@@ -126,34 +125,6 @@ export class PatternAnalyzer {
   }
 
   // ── Private helpers ──
-
-  private _parseAllFailures(content: string): Array<{ date: string; description: string }> {
-    const entries: Array<{ date: string; description: string }> = []
-    const failureIdx = content.indexOf('## Failure Patterns')
-    if (failureIdx === -1) return entries
-
-    const afterFailure = content.slice(failureIdx)
-    const nextSection = afterFailure.indexOf('\n## ', '## Failure Patterns'.length)
-    const section = nextSection !== -1 ? afterFailure.slice(0, nextSection) : afterFailure
-
-    const lines = section.split('\n')
-    for (const line of lines) {
-      const match = line.match(/^- \[(\d{4}-\d{2}-\d{2})\]\s+(.+)/)
-      if (match && match[1] && match[2]) {
-        entries.push({ date: match[1], description: match[2].trim() })
-      }
-    }
-    return entries
-  }
-
-  private _categorize(description: string): string {
-    const lower = description.toLowerCase()
-    if (lower.includes('timeout')) return 'timeout'
-    if (/module_not_found|import|\.js/.test(lower)) return 'import'
-    if (/grep|token.*overflow|search.*scope/.test(lower)) return 'search'
-    if (/bash|command.*fail|docker|npm|pnpm|cargo|brew/.test(lower)) return 'tool-params'
-    return 'semantic'
-  }
 
   private _conditionForCategory(pattern: Pattern): string {
     switch (pattern.category) {

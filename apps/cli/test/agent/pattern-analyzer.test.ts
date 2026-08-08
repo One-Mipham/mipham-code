@@ -43,6 +43,22 @@ describe('PatternAnalyzer', () => {
     const timeoutPattern = patterns.find(p => p.category === 'timeout')
     expect(timeoutPattern).toBeDefined()
     expect(timeoutPattern!.frequency).toBeGreaterThanOrEqual(3)
+    expect(timeoutPattern!.confidence).toBe('medium')
+  })
+
+  it('detects high-confidence pattern with 5+ failures', () => {
+    setupAgentDir(baseDir, 'test-agent', [
+      'npm install timeout at 120s',
+      'docker build timeout at 120s',
+      'pnpm install timeout at default',
+      'brew install timeout at default',
+      'cargo build timeout at default',
+    ])
+    const analyzer = new PatternAnalyzer()
+    const patterns = analyzer.analyzeAgent('test-agent', baseDir)
+    const timeoutPattern = patterns.find(p => p.category === 'timeout')
+    expect(timeoutPattern).toBeDefined()
+    expect(timeoutPattern!.frequency).toBe(5)
     expect(timeoutPattern!.confidence).toBe('high')
   })
 
