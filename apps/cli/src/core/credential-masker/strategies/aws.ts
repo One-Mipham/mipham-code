@@ -22,13 +22,10 @@ export class AwsMaskingStrategy implements MaskingStrategy {
     let masked = content
 
     // Mask access key values — keep prefix for model context
-    masked = masked.replace(
-      /((?:AKIA|ASIA)[A-Z0-9]{12,})/g,
-      (_full, key: string) => {
-        const prefix = key.slice(0, 8) // "AKIAXXXX"
-        return `${prefix}${CREDENTIAL_SENTINEL}`
-      },
-    )
+    masked = masked.replace(/((?:AKIA|ASIA)[A-Z0-9]{12,})/g, (_full, key: string) => {
+      const prefix = key.slice(0, 8) // "AKIAXXXX"
+      return `${prefix}${CREDENTIAL_SENTINEL}`
+    })
 
     // Mask secret access key values — fully mask (no context needed)
     masked = masked.replace(

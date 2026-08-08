@@ -2,8 +2,15 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { rmSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
-import { FileInboxTransport, getFileInboxTransport } from '../../../src/agent/cross-session/file-inbox'
-import { registerActiveSession, unregisterSession, discoverSessions } from '../../../src/agent/cross-session/discovery'
+import {
+  FileInboxTransport,
+  getFileInboxTransport,
+} from '../../../src/agent/cross-session/file-inbox'
+import {
+  registerActiveSession,
+  unregisterSession,
+  discoverSessions,
+} from '../../../src/agent/cross-session/discovery'
 import type { SessionInfo } from '../../../src/shared/types'
 
 const TEST_INBOX = join(homedir(), '.mipham', 'inbox', 'test-session-cross')
@@ -22,13 +29,21 @@ describe('FileInboxTransport', () => {
 
   beforeEach(() => {
     // Clean up test directories
-    try { rmSync(TEST_INBOX, { recursive: true }) } catch {}
-    try { rmSync(TEST_ACTIVE, { recursive: true }) } catch {}
+    try {
+      rmSync(TEST_INBOX, { recursive: true })
+    } catch {}
+    try {
+      rmSync(TEST_ACTIVE, { recursive: true })
+    } catch {}
   })
 
   afterEach(() => {
-    try { rmSync(TEST_INBOX, { recursive: true }) } catch {}
-    try { rmSync(TEST_ACTIVE, { recursive: true }) } catch {}
+    try {
+      rmSync(TEST_INBOX, { recursive: true })
+    } catch {}
+    try {
+      rmSync(TEST_ACTIVE, { recursive: true })
+    } catch {}
   })
 
   it('sends a message to a session inbox', async () => {
@@ -117,11 +132,15 @@ describe('discovery', () => {
   }
 
   beforeEach(() => {
-    try { rmSync(TEST_ACTIVE, { recursive: true }) } catch {}
+    try {
+      rmSync(TEST_ACTIVE, { recursive: true })
+    } catch {}
   })
 
   afterEach(() => {
-    try { rmSync(TEST_ACTIVE, { recursive: true }) } catch {}
+    try {
+      rmSync(TEST_ACTIVE, { recursive: true })
+    } catch {}
   })
 
   it('discovers registered sessions', () => {

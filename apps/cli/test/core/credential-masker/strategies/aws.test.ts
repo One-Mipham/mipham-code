@@ -6,7 +6,12 @@ describe('AwsMaskingStrategy', () => {
   const strategy = new AwsMaskingStrategy()
 
   it('canHandle returns true for AWS rules', () => {
-    const rule: AwsMaskingRule = { path: '**/.aws/credentials', type: 'aws', awsPairs: true, sigv4: false }
+    const rule: AwsMaskingRule = {
+      path: '**/.aws/credentials',
+      type: 'aws',
+      awsPairs: true,
+      sigv4: false,
+    }
     expect(strategy.canHandle(rule)).toBe(true)
   })
 

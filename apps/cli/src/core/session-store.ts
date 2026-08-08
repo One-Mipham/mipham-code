@@ -243,9 +243,10 @@ export class SessionStore {
     mkdirSync(SUMMARIES_DIR, { recursive: true })
 
     const safeRaw = name.replace(/[^a-zA-Z0-9_-]/g, '_')
-    const safe = safeRaw.length > 100
-      ? `${safeRaw.slice(0, 80)}-${createHash('sha256').update(safeRaw).digest('hex').slice(0, 16)}`
-      : safeRaw
+    const safe =
+      safeRaw.length > 100
+        ? `${safeRaw.slice(0, 80)}-${createHash('sha256').update(safeRaw).digest('hex').slice(0, 16)}`
+        : safeRaw
     const summaryPath = join(SUMMARIES_DIR, `${safe}.md`)
     writeFileSync(summaryPath, `# ${name}\n\n${summary}\n\nTags: ${tags.join(', ')}\n`, 'utf-8')
 

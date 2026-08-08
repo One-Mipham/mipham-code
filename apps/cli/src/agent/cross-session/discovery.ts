@@ -1,4 +1,11 @@
-import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'node:fs'
+import {
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  mkdirSync,
+  unlinkSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import { homedir, hostname } from 'node:os'
 import type { SessionInfo } from '../../shared/types'

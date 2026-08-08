@@ -21,12 +21,7 @@ export class MessageRouter {
   /**
    * Route a message to the appropriate transport.
    */
-  async route(
-    from: string,
-    to: string,
-    summary: string,
-    message: string,
-  ): Promise<RouteResult> {
+  async route(from: string, to: string, summary: string, message: string): Promise<RouteResult> {
     // Same-process routing: "main" or background task IDs
     if (to === 'main' || to.startsWith('bg-') || to.startsWith('sub-agent-')) {
       try {

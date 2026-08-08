@@ -27,11 +27,7 @@ export class FileInboxTransport implements CrossSessionTransport {
     mkdirSync(dir, { recursive: true })
   }
 
-  async send(
-    from: SessionInfo,
-    toSessionId: string,
-    msg: AgentMessage,
-  ): Promise<boolean> {
+  async send(from: SessionInfo, toSessionId: string, msg: AgentMessage): Promise<boolean> {
     try {
       const inboxDir = join(INBOX_DIR, toSessionId)
       this.ensureDir(inboxDir)
@@ -68,7 +64,10 @@ export class FileInboxTransport implements CrossSessionTransport {
       for (const file of files) {
         try {
           const raw = readFileSync(join(inboxDir, file), 'utf-8')
-          const parsed = JSON.parse(raw) as AgentMessage & { _fromSession?: string; _fromMachine?: string }
+          const parsed = JSON.parse(raw) as AgentMessage & {
+            _fromSession?: string
+            _fromMachine?: string
+          }
 
           // Build the message body with cross-session origin prefix
           const originPrefix = parsed._fromSession

@@ -1,6 +1,10 @@
 import { homedir } from 'node:os'
 import { describe, it, expect } from 'vitest'
-import { matchPath, globToRegex, matchCredentialFile } from '../../../src/core/credential-masker/matcher'
+import {
+  matchPath,
+  globToRegex,
+  matchCredentialFile,
+} from '../../../src/core/credential-masker/matcher'
 import type { CredentialMaskingConfig } from '../../../src/shared/types'
 
 describe('matchPath', () => {

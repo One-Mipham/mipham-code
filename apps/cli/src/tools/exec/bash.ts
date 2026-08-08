@@ -134,7 +134,8 @@ export function detectViolations(stderr: string): string[] {
   const accessMatches = stderr.match(accessPatterns)
   if (accessMatches && accessMatches.length > 0) {
     // Extract file paths from error messages
-    const pathPattern = /(?:Permission denied|EACCES|EPERM|Operation not permitted).*?['"]?(\/[^\s'"]+)['"]?/gi
+    const pathPattern =
+      /(?:Permission denied|EACCES|EPERM|Operation not permitted).*?['"]?(\/[^\s'"]+)['"]?/gi
     const paths: string[] = []
     let match: RegExpExecArray | null
     while ((match = pathPattern.exec(stderr)) !== null) {
@@ -149,11 +150,13 @@ export function detectViolations(stderr: string): string[] {
   }
 
   // Network access violations
-  const netPatterns = /(?:Network is unreachable|Connection refused|ECONNREFUSED|ENETUNREACH|Could not resolve host|Name or service not known|ETIMEDOUT|Connection timed out)/gi
+  const netPatterns =
+    /(?:Network is unreachable|Connection refused|ECONNREFUSED|ENETUNREACH|Could not resolve host|Name or service not known|ETIMEDOUT|Connection timed out)/gi
   const netMatches = stderr.match(netPatterns)
   if (netMatches && netMatches.length > 0) {
     // Extract host:port from error messages
-    const hostPattern = /(?:connect to|Could not resolve host|Failed to connect to)\s+([^\s:]+(?::\d+)?)/gi
+    const hostPattern =
+      /(?:connect to|Could not resolve host|Failed to connect to)\s+([^\s:]+(?::\d+)?)/gi
     const hosts: string[] = []
     let match: RegExpExecArray | null
     while ((match = hostPattern.exec(stderr)) !== null) {

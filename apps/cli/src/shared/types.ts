@@ -412,10 +412,7 @@ export interface AwsMaskingRule {
 }
 
 export type CredentialFileRule =
-  | CredentialFullMaskRule
-  | CredentialExtractRule
-  | JwtMaskingRule
-  | AwsMaskingRule
+  CredentialFullMaskRule | CredentialExtractRule | JwtMaskingRule | AwsMaskingRule
 
 /** Configuration for credential masking, loaded from config.yml. */
 export interface CredentialMaskingConfig {

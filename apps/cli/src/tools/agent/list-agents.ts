@@ -16,7 +16,8 @@ export const listAgentsTool: ToolDefinition = {
         type: 'string',
         enum: ['local', 'all'],
         default: 'local',
-        description: 'Discovery scope. "local" scans this machine only. "all" is reserved for future network discovery.',
+        description:
+          'Discovery scope. "local" scans this machine only. "all" is reserved for future network discovery.',
       },
     },
   },

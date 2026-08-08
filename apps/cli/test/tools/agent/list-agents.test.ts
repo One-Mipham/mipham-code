@@ -3,18 +3,25 @@ import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { listAgentsTool } from '../../../src/tools/agent/list-agents'
-import { registerActiveSession, unregisterSession } from '../../../src/agent/cross-session/discovery'
+import {
+  registerActiveSession,
+  unregisterSession,
+} from '../../../src/agent/cross-session/discovery'
 import type { SessionInfo } from '../../../src/shared/types'
 
 const TEST_ACTIVE = join(homedir(), '.mipham', '.active-sessions')
 
 describe('ListAgents tool', () => {
   beforeEach(() => {
-    try { rmSync(TEST_ACTIVE, { recursive: true }) } catch {}
+    try {
+      rmSync(TEST_ACTIVE, { recursive: true })
+    } catch {}
   })
 
   afterEach(() => {
-    try { rmSync(TEST_ACTIVE, { recursive: true }) } catch {}
+    try {
+      rmSync(TEST_ACTIVE, { recursive: true })
+    } catch {}
   })
 
   it('returns empty when no sessions', async () => {
@@ -46,10 +53,18 @@ describe('ListAgents tool', () => {
 
   it('shows session count in output', async () => {
     registerActiveSession({
-      id: 's1', name: 'One', machine: 'host', pid: 1, startedAt: new Date().toISOString(),
+      id: 's1',
+      name: 'One',
+      machine: 'host',
+      pid: 1,
+      startedAt: new Date().toISOString(),
     })
     registerActiveSession({
-      id: 's2', name: 'Two', machine: 'host', pid: 2, startedAt: new Date().toISOString(),
+      id: 's2',
+      name: 'Two',
+      machine: 'host',
+      pid: 2,
+      startedAt: new Date().toISOString(),
     })
 
     const result = await listAgentsTool.execute({ scope: 'local' }, {} as any)

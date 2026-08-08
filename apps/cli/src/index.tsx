@@ -3,8 +3,18 @@ import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { render } from 'ink'
 import { App } from './ui/app'
-import { loadConfig, loadInferenceHookConfig, loadCredentialMaskingConfig, loadCrossSessionConfig } from './config/loader'
-import { registerActiveSession, heartbeatSession, unregisterSession, createSessionInfo } from './agent/cross-session/discovery'
+import {
+  loadConfig,
+  loadInferenceHookConfig,
+  loadCredentialMaskingConfig,
+  loadCrossSessionConfig,
+} from './config/loader'
+import {
+  registerActiveSession,
+  heartbeatSession,
+  unregisterSession,
+  createSessionInfo,
+} from './agent/cross-session/discovery'
 import { bootstrapProviders } from './providers/bootstrap'
 import { InstructionsLoader } from './core/instructions'
 import { loadSessionMemories, getMemoryManager } from './core/memory/memory-loader'

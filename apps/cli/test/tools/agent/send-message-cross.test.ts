@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { MessageRouter } from '../../../src/agent/message-router'
-import { registerActiveSession, unregisterSession } from '../../../src/agent/cross-session/discovery'
+import {
+  registerActiveSession,
+  unregisterSession,
+} from '../../../src/agent/cross-session/discovery'
 import type { SessionInfo } from '../../../src/shared/types'
 
 describe('MessageRouter', () => {
@@ -36,7 +39,12 @@ describe('MessageRouter', () => {
 
     registerActiveSession(targetSession)
 
-    const result = await router.route('test-sender', 'target-session-1', 'Hello', 'Cross-session test')
+    const result = await router.route(
+      'test-sender',
+      'target-session-1',
+      'Hello',
+      'Cross-session test',
+    )
     expect(result.success).toBe(true)
     expect(result.routedTo).toBe('inbox')
     expect(result.messageId).toBeTruthy()

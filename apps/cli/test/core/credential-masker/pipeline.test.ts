@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { MaskingPipeline, maskContent } from '../../../src/core/credential-masker/pipeline'
 import type { MaskingStrategy } from '../../../src/core/credential-masker/types'
-import type { CredentialFileRule, CredentialFullMaskRule, CredentialExtractRule, JwtMaskingRule } from '../../../src/shared/types'
+import type {
+  CredentialFileRule,
+  CredentialFullMaskRule,
+  CredentialExtractRule,
+  JwtMaskingRule,
+} from '../../../src/shared/types'
 
 describe('MaskingPipeline', () => {
   let pipeline: MaskingPipeline
