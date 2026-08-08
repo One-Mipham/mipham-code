@@ -868,6 +868,19 @@ export class QueryEngine {
         await this.hookEngine.executePostToolUse(name, effectiveParams, result, this.sessionId)
       }
 
+      // CRSI: Track rule effectiveness after tool execution
+      if (hookWarnings.length > 0) {
+        const tracker = this.getEffectivenessTracker()
+        for (const warning of hookWarnings) {
+          const match = warning.match(/^\[rule:([^\]]+)\]/)
+          const ruleId = match?.[1]
+          if (ruleId) {
+            tracker.recordApplication(ruleId, result.success)
+          }
+        }
+        tracker.persist()
+      }
+
       return result
     } catch (err) {
       // Sanitize error: strip stack traces and internal paths to prevent

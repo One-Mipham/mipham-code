@@ -483,7 +483,6 @@ const crsiDisableCmd: CommandHandler = (ctx, args) => {
 }
 
 const crsiAnalyzeCmd: CommandHandler = async (ctx) => {
-  const t = resolveT(ctx)
   const analyzer = ctx.engine.getPatternAnalyzer()
   const engine = ctx.engine.getRuleEngine()
   if (!engine) {

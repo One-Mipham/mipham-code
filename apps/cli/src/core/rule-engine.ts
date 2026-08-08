@@ -1,4 +1,6 @@
 import type { ExperienceRule } from '../agent/experience-rules.js'
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
+import { join, dirname } from 'node:path'
 
 export interface ToolRule {
   id: string
@@ -54,9 +56,12 @@ const BUILTIN_RULES: ToolRule[] = [
 
 export class ExperienceRuleEngine {
   private rules: ToolRule[]
+  private storePath: string
 
-  constructor() {
+  constructor(storeDir: string = join(process.env.HOME || '~', '.mipham', 'rule-engine')) {
     this.rules = [...BUILTIN_RULES.map(r => ({ ...r }))]
+    this.storePath = join(storeDir, 'rules.json')
+    this.load()
   }
 
   register(rule: ToolRule): void {
@@ -67,6 +72,7 @@ export class ExperienceRuleEngine {
     } else {
       this.rules.push(rule)
     }
+    this.persist()
   }
 
   intercept(
@@ -141,6 +147,31 @@ export class ExperienceRuleEngine {
     const rule = this.rules.find(r => r.id === id)
     if (rule) {
       rule.enabled = enabled
+      this.persist()
+    }
+  }
+
+  /** Persist non-builtin rules to disk. */
+  persist(): void {
+    const nonBuiltin = this.rules.filter(r => r.source !== 'builtin')
+    const dir = dirname(this.storePath)
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(this.storePath, JSON.stringify(nonBuiltin, null, 2), 'utf-8')
+  }
+
+  /** Load persisted non-builtin rules from disk. Rejects rules whose IDs conflict with builtins. */
+  load(): void {
+    if (!existsSync(this.storePath)) return
+    try {
+      const raw = JSON.parse(readFileSync(this.storePath, 'utf-8')) as ToolRule[]
+      const builtinIds = new Set(BUILTIN_RULES.map(r => r.id))
+      for (const rule of raw) {
+        // Reject if a builtin with the same ID exists (builtins always win)
+        if (builtinIds.has(rule.id)) continue
+        this.rules.push(rule)
+      }
+    } catch {
+      // Corrupt file — start fresh with only builtins
     }
   }
 }

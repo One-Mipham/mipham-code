@@ -8,24 +8,14 @@ import type { HookEngine } from '../core/hooks'
 import type { PermissionSystem } from '../core/permission'
 import { AgentExperience } from './agent-experience'
 import { PatternAnalyzer } from './pattern-analyzer.js'
-import { EffectivenessTracker } from './effectiveness-tracker.js'
 import type { ExperienceRuleEngine } from '../core/rule-engine.js'
 
 // Singleton instances (created lazily)
 let _patternAnalyzer: PatternAnalyzer | undefined
-let _effectivenessTracker: EffectivenessTracker | undefined
 
 function getPatternAnalyzer(): PatternAnalyzer {
   if (!_patternAnalyzer) _patternAnalyzer = new PatternAnalyzer()
   return _patternAnalyzer
-}
-
-function getEffectivenessTracker(): EffectivenessTracker {
-  if (!_effectivenessTracker) {
-    _effectivenessTracker = new EffectivenessTracker()
-    _effectivenessTracker.load()
-  }
-  return _effectivenessTracker
 }
 
 const TYPE_SYSTEM_PROMPTS: Record<SubAgentType, string> = {
