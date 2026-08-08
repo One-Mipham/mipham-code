@@ -61,8 +61,8 @@ export class PatternAnalyzer {
     let agents: string[]
     try {
       agents = readdirSync(dir, { withFileTypes: true })
-        .filter(d => d.isDirectory())
-        .map(d => d.name)
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name)
     } catch {
       return []
     }
@@ -128,19 +128,27 @@ export class PatternAnalyzer {
 
   private _conditionForCategory(pattern: Pattern): string {
     switch (pattern.category) {
-      case 'timeout': return 'heavy CLI commands (npm/docker/pnpm/cargo)'
-      case 'import': return 'ESM module imports missing .js extension'
-      case 'search': return 'full-repository search without directory scoping'
-      default: return pattern.examples[0]?.slice(0, 100) || 'unknown condition'
+      case 'timeout':
+        return 'heavy CLI commands (npm/docker/pnpm/cargo)'
+      case 'import':
+        return 'ESM module imports missing .js extension'
+      case 'search':
+        return 'full-repository search without directory scoping'
+      default:
+        return pattern.examples[0]?.slice(0, 100) || 'unknown condition'
     }
   }
 
   private _actionForCategory(category: string): string {
     switch (category) {
-      case 'timeout': return 'set Bash timeout ≥ 300000ms for heavy commands'
-      case 'import': return 'append .js extension to ESM relative imports'
-      case 'search': return 'use Glob to narrow directory before Grep'
-      default: return 'review and adjust tool parameters before execution'
+      case 'timeout':
+        return 'set Bash timeout ≥ 300000ms for heavy commands'
+      case 'import':
+        return 'append .js extension to ESM relative imports'
+      case 'search':
+        return 'use Glob to narrow directory before Grep'
+      default:
+        return 'review and adjust tool parameters before execution'
     }
   }
 }

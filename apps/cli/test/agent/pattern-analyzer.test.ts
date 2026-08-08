@@ -40,7 +40,7 @@ describe('PatternAnalyzer', () => {
     ])
     const analyzer = new PatternAnalyzer()
     const patterns = analyzer.analyzeAgent('test-agent', baseDir)
-    const timeoutPattern = patterns.find(p => p.category === 'timeout')
+    const timeoutPattern = patterns.find((p) => p.category === 'timeout')
     expect(timeoutPattern).toBeDefined()
     expect(timeoutPattern!.frequency).toBeGreaterThanOrEqual(3)
     expect(timeoutPattern!.confidence).toBe('medium')
@@ -56,7 +56,7 @@ describe('PatternAnalyzer', () => {
     ])
     const analyzer = new PatternAnalyzer()
     const patterns = analyzer.analyzeAgent('test-agent', baseDir)
-    const timeoutPattern = patterns.find(p => p.category === 'timeout')
+    const timeoutPattern = patterns.find((p) => p.category === 'timeout')
     expect(timeoutPattern).toBeDefined()
     expect(timeoutPattern!.frequency).toBe(5)
     expect(timeoutPattern!.confidence).toBe('high')
@@ -70,7 +70,7 @@ describe('PatternAnalyzer', () => {
     const analyzer = new PatternAnalyzer()
     const patterns = analyzer.analyzeAgent('test-agent', baseDir)
     // 2 failures → no pattern (only warning rule, not auto-created ToolRule)
-    expect(patterns.filter(p => p.frequency >= 3)).toEqual([])
+    expect(patterns.filter((p) => p.frequency >= 3)).toEqual([])
   })
 
   it('detects import error pattern', () => {
@@ -81,7 +81,7 @@ describe('PatternAnalyzer', () => {
     ])
     const analyzer = new PatternAnalyzer()
     const patterns = analyzer.analyzeAgent('test-agent', baseDir)
-    const importPattern = patterns.find(p => p.category === 'import')
+    const importPattern = patterns.find((p) => p.category === 'import')
     expect(importPattern).toBeDefined()
     expect(importPattern!.frequency).toBe(3)
   })
@@ -94,7 +94,7 @@ describe('PatternAnalyzer', () => {
     ])
     const analyzer = new PatternAnalyzer()
     const patterns = analyzer.analyzeAgent('test-agent', baseDir)
-    const timeoutPattern = patterns.find(p => p.category === 'timeout')
+    const timeoutPattern = patterns.find((p) => p.category === 'timeout')
     expect(timeoutPattern).toBeDefined()
 
     const rule = analyzer.toRule(timeoutPattern!)
@@ -112,7 +112,7 @@ describe('PatternAnalyzer', () => {
     ])
     const analyzer = new PatternAnalyzer()
     const patterns = analyzer.analyzeAgent('test-agent', baseDir)
-    const timeoutPattern = patterns.find(p => p.category === 'timeout')
+    const timeoutPattern = patterns.find((p) => p.category === 'timeout')
     expect(timeoutPattern).toBeDefined()
 
     const toolRule = analyzer.toToolRule(timeoutPattern!)

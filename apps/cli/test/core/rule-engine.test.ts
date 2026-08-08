@@ -118,7 +118,7 @@ describe('ExperienceRuleEngine', () => {
   it('setRuleEnabled toggles rule state', () => {
     const engine = new ExperienceRuleEngine()
     const rules = engine.getActiveRules()
-    const timeoutRule = rules.find(r => r.id === 'rule-timeout-bash-heavy')
+    const timeoutRule = rules.find((r) => r.id === 'rule-timeout-bash-heavy')
     expect(timeoutRule).toBeDefined()
     expect(timeoutRule!.enabled).toBe(true)
 
@@ -141,11 +141,15 @@ describe('ExperienceRuleEngine', () => {
     const engine = new ExperienceRuleEngine()
     const expRules = [
       {
-        id: 'rule-timeout-xyz', type: 'mandatory' as const,
-        condition: 'heavy CLI commands', action: 'set timeout ≥ 300s',
+        id: 'rule-timeout-xyz',
+        type: 'mandatory' as const,
+        condition: 'heavy CLI commands',
+        action: 'set timeout ≥ 300s',
         evidence: { failureCount: 3, lastFailure: '2026-08-07', examples: ['npm install timeout'] },
-        category: 'timeout' as const, source: 'agent-experience' as const,
-        agentName: 'test', createdAt: '2026-08-08',
+        category: 'timeout' as const,
+        source: 'agent-experience' as const,
+        agentName: 'test',
+        createdAt: '2026-08-08',
       },
     ]
     const toolRules = engine.convertFromExperienceRules(expRules)
@@ -158,6 +162,6 @@ describe('ExperienceRuleEngine', () => {
     const engine = new ExperienceRuleEngine()
     const rules = engine.getActiveRules()
     expect(rules.length).toBeGreaterThan(0)
-    expect(rules.every(r => r.enabled)).toBe(true)
+    expect(rules.every((r) => r.enabled)).toBe(true)
   })
 })

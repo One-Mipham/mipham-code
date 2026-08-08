@@ -479,7 +479,9 @@ const crsiDisableCmd: CommandHandler = (ctx, args) => {
     return { content: 'Usage: /crsi disable <rule-id>' }
   }
   engine.setRuleEnabled(ruleId, false)
-  return { content: `Rule \`${ruleId}\` has been disabled. Use \`/crsi restore ${ruleId}\` to re-enable.` }
+  return {
+    content: `Rule \`${ruleId}\` has been disabled. Use \`/crsi restore ${ruleId}\` to re-enable.`,
+  }
 }
 
 const crsiAnalyzeCmd: CommandHandler = async (ctx) => {
@@ -501,9 +503,16 @@ const crsiAnalyzeCmd: CommandHandler = async (ctx) => {
     registered++
   }
 
-  const lines: string[] = ['## CRSI Analysis Complete', '', `Found ${patterns.length} patterns, ${registered} rules registered.`, '']
+  const lines: string[] = [
+    '## CRSI Analysis Complete',
+    '',
+    `Found ${patterns.length} patterns, ${registered} rules registered.`,
+    '',
+  ]
   for (const p of patterns) {
-    lines.push(`- [${p.category}] \`${p.agentName}\` — ${p.frequency} failures (${p.confidence} confidence)`)
+    lines.push(
+      `- [${p.category}] \`${p.agentName}\` — ${p.frequency} failures (${p.confidence} confidence)`,
+    )
   }
   return { content: lines.join('\n') }
 }
@@ -531,9 +540,9 @@ const crsiStatsCmd: CommandHandler = async (ctx) => {
   const rules = engine.getActiveRules()
   const lines: string[] = ['## CRSI Statistics', '']
   lines.push(`Total active rules: ${rules.length}`)
-  lines.push(`Builtin: ${rules.filter(r => r.source === 'builtin').length}`)
-  lines.push(`Auto-generated: ${rules.filter(r => r.source === 'pattern-analyzer').length}`)
-  lines.push(`Manual: ${rules.filter(r => r.source === 'manual').length}`)
+  lines.push(`Builtin: ${rules.filter((r) => r.source === 'builtin').length}`)
+  lines.push(`Auto-generated: ${rules.filter((r) => r.source === 'pattern-analyzer').length}`)
+  lines.push(`Manual: ${rules.filter((r) => r.source === 'manual').length}`)
 
   if (tracker) {
     let totalInterceptions = 0
@@ -547,7 +556,9 @@ const crsiStatsCmd: CommandHandler = async (ctx) => {
     }
     lines.push('')
     lines.push(`Total interceptions: ${totalInterceptions}`)
-    lines.push(`Success rate after rules: ${totalInterceptions > 0 ? Math.round(totalSuccesses / totalInterceptions * 100) : 0}%`)
+    lines.push(
+      `Success rate after rules: ${totalInterceptions > 0 ? Math.round((totalSuccesses / totalInterceptions) * 100) : 0}%`,
+    )
   }
 
   return { content: lines.join('\n') }

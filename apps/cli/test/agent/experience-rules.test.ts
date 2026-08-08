@@ -16,8 +16,16 @@ function makeExperience(failures: string[]): string {
 ## Stats
 - 总执行: 10 次 | 成功: 7 | 失败: 3
 `
-  return header + failures.map((f, i) => `- [2026-08-0${7 - i}] ${f}
-  **When to avoid:** auto-generated`).join('\n') + footer
+  return (
+    header +
+    failures
+      .map(
+        (f, i) => `- [2026-08-0${7 - i}] ${f}
+  **When to avoid:** auto-generated`,
+      )
+      .join('\n') +
+    footer
+  )
 }
 
 describe('ExperienceRuleExtractor', () => {
@@ -25,7 +33,12 @@ describe('ExperienceRuleExtractor', () => {
 
   it('returns empty array for empty experience content', () => {
     expect(extractor.extract('', 'test-agent')).toEqual([])
-    expect(extractor.extract('# Agent Experience — test-agent\n\n## Success Patterns\n\n## Failure Patterns\n\n## Stats\n- 总执行: 0 次 | 成功: 0 | 失败: 0\n', 'test-agent')).toEqual([])
+    expect(
+      extractor.extract(
+        '# Agent Experience — test-agent\n\n## Success Patterns\n\n## Failure Patterns\n\n## Stats\n- 总执行: 0 次 | 成功: 0 | 失败: 0\n',
+        'test-agent',
+      ),
+    ).toEqual([])
   })
 
   it('does not generate rules for single failures', () => {
@@ -35,13 +48,10 @@ describe('ExperienceRuleExtractor', () => {
   })
 
   it('generates warning rule for 2 failures of same category', () => {
-    const exp = makeExperience([
-      'npm install timeout at 120s',
-      'pnpm install timeout at 120s',
-    ])
+    const exp = makeExperience(['npm install timeout at 120s', 'pnpm install timeout at 120s'])
     const rules = extractor.extract(exp, 'test-agent')
     expect(rules.length).toBeGreaterThanOrEqual(1)
-    const timeoutRule = rules.find(r => r.category === 'timeout')
+    const timeoutRule = rules.find((r) => r.category === 'timeout')
     expect(timeoutRule).toBeDefined()
     expect(timeoutRule!.type).toBe('warning')
     expect(timeoutRule!.evidence.failureCount).toBe(2)
@@ -54,19 +64,16 @@ describe('ExperienceRuleExtractor', () => {
       'pnpm install timeout at 120s',
     ])
     const rules = extractor.extract(exp, 'test-agent')
-    const timeoutRule = rules.find(r => r.category === 'timeout')
+    const timeoutRule = rules.find((r) => r.category === 'timeout')
     expect(timeoutRule).toBeDefined()
     expect(timeoutRule!.type).toBe('mandatory')
     expect(timeoutRule!.evidence.failureCount).toBe(3)
   })
 
   it('categorizes MODULE_NOT_FOUND as import', () => {
-    const exp = makeExperience([
-      'MODULE_NOT_FOUND for ./foo',
-      'MODULE_NOT_FOUND for ./bar',
-    ])
+    const exp = makeExperience(['MODULE_NOT_FOUND for ./foo', 'MODULE_NOT_FOUND for ./bar'])
     const rules = extractor.extract(exp, 'test-agent')
-    const importRule = rules.find(r => r.category === 'import')
+    const importRule = rules.find((r) => r.category === 'import')
     expect(importRule).toBeDefined()
   })
 
@@ -76,7 +83,7 @@ describe('ExperienceRuleExtractor', () => {
       'Grep search scope too large — 300K tokens',
     ])
     const rules = extractor.extract(exp, 'test-agent')
-    const searchRule = rules.find(r => r.category === 'search')
+    const searchRule = rules.find((r) => r.category === 'search')
     expect(searchRule).toBeDefined()
   })
 
@@ -89,7 +96,7 @@ describe('ExperienceRuleExtractor', () => {
       'MODULE_NOT_FOUND for ./foo',
     ])
     const rules = extractor.extract(exp, 'test-agent')
-    const ids = rules.map(r => r.id)
+    const ids = rules.map((r) => r.id)
     expect(new Set(ids).size).toBe(ids.length) // all unique
   })
 
@@ -100,7 +107,11 @@ describe('ExperienceRuleExtractor', () => {
         type: 'mandatory',
         condition: 'npm/docker commands',
         action: 'set timeout ≥ 300s',
-        evidence: { failureCount: 3, lastFailure: '2026-08-07', examples: ['npm install timeout at 120s'] },
+        evidence: {
+          failureCount: 3,
+          lastFailure: '2026-08-07',
+          examples: ['npm install timeout at 120s'],
+        },
         category: 'timeout',
         source: 'agent-experience',
         agentName: 'test-agent',
@@ -116,8 +127,28 @@ describe('ExperienceRuleExtractor', () => {
 
   it('prioritize orders mandatory before warning', () => {
     const rules: ExperienceRule[] = [
-      { id: 'r1', type: 'warning', category: 'search', condition: '', action: '', evidence: { failureCount: 2, lastFailure: '', examples: [] }, source: 'agent-experience', agentName: 'x', createdAt: '' },
-      { id: 'r2', type: 'mandatory', category: 'timeout', condition: '', action: '', evidence: { failureCount: 3, lastFailure: '', examples: [] }, source: 'agent-experience', agentName: 'x', createdAt: '' },
+      {
+        id: 'r1',
+        type: 'warning',
+        category: 'search',
+        condition: '',
+        action: '',
+        evidence: { failureCount: 2, lastFailure: '', examples: [] },
+        source: 'agent-experience',
+        agentName: 'x',
+        createdAt: '',
+      },
+      {
+        id: 'r2',
+        type: 'mandatory',
+        category: 'timeout',
+        condition: '',
+        action: '',
+        evidence: { failureCount: 3, lastFailure: '', examples: [] },
+        source: 'agent-experience',
+        agentName: 'x',
+        createdAt: '',
+      },
     ]
     const prioritized = extractor.prioritize(rules)
     expect(prioritized[0]!.type).toBe('mandatory')

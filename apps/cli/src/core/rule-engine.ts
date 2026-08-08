@@ -22,7 +22,9 @@ const BUILTIN_RULES: ToolRule[] = [
     category: 'timeout',
     match: (p: Record<string, unknown>) => {
       const cmd = String(p.command ?? '')
-      const heavy = /npm (install|ci|test)|docker build|pnpm install|cargo build|brew install/.test(cmd)
+      const heavy = /npm (install|ci|test)|docker build|pnpm install|cargo build|brew install/.test(
+        cmd,
+      )
       if (!heavy) return false
       const timeout = (p as Record<string, unknown>).timeout as number | undefined
       return !timeout || timeout < 300_000
@@ -59,14 +61,14 @@ export class ExperienceRuleEngine {
   private storePath: string
 
   constructor(storeDir: string = join(process.env.HOME || '~', '.mipham', 'rule-engine')) {
-    this.rules = [...BUILTIN_RULES.map(r => ({ ...r }))]
+    this.rules = [...BUILTIN_RULES.map((r) => ({ ...r }))]
     this.storePath = join(storeDir, 'rules.json')
     this.load()
   }
 
   register(rule: ToolRule): void {
     // Replace if same ID exists, otherwise append
-    const idx = this.rules.findIndex(r => r.id === rule.id)
+    const idx = this.rules.findIndex((r) => r.id === rule.id)
     if (idx !== -1) {
       this.rules[idx] = rule
     } else {
@@ -140,11 +142,11 @@ export class ExperienceRuleEngine {
   }
 
   getActiveRules(): ToolRule[] {
-    return this.rules.filter(r => r.enabled)
+    return this.rules.filter((r) => r.enabled)
   }
 
   setRuleEnabled(id: string, enabled: boolean): void {
-    const rule = this.rules.find(r => r.id === id)
+    const rule = this.rules.find((r) => r.id === id)
     if (rule) {
       rule.enabled = enabled
       this.persist()
@@ -153,7 +155,7 @@ export class ExperienceRuleEngine {
 
   /** Persist non-builtin rules to disk. */
   persist(): void {
-    const nonBuiltin = this.rules.filter(r => r.source !== 'builtin')
+    const nonBuiltin = this.rules.filter((r) => r.source !== 'builtin')
     const dir = dirname(this.storePath)
     mkdirSync(dir, { recursive: true })
     writeFileSync(this.storePath, JSON.stringify(nonBuiltin, null, 2), 'utf-8')
@@ -164,7 +166,7 @@ export class ExperienceRuleEngine {
     if (!existsSync(this.storePath)) return
     try {
       const raw = JSON.parse(readFileSync(this.storePath, 'utf-8')) as ToolRule[]
-      const builtinIds = new Set(BUILTIN_RULES.map(r => r.id))
+      const builtinIds = new Set(BUILTIN_RULES.map((r) => r.id))
       for (const rule of raw) {
         // Reject if a builtin with the same ID exists (builtins always win)
         if (builtinIds.has(rule.id)) continue

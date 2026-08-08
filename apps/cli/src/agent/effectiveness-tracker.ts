@@ -17,7 +17,7 @@ export interface RuleEffectiveness {
   }>
 }
 
-const EVAL_THRESHOLD = 10  // evaluate after 10 applications
+const EVAL_THRESHOLD = 10 // evaluate after 10 applications
 const STORE_FILE = 'effectiveness.json'
 
 export class EffectivenessTracker {
@@ -61,8 +61,16 @@ export class EffectivenessTracker {
    * @param autoRuleManagement — when false, skip auto-degrade/disable/enable logic
    *   but still record evaluation history for manual review. Default true.
    */
-  evaluate(autoRuleManagement = true): { upgrades: string[]; degradations: string[]; disables: string[] } {
-    const result = { upgrades: [] as string[], degradations: [] as string[], disables: [] as string[] }
+  evaluate(autoRuleManagement = true): {
+    upgrades: string[]
+    degradations: string[]
+    disables: string[]
+  } {
+    const result = {
+      upgrades: [] as string[],
+      degradations: [] as string[],
+      disables: [] as string[],
+    }
     const now = new Date().toISOString().slice(0, 10)
 
     for (const [ruleId, eff] of this.data) {
@@ -90,10 +98,7 @@ export class EffectivenessTracker {
       }
 
       // Disable: degrading rule with no improvement across evaluations
-      if (
-        eff.status === 'degrading' &&
-        eff.evaluationHistory.length >= 2
-      ) {
+      if (eff.status === 'degrading' && eff.evaluationHistory.length >= 2) {
         const last = eff.evaluationHistory[eff.evaluationHistory.length - 1]
         const prev = eff.evaluationHistory[eff.evaluationHistory.length - 2]
         if (last!.failureRate >= prev!.failureRate) {
@@ -103,10 +108,7 @@ export class EffectivenessTracker {
       }
 
       // Upgrade: degrading rule that has improved significantly
-      if (
-        eff.status === 'degrading' &&
-        eff.postRuleFailureRate < 0.4
-      ) {
+      if (eff.status === 'degrading' && eff.postRuleFailureRate < 0.4) {
         eff.status = 'active'
         result.upgrades.push(ruleId)
       }

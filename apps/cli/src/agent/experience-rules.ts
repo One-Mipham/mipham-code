@@ -1,17 +1,17 @@
 export interface ExperienceRule {
-  id: string                    // rule-<category>-<shortHash>
+  id: string // rule-<category>-<shortHash>
   type: 'mandatory' | 'warning'
   condition: string
   action: string
   evidence: {
     failureCount: number
-    lastFailure: string         // ISO date
+    lastFailure: string // ISO date
     examples: string[]
   }
   category: 'timeout' | 'import' | 'search' | 'tool-params' | 'semantic'
   source: 'agent-experience' | 'manual' | 'pattern-analyzer'
   agentName: string
-  createdAt: string             // ISO date
+  createdAt: string // ISO date
 }
 
 export interface FailureEntry {
@@ -49,30 +49,45 @@ export function categorize(description: string): ExperienceRule['category'] {
 
 function createRuleId(category: string, description: string): string {
   // Hash the first 30 chars of description for uniqueness
-  const hash = description.slice(0, 30).split('').reduce((acc, c) => {
-    return ((acc << 5) - acc + c.charCodeAt(0)) | 0
-  }, 0).toString(36).slice(-6)
+  const hash = description
+    .slice(0, 30)
+    .split('')
+    .reduce((acc, c) => {
+      return ((acc << 5) - acc + c.charCodeAt(0)) | 0
+    }, 0)
+    .toString(36)
+    .slice(-6)
   return `rule-${category}-${hash}`
 }
 
 function conditionForCategory(category: string, entries: FailureEntry[]): string {
-  const combined = entries.map(e => e.description).join('; ')
+  const combined = entries.map((e) => e.description).join('; ')
   switch (category) {
-    case 'timeout': return 'heavy CLI commands (npm/docker/pnpm)'
-    case 'import': return 'ESM module imports missing .js extension'
-    case 'search': return 'full-repository Grep without directory scoping'
-    case 'tool-params': return combined.slice(0, 100)
-    default: return combined.slice(0, 100)
+    case 'timeout':
+      return 'heavy CLI commands (npm/docker/pnpm)'
+    case 'import':
+      return 'ESM module imports missing .js extension'
+    case 'search':
+      return 'full-repository Grep without directory scoping'
+    case 'tool-params':
+      return combined.slice(0, 100)
+    default:
+      return combined.slice(0, 100)
   }
 }
 
 function actionForCategory(category: string): string {
   switch (category) {
-    case 'timeout': return 'set Bash timeout ≥ 300000ms for heavy commands'
-    case 'import': return 'always append .js extension to ESM relative imports'
-    case 'search': return 'use Glob to narrow directory before Grep'
-    case 'tool-params': return 'review and adjust tool parameters before execution'
-    default: return 'verify tool parameters match known good patterns'
+    case 'timeout':
+      return 'set Bash timeout ≥ 300000ms for heavy commands'
+    case 'import':
+      return 'always append .js extension to ESM relative imports'
+    case 'search':
+      return 'use Glob to narrow directory before Grep'
+    case 'tool-params':
+      return 'review and adjust tool parameters before execution'
+    default:
+      return 'verify tool parameters match known good patterns'
   }
 }
 
@@ -109,7 +124,7 @@ export class ExperienceRuleExtractor {
         evidence: {
           failureCount: catEntries.length,
           lastFailure: lastEntry.date,
-          examples: catEntries.slice(0, 3).map(e => e.description),
+          examples: catEntries.slice(0, 3).map((e) => e.description),
         },
         category: category as ExperienceRule['category'],
         source: 'agent-experience',
@@ -139,8 +154,8 @@ export class ExperienceRuleExtractor {
   formatForInjection(rules: ExperienceRule[]): string {
     if (rules.length === 0) return ''
 
-    const mandatory = rules.filter(r => r.type === 'mandatory')
-    const warnings = rules.filter(r => r.type === 'warning')
+    const mandatory = rules.filter((r) => r.type === 'mandatory')
+    const warnings = rules.filter((r) => r.type === 'warning')
 
     let output = ''
 

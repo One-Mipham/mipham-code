@@ -26,33 +26,35 @@
 
 ## File Map
 
-| File | Role | Phase |
-|------|------|-------|
-| `agent/experience-rules.ts` | **NEW** — `ExperienceRule` type + `ExperienceRuleExtractor` | 10.1 |
-| `agent/agent-experience.ts` | MODIFY — add `getRules()` convenience method | 10.1 |
-| `agent/agent-context.ts` | MODIFY — replace raw `getExperience()` with rule extraction + injection | 10.1 |
-| `core/rule-engine.ts` | **NEW** — `ExperienceRuleEngine` + `ToolRule` + builtin rules | 10.2 |
-| `core/engine.ts` | MODIFY — integrate `RuleEngine.intercept()` into `executeTool()` | 10.2 |
-| `ui/commands.ts` | MODIFY — register `/crsi rules` and `/crsi disable` | 10.2 |
-| `agent/pattern-analyzer.ts` | **NEW** — `PatternAnalyzer` — scans experience.md for failure patterns | 10.3 |
-| `agent/effectiveness-tracker.ts` | **NEW** — `EffectivenessTracker` — tracks rule impact | 10.3 |
-| `ui/commands.ts` | MODIFY (2nd pass) — register `/crsi analyze`, `/crsi restore`, `/crsi stats` | 10.3 |
-| `agent/sub-agent.ts` | MODIFY — wire `PatternAnalyzer` trigger on `SubagentStop` | 10.3 |
-| `test/agent/experience-rules.test.ts` | **NEW** — tests for rule extraction | 10.1 |
-| `test/core/rule-engine.test.ts` | **NEW** — tests for RuleEngine + builtin rules | 10.2 |
-| `test/agent/pattern-analyzer.test.ts` | **NEW** — tests for pattern detection | 10.3 |
-| `test/agent/effectiveness-tracker.test.ts` | **NEW** — tests for effectiveness tracking | 10.3 |
+| File                                       | Role                                                                         | Phase |
+| ------------------------------------------ | ---------------------------------------------------------------------------- | ----- |
+| `agent/experience-rules.ts`                | **NEW** — `ExperienceRule` type + `ExperienceRuleExtractor`                  | 10.1  |
+| `agent/agent-experience.ts`                | MODIFY — add `getRules()` convenience method                                 | 10.1  |
+| `agent/agent-context.ts`                   | MODIFY — replace raw `getExperience()` with rule extraction + injection      | 10.1  |
+| `core/rule-engine.ts`                      | **NEW** — `ExperienceRuleEngine` + `ToolRule` + builtin rules                | 10.2  |
+| `core/engine.ts`                           | MODIFY — integrate `RuleEngine.intercept()` into `executeTool()`             | 10.2  |
+| `ui/commands.ts`                           | MODIFY — register `/crsi rules` and `/crsi disable`                          | 10.2  |
+| `agent/pattern-analyzer.ts`                | **NEW** — `PatternAnalyzer` — scans experience.md for failure patterns       | 10.3  |
+| `agent/effectiveness-tracker.ts`           | **NEW** — `EffectivenessTracker` — tracks rule impact                        | 10.3  |
+| `ui/commands.ts`                           | MODIFY (2nd pass) — register `/crsi analyze`, `/crsi restore`, `/crsi stats` | 10.3  |
+| `agent/sub-agent.ts`                       | MODIFY — wire `PatternAnalyzer` trigger on `SubagentStop`                    | 10.3  |
+| `test/agent/experience-rules.test.ts`      | **NEW** — tests for rule extraction                                          | 10.1  |
+| `test/core/rule-engine.test.ts`            | **NEW** — tests for RuleEngine + builtin rules                               | 10.2  |
+| `test/agent/pattern-analyzer.test.ts`      | **NEW** — tests for pattern detection                                        | 10.3  |
+| `test/agent/effectiveness-tracker.test.ts` | **NEW** — tests for effectiveness tracking                                   | 10.3  |
 
 ---
 
 ### Task 1: ExperienceRule type + ExperienceRuleExtractor
 
 **Files:**
+
 - Create: `apps/cli/src/agent/experience-rules.ts`
 - Modify: `apps/cli/src/agent/agent-experience.ts`
 - Test: `apps/cli/test/agent/experience-rules.test.ts`
 
 **Interfaces:**
+
 - Produces: `ExperienceRule` interface, `ExperienceRuleExtractor` class with `extract(experienceContent: string, agentName: string): ExperienceRule[]`, `prioritize(rules: ExperienceRule[]): ExperienceRule[]`, `formatForInjection(rules: ExperienceRule[]): string`
 
 - [ ] **Step 1: Write the failing tests**
@@ -77,8 +79,16 @@ function makeExperience(failures: string[]): string {
 ## Stats
 - 总执行: 10 次 | 成功: 7 | 失败: 3
 `
-  return header + failures.map((f, i) => `- [2026-08-0${7 - i}] ${f}
-  **When to avoid:** auto-generated`).join('\n') + footer
+  return (
+    header +
+    failures
+      .map(
+        (f, i) => `- [2026-08-0${7 - i}] ${f}
+  **When to avoid:** auto-generated`,
+      )
+      .join('\n') +
+    footer
+  )
 }
 
 describe('ExperienceRuleExtractor', () => {
@@ -86,7 +96,12 @@ describe('ExperienceRuleExtractor', () => {
 
   it('returns empty array for empty experience content', () => {
     expect(extractor.extract('', 'test-agent')).toEqual([])
-    expect(extractor.extract('# Agent Experience — test-agent\n\n## Success Patterns\n\n## Failure Patterns\n\n## Stats\n- 总执行: 0 次 | 成功: 0 | 失败: 0\n', 'test-agent')).toEqual([])
+    expect(
+      extractor.extract(
+        '# Agent Experience — test-agent\n\n## Success Patterns\n\n## Failure Patterns\n\n## Stats\n- 总执行: 0 次 | 成功: 0 | 失败: 0\n',
+        'test-agent',
+      ),
+    ).toEqual([])
   })
 
   it('does not generate rules for single failures', () => {
@@ -96,13 +111,10 @@ describe('ExperienceRuleExtractor', () => {
   })
 
   it('generates warning rule for 2 failures of same category', () => {
-    const exp = makeExperience([
-      'npm install timeout at 120s',
-      'pnpm install timeout at 120s',
-    ])
+    const exp = makeExperience(['npm install timeout at 120s', 'pnpm install timeout at 120s'])
     const rules = extractor.extract(exp, 'test-agent')
     expect(rules.length).toBeGreaterThanOrEqual(1)
-    const timeoutRule = rules.find(r => r.category === 'timeout')
+    const timeoutRule = rules.find((r) => r.category === 'timeout')
     expect(timeoutRule).toBeDefined()
     expect(timeoutRule!.type).toBe('warning')
     expect(timeoutRule!.evidence.failureCount).toBe(2)
@@ -115,19 +127,16 @@ describe('ExperienceRuleExtractor', () => {
       'pnpm install timeout at 120s',
     ])
     const rules = extractor.extract(exp, 'test-agent')
-    const timeoutRule = rules.find(r => r.category === 'timeout')
+    const timeoutRule = rules.find((r) => r.category === 'timeout')
     expect(timeoutRule).toBeDefined()
     expect(timeoutRule!.type).toBe('mandatory')
     expect(timeoutRule!.evidence.failureCount).toBe(3)
   })
 
   it('categorizes MODULE_NOT_FOUND as import', () => {
-    const exp = makeExperience([
-      'MODULE_NOT_FOUND for ./foo',
-      'MODULE_NOT_FOUND for ./bar',
-    ])
+    const exp = makeExperience(['MODULE_NOT_FOUND for ./foo', 'MODULE_NOT_FOUND for ./bar'])
     const rules = extractor.extract(exp, 'test-agent')
-    const importRule = rules.find(r => r.category === 'import')
+    const importRule = rules.find((r) => r.category === 'import')
     expect(importRule).toBeDefined()
   })
 
@@ -137,7 +146,7 @@ describe('ExperienceRuleExtractor', () => {
       'Grep search scope too large — 300K tokens',
     ])
     const rules = extractor.extract(exp, 'test-agent')
-    const searchRule = rules.find(r => r.category === 'search')
+    const searchRule = rules.find((r) => r.category === 'search')
     expect(searchRule).toBeDefined()
   })
 
@@ -150,7 +159,7 @@ describe('ExperienceRuleExtractor', () => {
       'MODULE_NOT_FOUND for ./foo',
     ])
     const rules = extractor.extract(exp, 'test-agent')
-    const ids = rules.map(r => r.id)
+    const ids = rules.map((r) => r.id)
     expect(new Set(ids).size).toBe(ids.length) // all unique
   })
 
@@ -161,7 +170,11 @@ describe('ExperienceRuleExtractor', () => {
         type: 'mandatory',
         condition: 'npm/docker commands',
         action: 'set timeout ≥ 300s',
-        evidence: { failureCount: 3, lastFailure: '2026-08-07', examples: ['npm install timeout at 120s'] },
+        evidence: {
+          failureCount: 3,
+          lastFailure: '2026-08-07',
+          examples: ['npm install timeout at 120s'],
+        },
         category: 'timeout',
         source: 'agent-experience',
         agentName: 'test-agent',
@@ -177,8 +190,28 @@ describe('ExperienceRuleExtractor', () => {
 
   it('prioritize orders mandatory before warning', () => {
     const rules: ExperienceRule[] = [
-      { id: 'r1', type: 'warning', category: 'search', condition: '', action: '', evidence: { failureCount: 2, lastFailure: '', examples: [] }, source: 'agent-experience', agentName: 'x', createdAt: '' },
-      { id: 'r2', type: 'mandatory', category: 'timeout', condition: '', action: '', evidence: { failureCount: 3, lastFailure: '', examples: [] }, source: 'agent-experience', agentName: 'x', createdAt: '' },
+      {
+        id: 'r1',
+        type: 'warning',
+        category: 'search',
+        condition: '',
+        action: '',
+        evidence: { failureCount: 2, lastFailure: '', examples: [] },
+        source: 'agent-experience',
+        agentName: 'x',
+        createdAt: '',
+      },
+      {
+        id: 'r2',
+        type: 'mandatory',
+        category: 'timeout',
+        condition: '',
+        action: '',
+        evidence: { failureCount: 3, lastFailure: '', examples: [] },
+        source: 'agent-experience',
+        agentName: 'x',
+        createdAt: '',
+      },
     ]
     const prioritized = extractor.prioritize(rules)
     expect(prioritized[0].type).toBe('mandatory')
@@ -197,19 +230,19 @@ Expected: FAIL — "Cannot find module" or "not defined"
 ```typescript
 // apps/cli/src/agent/experience-rules.ts
 export interface ExperienceRule {
-  id: string                    // rule-<category>-<shortHash>
+  id: string // rule-<category>-<shortHash>
   type: 'mandatory' | 'warning'
   condition: string
   action: string
   evidence: {
     failureCount: number
-    lastFailure: string         // ISO date
+    lastFailure: string // ISO date
     examples: string[]
   }
   category: 'timeout' | 'import' | 'search' | 'tool-params' | 'semantic'
   source: 'agent-experience' | 'manual' | 'pattern-analyzer'
   agentName: string
-  createdAt: string             // ISO date
+  createdAt: string // ISO date
 }
 
 interface FailureEntry {
@@ -249,30 +282,45 @@ function categorize(description: string): ExperienceRule['category'] {
 
 function createRuleId(category: string, description: string): string {
   // Hash the first 30 chars of description for uniqueness
-  const hash = description.slice(0, 30).split('').reduce((acc, c) => {
-    return ((acc << 5) - acc + c.charCodeAt(0)) | 0
-  }, 0).toString(36).slice(-6)
+  const hash = description
+    .slice(0, 30)
+    .split('')
+    .reduce((acc, c) => {
+      return ((acc << 5) - acc + c.charCodeAt(0)) | 0
+    }, 0)
+    .toString(36)
+    .slice(-6)
   return `rule-${category}-${hash}`
 }
 
 function conditionForCategory(category: string, entries: FailureEntry[]): string {
-  const combined = entries.map(e => e.description).join('; ')
+  const combined = entries.map((e) => e.description).join('; ')
   switch (category) {
-    case 'timeout': return 'heavy CLI commands (npm/docker/pnpm)'
-    case 'import': return 'ESM module imports missing .js extension'
-    case 'search': return 'full-repository Grep without directory scoping'
-    case 'tool-params': return combined.slice(0, 100)
-    default: return combined.slice(0, 100)
+    case 'timeout':
+      return 'heavy CLI commands (npm/docker/pnpm)'
+    case 'import':
+      return 'ESM module imports missing .js extension'
+    case 'search':
+      return 'full-repository Grep without directory scoping'
+    case 'tool-params':
+      return combined.slice(0, 100)
+    default:
+      return combined.slice(0, 100)
   }
 }
 
 function actionForCategory(category: string): string {
   switch (category) {
-    case 'timeout': return 'set Bash timeout ≥ 300000ms for heavy commands'
-    case 'import': return 'always append .js extension to ESM relative imports'
-    case 'search': return 'use Glob to narrow directory before Grep'
-    case 'tool-params': return 'review and adjust tool parameters before execution'
-    default: return 'verify tool parameters match known good patterns'
+    case 'timeout':
+      return 'set Bash timeout ≥ 300000ms for heavy commands'
+    case 'import':
+      return 'always append .js extension to ESM relative imports'
+    case 'search':
+      return 'use Glob to narrow directory before Grep'
+    case 'tool-params':
+      return 'review and adjust tool parameters before execution'
+    default:
+      return 'verify tool parameters match known good patterns'
   }
 }
 
@@ -307,7 +355,7 @@ export class ExperienceRuleExtractor {
         evidence: {
           failureCount: catEntries.length,
           lastFailure: lastEntry.date,
-          examples: catEntries.slice(0, 3).map(e => e.description),
+          examples: catEntries.slice(0, 3).map((e) => e.description),
         },
         category: category as ExperienceRule['category'],
         source: 'agent-experience',
@@ -335,8 +383,8 @@ export class ExperienceRuleExtractor {
   formatForInjection(rules: ExperienceRule[]): string {
     if (rules.length === 0) return ''
 
-    const mandatory = rules.filter(r => r.type === 'mandatory')
-    const warnings = rules.filter(r => r.type === 'warning')
+    const mandatory = rules.filter((r) => r.type === 'mandatory')
+    const warnings = rules.filter((r) => r.type === 'warning')
 
     let output = ''
 
@@ -411,9 +459,11 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 2: Wire rule injection into agent-context.ts
 
 **Files:**
+
 - Modify: `apps/cli/src/agent/agent-context.ts`
 
 **Interfaces:**
+
 - Consumes: `ExperienceRuleExtractor.extract()`, `ExperienceRuleExtractor.formatForInjection()`
 - Modifies: `loadAgentMemory()` — replaces raw `exp.getExperience()` with `exp.getRules()` + formatted injection
 
@@ -425,15 +475,15 @@ Replace lines 59–117 (the experience handling block) in `apps/cli/src/agent/ag
 import { ExperienceRuleExtractor } from './experience-rules.js'
 
 // Inside loadAgentMemory(), replace the experience block (lines 59-117) with:
-  // Load auto-accumulated experience rules (always from user scope)
-  const exp = new AgentExperience(agentName)
-  const extractor = new ExperienceRuleExtractor()
-  const rules = extractor.prioritize(exp.getRules())
+// Load auto-accumulated experience rules (always from user scope)
+const exp = new AgentExperience(agentName)
+const extractor = new ExperienceRuleExtractor()
+const rules = extractor.prioritize(exp.getRules())
 
-  let experienceMemory = ''
-  if (rules.length > 0) {
-    experienceMemory = extractor.formatForInjection(rules)
-  }
+let experienceMemory = ''
+if (rules.length > 0) {
+  experienceMemory = extractor.formatForInjection(rules)
+}
 ```
 
 - [ ] **Step 2: Run existing tests to verify no regressions**
@@ -459,10 +509,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 3: ExperienceRuleEngine + builtin rules
 
 **Files:**
+
 - Create: `apps/cli/src/core/rule-engine.ts`
 - Test: `apps/cli/test/core/rule-engine.test.ts`
 
 **Interfaces:**
+
 - Produces: `ToolRule` interface, `ExperienceRuleEngine` class with `register(rule: ToolRule): void`, `intercept(toolName: string, params: Record<string, unknown>): { modified: Record<string, unknown>; warnings: string[] }`, `convertFromExperienceRules(experienceRules: ExperienceRule[]): ToolRule[]`, `getActiveRules(): ToolRule[]`, `setRuleEnabled(id: string, enabled: boolean): void`
 
 - [ ] **Step 1: Write the failing tests**
@@ -589,7 +641,7 @@ describe('ExperienceRuleEngine', () => {
   it('setRuleEnabled toggles rule state', () => {
     const engine = new ExperienceRuleEngine()
     const rules = engine.getActiveRules()
-    const timeoutRule = rules.find(r => r.id === 'rule-timeout-bash-heavy')
+    const timeoutRule = rules.find((r) => r.id === 'rule-timeout-bash-heavy')
     expect(timeoutRule).toBeDefined()
     expect(timeoutRule!.enabled).toBe(true)
 
@@ -612,11 +664,15 @@ describe('ExperienceRuleEngine', () => {
     const engine = new ExperienceRuleEngine()
     const expRules = [
       {
-        id: 'rule-timeout-xyz', type: 'mandatory' as const,
-        condition: 'heavy CLI commands', action: 'set timeout ≥ 300s',
+        id: 'rule-timeout-xyz',
+        type: 'mandatory' as const,
+        condition: 'heavy CLI commands',
+        action: 'set timeout ≥ 300s',
         evidence: { failureCount: 3, lastFailure: '2026-08-07', examples: ['npm install timeout'] },
-        category: 'timeout' as const, source: 'agent-experience' as const,
-        agentName: 'test', createdAt: '2026-08-08',
+        category: 'timeout' as const,
+        source: 'agent-experience' as const,
+        agentName: 'test',
+        createdAt: '2026-08-08',
       },
     ]
     const toolRules = engine.convertFromExperienceRules(expRules)
@@ -629,7 +685,7 @@ describe('ExperienceRuleEngine', () => {
     const engine = new ExperienceRuleEngine()
     const rules = engine.getActiveRules()
     expect(rules.length).toBeGreaterThan(0)
-    expect(rules.every(r => r.enabled)).toBe(true)
+    expect(rules.every((r) => r.enabled)).toBe(true)
   })
 })
 ```
@@ -665,7 +721,9 @@ const BUILTIN_RULES: ToolRule[] = [
     category: 'timeout',
     match: (p: Record<string, unknown>) => {
       const cmd = String(p.command ?? '')
-      const heavy = /npm (install|ci|test)|docker build|pnpm install|cargo build|brew install/.test(cmd)
+      const heavy = /npm (install|ci|test)|docker build|pnpm install|cargo build|brew install/.test(
+        cmd,
+      )
       if (!heavy) return false
       const timeout = (p as Record<string, unknown>).timeout as number | undefined
       return !timeout || timeout < 300_000
@@ -701,12 +759,12 @@ export class ExperienceRuleEngine {
   private rules: ToolRule[]
 
   constructor() {
-    this.rules = [...BUILTIN_RULES.map(r => ({ ...r }))]
+    this.rules = [...BUILTIN_RULES.map((r) => ({ ...r }))]
   }
 
   register(rule: ToolRule): void {
     // Replace if same ID exists, otherwise append
-    const idx = this.rules.findIndex(r => r.id === rule.id)
+    const idx = this.rules.findIndex((r) => r.id === rule.id)
     if (idx !== -1) {
       this.rules[idx] = rule
     } else {
@@ -779,11 +837,11 @@ export class ExperienceRuleEngine {
   }
 
   getActiveRules(): ToolRule[] {
-    return this.rules.filter(r => r.enabled)
+    return this.rules.filter((r) => r.enabled)
   }
 
   setRuleEnabled(id: string, enabled: boolean): void {
-    const rule = this.rules.find(r => r.id === id)
+    const rule = this.rules.find((r) => r.id === id)
     if (rule) {
       rule.enabled = enabled
     }
@@ -816,9 +874,11 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 4: Integrate RuleEngine into engine.ts tool execution
 
 **Files:**
+
 - Modify: `apps/cli/src/core/engine.ts`
 
 **Interfaces:**
+
 - Consumes: `ExperienceRuleEngine.intercept()`
 - Modifies: `QueryEngine.executeTool()` — calls `ruleEngine.intercept()` in the PreToolUse flow, injects warnings into tool result
 
@@ -846,50 +906,50 @@ export class QueryEngine {
 In the `executeTool` method of `QueryEngine`, after the existing PreToolUse hook block (lines 797–811), add the RuleEngine intercept:
 
 ```typescript
-    // Run PreToolUse hooks (existing code)
-    let effectiveParams = params
-    let hookWarnings: string[] = []
-    if (this.hookEngine) {
-      const preResult = await this.hookEngine.executePreToolUse(name, params, this.sessionId)
-      if (!preResult.allowed) {
-        return {
-          success: false,
-          content: '',
-          error: preResult.reason || t('errors.tool_blocked', { name }),
-        }
-      }
-      if (preResult.modifiedInput) {
-        effectiveParams = { ...params, ...preResult.modifiedInput }
-      }
+// Run PreToolUse hooks (existing code)
+let effectiveParams = params
+let hookWarnings: string[] = []
+if (this.hookEngine) {
+  const preResult = await this.hookEngine.executePreToolUse(name, params, this.sessionId)
+  if (!preResult.allowed) {
+    return {
+      success: false,
+      content: '',
+      error: preResult.reason || t('errors.tool_blocked', { name }),
     }
+  }
+  if (preResult.modifiedInput) {
+    effectiveParams = { ...params, ...preResult.modifiedInput }
+  }
+}
 
-    // CRSI RuleEngine intercept (new)
-    if (this.ruleEngine) {
-      const ruleResult = this.ruleEngine.intercept(name, effectiveParams)
-      if (Object.keys(ruleResult.modified).length > 0) {
-        effectiveParams = ruleResult.modified
-      }
-      if (ruleResult.warnings.length > 0) {
-        hookWarnings = ruleResult.warnings
-      }
-    }
+// CRSI RuleEngine intercept (new)
+if (this.ruleEngine) {
+  const ruleResult = this.ruleEngine.intercept(name, effectiveParams)
+  if (Object.keys(ruleResult.modified).length > 0) {
+    effectiveParams = ruleResult.modified
+  }
+  if (ruleResult.warnings.length > 0) {
+    hookWarnings = ruleResult.warnings
+  }
+}
 ```
 
 Then, after the tool executes successfully (after line 826), prepend warnings to the result:
 
 ```typescript
-      // Track touched files for rules matching (existing)
-      this.trackTouchedFile(name, effectiveParams)
+// Track touched files for rules matching (existing)
+this.trackTouchedFile(name, effectiveParams)
 
-      // Prepend CRSI warnings to result content
-      if (hookWarnings.length > 0 && result.success) {
-        result.content = hookWarnings.join('\n') + '\n' + (result.content || '')
-      }
+// Prepend CRSI warnings to result content
+if (hookWarnings.length > 0 && result.success) {
+  result.content = hookWarnings.join('\n') + '\n' + (result.content || '')
+}
 
-      // Run PostToolUse hooks (existing)
-      if (this.hookEngine) {
-        await this.hookEngine.executePostToolUse(name, effectiveParams, result, this.sessionId)
-      }
+// Run PostToolUse hooks (existing)
+if (this.hookEngine) {
+  await this.hookEngine.executePostToolUse(name, effectiveParams, result, this.sessionId)
+}
 ```
 
 - [ ] **Step 3: Pass ruleEngine instance in index.tsx**
@@ -927,9 +987,11 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 5: Register /crsi commands (Phase 10.2 set)
 
 **Files:**
+
 - Modify: `apps/cli/src/ui/commands.ts`
 
 **Interfaces:**
+
 - Consumes: `ExperienceRuleEngine.getActiveRules()`, `setRuleEnabled()`
 
 - [ ] **Step 1: Find command registration pattern in commands.ts**
@@ -1002,10 +1064,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 6: PatternAnalyzer — auto-discover failure patterns
 
 **Files:**
+
 - Create: `apps/cli/src/agent/pattern-analyzer.ts`
 - Test: `apps/cli/test/agent/pattern-analyzer.test.ts`
 
 **Interfaces:**
+
 - Produces: `Pattern` interface, `PatternAnalyzer` class with `analyzeAgent(agentName: string, baseDir?: string): Pattern[]`, `analyzeAllAgents(baseDir?: string): Pattern[]`, `toRule(pattern: Pattern): ExperienceRule`, `toToolRule(pattern: Pattern): ToolRule`
 - Consumes: `AgentExperience.getExperience()`, `ExperienceRule` type, `ToolRule` type
 
@@ -1055,7 +1119,7 @@ describe('PatternAnalyzer', () => {
     ])
     const analyzer = new PatternAnalyzer()
     const patterns = analyzer.analyzeAgent('test-agent', baseDir)
-    const timeoutPattern = patterns.find(p => p.category === 'timeout')
+    const timeoutPattern = patterns.find((p) => p.category === 'timeout')
     expect(timeoutPattern).toBeDefined()
     expect(timeoutPattern!.frequency).toBeGreaterThanOrEqual(3)
     expect(timeoutPattern!.confidence).toBe('high')
@@ -1069,7 +1133,7 @@ describe('PatternAnalyzer', () => {
     const analyzer = new PatternAnalyzer()
     const patterns = analyzer.analyzeAgent('test-agent', baseDir)
     // 2 failures → no pattern (only warning rule, not auto-created ToolRule)
-    expect(patterns.filter(p => p.frequency >= 3)).toEqual([])
+    expect(patterns.filter((p) => p.frequency >= 3)).toEqual([])
   })
 
   it('detects import error pattern', () => {
@@ -1080,7 +1144,7 @@ describe('PatternAnalyzer', () => {
     ])
     const analyzer = new PatternAnalyzer()
     const patterns = analyzer.analyzeAgent('test-agent', baseDir)
-    const importPattern = patterns.find(p => p.category === 'import')
+    const importPattern = patterns.find((p) => p.category === 'import')
     expect(importPattern).toBeDefined()
     expect(importPattern!.frequency).toBe(3)
   })
@@ -1093,7 +1157,7 @@ describe('PatternAnalyzer', () => {
     ])
     const analyzer = new PatternAnalyzer()
     const patterns = analyzer.analyzeAgent('test-agent', baseDir)
-    const timeoutPattern = patterns.find(p => p.category === 'timeout')
+    const timeoutPattern = patterns.find((p) => p.category === 'timeout')
     expect(timeoutPattern).toBeDefined()
 
     const rule = analyzer.toRule(timeoutPattern!)
@@ -1111,7 +1175,7 @@ describe('PatternAnalyzer', () => {
     ])
     const analyzer = new PatternAnalyzer()
     const patterns = analyzer.analyzeAgent('test-agent', baseDir)
-    const timeoutPattern = patterns.find(p => p.category === 'timeout')
+    const timeoutPattern = patterns.find((p) => p.category === 'timeout')
     expect(timeoutPattern).toBeDefined()
 
     const toolRule = analyzer.toToolRule(timeoutPattern!)
@@ -1197,8 +1261,8 @@ export class PatternAnalyzer {
     let agents: string[]
     try {
       agents = readdirSync(dir, { withFileTypes: true })
-        .filter(d => d.isDirectory())
-        .map(d => d.name)
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name)
     } catch {
       return []
     }
@@ -1292,19 +1356,27 @@ export class PatternAnalyzer {
 
   private _conditionForCategory(pattern: Pattern): string {
     switch (pattern.category) {
-      case 'timeout': return 'heavy CLI commands (npm/docker/pnpm/cargo)'
-      case 'import': return 'ESM module imports missing .js extension'
-      case 'search': return 'full-repository search without directory scoping'
-      default: return pattern.examples[0]?.slice(0, 100) || 'unknown condition'
+      case 'timeout':
+        return 'heavy CLI commands (npm/docker/pnpm/cargo)'
+      case 'import':
+        return 'ESM module imports missing .js extension'
+      case 'search':
+        return 'full-repository search without directory scoping'
+      default:
+        return pattern.examples[0]?.slice(0, 100) || 'unknown condition'
     }
   }
 
   private _actionForCategory(category: string): string {
     switch (category) {
-      case 'timeout': return 'set Bash timeout ≥ 300000ms for heavy commands'
-      case 'import': return 'append .js extension to ESM relative imports'
-      case 'search': return 'use Glob to narrow directory before Grep'
-      default: return 'review and adjust tool parameters before execution'
+      case 'timeout':
+        return 'set Bash timeout ≥ 300000ms for heavy commands'
+      case 'import':
+        return 'append .js extension to ESM relative imports'
+      case 'search':
+        return 'use Glob to narrow directory before Grep'
+      default:
+        return 'review and adjust tool parameters before execution'
     }
   }
 }
@@ -1333,10 +1405,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 7: EffectivenessTracker — rule impact tracking
 
 **Files:**
+
 - Create: `apps/cli/src/agent/effectiveness-tracker.ts`
 - Test: `apps/cli/test/agent/effectiveness-tracker.test.ts`
 
 **Interfaces:**
+
 - Produces: `RuleEffectiveness` interface, `EffectivenessTracker` class with `recordApplication(ruleId: string, success: boolean): void`, `evaluate(): { upgrades: string[]; degradations: string[]; disables: string[] }`, `getEffectiveness(ruleId: string): RuleEffectiveness | null`, `persist(): void`, `load(): void`
 
 - [ ] **Step 1: Write failing tests**
@@ -1451,8 +1525,8 @@ export interface RuleEffectiveness {
   }>
 }
 
-const EVAL_THRESHOLD = 10  // evaluate after 10 applications
-const DEGRADE_THRESHOLD = 10  // 10 more applications with no improvement → degrade
+const EVAL_THRESHOLD = 10 // evaluate after 10 applications
+const DEGRADE_THRESHOLD = 10 // 10 more applications with no improvement → degrade
 const STORE_FILE = 'effectiveness.json'
 
 export class EffectivenessTracker {
@@ -1492,7 +1566,11 @@ export class EffectivenessTracker {
   }
 
   evaluate(): { upgrades: string[]; degradations: string[]; disables: string[] } {
-    const result = { upgrades: [] as string[], degradations: [] as string[], disables: [] as string[] }
+    const result = {
+      upgrades: [] as string[],
+      degradations: [] as string[],
+      disables: [] as string[],
+    }
     const now = new Date().toISOString().slice(0, 10)
 
     for (const [ruleId, eff] of this.data) {
@@ -1523,10 +1601,7 @@ export class EffectivenessTracker {
         // No improvement after degrading → disable
         eff.status = 'disabled'
         result.disables.push(ruleId)
-      } else if (
-        eff.status === 'degrading' &&
-        eff.postRuleFailureRate < 0.4
-      ) {
+      } else if (eff.status === 'degrading' && eff.postRuleFailureRate < 0.4) {
         // Improved → restore to active
         eff.status = 'active'
         result.upgrades.push(ruleId)
@@ -1592,10 +1667,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 8: Wire SessionEnd trigger + full CRSI loop
 
 **Files:**
+
 - Modify: `apps/cli/src/agent/sub-agent.ts` — trigger PatternAnalyzer on SubagentStop
 - Modify: `apps/cli/src/ui/commands.ts` — add `/crsi analyze`, `/crsi restore`, `/crsi stats`
 
 **Interfaces:**
+
 - Consumes: `PatternAnalyzer.analyzeAgent()`, `PatternAnalyzer.toToolRule()`, `EffectivenessTracker.recordApplication()`, `ExperienceRuleEngine.register()`, `EffectivenessTracker.evaluate()`, `EffectivenessTracker.getEffectiveness()`
 
 - [ ] **Step 1: Wire PatternAnalyzer + EffectivenessTracker into sub-agent.ts**
@@ -1756,6 +1833,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 ### Task 9: Feature flags + config integration
 
 **Files:**
+
 - Modify: `apps/cli/src/config/defaults.ts` — add `crsi` section to default config
 
 - [ ] **Step 1: Add CRSI defaults to config**
@@ -1808,4 +1886,3 @@ pnpm lint         # must pass with zero warnings
 pnpm test         # all 642+ existing + 15+ new = ~657 tests, zero failures
 pnpm build        # must produce valid binary
 ```
-

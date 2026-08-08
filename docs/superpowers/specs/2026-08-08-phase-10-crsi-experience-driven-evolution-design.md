@@ -14,11 +14,11 @@
 
 Phase 7 实现了 Agent Memory 持久化的三个子系统：
 
-| 子系统 | 能力 |
-|--------|------|
+| 子系统                 | 能力                                                 |
+| ---------------------- | ---------------------------------------------------- |
 | Enhanced MemoryManager | wikilinks + 去重 + distillFromSession + 时间衰减召回 |
-| Session Resume | 会话索引 + 摘要 + /resume 命令 + SessionStart 注入 |
-| Agent Experience | 成功/失败模式记录 + 经验注入系统提示 |
+| Session Resume         | 会话索引 + 摘要 + /resume 命令 + SessionStart 注入   |
+| Agent Experience       | 成功/失败模式记录 + 经验注入系统提示                 |
 
 ### 1.2 核心断裂点
 
@@ -83,19 +83,20 @@ Phase 10.1 (B)      │  ┌─────────────────�
 
 ```typescript
 interface ExperienceRule {
-  id: string                    // 唯一标识，格式: rule-<category>-<hash>
+  id: string // 唯一标识，格式: rule-<category>-<hash>
   type: 'mandatory' | 'warning'
-  condition: string             // 触发条件描述
-  action: string                // 必须执行的动作
-  evidence: {                   // 证据链
+  condition: string // 触发条件描述
+  action: string // 必须执行的动作
+  evidence: {
+    // 证据链
     failureCount: number
-    lastFailure: string         // ISO date
-    examples: string[]          // 具体失败案例（最多 3 条）
+    lastFailure: string // ISO date
+    examples: string[] // 具体失败案例（最多 3 条）
   }
   category: 'timeout' | 'import' | 'search' | 'tool-params' | 'semantic'
   source: 'agent-experience' | 'manual' | 'pattern-analyzer'
-  agentName: string             // 来源 Agent
-  createdAt: string             // ISO date
+  agentName: string // 来源 Agent
+  createdAt: string // ISO date
 }
 ```
 
@@ -125,10 +126,10 @@ interface ExperienceRule {
 class ExperienceRuleExtractor {
   // 从 experience.md 提取规则
   extract(experienceContent: string, agentName: string): ExperienceRule[]
-  
+
   // 按 category 和 type 排序
   prioritize(rules: ExperienceRule[]): ExperienceRule[]
-  
+
   // 生成注入 system prompt 的文本块
   formatForInjection(rules: ExperienceRule[]): string
 }
@@ -150,11 +151,11 @@ class ExperienceRuleExtractor {
 
 ### 3.5 改动文件
 
-| 文件 | 改动 | 行数 |
-|------|------|------|
+| 文件                        | 改动                                             | 行数 |
+| --------------------------- | ------------------------------------------------ | ---- |
 | `agent/experience-rules.ts` | **新文件** — ExperienceRule 类型 + RuleExtractor | ~120 |
-| `agent/agent-context.ts` | 替换 getExperience() 调用为 extractor | ~15 |
-| `agent/agent-experience.ts` | 新增 getRules() 方法 | ~20 |
+| `agent/agent-context.ts`    | 替换 getExperience() 调用为 extractor            | ~15  |
+| `agent/agent-experience.ts` | 新增 getRules() 方法                             | ~20  |
 
 ### 3.6 测试
 
@@ -194,12 +195,12 @@ PreToolUse Hook ← 🆕 RuleEngine 在此介入
 ```typescript
 interface ToolRule {
   id: string
-  toolName: string                    // 'bash' | 'write' | 'edit' | 'grep' | ...
+  toolName: string // 'bash' | 'write' | 'edit' | 'grep' | ...
   category: string
   match: (params: Record<string, unknown>) => boolean
   fix: (params: Record<string, unknown>) => {
-    modified: Record<string, unknown>  // 修正后的参数
-    warning: string                    // 告知 AI 的修正说明
+    modified: Record<string, unknown> // 修正后的参数
+    warning: string // 告知 AI 的修正说明
   }
   source: 'builtin' | 'pattern-analyzer' | 'manual'
   enabled: boolean
@@ -207,22 +208,25 @@ interface ToolRule {
 
 class ExperienceRuleEngine {
   private rules: ToolRule[]
-  
+
   // 注册规则
   register(rule: ToolRule): void
-  
+
   // 在工具执行前检查并修正
-  intercept(toolName: string, params: Record<string, unknown>): {
+  intercept(
+    toolName: string,
+    params: Record<string, unknown>,
+  ): {
     modified: Record<string, unknown>
     warnings: string[]
   }
-  
+
   // 从 ExperienceRule[] 转换为 ToolRule[] (10.3 调用)
   convertFromExperienceRules(experienceRules: ExperienceRule[]): ToolRule[]
-  
+
   // 获取所有活跃规则
   getActiveRules(): ToolRule[]
-  
+
   // 禁用/启用规则
   setRuleEnabled(id: string, enabled: boolean): void
 }
@@ -238,15 +242,17 @@ const BUILTIN_RULES: ToolRule[] = [
     category: 'timeout',
     match: (p) => {
       const cmd = String(p.command ?? '')
-      return /npm (install|ci|test)|docker build|pnpm install|cargo build|brew install/.test(cmd)
-        && (!p.timeout || p.timeout < 300_000)
+      return (
+        /npm (install|ci|test)|docker build|pnpm install|cargo build|brew install/.test(cmd) &&
+        (!p.timeout || p.timeout < 300_000)
+      )
     },
     fix: (p) => ({
       modified: { ...p, timeout: 300_000 },
-      warning: `⏱️ timeout 已从 ${p.timeout || 'default'}ms 自动提升至 300000ms（该命令类型历史超时率 > 50%）`
+      warning: `⏱️ timeout 已从 ${p.timeout || 'default'}ms 自动提升至 300000ms（该命令类型历史超时率 > 50%）`,
     }),
     source: 'builtin',
-    enabled: true
+    enabled: true,
   },
   {
     id: 'rule-git-force-protection',
@@ -258,11 +264,11 @@ const BUILTIN_RULES: ToolRule[] = [
     },
     fix: (p) => ({
       modified: p,
-      warning: `⚠️ 检测到 git --force 操作。如需执行请设置 dangerouslyDisableSandbox: true`
+      warning: `⚠️ 检测到 git --force 操作。如需执行请设置 dangerouslyDisableSandbox: true`,
     }),
     source: 'builtin',
-    enabled: true
-  }
+    enabled: true,
+  },
 ]
 ```
 
@@ -274,12 +280,12 @@ const BUILTIN_RULES: ToolRule[] = [
 
 ### 4.6 改动文件
 
-| 文件 | 改动 | 行数 |
-|------|------|------|
+| 文件                  | 改动                                               | 行数 |
+| --------------------- | -------------------------------------------------- | ---- |
 | `core/rule-engine.ts` | **新文件** — RuleEngine + ToolRule + builtin rules | ~150 |
-| `core/hooks.ts` | 新增 PreToolUse 事件类型 + 触发逻辑 | ~30 |
-| `core/permission.ts` | 在工具执行前调用 RuleEngine.intercept() | ~20 |
-| `ui/commands.ts` | 注册 `/crsi rules`、`/crsi disable` | ~30 |
+| `core/hooks.ts`       | 新增 PreToolUse 事件类型 + 触发逻辑                | ~30  |
+| `core/permission.ts`  | 在工具执行前调用 RuleEngine.intercept()            | ~20  |
+| `ui/commands.ts`      | 注册 `/crsi rules`、`/crsi disable`                | ~30  |
 
 ### 4.7 测试
 
@@ -332,18 +338,19 @@ const BUILTIN_RULES: ToolRule[] = [
 ### 5.2 PatternAnalyzer
 
 **触发时机**：
+
 - 会话退出时（SessionEnd hook）
 - 手动触发：`/crsi analyze`
 - 累计阈值：Agent 每累计 5 次新执行后自动扫描
 
 **发现模式类型**：
 
-| 模式 | 检测方式 | 生成规则类型 |
-|------|---------|-------------|
-| 同类工具重复失败 | 同一 agent + toolName + 相似 error message ≥3 次 | ToolRule (PreTool Hook) |
-| 命令超时模式 | Bash 超时中同一类命令（npm/docker/cargo）≥3 次 | ToolRule (timeout boost) |
-| 文件路径错误 | Write/Edit 导致 MODULE_NOT_FOUND ≥3 次 | SemanticRule (注入提示) |
-| 搜索模式低效 | Grep 无结果 + 后续缩小范围后找到 ≥3 次 | SemanticRule |
+| 模式             | 检测方式                                         | 生成规则类型             |
+| ---------------- | ------------------------------------------------ | ------------------------ |
+| 同类工具重复失败 | 同一 agent + toolName + 相似 error message ≥3 次 | ToolRule (PreTool Hook)  |
+| 命令超时模式     | Bash 超时中同一类命令（npm/docker/cargo）≥3 次   | ToolRule (timeout boost) |
+| 文件路径错误     | Write/Edit 导致 MODULE_NOT_FOUND ≥3 次           | SemanticRule (注入提示)  |
+| 搜索模式低效     | Grep 无结果 + 后续缩小范围后找到 ≥3 次           | SemanticRule             |
 
 **相似度判断**：对 error message 提取关键词（移除路径、时间戳等变量），计算 Jaccard 相似度。
 
@@ -351,13 +358,13 @@ const BUILTIN_RULES: ToolRule[] = [
 class PatternAnalyzer {
   // 扫描所有 Agent 的 experience.md
   analyzeAllAgents(): Pattern[]
-  
+
   // 针对单个 Agent 扫描
   analyzeAgent(agentName: string): Pattern[]
-  
+
   // 将 Pattern 转换为 ExperienceRule
   toRule(pattern: Pattern): ExperienceRule
-  
+
   // 将 Pattern 转换为 ToolRule（供 RuleEngine 使用）
   toToolRule(pattern: Pattern): ToolRule
 }
@@ -368,10 +375,10 @@ class PatternAnalyzer {
 ```typescript
 interface RuleEffectiveness {
   ruleId: string
-  appliedCount: number           // 规则被触发次数
-  successAfterCount: number      // 规则应用后操作成功的次数
-  preRuleFailureRate: number     // 规则创建前该操作的失败率
-  postRuleFailureRate: number    // 规则创建后该操作的失败率（最近 20 次）
+  appliedCount: number // 规则被触发次数
+  successAfterCount: number // 规则应用后操作成功的次数
+  preRuleFailureRate: number // 规则创建前该操作的失败率
+  postRuleFailureRate: number // 规则创建后该操作的失败率（最近 20 次）
   status: 'active' | 'degrading' | 'disabled'
   createdAt: string
   lastEvaluatedAt: string
@@ -381,16 +388,16 @@ interface RuleEffectiveness {
 class EffectivenessTracker {
   // 记录规则应用
   recordApplication(ruleId: string, success: boolean): void
-  
+
   // 获取规则效果
   getEffectiveness(ruleId: string): RuleEffectiveness
-  
+
   // 评估所有规则，返回需要升降级的规则
   evaluate(): { upgrades: string[]; degradations: string[]; disables: string[] }
-  
+
   // 持久化到 ~/.mipham/rule-engine/effectiveness.json
   persist(): void
-  
+
   // 从文件加载
   load(): void
 }
@@ -398,11 +405,11 @@ class EffectivenessTracker {
 
 ### 5.4 自动降级规则
 
-| 条件 | 动作 |
-|------|------|
-| 应用 ≥10 次，失败率不降反升 | `mandatory` → `warning` |
-| `warning` 状态再观察 10 次，依然无效 | `warning` → `disabled` |
-| 用户手动恢复后，重新观察 20 次 | 按正常逻辑评估 |
+| 条件                                 | 动作                    |
+| ------------------------------------ | ----------------------- |
+| 应用 ≥10 次，失败率不降反升          | `mandatory` → `warning` |
+| `warning` 状态再观察 10 次，依然无效 | `warning` → `disabled`  |
+| 用户手动恢复后，重新观察 20 次       | 按正常逻辑评估          |
 
 - `disabled` 状态保留记录但不再生效
 - 用户可手动恢复：`/crsi restore <rule-id>`
@@ -419,22 +426,22 @@ class EffectivenessTracker {
 
 ### 5.6 新增命令
 
-| 命令 | 功能 |
-|------|------|
-| `/crsi analyze` | 手动触发模式分析 |
-| `/crsi rules` | 列出所有规则：类型、状态、效果数据 |
-| `/crsi disable <id>` | 禁用指定规则 |
-| `/crsi restore <id>` | 恢复被降级或禁用的规则 |
-| `/crsi stats` | 显示 CRSI 整体效果：规则数、拦截次数、成功率变化 |
+| 命令                 | 功能                                             |
+| -------------------- | ------------------------------------------------ |
+| `/crsi analyze`      | 手动触发模式分析                                 |
+| `/crsi rules`        | 列出所有规则：类型、状态、效果数据               |
+| `/crsi disable <id>` | 禁用指定规则                                     |
+| `/crsi restore <id>` | 恢复被降级或禁用的规则                           |
+| `/crsi stats`        | 显示 CRSI 整体效果：规则数、拦截次数、成功率变化 |
 
 ### 5.7 改动文件
 
-| 文件 | 改动 | 行数 |
-|------|------|------|
-| `agent/pattern-analyzer.ts` | **新文件** — 模式扫描 + 规则生成 | ~150 |
-| `agent/effectiveness-tracker.ts` | **新文件** — 规则效果追踪 | ~120 |
-| `core/hooks.ts` | SessionEnd hook 触发 analyze | ~15 |
-| `ui/commands.ts` | 注册 `/crsi analyze`、`/crsi restore`、`/crsi stats` | ~40 |
+| 文件                             | 改动                                                 | 行数 |
+| -------------------------------- | ---------------------------------------------------- | ---- |
+| `agent/pattern-analyzer.ts`      | **新文件** — 模式扫描 + 规则生成                     | ~150 |
+| `agent/effectiveness-tracker.ts` | **新文件** — 规则效果追踪                            | ~120 |
+| `core/hooks.ts`                  | SessionEnd hook 触发 analyze                         | ~15  |
+| `ui/commands.ts`                 | 注册 `/crsi analyze`、`/crsi restore`、`/crsi stats` | ~40  |
 
 ### 5.8 测试
 
@@ -487,10 +494,10 @@ AI 越来越少犯同类错误 ← CRSI
 ```json
 {
   "crsi": {
-    "ruleInjection": true,        // 10.1 — 经验→强制规则注入
-    "preToolHook": true,          // 10.2 — PreTool Hook 确定性拦截
-    "autoPatternAnalysis": true,  // 10.3 — 自动模式发现
-    "autoRuleManagement": true    // 10.3 — 自动规则升降级
+    "ruleInjection": true, // 10.1 — 经验→强制规则注入
+    "preToolHook": true, // 10.2 — PreTool Hook 确定性拦截
+    "autoPatternAnalysis": true, // 10.3 — 自动模式发现
+    "autoRuleManagement": true // 10.3 — 自动规则升降级
   }
 }
 ```
@@ -520,6 +527,7 @@ Phase 10.3 (C)
 ```
 
 **为什么这个顺序**：
+
 - 10.1 是数据基础——定义了规则的统一结构
 - 10.2 依赖 10.1 的类型定义，但可以独立测试
 - 10.3 是消费者——它发现模式、创建规则，通过 10.1 和 10.2 的渠道生效
@@ -528,13 +536,13 @@ Phase 10.3 (C)
 
 ## 九、风险与缓解
 
-| 风险 | 缓解 |
-|------|------|
-| 规则误匹配（false positive） | ToolRule.match() 必须足够精确；用户可随时 disable |
-| 规则爆炸式增长 | 全局上限 50 条规则；超过则淘汰最久未触发的 |
-| 自动修正引入新错误 | 修正后通过 EffectivenessTracker 监控，失败率上升则自动降级 |
-| PatternAnalyzer 消耗过多资源 | 仅在 SessionEnd 时运行，手动触发备选 |
-| 隐私风险（audit.log） | audit.log 仅存储 ruleId + timestamp + toolName，不含参数内容 |
+| 风险                         | 缓解                                                         |
+| ---------------------------- | ------------------------------------------------------------ |
+| 规则误匹配（false positive） | ToolRule.match() 必须足够精确；用户可随时 disable            |
+| 规则爆炸式增长               | 全局上限 50 条规则；超过则淘汰最久未触发的                   |
+| 自动修正引入新错误           | 修正后通过 EffectivenessTracker 监控，失败率上升则自动降级   |
+| PatternAnalyzer 消耗过多资源 | 仅在 SessionEnd 时运行，手动触发备选                         |
+| 隐私风险（audit.log）        | audit.log 仅存储 ruleId + timestamp + toolName，不含参数内容 |
 
 ---
 
@@ -550,6 +558,6 @@ Phase 10.3 (C)
 
 ### 修订历史
 
-| 版本 | 日期 | 变更内容 | 维护人 |
-|------|------|---------|--------|
+| 版本  | 日期       | 变更内容                     | 维护人     |
+| ----- | ---------- | ---------------------------- | ---------- |
 | 1.0.0 | 2026-08-08 | 初版：三阶段递进架构完整设计 | 技术委员会 |
