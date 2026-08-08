@@ -17,12 +17,14 @@ import type {
   InferenceHookConfig,
   CredentialMaskingConfig,
   BackgroundAgentConfig,
+  CrossSessionConfig,
 } from '../shared/index.ts'
 import {
   DEFAULT_CONFIG,
   DEFAULT_INFERENCE_HOOK_CONFIG,
   DEFAULT_CREDENTIAL_MASKING_CONFIG,
   DEFAULT_BACKGROUND_AGENT_CONFIG,
+  DEFAULT_CROSS_SESSION_CONFIG,
 } from './defaults'
 
 const MIPHAM_HOME = join(homedir(), '.mipham')
@@ -367,6 +369,37 @@ export function loadBackgroundAgentConfig(cwd: string = process.cwd()): Backgrou
           auto_push: section.auto_push ?? merged.auto_push,
           auto_worktree: section.auto_worktree ?? merged.auto_worktree,
           commit_coauthors: section.commit_coauthors ?? merged.commit_coauthors,
+        }
+      }
+    } catch {
+      // Silently skip malformed configs
+    }
+  }
+
+  return merged
+}
+
+/**
+ * Load cross-session messaging configuration from the same config sources.
+ * Merges project-level over user-level. Returns defaults if no section present.
+ */
+export function loadCrossSessionConfig(cwd: string = process.cwd()): CrossSessionConfig {
+  const configPath = join(cwd, '.mipham', 'config.yml')
+  const userConfigPath = join(MIPHAM_HOME, 'config.yml')
+
+  let merged = { ...DEFAULT_CROSS_SESSION_CONFIG }
+
+  const paths = [userConfigPath, configPath] // project wins (loaded last)
+  for (const path of paths) {
+    try {
+      if (!existsSync(path)) continue
+      const raw = readFileSync(path, 'utf-8')
+      const parsed = parseYaml(raw) as Record<string, unknown>
+      const section = parsed.cross_session as Partial<CrossSessionConfig> | undefined
+      if (section) {
+        merged = {
+          crossSessionInbound: section.crossSessionInbound ?? merged.crossSessionInbound,
+          dialogExpiry: section.dialogExpiry ?? merged.dialogExpiry,
         }
       }
     } catch {

@@ -3,7 +3,8 @@ import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { render } from 'ink'
 import { App } from './ui/app'
-import { loadConfig, loadInferenceHookConfig, loadCredentialMaskingConfig } from './config/loader'
+import { loadConfig, loadInferenceHookConfig, loadCredentialMaskingConfig, loadCrossSessionConfig } from './config/loader'
+import { registerActiveSession, heartbeatSession, unregisterSession, createSessionInfo } from './agent/cross-session/discovery'
 import { bootstrapProviders } from './providers/bootstrap'
 import { InstructionsLoader } from './core/instructions'
 import { loadSessionMemories, getMemoryManager } from './core/memory/memory-loader'
@@ -284,10 +285,36 @@ export async function runApp(options: RunOptions): Promise<void> {
 
   engine.setupContextSummarizer()
 
+  // ── Cross-session messaging: register session, heartbeat, shutdown ──
+  engine.setSessionId(sessionName)
+  const sessionInfo = createSessionInfo(
+    sessionName,
+    sessionName,
+    process.cwd(),
+    defaultProvider,
+    defaultModel,
+  )
+  registerActiveSession(sessionInfo)
+
+  // 30-second heartbeat to keep the session file mtime fresh
+  const heartbeatInterval = setInterval(() => {
+    heartbeatSession(sessionName)
+  }, 30_000)
+
+  // Allow heartbeat to not keep the process alive
+  if (heartbeatInterval.unref) {
+    heartbeatInterval.unref()
+  }
+
+  // Load cross-session config (available for MessageRouter and future consumers)
+  loadCrossSessionConfig()
+
   // Auto-save session on exit
   let saved = false
   const saveAndExit = () => {
     saved = true
+    clearInterval(heartbeatInterval)
+    unregisterSession(sessionName)
     artifactServer.stop()
     if (context.getMessageCount() > 0) {
       SessionStore.save(sessionName, context.getMessages(), {
@@ -304,6 +331,8 @@ export async function runApp(options: RunOptions): Promise<void> {
 
   // Safety net: auto-save on exit for paths that bypass saveAndExit
   process.on('exit', () => {
+    clearInterval(heartbeatInterval)
+    unregisterSession(sessionName)
     if (!saved && context.getMessageCount() > 0) {
       SessionStore.autoSave(context.getMessages(), {
         provider: defaultProvider,

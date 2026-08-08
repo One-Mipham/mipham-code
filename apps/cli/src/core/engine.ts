@@ -18,6 +18,8 @@ import { getBackgroundAgentRegistry } from '../agent/background-registry'
 import { RulesLoader } from './rules-loader'
 import { UsageTracker } from './usage-tracker'
 import { buildRequest, sendInferenceCheck, isInferenceHookEnabled } from './inference-hook'
+import { getFileInboxTransport } from '../agent/cross-session/file-inbox'
+import { getMessageBus } from '../agent/message-bus'
 import { createT } from '../i18n-core/t'
 import enUS from '../i18n-core/locales/en-US.json'
 import zhCN from '../i18n-core/locales/zh-CN.json'
@@ -53,6 +55,35 @@ export class QueryEngine {
     private tools: Map<string, ToolDefinition>,
     private permission: PermissionSystem = new PermissionSystem('default'),
   ) {}
+
+  /** Session identifier for cross-session messaging. Set by the app startup via setSessionId(). */
+  private sessionId: string = 'session-1'
+
+  /** Set the session identifier (called from index.tsx at startup with the actual session name). */
+  setSessionId(id: string): void {
+    this.sessionId = id
+  }
+
+  /** Get the current session identifier. */
+  getSessionId(): string {
+    return this.sessionId
+  }
+
+  /** Poll the cross-session file inbox for messages addressed to this session. */
+  async pollCrossSessionInbox(): Promise<void> {
+    try {
+      const transport = getFileInboxTransport()
+      const messages = await transport.poll(this.sessionId)
+      if (messages.length > 0) {
+        const bus = getMessageBus()
+        for (const msg of messages) {
+          bus.post(msg.from, msg.to, msg.summary, msg.message, msg.type)
+        }
+      }
+    } catch {
+      // Best-effort: don't let a failed inbox poll break the turn
+    }
+  }
 
   /** Register a hook engine for pre/post tool-use lifecycle events. */
   setHookEngine(hooks: HookEngine): void {
@@ -255,9 +286,12 @@ export class QueryEngine {
   }
 
   async *process(userInput: string, signal?: AbortSignal): AsyncGenerator<StreamChunk> {
+    // Poll for cross-session messages before each turn
+    await this.pollCrossSessionInbox()
+
     // Fire UserPromptSubmit hooks before processing
     if (this.hookEngine) {
-      const submitResult = await this.hookEngine.executeUserPromptSubmit(userInput, 'session-1')
+      const submitResult = await this.hookEngine.executeUserPromptSubmit(userInput, this.sessionId)
       if (submitResult.additionalContext) {
         this.context.addMessage({
           role: 'user',
@@ -292,7 +326,7 @@ export class QueryEngine {
       const model = this.registry.getActiveModel()
       const request = buildRequest(
         messages,
-        'session-1',
+        this.sessionId,
         provider,
         model,
         hookConfig.organization_id,
@@ -587,7 +621,7 @@ export class QueryEngine {
         const model = this.registry.getActiveModel()
         const request = buildRequest(
           messages,
-          'session-1',
+          this.sessionId,
           provider,
           model,
           hookConfig.organization_id,
@@ -762,7 +796,7 @@ export class QueryEngine {
     // Run PreToolUse hooks
     let effectiveParams = params
     if (this.hookEngine) {
-      const preResult = await this.hookEngine.executePreToolUse(name, params, 'session-1')
+      const preResult = await this.hookEngine.executePreToolUse(name, params, this.sessionId)
       if (!preResult.allowed) {
         return {
           success: false,
@@ -778,7 +812,7 @@ export class QueryEngine {
     try {
       const result = await tool.execute(effectiveParams, {
         cwd: process.cwd(),
-        sessionId: 'session-1',
+        sessionId: this.sessionId,
         provider: this.registry.getActive().config.id,
         model: this.registry.getActiveModel(),
         skillsLoader: this.skillsLoader,
@@ -795,7 +829,7 @@ export class QueryEngine {
 
       // Run PostToolUse hooks
       if (this.hookEngine) {
-        await this.hookEngine.executePostToolUse(name, effectiveParams, result, 'session-1')
+        await this.hookEngine.executePostToolUse(name, effectiveParams, result, this.sessionId)
       }
 
       return result
@@ -867,7 +901,7 @@ export class QueryEngine {
   /** Wrap context compaction with PreCompact/PostCompact hooks. */
   private async compactWithHooks(heading: string): Promise<void> {
     if (this.hookEngine) {
-      const preResult = await this.hookEngine.executePreCompact('session-1')
+      const preResult = await this.hookEngine.executePreCompact(this.sessionId)
       if (preResult.additionalContext) {
         this.context.addMessage({
           role: 'user',
@@ -879,7 +913,7 @@ export class QueryEngine {
     await this.context.compact(heading)
 
     if (this.hookEngine) {
-      const postResult = await this.hookEngine.executePostCompact('session-1')
+      const postResult = await this.hookEngine.executePostCompact(this.sessionId)
       if (postResult.additionalContext) {
         this.context.addMessage({
           role: 'user',
@@ -893,7 +927,7 @@ export class QueryEngine {
   private async *checkStopHook(signal?: AbortSignal): AsyncGenerator<StreamChunk> {
     if (!this.hookEngine) return
 
-    const stopResult = await this.hookEngine.executeStop('session-1')
+    const stopResult = await this.hookEngine.executeStop(this.sessionId)
     if (stopResult.decision === 'block') {
       // Feed the block reason back to the AI and continue
       this.context.addMessage({
