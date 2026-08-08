@@ -8,7 +8,16 @@
 import type { CommandHandler, CommandContext, CommandResult } from '../ui/commands.js'
 import { getWorkspaceTrust } from '../core/workspace-trust'
 
-export { initCmd, permissionsCmd, recommendCmd, setupCmd, addDirCmd, promptAuditCmd, securityCmd, trustCmd }
+export {
+  initCmd,
+  permissionsCmd,
+  recommendCmd,
+  setupCmd,
+  addDirCmd,
+  promptAuditCmd,
+  securityCmd,
+  trustCmd,
+}
 
 const initCmd: CommandHandler = async (ctx) => {
   const { existsSync, mkdirSync, writeFileSync } = await import('node:fs')
