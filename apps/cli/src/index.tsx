@@ -2,6 +2,7 @@ import React from 'react'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { render } from 'ink'
+import * as readline from 'node:readline'
 import { App } from './ui/app'
 import {
   loadConfig,
@@ -33,6 +34,7 @@ import { AgentRegistry } from './agent/agent-registry'
 import { HookEngine } from './core/hooks'
 import { ArtifactServer } from './artifacts/server'
 import { getMetrics } from './core/metrics'
+import { getWorkspaceTrust } from './core/workspace-trust'
 import { ARTIFACTS_DIR, ARTIFACT_PORT, MIPHAM_DIR } from './shared/constants'
 import { AgentViewManager } from './agent-view/agent-view-manager'
 import { AgentViewDashboard } from './agent-view/dashboard'
@@ -52,9 +54,68 @@ interface RunOptions {
   version?: string
 }
 
+/**
+ * Check workspace trust before starting the session.
+ * If the cwd is not trusted, prompt the user via stdin.
+ * Exits the process if the user declines.
+ */
+async function checkWorkspaceTrust(): Promise<void> {
+  const cwd = process.cwd()
+  const trust = getWorkspaceTrust()
+
+  if (trust.isTrusted(cwd)) return
+
+  // Non-interactive mode (piped stdin, headless) — skip prompt, proceed
+  if (!process.stdin.isTTY) return
+
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stderr, // use stderr to avoid interfering with stdout rendering
+  })
+
+  const question = (prompt: string): Promise<string> =>
+    new Promise((resolve) => {
+      rl.question(prompt, (answer) => {
+        resolve(answer.trim().toLowerCase())
+      })
+    })
+
+  process.stderr.write('\n')
+  process.stderr.write('╔══════════════════════════════════════════════╗\n')
+  process.stderr.write('║  ⚠️  Workspace Trust                          ║\n')
+  process.stderr.write('╠══════════════════════════════════════════════╣\n')
+  process.stderr.write('║                                              ║\n')
+  process.stderr.write(`║  Directory not trusted:                      ║\n`)
+  process.stderr.write(`║  ${cwd.slice(0, 42).padEnd(42)}║\n`)
+  process.stderr.write('║                                              ║\n')
+  process.stderr.write('║  Trust this workspace?                       ║\n')
+  process.stderr.write('║  [Y] Trust and continue                      ║\n')
+  process.stderr.write('║  [N] Exit                                    ║\n')
+  process.stderr.write('║                                              ║\n')
+  process.stderr.write('╚══════════════════════════════════════════════╝\n')
+  process.stderr.write('\n')
+
+  try {
+    const answer = await question('Trust this workspace? [Y/N]: ')
+    if (answer === 'y' || answer === 'yes') {
+      trust.trust(cwd)
+      process.stderr.write(`✓ Workspace trusted: ${cwd}\n\n`)
+    } else {
+      process.stderr.write('✗ Workspace not trusted. Exiting.\n')
+      rl.close()
+      process.exit(1)
+    }
+  } finally {
+    rl.close()
+  }
+}
+
 export async function runApp(options: RunOptions): Promise<void> {
   // Metrics: count CLI invocation
   getMetrics().cliInvocations.inc()
+
+  // ── Workspace Trust Check ──
+  await checkWorkspaceTrust()
 
   // Handle `mipham agents` subcommand — launch standalone dashboard
   const args = process.argv.slice(2)

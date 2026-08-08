@@ -8,6 +8,7 @@ import type { HookEngine } from '../core/hooks'
 import type { PermissionSystem } from '../core/permission'
 import { AgentExperience } from './agent-experience'
 import { PatternAnalyzer } from './pattern-analyzer.js'
+import { getWorkspaceTrust } from '../core/workspace-trust'
 import type { ExperienceRuleEngine } from '../core/rule-engine.js'
 
 // Singleton instances (created lazily)
@@ -199,6 +200,19 @@ export class SubAgent {
 
     // Resolve execution directory: worktree isolation or process cwd
     const execCwd = options.worktreePath || process.cwd()
+
+    // Check workspace trust for the execution directory.
+    // For worktree-isolated agents, auto-trust the worktree if the parent is trusted.
+    if (options.worktreePath) {
+      const trust = getWorkspaceTrust()
+      if (!trust.isTrusted(execCwd)) {
+        // Auto-trust worktree directories when the parent workspace is trusted
+        if (trust.isTrusted(process.cwd())) {
+          trust.trust(execCwd)
+        }
+        // Otherwise, proceed with a warning — don't block agent execution
+      }
+    }
 
     // Resolve system prompt: agentDef > options.systemPrompt > builtin type
     const systemPrompt =
