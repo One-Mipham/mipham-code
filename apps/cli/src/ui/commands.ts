@@ -482,6 +482,78 @@ const crsiDisableCmd: CommandHandler = (ctx, args) => {
   return { content: `Rule \`${ruleId}\` has been disabled. Use \`/crsi restore ${ruleId}\` to re-enable.` }
 }
 
+const crsiAnalyzeCmd: CommandHandler = async (ctx) => {
+  const t = resolveT(ctx)
+  const analyzer = ctx.engine.getPatternAnalyzer()
+  const engine = ctx.engine.getRuleEngine()
+  if (!engine) {
+    return { content: 'CRSI system is not available.' }
+  }
+
+  const patterns = analyzer.analyzeAllAgents()
+  if (patterns.length === 0) {
+    return { content: 'No failure patterns found across agents.' }
+  }
+
+  let registered = 0
+  for (const pattern of patterns) {
+    const toolRule = analyzer.toToolRule(pattern)
+    engine.register(toolRule)
+    registered++
+  }
+
+  const lines: string[] = ['## CRSI Analysis Complete', '', `Found ${patterns.length} patterns, ${registered} rules registered.`, '']
+  for (const p of patterns) {
+    lines.push(`- [${p.category}] \`${p.agentName}\` — ${p.frequency} failures (${p.confidence} confidence)`)
+  }
+  return { content: lines.join('\n') }
+}
+
+const crsiRestoreCmd: CommandHandler = (ctx, args) => {
+  const engine = ctx.engine.getRuleEngine()
+  if (!engine) {
+    return { content: 'CRSI rule engine is not available.' }
+  }
+  const ruleId = args.join(' ').trim()
+  if (!ruleId) {
+    return { content: 'Usage: /crsi restore <rule-id>' }
+  }
+  engine.setRuleEnabled(ruleId, true)
+  return { content: `Rule \`${ruleId}\` has been re-enabled.` }
+}
+
+const crsiStatsCmd: CommandHandler = async (ctx) => {
+  const engine = ctx.engine.getRuleEngine()
+  const tracker = ctx.engine.getEffectivenessTracker()
+  if (!engine) {
+    return { content: 'CRSI rule engine is not available.' }
+  }
+
+  const rules = engine.getActiveRules()
+  const lines: string[] = ['## CRSI Statistics', '']
+  lines.push(`Total active rules: ${rules.length}`)
+  lines.push(`Builtin: ${rules.filter(r => r.source === 'builtin').length}`)
+  lines.push(`Auto-generated: ${rules.filter(r => r.source === 'pattern-analyzer').length}`)
+  lines.push(`Manual: ${rules.filter(r => r.source === 'manual').length}`)
+
+  if (tracker) {
+    let totalInterceptions = 0
+    let totalSuccesses = 0
+    for (const r of rules) {
+      const eff = tracker.getEffectiveness(r.id)
+      if (eff) {
+        totalInterceptions += eff.appliedCount
+        totalSuccesses += eff.successAfterCount
+      }
+    }
+    lines.push('')
+    lines.push(`Total interceptions: ${totalInterceptions}`)
+    lines.push(`Success rate after rules: ${totalInterceptions > 0 ? Math.round(totalSuccesses / totalInterceptions * 100) : 0}%`)
+  }
+
+  return { content: lines.join('\n') }
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Workflow
 // ═══════════════════════════════════════════════════════════════
@@ -3110,6 +3182,9 @@ const commandsListCmd: CommandHandler = () => {
     '/commands': 'Tools & Skills',
     '/crsi rules': 'Tools & Skills',
     '/crsi disable': 'Tools & Skills',
+    '/crsi analyze': 'Tools & Skills',
+    '/crsi restore': 'Tools & Skills',
+    '/crsi stats': 'Tools & Skills',
     '/plan': 'Workflow',
     '/no-plan': 'Workflow',
     '/tdd': 'Workflow',
@@ -3249,6 +3324,9 @@ registry.set('/plugin-disable', pluginDisableCmd)
 registry.set('/commands', commandsListCmd)
 registry.set('/crsi rules', crsiRulesCmd)
 registry.set('/crsi disable', crsiDisableCmd)
+registry.set('/crsi analyze', crsiAnalyzeCmd)
+registry.set('/crsi restore', crsiRestoreCmd)
+registry.set('/crsi stats', crsiStatsCmd)
 
 // Workflow
 registry.set('/plan', planCmd)
@@ -3401,6 +3479,9 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/plugin-disable': 'Disable an enabled plugin',
   '/crsi rules': 'List all active CRSI rules with their status',
   '/crsi disable': 'Disable a CRSI rule by ID',
+  '/crsi analyze': 'Manually trigger CRSI pattern analysis across all agents',
+  '/crsi restore': 'Restore a disabled or degraded CRSI rule',
+  '/crsi stats': 'Show CRSI overall effectiveness statistics',
   '/plan': 'Enter plan mode',
   '/no-plan': 'Exit plan mode',
   '/tdd': 'Test-Driven Development workflow (RED → GREEN → REFACTOR)',

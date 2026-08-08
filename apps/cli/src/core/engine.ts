@@ -17,6 +17,8 @@ import type { SkillsLoader } from '../skills/loader'
 import { getBackgroundAgentRegistry } from '../agent/background-registry'
 import { RulesLoader } from './rules-loader'
 import { ExperienceRuleEngine } from './rule-engine.js'
+import { PatternAnalyzer } from '../agent/pattern-analyzer.js'
+import { EffectivenessTracker } from '../agent/effectiveness-tracker.js'
 import { UsageTracker } from './usage-tracker'
 import { buildRequest, sendInferenceCheck, isInferenceHookEnabled } from './inference-hook'
 import { getFileInboxTransport } from '../agent/cross-session/file-inbox'
@@ -39,6 +41,8 @@ export class QueryEngine {
   private agentViewManager?: AgentViewManager
   private skillsLoader?: SkillsLoader
   private ruleEngine?: ExperienceRuleEngine
+  private _patternAnalyzer?: PatternAnalyzer
+  private _effectivenessTracker?: EffectivenessTracker
   private goal?: string
   private maxGoalLoops = 20
   private lastAssistantContent?: string
@@ -840,6 +844,7 @@ export class QueryEngine {
         agentRegistry: this.agentRegistry,
         backgroundAgentRegistry: getBackgroundAgentRegistry(),
         permissionSystem: this.permission,
+        ruleEngine: this.ruleEngine,
       })
 
       // Track touched files for rules matching
@@ -888,6 +893,23 @@ export class QueryEngine {
 
   getRuleEngine(): ExperienceRuleEngine | undefined {
     return this.ruleEngine
+  }
+
+  /** Lazily-initialized PatternAnalyzer singleton. */
+  getPatternAnalyzer(): PatternAnalyzer {
+    if (!this._patternAnalyzer) {
+      this._patternAnalyzer = new PatternAnalyzer()
+    }
+    return this._patternAnalyzer
+  }
+
+  /** Lazily-initialized EffectivenessTracker singleton. */
+  getEffectivenessTracker(): EffectivenessTracker {
+    if (!this._effectivenessTracker) {
+      this._effectivenessTracker = new EffectivenessTracker()
+      this._effectivenessTracker.load()
+    }
+    return this._effectivenessTracker
   }
 
   /** Register a tool dynamically (used by MCP auto-registration). */

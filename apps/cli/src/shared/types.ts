@@ -72,6 +72,7 @@ export interface ToolContext {
   agentRegistry?: import('../agent/agent-registry').AgentRegistry
   backgroundAgentRegistry?: import('../agent/background-registry').BackgroundAgentRegistry
   permissionSystem?: import('../core/permission').PermissionSystem
+  ruleEngine?: import('../core/rule-engine').ExperienceRuleEngine
 }
 
 // ── Artifact Types ──

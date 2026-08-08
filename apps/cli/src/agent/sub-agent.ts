@@ -7,6 +7,26 @@ import { getMessageBus } from './message-bus'
 import type { HookEngine } from '../core/hooks'
 import type { PermissionSystem } from '../core/permission'
 import { AgentExperience } from './agent-experience'
+import { PatternAnalyzer } from './pattern-analyzer.js'
+import { EffectivenessTracker } from './effectiveness-tracker.js'
+import type { ExperienceRuleEngine } from '../core/rule-engine.js'
+
+// Singleton instances (created lazily)
+let _patternAnalyzer: PatternAnalyzer | undefined
+let _effectivenessTracker: EffectivenessTracker | undefined
+
+function getPatternAnalyzer(): PatternAnalyzer {
+  if (!_patternAnalyzer) _patternAnalyzer = new PatternAnalyzer()
+  return _patternAnalyzer
+}
+
+function getEffectivenessTracker(): EffectivenessTracker {
+  if (!_effectivenessTracker) {
+    _effectivenessTracker = new EffectivenessTracker()
+    _effectivenessTracker.load()
+  }
+  return _effectivenessTracker
+}
 
 const TYPE_SYSTEM_PROMPTS: Record<SubAgentType, string> = {
   general: 'You are a focused sub-agent. Complete the assigned task thoroughly and return results.',
@@ -32,6 +52,7 @@ export class SubAgent {
     private toolRegistry: Map<string, ToolDefinition>,
     private permission?: PermissionSystem,
     private hookEngine?: HookEngine,
+    private ruleEngine?: ExperienceRuleEngine,
   ) {}
 
   /**
@@ -85,6 +106,21 @@ export class SubAgent {
             options.agentDef,
           )
         }
+
+        // CRSI: trigger pattern analysis after each agent execution
+        try {
+          const analyzer = getPatternAnalyzer()
+          const agentName = options.agentDef?.name || agentType
+          const patterns = analyzer.analyzeAgent(agentName)
+          if (patterns.length > 0 && this.ruleEngine) {
+            for (const pattern of patterns) {
+              const toolRule = analyzer.toToolRule(pattern)
+              this.ruleEngine.register(toolRule)
+            }
+          }
+        } catch {
+          // Pattern analysis failure never blocks agent execution
+        }
       })
 
       return `[background-task:${taskId}]`
@@ -97,6 +133,22 @@ export class SubAgent {
         await this.hookEngine.executeSubagentStop(agentType, description, 'sub-agent', true, result)
       }
       this.logSuccessExperience(agentType, description, result, options.agentDef)
+
+      // CRSI: trigger pattern analysis after successful sync execution
+      try {
+        const analyzer = getPatternAnalyzer()
+        const agentName = options.agentDef?.name || agentType
+        const patterns = analyzer.analyzeAgent(agentName)
+        if (patterns.length > 0 && this.ruleEngine) {
+          for (const pattern of patterns) {
+            const toolRule = analyzer.toToolRule(pattern)
+            this.ruleEngine.register(toolRule)
+          }
+        }
+      } catch {
+        // Pattern analysis failure never blocks agent execution
+      }
+
       return result
     } catch (err) {
       if (this.hookEngine) {
@@ -109,6 +161,22 @@ export class SubAgent {
         )
       }
       this.logFailureExperience(agentType, description, String(err), options.agentDef)
+
+      // CRSI: trigger pattern analysis after failed sync execution (failures produce patterns too)
+      try {
+        const analyzer = getPatternAnalyzer()
+        const agentName = options.agentDef?.name || agentType
+        const patterns = analyzer.analyzeAgent(agentName)
+        if (patterns.length > 0 && this.ruleEngine) {
+          for (const pattern of patterns) {
+            const toolRule = analyzer.toToolRule(pattern)
+            this.ruleEngine.register(toolRule)
+          }
+        }
+      } catch {
+        // Pattern analysis failure never blocks agent execution
+      }
+
       throw err
     }
   }
