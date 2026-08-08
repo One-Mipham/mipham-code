@@ -52,6 +52,63 @@ describe('EffectivenessTracker', () => {
     expect(result.disables).toEqual([])
   })
 
+  it('degrades rule with >60% failure rate', () => {
+    // 10 applications: 8 failures, 2 successes → failure rate = 0.8 > 0.6
+    for (let i = 0; i < 10; i++) {
+      tracker.recordApplication('rule-bad', i >= 8)
+    }
+    const result = tracker.evaluate()
+    expect(result.degradations).toEqual(['rule-bad'])
+
+    const eff = tracker.getEffectiveness('rule-bad')
+    expect(eff).toBeDefined()
+    expect(eff!.status).toBe('degrading')
+    expect(eff!.postRuleFailureRate).toBe(0.8)
+  })
+
+  it('disables rule that shows no improvement after degrading', () => {
+    // First: 10 applications with 8 failures → degrade
+    for (let i = 0; i < 10; i++) {
+      tracker.recordApplication('rule-worsening', i >= 8)
+    }
+    tracker.evaluate()
+    let eff = tracker.getEffectiveness('rule-worsening')
+    expect(eff!.status).toBe('degrading')
+
+    // Add more failures, keeping failure rate high → second evaluate should disable
+    for (let i = 0; i < 10; i++) {
+      tracker.recordApplication('rule-worsening', i >= 8)
+    }
+    const result = tracker.evaluate()
+    expect(result.disables).toContain('rule-worsening')
+
+    eff = tracker.getEffectiveness('rule-worsening')
+    expect(eff!.status).toBe('disabled')
+  })
+
+  it('upgrades degraded rule back to active when failure rate drops', () => {
+    // First: 10 applications with 8 failures → degrade
+    for (let i = 0; i < 10; i++) {
+      tracker.recordApplication('rule-recovering', i >= 8)
+    }
+    tracker.evaluate()
+    let eff = tracker.getEffectiveness('rule-recovering')
+    expect(eff!.status).toBe('degrading')
+
+    // Add 10 successes → failure rate drops to ~0.4 (8 failures / 20 total)
+    for (let i = 0; i < 10; i++) {
+      tracker.recordApplication('rule-recovering', true)
+    }
+    // Failure rate = 8/20 = 0.4. That's not < 0.4, so add 1 more success
+    tracker.recordApplication('rule-recovering', true)
+    // Now: 8 failures / 21 = ~0.381 < 0.4
+    const result = tracker.evaluate()
+    expect(result.upgrades).toContain('rule-recovering')
+
+    eff = tracker.getEffectiveness('rule-recovering')
+    expect(eff!.status).toBe('active')
+  })
+
   it('persist and load roundtrip', () => {
     tracker.recordApplication('rule-test', true)
     tracker.recordApplication('rule-test', false)

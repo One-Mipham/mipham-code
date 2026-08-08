@@ -18,7 +18,6 @@ export interface RuleEffectiveness {
 }
 
 const EVAL_THRESHOLD = 10  // evaluate after 10 applications
-const DEGRADE_THRESHOLD = 10  // 10 more applications with no improvement → degrade
 const STORE_FILE = 'effectiveness.json'
 
 export class EffectivenessTracker {
@@ -50,9 +49,8 @@ export class EffectivenessTracker {
     eff.appliedCount++
     if (success) eff.successAfterCount++
 
-    // Calculate current failure rate over last EVAL_THRESHOLD entries
+    // Calculate current failure rate
     if (eff.appliedCount >= EVAL_THRESHOLD) {
-      const recentWindow = Math.min(eff.appliedCount, 20)
       eff.postRuleFailureRate = 1 - eff.successAfterCount / eff.appliedCount
     }
   }
@@ -76,24 +74,30 @@ export class EffectivenessTracker {
         eff.evaluationHistory = eff.evaluationHistory.slice(-10)
       }
 
+      // Degrade: active rule with high failure rate
       if (eff.status === 'active' && eff.postRuleFailureRate > 0.6) {
-        // High failure rate despite rule → degrade
         eff.status = 'degrading'
         result.degradations.push(ruleId)
-      } else if (
+      }
+
+      // Disable: degrading rule with no improvement across evaluations
+      if (
         eff.status === 'degrading' &&
-        eff.evaluationHistory.length >= 2 &&
-        eff.evaluationHistory[eff.evaluationHistory.length - 1].failureRate >=
-          eff.evaluationHistory[eff.evaluationHistory.length - 2].failureRate
+        eff.evaluationHistory.length >= 2
       ) {
-        // No improvement after degrading → disable
-        eff.status = 'disabled'
-        result.disables.push(ruleId)
-      } else if (
+        const last = eff.evaluationHistory[eff.evaluationHistory.length - 1]
+        const prev = eff.evaluationHistory[eff.evaluationHistory.length - 2]
+        if (last!.failureRate >= prev!.failureRate) {
+          eff.status = 'disabled'
+          result.disables.push(ruleId)
+        }
+      }
+
+      // Upgrade: degrading rule that has improved significantly
+      if (
         eff.status === 'degrading' &&
         eff.postRuleFailureRate < 0.4
       ) {
-        // Improved → restore to active
         eff.status = 'active'
         result.upgrades.push(ruleId)
       }
