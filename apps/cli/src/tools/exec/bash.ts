@@ -122,6 +122,54 @@ function isBlocked(command: string): string | null {
   return null // safe
 }
 
+/**
+ * Detect sandbox violations from stderr output.
+ * Parses common OS-level error patterns indicating denied access.
+ */
+export function detectViolations(stderr: string): string[] {
+  const violations: string[] = []
+
+  // File access violations
+  const accessPatterns = /(?:Permission denied|EACCES|EPERM|Operation not permitted)/gi
+  const accessMatches = stderr.match(accessPatterns)
+  if (accessMatches && accessMatches.length > 0) {
+    // Extract file paths from error messages
+    const pathPattern = /(?:Permission denied|EACCES|EPERM|Operation not permitted).*?['"]?(\/[^\s'"]+)['"]?/gi
+    const paths: string[] = []
+    let match: RegExpExecArray | null
+    while ((match = pathPattern.exec(stderr)) !== null) {
+      paths.push(match[1]!)
+    }
+
+    if (paths.length > 0) {
+      violations.push(`  File access denied: ${paths.join(', ')}`)
+    } else {
+      violations.push(`  File access denied (${accessMatches.length} occurrence(s))`)
+    }
+  }
+
+  // Network access violations
+  const netPatterns = /(?:Network is unreachable|Connection refused|ECONNREFUSED|ENETUNREACH|Could not resolve host|Name or service not known|ETIMEDOUT|Connection timed out)/gi
+  const netMatches = stderr.match(netPatterns)
+  if (netMatches && netMatches.length > 0) {
+    // Extract host:port from error messages
+    const hostPattern = /(?:connect to|Could not resolve host|Failed to connect to)\s+([^\s:]+(?::\d+)?)/gi
+    const hosts: string[] = []
+    let match: RegExpExecArray | null
+    while ((match = hostPattern.exec(stderr)) !== null) {
+      hosts.push(match[1]!)
+    }
+
+    if (hosts.length > 0) {
+      violations.push(`  Network access denied: ${hosts.join(', ')}`)
+    } else {
+      violations.push(`  Network access denied (${netMatches.length} occurrence(s))`)
+    }
+  }
+
+  return violations
+}
+
 export const bashTool: ToolDefinition = {
   name: 'Bash',
   description:
@@ -173,6 +221,9 @@ export const bashTool: ToolDefinition = {
       const exitCode = await proc.exited
       clearTimeout(timer)
 
+      // Read stderr for violation detection and error reporting
+      const rawStderr = await new Response(proc.stderr).text()
+
       // ── Credential masking: scrub output ──
       let output = rawOutput
       if (credentialConfig?.enabled && credentialConfig.output_scrubbing.enabled) {
@@ -180,20 +231,30 @@ export const bashTool: ToolDefinition = {
         output = maskOutput(rawOutput, credentialConfig)
       }
 
+      // ── Sandbox violation detection ──
+      const violations = detectViolations(rawStderr)
+
       if (exitCode !== 0) {
-        const rawStderr = await new Response(proc.stderr).text()
         const stderr =
           credentialConfig?.enabled && credentialConfig.output_scrubbing.enabled
             ? (await import('../../core/credential-masker')).maskOutput(rawStderr, credentialConfig)
             : rawStderr
+        let errorContent = output.slice(0, 5_000)
+        if (violations.length > 0) {
+          errorContent += '\n\n── Sandbox Violations ──\n' + violations.join('\n')
+        }
         return {
           success: false,
-          content: output.slice(0, 5_000),
+          content: errorContent,
           error: `Exit code ${exitCode}: ${stderr.slice(0, 1_000)}`,
         }
       }
 
-      return { success: true, content: output.slice(0, 100_000) || '(no output)' }
+      let successContent = output.slice(0, 100_000) || '(no output)'
+      if (violations.length > 0) {
+        successContent += '\n\n── Sandbox Violations ──\n' + violations.join('\n')
+      }
+      return { success: true, content: successContent }
     } catch (err) {
       return {
         success: false,

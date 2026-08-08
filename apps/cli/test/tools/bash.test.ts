@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import type { ToolContext } from '@mipham/shared'
-import { bashTool } from '../../src/tools/exec/bash'
+import { bashTool, detectViolations } from '../../src/tools/exec/bash'
 
 const ctx: ToolContext = {
   cwd: '/tmp/test',
@@ -60,4 +60,65 @@ describe('bash security hardening', () => {
       expect(result.error).toContain('rejected by security policy')
     })
   }
+})
+
+// ============================================================
+// detectViolations — sandbox violation reporting
+// ============================================================
+
+describe('detectViolations', () => {
+  it('detects file permission denied with path', () => {
+    const stderr = "cat: /etc/shadow: Permission denied\n"
+    const result = detectViolations(stderr)
+    expect(result.length).toBeGreaterThanOrEqual(1)
+    expect(result.some(r => r.includes('File access denied'))).toBe(true)
+  })
+
+  it('detects EACCES error', () => {
+    const stderr = "Error: EACCES: permission denied, open '/root/.secret'\n"
+    const result = detectViolations(stderr)
+    expect(result.some(r => r.includes('File access denied'))).toBe(true)
+  })
+
+  it('detects EPERM error', () => {
+    const stderr = "EPERM: operation not permitted, unlink '/var/run/lock'\n"
+    const result = detectViolations(stderr)
+    expect(result.some(r => r.includes('File access denied'))).toBe(true)
+  })
+
+  it('detects network unreachable', () => {
+    const stderr = "curl: (7) Failed to connect to internal.api:443 — Network is unreachable\n"
+    const result = detectViolations(stderr)
+    expect(result.some(r => r.includes('Network access denied'))).toBe(true)
+  })
+
+  it('detects connection refused', () => {
+    const stderr = "Connection refused (ECONNREFUSED) — localhost:8080\n"
+    const result = detectViolations(stderr)
+    expect(result.some(r => r.includes('Network access denied'))).toBe(true)
+  })
+
+  it('detects DNS resolution failure', () => {
+    const stderr = "ssh: Could not resolve host internal.corp: Name or service not known\n"
+    const result = detectViolations(stderr)
+    expect(result.some(r => r.includes('Network access denied'))).toBe(true)
+  })
+
+  it('reports both file and network violations together', () => {
+    const stderr = "Permission denied: /etc/secret\nNetwork is unreachable to api.internal:443\n"
+    const result = detectViolations(stderr)
+    expect(result.some(r => r.includes('File access denied'))).toBe(true)
+    expect(result.some(r => r.includes('Network access denied'))).toBe(true)
+  })
+
+  it('returns empty array for clean stderr', () => {
+    const stderr = "File processed successfully.\nAll operations completed.\n"
+    const result = detectViolations(stderr)
+    expect(result).toHaveLength(0)
+  })
+
+  it('returns empty array for empty stderr', () => {
+    const result = detectViolations('')
+    expect(result).toHaveLength(0)
+  })
 })
