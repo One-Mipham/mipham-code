@@ -29,6 +29,11 @@ export function matchCredentialFile(
  * - 'extract' mode: replace regex-matched tokens with sentinel
  */
 export function maskContent(content: string, rule: CredentialFileRule): string {
+  // jwt and aws types use `type` instead of `mode` — passthrough for now
+  if (!('mode' in rule)) {
+    return content
+  }
+
   if (rule.mode === 'full') {
     return CREDENTIAL_SENTINEL
   }

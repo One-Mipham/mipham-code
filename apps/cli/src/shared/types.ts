@@ -375,17 +375,47 @@ export interface CredentialFullMaskRule {
   mode: 'full'
 }
 
+/** Per-extract-pattern configuration with optional field-based extraction. */
+export interface CredentialExtractPattern {
+  /** Regex pattern to match. When `field` is set, applied to field value only. */
+  pattern: string
+  /** Optional replacement string. Defaults to CREDENTIAL_SENTINEL. */
+  replacement?: string
+  /** 🆕 JSON key to extract before applying pattern. If unset, pattern runs against full content. */
+  field?: string
+}
+
 /** Extract-based masking rule: only regex-matched tokens are replaced. */
 export interface CredentialExtractRule {
   path: string
   mode: 'extract'
-  extract: Array<{
-    pattern: string
-    replacement?: string
-  }>
+  extract: CredentialExtractPattern[]
+  /** 🆕 Behavior when no extract pattern matches: 'mask' (replace all) or 'passthrough' (keep). Default: 'mask'. */
+  onExtractNoMatch?: 'mask' | 'passthrough'
 }
 
-export type CredentialFileRule = CredentialFullMaskRule | CredentialExtractRule
+/** 🆕 JWT-aware masking rule: decode payload and mask specified claims. */
+export interface JwtMaskingRule {
+  path: string
+  type: 'jwt'
+  decode: 'jwt'
+  /** Claim names to mask in the JWT payload (e.g. ["sub", "email"]). */
+  maskClaims: string[]
+}
+
+/** 🆕 AWS credential pair masking rule: detect key pairs and optionally re-sign. */
+export interface AwsMaskingRule {
+  path: string
+  type: 'aws'
+  awsPairs: boolean
+  sigv4: boolean
+}
+
+export type CredentialFileRule =
+  | CredentialFullMaskRule
+  | CredentialExtractRule
+  | JwtMaskingRule
+  | AwsMaskingRule
 
 /** Configuration for credential masking, loaded from config.yml. */
 export interface CredentialMaskingConfig {
@@ -399,6 +429,29 @@ export interface CredentialMaskingConfig {
     enabled: boolean
     patterns: string[]
   }
+}
+
+// ── Cross-Session Messaging Types ──
+
+/** Controls how inbound cross-session messages are handled. */
+export type CrossSessionInbound = 'allow' | 'ask' | 'deny'
+
+/** 🆕 Configuration for cross-session messaging. */
+export interface CrossSessionConfig {
+  crossSessionInbound: CrossSessionInbound
+  dialogExpiry: number // seconds
+}
+
+/** Session information exposed via ListAgents. */
+export interface SessionInfo {
+  id: string
+  name: string
+  machine: string
+  pid: number
+  startedAt: string
+  cwd?: string
+  provider?: string
+  model?: string
 }
 
 // ── Background Agent Types ──

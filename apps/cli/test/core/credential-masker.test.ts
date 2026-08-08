@@ -44,7 +44,9 @@ describe('matchCredentialFile', () => {
     const config = makeConfig({ files: [{ path: '/home/user/.env', mode: 'full' }] })
     const rule = matchCredentialFile('/home/user/.env', config)
     expect(rule).not.toBeNull()
-    expect(rule!.mode).toBe('full')
+    if (rule && 'mode' in rule) {
+      expect(rule.mode).toBe('full')
+    }
   })
 
   it('should match with ~ home expansion', () => {
