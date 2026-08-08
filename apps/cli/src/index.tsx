@@ -246,6 +246,10 @@ export async function runApp(options: RunOptions): Promise<void> {
   const inferenceHookConfig = loadInferenceHookConfig()
   engine.setInferenceHookConfig(inferenceHookConfig)
 
+  // Initialize credential masking pipeline (strategies: Full, Extract, JWT)
+  const { initializePipeline } = await import('./core/credential-masker/index')
+  initializePipeline()
+
   // Wire credential masking configuration into tools
   const credentialMaskingConfig = loadCredentialMaskingConfig()
   const { setCredentialMaskingConfigForRead } = await import('./tools/file/read')
