@@ -318,8 +318,9 @@ export async function runApp(options: RunOptions): Promise<void> {
     heartbeatInterval.unref()
   }
 
-  // Load cross-session config (available for MessageRouter and future consumers)
-  loadCrossSessionConfig()
+  // Load cross-session config and wire into the engine's inbound policy
+  const crossSessionConfig = loadCrossSessionConfig(process.cwd())
+  engine.setCrossSessionConfig(crossSessionConfig)
 
   // Auto-save session on exit
   let saved = false

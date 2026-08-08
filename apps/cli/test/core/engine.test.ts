@@ -449,3 +449,50 @@ describe('QueryEngine', () => {
     })
   })
 })
+
+// ============================================================
+// Cross-Session Inbound Config
+// ============================================================
+
+describe('Cross-session inbound config', () => {
+  const makeEngine = () => {
+    const registry = mockProviderRegistry()
+    const ctx = mockContext()
+    return new QueryEngine(registry, ctx, new Map())
+  }
+
+  it('stores cross-session config via setCrossSessionConfig', () => {
+    const engine = makeEngine()
+    engine.setCrossSessionConfig({ crossSessionInbound: 'deny', dialogExpiry: 600 })
+    // setSessionId is needed for pollCrossSessionInbox
+    engine.setSessionId('test-session-config')
+    // verify no throw — config is accepted
+  })
+
+  it('defaults to ask mode before setCrossSessionConfig is called', async () => {
+    const engine = makeEngine()
+    engine.setSessionId('test-session-default')
+
+    // In 'ask' mode (default), pollCrossSessionInbox should not throw
+    // even when the inbox directory doesn't exist yet
+    await expect(engine.pollCrossSessionInbox()).resolves.toBeUndefined()
+  })
+
+  it('pollCrossSessionInbox succeeds in deny mode', async () => {
+    const engine = makeEngine()
+    engine.setCrossSessionConfig({ crossSessionInbound: 'deny', dialogExpiry: 300 })
+    engine.setSessionId('test-session-deny')
+
+    // Deny mode should silently succeed (no messages to discard)
+    await expect(engine.pollCrossSessionInbox()).resolves.toBeUndefined()
+  })
+
+  it('pollCrossSessionInbox succeeds in allow mode', async () => {
+    const engine = makeEngine()
+    engine.setCrossSessionConfig({ crossSessionInbound: 'allow', dialogExpiry: 300 })
+    engine.setSessionId('test-session-allow')
+
+    // Allow mode should silently succeed (no messages to forward)
+    await expect(engine.pollCrossSessionInbox()).resolves.toBeUndefined()
+  })
+})

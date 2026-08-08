@@ -4,6 +4,7 @@ import type {
   ToolResult,
   InferenceHookConfig,
   CrsiConfig,
+  CrossSessionConfig,
 } from '../shared/index.ts'
 import { ProviderRegistry } from '../providers/registry'
 import { ContextManager } from './context'
@@ -69,6 +70,12 @@ export class QueryEngine {
   /** Session identifier for cross-session messaging. Set by the app startup via setSessionId(). */
   private sessionId: string = 'session-1'
 
+  /** Cross-session inbound policy. Default: 'ask' (messages require user review). */
+  private crossSessionConfig: CrossSessionConfig = {
+    crossSessionInbound: 'ask',
+    dialogExpiry: 300,
+  }
+
   /** Set the session identifier (called from index.tsx at startup with the actual session name). */
   setSessionId(id: string): void {
     this.sessionId = id
@@ -79,15 +86,45 @@ export class QueryEngine {
     return this.sessionId
   }
 
+  /** Set the cross-session messaging policy (called from index.tsx at startup). */
+  setCrossSessionConfig(config: CrossSessionConfig): void {
+    this.crossSessionConfig = config
+  }
+
   /** Poll the cross-session file inbox for messages addressed to this session. */
   async pollCrossSessionInbox(): Promise<void> {
+    const policy = this.crossSessionConfig.crossSessionInbound
+
+    // 'deny' — silently discard all inbound messages
+    if (policy === 'deny') {
+      try {
+        const transport = getFileInboxTransport()
+        await transport.poll(this.sessionId) // read + delete, don't forward
+      } catch {
+        // Best-effort discard
+      }
+      return
+    }
+
     try {
       const transport = getFileInboxTransport()
       const messages = await transport.poll(this.sessionId)
       if (messages.length > 0) {
         const bus = getMessageBus()
         for (const msg of messages) {
-          bus.post(msg.from, msg.to, msg.summary, msg.message, msg.type)
+          if (policy === 'ask') {
+            // Mark as awaiting approval — the model should verify with the user before acting
+            bus.post(
+              msg.from,
+              msg.to,
+              `[Awaiting Approval] ${msg.summary}`,
+              `[Cross-session message from ${msg.from} — verify with user before acting]\n\n${msg.message}`,
+              'warning',
+            )
+          } else {
+            // 'allow' — forward directly
+            bus.post(msg.from, msg.to, msg.summary, msg.message, msg.type)
+          }
         }
       }
     } catch (err) {
