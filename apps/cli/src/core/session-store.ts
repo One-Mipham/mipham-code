@@ -9,6 +9,7 @@ import {
   statSync,
 } from 'node:fs'
 import { join } from 'node:path'
+import { createHash } from 'node:crypto'
 import type { Message } from '../shared/types'
 
 export interface SessionMetadata {
@@ -50,7 +51,15 @@ function ensureDir(): void {
 
 function filePath(name: string): string {
   // Sanitize name for filesystem
-  const safe = name.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 100)
+  const safe = name.replace(/[^a-zA-Z0-9_-]/g, '_')
+
+  // For very long names (>100 chars), use SHA-256 hash suffix to prevent collision
+  if (safe.length > 100) {
+    const hash = createHash('sha256').update(safe).digest('hex').slice(0, 16)
+    const truncated = safe.slice(0, 80)
+    return join(SESSIONS_DIR, `${truncated}-${hash}.jsonl`)
+  }
+
   return join(SESSIONS_DIR, `${safe}.jsonl`)
 }
 
@@ -233,7 +242,10 @@ export class SessionStore {
     ensureDir()
     mkdirSync(SUMMARIES_DIR, { recursive: true })
 
-    const safe = name.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 100)
+    const safeRaw = name.replace(/[^a-zA-Z0-9_-]/g, '_')
+    const safe = safeRaw.length > 100
+      ? `${safeRaw.slice(0, 80)}-${createHash('sha256').update(safeRaw).digest('hex').slice(0, 16)}`
+      : safeRaw
     const summaryPath = join(SUMMARIES_DIR, `${safe}.md`)
     writeFileSync(summaryPath, `# ${name}\n\n${summary}\n\nTags: ${tags.join(', ')}\n`, 'utf-8')
 
