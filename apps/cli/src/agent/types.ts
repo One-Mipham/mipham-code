@@ -46,4 +46,6 @@ export interface SubAgentOptions {
   onProgress?: (chunk: string) => void
   /** When set, tool executions use this path as cwd (git worktree isolation). */
   worktreePath?: string
+  /** CRSI: when false, skip pattern analysis after agent execution. Default true. */
+  autoPatternAnalysis?: boolean
 }

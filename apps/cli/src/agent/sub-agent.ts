@@ -108,18 +108,21 @@ export class SubAgent {
         }
 
         // CRSI: trigger pattern analysis after each agent execution
-        try {
-          const analyzer = getPatternAnalyzer()
-          const agentName = options.agentDef?.name || agentType
-          const patterns = analyzer.analyzeAgent(agentName)
-          if (patterns.length > 0 && this.ruleEngine) {
-            for (const pattern of patterns) {
-              const toolRule = analyzer.toToolRule(pattern)
-              this.ruleEngine.register(toolRule)
+        // Gated by crsi.autoPatternAnalysis feature flag
+        if (options.autoPatternAnalysis !== false) {
+          try {
+            const analyzer = getPatternAnalyzer()
+            const agentName = options.agentDef?.name || agentType
+            const patterns = analyzer.analyzeAgent(agentName)
+            if (patterns.length > 0 && this.ruleEngine) {
+              for (const pattern of patterns) {
+                const toolRule = analyzer.toToolRule(pattern)
+                this.ruleEngine.register(toolRule)
+              }
             }
+          } catch {
+            // Pattern analysis failure never blocks agent execution
           }
-        } catch {
-          // Pattern analysis failure never blocks agent execution
         }
       })
 
@@ -135,18 +138,21 @@ export class SubAgent {
       this.logSuccessExperience(agentType, description, result, options.agentDef)
 
       // CRSI: trigger pattern analysis after successful sync execution
-      try {
-        const analyzer = getPatternAnalyzer()
-        const agentName = options.agentDef?.name || agentType
-        const patterns = analyzer.analyzeAgent(agentName)
-        if (patterns.length > 0 && this.ruleEngine) {
-          for (const pattern of patterns) {
-            const toolRule = analyzer.toToolRule(pattern)
-            this.ruleEngine.register(toolRule)
+      // Gated by crsi.autoPatternAnalysis feature flag
+      if (options.autoPatternAnalysis !== false) {
+        try {
+          const analyzer = getPatternAnalyzer()
+          const agentName = options.agentDef?.name || agentType
+          const patterns = analyzer.analyzeAgent(agentName)
+          if (patterns.length > 0 && this.ruleEngine) {
+            for (const pattern of patterns) {
+              const toolRule = analyzer.toToolRule(pattern)
+              this.ruleEngine.register(toolRule)
+            }
           }
+        } catch {
+          // Pattern analysis failure never blocks agent execution
         }
-      } catch {
-        // Pattern analysis failure never blocks agent execution
       }
 
       return result
@@ -163,18 +169,21 @@ export class SubAgent {
       this.logFailureExperience(agentType, description, String(err), options.agentDef)
 
       // CRSI: trigger pattern analysis after failed sync execution (failures produce patterns too)
-      try {
-        const analyzer = getPatternAnalyzer()
-        const agentName = options.agentDef?.name || agentType
-        const patterns = analyzer.analyzeAgent(agentName)
-        if (patterns.length > 0 && this.ruleEngine) {
-          for (const pattern of patterns) {
-            const toolRule = analyzer.toToolRule(pattern)
-            this.ruleEngine.register(toolRule)
+      // Gated by crsi.autoPatternAnalysis feature flag
+      if (options.autoPatternAnalysis !== false) {
+        try {
+          const analyzer = getPatternAnalyzer()
+          const agentName = options.agentDef?.name || agentType
+          const patterns = analyzer.analyzeAgent(agentName)
+          if (patterns.length > 0 && this.ruleEngine) {
+            for (const pattern of patterns) {
+              const toolRule = analyzer.toToolRule(pattern)
+              this.ruleEngine.register(toolRule)
+            }
           }
+        } catch {
+          // Pattern analysis failure never blocks agent execution
         }
-      } catch {
-        // Pattern analysis failure never blocks agent execution
       }
 
       throw err

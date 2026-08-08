@@ -22,6 +22,12 @@ export const DEFAULT_CONFIG: MiphamConfig = {
     mcp: { oauthEnabled: true },
     context: { useRealTokenizer: true, adaptiveThresholds: true },
   },
+  crsi: {
+    ruleInjection: true,
+    preToolHook: true,
+    autoPatternAnalysis: true,
+    autoRuleManagement: true,
+  },
 }
 
 export const DEFAULT_INFERENCE_HOOK_CONFIG: InferenceHookConfig = {

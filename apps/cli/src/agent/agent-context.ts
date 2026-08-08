@@ -5,6 +5,7 @@ import { homedir } from 'node:os'
 import { ContextManager } from '../core/context'
 import type { ToolDefinition } from '../shared/index.ts'
 import type { AgentDefinition } from './types'
+import type { CrsiConfig } from '../shared/index.ts'
 import { AgentExperience } from './agent-experience'
 import { ExperienceRuleExtractor } from './experience-rules.js'
 
@@ -16,8 +17,14 @@ export interface AgentContextResult {
 /**
  * Load agent memory files from the appropriate scope directory.
  * Returns combined content for injection into the system prompt.
+ *
+ * @param crsiRuleInjection — when false, skip experience rule extraction (CRSI feature flag).
  */
-function loadAgentMemory(agentName: string, scope: 'user' | 'project' | 'local'): string {
+function loadAgentMemory(
+  agentName: string,
+  scope: 'user' | 'project' | 'local',
+  crsiRuleInjection = true,
+): string {
   let memoryDir: string
   const home = homedir()
 
@@ -58,13 +65,16 @@ function loadAgentMemory(agentName: string, scope: 'user' | 'project' | 'local')
   }
 
   // Load auto-accumulated experience rules (always from user scope)
-  const exp = new AgentExperience(agentName)
-  const extractor = new ExperienceRuleExtractor()
-  const rules = extractor.prioritize(exp.getRules())
-
+  // Gated by crsi.ruleInjection feature flag
   let experienceMemory = ''
-  if (rules.length > 0) {
-    experienceMemory = extractor.formatForInjection(rules)
+  if (crsiRuleInjection) {
+    const exp = new AgentExperience(agentName)
+    const extractor = new ExperienceRuleExtractor()
+    const rules = extractor.prioritize(exp.getRules())
+
+    if (rules.length > 0) {
+      experienceMemory = extractor.formatForInjection(rules)
+    }
   }
 
   // Combine both memory sources
@@ -90,6 +100,7 @@ export function createAgentContext(
   agentDef: AgentDefinition,
   toolRegistry: Map<string, ToolDefinition>,
   contextWindow?: number,
+  crsiConfig?: Partial<CrsiConfig>,
 ): AgentContextResult {
   // Create isolated context
   const context = new ContextManager({
@@ -100,7 +111,8 @@ export function createAgentContext(
   // Build system prompt with optional agent memory
   let systemPrompt = agentDef.systemPrompt
   if (agentDef.memory) {
-    const memory = loadAgentMemory(agentDef.name, agentDef.memory)
+    const ruleInjection = crsiConfig?.ruleInjection !== false
+    const memory = loadAgentMemory(agentDef.name, agentDef.memory, ruleInjection)
     if (memory) {
       systemPrompt = `${systemPrompt}\n\n---\n\n${memory}`
     }

@@ -55,7 +55,13 @@ export class EffectivenessTracker {
     }
   }
 
-  evaluate(): { upgrades: string[]; degradations: string[]; disables: string[] } {
+  /**
+   * Evaluate rule effectiveness and return auto-management actions.
+   *
+   * @param autoRuleManagement — when false, skip auto-degrade/disable/enable logic
+   *   but still record evaluation history for manual review. Default true.
+   */
+  evaluate(autoRuleManagement = true): { upgrades: string[]; degradations: string[]; disables: string[] } {
     const result = { upgrades: [] as string[], degradations: [] as string[], disables: [] as string[] }
     const now = new Date().toISOString().slice(0, 10)
 
@@ -73,6 +79,9 @@ export class EffectivenessTracker {
       if (eff.evaluationHistory.length > 10) {
         eff.evaluationHistory = eff.evaluationHistory.slice(-10)
       }
+
+      // Auto-management is gated by crsi.autoRuleManagement feature flag
+      if (!autoRuleManagement) continue
 
       // Degrade: active rule with high failure rate
       if (eff.status === 'active' && eff.postRuleFailureRate > 0.6) {

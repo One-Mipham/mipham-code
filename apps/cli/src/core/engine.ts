@@ -3,6 +3,7 @@ import type {
   ToolDefinition,
   ToolResult,
   InferenceHookConfig,
+  CrsiConfig,
 } from '../shared/index.ts'
 import { ProviderRegistry } from '../providers/registry'
 import { ContextManager } from './context'
@@ -137,6 +138,8 @@ export class QueryEngine {
   private usageTracker = new UsageTracker()
   /** Inference hook (DLP) configuration. */
   private inferenceHookConfig?: InferenceHookConfig
+  /** CRSI feature flags. */
+  private crsiConfig?: Partial<CrsiConfig>
 
   /** Register the rules loader. */
   setRulesLoader(loader: RulesLoader): void {
@@ -147,6 +150,11 @@ export class QueryEngine {
   /** Register inference hook (DLP) configuration. */
   setInferenceHookConfig(config: InferenceHookConfig): void {
     this.inferenceHookConfig = config
+  }
+
+  /** Register CRSI feature flags. */
+  setCrsiConfig(config: Partial<CrsiConfig> | undefined): void {
+    this.crsiConfig = config
   }
 
   /** Pending task notifications from background agents (cleared after draining). */
@@ -820,8 +828,8 @@ export class QueryEngine {
       }
     }
 
-    // CRSI RuleEngine intercept
-    if (this.ruleEngine) {
+    // CRSI RuleEngine intercept — gated by crsi.preToolHook feature flag
+    if (this.crsiConfig?.preToolHook !== false && this.ruleEngine) {
       const ruleResult = this.ruleEngine.intercept(name, effectiveParams)
       if (Object.keys(ruleResult.modified).length > 0) {
         effectiveParams = ruleResult.modified

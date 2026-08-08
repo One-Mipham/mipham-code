@@ -163,11 +163,24 @@ export interface MiphamConfig {
   }
   /** Phase 9 feature flags. All default to true. */
   features?: Partial<FeatureFlags>
+  /** Phase 10 CRSI feature flags. All default to true. */
+  crsi?: Partial<CrsiConfig>
 }
 
 export interface FeatureFlags {
   mcp: { oauthEnabled: boolean }
   context: { useRealTokenizer: boolean; adaptiveThresholds: boolean }
+}
+
+export interface CrsiConfig {
+  /** Extract and inject experience rules into agent system prompts. */
+  ruleInjection: boolean
+  /** Intercept tool calls and auto-fix known failure patterns before execution. */
+  preToolHook: boolean
+  /** Analyze agent outcomes for recurring failure patterns. */
+  autoPatternAnalysis: boolean
+  /** Auto-degrade/disable low-effectiveness rules based on success-rate tracking. */
+  autoRuleManagement: boolean
 }
 
 export interface McpServerConfig {
