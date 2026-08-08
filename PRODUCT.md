@@ -18,7 +18,7 @@ Mipham Code 是一个**开源核心、多模型智能编程终端**，通过 Rea
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | **Multi-Model**         | 8 providers (7 active + 1 upcoming), 28+ models via unified API (Anthropic, OpenAI, DeepSeek, Google, Qwen, Doubao, Hunyuan, MiphamAI) |
 | **16 Built-in Tools**   | File operations, shell execution, agent dispatch, MCP integration, web search                                                          |
-| **60 Slash Commands**   | Full Claude Code-compatible command set with zero re-learning                                                                          |
+| **60 Slash Commands**   | Full command set with zero re-learning                                                                          |
 | **MCP Protocol**        | Full JSON-RPC 2.0 stdio transport — connect to any MCP-compatible server                                                               |
 | **13 Skills**           | 11 standard + 2 Mipham-exclusive skills with dual-runtime architecture                                                                 |
 | **Security Hardened**   | Path sandbox, SSRF protection, Bash command blacklist, permission gating, parameter validation                                         |
@@ -127,7 +127,7 @@ irm https://onemipham.com/install.ps1 | iex
 2. **Surgical Changes** — Only modify what's required, match existing style
 3. **Security by Default** — Path sandbox, permission gates, SSRF protection built-in
 4. **Multi-Model First** — Every feature works across all 8 providers
-5. **Zero Re-Learning** — Commands mirror Claude Code UX
+5. **Zero Re-Learning** — Intuitive command interface
 
 ---
 

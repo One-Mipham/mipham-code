@@ -283,7 +283,7 @@ mipham-code 变更（包名/版本）
 1. **VS Code 扩展发布** — 发布到 VS Code Marketplace
 2. **JetBrains 插件** — IntelliJ/WebStorm 终端集成
 3. **MCP 深度集成** — OAuth 认证、动态工具更新、Tool Search 增强
-4. **1M 上下文窗口** — 对标 Claude Code Sonnet 5
+4. **1M 上下文窗口** — 支持超长上下文模型
 5. **macOS .app** — 将 CLI 打包为 macOS 应用包（.icns 已就绪）
 6. **多语言国际化** — CLI 和 Web 的 i18n 支持
 

@@ -16,7 +16,7 @@ Requirements: **Bun 1.2+** (recommended) or **Node.js 22+**
 ## Features
 
 - **9 AI Providers** — Anthropic Claude · OpenAI GPT · DeepSeek · Kimi (Moonshot) · Google Gemini · Doubao 豆包 · Tencent Hunyuan 混元 · Qwen 通义千问 · MiphamAI
-- **66 Slash Commands** — Interactive command picker (↑↓ Enter Esc), Claude Code-compatible, zero re-learning
+- **66 Slash Commands** — Interactive command picker (↑↓ Enter Esc), intuitive command interface, zero re-learning
 - **16 Built-in Tools** — File ops, shell execution, agent dispatch, MCP integration, web search
 - **14 Skills + Marketplace** — 11 standard + 3 Mipham-exclusive skills. `/browse-skills` `/install-skill` community marketplace
 - **Self-Update** — `mipham update` / `/upgrade` — one command to check, backup config, upgrade, restore. API keys preserved
