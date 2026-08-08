@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
+import { ExperienceRuleExtractor, type ExperienceRule } from './experience-rules.js'
 
 const MAX_EXPERIENCES = 20
 
@@ -44,6 +45,13 @@ export class AgentExperience {
         /* ok */
       }
     }
+  }
+
+  getRules(): ExperienceRule[] {
+    const content = this.getExperience()
+    if (!content) return []
+    const extractor = new ExperienceRuleExtractor()
+    return extractor.extract(content, this.agentName)
   }
 
   private appendToSection(section: string, entry: string, type: 'success' | 'failure'): void {
