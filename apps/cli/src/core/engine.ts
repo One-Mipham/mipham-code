@@ -80,8 +80,9 @@ export class QueryEngine {
           bus.post(msg.from, msg.to, msg.summary, msg.message, msg.type)
         }
       }
-    } catch {
+    } catch (err) {
       // Best-effort: don't let a failed inbox poll break the turn
+      console.warn('Cross-session inbox poll failed:', err)
     }
   }
 

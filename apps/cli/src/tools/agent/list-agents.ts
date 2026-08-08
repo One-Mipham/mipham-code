@@ -54,8 +54,6 @@ function formatSessionList(sessions: import('../../shared/types').SessionInfo[])
   for (const s of sessions) {
     const modelInfo = s.model ? ` · ${s.model}` : ''
     const providerInfo = s.provider ? ` (${s.provider})` : ''
-    const cwdInfo = s.cwd ? ` · ${s.cwd}` : ''
-
     lines.push(`  ${s.id}`)
     lines.push(`    Name:    ${s.name}`)
     lines.push(`    Machine: ${s.machine}${modelInfo}${providerInfo}`)
