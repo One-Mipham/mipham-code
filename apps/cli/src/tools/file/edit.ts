@@ -2,10 +2,65 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import type { ToolDefinition } from '../../shared/index.ts'
 import { resolveSafe } from '../../security/path'
 
+/**
+ * Characters considered part of an identifier in source code.
+ * A match is only valid if it sits at identifier boundaries —
+ * i.e. not embedded inside a larger identifier word.
+ */
+function isIdentifierChar(c: string): boolean {
+  return /[a-zA-Z0-9_$]/.test(c)
+}
+
+/**
+ * Find all valid occurrences of `oldStr` in `content`.
+ * A match is valid only when it does NOT sit inside a larger identifier:
+ * - If oldStr starts with an identifier char, the char before the match
+ *   must NOT be an identifier char (or the match must be at position 0).
+ * - If oldStr ends with an identifier char, the char after the match
+ *   must NOT be an identifier char (or the match must be at end of file).
+ */
+function findValidMatches(content: string, oldStr: string): number[] {
+  const indices: number[] = []
+  // oldStr is guaranteed non-empty by the required parameter validation
+  const oldFirst = oldStr[0]!
+  const oldLast = oldStr[oldStr.length - 1]!
+  const checkLeft = isIdentifierChar(oldFirst)
+  const checkRight = isIdentifierChar(oldLast)
+
+  let pos = 0
+  while (pos < content.length) {
+    const idx = content.indexOf(oldStr, pos)
+    if (idx === -1) break
+
+    // Left boundary check: if oldStr starts with identifier char,
+    // the character before the match must not be an identifier char.
+    if (checkLeft && idx > 0 && isIdentifierChar(content[idx - 1]!)) {
+      pos = idx + 1
+      continue
+    }
+
+    // Right boundary check: if oldStr ends with identifier char,
+    // the character after the match must not be an identifier char.
+    const afterIdx = idx + oldStr.length
+    if (checkRight && afterIdx < content.length && isIdentifierChar(content[afterIdx]!)) {
+      pos = idx + 1
+      continue
+    }
+
+    indices.push(idx)
+    pos = idx + 1
+  }
+
+  return indices
+}
+
 export const editTool: ToolDefinition = {
   name: 'Edit',
   description:
-    'Perform exact string replacement in a file. old_string must match exactly and be unique.',
+    'Perform exact string replacement in a file. ' +
+    'old_string must match exactly as a standalone occurrence — it will NOT match inside larger ' +
+    'identifiers or words (e.g. "user" will not match inside "username"). ' +
+    'Must be unique in the file (unless replace_all is used).',
   category: 'file',
   permission: 'ask',
   parameters: {
@@ -43,22 +98,30 @@ export const editTool: ToolDefinition = {
       }
     }
 
-    if (replaceAll) {
-      if (!content.includes(oldStr)) {
-        return { success: false, content: '', error: 'old_string not found in file' }
+    const matches = findValidMatches(content, oldStr)
+
+    if (matches.length === 0) {
+      return {
+        success: false,
+        content: '',
+        error:
+          'old_string not found in file. ' +
+          'It may appear only as part of a larger word/identifier — provide more context.',
       }
-      const updated = content.replaceAll(oldStr, newStr)
-      writeFileSync(filePath, updated, 'utf-8')
-      const count = content.split(oldStr).length - 1
-      return { success: true, content: `Replaced ${count} occurrences in ${filePath}` }
     }
 
-    const firstIndex = content.indexOf(oldStr)
-    if (firstIndex === -1) {
-      return { success: false, content: '', error: 'old_string not found in file' }
+    if (replaceAll) {
+      // Build result by splicing at each match (in reverse so indices stay valid)
+      let result = content
+      for (let i = matches.length - 1; i >= 0; i--) {
+        const idx = matches[i]!
+        result = result.slice(0, idx) + newStr + result.slice(idx + oldStr.length)
+      }
+      writeFileSync(filePath, result, 'utf-8')
+      return { success: true, content: `Replaced ${matches.length} occurrences in ${filePath}` }
     }
-    const secondIndex = content.indexOf(oldStr, firstIndex + 1)
-    if (secondIndex !== -1) {
+
+    if (matches.length > 1) {
       return {
         success: false,
         content: '',
@@ -66,8 +129,8 @@ export const editTool: ToolDefinition = {
       }
     }
 
-    const updated =
-      content.slice(0, firstIndex) + newStr + content.slice(firstIndex + oldStr.length)
+    const idx = matches[0]!
+    const updated = content.slice(0, idx) + newStr + content.slice(idx + oldStr.length)
     writeFileSync(filePath, updated, 'utf-8')
     return { success: true, content: `Replaced 1 occurrence in ${filePath}` }
   },

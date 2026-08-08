@@ -245,6 +245,71 @@ describe('Edit tool execution', () => {
     expect(result.success).toBe(true)
     expect(readFileSync(testFile(), 'utf-8')).toBe('line1\nline2\nline3')
   })
+
+  it('rejects substring-only match (old_string inside larger identifier)', async () => {
+    // "user" appears only as a substring of "username" — not a standalone occurrence
+    writeFileSync(testFile(), 'const username = "admin"')
+    const result = await editTool.execute(
+      { file_path: testFile(), old_string: 'user', new_string: 'account' },
+      ctx,
+    )
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('not found')
+  })
+
+  it('rejects substring match at start of identifier', async () => {
+    // "get" inside "getUserName" — starts at identifier boundary but ends mid-identifier
+    writeFileSync(testFile(), 'getUserName()')
+    const result = await editTool.execute(
+      { file_path: testFile(), old_string: 'get', new_string: 'fetch' },
+      ctx,
+    )
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('not found')
+  })
+
+  it('rejects substring match at end of identifier', async () => {
+    // "Name" inside "getUserName" — starts mid-identifier
+    writeFileSync(testFile(), 'getUserName()')
+    const result = await editTool.execute(
+      { file_path: testFile(), old_string: 'Name', new_string: 'Login' },
+      ctx,
+    )
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('not found')
+  })
+
+  it('allows standalone match when surrounded by non-identifier chars', async () => {
+    writeFileSync(testFile(), 'const user = "test"\nconst username = "admin"')
+    const result = await editTool.execute(
+      { file_path: testFile(), old_string: 'user', new_string: 'account' },
+      ctx,
+    )
+    expect(result.success).toBe(true)
+    expect(readFileSync(testFile(), 'utf-8')).toBe('const account = "test"\nconst username = "admin"')
+  })
+
+  it('replace_all skips substring matches inside larger identifiers', async () => {
+    writeFileSync(testFile(), 'user\nusername\nuserAge\nsuper_user\nuser')
+    const result = await editTool.execute(
+      { file_path: testFile(), old_string: 'user', new_string: 'account', replace_all: true },
+      ctx,
+    )
+    expect(result.success).toBe(true)
+    // Only standalone "user" replaced (lines 1 and 5).
+    // "username", "userAge", "super_user" are all larger identifiers — skipped.
+    expect(readFileSync(testFile(), 'utf-8')).toBe('account\nusername\nuserAge\nsuper_user\naccount')
+  })
+
+  it('replace_all returns error when old_string only appears as substring', async () => {
+    writeFileSync(testFile(), 'username\nuserAge')
+    const result = await editTool.execute(
+      { file_path: testFile(), old_string: 'user', new_string: 'account', replace_all: true },
+      ctx,
+    )
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('not found')
+  })
 })
 
 // ============================================================
