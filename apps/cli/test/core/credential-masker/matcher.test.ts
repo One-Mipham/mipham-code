@@ -15,7 +15,8 @@ describe('matchPath', () => {
 
   it('single * matches within segment', () => {
     expect(matchPath('/home/user/.env.local', '/home/user/.env.*')).toBe(true)
-    expect(matchPath('/home/user/.env', '/home/user/.env.*')).toBe(true)
+    // .env.* requires literal dot after .env, so .env without trailing dot does NOT match
+    expect(matchPath('/home/user/.env', '/home/user/.env.*')).toBe(false)
   })
 
   it('? matches single char', () => {

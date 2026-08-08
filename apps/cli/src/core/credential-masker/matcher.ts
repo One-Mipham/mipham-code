@@ -85,13 +85,7 @@ export function globToRegex(pattern: string): RegExp {
       continue
     }
     if (ch === '*') {
-      // When * follows a literal ., make the dot optional so .env.* matches .env
-      if (i > 0 && pattern[i - 1] === '.') {
-        regexStr = regexStr.slice(0, -2) // Remove the already-output \.
-        regexStr += '(?:\\.)?[^/]*'
-      } else {
-        regexStr += '[^/]*'
-      }
+      regexStr += '[^/]*'
       i++
       continue
     }
