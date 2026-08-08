@@ -286,7 +286,9 @@ describe('Edit tool execution', () => {
       ctx,
     )
     expect(result.success).toBe(true)
-    expect(readFileSync(testFile(), 'utf-8')).toBe('const account = "test"\nconst username = "admin"')
+    expect(readFileSync(testFile(), 'utf-8')).toBe(
+      'const account = "test"\nconst username = "admin"',
+    )
   })
 
   it('replace_all skips substring matches inside larger identifiers', async () => {
@@ -298,7 +300,9 @@ describe('Edit tool execution', () => {
     expect(result.success).toBe(true)
     // Only standalone "user" replaced (lines 1 and 5).
     // "username", "userAge", "super_user" are all larger identifiers — skipped.
-    expect(readFileSync(testFile(), 'utf-8')).toBe('account\nusername\nuserAge\nsuper_user\naccount')
+    expect(readFileSync(testFile(), 'utf-8')).toBe(
+      'account\nusername\nuserAge\nsuper_user\naccount',
+    )
   })
 
   it('replace_all returns error when old_string only appears as substring', async () => {
