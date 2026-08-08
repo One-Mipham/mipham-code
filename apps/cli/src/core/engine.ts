@@ -886,6 +886,10 @@ export class QueryEngine {
     return this.tools
   }
 
+  getRuleEngine(): ExperienceRuleEngine | undefined {
+    return this.ruleEngine
+  }
+
   /** Register a tool dynamically (used by MCP auto-registration). */
   registerTool(tool: ToolDefinition): void {
     if (this.tools.has(tool.name)) {

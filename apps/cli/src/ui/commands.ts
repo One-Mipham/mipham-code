@@ -447,6 +447,42 @@ const skillsCmd: CommandHandler = (ctx) => {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// CRSI (Conversational Rule Self-Improvement)
+// ═══════════════════════════════════════════════════════════════
+
+const crsiRulesCmd: CommandHandler = (ctx) => {
+  const engine = ctx.engine.getRuleEngine()
+  if (!engine) {
+    return { content: 'CRSI rule engine is not available.' }
+  }
+  const rules = engine.getActiveRules()
+  if (rules.length === 0) {
+    return { content: 'No active CRSI rules.' }
+  }
+  const lines: string[] = ['## Active CRSI Rules', '']
+  for (const r of rules) {
+    const status = r.enabled ? '✅' : '⛔'
+    lines.push(`- \`${r.id}\` [${r.category}] ${r.toolName} — ${r.source} ${status}`)
+  }
+  lines.push('', `Total: ${rules.length} active rules`)
+  lines.push('', 'Use `/crsi disable <rule-id>` to disable a rule.')
+  return { content: lines.join('\n') }
+}
+
+const crsiDisableCmd: CommandHandler = (ctx, args) => {
+  const engine = ctx.engine.getRuleEngine()
+  if (!engine) {
+    return { content: 'CRSI rule engine is not available.' }
+  }
+  const ruleId = args[0]?.trim()
+  if (!ruleId) {
+    return { content: 'Usage: /crsi disable <rule-id>' }
+  }
+  engine.setRuleEnabled(ruleId, false)
+  return { content: `Rule \`${ruleId}\` has been disabled. Use \`/crsi restore ${ruleId}\` to re-enable.` }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Workflow
 // ═══════════════════════════════════════════════════════════════
 
@@ -3072,6 +3108,8 @@ const commandsListCmd: CommandHandler = () => {
     '/plugin-enable': 'Plugins',
     '/plugin-disable': 'Plugins',
     '/commands': 'Tools & Skills',
+    '/crsi rules': 'Tools & Skills',
+    '/crsi disable': 'Tools & Skills',
     '/plan': 'Workflow',
     '/no-plan': 'Workflow',
     '/tdd': 'Workflow',
@@ -3209,6 +3247,8 @@ registry.set('/remove-plugin', removePluginCmd)
 registry.set('/plugin-enable', pluginEnableCmd)
 registry.set('/plugin-disable', pluginDisableCmd)
 registry.set('/commands', commandsListCmd)
+registry.set('/crsi rules', crsiRulesCmd)
+registry.set('/crsi disable', crsiDisableCmd)
 
 // Workflow
 registry.set('/plan', planCmd)
@@ -3359,6 +3399,8 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/remove-plugin': 'Remove an installed plugin',
   '/plugin-enable': 'Enable a disabled plugin',
   '/plugin-disable': 'Disable an enabled plugin',
+  '/crsi rules': 'List all active CRSI rules with their status',
+  '/crsi disable': 'Disable a CRSI rule by ID',
   '/plan': 'Enter plan mode',
   '/no-plan': 'Exit plan mode',
   '/tdd': 'Test-Driven Development workflow (RED → GREEN → REFACTOR)',
