@@ -6,8 +6,9 @@
  * /security, /audit, /prompt-audit
  */
 import type { CommandHandler, CommandContext, CommandResult } from '../ui/commands.js'
+import { getWorkspaceTrust } from '../core/workspace-trust'
 
-export { initCmd, permissionsCmd, recommendCmd, setupCmd, addDirCmd, promptAuditCmd, securityCmd }
+export { initCmd, permissionsCmd, recommendCmd, setupCmd, addDirCmd, promptAuditCmd, securityCmd, trustCmd }
 
 const initCmd: CommandHandler = async (ctx) => {
   const { existsSync, mkdirSync, writeFileSync } = await import('node:fs')
@@ -1001,6 +1002,38 @@ const securityCmd: CommandHandler = async () => {
   }
   lines.push('')
   lines.push('For a full audit: type "audit my project for security issues" in chat.')
+
+  return { content: lines.join('\n') }
+}
+
+const trustCmd: CommandHandler = (ctx) => {
+  const trust = getWorkspaceTrust()
+  const cwd = process.cwd()
+  const trusted = trust.listTrusted()
+
+  const lines: string[] = [
+    '── Workspace Trust ──',
+    '',
+    `Current directory: ${cwd}`,
+    `Trusted: ${trust.isTrusted(cwd) ? '✅ Yes' : '⚠️  No (restart to trust)'}`,
+    `Trust store: ${trust.getStorePath()}`,
+    '',
+  ]
+
+  if (trusted.length === 0) {
+    lines.push('No trusted workspaces configured.')
+    lines.push('')
+    lines.push('Trust a workspace: restart Mipham Code in the directory')
+    lines.push('and accept the trust prompt.')
+  } else {
+    lines.push(`Trusted workspaces (${trusted.length}):`)
+    for (const dir of trusted) {
+      const marker = cwd.startsWith(dir) ? ' ← current' : ''
+      lines.push(`  • ${dir}${marker}`)
+    }
+    lines.push('')
+    lines.push('Remove a workspace: delete the directory entry from the trust store.')
+  }
 
   return { content: lines.join('\n') }
 }

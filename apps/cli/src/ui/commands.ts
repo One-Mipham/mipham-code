@@ -35,6 +35,7 @@ import {
   addDirCmd,
   securityCmd,
   promptAuditCmd,
+  trustCmd,
 } from '../commands/project.js'
 import { themeCmd, releaseNotesCmd, ideCmd, terminalSetupCmd } from '../commands/environment.js'
 import { commitCmd, pushCmd, prCmd, issueCmd } from '../commands/git.js'
@@ -3215,6 +3216,7 @@ const commandsListCmd: CommandHandler = () => {
     '/recommend': 'Project',
     '/security': 'Project',
     '/audit': 'Project',
+    '/trust': 'Project',
     '/prompt-audit': 'Code Quality',
     '/ide': 'Environment',
     '/terminal-setup': 'Environment',
@@ -3371,6 +3373,7 @@ registry.set('/permissions', permissionsCmd)
 registry.set('/add-dir', addDirCmd)
 registry.set('/security', securityCmd)
 registry.set('/audit', securityCmd)
+registry.set('/trust', trustCmd)
 registry.set('/prompt-audit', promptAuditCmd)
 
 // Environment
@@ -3513,6 +3516,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/recommend': 'Analyze project + recommend skills & setup',
   '/security': 'Security review checklist',
   '/audit': 'Same as /security',
+  '/trust': 'Show and manage trusted workspaces',
   '/prompt-audit': 'Audit prompts for modern model optimization',
   '/ide': 'IDE integration guide',
   '/terminal-setup': 'Shell & terminal config',
