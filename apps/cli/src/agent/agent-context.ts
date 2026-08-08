@@ -6,6 +6,7 @@ import { ContextManager } from '../core/context'
 import type { ToolDefinition } from '../shared/index.ts'
 import type { AgentDefinition } from './types'
 import { AgentExperience } from './agent-experience'
+import { ExperienceRuleExtractor } from './experience-rules.js'
 
 export interface AgentContextResult {
   context: ContextManager
@@ -56,64 +57,14 @@ function loadAgentMemory(agentName: string, scope: 'user' | 'project' | 'local')
     }
   }
 
-  // Load auto-accumulated experience (always from user scope)
+  // Load auto-accumulated experience rules (always from user scope)
   const exp = new AgentExperience(agentName)
-  const experienceContent = exp.getExperience()
+  const extractor = new ExperienceRuleExtractor()
+  const rules = extractor.prioritize(exp.getRules())
 
   let experienceMemory = ''
-  if (experienceContent) {
-    const lines = experienceContent.split('\n')
-    const statsIdx = lines.findIndex((l) => l.startsWith('## Stats'))
-    const successIdx = lines.findIndex((l) => l.startsWith('## Success Patterns'))
-    const failureIdx = lines.findIndex((l) => l.startsWith('## Failure Patterns'))
-
-    // Header: content before the first section
-    const firstSection = Math.min(
-      successIdx !== -1 ? successIdx : Infinity,
-      failureIdx !== -1 ? failureIdx : Infinity,
-      statsIdx !== -1 ? statsIdx : Infinity,
-    )
-    const header = lines.slice(0, firstSection === Infinity ? 3 : firstSection)
-
-    // Last 5 success entries (summary line only, not detail)
-    const successLines: string[] = []
-    if (successIdx !== -1) {
-      const endIdx = Math.min(
-        failureIdx !== -1 && failureIdx > successIdx ? failureIdx : Infinity,
-        statsIdx !== -1 && statsIdx > successIdx ? statsIdx : Infinity,
-      )
-      successLines.push(
-        ...lines
-          .slice(successIdx + 1, endIdx === Infinity ? undefined : endIdx)
-          .filter((l) => l.startsWith('- ['))
-          .slice(-5),
-      )
-    }
-
-    // Last 3 failure entries (summary line only, not detail)
-    const failureLines: string[] = []
-    if (failureIdx !== -1) {
-      const endIdx = statsIdx !== -1 && statsIdx > failureIdx ? statsIdx : Infinity
-      failureLines.push(
-        ...lines
-          .slice(failureIdx + 1, endIdx === Infinity ? undefined : endIdx)
-          .filter((l) => l.startsWith('- ['))
-          .slice(-3),
-      )
-    }
-
-    // Stats section (header + stat line)
-    const stats = statsIdx !== -1 ? lines.slice(statsIdx, statsIdx + 3) : []
-
-    if (successLines.length > 0 || failureLines.length > 0) {
-      experienceMemory = [
-        '## Agent Experience',
-        ...header.filter((l) => l.trim()),
-        ...successLines,
-        ...failureLines,
-        ...stats,
-      ].join('\n')
-    }
+  if (rules.length > 0) {
+    experienceMemory = extractor.formatForInjection(rules)
   }
 
   // Combine both memory sources
