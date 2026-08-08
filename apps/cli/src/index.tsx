@@ -20,6 +20,7 @@ import { InstructionsLoader } from './core/instructions'
 import { loadSessionMemories, getMemoryManager } from './core/memory/memory-loader'
 import { ContextManager } from './core/context'
 import { QueryEngine } from './core/engine'
+import { ExperienceRuleEngine } from './core/rule-engine.js'
 import { SessionStore } from './core/session-store'
 import type { PermissionLevel } from './shared/types'
 import { SkillsLoader } from './skills/loader'
@@ -247,7 +248,8 @@ export async function runApp(options: RunOptions): Promise<void> {
   const artifactServer = new ArtifactServer(artifactsDir, ARTIFACT_PORT)
 
   // Create query engine
-  const engine = new QueryEngine(registry, context, tools)
+  const ruleEngine = new ExperienceRuleEngine()
+  const engine = new QueryEngine(registry, context, tools, undefined, ruleEngine)
   engine.setHookEngine(hookEngine)
   engine.setArtifactServer(artifactServer)
   engine.setAgentViewManager(agentViewManager)

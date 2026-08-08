@@ -16,6 +16,7 @@ import type { AgentViewManager } from '../agent-view/agent-view-manager'
 import type { SkillsLoader } from '../skills/loader'
 import { getBackgroundAgentRegistry } from '../agent/background-registry'
 import { RulesLoader } from './rules-loader'
+import { ExperienceRuleEngine } from './rule-engine.js'
 import { UsageTracker } from './usage-tracker'
 import { buildRequest, sendInferenceCheck, isInferenceHookEnabled } from './inference-hook'
 import { getFileInboxTransport } from '../agent/cross-session/file-inbox'
@@ -37,6 +38,7 @@ export class QueryEngine {
   private agentRegistry?: AgentRegistry
   private agentViewManager?: AgentViewManager
   private skillsLoader?: SkillsLoader
+  private ruleEngine?: ExperienceRuleEngine
   private goal?: string
   private maxGoalLoops = 20
   private lastAssistantContent?: string
@@ -54,7 +56,10 @@ export class QueryEngine {
     private context: ContextManager,
     private tools: Map<string, ToolDefinition>,
     private permission: PermissionSystem = new PermissionSystem('default'),
-  ) {}
+    ruleEngine?: ExperienceRuleEngine,
+  ) {
+    this.ruleEngine = ruleEngine
+  }
 
   /** Session identifier for cross-session messaging. Set by the app startup via setSessionId(). */
   private sessionId: string = 'session-1'
@@ -796,6 +801,7 @@ export class QueryEngine {
 
     // Run PreToolUse hooks
     let effectiveParams = params
+    let hookWarnings: string[] = []
     if (this.hookEngine) {
       const preResult = await this.hookEngine.executePreToolUse(name, params, this.sessionId)
       if (!preResult.allowed) {
@@ -807,6 +813,17 @@ export class QueryEngine {
       }
       if (preResult.modifiedInput) {
         effectiveParams = { ...params, ...preResult.modifiedInput }
+      }
+    }
+
+    // CRSI RuleEngine intercept
+    if (this.ruleEngine) {
+      const ruleResult = this.ruleEngine.intercept(name, effectiveParams)
+      if (Object.keys(ruleResult.modified).length > 0) {
+        effectiveParams = ruleResult.modified
+      }
+      if (ruleResult.warnings.length > 0) {
+        hookWarnings = ruleResult.warnings
       }
     }
 
@@ -827,6 +844,11 @@ export class QueryEngine {
 
       // Track touched files for rules matching
       this.trackTouchedFile(name, effectiveParams)
+
+      // Prepend CRSI warnings to result content
+      if (hookWarnings.length > 0 && result.success) {
+        result.content = hookWarnings.join('\n') + '\n' + (result.content || '')
+      }
 
       // Run PostToolUse hooks
       if (this.hookEngine) {
