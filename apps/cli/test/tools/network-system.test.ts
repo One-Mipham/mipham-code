@@ -143,16 +143,18 @@ describe('WebSearch tool definition', () => {
 })
 
 describe('WebSearch tool execution', () => {
-  it('returns search result stub', async () => {
+  it('returns helpful setup message when API key not configured', async () => {
     const result = await webSearchTool.execute({ query: 'vitest tutorial' }, ctx)
     expect(result.success).toBe(true)
     expect(result.content).toContain('vitest tutorial')
-    expect(result.content).toContain('search API')
+    expect(result.content).toContain('not yet configured')
+    expect(result.content).toContain('brave.com/search/api/')
   })
 
-  it('mentions search API configuration', async () => {
+  it('mentions Brave Search API setup instructions', async () => {
     const result = await webSearchTool.execute({ query: 'test' }, ctx)
-    expect(result.content).toContain('Results would appear')
+    expect(result.content).toContain('BRAVE_API_KEY')
+    expect(result.content).toContain('export')
   })
 
   it('passes query correctly to response', async () => {
