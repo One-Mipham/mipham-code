@@ -1,5 +1,6 @@
 import React from 'react'
 import { join } from 'node:path'
+import { homedir } from 'node:os'
 import { existsSync } from 'node:fs'
 import { render } from 'ink'
 import * as readline from 'node:readline'
@@ -261,6 +262,52 @@ export async function runApp(options: RunOptions): Promise<void> {
     const keyReminder = keyManager.getExpiryReminder()
     if (keyReminder) {
       prompt = `${prompt}\n\n<system-reminder name="key-expiry">\n${keyReminder}\n</system-reminder>`
+    }
+
+    // First-run setup detection: inject mipham-code-setup guidance when
+    // no project or user config exists. This mirrors Claude Code's first-run
+    // onboarding flow — the AI proactively offers to help configure the tool.
+    const hasProjectConfig = existsSync(join(process.cwd(), '.mipham', 'config.yml'))
+    const hasUserConfig = existsSync(join(homedir(), '.mipham', 'config.yml'))
+    const hasMiphamMd = existsSync(join(process.cwd(), 'MIPHAM.md'))
+    if (!hasProjectConfig && !hasUserConfig) {
+      const setupReminder = [
+        '── First-Run Setup ──',
+        '',
+        `This appears to be a first run: no .mipham/config.yml found in project or ~/.mipham/.`,
+        '',
+        'Invoke the mipham-code-setup skill to guide the user through setup:',
+        '- Installation verification',
+        '- API key configuration',
+        '- Project initialization (.mipham/ + MIPHAM.md + config.yml)',
+        '- Provider & model selection',
+        '- Skills & permissions setup',
+        '- Workspace trust',
+        '- Shell & IDE integration',
+        '',
+        'The user may also run /setup for the guided 6-step wizard.',
+        'Be proactive: offer to help configure Mipham Code before diving into',
+        'their task. A properly configured environment makes everything smoother.',
+      ].join('\n')
+      prompt = `${prompt}\n\n<system-reminder name="first-run-setup">\n${setupReminder}\n</system-reminder>`
+    } else if (!hasMiphamMd) {
+      // Partial setup: has config but no MIPHAM.md
+      const partialReminder = [
+        '── Missing MIPHAM.md ──',
+        '',
+        'No MIPHAM.md found in project root. This file tells the AI about',
+        'project-specific preferences (language, code style, test framework).',
+        '',
+        'Suggest creating one: /setup 1 or "help me create a MIPHAM.md"',
+        '',
+        'A basic MIPHAM.md includes:',
+        '- Project name and description',
+        '- Primary language (zh-CN / en)',
+        '- Tech stack',
+        '- Code style preferences',
+        '- Test framework',
+      ].join('\n')
+      prompt = `${prompt}\n\n<system-reminder name="missing-mipham-md">\n${partialReminder}\n</system-reminder>`
     }
 
     context.setSystemPrompt(prompt)
