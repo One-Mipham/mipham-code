@@ -45,34 +45,36 @@ describe('WebFetch tool execution', () => {
     vi.restoreAllMocks()
   })
 
-  it('fetches URL and extracts text content', async () => {
+  it('fetches URL and converts HTML to markdown', async () => {
     const mockHtml = '<html><body><h1>Hello</h1><p>World</p></body></html>'
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       text: () => Promise.resolve(mockHtml),
       status: 200,
       statusText: 'OK',
+      headers: new Map([['content-type', 'text/html']]),
     }) as unknown as typeof fetch
 
-    const result = await webFetchTool.execute({ url: 'https://example.com' }, ctx)
+    const result = await webFetchTool.execute({ url: 'https://md-test.example.com' }, ctx)
     expect(result.success).toBe(true)
     expect(result.content).toContain('Hello')
     expect(result.content).toContain('World')
-    // HTML tags should be stripped
+    // HTML tags should be converted to markdown (h1 → # heading)
     expect(result.content).not.toContain('<h1>')
   })
 
   it('sends User-Agent header', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      text: () => Promise.resolve('ok'),
+      text: () => Promise.resolve('plain text'),
       status: 200,
       statusText: 'OK',
+      headers: new Map([['content-type', 'text/plain']]),
     }) as unknown as typeof fetch
 
-    await webFetchTool.execute({ url: 'https://example.com' }, ctx)
+    await webFetchTool.execute({ url: 'https://user-agent-test.example.com' }, ctx)
     const callArgs = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!
-    expect(callArgs[0]).toBe('https://example.com')
+    expect(callArgs[0]).toBe('https://user-agent-test.example.com')
     expect(callArgs[1]?.headers?.['User-Agent']).toContain('Mipham-Code')
   })
 
@@ -81,9 +83,10 @@ describe('WebFetch tool execution', () => {
       ok: false,
       status: 404,
       statusText: 'Not Found',
+      headers: new Map([['content-type', 'text/html']]),
     }) as unknown as typeof fetch
 
-    const result = await webFetchTool.execute({ url: 'https://example.com/missing' }, ctx)
+    const result = await webFetchTool.execute({ url: 'https://error-test.example.com/missing' }, ctx)
     expect(result.success).toBe(false)
     expect(result.error).toContain('HTTP 404')
   })
@@ -98,18 +101,52 @@ describe('WebFetch tool execution', () => {
     expect(result.error).toContain('Fetch failed')
   })
 
-  it('truncates long responses to 50000 chars', async () => {
-    const longText = '<p>' + 'x'.repeat(100_000) + '</p>'
+  it('truncates long responses to 100K chars', async () => {
+    const longText = '<p>' + 'x'.repeat(200_000) + '</p>'
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       text: () => Promise.resolve(longText),
       status: 200,
       statusText: 'OK',
+      headers: new Map([['content-type', 'text/html']]),
     }) as unknown as typeof fetch
 
     const result = await webFetchTool.execute({ url: 'https://example.com/large' }, ctx)
     expect(result.success).toBe(true)
-    expect(result.content.length).toBeLessThanOrEqual(50_000)
+    expect(result.content.length).toBeLessThanOrEqual(110_000) // 100K + header overhead
+  })
+
+  it('caches responses for subsequent requests', async () => {
+    const mockHtml = '<html><body><p>cached content</p></body></html>'
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve(mockHtml),
+      status: 200,
+      statusText: 'OK',
+      headers: new Map([['content-type', 'text/html']]),
+    }) as unknown as typeof fetch
+
+    await webFetchTool.execute({ url: 'https://example.com/cached' }, ctx)
+    const firstCallCount = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.length
+
+    // Second call should hit cache (no additional fetch)
+    await webFetchTool.execute({ url: 'https://example.com/cached' }, ctx)
+    const secondCallCount = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.length
+    expect(secondCallCount).toBe(firstCallCount) // no new fetch call
+  })
+
+  it('upgrades HTTP to HTTPS', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve('ok'),
+      status: 200,
+      statusText: 'OK',
+      headers: new Map([['content-type', 'text/plain']]),
+    }) as unknown as typeof fetch
+
+    await webFetchTool.execute({ url: 'http://http-upgrade-test.example.com' }, ctx)
+    const callArgs = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!
+    expect(callArgs[0]).toBe('https://http-upgrade-test.example.com')
   })
 })
 
