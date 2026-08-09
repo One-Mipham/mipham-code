@@ -55,7 +55,7 @@ mipham-code/
 │   │   │   ├── workflow/       # Workflow 运行时 + Schema 验证
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
-│   │   ├── skills/             # 15 个内置技能（12 standard + 3 mipham）
+│   │   ├── skills/             # 17 个内置技能（14 standard + 3 mipham）
 │   │   ├── test/               # 57 个测试文件，642 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
@@ -126,9 +126,9 @@ pnpm format       # Prettier
 | Computer（1）   | computer-use                                                                                   |
 | Scheduling（4） | schedule-wakeup, cron-create, cron-delete, cron-list                                           |
 
-### Skills 系统（15 个内置技能）
+### Skills 系统（17 个内置技能）
 
-**Standard（12）**: code-review, compassionate-communication, doc-generator, github-ops, memory, mipham-code-setup, security-review, self-review, superpower, tdd, web-access, web-search
+**Standard（14）**: code-review, compassionate-communication, doc-generator, github-ops, memory, mipham-code-setup, security-review, self-review, superpower, systematic-debugging, tdd, test-driven-development, web-access, web-search
 
 **Mipham Exclusive（3）**: om-artifact, om-model-optimize, om-security
 

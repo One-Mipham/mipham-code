@@ -286,9 +286,9 @@ providers:
 
 ### 5.1 — Built-in Skills
 
-Mipham Code ships with 15 built-in skills loaded automatically:
+Mipham Code ships with 17 built-in skills loaded automatically:
 
-- **Standard (12)**: code-review, compassionate-communication, doc-generator, github-ops, memory, mipham-code-setup, security-review, self-review, superpower, tdd, web-access, web-search
+- **Standard (14)**: code-review, compassionate-communication, doc-generator, github-ops, memory, mipham-code-setup, security-review, self-review, superpower, systematic-debugging, tdd, test-driven-development, web-access, web-search
 - **Mipham (3)**: om-artifact, om-model-optimize, om-security
 
 ### 5.2 — Community Skills
