@@ -53,6 +53,15 @@
     "builtin": true
   },
   {
+    "name": "mipham-code-setup",
+    "description": "Install, configure, diagnose, and troubleshoot Mipham Code — executable setup workflow with 9-phase decision tree covering installation, API keys, providers, models, skills, permissions, workspace trust, and shell/IDE integration",
+    "url": "https://github.com/One-Mipham/mipham-code",
+    "file": "mipham-code-setup.SKILL.md",
+    "category": "Setup",
+    "author": "MiphamAI",
+    "builtin": true
+  },
+  {
     "name": "security-review",
     "description": "Security audit and vulnerability scanning for code changes — OWASP, secrets, supply chain",
     "url": "https://github.com/One-Mipham/skill-security-review",
