@@ -156,7 +156,8 @@ export const webSearchTool: ToolDefinition = {
           return {
             success: false,
             content: '',
-            error: 'Brave Search API rate limit reached (2,000/month on free tier). Try again later.',
+            error:
+              'Brave Search API rate limit reached (2,000/month on free tier). Try again later.',
           }
         }
         if (response.status === 401) {

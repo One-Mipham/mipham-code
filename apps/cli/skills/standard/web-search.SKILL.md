@@ -70,6 +70,7 @@ Question involves...
 ### For Chinese-Language Queries
 
 Chinese queries work but yield fewer technical results:
+
 ```
 ✅ "React 19 useEffect 执行两次 修复"     → mixed language for best results
 ✅ "Vue 3 Composition API 最佳实践 2026"
@@ -81,12 +82,12 @@ Chinese queries work but yield fewer technical results:
 
 ### Domain Authority Tiers
 
-| Tier | Domains | Weight |
-|------|---------|--------|
-| **Official** | docs.github.com, nextjs.org, nodejs.org, python.org, rust-lang.org | Highest |
-| **Authoritative** | developer.mozilla.org, web.dev, kubernetes.io | High |
-| **Trusted** | stackoverflow.com (high-score), dev.to, medium.com (verified authors) | Medium |
-| **Low** | personal blogs, random forums, w3schools | Low |
+| Tier              | Domains                                                               | Weight  |
+| ----------------- | --------------------------------------------------------------------- | ------- |
+| **Official**      | docs.github.com, nextjs.org, nodejs.org, python.org, rust-lang.org    | Highest |
+| **Authoritative** | developer.mozilla.org, web.dev, kubernetes.io                         | High    |
+| **Trusted**       | stackoverflow.com (high-score), dev.to, medium.com (verified authors) | Medium  |
+| **Low**           | personal blogs, random forums, w3schools                              | Low     |
 
 ### Use allowed_domains for targeted searches
 
@@ -141,9 +142,11 @@ Search result looks promising?
 [Answer with inline citations]
 
 ### Details (if deep-read was done)
+
 [Structured content from fetched pages]
 
 Sources:
+
 - [Title](URL) — [1-sentence note on what was found there]
 - [Title](URL) — [1-sentence note]
 ```
@@ -162,10 +165,12 @@ Sources:
 Web search uses **Brave Search API** (free tier: 2,000 queries/month).
 
 If search returns "not configured":
+
 1. Get a free API key at https://brave.com/search/api/
 2. Set: `export BRAVE_API_KEY="BSA..."`
 3. Restart Mipham Code
 
 Alternatives (additional API keys supported):
+
 - `TAVILY_API_KEY` — https://tavily.com
 - `SERPAPI_API_KEY` — https://serpapi.com

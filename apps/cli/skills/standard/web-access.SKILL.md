@@ -64,6 +64,7 @@ Use `WebSearch` for discovery queries — finding documentation, news, troublesh
 ### Domain Filtering
 
 Use `allowed_domains` for authoritative sources:
+
 - `docs.github.com` — GitHub docs
 - `nextjs.org` — Next.js official
 - `developer.mozilla.org` — MDN
@@ -80,8 +81,10 @@ Use `blocked_domains` to exclude noise (e.g., exclude `w3schools.com` when looki
 ### Source Attribution
 
 Always end responses with:
+
 ```markdown
 Sources:
+
 - [Title](URL) — brief note
 ```
 
@@ -103,6 +106,7 @@ Use `WebFetch` for reading a specific URL.
 ### Prompt Parameter
 
 Use `prompt` to guide extraction focus:
+
 ```
 WebFetch: url="https://docs.example.com", prompt="find the authentication API section"
 ```
@@ -122,13 +126,13 @@ Use `ComputerUse` for interactive browsing — login, form submission, JavaScrip
 
 ### Available Actions
 
-| Action | Purpose |
-|--------|---------|
-| `browser_navigate` | Go to a URL |
+| Action             | Purpose                                     |
+| ------------------ | ------------------------------------------- |
+| `browser_navigate` | Go to a URL                                 |
 | `browser_snapshot` | Capture accessibility tree (page structure) |
-| `browser_click` | Click an element by UID |
-| `screenshot` | Capture visible viewport |
-| `launch` | Open a desktop application |
+| `browser_click`    | Click an element by UID                     |
+| `screenshot`       | Capture visible viewport                    |
+| `launch`           | Open a desktop application                  |
 
 ### Workflow for Authenticated Sites
 
@@ -161,25 +165,30 @@ Use `ComputerUse` for interactive browsing — login, form submission, JavaScrip
 After fetching content (via any method):
 
 ### Content Extraction
+
 1. Identify relevant sections using the prompt/h3 headings
 2. Extract key facts, code examples, API signatures
 3. Note the source URL for attribution
 
 ### Cross-Referencing
+
 1. Verify technical claims across 2+ sources
 2. Flag contradictions between sources
 3. Note version/deprecation warnings
 
 ### Output Format
+
 ```markdown
 ## [Topic]
 
 [Key finding with source attribution]
 
 ### Details
+
 [Structured content from page]
 
 Sources:
+
 - [Title](URL)
 ```
 

@@ -86,7 +86,10 @@ describe('WebFetch tool execution', () => {
       headers: new Map([['content-type', 'text/html']]),
     }) as unknown as typeof fetch
 
-    const result = await webFetchTool.execute({ url: 'https://error-test.example.com/missing' }, ctx)
+    const result = await webFetchTool.execute(
+      { url: 'https://error-test.example.com/missing' },
+      ctx,
+    )
     expect(result.success).toBe(false)
     expect(result.error).toContain('HTTP 404')
   })
@@ -127,11 +130,13 @@ describe('WebFetch tool execution', () => {
     }) as unknown as typeof fetch
 
     await webFetchTool.execute({ url: 'https://example.com/cached' }, ctx)
-    const firstCallCount = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.length
+    const firstCallCount = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .length
 
     // Second call should hit cache (no additional fetch)
     await webFetchTool.execute({ url: 'https://example.com/cached' }, ctx)
-    const secondCallCount = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.length
+    const secondCallCount = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .length
     expect(secondCallCount).toBe(firstCallCount) // no new fetch call
   })
 

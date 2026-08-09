@@ -68,7 +68,8 @@ function htmlToMarkdown(html: string, baseUrl: string): string {
   })
 
   // Convert images: <img ... src="..." ...> → ![alt](url)
-  text = text.replace(/<img[^>]*src=["']([^"']*)["'][^>]*alt=["']([^"']*)["'][^>]*\/?>/gi,
+  text = text.replace(
+    /<img[^>]*src=["']([^"']*)["'][^>]*alt=["']([^"']*)["'][^>]*\/?>/gi,
     (_, src, alt) => {
       const resolved = resolveUrl(src, baseUrl)
       return `![${alt || ''}](${resolved})`
