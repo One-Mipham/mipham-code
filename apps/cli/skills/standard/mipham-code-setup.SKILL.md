@@ -16,6 +16,7 @@ allowed-tools:
 **Type**: Rigid — follow the decision tree exactly. Don't skip diagnostic phases.
 
 **Purpose**: Guide users from zero to fully configured Mipham Code. This skill is BOTH:
+
 1. A self-contained diagnostic + configuration workflow the AI can execute
 2. A reference for `/setup` command behavior and slash commands
 
@@ -95,6 +96,7 @@ curl -fsSL https://mipham.ai/install.sh | bash
 ```
 
 Then restart the shell or run:
+
 ```bash
 export PATH="$HOME/.mipham/bin:$PATH"
 ```
@@ -144,15 +146,16 @@ permission: default
 ```
 
 **Providers available** (alphabetical):
-| Provider | Type | Example Models |
-|----------|------|---------------|
-| anthropic | Native SDK | Claude Haiku 4.5, Sonnet 4.6, Opus 4.8 |
-| deepseek | OpenAI Compat | V4 Flash, V4 Pro |
-| doubao | OpenAI Compat | Seed 1.6, Seed 2.0 |
-| gemini | OpenAI Compat | 3.0 Flash, 3.0 Pro, 2.5 Pro |
-| hunyuan | OpenAI Compat | Lite, TurboS, 2.0, T1 |
-| openai | OpenAI Compat | GPT-5.4 Mini, GPT-5.4, GPT-5.5, Codex |
-| qwen | OpenAI Compat | Qwen Plus, Qwen Max |
+
+| Provider  | Type          | Example Models                         |
+| --------- | ------------- | -------------------------------------- |
+| anthropic | Native SDK    | Claude Haiku 4.5, Sonnet 4.6, Opus 4.8 |
+| deepseek  | OpenAI Compat | V4 Flash, V4 Pro                       |
+| doubao    | OpenAI Compat | Seed 1.6, Seed 2.0                     |
+| gemini    | OpenAI Compat | 3.0 Flash, 3.0 Pro, 2.5 Pro            |
+| hunyuan   | OpenAI Compat | Lite, TurboS, 2.0, T1                  |
+| openai    | OpenAI Compat | GPT-5.4 Mini, GPT-5.4, GPT-5.5, Codex  |
+| qwen      | OpenAI Compat | Qwen Plus, Qwen Max                    |
 
 ### 2.3 — Create MIPHAM.md (optional but recommended)
 
@@ -162,11 +165,13 @@ Create `MIPHAM.md` in project root to define AI personality:
 # MIPHAM.md
 
 ## Project Context
+
 - **Project**: [name]
 - **Language**: [zh-CN / en]
 - **Stack**: [TypeScript / Python / etc.]
 
 ## Preferences
+
 - Code style: [e.g., functional, OOP]
 - Comment language: [e.g., English]
 - Test framework: [e.g., Vitest]
@@ -203,12 +208,14 @@ export GEMINI_API_KEY="..."
 ```
 
 Add these to `~/.zshrc` or `~/.bashrc` for persistence:
+
 ```bash
 echo 'export ANTHROPIC_API_KEY="sk-ant-..."' >> ~/.zshrc
 source ~/.zshrc
 ```
 
 **Alternative**: Store in `~/.mipham/config.yml`:
+
 ```yaml
 providers:
   - id: anthropic
@@ -238,12 +245,14 @@ env | grep API_KEY
 ### 4.1 — Set Default Provider & Model
 
 In `.mipham/config.yml`:
+
 ```yaml
 defaultProvider: anthropic
 defaultModel: claude-sonnet-4-6
 ```
 
 Or use slash commands:
+
 ```
 /model          # Interactive model picker (Ctrl+P)
 /switch         # Switch provider
@@ -278,17 +287,20 @@ providers:
 ### 5.1 — Built-in Skills
 
 Mipham Code ships with 15 built-in skills loaded automatically:
+
 - **Standard (12)**: code-review, compassionate-communication, doc-generator, github-ops, memory, mipham-code-setup, security-review, self-review, superpower, tdd, web-access, web-search
 - **Mipham (3)**: om-artifact, om-model-optimize, om-security
 
 ### 5.2 — Community Skills
 
 Install from the community registry:
+
 ```
 /setup 4     # Guided skill browser
 ```
 
 Or directly:
+
 ```bash
 # Skills are loaded from:
 # - apps/cli/skills/standard/     (built-in standard)
@@ -319,23 +331,25 @@ Or directly:
 
 ### 6.1 — Permission Modes
 
-| Mode | Behavior | Use Case |
-|------|----------|----------|
-| `default` | Prompt for each tool | Normal development (recommended) |
-| `acceptEdits` | Auto-allow edits, prompt others | Active coding sessions |
-| `plan` | Plan-only, no tool execution | Design & architecture work |
-| `auto` | Auto-allow all | Trusted, frequent use |
-| `dontAsk` | Never auto-allow | CI/CD safety |
-| `bypassPermissions` | Skip all checks | ⚠️ Only for fully trusted codebases |
+| Mode                | Behavior                        | Use Case                            |
+| ------------------- | ------------------------------- | ----------------------------------- |
+| `default`           | Prompt for each tool            | Normal development (recommended)    |
+| `acceptEdits`       | Auto-allow edits, prompt others | Active coding sessions              |
+| `plan`              | Plan-only, no tool execution    | Design & architecture work          |
+| `auto`              | Auto-allow all                  | Trusted, frequent use               |
+| `dontAsk`           | Never auto-allow                | CI/CD safety                        |
+| `bypassPermissions` | Skip all checks                 | ⚠️ Only for fully trusted codebases |
 
 ### 6.2 — Configure
 
 In `.mipham/config.yml`:
+
 ```yaml
 permission: auto
 ```
 
 Or via slash command:
+
 ```
 /permissions           # View current settings
 /setup 5               # Permission setup wizard
@@ -344,6 +358,7 @@ Or via slash command:
 ### 6.3 — CI/CD Safety
 
 For CI/CD environments, use `dontAsk` mode to prevent the AI from executing tools without explicit approval:
+
 ```yaml
 permission: dontAsk
 ```
@@ -369,6 +384,7 @@ Workspace trust is a security mechanism that prevents AI from operating in untru
 **Interactive**: Accept the trust prompt when launching Mipham Code in a new directory.
 
 **Manual**:
+
 ```
 /trust              # Show trust status
 /trust add <dir>    # Trust a directory
@@ -400,6 +416,7 @@ When using git worktrees, Mipham Code automatically trusts worktree directories 
 ### 8.1 — Shell Alias
 
 Add to `~/.zshrc` or `~/.bashrc`:
+
 ```bash
 alias mipham='cd ~/your-project && bun run ~/path/to/mipham-code/apps/cli/bin/mipham.ts'
 # Or if installed globally:
@@ -409,16 +426,19 @@ alias mipham='mipham'
 ### 8.2 — VS Code Integration
 
 Run `/ide` to auto-generate `.vscode/` config files:
+
 - `settings.json` — terminal profile "mipham" using Bun
 - `keybindings.json` — Cmd+Esc to focus terminal, Cmd+Shift+M for new terminal
 - `extensions.json` — recommends `miphamai.mipham-code` extension
 
 To use after generation:
+
 1. Restart VS Code (or Cmd+Shift+P → Reload Window)
 2. Open terminal: Ctrl+` or Cmd+Esc
 3. Select "mipham" profile from terminal dropdown
 
 Install the VS Code extension:
+
 ```bash
 code --install-extension miphamai.mipham-code
 ```
@@ -456,6 +476,7 @@ Run after all configuration phases complete.
 ### 9.2 — End-to-End Test
 
 Start a conversation and verify:
+
 1. Model responds (not stuck on "connecting...")
 2. File tools work: "read CLAUDE.md"
 3. Bash works: "list files in current directory"
@@ -463,17 +484,17 @@ Start a conversation and verify:
 
 ### 9.3 — Common Issues & Fixes
 
-| Symptom | Diagnosis | Fix |
-|---------|-----------|-----|
-| "Provider not registered" | Missing or invalid API key | `env \| grep API_KEY`; check key format |
-| "Model not found" | Model ID mismatch or disabled provider | `/models` to list available; `/switch` to change |
-| Slow responses | Large model, network, or context full | `/fast on` or switch to Flash model; `/compact` |
-| Context full | Too many messages in history | `/compact` to compress; `/clear` to reset |
-| Permission denied | Tool blocked by permission mode | `/permissions` to check; adjust mode |
-| "Workspace not trusted" | New directory, not yet trusted | Accept startup prompt or run `/trust` |
-| MCP tools not available | Server not connected | `/mcp connect <name>` or check config |
-| Update not applying | Cached binary | `mipham update --force` then restart |
-| Config changes ignored | YAML syntax error | Validate with `mipham --check-config` |
+| Symptom                   | Diagnosis                              | Fix                                              |
+| ------------------------- | -------------------------------------- | ------------------------------------------------ |
+| "Provider not registered" | Missing or invalid API key             | `env \| grep API_KEY`; check key format          |
+| "Model not found"         | Model ID mismatch or disabled provider | `/models` to list available; `/switch` to change |
+| Slow responses            | Large model, network, or context full  | `/fast on` or switch to Flash model; `/compact`  |
+| Context full              | Too many messages in history           | `/compact` to compress; `/clear` to reset        |
+| Permission denied         | Tool blocked by permission mode        | `/permissions` to check; adjust mode             |
+| "Workspace not trusted"   | New directory, not yet trusted         | Accept startup prompt or run `/trust`            |
+| MCP tools not available   | Server not connected                   | `/mcp connect <name>` or check config            |
+| Update not applying       | Cached binary                          | `mipham update --force` then restart             |
+| Config changes ignored    | YAML syntax error                      | Validate with `mipham --check-config`            |
 
 ### 9.4 — Get Help
 
@@ -489,32 +510,32 @@ Chat-based help: "help me configure X" or "why isn't Y working?"
 
 ## Quick Reference: Essential Slash Commands
 
-| Category | Command | Purpose |
-|----------|---------|---------|
-| **Setup** | `/setup` | Full 6-step setup wizard |
-| | `/setup 1` | Initialize project (.mipham/ + MIPHAM.md + config.yml) |
-| | `/setup 2` | Configure providers & API keys |
-| | `/setup 3` | Choose default model |
-| | `/setup 4` | Browse & install skills |
-| | `/setup 5` | Configure permissions |
-| | `/setup 6` | Shell & IDE integration |
-| **Diagnosis** | `/doctor` | System diagnostics |
-| | `/trust` | Workspace trust status |
-| | `/permissions` | Tool permission settings |
-| **Model** | `/model` | Interactive model picker (Ctrl+P) |
-| | `/switch` | Switch provider |
-| | `/models` | List available models |
-| **Session** | `/clear` | Reset conversation |
-| | `/compact` | Compress context |
-| | `/rename` | Rename session |
-| **Workflow** | `/plan` | Enter plan mode |
-| | `/review` | Code review |
-| | `/todos` | Task list |
-| **IDE** | `/ide` | Generate VS Code integration files |
-| | `/terminal-setup` | Shell & terminal config |
-| **Skills** | `/skills list` | List installed skills |
-| | `/skills search` | Search skill registry |
-| | `/skills install` | Install a skill |
+| Category      | Command           | Purpose                                                |
+| ------------- | ----------------- | ------------------------------------------------------ |
+| **Setup**     | `/setup`          | Full 6-step setup wizard                               |
+|               | `/setup 1`        | Initialize project (.mipham/ + MIPHAM.md + config.yml) |
+|               | `/setup 2`        | Configure providers & API keys                         |
+|               | `/setup 3`        | Choose default model                                   |
+|               | `/setup 4`        | Browse & install skills                                |
+|               | `/setup 5`        | Configure permissions                                  |
+|               | `/setup 6`        | Shell & IDE integration                                |
+| **Diagnosis** | `/doctor`         | System diagnostics                                     |
+|               | `/trust`          | Workspace trust status                                 |
+|               | `/permissions`    | Tool permission settings                               |
+| **Model**     | `/model`          | Interactive model picker (Ctrl+P)                      |
+|               | `/switch`         | Switch provider                                        |
+|               | `/models`         | List available models                                  |
+| **Session**   | `/clear`          | Reset conversation                                     |
+|               | `/compact`        | Compress context                                       |
+|               | `/rename`         | Rename session                                         |
+| **Workflow**  | `/plan`           | Enter plan mode                                        |
+|               | `/review`         | Code review                                            |
+|               | `/todos`          | Task list                                              |
+| **IDE**       | `/ide`            | Generate VS Code integration files                     |
+|               | `/terminal-setup` | Shell & terminal config                                |
+| **Skills**    | `/skills list`    | List installed skills                                  |
+|               | `/skills search`  | Search skill registry                                  |
+|               | `/skills install` | Install a skill                                        |
 
 ---
 
