@@ -703,7 +703,7 @@
     "status": {
       "esc_to_interrupt": "Esc 中断",
       "shift_tab_cycle": "Shift+Tab 切换",
-      "left_for_agents": "← 代理"
+      "left_for_agents": "ctrl+g 管理代理"
     }
   },
   "tools": {

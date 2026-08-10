@@ -15,6 +15,8 @@ interface InputBarProps {
   onToggleFocus?: () => void
   /** Ctrl+O → expand last tool call */
   onToggleExpand?: () => void
+  /** Ctrl+G → toggle agent view dashboard */
+  onToggleAgentView?: () => void
   /** Shift+Tab → cycle permission mode */
   onCyclePermission?: () => void
   /** Escape → cancel loading (when input is empty) */
@@ -71,6 +73,7 @@ export function InputBar({
   onTogglePicker,
   onToggleFocus,
   onToggleExpand,
+  onToggleAgentView,
   onCyclePermission,
   onCancel,
 }: InputBarProps) {
@@ -183,6 +186,12 @@ export function InputBar({
     if (key.ctrl && input === 'o') {
       setValue(valueBeforeShortcut.current)
       onToggleExpand?.()
+      return
+    }
+    // Ctrl+G → toggle agent view dashboard
+    if (key.ctrl && input === 'g') {
+      setValue(valueBeforeShortcut.current)
+      onToggleAgentView?.()
       return
     }
 

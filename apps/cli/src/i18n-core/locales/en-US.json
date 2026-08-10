@@ -703,7 +703,7 @@
     "status": {
       "esc_to_interrupt": "esc to interrupt",
       "shift_tab_cycle": "shift+tab to cycle",
-      "left_for_agents": "← for agents"
+      "left_for_agents": "ctrl+g agents to manage"
     }
   },
   "tools": {

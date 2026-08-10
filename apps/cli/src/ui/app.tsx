@@ -12,6 +12,8 @@ import { ChatPanel } from './chat'
 import { InputBar } from './input'
 import { ModelPicker } from './picker'
 import { AgentFooter, type AgentEntry } from './agent-footer'
+import { AgentViewDashboard } from '../agent-view/dashboard'
+import type { AgentViewManager } from '../agent-view/agent-view-manager'
 import { WorkflowProgress } from './workflow-progress.js'
 import {
   getCommand,
@@ -33,6 +35,7 @@ interface AppProps {
   pluginManager?: PluginManager
   version?: string
   sessionId?: string
+  agentViewManager?: AgentViewManager
 }
 
 export interface ToolMeta {
@@ -121,6 +124,7 @@ export function App({
   pluginManager,
   version,
   sessionId,
+  agentViewManager,
 }: AppProps) {
   const { t } = useI18n()
   const PERMISSION_LABELS = useMemo<Record<PermissionMode, string>>(
@@ -139,6 +143,7 @@ export function App({
   const [providerId, setProviderId] = useState(initialProvider || config.defaultProvider)
   const [modelId, setModelId] = useState(initialModel || config.defaultModel)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [agentViewOpen, setAgentViewOpen] = useState(false)
   const [_sessionTitle, setSessionTitle] = useState('')
   const [_fastMode, setFastMode] = useState(false)
   const [_effort, setEffort] = useState('high')
@@ -580,99 +585,115 @@ export function App({
       {/* Workflow progress — auto-detects active workflows, renders nothing when idle */}
       <WorkflowProgress />
 
-      {/* Chat panel */}
-      <ChatPanel messages={messages} focusMode={focusMode} />
-
-      {/* Input with separator lines */}
-      {pickerOpen ? (
-        <ModelPicker
-          config={config}
-          currentProvider={providerId}
-          currentModel={modelId}
-          onSelect={(newProvider, newModel) => {
-            engine.switchProvider(newProvider, newModel)
-            setProviderId(newProvider)
-            setModelId(newModel)
-            setPickerOpen(false)
-            setMessages((prev) => [
-              ...prev,
-              { role: 'system', content: `✓ Switched to ${newProvider}/${newModel}` },
-            ])
-          }}
-          onClose={() => setPickerOpen(false)}
+      {/* Agent View Dashboard — Ctrl+G overlay (replaces chat + input) */}
+      {agentViewOpen && agentViewManager ? (
+        <AgentViewDashboard
+          manager={agentViewManager}
+          onAttach={() => {}}
+          onExit={() => setAgentViewOpen(false)}
         />
       ) : (
-        /* Input bar (hidden when picker is open) */
-        <Box flexDirection="column">
-          <Text dimColor>──────────────────────────────</Text>
-          <InputBar
-            onSubmit={handleSubmit}
-            isLoading={isLoading}
-            onTogglePicker={() => setPickerOpen((prev) => !prev)}
-            onToggleFocus={() => setFocusMode((prev) => !prev)}
-            onToggleExpand={() => {
-              setMessages((prev) => {
-                const msgs = [...prev]
-                for (let i = msgs.length - 1; i >= 0; i--) {
-                  if (msgs[i]?.toolMeta) {
-                    const meta = msgs[i]!.toolMeta!
-                    if (meta.collapsed) {
-                      msgs[i] = {
-                        ...msgs[i]!,
-                        content: `🔧 ${meta.name}: ${meta.input}\n📋 Result: ${meta.output || '(pending)'}`,
-                        toolMeta: { ...meta, collapsed: false },
-                      }
-                    } else {
-                      const short =
-                        meta.input.length > 50 ? meta.input.slice(0, 50) + '...' : meta.input
-                      msgs[i] = {
-                        ...msgs[i]!,
-                        content: `⏺ ${meta.name} · ${short} (Ctrl+O to expand)`,
-                        toolMeta: { ...meta, collapsed: true },
+        <>
+          {/* Chat panel */}
+          <ChatPanel messages={messages} focusMode={focusMode} />
+
+          {/* Input with separator lines */}
+          {pickerOpen ? (
+            <ModelPicker
+              config={config}
+              currentProvider={providerId}
+              currentModel={modelId}
+              onSelect={(newProvider, newModel) => {
+                engine.switchProvider(newProvider, newModel)
+                setProviderId(newProvider)
+                setModelId(newModel)
+                setPickerOpen(false)
+                setMessages((prev) => [
+                  ...prev,
+                  { role: 'system', content: `✓ Switched to ${newProvider}/${newModel}` },
+                ])
+              }}
+              onClose={() => setPickerOpen(false)}
+            />
+          ) : (
+            /* Input bar (hidden when picker is open) */
+            <Box flexDirection="column">
+              <Text dimColor>──────────────────────────────</Text>
+              <InputBar
+                onSubmit={handleSubmit}
+                isLoading={isLoading}
+                onTogglePicker={() => setPickerOpen((prev) => !prev)}
+                onToggleFocus={() => setFocusMode((prev) => !prev)}
+                onToggleExpand={() => {
+                  setMessages((prev) => {
+                    const msgs = [...prev]
+                    for (let i = msgs.length - 1; i >= 0; i--) {
+                      if (msgs[i]?.toolMeta) {
+                        const meta = msgs[i]!.toolMeta!
+                        if (meta.collapsed) {
+                          msgs[i] = {
+                            ...msgs[i]!,
+                            content: `🔧 ${meta.name}: ${meta.input}\n📋 Result: ${meta.output || '(pending)'}`,
+                            toolMeta: { ...meta, collapsed: false },
+                          }
+                        } else {
+                          const short =
+                            meta.input.length > 50 ? meta.input.slice(0, 50) + '...' : meta.input
+                          msgs[i] = {
+                            ...msgs[i]!,
+                            content: `⏺ ${meta.name} · ${short} (Ctrl+O to expand)`,
+                            toolMeta: { ...meta, collapsed: true },
+                          }
+                        }
+                        break
                       }
                     }
-                    break
+                    return msgs
+                  })
+                }}
+                onCyclePermission={() => {
+                  setPermissionMode((prev) => {
+                    const idx = PERMISSION_MODES.indexOf(prev)
+                    const next = PERMISSION_MODES[(idx + 1) % PERMISSION_MODES.length]!
+                    engine.getPermission().setMode(next)
+                    return next
+                  })
+                }}
+                onCancel={() => {
+                  if (abortRef.current) {
+                    abortRef.current.abort()
                   }
-                }
-                return msgs
-              })
-            }}
-            onCyclePermission={() => {
-              setPermissionMode((prev) => {
-                const idx = PERMISSION_MODES.indexOf(prev)
-                const next = PERMISSION_MODES[(idx + 1) % PERMISSION_MODES.length]!
-                engine.getPermission().setMode(next)
-                return next
-              })
-            }}
-            onCancel={() => {
-              if (abortRef.current) {
-                abortRef.current.abort()
-              }
-            }}
+                }}
+                onToggleAgentView={() => setAgentViewOpen((prev) => !prev)}
+              />
+              <Text dimColor>──────────────────────────────</Text>
+            </Box>
+          )}
+
+          {/* Agent status footer — shows running background agents */}
+          <AgentFooter
+            agents={Object.values(runningAgents)}
+            gitBranch={gitBranch}
+            tick={agentTick}
           />
-          <Text dimColor>──────────────────────────────</Text>
-        </Box>
-      )}
 
-      {/* Agent status footer — shows running background agents */}
-      <AgentFooter agents={Object.values(runningAgents)} gitBranch={gitBranch} tick={agentTick} />
-
-      {/* Status line — Claude Code style */}
-      <Box marginTop={1} flexDirection="column">
-        {goalText && (
-          <Box>
-            <Text color="green">🎯 Goal: {goalText}</Text>
+          {/* Status line — Claude Code style */}
+          <Box marginTop={1} flexDirection="column">
+            {goalText && (
+              <Box>
+                <Text color="green">🎯 Goal: {goalText}</Text>
+              </Box>
+            )}
+            <Box flexDirection="row">
+              <Text color={PERMISSION_COLORS[permissionMode]}>
+                ⏵⏵ {PERMISSION_LABELS[permissionMode]} ({t('ui.status.shift_tab_cycle')})
+              </Text>
+              <Text dimColor> · {t('ui.status.esc_to_interrupt')}</Text>
+              <Text dimColor> · {t('ui.status.left_for_agents')}</Text>
+            </Box>
           </Box>
-        )}
-        <Box flexDirection="row">
-          <Text color={PERMISSION_COLORS[permissionMode]}>
-            ⏵⏵ {PERMISSION_LABELS[permissionMode]} ({t('ui.status.shift_tab_cycle')})
-          </Text>
-          <Text dimColor> · {t('ui.status.esc_to_interrupt')}</Text>
-          <Text dimColor> · {t('ui.status.left_for_agents')}</Text>
-        </Box>
-      </Box>
+        </>
+      )}
     </Box>
   )
 }

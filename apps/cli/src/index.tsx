@@ -488,6 +488,7 @@ export async function runApp(options: RunOptions): Promise<void> {
         pluginManager,
         version: options.version,
         sessionId: sessionName,
+        agentViewManager,
       }),
     }),
   )
