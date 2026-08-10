@@ -321,7 +321,9 @@ async function main() {
   const restoreFlowControl = () => {
     try {
       execSync('stty ixon 2>/dev/null || true', { stdio: 'ignore' })
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
   process.on('exit', restoreFlowControl)
   process.on('SIGINT', restoreFlowControl)
