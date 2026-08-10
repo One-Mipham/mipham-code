@@ -120,7 +120,10 @@ export class DaemonDatabase {
   }
 
   getSession(id: string): DaemonSession | null {
-    const row = this.db.query('SELECT * FROM sessions WHERE id = ?').get(id) as Record<string, unknown> | null
+    const row = this.db.query('SELECT * FROM sessions WHERE id = ?').get(id) as Record<
+      string,
+      unknown
+    > | null
     if (!row) return null
     return this.rowToSession(row)
   }
@@ -138,10 +141,12 @@ export class DaemonDatabase {
   updateSessionStatus(id: string, status: SessionStatus): void {
     const now = new Date().toISOString()
     const closedAt = status === 'closed' ? now : null
-    this.db.run(
-      `UPDATE sessions SET status = ?, updated_at = ?, closed_at = ? WHERE id = ?`,
-      [status, now, closedAt, id],
-    )
+    this.db.run(`UPDATE sessions SET status = ?, updated_at = ?, closed_at = ? WHERE id = ?`, [
+      status,
+      now,
+      closedAt,
+      id,
+    ])
   }
 
   closeSession(id: string): void {
@@ -206,7 +211,10 @@ export class DaemonDatabase {
   }
 
   getAgent(id: string): DaemonAgent | null {
-    const row = this.db.query('SELECT * FROM agents WHERE id = ?').get(id) as Record<string, unknown> | null
+    const row = this.db.query('SELECT * FROM agents WHERE id = ?').get(id) as Record<
+      string,
+      unknown
+    > | null
     if (!row) return null
     return this.rowToAgent(row)
   }

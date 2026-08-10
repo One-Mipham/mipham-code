@@ -86,11 +86,7 @@ describe('DaemonDatabase', () => {
       model: 'gpt-5',
     })
     for (let i = 0; i < 10; i++) {
-      db.saveMessage(
-        session.id,
-        'user',
-        JSON.stringify({ role: 'user', content: `msg-${i}` }),
-      )
+      db.saveMessage(session.id, 'user', JSON.stringify({ role: 'user', content: `msg-${i}` }))
     }
     const messages = db.getMessages(session.id, 5)
     expect(messages.length).toBe(5)

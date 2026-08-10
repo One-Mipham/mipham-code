@@ -13,9 +13,15 @@ const TEST_PORT = 45999
 const TEST_TOKEN = generateToken()
 
 function cleanDb() {
-  try { unlinkSync(TEST_DB) } catch {}
-  try { unlinkSync(TEST_DB + '-wal') } catch {}
-  try { unlinkSync(TEST_DB + '-shm') } catch {}
+  try {
+    unlinkSync(TEST_DB)
+  } catch {}
+  try {
+    unlinkSync(TEST_DB + '-wal')
+  } catch {}
+  try {
+    unlinkSync(TEST_DB + '-shm')
+  } catch {}
 }
 
 function apiUrl(path: string): string {
@@ -27,7 +33,7 @@ async function fetchApi(path: string, options?: RequestInit) {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${TEST_TOKEN}`,
+      Authorization: `Bearer ${TEST_TOKEN}`,
       ...(options?.headers || {}),
     },
   })

@@ -121,73 +121,69 @@ if (!(globalThis.Bun as Record<string, unknown>).serve) {
         },
       }
 
-      const httpServer = createHttpServer(
-        async (req: IncomingMessage, res: ServerResponse) => {
-          const url = `http://${config.hostname}:${config.port}${req.url}`
+      const httpServer = createHttpServer(async (req: IncomingMessage, res: ServerResponse) => {
+        const url = `http://${config.hostname}:${config.port}${req.url}`
 
-          // Convert Node.js headers to WHATWG Headers.
-          const reqHeaders = new Headers()
-          for (const [key, value] of Object.entries(req.headers)) {
-            if (value !== undefined && value !== null) {
-              if (Array.isArray(value)) {
-                for (const v of value) reqHeaders.append(key, String(v))
-              } else {
-                reqHeaders.set(key, String(value))
-              }
+        // Convert Node.js headers to WHATWG Headers.
+        const reqHeaders = new Headers()
+        for (const [key, value] of Object.entries(req.headers)) {
+          if (value !== undefined && value !== null) {
+            if (Array.isArray(value)) {
+              for (const v of value) reqHeaders.append(key, String(v))
+            } else {
+              reqHeaders.set(key, String(value))
             }
           }
+        }
 
-          // Read body chunks from the incoming message stream.
-          const chunks: Buffer[] = []
-          for await (const chunk of req) {
-            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as ArrayBuffer))
-          }
-          const body = Buffer.concat(chunks)
+        // Read body chunks from the incoming message stream.
+        const chunks: Buffer[] = []
+        for await (const chunk of req) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as ArrayBuffer))
+        }
+        const body = Buffer.concat(chunks)
 
-          const request = new Request(url, {
-            method: req.method || 'GET',
-            headers: reqHeaders,
-            body: body.length > 0 ? new Uint8Array(body) : undefined,
-          })
+        const request = new Request(url, {
+          method: req.method || 'GET',
+          headers: reqHeaders,
+          body: body.length > 0 ? new Uint8Array(body) : undefined,
+        })
 
-          try {
-            const response = await config.fetch(request, mockServer)
+        try {
+          const response = await config.fetch(request, mockServer)
 
-            if (!response) {
-              // void return — treated as 204 No Content (or WS upgrade stub)
-              res.writeHead(204)
-              res.end()
-              return
-            }
-
-            // Write status and response headers.
-            const resHeaders: Record<string, string> = {}
-            response.headers.forEach((value, key) => {
-              resHeaders[key] = value
-            })
-            res.writeHead(response.status, resHeaders)
-
-            // Stream the response body.
-            if (response.body) {
-              const reader = response.body.getReader()
-              // eslint-disable-next-line no-constant-condition
-              while (true) {
-                const { done, value } = await reader.read()
-                if (done) break
-                res.write(value)
-              }
-            }
+          if (!response) {
+            // void return — treated as 204 No Content (or WS upgrade stub)
+            res.writeHead(204)
             res.end()
-          } catch (err) {
-            if (!res.headersSent) {
-              res.writeHead(500, { 'Content-Type': 'application/json' })
-            }
-            res.end(
-              JSON.stringify({ ok: false, error: 'Internal server error' }),
-            )
+            return
           }
-        },
-      )
+
+          // Write status and response headers.
+          const resHeaders: Record<string, string> = {}
+          response.headers.forEach((value, key) => {
+            resHeaders[key] = value
+          })
+          res.writeHead(response.status, resHeaders)
+
+          // Stream the response body.
+          if (response.body) {
+            const reader = response.body.getReader()
+            // eslint-disable-next-line no-constant-condition
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) break
+              res.write(value)
+            }
+          }
+          res.end()
+        } catch (err) {
+          if (!res.headersSent) {
+            res.writeHead(500, { 'Content-Type': 'application/json' })
+          }
+          res.end(JSON.stringify({ ok: false, error: 'Internal server error' }))
+        }
+      })
 
       mockServer._http = httpServer
       httpServer.listen(config.port, config.hostname)

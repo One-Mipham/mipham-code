@@ -26,7 +26,11 @@ export class SessionManager {
   closeSession(id: string): void {
     this.db.closeSession(id)
     for (const cb of this.closeCallbacks) {
-      try { cb(id) } catch { /* callback errors should not propagate */ }
+      try {
+        cb(id)
+      } catch {
+        /* callback errors should not propagate */
+      }
     }
   }
 

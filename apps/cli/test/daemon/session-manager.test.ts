@@ -10,9 +10,15 @@ describe('SessionManager', () => {
   let sm: SessionManager
 
   beforeAll(() => {
-    try { unlinkSync(TEST_DB) } catch {}
-    try { unlinkSync(TEST_DB + '-wal') } catch {}
-    try { unlinkSync(TEST_DB + '-shm') } catch {}
+    try {
+      unlinkSync(TEST_DB)
+    } catch {}
+    try {
+      unlinkSync(TEST_DB + '-wal')
+    } catch {}
+    try {
+      unlinkSync(TEST_DB + '-shm')
+    } catch {}
     db = new DaemonDatabase(TEST_DB)
     db.init()
     sm = new SessionManager(db)
@@ -20,7 +26,9 @@ describe('SessionManager', () => {
 
   afterAll(() => {
     db.close()
-    try { unlinkSync(TEST_DB) } catch {}
+    try {
+      unlinkSync(TEST_DB)
+    } catch {}
   })
 
   it('creates a session with defaults', () => {
@@ -45,12 +53,14 @@ describe('SessionManager', () => {
 
   it('lists only active sessions', () => {
     const active = sm.listSessions('active')
-    expect(active.every(s => s.status === 'active')).toBe(true)
+    expect(active.every((s) => s.status === 'active')).toBe(true)
   })
 
   it('notifies onClose callback when session is closed', () => {
     let closedId = ''
-    sm.onSessionClosed((id) => { closedId = id })
+    sm.onSessionClosed((id) => {
+      closedId = id
+    })
 
     const s = sm.createSession('cb-test', '/tmp', 'openai', 'gpt-5')
     sm.closeSession(s.id)

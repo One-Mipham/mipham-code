@@ -27,7 +27,11 @@ export function createServer(config: ServerConfig): Server<WsData> {
     if (!clients) return
     const msg = JSON.stringify(data)
     for (const ws of clients) {
-      try { ws.send(msg) } catch { clients.delete(ws) }
+      try {
+        ws.send(msg)
+      } catch {
+        clients.delete(ws)
+      }
     }
   }
 
@@ -51,7 +55,11 @@ export function createServer(config: ServerConfig): Server<WsData> {
 
       // Parse body helper
       async function jsonBody(): Promise<Record<string, unknown>> {
-        try { return await req.json() } catch { return {} }
+        try {
+          return await req.json()
+        } catch {
+          return {}
+        }
       }
 
       // ── Health ──────────────────────────────────────
@@ -147,7 +155,8 @@ export function createServer(config: ServerConfig): Server<WsData> {
       // ── Goals (stub — Phase 4) ──────────────────────
       if (method === 'GET' && path === '/api/v1/goals') {
         const sessionId = url.searchParams.get('session')
-        if (!sessionId) return Response.json({ ok: false, error: '?session= required' }, { status: 400 })
+        if (!sessionId)
+          return Response.json({ ok: false, error: '?session= required' }, { status: 400 })
         const goals = db.getGoals(sessionId)
         return Response.json({ ok: true, data: { goals } })
       }
@@ -159,7 +168,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
           sessionId: body.sessionId as string,
           description: body.description as string,
           status: 'active',
-          progress: body.progress as DaemonGoal['progress'] || null,
+          progress: (body.progress as DaemonGoal['progress']) || null,
           createdAt: now,
           updatedAt: now,
         })
@@ -169,7 +178,8 @@ export function createServer(config: ServerConfig): Server<WsData> {
       // ── Schedules (stub — Phase 4) ──────────────────
       if (method === 'GET' && path === '/api/v1/schedules') {
         const sessionId = url.searchParams.get('session')
-        if (!sessionId) return Response.json({ ok: false, error: '?session= required' }, { status: 400 })
+        if (!sessionId)
+          return Response.json({ ok: false, error: '?session= required' }, { status: 400 })
         const schedules = db.getSchedules(sessionId)
         return Response.json({ ok: true, data: { schedules } })
       }

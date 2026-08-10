@@ -1,6 +1,11 @@
 // apps/cli/test/daemon/auth.test.ts
 import { describe, it, expect, afterAll } from 'vitest'
-import { generateToken, verifyToken, loadOrCreateToken, authMiddleware } from '../../src/daemon/auth'
+import {
+  generateToken,
+  verifyToken,
+  loadOrCreateToken,
+  authMiddleware,
+} from '../../src/daemon/auth'
 import { unlinkSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -8,7 +13,9 @@ const TEST_TOKEN_FILE = join(process.env.HOME || '/tmp', '.mipham', 'daemon-test
 
 describe('Daemon Auth', () => {
   afterAll(() => {
-    try { unlinkSync(TEST_TOKEN_FILE) } catch {}
+    try {
+      unlinkSync(TEST_TOKEN_FILE)
+    } catch {}
   })
 
   it('generates a 64-char hex token', () => {
@@ -25,7 +32,9 @@ describe('Daemon Auth', () => {
 
   it('loads existing token or creates new one', () => {
     // Clean state
-    try { unlinkSync(TEST_TOKEN_FILE) } catch {}
+    try {
+      unlinkSync(TEST_TOKEN_FILE)
+    } catch {}
 
     const token1 = loadOrCreateToken(TEST_TOKEN_FILE)
     expect(token1.length).toBe(64)
