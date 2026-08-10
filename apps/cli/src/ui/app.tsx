@@ -1,11 +1,13 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { Box, Text, useInput } from 'ink'
+import TextInput from 'ink-text-input'
 import { readFileSync } from 'node:fs'
 import type { QueryEngine } from '../core/engine'
 import type { MiphamConfig } from '../shared/index.ts'
 import type { SkillsLoader } from '../skills/loader'
 import type { PluginManager } from '../plugin/plugin-manager'
 import { setPreference } from '../config/preferences'
+import { saveProviderApiKey } from '../config/loader'
 import { AgentRegistry } from '../agent/agent-registry'
 import { getBackgroundAgentRegistry } from '../agent/background-registry'
 import { ChatPanel } from './chat'
@@ -154,6 +156,12 @@ export function App({
   const [modelId, setModelId] = useState(initialModel || config.defaultModel)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [agentViewOpen, setAgentViewOpen] = useState(false)
+  const [apiKeyPrompt, setApiKeyPrompt] = useState<{
+    providerId: string
+    modelId: string
+    providerName: string
+  } | null>(null)
+  const [apiKeyInput, setApiKeyInput] = useState('')
   const [_sessionTitle, setSessionTitle] = useState('')
   const [_fastMode, setFastMode] = useState(false)
   const [_effort, setEffort] = useState('high')
@@ -279,6 +287,40 @@ export function App({
     [engine, config, providerId, modelId, skillsLoader, pluginManager, sessionId, t],
   )
 
+  const handleApiKeySubmit = useCallback(
+    (submittedKey: string) => {
+      if (!apiKeyPrompt || !submittedKey.trim()) return
+
+      const trimmed = submittedKey.trim()
+      const saved = saveProviderApiKey(apiKeyPrompt.providerId, trimmed)
+
+      // Update the in-memory provider's apiKey so subsequent checks pass
+      const provider = config.providers.find((p) => p.id === apiKeyPrompt.providerId)
+      if (provider) {
+        provider.apiKey = trimmed
+      }
+
+      // Execute the switch now that we have the key
+      engine.switchProvider(apiKeyPrompt.providerId, apiKeyPrompt.modelId)
+      setProviderId(apiKeyPrompt.providerId)
+      setModelId(apiKeyPrompt.modelId)
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'system',
+          content: saved
+            ? `✓ API Key saved for ${apiKeyPrompt.providerName}. Switched to ${apiKeyPrompt.providerId}/${apiKeyPrompt.modelId}.`
+            : `⚠ Could not persist API Key to config, but switched to ${apiKeyPrompt.providerId}/${apiKeyPrompt.modelId} for this session.`,
+        },
+      ])
+
+      setApiKeyPrompt(null)
+      setApiKeyInput('')
+    },
+    [apiKeyPrompt, config, engine],
+  )
+
   const handleSubmit = useCallback(
     async (input: string) => {
       if (!input.trim()) return
@@ -290,13 +332,23 @@ export function App({
         // /switch takes args, handled separately
         if (command === '/switch') {
           const result = await handleSwitch(mkCtx(), args)
-          setMessages((prev) => [
-            ...prev,
-            { role: 'user', content: input },
-            { role: 'system', content: result.content },
-          ])
-          if (result.nextProvider) setProviderId(result.nextProvider)
-          if (result.nextModel) setModelId(result.nextModel)
+          if (result.needsApiKey) {
+            setApiKeyPrompt(result.needsApiKey)
+            setApiKeyInput('')
+            setMessages((prev) => [
+              ...prev,
+              { role: 'user', content: input },
+              { role: 'system', content: result.content },
+            ])
+          } else {
+            setMessages((prev) => [
+              ...prev,
+              { role: 'user', content: input },
+              { role: 'system', content: result.content },
+            ])
+            if (result.nextProvider) setProviderId(result.nextProvider)
+            if (result.nextModel) setModelId(result.nextModel)
+          }
           if (result.exit) process.exit(0)
           return
         }
@@ -335,11 +387,21 @@ export function App({
         if (handler) {
           const result = await handler(mkCtx(), args)
           forwardToAI = result.forwardToAI
+          // Handle API key prompt from command result
+          if (result.needsApiKey) {
+            setApiKeyPrompt(result.needsApiKey)
+            setApiKeyInput('')
+          }
           setMessages((prev) => [
             ...prev,
             { role: 'user', content: input },
             { role: 'system', content: result.content },
           ])
+          if (result.needsApiKey) {
+            // Don't process nextProvider/model when waiting for API key
+            if (result.exit) process.exit(0)
+            return
+          }
           if (result.clearMessages) setMessages([])
           if (result.nextProvider) setProviderId(result.nextProvider)
           if (result.nextModel) setModelId(result.nextModel)
@@ -584,9 +646,14 @@ export function App({
   )
 
   useInput((_input, key) => {
-    // Escape: close picker → abort loading (does NOT exit app)
+    // Escape: close apiKeyPrompt → close picker → abort loading (does NOT exit app)
     // Vim mode toggle is handled by InputBar
     if (key.escape) {
+      if (apiKeyPrompt) {
+        setApiKeyPrompt(null)
+        setApiKeyInput('')
+        return
+      }
       if (pickerOpen) {
         setPickerOpen(false)
         return
@@ -602,6 +669,49 @@ export function App({
     // All other global hotkeys (Shift+Tab, Ctrl+P, Ctrl+F, Ctrl+O)
     // are handled in InputBar to avoid ink-text-input conflicts
   })
+
+  // ── API Key prompt modal ──
+  if (apiKeyPrompt) {
+    return (
+      <Box flexDirection="column" padding={1} height="100%">
+        {/* Header */}
+        <Box flexDirection="column" marginBottom={1}>
+          <Text color="#FFD700" bold>
+            Mipham Code
+          </Text>
+          <Text dimColor>v{version || '0.0.0'}</Text>
+        </Box>
+
+        {/* Chat panel — show existing messages */}
+        <ChatPanel messages={messages} focusMode={false} />
+
+        {/* API Key input prompt */}
+        <Box flexDirection="column" marginTop={1}>
+          <Text dimColor>──────────────────────────────</Text>
+          <Box flexDirection="column" marginY={1} borderStyle="round" borderColor="yellow" padding={1}>
+            <Text bold color="yellow">
+              {t('ui.picker.needs_api_key', { provider: apiKeyPrompt.providerName })}
+            </Text>
+            <Text dimColor>
+              {apiKeyPrompt.providerId}/{apiKeyPrompt.modelId}
+            </Text>
+            <Box marginTop={1}>
+              <TextInput
+                value={apiKeyInput}
+                onChange={setApiKeyInput}
+                onSubmit={handleApiKeySubmit}
+                placeholder={t('ui.picker.api_key_placeholder')}
+              />
+            </Box>
+            <Box marginTop={1}>
+              <Text dimColor>Esc {t('ui.status.esc_to_interrupt')}</Text>
+            </Box>
+          </Box>
+          <Text dimColor>──────────────────────────────</Text>
+        </Box>
+      </Box>
+    )
+  }
 
   return (
     <Box flexDirection="column" padding={1} height="100%">
@@ -643,6 +753,18 @@ export function App({
                 setMessages((prev) => [
                   ...prev,
                   { role: 'system', content: `✓ Switched to ${newProvider}/${newModel}` },
+                ])
+              }}
+              onNeedsApiKey={(providerId, modelId, providerName) => {
+                setApiKeyPrompt({ providerId, modelId, providerName })
+                setApiKeyInput('')
+                setPickerOpen(false)
+                setMessages((prev) => [
+                  ...prev,
+                  {
+                    role: 'system',
+                    content: t('ui.picker.needs_api_key', { provider: providerName }),
+                  },
                 ])
               }}
               onClose={() => setPickerOpen(false)}

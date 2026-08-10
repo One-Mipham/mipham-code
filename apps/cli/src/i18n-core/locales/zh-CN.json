@@ -190,7 +190,9 @@
     },
     "switch": {
       "usage": "用法: /switch <provider> <model>\n示例: /switch deepseek deepseek-v4-pro",
-      "confirmed": "✓ 已切换到 {provider}/{model}"
+      "confirmed": "✓ 已切换到 {provider}/{model}",
+      "needs_api_key": "{provider} 需要 API Key。请在下方输入，或使用 Ctrl+P 选择模型后输入。",
+      "unknown_provider": "未知 provider: {provider}"
     },
     "goal": {
       "set": "✓ 目标已设置：\"{goal}\"",
@@ -688,7 +690,9 @@
       "coming_soon": "[即将推出]",
       "no_active_models": "（无可用模型）",
       "select_provider_hint": "选择提供商 → Enter 查看模型",
-      "select_model_hint": "选择模型 → Enter 切换"
+      "select_model_hint": "选择模型 → Enter 切换",
+      "needs_api_key": "{provider} 需要 API Key",
+      "api_key_placeholder": "粘贴 API Key 后按 Enter..."
     },
     "command_picker": {
       "title": "命令",

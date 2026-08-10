@@ -6,10 +6,11 @@ import {
   readdirSync,
   unlinkSync,
   chmodSync,
+  writeFileSync,
 } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
-import { parse as parseYaml } from 'yaml'
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import type {
   MiphamConfig,
   ProviderConfig,
@@ -408,4 +409,53 @@ export function loadCrossSessionConfig(cwd: string = process.cwd()): CrossSessio
   }
 
   return merged
+}
+
+/**
+ * Persist an API key for a single provider to the user-level config.yml.
+ * Reads the existing YAML, updates/replaces the provider's apiKey field,
+ * and writes it back. Creates the config if it doesn't exist.
+ *
+ * Returns true on success, false on failure.
+ */
+export function saveProviderApiKey(providerId: string, apiKey: string, cwd: string = process.cwd()): boolean {
+  const userConfigPath = join(MIPHAM_HOME, 'config.yml')
+  const projectConfigPath = join(cwd, '.mipham', 'config.yml')
+
+  // Prefer user-level config; fall back to project-level if no user config exists.
+  const configPath = existsSync(userConfigPath) ? userConfigPath : projectConfigPath
+
+  try {
+    mkdirSync(MIPHAM_HOME, { recursive: true, mode: 0o700 })
+
+    // Read existing config (or start fresh)
+    let doc: Record<string, unknown> = {}
+    if (existsSync(configPath)) {
+      const raw = readFileSync(configPath, 'utf-8')
+      doc = (parseYaml(raw) as Record<string, unknown>) || {}
+    } else if (configPath === projectConfigPath) {
+      mkdirSync(join(cwd, '.mipham'), { recursive: true })
+    }
+
+    // Find and update the provider in the providers array
+    const providers = (doc.providers as Array<Record<string, unknown>>) || []
+    const idx = providers.findIndex((p) => p.id === providerId)
+
+    if (idx >= 0) {
+      providers[idx] = { ...providers[idx], apiKey }
+    } else {
+      // Provider not in config — append it
+      providers.push({ id: providerId, apiKey })
+    }
+
+    doc.providers = providers
+
+    // Write back
+    writeFileSync(configPath, stringifyYaml(doc), { encoding: 'utf-8', mode: 0o600 })
+    return true
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    process.stderr.write(`⚠ Mipham Code: failed to save API key for ${providerId}: ${msg}\n`)
+    return false
+  }
 }

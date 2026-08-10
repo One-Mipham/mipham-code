@@ -8,6 +8,7 @@ interface PickerProps {
   currentProvider: string
   currentModel: string
   onSelect: (providerId: string, modelId: string) => void
+  onNeedsApiKey?: (providerId: string, modelId: string, providerName: string) => void
   onClose: () => void
 }
 
@@ -18,6 +19,7 @@ export function ModelPicker({
   currentProvider,
   currentModel,
   onSelect,
+  onNeedsApiKey,
   onClose,
 }: PickerProps) {
   const { t } = useI18n()
@@ -60,9 +62,17 @@ export function ModelPicker({
     if (!selectedProvider) return
     const model = models[modelIdx]
     if (model) {
+      // Check API key before confirming switch
+      const apiKey = selectedProvider.apiKey
+      if (!apiKey || apiKey.trim() === '' || /^\$\{[A-Z_]+\}$/.test(apiKey.trim())) {
+        if (selectedProvider.id !== 'ollama' && onNeedsApiKey) {
+          onNeedsApiKey(selectedProvider.id, model.id, selectedProvider.name)
+          return
+        }
+      }
       onSelect(selectedProvider.id, model.id)
     }
-  }, [selectedProvider, models, modelIdx, onSelect])
+  }, [selectedProvider, models, modelIdx, onSelect, onNeedsApiKey])
 
   useInput((input, key) => {
     // Global keys

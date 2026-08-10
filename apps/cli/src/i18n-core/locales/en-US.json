@@ -190,7 +190,9 @@
     },
     "switch": {
       "usage": "Usage: /switch <provider> <model>\nExample: /switch deepseek deepseek-v4-pro",
-      "confirmed": "✓ Switched to {provider}/{model}"
+      "confirmed": "✓ Switched to {provider}/{model}",
+      "needs_api_key": "{provider} requires an API Key. Enter it below, or use Ctrl+P to select a model and input.",
+      "unknown_provider": "Unknown provider: {provider}"
     },
     "goal": {
       "set": "✓ Goal set: \"{goal}\"",
@@ -688,7 +690,9 @@
       "coming_soon": "[coming]",
       "no_active_models": "(no active models)",
       "select_provider_hint": "Select a provider → Enter to see models",
-      "select_model_hint": "Select a model → Enter to switch"
+      "select_model_hint": "Select a model → Enter to switch",
+      "needs_api_key": "{provider} requires an API Key",
+      "api_key_placeholder": "Paste API Key and press Enter..."
     },
     "command_picker": {
       "title": "Commands",

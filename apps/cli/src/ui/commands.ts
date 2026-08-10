@@ -83,6 +83,12 @@ export interface CommandResult {
   forwardToAI?: string
   /** If set, restored messages to load into the session (used by /resume last). */
   forwardedMessages?: Message[]
+  /** API Key 补录请求：切换前需用户输入 Key */
+  needsApiKey?: {
+    providerId: string
+    modelId: string
+    providerName: string
+  }
 }
 
 export type CommandHandler = (
@@ -432,12 +438,34 @@ const providersCmd: CommandHandler = (ctx) => {
   }
 }
 
+/** Detect whether an API key is missing (empty, placeholder, or env-var reference that resolves to empty). */
+function isApiKeyMissing(apiKey: string): boolean {
+  if (!apiKey || apiKey.trim() === '') return true
+  if (apiKey === 'ollama-local') return false // Ollama local — no key needed
+  if (/^\$\{[A-Z_]+\}$/.test(apiKey.trim())) return true // ${VAR} placeholder
+  return false
+}
+
 const switchCmd: CommandHandler = (ctx, args) => {
   const t = resolveT(ctx)
   const [newProvider, newModel] = args
   if (!newProvider || !newModel) {
     return { content: t('commands.switch.usage') }
   }
+
+  const provider = ctx.config.providers.find((p) => p.id === newProvider)
+  if (!provider) {
+    return { content: t('commands.switch.unknown_provider', { provider: newProvider }) }
+  }
+
+  // Check API Key before switching
+  if (isApiKeyMissing(provider.apiKey)) {
+    return {
+      content: t('commands.switch.needs_api_key', { provider: provider.name }),
+      needsApiKey: { providerId: newProvider, modelId: newModel, providerName: provider.name },
+    }
+  }
+
   ctx.engine.switchProvider(newProvider, newModel)
   return {
     content: t('commands.switch.confirmed', { provider: newProvider, model: newModel }),
