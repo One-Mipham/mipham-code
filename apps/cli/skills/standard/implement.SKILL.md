@@ -32,6 +32,7 @@ Use git worktree or a feature branch. Never implement on main/master without exp
 ### 1.2 Read the plan/spec/tickets
 
 Read the full spec or ticket set. Understand:
+
 - What is being built?
 - What are the acceptance criteria?
 - What are the pre-agreed seams (where TDD should be applied)?
@@ -39,6 +40,7 @@ Read the full spec or ticket set. Understand:
 ### 1.3 Review critically
 
 Before writing any code:
+
 - Are there gaps or ambiguities in the spec?
 - Are the success criteria testable?
 - Do you understand every instruction?
@@ -65,6 +67,7 @@ Use the `tdd` skill for full red-green-refactor discipline.
 ### 2.2 Incremental verification
 
 During implementation:
+
 - **Run typecheck** after each significant change: `pnpm typecheck`
 - **Run relevant test file** after each task: `pnpm test -- <file>`
 - **Don't wait** until everything is done to discover type errors
@@ -105,6 +108,7 @@ CI must be green.
 **Before committing**, run code review:
 
 Use the `code-review` skill for a two-axis review:
+
 - **Standards**: Does the diff follow the repo's coding standards?
 - **Spec**: Does it faithfully implement the originating issue/spec?
 
@@ -130,6 +134,7 @@ git commit -m "<type>: <description>"
 ## When to Stop and Ask
 
 **STOP immediately when:**
+
 - A task is blocked (missing dependency, unclear instruction, verification fails repeatedly)
 - The spec has a critical gap that prevents starting
 - You don't understand an instruction
@@ -141,10 +146,10 @@ git commit -m "<type>: <description>"
 
 ## Quick Reference
 
-| Step | Key Activities | Done When |
-|------|---------------|-----------|
-| **1. Review** | Load spec, isolate workspace, review critically | All concerns raised and resolved |
-| **2. Execute** | TDD at seams, incremental typecheck/test, one task at a time | All tasks complete and verified |
-| **3. Verify** | Full test suite, lint, format | CI-ready (all green) |
-| **4. Review** | Two-axis code review (standards + spec) | Findings addressed |
-| **5. Commit** | Conventional Commits, reference spec/ticket | Work committed to branch |
+| Step           | Key Activities                                               | Done When                        |
+| -------------- | ------------------------------------------------------------ | -------------------------------- |
+| **1. Review**  | Load spec, isolate workspace, review critically              | All concerns raised and resolved |
+| **2. Execute** | TDD at seams, incremental typecheck/test, one task at a time | All tasks complete and verified  |
+| **3. Verify**  | Full test suite, lint, format                                | CI-ready (all green)             |
+| **4. Review**  | Two-axis code review (standards + spec)                      | Findings addressed               |
+| **5. Commit**  | Conventional Commits, reference spec/ticket                  | Work committed to branch         |

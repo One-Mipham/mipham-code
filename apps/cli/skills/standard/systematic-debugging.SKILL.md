@@ -34,7 +34,7 @@ Issue is...
 
 ## Phase 1: Build a Feedback Loop 🔴 THE SKILL
 
-**This is the centerpiece.** A tight pass/fail signal for the bug — one that goes red on *this* bug — makes everything else mechanical. No loop = no debugging, only guessing.
+**This is the centerpiece.** A tight pass/fail signal for the bug — one that goes red on _this_ bug — makes everything else mechanical. No loop = no debugging, only guessing.
 
 Spend disproportionate effort here. Be aggressive. Be creative. Refuse to give up.
 
@@ -56,13 +56,13 @@ Spend disproportionate effort here. Be aggressive. Be creative. Refuse to give u
       - Log what data exits
       - Verify environment/config propagation
       - Check state at each layer
-    
+
     Run once to identify WHICH layer fails, THEN investigate that component.
     ```
 
 ### 1.2 Tighten the loop
 
-Once you have *a* loop, make it tighter:
+Once you have _a_ loop, make it tighter:
 
 - **Faster**: Cache setup, skip unrelated init, narrow test scope.
 - **Sharper signal**: Assert on the specific symptom, not "didn't crash".
@@ -116,6 +116,7 @@ Done when **every remaining element is load-bearing** — removing any one makes
 ### 3.1 Pattern Analysis
 
 Before forming hypotheses:
+
 - Find similar **working** code in the same codebase.
 - Read the reference implementation completely — don't skim.
 - List every difference between working and broken, however small.
@@ -140,6 +141,7 @@ If you cannot state the prediction, the hypothesis is a vibe — discard or shar
 Each probe must map to a specific Phase 3 prediction. **Change one variable at a time.**
 
 Tool preference:
+
 1. **Debugger/REPL** — one breakpoint beats ten logs.
 2. **Targeted logs** at boundaries that distinguish hypotheses.
 3. Never "log everything and grep".
@@ -198,16 +200,16 @@ Required before declaring done:
 
 If you catch yourself thinking:
 
-| Thought | Reality |
-|---------|---------|
-| "Quick fix for now, investigate later" | First fix sets the pattern. Do it right. |
-| "Just try changing X and see if it works" | Guessing. Build a loop instead (Phase 1). |
-| "Add multiple changes, run tests" | Can't isolate what worked. One variable at a time. |
-| "Skip the test, I'll verify manually" | Untested fixes don't stick. |
-| "It's probably X, let me fix that" | Seeing symptoms ≠ understanding root cause. |
-| "I don't fully understand but this might work" | Return to Phase 1. |
-| "Reference too long, I'll adapt the pattern" | Partial understanding guarantees bugs. Read it completely. |
-| "One more fix attempt" (after 2+ failures) | 3+ failures = architectural problem. Question the pattern. |
+| Thought                                        | Reality                                                    |
+| ---------------------------------------------- | ---------------------------------------------------------- |
+| "Quick fix for now, investigate later"         | First fix sets the pattern. Do it right.                   |
+| "Just try changing X and see if it works"      | Guessing. Build a loop instead (Phase 1).                  |
+| "Add multiple changes, run tests"              | Can't isolate what worked. One variable at a time.         |
+| "Skip the test, I'll verify manually"          | Untested fixes don't stick.                                |
+| "It's probably X, let me fix that"             | Seeing symptoms ≠ understanding root cause.                |
+| "I don't fully understand but this might work" | Return to Phase 1.                                         |
+| "Reference too long, I'll adapt the pattern"   | Partial understanding guarantees bugs. Read it completely. |
+| "One more fix attempt" (after 2+ failures)     | 3+ failures = architectural problem. Question the pattern. |
 
 **ALL of these mean: STOP. Return to the earliest incomplete Phase.**
 
@@ -215,14 +217,14 @@ If you catch yourself thinking:
 
 ## Quick Reference
 
-| Phase | Key Activities | Success Criteria |
-|-------|---------------|------------------|
-| **1. Feedback Loop** | Build tight red/green signal for the bug | Deterministic, fast, agent-runnable |
-| **2. Reproduce+Minimise** | Confirm + shrink to smallest load-bearing scenario | Every element is load-bearing |
-| **3. Pattern+Hypothesise** | Compare working examples, rank 3-5 falsifiable hypotheses | Each hypothesis has a testable prediction |
-| **4. Instrument** | One probe per prediction, tagged logs | Identify which hypothesis holds |
-| **5. Fix+Regression** | Assess seam → test → single fix → verify | Bug resolved, test passes, original loop green |
-| **6. Cleanup+Post-Mortem** | Remove instrumentation, document cause | Preventative insight captured |
+| Phase                      | Key Activities                                            | Success Criteria                               |
+| -------------------------- | --------------------------------------------------------- | ---------------------------------------------- |
+| **1. Feedback Loop**       | Build tight red/green signal for the bug                  | Deterministic, fast, agent-runnable            |
+| **2. Reproduce+Minimise**  | Confirm + shrink to smallest load-bearing scenario        | Every element is load-bearing                  |
+| **3. Pattern+Hypothesise** | Compare working examples, rank 3-5 falsifiable hypotheses | Each hypothesis has a testable prediction      |
+| **4. Instrument**          | One probe per prediction, tagged logs                     | Identify which hypothesis holds                |
+| **5. Fix+Regression**      | Assess seam → test → single fix → verify                  | Bug resolved, test passes, original loop green |
+| **6. Cleanup+Post-Mortem** | Remove instrumentation, document cause                    | Preventative insight captured                  |
 
 ---
 

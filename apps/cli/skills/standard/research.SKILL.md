@@ -109,10 +109,10 @@ The agent writes findings in this structure:
 
 ## Source Evaluation
 
-| Source | Type | Authority | Notes |
-|--------|------|-----------|-------|
-| [Name](URL) | Official docs | High | Current as of YYYY-MM |
-| [Name](URL) | Source code | High | Tag vX.Y.Z |
+| Source      | Type          | Authority | Notes                 |
+| ----------- | ------------- | --------- | --------------------- |
+| [Name](URL) | Official docs | High      | Current as of YYYY-MM |
+| [Name](URL) | Source code   | High      | Tag vX.Y.Z            |
 
 ## Open Questions
 
@@ -120,6 +120,7 @@ The agent writes findings in this structure:
 - [Question 2]
 
 Sources:
+
 - [Title](URL) — brief note
 ```
 
