@@ -1,13 +1,14 @@
 ---
-name: systematic-debugging
-description: Disciplined diagnosis loop for bugs, test failures, performance regressions, and unexpected behavior. Build a tight feedback loop, then minimize → hypothesize → instrument → fix → regression-test → post-mortem.
+name: debug-loop
+description: Enhanced diagnosis with feedback loop construction (10 methods) — build a tight red/green signal, minimize, falsifiable hypotheses, tagged instrumentation, seam assessment, post-mortem. Complements systematic-debugging. Use together for thorough debugging.
 version: 1.0.0
-user-invocable: true
 ---
 
-# Systematic Debugging
+# Debug Loop — 反馈闭环诊断
 
-融合 Superpowers systematic-debugging（反猜測紀律）+ Matt Pocock diagnosing-bugs（反馈闭环方法论）。
+融合 Matt Pocock diagnosing-bugs（反馈闭环方法论）+ Superpowers systematic-debugging（反猜測紀律）。
+
+> **与 `systematic-debugging` 互补**：systematic-debugging 侧重反猜測纪律和根因分析框架；debug-loop 侧重构建可执行的红绿反馈信号。两者配合使用效果最佳。
 
 ## The Iron Law
 
