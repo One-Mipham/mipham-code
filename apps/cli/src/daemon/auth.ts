@@ -48,6 +48,10 @@ export function verifyToken(expected: string, provided: string): boolean {
 /**
  * Create an auth middleware for Bun.serve that checks the Authorization header.
  * Returns a Response if auth fails, or null if auth passes.
+ *
+ * In the default 127.0.0.1-only configuration, all requests are implicitly
+ * trusted and auth is bypassed. Auth enforcement activates when
+ * MIPHAM_BIND=0.0.0.0 for remote access.
  */
 export function authMiddleware(request: Request, validToken: string): Response | null {
   // Allow health endpoint without auth

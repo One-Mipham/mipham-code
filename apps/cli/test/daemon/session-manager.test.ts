@@ -40,7 +40,11 @@ describe('SessionManager', () => {
   })
 
   it('returns active session count', () => {
-    expect(sm.getActiveCount()).toBeGreaterThanOrEqual(1)
+    // Create a known number of sessions so this test is self-contained
+    const before = sm.getActiveCount()
+    sm.createSession('count-1', '/tmp/a', 'openai', 'gpt-5')
+    sm.createSession('count-2', '/tmp/b', 'openai', 'gpt-5')
+    expect(sm.getActiveCount()).toBe(before + 2)
   })
 
   it('closes a session', () => {

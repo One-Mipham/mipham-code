@@ -91,7 +91,6 @@ export interface ApiResponse<T> {
 
 export interface CreateSessionResponse {
   session: DaemonSession
-  authToken: string
 }
 
 export interface ListSessionsResponse {

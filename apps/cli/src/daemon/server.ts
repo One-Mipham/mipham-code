@@ -4,6 +4,7 @@ import type { DaemonDatabase } from './database'
 import type { SessionManager } from './session-manager'
 import type { DaemonGoal } from './types'
 import { authMiddleware } from './auth'
+import { PACKAGE_VERSION } from '../shared/package-info'
 
 interface ServerConfig {
   db: DaemonDatabase
@@ -73,7 +74,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
           activeSessions: stats.activeSessions,
           totalSessions: stats.totalSessions,
           activeAgents: stats.activeAgents,
-          version: '0.31.1',
+          version: PACKAGE_VERSION,
         })
       }
 
