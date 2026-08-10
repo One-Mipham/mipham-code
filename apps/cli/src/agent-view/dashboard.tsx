@@ -104,14 +104,14 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
     }
 
     // Ctrl+T — toggle group by (status ↔ directory)
-    if (input === '\x14') {
+    if (key.ctrl && input === 't') {
       setGroupBy((prev) => (prev === 'status' ? 'directory' : 'status'))
       showFeedback(`Grouped by ${_groupBy === 'status' ? 'directory' : 'status'}`)
       return
     }
 
     // Ctrl+R — rename selected session
-    if (input === '\x12') {
+    if (key.ctrl && input === 'r') {
       if (sessionsOnly.length === 0) {
         showFeedback('No sessions to rename')
         return
