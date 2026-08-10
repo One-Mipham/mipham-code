@@ -419,10 +419,7 @@ export class AutoMemoryEngine {
     return decisions.slice(0, 5)
   }
 
-  private extractActionItems(
-    assistantContent: string,
-    toolCalls: ToolCallRecord[],
-  ): string[] {
+  private extractActionItems(assistantContent: string, toolCalls: ToolCallRecord[]): string[] {
     const items: string[] = []
 
     // Check for TODO markers in assistant content
@@ -594,7 +591,13 @@ export class AutoMemoryEngine {
       `| 成功率 | ${totalSuccesses + totalFailures > 0 ? Math.round((totalSuccesses / (totalSuccesses + totalFailures)) * 100) : 100}% |`,
       '',
       ...(criticalInsights.length > 0
-        ? ['## ⚠️ 关键洞察', '', ...criticalInsights.map((i) => `- **${i.category}**: ${i.description}\n  → ${i.suggestion}`)]
+        ? [
+            '## ⚠️ 关键洞察',
+            '',
+            ...criticalInsights.map(
+              (i) => `- **${i.category}**: ${i.description}\n  → ${i.suggestion}`,
+            ),
+          ]
         : []),
       '',
       '---',

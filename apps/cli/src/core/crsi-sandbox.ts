@@ -52,7 +52,8 @@ export interface CrsiModificationResult {
   /** Error message if something failed */
   error?: string
   /** Current phase of the sandbox pipeline */
-  phase: 'pending' | 'applied' | 'testing' | 'passed' | 'failed' | 'approved' | 'merged' | 'rolled-back'
+  phase:
+    'pending' | 'applied' | 'testing' | 'passed' | 'failed' | 'approved' | 'merged' | 'rolled-back'
 }
 
 export interface CrsiTestResult {
@@ -154,7 +155,12 @@ export class CrsiSandbox {
    */
   applyModification(mod: CrsiModification): CrsiModificationResult {
     if (!this.worktreePath) {
-      return { modification: mod, applied: false, phase: 'pending', error: 'No worktree created. Call createWorktree() first.' }
+      return {
+        modification: mod,
+        applied: false,
+        phase: 'pending',
+        error: 'No worktree created. Call createWorktree() first.',
+      }
     }
 
     this.sessionReport.summary.total++
@@ -180,7 +186,8 @@ export class CrsiSandbox {
     try {
       const currentContent = readFileSync(targetPath, 'utf-8')
       if (currentContent !== mod.originalContent && mod.originalContent) {
-        result.error = 'Original content mismatch — file may have been modified since the audit. Aborting.'
+        result.error =
+          'Original content mismatch — file may have been modified since the audit. Aborting.'
         result.phase = 'failed'
         this.sessionReport.modifications.push(result)
         return result
@@ -313,9 +320,7 @@ export class CrsiSandbox {
     }
 
     // Check that all modifications passed tests
-    const failedCount = this.sessionReport.modifications.filter(
-      (m) => m.phase === 'failed',
-    ).length
+    const failedCount = this.sessionReport.modifications.filter((m) => m.phase === 'failed').length
     if (failedCount > 0) {
       return {
         success: false,
