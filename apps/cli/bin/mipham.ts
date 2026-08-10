@@ -311,13 +311,16 @@ async function main() {
   // ── Disable terminal special characters ──────────────────────────────────
   // Terminal intercepts Ctrl+S (XOFF), Ctrl+T (SIGINFO/status), Ctrl+R (rprnt)
   // before the app sees them. Disable these so Agent Dashboard shortcuts work.
+  // IMPORTANT: stty needs the real terminal on stdin — 'ignore' won't work.
   const { execSync } = await import('node:child_process')
   let savedStty = ''
   try {
-    savedStty = execSync('stty -g 2>/dev/null || true', { encoding: 'utf-8' }).trim()
-    // Disable: flow control (^S/^Q), status (^T), reprint (^R)
-    execSync('stty -ixon stop undef start undef status undef rprnt undef 2>/dev/null || true', {
-      stdio: 'ignore',
+    savedStty = execSync('stty -g', {
+      encoding: 'utf-8',
+      stdio: ['inherit', 'pipe', 'ignore'],
+    }).trim()
+    execSync('stty -ixon stop undef start undef status undef rprnt undef', {
+      stdio: ['inherit', 'ignore', 'ignore'],
     })
   } catch {
     // Non-POSIX platform (Windows) — no special chars to disable
@@ -326,7 +329,9 @@ async function main() {
   const restoreTerminal = () => {
     if (!savedStty) return
     try {
-      execSync(`stty ${savedStty} 2>/dev/null || true`, { stdio: 'ignore' })
+      execSync(`stty ${savedStty}`, {
+        stdio: ['inherit', 'ignore', 'ignore'],
+      })
     } catch {
       /* ignore */
     }
