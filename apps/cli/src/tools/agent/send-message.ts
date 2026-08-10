@@ -33,13 +33,17 @@ export const sendMessageTool: ToolDefinition = {
     const summary = (params.summary as string) || '(no subject)'
     const message = params.message as string
 
+    // P1-1: Truncate long summaries instead of rejecting (max 200 chars)
+    const truncatedSummary =
+      summary.length > 200 ? summary.slice(0, 197) + '...' : summary
+
     const from =
       ctx.sessionId === 'sub-agent'
         ? `sub-agent-${Date.now().toString(36)}`
         : ctx.sessionId || 'main'
 
     const router = getMessageRouter()
-    const result = await router.route(from, to, summary, message)
+    const result = await router.route(from, to, truncatedSummary, message)
 
     if (!result.success) {
       return {
@@ -58,7 +62,7 @@ export const sendMessageTool: ToolDefinition = {
         `ID:      ${result.messageId}\n` +
         `From:    ${from}\n` +
         `To:      ${to}\n` +
-        `Summary: ${summary.slice(0, 100)}`,
+        `Summary: ${truncatedSummary.slice(0, 100)}`,
     }
   },
 }

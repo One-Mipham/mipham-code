@@ -841,12 +841,21 @@ export class QueryEngine {
 
     // Security: check permission before executing
     if (this.permission.needsApproval(tool, params)) {
+      // P1-4: Increment consecutive block counter; if limit exceeded,
+      // tell the model to move on instead of retrying.
+      const limitExceeded = this.permission.incrementBlockCounter()
+      const baseError = t('errors.tool_not_allowed', { name })
+      const moveOnHint = limitExceeded
+        ? '\n(Consecutive block limit reached. Please try a different approach or ask the user for guidance.)'
+        : ''
       return {
         success: false,
         content: '',
-        error: t('errors.tool_not_allowed', { name }),
+        error: baseError + moveOnHint,
       }
     }
+    // P1-4: Tool allowed — reset block counter
+    this.permission.resetBlockCounter()
 
     // Run PreToolUse hooks
     let effectiveParams = params
@@ -902,7 +911,18 @@ export class QueryEngine {
 
       // Run PostToolUse hooks
       if (this.hookEngine) {
-        await this.hookEngine.executePostToolUse(name, effectiveParams, result, this.sessionId)
+        const postResult = await this.hookEngine.executePostToolUse(
+          name, effectiveParams, result, this.sessionId,
+        )
+        // P1-2: Consume hook result — apply updatedOutput and additionalContext
+        if (postResult.updatedOutput) {
+          result.content = postResult.updatedOutput
+        }
+        if (postResult.additionalContext) {
+          result.content = result.content
+            ? result.content + '\n' + postResult.additionalContext
+            : postResult.additionalContext
+        }
       }
 
       // CRSI: Track rule effectiveness after tool execution
@@ -920,6 +940,15 @@ export class QueryEngine {
 
       return result
     } catch (err) {
+      // P1-3: Trigger PostToolUseFailure hook on tool execution errors
+      if (this.hookEngine) {
+        this.hookEngine.executePostToolUseFailure(
+          name, effectiveParams, String(err), this.sessionId,
+        ).catch(() => {
+          // Hook failures never block error handling
+        })
+      }
+
       // Sanitize error: strip stack traces and internal paths to prevent
       // information disclosure to the LLM conversation context.
       const message =

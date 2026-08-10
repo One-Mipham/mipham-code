@@ -32,6 +32,10 @@ export class PermissionSystem {
   // ── P0-5: Sub-agent mode (auto mode hardening for background tasks) ──
   private isSubAgent = false
 
+  // ── P1-4: Consecutive block counter (prevents infinite retry loops) ──
+  private consecutiveBlockCount = 0
+  private static readonly MAX_CONSECUTIVE_BLOCKS = 3
+
   /** Invalidate the permission cache (called on any rule/mode change). */
   private invalidateCache(): void {
     this.checkCache.clear()
@@ -88,6 +92,26 @@ export class PermissionSystem {
   setSubAgentMode(enabled: boolean): void {
     this.isSubAgent = enabled
     this.invalidateCache()
+  }
+
+  /**
+   * P1-4 (v2.1.225 alignment): Increment the consecutive block counter
+   * when a tool is denied. Safety-filter refusals should NOT count.
+   * Returns true if the consecutive block limit has been exceeded.
+   */
+  incrementBlockCounter(): boolean {
+    this.consecutiveBlockCount++
+    return this.consecutiveBlockCount >= PermissionSystem.MAX_CONSECUTIVE_BLOCKS
+  }
+
+  /** Reset the block counter when a tool is successfully executed. */
+  resetBlockCounter(): void {
+    this.consecutiveBlockCount = 0
+  }
+
+  /** Get the current consecutive block count. */
+  getBlockCount(): number {
+    return this.consecutiveBlockCount
   }
 
   /**
