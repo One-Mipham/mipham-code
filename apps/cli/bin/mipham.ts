@@ -208,8 +208,10 @@ async function runUpdate(): Promise<boolean> {
   console.log(`  Checking npm registry for latest version...`)
   console.log()
 
-  // Check latest version from npm with retry + mirror fallback
+  // Check latest version from npm with retry + mirror fallback.
+  // Track which registry responded so we can use it for the install step too.
   let latestVersion = ''
+  let workingRegistry = 'https://registry.npmjs.org/' // default
   try {
     const { execSync } = await import('node:child_process')
 
@@ -233,7 +235,10 @@ async function runUpdate(): Promise<boolean> {
           { encoding: 'utf-8', timeout: attempt.timeout, stdio: ['pipe', 'pipe', 'pipe'] },
         ).trim()
         latestVersion = result.replace(/"/g, '')
-        if (latestVersion) break
+        if (latestVersion) {
+          workingRegistry = attempt.registry
+          break
+        }
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err))
         // Continue to next attempt
@@ -278,7 +283,7 @@ async function runUpdate(): Promise<boolean> {
   console.log()
   console.log(`Updating ${PACKAGE} to v${latestVersion}...`)
 
-  const ok = performUpdate(latestVersion)
+  const ok = performUpdate(latestVersion, workingRegistry)
   if (!ok) {
     console.log()
     console.log(`✗ Update failed.`)

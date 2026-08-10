@@ -139,19 +139,30 @@ function isValidSemver(v: string): boolean {
 /**
  * Perform the actual update via npm install -g.
  * Validates the version string before shell execution (prevents command injection).
+ *
+ * @param version  Target semver version (must pass isValidSemver).
+ * @param registry Optional npm registry URL — when provided the install uses it
+ *                 directly (useful when the primary registry is slow, e.g. China).
+ *                 Falls back to the npm default if omitted.
  * Returns true on success.
  */
-export function performUpdate(version: string): boolean {
+export function performUpdate(version: string, registry?: string): boolean {
   if (!isValidSemver(version)) {
     process.stderr.write(`⚠ Refusing to install invalid version: "${version}"\n`)
     return false
   }
 
+  // Sanitize registry — only allow known URLs to prevent command injection
+  const allowedRegistries = REGISTRIES.map((r) => r.url)
+  const safeRegistry = registry && allowedRegistries.includes(registry) ? registry : undefined
+
+  const registryFlag = safeRegistry ? ` --registry=${safeRegistry}` : ''
+
   try {
-    execSync(`npm install -g ${PACKAGE}@${version}`, {
+    execSync(`npm install -g ${PACKAGE}@${version}${registryFlag}`, {
       encoding: 'utf-8',
       stdio: 'inherit',
-      timeout: 120_000,
+      timeout: 600_000, // 10 min — slow networks (e.g. China → npmjs) may need 7+ min
     })
     return true
   } catch {
