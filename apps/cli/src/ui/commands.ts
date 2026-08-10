@@ -41,6 +41,8 @@ import { themeCmd, releaseNotesCmd, ideCmd, terminalSetupCmd } from '../commands
 import { commitCmd, pushCmd, prCmd, issueCmd } from '../commands/git.js'
 import { keysCmd } from '../commands/keys'
 import { workflowViewCmd, workflowWatchCmd } from '../commands/workflow-view.js'
+import { execSync } from 'node:child_process'
+import { OLLAMA_PRESET_MODELS } from '../shared/constants'
 
 export interface CommandContext {
   engine: QueryEngine
@@ -142,6 +144,7 @@ const helpCmd: CommandHandler = (ctx) => {
       /fast [on|off] Toggle fast mode
       /effort <lvl>  Set reasoning effort (low|medium|high|xhigh|max)
       /theme [dark|light|auto] Set terminal theme
+      /ollama-refresh Refresh Ollama model list at runtime
 
       ── Tools & Skills ──────────────────
       /tools         List available tools (${toolsCount} total)
@@ -348,6 +351,66 @@ const modelsCmd: CommandHandler = (ctx) => {
 
   return {
     content: `${t('commands.models.title', { count: String(lines.length) })}\n\n${t('commands.models.header')}\n${'-'.repeat(80)}\n${lines.join('\n')}\n\n${t('commands.models.hint')}`,
+  }
+}
+
+const ollamaRefreshCmd: CommandHandler = (ctx) => {
+  const t = resolveT(ctx)
+  const ollamaProvider = ctx.config.providers.find((p) => p.id === 'ollama')
+  if (!ollamaProvider) {
+    return { content: t('commands.ollama_refresh.not_configured') }
+  }
+
+  const before = ollamaProvider.models.length
+  try {
+    const seen = new Set<string>()
+    const refreshed: Array<{ id: string }> = []
+
+    // 1. Scan locally downloaded models via `ollama list`
+    try {
+      const out = execSync('ollama list', { timeout: 5000, encoding: 'utf-8' })
+      const lines = out.split('\n').slice(1).filter(Boolean)
+      for (const line of lines) {
+        const name = line.split(/\s+/)[0]!
+        if (!seen.has(name)) {
+          seen.add(name)
+          refreshed.push({ id: name })
+        }
+      }
+    } catch {
+      // ollama list failed (not installed / not running) — continue with presets
+    }
+
+    // 2. Merge preset models (deduplicated)
+    for (const preset of OLLAMA_PRESET_MODELS) {
+      if (!seen.has(preset.id)) {
+        seen.add(preset.id)
+        refreshed.push({ id: preset.id })
+      }
+    }
+
+    // 3. Update the in-memory provider model list
+    ollamaProvider.models = refreshed.map((m) => ({
+      id: m.id,
+      name: m.id,
+      providerId: 'ollama',
+      contextWindow: 128_000,
+      maxOutput: 32_000,
+      vision: false,
+      status: 'active' as const,
+    }))
+
+    const after = refreshed.length
+    const added = after - before
+    return {
+      content: t('commands.ollama_refresh.done', {
+        total: String(after),
+        added: added > 0 ? `+${added}` : String(added),
+      }),
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { content: t('commands.ollama_refresh.error', { error: msg }) }
   }
 }
 
@@ -3169,6 +3232,7 @@ const commandsListCmd: CommandHandler = () => {
     '/pick': 'Model & Provider',
     '/model': 'Model & Provider',
     '/models': 'Model & Provider',
+    '/ollama-refresh': 'Model & Provider',
     '/provider': 'Model & Provider',
     '/providers': 'Model & Provider',
     '/switch': 'Model & Provider',
@@ -3313,6 +3377,7 @@ registry.set('/ultracode', ultracodeCmd)
 // Model & Provider
 registry.set('/model', modelCmd)
 registry.set('/models', modelsCmd)
+registry.set('/ollama-refresh', ollamaRefreshCmd)
 registry.set('/provider', providerCmd)
 registry.set('/providers', providersCmd)
 registry.set('/config', configCmd)

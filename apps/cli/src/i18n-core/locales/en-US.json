@@ -240,6 +240,11 @@
       "header": "Provider      Model                          Context     Vision",
       "hint": "Use /switch <provider> <model> to change.\nSee /providers for upcoming models."
     },
+    "ollama_refresh": {
+      "not_configured": "Ollama provider not configured",
+      "done": "Ollama models refreshed: {total} total ({added})",
+      "error": "Refresh failed: {error}"
+    },
     "provider": {
       "current": "Current provider: {provider}\nModel: {model}"
     },
