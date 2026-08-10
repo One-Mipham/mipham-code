@@ -4,8 +4,8 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 1.6.0
-> **最后更新**: 2026-08-10 — v0.25.0：P0/P1/P2 安全对齐 Claude Code v2.1.222→v2.1.226（13 项修复）
+> **版本**: 1.7.0
+> **最后更新**: 2026-08-10 — v0.26.0：5 新 Skills + 批判性思维层，需求→交付链路 85% 覆盖
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -55,7 +55,7 @@ mipham-code/
 │   │   │   ├── workflow/       # Workflow 运行时 + Schema 验证
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
-│   │   ├── skills/             # 17 个内置技能（14 standard + 3 mipham）
+│   │   ├── skills/             # 23 个内置技能（20 standard + 3 mipham）
 │   │   ├── test/               # 57 个测试文件，1020 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
@@ -126,9 +126,9 @@ pnpm format       # Prettier
 | Computer（1）   | computer-use                                                                                   |
 | Scheduling（4） | schedule-wakeup, cron-create, cron-delete, cron-list                                           |
 
-### Skills 系统（17 个内置技能）
+### Skills 系统（23 个内置技能）
 
-**Standard（14）**: code-review, compassionate-communication, doc-generator, github-ops, memory, mipham-code-setup, security-review, self-review, superpower, systematic-debugging, tdd, test-driven-development, web-access, web-search
+**Standard（20）**: code-review, codebase-design, compassionate-communication, debug-loop, doc-generator, domain-modeling, github-ops, grill-with-docs, implement, memory, mipham-code-setup, research, security-review, self-review, superpower, systematic-debugging, tdd, to-spec, triage, web-access, web-search
 
 **Mipham Exclusive（3）**: om-artifact, om-model-optimize, om-security
 
@@ -233,14 +233,14 @@ GitHub Actions 5 阶段流水线：`typecheck → lint → format → build-cli 
 
 | 日期       | Commit    | 说明                                                                              |
 | ---------- | --------- | --------------------------------------------------------------------------------- |
+| 2026-08-10 | `a8c7c32` | chore: bump version to 0.26.0 — 5 新 Skills + 批判性思维层                         |
+| 2026-08-10 | `df2dede` | feat(skills): codebase-design + to-spec — 深层模块设计 + 规范文档                  |
+| 2026-08-10 | `49166c8` | feat(skills): domain-modeling + triage — 共享语言 + 跨会话工单追踪                 |
+| 2026-08-10 | `e0d1f44` | feat(skills): grill-with-docs — 5 阶段深度需求访谈                                 |
+| 2026-08-10 | `01b9401` | feat(core): 批判性思维自检层 — 5 维分析质量框架                                    |
 | 2026-08-10 | `010e128` | chore: bump version to 0.25.0 — P0/P1/P2 安全对齐                                 |
-| 2026-08-10 | `358d764` | feat(security): P2 完整性对齐 — lifecycle hooks、权限注入、消息超时、工具错误     |
-| 2026-08-10 | `5da7d21` | feat(security): P1 可靠性对齐 — SendMessage截断、PostToolUse消费、阻塞计数器      |
-| 2026-08-10 | `0de566b` | feat(security): P0 安全对齐 — Bash绕过、沙箱逃逸、org策略、worktree隔离、hook绕过 |
-| 2026-08-05 | `e2be832` | feat: Sprint 5 — Rules 系统、Agent Memory 三级、MCP Tool Search、VS Code 扩展     |
-| 2026-08-05 | `8640a42` | chore: auto-format before push                                                    |
-| 2026-08-05 | `8dd6abd` | chore: bump version to 0.10.0 — 五 Sprint 交付                                    |
-| 2026-08-05 | `6a90174` | feat: Sprint 3 — plan mode, 6 permissions, subagent hooks, agent view             |
+| 2026-08-10 | `358d764` | feat(security): P2 完整性对齐                                                     |
+| 2026-08-10 | `5da7d21` | feat(security): P1 可靠性对齐                                                     |
 
 ---
 
@@ -296,6 +296,7 @@ mipham-code 变更（包名/版本）
 
 | 版本  | 日期       | 变更内容                                                                          | 维护人     |
 | ----- | ---------- | --------------------------------------------------------------------------------- | ---------- |
+| 1.7.0 | 2026-08-10 | v0.26.0：5 新 Skills + 批判性思维层，Skills 15→20，需求→交付链路 85% 覆盖          | 技术委员会 |
 | 1.6.0 | 2026-08-10 | v0.25.0：P0/P1/P2 安全对齐 Claude Code v2.1.222→v2.1.226，13 项修复，1020 测试    | 技术委员会 |
 | 1.5.0 | 2026-08-10 | 新增关键约束：任务执行流程（搜索→实现→验证→lint）、高效并行调用、禁止自动提交     | 技术委员会 |
 | 1.4.0 | 2026-08-05 | Sprint 5：Rules 系统、Agent Memory 三级、MCP Tool Search（30 工具）、VS Code 扩展 | 技术委员会 |
