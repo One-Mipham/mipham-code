@@ -185,6 +185,107 @@ export function detectViolations(stderr: string): string[] {
   return violations
 }
 
+/**
+ * Vibe coding: Parse stderr output for error locations (file path + line + column).
+ * Supports common tool formats: TypeScript, ESLint, pytest, Rust, Go, Prettier, etc.
+ * Returns up to 10 unique locations sorted by file then line.
+ */
+interface ErrorLocation {
+  file: string
+  line: number
+  col?: number
+  message?: string
+}
+
+function parseErrorLocations(stderr: string): ErrorLocation[] {
+  const locations: ErrorLocation[] = []
+
+  // TypeScript / ESLint / Prettier: path(line,col): message
+  // e.g., src/foo.ts(42,10): error TS2304: Cannot find name 'foo'
+  const tsPattern = /([^\s(]+)\((\d+),(\d+)\):\s*(.+)/g
+  let match: RegExpExecArray | null
+  let m: RegExpExecArray | null
+  while ((m = tsPattern.exec(stderr)) !== null) {
+    locations.push({
+      file: m[1]!,
+      line: parseInt(m[2]!),
+      col: parseInt(m[3]!),
+      message: (m[4] || '').slice(0, 120),
+    })
+  }
+
+  // pytest / Python: path:line: message
+  // e.g., tests/test_foo.py:42: AssertionError: ...
+  const pyPattern = /([^\s:]+\.py):(\d+):\s*(.+)/g
+  while ((match = pyPattern.exec(stderr)) !== null) {
+    const pm = match
+    locations.push({
+      file: pm[1]!,
+      line: parseInt(pm[2]!),
+      message: (pm[3] || '').slice(0, 120),
+    })
+  }
+
+  // Rust: --> path:line:col
+  // e.g., --> src/main.rs:42:10
+  const rustPattern = /-->\s*([^\s:]+):(\d+):(\d+)/g
+  while ((match = rustPattern.exec(stderr)) !== null) {
+    const rm = match
+    locations.push({
+      file: rm[1]!,
+      line: parseInt(rm[2]!),
+      col: parseInt(rm[3]!),
+    })
+  }
+
+  // Go: path:line:col: message
+  // e.g., ./main.go:42:10: undefined: foo
+  const goPattern = /([^\s:]+\.go):(\d+):(\d+):\s*(.+)/g
+  while ((match = goPattern.exec(stderr)) !== null) {
+    const gm2 = match
+    locations.push({
+      file: gm2[1]!,
+      line: parseInt(gm2[2]!),
+      col: parseInt(gm2[3]!),
+      message: (gm2[4] || '').slice(0, 120),
+    })
+  }
+
+  // Generic: path:line (any file extension)
+  // e.g., src/foo.ts:42
+  const genericPattern = /([^\s:]+\.[a-zA-Z]{1,6}):(\d+)\b/g
+  while ((match = genericPattern.exec(stderr)) !== null) {
+    const gm = match
+    const file = gm[1]!
+    // Skip if we already have this exact location from a more specific pattern
+    const alreadyHave = locations.some(
+      (l) => l.file === file && l.line === parseInt(gm[2]!),
+    )
+    if (!alreadyHave) {
+      locations.push({ file, line: parseInt(match[2]!) })
+    }
+  }
+
+  // Deduplicate and sort: same file+line → keep first
+  const seen = new Set<string>()
+  const unique: ErrorLocation[] = []
+  for (const loc of locations) {
+    const key = `${loc.file}:${loc.line}`
+    if (!seen.has(key)) {
+      seen.add(key)
+      unique.push(loc)
+    }
+  }
+
+  // Sort by file path then line number
+  unique.sort((a, b) => {
+    const fileCmp = a.file.localeCompare(b.file)
+    return fileCmp !== 0 ? fileCmp : a.line - b.line
+  })
+
+  return unique.slice(0, 10)
+}
+
 export const bashTool: ToolDefinition = {
   name: 'Bash',
   description:
@@ -282,6 +383,13 @@ export const bashTool: ToolDefinition = {
         let errorContent = output.slice(0, 5_000)
         if (violations.length > 0) {
           errorContent += '\n\n── Sandbox Violations ──\n' + violations.join('\n')
+        }
+        // Vibe coding fix: auto-parse error locations from stderr
+        const errorLocations = parseErrorLocations(rawStderr)
+        if (errorLocations.length > 0) {
+          errorContent +=
+            '\n\n── Error Locations (for quick fix) ──\n' +
+            errorLocations.map((l) => `  ${l.file}:${l.line}` + (l.col ? `:${l.col}` : '') + (l.message ? ` — ${l.message}` : '')).join('\n')
         }
         return {
           success: false,

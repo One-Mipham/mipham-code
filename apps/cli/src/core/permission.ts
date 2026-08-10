@@ -9,6 +9,53 @@ import type { PermissionRuleEntry } from '../shared/index.ts'
 import { matchBashRule, compileRule } from './permission-rules'
 import { loadPermissionConfig, nextMode, clampMode, MODE_CYCLE } from './permission-config'
 
+/**
+ * Check if a Bash command is a "verification-only" command that should be
+ * auto-approved in acceptEdits mode. These are non-destructive read/check
+ * operations that form the core of the vibe coding edit→test→fix loop.
+ */
+function isVerificationCommand(input: Record<string, unknown>): boolean {
+  const cmd = (input.command as string) || ''
+  // Patterns for verification-only commands (no side effects on codebase)
+  const verifyPatterns = [
+    /\bpnpm\s+test\b/,         // test runner
+    /\bpnpm\s+t\b/,            // shorthand test
+    /\bpnpm\s+typecheck\b/,    // type checking
+    /\bpnpm\s+lint\b/,         // linting
+    /\bpnpm\s+format:check\b/, // format check
+    /\bnpm\s+test\b/,          // npm test
+    /\bnpm\s+run\s+test\b/,    // npm run test
+    /\bvitest\b/,              // vitest runner
+    /\bjest\b/,                // jest runner
+    /\btsc\s+(?!init)/,        // TypeScript compiler (not tsc init)
+    /\btsc\s+--noEmit\b/,      // type check only
+    /\beslint\b/,              // eslint
+    /\bprettier\s+--check\b/,  // prettier check
+    /\bpytest\b/,              // python test runner
+    /\bruff\s+check\b/,        // python linter
+    /\bcargo\s+test\b/,        // rust test
+    /\bcargo\s+check\b/,       // rust check
+    /\bgo\s+test\b/,           // go test
+    /\bgo\s+vet\b/,            // go vet
+    /\bmake\s+test\b/,         // make test
+    /\bgit\s+status\b/,        // git status (read-only)
+    /\bgit\s+diff\b/,          // git diff (read-only)
+    /\bgit\s+log\b/,           // git log (read-only)
+    /\bgit\s+branch\b/,        // git branch (read-only)
+    /\bls\b/,                  // list files
+    /\bcat\b/,                 // read file
+    /\bhead\b/,                // read file start
+    /\btail\b/,                // read file end
+    /\bwhich\b/,               // find binary
+    /\becho\b/,                // print text
+    /\bnode\s+-v\b/,           // node version
+    /\bpython\s+--version\b/,  // python version
+    /\bwhoami\b/,              // current user
+    /\bpwd\b/,                 // current directory
+  ]
+  return verifyPatterns.some((p) => p.test(cmd))
+}
+
 const VALID_MODES: Set<string> = new Set<string>(MODE_CYCLE)
 
 export class PermissionSystem {
@@ -276,7 +323,7 @@ export class PermissionSystem {
     }
 
     // 5. Mode baseline
-    const baseline = this.modeBaseline(tool)
+    const baseline = this.modeBaseline(tool, input)
     if (baseline !== 'mode-baseline') {
       this.checkCache.set(cacheKey, baseline)
       return baseline
@@ -323,21 +370,29 @@ export class PermissionSystem {
     return rule.pattern === tool.name || rule.compiled.test(tool.name)
   }
 
-  private modeBaseline(tool: ToolDefinition): PermissionLevel | 'mode-baseline' {
+  private modeBaseline(
+    tool: ToolDefinition,
+    input?: Record<string, unknown>,
+  ): PermissionLevel | 'mode-baseline' {
     switch (this.mode) {
       case 'default':
         // Delegate to tool.permission (backward compat)
         return 'mode-baseline'
 
       case 'acceptEdits':
-        // Reads + file edits free; Bash requires approval
-        return tool.category === 'file'
-          ? ['Bash'].includes(tool.name)
-            ? 'ask'
-            : 'bypass'
-          : tool.name === 'Bash'
-            ? 'ask'
-            : 'ask'
+        // Reads + file edits free; Bash auto-approved for verification commands
+        if (tool.category === 'file' && tool.name !== 'Bash') {
+          return 'bypass'
+        }
+        if (tool.name === 'Bash') {
+          // Vibe coding fix: auto-approve verification commands
+          // so the edit→test→fix loop isn't interrupted by permission prompts
+          if (input && isVerificationCommand(input)) {
+            return 'bypass'
+          }
+          return 'ask'
+        }
+        return 'ask'
 
       case 'plan':
         // Only reads, no writes or executes
