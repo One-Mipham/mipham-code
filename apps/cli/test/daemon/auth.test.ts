@@ -1,6 +1,6 @@
 // apps/cli/test/daemon/auth.test.ts
 import { describe, it, expect, afterAll } from 'vitest'
-import { generateToken, verifyToken, loadOrCreateToken } from '../../src/daemon/auth'
+import { generateToken, verifyToken, loadOrCreateToken, authMiddleware } from '../../src/daemon/auth'
 import { unlinkSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -43,10 +43,86 @@ describe('Daemon Auth', () => {
     expect(verifyToken(token, '')).toBe(false)
   })
 
-  it('uses constant-time comparison', () => {
+  it('rejects wrong-length token safely', () => {
     // verifyToken uses timing-safe comparison via Bun.password.constantTimeCompare
     const token = generateToken()
     // Wrong length should still fail safely
     expect(verifyToken(token, 'short')).toBe(false)
+  })
+})
+
+describe('authMiddleware', () => {
+  const VALID_TOKEN = 'a'.repeat(64)
+
+  it('allows /api/v1/health without auth', () => {
+    const req = new Request('http://example.com/api/v1/health')
+    const result = authMiddleware(req, VALID_TOKEN)
+    expect(result).toBeNull()
+  })
+
+  it('allows localhost requests without auth — 127.0.0.1', () => {
+    const req = new Request('http://127.0.0.1:3000/api/v1/sessions', {
+      headers: { host: '127.0.0.1:3000' },
+    })
+    const result = authMiddleware(req, VALID_TOKEN)
+    expect(result).toBeNull()
+  })
+
+  it('allows localhost requests without auth — localhost', () => {
+    const req = new Request('http://localhost:3000/api/v1/sessions', {
+      headers: { host: 'localhost:3000' },
+    })
+    const result = authMiddleware(req, VALID_TOKEN)
+    expect(result).toBeNull()
+  })
+
+  it('allows localhost requests without auth — [::1]', () => {
+    const req = new Request('http://[::1]:3000/api/v1/sessions', {
+      headers: { host: '[::1]:3000' },
+    })
+    const result = authMiddleware(req, VALID_TOKEN)
+    expect(result).toBeNull()
+  })
+
+  it('returns 401 when Authorization header is missing', async () => {
+    const req = new Request('http://example.com/api/v1/sessions')
+    const result = authMiddleware(req, VALID_TOKEN)
+    expect(result).not.toBeNull()
+    expect(result!.status).toBe(401)
+    const body = await result!.json()
+    expect(body.ok).toBe(false)
+    expect(body.error).toBe('Missing authorization header')
+  })
+
+  it('returns 401 when Authorization header lacks Bearer prefix', async () => {
+    const req = new Request('http://example.com/api/v1/sessions', {
+      headers: { authorization: 'Basic dGVzdDp0ZXN0' },
+    })
+    const result = authMiddleware(req, VALID_TOKEN)
+    expect(result).not.toBeNull()
+    expect(result!.status).toBe(401)
+    const body = await result!.json()
+    expect(body.ok).toBe(false)
+    expect(body.error).toBe('Missing authorization header')
+  })
+
+  it('returns 403 when token is invalid', async () => {
+    const req = new Request('http://example.com/api/v1/sessions', {
+      headers: { authorization: `Bearer wrong-token` },
+    })
+    const result = authMiddleware(req, VALID_TOKEN)
+    expect(result).not.toBeNull()
+    expect(result!.status).toBe(403)
+    const body = await result!.json()
+    expect(body.ok).toBe(false)
+    expect(body.error).toBe('Invalid token')
+  })
+
+  it('returns null when token is valid', () => {
+    const req = new Request('http://example.com/api/v1/sessions', {
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    })
+    const result = authMiddleware(req, VALID_TOKEN)
+    expect(result).toBeNull()
   })
 })
