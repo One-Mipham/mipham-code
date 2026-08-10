@@ -34,13 +34,10 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
   const [feedback, setFeedback] = useState<string | null>(null)
 
   // Flash a brief feedback message that auto-clears
-  const showFeedback = useCallback(
-    (msg: string) => {
-      setFeedback(msg)
-      setTimeout(() => setFeedback(null), 1800)
-    },
-    [],
-  )
+  const showFeedback = useCallback((msg: string) => {
+    setFeedback(msg)
+    setTimeout(() => setFeedback(null), 1800)
+  }, [])
 
   // Build a flat list of sessions in group order, with group headers
   const flatList = useMemo(() => {
