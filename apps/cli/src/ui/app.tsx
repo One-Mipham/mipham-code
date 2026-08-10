@@ -694,7 +694,8 @@ export function App({
             {/* Mipham-unique modes (extends Claude Code's 3 → 6 modes) */}
             <Box>
               <Text dimColor>
-                {t('ui.status.mipham_modes')}: {PERMISSION_LABELS.plan} · {PERMISSION_LABELS.auto} · {PERMISSION_LABELS.dontAsk}
+                {t('ui.status.mipham_modes')}: {PERMISSION_LABELS.plan} · {PERMISSION_LABELS.auto} ·{' '}
+                {PERMISSION_LABELS.dontAsk}
               </Text>
             </Box>
           </Box>
