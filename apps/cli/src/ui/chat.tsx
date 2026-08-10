@@ -28,6 +28,7 @@ function toolColor(name: string): string {
       return 'white'
     case 'Write':
     case 'Edit':
+    case 'Update':
       return 'red'
     case 'Agent':
     case 'Task':
@@ -59,12 +60,20 @@ const MessageRow = React.memo(
       >
         {msg.toolMeta ? (
           <Box flexDirection="column">
-            <Text color={toolColor(msg.toolMeta.name)}>
-              {msg.toolMeta.collapsed ? '⏺' : '⏺ ▼'} {msg.toolMeta.name}
-              {msg.toolMeta.input ? `(${msg.toolMeta.input.slice(0, 120)})` : ''}
-            </Text>
+            {/* Tool call line: ⏺ ToolName(detail) — Claude Code parity */}
+            {msg.toolMeta.name ? (
+              <Text color={toolColor(msg.toolMeta.name)}>
+                {msg.toolMeta.collapsed ? '⏺' : '⏺ ▼'}{' '}
+                {msg.toolMeta.name}
+                {msg.toolMeta.input ? ` (${msg.toolMeta.input.slice(0, 120)})` : ''}
+              </Text>
+            ) : null}
+            {/* Tool result line: ⎿  summary text */}
             {msg.toolMeta.output ? (
-              <Text dimColor> ⎿ {msg.toolMeta.output.slice(0, 300)}</Text>
+              <Text dimColor>
+                {'  ⎿  '}
+                {msg.toolMeta.output.slice(0, 300)}
+              </Text>
             ) : msg.content && !msg.toolMeta.collapsed ? (
               <Text dimColor>{msg.content}</Text>
             ) : null}

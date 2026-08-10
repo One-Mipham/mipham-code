@@ -44,6 +44,8 @@ export interface ToolMeta {
   input: string
   output?: string
   collapsed: boolean
+  /** Original tool name before Claude Code display renaming (e.g. Write→Update). */
+  originalName?: string
 }
 
 export interface ChatMessage {
@@ -87,7 +89,8 @@ const PERMISSION_COLORS: Record<PermissionMode, string> = {
   bypassPermissions: 'red',
 }
 
-/** Format a tool's input parameters into a compact one-line detail string. */
+/** Format a tool's input parameters into a compact one-line detail string.
+ *  Tool display names follow Claude Code convention: Write/Edit → Update. */
 function formatToolDetail(name: string, input: Record<string, unknown>): string {
   switch (name) {
     case 'Bash':
@@ -95,9 +98,9 @@ function formatToolDetail(name: string, input: Record<string, unknown>): string 
     case 'Read':
       return (input.file_path as string) || ''
     case 'Write':
-      return (input.file_path as string) || ''
+      return (input.file_path as string) || '' // displayed as "Update" in chat
     case 'Edit':
-      return (input.file_path as string) || ''
+      return `${(input.file_path as string) || ''}: ${((input.old_string as string) || '').slice(0, 60)}` // displayed as "Update" in chat
     case 'Grep':
       return (input.pattern as string) || ''
     case 'Glob':
@@ -113,6 +116,12 @@ function formatToolDetail(name: string, input: Record<string, unknown>): string 
     default:
       return JSON.stringify(input).slice(0, 80)
   }
+}
+
+/** Claude Code display name: maps Write/Edit → Update for parity. */
+function toolDisplayName(name: string): string {
+  if (name === 'Write' || name === 'Edit') return 'Update'
+  return name
 }
 
 export function App({
@@ -462,7 +471,12 @@ export function App({
               {
                 role: 'system' as const,
                 content: detail,
-                toolMeta: { name: toolName, input: detail, collapsed: true },
+                toolMeta: {
+                  name: toolDisplayName(toolName),
+                  input: detail,
+                  collapsed: true,
+                  originalName: toolName,
+                },
               },
             ])
             // Flush stream buffer before showing tool card
@@ -475,18 +489,33 @@ export function App({
             setAgentProgress(null)
             // Sync background agents (e.g. Agent tool may have spawned them)
             syncBgAgents()
-            // Only show tool results with meaningful content.
-            // Skip empty results, "(no matches)", and other noise.
             const output = chunk.content ? String(chunk.content).trim() : ''
             if (output && output !== '(no matches)' && output.length > 20) {
-              const firstLine = output.split('\n')[0]!.slice(0, 200)
-              const preview = firstLine.length < output.length ? `${firstLine}...` : firstLine
+              // Generate diff-style summary for file operations (Claude Code parity)
+              let preview: string
+              const isFileOp = chunk.toolUse?.name === 'Write' || chunk.toolUse?.name === 'Edit'
+              if (isFileOp && chunk.toolUse?.input?.file_path) {
+                const filePath = String(chunk.toolUse.input.file_path)
+                const newContent = String(chunk.toolUse.input.content || chunk.toolUse.input.new_string || '')
+                // Count lines added/removed for Write operations
+                const lineCount = newContent.split('\n').length
+                preview = `Updated ${filePath} · ${lineCount} lines`
+              } else {
+                const firstLine = output.split('\n')[0]!.slice(0, 200)
+                preview = firstLine.length < output.length ? `${firstLine}...` : firstLine
+              }
               setMessages((prev) => [
                 ...prev,
                 {
                   role: 'system' as const,
-                  content: `  ⎿  ${preview}`,
-                  toolMeta: { name: '', input: '', output: preview, collapsed: true },
+                  content: preview,
+                  toolMeta: {
+                    name: '',
+                    input: '',
+                    output: preview,
+                    collapsed: true,
+                    originalName: chunk.toolUse?.name,
+                  },
                 },
               ])
             }
