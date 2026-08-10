@@ -24,7 +24,7 @@ import { ContextManager } from './core/context'
 import { QueryEngine } from './core/engine'
 import { ExperienceRuleEngine } from './core/rule-engine.js'
 import { SessionStore } from './core/session-store'
-import type { PermissionLevel } from './shared/types'
+import type { PermissionLevel, MiphamConfig } from './shared/types'
 import { SkillsLoader } from './skills/loader'
 import { PluginManager } from './plugin/plugin-manager'
 import { loadPlugins } from './plugin/plugin-loader'
@@ -42,6 +42,7 @@ import { AgentViewDashboard } from './agent-view/dashboard'
 import { createT } from './i18n-core/t'
 import { detectLocale } from './i18n-core/detect'
 import { I18nProvider } from './i18n-context'
+import { ConfigWizard } from './ui/config-wizard'
 import enUS from './i18n-core/locales/en-US.json' with { type: 'json' }
 import zhCN from './i18n-core/locales/zh-CN.json' with { type: 'json' }
 import type { TranslationMap } from './i18n-core/types'
@@ -109,6 +110,70 @@ async function checkWorkspaceTrust(): Promise<void> {
   } finally {
     rl.close()
   }
+}
+
+// ── SetupGate: first-run wizard → App bridge ──
+
+interface SetupGateProps {
+  needsSetup: boolean
+  engine: QueryEngine
+  config: MiphamConfig
+  defaultProvider: string
+  defaultModel: string
+  lang?: string
+  skillsLoader?: SkillsLoader
+  pluginManager?: PluginManager
+  version?: string
+  sessionId: string
+  agentViewManager?: AgentViewManager
+  locale: string
+  t: (key: string) => string
+}
+
+function SetupGate(props: SetupGateProps) {
+  const [showWizard, setShowWizard] = React.useState(props.needsSetup)
+  const [wizardProvider, setWizardProvider] = React.useState<string | null>(null)
+  const [wizardModel, setWizardModel] = React.useState<string | null>(null)
+
+  // When wizard completes: write config, switch provider, proceed to App
+  const handleWizardComplete = React.useCallback(
+    (wizardConfig: { providerId: string; modelId: string; apiKey: string }) => {
+      // Switch the engine to the newly configured provider
+      try {
+        props.engine.switchProvider(wizardConfig.providerId, wizardConfig.modelId)
+      } catch {
+        // If switch fails (e.g. provider not yet in registry), just use as-is
+      }
+      setWizardProvider(wizardConfig.providerId)
+      setWizardModel(wizardConfig.modelId)
+      setShowWizard(false)
+    },
+    [props.engine],
+  )
+
+  const handleWizardSkip = React.useCallback(() => {
+    setShowWizard(false)
+  }, [])
+
+  if (showWizard) {
+    return React.createElement(ConfigWizard, {
+      onComplete: handleWizardComplete,
+      onSkip: handleWizardSkip,
+    })
+  }
+
+  return React.createElement(App, {
+    engine: props.engine,
+    config: props.config,
+    initialProvider: wizardProvider || props.defaultProvider,
+    initialModel: wizardModel || props.defaultModel,
+    lang: props.lang,
+    skillsLoader: props.skillsLoader,
+    pluginManager: props.pluginManager,
+    version: props.version,
+    sessionId: props.sessionId,
+    agentViewManager: props.agentViewManager,
+  })
 }
 
 export async function runApp(options: RunOptions): Promise<void> {
@@ -481,21 +546,29 @@ export async function runApp(options: RunOptions): Promise<void> {
     }
   })
 
+  // ── First-run detection: show interactive ConfigWizard if no config exists ──
+  const hasUserConfig = existsSync(join(homedir(), '.mipham', 'config.yml'))
+  const hasProjectConfig = existsSync(join(process.cwd(), '.mipham', 'config.yml'))
+  const needsSetup = !hasUserConfig && !hasProjectConfig
+
   const { waitUntilExit } = render(
     React.createElement(I18nProvider, {
       locale,
       t,
-      children: React.createElement(App, {
+      children: React.createElement(SetupGate, {
+        needsSetup,
         engine,
         config,
-        initialProvider: defaultProvider,
-        initialModel: defaultModel,
+        defaultProvider,
+        defaultModel,
         lang: options.lang,
         skillsLoader,
         pluginManager,
         version: options.version,
         sessionId: sessionName,
         agentViewManager,
+        locale,
+        t,
       }),
     }),
   )
