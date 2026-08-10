@@ -63,8 +63,7 @@ const MessageRow = React.memo(
             {/* Tool call line: ⏺ ToolName(detail) — Claude Code parity */}
             {msg.toolMeta.name ? (
               <Text color={toolColor(msg.toolMeta.name)}>
-                {msg.toolMeta.collapsed ? '⏺' : '⏺ ▼'}{' '}
-                {msg.toolMeta.name}
+                {msg.toolMeta.collapsed ? '⏺' : '⏺ ▼'} {msg.toolMeta.name}
                 {msg.toolMeta.input ? ` (${msg.toolMeta.input.slice(0, 120)})` : ''}
               </Text>
             ) : null}

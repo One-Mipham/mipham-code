@@ -496,7 +496,9 @@ export function App({
               const isFileOp = chunk.toolUse?.name === 'Write' || chunk.toolUse?.name === 'Edit'
               if (isFileOp && chunk.toolUse?.input?.file_path) {
                 const filePath = String(chunk.toolUse.input.file_path)
-                const newContent = String(chunk.toolUse.input.content || chunk.toolUse.input.new_string || '')
+                const newContent = String(
+                  chunk.toolUse.input.content || chunk.toolUse.input.new_string || '',
+                )
                 // Count lines added/removed for Write operations
                 const lineCount = newContent.split('\n').length
                 preview = `Updated ${filePath} · ${lineCount} lines`
