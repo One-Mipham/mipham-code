@@ -116,7 +116,11 @@ function isBlocked(command: string): string | null {
   }
   // Also check sanitized first word (catches fullwidth command names after normalization)
   const sanitizedFirstWord = sanitized.trim().split(/\s+/)[0]
-  if (sanitizedFirstWord && sanitizedFirstWord !== firstWord && BLOCKED_COMMANDS.includes(sanitizedFirstWord)) {
+  if (
+    sanitizedFirstWord &&
+    sanitizedFirstWord !== firstWord &&
+    BLOCKED_COMMANDS.includes(sanitizedFirstWord)
+  ) {
     return `Command "${sanitizedFirstWord}" rejected by security policy.`
   }
 
@@ -216,8 +220,9 @@ export const bashTool: ToolDefinition = {
       if (cdMatch) {
         const target = cdMatch[1] || cdMatch[2] || cdMatch[3] || ''
         // Resolve relative to cwd
-        const resolved =
-          target.startsWith('/') ? target : `${ctx.cwd}/${target}`.replace(/\/\.\//g, '/')
+        const resolved = target.startsWith('/')
+          ? target
+          : `${ctx.cwd}/${target}`.replace(/\/\.\//g, '/')
         if (!resolved.startsWith(ctx.cwd) && !resolved.startsWith(worktreeRoot + '/')) {
           return {
             success: false,

@@ -113,12 +113,16 @@ Script format: export const meta = { name, description, phases: [...] }
    */
   private buildPermissionContext(mode: string): string {
     const modeDescriptions: Record<string, string> = {
-      default: 'You are in **default** mode. Tools marked as requiring approval will be blocked. Use Read/Grep/Glob for exploration.',
-      acceptEdits: 'You are in **acceptEdits** mode. File reads and edits are allowed; Bash requires approval.',
+      default:
+        'You are in **default** mode. Tools marked as requiring approval will be blocked. Use Read/Grep/Glob for exploration.',
+      acceptEdits:
+        'You are in **acceptEdits** mode. File reads and edits are allowed; Bash requires approval.',
       plan: 'You are in **plan** mode. Only Read/Grep/Glob are allowed — no file modifications or command execution.',
       auto: 'You are in **auto** mode. Most tools run without approval. If a tool is blocked by security policy or hooks, try a different approach instead of retrying.',
-      dontAsk: 'You are in **dontAsk** mode. All tools blocked unless explicitly allowlisted. Check your allow rules before acting.',
-      bypassPermissions: 'You are in **bypassPermissions** mode. All tools are allowed. Use this power responsibly.',
+      dontAsk:
+        'You are in **dontAsk** mode. All tools blocked unless explicitly allowlisted. Check your allow rules before acting.',
+      bypassPermissions:
+        'You are in **bypassPermissions** mode. All tools are allowed. Use this power responsibly.',
     }
 
     const description = modeDescriptions[mode]

@@ -147,8 +147,7 @@ export class PermissionSystem {
    */
   private resolveAgentMode(agentMode: string): PermissionMode {
     // Normalize aliases
-    const normalized =
-      agentMode === 'bypass' ? 'bypassPermissions' : agentMode
+    const normalized = agentMode === 'bypass' ? 'bypassPermissions' : agentMode
 
     const modeMap: Record<string, PermissionMode> = {
       bypassPermissions: 'bypassPermissions',

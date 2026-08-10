@@ -42,11 +42,7 @@ function isOutsideWorktree(command: string, cwd: string): string | null {
   const worktreeRoot = cwd.substring(0, cwd.indexOf(WORKTREE_MARKER))
 
   // Detect git commands that reference the main checkout path
-  const mainCheckoutPaths = [
-    /\b--work-tree=([^\s]+)/g,
-    /\b--git-dir=([^\s]+)/g,
-    /\b-C\s+([^\s]+)/g,
-  ]
+  const mainCheckoutPaths = [/\b--work-tree=([^\s]+)/g, /\b--git-dir=([^\s]+)/g, /\b-C\s+([^\s]+)/g]
 
   for (const pathPattern of mainCheckoutPaths) {
     let match: RegExpExecArray | null

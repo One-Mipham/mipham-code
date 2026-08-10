@@ -114,10 +114,12 @@ export class QueryEngine {
         for (const msg of messages) {
           // P2-1: Trigger Notification hook for cross-session messages
           if (this.hookEngine) {
-            this.hookEngine.executeNotification(
-              `Cross-session message from ${msg.from}: ${msg.summary}`,
-              this.sessionId,
-            ).catch(() => {})
+            this.hookEngine
+              .executeNotification(
+                `Cross-session message from ${msg.from}: ${msg.summary}`,
+                this.sessionId,
+              )
+              .catch(() => {})
           }
 
           if (policy === 'ask') {
@@ -925,7 +927,10 @@ export class QueryEngine {
       // Run PostToolUse hooks
       if (this.hookEngine) {
         const postResult = await this.hookEngine.executePostToolUse(
-          name, effectiveParams, result, this.sessionId,
+          name,
+          effectiveParams,
+          result,
+          this.sessionId,
         )
         // P1-2: Consume hook result — apply updatedOutput and additionalContext
         if (postResult.updatedOutput) {
@@ -955,11 +960,11 @@ export class QueryEngine {
     } catch (err) {
       // P1-3: Trigger PostToolUseFailure hook on tool execution errors
       if (this.hookEngine) {
-        this.hookEngine.executePostToolUseFailure(
-          name, effectiveParams, String(err), this.sessionId,
-        ).catch(() => {
-          // Hook failures never block error handling
-        })
+        this.hookEngine
+          .executePostToolUseFailure(name, effectiveParams, String(err), this.sessionId)
+          .catch(() => {
+            // Hook failures never block error handling
+          })
       }
 
       // Sanitize error: strip stack traces and internal paths to prevent

@@ -119,16 +119,12 @@ export function createSandbox(
               const ctor = Object.prototype.constructor
               return new Proxy(ctor, {
                 construct() {
-                  throw new Error(
-                    'Dynamic constructor invocation is disabled in workflow sandbox.',
-                  )
+                  throw new Error('Dynamic constructor invocation is disabled in workflow sandbox.')
                 },
                 get(_t, ctorProp) {
                   // Block [].constructor.constructor chain
                   if (ctorProp === 'constructor') {
-                    throw new Error(
-                      'constructor.constructor is disabled in workflow sandbox.',
-                    )
+                    throw new Error('constructor.constructor is disabled in workflow sandbox.')
                   }
                   const val = (ctor as unknown as Record<string, unknown>)[ctorProp as string]
                   return typeof val === 'function'
@@ -145,9 +141,7 @@ export function createSandbox(
         })
       }
       const val = (Object as unknown as Record<string, unknown>)[prop as string]
-      return typeof val === 'function'
-        ? (val as (...args: unknown[]) => unknown).bind(Object)
-        : val
+      return typeof val === 'function' ? (val as (...args: unknown[]) => unknown).bind(Object) : val
     },
   })
 

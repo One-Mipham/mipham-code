@@ -34,8 +34,7 @@ export const sendMessageTool: ToolDefinition = {
     const message = params.message as string
 
     // P1-1: Truncate long summaries instead of rejecting (max 200 chars)
-    const truncatedSummary =
-      summary.length > 200 ? summary.slice(0, 197) + '...' : summary
+    const truncatedSummary = summary.length > 200 ? summary.slice(0, 197) + '...' : summary
 
     const from =
       ctx.sessionId === 'sub-agent'

@@ -235,7 +235,10 @@ export class SubAgent {
       if (!agentDef?.tools) {
         // No explicit allowlist — add Git to disallowedTools
         const existingDisallowed = agentDef?.disallowedTools
-          ? agentDef.disallowedTools.split(',').map(s => s.trim()).filter(Boolean)
+          ? agentDef.disallowedTools
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
           : []
         if (!existingDisallowed.includes('Git')) {
           existingDisallowed.push('Git')
@@ -455,7 +458,9 @@ export class SubAgent {
 
             currentMessages.push({
               role: 'assistant' as const,
-              content: [{ type: 'tool_use' as const, id: tu.id, name: tu.name, input: effectiveInput }],
+              content: [
+                { type: 'tool_use' as const, id: tu.id, name: tu.name, input: effectiveInput },
+              ],
             })
             currentMessages.push({
               role: 'user' as const,
@@ -463,21 +468,20 @@ export class SubAgent {
                 {
                   type: 'tool_result' as const,
                   tool_use_id: tu.id,
-                  content: displayResult.success ? displayResult.content : displayResult.error || displayResult.content,
+                  content: displayResult.success
+                    ? displayResult.content
+                    : displayResult.error || displayResult.content,
                 },
               ],
             })
           } catch (err) {
             // ── P0-5: Run PostToolUseFailure hooks ──
             if (this.hookEngine) {
-              this.hookEngine.executePostToolUseFailure(
-                tu.name,
-                effectiveInput,
-                String(err),
-                'sub-agent',
-              ).catch(() => {
-                // Hook failures never block execution
-              })
+              this.hookEngine
+                .executePostToolUseFailure(tu.name, effectiveInput, String(err), 'sub-agent')
+                .catch(() => {
+                  // Hook failures never block execution
+                })
             }
 
             currentMessages.push({
