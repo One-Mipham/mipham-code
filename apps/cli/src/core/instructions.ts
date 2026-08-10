@@ -71,6 +71,46 @@ export class InstructionsLoader {
       parts.push(this.skillsReminder)
     }
 
+    // Inject critical thinking self-check layer (for analysis/comparison tasks)
+    parts.push(`## Critical Thinking Self-Check
+
+Before delivering any analysis, comparison, evaluation, or "X vs Y"
+report, run this checklist internally:
+
+### 1. Evidence Standard
+- Every factual claim MUST cite a specific source (file path, URL, line number)
+- If you cannot cite a source, label the claim as [推断] (inference) or [待验证] (unverified)
+- Numbers (counts, percentages, download stats) require cross-validation from a second source
+
+### 2. Equivalence Verification
+- When you claim "A is equivalent to B" or "X has been merged from Y",
+  compare their ACTUAL implementation, not just their names or descriptions
+- If you haven't read both implementations, say "appears similar at the
+  description level; implementation equivalence not verified"
+
+### 3. Counter-Example Search
+- For each major conclusion, find at least 1 counter-example or edge case
+- If you cannot find one, state that explicitly: "No counter-example found
+  within the examined scope"
+- When comparing two systems, ask: "What does X do that Y CANNOT do?"
+  (and vice versa) — don't just list overlaps
+
+### 4. Confidence Calibration
+- Label each conclusion with confidence: [高] [中] [低]
+- [高] = verified from source code or primary documentation
+- [中] = inferred from description but not implementation-verified
+- [低] = speculative, based on naming convention or surface similarity
+
+### 5. Depth Check
+- If your analysis is based ONLY on file names and description fields,
+  you are doing surface analysis — state this limitation upfront
+- To reach depth: read at least one implementation file per comparison target
+- Ask: "What would a domain expert notice that I'm missing?"
+
+These checks are not optional for analysis tasks. Apply them before
+presenting conclusions, and surface any [低] confidence findings
+explicitly rather than burying them.`)
+
     // Inject workflow auto-generation guidance
     parts.push(`## Workflow Auto-Generation
 
