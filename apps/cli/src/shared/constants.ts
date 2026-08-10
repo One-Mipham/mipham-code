@@ -363,6 +363,14 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     status: 'upcoming',
   },
   {
+    id: 'ollama',
+    name: 'Ollama (本地)',
+    protocol: 'openai-compatible' as const,
+    baseUrl: 'http://localhost:11434/v1',
+    apiKey: 'ollama-local',
+    models: [],  // 动态发现，初值为空
+  },
+  {
     id: 'openai',
     name: 'OpenAI',
     protocol: 'openai-compatible',
@@ -443,6 +451,19 @@ export const PROTOCOL_LABELS: Record<string, string> = {
 }
 
 export const TOOL_CATEGORIES = ['file', 'exec', 'agent', 'network', 'system', 'artifact'] as const
+
+/** 预置 Ollama 模型 — 与 ollama list 结果合并去重后展示 */
+export const OLLAMA_PRESET_MODELS = [
+  { id: 'om-V5-Flash',     source: 'MiphamAI' },
+  { id: 'om-V5-Pro',       source: 'MiphamAI' },
+  { id: 'om-V5-Visual',    source: 'MiphamAI' },
+  { id: 'om-V5-Apex',      source: 'MiphamAI' },
+  { id: 'deepseek-r1:70b', source: '热门' },
+  { id: 'deepseek-v3',     source: '热门' },
+  { id: 'qwen2.5:72b',     source: '热门' },
+  { id: 'qwen3',           source: '热门' },
+] as const
+
 export const CONFIG_FILE_NAME = 'config.yml'
 export const MIPHAM_DIR = '.mipham'
 export const USER_CONFIG_DIR = '.mipham'
