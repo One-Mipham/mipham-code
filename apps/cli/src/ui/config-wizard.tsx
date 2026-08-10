@@ -29,9 +29,7 @@ interface Props {
 
 // ── Constants ──
 
-const CLOUD_PROVIDERS = DEFAULT_PROVIDERS.filter(
-  (p) => p.id !== 'ollama' && p.id !== 'mipham',
-)
+const CLOUD_PROVIDERS = DEFAULT_PROVIDERS.filter((p) => p.id !== 'ollama' && p.id !== 'mipham')
 
 const SELECTED_COLOR = 'cyan'
 
@@ -164,14 +162,35 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
         return
       }
       // Go back one step
-      if (step === 'mode') { goStep('welcome'); return }
-      if (step === 'provider') { goStep('mode'); return }
-      if (step === 'model') { goStep('provider'); return }
-      if (step === 'apikey') { goStep('model'); return }
-      if (step === 'ollama') { goStep('mode'); return }
+      if (step === 'mode') {
+        goStep('welcome')
+        return
+      }
+      if (step === 'provider') {
+        goStep('mode')
+        return
+      }
+      if (step === 'model') {
+        goStep('provider')
+        return
+      }
+      if (step === 'apikey') {
+        goStep('model')
+        return
+      }
+      if (step === 'ollama') {
+        goStep('mode')
+        return
+      }
       if (step === 'confirm') {
-        if (mode === 'cloud') { goStep('apikey'); return }
-        if (mode === 'local') { goStep('ollama'); return }
+        if (mode === 'cloud') {
+          goStep('apikey')
+          return
+        }
+        if (mode === 'local') {
+          goStep('ollama')
+          return
+        }
       }
       return
     }
@@ -248,7 +267,9 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
     <Box flexDirection="column" padding={1}>
       {/* Header */}
       <Box marginBottom={1}>
-        <Text color="#FFD700" bold>Mipham Code</Text>
+        <Text color="#FFD700" bold>
+          Mipham Code
+        </Text>
         <Text dimColor> — 配置向导</Text>
       </Box>
       <Box marginBottom={1}>
@@ -259,7 +280,9 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
       {step === 'welcome' && (
         <Box flexDirection="column">
           <Box marginBottom={1}>
-            <Text bold color="cyan">欢迎使用 Mipham Code！</Text>
+            <Text bold color="cyan">
+              欢迎使用 Mipham Code！
+            </Text>
           </Box>
           <Text>在开始之前，需要先配置 AI 模型连接。</Text>
           <Text>此向导只需 1 分钟，需要您准备好 API Key。</Text>
@@ -284,17 +307,17 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
               {cursor === 0 ? '▶' : ' '} 🌐 云端 AI 模型（推荐）
             </Text>
           </Box>
-          <Text dimColor>   Claude · DeepSeek · Gemini · 豆包 · Qwen · 混元 · OpenAI</Text>
+          <Text dimColor> Claude · DeepSeek · Gemini · 豆包 · Qwen · 混元 · OpenAI</Text>
 
           <Box marginTop={2} marginBottom={1}>
             <Text color={cursor === 1 ? SELECTED_COLOR : undefined}>
               {cursor === 1 ? '▶' : ' '} 🖥️ 本地模型（Ollama）
             </Text>
           </Box>
-          <Text dimColor>   需要提前安装 Ollama 并下载模型</Text>
+          <Text dimColor> 需要提前安装 Ollama 并下载模型</Text>
 
           <Box marginTop={2}>
-            <Text dimColor>↑↓ 选择  ·  Enter 确认  ·  Esc 返回</Text>
+            <Text dimColor>↑↓ 选择 · Enter 确认 · Esc 返回</Text>
           </Box>
         </Box>
       )}
@@ -310,13 +333,11 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
               <Text color={i === cursor ? SELECTED_COLOR : undefined}>
                 {i === cursor ? '▶' : '  '} {p.name}
               </Text>
-              <Text dimColor>
-                {' '}({p.models.filter((m) => m.status === 'active').length} 个模型)
-              </Text>
+              <Text dimColor> ({p.models.filter((m) => m.status === 'active').length} 个模型)</Text>
             </Box>
           ))}
           <Box marginTop={1}>
-            <Text dimColor>↑↓ 选择  ·  Enter 确认  ·  Esc 返回</Text>
+            <Text dimColor>↑↓ 选择 · Enter 确认 · Esc 返回</Text>
           </Box>
         </Box>
       )}
@@ -334,11 +355,11 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
               <Text color={i === cursor ? SELECTED_COLOR : undefined}>
                 {i === cursor ? '▶' : '  '} {m.name}
               </Text>
-              <Text dimColor>  ({m.id})</Text>
+              <Text dimColor> ({m.id})</Text>
             </Box>
           ))}
           <Box marginTop={1}>
-            <Text dimColor>↑↓ 选择  ·  Enter 确认  ·  Esc 返回</Text>
+            <Text dimColor>↑↓ 选择 · Enter 确认 · Esc 返回</Text>
           </Box>
         </Box>
       )}
@@ -349,9 +370,7 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
           <Box marginBottom={1}>
             <Text bold>粘贴 API Key：</Text>
           </Box>
-          <Text dimColor>
-            提供商：{DEFAULT_PROVIDERS.find((p) => p.id === providerId)?.name}
-          </Text>
+          <Text dimColor>提供商：{DEFAULT_PROVIDERS.find((p) => p.id === providerId)?.name}</Text>
           <Text dimColor>
             模型：{getActiveModels(providerId!).find((m) => m.id === modelId)?.name}
           </Text>
@@ -370,7 +389,7 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
             />
           </Box>
           <Box marginTop={1}>
-            <Text dimColor>Enter 继续  ·  Esc 返回选模型</Text>
+            <Text dimColor>Enter 继续 · Esc 返回选模型</Text>
           </Box>
         </Box>
       )}
@@ -407,7 +426,7 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
             />
           </Box>
           <Box marginTop={1}>
-            <Text dimColor>Enter 继续  ·  Esc 返回</Text>
+            <Text dimColor>Enter 继续 · Esc 返回</Text>
           </Box>
         </Box>
       )}
@@ -416,23 +435,21 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
       {step === 'confirm' && (
         <Box flexDirection="column">
           <Box marginBottom={1}>
-            <Text bold color="cyan">配置确认：</Text>
+            <Text bold color="cyan">
+              配置确认：
+            </Text>
           </Box>
           <Text>连接方式：{mode === 'cloud' ? '🌐 云端' : '🖥️ 本地'}</Text>
           {mode === 'cloud' && (
             <>
-              <Text>
-                提供商：{DEFAULT_PROVIDERS.find((p) => p.id === providerId)?.name}
-              </Text>
+              <Text>提供商：{DEFAULT_PROVIDERS.find((p) => p.id === providerId)?.name}</Text>
               <Text>模型：{modelId}</Text>
               <Text>
                 API Key：{apiKey.slice(0, 8)}...{apiKey.slice(-4)}
               </Text>
             </>
           )}
-          {mode === 'local' && (
-            <Text>Ollama 模型：{ollamaModel.trim() || 'llama3.2'}</Text>
-          )}
+          {mode === 'local' && <Text>Ollama 模型：{ollamaModel.trim() || 'llama3.2'}</Text>}
           <Box marginTop={1}>
             <Text dimColor>配置文件将保存到 ~/.mipham/config.yml</Text>
           </Box>
@@ -454,7 +471,9 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
       {step === 'done' && (
         <Box flexDirection="column">
           <Box marginBottom={1}>
-            <Text color="green" bold>✅ 配置完成！</Text>
+            <Text color="green" bold>
+              ✅ 配置完成！
+            </Text>
           </Box>
           <Text>Mipham Code 正在启动...</Text>
         </Box>
