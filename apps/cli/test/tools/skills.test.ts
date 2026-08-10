@@ -441,10 +441,10 @@ describe('Built-in skills', () => {
     loader.loadBuiltin(projectRoot)
 
     const all = loader.list()
-    expect(all.length).toBe(15) // 12 standard + 3 mipham
+    expect(all.length).toBe(18) // 15 standard + 3 mipham
 
     const standard = loader.listByType('standard')
-    expect(standard.length).toBe(12)
+    expect(standard.length).toBe(15)
 
     const mipham = loader.listByType('mipham')
     expect(mipham.length).toBe(3)
@@ -477,10 +477,13 @@ describe('Built-in skills', () => {
     expect(names).toEqual([
       'code-review',
       'compassionate-communication',
+      'debug-loop',
       'doc-generator',
       'github-ops',
+      'implement',
       'memory',
       'mipham-code-setup',
+      'research',
       'security-review',
       'self-review',
       'superpower',
