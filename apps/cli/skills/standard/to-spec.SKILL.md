@@ -48,17 +48,21 @@ created: 2026-08-10
 ## Scope
 
 ### In Scope
+
 - {What we're building}
 
 ### Out of Scope (Explicit)
+
 - {What we're NOT building — prevents scope creep}
 
 ## Requirements
 
 ### Functional
+
 - **{Requirement}**: {Description}. Acceptance: {measurable criterion}.
 
 ### Non-Functional
+
 - **Performance**: {latency, throughput targets}
 - **Security**: {auth, data protection, threat model}
 - **Scale**: {expected volume, growth projections}
@@ -88,6 +92,7 @@ created: 2026-08-10
 ### Step 1: Extract from Conversation
 
 Scan the conversation history for:
+
 - Decisions made (explicit and implicit)
 - Terms defined (candidates for CONTEXT.md)
 - Edge cases discussed
@@ -97,6 +102,7 @@ Scan the conversation history for:
 ### Step 2: Fill Gaps
 
 For each gap you find:
+
 - Edge cases not discussed → flag as Open Questions
 - Terms used but not defined → propose definitions
 - Assumptions not stated → make them explicit
@@ -104,6 +110,7 @@ For each gap you find:
 ### Step 3: Validate with User
 
 Present the spec and ask:
+
 1. "Does this match your understanding?"
 2. "What's missing?"
 3. "What's wrong?"

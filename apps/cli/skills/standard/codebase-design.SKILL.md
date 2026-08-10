@@ -63,6 +63,7 @@ When evaluating a module design, run through these:
 ### Check 1: Interface Size
 
 Count the effective parameters:
+
 - Required parameters + optional parameters with non-trivial defaults
 - Configuration methods that MUST be called before use
 - Implicit dependencies (global state, env vars, singletons)
@@ -74,6 +75,7 @@ Count the effective parameters:
 ### Check 2: Information Hiding
 
 Does the module expose information that callers don't need?
+
 - Internal data structures leaked through the interface
 - Implementation details exposed via parameter types
 - Error types that reveal internal architecture
@@ -85,6 +87,7 @@ Does the module expose information that callers don't need?
 ### Check 3: Abstraction Quality
 
 Does the module represent a single, coherent idea?
+
 - Can you describe what it does in one sentence without "and"?
 - Would a new team member guess where to find this functionality?
 - If you remove the module, does exactly one concept go missing?
@@ -96,6 +99,7 @@ Does the module represent a single, coherent idea?
 ### Check 4: General-Purpose vs Special-Purpose
 
 Is the module solving the general case or a specific use case?
+
 - Would the interface work if requirements changed slightly?
 - Are there hardcoded assumptions that could be parameters?
 - Is the module useful in contexts other than its creator imagined?
@@ -107,6 +111,7 @@ Is the module solving the general case or a specific use case?
 ### Check 5: Seam Placement
 
 Where you split modules matters as much as what they do.
+
 - Does the split happen at a natural boundary?
 - Are there circular dependencies across the seam?
 - Can each side be tested independently?
@@ -122,6 +127,7 @@ Where you split modules matters as much as what they do.
 Scan the codebase for these patterns:
 
 ### Shallow Pass-Through
+
 ```typescript
 // Shallow — just delegates with no added value
 function getUser(id: string) {
@@ -141,7 +147,9 @@ function getUser(id: string, ctx: RequestContext) {
 ```
 
 ### Temporal Decomposition
+
 When a module's methods must be called in a specific order, the interface is too wide.
+
 ```typescript
 // Shallow — caller manages lifecycle
 const conn = new Connection()
@@ -157,16 +165,18 @@ conn.send(data)
 ```
 
 ### Overexposure
+
 When internal types leak through the public API:
+
 ```typescript
 // Shallow — exposes ORM internals
 interface UserService {
-  findUser(id: string): Promise<PrismaUser | null>  // ❌ PrismaUser is internal
+  findUser(id: string): Promise<PrismaUser | null> // ❌ PrismaUser is internal
 }
 
 // Deep — owns its types
 interface UserService {
-  findUser(id: string): Promise<User | null>  // ✅ User is a domain type
+  findUser(id: string): Promise<User | null> // ✅ User is a domain type
 }
 ```
 
