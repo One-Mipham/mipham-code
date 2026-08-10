@@ -21,7 +21,15 @@ import { execSync } from 'node:child_process'
 // ── Types ──
 
 interface WizardState {
-  step: 'welcome' | 'mode' | 'cloud-provider' | 'cloud-model' | 'cloud-key' | 'local-ollama' | 'confirm' | 'done'
+  step:
+    | 'welcome'
+    | 'mode'
+    | 'cloud-provider'
+    | 'cloud-model'
+    | 'cloud-key'
+    | 'local-ollama'
+    | 'confirm'
+    | 'done'
   mode: 'local' | 'cloud' | null
   providerId: string | null
   modelId: string | null
@@ -39,9 +47,7 @@ interface Props {
 // ── Helpers ──
 
 /** Filter to cloud-only providers (exclude ollama/mipham local-only). */
-const CLOUD_PROVIDERS = DEFAULT_PROVIDERS.filter(
-  (p) => p.id !== 'ollama' && p.id !== 'mipham',
-)
+const CLOUD_PROVIDERS = DEFAULT_PROVIDERS.filter((p) => p.id !== 'ollama' && p.id !== 'mipham')
 
 /** Get active models for a provider. */
 function getModels(providerId: string): ModelInfo[] {
@@ -72,7 +78,6 @@ function writeConfig(providerId: string, modelId: string, apiKey: string): void 
     ...(provider?.baseUrl ? [`    baseUrl: ${provider.baseUrl}`] : []),
     `    apiKey: ${apiKey}`,
     `    models:`,
-
   ]
 
   const models = getModels(providerId)
@@ -129,26 +134,35 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
     setState((s) => ({ ...s, step, error: null }))
   }, [])
 
-  const setMode = useCallback((mode: 'local' | 'cloud') => {
-    setState((s) => ({ ...s, mode }))
-    if (mode === 'cloud') {
-      goTo('cloud-provider')
-    } else {
-      const status = checkOllama()
-      setOllamaStatus(status)
-      goTo('local-ollama')
-    }
-  }, [goTo])
+  const setMode = useCallback(
+    (mode: 'local' | 'cloud') => {
+      setState((s) => ({ ...s, mode }))
+      if (mode === 'cloud') {
+        goTo('cloud-provider')
+      } else {
+        const status = checkOllama()
+        setOllamaStatus(status)
+        goTo('local-ollama')
+      }
+    },
+    [goTo],
+  )
 
-  const selectProvider = useCallback((providerId: string) => {
-    setState((s) => ({ ...s, providerId }))
-    goTo('cloud-model')
-  }, [goTo])
+  const selectProvider = useCallback(
+    (providerId: string) => {
+      setState((s) => ({ ...s, providerId }))
+      goTo('cloud-model')
+    },
+    [goTo],
+  )
 
-  const selectModel = useCallback((modelId: string) => {
-    setState((s) => ({ ...s, modelId }))
-    goTo('cloud-key')
-  }, [goTo])
+  const selectModel = useCallback(
+    (modelId: string) => {
+      setState((s) => ({ ...s, modelId }))
+      goTo('cloud-key')
+    },
+    [goTo],
+  )
 
   const confirmApiKey = useCallback(() => {
     const key = inputValue.trim()
@@ -206,9 +220,12 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
 
     // Cloud provider / model selection (list navigation)
     if (state.step === 'cloud-provider' || state.step === 'cloud-model') {
-      const items = state.step === 'cloud-provider'
-        ? CLOUD_PROVIDERS
-        : state.providerId ? getModels(state.providerId) : []
+      const items =
+        state.step === 'cloud-provider'
+          ? CLOUD_PROVIDERS
+          : state.providerId
+            ? getModels(state.providerId)
+            : []
 
       if (items.length === 0) return
 
@@ -268,7 +285,9 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
     <Box flexDirection="column" padding={1}>
       {/* Header */}
       <Box marginBottom={1}>
-        <Text color="#FFD700" bold>Mipham Code</Text>
+        <Text color="#FFD700" bold>
+          Mipham Code
+        </Text>
         <Text dimColor> — 配置向导</Text>
       </Box>
 
@@ -280,7 +299,9 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
       {state.step === 'welcome' && (
         <Box flexDirection="column">
           <Box marginBottom={1}>
-            <Text bold color="cyan">欢迎使用 Mipham Code！</Text>
+            <Text bold color="cyan">
+              欢迎使用 Mipham Code！
+            </Text>
           </Box>
           <Box marginBottom={1}>
             <Text>在开始之前，需要先配置 AI 模型连接。</Text>
@@ -306,7 +327,7 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
             </Text>
           </Box>
           <Box marginBottom={1}>
-            <Text dimColor>   Claude · DeepSeek · Gemini · 豆包 · Qwen · 混元 · OpenAI</Text>
+            <Text dimColor> Claude · DeepSeek · Gemini · 豆包 · Qwen · 混元 · OpenAI</Text>
           </Box>
           <Box marginBottom={1}>
             <Text color={selectedIdx === 1 ? selectedColor : dimColor}>
@@ -314,10 +335,10 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
             </Text>
           </Box>
           <Box marginBottom={1}>
-            <Text dimColor>   需要提前安装 Ollama 并下载模型</Text>
+            <Text dimColor> 需要提前安装 Ollama 并下载模型</Text>
           </Box>
           <Box marginTop={1}>
-            <Text dimColor>↑↓ 选择  ·  Enter 确认  ·  Esc 跳过</Text>
+            <Text dimColor>↑↓ 选择 · Enter 确认 · Esc 跳过</Text>
           </Box>
         </Box>
       )}
@@ -333,11 +354,11 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
               <Text color={i === selectedIdx ? selectedColor : undefined}>
                 {i === selectedIdx ? '▶' : ' '} {p.name}
               </Text>
-              <Text dimColor>  ({p.models.filter((m) => m.status === 'active').length} 个模型)</Text>
+              <Text dimColor> ({p.models.filter((m) => m.status === 'active').length} 个模型)</Text>
             </Box>
           ))}
           <Box marginTop={1}>
-            <Text dimColor>↑↓ 选择  ·  Enter 确认  ·  Esc 返回</Text>
+            <Text dimColor>↑↓ 选择 · Enter 确认 · Esc 返回</Text>
           </Box>
         </Box>
       )}
@@ -355,11 +376,11 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
               <Text color={i === selectedIdx ? selectedColor : undefined}>
                 {i === selectedIdx ? '▶' : ' '} {m.name}
               </Text>
-              <Text dimColor>  ({m.id})</Text>
+              <Text dimColor> ({m.id})</Text>
             </Box>
           ))}
           <Box marginTop={1}>
-            <Text dimColor>↑↓ 选择  ·  Enter 确认  ·  Esc 返回</Text>
+            <Text dimColor>↑↓ 选择 · Enter 确认 · Esc 返回</Text>
           </Box>
         </Box>
       )}
@@ -395,7 +416,7 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
             />
           </Box>
           <Box marginTop={1}>
-            <Text dimColor>Enter 确认  ·  Esc 返回</Text>
+            <Text dimColor>Enter 确认 · Esc 返回</Text>
           </Box>
         </Box>
       )}
@@ -424,9 +445,7 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
             </Box>
           )}
           <Box marginBottom={1}>
-            <Text dimColor>
-              请输入 Ollama 模型名称（如 llama3.2, qwen2.5, deepseek-r1）：
-            </Text>
+            <Text dimColor>请输入 Ollama 模型名称（如 llama3.2, qwen2.5, deepseek-r1）：</Text>
           </Box>
           <Box>
             <Text color="yellow">🖥️ </Text>
@@ -447,7 +466,9 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
       {state.step === 'confirm' && (
         <Box flexDirection="column">
           <Box marginBottom={1}>
-            <Text bold color="cyan">配置确认：</Text>
+            <Text bold color="cyan">
+              配置确认：
+            </Text>
           </Box>
           <Box marginBottom={1}>
             <Text>连接方式：{state.mode === 'cloud' ? '🌐 云端' : '🖥️ 本地'}</Text>
@@ -459,7 +480,9 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
             <Text>模型：{state.modelId}</Text>
           </Box>
           <Box marginBottom={1}>
-            <Text>API Key：{state.apiKey.slice(0, 8)}...{state.apiKey.slice(-4)}</Text>
+            <Text>
+              API Key：{state.apiKey.slice(0, 8)}...{state.apiKey.slice(-4)}
+            </Text>
           </Box>
           <Box marginBottom={1}>
             <Text dimColor>配置文件将保存到 ~/.mipham/config.yml</Text>
@@ -473,7 +496,7 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
             <Text color="yellow">按 Enter 保存并开始 →</Text>
           </Box>
           <Box marginTop={1}>
-            <Text dimColor>Backspace 返回修改  ·  Esc 跳过配置</Text>
+            <Text dimColor>Backspace 返回修改 · Esc 跳过配置</Text>
           </Box>
         </Box>
       )}
@@ -482,7 +505,9 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
       {state.step === 'done' && (
         <Box flexDirection="column">
           <Box marginBottom={1}>
-            <Text color="green" bold>✅ 配置完成！</Text>
+            <Text color="green" bold>
+              ✅ 配置完成！
+            </Text>
           </Box>
           <Box marginBottom={1}>
             <Text>Mipham Code 正在启动...</Text>
