@@ -6,6 +6,8 @@ export default defineConfig({
     alias: {
       // Redirect 'bun' imports to our Node.js-compatible mock
       bun: resolve(__dirname, 'test/__mocks__/bun.ts'),
+      // Redirect 'bun:sqlite' to a shim wrapping node:sqlite DatabaseSync
+      'bun:sqlite': resolve(__dirname, 'test/__mocks__/bun-sqlite.ts'),
     },
   },
   test: {

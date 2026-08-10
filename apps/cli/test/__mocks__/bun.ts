@@ -126,4 +126,31 @@ export function $(strings: TemplateStringsArray, ...values: unknown[]) {
   return chain
 }
 
+// ── Bun server types (used by daemon server.ts) ─────────────────────────
+export interface ServerWebSocket<T = undefined> {
+  readonly data: T
+  send(message: string | ArrayBuffer | Uint8Array): number
+  close(code?: number, reason?: string): void
+}
+
+export interface Server<WebSocketData = undefined> {
+  port: number
+  hostname: string
+  development: boolean
+  pendingRequests: number
+  pendingWebSockets: number
+  stop(closeActiveConnections?: boolean): void
+  ref(): void
+  unref(): void
+  reload(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    options: any,
+  ): Server<WebSocketData>
+  fetch(request: Request | string): Response | Promise<Response>
+  upgrade(
+    req: Request,
+    options?: { data?: WebSocketData; headers?: Record<string, string> },
+  ): boolean
+}
+
 export default { Glob, $ }
