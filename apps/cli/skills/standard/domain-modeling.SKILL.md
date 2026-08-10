@@ -13,7 +13,7 @@ allowed-tools:
 
 # Domain Modeling — Continuous Shared Language
 
-Actively build and sharpen the project's domain model as you work. This is the *active* discipline — challenging terms, inventing edge-case scenarios, and writing the glossary and decisions down the moment they crystallize. (Merely *reading* `CONTEXT.md` for vocabulary is not this skill — that's a one-line habit any skill can do. This skill is for when you're changing the model, not just consuming it.)
+Actively build and sharpen the project's domain model as you work. This is the _active_ discipline — challenging terms, inventing edge-case scenarios, and writing the glossary and decisions down the moment they crystallize. (Merely _reading_ `CONTEXT.md` for vocabulary is not this skill — that's a one-line habit any skill can do. This skill is for when you're changing the model, not just consuming it.)
 
 ## File Structure
 
@@ -64,6 +64,7 @@ When a term is resolved, update `CONTEXT.md` right there. Don't batch — captur
 ### Offer ADRs Sparingly
 
 Only create an ADR when ALL three are true:
+
 1. **Hard to reverse** — changing your mind later has real cost
 2. **Surprising without context** — a future reader would wonder "why?"
 3. **The result of a real trade-off** — there were genuine alternatives
@@ -104,6 +105,7 @@ _Avoid_: {alternative terms that should not be used}
 Number sequentially (`docs/adr/0001-slug.md`, `0002-slug.md`, ...).
 
 Optional sections (only when they add value):
+
 - **Status** frontmatter: `proposed | accepted | deprecated | superseded by ADR-NNNN`
 - **Considered Options**: rejected alternatives worth remembering
 - **Consequences**: non-obvious downstream effects

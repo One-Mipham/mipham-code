@@ -44,29 +44,32 @@ tags:
 ---
 
 ## Description
+
 Add JWT-based authentication with refresh token rotation.
 
 ## Acceptance Criteria
+
 - [ ] Login endpoint returns access + refresh tokens
 - [ ] Refresh endpoint rotates tokens
 - [ ] Invalid tokens return 401
 - [ ] Rate limiting on login attempts
 
 ## Notes
+
 - OAuth not in scope for T-001 (punted to T-005)
 ```
 
 ### Status Values
 
-| Status | Meaning |
-|--------|---------|
-| `backlog` | Not yet planned for any session |
-| `planned` | Scoped and ready to work |
-| `in-progress` | Currently being worked on |
-| `review` | Implementation done, awaiting verification |
-| `done` | Verified and merged |
-| `blocked` | Cannot proceed due to dependency |
-| `wontfix` | Decided not to do |
+| Status        | Meaning                                    |
+| ------------- | ------------------------------------------ |
+| `backlog`     | Not yet planned for any session            |
+| `planned`     | Scoped and ready to work                   |
+| `in-progress` | Currently being worked on                  |
+| `review`      | Implementation done, awaiting verification |
+| `done`        | Verified and merged                        |
+| `blocked`     | Cannot proceed due to dependency           |
+| `wontfix`     | Decided not to do                          |
 
 ---
 
@@ -118,6 +121,7 @@ When starting a new session, check for continuity:
 ### Phase 4: Ticket Lifecycle
 
 When working on a ticket:
+
 - Mark it `in-progress` when you start
 - Mark it `review` when implementation is done
 - Mark it `done` after verification (tests pass, typecheck clean)
