@@ -1,4 +1,5 @@
 import type { ToolDefinition, CredentialMaskingConfig } from '../../shared/index.ts'
+import { sanitizeCommand } from '../../shared/sanitize.ts'
 
 // Injected at startup — set via index.tsx
 let credentialConfig: CredentialMaskingConfig | undefined
@@ -105,16 +106,23 @@ function normalizeEscapes(command: string): string {
 function isBlocked(command: string): string | null {
   // Normalize ANSI-C escape sequences for defense-in-depth
   const normalized = normalizeEscapes(command)
+  // P0-1: Also sanitize for permission check (strips invisible chars, normalizes homoglyphs)
+  const sanitized = sanitizeCommand(command)
 
-  // Check exact blocked commands (on normalized command)
+  // Check exact blocked commands (on normalized + sanitized)
   const firstWord = normalized.trim().split(/\s+/)[0]
   if (firstWord && BLOCKED_COMMANDS.includes(firstWord)) {
     return `Command "${firstWord}" rejected by security policy.`
   }
+  // Also check sanitized first word (catches fullwidth command names after normalization)
+  const sanitizedFirstWord = sanitized.trim().split(/\s+/)[0]
+  if (sanitizedFirstWord && sanitizedFirstWord !== firstWord && BLOCKED_COMMANDS.includes(sanitizedFirstWord)) {
+    return `Command "${sanitizedFirstWord}" rejected by security policy.`
+  }
 
-  // Check dangerous patterns (on both original and normalized)
+  // Check dangerous patterns (on original, normalized, and sanitized)
   for (const pattern of BLOCKED_PATTERNS) {
-    if (pattern.test(command) || pattern.test(normalized)) {
+    if (pattern.test(command) || pattern.test(normalized) || pattern.test(sanitized)) {
       return `Command rejected by security policy. Pattern matched: ${pattern.source.slice(0, 40)}...`
     }
   }
@@ -197,6 +205,30 @@ export const bashTool: ToolDefinition = {
   async execute(params, ctx) {
     const command = params.command as string
     const timeout = Math.min((params.timeout as number) || 120_000, 600_000)
+
+    // P0-4: Worktree isolation — block cd escape attempts
+    const WORKTREE_MARKER = '.claude/worktrees/'
+    if (ctx.cwd.includes(WORKTREE_MARKER)) {
+      const worktreeRoot = ctx.cwd.substring(0, ctx.cwd.indexOf(WORKTREE_MARKER))
+      // Detect cd to absolute paths outside the worktree
+      const cdEscapePattern = /\bcd\s+(?:"([^"]+)"|'([^']+)'|([^\s;|&]+))/
+      const cdMatch = command.match(cdEscapePattern)
+      if (cdMatch) {
+        const target = cdMatch[1] || cdMatch[2] || cdMatch[3] || ''
+        // Resolve relative to cwd
+        const resolved =
+          target.startsWith('/') ? target : `${ctx.cwd}/${target}`.replace(/\/\.\//g, '/')
+        if (!resolved.startsWith(ctx.cwd) && !resolved.startsWith(worktreeRoot + '/')) {
+          return {
+            success: false,
+            content: '',
+            error:
+              `Worktree isolation: cannot cd outside worktree directory. ` +
+              `Attempted: ${target}. Use tools within the worktree only.`,
+          }
+        }
+      }
+    }
 
     // Security: check command against deny list
     const blockedReason = isBlocked(command)

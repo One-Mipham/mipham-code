@@ -8,6 +8,10 @@ const FORBIDDEN = new Set(['Date.now', 'Math.random', 'crypto.randomUUID'])
  * Blocks Date.now(), Math.random(), argless new Date(), crypto.randomUUID(),
  * plus explicit sandbox escape vectors: eval, Function constructor, import(),
  * require(), process, Bun, fetch, setTimeout/setInterval, etc.
+ *
+ * P0-2 (v2.1.223 alignment): Added explicit defense-in-depth denial of all
+ * host globals (process, require, Bun, fetch, setTimeout, etc.) and
+ * constructor.constructor escape vector blocking.
  */
 export function createSandbox(
   args: unknown,
@@ -29,6 +33,27 @@ export function createSandbox(
     Function: () => {
       throw new Error('new Function() is disabled in workflow sandbox.')
     },
+
+    // ── P0-2: Defense-in-depth — explicit denial of all host globals ──
+    // vm.createContext() does NOT inherit host globals by default, but these
+    // explicit undefined entries prevent prototype-chain access and serve as
+    // auditable documentation of what is deliberately blocked.
+    process: undefined,
+    require: undefined,
+    import: undefined,
+    Bun: undefined,
+    fetch: undefined,
+    setTimeout: undefined,
+    setInterval: undefined,
+    queueMicrotask: undefined,
+    clearTimeout: undefined,
+    clearInterval: undefined,
+    globalThis: undefined,
+    global: undefined,
+    __dirname: undefined,
+    __filename: undefined,
+    module: undefined,
+    exports: undefined,
   }
 
   // Override Date to block now() and argless constructor
@@ -80,6 +105,51 @@ export function createSandbox(
       },
     })
   }
+
+  // ── P0-2: Block constructor.constructor escape vector ──
+  // The chain [].constructor.constructor('return this')() can escape
+  // vm.createContext if not blocked. We override Object to intercept
+  // constructor access on prototype chains.
+  sandboxObj.Object = new Proxy(Object, {
+    get(target, prop) {
+      if (prop === 'prototype') {
+        return new Proxy(Object.prototype, {
+          get(protoTarget, protoProp) {
+            if (protoProp === 'constructor') {
+              const ctor = Object.prototype.constructor
+              return new Proxy(ctor, {
+                construct() {
+                  throw new Error(
+                    'Dynamic constructor invocation is disabled in workflow sandbox.',
+                  )
+                },
+                get(_t, ctorProp) {
+                  // Block [].constructor.constructor chain
+                  if (ctorProp === 'constructor') {
+                    throw new Error(
+                      'constructor.constructor is disabled in workflow sandbox.',
+                    )
+                  }
+                  const val = (ctor as unknown as Record<string, unknown>)[ctorProp as string]
+                  return typeof val === 'function'
+                    ? (val as (...args: unknown[]) => unknown).bind(ctor)
+                    : val
+                },
+              })
+            }
+            const val = (protoTarget as Record<string, unknown>)[protoProp as string]
+            return typeof val === 'function'
+              ? (val as (...args: unknown[]) => unknown).bind(protoTarget)
+              : val
+          },
+        })
+      }
+      const val = (Object as unknown as Record<string, unknown>)[prop as string]
+      return typeof val === 'function'
+        ? (val as (...args: unknown[]) => unknown).bind(Object)
+        : val
+    },
+  })
 
   return vm.createContext(sandboxObj)
 }

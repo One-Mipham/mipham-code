@@ -29,6 +29,9 @@ export class PermissionSystem {
   // ── Org-level restrictions (P0 security) ──
   private restrictions: PermissionRestrictions | undefined = undefined
 
+  // ── P0-5: Sub-agent mode (auto mode hardening for background tasks) ──
+  private isSubAgent = false
+
   /** Invalidate the permission cache (called on any rule/mode change). */
   private invalidateCache(): void {
     this.checkCache.clear()
@@ -75,6 +78,66 @@ export class PermissionSystem {
 
   getRestrictions(): PermissionRestrictions | undefined {
     return this.restrictions
+  }
+
+  /**
+   * P0-5 (v2.1.222 alignment): Enable sub-agent safety mode.
+   * When true, auto mode returns 'ask' for Bash/Write/Edit tools instead of
+   * 'bypass', ensuring PreToolUse hooks remain the safety gate in background agents.
+   */
+  setSubAgentMode(enabled: boolean): void {
+    this.isSubAgent = enabled
+    this.invalidateCache()
+  }
+
+  /**
+   * P0-3 (v2.1.223 alignment): Create a permission context for a sub-agent.
+   *
+   * The sub-agent's requested permissionMode is clamped against the parent's
+   * org restrictions (maxAllowedMode, forbiddenModes). Deny rules from the
+   * parent are propagated so org safety policies always apply.
+   *
+   * Returns a new PermissionSystem instance — NOT shared with the parent.
+   */
+  createSubAgentPermission(agentPermissionMode: string): PermissionSystem {
+    const resolvedMode = this.resolveAgentMode(agentPermissionMode)
+    const subPerm = new PermissionSystem(resolvedMode)
+
+    // Propagate org restrictions to sub-agent
+    if (this.restrictions) {
+      subPerm.setRestrictions(this.restrictions)
+    }
+
+    // Propagate deny rules (org safety policies must always apply)
+    for (const denyEntry of this.denyRules) {
+      subPerm.deny(denyEntry.pattern)
+    }
+
+    return subPerm
+  }
+
+  /**
+   * Resolve an agent's permissionMode string to a clamped PermissionMode.
+   * 'inherit' means "use the parent's current mode".
+   * 'bypass' is treated as an alias for 'bypassPermissions'.
+   */
+  private resolveAgentMode(agentMode: string): PermissionMode {
+    // Normalize aliases
+    const normalized =
+      agentMode === 'bypass' ? 'bypassPermissions' : agentMode
+
+    const modeMap: Record<string, PermissionMode> = {
+      bypassPermissions: 'bypassPermissions',
+      dontAsk: 'dontAsk',
+      auto: 'auto',
+      plan: 'plan',
+      acceptEdits: 'acceptEdits',
+      default: 'default',
+      inherit: this.mode,
+    }
+
+    const desired: PermissionMode = modeMap[normalized] || 'default'
+    return clampMode(desired, this.restrictions)
   }
 
   // ── Rule management ──
@@ -266,6 +329,12 @@ export class PermissionSystem {
         // so deny/allow rules are honored for cross-session messages.
         if (tool.name === 'SendMessage') {
           return 'mode-baseline'
+        }
+        // P0-5: In sub-agent context, enforce 'ask' for destructive tools
+        // so hooks remain the sole safety gate. Without hooks, these tools
+        // would otherwise run completely un-gated in auto mode.
+        if (this.isSubAgent && ['Bash', 'Write', 'Edit'].includes(tool.name)) {
+          return 'ask'
         }
         return 'bypass'
 

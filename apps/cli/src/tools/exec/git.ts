@@ -1,6 +1,66 @@
 import type { ToolDefinition } from '../../shared/index.ts'
 
-const DANGEROUS_COMMANDS = ['push --force', 'reset --hard', 'clean -fd', 'branch -D']
+// P0-4 (v2.1.222 alignment): Regex-based word-boundary patterns replace
+// fragile substring matching. Each pattern describes what it blocks.
+const DANGEROUS_GIT_PATTERNS: Array<{ pattern: RegExp; description: string }> = [
+  // Destructive push
+  { pattern: /\bpush\s+.*--force(?:-with-lease)?\b/, description: 'push --force' },
+  { pattern: /\bpush\s+.*-[fF]\b/, description: 'push -f (force)' },
+  { pattern: /\bpush\s+--delete\b/, description: 'push --delete (remote branch deletion)' },
+  { pattern: /\bpush\s+--mirror\b/, description: 'push --mirror' },
+  // Destructive reset
+  { pattern: /\breset\s+--hard\b/, description: 'reset --hard' },
+  { pattern: /\breset\s+--merge\b/, description: 'reset --merge' },
+  { pattern: /\breset\s+--keep\b/, description: 'reset --keep' },
+  // Destructive clean
+  { pattern: /\bclean\s+-[a-z]*f[a-z]*d[a-z]*\b/, description: 'clean -fd' },
+  { pattern: /\bclean\s+-[a-z]*d[a-z]*f[a-z]*\b/, description: 'clean -fd' },
+  { pattern: /\bclean\s+-[a-z]*x[a-z]*\b/, description: 'clean -x (remove ignored files)' },
+  // Force-delete branch
+  { pattern: /\bbranch\s+-D\b/, description: 'branch -D (force delete)' },
+  { pattern: /\bbranch\s+--delete\s+--force\b/, description: 'branch --delete --force' },
+  // Rebase (potentially destructive)
+  { pattern: /\brebase\s+--onto\b/, description: 'rebase --onto' },
+  // Force checkout (overwrites local changes)
+  { pattern: /\bcheckout\s+.*(?:--force|-f)\b/, description: 'checkout --force' },
+  // Stash manipulation
+  { pattern: /\bstash\s+drop\b/, description: 'stash drop' },
+  { pattern: /\bstash\s+clear\b/, description: 'stash clear' },
+  // Identity spoofing via config
+  { pattern: /\bconfig\s+.*user\./, description: 'config user.* (identity spoofing)' },
+]
+
+/**
+ * Check if the command references paths outside the current working directory
+ * when operating in a worktree context.
+ */
+function isOutsideWorktree(command: string, cwd: string): string | null {
+  const WORKTREE_MARKER = '.claude/worktrees/'
+  if (!cwd.includes(WORKTREE_MARKER)) return null
+
+  // Extract the project root (everything before .claude/worktrees/)
+  const worktreeRoot = cwd.substring(0, cwd.indexOf(WORKTREE_MARKER))
+
+  // Detect git commands that reference the main checkout path
+  const mainCheckoutPaths = [
+    /\b--work-tree=([^\s]+)/g,
+    /\b--git-dir=([^\s]+)/g,
+    /\b-C\s+([^\s]+)/g,
+  ]
+
+  for (const pathPattern of mainCheckoutPaths) {
+    let match: RegExpExecArray | null
+    while ((match = pathPattern.exec(command)) !== null) {
+      const refPath = match[1]!
+      // If the referenced path is outside the worktree, block it
+      if (!refPath.startsWith(cwd) && !refPath.startsWith(worktreeRoot + '/')) {
+        return `Git command references path outside worktree: ${refPath}`
+      }
+    }
+  }
+
+  return null
+}
 
 export const gitTool: ToolDefinition = {
   name: 'Git',
@@ -20,13 +80,24 @@ export const gitTool: ToolDefinition = {
   async execute(params, ctx) {
     const command = params.command as string
 
-    for (const dangerous of DANGEROUS_COMMANDS) {
-      if (command.includes(dangerous)) {
+    // P0-4: Regex-based word-boundary pattern matching
+    for (const { pattern, description } of DANGEROUS_GIT_PATTERNS) {
+      if (pattern.test(command)) {
         return {
           success: false,
           content: '',
-          error: `Dangerous git command blocked: "${dangerous}". Run manually if intended.`,
+          error: `Dangerous git command blocked: "${description}". Run manually if intended.`,
         }
+      }
+    }
+
+    // P0-4: Worktree isolation — block commands referencing outside paths
+    const worktreeErr = isOutsideWorktree(command, ctx.cwd)
+    if (worktreeErr) {
+      return {
+        success: false,
+        content: '',
+        error: `Worktree isolation: ${worktreeErr}. Blocked for safety.`,
       }
     }
 

@@ -198,6 +198,22 @@ export class SubAgent {
     const agentType = options.type || 'general'
     const agentDef = options.agentDef
 
+    // ── P0-3: Create isolated PermissionSystem for this sub-agent ──
+    // The agent definition's permissionMode is clamped against parent's org
+    // restrictions (maxAllowedMode, forbiddenModes). When permissionMode is
+    // 'inherit' or not set, the parent's mode is used but still clamped.
+    let subPermission = this.permission // default: use parent's
+    if (this.permission) {
+      const agentPermMode =
+        agentDef?.permissionMode && agentDef.permissionMode !== 'inherit'
+          ? agentDef.permissionMode
+          : 'inherit'
+      subPermission = this.permission.createSubAgentPermission(agentPermMode)
+      // P0-5: Enable sub-agent safety mode — auto mode returns 'ask' for
+      // Bash/Write/Edit so hooks remain the safety gate in background agents.
+      subPermission.setSubAgentMode(true)
+    }
+
     // Resolve execution directory: worktree isolation or process cwd
     const execCwd = options.worktreePath || process.cwd()
 
@@ -211,6 +227,22 @@ export class SubAgent {
           trust.trust(execCwd)
         }
         // Otherwise, proceed with a warning — don't block agent execution
+      }
+
+      // P0-4: Auto-disallow Git tool for worktree-isolated sub-agents
+      // to prevent destructive operations on the main checkout.
+      // Agent definitions can explicitly re-enable Git if needed.
+      if (!agentDef?.tools) {
+        // No explicit allowlist — add Git to disallowedTools
+        const existingDisallowed = agentDef?.disallowedTools
+          ? agentDef.disallowedTools.split(',').map(s => s.trim()).filter(Boolean)
+          : []
+        if (!existingDisallowed.includes('Git')) {
+          existingDisallowed.push('Git')
+        }
+        if (agentDef) {
+          agentDef.disallowedTools = existingDisallowed.join(',')
+        }
       }
     }
 
@@ -352,11 +384,36 @@ export class SubAgent {
             continue
           }
 
+          // ── P0-5: Run PreToolUse hooks (before permission check) ──
+          let effectiveInput = tu.input
+          if (this.hookEngine) {
+            const preResult = await this.hookEngine.executePreToolUse(
+              tu.name,
+              tu.input,
+              'sub-agent',
+            )
+            if (!preResult.allowed) {
+              const denialMsg = preResult.reason
+                ? `Tool "${tu.name}" blocked by PreToolUse hook: ${preResult.reason}`
+                : `Tool "${tu.name}" blocked by PreToolUse hook.`
+              currentMessages.push({
+                role: 'user' as const,
+                content: denialMsg,
+              })
+              continue
+            }
+            // Apply modified input from hooks
+            if (preResult.modifiedInput) {
+              effectiveInput = { ...tu.input, ...preResult.modifiedInput }
+            }
+          }
+
           // Security: check permission before executing.
           // Sub-agents run without user interaction — tools requiring approval are rejected.
           // When permission system is absent (undefined), allow all tools (backward compat
           // for tests and headless usage). When present, always enforce approval checks.
-          if (this.permission?.needsApproval(tool, tu.input)) {
+          // P0-3: Uses isolated subPermission (clamped by org restrictions) instead of parent's.
+          if (subPermission?.needsApproval(tool, effectiveInput)) {
             currentMessages.push({
               role: 'user' as const,
               content:
@@ -367,16 +424,38 @@ export class SubAgent {
           }
 
           try {
-            const result = await tool.execute(tu.input, {
+            const result = await tool.execute(effectiveInput, {
               cwd: execCwd,
               sessionId: 'sub-agent',
               provider: '',
               model: finalModel,
             })
 
+            // ── P0-5: Run PostToolUse hooks ──
+            let displayResult = result
+            if (this.hookEngine) {
+              const postResult = await this.hookEngine.executePostToolUse(
+                tu.name,
+                effectiveInput,
+                result,
+                'sub-agent',
+              )
+              if (postResult.updatedOutput) {
+                displayResult = { ...result, content: postResult.updatedOutput }
+              }
+              if (postResult.additionalContext) {
+                displayResult = {
+                  ...displayResult,
+                  content: displayResult.content
+                    ? displayResult.content + '\n' + postResult.additionalContext
+                    : postResult.additionalContext,
+                }
+              }
+            }
+
             currentMessages.push({
               role: 'assistant' as const,
-              content: [{ type: 'tool_use' as const, id: tu.id, name: tu.name, input: tu.input }],
+              content: [{ type: 'tool_use' as const, id: tu.id, name: tu.name, input: effectiveInput }],
             })
             currentMessages.push({
               role: 'user' as const,
@@ -384,11 +463,23 @@ export class SubAgent {
                 {
                   type: 'tool_result' as const,
                   tool_use_id: tu.id,
-                  content: result.success ? result.content : result.error || result.content,
+                  content: displayResult.success ? displayResult.content : displayResult.error || displayResult.content,
                 },
               ],
             })
           } catch (err) {
+            // ── P0-5: Run PostToolUseFailure hooks ──
+            if (this.hookEngine) {
+              this.hookEngine.executePostToolUseFailure(
+                tu.name,
+                effectiveInput,
+                String(err),
+                'sub-agent',
+              ).catch(() => {
+                // Hook failures never block execution
+              })
+            }
+
             currentMessages.push({
               role: 'user' as const,
               content: `Tool "${tu.name}" execution error: ${String(err)}`,

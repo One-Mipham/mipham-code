@@ -24,6 +24,7 @@ import {
 } from './commands'
 import { useI18n } from '../i18n-context'
 import type { PermissionMode } from '../shared/index.ts'
+import { sanitizeForDisplay } from '../shared/sanitize.ts'
 
 interface AppProps {
   engine: QueryEngine
@@ -90,7 +91,7 @@ const PERMISSION_COLORS: Record<PermissionMode, string> = {
 function formatToolDetail(name: string, input: Record<string, unknown>): string {
   switch (name) {
     case 'Bash':
-      return (input.command as string) || ''
+      return sanitizeForDisplay((input.command as string) || '')
     case 'Read':
       return (input.file_path as string) || ''
     case 'Write':
