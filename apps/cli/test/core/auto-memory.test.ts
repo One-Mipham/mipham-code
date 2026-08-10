@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { AutoMemoryEngine, type ToolCallRecord } from '../../src/core/auto-memory'
-import { mkdirSync, rmSync, existsSync } from 'node:fs'
+import { mkdirSync, rmSync, existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
@@ -176,7 +176,6 @@ describe('AutoMemoryEngine', () => {
       expect(existsSync(memFile)).toBe(true)
 
       // Verify it has the right content
-      const { readFileSync } = require('node:fs')
       const content = readFileSync(memFile, 'utf-8')
       expect(content).toContain('会话复盘')
       expect(content).toContain(reflection.id)
@@ -205,7 +204,6 @@ describe('AutoMemoryEngine', () => {
       const indexFile = join(testDir, 'MEMORY.md')
       expect(existsSync(indexFile)).toBe(true)
 
-      const { readFileSync } = require('node:fs')
       const indexContent = readFileSync(indexFile, 'utf-8')
       expect(indexContent).toContain(reflection.id)
     })
@@ -215,7 +213,7 @@ describe('AutoMemoryEngine', () => {
     it('should track accumulated reflection count', () => {
       expect(engine.sessionReflectionCount).toBe(0)
 
-      const reflection1 = engine.analyzeTurn({
+      engine.analyzeTurn({
         sessionId: 'test-count',
         userMessage: 'msg1',
         assistantContent: 'resp1',

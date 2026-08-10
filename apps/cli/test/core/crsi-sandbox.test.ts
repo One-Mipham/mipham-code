@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { CrsiSandbox } from '../../src/core/crsi-sandbox'
-import { writeFileSync, mkdirSync, existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { homedir } from 'node:os'
 
 // The worktree is a full monorepo copy. The test runs from apps/cli/,
 // but the worktree root is the repo root. So file paths are relative to
@@ -59,7 +60,6 @@ describe('CrsiSandbox', () => {
       sandbox.createWorktree()
 
       // Read the real package.json first
-      const { readFileSync } = require('node:fs')
       const originalContent = readFileSync(CWD_FILE, 'utf-8')
 
       const result = sandbox.applyModification({
@@ -102,7 +102,6 @@ describe('CrsiSandbox', () => {
     it('should accept empty original content (lenient mode)', () => {
       sandbox.createWorktree()
 
-      const { readFileSync } = require('node:fs')
       const realContent = readFileSync(CWD_FILE, 'utf-8')
 
       const result = sandbox.applyModification({
@@ -127,7 +126,6 @@ describe('CrsiSandbox', () => {
     it('should return a diff after modification', () => {
       sandbox.createWorktree()
 
-      const { readFileSync } = require('node:fs')
       const originalContent = readFileSync(CWD_FILE, 'utf-8')
 
       sandbox.applyModification({
@@ -178,8 +176,6 @@ describe('CrsiSandbox', () => {
       const report = sandbox.finalize()
 
       // Check the report file exists
-      const { join } = require('node:path')
-      const { homedir } = require('node:os')
       const reportPath = join(homedir(), '.mipham', 'crsi-sandbox', `${report.sessionId}.json`)
       expect(existsSync(reportPath)).toBe(true)
     })
@@ -196,7 +192,6 @@ describe('CrsiSandbox', () => {
   describe('session tracking', () => {
     it('should track modifications throughout the session', () => {
       sandbox.createWorktree()
-      const { readFileSync } = require('node:fs')
       const originalContent = readFileSync(CWD_FILE, 'utf-8')
 
       // Apply 3 modifications
