@@ -200,15 +200,7 @@ describe('ConfigWizard Cloud path', () => {
       expect(step).toBe('done')
       path.push(step)
 
-      expect(path).toEqual([
-        'welcome',
-        'mode',
-        'provider',
-        'model',
-        'apikey',
-        'confirm',
-        'done',
-      ])
+      expect(path).toEqual(['welcome', 'mode', 'provider', 'model', 'apikey', 'confirm', 'done'])
     })
   })
 
@@ -324,12 +316,7 @@ describe('ConfigWizard Cloud path', () => {
     })
 
     it('does not include baseUrl for Anthropic (native protocol)', () => {
-      const config = writeConfigFile(
-        'anthropic',
-        'claude-sonnet-5',
-        'sk-ant-test',
-        tmpDir,
-      )
+      const config = writeConfigFile('anthropic', 'claude-sonnet-5', 'sk-ant-test', tmpDir)
       expect(config).not.toContain('baseUrl:')
     })
 
