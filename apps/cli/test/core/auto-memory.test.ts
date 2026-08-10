@@ -32,7 +32,12 @@ describe('AutoMemoryEngine', () => {
     it('should produce a reflection with successes and failures', () => {
       const toolCalls: ToolCallRecord[] = [
         { name: 'Read', input: { file_path: 'src/foo.ts' }, success: true },
-        { name: 'Bash', input: { command: 'npm install' }, success: false, error: 'timeout after 120s' },
+        {
+          name: 'Bash',
+          input: { command: 'npm install' },
+          success: false,
+          error: 'timeout after 120s',
+        },
         { name: 'Write', input: { file_path: 'src/bar.ts' }, success: true },
       ]
 
@@ -92,7 +97,11 @@ describe('AutoMemoryEngine', () => {
       })
 
       expect(reflection.decisions.length).toBeGreaterThanOrEqual(1)
-      expect(reflection.decisions.some((d) => d.includes('React') || d.includes('Fastify') || d.includes('用户决定'))).toBe(true)
+      expect(
+        reflection.decisions.some(
+          (d) => d.includes('React') || d.includes('Fastify') || d.includes('用户决定'),
+        ),
+      ).toBe(true)
     })
 
     it('should extract action items from failures and TODOs', () => {
@@ -117,7 +126,12 @@ describe('AutoMemoryEngine', () => {
     it('should deduplicate CRSI insights by category', () => {
       const toolCalls: ToolCallRecord[] = [
         { name: 'Bash', input: { command: 'npm install' }, success: false, error: 'timeout' },
-        { name: 'Bash', input: { command: 'pnpm test' }, success: false, error: 'timeout after 120s' },
+        {
+          name: 'Bash',
+          input: { command: 'pnpm test' },
+          success: false,
+          error: 'timeout after 120s',
+        },
         { name: 'Bash', input: { command: 'docker build' }, success: false, error: 'timed out' },
       ]
 
@@ -254,7 +268,9 @@ describe('AutoMemoryEngine', () => {
         sessionId: 'test-reminder',
         userMessage: 'fix the timeout bug',
         assistantContent: '增加 timeout 到 300000ms',
-        toolCalls: [{ name: 'Bash', input: { command: 'npm install', timeout: 300000 }, success: true }],
+        toolCalls: [
+          { name: 'Bash', input: { command: 'npm install', timeout: 300000 }, success: true },
+        ],
         modelProvider: 'anthropic',
         modelId: 'claude-sonnet-5',
         turnDurationMs: 3000,
