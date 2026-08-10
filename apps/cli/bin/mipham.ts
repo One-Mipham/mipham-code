@@ -308,6 +308,25 @@ async function runUpdate(): Promise<boolean> {
 }
 
 async function main() {
+  // ── Disable terminal software flow control (XON/XOFF) ──────────────────
+  // Ctrl+S and Ctrl+Q are intercepted by the terminal for flow control by default.
+  // Disabling it lets our app receive these key combinations (e.g. Agent Dashboard).
+  const { execSync } = await import('node:child_process')
+  try {
+    execSync('stty -ixon 2>/dev/null || true', { stdio: 'ignore' })
+  } catch {
+    // Non-POSIX platform (Windows) — no flow control to disable
+  }
+  // Restore flow control on exit
+  const restoreFlowControl = () => {
+    try {
+      execSync('stty ixon 2>/dev/null || true', { stdio: 'ignore' })
+    } catch { /* ignore */ }
+  }
+  process.on('exit', restoreFlowControl)
+  process.on('SIGINT', restoreFlowControl)
+  process.on('SIGTERM', restoreFlowControl)
+
   // ── Read version fresh from package.json at startup (bypasses Bun module cache) ──
   const { readFileSync } = await import('node:fs')
   const { join } = await import('node:path')

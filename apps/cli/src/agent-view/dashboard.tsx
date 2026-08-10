@@ -103,8 +103,8 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
       return
     }
 
-    // Ctrl+S — toggle group by (status ↔ directory)
-    if (input === '\x13') {
+    // Ctrl+T — toggle group by (status ↔ directory)
+    if (input === '\x14') {
       setGroupBy((prev) => (prev === 'status' ? 'directory' : 'status'))
       showFeedback(`Grouped by ${_groupBy === 'status' ? 'directory' : 'status'}`)
       return
@@ -207,7 +207,7 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
         </Box>
         <Box>
           <Text dimColor>
-            j/k navigate · Space peek · Enter attach · Ctrl+S group · Ctrl+R rename · Esc back
+            j/k navigate · Space peek · Enter attach · Ctrl+T group · Ctrl+R rename · Esc back
           </Text>
         </Box>
       </Box>
