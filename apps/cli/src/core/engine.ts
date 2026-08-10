@@ -14,6 +14,7 @@ import type { ArtifactServer } from '../artifacts/server'
 import type { AgentRegistry } from '../agent/agent-registry'
 import { analyzeForMemory } from './memory/memory-writer'
 import { getMemoryManager } from './memory/memory-loader'
+import { AutoMemoryEngine } from './auto-memory.js'
 import type { AgentViewManager } from '../agent-view/agent-view-manager'
 import type { SkillsLoader } from '../skills/loader'
 import { getBackgroundAgentRegistry } from '../agent/background-registry'
@@ -45,6 +46,7 @@ export class QueryEngine {
   private ruleEngine?: ExperienceRuleEngine
   private _patternAnalyzer?: PatternAnalyzer
   private _effectivenessTracker?: EffectivenessTracker
+  private _autoMemory?: AutoMemoryEngine
   private goal?: string
   private maxGoalLoops = 20
   private lastAssistantContent?: string
@@ -1015,6 +1017,24 @@ export class QueryEngine {
       this._effectivenessTracker.load()
     }
     return this._effectivenessTracker
+  }
+
+  /**
+   * CRSI Phase 2: Lazily-initialized AutoMemoryEngine singleton.
+   * Wires the CRSI Phase 1 pipeline (PatternAnalyzer, RuleEngine, EffectivenessTracker)
+   * into the auto-reflection engine so that post-turn insights can feed rule generation.
+   */
+  getAutoMemory(): AutoMemoryEngine {
+    if (!this._autoMemory) {
+      this._autoMemory = new AutoMemoryEngine()
+      // Wire CRSI Phase 1 → Phase 2 bridge
+      this._autoMemory.setCrsiPipeline(
+        this.getPatternAnalyzer(),
+        this.getRuleEngine() || new ExperienceRuleEngine(),
+        this.getEffectivenessTracker(),
+      )
+    }
+    return this._autoMemory
   }
 
   /** Register a tool dynamically (used by MCP auto-registration). */
