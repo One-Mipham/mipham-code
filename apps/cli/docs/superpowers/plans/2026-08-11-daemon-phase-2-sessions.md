@@ -18,31 +18,33 @@
 
 ## File Map
 
-| File | Purpose |
-|------|---------|
-| Create `apps/cli/src/daemon/attach-protocol.ts` | WS message types |
-| Create `apps/cli/src/daemon/session-worker.ts` | Engine wrapper, prompt processing, WS broadcast |
-| Create `apps/cli/src/daemon/worker-pool.ts` | Worker lifecycle, idle timeout |
-| Modify `apps/cli/src/daemon/server.ts` | Wire prompt endpoint + WS handler |
-| Modify `apps/cli/src/daemon/index.ts` | WorkerPool in daemon lifecycle |
-| Create `apps/cli/src/daemon/remote-engine.ts` | WS-based engine for TUI attach |
-| Modify `apps/cli/bin/mipham.ts` | attach/attach --latest commands |
-| Modify `apps/cli/src/index.tsx` | remoteSession option |
-| Modify `apps/cli/src/ui/app.tsx` | Accept remote engine |
-| Create `apps/cli/test/daemon/session-worker.test.ts` | Worker tests |
-| Create `apps/cli/test/daemon/attach-protocol.test.ts` | Protocol tests |
+| File                                                  | Purpose                                         |
+| ----------------------------------------------------- | ----------------------------------------------- |
+| Create `apps/cli/src/daemon/attach-protocol.ts`       | WS message types                                |
+| Create `apps/cli/src/daemon/session-worker.ts`        | Engine wrapper, prompt processing, WS broadcast |
+| Create `apps/cli/src/daemon/worker-pool.ts`           | Worker lifecycle, idle timeout                  |
+| Modify `apps/cli/src/daemon/server.ts`                | Wire prompt endpoint + WS handler               |
+| Modify `apps/cli/src/daemon/index.ts`                 | WorkerPool in daemon lifecycle                  |
+| Create `apps/cli/src/daemon/remote-engine.ts`         | WS-based engine for TUI attach                  |
+| Modify `apps/cli/bin/mipham.ts`                       | attach/attach --latest commands                 |
+| Modify `apps/cli/src/index.tsx`                       | remoteSession option                            |
+| Modify `apps/cli/src/ui/app.tsx`                      | Accept remote engine                            |
+| Create `apps/cli/test/daemon/session-worker.test.ts`  | Worker tests                                    |
+| Create `apps/cli/test/daemon/attach-protocol.test.ts` | Protocol tests                                  |
 
 ---
 
 ### Task 1: Attach Protocol Types
 
 Create `apps/cli/src/daemon/attach-protocol.ts` — WS message protocol:
+
 - Client→Daemon: `ClientPromptMessage`, `ClientInterruptMessage`
 - Daemon→Client: `ServerTextMessage`, `ServerToolUseMessage`, `ServerToolResultMessage`, `ServerUsageMessage`, `ServerDoneMessage`, `ServerErrorMessage`, `ServerSessionStateMessage`
 
 ### Task 2: Session Worker
 
 Create `apps/cli/src/daemon/session-worker.ts` — `SessionWorker` class:
+
 - Owns QueryEngine + ContextManager + ProviderRegistry
 - `processPrompt(prompt)` — calls engine.process(), broadcasts chunks to WS clients
 - `interrupt()` — aborts current generation
@@ -53,6 +55,7 @@ Create `apps/cli/src/daemon/session-worker.ts` — `SessionWorker` class:
 ### Task 3: Worker Pool
 
 Create `apps/cli/src/daemon/worker-pool.ts` — `WorkerPool` class:
+
 - `createWorker(sessionId, engine, context, registry)` — creates SessionWorker
 - `getWorker(sessionId)` — returns existing worker
 - `stopWorker(sessionId)` — interrupts, saves state, marks session idle
@@ -62,6 +65,7 @@ Create `apps/cli/src/daemon/worker-pool.ts` — `WorkerPool` class:
 ### Task 4: Wire Server Endpoints
 
 Modify `apps/cli/src/daemon/server.ts`:
+
 - Accept `WorkerPool` in `ServerConfig`
 - `POST /sessions/:id/prompt` — get/create worker, call processPrompt(), respond 200
 - WS `message` handler — parse ClientMessage, route prompt/interrupt to worker
@@ -70,12 +74,14 @@ Modify `apps/cli/src/daemon/server.ts`:
 ### Task 5: Daemon Lifecycle Integration
 
 Modify `apps/cli/src/daemon/index.ts`:
+
 - Create `WorkerPool` in `startDaemon()`, pass to server
 - Stop pool in `stopDaemon()`
 
 ### Task 6: Remote Engine
 
 Create `apps/cli/src/daemon/remote-engine.ts` — `RemoteEngine` class:
+
 - WebSocket-based QueryEngine substitute
 - Exposes `process(prompt, signal)` async generator (same interface as local engine)
 - TUI consumes identically
@@ -83,6 +89,7 @@ Create `apps/cli/src/daemon/remote-engine.ts` — `RemoteEngine` class:
 ### Task 7: CLI Attach Commands
 
 Modify `apps/cli/bin/mipham.ts`:
+
 - `runAttachCLI()` — handles attach/attach <id>/attach --latest
 - Lists active sessions from daemon HTTP API
 - Launches TUI in remote mode via `runApp({ remoteSession: {...} })`
@@ -91,6 +98,7 @@ Modify `apps/cli/bin/mipham.ts`:
 ### Task 8: TUI Remote Mode
 
 Modify `apps/cli/src/index.tsx` + `apps/cli/src/ui/app.tsx`:
+
 - Add `remoteSession` to `RunOptions`
 - When set, create `RemoteEngine` instead of local QueryEngine
 - TUI chunk loop unchanged
