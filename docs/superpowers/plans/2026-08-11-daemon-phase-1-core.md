@@ -26,28 +26,30 @@
 
 ## File Map
 
-| File | Responsibility |
-|------|---------------|
-| **Create** `apps/cli/src/daemon/types.ts` | Shared types for daemon sessions, agents, goals, schedules |
-| **Create** `apps/cli/src/daemon/database.ts` | SQLite schema, migrations, CRUD operations for all tables |
-| **Create** `apps/cli/src/daemon/auth.ts` | Token generation, validation, auth middleware |
-| **Create** `apps/cli/src/daemon/session-manager.ts` | Session lifecycle, in-memory session registry, worker pool stub |
-| **Create** `apps/cli/src/daemon/server.ts` | Bun.serve HTTP server + WebSocket upgrade, route handlers |
-| **Create** `apps/cli/src/daemon/index.ts` | Daemon lifecycle: startDaemon(), stopDaemon(), getDaemonStatus() |
-| **Create** `apps/cli/bin/daemon.ts` | Standalone daemon process entry point (spawned by CLI) |
-| **Modify** `apps/cli/bin/mipham.ts` | Add `daemon start/stop/status/restart`, `--no-daemon` flag, auto-launch logic |
-| **Create** `apps/cli/test/daemon/database.test.ts` | Database tests |
-| **Create** `apps/cli/test/daemon/server.test.ts` | Server integration tests |
-| **Create** `apps/cli/test/daemon/auth.test.ts` | Auth tests |
+| File                                                | Responsibility                                                                |
+| --------------------------------------------------- | ----------------------------------------------------------------------------- |
+| **Create** `apps/cli/src/daemon/types.ts`           | Shared types for daemon sessions, agents, goals, schedules                    |
+| **Create** `apps/cli/src/daemon/database.ts`        | SQLite schema, migrations, CRUD operations for all tables                     |
+| **Create** `apps/cli/src/daemon/auth.ts`            | Token generation, validation, auth middleware                                 |
+| **Create** `apps/cli/src/daemon/session-manager.ts` | Session lifecycle, in-memory session registry, worker pool stub               |
+| **Create** `apps/cli/src/daemon/server.ts`          | Bun.serve HTTP server + WebSocket upgrade, route handlers                     |
+| **Create** `apps/cli/src/daemon/index.ts`           | Daemon lifecycle: startDaemon(), stopDaemon(), getDaemonStatus()              |
+| **Create** `apps/cli/bin/daemon.ts`                 | Standalone daemon process entry point (spawned by CLI)                        |
+| **Modify** `apps/cli/bin/mipham.ts`                 | Add `daemon start/stop/status/restart`, `--no-daemon` flag, auto-launch logic |
+| **Create** `apps/cli/test/daemon/database.test.ts`  | Database tests                                                                |
+| **Create** `apps/cli/test/daemon/server.test.ts`    | Server integration tests                                                      |
+| **Create** `apps/cli/test/daemon/auth.test.ts`      | Auth tests                                                                    |
 
 ---
 
 ### Task 1: Daemon Types
 
 **Files:**
+
 - Create: `apps/cli/src/daemon/types.ts`
 
 **Interfaces:**
+
 - Produces: `DaemonSession`, `DaemonAgent`, `DaemonGoal`, `DaemonSchedule`, `DaemonStatus`, `SessionStatus`, `AgentStatus`, `AgentKind`, `GoalStatus`, `CreateSessionInput`
 
 - [ ] **Step 1: Write the types file**
@@ -159,6 +161,7 @@ export interface ListSessionsResponse {
 ```bash
 cd apps/cli && pnpm typecheck
 ```
+
 Expected: PASS (new file compiles without errors)
 
 - [ ] **Step 3: Commit**
@@ -173,10 +176,12 @@ git commit -m "feat(daemon): add daemon types (Session, Agent, Goal, Schedule)"
 ### Task 2: SQLite Database Layer
 
 **Files:**
+
 - Create: `apps/cli/src/daemon/database.ts`
 - Create: `apps/cli/test/daemon/database.test.ts`
 
 **Interfaces:**
+
 - Consumes: `DaemonSession`, `DaemonAgent`, `DaemonGoal`, `DaemonSchedule`, `MessageRecord`, `CreateSessionInput` from `types.ts`
 - Produces: `DaemonDatabase` class
 
@@ -191,9 +196,15 @@ import { unlinkSync } from 'node:fs'
 const TEST_DB = '/tmp/mipham-daemon-test.db'
 
 function cleanDb() {
-  try { unlinkSync(TEST_DB) } catch {}
-  try { unlinkSync(TEST_DB + '-wal') } catch {}
-  try { unlinkSync(TEST_DB + '-shm') } catch {}
+  try {
+    unlinkSync(TEST_DB)
+  } catch {}
+  try {
+    unlinkSync(TEST_DB + '-wal')
+  } catch {}
+  try {
+    unlinkSync(TEST_DB + '-shm')
+  } catch {}
 }
 
 describe('DaemonDatabase', () => {
@@ -234,15 +245,30 @@ describe('DaemonDatabase', () => {
 
     const active = db.listSessions('active')
     expect(active.length).toBe(2) // test-session + s1
-    expect(active.every(s => s.status === 'active')).toBe(true)
+    expect(active.every((s) => s.status === 'active')).toBe(true)
   })
 
   it('saves and retrieves messages', () => {
-    const session = db.createSession({ name: 'msg-test', cwd: '/tmp', provider: 'openai', model: 'gpt-5' })
+    const session = db.createSession({
+      name: 'msg-test',
+      cwd: '/tmp',
+      provider: 'openai',
+      model: 'gpt-5',
+    })
     db.saveMessage(session.id, 'user', JSON.stringify({ role: 'user', content: 'hello' }))
-    db.saveMessage(session.id, 'assistant', JSON.stringify({ role: 'assistant', content: [{
-      type: 'text', text: 'hi!'
-    }] }))
+    db.saveMessage(
+      session.id,
+      'assistant',
+      JSON.stringify({
+        role: 'assistant',
+        content: [
+          {
+            type: 'text',
+            text: 'hi!',
+          },
+        ],
+      }),
+    )
 
     const messages = db.getMessages(session.id)
     expect(messages.length).toBe(2)
@@ -251,7 +277,12 @@ describe('DaemonDatabase', () => {
   })
 
   it('respects message limit', () => {
-    const session = db.createSession({ name: 'limit-test', cwd: '/tmp', provider: 'openai', model: 'gpt-5' })
+    const session = db.createSession({
+      name: 'limit-test',
+      cwd: '/tmp',
+      provider: 'openai',
+      model: 'gpt-5',
+    })
     for (let i = 0; i < 10; i++) {
       db.saveMessage(session.id, 'user', JSON.stringify({ role: 'user', content: `msg-${i}` }))
     }
@@ -260,7 +291,12 @@ describe('DaemonDatabase', () => {
   })
 
   it('creates and lists agents', () => {
-    const session = db.createSession({ name: 'agent-test', cwd: '/tmp', provider: 'anthropic', model: 'claude' })
+    const session = db.createSession({
+      name: 'agent-test',
+      cwd: '/tmp',
+      provider: 'anthropic',
+      model: 'claude',
+    })
     const agent = db.createAgent({
       id: 'agent-1',
       sessionId: session.id,
@@ -286,7 +322,12 @@ describe('DaemonDatabase', () => {
   })
 
   it('creates and updates goals', () => {
-    const session = db.createSession({ name: 'goal-test', cwd: '/tmp', provider: 'openai', model: 'gpt-5' })
+    const session = db.createSession({
+      name: 'goal-test',
+      cwd: '/tmp',
+      provider: 'openai',
+      model: 'gpt-5',
+    })
     const goalId = db.createGoal({
       sessionId: session.id,
       description: 'complete the feature',
@@ -303,7 +344,12 @@ describe('DaemonDatabase', () => {
   })
 
   it('creates and deletes schedules', () => {
-    const session = db.createSession({ name: 'sched-test', cwd: '/tmp', provider: 'openai', model: 'gpt-5' })
+    const session = db.createSession({
+      name: 'sched-test',
+      cwd: '/tmp',
+      provider: 'openai',
+      model: 'gpt-5',
+    })
     const schedId = db.createSchedule({
       sessionId: session.id,
       cronExpr: '0 9 * * *',
@@ -328,14 +374,27 @@ describe('DaemonDatabase', () => {
     const { join } = await import('node:path')
     const sessionsDir = join(process.env.HOME || '/tmp', '.mipham', 'sessions')
     mkdirSync(sessionsDir, { recursive: true })
-    const oldSession = { metadata: { name: 'old-session', createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-02T00:00:00Z', provider: 'openai', model: 'gpt-4', messageCount: 10, cwd: '/tmp' }, messages: [{ role: 'user', content: 'test' }] }
+    const oldSession = {
+      metadata: {
+        name: 'old-session',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-02T00:00:00Z',
+        provider: 'openai',
+        model: 'gpt-4',
+        messageCount: 10,
+        cwd: '/tmp',
+      },
+      messages: [{ role: 'user', content: 'test' }],
+    }
     writeFileSync(join(sessionsDir, 'old-session.jsonl'), JSON.stringify(oldSession))
 
     const count = db.migrateFromJsonl()
     expect(count).toBeGreaterThanOrEqual(1)
 
     // Clean up
-    try { unlinkSync(join(sessionsDir, 'old-session.jsonl')) } catch {}
+    try {
+      unlinkSync(join(sessionsDir, 'old-session.jsonl'))
+    } catch {}
   })
 })
 ```
@@ -345,6 +404,7 @@ describe('DaemonDatabase', () => {
 ```bash
 cd apps/cli && npx vitest run test/daemon/database.test.ts
 ```
+
 Expected: FAIL — `DaemonDatabase` not defined
 
 - [ ] **Step 3: Implement DaemonDatabase**
@@ -352,7 +412,15 @@ Expected: FAIL — `DaemonDatabase` not defined
 ```typescript
 // apps/cli/src/daemon/database.ts
 import { Database } from 'bun:sqlite'
-import type { DaemonSession, DaemonAgent, DaemonGoal, DaemonSchedule, MessageRecord, CreateSessionInput, SessionStatus } from './types'
+import type {
+  DaemonSession,
+  DaemonAgent,
+  DaemonGoal,
+  DaemonSchedule,
+  MessageRecord,
+  CreateSessionInput,
+  SessionStatus,
+} from './types'
 
 export class DaemonDatabase {
   private db: Database
@@ -446,15 +514,26 @@ export class DaemonDatabase {
       [id, input.name, input.cwd, input.provider, input.model, now, now],
     )
     return {
-      id, name: input.name, cwd: input.cwd,
-      provider: input.provider, model: input.model,
-      status: 'active', createdAt: now, updatedAt: now,
-      closedAt: null, turnCount: 0, tokenIn: 0, tokenOut: 0,
+      id,
+      name: input.name,
+      cwd: input.cwd,
+      provider: input.provider,
+      model: input.model,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+      closedAt: null,
+      turnCount: 0,
+      tokenIn: 0,
+      tokenOut: 0,
     }
   }
 
   getSession(id: string): DaemonSession | null {
-    const row = this.db.query('SELECT * FROM sessions WHERE id = ?').get(id) as Record<string, unknown> | null
+    const row = this.db.query('SELECT * FROM sessions WHERE id = ?').get(id) as Record<
+      string,
+      unknown
+    > | null
     if (!row) return null
     return this.rowToSession(row)
   }
@@ -464,18 +543,20 @@ export class DaemonDatabase {
       ? 'SELECT * FROM sessions WHERE status = ? ORDER BY updated_at DESC'
       : 'SELECT * FROM sessions ORDER BY updated_at DESC'
     const rows = status
-      ? this.db.query(sql).all(status) as Record<string, unknown>[]
-      : this.db.query(sql).all() as Record<string, unknown>[]
-    return rows.map(r => this.rowToSession(r))
+      ? (this.db.query(sql).all(status) as Record<string, unknown>[])
+      : (this.db.query(sql).all() as Record<string, unknown>[])
+    return rows.map((r) => this.rowToSession(r))
   }
 
   updateSessionStatus(id: string, status: SessionStatus): void {
     const now = new Date().toISOString()
     const closedAt = status === 'closed' ? now : null
-    this.db.run(
-      `UPDATE sessions SET status = ?, updated_at = ?, closed_at = ? WHERE id = ?`,
-      [status, now, closedAt, id],
-    )
+    this.db.run(`UPDATE sessions SET status = ?, updated_at = ?, closed_at = ? WHERE id = ?`, [
+      status,
+      now,
+      closedAt,
+      id,
+    ])
   }
 
   closeSession(id: string): void {
@@ -504,7 +585,7 @@ export class DaemonDatabase {
     const rows = this.db
       .query('SELECT * FROM messages WHERE session_id = ? ORDER BY id DESC LIMIT ?')
       .all(sessionId, limit) as Record<string, unknown>[]
-    return rows.reverse().map(r => ({
+    return rows.reverse().map((r) => ({
       id: r.id as number,
       sessionId: r.session_id as string,
       role: r.role as MessageRecord['role'],
@@ -519,15 +600,31 @@ export class DaemonDatabase {
     this.db.run(
       `INSERT INTO agents (id, session_id, parent_id, agent_type, description, status, kind, worktree, branch, pr_url, created_at, completed_at, result, error)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [agent.id, agent.sessionId, agent.parentId, agent.agentType, agent.description,
-       agent.status, agent.kind, agent.worktree, agent.branch, agent.prUrl,
-       agent.createdAt, agent.completedAt, agent.result, agent.error],
+      [
+        agent.id,
+        agent.sessionId,
+        agent.parentId,
+        agent.agentType,
+        agent.description,
+        agent.status,
+        agent.kind,
+        agent.worktree,
+        agent.branch,
+        agent.prUrl,
+        agent.createdAt,
+        agent.completedAt,
+        agent.result,
+        agent.error,
+      ],
     )
     return agent
   }
 
   getAgent(id: string): DaemonAgent | null {
-    const row = this.db.query('SELECT * FROM agents WHERE id = ?').get(id) as Record<string, unknown> | null
+    const row = this.db.query('SELECT * FROM agents WHERE id = ?').get(id) as Record<
+      string,
+      unknown
+    > | null
     if (!row) return null
     return this.rowToAgent(row)
   }
@@ -537,13 +634,14 @@ export class DaemonDatabase {
       ? 'SELECT * FROM agents WHERE session_id = ? ORDER BY created_at DESC'
       : 'SELECT * FROM agents ORDER BY created_at DESC'
     const rows = sessionId
-      ? this.db.query(sql).all(sessionId) as Record<string, unknown>[]
-      : this.db.query(sql).all() as Record<string, unknown>[]
-    return rows.map(r => this.rowToAgent(r))
+      ? (this.db.query(sql).all(sessionId) as Record<string, unknown>[])
+      : (this.db.query(sql).all() as Record<string, unknown>[])
+    return rows.map((r) => this.rowToAgent(r))
   }
 
   updateAgentStatus(id: string, status: string, result?: string, error?: string): void {
-    const completedAt = status === 'completed' || status === 'failed' ? new Date().toISOString() : null
+    const completedAt =
+      status === 'completed' || status === 'failed' ? new Date().toISOString() : null
     this.db.run(
       `UPDATE agents SET status = ?, result = ?, error = ?, completed_at = ? WHERE id = ?`,
       [status, result ?? null, error ?? null, completedAt, id],
@@ -555,16 +653,23 @@ export class DaemonDatabase {
   createGoal(goal: Omit<DaemonGoal, 'id'>): number {
     const result = this.db.run(
       `INSERT INTO goals (session_id, description, status, progress, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
-      [goal.sessionId, goal.description, goal.status,
-       goal.progress ? JSON.stringify(goal.progress) : null,
-       goal.createdAt, goal.updatedAt],
+      [
+        goal.sessionId,
+        goal.description,
+        goal.status,
+        goal.progress ? JSON.stringify(goal.progress) : null,
+        goal.createdAt,
+        goal.updatedAt,
+      ],
     )
     return Number(result.lastInsertRowid)
   }
 
   getGoals(sessionId: string): DaemonGoal[] {
-    const rows = this.db.query('SELECT * FROM goals WHERE session_id = ? ORDER BY id').all(sessionId) as Record<string, unknown>[]
-    return rows.map(r => ({
+    const rows = this.db
+      .query('SELECT * FROM goals WHERE session_id = ? ORDER BY id')
+      .all(sessionId) as Record<string, unknown>[]
+    return rows.map((r) => ({
       id: r.id as number,
       sessionId: r.session_id as string,
       description: r.description as string,
@@ -580,8 +685,14 @@ export class DaemonDatabase {
     const sets: string[] = ['updated_at = ?']
     const vals: unknown[] = [now]
 
-    if (updates.status !== undefined) { sets.push('status = ?'); vals.push(updates.status) }
-    if (updates.description !== undefined) { sets.push('description = ?'); vals.push(updates.description) }
+    if (updates.status !== undefined) {
+      sets.push('status = ?')
+      vals.push(updates.status)
+    }
+    if (updates.description !== undefined) {
+      sets.push('description = ?')
+      vals.push(updates.description)
+    }
     if (updates.progress !== undefined) {
       sets.push('progress = ?')
       vals.push(updates.progress ? JSON.stringify(updates.progress) : null)
@@ -596,15 +707,23 @@ export class DaemonDatabase {
   createSchedule(schedule: Omit<DaemonSchedule, 'id'>): number {
     const result = this.db.run(
       `INSERT INTO schedules (session_id, cron_expr, prompt, enabled, last_fired, next_fire) VALUES (?, ?, ?, ?, ?, ?)`,
-      [schedule.sessionId, schedule.cronExpr, schedule.prompt,
-       schedule.enabled ? 1 : 0, schedule.lastFired, schedule.nextFire],
+      [
+        schedule.sessionId,
+        schedule.cronExpr,
+        schedule.prompt,
+        schedule.enabled ? 1 : 0,
+        schedule.lastFired,
+        schedule.nextFire,
+      ],
     )
     return Number(result.lastInsertRowid)
   }
 
   getSchedules(sessionId: string): DaemonSchedule[] {
-    const rows = this.db.query('SELECT * FROM schedules WHERE session_id = ?').all(sessionId) as Record<string, unknown>[]
-    return rows.map(r => this.rowToSchedule(r))
+    const rows = this.db
+      .query('SELECT * FROM schedules WHERE session_id = ?')
+      .all(sessionId) as Record<string, unknown>[]
+    return rows.map((r) => this.rowToSchedule(r))
   }
 
   deleteSchedule(id: number): void {
@@ -613,10 +732,10 @@ export class DaemonDatabase {
 
   getDueSchedules(): DaemonSchedule[] {
     const now = new Date().toISOString()
-    const rows = this.db.query(
-      'SELECT * FROM schedules WHERE enabled = 1 AND next_fire <= ?',
-    ).all(now) as Record<string, unknown>[]
-    return rows.map(r => this.rowToSchedule(r))
+    const rows = this.db
+      .query('SELECT * FROM schedules WHERE enabled = 1 AND next_fire <= ?')
+      .all(now) as Record<string, unknown>[]
+    return rows.map((r) => this.rowToSchedule(r))
   }
 
   // ── Migration ──────────────────────────────────────────────
@@ -665,15 +784,19 @@ export class DaemonDatabase {
   // ── Stats ──────────────────────────────────────────────────
 
   getStats(): { activeSessions: number; totalSessions: number; activeAgents: number } {
-    const activeSessions = (this.db.query(
-      "SELECT COUNT(*) as c FROM sessions WHERE status != 'closed'",
-    ).get() as { c: number }).c
-    const totalSessions = (this.db.query(
-      'SELECT COUNT(*) as c FROM sessions',
-    ).get() as { c: number }).c
-    const activeAgents = (this.db.query(
-      "SELECT COUNT(*) as c FROM agents WHERE status = 'running'",
-    ).get() as { c: number }).c
+    const activeSessions = (
+      this.db.query("SELECT COUNT(*) as c FROM sessions WHERE status != 'closed'").get() as {
+        c: number
+      }
+    ).c
+    const totalSessions = (
+      this.db.query('SELECT COUNT(*) as c FROM sessions').get() as { c: number }
+    ).c
+    const activeAgents = (
+      this.db.query("SELECT COUNT(*) as c FROM agents WHERE status = 'running'").get() as {
+        c: number
+      }
+    ).c
     return { activeSessions, totalSessions, activeAgents }
   }
 
@@ -734,6 +857,7 @@ export class DaemonDatabase {
 ```bash
 cd apps/cli && npx vitest run test/daemon/database.test.ts
 ```
+
 Expected: ALL TESTS PASS
 
 - [ ] **Step 5: Commit**
@@ -748,10 +872,12 @@ git commit -m "feat(daemon): SQLite database layer with migration from JSONL"
 ### Task 3: Daemon Auth (Token Management)
 
 **Files:**
+
 - Create: `apps/cli/src/daemon/auth.ts`
 - Create: `apps/cli/test/daemon/auth.test.ts`
 
 **Interfaces:**
+
 - Produces: `generateToken()`, `loadOrCreateToken()`, `verifyToken()`, `authMiddleware()`
 
 - [ ] **Step 1: Write the failing test**
@@ -767,7 +893,9 @@ const TEST_TOKEN_FILE = join(process.env.HOME || '/tmp', '.mipham', 'daemon-test
 
 describe('Daemon Auth', () => {
   afterAll(() => {
-    try { unlinkSync(TEST_TOKEN_FILE) } catch {}
+    try {
+      unlinkSync(TEST_TOKEN_FILE)
+    } catch {}
   })
 
   it('generates a 64-char hex token', () => {
@@ -784,7 +912,9 @@ describe('Daemon Auth', () => {
 
   it('loads existing token or creates new one', () => {
     // Clean state
-    try { unlinkSync(TEST_TOKEN_FILE) } catch {}
+    try {
+      unlinkSync(TEST_TOKEN_FILE)
+    } catch {}
 
     const token1 = loadOrCreateToken(TEST_TOKEN_FILE)
     expect(token1.length).toBe(64)
@@ -816,6 +946,7 @@ describe('Daemon Auth', () => {
 ```bash
 cd apps/cli && npx vitest run test/daemon/auth.test.ts
 ```
+
 Expected: FAIL
 
 - [ ] **Step 3: Implement auth module**
@@ -854,20 +985,14 @@ export function loadOrCreateToken(tokenPath: string): string {
  */
 export function verifyToken(expected: string, provided: string): boolean {
   if (!provided || !expected) return false
-  return Bun.password.constantTimeCompare(
-    Buffer.from(expected),
-    Buffer.from(provided),
-  )
+  return Bun.password.constantTimeCompare(Buffer.from(expected), Buffer.from(provided))
 }
 
 /**
  * Create an auth middleware for Bun.serve that checks the Authorization header.
  * Returns a Response if auth fails, or null if auth passes.
  */
-export function authMiddleware(
-  request: Request,
-  validToken: string,
-): Response | null {
+export function authMiddleware(request: Request, validToken: string): Response | null {
   // Allow health endpoint without auth
   const url = new URL(request.url)
   if (url.pathname === '/api/v1/health') return null
@@ -903,6 +1028,7 @@ export function authMiddleware(
 ```bash
 cd apps/cli && npx vitest run test/daemon/auth.test.ts
 ```
+
 Expected: ALL TESTS PASS
 
 - [ ] **Step 5: Commit**
@@ -917,10 +1043,12 @@ git commit -m "feat(daemon): token generation, verification, and auth middleware
 ### Task 4: Session Manager
 
 **Files:**
+
 - Create: `apps/cli/src/daemon/session-manager.ts`
 - Create: `apps/cli/test/daemon/session-manager.test.ts`
 
 **Interfaces:**
+
 - Consumes: `DaemonDatabase` from `database.ts`, `DaemonSession`, `CreateSessionInput` from `types.ts`
 - Produces: `SessionManager` class
 
@@ -940,9 +1068,15 @@ describe('SessionManager', () => {
   let sm: SessionManager
 
   beforeAll(() => {
-    try { unlinkSync(TEST_DB) } catch {}
-    try { unlinkSync(TEST_DB + '-wal') } catch {}
-    try { unlinkSync(TEST_DB + '-shm') } catch {}
+    try {
+      unlinkSync(TEST_DB)
+    } catch {}
+    try {
+      unlinkSync(TEST_DB + '-wal')
+    } catch {}
+    try {
+      unlinkSync(TEST_DB + '-shm')
+    } catch {}
     db = new DaemonDatabase(TEST_DB)
     db.init()
     sm = new SessionManager(db)
@@ -950,7 +1084,9 @@ describe('SessionManager', () => {
 
   afterAll(() => {
     db.close()
-    try { unlinkSync(TEST_DB) } catch {}
+    try {
+      unlinkSync(TEST_DB)
+    } catch {}
   })
 
   it('creates a session with defaults', () => {
@@ -975,12 +1111,14 @@ describe('SessionManager', () => {
 
   it('lists only active sessions', () => {
     const active = sm.listSessions('active')
-    expect(active.every(s => s.status === 'active')).toBe(true)
+    expect(active.every((s) => s.status === 'active')).toBe(true)
   })
 
   it('notifies onClose callback when session is closed', () => {
     let closedId = ''
-    sm.onSessionClosed((id) => { closedId = id })
+    sm.onSessionClosed((id) => {
+      closedId = id
+    })
 
     const s = sm.createSession('cb-test', '/tmp', 'openai', 'gpt-5')
     sm.closeSession(s.id)
@@ -994,6 +1132,7 @@ describe('SessionManager', () => {
 ```bash
 cd apps/cli && npx vitest run test/daemon/session-manager.test.ts
 ```
+
 Expected: FAIL
 
 - [ ] **Step 3: Implement SessionManager**
@@ -1028,7 +1167,11 @@ export class SessionManager {
   closeSession(id: string): void {
     this.db.closeSession(id)
     for (const cb of this.closeCallbacks) {
-      try { cb(id) } catch { /* callback errors should not propagate */ }
+      try {
+        cb(id)
+      } catch {
+        /* callback errors should not propagate */
+      }
     }
   }
 
@@ -1048,6 +1191,7 @@ export class SessionManager {
 ```bash
 cd apps/cli && npx vitest run test/daemon/session-manager.test.ts
 ```
+
 Expected: ALL TESTS PASS
 
 - [ ] **Step 5: Commit**
@@ -1062,10 +1206,12 @@ git commit -m "feat(daemon): session manager with lifecycle and close callbacks"
 ### Task 5: HTTP + WebSocket Server
 
 **Files:**
+
 - Create: `apps/cli/src/daemon/server.ts`
 - Create: `apps/cli/test/daemon/server.test.ts`
 
 **Interfaces:**
+
 - Consumes: `DaemonDatabase` from `database.ts`, `SessionManager` from `session-manager.ts`, `authMiddleware` from `auth.ts`, `DaemonSession` from `types.ts`
 - Produces: `createServer()`, `DaemonServer` type
 
@@ -1086,9 +1232,15 @@ const TEST_PORT = 45999
 const TEST_TOKEN = generateToken()
 
 function cleanDb() {
-  try { unlinkSync(TEST_DB) } catch {}
-  try { unlinkSync(TEST_DB + '-wal') } catch {}
-  try { unlinkSync(TEST_DB + '-shm') } catch {}
+  try {
+    unlinkSync(TEST_DB)
+  } catch {}
+  try {
+    unlinkSync(TEST_DB + '-wal')
+  } catch {}
+  try {
+    unlinkSync(TEST_DB + '-shm')
+  } catch {}
 }
 
 function apiUrl(path: string): string {
@@ -1100,7 +1252,7 @@ async function fetchApi(path: string, options?: RequestInit) {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${TEST_TOKEN}`,
+      Authorization: `Bearer ${TEST_TOKEN}`,
       ...(options?.headers || {}),
     },
   })
@@ -1182,7 +1334,7 @@ describe('Daemon HTTP Server', () => {
   it('rejects requests without auth when not localhost', async () => {
     // Simulate external request (no localhost host header)
     const res = await fetch(apiUrl('/api/v1/sessions'), {
-      headers: { 'Content-Type': 'application/json', 'Host': 'external.example.com' },
+      headers: { 'Content-Type': 'application/json', Host: 'external.example.com' },
     })
     expect(res.status).toBe(401)
   })
@@ -1194,6 +1346,7 @@ describe('Daemon HTTP Server', () => {
 ```bash
 cd apps/cli && npx vitest run test/daemon/server.test.ts
 ```
+
 Expected: FAIL — `createServer` not defined
 
 - [ ] **Step 3: Implement HTTP + WebSocket server**
@@ -1227,7 +1380,11 @@ export function createServer(config: ServerConfig): Server {
     if (!clients) return
     const msg = JSON.stringify(data)
     for (const ws of clients) {
-      try { ws.send(msg) } catch { clients.delete(ws) }
+      try {
+        ws.send(msg)
+      } catch {
+        clients.delete(ws)
+      }
     }
   }
 
@@ -1251,7 +1408,11 @@ export function createServer(config: ServerConfig): Server {
 
       // Parse body helper
       async function jsonBody(): Promise<Record<string, unknown>> {
-        try { return await req.json() } catch { return {} }
+        try {
+          return await req.json()
+        } catch {
+          return {}
+        }
       }
 
       // ── Health ──────────────────────────────────────
@@ -1347,7 +1508,8 @@ export function createServer(config: ServerConfig): Server {
       // ── Goals (stub — Phase 4) ──────────────────────
       if (method === 'GET' && path === '/api/v1/goals') {
         const sessionId = url.searchParams.get('session')
-        if (!sessionId) return Response.json({ ok: false, error: '?session= required' }, { status: 400 })
+        if (!sessionId)
+          return Response.json({ ok: false, error: '?session= required' }, { status: 400 })
         const goals = db.getGoals(sessionId)
         return Response.json({ ok: true, data: { goals } })
       }
@@ -1359,7 +1521,7 @@ export function createServer(config: ServerConfig): Server {
           sessionId: body.sessionId as string,
           description: body.description as string,
           status: 'active',
-          progress: body.progress as DaemonGoal['progress'] || null,
+          progress: (body.progress as DaemonGoal['progress']) || null,
           createdAt: now,
           updatedAt: now,
         })
@@ -1369,7 +1531,8 @@ export function createServer(config: ServerConfig): Server {
       // ── Schedules (stub — Phase 4) ──────────────────
       if (method === 'GET' && path === '/api/v1/schedules') {
         const sessionId = url.searchParams.get('session')
-        if (!sessionId) return Response.json({ ok: false, error: '?session= required' }, { status: 400 })
+        if (!sessionId)
+          return Response.json({ ok: false, error: '?session= required' }, { status: 400 })
         const schedules = db.getSchedules(sessionId)
         return Response.json({ ok: true, data: { schedules } })
       }
@@ -1408,6 +1571,7 @@ export function createServer(config: ServerConfig): Server {
 ```bash
 cd apps/cli && npx vitest run test/daemon/server.test.ts
 ```
+
 Expected: ALL TESTS PASS
 
 - [ ] **Step 5: Commit**
@@ -1422,9 +1586,11 @@ git commit -m "feat(daemon): HTTP + WebSocket server with session CRUD endpoints
 ### Task 6: Daemon Lifecycle (start/stop/status)
 
 **Files:**
+
 - Create: `apps/cli/src/daemon/index.ts`
 
 **Interfaces:**
+
 - Consumes: `DaemonDatabase` from `database.ts`, `SessionManager` from `session-manager.ts`, `createServer` from `server.ts`, `loadOrCreateToken` from `auth.ts`
 - Produces: `startDaemon()`, `stopDaemon()`, `getDaemonStatus()`, `getPort()`
 
@@ -1540,23 +1706,35 @@ export async function stopDaemon(force: boolean = false): Promise<void> {
   }
 
   // Clean up PID/port files
-  try { unlinkSync(PID_FILE) } catch {}
-  try { unlinkSync(PORT_FILE) } catch {}
+  try {
+    unlinkSync(PID_FILE)
+  } catch {}
+  try {
+    unlinkSync(PORT_FILE)
+  } catch {}
 }
 
 export function getDaemonStatus(): DaemonStatus | null {
   if (!existsSync(PID_FILE)) return null
 
   let pid = 0
-  try { pid = parseInt(readFileSync(PID_FILE, 'utf-8').trim(), 10) } catch { return null }
+  try {
+    pid = parseInt(readFileSync(PID_FILE, 'utf-8').trim(), 10)
+  } catch {
+    return null
+  }
 
   // Check if process is actually running
   try {
     process.kill(pid, 0) // Signal 0 just checks existence
   } catch {
     // Process not running — clean up stale files
-    try { unlinkSync(PID_FILE) } catch {}
-    try { unlinkSync(PORT_FILE) } catch {}
+    try {
+      unlinkSync(PID_FILE)
+    } catch {}
+    try {
+      unlinkSync(PORT_FILE)
+    } catch {}
     return null
   }
 
@@ -1581,6 +1759,7 @@ export function getDaemonStatus(): DaemonStatus | null {
 ```bash
 cd apps/cli && pnpm typecheck
 ```
+
 Expected: PASS
 
 - [ ] **Step 3: Commit**
@@ -1595,9 +1774,11 @@ git commit -m "feat(daemon): lifecycle management (start, stop, status)"
 ### Task 7: Daemon Binary Entry Point
 
 **Files:**
+
 - Create: `apps/cli/bin/daemon.ts`
 
 **Interfaces:**
+
 - Consumes: `startDaemon`, `stopDaemon`, `getDaemonStatus` from `daemon/index.ts`
 
 - [ ] **Step 1: Write daemon binary entry**
@@ -1651,6 +1832,7 @@ process.on('SIGINT', async () => {
 ```bash
 cd apps/cli && pnpm typecheck
 ```
+
 Expected: PASS
 
 - [ ] **Step 3: Commit**
@@ -1665,9 +1847,11 @@ git commit -m "feat(daemon): standalone daemon binary entry point"
 ### Task 8: CLI Daemon Commands
 
 **Files:**
+
 - Modify: `apps/cli/bin/mipham.ts`
 
 **Interfaces:**
+
 - Consumes: `startDaemon`, `stopDaemon`, `getDaemonStatus`, `getPort` from `daemon/index.ts`
 
 - [ ] **Step 1: Add daemon subcommands to mipham.ts**
@@ -1685,8 +1869,7 @@ async function runDaemonCLI(): Promise<boolean> {
 
   // --no-daemon flag (checked in main)
   // All daemon commands dynamically import to keep startup fast
-  const { startDaemon, stopDaemon, getDaemonStatus, getPort } =
-    await import('../src/daemon/index')
+  const { startDaemon, stopDaemon, getDaemonStatus, getPort } = await import('../src/daemon/index')
 
   if (subcmd === 'start') {
     const status = getDaemonStatus()
@@ -1707,7 +1890,7 @@ async function runDaemonCLI(): Promise<boolean> {
     child.unref()
 
     // Wait briefly for daemon to start
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    await new Promise((resolve) => setTimeout(resolve, 1000))
 
     const newStatus = getDaemonStatus()
     if (newStatus) {
@@ -1751,8 +1934,10 @@ async function runDaemonCLI(): Promise<boolean> {
   if (subcmd === 'restart') {
     const status = getDaemonStatus()
     if (status) {
-      try { process.kill(status.pid, 'SIGTERM') } catch {}
-      await new Promise(resolve => setTimeout(resolve, 500))
+      try {
+        process.kill(status.pid, 'SIGTERM')
+      } catch {}
+      await new Promise((resolve) => setTimeout(resolve, 500))
     }
     // Re-spawn daemon
     const { spawn } = await import('node:child_process')
@@ -1763,7 +1948,7 @@ async function runDaemonCLI(): Promise<boolean> {
       env: { ...process.env },
     })
     child.unref()
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    await new Promise((resolve) => setTimeout(resolve, 1000))
     console.log('Daemon restarted.')
     process.exit(0)
   }
@@ -1780,13 +1965,13 @@ async function runDaemonCLI(): Promise<boolean> {
 In `main()`, add daemon CLI handling after `runUpdate()` and before `runPluginCLI()`:
 
 ```typescript
-  // ── Update / upgrade ──────────────────────────────────────────────────────
-  const handledUpdate = await runUpdate()
-  if (handledUpdate) return
+// ── Update / upgrade ──────────────────────────────────────────────────────
+const handledUpdate = await runUpdate()
+if (handledUpdate) return
 
-  // ── Daemon commands ───────────────────────────────────────────────────────
-  const handledDaemon = await runDaemonCLI()
-  if (handledDaemon) return
+// ── Daemon commands ───────────────────────────────────────────────────────
+const handledDaemon = await runDaemonCLI()
+if (handledDaemon) return
 ```
 
 Also add `'daemon'` to the `KNOWN_COMMANDS` array (for typo suggestions).
@@ -1794,10 +1979,13 @@ Also add `'daemon'` to the `KNOWN_COMMANDS` array (for typo suggestions).
 - [ ] **Step 3: Update KNOWN_COMMANDS**
 
 Change:
+
 ```typescript
 const KNOWN_COMMANDS = ['update', 'upgrade', 'plugin', 'workflow', 'help']
 ```
+
 To:
+
 ```typescript
 const KNOWN_COMMANDS = ['update', 'upgrade', 'plugin', 'workflow', 'daemon', 'help']
 ```
@@ -1807,6 +1995,7 @@ const KNOWN_COMMANDS = ['update', 'upgrade', 'plugin', 'workflow', 'daemon', 'he
 ```bash
 cd apps/cli && pnpm typecheck
 ```
+
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -1825,6 +2014,7 @@ git commit -m "feat(daemon): CLI subcommands (start, stop, status, restart)"
 ```bash
 cd apps/cli && npx vitest run test/daemon/
 ```
+
 Expected: ALL TESTS PASS
 
 - [ ] **Step 2: Run full test suite (no regressions)**
@@ -1832,6 +2022,7 @@ Expected: ALL TESTS PASS
 ```bash
 cd apps/cli && npx vitest run
 ```
+
 Expected: ALL 1020+ TESTS PASS
 
 - [ ] **Step 3: Run typecheck**
@@ -1839,6 +2030,7 @@ Expected: ALL 1020+ TESTS PASS
 ```bash
 cd apps/cli && pnpm typecheck
 ```
+
 Expected: PASS
 
 - [ ] **Step 4: Run format check**
@@ -1846,6 +2038,7 @@ Expected: PASS
 ```bash
 pnpm format:check
 ```
+
 Expected: PASS
 
 - [ ] **Step 5: Final commit**
@@ -1869,6 +2062,7 @@ After Task 9, the daemon core is operational:
 - All state persisted to SQLite at `~/.mipham/daemon.db`
 
 **Next phases build on this:**
+
 - Phase 2: Session Workers + Engine integration + `mipham attach`
 - Phase 3: Agent communication system
 - Phase 4: Goals + Schedules
