@@ -45,9 +45,8 @@ function writeConfigFile(providerId: string, modelId: string, apiKey: string): v
   mkdirSync(configDir, { recursive: true })
 
   const provider = DEFAULT_PROVIDERS.find((p) => p.id === providerId)
-  const models = providerId === 'ollama'
-    ? getOllamaModelListForConfig()
-    : getActiveModels(providerId)
+  const models =
+    providerId === 'ollama' ? getOllamaModelListForConfig() : getActiveModels(providerId)
 
   function getOllamaModelListForConfig(): ModelInfo[] {
     // 与 getOllamaModelList 逻辑一致，但用于配置写入
@@ -63,21 +62,31 @@ function writeConfigFile(providerId: string, modelId: string, apiKey: string): v
         if (!seen.has(name)) {
           seen.add(name)
           result.push({
-            id: name, name, providerId: 'ollama',
-            contextWindow: 128_000, maxOutput: 32_000,
-            vision: false, status: 'active',
+            id: name,
+            name,
+            providerId: 'ollama',
+            contextWindow: 128_000,
+            maxOutput: 32_000,
+            vision: false,
+            status: 'active',
           })
         }
       }
-    } catch { /* ollama not available */ }
+    } catch {
+      /* ollama not available */
+    }
 
     for (const p of OLLAMA_PRESET_MODELS) {
       if (!seen.has(p.id)) {
         seen.add(p.id)
         result.push({
-          id: p.id, name: p.id, providerId: 'ollama',
-          contextWindow: 128_000, maxOutput: 32_000,
-          vision: false, status: 'active',
+          id: p.id,
+          name: p.id,
+          providerId: 'ollama',
+          contextWindow: 128_000,
+          maxOutput: 32_000,
+          vision: false,
+          status: 'active',
         })
       }
     }
@@ -491,7 +500,11 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
             <Box flexDirection="column" marginBottom={1}>
               <Text>
                 状态：{ollamaStatus.installed ? '✅ 已安装' : '❌ 未安装'}
-                {ollamaStatus.running ? ' · 运行中' : ollamaStatus.installed ? ' · 未运行（请执行 ollama serve）' : ''}
+                {ollamaStatus.running
+                  ? ' · 运行中'
+                  : ollamaStatus.installed
+                    ? ' · 未运行（请执行 ollama serve）'
+                    : ''}
               </Text>
             </Box>
           ) : (
@@ -519,9 +532,7 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
               <Text dimColor>
                 未检测到已下载模型。请先运行 ollama pull &lt;model&gt; 下载模型。
               </Text>
-              <Text dimColor>
-                以下为预置模型列表，选择后可在对话中通过 /models 切换。
-              </Text>
+              <Text dimColor>以下为预置模型列表，选择后可在对话中通过 /models 切换。</Text>
             </Box>
           )}
           <Box marginTop={1}>

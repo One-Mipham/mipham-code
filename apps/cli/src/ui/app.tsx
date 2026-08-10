@@ -688,7 +688,13 @@ export function App({
         {/* API Key input prompt */}
         <Box flexDirection="column" marginTop={1}>
           <Text dimColor>──────────────────────────────</Text>
-          <Box flexDirection="column" marginY={1} borderStyle="round" borderColor="yellow" padding={1}>
+          <Box
+            flexDirection="column"
+            marginY={1}
+            borderStyle="round"
+            borderColor="yellow"
+            padding={1}
+          >
             <Text bold color="yellow">
               {t('ui.picker.needs_api_key', { provider: apiKeyPrompt.providerName })}
             </Text>

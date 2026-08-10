@@ -418,7 +418,11 @@ export function loadCrossSessionConfig(cwd: string = process.cwd()): CrossSessio
  *
  * Returns true on success, false on failure.
  */
-export function saveProviderApiKey(providerId: string, apiKey: string, cwd: string = process.cwd()): boolean {
+export function saveProviderApiKey(
+  providerId: string,
+  apiKey: string,
+  cwd: string = process.cwd(),
+): boolean {
   const userConfigPath = join(MIPHAM_HOME, 'config.yml')
   const projectConfigPath = join(cwd, '.mipham', 'config.yml')
 
