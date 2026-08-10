@@ -18,40 +18,40 @@ function isVerificationCommand(input: Record<string, unknown>): boolean {
   const cmd = (input.command as string) || ''
   // Patterns for verification-only commands (no side effects on codebase)
   const verifyPatterns = [
-    /\bpnpm\s+test\b/,         // test runner
-    /\bpnpm\s+t\b/,            // shorthand test
-    /\bpnpm\s+typecheck\b/,    // type checking
-    /\bpnpm\s+lint\b/,         // linting
+    /\bpnpm\s+test\b/, // test runner
+    /\bpnpm\s+t\b/, // shorthand test
+    /\bpnpm\s+typecheck\b/, // type checking
+    /\bpnpm\s+lint\b/, // linting
     /\bpnpm\s+format:check\b/, // format check
-    /\bnpm\s+test\b/,          // npm test
-    /\bnpm\s+run\s+test\b/,    // npm run test
-    /\bvitest\b/,              // vitest runner
-    /\bjest\b/,                // jest runner
-    /\btsc\s+(?!init)/,        // TypeScript compiler (not tsc init)
-    /\btsc\s+--noEmit\b/,      // type check only
-    /\beslint\b/,              // eslint
-    /\bprettier\s+--check\b/,  // prettier check
-    /\bpytest\b/,              // python test runner
-    /\bruff\s+check\b/,        // python linter
-    /\bcargo\s+test\b/,        // rust test
-    /\bcargo\s+check\b/,       // rust check
-    /\bgo\s+test\b/,           // go test
-    /\bgo\s+vet\b/,            // go vet
-    /\bmake\s+test\b/,         // make test
-    /\bgit\s+status\b/,        // git status (read-only)
-    /\bgit\s+diff\b/,          // git diff (read-only)
-    /\bgit\s+log\b/,           // git log (read-only)
-    /\bgit\s+branch\b/,        // git branch (read-only)
-    /\bls\b/,                  // list files
-    /\bcat\b/,                 // read file
-    /\bhead\b/,                // read file start
-    /\btail\b/,                // read file end
-    /\bwhich\b/,               // find binary
-    /\becho\b/,                // print text
-    /\bnode\s+-v\b/,           // node version
-    /\bpython\s+--version\b/,  // python version
-    /\bwhoami\b/,              // current user
-    /\bpwd\b/,                 // current directory
+    /\bnpm\s+test\b/, // npm test
+    /\bnpm\s+run\s+test\b/, // npm run test
+    /\bvitest\b/, // vitest runner
+    /\bjest\b/, // jest runner
+    /\btsc\s+(?!init)/, // TypeScript compiler (not tsc init)
+    /\btsc\s+--noEmit\b/, // type check only
+    /\beslint\b/, // eslint
+    /\bprettier\s+--check\b/, // prettier check
+    /\bpytest\b/, // python test runner
+    /\bruff\s+check\b/, // python linter
+    /\bcargo\s+test\b/, // rust test
+    /\bcargo\s+check\b/, // rust check
+    /\bgo\s+test\b/, // go test
+    /\bgo\s+vet\b/, // go vet
+    /\bmake\s+test\b/, // make test
+    /\bgit\s+status\b/, // git status (read-only)
+    /\bgit\s+diff\b/, // git diff (read-only)
+    /\bgit\s+log\b/, // git log (read-only)
+    /\bgit\s+branch\b/, // git branch (read-only)
+    /\bls\b/, // list files
+    /\bcat\b/, // read file
+    /\bhead\b/, // read file start
+    /\btail\b/, // read file end
+    /\bwhich\b/, // find binary
+    /\becho\b/, // print text
+    /\bnode\s+-v\b/, // node version
+    /\bpython\s+--version\b/, // python version
+    /\bwhoami\b/, // current user
+    /\bpwd\b/, // current directory
   ]
   return verifyPatterns.some((p) => p.test(cmd))
 }

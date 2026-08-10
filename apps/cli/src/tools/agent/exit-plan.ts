@@ -56,9 +56,7 @@ export const exitPlanModeTool: ToolDefinition = {
         '',
         'DO NOT start implementing until the user explicitly approves.',
         'DO NOT call ExitPlanMode with approved:true — that parameter no longer exists.',
-        planContent
-          ? `\n── Plan Content (for reference) ──\n\n${planContent.slice(0, 3000)}`
-          : '',
+        planContent ? `\n── Plan Content (for reference) ──\n\n${planContent.slice(0, 3000)}` : '',
       ].join('\n'),
     }
   },

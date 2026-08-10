@@ -258,9 +258,7 @@ function parseErrorLocations(stderr: string): ErrorLocation[] {
     const gm = match
     const file = gm[1]!
     // Skip if we already have this exact location from a more specific pattern
-    const alreadyHave = locations.some(
-      (l) => l.file === file && l.line === parseInt(gm[2]!),
-    )
+    const alreadyHave = locations.some((l) => l.file === file && l.line === parseInt(gm[2]!))
     if (!alreadyHave) {
       locations.push({ file, line: parseInt(match[2]!) })
     }
@@ -389,7 +387,14 @@ export const bashTool: ToolDefinition = {
         if (errorLocations.length > 0) {
           errorContent +=
             '\n\n── Error Locations (for quick fix) ──\n' +
-            errorLocations.map((l) => `  ${l.file}:${l.line}` + (l.col ? `:${l.col}` : '') + (l.message ? ` — ${l.message}` : '')).join('\n')
+            errorLocations
+              .map(
+                (l) =>
+                  `  ${l.file}:${l.line}` +
+                  (l.col ? `:${l.col}` : '') +
+                  (l.message ? ` — ${l.message}` : ''),
+              )
+              .join('\n')
         }
         return {
           success: false,
