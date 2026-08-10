@@ -31,6 +31,16 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [peekingSessionId, setPeekingSessionId] = useState<string | null>(null)
   const [_groupBy, setGroupBy] = useState<'status' | 'directory'>('status')
+  const [feedback, setFeedback] = useState<string | null>(null)
+
+  // Flash a brief feedback message that auto-clears
+  const showFeedback = useCallback(
+    (msg: string) => {
+      setFeedback(msg)
+      setTimeout(() => setFeedback(null), 1800)
+    },
+    [],
+  )
 
   // Build a flat list of sessions in group order, with group headers
   const flatList = useMemo(() => {
@@ -99,26 +109,39 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
     // Ctrl+S — toggle group by (status ↔ directory)
     if (input === '\x13') {
       setGroupBy((prev) => (prev === 'status' ? 'directory' : 'status'))
+      showFeedback(`Grouped by ${_groupBy === 'status' ? 'directory' : 'status'}`)
       return
     }
 
     // Ctrl+R — rename selected session
     if (input === '\x12') {
-      if (sessionsOnly.length === 0) return
+      if (sessionsOnly.length === 0) {
+        showFeedback('No sessions to rename')
+        return
+      }
       const current = sessionsOnly[selectedIndex]
       if (!current) return
       const newTitle = `session-${Date.now().toString(36)}`
       manager.rename(current.session.id, newTitle)
+      showFeedback(`Renamed to ${newTitle}`)
       return
     }
 
     if (input === 'j') {
+      if (sessionsOnly.length === 0) {
+        showFeedback('No sessions to navigate — spawn a background agent first')
+        return
+      }
       setSelectedIndex((prev) => Math.min(prev + 1, sessionsOnly.length - 1))
       setPeekingSessionId(null)
       return
     }
 
     if (input === 'k') {
+      if (sessionsOnly.length === 0) {
+        showFeedback('No sessions to navigate — spawn a background agent first')
+        return
+      }
       setSelectedIndex((prev) => Math.max(prev - 1, 0))
       setPeekingSessionId(null)
       return
@@ -126,7 +149,10 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
 
     // Space — toggle peek
     if (input === ' ') {
-      if (sessionsOnly.length === 0) return
+      if (sessionsOnly.length === 0) {
+        showFeedback('No sessions to peek')
+        return
+      }
       const current = sessionsOnly[selectedIndex]
       if (!current) return
       setPeekingSessionId(peekingSessionId === current.session.id ? null : current.session.id)
@@ -135,7 +161,10 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
 
     // Enter — attach to selected session
     if (key.return) {
-      if (sessionsOnly.length === 0) return
+      if (sessionsOnly.length === 0) {
+        showFeedback('No sessions to attach — spawn a background agent first')
+        return
+      }
       const current = sessionsOnly[selectedIndex]
       if (!current) return
       if (peekingSessionId) {
@@ -198,6 +227,13 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
           <Text dimColor>
             Use the Agent tool or type &quot;run this in background&quot; to spawn one.
           </Text>
+          {feedback && (
+            <Box marginTop={1}>
+              <Text color="yellow" dimColor>
+                ⚡ {feedback}
+              </Text>
+            </Box>
+          )}
         </Box>
       ) : (
         <Box flexDirection="column">
@@ -231,6 +267,15 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
       {/* Peek panel (shown below the list when peeking) */}
       {peekData && (
         <SessionPeek session={peekData.session} recentMessages={peekData.recentMessages} />
+      )}
+
+      {/* Feedback toast — flashes briefly on action */}
+      {feedback && (
+        <Box marginTop={1}>
+          <Text color="yellow" dimColor>
+            ⚡ {feedback}
+          </Text>
+        </Box>
       )}
     </Box>
   )
