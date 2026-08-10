@@ -83,6 +83,16 @@ export function InputBar({
   const [completionVerb, setCompletionVerb] = useState<string | null>(null)
   const prevLoading = useRef(isLoading)
 
+  // ── Message history for arrow-key navigation (Claude Code parity) ──
+  const [submittedHistory, setSubmittedHistory] = useState<string[]>([])
+  const historyIndexRef = useRef(-1) // -1 = not browsing history
+  const savedDraftRef = useRef('') // saved user draft before browsing history
+
+  // Stabilize t ref — prevents stale closures in intervals and avoids
+  // unnecessary effect re-runs when the i18n context value object changes.
+  const tRef = useRef(t)
+  tRef.current = t
+
   // ── Slash command hints ──
   const allCommands = useMemo(() => getCommandList(), [])
   const slashHints = useMemo(() => {
@@ -92,32 +102,33 @@ export function InputBar({
     return allCommands.filter((c) => c.name.toLowerCase().includes(filter)).slice(0, 8)
   }, [value, allCommands])
 
-  // Rotate gerunds while loading
+  // Rotate gerunds while loading — use tRef to avoid re-running when i18n context re-renders
   useEffect(() => {
     if (!isLoading) return
     const interval = setInterval(() => {
-      setVerb(t(pick(LOADING_KEYS)))
-    }, 1200)
+      setVerb(tRef.current(pick(LOADING_KEYS)))
+    }, 2000)
     return () => clearInterval(interval)
-  }, [isLoading, t])
+  }, [isLoading])
 
   // Pick a fresh gerund when loading starts
   useEffect(() => {
     if (isLoading) {
-      setVerb(t(pick(LOADING_KEYS)))
+      setVerb(tRef.current(pick(LOADING_KEYS)))
       setCompletionVerb(null)
     }
-  }, [isLoading, t])
+  }, [isLoading])
 
   // Flash a past participle when loading stops
   useEffect(() => {
     if (prevLoading.current === true && isLoading === false) {
-      setCompletionVerb(t(pick(COMPLETED_KEYS)))
+      setCompletionVerb(tRef.current(pick(COMPLETED_KEYS)))
       const timer = setTimeout(() => setCompletionVerb(null), 1500)
+      prevLoading.current = isLoading
       return () => clearTimeout(timer)
     }
     prevLoading.current = isLoading
-  }, [isLoading, t])
+  }, [isLoading])
 
   const [vimMode, setVimMode] = useState<VimMode>('insert')
   // NOTE: Dual mode state — React state (vimMode) drives UI re-renders (prompt color,
@@ -193,6 +204,39 @@ export function InputBar({
       setValue(valueBeforeShortcut.current)
       onToggleAgentView?.()
       return
+    }
+
+    // ── Arrow-key history navigation (insert mode only, Claude Code parity) ──
+    if (vimEngine.current.mode === 'insert' && !searchMode) {
+      if (key.upArrow || key.downArrow) {
+        // Ignore if picker is active (command picker handles its own arrows)
+        if (value.startsWith('/')) return
+
+        if (key.upArrow) {
+          if (submittedHistory.length === 0) return
+          // Save current draft the first time we enter history browsing
+          if (historyIndexRef.current === -1) {
+            savedDraftRef.current = value
+          }
+          const newIndex = Math.min(historyIndexRef.current + 1, submittedHistory.length - 1)
+          historyIndexRef.current = newIndex
+          setValue(submittedHistory[submittedHistory.length - 1 - newIndex]!)
+          return
+        }
+        if (key.downArrow) {
+          if (historyIndexRef.current === -1) return
+          const newIndex = historyIndexRef.current - 1
+          historyIndexRef.current = newIndex
+          if (newIndex === -1) {
+            // Back to the original draft
+            setValue(savedDraftRef.current)
+            savedDraftRef.current = ''
+          } else {
+            setValue(submittedHistory[submittedHistory.length - 1 - newIndex]!)
+          }
+          return
+        }
+      }
     }
 
     if (vimEngine.current.mode !== 'normal') return
@@ -288,6 +332,10 @@ export function InputBar({
 
   const handleSubmit = (val: string) => {
     if (!val.trim() || isLoading) return
+    // Save to message history for arrow-key navigation
+    setSubmittedHistory((prev) => [...prev, val])
+    historyIndexRef.current = -1
+    savedDraftRef.current = ''
     onSubmit(val)
     setValue('')
     setPickerActive(false)
@@ -327,6 +375,11 @@ export function InputBar({
           onChange={(val) => {
             // Block text changes during search mode — keys go to search query
             if (searchMode) return
+            // Reset history browsing when user starts typing
+            if (historyIndexRef.current !== -1) {
+              historyIndexRef.current = -1
+              savedDraftRef.current = ''
+            }
             setValue(val)
           }}
           onSubmit={handleSubmit}
