@@ -702,7 +702,7 @@
     },
     "status": {
       "esc_to_interrupt": "esc to interrupt",
-      "shift_tab_cycle": "shift+tab 6 modes",
+      "shift_tab_cycle": "shift+tab",
       "left_for_agents": "ctrl+g agents to manage",
       "mipham_modes": "Mipham"
     }
