@@ -1,6 +1,8 @@
+import { execSync } from 'node:child_process'
 import type { ProviderConfig, ModelInfo, Message, StreamChunk } from '../shared/index.ts'
 import type { ProviderInstance, ChatRequest } from './registry'
 import { fetchWithRetry } from './fetch-utils'
+import { OLLAMA_PRESET_MODELS } from '../shared/constants'
 
 export class OpenAICompatProvider implements ProviderInstance {
   constructor(public config: ProviderConfig) {}
@@ -167,7 +169,56 @@ export class OpenAICompatProvider implements ProviderInstance {
   }
 
   async listModels(): Promise<ModelInfo[]> {
+    if (this.config.id === 'ollama') {
+      return this.listOllamaModels()
+    }
     return this.config.models.filter((m) => m.status === 'active')
+  }
+
+  private listOllamaModels(): ModelInfo[] {
+    const seen = new Set<string>()
+    const result: ModelInfo[] = []
+
+    // 1. ollama list locally downloaded models
+    try {
+      const out = execSync('ollama list', { timeout: 5000, encoding: 'utf-8' })
+      const lines = out.split('\n').slice(1).filter(Boolean)
+      for (const line of lines) {
+        const name = line.split(/\s+/)[0]!
+        if (!seen.has(name)) {
+          seen.add(name)
+          result.push({
+            id: name,
+            name,
+            providerId: 'ollama',
+            contextWindow: 128_000,
+            maxOutput: 32_000,
+            vision: false,
+            status: 'active',
+          })
+        }
+      }
+    } catch {
+      // ollama list failed (not installed / not running) → continue with presets
+    }
+
+    // 2. Preset models (deduplicated)
+    for (const preset of OLLAMA_PRESET_MODELS) {
+      if (!seen.has(preset.id)) {
+        seen.add(preset.id)
+        result.push({
+          id: preset.id,
+          name: `${preset.id} [${preset.source}]`,
+          providerId: 'ollama',
+          contextWindow: 128_000,
+          maxOutput: 32_000,
+          vision: false,
+          status: 'active',
+        })
+      }
+    }
+
+    return result
   }
 
   async healthCheck(): Promise<boolean> {
