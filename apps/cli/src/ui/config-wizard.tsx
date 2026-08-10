@@ -171,7 +171,7 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
   const [cursor, setCursor] = useState(0)
 
   // Ollama
-  const [ollamaModel, setOllamaModel] = useState('')
+  const [ollamaModel, _setOllamaModel] = useState('')
   const [ollamaStatus, setOllamaStatus] = useState<ReturnType<typeof checkOllama> | null>(null)
   const [ollamaCursor, setOllamaCursor] = useState(0)
   const ollamaModelList = ollamaStatus ? getOllamaModelList(ollamaStatus.models) : []
@@ -349,8 +349,6 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
   })
 
   // ── Render ──
-
-  const dim = 'gray'
 
   return (
     <Box flexDirection="column" padding={1}>
