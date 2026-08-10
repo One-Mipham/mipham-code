@@ -689,10 +689,14 @@ export function App({
                 ⏵⏵ {PERMISSION_LABELS[permissionMode]}
               </Text>
               <Text dimColor>
-                {' '}({t('ui.status.shift_tab_cycle')}: {PERMISSION_LABELS.default} ·{' '}
+                {' '}
+                ({t('ui.status.shift_tab_cycle')}: {PERMISSION_LABELS.default} ·{' '}
                 {PERMISSION_LABELS.acceptEdits} · {PERMISSION_LABELS.bypassPermissions} ·{' '}
                 {PERMISSION_LABELS.plan} · {PERMISSION_LABELS.auto} · {PERMISSION_LABELS.dontAsk})
-                {' · '}{t('ui.status.esc_to_interrupt')}{' · '}{t('ui.status.left_for_agents')}
+                {' · '}
+                {t('ui.status.esc_to_interrupt')}
+                {' · '}
+                {t('ui.status.left_for_agents')}
               </Text>
             </Box>
           </Box>
