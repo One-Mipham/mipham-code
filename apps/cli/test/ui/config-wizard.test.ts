@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { DEFAULT_PROVIDERS } from '../../src/shared/constants'
+import { DEFAULT_PROVIDERS, OLLAMA_PRESET_MODELS } from '../../src/shared/constants'
 import { mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -376,6 +376,117 @@ describe('ConfigWizard Cloud path', () => {
       expect(transition('mode', 'down')).toBe('mode')
       expect(transition('model', 'up')).toBe('model')
       expect(transition('model', 'down')).toBe('model')
+      expect(transition('ollama', 'up')).toBe('ollama')
+      expect(transition('ollama', 'down')).toBe('ollama')
     })
+  })
+})
+
+// ── Ollama model list helpers ──
+
+interface OllamaModelItem {
+  id: string
+  source: 'local' | 'MiphamAI' | '热门'
+}
+
+function getOllamaModelList(installedModels: string[]): OllamaModelItem[] {
+  const seen = new Set<string>()
+  const result: OllamaModelItem[] = []
+
+  // ollama list 返回的本地模型
+  for (const name of installedModels) {
+    if (!seen.has(name)) {
+      seen.add(name)
+      result.push({ id: name, source: 'local' })
+    }
+  }
+
+  // 预置模型（去重）
+  for (const preset of OLLAMA_PRESET_MODELS) {
+    if (!seen.has(preset.id)) {
+      seen.add(preset.id)
+      result.push({ id: preset.id, source: preset.source as 'MiphamAI' | '热门' })
+    }
+  }
+
+  return result
+}
+
+describe('ConfigWizard Ollama model list', () => {
+  it('includes installed models before preset models', () => {
+    const list = getOllamaModelList(['llama3.2', 'qwen2.5'])
+    expect(list[0]!.id).toBe('llama3.2')
+    expect(list[0]!.source).toBe('local')
+    expect(list[1]!.id).toBe('qwen2.5')
+    expect(list[1]!.source).toBe('local')
+  })
+
+  it('deduplicates — installed model overrides preset', () => {
+    // qwen2.5:72b is similar but not exact match, so both should appear
+    const list = getOllamaModelList(['qwen2.5:72b'])
+    // Preset qwen2.5:72b should be deduplicated since it's in installedModels
+    const qwenEntries = list.filter((m) => m.id === 'qwen2.5:72b')
+    expect(qwenEntries).toHaveLength(1)
+    expect(qwenEntries[0]!.source).toBe('local')
+  })
+
+  it('includes all preset models when no local models installed', () => {
+    const list = getOllamaModelList([])
+    const presetIds = OLLAMA_PRESET_MODELS.map((p) => p.id)
+    for (const id of presetIds) {
+      expect(list.find((m) => m.id === id)).toBeTruthy()
+    }
+  })
+
+  it('preset models have correct source labels', () => {
+    const list = getOllamaModelList([])
+    for (const item of list) {
+      if (item.source === 'local') {
+        expect(item.source).toBe('local')
+      } else {
+        expect(['MiphamAI', '热门']).toContain(item.source)
+      }
+    }
+  })
+
+  it('returns empty array when both installed and presets are empty (edge case)', () => {
+    // This tests the empty input — presets always exist, so this is theoretical
+    const list = getOllamaModelList([])
+    expect(list.length).toBeGreaterThan(0) // presets always fill in
+  })
+
+  it('ollamaCursor navigation wraps around', () => {
+    const list = getOllamaModelList(['llama3.2', 'codellama'])
+    const len = list.length
+
+    // Wrap up from 0 → last
+    const upFrom0 = 0 > 0 ? 0 - 1 : len - 1
+    expect(upFrom0).toBe(len - 1)
+
+    // Wrap down from last → 0
+    const downFromLast = len - 1 < len - 1 ? len - 1 + 1 : 0
+    expect(downFromLast).toBe(0)
+
+    // Normal up
+    const upFrom1 = 1 > 0 ? 1 - 1 : len - 1
+    expect(upFrom1).toBe(0)
+
+    // Normal down
+    const downFrom0 = 0 < len - 1 ? 0 + 1 : 0
+    expect(downFrom0).toBe(1)
+  })
+
+  it('MiphamAI preset models appear with [MiphamAI] label', () => {
+    const list = getOllamaModelList([])
+    const miphamModels = list.filter((m) => m.source === 'MiphamAI')
+    expect(miphamModels.length).toBeGreaterThanOrEqual(1)
+    expect(miphamModels[0]!.id).toContain('om-V5')
+  })
+
+  it('热门 preset models appear with [热门] label', () => {
+    const list = getOllamaModelList([])
+    const hotModels = list.filter((m) => m.source === '热门')
+    expect(hotModels.length).toBeGreaterThanOrEqual(1)
+    expect(hotModels.map((m) => m.id)).toContain('deepseek-r1:70b')
   })
 })

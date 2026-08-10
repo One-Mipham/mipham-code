@@ -11,7 +11,7 @@
 import React, { useState, useEffect } from 'react'
 import { Box, Text, useInput } from 'ink'
 import TextInput from 'ink-text-input'
-import { DEFAULT_PROVIDERS } from '../shared/constants'
+import { DEFAULT_PROVIDERS, OLLAMA_PRESET_MODELS } from '../shared/constants'
 import type { ProviderConfig, ModelInfo } from '../shared/types'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -88,6 +88,36 @@ function checkOllama(): { installed: boolean; running: boolean; models: string[]
   }
 }
 
+// ── Ollama model list helpers ──
+
+interface OllamaModelItem {
+  id: string
+  source: 'local' | 'MiphamAI' | '热门'
+}
+
+function getOllamaModelList(installedModels: string[]): OllamaModelItem[] {
+  const seen = new Set<string>()
+  const result: OllamaModelItem[] = []
+
+  // ollama list 返回的本地模型
+  for (const name of installedModels) {
+    if (!seen.has(name)) {
+      seen.add(name)
+      result.push({ id: name, source: 'local' })
+    }
+  }
+
+  // 预置模型（去重）
+  for (const preset of OLLAMA_PRESET_MODELS) {
+    if (!seen.has(preset.id)) {
+      seen.add(preset.id)
+      result.push({ id: preset.id, source: preset.source as 'MiphamAI' | '热门' })
+    }
+  }
+
+  return result
+}
+
 // ── Component ──
 
 export function ConfigWizard({ onComplete, onSkip }: Props) {
@@ -106,6 +136,8 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
   // Ollama
   const [ollamaModel, setOllamaModel] = useState('')
   const [ollamaStatus, setOllamaStatus] = useState<ReturnType<typeof checkOllama> | null>(null)
+  const [ollamaCursor, setOllamaCursor] = useState(0)
+  const ollamaModelList = ollamaStatus ? getOllamaModelList(ollamaStatus.models) : []
 
   // ── Derived data ──
 
@@ -115,6 +147,7 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
   // Reset cursor when step changes
   const goStep = (s: Step) => {
     setCursor(0)
+    setOllamaCursor(0)
     setError(null)
     setStep(s)
   }
@@ -135,7 +168,8 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
   }
 
   const finishLocal = () => {
-    const model = ollamaModel.trim() || 'llama3.2'
+    const selectedModel = ollamaModelList[ollamaCursor]
+    const model = selectedModel?.id || ollamaModel.trim() || 'llama3.2'
     try {
       writeConfigFile('ollama', model, 'ollama-local')
       onComplete({ providerId: 'ollama', modelId: model, apiKey: 'ollama-local' })
@@ -245,6 +279,24 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
           setModelId(m.id)
           goStep('apikey')
         }
+      }
+      return
+    }
+
+    // ── Ollama model selection ──
+    if (step === 'ollama') {
+      if (ollamaModelList.length === 0) return
+      if (key.upArrow) {
+        setOllamaCursor((c) => (c > 0 ? c - 1 : ollamaModelList.length - 1))
+        return
+      }
+      if (key.downArrow) {
+        setOllamaCursor((c) => (c < ollamaModelList.length - 1 ? c + 1 : 0))
+        return
+      }
+      if (key.return) {
+        goStep('confirm')
+        return
       }
       return
     }
@@ -404,29 +456,41 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
             <Box flexDirection="column" marginBottom={1}>
               <Text>
                 状态：{ollamaStatus.installed ? '✅ 已安装' : '❌ 未安装'}
-                {ollamaStatus.running ? ' · 运行中' : ''}
+                {ollamaStatus.running ? ' · 运行中' : ollamaStatus.installed ? ' · 未运行（请执行 ollama serve）' : ''}
               </Text>
-              {ollamaStatus.models.length > 0 && (
-                <Text dimColor>已下载模型：{ollamaStatus.models.join(', ')}</Text>
-              )}
             </Box>
           ) : (
             <Text dimColor>正在检测 Ollama...</Text>
           )}
+          {ollamaModelList.length > 0 && (
+            <Box flexDirection="column" marginBottom={1}>
+              <Box marginBottom={1}>
+                <Text dimColor>已下载模型（↑↓ 选择 · Enter 确认）：</Text>
+              </Box>
+              {ollamaModelList.map((m, i) => (
+                <Box key={m.id}>
+                  <Text color={i === ollamaCursor ? 'cyan' : undefined}>
+                    {i === ollamaCursor ? '▶' : '  '} {m.id}
+                  </Text>
+                  {m.source !== 'local' && (
+                    <Text dimColor> [{m.source === 'MiphamAI' ? 'MiphamAI' : '热门'}]</Text>
+                  )}
+                </Box>
+              ))}
+            </Box>
+          )}
+          {ollamaStatus && ollamaModelList.length === 0 && (
+            <Box marginBottom={1}>
+              <Text dimColor>
+                未检测到已下载模型。请先运行 ollama pull &lt;model&gt; 下载模型。
+              </Text>
+              <Text dimColor>
+                以下为预置模型列表，选择后可在对话中通过 /models 切换。
+              </Text>
+            </Box>
+          )}
           <Box marginTop={1}>
-            <Text dimColor>输入 Ollama 模型名称（如 llama3.2, qwen2.5, deepseek-r1）：</Text>
-          </Box>
-          <Box marginTop={1}>
-            <Text color="yellow">🖥️ </Text>
-            <TextInput
-              value={ollamaModel}
-              onChange={setOllamaModel}
-              onSubmit={() => goStep('confirm')}
-              placeholder="模型名，默认 llama3.2"
-            />
-          </Box>
-          <Box marginTop={1}>
-            <Text dimColor>Enter 继续 · Esc 返回</Text>
+            <Text dimColor>↑↓ 选择 · Enter 确认 · Esc 返回</Text>
           </Box>
         </Box>
       )}
@@ -449,7 +513,11 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
               </Text>
             </>
           )}
-          {mode === 'local' && <Text>Ollama 模型：{ollamaModel.trim() || 'llama3.2'}</Text>}
+          {mode === 'local' && (
+            <Text>
+              Ollama 模型：{ollamaModelList[ollamaCursor]?.id || ollamaModel.trim() || 'llama3.2'}
+            </Text>
+          )}
           <Box marginTop={1}>
             <Text dimColor>配置文件将保存到 ~/.mipham/config.yml</Text>
           </Box>
