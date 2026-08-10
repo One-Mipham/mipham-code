@@ -1,0 +1,236 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { CrsiSandbox } from '../../src/core/crsi-sandbox'
+import { writeFileSync, mkdirSync, existsSync } from 'node:fs'
+import { join } from 'node:path'
+
+// The worktree is a full monorepo copy. The test runs from apps/cli/,
+// but the worktree root is the repo root. So file paths are relative to
+// the repo root: apps/cli/README.md = worktree_root/apps/cli/README.md.
+// We read original content from CWD-relative paths: README.md = apps/cli/README.md.
+const WORKTREE_FILE = 'apps/cli/README.md'
+const CWD_FILE = 'README.md'
+
+describe('CrsiSandbox', () => {
+  let sandbox: CrsiSandbox
+
+  beforeEach(() => {
+    sandbox = new CrsiSandbox()
+  })
+
+  afterEach(() => {
+    // Always clean up worktree
+    try {
+      sandbox.removeWorktree()
+    } catch {
+      // best-effort
+    }
+  })
+
+  describe('createWorktree', () => {
+    it('should create an isolated git worktree and return its path', () => {
+      const { worktreePath, branch } = sandbox.createWorktree()
+
+      expect(existsSync(worktreePath)).toBe(true)
+      expect(branch).toContain('crsi-sandbox-')
+
+      // Verify it's a real git worktree
+      expect(existsSync(join(worktreePath, '.git'))).toBe(true)
+      expect(existsSync(join(worktreePath, WORKTREE_FILE))).toBe(true)
+    })
+  })
+
+  describe('applyModification', () => {
+    it('should fail if no worktree is created', () => {
+      const result = sandbox.applyModification({
+        id: 'test-mod-1',
+        description: 'Test modification',
+        filePath: WORKTREE_FILE,
+        newContent: '{}',
+        originalContent: '{}',
+        timestamp: new Date().toISOString(),
+      })
+
+      expect(result.applied).toBe(false)
+      expect(result.phase).toBe('pending')
+      expect(result.error).toContain('No worktree created')
+    })
+
+    it('should apply a modification in the worktree without touching the real file', () => {
+      sandbox.createWorktree()
+
+      // Read the real package.json first
+      const { readFileSync } = require('node:fs')
+      const originalContent = readFileSync(CWD_FILE, 'utf-8')
+
+      const result = sandbox.applyModification({
+        id: 'test-mod-2',
+        description: 'Safe test modification in worktree',
+        filePath: WORKTREE_FILE,
+        newContent: '{"name": "crsi-test-modified", "version": "99.99.99"}',
+        originalContent,
+        timestamp: new Date().toISOString(),
+      })
+
+      expect(result.applied).toBe(true)
+      expect(result.phase).toBe('applied')
+      expect(result.diff).toBeTruthy()
+      expect(result.diff).toContain('crsi-test-modified')
+
+      // Verify the real file is UNCHANGED
+      const realContent = readFileSync(CWD_FILE, 'utf-8')
+      expect(realContent).toBe(originalContent)
+      expect(realContent).not.toContain('crsi-test-modified')
+    })
+
+    it('should reject if original content does not match (safety check)', () => {
+      sandbox.createWorktree()
+
+      const result = sandbox.applyModification({
+        id: 'test-mod-3',
+        description: 'Should be rejected',
+        filePath: WORKTREE_FILE,
+        newContent: '{}',
+        originalContent: 'this-content-does-not-exist-in-the-real-file-xyz-123',
+        timestamp: new Date().toISOString(),
+      })
+
+      expect(result.applied).toBe(false)
+      expect(result.phase).toBe('failed')
+      expect(result.error).toContain('mismatch')
+    })
+
+    it('should accept empty original content (lenient mode)', () => {
+      sandbox.createWorktree()
+
+      const { readFileSync } = require('node:fs')
+      const realContent = readFileSync(CWD_FILE, 'utf-8')
+
+      const result = sandbox.applyModification({
+        id: 'test-mod-4',
+        description: 'Lenient mode',
+        filePath: WORKTREE_FILE,
+        newContent: realContent, // No change
+        originalContent: '', // Empty = skip check
+        timestamp: new Date().toISOString(),
+      })
+
+      expect(result.applied).toBe(true)
+      expect(result.phase).toBe('applied')
+    })
+  })
+
+  describe('getDiff', () => {
+    it('should return empty string when no worktree exists', () => {
+      expect(sandbox.getDiff()).toBe('')
+    })
+
+    it('should return a diff after modification', () => {
+      sandbox.createWorktree()
+
+      const { readFileSync } = require('node:fs')
+      const originalContent = readFileSync(CWD_FILE, 'utf-8')
+
+      sandbox.applyModification({
+        id: 'test-diff-mod',
+        description: 'Diff test',
+        filePath: WORKTREE_FILE,
+        newContent: '{"name": "diff-test"}',
+        originalContent,
+        timestamp: new Date().toISOString(),
+      })
+
+      const diff = sandbox.getDiff()
+      expect(diff).toBeTruthy()
+      expect(diff).toContain('diff-test')
+    })
+  })
+
+  describe('rollback', () => {
+    it('should clean up worktree on rollback', () => {
+      const { worktreePath } = sandbox.createWorktree()
+      expect(existsSync(worktreePath)).toBe(true)
+
+      const result = sandbox.rollback()
+      expect(result.success).toBe(true)
+
+      // Worktree should be cleaned up
+      expect(existsSync(worktreePath)).toBe(false)
+    })
+  })
+
+  describe('finalize', () => {
+    it('should produce a session report and clean up', () => {
+      const { worktreePath } = sandbox.createWorktree()
+
+      const report = sandbox.finalize()
+
+      expect(report.sessionId).toContain('crsi-session-')
+      expect(report.summary.total).toBe(0)
+      expect(report.completedAt).toBeTruthy()
+
+      // Worktree should be cleaned up
+      expect(existsSync(worktreePath)).toBe(false)
+    })
+
+    it('should persist report to disk', () => {
+      sandbox.createWorktree()
+
+      const report = sandbox.finalize()
+
+      // Check the report file exists
+      const { join } = require('node:path')
+      const { homedir } = require('node:os')
+      const reportPath = join(homedir(), '.mipham', 'crsi-sandbox', `${report.sessionId}.json`)
+      expect(existsSync(reportPath)).toBe(true)
+    })
+  })
+
+  describe('getDiff without modifications', () => {
+    it('should return empty for clean worktree', () => {
+      sandbox.createWorktree()
+      const diff = sandbox.getDiff()
+      expect(diff).toBe('') // No changes yet
+    })
+  })
+
+  describe('session tracking', () => {
+    it('should track modifications throughout the session', () => {
+      sandbox.createWorktree()
+      const { readFileSync } = require('node:fs')
+      const originalContent = readFileSync(CWD_FILE, 'utf-8')
+
+      // Apply 3 modifications
+      sandbox.applyModification({
+        id: 'mod-a',
+        description: 'Change A',
+        filePath: WORKTREE_FILE,
+        newContent: '{"a": 1}',
+        originalContent,
+        timestamp: new Date().toISOString(),
+      })
+
+      sandbox.applyModification({
+        id: 'mod-b',
+        description: 'Change B',
+        filePath: WORKTREE_FILE,
+        newContent: '{"b": 2}',
+        originalContent: '', // lenient
+        timestamp: new Date().toISOString(),
+      })
+
+      sandbox.applyModification({
+        id: 'mod-c',
+        description: 'Change C (known mismatch)',
+        filePath: WORKTREE_FILE,
+        newContent: '{}',
+        originalContent: 'wrong-content',
+        timestamp: new Date().toISOString(),
+      })
+
+      const report = sandbox.getReport()
+      expect(report.summary.total).toBe(3)
+      expect(report.summary.applied).toBe(2)
+      expect(report.modifications).toHaveLength(3)
+    })
+  })
+})
