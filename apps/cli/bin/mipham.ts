@@ -312,6 +312,105 @@ async function runUpdate(): Promise<boolean> {
   process.exit(0)
 }
 
+// ── Daemon lifecycle commands ──────────────────────────────────────────────────
+
+async function runDaemonCLI(): Promise<boolean> {
+  const args = process.argv.slice(2)
+  if (args[0] !== 'daemon') return false
+
+  const subcmd = args[1]
+
+  const { spawn } = await import('node:child_process')
+
+  if (subcmd === 'start') {
+    const { getDaemonStatus } = await import('../src/daemon/index')
+    const status = getDaemonStatus()
+    if (status) {
+      console.log(`Daemon already running (PID: ${status.pid}, Port: ${status.port})`)
+      process.exit(0)
+    }
+
+    console.log('Starting daemon...')
+    const daemonScript = new URL('./daemon.ts', import.meta.url).pathname
+    const child = spawn('bun', ['run', daemonScript], {
+      detached: true,
+      stdio: 'ignore',
+      env: { ...process.env },
+    })
+    child.unref()
+
+    // Wait briefly for daemon to write PID/port files
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+
+    const newStatus = getDaemonStatus()
+    if (newStatus) {
+      console.log(`Daemon started (PID: ${newStatus.pid}, Port: ${newStatus.port})`)
+    } else {
+      console.log('Daemon started (PID unknown — check `mipham daemon status`)')
+    }
+    process.exit(0)
+  }
+
+  if (subcmd === 'stop') {
+    const { getDaemonStatus } = await import('../src/daemon/index')
+    const status = getDaemonStatus()
+    if (!status) {
+      console.log('Daemon is not running.')
+      process.exit(0)
+    }
+    try {
+      process.kill(status.pid, 'SIGTERM')
+      console.log(`Daemon stopped (PID: ${status.pid})`)
+    } catch {
+      console.log('Daemon is not running.')
+    }
+    process.exit(0)
+  }
+
+  if (subcmd === 'status') {
+    const { getDaemonStatus } = await import('../src/daemon/index')
+    const status = getDaemonStatus()
+    if (status) {
+      console.log(`Daemon: running`)
+      console.log(`  PID:    ${status.pid}`)
+      console.log(`  Port:   ${status.port}`)
+      console.log(`  URL:    http://127.0.0.1:${status.port}`)
+    } else {
+      console.log(`Daemon: not running`)
+    }
+    process.exit(0)
+  }
+
+  if (subcmd === 'restart') {
+    const { getDaemonStatus } = await import('../src/daemon/index')
+    const status = getDaemonStatus()
+    if (status) {
+      try {
+        process.kill(status.pid, 'SIGTERM')
+      } catch {
+        // Process may have already exited
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500))
+    }
+
+    const daemonScript = new URL('./daemon.ts', import.meta.url).pathname
+    const child = spawn('bun', ['run', daemonScript], {
+      detached: true,
+      stdio: 'ignore',
+      env: { ...process.env },
+    })
+    child.unref()
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    console.log('Daemon restarted.')
+    process.exit(0)
+  }
+
+  // Unknown subcommand
+  console.error(`Unknown daemon command: mipham daemon ${subcmd}`)
+  console.error('Usage: mipham daemon start|stop|status|restart')
+  process.exit(1)
+}
+
 async function main() {
   // ── Disable terminal special characters ──────────────────────────────────
   // Terminal intercepts Ctrl+S (XOFF), Ctrl+T (SIGINFO/status), Ctrl+R (rprnt)
@@ -380,6 +479,7 @@ Usage:
   mipham                     Launch interactive CLI
   mipham update              Update to the latest version
   mipham upgrade             Same as 'mipham update'
+  mipham daemon <cmd>        Daemon lifecycle (start, stop, status, restart)
   mipham plugin <cmd>        Plugin management (install, list, remove, etc.)
   mipham workflow <cmd>      Workflow orchestration (run, list, resume, etc.)
   mipham --version           Print version and exit
@@ -398,6 +498,10 @@ npm:  https://www.npmjs.com/package/@miphamai/cli`)
   const handledUpdate = await runUpdate()
   if (handledUpdate) return
 
+  // ── Daemon commands ───────────────────────────────────────────────────────
+  const handledDaemon = await runDaemonCLI()
+  if (handledDaemon) return
+
   // Check for plugin subcommands first
   const handledPlugin = await runPluginCLI()
   if (handledPlugin) return
@@ -409,7 +513,7 @@ npm:  https://www.npmjs.com/package/@miphamai/cli`)
   // ── Unknown command detection ──────────────────────────────────────────────
   // After all known subcommands are checked, any remaining positional argument
   // is probably a typo. Show error + suggestions instead of silently launching CLI.
-  const KNOWN_COMMANDS = ['update', 'upgrade', 'plugin', 'workflow', 'help']
+  const KNOWN_COMMANDS = ['update', 'upgrade', 'plugin', 'workflow', 'daemon', 'help']
   const firstArg = process.argv.slice(2).find((a) => !a.startsWith('-'))
   if (firstArg) {
     // Levenshtein distance to find closest match
