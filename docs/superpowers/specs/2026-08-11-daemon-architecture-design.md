@@ -22,12 +22,12 @@
 
 ## 二、设计决策
 
-| 维度 | 选择 |
-|------|------|
-| 范围 | C — 全功能平台（多会话、代理通信、定时调度、HTTP API） |
-| IPC 协议 | localhost HTTP + WebSocket |
-| 持久化 | SQLite (`~/.mipham/daemon.db`) |
-| 生命周期 | 首次 `mipham` 自动启动；`mipham --no-daemon` 跳过 |
+| 维度     | 选择                                                          |
+| -------- | ------------------------------------------------------------- |
+| 范围     | C — 全功能平台（多会话、代理通信、定时调度、HTTP API）        |
+| IPC 协议 | localhost HTTP + WebSocket                                    |
+| 持久化   | SQLite (`~/.mipham/daemon.db`)                                |
+| 生命周期 | 首次 `mipham` 自动启动；`mipham --no-daemon` 跳过             |
 | 执行模型 | 保持现有工具系统（read/write/bash/edit/agent/...） + 6 级权限 |
 
 ---
@@ -283,15 +283,15 @@ WS     /api/v1/sessions/:id/stream  实时流 (token/工具调用/agent 事件)
 
 ### 安全边界
 
-| 层级 | 机制 |
-|------|------|
-| **网络** | 默认仅监听 `127.0.0.1`（`MIPHAM_BIND=0.0.0.0` 可覆盖） |
-| **鉴权** | Bearer token，自动生成 64 字符随机令牌 |
-| **工具执行** | 保持现有 6 级权限系统（default/acceptEdits/plan/auto/dontAsk/bypass） |
-| **凭据保护** | Credential Masker 在 daemon 进程中同样生效 |
-| **Hook 系统** | PreToolUse/PostToolUse hooks 在 daemon worker 中执行 |
-| **进程隔离** | Worker 独立子进程；单个 worker 崩溃不影响其他会话 |
-| **沙箱** | 不引入 IPython 自由执行模型；所有代码执行经过 bash 工具 + 权限检查 |
+| 层级          | 机制                                                                  |
+| ------------- | --------------------------------------------------------------------- |
+| **网络**      | 默认仅监听 `127.0.0.1`（`MIPHAM_BIND=0.0.0.0` 可覆盖）                |
+| **鉴权**      | Bearer token，自动生成 64 字符随机令牌                                |
+| **工具执行**  | 保持现有 6 级权限系统（default/acceptEdits/plan/auto/dontAsk/bypass） |
+| **凭据保护**  | Credential Masker 在 daemon 进程中同样生效                            |
+| **Hook 系统** | PreToolUse/PostToolUse hooks 在 daemon worker 中执行                  |
+| **进程隔离**  | Worker 独立子进程；单个 worker 崩溃不影响其他会话                     |
+| **沙箱**      | 不引入 IPython 自由执行模型；所有代码执行经过 bash 工具 + 权限检查    |
 
 ### 拒绝的攻击向量
 
@@ -303,37 +303,37 @@ WS     /api/v1/sessions/:id/stream  实时流 (token/工具调用/agent 事件)
 
 ## 八、测试策略
 
-| 层级 | 工具 | 内容 |
-|------|------|------|
-| **单元测试** | Vitest | SQLite 读写、Session Manager、Worker 生命周期、权限传递 |
-| **集成测试** | Vitest + 临时端口 | HTTP API 端点、WebSocket 流、daemon 重启恢复 |
-| **渗透测试** | 现有套件扩展 | Daemon API 鉴权、WebSocket 注入、会话劫持 |
-| **压力测试** | 新增 | 100+ 并发会话、Worker 池耗尽恢复、SQLite 写入争用 |
+| 层级         | 工具              | 内容                                                    |
+| ------------ | ----------------- | ------------------------------------------------------- |
+| **单元测试** | Vitest            | SQLite 读写、Session Manager、Worker 生命周期、权限传递 |
+| **集成测试** | Vitest + 临时端口 | HTTP API 端点、WebSocket 流、daemon 重启恢复            |
+| **渗透测试** | 现有套件扩展      | Daemon API 鉴权、WebSocket 注入、会话劫持               |
+| **压力测试** | 新增              | 100+ 并发会话、Worker 池耗尽恢复、SQLite 写入争用       |
 
 ---
 
 ## 九、分阶段实施
 
-| 阶段 | 内容 | 文件估计 |
-|------|------|---------|
-| **Phase 1: Daemon 核心** | HTTP+WS server、Session Manager、SQLite schema、`mipham daemon start/stop/status` | ~8 文件 |
-| **Phase 2: 会话持久化** | Session Worker、Engine 集成、WebSocket 实时流、`mipham attach`、compact | ~6 文件 |
-| **Phase 3: Agent 系统** | Agent 表 + 注册、跨会话 agent 通信、`mipham agents` | ~5 文件 |
-| **Phase 4: Goals + Schedules** | Goals CRUD、定时调度、心跳检测、自动续期 | ~4 文件 |
-| **Phase 5: 外部 API** | REST API 鉴权、速率限制、API 文档 | ~3 文件 |
+| 阶段                           | 内容                                                                              | 文件估计 |
+| ------------------------------ | --------------------------------------------------------------------------------- | -------- |
+| **Phase 1: Daemon 核心**       | HTTP+WS server、Session Manager、SQLite schema、`mipham daemon start/stop/status` | ~8 文件  |
+| **Phase 2: 会话持久化**        | Session Worker、Engine 集成、WebSocket 实时流、`mipham attach`、compact           | ~6 文件  |
+| **Phase 3: Agent 系统**        | Agent 表 + 注册、跨会话 agent 通信、`mipham agents`                               | ~5 文件  |
+| **Phase 4: Goals + Schedules** | Goals CRUD、定时调度、心跳检测、自动续期                                          | ~4 文件  |
+| **Phase 5: 外部 API**          | REST API 鉴权、速率限制、API 文档                                                 | ~3 文件  |
 
 ---
 
 ## 十、兼容性
 
-| 项目 | 策略 |
-|------|------|
-| `mipham --no-daemon` | 保留旧行为，纯本地模式 |
-| `~/.mipham/sessions/*.jsonl` | 首次启动自动迁移到 SQLite |
-| `config.yml` | 不变，daemon 共享同一份配置 |
-| 现有工具系统 | 完全兼容，session worker 复用同一 Engine |
-| `mipham update` | daemon 先停止 → 更新 → 重启 daemon |
-| VS Code / JetBrains 扩展 | 通过 HTTP API 集成 |
+| 项目                         | 策略                                     |
+| ---------------------------- | ---------------------------------------- |
+| `mipham --no-daemon`         | 保留旧行为，纯本地模式                   |
+| `~/.mipham/sessions/*.jsonl` | 首次启动自动迁移到 SQLite                |
+| `config.yml`                 | 不变，daemon 共享同一份配置              |
+| 现有工具系统                 | 完全兼容，session worker 复用同一 Engine |
+| `mipham update`              | daemon 先停止 → 更新 → 重启 daemon       |
+| VS Code / JetBrains 扩展     | 通过 HTTP API 集成                       |
 
 ---
 
