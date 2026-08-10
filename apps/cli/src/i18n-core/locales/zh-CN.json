@@ -702,8 +702,9 @@
     },
     "status": {
       "esc_to_interrupt": "Esc 中断",
-      "shift_tab_cycle": "Shift+Tab 切换",
-      "left_for_agents": "ctrl+g 管理代理"
+      "shift_tab_cycle": "Shift+Tab 6种模式",
+      "left_for_agents": "ctrl+g 管理代理",
+      "mipham_modes": "Mipham独有"
     }
   },
   "tools": {
