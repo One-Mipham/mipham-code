@@ -238,12 +238,12 @@ export async function runApp(options: RunOptions): Promise<void> {
       for (const msg of saved.messages) {
         context.addMessage(msg)
       }
-      context.setSystemPrompt(instructions.buildSystemPrompt())
+      context.setSystemPrompt(instructions.buildSystemPrompt(config.permission as string))
     }
   }
 
   if (context.getMessageCount() === 0) {
-    const basePrompt = instructions.buildSystemPrompt()
+    const basePrompt = instructions.buildSystemPrompt(config.permission as string)
     const memoryReminder = loadSessionMemories(basePrompt)
 
     // Inject previous session summary for AI continuity
@@ -430,12 +430,19 @@ export async function runApp(options: RunOptions): Promise<void> {
   const crossSessionConfig = loadCrossSessionConfig(process.cwd())
   engine.setCrossSessionConfig(crossSessionConfig)
 
+  // P2-1: Trigger SessionStart hooks after full initialization
+  hookEngine.executeSessionStart(sessionName).catch(() => {
+    // Hook failures never block session startup
+  })
+
   // Auto-save session on exit
   let saved = false
   const saveAndExit = () => {
     saved = true
     clearInterval(heartbeatInterval)
     unregisterSession(sessionName)
+    // P2-1: Trigger SessionEnd hooks before cleanup (best-effort)
+    hookEngine.executeSessionEnd(sessionName).catch(() => {})
     artifactServer.stop()
     if (context.getMessageCount() > 0) {
       SessionStore.save(sessionName, context.getMessages(), {

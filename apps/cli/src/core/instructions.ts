@@ -47,7 +47,7 @@ export class InstructionsLoader {
     this.tryLoad(join(home, '.mipham', 'USER.md'), 'user')
   }
 
-  buildSystemPrompt(): string {
+  buildSystemPrompt(permissionMode?: string): string {
     const parts: string[] = []
 
     for (const inst of this.instructions) {
@@ -59,6 +59,11 @@ export class InstructionsLoader {
         user: 'User Preferences',
       }
       parts.push(`<!-- ${levelLabel[inst.level] || inst.level} (${inst.path}) -->\n${inst.content}`)
+    }
+
+    // P2-2: Inject current permission mode so the model knows its constraints
+    if (permissionMode) {
+      parts.push(this.buildPermissionContext(permissionMode))
     }
 
     // Append skills reminder after all instructions
@@ -100,6 +105,26 @@ Script format: export const meta = { name, description, phases: [...] }
   /** Set the skills system-reminder block to inject into the system prompt. */
   setSkillsReminder(reminder: string): void {
     this.skillsReminder = reminder
+  }
+
+  /**
+   * P2-2: Build a permission-mode context block for the system prompt.
+   * Tells the model its current permission level and what to expect.
+   */
+  private buildPermissionContext(mode: string): string {
+    const modeDescriptions: Record<string, string> = {
+      default: 'You are in **default** mode. Tools marked as requiring approval will be blocked. Use Read/Grep/Glob for exploration.',
+      acceptEdits: 'You are in **acceptEdits** mode. File reads and edits are allowed; Bash requires approval.',
+      plan: 'You are in **plan** mode. Only Read/Grep/Glob are allowed — no file modifications or command execution.',
+      auto: 'You are in **auto** mode. Most tools run without approval. If a tool is blocked by security policy or hooks, try a different approach instead of retrying.',
+      dontAsk: 'You are in **dontAsk** mode. All tools blocked unless explicitly allowlisted. Check your allow rules before acting.',
+      bypassPermissions: 'You are in **bypassPermissions** mode. All tools are allowed. Use this power responsibly.',
+    }
+
+    const description = modeDescriptions[mode]
+    if (!description) return ''
+
+    return `## Permission Context\n\n${description}\n\nWhen a tool is denied, do NOT retry with the same tool and similar parameters. Move on to a different approach or ask the user for guidance.`
   }
 
   list(): InstructionFile[] {

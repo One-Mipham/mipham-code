@@ -56,15 +56,20 @@ export class AgentMessageBus {
   /**
    * Get all unread messages addressed to the given agent.
    * Does NOT mark them as read — use markRead() for that.
+   * P2-3: Auto-prunes messages older than 1 hour before polling.
    */
   poll(agentId: string): AgentMessage[] {
+    // Auto-prune stale messages to prevent accumulation and stuck states
+    this.prune(60 * 60 * 1000) // 1 hour TTL
     return this.messages.filter((m) => m.to === agentId && !m.read)
   }
 
   /**
    * Get all messages addressed to the given agent (read + unread).
+   * P2-3: Auto-prunes stale messages before listing.
    */
   list(agentId: string): AgentMessage[] {
+    this.prune(60 * 60 * 1000) // 1 hour TTL
     return this.messages.filter((m) => m.to === agentId)
   }
 

@@ -112,6 +112,14 @@ export class QueryEngine {
       if (messages.length > 0) {
         const bus = getMessageBus()
         for (const msg of messages) {
+          // P2-1: Trigger Notification hook for cross-session messages
+          if (this.hookEngine) {
+            this.hookEngine.executeNotification(
+              `Cross-session message from ${msg.from}: ${msg.summary}`,
+              this.sessionId,
+            ).catch(() => {})
+          }
+
           if (policy === 'ask') {
             // Mark as awaiting approval — the model should verify with the user before acting
             bus.post(
@@ -836,7 +844,12 @@ export class QueryEngine {
   private async executeTool(name: string, params: Record<string, unknown>): Promise<ToolResult> {
     const tool = this.tools.get(name)
     if (!tool) {
-      return { success: false, content: '', error: `Unknown tool: ${name}` }
+      // P2-4: Provide a more helpful error for unavailable tools
+      const isMcpTool = name.startsWith('mcp__')
+      const hint = isMcpTool
+        ? `\nMCP tool "${name}" is no longer available. The MCP server may have been removed or disconnected. Use tool-search to discover available tools.`
+        : `\nTool "${name}" is not registered. Available tools may have changed — check the tool list.`
+      return { success: false, content: '', error: `Unknown tool: ${name}${hint}` }
     }
 
     // Security: check permission before executing
