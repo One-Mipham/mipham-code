@@ -308,26 +308,32 @@ async function runUpdate(): Promise<boolean> {
 }
 
 async function main() {
-  // ── Disable terminal software flow control (XON/XOFF) ──────────────────
-  // Ctrl+S and Ctrl+Q are intercepted by the terminal for flow control by default.
-  // Disabling it lets our app receive these key combinations (e.g. Agent Dashboard).
+  // ── Disable terminal special characters ──────────────────────────────────
+  // Terminal intercepts Ctrl+S (XOFF), Ctrl+T (SIGINFO/status), Ctrl+R (rprnt)
+  // before the app sees them. Disable these so Agent Dashboard shortcuts work.
   const { execSync } = await import('node:child_process')
+  let savedStty = ''
   try {
-    execSync('stty -ixon 2>/dev/null || true', { stdio: 'ignore' })
+    savedStty = execSync('stty -g 2>/dev/null || true', { encoding: 'utf-8' }).trim()
+    // Disable: flow control (^S/^Q), status (^T), reprint (^R)
+    execSync('stty -ixon stop undef start undef status undef rprnt undef 2>/dev/null || true', {
+      stdio: 'ignore',
+    })
   } catch {
-    // Non-POSIX platform (Windows) — no flow control to disable
+    // Non-POSIX platform (Windows) — no special chars to disable
   }
-  // Restore flow control on exit
-  const restoreFlowControl = () => {
+  // Restore original terminal settings on exit
+  const restoreTerminal = () => {
+    if (!savedStty) return
     try {
-      execSync('stty ixon 2>/dev/null || true', { stdio: 'ignore' })
+      execSync(`stty ${savedStty} 2>/dev/null || true`, { stdio: 'ignore' })
     } catch {
       /* ignore */
     }
   }
-  process.on('exit', restoreFlowControl)
-  process.on('SIGINT', restoreFlowControl)
-  process.on('SIGTERM', restoreFlowControl)
+  process.on('exit', restoreTerminal)
+  process.on('SIGINT', restoreTerminal)
+  process.on('SIGTERM', restoreTerminal)
 
   // ── Read version fresh from package.json at startup (bypasses Bun module cache) ──
   const { readFileSync } = await import('node:fs')
