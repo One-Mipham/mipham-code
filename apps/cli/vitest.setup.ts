@@ -9,6 +9,7 @@
  * (e.g. vi.spyOn(Bun, 'spawn')) to simulate different behaviours.
  */
 import { vi } from 'vitest'
+import { timingSafeEqual } from 'node:crypto'
 
 // ── Minimal Bun global mock ─────────────────────────────────────────────────
 
@@ -41,6 +42,14 @@ if (typeof globalThis.Bun === 'undefined') {
       arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
       stream: () => new ReadableStream(),
     })),
+
+    // Bun.password — constant-time comparison using Node.js crypto.timingSafeEqual
+    password: {
+      constantTimeCompare: (a: Buffer, b: Buffer): boolean => {
+        if (a.length !== b.length) return false
+        return timingSafeEqual(a, b)
+      },
+    },
 
     // Bun.write() — no-op
     write: vi.fn(() => Promise.resolve(0)),
