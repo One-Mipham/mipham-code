@@ -556,7 +556,16 @@ async function runAgentCLI(): Promise<boolean> {
       const resp = await fetch(`${baseUrl}/api/v1/agents`)
       const data = (await resp.json()) as {
         ok: boolean
-        data?: { agents: Array<{ id: string; status: string; agentType: string; description: string; createdAt: string; sessionId: string }> }
+        data?: {
+          agents: Array<{
+            id: string
+            status: string
+            agentType: string
+            description: string
+            createdAt: string
+            sessionId: string
+          }>
+        }
       }
       if (!data.ok || !data.data) {
         console.error('Failed to fetch agents.')
@@ -662,7 +671,24 @@ async function runAgentCLI(): Promise<boolean> {
     const resp = await fetch(`${baseUrl}/api/v1/agents/${agentId}`)
     const data = (await resp.json()) as {
       ok: boolean
-      data?: { agent: { id: string; agentType: string; description: string; status: string; kind: string; sessionId: string; createdAt: string; completedAt?: string | null; result?: string | null; error?: string | null; worktree?: string | null; branch?: string | null; prUrl?: string | null; parentId?: string | null } }
+      data?: {
+        agent: {
+          id: string
+          agentType: string
+          description: string
+          status: string
+          kind: string
+          sessionId: string
+          createdAt: string
+          completedAt?: string | null
+          result?: string | null
+          error?: string | null
+          worktree?: string | null
+          branch?: string | null
+          prUrl?: string | null
+          parentId?: string | null
+        }
+      }
       error?: string
     }
     if (!data.ok || !data.data) {
@@ -806,7 +832,17 @@ npm:  https://www.npmjs.com/package/@miphamai/cli`)
   // ── Unknown command detection ──────────────────────────────────────────────
   // After all known subcommands are checked, any remaining positional argument
   // is probably a typo. Show error + suggestions instead of silently launching CLI.
-  const KNOWN_COMMANDS = ['update', 'upgrade', 'plugin', 'workflow', 'daemon', 'attach', 'agents', 'agent', 'help']
+  const KNOWN_COMMANDS = [
+    'update',
+    'upgrade',
+    'plugin',
+    'workflow',
+    'daemon',
+    'attach',
+    'agents',
+    'agent',
+    'help',
+  ]
   const firstArg = process.argv.slice(2).find((a) => !a.startsWith('-'))
   if (firstArg) {
     // Levenshtein distance to find closest match

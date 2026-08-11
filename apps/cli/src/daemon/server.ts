@@ -314,12 +314,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
         }
 
         const kind = (body.kind as AgentKind) || undefined
-        const agent = agentManager.createAgent(
-          sessionId,
-          agentType,
-          description,
-          kind,
-        )
+        const agent = agentManager.createAgent(sessionId, agentType, description, kind)
         return Response.json({ ok: true, data: { agent } }, { status: 201 })
       }
 
