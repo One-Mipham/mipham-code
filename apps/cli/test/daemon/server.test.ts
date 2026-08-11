@@ -5,6 +5,8 @@ import { DaemonDatabase } from '../../src/daemon/database'
 import { SessionManager } from '../../src/daemon/session-manager'
 import { AgentManager } from '../../src/daemon/agent-manager'
 import { MessageBus } from '../../src/daemon/message-bus'
+import { GoalManager } from '../../src/daemon/goal-manager'
+import { ScheduleManager } from '../../src/daemon/schedule-manager'
 import { WorkerPool } from '../../src/daemon/worker-pool'
 import { generateToken } from '../../src/daemon/auth'
 import { unlinkSync } from 'node:fs'
@@ -64,6 +66,8 @@ describe('Daemon HTTP Server', () => {
       hostname: '127.0.0.1',
       agentManager: new AgentManager(db),
       messageBus: new MessageBus(),
+      goalManager: new GoalManager(db),
+      scheduleManager: new ScheduleManager(db, pool),
     })
     // Wait for the server to start listening (Node.js http.listen is async)
     for (let i = 0; i < 50; i++) {

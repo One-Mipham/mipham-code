@@ -14,6 +14,8 @@ import { DaemonDatabase } from './database'
 import { SessionManager } from './session-manager'
 import { AgentManager } from './agent-manager'
 import { MessageBus } from './message-bus'
+import { GoalManager } from './goal-manager'
+import { ScheduleManager } from './schedule-manager'
 import { createServer } from './server'
 import { WorkerPool } from './worker-pool'
 import { loadOrCreateToken } from './auth'
@@ -35,6 +37,7 @@ let activeDb: DaemonDatabase | null = null
 let activePool: WorkerPool | null = null
 let activeAgentManager: AgentManager | null = null
 let activeMessageBus: MessageBus | null = null
+let activeScheduleManager: ScheduleManager | null = null
 
 function getConfiguredPort(): number {
   if (process.env.MIPHAM_PORT) {
@@ -145,8 +148,27 @@ export async function startDaemon(): Promise<{ port: number; token: string }> {
   const messageBus = new MessageBus()
   activeMessageBus = messageBus
 
+  // Create goal manager and schedule manager (Phase 4)
+  const goalManager = new GoalManager(db)
+  const scheduleManager = new ScheduleManager(db, pool)
+  activeScheduleManager = scheduleManager
+
+  // Start the schedule checking interval (checks every 60s)
+  scheduleManager.start()
+
   // Start HTTP server (Bun.serve starts listening immediately)
-  const server = createServer({ db, sm, pool, token, port, hostname, agentManager, messageBus })
+  const server = createServer({
+    db,
+    sm,
+    pool,
+    token,
+    port,
+    hostname,
+    agentManager,
+    messageBus,
+    goalManager,
+    scheduleManager,
+  })
   activeServer = server
 
   // Write PID and port files
@@ -186,6 +208,12 @@ export async function stopDaemon(force: boolean = false): Promise<void> {
   if (activePool) {
     await activePool.stopAll()
     activePool = null
+  }
+
+  // Stop schedule manager interval (Phase 4)
+  if (activeScheduleManager) {
+    activeScheduleManager.stop()
+    activeScheduleManager = null
   }
 
   // Clean up agent manager and message bus (Phase 3)
