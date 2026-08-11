@@ -444,7 +444,12 @@ export function App({
 
       // Start agent progress indicator immediately for ALL processing
       const progressStart = Date.now()
-      const progress: AgentProgress = { name: '', description: '', startTime: progressStart, tokensUsed: 0 }
+      const progress: AgentProgress = {
+        name: '',
+        description: '',
+        startTime: progressStart,
+        tokensUsed: 0,
+      }
       agentProgressRef.current = progress
       setAgentProgress(progress)
       setAgentTick((t) => t + 1)
