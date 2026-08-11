@@ -2,7 +2,9 @@
 import type { Server, ServerWebSocket } from 'bun'
 import type { DaemonDatabase } from './database'
 import type { SessionManager } from './session-manager'
-import type { DaemonGoal } from './types'
+import type { AgentManager } from './agent-manager'
+import type { MessageBus } from './message-bus'
+import type { DaemonGoal, AgentKind } from './types'
 import { authMiddleware } from './auth'
 import { PACKAGE_VERSION } from '../shared/package-info'
 import { WorkerPool } from './worker-pool'
@@ -24,6 +26,8 @@ interface ServerConfig {
   token: string
   port: number
   hostname: string
+  agentManager: AgentManager
+  messageBus: MessageBus
 }
 
 interface WsData {
@@ -31,7 +35,7 @@ interface WsData {
 }
 
 export function createServer(config: ServerConfig): Server<WsData> {
-  const { db, sm, pool, token, port, hostname } = config
+  const { db, sm, pool, token, port, hostname, agentManager, messageBus } = config
 
   const wsClients = new Map<string, Set<ServerWebSocket<WsData>>>()
 
@@ -47,6 +51,22 @@ export function createServer(config: ServerConfig): Server<WsData> {
       }
     }
   }
+
+  // ── Agent lifecycle → WebSocket broadcast + MessageBus registration ──
+  agentManager.onLifecycleEvent((event) => {
+    // Register / unregister in the message bus for broadcastToSession routing
+    if (event.type === 'created') {
+      messageBus.registerAgent(event.agent.sessionId, event.agent.id)
+    } else if (event.type === 'completed' || event.type === 'failed') {
+      messageBus.unregisterAgent(event.agent.id)
+    }
+
+    // Broadcast lifecycle events to all WebSocket clients in the agent's session
+    broadcast(event.agent.sessionId, {
+      type: 'agent_lifecycle',
+      event: { type: event.type, agent: event.agent },
+    })
+  })
 
   // ── Lazy engine & worker initialization ──────────────────────────────
   // Shared across all sessions — lazily initialized on first prompt.
@@ -273,11 +293,78 @@ export function createServer(config: ServerConfig): Server<WsData> {
         )
       }
 
-      // ── Agents (stub — Phase 3) ─────────────────────
+      // ── Agents CRUD ──────────────────────────────────
+      if (method === 'POST' && path === '/api/v1/agents') {
+        const body = await jsonBody()
+        const sessionId = body.sessionId as string
+        const agentType = body.agentType as string
+        const description = body.description as string
+
+        if (!sessionId || !agentType || !description) {
+          return Response.json(
+            { ok: false, error: 'sessionId, agentType, and description are required' },
+            { status: 400 },
+          )
+        }
+
+        // Validate session exists
+        const session = db.getSession(sessionId)
+        if (!session) {
+          return Response.json({ ok: false, error: 'Session not found' }, { status: 404 })
+        }
+
+        const kind = (body.kind as AgentKind) || undefined
+        const agent = agentManager.createAgent(
+          sessionId,
+          agentType,
+          description,
+          kind,
+        )
+        return Response.json({ ok: true, data: { agent } }, { status: 201 })
+      }
+
       if (method === 'GET' && path === '/api/v1/agents') {
         const sessionId = url.searchParams.get('session') || undefined
-        const agents = db.listAgents(sessionId)
+        const agents = agentManager.listAgents(sessionId)
         return Response.json({ ok: true, data: { agents } })
+      }
+
+      const agentMatch = path.match(/^\/api\/v1\/agents\/([^/]+)$/)
+      if (agentMatch && method === 'GET') {
+        const agent = agentManager.getAgent(agentMatch[1]!)
+        if (!agent) {
+          return Response.json({ ok: false, error: 'Agent not found' }, { status: 404 })
+        }
+        return Response.json({ ok: true, data: { agent } })
+      }
+
+      if (agentMatch && method === 'DELETE') {
+        const id = agentMatch[1]!
+        const stopped = agentManager.stopAgent(id)
+        if (!stopped) {
+          return Response.json({ ok: false, error: 'Agent not found' }, { status: 404 })
+        }
+        return Response.json({ ok: true, data: { agent: stopped } })
+      }
+
+      const agentMessageMatch = path.match(/^\/api\/v1\/agents\/([^/]+)\/message$/)
+      if (agentMessageMatch && method === 'POST') {
+        const body = await jsonBody()
+        const agentId = agentMessageMatch[1]!
+        const content = body.content as string
+
+        if (!content || typeof content !== 'string') {
+          return Response.json({ ok: false, error: '"content" field is required' }, { status: 400 })
+        }
+
+        // Verify agent exists
+        const agent = agentManager.getAgent(agentId)
+        if (!agent) {
+          return Response.json({ ok: false, error: 'Agent not found' }, { status: 404 })
+        }
+
+        messageBus.send('user', agentId, content)
+        return Response.json({ ok: true }, { status: 202 })
       }
 
       // ── Goals (stub — Phase 4) ──────────────────────

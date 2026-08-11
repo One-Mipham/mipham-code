@@ -12,6 +12,8 @@ import { homedir } from 'node:os'
 import type { Server } from 'bun'
 import { DaemonDatabase } from './database'
 import { SessionManager } from './session-manager'
+import { AgentManager } from './agent-manager'
+import { MessageBus } from './message-bus'
 import { createServer } from './server'
 import { WorkerPool } from './worker-pool'
 import { loadOrCreateToken } from './auth'
@@ -31,6 +33,8 @@ const DEFAULT_PORT = 45671
 let activeServer: Server<unknown> | null = null
 let activeDb: DaemonDatabase | null = null
 let activePool: WorkerPool | null = null
+let activeAgentManager: AgentManager | null = null
+let activeMessageBus: MessageBus | null = null
 
 function getConfiguredPort(): number {
   if (process.env.MIPHAM_PORT) {
@@ -101,7 +105,7 @@ export function getPort(): number {
  * 1. Ensures ~/.mipham exists (mode 0o700)
  * 2. Loads or creates the auth token
  * 3. Initializes the SQLite database and runs JSONL migration on first start
- * 4. Creates a SessionManager
+ * 4. Creates a SessionManager, AgentManager, and MessageBus
  * 5. Starts the HTTP server on an available port
  * 6. Writes PID and port files to disk
  *
@@ -135,8 +139,14 @@ export async function startDaemon(): Promise<{ port: number; token: string }> {
   const pool = new WorkerPool(db)
   activePool = pool
 
+  // Create agent manager and message bus (Phase 3)
+  const agentManager = new AgentManager(db)
+  activeAgentManager = agentManager
+  const messageBus = new MessageBus()
+  activeMessageBus = messageBus
+
   // Start HTTP server (Bun.serve starts listening immediately)
-  const server = createServer({ db, sm, pool, token, port, hostname })
+  const server = createServer({ db, sm, pool, token, port, hostname, agentManager, messageBus })
   activeServer = server
 
   // Write PID and port files
@@ -177,6 +187,10 @@ export async function stopDaemon(force: boolean = false): Promise<void> {
     await activePool.stopAll()
     activePool = null
   }
+
+  // Clean up agent manager and message bus (Phase 3)
+  activeAgentManager = null
+  activeMessageBus = null
 
   // Close database (commits any pending WAL)
   if (activeDb) {

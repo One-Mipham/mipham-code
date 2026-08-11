@@ -523,6 +523,174 @@ async function runAttachCLI(): Promise<boolean> {
   return true
 }
 
+// ── Agent CLI: inspect and manage daemon agents ─────────────────────────────
+
+async function runAgentCLI(): Promise<boolean> {
+  const args = process.argv.slice(2)
+  if (args[0] !== 'agents' && args[0] !== 'agent') return false
+
+  const { getPort, getDaemonStatus } = await import('../src/daemon/index')
+  const { join } = await import('node:path')
+  const { readFileSync, existsSync } = await import('node:fs')
+  const { homedir } = await import('node:os')
+
+  // Check if daemon is running
+  const status = getDaemonStatus()
+  if (!status) {
+    console.error('No daemon running. Start one with: mipham daemon start')
+    process.exit(1)
+  }
+
+  const port = getPort()
+  const tokenPath = join(homedir(), '.mipham', 'daemon.token')
+  let token = ''
+  if (existsSync(tokenPath)) {
+    token = readFileSync(tokenPath, 'utf-8').trim()
+  }
+
+  const baseUrl = `http://127.0.0.1:${port}`
+
+  // ── mipham agents ──────────────────────────────────────────
+  if (args[0] === 'agents') {
+    try {
+      const resp = await fetch(`${baseUrl}/api/v1/agents`)
+      const data = (await resp.json()) as {
+        ok: boolean
+        data?: { agents: Array<{ id: string; status: string; agentType: string; description: string; createdAt: string; sessionId: string }> }
+      }
+      if (!data.ok || !data.data) {
+        console.error('Failed to fetch agents.')
+        process.exit(1)
+      }
+      const agents = data.data.agents
+      if (agents.length === 0) {
+        console.log('No agents found.')
+      } else {
+        for (const a of agents) {
+          const shortId = a.id.slice(0, 12)
+          console.log(`${shortId}  [${a.status}]  ${a.agentType}  ${a.description}`)
+        }
+      }
+    } catch (err) {
+      console.error(`Failed to connect to daemon at port ${port}: ${String(err)}`)
+      process.exit(1)
+    }
+    process.exit(0)
+  }
+
+  // ── mipham agent <id|subcommand> ───────────────────────────
+  const target = args[1]
+  if (!target) {
+    console.error('Usage: mipham agent <id|message|stop> [...]')
+    process.exit(1)
+  }
+
+  // mipham agent message <id> [--content <text>]
+  if (target === 'message') {
+    const agentId = args[2]
+    if (!agentId) {
+      console.error('Usage: mipham agent message <id> [--content <text>]')
+      process.exit(1)
+    }
+
+    let content = ''
+    const contentFlagIdx = args.indexOf('--content')
+    if (contentFlagIdx !== -1 && args[contentFlagIdx + 1]) {
+      content = args[contentFlagIdx + 1]!
+    } else {
+      // Prompt for content interactively
+      const { createInterface } = await import('node:readline')
+      const rl = createInterface({ input: process.stdin, output: process.stdout })
+      content = await new Promise<string>((resolve) => {
+        rl.question('Message: ', (answer) => {
+          rl.close()
+          resolve(answer)
+        })
+      })
+    }
+
+    if (!content.trim()) {
+      console.error('Message content is required.')
+      process.exit(1)
+    }
+
+    try {
+      const resp = await fetch(`${baseUrl}/api/v1/agents/${agentId}/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      })
+      const data = (await resp.json()) as { ok: boolean; error?: string }
+      if (!data.ok) {
+        console.error(`Error: ${data.error || 'Unknown error'}`)
+        process.exit(1)
+      }
+      console.log(`Message sent to agent ${agentId}`)
+    } catch (err) {
+      console.error(`Failed to connect to daemon at port ${port}: ${String(err)}`)
+      process.exit(1)
+    }
+    process.exit(0)
+  }
+
+  // mipham agent stop <id>
+  if (target === 'stop') {
+    const agentId = args[2]
+    if (!agentId) {
+      console.error('Usage: mipham agent stop <id>')
+      process.exit(1)
+    }
+
+    try {
+      const resp = await fetch(`${baseUrl}/api/v1/agents/${agentId}`, { method: 'DELETE' })
+      const data = (await resp.json()) as { ok: boolean; error?: string }
+      if (!data.ok) {
+        console.error(`Error: ${data.error || 'Unknown error'}`)
+        process.exit(1)
+      }
+      console.log(`Agent ${agentId} stopped.`)
+    } catch (err) {
+      console.error(`Failed to connect to daemon at port ${port}: ${String(err)}`)
+      process.exit(1)
+    }
+    process.exit(0)
+  }
+
+  // mipham agent <id> — show detail
+  const agentId = target
+  try {
+    const resp = await fetch(`${baseUrl}/api/v1/agents/${agentId}`)
+    const data = (await resp.json()) as {
+      ok: boolean
+      data?: { agent: { id: string; agentType: string; description: string; status: string; kind: string; sessionId: string; createdAt: string; completedAt?: string | null; result?: string | null; error?: string | null; worktree?: string | null; branch?: string | null; prUrl?: string | null; parentId?: string | null } }
+      error?: string
+    }
+    if (!data.ok || !data.data) {
+      console.error(`Error: ${data.error || 'Agent not found'}`)
+      process.exit(1)
+    }
+    const a = data.data.agent
+    console.log(`Agent: ${a.id}`)
+    console.log(`  Type:        ${a.agentType}`)
+    console.log(`  Description: ${a.description}`)
+    console.log(`  Status:      ${a.status}`)
+    console.log(`  Kind:        ${a.kind}`)
+    console.log(`  Session:     ${a.sessionId}`)
+    if (a.parentId) console.log(`  Parent:      ${a.parentId}`)
+    console.log(`  Created:     ${a.createdAt}`)
+    if (a.completedAt) console.log(`  Completed:   ${a.completedAt}`)
+    if (a.result) console.log(`  Result:      ${a.result}`)
+    if (a.error) console.log(`  Error:       ${a.error}`)
+    if (a.worktree) console.log(`  Worktree:    ${a.worktree}`)
+    if (a.branch) console.log(`  Branch:      ${a.branch}`)
+    if (a.prUrl) console.log(`  PR:          ${a.prUrl}`)
+  } catch (err) {
+    console.error(`Failed to connect to daemon at port ${port}: ${String(err)}`)
+    process.exit(1)
+  }
+  process.exit(0)
+}
+
 async function main() {
   // ── Disable terminal special characters ──────────────────────────────────
   // Terminal intercepts Ctrl+S (XOFF), Ctrl+T (SIGINFO/status), Ctrl+R (rprnt)
@@ -593,6 +761,10 @@ Usage:
   mipham upgrade             Same as 'mipham update'
   mipham daemon <cmd>        Daemon lifecycle (start, stop, status, restart)
   mipham attach [id]         Attach to a daemon session (--latest for recent)
+  mipham agents              List all agents
+  mipham agent <id>          Show agent detail
+  mipham agent message <id>  Send message to an agent
+  mipham agent stop <id>     Stop a running agent
   mipham plugin <cmd>        Plugin management (install, list, remove, etc.)
   mipham workflow <cmd>      Workflow orchestration (run, list, resume, etc.)
   mipham --version           Print version and exit
@@ -619,6 +791,10 @@ npm:  https://www.npmjs.com/package/@miphamai/cli`)
   const handledAttach = await runAttachCLI()
   if (handledAttach) return
 
+  // ── Agent commands ────────────────────────────────────────────────────────
+  const handledAgent = await runAgentCLI()
+  if (handledAgent) return
+
   // Check for plugin subcommands first
   const handledPlugin = await runPluginCLI()
   if (handledPlugin) return
@@ -630,7 +806,7 @@ npm:  https://www.npmjs.com/package/@miphamai/cli`)
   // ── Unknown command detection ──────────────────────────────────────────────
   // After all known subcommands are checked, any remaining positional argument
   // is probably a typo. Show error + suggestions instead of silently launching CLI.
-  const KNOWN_COMMANDS = ['update', 'upgrade', 'plugin', 'workflow', 'daemon', 'attach', 'help']
+  const KNOWN_COMMANDS = ['update', 'upgrade', 'plugin', 'workflow', 'daemon', 'attach', 'agents', 'agent', 'help']
   const firstArg = process.argv.slice(2).find((a) => !a.startsWith('-'))
   if (firstArg) {
     // Levenshtein distance to find closest match

@@ -3,6 +3,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { createServer } from '../../src/daemon/server'
 import { DaemonDatabase } from '../../src/daemon/database'
 import { SessionManager } from '../../src/daemon/session-manager'
+import { AgentManager } from '../../src/daemon/agent-manager'
+import { MessageBus } from '../../src/daemon/message-bus'
 import { WorkerPool } from '../../src/daemon/worker-pool'
 import { generateToken } from '../../src/daemon/auth'
 import { unlinkSync } from 'node:fs'
@@ -60,6 +62,8 @@ describe('Daemon HTTP Server', () => {
       token: TEST_TOKEN,
       port: TEST_PORT,
       hostname: '127.0.0.1',
+      agentManager: new AgentManager(db),
+      messageBus: new MessageBus(),
     })
     // Wait for the server to start listening (Node.js http.listen is async)
     for (let i = 0; i < 50; i++) {

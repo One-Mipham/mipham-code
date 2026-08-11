@@ -4,6 +4,9 @@
  * Each background task runs as a detached Promise with an AbortController
  * for cancellation. The registry tracks status and stores results, which
  * can be queried via the Task tool (output/stop actions) or the Agent View.
+ *
+ * When a database is provided via setDatabase(), agent records are persisted
+ * to the daemon's SQLite database for cross-session visibility.
  */
 
 export type BackgroundTaskKind = 'interactive' | 'forked' | 'attached' | 'unattended'
@@ -29,16 +32,52 @@ export interface BackgroundTask {
   abortController: AbortController
 }
 
+/** Minimal database interface for agent persistence — avoids circular imports
+ *  on the DaemonDatabase class. */
+interface AgentDatabase {
+  createAgent(agent: {
+    id: string
+    sessionId: string
+    parentId: string | null
+    agentType: string
+    description: string
+    status: string
+    kind: string
+    worktree: string | null
+    branch: string | null
+    prUrl: string | null
+    createdAt: string
+    completedAt: string | null
+    result: string | null
+    error: string | null
+  }): unknown
+  updateAgentStatus(id: string, status: string, result?: string, error?: string): void
+}
+
 type CompleteCallback = (task: BackgroundTask) => void
 
 export class BackgroundAgentRegistry {
   private tasks: Map<string, BackgroundTask> = new Map()
   private completeCallbacks: Map<string, CompleteCallback[]> = new Map()
   private idCounter = 0
+  private db: AgentDatabase | null = null
+
+  /**
+   * Set the daemon database for optional SQLite persistence.
+   * When set, spawned agents are persisted to the database and their
+   * status updates are kept in sync.
+   *
+   * Uses a structural interface to avoid circular imports on DaemonDatabase.
+   */
+  setDatabase(db: AgentDatabase): void {
+    this.db = db
+  }
 
   /**
    * Spawn a background task. Returns the task ID immediately.
    * The executor function runs asynchronously; its result is stored in the task.
+   *
+   * If a database is configured, the agent record is also persisted to SQLite.
    *
    * @param description - Human-readable description
    * @param agentType - Sub-agent type (general, explore, plan, code-review)
@@ -51,6 +90,7 @@ export class BackgroundAgentRegistry {
     kind: BackgroundTaskKind = 'interactive',
   ): string {
     const id = `bg-${++this.idCounter}-${Date.now().toString(36)}`
+    const now = new Date()
 
     const task: BackgroundTask = {
       id,
@@ -58,11 +98,35 @@ export class BackgroundAgentRegistry {
       agentType,
       status: 'running',
       kind,
-      startedAt: new Date(),
+      startedAt: now,
       abortController: new AbortController(),
     }
 
     this.tasks.set(id, task)
+
+    // Persist to SQLite when database is available
+    if (this.db) {
+      try {
+        this.db.createAgent({
+          id,
+          sessionId: 'background',
+          parentId: null,
+          agentType,
+          description,
+          status: 'running',
+          kind,
+          worktree: task.worktree ?? null,
+          branch: task.branch ?? null,
+          prUrl: task.prUrl ?? null,
+          createdAt: now.toISOString(),
+          completedAt: null,
+          result: null,
+          error: null,
+        })
+      } catch {
+        // Database persistence is best-effort — don't fail the task
+      }
+    }
 
     // Execute in background — do NOT await
     executor(task.abortController.signal)
@@ -70,6 +134,7 @@ export class BackgroundAgentRegistry {
         task.status = 'completed'
         task.completedAt = new Date()
         task.result = result
+        this.syncDbStatus(id, 'completed', result)
         this.fireComplete(id)
       })
       .catch((err) => {
@@ -82,6 +147,7 @@ export class BackgroundAgentRegistry {
           task.error = String(err)
         }
         task.completedAt = new Date()
+        this.syncDbStatus(id, task.status, undefined, task.error)
         this.fireComplete(id)
       })
 
@@ -172,6 +238,19 @@ export class BackgroundAgentRegistry {
       counts[task.status]++
     }
     return counts
+  }
+
+  /**
+   * Sync task completion/failure status to the daemon database.
+   * Best-effort — errors are silently ignored.
+   */
+  private syncDbStatus(id: string, status: string, result?: string, error?: string): void {
+    if (!this.db) return
+    try {
+      this.db.updateAgentStatus(id, status, result, error)
+    } catch {
+      // Database sync is best-effort
+    }
   }
 
   private fireComplete(id: string): void {
