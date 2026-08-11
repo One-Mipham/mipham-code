@@ -79,6 +79,11 @@ export function InputBar({
 }: InputBarProps) {
   const { t } = useI18n()
   const [value, setValue] = useState('')
+  // Ref mirror of value — used by useInput to read latest without stale closure.
+  // Also used by throttled onChange to hold the latest pending value.
+  const valueRef = useRef(value)
+  // Throttle timer for onChange — prevents React render floods during paste.
+  const onChangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [verb, setVerb] = useState(() => t(pick(LOADING_KEYS)))
   const [completionVerb, setCompletionVerb] = useState<string | null>(null)
   const prevLoading = useRef(isLoading)
@@ -330,14 +335,27 @@ export function InputBar({
     prevValueRef.current = value
   }, [value, vimMode])
 
+  // Keep valueRef in sync with state (so useInput handlers read latest value)
+  useEffect(() => {
+    valueRef.current = value
+  }, [value])
+
   const handleSubmit = (val: string) => {
-    if (!val.trim() || isLoading) return
+    // Flush any pending throttled onChange before submitting
+    if (onChangeTimerRef.current) {
+      clearTimeout(onChangeTimerRef.current)
+      onChangeTimerRef.current = null
+    }
+    // Use latest value from ref (may be ahead of state during throttle)
+    const finalValue = val || valueRef.current
+    if (!finalValue.trim() || isLoading) return
     // Save to message history for arrow-key navigation
-    setSubmittedHistory((prev) => [...prev, val])
+    setSubmittedHistory((prev) => [...prev, finalValue])
     historyIndexRef.current = -1
     savedDraftRef.current = ''
-    onSubmit(val)
+    onSubmit(finalValue)
     setValue('')
+    valueRef.current = ''
     setPickerActive(false)
   }
 
@@ -380,7 +398,17 @@ export function InputBar({
               historyIndexRef.current = -1
               savedDraftRef.current = ''
             }
+            // Throttle: first keystroke renders immediately, then batch at ~30fps.
+            // During paste, the terminal may send hundreds of characters in rapid
+            // succession — without throttling, each triggers a React render+Ink write
+            // cycle that starves the event loop and freezes the UI.
+            valueRef.current = val
+            if (onChangeTimerRef.current) return // timer pending, latest value in ref
             setValue(val)
+            onChangeTimerRef.current = setTimeout(() => {
+              onChangeTimerRef.current = null
+              setValue(valueRef.current)
+            }, 33) // ~30fps
           }}
           onSubmit={handleSubmit}
           placeholder={
