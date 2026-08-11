@@ -11,11 +11,7 @@ const ALLOWED_METHODS = 'GET, POST, PATCH, DELETE, OPTIONS'
  * Check whether an origin string refers to localhost.
  */
 export function isLocalhostOrigin(origin: string): boolean {
-  return (
-    origin.includes('localhost') ||
-    origin.includes('127.0.0.1') ||
-    origin.includes('[::1]')
-  )
+  return origin.includes('localhost') || origin.includes('127.0.0.1') || origin.includes('[::1]')
 }
 
 /**

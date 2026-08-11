@@ -43,7 +43,20 @@ interface WsData {
 }
 
 export function createServer(config: ServerConfig): Server<WsData> {
-  const { db, sm, pool, token, tokenPath, port, hostname, agentManager, messageBus, goalManager, scheduleManager, rateLimiter } = config
+  const {
+    db,
+    sm,
+    pool,
+    token,
+    tokenPath,
+    port,
+    hostname,
+    agentManager,
+    messageBus,
+    goalManager,
+    scheduleManager,
+    rateLimiter,
+  } = config
 
   const wsClients = new Map<string, Set<ServerWebSocket<WsData>>>()
 
@@ -315,10 +328,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
           console.error(`Server: error processing prompt for session ${sessionId}:`, err)
         })
 
-        return json(
-          { ok: true, data: { sessionId, status: 'processing' } },
-          { status: 202 },
-        )
+        return json({ ok: true, data: { sessionId, status: 'processing' } }, { status: 202 })
       }
 
       // ── Agents CRUD ──────────────────────────────────
@@ -393,8 +403,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
       // ── Goals (Phase 4 — service-backed) ────────────
       if (method === 'GET' && path === '/api/v1/goals') {
         const sessionId = url.searchParams.get('session')
-        if (!sessionId)
-          return json({ ok: false, error: '?session= required' }, { status: 400 })
+        if (!sessionId) return json({ ok: false, error: '?session= required' }, { status: 400 })
         const goals = goalManager.getGoals(sessionId)
         return json({ ok: true, data: { goals } })
       }
@@ -436,8 +445,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
       // ── Schedules (Phase 4 — service-backed) ─────────
       if (method === 'GET' && path === '/api/v1/schedules') {
         const sessionId = url.searchParams.get('session')
-        if (!sessionId)
-          return json({ ok: false, error: '?session= required' }, { status: 400 })
+        if (!sessionId) return json({ ok: false, error: '?session= required' }, { status: 400 })
         const schedules = scheduleManager.getSchedules(sessionId)
         return json({ ok: true, data: { schedules } })
       }
@@ -486,28 +494,60 @@ export function createServer(config: ServerConfig): Server<WsData> {
             openapi: '3.0.3',
             info: { title: 'Mipham Code Daemon API', version: PACKAGE_VERSION },
             endpoints: [
-              { method: 'GET', path: '/api/v1/health', description: 'Health check and daemon stats' },
+              {
+                method: 'GET',
+                path: '/api/v1/health',
+                description: 'Health check and daemon stats',
+              },
               { method: 'GET', path: '/api/v1/stats', description: 'Database statistics' },
               { method: 'POST', path: '/api/v1/sessions', description: 'Create a new session' },
               { method: 'GET', path: '/api/v1/sessions', description: 'List sessions' },
               { method: 'GET', path: '/api/v1/sessions/:id', description: 'Get session details' },
               { method: 'DELETE', path: '/api/v1/sessions/:id', description: 'Close a session' },
-              { method: 'GET', path: '/api/v1/sessions/:id/messages', description: 'Get session messages' },
-              { method: 'WS', path: '/api/v1/sessions/:id/stream', description: 'WebSocket stream for session' },
-              { method: 'POST', path: '/api/v1/sessions/:id/prompt', description: 'Send a prompt to a session' },
+              {
+                method: 'GET',
+                path: '/api/v1/sessions/:id/messages',
+                description: 'Get session messages',
+              },
+              {
+                method: 'WS',
+                path: '/api/v1/sessions/:id/stream',
+                description: 'WebSocket stream for session',
+              },
+              {
+                method: 'POST',
+                path: '/api/v1/sessions/:id/prompt',
+                description: 'Send a prompt to a session',
+              },
               { method: 'POST', path: '/api/v1/agents', description: 'Create a background agent' },
               { method: 'GET', path: '/api/v1/agents', description: 'List agents' },
               { method: 'GET', path: '/api/v1/agents/:id', description: 'Get agent details' },
               { method: 'DELETE', path: '/api/v1/agents/:id', description: 'Stop an agent' },
-              { method: 'POST', path: '/api/v1/agents/:id/message', description: 'Send message to an agent' },
+              {
+                method: 'POST',
+                path: '/api/v1/agents/:id/message',
+                description: 'Send message to an agent',
+              },
               { method: 'GET', path: '/api/v1/goals', description: 'List goals for a session' },
               { method: 'POST', path: '/api/v1/goals', description: 'Create a goal' },
               { method: 'PATCH', path: '/api/v1/goals/:id', description: 'Update a goal' },
-              { method: 'GET', path: '/api/v1/schedules', description: 'List schedules for a session' },
+              {
+                method: 'GET',
+                path: '/api/v1/schedules',
+                description: 'List schedules for a session',
+              },
               { method: 'POST', path: '/api/v1/schedules', description: 'Create a schedule' },
               { method: 'DELETE', path: '/api/v1/schedules/:id', description: 'Delete a schedule' },
-              { method: 'POST', path: '/api/v1/auth/rotate', description: 'Rotate API token (requires auth)' },
-              { method: 'GET', path: '/api/v1/docs', description: 'API documentation (this endpoint)' },
+              {
+                method: 'POST',
+                path: '/api/v1/auth/rotate',
+                description: 'Rotate API token (requires auth)',
+              },
+              {
+                method: 'GET',
+                path: '/api/v1/docs',
+                description: 'API documentation (this endpoint)',
+              },
             ],
           },
         })
