@@ -556,16 +556,7 @@ async function runAgentCLI(): Promise<boolean> {
       const resp = await fetch(`${baseUrl}/api/v1/agents`)
       const data = (await resp.json()) as {
         ok: boolean
-        data?: {
-          agents: Array<{
-            id: string
-            status: string
-            agentType: string
-            description: string
-            createdAt: string
-            sessionId: string
-          }>
-        }
+        data?: { agents: Array<{ id: string; status: string; agentType: string; description: string; createdAt: string; sessionId: string }> }
       }
       if (!data.ok || !data.data) {
         console.error('Failed to fetch agents.')
@@ -671,24 +662,7 @@ async function runAgentCLI(): Promise<boolean> {
     const resp = await fetch(`${baseUrl}/api/v1/agents/${agentId}`)
     const data = (await resp.json()) as {
       ok: boolean
-      data?: {
-        agent: {
-          id: string
-          agentType: string
-          description: string
-          status: string
-          kind: string
-          sessionId: string
-          createdAt: string
-          completedAt?: string | null
-          result?: string | null
-          error?: string | null
-          worktree?: string | null
-          branch?: string | null
-          prUrl?: string | null
-          parentId?: string | null
-        }
-      }
+      data?: { agent: { id: string; agentType: string; description: string; status: string; kind: string; sessionId: string; createdAt: string; completedAt?: string | null; result?: string | null; error?: string | null; worktree?: string | null; branch?: string | null; prUrl?: string | null; parentId?: string | null } }
       error?: string
     }
     if (!data.ok || !data.data) {
@@ -715,6 +689,284 @@ async function runAgentCLI(): Promise<boolean> {
     process.exit(1)
   }
   process.exit(0)
+}
+
+// ── Goal CLI: manage daemon goals ─────────────────────────────────────────────
+
+async function runGoalCLI(): Promise<boolean> {
+  const args = process.argv.slice(2)
+  if (args[0] !== 'goal') return false
+
+  const { getPort, getDaemonStatus } = await import('../src/daemon/index')
+
+  // Check if daemon is running
+  const status = getDaemonStatus()
+  if (!status) {
+    console.error('No daemon running. Start one with: mipham daemon start')
+    process.exit(1)
+  }
+
+  const port = getPort()
+  const baseUrl = `http://127.0.0.1:${port}`
+
+  const subcmd = args[1]
+  if (!subcmd) {
+    console.error('Usage: mipham goal list|add|done|pause [options]')
+    process.exit(1)
+  }
+
+  // ── mipham goal list [--session <id>] ─────────────────────────
+  if (subcmd === 'list') {
+    const sessionIdx = args.indexOf('--session')
+    const sessionId = sessionIdx !== -1 ? args[sessionIdx + 1] : undefined
+    if (!sessionId) {
+      console.error('Usage: mipham goal list --session <id>')
+      process.exit(1)
+    }
+
+    try {
+      const resp = await fetch(`${baseUrl}/api/v1/goals?session=${sessionId}`)
+      const data = (await resp.json()) as {
+        ok: boolean
+        data?: { goals: Array<{ id: number; description: string; status: string; progress: { current: number; total: number } | null; createdAt: string }> }
+      }
+      if (!data.ok || !data.data) {
+        console.error('Failed to fetch goals.')
+        process.exit(1)
+      }
+      const goals = data.data.goals
+      if (goals.length === 0) {
+        console.log('No goals found.')
+      } else {
+        for (const g of goals) {
+          const progressStr = g.progress ? ` [${g.progress.current}/${g.progress.total}]` : ''
+          console.log(`#${g.id}  [${g.status}]${progressStr}  ${g.description}`)
+        }
+      }
+    } catch (err) {
+      console.error(`Failed to connect to daemon at port ${port}: ${String(err)}`)
+      process.exit(1)
+    }
+    process.exit(0)
+  }
+
+  // ── mipham goal add --session <id> --desc <text> [--current <n> --total <n>] ─
+  if (subcmd === 'add') {
+    const sessionIdx = args.indexOf('--session')
+    const sessionId = sessionIdx !== -1 ? args[sessionIdx + 1] : undefined
+    const descIdx = args.indexOf('--desc')
+    const description = descIdx !== -1 ? args[descIdx + 1] : undefined
+
+    if (!sessionId || !description) {
+      console.error('Usage: mipham goal add --session <id> --desc <text> [--current <n> --total <n>]')
+      process.exit(1)
+    }
+
+    const currentIdx = args.indexOf('--current')
+    const totalIdx = args.indexOf('--total')
+    const current = currentIdx !== -1 ? parseInt(args[currentIdx + 1]!, 10) : undefined
+    const total = totalIdx !== -1 ? parseInt(args[totalIdx + 1]!, 10) : undefined
+    const progress =
+      current !== undefined && total !== undefined ? { current, total } : undefined
+
+    try {
+      const resp = await fetch(`${baseUrl}/api/v1/goals`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, description, progress }),
+      })
+      const data = (await resp.json()) as { ok: boolean; data?: { id: number }; error?: string }
+      if (!data.ok) {
+        console.error(`Error: ${data.error || 'Unknown error'}`)
+        process.exit(1)
+      }
+      console.log(`Goal #${data.data!.id} created.`)
+    } catch (err) {
+      console.error(`Failed to connect to daemon at port ${port}: ${String(err)}`)
+      process.exit(1)
+    }
+    process.exit(0)
+  }
+
+  // ── mipham goal done <id> ──────────────────────────────────────
+  if (subcmd === 'done') {
+    const goalId = args[2]
+    if (!goalId) {
+      console.error('Usage: mipham goal done <id>')
+      process.exit(1)
+    }
+
+    try {
+      const resp = await fetch(`${baseUrl}/api/v1/goals/${goalId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'completed' }),
+      })
+      const data = (await resp.json()) as { ok: boolean; error?: string }
+      if (!data.ok) {
+        console.error(`Error: ${data.error || 'Unknown error'}`)
+        process.exit(1)
+      }
+      console.log(`Goal #${goalId} marked as done.`)
+    } catch (err) {
+      console.error(`Failed to connect to daemon at port ${port}: ${String(err)}`)
+      process.exit(1)
+    }
+    process.exit(0)
+  }
+
+  // ── mipham goal pause <id> ─────────────────────────────────────
+  if (subcmd === 'pause') {
+    const goalId = args[2]
+    if (!goalId) {
+      console.error('Usage: mipham goal pause <id>')
+      process.exit(1)
+    }
+
+    try {
+      const resp = await fetch(`${baseUrl}/api/v1/goals/${goalId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'paused' }),
+      })
+      const data = (await resp.json()) as { ok: boolean; error?: string }
+      if (!data.ok) {
+        console.error(`Error: ${data.error || 'Unknown error'}`)
+        process.exit(1)
+      }
+      console.log(`Goal #${goalId} paused.`)
+    } catch (err) {
+      console.error(`Failed to connect to daemon at port ${port}: ${String(err)}`)
+      process.exit(1)
+    }
+    process.exit(0)
+  }
+
+  console.error(`Unknown goal command: mipham goal ${subcmd}`)
+  console.error('Usage: mipham goal list|add|done|pause [options]')
+  process.exit(1)
+}
+
+// ── Schedule CLI: manage daemon schedules ─────────────────────────────────────
+
+async function runScheduleCLI(): Promise<boolean> {
+  const args = process.argv.slice(2)
+  if (args[0] !== 'schedule') return false
+
+  const { getPort, getDaemonStatus } = await import('../src/daemon/index')
+
+  // Check if daemon is running
+  const status = getDaemonStatus()
+  if (!status) {
+    console.error('No daemon running. Start one with: mipham daemon start')
+    process.exit(1)
+  }
+
+  const port = getPort()
+  const baseUrl = `http://127.0.0.1:${port}`
+
+  const subcmd = args[1]
+  if (!subcmd) {
+    console.error('Usage: mipham schedule list|add|remove [options]')
+    process.exit(1)
+  }
+
+  // ── mipham schedule list [--session <id>] ──────────────────────
+  if (subcmd === 'list') {
+    const sessionIdx = args.indexOf('--session')
+    const sessionId = sessionIdx !== -1 ? args[sessionIdx + 1] : undefined
+    if (!sessionId) {
+      console.error('Usage: mipham schedule list --session <id>')
+      process.exit(1)
+    }
+
+    try {
+      const resp = await fetch(`${baseUrl}/api/v1/schedules?session=${sessionId}`)
+      const data = (await resp.json()) as {
+        ok: boolean
+        data?: { schedules: Array<{ id: number; cronExpr: string; prompt: string; enabled: boolean; lastFired: string | null; nextFire: string }> }
+      }
+      if (!data.ok || !data.data) {
+        console.error('Failed to fetch schedules.')
+        process.exit(1)
+      }
+      const schedules = data.data.schedules
+      if (schedules.length === 0) {
+        console.log('No schedules found.')
+      } else {
+        for (const s of schedules) {
+          const enabledStr = s.enabled ? 'enabled' : 'disabled'
+          const lastStr = s.lastFired ? ` last: ${s.lastFired}` : ''
+          console.log(`#${s.id}  [${enabledStr}]  ${s.cronExpr}  next: ${s.nextFire}${lastStr}`)
+          console.log(`       prompt: ${s.prompt}`)
+        }
+      }
+    } catch (err) {
+      console.error(`Failed to connect to daemon at port ${port}: ${String(err)}`)
+      process.exit(1)
+    }
+    process.exit(0)
+  }
+
+  // ── mipham schedule add --session <id> --cron <expr> --prompt <text> ──
+  if (subcmd === 'add') {
+    const sessionIdx = args.indexOf('--session')
+    const sessionId = sessionIdx !== -1 ? args[sessionIdx + 1] : undefined
+    const cronIdx = args.indexOf('--cron')
+    const cronExpr = cronIdx !== -1 ? args[cronIdx + 1] : undefined
+    const promptIdx = args.indexOf('--prompt')
+    const prompt = promptIdx !== -1 ? args[promptIdx + 1] : undefined
+
+    if (!sessionId || !cronExpr || !prompt) {
+      console.error('Usage: mipham schedule add --session <id> --cron <expr> --prompt <text>')
+      process.exit(1)
+    }
+
+    try {
+      const resp = await fetch(`${baseUrl}/api/v1/schedules`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, cronExpr, prompt }),
+      })
+      const data = (await resp.json()) as { ok: boolean; data?: { id: number }; error?: string }
+      if (!data.ok) {
+        console.error(`Error: ${data.error || 'Unknown error'}`)
+        process.exit(1)
+      }
+      console.log(`Schedule #${data.data!.id} created (cron: ${cronExpr}).`)
+    } catch (err) {
+      console.error(`Failed to connect to daemon at port ${port}: ${String(err)}`)
+      process.exit(1)
+    }
+    process.exit(0)
+  }
+
+  // ── mipham schedule remove <id> ─────────────────────────────────
+  if (subcmd === 'remove') {
+    const scheduleId = args[2]
+    if (!scheduleId) {
+      console.error('Usage: mipham schedule remove <id>')
+      process.exit(1)
+    }
+
+    try {
+      const resp = await fetch(`${baseUrl}/api/v1/schedules/${scheduleId}`, { method: 'DELETE' })
+      const data = (await resp.json()) as { ok: boolean; error?: string }
+      if (!data.ok) {
+        console.error(`Error: ${data.error || 'Unknown error'}`)
+        process.exit(1)
+      }
+      console.log(`Schedule #${scheduleId} removed.`)
+    } catch (err) {
+      console.error(`Failed to connect to daemon at port ${port}: ${String(err)}`)
+      process.exit(1)
+    }
+    process.exit(0)
+  }
+
+  console.error(`Unknown schedule command: mipham schedule ${subcmd}`)
+  console.error('Usage: mipham schedule list|add|remove [options]')
+  process.exit(1)
 }
 
 async function main() {
@@ -791,6 +1043,8 @@ Usage:
   mipham agent <id>          Show agent detail
   mipham agent message <id>  Send message to an agent
   mipham agent stop <id>     Stop a running agent
+  mipham goal <cmd>          Goal management (list, add, done, pause)
+  mipham schedule <cmd>      Schedule management (list, add, remove)
   mipham plugin <cmd>        Plugin management (install, list, remove, etc.)
   mipham workflow <cmd>      Workflow orchestration (run, list, resume, etc.)
   mipham --version           Print version and exit
@@ -821,6 +1075,14 @@ npm:  https://www.npmjs.com/package/@miphamai/cli`)
   const handledAgent = await runAgentCLI()
   if (handledAgent) return
 
+  // ── Goal commands ──────────────────────────────────────────────────────────
+  const handledGoal = await runGoalCLI()
+  if (handledGoal) return
+
+  // ── Schedule commands ──────────────────────────────────────────────────────
+  const handledSchedule = await runScheduleCLI()
+  if (handledSchedule) return
+
   // Check for plugin subcommands first
   const handledPlugin = await runPluginCLI()
   if (handledPlugin) return
@@ -832,17 +1094,7 @@ npm:  https://www.npmjs.com/package/@miphamai/cli`)
   // ── Unknown command detection ──────────────────────────────────────────────
   // After all known subcommands are checked, any remaining positional argument
   // is probably a typo. Show error + suggestions instead of silently launching CLI.
-  const KNOWN_COMMANDS = [
-    'update',
-    'upgrade',
-    'plugin',
-    'workflow',
-    'daemon',
-    'attach',
-    'agents',
-    'agent',
-    'help',
-  ]
+  const KNOWN_COMMANDS = ['update', 'upgrade', 'plugin', 'workflow', 'daemon', 'attach', 'agents', 'agent', 'goal', 'schedule', 'help']
   const firstArg = process.argv.slice(2).find((a) => !a.startsWith('-'))
   if (firstArg) {
     // Levenshtein distance to find closest match

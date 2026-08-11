@@ -5,6 +5,8 @@ import type { SessionManager } from './session-manager'
 import type { AgentManager } from './agent-manager'
 import type { MessageBus } from './message-bus'
 import type { DaemonGoal, AgentKind } from './types'
+import type { GoalManager } from './goal-manager'
+import type { ScheduleManager } from './schedule-manager'
 import { authMiddleware } from './auth'
 import { PACKAGE_VERSION } from '../shared/package-info'
 import { WorkerPool } from './worker-pool'
@@ -28,6 +30,8 @@ interface ServerConfig {
   hostname: string
   agentManager: AgentManager
   messageBus: MessageBus
+  goalManager: GoalManager
+  scheduleManager: ScheduleManager
 }
 
 interface WsData {
@@ -35,7 +39,7 @@ interface WsData {
 }
 
 export function createServer(config: ServerConfig): Server<WsData> {
-  const { db, sm, pool, token, port, hostname, agentManager, messageBus } = config
+  const { db, sm, pool, token, port, hostname, agentManager, messageBus, goalManager, scheduleManager } = config
 
   const wsClients = new Map<string, Set<ServerWebSocket<WsData>>>()
 
@@ -362,36 +366,86 @@ export function createServer(config: ServerConfig): Server<WsData> {
         return Response.json({ ok: true }, { status: 202 })
       }
 
-      // ── Goals (stub — Phase 4) ──────────────────────
+      // ── Goals (Phase 4 — service-backed) ────────────
       if (method === 'GET' && path === '/api/v1/goals') {
         const sessionId = url.searchParams.get('session')
         if (!sessionId)
           return Response.json({ ok: false, error: '?session= required' }, { status: 400 })
-        const goals = db.getGoals(sessionId)
+        const goals = goalManager.getGoals(sessionId)
         return Response.json({ ok: true, data: { goals } })
       }
 
       if (method === 'POST' && path === '/api/v1/goals') {
         const body = await jsonBody()
-        const now = new Date().toISOString()
-        const goalId = db.createGoal({
-          sessionId: body.sessionId as string,
-          description: body.description as string,
-          status: 'active',
-          progress: (body.progress as DaemonGoal['progress']) || null,
-          createdAt: now,
-          updatedAt: now,
-        })
+        const sessionId = body.sessionId as string
+        const description = body.description as string
+
+        if (!sessionId || !description) {
+          return Response.json(
+            { ok: false, error: 'sessionId and description are required' },
+            { status: 400 },
+          )
+        }
+
+        // Validate session exists
+        const session = db.getSession(sessionId)
+        if (!session) {
+          return Response.json({ ok: false, error: 'Session not found' }, { status: 404 })
+        }
+
+        const progress = body.progress as { current: number; total: number } | undefined
+        const goalId = goalManager.createGoal(sessionId, description, progress)
         return Response.json({ ok: true, data: { id: goalId } }, { status: 201 })
       }
 
-      // ── Schedules (stub — Phase 4) ──────────────────
+      const goalMatch = path.match(/^\/api\/v1\/goals\/(\d+)$/)
+      if (goalMatch && method === 'PATCH') {
+        const id = parseInt(goalMatch[1]!, 10)
+        const body = await jsonBody()
+        goalManager.updateGoal(
+          id,
+          body as Partial<Pick<DaemonGoal, 'status' | 'description' | 'progress'>>,
+        )
+        return Response.json({ ok: true })
+      }
+
+      // ── Schedules (Phase 4 — service-backed) ─────────
       if (method === 'GET' && path === '/api/v1/schedules') {
         const sessionId = url.searchParams.get('session')
         if (!sessionId)
           return Response.json({ ok: false, error: '?session= required' }, { status: 400 })
-        const schedules = db.getSchedules(sessionId)
+        const schedules = scheduleManager.getSchedules(sessionId)
         return Response.json({ ok: true, data: { schedules } })
+      }
+
+      if (method === 'POST' && path === '/api/v1/schedules') {
+        const body = await jsonBody()
+        const sessionId = body.sessionId as string
+        const cronExpr = body.cronExpr as string
+        const prompt = body.prompt as string
+
+        if (!sessionId || !cronExpr || !prompt) {
+          return Response.json(
+            { ok: false, error: 'sessionId, cronExpr, and prompt are required' },
+            { status: 400 },
+          )
+        }
+
+        // Validate session exists
+        const session = db.getSession(sessionId)
+        if (!session) {
+          return Response.json({ ok: false, error: 'Session not found' }, { status: 404 })
+        }
+
+        const scheduleId = scheduleManager.createSchedule(sessionId, cronExpr, prompt)
+        return Response.json({ ok: true, data: { id: scheduleId } }, { status: 201 })
+      }
+
+      const scheduleMatch = path.match(/^\/api\/v1\/schedules\/(\d+)$/)
+      if (scheduleMatch && method === 'DELETE') {
+        const id = parseInt(scheduleMatch[1]!, 10)
+        scheduleManager.deleteSchedule(id)
+        return Response.json({ ok: true })
       }
 
       return Response.json({ ok: false, error: 'Not found' }, { status: 404 })

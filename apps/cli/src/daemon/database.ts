@@ -321,6 +321,14 @@ export class DaemonDatabase {
     this.db.run('DELETE FROM schedules WHERE id = ?', [id])
   }
 
+  updateScheduleFireTimes(id: number, lastFired: string, nextFire: string): void {
+    this.db.run(`UPDATE schedules SET last_fired = ?, next_fire = ? WHERE id = ?`, [
+      lastFired,
+      nextFire,
+      id,
+    ])
+  }
+
   getDueSchedules(): DaemonSchedule[] {
     const now = new Date().toISOString()
     const rows = this.db
