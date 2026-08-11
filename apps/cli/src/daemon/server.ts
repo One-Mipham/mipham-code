@@ -39,7 +39,18 @@ interface WsData {
 }
 
 export function createServer(config: ServerConfig): Server<WsData> {
-  const { db, sm, pool, token, port, hostname, agentManager, messageBus, goalManager, scheduleManager } = config
+  const {
+    db,
+    sm,
+    pool,
+    token,
+    port,
+    hostname,
+    agentManager,
+    messageBus,
+    goalManager,
+    scheduleManager,
+  } = config
 
   const wsClients = new Map<string, Set<ServerWebSocket<WsData>>>()
 
