@@ -79,17 +79,15 @@ const MessageRow = React.memo(
           </Box>
         ) : (
           <>
-            <Text
-              bold
-              color={msg.role === 'user' ? 'green' : msg.role === 'system' ? 'yellow' : 'blue'}
-            >
-              {msg.role === 'user'
-                ? `▸ ${displayCwd()}`
-                : msg.role === 'assistant'
-                  ? t('ui.assistant.role_label')
-                  : `⚠ ${t('ui.system.role_label')}`}
-              :
-            </Text>
+            {msg.role === 'user' ? (
+              <Text bold color="green">
+                ▸ {displayCwd()}:
+              </Text>
+            ) : msg.role === 'system' ? (
+              <Text bold color="yellow">
+                ⚠ {t('ui.system.role_label')}:
+              </Text>
+            ) : null}
             <Text>{msg.content}</Text>
           </>
         )}

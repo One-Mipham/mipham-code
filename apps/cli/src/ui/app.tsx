@@ -705,14 +705,6 @@ export function App({
   if (apiKeyPrompt) {
     return (
       <Box flexDirection="column" padding={1} height="100%">
-        {/* Header */}
-        <Box flexDirection="column" marginBottom={1}>
-          <Text color="#FFD700" bold>
-            Mipham Code
-          </Text>
-          <Text dimColor>v{version || '0.0.0'}</Text>
-        </Box>
-
         {/* Chat panel — show existing messages */}
         <ChatPanel messages={messages} focusMode={false} />
 
@@ -752,15 +744,6 @@ export function App({
 
   return (
     <Box flexDirection="column" padding={1} height="100%">
-      {/* Header — left-aligned */}
-      <Box flexDirection="column" marginBottom={1}>
-        <Text color="#FFD700" bold>
-          Mipham Code
-        </Text>
-        <Text dimColor>v{version || '0.0.0'}</Text>
-        <Text dimColor>{modelId}</Text>
-      </Box>
-
       {/* Workflow progress — auto-detects active workflows, renders nothing when idle */}
       <WorkflowProgress />
 
