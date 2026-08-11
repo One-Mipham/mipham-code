@@ -21,10 +21,7 @@ const PAGE_SIZE = 12
  * Split a string into segments, marking which substrings match the query.
  * Case-insensitive matching. Used to bold matching characters in the picker.
  */
-function highlightMatches(
-  text: string,
-  query: string,
-): { text: string; match: boolean }[] {
+function highlightMatches(text: string, query: string): { text: string; match: boolean }[] {
   if (!query) return [{ text, match: false }]
   const lowerText = text.toLowerCase()
   const lowerQuery = query.toLowerCase()
@@ -144,17 +141,11 @@ export function CommandPicker({
                 {isCursor ? '▶ ' : '  '}
               </Text>
               {segments.map((seg, j) => (
-                <Text
-                  key={j}
-                  color={itemColor(isCursor)}
-                  bold={itemBold(isCursor) || seg.match}
-                >
+                <Text key={j} color={itemColor(isCursor)} bold={itemBold(isCursor) || seg.match}>
                   {seg.text}
                 </Text>
               ))}
-              {padLen > 0 && (
-                <Text color={itemColor(isCursor)}>{' '.repeat(padLen)}</Text>
-              )}
+              {padLen > 0 && <Text color={itemColor(isCursor)}>{' '.repeat(padLen)}</Text>}
               <Text dimColor>{cmd.description}</Text>
             </Box>
           )
