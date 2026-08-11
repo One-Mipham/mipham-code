@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { Box, Text, useInput } from 'ink'
 import TextInput from 'ink-text-input'
-import { readFileSync } from 'node:fs'
 import type { QueryEngine } from '../core/engine'
 import type { RemoteEngine } from '../daemon/remote-engine'
 import type { MiphamConfig } from '../shared/index.ts'
@@ -183,28 +182,18 @@ export function App({
   const [agentProgress, setAgentProgress] = useState<AgentProgress | null>(null)
   // Multi-agent tracking: keyed by agent/task ID, shows all running + recently completed agents
   const [runningAgents, setRunningAgents] = useState<Record<string, AgentEntry>>({})
-  const [gitBranch, setGitBranch] = useState('')
   const [agentTick, setAgentTick] = useState(0)
-
-  // Detect git branch on mount
-  useEffect(() => {
-    try {
-      const head = readFileSync('.git/HEAD', 'utf8').trim()
-      const m = head.match(/^ref: refs\/heads\/(.+)$/)
-      setGitBranch(m ? m[1]! : head.slice(0, 7))
-    } catch {
-      // Not a git repo — leave empty
-    }
-  }, [])
+  /** Active foreground tool indicator: [Bash command...], [Update file.ts...], etc. */
+  const [activeTool, setActiveTool] = useState<{ name: string; detail: string } | null>(null)
 
   // Tick timer for agent elapsed displays (re-renders every second while agents are running)
   useEffect(() => {
     const hasRunning =
-      Object.values(runningAgents).some((a) => a.status === 'running') || agentProgress !== null
+      Object.values(runningAgents).some((a) => a.status === 'running') || agentProgress !== null || activeTool !== null
     if (!hasRunning) return
     const i = setInterval(() => setAgentTick((t) => t + 1), 1000)
     return () => clearInterval(i)
-  }, [runningAgents, agentProgress])
+  }, [runningAgents, agentProgress, activeTool])
 
   // Sync running agents from BackgroundAgentRegistry into React state.
   // Called after Agent tool results and task notifications to keep the footer current.
@@ -520,6 +509,9 @@ export function App({
             const isAgent = toolName === 'Agent' || toolName === 'Task'
             const detail = formatToolDetail(toolName, chunk.toolUse.input)
 
+            // Show [ToolName detail...] activity indicator for ALL tools
+            setActiveTool({ name: toolDisplayName(toolName), detail })
+
             if (isAgent) {
               setAgentProgress({
                 name: detail || (chunk.toolUse.input.subagent_type as string) || 'General-purpose',
@@ -553,6 +545,7 @@ export function App({
 
           if (chunk.type === 'tool_result') {
             setAgentProgress(null)
+            setActiveTool(null)
             // Sync background agents (e.g. Agent tool may have spawned them)
             syncBgAgents()
             const output = chunk.content ? String(chunk.content).trim() : ''
@@ -834,11 +827,12 @@ export function App({
             </Box>
           )}
 
-          {/* Agent status footer — shows running background agents */}
+          {/* Agent status footer — shows active tool indicator + inline agent progress + running background agents */}
           <AgentFooter
             agents={Object.values(runningAgents)}
-            gitBranch={gitBranch}
             tick={agentTick}
+            activeTool={activeTool}
+            agentProgress={agentProgress}
           />
 
           {/* Status line — Claude Code style */}
