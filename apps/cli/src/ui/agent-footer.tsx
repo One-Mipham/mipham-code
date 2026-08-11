@@ -48,11 +48,25 @@ function formatTokens(n: number): string {
 /** Map tool name to Ink color for the [Tool ...] indicator. */
 function toolIndicatorColor(name: string): string {
   switch (name) {
-    case 'Bash': case 'Read': case 'Glob': case 'Grep': return 'white'
-    case 'Write': case 'Edit': case 'Update': return 'red'
-    case 'Agent': case 'Task': case 'Skill': case 'Workflow': return 'magenta'
-    case 'WebSearch': case 'WebFetch': return 'blue'
-    default: return 'white'
+    case 'Bash':
+    case 'Read':
+    case 'Glob':
+    case 'Grep':
+      return 'white'
+    case 'Write':
+    case 'Edit':
+    case 'Update':
+      return 'red'
+    case 'Agent':
+    case 'Task':
+    case 'Skill':
+    case 'Workflow':
+      return 'magenta'
+    case 'WebSearch':
+    case 'WebFetch':
+      return 'blue'
+    default:
+      return 'white'
   }
 }
 
@@ -64,10 +78,22 @@ function animatedDots(tick: number): string {
 
 /** Gerund verbs for agent progress — rotated every 2 seconds for visual liveliness. */
 const GERUNDS = [
-  'Pondering', 'Contemplating', 'Cerebrating', 'Ruminating',
-  'Deliberating', 'Cogitating', 'Perambulating', 'Computing',
-  'Processing', 'Analyzing', 'Synthesizing', 'Orchestrating',
-  'Forging', 'Illuminating', 'Manifesting', 'Transmogrifying',
+  'Pondering',
+  'Contemplating',
+  'Cerebrating',
+  'Ruminating',
+  'Deliberating',
+  'Cogitating',
+  'Perambulating',
+  'Computing',
+  'Processing',
+  'Analyzing',
+  'Synthesizing',
+  'Orchestrating',
+  'Forging',
+  'Illuminating',
+  'Manifesting',
+  'Transmogrifying',
 ]
 
 /** Pick a gerund that changes every 2 seconds (driven by tick). */
@@ -89,7 +115,8 @@ export function AgentFooter({ agents, tick, activeTool, agentProgress }: AgentFo
       {hasTool && (
         <Box>
           <Text color={toolIndicatorColor(activeTool!.name)}>
-            {'  '}[{activeTool!.name} {activeTool!.detail.slice(0, 60)}{animatedDots(tick)}]
+            {'  '}[{activeTool!.name} {activeTool!.detail.slice(0, 60)}
+            {animatedDots(tick)}]
           </Text>
         </Box>
       )}

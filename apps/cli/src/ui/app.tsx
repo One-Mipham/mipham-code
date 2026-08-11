@@ -189,7 +189,9 @@ export function App({
   // Tick timer for agent elapsed displays (re-renders every second while agents are running)
   useEffect(() => {
     const hasRunning =
-      Object.values(runningAgents).some((a) => a.status === 'running') || agentProgress !== null || activeTool !== null
+      Object.values(runningAgents).some((a) => a.status === 'running') ||
+      agentProgress !== null ||
+      activeTool !== null
     if (!hasRunning) return
     const i = setInterval(() => setAgentTick((t) => t + 1), 1000)
     return () => clearInterval(i)
