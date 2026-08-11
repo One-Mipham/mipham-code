@@ -13,6 +13,7 @@ import type { Server } from 'bun'
 import { DaemonDatabase } from './database'
 import { SessionManager } from './session-manager'
 import { createServer } from './server'
+import { WorkerPool } from './worker-pool'
 import { loadOrCreateToken } from './auth'
 import { PACKAGE_VERSION } from '../shared/package-info'
 import type { DaemonStatus } from './types'
@@ -29,6 +30,7 @@ const DEFAULT_PORT = 45671
 // The lifecycle only needs .stop() on the server; WebSocketData type is opaque here.
 let activeServer: Server<unknown> | null = null
 let activeDb: DaemonDatabase | null = null
+let activePool: WorkerPool | null = null
 
 function getConfiguredPort(): number {
   if (process.env.MIPHAM_PORT) {
@@ -129,8 +131,12 @@ export async function startDaemon(): Promise<{ port: number; token: string }> {
   // Create session manager
   const sm = new SessionManager(db)
 
+  // Create worker pool (idle timeout: 30 min default)
+  const pool = new WorkerPool(db)
+  activePool = pool
+
   // Start HTTP server (Bun.serve starts listening immediately)
-  const server = createServer({ db, sm, token, port, hostname })
+  const server = createServer({ db, sm, pool, token, port, hostname })
   activeServer = server
 
   // Write PID and port files
@@ -164,6 +170,12 @@ export async function stopDaemon(force: boolean = false): Promise<void> {
   if (activeServer) {
     activeServer.stop()
     activeServer = null
+  }
+
+  // Stop worker pool (interrupts all in-progress prompts, persists state)
+  if (activePool) {
+    await activePool.stopAll()
+    activePool = null
   }
 
   // Close database (commits any pending WAL)

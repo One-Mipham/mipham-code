@@ -411,6 +411,118 @@ async function runDaemonCLI(): Promise<boolean> {
   process.exit(1)
 }
 
+// ── Attach: connect TUI to a daemon session ────────────────────────────────
+
+async function runAttachCLI(): Promise<boolean> {
+  const args = process.argv.slice(2)
+  if (args[0] !== 'attach') return false
+
+  const { getPort, getDaemonStatus } = await import('../src/daemon/index')
+  const { join } = await import('node:path')
+  const { readFileSync, existsSync } = await import('node:fs')
+  const { homedir } = await import('node:os')
+
+  // Check if daemon is running
+  const status = getDaemonStatus()
+  if (!status) {
+    console.error('No daemon running. Start one with: mipham daemon start')
+    process.exit(1)
+  }
+
+  const port = getPort()
+  const tokenPath = join(homedir(), '.mipham', 'daemon.token')
+  let token = ''
+  if (existsSync(tokenPath)) {
+    token = readFileSync(tokenPath, 'utf-8').trim()
+  }
+
+  // Fetch active sessions from daemon
+  interface SessionInfo {
+    id: string
+    name: string
+    cwd: string
+    status: string
+    model: string
+    updatedAt: string
+  }
+
+  let sessions: SessionInfo[] = []
+  try {
+    const resp = await fetch(`http://127.0.0.1:${port}/api/v1/sessions`)
+    const data = (await resp.json()) as { ok: boolean; data?: { sessions: SessionInfo[] } }
+    if (data.ok && data.data) {
+      sessions = data.data.sessions.filter((s) => s.status === 'active' || s.status === 'idle')
+    }
+  } catch (err) {
+    console.error(`Failed to connect to daemon at port ${port}: ${String(err)}`)
+    process.exit(1)
+  }
+
+  const latestFlag = args.includes('--latest')
+  const sessionIdArg = args[1] && !args[1].startsWith('-') ? args[1] : undefined
+
+  let targetSession: SessionInfo | null = null
+
+  if (latestFlag) {
+    if (sessions.length === 0) {
+      console.error('No active sessions found.')
+      process.exit(1)
+    }
+    targetSession = sessions[0]! // Most recently updated active/idle session
+  } else if (sessionIdArg) {
+    targetSession =
+      sessions.find((s) => s.id === sessionIdArg || s.id.startsWith(sessionIdArg)) ?? null
+    if (!targetSession) {
+      console.error(`Session "${sessionIdArg}" not found.`)
+      if (sessions.length > 0) {
+        console.error(`Available sessions:`)
+        for (const s of sessions) {
+          console.error(`  ${s.id.slice(0, 8)}  ${s.name}  [${s.status}]  ${s.cwd}`)
+        }
+      }
+      process.exit(1)
+    }
+  } else {
+    // List sessions and show usage
+    if (sessions.length === 0) {
+      console.log('No active sessions.')
+    } else {
+      console.log('Active sessions:')
+      for (const s of sessions) {
+        const shortId = s.id.slice(0, 8)
+        console.log(`  ${shortId}  ${s.name}  [${s.status}]  ${s.model}  ${s.cwd}`)
+      }
+    }
+    console.log()
+    console.log('Usage:')
+    console.log('  mipham attach <id>       Attach to a specific session')
+    console.log('  mipham attach --latest   Attach to the most recent session')
+    process.exit(0)
+  }
+
+  // Read version for the TUI header
+  let version = '0.0.0'
+  try {
+    const pkgPath = join(import.meta.dirname!, '..', 'package.json')
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
+    version = pkg.version
+  } catch {
+    // fallback
+  }
+
+  // Launch TUI in remote mode — the engine will connect via WebSocket
+  const { runApp } = await import('../src/index')
+  await runApp({
+    version,
+    remoteSession: {
+      sessionId: targetSession.id,
+      port,
+      token,
+    },
+  })
+  return true
+}
+
 async function main() {
   // ── Disable terminal special characters ──────────────────────────────────
   // Terminal intercepts Ctrl+S (XOFF), Ctrl+T (SIGINFO/status), Ctrl+R (rprnt)
@@ -480,6 +592,7 @@ Usage:
   mipham update              Update to the latest version
   mipham upgrade             Same as 'mipham update'
   mipham daemon <cmd>        Daemon lifecycle (start, stop, status, restart)
+  mipham attach [id]         Attach to a daemon session (--latest for recent)
   mipham plugin <cmd>        Plugin management (install, list, remove, etc.)
   mipham workflow <cmd>      Workflow orchestration (run, list, resume, etc.)
   mipham --version           Print version and exit
@@ -502,6 +615,10 @@ npm:  https://www.npmjs.com/package/@miphamai/cli`)
   const handledDaemon = await runDaemonCLI()
   if (handledDaemon) return
 
+  // ── Attach commands ───────────────────────────────────────────────────────
+  const handledAttach = await runAttachCLI()
+  if (handledAttach) return
+
   // Check for plugin subcommands first
   const handledPlugin = await runPluginCLI()
   if (handledPlugin) return
@@ -513,7 +630,7 @@ npm:  https://www.npmjs.com/package/@miphamai/cli`)
   // ── Unknown command detection ──────────────────────────────────────────────
   // After all known subcommands are checked, any remaining positional argument
   // is probably a typo. Show error + suggestions instead of silently launching CLI.
-  const KNOWN_COMMANDS = ['update', 'upgrade', 'plugin', 'workflow', 'daemon', 'help']
+  const KNOWN_COMMANDS = ['update', 'upgrade', 'plugin', 'workflow', 'daemon', 'attach', 'help']
   const firstArg = process.argv.slice(2).find((a) => !a.startsWith('-'))
   if (firstArg) {
     // Levenshtein distance to find closest match

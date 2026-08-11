@@ -3,6 +3,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { createServer } from '../../src/daemon/server'
 import { DaemonDatabase } from '../../src/daemon/database'
 import { SessionManager } from '../../src/daemon/session-manager'
+import { WorkerPool } from '../../src/daemon/worker-pool'
 import { generateToken } from '../../src/daemon/auth'
 import { unlinkSync } from 'node:fs'
 import { Socket } from 'node:net'
@@ -44,13 +45,22 @@ describe('Daemon HTTP Server', () => {
   let server: Server<any>
   let db: DaemonDatabase
   let sm: SessionManager
+  let pool: WorkerPool
 
   beforeAll(async () => {
     cleanDb()
     db = new DaemonDatabase(TEST_DB)
     db.init()
     sm = new SessionManager(db)
-    server = createServer({ db, sm, token: TEST_TOKEN, port: TEST_PORT, hostname: '127.0.0.1' })
+    pool = new WorkerPool(db)
+    server = createServer({
+      db,
+      sm,
+      pool,
+      token: TEST_TOKEN,
+      port: TEST_PORT,
+      hostname: '127.0.0.1',
+    })
     // Wait for the server to start listening (Node.js http.listen is async)
     for (let i = 0; i < 50; i++) {
       try {

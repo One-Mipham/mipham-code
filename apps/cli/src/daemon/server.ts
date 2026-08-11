@@ -5,10 +5,22 @@ import type { SessionManager } from './session-manager'
 import type { DaemonGoal } from './types'
 import { authMiddleware } from './auth'
 import { PACKAGE_VERSION } from '../shared/package-info'
+import { WorkerPool } from './worker-pool'
+import type { SessionWorker } from './session-worker'
+import type { ClientMessage } from './attach-protocol'
+import { QueryEngine } from '../core/engine'
+import { ContextManager } from '../core/context'
+import { loadConfig } from '../config/loader'
+import { bootstrapProviders } from '../providers/bootstrap'
+import { createToolRegistry } from '../tools'
+import { PermissionSystem } from '../core/permission'
+import type { ProviderRegistry } from '../providers/registry'
+import type { ToolDefinition } from '../shared/types'
 
 interface ServerConfig {
   db: DaemonDatabase
   sm: SessionManager
+  pool: WorkerPool
   token: string
   port: number
   hostname: string
@@ -19,7 +31,7 @@ interface WsData {
 }
 
 export function createServer(config: ServerConfig): Server<WsData> {
-  const { db, sm, token, port, hostname } = config
+  const { db, sm, pool, token, port, hostname } = config
 
   const wsClients = new Map<string, Set<ServerWebSocket<WsData>>>()
 
@@ -33,6 +45,93 @@ export function createServer(config: ServerConfig): Server<WsData> {
       } catch {
         clients.delete(ws)
       }
+    }
+  }
+
+  // ── Lazy engine & worker initialization ──────────────────────────────
+  // Shared across all sessions — lazily initialized on first prompt.
+  const engineCache = new Map<string, QueryEngine>()
+  let sharedRegistry: ProviderRegistry | null = null
+  let sharedTools: Map<string, ToolDefinition> | null = null
+  const DEFAULT_MAX_TOKENS = 200_000
+
+  function getOrCreateEngine(
+    sessionId: string,
+    cwd: string,
+    provider: string,
+    model: string,
+  ): QueryEngine {
+    const existing = engineCache.get(sessionId)
+    if (existing) {
+      // Ensure the active provider/model matches the session metadata
+      existing.switchProvider(provider, model)
+      return existing
+    }
+
+    // Lazy-init shared provider registry
+    if (!sharedRegistry) {
+      const config = loadConfig(cwd)
+      sharedRegistry = bootstrapProviders(config.providers, provider, model)
+    } else {
+      sharedRegistry.switchProvider(provider, model)
+    }
+
+    // Lazy-init shared tool registry
+    if (!sharedTools) {
+      sharedTools = createToolRegistry()
+    }
+
+    // Create per-session context, restoring previous messages from DB
+    const context = new ContextManager({
+      maxTokens: DEFAULT_MAX_TOKENS,
+      compactionThreshold: 0.9,
+      contextWindow: DEFAULT_MAX_TOKENS,
+    })
+
+    const dbMessages = db.getMessages(sessionId, 10000)
+    for (const msg of dbMessages) {
+      try {
+        const parsed = JSON.parse(msg.content)
+        context.addMessage(parsed)
+      } catch {
+        context.addMessage({
+          role: msg.role as 'user' | 'assistant' | 'system',
+          content: msg.content,
+        })
+      }
+    }
+
+    const permission = new PermissionSystem('bypassPermissions')
+    const engine = new QueryEngine(sharedRegistry, context, sharedTools, permission)
+    engine.setSessionId(sessionId)
+    engineCache.set(sessionId, engine)
+    return engine
+  }
+
+  function getOrCreateWorker(
+    sessionId: string,
+    ws?: ServerWebSocket<WsData>,
+  ): SessionWorker | null {
+    try {
+      const session = db.getSession(sessionId)
+      if (!session || session.status === 'closed') return null
+
+      const engine = getOrCreateEngine(sessionId, session.cwd, session.provider, session.model)
+      const worker = pool.createWorker(sessionId, engine, engine.getContext(), engine.getRegistry())
+
+      // Register all connected WS clients with the worker so they
+      // receive streamed output for this session.
+      const clients = wsClients.get(sessionId)
+      if (clients) {
+        for (const client of clients) {
+          worker.addClient(client)
+        }
+      }
+
+      return worker
+    } catch (err) {
+      console.error(`Server: error creating worker for session ${sessionId}:`, err)
+      return null
     }
   }
 
@@ -112,7 +211,14 @@ export function createServer(config: ServerConfig): Server<WsData> {
       }
 
       if (sessionMatch && method === 'DELETE') {
-        sm.closeSession(sessionMatch[1]!)
+        const sessionId = sessionMatch[1]!
+        // Stop worker (interrupt, persist, mark idle) before closing session
+        pool.stopWorker(sessionId).catch((err: unknown) => {
+          console.error(`Server: error stopping worker for session ${sessionId}:`, err)
+        })
+        // Remove engine from cache
+        engineCache.delete(sessionId)
+        sm.closeSession(sessionId)
         return Response.json({ ok: true })
       }
 
@@ -124,26 +230,47 @@ export function createServer(config: ServerConfig): Server<WsData> {
         return Response.json({ ok: true, data: { messages } })
       }
 
-      // ── Prompt (stub — Phase 2) ─────────────────────
+      // ── Prompt (Phase 2 — engine-backed) ──────────────
       const promptMatch = path.match(/^\/api\/v1\/sessions\/([^/]+)\/prompt$/)
       if (promptMatch && method === 'POST') {
         const body = await jsonBody()
         const sessionId = promptMatch[1]!
         const prompt = body.prompt as string
 
-        // Phase 1 stub: save the user message, return placeholder
-        db.saveMessage(sessionId, 'user', JSON.stringify({ role: 'user', content: prompt }))
+        if (!prompt || typeof prompt !== 'string') {
+          return Response.json({ ok: false, error: '"prompt" field is required' }, { status: 400 })
+        }
 
-        // Broadcast via WebSocket for real-time streaming clients
-        broadcast(sessionId, { type: 'prompt_received', sessionId, prompt })
+        const session = db.getSession(sessionId)
+        if (!session) {
+          return Response.json({ ok: false, error: 'Session not found' }, { status: 404 })
+        }
 
-        return Response.json({
-          ok: true,
-          data: {
-            sessionId,
-            message: 'Prompt received. Full execution coming in Phase 2.',
-          },
+        if (session.status === 'closed') {
+          return Response.json({ ok: false, error: 'Session is closed' }, { status: 400 })
+        }
+
+        // Reactivate idle sessions
+        if (session.status === 'idle') {
+          db.updateSessionStatus(sessionId, 'active')
+        }
+
+        // Get or create the worker (lazy engine initialization)
+        const worker = getOrCreateWorker(sessionId)
+        if (!worker) {
+          return Response.json({ ok: false, error: 'Failed to initialize engine' }, { status: 500 })
+        }
+
+        // Fire and forget — respond immediately while processing
+        // streams results to connected WebSocket clients.
+        worker.processPrompt(prompt).catch((err: unknown) => {
+          console.error(`Server: error processing prompt for session ${sessionId}:`, err)
         })
+
+        return Response.json(
+          { ok: true, data: { sessionId, status: 'processing' } },
+          { status: 202 },
+        )
       }
 
       // ── Agents (stub — Phase 3) ─────────────────────
@@ -195,6 +322,13 @@ export function createServer(config: ServerConfig): Server<WsData> {
           wsClients.set(sessionId, new Set())
         }
         wsClients.get(sessionId)!.add(ws)
+
+        // Register with worker if already active so the new client
+        // receives future streamed output for this session.
+        const worker = pool.getWorker(sessionId)
+        if (worker) {
+          worker.addClient(ws)
+        }
       },
       close(ws) {
         const sessionId = ws.data.sessionId
@@ -203,9 +337,52 @@ export function createServer(config: ServerConfig): Server<WsData> {
           clients.delete(ws)
           if (clients.size === 0) wsClients.delete(sessionId)
         }
+
+        // Remove from worker's broadcast set
+        const worker = pool.getWorker(sessionId)
+        if (worker) {
+          worker.removeClient(ws)
+        }
       },
-      message() {
-        // Client-to-server WS messages handled in Phase 2
+      message(ws, msg) {
+        const sessionId = ws.data.sessionId
+
+        let parsed: ClientMessage
+        try {
+          const raw = typeof msg === 'string' ? msg : new TextDecoder().decode(msg as Uint8Array)
+          parsed = JSON.parse(raw) as ClientMessage
+        } catch {
+          // Ignore malformed messages
+          return
+        }
+
+        if (!parsed || typeof parsed.type !== 'string') return
+
+        switch (parsed.type) {
+          case 'prompt': {
+            if (!parsed.prompt || typeof parsed.prompt !== 'string') return
+
+            const worker = getOrCreateWorker(sessionId, ws)
+            if (!worker) return
+
+            worker.processPrompt(parsed.prompt).catch((err: unknown) => {
+              console.error(`Server: error processing WS prompt for session ${sessionId}:`, err)
+            })
+            break
+          }
+
+          case 'interrupt': {
+            const worker = pool.getWorker(sessionId)
+            if (worker) {
+              worker.interrupt()
+            }
+            break
+          }
+
+          default:
+            // Unknown message type — silently ignored
+            break
+        }
       },
     },
   })

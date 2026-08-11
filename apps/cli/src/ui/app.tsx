@@ -3,6 +3,7 @@ import { Box, Text, useInput } from 'ink'
 import TextInput from 'ink-text-input'
 import { readFileSync } from 'node:fs'
 import type { QueryEngine } from '../core/engine'
+import type { RemoteEngine } from '../daemon/remote-engine'
 import type { MiphamConfig } from '../shared/index.ts'
 import type { SkillsLoader } from '../skills/loader'
 import type { PluginManager } from '../plugin/plugin-manager'
@@ -29,7 +30,7 @@ import type { PermissionMode } from '../shared/index.ts'
 import { sanitizeForDisplay } from '../shared/sanitize.ts'
 
 interface AppProps {
-  engine: QueryEngine
+  engine: QueryEngine | RemoteEngine
   config: MiphamConfig
   initialProvider?: string
   initialModel?: string
@@ -265,7 +266,10 @@ export function App({
 
   const mkCtx = useCallback(
     (): CommandContext => ({
-      engine,
+      // In remote attach mode, RemoteEngine provides stub methods for all the
+      // QueryEngine APIs that slash commands need. The cast is safe because
+      // stubs cover every method that CommandContext consumers call.
+      engine: engine as QueryEngine,
       config,
       providerId,
       modelId,

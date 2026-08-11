@@ -47,6 +47,13 @@ import enUS from './i18n-core/locales/en-US.json' with { type: 'json' }
 import zhCN from './i18n-core/locales/zh-CN.json' with { type: 'json' }
 import type { TranslationMap } from './i18n-core/types'
 
+// Locale bundles — defined at module level so the remote-attach branch can
+// reference them before the full bootstrap path runs.
+const localeBundles: Record<string, TranslationMap> = {
+  'en-US': enUS as TranslationMap,
+  'zh-CN': zhCN as TranslationMap,
+}
+
 interface RunOptions {
   model?: string
   provider?: string
@@ -54,6 +61,8 @@ interface RunOptions {
   permission?: string
   resume?: string
   version?: string
+  /** When set, launch TUI in remote mode connected to a daemon session. */
+  remoteSession?: { sessionId: string; port: number; token: string }
 }
 
 /**
@@ -183,6 +192,41 @@ export async function runApp(options: RunOptions): Promise<void> {
   // ── Workspace Trust Check ──
   await checkWorkspaceTrust()
 
+  // ── Remote attach mode ──────────────────────────────────────────────────
+  // When the TUI is launched via `mipham attach`, skip the entire local
+  // engine bootstrap and connect to the daemon via WebSocket instead.
+  if (options.remoteSession) {
+    const { RemoteEngine } = await import('./daemon/remote-engine')
+    const engine = new RemoteEngine(options.remoteSession)
+
+    // Detect locale and create translation function (same as local path)
+    const locale = detectLocale({ lang: options.lang })
+    const t = createT(localeBundles[locale] || enUS, enUS)
+
+    // Set terminal window title
+    process.stdout.write('\x1b]0;Mipham Code\x07')
+
+    const { waitUntilExit } = render(
+      React.createElement(I18nProvider, {
+        locale,
+        t,
+        children: React.createElement(App, {
+          engine,
+          config: {} as MiphamConfig,
+          initialProvider: 'remote',
+          initialModel: 'remote',
+          version: options.version,
+          sessionId: options.remoteSession.sessionId,
+        }),
+      }),
+    )
+    await waitUntilExit()
+
+    // Close the WebSocket connection on the way out
+    engine.close()
+    return
+  }
+
   // Handle `mipham agents` subcommand — launch standalone dashboard
   const args = process.argv.slice(2)
   if (args[0] === 'agents') {
@@ -208,10 +252,6 @@ export async function runApp(options: RunOptions): Promise<void> {
 
   // Detect locale and create translation function
   const locale = detectLocale({ lang: options.lang })
-  const localeBundles: Record<string, TranslationMap> = {
-    'en-US': enUS as TranslationMap,
-    'zh-CN': zhCN as TranslationMap,
-  }
   const t = createT(localeBundles[locale] || enUS, enUS)
 
   // Bootstrap providers
