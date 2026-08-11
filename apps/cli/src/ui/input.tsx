@@ -398,13 +398,16 @@ export function InputBar({
               historyIndexRef.current = -1
               savedDraftRef.current = ''
             }
+            // Normalize newlines → spaces. ink-text-input is single-line; multi-line
+            // paste would trap arrow-key navigation on the first line.
+            const normalized = val.replace(/\n/g, ' ')
             // Throttle: first keystroke renders immediately, then batch at ~30fps.
             // During paste, the terminal may send hundreds of characters in rapid
             // succession — without throttling, each triggers a React render+Ink write
             // cycle that starves the event loop and freezes the UI.
-            valueRef.current = val
+            valueRef.current = normalized
             if (onChangeTimerRef.current) return // timer pending, latest value in ref
-            setValue(val)
+            setValue(normalized)
             onChangeTimerRef.current = setTimeout(() => {
               onChangeTimerRef.current = null
               setValue(valueRef.current)
