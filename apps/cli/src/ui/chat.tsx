@@ -157,52 +157,58 @@ export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
 }
 
 /**
- * Group consecutive tool calls into compact one-liners for the normal view.
- * Single tools show normally; 2+ consecutive tools get folded:
- *   ⏺ Read · Glob · Bash (3 tools)
+ * Pair each tool_use message with its following tool_result message(s),
+ * showing every tool individually with its name, detail, and output.
+ *
+ * Claude Code parity: each tool renders as:
+ *   ⏺ ToolName (detail)        ← colored per tool type
+ *     ⎿  output summary          ← dimmed below
+ *
+ * Only true duplicates (same tool name + same detail) are collapsed
+ * into a single entry with a count.
  */
 function compactToolGroups(messages: ChatMessage[]): ChatMessage[] {
   const result: ChatMessage[] = []
-  let toolGroup: ChatMessage[] = []
-
-  const flush = () => {
-    if (toolGroup.length === 0) return
-    if (toolGroup.length === 1) {
-      result.push(toolGroup[0]!)
-    } else {
-      const names = toolGroup
-        .filter((t) => t.toolMeta?.name && !t.toolMeta.name.startsWith('tools ('))
-        .map((t) => t.toolMeta!.name)
-      const uniqueNames = [...new Set(names)]
-      result.push({
-        role: 'system',
-        content: `⏺ ${uniqueNames.join(' · ')} (${names.length} tools)`,
-        toolMeta: {
-          name: `tools (${names.length})`,
-          input: uniqueNames.join(', '),
-          collapsed: true,
-        },
-      })
-    }
-    toolGroup = []
-  }
+  let current: ChatMessage | null = null
 
   for (const msg of messages) {
-    // Tool results (no name, has output) get folded into the preceding tool group
-    if (msg.toolMeta && !msg.toolMeta.name && msg.toolMeta.output) {
-      toolGroup.push(msg)
-      continue
-    }
-    // Tool calls with a name
+    // Tool call with a name → flush previous, start a new one
     if (msg.toolMeta?.name && !msg.toolMeta.name.startsWith('tools (')) {
-      toolGroup.push(msg)
+      if (current) result.push(current)
+      current = { ...msg }
       continue
     }
-    // Already-grouped or non-tool message
-    flush()
+
+    // Tool result (no name, has output) → merge output into current tool
+    if (msg.toolMeta && !msg.toolMeta.name && msg.toolMeta.output) {
+      if (current) {
+        current = {
+          ...current,
+          content: msg.content,
+          toolMeta: {
+            ...current.toolMeta!,
+            output: msg.toolMeta.output,
+          },
+        }
+      }
+      // Orphan tool result (no preceding tool_use) → skip
+      continue
+    }
+
+    // Already-grouped message (from a previous compact cycle) or non-tool
+    if (current) {
+      result.push(current)
+      current = null
+    }
+    // Skip orphan tool-result messages without a preceding tool_use
+    if (msg.toolMeta && !msg.toolMeta.name && msg.toolMeta.output) {
+      continue
+    }
     result.push(msg)
   }
-  flush()
+
+  // Flush any remaining tool
+  if (current) result.push(current)
   return result
 }
 
