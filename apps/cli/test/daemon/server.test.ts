@@ -9,6 +9,7 @@ import { GoalManager } from '../../src/daemon/goal-manager'
 import { ScheduleManager } from '../../src/daemon/schedule-manager'
 import { WorkerPool } from '../../src/daemon/worker-pool'
 import { generateToken } from '../../src/daemon/auth'
+import { RateLimiter } from '../../src/daemon/rate-limiter'
 import { unlinkSync } from 'node:fs'
 import { Socket } from 'node:net'
 import type { Server } from 'bun'
@@ -62,12 +63,14 @@ describe('Daemon HTTP Server', () => {
       sm,
       pool,
       token: TEST_TOKEN,
+      tokenPath: '/tmp/mipham-test.token',
       port: TEST_PORT,
       hostname: '127.0.0.1',
       agentManager: new AgentManager(db),
       messageBus: new MessageBus(),
       goalManager: new GoalManager(db),
       scheduleManager: new ScheduleManager(db, pool),
+      rateLimiter: new RateLimiter(1000, 60_000),
     })
     // Wait for the server to start listening (Node.js http.listen is async)
     for (let i = 0; i < 50; i++) {

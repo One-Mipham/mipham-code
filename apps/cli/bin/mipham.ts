@@ -969,6 +969,54 @@ async function runScheduleCLI(): Promise<boolean> {
   process.exit(1)
 }
 
+// ── Token CLI: manage daemon API tokens ────────────────────────────────────────
+
+async function runTokenCLI(): Promise<boolean> {
+  const args = process.argv.slice(2)
+  if (args[0] !== 'token') return false
+
+  const { join } = await import('node:path')
+  const { readFileSync, existsSync } = await import('node:fs')
+  const { homedir } = await import('node:os')
+  const { rotateToken, listTokens } = await import('../src/daemon/auth')
+
+  const tokenPath = join(homedir(), '.mipham', 'daemon.token')
+
+  const subcmd = args[1]
+
+  // ── mipham token rotate ──────────────────────────────
+  if (subcmd === 'rotate') {
+    if (!existsSync(tokenPath)) {
+      console.error('No token file found. Start the daemon first with: mipham daemon start')
+      process.exit(1)
+    }
+    const oldTokens = listTokens(tokenPath)
+    const newToken = rotateToken(tokenPath)
+    console.log(`Token rotated successfully.`)
+    console.log(`  Old token: ${oldTokens[0]?.slice(0, 16) ?? 'none'}...`)
+    console.log(`  New token: ${newToken.slice(0, 16)}...`)
+    console.log(`  Full token: ${newToken}`)
+    process.exit(0)
+  }
+
+  // ── mipham token show ────────────────────────────────
+  if (subcmd === 'show') {
+    const tokens = listTokens(tokenPath)
+    if (tokens.length === 0) {
+      console.log('No token found. Start the daemon first with: mipham daemon start')
+    } else {
+      for (const t of tokens) {
+        console.log(t)
+      }
+    }
+    process.exit(0)
+  }
+
+  console.error(`Unknown token command: mipham token ${subcmd}`)
+  console.error('Usage: mipham token rotate|show')
+  process.exit(1)
+}
+
 async function main() {
   // ── Disable terminal special characters ──────────────────────────────────
   // Terminal intercepts Ctrl+S (XOFF), Ctrl+T (SIGINFO/status), Ctrl+R (rprnt)
@@ -1045,6 +1093,7 @@ Usage:
   mipham agent stop <id>     Stop a running agent
   mipham goal <cmd>          Goal management (list, add, done, pause)
   mipham schedule <cmd>      Schedule management (list, add, remove)
+  mipham token <cmd>         Token management (show, rotate)
   mipham plugin <cmd>        Plugin management (install, list, remove, etc.)
   mipham workflow <cmd>      Workflow orchestration (run, list, resume, etc.)
   mipham --version           Print version and exit
@@ -1083,6 +1132,10 @@ npm:  https://www.npmjs.com/package/@miphamai/cli`)
   const handledSchedule = await runScheduleCLI()
   if (handledSchedule) return
 
+  // ── Token commands ──────────────────────────────────────────────────────────
+  const handledToken = await runTokenCLI()
+  if (handledToken) return
+
   // Check for plugin subcommands first
   const handledPlugin = await runPluginCLI()
   if (handledPlugin) return
@@ -1094,7 +1147,7 @@ npm:  https://www.npmjs.com/package/@miphamai/cli`)
   // ── Unknown command detection ──────────────────────────────────────────────
   // After all known subcommands are checked, any remaining positional argument
   // is probably a typo. Show error + suggestions instead of silently launching CLI.
-  const KNOWN_COMMANDS = ['update', 'upgrade', 'plugin', 'workflow', 'daemon', 'attach', 'agents', 'agent', 'goal', 'schedule', 'help']
+  const KNOWN_COMMANDS = ['update', 'upgrade', 'plugin', 'workflow', 'daemon', 'attach', 'agents', 'agent', 'goal', 'schedule', 'token', 'help']
   const firstArg = process.argv.slice(2).find((a) => !a.startsWith('-'))
   if (firstArg) {
     // Levenshtein distance to find closest match
