@@ -470,7 +470,8 @@ async function runAttachCLI(): Promise<boolean> {
     }
     targetSession = sessions[0]! // Most recently updated active/idle session
   } else if (sessionIdArg) {
-    targetSession = sessions.find((s) => s.id === sessionIdArg || s.id.startsWith(sessionIdArg)) ?? null
+    targetSession =
+      sessions.find((s) => s.id === sessionIdArg || s.id.startsWith(sessionIdArg)) ?? null
     if (!targetSession) {
       console.error(`Session "${sessionIdArg}" not found.`)
       if (sessions.length > 0) {

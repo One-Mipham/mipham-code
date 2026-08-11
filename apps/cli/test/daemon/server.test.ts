@@ -53,7 +53,14 @@ describe('Daemon HTTP Server', () => {
     db.init()
     sm = new SessionManager(db)
     pool = new WorkerPool(db)
-    server = createServer({ db, sm, pool, token: TEST_TOKEN, port: TEST_PORT, hostname: '127.0.0.1' })
+    server = createServer({
+      db,
+      sm,
+      pool,
+      token: TEST_TOKEN,
+      port: TEST_PORT,
+      hostname: '127.0.0.1',
+    })
     // Wait for the server to start listening (Node.js http.listen is async)
     for (let i = 0; i < 50; i++) {
       try {

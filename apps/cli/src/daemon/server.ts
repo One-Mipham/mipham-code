@@ -116,18 +116,8 @@ export function createServer(config: ServerConfig): Server<WsData> {
       const session = db.getSession(sessionId)
       if (!session || session.status === 'closed') return null
 
-      const engine = getOrCreateEngine(
-        sessionId,
-        session.cwd,
-        session.provider,
-        session.model,
-      )
-      const worker = pool.createWorker(
-        sessionId,
-        engine,
-        engine.getContext(),
-        engine.getRegistry(),
-      )
+      const engine = getOrCreateEngine(sessionId, session.cwd, session.provider, session.model)
+      const worker = pool.createWorker(sessionId, engine, engine.getContext(), engine.getRegistry())
 
       // Register all connected WS clients with the worker so they
       // receive streamed output for this session.
@@ -140,10 +130,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
 
       return worker
     } catch (err) {
-      console.error(
-        `Server: error creating worker for session ${sessionId}:`,
-        err,
-      )
+      console.error(`Server: error creating worker for session ${sessionId}:`, err)
       return null
     }
   }
@@ -251,25 +238,16 @@ export function createServer(config: ServerConfig): Server<WsData> {
         const prompt = body.prompt as string
 
         if (!prompt || typeof prompt !== 'string') {
-          return Response.json(
-            { ok: false, error: '"prompt" field is required' },
-            { status: 400 },
-          )
+          return Response.json({ ok: false, error: '"prompt" field is required' }, { status: 400 })
         }
 
         const session = db.getSession(sessionId)
         if (!session) {
-          return Response.json(
-            { ok: false, error: 'Session not found' },
-            { status: 404 },
-          )
+          return Response.json({ ok: false, error: 'Session not found' }, { status: 404 })
         }
 
         if (session.status === 'closed') {
-          return Response.json(
-            { ok: false, error: 'Session is closed' },
-            { status: 400 },
-          )
+          return Response.json({ ok: false, error: 'Session is closed' }, { status: 400 })
         }
 
         // Reactivate idle sessions
@@ -280,19 +258,13 @@ export function createServer(config: ServerConfig): Server<WsData> {
         // Get or create the worker (lazy engine initialization)
         const worker = getOrCreateWorker(sessionId)
         if (!worker) {
-          return Response.json(
-            { ok: false, error: 'Failed to initialize engine' },
-            { status: 500 },
-          )
+          return Response.json({ ok: false, error: 'Failed to initialize engine' }, { status: 500 })
         }
 
         // Fire and forget — respond immediately while processing
         // streams results to connected WebSocket clients.
         worker.processPrompt(prompt).catch((err: unknown) => {
-          console.error(
-            `Server: error processing prompt for session ${sessionId}:`,
-            err,
-          )
+          console.error(`Server: error processing prompt for session ${sessionId}:`, err)
         })
 
         return Response.json(
@@ -394,10 +366,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
             if (!worker) return
 
             worker.processPrompt(parsed.prompt).catch((err: unknown) => {
-              console.error(
-                `Server: error processing WS prompt for session ${sessionId}:`,
-                err,
-              )
+              console.error(`Server: error processing WS prompt for session ${sessionId}:`, err)
             })
             break
           }

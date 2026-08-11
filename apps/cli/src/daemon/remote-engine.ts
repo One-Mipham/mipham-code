@@ -17,11 +17,7 @@
 //   }
 //   engine.close()
 
-import type {
-  ClientPromptMessage,
-  ClientInterruptMessage,
-  ServerMessage,
-} from './attach-protocol'
+import type { ClientPromptMessage, ClientInterruptMessage, ServerMessage } from './attach-protocol'
 import type { StreamChunk } from '../shared/types'
 
 // ── Public API ───────────────────────────────────────────────────────────────
