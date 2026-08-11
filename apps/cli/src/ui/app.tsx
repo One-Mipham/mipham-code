@@ -185,13 +185,17 @@ export function App({
   const [agentTick, setAgentTick] = useState(0)
   /** Active foreground tool indicator: [Bash command...], [Update file.ts...], etc. */
   const [activeTool, setActiveTool] = useState<{ name: string; detail: string } | null>(null)
+  // Refs for immediate state (bypasses React batching so footer renders between rapid chunks)
+  const activeToolRef = useRef<{ name: string; detail: string } | null>(null)
+  const agentProgressRef = useRef<AgentProgress | null>(null)
 
-  // Tick timer for agent elapsed displays (re-renders every second while agents are running)
+  // Tick timer for agent elapsed displays (re-renders every second while agents are running).
+  // Uses refs so the timer doesn't stop between state batches.
   useEffect(() => {
     const hasRunning =
       Object.values(runningAgents).some((a) => a.status === 'running') ||
-      agentProgress !== null ||
-      activeTool !== null
+      agentProgressRef.current !== null ||
+      activeToolRef.current !== null
     if (!hasRunning) return
     const i = setInterval(() => setAgentTick((t) => t + 1), 1000)
     return () => clearInterval(i)
@@ -438,6 +442,13 @@ export function App({
       setMessages((prev) => [...prev, { role: 'user', content: input }])
       setIsLoading(true)
 
+      // Start agent progress indicator immediately for ALL processing
+      const progressStart = Date.now()
+      const progress: AgentProgress = { name: '', description: '', startTime: progressStart, tokensUsed: 0 }
+      agentProgressRef.current = progress
+      setAgentProgress(progress)
+      setAgentTick((t) => t + 1)
+
       const controller = new AbortController()
       abortRef.current = controller
 
@@ -511,18 +522,24 @@ export function App({
             const isAgent = toolName === 'Agent' || toolName === 'Task'
             const detail = formatToolDetail(toolName, chunk.toolUse.input)
 
-            // Show [ToolName detail...] activity indicator for ALL tools
-            setActiveTool({ name: toolDisplayName(toolName), detail })
+            // Show [ToolName detail...] activity indicator for ALL tools (via ref for immediate render)
+            const toolEntry = { name: toolDisplayName(toolName), detail }
+            activeToolRef.current = toolEntry
+            setActiveTool(toolEntry)
+            setAgentTick((t) => t + 1)
 
             if (isAgent) {
-              setAgentProgress({
+              const ap: AgentProgress = {
                 name: detail || (chunk.toolUse.input.subagent_type as string) || 'General-purpose',
                 description:
                   (chunk.toolUse.input.description as string) ||
                   (chunk.toolUse.input.prompt as string) ||
                   '',
                 startTime: Date.now(),
-              })
+              }
+              agentProgressRef.current = ap
+              setAgentProgress(ap)
+              setAgentTick((t) => t + 1)
             }
 
             // Show tool call as a visible, collapsed message
@@ -546,8 +563,10 @@ export function App({
           }
 
           if (chunk.type === 'tool_result') {
-            setAgentProgress(null)
+            // Clear tool indicator but keep agent progress (AI is still processing)
+            activeToolRef.current = null
             setActiveTool(null)
+            setAgentTick((t) => t + 1)
             // Sync background agents (e.g. Agent tool may have spawned them)
             syncBgAgents()
             const output = chunk.content ? String(chunk.content).trim() : ''
@@ -584,12 +603,14 @@ export function App({
             }
           }
 
-          if (chunk.type === 'usage' && agentProgress) {
+          if (chunk.type === 'usage') {
             const totalTokens = (chunk.inputTokens || 0) + (chunk.outputTokens || 0)
-            if (totalTokens > 0) {
-              setAgentProgress((prev) =>
-                prev ? { ...prev, tokensUsed: (prev.tokensUsed || 0) + totalTokens } : null,
-              )
+            if (totalTokens > 0 && agentProgressRef.current) {
+              agentProgressRef.current = {
+                ...agentProgressRef.current,
+                tokensUsed: (agentProgressRef.current.tokensUsed || 0) + totalTokens,
+              }
+              setAgentProgress({ ...agentProgressRef.current })
             }
           }
 
@@ -633,6 +654,12 @@ export function App({
         flushStreamBuffer()
         setIsLoading(false)
         abortRef.current = null
+        // Clear all progress/tool indicators
+        agentProgressRef.current = null
+        setAgentProgress(null)
+        activeToolRef.current = null
+        setActiveTool(null)
+        setAgentTick((t) => t + 1)
         // Auto-save checkpoint after each AI response
         if (assistantContent) {
           engine.getContext().saveCheckpoint('post-turn')
