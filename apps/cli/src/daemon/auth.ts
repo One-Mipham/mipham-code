@@ -46,6 +46,26 @@ export function verifyToken(expected: string, provided: string): boolean {
 }
 
 /**
+ * Generate a new API token, overwrite the token file, and return the new token.
+ */
+export function rotateToken(tokenPath: string): string {
+  const token = generateToken()
+  writeFileSync(tokenPath, token, { mode: 0o600 })
+  return token
+}
+
+/**
+ * Read all tokens from the token file.
+ * Currently supports a single token per file; returns it as a single-element array.
+ * Returns an empty array if the file does not exist.
+ */
+export function listTokens(tokenPath: string): string[] {
+  if (!existsSync(tokenPath)) return []
+  const token = readFileSync(tokenPath, 'utf-8').trim()
+  return token ? [token] : []
+}
+
+/**
  * Create an auth middleware for Bun.serve that checks the Authorization header.
  * Returns a Response if auth fails, or null if auth passes.
  *

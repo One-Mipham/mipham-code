@@ -7,7 +7,9 @@ import type { MessageBus } from './message-bus'
 import type { DaemonGoal, AgentKind } from './types'
 import type { GoalManager } from './goal-manager'
 import type { ScheduleManager } from './schedule-manager'
-import { authMiddleware } from './auth'
+import { authMiddleware, rotateToken } from './auth'
+import { RateLimiter } from './rate-limiter'
+import { corsMiddleware, addCorsHeaders } from './cors'
 import { PACKAGE_VERSION } from '../shared/package-info'
 import { WorkerPool } from './worker-pool'
 import type { SessionWorker } from './session-worker'
@@ -26,12 +28,14 @@ interface ServerConfig {
   sm: SessionManager
   pool: WorkerPool
   token: string
+  tokenPath: string
   port: number
   hostname: string
   agentManager: AgentManager
   messageBus: MessageBus
   goalManager: GoalManager
   scheduleManager: ScheduleManager
+  rateLimiter: RateLimiter
 }
 
 interface WsData {
@@ -39,18 +43,7 @@ interface WsData {
 }
 
 export function createServer(config: ServerConfig): Server<WsData> {
-  const {
-    db,
-    sm,
-    pool,
-    token,
-    port,
-    hostname,
-    agentManager,
-    messageBus,
-    goalManager,
-    scheduleManager,
-  } = config
+  const { db, sm, pool, token, tokenPath, port, hostname, agentManager, messageBus, goalManager, scheduleManager, rateLimiter } = config
 
   const wsClients = new Map<string, Set<ServerWebSocket<WsData>>>()
 
@@ -174,13 +167,33 @@ export function createServer(config: ServerConfig): Server<WsData> {
     port,
     hostname,
     async fetch(req, server) {
-      // Auth check (skipped for localhost and health endpoint)
-      const authError = authMiddleware(req, token)
-      if (authError) return authError
+      // ── CORS preflight ──────────────────────────────
+      const corsResponse = corsMiddleware(req)
+      if (corsResponse) return corsResponse
 
       const url = new URL(req.url)
       const path = url.pathname
       const method = req.method
+
+      // ── Rate limiting (skip health endpoint) ──────────
+      if (path !== '/api/v1/health') {
+        const ip = server.requestIP(req)?.address || 'unknown'
+        const rl = rateLimiter.check(ip)
+        if (!rl.allowed) {
+          return addCorsHeaders(
+            Response.json({ ok: false, error: 'Rate limit exceeded' }, { status: 429 }),
+            req,
+          )
+        }
+      }
+
+      // ── Auth check ──────────────────────────────────
+      const authError = authMiddleware(req, token)
+      if (authError) return addCorsHeaders(authError, req)
+
+      // Helper: create JSON response with CORS headers for external origins
+      const json = (data: unknown, init?: ResponseInit) =>
+        addCorsHeaders(Response.json(data, init), req)
 
       // WebSocket upgrade
       const streamMatch = path.match(/^\/api\/v1\/sessions\/([^/]+)\/stream$/)
@@ -200,7 +213,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
       // ── Health ──────────────────────────────────────
       if (method === 'GET' && path === '/api/v1/health') {
         const stats = db.getStats()
-        return Response.json({
+        return json({
           ok: true,
           pid: process.pid,
           port,
@@ -215,7 +228,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
       // ── Stats ───────────────────────────────────────
       if (method === 'GET' && path === '/api/v1/stats') {
         const stats = db.getStats()
-        return Response.json({ ok: true, data: stats })
+        return json({ ok: true, data: stats })
       }
 
       // ── Sessions CRUD ───────────────────────────────
@@ -227,22 +240,22 @@ export function createServer(config: ServerConfig): Server<WsData> {
           (body.provider as string) || 'unknown',
           (body.model as string) || 'unknown',
         )
-        return Response.json({ ok: true, data: { session } }, { status: 201 })
+        return json({ ok: true, data: { session } }, { status: 201 })
       }
 
       if (method === 'GET' && path === '/api/v1/sessions') {
         const status = url.searchParams.get('status') || undefined
         const sessions = sm.listSessions(status)
-        return Response.json({ ok: true, data: { sessions } })
+        return json({ ok: true, data: { sessions } })
       }
 
       const sessionMatch = path.match(/^\/api\/v1\/sessions\/([^/]+)$/)
       if (sessionMatch && method === 'GET') {
         const session = sm.getSession(sessionMatch[1]!)
         if (!session) {
-          return Response.json({ ok: false, error: 'Session not found' }, { status: 404 })
+          return json({ ok: false, error: 'Session not found' }, { status: 404 })
         }
-        return Response.json({ ok: true, data: { session } })
+        return json({ ok: true, data: { session } })
       }
 
       if (sessionMatch && method === 'DELETE') {
@@ -254,7 +267,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
         // Remove engine from cache
         engineCache.delete(sessionId)
         sm.closeSession(sessionId)
-        return Response.json({ ok: true })
+        return json({ ok: true })
       }
 
       // ── Session messages ────────────────────────────
@@ -262,7 +275,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
       if (messagesMatch && method === 'GET') {
         const limit = parseInt(url.searchParams.get('limit') || '100')
         const messages = db.getMessages(messagesMatch[1]!, limit)
-        return Response.json({ ok: true, data: { messages } })
+        return json({ ok: true, data: { messages } })
       }
 
       // ── Prompt (Phase 2 — engine-backed) ──────────────
@@ -273,16 +286,16 @@ export function createServer(config: ServerConfig): Server<WsData> {
         const prompt = body.prompt as string
 
         if (!prompt || typeof prompt !== 'string') {
-          return Response.json({ ok: false, error: '"prompt" field is required' }, { status: 400 })
+          return json({ ok: false, error: '"prompt" field is required' }, { status: 400 })
         }
 
         const session = db.getSession(sessionId)
         if (!session) {
-          return Response.json({ ok: false, error: 'Session not found' }, { status: 404 })
+          return json({ ok: false, error: 'Session not found' }, { status: 404 })
         }
 
         if (session.status === 'closed') {
-          return Response.json({ ok: false, error: 'Session is closed' }, { status: 400 })
+          return json({ ok: false, error: 'Session is closed' }, { status: 400 })
         }
 
         // Reactivate idle sessions
@@ -293,7 +306,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
         // Get or create the worker (lazy engine initialization)
         const worker = getOrCreateWorker(sessionId)
         if (!worker) {
-          return Response.json({ ok: false, error: 'Failed to initialize engine' }, { status: 500 })
+          return json({ ok: false, error: 'Failed to initialize engine' }, { status: 500 })
         }
 
         // Fire and forget — respond immediately while processing
@@ -302,7 +315,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
           console.error(`Server: error processing prompt for session ${sessionId}:`, err)
         })
 
-        return Response.json(
+        return json(
           { ok: true, data: { sessionId, status: 'processing' } },
           { status: 202 },
         )
@@ -316,7 +329,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
         const description = body.description as string
 
         if (!sessionId || !agentType || !description) {
-          return Response.json(
+          return json(
             { ok: false, error: 'sessionId, agentType, and description are required' },
             { status: 400 },
           )
@@ -325,36 +338,36 @@ export function createServer(config: ServerConfig): Server<WsData> {
         // Validate session exists
         const session = db.getSession(sessionId)
         if (!session) {
-          return Response.json({ ok: false, error: 'Session not found' }, { status: 404 })
+          return json({ ok: false, error: 'Session not found' }, { status: 404 })
         }
 
         const kind = (body.kind as AgentKind) || undefined
         const agent = agentManager.createAgent(sessionId, agentType, description, kind)
-        return Response.json({ ok: true, data: { agent } }, { status: 201 })
+        return json({ ok: true, data: { agent } }, { status: 201 })
       }
 
       if (method === 'GET' && path === '/api/v1/agents') {
         const sessionId = url.searchParams.get('session') || undefined
         const agents = agentManager.listAgents(sessionId)
-        return Response.json({ ok: true, data: { agents } })
+        return json({ ok: true, data: { agents } })
       }
 
       const agentMatch = path.match(/^\/api\/v1\/agents\/([^/]+)$/)
       if (agentMatch && method === 'GET') {
         const agent = agentManager.getAgent(agentMatch[1]!)
         if (!agent) {
-          return Response.json({ ok: false, error: 'Agent not found' }, { status: 404 })
+          return json({ ok: false, error: 'Agent not found' }, { status: 404 })
         }
-        return Response.json({ ok: true, data: { agent } })
+        return json({ ok: true, data: { agent } })
       }
 
       if (agentMatch && method === 'DELETE') {
         const id = agentMatch[1]!
         const stopped = agentManager.stopAgent(id)
         if (!stopped) {
-          return Response.json({ ok: false, error: 'Agent not found' }, { status: 404 })
+          return json({ ok: false, error: 'Agent not found' }, { status: 404 })
         }
-        return Response.json({ ok: true, data: { agent: stopped } })
+        return json({ ok: true, data: { agent: stopped } })
       }
 
       const agentMessageMatch = path.match(/^\/api\/v1\/agents\/([^/]+)\/message$/)
@@ -364,26 +377,26 @@ export function createServer(config: ServerConfig): Server<WsData> {
         const content = body.content as string
 
         if (!content || typeof content !== 'string') {
-          return Response.json({ ok: false, error: '"content" field is required' }, { status: 400 })
+          return json({ ok: false, error: '"content" field is required' }, { status: 400 })
         }
 
         // Verify agent exists
         const agent = agentManager.getAgent(agentId)
         if (!agent) {
-          return Response.json({ ok: false, error: 'Agent not found' }, { status: 404 })
+          return json({ ok: false, error: 'Agent not found' }, { status: 404 })
         }
 
         messageBus.send('user', agentId, content)
-        return Response.json({ ok: true }, { status: 202 })
+        return json({ ok: true }, { status: 202 })
       }
 
       // ── Goals (Phase 4 — service-backed) ────────────
       if (method === 'GET' && path === '/api/v1/goals') {
         const sessionId = url.searchParams.get('session')
         if (!sessionId)
-          return Response.json({ ok: false, error: '?session= required' }, { status: 400 })
+          return json({ ok: false, error: '?session= required' }, { status: 400 })
         const goals = goalManager.getGoals(sessionId)
-        return Response.json({ ok: true, data: { goals } })
+        return json({ ok: true, data: { goals } })
       }
 
       if (method === 'POST' && path === '/api/v1/goals') {
@@ -392,7 +405,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
         const description = body.description as string
 
         if (!sessionId || !description) {
-          return Response.json(
+          return json(
             { ok: false, error: 'sessionId and description are required' },
             { status: 400 },
           )
@@ -401,12 +414,12 @@ export function createServer(config: ServerConfig): Server<WsData> {
         // Validate session exists
         const session = db.getSession(sessionId)
         if (!session) {
-          return Response.json({ ok: false, error: 'Session not found' }, { status: 404 })
+          return json({ ok: false, error: 'Session not found' }, { status: 404 })
         }
 
         const progress = body.progress as { current: number; total: number } | undefined
         const goalId = goalManager.createGoal(sessionId, description, progress)
-        return Response.json({ ok: true, data: { id: goalId } }, { status: 201 })
+        return json({ ok: true, data: { id: goalId } }, { status: 201 })
       }
 
       const goalMatch = path.match(/^\/api\/v1\/goals\/(\d+)$/)
@@ -417,16 +430,16 @@ export function createServer(config: ServerConfig): Server<WsData> {
           id,
           body as Partial<Pick<DaemonGoal, 'status' | 'description' | 'progress'>>,
         )
-        return Response.json({ ok: true })
+        return json({ ok: true })
       }
 
       // ── Schedules (Phase 4 — service-backed) ─────────
       if (method === 'GET' && path === '/api/v1/schedules') {
         const sessionId = url.searchParams.get('session')
         if (!sessionId)
-          return Response.json({ ok: false, error: '?session= required' }, { status: 400 })
+          return json({ ok: false, error: '?session= required' }, { status: 400 })
         const schedules = scheduleManager.getSchedules(sessionId)
-        return Response.json({ ok: true, data: { schedules } })
+        return json({ ok: true, data: { schedules } })
       }
 
       if (method === 'POST' && path === '/api/v1/schedules') {
@@ -436,7 +449,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
         const prompt = body.prompt as string
 
         if (!sessionId || !cronExpr || !prompt) {
-          return Response.json(
+          return json(
             { ok: false, error: 'sessionId, cronExpr, and prompt are required' },
             { status: 400 },
           )
@@ -445,21 +458,62 @@ export function createServer(config: ServerConfig): Server<WsData> {
         // Validate session exists
         const session = db.getSession(sessionId)
         if (!session) {
-          return Response.json({ ok: false, error: 'Session not found' }, { status: 404 })
+          return json({ ok: false, error: 'Session not found' }, { status: 404 })
         }
 
         const scheduleId = scheduleManager.createSchedule(sessionId, cronExpr, prompt)
-        return Response.json({ ok: true, data: { id: scheduleId } }, { status: 201 })
+        return json({ ok: true, data: { id: scheduleId } }, { status: 201 })
       }
 
       const scheduleMatch = path.match(/^\/api\/v1\/schedules\/(\d+)$/)
       if (scheduleMatch && method === 'DELETE') {
         const id = parseInt(scheduleMatch[1]!, 10)
         scheduleManager.deleteSchedule(id)
-        return Response.json({ ok: true })
+        return json({ ok: true })
       }
 
-      return Response.json({ ok: false, error: 'Not found' }, { status: 404 })
+      // ── Auth: rotate token ───────────────────────────
+      if (method === 'POST' && path === '/api/v1/auth/rotate') {
+        const newToken = rotateToken(tokenPath)
+        return json({ ok: true, data: { token: newToken } })
+      }
+
+      // ── API Docs ─────────────────────────────────────
+      if (method === 'GET' && path === '/api/v1/docs') {
+        return json({
+          ok: true,
+          data: {
+            openapi: '3.0.3',
+            info: { title: 'Mipham Code Daemon API', version: PACKAGE_VERSION },
+            endpoints: [
+              { method: 'GET', path: '/api/v1/health', description: 'Health check and daemon stats' },
+              { method: 'GET', path: '/api/v1/stats', description: 'Database statistics' },
+              { method: 'POST', path: '/api/v1/sessions', description: 'Create a new session' },
+              { method: 'GET', path: '/api/v1/sessions', description: 'List sessions' },
+              { method: 'GET', path: '/api/v1/sessions/:id', description: 'Get session details' },
+              { method: 'DELETE', path: '/api/v1/sessions/:id', description: 'Close a session' },
+              { method: 'GET', path: '/api/v1/sessions/:id/messages', description: 'Get session messages' },
+              { method: 'WS', path: '/api/v1/sessions/:id/stream', description: 'WebSocket stream for session' },
+              { method: 'POST', path: '/api/v1/sessions/:id/prompt', description: 'Send a prompt to a session' },
+              { method: 'POST', path: '/api/v1/agents', description: 'Create a background agent' },
+              { method: 'GET', path: '/api/v1/agents', description: 'List agents' },
+              { method: 'GET', path: '/api/v1/agents/:id', description: 'Get agent details' },
+              { method: 'DELETE', path: '/api/v1/agents/:id', description: 'Stop an agent' },
+              { method: 'POST', path: '/api/v1/agents/:id/message', description: 'Send message to an agent' },
+              { method: 'GET', path: '/api/v1/goals', description: 'List goals for a session' },
+              { method: 'POST', path: '/api/v1/goals', description: 'Create a goal' },
+              { method: 'PATCH', path: '/api/v1/goals/:id', description: 'Update a goal' },
+              { method: 'GET', path: '/api/v1/schedules', description: 'List schedules for a session' },
+              { method: 'POST', path: '/api/v1/schedules', description: 'Create a schedule' },
+              { method: 'DELETE', path: '/api/v1/schedules/:id', description: 'Delete a schedule' },
+              { method: 'POST', path: '/api/v1/auth/rotate', description: 'Rotate API token (requires auth)' },
+              { method: 'GET', path: '/api/v1/docs', description: 'API documentation (this endpoint)' },
+            ],
+          },
+        })
+      }
+
+      return json({ ok: false, error: 'Not found' }, { status: 404 })
     },
 
     websocket: {

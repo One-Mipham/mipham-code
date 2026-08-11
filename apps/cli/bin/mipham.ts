@@ -556,16 +556,7 @@ async function runAgentCLI(): Promise<boolean> {
       const resp = await fetch(`${baseUrl}/api/v1/agents`)
       const data = (await resp.json()) as {
         ok: boolean
-        data?: {
-          agents: Array<{
-            id: string
-            status: string
-            agentType: string
-            description: string
-            createdAt: string
-            sessionId: string
-          }>
-        }
+        data?: { agents: Array<{ id: string; status: string; agentType: string; description: string; createdAt: string; sessionId: string }> }
       }
       if (!data.ok || !data.data) {
         console.error('Failed to fetch agents.')
@@ -671,24 +662,7 @@ async function runAgentCLI(): Promise<boolean> {
     const resp = await fetch(`${baseUrl}/api/v1/agents/${agentId}`)
     const data = (await resp.json()) as {
       ok: boolean
-      data?: {
-        agent: {
-          id: string
-          agentType: string
-          description: string
-          status: string
-          kind: string
-          sessionId: string
-          createdAt: string
-          completedAt?: string | null
-          result?: string | null
-          error?: string | null
-          worktree?: string | null
-          branch?: string | null
-          prUrl?: string | null
-          parentId?: string | null
-        }
-      }
+      data?: { agent: { id: string; agentType: string; description: string; status: string; kind: string; sessionId: string; createdAt: string; completedAt?: string | null; result?: string | null; error?: string | null; worktree?: string | null; branch?: string | null; prUrl?: string | null; parentId?: string | null } }
       error?: string
     }
     if (!data.ok || !data.data) {
@@ -754,15 +728,7 @@ async function runGoalCLI(): Promise<boolean> {
       const resp = await fetch(`${baseUrl}/api/v1/goals?session=${sessionId}`)
       const data = (await resp.json()) as {
         ok: boolean
-        data?: {
-          goals: Array<{
-            id: number
-            description: string
-            status: string
-            progress: { current: number; total: number } | null
-            createdAt: string
-          }>
-        }
+        data?: { goals: Array<{ id: number; description: string; status: string; progress: { current: number; total: number } | null; createdAt: string }> }
       }
       if (!data.ok || !data.data) {
         console.error('Failed to fetch goals.')
@@ -792,9 +758,7 @@ async function runGoalCLI(): Promise<boolean> {
     const description = descIdx !== -1 ? args[descIdx + 1] : undefined
 
     if (!sessionId || !description) {
-      console.error(
-        'Usage: mipham goal add --session <id> --desc <text> [--current <n> --total <n>]',
-      )
+      console.error('Usage: mipham goal add --session <id> --desc <text> [--current <n> --total <n>]')
       process.exit(1)
     }
 
@@ -802,7 +766,8 @@ async function runGoalCLI(): Promise<boolean> {
     const totalIdx = args.indexOf('--total')
     const current = currentIdx !== -1 ? parseInt(args[currentIdx + 1]!, 10) : undefined
     const total = totalIdx !== -1 ? parseInt(args[totalIdx + 1]!, 10) : undefined
-    const progress = current !== undefined && total !== undefined ? { current, total } : undefined
+    const progress =
+      current !== undefined && total !== undefined ? { current, total } : undefined
 
     try {
       const resp = await fetch(`${baseUrl}/api/v1/goals`, {
@@ -919,16 +884,7 @@ async function runScheduleCLI(): Promise<boolean> {
       const resp = await fetch(`${baseUrl}/api/v1/schedules?session=${sessionId}`)
       const data = (await resp.json()) as {
         ok: boolean
-        data?: {
-          schedules: Array<{
-            id: number
-            cronExpr: string
-            prompt: string
-            enabled: boolean
-            lastFired: string | null
-            nextFire: string
-          }>
-        }
+        data?: { schedules: Array<{ id: number; cronExpr: string; prompt: string; enabled: boolean; lastFired: string | null; nextFire: string }> }
       }
       if (!data.ok || !data.data) {
         console.error('Failed to fetch schedules.')
@@ -1013,6 +969,54 @@ async function runScheduleCLI(): Promise<boolean> {
   process.exit(1)
 }
 
+// ── Token CLI: manage daemon API tokens ────────────────────────────────────────
+
+async function runTokenCLI(): Promise<boolean> {
+  const args = process.argv.slice(2)
+  if (args[0] !== 'token') return false
+
+  const { join } = await import('node:path')
+  const { readFileSync, existsSync } = await import('node:fs')
+  const { homedir } = await import('node:os')
+  const { rotateToken, listTokens } = await import('../src/daemon/auth')
+
+  const tokenPath = join(homedir(), '.mipham', 'daemon.token')
+
+  const subcmd = args[1]
+
+  // ── mipham token rotate ──────────────────────────────
+  if (subcmd === 'rotate') {
+    if (!existsSync(tokenPath)) {
+      console.error('No token file found. Start the daemon first with: mipham daemon start')
+      process.exit(1)
+    }
+    const oldTokens = listTokens(tokenPath)
+    const newToken = rotateToken(tokenPath)
+    console.log(`Token rotated successfully.`)
+    console.log(`  Old token: ${oldTokens[0]?.slice(0, 16) ?? 'none'}...`)
+    console.log(`  New token: ${newToken.slice(0, 16)}...`)
+    console.log(`  Full token: ${newToken}`)
+    process.exit(0)
+  }
+
+  // ── mipham token show ────────────────────────────────
+  if (subcmd === 'show') {
+    const tokens = listTokens(tokenPath)
+    if (tokens.length === 0) {
+      console.log('No token found. Start the daemon first with: mipham daemon start')
+    } else {
+      for (const t of tokens) {
+        console.log(t)
+      }
+    }
+    process.exit(0)
+  }
+
+  console.error(`Unknown token command: mipham token ${subcmd}`)
+  console.error('Usage: mipham token rotate|show')
+  process.exit(1)
+}
+
 async function main() {
   // ── Disable terminal special characters ──────────────────────────────────
   // Terminal intercepts Ctrl+S (XOFF), Ctrl+T (SIGINFO/status), Ctrl+R (rprnt)
@@ -1089,6 +1093,7 @@ Usage:
   mipham agent stop <id>     Stop a running agent
   mipham goal <cmd>          Goal management (list, add, done, pause)
   mipham schedule <cmd>      Schedule management (list, add, remove)
+  mipham token <cmd>         Token management (show, rotate)
   mipham plugin <cmd>        Plugin management (install, list, remove, etc.)
   mipham workflow <cmd>      Workflow orchestration (run, list, resume, etc.)
   mipham --version           Print version and exit
@@ -1127,6 +1132,10 @@ npm:  https://www.npmjs.com/package/@miphamai/cli`)
   const handledSchedule = await runScheduleCLI()
   if (handledSchedule) return
 
+  // ── Token commands ──────────────────────────────────────────────────────────
+  const handledToken = await runTokenCLI()
+  if (handledToken) return
+
   // Check for plugin subcommands first
   const handledPlugin = await runPluginCLI()
   if (handledPlugin) return
@@ -1138,19 +1147,7 @@ npm:  https://www.npmjs.com/package/@miphamai/cli`)
   // ── Unknown command detection ──────────────────────────────────────────────
   // After all known subcommands are checked, any remaining positional argument
   // is probably a typo. Show error + suggestions instead of silently launching CLI.
-  const KNOWN_COMMANDS = [
-    'update',
-    'upgrade',
-    'plugin',
-    'workflow',
-    'daemon',
-    'attach',
-    'agents',
-    'agent',
-    'goal',
-    'schedule',
-    'help',
-  ]
+  const KNOWN_COMMANDS = ['update', 'upgrade', 'plugin', 'workflow', 'daemon', 'attach', 'agents', 'agent', 'goal', 'schedule', 'token', 'help']
   const firstArg = process.argv.slice(2).find((a) => !a.startsWith('-'))
   if (firstArg) {
     // Levenshtein distance to find closest match

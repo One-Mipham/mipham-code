@@ -19,6 +19,7 @@ import { ScheduleManager } from './schedule-manager'
 import { createServer } from './server'
 import { WorkerPool } from './worker-pool'
 import { loadOrCreateToken } from './auth'
+import { RateLimiter } from './rate-limiter'
 import { PACKAGE_VERSION } from '../shared/package-info'
 import type { DaemonStatus } from './types'
 
@@ -38,6 +39,7 @@ let activePool: WorkerPool | null = null
 let activeAgentManager: AgentManager | null = null
 let activeMessageBus: MessageBus | null = null
 let activeScheduleManager: ScheduleManager | null = null
+let activeRateLimiter: RateLimiter | null = null
 
 function getConfiguredPort(): number {
   if (process.env.MIPHAM_PORT) {
@@ -156,18 +158,24 @@ export async function startDaemon(): Promise<{ port: number; token: string }> {
   // Start the schedule checking interval (checks every 60s)
   scheduleManager.start()
 
+  // Create rate limiter (Phase 5 — 100 req/min per client IP)
+  const rateLimiter = new RateLimiter(100, 60_000)
+  activeRateLimiter = rateLimiter
+
   // Start HTTP server (Bun.serve starts listening immediately)
   const server = createServer({
     db,
     sm,
     pool,
     token,
+    tokenPath: TOKEN_PATH,
     port,
     hostname,
     agentManager,
     messageBus,
     goalManager,
     scheduleManager,
+    rateLimiter,
   })
   activeServer = server
 
@@ -214,6 +222,12 @@ export async function stopDaemon(force: boolean = false): Promise<void> {
   if (activeScheduleManager) {
     activeScheduleManager.stop()
     activeScheduleManager = null
+  }
+
+  // Stop rate limiter cleanup interval (Phase 5)
+  if (activeRateLimiter) {
+    activeRateLimiter.stop()
+    activeRateLimiter = null
   }
 
   // Clean up agent manager and message bus (Phase 3)

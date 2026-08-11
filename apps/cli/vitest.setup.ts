@@ -119,6 +119,10 @@ if (!(globalThis.Bun as Record<string, unknown>).serve) {
           // WebSocket upgrades are not supported in the test mock.
           return false
         },
+        requestIP(_req: Request): { address: string; family: string; port: number } | null {
+          // In test environment, return localhost — sufficient for rate limiter tests
+          return { address: '127.0.0.1', family: 'IPv4', port: 0 }
+        },
       }
 
       const httpServer = createHttpServer(async (req: IncomingMessage, res: ServerResponse) => {
