@@ -4,8 +4,8 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.0.0
-> **最后更新**: 2026-08-11 — Daemon 后台持久化架构 5 阶段完成（历时 12 小时），Mipham Code 进化为超级智能体平台
+> **版本**: 2.0.1
+> **最后更新**: 2026-08-11 — v0.32.1 工具逐个显示修复（compactToolGroups 重写，与 Claude Code 显示对齐）
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -231,16 +231,16 @@ GitHub Actions 5 阶段流水线：`typecheck → lint → format → build-cli 
 
 ## 最近提交
 
-| 日期       | Commit    | 说明                                                               |
-| ---------- | --------- | ------------------------------------------------------------------ |
-| 2026-08-10 | `9f349f5` | chore: bump version to 0.27.0 — 3 Vibe Coding 摩擦点修复           |
-| 2026-08-10 | `7e58f32` | feat(ux): Plan 批准门控 + 验证自动批准 + 错误位置解析              |
-| 2026-08-10 | `a8c7c32` | chore: bump version to 0.26.0 — 5 新 Skills + 批判性思维层         |
-| 2026-08-10 | `df2dede` | feat(skills): codebase-design + to-spec — 深层模块设计 + 规范文档  |
-| 2026-08-10 | `49166c8` | feat(skills): domain-modeling + triage — 共享语言 + 跨会话工单追踪 |
-| 2026-08-10 | `e0d1f44` | feat(skills): grill-with-docs — 5 阶段深度需求访谈                 |
-| 2026-08-10 | `01b9401` | feat(core): 批判性思维自检层 — 5 维分析质量框架                    |
-| 2026-08-10 | `010e128` | chore: bump version to 0.25.0 — P0/P1/P2 安全对齐                  |
+| 日期       | Commit    | 说明                                                                       |
+| ---------- | --------- | -------------------------------------------------------------------------- |
+| 2026-08-11 | `10f4946` | fix(ui): 工具逐个显示 — compactToolGroups 重写，与 Claude Code 显示对齐    |
+| 2026-08-11 | `954ddcb` | chore: bump version to 0.32.0 — Daemon 架构 5 阶段完成（超级智能体平台）   |
+| 2026-08-11 | `59b3d69` | feat(daemon): Phase 5 外部 API 安全（RateLimiter + CORS）                  |
+| 2026-08-11 | `98025b5` | feat(daemon): Phase 4 Goals + Schedules（GoalManager + cron 调度）         |
+| 2026-08-11 | `31450368` | feat(daemon): Phase 3 Agent 系统（AgentManager + MessageBus）              |
+| 2026-08-11 | `31448815` | feat(daemon): Phase 2 会话持久化（SessionWorker + RemoteEngine + attach）  |
+| 2026-08-11 | `31448815` | feat(daemon): Phase 1 核心基础设施（Bun.serve + SQLite + auth）            |
+| 2026-08-10 | `9f349f5` | chore: bump version to 0.27.0 — 3 Vibe Coding 摩擦点修复                   |
 
 ---
 
@@ -300,6 +300,7 @@ mipham-code 变更（包名/版本）
 
 | 版本  | 日期       | 变更内容                                                                                | 维护人     |
 | ----- | ---------- | --------------------------------------------------------------------------------------- | ---------- |
+| 2.0.1 | 2026-08-11 | v0.32.1 工具逐个显示修复（compactToolGroups 重写），1115 测试，CI 绿                    | 技术委员会 |
 | 2.0.0 | 2026-08-11 | Daemon 后台持久化架构 5 阶段完成（45 文件，~6000 行），Mipham Code 进化为超级智能体平台 | 技术委员会 |
 | 1.9.0 | 2026-08-11 | 下一步计划新增 Daemon 后台持久化架构（借鉴 prime-agent 评估结论），1020 测试，CI 绿     | 技术委员会 |
 | 1.8.0 | 2026-08-10 | v0.27.0：3 Vibe Coding 摩擦点修复 + 全面能力评估（综合 7.8/10），1020 测试，CI 绿       | 技术委员会 |
