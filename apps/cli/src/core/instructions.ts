@@ -139,6 +139,20 @@ When a workflow completes successfully, offer to save it:
 Script format: export const meta = { name, description, phases: [...] }
 // script body using primitives...`)
 
+    // Inject code search conventions — prefer dedicated tools over raw Bash
+    parts.push(`## Code Search Conventions
+
+- Prefer the **Grep** tool for file-content search — it runs ripgrep (rg),
+  10× faster than grep, with automatic fallback to grep if rg is unavailable
+- Use the **Glob** tool to find files by name pattern, then Grep to search
+  their contents — narrow scope before full-text search
+- Use **Bash** with grep/rg/find ONLY for complex multi-step pipelines
+  (e.g., pipe to sort | uniq -c | sort -rn, or chained find + xargs)
+- Grep tool handles rg→grep fallback automatically; no need to
+  pre-check for rg availability or manually fall back
+- When you need to search AND read results: Glob → Grep → Read
+  (find files, search contents, then read the matching files)`)
+
     return parts.join('\n\n---\n\n')
   }
 

@@ -18,6 +18,34 @@ interface CommandPickerProps {
 const PAGE_SIZE = 12
 
 /**
+ * Split a string into segments, marking which substrings match the query.
+ * Case-insensitive matching. Used to bold matching characters in the picker.
+ */
+function highlightMatches(
+  text: string,
+  query: string,
+): { text: string; match: boolean }[] {
+  if (!query) return [{ text, match: false }]
+  const lowerText = text.toLowerCase()
+  const lowerQuery = query.toLowerCase()
+  const segments: { text: string; match: boolean }[] = []
+  let pos = 0
+  while (pos < text.length) {
+    const idx = lowerText.indexOf(lowerQuery, pos)
+    if (idx === -1) {
+      segments.push({ text: text.slice(pos), match: false })
+      break
+    }
+    if (idx > pos) {
+      segments.push({ text: text.slice(pos, idx), match: false })
+    }
+    segments.push({ text: text.slice(idx, idx + query.length), match: true })
+    pos = idx + query.length
+  }
+  return segments
+}
+
+/**
  * CommandPicker — interactive slash-command selector.
  *
  * Reuses the ModelPicker's Ink interaction pattern:
@@ -107,12 +135,26 @@ export function CommandPicker({
         {visible.map((cmd, i) => {
           const globalIdx = i + scrollStart
           const isCursor = globalIdx === cursorIdx
+          const query = filter.startsWith('/') ? filter.slice(1) : filter
+          const segments = highlightMatches(cmd.name, query)
+          const padLen = Math.max(0, 20 - cmd.name.length)
           return (
             <Box key={cmd.name}>
               <Text color={itemColor(isCursor)} bold={itemBold(isCursor)}>
                 {isCursor ? '▶ ' : '  '}
-                {cmd.name.padEnd(20)}
               </Text>
+              {segments.map((seg, j) => (
+                <Text
+                  key={j}
+                  color={itemColor(isCursor)}
+                  bold={itemBold(isCursor) || seg.match}
+                >
+                  {seg.text}
+                </Text>
+              ))}
+              {padLen > 0 && (
+                <Text color={itemColor(isCursor)}>{' '.repeat(padLen)}</Text>
+              )}
               <Text dimColor>{cmd.description}</Text>
             </Box>
           )

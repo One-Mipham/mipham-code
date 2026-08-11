@@ -4,7 +4,15 @@ import { resolveSafe } from '../../security/path'
 
 export const grepTool: ToolDefinition = {
   name: 'Grep',
-  description: 'Search file contents using ripgrep. Fast regex search across files.',
+  description:
+    'Search file contents using ripgrep (rg) — the recommended code search tool. ' +
+    '~10× faster than grep, with automatic fallback to grep if rg is unavailable. ' +
+    'Use this for single-shot regex searches across files. ' +
+    'Prefer Grep over Bash grep/rg for code search; use Bash only for complex ' +
+    'multi-step pipelines (e.g., pipe to sort/uniq/wc, or chained find+xargs). ' +
+    'Best practice: narrow scope with `path` (directory/file) and `include` ' +
+    '(glob pattern, e.g. "*.ts") before searching. ' +
+    'The `pattern` parameter accepts full regex syntax (e.g., "log.*Error", "\\bclass\\s+\\w+").',
   category: 'file',
   permission: 'auto',
   parameters: {
