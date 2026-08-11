@@ -231,16 +231,16 @@ GitHub Actions 5 阶段流水线：`typecheck → lint → format → build-cli 
 
 ## 最近提交
 
-| 日期       | Commit    | 说明                                                                       |
-| ---------- | --------- | -------------------------------------------------------------------------- |
-| 2026-08-11 | `10f4946` | fix(ui): 工具逐个显示 — compactToolGroups 重写，与 Claude Code 显示对齐    |
-| 2026-08-11 | `954ddcb` | chore: bump version to 0.32.0 — Daemon 架构 5 阶段完成（超级智能体平台）   |
-| 2026-08-11 | `59b3d69` | feat(daemon): Phase 5 外部 API 安全（RateLimiter + CORS）                  |
-| 2026-08-11 | `98025b5` | feat(daemon): Phase 4 Goals + Schedules（GoalManager + cron 调度）         |
-| 2026-08-11 | `31450368` | feat(daemon): Phase 3 Agent 系统（AgentManager + MessageBus）              |
-| 2026-08-11 | `31448815` | feat(daemon): Phase 2 会话持久化（SessionWorker + RemoteEngine + attach）  |
-| 2026-08-11 | `31448815` | feat(daemon): Phase 1 核心基础设施（Bun.serve + SQLite + auth）            |
-| 2026-08-10 | `9f349f5` | chore: bump version to 0.27.0 — 3 Vibe Coding 摩擦点修复                   |
+| 日期       | Commit     | 说明                                                                      |
+| ---------- | ---------- | ------------------------------------------------------------------------- |
+| 2026-08-11 | `10f4946`  | fix(ui): 工具逐个显示 — compactToolGroups 重写，与 Claude Code 显示对齐   |
+| 2026-08-11 | `954ddcb`  | chore: bump version to 0.32.0 — Daemon 架构 5 阶段完成（超级智能体平台）  |
+| 2026-08-11 | `59b3d69`  | feat(daemon): Phase 5 外部 API 安全（RateLimiter + CORS）                 |
+| 2026-08-11 | `98025b5`  | feat(daemon): Phase 4 Goals + Schedules（GoalManager + cron 调度）        |
+| 2026-08-11 | `31450368` | feat(daemon): Phase 3 Agent 系统（AgentManager + MessageBus）             |
+| 2026-08-11 | `31448815` | feat(daemon): Phase 2 会话持久化（SessionWorker + RemoteEngine + attach） |
+| 2026-08-11 | `31448815` | feat(daemon): Phase 1 核心基础设施（Bun.serve + SQLite + auth）           |
+| 2026-08-10 | `9f349f5`  | chore: bump version to 0.27.0 — 3 Vibe Coding 摩擦点修复                  |
 
 ---
 
