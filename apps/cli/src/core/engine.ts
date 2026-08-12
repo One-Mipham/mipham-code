@@ -1000,11 +1000,7 @@ export class QueryEngine {
         err instanceof Error ? err.message : String(err).split('\n')[0] || 'Unknown error'
 
       // ── SIS AutoCorrector — post-error self-healing ──
-      const correction = this.getAutoCorrector().analyze(
-        name,
-        effectiveParams,
-        message,
-      )
+      const correction = this.getAutoCorrector().analyze(name, effectiveParams, message)
 
       let errorContent = `Tool execution failed: ${message}`
       if (correction.suggestion) {

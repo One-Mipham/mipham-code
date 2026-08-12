@@ -825,7 +825,11 @@ const sisCleanupCmd: CommandHandler = async (ctx) => {
   if (report.retiredRemoved > 0) lines.push(`🗑️  移除过期退役: ${report.retiredRemoved} 条`)
   if (report.zeroSuccessRetired > 0) lines.push(`⚠️  退役零成功率: ${report.zeroSuccessRetired} 条`)
   if (report.duplicatesMerged > 0) lines.push(`🔗 合并重复签名: ${report.duplicatesMerged} 条`)
-  if (report.retiredRemoved === 0 && report.zeroSuccessRetired === 0 && report.duplicatesMerged === 0) {
+  if (
+    report.retiredRemoved === 0 &&
+    report.zeroSuccessRetired === 0 &&
+    report.duplicatesMerged === 0
+  ) {
     lines.push('✅ 免疫记忆干净，无需清理')
   }
   return { content: lines.join('\n') }

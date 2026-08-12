@@ -25,7 +25,11 @@ describe('AutoCorrector', () => {
 
   describe('unknown errors', () => {
     it('records new error signatures for unknown errors', () => {
-      const result = corrector.analyze('Bash', { command: 'some-new-cmd' }, 'command not found: some-new-cmd')
+      const result = corrector.analyze(
+        'Bash',
+        { command: 'some-new-cmd' },
+        'command not found: some-new-cmd',
+      )
       expect(result.corrected).toBe(false)
       expect(result.action).toBe('record-only')
       expect(result.newSignatureId).toBeDefined()
@@ -40,7 +44,7 @@ describe('AutoCorrector', () => {
       const result = corrector.analyze(
         'Bash',
         { command: 'cat /tmp/file-12345.txt' },
-        'ENOENT: no such file or directory, open \'/tmp/file-12345.txt\'',
+        "ENOENT: no such file or directory, open '/tmp/file-12345.txt'",
       )
       expect(result.newSignatureId).toBeDefined()
       const sig = db.get(result.newSignatureId!)
@@ -49,7 +53,11 @@ describe('AutoCorrector', () => {
     })
 
     it('categorizes timeout errors correctly', () => {
-      const result = corrector.analyze('Bash', { command: 'npm install' }, 'ETIMEDOUT: operation timed out')
+      const result = corrector.analyze(
+        'Bash',
+        { command: 'npm install' },
+        'ETIMEDOUT: operation timed out',
+      )
       const sig = db.get(result.newSignatureId!)
       expect(sig!.category).toBe('timeout')
     })

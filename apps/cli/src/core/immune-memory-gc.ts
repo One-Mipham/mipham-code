@@ -168,8 +168,7 @@ export class ImmuneMemoryGC {
     // Transfer occurrences
     to.occurrences += from.occurrences
     to.successCount += from.successCount
-    to.successRate =
-      to.occurrences > 0 ? to.successCount / to.occurrences : 1.0
+    to.successRate = to.occurrences > 0 ? to.successCount / to.occurrences : 1.0
 
     // Keep the earlier firstSeen
     if (from.firstSeen < to.firstSeen) {

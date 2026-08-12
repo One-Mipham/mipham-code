@@ -105,7 +105,11 @@ export class AutoCorrector {
     const confidence = sig.successRate
 
     // High confidence → auto-retry with corrected params
-    if (confidence >= AUTO_RETRY_THRESHOLD && sig.fixStrategy !== 'warn' && sig.fixStrategy !== 'block') {
+    if (
+      confidence >= AUTO_RETRY_THRESHOLD &&
+      sig.fixStrategy !== 'warn' &&
+      sig.fixStrategy !== 'block'
+    ) {
       const correctedParams = this.applyFix(sig, params)
       return {
         corrected: true,
@@ -148,16 +152,12 @@ export class AutoCorrector {
       action: 'record-only',
       newSignatureId: sig.id,
       suggestion:
-        `🆕 SIS 已记录新错误签名 \`${sig.id}\` (${category})。` +
-        `此错误再次发生时将被自动识别。`,
+        `🆕 SIS 已记录新错误签名 \`${sig.id}\` (${category})。` + `此错误再次发生时将被自动识别。`,
     }
   }
 
   /** Apply a signature's fix to the original params. */
-  private applyFix(
-    sig: ErrorSignature,
-    params: Record<string, unknown>,
-  ): Record<string, unknown> {
+  private applyFix(sig: ErrorSignature, params: Record<string, unknown>): Record<string, unknown> {
     switch (sig.fixStrategy) {
       case 'replace':
         return { ...params, command: sig.fixAction }
