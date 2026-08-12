@@ -449,6 +449,24 @@ export function App({
         }
       }
 
+      // ── Emotion detection: adjust behavior based on user's emotional state ──
+      // Uses regex heuristics (zero-latency) to detect frustration/impatience/confusion.
+      // When frustrated, prepends a terseness instruction to the user input so the
+      // AI model skips explanations and gets straight to the fix.
+      let emotionPrefix = ''
+      try {
+        const { EmotionDetector } = await import('../core/emotion-detector.js')
+        const detector = new EmotionDetector()
+        const result = detector.detect(input)
+        if (result.emotion === 'frustrated' || result.emotion === 'impatient') {
+          emotionPrefix = `[SYSTEM NOTE: The user is ${result.emotion}. Be extremely concise. Skip all explanations, preambles, and summaries. Output only the fix/result. No "here's what I did" or "let me explain". One sentence maximum before code.]\n\n`
+        } else if (result.emotion === 'confused') {
+          emotionPrefix = `[SYSTEM NOTE: The user seems confused. Explain more thoroughly, break down complex steps, and offer clarifying questions rather than assuming understanding.]\n\n`
+        }
+      } catch {
+        // Emotion detection is non-critical — fail silently
+      }
+
       // ── Normal message processing (AI chat) ──
       setMessages((prev) => [...prev, { role: 'user', content: input }])
       setIsLoading(true)
@@ -493,7 +511,7 @@ export function App({
       }
 
       try {
-        for await (const chunk of engine.process(input, controller.signal)) {
+        for await (const chunk of engine.process(emotionPrefix ? emotionPrefix + input : input, controller.signal)) {
           // Reasoning content (DeepSeek V4 thinking mode) — silently consumed,
           // not shown to user to avoid noise.
           if (chunk.reasoning_content) {

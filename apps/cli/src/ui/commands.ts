@@ -930,6 +930,65 @@ const sisCleanupCmd: CommandHandler = async (ctx) => {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Auto-Dream: Background Memory Consolidation
+// ═══════════════════════════════════════════════════════════════
+
+const dreamCmd: CommandHandler = async (ctx, args) => {
+  const t = resolveT(ctx)
+  const aggressive = args.includes('--aggressive') || args.includes('-a')
+  const status = args.includes('--status') || args.includes('-s')
+
+  const engine = ctx.engine.getDreamEngine?.()
+  if (!engine) {
+    return { content: 'DreamEngine 未初始化。请确认 Mipham Code 版本 >= v0.34.0。' }
+  }
+
+  if (status) {
+    const history = engine.getDreamHistory()
+    if (history.length === 0) {
+      return { content: '🌙 尚未运行过 Auto-Dream。使用 `/dream` 手动触发首次梦境整合。' }
+    }
+    const lines: string[] = ['## 🌙 Auto-Dream 历史', '']
+    for (const entry of history.slice(0, 5)) {
+      const ts = new Date(entry.timestamp).toLocaleString('zh-CN')
+      const total = entry.actions.length
+      const applied = entry.actions.filter((a) => a.autoApplied).length
+      const flagged = entry.actions.filter((a) => !a.autoApplied).length
+      lines.push(`- **${ts}**: ${total} 行动 (${applied} 自动应用, ${flagged} 标记审查)`)
+    }
+    return { content: lines.join('\n') }
+  }
+
+  const report = engine.dream({ aggressive })
+  const lines: string[] = [
+    '## 🌙 Auto-Dream 完成',
+    '',
+    `记忆整合: ${report.beforeCount} → ${report.afterCount}`,
+    ...(report.phases.deduplicated > 0 ? [`- 去重: ${report.phases.deduplicated} 条`] : []),
+    ...(report.phases.contradictionsFound > 0 ? [`- 矛盾冲突: ${report.phases.contradictionsFound} 处 (需人工裁决)`] : []),
+    ...(report.phases.merged > 0 ? [`- 合并: ${report.phases.merged} 组`] : []),
+    ...(report.phases.solidified > 0 ? [`- 模糊标记: ${report.phases.solidified} 条 (建议固化)`] : []),
+    ...(report.phases.pruned > 0 ? [`- 清理过期: ${report.phases.pruned} 条`] : []),
+    '',
+  ]
+
+  const flagged = report.actions.filter((a) => !a.autoApplied)
+  if (flagged.length > 0 && !aggressive) {
+    lines.push(`⚠️  ${flagged.length} 项待审查。使用 \`/dream --aggressive\` 自动应用所有操作。`)
+    lines.push('')
+    for (const action of flagged) {
+      lines.push(`- [ ] **${action.type}**: ${action.description}`)
+    }
+  }
+
+  if (report.actions.length === 0) {
+    lines.push('✅ 记忆干净，无需整理。')
+  }
+
+  return { content: lines.join('\n') }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Workflow
 // ═══════════════════════════════════════════════════════════════
 
@@ -3562,6 +3621,7 @@ const commandsListCmd: CommandHandler = () => {
     '/recap': 'Session & Identity',
     '/export': 'Session & Identity',
     '/doctor': 'Session & Identity',
+    '/dream': 'Session & Identity',
     '/resume': 'Session & Identity',
     '/resume last': 'Session & Identity',
     '/resume delete': 'Session & Identity',
@@ -3757,6 +3817,7 @@ registry.set('/sis errors', sisErrorsCmd)
 registry.set('/sis stats', sisStatsCmd)
 registry.set('/sis clear', sisClearCmd)
 registry.set('/sis cleanup', sisCleanupCmd)
+registry.set('/dream', dreamCmd)
 
 // Workflow
 registry.set('/plan', planCmd)
@@ -3877,6 +3938,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/recap': 'Summarize session so far',
   '/export': 'Export conversation to file',
   '/doctor': 'System diagnostics',
+  '/dream': 'Background memory consolidation',
   '/resume': 'List saved sessions',
   '/resume last': 'Restore the most recent saved session',
   '/resume delete': 'Delete a saved session',

@@ -15,6 +15,7 @@ import type { AgentRegistry } from '../agent/agent-registry'
 import { analyzeForMemory } from './memory/memory-writer'
 import { getMemoryManager } from './memory/memory-loader'
 import { AutoMemoryEngine } from './auto-memory.js'
+import type { ToolCallRecord } from './auto-memory.js'
 import type { AgentViewManager } from '../agent-view/agent-view-manager'
 import type { SkillsLoader } from '../skills/loader'
 import { getBackgroundAgentRegistry } from '../agent/background-registry'
@@ -26,6 +27,7 @@ import { ErrorSignatureDB } from './error-signature-db.js'
 import { PreFlightChecker } from './preflight-checker.js'
 import { AutoCorrector } from './auto-corrector.js'
 import { MetaRuleEngine } from './meta-rule-engine.js'
+import { DreamEngine } from './dream-engine.js'
 import { UsageTracker } from './usage-tracker'
 import { buildRequest, sendInferenceCheck, isInferenceHookEnabled } from './inference-hook'
 import { getFileInboxTransport } from '../agent/cross-session/file-inbox'
@@ -55,6 +57,7 @@ export class QueryEngine {
   private _preflightChecker?: PreFlightChecker
   private _autoCorrector?: AutoCorrector
   private _metaRuleEngine?: MetaRuleEngine
+  private _dreamEngine?: DreamEngine
   /** Files read this session — tracks what the Read tool has loaded */
   private readFiles = new Set<string>()
   private goal?: string
@@ -428,6 +431,7 @@ export class QueryEngine {
     let thinkingContent = ''
     let turnApiInputTokens = 0
     let turnApiOutputTokens = 0
+    const turnStart = Date.now()
     const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
 
     // Stream model response
@@ -534,13 +538,24 @@ export class QueryEngine {
     }
 
     // Execute any tools that were requested
+    const toolCallRecords: ToolCallRecord[] = []
     for (const toolUse of toolUses) {
+      const toolStart = Date.now()
       const result = await this.executeTool(toolUse.name, toolUse.input)
       yield {
         type: 'tool_result',
         tool_use_id: toolUse.id,
         content: result.success ? result.content : result.error || result.content,
       }
+
+      // Collect tool call record for CRSI auto-reflection
+      toolCallRecords.push({
+        name: toolUse.name,
+        input: toolUse.input,
+        success: result.success,
+        error: result.success ? undefined : (result.error || 'Unknown error'),
+        durationMs: Date.now() - toolStart,
+      })
 
       // Add tool use + result to context
       // DeepSeek V4 thinking mode requires reasoning_content on every assistant message
@@ -559,6 +574,28 @@ export class QueryEngine {
           },
         ],
       })
+    }
+
+    // ── CRSI Reflection: Wire AutoMemoryEngine.analyzeTurn() into main loop ──
+    // This is the primary CRSI learning mechanism — every turn's tool calls,
+    // successes, and failures are analyzed for patterns and fed into the
+    // CRSI pipeline (PatternAnalyzer → ExperienceRuleEngine → ErrorSignatureDB).
+    if (toolCallRecords.length > 0) {
+      try {
+        const autoMemory = this.getAutoMemory()
+        const reflection = autoMemory.analyzeTurn({
+          sessionId: this.sessionId,
+          userMessage: userInput,
+          assistantContent,
+          toolCalls: toolCallRecords,
+          modelProvider: this.registry.getActive().config.id,
+          modelId: this.registry.getActiveModel(),
+          turnDurationMs: turnStart ? Date.now() - turnStart : 0,
+        })
+        autoMemory.persist(reflection)
+      } catch {
+        // Reflection is non-critical — failures must not break the main loop
+      }
     }
 
     // Record API token usage for this turn, attributed to executed tools
@@ -1139,6 +1176,14 @@ export class QueryEngine {
       )
     }
     return this._metaRuleEngine
+  }
+
+  /** Auto-Dream: Lazily-initialized background memory consolidation engine. */
+  getDreamEngine(): DreamEngine {
+    if (!this._dreamEngine) {
+      this._dreamEngine = new DreamEngine()
+    }
+    return this._dreamEngine
   }
 
   /** Register a tool dynamically (used by MCP auto-registration). */
