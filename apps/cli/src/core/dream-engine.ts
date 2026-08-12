@@ -78,10 +78,9 @@ interface MemoryFile {
 
 // ── Constants ──
 
-const MEMORY_DIR = join(homedir(), '.mipham', 'memory')
-const DREAM_LOG = join(homedir(), '.mipham', 'dream-log.json')
+const DEFAULT_MEMORY_DIR = join(homedir(), '.mipham', 'memory')
 const STALE_DAYS = 30
-const SIMILARITY_THRESHOLD = 0.75
+const SIMILARITY_THRESHOLD = 0.65
 
 /** Vague qualifiers that suggest an entry needs solidification */
 const VAGUE_PATTERNS = [
@@ -103,9 +102,11 @@ const VAGUE_PATTERNS = [
 
 export class DreamEngine {
   private memoryDir: string
+  private dreamLog: string
 
-  constructor(memoryDir: string = MEMORY_DIR) {
+  constructor(memoryDir: string = DEFAULT_MEMORY_DIR) {
     this.memoryDir = memoryDir
+    this.dreamLog = join(memoryDir, 'dream-log.json')
   }
 
   /**
@@ -467,9 +468,30 @@ export class DreamEngine {
     try {
       const lines = match[1]!.split('\n')
       const fm: Record<string, unknown> = {}
+      let currentNested: Record<string, unknown> | null = null
+      let nestedKey = ''
       for (const line of lines) {
-        const kv = line.match(/^(\w[\w\s]*?):\s*(.+)$/)
-        if (kv) fm[kv[1]!.trim()] = kv[2]!.trim()
+        // Handle nested YAML (e.g. "metadata:\n  type: feedback")
+        const nested = line.match(/^  (\w[\w\s]*?):\s*(.+)$/)
+        if (nested && currentNested !== null) {
+          currentNested[nested[1]!.trim()] = nested[2]!.trim()
+          continue
+        }
+        // Top-level key
+        const kv = line.match(/^(\w[\w\s]*?):\s*(.*)$/)
+        if (kv) {
+          const key = kv[1]!.trim()
+          const val = kv[2]!.trim()
+          if (val === '') {
+            // Empty value → start nested block
+            currentNested = {}
+            nestedKey = key
+            fm[key] = currentNested
+          } else {
+            currentNested = null
+            fm[key] = val
+          }
+        }
       }
       return { frontmatter: fm, content: match[2] || '' }
     } catch {
@@ -478,15 +500,15 @@ export class DreamEngine {
   }
 
   private jaccardSimilarity(a: string, b: string): number {
+    // Strip punctuation before tokenizing for robust text comparison
+    const clean = (s: string) => s.toLowerCase().replace(/[.,!?;:'"(){}[\]\\/#*&%$@]+/g, ' ')
     const tokensA = new Set(
-      a
-        .toLowerCase()
+      clean(a)
         .split(/\s+/)
         .filter((t) => t.length > 1),
     )
     const tokensB = new Set(
-      b
-        .toLowerCase()
+      clean(b)
         .split(/\s+/)
         .filter((t) => t.length > 1),
     )
@@ -506,13 +528,13 @@ export class DreamEngine {
       mkdirSync(dir, { recursive: true })
 
       let log: Array<{ timestamp: string; actions: DreamAction[] }> = []
-      if (existsSync(DREAM_LOG)) {
-        log = JSON.parse(readFileSync(DREAM_LOG, 'utf-8'))
+      if (existsSync(this.dreamLog)) {
+        log = JSON.parse(readFileSync(this.dreamLog, 'utf-8'))
       }
       log.unshift({ timestamp, actions })
       // Keep last 10 dream cycles
       if (log.length > 10) log = log.slice(0, 10)
-      writeFileSync(DREAM_LOG, JSON.stringify(log, null, 2), 'utf-8')
+      writeFileSync(this.dreamLog, JSON.stringify(log, null, 2), 'utf-8')
     } catch {
       // Best-effort persistence
     }
@@ -521,8 +543,8 @@ export class DreamEngine {
   /** Get dream history for display. */
   getDreamHistory(): Array<{ timestamp: string; actions: DreamAction[] }> {
     try {
-      if (!existsSync(DREAM_LOG)) return []
-      return JSON.parse(readFileSync(DREAM_LOG, 'utf-8'))
+      if (!existsSync(this.dreamLog)) return []
+      return JSON.parse(readFileSync(this.dreamLog, 'utf-8'))
     } catch {
       return []
     }
