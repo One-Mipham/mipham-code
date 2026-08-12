@@ -959,9 +959,7 @@ const crsiInterpretCmd: CommandHandler = (ctx, args) => {
         const bar =
           '█'.repeat(Math.round(sig.successRate * 10)) +
           '░'.repeat(10 - Math.round(sig.successRate * 10))
-        lines.push(
-          `- **${sig.toolName}**: \`${sig.pattern.slice(0, 60)}\``,
-        )
+        lines.push(`- **${sig.toolName}**: \`${sig.pattern.slice(0, 60)}\``)
         lines.push(
           `  Success: ${bar} ${Math.round(sig.successRate * 100)}% | ${sig.occurrences}x | ${sig.fixStrategy}`,
         )
@@ -1134,9 +1132,7 @@ const constitutionCmd: CommandHandler = (ctx, args) => {
         `Principles: **${c.principles.length}**`,
         `Path: \`${constitution.getPath()}\``,
         '',
-        c.principles
-          .map((p) => `- **${p.id}** [${p.enforce}]: ${p.text}`)
-          .join('\n'),
+        c.principles.map((p) => `- **${p.id}** [${p.enforce}]: ${p.text}`).join('\n'),
       ].join('\n'),
     }
   }
@@ -1166,9 +1162,7 @@ const constitutionCmd: CommandHandler = (ctx, args) => {
   lines.push('---')
   lines.push('')
   lines.push('🔧 `/constitution reload` — 重新加载（修改 constitution.yml 后使用）')
-  lines.push(
-    '📝 编辑: `vi ~/.mipham/constitution.yml`',
-  )
+  lines.push('📝 编辑: `vi ~/.mipham/constitution.yml`')
   lines.push('🗑️  重置: 删除 `~/.mipham/constitution.yml` 后执行 `/constitution reload`')
   lines.push('')
   lines.push(

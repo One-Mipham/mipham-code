@@ -1001,10 +1001,7 @@ export class QueryEngine {
         }
       }
       if (principle.enforce === 'warn') {
-        hookWarnings = [
-          ...hookWarnings,
-          `⚖️ Constitution: ${principle.id} — ${principle.text}`,
-        ]
+        hookWarnings = [...hookWarnings, `⚖️ Constitution: ${principle.id} — ${principle.text}`]
       }
     }
 

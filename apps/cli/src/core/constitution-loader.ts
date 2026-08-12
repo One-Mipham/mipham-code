@@ -60,8 +60,7 @@ const DEFAULT_CONSTITUTION: MiphamConstitution = {
       audit_pattern:
         '(fabricated|made.up|dummy.data|fake\s+(response|result|data)|placeholder\s+data)',
       scope: 'all-tools',
-      rationale:
-        'MiphamAI4S 科学诚信原则：编造数据是不可接受的底线违反。适用于所有工具和输出。',
+      rationale: 'MiphamAI4S 科学诚信原则：编造数据是不可接受的底线违反。适用于所有工具和输出。',
     },
     {
       id: 'no-credential-leak',
@@ -280,11 +279,7 @@ export class ConstitutionLoader {
     return result
   }
 
-  private setPrincipleField(
-    p: Partial<ConstitutionalPrinciple>,
-    key: string,
-    val: string,
-  ): void {
+  private setPrincipleField(p: Partial<ConstitutionalPrinciple>, key: string, val: string): void {
     switch (key) {
       case 'id':
         p.id = val
