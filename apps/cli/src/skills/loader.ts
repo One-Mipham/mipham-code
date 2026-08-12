@@ -115,7 +115,10 @@ export class SkillsLoader {
       }
 
       // ── Safety: sanitize description ──
-      const description = sanitizeSkillDescription(rawDescription, type === 'mipham' ? undefined : type)
+      const description = sanitizeSkillDescription(
+        rawDescription,
+        type === 'mipham' ? undefined : type,
+      )
 
       // ── Safety: sanitize body ──
       let body: string | undefined

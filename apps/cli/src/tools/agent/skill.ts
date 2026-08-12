@@ -75,9 +75,7 @@ export const skillTool: ToolDefinition = {
         `Type: ${skill.type} | Version: ${skill.version}`,
         skill.description ? `Description: ${skill.description}` : '',
         args ? `Arguments: ${args}` : '',
-        safeBodyResult?.warnings.length
-          ? `⚠️ Safety: ${safeBodyResult.warnings.join('; ')}`
-          : '',
+        safeBodyResult?.warnings.length ? `⚠️ Safety: ${safeBodyResult.warnings.join('; ')}` : '',
         '',
         'The AI should now follow these instructions:',
         '',
