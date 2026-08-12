@@ -809,6 +809,28 @@ const sisClearCmd: CommandHandler = (ctx, args) => {
   return { content: `已退役签名 \`${sigId}\` (${sig.pattern.slice(0, 50)}...)` }
 }
 
+const sisCleanupCmd: CommandHandler = async (ctx) => {
+  const db = ctx.engine.getErrorSignatureDB?.()
+  if (!db) {
+    return { content: 'SIS 自免疫系统未初始化。' }
+  }
+  // Use dynamic import for ESM compatibility
+  const { ImmuneMemoryGC } = await import('../../src/core/immune-memory-gc.js')
+  const gc = new ImmuneMemoryGC(db)
+  const report = gc.collect()
+  const lines: string[] = ['## 🧹 SIS 免疫记忆清理完成', '']
+  lines.push(`清理前: ${report.before} 条签名`)
+  lines.push(`清理后: ${report.after} 条签名`)
+  lines.push('')
+  if (report.retiredRemoved > 0) lines.push(`🗑️  移除过期退役: ${report.retiredRemoved} 条`)
+  if (report.zeroSuccessRetired > 0) lines.push(`⚠️  退役零成功率: ${report.zeroSuccessRetired} 条`)
+  if (report.duplicatesMerged > 0) lines.push(`🔗 合并重复签名: ${report.duplicatesMerged} 条`)
+  if (report.retiredRemoved === 0 && report.zeroSuccessRetired === 0 && report.duplicatesMerged === 0) {
+    lines.push('✅ 免疫记忆干净，无需清理')
+  }
+  return { content: lines.join('\n') }
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Workflow
 // ═══════════════════════════════════════════════════════════════
@@ -3593,6 +3615,7 @@ registry.set('/crsi health', crsiHealthCmd)
 registry.set('/sis errors', sisErrorsCmd)
 registry.set('/sis stats', sisStatsCmd)
 registry.set('/sis clear', sisClearCmd)
+registry.set('/sis cleanup', sisCleanupCmd)
 
 // Workflow
 registry.set('/plan', planCmd)
@@ -3753,6 +3776,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/sis errors': 'List all active SIS immune memory signatures',
   '/sis stats': 'Show SIS self-immune system aggregate statistics',
   '/sis clear': 'Retire an immune memory signature by ID',
+  '/sis cleanup': 'Run immune memory garbage collection (dedup + cleanup)',
   '/plan': 'Enter plan mode',
   '/no-plan': 'Exit plan mode',
   '/tdd': 'Test-Driven Development workflow (RED → GREEN → REFACTOR)',

@@ -139,7 +139,7 @@ export class ErrorSignatureDB {
       id,
       occurrences: 1,
       successCount: 0,
-      successRate: 1.0, // starts optimistic
+      successRate: 0, // starts at 0 — must prove itself before auto-apply
       firstSeen: now,
       lastSeen: now,
       status: 'active',

@@ -24,6 +24,7 @@ import { PatternAnalyzer } from '../agent/pattern-analyzer.js'
 import { EffectivenessTracker } from '../agent/effectiveness-tracker.js'
 import { ErrorSignatureDB } from './error-signature-db.js'
 import { PreFlightChecker } from './preflight-checker.js'
+import { AutoCorrector } from './auto-corrector.js'
 import { UsageTracker } from './usage-tracker'
 import { buildRequest, sendInferenceCheck, isInferenceHookEnabled } from './inference-hook'
 import { getFileInboxTransport } from '../agent/cross-session/file-inbox'
@@ -51,6 +52,7 @@ export class QueryEngine {
   private _autoMemory?: AutoMemoryEngine
   private _errorSignatureDB?: ErrorSignatureDB
   private _preflightChecker?: PreFlightChecker
+  private _autoCorrector?: AutoCorrector
   private goal?: string
   private maxGoalLoops = 20
   private lastAssistantContent?: string
@@ -996,7 +998,23 @@ export class QueryEngine {
       // information disclosure to the LLM conversation context.
       const message =
         err instanceof Error ? err.message : String(err).split('\n')[0] || 'Unknown error'
-      return { success: false, content: '', error: `Tool execution failed: ${message}` }
+
+      // ── SIS AutoCorrector — post-error self-healing ──
+      const correction = this.getAutoCorrector().analyze(
+        name,
+        effectiveParams,
+        message,
+      )
+
+      let errorContent = `Tool execution failed: ${message}`
+      if (correction.suggestion) {
+        errorContent += '\n\n' + correction.suggestion
+      }
+      if (correction.action === 'retry' && correction.correctedParams) {
+        errorContent += '\n💡 SIS 已自动修正参数，下次执行时将使用修正后的命令。'
+      }
+
+      return { success: false, content: '', error: errorContent }
     }
   }
 
@@ -1087,6 +1105,18 @@ export class QueryEngine {
       )
     }
     return this._preflightChecker
+  }
+
+  /**
+   * SIS Phase 2: Lazily-initialized AutoCorrector singleton.
+   * Analyzes failed tool calls and suggests corrections based on
+   * the error signature database.
+   */
+  private getAutoCorrector(): AutoCorrector {
+    if (!this._autoCorrector) {
+      this._autoCorrector = new AutoCorrector(this.getErrorSignatureDB())
+    }
+    return this._autoCorrector
   }
 
   /** Register a tool dynamically (used by MCP auto-registration). */
