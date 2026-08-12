@@ -553,7 +553,7 @@ export class QueryEngine {
         name: toolUse.name,
         input: toolUse.input,
         success: result.success,
-        error: result.success ? undefined : (result.error || 'Unknown error'),
+        error: result.success ? undefined : result.error || 'Unknown error',
         durationMs: Date.now() - toolStart,
       })
 

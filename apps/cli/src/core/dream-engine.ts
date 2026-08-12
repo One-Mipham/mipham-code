@@ -25,7 +25,15 @@
  *     → Write consolidated memory + generate DreamReport
  */
 
-import { readdirSync, readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync, statSync } from 'node:fs'
+import {
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+  unlinkSync,
+  existsSync,
+  mkdirSync,
+  statSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 
@@ -194,10 +202,7 @@ export class DreamEngine {
       for (let j = i + 1; j < memories.length; j++) {
         if (removed.has(memories[j]!.path)) continue
 
-        const similarity = this.jaccardSimilarity(
-          memories[i]!.content,
-          memories[j]!.content,
-        )
+        const similarity = this.jaccardSimilarity(memories[i]!.content, memories[j]!.content)
 
         if (similarity >= SIMILARITY_THRESHOLD) {
           // Keep the older, more established entry
@@ -317,7 +322,11 @@ export class DreamEngine {
           writeFileSync(primary.path, updated, 'utf-8')
 
           for (const s of secondary) {
-            try { unlinkSync(s.path) } catch { /* best-effort */ }
+            try {
+              unlinkSync(s.path)
+            } catch {
+              /* best-effort */
+            }
           }
 
           actions.push({
@@ -355,10 +364,13 @@ export class DreamEngine {
     for (const mem of memories) {
       const vagueMatches = VAGUE_PATTERNS.filter((p) => p.test(mem.content))
       if (vagueMatches.length > 0) {
-        const matched = vagueMatches.map((p) => {
-          const m = mem.content.match(p)
-          return m ? `"${m[0]}"` : ''
-        }).filter(Boolean).join(', ')
+        const matched = vagueMatches
+          .map((p) => {
+            const m = mem.content.match(p)
+            return m ? `"${m[0]}"` : ''
+          })
+          .filter(Boolean)
+          .join(', ')
         actions.push({
           type: 'solidify',
           description: `Vague entry "${mem.name}" uses qualifiers: ${matched}. Consider replacing with definite statements.`,
@@ -466,8 +478,18 @@ export class DreamEngine {
   }
 
   private jaccardSimilarity(a: string, b: string): number {
-    const tokensA = new Set(a.toLowerCase().split(/\s+/).filter((t) => t.length > 1))
-    const tokensB = new Set(b.toLowerCase().split(/\s+/).filter((t) => t.length > 1))
+    const tokensA = new Set(
+      a
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((t) => t.length > 1),
+    )
+    const tokensB = new Set(
+      b
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((t) => t.length > 1),
+    )
     if (tokensA.size === 0 || tokensB.size === 0) return 0
 
     let intersection = 0

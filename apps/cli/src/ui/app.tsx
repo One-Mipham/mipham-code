@@ -511,7 +511,10 @@ export function App({
       }
 
       try {
-        for await (const chunk of engine.process(emotionPrefix ? emotionPrefix + input : input, controller.signal)) {
+        for await (const chunk of engine.process(
+          emotionPrefix ? emotionPrefix + input : input,
+          controller.signal,
+        )) {
           // Reasoning content (DeepSeek V4 thinking mode) — silently consumed,
           // not shown to user to avoid noise.
           if (chunk.reasoning_content) {

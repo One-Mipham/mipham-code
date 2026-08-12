@@ -965,9 +965,13 @@ const dreamCmd: CommandHandler = async (ctx, args) => {
     '',
     `记忆整合: ${report.beforeCount} → ${report.afterCount}`,
     ...(report.phases.deduplicated > 0 ? [`- 去重: ${report.phases.deduplicated} 条`] : []),
-    ...(report.phases.contradictionsFound > 0 ? [`- 矛盾冲突: ${report.phases.contradictionsFound} 处 (需人工裁决)`] : []),
+    ...(report.phases.contradictionsFound > 0
+      ? [`- 矛盾冲突: ${report.phases.contradictionsFound} 处 (需人工裁决)`]
+      : []),
     ...(report.phases.merged > 0 ? [`- 合并: ${report.phases.merged} 组`] : []),
-    ...(report.phases.solidified > 0 ? [`- 模糊标记: ${report.phases.solidified} 条 (建议固化)`] : []),
+    ...(report.phases.solidified > 0
+      ? [`- 模糊标记: ${report.phases.solidified} 条 (建议固化)`]
+      : []),
     ...(report.phases.pruned > 0 ? [`- 清理过期: ${report.phases.pruned} 条`] : []),
     '',
   ]
