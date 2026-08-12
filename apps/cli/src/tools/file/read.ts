@@ -45,6 +45,9 @@ export const readTool: ToolDefinition = {
     const limit = (params.limit as number) || 2000
     const content = readFileSync(filePath, 'utf-8')
 
+    // ── Read tracking: mark file as read for Write tool safety ──
+    ctx.readFiles?.add(filePath)
+
     // ── Credential masking ──
     if (credentialConfig) {
       const { matchCredentialFile, maskContent, CREDENTIAL_SENTINEL } =

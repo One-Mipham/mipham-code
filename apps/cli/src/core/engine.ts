@@ -55,6 +55,8 @@ export class QueryEngine {
   private _preflightChecker?: PreFlightChecker
   private _autoCorrector?: AutoCorrector
   private _metaRuleEngine?: MetaRuleEngine
+  /** Files read this session — tracks what the Read tool has loaded */
+  private readFiles = new Set<string>()
   private goal?: string
   private maxGoalLoops = 20
   private lastAssistantContent?: string
@@ -943,6 +945,7 @@ export class QueryEngine {
         backgroundAgentRegistry: getBackgroundAgentRegistry(),
         permissionSystem: this.permission,
         ruleEngine: this.ruleEngine,
+        readFiles: this.readFiles,
       })
 
       // Track touched files for rules matching

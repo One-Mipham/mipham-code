@@ -1,5 +1,6 @@
 import type { ToolDefinition } from '../../shared/index.ts'
 import { executeForkedSkill } from '../../skills/fork-executor'
+import { sanitizeSkillBody } from '../../skills/sanitizer.js'
 
 export const skillTool: ToolDefinition = {
   name: 'Skill',
@@ -66,15 +67,21 @@ export const skillTool: ToolDefinition = {
       }
 
       // Standard inline execution — return skill body for AI to follow
+      const safeBodyResult = skill.body ? sanitizeSkillBody(skill.body) : undefined
+      const bodyText = safeBodyResult?.text || skill.body || '(no instructions body)'
+
       const lines: string[] = [
         `── Skill Invoked: ${skill.name} ──`,
         `Type: ${skill.type} | Version: ${skill.version}`,
         skill.description ? `Description: ${skill.description}` : '',
         args ? `Arguments: ${args}` : '',
+        safeBodyResult?.warnings.length
+          ? `⚠️ Safety: ${safeBodyResult.warnings.join('; ')}`
+          : '',
         '',
         'The AI should now follow these instructions:',
         '',
-        skill.body || '(no instructions body)',
+        bodyText,
       ].filter(Boolean)
 
       return { success: true, content: lines.join('\n') }

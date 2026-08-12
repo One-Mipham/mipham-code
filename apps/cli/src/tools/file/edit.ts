@@ -90,6 +90,10 @@ export const editTool: ToolDefinition = {
     }
 
     const content = readFileSync(filePath, 'utf-8')
+
+    // ── Read tracking: mark as read before editing ──
+    ctx.readFiles?.add(filePath)
+
     if (content.length > MAX_FILE_SIZE) {
       return {
         success: false,

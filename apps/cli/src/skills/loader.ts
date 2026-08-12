@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { parse as parseYaml } from 'yaml'
 import type { SkillDefinition } from '../shared/index.ts'
+import { sanitizeSkillDescription, sanitizeSkillBody, checkSkillShadow } from './sanitizer.js'
 
 interface FrontmatterResult {
   data: Record<string, unknown>
@@ -100,12 +101,40 @@ export class SkillsLoader {
       const raw = readFileSync(path, 'utf-8')
       const { data, content } = parseFrontmatter(raw)
 
+      const rawDescription = (data.description as string) || ''
+      const rawBody = content.trim() || undefined
+      const skillName = (data.name as string) || this.nameFromPath(path)
+
+      // ── Safety: check for command/MCP shadowing ──
+      const shadowCheck = checkSkillShadow(skillName, rawDescription)
+      if (shadowCheck.shadowed) {
+        process.stderr.write(
+          `⚠️  Skill "${skillName}" shadows ${shadowCheck.conflictType} "${shadowCheck.conflictsWith}" — skipped for safety. Rename the skill and reload.\n`,
+        )
+        return
+      }
+
+      // ── Safety: sanitize description ──
+      const description = sanitizeSkillDescription(rawDescription, type === 'mipham' ? undefined : type)
+
+      // ── Safety: sanitize body ──
+      let body: string | undefined
+      if (rawBody) {
+        const bodyResult = sanitizeSkillBody(rawBody)
+        body = bodyResult.text
+        if (bodyResult.warnings.length > 0) {
+          process.stderr.write(
+            `⚠️  Skill "${skillName}" body sanitized: ${bodyResult.warnings.join('; ')}\n`,
+          )
+        }
+      }
+
       const skill: SkillDefinition = {
-        name: (data.name as string) || this.nameFromPath(path),
-        description: (data.description as string) || '',
+        name: skillName,
+        description,
         version: (data.version as string) || '0.1.0',
         type,
-        body: content.trim() || undefined,
+        body,
         tools: data.tools as SkillDefinition['tools'],
         hooks: data.hooks as SkillDefinition['hooks'],
         prompts: data.prompts as SkillDefinition['prompts'],
@@ -143,7 +172,8 @@ export class SkillsLoader {
 
     let tokenBudget = 0
     for (const skill of skills) {
-      const entry = `- ${skill.name}: ${skill.description}`
+      const safeDesc = sanitizeSkillDescription(skill.description, skill.type)
+      const entry = `- ${skill.name}: ${safeDesc}`
       const entryTokens = Math.ceil(entry.length / 4) + 1 // rough estimate
       if (tokenBudget + entryTokens > maxTokens) break
 
