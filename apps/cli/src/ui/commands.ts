@@ -930,6 +930,123 @@ const sisCleanupCmd: CommandHandler = async (ctx) => {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// CRSI Interpret — Tool-Call Behavior Dashboard
+// ═══════════════════════════════════════════════════════════════
+
+const crsiInterpretCmd: CommandHandler = (ctx, args) => {
+  const t = resolveT(ctx)
+  const engine = ctx.engine
+  const toolFilter = args[0]?.toLowerCase()
+
+  const lines: string[] = ['## 🧠 CRSI Tool-Call Interpretability', '']
+
+  // ── Error Signature Analysis ──
+  const db = engine.getErrorSignatureDB?.()
+  if (db) {
+    const sigs = toolFilter
+      ? db.getActive().filter((s) => s.toolName.toLowerCase() === toolFilter)
+      : db.getActive()
+
+    if (sigs.length === 0) {
+      lines.push(
+        toolFilter
+          ? `No error signatures for tool \`${toolFilter}\`. CRSI immune memory is clean for this tool.`
+          : 'No active error signatures. CRSI immune memory is clean.',
+      )
+    } else {
+      lines.push(`### 🛡️ Error Signatures${toolFilter ? ` — \`${toolFilter}\`` : ''}`, '')
+      for (const sig of sigs.slice(0, 15)) {
+        const bar =
+          '█'.repeat(Math.round(sig.successRate * 10)) +
+          '░'.repeat(10 - Math.round(sig.successRate * 10))
+        lines.push(
+          `- **${sig.toolName}**: \`${sig.pattern.slice(0, 60)}\``,
+        )
+        lines.push(
+          `  Success: ${bar} ${Math.round(sig.successRate * 100)}% | ${sig.occurrences}x | ${sig.fixStrategy}`,
+        )
+        lines.push(`  Fix: \`${sig.fixAction.slice(0, 80)}\``)
+        lines.push('')
+      }
+      if (sigs.length > 15) lines.push(`... and ${sigs.length - 15} more signatures`, '')
+    }
+  }
+
+  // ── CRSI Reflection Summary ──
+  const autoMemory = engine.getAutoMemory?.()
+  if (autoMemory) {
+    const count = autoMemory.sessionReflectionCount ?? 0
+    if (count > 0) {
+      lines.push('### 📊 CRSI Reflection Summary', '')
+      lines.push(`Turn reflections analyzed: **${count}**`)
+      lines.push('')
+    }
+  }
+
+  // ── Usage Tracker by Tool ──
+  const usage = engine.getUsageTracker?.()
+  if (usage) {
+    const summary = usage.getSummary()
+    lines.push('### 💰 Token Usage', '')
+    lines.push(`API input tokens:  ${summary.apiInputTokens.toLocaleString()}`)
+    lines.push(`API output tokens: ${summary.apiOutputTokens.toLocaleString()}`)
+    lines.push(`Estimated tokens:  ${summary.estimatedTokens.toLocaleString()}`)
+    lines.push('')
+  }
+
+  // ── System Health ──
+  const meta = engine.getMetaRuleEngine?.()
+  if (meta) {
+    try {
+      const analysis = meta.analyze()
+      if (analysis.systemHealth) {
+        const h = analysis.systemHealth
+        const bar = '█'.repeat(Math.round(h.score / 10)) + '░'.repeat(10 - Math.round(h.score / 10))
+        lines.push('### 🏥 System Health', '')
+        lines.push(`Overall: ${bar} **${h.score}/100**`)
+        lines.push(`Assessment: ${h.assessment}`)
+        if (h.components) {
+          lines.push('')
+          for (const [comp, score] of Object.entries(h.components)) {
+            const cbar =
+              '▮'.repeat(Math.round((score as number) / 10)) +
+              '▯'.repeat(10 - Math.round((score as number) / 10))
+            lines.push(`  ${comp.padEnd(20)} ${cbar} ${score}/100`)
+          }
+        }
+        lines.push('')
+      }
+    } catch {
+      // Meta analysis unavailable
+    }
+  }
+
+  // ── Constitution Health ──
+  const constitution = engine.getConstitutionLoader?.()
+  if (constitution) {
+    const c = constitution.load()
+    const blocks = c.principles.filter((p) => p.enforce === 'block').length
+    const warns = c.principles.filter((p) => p.enforce === 'warn').length
+    const autos = c.principles.filter((p) => p.enforce === 'auto').length
+    lines.push('### ⚖️ Constitution', '')
+    lines.push(
+      `Principles: **${c.principles.length}** (🚫 ${blocks} block | ⚠️ ${warns} warn | 🔄 ${autos} auto)`,
+    )
+    lines.push(`Version: v${c.version}`)
+    lines.push('')
+  }
+
+  if (lines.length <= 2) {
+    lines.push('_Start using tools to populate CRSI interpretability data._')
+  }
+
+  lines.push('──')
+  lines.push('🔍 Filter by tool: `/crsi interpret <tool-name>` (e.g. `/crsi interpret Bash`)')
+
+  return { content: lines.join('\n') }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Auto-Dream: Background Memory Consolidation
 // ═══════════════════════════════════════════════════════════════
 
@@ -988,6 +1105,75 @@ const dreamCmd: CommandHandler = async (ctx, args) => {
   if (report.actions.length === 0) {
     lines.push('✅ 记忆干净，无需整理。')
   }
+
+  return { content: lines.join('\n') }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Constitution
+// ═══════════════════════════════════════════════════════════════
+
+const constitutionCmd: CommandHandler = (ctx, args) => {
+  const t = resolveT(ctx)
+  const engine = ctx.engine
+  const constitution = engine.getConstitutionLoader?.()
+  if (!constitution) {
+    return { content: 'ConstitutionLoader 未初始化。请确认 Mipham Code 版本 >= v0.34.0。' }
+  }
+
+  const subCmd = args[0]?.toLowerCase()
+
+  // /constitution reload
+  if (subCmd === 'reload') {
+    const c = constitution.reload()
+    return {
+      content: [
+        '## ⚖️ Constitution Reloaded',
+        '',
+        `Version: **v${c.version}**`,
+        `Principles: **${c.principles.length}**`,
+        `Path: \`${constitution.getPath()}\``,
+        '',
+        c.principles
+          .map((p) => `- **${p.id}** [${p.enforce}]: ${p.text}`)
+          .join('\n'),
+      ].join('\n'),
+    }
+  }
+
+  // /constitution view (default)
+  const c = constitution.load()
+  const lines: string[] = [
+    '## ⚖️ Mipham Constitution',
+    '',
+    `Version: **v${c.version}** | Principles: **${c.principles.length}** | Path: \`${constitution.getPath()}\``,
+    '',
+    '---',
+    '',
+  ]
+
+  for (const p of c.principles) {
+    const icon = p.enforce === 'block' ? '🚫' : p.enforce === 'warn' ? '⚠️' : '🔄'
+    lines.push(`### ${icon} ${p.id} [${p.enforce}]`)
+    lines.push('')
+    lines.push(p.text)
+    if (p.rationale) lines.push(`  *${p.rationale}*`)
+    if (p.scope) lines.push(`  Scope: \`${p.scope}\``)
+    if (p.tools) lines.push(`  Tools: ${p.tools.join(', ')}`)
+    lines.push('')
+  }
+
+  lines.push('---')
+  lines.push('')
+  lines.push('🔧 `/constitution reload` — 重新加载（修改 constitution.yml 后使用）')
+  lines.push(
+    '📝 编辑: `vi ~/.mipham/constitution.yml`',
+  )
+  lines.push('🗑️  重置: 删除 `~/.mipham/constitution.yml` 后执行 `/constitution reload`')
+  lines.push('')
+  lines.push(
+    '*Inspired by Anthropic Constitutional AI. Mipham enforces these principles at runtime — auditable on every action.*',
+  )
 
   return { content: lines.join('\n') }
 }
@@ -3861,6 +4047,7 @@ const commandsListCmd: CommandHandler = () => {
     '/export': 'Session & Identity',
     '/doctor': 'Session & Identity',
     '/dream': 'Session & Identity',
+    '/constitution': 'Session & Identity',
     '/bug-report': 'Session & Identity',
     '/changelog': 'Session & Identity',
     '/resume': 'Session & Identity',
@@ -3905,6 +4092,7 @@ const commandsListCmd: CommandHandler = () => {
     '/crsi stats': 'Tools & Skills',
     '/crsi health': 'Tools & Skills',
     '/crsi meta': 'Tools & Skills',
+    '/crsi interpret': 'Tools & Skills',
     '/sis errors': 'Tools & Skills',
     '/sis stats': 'Tools & Skills',
     '/sis clear': 'Tools & Skills',
@@ -4054,11 +4242,13 @@ registry.set('/crsi restore', crsiRestoreCmd)
 registry.set('/crsi stats', crsiStatsCmd)
 registry.set('/crsi health', crsiHealthCmd)
 registry.set('/crsi meta', crsiMetaCmd)
+registry.set('/crsi interpret', crsiInterpretCmd)
 registry.set('/sis errors', sisErrorsCmd)
 registry.set('/sis stats', sisStatsCmd)
 registry.set('/sis clear', sisClearCmd)
 registry.set('/sis cleanup', sisCleanupCmd)
 registry.set('/dream', dreamCmd)
+registry.set('/constitution', constitutionCmd)
 registry.set('/bug-report', bugReportCmd)
 registry.set('/changelog', changelogCmd)
 
@@ -4182,6 +4372,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/export': 'Export conversation to file',
   '/doctor': 'System diagnostics',
   '/dream': 'Background memory consolidation',
+  '/constitution': 'View or reload constitutional principles',
   '/bug-report': 'Generate diagnostic report for GitHub Issues',
   '/changelog': 'Recent version history',
   '/resume': 'List saved sessions',
@@ -4224,6 +4415,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/crsi stats': 'Show CRSI overall effectiveness statistics',
   '/crsi health': 'CRSI + SIS unified health dashboard with scoring',
   '/crsi meta': 'RSI Level 3 meta-rule analysis — rules that improve the rules',
+  '/crsi interpret': 'Tool-call behavior dashboard — error patterns, usage, health',
   '/sis errors': 'List all active SIS immune memory signatures',
   '/sis stats': 'Show SIS self-immune system aggregate statistics',
   '/sis clear': 'Retire an immune memory signature by ID',

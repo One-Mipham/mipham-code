@@ -28,6 +28,7 @@ import { PreFlightChecker } from './preflight-checker.js'
 import { AutoCorrector } from './auto-corrector.js'
 import { MetaRuleEngine } from './meta-rule-engine.js'
 import { DreamEngine } from './dream-engine.js'
+import { ConstitutionLoader } from './constitution-loader.js'
 import { UsageTracker } from './usage-tracker'
 import { buildRequest, sendInferenceCheck, isInferenceHookEnabled } from './inference-hook'
 import { getFileInboxTransport } from '../agent/cross-session/file-inbox'
@@ -58,6 +59,7 @@ export class QueryEngine {
   private _autoCorrector?: AutoCorrector
   private _metaRuleEngine?: MetaRuleEngine
   private _dreamEngine?: DreamEngine
+  private _constitutionLoader?: ConstitutionLoader
   /** Files read this session — tracks what the Read tool has loaded */
   private readFiles = new Set<string>()
   private goal?: string
@@ -973,6 +975,39 @@ export class QueryEngine {
       hookWarnings = [...hookWarnings, preflight.warning]
     }
 
+    // ── Mipham Constitution — constitutional principle enforcement ──
+    // Checks the tool + params against the machine-readable constitution.
+    // Block-level violations (enforce: block) halt execution immediately.
+    // Warn-level violations (enforce: warn) are appended to hookWarnings.
+    const constitution = this.getConstitutionLoader()
+    const principles = constitution.getPrinciplesForTool(name)
+    for (const principle of principles) {
+      if (principle.enforce === 'block') {
+        // Audit: check if the tool params or command match a violation pattern
+        if (principle.audit_pattern) {
+          try {
+            const regex = new RegExp(principle.audit_pattern, 'i')
+            const paramsStr = JSON.stringify(effectiveParams)
+            if (regex.test(paramsStr)) {
+              return {
+                success: false,
+                content: `🚫 Constitution violation blocked: **${principle.id}** — ${principle.text}`,
+                error: `Constitutional principle "${principle.id}" blocked this operation.`,
+              }
+            }
+          } catch {
+            // Invalid regex — skip this principle
+          }
+        }
+      }
+      if (principle.enforce === 'warn') {
+        hookWarnings = [
+          ...hookWarnings,
+          `⚖️ Constitution: ${principle.id} — ${principle.text}`,
+        ]
+      }
+    }
+
     try {
       const result = await tool.execute(effectiveParams, {
         cwd: process.cwd(),
@@ -1184,6 +1219,14 @@ export class QueryEngine {
       this._dreamEngine = new DreamEngine()
     }
     return this._dreamEngine
+  }
+
+  /** Mipham Constitution: Lazily-initialized constitutional principle loader/enforcer. */
+  getConstitutionLoader(): ConstitutionLoader {
+    if (!this._constitutionLoader) {
+      this._constitutionLoader = new ConstitutionLoader()
+    }
+    return this._constitutionLoader
   }
 
   /** Register a tool dynamically (used by MCP auto-registration). */
