@@ -1014,7 +1014,9 @@ const bugReportCmd: CommandHandler = async (ctx) => {
   lines.push(`- **Session**: ${ctx.sessionId}`)
   lines.push(`- **Node**: ${process.version}`)
   lines.push(`- **Platform**: ${process.platform} ${process.arch}`)
-  lines.push(`- **OS**: ${process.platform === 'darwin' ? 'macOS' : process.platform === 'linux' ? 'Linux' : 'Windows'}`)
+  lines.push(
+    `- **OS**: ${process.platform === 'darwin' ? 'macOS' : process.platform === 'linux' ? 'Linux' : 'Windows'}`,
+  )
   lines.push(`- **Provider**: ${ctx.providerId}`)
   lines.push(`- **Model**: ${ctx.modelId}`)
   lines.push('')
@@ -1027,7 +1029,9 @@ const bugReportCmd: CommandHandler = async (ctx) => {
       if (active.length > 0) {
         lines.push('### Active Error Signatures', '')
         for (const sig of active.slice(0, 10)) {
-          lines.push(`- \`${sig.id}\`: ${sig.pattern} (${sig.category}, ${sig.occurrences}x, ${(sig.successRate * 100).toFixed(0)}% success)`)
+          lines.push(
+            `- \`${sig.id}\`: ${sig.pattern} (${sig.category}, ${sig.occurrences}x, ${(sig.successRate * 100).toFixed(0)}% success)`,
+          )
         }
         lines.push('')
       }
@@ -1045,7 +1049,9 @@ const bugReportCmd: CommandHandler = async (ctx) => {
       if (disabled.length > 0) {
         lines.push('### Disabled Hooks', '')
         for (const entry of disabled) {
-          lines.push(`- \`${entry.key}\`: ${entry.health.failures} failures, disabled at ${new Date(entry.health.disabledAt).toISOString()}`)
+          lines.push(
+            `- \`${entry.key}\`: ${entry.health.failures} failures, disabled at ${new Date(entry.health.disabledAt).toISOString()}`,
+          )
         }
         lines.push('')
       }
@@ -1063,7 +1069,9 @@ const bugReportCmd: CommandHandler = async (ctx) => {
         const last = history[0]!
         lines.push('### Last Auto-Dream', '')
         lines.push(`- **Ran at**: ${last.timestamp}`)
-        lines.push(`- **Actions**: ${last.actions.length} (${last.actions.filter((a: { autoApplied: boolean }) => a.autoApplied).length} applied)`)
+        lines.push(
+          `- **Actions**: ${last.actions.length} (${last.actions.filter((a: { autoApplied: boolean }) => a.autoApplied).length} applied)`,
+        )
         lines.push('')
       }
     }
@@ -2394,10 +2402,16 @@ const statsCmd: CommandHandler = (ctx) => {
     if (db) {
       const s = db.getStats()
       if (s.total > 0) {
-        extras.push('', '── SIS Self-Immune ──', `Signatures: ${s.total} total, ${s.active} active | Success rate: ${(s.avgSuccessRate * 100).toFixed(0)}%`)
+        extras.push(
+          '',
+          '── SIS Self-Immune ──',
+          `Signatures: ${s.total} total, ${s.active} active | Success rate: ${(s.avgSuccessRate * 100).toFixed(0)}%`,
+        )
       }
     }
-  } catch { /* SIS not initialized */ }
+  } catch {
+    /* SIS not initialized */
+  }
 
   try {
     const autoMemory = engine.getAutoMemory?.()
@@ -2405,17 +2419,23 @@ const statsCmd: CommandHandler = (ctx) => {
       const count = autoMemory.sessionReflectionCount ?? 0
       if (count > 0) extras.push(`CRSI Reflections: ${count} turn(s) analyzed`)
     }
-  } catch { /* CRSI not initialized */ }
+  } catch {
+    /* CRSI not initialized */
+  }
 
   try {
     const meta = engine.getMetaRuleEngine?.()
     if (meta) {
       const analysis = meta.analyze()
       if (analysis.systemHealth) {
-        extras.push(`System Health: ${analysis.systemHealth.score}/100 — ${analysis.systemHealth.assessment}`)
+        extras.push(
+          `System Health: ${analysis.systemHealth.score}/100 — ${analysis.systemHealth.assessment}`,
+        )
       }
     }
-  } catch { /* Meta not initialized */ }
+  } catch {
+    /* Meta not initialized */
+  }
 
   return { content: [...base, ...extras].join('\n') }
 }
