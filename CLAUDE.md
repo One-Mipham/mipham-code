@@ -22,6 +22,21 @@ Mipham Code 是开源（Apache 2.0）的多模型智能编程终端，基于 Bun
 - **产品页**: https://mipham.ai/code
 - **安装**: `curl -fsSL https://mipham.ai/install.sh | bash`
 
+### 终极愿景：CRSI
+
+Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvement）**——华安麦逄人工智能对硅谷 RSI（Recursive Self-Improvement）概念的品牌化表达，被视为取代 AGI 的 AI 终极巅峰。
+
+当前 CRSI 工程实现包括三个子系统：
+
+| 子系统 | 组件 | 状态 |
+|--------|------|:--:|
+| 🧠 学习 | PatternAnalyzer + AutoMemoryEngine + ExperienceRuleEngine + EffectivenessTracker | ✅ 2,121 行 |
+| 🛡️ 免疫 (SIS) | ErrorSignatureDB + PreFlightChecker | ✅ P0 完成 |
+| 🔒 安全 | CrsiSandbox（5 阶段受控自修改） | ✅ 551 行 |
+
+CLI 命令：`/crsi rules|disable|analyze|restore|stats|health` + `/sis errors|stats|clear`
+测试：1,141 测试（含 26 个 SIS 测试）
+
 ---
 
 ## 技术栈

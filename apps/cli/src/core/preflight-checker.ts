@@ -66,7 +66,7 @@ export class PreFlightChecker {
     // ── Layer 1: ErrorSignatureDB ──
     const sig = this.errorDB.match(toolName, params)
     if (sig) {
-      results.push(this.signatureToResult(sig))
+      results.push(this.signatureToResult(sig, params))
     }
 
     // ── Layer 2: ExperienceRuleEngine ──
@@ -100,7 +100,7 @@ export class PreFlightChecker {
   /**
    * Convert an ErrorSignature to a PreFlightResult based on its fixStrategy.
    */
-  private signatureToResult(sig: ErrorSignature): PreFlightResult {
+  private signatureToResult(sig: ErrorSignature, params: Record<string, unknown>): PreFlightResult {
     const base = {
       matchedSignature: sig.id,
       explanation: sig.explanation,

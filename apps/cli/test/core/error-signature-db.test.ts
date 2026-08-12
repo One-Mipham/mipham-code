@@ -144,7 +144,7 @@ describe('ErrorSignatureDB', () => {
       db.retire(retired.id)
       const active = db.getActive()
       expect(active.length).toBe(1)
-      expect(active[0].pattern).toBe('active-rule')
+      expect(active[0]!.pattern).toBe('active-rule')
     })
 
     it('getStats returns correct aggregates', () => {
@@ -182,7 +182,7 @@ describe('ErrorSignatureDB', () => {
       const db2 = new ErrorSignatureDB(TEST_DIR)
       const active = db2.getActive()
       expect(active.length).toBe(1)
-      expect(active[0].pattern).toBe('npm install')
+      expect(active[0]!.pattern).toBe('npm install')
     })
   })
 })

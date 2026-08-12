@@ -656,6 +656,88 @@ const crsiStatsCmd: CommandHandler = async (ctx) => {
   return { content: lines.join('\n') }
 }
 
+const crsiHealthCmd: CommandHandler = async (ctx) => {
+  const engine = ctx.engine.getRuleEngine()
+  const tracker = ctx.engine.getEffectivenessTracker()
+  const db = ctx.engine.getErrorSignatureDB?.()
+  const patternAnalyzer = ctx.engine.getPatternAnalyzer?.()
+
+  const lines: string[] = ['## 🏥 CRSI 系统健康仪表盘', '']
+
+  // ── CRSI Section ──
+  lines.push('### 🧠 CRSI 学习子系统', '')
+  if (engine) {
+    const rules = engine.getActiveRules()
+    const builtin = rules.filter((r) => r.source === 'builtin').length
+    const auto = rules.filter((r) => r.source === 'pattern-analyzer').length
+    const manual = rules.filter((r) => r.source === 'manual').length
+
+    lines.push(`| 指标 | 值 |`)
+    lines.push(`|------|----|`)
+    lines.push(`| 活跃规则 | ${rules.length} (内置 ${builtin} · 自动 ${auto} · 手动 ${manual}) |`)
+
+    if (tracker) {
+      let interceptions = 0
+      let successes = 0
+      for (const r of rules) {
+        const eff = tracker.getEffectiveness(r.id)
+        if (eff) {
+          interceptions += eff.appliedCount
+          successes += eff.successAfterCount
+        }
+      }
+      const crsiRate = interceptions > 0 ? Math.round((successes / interceptions) * 100) : 100
+      lines.push(`| 总拦截次数 | ${interceptions} |`)
+      lines.push(`| 拦截成功率 | ${crsiRate}% |`)
+    }
+
+    // Pattern analysis depth
+    if (patternAnalyzer) {
+      const patterns = patternAnalyzer.analyzeAllAgents()
+      lines.push(`| 已检测模式 | ${patterns.length} |`)
+    }
+
+    lines.push('')
+    lines.push('CRSI 命令: `/crsi rules` `/crsi stats` `/crsi analyze`')
+  } else {
+    lines.push('CRSI 规则引擎未初始化')
+  }
+
+  // ── SIS Section ──
+  lines.push('', '### 🛡️ SIS 自免疫子系统', '')
+  if (db) {
+    const stats = db.getStats()
+    const healthEmoji = stats.avgSuccessRate >= 0.8 ? '🟢' : stats.avgSuccessRate >= 0.5 ? '🟡' : '🔴'
+
+    lines.push(`| 指标 | 值 |`)
+    lines.push(`|------|----|`)
+    lines.push(`| 免疫记忆 | ${stats.total} 条 (🟢${stats.active} · 🟡${stats.degraded} · ⚫${stats.retired}) |`)
+    lines.push(`| 平均成功率 | ${Math.round(stats.avgSuccessRate * 100)}% |`)
+    lines.push(`| 总拦截 | ${stats.totalInterceptions} 次 |`)
+
+    lines.push('')
+    lines.push('SIS 命令: `/sis errors` `/sis stats` `/sis clear <id>`')
+  } else {
+    lines.push('SIS 自免疫系统未初始化')
+  }
+
+  // ── Overall Health Score ──
+  lines.push('', '### 📊 综合健康评分', '')
+  const crsiScore = engine ? 50 : 0
+  const sisScore = db ? (db.getStats().avgSuccessRate >= 0.8 ? 50 : 25) : 0
+  const totalScore = crsiScore + sisScore
+
+  const grade = totalScore >= 80 ? '🟢 A — 优秀' : totalScore >= 50 ? '🟡 B — 良好' : totalScore >= 25 ? '🟠 C — 需关注' : '🔴 D — 待初始化'
+
+  lines.push(`| 子系统 | 状态 | 得分 |`)
+  lines.push(`|--------|------|------|`)
+  lines.push(`| CRSI 学习 | ${engine ? '✅ 在线' : '❌ 离线'} | ${crsiScore}/50 |`)
+  lines.push(`| SIS 免疫 | ${db ? '✅ 在线' : '❌ 离线'} | ${sisScore}/50 |`)
+  lines.push(`| **综合** | **${grade}** | **${totalScore}/100** |`)
+
+  return { content: lines.join('\n') }
+}
+
 // ═══════════════════════════════════════════════════════════════
 // SIS (Self-Immune System)
 // ═══════════════════════════════════════════════════════════════
@@ -3349,6 +3431,7 @@ const commandsListCmd: CommandHandler = () => {
     '/crsi analyze': 'Tools & Skills',
     '/crsi restore': 'Tools & Skills',
     '/crsi stats': 'Tools & Skills',
+    '/crsi health': 'Tools & Skills',
     '/sis errors': 'Tools & Skills',
     '/sis stats': 'Tools & Skills',
     '/sis clear': 'Tools & Skills',
@@ -3496,6 +3579,7 @@ registry.set('/crsi disable', crsiDisableCmd)
 registry.set('/crsi analyze', crsiAnalyzeCmd)
 registry.set('/crsi restore', crsiRestoreCmd)
 registry.set('/crsi stats', crsiStatsCmd)
+registry.set('/crsi health', crsiHealthCmd)
 registry.set('/sis errors', sisErrorsCmd)
 registry.set('/sis stats', sisStatsCmd)
 registry.set('/sis clear', sisClearCmd)
@@ -3655,6 +3739,10 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/crsi analyze': 'Manually trigger CRSI pattern analysis across all agents',
   '/crsi restore': 'Restore a disabled or degraded CRSI rule',
   '/crsi stats': 'Show CRSI overall effectiveness statistics',
+  '/crsi health': 'CRSI + SIS unified health dashboard with scoring',
+  '/sis errors': 'List all active SIS immune memory signatures',
+  '/sis stats': 'Show SIS self-immune system aggregate statistics',
+  '/sis clear': 'Retire an immune memory signature by ID',
   '/plan': 'Enter plan mode',
   '/no-plan': 'Exit plan mode',
   '/tdd': 'Test-Driven Development workflow (RED → GREEN → REFACTOR)',
