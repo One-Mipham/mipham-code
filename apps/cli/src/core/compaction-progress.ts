@@ -14,11 +14,7 @@
 // ── Types ──
 
 export type CompactionPhase =
-  | 'microcompact'
-  | 'snip'
-  | 'reactive-compact'
-  | 'emergency-drain'
-  | 'complete'
+  'microcompact' | 'snip' | 'reactive-compact' | 'emergency-drain' | 'complete'
 
 export interface CompactionStatus {
   phase: CompactionPhase

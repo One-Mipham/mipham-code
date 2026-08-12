@@ -285,7 +285,8 @@ export class HookEngine {
       // ── Resilience: skip disabled hooks ──
       if (this.shouldSkip(key)) {
         result.additionalContext = result.additionalContext
-          ? result.additionalContext + `\n[Hook "${key}" skipped — temporarily disabled after repeated failures]`
+          ? result.additionalContext +
+            `\n[Hook "${key}" skipped — temporarily disabled after repeated failures]`
           : `[Hook "${key}" skipped — temporarily disabled after repeated failures]`
         continue
       }

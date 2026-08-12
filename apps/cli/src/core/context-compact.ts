@@ -53,10 +53,7 @@ export async function reactiveCompact(
   }
 
   // ── Progress tracker ──
-  const tracker = new CompactionProgressTracker(
-    messages.length,
-    tokensBefore,
-  )
+  const tracker = new CompactionProgressTracker(messages.length, tokensBefore)
   tracker.update({ phase: 'snip', message: 'Snipping empty pairs...', percent: 5 })
 
   // First, run snip to remove empty pairs

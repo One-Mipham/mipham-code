@@ -273,7 +273,9 @@ const compactCmd: CommandHandler = async (ctx) => {
   const tokensBefore = context.getEstimatedTokens()
 
   // Show start progress
-  process.stderr.write(`🔄 Compacting: ${msgsBefore} messages, ${tokensBefore.toLocaleString()} tokens...\n`)
+  process.stderr.write(
+    `🔄 Compacting: ${msgsBefore} messages, ${tokensBefore.toLocaleString()} tokens...\n`,
+  )
 
   const startTime = Date.now()
   const result = await context.compact('user requested compaction')
@@ -286,8 +288,12 @@ const compactCmd: CommandHandler = async (ctx) => {
       t('commands.compact.confirmed'),
       `Messages: ${msgsBefore} → ${msgsAfter} | Tokens: ${result.before.toLocaleString()} → ${result.after.toLocaleString()} (${saved}% saved)`,
       `Duration: ${elapsed}s`,
-      msgsBefore > msgsAfter ? `💡 Tip: Use /compact early to prevent automatic compaction delays.` : '',
-    ].filter(Boolean).join('\n'),
+      msgsBefore > msgsAfter
+        ? `💡 Tip: Use /compact early to prevent automatic compaction delays.`
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n'),
   }
 }
 
