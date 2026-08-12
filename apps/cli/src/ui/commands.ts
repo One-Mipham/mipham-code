@@ -748,6 +748,76 @@ const crsiHealthCmd: CommandHandler = async (ctx) => {
   return { content: lines.join('\n') }
 }
 
+const crsiMetaCmd: CommandHandler = async (ctx) => {
+  const metaEngine = ctx.engine.getMetaRuleEngine?.()
+  if (!metaEngine) {
+    return { content: 'MetaRuleEngine 未初始化。请先运行 `/crsi health` 初始化 CRSI 系统。' }
+  }
+
+  const result = metaEngine.analyze()
+  const lines: string[] = ['## 🔮 CRSI 元规则分析 (RSI Level 3)', '']
+
+  // ── System Health ──
+  lines.push('### 📊 系统健康评分', '')
+  const h = result.systemHealth
+  lines.push(`| 组件 | 得分 |`)
+  lines.push(`|------|------|`)
+  lines.push(`| 错误签名 | ${h.components.errorSignatures}/100 |`)
+  lines.push(`| 预防拦截 | ${h.components.preflightPrevention}/100 |`)
+  lines.push(`| 自动修复 | ${h.components.autoCorrection}/100 |`)
+  lines.push(`| 免疫记忆 | ${h.components.immuneMemory}/100 |`)
+  lines.push(`| 规则有效性 | ${h.components.ruleEffectiveness}/100 |`)
+  lines.push(`| **综合** | **${h.score}/100** |`)
+  lines.push('')
+  lines.push(h.assessment)
+  lines.push('')
+
+  // ── Recommendations ──
+  lines.push('### 💡 优化建议', '')
+  for (const rec of h.recommendations) {
+    lines.push(`- ${rec}`)
+  }
+  lines.push('')
+
+  // ── Meta-Rules ──
+  if (result.metaRules.length > 0) {
+    lines.push(`### 🧬 发现 ${result.metaRules.length} 条元规则`, '')
+
+    for (const mr of result.metaRules) {
+      const confIcon = mr.confidence === 'high' ? '🔴' : mr.confidence === 'medium' ? '🟡' : '🟢'
+      const autoLabel = mr.autoApplicable ? ' [可自动应用]' : ''
+      lines.push(`#### ${confIcon} ${mr.title}${autoLabel}`)
+      lines.push('')
+      lines.push(mr.description)
+      lines.push('')
+      lines.push(`> **建议**: ${mr.recommendation}`)
+      lines.push('')
+      lines.push(
+        `置信度: ${mr.confidence} | 样本量: ${mr.evidence.sampleSize} | 生成时间: ${mr.generatedAt}`,
+      )
+      lines.push('')
+    }
+  } else {
+    lines.push('### 🧬 元规则', '')
+    lines.push('暂无元规则生成。当系统积累足够的错误签名和规则数据后，元规则引擎将自动发现跨规则模式。')
+    lines.push('')
+  }
+
+  // ── Auto-applicable summary ──
+  const autoApplicable = metaEngine.getAutoApplicable(result.metaRules)
+  if (autoApplicable.length > 0) {
+    lines.push('### ⚡ 可自动应用', '')
+    lines.push(`${autoApplicable.length} 条元规则可安全自动应用：`)
+    for (const mr of autoApplicable) {
+      lines.push(`- \`${mr.id}\`: ${mr.recommendation}`)
+    }
+    lines.push('')
+    lines.push('使用 `/crsi meta --apply` 自动应用高置信度元规则。')
+  }
+
+  return { content: lines.join('\n') }
+}
+
 // ═══════════════════════════════════════════════════════════════
 // SIS (Self-Immune System)
 // ═══════════════════════════════════════════════════════════════
@@ -3468,6 +3538,7 @@ const commandsListCmd: CommandHandler = () => {
     '/crsi restore': 'Tools & Skills',
     '/crsi stats': 'Tools & Skills',
     '/crsi health': 'Tools & Skills',
+    '/crsi meta': 'Tools & Skills',
     '/sis errors': 'Tools & Skills',
     '/sis stats': 'Tools & Skills',
     '/sis clear': 'Tools & Skills',
@@ -3616,6 +3687,7 @@ registry.set('/crsi analyze', crsiAnalyzeCmd)
 registry.set('/crsi restore', crsiRestoreCmd)
 registry.set('/crsi stats', crsiStatsCmd)
 registry.set('/crsi health', crsiHealthCmd)
+registry.set('/crsi meta', crsiMetaCmd)
 registry.set('/sis errors', sisErrorsCmd)
 registry.set('/sis stats', sisStatsCmd)
 registry.set('/sis clear', sisClearCmd)
@@ -3777,6 +3849,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/crsi restore': 'Restore a disabled or degraded CRSI rule',
   '/crsi stats': 'Show CRSI overall effectiveness statistics',
   '/crsi health': 'CRSI + SIS unified health dashboard with scoring',
+  '/crsi meta': 'RSI Level 3 meta-rule analysis — rules that improve the rules',
   '/sis errors': 'List all active SIS immune memory signatures',
   '/sis stats': 'Show SIS self-immune system aggregate statistics',
   '/sis clear': 'Retire an immune memory signature by ID',

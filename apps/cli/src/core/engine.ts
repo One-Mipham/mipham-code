@@ -25,6 +25,7 @@ import { EffectivenessTracker } from '../agent/effectiveness-tracker.js'
 import { ErrorSignatureDB } from './error-signature-db.js'
 import { PreFlightChecker } from './preflight-checker.js'
 import { AutoCorrector } from './auto-corrector.js'
+import { MetaRuleEngine } from './meta-rule-engine.js'
 import { UsageTracker } from './usage-tracker'
 import { buildRequest, sendInferenceCheck, isInferenceHookEnabled } from './inference-hook'
 import { getFileInboxTransport } from '../agent/cross-session/file-inbox'
@@ -53,6 +54,7 @@ export class QueryEngine {
   private _errorSignatureDB?: ErrorSignatureDB
   private _preflightChecker?: PreFlightChecker
   private _autoCorrector?: AutoCorrector
+  private _metaRuleEngine?: MetaRuleEngine
   private goal?: string
   private maxGoalLoops = 20
   private lastAssistantContent?: string
@@ -1113,6 +1115,22 @@ export class QueryEngine {
       this._autoCorrector = new AutoCorrector(this.getErrorSignatureDB())
     }
     return this._autoCorrector
+  }
+
+  /**
+   * SIS Phase 3 (RSI Level 3): Lazily-initialized MetaRuleEngine singleton.
+   * Analyzes accumulated SIS data (ErrorSignatureDB + EffectivenessTracker)
+   * to discover meta-rules — rules about rules. This is the recursive
+   * self-improvement core: the system improving its own ability to improve.
+   */
+  getMetaRuleEngine(): MetaRuleEngine {
+    if (!this._metaRuleEngine) {
+      this._metaRuleEngine = new MetaRuleEngine(
+        this.getErrorSignatureDB(),
+        this.getEffectivenessTracker(),
+      )
+    }
+    return this._metaRuleEngine
   }
 
   /** Register a tool dynamically (used by MCP auto-registration). */

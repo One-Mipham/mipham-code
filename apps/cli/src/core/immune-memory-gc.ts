@@ -115,15 +115,17 @@ export class ImmuneMemoryGC {
     const merged = new Set<string>()
 
     for (let i = 0; i < active.length; i++) {
-      if (merged.has(active[i].id)) continue
+      const sigI = active[i]!
+      if (merged.has(sigI.id)) continue
 
       for (let j = i + 1; j < active.length; j++) {
-        if (merged.has(active[j].id)) continue
+        const sigJ = active[j]!
+        if (merged.has(sigJ.id)) continue
 
-        if (this.areSimilar(active[i], active[j])) {
+        if (this.areSimilar(sigI, sigJ)) {
           // Merge j into i (keep the older, more established one)
-          this.merge(active[i], active[j])
-          merged.add(active[j].id)
+          this.merge(sigI, sigJ)
+          merged.add(sigJ.id)
           count++
         }
       }

@@ -74,8 +74,7 @@ describe('AutoCorrector', () => {
         explanation: 'npm install frequently times out — use pnpm',
       })
       // Simulate high success rate
-      const sigs = db.getActive()
-      const sig = sigs[0]
+      const sig = db.getActive()[0]!
       // Manually set high success
       for (let i = 0; i < 10; i++) {
         db.recordResult(sig.id, true)
@@ -118,7 +117,7 @@ describe('AutoCorrector', () => {
         explanation: 'Flaky command',
       })
       // Give it high confidence
-      const sig = db.getActive()[0]
+      const sig = db.getActive()[0]!
       for (let i = 0; i < 10; i++) db.recordResult(sig.id, true)
 
       const result = corrector.analyze('Bash', { command: 'flake' }, 'error', 1)
