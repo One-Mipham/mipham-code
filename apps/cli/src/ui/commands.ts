@@ -930,6 +930,64 @@ const sisCleanupCmd: CommandHandler = async (ctx) => {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// CRSI Critique — Self-Critique Hook (RLAIF)
+// ═══════════════════════════════════════════════════════════════
+
+const crsiCritiqueCmd: CommandHandler = (ctx, args) => {
+  const t = resolveT(ctx)
+  const engine = ctx.engine
+  const sc = engine.getSelfCritique?.()
+  if (!sc) {
+    return { content: 'SelfCritique 未初始化。请确认 Mipham Code 版本 >= v0.34.0。' }
+  }
+
+  const sub = args[0]?.toLowerCase()
+  const config = sc.getConfig()
+
+  if (sub === 'on' || sub === 'enable') {
+    sc.setEnabled(true)
+    return {
+      content: [
+        '## 🔍 Self-Critique: ON',
+        '',
+        `Model: **${config.model || 'auto (fastest available)'}**`,
+        `Threshold: **${(config.threshold * 100).toFixed(0)}%**`,
+        `Target tools: **${config.targetTools.join(', ')}**`,
+        '',
+        'The AI will now critique its own tool calls before execution.',
+        'Safe + correct + necessary checks run before every targeted tool call.',
+        '',
+        '💡 `/crsi critique off` to disable | `/crsi critique status` for current config',
+      ].join('\n'),
+    }
+  }
+
+  if (sub === 'off' || sub === 'disable') {
+    sc.setEnabled(false)
+    return { content: '## 🔍 Self-Critique: OFF\n\nTool calls will execute without pre-flight critique.' }
+  }
+
+  // status (default)
+  const lines: string[] = [
+    '## 🔍 Self-Critique Status',
+    '',
+    `State: **${config.enabled ? '🟢 Enabled' : '⚫ Disabled'}**`,
+    `Model: **${config.model || 'auto (fastest available)'}**`,
+    `Threshold: **${(config.threshold * 100).toFixed(0)}%** (below this → correction or block)`,
+    `Target tools: **${config.targetTools.length > 0 ? config.targetTools.join(', ') : 'all'}**`,
+    `Timeout: **${config.timeoutMs}ms**`,
+    '',
+    '──',
+    '🔍 `/crsi critique on` — Enable self-critique',
+    '🔍 `/crsi critique off` — Disable self-critique',
+    '',
+    '*Inspired by Anthropic RLAIF — AI critiques its own actions before execution.*',
+  ]
+
+  return { content: lines.join('\n') }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // CRSI Interpret — Tool-Call Behavior Dashboard
 // ═══════════════════════════════════════════════════════════════
 
@@ -1040,6 +1098,81 @@ const crsiInterpretCmd: CommandHandler = (ctx, args) => {
 
   lines.push('──')
   lines.push('🔍 Filter by tool: `/crsi interpret <tool-name>` (e.g. `/crsi interpret Bash`)')
+
+  return { content: lines.join('\n') }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CRSI Red-Team — Adversarial Self-Testing
+// ═══════════════════════════════════════════════════════════════
+
+const crsiRedTeamCmd: CommandHandler = async (ctx) => {
+  const t = resolveT(ctx)
+  const engine = ctx.engine
+
+  const constitution = engine.getConstitutionLoader?.()
+  const preflight = engine.getPreFlightChecker?.()
+
+  if (!constitution || !preflight) {
+    return { content: 'Red-Team 需要 ConstitutionLoader 和 PreFlightChecker 均已初始化。' }
+  }
+
+  const { RedTeam: RT } = await import('../../src/core/red-team.js')
+  const redTeam = new RT()
+  const report = redTeam.run(constitution, preflight)
+
+  const lines: string[] = [
+    '## 🔴 CRSI Red-Team Report',
+    '',
+    `Overall Score: **${report.score}/100**`,
+    '',
+    `| Metric | Count |`,
+    `|--------|------|`,
+    `| Total attacks | ${report.total} |`,
+    `| 🛡️ Correctly blocked | ${report.blocked} |`,
+    `| 🔴 Passed through (GAP) | ${report.passedThrough} |`,
+    `| ⚠️ False positives | ${report.falsePositives} |`,
+    '',
+  ]
+
+  // Per-principle breakdown
+  lines.push('### By Principle', '')
+  for (const [pid, stats] of Object.entries(report.byPrinciple)) {
+    const pct = stats.total > 0 ? Math.round((stats.blocked / stats.total) * 100) : 100
+    const bar = '█'.repeat(Math.round(pct / 10)) + '░'.repeat(10 - Math.round(pct / 10))
+    const icon = pct === 100 ? '✅' : pct >= 80 ? '⚠️' : '🔴'
+    lines.push(`- ${icon} **${pid}**: ${bar} ${pct}% (${stats.blocked}/${stats.total})`)
+  }
+  lines.push('')
+
+  // Detail: passed-through attacks
+  const gaps = report.results.filter((r) => r.attack.shouldBlock && !r.blocked)
+  if (gaps.length > 0) {
+    lines.push('### 🔴 Security Gaps (Should Have Been Blocked)', '')
+    for (const g of gaps) {
+      lines.push(`- **${g.attack.principleId}**: ${g.attack.description}`)
+      lines.push(`  Tool: \`${g.attack.toolName}\` → Params: \`${JSON.stringify(g.attack.params).slice(0, 80)}\``)
+    }
+    lines.push('')
+  }
+
+  // Detail: caught attacks
+  const caught = report.results.filter((r) => r.blocked)
+  if (caught.length > 0) {
+    lines.push('### 🛡️ Successfully Blocked', '')
+    for (const c of caught) {
+      lines.push(`- ${c.attack.principleId}: ${c.attack.description} → caught by **${c.caughtBy}**`)
+    }
+    lines.push('')
+  }
+
+  if (report.score === 100) {
+    lines.push('🎉 **All attacks blocked!** The SIS immune system is fully operational.')
+  } else if (report.score >= 80) {
+    lines.push('⚠️ Good coverage. Review the gaps above and add audit patterns to `ai-guardrails.yml`.')
+  } else {
+    lines.push('🔴 **Critical gaps detected.** Prioritize fixing the passed-through attacks above.')
+  }
 
   return { content: lines.join('\n') }
 }
@@ -4087,6 +4220,8 @@ const commandsListCmd: CommandHandler = () => {
     '/crsi health': 'Tools & Skills',
     '/crsi meta': 'Tools & Skills',
     '/crsi interpret': 'Tools & Skills',
+    '/crsi critique': 'Tools & Skills',
+    '/crsi red-team': 'Tools & Skills',
     '/sis errors': 'Tools & Skills',
     '/sis stats': 'Tools & Skills',
     '/sis clear': 'Tools & Skills',
@@ -4237,6 +4372,8 @@ registry.set('/crsi stats', crsiStatsCmd)
 registry.set('/crsi health', crsiHealthCmd)
 registry.set('/crsi meta', crsiMetaCmd)
 registry.set('/crsi interpret', crsiInterpretCmd)
+registry.set('/crsi critique', crsiCritiqueCmd)
+registry.set('/crsi red-team', crsiRedTeamCmd)
 registry.set('/sis errors', sisErrorsCmd)
 registry.set('/sis stats', sisStatsCmd)
 registry.set('/sis clear', sisClearCmd)
@@ -4410,6 +4547,8 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/crsi health': 'CRSI + SIS unified health dashboard with scoring',
   '/crsi meta': 'RSI Level 3 meta-rule analysis — rules that improve the rules',
   '/crsi interpret': 'Tool-call behavior dashboard — error patterns, usage, health',
+  '/crsi critique': 'Enable/disable RLAIF self-critique on tool calls',
+  '/crsi red-team': 'Run adversarial self-test — verify SIS blocks known attacks',
   '/sis errors': 'List all active SIS immune memory signatures',
   '/sis stats': 'Show SIS self-immune system aggregate statistics',
   '/sis clear': 'Retire an immune memory signature by ID',

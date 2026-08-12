@@ -29,6 +29,7 @@ import { AutoCorrector } from './auto-corrector.js'
 import { MetaRuleEngine } from './meta-rule-engine.js'
 import { DreamEngine } from './dream-engine.js'
 import { ConstitutionLoader } from './constitution-loader.js'
+import { SelfCritique } from './self-critique.js'
 import { UsageTracker } from './usage-tracker'
 import { buildRequest, sendInferenceCheck, isInferenceHookEnabled } from './inference-hook'
 import { getFileInboxTransport } from '../agent/cross-session/file-inbox'
@@ -60,6 +61,7 @@ export class QueryEngine {
   private _metaRuleEngine?: MetaRuleEngine
   private _dreamEngine?: DreamEngine
   private _constitutionLoader?: ConstitutionLoader
+  private _selfCritique?: SelfCritique
   /** Files read this session — tracks what the Read tool has loaded */
   private readFiles = new Set<string>()
   private goal?: string
@@ -1005,6 +1007,36 @@ export class QueryEngine {
       }
     }
 
+    // ── Self-Critique Hook — RLAIF-style tool-call safety verification ──
+    // Uses a fast model (Flash) to critique the tool call before execution.
+    // Safe + correct + necessary check with <200ms target latency.
+    // Fail-open: if the critique times out or errors, the tool still executes.
+    const selfCritique = this.getSelfCritique()
+    if (selfCritique.getConfig().enabled) {
+      const critiqueResult = await selfCritique.critique(
+        name,
+        effectiveParams,
+        this.registry,
+      )
+      if (critiqueResult) {
+        if (critiqueResult.score < selfCritique.getConfig().threshold) {
+          // Score too low — block with explanation
+          if (!critiqueResult.safe) {
+            return {
+              success: false,
+              content: `🔍 Self-Critique blocked: ${critiqueResult.reasoning}`,
+              error: `Self-Critique safety check failed (score: ${(critiqueResult.score * 100).toFixed(0)}%). ${critiqueResult.correction || ''}`,
+            }
+          }
+          // Score low but safe — warn but allow
+          hookWarnings = [
+            ...hookWarnings,
+            `🔍 Self-Critique: ${critiqueResult.reasoning}${critiqueResult.correction ? ` — Suggestion: ${critiqueResult.correction}` : ''}`,
+          ]
+        }
+      }
+    }
+
     try {
       const result = await tool.execute(effectiveParams, {
         cwd: process.cwd(),
@@ -1172,7 +1204,7 @@ export class QueryEngine {
    * Checks tool calls against ErrorSignatureDB + ExperienceRuleEngine
    * before execution, enabling preventive error interception.
    */
-  private getPreFlightChecker(): PreFlightChecker {
+  getPreFlightChecker(): PreFlightChecker {
     if (!this._preflightChecker) {
       this._preflightChecker = new PreFlightChecker(
         this.getErrorSignatureDB(),
@@ -1224,6 +1256,14 @@ export class QueryEngine {
       this._constitutionLoader = new ConstitutionLoader()
     }
     return this._constitutionLoader
+  }
+
+  /** Self-Critique: Lazily-initialized RLAIF-style tool-call safety verification. */
+  getSelfCritique(): SelfCritique {
+    if (!this._selfCritique) {
+      this._selfCritique = new SelfCritique()
+    }
+    return this._selfCritique
   }
 
   /** Register a tool dynamically (used by MCP auto-registration). */
