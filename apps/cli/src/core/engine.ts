@@ -1013,11 +1013,7 @@ export class QueryEngine {
     // Fail-open: if the critique times out or errors, the tool still executes.
     const selfCritique = this.getSelfCritique()
     if (selfCritique.getConfig().enabled) {
-      const critiqueResult = await selfCritique.critique(
-        name,
-        effectiveParams,
-        this.registry,
-      )
+      const critiqueResult = await selfCritique.critique(name, effectiveParams, this.registry)
       if (critiqueResult) {
         if (critiqueResult.score < selfCritique.getConfig().threshold) {
           // Score too low — block with explanation

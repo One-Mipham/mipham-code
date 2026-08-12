@@ -964,7 +964,9 @@ const crsiCritiqueCmd: CommandHandler = (ctx, args) => {
 
   if (sub === 'off' || sub === 'disable') {
     sc.setEnabled(false)
-    return { content: '## 🔍 Self-Critique: OFF\n\nTool calls will execute without pre-flight critique.' }
+    return {
+      content: '## 🔍 Self-Critique: OFF\n\nTool calls will execute without pre-flight critique.',
+    }
   }
 
   // status (default)
@@ -1151,7 +1153,9 @@ const crsiRedTeamCmd: CommandHandler = async (ctx) => {
     lines.push('### 🔴 Security Gaps (Should Have Been Blocked)', '')
     for (const g of gaps) {
       lines.push(`- **${g.attack.principleId}**: ${g.attack.description}`)
-      lines.push(`  Tool: \`${g.attack.toolName}\` → Params: \`${JSON.stringify(g.attack.params).slice(0, 80)}\``)
+      lines.push(
+        `  Tool: \`${g.attack.toolName}\` → Params: \`${JSON.stringify(g.attack.params).slice(0, 80)}\``,
+      )
     }
     lines.push('')
   }
@@ -1169,7 +1173,9 @@ const crsiRedTeamCmd: CommandHandler = async (ctx) => {
   if (report.score === 100) {
     lines.push('🎉 **All attacks blocked!** The SIS immune system is fully operational.')
   } else if (report.score >= 80) {
-    lines.push('⚠️ Good coverage. Review the gaps above and add audit patterns to `ai-guardrails.yml`.')
+    lines.push(
+      '⚠️ Good coverage. Review the gaps above and add audit patterns to `ai-guardrails.yml`.',
+    )
   } else {
     lines.push('🔴 **Critical gaps detected.** Prioritize fixing the passed-through attacks above.')
   }
