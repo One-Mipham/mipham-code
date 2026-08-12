@@ -37,8 +37,8 @@ export interface PreFlightResult {
 
 const ACTION_PRIORITY: Record<PreFlightResult['action'], number> = {
   allow: 0,
-  warn:  1,
-  fix:   2,
+  warn: 1,
+  fix: 2,
   block: 3,
 }
 

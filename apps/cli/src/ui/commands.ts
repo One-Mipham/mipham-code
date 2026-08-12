@@ -672,9 +672,7 @@ const sisErrorsCmd: CommandHandler = (ctx) => {
   const lines: string[] = ['## 🛡️ SIS 免疫记忆', '']
   for (const sig of sigs) {
     const statusIcon = sig.status === 'active' ? '🟢' : '🟡'
-    lines.push(
-      `- ${statusIcon} \`${sig.id}\` [${sig.category}] ${sig.toolName}`,
-    )
+    lines.push(`- ${statusIcon} \`${sig.id}\` [${sig.category}] ${sig.toolName}`)
     lines.push(`  模式: \`${sig.pattern.slice(0, 80)}${sig.pattern.length > 80 ? '...' : ''}\``)
     lines.push(
       `  修复: ${sig.fixStrategy} → ${sig.fixAction.slice(0, 60)} | 发生 ${sig.occurrences} 次 | 成功率 ${Math.round(sig.successRate * 100)}%`,
@@ -694,7 +692,9 @@ const sisStatsCmd: CommandHandler = (ctx) => {
   const stats = db.getStats()
   const lines: string[] = ['## 🛡️ SIS 自免疫统计', '']
   lines.push(`总签名数: ${stats.total}`)
-  lines.push(`🟢 活跃: ${stats.active}  |  🟡 降级: ${stats.degraded}  |  ⚫ 已退役: ${stats.retired}`)
+  lines.push(
+    `🟢 活跃: ${stats.active}  |  🟡 降级: ${stats.degraded}  |  ⚫ 已退役: ${stats.retired}`,
+  )
   lines.push(`平均成功率: ${Math.round(stats.avgSuccessRate * 100)}%`)
   lines.push(`总拦截次数: ${stats.totalInterceptions}`)
   return { content: lines.join('\n') }

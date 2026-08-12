@@ -63,9 +63,9 @@ export interface ErrorSignatureStats {
 
 const DEFAULT_STORE_DIR = join(homedir(), '.mipham', 'sis')
 const STORE_FILE = 'error-signatures.json'
-const MIN_SUCCESS_RATE = 0.5    // below this → degraded
-const RETIREMENT_RATE = 0.2     // below this and > 90 days old → retired
-const RETENTION_DAYS = 90       // auto-clean retired signatures older than this
+const MIN_SUCCESS_RATE = 0.5 // below this → degraded
+const RETIREMENT_RATE = 0.2 // below this and > 90 days old → retired
+const RETENTION_DAYS = 90 // auto-clean retired signatures older than this
 
 // ── Database ──
 
@@ -114,15 +114,19 @@ export class ErrorSignatureDB {
    * Insert a new error signature. If a signature with the same pattern +
    * toolName + category already exists, increment its occurrence count instead.
    */
-  insert(sig: Omit<ErrorSignature, 'id' | 'occurrences' | 'successCount' | 'successRate' | 'firstSeen' | 'lastSeen' | 'status'>): ErrorSignature {
+  insert(
+    sig: Omit<
+      ErrorSignature,
+      'id' | 'occurrences' | 'successCount' | 'successRate' | 'firstSeen' | 'lastSeen' | 'status'
+    >,
+  ): ErrorSignature {
     // Dedup: same pattern + toolName + category → update existing
     const existing = this.findByPattern(sig.pattern, sig.toolName, sig.category)
     if (existing) {
       existing.occurrences++
       existing.lastSeen = new Date().toISOString()
-      existing.successRate = existing.occurrences > 0
-        ? existing.successCount / existing.occurrences
-        : 1.0
+      existing.successRate =
+        existing.occurrences > 0 ? existing.successCount / existing.occurrences : 1.0
       this.dirty = true
       this.save()
       return existing
@@ -194,9 +198,7 @@ export class ErrorSignatureDB {
     if (success) {
       sig.successCount++
     }
-    sig.successRate = sig.occurrences > 0
-      ? sig.successCount / sig.occurrences
-      : 1.0
+    sig.successRate = sig.occurrences > 0 ? sig.successCount / sig.occurrences : 1.0
 
     // Auto-degrade
     if (sig.successRate < MIN_SUCCESS_RATE && sig.status === 'active') {
@@ -243,9 +245,8 @@ export class ErrorSignatureDB {
     const degraded = all.filter((s) => s.status === 'degraded')
     const retired = all.filter((s) => s.status === 'retired')
 
-    const avgSuccessRate = active.length > 0
-      ? active.reduce((sum, s) => sum + s.successRate, 0) / active.length
-      : 0
+    const avgSuccessRate =
+      active.length > 0 ? active.reduce((sum, s) => sum + s.successRate, 0) / active.length : 0
 
     return {
       total: all.length,
@@ -290,7 +291,11 @@ export class ErrorSignatureDB {
   // ── Private Helpers ──
 
   /** Find an existing signature by pattern + toolName + category. */
-  private findByPattern(pattern: string, toolName: string, category: string): ErrorSignature | undefined {
+  private findByPattern(
+    pattern: string,
+    toolName: string,
+    category: string,
+  ): ErrorSignature | undefined {
     for (const sig of this.signatures.values()) {
       if (sig.pattern === pattern && sig.toolName === toolName && sig.category === category) {
         return sig

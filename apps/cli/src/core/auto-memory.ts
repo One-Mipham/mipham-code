@@ -368,8 +368,8 @@ export class AutoMemoryEngine {
           fixStrategy: 'replace',
           fixAction: String(
             toolRule.fix({ command: errorText }).modified?.command ||
-            toolRule.fix({}).modified?.command ||
-            ''
+              toolRule.fix({}).modified?.command ||
+              '',
           ),
           explanation: `CRSI 自动生成: ${toolRule.id} — ${pattern.category} 类错误 (${count} 次发生)`,
         })
