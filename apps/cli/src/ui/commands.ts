@@ -993,6 +993,163 @@ const dreamCmd: CommandHandler = async (ctx, args) => {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Bug Report
+// ═══════════════════════════════════════════════════════════════
+
+const bugReportCmd: CommandHandler = async (ctx) => {
+  const t = resolveT(ctx)
+  const engine = ctx.engine
+  const lines: string[] = [
+    '## 🐛 Bug Report',
+    '',
+    '> Copy the report below and paste it into your GitHub Issue.',
+    '',
+    '---',
+    '',
+  ]
+
+  // ── Version & Runtime ──
+  lines.push('### Environment', '')
+  lines.push(`- **Mipham Code**: v${ctx.version}`)
+  lines.push(`- **Session**: ${ctx.sessionId}`)
+  lines.push(`- **Node**: ${process.version}`)
+  lines.push(`- **Platform**: ${process.platform} ${process.arch}`)
+  lines.push(`- **OS**: ${process.platform === 'darwin' ? 'macOS' : process.platform === 'linux' ? 'Linux' : 'Windows'}`)
+  lines.push(`- **Provider**: ${ctx.providerId}`)
+  lines.push(`- **Model**: ${ctx.modelId}`)
+  lines.push('')
+
+  // ── SIS errors ──
+  try {
+    const db = engine.getErrorSignatureDB?.()
+    if (db) {
+      const active = db.getActive()
+      if (active.length > 0) {
+        lines.push('### Active Error Signatures', '')
+        for (const sig of active.slice(0, 10)) {
+          lines.push(`- \`${sig.id}\`: ${sig.pattern} (${sig.category}, ${sig.occurrences}x, ${(sig.successRate * 100).toFixed(0)}% success)`)
+        }
+        lines.push('')
+      }
+    }
+  } catch {
+    // SIS unavailable
+  }
+
+  // ── Hook health ──
+  try {
+    const hookEngine = engine.getHookEngine?.()
+    if (hookEngine) {
+      const health = hookEngine.getHookHealth()
+      const disabled = health.filter((h) => h.health.disabled)
+      if (disabled.length > 0) {
+        lines.push('### Disabled Hooks', '')
+        for (const entry of disabled) {
+          lines.push(`- \`${entry.key}\`: ${entry.health.failures} failures, disabled at ${new Date(entry.health.disabledAt).toISOString()}`)
+        }
+        lines.push('')
+      }
+    }
+  } catch {
+    // Hook health unavailable
+  }
+
+  // ── Recent dream log ──
+  try {
+    const dreamEngine = engine.getDreamEngine?.()
+    if (dreamEngine) {
+      const history = dreamEngine.getDreamHistory()
+      if (history.length > 0) {
+        const last = history[0]!
+        lines.push('### Last Auto-Dream', '')
+        lines.push(`- **Ran at**: ${last.timestamp}`)
+        lines.push(`- **Actions**: ${last.actions.length} (${last.actions.filter((a: { autoApplied: boolean }) => a.autoApplied).length} applied)`)
+        lines.push('')
+      }
+    }
+  } catch {
+    // Dream engine unavailable
+  }
+
+  // ── Steps to reproduce (template) ──
+  lines.push('### Steps to Reproduce', '')
+  lines.push('1. ')
+  lines.push('2. ')
+  lines.push('3. ')
+  lines.push('')
+  lines.push('### Expected Behavior', '')
+  lines.push('')
+  lines.push('### Actual Behavior', '')
+  lines.push('')
+  lines.push('---')
+  lines.push(`🤖 Generated with Mipham Code v${ctx.version}`)
+
+  return { content: lines.join('\n'), copyContent: lines.join('\n') }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Feedback
+// ═══════════════════════════════════════════════════════════════
+// Changelog
+// ═══════════════════════════════════════════════════════════════
+
+const changelogCmd: CommandHandler = async (ctx) => {
+  const t = resolveT(ctx)
+  const lines: string[] = ['## 📋 Changelog', '']
+
+  try {
+    const { execSync } = await import('node:child_process')
+    const tags = execSync('git tag --sort=-creatordate', { encoding: 'utf-8', timeout: 5000 })
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .slice(0, 15)
+
+    if (tags.length === 0) {
+      lines.push('No version tags found.')
+      return { content: lines.join('\n') }
+    }
+
+    lines.push(`Current: **v${ctx.version}**`, '')
+
+    for (let i = 0; i < tags.length; i++) {
+      const tag = tags[i]!
+      const nextTag = tags[i + 1]
+      try {
+        const range = nextTag ? `${nextTag}..${tag}` : tag
+        const log = execSync(
+          `git log --oneline --no-merges ${range} --format="%s" 2>/dev/null | head -8`,
+          { encoding: 'utf-8', timeout: 5000 },
+        )
+          .trim()
+          .split('\n')
+          .filter(Boolean)
+
+        const isCurrent = tag === `v${ctx.version}`
+        lines.push(`### ${tag}${isCurrent ? ' ← current' : ''}`, '')
+        if (log.length > 0) {
+          for (const entry of log) {
+            lines.push(`- ${entry}`)
+          }
+        } else {
+          lines.push('  _(release tag only)_')
+        }
+        lines.push('')
+      } catch {
+        lines.push(`### ${tag}`, '', '  _(details unavailable)_', '')
+      }
+    }
+  } catch {
+    lines.push('Unable to read git history. Make sure you are in the Mipham Code repository.')
+  }
+
+  lines.push('---')
+  lines.push(`Full history: \`git log --oneline\``)
+
+  return { content: lines.join('\n') }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Workflow
 // ═══════════════════════════════════════════════════════════════
 
@@ -2210,25 +2367,57 @@ const statsCmd: CommandHandler = (ctx) => {
   const assistantMsgs = msgs.filter((m) => m.role === 'assistant').length
   const systemMsgs = msgs.filter((m) => m.role === 'system').length
 
-  return {
-    content: [
-      t('commands.stats.title'),
-      '',
-      t('commands.stats.messages', {
-        total: String(msgs.length),
-        user: String(userMsgs),
-        assistant: String(assistantMsgs),
-        system: String(systemMsgs),
-      }),
-      t('commands.stats.tokens', { tokens: tokens.toLocaleString() }),
-      t('commands.stats.tools', { count: String(tools.size) }),
-      t('commands.stats.provider', { provider: ctx.providerId }),
-      t('commands.stats.model', { model: ctx.modelId }),
-      t('commands.stats.permission', { permission: ctx.config.permission }),
-      '',
-      t('commands.stats.usage', { pct: ((tokens / 200_000) * 100).toFixed(1) }),
-    ].join('\n'),
-  }
+  const base = [
+    t('commands.stats.title'),
+    '',
+    t('commands.stats.messages', {
+      total: String(msgs.length),
+      user: String(userMsgs),
+      assistant: String(assistantMsgs),
+      system: String(systemMsgs),
+    }),
+    t('commands.stats.tokens', { tokens: tokens.toLocaleString() }),
+    t('commands.stats.tools', { count: String(tools.size) }),
+    t('commands.stats.provider', { provider: ctx.providerId }),
+    t('commands.stats.model', { model: ctx.modelId }),
+    t('commands.stats.permission', { permission: ctx.config.permission }),
+    '',
+    t('commands.stats.usage', { pct: ((tokens / 200_000) * 100).toFixed(1) }),
+  ]
+
+  // ── CRSI & SIS extensions ──
+  const engine = ctx.engine
+  const extras: string[] = []
+
+  try {
+    const db = engine.getErrorSignatureDB?.()
+    if (db) {
+      const s = db.getStats()
+      if (s.total > 0) {
+        extras.push('', '── SIS Self-Immune ──', `Signatures: ${s.total} total, ${s.active} active | Success rate: ${(s.avgSuccessRate * 100).toFixed(0)}%`)
+      }
+    }
+  } catch { /* SIS not initialized */ }
+
+  try {
+    const autoMemory = engine.getAutoMemory?.()
+    if (autoMemory) {
+      const count = autoMemory.sessionReflectionCount ?? 0
+      if (count > 0) extras.push(`CRSI Reflections: ${count} turn(s) analyzed`)
+    }
+  } catch { /* CRSI not initialized */ }
+
+  try {
+    const meta = engine.getMetaRuleEngine?.()
+    if (meta) {
+      const analysis = meta.analyze()
+      if (analysis.systemHealth) {
+        extras.push(`System Health: ${analysis.systemHealth.score}/100 — ${analysis.systemHealth.assessment}`)
+      }
+    }
+  } catch { /* Meta not initialized */ }
+
+  return { content: [...base, ...extras].join('\n') }
 }
 
 const summaryCmd: CommandHandler = (ctx) => {
@@ -3220,31 +3409,57 @@ To switch providers without clearing keys, use /switch <provider> <model>.`,
 // Phase 4 — Feedback
 // ═══════════════════════════════════════════════════════════════
 
-const feedbackCmd: CommandHandler = (ctx, args) => {
+const feedbackCmd: CommandHandler = async (ctx, args) => {
   const message = args.join(' ').trim()
 
   const lines: string[] = ['── Feedback ──', '']
 
+  // If a message was provided, save it to ~/.mipham/feedback/
   if (message) {
-    lines.push('Your feedback:')
-    lines.push('')
-    lines.push('  """')
-    for (const line of message.split('\n')) {
-      lines.push('  ' + line)
+    try {
+      const { writeFileSync, mkdirSync, existsSync } = await import('node:fs')
+      const { join } = await import('node:path')
+      const { homedir } = await import('node:os')
+
+      const dir = join(homedir(), '.mipham', 'feedback')
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+
+      const ts = new Date().toISOString().replace(/[:.]/g, '-')
+      const file = join(dir, `feedback-${ts}.md`)
+      const content = [
+        '---',
+        `timestamp: ${new Date().toISOString()}`,
+        `version: ${ctx.version}`,
+        `session: ${ctx.sessionId}`,
+        `provider: ${ctx.providerId}`,
+        `model: ${ctx.modelId}`,
+        '---',
+        '',
+        message,
+      ].join('\n')
+      writeFileSync(file, content, 'utf-8')
+
+      lines.push('Your feedback:')
+      lines.push('')
+      lines.push('  """')
+      for (const line of message.split('\n')) {
+        lines.push('  ' + line)
+      }
+      lines.push('  """')
+      lines.push('')
+      lines.push(`✅ Saved to \`${file}\``)
+      lines.push('')
+    } catch (err) {
+      lines.push(`⚠️ Save failed: ${String(err)}`)
+      lines.push('')
     }
-    lines.push('  """')
-    lines.push('')
-    lines.push('── Preview Complete ──')
-    lines.push('')
-    lines.push('Copy the above and submit via one of the channels below.')
-    lines.push('')
   }
 
   lines.push('── Feedback Channels ──')
   lines.push('')
   lines.push('  🐛 Bug Reports')
   lines.push('     GitHub Issues: https://github.com/One-Mipham/mipham-code/issues')
-  lines.push('     Template:      Bug Report (include version + reproduction steps)')
+  lines.push('     Or run `/bug-report` to auto-generate a diagnostic report')
   lines.push('')
   lines.push('  💡 Feature Requests')
   lines.push('     GitHub Issues: https://github.com/One-Mipham/mipham-code/issues')
@@ -3626,6 +3841,8 @@ const commandsListCmd: CommandHandler = () => {
     '/export': 'Session & Identity',
     '/doctor': 'Session & Identity',
     '/dream': 'Session & Identity',
+    '/bug-report': 'Session & Identity',
+    '/changelog': 'Session & Identity',
     '/resume': 'Session & Identity',
     '/resume last': 'Session & Identity',
     '/resume delete': 'Session & Identity',
@@ -3822,6 +4039,8 @@ registry.set('/sis stats', sisStatsCmd)
 registry.set('/sis clear', sisClearCmd)
 registry.set('/sis cleanup', sisCleanupCmd)
 registry.set('/dream', dreamCmd)
+registry.set('/bug-report', bugReportCmd)
+registry.set('/changelog', changelogCmd)
 
 // Workflow
 registry.set('/plan', planCmd)
@@ -3943,6 +4162,8 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/export': 'Export conversation to file',
   '/doctor': 'System diagnostics',
   '/dream': 'Background memory consolidation',
+  '/bug-report': 'Generate diagnostic report for GitHub Issues',
+  '/changelog': 'Recent version history',
   '/resume': 'List saved sessions',
   '/resume last': 'Restore the most recent saved session',
   '/resume delete': 'Delete a saved session',
