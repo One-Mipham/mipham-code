@@ -124,8 +124,13 @@ export class ContextManager {
     return this.estimatedTokens > this.config.maxTokens * this.config.compactionThreshold
   }
 
-  async compact(heading: string): Promise<void> {
-    if (this.messages.length <= 30) return
+  async compact(heading: string): Promise<{ before: number; after: number }> {
+    const beforeMsgs = this.messages.length
+    const beforeTokens = this.estimatedTokens
+
+    if (this.messages.length <= 30) {
+      return { before: beforeTokens, after: beforeTokens }
+    }
 
     const keep = 20
     const toDrop = this.messages.slice(0, -keep)
@@ -155,6 +160,8 @@ export class ContextManager {
         typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
       )
     }
+
+    return { before: beforeTokens, after: this.estimatedTokens }
   }
 
   getEstimatedTokens(): number {
@@ -266,11 +273,11 @@ export class ContextManager {
    */
   async on413Error(): Promise<boolean> {
     const result = await emergencyDrain(this)
-    if (result) {
+    if (result.recovered) {
       this.compactionStats.drainCount++
       this.compactionStats.lastCompaction = new Date()
     }
-    return result
+    return result.recovered
   }
 
   // ── Forced compaction (e.g. /compact command) ──

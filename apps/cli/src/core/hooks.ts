@@ -6,6 +6,29 @@ import type {
   ToolResult,
 } from '../shared/index.ts'
 
+// ── Hook resilience types ──
+
+interface HookHealth {
+  /** Consecutive failure count */
+  failures: number
+  /** Timestamp of last failure (ms since epoch) */
+  lastFailureTime: number
+  /** Whether the hook is currently disabled due to repeated failures */
+  disabled: boolean
+  /** Timestamp when disabled (ms since epoch) */
+  disabledAt: number
+  /** Total failure count (lifetime) */
+  totalFailures: number
+}
+
+/** Max consecutive failures before auto-disabling a hook */
+const MAX_CONSECUTIVE_FAILURES = 5
+
+/** Cooldown period in ms before a disabled hook is re-tried (5 minutes) */
+const COOLDOWN_MS = 5 * 60 * 1000
+
+// ── Helpers ──
+
 /**
  * Merge two permission decisions, keeping the more restrictive one.
  * Priority: deny > defer > ask > allow
@@ -22,6 +45,8 @@ export function mergePermissionDecision(
 
 export class HookEngine {
   private hooks: HookDefinition[] = []
+  /** Health tracking per hook key (event[:toolName]) */
+  private health = new Map<string, HookHealth>()
 
   register(hook: HookDefinition): void {
     this.hooks.push(hook)
@@ -71,31 +96,26 @@ export class HookEngine {
 
   // ── NEW event executors ──
 
-  /** Stop hook: fires when AI completes a turn. Can block to force continuation. */
   async executeStop(sessionId: string): Promise<HookResult> {
     const ctx: HookContext = { event: 'Stop', sessionId }
     return this.runHooks('Stop', undefined, ctx)
   }
 
-  /** UserPromptSubmit: fires when user submits input. Can block malicious input. */
   async executeUserPromptSubmit(prompt: string, sessionId: string): Promise<HookResult> {
     const ctx: HookContext = { event: 'UserPromptSubmit', sessionId, userPrompt: prompt }
     return this.runHooks('UserPromptSubmit', undefined, ctx)
   }
 
-  /** PreCompact: fires before context compaction. */
   async executePreCompact(sessionId: string): Promise<HookResult> {
     const ctx: HookContext = { event: 'PreCompact', sessionId }
     return this.runHooks('PreCompact', undefined, ctx)
   }
 
-  /** PostCompact: fires after context compaction. Can inject additional context. */
   async executePostCompact(sessionId: string): Promise<HookResult> {
     const ctx: HookContext = { event: 'PostCompact', sessionId }
     return this.runHooks('PostCompact', undefined, ctx)
   }
 
-  /** ConfigChange: fires when configuration changes. */
   async executeConfigChange(key: string, value: unknown, sessionId: string): Promise<HookResult> {
     const ctx: HookContext = {
       event: 'ConfigChange',
@@ -106,7 +126,6 @@ export class HookEngine {
     return this.runHooks('ConfigChange', undefined, ctx)
   }
 
-  /** SubagentStart: fires when a sub-agent begins execution. */
   async executeSubagentStart(
     agentType: string,
     description: string,
@@ -120,7 +139,6 @@ export class HookEngine {
     return this.runHooks('SubagentStart', undefined, ctx)
   }
 
-  /** SubagentStop: fires when a sub-agent completes (success or failure). */
   async executeSubagentStop(
     agentType: string,
     description: string,
@@ -137,7 +155,6 @@ export class HookEngine {
     return this.runHooks('SubagentStop', undefined, ctx)
   }
 
-  /** PostToolUseFailure: fires when a tool call fails. */
   async executePostToolUseFailure(
     toolName: string,
     toolInput: Record<string, unknown>,
@@ -154,7 +171,6 @@ export class HookEngine {
     return this.runHooks('PostToolUseFailure', toolName, ctx)
   }
 
-  /** PreInference: fires before every model API call for DLP inspection. */
   async executePreInference(
     messages: Array<{ role: string; content: string }>,
     toolCalls: Array<{
@@ -177,6 +193,79 @@ export class HookEngine {
     return this.runHooks('PreInference', undefined, ctx)
   }
 
+  // ── Health & Resilience ──
+
+  /** Get a hook health key for tracking. */
+  private healthKey(hook: HookDefinition): string {
+    return hook.toolName ? `${hook.event}:${hook.toolName}` : hook.event
+  }
+
+  /** Check if a hook should be skipped due to repeated failures. */
+  private shouldSkip(key: string): boolean {
+    const h = this.health.get(key)
+    if (!h) return false
+
+    // If disabled, check cooldown
+    if (h.disabled) {
+      const elapsed = Date.now() - h.disabledAt
+      if (elapsed < COOLDOWN_MS) {
+        return true // still in cooldown
+      }
+      // Cooldown expired — re-enable for a trial
+      h.disabled = false
+      h.failures = 0
+      process.stderr.write(`🔄 Hook "${key}" cooldown expired — re-enabled for trial.\n`)
+      return false
+    }
+
+    return false
+  }
+
+  /** Record a hook success — resets failure counter. */
+  private recordSuccess(key: string): void {
+    const h = this.health.get(key)
+    if (h) {
+      h.failures = 0
+      h.disabled = false
+    }
+  }
+
+  /** Record a hook failure — may trigger auto-disable. */
+  private recordFailure(key: string): void {
+    let h = this.health.get(key)
+    if (!h) {
+      h = { failures: 0, lastFailureTime: 0, disabled: false, disabledAt: 0, totalFailures: 0 }
+      this.health.set(key, h)
+    }
+
+    h.failures++
+    h.totalFailures++
+    h.lastFailureTime = Date.now()
+
+    if (h.failures >= MAX_CONSECUTIVE_FAILURES && !h.disabled) {
+      h.disabled = true
+      h.disabledAt = Date.now()
+      process.stderr.write(
+        `⚠️  Hook "${key}" failed ${MAX_CONSECUTIVE_FAILURES} consecutive times — auto-disabled for ${COOLDOWN_MS / 60_000} minutes.\n` +
+          `   Use /hooks enable "${key}" to re-enable manually.\n`,
+      )
+    }
+  }
+
+  /** Get the health status of all hooks. */
+  getHookHealth(): Array<{ key: string; health: HookHealth }> {
+    return Array.from(this.health.entries()).map(([key, health]) => ({ key, health }))
+  }
+
+  /** Manually re-enable a disabled hook. */
+  reEnableHook(key: string): boolean {
+    const h = this.health.get(key)
+    if (!h || !h.disabled) return false
+    h.disabled = false
+    h.failures = 0
+    return true
+  }
+
   // ── Core execution ──
 
   private async runHooks(
@@ -191,8 +280,21 @@ export class HookEngine {
     const result: HookResult = { allowed: true }
 
     for (const hook of matching) {
+      const key = this.healthKey(hook)
+
+      // ── Resilience: skip disabled hooks ──
+      if (this.shouldSkip(key)) {
+        result.additionalContext = result.additionalContext
+          ? result.additionalContext + `\n[Hook "${key}" skipped — temporarily disabled after repeated failures]`
+          : `[Hook "${key}" skipped — temporarily disabled after repeated failures]`
+        continue
+      }
+
       try {
         const hookResult = await hook.handler(ctx)
+
+        // Record success
+        this.recordSuccess(key)
 
         // Block on first deny — stops further hook execution
         if (!hookResult.allowed) {
@@ -233,6 +335,8 @@ export class HookEngine {
           result.updatedOutput = hookResult.updatedOutput
         }
       } catch {
+        // Record failure — may trigger auto-disable
+        this.recordFailure(key)
         // Hook failures do not block execution
       }
     }

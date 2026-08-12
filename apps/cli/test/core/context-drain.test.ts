@@ -20,9 +20,9 @@ describe('emergencyDrain', () => {
     }
 
     const initialCount = context.getMessageCount()
-    const recovered = await emergencyDrain(context)
+    const result = await emergencyDrain(context)
 
-    expect(recovered).toBe(true)
+    expect(result.recovered).toBe(true)
     expect(context.getMessageCount()).toBeLessThan(initialCount)
     // Should be roughly half, plus system prompt preserved
     expect(context.getSystemPrompt()).toBe('system')

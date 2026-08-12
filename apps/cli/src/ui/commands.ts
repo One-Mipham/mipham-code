@@ -269,11 +269,25 @@ const exitCmd: CommandHandler = () => ({ content: '', exit: true })
 const compactCmd: CommandHandler = async (ctx) => {
   const t = resolveT(ctx)
   const context = ctx.engine.getContext()
-  const before = context.getEstimatedTokens()
-  await context.compact('user requested compaction')
-  const after = context.getEstimatedTokens()
+  const msgsBefore = context.getMessageCount()
+  const tokensBefore = context.getEstimatedTokens()
+
+  // Show start progress
+  process.stderr.write(`🔄 Compacting: ${msgsBefore} messages, ${tokensBefore.toLocaleString()} tokens...\n`)
+
+  const startTime = Date.now()
+  const result = await context.compact('user requested compaction')
+  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+  const msgsAfter = context.getMessageCount()
+  const saved = result.before > 0 ? ((1 - result.after / result.before) * 100).toFixed(0) : '0'
+
   return {
-    content: `${t('commands.compact.confirmed')}\n${t('commands.compact.tokens', { before: before.toLocaleString(), after: after.toLocaleString(), saved: ((1 - after / before) * 100).toFixed(0) })}`,
+    content: [
+      t('commands.compact.confirmed'),
+      `Messages: ${msgsBefore} → ${msgsAfter} | Tokens: ${result.before.toLocaleString()} → ${result.after.toLocaleString()} (${saved}% saved)`,
+      `Duration: ${elapsed}s`,
+      msgsBefore > msgsAfter ? `💡 Tip: Use /compact early to prevent automatic compaction delays.` : '',
+    ].filter(Boolean).join('\n'),
   }
 }
 
@@ -2256,6 +2270,46 @@ const hooksCmd: CommandHandler = async (ctx) => {
   }
 }
 
+const hooksHealthCmd: CommandHandler = (ctx) => {
+  const hookEngine = ctx.engine.getHookEngine?.()
+  if (!hookEngine) {
+    return { content: 'Hook engine not available.' }
+  }
+
+  const health = hookEngine.getHookHealth()
+  if (health.length === 0) {
+    return { content: '✅ All hooks are healthy — no failures recorded.' }
+  }
+
+  const lines: string[] = ['## 🪝 Hook Health Status', '']
+  for (const { key, health: h } of health) {
+    const status = h.disabled ? '🔴 DISABLED' : h.failures > 0 ? '🟡 DEGRADED' : '🟢 HEALTHY'
+    lines.push(`### ${status} \`${key}\``)
+    lines.push(`| 连续失败 | ${h.failures} (threshold: 5) |`)
+    lines.push(`| 总失败次数 | ${h.totalFailures} |`)
+    if (h.disabled) {
+      const remaining = Math.max(0, 5 - (Date.now() - h.disabledAt) / 60_000)
+      lines.push(`| 自动恢复 | ${remaining.toFixed(0)} min remaining |`)
+      lines.push('')
+      lines.push(`Use \`/hooks enable "${key}"\` to re-enable manually.`)
+    }
+    lines.push('')
+  }
+  return { content: lines.join('\n') }
+}
+
+const hooksEnableCmd: CommandHandler = (ctx, args) => {
+  const hookEngine = ctx.engine.getHookEngine?.()
+  if (!hookEngine) return { content: 'Hook engine not available.' }
+  const keyArg = args[0]?.trim().replace(/"/g, '')
+  if (!keyArg) {
+    return { content: 'Usage: /hooks enable "<hook-key>"\n\nUse /hooks health to see hook keys.' }
+  }
+  return hookEngine.reEnableHook(keyArg)
+    ? { content: `✅ Hook "${keyArg}" re-enabled.` }
+    : { content: `Hook "${keyArg}" not found or not disabled. Use /hooks health to check status.` }
+}
+
 const batchCmd: CommandHandler = async (ctx) => {
   const t = resolveT(ctx)
   return { content: t('commands.batch.title') }
@@ -3776,6 +3830,8 @@ registry.set('/stats', statsCmd)
 registry.set('/summary', summaryCmd)
 registry.set('/cd', cdCmd)
 registry.set('/hooks', hooksCmd)
+registry.set('/hooks health', hooksHealthCmd)
+registry.set('/hooks enable', hooksEnableCmd)
 registry.set('/batch', batchCmd)
 
 // ═══════════════════════════════════════════════════════════════
@@ -3909,6 +3965,8 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/summary': 'Generate session summary',
   '/cd': 'Change session working directory',
   '/hooks': 'Manage lifecycle hook scripts',
+  '/hooks health': 'Check hook health — see failures, disabled hooks, recovery status',
+  '/hooks enable': 'Manually re-enable a hook that was auto-disabled after repeated failures',
   '/batch': 'Apply changes across multiple files',
 }
 

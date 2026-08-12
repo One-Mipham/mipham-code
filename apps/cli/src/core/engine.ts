@@ -160,6 +160,11 @@ export class QueryEngine {
     this.hookEngine = hooks
   }
 
+  /** Get the registered hook engine (for health inspection). */
+  getHookEngine(): HookEngine | undefined {
+    return this.hookEngine
+  }
+
   /** Register the artifact server for tool context. */
   setArtifactServer(server: ArtifactServer): void {
     this.artifactServer = server
