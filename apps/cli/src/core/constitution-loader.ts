@@ -13,7 +13,7 @@
  * Format: YAML with schema validation
  */
 
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 
@@ -154,7 +154,6 @@ export class ConstitutionLoader {
     // Write the default constitution to disk for visibility
     this.cached = DEFAULT_CONSTITUTION
     try {
-      const { writeFileSync, mkdirSync } = require('node:fs')
       const dir = join(homedir(), '.mipham')
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
       writeFileSync(this.path, this.serializeToYaml(DEFAULT_CONSTITUTION), 'utf-8')
