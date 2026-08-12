@@ -12,13 +12,27 @@ import { tmpdir } from 'node:os'
 import { DreamEngine } from '../../src/core/dream-engine.js'
 
 function writeMem(dir: string, name: string, type: string, body: string): void {
-  const fm = ['---', `name: ${name}`, 'description: test', 'metadata:', `  type: ${type}`, '---'].join('\n')
+  const fm = [
+    '---',
+    `name: ${name}`,
+    'description: test',
+    'metadata:',
+    `  type: ${type}`,
+    '---',
+  ].join('\n')
   writeFileSync(join(dir, `${name}.md`), `${fm}\n${body}`, 'utf-8')
 }
 
 function writeMemAged(dir: string, name: string, body: string, ageDays: number): void {
   const past = new Date(Date.now() - ageDays * 86_400_000)
-  const fm = ['---', `name: ${name}`, 'description: test', 'metadata:', '  type: feedback', '---'].join('\n')
+  const fm = [
+    '---',
+    `name: ${name}`,
+    'description: test',
+    'metadata:',
+    '  type: feedback',
+    '---',
+  ].join('\n')
   const path = join(dir, `${name}.md`)
   writeFileSync(path, `${fm}\n${body}`, 'utf-8')
   const { utimesSync } = require('node:fs')
@@ -39,7 +53,11 @@ describe('DreamEngine', () => {
   })
 
   afterEach(() => {
-    try { rmSync(memDir, { recursive: true, force: true }) } catch { /* */ }
+    try {
+      rmSync(memDir, { recursive: true, force: true })
+    } catch {
+      /* */
+    }
   })
 
   // ── Empty / edge cases ──
@@ -81,8 +99,12 @@ describe('DreamEngine', () => {
       const report = engine.dream({ aggressive: true })
       const dedup = report.actions.filter((a) => a.type === 'dedup' && a.autoApplied)
       expect(dedup.length).toBeGreaterThanOrEqual(1)
-      expect(existsSync(join(memDir, 'fact-a.md')) || existsSync(join(memDir, 'fact-b.md'))).toBe(true)
-      expect(existsSync(join(memDir, 'fact-a.md')) && existsSync(join(memDir, 'fact-b.md'))).toBe(false)
+      expect(existsSync(join(memDir, 'fact-a.md')) || existsSync(join(memDir, 'fact-b.md'))).toBe(
+        true,
+      )
+      expect(existsSync(join(memDir, 'fact-a.md')) && existsSync(join(memDir, 'fact-b.md'))).toBe(
+        false,
+      )
     })
 
     it('does NOT flag distinct entries as duplicates', () => {
@@ -119,8 +141,18 @@ describe('DreamEngine', () => {
   describe('Phase 3: Merge Related', () => {
     it('detects related entries of same type', () => {
       // Names similar, same type, content has moderate overlap (≥ 0.3) but below dedup threshold (0.65)
-      writeMem(memDir, 'sis design', 'project', 'SIS is a self immune system with three defense lines for safe tool execution.')
-      writeMem(memDir, 'sis design impl', 'project', 'SIS self immune system uses defense lines to block unsafe tool commands.')
+      writeMem(
+        memDir,
+        'sis design',
+        'project',
+        'SIS is a self immune system with three defense lines for safe tool execution.',
+      )
+      writeMem(
+        memDir,
+        'sis design impl',
+        'project',
+        'SIS self immune system uses defense lines to block unsafe tool commands.',
+      )
 
       const report = engine.dream()
       expect(report.phases.merged).toBeGreaterThanOrEqual(1)
@@ -128,8 +160,18 @@ describe('DreamEngine', () => {
 
     it('auto-merges with aggressive flag', () => {
       // Names overlap enough (≥0.5), same type, content moderately similar (≥0.3), below dedup (0.65)
-      writeMem(memDir, 'crsi pattern one', 'project', 'CRSI analyzes tool error patterns and automatically generates correction rules.')
-      writeMem(memDir, 'crsi pattern two', 'project', 'CRSI generates new auto correction rules from error pattern analysis results.')
+      writeMem(
+        memDir,
+        'crsi pattern one',
+        'project',
+        'CRSI analyzes tool error patterns and automatically generates correction rules.',
+      )
+      writeMem(
+        memDir,
+        'crsi pattern two',
+        'project',
+        'CRSI generates new auto correction rules from error pattern analysis results.',
+      )
 
       const report = engine.dream({ aggressive: true })
       const merged = report.actions.filter((a) => a.type === 'merge' && a.autoApplied)
@@ -149,7 +191,12 @@ describe('DreamEngine', () => {
 
   describe('Phase 4: Solidify Vague', () => {
     it('flags entries with vague qualifiers', () => {
-      writeMem(memDir, 'maybe-fact', 'feedback', 'The user maybe prefers using Bun over Node.js, perhaps because of speed.')
+      writeMem(
+        memDir,
+        'maybe-fact',
+        'feedback',
+        'The user maybe prefers using Bun over Node.js, perhaps because of speed.',
+      )
 
       const report = engine.dream()
       expect(report.phases.solidified).toBeGreaterThanOrEqual(1)
@@ -159,14 +206,24 @@ describe('DreamEngine', () => {
     })
 
     it('does NOT flag definitive statements', () => {
-      writeMem(memDir, 'definite-fact', 'feedback', 'The user uses Bun as the primary runtime for all Mipham projects.')
+      writeMem(
+        memDir,
+        'definite-fact',
+        'feedback',
+        'The user uses Bun as the primary runtime for all Mipham projects.',
+      )
 
       const report = engine.dream()
       expect(report.phases.solidified).toBe(0)
     })
 
     it('detects "seems" and "probably" as vague', () => {
-      writeMem(memDir, 'soft-fact', 'feedback', 'It seems like the build is usually faster with caching enabled.')
+      writeMem(
+        memDir,
+        'soft-fact',
+        'feedback',
+        'It seems like the build is usually faster with caching enabled.',
+      )
 
       const report = engine.dream()
       expect(report.phases.solidified).toBeGreaterThanOrEqual(1)
@@ -202,9 +259,24 @@ describe('DreamEngine', () => {
 
   describe('full dream pipeline', () => {
     it('processes a realistic memory set end-to-end', () => {
-      writeMem(memDir, 'happy user feedback', 'feedback', 'User is happy with TypeScript strict mode.')
-      writeMem(memDir, 'happy user feedback dup', 'feedback', 'User is happy with TypeScript strict mode and prefers it.')
-      writeMem(memDir, 'uncertain fact', 'feedback', 'Maybe the user might switch to Rust eventually.')
+      writeMem(
+        memDir,
+        'happy user feedback',
+        'feedback',
+        'User is happy with TypeScript strict mode.',
+      )
+      writeMem(
+        memDir,
+        'happy user feedback dup',
+        'feedback',
+        'User is happy with TypeScript strict mode and prefers it.',
+      )
+      writeMem(
+        memDir,
+        'uncertain fact',
+        'feedback',
+        'Maybe the user might switch to Rust eventually.',
+      )
       writeMemAged(memDir, 'old setup', 'Use Node 18 for this project.', 45)
       writeMem(memDir, 'deploy how to', 'project', 'Deploy using rsync to the production server.')
       writeMem(memDir, 'deploy how not', 'project', 'Do not use rsync use Docker instead.')

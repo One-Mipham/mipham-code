@@ -250,9 +250,7 @@ export class EmotionDetector {
     // Normalize: first match passes at weight ≥ 0.5; additional matches increase confidence
     // with diminishing returns (matchCount-1 so single match = no dampening)
     const score =
-      matchCount === 0
-        ? 0
-        : Math.min(1.0, totalWeight / (1 + Math.max(0, matchCount - 1) * 0.5))
+      matchCount === 0 ? 0 : Math.min(1.0, totalWeight / (1 + Math.max(0, matchCount - 1) * 0.5))
 
     return { score, triggers }
   }
