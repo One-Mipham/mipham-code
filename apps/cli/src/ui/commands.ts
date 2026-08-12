@@ -799,7 +799,9 @@ const crsiMetaCmd: CommandHandler = async (ctx) => {
     }
   } else {
     lines.push('### 🧬 元规则', '')
-    lines.push('暂无元规则生成。当系统积累足够的错误签名和规则数据后，元规则引擎将自动发现跨规则模式。')
+    lines.push(
+      '暂无元规则生成。当系统积累足够的错误签名和规则数据后，元规则引擎将自动发现跨规则模式。',
+    )
     lines.push('')
   }
 

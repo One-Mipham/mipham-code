@@ -23,10 +23,7 @@ import type { EffectivenessTracker, RuleEffectiveness } from '../agent/effective
 // ── Types ──
 
 export type MetaRuleCategory =
-  | 'threshold-tuning'
-  | 'strategy-optimization'
-  | 'cross-rule-pattern'
-  | 'category-emergence'
+  'threshold-tuning' | 'strategy-optimization' | 'cross-rule-pattern' | 'category-emergence'
 
 export type MetaRuleConfidence = 'high' | 'medium' | 'low'
 
@@ -246,7 +243,10 @@ export class MetaRuleEngine {
     if (sigs.length < MIN_SAMPLE_SIZE) return rules
 
     // Group by category + fixStrategy
-    const byCatStrategy = new Map<string, { successRates: number[]; occurrences: number[]; ids: string[] }>()
+    const byCatStrategy = new Map<
+      string,
+      { successRates: number[]; occurrences: number[]; ids: string[] }
+    >()
 
     for (const sig of sigs) {
       if (sig.occurrences < 3) continue // too new to evaluate
@@ -342,13 +342,21 @@ export class MetaRuleEngine {
     const toolEntries = [...byTool.entries()].sort((a, b) => b[1].length - a[1].length)
     const dominant = toolEntries[0]
     const runnerUp = toolEntries[1]
-    if (dominant && runnerUp && toolEntries.length >= 2 && dominant[1].length > runnerUp[1].length * 2) {
+    if (
+      dominant &&
+      runnerUp &&
+      toolEntries.length >= 2 &&
+      dominant[1].length > runnerUp[1].length * 2
+    ) {
       rules.push({
         id: `meta-cross-tool-${Date.now().toString(36)}`,
         category: 'cross-rule-pattern',
         title: `${dominant[0]} 工具规则最成熟`,
         description: `${dominant[0]} 工具有 ${dominant[1].length} 个高成功率签名（≥80%），远超第二名 ${runnerUp[0]}（${runnerUp[1].length} 个）。SIS 对 ${dominant[0]} 类错误的免疫力最强。`,
-        recommendation: `优先在其他工具（${toolEntries.slice(1).map((e) => e[0]).join(', ')}）上扩展签名覆盖，追赶 ${dominant[0]} 的成熟度`,
+        recommendation: `优先在其他工具（${toolEntries
+          .slice(1)
+          .map((e) => e[0])
+          .join(', ')}）上扩展签名覆盖，追赶 ${dominant[0]} 的成熟度`,
         autoApplicable: false,
         evidence: {
           sampleSize: highSuccess.length,
@@ -392,9 +400,7 @@ export class MetaRuleEngine {
           evidence: {
             sampleSize: count,
             metrics: { count, totalFixActions: fixActions.length },
-            relatedIds: fixActions
-              .filter((s) => s.fixAction.startsWith(bigram))
-              .map((s) => s.id),
+            relatedIds: fixActions.filter((s) => s.fixAction.startsWith(bigram)).map((s) => s.id),
             summary: `${count}/${fixActions.length} 修复动作以 "${bigram}" 开头`,
           },
           confidence: count >= 5 ? 'high' : 'low',
@@ -456,8 +462,7 @@ export class MetaRuleEngine {
       if (data.count >= 3) {
         // Check if these signatures' current categories are mostly 'semantic'
         // (meaning the system couldn't classify them well)
-        const semanticRatio =
-          data.sigs.filter((s) => s.category === 'semantic').length / data.count
+        const semanticRatio = data.sigs.filter((s) => s.category === 'semantic').length / data.count
 
         rules.push({
           id: `meta-emergent-${kw.replace(/\s+/g, '-')}-${Date.now().toString(36)}`,
@@ -513,7 +518,8 @@ export class MetaRuleEngine {
       (s) => s.fixStrategy === 'warn' || s.fixStrategy === 'block',
     ).length
     const fixSigs = sigs.filter(
-      (s) => s.fixStrategy === 'replace' || s.fixStrategy === 'prepend' || s.fixStrategy === 'append',
+      (s) =>
+        s.fixStrategy === 'replace' || s.fixStrategy === 'prepend' || s.fixStrategy === 'append',
     ).length
     let preflightScore = 50
     if (sigs.length > 0) {
@@ -542,8 +548,7 @@ export class MetaRuleEngine {
       if (allEff.length > 0) {
         const avgSuccess =
           allEff.reduce((sum, e) => {
-            const rate =
-              e.appliedCount > 0 ? e.successAfterCount / e.appliedCount : 0
+            const rate = e.appliedCount > 0 ? e.successAfterCount / e.appliedCount : 0
             return sum + rate
           }, 0) / allEff.length
         ruleEffectivenessScore = Math.min(50 + Math.round(avgSuccess * 50), 100)
@@ -564,8 +569,7 @@ export class MetaRuleEngine {
     if (score >= 80) assessment = '🟢 SIS 免疫系统运行良好。错误覆盖率、自动修复率均处于健康水平。'
     else if (score >= 60)
       assessment = '🟡 SIS 免疫系统基本正常。部分组件需要关注，建议按下方推荐优化。'
-    else if (score >= 40)
-      assessment = '🟠 SIS 免疫系统有待加强。错误签名覆盖不足或自动修复率偏低。'
+    else if (score >= 40) assessment = '🟠 SIS 免疫系统有待加强。错误签名覆盖不足或自动修复率偏低。'
     else assessment = '🔴 SIS 免疫系统薄弱。需要大量积累错误签名并提升修复成功率。'
 
     // ── Recommendations ──
