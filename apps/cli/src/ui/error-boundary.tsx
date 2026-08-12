@@ -68,18 +68,14 @@ export class ErrorBoundary extends Component<Props, State> {
           <Text color="red" bold>
             ⚠️ UI Render Error
           </Text>
-          <Text dimColor>
-            {this.state.error?.message || 'Unknown rendering error'}
-          </Text>
+          <Text dimColor>{this.state.error?.message || 'Unknown rendering error'}</Text>
           <Text> </Text>
           <Text dimColor>
-            The terminal interface encountered a rendering issue. Auto-recovery
-            in 5 seconds... Press Enter to attempt immediate recovery.
+            The terminal interface encountered a rendering issue. Auto-recovery in 5 seconds...
+            Press Enter to attempt immediate recovery.
           </Text>
           <Text> </Text>
-          <Text color="yellow">
-            Your session data and conversation history are preserved.
-          </Text>
+          <Text color="yellow">Your session data and conversation history are preserved.</Text>
         </Box>
       )
     }
