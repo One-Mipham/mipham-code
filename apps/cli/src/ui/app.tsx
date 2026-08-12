@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { Box, Text, useInput } from 'ink'
 import TextInput from 'ink-text-input'
+import { ErrorBoundary } from './error-boundary'
 import type { QueryEngine } from '../core/engine'
 import type { RemoteEngine } from '../daemon/remote-engine'
 import type { MiphamConfig } from '../shared/index.ts'
@@ -410,7 +411,17 @@ export function App({
               role: msg.role,
               content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
             }))
-            setMessages((prev) => [...prev, ...restored])
+            if (result.resumeWarning) {
+              // Fix 7: Session isolation — add a visual separator between current session
+              // and restored history to prevent accidental leakage/confusion
+              const separator: ChatMessage = {
+                role: 'assistant' as const,
+                content: '── Restored session history below ──',
+              }
+              setMessages((prev) => [...prev, separator, ...restored])
+            } else {
+              setMessages((prev) => [...prev, ...restored])
+            }
           }
           if (result.copyContent) {
             // Copy to clipboard via pbcopy (macOS) or clip (Windows)
@@ -743,6 +754,7 @@ export function App({
   }
 
   return (
+    <ErrorBoundary>
     <Box flexDirection="column" padding={1} height="100%">
       {/* Workflow progress — auto-detects active workflows, renders nothing when idle */}
       <WorkflowProgress />
@@ -878,5 +890,6 @@ export function App({
         </>
       )}
     </Box>
+    </ErrorBoundary>
   )
 }

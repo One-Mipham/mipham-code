@@ -83,6 +83,8 @@ export interface CommandResult {
   forwardToAI?: string
   /** If set, restored messages to load into the session (used by /resume last). */
   forwardedMessages?: Message[]
+  /** If true, resume into current non-empty session — app should warn before loading */
+  resumeWarning?: boolean
   /** API Key 补录请求：切换前需用户输入 Key */
   needsApiKey?: {
     providerId: string
@@ -2486,6 +2488,7 @@ const resumeLastCmd: CommandHandler = async (ctx) => {
         : t('commands.resume.restored_full_footer', { loaded: String(messages.length) }),
     ].join('\n'),
     forwardedMessages: messages,
+    resumeWarning: true,
   }
 }
 

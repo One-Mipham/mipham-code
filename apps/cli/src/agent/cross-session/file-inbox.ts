@@ -23,12 +23,23 @@ const INBOX_DIR = join(MIPHAM_HOME, 'inbox')
  * Each message file is named: <ISO-timestamp>-<msg-id>.json
  */
 export class FileInboxTransport implements CrossSessionTransport {
+  private initialized = false
+
   private ensureDir(dir: string): void {
     mkdirSync(dir, { recursive: true })
   }
 
+  /** Ensure the inbox root directory exists (call on first use). */
+  private ensureInboxRoot(): void {
+    if (!this.initialized) {
+      this.ensureDir(INBOX_DIR)
+      this.initialized = true
+    }
+  }
+
   async send(from: SessionInfo, toSessionId: string, msg: AgentMessage): Promise<boolean> {
     try {
+      this.ensureInboxRoot()
       const inboxDir = join(INBOX_DIR, toSessionId)
       this.ensureDir(inboxDir)
 
@@ -36,13 +47,17 @@ export class FileInboxTransport implements CrossSessionTransport {
       const filename = `${timestamp}-${msg.id}.json`
       const filePath = join(inboxDir, filename)
 
+      // Serialize with structured sender fields
+      const envelope = {
+        ...msg,
+        senderName: from.id,
+        senderMachine: from.machine,
+        senderSession: from.id,
+      }
+
       // Atomic write: temp file then rename
       const tmpPath = filePath + '.tmp'
-      writeFileSync(
-        tmpPath,
-        JSON.stringify({ ...msg, _fromSession: from.id, _fromMachine: from.machine }, null, 2),
-        'utf-8',
-      )
+      writeFileSync(tmpPath, JSON.stringify(envelope, null, 2), 'utf-8')
       renameSync(tmpPath, filePath)
 
       return true
@@ -52,6 +67,8 @@ export class FileInboxTransport implements CrossSessionTransport {
   }
 
   async poll(sessionId: string): Promise<AgentMessage[]> {
+    // Fix 6: Ensure inbox root exists before checking subdirectory
+    this.ensureInboxRoot()
     const inboxDir = join(INBOX_DIR, sessionId)
     if (!existsSync(inboxDir)) return []
 
@@ -65,21 +82,22 @@ export class FileInboxTransport implements CrossSessionTransport {
         try {
           const raw = readFileSync(join(inboxDir, file), 'utf-8')
           const parsed = JSON.parse(raw) as AgentMessage & {
-            _fromSession?: string
-            _fromMachine?: string
+            senderName?: string
+            senderMachine?: string
+            senderSession?: string
           }
 
-          // Build the message body with cross-session origin prefix
-          const originPrefix = parsed._fromSession
-            ? `[From: ${parsed._fromSession}@${parsed._fromMachine || 'unknown'}]\n\n`
-            : ''
+          // Fix 5: Structured sender display — separate From: line before body
+          const senderName = parsed.senderName || parsed.from || 'unknown'
+          const senderMachine = parsed.senderMachine || ''
+          const originLine = `[From: ${senderName}${senderMachine ? ` @ ${senderMachine}` : ''}]`
 
           messages.push({
             id: parsed.id,
             from: parsed.from,
             to: parsed.to,
             summary: parsed.summary,
-            message: `${originPrefix}${parsed.message}`,
+            message: `${originLine}\n${parsed.message}`,
             timestamp: new Date(parsed.timestamp),
             read: parsed.read,
             type: parsed.type,
