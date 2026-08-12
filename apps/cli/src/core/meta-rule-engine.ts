@@ -18,7 +18,7 @@
  */
 
 import type { ErrorSignatureDB, ErrorSignature } from './error-signature-db.js'
-import type { EffectivenessTracker, RuleEffectiveness } from '../agent/effectiveness-tracker.js'
+import type { EffectivenessTracker } from '../agent/effectiveness-tracker.js'
 
 // ── Types ──
 
@@ -89,18 +89,6 @@ export interface SystemHealth {
 
 /** Minimum data points needed to generate a meta-rule */
 const MIN_SAMPLE_SIZE = 5
-
-/** High-confidence threshold for auto-application */
-const AUTO_APPLY_CONFIDENCE = 0.85
-
-/** Categories ordered by severity for ranking */
-const CATEGORY_SEVERITY: Record<string, number> = {
-  timeout: 3,
-  'tool-params': 3,
-  import: 2,
-  search: 2,
-  semantic: 1,
-}
 
 // ── Engine ──
 
@@ -424,9 +412,6 @@ export class MetaRuleEngine {
     const sigs = this.errorDB?.getActive() || []
     if (sigs.length < 10) return rules
 
-    // Known categories
-    const knownCats = new Set(['timeout', 'tool-params', 'import', 'search', 'semantic'])
-
     // Look for signature clusters that don't clearly fit known categories
     // by analyzing pattern keywords
     const keywords = new Map<string, { count: number; sigs: ErrorSignature[] }>()
@@ -514,9 +499,6 @@ export class MetaRuleEngine {
     }
 
     // ── Preflight Prevention health ──
-    const warnBlockSigs = sigs.filter(
-      (s) => s.fixStrategy === 'warn' || s.fixStrategy === 'block',
-    ).length
     const fixSigs = sigs.filter(
       (s) =>
         s.fixStrategy === 'replace' || s.fixStrategy === 'prepend' || s.fixStrategy === 'append',

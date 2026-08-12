@@ -183,7 +183,7 @@ export class AutoCorrector {
    */
   private extractPattern(error: string): string {
     // Remove dynamic content
-    let cleaned = error
+    const cleaned = error
       .replace(/\/[^\s]+\/[^\s]*/g, '/<path>') // paths
       .replace(/\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}/g, '<timestamp>') // timestamps
       .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<uuid>') // UUIDs
