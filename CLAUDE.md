@@ -28,11 +28,11 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 
 当前 CRSI 工程实现包括三个子系统：
 
-| 子系统 | 组件 | 状态 |
-|--------|------|:--:|
-| 🧠 学习 | PatternAnalyzer + AutoMemoryEngine + ExperienceRuleEngine + EffectivenessTracker | ✅ 2,121 行 |
-| 🛡️ 免疫 (SIS) | ErrorSignatureDB + PreFlightChecker | ✅ P0 完成 |
-| 🔒 安全 | CrsiSandbox（5 阶段受控自修改） | ✅ 551 行 |
+| 子系统        | 组件                                                                             |    状态     |
+| ------------- | -------------------------------------------------------------------------------- | :---------: |
+| 🧠 学习       | PatternAnalyzer + AutoMemoryEngine + ExperienceRuleEngine + EffectivenessTracker | ✅ 2,121 行 |
+| 🛡️ 免疫 (SIS) | ErrorSignatureDB + PreFlightChecker                                              | ✅ P0 完成  |
+| 🔒 安全       | CrsiSandbox（5 阶段受控自修改）                                                  |  ✅ 551 行  |
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health` + `/sis errors|stats|clear`
 测试：1,141 测试（含 26 个 SIS 测试）

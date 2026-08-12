@@ -707,11 +707,14 @@ const crsiHealthCmd: CommandHandler = async (ctx) => {
   lines.push('', '### 🛡️ SIS 自免疫子系统', '')
   if (db) {
     const stats = db.getStats()
-    const healthEmoji = stats.avgSuccessRate >= 0.8 ? '🟢' : stats.avgSuccessRate >= 0.5 ? '🟡' : '🔴'
+    const healthEmoji =
+      stats.avgSuccessRate >= 0.8 ? '🟢' : stats.avgSuccessRate >= 0.5 ? '🟡' : '🔴'
 
     lines.push(`| 指标 | 值 |`)
     lines.push(`|------|----|`)
-    lines.push(`| 免疫记忆 | ${stats.total} 条 (🟢${stats.active} · 🟡${stats.degraded} · ⚫${stats.retired}) |`)
+    lines.push(
+      `| 免疫记忆 | ${stats.total} 条 (🟢${stats.active} · 🟡${stats.degraded} · ⚫${stats.retired}) |`,
+    )
     lines.push(`| 平均成功率 | ${Math.round(stats.avgSuccessRate * 100)}% |`)
     lines.push(`| 总拦截 | ${stats.totalInterceptions} 次 |`)
 
@@ -727,7 +730,14 @@ const crsiHealthCmd: CommandHandler = async (ctx) => {
   const sisScore = db ? (db.getStats().avgSuccessRate >= 0.8 ? 50 : 25) : 0
   const totalScore = crsiScore + sisScore
 
-  const grade = totalScore >= 80 ? '🟢 A — 优秀' : totalScore >= 50 ? '🟡 B — 良好' : totalScore >= 25 ? '🟠 C — 需关注' : '🔴 D — 待初始化'
+  const grade =
+    totalScore >= 80
+      ? '🟢 A — 优秀'
+      : totalScore >= 50
+        ? '🟡 B — 良好'
+        : totalScore >= 25
+          ? '🟠 C — 需关注'
+          : '🔴 D — 待初始化'
 
   lines.push(`| 子系统 | 状态 | 得分 |`)
   lines.push(`|--------|------|------|`)
