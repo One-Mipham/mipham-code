@@ -1161,9 +1161,9 @@ const constitutionCmd: CommandHandler = (ctx, args) => {
 
   lines.push('---')
   lines.push('')
-  lines.push('🔧 `/constitution reload` — 重新加载（修改 constitution.yml 后使用）')
-  lines.push('📝 编辑: `vi ~/.mipham/constitution.yml`')
-  lines.push('🗑️  重置: 删除 `~/.mipham/constitution.yml` 后执行 `/constitution reload`')
+  lines.push('🔧 `/constitution reload` — 重新加载（修改 ai-guardrails.yml 后使用）')
+  lines.push('📝 编辑: `vi ~/.mipham/ai-guardrails.yml`')
+  lines.push('🗑️  重置: 删除 `~/.mipham/ai-guardrails.yml` 后执行 `/constitution reload`')
   lines.push('')
   lines.push(
     '*Inspired by Anthropic Constitutional AI. Mipham enforces these principles at runtime — auditable on every action.*',

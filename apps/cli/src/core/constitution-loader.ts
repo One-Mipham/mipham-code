@@ -9,7 +9,7 @@
  * at runtime by the PreFlightChecker and SIS defense lines — making it auditable
  * on every single action, not just during training.
  *
- * Default location: ~/.mipham/constitution.yml
+ * Default location: ~/.mipham/ai-guardrails.yml
  * Format: YAML with schema validation
  */
 
@@ -128,7 +128,7 @@ export class ConstitutionLoader {
   private cached: MiphamConstitution | null = null
 
   constructor(customPath?: string) {
-    this.path = customPath || join(homedir(), '.mipham', 'constitution.yml')
+    this.path = customPath || join(homedir(), '.mipham', 'ai-guardrails.yml')
   }
 
   /**
@@ -323,7 +323,7 @@ export class ConstitutionLoader {
   /** Serialize a constitution back to YAML for writing to disk. */
   private serializeToYaml(constitution: MiphamConstitution): string {
     const lines: string[] = [
-      `# Mipham Constitution v${constitution.version}`,
+      `# Mipham AI Guardrails v${constitution.version}`,
       '#',
       '# Machine-readable ethical & safety principles enforced at runtime.',
       '# Inspired by Anthropic Constitutional AI.',
