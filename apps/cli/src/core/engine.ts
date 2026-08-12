@@ -22,6 +22,8 @@ import { RulesLoader } from './rules-loader'
 import { ExperienceRuleEngine } from './rule-engine.js'
 import { PatternAnalyzer } from '../agent/pattern-analyzer.js'
 import { EffectivenessTracker } from '../agent/effectiveness-tracker.js'
+import { ErrorSignatureDB } from './error-signature-db.js'
+import { PreFlightChecker } from './preflight-checker.js'
 import { UsageTracker } from './usage-tracker'
 import { buildRequest, sendInferenceCheck, isInferenceHookEnabled } from './inference-hook'
 import { getFileInboxTransport } from '../agent/cross-session/file-inbox'
@@ -47,6 +49,8 @@ export class QueryEngine {
   private _patternAnalyzer?: PatternAnalyzer
   private _effectivenessTracker?: EffectivenessTracker
   private _autoMemory?: AutoMemoryEngine
+  private _errorSignatureDB?: ErrorSignatureDB
+  private _preflightChecker?: PreFlightChecker
   private goal?: string
   private maxGoalLoops = 20
   private lastAssistantContent?: string
@@ -902,6 +906,25 @@ export class QueryEngine {
       }
     }
 
+    // ── SIS PreFlightChecker — known error pattern interception ──
+    const preflight = this.getPreFlightChecker().check(name, effectiveParams)
+    if (preflight.action === 'block') {
+      return {
+        success: false,
+        content: preflight.warning || 'SIS 免疫系统拦截了此操作',
+        error: preflight.warning,
+      }
+    }
+    if (preflight.action === 'fix' && preflight.modifiedParams) {
+      effectiveParams = preflight.modifiedParams
+      if (preflight.warning) {
+        hookWarnings = [...hookWarnings, preflight.warning]
+      }
+    }
+    if (preflight.action === 'warn' && preflight.warning) {
+      hookWarnings = [...hookWarnings, preflight.warning]
+    }
+
     try {
       const result = await tool.execute(effectiveParams, {
         cwd: process.cwd(),
@@ -1033,8 +1056,37 @@ export class QueryEngine {
         this.getRuleEngine() || new ExperienceRuleEngine(),
         this.getEffectivenessTracker(),
       )
+      // Wire SIS error signature DB for cross-session immunity
+      this._autoMemory.setErrorSignatureDB(this.getErrorSignatureDB())
     }
     return this._autoMemory
+  }
+
+  /**
+   * SIS Phase 0: Lazily-initialized ErrorSignatureDB singleton.
+   * Provides persistent storage of known error patterns across sessions.
+   * Public accessor for CLI commands (/sis errors, /sis stats, /sis clear).
+   */
+  getErrorSignatureDB(): ErrorSignatureDB {
+    if (!this._errorSignatureDB) {
+      this._errorSignatureDB = new ErrorSignatureDB()
+    }
+    return this._errorSignatureDB
+  }
+
+  /**
+   * SIS Phase 0: Lazily-initialized PreFlightChecker singleton.
+   * Checks tool calls against ErrorSignatureDB + ExperienceRuleEngine
+   * before execution, enabling preventive error interception.
+   */
+  private getPreFlightChecker(): PreFlightChecker {
+    if (!this._preflightChecker) {
+      this._preflightChecker = new PreFlightChecker(
+        this.getErrorSignatureDB(),
+        this.getRuleEngine(),
+      )
+    }
+    return this._preflightChecker
   }
 
   /** Register a tool dynamically (used by MCP auto-registration). */

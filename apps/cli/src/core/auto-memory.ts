@@ -15,6 +15,7 @@ import { MemoryManager, type MemoryEntry } from './memory/memory-manager.js'
 import type { PatternAnalyzer, Pattern } from '../agent/pattern-analyzer.js'
 import type { ExperienceRuleEngine, ToolRule } from './rule-engine.js'
 import type { EffectivenessTracker } from '../agent/effectiveness-tracker.js'
+import type { ErrorSignatureDB } from './error-signature-db.js'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 
@@ -86,6 +87,7 @@ export class AutoMemoryEngine {
   private patternAnalyzer?: PatternAnalyzer
   private ruleEngine?: ExperienceRuleEngine
   private effectivenessTracker?: EffectivenessTracker
+  private errorSignatureDB?: ErrorSignatureDB
 
   /** Accumulated reflections for the current session (not yet persisted to disk). */
   private sessionReflections: TurnReflection[] = []
@@ -109,6 +111,15 @@ export class AutoMemoryEngine {
     this.patternAnalyzer = patternAnalyzer
     this.ruleEngine = ruleEngine
     this.effectivenessTracker = effectivenessTracker
+  }
+
+  /**
+   * Wire the SIS (Self-Immune System) error signature database.
+   * Enables persistent error memory — known failure patterns are
+   * saved and can be intercepted before execution by PreFlightChecker.
+   */
+  setErrorSignatureDB(db: ErrorSignatureDB): void {
+    this.errorSignatureDB = db
   }
 
   // ── Core API ──
@@ -344,6 +355,24 @@ export class AutoMemoryEngine {
       // Track the new rule's effectiveness
       if (this.effectivenessTracker) {
         this.effectivenessTracker.recordApplication(toolRule.id, true)
+      }
+
+      // ── SIS: persist error signature for cross-session immunity ──
+      if (this.errorSignatureDB) {
+        const examples = pattern.examples || []
+        const errorText = examples[0] || ''
+        this.errorSignatureDB.insert({
+          pattern: errorText.slice(0, 200), // first 200 chars as match pattern
+          category,
+          toolName: toolRule.toolName,
+          fixStrategy: 'replace',
+          fixAction: String(
+            toolRule.fix({ command: errorText }).modified?.command ||
+            toolRule.fix({}).modified?.command ||
+            ''
+          ),
+          explanation: `CRSI 自动生成: ${toolRule.id} — ${pattern.category} 类错误 (${count} 次发生)`,
+        })
       }
     }
   }

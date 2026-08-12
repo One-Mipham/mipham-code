@@ -657,6 +657,67 @@ const crsiStatsCmd: CommandHandler = async (ctx) => {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// SIS (Self-Immune System)
+// ═══════════════════════════════════════════════════════════════
+
+const sisErrorsCmd: CommandHandler = (ctx) => {
+  const db = ctx.engine.getErrorSignatureDB?.()
+  if (!db) {
+    return { content: 'SIS 自免疫系统未初始化。' }
+  }
+  const sigs = db.getActive()
+  if (sigs.length === 0) {
+    return { content: '🛡️ SIS 免疫记忆为空 — 尚未记录任何错误签名。' }
+  }
+  const lines: string[] = ['## 🛡️ SIS 免疫记忆', '']
+  for (const sig of sigs) {
+    const statusIcon = sig.status === 'active' ? '🟢' : '🟡'
+    lines.push(
+      `- ${statusIcon} \`${sig.id}\` [${sig.category}] ${sig.toolName}`,
+    )
+    lines.push(`  模式: \`${sig.pattern.slice(0, 80)}${sig.pattern.length > 80 ? '...' : ''}\``)
+    lines.push(
+      `  修复: ${sig.fixStrategy} → ${sig.fixAction.slice(0, 60)} | 发生 ${sig.occurrences} 次 | 成功率 ${Math.round(sig.successRate * 100)}%`,
+    )
+    lines.push('')
+  }
+  lines.push(`共 ${sigs.length} 条活跃免疫记忆`)
+  lines.push('', '使用 `/sis stats` 查看汇总统计，`/sis clear <id>` 清除指定签名')
+  return { content: lines.join('\n') }
+}
+
+const sisStatsCmd: CommandHandler = (ctx) => {
+  const db = ctx.engine.getErrorSignatureDB?.()
+  if (!db) {
+    return { content: 'SIS 自免疫系统未初始化。' }
+  }
+  const stats = db.getStats()
+  const lines: string[] = ['## 🛡️ SIS 自免疫统计', '']
+  lines.push(`总签名数: ${stats.total}`)
+  lines.push(`🟢 活跃: ${stats.active}  |  🟡 降级: ${stats.degraded}  |  ⚫ 已退役: ${stats.retired}`)
+  lines.push(`平均成功率: ${Math.round(stats.avgSuccessRate * 100)}%`)
+  lines.push(`总拦截次数: ${stats.totalInterceptions}`)
+  return { content: lines.join('\n') }
+}
+
+const sisClearCmd: CommandHandler = (ctx, args) => {
+  const db = ctx.engine.getErrorSignatureDB?.()
+  if (!db) {
+    return { content: 'SIS 自免疫系统未初始化。' }
+  }
+  const sigId = args[0]?.trim()
+  if (!sigId) {
+    return { content: 'Usage: /sis clear <signature-id>\n\n使用 `/sis errors` 查看所有签名 ID。' }
+  }
+  const sig = db.get(sigId)
+  if (!sig) {
+    return { content: `签名 \`${sigId}\` 未找到。` }
+  }
+  db.retire(sigId)
+  return { content: `已退役签名 \`${sigId}\` (${sig.pattern.slice(0, 50)}...)` }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Workflow
 // ═══════════════════════════════════════════════════════════════
 
@@ -3288,6 +3349,9 @@ const commandsListCmd: CommandHandler = () => {
     '/crsi analyze': 'Tools & Skills',
     '/crsi restore': 'Tools & Skills',
     '/crsi stats': 'Tools & Skills',
+    '/sis errors': 'Tools & Skills',
+    '/sis stats': 'Tools & Skills',
+    '/sis clear': 'Tools & Skills',
     '/plan': 'Workflow',
     '/no-plan': 'Workflow',
     '/tdd': 'Workflow',
@@ -3432,6 +3496,9 @@ registry.set('/crsi disable', crsiDisableCmd)
 registry.set('/crsi analyze', crsiAnalyzeCmd)
 registry.set('/crsi restore', crsiRestoreCmd)
 registry.set('/crsi stats', crsiStatsCmd)
+registry.set('/sis errors', sisErrorsCmd)
+registry.set('/sis stats', sisStatsCmd)
+registry.set('/sis clear', sisClearCmd)
 
 // Workflow
 registry.set('/plan', planCmd)
