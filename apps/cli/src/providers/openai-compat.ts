@@ -8,9 +8,13 @@ export class OpenAICompatProvider implements ProviderInstance {
   constructor(public config: ProviderConfig) {}
 
   async *chat(req: ChatRequest): AsyncGenerator<StreamChunk> {
-    // Accept both baseUrl and baseURL (common YAML typo)
+    // Accept both baseUrl and baseURL (common YAML typo); resolve env templates
     const rawBase = (this.config as any).baseUrl || (this.config as any).baseURL
-    const baseUrl = rawBase?.replace(/\/+$/, '') || 'https://api.openai.com/v1'
+    const baseUrl =
+      this.resolveEnvTemplate(
+        rawBase?.replace(/\/+$/, '') || '',
+        'OpenAI-compatible provider: baseUrl',
+      ) || 'https://api.openai.com/v1'
     const apiKey = this.resolveApiKey(this.config.apiKey)
 
     const body = {
@@ -224,7 +228,11 @@ export class OpenAICompatProvider implements ProviderInstance {
   async healthCheck(): Promise<boolean> {
     try {
       const rawBase = (this.config as any).baseUrl || (this.config as any).baseURL
-      const baseUrl = rawBase?.replace(/\/+$/, '') || 'https://api.openai.com/v1'
+      const baseUrl =
+        this.resolveEnvTemplate(
+          rawBase?.replace(/\/+$/, '') || '',
+          'OpenAI-compatible provider: baseUrl',
+        ) || 'https://api.openai.com/v1'
       const apiKey = this.resolveApiKey(this.config.apiKey)
       // 5s timeout so a down endpoint doesn't hang health checks (v2.1.229 alignment)
       const res = await fetchWithRetry(
@@ -369,21 +377,25 @@ export class OpenAICompatProvider implements ProviderInstance {
     }
   }
 
-  private resolveApiKey(keyTemplate: string): string {
-    // Accept both ${VAR} and $VAR syntax
-    let match = keyTemplate.match(/^\$\{(.+)\}$/)
-    if (!match) match = keyTemplate.match(/^\$([A-Z_][A-Z0-9_]*)$/)
+  /** Resolve a `${VAR}` / `$VAR` template against the environment. */
+  private resolveEnvTemplate(value: string, warnPrefix: string): string {
+    let match = value.match(/^\$\{(.+)\}$/)
+    if (!match) match = value.match(/^\$([A-Z_][A-Z0-9_]*)$/)
     if (match?.[1]) {
       const varName = match[1]
-      const value = process.env[varName]
-      if (!value) {
+      const envValue = process.env[varName]
+      if (!envValue) {
         process.stderr.write(
-          `⚠ OpenAI-compatible provider: apiKey references $${varName} but that environment variable is not set\n`,
+          `⚠ ${warnPrefix} references $${varName} but that environment variable is not set\n`,
         )
         return ''
       }
-      return value
+      return envValue
     }
-    return keyTemplate
+    return value
+  }
+
+  private resolveApiKey(keyTemplate: string): string {
+    return this.resolveEnvTemplate(keyTemplate, 'OpenAI-compatible provider: apiKey')
   }
 }

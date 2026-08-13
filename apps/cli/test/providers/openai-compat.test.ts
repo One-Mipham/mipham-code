@@ -345,6 +345,22 @@ describe('OpenAICompatProvider', () => {
     expect(healthy).toBe(false)
   })
 
+  it('should resolve env-var templates in baseUrl (${MIPHAM_BASE_URL})', async () => {
+    process.env.MIPHAM_BASE_URL = 'http://resolved.example.com/v1'
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }))
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new OpenAICompatProvider(makeConfig({ baseUrl: '${MIPHAM_BASE_URL}' }))
+    const healthy = await provider.healthCheck()
+
+    expect(healthy).toBe(true)
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://resolved.example.com/v1/models',
+      expect.anything(),
+    )
+    delete process.env.MIPHAM_BASE_URL
+  })
+
   // ═══════════════════════════════════════════
   // Config
   // ═══════════════════════════════════════════

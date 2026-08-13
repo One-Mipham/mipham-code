@@ -660,6 +660,13 @@ export function App({
 
           if (chunk.type === 'warning' && chunk.content) {
             setMessages((prev) => [...prev, { role: 'system', content: `⚠ ${chunk.content}` }])
+            // Keep the footer's provider/model in sync after an automatic fallback
+            // switch. RemoteEngine's registry is a stub without getActive.
+            const registry = engine.getRegistry()
+            if ('getActive' in registry) {
+              setProviderId(registry.getActive().config.id)
+              setModelId(registry.getActiveModel())
+            }
           }
 
           if (chunk.type === 'task_notification' && chunk.taskNotification) {
