@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
+import type { CrsiProvenanceBridge, CrsiVerdict } from './crsi-provenance-bridge.js'
 
 export interface RuleEffectiveness {
   ruleId: string
@@ -15,6 +16,8 @@ export interface RuleEffectiveness {
     appliedCount: number
     failureRate: number
   }>
+  /** megasystem decision id, set when the rule was recorded via the bridge. */
+  decisionId?: string
 }
 
 const EVAL_THRESHOLD = 10 // evaluate after 10 applications
@@ -23,10 +26,22 @@ const STORE_FILE = 'effectiveness.json'
 export class EffectivenessTracker {
   private data: Map<string, RuleEffectiveness>
   private storePath: string
+  private provenanceBridge?: CrsiProvenanceBridge
 
   constructor(storeDir: string = join(process.env.HOME || '~', '.mipham', 'rule-engine')) {
     this.storePath = join(storeDir, STORE_FILE)
     this.data = new Map()
+  }
+
+  /** Wire the CRSI ↔ MegaSystem provenance bridge for verdict reporting. */
+  setProvenanceBridge(bridge: CrsiProvenanceBridge): void {
+    this.provenanceBridge = bridge
+  }
+
+  /** Associate a rule with the megasystem decision recorded for it. */
+  setDecisionId(ruleId: string, decisionId: string): void {
+    const eff = this.data.get(ruleId)
+    if (eff) eff.decisionId = decisionId
   }
 
   recordApplication(ruleId: string, success: boolean): void {
@@ -88,6 +103,9 @@ export class EffectivenessTracker {
         eff.evaluationHistory = eff.evaluationHistory.slice(-10)
       }
 
+      // Report the verdict to megasystem (non-blocking, degrades gracefully)
+      this._reportEvaluation(eff)
+
       // Auto-management is gated by crsi.autoRuleManagement feature flag
       if (!autoRuleManagement) continue
 
@@ -119,6 +137,23 @@ export class EffectivenessTracker {
 
   getEffectiveness(ruleId: string): RuleEffectiveness | null {
     return this.data.get(ruleId) || null
+  }
+
+  /** Fire-and-forget the effectiveness verdict to megasystem. */
+  private _reportEvaluation(eff: RuleEffectiveness): void {
+    if (!this.provenanceBridge || !eff.decisionId) return
+    const verdict: CrsiVerdict =
+      eff.postRuleFailureRate < 0.4
+        ? 'effective'
+        : eff.postRuleFailureRate > 0.6
+          ? 'ineffective'
+          : 'degrading'
+    this.provenanceBridge
+      .evaluateDecision(eff.decisionId, verdict, {
+        score: eff.postRuleFailureRate,
+        metrics: { applied: eff.appliedCount, success: eff.successAfterCount },
+      })
+      .catch(() => {})
   }
 
   persist(): void {

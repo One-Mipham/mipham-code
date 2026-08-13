@@ -16,6 +16,7 @@ import type { PatternAnalyzer, Pattern } from '../agent/pattern-analyzer.js'
 import type { ExperienceRuleEngine, ToolRule } from './rule-engine.js'
 import type { EffectivenessTracker } from '../agent/effectiveness-tracker.js'
 import type { ErrorSignatureDB } from './error-signature-db.js'
+import type { CrsiProvenanceBridge } from '../agent/crsi-provenance-bridge.js'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 
@@ -88,6 +89,7 @@ export class AutoMemoryEngine {
   private ruleEngine?: ExperienceRuleEngine
   private effectivenessTracker?: EffectivenessTracker
   private errorSignatureDB?: ErrorSignatureDB
+  private provenanceBridge?: CrsiProvenanceBridge
 
   /** Accumulated reflections for the current session (not yet persisted to disk). */
   private sessionReflections: TurnReflection[] = []
@@ -120,6 +122,14 @@ export class AutoMemoryEngine {
    */
   setErrorSignatureDB(db: ErrorSignatureDB): void {
     this.errorSignatureDB = db
+  }
+
+  /**
+   * Wire the CRSI ↔ MegaSystem provenance bridge. When set, every
+   * auto-generated rule is recorded as an auditable decision in megasystem.
+   */
+  setProvenanceBridge(bridge: CrsiProvenanceBridge): void {
+    this.provenanceBridge = bridge
   }
 
   // ── Core API ──
@@ -218,8 +228,10 @@ export class AutoMemoryEngine {
       this.writeSessionSummary()
     }
 
-    // Flush CRSI state
+    // Flush CRSI state — evaluate first (reports verdicts to megasystem,
+    // applies auto-degrade/disable/upgrade), then persist.
     if (this.effectivenessTracker) {
+      this.effectivenessTracker.evaluate()
       this.effectivenessTracker.persist()
     }
   }
@@ -351,6 +363,23 @@ export class AutoMemoryEngine {
 
       const toolRule = this.patternAnalyzer.toToolRule(pattern)
       this.ruleEngine.register(toolRule)
+
+      // ── CRSI ↔ MegaSystem: record the rule as an auditable decision ──
+      if (this.provenanceBridge) {
+        const confidence = pattern.confidence === 'high' ? 0.9 : 0.6
+        this.provenanceBridge
+          .recordDecision(
+            `[${pattern.category}] ${toolRule.toolName} — ${pattern.examples?.[0] || ''}`,
+            `rule ${toolRule.id} — ${pattern.category} auto-fix`,
+            confidence,
+          )
+          .then((decisionId) => {
+            if (decisionId && this.effectivenessTracker) {
+              this.effectivenessTracker.setDecisionId(toolRule.id, decisionId)
+            }
+          })
+          .catch(() => {})
+      }
 
       // Track the new rule's effectiveness
       if (this.effectivenessTracker) {

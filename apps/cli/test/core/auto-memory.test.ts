@@ -1,9 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { AutoMemoryEngine, type ToolCallRecord } from '../../src/core/auto-memory'
 import { mkdirSync, rmSync, existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
+import { EffectivenessTracker } from '../../src/agent/effectiveness-tracker.js'
+import type { PatternAnalyzer } from '../../src/agent/pattern-analyzer.js'
+import type { ExperienceRuleEngine } from '../../src/core/rule-engine.js'
+import type { CrsiProvenanceBridge } from '../../src/agent/crsi-provenance-bridge.js'
 
 function createTestDir(): string {
   const dir = join(tmpdir(), `mipham-test-auto-memory-${randomUUID().slice(0, 8)}`)
@@ -279,6 +283,70 @@ describe('AutoMemoryEngine', () => {
       const reminder = engine.buildReminder('timeout bug')
       expect(typeof reminder).toBe('string')
       // May be empty if no matches, which is acceptable
+    })
+  })
+
+  describe('CRSI provenance bridge wiring', () => {
+    function mockPipeline() {
+      const toToolRule = vi.fn((p: { id: string; category: string }) => ({
+        id: p.id,
+        toolName: 'Bash',
+        category: p.category,
+        fix: () => ({ modified: { command: 'fixed' } }),
+      }))
+      const patternAnalyzer = { toToolRule } as unknown as PatternAnalyzer
+      const ruleEngine = {
+        register: vi.fn(),
+        getActiveRules: () => [],
+      } as unknown as ExperienceRuleEngine
+      const tracker = new EffectivenessTracker(testDir)
+      engine.setCrsiPipeline(patternAnalyzer, ruleEngine, tracker)
+      return { tracker }
+    }
+
+    function failingTurn(sessionId: string) {
+      return {
+        sessionId,
+        userMessage: 'install deps',
+        assistantContent: 'installing',
+        toolCalls: [
+          {
+            name: 'Bash',
+            input: { command: 'npm install' },
+            success: false,
+            error: 'timeout after 120s',
+          },
+        ],
+        modelProvider: 'anthropic',
+        modelId: 'claude-sonnet-5',
+        turnDurationMs: 5000,
+      }
+    }
+
+    it('records generated rules as auditable decisions in megasystem', () => {
+      const recordDecision = vi.fn(() => Promise.resolve('d1'))
+      const bridge = { recordDecision } as unknown as CrsiProvenanceBridge
+      engine.setProvenanceBridge(bridge)
+      mockPipeline()
+
+      engine.analyzeTurn(failingTurn('bridge-test'))
+      const reflection = engine.analyzeTurn(failingTurn('bridge-test'))
+      engine.persist(reflection)
+
+      expect(recordDecision).toHaveBeenCalledTimes(1)
+      expect(recordDecision).toHaveBeenCalledWith(
+        expect.stringContaining('timeout'),
+        expect.stringContaining('auto-fix'),
+        0.6,
+      )
+    })
+
+    it('does not throw without a bridge', () => {
+      mockPipeline()
+
+      engine.analyzeTurn(failingTurn('no-bridge-test'))
+      const reflection = engine.analyzeTurn(failingTurn('no-bridge-test'))
+      expect(() => engine.persist(reflection)).not.toThrow()
     })
   })
 })
