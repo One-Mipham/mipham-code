@@ -317,12 +317,20 @@ const contextCmd: CommandHandler = (ctx) => {
   }
 }
 
-const statusCmd: CommandHandler = (ctx) => {
+const statusCmd: CommandHandler = async (ctx) => {
   const t = resolveT(ctx)
   const c = ctx.engine.getContext()
   const tools = ctx.engine.getTools()
   const runtime = typeof Bun !== 'undefined' ? 'Bun' : 'Node.js'
   const runtimeVer = typeof Bun !== 'undefined' ? Bun.version : process.version
+  const health = ctx.engine.getRegistry()
+    ? await ctx.engine.getRegistry().healthMap()
+    : new Map<string, boolean>()
+  const providerHealth = ctx.config.providers
+    .filter((p) => p.status !== 'upcoming')
+    .map((p) => `${p.id} ${health.get(p.id) ? '🟢' : '🔴'}`)
+    .join('  ')
+
   return {
     content: stripIndent`
       ${t('commands.status.session_title')}
@@ -337,6 +345,9 @@ const statusCmd: CommandHandler = (ctx) => {
       ${t('commands.status.platform')}   ${process.platform} ${process.arch}
       ${t('commands.status.runtime')}    ${runtime} ${runtimeVer}
       ${t('commands.status.cwd')}        ${process.cwd()}
+
+      Providers
+      ${providerHealth}
     `,
   }
 }
@@ -449,12 +460,19 @@ const providerCmd: CommandHandler = (ctx) => {
   }
 }
 
-const providersCmd: CommandHandler = (ctx) => {
+const providersCmd: CommandHandler = async (ctx) => {
   const t = resolveT(ctx)
-  const lines = ctx.config.providers.map(
-    (p) =>
-      `  ${p.id.padEnd(14)} ${p.name.padEnd(20)} ${p.protocol.padEnd(18)} ${p.models.length} models  ${p.status === 'upcoming' ? '[upcoming]' : '✓'}`,
-  )
+  const health = ctx.engine.getRegistry()
+    ? await ctx.engine.getRegistry().healthMap()
+    : new Map<string, boolean>()
+
+  const lines = ctx.config.providers.map((p) => {
+    if (p.status === 'upcoming') {
+      return `  ${p.id.padEnd(14)} ${p.name.padEnd(20)} ${p.protocol.padEnd(18)} ${p.models.length} models  ⏳ [upcoming]`
+    }
+    const ok = health.get(p.id) ?? false
+    return `  ${p.id.padEnd(14)} ${p.name.padEnd(20)} ${p.protocol.padEnd(18)} ${p.models.length} models  ${ok ? '🟢 reachable' : '🔴 unreachable'}`
+  })
   return {
     content: `${t('commands.providers.title')}\n\n${lines.join('\n')}\n\n${t('commands.providers.current', { provider: ctx.providerId, model: ctx.modelId })}`,
   }

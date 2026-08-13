@@ -226,9 +226,12 @@ export class OpenAICompatProvider implements ProviderInstance {
       const rawBase = (this.config as any).baseUrl || (this.config as any).baseURL
       const baseUrl = rawBase?.replace(/\/+$/, '') || 'https://api.openai.com/v1'
       const apiKey = this.resolveApiKey(this.config.apiKey)
-      const res = await fetch(`${baseUrl}/models`, {
-        headers: { Authorization: `Bearer ${apiKey}` },
-      })
+      // 5s timeout so a down endpoint doesn't hang health checks (v2.1.229 alignment)
+      const res = await fetchWithRetry(
+        `${baseUrl}/models`,
+        { headers: { Authorization: `Bearer ${apiKey}` } },
+        { timeout: 5000, maxRetries: 0 },
+      )
       return res.ok
     } catch {
       return false

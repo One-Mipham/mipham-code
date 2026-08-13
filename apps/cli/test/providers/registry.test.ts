@@ -230,4 +230,58 @@ describe('ProviderRegistry', () => {
       expect(provider.chat).toHaveBeenCalledWith(expect.objectContaining({ model: 'test-model-1' }))
     })
   })
+
+  describe('healthStatus and healthMap', () => {
+    it('should return true when provider healthCheck resolves true', async () => {
+      const config = makeConfig()
+      const registry = new ProviderRegistry([config], config.id, 'test-model-1')
+      const provider = makeMockProvider(config)
+      provider.healthCheck = vi.fn().mockResolvedValue(true)
+      registry.register(config.id, provider)
+
+      expect(await registry.healthStatus(config.id)).toBe(true)
+    })
+
+    it('should return false when provider healthCheck resolves false', async () => {
+      const config = makeConfig()
+      const registry = new ProviderRegistry([config], config.id, 'test-model-1')
+      const provider = makeMockProvider(config)
+      provider.healthCheck = vi.fn().mockResolvedValue(false)
+      registry.register(config.id, provider)
+
+      expect(await registry.healthStatus(config.id)).toBe(false)
+    })
+
+    it('should return undefined for unregistered provider', async () => {
+      const registry = new ProviderRegistry([makeConfig()], 'x', 'm1')
+      expect(await registry.healthStatus('missing')).toBeUndefined()
+    })
+
+    it('should return false (not throw) when healthCheck throws', async () => {
+      const config = makeConfig()
+      const registry = new ProviderRegistry([config], config.id, 'test-model-1')
+      const provider = makeMockProvider(config)
+      provider.healthCheck = vi.fn().mockRejectedValue(new Error('boom'))
+      registry.register(config.id, provider)
+
+      expect(await registry.healthStatus(config.id)).toBe(false)
+    })
+
+    it('should aggregate health across all registered providers', async () => {
+      const c1 = makeConfig({ id: 'a' })
+      const c2 = makeConfig({ id: 'b' })
+      const registry = new ProviderRegistry([c1, c2], 'a', 'm1')
+      const p1 = makeMockProvider(c1)
+      const p2 = makeMockProvider(c2)
+      p1.healthCheck = vi.fn().mockResolvedValue(true)
+      p2.healthCheck = vi.fn().mockResolvedValue(false)
+      registry.register('a', p1)
+      registry.register('b', p2)
+
+      const map = await registry.healthMap()
+      expect(map.get('a')).toBe(true)
+      expect(map.get('b')).toBe(false)
+      expect(map.size).toBe(2)
+    })
+  })
 })

@@ -72,6 +72,32 @@ export class ProviderRegistry {
     return undefined
   }
 
+  /**
+   * Check a single provider's health. Returns undefined if not registered,
+   * otherwise the provider's healthCheck() result. Never throws.
+   */
+  async healthStatus(id: string): Promise<boolean | undefined> {
+    const provider = this.providers.get(id)
+    if (!provider) return undefined
+    try {
+      return await provider.healthCheck()
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Health of all registered providers, checked concurrently.
+   * Returns a Map of provider id → reachable boolean.
+   */
+  async healthMap(): Promise<Map<string, boolean>> {
+    const ids = this.listIds()
+    const results = await Promise.all(
+      ids.map(async (id) => [id, (await this.healthStatus(id)) ?? false] as const),
+    )
+    return new Map(results)
+  }
+
   async *chat(req: ChatRequest): AsyncGenerator<StreamChunk> {
     const provider = this.getActive()
     yield* provider.chat({ ...req, model: req.model || this.activeModelId })
