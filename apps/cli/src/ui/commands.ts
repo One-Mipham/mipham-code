@@ -3575,8 +3575,9 @@ const mcpCmd: CommandHandler = async (ctx, args) => {
         forwardToAI: `Connect to MCP server "${name}" using OAuth. Call McpClient.getInstance().connectWithOAuth() with the server config, then register its tools. Report the result.`,
       }
     }
+    const via = config.url ? 'HTTP' : 'stdio'
     return {
-      content: `── MCP Connect: ${name} ──\n\nConnecting via stdio...`,
+      content: `── MCP Connect: ${name} ──\n\nConnecting via ${via}...`,
       forwardToAI: `Connect to MCP server "${name}" using McpClient.getInstance().connect(config), then register its tools. Report the result.`,
     }
   }
@@ -3629,7 +3630,10 @@ const mcpCmd: CommandHandler = async (ctx, args) => {
       const statusLabel = live ? live.status : 'not started'
       const oauthTag = s.auth?.type === 'oauth' ? ' [OAuth]' : ''
       lines.push(`  ${statusIcon} ${s.name}${oauthTag}  [${statusLabel}]`)
-      lines.push(`     Command: ${s.command} ${s.args.join(' ')}`)
+      const transportInfo = s.url
+        ? `URL: ${s.url}`
+        : `Command: ${s.command ?? ''} ${(s.args ?? []).join(' ')}`
+      lines.push(`     ${transportInfo}`)
       if (live?.tools && live.tools.length > 0) {
         lines.push(`     Tools: ${live.tools.length} registered`)
       }

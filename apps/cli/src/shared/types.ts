@@ -187,8 +187,14 @@ export interface CrsiConfig {
 
 export interface McpServerConfig {
   name: string
-  command: string
-  args: string[]
+  /** stdio: executable to spawn (mutually exclusive with `url`). */
+  command?: string
+  /** stdio: args passed to `command`. */
+  args?: string[]
+  /** HTTP: Streamable HTTP endpoint (mutually exclusive with `command`). */
+  url?: string
+  /** HTTP: extra request headers (e.g. Authorization). */
+  headers?: Record<string, string>
   env?: Record<string, string>
   auth?: {
     type: 'oauth'

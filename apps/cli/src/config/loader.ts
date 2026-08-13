@@ -175,7 +175,13 @@ function loadMcpJson(cwd: string): McpServerConfig[] {
       const parsed = JSON.parse(raw) as {
         mcpServers?: Record<
           string,
-          { command: string; args?: string[]; env?: Record<string, string> }
+          {
+            command?: string
+            args?: string[]
+            url?: string
+            headers?: Record<string, string>
+            env?: Record<string, string>
+          }
         >
       }
 
@@ -187,6 +193,8 @@ function loadMcpJson(cwd: string): McpServerConfig[] {
             name,
             command: cfg.command,
             args: cfg.args || [],
+            url: cfg.url,
+            headers: cfg.headers,
             env: cfg.env,
           })
         }

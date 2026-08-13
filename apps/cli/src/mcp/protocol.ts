@@ -5,7 +5,7 @@ import type {
   ResourceDefinition,
   ResourceReadResult,
 } from './types'
-import { StdioTransport } from './transport'
+import type { Transport } from './transport'
 
 const MCP_VERSION = '2024-11-05'
 
@@ -20,7 +20,7 @@ export class McpProtocol {
   } = {}
   private handlers = new Map<string, Array<(...args: any[]) => void>>()
 
-  constructor(private transport: StdioTransport) {}
+  constructor(private transport: Transport) {}
 
   on(event: string, handler: (...args: any[]) => void): void {
     const list = this.handlers.get(event) || []
@@ -33,14 +33,8 @@ export class McpProtocol {
     for (const h of list) h(...args)
   }
 
-  async initialize(
-    serverCommand: string,
-    serverArgs: string[],
-    env?: Record<string, string>,
-  ): Promise<InitializeResult> {
-    // Start transport
-    await this.transport.start(serverCommand, serverArgs, env)
-
+  async initialize(): Promise<InitializeResult> {
+    // Transport must already be started by the caller (McpClient.connect).
     // Send initialize request
     const result = (await this.transport.sendRequest('initialize', {
       protocolVersion: MCP_VERSION,
