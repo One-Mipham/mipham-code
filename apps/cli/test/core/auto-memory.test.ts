@@ -310,7 +310,12 @@ describe('AutoMemoryEngine', () => {
         userMessage: 'install deps',
         assistantContent: 'installing',
         toolCalls: [
-          { name: 'Bash', input: { command: 'npm install' }, success: false, error: 'timeout after 120s' },
+          {
+            name: 'Bash',
+            input: { command: 'npm install' },
+            success: false,
+            error: 'timeout after 120s',
+          },
         ],
         modelProvider: 'anthropic',
         modelId: 'claude-sonnet-5',

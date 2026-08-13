@@ -35,11 +35,7 @@ export class CrsiProvenanceBridge {
    * Returns the megasystem decision id, or null when the server is
    * unavailable or the call failed — the caller may ignore null.
    */
-  async recordDecision(
-    query: string,
-    answer: string,
-    confidence?: number,
-  ): Promise<string | null> {
+  async recordDecision(query: string, answer: string, confidence?: number): Promise<string | null> {
     const result = await this.client.callTool(this.serverName, 'record_decision', {
       query,
       answer,
