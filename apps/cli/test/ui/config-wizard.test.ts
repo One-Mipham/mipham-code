@@ -260,8 +260,8 @@ describe('ConfigWizard Cloud path', () => {
   describe('getActiveModels', () => {
     it('returns only active models', () => {
       const models = getActiveModels('mipham')
-      // MiphamAI models are all 'upcoming', not 'active'
-      expect(models).toHaveLength(0)
+      // MiphamAI models are now 'active' (wired to Engine; om-V5 serving pending)
+      expect(models).toHaveLength(4)
     })
 
     it('returns all 6 Anthropic models as active', () => {
@@ -480,7 +480,7 @@ describe('ConfigWizard Ollama model list', () => {
     const list = getOllamaModelList([])
     const miphamModels = list.filter((m) => m.source === 'MiphamAI')
     expect(miphamModels.length).toBeGreaterThanOrEqual(1)
-    expect(miphamModels[0]!.id).toContain('om-V5')
+    expect(miphamModels[0]!.id).toContain('om-v5')
   })
 
   it('热门 preset models appear with [热门] label', () => {
