@@ -16,8 +16,9 @@ describe('McpProtocol', () => {
 
   async function connect() {
     transport = new StdioTransport()
+    await transport.start('bun', ['run', 'test/mcp/mock-server.ts'])
     protocol = new McpProtocol(transport)
-    await protocol.initialize('bun', ['run', 'test/mcp/mock-server.ts'])
+    await protocol.initialize()
   }
 
   describe('initialize', () => {

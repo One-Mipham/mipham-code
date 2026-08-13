@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { McpClient } from '../../src/mcp/client'
 
 describe('McpClient', () => {
@@ -114,6 +114,63 @@ describe('McpClient', () => {
 
       await client.closeAll()
       expect(client.listConnections()).toHaveLength(0)
+    })
+  })
+
+  describe('HTTP connect', () => {
+    it('connects to a Streamable HTTP MCP server via url', async () => {
+      const mockFetch = vi.fn(async (input: string, init?: RequestInit) => {
+        const body = JSON.parse(init!.body as string) as { id: number; method: string }
+        const base = { jsonrpc: '2.0', id: body.id }
+        if (body.method === 'initialize') {
+          return new Response(
+            JSON.stringify({
+              ...base,
+              result: {
+                protocolVersion: '2024-11-05',
+                capabilities: { tools: {}, resources: {} },
+                serverInfo: { name: 'http-mock', version: '1.0.0' },
+              },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          )
+        }
+        if (body.method === 'tools/list') {
+          return new Response(
+            JSON.stringify({
+              ...base,
+              result: {
+                tools: [
+                  {
+                    name: 'search_graph',
+                    description: 'Search entities',
+                    inputSchema: { type: 'object', properties: {} },
+                  },
+                ],
+              },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          )
+        }
+        return new Response(JSON.stringify({ ...base, result: {} }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      })
+      vi.stubGlobal('fetch', mockFetch)
+
+      try {
+        const client = McpClient.getInstance()
+        await client.connect({ name: 'http-mock', url: 'http://localhost:8004/mcp' })
+
+        const conn = client.getConnection('http-mock')
+        expect(conn).toBeDefined()
+        expect(conn!.status).toBe('connected')
+        expect(conn!.serverInfo?.name).toBe('http-mock')
+        expect(client.getTools('http-mock').map((t) => t.name)).toContain('search_graph')
+      } finally {
+        vi.unstubAllGlobals()
+      }
     })
   })
 })

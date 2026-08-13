@@ -104,7 +104,7 @@ export interface ResourceReadResult {
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
 
 export interface ConnectionInfo {
-  config: { name: string; command: string; args: string[] }
+  config: { name: string; command?: string; args?: string[]; url?: string }
   status: ConnectionStatus
   tools: ToolDefinition[]
   error?: string

@@ -6,7 +6,8 @@ import type {
   ToolCallResult,
   InitializeResult,
 } from './types'
-import { StdioTransport } from './transport'
+import { StdioTransport, type Transport } from './transport'
+import { HttpTransport } from './http-transport'
 import { McpProtocol } from './protocol'
 import { OAuthClient } from './oauth'
 import { TokenStore } from './token-store'
@@ -23,7 +24,7 @@ const t = createT(bundles['en-US'] || (enUS as TranslationMap), enUS as Translat
 
 interface ActiveConnection {
   config: McpServerConfig
-  transport: StdioTransport
+  transport: Transport
   protocol: McpProtocol
   status: ConnectionStatus
   tools: ToolDefinition[]
@@ -150,7 +151,9 @@ export class McpClient {
     const existing = this.connections.get(config.name)
     if (existing?.status === 'connected') return
 
-    const transport = new StdioTransport()
+    const transport: StdioTransport | HttpTransport = config.url
+      ? new HttpTransport()
+      : new StdioTransport()
     const protocol = new McpProtocol(transport)
 
     const connection: ActiveConnection = {
@@ -164,11 +167,13 @@ export class McpClient {
     this.connections.set(config.name, connection)
 
     try {
-      const initResult: InitializeResult = await protocol.initialize(
-        config.command,
-        config.args,
-        config.env,
-      )
+      // Start the transport (transport-specific), then perform the handshake.
+      if (transport instanceof HttpTransport) {
+        await transport.start(config.url ?? '', config.headers, config.env)
+      } else {
+        await transport.start(config.command ?? '', config.args ?? [], config.env)
+      }
+      const initResult: InitializeResult = await protocol.initialize()
 
       connection.status = 'connected'
       connection.serverInfo = initResult.serverInfo
@@ -229,6 +234,7 @@ export class McpClient {
         name: conn.config.name,
         command: conn.config.command,
         args: conn.config.args,
+        url: conn.config.url,
       },
       status: conn.status,
       tools: conn.tools,
@@ -243,6 +249,7 @@ export class McpClient {
         name: conn.config.name,
         command: conn.config.command,
         args: conn.config.args,
+        url: conn.config.url,
       },
       status: conn.status,
       tools: conn.tools,

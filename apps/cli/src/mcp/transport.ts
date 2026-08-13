@@ -1,7 +1,23 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import type { JsonRpcRequest, JsonRpcResponse, JsonRpcNotification } from './types'
 
-type NotificationHandler = (notification: JsonRpcNotification) => void
+export type NotificationHandler = (notification: JsonRpcNotification) => void
+
+/**
+ * Common transport contract shared by stdio and HTTP transports.
+ *
+ * `McpProtocol` depends on this interface (not a concrete transport), so it
+ * can speak JSON-RPC 2.0 over either a spawned subprocess or an HTTP endpoint.
+ * Transport startup is transport-specific and intentionally NOT part of this
+ * interface — callers invoke the concrete `start(...)` before use.
+ */
+export interface Transport {
+  sendRequest(method: string, params?: Record<string, unknown>): Promise<unknown>
+  sendNotification(method: string, params?: Record<string, unknown>): void
+  onNotification(handler: NotificationHandler): void
+  close(): Promise<void>
+  isConnected(): boolean
+}
 
 const REQUEST_TIMEOUT_MS = 60_000
 
@@ -52,7 +68,7 @@ function buildProcEnv(extra?: Record<string, string>): Record<string, string> {
  *
  * Uses Node.js child_process for portability across Bun and Node runtimes.
  */
-export class StdioTransport {
+export class StdioTransport implements Transport {
   private proc: ChildProcess | null = null
   private msgId = 0
   private pending = new Map<
