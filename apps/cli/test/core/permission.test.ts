@@ -124,6 +124,34 @@ describe('PermissionSystem', () => {
   })
 
   // ═══════════════════════════════════════════
+  // dangerous git flags (v2.1.229 alignment)
+  // ═══════════════════════════════════════════
+
+  it('should require approval for git push --force in auto mode', () => {
+    const ps = new PermissionSystem('auto')
+    const bash = makeTool('Bash', 'ask', 'exec')
+    expect(ps.check(bash, { command: 'git push --force origin main' })).toBe('ask')
+  })
+
+  it('should require approval for git commit --amend in auto mode', () => {
+    const ps = new PermissionSystem('auto')
+    const bash = makeTool('Bash', 'ask', 'exec')
+    expect(ps.check(bash, { command: 'git commit --amend --no-edit' })).toBe('ask')
+  })
+
+  it('should NOT flag --force-with-lease (safe force push)', () => {
+    const ps = new PermissionSystem('auto')
+    const bash = makeTool('Bash', 'ask', 'exec')
+    expect(ps.check(bash, { command: 'git push --force-with-lease origin main' })).toBe('bypass')
+  })
+
+  it('should NOT flag non-git commands containing --force', () => {
+    const ps = new PermissionSystem('auto')
+    const bash = makeTool('Bash', 'ask', 'exec')
+    expect(ps.check(bash, { command: 'pnpm install --force' })).toBe('bypass')
+  })
+
+  // ═══════════════════════════════════════════
   // isBypassed
   // ═══════════════════════════════════════════
 

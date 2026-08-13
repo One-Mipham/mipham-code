@@ -1,11 +1,29 @@
+import os from 'node:os'
+
 /**
  * parallel() — barrier: executes all thunks concurrently, waits for all.
  * Failed thunks resolve to null. Never throws.
  *
- * P0-2 (v2.1.223 alignment): Added concurrency cap (MAX_CONCURRENT = 16)
- * to prevent resource exhaustion from unbounded fan-out.
+ * P0-2 (v2.1.223 alignment): Added concurrency cap (MAX_CONCURRENT) to prevent
+ * resource exhaustion from unbounded fan-out.
+ *
+ * v2.1.229 alignment: detect parallelism via os.availableParallelism() so
+ * CPU-limited containers (cgroup quota) don't fan out to the host core count.
+ * Still capped at 16 to bound resource usage, with a floor of 1.
  */
-const MAX_CONCURRENT = 16
+function detectParallelism(): number {
+  try {
+    if (typeof os.availableParallelism === 'function') {
+      const p = os.availableParallelism()
+      if (typeof p === 'number' && p > 0) return p
+    }
+  } catch {
+    /* fall through to cpus() */
+  }
+  return os.cpus().length || 1
+}
+
+const MAX_CONCURRENT = Math.max(1, Math.min(16, detectParallelism()))
 
 /**
  * Simple async semaphore for concurrency limiting.

@@ -147,4 +147,28 @@ describe('AgentViewManager', () => {
     expect(counts.completed).toBe(0)
     expect(counts.failed).toBe(0)
   })
+
+  // ═══════════════════════════════════════════
+  // groupByDirectory
+  // ═══════════════════════════════════════════
+
+  it('should group sessions by directory, sorted alphabetically', () => {
+    const mgr = makeManager()
+    const a = mgr.create('Task A', 'Do A', { directory: '/repo/alpha' })
+    const b = mgr.create('Task B', 'Do B', { directory: '/repo/beta' })
+    const c = mgr.create('Task C', 'Do C', { directory: '/repo/alpha' })
+
+    const groups = mgr.groupByDirectory()
+    expect(groups).toHaveLength(2)
+    expect(groups[0]!.directory).toBe('/repo/alpha')
+    expect(groups[0]!.sessions.map((s) => s.id)).toEqual([a.id, c.id])
+    expect(groups[1]!.directory).toBe('/repo/beta')
+    expect(groups[1]!.sessions.map((s) => s.id)).toEqual([b.id])
+  })
+
+  it('should default directory to process.cwd() when not provided', () => {
+    const mgr = makeManager()
+    const session = mgr.create('Task A', 'Do A')
+    expect(session.directory).toBe(process.cwd())
+  })
 })

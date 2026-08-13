@@ -113,6 +113,27 @@ describe('QueryEngine', () => {
     })
   })
 
+  describe('process — input guards', () => {
+    it('should ignore whitespace-only input without calling the provider', async () => {
+      let called = false
+      const registry = mockProviderRegistry(async function* () {
+        called = true
+        yield { type: 'text', content: 'should not happen' }
+        yield { type: 'stop' }
+      })
+
+      const engine = new QueryEngine(registry, mockContext(), makeToolMap([]))
+
+      const chunks: StreamChunk[] = []
+      for await (const chunk of engine.process('   \n\t ')) {
+        chunks.push(chunk)
+      }
+
+      expect(chunks).toHaveLength(0)
+      expect(called).toBe(false)
+    })
+  })
+
   describe('process — basic conversation', () => {
     it('should yield text and stop chunks from provider', async () => {
       const registry = mockProviderRegistry(async function* () {

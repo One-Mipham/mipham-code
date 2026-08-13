@@ -30,7 +30,7 @@ const STATUS_HEADERS: Record<string, { label: string; color: string }> = {
 export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps) {
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [peekingSessionId, setPeekingSessionId] = useState<string | null>(null)
-  const [_groupBy, setGroupBy] = useState<'status' | 'directory'>('status')
+  const [groupBy, setGroupBy] = useState<'status' | 'directory'>('status')
   const [feedback, setFeedback] = useState<string | null>(null)
 
   // Flash a brief feedback message that auto-clears
@@ -41,37 +41,53 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
 
   // Build a flat list of sessions in group order, with group headers
   const flatList = useMemo(() => {
-    const groups = manager.groupByStatus()
     const result: Array<
-      | { type: 'header'; status: string; label: string; color: string; count: number }
+      | { type: 'header'; key: string; label: string; color: string; count: number }
       | { type: 'session'; session: AgentSession }
     > = []
 
-    const statusOrder: Array<keyof typeof STATUS_HEADERS> = [
-      'working',
-      'needs-input',
-      'completed',
-      'failed',
-    ]
+    if (groupBy === 'directory') {
+      for (const group of manager.groupByDirectory()) {
+        result.push({
+          type: 'header',
+          key: `dir-${group.directory}`,
+          label: group.directory,
+          color: 'blue',
+          count: group.sessions.length,
+        })
 
-    for (const _status of statusOrder) {
-      const status = _status as SessionStatus
-      const sessions = groups[status] ?? []
-      result.push({
-        type: 'header',
-        status,
-        label: STATUS_HEADERS[status]!.label,
-        color: STATUS_HEADERS[status]!.color,
-        count: sessions.length,
-      })
+        for (const session of group.sessions) {
+          result.push({ type: 'session', session })
+        }
+      }
+    } else {
+      const groups = manager.groupByStatus()
+      const statusOrder: Array<keyof typeof STATUS_HEADERS> = [
+        'working',
+        'needs-input',
+        'completed',
+        'failed',
+      ]
 
-      for (const session of sessions) {
-        result.push({ type: 'session', session })
+      for (const _status of statusOrder) {
+        const status = _status as SessionStatus
+        const sessions = groups[status] ?? []
+        result.push({
+          type: 'header',
+          key: `status-${status}`,
+          label: STATUS_HEADERS[status]!.label,
+          color: STATUS_HEADERS[status]!.color,
+          count: sessions.length,
+        })
+
+        for (const session of sessions) {
+          result.push({ type: 'session', session })
+        }
       }
     }
 
     return result
-  }, [manager])
+  }, [manager, groupBy])
 
   // Flatten sessions only for navigation (skip headers)
   const sessionsOnly = useMemo(
@@ -106,7 +122,7 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
     // Ctrl+T — toggle group by (status ↔ directory)
     if (key.ctrl && input === 't') {
       setGroupBy((prev) => (prev === 'status' ? 'directory' : 'status'))
-      showFeedback(`Grouped by ${_groupBy === 'status' ? 'directory' : 'status'}`)
+      showFeedback(`Grouped by ${groupBy === 'status' ? 'directory' : 'status'}`)
       return
     }
 
@@ -238,7 +254,7 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
           {flatList.map((item, _flatIdx) => {
             if (item.type === 'header') {
               return (
-                <Box key={`h-${item.status}`} marginY={1}>
+                <Box key={`h-${item.key}`} marginY={1}>
                   <Text bold color={item.color}>
                     {' '}
                     {item.label} ({item.count})

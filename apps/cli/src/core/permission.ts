@@ -10,6 +10,18 @@ import { matchBashRule, compileRule } from './permission-rules'
 import { loadPermissionConfig, nextMode, clampMode, MODE_CYCLE } from './permission-config'
 
 /**
+ * Check if a Bash command is a git/gh operation using a destructive flag
+ * (--force, --amend, --no-verify, --hard) that must never be auto-approved.
+ * v2.1.229 alignment: these rewrite history / force-push, so they fall back
+ * to explicit user confirmation even in auto mode.
+ */
+function hasDangerousGitFlags(input: Record<string, unknown>): boolean {
+  const cmd = (input.command as string) || ''
+  if (!/^(git|gh)\s+/.test(cmd.trim())) return false
+  return /--force(?!-with-lease)\b|--amend\b|--no-verify\b|--hard\b/.test(cmd)
+}
+
+/**
  * Check if a Bash command is a "verification-only" command that should be
  * auto-approved in acceptEdits mode. These are non-destructive read/check
  * operations that form the core of the vibe coding edit→test→fix loop.
@@ -412,6 +424,10 @@ export class PermissionSystem {
         // so hooks remain the sole safety gate. Without hooks, these tools
         // would otherwise run completely un-gated in auto mode.
         if (this.isSubAgent && ['Bash', 'Write', 'Edit'].includes(tool.name)) {
+          return 'ask'
+        }
+        // v2.1.229 alignment: destructive git/gh flags are never auto-approved.
+        if (tool.name === 'Bash' && input && hasDangerousGitFlags(input)) {
           return 'ask'
         }
         return 'bypass'

@@ -377,6 +377,10 @@ export class QueryEngine {
   }
 
   async *process(userInput: string, signal?: AbortSignal): AsyncGenerator<StreamChunk> {
+    // v2.1.229 alignment: reject whitespace-only messages before they reach the
+    // provider API (which would otherwise 400 on an empty/blank message).
+    if (!userInput.trim()) return
+
     // Poll for cross-session messages before each turn
     await this.pollCrossSessionInbox()
 

@@ -34,11 +34,14 @@ export interface AgentSession {
   branch?: string
   /** Created PR URL (if requested) */
   prUrl?: string
+  /** Working directory the session was spawned from (used for directory grouping). */
+  directory: string
 }
 
 export interface CreateSessionOptions {
   provider?: string
   model?: string
+  directory?: string
 }
 
 export interface SessionPeek {
@@ -47,6 +50,11 @@ export interface SessionPeek {
 }
 
 export type StatusGroups = Record<SessionStatus, AgentSession[]>
+
+export interface DirectoryGroup {
+  directory: string
+  sessions: AgentSession[]
+}
 
 export class AgentViewManager {
   private sessions: Map<string, AgentSession> = new Map()
@@ -66,6 +74,7 @@ export class AgentViewManager {
       provider: options.provider ?? 'unknown',
       model: options.model ?? 'unknown',
       task,
+      directory: options.directory ?? process.cwd(),
       createdAt: new Date(),
       elapsedMs: 0,
       messages: [],
@@ -107,6 +116,27 @@ export class AgentViewManager {
     }
 
     return groups
+  }
+
+  /**
+   * Group all sessions by their working directory (v2.1.229 session-grouping alignment).
+   * Returns groups sorted alphabetically by directory path.
+   */
+  groupByDirectory(): DirectoryGroup[] {
+    const groups = new Map<string, AgentSession[]>()
+
+    for (const id of this.sessionOrder) {
+      const session = this.sessions.get(id)
+      if (!session) continue
+      const dir = session.directory || '(unknown)'
+      const existing = groups.get(dir)
+      if (existing) existing.push(session)
+      else groups.set(dir, [session])
+    }
+
+    return Array.from(groups.entries())
+      .map(([directory, sessions]) => ({ directory, sessions }))
+      .sort((a, b) => a.directory.localeCompare(b.directory))
   }
 
   /**
