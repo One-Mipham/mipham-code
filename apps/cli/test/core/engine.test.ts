@@ -134,6 +134,66 @@ describe('QueryEngine', () => {
     })
   })
 
+  describe('process — provider fallback', () => {
+    it('should degrade to default provider when active provider fails', async () => {
+      const goodChat = async function* (): AsyncGenerator<StreamChunk> {
+        yield { type: 'text', content: 'fallback response' }
+        yield { type: 'stop' }
+      }
+      const badChat = async function* (): AsyncGenerator<StreamChunk> {
+        throw new Error('ECONNREFUSED: connection refused')
+      }
+
+      const registry = new ProviderRegistry([], 'good', 'good-model')
+      registry.register('good', {
+        config: {
+          id: 'good',
+          name: 'Good',
+          protocol: 'openai-compatible' as const,
+          apiKey: 'k',
+          models: [
+            {
+              id: 'good-model',
+              name: 'Good Model',
+              providerId: 'good',
+              contextWindow: 1000,
+              maxOutput: 100,
+              vision: false,
+              status: 'active' as const,
+            },
+          ],
+        },
+        chat: goodChat,
+        listModels: async () => [],
+        healthCheck: async () => true,
+      })
+      registry.register('bad', {
+        config: {
+          id: 'bad',
+          name: 'Bad',
+          protocol: 'openai-compatible' as const,
+          apiKey: 'k',
+          models: [],
+        },
+        chat: badChat,
+        listModels: async () => [],
+        healthCheck: async () => true,
+      })
+      registry.switchProvider('bad', 'bad-model')
+
+      const engine = new QueryEngine(registry, mockContext(), makeToolMap([]))
+      const chunks: StreamChunk[] = []
+      for await (const chunk of engine.process('hi')) {
+        chunks.push(chunk)
+      }
+
+      expect(chunks.some((c) => c.type === 'warning')).toBe(true)
+      expect(chunks.some((c) => c.type === 'text' && c.content === 'fallback response')).toBe(true)
+      // Active provider should now be the default (good)
+      expect(registry.getActive().config.id).toBe('good')
+    })
+  })
+
   describe('process — basic conversation', () => {
     it('should yield text and stop chunks from provider', async () => {
       const registry = mockProviderRegistry(async function* () {

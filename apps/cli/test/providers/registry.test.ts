@@ -231,6 +231,27 @@ describe('ProviderRegistry', () => {
     })
   })
 
+  describe('default provider tracking', () => {
+    it('should expose the configured default provider and model', () => {
+      const config = makeConfig()
+      const registry = new ProviderRegistry([config], config.id, 'test-model-1')
+      expect(registry.getDefaultProviderId()).toBe(config.id)
+      expect(registry.getDefaultModelId()).toBe('test-model-1')
+    })
+
+    it('should keep default provider after switching active provider', () => {
+      const c1 = makeConfig({ id: 'p1' })
+      const c2 = makeConfig({ id: 'p2' })
+      const registry = new ProviderRegistry([c1, c2], 'p1', 'm1')
+      registry.register('p1', makeMockProvider(c1))
+      registry.register('p2', makeMockProvider(c2))
+
+      registry.switchProvider('p2', 'm2')
+      expect(registry.getDefaultProviderId()).toBe('p1')
+      expect(registry.getActive().config.id).toBe('p2')
+    })
+  })
+
   describe('healthStatus and healthMap', () => {
     it('should return true when provider healthCheck resolves true', async () => {
       const config = makeConfig()

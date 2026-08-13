@@ -446,13 +446,12 @@ export class QueryEngine {
 
     // Stream model response
     try {
-      for await (const chunk of this.registry.chat({
-        model: this.registry.getActiveModel(),
+      for await (const chunk of this.chatWithFallback(
         messages,
         systemPrompt,
-        tools: toolDefs.length > 0 ? toolDefs : undefined,
+        toolDefs.length > 0 ? toolDefs : undefined,
         signal,
-      })) {
+      )) {
         yield chunk
 
         if (chunk.type === 'error') {
@@ -1142,6 +1141,80 @@ export class QueryEngine {
 
   getRegistry(): ProviderRegistry {
     return this.registry
+  }
+
+  /**
+   * Stream a chat response with graceful provider fallback (v2.1.229 alignment).
+   *
+   * On a connection/availability failure from the active provider (thrown
+   * network error or an error chunk), switches to the configured default
+   * provider and retries once, yielding a `warning` chunk so the UI can tell
+   * the user the provider degraded. Abort errors propagate untouched.
+   */
+  private async *chatWithFallback(
+    messages: import('../shared/types').Message[],
+    systemPrompt: string,
+    toolDefs: Record<string, unknown>[] | undefined,
+    signal?: AbortSignal,
+  ): AsyncGenerator<StreamChunk> {
+    const activeId = this.registry.getActive().config.id
+    const defaultId = this.registry.getDefaultProviderId()
+
+    // ── Attempt 1: active provider ──
+    let failure: string | null = null
+    try {
+      for await (const chunk of this.registry.chat({
+        model: this.registry.getActiveModel(),
+        messages,
+        systemPrompt,
+        tools: toolDefs,
+        signal,
+      })) {
+        if (chunk.type === 'error') {
+          failure = chunk.error ?? 'Unknown error'
+          break
+        }
+        yield chunk
+      }
+      if (failure === null) return
+    } catch (err) {
+      if (isAbortError(err)) throw err
+      failure = String(err)
+    }
+
+    // ── Fallback: configured default provider, once ──
+    if (!defaultId || defaultId === activeId || !this.registry.get(defaultId)) {
+      yield { type: 'error', error: failure }
+      return
+    }
+    const fallbackModel = this.registry
+      .get(defaultId)!
+      .config.models.find((m) => m.status === 'active')?.id
+    if (!fallbackModel) {
+      yield { type: 'error', error: failure }
+      return
+    }
+
+    this.registry.switchProvider(defaultId, fallbackModel)
+    yield {
+      type: 'warning',
+      content: `${activeId} unreachable — degraded to ${defaultId} (${fallbackModel})`,
+    }
+
+    try {
+      for await (const chunk of this.registry.chat({
+        model: fallbackModel,
+        messages,
+        systemPrompt,
+        tools: toolDefs,
+        signal,
+      })) {
+        yield chunk
+      }
+    } catch (err) {
+      if (isAbortError(err)) throw err
+      yield { type: 'error', error: String(err) }
+    }
   }
 
   getTools(): Map<string, ToolDefinition> {

@@ -21,10 +21,24 @@ export class ProviderRegistry {
   private providers = new Map<string, ProviderInstance>()
   private activeProviderId: string
   private activeModelId: string
+  private defaultProviderId: string
+  private defaultModelId: string
 
   constructor(providers: ProviderConfig[], defaultProvider: string, defaultModel: string) {
     this.activeProviderId = defaultProvider
     this.activeModelId = defaultModel
+    this.defaultProviderId = defaultProvider
+    this.defaultModelId = defaultModel
+  }
+
+  /** The configured default provider id (used for fallback routing). */
+  getDefaultProviderId(): string {
+    return this.defaultProviderId
+  }
+
+  /** The configured default model id. */
+  getDefaultModelId(): string {
+    return this.defaultModelId
   }
 
   register(id: string, instance: ProviderInstance): void {

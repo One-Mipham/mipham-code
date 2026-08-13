@@ -658,6 +658,10 @@ export function App({
             ])
           }
 
+          if (chunk.type === 'warning' && chunk.content) {
+            setMessages((prev) => [...prev, { role: 'system', content: `⚠ ${chunk.content}` }])
+          }
+
           if (chunk.type === 'task_notification' && chunk.taskNotification) {
             const tn = chunk.taskNotification
             const isDone = tn.status === 'completed'

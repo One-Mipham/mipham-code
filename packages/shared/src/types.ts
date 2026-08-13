@@ -90,6 +90,7 @@ export interface StreamChunk {
     | 'thinking'
     | 'stop'
     | 'error'
+    | 'warning'
     | 'task_notification'
     | 'usage'
   content?: string
