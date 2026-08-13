@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { EffectivenessTracker } from '../../src/agent/effectiveness-tracker.js'
+import type { CrsiProvenanceBridge } from '../../src/agent/crsi-provenance-bridge.js'
 
 describe('EffectivenessTracker', () => {
   let tracker: EffectivenessTracker
@@ -131,5 +132,58 @@ describe('EffectivenessTracker', () => {
     const eff = tracker.getEffectiveness('rule-test')
     expect(eff).toBeDefined()
     expect(eff!.evaluationHistory.length).toBeGreaterThan(0)
+  })
+
+  it('reports effective verdict to megasystem when a decision id is set', () => {
+    const evaluateDecision = vi.fn(() => Promise.resolve(true))
+    const bridge = { evaluateDecision } as unknown as CrsiProvenanceBridge
+    tracker.setProvenanceBridge(bridge)
+    tracker.recordApplication('rule-good', true)
+    tracker.setDecisionId('rule-good', 'd1')
+    for (let i = 0; i < 9; i++) tracker.recordApplication('rule-good', true)
+
+    tracker.evaluate()
+
+    expect(evaluateDecision).toHaveBeenCalledWith(
+      'd1',
+      'effective',
+      expect.objectContaining({ score: 0 }),
+    )
+  })
+
+  it('reports ineffective verdict when failure rate is high', () => {
+    const evaluateDecision = vi.fn(() => Promise.resolve(true))
+    const bridge = { evaluateDecision } as unknown as CrsiProvenanceBridge
+    tracker.setProvenanceBridge(bridge)
+    tracker.recordApplication('rule-bad', false)
+    tracker.setDecisionId('rule-bad', 'd2')
+    for (let i = 0; i < 9; i++) tracker.recordApplication('rule-bad', false)
+
+    tracker.evaluate()
+
+    expect(evaluateDecision).toHaveBeenCalledWith(
+      'd2',
+      'ineffective',
+      expect.objectContaining({ score: 1 }),
+    )
+  })
+
+  it('does not report when no decision id is set', () => {
+    const evaluateDecision = vi.fn(() => Promise.resolve(true))
+    const bridge = { evaluateDecision } as unknown as CrsiProvenanceBridge
+    tracker.setProvenanceBridge(bridge)
+    for (let i = 0; i < 10; i++) tracker.recordApplication('rule-noid', true)
+
+    tracker.evaluate()
+
+    expect(evaluateDecision).not.toHaveBeenCalled()
+  })
+
+  it('does not crash without a bridge', () => {
+    tracker.recordApplication('rule-nobridge', true)
+    tracker.setDecisionId('rule-nobridge', 'd3')
+    for (let i = 0; i < 9; i++) tracker.recordApplication('rule-nobridge', true)
+
+    expect(() => tracker.evaluate()).not.toThrow()
   })
 })

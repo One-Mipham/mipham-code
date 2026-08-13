@@ -23,6 +23,8 @@ import { RulesLoader } from './rules-loader'
 import { ExperienceRuleEngine } from './rule-engine.js'
 import { PatternAnalyzer } from '../agent/pattern-analyzer.js'
 import { EffectivenessTracker } from '../agent/effectiveness-tracker.js'
+import { CrsiProvenanceBridge } from '../agent/crsi-provenance-bridge.js'
+import { McpClient } from '../mcp/client.js'
 import { ErrorSignatureDB } from './error-signature-db.js'
 import { PreFlightChecker } from './preflight-checker.js'
 import { AutoCorrector } from './auto-corrector.js'
@@ -1179,6 +1181,12 @@ export class QueryEngine {
       )
       // Wire SIS error signature DB for cross-session immunity
       this._autoMemory.setErrorSignatureDB(this.getErrorSignatureDB())
+
+      // Wire CRSI ↔ MegaSystem provenance bridge (degrades gracefully
+      // when the mipham-kg MCP server is not connected).
+      const bridge = new CrsiProvenanceBridge(McpClient.getInstance())
+      this._autoMemory.setProvenanceBridge(bridge)
+      this.getEffectivenessTracker().setProvenanceBridge(bridge)
     }
     return this._autoMemory
   }
