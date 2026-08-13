@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs'
+import { mkdirSync, writeFileSync, rmSync, existsSync, utimesSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { DreamEngine } from '../../src/core/dream-engine.js'
@@ -35,7 +35,6 @@ function writeMemAged(dir: string, name: string, body: string, ageDays: number):
   ].join('\n')
   const path = join(dir, `${name}.md`)
   writeFileSync(path, `${fm}\n${body}`, 'utf-8')
-  const { utimesSync } = require('node:fs')
   utimesSync(path, past, past)
 }
 
