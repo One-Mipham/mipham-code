@@ -532,6 +532,12 @@ export class QueryEngine {
       return
     }
 
+    // Record the provider's cached prefix (all messages except the newest)
+    // for cache-aware microcompaction.
+    if (messages.length >= 2) {
+      this.context.markCached(messages.slice(0, -1))
+    }
+
     // Track last assistant content for goal checking
     if (assistantContent) {
       this.lastAssistantContent = assistantContent

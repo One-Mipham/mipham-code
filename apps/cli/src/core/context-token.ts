@@ -12,6 +12,8 @@ export interface CacheTracker {
   isInCache(msg: Message): boolean
   /** Returns a snapshot of the cache state for metrics / logging. */
   getStatus(): CacheStatus
+  /** Record the set of messages currently held in the provider prompt cache. */
+  markCached?(messages: Message[]): void
   /** Clear the tracker state (does NOT evict from provider cache). */
   invalidate(): void
 }
@@ -41,8 +43,50 @@ export class NoopCacheTracker implements CacheTracker {
     this.messageCount = messages.length
   }
 
+  markCached(_messages: Message[]): void {
+    // No-op — prompt caching is disabled with this tracker.
+  }
+
   invalidate(): void {
     this.messageCount = 0
+  }
+}
+
+/**
+ * Tracks which messages are currently held in the provider's prompt cache.
+ * The engine informs it of the cached prefix after each successful request
+ * (Anthropic caches "all messages except the newest"; DeepSeek/OpenAI auto-cache
+ * the same prefix). Object-identity based, so it stays valid across the
+ * ContextManager's shallow-copied message arrays.
+ */
+export class PrefixCacheTracker implements CacheTracker {
+  private cachedMessages = new WeakSet<Message>()
+  private cachedCount = 0
+  private cachedTokens = 0
+
+  markCached(messages: Message[]): void {
+    this.cachedMessages = new WeakSet(messages)
+    this.cachedCount = messages.length
+    this.cachedTokens = messages.reduce((sum, m) => sum + estimateMessageTokens(m), 0)
+  }
+
+  isInCache(msg: Message): boolean {
+    return this.cachedMessages.has(msg)
+  }
+
+  getStatus(): CacheStatus {
+    return {
+      totalMessages: this.cachedCount,
+      cachedMessages: this.cachedCount,
+      cachedTokens: this.cachedTokens,
+      uncachedTokens: 0,
+    }
+  }
+
+  invalidate(): void {
+    this.cachedMessages = new WeakSet()
+    this.cachedCount = 0
+    this.cachedTokens = 0
   }
 }
 
