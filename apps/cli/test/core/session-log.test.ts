@@ -1,8 +1,9 @@
 import { existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, it, expect, afterEach } from 'vitest'
-import { messageToEvents, deriveMessages, SessionLog, assertModelVisible } from '../../src/core/session-log'
+import { messageToEvents, deriveMessages, SessionLog, assertModelVisible, replayMessages, forkEvents, resumeMessages } from '../../src/core/session-log'
 import type { Message } from '../../src/shared/types'
+import type { SessionEvent } from '../../src/core/session-log'
 
 describe('messageToEvents ↔ deriveMessages round-trip', () => {
   const samples: Message[] = [
@@ -81,5 +82,35 @@ describe('assertModelVisible', () => {
     expect(() =>
       assertModelVisible(log, [{ role: 'user', content: '[Earlier conversation summary]: …' }]),
     ).not.toThrow()
+  })
+})
+
+describe('replay / fork / resume', () => {
+  const turn = (at: number): SessionEvent[] => [
+    { type: 'user/message', at, message: { role: 'user', content: 'q' } },
+    { type: 'assistant/message', at, message: { role: 'assistant', content: 'a' } },
+  ]
+
+  it('replayMessages derives the full message history from a log', () => {
+    const log = new SessionLog('replay-test')
+    turn(1).forEach((e) => log.append(e))
+    turn(2).forEach((e) => log.append(e))
+    expect(replayMessages(log)).toEqual([
+      { role: 'user', content: 'q' },
+      { role: 'assistant', content: 'a' },
+      { role: 'user', content: 'q' },
+      { role: 'assistant', content: 'a' },
+    ])
+  })
+
+  it('forkEvents truncates the log at a prefix index', () => {
+    const events = [...turn(1), ...turn(2)]
+    expect(forkEvents(events, 2)).toEqual(turn(1))
+  })
+
+  it('resumeMessages equals replayMessages (alias for streaming resume)', () => {
+    const log = new SessionLog('resume-test')
+    turn(1).forEach((e) => log.append(e))
+    expect(resumeMessages(log)).toEqual(replayMessages(log))
   })
 })

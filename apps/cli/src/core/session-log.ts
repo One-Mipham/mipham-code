@@ -130,3 +130,18 @@ export function assertModelVisible(log: SessionEvent[], messages: Message[]): vo
     di++
   }
 }
+
+/** replay：从日志派生完整消息历史（回归测试可断言其确定性）。 */
+export function replayMessages(log: SessionLog): Message[] {
+  return deriveMessages(log.events())
+}
+
+/** fork：截取日志前缀（到 uptoIndex，含）作为子会话继承的基。 */
+export function forkEvents(events: SessionEvent[], uptoIndex: number): SessionEvent[] {
+  return events.slice(0, uptoIndex)
+}
+
+/** resume：从日志恢复消息历史（与 replay 同源；独立命名便于语义区分）。 */
+export function resumeMessages(log: SessionLog): Message[] {
+  return deriveMessages(log.events())
+}
