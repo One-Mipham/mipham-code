@@ -84,4 +84,21 @@ describe('Context reversible effects', () => {
     ctx.dispose()
     expect(count).toBe(1)
   })
+
+  it('dispose() unwinds remaining effects when a disposer throws', () => {
+    const ctx = new Context()
+    const log: string[] = []
+    ctx.effect(() => {
+      log.push('a+')
+      return () => log.push('a-')
+    })
+    ctx.effect(() => {
+      log.push('b+')
+      return () => {
+        throw new Error('teardown boom')
+      }
+    })
+    expect(() => ctx.dispose()).toThrow(AggregateError)
+    expect(log).toEqual(['a+', 'b+', 'a-'])
+  })
 })

@@ -33,10 +33,16 @@ export class Context {
     let status: ServiceStatus = 'inactive'
     let error: Error | undefined
     let disposer: Disposer = () => {}
+    let applied = false
+    let disposed = false
+    let effectSnapshot = -1
 
     const tryApply = (): boolean => {
+      if (applied) return true
       if (!keys.every((k) => this.has(k))) return false
+      applied = true
       status = 'loading'
+      effectSnapshot = this.effects.length
       try {
         disposer = service.apply(this) ?? (() => {})
         status = 'active'
@@ -48,6 +54,10 @@ export class Context {
     }
 
     const waiter = (): boolean => {
+      if (disposed) {
+        this.waiters = this.waiters.filter((w) => w !== waiter)
+        return true
+      }
       if (!tryApply()) return false
       this.waiters = this.waiters.filter((w) => w !== waiter)
       return true
@@ -59,9 +69,16 @@ export class Context {
 
     const mounted: Mounted = {
       dispose: () => {
+        disposed = true
+        this.waiters = this.waiters.filter((w) => w !== waiter)
         if (status === 'active') {
           status = 'unloading'
           disposer()
+        }
+        if (effectSnapshot >= 0) {
+          while (this.effects.length > effectSnapshot) {
+            this.effects.pop()!()
+          }
         }
       },
       status: () => status,
@@ -133,8 +150,16 @@ export class Context {
   }
 
   dispose(): void {
-    while (this.effects.length) this.effects.pop()!()
+    const errors: unknown[] = []
+    while (this.effects.length) {
+      try {
+        this.effects.pop()!()
+      } catch (e) {
+        errors.push(e)
+      }
+    }
     this.services.clear()
     this.listeners.clear()
+    if (errors.length) throw new AggregateError(errors)
   }
 }
