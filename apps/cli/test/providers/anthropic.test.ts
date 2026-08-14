@@ -130,7 +130,7 @@ describe('AnthropicProvider', () => {
     expect(messages[0]!.role).toBe('user')
   })
 
-  it('should send system prompt as top-level system field', async () => {
+  it('should send system prompt as a cached text block', async () => {
     let capturedBody: Record<string, unknown> = {}
     const fetchMock = vi.fn().mockImplementation(async (_url, opts) => {
       capturedBody = JSON.parse(opts.body as string)
@@ -147,7 +147,34 @@ describe('AnthropicProvider', () => {
       }),
     )
 
-    expect(capturedBody.system).toBe('You are a helpful assistant.')
+    const system = capturedBody.system as Array<{
+      type: string
+      text: string
+      cache_control: { type: string }
+    }>
+    expect(system).toHaveLength(1)
+    expect(system[0]!.type).toBe('text')
+    expect(system[0]!.text).toBe('You are a helpful assistant.')
+    expect(system[0]!.cache_control).toEqual({ type: 'ephemeral' })
+  })
+
+  it('should omit system field when no system prompt', async () => {
+    let capturedBody: Record<string, unknown> = {}
+    const fetchMock = vi.fn().mockImplementation(async (_url, opts) => {
+      capturedBody = JSON.parse(opts.body as string)
+      return makeSSEResponse(['data: {"type":"message_stop"}'])
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new AnthropicProvider(makeConfig())
+    await collectChunks(
+      provider.chat({
+        model: 'claude-sonnet-4-6',
+        messages: [{ role: 'user', content: 'hi' }],
+      }),
+    )
+
+    expect(capturedBody.system).toBeUndefined()
   })
 
   it('should send tools with input_schema', async () => {
