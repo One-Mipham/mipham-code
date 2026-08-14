@@ -73,7 +73,7 @@ export class AgentRegistry {
                 .split(',')
                 .map((s) => s.trim())
             : undefined,
-          background: (data.background as boolean) || false,
+          background: typeof data.background === 'boolean' ? data.background : undefined,
           memory: data.memory as 'user' | 'project' | 'local' | undefined,
           source,
           filePath: fullPath,
@@ -125,7 +125,6 @@ export class AgentRegistry {
         systemPrompt: BUILTIN_SYSTEM_PROMPTS[builtinType],
         model: 'inherit',
         permissionMode: 'inherit',
-        background: false,
         source: 'builtin',
       }
     }

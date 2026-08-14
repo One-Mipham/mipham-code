@@ -98,7 +98,7 @@ Minimal body.`,
     const agent = registry.get('minimal')!
     expect(agent.model).toBe('inherit')
     expect(agent.permissionMode).toBe('inherit')
-    expect(agent.background).toBe(false)
+    expect(agent.background).toBeUndefined()
     expect(agent.tools).toBeUndefined()
   })
 

@@ -6,7 +6,7 @@ export const sendMessageTool: ToolDefinition = {
   description:
     'Send a message to another agent or session. ' +
     'Use "main" for the parent conversation, a background task ID for same-process agents, ' +
-    'or a session ID for cross-session messaging (use ListAgents to discover sessions).',
+    'or a session ID (or unique session name) for cross-session messaging (use ListAgents to discover sessions).',
   category: 'agent',
   permission: 'auto',
   parameters: {
@@ -15,7 +15,7 @@ export const sendMessageTool: ToolDefinition = {
       to: {
         type: 'string',
         description:
-          'Recipient: "main" for the parent conversation, a background task ID, or a session ID for cross-session messaging.',
+          'Recipient: "main" for the parent conversation, a background task ID, or a session ID / unique session name for cross-session messaging.',
       },
       summary: {
         type: 'string',

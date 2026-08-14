@@ -5,13 +5,26 @@ import { getBackgroundAgentRegistry } from '../../agent/background-registry'
 
 const VALID_TYPES: SubAgentType[] = ['general', 'explore', 'plan', 'code-review']
 
+/**
+ * Resolve whether a sub-agent should run in the background.
+ * Precedence: explicit `run_in_background` param > agent frontmatter
+ * `background` field > default (background, Claude Code 2.1.232 parity).
+ */
+export function resolveRunInBackground(
+  runInBackground: boolean | undefined,
+  agentDef?: { background?: boolean },
+): boolean {
+  return runInBackground ?? agentDef?.background ?? true
+}
+
 export const agentTool: ToolDefinition = {
   name: 'Agent',
   description:
     'Launch a sub-agent to handle complex, multi-step tasks independently. ' +
     'Available types: general (default), explore (code search), plan (design), code-review. ' +
-    'Set run_in_background: true to execute asynchronously — returns a task ID immediately; ' +
-    'results are retrievable via the Task tool (output action) or Agent View.',
+    'Runs in the background by default — returns a task ID immediately; results are ' +
+    'retrievable via the Task tool (output action) or Agent View. ' +
+    'Set run_in_background: false to run synchronously.',
   category: 'agent',
   permission: 'ask',
   parameters: {
@@ -26,7 +39,7 @@ export const agentTool: ToolDefinition = {
       run_in_background: {
         type: 'boolean',
         description:
-          'When true, execute asynchronously and return a task ID immediately. Use Task output to retrieve results. Default: false.',
+          'When false, execute synchronously and return the result directly. Default: true (background).',
       },
     },
     required: ['description', 'prompt'],
@@ -35,7 +48,6 @@ export const agentTool: ToolDefinition = {
     const description = params.description as string
     const prompt = params.prompt as string
     const agentType = (params.subagent_type as SubAgentType) || 'general'
-    const runInBackground = params.run_in_background === true
 
     if (!VALID_TYPES.includes(agentType)) {
       return {
@@ -58,6 +70,10 @@ export const agentTool: ToolDefinition = {
 
     // Resolve agent definition from registry (custom > builtin)
     const agentDef = ctx.agentRegistry?.resolve(agentType)
+    const runInBackground = resolveRunInBackground(
+      params.run_in_background as boolean | undefined,
+      agentDef,
+    )
 
     try {
       const sub = new SubAgent(

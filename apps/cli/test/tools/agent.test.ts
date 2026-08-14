@@ -3,7 +3,7 @@ import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { ToolContext } from '@mipham/shared'
-import { agentTool } from '../../src/tools/agent/agent'
+import { agentTool, resolveRunInBackground } from '../../src/tools/agent/agent'
 import { skillTool } from '../../src/tools/agent/skill'
 import { planTool } from '../../src/tools/agent/plan'
 import { memoryTool } from '../../src/tools/agent/memory'
@@ -36,6 +36,33 @@ describe('Agent tool definition', () => {
   it('has optional subagent_type parameter', () => {
     const params = agentTool.parameters as { properties: Record<string, unknown> }
     expect(params.properties).toHaveProperty('subagent_type')
+  })
+})
+
+describe('resolveRunInBackground', () => {
+  it('defaults to background when unspecified', () => {
+    expect(resolveRunInBackground(undefined, undefined)).toBe(true)
+  })
+
+  it('honors explicit false (opt-out to sync)', () => {
+    expect(resolveRunInBackground(false, undefined)).toBe(false)
+  })
+
+  it('honors explicit true', () => {
+    expect(resolveRunInBackground(true, undefined)).toBe(true)
+  })
+
+  it('honors frontmatter background: false', () => {
+    expect(resolveRunInBackground(undefined, { background: false })).toBe(false)
+  })
+
+  it('honors frontmatter background: true', () => {
+    expect(resolveRunInBackground(undefined, { background: true })).toBe(true)
+  })
+
+  it('explicit param wins over frontmatter', () => {
+    expect(resolveRunInBackground(false, { background: true })).toBe(false)
+    expect(resolveRunInBackground(true, { background: false })).toBe(true)
   })
 })
 
