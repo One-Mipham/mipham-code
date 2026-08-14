@@ -177,6 +177,91 @@ describe('AnthropicProvider', () => {
     expect(capturedBody.system).toBeUndefined()
   })
 
+  it('should mark the stable message prefix for caching (all but last message)', async () => {
+    let capturedBody: Record<string, unknown> = {}
+    const fetchMock = vi.fn().mockImplementation(async (_url, opts) => {
+      capturedBody = JSON.parse(opts.body as string)
+      return makeSSEResponse(['data: {"type":"message_stop"}'])
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new AnthropicProvider(makeConfig())
+    await collectChunks(
+      provider.chat({
+        model: 'claude-sonnet-4-6',
+        messages: [
+          { role: 'user', content: 'first' },
+          { role: 'assistant', content: 'reply' },
+          { role: 'user', content: 'second' },
+        ],
+      }),
+    )
+
+    const messages = capturedBody.messages as Array<{
+      role: string
+      content: Array<{ type: string; cache_control?: { type: string } }>
+    }>
+    // Breakpoint lands on the second-to-last message's last block
+    expect(messages[1]!.content[messages[1]!.content.length - 1]!.cache_control).toEqual({
+      type: 'ephemeral',
+    })
+    // Newest message stays uncached
+    expect(messages[2]!.content[messages[2]!.content.length - 1]!.cache_control).toBeUndefined()
+  })
+
+  it('should not add a message breakpoint with fewer than two messages', async () => {
+    let capturedBody: Record<string, unknown> = {}
+    const fetchMock = vi.fn().mockImplementation(async (_url, opts) => {
+      capturedBody = JSON.parse(opts.body as string)
+      return makeSSEResponse(['data: {"type":"message_stop"}'])
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new AnthropicProvider(makeConfig())
+    await collectChunks(
+      provider.chat({ model: 'claude-sonnet-4-6', messages: [{ role: 'user', content: 'only' }] }),
+    )
+
+    const messages = capturedBody.messages as Array<{
+      role: string
+      content: Array<{ type: string; cache_control?: { type: string } }>
+    }>
+    expect(messages[0]!.content[0]!.cache_control).toBeUndefined()
+  })
+
+  it('should mark the last tool definition for caching', async () => {
+    let capturedBody: Record<string, unknown> = {}
+    const fetchMock = vi.fn().mockImplementation(async (_url, opts) => {
+      capturedBody = JSON.parse(opts.body as string)
+      return makeSSEResponse(['data: {"type":"message_stop"}'])
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new AnthropicProvider(makeConfig())
+    await collectChunks(
+      provider.chat({
+        model: 'claude-sonnet-4-6',
+        messages: [],
+        tools: [
+          {
+            name: 'read',
+            description: 'Read file',
+            parameters: { type: 'object', properties: {} },
+          },
+          {
+            name: 'write',
+            description: 'Write file',
+            parameters: { type: 'object', properties: {} },
+          },
+        ],
+      }),
+    )
+
+    const tools = capturedBody.tools as Array<{ name: string; cache_control?: { type: string } }>
+    expect(tools[0]!.cache_control).toBeUndefined()
+    expect(tools[1]!.cache_control).toEqual({ type: 'ephemeral' })
+  })
+
   it('should send tools with input_schema', async () => {
     let capturedBody: Record<string, unknown> = {}
     const fetchMock = vi.fn().mockImplementation(async (_url, opts) => {
