@@ -4041,8 +4041,10 @@ const forkCmd: CommandHandler = async (ctx, args) => {
         ctx.engine.getTools(),
         ctx.engine.getPermission(),
       )
+      const parentContext = ctx.engine.getContext()
       const result = await sa.execute(prompt, 'fork: ' + prompt.slice(0, 60), {
         worktreePath: wtPath,
+        inheritContext: { messages: parentContext.getMessages() },
       })
       try {
         const { execSync: ex } = await import('node:child_process')

@@ -1,5 +1,7 @@
 // apps/cli/src/agent/types.ts
 
+import type { Message } from '../shared/index.ts'
+
 export type SubAgentType = 'general' | 'explore' | 'plan' | 'code-review'
 
 export interface AgentFrontmatter {
@@ -48,6 +50,8 @@ export interface SubAgentOptions {
   onProgress?: (chunk: string) => void
   /** When set, tool executions use this path as cwd (git worktree isolation). */
   worktreePath?: string
+  /** Seed the sub-agent with a parent conversation prefix (e.g., fork inheritance). */
+  inheritContext?: { messages: Message[] }
   /** CRSI: when false, skip pattern analysis after agent execution. Default true. */
   autoPatternAnalysis?: boolean
 }

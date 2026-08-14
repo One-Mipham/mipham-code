@@ -3,7 +3,7 @@ import { SubAgent } from '../../src/agent/sub-agent'
 import { getMessageBus } from '../../src/agent/message-bus'
 import { AgentExperience } from '../../src/agent/agent-experience'
 import type { ProviderRegistry, ProviderInstance, ChatRequest } from '../../src/providers/registry'
-import type { ToolDefinition, StreamChunk } from '../../src/shared/index.ts'
+import type { ToolDefinition, StreamChunk, Message } from '../../src/shared/index.ts'
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -295,6 +295,36 @@ describe('SubAgent', () => {
 
     expect(receivedModel).toBe('claude-sonnet')
     expect(result).toContain('ok')
+  })
+
+  it('seeds inherited parent conversation into the sub-agent context', async () => {
+    let receivedMessages: Message[] = []
+    const provider = createMockProvider([{ type: 'text', content: 'ok' }, { type: 'stop' }])
+    const originalChat = provider.chat
+    provider.chat = async function* (req) {
+      receivedMessages = req.messages
+      yield* originalChat.call(provider, req)
+    }
+
+    const registry = createMockRegistry(provider)
+    const sub = new SubAgent(registry, TOOLS)
+
+    const inherited: Message[] = [
+      { role: 'user', content: 'parent question' },
+      { role: 'assistant', content: 'parent answer' },
+    ]
+
+    await sub.execute('do the task', 'task', {
+      type: 'general',
+      inheritContext: { messages: inherited },
+    })
+
+    expect(receivedMessages.length).toBeGreaterThanOrEqual(3)
+    expect(receivedMessages[0]).toEqual(inherited[0])
+    expect(receivedMessages[1]).toEqual(inherited[1])
+    const last = receivedMessages[receivedMessages.length - 1]!
+    expect(last.role).toBe('user')
+    expect(last.content).toBe('do the task')
   })
 
   it('posts warning to message bus when model fallback occurs', async () => {
