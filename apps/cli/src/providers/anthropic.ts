@@ -60,7 +60,9 @@ export class AnthropicProvider implements ProviderInstance {
     }
 
     if (req.systemPrompt) {
-      body.system = req.systemPrompt
+      // Mark the system prompt for prompt caching — it's the largest stable
+      // block and byte-identical across turns, so it always hits the cache.
+      body.system = [{ type: 'text', text: req.systemPrompt, cache_control: { type: 'ephemeral' } }]
     }
 
     if (req.temperature !== undefined) {
