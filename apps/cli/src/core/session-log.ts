@@ -1,3 +1,5 @@
+import { appendFileSync, readFileSync, mkdirSync, existsSync } from 'node:fs'
+import { join } from 'node:path'
 import type { Message, ToolUseContent, ToolResultContent } from '../shared/types'
 
 export type SessionEvent =
@@ -57,4 +59,50 @@ export function deriveMessages(events: SessionEvent[]): Message[] {
     // 'session/start' → 无消息
   }
   return out
+}
+
+const HOME = process.env.HOME || '~'
+const LOG_DIR = join(HOME, '.mipham', 'sessions')
+
+export class SessionLog {
+  private buf: SessionEvent[] = []
+  private now: () => number
+
+  constructor(private name: string, opts?: { now?: () => number }) {
+    this.now = opts?.now ?? (() => Date.now())
+  }
+
+  append(event: SessionEvent): void {
+    this.buf.push(event)
+  }
+
+  /** 不可变快照（浅拷贝，事件本身视为不可变）。 */
+  events(): SessionEvent[] {
+    return [...this.buf]
+  }
+
+  /** 追加写入 JSONL（每行一个事件，不重写整文件）。 */
+  save(): void {
+    mkdirSync(LOG_DIR, { recursive: true })
+    for (const e of this.buf) {
+      appendFileSync(join(LOG_DIR, `${this.name}.jsonl`), JSON.stringify(e) + '\n', 'utf-8')
+    }
+  }
+
+  /** 从既有 JSONL 打开，逐行解析为事件。 */
+  static open(name: string): SessionLog {
+    const log = new SessionLog(name)
+    const path = join(LOG_DIR, `${name}.jsonl`)
+    if (!existsSync(path)) return log
+    for (const line of readFileSync(path, 'utf-8').split('\n')) {
+      const trimmed = line.trim()
+      if (!trimmed) continue
+      try {
+        log.buf.push(JSON.parse(trimmed) as SessionEvent)
+      } catch {
+        // 跳过损坏行
+      }
+    }
+    return log
+  }
 }

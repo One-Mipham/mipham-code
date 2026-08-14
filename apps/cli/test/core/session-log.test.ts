@@ -1,5 +1,7 @@
-import { describe, it, expect } from 'vitest'
-import { messageToEvents, deriveMessages } from '../../src/core/session-log'
+import { existsSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
+import { describe, it, expect, afterEach } from 'vitest'
+import { messageToEvents, deriveMessages, SessionLog } from '../../src/core/session-log'
 import type { Message } from '../../src/shared/types'
 
 describe('messageToEvents ↔ deriveMessages round-trip', () => {
@@ -21,5 +23,42 @@ describe('messageToEvents ↔ deriveMessages round-trip', () => {
     const seq = samples
     const events = seq.flatMap((m) => messageToEvents(m, 1000))
     expect(deriveMessages(events)).toEqual(seq)
+  })
+})
+
+const HOME = process.env.HOME || '~'
+const LOG_DIR = join(HOME, '.mipham', 'sessions')
+
+describe('SessionLog append-only', () => {
+  const name = `test-log-${Date.now()}`
+  afterEach(() => {
+    rmSync(join(LOG_DIR, `${name}.jsonl`), { force: true })
+  })
+
+  it('appends events and returns an immutable snapshot', () => {
+    const log = new SessionLog(name)
+    const a = { type: 'user/message', at: 1, message: { role: 'user', content: 'hi' } } as const
+    log.append(a)
+    const snap = log.events()
+    expect(snap).toHaveLength(1)
+    snap.push(a) // mutation of the snapshot must not affect the log
+    expect(log.events()).toHaveLength(1)
+  })
+
+  it('persists to JSONL and reopens byte-identically', () => {
+    const log = new SessionLog(name, { now: () => 1 })
+    log.append({ type: 'session/start', at: 1, sessionId: name })
+    log.append({ type: 'user/message', at: 1, message: { role: 'user', content: 'hi' } })
+    log.append(messageToEvents({ role: 'assistant', content: 'ok' }, 1)[0]!)
+    log.save()
+
+    expect(existsSync(join(LOG_DIR, `${name}.jsonl`))).toBe(true)
+    const reopened = SessionLog.open(name)
+    expect(reopened.events()).toEqual(log.events())
+  })
+
+  it('open on missing file returns empty log', () => {
+    const log = SessionLog.open('test-log-nonexistent-xyz')
+    expect(log.events()).toEqual([])
   })
 })
