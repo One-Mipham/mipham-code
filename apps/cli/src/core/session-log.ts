@@ -2,6 +2,7 @@ import { appendFileSync, readFileSync, mkdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Message, ToolUseContent, ToolResultContent } from '../shared/types'
 
+// M1b 待对齐：compaction/summary 未记录其在流中的位置（deriveMessages 现追加在末尾）；tool/result 存 content:string（spec §4.2 的 result:ToolResult 含 success/error，M1 仅需 content）。
 export type SessionEvent =
   | { type: 'session/start'; at: number; sessionId: string }
   | { type: 'user/message'; at: number; message: Message }
@@ -15,13 +16,10 @@ export function messageToEvents(msg: Message, at = 0): SessionEvent[] {
   if (msg.role === 'user') {
     if (Array.isArray(msg.content)) {
       const results = msg.content.filter((b) => b.type === 'tool_result') as ToolResultContent[]
-      if (results.length > 0 && results.length === msg.content.length) {
-        return results.map((r) => ({
-          type: 'tool/result',
-          at,
-          id: r.tool_use_id,
-          content: r.content,
-        }))
+      // 仅当内容是「单个 tool_result 块」才拆分为 tool/result，保证 deriveMessages 字节级还原
+      if (results.length === 1 && results.length === msg.content.length) {
+        const r = results[0]!
+        return [{ type: 'tool/result', at, id: r.tool_use_id, content: r.content }]
       }
       return [{ type: 'user/message', at, message: msg }]
     }
@@ -30,8 +28,11 @@ export function messageToEvents(msg: Message, at = 0): SessionEvent[] {
   if (msg.role === 'assistant') {
     if (Array.isArray(msg.content)) {
       const uses = msg.content.filter((b) => b.type === 'tool_use') as ToolUseContent[]
-      if (uses.length > 0 && uses.length === msg.content.length) {
-        return uses.map((u) => ({ type: 'tool/call', at, id: u.id, name: u.name, input: u.input }))
+      // 仅当内容是「单个 tool_use 块」且 reasoning_content === '' 才拆分为 tool/call（引擎约定），
+      // 否则整条嵌入 assistant/message，保证 reasoning_content 存在性与多块边界字节级还原
+      if (uses.length === 1 && uses.length === msg.content.length && msg.reasoning_content === '') {
+        const u = uses[0]!
+        return [{ type: 'tool/call', at, id: u.id, name: u.name, input: u.input }]
       }
       return [{ type: 'assistant/message', at, message: msg }]
     }
@@ -71,6 +72,7 @@ const LOG_DIR = join(HOME, '.mipham', 'sessions')
 
 export class SessionLog {
   private buf: SessionEvent[] = []
+  private flushed = 0
 
   constructor(private name: string) {}
 
@@ -83,15 +85,16 @@ export class SessionLog {
     return [...this.buf]
   }
 
-  /** 追加写入 JSONL（每行一个事件，不重写整文件）。 */
+  /** 追加写入 JSONL（只写上次 save 之后新增的事件，幂等）。 */
   save(): void {
     mkdirSync(LOG_DIR, { recursive: true })
-    for (const e of this.buf) {
+    for (const e of this.buf.slice(this.flushed)) {
       appendFileSync(join(LOG_DIR, `${this.name}.jsonl`), JSON.stringify(e) + '\n', 'utf-8')
     }
+    this.flushed = this.buf.length
   }
 
-  /** 从既有 JSONL 打开，逐行解析为事件。 */
+  /** 从既有 JSONL 打开，逐行解析为事件（已落盘事件标记为已 flush）。 */
   static open(name: string): SessionLog {
     const log = new SessionLog(name)
     const path = join(LOG_DIR, `${name}.jsonl`)
@@ -105,6 +108,7 @@ export class SessionLog {
         // 跳过损坏行
       }
     }
+    log.flushed = log.buf.length
     return log
   }
 }
@@ -119,7 +123,8 @@ function messagesEqual(a: Message, b: Message): boolean {
   return JSON.stringify(a) === JSON.stringify(b)
 }
 
-/** 断言 messages 是 deriveMessages(log) 的子序列（压缩摘要豁免）。失败即抛错（fail-loud）。 */
+/** 断言 messages 是 deriveMessages(log) 的子序列（压缩摘要豁免）。失败即抛错（fail-loud）。
+ *  纯工具 + 测试断言；运行时 hot-path 接线（debug 门控）推迟到 M1b。 */
 export function assertModelVisible(log: SessionEvent[], messages: Message[]): void {
   const derived = deriveMessages(log)
   let di = 0

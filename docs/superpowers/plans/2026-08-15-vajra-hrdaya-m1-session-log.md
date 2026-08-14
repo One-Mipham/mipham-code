@@ -685,4 +685,4 @@ git commit -m "feat(cli): attach in-memory SessionLog at app startup"
 
 **Type consistency**：`SessionEvent` 七变体、`messageToEvents(msg, at=0)`、`deriveMessages(events)`、`SessionLog(name, opts?)` 的方法名在各 Task 间一致；`setLog`/`getLog` 在 Task 5/6 一致。
 
-**Explicit deferrals（M1b）**：`assistant/chunk` 流级 replay、SessionStore 持久化翻转（save→append/load→derive + 旧格式回退）、按真实 sessionId 持久化。
+**Explicit deferrals（M1b）**：`assistant/chunk` 流级 replay、SessionStore 持久化翻转（save→append/load→derive + 旧格式回退）、按真实 sessionId 持久化、`assertModelVisible` 运行时 hot-path 接线（debug 门控，已定义+单测）、`compaction/summary` 在流中的位置记录、`tool/result` 升级为 spec §4.2 的 `result: ToolResult`（含 success/error）。

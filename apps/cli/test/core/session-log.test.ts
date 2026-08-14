@@ -43,6 +43,26 @@ describe('messageToEvents ↔ deriveMessages round-trip', () => {
     const events = seq.flatMap((m) => messageToEvents(m, 1000))
     expect(deriveMessages(events)).toEqual(seq)
   })
+
+  it('round-trips tool_use without reasoning_content (sub-agent shape) byte-identically', () => {
+    const m: Message = {
+      role: 'assistant',
+      content: [{ type: 'tool_use', id: 't2', name: 'read', input: { file_path: '/b' } }],
+    }
+    expect(deriveMessages(messageToEvents(m))).toEqual([m])
+  })
+
+  it('round-trips a multi-tool_use message without changing boundaries', () => {
+    const m: Message = {
+      role: 'assistant',
+      content: [
+        { type: 'tool_use', id: 'a', name: 'x', input: {} },
+        { type: 'tool_use', id: 'b', name: 'y', input: {} },
+      ],
+      reasoning_content: '',
+    }
+    expect(deriveMessages(messageToEvents(m))).toEqual([m])
+  })
 })
 
 const HOME = process.env.HOME || '~'
@@ -73,6 +93,17 @@ describe('SessionLog append-only', () => {
 
     expect(existsSync(join(LOG_DIR, `${name}.jsonl`))).toBe(true)
     const reopened = SessionLog.open(name)
+    expect(reopened.events()).toEqual(log.events())
+  })
+
+  it('save is idempotent — double save does not duplicate events', () => {
+    const log = new SessionLog(name)
+    log.append({ type: 'user/message', at: 1, message: { role: 'user', content: 'hi' } })
+    log.save()
+    log.save()
+
+    const reopened = SessionLog.open(name)
+    expect(reopened.events()).toHaveLength(1)
     expect(reopened.events()).toEqual(log.events())
   })
 
