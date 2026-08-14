@@ -35,3 +35,43 @@ describe('Context service repository', () => {
     expect(child.has('b')).toBe(false)
   })
 })
+
+describe('Context reversible effects', () => {
+  it('effect registers and returns a disposer', () => {
+    const ctx = new Context()
+    const log: string[] = []
+    const off = ctx.effect(() => {
+      log.push('setup')
+      return () => log.push('teardown')
+    })
+    expect(log).toEqual(['setup'])
+    off()
+    expect(log).toEqual(['setup', 'teardown'])
+  })
+
+  it('dispose() unwinds effects in LIFO order', () => {
+    const ctx = new Context()
+    const log: string[] = []
+    ctx.effect(() => { log.push('a+'); return () => log.push('a-') })
+    ctx.effect(() => { log.push('b+'); return () => log.push('b-') })
+    ctx.dispose()
+    expect(log).toEqual(['a+', 'b+', 'b-', 'a-'])
+  })
+
+  it('effect without a returned disposer is safe to dispose', () => {
+    const ctx = new Context()
+    const log: string[] = []
+    ctx.effect(() => { log.push('x') })
+    ctx.dispose()
+    expect(log).toEqual(['x'])
+  })
+
+  it('manual dispose then context dispose does not double-teardown', () => {
+    const ctx = new Context()
+    let count = 0
+    const off = ctx.effect(() => () => { count++ })
+    off()
+    ctx.dispose()
+    expect(count).toBe(1)
+  })
+})
