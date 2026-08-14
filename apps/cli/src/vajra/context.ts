@@ -1,8 +1,13 @@
+import type { EventsOfMode } from './events'
+
 export type Disposer = () => void
+
+type Listener = (...args: any[]) => any
 
 export class Context {
   private services = new Map<string, unknown>()
   private effects: Disposer[] = []
+  private listeners = new Map<string, Listener[]>()
   readonly parent?: Context
 
   constructor(parent?: Context) {
@@ -40,8 +45,47 @@ export class Context {
     return dispose
   }
 
+  on(event: string, fn: Listener): Disposer {
+    const ls = this.listeners.get(event) ?? []
+    ls.push(fn)
+    this.listeners.set(event, ls)
+    return () => {
+      const cur = this.listeners.get(event)
+      if (cur)
+        this.listeners.set(
+          event,
+          cur.filter((l) => l !== fn),
+        )
+    }
+  }
+
+  emit(event: EventsOfMode<'emit'>, ...args: unknown[]): void {
+    for (const fn of this.listeners.get(event) ?? []) fn(...args)
+  }
+
+  async waterfall<T>(event: EventsOfMode<'waterfall'>, value: T, ...args: unknown[]): Promise<T> {
+    const ls = this.listeners.get(event) ?? []
+    const run = async (i: number, v: T): Promise<T> => {
+      if (i >= ls.length) return v
+      const next = async (nextVal?: T) => run(i + 1, nextVal === undefined ? v : nextVal)
+      return (await ls[i]!(v, ...args, next)) as T
+    }
+    return run(0, value)
+  }
+
+  async parallel(event: EventsOfMode<'parallel'>, ...args: unknown[]): Promise<unknown[]> {
+    return Promise.all((this.listeners.get(event) ?? []).map((fn) => fn(...args)))
+  }
+
+  async serial(event: EventsOfMode<'serial'>, ...args: unknown[]): Promise<unknown[]> {
+    const out: unknown[] = []
+    for (const fn of this.listeners.get(event) ?? []) out.push(await fn(...args))
+    return out
+  }
+
   dispose(): void {
     while (this.effects.length) this.effects.pop()!()
     this.services.clear()
+    this.listeners.clear()
   }
 }
