@@ -52,8 +52,14 @@ describe('Context reversible effects', () => {
   it('dispose() unwinds effects in LIFO order', () => {
     const ctx = new Context()
     const log: string[] = []
-    ctx.effect(() => { log.push('a+'); return () => log.push('a-') })
-    ctx.effect(() => { log.push('b+'); return () => log.push('b-') })
+    ctx.effect(() => {
+      log.push('a+')
+      return () => log.push('a-')
+    })
+    ctx.effect(() => {
+      log.push('b+')
+      return () => log.push('b-')
+    })
     ctx.dispose()
     expect(log).toEqual(['a+', 'b+', 'b-', 'a-'])
   })
@@ -61,7 +67,9 @@ describe('Context reversible effects', () => {
   it('effect without a returned disposer is safe to dispose', () => {
     const ctx = new Context()
     const log: string[] = []
-    ctx.effect(() => { log.push('x') })
+    ctx.effect(() => {
+      log.push('x')
+    })
     ctx.dispose()
     expect(log).toEqual(['x'])
   })
@@ -69,7 +77,9 @@ describe('Context reversible effects', () => {
   it('manual dispose then context dispose does not double-teardown', () => {
     const ctx = new Context()
     let count = 0
-    const off = ctx.effect(() => () => { count++ })
+    const off = ctx.effect(() => () => {
+      count++
+    })
     off()
     ctx.dispose()
     expect(count).toBe(1)
