@@ -270,6 +270,13 @@ export class SubAgent {
     )
 
     context.setSystemPrompt(systemPrompt)
+
+    // Seed inherited parent conversation (fork inheritance) as a byte-identical
+    // prefix so the provider prompt cache is reused.
+    if (options.inheritContext && options.inheritContext.messages.length > 0) {
+      context.seedMessages(options.inheritContext.messages)
+    }
+
     context.addMessage({ role: 'user', content: prompt })
 
     const messages = context.getMessages()

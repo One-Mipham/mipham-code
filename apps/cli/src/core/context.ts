@@ -116,6 +116,17 @@ export class ContextManager {
     this.checkCompression()
   }
 
+  /**
+   * Seed a batch of pre-existing messages (e.g., an inherited parent
+   * conversation). Unlike addMessage, this does not trigger compaction so the
+   * byte-identical prefix is preserved for prompt-cache hits.
+   */
+  seedMessages(messages: Message[]): void {
+    if (messages.length === 0) return
+    this.messages.push(...messages)
+    this.reEstimateTokens()
+  }
+
   getMessages(): Message[] {
     return [...this.messages]
   }
