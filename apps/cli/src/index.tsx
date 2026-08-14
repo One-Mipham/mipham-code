@@ -21,6 +21,7 @@ import { bootstrapProviders } from './providers/bootstrap'
 import { InstructionsLoader } from './core/instructions'
 import { loadSessionMemories, getMemoryManager } from './core/memory/memory-loader'
 import { ContextManager } from './core/context'
+import { PrefixCacheTracker } from './core/context-token'
 import { QueryEngine } from './core/engine'
 import { ExperienceRuleEngine } from './core/rule-engine.js'
 import { SessionStore } from './core/session-store'
@@ -325,6 +326,8 @@ export async function runApp(options: RunOptions): Promise<void> {
     compactionThreshold: 0.9,
     contextWindow: adaptiveThresholds ? modelContextWindow : undefined,
   })
+  // Cache-aware microcompaction: track the provider's prompt-cache prefix.
+  context.setCacheTracker(new PrefixCacheTracker())
 
   // Adaptive memory budget: scale with model's context window
   getMemoryManager().setContextWindow(modelContextWindow)

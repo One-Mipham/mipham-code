@@ -252,6 +252,11 @@ export class ContextManager {
     this.cacheTracker = tracker
   }
 
+  /** Mark a set of messages as cached by the provider (called after a request). */
+  markCached(messages: Message[]): void {
+    this.cacheTracker.markCached?.(messages)
+  }
+
   /** Get a snapshot of the provider prompt-cache state. */
   getCacheStatus(): CacheStatus {
     return this.cacheTracker.getStatus()

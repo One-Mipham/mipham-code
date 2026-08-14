@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { microcompact, shouldMicrocompact } from '../../src/core/context-microcompact'
-import { NoopCacheTracker } from '../../src/core/context-token'
+import { NoopCacheTracker, PrefixCacheTracker } from '../../src/core/context-token'
 import type { Message } from '@mipham/shared'
 
 function makeMessages(count: number): Message[] {
@@ -89,5 +89,39 @@ describe('microcompact', () => {
     const cache = new NoopCacheTracker()
     // With NoopCacheTracker (nothing in cache), savings should be positive
     expect(shouldMicrocompact(messages, cache, 0.7)).toBe(true)
+  })
+})
+
+describe('PrefixCacheTracker', () => {
+  it('reports marked messages as cached by object identity', () => {
+    const tracker = new PrefixCacheTracker()
+    const messages = makeMessages(3) // 9 messages
+    tracker.markCached(messages.slice(0, 6))
+
+    expect(tracker.isInCache(messages[0]!)).toBe(true)
+    expect(tracker.isInCache(messages[5]!)).toBe(true)
+    expect(tracker.isInCache(messages[6]!)).toBe(false)
+    expect(tracker.isInCache(messages[8]!)).toBe(false)
+  })
+
+  it('clears state on invalidate', () => {
+    const tracker = new PrefixCacheTracker()
+    const messages = makeMessages(2)
+    tracker.markCached(messages)
+    expect(tracker.isInCache(messages[0]!)).toBe(true)
+
+    tracker.invalidate()
+    expect(tracker.isInCache(messages[0]!)).toBe(false)
+    expect(tracker.getStatus().cachedMessages).toBe(0)
+  })
+
+  it('reports cached message count and token estimate in status', () => {
+    const tracker = new PrefixCacheTracker()
+    const messages = makeMessages(2) // 6 messages
+    tracker.markCached(messages.slice(0, 3))
+
+    const status = tracker.getStatus()
+    expect(status.cachedMessages).toBe(3)
+    expect(status.cachedTokens).toBeGreaterThan(0)
   })
 })
