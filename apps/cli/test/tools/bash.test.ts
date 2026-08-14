@@ -63,6 +63,49 @@ describe('bash security hardening', () => {
 })
 
 // ============================================================
+// Git guardrail parity — dangerous git commands must be blocked when
+// invoked via Bash (the Git tool blocks these; Bash previously allowed a bypass)
+// ============================================================
+
+describe('bash git guardrail parity', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  const blockedGitCommands = [
+    { desc: 'force push', cmd: 'git push --force origin main' },
+    { desc: 'force push short flag', cmd: 'git push -f' },
+    { desc: 'hard reset', cmd: 'git reset --hard HEAD~1' },
+    { desc: 'force delete branch', cmd: 'git branch -D feature-x' },
+    { desc: 'clean ignored+untracked', cmd: 'git clean -fd' },
+  ]
+
+  for (const { desc, cmd } of blockedGitCommands) {
+    it(`blocks: ${desc}`, async () => {
+      mockSafeSpawn()
+      const result = await bashTool.execute({ command: cmd, description: 'test' }, ctx)
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('Dangerous git command blocked')
+    })
+  }
+
+  it('allows safe git commands', async () => {
+    mockSafeSpawn()
+    const result = await bashTool.execute({ command: 'git status', description: 'test' }, ctx)
+    expect(result.success).toBe(true)
+  })
+
+  it('allows non-force push', async () => {
+    mockSafeSpawn()
+    const result = await bashTool.execute(
+      { command: 'git push origin main', description: 'test' },
+      ctx,
+    )
+    expect(result.success).toBe(true)
+  })
+})
+
+// ============================================================
 // detectViolations — sandbox violation reporting
 // ============================================================
 

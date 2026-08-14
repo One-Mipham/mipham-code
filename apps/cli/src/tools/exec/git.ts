@@ -2,7 +2,7 @@ import type { ToolDefinition } from '../../shared/index.ts'
 
 // P0-4 (v2.1.222 alignment): Regex-based word-boundary patterns replace
 // fragile substring matching. Each pattern describes what it blocks.
-const DANGEROUS_GIT_PATTERNS: Array<{ pattern: RegExp; description: string }> = [
+export const DANGEROUS_GIT_PATTERNS: Array<{ pattern: RegExp; description: string }> = [
   // Destructive push
   { pattern: /\bpush\s+.*--force(?:-with-lease)?\b/, description: 'push --force' },
   { pattern: /\bpush\s+.*-[fF]\b/, description: 'push -f (force)' },
