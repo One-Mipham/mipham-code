@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { rmSync, existsSync } from 'node:fs'
+import { rmSync, existsSync, mkdirSync, symlinkSync } from 'node:fs'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import {
   FileInboxTransport,
   getFileInboxTransport,
@@ -118,6 +118,44 @@ describe('FileInboxTransport', () => {
       type: 'message',
     })
     expect(result).toBe(false)
+  })
+
+  it('refuses to write through a symlinked inbox directory', async () => {
+    const inboxRoot = join(homedir(), '.mipham', 'inbox')
+    const sessionDir = join(inboxRoot, 'symlink-session')
+    const target = join(tmpdir(), 'symlink-attacker-target')
+    mkdirSync(inboxRoot, { recursive: true })
+    mkdirSync(target, { recursive: true })
+    try {
+      rmSync(sessionDir, { force: true })
+    } catch {}
+    try {
+      symlinkSync(target, sessionDir)
+    } catch {
+      // Symlinks unavailable on this platform — skip
+      return
+    }
+
+    try {
+      const result = await transport.send(fromSession, 'symlink-session', {
+        id: 'msg-1',
+        from: 'sender-123',
+        to: 'symlink-session',
+        summary: 'Hi',
+        message: 'Redirected?',
+        timestamp: new Date(),
+        read: false,
+        type: 'message',
+      })
+      expect(result).toBe(false)
+    } finally {
+      try {
+        rmSync(sessionDir, { force: true })
+      } catch {}
+      try {
+        rmSync(target, { recursive: true, force: true })
+      } catch {}
+    }
   })
 })
 

@@ -11,6 +11,8 @@ import { setPreference } from '../config/preferences'
 import { saveProviderApiKey } from '../config/loader'
 import { AgentRegistry } from '../agent/agent-registry'
 import { getBackgroundAgentRegistry } from '../agent/background-registry'
+import { getMessageRouter, parseMention, resolveRecipientSession } from '../agent/message-router'
+import { discoverSessions } from '../agent/cross-session/discovery'
 import { ChatPanel } from './chat'
 import { InputBar } from './input'
 import { ModelPicker } from './picker'
@@ -324,6 +326,40 @@ export function App({
   const handleSubmit = useCallback(
     async (input: string) => {
       if (!input.trim()) return
+
+      // ── @mention: direct cross-session message — only when the name resolves
+      // to a live session; otherwise fall through to normal AI processing so a
+      // leading `@word` (e.g. "@bob please review") isn't hijacked as a send. ──
+      const mention = parseMention(input)
+      if (mention && resolveRecipientSession(discoverSessions(), mention.name).session) {
+        if (!mention.message) {
+          setMessages((prev) => [
+            ...prev,
+            { role: 'user', content: input },
+            { role: 'system', content: 'Usage: @session-name <message>' },
+          ])
+          return
+        }
+        const mentionSummary =
+          mention.message.length > 50 ? mention.message.slice(0, 47) + '...' : mention.message
+        const result = await getMessageRouter().route(
+          sessionId || 'main',
+          mention.name,
+          mentionSummary,
+          mention.message,
+        )
+        setMessages((prev) => [
+          ...prev,
+          { role: 'user', content: input },
+          {
+            role: 'system',
+            content: result.success
+              ? `── Message sent to ${mention.name} ──${result.messageId ? `\nID: ${result.messageId}` : ''}`
+              : `❌ Failed to send to ${mention.name}: ${result.error}`,
+          },
+        ])
+        return
+      }
 
       // ── Slash command dispatch ──
       if (looksLikeSlashCommand(input)) {

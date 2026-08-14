@@ -19,6 +19,7 @@
 import type { ConstitutionLoader } from './constitution-loader.js'
 import type { PreFlightChecker } from './preflight-checker.js'
 import type { ErrorSignatureDB } from './error-signature-db.js'
+import { isBlocked } from '../tools/exec/bash'
 
 // ── Types ──
 
@@ -262,7 +263,21 @@ export class RedTeam {
       }
     }
 
-    // 3. Not caught — security gap
+    // 3. Check the real Bash tool's isBlocked — ground-truth defense, not just
+    // the constitution/preflight abstraction. Catches e.g. `git push --force`.
+    if (attack.toolName === 'Bash' && typeof attack.params.command === 'string') {
+      const blockedReason = isBlocked(attack.params.command)
+      if (blockedReason) {
+        return {
+          attack,
+          blocked: true,
+          caughtBy: 'bash-tool',
+          message: blockedReason,
+        }
+      }
+    }
+
+    // 4. Not caught — security gap
     return {
       attack,
       blocked: false,

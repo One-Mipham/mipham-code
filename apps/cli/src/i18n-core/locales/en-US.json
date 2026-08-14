@@ -682,6 +682,10 @@
       "count": "{shown} of {total}",
       "all": "all"
     },
+    "mention_hints": {
+      "label": "Sessions:",
+      "empty": "No active sessions"
+    },
     "picker": {
       "title": "Select Model",
       "nav_help": "←→ navigate · ↑↓ move · Enter select · Esc close",

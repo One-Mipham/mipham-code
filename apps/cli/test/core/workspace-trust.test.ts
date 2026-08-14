@@ -62,6 +62,24 @@ describe('WorkspaceTrust', () => {
     expect(trust.isTrusted(child)).toBe(true)
   })
 
+  it('does not trust nested git repos under a trusted directory', () => {
+    const outer = join(tmpdir(), 'outer-repo')
+    const nested = join(outer, 'vendor', 'dep')
+    const sibling = join(outer, 'src')
+    mkdirSync(nested, { recursive: true })
+    mkdirSync(sibling, { recursive: true })
+    // Mark outer and the nested dir as separate git-repo roots.
+    mkdirSync(join(outer, '.git'), { recursive: true })
+    mkdirSync(join(nested, '.git'), { recursive: true })
+
+    trust.trust(outer)
+    // Same-repo subdir is still trusted…
+    expect(trust.isTrusted(sibling)).toBe(true)
+    // …but the nested repo (and anything under it) is isolated.
+    expect(trust.isTrusted(nested)).toBe(false)
+    expect(trust.isTrusted(join(nested, 'src'))).toBe(false)
+  })
+
   it('does not trust sibling directories', () => {
     const dir1 = join(tmpdir(), 'project-a')
     const dir2 = join(tmpdir(), 'project-b')

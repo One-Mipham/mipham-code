@@ -5,6 +5,7 @@ import { VimMotionEngine, type VimMode } from './vim-motions.js'
 import { getCommandList } from './commands.js'
 import { CommandPicker } from './command-picker.js'
 import { useI18n } from '../i18n-context'
+import { discoverSessions } from '../agent/cross-session/discovery'
 
 interface InputBarProps {
   onSubmit: (input: string) => void
@@ -106,6 +107,15 @@ export function InputBar({
     if (!filter) return allCommands.slice(0, 12) // show first 12 when just "/"
     return allCommands.filter((c) => c.name.toLowerCase().includes(filter)).slice(0, 8)
   }, [value, allCommands])
+
+  // ── @mention hints (cross-session recipients) ──
+  const mentionHints = useMemo(() => {
+    if (!value.startsWith('@')) return []
+    const filter = value.slice(1).toLowerCase()
+    const names = discoverSessions().map((s) => s.name)
+    if (!filter) return names.slice(0, 12)
+    return names.filter((n) => n.toLowerCase().includes(filter)).slice(0, 8)
+  }, [value])
 
   // Rotate gerunds while loading — use tRef to avoid re-running when i18n context re-renders
   useEffect(() => {
@@ -446,6 +456,17 @@ export function InputBar({
                 })}
             )
           </Text>
+        </Box>
+      )}
+      {/* @mention hints — active sessions (cross-session messaging) */}
+      {mentionHints.length > 0 && vimMode === 'insert' && !pickerActive && (
+        <Box marginTop={1} flexDirection="column" gap={1}>
+          <Text dimColor>{t('ui.mention_hints.label')} </Text>
+          {mentionHints.map((name) => (
+            <Text key={name} color="green">
+              {name}
+            </Text>
+          ))}
         </Box>
       )}
     </Box>

@@ -55,6 +55,22 @@ describe('McpClient', () => {
     })
   })
 
+  describe('connect timeout', () => {
+    it('fails fast when the server hangs during handshake', async () => {
+      const client = McpClient.getInstance()
+      process.env.MIPHAM_MCP_CONNECT_TIMEOUT_MS = '500'
+      try {
+        const started = Date.now()
+        await expect(
+          client.connect({ name: 'hang', command: 'sleep', args: ['30'] }),
+        ).rejects.toThrow(/timed out/)
+        expect(Date.now() - started).toBeLessThan(5_000)
+      } finally {
+        delete process.env.MIPHAM_MCP_CONNECT_TIMEOUT_MS
+      }
+    })
+  })
+
   describe('callTool', () => {
     it('calls a tool on a connected server', async () => {
       const client = McpClient.getInstance()

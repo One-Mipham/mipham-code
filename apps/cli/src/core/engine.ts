@@ -35,7 +35,7 @@ import { SelfCritique } from './self-critique.js'
 import { UsageTracker } from './usage-tracker'
 import { buildRequest, sendInferenceCheck, isInferenceHookEnabled } from './inference-hook'
 import { getFileInboxTransport } from '../agent/cross-session/file-inbox'
-import { getMessageBus } from '../agent/message-bus'
+import { getMessageBus, type AgentMessage } from '../agent/message-bus'
 import { createT } from '../i18n-core/t'
 import enUS from '../i18n-core/locales/en-US.json'
 import zhCN from '../i18n-core/locales/zh-CN.json'
@@ -46,6 +46,20 @@ const bundles: Record<string, TranslationMap> = {
   'zh-CN': zhCN as TranslationMap,
 }
 const t = createT(bundles['en-US'] || (enUS as TranslationMap), enUS as TranslationMap)
+
+/**
+ * Drop inbound messages whose timestamp is older than the dialog-expiry TTL.
+ * A stale message's approval dialog is no longer relevant, so it's discarded
+ * before forwarding. Pure — unit-testable without touching the inbox.
+ */
+export function filterExpiredMessages(
+  messages: AgentMessage[],
+  dialogExpirySeconds: number,
+  now = Date.now(),
+): AgentMessage[] {
+  const maxAgeMs = dialogExpirySeconds * 1000
+  return messages.filter((m) => now - new Date(m.timestamp).getTime() <= maxAgeMs)
+}
 
 export class QueryEngine {
   private hookEngine?: HookEngine
@@ -131,8 +145,11 @@ export class QueryEngine {
       const transport = getFileInboxTransport()
       const messages = await transport.poll(this.sessionId)
       if (messages.length > 0) {
+        // dialogExpiry: discard messages older than the approval-dialog TTL
+        const fresh = filterExpiredMessages(messages, this.crossSessionConfig.dialogExpiry)
+        if (fresh.length === 0) return
         const bus = getMessageBus()
-        for (const msg of messages) {
+        for (const msg of fresh) {
           // P2-1: Trigger Notification hook for cross-session messages
           if (this.hookEngine) {
             this.hookEngine

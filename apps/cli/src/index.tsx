@@ -1,5 +1,5 @@
 import React from 'react'
-import { join } from 'node:path'
+import { join, basename } from 'node:path'
 import { homedir } from 'node:os'
 import { existsSync } from 'node:fs'
 import { render } from 'ink'
@@ -16,6 +16,8 @@ import {
   heartbeatSession,
   unregisterSession,
   createSessionInfo,
+  ensureUniqueSessionName,
+  discoverSessions,
 } from './agent/cross-session/discovery'
 import { bootstrapProviders } from './providers/bootstrap'
 import { InstructionsLoader } from './core/instructions'
@@ -515,9 +517,13 @@ export async function runApp(options: RunOptions): Promise<void> {
 
   // ── Cross-session messaging: register session, heartbeat, shutdown ──
   engine.setSessionId(sessionName)
+  // Human-readable, cross-session-addressable name. Defaults to the cwd basename
+  // so `@mipham-code` can address this session; uniqueness is enforced against
+  // other live sessions (suffix -2, -3, …). The id stays a stable `session-<ts>`.
+  const defaultName = basename(process.cwd()) || 'session'
   const sessionInfo = createSessionInfo(
     sessionName,
-    sessionName,
+    ensureUniqueSessionName(defaultName, discoverSessions()),
     process.cwd(),
     defaultProvider,
     defaultModel,

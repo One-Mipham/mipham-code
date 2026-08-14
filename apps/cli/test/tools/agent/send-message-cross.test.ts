@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { MessageRouter, resolveRecipientSession } from '../../../src/agent/message-router'
+import {
+  MessageRouter,
+  resolveRecipientSession,
+  parseMention,
+} from '../../../src/agent/message-router'
 import {
   registerActiveSession,
   unregisterSession,
@@ -50,6 +54,28 @@ describe('resolveRecipientSession', () => {
     const result = resolveRecipientSession([makeSession('a', 'alpha')], 'zzz')
     expect(result.session).toBeUndefined()
     expect(result.error).toContain('No active session found')
+  })
+})
+
+describe('parseMention', () => {
+  it('parses @name with a message', () => {
+    expect(parseMention('@alpha hello there')).toEqual({ name: 'alpha', message: 'hello there' })
+  })
+
+  it('parses @name with no message as empty body', () => {
+    expect(parseMention('@alpha')).toEqual({ name: 'alpha', message: '' })
+  })
+
+  it('trims surrounding whitespace', () => {
+    expect(parseMention('  @alpha   hello  ')).toEqual({ name: 'alpha', message: 'hello' })
+  })
+
+  it('returns null for plain text (no @mention)', () => {
+    expect(parseMention('hello world')).toBeNull()
+  })
+
+  it('returns null for a slash command', () => {
+    expect(parseMention('/model')).toBeNull()
   })
 })
 

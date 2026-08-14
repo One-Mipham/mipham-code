@@ -5,6 +5,7 @@ import {
   existsSync,
   mkdirSync,
   unlinkSync,
+  statSync,
 } from 'node:fs'
 import { join } from 'node:path'
 import { homedir, hostname } from 'node:os'
@@ -12,6 +13,9 @@ import type { SessionInfo } from '../../shared/types'
 
 const MIPHAM_HOME = join(homedir(), '.mipham')
 const ACTIVE_SESSIONS_DIR = join(MIPHAM_HOME, '.active-sessions')
+
+/** A session whose heartbeat file hasn't been touched in this long is dead. */
+const STALE_SESSION_TTL_MS = 10 * 60 * 1000 // 10 min — heartbeat is 30s
 
 /**
  * Register the current session as active.
@@ -56,11 +60,19 @@ export function discoverSessions(): SessionInfo[] {
 
   try {
     const files = readdirSync(ACTIVE_SESSIONS_DIR).filter((f) => f.endsWith('.json'))
+    const now = Date.now()
 
     const sessions: SessionInfo[] = []
     for (const file of files) {
+      const filePath = join(ACTIVE_SESSIONS_DIR, file)
       try {
-        const raw = readFileSync(join(ACTIVE_SESSIONS_DIR, file), 'utf-8')
+        // Prune stale session files (crashed without unregistering). A live
+        // session's 30s heartbeat keeps mtime fresh; 10 min of silence = dead.
+        if (now - statSync(filePath).mtimeMs > STALE_SESSION_TTL_MS) {
+          unlinkSync(filePath)
+          continue
+        }
+        const raw = readFileSync(filePath, 'utf-8')
         const info = JSON.parse(raw) as SessionInfo
         sessions.push(info)
       } catch {
@@ -96,4 +108,36 @@ export function createSessionInfo(
     provider,
     model,
   }
+}
+
+/**
+ * Return a unique session name among active sessions. If `preferred` is taken
+ * by another session (excluding `selfId`), append `-2`, `-3`, … until free.
+ * Pure with respect to `existing` — no filesystem access, so it's unit-testable.
+ */
+export function ensureUniqueSessionName(
+  preferred: string,
+  existing: SessionInfo[],
+  selfId?: string,
+): string {
+  const taken = new Set(existing.filter((s) => s.id !== selfId).map((s) => s.name))
+  if (!taken.has(preferred)) return preferred
+  let i = 2
+  while (taken.has(`${preferred}-${i}`)) i++
+  return `${preferred}-${i}`
+}
+
+/**
+ * Rename an active session in the registry. Enforces uniqueness against other
+ * live sessions (excluding self). Returns null if the session isn't registered.
+ */
+export function renameActiveSession(sessionId: string, newName: string): string | null {
+  const filePath = join(ACTIVE_SESSIONS_DIR, `${sessionId}.json`)
+  if (!existsSync(filePath)) return null
+  const raw = readFileSync(filePath, 'utf-8')
+  const info = JSON.parse(raw) as SessionInfo
+  const others = discoverSessions().filter((s) => s.id !== sessionId)
+  info.name = ensureUniqueSessionName(newName, others)
+  writeFileSync(filePath, JSON.stringify(info, null, 2), 'utf-8')
+  return info.name
 }

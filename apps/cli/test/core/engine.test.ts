@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { StreamChunk, ToolDefinition, ToolResult } from '../../src/shared/index.ts'
-import { QueryEngine } from '../../src/core/engine'
+import { QueryEngine, filterExpiredMessages } from '../../src/core/engine'
+import type { AgentMessage } from '../../src/agent/message-bus'
 import { ContextManager } from '../../src/core/context'
 import { PermissionSystem } from '../../src/core/permission'
 import { HookEngine } from '../../src/core/hooks'
@@ -534,6 +535,36 @@ describe('QueryEngine', () => {
 // ============================================================
 // Cross-Session Inbound Config
 // ============================================================
+
+describe('filterExpiredMessages', () => {
+  const now = Date.now()
+  const mkMsg = (ageMs: number): AgentMessage => ({
+    id: 'm',
+    from: 'a',
+    to: 'b',
+    summary: 's',
+    message: 'x',
+    timestamp: new Date(now - ageMs),
+    read: false,
+    type: 'message',
+  })
+
+  it('keeps messages within the expiry window', () => {
+    const msgs = [mkMsg(0), mkMsg(10_000)]
+    expect(filterExpiredMessages(msgs, 300, now)).toHaveLength(2)
+  })
+
+  it('drops messages older than the expiry window', () => {
+    const msgs = [mkMsg(0), mkMsg(301_000)]
+    expect(filterExpiredMessages(msgs, 300, now)).toHaveLength(1)
+  })
+
+  it('drops everything when expiry is zero', () => {
+    // Any real message is older than the instant it was written (age > 0).
+    const msgs = [mkMsg(1)]
+    expect(filterExpiredMessages(msgs, 0, now)).toHaveLength(0)
+  })
+})
 
 describe('Cross-session inbound config', () => {
   const makeEngine = () => {

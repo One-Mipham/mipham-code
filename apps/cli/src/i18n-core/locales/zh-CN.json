@@ -682,6 +682,10 @@
       "count": "{shown} / {total}",
       "all": "全部"
     },
+    "mention_hints": {
+      "label": "会话：",
+      "empty": "无活跃会话"
+    },
     "picker": {
       "title": "选择模型",
       "nav_help": "←→ 导航 · ↑↓ 移动 · Enter 选择 · Esc 关闭",

@@ -6,6 +6,7 @@ import {
   unlinkSync,
   existsSync,
   renameSync,
+  lstatSync,
 } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
@@ -15,6 +16,15 @@ import type { SessionInfo } from '../../shared/types'
 
 const MIPHAM_HOME = join(homedir(), '.mipham')
 const INBOX_DIR = join(MIPHAM_HOME, 'inbox')
+
+/** True if a path exists and is a symbolic link (symlink-attack guard). */
+function isSymlink(path: string): boolean {
+  try {
+    return lstatSync(path).isSymbolicLink()
+  } catch {
+    return false
+  }
+}
 
 /**
  * Filesystem-based cross-session transport.
@@ -42,6 +52,9 @@ export class FileInboxTransport implements CrossSessionTransport {
       this.ensureInboxRoot()
       const inboxDir = join(INBOX_DIR, toSessionId)
       this.ensureDir(inboxDir)
+
+      // Symlink guard: refuse to write through a symlinked inbox directory.
+      if (isSymlink(INBOX_DIR) || isSymlink(inboxDir)) return false
 
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
       const filename = `${timestamp}-${msg.id}.json`
@@ -71,6 +84,8 @@ export class FileInboxTransport implements CrossSessionTransport {
     this.ensureInboxRoot()
     const inboxDir = join(INBOX_DIR, sessionId)
     if (!existsSync(inboxDir)) return []
+    // Symlink guard: refuse to read through a symlinked inbox directory.
+    if (isSymlink(INBOX_DIR) || isSymlink(inboxDir)) return []
 
     try {
       const files = readdirSync(inboxDir)

@@ -12,6 +12,7 @@ import type { Message } from '../shared/types.js'
 import { McpClient } from '../mcp/client'
 import { NPM_UPDATE_COMMAND, PACKAGE_VERSION } from '../shared/index.ts'
 import { getPreference } from '../config/preferences'
+import { loadCrossSessionConfig } from '../config/loader'
 import { stripIndent } from './strip-indent.js'
 import { createT } from '../i18n-core/t'
 import type { TranslationMap } from '../i18n-core/types'
@@ -43,6 +44,7 @@ import { keysCmd } from '../commands/keys'
 import { workflowViewCmd, workflowWatchCmd } from '../commands/workflow-view.js'
 import { execSync } from 'node:child_process'
 import { OLLAMA_PRESET_MODELS } from '../shared/constants'
+import { renameActiveSession } from '../agent/cross-session/discovery'
 
 export interface CommandContext {
   engine: QueryEngine
@@ -517,12 +519,16 @@ const switchCmd: CommandHandler = (ctx, args) => {
 const configCmd: CommandHandler = (ctx) => {
   const t = resolveT(ctx)
   const c = ctx.config
+  const xs = loadCrossSessionConfig(process.cwd())
   const lines = [
     `version:          ${c.version}`,
     `defaultProvider:  ${c.defaultProvider}`,
     `defaultModel:     ${c.defaultModel}`,
     `permission:       ${c.permission}`,
     `providers:        ${c.providers.length} configured`,
+    '',
+    `crossSessionInbound: ${xs.crossSessionInbound}`,
+    `dialogExpiry:        ${xs.dialogExpiry}s`,
   ]
   return {
     content: `${t('commands.config.title')}\n${lines.join('\n')}\n\n${t('commands.config.edit')}`,
@@ -1588,7 +1594,10 @@ const renameCmd: CommandHandler = (ctx, args) => {
     return { content: t('commands.rename.usage') }
   }
   ctx.setSessionTitle(name.trim())
-  return { content: t('commands.rename.confirmed', { name: name.trim() }) }
+  // Persist to the cross-session registry so `@name` can address this session.
+  // Returns the (possibly uniquified) final name — surface that to the user.
+  const finalName = renameActiveSession(ctx.sessionId, name.trim())
+  return { content: t('commands.rename.confirmed', { name: finalName ?? name.trim() }) }
 }
 
 const goalCmd: CommandHandler = (ctx, args) => {

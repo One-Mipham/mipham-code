@@ -22,6 +22,15 @@ const bundles: Record<string, TranslationMap> = {
 }
 const t = createT(bundles['en-US'] || (enUS as TranslationMap), enUS as TranslationMap)
 
+// Connect-handshake timeout: a hung MCP server should fail startup fast rather
+// than block on the per-request 60s timeout. Overridable via env for tests.
+const DEFAULT_CONNECT_TIMEOUT_MS = 15_000
+
+function connectTimeoutMs(): number {
+  const env = Number(process.env.MIPHAM_MCP_CONNECT_TIMEOUT_MS)
+  return Number.isFinite(env) && env > 0 ? env : DEFAULT_CONNECT_TIMEOUT_MS
+}
+
 interface ActiveConnection {
   config: McpServerConfig
   transport: Transport
@@ -167,30 +176,60 @@ export class McpClient {
     this.connections.set(config.name, connection)
 
     try {
-      // Start the transport (transport-specific), then perform the handshake.
-      if (transport instanceof HttpTransport) {
-        await transport.start(config.url ?? '', config.headers, config.env)
-      } else {
-        await transport.start(config.command ?? '', config.args ?? [], config.env)
-      }
-      const initResult: InitializeResult = await protocol.initialize()
+      await this.withConnectTimeout(config.name, async () => {
+        // Start the transport (transport-specific), then perform the handshake.
+        if (transport instanceof HttpTransport) {
+          await transport.start(config.url ?? '', config.headers, config.env)
+        } else {
+          await transport.start(config.command ?? '', config.args ?? [], config.env)
+        }
+        const initResult: InitializeResult = await protocol.initialize()
 
-      connection.status = 'connected'
-      connection.serverInfo = initResult.serverInfo
+        connection.status = 'connected'
+        connection.serverInfo = initResult.serverInfo
 
-      // Wire tools-changed notification
-      protocol.on('tools-changed', async () => {
-        await this.onToolsChanged(config.name)
+        // Wire tools-changed notification
+        protocol.on('tools-changed', async () => {
+          await this.onToolsChanged(config.name)
+        })
+
+        // Discover tools
+        if (initResult.capabilities.tools) {
+          connection.tools = await protocol.listTools()
+        }
       })
-
-      // Discover tools
-      if (initResult.capabilities.tools) {
-        connection.tools = await protocol.listTools()
-      }
     } catch (err) {
       connection.status = 'error'
       connection.error = String(err)
+      try {
+        await transport.close()
+      } catch {
+        // Best-effort cleanup on a failed connect
+      }
       throw err
+    }
+  }
+
+  /** Race the connect handshake against a timeout so a hung server fails fast. */
+  private async withConnectTimeout<T>(name: string, fn: () => Promise<T>): Promise<T> {
+    const timeoutMs = connectTimeoutMs()
+    let timer: ReturnType<typeof setTimeout> | null = null
+    // Swallow a late rejection: if the timeout wins, transport.close() in the
+    // caller's catch makes fn()'s pending request reject after we've moved on.
+    const work = fn()
+    work.catch(() => {})
+    try {
+      return await Promise.race([
+        work,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`MCP connect timed out for "${name}" after ${timeoutMs}ms`)),
+            timeoutMs,
+          )
+        }),
+      ])
+    } finally {
+      if (timer) clearTimeout(timer)
     }
   }
 

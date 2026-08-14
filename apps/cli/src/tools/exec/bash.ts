@@ -104,7 +104,7 @@ function normalizeEscapes(command: string): string {
   )
 }
 
-function isBlocked(command: string): string | null {
+export function isBlocked(command: string): string | null {
   // Normalize ANSI-C escape sequences for defense-in-depth
   const normalized = normalizeEscapes(command)
   // P0-1: Also sanitize for permission check (strips invisible chars, normalizes homoglyphs)

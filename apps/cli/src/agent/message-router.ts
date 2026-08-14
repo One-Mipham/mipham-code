@@ -40,6 +40,24 @@ export function resolveRecipientSession(sessions: SessionInfo[], to: string): Se
   }
 }
 
+export interface MentionParse {
+  name: string
+  message: string
+}
+
+/**
+ * Parse a user-input `@name message` mention. Returns null when the input does
+ * not start with an @mention. The message may be empty — callers decide whether
+ * an empty body is valid. Used by the input bar to route a direct cross-session
+ * message without going through the AI.
+ */
+export function parseMention(input: string): MentionParse | null {
+  const trimmed = input.trim()
+  const m = /^@(\S+)(?:\s+([\s\S]+))?$/.exec(trimmed)
+  if (!m) return null
+  return { name: m[1]!, message: (m[2] ?? '').trim() }
+}
+
 /**
  * MessageRouter decides how to deliver a message based on the recipient.
  *
@@ -72,8 +90,10 @@ export class MessageRouter {
     }
     const targetSession = resolution.session!
 
-    // Get sender info
-    const senderSession = createSessionInfo(from, from)
+    // Get sender info — resolve the human-readable name when the sender is a
+    // registered session, else fall back to the raw id (e.g. non-session senders).
+    const senderName = discoverSessions().find((s) => s.id === from)?.name ?? from
+    const senderSession = createSessionInfo(from, senderName)
 
     try {
       const transport = getFileInboxTransport()

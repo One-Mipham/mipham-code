@@ -26,6 +26,26 @@ function realPath(dir: string): string {
 }
 
 /**
+ * True if a `.git` file or directory exists anywhere strictly between `dir` and
+ * its trusted ancestor `ancestor`. A `.git` marks the root of a separate
+ * repository — trust does not cross that boundary (nested-repo isolation).
+ */
+function hasGitBoundary(dir: string, ancestor: string): boolean {
+  let cur = dir
+  // Case-insensitive termination matches isTrusted's `toLowerCase()` ancestor
+  // check — otherwise a path referenced with different casing than when it was
+  // trusted would walk past the ancestor and miss the boundary.
+  const targetLower = ancestor.toLowerCase()
+  while (cur.toLowerCase() !== targetLower && cur.length > ancestor.length) {
+    if (existsSync(join(cur, '.git'))) return true
+    const parent = dirname(cur)
+    if (parent === cur) break
+    cur = parent
+  }
+  return false
+}
+
+/**
  * Manages the workspace trust store.
  *
  * Trust is hierarchical: a directory is trusted if it or any of its
@@ -82,8 +102,11 @@ export class WorkspaceTrust {
       const trustedLower = trusted.toLowerCase()
       // Exact match
       if (resolvedLower === trustedLower) return true
-      // Ancestor match: trusted dir is a parent of the target
-      if (resolvedLower.startsWith(trustedLower + '/')) return true
+      // Ancestor match: trusted dir is a parent of the target. Trust does not
+      // cross a nested git-repository boundary (vendored/submodule isolation).
+      if (resolvedLower.startsWith(trustedLower + '/') && !hasGitBoundary(resolved, trusted)) {
+        return true
+      }
     }
 
     return false
