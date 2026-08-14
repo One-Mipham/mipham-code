@@ -26,7 +26,8 @@ export interface AgentDefinition {
   permissionMode: string
   maxTurns?: number
   skills?: string[]
-  background: boolean
+  /** Force background (true) or sync (false) execution. Unset inherits the tool default. */
+  background?: boolean
   source: 'builtin' | 'project' | 'user'
   filePath?: string
   memory?: 'user' | 'project' | 'local' // agent memory scope

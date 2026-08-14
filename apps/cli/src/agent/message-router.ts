@@ -2,12 +2,42 @@ import { getMessageBus } from './message-bus'
 import { getFileInboxTransport } from './cross-session/file-inbox'
 import { discoverSessions, createSessionInfo } from './cross-session/discovery'
 import type { AgentMessage } from './message-bus'
+import type { SessionInfo } from '../shared/types'
 
 export interface RouteResult {
   success: boolean
   routedTo: 'bus' | 'inbox' | 'unknown'
   error?: string
   messageId?: string
+}
+
+export interface SessionResolution {
+  session?: SessionInfo
+  error?: string
+}
+
+/**
+ * Resolve a recipient among live sessions by bare name — session ID first,
+ * then session name. A name must uniquely match exactly one session; ambiguity
+ * and non-matches are reported as errors.
+ */
+export function resolveRecipientSession(sessions: SessionInfo[], to: string): SessionResolution {
+  const byId = sessions.find((s) => s.id === to)
+  if (byId) return { session: byId }
+
+  const byName = sessions.filter((s) => s.name === to)
+  if (byName.length === 1) return { session: byName[0] }
+  if (byName.length > 1) {
+    return {
+      error:
+        `Ambiguous session name "${to}" matches ${byName.length} live sessions. ` +
+        `Use a session ID to disambiguate (ListAgents).`,
+    }
+  }
+
+  return {
+    error: `No active session found matching "${to}". Use ListAgents to discover available sessions.`,
+  }
 }
 
 /**
@@ -33,17 +63,14 @@ export class MessageRouter {
       }
     }
 
-    // Cross-session routing
+    // Cross-session routing (by session ID or bare name)
     const sessions = discoverSessions()
-    const targetSession = sessions.find((s) => s.id === to)
+    const resolution = resolveRecipientSession(sessions, to)
 
-    if (!targetSession) {
-      return {
-        success: false,
-        routedTo: 'unknown',
-        error: `No active session found with ID "${to}". Use ListAgents to discover available sessions.`,
-      }
+    if (resolution.error) {
+      return { success: false, routedTo: 'unknown', error: resolution.error }
     }
+    const targetSession = resolution.session!
 
     // Get sender info
     const senderSession = createSessionInfo(from, from)
@@ -53,7 +80,7 @@ export class MessageRouter {
       const msg: AgentMessage = {
         id: `xmsg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
         from,
-        to,
+        to: targetSession.id,
         summary: summary.slice(0, 200),
         message,
         timestamp: new Date(),
@@ -61,7 +88,7 @@ export class MessageRouter {
         type: 'message',
       }
 
-      const delivered = await transport.send(senderSession, to, msg)
+      const delivered = await transport.send(senderSession, targetSession.id, msg)
       if (!delivered) {
         return { success: false, routedTo: 'inbox', error: 'Failed to write message to inbox.' }
       }

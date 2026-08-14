@@ -1,10 +1,57 @@
 import { describe, it, expect } from 'vitest'
-import { MessageRouter } from '../../../src/agent/message-router'
+import { MessageRouter, resolveRecipientSession } from '../../../src/agent/message-router'
 import {
   registerActiveSession,
   unregisterSession,
 } from '../../../src/agent/cross-session/discovery'
 import type { SessionInfo } from '../../../src/shared/types'
+
+function makeSession(id: string, name: string): SessionInfo {
+  return {
+    id,
+    name,
+    machine: 'test-host',
+    pid: 1,
+    startedAt: new Date().toISOString(),
+  }
+}
+
+describe('resolveRecipientSession', () => {
+  it('resolves by exact id', () => {
+    const result = resolveRecipientSession([makeSession('a', 'alpha')], 'a')
+    expect(result.session?.id).toBe('a')
+    expect(result.error).toBeUndefined()
+  })
+
+  it('resolves by unique name', () => {
+    const result = resolveRecipientSession([makeSession('a', 'alpha')], 'alpha')
+    expect(result.session?.id).toBe('a')
+    expect(result.error).toBeUndefined()
+  })
+
+  it('prefers id match over name match', () => {
+    const result = resolveRecipientSession(
+      [makeSession('alpha', 'x'), makeSession('b', 'alpha')],
+      'alpha',
+    )
+    expect(result.session?.id).toBe('alpha')
+  })
+
+  it('errors on ambiguous name', () => {
+    const result = resolveRecipientSession(
+      [makeSession('a', 'dup'), makeSession('b', 'dup')],
+      'dup',
+    )
+    expect(result.session).toBeUndefined()
+    expect(result.error).toContain('Ambiguous')
+  })
+
+  it('errors when no id or name matches', () => {
+    const result = resolveRecipientSession([makeSession('a', 'alpha')], 'zzz')
+    expect(result.session).toBeUndefined()
+    expect(result.error).toContain('No active session found')
+  })
+})
 
 describe('MessageRouter', () => {
   const router = new MessageRouter()
@@ -51,5 +98,24 @@ describe('MessageRouter', () => {
 
     // Cleanup
     unregisterSession('target-session-1')
+  })
+
+  it('routes to inbox by unique session name (bare name)', async () => {
+    const targetSession: SessionInfo = {
+      id: 'bare-name-id-xyz',
+      name: 'bare-name-unique-xyz',
+      machine: 'test-host',
+      pid: 55556,
+      startedAt: new Date().toISOString(),
+    }
+
+    registerActiveSession(targetSession)
+
+    const result = await router.route('test-sender', 'bare-name-unique-xyz', 'Hello', 'By name')
+    expect(result.success).toBe(true)
+    expect(result.routedTo).toBe('inbox')
+
+    // Cleanup
+    unregisterSession('bare-name-id-xyz')
   })
 })
