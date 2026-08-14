@@ -65,7 +65,7 @@ describe('SessionLog append-only', () => {
   })
 
   it('persists to JSONL and reopens byte-identically', () => {
-    const log = new SessionLog(name, { now: () => 1 })
+    const log = new SessionLog(name)
     log.append({ type: 'session/start', at: 1, sessionId: name })
     log.append({ type: 'user/message', at: 1, message: { role: 'user', content: 'hi' } })
     log.append(messageToEvents({ role: 'assistant', content: 'ok' }, 1)[0]!)

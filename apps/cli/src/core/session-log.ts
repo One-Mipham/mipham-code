@@ -71,14 +71,8 @@ const LOG_DIR = join(HOME, '.mipham', 'sessions')
 
 export class SessionLog {
   private buf: SessionEvent[] = []
-  private now: () => number
 
-  constructor(
-    private name: string,
-    opts?: { now?: () => number },
-  ) {
-    this.now = opts?.now ?? (() => Date.now())
-  }
+  constructor(private name: string) {}
 
   append(event: SessionEvent): void {
     this.buf.push(event)
@@ -144,7 +138,7 @@ export function replayMessages(log: SessionLog): Message[] {
   return deriveMessages(log.events())
 }
 
-/** fork：截取日志前缀（到 uptoIndex，含）作为子会话继承的基。 */
+/** fork：截取日志前 uptoIndex 个事件（half-open，不含 uptoIndex）作为子会话继承的基。 */
 export function forkEvents(events: SessionEvent[], uptoIndex: number): SessionEvent[] {
   return events.slice(0, uptoIndex)
 }
