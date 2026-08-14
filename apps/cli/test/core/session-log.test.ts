@@ -1,7 +1,7 @@
 import { existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, it, expect, afterEach } from 'vitest'
-import { messageToEvents, deriveMessages, SessionLog } from '../../src/core/session-log'
+import { messageToEvents, deriveMessages, SessionLog, assertModelVisible } from '../../src/core/session-log'
 import type { Message } from '../../src/shared/types'
 
 describe('messageToEvents ↔ deriveMessages round-trip', () => {
@@ -60,5 +60,26 @@ describe('SessionLog append-only', () => {
   it('open on missing file returns empty log', () => {
     const log = SessionLog.open('test-log-nonexistent-xyz')
     expect(log.events()).toEqual([])
+  })
+})
+
+describe('assertModelVisible', () => {
+  const ev = (m: Message) => messageToEvents(m, 0)
+
+  it('passes when messages are a subsequence of the derived log', () => {
+    const log = [...ev({ role: 'user', content: 'a' }), ...ev({ role: 'assistant', content: 'b' }), ...ev({ role: 'user', content: 'c' })]
+    expect(() => assertModelVisible(log, [{ role: 'user', content: 'a' }, { role: 'user', content: 'c' }])).not.toThrow()
+  })
+
+  it('throws when a message is not logged', () => {
+    const log = ev({ role: 'user', content: 'a' })
+    expect(() => assertModelVisible(log, [{ role: 'user', content: 'NOT-LOGGED' }])).toThrow(/not logged/)
+  })
+
+  it('exempts compaction summaries', () => {
+    const log = ev({ role: 'user', content: 'a' })
+    expect(() =>
+      assertModelVisible(log, [{ role: 'user', content: '[Earlier conversation summary]: …' }]),
+    ).not.toThrow()
   })
 })

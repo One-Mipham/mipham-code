@@ -106,3 +106,27 @@ export class SessionLog {
     return log
   }
 }
+
+const SUMMARY_PREFIX = '[Earlier conversation summary]:'
+
+export function isCompactionSummary(m: Message): boolean {
+  return m.role === 'user' && typeof m.content === 'string' && m.content.startsWith(SUMMARY_PREFIX)
+}
+
+function messagesEqual(a: Message, b: Message): boolean {
+  return JSON.stringify(a) === JSON.stringify(b)
+}
+
+/** 断言 messages 是 deriveMessages(log) 的子序列（压缩摘要豁免）。失败即抛错（fail-loud）。 */
+export function assertModelVisible(log: SessionEvent[], messages: Message[]): void {
+  const derived = deriveMessages(log)
+  let di = 0
+  for (const m of messages) {
+    if (isCompactionSummary(m)) continue
+    while (di < derived.length && !messagesEqual(derived[di]!, m)) di++
+    if (di >= derived.length) {
+      throw new Error(`Model-visible message not logged: ${JSON.stringify(m).slice(0, 200)}`)
+    }
+    di++
+  }
+}
