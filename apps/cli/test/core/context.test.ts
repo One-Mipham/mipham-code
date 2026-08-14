@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { Message, ContentBlock } from '@mipham/shared'
 import { ContextManager } from '../../src/core/context'
+import { SessionLog, deriveMessages } from '../../src/core/session-log'
 
 function makeContext(maxTokens = 200_000, compactionThreshold = 0.9) {
   return new ContextManager({ maxTokens, compactionThreshold })
@@ -399,5 +400,26 @@ describe('ContextManager', () => {
     // Restore to large max
     ctx.updateMaxTokens(1_000_000)
     expect(ctx.needsCompaction()).toBe(false)
+  })
+})
+
+describe('ContextManager log integration', () => {
+  it('addMessage appends events to an attached log', () => {
+    const cm = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
+    const log = new SessionLog('cm-test')
+    cm.setLog(log)
+    cm.addMessage({ role: 'user', content: 'hi' })
+    cm.addMessage({ role: 'assistant', content: 'hello' })
+    expect(deriveMessages(log.events())).toEqual([
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'hello' },
+    ])
+  })
+
+  it('behaves unchanged when no log is attached', () => {
+    const cm = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
+    cm.addMessage({ role: 'user', content: 'hi' })
+    expect(cm.getMessages()).toEqual([{ role: 'user', content: 'hi' }])
+    expect(cm.getLog()).toBeUndefined()
   })
 })

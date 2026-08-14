@@ -4,6 +4,7 @@ import { microcompact } from './context-microcompact'
 import { reactiveCompact } from './context-compact'
 import { emergencyDrain } from './context-drain'
 import { NoopCacheTracker, type CacheTracker, type CacheStatus } from './context-token'
+import { SessionLog, messageToEvents } from './session-log'
 
 export type Summarizer = (messages: Message[], heading: string) => Promise<string>
 
@@ -56,6 +57,17 @@ export class ContextManager {
 
   constructor(private config: ContextConfig) {
     this.calculateThresholds()
+  }
+
+  private log?: SessionLog
+
+  /** 附加一个 append-only 会话日志；addMessage/seedMessages 将写通镜像到日志。 */
+  setLog(log?: SessionLog): void {
+    this.log = log
+  }
+
+  getLog(): SessionLog | undefined {
+    return this.log
   }
 
   /**
@@ -112,6 +124,10 @@ export class ContextManager {
       typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
     )
 
+    if (this.log) {
+      for (const e of messageToEvents(msg, Date.now())) this.log.append(e)
+    }
+
     // Auto-trigger compression checks (fire-and-forget, don't await)
     this.checkCompression()
   }
@@ -124,6 +140,9 @@ export class ContextManager {
   seedMessages(messages: Message[]): void {
     if (messages.length === 0) return
     this.messages.push(...messages)
+    if (this.log) {
+      for (const m of messages) for (const e of messageToEvents(m, Date.now())) this.log.append(e)
+    }
     this.reEstimateTokens()
   }
 
@@ -155,6 +174,7 @@ export class ContextManager {
           content: `[Earlier conversation summary]: ${summary}`,
         }
         this.messages = [summaryMsg, ...this.messages.slice(-keep)]
+        if (this.log) this.log.append({ type: 'compaction/summary', at: Date.now(), summary })
       } catch {
         // Fall back to truncation on summarizer failure
         this.messages = this.messages.slice(-keep)
