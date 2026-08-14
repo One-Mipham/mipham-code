@@ -151,6 +151,30 @@ describe('maskOutput', () => {
     const output = 'TOKEN=abc'
     expect(maskOutput(output, config)).toBe(output)
   })
+
+  it('should redact bare GitHub PAT token (ghp_)', () => {
+    const config = makeConfig()
+    const output = 'auth failed for ghp_1234567890abcdefghijklmnopqrstuvwxyz'
+    const result = maskOutput(output, config)
+    expect(result).not.toContain('ghp_1234567890abcdefghijklmnopqrstuvwxyz')
+    expect(result).toContain(CREDENTIAL_SENTINEL)
+  })
+
+  it('should redact bare GitLab PAT token (glpat-)', () => {
+    const config = makeConfig()
+    const output = 'using glpat-abcdefghijklmnopqrstuvwxyz for auth'
+    const result = maskOutput(output, config)
+    expect(result).not.toContain('glpat-abcdefghijklmnopqrstuvwxyz')
+    expect(result).toContain(CREDENTIAL_SENTINEL)
+  })
+
+  it('should redact fine-grained github_pat_ token', () => {
+    const config = makeConfig()
+    const output = 'token leaked: github_pat_11ABCDEFG0abcdefg_1234567890abcdefghijklmnopqrstuvwxyz'
+    const result = maskOutput(output, config)
+    expect(result).not.toContain('github_pat_')
+    expect(result).toContain(CREDENTIAL_SENTINEL)
+  })
 })
 
 // ── Tests: filterEnv ──

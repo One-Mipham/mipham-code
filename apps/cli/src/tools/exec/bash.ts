@@ -1,5 +1,6 @@
 import type { ToolDefinition, CredentialMaskingConfig } from '../../shared/index.ts'
 import { sanitizeCommand } from '../../shared/sanitize.ts'
+import { DANGEROUS_GIT_PATTERNS } from './git.ts'
 
 // Injected at startup — set via index.tsx
 let credentialConfig: CredentialMaskingConfig | undefined
@@ -122,6 +123,19 @@ function isBlocked(command: string): string | null {
     BLOCKED_COMMANDS.includes(sanitizedFirstWord)
   ) {
     return `Command "${sanitizedFirstWord}" rejected by security policy.`
+  }
+
+  // Detect dangerous git operations invoked via Bash. The Git tool guards these,
+  // but shelling out with `git push --force` would bypass it — apply the same
+  // pattern list to any Bash command that starts with a git invocation.
+  const gitInvocation = normalized.trim().match(/^(?:sudo\s+)?git(?:\s+|$)(.*)$/i)
+  if (gitInvocation) {
+    const subcommand = gitInvocation[1] || ''
+    for (const { pattern, description } of DANGEROUS_GIT_PATTERNS) {
+      if (pattern.test(subcommand)) {
+        return `Dangerous git command blocked: "${description}". Run manually if intended.`
+      }
+    }
   }
 
   // Check dangerous patterns (on original, normalized, and sanitized)
