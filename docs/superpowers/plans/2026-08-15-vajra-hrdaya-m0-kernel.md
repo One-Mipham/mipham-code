@@ -26,16 +26,19 @@
 ### Task 1: Context 骨架 — 服务仓库 + scope
 
 **Files:**
+
 - Create: `apps/cli/src/vajra/context.ts`
 - Create: `apps/cli/src/vajra/events.ts`（先建空类型文件，Task 3 填充）
 - Test: `apps/cli/test/vajra/context.test.ts`
 
 **Interfaces:**
+
 - Produces: `class Context`，方法 `provide<T>(key, value): Disposer`、`get<T>(key): T | undefined`、`has(key): boolean`、`scope(key): Context`；`type Disposer = () => void`
 
 - [ ] **Step 1: 写失败测试**
 
 `apps/cli/test/vajra/context.test.ts`:
+
 ```ts
 import { describe, it, expect } from 'vitest'
 import { Context } from '../../src/vajra/context'
@@ -84,6 +87,7 @@ Expected: FAIL — `Cannot find module '../../src/vajra/context'`
 - [ ] **Step 3: 写最小实现**
 
 `apps/cli/src/vajra/context.ts`:
+
 ```ts
 export type Disposer = () => void
 
@@ -133,16 +137,19 @@ git commit -m "feat(vajra): add Context service repository + scope"
 ### Task 2: 可逆效应 — effect + dispose LIFO 回滚
 
 **Files:**
+
 - Modify: `apps/cli/src/vajra/context.ts`（加 `effect`/`dispose`）
 - Test: `apps/cli/test/vajra/context.test.ts`（追加 describe）
 
 **Interfaces:**
+
 - Consumes: `Context`（Task 1）
 - Produces: `effect(fn: () => Disposer | void): Disposer`、`dispose(): void`
 
 - [ ] **Step 1: 写失败测试**
 
 在 `context.test.ts` 追加:
+
 ```ts
 describe('Context reversible effects', () => {
   it('effect registers and returns a disposer', () => {
@@ -160,8 +167,14 @@ describe('Context reversible effects', () => {
   it('dispose() unwinds effects in LIFO order', () => {
     const ctx = new Context()
     const log: string[] = []
-    ctx.effect(() => { log.push('a+'); return () => log.push('a-') })
-    ctx.effect(() => { log.push('b+'); return () => log.push('b-') })
+    ctx.effect(() => {
+      log.push('a+')
+      return () => log.push('a-')
+    })
+    ctx.effect(() => {
+      log.push('b+')
+      return () => log.push('b-')
+    })
     ctx.dispose()
     expect(log).toEqual(['a+', 'b+', 'b-', 'a-'])
   })
@@ -169,7 +182,9 @@ describe('Context reversible effects', () => {
   it('effect without a returned disposer is safe to dispose', () => {
     const ctx = new Context()
     const log: string[] = []
-    ctx.effect(() => { log.push('x') })
+    ctx.effect(() => {
+      log.push('x')
+    })
     ctx.dispose()
     expect(log).toEqual(['x'])
   })
@@ -177,7 +192,9 @@ describe('Context reversible effects', () => {
   it('manual dispose then context dispose does not double-teardown', () => {
     const ctx = new Context()
     let count = 0
-    const off = ctx.effect(() => () => { count++ })
+    const off = ctx.effect(() => () => {
+      count++
+    })
     off()
     ctx.dispose()
     expect(count).toBe(1)
@@ -193,6 +210,7 @@ Expected: FAIL — `ctx.effect is not a function`
 - [ ] **Step 3: 写最小实现**
 
 在 `Context` 类内加:
+
 ```ts
   private effects: Disposer[] = []
 
@@ -231,15 +249,18 @@ git commit -m "feat(vajra): add reversible effects with LIFO dispose"
 ### Task 3: 事件类型 — DispatchMode / EventMap / EventsOfMode
 
 **Files:**
+
 - Modify: `apps/cli/src/vajra/events.ts`（填充类型）
 - Test: 无运行时测试（类型层，Task 4 用 typecheck 验证）
 
 **Interfaces:**
+
 - Produces: `type DispatchMode = 'emit' | 'waterfall' | 'parallel' | 'serial'`；`interface EventMap {}`（里程碑通过 declaration merging 扩展）；`type EventsOfMode<M extends DispatchMode>`（从 EventMap 提取声明为某 mode 的事件名联合）
 
 - [ ] **Step 1: 写实现**
 
 `apps/cli/src/vajra/events.ts`:
+
 ```ts
 export type DispatchMode = 'emit' | 'waterfall' | 'parallel' | 'serial'
 
@@ -272,16 +293,19 @@ git commit -m "feat(vajra): add typed event map with mode contract"
 ### Task 4: 事件派发 — on + 四派发方法（mode 约束）
 
 **Files:**
+
 - Modify: `apps/cli/src/vajra/context.ts`（加 `on`/`emit`/`waterfall`/`parallel`/`serial`，signature 用 `EventsOfMode` 约束）
 - Test: `apps/cli/test/vajra/events.test.ts`（运行时行为）+ 同文件内的 typecheck 断言（`@ts-expect-error`）
 
 **Interfaces:**
+
 - Consumes: `EventsOfMode`（Task 3）、`Context`（Task 1）
 - Produces: `on(event, fn): Disposer`；`emit(event: EventsOfMode<'emit'>, ...args): void`；`waterfall<T>(event: EventsOfMode<'waterfall'>, value: T, ...args): Promise<T>`；`parallel(event: EventsOfMode<'parallel'>, ...args): Promise<unknown[]>`；`serial(event: EventsOfMode<'serial'>, ...args): Promise<unknown[]>`
 
 - [ ] **Step 1: 写失败测试**
 
 `apps/cli/test/vajra/events.test.ts`:
+
 ```ts
 import { describe, it, expect } from 'vitest'
 import { Context } from '../../src/vajra/context'
@@ -333,15 +357,25 @@ describe('Context event dispatch', () => {
   it('parallel runs concurrently, serial runs in order', async () => {
     const p = new Context()
     const pOrder: string[] = []
-    p.on('t/p', async () => { await new Promise((r) => setTimeout(r, 30)); pOrder.push('slow') })
-    p.on('t/p', async () => { pOrder.push('fast') })
+    p.on('t/p', async () => {
+      await new Promise((r) => setTimeout(r, 30))
+      pOrder.push('slow')
+    })
+    p.on('t/p', async () => {
+      pOrder.push('fast')
+    })
     await p.parallel('t/p')
     expect(pOrder[0]).toBe('fast')
 
     const s = new Context()
     const sOrder: string[] = []
-    s.on('t/s', async () => { await new Promise((r) => setTimeout(r, 30)); sOrder.push('slow') })
-    s.on('t/s', async () => { sOrder.push('fast') })
+    s.on('t/s', async () => {
+      await new Promise((r) => setTimeout(r, 30))
+      sOrder.push('slow')
+    })
+    s.on('t/s', async () => {
+      sOrder.push('fast')
+    })
     await s.serial('t/s')
     expect(sOrder).toEqual(['slow', 'fast'])
   })
@@ -368,6 +402,7 @@ Expected: FAIL — `ctx.on is not a function`
 - [ ] **Step 3: 写最小实现**
 
 在 `context.ts` 顶部 import 类型，类内加:
+
 ```ts
 import type { EventsOfMode } from './events'
 
@@ -436,17 +471,20 @@ git commit -m "feat(vajra): add event dispatch with mode contract"
 ### Task 5: Service 生命周期 — mount + inject + 状态机
 
 **Files:**
+
 - Create: `apps/cli/src/vajra/service.ts`
 - Modify: `apps/cli/src/vajra/context.ts`（加 `mount` 方法 + waiter 列表 + `flushWaiters` 接进 `provide`）
 - Test: `apps/cli/test/vajra/service.test.ts`
 
 **Interfaces:**
+
 - Consumes: `Context`（Task 1）
 - Produces: `interface Service { inject?: string[]; apply(ctx: Context): void | Disposer }`；`type ServiceStatus = 'inactive' | 'loading' | 'active' | 'unloading' | 'failed'`；`interface Mounted { dispose(): void; status(): ServiceStatus; readonly error?: Error }`；`Context.mount(service: Service): Mounted`
 
 - [ ] **Step 1: 写失败测试**
 
 `apps/cli/test/vajra/service.test.ts`:
+
 ```ts
 import { describe, it, expect } from 'vitest'
 import { Context } from '../../src/vajra/context'
@@ -474,7 +512,9 @@ describe('Context.mount lifecycle', () => {
     let applied = false
     const svc: Service = {
       inject: ['cfg'],
-      apply() { applied = true },
+      apply() {
+        applied = true
+      },
     }
     const m = ctx.mount(svc)
     expect(applied).toBe(false)
@@ -487,7 +527,9 @@ describe('Context.mount lifecycle', () => {
   it('mount isolates apply failure — host survives, status failed', () => {
     const ctx = new Context()
     const svc: Service = {
-      apply() { throw new Error('boom') },
+      apply() {
+        throw new Error('boom')
+      },
     }
     const m = ctx.mount(svc)
     expect(m.status()).toBe('failed')
@@ -525,6 +567,7 @@ Expected: FAIL — `ctx.mount is not a function`
 - [ ] **Step 3: 写最小实现**
 
 `apps/cli/src/vajra/service.ts`:
+
 ```ts
 import type { Context } from './context'
 import type { Disposer } from './context'
@@ -544,6 +587,7 @@ export interface Mounted {
 ```
 
 `context.ts` 类内加（并在 `provide` 内 set 之后调用 `this.flushWaiters()`）:
+
 ```ts
 import type { Service, Mounted, ServiceStatus } from './service'
 
@@ -624,15 +668,18 @@ git commit -m "feat(vajra): add Service lifecycle state machine + inject"
 ### Task 6: 导出 + 全量回归
 
 **Files:**
+
 - Create: `apps/cli/src/vajra/index.ts`
 - Test: 无新测试；跑全量回归确认零迁移
 
 **Interfaces:**
+
 - Produces: `export { Context } from './context'`、`export type { Disposer }`、`export type { DispatchMode, EventMap, EventsOfMode } from './events'`、`export type { Service, ServiceStatus, Mounted } from './service'`
 
 - [ ] **Step 1: 写导出**
 
 `apps/cli/src/vajra/index.ts`:
+
 ```ts
 export { Context } from './context'
 export type { Disposer } from './context'
@@ -643,11 +690,13 @@ export type { Service, ServiceStatus, Mounted } from './service'
 - [ ] **Step 2: typecheck + lint + format**
 
 Run:
+
 ```bash
 pnpm typecheck
 pnpm lint
 pnpm format
 ```
+
 Expected: 全部 PASS（无错误）
 
 - [ ] **Step 3: 全量测试回归（零迁移验证）**
