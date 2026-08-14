@@ -25,10 +25,12 @@
 ### Task 1: SessionEvent 类型 + messageToEvents/deriveMessages 编解码对
 
 **Files:**
+
 - Create: `apps/cli/src/core/session-log.ts`
 - Test: `apps/cli/test/core/session-log.test.ts`
 
 **Interfaces:**
+
 - Consumes: `Message`, `ContentBlock`, `ToolUseContent`, `ToolResultContent` from `../shared/types`.
 - Produces: `SessionEvent`（联合类型）、`messageToEvents(msg, at?)`、`deriveMessages(events)`——Task 2–5 依赖。
 
@@ -46,9 +48,19 @@ describe('messageToEvents ↔ deriveMessages round-trip', () => {
   const samples: Message[] = [
     { role: 'user', content: 'Hello' },
     { role: 'assistant', content: 'Hi there!', reasoning_content: 'thinking...' },
-    { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'read', input: { file_path: '/a' } }], reasoning_content: '' },
+    {
+      role: 'assistant',
+      content: [{ type: 'tool_use', id: 't1', name: 'read', input: { file_path: '/a' } }],
+      reasoning_content: '',
+    },
     { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'file body' }] },
-    { role: 'assistant', content: [{ type: 'thinking', thinking: '…' }, { type: 'text', text: 'done' }] },
+    {
+      role: 'assistant',
+      content: [
+        { type: 'thinking', thinking: '…' },
+        { type: 'text', text: 'done' },
+      ],
+    },
   ]
 
   it('round-trips each sample byte-identically', () => {
@@ -90,7 +102,12 @@ export function messageToEvents(msg: Message, at = 0): SessionEvent[] {
     if (Array.isArray(msg.content)) {
       const results = msg.content.filter((b) => b.type === 'tool_result') as ToolResultContent[]
       if (results.length > 0 && results.length === msg.content.length) {
-        return results.map((r) => ({ type: 'tool/result', at, id: r.tool_use_id, content: r.content }))
+        return results.map((r) => ({
+          type: 'tool/result',
+          at,
+          id: r.tool_use_id,
+          content: r.content,
+        }))
       }
       return [{ type: 'user/message', at, message: msg }]
     }
@@ -153,10 +170,12 @@ git commit -m "feat(session-log): add SessionEvent type + messageToEvents/derive
 ### Task 2: SessionLog 类（append-only + JSONL 持久化）
 
 **Files:**
+
 - Modify: `apps/cli/src/core/session-log.ts`
 - Test: `apps/cli/test/core/session-log.test.ts`（追加 describe）
 
 **Interfaces:**
+
 - Consumes: `SessionEvent`、`messageToEvents`（Task 1）。
 - Produces: `SessionLog` 类——`append(event)`、`events(): SessionEvent[]`（不可变快照）、`SessionLog.open(name): SessionLog`、`save(name)`。Task 4–6 依赖。
 
@@ -224,7 +243,10 @@ export class SessionLog {
   private buf: SessionEvent[] = []
   private now: () => number
 
-  constructor(private name: string, opts?: { now?: () => number }) {
+  constructor(
+    private name: string,
+    opts?: { now?: () => number },
+  ) {
     this.now = opts?.now ?? (() => Date.now())
   }
 
@@ -283,10 +305,12 @@ git commit -m "feat(session-log): add append-only SessionLog with JSONL persiste
 ### Task 3: 不变量 assertModelVisible（model-visible means logged）
 
 **Files:**
+
 - Modify: `apps/cli/src/core/session-log.ts`
 - Test: `apps/cli/test/core/session-log.test.ts`（追加 describe）
 
 **Interfaces:**
+
 - Consumes: `deriveMessages`（Task 1）、`SessionEvent`。
 - Produces: `assertModelVisible(log, messages)`、`isCompactionSummary(msg)`（Task 5 的 compact 集成用它检测豁免）。
 
@@ -301,13 +325,24 @@ describe('assertModelVisible', () => {
   const ev = (m: Message) => messageToEvents(m, 0)
 
   it('passes when messages are a subsequence of the derived log', () => {
-    const log = [...ev({ role: 'user', content: 'a' }), ...ev({ role: 'assistant', content: 'b' }), ...ev({ role: 'user', content: 'c' })]
-    expect(() => assertModelVisible(log, [{ role: 'user', content: 'a' }, { role: 'user', content: 'c' }])).not.toThrow()
+    const log = [
+      ...ev({ role: 'user', content: 'a' }),
+      ...ev({ role: 'assistant', content: 'b' }),
+      ...ev({ role: 'user', content: 'c' }),
+    ]
+    expect(() =>
+      assertModelVisible(log, [
+        { role: 'user', content: 'a' },
+        { role: 'user', content: 'c' },
+      ]),
+    ).not.toThrow()
   })
 
   it('throws when a message is not logged', () => {
     const log = ev({ role: 'user', content: 'a' })
-    expect(() => assertModelVisible(log, [{ role: 'user', content: 'NOT-LOGGED' }])).toThrow(/not logged/)
+    expect(() => assertModelVisible(log, [{ role: 'user', content: 'NOT-LOGGED' }])).toThrow(
+      /not logged/,
+    )
   })
 
   it('exempts compaction summaries', () => {
@@ -369,10 +404,12 @@ git commit -m "feat(session-log): add model-visible invariant assertModelVisible
 ### Task 4: replay / fork / resume 消费器
 
 **Files:**
+
 - Modify: `apps/cli/src/core/session-log.ts`
 - Test: `apps/cli/test/core/session-log.test.ts`（追加 describe）
 
 **Interfaces:**
+
 - Consumes: `SessionLog`（Task 2）、`deriveMessages`（Task 1）。
 - Produces: `replayMessages(log)`、`forkEvents(events, uptoIndex)`、`resumeMessages(log)`（Task 6 及未来 fork/resume 依赖）。
 
@@ -455,10 +492,12 @@ git commit -m "feat(session-log): add replay/fork/resume consumers"
 ### Task 5: ContextManager 写通集成（可选 log + addMessage 追加）
 
 **Files:**
+
 - Modify: `apps/cli/src/core/context.ts`
 - Test: `apps/cli/test/core/context.test.ts`（追加 describe）
 
 **Interfaces:**
+
 - Consumes: `SessionLog`、`messageToEvents`、`assertModelVisible`（Task 1–3）。
 - Produces: `ContextManager.setLog(log?)`、`getLog()`。`addMessage`/`seedMessages` 在有 log 时追加事件；`compact()` 追加 `compaction/summary` 事件。
 
@@ -555,10 +594,15 @@ seedMessages(messages: Message[]): void {
 if (this.summarizer && toDrop.length >= 4) {
   try {
     const summary = await this.summarizer(toDrop, heading)
-    const summaryMsg: Message = { role: 'user', content: `[Earlier conversation summary]: ${summary}` }
+    const summaryMsg: Message = {
+      role: 'user',
+      content: `[Earlier conversation summary]: ${summary}`,
+    }
     this.messages = [summaryMsg, ...this.messages.slice(-keep)]
     if (this.log) this.log.append({ type: 'compaction/summary', at: Date.now(), summary })
-  } catch { /* 原有 fallback 不变 */ }
+  } catch {
+    /* 原有 fallback 不变 */
+  }
 }
 ```
 
@@ -581,10 +625,12 @@ git commit -m "feat(context): write-through mirror to optional SessionLog"
 ### Task 6: 主 app 接线 + 全量绿
 
 **Files:**
+
 - Modify: `apps/cli/src/index.tsx`（构造处 attach 一个内存 SessionLog）
 - Test: 无新增（跑全量）
 
 **Interfaces:**
+
 - Consumes: `SessionLog`、`ContextManager.setLog`（Task 2、5）。
 
 **规格**：让真实会话在内存中捕获日志，使 replay/fork/resume 在真实会话可用（持久化到 `~/.mipham/sessions/<name>.jsonl` 的接线与 SessionStore 翻转推迟到 M1b）。
@@ -628,6 +674,7 @@ git commit -m "feat(cli): attach in-memory SessionLog at app startup"
 ## Self-Review
 
 **Spec coverage**（对照 spec §四 + §7.3）：
+
 - §4.2 SessionEvent 流 → Task 1（`assistant/chunk` 原始流块明确推迟，plan 已注明）。
 - §4.1「存源流、派投影」+ §4.3 不变量 → Task 2/3/5。
 - §4.4 消费者（fork/resume/replay）→ Task 4。

@@ -16,7 +16,12 @@ export function messageToEvents(msg: Message, at = 0): SessionEvent[] {
     if (Array.isArray(msg.content)) {
       const results = msg.content.filter((b) => b.type === 'tool_result') as ToolResultContent[]
       if (results.length > 0 && results.length === msg.content.length) {
-        return results.map((r) => ({ type: 'tool/result', at, id: r.tool_use_id, content: r.content }))
+        return results.map((r) => ({
+          type: 'tool/result',
+          at,
+          id: r.tool_use_id,
+          content: r.content,
+        }))
       }
       return [{ type: 'user/message', at, message: msg }]
     }
@@ -68,7 +73,10 @@ export class SessionLog {
   private buf: SessionEvent[] = []
   private now: () => number
 
-  constructor(private name: string, opts?: { now?: () => number }) {
+  constructor(
+    private name: string,
+    opts?: { now?: () => number },
+  ) {
     this.now = opts?.now ?? (() => Date.now())
   }
 

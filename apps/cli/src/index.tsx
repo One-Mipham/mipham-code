@@ -26,6 +26,7 @@ import { ContextManager } from './core/context'
 import { PrefixCacheTracker } from './core/context-token'
 import { QueryEngine } from './core/engine'
 import { ExperienceRuleEngine } from './core/rule-engine.js'
+import { SessionLog } from './core/session-log'
 import { SessionStore } from './core/session-store'
 import type { PermissionLevel, MiphamConfig } from './shared/types'
 import { SkillsLoader } from './skills/loader'
@@ -328,6 +329,7 @@ export async function runApp(options: RunOptions): Promise<void> {
     compactionThreshold: 0.9,
     contextWindow: adaptiveThresholds ? modelContextWindow : undefined,
   })
+  context.setLog(new SessionLog('session'))
   // Cache-aware microcompaction: track the provider's prompt-cache prefix.
   context.setCacheTracker(new PrefixCacheTracker())
 
