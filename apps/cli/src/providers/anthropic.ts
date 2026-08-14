@@ -52,11 +52,14 @@ export class AnthropicProvider implements ProviderInstance {
     let currentToolId = ''
     let accumulatedToolInput = ''
 
+    const messages = this.convertMessages(req.messages)
+    this.markPrefixCacheBreakpoint(messages)
+
     const body: Record<string, unknown> = {
       model: req.model,
       max_tokens: req.maxTokens || 4096,
       stream: true,
-      messages: this.convertMessages(req.messages),
+      messages,
     }
 
     if (req.systemPrompt) {
@@ -70,11 +73,14 @@ export class AnthropicProvider implements ProviderInstance {
     }
 
     if (req.tools && req.tools.length > 0) {
-      body.tools = req.tools.map((t) => ({
+      const tools: Record<string, unknown>[] = req.tools.map((t) => ({
         name: t.name,
         description: t.description,
         input_schema: t.parameters || t.input_schema || { type: 'object', properties: {} },
       }))
+      // Cache the tools: mark the last tool definition as a breakpoint.
+      tools[tools.length - 1]!.cache_control = { type: 'ephemeral' }
+      body.tools = tools
     }
 
     const response = await fetchWithRetry(`${this.baseUrl}/messages`, {
@@ -239,6 +245,20 @@ export class AnthropicProvider implements ProviderInstance {
     // Use a lightweight check — verify API key format exists
     const apiKey = this.resolveApiKey(this.config.apiKey)
     return apiKey.length > 0 && apiKey.startsWith('sk-ant-')
+  }
+
+  /**
+   * Mark the stable conversation prefix for prompt caching. The breakpoint is
+   * placed on the last block of the second-to-last message, leaving only the
+   * newest message uncached.
+   */
+  private markPrefixCacheBreakpoint(messages: Record<string, unknown>[]): void {
+    if (messages.length < 2) return
+    const boundary = messages[messages.length - 2]!
+    const content = boundary.content
+    if (!Array.isArray(content) || content.length === 0) return
+    const lastBlock = content[content.length - 1] as Record<string, unknown>
+    lastBlock.cache_control = { type: 'ephemeral' }
   }
 
   private convertMessages(messages: Message[]): Record<string, unknown>[] {
