@@ -1,4 +1,5 @@
 import type { EventsOfMode } from './events'
+import type { Service, Mounted, ServiceStatus } from './service'
 
 export type Disposer = () => void
 
@@ -8,6 +9,7 @@ export class Context {
   private services = new Map<string, unknown>()
   private effects: Disposer[] = []
   private listeners = new Map<string, Listener[]>()
+  private waiters: Array<() => boolean> = []
   readonly parent?: Context
 
   constructor(parent?: Context) {
@@ -16,9 +18,56 @@ export class Context {
 
   provide<T>(key: string, value: T): Disposer {
     this.services.set(key, value)
+    this.flushWaiters()
     return () => {
       this.services.delete(key)
     }
+  }
+
+  private flushWaiters(): void {
+    this.waiters = this.waiters.filter((w) => !w())
+  }
+
+  mount(service: Service): Mounted {
+    const keys = service.inject ?? []
+    let status: ServiceStatus = 'inactive'
+    let error: Error | undefined
+    let disposer: Disposer = () => {}
+
+    const tryApply = (): boolean => {
+      if (!keys.every((k) => this.has(k))) return false
+      status = 'loading'
+      try {
+        disposer = service.apply(this) ?? (() => {})
+        status = 'active'
+      } catch (e) {
+        error = e as Error
+        status = 'failed'
+      }
+      return true
+    }
+
+    const waiter = (): boolean => {
+      if (!tryApply()) return false
+      this.waiters = this.waiters.filter((w) => w !== waiter)
+      return true
+    }
+
+    if (!tryApply()) {
+      this.waiters.push(waiter)
+    }
+
+    const mounted: Mounted = {
+      dispose: () => {
+        if (status === 'active') {
+          status = 'unloading'
+          disposer()
+        }
+      },
+      status: () => status,
+    }
+    Object.defineProperty(mounted, 'error', { get: () => error })
+    return mounted
   }
 
   get<T>(key: string): T | undefined {
