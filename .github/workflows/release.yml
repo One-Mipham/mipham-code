@@ -41,7 +41,7 @@ jobs:
         run: bun build --compile --minify --external react-devtools-core --target=${{ matrix.target }} ./bin/mipham.ts --outfile dist/${{ matrix.binary }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.binary }}
           path: apps/cli/dist/${{ matrix.binary }}
