@@ -11,6 +11,12 @@ const BLOCKED_PATTERNS = [
   /\brm\s+-rf\s+\/(\s|$)/,
   /\brm\s+-rf\s+\/\*\s*$/,
   /\bsudo\s+rm\s+.*\//,
+  // rm -rf on home directory or any absolute path (relative dirs like node_modules stay allowed)
+  /\brm\s+-(?:rf|fr)\s+~(?:$|\s|\/)/,
+  /\brm\s+-(?:rf|fr)\s+\/(?![\s*])/,
+  // rm -rf on dangerous cwd globs
+  /\brm\s+-(?:rf|fr)\s+\*\s*$/,
+  /\brm\s+-(?:rf|fr)\s+\.\s*$/,
   // Filesystem manipulation
   /\bmkfs\./,
   /\bdd\s+if=/,
@@ -121,14 +127,11 @@ export function isBlocked(command: string): string | null {
     return `Command "${sanitizedFirstWord}" rejected by security policy.`
   }
 
-  // Detect dangerous git operations invoked via Bash. The Git tool guards these,
-  // but shelling out with `git push --force` would bypass it — apply the same
-  // pattern list to any Bash command that starts with a git invocation.
-  const gitInvocation = normalized.trim().match(/^(?:sudo\s+)?git(?:\s+|$)(.*)$/i)
-  if (gitInvocation) {
-    const subcommand = gitInvocation[1] || ''
+  // Detect dangerous git operations invoked via Bash — anywhere in the command,
+  // so `echo ok && git push --force` is still caught (not just `^git`).
+  if (/(?:^|[\s;&|])(?:sudo\s+)?(?:git|gh)\s+/.test(normalized)) {
     for (const { pattern, description } of DANGEROUS_GIT_PATTERNS) {
-      if (pattern.test(subcommand)) {
+      if (pattern.test(normalized)) {
         return `Dangerous git command blocked: "${description}". Run manually if intended.`
       }
     }

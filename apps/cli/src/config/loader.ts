@@ -58,6 +58,7 @@ function safeParseYaml(path: string, label: string): Partial<MiphamConfig> | nul
 function mergeProviders(
   baseProviders: ProviderConfig[],
   overrideProviders: ProviderConfig[],
+  allowBaseUrlOverride: boolean,
 ): ProviderConfig[] {
   const merged = [...baseProviders]
 
@@ -75,7 +76,10 @@ function mergeProviders(
       id: base.id,
       name: op.name || base.name,
       protocol: op.protocol || base.protocol,
-      baseUrl: op.baseUrl ?? base.baseUrl,
+      // baseUrl is a routing field — it decides where the user's API key is
+      // sent, so only trusted (user-level) config may override it. Untrusted
+      // (project-level) config cannot redirect a built-in provider's traffic.
+      baseUrl: allowBaseUrlOverride ? (op.baseUrl ?? base.baseUrl) : base.baseUrl,
       apiKey: op.apiKey ?? base.apiKey,
       models: op.models?.length ? op.models : base.models,
       status: op.status ?? base.status,
@@ -85,10 +89,14 @@ function mergeProviders(
   return merged
 }
 
-function mergeConfig(base: MiphamConfig, override: Partial<MiphamConfig>): MiphamConfig {
+function mergeConfig(
+  base: MiphamConfig,
+  override: Partial<MiphamConfig>,
+  allowBaseUrlOverride: boolean,
+): MiphamConfig {
   const merged: MiphamConfig = { ...base, ...override }
   if (override.providers) {
-    merged.providers = mergeProviders(base.providers, override.providers)
+    merged.providers = mergeProviders(base.providers, override.providers, allowBaseUrlOverride)
   } else {
     merged.providers = base.providers
   }
@@ -216,7 +224,7 @@ export function loadConfig(cwd: string = process.cwd()): MiphamConfig {
   // ── Load project-level config ──
   const projectConfig = safeParseYaml(configPath, 'project config')
   if (projectConfig) {
-    config = mergeConfig(config, projectConfig)
+    config = mergeConfig(config, projectConfig, false)
   } else if (existsSync(configPath)) {
     // File exists but failed to parse — try to restore from backup
     process.stderr.write(`⚠ Mipham Code: project config is corrupted, attempting recovery...\n`)
@@ -226,7 +234,7 @@ export function loadConfig(cwd: string = process.cwd()): MiphamConfig {
       // Retry parsing after restore
       const restored = safeParseYaml(configPath, 'restored project config')
       if (restored) {
-        config = mergeConfig(config, restored)
+        config = mergeConfig(config, restored, false)
       }
     }
   }
@@ -234,7 +242,7 @@ export function loadConfig(cwd: string = process.cwd()): MiphamConfig {
   // ── Load user-level config ──
   const userConfig = safeParseYaml(userConfigPath, 'user config')
   if (userConfig) {
-    config = mergeConfig(config, userConfig)
+    config = mergeConfig(config, userConfig, true)
   } else if (existsSync(userConfigPath)) {
     // File exists but failed to parse — try to restore from backup
     process.stderr.write(`⚠ Mipham Code: user config is corrupted, attempting recovery...\n`)
@@ -244,7 +252,7 @@ export function loadConfig(cwd: string = process.cwd()): MiphamConfig {
       // Retry parsing after restore
       const restored = safeParseYaml(userConfigPath, 'restored user config')
       if (restored) {
-        config = mergeConfig(config, restored)
+        config = mergeConfig(config, restored, true)
       }
     }
   } else {
@@ -286,13 +294,15 @@ export function loadConfig(cwd: string = process.cwd()): MiphamConfig {
  *
  * Returns default (disabled) config if no inference_hooks section is present.
  */
-export function loadInferenceHookConfig(cwd: string = process.cwd()): InferenceHookConfig {
-  const configPath = join(cwd, '.mipham', 'config.yml')
+export function loadInferenceHookConfig(): InferenceHookConfig {
+  // DLP is a user/org-level security setting — the endpoint controls where the
+  // entire conversation is sent, so a project config must NOT be able to
+  // redirect it (exfiltration). Read only from the user-level config.
   const userConfigPath = join(MIPHAM_HOME, 'config.yml')
 
   let merged = { ...DEFAULT_INFERENCE_HOOK_CONFIG }
 
-  const paths = [userConfigPath, configPath] // project wins (loaded last)
+  const paths = [userConfigPath]
   for (const path of paths) {
     try {
       if (!existsSync(path)) continue

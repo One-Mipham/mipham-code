@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { homedir } from 'node:os'
+import { saveProviderApiKey } from './loader'
 
 const MIPHAM_DIR = join(homedir(), '.mipham')
 const KEYS_FILE = join(MIPHAM_DIR, 'keys.json')
@@ -67,7 +68,16 @@ export class KeyManager {
     }))
   }
 
-  rotate(provider: string, _newKey: string): { success: boolean; message: string } {
+  rotate(provider: string, newKey: string): { success: boolean; message: string } {
+    // Persist the new key first — the actual rotation. Metadata below is only
+    // bookkeeping; without writing the key, "rotate" would be a silent no-op.
+    if (!saveProviderApiKey(provider, newKey)) {
+      return {
+        success: false,
+        message: `Rotation aborted: failed to persist new key for "${provider}".`,
+      }
+    }
+
     const data = loadKeys()
     const now = new Date().toISOString()
     const existing = data[provider]

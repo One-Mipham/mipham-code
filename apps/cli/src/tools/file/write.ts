@@ -32,7 +32,7 @@ export const writeTool: ToolDefinition = {
 
     // ── Read-before-write safety check ──
     const fileExists = existsSync(filePath)
-    const wasRead = ctx.readFiles?.has(filePath) ?? true // if no tracking, allow
+    const wasRead = ctx.readFiles?.has(filePath) ?? false // fail closed: no tracking = not read
     if (fileExists && !wasRead) {
       return {
         success: false,

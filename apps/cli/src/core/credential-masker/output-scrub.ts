@@ -1,5 +1,6 @@
 import { CREDENTIAL_SENTINEL } from './types'
 import type { CredentialMaskingConfig } from '../../shared/index.ts'
+import { SecurityGate } from '../../security/gate'
 
 /**
  * Well-known secret token prefixes. These are high-signal formats that must
@@ -22,6 +23,10 @@ export function maskOutput(output: string, config: CredentialMaskingConfig): str
 
   // Redact bare secret tokens by prefix (always on, independent of config patterns).
   masked = masked.replace(TOKEN_REDACTION_PATTERN, CREDENTIAL_SENTINEL)
+
+  // Redact bare sk-/sk-ant-/JWT tokens — wire the SecurityGate credential-leak
+  // detection into the output path (defense-in-depth beyond the config patterns).
+  masked = SecurityGate.redactCredentialLeak(masked)
 
   for (const pattern of config.output_scrubbing.patterns) {
     try {

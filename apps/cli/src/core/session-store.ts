@@ -47,7 +47,7 @@ export interface SessionIndexEntry {
 }
 
 function ensureDir(): void {
-  mkdirSync(SESSIONS_DIR, { recursive: true })
+  mkdirSync(SESSIONS_DIR, { recursive: true, mode: 0o700 })
 }
 
 function filePath(name: string): string {
@@ -81,7 +81,7 @@ export class SessionStore {
 
     // Atomic write: write to temp file, then rename (same-fs rename is atomic)
     const tmp = path + '.tmp'
-    writeFileSync(tmp, JSON.stringify(session) + '\n', 'utf-8')
+    writeFileSync(tmp, JSON.stringify(session) + '\n', { encoding: 'utf-8', mode: 0o600 })
     renameSync(tmp, path)
 
     // Incremental index update — only touch this session's entry
@@ -285,7 +285,7 @@ export class SessionStore {
       }
     }
 
-    writeFileSync(INDEX_FILE, JSON.stringify(index, null, 2), 'utf-8')
+    writeFileSync(INDEX_FILE, JSON.stringify(index, null, 2), { encoding: 'utf-8', mode: 0o600 })
   }
 
   /**
@@ -313,7 +313,7 @@ export class SessionStore {
     } else {
       index.push(entry)
     }
-    writeFileSync(INDEX_FILE, JSON.stringify(index, null, 2), 'utf-8')
+    writeFileSync(INDEX_FILE, JSON.stringify(index, null, 2), { encoding: 'utf-8', mode: 0o600 })
   }
 
   /**
@@ -322,7 +322,7 @@ export class SessionStore {
    */
   static saveSummary(name: string, summary: string, tags: string[]): void {
     ensureDir()
-    mkdirSync(SUMMARIES_DIR, { recursive: true })
+    mkdirSync(SUMMARIES_DIR, { recursive: true, mode: 0o700 })
 
     const safeRaw = name.replace(/[^a-zA-Z0-9_-]/g, '_')
     const safe =
@@ -330,7 +330,10 @@ export class SessionStore {
         ? `${safeRaw.slice(0, 80)}-${createHash('sha256').update(safeRaw).digest('hex').slice(0, 16)}`
         : safeRaw
     const summaryPath = join(SUMMARIES_DIR, `${safe}.md`)
-    writeFileSync(summaryPath, `# ${name}\n\n${summary}\n\nTags: ${tags.join(', ')}\n`, 'utf-8')
+    writeFileSync(summaryPath, `# ${name}\n\n${summary}\n\nTags: ${tags.join(', ')}\n`, {
+      encoding: 'utf-8',
+      mode: 0o600,
+    })
 
     // Update index entry — create minimal one if not present
     try {
@@ -352,7 +355,7 @@ export class SessionStore {
           tags,
         })
       }
-      writeFileSync(INDEX_FILE, JSON.stringify(index, null, 2), 'utf-8')
+      writeFileSync(INDEX_FILE, JSON.stringify(index, null, 2), { encoding: 'utf-8', mode: 0o600 })
     } catch {
       // Index write is best-effort
     }

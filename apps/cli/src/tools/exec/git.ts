@@ -28,6 +28,23 @@ export const DANGEROUS_GIT_PATTERNS: Array<{ pattern: RegExp; description: strin
   { pattern: /\bstash\s+clear\b/, description: 'stash clear' },
   // Identity spoofing via config
   { pattern: /\bconfig\s+.*user\./, description: 'config user.* (identity spoofing)' },
+  // Remote manipulation (repo redirection / exfiltration)
+  { pattern: /\bremote\s+(?:add|set-url|rename)\b/, description: 'remote add/set-url/rename' },
+  // History rewrite
+  { pattern: /\bcommit\s+.*--amend\b/, description: 'commit --amend (history rewrite)' },
+  {
+    pattern: /\bcommit\s+.*(?:--no-verify|-n)\b/,
+    description: 'commit --no-verify/-n (hook bypass)',
+  },
+  // Command-execution vectors via git config
+  {
+    pattern: /(?:-c\s+|--config[=\s]|config\s+)core\.(?:sshCommand|pager|askpass|editor)/,
+    description: 'git core.* command execution (sshCommand/pager/askpass/editor)',
+  },
+  {
+    pattern: /(?:-c\s+|--config[=\s]|config\s+)(?:alias\.|credential\.helper)/,
+    description: 'git alias/credential.helper command execution',
+  },
 ]
 
 /**

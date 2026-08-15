@@ -41,7 +41,17 @@ export const DEFAULT_INFERENCE_HOOK_CONFIG: InferenceHookConfig = {
 
 export const DEFAULT_CREDENTIAL_MASKING_CONFIG: CredentialMaskingConfig = {
   enabled: true,
-  files: [],
+  // Default sensitive-file rules: full-mask any of these before the model sees them.
+  files: [
+    { path: '**/.env*', mode: 'full' },
+    { path: '**/.aws/credentials', mode: 'full' },
+    { path: '**/.aws/config', mode: 'full' },
+    { path: '**/.ssh/id_*', mode: 'full' },
+    { path: '**/*.pem', mode: 'full' },
+    { path: '**/*.key', mode: 'full' },
+    { path: '**/.netrc', mode: 'full' },
+    { path: '**/credentials.*', mode: 'full' },
+  ],
   output_scrubbing: {
     enabled: true,
     patterns: ['(?i)(api[_-]?key|secret|token|password|credential)\\s*[:=]\\s*\\S+'],

@@ -129,12 +129,14 @@ export class SessionLog {
 
   /** 追加写入 JSONL（只写上次 save 之后新增的事件，幂等）。 */
   save(): void {
-    mkdirSync(LOG_DIR, { recursive: true })
+    // Session logs contain full conversation + tool results (possibly credentials):
+    // restrict to owner-only (dir 0700, file 0600).
+    mkdirSync(LOG_DIR, { recursive: true, mode: 0o700 })
     for (const e of this.buf.slice(this.flushed)) {
       appendFileSync(
         join(LOG_DIR, `${sanitizeSessionName(this.name)}.jsonl`),
         JSON.stringify(e) + '\n',
-        'utf-8',
+        { encoding: 'utf-8', mode: 0o600 },
       )
     }
     this.flushed = this.buf.length

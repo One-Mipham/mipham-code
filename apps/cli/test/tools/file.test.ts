@@ -159,11 +159,22 @@ describe('Write tool execution', () => {
     expect(written).toBe('nested content')
   })
 
-  it('overwrites existing file', async () => {
+  it('overwrites existing file after it has been read', async () => {
     const dest = join(tmpDir, 'existing.txt')
     writeFileSync(dest, 'original')
+    ctx.readFiles = new Set()
+    await readTool.execute({ file_path: dest }, ctx) // read-first populates readFiles (canonical path)
     await writeTool.execute({ file_path: dest, content: 'updated' }, ctx)
     expect(readFileSync(dest, 'utf-8')).toBe('updated')
+  })
+
+  it('blocks overwriting an unread existing file (fail-closed)', async () => {
+    const dest = join(tmpDir, 'existing.txt')
+    writeFileSync(dest, 'original')
+    const result = await writeTool.execute({ file_path: dest, content: 'updated' }, ctx)
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('not been read')
+    expect(readFileSync(dest, 'utf-8')).toBe('original')
   })
 
   it('writes empty content', async () => {

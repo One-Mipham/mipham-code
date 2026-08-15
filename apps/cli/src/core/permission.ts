@@ -17,7 +17,9 @@ import { loadPermissionConfig, nextMode, clampMode, MODE_CYCLE } from './permiss
  */
 function hasDangerousGitFlags(input: Record<string, unknown>): boolean {
   const cmd = (input.command as string) || ''
-  if (!/^(git|gh)\s+/.test(cmd.trim())) return false
+  // Detect a git/gh invocation anywhere in the command (not just `^git`), so
+  // `echo ok && git push --force` is still caught.
+  if (!/(?:^|[\s;&|])(?:sudo\s+)?(?:git|gh)\s+/.test(cmd)) return false
   return /--force(?!-with-lease)\b|--amend\b|--no-verify\b|--hard\b/.test(cmd)
 }
 
@@ -28,6 +30,10 @@ function hasDangerousGitFlags(input: Record<string, unknown>): boolean {
  */
 function isVerificationCommand(input: Record<string, unknown>): boolean {
   const cmd = (input.command as string) || ''
+  // A verification command must be a single simple command — any shell
+  // metacharacter (&&, ;, |, >, <, backtick, $) means it can chain a destructive
+  // action (e.g. `cat x && rm -rf ~`), so never auto-approve it.
+  if (/[;&|><`$]/.test(cmd)) return false
   // Patterns for verification-only commands (no side effects on codebase)
   const verifyPatterns = [
     /\bpnpm\s+test\b/, // test runner

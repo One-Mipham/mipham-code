@@ -90,4 +90,14 @@ export class SecurityGate {
     }
     return { blocked: false }
   }
+
+  /** Redact known API-key-shaped tokens from output (defense-in-depth beyond config patterns). */
+  static redactCredentialLeak(output: string): string {
+    if (!this.checkCredentialLeak(output).blocked) return output
+    let out = output
+    for (const { regex } of API_KEY_PATTERNS) {
+      out = out.replace(new RegExp(regex.source, 'gi'), '[REDACTED]')
+    }
+    return out
+  }
 }

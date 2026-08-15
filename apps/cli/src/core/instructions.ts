@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, readdirSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 import type { InstructionFile } from '../shared/index.ts'
@@ -39,9 +39,6 @@ export class InstructionsLoader {
     this.tryLoad(join(cwd, 'MIPHAM.md'), 'project')
     this.tryLoad(join(cwd, 'CLAUDE.md'), 'project')
 
-    // Tier 2b: Directory-level MIPHAM.md (recursive, up to 3 levels)
-    this.tryLoadRecursive(cwd, 'directory')
-
     // Tier 3: User-level ~/.mipham/USER.md
     const home = process.env.HOME || '~'
     this.tryLoad(join(home, '.mipham', 'USER.md'), 'user')
@@ -51,6 +48,9 @@ export class InstructionsLoader {
     const parts: string[] = []
 
     for (const inst of this.instructions) {
+      // Honor `privacy: private` — such instructions are never sent to the model.
+      if (inst.privacy === 'private') continue
+
       const levelLabel: Record<string, string> = {
         group: 'Group Policy',
         company: 'Company Policy',
@@ -206,43 +206,5 @@ Script format: export const meta = { name, description, phases: [...] }
     } catch {
       // Silently skip unreadable files
     }
-  }
-
-  private tryLoadRecursive(dir: string, level: InstructionFile['level']): void {
-    const maxDepth = 3
-
-    const walk = (current: string, depth: number) => {
-      if (depth > maxDepth) return
-
-      // Check for MIPHAM.md in this directory
-      const miphamPath = join(current, 'MIPHAM.md')
-      if (existsSync(miphamPath) && current !== dir) {
-        this.tryLoad(miphamPath, level)
-      }
-      // Also check for CLAUDE.md
-      const claudeMdPath = join(current, 'CLAUDE.md')
-      if (existsSync(claudeMdPath) && current !== dir) {
-        this.tryLoad(claudeMdPath, level)
-      }
-
-      try {
-        const items = readdirSync(current, { withFileTypes: true })
-        for (const item of items) {
-          if (
-            item.isDirectory() &&
-            !item.name.startsWith('.') &&
-            item.name !== 'node_modules' &&
-            item.name !== 'dist' &&
-            item.name !== '.next'
-          ) {
-            walk(join(current, item.name), depth + 1)
-          }
-        }
-      } catch {
-        // skip unreadable directories
-      }
-    }
-
-    walk(dir, 0)
   }
 }
