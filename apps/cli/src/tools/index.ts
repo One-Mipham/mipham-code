@@ -1,11 +1,13 @@
 import type { ToolDefinition } from '../shared/index.ts'
+import { Context } from '../vajra'
 import { withValidation } from './validation'
-import { readTool } from './file/read'
+import { toolService, collectTools } from './seam'
+import { readToolService } from './file/read'
 import { writeTool } from './file/write'
 import { editTool } from './file/edit'
 import { globTool } from './file/glob'
 import { grepTool } from './file/grep'
-import { bashTool } from './exec/bash'
+import { bashToolService } from './exec/bash'
 import { gitTool } from './exec/git'
 import { taskTool } from './exec/task'
 import { enterWorktreeTool } from './exec/enter-worktree'
@@ -29,53 +31,63 @@ import { listAgentsTool } from './agent/list-agents'
 import { computerUseTool } from './computer/computer-use'
 import { scheduleWakeupTool } from './scheduling/schedule-wakeup.js'
 import { cronCreateTool, cronDeleteTool, cronListTool } from './scheduling/cron.js'
+import { DEFAULT_CREDENTIAL_MASKING_CONFIG } from '../config/defaults'
 
-export function createToolRegistry(): Map<string, ToolDefinition> {
-  const tools: ToolDefinition[] = [
+function defaultToolContext(): Context {
+  const ctx = new Context()
+  ctx.provide('credentials', DEFAULT_CREDENTIAL_MASKING_CONFIG)
+  return ctx
+}
+
+export function createToolRegistry(
+  ctx: Context = defaultToolContext(),
+): Map<string, ToolDefinition> {
+  // 普通工具：包 withValidation 后作为 Service 挂载
+  const plainTools: ToolDefinition[] = [
     // File tools
-    withValidation(readTool),
-    withValidation(writeTool),
-    withValidation(editTool),
-    withValidation(globTool),
-    withValidation(grepTool),
+    writeTool,
+    editTool,
+    globTool,
+    grepTool,
     // Exec tools
-    withValidation(bashTool),
-    withValidation(gitTool),
-    withValidation(taskTool),
-    withValidation(enterWorktreeTool),
-    withValidation(exitWorktreeTool),
+    gitTool,
+    taskTool,
+    enterWorktreeTool,
+    exitWorktreeTool,
     // Agent tools
-    withValidation(agentTool),
-    withValidation(skillTool),
-    withValidation(planTool),
-    withValidation(enterPlanModeTool),
-    withValidation(exitPlanModeTool),
-    withValidation(memoryTool),
-    withValidation(workflowTool),
-    withValidation(reportFindingsTool),
-    withValidation(sendMessageTool),
-    withValidation(listAgentsTool),
+    agentTool,
+    skillTool,
+    planTool,
+    enterPlanModeTool,
+    exitPlanModeTool,
+    memoryTool,
+    workflowTool,
+    reportFindingsTool,
+    sendMessageTool,
+    listAgentsTool,
     // Network tools
-    withValidation(webFetchTool),
-    withValidation(webSearchTool),
+    webFetchTool,
+    webSearchTool,
     // System tools
-    withValidation(configTool),
-    withValidation(mcpTool),
-    withValidation(toolSearchTool),
+    configTool,
+    mcpTool,
+    toolSearchTool,
     // Artifact tools
-    withValidation(artifactTool),
+    artifactTool,
     // Computer Use tools
-    withValidation(computerUseTool),
+    computerUseTool,
     // Scheduling tools
-    withValidation(scheduleWakeupTool),
-    withValidation(cronCreateTool),
-    withValidation(cronDeleteTool),
-    withValidation(cronListTool),
+    scheduleWakeupTool,
+    cronCreateTool,
+    cronDeleteTool,
+    cronListTool,
   ]
-
-  const map = new Map<string, ToolDefinition>()
-  for (const tool of tools) {
-    map.set(tool.name, tool)
+  for (const tool of plainTools) {
+    ctx.mount(toolService(withValidation(tool)))
   }
-  return map
+  // 注入工具（credentials 依赖）：read + bash
+  ctx.mount(readToolService)
+  ctx.mount(bashToolService)
+
+  return collectTools(ctx)
 }
