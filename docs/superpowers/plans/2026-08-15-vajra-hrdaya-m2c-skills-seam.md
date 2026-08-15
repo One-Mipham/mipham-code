@@ -25,12 +25,14 @@
 ## Task 1: ctx.skills 技能缝（Skills 接口 + mountSkills + SkillsLoader implements Skills + engine setSkills）
 
 **Files:**
+
 - Create: `apps/cli/src/skills/seam.ts`
 - Modify: `apps/cli/src/skills/loader.ts`（`class SkillsLoader implements Skills`）
 - Modify: `apps/cli/src/core/engine.ts`（`setSkills` + `skillsProvider` 回退）
 - Test: `apps/cli/test/core/engine.test.ts`（换 skills provider 不改 engine）
 
 **Interfaces:**
+
 - Produces: `Skills` 接口（`get`/`list`/`has`/`buildSystemReminder`）、`SKILLS_KEY = 'skills'`、`mountSkills(ctx, skills)`、`ContextManager` 无改动、`engine.setSkills(skills)`。
 
 - [ ] **Step 1: 写失败测试**
@@ -86,6 +88,7 @@ export function mountSkills(ctx: Context, skills: Skills): Disposer {
 `apps/cli/src/skills/loader.ts`：类声明改为 `export class SkillsLoader implements Skills`，顶部 `import type { Skills } from './seam'`。方法签名已满足（`get`/`list`/`has`/`buildSystemReminder`），无需改方法体。
 
 `apps/cli/src/core/engine.ts`：
+
 - 顶部 `import type { Skills } from '../skills/seam'`。
 - 字段区（`private skillsLoader?: SkillsLoader` 旁）加 `private skillsProvider?: Skills`。
 - `setSkillsLoader` 旁新增：
@@ -121,11 +124,13 @@ git commit -m "feat(skills): mount SkillsLoader as ctx.skills seam (Skills inter
 ## Task 2: self-critique 漏缝接入（critique 走 llm 缝）
 
 **Files:**
+
 - Modify: `apps/cli/src/core/self-critique.ts`（`critique()` 加 `llm?` 参数）
 - Modify: `apps/cli/src/core/engine.ts`（line 1035 调用传 `this.llm`）
 - Test: `apps/cli/test/core/self-critique.test.ts`（存在则扩展；否则 engine.test.ts 内）
 
 **Interfaces:**
+
 - Produces: `SelfCritique.critique(name, params, registry, llm?)`；`llm` 缺省时回退 `registry.chat`。
 
 - [ ] **Step 1: 写失败测试**
@@ -140,6 +145,7 @@ Expected: FAIL。
 - [ ] **Step 3: 最小实现**
 
 `apps/cli/src/core/self-critique.ts`：
+
 - 顶部 `import type { Llm } from '../providers/llm'`。
 - `critique` 签名：`async critique(toolName, params, registry: ProviderRegistry, llm?: Llm)`（`llm` 默认回退 registry）。
 - line 147 改：`for await (const chunk of (llm ?? registry).chat({ ... }))`。
@@ -147,7 +153,7 @@ Expected: FAIL。
 `apps/cli/src/core/engine.ts` line 1035 改：
 
 ```ts
-      const critiqueResult = await selfCritique.critique(name, effectiveParams, this.registry, this.llm)
+const critiqueResult = await selfCritique.critique(name, effectiveParams, this.registry, this.llm)
 ```
 
 （`this.llm` 是 engine 的私有 Llm 字段，M2b 已加；未设置时为 undefined → self-critique 回退 registry，行为不变。）
@@ -168,6 +174,7 @@ git commit -m "feat(self-critique): route critique chat through injected Llm sea
 ## Task 3: SubAgent 漏缝接入（llm 参数 + ToolContext.llm + agent 工具接线）
 
 **Files:**
+
 - Modify: `apps/cli/src/agent/sub-agent.ts`（构造加 `llm?` + line 335 走缝）
 - Modify: `apps/cli/src/shared/types.ts` + `packages/shared/src/types.ts`（ToolContext 加 `llm?`）
 - Modify: `apps/cli/src/core/engine.ts`（ToolContext 注入 `llm: this.llm`）
@@ -175,6 +182,7 @@ git commit -m "feat(self-critique): route critique chat through injected Llm sea
 - Test: `apps/cli/test/agent/sub-agent.test.ts`（存在则扩展）
 
 **Interfaces:**
+
 - Produces: `SubAgent` 构造 `(registry, toolRegistry, permission?, hookEngine?, ruleEngine?, llm?)`；line 335 `(this.llm ?? this.registry).chat(...)`。
 
 - [ ] **Step 1: 写失败测试**
@@ -189,6 +197,7 @@ Expected: FAIL。
 - [ ] **Step 3: 最小实现**
 
 `apps/cli/src/agent/sub-agent.ts`：
+
 - `import type { Llm } from '../providers/llm'`。
 - 构造加尾参 `private llm?: Llm`。
 - line 335 改：`for await (const chunk of (this.llm ?? this.registry).chat({ ... }))`。
@@ -228,6 +237,7 @@ git commit -m "feat(sub-agent): route sub-agent chat through injected Llm seam"
 ## Self-Review
 
 **Spec coverage（§5 三缝映射）：**
+
 - `ctx.skills`（技能加载缝）→ Task 1 ✅
 - M2b 遗留「self-critique/SubAgent 漏缝」→ Task 2 + Task 3 ✅
 - `ctx.llm`/`ctx.tools` 已由 M2b/M2 落地（本轮不动）✅
