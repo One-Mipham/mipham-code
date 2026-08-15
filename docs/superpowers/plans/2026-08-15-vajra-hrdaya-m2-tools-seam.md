@@ -27,10 +27,12 @@
 ### Task 1: Vajra `Context.keys()` 枚举方法
 
 **Files:**
+
 - Modify: `apps/cli/src/vajra/context.ts`
 - Test: `apps/cli/test/vajra/context.test.ts`
 
 **Interfaces:**
+
 - Produces: `Context.keys(): string[]` — 返回本 Context **本地**提供的服务键（不含 parent）；后续 Task 3 `collectTools` 依赖它枚举 `tool:*` 键
 
 - [ ] **Step 1: Write the failing test**
@@ -38,21 +40,21 @@
 在 `apps/cli/test/vajra/context.test.ts` 的顶层 `describe('Context')` 内新增：
 
 ```ts
-  it('enumerates locally provided keys', () => {
-    const ctx = new Context()
-    ctx.provide('a', 1)
-    ctx.provide('tool:Read', { name: 'Read' })
-    const keys = ctx.keys().sort()
-    expect(keys).toEqual(['a', 'tool:Read'])
-  })
+it('enumerates locally provided keys', () => {
+  const ctx = new Context()
+  ctx.provide('a', 1)
+  ctx.provide('tool:Read', { name: 'Read' })
+  const keys = ctx.keys().sort()
+  expect(keys).toEqual(['a', 'tool:Read'])
+})
 
-  it('keys() does not include parent keys', () => {
-    const parent = new Context()
-    parent.provide('secret', true)
-    const child = parent.scope('child')
-    child.provide('local', 1)
-    expect(child.keys()).toEqual(['local'])
-  })
+it('keys() does not include parent keys', () => {
+  const parent = new Context()
+  parent.provide('secret', true)
+  const child = parent.scope('child')
+  child.provide('local', 1)
+  expect(child.keys()).toEqual(['local'])
+})
 ```
 
 （如文件顶层已有 `import { Context } from '../../src/vajra'`，复用即可。）
@@ -89,11 +91,13 @@ git commit -m "feat(vajra): add Context.keys() enumeration for service seams"
 ### Task 2: 抽离 `withValidation` 到 `src/tools/validation.ts`
 
 **Files:**
+
 - Create: `apps/cli/src/tools/validation.ts`
 - Modify: `apps/cli/src/tools/index.ts`（删除 moved 的代码，改为 import）
 - Test: `apps/cli/test/tools/param-validation.test.ts`（已有，无需改，验证无回归）
 
 **Interfaces:**
+
 - Produces: `validateParams(schema, params): string[]` 与 `withValidation(tool: ToolDefinition): ToolDefinition`（从 tools/index.ts 原样搬移，语义零变化）；read/bash（Task 4/5）与 tools/index.ts（Task 6）都从这里 import
 - Consumes: `sanitizeParams`（`../shared/sanitize`）、i18n `createT`/`t`
 
@@ -227,10 +231,12 @@ git commit -m "refactor(tools): extract withValidation to shared validation modu
 ### Task 3: 工具缝基础 `src/tools/seam.ts`
 
 **Files:**
+
 - Create: `apps/cli/src/tools/seam.ts`
 - Test: `apps/cli/test/tools/seam.test.ts`
 
 **Interfaces:**
+
 - Produces:
   - `toolKey(name: string): string` — 返回 `tool:${name}`
   - `toolService(tool: ToolDefinition): Service` — 把普通 ToolDefinition 包装成 Vajra Service（apply 时 `ctx.provide(toolKey(tool.name), tool)`）
@@ -253,7 +259,11 @@ const readTool: ToolDefinition = {
   description: 'read a file',
   category: 'file',
   permission: 'auto',
-  parameters: { type: 'object', properties: { file_path: { type: 'string' } }, required: ['file_path'] },
+  parameters: {
+    type: 'object',
+    properties: { file_path: { type: 'string' } },
+    required: ['file_path'],
+  },
   execute: async () => ({ success: true, content: 'ok' }),
 }
 
@@ -351,10 +361,12 @@ git commit -m "feat(tools): add Vajra tool seam (toolService + collectTools)"
 ### Task 4: read.ts 升缝 — `createReadTool` 工厂 + `readToolService` 注入
 
 **Files:**
+
 - Modify: `apps/cli/src/tools/file/read.ts`
 - Test: `apps/cli/test/tools/file.test.ts`（改 import + 新增注入用例）
 
 **Interfaces:**
+
 - Produces:
   - `createReadTool(credentialConfig?: CredentialMaskingConfig): ToolDefinition` — 纯工厂（execute 内用闭包参数 `credentialConfig`，不再读模块全局）
   - `readToolService: Service` — `inject: ['credentials']`，apply 时 `ctx.get('credentials')` 后 `ctx.provide(toolKey('Read'), withValidation(createReadTool(config)))`
@@ -380,27 +392,27 @@ const readTool = createReadTool()
 在同一 describe 内新增注入门控用例：
 
 ```ts
-  describe('readToolService (credential injection)', () => {
-    it('does not mount without credentials (inject gating)', () => {
-      const ctx = new Context()
-      const mounted = ctx.mount(readToolService)
-      expect(mounted.status()).toBe('inactive')
-      expect(collectTools(ctx).has('Read')).toBe(false)
-    })
-
-    it('mounts once credentials are provided', () => {
-      const ctx = new Context()
-      const mounted = ctx.mount(readToolService)
-      ctx.provide('credentials', {
-        enabled: true,
-        files: [],
-        output_scrubbing: { enabled: true, patterns: [] },
-        env_filter: { enabled: true, patterns: [] },
-      })
-      expect(mounted.status()).toBe('active')
-      expect(collectTools(ctx).has('Read')).toBe(true)
-    })
+describe('readToolService (credential injection)', () => {
+  it('does not mount without credentials (inject gating)', () => {
+    const ctx = new Context()
+    const mounted = ctx.mount(readToolService)
+    expect(mounted.status()).toBe('inactive')
+    expect(collectTools(ctx).has('Read')).toBe(false)
   })
+
+  it('mounts once credentials are provided', () => {
+    const ctx = new Context()
+    const mounted = ctx.mount(readToolService)
+    ctx.provide('credentials', {
+      enabled: true,
+      files: [],
+      output_scrubbing: { enabled: true, patterns: [] },
+      env_filter: { enabled: true, patterns: [] },
+    })
+    expect(mounted.status()).toBe('active')
+    expect(collectTools(ctx).has('Read')).toBe(true)
+  })
+})
 ```
 
 顶部 import 区补：
@@ -465,10 +477,12 @@ git commit -m "feat(tools): read.ts seam — inject credentials, drop module-glo
 ### Task 5: bash.ts 升缝 — `createBashTool` 工厂 + `bashToolService` 注入
 
 **Files:**
+
 - Modify: `apps/cli/src/tools/exec/bash.ts`
 - Test: `apps/cli/test/tools/exec.test.ts`、`apps/cli/test/tools/bash.test.ts`（改 import + 新增注入用例）
 
 **Interfaces:**
+
 - Produces: `createBashTool(credentialConfig?: CredentialMaskingConfig): ToolDefinition`、`bashToolService: Service`（`inject: ['credentials']`）
 - Consumes: Task 2 `withValidation`、Task 3 `toolKey`、`Service` 类型
 - **保留不变**：`isBlocked`（第 107 行）、`detectViolations`（第 155 行）、`BLOCKED_PATTERNS`、`sanitizeCommand` import、`DANGEROUS_GIT_PATTERNS` import
@@ -495,23 +509,23 @@ import { createBashTool, detectViolations } from '../../src/tools/exec/bash'
 在 `bash.test.ts` 内新增注入门控用例（import `Context` + `collectTools` + `bashToolService`）：
 
 ```ts
-  describe('bashToolService (credential injection)', () => {
-    it('does not mount without credentials, mounts after provide', () => {
-      const ctx = new Context()
-      const mounted = ctx.mount(bashToolService)
-      expect(mounted.status()).toBe('inactive')
-      expect(collectTools(ctx).has('Bash')).toBe(false)
+describe('bashToolService (credential injection)', () => {
+  it('does not mount without credentials, mounts after provide', () => {
+    const ctx = new Context()
+    const mounted = ctx.mount(bashToolService)
+    expect(mounted.status()).toBe('inactive')
+    expect(collectTools(ctx).has('Bash')).toBe(false)
 
-      ctx.provide('credentials', {
-        enabled: true,
-        files: [],
-        output_scrubbing: { enabled: true, patterns: [] },
-        env_filter: { enabled: true, patterns: [] },
-      })
-      expect(mounted.status()).toBe('active')
-      expect(collectTools(ctx).has('Bash')).toBe(true)
+    ctx.provide('credentials', {
+      enabled: true,
+      files: [],
+      output_scrubbing: { enabled: true, patterns: [] },
+      env_filter: { enabled: true, patterns: [] },
     })
+    expect(mounted.status()).toBe('active')
+    expect(collectTools(ctx).has('Bash')).toBe(true)
   })
+})
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -540,9 +554,9 @@ export function createBashTool(credentialConfig?: CredentialMaskingConfig): Tool
   return {
 ```
 
-   并在文件末尾（第 433 行 `}` 之后）补 `\n  }\n}` 闭合工厂。
+并在文件末尾（第 433 行 `}` 之后）补 `\n  }\n}` 闭合工厂。
 
-   > 函数参数命名 `credentialConfig` 与模块全局同名，`execute` 内第 360/362/382/384/392/393 行的 `credentialConfig` 引用自动经闭包解析到参数，无需改动。
+> 函数参数命名 `credentialConfig` 与模块全局同名，`execute` 内第 360/362/382/384/392/393 行的 `credentialConfig` 引用自动经闭包解析到参数，无需改动。
 
 4. 在文件末尾追加：
 
@@ -573,10 +587,12 @@ git commit -m "feat(tools): bash.ts seam — inject credentials, drop module-glo
 ### Task 6: tools/index.ts — `createToolRegistry(ctx)` 升缝
 
 **Files:**
+
 - Modify: `apps/cli/src/tools/index.ts`
 - Test: `apps/cli/test/tools/param-validation.test.ts`（改 import，无默认参数变化）、新增 `apps/cli/test/tools/registry.test.ts`
 
 **Interfaces:**
+
 - Produces: `createToolRegistry(ctx: Context = defaultToolContext()): Map<string, ToolDefinition>` — 挂载 read/bash service + 其余 30 个普通工具 `toolService(withValidation(tool))`，返回 `collectTools(ctx)`
 - Consumes: Task 2 `withValidation`、Task 3 `toolService`/`collectTools`、Task 4 `readToolService`、Task 5 `bashToolService`、`DEFAULT_CREDENTIAL_MASKING_CONFIG`（`../config/defaults`）
 - `defaultToolContext()`：新建 `Context` 并 `provide('credentials', DEFAULT_CREDENTIAL_MASKING_CONFIG)`，保证无参调用时 read/bash 仍挂载（backward compat）
@@ -685,26 +701,48 @@ function defaultToolContext(): Context {
   return ctx
 }
 
-export function createToolRegistry(ctx: Context = defaultToolContext()): Map<string, ToolDefinition> {
+export function createToolRegistry(
+  ctx: Context = defaultToolContext(),
+): Map<string, ToolDefinition> {
   // 普通工具：包 withValidation 后作为 Service 挂载
   const plainTools: ToolDefinition[] = [
     // File tools
-    writeTool, editTool, globTool, grepTool,
+    writeTool,
+    editTool,
+    globTool,
+    grepTool,
     // Exec tools
-    gitTool, taskTool, enterWorktreeTool, exitWorktreeTool,
+    gitTool,
+    taskTool,
+    enterWorktreeTool,
+    exitWorktreeTool,
     // Agent tools
-    agentTool, skillTool, planTool, enterPlanModeTool, exitPlanModeTool,
-    memoryTool, workflowTool, reportFindingsTool, sendMessageTool, listAgentsTool,
+    agentTool,
+    skillTool,
+    planTool,
+    enterPlanModeTool,
+    exitPlanModeTool,
+    memoryTool,
+    workflowTool,
+    reportFindingsTool,
+    sendMessageTool,
+    listAgentsTool,
     // Network tools
-    webFetchTool, webSearchTool,
+    webFetchTool,
+    webSearchTool,
     // System tools
-    configTool, mcpTool, toolSearchTool,
+    configTool,
+    mcpTool,
+    toolSearchTool,
     // Artifact tools
     artifactTool,
     // Computer Use tools
     computerUseTool,
     // Scheduling tools
-    scheduleWakeupTool, cronCreateTool, cronDeleteTool, cronListTool,
+    scheduleWakeupTool,
+    cronCreateTool,
+    cronDeleteTool,
+    cronListTool,
   ]
   for (const tool of plainTools) {
     ctx.mount(toolService(withValidation(tool)))
@@ -736,10 +774,12 @@ git commit -m "feat(tools): createToolRegistry(ctx) mounts tools as Vajra servic
 ### Task 7: index.tsx 接线 — Context + provide credentials
 
 **Files:**
+
 - Modify: `apps/cli/src/index.tsx`
 - Test: 全量测试套件（`pnpm test`）
 
 **Interfaces:**
+
 - Consumes: Task 6 `createToolRegistry(ctx)`；`Context`（`./vajra`）；`loadCredentialMaskingConfig`（已 import，`./config/loader`）
 - **删除**：`setCredentialMaskingConfigForRead`/`setCredentialMaskingConfigForBash` 的动态 import + 调用（第 496–500 行）
 
@@ -752,17 +792,17 @@ git commit -m "feat(tools): createToolRegistry(ctx) mounts tools as Vajra servic
 `apps/cli/src/index.tsx` 第 437–438 行（`// Create tool registry ...` 注释 + `const tools = createToolRegistry()`）改为：
 
 ```ts
-  // Initialize credential masking pipeline (strategies: Full, Extract, JWT)
-  const { initializePipeline } = await import('./core/credential-masker/index')
-  initializePipeline()
+// Initialize credential masking pipeline (strategies: Full, Extract, JWT)
+const { initializePipeline } = await import('./core/credential-masker/index')
+initializePipeline()
 
-  // Load credential masking config and inject it into the tool seam
-  const credentialMaskingConfig = loadCredentialMaskingConfig()
-  const toolContext = new Context()
-  toolContext.provide('credentials', credentialMaskingConfig)
+// Load credential masking config and inject it into the tool seam
+const credentialMaskingConfig = loadCredentialMaskingConfig()
+const toolContext = new Context()
+toolContext.provide('credentials', credentialMaskingConfig)
 
-  // Create tool registry with all built-in tools (mounted as Vajra services)
-  const tools = createToolRegistry(toolContext)
+// Create tool registry with all built-in tools (mounted as Vajra services)
+const tools = createToolRegistry(toolContext)
 ```
 
 并在顶部 import 区新增：
@@ -794,6 +834,7 @@ git commit -m "feat(cli): wire tool seam context + inject credentials at startup
 ## Self-Review
 
 **Spec coverage（§7.4 + §五）:**
+
 - ✅ `ctx.tools` 工具注册缝：Task 3（seam）+ Task 6（createToolRegistry(ctx)）——工具成为可挂载 Service
 - ✅ 「加一个工具不改 index.ts」测试：Task 3 `adds a new tool by mounting a service` + Task 6 `mounts into a caller-provided context`
 - ✅ `read.ts` credentialConfig 全局走私 → `inject: ['credentials']`：Task 4（read）+ Task 5（bash，同型病灶）
