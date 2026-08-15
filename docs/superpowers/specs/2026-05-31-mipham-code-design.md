@@ -195,7 +195,7 @@ providers:
   - id: mipham
     name: MiphamAI
     protocol: openai-compatible
-    baseUrl: https://api.mipham.ai/v1 # 预留
+    baseUrl: https://api.onemipham.com/v1 # 预留
     apiKey: ${MIPHAM_API_KEY}
     models:
       - om-V5-Pro # 旗舰：推理与程序开发大模型

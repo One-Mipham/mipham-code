@@ -59,6 +59,33 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
         vision: true,
         status: 'active',
       },
+      {
+        id: 'claude-fable-5',
+        name: 'Claude Fable 5',
+        providerId: 'anthropic',
+        contextWindow: 1_000_000,
+        maxOutput: 128_000,
+        vision: true,
+        status: 'active',
+      },
+      {
+        id: 'claude-sonnet-5',
+        name: 'Claude Sonnet 5',
+        providerId: 'anthropic',
+        contextWindow: 1_000_000,
+        maxOutput: 128_000,
+        vision: true,
+        status: 'active',
+      },
+      {
+        id: 'claude-opus-5',
+        name: 'Claude Opus 5',
+        providerId: 'anthropic',
+        contextWindow: 1_000_000,
+        maxOutput: 128_000,
+        vision: true,
+        status: 'active',
+      },
     ],
   },
   {
@@ -268,7 +295,69 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
       },
     ],
   },
+  {
+    id: 'kimi',
+    name: 'Kimi (月之暗面)',
+    protocol: 'openai-compatible',
+    baseUrl: 'https://api.moonshot.cn/v1',
+    apiKey: '${KIMI_API_KEY}',
+    models: [
+      {
+        id: 'kimi-latest',
+        name: 'Kimi Latest',
+        providerId: 'kimi',
+        contextWindow: 128_000,
+        maxOutput: 16_000,
+        vision: true,
+        status: 'active',
+      },
+      {
+        id: 'kimi-k3',
+        name: 'Kimi K3',
+        providerId: 'kimi',
+        contextWindow: 1_000_000,
+        maxOutput: 128_000,
+        vision: true,
+        status: 'active',
+      },
+      {
+        id: 'moonshot-v1-8k',
+        name: 'Moonshot v1 8K',
+        providerId: 'kimi',
+        contextWindow: 8_000,
+        maxOutput: 4_000,
+        vision: false,
+        status: 'active',
+      },
+      {
+        id: 'moonshot-v1-32k',
+        name: 'Moonshot v1 32K',
+        providerId: 'kimi',
+        contextWindow: 32_000,
+        maxOutput: 4_000,
+        vision: false,
+        status: 'active',
+      },
+      {
+        id: 'moonshot-v1-128k',
+        name: 'Moonshot v1 128K',
+        providerId: 'kimi',
+        contextWindow: 128_000,
+        maxOutput: 4_000,
+        vision: false,
+        status: 'active',
+      },
+    ],
+  },
   MIPHAM_PROVIDER,
+  {
+    id: 'ollama',
+    name: 'Ollama (本地)',
+    protocol: 'openai-compatible',
+    baseUrl: 'http://localhost:11434/v1',
+    apiKey: 'ollama-local',
+    models: [], // 动态发现，初值为空
+  },
   {
     id: 'openai',
     name: 'OpenAI',
@@ -349,8 +438,27 @@ export const PROTOCOL_LABELS: Record<string, string> = {
   custom: 'Custom Protocol',
 }
 
-export const TOOL_CATEGORIES = ['file', 'exec', 'agent', 'network', 'system'] as const
+export const TOOL_CATEGORIES = ['file', 'exec', 'agent', 'network', 'system', 'artifact', 'scheduling'] as const
 export const CONFIG_FILE_NAME = 'config.yml'
 export const MIPHAM_DIR = '.mipham'
 export const USER_CONFIG_DIR = '.mipham'
 export const MEMORY_DIR = 'memory'
+
+/** 预置 Ollama 模型 — 与 ollama list 结果合并去重后展示 */
+export const OLLAMA_PRESET_MODELS = [
+  { id: 'om-v5-flash', source: 'MiphamAI' },
+  { id: 'om-v5-pro', source: 'MiphamAI' },
+  { id: 'om-v5-visual', source: 'MiphamAI' },
+  { id: 'om-v5-apex', source: 'MiphamAI' },
+  { id: 'deepseek-r1:70b', source: '热门' },
+  { id: 'deepseek-v3', source: '热门' },
+  { id: 'qwen2.5:72b', source: '热门' },
+  { id: 'qwen3', source: '热门' },
+] as const
+
+// ── Artifact Constants ──
+export const ARTIFACTS_DIR = 'artifacts'
+export const ARTIFACT_PORT = 9876
+export const ARTIFACT_MAX_PORT_TRIES = 10
+export const ARTIFACT_MAX_SIZE = 5 * 1024 * 1024 // 5MB
+export const ARTIFACT_ALLOWED_EXTENSIONS = ['.html', '.svg']

@@ -524,7 +524,7 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     id: 'mipham',
     name: 'MiphamAI',
     protocol: 'openai-compatible',
-    baseUrl: 'https://api.mipham.ai/v1',
+    baseUrl: 'https://api.onemipham.com/v1',
     apiKey: '${MIPHAM_API_KEY}',
     models: [
       {

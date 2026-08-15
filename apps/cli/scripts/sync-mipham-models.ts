@@ -77,7 +77,7 @@ interface SnapshotFile {
 
 async function main() {
   const args = process.argv.slice(2)
-  let engineUrl = 'https://api.mipham.ai/v1'
+  let engineUrl = 'https://api.onemipham.com/v1'
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--engine-url' && args[i + 1]) {
@@ -120,7 +120,7 @@ async function main() {
     id: 'mipham',
     name: 'MiphamAI',
     protocol: 'openai-compatible' as const,
-    baseUrl: 'https://api.mipham.ai/v1',
+    baseUrl: 'https://api.onemipham.com/v1',
     apiKey: '${MIPHAM_API_KEY}',
     status: 'active',
   }
