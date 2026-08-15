@@ -3,7 +3,7 @@ import { parse as parseYaml } from 'yaml'
 
 export type BundleLine = {
   id: string
-  kind: 'tool' | 'provider' | 'skill'
+  kind: 'tool' | 'provider' | 'skill' | 'service'
   config: Record<string, unknown>
 }
 export type Bundle = { name: string; lines: BundleLine[] }

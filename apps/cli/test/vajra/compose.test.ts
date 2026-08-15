@@ -4,6 +4,15 @@ import type { Bundle, BundleLine, Profile } from '../../src/vajra/compose'
 import { writeFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { Context } from '../../src/vajra'
+import { LLM_KEY } from '../../src/providers/llm'
+import { replayLlm, type RecordedTurn } from '../../src/providers/llm-replay'
+import {
+  planRunnerService,
+  PLAN_RUNNER_KEY,
+  type PlanRunner,
+} from '../../src/vajra/leaf/plan-runner'
+import { mountProfile, type ServiceResolver } from '../../src/vajra/compose'
 
 it('assemble concatenates bundles in order', () => {
   const b1: Bundle = { name: 'b1', lines: [{ id: 't1', kind: 'tool', config: {} }] }
@@ -83,4 +92,59 @@ it('patch does not mutate the shared bundle line (per-profile isolation)', () =>
   assemble(p1, () => b) // p1 打补丁到 2.0.0
   const lines2 = assemble(p2, () => b) // p2 共享同一 bundle，无补丁
   expect(lines2.find((l) => l.id === 'ver')!.config.version).toBe('1.0.0') // 未被 p1 污染
+})
+
+const text = (s: string): RecordedTurn => ({
+  req: { model: 'm', messages: [] },
+  chunks: [{ type: 'text', content: s }, { type: 'stop' }],
+})
+
+it('mounts the plan-runner leaf via a profile bundle', async () => {
+  const ctx = new Context()
+  ctx.provide(LLM_KEY, replayLlm([text('implemented A'), text('APPROVE')]))
+
+  const bundle: Bundle = {
+    name: 'orchestration',
+    lines: [{ id: 'plan-runner', kind: 'service', config: {} }],
+  }
+  const resolveService: ServiceResolver = (line) =>
+    line.id === 'plan-runner' ? planRunnerService : undefined
+
+  const mounted = mountProfile(
+    ctx,
+    { name: 'default', bundles: ['orchestration'] },
+    () => bundle,
+    resolveService,
+  )
+  const runner = ctx.get<PlanRunner>(PLAN_RUNNER_KEY)!
+  const outcomes = await runner.run({ name: 'p', tasks: [{ id: 't1', description: 'do A' }] })
+
+  expect(outcomes.map((o) => o.status)).toEqual(['done'])
+  expect(mounted).toHaveLength(1)
+  expect(mounted[0]!.status()).toBe('active')
+})
+
+it('loads a bundle + profile from disk and mounts plan-runner (declarative end-to-end)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'leaf-mount-'))
+  writeFileSync(
+    join(dir, 'orchestration.yml'),
+    'name: orchestration\nlines:\n  - id: plan-runner\n    kind: service\n    config: {}\n',
+  )
+  writeFileSync(join(dir, 'default.yml'), 'name: default\nbundles:\n  - orchestration\n')
+
+  const ctx = new Context()
+  ctx.provide(LLM_KEY, replayLlm([text('implemented'), text('APPROVE')]))
+
+  const profile = loadProfile(join(dir, 'default.yml'))
+  const resolveBundle = (name: string) => loadBundle(join(dir, `${name}.yml`))
+  const resolveService: ServiceResolver = (line) =>
+    line.id === 'plan-runner' ? planRunnerService : undefined
+
+  const mounted = mountProfile(ctx, profile, resolveBundle, resolveService)
+  const runner = ctx.get<PlanRunner>(PLAN_RUNNER_KEY)!
+  const outcomes = await runner.run({ name: 'p', tasks: [{ id: 't1', description: 'do A' }] })
+
+  expect(outcomes.map((o) => o.status)).toEqual(['done'])
+  expect(mounted).toHaveLength(1)
+  rmSync(dir, { recursive: true, force: true })
 })
