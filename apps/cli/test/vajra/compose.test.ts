@@ -58,3 +58,12 @@ it('package/version change lives in one bundle line via patch', () => {
   expect(dumped).not.toContain('1.0.0') // 旧版本不再出现 → 单源
   expect(dumped.split('\n').filter((l) => l.includes('package-info'))).toHaveLength(1) // 恰好一行
 })
+
+it('patch does not mutate the shared bundle line (per-profile isolation)', () => {
+  const b: Bundle = { name: 'b', lines: [{ id: 'ver', kind: 'skill', config: { version: '1.0.0' } }] }
+  const p1: Profile = { name: 'p1', bundles: ['b'], patch: { ver: { config: { version: '2.0.0' } } } }
+  const p2: Profile = { name: 'p2', bundles: ['b'] }
+  assemble(p1, () => b) // p1 打补丁到 2.0.0
+  const lines2 = assemble(p2, () => b) // p2 共享同一 bundle，无补丁
+  expect(lines2.find((l) => l.id === 'ver')!.config.version).toBe('1.0.0') // 未被 p1 污染
+})

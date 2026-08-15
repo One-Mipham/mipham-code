@@ -79,4 +79,12 @@ describe('tool seam', () => {
     const tools = collectTools(child)
     expect(tools.get('read')).toBe(toolB)
   })
+
+  it('scoped context inherits a parent-only tool', () => {
+    const root = new Context()
+    root.mount(toolService(withValidation(readTool)))
+    const child = root.scope('agent-x')
+    // child 未挂任何工具 → collectTools(child) 应继承 root 的 readTool
+    expect(collectTools(child).get('Read')!.name).toBe('Read')
+  })
 })
