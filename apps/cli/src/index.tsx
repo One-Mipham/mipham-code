@@ -34,6 +34,8 @@ import { PluginManager } from './plugin/plugin-manager'
 import { loadPlugins } from './plugin/plugin-loader'
 import { createToolRegistry } from './tools'
 import { Context } from './vajra'
+import { mountSkills, SKILLS_KEY } from './skills/seam'
+import { mountLlm, LLM_KEY } from './providers/llm'
 import { McpClient } from './mcp/client'
 import { registerMcpServerTools } from './mcp/registry'
 import { AgentRegistry } from './agent/agent-registry'
@@ -447,6 +449,10 @@ export async function runApp(options: RunOptions): Promise<void> {
   // Create tool registry with all built-in tools (mounted as Vajra services)
   const tools = createToolRegistry(toolContext)
 
+  // 绞杀收官：skills + llm 也挂载到同一 Vajra Context（tools 已接）
+  mountSkills(toolContext, skillsLoader)
+  mountLlm(toolContext, registry)
+
   // Connect MCP servers and register their tools into the tool registry.
   // Uses Promise.allSettled for parallel connection — failures are non-fatal.
   const mcpServers = config.skills?.mcpServers ?? []
@@ -492,7 +498,8 @@ export async function runApp(options: RunOptions): Promise<void> {
   engine.setHookEngine(hookEngine)
   engine.setArtifactServer(artifactServer)
   engine.setAgentViewManager(agentViewManager)
-  engine.setSkillsLoader(skillsLoader)
+  engine.setSkills(toolContext.get(SKILLS_KEY)!)
+  engine.setLlm(toolContext.get(LLM_KEY)!)
 
   // Wire inference hooks (DLP) configuration
   const inferenceHookConfig = loadInferenceHookConfig()
