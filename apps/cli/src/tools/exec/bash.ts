@@ -297,136 +297,139 @@ function parseErrorLocations(stderr: string): ErrorLocation[] {
 export function createBashTool(credentialConfig?: CredentialMaskingConfig): ToolDefinition {
   return {
     name: 'Bash',
-  description:
-    'Execute a bash command. Returns stdout and stderr. Timeout: 120s. Use with caution.',
-  category: 'exec',
-  permission: 'ask',
-  parameters: {
-    type: 'object',
-    properties: {
-      command: { type: 'string', description: 'The bash command to execute' },
-      description: {
-        type: 'string',
-        description: 'What this command does (for audit log)',
+    description:
+      'Execute a bash command. Returns stdout and stderr. Timeout: 120s. Use with caution.',
+    category: 'exec',
+    permission: 'ask',
+    parameters: {
+      type: 'object',
+      properties: {
+        command: { type: 'string', description: 'The bash command to execute' },
+        description: {
+          type: 'string',
+          description: 'What this command does (for audit log)',
+        },
+        timeout: {
+          type: 'integer',
+          description: 'Timeout in milliseconds (max 600000)',
+        },
       },
-      timeout: {
-        type: 'integer',
-        description: 'Timeout in milliseconds (max 600000)',
-      },
+      required: ['command'],
     },
-    required: ['command'],
-  },
-  async execute(params, ctx) {
-    const command = params.command as string
-    const timeout = Math.min((params.timeout as number) || 120_000, 600_000)
+    async execute(params, ctx) {
+      const command = params.command as string
+      const timeout = Math.min((params.timeout as number) || 120_000, 600_000)
 
-    // P0-4: Worktree isolation — block cd escape attempts
-    const WORKTREE_MARKER = '.claude/worktrees/'
-    if (ctx.cwd.includes(WORKTREE_MARKER)) {
-      const worktreeRoot = ctx.cwd.substring(0, ctx.cwd.indexOf(WORKTREE_MARKER))
-      // Detect cd to absolute paths outside the worktree
-      const cdEscapePattern = /\bcd\s+(?:"([^"]+)"|'([^']+)'|([^\s;|&]+))/
-      const cdMatch = command.match(cdEscapePattern)
-      if (cdMatch) {
-        const target = cdMatch[1] || cdMatch[2] || cdMatch[3] || ''
-        // Resolve relative to cwd
-        const resolved = target.startsWith('/')
-          ? target
-          : `${ctx.cwd}/${target}`.replace(/\/\.\//g, '/')
-        if (!resolved.startsWith(ctx.cwd) && !resolved.startsWith(worktreeRoot + '/')) {
-          return {
-            success: false,
-            content: '',
-            error:
-              `Worktree isolation: cannot cd outside worktree directory. ` +
-              `Attempted: ${target}. Use tools within the worktree only.`,
+      // P0-4: Worktree isolation — block cd escape attempts
+      const WORKTREE_MARKER = '.claude/worktrees/'
+      if (ctx.cwd.includes(WORKTREE_MARKER)) {
+        const worktreeRoot = ctx.cwd.substring(0, ctx.cwd.indexOf(WORKTREE_MARKER))
+        // Detect cd to absolute paths outside the worktree
+        const cdEscapePattern = /\bcd\s+(?:"([^"]+)"|'([^']+)'|([^\s;|&]+))/
+        const cdMatch = command.match(cdEscapePattern)
+        if (cdMatch) {
+          const target = cdMatch[1] || cdMatch[2] || cdMatch[3] || ''
+          // Resolve relative to cwd
+          const resolved = target.startsWith('/')
+            ? target
+            : `${ctx.cwd}/${target}`.replace(/\/\.\//g, '/')
+          if (!resolved.startsWith(ctx.cwd) && !resolved.startsWith(worktreeRoot + '/')) {
+            return {
+              success: false,
+              content: '',
+              error:
+                `Worktree isolation: cannot cd outside worktree directory. ` +
+                `Attempted: ${target}. Use tools within the worktree only.`,
+            }
           }
         }
       }
-    }
 
-    // Security: check command against deny list
-    const blockedReason = isBlocked(command)
-    if (blockedReason) {
-      return { success: false, content: '', error: blockedReason }
-    }
-
-    try {
-      // ── Credential masking: filter sensitive env vars ──
-      let spawnEnv: Record<string, string | undefined> | undefined
-      if (credentialConfig?.enabled && credentialConfig.env_filter.enabled) {
-        const { filterEnv } = await import('../../core/credential-masker')
-        spawnEnv = filterEnv(process.env as Record<string, string | undefined>, credentialConfig)
+      // Security: check command against deny list
+      const blockedReason = isBlocked(command)
+      if (blockedReason) {
+        return { success: false, content: '', error: blockedReason }
       }
 
-      const proc = Bun.spawn(['bash', '-c', command], {
-        cwd: ctx.cwd,
-        stdout: 'pipe',
-        stderr: 'pipe',
-        env: spawnEnv,
-      })
+      try {
+        // ── Credential masking: filter sensitive env vars ──
+        let spawnEnv: Record<string, string | undefined> | undefined
+        if (credentialConfig?.enabled && credentialConfig.env_filter.enabled) {
+          const { filterEnv } = await import('../../core/credential-masker')
+          spawnEnv = filterEnv(process.env as Record<string, string | undefined>, credentialConfig)
+        }
 
-      const timer = setTimeout(() => proc.kill(), timeout)
-      const rawOutput = await new Response(proc.stdout).text()
-      const exitCode = await proc.exited
-      clearTimeout(timer)
+        const proc = Bun.spawn(['bash', '-c', command], {
+          cwd: ctx.cwd,
+          stdout: 'pipe',
+          stderr: 'pipe',
+          env: spawnEnv,
+        })
 
-      // Read stderr for violation detection and error reporting
-      const rawStderr = await new Response(proc.stderr).text()
+        const timer = setTimeout(() => proc.kill(), timeout)
+        const rawOutput = await new Response(proc.stdout).text()
+        const exitCode = await proc.exited
+        clearTimeout(timer)
 
-      // ── Credential masking: scrub output ──
-      let output = rawOutput
-      if (credentialConfig?.enabled && credentialConfig.output_scrubbing.enabled) {
-        const { maskOutput } = await import('../../core/credential-masker')
-        output = maskOutput(rawOutput, credentialConfig)
-      }
+        // Read stderr for violation detection and error reporting
+        const rawStderr = await new Response(proc.stderr).text()
 
-      // ── Sandbox violation detection ──
-      const violations = detectViolations(rawStderr)
+        // ── Credential masking: scrub output ──
+        let output = rawOutput
+        if (credentialConfig?.enabled && credentialConfig.output_scrubbing.enabled) {
+          const { maskOutput } = await import('../../core/credential-masker')
+          output = maskOutput(rawOutput, credentialConfig)
+        }
 
-      if (exitCode !== 0) {
-        const stderr =
-          credentialConfig?.enabled && credentialConfig.output_scrubbing.enabled
-            ? (await import('../../core/credential-masker')).maskOutput(rawStderr, credentialConfig)
-            : rawStderr
-        let errorContent = output.slice(0, 5_000)
+        // ── Sandbox violation detection ──
+        const violations = detectViolations(rawStderr)
+
+        if (exitCode !== 0) {
+          const stderr =
+            credentialConfig?.enabled && credentialConfig.output_scrubbing.enabled
+              ? (await import('../../core/credential-masker')).maskOutput(
+                  rawStderr,
+                  credentialConfig,
+                )
+              : rawStderr
+          let errorContent = output.slice(0, 5_000)
+          if (violations.length > 0) {
+            errorContent += '\n\n── Sandbox Violations ──\n' + violations.join('\n')
+          }
+          // Vibe coding fix: auto-parse error locations from stderr
+          const errorLocations = parseErrorLocations(rawStderr)
+          if (errorLocations.length > 0) {
+            errorContent +=
+              '\n\n── Error Locations (for quick fix) ──\n' +
+              errorLocations
+                .map(
+                  (l) =>
+                    `  ${l.file}:${l.line}` +
+                    (l.col ? `:${l.col}` : '') +
+                    (l.message ? ` — ${l.message}` : ''),
+                )
+                .join('\n')
+          }
+          return {
+            success: false,
+            content: errorContent,
+            error: `Exit code ${exitCode}: ${stderr.slice(0, 1_000)}`,
+          }
+        }
+
+        let successContent = output.slice(0, 100_000) || '(no output)'
         if (violations.length > 0) {
-          errorContent += '\n\n── Sandbox Violations ──\n' + violations.join('\n')
+          successContent += '\n\n── Sandbox Violations ──\n' + violations.join('\n')
         }
-        // Vibe coding fix: auto-parse error locations from stderr
-        const errorLocations = parseErrorLocations(rawStderr)
-        if (errorLocations.length > 0) {
-          errorContent +=
-            '\n\n── Error Locations (for quick fix) ──\n' +
-            errorLocations
-              .map(
-                (l) =>
-                  `  ${l.file}:${l.line}` +
-                  (l.col ? `:${l.col}` : '') +
-                  (l.message ? ` — ${l.message}` : ''),
-              )
-              .join('\n')
-        }
+        return { success: true, content: successContent }
+      } catch (err) {
         return {
           success: false,
-          content: errorContent,
-          error: `Exit code ${exitCode}: ${stderr.slice(0, 1_000)}`,
+          content: '',
+          error: `Command failed: ${String(err)}`,
         }
       }
-
-      let successContent = output.slice(0, 100_000) || '(no output)'
-      if (violations.length > 0) {
-        successContent += '\n\n── Sandbox Violations ──\n' + violations.join('\n')
-      }
-      return { success: true, content: successContent }
-    } catch (err) {
-      return {
-        success: false,
-        content: '',
-        error: `Command failed: ${String(err)}`,
-      }
-    }
-  },
+    },
   }
 }
 

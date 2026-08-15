@@ -9,7 +9,11 @@ const readTool: ToolDefinition = {
   description: 'read a file',
   category: 'file',
   permission: 'auto',
-  parameters: { type: 'object', properties: { file_path: { type: 'string' } }, required: ['file_path'] },
+  parameters: {
+    type: 'object',
+    properties: { file_path: { type: 'string' } },
+    required: ['file_path'],
+  },
   execute: async () => ({ success: true, content: 'ok' }),
 }
 

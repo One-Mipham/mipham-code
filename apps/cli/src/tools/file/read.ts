@@ -8,7 +8,8 @@ import { withValidation } from '../validation'
 export function createReadTool(credentialConfig?: CredentialMaskingConfig): ToolDefinition {
   return {
     name: 'Read',
-    description: 'Read a file from the local filesystem. Supports offset and limit for large files.',
+    description:
+      'Read a file from the local filesystem. Supports offset and limit for large files.',
     category: 'file',
     permission: 'auto',
     parameters: {

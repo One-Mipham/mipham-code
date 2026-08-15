@@ -52,6 +52,14 @@ export const DEFAULT_CREDENTIAL_MASKING_CONFIG: CredentialMaskingConfig = {
   },
 }
 
+/** 掩码中立配置：Read/Bash 照常挂载，但不启用任何凭据掩码（对齐 pre-seam 无参行为）。 */
+export const DISABLED_CREDENTIAL_MASKING_CONFIG: CredentialMaskingConfig = {
+  enabled: false,
+  files: [],
+  output_scrubbing: { enabled: false, patterns: [] },
+  env_filter: { enabled: false, patterns: [] },
+}
+
 export const DEFAULT_BACKGROUND_AGENT_CONFIG: BackgroundAgentConfig = {
   auto_commit: true,
   auto_push: true,

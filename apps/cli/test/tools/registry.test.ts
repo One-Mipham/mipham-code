@@ -2,14 +2,27 @@ import { describe, it, expect } from 'vitest'
 import { Context } from '../../src/vajra'
 import { createToolRegistry } from '../../src/tools/index'
 import { collectTools } from '../../src/tools/seam'
-import { DEFAULT_CREDENTIAL_MASKING_CONFIG } from '../../src/config/defaults'
+import {
+  DEFAULT_CREDENTIAL_MASKING_CONFIG,
+  DISABLED_CREDENTIAL_MASKING_CONFIG,
+} from '../../src/config/defaults'
 
 describe('createToolRegistry (seam)', () => {
-  it('returns all built-in tools by default (incl. Read/Bash)', () => {
+  it('returns all 31 built-in tools by default (incl. Read/Bash)', () => {
     const registry = createToolRegistry()
     expect(registry.has('Read')).toBe(true)
     expect(registry.has('Bash')).toBe(true)
-    expect(registry.size).toBeGreaterThanOrEqual(30)
+    expect(registry.size).toBe(31)
+  })
+
+  it('no-arg default is masking-neutral (does not enable credential masking)', () => {
+    // 无参路径（daemon/workflow）不得静默启用掩码——defaultToolContext 必须提供
+    // DISABLED 配置（enabled:false），而非 DEFAULT（enabled:true）。
+    expect(DISABLED_CREDENTIAL_MASKING_CONFIG.enabled).toBe(false)
+    expect(DEFAULT_CREDENTIAL_MASKING_CONFIG.enabled).toBe(true)
+    const registry = createToolRegistry()
+    expect(registry.has('Read')).toBe(true)
+    expect(registry.has('Bash')).toBe(true)
   })
 
   it('mounts into a caller-provided context so plugins can add tools', () => {
