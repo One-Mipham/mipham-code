@@ -1161,7 +1161,8 @@ npm:  https://www.npmjs.com/package/@miphamai/cli`)
     const { loadProfile, loadBundle, assemble, dumpConfig } = await import('../src/vajra/compose')
 
     const profileIdx = process.argv.indexOf('--profile')
-    const profileName = profileIdx !== -1 && process.argv[profileIdx + 1] ? process.argv[profileIdx + 1]! : 'default'
+    const profileName =
+      profileIdx !== -1 && process.argv[profileIdx + 1] ? process.argv[profileIdx + 1]! : 'default'
     const dir = join(homedir(), '.mipham', 'profiles')
     const profilePath = join(dir, `${profileName}.yml`)
 

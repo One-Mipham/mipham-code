@@ -19,7 +19,10 @@ export function loadBundle(path: string): Bundle {
   if (data.lines !== undefined && !Array.isArray(data.lines)) {
     throw new Error(`bundle "${path}": "lines" must be an array`)
   }
-  return { name: typeof data.name === 'string' ? data.name : path, lines: (data.lines ?? []) as BundleLine[] }
+  return {
+    name: typeof data.name === 'string' ? data.name : path,
+    lines: (data.lines ?? []) as BundleLine[],
+  }
 }
 
 export function loadProfile(path: string): Profile {
