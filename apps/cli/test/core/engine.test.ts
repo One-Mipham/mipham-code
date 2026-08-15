@@ -6,6 +6,10 @@ import { ContextManager } from '../../src/core/context'
 import { PermissionSystem } from '../../src/core/permission'
 import { HookEngine } from '../../src/core/hooks'
 import { ProviderRegistry } from '../../src/providers/registry'
+import { Context } from '../../src/vajra'
+import type { Llm } from '../../src/providers/llm'
+import { mountLlm } from '../../src/providers/llm'
+import { recordLlm, replayLlm } from '../../src/providers/llm-replay'
 
 // ── Helpers ──
 
@@ -274,6 +278,36 @@ describe('QueryEngine', () => {
 
       expect(chunks.some((c) => c.type === 'text' && c.content === 'from-seam')).toBe(true)
       expect(chunks.some((c) => c.type === 'text' && c.content === 'from-registry')).toBe(false)
+    })
+  })
+
+  describe('process — ctx.llm provider-swap (llm-replay)', () => {
+    it('swapping ctx.llm to a replay makes the engine follow it', async () => {
+      // 1. Record a "real" chat turn
+      const { llm: realLlm, turns } = recordLlm({
+        chat: async function* () {
+          yield { type: 'text', content: 'recorded-response' }
+          yield { type: 'stop' }
+        },
+      })
+      const recorded: StreamChunk[] = []
+      for await (const c of realLlm.chat({ model: 'm', messages: [] })) recorded.push(c)
+      expect(turns).toHaveLength(1)
+
+      // 2. Mount the replay under ctx.llm (swap the implementation)
+      const ctx = new Context()
+      mountLlm(ctx, replayLlm(turns))
+
+      // 3. Engine injects that seam
+      const engine = new QueryEngine(mockProviderRegistry(), mockContext(), makeToolMap([]))
+      engine.setLlm(ctx.get<Llm>('llm')!)
+
+      // 4. Engine's chat goes through the replay, not the registry mock
+      const chunks: StreamChunk[] = []
+      for await (const chunk of engine.process('hi')) chunks.push(chunk)
+
+      expect(chunks.some((c) => c.type === 'text' && c.content === 'recorded-response')).toBe(true)
+      expect(chunks.some((c) => c.type === 'text' && c.content === 'Hello!')).toBe(false)
     })
   })
 
