@@ -46,8 +46,15 @@ it('patch replaces a line by id', () => {
   expect(lines.find((l) => l.id === 'ver')!.config.version).toBe('2.0.0')
 })
 
-it('package/version change lives in one bundle line', () => {
+it('package/version change lives in one bundle line via patch', () => {
   const b: Bundle = { name: 'meta', lines: [{ id: 'package-info', kind: 'provider', config: { version: '1.0.0' } }] }
-  b.lines[0]!.config.version = '2.0.0'
-  expect(dumpConfig(assemble({ name: 'p', bundles: ['meta'] }, () => b))).toContain('2.0.0')
+  const profile: Profile = {
+    name: 'p',
+    bundles: ['meta'],
+    patch: { 'package-info': { config: { version: '2.0.0' } } },
+  }
+  const dumped = dumpConfig(assemble(profile, () => b))
+  expect(dumped).toContain('2.0.0')
+  expect(dumped).not.toContain('1.0.0') // 旧版本不再出现 → 单源
+  expect(dumped.split('\n').filter((l) => l.includes('package-info'))).toHaveLength(1) // 恰好一行
 })
