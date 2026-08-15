@@ -329,7 +329,16 @@ export async function runApp(options: RunOptions): Promise<void> {
     compactionThreshold: 0.9,
     contextWindow: adaptiveThresholds ? modelContextWindow : undefined,
   })
-  context.setLog(new SessionLog('session'))
+  const sessionLog = new SessionLog(sessionName)
+  sessionLog.append({
+    type: 'session/start',
+    at: Date.now(),
+    sessionId: sessionName,
+    provider: defaultProvider,
+    model: defaultModel,
+    cwd: process.cwd(),
+  })
+  context.setLog(sessionLog)
   // Cache-aware microcompaction: track the provider's prompt-cache prefix.
   context.setCacheTracker(new PrefixCacheTracker())
 
@@ -337,19 +346,20 @@ export async function runApp(options: RunOptions): Promise<void> {
   getMemoryManager().setContextWindow(modelContextWindow)
 
   if (options.resume) {
-    const saved = SessionStore.load(options.resume)
-    if (saved) {
-      // Restore working directory if saved
-      if (saved.metadata.cwd && existsSync(saved.metadata.cwd)) {
+    const log = SessionStore.loadLog(options.resume)
+    const events = log.events()
+    if (events.length > 0) {
+      const start = events.find((e) => e.type === 'session/start') as
+        | { type: 'session/start'; cwd?: string }
+        | undefined
+      if (start?.cwd && existsSync(start.cwd)) {
         try {
-          process.chdir(saved.metadata.cwd)
+          process.chdir(start.cwd)
         } catch {
-          // cwd may no longer exist; silently continue
+          // cwd 可能已不存在
         }
       }
-      for (const msg of saved.messages) {
-        context.addMessage(msg)
-      }
+      context.restoreLog(log)
       context.setSystemPrompt(instructions.buildSystemPrompt(config.permission as string))
     }
   }
@@ -561,11 +571,20 @@ export async function runApp(options: RunOptions): Promise<void> {
     hookEngine.executeSessionEnd(sessionName).catch(() => {})
     artifactServer.stop()
     if (context.getMessageCount() > 0) {
-      SessionStore.save(sessionName, context.getMessages(), {
-        provider: defaultProvider,
-        model: defaultModel,
-        cwd: process.cwd(),
-      })
+      const log = context.getLog()
+      if (log) {
+        SessionStore.saveLog(sessionName, log, {
+          provider: defaultProvider,
+          model: defaultModel,
+          cwd: process.cwd(),
+        })
+      } else {
+        SessionStore.save(sessionName, context.getMessages(), {
+          provider: defaultProvider,
+          model: defaultModel,
+          cwd: process.cwd(),
+        })
+      }
     }
     process.exit(0)
   }

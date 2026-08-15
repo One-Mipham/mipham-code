@@ -2840,11 +2840,20 @@ const cdCmd: CommandHandler = async (ctx, args) => {
       const { SessionStore } = await import('../core/session-store')
       const saved = SessionStore.load(ctx.sessionId)
       if (saved) {
-        SessionStore.save(ctx.sessionId, saved.messages, {
-          provider: saved.metadata.provider,
-          model: saved.metadata.model,
-          cwd: resolved,
-        })
+        const log = ctx.engine.getContext().getLog()
+        if (log) {
+          SessionStore.saveLog(ctx.sessionId, log, {
+            provider: saved.metadata.provider,
+            model: saved.metadata.model,
+            cwd: resolved,
+          })
+        } else {
+          SessionStore.save(ctx.sessionId, saved.messages, {
+            provider: saved.metadata.provider,
+            model: saved.metadata.model,
+            cwd: resolved,
+          })
+        }
       }
     } catch {
       /* session persistence is best-effort */

@@ -422,4 +422,19 @@ describe('ContextManager log integration', () => {
     expect(cm.getMessages()).toEqual([{ role: 'user', content: 'hi' }])
     expect(cm.getLog()).toBeUndefined()
   })
+
+  it('restoreLog sets log as source without re-appending', () => {
+    const log = new SessionLog('restore-test')
+    log.append({ type: 'session/start', at: 1, sessionId: 'restore-test' })
+    log.append({ type: 'user/message', at: 1, message: { role: 'user', content: 'hi' } })
+    log.append({ type: 'assistant/message', at: 1, message: { role: 'assistant', content: 'yo' } })
+
+    const cm = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
+    cm.restoreLog(log)
+    expect(cm.getMessages()).toEqual([
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'yo' },
+    ])
+    expect(deriveMessages(cm.getLog()!.events())).toHaveLength(2) // 未重复写通
+  })
 })

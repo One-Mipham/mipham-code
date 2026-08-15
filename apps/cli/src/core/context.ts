@@ -4,7 +4,7 @@ import { microcompact } from './context-microcompact'
 import { reactiveCompact } from './context-compact'
 import { emergencyDrain } from './context-drain'
 import { NoopCacheTracker, type CacheTracker, type CacheStatus } from './context-token'
-import { SessionLog, messageToEvents } from './session-log'
+import { SessionLog, messageToEvents, deriveMessages } from './session-log'
 
 export type Summarizer = (messages: Message[], heading: string) => Promise<string>
 
@@ -68,6 +68,13 @@ export class ContextManager {
 
   getLog(): SessionLog | undefined {
     return this.log
+  }
+
+  /** 从已持久化的日志恢复：设 log 为源，messages 为投影（不重复写通）。 */
+  restoreLog(log: SessionLog): void {
+    this.log = log
+    this.messages = deriveMessages(log.events())
+    this.reEstimateTokens()
   }
 
   /**
