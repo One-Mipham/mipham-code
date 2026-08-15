@@ -34,6 +34,22 @@ describe('Context service repository', () => {
     expect(child.has('a')).toBe(true)
     expect(child.has('b')).toBe(false)
   })
+
+  it('enumerates locally provided keys', () => {
+    const ctx = new Context()
+    ctx.provide('a', 1)
+    ctx.provide('tool:Read', { name: 'Read' })
+    const keys = ctx.keys().sort()
+    expect(keys).toEqual(['a', 'tool:Read'])
+  })
+
+  it('keys() does not include parent keys', () => {
+    const parent = new Context()
+    parent.provide('secret', true)
+    const child = parent.scope('child')
+    child.provide('local', 1)
+    expect(child.keys()).toEqual(['local'])
+  })
 })
 
 describe('Context reversible effects', () => {

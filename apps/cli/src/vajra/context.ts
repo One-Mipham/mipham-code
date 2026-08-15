@@ -95,6 +95,10 @@ export class Context {
     return this.services.has(key) || (this.parent?.has(key) ?? false)
   }
 
+  keys(): string[] {
+    return [...this.services.keys()]
+  }
+
   scope(_key: unknown): Context {
     return new Context(this)
   }
