@@ -1144,11 +1144,35 @@ Usage:
   mipham --help              Show this help
 
 Flags:
+  --dump-config              Print the assembled profile tree
   --safe-mode                Skip custom agents, skills, hooks, plugins
   --version, -v, -V          Print version
 
 Docs: https://mipham.ai/code
 npm:  https://www.npmjs.com/package/@miphamai/cli`)
+    process.exit(0)
+  }
+
+  // ── Dump config flag ───────────────────────────────────────────────────────
+  if (process.argv.includes('--dump-config')) {
+    const { homedir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { existsSync } = await import('node:fs')
+    const { loadProfile, loadBundle, assemble, dumpConfig } = await import('../src/vajra/compose')
+
+    const profileIdx = process.argv.indexOf('--profile')
+    const profileName = profileIdx !== -1 && process.argv[profileIdx + 1] ? process.argv[profileIdx + 1]! : 'default'
+    const dir = join(homedir(), '.mipham', 'profiles')
+    const profilePath = join(dir, `${profileName}.yml`)
+
+    if (!existsSync(profilePath)) {
+      console.error(`Profile "${profileName}" not found at ${profilePath}`)
+      process.exit(1)
+    }
+
+    const profile = loadProfile(profilePath)
+    const resolveBundle = (name: string) => loadBundle(join(dir, `${name}.yml`))
+    console.log(dumpConfig(assemble(profile, resolveBundle)))
     process.exit(0)
   }
 

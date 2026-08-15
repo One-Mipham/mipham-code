@@ -28,6 +28,17 @@ it('dumpConfig prints one line per resolved line', () => {
   expect(dumpConfig(lines)).toContain('tool')
 })
 
+it('dumpConfig of an assembled profile prints one tab-separated line per line', () => {
+  const b: Bundle = {
+    name: 'orchestration',
+    lines: [{ id: 'plan-runner', kind: 'service', config: { model: 'gpt-4o' } }],
+  }
+  const lines = assemble({ name: 'default', bundles: ['orchestration'] }, () => b)
+  const dumped = dumpConfig(lines)
+  expect(dumped).toContain('plan-runner\tservice')
+  expect(dumped).toContain('"model":"gpt-4o"')
+})
+
 it('loadBundle parses a yaml bundle file', () => {
   const dir = mkdtempSync(join(tmpdir(), 'm3-bundle-'))
   const p = join(dir, 'b.yml')
