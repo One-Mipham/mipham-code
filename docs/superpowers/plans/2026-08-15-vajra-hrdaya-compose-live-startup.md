@@ -23,10 +23,12 @@
 ## Task 1: Context.dispose 清理 scopes 缓存
 
 **Files:**
+
 - Modify: `apps/cli/src/vajra/context.ts`
 - Test: `apps/cli/test/vajra/context.test.ts`
 
 **Interfaces:**
+
 - Produces: `Context.dispose()` 额外清空 `this.scopes`。
 
 - [ ] **Step 1: 写失败测试**
@@ -53,7 +55,7 @@ Expected: FAIL——dispose 后 `scope('agent-x')` 仍返回缓存的 `child`。
 `apps/cli/src/vajra/context.ts` 的 `dispose()` 里，在 `this.services.clear()` 后加：
 
 ```ts
-    this.scopes.clear()
+this.scopes.clear()
 ```
 
 （`this.scopes` 是 `private scopes = new Map<unknown, Context>()`，dispose 后应清空使重开返回新 child。）
@@ -74,10 +76,12 @@ git commit -m "fix(vajra): Context.dispose clears scope cache"
 ## Task 2: loadBundle/loadProfile schema 校验
 
 **Files:**
+
 - Modify: `apps/cli/src/vajra/compose/bundle.ts`
 - Test: `apps/cli/test/vajra/compose.test.ts`
 
 **Interfaces:**
+
 - Produces: `loadBundle`/`loadProfile` 解析后校验 shape，坏数据抛 `Error`（描述缺失字段）。
 
 - [ ] **Step 1: 写失败测试**
@@ -118,7 +122,10 @@ export function loadBundle(path: string): Bundle {
   if (data.lines !== undefined && !Array.isArray(data.lines)) {
     throw new Error(`bundle "${path}": "lines" must be an array`)
   }
-  return { name: typeof data.name === 'string' ? data.name : path, lines: (data.lines ?? []) as BundleLine[] }
+  return {
+    name: typeof data.name === 'string' ? data.name : path,
+    lines: (data.lines ?? []) as BundleLine[],
+  }
 }
 ```
 
@@ -157,10 +164,12 @@ git commit -m "feat(vajra): loadBundle/loadProfile schema validation (fail-loud)
 ## Task 3: mipham --dump-config CLI
 
 **Files:**
+
 - Modify: `apps/cli/bin/mipham.ts`
 - Test: `apps/cli/test/vajra/compose.test.ts`（或新 CLI 测试，就近验证 `dumpConfig`+`assemble` 输出已覆盖）
 
 **Interfaces:**
+
 - Produces: `mipham --dump-config [--profile <name>]` 顶层 flag——读 `~/.mipham/profiles/<name>.yml` + 同目录 bundle，`assemble` + `dumpConfig` 打印到 stdout。
 
 - [ ] **Step 1: 写失败测试**
@@ -190,28 +199,29 @@ Expected: FAIL——若无此断言则直接过（报告 DONE_WITH_CONCERNS，�
 `apps/cli/bin/mipham.ts` 的 `main()` 里，在 `--version`/`--help` 处理后、`--safe-mode` 前，加：
 
 ```ts
-  // ── Dump config flag ───────────────────────────────────────────────────────
-  if (process.argv.includes('--dump-config')) {
-    const { homedir } = await import('node:os')
-    const { join } = await import('node:path')
-    const { existsSync } = await import('node:fs')
-    const { loadProfile, loadBundle, assemble, dumpConfig } = await import('../src/vajra/compose')
+// ── Dump config flag ───────────────────────────────────────────────────────
+if (process.argv.includes('--dump-config')) {
+  const { homedir } = await import('node:os')
+  const { join } = await import('node:path')
+  const { existsSync } = await import('node:fs')
+  const { loadProfile, loadBundle, assemble, dumpConfig } = await import('../src/vajra/compose')
 
-    const profileIdx = process.argv.indexOf('--profile')
-    const profileName = profileIdx !== -1 && process.argv[profileIdx + 1] ? process.argv[profileIdx + 1]! : 'default'
-    const dir = join(homedir(), '.mipham', 'profiles')
-    const profilePath = join(dir, `${profileName}.yml`)
+  const profileIdx = process.argv.indexOf('--profile')
+  const profileName =
+    profileIdx !== -1 && process.argv[profileIdx + 1] ? process.argv[profileIdx + 1]! : 'default'
+  const dir = join(homedir(), '.mipham', 'profiles')
+  const profilePath = join(dir, `${profileName}.yml`)
 
-    if (!existsSync(profilePath)) {
-      console.error(`Profile "${profileName}" not found at ${profilePath}`)
-      process.exit(1)
-    }
-
-    const profile = loadProfile(profilePath)
-    const resolveBundle = (name: string) => loadBundle(join(dir, `${name}.yml`))
-    console.log(dumpConfig(assemble(profile, resolveBundle)))
-    process.exit(0)
+  if (!existsSync(profilePath)) {
+    console.error(`Profile "${profileName}" not found at ${profilePath}`)
+    process.exit(1)
   }
+
+  const profile = loadProfile(profilePath)
+  const resolveBundle = (name: string) => loadBundle(join(dir, `${name}.yml`))
+  console.log(dumpConfig(assemble(profile, resolveBundle)))
+  process.exit(0)
+}
 ```
 
 并在 `KNOWN_COMMANDS` 列表的 flag 说明（`--help` 文本的 Flags 段）加一行 `  --dump-config            Print the assembled profile tree`。
@@ -232,6 +242,7 @@ git commit -m "feat(cli): --dump-config prints assembled profile tree"
 ## Self-Review
 
 **Spec coverage（§6/§3.2/§11）：**
+
 - `--dump-config` 打印真实组装树 → Task 3 ✅
 - scope scopes 随 dispose 清理 → Task 1 ✅
 - loadBundle/loadProfile schema 校验 → Task 2 ✅
