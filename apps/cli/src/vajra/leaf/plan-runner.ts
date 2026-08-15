@@ -38,7 +38,6 @@ async function chatText(llm: Llm, prompt: string): Promise<string> {
 export const planRunnerService: Service = {
   inject: ['llm'],
   apply(ctx) {
-    const llm = ctx.get<Llm>('llm')!
     const runner: PlanRunner = {
       async run(plan) {
         const outcomes: TaskOutcome[] = []

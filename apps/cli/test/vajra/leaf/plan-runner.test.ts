@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import { Context } from '../../../src/vajra'
-import type { Llm } from '../../../src/providers/llm'
 import { LLM_KEY } from '../../../src/providers/llm'
 import { replayLlm, type RecordedTurn } from '../../../src/providers/llm-replay'
 import {
