@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import type { ToolContext } from '@mipham/shared'
+import type { ToolContext } from '../../src/shared'
 import { createBashTool } from '../../src/tools/exec/bash'
 import { gitTool } from '../../src/tools/exec/git'
 import { taskTool } from '../../src/tools/exec/task'

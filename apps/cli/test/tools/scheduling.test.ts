@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { ToolContext } from '@mipham/shared'
+import type { ToolContext } from '../../src/shared'
 import { scheduleWakeupTool } from '../../src/tools/scheduling/schedule-wakeup.js'
 import { cronCreateTool, cronDeleteTool, cronListTool } from '../../src/tools/scheduling/cron.js'
 

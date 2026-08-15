@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import type { ToolContext } from '@mipham/shared'
+import type { ToolContext } from '../../src/shared'
 import { Context } from '../../src/vajra'
 import { collectTools } from '../../src/tools/seam'
 import { createBashTool, detectViolations, bashToolService } from '../../src/tools/exec/bash'

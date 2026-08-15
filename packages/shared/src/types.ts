@@ -57,13 +57,26 @@ export interface Message {
 
 // ── Tool Types ──
 export type ToolPermission = 'auto' | 'ask' | 'bypass'
-export type ToolCategory = 'file' | 'exec' | 'agent' | 'network' | 'system'
+export type ToolCategory =
+  'file' | 'exec' | 'agent' | 'network' | 'system' | 'artifact' | 'scheduling'
 
-export interface ToolContext {
-  cwd: string
+// ── Artifact Types ──
+export interface ArtifactEntry {
+  name: string
+  path: string
+  url: string
+  size: number
+  type: 'html' | 'svg'
+  createdAt: string
   sessionId: string
-  provider: string
-  model: string
+  versions?: string[] // version tags e.g. ['v1', 'v2']
+  versionCount?: number
+}
+
+export interface ArtifactManifest {
+  version: 1
+  artifacts: ArtifactEntry[]
+  port?: number
 }
 
 export interface ToolResult {
@@ -72,13 +85,13 @@ export interface ToolResult {
   error?: string
 }
 
-export interface ToolDefinition {
-  name: string
+// ── Task Notification Types ──
+export interface TaskNotification {
+  taskId: string
+  status: 'started' | 'completed' | 'failed'
   description: string
-  category: ToolCategory
-  permission: ToolPermission
-  parameters: Record<string, unknown>
-  execute: (params: Record<string, unknown>, ctx: ToolContext) => Promise<ToolResult>
+  content?: string
+  error?: string
 }
 
 // ── Stream Types ──
@@ -102,13 +115,7 @@ export interface StreamChunk {
   /** Anthropic thinking block content (DeepSeek Anthropic endpoint). */
   thinking?: string
   /** Background task notification payload (type: 'task_notification'). */
-  taskNotification?: {
-    taskId: string
-    status: 'started' | 'completed' | 'failed'
-    description: string
-    content?: string
-    error?: string
-  }
+  taskNotification?: TaskNotification
   /** API-reported input token count (type: 'usage'). */
   inputTokens?: number
   /** API-reported output token count (type: 'usage'). */
@@ -121,26 +128,57 @@ export interface MiphamConfig {
   defaultProvider: string
   defaultModel: string
   permission: ToolPermission
+  /** Org-level permission restrictions (forbiddenModes, maxAllowedMode). */
+  permissionRestrictions?: PermissionRestrictions
   providers: ProviderConfig[]
   skills?: { paths: string[]; mcpServers: McpServerConfig[] }
+  marketplace?: {
+    /** If set, only allow installs from matching repos (e.g. ["One-Mipham/*"]) */
+    strictKnownMarketplaces?: string[]
+    /** Block installs from matching repos (e.g. ["malicious-org/*"]) */
+    blockedMarketplaces?: string[]
+  }
+  /** Phase 9 feature flags. All default to true. */
+  features?: Partial<FeatureFlags>
+  /** Phase 10 CRSI feature flags. All default to true. */
+  crsi?: Partial<CrsiConfig>
+}
+
+export interface FeatureFlags {
+  mcp: { oauthEnabled: boolean }
+  context: { useRealTokenizer: boolean; adaptiveThresholds: boolean }
+}
+
+export interface CrsiConfig {
+  /** Extract and inject experience rules into agent system prompts. */
+  ruleInjection: boolean
+  /** Intercept tool calls and auto-fix known failure patterns before execution. */
+  preToolHook: boolean
+  /** Analyze agent outcomes for recurring failure patterns. */
+  autoPatternAnalysis: boolean
+  /** Auto-degrade/disable low-effectiveness rules based on success-rate tracking. */
+  autoRuleManagement: boolean
 }
 
 export interface McpServerConfig {
   name: string
-  command: string
-  args: string[]
+  /** stdio: executable to spawn (mutually exclusive with `url`). */
+  command?: string
+  /** stdio: args passed to `command`. */
+  args?: string[]
+  /** HTTP: Streamable HTTP endpoint (mutually exclusive with `command`). */
+  url?: string
+  /** HTTP: extra request headers (e.g. Authorization). */
+  headers?: Record<string, string>
   env?: Record<string, string>
-}
-
-// ── Skill Types ──
-export interface SkillDefinition {
-  name: string
-  description: string
-  version: string
-  type: 'standard' | 'mipham'
-  tools?: ToolDefinition[]
-  hooks?: HookDefinition[]
-  prompts?: Record<string, string>
+  auth?: {
+    type: 'oauth'
+    authorizationUrl: string
+    tokenUrl: string
+    clientId: string
+    scopes?: string[]
+    redirectPort?: number
+  }
 }
 
 // ── Hook Types ──
@@ -224,7 +262,34 @@ export interface InstructionFile {
 }
 
 // ── Permission Types ──
-export type PermissionLevel = 'auto' | 'ask' | 'bypass'
+/** Six explicit permission modes matching Claude Code's permission architecture */
+export type PermissionMode =
+  'default' | 'acceptEdits' | 'plan' | 'auto' | 'dontAsk' | 'bypassPermissions'
+
+/** Backward-compatible alias: PermissionMode plus legacy 'ask' and 'bypass' */
+export type PermissionLevel = PermissionMode | 'ask' | 'bypass'
+
+/** Org-level restrictions that cap or forbid specific permission modes. */
+export interface PermissionRestrictions {
+  /** Modes that may not be entered (cycle skips them). */
+  forbiddenModes?: PermissionMode[]
+  /** Ceiling — modes ranked higher (more permissive) than this are treated as forbidden. */
+  maxAllowedMode?: PermissionMode
+}
+
+export interface PermissionConfig {
+  mode: PermissionMode
+  allow: string[]
+  deny: string[]
+  /** Optional org-level restrictions enforced on every mode transition. */
+  restrictions?: PermissionRestrictions
+}
+
+export interface PermissionRuleEntry {
+  pattern: string // e.g., "Bash(git:*)"
+  level: 'allow' | 'deny' | 'ask'
+  compiled: RegExp
+}
 
 export interface PermissionRule {
   toolName: string
@@ -234,15 +299,23 @@ export interface PermissionRule {
 
 // ── Inference Hook (DLP) Types ──
 
+/** Configuration for the PreInference DLP hook, loaded from config.yml. */
 export interface InferenceHookConfig {
+  /** DLP server endpoint (HTTPS). Empty = feature disabled. */
   endpoint: string
+  /** HMAC signing secret (format: mis_<random>). */
   signing_secret: string
+  /** Request timeout in milliseconds. Default 5000. */
   timeout: number
+  /** Failure posture: 'fail-closed' blocks on error, 'fail-open' allows. */
   on_failure: 'fail-closed' | 'fail-open'
+  /** Organization identifier (optional, sent in payload). */
   organization_id: string
+  /** Additional custom headers to send with each request. */
   headers: Record<string, string>
 }
 
+/** Outgoing request to the DLP server. */
 export interface InferenceCheckRequest {
   type: 'inference_check'
   id: string
@@ -262,6 +335,7 @@ export interface InferenceCheckRequest {
   }
 }
 
+/** Response from the DLP server. */
 export interface InferenceCheckResponse {
   verdict: 'allow' | 'deny'
   reason?: string
@@ -269,22 +343,52 @@ export interface InferenceCheckResponse {
 
 // ── Credential Masking Types ──
 
+/** Full-file masking rule: entire file content replaced with sentinel. */
 export interface CredentialFullMaskRule {
   path: string
   mode: 'full'
 }
 
+/** Per-extract-pattern configuration with optional field-based extraction. */
+export interface CredentialExtractPattern {
+  /** Regex pattern to match. When `field` is set, applied to field value only. */
+  pattern: string
+  /** Optional replacement string. Defaults to CREDENTIAL_SENTINEL. */
+  replacement?: string
+  /** 🆕 JSON key to extract before applying pattern. If unset, pattern runs against full content. */
+  field?: string
+}
+
+/** Extract-based masking rule: only regex-matched tokens are replaced. */
 export interface CredentialExtractRule {
   path: string
   mode: 'extract'
-  extract: Array<{
-    pattern: string
-    replacement?: string
-  }>
+  extract: CredentialExtractPattern[]
+  /** 🆕 Behavior when no extract pattern matches: 'mask' (replace all) or 'passthrough' (keep). Default: 'mask'. */
+  onExtractNoMatch?: 'mask' | 'passthrough'
 }
 
-export type CredentialFileRule = CredentialFullMaskRule | CredentialExtractRule
+/** 🆕 JWT-aware masking rule: decode payload and mask specified claims. */
+export interface JwtMaskingRule {
+  path: string
+  type: 'jwt'
+  decode: 'jwt'
+  /** Claim names to mask in the JWT payload (e.g. ["sub", "email"]). */
+  maskClaims: string[]
+}
 
+/** 🆕 AWS credential pair masking rule: detect key pairs and optionally re-sign. */
+export interface AwsMaskingRule {
+  path: string
+  type: 'aws'
+  awsPairs: boolean
+  sigv4: boolean
+}
+
+export type CredentialFileRule =
+  CredentialFullMaskRule | CredentialExtractRule | JwtMaskingRule | AwsMaskingRule
+
+/** Configuration for credential masking, loaded from config.yml. */
 export interface CredentialMaskingConfig {
   enabled: boolean
   files: CredentialFileRule[]
@@ -296,4 +400,36 @@ export interface CredentialMaskingConfig {
     enabled: boolean
     patterns: string[]
   }
+}
+
+// ── Cross-Session Messaging Types ──
+
+/** Controls how inbound cross-session messages are handled. */
+export type CrossSessionInbound = 'allow' | 'ask' | 'deny'
+
+/** 🆕 Configuration for cross-session messaging. */
+export interface CrossSessionConfig {
+  crossSessionInbound: CrossSessionInbound
+  dialogExpiry: number // seconds
+}
+
+/** Session information exposed via ListAgents. */
+export interface SessionInfo {
+  id: string
+  name: string
+  machine: string
+  pid: number
+  startedAt: string
+  cwd?: string
+  provider?: string
+  model?: string
+}
+
+// ── Background Agent Types ──
+
+export interface BackgroundAgentConfig {
+  auto_commit: boolean
+  auto_push: boolean
+  auto_worktree: boolean
+  commit_coauthors: boolean
 }

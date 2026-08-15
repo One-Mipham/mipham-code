@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { writeFileSync } from 'node:fs'
-import type { ToolContext } from '@mipham/shared'
+import type { ToolContext } from '../../../src/shared'
 
 // Mock node:child_process to prevent real command execution
 vi.mock('node:child_process', () => ({
