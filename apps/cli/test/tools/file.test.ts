@@ -3,11 +3,15 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'nod
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { ToolContext } from '@mipham/shared'
-import { readTool } from '../../src/tools/file/read'
+import { Context } from '../../src/vajra'
+import { collectTools } from '../../src/tools/seam'
+import { createReadTool, readToolService } from '../../src/tools/file/read'
 import { writeTool } from '../../src/tools/file/write'
 import { editTool } from '../../src/tools/file/edit'
 import { globTool } from '../../src/tools/file/glob'
 import { grepTool } from '../../src/tools/file/grep'
+
+const readTool = createReadTool()
 
 // ── Test context ──
 
@@ -94,6 +98,28 @@ describe('Read tool execution', () => {
     const result = await readTool.execute({ file_path: join(tmpDir, 'test.txt') }, ctx)
     expect(result.success).toBe(true)
     expect(result.content).toContain('hello world')
+  })
+})
+
+describe('readToolService (credential injection)', () => {
+  it('does not mount without credentials (inject gating)', () => {
+    const ctx = new Context()
+    const mounted = ctx.mount(readToolService)
+    expect(mounted.status()).toBe('inactive')
+    expect(collectTools(ctx).has('Read')).toBe(false)
+  })
+
+  it('mounts once credentials are provided', () => {
+    const ctx = new Context()
+    const mounted = ctx.mount(readToolService)
+    ctx.provide('credentials', {
+      enabled: true,
+      files: [],
+      output_scrubbing: { enabled: true, patterns: [] },
+      env_filter: { enabled: true, patterns: [] },
+    })
+    expect(mounted.status()).toBe('active')
+    expect(collectTools(ctx).has('Read')).toBe(true)
   })
 })
 
