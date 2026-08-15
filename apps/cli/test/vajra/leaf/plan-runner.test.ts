@@ -3,6 +3,7 @@ import { Context } from '../../../src/vajra'
 import { LLM_KEY, type Llm } from '../../../src/providers/llm'
 import { recordLlm, replayLlm, type RecordedTurn } from '../../../src/providers/llm-replay'
 import {
+  createPlanRunnerService,
   planRunnerService,
   PLAN_RUNNER_KEY,
   type PlanRunner,
@@ -94,5 +95,25 @@ describe('plan-runner leaf', () => {
       { taskId: 't1', status: 'error' },
       { taskId: 't2', status: 'done' },
     ])
+  })
+
+  it('accepts a configured model via createPlanRunnerService', async () => {
+    const ctx = new Context()
+    const recorder = recordLlm(replayLlm([text('X'), text('APPROVE')]))
+    ctx.provide(LLM_KEY, recorder.llm)
+    ctx.mount(createPlanRunnerService({ model: 'gpt-4o' }))
+    const runner = ctx.get<PlanRunner>(PLAN_RUNNER_KEY)!
+    await runner.run({ name: 'p', tasks: [{ id: 't1', description: 'do X' }] })
+    expect(recorder.turns[0]!.req.model).toBe('gpt-4o')
+  })
+
+  it('defaults to empty model (use active model via registry fallback)', async () => {
+    const ctx = new Context()
+    const recorder = recordLlm(replayLlm([text('X'), text('APPROVE')]))
+    ctx.provide(LLM_KEY, recorder.llm)
+    ctx.mount(planRunnerService)
+    const runner = ctx.get<PlanRunner>(PLAN_RUNNER_KEY)!
+    await runner.run({ name: 'p', tasks: [{ id: 't1', description: 'do X' }] })
+    expect(recorder.turns[0]!.req.model).toBe('') // 占位 'plan-runner' 已拔
   })
 })
