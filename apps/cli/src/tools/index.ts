@@ -1,9 +1,5 @@
-import type { ToolDefinition, ToolResult } from '../shared/index.ts'
-import { sanitizeParams } from '../shared/sanitize'
-import { createT } from '../i18n-core/t'
-import enUS from '../i18n-core/locales/en-US.json'
-import zhCN from '../i18n-core/locales/zh-CN.json'
-import type { TranslationMap } from '../i18n-core/types'
+import type { ToolDefinition } from '../shared/index.ts'
+import { withValidation } from './validation'
 import { readTool } from './file/read'
 import { writeTool } from './file/write'
 import { editTool } from './file/edit'
@@ -33,94 +29,6 @@ import { listAgentsTool } from './agent/list-agents'
 import { computerUseTool } from './computer/computer-use'
 import { scheduleWakeupTool } from './scheduling/schedule-wakeup.js'
 import { cronCreateTool, cronDeleteTool, cronListTool } from './scheduling/cron.js'
-
-const bundles: Record<string, TranslationMap> = {
-  'en-US': enUS as TranslationMap,
-  'zh-CN': zhCN as TranslationMap,
-}
-const t = createT(bundles['en-US'] || (enUS as TranslationMap), enUS as TranslationMap)
-
-/**
- * Validate tool parameters against the tool's JSON Schema definition.
- * Returns an array of error messages (empty = valid).
- */
-function validateParams(
-  schema: Record<string, unknown>,
-  params: Record<string, unknown>,
-): string[] {
-  const errors: string[] = []
-
-  // Check required fields
-  const required = schema.required as string[] | undefined
-  if (required) {
-    for (const field of required) {
-      if (params[field] === undefined || params[field] === null) {
-        errors.push(t('errors.missing_param', { param: field }))
-      }
-    }
-  }
-
-  // Check types for provided fields
-  const properties = schema.properties as
-    Record<string, { type: string; enum?: string[] }> | undefined
-  if (properties) {
-    for (const [key, def] of Object.entries(properties)) {
-      const value = params[key]
-      if (value === undefined || value === null) continue // already caught by required check
-
-      switch (def.type) {
-        case 'string':
-          if (typeof value !== 'string') errors.push(t('errors.type_string', { key }))
-          else if (def.enum && !def.enum.includes(value)) {
-            errors.push(t('errors.type_enum', { key, values: def.enum.join(', ') }))
-          }
-          break
-        case 'integer':
-        case 'number':
-          if (typeof value !== 'number') errors.push(t('errors.type_number', { key }))
-          break
-        case 'boolean':
-          if (typeof value !== 'boolean') errors.push(t('errors.type_boolean', { key }))
-          break
-        case 'object':
-          if (typeof value !== 'object' || Array.isArray(value)) {
-            errors.push(t('errors.type_object', { key }))
-          }
-          break
-        case 'array':
-          if (!Array.isArray(value)) errors.push(t('errors.type_array', { key }))
-          break
-      }
-    }
-  }
-
-  return errors
-}
-
-/**
- * Wrap a tool's execute with parameter validation.
- */
-function withValidation(tool: ToolDefinition): ToolDefinition {
-  const schema = tool.parameters as Record<string, unknown>
-  if (!schema || !schema.properties) return tool // no schema to validate against
-
-  return {
-    ...tool,
-    async execute(params, ctx): Promise<ToolResult> {
-      // Sanitize dangerous Unicode from all inputs
-      const cleanParams = sanitizeParams(params)
-      const errors = validateParams(schema, cleanParams)
-      if (errors.length > 0) {
-        return {
-          success: false,
-          content: '',
-          error: t('errors.invalid_params', { errors: errors.join('; ') }),
-        }
-      }
-      return tool.execute(cleanParams, ctx)
-    },
-  }
-}
 
 export function createToolRegistry(): Map<string, ToolDefinition> {
   const tools: ToolDefinition[] = [
