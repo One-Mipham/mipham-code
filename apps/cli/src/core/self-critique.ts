@@ -19,6 +19,7 @@
  */
 
 import type { ProviderRegistry } from '../providers/registry'
+import type { Llm } from '../providers/llm'
 
 // ── Types ──
 
@@ -124,6 +125,7 @@ export class SelfCritique {
     toolName: string,
     params: Record<string, unknown>,
     registry: ProviderRegistry,
+    llm?: Llm,
     context?: string,
   ): Promise<CritiqueResult | null> {
     if (!this.config.enabled) return null
@@ -144,7 +146,7 @@ export class SelfCritique {
       const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs)
 
       let responseText = ''
-      for await (const chunk of registry.chat({
+      for await (const chunk of (llm ?? registry).chat({
         model: critiqueModel,
         messages: [{ role: 'user', content: prompt }],
         signal: controller.signal,

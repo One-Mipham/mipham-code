@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { StreamChunk, ToolDefinition, ToolResult } from '../../src/shared/index.ts'
 import { QueryEngine, filterExpiredMessages } from '../../src/core/engine'
+import { SelfCritique } from '../../src/core/self-critique'
 import type { AgentMessage } from '../../src/agent/message-bus'
 import { ContextManager } from '../../src/core/context'
 import { PermissionSystem } from '../../src/core/permission'
@@ -725,5 +726,68 @@ describe('Cross-session inbound config', () => {
 
     // Allow mode should silently succeed (no messages to forward)
     await expect(engine.pollCrossSessionInbox()).resolves.toBeUndefined()
+  })
+})
+
+// ============================================================
+// SelfCritique — 注入 Llm 缝
+// ============================================================
+
+describe('SelfCritique — critique chat seam', () => {
+  it('routes critique chat through the injected llm, not registry.chat', async () => {
+    // registry.chat 若被调用则打标记——探测 critique 是否绕过注入的 llm 缝
+    let registryChatCalled = false
+    const registry = mockProviderRegistry(async function* () {
+      registryChatCalled = true
+      yield {
+        type: 'text',
+        content: JSON.stringify({
+          safe: false,
+          correct: false,
+          necessary: false,
+          reasoning: 'registry',
+        }),
+      }
+      yield { type: 'stop' }
+    })
+
+    const critique = new SelfCritique({ enabled: true })
+    const llm: Llm = {
+      chat: async function* () {
+        yield {
+          type: 'text',
+          content: JSON.stringify({ safe: true, correct: true, necessary: true, reasoning: 'ok' }),
+        }
+        yield { type: 'stop' }
+      },
+    }
+
+    const result = await critique.critique('Bash', { command: 'ls' }, registry, llm)
+
+    expect(result).not.toBeNull()
+    expect(result?.safe).toBe(true)
+    expect(result?.score).toBe(1)
+    expect(registryChatCalled).toBe(false)
+  })
+
+  it('falls back to registry.chat when no llm is provided', async () => {
+    const registry = mockProviderRegistry(async function* () {
+      yield {
+        type: 'text',
+        content: JSON.stringify({
+          safe: true,
+          correct: true,
+          necessary: true,
+          reasoning: 'registry fallback',
+        }),
+      }
+      yield { type: 'stop' }
+    })
+
+    const critique = new SelfCritique({ enabled: true })
+    const result = await critique.critique('Bash', { command: 'ls' }, registry)
+
+    expect(result).not.toBeNull()
+    expect(result?.safe).toBe(true)
   })
 })
