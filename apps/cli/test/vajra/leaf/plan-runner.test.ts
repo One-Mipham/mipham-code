@@ -158,7 +158,10 @@ it('uses the registry active model when mounted against a real engine', async ()
   }
   const seenModels: string[] = []
   const registry = new ProviderRegistry([config], 'test-provider', 'real-model')
-  registry.register('test-provider', makeMockProvider(config, (m) => seenModels.push(m)))
+  registry.register(
+    'test-provider',
+    makeMockProvider(config, (m) => seenModels.push(m)),
+  )
 
   const ctx = new Context()
   ctx.provide(LLM_KEY, registry) // 真引擎：ProviderRegistry 作为 llm 缝

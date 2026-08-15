@@ -23,10 +23,12 @@
 ## Task 1: createPlanRunnerService 工厂 + model 缝
 
 **Files:**
+
 - Modify: `apps/cli/src/vajra/leaf/plan-runner.ts`
 - Test: `apps/cli/test/vajra/leaf/plan-runner.test.ts`（扩展）
 
 **Interfaces:**
+
 - Consumes: `Llm`（`providers/llm`）、`Service`（`../index`）。
 - Produces: `createPlanRunnerService(options?: { model?: string }): Service`；`planRunnerService: Service`（`= createPlanRunnerService()`）；`chatText(llm, prompt, model)` 私有。
 
@@ -92,7 +94,11 @@ export function createPlanRunnerService(options: { model?: string } = {}): Servi
             let result = ''
             let review = ''
             try {
-              result = await chatText(taskCtx.get<Llm>('llm')!, `Implement: ${task.description}`, model)
+              result = await chatText(
+                taskCtx.get<Llm>('llm')!,
+                `Implement: ${task.description}`,
+                model,
+              )
               review = await chatText(
                 taskCtx.get<Llm>('llm')!,
                 `Review: does the result satisfy "${task.description}"? Result: ${result}`,
@@ -139,9 +145,11 @@ git commit -m "feat(vajra): createPlanRunnerService factory — model seam repla
 ## Task 2: 真引擎（ProviderRegistry）端到端测试
 
 **Files:**
+
 - Test: `apps/cli/test/vajra/leaf/plan-runner.test.ts`（扩展）
 
 **Interfaces:**
+
 - Consumes: Task 1 的 `planRunnerService`/`createPlanRunnerService`/`PLAN_RUNNER_KEY`/`PlanRunner`；`ProviderRegistry`/`ProviderInstance`/`ChatRequest`（`providers/registry`）；`ProviderConfig`（`../shared`）。
 
 - [ ] **Step 1: 写失败测试**
@@ -186,7 +194,10 @@ it('uses the registry active model when mounted against a real engine', async ()
   }
   const seenModels: string[] = []
   const registry = new ProviderRegistry([config], 'test-provider', 'real-model')
-  registry.register('test-provider', makeMockProvider(config, (m) => seenModels.push(m)))
+  registry.register(
+    'test-provider',
+    makeMockProvider(config, (m) => seenModels.push(m)),
+  )
 
   const ctx = new Context()
   ctx.provide(LLM_KEY, registry) // 真引擎：ProviderRegistry 作为 llm 缝
@@ -225,6 +236,7 @@ git commit -m "test(vajra): prove plan-runner uses registry active model end-to-
 ## Self-Review
 
 **Spec coverage（§5/§7.5）：**
+
 - 能力缝换实现（provider 换实现零 fork）→ Task 2 真 ProviderRegistry 端到端 ✅
 - model 缝可配（config 传播）→ Task 1 `createPlanRunnerService({ model })` ✅
 - 占位 `'plan-runner'` 拔除 → Task 1 默认 `''` + Task 2 `every === 'real-model'` ✅

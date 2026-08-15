@@ -53,7 +53,11 @@ export function createPlanRunnerService(options: { model?: string } = {}): Servi
             let result = ''
             let review = ''
             try {
-              result = await chatText(taskCtx.get<Llm>('llm')!, `Implement: ${task.description}`, model)
+              result = await chatText(
+                taskCtx.get<Llm>('llm')!,
+                `Implement: ${task.description}`,
+                model,
+              )
               review = await chatText(
                 taskCtx.get<Llm>('llm')!,
                 `Review: does the result satisfy "${task.description}"? Result: ${result}`,
