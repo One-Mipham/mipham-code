@@ -7,6 +7,8 @@ import type {
   CrossSessionConfig,
 } from '../shared/index.ts'
 import { ProviderRegistry } from '../providers/registry'
+import type { ChatRequest } from '../providers/registry'
+import type { Llm } from '../providers/llm'
 import { ContextManager } from './context'
 import { PermissionSystem } from './permission'
 import type { HookEngine } from './hooks'
@@ -91,6 +93,9 @@ export class QueryEngine {
   private goalDecompose = false
   /** Subtask IDs created via decomposition. */
   private goalSubtasks: string[] = []
+
+  /** 注入的 LLM chat 缝。未设置时回退 this.registry（strangler-fig）。 */
+  private llm?: Llm
 
   constructor(
     private registry: ProviderRegistry,
@@ -363,7 +368,7 @@ export class QueryEngine {
       // Collect full summary text from streaming response
       let summary = ''
       try {
-        for await (const chunk of this.registry.chat({
+        for await (const chunk of this.llmChat({
           model: this.registry.getActiveModel(),
           messages: [
             { role: 'system', content: summaryPrompt },
@@ -793,7 +798,7 @@ export class QueryEngine {
       const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
 
       try {
-        for await (const chunk of this.registry.chat({
+        for await (const chunk of this.llmChat({
           model: this.registry.getActiveModel(),
           messages,
           systemPrompt,
@@ -874,7 +879,7 @@ export class QueryEngine {
         try {
           const finalSystemPrompt = this.context.getSystemPrompt()
           const finalMessages = this.context.getMessages()
-          for await (const chunk of this.registry.chat({
+          for await (const chunk of this.llmChat({
             model: this.registry.getActiveModel(),
             messages: finalMessages,
             systemPrompt: finalSystemPrompt,
@@ -1166,6 +1171,16 @@ export class QueryEngine {
     return this.registry
   }
 
+  /** 注入 LLM 适配缝（换 chat 实现）。 */
+  setLlm(llm: Llm): void {
+    this.llm = llm
+  }
+
+  /** 统一 chat 出口：优先走注入的 Llm 缝，否则回退 registry。 */
+  private async *llmChat(req: ChatRequest): AsyncGenerator<StreamChunk> {
+    yield* (this.llm ?? this.registry).chat(req)
+  }
+
   /**
    * Stream a chat response with graceful provider fallback (v2.1.229 alignment).
    *
@@ -1186,7 +1201,7 @@ export class QueryEngine {
     // ── Attempt 1: active provider ──
     let failure: string | null = null
     try {
-      for await (const chunk of this.registry.chat({
+      for await (const chunk of this.llmChat({
         model: this.registry.getActiveModel(),
         messages,
         systemPrompt,
@@ -1225,7 +1240,7 @@ export class QueryEngine {
     }
 
     try {
-      for await (const chunk of this.registry.chat({
+      for await (const chunk of this.llmChat({
         model: fallbackModel,
         messages,
         systemPrompt,

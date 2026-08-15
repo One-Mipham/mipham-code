@@ -252,6 +252,29 @@ describe('QueryEngine', () => {
       const msgs = context.getMessages()
       expect(msgs[1]?.content).toBe('Part 1 Part 2')
     })
+
+    it('routes chat through the injected Llm seam when setLlm is called', async () => {
+      const registry = mockProviderRegistry(async function* () {
+        yield { type: 'text', content: 'from-registry' }
+        yield { type: 'stop' }
+      })
+      const engine = new QueryEngine(registry, mockContext(), makeToolMap([]))
+
+      engine.setLlm({
+        chat: async function* () {
+          yield { type: 'text', content: 'from-seam' }
+          yield { type: 'stop' }
+        },
+      })
+
+      const chunks: StreamChunk[] = []
+      for await (const chunk of engine.process('hi')) {
+        chunks.push(chunk)
+      }
+
+      expect(chunks.some((c) => c.type === 'text' && c.content === 'from-seam')).toBe(true)
+      expect(chunks.some((c) => c.type === 'text' && c.content === 'from-registry')).toBe(false)
+    })
   })
 
   describe('process — error handling', () => {
