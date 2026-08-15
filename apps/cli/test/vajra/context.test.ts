@@ -132,4 +132,12 @@ describe('Context reversible effects', () => {
     expect(() => ctx.dispose()).toThrow(AggregateError)
     expect(log).toEqual(['a+', 'b+', 'a-'])
   })
+
+  it('dispose clears scoped child contexts', () => {
+    const root = new Context()
+    const child = root.scope('agent-x')
+    root.dispose()
+    const again = root.scope('agent-x')
+    expect(again).not.toBe(child) // dispose 后重开，非缓存旧 child
+  })
 })

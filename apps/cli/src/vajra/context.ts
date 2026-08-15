@@ -176,6 +176,7 @@ export class Context {
       }
     }
     this.services.clear()
+    this.scopes.clear()
     this.listeners.clear()
     if (errors.length) throw new AggregateError(errors)
   }
