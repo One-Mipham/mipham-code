@@ -1,9 +1,6 @@
 import type { Profile, Bundle, BundleLine } from './bundle'
 
-export function assemble(
-  profile: Profile,
-  resolveBundle: (name: string) => Bundle,
-): BundleLine[] {
+export function assemble(profile: Profile, resolveBundle: (name: string) => Bundle): BundleLine[] {
   // 浅拷贝每行，使 patch 不回写共享的 bundle 行对象（不同 profile 共享同一 bundle 时补丁隔离）
   const lines = profile.bundles.flatMap((name) =>
     resolveBundle(name).lines.map((l) => ({ ...l, config: { ...l.config } })),

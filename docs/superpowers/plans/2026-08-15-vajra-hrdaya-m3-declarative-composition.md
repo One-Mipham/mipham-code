@@ -23,11 +23,13 @@
 ## Task 1: Context.scope keyed 缓存 + keysRecursive 枚举 + collectTools 遮蔽
 
 **Files:**
+
 - Modify: `apps/cli/src/vajra/context.ts`
 - Modify: `apps/cli/src/tools/seam.ts`（`collectTools` 用 `keysRecursive`）
 - Test: `apps/cli/test/vajra/context.test.ts`（存在则扩展）、`apps/cli/test/core/engine.test.ts` 或 `tools` 测试
 
 **Interfaces:**
+
 - Produces: `Context.keysRecursive(): string[]`（local ∪ parent，local 优先去重）；`Context.scope(key)` keyed 缓存（重复调用返回同一 child）。
 
 - [ ] **Step 1: 写失败测试**
@@ -64,6 +66,7 @@ Expected: FAIL——`scope` 未缓存、`keysRecursive` 未定义。
 - [ ] **Step 3: 最小实现**
 
 `apps/cli/src/vajra/context.ts`：
+
 - 字段加 `private scopes = new Map<unknown, Context>()`。
 - `scope(key: unknown): Context` 改为：
 
@@ -108,6 +111,7 @@ git commit -m "feat(vajra): scope keyed caching + keysRecursive enumeration (sha
 ## Task 2: profile/bundle 声明式层 + --dump-config
 
 **Files:**
+
 - Create: `apps/cli/src/vajra/compose/bundle.ts`（Bundle/Profile 类型 + load）
 - Create: `apps/cli/src/vajra/compose/assemble.ts`（resolve profile → line list）
 - Create: `apps/cli/src/vajra/compose/dump.ts`（`dumpConfig(profile) → string`）
@@ -115,6 +119,7 @@ git commit -m "feat(vajra): scope keyed caching + keysRecursive enumeration (sha
 - Test: `apps/cli/test/vajra/compose.test.ts`
 
 **Interfaces:**
+
 - Produces:
   - `type BundleLine = { id: string; kind: 'tool' | 'provider' | 'skill'; config: Record<string, unknown> }`
   - `type Bundle = { name: string; lines: BundleLine[] }`
@@ -192,10 +197,7 @@ export function loadProfile(path: string): Profile {
 ```ts
 import type { Profile, Bundle, BundleLine } from './bundle'
 
-export function assemble(
-  profile: Profile,
-  resolveBundle: (name: string) => Bundle,
-): BundleLine[] {
+export function assemble(profile: Profile, resolveBundle: (name: string) => Bundle): BundleLine[] {
   return profile.bundles.flatMap((name) => resolveBundle(name).lines)
 }
 ```
@@ -206,9 +208,7 @@ export function assemble(
 import type { BundleLine } from './bundle'
 
 export function dumpConfig(lines: BundleLine[]): string {
-  return lines
-    .map((l) => `${l.id}\t${l.kind}\t${JSON.stringify(l.config)}`)
-    .join('\n')
+  return lines.map((l) => `${l.id}\t${l.kind}\t${JSON.stringify(l.config)}`).join('\n')
 }
 ```
 
@@ -230,10 +230,12 @@ git commit -m "feat(vajra): profile/bundle declarative layer + dumpConfig"
 ## Task 3: patch 一行替换 + 「包名/版本只改 bundle 一处」测试
 
 **Files:**
+
 - Modify: `apps/cli/src/vajra/compose/assemble.ts`（assemble 应用 profile.patch）
 - Test: `apps/cli/test/vajra/compose.test.ts`
 
 **Interfaces:**
+
 - `assemble(profile, resolveBundle)` 现在：拼 lines 后，对 `profile.patch` 里每个 `[id, partial]`，找到 `lines.find(l => l.id === id)` 并 `Object.assign(line, partial)`（未找到则追加）。
 
 - [ ] **Step 1: 写失败测试**
@@ -247,7 +249,10 @@ it('patch replaces a line by id', () => {
 })
 
 it('package/version change lives in one bundle line', () => {
-  const b = { name: 'meta', lines: [{ id: 'package-info', kind: 'provider', config: { version: '1.0.0' } }] }
+  const b = {
+    name: 'meta',
+    lines: [{ id: 'package-info', kind: 'provider', config: { version: '1.0.0' } }],
+  }
   // 变更 bundle 一处 → dumpConfig 反映新版本，无需改其他文件
   b.lines[0]!.config.version = '2.0.0'
   expect(dumpConfig(assemble({ name: 'p', bundles: ['meta'] }, () => b))).toContain('2.0.0')
@@ -264,10 +269,7 @@ Expected: FAIL——patch 未应用。
 `assemble.ts`：
 
 ```ts
-export function assemble(
-  profile: Profile,
-  resolveBundle: (name: string) => Bundle,
-): BundleLine[] {
+export function assemble(profile: Profile, resolveBundle: (name: string) => Bundle): BundleLine[] {
   const lines = profile.bundles.flatMap((name) => resolveBundle(name).lines)
   if (profile.patch) {
     for (const [id, partial] of Object.entries(profile.patch)) {
@@ -299,6 +301,7 @@ git commit -m "feat(vajra): profile patch line replacement"
 ## Self-Review
 
 **Spec coverage（§6/§3.2/§7.5/§11）：**
+
 - scope shadowing（scoped 工具遮蔽同名全局）→ Task 1 ✅
 - profile/bundle 声明式组合 → Task 2 ✅
 - patch 一行替换 → Task 3 ✅

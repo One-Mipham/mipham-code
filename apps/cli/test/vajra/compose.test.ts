@@ -40,14 +40,24 @@ it('loadProfile parses a yaml profile file', () => {
 })
 
 it('patch replaces a line by id', () => {
-  const b1: Bundle = { name: 'b1', lines: [{ id: 'ver', kind: 'skill', config: { version: '1.0.0' } }] }
-  const profile: Profile = { name: 'p', bundles: ['b1'], patch: { ver: { config: { version: '2.0.0' } } } }
+  const b1: Bundle = {
+    name: 'b1',
+    lines: [{ id: 'ver', kind: 'skill', config: { version: '1.0.0' } }],
+  }
+  const profile: Profile = {
+    name: 'p',
+    bundles: ['b1'],
+    patch: { ver: { config: { version: '2.0.0' } } },
+  }
   const lines = assemble(profile, () => b1)
   expect(lines.find((l) => l.id === 'ver')!.config.version).toBe('2.0.0')
 })
 
 it('package/version change lives in one bundle line via patch', () => {
-  const b: Bundle = { name: 'meta', lines: [{ id: 'package-info', kind: 'provider', config: { version: '1.0.0' } }] }
+  const b: Bundle = {
+    name: 'meta',
+    lines: [{ id: 'package-info', kind: 'provider', config: { version: '1.0.0' } }],
+  }
   const profile: Profile = {
     name: 'p',
     bundles: ['meta'],
@@ -60,8 +70,15 @@ it('package/version change lives in one bundle line via patch', () => {
 })
 
 it('patch does not mutate the shared bundle line (per-profile isolation)', () => {
-  const b: Bundle = { name: 'b', lines: [{ id: 'ver', kind: 'skill', config: { version: '1.0.0' } }] }
-  const p1: Profile = { name: 'p1', bundles: ['b'], patch: { ver: { config: { version: '2.0.0' } } } }
+  const b: Bundle = {
+    name: 'b',
+    lines: [{ id: 'ver', kind: 'skill', config: { version: '1.0.0' } }],
+  }
+  const p1: Profile = {
+    name: 'p1',
+    bundles: ['b'],
+    patch: { ver: { config: { version: '2.0.0' } } },
+  }
   const p2: Profile = { name: 'p2', bundles: ['b'] }
   assemble(p1, () => b) // p1 打补丁到 2.0.0
   const lines2 = assemble(p2, () => b) // p2 共享同一 bundle，无补丁
