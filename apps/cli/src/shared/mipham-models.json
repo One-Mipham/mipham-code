@@ -1,0 +1,50 @@
+{
+  "_comment": "Mipham model definitions — synced from Engine GET /v1/mipham-models. Run 'bun run scripts/sync-mipham-models.ts' to update.",
+  "provider": {
+    "id": "mipham",
+    "name": "MiphamAI",
+    "protocol": "openai-compatible",
+    "baseUrl": "https://api.onemipham.com/v1",
+    "apiKey": "${MIPHAM_API_KEY}",
+    "status": "active"
+  },
+  "models": [
+    {
+      "id": "om-v5-flash",
+      "name": "OM V5 Flash",
+      "providerId": "mipham",
+      "contextWindow": 16384,
+      "maxOutput": 4096,
+      "vision": false,
+      "status": "active"
+    },
+    {
+      "id": "om-v5-pro",
+      "name": "OM V5 Pro",
+      "providerId": "mipham",
+      "contextWindow": 131072,
+      "maxOutput": 16384,
+      "vision": false,
+      "status": "active"
+    },
+    {
+      "id": "om-v5-visual",
+      "name": "OM V5 Visual",
+      "providerId": "mipham",
+      "contextWindow": 65536,
+      "maxOutput": 4096,
+      "vision": true,
+      "status": "active"
+    },
+    {
+      "id": "om-v5-apex",
+      "name": "OM V5 Apex",
+      "providerId": "mipham",
+      "contextWindow": 200000,
+      "maxOutput": 32768,
+      "vision": false,
+      "status": "active"
+    }
+  ],
+  "synced_at": "2026-08-04T00:00:00Z"
+}
