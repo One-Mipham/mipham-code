@@ -220,11 +220,23 @@ export class ContextManager {
         }
       } catch {
         // Fall back to truncation on summarizer failure
-        this.messages = this.messages.slice(-keep)
+        const kept = this.messages.slice(-keep)
+        if (this.log) {
+          this.log.append({ type: 'compaction/rewrite', at: Date.now(), messages: kept })
+          this.messages = deriveMessages(this.log.events())
+        } else {
+          this.messages = kept
+        }
       }
     } else {
       // Simple truncation fallback
-      this.messages = this.messages.slice(-keep)
+      const kept = this.messages.slice(-keep)
+      if (this.log) {
+        this.log.append({ type: 'compaction/rewrite', at: Date.now(), messages: kept })
+        this.messages = deriveMessages(this.log.events())
+      } else {
+        this.messages = kept
+      }
     }
 
     // Re-estimate tokens
@@ -436,7 +448,14 @@ export class ContextManager {
       this.compactionStats.lastCompaction = new Date()
     }
 
-    this.messages = compacted
+    // 仅当内容真变时写日志并重建投影（model-visible means logged 不变量）。
+    // 用 deriveMessages(log) 而非直接赋值 compacted，避免与日志事件共享 messages 引用被 addMessage.push 污染。
+    if (this.log && (removed > 0 || tokensSaved > 0)) {
+      this.log.append({ type: 'compaction/rewrite', at: Date.now(), messages: compacted })
+      this.messages = deriveMessages(this.log.events())
+    } else {
+      this.messages = compacted
+    }
     this.reEstimateTokens()
   }
 

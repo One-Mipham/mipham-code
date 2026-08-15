@@ -513,4 +513,36 @@ describe('ContextManager log integration', () => {
     }
     expect(ev.replacedCount).toBe(40 - 20) // 20（取自日志 40），而非 toDrop.length=12
   })
+
+  it('runMicrocompact appends compaction/rewrite and deriveMessages reproduces the projection', async () => {
+    const cm = new ContextManager({ maxTokens: 60, compactionThreshold: 0.9 })
+    const log = new SessionLog('microcompact-rewrite-test')
+    cm.setLog(log)
+    // 4 个非空 tool_result → microcompact keepRecent=3 会把最旧的 t0 换成占位符
+    for (let i = 0; i < 4; i++) {
+      cm.addToolResult(`t${i}`, { success: true, content: `result content ${i} with some length` })
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0)) // flush 异步 microcompact
+    const rewrite = log.events().find((e) => e.type === 'compaction/rewrite')
+    expect(rewrite).toBeDefined()
+    expect(deriveMessages(log.events())).toEqual(cm.getMessages())
+    expect(cm.getMessages()[0]).toEqual({
+      role: 'user',
+      content: [{ type: 'tool_result', tool_use_id: 't0', content: '[earlier result omitted]' }],
+    })
+  })
+
+  it('compact truncation fallback (no summarizer) appends compaction/rewrite', async () => {
+    const cm = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
+    const log = new SessionLog('compact-truncate-rewrite-test')
+    cm.setLog(log)
+    // 无 summarizer：compact 走纯截断分支
+    for (let i = 0; i < 31; i++) {
+      cm.addMessage({ role: i % 2 === 0 ? 'user' : 'assistant', content: `msg${i}` })
+    }
+    await cm.compact('test')
+    expect(deriveMessages(log.events())).toEqual(cm.getMessages())
+    expect(cm.getMessages()).toHaveLength(20) // 纯截断保留最后 20 条
+    expect(log.events().some((e) => e.type === 'compaction/rewrite')).toBe(true)
+  })
 })

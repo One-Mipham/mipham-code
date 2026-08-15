@@ -19,6 +19,7 @@ export type SessionEvent =
   | { type: 'tool/result'; at: number; id: string; result: ToolResult }
   | { type: 'context/inject'; at: number; source: string; text: string }
   | { type: 'compaction/summary'; at: number; summary: string; replacedCount: number }
+  | { type: 'compaction/rewrite'; at: number; messages: Message[] }
 
 export function messageToEvents(msg: Message, at = 0): SessionEvent[] {
   if (msg.role === 'user') {
@@ -57,7 +58,7 @@ export function messageToEvents(msg: Message, at = 0): SessionEvent[] {
 }
 
 export function deriveMessages(events: SessionEvent[]): Message[] {
-  const out: Message[] = []
+  let out: Message[] = []
   for (const e of events) {
     if (e.type === 'user/message' || e.type === 'assistant/message') {
       out.push(e.message)
@@ -89,6 +90,9 @@ export function deriveMessages(events: SessionEvent[]): Message[] {
       } else {
         out.push({ role: 'user', content: `[Earlier conversation summary]: ${e.summary}` })
       }
+    } else if (e.type === 'compaction/rewrite') {
+      // 快照替换：整个投影重建（微压缩/截断等结构性编辑的字节级复现）
+      out = structuredClone(e.messages)
     }
     // 'session/start' → 无消息
   }

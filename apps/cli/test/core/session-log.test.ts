@@ -235,6 +235,37 @@ describe('compaction/summary stream position', () => {
   })
 })
 
+describe('compaction/rewrite stream position', () => {
+  it('replaces the whole projection with the snapshot and continues appending', () => {
+    const events: SessionEvent[] = [
+      { type: 'user/message', at: 1, message: { role: 'user', content: 'm1' } },
+      { type: 'assistant/message', at: 2, message: { role: 'assistant', content: 'm2' } },
+      {
+        type: 'compaction/rewrite',
+        at: 3,
+        messages: [
+          { role: 'user', content: 'kept-a' },
+          { role: 'assistant', content: 'kept-b' },
+        ],
+      },
+      { type: 'user/message', at: 4, message: { role: 'user', content: 'after' } },
+    ]
+    expect(deriveMessages(events)).toEqual([
+      { role: 'user', content: 'kept-a' },
+      { role: 'assistant', content: 'kept-b' },
+      { role: 'user', content: 'after' },
+    ])
+  })
+
+  it('does not alias the stored snapshot (mutating the derived array leaves the log intact)', () => {
+    const snapshot: Message[] = [{ role: 'user', content: 'x' }]
+    const events: SessionEvent[] = [{ type: 'compaction/rewrite', at: 1, messages: snapshot }]
+    const derived = deriveMessages(events)
+    derived.push({ role: 'user', content: 'y' })
+    expect(snapshot).toEqual([{ role: 'user', content: 'x' }])
+  })
+})
+
 describe('tool/result carries full ToolResult', () => {
   it('messageToEvents derives success:true best-effort from a tool_result block', () => {
     const m: Message = {
