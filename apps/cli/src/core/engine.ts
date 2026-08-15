@@ -799,7 +799,10 @@ export class QueryEngine {
           yield chunk
 
           if (chunk.type === 'error') return
-          if (chunk.type === 'text' && chunk.content) assistantContent += chunk.content
+          if (chunk.type === 'text' && chunk.content) {
+            assistantContent += chunk.content
+            this.context.recordChunk(chunk.content)
+          }
 
           if (chunk.reasoning_content) {
             reasoningContent += chunk.reasoning_content

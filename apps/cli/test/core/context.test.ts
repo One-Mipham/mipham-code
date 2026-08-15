@@ -484,4 +484,14 @@ describe('ContextManager log integration', () => {
     const raw = log.events().find((e) => e.type === 'tool/result')
     expect(raw).toMatchObject({ id: 't1', result: { success: false, error: 'boom' } })
   })
+
+  it('recordChunk appends chunks to log but not to projection', () => {
+    const cm = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
+    const log = new SessionLog('chunk-ctx-test')
+    cm.setLog(log)
+    cm.recordChunk('Hel')
+    cm.recordChunk('lo')
+    expect(cm.getMessages()).toEqual([])
+    expect(log.events().filter((e) => e.type === 'assistant/chunk')).toHaveLength(2)
+  })
 })

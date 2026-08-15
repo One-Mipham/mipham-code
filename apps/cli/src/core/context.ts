@@ -156,6 +156,11 @@ export class ContextManager {
     this.checkCompression()
   }
 
+  /** 记录原始 assistant 流块（保 replay 保真）；不写入投影 messages。 */
+  recordChunk(chunk: string): void {
+    if (this.log) this.log.append({ type: 'assistant/chunk', at: Date.now(), chunk })
+  }
+
   /**
    * Seed a batch of pre-existing messages (e.g., an inherited parent
    * conversation). Unlike addMessage, this does not trigger compaction so the

@@ -3,7 +3,6 @@ import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import type { Message, ToolUseContent, ToolResultContent, ToolResult } from '../shared/types'
 
-// M1b 待对齐：compaction/summary 未记录其在流中的位置（deriveMessages 现追加在末尾）；tool/result 已升级为 result:ToolResult（含 success/error）。
 export type SessionEvent =
   | {
       type: 'session/start'
@@ -16,6 +15,7 @@ export type SessionEvent =
   | { type: 'user/message'; at: number; message: Message }
   | { type: 'assistant/message'; at: number; message: Message }
   | { type: 'tool/call'; at: number; id: string; name: string; input: Record<string, unknown> }
+  | { type: 'assistant/chunk'; at: number; chunk: string }
   | { type: 'tool/result'; at: number; id: string; result: ToolResult }
   | { type: 'context/inject'; at: number; source: string; text: string }
   | { type: 'compaction/summary'; at: number; summary: string; replacedCount: number }
@@ -54,6 +54,8 @@ export function deriveMessages(events: SessionEvent[]): Message[] {
   for (const e of events) {
     if (e.type === 'user/message' || e.type === 'assistant/message') {
       out.push(e.message)
+    } else if (e.type === 'assistant/chunk') {
+      // 无消息：原始块由 assistant/message 汇总，chunk 仅供 replayChunks 流级回放
     } else if (e.type === 'tool/call') {
       out.push({
         role: 'assistant',
@@ -197,4 +199,12 @@ export function forkEvents(events: SessionEvent[], uptoIndex: number): SessionEv
 /** resume：从日志恢复消息历史（与 replay 同源；独立命名便于语义区分）。 */
 export function resumeMessages(log: SessionLog): Message[] {
   return deriveMessages(log.events())
+}
+
+/** replay：从日志抽取原始 assistant 流块（保 replay 保真）。 */
+export function replayChunks(log: SessionLog): string[] {
+  return log
+    .events()
+    .filter((e): e is Extract<SessionEvent, { type: 'assistant/chunk' }> => e.type === 'assistant/chunk')
+    .map((e) => e.chunk)
 }

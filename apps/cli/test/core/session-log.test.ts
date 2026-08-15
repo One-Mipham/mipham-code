@@ -7,6 +7,7 @@ import {
   SessionLog,
   assertModelVisible,
   replayMessages,
+  replayChunks,
   forkEvents,
   resumeMessages,
   sanitizeSessionName,
@@ -263,5 +264,25 @@ describe('tool/result carries full ToolResult', () => {
     expect(deriveMessages(events)).toEqual([
       { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'legacy' }] },
     ])
+  })
+})
+
+describe('assistant/chunk stream replay', () => {
+  it('replayChunks extracts raw chunk strings in order', () => {
+    const log = new SessionLog('chunk-test')
+    log.append({ type: 'assistant/chunk', at: 1, chunk: 'Hel' })
+    log.append({ type: 'assistant/chunk', at: 2, chunk: 'lo ' })
+    log.append({ type: 'assistant/chunk', at: 3, chunk: 'world' })
+    log.append({ type: 'assistant/message', at: 4, message: { role: 'assistant', content: 'Hello world' } })
+    expect(replayChunks(log)).toEqual(['Hel', 'lo ', 'world'])
+  })
+
+  it('deriveMessages ignores chunks (message comes from assistant/message)', () => {
+    const events: SessionEvent[] = [
+      { type: 'assistant/chunk', at: 1, chunk: 'Hel' },
+      { type: 'assistant/chunk', at: 2, chunk: 'lo' },
+      { type: 'assistant/message', at: 3, message: { role: 'assistant', content: 'Hello' } },
+    ]
+    expect(deriveMessages(events)).toEqual([{ role: 'assistant', content: 'Hello' }])
   })
 })
