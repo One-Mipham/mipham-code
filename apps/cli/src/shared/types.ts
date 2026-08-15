@@ -73,6 +73,7 @@ export interface ToolContext {
   backgroundAgentRegistry?: import('../agent/background-registry').BackgroundAgentRegistry
   permissionSystem?: import('../core/permission').PermissionSystem
   ruleEngine?: import('../core/rule-engine').ExperienceRuleEngine
+  llm?: import('../providers/llm').Llm
   /** Files read this session — used by Write tool to check read-before-write */
   readFiles?: Set<string>
 }

@@ -1,4 +1,5 @@
 import type { ProviderRegistry } from '../providers/registry'
+import type { Llm } from '../providers/llm'
 import type { ToolDefinition } from '../shared/index.ts'
 import type { SubAgentType, SubAgentOptions, AgentDefinition } from './types'
 import { createAgentContext } from './agent-context'
@@ -44,6 +45,7 @@ export class SubAgent {
     private permission?: PermissionSystem,
     private hookEngine?: HookEngine,
     private ruleEngine?: ExperienceRuleEngine,
+    private llm?: Llm,
   ) {}
 
   /**
@@ -189,8 +191,7 @@ export class SubAgent {
     options: SubAgentOptions,
     signal?: AbortSignal,
   ): Promise<string> {
-    const provider = this.registry.getActive()
-    if (!provider) {
+    if (!this.registry.getActive()) {
       throw new Error('No active provider available for sub-agent execution')
     }
 
@@ -332,7 +333,7 @@ export class SubAgent {
         const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
         let turnText = ''
 
-        for await (const chunk of provider.chat({
+        for await (const chunk of (this.llm ?? this.registry).chat({
           model: finalModel,
           messages: currentMessages,
           systemPrompt: currentSystemPrompt,

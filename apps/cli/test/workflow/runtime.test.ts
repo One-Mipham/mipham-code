@@ -34,6 +34,9 @@ function createMockEngine(provider: ProviderInstance): QueryEngine {
     getActive: () => provider,
     getActiveModel: () => 'mock-model',
     switchProvider: (_id: string, _model?: string) => {},
+    async *chat(req: ChatRequest): AsyncGenerator<StreamChunk> {
+      yield* provider.chat(req)
+    },
   } as unknown as ProviderRegistry
 
   const toolRegistry = new Map<string, ToolDefinition>()

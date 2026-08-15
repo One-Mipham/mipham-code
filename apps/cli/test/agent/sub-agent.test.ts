@@ -3,6 +3,7 @@ import { SubAgent } from '../../src/agent/sub-agent'
 import { getMessageBus } from '../../src/agent/message-bus'
 import { AgentExperience } from '../../src/agent/agent-experience'
 import type { ProviderRegistry, ProviderInstance, ChatRequest } from '../../src/providers/registry'
+import type { Llm } from '../../src/providers/llm'
 import type { ToolDefinition, StreamChunk, Message } from '../../src/shared/index.ts'
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
@@ -54,6 +55,9 @@ function createMockRegistry(
     getActiveModel: () => 'mock-model',
     listModels: () => models,
     findModel: (id: string) => models.find((m) => m.id === id),
+    async *chat(req: ChatRequest): AsyncGenerator<StreamChunk> {
+      yield* provider.chat(req)
+    },
   } as unknown as ProviderRegistry
   return registry
 }
@@ -72,6 +76,32 @@ describe('SubAgent', () => {
     const result = await sub.execute('analyze this', 'analysis task', { type: 'general' })
 
     expect(result).toContain('Task analysis complete.')
+  })
+
+  it('routes chat through injected Llm seam instead of registry active provider', async () => {
+    // registry active provider 会产出 "from-registry"——必须被绕过
+    const registryProvider = createMockProvider([
+      { type: 'text', content: 'from-registry' },
+      { type: 'stop' },
+    ])
+    const registry = createMockRegistry(registryProvider)
+
+    // 注入的 llm 缝产出 "from-llm"——必须被走通
+    let llmChatCalled = false
+    const llm: Llm = {
+      async *chat(_req: ChatRequest): AsyncGenerator<StreamChunk> {
+        llmChatCalled = true
+        yield { type: 'text', content: 'from-llm' }
+        yield { type: 'stop' }
+      },
+    }
+
+    const sub = new SubAgent(registry, TOOLS, undefined, undefined, undefined, llm)
+    const result = await sub.execute('test', 'test task', { type: 'general' })
+
+    expect(llmChatCalled).toBe(true)
+    expect(result).toContain('from-llm')
+    expect(result).not.toContain('from-registry')
   })
 
   it('throws when no active provider is available', async () => {

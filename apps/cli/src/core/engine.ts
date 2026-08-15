@@ -1078,6 +1078,7 @@ export class QueryEngine {
         backgroundAgentRegistry: getBackgroundAgentRegistry(),
         permissionSystem: this.permission,
         ruleEngine: this.ruleEngine,
+        llm: this.llm,
         readFiles: this.readFiles,
       })
 

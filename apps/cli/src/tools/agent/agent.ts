@@ -82,6 +82,7 @@ export const agentTool: ToolDefinition = {
         ctx.permissionSystem,
         undefined,
         ctx.ruleEngine,
+        ctx.llm,
       )
       const result = await sub.execute(prompt, description, {
         type: agentType,

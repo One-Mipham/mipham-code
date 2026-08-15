@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { executeForkedSkill } from '../../src/skills/fork-executor'
 import type { SkillDefinition } from '../../src/shared/index.ts'
-import type { ProviderRegistry, ProviderInstance } from '../../src/providers/registry'
+import type { ProviderRegistry, ProviderInstance, ChatRequest } from '../../src/providers/registry'
 import type { ToolDefinition } from '../../src/shared/index.ts'
 
 function createMockRegistry(): ProviderRegistry {
@@ -21,6 +21,9 @@ function createMockRegistry(): ProviderRegistry {
   return {
     getActive: () => provider,
     getActiveModel: () => 'mock-model',
+    async *chat(req: ChatRequest) {
+      yield* provider.chat(req)
+    },
   } as unknown as ProviderRegistry
 }
 
@@ -58,6 +61,9 @@ describe('executeForkedSkill', () => {
     const registry = {
       getActive: () => provider,
       getActiveModel: () => 'mock-model',
+      async *chat(req: ChatRequest) {
+        yield* provider.chat(req)
+      },
     } as unknown as ProviderRegistry
 
     const skill: SkillDefinition = {
