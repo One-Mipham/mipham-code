@@ -350,8 +350,7 @@ export async function runApp(options: RunOptions): Promise<void> {
     const events = log.events()
     if (events.length > 0) {
       const start = events.find((e) => e.type === 'session/start') as
-        | { type: 'session/start'; cwd?: string }
-        | undefined
+        { type: 'session/start'; cwd?: string } | undefined
       if (start?.cwd && existsSync(start.cwd)) {
         try {
           process.chdir(start.cwd)

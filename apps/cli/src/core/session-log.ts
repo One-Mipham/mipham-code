@@ -5,7 +5,14 @@ import type { Message, ToolUseContent, ToolResultContent } from '../shared/types
 
 // M1b 待对齐：compaction/summary 未记录其在流中的位置（deriveMessages 现追加在末尾）；tool/result 存 content:string（spec §4.2 的 result:ToolResult 含 success/error，M1 仅需 content）。
 export type SessionEvent =
-  | { type: 'session/start'; at: number; sessionId: string; provider?: string; model?: string; cwd?: string }
+  | {
+      type: 'session/start'
+      at: number
+      sessionId: string
+      provider?: string
+      model?: string
+      cwd?: string
+    }
   | { type: 'user/message'; at: number; message: Message }
   | { type: 'assistant/message'; at: number; message: Message }
   | { type: 'tool/call'; at: number; id: string; name: string; input: Record<string, unknown> }
@@ -100,7 +107,11 @@ export class SessionLog {
   save(): void {
     mkdirSync(LOG_DIR, { recursive: true })
     for (const e of this.buf.slice(this.flushed)) {
-      appendFileSync(join(LOG_DIR, `${sanitizeSessionName(this.name)}.jsonl`), JSON.stringify(e) + '\n', 'utf-8')
+      appendFileSync(
+        join(LOG_DIR, `${sanitizeSessionName(this.name)}.jsonl`),
+        JSON.stringify(e) + '\n',
+        'utf-8',
+      )
     }
     this.flushed = this.buf.length
   }

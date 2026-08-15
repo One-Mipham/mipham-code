@@ -11,7 +11,7 @@ import {
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import type { Message } from '../shared/types'
-import { sanitizeSessionName, SessionLog, deriveMessages } from './session-log'
+import { sanitizeSessionName, SessionLog, deriveMessages, messageToEvents } from './session-log'
 
 export interface SessionMetadata {
   name: string
@@ -120,8 +120,38 @@ export class SessionStore {
     }
   }
 
-  /** 从磁盘重开一个 SessionLog（不存在返回空 log）。 */
+  /** 从磁盘重开一个 SessionLog（不存在返回空 log）。旧格式快照自动迁移为事件日志。 */
   static loadLog(name: string): SessionLog {
+    const path = filePath(name)
+    if (!existsSync(path)) return SessionLog.open(name)
+    try {
+      const raw = readFileSync(path, 'utf-8')
+      const parsed = JSON.parse(raw) as unknown
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        'metadata' in parsed &&
+        Array.isArray((parsed as { messages?: unknown }).messages)
+      ) {
+        // 旧格式快照 → 迁移为事件日志（重写文件，避免后续 append 混格式）
+        const old = parsed as StoredSession
+        const log = new SessionLog(name)
+        log.append({
+          type: 'session/start',
+          at: Date.parse(old.metadata.createdAt) || Date.now(),
+          sessionId: name,
+          provider: old.metadata.provider,
+          model: old.metadata.model,
+          cwd: old.metadata.cwd,
+        })
+        for (const m of old.messages) for (const e of messageToEvents(m)) log.append(e)
+        unlinkSync(path)
+        log.save()
+        return log
+      }
+    } catch {
+      // 非旧格式（多行 JSONL 或单事件）→ 走 open
+    }
     return SessionLog.open(name)
   }
 
@@ -152,15 +182,23 @@ export class SessionStore {
 
   private static logToStoredSession(name: string, log: SessionLog): StoredSession | null {
     const events = log.events()
+    if (events.length === 0) return null
     const start = events.find((e) => e.type === 'session/start') as
-      | { type: 'session/start'; at: number; sessionId: string; provider?: string; model?: string; cwd?: string }
+      | {
+          type: 'session/start'
+          at: number
+          sessionId: string
+          provider?: string
+          model?: string
+          cwd?: string
+        }
       | undefined
     const messages = deriveMessages(events)
     const stat = statSync(filePath(name))
     return {
       metadata: {
         name,
-        createdAt: stat.mtime.toISOString(),
+        createdAt: start?.at ? new Date(start.at).toISOString() : stat.mtime.toISOString(),
         updatedAt: stat.mtime.toISOString(),
         provider: start?.provider || 'unknown',
         model: start?.model || 'unknown',

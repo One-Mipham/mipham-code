@@ -25,11 +25,13 @@
 ### Task 1: session/start 扩展元数据 + SessionLog 路径消毒
 
 **Files:**
+
 - Modify: `apps/cli/src/core/session-log.ts`
 - Modify: `apps/cli/src/core/session-store.ts`（`filePath` 复用消毒函数）
 - Test: `apps/cli/test/core/session-log.test.ts`（追加）
 
 **Interfaces:**
+
 - Produces: `sanitizeSessionName(name)`（导出）、`session/start` 变体新增 `provider?/model?/cwd?`。Task 2–5 依赖。
 
 - [ ] **Step 1: 写失败测试**
@@ -111,10 +113,12 @@ git commit -m "feat(session-log): sanitize session name + extend session/start m
 ### Task 2: SessionStore.saveLog + loadLog
 
 **Files:**
+
 - Modify: `apps/cli/src/core/session-store.ts`
 - Test: `apps/cli/test/core/session-store.test.ts`（追加）
 
 **Interfaces:**
+
 - Consumes: `SessionLog`、`sanitizeSessionName`、`deriveMessages`（Task 1）。
 - Produces: `SessionStore.saveLog(name, log, meta?)`、`SessionStore.loadLog(name)`。
 
@@ -135,7 +139,10 @@ describe('saveLog / loadLog', () => {
     const reloaded = SessionStore.loadLog('test-savelog')
     expect(reloaded).not.toBeNull()
     expect(reloaded!.events()).toHaveLength(2)
-    expect(reloaded!.events()[0]).toMatchObject({ type: 'session/start', sessionId: 'test-savelog' })
+    expect(reloaded!.events()[0]).toMatchObject({
+      type: 'session/start',
+      sessionId: 'test-savelog',
+    })
   })
 
   it('saveLog adds a session/start event if missing, and is idempotent', () => {
@@ -209,10 +216,12 @@ git commit -m "feat(session-store): add saveLog/loadLog append-only persistence"
 ### Task 3: SessionStore.load 双格式（旧格式回退 + 新格式 derive）
 
 **Files:**
+
 - Modify: `apps/cli/src/core/session-store.ts`
 - Test: `apps/cli/test/core/session-store.test.ts`（追加）
 
 **Interfaces:**
+
 - Consumes: `SessionLog`、`deriveMessages`（Task 1/2）。
 - Produces: `load(name)` 双格式；私有 `logToStoredSession(name, log)`。
 
@@ -222,7 +231,13 @@ git commit -m "feat(session-store): add saveLog/loadLog append-only persistence"
 describe('load old-format fallback + new-format derive', () => {
   it('loads a new-format (event log) session', () => {
     const log = new SessionLog('test-load-new')
-    log.append({ type: 'session/start', at: 1, sessionId: 'test-load-new', provider: 'openai', model: 'gpt' })
+    log.append({
+      type: 'session/start',
+      at: 1,
+      sessionId: 'test-load-new',
+      provider: 'openai',
+      model: 'gpt',
+    })
     log.append({ type: 'user/message', at: 1, message: { role: 'user', content: 'Hello' } })
     log.append({ type: 'assistant/message', at: 1, message: { role: 'assistant', content: 'Hi' } })
     SessionStore.saveLog('test-load-new', log)
@@ -236,7 +251,9 @@ describe('load old-format fallback + new-format derive', () => {
   })
 
   it('still loads an old-format (snapshot) session', () => {
-    SessionStore.save('test-load-old', [{ role: 'user', content: 'legacy' }], { provider: 'anthropic' })
+    SessionStore.save('test-load-old', [{ role: 'user', content: 'legacy' }], {
+      provider: 'anthropic',
+    })
     const loaded = SessionStore.load('test-load-old')
     expect(loaded).not.toBeNull()
     expect(loaded!.messages).toHaveLength(1)
@@ -310,10 +327,12 @@ git commit -m "feat(session-store): dual-format load with old-snapshot fallback"
 ### Task 4: SessionStore.list 双格式
 
 **Files:**
+
 - Modify: `apps/cli/src/core/session-store.ts`
 - Test: `apps/cli/test/core/session-store.test.ts`（追加）
 
 **Interfaces:**
+
 - Consumes: `load`（Task 3，双格式）。
 
 - [ ] **Step 1: 写失败测试**
@@ -379,12 +398,14 @@ git commit -m "feat(session-store): dual-format list"
 ### Task 5: ContextManager.restoreLog + 真实 sessionId 接线
 
 **Files:**
+
 - Modify: `apps/cli/src/core/context.ts`
 - Modify: `apps/cli/src/index.tsx`
 - Modify: `apps/cli/src/ui/commands.ts`（`/cd` 保存处）
 - Test: `apps/cli/test/core/context.test.ts`（追加）
 
 **Interfaces:**
+
 - Consumes: `SessionLog`、`deriveMessages`、`saveLog/loadLog`（Task 1–4）。
 - Produces: `ContextManager.restoreLog(log)`。
 
@@ -460,10 +481,13 @@ if (options.resume) {
   const events = log.events()
   if (events.length > 0) {
     const start = events.find((e) => e.type === 'session/start') as
-      | { type: 'session/start'; cwd?: string }
-      | undefined
+      { type: 'session/start'; cwd?: string } | undefined
     if (start?.cwd && existsSync(start.cwd)) {
-      try { process.chdir(start.cwd) } catch { /* cwd 可能已不存在 */ }
+      try {
+        process.chdir(start.cwd)
+      } catch {
+        /* cwd 可能已不存在 */
+      }
     }
     context.restoreLog(log)
     context.setSystemPrompt(instructions.buildSystemPrompt(config.permission as string))
@@ -497,9 +521,17 @@ if (context.getMessageCount() > 0) {
 ```ts
 const log = ctx.engine.getContext().getLog()
 if (log) {
-  SessionStore.saveLog(ctx.sessionId, log, { provider: saved.metadata.provider, model: saved.metadata.model, cwd: resolved })
+  SessionStore.saveLog(ctx.sessionId, log, {
+    provider: saved.metadata.provider,
+    model: saved.metadata.model,
+    cwd: resolved,
+  })
 } else {
-  SessionStore.save(ctx.sessionId, saved.messages, { provider: saved.metadata.provider, model: saved.metadata.model, cwd: resolved })
+  SessionStore.save(ctx.sessionId, saved.messages, {
+    provider: saved.metadata.provider,
+    model: saved.metadata.model,
+    cwd: resolved,
+  })
 }
 ```
 

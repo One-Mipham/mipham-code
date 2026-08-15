@@ -198,7 +198,10 @@ describe('SessionStore', () => {
       const reloaded = SessionStore.loadLog('test-savelog')
       expect(reloaded).not.toBeNull()
       expect(reloaded!.events()).toHaveLength(2)
-      expect(reloaded!.events()[0]).toMatchObject({ type: 'session/start', sessionId: 'test-savelog' })
+      expect(reloaded!.events()[0]).toMatchObject({
+        type: 'session/start',
+        sessionId: 'test-savelog',
+      })
 
       SessionStore.delete('test-savelog')
     })
@@ -236,9 +239,19 @@ describe('SessionStore', () => {
   describe('load old-format fallback + new-format derive', () => {
     it('loads a new-format (event log) session', () => {
       const log = new SessionLog('test-load-new')
-      log.append({ type: 'session/start', at: 1, sessionId: 'test-load-new', provider: 'openai', model: 'gpt' })
+      log.append({
+        type: 'session/start',
+        at: 1,
+        sessionId: 'test-load-new',
+        provider: 'openai',
+        model: 'gpt',
+      })
       log.append({ type: 'user/message', at: 1, message: { role: 'user', content: 'Hello' } })
-      log.append({ type: 'assistant/message', at: 1, message: { role: 'assistant', content: 'Hi' } })
+      log.append({
+        type: 'assistant/message',
+        at: 1,
+        message: { role: 'assistant', content: 'Hi' },
+      })
       SessionStore.saveLog('test-load-new', log)
 
       const loaded = SessionStore.load('test-load-new')
@@ -252,11 +265,40 @@ describe('SessionStore', () => {
     })
 
     it('still loads an old-format (snapshot) session', () => {
-      SessionStore.save('test-load-old', [{ role: 'user', content: 'legacy' }], { provider: 'anthropic' })
+      SessionStore.save('test-load-old', [{ role: 'user', content: 'legacy' }], {
+        provider: 'anthropic',
+      })
       const loaded = SessionStore.load('test-load-old')
       expect(loaded).not.toBeNull()
       expect(loaded!.messages).toHaveLength(1)
       expect(loaded!.metadata.provider).toBe('anthropic')
+    })
+  })
+
+  describe('loadLog old-format migration', () => {
+    it('migrates an old-format snapshot to event log on load', () => {
+      SessionStore.save(
+        'test-migrate',
+        [
+          { role: 'user', content: 'legacy hi' },
+          { role: 'assistant', content: 'legacy yo' },
+        ],
+        { provider: 'anthropic', model: 'claude' },
+      )
+
+      const log = SessionStore.loadLog('test-migrate')
+      const events = log.events()
+      expect(events[0]).toMatchObject({
+        type: 'session/start',
+        sessionId: 'test-migrate',
+        provider: 'anthropic',
+      })
+
+      const loaded = SessionStore.load('test-migrate')
+      expect(loaded!.messages).toHaveLength(2)
+      expect(loaded!.metadata.provider).toBe('anthropic')
+
+      SessionStore.delete('test-migrate')
     })
   })
 })
