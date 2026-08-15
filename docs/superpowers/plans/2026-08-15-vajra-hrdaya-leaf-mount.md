@@ -24,12 +24,14 @@
 ## Task 1: mount 能力 + plan-runner 走通声明式链
 
 **Files:**
+
 - Create: `apps/cli/src/vajra/compose/mount.ts`
 - Modify: `apps/cli/src/vajra/compose/bundle.ts`（`BundleLine.kind` 加 `'service'`）
 - Modify: `apps/cli/src/vajra/compose/index.ts`（re-export `./mount`）
 - Test: `apps/cli/test/vajra/compose.test.ts`（扩展）
 
 **Interfaces:**
+
 - Consumes: `Context`/`Mounted`/`Service` 类型（`../index`）；`Bundle`/`BundleLine`/`Profile`（`./bundle`）；`assemble`（`./assemble`）；真叶子 `planRunnerService`/`PLAN_RUNNER_KEY`/`PlanRunner`（`leaf/plan-runner`）；`LLM_KEY`/`replayLlm`/`RecordedTurn`（`providers/llm` / `providers/llm-replay`）。
 - Produces: `type ServiceResolver = (line: BundleLine) => Service | undefined`；`mountLines(ctx, lines, resolveService): Mounted[]`；`mountProfile(ctx, profile, resolveBundle, resolveService): Mounted[]`；`BundleLine.kind` 扩为 `'tool' | 'provider' | 'skill' | 'service'`。
 
@@ -177,6 +179,7 @@ git commit -m "feat(vajra): mount services via profile bundle — plan-runner �
 ## Self-Review
 
 **Spec coverage（§6/§7.5/§11）：**
+
 - bundle = 「配置行 + 要挂的代码」→ Task 1 `ServiceResolver` + `mountLines`/`mountProfile` ✅
 - profile 声明式组合 → `mountProfile` 走 `assemble` 链 ✅
 - 「装下一片真叶子」live 演示（plan-runner 经 profile 挂载）→ 两个测试（inline + YAML end-to-end）✅
