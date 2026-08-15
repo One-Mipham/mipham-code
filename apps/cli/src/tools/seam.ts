@@ -16,7 +16,7 @@ export function toolService(tool: ToolDefinition): Service {
 /** 从 Context 已挂载的工具服务派生 name → definition 的 Map（engine 消费）。 */
 export function collectTools(ctx: Context): Map<string, ToolDefinition> {
   const map = new Map<string, ToolDefinition>()
-  for (const key of ctx.keys()) {
+  for (const key of ctx.keysRecursive()) {
     if (!key.startsWith('tool:')) continue
     const tool = ctx.get<ToolDefinition>(key)
     if (tool) map.set(tool.name, tool)

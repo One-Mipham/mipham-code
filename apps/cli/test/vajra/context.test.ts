@@ -50,6 +50,21 @@ describe('Context service repository', () => {
     child.provide('local', 1)
     expect(child.keys()).toEqual(['local'])
   })
+
+  it('scope(key) returns the same child context for the same key', () => {
+    const root = new Context()
+    expect(root.scope('agent-x')).toBe(root.scope('agent-x'))
+  })
+
+  it('keysRecursive enumerates parent + local with local shadowing', () => {
+    const root = new Context()
+    root.provide('tool:read', 'parent-read')
+    const child = root.scope('agent-x')
+    child.provide('tool:read', 'child-read')
+    child.provide('tool:write', 'child-write')
+    expect(new Set(child.keysRecursive())).toEqual(new Set(['tool:read', 'tool:write']))
+    expect(child.get('tool:read')).toBe('child-read')
+  })
 })
 
 describe('Context reversible effects', () => {

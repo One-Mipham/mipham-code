@@ -54,4 +54,29 @@ describe('tool seam', () => {
     expect(tools.size).toBe(1)
     expect(tools.has('Read')).toBe(true)
   })
+
+  it('scoped context shadows a same-named parent tool', () => {
+    const root = new Context()
+    const toolA: ToolDefinition = {
+      name: 'read',
+      description: 'parent read',
+      category: 'file',
+      permission: 'auto',
+      parameters: {},
+      execute: async () => ({ success: true, content: 'A' }),
+    }
+    const toolB: ToolDefinition = {
+      name: 'read',
+      description: 'child read',
+      category: 'file',
+      permission: 'auto',
+      parameters: {},
+      execute: async () => ({ success: true, content: 'B' }),
+    }
+    root.mount(toolService(withValidation(toolA)))
+    const child = root.scope('agent-x')
+    child.mount(toolService(withValidation(toolB)))
+    const tools = collectTools(child)
+    expect(tools.get('read')).toBe(toolB)
+  })
 })

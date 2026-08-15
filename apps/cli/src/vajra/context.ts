@@ -10,6 +10,7 @@ export class Context {
   private effects: Disposer[] = []
   private listeners = new Map<string, Listener[]>()
   private waiters: Array<() => boolean> = []
+  private scopes = new Map<unknown, Context>()
   readonly parent?: Context
 
   constructor(parent?: Context) {
@@ -99,8 +100,20 @@ export class Context {
     return [...this.services.keys()]
   }
 
-  scope(_key: unknown): Context {
-    return new Context(this)
+  /** 枚举本层 + 父层所有键（local 遮蔽 parent，去重）。 */
+  keysRecursive(): string[] {
+    const seen = new Set<string>(this.keys())
+    for (const k of this.parent?.keysRecursive() ?? []) seen.add(k)
+    return [...seen]
+  }
+
+  scope(key: unknown): Context {
+    let child = this.scopes.get(key)
+    if (!child) {
+      child = new Context(this)
+      this.scopes.set(key, child)
+    }
+    return child
   }
 
   effect(fn: () => Disposer | void): Disposer {
