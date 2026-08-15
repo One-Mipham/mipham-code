@@ -48,6 +48,22 @@ it('loadProfile parses a yaml profile file', () => {
   rmSync(dir, { recursive: true, force: true })
 })
 
+it('loadBundle throws on non-array lines', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'bad-bundle-'))
+  const p = join(dir, 'bad.yml')
+  writeFileSync(p, 'name: b\nlines: not-an-array\n')
+  expect(() => loadBundle(p)).toThrow(/lines/)
+  rmSync(dir, { recursive: true, force: true })
+})
+
+it('loadProfile throws on non-array bundles', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'bad-profile-'))
+  const p = join(dir, 'bad.yml')
+  writeFileSync(p, 'name: p\nbundles: not-an-array\n')
+  expect(() => loadProfile(p)).toThrow(/bundles/)
+  rmSync(dir, { recursive: true, force: true })
+})
+
 it('patch replaces a line by id', () => {
   const b1: Bundle = {
     name: 'b1',
