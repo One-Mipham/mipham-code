@@ -8,6 +8,9 @@ import {
   PLAN_RUNNER_KEY,
   type PlanRunner,
 } from '../../../src/vajra/leaf/plan-runner'
+import { ProviderRegistry } from '../../../src/providers/registry'
+import type { ProviderInstance, ChatRequest } from '../../../src/providers/registry'
+import type { ProviderConfig } from '../../../src/shared'
 
 const text = (s: string): RecordedTurn => ({
   req: { model: 'm', messages: [] },
@@ -116,4 +119,54 @@ describe('plan-runner leaf', () => {
     await runner.run({ name: 'p', tasks: [{ id: 't1', description: 'do X' }] })
     expect(recorder.turns[0]!.req.model).toBe('') // 占位 'plan-runner' 已拔
   })
+})
+
+function makeMockProvider(
+  config: ProviderConfig,
+  onModel: (model: string) => void,
+): ProviderInstance {
+  return {
+    config,
+    async *chat(req: ChatRequest) {
+      onModel(req.model)
+      yield { type: 'text', content: 'APPROVE' }
+      yield { type: 'stop' }
+    },
+    listModels: async () => config.models.filter((m) => m.status === 'active'),
+    healthCheck: async () => true,
+  }
+}
+
+it('uses the registry active model when mounted against a real engine', async () => {
+  const config: ProviderConfig = {
+    id: 'test-provider',
+    name: 'Test Provider',
+    protocol: 'openai-compatible',
+    baseUrl: 'https://api.test.com/v1',
+    apiKey: '${TEST_API_KEY}',
+    models: [
+      {
+        id: 'real-model',
+        name: 'Real Model',
+        providerId: 'test-provider',
+        contextWindow: 128_000,
+        maxOutput: 32_000,
+        vision: false,
+        status: 'active',
+      },
+    ],
+  }
+  const seenModels: string[] = []
+  const registry = new ProviderRegistry([config], 'test-provider', 'real-model')
+  registry.register('test-provider', makeMockProvider(config, (m) => seenModels.push(m)))
+
+  const ctx = new Context()
+  ctx.provide(LLM_KEY, registry) // 真引擎：ProviderRegistry 作为 llm 缝
+  ctx.mount(planRunnerService)
+  const runner = ctx.get<PlanRunner>(PLAN_RUNNER_KEY)!
+  const outcomes = await runner.run({ name: 'p', tasks: [{ id: 't1', description: 'do A' }] })
+
+  expect(outcomes[0]!.status).toBe('done') // mock provider 一律 APPROVE
+  expect(seenModels).toHaveLength(2) // implementer + reviewer 各一次
+  expect(seenModels.every((m) => m === 'real-model')).toBe(true) // 占位已由 active model 取代
 })
