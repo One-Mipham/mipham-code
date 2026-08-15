@@ -38,3 +38,16 @@ it('loadProfile parses a yaml profile file', () => {
   expect(profile.bundles).toEqual(['b1', 'b2'])
   rmSync(dir, { recursive: true, force: true })
 })
+
+it('patch replaces a line by id', () => {
+  const b1: Bundle = { name: 'b1', lines: [{ id: 'ver', kind: 'skill', config: { version: '1.0.0' } }] }
+  const profile: Profile = { name: 'p', bundles: ['b1'], patch: { ver: { config: { version: '2.0.0' } } } }
+  const lines = assemble(profile, () => b1)
+  expect(lines.find((l) => l.id === 'ver')!.config.version).toBe('2.0.0')
+})
+
+it('package/version change lives in one bundle line', () => {
+  const b: Bundle = { name: 'meta', lines: [{ id: 'package-info', kind: 'provider', config: { version: '1.0.0' } }] }
+  b.lines[0]!.config.version = '2.0.0'
+  expect(dumpConfig(assemble({ name: 'p', bundles: ['meta'] }, () => b))).toContain('2.0.0')
+})
