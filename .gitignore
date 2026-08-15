@@ -5,7 +5,7 @@ out/
 *.log
 .env
 .env.local
-.mipham/memory/
+.mipham/
 .claude/worktrees/
 .claude/plans/
 .playwright-mcp/
