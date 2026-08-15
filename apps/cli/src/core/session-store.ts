@@ -178,20 +178,14 @@ export class SessionStore {
     ensureDir()
     try {
       const files = readdirSync(SESSIONS_DIR).filter((f) => f.endsWith('.jsonl'))
-
       const sessions: SessionMetadata[] = []
       for (const file of files) {
-        try {
-          const raw = readFileSync(join(SESSIONS_DIR, file), 'utf-8')
-          const session = JSON.parse(raw) as StoredSession
-          if (session.metadata) {
-            sessions.push(session.metadata)
-          }
-        } catch {
-          // Skip corrupt files
+        const name = file.replace('.jsonl', '')
+        const session = SessionStore.load(name)
+        if (session?.metadata) {
+          sessions.push(session.metadata)
         }
       }
-
       sessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
       return sessions
     } catch {

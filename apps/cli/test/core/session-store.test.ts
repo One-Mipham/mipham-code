@@ -216,6 +216,23 @@ describe('SessionStore', () => {
     })
   })
 
+  describe('list dual-format', () => {
+    it('lists both new-format and old-format sessions', () => {
+      const log = new SessionLog('test-list-new')
+      log.append({ type: 'session/start', at: 1, sessionId: 'test-list-new', provider: 'openai' })
+      log.append({ type: 'user/message', at: 1, message: { role: 'user', content: 'a' } })
+      SessionStore.saveLog('test-list-new', log)
+      SessionStore.save('test-list-old', [{ role: 'user', content: 'b' }])
+
+      const names = SessionStore.list().map((s) => s.name)
+      expect(names).toContain('test-list-new')
+      expect(names).toContain('test-list-old')
+
+      // Cleanup the new-format file (list now sees it, but delete is cleaner)
+      SessionStore.delete('test-list-new')
+    })
+  })
+
   describe('load old-format fallback + new-format derive', () => {
     it('loads a new-format (event log) session', () => {
       const log = new SessionLog('test-load-new')
