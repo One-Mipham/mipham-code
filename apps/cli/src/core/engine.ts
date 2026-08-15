@@ -1221,6 +1221,11 @@ export class QueryEngine {
     }
 
     // ── Fallback: configured default provider, once ──
+    // 若已注入 Llm 缝，缝拥有整个 chat 流程——不回退（避免切 registry 状态 + 二次调用）
+    if (this.llm) {
+      yield { type: 'error', error: failure }
+      return
+    }
     if (!defaultId || defaultId === activeId || !this.registry.get(defaultId)) {
       yield { type: 'error', error: failure }
       return

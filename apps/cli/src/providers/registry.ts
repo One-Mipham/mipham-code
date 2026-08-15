@@ -1,4 +1,5 @@
 import type { ProviderConfig, ModelInfo, Message, StreamChunk } from '../shared/index.ts'
+import type { Llm } from './llm'
 
 export interface ProviderInstance {
   config: ProviderConfig
@@ -17,7 +18,7 @@ export interface ChatRequest {
   signal?: AbortSignal
 }
 
-export class ProviderRegistry {
+export class ProviderRegistry implements Llm {
   private providers = new Map<string, ProviderInstance>()
   private activeProviderId: string
   private activeModelId: string

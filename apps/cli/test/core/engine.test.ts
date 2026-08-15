@@ -300,7 +300,9 @@ describe('QueryEngine', () => {
 
       // 3. Engine injects that seam
       const engine = new QueryEngine(mockProviderRegistry(), mockContext(), makeToolMap([]))
-      engine.setLlm(ctx.get<Llm>('llm')!)
+      const llm = ctx.get<Llm>('llm')
+      if (!llm) throw new Error('expected ctx.llm to be mounted')
+      engine.setLlm(llm)
 
       // 4. Engine's chat goes through the replay, not the registry mock
       const chunks: StreamChunk[] = []
