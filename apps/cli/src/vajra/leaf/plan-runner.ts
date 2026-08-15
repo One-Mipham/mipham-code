@@ -1,5 +1,6 @@
 import type { Service } from '../index'
 import type { Llm } from '../../providers/llm'
+import type { BundleLine } from '../compose/bundle'
 
 export type PlanTask = { id: string; description: string }
 export type Plan = { name: string; tasks: PlanTask[] }
@@ -84,3 +85,10 @@ export function createPlanRunnerService(options: { model?: string } = {}): Servi
 
 /** 默认 plan-runner Service（model 空串 = 用 active model）。 */
 export const planRunnerService: Service = createPlanRunnerService()
+
+/** 从 bundle 行解析 plan-runner Service（读 config.model 传工厂；id 非 plan-runner 或纯数据行返回 undefined）。 */
+export function planRunnerFromLine(line: BundleLine): Service | undefined {
+  if (line.id !== 'plan-runner') return undefined
+  const model = typeof line.config.model === 'string' ? line.config.model : undefined
+  return createPlanRunnerService({ model })
+}

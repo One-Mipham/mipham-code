@@ -4,6 +4,7 @@ import { LLM_KEY, type Llm } from '../../../src/providers/llm'
 import { recordLlm, replayLlm, type RecordedTurn } from '../../../src/providers/llm-replay'
 import {
   createPlanRunnerService,
+  planRunnerFromLine,
   planRunnerService,
   PLAN_RUNNER_KEY,
   type PlanRunner,
@@ -118,6 +119,27 @@ describe('plan-runner leaf', () => {
     const runner = ctx.get<PlanRunner>(PLAN_RUNNER_KEY)!
     await runner.run({ name: 'p', tasks: [{ id: 't1', description: 'do X' }] })
     expect(recorder.turns[0]!.req.model).toBe('') // 占位 'plan-runner' 已拔
+  })
+
+  it('planRunnerFromLine reads config.model into the service', async () => {
+    const ctx = new Context()
+    const recorder = recordLlm(replayLlm([text('X'), text('APPROVE')]))
+    ctx.provide(LLM_KEY, recorder.llm)
+    const service = planRunnerFromLine({
+      id: 'plan-runner',
+      kind: 'service',
+      config: { model: 'gpt-4o' },
+    })!
+    ctx.mount(service)
+    const runner = ctx.get<PlanRunner>(PLAN_RUNNER_KEY)!
+    await runner.run({ name: 'p', tasks: [{ id: 't1', description: 'do X' }] })
+    expect(recorder.turns[0]!.req.model).toBe('gpt-4o')
+  })
+
+  it('planRunnerFromLine returns undefined for non-plan-runner lines', () => {
+    expect(
+      planRunnerFromLine({ id: 'package-info', kind: 'provider', config: {} }),
+    ).toBeUndefined()
   })
 })
 
