@@ -18,7 +18,7 @@ export type SessionEvent =
   | { type: 'tool/call'; at: number; id: string; name: string; input: Record<string, unknown> }
   | { type: 'tool/result'; at: number; id: string; content: string }
   | { type: 'context/inject'; at: number; source: string; text: string }
-  | { type: 'compaction/summary'; at: number; summary: string }
+  | { type: 'compaction/summary'; at: number; summary: string; replacedCount: number }
 
 export function messageToEvents(msg: Message, at = 0): SessionEvent[] {
   if (msg.role === 'user') {
@@ -68,7 +68,14 @@ export function deriveMessages(events: SessionEvent[]): Message[] {
     } else if (e.type === 'context/inject') {
       out.push({ role: 'user', content: e.text })
     } else if (e.type === 'compaction/summary') {
-      out.push({ role: 'user', content: `[Earlier conversation summary]: ${e.summary}` })
+      // replacedCount = 被摘要替换的前缀消息数；旧 JSONL 无此字段则退回「追加末尾」
+      const n = (e as { replacedCount?: number }).replacedCount ?? 0
+      if (n > 0) {
+        out.splice(0, n)
+        out.unshift({ role: 'user', content: `[Earlier conversation summary]: ${e.summary}` })
+      } else {
+        out.push({ role: 'user', content: `[Earlier conversation summary]: ${e.summary}` })
+      }
     }
     // 'session/start' → 无消息
   }

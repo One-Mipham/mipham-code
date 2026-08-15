@@ -458,4 +458,18 @@ describe('ContextManager log integration', () => {
     cm.replaceMessages([{ role: 'user', content: 'NOT-LOGGED' }]) // 绕过日志写通
     expect(() => cm.addMessage({ role: 'user', content: 'trigger' })).toThrow(/not logged/)
   })
+
+  it('compact records replacedCount and deriveMessages reproduces post-compaction projection', async () => {
+    const cm = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
+    const log = new SessionLog('compact-position-test')
+    cm.setLog(log)
+    cm.setSummarizer(async () => 'summarized content')
+    for (let i = 0; i < 31; i++) {
+      cm.addMessage({ role: i % 2 === 0 ? 'user' : 'assistant', content: `msg${i}` })
+    }
+    await cm.compact('test')
+    const derived = deriveMessages(log.events())
+    expect(derived[0]).toEqual({ role: 'user', content: '[Earlier conversation summary]: summarized content' })
+    expect(derived).toHaveLength(21) // 1 摘要 + 20 保留
+  })
 })

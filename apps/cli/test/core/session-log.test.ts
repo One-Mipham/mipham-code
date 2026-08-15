@@ -206,3 +206,30 @@ describe('assertModelVisible debug gating', () => {
     expect(isAssertModelVisibleDebug()).toBe(false)
   })
 })
+
+describe('compaction/summary stream position', () => {
+  it('replaces the dropped prefix with the summary at its position', () => {
+    const events: SessionEvent[] = [
+      { type: 'user/message', at: 1, message: { role: 'user', content: 'm1' } },
+      { type: 'assistant/message', at: 2, message: { role: 'assistant', content: 'm2' } },
+      { type: 'user/message', at: 3, message: { role: 'user', content: 'm3' } },
+      { type: 'assistant/message', at: 4, message: { role: 'assistant', content: 'm4' } },
+      { type: 'compaction/summary', at: 5, summary: 'S', replacedCount: 3 },
+    ]
+    expect(deriveMessages(events)).toEqual([
+      { role: 'user', content: '[Earlier conversation summary]: S' },
+      { role: 'assistant', content: 'm4' },
+    ])
+  })
+
+  it('old summary events (no replacedCount) still append at end', () => {
+    const events = [
+      { type: 'user/message', at: 1, message: { role: 'user', content: 'm1' } },
+      { type: 'compaction/summary', at: 2, summary: 'S' },
+    ] as unknown as SessionEvent[] // 模拟旧 JSONL 解析（无 replacedCount）
+    expect(deriveMessages(events)).toEqual([
+      { role: 'user', content: 'm1' },
+      { role: 'user', content: '[Earlier conversation summary]: S' },
+    ])
+  })
+})
