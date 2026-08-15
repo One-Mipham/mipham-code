@@ -23,10 +23,12 @@
 ## Task 1: plan-runner Service 核心
 
 **Files:**
+
 - Create: `apps/cli/src/vajra/leaf/plan-runner.ts`
 - Test: `apps/cli/test/vajra/leaf/plan-runner.test.ts`
 
 **Interfaces:**
+
 - Produces: `PlanTask`/`Plan`/`TaskOutcome`/`PlanRunner` 类型；`PLAN_RUNNER_KEY = 'plan-runner'`；`planRunnerService: Service`（`inject: ['llm']`）；事件 `plan/task-start` / `plan/task-done`（declaration merging）。
 
 - [ ] **Step 1: 写失败测试**
@@ -38,7 +40,11 @@ import { describe, it, expect, vi } from 'vitest'
 import { Context } from '../../../src/vajra'
 import type { Llm } from '../../../src/providers/llm'
 import { replayLlm, type RecordedTurn } from '../../../src/providers/llm-replay'
-import { planRunnerService, PLAN_RUNNER_KEY, type PlanRunner } from '../../../src/vajra/leaf/plan-runner'
+import {
+  planRunnerService,
+  PLAN_RUNNER_KEY,
+  type PlanRunner,
+} from '../../../src/vajra/leaf/plan-runner'
 import { LLM_KEY } from '../../../src/providers/llm'
 
 const text = (s: string): RecordedTurn => ({
@@ -49,12 +55,15 @@ const text = (s: string): RecordedTurn => ({
 describe('plan-runner leaf', () => {
   it('runs a plan via the injected llm seam and emits events', async () => {
     const ctx = new Context()
-    ctx.provide(LLM_KEY, replayLlm([
-      text('implemented A'),
-      text('APPROVE — good'),
-      text('implemented B'),
-      text('REJECT — needs work'),
-    ]))
+    ctx.provide(
+      LLM_KEY,
+      replayLlm([
+        text('implemented A'),
+        text('APPROVE — good'),
+        text('implemented B'),
+        text('REJECT — needs work'),
+      ]),
+    )
 
     const started: string[] = []
     ctx.on('plan/task-start', (e) => started.push(e.taskId))
@@ -63,10 +72,13 @@ describe('plan-runner leaf', () => {
 
     ctx.mount(planRunnerService)
     const runner = ctx.get<PlanRunner>(PLAN_RUNNER_KEY)!
-    const outcomes = await runner.run({ name: 'p', tasks: [
-      { id: 't1', description: 'do A' },
-      { id: 't2', description: 'do B' },
-    ] })
+    const outcomes = await runner.run({
+      name: 'p',
+      tasks: [
+        { id: 't1', description: 'do A' },
+        { id: 't2', description: 'do B' },
+      ],
+    })
 
     expect(outcomes.map((o) => o.status)).toEqual(['done', 'needs-changes'])
     expect(started).toEqual(['t1', 't2'])
@@ -144,13 +156,18 @@ export const planRunnerService: Service = {
           let review = ''
           try {
             result = await chatText(taskCtx.get<Llm>('llm')!, `Implement: ${task.description}`)
-            review = await chatText(taskCtx.get<Llm>('llm')!, `Review: does the result satisfy "${task.description}"? Result: ${result}`)
+            review = await chatText(
+              taskCtx.get<Llm>('llm')!,
+              `Review: does the result satisfy "${task.description}"? Result: ${result}`,
+            )
           } catch (e) {
             outcomes.push({ taskId: task.id, status: 'error', result, review: String(e) })
             ctx.emit('plan/task-done', { taskId: task.id, status: 'error' })
             continue
           }
-          const status: TaskOutcome['status'] = review.startsWith('APPROVE') ? 'done' : 'needs-changes'
+          const status: TaskOutcome['status'] = review.startsWith('APPROVE')
+            ? 'done'
+            : 'needs-changes'
           outcomes.push({ taskId: task.id, status, result, review })
           ctx.emit('plan/task-done', { taskId: task.id, status })
         }
@@ -178,9 +195,11 @@ git commit -m "feat(vajra): plan-runner leaf — SDD orchestration as kernel ser
 ## Task 2: 换 provider 零 fork 测试（recordLlm 断言缝被消费）
 
 **Files:**
+
 - Test: `apps/cli/test/vajra/leaf/plan-runner.test.ts`（扩展）
 
 **Interfaces:**
+
 - Consumes: Task 1 的 `planRunnerService`/`PLAN_RUNNER_KEY`。
 
 - [ ] **Step 1: 写失败测试**
@@ -188,18 +207,18 @@ git commit -m "feat(vajra): plan-runner leaf — SDD orchestration as kernel ser
 追加：
 
 ```ts
-  it('consumes the injected llm (recordLlm proves the seam, not a default)', async () => {
-    const ctx = new Context()
-    const recorder = recordLlm(replayLlm([text('X'), text('APPROVE')]))
-    ctx.provide(LLM_KEY, recorder.llm)
-    ctx.mount(planRunnerService)
-    const runner = ctx.get<PlanRunner>(PLAN_RUNNER_KEY)!
-    await runner.run({ name: 'p', tasks: [{ id: 't1', description: 'do X' }] })
-    // implementer + reviewer 各一次 → 2 次 chat 走注入的缝
-    expect(recorder.turns).toHaveLength(2)
-    expect(recorder.turns[0]!.req.messages[0]!.content).toContain('Implement:')
-    expect(recorder.turns[1]!.req.messages[0]!.content).toContain('Review:')
-  })
+it('consumes the injected llm (recordLlm proves the seam, not a default)', async () => {
+  const ctx = new Context()
+  const recorder = recordLlm(replayLlm([text('X'), text('APPROVE')]))
+  ctx.provide(LLM_KEY, recorder.llm)
+  ctx.mount(planRunnerService)
+  const runner = ctx.get<PlanRunner>(PLAN_RUNNER_KEY)!
+  await runner.run({ name: 'p', tasks: [{ id: 't1', description: 'do X' }] })
+  // implementer + reviewer 各一次 → 2 次 chat 走注入的缝
+  expect(recorder.turns).toHaveLength(2)
+  expect(recorder.turns[0]!.req.messages[0]!.content).toContain('Implement:')
+  expect(recorder.turns[1]!.req.messages[0]!.content).toContain('Review:')
+})
 ```
 
 （import 补 `recordLlm`。）
@@ -229,6 +248,7 @@ git commit -m "test(vajra): prove plan-runner consumes the injected llm seam (re
 ## Self-Review
 
 **Spec coverage（§3.1/§7.1/§11）：**
+
 - 事件契约 declaration merging（内核首例，不改内核）→ Task 1 `declare module '../events'` ✅
 - 「装下一片真叶子」——Service + inject + scope + emit + llm 缝协同 → Task 1 ✅
 - 换 provider 零 fork（llm-replay 替真 API）→ Task 2 ✅
