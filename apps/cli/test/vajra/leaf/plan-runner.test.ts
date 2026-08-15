@@ -137,9 +137,7 @@ describe('plan-runner leaf', () => {
   })
 
   it('planRunnerFromLine returns undefined for non-plan-runner lines', () => {
-    expect(
-      planRunnerFromLine({ id: 'package-info', kind: 'provider', config: {} }),
-    ).toBeUndefined()
+    expect(planRunnerFromLine({ id: 'package-info', kind: 'provider', config: {} })).toBeUndefined()
   })
 })
 
