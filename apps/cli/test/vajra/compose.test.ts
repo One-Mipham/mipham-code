@@ -12,7 +12,7 @@ import {
   PLAN_RUNNER_KEY,
   type PlanRunner,
 } from '../../src/vajra/leaf/plan-runner'
-import { mountProfile, type ServiceResolver } from '../../src/vajra/compose'
+import { mountLines, mountProfile, type ServiceResolver } from '../../src/vajra/compose'
 
 it('assemble concatenates bundles in order', () => {
   const b1: Bundle = { name: 'b1', lines: [{ id: 't1', kind: 'tool', config: {} }] }
@@ -147,4 +147,22 @@ it('loads a bundle + profile from disk and mounts plan-runner (declarative end-t
   expect(outcomes.map((o) => o.status)).toEqual(['done'])
   expect(mounted).toHaveLength(1)
   rmSync(dir, { recursive: true, force: true })
+})
+
+it('mountLines skips lines the resolver maps to undefined (data-only lines)', () => {
+  const ctx = new Context()
+  ctx.provide(LLM_KEY, replayLlm([]))
+
+  const lines: BundleLine[] = [
+    { id: 'package-info', kind: 'provider', config: { version: '1.0.0' } }, // 纯数据行，resolver 返回 undefined → 跳过
+    { id: 'plan-runner', kind: 'service', config: {} },
+  ]
+  const resolveService: ServiceResolver = (line) =>
+    line.id === 'plan-runner' ? planRunnerService : undefined
+
+  const mounted = mountLines(ctx, lines, resolveService)
+
+  expect(mounted).toHaveLength(1)
+  expect(ctx.get(PLAN_RUNNER_KEY)).toBeDefined()
+  expect(ctx.get('package-info')).toBeUndefined()
 })
