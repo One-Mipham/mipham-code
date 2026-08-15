@@ -22,10 +22,12 @@
 ## Task 1: planRunnerFromLine resolver 助手 + config.model 传播
 
 **Files:**
+
 - Modify: `apps/cli/src/vajra/leaf/plan-runner.ts`
 - Test: `apps/cli/test/vajra/leaf/plan-runner.test.ts`（扩展）
 
 **Interfaces:**
+
 - Consumes: `BundleLine`（`../compose/bundle`）、`Service`（`../index`）、`createPlanRunnerService`（本文件）。
 - Produces: `planRunnerFromLine(line: BundleLine): Service | undefined`。
 
@@ -50,9 +52,7 @@ it('planRunnerFromLine reads config.model into the service', async () => {
 })
 
 it('planRunnerFromLine returns undefined for non-plan-runner lines', () => {
-  expect(
-    planRunnerFromLine({ id: 'package-info', kind: 'provider', config: {} }),
-  ).toBeUndefined()
+  expect(planRunnerFromLine({ id: 'package-info', kind: 'provider', config: {} })).toBeUndefined()
 })
 ```
 
