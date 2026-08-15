@@ -443,15 +443,15 @@ export async function runApp(options: RunOptions): Promise<void> {
 
   // Load credential masking config and inject it into the tool seam
   const credentialMaskingConfig = loadCredentialMaskingConfig()
-  const toolContext = new Context()
-  toolContext.provide('credentials', credentialMaskingConfig)
+  const vajraContext = new Context()
+  vajraContext.provide('credentials', credentialMaskingConfig)
 
   // Create tool registry with all built-in tools (mounted as Vajra services)
-  const tools = createToolRegistry(toolContext)
+  const tools = createToolRegistry(vajraContext)
 
   // 绞杀收官：skills + llm 也挂载到同一 Vajra Context（tools 已接）
-  mountSkills(toolContext, skillsLoader)
-  mountLlm(toolContext, registry)
+  mountSkills(vajraContext, skillsLoader)
+  mountLlm(vajraContext, registry)
 
   // Connect MCP servers and register their tools into the tool registry.
   // Uses Promise.allSettled for parallel connection — failures are non-fatal.
@@ -498,8 +498,8 @@ export async function runApp(options: RunOptions): Promise<void> {
   engine.setHookEngine(hookEngine)
   engine.setArtifactServer(artifactServer)
   engine.setAgentViewManager(agentViewManager)
-  engine.setSkills(toolContext.get(SKILLS_KEY)!)
-  engine.setLlm(toolContext.get(LLM_KEY)!)
+  engine.setSkills(vajraContext.get(SKILLS_KEY)!)
+  engine.setLlm(vajraContext.get(LLM_KEY)!)
 
   // Wire inference hooks (DLP) configuration
   const inferenceHookConfig = loadInferenceHookConfig()

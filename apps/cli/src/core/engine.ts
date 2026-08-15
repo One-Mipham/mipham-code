@@ -19,7 +19,6 @@ import { getMemoryManager } from './memory/memory-loader'
 import { AutoMemoryEngine } from './auto-memory.js'
 import type { ToolCallRecord } from './auto-memory.js'
 import type { AgentViewManager } from '../agent-view/agent-view-manager'
-import type { SkillsLoader } from '../skills/loader'
 import type { Skills } from '../skills/seam'
 import { getBackgroundAgentRegistry } from '../agent/background-registry'
 import { RulesLoader } from './rules-loader'
@@ -69,7 +68,6 @@ export class QueryEngine {
   private artifactServer?: ArtifactServer
   private agentRegistry?: AgentRegistry
   private agentViewManager?: AgentViewManager
-  private skillsLoader?: SkillsLoader
   private skillsProvider?: Skills
   private ruleEngine?: ExperienceRuleEngine
   private _patternAnalyzer?: PatternAnalyzer
@@ -223,12 +221,7 @@ export class QueryEngine {
     return this.agentViewManager
   }
 
-  /** Register the SkillsLoader for Skill tool context injection. */
-  setSkillsLoader(loader: SkillsLoader): void {
-    this.skillsLoader = loader
-  }
-
-  /** 注入技能加载缝（ctx.skills）。未设置时回退 this.skillsLoader（strangler-fig）。 */
+  /** 注入技能加载缝（ctx.skills）。 */
   setSkills(provider: Skills): void {
     this.skillsProvider = provider
   }
@@ -1070,7 +1063,7 @@ export class QueryEngine {
         sessionId: this.sessionId,
         provider: this.registry.getActive().config.id,
         model: this.registry.getActiveModel(),
-        skillsLoader: this.skillsProvider ?? this.skillsLoader,
+        skillsLoader: this.skillsProvider,
         registry: this.registry,
         toolRegistry: this.tools,
         artifactServer: this.artifactServer,
@@ -1168,6 +1161,11 @@ export class QueryEngine {
 
   getRegistry(): ProviderRegistry {
     return this.registry
+  }
+
+  /** 当前注入的 LLM 缝（未接线时 undefined，消费方回退 registry）。 */
+  getLlm(): Llm | undefined {
+    return this.llm
   }
 
   /** 注入 LLM 适配缝（换 chat 实现）。 */

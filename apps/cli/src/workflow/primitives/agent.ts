@@ -1,5 +1,6 @@
 import { SubAgent } from '../../agent/sub-agent'
 import type { ProviderRegistry } from '../../providers/registry'
+import type { Llm } from '../../providers/llm'
 import type { ToolDefinition } from '../../shared/index.ts'
 import type { PermissionSystem } from '../../core/permission'
 import { validateJSONSchema, formatValidationErrors } from '../schema-validator'
@@ -41,6 +42,7 @@ export async function workflowAgent(
   registry: ProviderRegistry,
   toolRegistry: Map<string, ToolDefinition>,
   opts: WorkflowAgentOpts = {},
+  llm?: Llm,
 ): Promise<unknown> {
   // If provider override, switch temporarily
   if (opts.provider) {
@@ -82,7 +84,7 @@ export async function workflowAgent(
       `Return ONLY the JSON object, no other text. Do not wrap in markdown code fences.`
   }
 
-  const sub = new SubAgent(registry, toolRegistry, opts.permissionSystem)
+  const sub = new SubAgent(registry, toolRegistry, opts.permissionSystem, undefined, undefined, llm)
 
   // ── Execute with optional schema validation + retry ──
   let result: unknown = ''

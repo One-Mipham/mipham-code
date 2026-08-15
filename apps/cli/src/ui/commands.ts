@@ -4058,6 +4058,9 @@ const forkCmd: CommandHandler = async (ctx, args) => {
         ctx.engine.getRegistry(),
         ctx.engine.getTools(),
         ctx.engine.getPermission(),
+        undefined,
+        undefined,
+        ctx.engine.getLlm(),
       )
       const parentContext = ctx.engine.getContext()
       const result = await sa.execute(prompt, 'fork: ' + prompt.slice(0, 60), {

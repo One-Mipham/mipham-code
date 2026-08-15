@@ -103,6 +103,7 @@ export async function runWorkflow(
   const registry: ProviderRegistry = engine.getRegistry()
   const toolRegistry = engine.getTools()
   const permission = engine.getPermission()
+  const llm = engine.getLlm()
 
   const budget = createBudget(budgetTotal)
 
@@ -124,10 +125,16 @@ export async function runWorkflow(
 
     bus.emitEvent({ type: 'agent:start', agentId, label: agentId, phase })
 
-    const result = await workflowAgent(prompt, registry, toolRegistry, {
-      ...(opts || {}),
-      permissionSystem: permission,
-    } as Record<string, unknown>)
+    const result = await workflowAgent(
+      prompt,
+      registry,
+      toolRegistry,
+      {
+        ...(opts || {}),
+        permissionSystem: permission,
+      } as Record<string, unknown>,
+      llm,
+    )
 
     const durationMs = Date.now() - startTime
     bus.emitEvent({ type: 'agent:end', agentId, label: agentId, success: true, durationMs })

@@ -1,8 +1,6 @@
 import type { Message, ToolResult } from '../shared/index.ts'
 import { snipMessages } from './context-snip'
 import { microcompact } from './context-microcompact'
-import { reactiveCompact } from './context-compact'
-import { emergencyDrain } from './context-drain'
 import { NoopCacheTracker, type CacheTracker, type CacheStatus } from './context-token'
 import {
   SessionLog,
@@ -25,9 +23,6 @@ export interface CompactionStats {
   snipMessagesRemoved: number
   microcompactCount: number
   microcompactTokensSaved: number
-  compactCount: number
-  compactTokensSaved: number
-  drainCount: number
   lastCompaction: Date | null
 }
 
@@ -54,9 +49,6 @@ export class ContextManager {
     snipMessagesRemoved: 0,
     microcompactCount: 0,
     microcompactTokensSaved: 0,
-    compactCount: 0,
-    compactTokensSaved: 0,
-    drainCount: 0,
     lastCompaction: null,
   }
   private compressionPending = false
@@ -353,50 +345,6 @@ export class ContextManager {
   /** Return a copy of the current compaction statistics. */
   getCompactionStats(): CompactionStats {
     return { ...this.compactionStats }
-  }
-
-  // ── 413 recovery ──
-
-  /**
-   * Emergency context drain for 413 (context too large) errors.
-   * Progressively strips messages until the context fits.
-   * Returns true if recovery was possible, false if already minimal.
-   */
-  async on413Error(): Promise<boolean> {
-    const result = await emergencyDrain(this)
-    if (result.recovered) {
-      this.compactionStats.drainCount++
-      this.compactionStats.lastCompaction = new Date()
-    }
-    return result.recovered
-  }
-
-  // ── Forced compaction (e.g. /compact command) ──
-
-  /**
-   * Force compaction of the conversation history.
-   *
-   * Uses the provided summarizer, the internal summarizer, or falls back
-   * to emergency drain if neither is available.
-   */
-  async forceCompact(heading: string, summarizer?: Summarizer): Promise<void> {
-    const beforeTokens = this.estimatedTokens
-
-    if (summarizer) {
-      await reactiveCompact(this, summarizer, heading)
-    } else if (this.summarizer) {
-      await reactiveCompact(this, this.summarizer, heading)
-    } else {
-      // Fallback: simple truncation via drain
-      await emergencyDrain(this)
-    }
-
-    const tokensSaved = beforeTokens - this.estimatedTokens
-    this.compactionStats.compactCount++
-    if (tokensSaved > 0) {
-      this.compactionStats.compactTokensSaved += tokensSaved
-    }
-    this.compactionStats.lastCompaction = new Date()
   }
 
   // ── Private compression helpers ──
