@@ -33,6 +33,7 @@ import { SkillsLoader } from './skills/loader'
 import { PluginManager } from './plugin/plugin-manager'
 import { loadPlugins } from './plugin/plugin-loader'
 import { createToolRegistry } from './tools'
+import { Context } from './vajra'
 import { McpClient } from './mcp/client'
 import { registerMcpServerTools } from './mcp/registry'
 import { AgentRegistry } from './agent/agent-registry'
@@ -434,8 +435,17 @@ export async function runApp(options: RunOptions): Promise<void> {
     context.setSystemPrompt(prompt)
   }
 
-  // Create tool registry with all built-in tools
-  const tools = createToolRegistry()
+  // Initialize credential masking pipeline (strategies: Full, Extract, JWT)
+  const { initializePipeline } = await import('./core/credential-masker/index')
+  initializePipeline()
+
+  // Load credential masking config and inject it into the tool seam
+  const credentialMaskingConfig = loadCredentialMaskingConfig()
+  const toolContext = new Context()
+  toolContext.provide('credentials', credentialMaskingConfig)
+
+  // Create tool registry with all built-in tools (mounted as Vajra services)
+  const tools = createToolRegistry(toolContext)
 
   // Connect MCP servers and register their tools into the tool registry.
   // Uses Promise.allSettled for parallel connection — failures are non-fatal.
@@ -487,17 +497,6 @@ export async function runApp(options: RunOptions): Promise<void> {
   // Wire inference hooks (DLP) configuration
   const inferenceHookConfig = loadInferenceHookConfig()
   engine.setInferenceHookConfig(inferenceHookConfig)
-
-  // Initialize credential masking pipeline (strategies: Full, Extract, JWT)
-  const { initializePipeline } = await import('./core/credential-masker/index')
-  initializePipeline()
-
-  // Wire credential masking configuration into tools
-  const credentialMaskingConfig = loadCredentialMaskingConfig()
-  const { setCredentialMaskingConfigForRead } = await import('./tools/file/read')
-  const { setCredentialMaskingConfigForBash } = await import('./tools/exec/bash')
-  setCredentialMaskingConfigForRead(credentialMaskingConfig)
-  setCredentialMaskingConfigForBash(credentialMaskingConfig)
 
   // Sync engine permission with config (fix: UI shows "auto" but engine defaulted to bypass-legacy)
   if (config.permission) {
