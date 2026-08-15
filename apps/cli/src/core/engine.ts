@@ -20,6 +20,7 @@ import { AutoMemoryEngine } from './auto-memory.js'
 import type { ToolCallRecord } from './auto-memory.js'
 import type { AgentViewManager } from '../agent-view/agent-view-manager'
 import type { SkillsLoader } from '../skills/loader'
+import type { Skills } from '../skills/seam'
 import { getBackgroundAgentRegistry } from '../agent/background-registry'
 import { RulesLoader } from './rules-loader'
 import { ExperienceRuleEngine } from './rule-engine.js'
@@ -69,6 +70,7 @@ export class QueryEngine {
   private agentRegistry?: AgentRegistry
   private agentViewManager?: AgentViewManager
   private skillsLoader?: SkillsLoader
+  private skillsProvider?: Skills
   private ruleEngine?: ExperienceRuleEngine
   private _patternAnalyzer?: PatternAnalyzer
   private _effectivenessTracker?: EffectivenessTracker
@@ -224,6 +226,11 @@ export class QueryEngine {
   /** Register the SkillsLoader for Skill tool context injection. */
   setSkillsLoader(loader: SkillsLoader): void {
     this.skillsLoader = loader
+  }
+
+  /** 注入技能加载缝（ctx.skills）。未设置时回退 this.skillsLoader（strangler-fig）。 */
+  setSkills(provider: Skills): void {
+    this.skillsProvider = provider
   }
 
   /** Rules loader for path-scoped rules injection. */
@@ -1058,7 +1065,7 @@ export class QueryEngine {
         sessionId: this.sessionId,
         provider: this.registry.getActive().config.id,
         model: this.registry.getActiveModel(),
-        skillsLoader: this.skillsLoader,
+        skillsLoader: this.skillsProvider ?? this.skillsLoader,
         registry: this.registry,
         toolRegistry: this.tools,
         artifactServer: this.artifactServer,

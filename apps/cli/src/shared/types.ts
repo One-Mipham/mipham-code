@@ -65,7 +65,7 @@ export interface ToolContext {
   sessionId: string
   provider: string
   model: string
-  skillsLoader?: import('../skills/loader').SkillsLoader
+  skillsLoader?: import('../skills/seam').Skills
   registry?: import('../providers/registry').ProviderRegistry
   toolRegistry?: Map<string, ToolDefinition>
   artifactServer?: import('../artifacts/server').ArtifactServer

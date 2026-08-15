@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { parse as parseYaml } from 'yaml'
 import type { SkillDefinition } from '../shared/index.ts'
+import type { Skills } from './seam'
 import { sanitizeSkillDescription, sanitizeSkillBody, checkSkillShadow } from './sanitizer.js'
 
 interface FrontmatterResult {
@@ -21,7 +22,7 @@ function parseFrontmatter(raw: string): FrontmatterResult {
   }
 }
 
-export class SkillsLoader {
+export class SkillsLoader implements Skills {
   private skills = new Map<string, SkillDefinition>()
 
   loadBuiltin(basePath: string): void {

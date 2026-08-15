@@ -119,6 +119,44 @@ describe('QueryEngine', () => {
     })
   })
 
+  describe('skills seam — setSkills', () => {
+    it('setSkills overrides the skills provider injected into tool context', async () => {
+      const fakeSkills = {
+        get: () => undefined,
+        list: () => [],
+        has: () => false,
+        buildSystemReminder: () => '',
+      }
+
+      // 捕获工具执行时注入的 ToolContext，验证 setSkills 覆盖默认 loader
+      let capturedSkills: unknown
+      const tool: ToolDefinition = {
+        ...mockTool('capture-skills'),
+        execute: async (_params, ctx) => {
+          capturedSkills = ctx.skillsLoader
+          return { success: true, content: 'captured' }
+        },
+      }
+
+      const registry = mockProviderRegistry(async function* () {
+        yield {
+          type: 'tool_use',
+          toolUse: { type: 'tool_use', id: 'call_1', name: 'capture-skills', input: {} },
+        }
+        yield { type: 'stop' }
+      })
+
+      const engine = new QueryEngine(registry, mockContext(), makeToolMap([tool]))
+      engine.setSkills(fakeSkills)
+
+      for await (const _ of engine.process('capture skills provider')) {
+        /* drain */
+      }
+
+      expect(capturedSkills).toBe(fakeSkills)
+    })
+  })
+
   describe('process — input guards', () => {
     it('should ignore whitespace-only input without calling the provider', async () => {
       let called = false
