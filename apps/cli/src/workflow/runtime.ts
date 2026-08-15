@@ -1,5 +1,5 @@
 import vm from 'node:vm'
-import { createSandbox } from './sandbox'
+import { createSandbox, sealValue } from './sandbox'
 import { createJournal, appendJournal, loadJournal, loadScript } from './journal'
 import { createBudget } from './budget'
 import { workflowAgent } from './primitives/agent'
@@ -166,19 +166,20 @@ export async function runWorkflow(
     })()
   `
 
-  // Execute in node:vm sandbox — no access to host globals
+  // Execute in a node:vm context (deterministic replay; NOT a security boundary).
   const vmScript = new vm.Script(wrappedScript, { filename: 'workflow.js' })
   const sandboxCtx = createSandbox(args, budget)
 
-  // Inject primitives into the sandbox context (whitelist approach)
-  sandboxCtx.agent = agent
-  sandboxCtx.parallel = parallel
-  sandboxCtx.pipeline = pipeline
-  sandboxCtx.verify = verify
-  sandboxCtx.judge = judge
-  sandboxCtx.loopUntilConvergence = loopUntilConvergence
-  sandboxCtx.phase = wrappedPhase
-  sandboxCtx.log = log
+  // Inject primitives into the context (sealed so their constructor chain
+  // can't reach host globals via `fn.constructor('return process')()`).
+  sandboxCtx.agent = sealValue(agent)
+  sandboxCtx.parallel = sealValue(parallel)
+  sandboxCtx.pipeline = sealValue(pipeline)
+  sandboxCtx.verify = sealValue(verify)
+  sandboxCtx.judge = sealValue(judge)
+  sandboxCtx.loopUntilConvergence = sealValue(loopUntilConvergence)
+  sandboxCtx.phase = sealValue(wrappedPhase)
+  sandboxCtx.log = sealValue(log)
 
   let result: unknown
   try {

@@ -65,37 +65,40 @@ describe('authMiddleware', () => {
 
   it('allows /api/v1/health without auth', () => {
     const req = new Request('http://example.com/api/v1/health')
-    const result = authMiddleware(req, VALID_TOKEN)
+    const result = authMiddleware(req, VALID_TOKEN, '8.8.8.8')
     expect(result).toBeNull()
   })
 
-  it('allows localhost requests without auth — 127.0.0.1', () => {
-    const req = new Request('http://127.0.0.1:3000/api/v1/sessions', {
-      headers: { host: '127.0.0.1:3000' },
-    })
-    const result = authMiddleware(req, VALID_TOKEN)
+  it('allows loopback connections without auth — 127.0.0.1', () => {
+    const req = new Request('http://example.com/api/v1/sessions')
+    const result = authMiddleware(req, VALID_TOKEN, '127.0.0.1')
     expect(result).toBeNull()
   })
 
-  it('allows localhost requests without auth — localhost', () => {
-    const req = new Request('http://localhost:3000/api/v1/sessions', {
+  it('allows loopback connections without auth — ::1', () => {
+    const req = new Request('http://example.com/api/v1/sessions')
+    const result = authMiddleware(req, VALID_TOKEN, '::1')
+    expect(result).toBeNull()
+  })
+
+  it('allows loopback connections without auth — ::ffff:127.0.0.1', () => {
+    const req = new Request('http://example.com/api/v1/sessions')
+    const result = authMiddleware(req, VALID_TOKEN, '::ffff:127.0.0.1')
+    expect(result).toBeNull()
+  })
+
+  it('rejects a spoofed Host header from a non-loopback peer', () => {
+    const req = new Request('http://example.com/api/v1/sessions', {
       headers: { host: 'localhost:3000' },
     })
-    const result = authMiddleware(req, VALID_TOKEN)
-    expect(result).toBeNull()
-  })
-
-  it('allows localhost requests without auth — [::1]', () => {
-    const req = new Request('http://[::1]:3000/api/v1/sessions', {
-      headers: { host: '[::1]:3000' },
-    })
-    const result = authMiddleware(req, VALID_TOKEN)
-    expect(result).toBeNull()
+    const result = authMiddleware(req, VALID_TOKEN, '8.8.8.8')
+    expect(result).not.toBeNull()
+    expect(result!.status).toBe(401)
   })
 
   it('returns 401 when Authorization header is missing', async () => {
     const req = new Request('http://example.com/api/v1/sessions')
-    const result = authMiddleware(req, VALID_TOKEN)
+    const result = authMiddleware(req, VALID_TOKEN, '8.8.8.8')
     expect(result).not.toBeNull()
     expect(result!.status).toBe(401)
     const body = await result!.json()
@@ -107,7 +110,7 @@ describe('authMiddleware', () => {
     const req = new Request('http://example.com/api/v1/sessions', {
       headers: { authorization: 'Basic dGVzdDp0ZXN0' },
     })
-    const result = authMiddleware(req, VALID_TOKEN)
+    const result = authMiddleware(req, VALID_TOKEN, '8.8.8.8')
     expect(result).not.toBeNull()
     expect(result!.status).toBe(401)
     const body = await result!.json()
@@ -119,7 +122,7 @@ describe('authMiddleware', () => {
     const req = new Request('http://example.com/api/v1/sessions', {
       headers: { authorization: `Bearer wrong-token` },
     })
-    const result = authMiddleware(req, VALID_TOKEN)
+    const result = authMiddleware(req, VALID_TOKEN, '8.8.8.8')
     expect(result).not.toBeNull()
     expect(result!.status).toBe(403)
     const body = await result!.json()
@@ -131,7 +134,7 @@ describe('authMiddleware', () => {
     const req = new Request('http://example.com/api/v1/sessions', {
       headers: { authorization: `Bearer ${VALID_TOKEN}` },
     })
-    const result = authMiddleware(req, VALID_TOKEN)
+    const result = authMiddleware(req, VALID_TOKEN, '8.8.8.8')
     expect(result).toBeNull()
   })
 })

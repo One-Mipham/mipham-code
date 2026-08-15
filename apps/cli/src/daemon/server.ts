@@ -21,7 +21,7 @@ import { bootstrapProviders } from '../providers/bootstrap'
 import { createToolRegistry } from '../tools'
 import { PermissionSystem } from '../core/permission'
 import type { ProviderRegistry } from '../providers/registry'
-import type { ToolDefinition } from '../shared/types'
+import type { ToolDefinition, PermissionMode } from '../shared/types'
 
 interface ServerConfig {
   db: DaemonDatabase
@@ -40,6 +40,27 @@ interface ServerConfig {
 
 interface WsData {
   sessionId: string
+}
+
+const DAEMON_PERMISSION_MODES: ReadonlySet<PermissionMode> = new Set<PermissionMode>([
+  'default',
+  'acceptEdits',
+  'plan',
+  'auto',
+  'dontAsk',
+  'bypassPermissions',
+])
+
+/**
+ * Resolve the daemon's permission mode from env, defaulting to least-privilege
+ * 'default'. Headless daemon sessions can never prompt, so 'ask'-level tools
+ * (Bash/Write/Edit) are blocked rather than auto-approved.
+ */
+function resolveDaemonPermission(): PermissionMode {
+  const fromEnv = process.env.MIPHAM_DAEMON_PERMISSION
+  return fromEnv && DAEMON_PERMISSION_MODES.has(fromEnv as PermissionMode)
+    ? (fromEnv as PermissionMode)
+    : 'default'
 }
 
 export function createServer(config: ServerConfig): Server<WsData> {
@@ -142,7 +163,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
       }
     }
 
-    const permission = new PermissionSystem('bypassPermissions')
+    const permission = new PermissionSystem(resolveDaemonPermission())
     const engine = new QueryEngine(sharedRegistry, context, sharedTools, permission)
     engine.setSessionId(sessionId)
     engineCache.set(sessionId, engine)
@@ -201,7 +222,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
       }
 
       // ── Auth check ──────────────────────────────────
-      const authError = authMiddleware(req, token)
+      const authError = authMiddleware(req, token, server.requestIP(req)?.address)
       if (authError) return addCorsHeaders(authError, req)
 
       // Helper: create JSON response with CORS headers for external origins

@@ -177,7 +177,7 @@ export const webFetchTool: ToolDefinition = {
     }
 
     // SSRF protection: validate URL before fetching
-    const validationError = validateUrl(url)
+    const validationError = await validateUrl(url)
     if (validationError) {
       return { success: false, content: '', error: validationError }
     }
@@ -186,39 +186,54 @@ export const webFetchTool: ToolDefinition = {
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), 30_000) // 30s timeout
 
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mipham-Code/0.24.0',
-          Accept: 'text/html,application/xhtml+xml,*/*',
-        },
-        redirect: 'follow',
-        signal: controller.signal,
-      })
+      // Manual redirect handling: follow same-host redirects one hop at a time,
+      // validating the target BEFORE each request (closes the SSRF-via-redirect gap).
+      let currentUrl = url
+      const originalHost = new URL(url).hostname
+      let response!: Response
 
-      clearTimeout(timer)
+      for (let hop = 0; hop <= 5; hop++) {
+        response = await fetch(currentUrl, {
+          headers: {
+            'User-Agent': 'Mipham-Code/0.24.0',
+            Accept: 'text/html,application/xhtml+xml,*/*',
+          },
+          redirect: 'manual',
+          signal: controller.signal,
+        })
 
-      // Cross-host redirect reporting
-      if (response.url) {
-        const finalHost = new URL(response.url).hostname
-        const originalHost = new URL(url).hostname
-        if (finalHost !== originalHost) {
-          return {
-            success: true,
-            content: `Redirected to: ${response.url}\n\nFetch from this URL directly to retrieve content.`,
-            metadata: { redirected: true, originalUrl: url, finalUrl: response.url },
-          }
-        }
+        // Not a redirect (or no Location) → proceed with this response
+        if (response.status < 300 || response.status >= 400) break
+        const location = response.headers.get('location')
+        if (!location || hop === 5) break
 
-        // SSRF defense: re-validate the resolved URL after redirects
-        const redirectError = validateUrl(response.url)
+        const nextUrl = new URL(location, currentUrl).toString()
+
+        // SSRF defense: validate the redirect target BEFORE following
+        const redirectError = await validateUrl(nextUrl)
         if (redirectError) {
+          clearTimeout(timer)
           return {
             success: false,
             content: '',
             error: `Redirect blocked: ${redirectError}`,
           }
         }
+
+        // Cross-host redirects are returned to the caller (tool contract)
+        if (new URL(nextUrl).hostname !== originalHost) {
+          clearTimeout(timer)
+          return {
+            success: true,
+            content: `Redirected to: ${nextUrl}\n\nFetch from this URL directly to retrieve content.`,
+            metadata: { redirected: true, originalUrl: url, finalUrl: nextUrl },
+          }
+        }
+
+        currentUrl = nextUrl
       }
+
+      clearTimeout(timer)
 
       // Determine content type; only convert HTML to markdown
       const contentType = response.headers.get('content-type') || ''

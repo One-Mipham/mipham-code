@@ -68,7 +68,7 @@ export class OAuthClient {
           resolve(receivedCode)
         }
       })
-      server.listen(port, () => {
+      server.listen(port, '127.0.0.1', () => {
         const authUrl = new URL(auth.authorizationUrl)
         authUrl.searchParams.set('response_type', 'code')
         authUrl.searchParams.set('client_id', auth.clientId)

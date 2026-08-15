@@ -73,16 +73,19 @@ export function listTokens(tokenPath: string): string[] {
  * trusted and auth is bypassed. Auth enforcement activates when
  * MIPHAM_BIND=0.0.0.0 for remote access.
  */
-export function authMiddleware(request: Request, validToken: string): Response | null {
+export function authMiddleware(
+  request: Request,
+  validToken: string,
+  peerAddress: string | undefined,
+): Response | null {
   // Allow health endpoint without auth
   const url = new URL(request.url)
   if (url.pathname === '/api/v1/health') return null
 
-  // localhost requests skip auth
-  const host = request.headers.get('host') || ''
-  if (host.startsWith('127.0.0.1') || host.startsWith('localhost') || host.startsWith('[::1]')) {
-    return null
-  }
+  // Trust only actual loopback connections (socket IP), never the spoofable Host header.
+  const isLoopback =
+    peerAddress === '127.0.0.1' || peerAddress === '::1' || peerAddress === '::ffff:127.0.0.1'
+  if (isLoopback) return null
 
   const auth = request.headers.get('authorization')
   if (!auth || !auth.startsWith('Bearer ')) {

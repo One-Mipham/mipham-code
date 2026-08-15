@@ -119,6 +119,7 @@ export class HttpTransport implements Transport {
         },
         body: JSON.stringify(request),
         signal: controller.signal,
+        redirect: 'manual',
       })
 
       if (!response.ok) {
@@ -164,6 +165,7 @@ export class HttpTransport implements Transport {
         ...this.headers,
       },
       body: JSON.stringify(notification),
+      redirect: 'manual',
     }).catch(() => {
       /* notifications are best-effort */
     })

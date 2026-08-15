@@ -1,10 +1,4 @@
 import dns from 'node:dns'
-const { lookupSync } = dns as unknown as {
-  lookupSync: (
-    hostname: string,
-    options?: { all?: boolean },
-  ) => Array<{ address: string; family: number }>
-}
 
 // ── Protocol allow-list ──
 const ALLOWED_PROTOCOLS = ['http:', 'https:']
@@ -20,7 +14,7 @@ const IPV4_BLOCKED = [
 ]
 
 /** Validate a URL for SSRF safety. Returns null if safe, or an error string. */
-export function validateUrl(urlStr: string): string | null {
+export async function validateUrl(urlStr: string): Promise<string | null> {
   let parsed: URL
   try {
     parsed = new URL(urlStr)
@@ -41,18 +35,17 @@ export function validateUrl(urlStr: string): string | null {
     return `URL hostname "${hostname}" resolves to a blocked IP range (private / loopback / link-local).`
   }
 
-  // 3. Check for raw IPv6 loopback / private
-  // Strip brackets from IPv6 hostnames (Bun's URL parser keeps them)
+  // 3. Check for raw IPv6 loopback / private / IPv4-mapped
   const ipv6Host = hostname.startsWith('[') ? hostname.slice(1, -1) : hostname
   if (isBlockedIPv6(ipv6Host)) {
     return `URL hostname "${hostname}" resolves to a blocked IPv6 address.`
   }
 
-  // 4. DNS rebinding protection: resolve hostname and check resolved IPs
-  // Use the bracket-less version for DNS lookups
-  const dnsHostname = hostname.startsWith('[') ? hostname.slice(1, -1) : hostname
+  // 4. DNS rebinding protection: resolve hostname and check resolved IPs.
+  //    Uses async dns.promises.lookup — the old sync `dns.lookupSync` never existed,
+  //    so this check was previously dead code (always threw → swallowed → "safe").
   try {
-    const addresses = lookupSync(dnsHostname, { all: true })
+    const addresses = await dns.promises.lookup(ipv6Host, { all: true })
     for (const addr of addresses) {
       if (isBlockedIPv4(addr.address)) {
         return `URL hostname "${hostname}" resolved to ${addr.address} (blocked IP range).`
@@ -62,7 +55,7 @@ export function validateUrl(urlStr: string): string | null {
       }
     }
   } catch {
-    // DNS resolution failed — that's OK for validation; the fetch will also fail
+    // DNS resolution failed — the subsequent fetch will fail too; treat as safe.
   }
 
   return null // safe
@@ -92,5 +85,35 @@ function isBlockedIPv6(ip: string): boolean {
   if (ip.startsWith('fc') || ip.startsWith('fd')) return true
   // IPv6 unspecified
   if (ip === '::' || ip === '0:0:0:0:0:0:0:0') return true
+
+  // IPv4-mapped (::ffff:a.b.c.d / ::ffff:xxxx:xxxx) and IPv4-compatible (::a.b.c.d / ::xxxx:xxxx)
+  // — these can smuggle a private IPv4 past the literal-IPv6 checks above.
+  const embedded = extractEmbeddedIPv4(ip)
+  if (embedded && isBlockedIPv4(embedded)) return true
+
   return false
+}
+
+/** Extract the IPv4 address embedded in an IPv4-mapped / IPv4-compatible IPv6 address. */
+function extractEmbeddedIPv4(ip: string): string | null {
+  let rest: string | null = null
+  const mapped = ip.match(/^::ffff:(.+)$/i)
+  const compat = ip.match(/^::([0-9a-fA-F]{1,4}):([0-9a-fA-F]{1,4})$/)
+  if (mapped) {
+    rest = mapped[1]!
+  } else if (compat) {
+    rest = `${compat[1]}:${compat[2]}`
+  } else {
+    return null
+  }
+
+  // Dotted-quad form (::ffff:127.0.0.1)
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(rest)) return rest
+
+  // Hex form (::ffff:7f00:1)
+  const hex = rest.match(/^([0-9a-fA-F]{1,4}):([0-9a-fA-F]{1,4})$/)
+  if (!hex) return null
+  const hi = parseInt(hex[1]!, 16)
+  const lo = parseInt(hex[2]!, 16)
+  return `${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`
 }

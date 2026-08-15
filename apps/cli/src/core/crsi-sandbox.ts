@@ -16,7 +16,7 @@
 
 import { execSync } from 'node:child_process'
 import { mkdirSync, rmSync, existsSync, writeFileSync, readFileSync, readdirSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { join, resolve, sep } from 'node:path'
 import { tmpdir, homedir } from 'node:os'
 import { randomUUID } from 'node:crypto'
 
@@ -172,7 +172,16 @@ export class CrsiSandbox {
       phase: 'pending',
     }
 
-    const targetPath = join(this.worktreePath, mod.filePath)
+    const worktreeRoot = resolve(this.worktreePath)
+    const targetPath = resolve(this.worktreePath, mod.filePath)
+
+    // Path traversal guard: reject any target that resolves outside the sandbox worktree
+    if (targetPath !== worktreeRoot && !targetPath.startsWith(worktreeRoot + sep)) {
+      result.error = `Path traversal blocked: "${mod.filePath}" resolves outside the worktree.`
+      result.phase = 'failed'
+      this.sessionReport.modifications.push(result)
+      return result
+    }
 
     // Verify the file exists in the worktree
     if (!existsSync(targetPath)) {
@@ -182,7 +191,7 @@ export class CrsiSandbox {
       return result
     }
 
-    // Verify original content matches (safety check)
+    // Verify original content matches (safety check — empty originalContent = lenient skip)
     try {
       const currentContent = readFileSync(targetPath, 'utf-8')
       if (currentContent !== mod.originalContent && mod.originalContent) {
@@ -319,12 +328,15 @@ export class CrsiSandbox {
       return { success: false, message: 'No worktree to merge from.' }
     }
 
-    // Check that all modifications passed tests
-    const failedCount = this.sessionReport.modifications.filter((m) => m.phase === 'failed').length
-    if (failedCount > 0) {
+    // Require every modification to have passed tests before merging. A mod left
+    // in 'pending'/'applied'/'testing' (tests never run or never passed) must not merge.
+    const mergeable = new Set(['passed', 'approved', 'merged'])
+    const blockers = this.sessionReport.modifications.filter((m) => !mergeable.has(m.phase))
+    if (blockers.length > 0) {
+      const phases = [...new Set(blockers.map((m) => m.phase))].join(', ')
       return {
         success: false,
-        message: `${failedCount} modification(s) failed tests. Cannot merge.`,
+        message: `${blockers.length} modification(s) not ready to merge (phase: ${phases}). Cannot merge.`,
       }
     }
 

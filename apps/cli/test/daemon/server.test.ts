@@ -143,10 +143,10 @@ describe('Daemon HTTP Server', () => {
     expect(getBody.data.session.status).toBe('closed')
   })
 
-  it('rejects requests without auth when not localhost', async () => {
-    // Use a raw TCP socket to bypass fetch's restriction on the Host header.
-    // fetch() always sets Host based on the URL, which would be 127.0.0.1
-    // and trigger the localhost auth bypass.
+  it('trusts loopback socket IP, ignoring a spoofed Host header', async () => {
+    // Connect from loopback (127.0.0.1) but spoof the Host header to look remote.
+    // Auth is based on the socket IP (requestIP), not the Host header, so this
+    // is allowed — the spoofed Host must NOT trigger an auth challenge.
     const status = await new Promise<number>((resolve, reject) => {
       const socket = new Socket()
       let response = ''
@@ -173,6 +173,6 @@ describe('Daemon HTTP Server', () => {
         )
       })
     })
-    expect(status).toBe(401)
+    expect(status).toBe(200)
   })
 })

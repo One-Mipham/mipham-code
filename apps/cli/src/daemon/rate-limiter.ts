@@ -30,6 +30,10 @@ export class RateLimiter {
    */
   check(key: string): { allowed: boolean; remaining: number; resetAt: number } {
     const now = Date.now()
+    // Bound the map size to prevent unbounded growth under a flood of distinct keys.
+    if (this.windows.size >= 100_000 && !this.windows.has(key)) {
+      this.cleanup()
+    }
     let entry = this.windows.get(key)
 
     if (!entry || now >= entry.resetAt) {

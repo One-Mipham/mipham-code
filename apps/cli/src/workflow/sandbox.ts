@@ -4,22 +4,64 @@ import vm from 'node:vm'
 const FORBIDDEN = new Set(['Date.now', 'Math.random', 'crypto.randomUUID'])
 
 /**
- * Create a sandboxed VM context for workflow script execution.
- * Blocks Date.now(), Math.random(), argless new Date(), crypto.randomUUID(),
- * plus explicit sandbox escape vectors: eval, Function constructor, import(),
- * require(), process, Bun, fetch, setTimeout/setInterval, etc.
+ * Wrap a host function so `.constructor` / `.prototype` / `__proto__` access
+ * cannot reach the host `Function` constructor (blocks
+ * `fn.constructor('return process')()` and friends).
+ */
+function sealFunction<T extends (...args: never[]) => unknown>(fn: T): T {
+  return new Proxy(fn, {
+    get(target, prop) {
+      if (prop === 'constructor' || prop === 'prototype' || prop === '__proto__') {
+        return undefined
+      }
+      return Reflect.get(target, prop)
+    },
+    apply(target, thisArg, argArray) {
+      return Reflect.apply(target, thisArg, argArray)
+    },
+  }) as T
+}
+
+/**
+ * Best-effort seal a value: freeze objects and wrap function properties so
+ * their constructor chain can't reach host globals.
+ */
+export function sealValue(value: unknown, depth = 0): unknown {
+  if (depth > 4) return value
+  if (typeof value === 'function') {
+    return sealFunction(value as (...args: never[]) => unknown)
+  }
+  if (value && typeof value === 'object') {
+    for (const key of Object.getOwnPropertyNames(value)) {
+      const child = (value as Record<string, unknown>)[key]
+      if (typeof child === 'function') {
+        ;(value as Record<string, unknown>)[key] = sealFunction(
+          child as (...args: never[]) => unknown,
+        )
+      }
+    }
+    return Object.freeze(value)
+  }
+  return value
+}
+
+/**
+ * Create a VM context for workflow script execution.
  *
- * P0-2 (v2.1.223 alignment): Added explicit defense-in-depth denial of all
- * host globals (process, require, Bun, fetch, setTimeout, etc.) and
- * constructor.constructor escape vector blocking.
+ * SECURITY: node:vm is NOT a security boundary. Workflow scripts are
+ * model-authored code running in the same process — the model already has
+ * Bash access, so this context does NOT isolate the script from the host.
+ * Its purpose is determinism (blocking Date.now/Math.random/randomUUID for
+ * reproducible replay) plus best-effort blocking of common escape vectors.
+ * Do not treat this as a sandbox that can safely run untrusted code.
  */
 export function createSandbox(
   args: unknown,
   budget: { total: number | null; spent(): number; remaining(): number },
 ): vm.Context {
   const sandboxObj: Record<string, unknown> = {
-    args,
-    budget,
+    args: sealValue(args),
+    budget: sealValue(budget),
     console: {
       log: (..._a: unknown[]) => {}, // no-op in sandbox
       error: (..._a: unknown[]) => {},
