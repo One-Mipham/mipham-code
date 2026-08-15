@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { Context } from '../../../src/vajra'
 import { LLM_KEY } from '../../../src/providers/llm'
-import { replayLlm, type RecordedTurn } from '../../../src/providers/llm-replay'
+import { recordLlm, replayLlm, type RecordedTurn } from '../../../src/providers/llm-replay'
 import {
   planRunnerService,
   PLAN_RUNNER_KEY,
@@ -51,5 +51,17 @@ describe('plan-runner leaf', () => {
     expect(mounted.status()).toBe('inactive')
     ctx.provide(LLM_KEY, replayLlm([]))
     expect(mounted.status()).toBe('active')
+  })
+
+  it('consumes the injected llm (recordLlm proves the seam, not a default)', async () => {
+    const ctx = new Context()
+    const recorder = recordLlm(replayLlm([text('X'), text('APPROVE')]))
+    ctx.provide(LLM_KEY, recorder.llm)
+    ctx.mount(planRunnerService)
+    const runner = ctx.get<PlanRunner>(PLAN_RUNNER_KEY)!
+    await runner.run({ name: 'p', tasks: [{ id: 't1', description: 'do X' }] })
+    expect(recorder.turns).toHaveLength(2)
+    expect(recorder.turns[0]!.req.messages[0]!.content).toContain('Implement:')
+    expect(recorder.turns[1]!.req.messages[0]!.content).toContain('Review:')
   })
 })
