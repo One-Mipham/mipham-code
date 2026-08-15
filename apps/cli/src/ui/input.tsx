@@ -231,7 +231,14 @@ export function InputBar({
           if (submittedHistory.length === 0) return
           // Save current draft the first time we enter history browsing
           if (historyIndexRef.current === -1) {
-            savedDraftRef.current = value
+            // Flush any pending throttle so its deferred setValue doesn't overwrite
+            // history navigation (paste → immediate ↑ race). Save the latest value
+            // from the ref — state `value` is stale inside the throttle window.
+            if (onChangeTimerRef.current) {
+              clearTimeout(onChangeTimerRef.current)
+              onChangeTimerRef.current = null
+            }
+            savedDraftRef.current = valueRef.current
           }
           const newIndex = Math.min(historyIndexRef.current + 1, submittedHistory.length - 1)
           historyIndexRef.current = newIndex
