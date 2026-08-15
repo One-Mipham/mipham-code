@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { existsSync, rmSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { SessionStore } from '../../src/core/session-store'
+import { SessionLog } from '../../src/core/session-log'
 
 const HOME = process.env.HOME || '~'
 const SESSIONS_DIR = join(HOME, '.mipham', 'sessions')
@@ -184,6 +185,34 @@ describe('SessionStore', () => {
 
       const latest = SessionStore.getLatest()
       expect(latest).toBeDefined()
+    })
+  })
+
+  describe('saveLog / loadLog', () => {
+    it('persists a log and reloads it with events intact', () => {
+      const log = new SessionLog('test-savelog')
+      log.append({ type: 'session/start', at: 1, sessionId: 'test-savelog', provider: 'anthropic' })
+      log.append({ type: 'user/message', at: 1, message: { role: 'user', content: 'hi' } })
+      SessionStore.saveLog('test-savelog', log, { provider: 'anthropic', model: 'm' })
+
+      const reloaded = SessionStore.loadLog('test-savelog')
+      expect(reloaded).not.toBeNull()
+      expect(reloaded!.events()).toHaveLength(2)
+      expect(reloaded!.events()[0]).toMatchObject({ type: 'session/start', sessionId: 'test-savelog' })
+
+      SessionStore.delete('test-savelog')
+    })
+
+    it('saveLog adds a session/start event if missing, and is idempotent', () => {
+      const log = new SessionLog('test-savelog2')
+      log.append({ type: 'user/message', at: 1, message: { role: 'user', content: 'hi' } })
+      SessionStore.saveLog('test-savelog2', log, { provider: 'p' })
+      SessionStore.saveLog('test-savelog2', log, { provider: 'p' })
+
+      const reloaded = SessionStore.loadLog('test-savelog2')
+      expect(reloaded!.events()).toHaveLength(2) // session/start + user/message, 无重复
+
+      SessionStore.delete('test-savelog2')
     })
   })
 })

@@ -11,7 +11,7 @@ import {
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import type { Message } from '../shared/types'
-import { sanitizeSessionName } from './session-log'
+import { sanitizeSessionName, SessionLog, deriveMessages } from './session-log'
 
 export interface SessionMetadata {
   name: string
@@ -90,6 +90,39 @@ export class SessionStore {
     } catch {
       // Index update is best-effort; .jsonl data is already safe
     }
+  }
+
+  /** 追加持久化一个 SessionLog（幂等：只写新事件）。缺失 session/start 时补一个。 */
+  static saveLog(
+    name: string,
+    log: SessionLog,
+    meta?: { provider?: string; model?: string; cwd?: string },
+  ): void {
+    ensureDir()
+    const events = log.events()
+    if (!events.some((e) => e.type === 'session/start')) {
+      log.append({ type: 'session/start', at: Date.now(), sessionId: name, ...meta })
+    }
+    log.save()
+    try {
+      const messages = deriveMessages(log.events())
+      SessionStore.updateIndexEntry(name, {
+        name,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        provider: meta?.provider || 'unknown',
+        model: meta?.model || 'unknown',
+        messageCount: messages.length,
+        cwd: meta?.cwd,
+      })
+    } catch {
+      // index 更新 best-effort
+    }
+  }
+
+  /** 从磁盘重开一个 SessionLog（不存在返回空 log）。 */
+  static loadLog(name: string): SessionLog {
+    return SessionLog.open(name)
   }
 
   /**
