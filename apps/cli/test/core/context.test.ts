@@ -472,4 +472,16 @@ describe('ContextManager log integration', () => {
     expect(derived[0]).toEqual({ role: 'user', content: '[Earlier conversation summary]: summarized content' })
     expect(derived).toHaveLength(21) // 1 摘要 + 20 保留
   })
+
+  it('addToolResult records full result and derives projection', () => {
+    const cm = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
+    const log = new SessionLog('tool-result-test')
+    cm.setLog(log)
+    cm.addToolResult('t1', { success: false, content: 'partial', error: 'boom' })
+    expect(cm.getMessages()).toEqual([
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'boom' }] },
+    ])
+    const raw = log.events().find((e) => e.type === 'tool/result')
+    expect(raw).toMatchObject({ id: 't1', result: { success: false, error: 'boom' } })
+  })
 })

@@ -1,4 +1,4 @@
-import type { Message } from '../shared/index.ts'
+import type { Message, ToolResult } from '../shared/index.ts'
 import { snipMessages } from './context-snip'
 import { microcompact } from './context-microcompact'
 import { reactiveCompact } from './context-compact'
@@ -140,6 +140,19 @@ export class ContextManager {
     }
 
     // Auto-trigger compression checks (fire-and-forget, don't await)
+    this.checkCompression()
+  }
+
+  /** 记录工具执行结果（全量 ToolResult 含 success/error）到日志，并写投影消息（不重复走 messageToEvents 拆分）。 */
+  addToolResult(toolUseId: string, result: ToolResult): void {
+    const content = result.success ? result.content : result.error || result.content
+    const msg: Message = {
+      role: 'user',
+      content: [{ type: 'tool_result', tool_use_id: toolUseId, content }],
+    }
+    this.messages.push(msg)
+    this.estimatedTokens += this.estimateTokens(JSON.stringify(msg.content))
+    if (this.log) this.log.append({ type: 'tool/result', at: Date.now(), id: toolUseId, result })
     this.checkCompression()
   }
 

@@ -601,16 +601,7 @@ export class QueryEngine {
         content: [{ type: 'tool_use', id: toolUse.id, name: toolUse.name, input: toolUse.input }],
         reasoning_content: '',
       })
-      this.context.addMessage({
-        role: 'user',
-        content: [
-          {
-            type: 'tool_result',
-            tool_use_id: toolUse.id,
-            content: result.success ? result.content : result.error || result.content,
-          },
-        ],
-      })
+      this.context.addToolResult(toolUse.id, result)
     }
 
     // ── CRSI Reflection: Wire AutoMemoryEngine.analyzeTurn() into main loop ──
@@ -919,16 +910,7 @@ export class QueryEngine {
           content: [{ type: 'tool_use', id: toolUse.id, name: toolUse.name, input: toolUse.input }],
           reasoning_content: '',
         })
-        this.context.addMessage({
-          role: 'user',
-          content: [
-            {
-              type: 'tool_result',
-              tool_use_id: toolUse.id,
-              content: result.success ? result.content : result.error || result.content,
-            },
-          ],
-        })
+        this.context.addToolResult(toolUse.id, result)
       }
     }
     // Max turns reached — safety limit, stop gracefully

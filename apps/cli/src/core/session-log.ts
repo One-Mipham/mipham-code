@@ -1,9 +1,9 @@
 import { appendFileSync, readFileSync, mkdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
-import type { Message, ToolUseContent, ToolResultContent } from '../shared/types'
+import type { Message, ToolUseContent, ToolResultContent, ToolResult } from '../shared/types'
 
-// M1b 待对齐：compaction/summary 未记录其在流中的位置（deriveMessages 现追加在末尾）；tool/result 存 content:string（spec §4.2 的 result:ToolResult 含 success/error，M1 仅需 content）。
+// M1b 待对齐：compaction/summary 未记录其在流中的位置（deriveMessages 现追加在末尾）；tool/result 已升级为 result:ToolResult（含 success/error）。
 export type SessionEvent =
   | {
       type: 'session/start'
@@ -16,7 +16,7 @@ export type SessionEvent =
   | { type: 'user/message'; at: number; message: Message }
   | { type: 'assistant/message'; at: number; message: Message }
   | { type: 'tool/call'; at: number; id: string; name: string; input: Record<string, unknown> }
-  | { type: 'tool/result'; at: number; id: string; content: string }
+  | { type: 'tool/result'; at: number; id: string; result: ToolResult }
   | { type: 'context/inject'; at: number; source: string; text: string }
   | { type: 'compaction/summary'; at: number; summary: string; replacedCount: number }
 
@@ -27,7 +27,7 @@ export function messageToEvents(msg: Message, at = 0): SessionEvent[] {
       // 仅当内容是「单个 tool_result 块」才拆分为 tool/result，保证 deriveMessages 字节级还原
       if (results.length === 1 && results.length === msg.content.length) {
         const r = results[0]!
-        return [{ type: 'tool/result', at, id: r.tool_use_id, content: r.content }]
+        return [{ type: 'tool/result', at, id: r.tool_use_id, result: { success: true, content: r.content } }]
       }
       return [{ type: 'user/message', at, message: msg }]
     }
@@ -61,9 +61,13 @@ export function deriveMessages(events: SessionEvent[]): Message[] {
         reasoning_content: '',
       })
     } else if (e.type === 'tool/result') {
+      // 兼容旧 JSONL（存 content:string）；新格式存 result:ToolResult（含 success/error）
+      const eo = e as unknown as { id: string; result?: ToolResult; content?: string }
+      const result: ToolResult = eo.result ?? { success: true, content: eo.content ?? '' }
+      const content = result.success ? result.content : result.error || result.content
       out.push({
         role: 'user',
-        content: [{ type: 'tool_result', tool_use_id: e.id, content: e.content }],
+        content: [{ type: 'tool_result', tool_use_id: e.id, content }],
       })
     } else if (e.type === 'context/inject') {
       out.push({ role: 'user', content: e.text })

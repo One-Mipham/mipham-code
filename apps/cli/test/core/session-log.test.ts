@@ -233,3 +233,35 @@ describe('compaction/summary stream position', () => {
     ])
   })
 })
+
+describe('tool/result carries full ToolResult', () => {
+  it('messageToEvents derives success:true best-effort from a tool_result block', () => {
+    const m: Message = { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'body' }] }
+    expect(deriveMessages(messageToEvents(m))).toEqual([m])
+  })
+
+  it('deriveMessages reproduces error content for a failed tool', () => {
+    const events: SessionEvent[] = [
+      { type: 'tool/result', at: 1, id: 't1', result: { success: false, content: 'partial', error: 'boom' } },
+    ]
+    expect(deriveMessages(events)).toEqual([
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'boom' }] },
+    ])
+  })
+
+  it('deriveMessages reproduces content for a successful tool', () => {
+    const events: SessionEvent[] = [
+      { type: 'tool/result', at: 1, id: 't1', result: { success: true, content: 'ok' } },
+    ]
+    expect(deriveMessages(events)).toEqual([
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }] },
+    ])
+  })
+
+  it('backward-compat: old tool/result with content:string still derives', () => {
+    const events = [{ type: 'tool/result', at: 1, id: 't1', content: 'legacy' }] as unknown as SessionEvent[]
+    expect(deriveMessages(events)).toEqual([
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'legacy' }] },
+    ])
+  })
+})
