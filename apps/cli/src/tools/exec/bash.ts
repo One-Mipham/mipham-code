@@ -1,13 +1,9 @@
 import type { ToolDefinition, CredentialMaskingConfig } from '../../shared/index.ts'
 import { sanitizeCommand } from '../../shared/sanitize.ts'
 import { DANGEROUS_GIT_PATTERNS } from './git.ts'
-
-// Injected at startup — set via index.tsx
-let credentialConfig: CredentialMaskingConfig | undefined
-
-export function setCredentialMaskingConfigForBash(config: CredentialMaskingConfig): void {
-  credentialConfig = config
-}
+import type { Service } from '../../vajra'
+import { toolKey } from '../seam'
+import { withValidation } from '../validation'
 
 // ── Dangerous command patterns ──
 const BLOCKED_PATTERNS = [
@@ -298,8 +294,9 @@ function parseErrorLocations(stderr: string): ErrorLocation[] {
   return unique.slice(0, 10)
 }
 
-export const bashTool: ToolDefinition = {
-  name: 'Bash',
+export function createBashTool(credentialConfig?: CredentialMaskingConfig): ToolDefinition {
+  return {
+    name: 'Bash',
   description:
     'Execute a bash command. Returns stdout and stderr. Timeout: 120s. Use with caution.',
   category: 'exec',
@@ -429,5 +426,14 @@ export const bashTool: ToolDefinition = {
         error: `Command failed: ${String(err)}`,
       }
     }
+  },
+  }
+}
+
+export const bashToolService: Service = {
+  inject: ['credentials'],
+  apply(ctx) {
+    const credentialConfig = ctx.get<CredentialMaskingConfig>('credentials')
+    ctx.provide(toolKey('Bash'), withValidation(createBashTool(credentialConfig)))
   },
 }

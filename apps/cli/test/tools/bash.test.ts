@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import type { ToolContext } from '@mipham/shared'
-import { bashTool, detectViolations } from '../../src/tools/exec/bash'
+import { Context } from '../../src/vajra'
+import { collectTools } from '../../src/tools/seam'
+import { createBashTool, detectViolations, bashToolService } from '../../src/tools/exec/bash'
+
+const bashTool = createBashTool()
 
 const ctx: ToolContext = {
   cwd: '/tmp/test',
@@ -163,5 +167,27 @@ describe('detectViolations', () => {
   it('returns empty array for empty stderr', () => {
     const result = detectViolations('')
     expect(result).toHaveLength(0)
+  })
+})
+
+// ============================================================
+// bashToolService — credential injection gating
+// ============================================================
+
+describe('bashToolService (credential injection)', () => {
+  it('does not mount without credentials, mounts after provide', () => {
+    const ctx = new Context()
+    const mounted = ctx.mount(bashToolService)
+    expect(mounted.status()).toBe('inactive')
+    expect(collectTools(ctx).has('Bash')).toBe(false)
+
+    ctx.provide('credentials', {
+      enabled: true,
+      files: [],
+      output_scrubbing: { enabled: true, patterns: [] },
+      env_filter: { enabled: true, patterns: [] },
+    })
+    expect(mounted.status()).toBe('active')
+    expect(collectTools(ctx).has('Bash')).toBe(true)
   })
 })
