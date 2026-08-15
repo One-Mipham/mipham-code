@@ -11,6 +11,7 @@ import {
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import type { Message } from '../shared/types'
+import { sanitizeSessionName } from './session-log'
 
 export interface SessionMetadata {
   name: string
@@ -50,17 +51,7 @@ function ensureDir(): void {
 }
 
 function filePath(name: string): string {
-  // Sanitize name for filesystem
-  const safe = name.replace(/[^a-zA-Z0-9_-]/g, '_')
-
-  // For very long names (>100 chars), use SHA-256 hash suffix to prevent collision
-  if (safe.length > 100) {
-    const hash = createHash('sha256').update(safe).digest('hex').slice(0, 16)
-    const truncated = safe.slice(0, 80)
-    return join(SESSIONS_DIR, `${truncated}-${hash}.jsonl`)
-  }
-
-  return join(SESSIONS_DIR, `${safe}.jsonl`)
+  return join(SESSIONS_DIR, `${sanitizeSessionName(name)}.jsonl`)
 }
 
 export class SessionStore {

@@ -9,6 +9,7 @@ import {
   replayMessages,
   forkEvents,
   resumeMessages,
+  sanitizeSessionName,
 } from '../../src/core/session-log'
 import type { Message } from '../../src/shared/types'
 import type { SessionEvent } from '../../src/core/session-log'
@@ -172,5 +173,19 @@ describe('replay / fork / resume', () => {
     const log = new SessionLog('resume-test')
     turn(1).forEach((e) => log.append(e))
     expect(resumeMessages(log)).toEqual(replayMessages(log))
+  })
+})
+
+describe('sanitizeSessionName', () => {
+  it('replaces path-special chars with underscores', () => {
+    expect(sanitizeSessionName('../etc/passwd')).toBe('___etc_passwd')
+  })
+
+  it('hashes over-long names deterministically', () => {
+    const long = 'x'.repeat(120)
+    const a = sanitizeSessionName(long)
+    const b = sanitizeSessionName(long)
+    expect(a).toBe(b)
+    expect(a.length).toBeLessThan(100)
   })
 })

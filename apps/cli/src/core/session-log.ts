@@ -1,10 +1,11 @@
 import { appendFileSync, readFileSync, mkdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { createHash } from 'node:crypto'
 import type { Message, ToolUseContent, ToolResultContent } from '../shared/types'
 
 // M1b 待对齐：compaction/summary 未记录其在流中的位置（deriveMessages 现追加在末尾）；tool/result 存 content:string（spec §4.2 的 result:ToolResult 含 success/error，M1 仅需 content）。
 export type SessionEvent =
-  | { type: 'session/start'; at: number; sessionId: string }
+  | { type: 'session/start'; at: number; sessionId: string; provider?: string; model?: string; cwd?: string }
   | { type: 'user/message'; at: number; message: Message }
   | { type: 'assistant/message'; at: number; message: Message }
   | { type: 'tool/call'; at: number; id: string; name: string; input: Record<string, unknown> }
@@ -70,6 +71,16 @@ export function deriveMessages(events: SessionEvent[]): Message[] {
 const HOME = process.env.HOME || '~'
 const LOG_DIR = join(HOME, '.mipham', 'sessions')
 
+/** 将会话名消毒为安全文件名（与 SessionStore 共用；防路径穿越）。 */
+export function sanitizeSessionName(name: string): string {
+  const safe = name.replace(/[^a-zA-Z0-9_-]/g, '_')
+  if (safe.length > 100) {
+    const hash = createHash('sha256').update(safe).digest('hex').slice(0, 16)
+    return `${safe.slice(0, 80)}-${hash}`
+  }
+  return safe
+}
+
 export class SessionLog {
   private buf: SessionEvent[] = []
   private flushed = 0
@@ -89,7 +100,7 @@ export class SessionLog {
   save(): void {
     mkdirSync(LOG_DIR, { recursive: true })
     for (const e of this.buf.slice(this.flushed)) {
-      appendFileSync(join(LOG_DIR, `${this.name}.jsonl`), JSON.stringify(e) + '\n', 'utf-8')
+      appendFileSync(join(LOG_DIR, `${sanitizeSessionName(this.name)}.jsonl`), JSON.stringify(e) + '\n', 'utf-8')
     }
     this.flushed = this.buf.length
   }
@@ -97,7 +108,7 @@ export class SessionLog {
   /** 从既有 JSONL 打开，逐行解析为事件（已落盘事件标记为已 flush）。 */
   static open(name: string): SessionLog {
     const log = new SessionLog(name)
-    const path = join(LOG_DIR, `${name}.jsonl`)
+    const path = join(LOG_DIR, `${sanitizeSessionName(name)}.jsonl`)
     if (!existsSync(path)) return log
     for (const line of readFileSync(path, 'utf-8').split('\n')) {
       const trimmed = line.trim()
