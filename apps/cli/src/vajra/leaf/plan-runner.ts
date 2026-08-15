@@ -20,7 +20,10 @@ export interface PlanRunner {
 declare module '../events' {
   interface EventMap {
     'plan/task-start': { mode: 'emit'; in: { taskId: string } }
-    'plan/task-done': { mode: 'emit'; in: { taskId: string; status: string } }
+    'plan/task-done': {
+      mode: 'emit'
+      in: { taskId: string; status: 'done' | 'needs-changes' | 'error' }
+    }
   }
 }
 
