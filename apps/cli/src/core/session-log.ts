@@ -146,7 +146,7 @@ function messagesEqual(a: Message, b: Message): boolean {
 }
 
 /** 断言 messages 是 deriveMessages(log) 的子序列（压缩摘要豁免）。失败即抛错（fail-loud）。
- *  纯工具 + 测试断言；运行时 hot-path 接线（debug 门控）推迟到 M1b。 */
+ *  纯工具 + 测试断言；运行时接线见 ContextManager（debug 门控，默认关闭）。 */
 export function assertModelVisible(log: SessionEvent[], messages: Message[]): void {
   const derived = deriveMessages(log)
   let di = 0
@@ -158,6 +158,19 @@ export function assertModelVisible(log: SessionEvent[], messages: Message[]): vo
     }
     di++
   }
+}
+
+// ── 运行时断言门控 ──
+let debugAssertModelVisible = false
+
+/** 开启/关闭运行时「model-visible means logged」断言（默认关闭；hot-path 成本）。 */
+export function setAssertModelVisibleDebug(enabled: boolean): void {
+  debugAssertModelVisible = enabled
+}
+
+/** 运行时断言当前是否开启。 */
+export function isAssertModelVisibleDebug(): boolean {
+  return debugAssertModelVisible
 }
 
 /** replay：从日志派生完整消息历史（回归测试可断言其确定性）。 */

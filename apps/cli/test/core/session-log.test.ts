@@ -10,6 +10,8 @@ import {
   forkEvents,
   resumeMessages,
   sanitizeSessionName,
+  setAssertModelVisibleDebug,
+  isAssertModelVisibleDebug,
 } from '../../src/core/session-log'
 import type { Message } from '../../src/shared/types'
 import type { SessionEvent } from '../../src/core/session-log'
@@ -187,5 +189,20 @@ describe('sanitizeSessionName', () => {
     const b = sanitizeSessionName(long)
     expect(a).toBe(b)
     expect(a.length).toBeLessThan(100)
+  })
+})
+
+describe('assertModelVisible debug gating', () => {
+  afterEach(() => setAssertModelVisibleDebug(false))
+
+  it('defaults to off', () => {
+    expect(isAssertModelVisibleDebug()).toBe(false)
+  })
+
+  it('toggles on and off', () => {
+    setAssertModelVisibleDebug(true)
+    expect(isAssertModelVisibleDebug()).toBe(true)
+    setAssertModelVisibleDebug(false)
+    expect(isAssertModelVisibleDebug()).toBe(false)
   })
 })

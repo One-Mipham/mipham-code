@@ -4,7 +4,7 @@ import { microcompact } from './context-microcompact'
 import { reactiveCompact } from './context-compact'
 import { emergencyDrain } from './context-drain'
 import { NoopCacheTracker, type CacheTracker, type CacheStatus } from './context-token'
-import { SessionLog, messageToEvents, deriveMessages } from './session-log'
+import { SessionLog, messageToEvents, deriveMessages, assertModelVisible, isAssertModelVisibleDebug } from './session-log'
 
 export type Summarizer = (messages: Message[], heading: string) => Promise<string>
 
@@ -135,6 +135,10 @@ export class ContextManager {
       for (const e of messageToEvents(msg, Date.now())) this.log.append(e)
     }
 
+    if (this.log && isAssertModelVisibleDebug()) {
+      assertModelVisible(this.log.events(), this.messages)
+    }
+
     // Auto-trigger compression checks (fire-and-forget, don't await)
     this.checkCompression()
   }
@@ -151,6 +155,10 @@ export class ContextManager {
       for (const m of messages) for (const e of messageToEvents(m, Date.now())) this.log.append(e)
     }
     this.reEstimateTokens()
+
+    if (this.log && isAssertModelVisibleDebug()) {
+      assertModelVisible(this.log.events(), this.messages)
+    }
   }
 
   getMessages(): Message[] {

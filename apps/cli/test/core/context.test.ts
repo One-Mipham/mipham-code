@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { Message, ContentBlock } from '@mipham/shared'
 import { ContextManager } from '../../src/core/context'
-import { SessionLog, deriveMessages } from '../../src/core/session-log'
+import { SessionLog, deriveMessages, setAssertModelVisibleDebug } from '../../src/core/session-log'
 
 function makeContext(maxTokens = 200_000, compactionThreshold = 0.9) {
   return new ContextManager({ maxTokens, compactionThreshold })
@@ -436,5 +436,26 @@ describe('ContextManager log integration', () => {
       { role: 'assistant', content: 'yo' },
     ])
     expect(deriveMessages(cm.getLog()!.events())).toHaveLength(2) // 未重复写通
+  })
+
+  it('addMessage does not throw when invariant holds (debug on)', () => {
+    setAssertModelVisibleDebug(true)
+    const cm = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
+    const log = new SessionLog('assert-debug-test')
+    cm.setLog(log)
+    expect(() => {
+      cm.addMessage({ role: 'user', content: 'hi' })
+      cm.addMessage({ role: 'assistant', content: 'hello' })
+    }).not.toThrow()
+  })
+
+  it('throws when messages diverge from log (debug on)', () => {
+    setAssertModelVisibleDebug(true)
+    const cm = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
+    const log = new SessionLog('assert-debug-throw-test')
+    cm.setLog(log)
+    cm.addMessage({ role: 'user', content: 'logged' })
+    cm.replaceMessages([{ role: 'user', content: 'NOT-LOGGED' }]) // 绕过日志写通
+    expect(() => cm.addMessage({ role: 'user', content: 'trigger' })).toThrow(/not logged/)
   })
 })
