@@ -438,7 +438,15 @@ export const PROTOCOL_LABELS: Record<string, string> = {
   custom: 'Custom Protocol',
 }
 
-export const TOOL_CATEGORIES = ['file', 'exec', 'agent', 'network', 'system', 'artifact', 'scheduling'] as const
+export const TOOL_CATEGORIES = [
+  'file',
+  'exec',
+  'agent',
+  'network',
+  'system',
+  'artifact',
+  'scheduling',
+] as const
 export const CONFIG_FILE_NAME = 'config.yml'
 export const MIPHAM_DIR = '.mipham'
 export const USER_CONFIG_DIR = '.mipham'
