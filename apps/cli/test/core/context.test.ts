@@ -469,7 +469,10 @@ describe('ContextManager log integration', () => {
     }
     await cm.compact('test')
     const derived = deriveMessages(log.events())
-    expect(derived[0]).toEqual({ role: 'user', content: '[Earlier conversation summary]: summarized content' })
+    expect(derived[0]).toEqual({
+      role: 'user',
+      content: '[Earlier conversation summary]: summarized content',
+    })
     expect(derived).toHaveLength(21) // 1 摘要 + 20 保留
   })
 

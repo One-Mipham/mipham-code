@@ -237,13 +237,21 @@ describe('compaction/summary stream position', () => {
 
 describe('tool/result carries full ToolResult', () => {
   it('messageToEvents derives success:true best-effort from a tool_result block', () => {
-    const m: Message = { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'body' }] }
+    const m: Message = {
+      role: 'user',
+      content: [{ type: 'tool_result', tool_use_id: 't1', content: 'body' }],
+    }
     expect(deriveMessages(messageToEvents(m))).toEqual([m])
   })
 
   it('deriveMessages reproduces error content for a failed tool', () => {
     const events: SessionEvent[] = [
-      { type: 'tool/result', at: 1, id: 't1', result: { success: false, content: 'partial', error: 'boom' } },
+      {
+        type: 'tool/result',
+        at: 1,
+        id: 't1',
+        result: { success: false, content: 'partial', error: 'boom' },
+      },
     ]
     expect(deriveMessages(events)).toEqual([
       { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'boom' }] },
@@ -260,7 +268,9 @@ describe('tool/result carries full ToolResult', () => {
   })
 
   it('backward-compat: old tool/result with content:string still derives', () => {
-    const events = [{ type: 'tool/result', at: 1, id: 't1', content: 'legacy' }] as unknown as SessionEvent[]
+    const events = [
+      { type: 'tool/result', at: 1, id: 't1', content: 'legacy' },
+    ] as unknown as SessionEvent[]
     expect(deriveMessages(events)).toEqual([
       { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'legacy' }] },
     ])
@@ -273,7 +283,11 @@ describe('assistant/chunk stream replay', () => {
     log.append({ type: 'assistant/chunk', at: 1, chunk: 'Hel' })
     log.append({ type: 'assistant/chunk', at: 2, chunk: 'lo ' })
     log.append({ type: 'assistant/chunk', at: 3, chunk: 'world' })
-    log.append({ type: 'assistant/message', at: 4, message: { role: 'assistant', content: 'Hello world' } })
+    log.append({
+      type: 'assistant/message',
+      at: 4,
+      message: { role: 'assistant', content: 'Hello world' },
+    })
     expect(replayChunks(log)).toEqual(['Hel', 'lo ', 'world'])
   })
 

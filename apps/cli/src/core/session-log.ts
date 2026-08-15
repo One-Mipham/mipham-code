@@ -27,7 +27,14 @@ export function messageToEvents(msg: Message, at = 0): SessionEvent[] {
       // 仅当内容是「单个 tool_result 块」才拆分为 tool/result，保证 deriveMessages 字节级还原
       if (results.length === 1 && results.length === msg.content.length) {
         const r = results[0]!
-        return [{ type: 'tool/result', at, id: r.tool_use_id, result: { success: true, content: r.content } }]
+        return [
+          {
+            type: 'tool/result',
+            at,
+            id: r.tool_use_id,
+            result: { success: true, content: r.content },
+          },
+        ]
       }
       return [{ type: 'user/message', at, message: msg }]
     }
@@ -205,6 +212,8 @@ export function resumeMessages(log: SessionLog): Message[] {
 export function replayChunks(log: SessionLog): string[] {
   return log
     .events()
-    .filter((e): e is Extract<SessionEvent, { type: 'assistant/chunk' }> => e.type === 'assistant/chunk')
+    .filter(
+      (e): e is Extract<SessionEvent, { type: 'assistant/chunk' }> => e.type === 'assistant/chunk',
+    )
     .map((e) => e.chunk)
 }

@@ -26,12 +26,14 @@
 ## Task 1: assertModelVisible 运行时 debug 门控接线
 
 **Files:**
+
 - Modify: `apps/cli/src/core/session-log.ts`（新增门控函数 + 更新 §注释）
 - Modify: `apps/cli/src/core/context.ts`（addMessage/seedMessages 写通后接线）
 - Test: `apps/cli/test/core/session-log.test.ts`（门控开关测试）
 - Test: `apps/cli/test/core/context.test.ts`（运行时接线测试）
 
 **Interfaces:**
+
 - Produces: `setAssertModelVisibleDebug(enabled: boolean): void`、`isAssertModelVisibleDebug(): boolean`（session-log.ts 导出）。
 
 - [ ] **Step 1: 写失败测试**
@@ -58,26 +60,26 @@ describe('assertModelVisible debug gating', () => {
 `apps/cli/test/core/context.test.ts` 在 `describe('ContextManager log integration')` 内新增：
 
 ```ts
-  it('addMessage does not throw when invariant holds (debug on)', () => {
-    setAssertModelVisibleDebug(true)
-    const cm = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
-    const log = new SessionLog('assert-debug-test')
-    cm.setLog(log)
-    expect(() => {
-      cm.addMessage({ role: 'user', content: 'hi' })
-      cm.addMessage({ role: 'assistant', content: 'hello' })
-    }).not.toThrow()
-  })
+it('addMessage does not throw when invariant holds (debug on)', () => {
+  setAssertModelVisibleDebug(true)
+  const cm = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
+  const log = new SessionLog('assert-debug-test')
+  cm.setLog(log)
+  expect(() => {
+    cm.addMessage({ role: 'user', content: 'hi' })
+    cm.addMessage({ role: 'assistant', content: 'hello' })
+  }).not.toThrow()
+})
 
-  it('throws when messages diverge from log (debug on)', () => {
-    setAssertModelVisibleDebug(true)
-    const cm = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
-    const log = new SessionLog('assert-debug-throw-test')
-    cm.setLog(log)
-    cm.addMessage({ role: 'user', content: 'logged' })
-    cm.replaceMessages([{ role: 'user', content: 'NOT-LOGGED' }]) // 绕过日志写通
-    expect(() => cm.addMessage({ role: 'user', content: 'trigger' })).toThrow(/not logged/)
-  })
+it('throws when messages diverge from log (debug on)', () => {
+  setAssertModelVisibleDebug(true)
+  const cm = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
+  const log = new SessionLog('assert-debug-throw-test')
+  cm.setLog(log)
+  cm.addMessage({ role: 'user', content: 'logged' })
+  cm.replaceMessages([{ role: 'user', content: 'NOT-LOGGED' }]) // 绕过日志写通
+  expect(() => cm.addMessage({ role: 'user', content: 'trigger' })).toThrow(/not logged/)
+})
 ```
 
 context.test.ts 需在文件顶部 import 补 `setAssertModelVisibleDebug`（from `../../src/core/session-log`，现已有该 import 行，追加即可）。
@@ -109,21 +111,22 @@ export function isAssertModelVisibleDebug(): boolean {
 同时把 `assertModelVisible` 上方的 JSDoc 注释（line 148-149）末尾的「运行时 hot-path 接线（debug 门控）推迟到 M1b」删除，改为「运行时接线见 ContextManager（debug 门控，默认关闭）」。
 
 `apps/cli/src/core/context.ts`：
+
 - line 7 import 改为：`import { SessionLog, messageToEvents, deriveMessages, assertModelVisible, isAssertModelVisibleDebug } from './session-log'`
 - `addMessage`（line 134-136 写通之后、`this.checkCompression()` 之前）插入：
 
 ```ts
-    if (this.log && isAssertModelVisibleDebug()) {
-      assertModelVisible(this.log.events(), this.messages)
-    }
+if (this.log && isAssertModelVisibleDebug()) {
+  assertModelVisible(this.log.events(), this.messages)
+}
 ```
 
 - `seedMessages`（line 153 `this.reEstimateTokens()` 之后）插入同样的两行断言：
 
 ```ts
-    if (this.log && isAssertModelVisibleDebug()) {
-      assertModelVisible(this.log.events(), this.messages)
-    }
+if (this.log && isAssertModelVisibleDebug()) {
+  assertModelVisible(this.log.events(), this.messages)
+}
 ```
 
 - [ ] **Step 4: 运行测试确认通过**
@@ -143,11 +146,13 @@ git commit -m "feat(session-log): wire assertModelVisible runtime assertion behi
 ## Task 2: compaction/summary 流位置记录（replacedCount）
 
 **Files:**
+
 - Modify: `apps/cli/src/core/session-log.ts`（事件加 `replacedCount` + deriveMessages 位置投影）
 - Modify: `apps/cli/src/core/context.ts`（compact 记录 replacedCount）
 - Test: `apps/cli/test/core/session-log.test.ts`、`apps/cli/test/core/context.test.ts`
 
 **Interfaces:**
+
 - Produces: `compaction/summary` 事件形状变为 `{ type: 'compaction/summary'; at: number; summary: string; replacedCount: number }`（`replacedCount` = 被摘要替换掉的前缀消息数 = `toDrop.length`）。
 
 - [ ] **Step 1: 写失败测试**
@@ -186,19 +191,22 @@ describe('compaction/summary stream position', () => {
 `context.test.ts` 的 `describe('ContextManager log integration')` 内新增：
 
 ```ts
-  it('compact records replacedCount and deriveMessages reproduces post-compaction projection', async () => {
-    const cm = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
-    const log = new SessionLog('compact-position-test')
-    cm.setLog(log)
-    cm.setSummarizer(async () => 'summarized content')
-    for (let i = 0; i < 31; i++) {
-      cm.addMessage({ role: i % 2 === 0 ? 'user' : 'assistant', content: `msg${i}` })
-    }
-    await cm.compact('test')
-    const derived = deriveMessages(log.events())
-    expect(derived[0]).toEqual({ role: 'user', content: '[Earlier conversation summary]: summarized content' })
-    expect(derived).toHaveLength(21) // 1 摘要 + 20 保留
+it('compact records replacedCount and deriveMessages reproduces post-compaction projection', async () => {
+  const cm = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
+  const log = new SessionLog('compact-position-test')
+  cm.setLog(log)
+  cm.setSummarizer(async () => 'summarized content')
+  for (let i = 0; i < 31; i++) {
+    cm.addMessage({ role: i % 2 === 0 ? 'user' : 'assistant', content: `msg${i}` })
+  }
+  await cm.compact('test')
+  const derived = deriveMessages(log.events())
+  expect(derived[0]).toEqual({
+    role: 'user',
+    content: '[Earlier conversation summary]: summarized content',
   })
+  expect(derived).toHaveLength(21) // 1 摘要 + 20 保留
+})
 ```
 
 - [ ] **Step 2: 运行测试确认失败**
@@ -209,6 +217,7 @@ Expected: FAIL——事件字面量 `{ type: 'compaction/summary', at, summary, 
 - [ ] **Step 3: 最小实现**
 
 `apps/cli/src/core/session-log.ts`：
+
 - line 21 事件形状改为：
 
 ```ts
@@ -233,7 +242,13 @@ Expected: FAIL——事件字面量 `{ type: 'compaction/summary', at, summary, 
 `apps/cli/src/core/context.ts` line 184 改为：
 
 ```ts
-        if (this.log) this.log.append({ type: 'compaction/summary', at: Date.now(), summary, replacedCount: toDrop.length })
+if (this.log)
+  this.log.append({
+    type: 'compaction/summary',
+    at: Date.now(),
+    summary,
+    replacedCount: toDrop.length,
+  })
 ```
 
 - [ ] **Step 4: 运行测试确认通过**
@@ -253,12 +268,14 @@ git commit -m "feat(session-log): record compaction summary stream position (rep
 ## Task 3: tool/result 升级 result:ToolResult
 
 **Files:**
+
 - Modify: `apps/cli/src/core/session-log.ts`（事件形状 + messageToEvents/deriveMessages）
 - Modify: `apps/cli/src/core/context.ts`（新增 addToolResult）
 - Modify: `apps/cli/src/core/engine.ts`（工具结果走 addToolResult）
 - Test: `apps/cli/test/core/session-log.test.ts`、`apps/cli/test/core/context.test.ts`
 
 **Interfaces:**
+
 - Produces: `ContextManager.addToolResult(toolUseId: string, result: ToolResult): void`。
 - `ToolResult`（`../shared/types`）：`{ success: boolean; content: string; error?: string }`。
 - 投影内容规则（与 engine 现状 line 610 一致）：`success ? content : (error || content)`。
@@ -270,13 +287,21 @@ git commit -m "feat(session-log): record compaction summary stream position (rep
 ```ts
 describe('tool/result carries full ToolResult', () => {
   it('messageToEvents derives success:true best-effort from a tool_result block', () => {
-    const m: Message = { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'body' }] }
+    const m: Message = {
+      role: 'user',
+      content: [{ type: 'tool_result', tool_use_id: 't1', content: 'body' }],
+    }
     expect(deriveMessages(messageToEvents(m))).toEqual([m])
   })
 
   it('deriveMessages reproduces error content for a failed tool', () => {
     const events: SessionEvent[] = [
-      { type: 'tool/result', at: 1, id: 't1', result: { success: false, content: 'partial', error: 'boom' } },
+      {
+        type: 'tool/result',
+        at: 1,
+        id: 't1',
+        result: { success: false, content: 'partial', error: 'boom' },
+      },
     ]
     expect(deriveMessages(events)).toEqual([
       { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'boom' }] },
@@ -293,7 +318,9 @@ describe('tool/result carries full ToolResult', () => {
   })
 
   it('backward-compat: old tool/result with content:string still derives', () => {
-    const events = [{ type: 'tool/result', at: 1, id: 't1', content: 'legacy' }] as unknown as SessionEvent[]
+    const events = [
+      { type: 'tool/result', at: 1, id: 't1', content: 'legacy' },
+    ] as unknown as SessionEvent[]
     expect(deriveMessages(events)).toEqual([
       { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'legacy' }] },
     ])
@@ -304,17 +331,17 @@ describe('tool/result carries full ToolResult', () => {
 `context.test.ts` 的 `describe('ContextManager log integration')` 内新增：
 
 ```ts
-  it('addToolResult records full result and derives projection', () => {
-    const cm = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
-    const log = new SessionLog('tool-result-test')
-    cm.setLog(log)
-    cm.addToolResult('t1', { success: false, content: 'partial', error: 'boom' })
-    expect(cm.getMessages()).toEqual([
-      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'boom' }] },
-    ])
-    const raw = log.events().find((e) => e.type === 'tool/result')
-    expect(raw).toMatchObject({ id: 't1', result: { success: false, error: 'boom' } })
-  })
+it('addToolResult records full result and derives projection', () => {
+  const cm = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
+  const log = new SessionLog('tool-result-test')
+  cm.setLog(log)
+  cm.addToolResult('t1', { success: false, content: 'partial', error: 'boom' })
+  expect(cm.getMessages()).toEqual([
+    { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'boom' }] },
+  ])
+  const raw = log.events().find((e) => e.type === 'tool/result')
+  expect(raw).toMatchObject({ id: 't1', result: { success: false, error: 'boom' } })
+})
 ```
 
 - [ ] **Step 2: 运行测试确认失败**
@@ -325,6 +352,7 @@ Expected: FAIL——`tool/result` 事件类型无 `result` 字段，`addToolResu
 - [ ] **Step 3: 最小实现**
 
 `apps/cli/src/core/session-log.ts`：
+
 - line 4 import 追加 `ToolResult`：`import type { Message, ToolUseContent, ToolResultContent, ToolResult } from '../shared/types'`
 - line 19 事件形状改为：
 
@@ -335,10 +363,12 @@ Expected: FAIL——`tool/result` 事件类型无 `result` 字段，`addToolResu
 - `messageToEvents` 的 tool_result 拆分（line 28-31）改为：
 
 ```ts
-      if (results.length === 1 && results.length === msg.content.length) {
-        const r = results[0]!
-        return [{ type: 'tool/result', at, id: r.tool_use_id, result: { success: true, content: r.content } }]
-      }
+if (results.length === 1 && results.length === msg.content.length) {
+  const r = results[0]!
+  return [
+    { type: 'tool/result', at, id: r.tool_use_id, result: { success: true, content: r.content } },
+  ]
+}
 ```
 
 - `deriveMessages` 的 `tool/result` 分支（line 63-67）改为：
@@ -357,6 +387,7 @@ Expected: FAIL——`tool/result` 事件类型无 `result` 字段，`addToolResu
 ```
 
 `apps/cli/src/core/context.ts`：
+
 - line 1 import 改为：`import type { Message, ToolResult } from '../shared/index.ts'`
 - 在 `addMessage` 之后（line 140 之后）新增方法：
 
@@ -394,12 +425,14 @@ git commit -m "feat(session-log): upgrade tool/result event to full ToolResult (
 ## Task 4: assistant/chunk 流级 replay
 
 **Files:**
+
 - Modify: `apps/cli/src/core/session-log.ts`（事件类型 + deriveMessages 跳过 + replayChunks）
 - Modify: `apps/cli/src/core/context.ts`（新增 recordChunk）
 - Modify: `apps/cli/src/core/engine.ts`（流循环记录 text chunk）
 - Test: `apps/cli/test/core/session-log.test.ts`、`apps/cli/test/core/context.test.ts`
 
 **Interfaces:**
+
 - Produces: `ContextManager.recordChunk(chunk: string): void`；`replayChunks(log: SessionLog): string[]`。
 
 - [ ] **Step 1: 写失败测试**
@@ -413,7 +446,11 @@ describe('assistant/chunk stream replay', () => {
     log.append({ type: 'assistant/chunk', at: 1, chunk: 'Hel' })
     log.append({ type: 'assistant/chunk', at: 2, chunk: 'lo ' })
     log.append({ type: 'assistant/chunk', at: 3, chunk: 'world' })
-    log.append({ type: 'assistant/message', at: 4, message: { role: 'assistant', content: 'Hello world' } })
+    log.append({
+      type: 'assistant/message',
+      at: 4,
+      message: { role: 'assistant', content: 'Hello world' },
+    })
     expect(replayChunks(log)).toEqual(['Hel', 'lo ', 'world'])
   })
 
@@ -431,15 +468,15 @@ describe('assistant/chunk stream replay', () => {
 `context.test.ts` 的 `describe('ContextManager log integration')` 内新增：
 
 ```ts
-  it('recordChunk appends chunks to log but not to projection', () => {
-    const cm = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
-    const log = new SessionLog('chunk-ctx-test')
-    cm.setLog(log)
-    cm.recordChunk('Hel')
-    cm.recordChunk('lo')
-    expect(cm.getMessages()).toEqual([])
-    expect(log.events().filter((e) => e.type === 'assistant/chunk')).toHaveLength(2)
-  })
+it('recordChunk appends chunks to log but not to projection', () => {
+  const cm = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
+  const log = new SessionLog('chunk-ctx-test')
+  cm.setLog(log)
+  cm.recordChunk('Hel')
+  cm.recordChunk('lo')
+  expect(cm.getMessages()).toEqual([])
+  expect(log.events().filter((e) => e.type === 'assistant/chunk')).toHaveLength(2)
+})
 ```
 
 - [ ] **Step 2: 运行测试确认失败**
@@ -450,6 +487,7 @@ Expected: FAIL——`assistant/chunk` 事件类型不存在、`replayChunks`/`re
 - [ ] **Step 3: 最小实现**
 
 `apps/cli/src/core/session-log.ts`：
+
 - 事件联合（line 18 后）新增：
 
 ```ts
@@ -471,7 +509,9 @@ Expected: FAIL——`assistant/chunk` 事件类型不存在、`replayChunks`/`re
 export function replayChunks(log: SessionLog): string[] {
   return log
     .events()
-    .filter((e): e is Extract<SessionEvent, { type: 'assistant/chunk' }> => e.type === 'assistant/chunk')
+    .filter(
+      (e): e is Extract<SessionEvent, { type: 'assistant/chunk' }> => e.type === 'assistant/chunk',
+    )
     .map((e) => e.chunk)
 }
 ```
@@ -490,10 +530,10 @@ export function replayChunks(log: SessionLog): string[] {
 `apps/cli/src/core/engine.ts`：流循环 line 487-489 的 text 分支改为：
 
 ```ts
-        if (chunk.type === 'text' && chunk.content) {
-          assistantContent += chunk.content
-          this.context.recordChunk(chunk.content)
-        }
+if (chunk.type === 'text' && chunk.content) {
+  assistantContent += chunk.content
+  this.context.recordChunk(chunk.content)
+}
 ```
 
 - [ ] **Step 4: 运行测试确认通过**
@@ -513,6 +553,7 @@ git commit -m "feat(session-log): add assistant/chunk stream-level replay (recor
 ## Self-Review
 
 **Spec coverage（对照 spec §4.2/§4.3/§4.1）：**
+
 - §4.2 `tool/result` 含 `result: ToolResult` → Task 3 ✅
 - §4.2 `assistant/chunk` 原始块保 replay 保真 → Task 4 ✅
 - §4.3 运行时 fail-loud 断言 → Task 1 ✅
