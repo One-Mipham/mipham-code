@@ -215,4 +215,31 @@ describe('SessionStore', () => {
       SessionStore.delete('test-savelog2')
     })
   })
+
+  describe('load old-format fallback + new-format derive', () => {
+    it('loads a new-format (event log) session', () => {
+      const log = new SessionLog('test-load-new')
+      log.append({ type: 'session/start', at: 1, sessionId: 'test-load-new', provider: 'openai', model: 'gpt' })
+      log.append({ type: 'user/message', at: 1, message: { role: 'user', content: 'Hello' } })
+      log.append({ type: 'assistant/message', at: 1, message: { role: 'assistant', content: 'Hi' } })
+      SessionStore.saveLog('test-load-new', log)
+
+      const loaded = SessionStore.load('test-load-new')
+      expect(loaded).not.toBeNull()
+      expect(loaded!.messages).toHaveLength(2)
+      expect(loaded!.messages[0]!.content).toBe('Hello')
+      expect(loaded!.metadata.provider).toBe('openai')
+      expect(loaded!.metadata.model).toBe('gpt')
+
+      SessionStore.delete('test-load-new')
+    })
+
+    it('still loads an old-format (snapshot) session', () => {
+      SessionStore.save('test-load-old', [{ role: 'user', content: 'legacy' }], { provider: 'anthropic' })
+      const loaded = SessionStore.load('test-load-old')
+      expect(loaded).not.toBeNull()
+      expect(loaded!.messages).toHaveLength(1)
+      expect(loaded!.metadata.provider).toBe('anthropic')
+    })
+  })
 })

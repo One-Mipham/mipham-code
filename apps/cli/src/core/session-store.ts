@@ -134,14 +134,40 @@ export class SessionStore {
 
     try {
       const raw = readFileSync(path, 'utf-8')
-      const session = JSON.parse(raw) as StoredSession
-      // Validate structure
-      if (!session.metadata || !Array.isArray(session.messages)) {
-        return null
+      // 旧格式：单 JSON 对象 {metadata, messages}
+      const parsed = JSON.parse(raw) as unknown
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        'metadata' in parsed &&
+        Array.isArray((parsed as { messages?: unknown }).messages)
+      ) {
+        return parsed as StoredSession
       }
-      return session
     } catch {
-      return null
+      // 多行 JSONL → 新格式，走事件解析
+    }
+    return SessionStore.logToStoredSession(name, SessionLog.open(name))
+  }
+
+  private static logToStoredSession(name: string, log: SessionLog): StoredSession | null {
+    const events = log.events()
+    const start = events.find((e) => e.type === 'session/start') as
+      | { type: 'session/start'; at: number; sessionId: string; provider?: string; model?: string; cwd?: string }
+      | undefined
+    const messages = deriveMessages(events)
+    const stat = statSync(filePath(name))
+    return {
+      metadata: {
+        name,
+        createdAt: stat.mtime.toISOString(),
+        updatedAt: stat.mtime.toISOString(),
+        provider: start?.provider || 'unknown',
+        model: start?.model || 'unknown',
+        messageCount: messages.length,
+        cwd: start?.cwd,
+      },
+      messages,
     }
   }
 
