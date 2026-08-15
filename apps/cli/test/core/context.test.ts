@@ -494,4 +494,20 @@ describe('ContextManager log integration', () => {
     expect(cm.getMessages()).toEqual([])
     expect(log.events().filter((e) => e.type === 'assistant/chunk')).toHaveLength(2)
   })
+
+  it('compact derives replacedCount from the log, not the drifted projection', async () => {
+    const cm = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
+    const log = new SessionLog('compact-drift-test')
+    cm.setLog(log)
+    cm.setSummarizer(async () => 'S')
+    for (let i = 0; i < 40; i++) {
+      cm.addMessage({ role: i % 2 === 0 ? 'user' : 'assistant', content: `msg${i}` })
+    }
+    cm.replaceMessages(cm.getMessages().slice(8)) // 投影缩短至 32，日志仍 40
+    await cm.compact('test')
+    const ev = log.events().find((e) => e.type === 'compaction/summary') as {
+      replacedCount: number
+    }
+    expect(ev.replacedCount).toBe(40 - 20) // 20（取自日志 40），而非 toDrop.length=12
+  })
 })

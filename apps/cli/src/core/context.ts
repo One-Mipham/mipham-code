@@ -207,7 +207,11 @@ export class ContextManager {
           content: `[Earlier conversation summary]: ${summary}`,
         }
         this.messages = [summaryMsg, ...this.messages.slice(-keep)]
-        if (this.log) this.log.append({ type: 'compaction/summary', at: Date.now(), summary, replacedCount: toDrop.length })
+        if (this.log) {
+          const derivedCount = deriveMessages(this.log.events()).length
+          const replacedCount = Math.max(0, derivedCount - keep)
+          this.log.append({ type: 'compaction/summary', at: Date.now(), summary, replacedCount })
+        }
       } catch {
         // Fall back to truncation on summarizer failure
         this.messages = this.messages.slice(-keep)

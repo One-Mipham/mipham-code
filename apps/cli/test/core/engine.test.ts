@@ -10,6 +10,7 @@ import { Context } from '../../src/vajra'
 import type { Llm } from '../../src/providers/llm'
 import { mountLlm } from '../../src/providers/llm'
 import { recordLlm, replayLlm } from '../../src/providers/llm-replay'
+import { SessionLog, replayChunks } from '../../src/core/session-log'
 
 // ── Helpers ──
 
@@ -278,6 +279,27 @@ describe('QueryEngine', () => {
 
       expect(chunks.some((c) => c.type === 'text' && c.content === 'from-seam')).toBe(true)
       expect(chunks.some((c) => c.type === 'text' && c.content === 'from-registry')).toBe(false)
+    })
+  })
+
+  describe('process — session log chunk recording', () => {
+    it('records assistant stream chunks on the primary process loop', async () => {
+      const registry = mockProviderRegistry(async function* () {
+        yield { type: 'text', content: 'hello' }
+        yield { type: 'stop' }
+      })
+
+      const context = mockContext()
+      const log = new SessionLog('engine-chunk-test')
+      context.setLog(log)
+
+      const engine = new QueryEngine(registry, context, makeToolMap([]))
+
+      for await (const _ of engine.process('hi')) {
+        /* drain */
+      }
+
+      expect(replayChunks(log)).toEqual(['hello'])
     })
   })
 

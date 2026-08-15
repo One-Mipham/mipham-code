@@ -486,6 +486,7 @@ export class QueryEngine {
 
         if (chunk.type === 'text' && chunk.content) {
           assistantContent += chunk.content
+          this.context.recordChunk(chunk.content)
         }
 
         if (chunk.reasoning_content) {
