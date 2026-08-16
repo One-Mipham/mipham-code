@@ -9,10 +9,10 @@
 # Use --ci only when you want pre-push verification locally.
 #
 # Updates:
-#   1. apps/cli/package.json              — "version" field
-#   2. packages/shared/src/package-info.ts — PACKAGE_VERSION constant
-#   3. packages/shared/package-info.json   — PACKAGE_VERSION field
-#   4. pnpm-lock.yaml                     — regenerated from package.json changes
+#   1. apps/cli/package.json                — "version" field
+#   2. package-info.ts (shared + vendored)  — PACKAGE_VERSION constant
+#   3. packages/shared/package-info.json     — PACKAGE_VERSION field
+#   4. pnpm-lock.yaml                       — regenerated from package.json changes
 #   5. Optionally: local CI checks (with --ci flag)
 
 set -euo pipefail
@@ -63,13 +63,15 @@ fs.writeFileSync('apps/cli/package.json', JSON.stringify(pkg, null, 2) + '\n');
 "
 echo "         ✓ $NEW_VERSION"
 
-# ── Step 3: Update packages/shared/src/package-info.ts ──
-echo "  [2/6] packages/shared/src/package-info.ts"
-if [[ "$OSTYPE" == "darwin"* ]]; then
-  sed -i '' "s/PACKAGE_VERSION = '[^']*'/PACKAGE_VERSION = '$NEW_VERSION'/" packages/shared/src/package-info.ts
-else
-  sed -i "s/PACKAGE_VERSION = '[^']*'/PACKAGE_VERSION = '$NEW_VERSION'/" packages/shared/src/package-info.ts
-fi
+# ── Step 3: Update package-info.ts (shared + vendored) ──
+echo "  [2/6] package-info.ts (shared + vendored)"
+for f in packages/shared/src/package-info.ts apps/cli/src/shared/package-info.ts; do
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    sed -i '' "s/PACKAGE_VERSION = '[^']*'/PACKAGE_VERSION = '$NEW_VERSION'/" "$f"
+  else
+    sed -i "s/PACKAGE_VERSION = '[^']*'/PACKAGE_VERSION = '$NEW_VERSION'/" "$f"
+  fi
+done
 echo "         ✓ $NEW_VERSION"
 
 # ── Step 4: Update packages/shared/package-info.json ──
@@ -143,7 +145,7 @@ if $RUN_CI; then
   if [ $FAILED -eq 0 ]; then
     echo "✅ Local CI passed! Ready to commit:"
     echo ""
-    echo "   git add apps/cli/package.json packages/shared/src/package-info.ts packages/shared/package-info.json pnpm-lock.yaml"
+    echo "   git add apps/cli/package.json packages/shared/src/package-info.ts apps/cli/src/shared/package-info.ts packages/shared/package-info.json pnpm-lock.yaml"
     echo "   git commit -m \"chore: bump version to $NEW_VERSION\""
     echo "   git push origin main"
     echo ""
@@ -158,7 +160,7 @@ else
   echo ""
   echo "✅ Version bumped! Ready to commit:"
   echo ""
-  echo "   git add apps/cli/package.json packages/shared/src/package-info.ts packages/shared/package-info.json pnpm-lock.yaml"
+  echo "   git add apps/cli/package.json packages/shared/src/package-info.ts apps/cli/src/shared/package-info.ts packages/shared/package-info.json pnpm-lock.yaml"
   echo "   git commit -m \"chore: bump version to $NEW_VERSION\""
   echo "   git push origin main"
   echo ""

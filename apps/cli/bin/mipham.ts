@@ -1094,17 +1094,9 @@ async function main() {
   process.on('SIGINT', restoreTerminal)
   process.on('SIGTERM', restoreTerminal)
 
-  // ── Read version fresh from package.json at startup (bypasses Bun module cache) ──
-  const { readFileSync } = await import('node:fs')
-  const { join } = await import('node:path')
-  let APP_VERSION = '0.0.0'
-  try {
-    const pkgPath = join(import.meta.dirname!, '..', 'package.json')
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
-    APP_VERSION = pkg.version
-  } catch {
-    // fallback — version will be '0.0.0'
-  }
+  // ── Version: build-time constant (bundled into the compiled binary) ──
+  const { PACKAGE_NAME, PACKAGE_VERSION } = await import('../src/shared/package-info')
+  const APP_VERSION = PACKAGE_VERSION
 
   // ── Version flag ──────────────────────────────────────────────────────────
   if (
@@ -1112,8 +1104,7 @@ async function main() {
     process.argv.includes('-v') ||
     process.argv.includes('-V')
   ) {
-    const pkg = JSON.parse(readFileSync(join(import.meta.dirname!, '..', 'package.json'), 'utf-8'))
-    console.log(`${pkg.name} v${pkg.version}`)
+    console.log(`${PACKAGE_NAME} v${PACKAGE_VERSION}`)
     process.exit(0)
   }
 

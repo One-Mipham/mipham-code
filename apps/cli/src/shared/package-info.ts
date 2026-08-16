@@ -1,22 +1,15 @@
 /**
  * Mipham Code — package metadata (bundled version)
  *
- * Reads directly from the CLI's own package.json at runtime
- * so npm consumers don't need the @mipham/shared workspace package.
+ * Compile-time constants (bundled into the compiled binary — no runtime
+ * package.json read). Version is synced by scripts/bump-version.sh.
  */
 
-import { readFileSync } from 'node:fs'
-import path from 'node:path'
-
-// resolve package.json relative to this source file
-const PKG_PATH = path.join(import.meta.dirname!, '..', '..', 'package.json')
-const pkg = JSON.parse(readFileSync(PKG_PATH, 'utf-8'))
-
 /** npm 包全名（含 scope） */
-export const PACKAGE_NAME: string = pkg.name
+export const PACKAGE_NAME = '@miphamai/cli' as const
 
 /** 当前发布版本 */
-export const PACKAGE_VERSION: string = pkg.version
+export const PACKAGE_VERSION = '0.39.1' as const
 
 /** npm install 全局安装命令 */
 export const NPM_INSTALL_COMMAND = `npm install -g ${PACKAGE_NAME}` as const

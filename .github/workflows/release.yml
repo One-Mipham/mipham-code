@@ -38,7 +38,12 @@ jobs:
 
       - name: Build binary
         working-directory: apps/cli
-        run: bun build --compile --minify --external react-devtools-core --target=${{ matrix.target }} ./bin/mipham.ts --outfile dist/${{ matrix.binary }}
+        run: bun build --compile --minify --target=${{ matrix.target }} ./bin/mipham.ts --outfile dist/${{ matrix.binary }}
+
+      - name: Smoke test binary
+        working-directory: apps/cli
+        shell: bash
+        run: ./dist/${{ matrix.binary }} --version
 
       - name: Upload artifact
         uses: actions/upload-artifact@v6
@@ -75,9 +80,16 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       - uses: pnpm/action-setup@v5
 
       - run: pnpm install --frozen-lockfile
+
+      - name: Smoke test npm package (pack + clean install + resolve imports)
+        run: bash scripts/smoke.sh apps/cli
 
       - name: Setup npm auth
         run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
