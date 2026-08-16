@@ -29,8 +29,7 @@
     "bin/",
     "src/",
     "skills/",
-    "assets/",
-    "dist/"
+    "assets/"
   ],
   "engines": {
     "node": ">=22.0.0"
