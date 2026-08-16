@@ -16,6 +16,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
+import alignmentVocabulary from './alignment-vocabulary.json' with { type: 'json' }
 
 // ── Types ──
 
@@ -36,6 +37,8 @@ export interface ConstitutionalPrinciple {
   tools?: string[]
   /** Optional: human explanation of why this principle exists */
   rationale?: string
+  /** Optional: which alignment value (karuna/prajna/vajra) this principle operationalizes. */
+  facet?: string
 }
 
 export interface MiphamConstitution {
@@ -47,78 +50,12 @@ export interface MiphamConstitution {
   principles: ConstitutionalPrinciple[]
 }
 
-// ── Default Constitution ──
+// ── Default Constitution (derived from the shared alignment vocabulary) ──
 
-const DEFAULT_CONSTITUTION: MiphamConstitution = {
-  version: '1.0.0',
-  last_modified: '2026-08-12',
-  principles: [
-    {
-      id: 'never-fabricate',
-      text: '禁止编造数据、文件内容、API 响应或测试结果。每个输出必须可追溯至真实来源或明确标注为推测。',
-      enforce: 'block',
-      audit_pattern:
-        '(fabricated|made.up|dummy.data|fake\s+(response|result|data)|placeholder\s+data)',
-      scope: 'all-tools',
-      rationale: 'MiphamAI4S 科学诚信原则：编造数据是不可接受的底线违反。适用于所有工具和输出。',
-    },
-    {
-      id: 'no-credential-leak',
-      text: '禁止在代码、日志、配置文件、提交信息、对话输出中写入或泄露凭据、API 密钥、令牌。',
-      enforce: 'block',
-      audit_pattern: '(apiKey|api_key|password|secret|token|credential)\\s*[=:]\\s*[\'"][^\'"]{8,}',
-      scope: 'Write,Edit,Bash',
-      rationale: 'Rismed Ronxin Capital 合规要求：硬编码凭据违反安全底线。',
-    },
-    {
-      id: 'minimal-change',
-      text: '只修改被明确要求的文件和代码。不顺手改动相邻代码、格式或注释。不重构未损坏的代码。',
-      enforce: 'warn',
-      scope: 'Write,Edit',
-      tools: ['Write', 'Edit'],
-      rationale: 'AI 编码原则 #3（精准修改）：diff 中每一行改动都应可直接追溯到用户要求。',
-    },
-    {
-      id: 'think-before-coding',
-      text: '不确定时必须提问，不得自行假设。存在多种解读时呈现所有选项，不沉默选择一个。',
-      enforce: 'warn',
-      scope: 'pre-inference',
-      hook: 'pre-inference',
-      rationale: 'AI 编码原则 #1（编码前先思考）：偏差谨慎。',
-    },
-    {
-      id: 'simplicity-first',
-      text: '只写解决问题所需的最小代码。不添加未被要求的灵活性、可配置性或抽象层。',
-      enforce: 'warn',
-      scope: 'Write,Edit',
-      tools: ['Write', 'Edit'],
-      rationale: 'AI 编码原则 #2（简洁优先）：一次性代码不需要抽象层。',
-    },
-    {
-      id: 'respect-permissions',
-      text: '尊重用户权限设置。绝不绕过或降级权限检查。Bypass 模式仅限用户明确授权。',
-      enforce: 'block',
-      scope: 'all-tools',
-      rationale: '权限系统是最后一道防线。任何绕过尝试都应被拦截并记录。',
-    },
-    {
-      id: 'no-destructive-without-confirmation',
-      text: '删除文件、强制推送、修改生产配置等破坏性操作前必须获得用户确认。',
-      enforce: 'block',
-      audit_pattern: '(rm\\s+-rf|git\\s+push\\s+--force|DROP\\s+TABLE|DELETE\\s+FROM)',
-      scope: 'Bash',
-      tools: ['Bash'],
-      rationale: '防止不可逆操作。即使 bypass 模式也应二次确认。',
-    },
-    {
-      id: 'persist-crsi-learning',
-      text: '每次工具调用失败后必须记录 ErrorSignature 到 ErrorSignatureDB。从错误中持续学习。',
-      enforce: 'auto',
-      scope: 'post-tool-use',
-      hook: 'post-tool-use',
-      rationale: 'CRSI 核心机制：不重复犯同样的错误。自动执行，无需人类参与。',
-    },
-  ],
+export const DEFAULT_CONSTITUTION: MiphamConstitution = {
+  version: alignmentVocabulary.version,
+  last_modified: '2026-08-16',
+  principles: alignmentVocabulary.principles as unknown as ConstitutionalPrinciple[],
 }
 
 // ── Loader ──
@@ -307,6 +244,9 @@ export class ConstitutionLoader {
       case 'rationale':
         p.rationale = val
         break
+      case 'facet':
+        p.facet = val
+        break
     }
   }
 
@@ -340,6 +280,7 @@ export class ConstitutionLoader {
       lines.push(`  - id: "${p.id}"`)
       lines.push(`    text: "${p.text}"`)
       lines.push(`    enforce: ${p.enforce}`)
+      if (p.facet) lines.push(`    facet: ${p.facet}`)
       if (p.audit_pattern) lines.push(`    audit_pattern: "${p.audit_pattern}"`)
       if (p.scope) lines.push(`    scope: "${p.scope}"`)
       if (p.hook) lines.push(`    hook: ${p.hook}`)
