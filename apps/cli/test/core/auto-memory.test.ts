@@ -394,11 +394,7 @@ describe('AutoMemoryEngine', () => {
     it('does not throw when the rule engine is not wired', () => {
       const tracker = new EffectivenessTracker(testDir)
       const patternAnalyzer = { toToolRule: vi.fn() } as unknown as PatternAnalyzer
-      engine.setCrsiPipeline(
-        patternAnalyzer,
-        undefined as unknown as ExperienceRuleEngine,
-        tracker,
-      )
+      engine.setCrsiPipeline(patternAnalyzer, undefined as unknown as ExperienceRuleEngine, tracker)
       for (let i = 0; i < 10; i++) tracker.recordApplication('rule-x', i >= 8)
       tracker.evaluate()
       for (let i = 0; i < 10; i++) tracker.recordApplication('rule-x', i >= 8)

@@ -672,9 +672,7 @@ const crsiRestoreCmd: CommandHandler = (ctx, args) => {
 function crsiSparkline(values: number[]): string {
   if (values.length === 0) return '—'
   const chars = '▁▂▃▄▅▆▇█'
-  return values
-    .map((v) => chars[Math.min(Math.max(Math.round(v * 7), 0), 7)] ?? '▁')
-    .join('')
+  return values.map((v) => chars[Math.min(Math.max(Math.round(v * 7), 0), 7)] ?? '▁').join('')
 }
 
 const crsiStatsCmd: CommandHandler = async (ctx) => {
@@ -715,7 +713,9 @@ const crsiStatsCmd: CommandHandler = async (ctx) => {
       const rate =
         eff.appliedCount > 0 ? Math.round((eff.successAfterCount / eff.appliedCount) * 100) : 0
       const trend = crsiSparkline(eff.evaluationHistory.map((h) => 1 - h.failureRate))
-      lines.push(`| ${eff.ruleId} | ${icon} ${eff.status} | ${eff.appliedCount} | ${rate}% | ${trend} |`)
+      lines.push(
+        `| ${eff.ruleId} | ${icon} ${eff.status} | ${eff.appliedCount} | ${rate}% | ${trend} |`,
+      )
     }
 
     const disabled = effs.filter((e) => e.status === 'disabled')
