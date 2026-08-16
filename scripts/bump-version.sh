@@ -55,7 +55,7 @@ echo "📦 Bumping: $CURRENT → $NEW_VERSION"
 echo ""
 
 # ── Step 2: Update apps/cli/package.json ──
-echo "  [1/6] apps/cli/package.json"
+echo "  [1/7] apps/cli/package.json"
 node -e "
 const fs = require('fs');
 const pkg = JSON.parse(fs.readFileSync('apps/cli/package.json','utf8'));
