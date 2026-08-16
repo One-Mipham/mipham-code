@@ -4,8 +4,8 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.2.2
-> **最后更新**: 2026-08-17 — Vajra-Hṛdaya 自建内核落地（M0→M3+真叶子）+ 对齐缝（第 4 缝）+ 愿力层（宪法序言注入 self-critique）+ post-CRSI 五条收官 + v0.41.0（未知 flag/option 拒绝 + 测试隔离）
+> **版本**: 2.3.0
+> **最后更新**: 2026-08-17 — CRSI 受约束自改进闭环六块落地（自我认知 `/crsi inventory` + 定界 + 闭环度量 + 沙箱入口 `/crsi modify` + producer `/crsi propose` + eval harness `/crsi eval`），补 AI 对话 path A 四缺口；红队 JSON 转义假阴性修复
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -26,16 +26,23 @@ Mipham Code 是开源（Apache 2.0）的多模型智能编程终端，基于 Bun
 
 Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvement）**——华安麦逄人工智能对硅谷 RSI（Recursive Self-Improvement）概念的品牌化表达，被视为取代 AGI 的 AI 终极巅峰。
 
-当前 CRSI 工程实现包括三个子系统：
+当前 CRSI 工程实现包括三个子系统 + 一个**受约束自改进闭环**：
 
 | 子系统        | 组件                                                                             |    状态     |
 | ------------- | -------------------------------------------------------------------------------- | :---------: |
 | 🧠 学习       | PatternAnalyzer + AutoMemoryEngine + ExperienceRuleEngine + EffectivenessTracker | ✅ 2,121 行 |
 | 🛡️ 免疫 (SIS) | ErrorSignatureDB + PreFlightChecker                                              | ✅ P0 完成  |
-| 🔒 安全       | CrsiSandbox（5 阶段受控自修改）                                                  |  ✅ 551 行  |
+| 🔒 安全       | CrsiSandbox（5 阶段受控自修改）+ 只读边界（PROTECTED_PATHS）                      |  ✅ 551 行  |
 
-CLI 命令：`/crsi rules|disable|analyze|restore|stats|health` + `/sis errors|stats|clear`
-测试：1,141 测试（含 26 个 SIS 测试）
+**受约束自改进闭环**（`执行 → 判定 → 反思 → 产出 → 验证 → 批准 → 固化`）：
+
+- **自我认知** `/crsi inventory` — 能力自报告，聚合 CRSI/SIS/宪法实时状态；系统提示注入「回答能力边界先查状态」规则
+- **沙箱入口** `/crsi modify` — `core/crsi-modify.ts` 两阶段闸门（worktree → 测试 → diff → `--approve`/`--reject`）
+- **producer** `/crsi propose` — `core/crsi-producer.ts` 模板化（无 LLM）把失败信号转成教训文件 `crsi-lessons.md`
+- **eval harness** `/crsi eval` — `core/eval-harness.ts` 冻结 10 条 ground-truth 契约（规则/宪法/沙箱边界/红队）+ rewards 日志 `~/.mipham/crsi/eval-scores.jsonl`，`runCrsiModification` 以「分数不退化」为第二道闸
+
+CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose|eval` + `/sis errors|stats|clear`
+测试：1,486 测试（1484 passed + 2 skipped）
 
 ---
 
@@ -150,9 +157,9 @@ pnpm format       # Prettier
 
 双轨运行时：standard 轨用于社区 Skills，mipham 轨用于 MiphamAI 专有功能。
 
-### Slash 命令系统（89 个）
+### Slash 命令系统（93 个）
 
-按分类分布：Session & Identity（21）、Workflow（16）、Tools & Skills（13）、Model & Provider（11）、Project（7）、Code Quality（5）、History（4）、GitHub（4）、Environment（4）、Account（3）、Agents（2）、Artifact（1）、Other（1）。
+按分类分布：Session & Identity（21）、Workflow（16）、Tools & Skills（17）、Model & Provider（11）、Project（7）、Code Quality（5）、History（4）、GitHub（4）、Environment（4）、Account（3）、Agents（2）、Artifact（1）、Other（1）。
 
 ### 记忆系统
 
@@ -217,7 +224,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
 | E2E      | 1       | 8        | full-pipeline                                 |
 | Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **111** | **1464** | **0 失败** ✅（1462 passed + 2 skipped）      |
+| **合计** | **115** | **1486** | **0 失败** ✅（1484 passed + 2 skipped）      |
 
 > 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
 
@@ -342,6 +349,15 @@ mipham-code 变更（包名/版本）
 5. ✅ **可观测性** — metrics 激活 + Daemon 结构化 JSON logger
 6. ✅ **Daemon 后台持久化** — 5 阶段完成（核心基础设施 → 会话持久化 → Agent 系统 → Goals+Schedules → 外部 API 安全），worker 继承 6 级权限系统
 
+**已完成（2026-08-17 CRSI 受约束自改进闭环六块）**：
+
+7. ✅ **自我认知** — `/crsi inventory` 能力自报告 + 系统提示「先查状态再答能力」规则
+8. ✅ **定界** — 沙箱只读边界（PROTECTED_PATHS：宪法/eval harness/改进机制不可自改）
+9. ✅ **闭环度量** — `exit` 兜底 flush（有效性评估真正生效）+ 测试隔离修复（`rule-engine.test.ts` 曾污染真实 `~/.mipham`）
+10. ✅ **沙箱入口** — `/crsi modify` 两阶段闸门（worktree → 全量测试 → diff → `--approve`/`--reject`）
+11. ✅ **producer** — `/crsi propose` 失败信号转教训文件（模板化，无 LLM）
+12. ✅ **eval harness** — `/crsi eval` 冻结 10 条 ground-truth 契约（规则/宪法/沙箱边界/红队）+ rewards 日志 + 防退化闸
+
 **待办**：
 
 1. **VS Code 扩展发布** — 发布到 VS Code Marketplace
@@ -350,6 +366,7 @@ mipham-code 变更（包名/版本）
 4. **1M 上下文窗口** — 支持超长上下文模型
 5. **多语言国际化** — CLI 和 Web 的 i18n 支持
 6. **内核后续收尾** — `toolContext` 改名 `vajraContext`、删死代码（setSkillsLoader/replaceMessages 等）、SubAgent 三 spawn 点迁 ctx.llm
+7. **CRSI 行为任务集** — ground-truth 编码任务（让 producer 从「教训」毕业到改 skill/prompt，使 eval harness 从「防退化」升级到「证明更好」）；`persistAll()` 反思持久化死代码收尾
 
 ---
 
@@ -357,6 +374,7 @@ mipham-code 变更（包名/版本）
 
 | 版本  | 日期       | 变更内容                                                                                                                                                                                                                                                                      | 维护人     |
 | ----- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| 2.3.0 | 2026-08-17 | CRSI 受约束自改进闭环六块落地：自我认知 `/crsi inventory` + 定界（沙箱 PROTECTED_PATHS 只读边界）+ 闭环度量（exit 兜底 flush + 测试隔离）+ 沙箱入口 `/crsi modify` + producer `/crsi propose`（教训文件）+ eval harness `/crsi eval`（10 条 ground-truth 契约 + rewards 日志 + 防退化闸）。修复红队 `JSON.stringify` 转义假阴性（`no-credential-leak` 引号匹配）。1486 测试（1484 passed + 2 skipped） | 技术委员会 |
 | 2.2.2 | 2026-08-17 | 愿力层：宪法 `preamble` 序言（悲/智/金刚 正向誓愿）从对齐词汇表 values 派生，注入 `self-critique` 审计提示词（先愿力后禁令）；抽 `buildCritiquePrompt` 纯函数。1464 测试（1462 passed + 2 skipped）                                                                           | 技术委员会 |
 | 2.2.1 | 2026-08-16 | Vajra-Hṛdaya 对齐缝（第 4 缝）：`Service.align?` 声明原则 id + `ctx.constitution` 缝（`Constitution` 接口 + `CONSTITUTION_KEY`）+ `mount()` 挂载前对齐门（声明未知 id 拒绝挂载，`core/constitution-seam.ts` 桥接 `ConstitutionLoader`）。1454 测试（1452 passed + 2 skipped） | 技术委员会 |
 | 2.2.0 | 2026-08-16 | Vajra-Hṛdaya 自建内核落地（M0 原语/M1 会话日志/M2 三缝/M3 声明式组合/真叶子 plan-runner/gap①-④ 绞杀收官）；post-CRSI 五条完成（发布冒烟测试/内核收口/CRSI 有效性度量/分发触达/可观测性）；v0.41.0（未知 flag/option 拒绝执行 + 跨会话测试隔离）。1449 测试                    | 技术委员会 |
