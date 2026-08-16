@@ -12,6 +12,7 @@ import type { Message } from '../shared/types.js'
 import { McpClient } from '../mcp/client'
 import { buildCapabilityReport } from '../core/capability-inventory'
 import { runCrsiModification, approvePending, rejectPending, hasPending } from '../core/crsi-modify'
+import { produceCrsiProposal, LESSONS_FILE } from '../core/crsi-producer'
 import { NPM_UPDATE_COMMAND, PACKAGE_VERSION } from '../shared/index.ts'
 import { getPreference } from '../config/preferences'
 import { loadCrossSessionConfig } from '../config/loader'
@@ -783,6 +784,51 @@ const crsiModifyCmd: CommandHandler = async (ctx, args) => {
     content:
       `✅ 测试通过。审阅下方 diff：\n\n${result.diff}\n\n` +
       '/crsi modify --approve  合并\n/crsi modify --reject   丢弃',
+  }
+}
+
+const crsiProposeCmd: CommandHandler = async (ctx) => {
+  if (hasPending()) {
+    return { content: '⚠️ 已有待批准的修改。先 /crsi modify --approve 或 --reject。' }
+  }
+
+  const insights = ctx.engine.getAutoMemory?.()?.accumulatedInsights ?? []
+  let metaRules: Parameters<typeof produceCrsiProposal>[1] = []
+  try {
+    metaRules = ctx.engine.getMetaRuleEngine?.()?.analyze().metaRules ?? []
+  } catch {
+    metaRules = []
+  }
+
+  // 教训文件按仓库根解析（沙箱的 filePath 是仓库根相对）。
+  let current = ''
+  try {
+    const { readFileSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const root = execSync('git rev-parse --show-toplevel', {
+      timeout: 5000,
+      encoding: 'utf-8',
+    }).trim()
+    current = readFileSync(join(root, LESSONS_FILE), 'utf-8')
+  } catch {
+    current = ''
+  }
+
+  const proposal = produceCrsiProposal(insights, metaRules, current, new Date().toISOString())
+
+  if (!proposal) {
+    return { content: '没有足够的失败信号（autoApplicable insight 或高置信元规则）来生成教训。' }
+  }
+
+  const result = runCrsiModification(proposal)
+  if (!result.applied || result.phase === 'failed') {
+    return { content: `❌ 生成失败（phase: ${result.phase}）。\n${result.error ?? ''}` }
+  }
+
+  return {
+    content:
+      `✅ 已生成教训并跑过测试。审阅 diff：\n\n${result.diff}\n\n` +
+      '/crsi modify --approve 合并 | /crsi modify --reject 丢弃',
   }
 }
 
@@ -4370,6 +4416,7 @@ const commandsListCmd: CommandHandler = () => {
     '/crsi health': 'Tools & Skills',
     '/crsi inventory': 'Tools & Skills',
     '/crsi modify': 'Tools & Skills',
+    '/crsi propose': 'Tools & Skills',
     '/crsi meta': 'Tools & Skills',
     '/crsi interpret': 'Tools & Skills',
     '/crsi critique': 'Tools & Skills',
@@ -4524,6 +4571,7 @@ registry.set('/crsi stats', crsiStatsCmd)
 registry.set('/crsi health', crsiHealthCmd)
 registry.set('/crsi inventory', crsiInventoryCmd)
 registry.set('/crsi modify', crsiModifyCmd)
+registry.set('/crsi propose', crsiProposeCmd)
 registry.set('/crsi meta', crsiMetaCmd)
 registry.set('/crsi interpret', crsiInterpretCmd)
 registry.set('/crsi critique', crsiCritiqueCmd)
@@ -4701,6 +4749,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/crsi health': 'CRSI + SIS unified health dashboard with scoring',
   '/crsi inventory': 'Live capability self-report — CRSI/SIS/constitution state',
   '/crsi modify': 'Run a code self-modification through the sandbox (worktree → tests → approve)',
+  '/crsi propose': 'Produce a codified CRSI lesson from failure signals, gated by the sandbox',
   '/crsi meta': 'RSI Level 3 meta-rule analysis — rules that improve the rules',
   '/crsi interpret': 'Tool-call behavior dashboard — error patterns, usage, health',
   '/crsi critique': 'Enable/disable RLAIF self-critique on tool calls',
