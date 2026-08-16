@@ -5,6 +5,7 @@
 import type { DaemonDatabase } from './database'
 import type { WorkerPool } from './worker-pool'
 import type { DaemonSchedule } from './types'
+import { logger } from './logger'
 
 // Simple minute-granularity cron expression parser.
 //
@@ -125,7 +126,7 @@ export class ScheduleManager {
       if (!worker) continue
 
       worker.processPrompt(schedule.prompt).catch((err: unknown) => {
-        console.error(`ScheduleManager: error firing schedule ${schedule.id}:`, err)
+        logger.error('error firing schedule', { scheduleId: schedule.id, error: err })
       })
 
       const now = new Date()

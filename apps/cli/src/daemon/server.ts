@@ -12,6 +12,7 @@ import { RateLimiter } from './rate-limiter'
 import { corsMiddleware, addCorsHeaders } from './cors'
 import { PACKAGE_VERSION } from '../shared/package-info'
 import { WorkerPool } from './worker-pool'
+import { logger } from './logger'
 import type { SessionWorker } from './session-worker'
 import type { ClientMessage } from './attach-protocol'
 import { QueryEngine } from '../core/engine'
@@ -192,7 +193,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
 
       return worker
     } catch (err) {
-      console.error(`Server: error creating worker for session ${sessionId}:`, err)
+      logger.error('error creating worker', { sessionId, error: err })
       return null
     }
   }
@@ -208,6 +209,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
       const url = new URL(req.url)
       const path = url.pathname
       const method = req.method
+      logger.info('request', { method, path })
 
       // ── Rate limiting (skip health endpoint) ──────────
       if (path !== '/api/v1/health') {
@@ -296,7 +298,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
         const sessionId = sessionMatch[1]!
         // Stop worker (interrupt, persist, mark idle) before closing session
         pool.stopWorker(sessionId).catch((err: unknown) => {
-          console.error(`Server: error stopping worker for session ${sessionId}:`, err)
+          logger.error('error stopping worker', { sessionId, error: err })
         })
         // Remove engine from cache
         engineCache.delete(sessionId)
@@ -346,7 +348,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
         // Fire and forget — respond immediately while processing
         // streams results to connected WebSocket clients.
         worker.processPrompt(prompt).catch((err: unknown) => {
-          console.error(`Server: error processing prompt for session ${sessionId}:`, err)
+          logger.error('error processing prompt', { sessionId, error: err })
         })
 
         return json({ ok: true, data: { sessionId, status: 'processing' } }, { status: 202 })
@@ -628,7 +630,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
             if (!worker) return
 
             worker.processPrompt(parsed.prompt).catch((err: unknown) => {
-              console.error(`Server: error processing WS prompt for session ${sessionId}:`, err)
+              logger.error('error processing WS prompt', { sessionId, error: err })
             })
             break
           }

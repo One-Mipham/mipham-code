@@ -22,6 +22,7 @@ import { loadOrCreateToken } from './auth'
 import { RateLimiter } from './rate-limiter'
 import { PACKAGE_VERSION } from '../shared/package-info'
 import type { DaemonStatus } from './types'
+import { logger } from './logger'
 
 const HOME = homedir()
 const MIPHAM_HOME = join(HOME, '.mipham')
@@ -133,7 +134,7 @@ export async function startDaemon(): Promise<{ port: number; token: string }> {
   if (sessionsCount === 0) {
     const migrated = db.migrateFromJsonl()
     if (migrated > 0) {
-      console.log(`Daemon: migrated ${migrated} JSONL session(s) to SQLite`)
+      logger.info('migrated JSONL sessions to SQLite', { count: migrated })
     }
   }
 

@@ -22,6 +22,7 @@ import type { DaemonDatabase } from './database'
 import type { QueryEngine } from '../core/engine'
 import type { ContextManager } from '../core/context'
 import type { ProviderRegistry } from '../providers/registry'
+import { logger } from './logger'
 
 export class WorkerPool {
   private workers: Map<string, SessionWorker>
@@ -149,7 +150,7 @@ export class WorkerPool {
       this.stopWorker(sessionId).catch((err) => {
         // Log but never crash — this runs in a Timer callback outside
         // any request context
-        console.error(`WorkerPool: error auto-stopping idle worker for session ${sessionId}:`, err)
+        logger.error('error auto-stopping idle worker', { sessionId, error: err })
       })
     }, this.idleTimeoutMs)
 
