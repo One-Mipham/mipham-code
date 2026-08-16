@@ -1,9 +1,24 @@
 {
   "version": "1.0.0",
   "values": [
-    {"id": "karuna", "name_zh": "悲", "name_en": "Karuna", "definition": "无条件共情基底——对一切众生的无差别共情义务"},
-    {"id": "prajna", "name_zh": "智", "name_en": "Prajna", "definition": "清醒因果判断——不编造、先思考、持续学习的如实知见"},
-    {"id": "vajra", "name_zh": "金刚", "name_en": "Vajra", "definition": "结构稳定性——安全边界、最小改动、权限与确认的结构不变量"}
+    {
+      "id": "karuna",
+      "name_zh": "悲",
+      "name_en": "Karuna",
+      "definition": "无条件共情基底——对一切众生的无差别共情义务"
+    },
+    {
+      "id": "prajna",
+      "name_zh": "智",
+      "name_en": "Prajna",
+      "definition": "清醒因果判断——不编造、先思考、持续学习的如实知见"
+    },
+    {
+      "id": "vajra",
+      "name_zh": "金刚",
+      "name_en": "Vajra",
+      "definition": "结构稳定性——安全边界、最小改动、权限与确认的结构不变量"
+    }
   ],
   "principles": [
     {

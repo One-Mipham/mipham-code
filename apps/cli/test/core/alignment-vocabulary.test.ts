@@ -25,7 +25,10 @@ describe('alignment-vocabulary (vendored)', () => {
 
   it('facet mapping matches the spec (prajna=3, vajra=5)', () => {
     const byFacet = (facet: string) =>
-      alignmentVocabulary.principles.filter((p) => p.facet === facet).map((p) => p.id).sort()
+      alignmentVocabulary.principles
+        .filter((p) => p.facet === facet)
+        .map((p) => p.id)
+        .sort()
     expect(byFacet('prajna')).toEqual(
       ['never-fabricate', 'persist-crsi-learning', 'think-before-coding'].sort(),
     )

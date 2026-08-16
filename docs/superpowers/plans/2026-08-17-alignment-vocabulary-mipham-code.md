@@ -33,11 +33,13 @@
 ### Task 1: vendor JSON + 重构 constitution-loader + 一致性测试
 
 **Files:**
+
 - Create: `apps/cli/src/core/alignment-vocabulary.json`
 - Modify: `apps/cli/src/core/constitution-loader.ts`
 - Test: `apps/cli/test/core/alignment-vocabulary.test.ts`
 
 **Interfaces:**
+
 - Consumes: ontology 的 `megasystem/ontology/ontology_poc/domains/alignment/alignment-vocabulary.json`（拷贝源）。
 - Produces: `constitution-loader.ts` 导出 `DEFAULT_CONSTITUTION`（8 原则 + `facet`）；`ConstitutionalPrinciple` 加 `facet?: string`；`load()`/`serializeToYaml`/`parseYaml` 支持 `facet` 往返。
 
@@ -80,7 +82,10 @@ describe('alignment-vocabulary (vendored)', () => {
 
   it('facet mapping matches the spec (prajna=3, vajra=5)', () => {
     const byFacet = (facet: string) =>
-      alignmentVocabulary.principles.filter((p) => p.facet === facet).map((p) => p.id).sort()
+      alignmentVocabulary.principles
+        .filter((p) => p.facet === facet)
+        .map((p) => p.id)
+        .sort()
     expect(byFacet('prajna')).toEqual(
       ['never-fabricate', 'persist-crsi-learning', 'think-before-coding'].sort(),
     )
@@ -153,8 +158,8 @@ export const DEFAULT_CONSTITUTION: MiphamConstitution = {
 4. `serializeToYaml` 的每条原则序列化里，`enforce` 行之后加 facet：
 
 ```ts
-      lines.push(`    enforce: ${p.enforce}`)
-      if (p.facet) lines.push(`    facet: ${p.facet}`)
+lines.push(`    enforce: ${p.enforce}`)
+if (p.facet) lines.push(`    facet: ${p.facet}`)
 ```
 
 5. `parseYaml` 的 `setPrincipleField` switch 加 case：
@@ -183,9 +188,11 @@ git commit -m "feat(core): constitution 从对齐词汇表派生（facet + 单�
 ### Task 2: CLAUDE.md 文档 + 全量回归
 
 **Files:**
+
 - Modify: `CLAUDE.md`
 
 **Interfaces:**
+
 - Consumes: 无。Produces: 文档反映「宪法对齐本体」闭环。
 
 - [ ] **Step 1: 更新 CLAUDE.md**
