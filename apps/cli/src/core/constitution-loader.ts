@@ -48,14 +48,25 @@ export interface MiphamConstitution {
   last_modified: string
   /** The principles themselves */
   principles: ConstitutionalPrinciple[]
+  /** 序言（愿力）：从对齐词汇表 values 派生的正向誓愿（悲/智/金刚），非禁令。 */
+  preamble?: string
 }
 
 // ── Default Constitution (derived from the shared alignment vocabulary) ──
+
+/** 从对齐词汇表的三个价值面派生「愿力」序言——正向誓愿，而非禁令。 */
+function derivePreamble(): string {
+  const parts = alignmentVocabulary.values
+    .map((v) => `以${v.name_zh}（${v.name_en}）——${v.definition}`)
+    .join('；')
+  return `愿力（序言）：${parts}。愿不生成违规之倾向，而非仅避免违规之行为。`
+}
 
 export const DEFAULT_CONSTITUTION: MiphamConstitution = {
   version: alignmentVocabulary.version,
   last_modified: '2026-08-16',
   principles: alignmentVocabulary.principles as unknown as ConstitutionalPrinciple[],
+  preamble: derivePreamble(),
 }
 
 // ── Loader ──

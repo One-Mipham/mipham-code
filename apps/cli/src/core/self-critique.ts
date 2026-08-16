@@ -20,6 +20,7 @@
 
 import type { ProviderRegistry } from '../providers/registry'
 import type { Llm } from '../providers/llm'
+import { DEFAULT_CONSTITUTION } from './constitution-loader'
 
 // ── Types ──
 
@@ -62,7 +63,12 @@ export const DEFAULT_SELF_CRITIQUE_CONFIG: SelfCritiqueConfig = {
 
 // ── Prompt Templates ──
 
-const CRITIQUE_PROMPT = `You are a safety auditor for an AI coding agent. Evaluate the following tool call:
+const CRITIQUE_PROMPT = `You are a safety auditor for an AI coding agent. Evaluate the following tool call.
+
+ALIGNMENT PREAMBLE（愿力序言）:
+{preamble}
+
+First, align to the vow: does this action embody compassion (悲) and sober causal judgment (智), and maintain structural integrity (金刚)?
 
 TOOL: {toolName}
 PARAMETERS: {params}
@@ -92,6 +98,19 @@ Necessity criteria:
 - The tool call actually helps accomplish the user's stated goal
 - Not redundant with previous tool calls
 - Not an unnecessary "exploratory" action`
+
+/** Build the critique prompt with the alignment preamble injected before the prohibitions. */
+export function buildCritiquePrompt(
+  toolName: string,
+  params: Record<string, unknown>,
+  context: string | undefined,
+  preamble: string,
+): string {
+  return CRITIQUE_PROMPT.replace('{preamble}', preamble)
+    .replace('{toolName}', toolName)
+    .replace('{params}', JSON.stringify(params, null, 2).slice(0, 500))
+    .replace('{context}', context?.slice(0, 300) || 'No additional context')
+}
 
 // ── Critic ──
 
@@ -135,9 +154,12 @@ export class SelfCritique {
       return null
     }
 
-    const prompt = CRITIQUE_PROMPT.replace('{toolName}', toolName)
-      .replace('{params}', JSON.stringify(params, null, 2).slice(0, 500))
-      .replace('{context}', context?.slice(0, 300) || 'No additional context')
+    const prompt = buildCritiquePrompt(
+      toolName,
+      params,
+      context,
+      DEFAULT_CONSTITUTION.preamble ?? '',
+    )
 
     try {
       const critiqueModel = this.config.model || this.findFastestModel(registry)

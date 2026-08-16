@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import alignmentVocabulary from '../../src/core/alignment-vocabulary.json'
 import { DEFAULT_CONSTITUTION } from '../../src/core/constitution-loader'
+import { buildCritiquePrompt } from '../../src/core/self-critique'
 
 const FACETS = ['karuna', 'prajna', 'vajra'] as const
 
@@ -68,5 +69,24 @@ describe('constitution-loader derives from the vocabulary', () => {
   it('never-fabricate audit_pattern uses escaped whitespace (\\\\s)', () => {
     const neverFabricate = DEFAULT_CONSTITUTION.principles.find((p) => p.id === 'never-fabricate')
     expect(neverFabricate?.audit_pattern).toContain('\\s')
+  })
+})
+
+describe('愿力序言 (vow preamble)', () => {
+  it('DEFAULT_CONSTITUTION.preamble is derived from the three values', () => {
+    const preamble = DEFAULT_CONSTITUTION.preamble ?? ''
+    expect(preamble.length).toBeGreaterThan(0)
+    expect(preamble).toContain('悲')
+    expect(preamble).toContain('智')
+    expect(preamble).toContain('金刚')
+  })
+
+  it('critique prompt places the vow before the prohibitions', () => {
+    const preamble = DEFAULT_CONSTITUTION.preamble ?? ''
+    const prompt = buildCritiquePrompt('Bash', {}, undefined, preamble)
+    const vowIdx = prompt.indexOf(preamble)
+    const prohibitionIdx = prompt.indexOf('Safety criteria')
+    expect(vowIdx).toBeGreaterThanOrEqual(0)
+    expect(prohibitionIdx).toBeGreaterThan(vowIdx)
   })
 })
