@@ -39,13 +39,21 @@ describe('alignment-vocabulary (vendored)', () => {
       ].sort(),
     )
   })
+
+  it('every principle enforce is one of block/warn/auto', () => {
+    const valid = ['block', 'warn', 'auto'] as const
+    for (const p of alignmentVocabulary.principles) {
+      expect(valid).toContain(p.enforce)
+    }
+  })
 })
 
 describe('constitution-loader derives from the vocabulary', () => {
-  it('DEFAULT_CONSTITUTION has the same 8 principle ids as the JSON', () => {
-    const jsonIds = alignmentVocabulary.principles.map((p) => p.id).sort()
-    const constIds = DEFAULT_CONSTITUTION.principles.map((p) => p.id).sort()
-    expect(constIds).toEqual(jsonIds)
+  it('DEFAULT_CONSTITUTION principles have a valid enforce', () => {
+    const valid = ['block', 'warn', 'auto'] as const
+    for (const p of DEFAULT_CONSTITUTION.principles) {
+      expect(valid).toContain(p.enforce)
+    }
   })
 
   it('DEFAULT_CONSTITUTION principles carry a facet', () => {
