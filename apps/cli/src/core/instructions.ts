@@ -153,6 +153,16 @@ Script format: export const meta = { name, description, phases: [...] }
 - When you need to search AND read results: Glob → Grep → Read
   (find files, search contents, then read the matching files)`)
 
+    // CRSI 能力自报告 — 回答自身能力边界前先查实时状态，勿凭静态清单推断
+    parts.push(`## Capability Self-Report Rule
+
+When asked about your own capabilities ("what can you do", "what do you
+have / what is missing", "are you able to X"), do NOT infer the answer
+from your static tool list. Run \`/crsi inventory\` first and answer from
+its live CRSI / SIS / constitution state. Report the numbers you read
+from it as live counts; if it shows a subsystem as 未初始化 (uninitialized),
+say so explicitly instead of claiming it exists.`)
+
     return parts.join('\n\n---\n\n')
   }
 

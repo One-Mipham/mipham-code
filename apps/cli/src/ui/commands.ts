@@ -10,6 +10,7 @@ import type { SkillsLoader } from '../skills/loader'
 import type { PluginManager } from '../plugin/plugin-manager'
 import type { Message } from '../shared/types.js'
 import { McpClient } from '../mcp/client'
+import { buildCapabilityReport } from '../core/capability-inventory'
 import { NPM_UPDATE_COMMAND, PACKAGE_VERSION } from '../shared/index.ts'
 import { getPreference } from '../config/preferences'
 import { loadCrossSessionConfig } from '../config/loader'
@@ -729,6 +730,10 @@ const crsiStatsCmd: CommandHandler = async (ctx) => {
   }
 
   return { content: lines.join('\n') }
+}
+
+const crsiInventoryCmd: CommandHandler = async (ctx) => {
+  return { content: buildCapabilityReport(ctx.engine) }
 }
 
 const crsiHealthCmd: CommandHandler = async (ctx) => {
@@ -4313,6 +4318,7 @@ const commandsListCmd: CommandHandler = () => {
     '/crsi restore': 'Tools & Skills',
     '/crsi stats': 'Tools & Skills',
     '/crsi health': 'Tools & Skills',
+    '/crsi inventory': 'Tools & Skills',
     '/crsi meta': 'Tools & Skills',
     '/crsi interpret': 'Tools & Skills',
     '/crsi critique': 'Tools & Skills',
@@ -4465,6 +4471,7 @@ registry.set('/crsi analyze', crsiAnalyzeCmd)
 registry.set('/crsi restore', crsiRestoreCmd)
 registry.set('/crsi stats', crsiStatsCmd)
 registry.set('/crsi health', crsiHealthCmd)
+registry.set('/crsi inventory', crsiInventoryCmd)
 registry.set('/crsi meta', crsiMetaCmd)
 registry.set('/crsi interpret', crsiInterpretCmd)
 registry.set('/crsi critique', crsiCritiqueCmd)
@@ -4640,6 +4647,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/crsi restore': 'Restore a disabled or degraded CRSI rule',
   '/crsi stats': 'Show CRSI overall effectiveness statistics',
   '/crsi health': 'CRSI + SIS unified health dashboard with scoring',
+  '/crsi inventory': 'Live capability self-report — CRSI/SIS/constitution state',
   '/crsi meta': 'RSI Level 3 meta-rule analysis — rules that improve the rules',
   '/crsi interpret': 'Tool-call behavior dashboard — error patterns, usage, health',
   '/crsi critique': 'Enable/disable RLAIF self-critique on tool calls',
