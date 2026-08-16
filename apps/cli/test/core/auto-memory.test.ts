@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { AutoMemoryEngine, type ToolCallRecord } from '../../src/core/auto-memory'
-import { mkdirSync, rmSync, existsSync, readFileSync } from 'node:fs'
+import { mkdirSync, rmSync, existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
@@ -400,6 +400,45 @@ describe('AutoMemoryEngine', () => {
       for (let i = 0; i < 10; i++) tracker.recordApplication('rule-x', i >= 8)
 
       expect(() => engine.flushEffectiveness()).not.toThrow()
+    })
+  })
+
+  describe('finalizeSession', () => {
+    function turn(sessionId: string): Parameters<AutoMemoryEngine['analyzeTurn']>[0] {
+      return {
+        sessionId,
+        userMessage: 'hello',
+        assistantContent: 'hi there',
+        toolCalls: [{ name: 'Read', input: { file_path: 'a.ts' }, success: true }],
+        modelProvider: 'anthropic',
+        modelId: 'claude-sonnet-5',
+        turnDurationMs: 100,
+      }
+    }
+
+    it('writes a session-level summary after reflections accumulate', () => {
+      engine.analyzeTurn(turn('finalize-test'))
+
+      engine.finalizeSession()
+
+      expect(existsSync(join(testDir, 'session-summary-finalize-test.md'))).toBe(true)
+    })
+
+    it('does not re-persist individual reflections (double-write guard)', () => {
+      const reflection = engine.analyzeTurn(turn('finalize-no-double'))
+      engine.persist(reflection) // per-turn persist, as engine.ts does
+
+      engine.finalizeSession()
+
+      const reflectionFiles = readdirSync(testDir).filter((f) => f.startsWith('reflection-'))
+      expect(reflectionFiles).toHaveLength(1)
+    })
+
+    it('does not throw and writes no summary when there are no reflections', () => {
+      expect(() => engine.finalizeSession()).not.toThrow()
+
+      const summaryFiles = readdirSync(testDir).filter((f) => f.startsWith('session-summary-'))
+      expect(summaryFiles).toHaveLength(0)
     })
   })
 })

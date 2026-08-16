@@ -217,14 +217,13 @@ export class AutoMemoryEngine {
   }
 
   /**
-   * Persist ALL accumulated session reflections at once (e.g. on session end).
+   * Finalize the session on exit: write the session-level summary and flush
+   * CRSI effectiveness (evaluate + apply auto-management). Individual turn
+   * reflections are already persisted per-turn via persist(), so this must
+   * NOT re-persist them — doing so would double-write and double-feed the
+   * CRSI pipeline.
    */
-  persistAll(): void {
-    for (const reflection of this.sessionReflections) {
-      this.persist(reflection)
-    }
-
-    // Also write a session-level summary
+  finalizeSession(): void {
     if (this.sessionReflections.length > 0) {
       this.writeSessionSummary()
     }

@@ -597,12 +597,13 @@ export async function runApp(options: RunOptions): Promise<void> {
         })
       }
     }
-    // Flush CRSI effectiveness — evaluate rules and apply auto-degrade/disable.
-    // Best-effort: the self-improvement flush must never block session exit.
+    // Finalize the session — write session summary + flush CRSI effectiveness
+    // (evaluate rules and apply auto-degrade/disable). Best-effort: the
+    // self-improvement closeout must never block session exit.
     try {
-      engine.getAutoMemory().flushEffectiveness()
+      engine.getAutoMemory().finalizeSession()
     } catch {
-      // ignore — CRSI flush is non-critical
+      // ignore — CRSI closeout is non-critical
     }
     getMetrics().activeSessions.dec()
     process.exit(0)
@@ -615,14 +616,14 @@ export async function runApp(options: RunOptions): Promise<void> {
   process.on('exit', () => {
     clearInterval(heartbeatInterval)
     unregisterSession(sessionName)
-    // Close the CRSI effectiveness loop on non-interactive exit paths
+    // Finalize the session on non-interactive exit paths
     // (daemon worker / crash / kill) that bypass saveAndExit. saveAndExit
-    // already flushes; guard on !saved to avoid double-evaluating.
+    // already finalizes; guard on !saved to avoid double-evaluating.
     if (!saved) {
       try {
-        engine.getAutoMemory().flushEffectiveness()
+        engine.getAutoMemory().finalizeSession()
       } catch {
-        // ignore — CRSI flush is non-critical
+        // ignore — CRSI closeout is non-critical
       }
     }
     if (!saved && context.getMessageCount() > 0) {

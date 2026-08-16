@@ -4,8 +4,8 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.3.0
-> **最后更新**: 2026-08-17 — CRSI 受约束自改进闭环六块落地（自我认知 `/crsi inventory` + 定界 + 闭环度量 + 沙箱入口 `/crsi modify` + producer `/crsi propose` + eval harness `/crsi eval`），补 AI 对话 path A 四缺口；红队 JSON 转义假阴性修复
+> **版本**: 2.3.1
+> **最后更新**: 2026-08-17 — CRSI 受约束自改进闭环六块落地 + `finalizeSession()` 反思持久化死代码收尾（会话级摘要真正产出，闭环度量最后一块封口）；红队 JSON 转义假阴性修复
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -42,7 +42,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **eval harness** `/crsi eval` — `core/eval-harness.ts` 冻结 10 条 ground-truth 契约（规则/宪法/沙箱边界/红队）+ rewards 日志 `~/.mipham/crsi/eval-scores.jsonl`，`runCrsiModification` 以「分数不退化」为第二道闸
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose|eval` + `/sis errors|stats|clear`
-测试：1,486 测试（1484 passed + 2 skipped）
+测试：1,489 测试（1487 passed + 2 skipped）
 
 ---
 
@@ -366,7 +366,7 @@ mipham-code 变更（包名/版本）
 4. **1M 上下文窗口** — 支持超长上下文模型
 5. **多语言国际化** — CLI 和 Web 的 i18n 支持
 6. **内核后续收尾** — `toolContext` 改名 `vajraContext`、删死代码（setSkillsLoader/replaceMessages 等）、SubAgent 三 spawn 点迁 ctx.llm
-7. **CRSI 行为任务集** — ground-truth 编码任务（让 producer 从「教训」毕业到改 skill/prompt，使 eval harness 从「防退化」升级到「证明更好」）；`persistAll()` 反思持久化死代码收尾
+7. **CRSI 行为任务集** — ground-truth 编码任务（让 producer 从「教训」毕业到改 skill/prompt，使 eval harness 从「防退化」升级到「证明更好」）
 
 ---
 
@@ -374,6 +374,7 @@ mipham-code 变更（包名/版本）
 
 | 版本  | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                               | 维护人     |
 | ----- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| 2.3.1 | 2026-08-17 | `persistAll()` 反思持久化死代码收尾：改名 `finalizeSession()`，去掉冗余 per-reflection 双写循环（`persist()` 已每 turn 落盘），接入 exit 兜底，会话级摘要 `writeSessionSummary()` 真正产出，闭环度量最后一块封口。+3 测试                                                                                                                                                                              | 技术委员会 |
 | 2.3.0 | 2026-08-17 | CRSI 受约束自改进闭环六块落地：自我认知 `/crsi inventory` + 定界（沙箱 PROTECTED_PATHS 只读边界）+ 闭环度量（exit 兜底 flush + 测试隔离）+ 沙箱入口 `/crsi modify` + producer `/crsi propose`（教训文件）+ eval harness `/crsi eval`（10 条 ground-truth 契约 + rewards 日志 + 防退化闸）。修复红队 `JSON.stringify` 转义假阴性（`no-credential-leak` 引号匹配）。1486 测试（1484 passed + 2 skipped） | 技术委员会 |
 | 2.2.2 | 2026-08-17 | 愿力层：宪法 `preamble` 序言（悲/智/金刚 正向誓愿）从对齐词汇表 values 派生，注入 `self-critique` 审计提示词（先愿力后禁令）；抽 `buildCritiquePrompt` 纯函数。1464 测试（1462 passed + 2 skipped）                                                                                                                                                                                                    | 技术委员会 |
 | 2.2.1 | 2026-08-16 | Vajra-Hṛdaya 对齐缝（第 4 缝）：`Service.align?` 声明原则 id + `ctx.constitution` 缝（`Constitution` 接口 + `CONSTITUTION_KEY`）+ `mount()` 挂载前对齐门（声明未知 id 拒绝挂载，`core/constitution-seam.ts` 桥接 `ConstitutionLoader`）。1454 测试（1452 passed + 2 skipped）                                                                                                                          | 技术委员会 |
