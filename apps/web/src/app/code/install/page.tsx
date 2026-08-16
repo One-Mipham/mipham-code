@@ -122,6 +122,18 @@ export default function InstallPage() {
         </table>
       </div>
 
+      {/* macOS App */}
+      <h2 className="text-2xl font-semibold mb-4">{t('web.install_page.macos_app_title')}</h2>
+      <p className="text-gray-600 mb-8">{t('web.install_page.macos_app_desc')}</p>
+
+      {/* JetBrains */}
+      <h2 className="text-2xl font-semibold mb-4">{t('web.install_page.jetbrains_title')}</h2>
+      <p className="text-gray-600 mb-8">{t('web.install_page.jetbrains_desc')}</p>
+
+      {/* VS Code */}
+      <h2 className="text-2xl font-semibold mb-4">{t('web.install_page.vscode_title')}</h2>
+      <p className="text-gray-600 mb-8">{t('web.install_page.vscode_desc')}</p>
+
       {/* Verify */}
       <h2 className="text-2xl font-semibold mb-4">{t('web.install_page.verify_title')}</h2>
       <pre className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg mb-8 overflow-x-auto">

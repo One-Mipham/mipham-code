@@ -126,7 +126,13 @@
       "api_keys_title": "Set API Keys",
       "api_keys_desc": "Export your provider API keys as environment variables:",
       "international": "International · 国际站",
-      "china_mainland": "中国大陆 · China mainland"
+      "china_mainland": "中国大陆 · China mainland",
+      "macos_app_title": "5. macOS App (.dmg)",
+      "macos_app_desc": "Native app bundle from GitHub Releases.",
+      "jetbrains_title": "6. JetBrains IDEs",
+      "jetbrains_desc": "Download the plugin zip from GitHub Releases, then install via Settings → Plugins → Install Plugin from Disk.",
+      "vscode_title": "7. VS Code",
+      "vscode_desc": "Extension in development — coming soon."
     },
     "docs": {
       "title": "Documentation",
