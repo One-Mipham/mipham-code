@@ -11,7 +11,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManagerListener
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
-import com.intellij.terminal.JBTerminalWidget
+import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.ui.components.JBTextField
 import com.intellij.util.ui.FormBuilder
 import org.jetbrains.plugins.terminal.TerminalView
@@ -23,38 +23,23 @@ private const val TERMINAL_TITLE = "Mipham Code"
 
 /**
  * Start: open a Terminal tab and run `mipham`.
- * If a Mipham terminal already exists, reuse it.
  */
 class MiphamStartAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val terminalView = TerminalView.getInstance(project)
-
-        val existing = findMiphamTerminal(terminalView)
-        if (existing != null) {
-            terminalView.openTerminalIn(existing)
-            return
-        }
-
         val widget = terminalView.createLocalShellWidget(project.basePath ?: "", TERMINAL_TITLE)
         widget.executeCommand(MIPHAM_COMMAND)
     }
 }
 
 /**
- * Focus: bring the first Mipham terminal tab to front.
- * Falls back to starting a new one if none exists.
+ * Focus: bring the Terminal tool window to front.
  */
 class MiphamFocusAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        val terminalView = TerminalView.getInstance(project)
-        val existing = findMiphamTerminal(terminalView)
-        if (existing != null) {
-            terminalView.openTerminalIn(existing)
-        } else {
-            MiphamStartAction().actionPerformed(e)
-        }
+        ToolWindowManager.getInstance(project).getToolWindow("Terminal")?.activate(null)
     }
 }
 
@@ -65,16 +50,6 @@ class MiphamOpenConfigAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         ShowSettingsUtil.getInstance().showSettingsDialog(project, "Mipham Code")
-    }
-}
-
-/**
- * Find a terminal widget whose title equals TERMINAL_TITLE.
- */
-private fun findMiphamTerminal(terminalView: TerminalView): JBTerminalWidget? {
-    val terminals = terminalView.getWidgets()
-    return terminals.find { widget ->
-        widget.toString().contains(TERMINAL_TITLE)
     }
 }
 
@@ -136,11 +111,12 @@ class MiphamSettingsConfigurable : Configurable {
     }
 
     override fun apply() {
-        val settings = MiphamSettings.getInstance()
-        settings.state = MiphamSettings.State(
-            bunPath = bunPathField.text,
-            provider = providerField.text,
-            model = modelField.text
+        MiphamSettings.getInstance().loadState(
+            MiphamSettings.State(
+                bunPath = bunPathField.text,
+                provider = providerField.text,
+                model = modelField.text
+            )
         )
     }
 

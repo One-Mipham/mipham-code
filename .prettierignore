@@ -1,3 +1,5 @@
 apps/cli/skills/workflows
 .claude/
 pnpm-lock.yaml
+infrastructure/jetbrains/build/
+infrastructure/jetbrains/.gradle/

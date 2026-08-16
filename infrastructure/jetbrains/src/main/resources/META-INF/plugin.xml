@@ -9,6 +9,7 @@
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
+    <depends>org.jetbrains.plugins.terminal</depends>
 
     <actions>
         <action id="MiphamCode.Start"
