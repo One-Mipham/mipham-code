@@ -9,9 +9,9 @@
 
 set -euo pipefail
 
-VERSION="${1:-0.21.0}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+VERSION="${1:-$(node -p "require('$REPO_ROOT/apps/cli/package.json').version" 2>/dev/null || echo '0.0.0')}"
 APP_DIR="$SCRIPT_DIR/Mipham Code.app"
 CONTENTS="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS/MacOS"

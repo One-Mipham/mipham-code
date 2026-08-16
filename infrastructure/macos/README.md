@@ -5,13 +5,14 @@ Native macOS application for Mipham Code.
 ## Build
 
 ```bash
+# Version is read from apps/cli/package.json automatically.
 # 1. Build the .app bundle
-./create-app.sh 0.21.0
+./create-app.sh
 
 # 2. Package as DMG
-./create-dmg.sh 0.21.0
+./create-dmg.sh
 
-# Output: mipham-code-0.21.0.dmg
+# Output: mipham-code-<version>.dmg
 ```
 
 ## Install
@@ -37,7 +38,7 @@ brew install --cask mipham
 
 ```bash
 export APPLE_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)"
-./create-dmg.sh 0.21.0
+./create-dmg.sh
 ```
 
 Requires an Apple Developer account and a stored notary keychain profile:
