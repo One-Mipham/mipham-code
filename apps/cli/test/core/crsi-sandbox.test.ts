@@ -126,6 +126,33 @@ describe('CrsiSandbox', () => {
       expect(result.applied).toBe(true)
       expect(result.phase).toBe('applied')
     })
+
+    it('rejects modifications to protected paths (constitution / eval harness / machinery)', () => {
+      sandbox.createWorktree()
+
+      const protectedFiles = [
+        'apps/cli/src/core/alignment-vocabulary.json',
+        'apps/cli/src/core/constitution-loader.ts',
+        'apps/cli/src/core/crsi-sandbox.ts',
+        'apps/cli/src/agent/effectiveness-tracker.ts',
+        'apps/cli/test/core/crsi-sandbox.test.ts',
+      ]
+
+      for (const filePath of protectedFiles) {
+        const result = sandbox.applyModification({
+          id: `prot-${filePath.replace(/[^a-z0-9]/gi, '-')}`,
+          description: 'Should be blocked by protected-path guard',
+          filePath,
+          newContent: '{}',
+          originalContent: '',
+          timestamp: new Date().toISOString(),
+        })
+
+        expect(result.applied).toBe(false)
+        expect(result.phase).toBe('failed')
+        expect(result.error).toContain('Protected path')
+      }
+    })
   })
 
   describe('getDiff', () => {

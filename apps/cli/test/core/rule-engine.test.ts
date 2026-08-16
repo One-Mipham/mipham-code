@@ -1,17 +1,23 @@
 import { describe, it, expect } from 'vitest'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { ExperienceRuleEngine } from '../../src/core/rule-engine.js'
 import type { ToolRule } from '../../src/core/rule-engine.js'
 
+// Isolate the rule-engine store from the real ~/.mipham — register()/setRuleEnabled()
+// persist to disk, so tests must not pollute the user's live rules.json.
+const TEST_DIR = join(tmpdir(), 'mipham-test-rule-engine')
+
 describe('ExperienceRuleEngine', () => {
   it('intercept returns unmodified params when no rules match', () => {
-    const engine = new ExperienceRuleEngine()
+    const engine = new ExperienceRuleEngine(TEST_DIR)
     const result = engine.intercept('Read', { file_path: '/tmp/test.txt' })
     expect(result.modified).toEqual({ file_path: '/tmp/test.txt' })
     expect(result.warnings).toEqual([])
   })
 
   it('builtin timeout rule matches npm install with low timeout', () => {
-    const engine = new ExperienceRuleEngine()
+    const engine = new ExperienceRuleEngine(TEST_DIR)
     const result = engine.intercept('Bash', {
       command: 'npm install express',
       timeout: 120000,
@@ -24,7 +30,7 @@ describe('ExperienceRuleEngine', () => {
   })
 
   it('builtin timeout rule also matches docker build', () => {
-    const engine = new ExperienceRuleEngine()
+    const engine = new ExperienceRuleEngine(TEST_DIR)
     const result = engine.intercept('Bash', {
       command: 'docker build -t app .',
       description: 'build image',
@@ -34,7 +40,7 @@ describe('ExperienceRuleEngine', () => {
   })
 
   it('builtin timeout rule does not modify already-high timeout', () => {
-    const engine = new ExperienceRuleEngine()
+    const engine = new ExperienceRuleEngine(TEST_DIR)
     const result = engine.intercept('Bash', {
       command: 'npm install express',
       timeout: 600000,
@@ -45,7 +51,7 @@ describe('ExperienceRuleEngine', () => {
   })
 
   it('builtin timeout rule does not match non-heavy commands', () => {
-    const engine = new ExperienceRuleEngine()
+    const engine = new ExperienceRuleEngine(TEST_DIR)
     const result = engine.intercept('Bash', {
       command: 'echo hello',
       description: 'simple echo',
@@ -55,7 +61,7 @@ describe('ExperienceRuleEngine', () => {
   })
 
   it('git force protection warns but does not modify params', () => {
-    const engine = new ExperienceRuleEngine()
+    const engine = new ExperienceRuleEngine(TEST_DIR)
     const result = engine.intercept('Bash', {
       command: 'git push --force origin main',
       description: 'force push',
@@ -67,7 +73,7 @@ describe('ExperienceRuleEngine', () => {
   })
 
   it('git force with dangerouslyDisableSandbox is not warned', () => {
-    const engine = new ExperienceRuleEngine()
+    const engine = new ExperienceRuleEngine(TEST_DIR)
     const result = engine.intercept('Bash', {
       command: 'git push --force origin main',
       dangerouslyDisableSandbox: true,
@@ -77,7 +83,7 @@ describe('ExperienceRuleEngine', () => {
   })
 
   it('custom rules can be registered and take effect', () => {
-    const engine = new ExperienceRuleEngine()
+    const engine = new ExperienceRuleEngine(TEST_DIR)
     const customRule: ToolRule = {
       id: 'rule-test-custom',
       toolName: 'Write',
@@ -100,7 +106,7 @@ describe('ExperienceRuleEngine', () => {
   })
 
   it('disabled rules are skipped', () => {
-    const engine = new ExperienceRuleEngine()
+    const engine = new ExperienceRuleEngine(TEST_DIR)
     const rule: ToolRule = {
       id: 'rule-disabled-test',
       toolName: 'Read',
@@ -116,7 +122,7 @@ describe('ExperienceRuleEngine', () => {
   })
 
   it('setRuleEnabled toggles rule state', () => {
-    const engine = new ExperienceRuleEngine()
+    const engine = new ExperienceRuleEngine(TEST_DIR)
     const rules = engine.getActiveRules()
     const timeoutRule = rules.find((r) => r.id === 'rule-timeout-bash-heavy')
     expect(timeoutRule).toBeDefined()
@@ -138,7 +144,7 @@ describe('ExperienceRuleEngine', () => {
   })
 
   it('convertFromExperienceRules converts ExperienceRule[] to ToolRule[]', () => {
-    const engine = new ExperienceRuleEngine()
+    const engine = new ExperienceRuleEngine(TEST_DIR)
     const expRules = [
       {
         id: 'rule-timeout-xyz',
@@ -159,7 +165,7 @@ describe('ExperienceRuleEngine', () => {
   })
 
   it('getActiveRules returns only enabled rules', () => {
-    const engine = new ExperienceRuleEngine()
+    const engine = new ExperienceRuleEngine(TEST_DIR)
     const rules = engine.getActiveRules()
     expect(rules.length).toBeGreaterThan(0)
     expect(rules.every((r) => r.enabled)).toBe(true)

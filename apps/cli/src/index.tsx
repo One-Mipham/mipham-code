@@ -615,6 +615,16 @@ export async function runApp(options: RunOptions): Promise<void> {
   process.on('exit', () => {
     clearInterval(heartbeatInterval)
     unregisterSession(sessionName)
+    // Close the CRSI effectiveness loop on non-interactive exit paths
+    // (daemon worker / crash / kill) that bypass saveAndExit. saveAndExit
+    // already flushes; guard on !saved to avoid double-evaluating.
+    if (!saved) {
+      try {
+        engine.getAutoMemory().flushEffectiveness()
+      } catch {
+        // ignore — CRSI flush is non-critical
+      }
+    }
     if (!saved && context.getMessageCount() > 0) {
       SessionStore.autoSave(context.getMessages(), {
         provider: defaultProvider,

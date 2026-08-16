@@ -88,6 +88,36 @@ const MAX_WORKTREE_AGE_MS = 30 * 60 * 1000 // 30 minutes
 const TEST_TIMEOUT_MS = 120_000 // 2 minutes
 const REPORT_DIR = join(homedir(), '.mipham', 'crsi-sandbox')
 
+/**
+ * 自改进循环的只读边界（信任域隔离）。
+ *
+ * 这些路径是 CRSI 自改进的「慢通道」——宪法、eval harness、改进机制自身。
+ * 自改进循环可以改 skill/workflow/prompt/memory，但绝不能改：
+ *   1. 宪法（对齐本体 + 对齐缝 + 加载器）—— 否则价值漂移会「优化」掉安全边界
+ *   2. eval harness（测试套件）—— 否则会改掉自己的评估标准（Goodhart 元劫持）
+ *   3. 改进机制自身（有效性追踪 / 元规则引擎 / 沙箱）—— 否则递归会改掉评估器
+ *
+ * 注意：这是 fail-closed 边界——宁可多拦，不可漏拦。
+ */
+const PROTECTED_PATHS = [
+  // 宪法（对齐）
+  'apps/cli/src/core/alignment-vocabulary.json',
+  'apps/cli/src/core/constitution-loader.ts',
+  'apps/cli/src/core/constitution-seam.ts',
+  'apps/cli/src/vajra/constitution.ts',
+  // eval harness
+  'apps/cli/test/',
+  // 改进机制自身
+  'apps/cli/src/agent/effectiveness-tracker.ts',
+  'apps/cli/src/core/meta-rule-engine.ts',
+  'apps/cli/src/core/crsi-sandbox.ts',
+]
+
+/** 是否命中只读边界。前缀匹配，目录条目以 `/` 结尾。 */
+function isProtectedPath(filePath: string): boolean {
+  return PROTECTED_PATHS.some((p) => filePath === p || filePath.startsWith(p))
+}
+
 // ── Sandbox ──
 
 export class CrsiSandbox {
@@ -178,6 +208,15 @@ export class CrsiSandbox {
     // Path traversal guard: reject any target that resolves outside the sandbox worktree
     if (targetPath !== worktreeRoot && !targetPath.startsWith(worktreeRoot + sep)) {
       result.error = `Path traversal blocked: "${mod.filePath}" resolves outside the worktree.`
+      result.phase = 'failed'
+      this.sessionReport.modifications.push(result)
+      return result
+    }
+
+    // Protected-path guard: the self-improvement loop must not modify the
+    // constitution, eval harness, or improvement machinery itself.
+    if (isProtectedPath(mod.filePath)) {
+      result.error = `Protected path: "${mod.filePath}" is read-only to the self-improvement loop.`
       result.phase = 'failed'
       this.sessionReport.modifications.push(result)
       return result
