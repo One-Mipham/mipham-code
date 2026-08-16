@@ -591,6 +591,13 @@ export async function runApp(options: RunOptions): Promise<void> {
         })
       }
     }
+    // Flush CRSI effectiveness — evaluate rules and apply auto-degrade/disable.
+    // Best-effort: the self-improvement flush must never block session exit.
+    try {
+      engine.getAutoMemory().flushEffectiveness()
+    } catch {
+      // ignore — CRSI flush is non-critical
+    }
     process.exit(0)
   }
 

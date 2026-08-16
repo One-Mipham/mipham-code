@@ -228,11 +228,25 @@ export class AutoMemoryEngine {
       this.writeSessionSummary()
     }
 
-    // Flush CRSI state — evaluate first (reports verdicts to megasystem,
-    // applies auto-degrade/disable/upgrade), then persist.
-    if (this.effectivenessTracker) {
-      this.effectivenessTracker.evaluate()
-      this.effectivenessTracker.persist()
+    // Flush CRSI effectiveness (evaluate + apply auto-management).
+    this.flushEffectiveness()
+  }
+
+  /**
+   * Evaluate rule effectiveness and apply auto-management to the rule engine:
+   * ineffective rules are disabled so intercept() stops injecting them, and
+   * recovered rules are re-enabled. Without this, `evaluate()`'s verdicts are
+   * computed but never acted upon — the self-improvement loop stays open.
+   */
+  flushEffectiveness(): void {
+    if (!this.effectivenessTracker) return
+
+    const { upgrades, disables } = this.effectivenessTracker.evaluate()
+    this.effectivenessTracker.persist()
+
+    if (this.ruleEngine) {
+      for (const id of disables) this.ruleEngine.setRuleEnabled(id, false)
+      for (const id of upgrades) this.ruleEngine.setRuleEnabled(id, true)
     }
   }
 

@@ -668,6 +668,15 @@ const crsiRestoreCmd: CommandHandler = (ctx, args) => {
   return { content: `Rule \`${ruleId}\` has been re-enabled.` }
 }
 
+/** Render a tiny ASCII sparkline from a series of 0-1 values (success rates). */
+function crsiSparkline(values: number[]): string {
+  if (values.length === 0) return '—'
+  const chars = '▁▂▃▄▅▆▇█'
+  return values
+    .map((v) => chars[Math.min(Math.max(Math.round(v * 7), 0), 7)] ?? '▁')
+    .join('')
+}
+
 const crsiStatsCmd: CommandHandler = async (ctx) => {
   const engine = ctx.engine.getRuleEngine()
   const tracker = ctx.engine.getEffectivenessTracker()
@@ -682,21 +691,41 @@ const crsiStatsCmd: CommandHandler = async (ctx) => {
   lines.push(`Auto-generated: ${rules.filter((r) => r.source === 'pattern-analyzer').length}`)
   lines.push(`Manual: ${rules.filter((r) => r.source === 'manual').length}`)
 
-  if (tracker) {
+  const effs = tracker?.allRules ?? []
+  if (effs.length > 0) {
     let totalInterceptions = 0
     let totalSuccesses = 0
-    for (const r of rules) {
-      const eff = tracker.getEffectiveness(r.id)
-      if (eff) {
-        totalInterceptions += eff.appliedCount
-        totalSuccesses += eff.successAfterCount
-      }
+    for (const eff of effs) {
+      totalInterceptions += eff.appliedCount
+      totalSuccesses += eff.successAfterCount
     }
     lines.push('')
     lines.push(`Total interceptions: ${totalInterceptions}`)
     lines.push(
       `Success rate after rules: ${totalInterceptions > 0 ? Math.round((totalSuccesses / totalInterceptions) * 100) : 0}%`,
     )
+
+    lines.push('')
+    lines.push('### Rule effectiveness')
+    lines.push('| Rule | Status | Applied | Success | Trend |')
+    lines.push('|------|--------|---------|---------|-------|')
+    const statusIcon: Record<string, string> = { active: '🟢', degrading: '🟡', disabled: '⚫' }
+    for (const eff of effs) {
+      const icon = statusIcon[eff.status] ?? '⚪'
+      const rate =
+        eff.appliedCount > 0 ? Math.round((eff.successAfterCount / eff.appliedCount) * 100) : 0
+      const trend = crsiSparkline(eff.evaluationHistory.map((h) => 1 - h.failureRate))
+      lines.push(`| ${eff.ruleId} | ${icon} ${eff.status} | ${eff.appliedCount} | ${rate}% | ${trend} |`)
+    }
+
+    const disabled = effs.filter((e) => e.status === 'disabled')
+    if (disabled.length > 0) {
+      lines.push('')
+      lines.push('### Disabled rules (retired)')
+      for (const d of disabled) {
+        lines.push(`- ${d.ruleId} (failure rate ${Math.round(d.postRuleFailureRate * 100)}%)`)
+      }
+    }
   }
 
   return { content: lines.join('\n') }
@@ -907,6 +936,21 @@ const sisStatsCmd: CommandHandler = (ctx) => {
   )
   lines.push(`平均成功率: ${Math.round(stats.avgSuccessRate * 100)}%`)
   lines.push(`总拦截次数: ${stats.totalInterceptions}`)
+
+  const active = db.getActive()
+  if (active.length > 0) {
+    lines.push('')
+    lines.push('### 签名明细（按拦截次数排序）')
+    lines.push('| 签名 | 状态 | 拦截 | 成功率 |')
+    lines.push('|------|------|------|--------|')
+    for (const s of active) {
+      const icon = s.status === 'active' ? '🟢' : '🟡'
+      lines.push(
+        `| ${s.id} | ${icon} ${s.status} | ${s.occurrences} | ${Math.round(s.successRate * 100)}% |`,
+      )
+    }
+  }
+
   return { content: lines.join('\n') }
 }
 

@@ -349,4 +349,61 @@ describe('AutoMemoryEngine', () => {
       expect(() => engine.persist(reflection)).not.toThrow()
     })
   })
+
+  describe('flushEffectiveness', () => {
+    function wireRuleEngine(setRuleEnabled = vi.fn()) {
+      const ruleEngine = {
+        register: vi.fn(),
+        getActiveRules: () => [],
+        setRuleEnabled,
+      } as unknown as ExperienceRuleEngine
+      const tracker = new EffectivenessTracker(testDir)
+      const patternAnalyzer = { toToolRule: vi.fn() } as unknown as PatternAnalyzer
+      engine.setCrsiPipeline(patternAnalyzer, ruleEngine, tracker)
+      return { tracker, setRuleEnabled }
+    }
+
+    it('disables ineffective rules in the rule engine', () => {
+      const { tracker, setRuleEnabled } = wireRuleEngine()
+
+      // Drive a rule to 'degrading': 10 apps, 8 failures → rate 0.8
+      for (let i = 0; i < 10; i++) tracker.recordApplication('rule-bad', i >= 8)
+      tracker.evaluate()
+
+      // More failures → second evaluation disables it
+      for (let i = 0; i < 10; i++) tracker.recordApplication('rule-bad', i >= 8)
+      engine.flushEffectiveness()
+
+      expect(setRuleEnabled).toHaveBeenCalledWith('rule-bad', false)
+    })
+
+    it('re-enables recovered rules in the rule engine', () => {
+      const { tracker, setRuleEnabled } = wireRuleEngine()
+
+      // Drive to 'degrading': 10 apps, 8 failures
+      for (let i = 0; i < 10; i++) tracker.recordApplication('rule-recover', i >= 8)
+      tracker.evaluate()
+
+      // Recover: many successes → failure rate drops below 0.4
+      for (let i = 0; i < 12; i++) tracker.recordApplication('rule-recover', true)
+      engine.flushEffectiveness()
+
+      expect(setRuleEnabled).toHaveBeenCalledWith('rule-recover', true)
+    })
+
+    it('does not throw when the rule engine is not wired', () => {
+      const tracker = new EffectivenessTracker(testDir)
+      const patternAnalyzer = { toToolRule: vi.fn() } as unknown as PatternAnalyzer
+      engine.setCrsiPipeline(
+        patternAnalyzer,
+        undefined as unknown as ExperienceRuleEngine,
+        tracker,
+      )
+      for (let i = 0; i < 10; i++) tracker.recordApplication('rule-x', i >= 8)
+      tracker.evaluate()
+      for (let i = 0; i < 10; i++) tracker.recordApplication('rule-x', i >= 8)
+
+      expect(() => engine.flushEffectiveness()).not.toThrow()
+    })
+  })
 })
