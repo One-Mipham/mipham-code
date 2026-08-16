@@ -1,8 +1,18 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { CrsiSandbox } from '../../src/core/crsi-sandbox'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
+
+// Isolate the sandbox report dir from the real ~/.mipham — finalize() persists
+// session reports to ~/.mipham/crsi-sandbox, which would accumulate real files.
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>()
+  return {
+    ...actual,
+    homedir: () => `${actual.tmpdir()}/mipham-test-crsi-sandbox`,
+  }
+})
 
 // The worktree is a full monorepo copy. The test runs from apps/cli/,
 // but the worktree root is the repo root. So file paths are relative to

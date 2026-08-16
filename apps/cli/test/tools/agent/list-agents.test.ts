@@ -1,12 +1,20 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+
+// Isolate the cross-session filesystem from the real ~/.mipham so this file's
+// rmSync of .active-sessions cannot race with parallel cross-session tests.
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>()
+  return {
+    ...actual,
+    homedir: () => `${actual.tmpdir()}/mipham-test-list-agents`,
+  }
+})
+
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { listAgentsTool } from '../../../src/tools/agent/list-agents'
-import {
-  registerActiveSession,
-  unregisterSession,
-} from '../../../src/agent/cross-session/discovery'
+import { registerActiveSession } from '../../../src/agent/cross-session/discovery'
 import type { SessionInfo } from '../../../src/shared/types'
 
 const TEST_ACTIVE = join(homedir(), '.mipham', '.active-sessions')

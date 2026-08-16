@@ -1,4 +1,16 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+
+// Isolate the cross-session filesystem from the real ~/.mipham so parallel
+// test files (discovery/file-inbox/list-agents) that rmSync the shared
+// .active-sessions directory cannot race with this file's registrations.
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>()
+  return {
+    ...actual,
+    homedir: () => `${actual.tmpdir()}/mipham-test-send-message-cross`,
+  }
+})
+
 import {
   MessageRouter,
   resolveRecipientSession,
