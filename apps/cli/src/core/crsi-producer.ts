@@ -108,8 +108,8 @@ export const MANAGED_RULE_MARKER = '  // ── CRSI producer 追加点（勿删
 /** 超时类命令匹配（与 BUILTIN rule-timeout-bash-heavy 一致）。 */
 const MANAGED_HEAVY_RE = 'npm (install|ci|test)|docker build|pnpm install|cargo build|brew install'
 
-/** 危险参数匹配（与 BUILTIN rule-git-force-protection 同族）。 */
-const MANAGED_DANGEROUS_RE = '--force|rm -rf|git reset --hard'
+/** 危险命令匹配（行为缺口：rm -rf / git reset --hard / chmod 777 / 管道投毒）。 */
+export const MANAGED_DANGEROUS_RE = 'rm -rf|git reset --hard|chmod[^\\n]*777|\\|\\s*(bash|sh)\\b'
 
 /** 确定性 hash（无 Date.now / Math.random，同信号同 id → 幂等）。 */
 function stableHash(s: string): string {

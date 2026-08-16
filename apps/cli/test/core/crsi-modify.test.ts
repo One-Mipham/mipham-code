@@ -1,4 +1,7 @@
-import { describe, it, expect, afterEach, vi } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
+import { join } from 'node:path'
+import { rmSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { CrsiSandbox } from '../../src/core/crsi-sandbox'
 import {
   runCrsiModification,
@@ -18,6 +21,11 @@ vi.mock('node:os', async (importOriginal) => {
 
 // Repo-root-relative path inside the worktree (worktree = full monorepo copy).
 const WORKTREE_FILE = 'apps/cli/README.md'
+
+beforeEach(() => {
+  // 清空 rewards 日志，避免跨运行残留的旧分数（如 gap 表上线前的 100）触发假退化。
+  rmSync(join(homedir(), '.mipham', 'crsi', 'eval-scores.jsonl'), { force: true })
+})
 
 afterEach(() => {
   // 安全清理：reject = 回滚 worktree，不触碰真实仓库。
