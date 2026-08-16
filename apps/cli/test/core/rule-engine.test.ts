@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { readFileSync } from 'node:fs'
 import { ExperienceRuleEngine } from '../../src/core/rule-engine.js'
 import type { ToolRule } from '../../src/core/rule-engine.js'
 
@@ -169,5 +170,26 @@ describe('ExperienceRuleEngine', () => {
     const rules = engine.getActiveRules()
     expect(rules.length).toBeGreaterThan(0)
     expect(rules.every((r) => r.enabled)).toBe(true)
+  })
+
+  it('managed rules are source-only — never persisted to disk, still take effect in-memory', () => {
+    const engine = new ExperienceRuleEngine(TEST_DIR)
+    const managedRule: ToolRule = {
+      id: 'managed-timeout-test',
+      toolName: 'Bash',
+      category: 'timeout',
+      match: () => true,
+      fix: (p) => ({ modified: p, warning: 'managed rule applied' }),
+      source: 'managed',
+      enabled: true,
+    }
+    engine.register(managedRule)
+
+    const rulesJson = readFileSync(join(TEST_DIR, 'rules.json'), 'utf-8')
+    expect(rulesJson).not.toContain('managed-timeout-test')
+
+    // 源码规则仍在内存生效（restart 后由 MANAGED_RULES 重新 merge）。
+    const result = engine.intercept('Bash', { command: 'x' })
+    expect(result.warnings.length).toBeGreaterThan(0)
   })
 })

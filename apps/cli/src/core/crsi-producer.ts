@@ -96,3 +96,92 @@ export function produceCrsiProposal(
     originalContent: currentLessons,
   }
 }
+
+// ── Producer 毕业：固化受管理规则（行为，非教训） ──
+
+/** 受管理规则文件（相对仓库根）。 */
+export const MANAGED_RULES_FILE = 'apps/cli/src/core/crsi-managed-rules.ts'
+
+/** 追加点标记（与 crsi-managed-rules.ts 内注释一致）。 */
+export const MANAGED_RULE_MARKER = '  // ── CRSI producer 追加点（勿删此标记）──'
+
+/** 超时类命令匹配（与 BUILTIN rule-timeout-bash-heavy 一致）。 */
+const MANAGED_HEAVY_RE = 'npm (install|ci|test)|docker build|pnpm install|cargo build|brew install'
+
+/** 危险参数匹配（与 BUILTIN rule-git-force-protection 同族）。 */
+const MANAGED_DANGEROUS_RE = '--force|rm -rf|git reset --hard'
+
+/** 确定性 hash（无 Date.now / Math.random，同信号同 id → 幂等）。 */
+function stableHash(s: string): string {
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+  return h.toString(36)
+}
+
+/** 生成受管理规则的稳定 id（同类别 + 同标题 → 同 id）。 */
+export function managedRuleId(signal: CrsiSignal): string {
+  return `managed-${signal.category}-${stableHash(signal.title)}`
+}
+
+/**
+ * 把一条信号渲染成 ToolRule 的 TS 对象字面量源（模板化、无 LLM）。
+ * 只支持 timeout / tool-params 两类确定性 category，其余返回 null。
+ */
+export function renderManagedRuleSource(signal: CrsiSignal): string | null {
+  const id = managedRuleId(signal)
+  const warning = signal.suggestion || `CRSI 自动固化: ${signal.title}`
+
+  if (signal.category === 'timeout') {
+    return [
+      `  {`,
+      `    id: '${id}',`,
+      `    toolName: 'Bash',`,
+      `    category: 'timeout',`,
+      `    match: (p) => { const cmd = String(p.command ?? ''); if (!/${MANAGED_HEAVY_RE}/.test(cmd)) return false; const t = p.timeout; return !t || t < 300000 },`,
+      `    fix: (p) => ({ modified: { ...p, timeout: 300000 }, warning: ${JSON.stringify(`⏱️ ${warning}`)} }),`,
+      `    source: 'managed',`,
+      `    enabled: true,`,
+      `  },`,
+    ].join('\n')
+  }
+
+  if (signal.category === 'tool-params') {
+    return [
+      `  {`,
+      `    id: '${id}',`,
+      `    toolName: 'Bash',`,
+      `    category: 'tool-params',`,
+      `    match: (p) => { const cmd = String(p.command ?? ''); return /${MANAGED_DANGEROUS_RE}/.test(cmd) && !p.dangerouslyDisableSandbox },`,
+      `    fix: (p) => ({ modified: p, warning: ${JSON.stringify(`⚠️ ${warning}`)} }),`,
+      `    source: 'managed',`,
+      `    enabled: true,`,
+      `  },`,
+    ].join('\n')
+  }
+
+  return null
+}
+
+/** 产出受管理规则变更候选（毕业路径）。无合格信号 / 同名规则已存在时返回 null。 */
+export function produceRuleProposal(
+  signal: CrsiSignal,
+  currentManagedRules: string,
+): { description: string; filePath: string; newContent: string; originalContent: string } | null {
+  const ruleSource = renderManagedRuleSource(signal)
+  if (!ruleSource) return null
+
+  const id = managedRuleId(signal)
+  // 幂等：同名规则已在文件中，不再重复产出。
+  if (currentManagedRules.includes(`id: '${id}'`)) return null
+
+  const newContent = currentManagedRules.includes(MANAGED_RULE_MARKER)
+    ? currentManagedRules.replace(MANAGED_RULE_MARKER, `${MANAGED_RULE_MARKER}\n${ruleSource}`)
+    : `${ruleSource}\n` // 文件缺失/异常时，回退为仅规则块
+
+  return {
+    description: `CRSI managed rule: ${signal.category} — ${signal.title}`,
+    filePath: MANAGED_RULES_FILE,
+    newContent,
+    originalContent: currentManagedRules,
+  }
+}

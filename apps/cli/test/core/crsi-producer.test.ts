@@ -3,7 +3,11 @@ import {
   selectCrsiSignal,
   buildLessonContent,
   produceCrsiProposal,
+  produceRuleProposal,
+  managedRuleId,
   LESSONS_FILE,
+  MANAGED_RULES_FILE,
+  MANAGED_RULE_MARKER,
 } from '../../src/core/crsi-producer'
 import type { CrsiInsight } from '../../src/core/auto-memory'
 import type { MetaRule } from '../../src/core/meta-rule-engine'
@@ -109,5 +113,64 @@ describe('produceCrsiProposal', () => {
     const proposal = produceCrsiProposal([insight()], [], '', 'ts')
     expect(proposal).not.toBeNull()
     expect(proposal!.newContent).toContain('## timeout')
+  })
+})
+
+describe('produceRuleProposal (毕业路径)', () => {
+  const signal = {
+    category: 'timeout',
+    title: 'Bash npm install 超时过低',
+    severity: 'warning' as const,
+    suggestion: '增加 timeout 到 300000ms',
+    evidence: ['npm install 超时'],
+  }
+
+  it('renders a managed rule with deterministic id and correct filePath', () => {
+    const proposal = produceRuleProposal(signal, '')
+    expect(proposal).not.toBeNull()
+    expect(proposal!.filePath).toBe(MANAGED_RULES_FILE)
+    expect(proposal!.newContent).toContain("id: 'managed-timeout-")
+    expect(proposal!.newContent).toContain("source: 'managed'")
+    expect(proposal!.newContent).toContain('timeout: 300000')
+    expect(proposal!.newContent).toContain('enabled: true')
+  })
+
+  it('is idempotent — producing twice yields no duplicate', () => {
+    const first = produceRuleProposal(signal, '')
+    expect(first).not.toBeNull()
+    const second = produceRuleProposal(signal, first!.newContent)
+    expect(second).toBeNull()
+  })
+
+  it('returns null for unsupported categories', () => {
+    expect(produceRuleProposal({ ...signal, category: 'semantic' }, '')).toBeNull()
+  })
+
+  it('managedRuleId is stable for the same signal regardless of evidence', () => {
+    expect(managedRuleId(signal)).toBe(managedRuleId(signal))
+    expect(managedRuleId(signal)).toBe(managedRuleId({ ...signal, evidence: ['different'] }))
+  })
+
+  it('appends at the marker when file already has the append marker', () => {
+    const file = [
+      `import type { ToolRule } from './rule-engine'`,
+      '',
+      'export const MANAGED_RULES: ToolRule[] = [',
+      MANAGED_RULE_MARKER,
+      ']',
+      '',
+    ].join('\n')
+    const proposal = produceRuleProposal(signal, file)
+    expect(proposal).not.toBeNull()
+    expect(proposal!.newContent).toContain(MANAGED_RULE_MARKER)
+    expect(proposal!.newContent).toContain("id: 'managed-timeout-")
+  })
+
+  it('renders tool-params rule for dangerous flags', () => {
+    const tp = { ...signal, category: 'tool-params', suggestion: '检测 git --force' }
+    const proposal = produceRuleProposal(tp, '')
+    expect(proposal).not.toBeNull()
+    expect(proposal!.newContent).toContain("category: 'tool-params'")
+    expect(proposal!.newContent).toContain('--force')
   })
 })

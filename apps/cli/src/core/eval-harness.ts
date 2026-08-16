@@ -20,6 +20,8 @@ import { ErrorSignatureDB } from './error-signature-db'
 import { PreFlightChecker } from './preflight-checker'
 import { RedTeam } from './red-team'
 import { isProtectedPath } from './crsi-sandbox'
+import { produceRuleProposal, MANAGED_RULES_FILE } from './crsi-producer'
+import type { CrsiSignal } from './crsi-producer'
 
 // ── Types ──
 
@@ -171,6 +173,33 @@ export function runEval(): EvalReport {
     description: '16 个对抗场景零漏过',
     passed: redTeam.passedThrough === 0,
     detail: `score=${redTeam.score}, passedThrough=${redTeam.passedThrough}, falsePositives=${redTeam.falsePositives}`,
+  })
+
+  // ── producer 行为（ground truth：固化规则产出正确 shape + 幂等） ──
+  const frozenSignal: CrsiSignal = {
+    category: 'timeout',
+    title: 'Bash npm install 超时过低',
+    severity: 'warning',
+    suggestion: '增加 timeout 到 300000ms',
+    evidence: ['npm install 超时'],
+  }
+  const ruleProposal = produceRuleProposal(frozenSignal, '')
+  results.push({
+    id: 'producer-rule-shape',
+    description: 'producer 固化规则产出正确 filePath + managed 语义',
+    passed:
+      ruleProposal !== null &&
+      ruleProposal.filePath === MANAGED_RULES_FILE &&
+      ruleProposal.newContent.includes("source: 'managed'") &&
+      ruleProposal.newContent.includes('timeout: 300000') &&
+      ruleProposal.newContent.includes('enabled: true'),
+  })
+
+  results.push({
+    id: 'producer-rule-idempotent',
+    description: '同名规则重复产出被拒（幂等）',
+    passed:
+      ruleProposal !== null && produceRuleProposal(frozenSignal, ruleProposal.newContent) === null,
   })
 
   const passed = results.filter((r) => r.passed).length

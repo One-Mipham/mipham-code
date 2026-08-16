@@ -12,7 +12,13 @@ import type { Message } from '../shared/types.js'
 import { McpClient } from '../mcp/client'
 import { buildCapabilityReport } from '../core/capability-inventory'
 import { runCrsiModification, approvePending, rejectPending, hasPending } from '../core/crsi-modify'
-import { produceCrsiProposal, LESSONS_FILE } from '../core/crsi-producer'
+import {
+  produceCrsiProposal,
+  produceRuleProposal,
+  selectCrsiSignal,
+  LESSONS_FILE,
+  MANAGED_RULES_FILE,
+} from '../core/crsi-producer'
 import { runEval, appendEvalScore } from '../core/eval-harness'
 import { NPM_UPDATE_COMMAND, PACKAGE_VERSION } from '../shared/index.ts'
 import { getPreference } from '../config/preferences'
@@ -788,7 +794,7 @@ const crsiModifyCmd: CommandHandler = async (ctx, args) => {
   }
 }
 
-const crsiProposeCmd: CommandHandler = async (ctx) => {
+const crsiProposeCmd: CommandHandler = async (ctx, args) => {
   if (hasPending()) {
     return { content: '⚠️ 已有待批准的修改。先 /crsi modify --approve 或 --reject。' }
   }
@@ -801,15 +807,57 @@ const crsiProposeCmd: CommandHandler = async (ctx) => {
     metaRules = []
   }
 
-  // 教训文件按仓库根解析（沙箱的 filePath 是仓库根相对）。
+  // 目标文件按仓库根解析（沙箱的 filePath 是仓库根相对）。
+  let root = process.cwd()
+  try {
+    root = execSync('git rev-parse --show-toplevel', {
+      timeout: 5000,
+      encoding: 'utf-8',
+    }).trim()
+  } catch {
+    // 非 git 目录 → 回退 cwd
+  }
+
+  // ── 毕业路径：/crsi propose --rule 固化受管理规则（行为） ──
+  if (args[0] === '--rule') {
+    const signal = selectCrsiSignal(insights, metaRules)
+    if (!signal) {
+      return { content: '没有足够的失败信号（autoApplicable insight 或高置信元规则）来固化规则。' }
+    }
+
+    let current = ''
+    try {
+      const { readFileSync } = await import('node:fs')
+      const { join } = await import('node:path')
+      current = readFileSync(join(root, MANAGED_RULES_FILE), 'utf-8')
+    } catch {
+      current = ''
+    }
+
+    const proposal = produceRuleProposal(signal, current)
+    if (!proposal) {
+      return {
+        content: '没有可固化的规则（category 需为 timeout/tool-params，且同名规则不存在）。',
+      }
+    }
+
+    const result = runCrsiModification(proposal)
+    if (!result.applied || result.phase === 'failed') {
+      return { content: `❌ 固化失败（phase: ${result.phase}）。\n${result.error ?? ''}` }
+    }
+
+    return {
+      content:
+        `✅ 已生成受管理规则并跑过测试。审阅 diff：\n\n${result.diff}\n\n` +
+        '/crsi modify --approve 合并 | /crsi modify --reject 丢弃',
+    }
+  }
+
+  // ── 教训路径（默认）：/crsi propose 追加教训 ──
   let current = ''
   try {
     const { readFileSync } = await import('node:fs')
     const { join } = await import('node:path')
-    const root = execSync('git rev-parse --show-toplevel', {
-      timeout: 5000,
-      encoding: 'utf-8',
-    }).trim()
     current = readFileSync(join(root, LESSONS_FILE), 'utf-8')
   } catch {
     current = ''
@@ -4771,7 +4819,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/crsi health': 'CRSI + SIS unified health dashboard with scoring',
   '/crsi inventory': 'Live capability self-report — CRSI/SIS/constitution state',
   '/crsi modify': 'Run a code self-modification through the sandbox (worktree → tests → approve)',
-  '/crsi propose': 'Produce a codified CRSI lesson from failure signals, gated by the sandbox',
+  '/crsi propose': '固化 CRSI 失败信号（默认教训 / --rule 受管理规则），沙箱 + 人批准门控',
   '/crsi eval': 'Run the ground-truth CRSI eval harness and record the score',
   '/crsi meta': 'RSI Level 3 meta-rule analysis — rules that improve the rules',
   '/crsi interpret': 'Tool-call behavior dashboard — error patterns, usage, health',

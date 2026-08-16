@@ -1,6 +1,7 @@
 import type { ExperienceRule } from '../agent/experience-rules.js'
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
+import { MANAGED_RULES } from './crsi-managed-rules'
 
 export interface ToolRule {
   id: string
@@ -11,7 +12,7 @@ export interface ToolRule {
     modified: Record<string, unknown>
     warning: string
   }
-  source: 'builtin' | 'pattern-analyzer' | 'manual'
+  source: 'builtin' | 'pattern-analyzer' | 'manual' | 'managed'
   enabled: boolean
 }
 
@@ -61,7 +62,7 @@ export class ExperienceRuleEngine {
   private storePath: string
 
   constructor(storeDir: string = join(process.env.HOME || '~', '.mipham', 'rule-engine')) {
-    this.rules = [...BUILTIN_RULES.map((r) => ({ ...r }))]
+    this.rules = [...BUILTIN_RULES, ...MANAGED_RULES].map((r) => ({ ...r }))
     this.storePath = join(storeDir, 'rules.json')
     this.load()
   }
@@ -153,23 +154,23 @@ export class ExperienceRuleEngine {
     }
   }
 
-  /** Persist non-builtin rules to disk. */
+  /** Persist runtime rules to disk. Builtin 与 managed 规则永不落盘（源码即真相）。 */
   persist(): void {
-    const nonBuiltin = this.rules.filter((r) => r.source !== 'builtin')
+    const nonBuiltin = this.rules.filter((r) => r.source !== 'builtin' && r.source !== 'managed')
     const dir = dirname(this.storePath)
     mkdirSync(dir, { recursive: true })
     writeFileSync(this.storePath, JSON.stringify(nonBuiltin, null, 2), 'utf-8')
   }
 
-  /** Load persisted non-builtin rules from disk. Rejects rules whose IDs conflict with builtins. */
+  /** Load persisted runtime rules from disk. Rejects rules whose IDs conflict with builtin/managed. */
   load(): void {
     if (!existsSync(this.storePath)) return
     try {
       const raw = JSON.parse(readFileSync(this.storePath, 'utf-8')) as ToolRule[]
-      const builtinIds = new Set(BUILTIN_RULES.map((r) => r.id))
+      const reservedIds = new Set([...BUILTIN_RULES, ...MANAGED_RULES].map((r) => r.id))
       for (const rule of raw) {
-        // Reject if a builtin with the same ID exists (builtins always win)
-        if (builtinIds.has(rule.id)) continue
+        // Reject if a builtin/managed rule with the same ID exists (source rules always win)
+        if (reservedIds.has(rule.id)) continue
         this.rules.push(rule)
       }
     } catch {

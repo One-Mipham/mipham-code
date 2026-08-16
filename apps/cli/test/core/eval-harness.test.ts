@@ -36,6 +36,13 @@ describe('runEval', () => {
     expect(ids).toContain('sandbox-protected-constitution')
     expect(ids).toContain('red-team-zero-gaps')
   })
+
+  it('covers producer behavior contracts', () => {
+    const report = runEval()
+    const ids = report.results.map((r) => r.id)
+    expect(ids).toContain('producer-rule-shape')
+    expect(ids).toContain('producer-rule-idempotent')
+  })
 })
 
 describe('rewards log', () => {
