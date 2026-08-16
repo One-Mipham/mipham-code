@@ -15,6 +15,7 @@
 import { randomUUID } from 'node:crypto'
 import { CrsiSandbox } from './crsi-sandbox'
 import type { CrsiModificationResult } from './crsi-sandbox'
+import { runEval, appendEvalScore, getLastEvalScore } from './eval-harness'
 
 export interface CrsiProposal {
   /** 人类可读的改动说明 */
@@ -68,6 +69,19 @@ export function runCrsiModification(
     applied.phase = 'failed'
     return applied
   }
+
+  // Eval harness gate：CRSI 契约分数不得低于上次记录（防跨合并退化）。
+  // 分数反映「当前代码」的 CRSI 契约（隔离组件，与本次 worktree 改动无关），
+  // 所以它是「仓库的 CRSI 代码自上次评估以来是否退化」的哨兵。
+  const evalReport = runEval()
+  const last = getLastEvalScore()
+  if (last !== null && evalReport.score < last) {
+    sandbox.rollback()
+    applied.phase = 'failed'
+    applied.error = `Eval regression: score ${evalReport.score} < last ${last}`
+    return applied
+  }
+  appendEvalScore(evalReport)
 
   applied.phase = 'passed'
   applied.diff = sandbox.getDiff()

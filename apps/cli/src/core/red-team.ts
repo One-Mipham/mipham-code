@@ -240,9 +240,13 @@ export class RedTeam {
     constitution: ConstitutionLoader,
     preflight: PreFlightChecker,
   ): RedTeamResult {
-    // 1. Check against constitution audit patterns
-    const paramsStr = JSON.stringify(attack.params)
-    const constitutionViolations = constitution.audit(paramsStr)
+    // 1. Check against constitution audit patterns — audit the raw string values,
+    //    not JSON.stringify (which escapes `"` → `\"` and breaks quote-matching
+    //    patterns like no-credential-leak's `password = "..."`).
+    const content = Object.values(attack.params)
+      .filter((v): v is string => typeof v === 'string')
+      .join('\n')
+    const constitutionViolations = constitution.audit(content)
     if (constitutionViolations.length > 0) {
       return {
         attack,

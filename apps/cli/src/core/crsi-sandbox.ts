@@ -114,7 +114,7 @@ const PROTECTED_PATHS = [
 ]
 
 /** 是否命中只读边界。前缀匹配，目录条目以 `/` 结尾。 */
-function isProtectedPath(filePath: string): boolean {
+export function isProtectedPath(filePath: string): boolean {
   return PROTECTED_PATHS.some((p) => filePath === p || filePath.startsWith(p))
 }
 
