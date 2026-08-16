@@ -193,8 +193,9 @@ function SetupGate(props: SetupGateProps) {
 }
 
 export async function runApp(options: RunOptions): Promise<void> {
-  // Metrics: count CLI invocation
+  // Metrics: count CLI invocation + active session
   getMetrics().cliInvocations.inc()
+  getMetrics().activeSessions.inc()
 
   // ── Workspace Trust Check ──
   await checkWorkspaceTrust()
@@ -598,6 +599,7 @@ export async function runApp(options: RunOptions): Promise<void> {
     } catch {
       // ignore — CRSI flush is non-critical
     }
+    getMetrics().activeSessions.dec()
     process.exit(0)
   }
 

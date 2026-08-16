@@ -35,6 +35,7 @@ import { DreamEngine } from './dream-engine.js'
 import { ConstitutionLoader } from './constitution-loader.js'
 import { SelfCritique } from './self-critique.js'
 import { UsageTracker } from './usage-tracker'
+import { getMetrics } from './metrics'
 import { buildRequest, sendInferenceCheck, isInferenceHookEnabled } from './inference-hook'
 import { getFileInboxTransport } from '../agent/cross-session/file-inbox'
 import { getMessageBus, type AgentMessage } from '../agent/message-bus'
@@ -921,6 +922,7 @@ export class QueryEngine {
   }
 
   private async executeTool(name: string, params: Record<string, unknown>): Promise<ToolResult> {
+    getMetrics().toolCalls.inc({ tool_name: name })
     const tool = this.tools.get(name)
     if (!tool) {
       // P2-4: Provide a more helpful error for unavailable tools
@@ -970,6 +972,7 @@ export class QueryEngine {
     if (this.crsiConfig?.preToolHook !== false && this.ruleEngine) {
       const ruleResult = this.ruleEngine.intercept(name, effectiveParams)
       if (Object.keys(ruleResult.modified).length > 0) {
+        getMetrics().crsiRuleApplications.inc()
         effectiveParams = ruleResult.modified
       }
       if (ruleResult.warnings.length > 0) {
@@ -980,6 +983,7 @@ export class QueryEngine {
     // ── SIS PreFlightChecker — known error pattern interception ──
     const preflight = this.getPreFlightChecker().check(name, effectiveParams)
     if (preflight.action === 'block') {
+      getMetrics().sisInterceptions.inc()
       return {
         success: false,
         content: preflight.warning || 'SIS 免疫系统拦截了此操作',
@@ -987,6 +991,7 @@ export class QueryEngine {
       }
     }
     if (preflight.action === 'fix' && preflight.modifiedParams) {
+      getMetrics().sisInterceptions.inc()
       effectiveParams = preflight.modifiedParams
       if (preflight.warning) {
         hookWarnings = [...hookWarnings, preflight.warning]

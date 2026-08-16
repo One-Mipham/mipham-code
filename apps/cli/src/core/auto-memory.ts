@@ -17,6 +17,7 @@ import type { ExperienceRuleEngine, ToolRule } from './rule-engine.js'
 import type { EffectivenessTracker } from '../agent/effectiveness-tracker.js'
 import type { ErrorSignatureDB } from './error-signature-db.js'
 import type { CrsiProvenanceBridge } from '../agent/crsi-provenance-bridge.js'
+import { getMetrics } from './metrics'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 
@@ -245,7 +246,10 @@ export class AutoMemoryEngine {
     this.effectivenessTracker.persist()
 
     if (this.ruleEngine) {
-      for (const id of disables) this.ruleEngine.setRuleEnabled(id, false)
+      for (const id of disables) {
+        this.ruleEngine.setRuleEnabled(id, false)
+        getMetrics().crsiRuleDisables.inc()
+      }
       for (const id of upgrades) this.ruleEngine.setRuleEnabled(id, true)
     }
   }

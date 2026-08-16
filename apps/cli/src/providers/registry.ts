@@ -1,5 +1,6 @@
 import type { ProviderConfig, ModelInfo, Message, StreamChunk } from '../shared/index.ts'
 import type { Llm } from './llm'
+import { getMetrics } from '../core/metrics'
 
 export interface ProviderInstance {
   config: ProviderConfig
@@ -115,6 +116,23 @@ export class ProviderRegistry implements Llm {
 
   async *chat(req: ChatRequest): AsyncGenerator<StreamChunk> {
     const provider = this.getActive()
-    yield* provider.chat({ ...req, model: req.model || this.activeModelId })
+    const providerId = this.activeProviderId
+    const modelId = req.model || this.activeModelId
+    const metrics = getMetrics()
+    const start = Date.now()
+    metrics.modelRequests.inc({ provider: providerId, model: modelId })
+    try {
+      for await (const chunk of provider.chat({ ...req, model: modelId })) {
+        if (chunk.type === 'error') {
+          metrics.modelRequestErrors.inc({ provider: providerId, error_type: 'api_error' })
+        }
+        yield chunk
+      }
+    } catch (err) {
+      metrics.modelRequestErrors.inc({ provider: providerId, error_type: 'exception' })
+      throw err
+    } finally {
+      metrics.modelRequestDurationMs.observe(Date.now() - start, { provider: providerId })
+    }
   }
 }

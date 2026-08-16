@@ -6,20 +6,20 @@ import { Counter, Gauge, Histogram, getMetrics, resetMetrics } from '../../src/c
 describe('Counter', () => {
   it('starts at zero', () => {
     const c = new Counter('test_total', 'Test counter')
-    expect(c.value).toBe(0)
+    expect(c.value()).toBe(0)
   })
 
   it('inc() increments by 1 by default', () => {
     const c = new Counter('test_total', 'Test counter')
     c.inc()
-    expect(c.value).toBe(1)
+    expect(c.value()).toBe(1)
   })
 
   it('inc(n) increments by n', () => {
     const c = new Counter('test_total', 'Test counter')
     c.inc(5)
     c.inc(3)
-    expect(c.value).toBe(8)
+    expect(c.value()).toBe(8)
   })
 
   it('toPrometheus format', () => {
@@ -42,8 +42,7 @@ describe('Counter', () => {
       name: 'test_total',
       type: 'counter',
       help: 'Test counter',
-      labels: { app: 'cli' },
-      value: 3,
+      series: [{ labels: '{app="cli"}', value: 3 }],
     })
   })
 
@@ -59,21 +58,21 @@ describe('Counter', () => {
 describe('Gauge', () => {
   it('starts at zero', () => {
     const g = new Gauge('test_gauge', 'Test gauge')
-    expect(g.value).toBe(0)
+    expect(g.value()).toBe(0)
   })
 
   it('inc() and dec()', () => {
     const g = new Gauge('test_gauge', 'Test gauge')
     g.inc(5)
     g.dec(2)
-    expect(g.value).toBe(3)
+    expect(g.value()).toBe(3)
   })
 
   it('set() overwrites value', () => {
     const g = new Gauge('test_gauge', 'Test gauge')
     g.inc(10)
     g.set(42)
-    expect(g.value).toBe(42)
+    expect(g.value()).toBe(42)
   })
 
   it('toPrometheus format', () => {
@@ -128,10 +127,11 @@ describe('Histogram', () => {
     h.observe(50)
     const j = h.toJSON() as any
     expect(j.type).toBe('histogram')
-    expect(j.count).toBe(1)
-    expect(j.sum).toBe(50)
-    expect(j.buckets).toHaveLength(3) // le=100, le=500, le=+Inf
-    expect(j.buckets[0]).toEqual({ le: '100', count: 1 })
+    const series = j.series[0]
+    expect(series.count).toBe(1)
+    expect(series.sum).toBe(50)
+    expect(series.buckets).toHaveLength(2) // le=100, le=500
+    expect(series.buckets[0]).toEqual({ le: '100', count: 1 })
   })
 })
 
@@ -161,7 +161,7 @@ describe('MetricsRegistry', () => {
     const c2 = m.counter('x', 'h')
     expect(c1).toBe(c2)
     c1.inc()
-    expect(c2.value).toBe(1)
+    expect(c2.value()).toBe(1)
   })
 
   it('predefined metrics are available', () => {
@@ -172,6 +172,9 @@ describe('MetricsRegistry', () => {
     expect(m.modelRequestErrors).toBeDefined()
     expect(m.modelRequestDurationMs).toBeDefined()
     expect(m.activeSessions).toBeDefined()
+    expect(m.crsiRuleApplications).toBeDefined()
+    expect(m.crsiRuleDisables).toBeDefined()
+    expect(m.sisInterceptions).toBeDefined()
   })
 
   it('toPrometheusText outputs HELP and TYPE lines', () => {
@@ -244,12 +247,22 @@ describe('Metrics edge cases', () => {
     expect(c.toPrometheus()).toBe('test 1')
   })
 
+  it('labelled inc() records separate series', () => {
+    const m = getMetrics()
+    m.toolCalls.inc({ tool_name: 'bash' })
+    m.toolCalls.inc({ tool_name: 'bash' })
+    m.toolCalls.inc({ tool_name: 'read' })
+    const text = m.toPrometheusText()
+    expect(text).toContain('mipham_code_tool_calls_total{tool_name="bash"} 2')
+    expect(text).toContain('mipham_code_tool_calls_total{tool_name="read"} 1')
+  })
+
   it('reset clears all metrics', () => {
     const m = getMetrics()
     m.cliInvocations.inc(5)
     m.reset()
     // After reset, re-creating a metric gives fresh state
     const c = m.counter('mipham_code_cli_invocations_total', '...')
-    expect(c.value).toBe(0)
+    expect(c.value()).toBe(0)
   })
 })
