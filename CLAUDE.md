@@ -4,8 +4,8 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.2.0
-> **最后更新**: 2026-08-16 — Vajra-Hṛdaya 自建内核落地（M0→M3+真叶子）+ post-CRSI 五条收官 + v0.41.0（未知 flag/option 拒绝 + 测试隔离）
+> **版本**: 2.2.1
+> **最后更新**: 2026-08-16 — Vajra-Hṛdaya 自建内核落地（M0→M3+真叶子）+ 对齐缝（第 4 缝）+ post-CRSI 五条收官 + v0.41.0（未知 flag/option 拒绝 + 测试隔离）
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -182,11 +182,12 @@ Vajra-Hṛdaya（金刚·心）是 Mipham Code **自建的可组合服务内核*
 | 声明式组合 | `vajra/compose/`            | `BundleLine`/`Bundle`/`Profile` 类型 + `assemble`（concat + patch 按 id 整行替换）+ `mountProfile` + `dumpConfig`                                                 |
 | 真叶子     | `vajra/leaf/plan-runner.ts` | SDD 编排作为内核 Service：逐任务 `ctx.scope` + `ctx.llm` 一击 + `ctx.emit` 进度事件                                                                               |
 
-三缝（把 harness 旧能力升为 Service，strangler fig 收账）：
+四缝（把 harness 旧能力升为 Service，strangler fig 收账）：
 
 - **工具缝** `tools/seam.ts` — `createToolRegistry(ctx)` 挂工具为 Service，`credentialConfig` 全局走私改 `inject:['credentials']`
 - **LLM 缝** `ctx.llm` — `Llm` 接口（chat）+ `ProviderRegistry`/`llm-replay` 回放器，engine `setLlm` + 默认回退 registry
 - **skills 缝** `ctx.skills` — `Skills` 接口 + `mountSkills` + `SkillsLoader implements Skills`
+- **对齐缝** `ctx.constitution` — `Constitution` 接口 + `CONSTITUTION_KEY` + `createConstitution(loader)` 桥接 `ConstitutionLoader`；`Service.align?` 声明原则 id，`mount()` 在 apply 前过对齐门（声明未知 id 拒绝挂载）
 
 会话日志（M1）：`core/session-log.ts` — `SessionEvent` 七变体 + `messageToEvents`/`deriveMessages` 字节级互逆 + append-only JSONL（「model-visible means logged」）。
 
@@ -215,7 +216,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
 | E2E      | 1       | 8        | full-pipeline                                 |
 | Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **109** | **1449** | **0 失败** ✅（1447 passed + 2 skipped）      |
+| **合计** | **110** | **1454** | **0 失败** ✅（1452 passed + 2 skipped）      |
 
 > 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
 
@@ -353,21 +354,22 @@ mipham-code 变更（包名/版本）
 
 ### 修订历史
 
-| 版本  | 日期       | 变更内容                                                                                                                                                                                                                                                   | 维护人     |
-| ----- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| 2.2.0 | 2026-08-16 | Vajra-Hṛdaya 自建内核落地（M0 原语/M1 会话日志/M2 三缝/M3 声明式组合/真叶子 plan-runner/gap①-④ 绞杀收官）；post-CRSI 五条完成（发布冒烟测试/内核收口/CRSI 有效性度量/分发触达/可观测性）；v0.41.0（未知 flag/option 拒绝执行 + 跨会话测试隔离）。1449 测试 | 技术委员会 |
-| 2.1.0 | 2026-08-14 | Claude Code 2.1.231~232 借鉴：4 项 P0（Bash git flag / token 脱敏 / 副代理后台 / SendMessage 裸名）+ prompt cache Phase 1a/1b/2/3（cache_control + PrefixCacheTracker + fork 继承）。1293 测试；Phase 4 错峰跳过（无共享前缀）                             | 技术委员会 |
-| 2.0.3 | 2026-08-13 | v0.32.7 Claude Code 2.1.227 借鉴：rg prompt 增强 + 斜杠菜单匹配高亮 + 性能排查。1115 tests ✅                                                                                                                                                              | 技术委员会 |
-| 2.0.2 | 2026-08-13 | v0.32.6 换行规范化（input onChange）+ 同步 v0.32.2→0.32.5：工具活动指示器、Header 精简、粘贴死锁修复                                                                                                                                                       | 技术委员会 |
-| 2.0.1 | 2026-08-11 | v0.32.1 工具逐个显示修复（compactToolGroups 重写），1115 测试，CI 绿                                                                                                                                                                                       | 技术委员会 |
-| 2.0.0 | 2026-08-11 | Daemon 后台持久化架构 5 阶段完成（45 文件，~6000 行），Mipham Code 进化为超级智能体平台                                                                                                                                                                    | 技术委员会 |
-| 1.9.0 | 2026-08-11 | 下一步计划新增 Daemon 后台持久化架构（借鉴 prime-agent 评估结论），1020 测试，CI 绿                                                                                                                                                                        | 技术委员会 |
-| 1.8.0 | 2026-08-10 | v0.27.0：3 Vibe Coding 摩擦点修复 + 全面能力评估（综合 7.8/10），1020 测试，CI 绿                                                                                                                                                                          | 技术委员会 |
-| 1.7.0 | 2026-08-10 | v0.26.0：5 新 Skills + 批判性思维层，Skills 15→20，需求→交付链路 85% 覆盖                                                                                                                                                                                  | 技术委员会 |
-| 1.6.0 | 2026-08-10 | v0.25.0：P0/P1/P2 安全对齐 Claude Code v2.1.222→v2.1.226，13 项修复，1020 测试                                                                                                                                                                             | 技术委员会 |
-| 1.5.0 | 2026-08-10 | 新增关键约束：任务执行流程（搜索→实现→验证→lint）、高效并行调用、禁止自动提交                                                                                                                                                                              | 技术委员会 |
-| 1.4.0 | 2026-08-05 | Sprint 5：Rules 系统、Agent Memory 三级、MCP Tool Search（30 工具）、VS Code 扩展                                                                                                                                                                          | 技术委员会 |
-| 1.3.0 | 2026-08-05 | v0.10.0 Sprint 1-4：29 工具、后台 Agent、Worktree、Plan Mode、6 级权限、642 测试                                                                                                                                                                           | 技术委员会 |
-| 1.2.0 | 2026-06-15 | 修正 Slash 命令（54→89）、Skills（11→15）、补充记忆系统、更新下一步计划                                                                                                                                                                                    | 技术委员会 |
-| 1.1.0 | 2026-06-15 | 更新最近提交表为实际 git 历史（27 commits），补充迁移说明                                                                                                                                                                                                  | 技术委员会 |
-| 1.0.0 | 2026-06-02 | 初始创建：完整架构、测试矩阵、Provider 表、Skills 清单、CI/CD 流水线                                                                                                                                                                                       | 技术委员会 |
+| 版本  | 日期       | 变更内容                                                                                                                                                                                                                                                                      | 维护人     |
+| ----- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| 2.2.1 | 2026-08-16 | Vajra-Hṛdaya 对齐缝（第 4 缝）：`Service.align?` 声明原则 id + `ctx.constitution` 缝（`Constitution` 接口 + `CONSTITUTION_KEY`）+ `mount()` 挂载前对齐门（声明未知 id 拒绝挂载，`core/constitution-seam.ts` 桥接 `ConstitutionLoader`）。1454 测试（1452 passed + 2 skipped） | 技术委员会 |
+| 2.2.0 | 2026-08-16 | Vajra-Hṛdaya 自建内核落地（M0 原语/M1 会话日志/M2 三缝/M3 声明式组合/真叶子 plan-runner/gap①-④ 绞杀收官）；post-CRSI 五条完成（发布冒烟测试/内核收口/CRSI 有效性度量/分发触达/可观测性）；v0.41.0（未知 flag/option 拒绝执行 + 跨会话测试隔离）。1449 测试                    | 技术委员会 |
+| 2.1.0 | 2026-08-14 | Claude Code 2.1.231~232 借鉴：4 项 P0（Bash git flag / token 脱敏 / 副代理后台 / SendMessage 裸名）+ prompt cache Phase 1a/1b/2/3（cache_control + PrefixCacheTracker + fork 继承）。1293 测试；Phase 4 错峰跳过（无共享前缀）                                                | 技术委员会 |
+| 2.0.3 | 2026-08-13 | v0.32.7 Claude Code 2.1.227 借鉴：rg prompt 增强 + 斜杠菜单匹配高亮 + 性能排查。1115 tests ✅                                                                                                                                                                                 | 技术委员会 |
+| 2.0.2 | 2026-08-13 | v0.32.6 换行规范化（input onChange）+ 同步 v0.32.2→0.32.5：工具活动指示器、Header 精简、粘贴死锁修复                                                                                                                                                                          | 技术委员会 |
+| 2.0.1 | 2026-08-11 | v0.32.1 工具逐个显示修复（compactToolGroups 重写），1115 测试，CI 绿                                                                                                                                                                                                          | 技术委员会 |
+| 2.0.0 | 2026-08-11 | Daemon 后台持久化架构 5 阶段完成（45 文件，~6000 行），Mipham Code 进化为超级智能体平台                                                                                                                                                                                       | 技术委员会 |
+| 1.9.0 | 2026-08-11 | 下一步计划新增 Daemon 后台持久化架构（借鉴 prime-agent 评估结论），1020 测试，CI 绿                                                                                                                                                                                           | 技术委员会 |
+| 1.8.0 | 2026-08-10 | v0.27.0：3 Vibe Coding 摩擦点修复 + 全面能力评估（综合 7.8/10），1020 测试，CI 绿                                                                                                                                                                                             | 技术委员会 |
+| 1.7.0 | 2026-08-10 | v0.26.0：5 新 Skills + 批判性思维层，Skills 15→20，需求→交付链路 85% 覆盖                                                                                                                                                                                                     | 技术委员会 |
+| 1.6.0 | 2026-08-10 | v0.25.0：P0/P1/P2 安全对齐 Claude Code v2.1.222→v2.1.226，13 项修复，1020 测试                                                                                                                                                                                                | 技术委员会 |
+| 1.5.0 | 2026-08-10 | 新增关键约束：任务执行流程（搜索→实现→验证→lint）、高效并行调用、禁止自动提交                                                                                                                                                                                                 | 技术委员会 |
+| 1.4.0 | 2026-08-05 | Sprint 5：Rules 系统、Agent Memory 三级、MCP Tool Search（30 工具）、VS Code 扩展                                                                                                                                                                                             | 技术委员会 |
+| 1.3.0 | 2026-08-05 | v0.10.0 Sprint 1-4：29 工具、后台 Agent、Worktree、Plan Mode、6 级权限、642 测试                                                                                                                                                                                              | 技术委员会 |
+| 1.2.0 | 2026-06-15 | 修正 Slash 命令（54→89）、Skills（11→15）、补充记忆系统、更新下一步计划                                                                                                                                                                                                       | 技术委员会 |
+| 1.1.0 | 2026-06-15 | 更新最近提交表为实际 git 历史（27 commits），补充迁移说明                                                                                                                                                                                                                     | 技术委员会 |
+| 1.0.0 | 2026-06-02 | 初始创建：完整架构、测试矩阵、Provider 表、Skills 清单、CI/CD 流水线                                                                                                                                                                                                          | 技术委员会 |

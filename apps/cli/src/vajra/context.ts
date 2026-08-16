@@ -1,5 +1,7 @@
 import type { EventsOfMode } from './events'
 import type { Service, Mounted, ServiceStatus } from './service'
+import type { Constitution } from './constitution'
+import { CONSTITUTION_KEY } from './constitution'
 
 export type Disposer = () => void
 
@@ -43,6 +45,19 @@ export class Context {
       if (!keys.every((k) => this.has(k))) return false
       applied = true
       status = 'loading'
+      // 对齐缝：挂载前向 constitution 求证声明的原则 id，全部已知才放行。
+      const align = service.align
+      if (align && align.length > 0) {
+        const constitution = this.get<Constitution>(CONSTITUTION_KEY)
+        if (constitution) {
+          const { violations } = constitution.check(align)
+          if (violations.length > 0) {
+            error = new Error(`对齐违例：${violations.join(', ')}`)
+            status = 'failed'
+            return true
+          }
+        }
+      }
       effectSnapshot = this.effects.length
       try {
         disposer = service.apply(this) ?? (() => {})

@@ -36,6 +36,8 @@ import { createToolRegistry } from './tools'
 import { Context } from './vajra'
 import { mountSkills, SKILLS_KEY } from './skills/seam'
 import { mountLlm, LLM_KEY } from './providers/llm'
+import { mountConstitution, createConstitution } from './core/constitution-seam'
+import { ConstitutionLoader } from './core/constitution-loader'
 import { McpClient } from './mcp/client'
 import { registerMcpServerTools } from './mcp/registry'
 import { AgentRegistry } from './agent/agent-registry'
@@ -446,6 +448,9 @@ export async function runApp(options: RunOptions): Promise<void> {
   const credentialMaskingConfig = loadCredentialMaskingConfig()
   const vajraContext = new Context()
   vajraContext.provide('credentials', credentialMaskingConfig)
+
+  // 对齐缝：宪法先就位，后续每个 Service 挂载（含工具）都在挂载前过对齐门。
+  mountConstitution(vajraContext, createConstitution(new ConstitutionLoader()))
 
   // Create tool registry with all built-in tools (mounted as Vajra services)
   const tools = createToolRegistry(vajraContext)
