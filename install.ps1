@@ -61,12 +61,36 @@ Write-Host ""
 
 # ── Try binary download first ──
 $releaseUrl = "https://github.com/One-Mipham/mipham-code/releases/latest/download"
-$binaryName = if ($OS -eq "windows") { "mipham-win-x64.exe" } elseif ($OS -eq "macos") { "mipham-darwin-arm64" } else { "mipham-linux-x64" }
+if ($OS -eq "windows") {
+  $binaryName = "mipham-win-x64.exe"
+  $installDir = "$env:LOCALAPPDATA\mipham\bin"
+  $binaryPath = "$installDir\mipham.exe"
+} elseif ($OS -eq "macos") {
+  $arch = if ((uname -m 2>$null) -eq "arm64") { "arm64" } else { "x64" }
+  $binaryName = "mipham-darwin-$arch"
+  $installDir = "$env:HOME/.mipham/bin"
+  $binaryPath = "$installDir/mipham"
+} else {
+  $binaryName = "mipham-linux-x64"
+  $installDir = "$env:HOME/.mipham/bin"
+  $binaryPath = "$installDir/mipham"
+}
 
 Write-Host "── Downloading binary: $binaryName ──" -ForegroundColor Yellow
 try {
-  Invoke-WebRequest -Uri "$releaseUrl/$binaryName" -OutFile "$env:LOCALAPPDATA\mipham.exe" -ErrorAction Stop
-  Write-Host "✓ Binary installed to $env:LOCALAPPDATA\mipham.exe" -ForegroundColor Green
+  New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+  Invoke-WebRequest -Uri "$releaseUrl/$binaryName" -OutFile $binaryPath -ErrorAction Stop
+  # Add install dir to user PATH (persistent) + current session so `mipham` is reachable.
+  if ($OS -eq "windows") {
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    if (-not $userPath) { $userPath = "" }
+    if ($userPath -notlike "*$installDir*") {
+      $newPath = if ($userPath) { "$userPath;$installDir" } else { $installDir }
+      [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+    }
+    $env:Path = "$env:Path;$installDir"
+  }
+  Write-Host "✓ Binary installed to $binaryPath" -ForegroundColor Green
   $installedBinary = $true
 } catch {
   Write-Host "⚠ Binary download failed, falling back to package manager..." -ForegroundColor Yellow
@@ -79,13 +103,13 @@ if ($installedBinary) {
 } elseif ($hasNpm) {
   Write-Host "── Installing via npm ──" -ForegroundColor Yellow
   Write-Host ""
-  Write-Host "Running: npm install -g @mipham/cli"
-  npm install -g @mipham/cli
+  Write-Host "Running: npm install -g @miphamai/cli"
+  npm install -g @miphamai/cli
 } elseif ($hasBun) {
   Write-Host "── Installing via Bun ──" -ForegroundColor Yellow
   Write-Host ""
-  Write-Host "Running: bun install -g @mipham/cli"
-  bun install -g @mipham/cli
+  Write-Host "Running: bun install -g @miphamai/cli"
+  bun install -g @miphamai/cli
 } else {
   Write-Host "── Prerequisites needed ──" -ForegroundColor Yellow
   Write-Host ""
