@@ -256,11 +256,20 @@ export function loadConfig(cwd: string = process.cwd()): MiphamConfig {
       }
     }
   } else {
-    // No user config yet — create the directory so it's ready
-    try {
-      mkdirSync(MIPHAM_HOME, { recursive: true })
-    } catch {
-      // best-effort
+    // No user config on disk — try to recover from a backup (e.g. the file was
+    // deleted). If no backup exists either, this is a first run: just create the
+    // directory so it's ready.
+    if (!tryRestoreFromBackup(userConfigPath)) {
+      try {
+        mkdirSync(MIPHAM_HOME, { recursive: true })
+      } catch {
+        // best-effort
+      }
+    } else {
+      const restored = safeParseYaml(userConfigPath, 'restored user config')
+      if (restored) {
+        config = mergeConfig(config, restored, true)
+      }
     }
   }
 

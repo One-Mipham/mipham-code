@@ -1,6 +1,30 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest'
+
+// Isolate the key store from the real ~/.mipham — KeyManager.ensureEntry()/
+// rotate() persist to keys.json, so tests must not pollute the user's live keys.
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>()
+  return {
+    ...actual,
+    homedir: () => `${actual.tmpdir()}/mipham-test-keys-home`,
+  }
+})
+
+import { rmSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { keysCmd } from '../../src/commands/keys.js'
 import { KeyManager } from '../../src/config/keys-manager.js'
+
+const TEST_HOME = join(tmpdir(), 'mipham-test-keys-home')
+
+beforeEach(() => {
+  rmSync(TEST_HOME, { recursive: true, force: true })
+})
+
+afterAll(() => {
+  rmSync(TEST_HOME, { recursive: true, force: true })
+})
 
 describe('Keys Commands', () => {
   it('/keys lists keys (or shows empty if none registered)', async () => {
