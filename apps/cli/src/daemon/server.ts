@@ -23,6 +23,8 @@ import { createToolRegistry } from '../tools'
 import { PermissionSystem } from '../core/permission'
 import type { ProviderRegistry } from '../providers/registry'
 import type { ToolDefinition, PermissionMode } from '../shared/types'
+import { createFeishuAdapter } from './feishu/adapter.js'
+import type { FeishuConfig } from './feishu/types.js'
 
 interface ServerConfig {
   db: DaemonDatabase
@@ -37,6 +39,7 @@ interface ServerConfig {
   goalManager: GoalManager
   scheduleManager: ScheduleManager
   rateLimiter: RateLimiter
+  feishu?: { config: FeishuConfig; cwd: string; provider: string; model: string }
 }
 
 interface WsData {
@@ -78,6 +81,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
     goalManager,
     scheduleManager,
     rateLimiter,
+    feishu,
   } = config
 
   const wsClients = new Map<string, Set<ServerWebSocket<WsData>>>()
@@ -198,6 +202,18 @@ export function createServer(config: ServerConfig): Server<WsData> {
     }
   }
 
+  // ── Feishu remote-control adapter（独立签名验证，复用同一 worker 池）──
+  const feishuAdapter = feishu
+    ? createFeishuAdapter(feishu.config, {
+        sm,
+        getOrCreateWorker,
+        rateLimiter,
+        cwd: feishu.cwd,
+        provider: feishu.provider,
+        model: feishu.model,
+      })
+    : undefined
+
   const server = Bun.serve<WsData>({
     port,
     hostname,
@@ -210,6 +226,11 @@ export function createServer(config: ServerConfig): Server<WsData> {
       const path = url.pathname
       const method = req.method
       logger.info('request', { method, path })
+
+      // ── Feishu event callback（独立签名验证，不经过 daemon Bearer 鉴权）──
+      if (feishuAdapter && method === 'POST' && path === '/feishu/event') {
+        return await feishuAdapter.handleEvent(req)
+      }
 
       // ── Rate limiting (skip health endpoint) ──────────
       if (path !== '/api/v1/health') {

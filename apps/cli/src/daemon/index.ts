@@ -23,6 +23,9 @@ import { RateLimiter } from './rate-limiter'
 import { PACKAGE_VERSION } from '../shared/package-info'
 import type { DaemonStatus } from './types'
 import { logger } from './logger'
+import { parseFeishuEnv } from './feishu/env.js'
+import type { FeishuConfig } from './feishu/types.js'
+import { loadConfig } from '../config/loader'
 
 const HOME = homedir()
 const MIPHAM_HOME = join(HOME, '.mipham')
@@ -163,6 +166,21 @@ export async function startDaemon(): Promise<{ port: number; token: string }> {
   const rateLimiter = new RateLimiter(100, 60_000)
   activeRateLimiter = rateLimiter
 
+  // Feishu remote-control adapter（env 未配置时跳过；配置则解析 session 默认 provider/model）
+  const feishuConfig = parseFeishuEnv()
+  let feishu: { config: FeishuConfig; cwd: string; provider: string; model: string } | undefined
+  if (feishuConfig) {
+    const cfg = loadConfig()
+    // 取第一个非 upcoming（即非「待上线」）的 provider 及其首个 model
+    const provider = cfg.providers.find((p) => p.status !== 'upcoming') ?? cfg.providers[0]
+    feishu = {
+      config: feishuConfig,
+      cwd: process.env.FEISHU_CWD || process.cwd(),
+      provider: provider?.id ?? 'anthropic',
+      model: provider?.models?.[0]?.id ?? 'claude-sonnet-5',
+    }
+  }
+
   // Start HTTP server (Bun.serve starts listening immediately)
   const server = createServer({
     db,
@@ -177,6 +195,7 @@ export async function startDaemon(): Promise<{ port: number; token: string }> {
     goalManager,
     scheduleManager,
     rateLimiter,
+    feishu,
   })
   activeServer = server
 
