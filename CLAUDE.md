@@ -4,8 +4,8 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.3.3
-> **最后更新**: 2026-08-17 — CRSI 行为缺口表（C1）落地：eval harness 16 契约（12 机制 + 4 行为缺口），producer 固化规则翻转缺口 =「证明更好」，基线分数如实 75
+> **版本**: 2.3.4
+> **最后更新**: 2026-08-17 — CRSI 行为缺口表（C2）固化：内核收尾 + 8 缺口固化，eval 分数翻转 75→100
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -39,7 +39,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **自我认知** `/crsi inventory` — 能力自报告，聚合 CRSI/SIS/宪法实时状态；系统提示注入「回答能力边界先查状态」规则
 - **沙箱入口** `/crsi modify` — `core/crsi-modify.ts` 两阶段闸门（worktree → 测试 → diff → `--approve`/`--reject`）
 - **producer** `/crsi propose` — `core/crsi-producer.ts` 模板化（无 LLM）把失败信号转成教训文件 `crsi-lessons.md`；`--rule` 毕业路径固化受管理规则 `crsi-managed-rules.ts`（确定性行为，source='managed'）
-- **eval harness** `/crsi eval` — `core/eval-harness.ts` 冻结 16 条 ground-truth 契约（12 机制：规则/宪法/沙箱边界/红队/producer 行为 + 4 行为缺口）+ rewards 日志 `~/.mipham/crsi/eval-scores.jsonl`，`runCrsiModification` 以「分数不退化」为第二道闸。行为缺口（rm -rf/管道投毒/git reset --hard/chmod 777）当前如实判 FAIL → 基线 75 分；producer 固化 tool-params 规则后翻转 PASS → 分数上升 =「证明更好」
+- **eval harness** `/crsi eval` — `core/eval-harness.ts` 冻结 20 条 ground-truth 契约（12 机制：规则/宪法/沙箱边界/红队/producer 行为 + 8 行为缺口）+ rewards 日志 `~/.mipham/crsi/eval-scores.jsonl`，`runCrsiModification` 以「分数不退化」为第二道闸。8 行为缺口（rm -rf/管道投毒/git reset --hard/chmod 777/mkfs/dd→/dev//关停主机/crontab -r）已由固化 managed tool-params 规则覆盖 → 全翻转 PASS → 满分 100 =「证明更好」
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule]|eval` + `/sis errors|stats|clear`
 测试：1,498 测试（1496 passed + 2 skipped）
@@ -358,6 +358,11 @@ mipham-code 变更（包名/版本）
 11. ✅ **producer** — `/crsi propose` 失败信号转教训文件（模板化，无 LLM）
 12. ✅ **eval harness** — `/crsi eval` 冻结 10 条 ground-truth 契约（规则/宪法/沙箱边界/红队）+ rewards 日志 + 防退化闸
 
+**已完成（2026-08-17 内核收尾 + 行为缺口表 C2）**：
+
+13. ✅ **内核后续收尾** — `defaultToolContext` 改名 `defaultVajraContext`；`replaceMessages` 保留为 session-log 不变量的测试缝（修正过时注释，`setSkillsLoader` 早已删除）；SubAgent 4 spawn 点已全部迁 `llm`
+14. ✅ **行为缺口表 C2（证明更好实演）** — `MANAGED_DANGEROUS_RE` 4→8（+ mkfs / dd→/dev/ / 关停主机 / crontab -r），固化 managed tool-params 规则，eval 分数翻转 75→100
+
 **待办**：
 
 1. **VS Code 扩展发布** — 发布到 VS Code Marketplace
@@ -365,8 +370,6 @@ mipham-code 变更（包名/版本）
 3. **MCP 深度集成** — OAuth 认证、动态工具更新、Tool Search 增强
 4. **1M 上下文窗口** — 支持超长上下文模型
 5. **多语言国际化** — CLI 和 Web 的 i18n 支持
-6. **内核后续收尾** — `toolContext` 改名 `vajraContext`、删死代码（setSkillsLoader/replaceMessages 等）、SubAgent 三 spawn 点迁 ctx.llm
-7. **CRSI 强「证明更好」（C 剩余）** — LLM 编码质量任务集需 LLM 裁判，违反 A1 铁律，需单独破例决策（C1 确定性行为缺口已落地）
 
 ---
 
@@ -374,6 +377,7 @@ mipham-code 变更（包名/版本）
 
 | 版本  | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                               | 维护人     |
 | ----- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| 2.3.4 | 2026-08-17 | 内核收尾 + 行为缺口表 C2：`defaultToolContext`→`defaultVajraContext`、`replaceMessages` 保留为 session-log 不变量的测试缝（修正过时注释）、SubAgent 4 spawn 点全部迁 `llm`；`MANAGED_DANGEROUS_RE` 4→8 缺口，固化 managed tool-params 规则，eval 分数翻转 75→100（「证明更好」首次实演，不破 A1 铁律）。测试仍 1496 passed + 2 skipped                                                                 | 技术委员会 |
 | 2.3.3 | 2026-08-17 | CRSI 行为缺口表（C1）：eval harness 12→16 契约，新增 4 条冻结行为缺口（rm -rf / 管道投毒 / git reset --hard / chmod 777）如实判 FAIL，基线分数 75；producer `tool-params` 规则覆盖这些缺口 → 固化后翻转 PASS =「证明更好」。`crsi-modify.test.ts` 补 rewards 日志清理（跨运行旧 100 分触发假退化）。+1 测试（1496 passed + 2 skipped）                                                                 | 技术委员会 |
 | 2.3.2 | 2026-08-17 | CRSI producer 毕业：`/crsi propose --rule` 固化受管理规则 `crsi-managed-rules.ts`（source='managed'，构造时 merge 进规则引擎、永不落盘），把失败信号转成确定性拦截行为（timeout/tool-params 两类模板）。eval harness 升级 10→12 契约（+ producer-rule-shape / producer-rule-idempotent）。+8 测试（1495 passed + 2 skipped）。强「证明更好」（LLM 编码质量）需 LLM 裁判，留作 C                        | 技术委员会 |
 | 2.3.1 | 2026-08-17 | `persistAll()` 反思持久化死代码收尾：改名 `finalizeSession()`，去掉冗余 per-reflection 双写循环（`persist()` 已每 turn 落盘），接入 exit 兜底，会话级摘要 `writeSessionSummary()` 真正产出，闭环度量最后一块封口。+3 测试                                                                                                                                                                              | 技术委员会 |
