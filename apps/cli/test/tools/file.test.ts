@@ -40,8 +40,8 @@ function mockRealSpawn() {
       child.on('close', (code) => resolve(code ?? 0))
     })
     const proc = {
-      stdout: Readable.toWeb(child.stdout!) as ReadableStream,
-      stderr: Readable.toWeb(child.stderr!) as ReadableStream,
+      stdout: Readable.toWeb(child.stdout!) as unknown as ReadableStream,
+      stderr: Readable.toWeb(child.stderr!) as unknown as ReadableStream,
       exited,
       get exitCode() {
         return child.exitCode
