@@ -36,11 +36,11 @@ export JETBRAINS_MARKETPLACE_TOKEN="<你的 token>"
 
 ## 关键约束
 
-- **版本必须递增**：改 `gradle.properties` 的 `pluginVersion`（当前 0.44.0，对齐 CLI）。
+- **版本必须递增**：改 `gradle.properties` 的 `pluginVersion`（当前 0.44.1）。
   Marketplace 拒绝重复版本。
 - **`build/` 和 `.gradle/` 是构建产物**，已在 `.gitignore` 排除，不要提交。
 - **本地验证**：发布前先 `./gradlew buildPlugin`，产物在
-  `build/distributions/mipham-code-jetbrains-0.44.0.zip`，可在 IDE 里
+  `build/distributions/mipham-code-jetbrains-0.44.1.zip`，可在 IDE 里
   **Settings → Plugins → ⚙️ → Install Plugin from Disk** 安装自测。
 
 ## 上架后

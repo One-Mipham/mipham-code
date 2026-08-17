@@ -2,6 +2,7 @@
     <id>ai.mipham.code</id>
     <name>Mipham Code</name>
     <vendor url="https://mipham.ai">MiphamAI</vendor>
+    <icon path="/icons/mipham-icon.png"/>
 
     <description><![CDATA[
         Multi-model AI coding terminal for JetBrains IDEs.

@@ -1,5 +1,9 @@
 # Mipham Code — JetBrains Plugin Changelog
 
+## 0.44.1 (2026-08-17)
+
+- Add plugin icon
+
 ## 0.44.0 (2026-08-17)
 
 - Version sync with Mipham Code CLI 0.44.0
