@@ -278,6 +278,7 @@ export function App({
       setEffort: (level: string) => {
         setEffort(level)
         setPreference('lastCodeReviewEffort', level)
+        engine.setEffort(level)
       },
       setFocusMode: (on: boolean) => setFocusMode(on),
       setGoal: (text: string) => setGoalText(text),

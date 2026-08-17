@@ -86,6 +86,8 @@ export class QueryEngine {
   private goal?: string
   private maxGoalLoops = 20
   private lastAssistantContent?: string
+  /** Reasoning effort (low|medium|high|xhigh|max) — scales the provider idle timeout. */
+  private effort: string = 'high'
   /** Custom verification shell script path for goal checking. */
   private goalVerifyScript?: string
   /** Custom verification skill name for goal checking. */
@@ -115,6 +117,11 @@ export class QueryEngine {
   private crossSessionConfig: CrossSessionConfig = {
     crossSessionInbound: 'ask',
     dialogExpiry: 300,
+  }
+
+  /** Set the reasoning effort (low|medium|high|xhigh|max). */
+  setEffort(level: string): void {
+    this.effort = level
   }
 
   /** Set the session identifier (called from index.tsx at startup with the actual session name). */
@@ -1209,6 +1216,7 @@ export class QueryEngine {
         systemPrompt,
         tools: toolDefs,
         signal,
+        effort: this.effort,
       })) {
         if (chunk.type === 'error') {
           failure = chunk.error ?? 'Unknown error'
@@ -1253,6 +1261,7 @@ export class QueryEngine {
         systemPrompt,
         tools: toolDefs,
         signal,
+        effort: this.effort,
       })) {
         yield chunk
       }

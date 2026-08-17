@@ -224,6 +224,9 @@ export class RemoteEngine {
   /** No-op: provider switching is managed by the daemon session. */
   switchProvider(_providerId: string, _modelId?: string): void {}
 
+  /** No-op: reasoning effort is managed by the daemon session. */
+  setEffort(_level: string): void {}
+
   /** Remote mode has no local agent registry. */
   getAgentRegistry(): undefined {
     return undefined

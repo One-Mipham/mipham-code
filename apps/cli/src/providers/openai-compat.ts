@@ -1,7 +1,7 @@
 import { execSync } from 'node:child_process'
 import type { ProviderConfig, ModelInfo, Message, StreamChunk } from '../shared/index.ts'
 import type { ProviderInstance, ChatRequest } from './registry'
-import { fetchWithRetry } from './fetch-utils'
+import { fetchWithRetry, streamIdleTimeoutMs } from './fetch-utils'
 import { OLLAMA_PRESET_MODELS } from '../shared/constants'
 
 export class OpenAICompatProvider implements ProviderInstance {
@@ -54,25 +54,33 @@ export class OpenAICompatProvider implements ProviderInstance {
     const pendingToolCalls = new Map<number, { id: string; name: string; arguments: string }>()
     let reasoningContent = ''
 
-    // Streaming read timeout: if no data arrives for 90s, abort to prevent UI freeze.
-    // DeepSeek V4 thinking mode can take 30-60s between chunks — 90s is a generous ceiling.
-    const STREAM_READ_TIMEOUT_MS = 90_000
+    // Streaming idle timeout: scaled by reasoning effort so long thinking passes
+    // (DeepSeek V4 / reasoning models) aren't mistaken for a stalled connection.
+    const STREAM_READ_TIMEOUT_MS = streamIdleTimeoutMs(req.effort)
 
     while (true) {
       let readResult: Awaited<ReturnType<typeof reader.read>>
+      let idleTimer: ReturnType<typeof setTimeout> | undefined
       try {
         readResult = await Promise.race([
           reader.read(),
-          new Promise<never>((_, reject) =>
-            setTimeout(
-              () => reject(new Error('Stream read timeout — no data for 90s')),
+          new Promise<never>((_, reject) => {
+            idleTimer = setTimeout(
+              () =>
+                reject(
+                  new Error(
+                    `Stream read timeout — no data for ${Math.round(STREAM_READ_TIMEOUT_MS / 1000)}s`,
+                  ),
+                ),
               STREAM_READ_TIMEOUT_MS,
-            ),
-          ),
+            )
+          }),
         ])
       } catch (err) {
         yield { type: 'error', error: `Stream stalled: ${String(err)}` }
         return
+      } finally {
+        if (idleTimer) clearTimeout(idleTimer)
       }
       const { done, value } = readResult
       if (done) break

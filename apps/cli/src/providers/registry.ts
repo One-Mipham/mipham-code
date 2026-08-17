@@ -17,6 +17,8 @@ export interface ChatRequest {
   maxTokens?: number
   temperature?: number
   signal?: AbortSignal
+  /** Reasoning effort (low|medium|high|xhigh|max) — scales the streaming idle timeout. */
+  effort?: string
 }
 
 export class ProviderRegistry implements Llm {

@@ -80,6 +80,28 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+// ── Streaming idle-timeout (stall guard) with effort multiplier ──────────
+//
+// Reasoning models think silently for long stretches. The idle timeout between
+// stream chunks is scaled by reasoning effort so a long thinking pass isn't
+// mistaken for a stalled connection (jcode stall-guard alignment).
+
+/** Base idle timeout between stream chunks, in ms. */
+export const STREAM_IDLE_TIMEOUT_BASE_MS = 90_000
+
+/** Effort level → idle-timeout multiplier. Unknown/absent effort → 1× (base). */
+const EFFORT_TIMEOUT_MULTIPLIER: Record<string, number> = {
+  high: 2,
+  xhigh: 3,
+  max: 4,
+}
+
+/** Compute the streaming idle timeout for a given reasoning-effort level. */
+export function streamIdleTimeoutMs(effort?: string): number {
+  const multiplier = effort ? (EFFORT_TIMEOUT_MULTIPLIER[effort] ?? 1) : 1
+  return STREAM_IDLE_TIMEOUT_BASE_MS * multiplier
+}
+
 /**
  * Combine multiple AbortSignals into one — any signal aborting
  * triggers the combined signal.
