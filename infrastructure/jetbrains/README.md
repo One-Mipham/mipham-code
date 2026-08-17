@@ -4,7 +4,7 @@ Multi-model AI coding terminal for all JetBrains IDEs.
 
 ## Install
 
-1. Download `mipham-code-jetbrains-0.21.0.zip` from [releases](https://github.com/One-Mipham/mipham-code/releases)
+1. Download `mipham-code-jetbrains-0.44.0.zip` from [releases](https://github.com/One-Mipham/mipham-code/releases)
 2. In your IDE: **Settings → Plugins → ⚙️ → Install Plugin from Disk**
 3. Select the `.zip` file
 4. Restart IDE
@@ -37,5 +37,5 @@ Multi-model AI coding terminal for all JetBrains IDEs.
 ```bash
 cd infrastructure/jetbrains
 ./gradlew buildPlugin
-# Output: build/distributions/mipham-code-jetbrains-0.21.0.zip
+# Output: build/distributions/mipham-code-jetbrains-0.44.0.zip
 ```

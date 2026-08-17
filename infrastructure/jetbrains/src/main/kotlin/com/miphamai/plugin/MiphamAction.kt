@@ -27,10 +27,27 @@ private const val TERMINAL_TITLE = "Mipham Code"
 class MiphamStartAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
+        val settings = MiphamSettings.getInstance().state
         val terminalView = TerminalView.getInstance(project)
         val widget = terminalView.createLocalShellWidget(project.basePath ?: "", TERMINAL_TITLE)
-        widget.executeCommand(MIPHAM_COMMAND)
+        widget.executeCommand(buildCommand(settings))
     }
+}
+
+/** Build the shell command from plugin settings (bun path + provider/model flags). */
+private fun buildCommand(settings: MiphamSettings.State): String {
+    val parts = mutableListOf<String>()
+    if (settings.bunPath.isNotBlank()) parts.add(settings.bunPath)
+    parts.add(MIPHAM_COMMAND)
+    if (settings.provider.isNotBlank()) {
+        parts.add("--provider")
+        parts.add(settings.provider)
+    }
+    if (settings.model.isNotBlank()) {
+        parts.add("--model")
+        parts.add(settings.model)
+    }
+    return parts.joinToString(" ")
 }
 
 /**

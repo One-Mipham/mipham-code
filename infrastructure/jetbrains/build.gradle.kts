@@ -25,4 +25,9 @@ tasks {
         sinceBuild.set("243")
         untilBuild.set("")
     }
+
+    publishPlugin {
+        // Token 从环境变量读，绝不硬编码（生成：https://plugins.jetbrains.com/author/me/tokens）
+        token.set(providers.environmentVariable("JETBRAINS_MARKETPLACE_TOKEN"))
+    }
 }
