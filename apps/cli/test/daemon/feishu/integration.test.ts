@@ -35,7 +35,16 @@ describe('parseFeishuEnv', () => {
   it('allowedOpenIds 过滤空白项', () => {
     vi.stubEnv('FEISHU_APP_ID', 'a')
     vi.stubEnv('FEISHU_APP_SECRET', 's')
+    vi.stubEnv('FEISHU_ENCRYPT_KEY', 'k')
     vi.stubEnv('FEISHU_ALLOWED_OPEN_IDS', ' ou_1 , , ou_2 ,')
     expect(parseFeishuEnv()?.allowedOpenIds).toEqual(['ou_1', 'ou_2'])
+  })
+
+  it('缺 encryptKey 与 verificationToken 时返回 null（fail-closed）', () => {
+    vi.stubEnv('FEISHU_APP_ID', 'a')
+    vi.stubEnv('FEISHU_APP_SECRET', 's')
+    vi.stubEnv('FEISHU_ENCRYPT_KEY', '')
+    vi.stubEnv('FEISHU_VERIFICATION_TOKEN', '')
+    expect(parseFeishuEnv()).toBeNull()
   })
 })
