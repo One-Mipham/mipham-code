@@ -56,6 +56,12 @@ describe('createFeishuEventDispatcher', () => {
     const body = { encrypt: 'x' }
     const headers = { 'x-lark-signature': 'sig' }
     await d.invoke(body, headers)
-    expect(invokeMock).toHaveBeenCalled()
+    expect(invokeMock).toHaveBeenCalledTimes(1)
+    const assigned = invokeMock.mock.calls[0]?.[0]
+    expect(assigned).toBeDefined()
+    const assignedObj = assigned as { headers?: Record<string, string> }
+    expect(assignedObj.headers).toEqual(headers)
+    expect(Object.prototype.hasOwnProperty.call(assignedObj, 'headers')).toBe(false)
+    expect(JSON.stringify(assignedObj)).not.toContain('x-lark-signature')
   })
 })
