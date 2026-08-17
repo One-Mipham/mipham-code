@@ -83,6 +83,10 @@ const MessageRow = React.memo(
               <Text bold color="green">
                 ▸ {displayCwd()}:
               </Text>
+            ) : msg.role === 'assistant' ? (
+              <Text bold color="magenta">
+                ◆ {t('ui.assistant.role_label')}:
+              </Text>
             ) : msg.role === 'system' ? (
               <Text bold color="yellow">
                 ⚠ {t('ui.system.role_label')}:

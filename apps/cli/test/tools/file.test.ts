@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { spawn } from 'node:child_process'
+import { Readable } from 'node:stream'
 import type { ToolContext } from '../../src/shared'
 import { Context } from '../../src/vajra'
 import { collectTools } from '../../src/tools/seam'
@@ -9,7 +11,7 @@ import { createReadTool, readToolService } from '../../src/tools/file/read'
 import { writeTool } from '../../src/tools/file/write'
 import { editTool } from '../../src/tools/file/edit'
 import { globTool } from '../../src/tools/file/glob'
-import { grepTool } from '../../src/tools/file/grep'
+import { grepTool, runSearch } from '../../src/tools/file/grep'
 
 const readTool = createReadTool()
 
@@ -26,6 +28,29 @@ beforeEach(() => {
 afterEach(() => {
   rmSync(tmpDir, { recursive: true, force: true })
 })
+
+/** Mock Bun.spawn to actually run the command (grep tests need real rg/grep output). */
+function mockRealSpawn() {
+  vi.spyOn(Bun, 'spawn').mockImplementation((cmd: string[], opts?: { cwd?: string }) => {
+    const child = spawn(cmd[0]!, cmd.slice(1), {
+      cwd: opts?.cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    const exited = new Promise<number>((resolve) => {
+      child.on('close', (code) => resolve(code ?? 0))
+    })
+    const proc = {
+      stdout: Readable.toWeb(child.stdout!) as ReadableStream,
+      stderr: Readable.toWeb(child.stderr!) as ReadableStream,
+      exited,
+      get exitCode() {
+        return child.exitCode
+      },
+      kill: () => child.kill(),
+    }
+    return proc as any
+  })
+}
 
 // ============================================================
 // Read Tool
@@ -428,6 +453,13 @@ describe('Grep tool definition', () => {
 })
 
 describe('Grep tool execution', () => {
+  beforeEach(() => {
+    mockRealSpawn()
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('finds pattern in files', async () => {
     writeFileSync(join(tmpDir, 'test.txt'), 'hello world\nfoo bar\nhello again')
     const result = await grepTool.execute({ pattern: 'hello', path: tmpDir }, ctx)
@@ -449,5 +481,23 @@ describe('Grep tool execution', () => {
     // Should find in .ts but exclude .txt
     expect(result.content).toContain('a.ts')
     expect(result.content).not.toContain('b.txt')
+  })
+})
+
+describe('Grep tool timeout (stall guard)', () => {
+  beforeEach(() => {
+    mockRealSpawn()
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('kills a hanging search instead of blocking forever', async () => {
+    // `sleep 5` outlives a 100ms timeout → runSearch must kill it and report timedOut.
+    const t0 = Date.now()
+    const { timedOut } = await runSearch(['sleep', '5'], tmpDir, 100)
+    expect(timedOut).toBe(true)
+    // Returned promptly (~100ms), not after the full 5s sleep.
+    expect(Date.now() - t0).toBeLessThan(4000)
   })
 })

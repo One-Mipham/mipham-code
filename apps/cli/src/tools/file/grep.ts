@@ -1,6 +1,27 @@
-import { $ } from 'bun'
 import type { ToolDefinition } from '../../shared/index.ts'
 import { resolveSafe } from '../../security/path'
+
+/** Grep stall guard: a search over a huge tree (or a pathological regex) must
+ *  not hang the session for minutes. Matches the Bash tool's 120s ceiling. */
+const GREP_TIMEOUT_MS = 120_000
+
+/** Run a search command with a kill-timer; report whether the timeout fired. */
+export async function runSearch(
+  cmd: string[],
+  cwd: string,
+  timeoutMs: number,
+): Promise<{ stdout: string; timedOut: boolean; exitCode: number | null }> {
+  const proc = Bun.spawn(cmd, { cwd, stdout: 'pipe', stderr: 'pipe' })
+  let timedOut = false
+  const timer = setTimeout(() => {
+    timedOut = true
+    proc.kill()
+  }, timeoutMs)
+  const stdout = await new Response(proc.stdout).text()
+  await proc.exited
+  clearTimeout(timer)
+  return { stdout, timedOut, exitCode: proc.exitCode }
+}
 
 export const grepTool: ToolDefinition = {
   name: 'Grep',
@@ -29,31 +50,51 @@ export const grepTool: ToolDefinition = {
     const searchPath = resolveSafe(ctx.cwd, (params.path as string) || '.')
     const include = params.include as string | undefined
 
+    // 1. ripgrep (fast path)
+    const rgArgs = ['rg', '-n', '--heading', '--color=never', '-M', '500', pattern]
+    if (include) rgArgs.push('--glob', include)
+    rgArgs.push(searchPath)
     try {
-      const args = ['-n', '--heading', '--color=never', '-M', '500', pattern]
-      if (include) args.push('--glob', include)
-      args.push(searchPath)
-
-      const result = await $`rg ${args}`.cwd(ctx.cwd).quiet().text()
-      return { success: true, content: result || '(no matches)' }
-    } catch (err: unknown) {
-      const exitErr = err as { exitCode?: number }
-      if (exitErr.exitCode === 1) {
-        return { success: true, content: '(no matches)' }
-      }
-      // Fallback to grep
-      try {
-        const content = await $`grep -rn ${pattern} ${searchPath}`.cwd(ctx.cwd).quiet().text()
-        return {
-          success: true,
-          content: content.slice(0, 50000) || '(no matches)',
-        }
-      } catch {
+      const { stdout, timedOut, exitCode } = await runSearch(rgArgs, ctx.cwd, GREP_TIMEOUT_MS)
+      if (timedOut) {
         return {
           success: false,
           content: '',
-          error: 'grep failed. Install ripgrep: brew install ripgrep',
+          error: `Grep timed out after ${GREP_TIMEOUT_MS / 1000}s — narrow scope with "path" and "include".`,
         }
+      }
+      if (exitCode === 1) return { success: true, content: '(no matches)' }
+      if (exitCode === 0) return { success: true, content: stdout || '(no matches)' }
+      // rg exit 2 (error) or null (killed) → fall through to grep
+    } catch {
+      // rg not installed → fall through to grep
+    }
+
+    // 2. fallback to plain grep
+    const grepArgs = ['grep', '-rn', pattern, searchPath]
+    try {
+      const { stdout, timedOut, exitCode } = await runSearch(grepArgs, ctx.cwd, GREP_TIMEOUT_MS)
+      if (timedOut) {
+        return {
+          success: false,
+          content: '',
+          error: `Grep timed out after ${GREP_TIMEOUT_MS / 1000}s — narrow scope with "path" and "include".`,
+        }
+      }
+      if (exitCode === 1) return { success: true, content: '(no matches)' }
+      if (exitCode === 0) {
+        return { success: true, content: stdout.slice(0, 50000) || '(no matches)' }
+      }
+      return {
+        success: false,
+        content: '',
+        error: 'grep failed. Install ripgrep: brew install ripgrep',
+      }
+    } catch {
+      return {
+        success: false,
+        content: '',
+        error: 'grep failed. Install ripgrep: brew install ripgrep',
       }
     }
   },
