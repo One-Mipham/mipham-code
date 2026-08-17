@@ -10,5 +10,6 @@ out/
 .claude/plans/
 .playwright-mcp/
 *.tgz
+*.vsix
 .vercel
 .worktrees/

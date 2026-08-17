@@ -1,5 +1,10 @@
 # Mipham Code — VS Code Extension Changelog
 
+## 0.44.0 — 2026-08-17
+
+- Version sync with Mipham Code CLI 0.44.0
+- Updated tool count to 30 tools (matching the CLI)
+
 ## 0.10.0 — 2026-08-05
 
 - Initial VS Code extension release
