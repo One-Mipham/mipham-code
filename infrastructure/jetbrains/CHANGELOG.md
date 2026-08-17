@@ -1,5 +1,9 @@
 # Mipham Code — JetBrains Plugin Changelog
 
+## 0.44.3 (2026-08-17)
+
+- Add plugin logo (`META-INF/pluginIcon.svg` + `pluginIcon_dark.svg`, 40×40 vector)
+
 ## 0.44.2 (2026-08-17)
 
 - Remove `<icon>` from plugin.xml (unsupported in IntelliJ 2024.3; caused "invalid plugin descriptor")
