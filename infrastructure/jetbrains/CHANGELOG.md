@@ -1,8 +1,9 @@
 # Mipham Code — JetBrains Plugin Changelog
 
-## 0.44.1 (2026-08-17)
+## 0.44.2 (2026-08-17)
 
-- Add plugin icon
+- Remove `<icon>` from plugin.xml (unsupported in IntelliJ 2024.3; caused "invalid plugin descriptor")
+- Ship plugin icon as standalone asset for the Marketplace listing
 
 ## 0.44.0 (2026-08-17)
 
