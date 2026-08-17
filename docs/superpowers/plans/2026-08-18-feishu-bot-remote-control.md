@@ -40,11 +40,13 @@
 ### Task 1: 依赖 + 类型骨架
 
 **Files:**
+
 - Modify: `apps/cli/package.json`
 - Create: `apps/cli/src/daemon/feishu/types.ts`
 - Test: 无（纯类型，无逻辑）
 
 **Interfaces:**
+
 - Produces: `FeishuConfig`、`FeishuTextMessage`（后续所有 task 引用）。
 
 - [ ] **Step 1: 加依赖**
@@ -55,6 +57,7 @@ Expected: 依赖写入 `package.json` dependencies，`pnpm-lock.yaml` 更新。
 - [ ] **Step 2: 写 types.ts**
 
 `apps/cli/src/daemon/feishu/types.ts`:
+
 ```ts
 export interface FeishuConfig {
   appId: string
@@ -89,16 +92,19 @@ git commit -m "feat(daemon): 加 lark SDK 依赖 + Feishu 类型骨架"
 ### Task 2: api.ts — 发消息
 
 **Files:**
+
 - Create: `apps/cli/src/daemon/feishu/api.ts`
 - Test: `apps/cli/test/daemon/feishu/api.test.ts`
 
 **Interfaces:**
+
 - Consumes: `FeishuConfig`（Task 1）。
 - Produces: `createFeishuApi(config): FeishuApi`，`FeishuApi = { sendText(openId: string, text: string): Promise<void> }`。
 
 - [ ] **Step 1: 写失败测试**
 
 `apps/cli/test/daemon/feishu/api.test.ts`:
+
 ```ts
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -146,6 +152,7 @@ Expected: FAIL — `createFeishuApi` 不存在。
 - [ ] **Step 3: 实现 api.ts**
 
 `apps/cli/src/daemon/feishu/api.ts`:
+
 ```ts
 import * as lark from '@larksuiteoapi/node-sdk'
 import type { FeishuConfig } from './types.js'
@@ -189,16 +196,19 @@ git commit -m "feat(daemon): Feishu 发消息 API（Lark SDK）"
 ### Task 3: events.ts — 事件解密验签
 
 **Files:**
+
 - Create: `apps/cli/src/daemon/feishu/events.ts`
 - Test: `apps/cli/test/daemon/feishu/events.test.ts`
 
 **Interfaces:**
+
 - Consumes: `FeishuConfig`、`FeishuTextMessage`（Task 1）。
 - Produces: `createFeishuEventDispatcher(config, onMessage): FeishuEventDispatcher`；`FeishuEventDispatcher = { invoke(body: unknown, headers: Record<string,string>): Promise<unknown> }`；`onMessage: (msg: FeishuTextMessage) => Promise<void>`。
 
 - [ ] **Step 1: 写失败测试**
 
 `apps/cli/test/daemon/feishu/events.test.ts`:
+
 ```ts
 import { describe, it, expect, vi } from 'vitest'
 
@@ -235,11 +245,21 @@ describe('createFeishuEventDispatcher', () => {
     const handler = registered['im.message.receive_v1']
     expect(handler).toBeDefined()
     await handler({
-      message: { chat_id: 'c1', message_id: 'm1', message_type: 'text', content: JSON.stringify({ text: 'hi' }) },
+      message: {
+        chat_id: 'c1',
+        message_id: 'm1',
+        message_type: 'text',
+        content: JSON.stringify({ text: 'hi' }),
+      },
       sender: { sender_id: { open_id: 'ou_1' } },
     })
 
-    expect(onMessage).toHaveBeenCalledWith({ chatId: 'c1', messageId: 'm1', openId: 'ou_1', text: 'hi' })
+    expect(onMessage).toHaveBeenCalledWith({
+      chatId: 'c1',
+      messageId: 'm1',
+      openId: 'ou_1',
+      text: 'hi',
+    })
   })
 
   it('invoke 透传 body + headers 给 SDK', async () => {
@@ -258,6 +278,7 @@ describe('createFeishuEventDispatcher', () => {
 - [ ] **Step 3: 实现 events.ts**
 
 `apps/cli/src/daemon/feishu/events.ts`:
+
 ```ts
 import * as lark from '@larksuiteoapi/node-sdk'
 import type { FeishuConfig, FeishuTextMessage } from './types.js'
@@ -314,16 +335,19 @@ git commit -m "feat(daemon): Feishu 事件解密验签（EventDispatcher 封装�
 ### Task 4: SessionWorker 暴露最终回复
 
 **Files:**
+
 - Modify: `apps/cli/src/daemon/session-worker.ts`
 - Test: `apps/cli/test/daemon/session-worker.test.ts`（若不存在则新建）
 
 **Interfaces:**
+
 - Consumes: `QueryEngine.getLastAssistantContent()`（`src/core/engine.ts:357` 已存在）。
 - Produces: `SessionWorker.getLastAssistantContent(): string | undefined`。
 
 - [ ] **Step 1: 写失败测试**
 
 在 `test/daemon/session-worker.test.ts`（或新建）加：
+
 ```ts
 it('getLastAssistantContent 委托给 engine', () => {
   const engine = { getLastAssistantContent: () => '最终回复' } as any
@@ -337,6 +361,7 @@ it('getLastAssistantContent 委托给 engine', () => {
 - [ ] **Step 3: 实现**
 
 在 `SessionWorker` 类加（`this.engine` 已存在）：
+
 ```ts
 getLastAssistantContent(): string | undefined {
   return this.engine.getLastAssistantContent()
@@ -357,10 +382,12 @@ git commit -m "feat(daemon): SessionWorker 暴露 getLastAssistantContent"
 ### Task 5: SessionManager open_id→session 映射
 
 **Files:**
+
 - Modify: `apps/cli/src/daemon/session-manager.ts`
 - Test: `apps/cli/test/daemon/session-manager.test.ts`（若不存在则新建）
 
 **Interfaces:**
+
 - Consumes: 现有 `createSession(name, cwd, provider, model)`、`listSessions()`、`getSession(id)`。
 - Produces: `getOrCreateByFeishuOpenId(openId: string, cwd: string, provider: string, model: string): DaemonSession`。
 
@@ -390,6 +417,7 @@ it('getOrCreateByFeishuOpenId 为不同 openId 建独立会话', () => {
 - [ ] **Step 3: 实现**
 
 在 `SessionManager` 类加：
+
 ```ts
 getOrCreateByFeishuOpenId(openId: string, cwd: string, provider: string, model: string): DaemonSession {
   const name = `feishu-${openId}`
@@ -413,10 +441,12 @@ git commit -m "feat(daemon): SessionManager 按 open_id 映射会话（feishu- �
 ### Task 6: adapter.ts — 编排
 
 **Files:**
+
 - Create: `apps/cli/src/daemon/feishu/adapter.ts`
 - Test: `apps/cli/test/daemon/feishu/adapter.test.ts`
 
 **Interfaces:**
+
 - Consumes: Task 1-5 的全部产出。
 - Produces: `createFeishuAdapter(config, deps): FeishuAdapter`；`FeishuAdapter = { handleEvent(request: Request): Promise<Response> }`；`deps = { sm, getOrCreateWorker, rateLimiter, cwd, provider, model }`。
 
@@ -427,38 +457,58 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@larksuiteoapi/node-sdk', () => ({
   AppType: { SelfBuild: 1 },
   Domain: { Feishu: 'feishu' },
-  Client: class { im = { message: { create: vi.fn() } } },
+  Client: class {
+    im = { message: { create: vi.fn() } }
+  },
   EventDispatcher: class {
-    register(map: Record<string, Function>) { this._map = map; return this }
+    register(map: Record<string, Function>) {
+      this._map = map
+      return this
+    }
     _map: Record<string, Function> = {}
-    async invoke(_a: unknown) { return { code: 0 } }
+    async invoke(_a: unknown) {
+      return { code: 0 }
+    }
   },
 }))
 import { createFeishuAdapter } from '../../../src/daemon/feishu/adapter.js'
 
 const config = {
-  appId: 'a', appSecret: 's', encryptKey: 'k', verificationToken: 't',
+  appId: 'a',
+  appSecret: 's',
+  encryptKey: 'k',
+  verificationToken: 't',
   allowedOpenIds: ['ou_1'],
 }
 
 function makeDeps() {
   return {
     sm: {
-      getOrCreateByFeishuOpenId: vi.fn(() => ({ id: 'sess-1', name: 'feishu-ou_1', cwd: '/tmp', provider: 'anthropic', model: 'claude' })),
+      getOrCreateByFeishuOpenId: vi.fn(() => ({
+        id: 'sess-1',
+        name: 'feishu-ou_1',
+        cwd: '/tmp',
+        provider: 'anthropic',
+        model: 'claude',
+      })),
     } as any,
     getOrCreateWorker: vi.fn(() => ({
       processPrompt: vi.fn(async () => {}),
       getLastAssistantContent: () => '完成！',
     })) as any,
     rateLimiter: { check: vi.fn(() => ({ allowed: true })) } as any,
-    cwd: '/tmp', provider: 'anthropic', model: 'claude',
+    cwd: '/tmp',
+    provider: 'anthropic',
+    model: 'claude',
   }
 }
 
 describe('createFeishuAdapter', () => {
   it('handleEvent 回显 challenge', async () => {
     const a = createFeishuAdapter(config, makeDeps())
-    const res = await a.handleEvent(new Request('http://x', { method: 'POST', body: JSON.stringify({ challenge: 'abc' }) }))
+    const res = await a.handleEvent(
+      new Request('http://x', { method: 'POST', body: JSON.stringify({ challenge: 'abc' }) }),
+    )
     expect(await res.json()).toEqual({ challenge: 'abc' })
   })
 
@@ -480,6 +530,7 @@ describe('createFeishuAdapter', () => {
 - [ ] **Step 3: 实现 adapter.ts**
 
 `apps/cli/src/daemon/feishu/adapter.ts`:
+
 ```ts
 import { createFeishuApi } from './api.js'
 import { createFeishuEventDispatcher } from './events.js'
@@ -510,7 +561,12 @@ export function createFeishuAdapter(config: FeishuConfig, deps: FeishuAdapterDep
     if (!allowed.has(msg.openId)) return
     if (!deps.rateLimiter.check(`feishu:${msg.openId}`).allowed) return
 
-    const session = deps.sm.getOrCreateByFeishuOpenId(msg.openId, deps.cwd, deps.provider, deps.model)
+    const session = deps.sm.getOrCreateByFeishuOpenId(
+      msg.openId,
+      deps.cwd,
+      deps.provider,
+      deps.model,
+    )
     const worker = deps.getOrCreateWorker(session.id)
     if (!worker) {
       await api.sendText(msg.openId, '（会话初始化失败，请稍后重试）')
@@ -563,17 +619,20 @@ git commit -m "feat(daemon): Feishu adapter 编排（鉴权+会话映射+prompt+
 ### Task 7: server.ts + index.ts 接线
 
 **Files:**
+
 - Modify: `apps/cli/src/daemon/server.ts`
 - Modify: `apps/cli/src/daemon/index.ts`
 - Test: `apps/cli/test/daemon/feishu/integration.test.ts`
 
 **Interfaces:**
+
 - Consumes: `createFeishuAdapter`（Task 6）、`FeishuConfig`。
 - Produces: `/feishu/event` 路由。
 
 - [ ] **Step 1: 写集成测试**
 
 `apps/cli/test/daemon/feishu/integration.test.ts`:
+
 ```ts
 import { describe, it, expect } from 'vitest'
 // 直接测 createServer 挂载的 /feishu/event 路由对 challenge 的响应（不需要真实 Feishu）
@@ -584,7 +643,14 @@ import { parseFeishuEnv } from '../../../src/daemon/feishu/env.js'
 describe('parseFeishuEnv', () => {
   it('解析合法 env', () => {
     const prev = process.env
-    process.env = { ...prev, FEISHU_APP_ID: 'a', FEISHU_APP_SECRET: 's', FEISHU_ENCRYPT_KEY: 'k', FEISHU_VERIFICATION_TOKEN: 't', FEISHU_ALLOWED_OPEN_IDS: 'ou_1,ou_2' }
+    process.env = {
+      ...prev,
+      FEISHU_APP_ID: 'a',
+      FEISHU_APP_SECRET: 's',
+      FEISHU_ENCRYPT_KEY: 'k',
+      FEISHU_VERIFICATION_TOKEN: 't',
+      FEISHU_ALLOWED_OPEN_IDS: 'ou_1,ou_2',
+    }
     const cfg = parseFeishuEnv()
     expect(cfg?.appId).toBe('a')
     expect(cfg?.allowedOpenIds).toEqual(['ou_1', 'ou_2'])
@@ -607,6 +673,7 @@ describe('parseFeishuEnv', () => {
 - [ ] **Step 3: 实现 env.ts**
 
 `apps/cli/src/daemon/feishu/env.ts`:
+
 ```ts
 import type { FeishuConfig } from './types.js'
 
@@ -630,6 +697,7 @@ export function parseFeishuEnv(): FeishuConfig | null {
 - [ ] **Step 4: server.ts 挂路由**
 
 在 `createServer` 的 `fetch` 里，`health` 路由之前（跳过 daemon Bearer 鉴权）加：
+
 ```ts
 // ── Feishu event callback（独立签名验证，不经过 daemon Bearer 鉴权）──
 if (feishuAdapter && method === 'POST' && path === '/feishu/event') {
@@ -642,6 +710,7 @@ if (feishuAdapter && method === 'POST' && path === '/feishu/event') {
 - [ ] **Step 5: index.ts 构造 adapter**
 
 `src/daemon/index.ts` 里 `startDaemon()`，在 `createServer` 前：
+
 ```ts
 import { parseFeishuEnv } from './feishu/env.js'
 import { createFeishuAdapter } from './feishu/adapter.js'
