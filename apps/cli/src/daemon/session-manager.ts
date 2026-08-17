@@ -23,6 +23,18 @@ export class SessionManager {
     return this.db.listSessions(status)
   }
 
+  getOrCreateByFeishuOpenId(
+    openId: string,
+    cwd: string,
+    provider: string,
+    model: string,
+  ): DaemonSession {
+    const name = `feishu-${openId}`
+    const existing = this.db.listSessions().find((s) => s.name === name && s.status !== 'closed')
+    if (existing) return existing
+    return this.db.createSession({ name, cwd, provider, model })
+  }
+
   closeSession(id: string): void {
     this.db.closeSession(id)
     for (const cb of this.closeCallbacks) {
