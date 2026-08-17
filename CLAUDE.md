@@ -224,7 +224,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
 | E2E      | 1       | 8        | full-pipeline                                 |
 | Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **115** | **1486** | **0 失败** ✅（1484 passed + 2 skipped）      |
+| **合计** | **115** | **1498** | **0 失败** ✅（1496 passed + 2 skipped）      |
 
 > 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
 
