@@ -24,23 +24,32 @@ export function createFeishuAdapter(config: FeishuConfig, deps: FeishuAdapterDep
   const allowed = new Set(config.allowedOpenIds)
 
   const onMessage = async (msg: FeishuTextMessage) => {
-    if (!allowed.has(msg.openId)) return
-    if (!deps.rateLimiter.check(`feishu:${msg.openId}`).allowed) return
+    try {
+      if (!allowed.has(msg.openId)) return
+      if (!deps.rateLimiter.check(`feishu:${msg.openId}`).allowed) return
 
-    const session = deps.sm.getOrCreateByFeishuOpenId(
-      msg.openId,
-      deps.cwd,
-      deps.provider,
-      deps.model,
-    )
-    const worker = deps.getOrCreateWorker(session.id)
-    if (!worker) {
-      await api.sendText(msg.openId, '（会话初始化失败，请稍后重试）')
-      return
+      const session = deps.sm.getOrCreateByFeishuOpenId(
+        msg.openId,
+        deps.cwd,
+        deps.provider,
+        deps.model,
+      )
+      const worker = deps.getOrCreateWorker(session.id)
+      if (!worker) {
+        await api.sendText(msg.openId, '（会话初始化失败，请稍后重试）')
+        return
+      }
+      await worker.processPrompt(msg.text)
+      const result = worker.getLastAssistantContent()
+      await api.sendText(msg.openId, result ? result.slice(0, 4000) : '（无回复）')
+    } catch (err) {
+      console.error('[feishu] message handling failed:', err)
+      try {
+        await api.sendText(msg.openId, '（处理失败，请稍后重试）')
+      } catch {
+        /* 忽略回送失败，确保不 rethrow → Feishu 不重试 */
+      }
     }
-    await worker.processPrompt(msg.text)
-    const result = worker.getLastAssistantContent()
-    await api.sendText(msg.openId, result ? result.slice(0, 4000) : '（无回复）')
   }
 
   const dispatcher = createFeishuEventDispatcher(config, onMessage)
@@ -60,12 +69,11 @@ export function createFeishuAdapter(config: FeishuConfig, deps: FeishuAdapterDep
       }
       const headers: Record<string, string> = {}
       request.headers.forEach((v, k) => (headers[k] = v))
-      try {
-        const result = await dispatcher.invoke(body, headers)
-        return Response.json(result ?? { code: 0 })
-      } catch {
-        return Response.json({ code: 1, msg: 'invalid event' }, { status: 400 })
+      const result = await dispatcher.invoke(body, headers)
+      if (!result.ok) {
+        return Response.json({ code: 1, msg: result.reason }, { status: 400 })
       }
+      return Response.json({ code: 0 })
     },
   }
 }

@@ -1,9 +1,15 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+vi.spyOn(console, 'error').mockImplementation(() => {})
+
+const messageCreateMock = vi.fn()
+const sdkInvokeMock = vi.fn()
+
 vi.mock('@larksuiteoapi/node-sdk', () => ({
   AppType: { SelfBuild: 1 },
   Domain: { Feishu: 'feishu' },
   Client: class {
-    im = { message: { create: vi.fn() } }
+    im = { message: { create: messageCreateMock } }
   },
   EventDispatcher: class {
     register(map: Record<string, (data: any) => unknown>) {
@@ -11,11 +17,12 @@ vi.mock('@larksuiteoapi/node-sdk', () => ({
       return this
     }
     _map: Record<string, (data: any) => unknown> = {}
-    async invoke(_a: unknown) {
-      return { code: 0 }
+    async invoke(assigned: unknown) {
+      return sdkInvokeMock(assigned, this._map)
     }
   },
 }))
+
 import { createFeishuAdapter } from '../../../src/daemon/feishu/adapter.js'
 
 const config = {
@@ -26,8 +33,20 @@ const config = {
   allowedOpenIds: ['ou_1'],
 }
 
+const textEventBody = {
+  message: {
+    chat_id: 'c1',
+    message_id: 'm1',
+    message_type: 'text',
+    content: JSON.stringify({ text: 'hi' }),
+  },
+  sender: { sender_id: { open_id: 'ou_1' } },
+}
+
 function makeDeps() {
+  const processPrompt = vi.fn(async () => {})
   return {
+    processPrompt,
     sm: {
       getOrCreateByFeishuOpenId: vi.fn(() => ({
         id: 'sess-1',
@@ -38,7 +57,7 @@ function makeDeps() {
       })),
     } as any,
     getOrCreateWorker: vi.fn(() => ({
-      processPrompt: vi.fn(async () => {}),
+      processPrompt,
       getLastAssistantContent: () => '完成！',
     })) as any,
     rateLimiter: { check: vi.fn(() => ({ allowed: true })) } as any,
@@ -48,21 +67,79 @@ function makeDeps() {
   }
 }
 
+// 默认让 SDK EventDispatcher.invoke 模拟「验签通过 + 派发 handler」
+function mockSdkDispatch() {
+  sdkInvokeMock.mockImplementation(
+    async (_assigned: unknown, map: Record<string, (data: any) => unknown>) => {
+      const handler = map['im.message.receive_v1']
+      if (!handler) return 'no im.message.receive_v1 event handle'
+      return await handler(_assigned)
+    },
+  )
+}
+
+function requestWithBody(body: unknown): Request {
+  return new Request('http://x', { method: 'POST', body: JSON.stringify(body) })
+}
+
+beforeEach(() => {
+  messageCreateMock.mockReset()
+  sdkInvokeMock.mockReset()
+  mockSdkDispatch()
+})
+
 describe('createFeishuAdapter', () => {
   it('handleEvent 回显 challenge', async () => {
     const a = createFeishuAdapter(config, makeDeps())
-    const res = await a.handleEvent(
-      new Request('http://x', { method: 'POST', body: JSON.stringify({ challenge: 'abc' }) }),
-    )
+    const res = await a.handleEvent(requestWithBody({ challenge: 'abc' }))
     expect(await res.json()).toEqual({ challenge: 'abc' })
   })
 
-  it('白名单外 openId 不跑 prompt', async () => {
+  it('白名单 miss → 不跑 prompt，返回 200', async () => {
     const deps = makeDeps()
-    // 通过 dispatcher 触发 onMessage —— 直接调用内部 onMessage 不可行，改测 handleEvent 路径：
-    // 这里用未授权配置重建 adapter，验证白名单过滤在 adapter 层生效。
     const a = createFeishuAdapter({ ...config, allowedOpenIds: [] }, deps)
-    // 加密事件走 invoke，无法在单测里模拟解密；白名单过滤逻辑抽成纯函数 isAllowed 便于测试
-    expect(a.isAllowed('ou_x')).toBe(false)
+    const res = await a.handleEvent(requestWithBody(textEventBody))
+    expect(res.status).toBe(200)
+    expect(deps.processPrompt).not.toHaveBeenCalled()
+    expect(messageCreateMock).not.toHaveBeenCalled()
+  })
+
+  it('白名单 hit → processPrompt 调用一次 + 回送消息', async () => {
+    const deps = makeDeps()
+    const a = createFeishuAdapter(config, deps)
+    const res = await a.handleEvent(requestWithBody(textEventBody))
+    expect(res.status).toBe(200)
+    expect(deps.processPrompt).toHaveBeenCalledTimes(1)
+    expect(deps.processPrompt).toHaveBeenCalledWith('hi')
+    expect(messageCreateMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('验签失败（SDK invoke → undefined）→ 4xx', async () => {
+    sdkInvokeMock.mockResolvedValue(undefined)
+    const deps = makeDeps()
+    const a = createFeishuAdapter(config, deps)
+    const res = await a.handleEvent(requestWithBody(textEventBody))
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ code: 1, msg: 'invalid_signature' })
+    expect(deps.processPrompt).not.toHaveBeenCalled()
+  })
+
+  it('无 handler（SDK invoke → "no X event handle"）→ 4xx', async () => {
+    sdkInvokeMock.mockResolvedValue('no im.message.receive_v1 event handle')
+    const deps = makeDeps()
+    const a = createFeishuAdapter(config, deps)
+    const res = await a.handleEvent(requestWithBody(textEventBody))
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ code: 1, msg: 'no_handler' })
+    expect(deps.processPrompt).not.toHaveBeenCalled()
+  })
+
+  it('回送失败 → 200（不 rethrow），processPrompt 只跑一次', async () => {
+    messageCreateMock.mockRejectedValue(new Error('send failed'))
+    const deps = makeDeps()
+    const a = createFeishuAdapter(config, deps)
+    const res = await a.handleEvent(requestWithBody(textEventBody))
+    expect(res.status).toBe(200)
+    expect(deps.processPrompt).toHaveBeenCalledTimes(1)
   })
 })
