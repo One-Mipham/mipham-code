@@ -107,8 +107,7 @@ jobs:
           java-version: 17
 
       - uses: gradle/actions/setup-gradle@v4
-        with:
-          build-root-directory: infrastructure/jetbrains
+        working-directory: infrastructure/jetbrains
 
       - name: Build plugin
         working-directory: infrastructure/jetbrains
@@ -145,7 +144,14 @@ jobs:
 
       - name: Publish to npm
         working-directory: apps/cli
-        run: npm publish --access public
+        run: |
+          CURRENT=$(node -p "require('./package.json').version")
+          PUBLISHED=$(npm view @miphamai/cli version 2>/dev/null || echo "none")
+          if [ "$CURRENT" = "$PUBLISHED" ]; then
+            echo "Version $CURRENT already published — skipping."
+          else
+            npm publish --access public
+          fi
 
   # ── Stage 4: GitHub Release ──
   release:
