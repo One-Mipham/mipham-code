@@ -8,6 +8,30 @@ import { realpathSync, existsSync } from 'node:fs'
 const BLOCKED_PATHS = ['/etc', '/proc', '/sys', '/dev', '/boot', '/root']
 
 /**
+ * Windows UNC paths and NT/Win32/DOS device-namespace prefixes.
+ *
+ * Accessing a UNC path (\\server\share) triggers SMB negotiation on Windows,
+ * which silently sends NTLM credentials to the target — a credential-leak
+ * vector (relay / offline cracking). The NT-namespace spelling (\??\UNC\...)
+ * bypasses naive UNC checks, so all device-namespace prefixes are rejected too.
+ *
+ * Anchored at token boundaries so escaped backslashes (echo \\n) and local
+ * drive paths (C:\\Users\\me) are NOT flagged, and http:// URLs are excluded
+ * from the forward-slash form.
+ */
+const UNC_DEVICE_PATTERNS: RegExp[] = [
+  /(?:^|[\s"'`(;|&])\\\\[A-Za-z0-9._-]+\\[^\s"'`;|&]/,
+  /(?:^|[\s"'`(;|&])\/\/[A-Za-z0-9._-]+\/[^\s"'`;|&]/,
+  /\\\?\?\\/,
+  /\\\\\?\\/,
+  /\\\\\.\\/,
+]
+
+export function isUncOrDevicePath(path: string): boolean {
+  return UNC_DEVICE_PATTERNS.some((re) => re.test(path))
+}
+
+/**
  * Resolve a user-supplied path relative to cwd, with sandbox enforcement.
  *
  * Rules:
@@ -22,6 +46,14 @@ const BLOCKED_PATHS = ['/etc', '/proc', '/sys', '/dev', '/boot', '/root']
  * @throws {Error} with a human-readable message if the path is blocked.
  */
 export function resolveSafe(cwd: string, inputPath: string): string {
+  // Reject UNC / device-namespace paths before touching the filesystem —
+  // resolving a UNC path on Windows would trigger SMB negotiation (NTLM leak).
+  if (isUncOrDevicePath(inputPath)) {
+    throw new Error(
+      `Path rejected: "${inputPath}" is a UNC or device-namespace path (blocked to prevent NTLM credential leakage).`,
+    )
+  }
+
   const raw = resolve(cwd, inputPath)
   const normalized = normalize(raw)
 

@@ -54,9 +54,12 @@ export class MiphamRuntime {
       ...variables,
     }
 
-    for (const [key, value] of Object.entries(allVars)) {
-      result = result.replaceAll(`\${${key}}`, value)
-    }
+    // Single-pass substitution: replacement values are NOT re-scanned for more
+    // template markers, so a variable containing `${key}` can't be re-expanded
+    // into another variable's value.
+    result = result.replace(/\$\{([^}]+)\}/g, (match, key: string) =>
+      Object.prototype.hasOwnProperty.call(allVars, key) ? allVars[key]! : match,
+    )
 
     return result
   }

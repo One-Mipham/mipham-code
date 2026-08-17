@@ -1,6 +1,7 @@
 import type { ToolDefinition, CredentialMaskingConfig } from '../../shared/index.ts'
 import { sanitizeCommand } from '../../shared/sanitize.ts'
 import { DANGEROUS_GIT_PATTERNS } from './git.ts'
+import { isUncOrDevicePath } from '../../security/path.ts'
 import type { Service } from '../../vajra'
 import { toolKey } from '../seam'
 import { withValidation } from '../validation'
@@ -135,6 +136,12 @@ export function isBlocked(command: string): string | null {
         return `Dangerous git command blocked: "${description}". Run manually if intended.`
       }
     }
+  }
+
+  // Reject UNC / device-namespace paths — accessing one triggers SMB negotiation
+  // on Windows and silently leaks NTLM credentials (Claude Code 2.1.233 CVE-class fix).
+  if (isUncOrDevicePath(command) || isUncOrDevicePath(normalized) || isUncOrDevicePath(sanitized)) {
+    return `Command rejected: references a UNC or device-namespace path (blocked to prevent NTLM credential leakage).`
   }
 
   // Check dangerous patterns (on original, normalized, and sanitized)

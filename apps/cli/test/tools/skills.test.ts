@@ -383,6 +383,15 @@ describe('StandardRuntime', () => {
     // With no variables, placeholders remain
     expect(result).toBe('Hello, ${name}!')
   })
+
+  it('does not re-expand variable values as template markers (single-pass)', async () => {
+    // A value containing ${aspect} must NOT be re-scanned and expanded again
+    const result = await runtime.executePrompt('analyze', {
+      file: '${aspect}',
+      aspect: 'SECRET',
+    })
+    expect(result).toBe('Analyze ${aspect} with focus on SECRET.')
+  })
 })
 
 // ============================================================
@@ -427,6 +436,13 @@ describe('MiphamRuntime', () => {
   it('Mipham context variables can be overridden by explicit variables', async () => {
     const result = await runtime.executePrompt('analyze', { provider: 'overridden' })
     expect(result).toContain('Provider: overridden')
+    expect(result).toContain('Model: deepseek-v4-pro')
+  })
+
+  it('does not re-expand variable values as template markers (single-pass)', async () => {
+    // A value containing ${model} must NOT be re-scanned and expanded again
+    const result = await runtime.executePrompt('analyze', { custom: '${model}' })
+    expect(result).toContain('Custom: ${model}')
     expect(result).toContain('Model: deepseek-v4-pro')
   })
 

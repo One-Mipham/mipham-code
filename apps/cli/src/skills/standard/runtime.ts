@@ -49,9 +49,12 @@ export class StandardRuntime {
 
     let result = prompt
     if (variables) {
-      for (const [key, value] of Object.entries(variables)) {
-        result = result.replaceAll(`\${${key}}`, value)
-      }
+      // Single-pass substitution: replacement values are NOT re-scanned for
+      // more template markers, so an argument containing `${key}` can't be
+      // re-expanded into another variable's value.
+      result = result.replace(/\$\{([^}]+)\}/g, (match, key: string) =>
+        Object.prototype.hasOwnProperty.call(variables, key) ? variables[key]! : match,
+      )
     }
 
     return result

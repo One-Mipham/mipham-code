@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { resolveSafe } from '../../src/security/path'
+import { resolveSafe, isUncOrDevicePath } from '../../src/security/path'
 
 describe('resolveSafe', () => {
   let tmpDir: string
@@ -85,5 +85,48 @@ describe('resolveSafe', () => {
         'outside the project workspace',
       )
     })
+  })
+
+  describe('UNC / device-namespace paths (NTLM leak prevention)', () => {
+    it('rejects backslash UNC paths', () => {
+      expect(() => resolveSafe(tmpDir, '\\\\server\\share\\file')).toThrow(/UNC|device-namespace/)
+    })
+
+    it('rejects NT namespace device prefix', () => {
+      expect(() => resolveSafe(tmpDir, '\\??\\UNC\\server\\share')).toThrow(/UNC|device-namespace/)
+    })
+  })
+})
+
+describe('isUncOrDevicePath', () => {
+  it('detects backslash UNC paths', () => {
+    expect(isUncOrDevicePath('\\\\server\\share\\file')).toBe(true)
+  })
+
+  it('detects forward-slash UNC paths', () => {
+    expect(isUncOrDevicePath('//server/share/file')).toBe(true)
+  })
+
+  it('detects NT namespace device prefix (\\??\\)', () => {
+    expect(isUncOrDevicePath('\\??\\UNC\\server\\share')).toBe(true)
+  })
+
+  it('detects Win32 verbatim namespace (\\\\?\\)', () => {
+    expect(isUncOrDevicePath('\\\\?\\UNC\\server\\share')).toBe(true)
+  })
+
+  it('detects DOS device namespace (\\\\.\\)', () => {
+    expect(isUncOrDevicePath('\\\\.\\pipe\\x')).toBe(true)
+  })
+
+  it('does not flag URLs', () => {
+    expect(isUncOrDevicePath('http://example.com/a')).toBe(false)
+    expect(isUncOrDevicePath('https://example.com/a')).toBe(false)
+  })
+
+  it('does not flag escaped backslashes or local paths', () => {
+    expect(isUncOrDevicePath('echo \\\\n')).toBe(false)
+    expect(isUncOrDevicePath('C:\\Users\\me')).toBe(false)
+    expect(isUncOrDevicePath('/home/user')).toBe(false)
   })
 })

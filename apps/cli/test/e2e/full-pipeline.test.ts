@@ -7,7 +7,18 @@
  * Run: ANTHROPIC_API_KEY=sk-ant-... npx vitest run test/e2e/
  *   or: DEEPSEEK_API_KEY=sk-... npx vitest run test/e2e/
  */
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, vi } from 'vitest'
+
+// Isolate config loading from the real ~/.mipham — this E2E test calls loadConfig(),
+// which auto-backs-up the user's live config.yml. Redirect homedir to a temp dir.
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>()
+  return {
+    ...actual,
+    homedir: () => `${actual.tmpdir()}/mipham-test-e2e`,
+  }
+})
+
 import { loadConfig } from '../../src/config/loader'
 import { bootstrapProviders } from '../../src/providers/bootstrap'
 import { InstructionsLoader } from '../../src/core/instructions'

