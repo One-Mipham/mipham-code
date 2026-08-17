@@ -36,7 +36,7 @@
   },
   "scripts": {
     "dev": "bun run bin/mipham.ts",
-    "build": "bun build --compile --minify ./bin/mipham.ts --outfile dist/mipham",
+    "build": "bun run scripts/generate-bundled-skills.ts && bun build --compile --minify ./bin/mipham.ts --outfile dist/mipham",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

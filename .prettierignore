@@ -1,4 +1,5 @@
 apps/cli/skills/workflows
+apps/cli/src/skills/bundled-skills.ts
 .claude/
 pnpm-lock.yaml
 infrastructure/jetbrains/build/

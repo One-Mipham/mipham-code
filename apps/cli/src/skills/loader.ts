@@ -5,6 +5,7 @@ import { parse as parseYaml } from 'yaml'
 import type { SkillDefinition } from '../shared/index.ts'
 import type { Skills } from './seam'
 import { sanitizeSkillDescription, sanitizeSkillBody, checkSkillShadow } from './sanitizer.js'
+import { BUNDLED_SKILLS, type BundledSkill } from './bundled-skills'
 
 interface FrontmatterResult {
   data: Record<string, unknown>
@@ -36,6 +37,32 @@ export class SkillsLoader implements Skills {
     const miphamDir = join(basePath, 'skills', 'mipham')
     if (existsSync(miphamDir)) {
       this.loadDirectory(miphamDir, 'mipham')
+    }
+  }
+
+  /**
+   * Load the built-in skills shipped alongside the app.
+   *
+   * Resolves the app root from this module's own location (`import.meta.dirname`),
+   * NOT the process working directory. `process.cwd()` points to wherever the user
+   * launched `mipham` from, so a cwd-relative lookup would silently miss the bundled
+   * skills in npm-global and compiled-binary installs.
+   */
+  loadBuiltinFromPackage(): void {
+    // loader.ts lives at <app-root>/src/skills/loader.ts → app root is two levels up
+    const appRoot = join(import.meta.dirname!, '..', '..')
+    this.loadBuiltin(appRoot)
+    // Fallback for the standalone binary: it has no skills/ on disk, so read
+    // the embedded snapshot bundled at compile time instead.
+    if (this.skills.size === 0) {
+      this.loadEmbedded(BUNDLED_SKILLS)
+    }
+  }
+
+  /** Load skills from an in-memory snapshot (the compiled-binary fallback). */
+  loadEmbedded(entries: ReadonlyArray<BundledSkill>): void {
+    for (const { type, raw } of entries) {
+      this.tryLoadRaw(raw, type, `embedded:${type}`)
     }
   }
 
@@ -100,11 +127,19 @@ export class SkillsLoader implements Skills {
   private tryLoad(path: string, type: 'standard' | 'mipham'): void {
     try {
       const raw = readFileSync(path, 'utf-8')
+      this.tryLoadRaw(raw, type, path)
+    } catch {
+      // skip unparseable
+    }
+  }
+
+  private tryLoadRaw(raw: string, type: 'standard' | 'mipham', sourceName: string): void {
+    try {
       const { data, content } = parseFrontmatter(raw)
 
       const rawDescription = (data.description as string) || ''
       const rawBody = content.trim() || undefined
-      const skillName = (data.name as string) || this.nameFromPath(path)
+      const skillName = (data.name as string) || this.nameFromPath(sourceName)
 
       // ── Safety: check for command/MCP shadowing ──
       const shadowCheck = checkSkillShadow(skillName, rawDescription)

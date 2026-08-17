@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { SkillDefinition } from '../../src/shared'
 import { SkillsLoader } from '../../src/skills/loader'
+import { BUNDLED_SKILLS } from '../../src/skills/bundled-skills'
 import { StandardRuntime } from '../../src/skills/standard/runtime'
 import { MiphamRuntime } from '../../src/skills/mipham/runtime'
 
@@ -114,6 +115,37 @@ describe('SkillsLoader', () => {
       loader.loadBuiltin(tmpDir)
 
       expect(loader.has('dynamic-name')).toBe(true)
+    })
+  })
+
+  describe('loadBuiltinFromPackage', () => {
+    it('loads the bundled skills shipped with the app (not cwd-relative)', () => {
+      const loader = new SkillsLoader()
+      loader.loadBuiltinFromPackage()
+
+      const counts = loader.countByType()
+      expect(counts.standard).toBeGreaterThanOrEqual(20)
+      expect(counts.mipham).toBeGreaterThanOrEqual(3)
+      // Spot-check two known bundled skills across both tracks
+      expect(loader.has('code-review')).toBe(true)
+      expect(loader.get('code-review')?.type).toBe('standard')
+      expect(loader.has('om-artifact')).toBe(true)
+      expect(loader.get('om-artifact')?.type).toBe('mipham')
+    })
+  })
+
+  describe('loadEmbedded (compiled-binary fallback)', () => {
+    it('loads skills from the bundled in-memory snapshot', () => {
+      const loader = new SkillsLoader()
+      loader.loadEmbedded(BUNDLED_SKILLS)
+
+      const counts = loader.countByType()
+      expect(counts.standard).toBeGreaterThanOrEqual(20)
+      expect(counts.mipham).toBeGreaterThanOrEqual(3)
+      expect(loader.has('code-review')).toBe(true)
+      expect(loader.get('code-review')?.type).toBe('standard')
+      expect(loader.has('om-artifact')).toBe(true)
+      expect(loader.get('om-artifact')?.type).toBe('mipham')
     })
   })
 
@@ -529,5 +561,25 @@ describe('Built-in skills', () => {
     for (const skill of loader.listByType('mipham')) {
       expect(skill.type).toBe('mipham')
     }
+  })
+})
+
+describe('bundled-skills snapshot freshness', () => {
+  it('matches the skills on disk (regenerate with `bun run scripts/generate-bundled-skills.ts`)', () => {
+    const skillsRoot = join(import.meta.dirname, '..', '..', 'skills')
+
+    const expected: Array<{ type: 'standard' | 'mipham'; raw: string }> = []
+    for (const type of ['standard', 'mipham'] as const) {
+      const ext = type === 'standard' ? '.SKILL.md' : '.mipham-skill.md'
+      const dir = join(skillsRoot, type)
+      const files = readdirSync(dir)
+        .filter((f) => f.endsWith(ext))
+        .sort()
+      for (const f of files) {
+        expected.push({ type, raw: readFileSync(join(dir, f), 'utf-8') })
+      }
+    }
+
+    expect(BUNDLED_SKILLS).toEqual(expected)
   })
 })

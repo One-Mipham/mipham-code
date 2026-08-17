@@ -275,7 +275,7 @@ export async function runApp(options: RunOptions): Promise<void> {
 
   // Load skills
   const skillsLoader = new SkillsLoader()
-  skillsLoader.loadBuiltin(process.cwd())
+  skillsLoader.loadBuiltinFromPackage()
   skillsLoader.loadUserSkills()
   if (config.skills?.paths) {
     skillsLoader.loadExternal(config.skills.paths)
