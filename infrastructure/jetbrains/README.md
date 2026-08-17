@@ -32,6 +32,10 @@ Multi-model AI coding terminal for all JetBrains IDEs.
 - IntelliJ IDEA 2024.3+ (or WebStorm/PyCharm/GoLand/Rider/CLion/DataGrip)
 - [Mipham Code CLI](https://mipham.ai/code) installed (`mipham` on PATH)
 
+## Known Limitations
+
+- **`Esc` key in the embedded terminal**: Mipham Code uses a React/Ink terminal UI that needs full terminal emulation. The JetBrains embedded terminal may not deliver a standalone `Esc` press (it is the prefix for ANSI escape sequences). Use **`Ctrl+C`** to exit/interrupt, or run `mipham` in a native terminal (iTerm2 / Terminal.app) for full key support.
+
 ## Build from Source
 
 ```bash
