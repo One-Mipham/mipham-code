@@ -16,7 +16,7 @@ describe('createToolRegistry (seam)', () => {
   })
 
   it('no-arg default is masking-neutral (does not enable credential masking)', () => {
-    // 无参路径（daemon/workflow）不得静默启用掩码——defaultToolContext 必须提供
+    // 无参路径（daemon/workflow）不得静默启用掩码——defaultVajraContext 必须提供
     // DISABLED 配置（enabled:false），而非 DEFAULT（enabled:true）。
     expect(DISABLED_CREDENTIAL_MASKING_CONFIG.enabled).toBe(false)
     expect(DEFAULT_CREDENTIAL_MASKING_CONFIG.enabled).toBe(true)

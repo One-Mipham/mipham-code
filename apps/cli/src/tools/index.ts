@@ -33,7 +33,7 @@ import { scheduleWakeupTool } from './scheduling/schedule-wakeup.js'
 import { cronCreateTool, cronDeleteTool, cronListTool } from './scheduling/cron.js'
 import { DISABLED_CREDENTIAL_MASKING_CONFIG } from '../config/defaults'
 
-function defaultToolContext(): Context {
+function defaultVajraContext(): Context {
   const ctx = new Context()
   // 掩码中立默认：无参调用（daemon/workflow）保持 Read/Bash 挂载，但不启用掩码，
   // 对齐 pre-seam 行为（那些路径从不调用 setter）。显式开启掩码走 index.tsx 的加载配置。
@@ -42,7 +42,7 @@ function defaultToolContext(): Context {
 }
 
 export function createToolRegistry(
-  ctx: Context = defaultToolContext(),
+  ctx: Context = defaultVajraContext(),
 ): Map<string, ToolDefinition> {
   // 普通工具：包 withValidation 后作为 Service 挂载
   const plainTools: ToolDefinition[] = [

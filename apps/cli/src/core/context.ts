@@ -258,7 +258,9 @@ export class ContextManager {
   }
 
   /**
-   * Replace all messages atomically (used by compaction layers).
+   * Replace all messages atomically, bypassing the session log.
+   * Kept as a drift seam for the session-log invariant tests (the
+   * "model-visible means logged" assertion) — no production caller.
    * Preserves system prompt. Does NOT trigger compaction checks.
    */
   replaceMessages(messages: Message[]): void {
