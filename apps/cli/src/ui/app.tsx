@@ -20,6 +20,7 @@ import { AgentFooter, type AgentEntry } from './agent-footer'
 import { AgentViewDashboard } from '../agent-view/dashboard'
 import type { AgentViewManager } from '../agent-view/agent-view-manager'
 import { WorkflowProgress } from './workflow-progress.js'
+import { GoalProgress } from './goal-progress.js'
 import {
   getCommand,
   looksLikeSlashCommand,
@@ -828,6 +829,17 @@ export function App({
         {/* Workflow progress — auto-detects active workflows, renders nothing when idle */}
         <WorkflowProgress />
 
+        {/* Goal progress — live goal + subtasks + done/total · elapsed · tokens (auto-hides when no goal) */}
+        <GoalProgress
+          goal={goalText}
+          getTokens={() => {
+            const tracker = engine.getUsageTracker()
+            if (!tracker) return 0
+            if ('totalApiTokens' in tracker) return tracker.totalApiTokens
+            return Object.values(tracker.getStats()).reduce((a, b) => a + b, 0)
+          }}
+        />
+
         {/* Agent View Dashboard — Ctrl+G overlay (replaces chat + input) */}
         {agentViewOpen && agentViewManager ? (
           <AgentViewDashboard
@@ -935,11 +947,6 @@ export function App({
 
             {/* Status line — Claude Code style */}
             <Box marginTop={1} flexDirection="column">
-              {goalText && (
-                <Box>
-                  <Text color="green">🎯 Goal: {goalText}</Text>
-                </Box>
-              )}
               <Box flexDirection="row">
                 <Text color={PERMISSION_COLORS[permissionMode]}>
                   ⏵⏵ {PERMISSION_LABELS[permissionMode]}

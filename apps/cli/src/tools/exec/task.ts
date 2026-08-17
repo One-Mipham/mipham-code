@@ -1,6 +1,6 @@
 import type { ToolDefinition } from '../../shared/index.ts'
 
-interface Task {
+export interface Task {
   id: string
   subject: string
   description: string
@@ -19,6 +19,11 @@ interface Task {
 
 const tasks = new Map<string, Task>()
 let taskCounter = 0
+
+/** Read accessor for the session task store — returns all non-deleted tasks. */
+export function getTasks(): Task[] {
+  return Array.from(tasks.values()).filter((t) => t.status !== 'deleted')
+}
 
 function formatTask(t: Task): string {
   const meta = t.metadata ? ` ${JSON.stringify(t.metadata)}` : ''
