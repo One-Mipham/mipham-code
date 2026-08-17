@@ -19,21 +19,18 @@ beforeEach(() => {
 })
 
 describe('runEval', () => {
-  it('reports an honest score with unfilled behavior gaps', () => {
+  it('reports a full score after managed rules fill the behavior gaps', () => {
     const report = runEval()
-    expect(report.total).toBe(16)
-    expect(report.passed).toBe(12)
-    expect(report.score).toBe(75)
-    // 4 个行为缺口如实判 FAIL（当前无规则覆盖）
-    const failures = report.failures
-    expect(failures).toContain('gap-rm-rf')
-    expect(failures).toContain('gap-curl-bash')
-    expect(failures).toContain('gap-git-reset-hard')
-    expect(failures).toContain('gap-chmod-777')
-    // 机制契约仍全绿
-    expect(failures).not.toContain('rule-timeout')
-    expect(failures).not.toContain('producer-rule-shape')
-    expect(failures).not.toContain('red-team-zero-gaps')
+    expect(report.total).toBe(20)
+    expect(report.passed).toBe(20)
+    expect(report.score).toBe(100)
+    // 8 个行为缺口全部翻转 PASS（固化 managed tool-params 规则后），无任何 FAIL
+    expect(report.failures).toHaveLength(0)
+    // 机制契约仍在
+    const ids = report.results.map((r) => r.id)
+    expect(ids).toContain('rule-timeout')
+    expect(ids).toContain('producer-rule-shape')
+    expect(ids).toContain('red-team-zero-gaps')
   })
 
   it('covers all four CRSI contract dimensions', () => {

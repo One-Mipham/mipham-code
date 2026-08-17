@@ -7,7 +7,27 @@
  * 真实拦截行为（而非 prose 教训）。
  */
 import type { ToolRule } from './rule-engine'
+import { MANAGED_DANGEROUS_RE } from './crsi-producer'
+
+/** 危险命令正则（与 crsi-producer.MANAGED_DANGEROUS_RE 单一真源）。 */
+const DANGEROUS_RE = new RegExp(MANAGED_DANGEROUS_RE)
 
 export const MANAGED_RULES: ToolRule[] = [
   // ── CRSI producer 追加点（勿删此标记）──
+  {
+    id: 'managed-tool-params-dangerous-commands',
+    toolName: 'Bash',
+    category: 'tool-params',
+    match: (p) => {
+      const cmd = String(p.command ?? '')
+      return DANGEROUS_RE.test(cmd) && !p.dangerouslyDisableSandbox
+    },
+    fix: (p) => ({
+      modified: p,
+      warning:
+        '⚠️ 检测到危险命令（rm -rf / 管道投毒 / git reset --hard / chmod 777 / 格盘 / 关停主机 / 清空 cron）。如需执行请设置 dangerouslyDisableSandbox: true',
+    }),
+    source: 'managed',
+    enabled: true,
+  },
 ]
