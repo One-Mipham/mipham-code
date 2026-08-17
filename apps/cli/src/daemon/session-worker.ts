@@ -253,6 +253,11 @@ export class SessionWorker {
     return this.session.id
   }
 
+  /** Get the last assistant text content from the underlying engine. */
+  getLastAssistantContent(): string | undefined {
+    return this.engine.getLastAssistantContent()
+  }
+
   // ── Persistence ────────────────────────────────────────────────────────
 
   /**
