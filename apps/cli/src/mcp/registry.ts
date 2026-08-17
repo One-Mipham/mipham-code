@@ -154,3 +154,47 @@ export function unregisterMcpServerTools(
     }
   }
 }
+
+/**
+ * Apply a runtime tool-list change (tools/list_changed) to the central registry.
+ * Pure core of the dynamic-tool-update path: add new tools, remove stale ones.
+ */
+export function applyToolChanges(
+  serverName: string,
+  added: McpToolDefinition[],
+  removed: McpToolDefinition[],
+  toolsMap: Map<string, ToolDefinition>,
+): { added: number; removed: number } {
+  let removedCount = 0
+  for (const t of removed) {
+    if (toolsMap.delete(convertMcpTool(serverName, t).name)) removedCount++
+  }
+
+  let addedCount = 0
+  for (const t of added) {
+    const converted = convertMcpTool(serverName, t)
+    toolsMap.set(converted.name, converted)
+    addedCount++
+  }
+
+  return { added: addedCount, removed: removedCount }
+}
+
+/**
+ * Keep the central registry in sync with runtime MCP tool changes.
+ * Register once at startup — the handler is global across all connected
+ * MCP servers (both config.yml and plugin).
+ */
+export function syncMcpToolsOnChange(
+  mcpClient: McpClient,
+  toolsMap: Map<string, ToolDefinition>,
+): void {
+  mcpClient.on('tools-changed', (name: unknown, added: unknown, removed: unknown) => {
+    applyToolChanges(
+      name as string,
+      (added as McpToolDefinition[] | undefined) ?? [],
+      (removed as McpToolDefinition[] | undefined) ?? [],
+      toolsMap,
+    )
+  })
+}

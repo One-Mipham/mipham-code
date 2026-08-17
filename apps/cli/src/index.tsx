@@ -39,7 +39,7 @@ import { mountLlm, LLM_KEY } from './providers/llm'
 import { mountConstitution, createConstitution } from './core/constitution-seam'
 import { ConstitutionLoader } from './core/constitution-loader'
 import { McpClient } from './mcp/client'
-import { registerMcpServerTools } from './mcp/registry'
+import { registerMcpServerTools, syncMcpToolsOnChange } from './mcp/registry'
 import { AgentRegistry } from './agent/agent-registry'
 import { HookEngine } from './core/hooks'
 import { ArtifactServer } from './artifacts/server'
@@ -483,6 +483,9 @@ export async function runApp(options: RunOptions): Promise<void> {
       }
     }
   }
+
+  // Wire runtime MCP tool changes (tools/list_changed) into the central registry.
+  syncMcpToolsOnChange(McpClient.getInstance(), tools)
 
   // Initialize hook engine — register skill-defined hooks
   const hookEngine = new HookEngine()

@@ -3,8 +3,11 @@ import {
   convertMcpTool,
   registerMcpServerTools,
   unregisterMcpServerTools,
+  applyToolChanges,
+  syncMcpToolsOnChange,
 } from '../../src/mcp/registry'
 import { McpClient } from '../../src/mcp/client'
+import type { ToolDefinition as McpToolDefinition } from '../../src/mcp/types'
 import type { ToolDefinition } from '../../src/shared/types'
 
 describe('mcp/registry', () => {
@@ -241,3 +244,72 @@ describe('mcp/registry', () => {
     })
   })
 })
+
+// ── applyToolChanges（动态工具更新核心）──
+
+describe('applyToolChanges', () => {
+  it('adds new tools and removes stale tools', () => {
+    const map = new Map<string, ToolDefinition>()
+    const oldTool = convertMcpTool('srv', makeMcpTool('old_tool'))
+    map.set(oldTool.name, oldTool)
+
+    const result = applyToolChanges(
+      'srv',
+      [makeMcpTool('new_tool')],
+      [makeMcpTool('old_tool')],
+      map,
+    )
+
+    expect(result).toEqual({ added: 1, removed: 1 })
+    expect(map.has('mcp__srv__new_tool')).toBe(true)
+    expect(map.has('mcp__srv__old_tool')).toBe(false)
+  })
+
+  it('removed count reflects only tools actually present', () => {
+    const map = new Map<string, ToolDefinition>()
+    const result = applyToolChanges('srv', [], [makeMcpTool('ghost')], map)
+    expect(result).toEqual({ added: 0, removed: 0 })
+  })
+})
+
+// ── syncMcpToolsOnChange（接线）──
+
+describe('syncMcpToolsOnChange', () => {
+  it('registers a tools-changed handler that applies changes', () => {
+    const handlers = new Map<string, Array<(...args: unknown[]) => void>>()
+    const fakeClient = {
+      on: (event: string, handler: (...args: unknown[]) => void) => {
+        const list = handlers.get(event) ?? []
+        list.push(handler)
+        handlers.set(event, list)
+      },
+    } as unknown as McpClient
+
+    const map = new Map<string, ToolDefinition>()
+    syncMcpToolsOnChange(fakeClient, map)
+
+    handlers.get('tools-changed')![0]!('srv', [makeMcpTool('runtime_tool')], [])
+    expect(map.has('mcp__srv__runtime_tool')).toBe(true)
+  })
+
+  it('removes tools reported as removed by the server', () => {
+    const handlers = new Map<string, Array<(...args: unknown[]) => void>>()
+    const fakeClient = {
+      on: (_event: string, handler: (...args: unknown[]) => void) => {
+        handlers.set('tools-changed', [handler])
+      },
+    } as unknown as McpClient
+
+    const map = new Map<string, ToolDefinition>()
+    const existing = convertMcpTool('srv', makeMcpTool('doomed'))
+    map.set(existing.name, existing)
+    syncMcpToolsOnChange(fakeClient, map)
+
+    handlers.get('tools-changed')![0]!('srv', [], [makeMcpTool('doomed')])
+    expect(map.has('mcp__srv__doomed')).toBe(false)
+  })
+})
+
+function makeMcpTool(name: string, description = 'desc'): McpToolDefinition {
+  return { name, description, inputSchema: { type: 'object', properties: {} } }
+}
