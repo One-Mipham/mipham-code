@@ -4,8 +4,12 @@
 
 ## 前置条件（一次性）
 
-1. **JetBrains Account**：在 https://plugins.jetbrains.com 用 JetBrains 账号登录。
-2. **Marketplace Token**：https://plugins.jetbrains.com/author/me/tokens 生成 token。
+1. **JetBrains Account**：用**现有** JetBrains 账号（下载 PyCharm 那个）登录
+   https://plugins.jetbrains.com/author/me，**不用新建账号**。
+   - Vendor 类型选 **Organization**，vendor ID = `miphamai`，公司名 = `One Mipham Corporation`。
+   - ⚠️ vendor ID 一旦创建**不可改**，务必确认拼写。
+2. **License**：Apache-2.0（已随仓库提供 `LICENSE`）。
+3. **Marketplace Token**：https://plugins.jetbrains.com/author/me/tokens 生成 token。
    - 令牌只通过环境变量注入，**绝不写进代码或提交到仓库**（已接入 `build.gradle.kts`）。
 
 ## 首次发布（需先注册插件清单）
