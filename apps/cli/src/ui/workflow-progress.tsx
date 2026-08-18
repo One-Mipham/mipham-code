@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { Box, Text } from 'ink'
+import { useI18n } from '../i18n-context'
 import { getEventBus } from '../workflow/event-bus.js'
 import type { WorkflowEvent } from '../workflow/event-bus.js'
 
@@ -16,6 +17,7 @@ interface WorkflowProgressProps {
 }
 
 export function WorkflowProgress({ runId }: WorkflowProgressProps) {
+  const { t } = useI18n()
   const [activeRunId, setActiveRunId] = useState<string | null>(null)
   const [phases, setPhases] = useState<Array<{ name: string; done: boolean }>>([])
   const [agents, setAgents] = useState<Map<string, AgentState>>(new Map())
@@ -129,7 +131,7 @@ export function WorkflowProgress({ runId }: WorkflowProgressProps) {
     <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1}>
       <Box>
         <Text bold color="cyan">
-          ═══ Workflow: {activeRunId || runId} ═══
+          {t('ui.workflow.title', { runId: activeRunId ?? runId ?? '' })}
         </Text>
       </Box>
 
@@ -139,9 +141,12 @@ export function WorkflowProgress({ runId }: WorkflowProgressProps) {
         return (
           <Box key={i} flexDirection="column" marginTop={1}>
             <Text>
-              {phase.done ? '●' : '◌'} Phase: {phase.name}
+              {phase.done ? '●' : '◌'} {t('ui.workflow.phase', { name: phase.name })}
               {phaseAgents.length > 0 &&
-                ` [${phaseAgents.filter((a) => a.status === 'done').length}/${phaseAgents.length} done]`}
+                t('ui.workflow.done_count', {
+                  done: String(phaseAgents.filter((a) => a.status === 'done').length),
+                  total: String(phaseAgents.length),
+                })}
             </Text>
             {phaseAgents.map((agent, j) => (
               <Box key={j} marginLeft={2}>
@@ -163,12 +168,16 @@ export function WorkflowProgress({ runId }: WorkflowProgressProps) {
       {/* Summary footer */}
       <Box marginTop={1}>
         <Text dimColor>
-          ═══ Elapsed: {elapsedStr} | Agents: {doneCount}/{agentList.length}
-          {runningCount > 0 && ` (${runningCount} running)`}
-          {failedCount > 0 && ` (${failedCount} failed)`}
-          {done && ` | Cache hits: ${cacheHits}`}
-          {done && ' | DONE ═══'}
-          {!done && ' | Status: running ═══'}
+          {t('ui.workflow.footer', {
+            time: elapsedStr,
+            done: String(doneCount),
+            total: String(agentList.length),
+          })}
+          {runningCount > 0 && t('ui.workflow.running', { n: String(runningCount) })}
+          {failedCount > 0 && t('ui.workflow.failed', { n: String(failedCount) })}
+          {done && t('ui.workflow.cache_hits', { n: String(cacheHits) })}
+          {done && t('ui.workflow.done_marker')}
+          {!done && t('ui.workflow.running_marker')}
         </Text>
       </Box>
     </Box>

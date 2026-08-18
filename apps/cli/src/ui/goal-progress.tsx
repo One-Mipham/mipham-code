@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Box, Text } from 'ink'
+import { useI18n } from '../i18n-context'
 import { getTasks } from '../tools/exec/task.js'
 import type { Task } from '../tools/exec/task.js'
 
@@ -61,6 +62,7 @@ function taskIcon(status: Task['status']): { icon: string; color?: string; dim?:
 
 /** Live goal progress panel — mirrors ZCode's goal view: title + subtasks + done/total · elapsed · tokens. */
 export function GoalProgress({ goal, getTokens, listTasks }: GoalProgressProps) {
+  const { t } = useI18n()
   const [tasks, setTasks] = useState<Task[]>([])
   const [tokens, setTokens] = useState(0)
   const [elapsedMs, setElapsedMs] = useState(0)
@@ -103,11 +105,11 @@ export function GoalProgress({ goal, getTokens, listTasks }: GoalProgressProps) 
       marginBottom={1}
     >
       <Text bold color="green">
-        🎯 Goal: {goal}
+        {t('ui.goal_progress.title', { goal })}
       </Text>
 
       {visibleTasks.length === 0 ? (
-        <Text dimColor> (no subtasks yet)</Text>
+        <Text dimColor>{t('ui.goal_progress.no_subtasks')}</Text>
       ) : (
         visibleTasks.map((t) => {
           const meta = taskIcon(t.status)
@@ -123,13 +125,17 @@ export function GoalProgress({ goal, getTokens, listTasks }: GoalProgressProps) 
 
       <Box marginTop={1}>
         <Text dimColor>
-          ═══ {summary.done}/{summary.total} done
-          {summary.inProgress > 0 && ` · ${summary.inProgress} in progress`}
-          {summary.failed > 0 && ` · ${summary.failed} failed`}
+          {t('ui.goal_progress.summary', {
+            done: String(summary.done),
+            total: String(summary.total),
+          })}
+          {summary.inProgress > 0 &&
+            t('ui.goal_progress.in_progress', { n: String(summary.inProgress) })}
+          {summary.failed > 0 && t('ui.goal_progress.failed', { n: String(summary.failed) })}
           {' · '}
           {formatElapsed(elapsedMs)}
-          {tokens > 0 && ` · ${formatTokens(tokens)} tokens`}
-          {' ═══'}
+          {tokens > 0 && t('ui.goal_progress.tokens', { n: formatTokens(tokens) })}
+          {t('ui.goal_progress.border_end')}
         </Text>
       </Box>
     </Box>

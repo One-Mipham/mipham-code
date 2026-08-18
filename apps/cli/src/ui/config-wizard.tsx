@@ -10,6 +10,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { Box, Text, useInput } from 'ink'
+import { useI18n } from '../i18n-context'
 import TextInput from 'ink-text-input'
 import { DEFAULT_PROVIDERS, OLLAMA_PRESET_MODELS } from '../shared/constants'
 import type { ProviderConfig, ModelInfo } from '../shared/types'
@@ -167,6 +168,7 @@ function getOllamaModelList(installedModels: string[]): OllamaModelItem[] {
 // ── Component ──
 
 export function ConfigWizard({ onComplete, onSkip }: Props) {
+  const { t } = useI18n()
   const [step, setStep] = useState<Step>('welcome')
 
   // Selections
@@ -202,14 +204,14 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
 
   const finishCloud = () => {
     if (!providerId || !modelId || !apiKey.trim()) {
-      setError('请填写 API Key')
+      setError(t('ui.wizard.error_apikey_required'))
       return
     }
     try {
       writeConfigFile(providerId, modelId, apiKey.trim())
       onComplete({ providerId, modelId, apiKey: apiKey.trim() })
     } catch (err) {
-      setError(`写入配置失败: ${String(err)}`)
+      setError(t('ui.wizard.error_write_failed', { err: String(err) }))
     }
   }
 
@@ -220,7 +222,7 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
       writeConfigFile('ollama', model, 'ollama-local')
       onComplete({ providerId: 'ollama', modelId: model, apiKey: 'ollama-local' })
     } catch (err) {
-      setError(`写入配置失败: ${String(err)}`)
+      setError(t('ui.wizard.error_write_failed', { err: String(err) }))
     }
   }
 
@@ -366,7 +368,7 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
         <Text color="#FFD700" bold>
           Mipham Code
         </Text>
-        <Text dimColor> — 配置向导</Text>
+        <Text dimColor>{t('ui.wizard.header_subtitle')}</Text>
       </Box>
       <Box marginBottom={1}>
         <Text dimColor>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</Text>
@@ -377,16 +379,16 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
         <Box flexDirection="column">
           <Box marginBottom={1}>
             <Text bold color="cyan">
-              欢迎使用 Mipham Code！
+              {t('ui.wizard.welcome_title')}
             </Text>
           </Box>
-          <Text>在开始之前，需要先配置 AI 模型连接。</Text>
-          <Text>此向导只需 1 分钟，需要您准备好 API Key。</Text>
+          <Text>{t('ui.wizard.welcome_intro')}</Text>
+          <Text>{t('ui.wizard.welcome_time')}</Text>
           <Box marginTop={1}>
-            <Text color="yellow">按 Enter 开始 →</Text>
+            <Text color="yellow">{t('ui.wizard.welcome_start')}</Text>
           </Box>
           <Box marginTop={1}>
-            <Text dimColor>Esc 跳过配置</Text>
+            <Text dimColor>{t('ui.wizard.welcome_skip')}</Text>
           </Box>
         </Box>
       )}
@@ -395,25 +397,25 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
       {step === 'mode' && (
         <Box flexDirection="column">
           <Box marginBottom={1}>
-            <Text bold>选择模型连接方式：</Text>
+            <Text bold>{t('ui.wizard.mode_title')}</Text>
           </Box>
 
           <Box marginBottom={1}>
             <Text color={cursor === 0 ? SELECTED_COLOR : undefined}>
-              {cursor === 0 ? '▶' : ' '} 🌐 云端 AI 模型（推荐）
+              {cursor === 0 ? '▶' : ' '} {t('ui.wizard.mode_cloud')}
             </Text>
           </Box>
           <Text dimColor> Claude · DeepSeek · Gemini · 豆包 · Qwen · 混元 · OpenAI</Text>
 
           <Box marginTop={2} marginBottom={1}>
             <Text color={cursor === 1 ? SELECTED_COLOR : undefined}>
-              {cursor === 1 ? '▶' : ' '} 🖥️ 本地模型（Ollama）
+              {cursor === 1 ? '▶' : ' '} {t('ui.wizard.mode_local')}
             </Text>
           </Box>
-          <Text dimColor> 需要提前安装 Ollama 并下载模型</Text>
+          <Text dimColor>{t('ui.wizard.mode_local_hint')}</Text>
 
           <Box marginTop={2}>
-            <Text dimColor>↑↓ 选择 · Enter 确认 · Esc 返回</Text>
+            <Text dimColor>{t('ui.wizard.nav_hint')}</Text>
           </Box>
         </Box>
       )}
@@ -422,18 +424,22 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
       {step === 'provider' && (
         <Box flexDirection="column">
           <Box marginBottom={1}>
-            <Text bold>选择 AI 模型提供商：</Text>
+            <Text bold>{t('ui.wizard.provider_title')}</Text>
           </Box>
           {providerList.map((p, i) => (
             <Box key={p.id} marginBottom={1}>
               <Text color={i === cursor ? SELECTED_COLOR : undefined}>
                 {i === cursor ? '▶' : '  '} {p.name}
               </Text>
-              <Text dimColor> ({p.models.filter((m) => m.status === 'active').length} 个模型)</Text>
+              <Text dimColor>
+                {t('ui.wizard.provider_count', {
+                  count: String(p.models.filter((m) => m.status === 'active').length),
+                })}
+              </Text>
             </Box>
           ))}
           <Box marginTop={1}>
-            <Text dimColor>↑↓ 选择 · Enter 确认 · Esc 返回</Text>
+            <Text dimColor>{t('ui.wizard.nav_hint')}</Text>
           </Box>
         </Box>
       )}
@@ -443,7 +449,10 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
         <Box flexDirection="column">
           <Box marginBottom={1}>
             <Text bold>
-              选择模型（{DEFAULT_PROVIDERS.find((p) => p.id === providerId)?.name || providerId}）：
+              {t('ui.wizard.model_title', {
+                provider:
+                  DEFAULT_PROVIDERS.find((p) => p.id === providerId)?.name || providerId || '',
+              })}
             </Text>
           </Box>
           {modelList.map((m, i) => (
@@ -455,7 +464,7 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
             </Box>
           ))}
           <Box marginTop={1}>
-            <Text dimColor>↑↓ 选择 · Enter 确认 · Esc 返回</Text>
+            <Text dimColor>{t('ui.wizard.nav_hint')}</Text>
           </Box>
         </Box>
       )}
@@ -464,11 +473,17 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
       {step === 'apikey' && (
         <Box flexDirection="column">
           <Box marginBottom={1}>
-            <Text bold>粘贴 API Key：</Text>
+            <Text bold>{t('ui.wizard.apikey_title')}</Text>
           </Box>
-          <Text dimColor>提供商：{DEFAULT_PROVIDERS.find((p) => p.id === providerId)?.name}</Text>
           <Text dimColor>
-            模型：{getActiveModels(providerId!).find((m) => m.id === modelId)?.name}
+            {t('ui.wizard.apikey_provider', {
+              provider: DEFAULT_PROVIDERS.find((p) => p.id === providerId)?.name || '',
+            })}
+          </Text>
+          <Text dimColor>
+            {t('ui.wizard.apikey_model', {
+              model: getActiveModels(providerId!).find((m) => m.id === modelId)?.name || '',
+            })}
           </Text>
           {error && (
             <Box marginBottom={1}>
@@ -481,11 +496,11 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
               value={apiKey}
               onChange={setApiKey}
               onSubmit={() => goStep('confirm')}
-              placeholder="粘贴 API Key 后按 Enter..."
+              placeholder={t('ui.wizard.apikey_placeholder')}
             />
           </Box>
           <Box marginTop={1}>
-            <Text dimColor>Enter 继续 · Esc 返回选模型</Text>
+            <Text dimColor>{t('ui.wizard.apikey_continue')}</Text>
           </Box>
         </Box>
       )}
@@ -494,26 +509,29 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
       {step === 'ollama' && (
         <Box flexDirection="column">
           <Box marginBottom={1}>
-            <Text bold>Ollama 本地模型配置：</Text>
+            <Text bold>{t('ui.wizard.ollama_title')}</Text>
           </Box>
           {ollamaStatus ? (
             <Box flexDirection="column" marginBottom={1}>
               <Text>
-                状态：{ollamaStatus.installed ? '✅ 已安装' : '❌ 未安装'}
+                {t('ui.wizard.ollama_status')}
+                {ollamaStatus.installed
+                  ? t('ui.wizard.ollama_installed')
+                  : t('ui.wizard.ollama_not_installed')}
                 {ollamaStatus.running
-                  ? ' · 运行中'
+                  ? t('ui.wizard.ollama_running')
                   : ollamaStatus.installed
-                    ? ' · 未运行（请执行 ollama serve）'
+                    ? t('ui.wizard.ollama_not_running')
                     : ''}
               </Text>
             </Box>
           ) : (
-            <Text dimColor>正在检测 Ollama...</Text>
+            <Text dimColor>{t('ui.wizard.ollama_detecting')}</Text>
           )}
           {ollamaModelList.length > 0 && (
             <Box flexDirection="column" marginBottom={1}>
               <Box marginBottom={1}>
-                <Text dimColor>已下载模型（↑↓ 选择 · Enter 确认）：</Text>
+                <Text dimColor>{t('ui.wizard.ollama_downloaded')}</Text>
               </Box>
               {ollamaModelList.map((m, i) => (
                 <Box key={m.id}>
@@ -521,7 +539,10 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
                     {i === ollamaCursor ? '▶' : '  '} {m.id}
                   </Text>
                   {m.source !== 'local' && (
-                    <Text dimColor> [{m.source === 'MiphamAI' ? 'MiphamAI' : '热门'}]</Text>
+                    <Text dimColor>
+                      {' '}
+                      [{m.source === 'MiphamAI' ? 'MiphamAI' : t('ui.wizard.ollama_source_hot')}]
+                    </Text>
                   )}
                 </Box>
               ))}
@@ -529,14 +550,12 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
           )}
           {ollamaStatus && ollamaModelList.length === 0 && (
             <Box marginBottom={1}>
-              <Text dimColor>
-                未检测到已下载模型。请先运行 ollama pull &lt;model&gt; 下载模型。
-              </Text>
-              <Text dimColor>以下为预置模型列表，选择后可在对话中通过 /models 切换。</Text>
+              <Text dimColor>{t('ui.wizard.ollama_no_models')}</Text>
+              <Text dimColor>{t('ui.wizard.ollama_preset_hint')}</Text>
             </Box>
           )}
           <Box marginTop={1}>
-            <Text dimColor>↑↓ 选择 · Enter 确认 · Esc 返回</Text>
+            <Text dimColor>{t('ui.wizard.nav_hint')}</Text>
           </Box>
         </Box>
       )}
@@ -546,26 +565,37 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
         <Box flexDirection="column">
           <Box marginBottom={1}>
             <Text bold color="cyan">
-              配置确认：
+              {t('ui.wizard.confirm_title')}
             </Text>
           </Box>
-          <Text>连接方式：{mode === 'cloud' ? '🌐 云端' : '🖥️ 本地'}</Text>
+          <Text>
+            {t('ui.wizard.confirm_connection')}
+            {mode === 'cloud' ? t('ui.wizard.confirm_cloud') : t('ui.wizard.confirm_local')}
+          </Text>
           {mode === 'cloud' && (
             <>
-              <Text>提供商：{DEFAULT_PROVIDERS.find((p) => p.id === providerId)?.name}</Text>
-              <Text>模型：{modelId}</Text>
               <Text>
-                API Key：{apiKey.slice(0, 8)}...{apiKey.slice(-4)}
+                {t('ui.wizard.confirm_provider', {
+                  provider: DEFAULT_PROVIDERS.find((p) => p.id === providerId)?.name || '',
+                })}
+              </Text>
+              <Text>{t('ui.wizard.confirm_model', { model: modelId || '' })}</Text>
+              <Text>
+                {t('ui.wizard.confirm_apikey', {
+                  masked: `${apiKey.slice(0, 8)}...${apiKey.slice(-4)}`,
+                })}
               </Text>
             </>
           )}
           {mode === 'local' && (
             <Text>
-              Ollama 模型：{ollamaModelList[ollamaCursor]?.id || ollamaModel.trim() || 'llama3.2'}
+              {t('ui.wizard.confirm_ollama_model', {
+                model: ollamaModelList[ollamaCursor]?.id || ollamaModel.trim() || 'llama3.2',
+              })}
             </Text>
           )}
           <Box marginTop={1}>
-            <Text dimColor>配置文件将保存到 ~/.mipham/config.yml</Text>
+            <Text dimColor>{t('ui.wizard.confirm_save_path')}</Text>
           </Box>
           {error && (
             <Box marginBottom={1}>
@@ -573,10 +603,10 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
             </Box>
           )}
           <Box marginTop={1}>
-            <Text color="yellow">按 Enter 保存并启动 →</Text>
+            <Text color="yellow">{t('ui.wizard.confirm_save')}</Text>
           </Box>
           <Box marginTop={1}>
-            <Text dimColor>Esc 返回修改</Text>
+            <Text dimColor>{t('ui.wizard.confirm_back')}</Text>
           </Box>
         </Box>
       )}
@@ -586,10 +616,10 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
         <Box flexDirection="column">
           <Box marginBottom={1}>
             <Text color="green" bold>
-              ✅ 配置完成！
+              {t('ui.wizard.done_title')}
             </Text>
           </Box>
-          <Text>Mipham Code 正在启动...</Text>
+          <Text>{t('ui.wizard.done_launching')}</Text>
         </Box>
       )}
     </Box>

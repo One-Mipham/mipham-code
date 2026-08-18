@@ -11,6 +11,7 @@
 
 import React, { Component } from 'react'
 import { Text, Box } from 'ink'
+import { useI18n } from '../i18n-context'
 
 interface Props {
   children: React.ReactNode
@@ -63,23 +64,25 @@ export class ErrorBoundary extends Component<Props, State> {
 
   override render(): React.ReactNode {
     if (this.state.hasError) {
-      return (
-        <Box flexDirection="column" padding={1}>
-          <Text color="red" bold>
-            ⚠️ UI Render Error
-          </Text>
-          <Text dimColor>{this.state.error?.message || 'Unknown rendering error'}</Text>
-          <Text> </Text>
-          <Text dimColor>
-            The terminal interface encountered a rendering issue. Auto-recovery in 5 seconds...
-            Press Enter to attempt immediate recovery.
-          </Text>
-          <Text> </Text>
-          <Text color="yellow">Your session data and conversation history are preserved.</Text>
-        </Box>
-      )
+      return <ErrorFallback error={this.state.error} />
     }
 
     return this.props.children
   }
+}
+
+function ErrorFallback({ error }: { error: Error | null }): React.ReactNode {
+  const { t } = useI18n()
+  return (
+    <Box flexDirection="column" padding={1}>
+      <Text color="red" bold>
+        {t('ui.error_boundary.title')}
+      </Text>
+      <Text dimColor>{error?.message || t('ui.error_boundary.unknown')}</Text>
+      <Text> </Text>
+      <Text dimColor>{t('ui.error_boundary.recovery')}</Text>
+      <Text> </Text>
+      <Text color="yellow">{t('ui.error_boundary.preserved')}</Text>
+    </Box>
+  )
 }
