@@ -4,8 +4,8 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.3.6
-> **最后更新**: 2026-08-18 — 待办收口：4 条已完成转档（VS Code/JetBrains/1M 上下文/i18n），测试数对齐 1561
+> **版本**: 2.3.7
+> **最后更新**: 2026-08-18 — 全量数字对齐（skills 24 / tools 31 / slash 102 / 测试 1561）+ 最近提交刷新
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -78,8 +78,8 @@ mipham-code/
 │   │   │   ├── workflow/       # Workflow 运行时 + Schema 验证
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
-│   │   ├── skills/             # 23 个内置技能（20 standard + 3 mipham）
-│   │   ├── test/               # 57 个测试文件，1020 个测试
+│   │   ├── skills/             # 24 个内置技能（20 standard + 4 mipham）
+│   │   ├── test/               # 125 个测试文件，1561 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -102,7 +102,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（295 个测试）
+pnpm test         # vitest run（1561 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -136,30 +136,30 @@ pnpm format       # Prettier
 
 模型按能力等级排序（Ultra → Pro → Plus → Flash → Lite），Ctrl+P 调用两级选择器。
 
-### 工具层（30 个工具）
+### 工具层（31 个工具）
 
-| 分类            | 工具                                                                                           |
-| --------------- | ---------------------------------------------------------------------------------------------- |
-| File（5）       | read, write, edit, glob, grep                                                                  |
-| Exec（5）       | bash, git, task, EnterWorktree, ExitWorktree                                                   |
-| Agent（9）      | agent, skill, plan, memory, workflow, EnterPlanMode, ExitPlanMode, ReportFindings, SendMessage |
-| Network（2）    | web-fetch, web-search                                                                          |
-| System（3）     | config, mcp, tool-search                                                                       |
-| Artifact（1）   | artifact                                                                                       |
-| Computer（1）   | computer-use                                                                                   |
-| Scheduling（4） | schedule-wakeup, cron-create, cron-delete, cron-list                                           |
+| 分类            | 工具                                                                                                       |
+| --------------- | ---------------------------------------------------------------------------------------------------------- |
+| File（5）       | read, write, edit, glob, grep                                                                              |
+| Exec（5）       | bash, git, task, EnterWorktree, ExitWorktree                                                               |
+| Agent（10）     | agent, skill, plan, memory, workflow, EnterPlanMode, ExitPlanMode, ReportFindings, SendMessage, listAgents |
+| Network（2）    | web-fetch, web-search                                                                                      |
+| System（3）     | config, mcp, tool-search                                                                                   |
+| Artifact（1）   | artifact                                                                                                   |
+| Computer（1）   | computer-use                                                                                               |
+| Scheduling（4） | schedule-wakeup, cron-create, cron-delete, cron-list                                                       |
 
-### Skills 系统（23 个内置技能）
+### Skills 系统（24 个内置技能）
 
-**Standard（20）**: code-review, codebase-design, compassionate-communication, debug-loop, doc-generator, domain-modeling, github-ops, grill-with-docs, implement, memory, mipham-code-setup, research, security-review, self-review, superpower, systematic-debugging, tdd, to-spec, triage, web-access, web-search
+**Standard（20）**: code-review, codebase-design, compassionate-communication, doc-generator, domain-modeling, github-ops, grill-with-docs, implement, memory, mipham-code-setup, research, security-review, self-review, superpower, systematic-debugging, tdd, to-spec, triage, web-access, web-search
 
-**Mipham Exclusive（3）**: om-artifact, om-model-optimize, om-security
+**Mipham Exclusive（4）**: om-artifact, om-model-optimize, om-security, self-audit
 
 双轨运行时：standard 轨用于社区 Skills，mipham 轨用于 MiphamAI 专有功能。
 
-### Slash 命令系统（93 个）
+### Slash 命令系统（102 个）
 
-按分类分布：Session & Identity（21）、Workflow（16）、Tools & Skills（17）、Model & Provider（11）、Project（7）、Code Quality（5）、History（4）、GitHub（4）、Environment（4）、Account（3）、Agents（2）、Artifact（1）、Other（1）。
+按分类：Session & Identity / Workflow / Tools & Skills / Model & Provider / Project / Code Quality / History / GitHub / Environment / Account / Agents / Artifact / Other（总数随版本演进，以 `/help` 实际列出为准）。
 
 ### 记忆系统
 
@@ -280,24 +280,23 @@ GitHub Actions 5 阶段流水线：`typecheck → lint → format → build-cli 
 
 ## 最近提交
 
-| 日期       | Commit     | 说明                                                                      |
-| ---------- | ---------- | ------------------------------------------------------------------------- |
-| 2026-08-14 | `6abf2e9`  | feat(agent): fork 继承父会话前缀（prompt cache Phase 3）                  |
-| 2026-08-14 | `806f9c6`  | feat(core): PrefixCacheTracker 接线缓存感知 microcompaction（Phase 2）    |
-| 2026-08-14 | `d759043`  | feat(providers): 稳定消息前缀 + tools 缓存（prompt cache Phase 1b）       |
-| 2026-08-14 | `65d2f90`  | feat(providers): Anthropic system prompt 缓存（prompt cache Phase 1a）    |
-| 2026-08-14 | `682dfbb`  | feat(agent): 副代理默认后台 + SendMessage 裸名投递                        |
-| 2026-08-14 | `b9e6ae4`  | feat(security): Bash git 危险 flag 拦截 + token 前缀脱敏                  |
-| 2026-08-13 | `ea8a6af`  | chore: bump version to 0.32.7 — Claude Code 2.1.227 借鉴                  |
-| 2026-08-13 | `5701037`  | feat: rg prompt 增强 + 斜杠菜单匹配高亮（3 files, +66/-2）                |
-| 2026-08-11 | `10f4946`  | fix(ui): 工具逐个显示 — compactToolGroups 重写，与 Claude Code 显示对齐   |
-| 2026-08-11 | `954ddcb`  | chore: bump version to 0.32.0 — Daemon 架构 5 阶段完成（超级智能体平台）  |
-| 2026-08-11 | `59b3d69`  | feat(daemon): Phase 5 外部 API 安全（RateLimiter + CORS）                 |
-| 2026-08-11 | `98025b5`  | feat(daemon): Phase 4 Goals + Schedules（GoalManager + cron 调度）        |
-| 2026-08-11 | `31450368` | feat(daemon): Phase 3 Agent 系统（AgentManager + MessageBus）             |
-| 2026-08-11 | `31448815` | feat(daemon): Phase 2 会话持久化（SessionWorker + RemoteEngine + attach） |
-| 2026-08-11 | `31448815` | feat(daemon): Phase 1 核心基础设施（Bun.serve + SQLite + auth）           |
-| 2026-08-10 | `9f349f5`  | chore: bump version to 0.27.0 — 3 Vibe Coding 摩擦点修复                  |
+| 日期       | Commit    | 说明                                                                  |
+| ---------- | --------- | --------------------------------------------------------------------- |
+| 2026-08-18 | `062899d` | docs(claude): 待办收口 — 4 条已完成转档 + 测试数对齐 1561             |
+| 2026-08-18 | `ae54082` | fix(ci): guard JetBrains publish via env var, not if: secrets         |
+| 2026-08-18 | `eb4d2cc` | fix(ci): drop setup-gradle — working-directory on uses: schema 违规   |
+| 2026-08-18 | `f0d0712` | chore: bump version to 0.48.0                                         |
+| 2026-08-18 | `93102f6` | ci: re-enable + auto-publish JetBrains plugin（已过审上线）           |
+| 2026-08-18 | `2e332b4` | chore(vscode): prepare 0.47.0 publish — real PNG icon                 |
+| 2026-08-18 | `0175208` | feat(i18n): wire config-wizard/goal/workflow/error-boundary + 65 keys |
+| 2026-08-18 | `33dbaa0` | fix(core): 1M context window — wire contextWindow through 3 gaps      |
+| 2026-08-18 | `5272bae` | fix(ci): 移除 JetBrains job + 修 setup-gradle 解析失败                |
+| 2026-08-18 | `ef4a54d` | fix(ci): release.yml JetBrains 构建 — setup-gradle@v4 移除废弃参数    |
+| 2026-08-18 | `da5ac88` | chore: bump version to 0.47.0                                         |
+| 2026-08-18 | `066ddff` | fix(daemon): Feishu 事件错误处理 — 防重试 + 验签失败 4xx              |
+| 2026-08-18 | `ac148b8` | fix(security): Feishu 事件流签名校验强制 encryptKey                   |
+| 2026-08-18 | `6acd911` | fix(security): Feishu env fail-closed — 无密钥不启用端点              |
+| 2026-08-18 | `7803425` | feat(daemon): 挂载 /feishu/event 路由 + env 接线                      |
 
 ---
 
@@ -382,6 +381,7 @@ mipham-code 变更（包名/版本）
 
 | 版本  | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                               | 维护人     |
 | ----- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| 2.3.7 | 2026-08-18 | 全量数字对齐：skills 23→24（+self-audit）、tools 30→31（+listAgents）、slash 命令 93→102、「最近提交」表刷新至 08-18；修正标准技能列表（移除已删除的 debug-loop）                                                                                                                                                                                                                                      | 技术委员会 |
 | 2.3.6 | 2026-08-18 | 待办收口：4 条已完成转档（VS Code 扩展发布 / JetBrains 插件上架 / 1M 上下文窗口 / 多语言国际化）；测试数对齐 1561（1559 passed + 2 skipped）                                                                                                                                                                                                                                                           | 技术委员会 |
 | 2.3.5 | 2026-08-17 | MCP 深度集成收口：OAuth 认证 + Tool Search 早已完成，本轮接上「动态工具更新」断链（`applyToolChanges` + `syncMcpToolsOnChange` → 中央注册表，`tools/list_changed` 增量同步）；补 4 个 MCP 测试。测试 1500 passed + 2 skipped                                                                                                                                                                           | 技术委员会 |
 | 2.3.4 | 2026-08-17 | 内核收尾 + 行为缺口表 C2：`defaultToolContext`→`defaultVajraContext`、`replaceMessages` 保留为 session-log 不变量的测试缝（修正过时注释）、SubAgent 4 spawn 点全部迁 `llm`；`MANAGED_DANGEROUS_RE` 4→8 缺口，固化 managed tool-params 规则，eval 分数翻转 75→100（「证明更好」首次实演，不破 A1 铁律）。测试仍 1496 passed + 2 skipped                                                                 | 技术委员会 |
