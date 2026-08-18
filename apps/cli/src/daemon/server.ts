@@ -67,6 +67,22 @@ function resolveDaemonPermission(): PermissionMode {
     : 'default'
 }
 
+const DAEMON_DEFAULT_CONTEXT_WINDOW = 200_000
+
+/**
+ * Resolve the effective context window (in tokens) for the daemon session's
+ * model. Mirrors the CLI's model-aware context sizing so a 1M-context model
+ * isn't silently hard-capped at 200K; falls back when the model isn't in the
+ * registry.
+ */
+export function resolveContextWindow(
+  registry: ProviderRegistry,
+  modelId: string,
+  fallback = DAEMON_DEFAULT_CONTEXT_WINDOW,
+): number {
+  return registry.findModel(modelId)?.contextWindow ?? fallback
+}
+
 export function createServer(config: ServerConfig): Server<WsData> {
   const {
     db,
@@ -120,7 +136,6 @@ export function createServer(config: ServerConfig): Server<WsData> {
   const engineCache = new Map<string, QueryEngine>()
   let sharedRegistry: ProviderRegistry | null = null
   let sharedTools: Map<string, ToolDefinition> | null = null
-  const DEFAULT_MAX_TOKENS = 200_000
 
   function getOrCreateEngine(
     sessionId: string,
@@ -148,11 +163,13 @@ export function createServer(config: ServerConfig): Server<WsData> {
       sharedTools = createToolRegistry()
     }
 
-    // Create per-session context, restoring previous messages from DB
+    // Create per-session context, restoring previous messages from DB.
+    // Size it to the active model's context window (1M-capable models get 1M).
+    const contextWindow = resolveContextWindow(sharedRegistry!, model)
     const context = new ContextManager({
-      maxTokens: DEFAULT_MAX_TOKENS,
+      maxTokens: contextWindow,
       compactionThreshold: 0.9,
-      contextWindow: DEFAULT_MAX_TOKENS,
+      contextWindow,
     })
 
     const dbMessages = db.getMessages(sessionId, 10000)

@@ -1431,7 +1431,7 @@ export class QueryEngine {
         const DISABLE_1M = process.env.MIPHAM_DISABLE_1M_CONTEXT === '1'
         const maxTokens =
           DISABLE_1M && model.contextWindow > 200_000 ? 200_000 : model.contextWindow
-        this.context.updateMaxTokens(maxTokens)
+        this.context.updateMaxTokens(maxTokens, model.contextWindow)
       }
     }
   }

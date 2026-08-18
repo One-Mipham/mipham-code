@@ -33,6 +33,7 @@ function createMockEngine(provider: ProviderInstance): QueryEngine {
   const registry = {
     getActive: () => provider,
     getActiveModel: () => 'mock-model',
+    findModel: () => undefined,
     switchProvider: (_id: string, _model?: string) => {},
     async *chat(req: ChatRequest): AsyncGenerator<StreamChunk> {
       yield* provider.chat(req)

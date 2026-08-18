@@ -118,6 +118,45 @@ describe('QueryEngine', () => {
       const engine = new QueryEngine(mockProviderRegistry(), mockContext(), makeToolMap([]))
       expect(() => engine.switchProvider('nonexistent')).toThrow()
     })
+
+    it('switchProvider propagates the model context window to the context manager', () => {
+      const registry = mockProviderRegistry()
+      registry.register('one-m', {
+        config: {
+          id: 'one-m',
+          name: 'One M',
+          protocol: 'openai-compatible',
+          apiKey: 'k',
+          models: [
+            {
+              id: 'model-1m',
+              name: 'Model 1M',
+              providerId: 'one-m',
+              contextWindow: 1_000_000,
+              maxOutput: 128_000,
+              vision: false,
+              status: 'active',
+            },
+          ],
+        },
+        chat: async function* () {
+          yield { type: 'stop' as const }
+        },
+        listModels: async () => [],
+        healthCheck: async () => true,
+      })
+
+      const context = mockContext() // no contextWindow → threshold stays at initial 0.9
+      expect(context.getCompactionThreshold()).toBe(0.9)
+
+      const engine = new QueryEngine(registry, context, makeToolMap([]))
+      engine.switchProvider('one-m', 'model-1m')
+
+      // maxTokens reflects the 1M window…
+      expect(context.getMaxTokens()).toBe(1_000_000)
+      // …and the adaptive compaction threshold recomputes to 1 - 50K/1M = 0.95
+      expect(context.getCompactionThreshold()).toBe(0.95)
+    })
   })
 
   describe('skills seam — setSkills', () => {

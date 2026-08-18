@@ -21,6 +21,7 @@ function createMockRegistry(): ProviderRegistry {
   return {
     getActive: () => provider,
     getActiveModel: () => 'mock-model',
+    findModel: () => undefined,
     async *chat(req: ChatRequest) {
       yield* provider.chat(req)
     },
@@ -61,6 +62,7 @@ describe('executeForkedSkill', () => {
     const registry = {
       getActive: () => provider,
       getActiveModel: () => 'mock-model',
+      findModel: () => undefined,
       async *chat(req: ChatRequest) {
         yield* provider.chat(req)
       },

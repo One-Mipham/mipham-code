@@ -102,10 +102,12 @@ export function createAgentContext(
   contextWindow?: number,
   crsiConfig?: Partial<CrsiConfig>,
 ): AgentContextResult {
-  // Create isolated context
+  // Create isolated context, sized to the resolved model's window when known.
+  // Passing contextWindow (not just maxTokens) enables adaptive thresholds.
   const context = new ContextManager({
     maxTokens: contextWindow || 100_000,
     compactionThreshold: 0.85,
+    contextWindow,
   })
 
   // Build system prompt with optional agent memory

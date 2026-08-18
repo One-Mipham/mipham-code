@@ -254,43 +254,8 @@ export class SubAgent {
     const systemPrompt =
       agentDef?.systemPrompt || options.systemPrompt || TYPE_SYSTEM_PROMPTS[agentType]
 
-    // Create isolated context with tool scoping
-    const resolvedDef: AgentDefinition = agentDef || {
-      name: agentType,
-      description: '',
-      systemPrompt,
-      model: options.modelOverride || 'inherit',
-      permissionMode: 'inherit',
-      background: false,
-      source: 'builtin',
-    }
-    const { context, allowedTools } = createAgentContext(
-      resolvedDef,
-      this.toolRegistry,
-      options.maxContextMessages,
-    )
-
-    context.setSystemPrompt(systemPrompt)
-
-    // Seed inherited parent conversation (fork inheritance) as a byte-identical
-    // prefix so the provider prompt cache is reused.
-    if (options.inheritContext && options.inheritContext.messages.length > 0) {
-      context.seedMessages(options.inheritContext.messages)
-    }
-
-    context.addMessage({ role: 'user', content: prompt })
-
-    const messages = context.getMessages()
-    const toolDefs =
-      allowedTools.length > 0
-        ? allowedTools.map((t) => ({
-            name: t.name,
-            description: t.description,
-            parameters: t.parameters,
-            input_schema: t.parameters,
-          }))
-        : undefined
-
+    // Resolve the sub-agent's model first, so its context window is known
+    // before the isolated context is created (model-aware sizing).
     const modelToUse = options.modelOverride || agentDef?.model || model
     // 'inherit' means use parent model
     const resolvedModel = modelToUse === 'inherit' ? model : modelToUse
@@ -316,6 +281,44 @@ export class SubAgent {
         finalModel = model
       }
     }
+
+    // Create isolated context with tool scoping, sized to the resolved model.
+    const resolvedDef: AgentDefinition = agentDef || {
+      name: agentType,
+      description: '',
+      systemPrompt,
+      model: options.modelOverride || 'inherit',
+      permissionMode: 'inherit',
+      background: false,
+      source: 'builtin',
+    }
+    const contextWindow = this.registry.findModel(finalModel)?.contextWindow
+    const { context, allowedTools } = createAgentContext(
+      resolvedDef,
+      this.toolRegistry,
+      contextWindow,
+    )
+
+    context.setSystemPrompt(systemPrompt)
+
+    // Seed inherited parent conversation (fork inheritance) as a byte-identical
+    // prefix so the provider prompt cache is reused.
+    if (options.inheritContext && options.inheritContext.messages.length > 0) {
+      context.seedMessages(options.inheritContext.messages)
+    }
+
+    context.addMessage({ role: 'user', content: prompt })
+
+    const messages = context.getMessages()
+    const toolDefs =
+      allowedTools.length > 0
+        ? allowedTools.map((t) => ({
+            name: t.name,
+            description: t.description,
+            parameters: t.parameters,
+            input_schema: t.parameters,
+          }))
+        : undefined
 
     const chunks: string[] = []
     const MAX_TOOL_TURNS = options.maxTurns || 5
