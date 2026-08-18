@@ -39,7 +39,13 @@ export const skillTool: ToolDefinition = {
 
       // Extract executable assets (scripts/references) if this skill bundles them.
       // No-op for every skill that has no entry in BUNDLED_SKILL_ASSETS.
-      ensureSkillAssets(skillName)
+      // A write failure (EACCES/ENOSPC) must not abort invocation: the skill body
+      // still delivers its own recovery guidance for the missing-script case.
+      try {
+        ensureSkillAssets(skillName)
+      } catch (err) {
+        console.warn(`Skill asset extraction failed for "${skillName}":`, err)
+      }
 
       // Check if skill has context: fork — execute in isolated subagent
       if (skill.context === 'fork') {
