@@ -514,6 +514,18 @@ describe('Built-in skills', () => {
     }
   })
 
+  it('web-access skill is upgraded to CDP v2.5.0', () => {
+    const loader = new SkillsLoader()
+    const projectRoot = join(import.meta.dirname, '..', '..')
+    loader.loadBuiltin(projectRoot)
+
+    const skill = loader.get('web-access')
+    expect(skill?.version).toBe('2.5.0')
+    expect(skill?.body).toContain('cdp-proxy')
+    expect(skill?.body).toContain('~/.mipham/skills/web-access')
+    expect(skill?.body).toContain('localhost:3456')
+  })
+
   it('all standard skills have expected names', () => {
     const loader = new SkillsLoader()
     const projectRoot = join(import.meta.dirname, '..', '..')
