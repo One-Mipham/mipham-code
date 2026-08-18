@@ -1,6 +1,6 @@
-import type { ToolDefinition } from '../../shared/index.ts'
+import type { ToolDefinition } from '../../shared'
 import { executeForkedSkill } from '../../skills/fork-executor'
-import { sanitizeSkillBody } from '../../skills/sanitizer.js'
+import { sanitizeSkillBody } from '../../skills/sanitizer'
 import { ensureSkillAssets } from '../../skills/skill-assets'
 
 export const skillTool: ToolDefinition = {

@@ -14,7 +14,9 @@ export interface SkillAssetsOptions {
  * Idempotently extract a skill's bundled executable assets to disk.
  * Content-compare: only writes when a file is missing or its content drifted,
  * so user-added files (e.g. site-patterns/*.md) are never overwritten.
- * Returns the extraction root, or null if the skill bundles no assets.
+ * Assets are UTF-8 text only today — binary assets would need base64 (see
+ * generate-bundled-skills.ts). Returns the extraction root, or null if the
+ * skill bundles no assets.
  */
 export function ensureSkillAssets(skillName: string, opts?: SkillAssetsOptions): string | null {
   const map = opts?.assets ?? BUNDLED_SKILL_ASSETS
@@ -24,10 +26,11 @@ export function ensureSkillAssets(skillName: string, opts?: SkillAssetsOptions):
   const root = join(base, skillName)
   for (const a of list) {
     const dest = join(root, a.path)
-    const fresh = !existsSync(dest) || readFileSync(dest, 'utf-8') !== a.content
-    if (fresh) {
+    const needsWrite = !existsSync(dest) || readFileSync(dest, 'utf-8') !== a.content
+    if (needsWrite) {
       mkdirSync(dirname(dest), { recursive: true })
-      writeFileSync(dest, a.content)
+      // Preserve the source exec bit (scripts/*.mjs), default 0o644 for docs.
+      writeFileSync(dest, a.content, { mode: a.mode ?? 0o644 })
     }
   }
   return root

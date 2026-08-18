@@ -1,5 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync, readFileSync } from 'node:fs'
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  rmSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { SkillDefinition } from '../../src/shared'
@@ -622,16 +630,21 @@ describe('bundled-skills snapshot freshness', () => {
 describe('bundled-skill-assets snapshot freshness', () => {
   it('matches web-access assets on disk (regenerate with `bun run scripts/generate-bundled-skills.ts`)', () => {
     const assetsRoot = join(import.meta.dirname, '..', '..', 'skills', 'standard', 'web-access')
-    const expected: Array<{ path: string; content: string }> = []
+    const expected: Array<{ path: string; content: string; mode?: number }> = []
     const walk = (dir: string, rel: string) => {
-      for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
-        a.name.localeCompare(b.name),
-      )) {
-        if (entry.name === '.gitkeep') continue
-        const full = join(dir, entry.name)
-        const relPath = rel ? `${rel}/${entry.name}` : entry.name
-        if (entry.isDirectory()) walk(full, relPath)
-        else expected.push({ path: relPath, content: readFileSync(full, 'utf-8') })
+      // Mirror the generator's traversal: code-unit .sort() on string names, one statSync.
+      for (const name of readdirSync(dir).sort()) {
+        if (name === '.gitkeep') continue
+        const full = join(dir, name)
+        const relPath = rel ? `${rel}/${name}` : name
+        const st = statSync(full)
+        if (st.isDirectory()) walk(full, relPath)
+        else
+          expected.push({
+            path: relPath,
+            content: readFileSync(full, 'utf-8'),
+            mode: st.mode & 0o777,
+          })
       }
     }
     walk(assetsRoot, '')

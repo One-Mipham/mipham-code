@@ -9,7 +9,6 @@ allowed-tools:
   - Bash
   - WebFetch
   - WebSearch
-  - ComputerUse
   - Read
 ---
 
@@ -98,6 +97,22 @@ node ~/.mipham/skills/web-access/scripts/find-url.mjs [关键词...] [--only boo
 | 企业公告      | 公司官方新闻页 |
 | 工具能力/用法 | 官方文档、源码 |
 
+### 交叉验证
+
+- 关键声明须 2+ 独立来源交叉印证。
+- 优先采纳当年/近期资料。
+- 权威层级：官方文档 > 知名博客 > 技术社区 > 随机论坛。
+
+### 来源归因
+
+回答结尾附来源列表：
+
+```markdown
+Sources:
+
+- [标题](URL) — 一句话说明
+```
+
 ## 站点经验
 
 特定网站经验按域名存 `~/.mipham/skills/web-access/references/site-patterns/<domain>.md`（frontmatter: domain/aliases/updated + 平台特征/有效模式/已知陷阱）。操作前若有匹配经验先读；操作成功后把验证过的新模式写回。
@@ -107,8 +122,8 @@ node ~/.mipham/skills/web-access/scripts/find-url.mjs [关键词...] [--only boo
 - 不主动操作用户已有 tab；任务结束关闭自建 tab。
 - 不提交凭据（除非用户显式批准）。
 - 尊重 robots.txt 与速率限制；不抓 PII。
-- proxy 仅绑 127.0.0.1，不暴露外网。
-- 所有 URL 过 SSRF 校验后才 fetch。
+- proxy 仅绑 127.0.0.1，不暴露外网；端口 3456 无鉴权，依赖本机信任边界，勿在共享/多用户主机运行。
+- ⚠️ proxy 不做 URL SSRF 校验（照搬上游，与 computer-use/Playwright 同类）：避免驱动 Chrome 访问本机内部服务/内网地址。
 
 ## 何时不用本 skill
 

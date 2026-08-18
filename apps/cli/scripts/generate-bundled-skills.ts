@@ -30,6 +30,7 @@ interface BundledSkill {
 interface BundledSkillAsset {
   path: string
   content: string
+  mode?: number
 }
 
 function collect(dir: string, type: 'standard' | 'mipham', ext: string): BundledSkill[] {
@@ -42,7 +43,8 @@ function collect(dir: string, type: 'standard' | 'mipham', ext: string): Bundled
   }))
 }
 
-/** Recursively collect executable assets; path is `/`-joined relative to `dir`. */
+/** Recursively collect executable assets; path is `/`-joined relative to `dir`.
+ *  Content is UTF-8 text only — binary assets would need base64. */
 function collectAssets(dir: string): BundledSkillAsset[] {
   const out: BundledSkillAsset[] = []
   const walk = (d: string, rel: string): void => {
@@ -50,8 +52,9 @@ function collectAssets(dir: string): BundledSkillAsset[] {
       if (name === '.gitkeep' || name === '.git') continue
       const full = join(d, name)
       const relPath = rel ? `${rel}/${name}` : name
-      if (statSync(full).isDirectory()) walk(full, relPath)
-      else out.push({ path: relPath, content: readFileSync(full, 'utf-8') })
+      const st = statSync(full)
+      if (st.isDirectory()) walk(full, relPath)
+      else out.push({ path: relPath, content: readFileSync(full, 'utf-8'), mode: st.mode & 0o777 })
     }
   }
   walk(dir, '')
@@ -91,12 +94,14 @@ function main(): void {
     'export interface BundledSkillAsset {',
     '  path: string',
     '  content: string',
+    '  mode?: number',
     '}',
     '',
     'export const BUNDLED_SKILL_ASSETS: Record<string, BundledSkillAsset[]> = {',
     `  ${JSON.stringify(ASSETS_SKILL)}: [`,
     ...assets.map(
-      (a) => `    { path: ${JSON.stringify(a.path)}, content: ${JSON.stringify(a.content)} },`,
+      (a) =>
+        `    { path: ${JSON.stringify(a.path)}, content: ${JSON.stringify(a.content)}, mode: ${a.mode} },`,
     ),
     '  ],',
     '}',
