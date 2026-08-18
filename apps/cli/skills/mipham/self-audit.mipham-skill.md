@@ -1,6 +1,6 @@
 ---
 name: self-audit
-description: CRSI Phase 2: Mipham Code systematic self-audit — identifies code quality, architecture, performance, and security issues; integrates with CRSI pipeline for auto-rule generation
+description: 'CRSI Phase 2: Mipham Code systematic self-audit — identifies code quality, architecture, performance, and security issues; integrates with CRSI pipeline for auto-rule generation'
 version: 1.0.0
 ---
 
