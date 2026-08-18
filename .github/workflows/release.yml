@@ -118,11 +118,15 @@ jobs:
           if-no-files-found: error
 
       - name: Publish plugin to JetBrains Marketplace
-        if: ${{ secrets.JETBRAINS_MARKETPLACE_TOKEN != '' }}
         working-directory: infrastructure/jetbrains
         env:
           JETBRAINS_MARKETPLACE_TOKEN: ${{ secrets.JETBRAINS_MARKETPLACE_TOKEN }}
-        run: ./gradlew publishPlugin --no-daemon --console=plain
+        run: |
+          if [ -n "$JETBRAINS_MARKETPLACE_TOKEN" ]; then
+            ./gradlew publishPlugin --no-daemon --console=plain
+          else
+            echo "JETBRAINS_MARKETPLACE_TOKEN not set — skipping publish (build only)."
+          fi
 
   # ── Stage 3: npm Publish ──
   publish:
