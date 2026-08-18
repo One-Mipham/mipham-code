@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import type { SkillDefinition } from '../../src/shared'
 import { SkillsLoader } from '../../src/skills/loader'
 import { BUNDLED_SKILLS } from '../../src/skills/bundled-skills'
+import { BUNDLED_SKILL_ASSETS } from '../../src/skills/bundled-skill-assets'
 import { StandardRuntime } from '../../src/skills/standard/runtime'
 import { MiphamRuntime } from '../../src/skills/mipham/runtime'
 
@@ -603,5 +604,23 @@ describe('bundled-skills snapshot freshness', () => {
     }
 
     expect(BUNDLED_SKILLS).toEqual(expected)
+  })
+})
+
+describe('bundled-skill-assets snapshot freshness', () => {
+  it('matches web-access assets on disk (regenerate with `bun run scripts/generate-bundled-skills.ts`)', () => {
+    const assetsRoot = join(import.meta.dirname, '..', '..', 'skills', 'standard', 'web-access')
+    const expected: Array<{ path: string; content: string }> = []
+    const walk = (dir: string, rel: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (entry.name === '.gitkeep') continue
+        const full = join(dir, entry.name)
+        const relPath = rel ? `${rel}/${entry.name}` : entry.name
+        if (entry.isDirectory()) walk(full, relPath)
+        else expected.push({ path: relPath, content: readFileSync(full, 'utf-8') })
+      }
+    }
+    walk(assetsRoot, '')
+    expect(BUNDLED_SKILL_ASSETS['web-access']).toEqual(expected)
   })
 })
