@@ -19,16 +19,17 @@ Multi-model AI coding terminal integrated into VS Code. 30 tools, 7 AI providers
 
 ## Installation
 
-### From VS Code Marketplace _(coming soon)_
+### From VS Code Marketplace
 
-Search "Mipham Code" in the Extensions view (`Cmd+Shift+X`).
+Search "Mipham Code" in the Extensions view (`Cmd+Shift+X`), or install from the
+[Marketplace page](https://marketplace.visualstudio.com/items?itemName=miphamai.mipham-code).
 
 ### From VSIX (local)
 
 ```bash
 cd infrastructure/vscode
 npx vsce package
-code --install-extension mipham-code-0.44.0.vsix
+code --install-extension mipham-code-0.47.0.vsix
 ```
 
 ### Development (symlink)
