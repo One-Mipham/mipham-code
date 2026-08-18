@@ -78,7 +78,7 @@ mipham-code/
 │   │   │   ├── workflow/       # Workflow 运行时 + Schema 验证
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
-│   │   ├── skills/             # 24 个内置技能（20 standard + 4 mipham）
+│   │   ├── skills/             # 25 个内置技能（20 standard + 5 mipham）
 │   │   ├── test/               # 125 个测试文件，1561 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
@@ -149,11 +149,11 @@ pnpm format       # Prettier
 | Computer（1）   | computer-use                                                                                               |
 | Scheduling（4） | schedule-wakeup, cron-create, cron-delete, cron-list                                                       |
 
-### Skills 系统（24 个内置技能）
+### Skills 系统（25 个内置技能）
 
-**Standard（20）**: code-review, codebase-design, compassionate-communication, doc-generator, domain-modeling, github-ops, grill-with-docs, implement, memory, mipham-code-setup, research, security-review, self-review, superpower, systematic-debugging, tdd, to-spec, triage, web-access, web-search
+**Standard（20）**: code-review, codebase-design, compassionate-communication, debug-loop, doc-generator, domain-modeling, github-ops, grill-with-docs, implement, memory, mipham-code-setup, research, security-review, self-review, superpower, tdd, to-spec, triage, web-access, web-search
 
-**Mipham Exclusive（4）**: om-artifact, om-model-optimize, om-security, self-audit
+**Mipham Exclusive（5）**: om-artifact, om-model-optimize, om-security, self-audit, doc-sync
 
 双轨运行时：standard 轨用于社区 Skills，mipham 轨用于 MiphamAI 专有功能。
 

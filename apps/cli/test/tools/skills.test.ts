@@ -489,13 +489,13 @@ describe('Built-in skills', () => {
     loader.loadBuiltin(projectRoot)
 
     const all = loader.list()
-    expect(all.length).toBe(24) // 20 standard + 4 mipham
+    expect(all.length).toBe(25) // 20 standard + 5 mipham
 
     const standard = loader.listByType('standard')
     expect(standard.length).toBe(20)
 
     const mipham = loader.listByType('mipham')
-    expect(mipham.length).toBe(4)
+    expect(mipham.length).toBe(5)
   })
 
   it('every built-in skill has a name and description', () => {
@@ -555,7 +555,13 @@ describe('Built-in skills', () => {
       .listByType('mipham')
       .map((s) => s.name)
       .sort()
-    expect(names).toEqual(['om-artifact', 'om-model-optimize', 'om-security', 'self-audit'])
+    expect(names).toEqual([
+      'doc-sync',
+      'om-artifact',
+      'om-model-optimize',
+      'om-security',
+      'self-audit',
+    ])
   })
 
   it('standard skills are loaded from files ending in .SKILL.md', () => {
