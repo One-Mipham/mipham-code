@@ -4,8 +4,8 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.3.5
-> **最后更新**: 2026-08-17 — MCP 深度集成收口：动态工具更新接线（tools/list_changed → 中央注册表）+ 补测试
+> **版本**: 2.3.6
+> **最后更新**: 2026-08-18 — 待办收口：4 条已完成转档（VS Code/JetBrains/1M 上下文/i18n），测试数对齐 1561
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -42,7 +42,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **eval harness** `/crsi eval` — `core/eval-harness.ts` 冻结 20 条 ground-truth 契约（12 机制：规则/宪法/沙箱边界/红队/producer 行为 + 8 行为缺口）+ rewards 日志 `~/.mipham/crsi/eval-scores.jsonl`，`runCrsiModification` 以「分数不退化」为第二道闸。8 行为缺口（rm -rf/管道投毒/git reset --hard/chmod 777/mkfs/dd→/dev//关停主机/crontab -r）已由固化 managed tool-params 规则覆盖 → 全翻转 PASS → 满分 100 =「证明更好」
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule]|eval` + `/sis errors|stats|clear`
-测试：1,502 测试（1500 passed + 2 skipped）
+测试：1,561 测试（1559 passed + 2 skipped）
 
 ---
 
@@ -224,7 +224,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
 | E2E      | 1       | 8        | full-pipeline                                 |
 | Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **115** | **1502** | **0 失败** ✅（1500 passed + 2 skipped）      |
+| **合计** | **125** | **1561** | **0 失败** ✅（1559 passed + 2 skipped）      |
 
 > 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
 
@@ -364,12 +364,17 @@ mipham-code 变更（包名/版本）
 14. ✅ **行为缺口表 C2（证明更好实演）** — `MANAGED_DANGEROUS_RE` 4→8（+ mkfs / dd→/dev/ / 关停主机 / crontab -r），固化 managed tool-params 规则，eval 分数翻转 75→100
 15. ✅ **MCP 深度集成** — OAuth 认证 + Tool Search 早已完成；本轮接上「动态工具更新」断链（`applyToolChanges` + `syncMcpToolsOnChange` → 中央注册表）
 
+**已完成（2026-08-18 待办收口）**：
+
+16. ✅ **VS Code 扩展发布** — 已上架 VS Code Marketplace（网页上传 VSIX，免 PAT）
+17. ✅ **JetBrains 插件发布** — 已过审上线（ai.mipham.code/33597），release 管线 env 判空自动发布
+18. ✅ **1M 上下文窗口** — 11+ 模型注册 `contextWindow: 1_000_000`；自适应阈值（200K/500K/1M）+ `MIPHAM_DISABLE_1M_CONTEXT` 开关
+19. ✅ **多语言国际化** — 10 个 `ui/*.tsx` 全接 `t()` + `commands.ts` 用 `createT`，65 键中英双语
+
 **待办**：
 
-1. **VS Code 扩展发布** — 发布到 VS Code Marketplace
-2. **JetBrains 插件发布** — 发布到 JetBrains Marketplace（构建已接入 release，待上架）
-3. **1M 上下文窗口** — 支持超长上下文模型
-4. **多语言国际化** — CLI 和 Web 的 i18n 支持
+1. **Bot 远程控制扩展** — Feishu 已落地（v0.47.0），补 Telegram/微信远程唤起（真缺口，IM SDK + 凭据 + prompt-injection，建议单独立项）
+2. **桌面 App** — macOS/Windows 桌面版（大工程，暂不排期）
 
 ---
 
@@ -377,6 +382,7 @@ mipham-code 变更（包名/版本）
 
 | 版本  | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                               | 维护人     |
 | ----- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| 2.3.6 | 2026-08-18 | 待办收口：4 条已完成转档（VS Code 扩展发布 / JetBrains 插件上架 / 1M 上下文窗口 / 多语言国际化）；测试数对齐 1561（1559 passed + 2 skipped）                                                                                                                                                                                                                             | 技术委员会 |
 | 2.3.5 | 2026-08-17 | MCP 深度集成收口：OAuth 认证 + Tool Search 早已完成，本轮接上「动态工具更新」断链（`applyToolChanges` + `syncMcpToolsOnChange` → 中央注册表，`tools/list_changed` 增量同步）；补 4 个 MCP 测试。测试 1500 passed + 2 skipped                                                                                                                                                                           | 技术委员会 |
 | 2.3.4 | 2026-08-17 | 内核收尾 + 行为缺口表 C2：`defaultToolContext`→`defaultVajraContext`、`replaceMessages` 保留为 session-log 不变量的测试缝（修正过时注释）、SubAgent 4 spawn 点全部迁 `llm`；`MANAGED_DANGEROUS_RE` 4→8 缺口，固化 managed tool-params 规则，eval 分数翻转 75→100（「证明更好」首次实演，不破 A1 铁律）。测试仍 1496 passed + 2 skipped                                                                 | 技术委员会 |
 | 2.3.3 | 2026-08-17 | CRSI 行为缺口表（C1）：eval harness 12→16 契约，新增 4 条冻结行为缺口（rm -rf / 管道投毒 / git reset --hard / chmod 777）如实判 FAIL，基线分数 75；producer `tool-params` 规则覆盖这些缺口 → 固化后翻转 PASS =「证明更好」。`crsi-modify.test.ts` 补 rewards 日志清理（跨运行旧 100 分触发假退化）。+1 测试（1496 passed + 2 skipped）                                                                 | 技术委员会 |
