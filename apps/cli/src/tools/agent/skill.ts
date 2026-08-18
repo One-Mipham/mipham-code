@@ -1,6 +1,7 @@
 import type { ToolDefinition } from '../../shared/index.ts'
 import { executeForkedSkill } from '../../skills/fork-executor'
 import { sanitizeSkillBody } from '../../skills/sanitizer.js'
+import { ensureSkillAssets } from '../../skills/skill-assets'
 
 export const skillTool: ToolDefinition = {
   name: 'Skill',
@@ -35,6 +36,10 @@ export const skillTool: ToolDefinition = {
           error: `Skill "${skillName}" not found.\n\nAvailable skills (${loader.list().length}):\n${available}\n\nUse /skills to browse, or create a .SKILL.md file in .mipham/skills/.`,
         }
       }
+
+      // Extract executable assets (scripts/references) if this skill bundles them.
+      // No-op for every skill that has no entry in BUNDLED_SKILL_ASSETS.
+      ensureSkillAssets(skillName)
 
       // Check if skill has context: fork — execute in isolated subagent
       if (skill.context === 'fork') {
