@@ -194,7 +194,9 @@ describe('bundled-skill-assets snapshot freshness', () => {
     const assetsRoot = join(import.meta.dirname, '..', '..', 'skills', 'standard', 'web-access')
     const expected: Array<{ path: string; content: string }> = []
     const walk = (dir: string, rel: string) => {
-      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
+        a.name.localeCompare(b.name),
+      )) {
         if (entry.name === '.gitkeep') continue
         const full = join(dir, entry.name)
         const relPath = rel ? `${rel}/${entry.name}` : entry.name
