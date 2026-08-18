@@ -4,8 +4,8 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.3.7
-> **最后更新**: 2026-08-18 — 全量数字对齐（skills 24 / tools 31 / slash 102 / 测试 1561）+ 最近提交刷新
+> **版本**: 2.3.8
+> **最后更新**: 2026-08-18 — doc-sync skill + self-audit YAML 修复（skills 24→25）
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -381,6 +381,7 @@ mipham-code 变更（包名/版本）
 
 | 版本  | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                               | 维护人     |
 | ----- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| 2.3.8 | 2026-08-18 | 新增 doc-sync skill（借 Truthmark 的 Truth Sync 概念，Map/Check/Update/Verify 四步 + 不变量铁律：只碰 docs/truth/**）；修复 self-audit YAML（description 冒号未加引号 → 自 7006c83 起静默 skip，现 5 个 mipham skill 全加载）；skills 24→25；纠正 debug-loop（frontmatter name=debug-loop，文件名 systematic-debugging，2.3.7 误删）                                                                   | 技术委员会 |
 | 2.3.7 | 2026-08-18 | 全量数字对齐：skills 23→24（+self-audit）、tools 30→31（+listAgents）、slash 命令 93→102、「最近提交」表刷新至 08-18；修正标准技能列表（移除已删除的 debug-loop）                                                                                                                                                                                                                                      | 技术委员会 |
 | 2.3.6 | 2026-08-18 | 待办收口：4 条已完成转档（VS Code 扩展发布 / JetBrains 插件上架 / 1M 上下文窗口 / 多语言国际化）；测试数对齐 1561（1559 passed + 2 skipped）                                                                                                                                                                                                                                                           | 技术委员会 |
 | 2.3.5 | 2026-08-17 | MCP 深度集成收口：OAuth 认证 + Tool Search 早已完成，本轮接上「动态工具更新」断链（`applyToolChanges` + `syncMcpToolsOnChange` → 中央注册表，`tools/list_changed` 增量同步）；补 4 个 MCP 测试。测试 1500 passed + 2 skipped                                                                                                                                                                           | 技术委员会 |
