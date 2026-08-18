@@ -22,7 +22,18 @@
 
 之后每次发新版本即可用 gradle 直接上传。
 
-## 发布步骤
+## 发布（推荐：CI 自动发布）
+
+release.yml 的 `jetbrains` job 会在 `git tag vX.Y.Z && git push` 时自动构建 +
+`publishPlugin` 上传 Marketplace。前提：
+
+1. 在 GitHub 仓库 **Settings → Secrets and variables → Actions** 加 secret
+   `JETBRAINS_MARKETPLACE_TOKEN`（值 = Marketplace token，见前置条件第 3 条）。
+2. 每次发版前 bump `gradle.properties` 的 `pluginVersion`（Marketplace 拒重复版本）。
+
+未配置 secret 时，CI 只构建 zip 挂 GitHub Release、不上架（`if` 守卫，不影响其他 stage）。
+
+## 发布（备选：手动）
 
 ```bash
 cd infrastructure/jetbrains
@@ -36,11 +47,11 @@ export JETBRAINS_MARKETPLACE_TOKEN="<你的 token>"
 
 ## 关键约束
 
-- **版本必须递增**：改 `gradle.properties` 的 `pluginVersion`（当前 0.44.3）。
+- **版本必须递增**：改 `gradle.properties` 的 `pluginVersion`（当前 0.47.0）。
   Marketplace 拒绝重复版本。
 - **`build/` 和 `.gradle/` 是构建产物**，已在 `.gitignore` 排除，不要提交。
 - **本地验证**：发布前先 `./gradlew buildPlugin`，产物在
-  `build/distributions/mipham-code-jetbrains-0.44.3.zip`，可在 IDE 里
+  `build/distributions/mipham-code-jetbrains-0.47.0.zip`，可在 IDE 里
   **Settings → Plugins → ⚙️ → Install Plugin from Disk** 安装自测。
 
 ## 上架后
