@@ -4,8 +4,8 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.3.8
-> **最后更新**: 2026-08-18 — doc-sync skill + self-audit YAML 修复（skills 24→25）
+> **版本**: 2.3.9
+> **最后更新**: 2026-08-18 — web-access 升级 v2.5.0（CDP Proxy 直连已登录 Chrome + 技能资产机制）
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -42,7 +42,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **eval harness** `/crsi eval` — `core/eval-harness.ts` 冻结 20 条 ground-truth 契约（12 机制：规则/宪法/沙箱边界/红队/producer 行为 + 8 行为缺口）+ rewards 日志 `~/.mipham/crsi/eval-scores.jsonl`，`runCrsiModification` 以「分数不退化」为第二道闸。8 行为缺口（rm -rf/管道投毒/git reset --hard/chmod 777/mkfs/dd→/dev//关停主机/crontab -r）已由固化 managed tool-params 规则覆盖 → 全翻转 PASS → 满分 100 =「证明更好」
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule]|eval` + `/sis errors|stats|clear`
-测试：1,561 测试（1559 passed + 2 skipped）
+测试：1,567 测试（1565 passed + 2 skipped）
 
 ---
 
@@ -79,7 +79,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 25 个内置技能（20 standard + 5 mipham）
-│   │   ├── test/               # 125 个测试文件，1561 个测试
+│   │   ├── test/               # 127 个测试文件，1567 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -102,7 +102,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（1561 个测试）
+pnpm test         # vitest run（1567 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -152,6 +152,8 @@ pnpm format       # Prettier
 ### Skills 系统（25 个内置技能）
 
 **Standard（20）**: code-review, codebase-design, compassionate-communication, debug-loop, doc-generator, domain-modeling, github-ops, grill-with-docs, implement, memory, mipham-code-setup, research, security-review, self-review, superpower, tdd, to-spec, triage, web-access, web-search
+
+> `web-access`（v2.5.0）是首个**带可执行资产**的 standard skill：CDP Proxy 直连用户已登录 Chrome（脚本随二进制内嵌，首次调用提取到 `~/.mipham/skills/web-access/`）。
 
 **Mipham Exclusive（5）**: om-artifact, om-model-optimize, om-security, self-audit, doc-sync
 
@@ -224,7 +226,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
 | E2E      | 1       | 8        | full-pipeline                                 |
 | Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **125** | **1561** | **0 失败** ✅（1559 passed + 2 skipped）      |
+| **合计** | **127** | **1567** | **0 失败** ✅（1565 passed + 2 skipped）      |
 
 > 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
 
@@ -381,6 +383,7 @@ mipham-code 变更（包名/版本）
 
 | 版本  | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                               | 维护人     |
 | ----- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| 2.3.9 | 2026-08-18 | web-access 升级 v2.5.0：CDP Proxy 直连用户已登录 Chrome（4 脚本 + cdp-api.md 原样照搬 eze-is/web-access）；新增「技能资产」机制（bundled-skill-assets.ts + ensureSkillAssets 提取到 ~/.mipham/skills/）；standard 轨首个带可执行资产的 skill                                                                                                                                                           | 技术委员会 |
 | 2.3.8 | 2026-08-18 | 新增 doc-sync skill（借 Truthmark 的 Truth Sync 概念，Map/Check/Update/Verify 四步 + 不变量铁律：只碰 docs/truth/**）；修复 self-audit YAML（description 冒号未加引号 → 自 7006c83 起静默 skip，现 5 个 mipham skill 全加载）；skills 24→25；纠正 debug-loop（frontmatter name=debug-loop，文件名 systematic-debugging，2.3.7 误删）                                                                   | 技术委员会 |
 | 2.3.7 | 2026-08-18 | 全量数字对齐：skills 23→24（+self-audit）、tools 30→31（+listAgents）、slash 命令 93→102、「最近提交」表刷新至 08-18；修正标准技能列表（移除已删除的 debug-loop）                                                                                                                                                                                                                                      | 技术委员会 |
 | 2.3.6 | 2026-08-18 | 待办收口：4 条已完成转档（VS Code 扩展发布 / JetBrains 插件上架 / 1M 上下文窗口 / 多语言国际化）；测试数对齐 1561（1559 passed + 2 skipped）                                                                                                                                                                                                                                                           | 技术委员会 |
