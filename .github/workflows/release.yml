@@ -106,9 +106,6 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - uses: gradle/actions/setup-gradle@v4
-        working-directory: infrastructure/jetbrains
-
       - name: Build plugin
         working-directory: infrastructure/jetbrains
         run: ./gradlew buildPlugin --no-daemon --console=plain
