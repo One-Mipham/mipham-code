@@ -9,7 +9,6 @@ import {
   runTaskN,
   runBeforeAfter,
   isNotDegraded,
-  isImproved,
   compareRuns,
   type TaskRunStats,
 } from '../../src/core/task-runner'
