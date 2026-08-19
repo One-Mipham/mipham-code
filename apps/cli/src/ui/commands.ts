@@ -21,6 +21,7 @@ import {
   proseProposalId,
   hasProposedProse,
   appendProseProposal,
+  clearProseProposals,
   LESSONS_FILE,
   MANAGED_RULES_FILE,
 } from '../core/crsi-producer'
@@ -960,6 +961,14 @@ const crsiEvalCmd: CommandHandler = async () => {
     lines.push('', `❌ 失败任务: ${report.failures.join(', ')}`)
   }
   return { content: lines.join('\n') }
+}
+
+const crsiProseClearCmd: CommandHandler = () => {
+  const count = clearProseProposals()
+  if (count === 0) {
+    return { content: '散文提议 ledger 为空（无可清除记录）。' }
+  }
+  return { content: `已清空散文提议 ledger（移除 ${count} 条记录）。` }
 }
 
 const crsiHealthCmd: CommandHandler = async (ctx) => {
@@ -4547,6 +4556,7 @@ const commandsListCmd: CommandHandler = () => {
     '/crsi inventory': 'Tools & Skills',
     '/crsi modify': 'Tools & Skills',
     '/crsi propose': 'Tools & Skills',
+    '/crsi prose-clear': 'Tools & Skills',
     '/crsi eval': 'Tools & Skills',
     '/crsi meta': 'Tools & Skills',
     '/crsi interpret': 'Tools & Skills',
@@ -4703,6 +4713,7 @@ registry.set('/crsi health', crsiHealthCmd)
 registry.set('/crsi inventory', crsiInventoryCmd)
 registry.set('/crsi modify', crsiModifyCmd)
 registry.set('/crsi propose', crsiProposeCmd)
+registry.set('/crsi prose-clear', crsiProseClearCmd)
 registry.set('/crsi eval', crsiEvalCmd)
 registry.set('/crsi meta', crsiMetaCmd)
 registry.set('/crsi interpret', crsiInterpretCmd)
@@ -4881,7 +4892,9 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/crsi health': 'CRSI + SIS unified health dashboard with scoring',
   '/crsi inventory': 'Live capability self-report — CRSI/SIS/constitution state',
   '/crsi modify': 'Run a code self-modification through the sandbox (worktree → tests → approve)',
-  '/crsi propose': '固化 CRSI 失败信号（默认教训 / --rule 受管理规则），沙箱 + 人批准门控',
+  '/crsi propose':
+    '固化 CRSI 失败信号（默认教训 / --rule 受管理规则 / --prose 改 skill 散文），沙箱 + 人批准门控',
+  '/crsi prose-clear': '清空散文提议去重 ledger（~/.mipham/crsi/prose-proposals.jsonl）',
   '/crsi eval': 'Run the ground-truth CRSI eval harness and record the score',
   '/crsi meta': 'RSI Level 3 meta-rule analysis — rules that improve the rules',
   '/crsi interpret': 'Tool-call behavior dashboard — error patterns, usage, health',

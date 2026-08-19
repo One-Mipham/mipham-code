@@ -13,7 +13,7 @@
 import type { CrsiInsight } from './auto-memory'
 import type { MetaRule } from './meta-rule-engine'
 import type { Llm } from '../providers/llm'
-import { readdirSync, appendFileSync, readFileSync, existsSync, mkdirSync } from 'node:fs'
+import { readdirSync, appendFileSync, readFileSync, existsSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 
@@ -386,5 +386,17 @@ export function appendProseProposal(record: ProseProposalRecord): void {
     appendFileSync(proseLedgerFile(), JSON.stringify(record) + '\n', 'utf-8')
   } catch {
     // ledger 非关键，失败不影响提议本身
+  }
+}
+
+/** 清空散文提议 ledger，返回清除的记录数（无文件时返回 0）。 */
+export function clearProseProposals(): number {
+  try {
+    if (!existsSync(proseLedgerFile())) return 0
+    const lines = readFileSync(proseLedgerFile(), 'utf-8').trim().split('\n').filter(Boolean)
+    rmSync(proseLedgerFile(), { force: true })
+    return lines.length
+  } catch {
+    return 0
   }
 }

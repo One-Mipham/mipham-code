@@ -2,7 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { join } from 'node:path'
 import { rmSync, appendFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { hasProposedProse, appendProseProposal } from '../../src/core/crsi-producer'
+import {
+  hasProposedProse,
+  appendProseProposal,
+  clearProseProposals,
+} from '../../src/core/crsi-producer'
 
 // Isolate the prose-proposals ledger from the real ~/.mipham.
 vi.mock('node:os', async (importOriginal) => {
@@ -41,5 +45,22 @@ describe('prose proposal ledger', () => {
     appendFileSync(file, 'not-json\n', 'utf-8')
     expect(hasProposedProse('prose-timeout-abc')).toBe(true)
     expect(hasProposedProse('not-json')).toBe(false)
+  })
+})
+
+describe('clearProseProposals', () => {
+  it('empties the ledger and returns the cleared record count', () => {
+    appendProseProposal({ id: 'prose-timeout-a', filePath: 'x.md', timestamp: 'ts' })
+    appendProseProposal({ id: 'prose-timeout-b', filePath: 'y.md', timestamp: 'ts' })
+    expect(hasProposedProse('prose-timeout-a')).toBe(true)
+
+    const cleared = clearProseProposals()
+    expect(cleared).toBe(2)
+    expect(hasProposedProse('prose-timeout-a')).toBe(false)
+    expect(hasProposedProse('prose-timeout-b')).toBe(false)
+  })
+
+  it('returns 0 when the ledger is absent', () => {
+    expect(clearProseProposals()).toBe(0)
   })
 })
