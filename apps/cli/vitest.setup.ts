@@ -13,6 +13,21 @@ import { timingSafeEqual } from 'node:crypto'
 import { createServer as createHttpServer } from 'node:http'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
+// ── Isolate node:os homedir ──────────────────────────────────────────────
+//
+// Any test that exercises the engine / skills runtime / auto-memory engine
+// writes to homedir()/.mipham/memory (turn reflections, Memory tool, memory
+// loader). Mock homedir globally to a temp dir so tests never touch — or
+// delete — the developer's live ~/.mipham/. Individual tests can still
+// override with their own vi.mock('node:os').
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>()
+  return {
+    ...actual,
+    homedir: () => `${actual.tmpdir()}/mipham-test-home`,
+  }
+})
+
 // ── Minimal Bun global mock ─────────────────────────────────────────────────
 
 if (typeof globalThis.Bun === 'undefined') {

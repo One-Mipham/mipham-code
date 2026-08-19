@@ -1,7 +1,9 @@
+import { join } from 'node:path'
+import { homedir } from 'node:os'
 import { MemoryManager } from './memory-manager'
 import type { MemoryManager as MemoryManagerType } from './memory-manager'
 
-const MEMORY_DIR = `${process.env.HOME || '~'}/.mipham/memory`
+const MEMORY_DIR = join(homedir(), '.mipham', 'memory')
 
 let instance: MemoryManagerType | null = null
 
