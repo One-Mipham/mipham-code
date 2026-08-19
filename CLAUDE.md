@@ -4,8 +4,8 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.4.2
-> **最后更新**: 2026-08-19 — producer 描述修正 + `/crsi prose-clear` 清空机制
+> **版本**: 2.4.3
+> **最后更新**: 2026-08-19 — daemon 尊重 `permissionRestrictions` + 权限文档补记
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -174,7 +174,7 @@ pnpm format       # Prettier
 
 - `engine.ts` — 对话引擎（消息管理、工具调用编排、SSE 流式输出、Rules 注入、后台任务通知）
 - `context.ts` — 上下文管理（系统提示、历史压缩）
-- `permission.ts` — 权限控制（6 级：default/acceptEdits/plan/auto/dontAsk/bypassPermissions）
+- `permission.ts` — 权限控制（6 级：default/acceptEdits/plan/auto/dontAsk/bypassPermissions；`permissionRestrictions`（forbiddenModes/maxAllowedMode）org 级强制降级，请求被禁模式时 fail-closed）
 - `hooks.ts` — 生命周期钩子（13 种事件，含 SubagentStart/Stop/PostToolUseFailure）
 - `instructions.ts` — 指令加载链（Rismed_Ronxin → One_Mipham → mipham-code）
 - `rules-loader.ts` — 路径作用域规则（.mipham/rules/\*.md → glob 匹配 → 自动注入）
@@ -284,6 +284,7 @@ GitHub Actions 5 阶段流水线：`typecheck → lint → format → build-cli 
 
 | 日期       | Commit    | 说明                                                                  |
 | ---------- | --------- | --------------------------------------------------------------------- |
+| 2026-08-19 | `401882e` | feat(daemon): 尊重 org 级 permissionRestrictions                      |
 | 2026-08-19 | `8e9780f` | feat(crsi): prose ledger 清空机制（/crsi prose-clear）                |
 | 2026-08-19 | `3ce4e0e` | feat(crsi): producer 三路径同信号幂等去重                             |
 | 2026-08-19 | `3cf2b31` | feat(crsi): wire /crsi propose --prose into CLI                       |
@@ -394,6 +395,7 @@ mipham-code 变更（包名/版本）
 
 | 版本  | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                               | 维护人     |
 | ----- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| 2.4.3 | 2026-08-19 | daemon 尊重 org 级 `permissionRestrictions`：抽取 `buildDaemonPermission(restrictions?)`，daemon 的 PermissionSystem 应用 config 的 `permissionRestrictions`（`MIPHAM_DAEMON_PERMISSION=bypassPermissions` 被 `forbiddenModes` 强制降级，fail-closed，与 CLI 对齐）；权限文档补记（CLAUDE.md 权限段 + defaults.ts 注释）。测试 1638 passed + 2 skipped                                                 | 技术委员会 |
 | 2.4.2 | 2026-08-19 | CRSI producer 打磨收尾：prose ledger 清空机制（`clearProseProposals` + `/crsi prose-clear` 命令）补上只增不删缺口；§终极愿景 producer 概述修正（`--prose` 两阶段 LLM + 三路径幂等，不再误写「模板化无 LLM」）；`/crsi` 命令清单补全 meta/interpret/critique/red-team/prose-clear 与 `/sis cleanup`。测试 1632 passed + 2 skipped                                                                       | 技术委员会 |
 | 2.4.1 | 2026-08-19 | CRSI producer 三路径同信号幂等去重：prose 路径 append-only ledger（`~/.mipham/crsi/prose-proposals.jsonl`，`proseProposalId` + `hasProposedProse`/`appendProseProposal`）+ 教训路径标题去重 + `/crsi propose --prose` 产出前查 ledger。`ProducerProposal.id` 由摆设变为真实去重键。测试 1630 passed + 2 skipped                                                                                        | 技术委员会 |
 | 2.4.0 | 2026-08-19 | CRSI 阶段 B 纵深收官：proposal-guard 结构预筛（补 PROTECTED_PATHS 评估机制 5 洞）+ 端到端任务运行器（C-MVP+C-2：runTask/runTaskN/compareRuns/runBeforeAfter）+ producer 散文提议（两阶段 LLM）+ `/crsi propose --prose` 接线。A1 边界决策落地 spec（LLM 只生成不判定）。测试 1624 passed + 2 skipped                                                                                                   | 技术委员会 |
