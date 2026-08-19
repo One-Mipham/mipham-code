@@ -12,6 +12,7 @@
 
 import type { CrsiInsight } from './auto-memory'
 import type { MetaRule } from './meta-rule-engine'
+import type { Llm } from '../providers/llm'
 
 /** 教训文件（相对仓库根）。预建，沙箱只能改已存在文件。 */
 export const LESSONS_FILE = 'apps/cli/crsi-lessons.md'
@@ -185,4 +186,59 @@ export function produceRuleProposal(
     newContent,
     originalContent: currentManagedRules,
   }
+}
+
+// ── Producer 散文提议（块 1）：从失败信号生成「改 skill 散文」提议 ──
+// A1 边界首次实演：LLM 只作「生成」（候选），判定仍走确定性（guard 预筛 / 行为效果 / 人审）。
+
+const PROSE_SELECT_PROMPT_VERSION = '1.0.0'
+
+function buildSelectSkillPrompt(signal: CrsiSignal, skillFiles: string[]): string {
+  return [
+    '你是 CRSI producer。给定失败信号，从候选 skill 文件列表中选出最相关的一个，返回其文件路径（只返回路径，一行，不要其他文字）。',
+    '',
+    '失败信号：',
+    `- category: ${signal.category}`,
+    `- title: ${signal.title}`,
+    signal.severity ? `- severity: ${signal.severity}` : '',
+    `- suggestion: ${signal.suggestion}`,
+    `- evidence: ${signal.evidence.join(' | ')}`,
+    '',
+    '候选 skill 文件：',
+    ...skillFiles.map((f) => `- ${f}`),
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+async function collectLlmText(llm: Llm, prompt: string): Promise<string> {
+  let text = ''
+  const req = {
+    model: 'prose',
+    messages: [{ role: 'user' as const, content: prompt }],
+    systemPrompt: '',
+  }
+  for await (const chunk of llm.chat(req)) {
+    if (chunk.type === 'text' && chunk.content) text += chunk.content
+  }
+  return text.trim()
+}
+
+function extractFilePath(response: string, skillFiles: string[]): string | null {
+  for (const f of skillFiles) {
+    if (response.includes(f)) return f
+  }
+  return null
+}
+
+export async function selectTargetSkill(
+  signal: CrsiSignal,
+  llm: Llm,
+  skillFiles: string[],
+): Promise<string | null> {
+  if (skillFiles.length === 0) return null
+  const prompt = buildSelectSkillPrompt(signal, skillFiles)
+  const response = await collectLlmText(llm, prompt)
+  if (!response) return null
+  return extractFilePath(response, skillFiles)
 }
