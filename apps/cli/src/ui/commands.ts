@@ -18,6 +18,9 @@ import {
   produceProseProposal,
   selectCrsiSignal,
   collectSkillFiles,
+  proseProposalId,
+  hasProposedProse,
+  appendProseProposal,
   LESSONS_FILE,
   MANAGED_RULES_FILE,
 } from '../core/crsi-producer'
@@ -833,6 +836,11 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
       return { content: '没有足够的失败信号来生成散文提议。' }
     }
 
+    const id = proseProposalId(signal)
+    if (hasProposedProse(id)) {
+      return { content: '该失败信号已生成过散文提议（幂等去重，跳过）。' }
+    }
+
     const llm = ctx.engine.getLlm() ?? ctx.engine.getRegistry()
     const { readFileSync } = await import('node:fs')
     const { join } = await import('node:path')
@@ -844,7 +852,7 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
     }
 
     const verdict = prefilterProposal({
-      id: `prose-${signal.title}`,
+      id,
       filePath: proposal.filePath,
       kind: 'skill',
       newContent: proposal.newContent,
@@ -862,6 +870,8 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
     if (!result.applied || result.phase === 'failed') {
       return { content: `❌ 生成失败（phase: ${result.phase}）。\n${result.error ?? ''}` }
     }
+
+    appendProseProposal({ id, filePath: proposal.filePath, timestamp: new Date().toISOString() })
 
     return {
       content:

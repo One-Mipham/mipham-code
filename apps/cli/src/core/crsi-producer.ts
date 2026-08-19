@@ -13,8 +13,9 @@
 import type { CrsiInsight } from './auto-memory'
 import type { MetaRule } from './meta-rule-engine'
 import type { Llm } from '../providers/llm'
-import { readdirSync } from 'node:fs'
+import { readdirSync, appendFileSync, readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { homedir } from 'node:os'
 
 /** 教训文件（相对仓库根）。预建，沙箱只能改已存在文件。 */
 export const LESSONS_FILE = 'apps/cli/crsi-lessons.md'
@@ -88,6 +89,9 @@ export function produceCrsiProposal(
 ): { description: string; filePath: string; newContent: string; originalContent: string } | null {
   const signal = selectCrsiSignal(insights, metaRules)
   if (!signal) return null
+
+  // 幂等：同一信号的教训标题已在文件中，不再重复产出。
+  if (currentLessons.includes(`## ${signal.category}: ${signal.title}`)) return null
 
   const lesson = buildLessonContent(signal, timestamp)
   const newContent = currentLessons ? `${currentLessons.trimEnd()}\n\n${lesson}\n` : `${lesson}\n`
@@ -336,4 +340,51 @@ export function collectSkillFiles(root: string): string[] {
     }
   }
   return files
+}
+
+// ── 幂等去重（prose ledger） ──
+// 散文提议（块 1）的幂等：同一失败信号只生成一次提议。与 --rule 路径「目标文件内 id marker」去重不同，
+// 散文改的是 skill 内容（非追加 marker），故用 ~/.mipham 下的 append-only ledger 记录「已提议的信号」。
+
+/** 散文提议的稳定 id（同 category + 同 title → 同 id，同 managedRuleId 的 hash 语义）。 */
+export function proseProposalId(signal: CrsiSignal): string {
+  return `prose-${signal.category}-${stableHash(signal.title)}`
+}
+
+/** ledger 里的一条散文提议记录。 */
+export interface ProseProposalRecord {
+  id: string
+  filePath: string
+  timestamp: string
+}
+
+function proseLedgerFile(): string {
+  return join(homedir(), '.mipham', 'crsi', 'prose-proposals.jsonl')
+}
+
+/** 该信号是否已生成过散文提议。 */
+export function hasProposedProse(id: string): boolean {
+  try {
+    if (!existsSync(proseLedgerFile())) return false
+    const lines = readFileSync(proseLedgerFile(), 'utf-8').trim().split('\n').filter(Boolean)
+    return lines.some((line) => {
+      try {
+        return (JSON.parse(line) as { id?: string }).id === id
+      } catch {
+        return false
+      }
+    })
+  } catch {
+    return false
+  }
+}
+
+/** 追加一条散文提议记录（append-only，非关键——失败不影响提议本身）。 */
+export function appendProseProposal(record: ProseProposalRecord): void {
+  try {
+    mkdirSync(join(homedir(), '.mipham', 'crsi'), { recursive: true })
+    appendFileSync(proseLedgerFile(), JSON.stringify(record) + '\n', 'utf-8')
+  } catch {
+    // ledger 非关键，失败不影响提议本身
+  }
 }

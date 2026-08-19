@@ -5,6 +5,7 @@ import {
   produceCrsiProposal,
   produceRuleProposal,
   managedRuleId,
+  proseProposalId,
   LESSONS_FILE,
   MANAGED_RULES_FILE,
   MANAGED_RULE_MARKER,
@@ -114,6 +115,42 @@ describe('produceCrsiProposal', () => {
     const proposal = produceCrsiProposal([insight()], [], '', 'ts')
     expect(proposal).not.toBeNull()
     expect(proposal!.newContent).toContain('## timeout')
+  })
+
+  it('is idempotent — returns null when the same lesson heading already exists', () => {
+    const existing = '# CRSI Lessons\n\n## timeout: Bash 超时过低\n\n- 建议: 加 timeout\n'
+    const proposal = produceCrsiProposal(
+      [insight({ description: 'Bash 超时过低', suggestion: '加 timeout' })],
+      [],
+      existing,
+      '2026-08-19T00:00:00Z',
+    )
+    expect(proposal).toBeNull()
+  })
+})
+
+describe('proseProposalId', () => {
+  const signal = {
+    category: 'timeout',
+    title: 'npm install 超时过低',
+    severity: 'warning' as const,
+    suggestion: '增加 timeout',
+    evidence: ['npm install 超时'],
+  }
+
+  it('is stable for the same category + title regardless of suggestion/evidence', () => {
+    expect(proseProposalId(signal)).toBe(proseProposalId(signal))
+    expect(proseProposalId(signal)).toBe(
+      proseProposalId({ ...signal, suggestion: '改别的', evidence: ['x', 'y'] }),
+    )
+  })
+
+  it('prefixes with prose-<category>- and differs across category/title', () => {
+    expect(proseProposalId(signal)).toMatch(/^prose-timeout-/)
+    expect(proseProposalId(signal)).not.toBe(
+      proseProposalId({ ...signal, category: 'tool-params' }),
+    )
+    expect(proseProposalId(signal)).not.toBe(proseProposalId({ ...signal, title: '另一标题' }))
   })
 })
 
