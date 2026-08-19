@@ -111,3 +111,29 @@ export async function runTaskN(
   }
   return { taskId: task.id, samples: n, passed, passRate: n > 0 ? passed / n : 0 }
 }
+
+export interface RunComparison {
+  baseline: TaskRunStats
+  candidate: TaskRunStats
+  /** 弱判：candidate 不退化（不低于 baseline 且至少 1 次成功） */
+  notDegraded: boolean
+  /** candidate 严格更好（通过率更高） */
+  improved: boolean
+}
+
+export function isNotDegraded(baseline: TaskRunStats, candidate: TaskRunStats): boolean {
+  return candidate.passRate >= baseline.passRate && candidate.passed >= 1
+}
+
+export function isImproved(baseline: TaskRunStats, candidate: TaskRunStats): boolean {
+  return candidate.passRate > baseline.passRate
+}
+
+export function compareRuns(baseline: TaskRunStats, candidate: TaskRunStats): RunComparison {
+  return {
+    baseline,
+    candidate,
+    notDegraded: isNotDegraded(baseline, candidate),
+    improved: isImproved(baseline, candidate),
+  }
+}

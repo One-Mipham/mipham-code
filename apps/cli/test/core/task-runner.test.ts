@@ -2,7 +2,16 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { loadRunnerTasks, judgeTask, runTask, runTaskN } from '../../src/core/task-runner'
+import {
+  loadRunnerTasks,
+  judgeTask,
+  runTask,
+  runTaskN,
+  isNotDegraded,
+  isImproved,
+  compareRuns,
+  type TaskRunStats,
+} from '../../src/core/task-runner'
 import type { Llm } from '../../src/providers/llm'
 
 describe('loadRunnerTasks', () => {
@@ -136,5 +145,36 @@ describe('runTask systemPrompt 注入', () => {
     const { llm, seen } = makeCaptureLlm()
     await runTask(loadRunnerTasks()[0]!, llm, { taskDir: RUN_DIR })
     expect(seen.some((s) => s.includes('CUSTOM-PROSE'))).toBe(false)
+  })
+})
+
+const stats = (passed: number, samples = 3): TaskRunStats => ({
+  taskId: 't',
+  samples,
+  passed,
+  passRate: samples > 0 ? passed / samples : 0,
+})
+
+describe('compareRuns 弱判', () => {
+  it('candidate 通过率更高 → 不退化且更好', () => {
+    const c = compareRuns(stats(1), stats(2))
+    expect(c.notDegraded).toBe(true)
+    expect(c.improved).toBe(true)
+  })
+
+  it('candidate 退化 → 退化', () => {
+    const c = compareRuns(stats(2), stats(1))
+    expect(c.notDegraded).toBe(false)
+    expect(c.improved).toBe(false)
+  })
+
+  it('candidate 全失败 → 退化（即使 passRate 持平）', () => {
+    expect(isNotDegraded(stats(0), stats(0))).toBe(false)
+  })
+
+  it('candidate 平手但至少 1 次成功 → 不退化、不更好', () => {
+    const c = compareRuns(stats(2), stats(2))
+    expect(c.notDegraded).toBe(true)
+    expect(c.improved).toBe(false)
   })
 })
