@@ -4,8 +4,8 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.4.1
-> **最后更新**: 2026-08-19 — CRSI producer 三路径同信号幂等去重（prose ledger + 教训标题去重）
+> **版本**: 2.4.2
+> **最后更新**: 2026-08-19 — producer 描述修正 + `/crsi prose-clear` 清空机制
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -38,10 +38,10 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 
 - **自我认知** `/crsi inventory` — 能力自报告，聚合 CRSI/SIS/宪法实时状态；系统提示注入「回答能力边界先查状态」规则
 - **沙箱入口** `/crsi modify` — `core/crsi-modify.ts` 两阶段闸门（worktree → 测试 → diff → `--approve`/`--reject`）
-- **producer** `/crsi propose` — `core/crsi-producer.ts` 模板化（无 LLM）把失败信号转成教训文件 `crsi-lessons.md`；`--rule` 毕业路径固化受管理规则 `crsi-managed-rules.ts`（确定性行为，source='managed'）
+- **producer** `/crsi propose` — `core/crsi-producer.ts` 把失败信号转成三类候选：默认教训文件 `crsi-lessons.md`（模板化无 LLM）、`--rule` 固化受管理规则 `crsi-managed-rules.ts`（确定性行为，source='managed'）、`--prose` 两阶段 LLM 改 skill 散文（A1 边界首演：LLM 只生成不判定）；三路径同信号幂等
 - **eval harness** `/crsi eval` — `core/eval-harness.ts` 冻结 20 条 ground-truth 契约（12 机制：规则/宪法/沙箱边界/红队/producer 行为 + 8 行为缺口）+ rewards 日志 `~/.mipham/crsi/eval-scores.jsonl`，`runCrsiModification` 以「分数不退化」为第二道闸。8 行为缺口（rm -rf/管道投毒/git reset --hard/chmod 777/mkfs/dd→/dev//关停主机/crontab -r）已由固化 managed tool-params 规则覆盖 → 全翻转 PASS → 满分 100 =「证明更好」
 
-CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule]|eval` + `/sis errors|stats|clear`
+CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
 测试：1,632 测试（1630 passed + 2 skipped）
 
 ---
@@ -284,6 +284,7 @@ GitHub Actions 5 阶段流水线：`typecheck → lint → format → build-cli 
 
 | 日期       | Commit    | 说明                                                                  |
 | ---------- | --------- | --------------------------------------------------------------------- |
+| 2026-08-19 | `8e9780f` | feat(crsi): prose ledger 清空机制（/crsi prose-clear）                |
 | 2026-08-19 | `3ce4e0e` | feat(crsi): producer 三路径同信号幂等去重                             |
 | 2026-08-19 | `3cf2b31` | feat(crsi): wire /crsi propose --prose into CLI                       |
 | 2026-08-19 | `551e9d1` | feat(crsi): producer prose proposal orchestration (two-stage LLM)     |
@@ -393,6 +394,7 @@ mipham-code 变更（包名/版本）
 
 | 版本  | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                               | 维护人     |
 | ----- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| 2.4.2 | 2026-08-19 | CRSI producer 打磨收尾：prose ledger 清空机制（`clearProseProposals` + `/crsi prose-clear` 命令）补上只增不删缺口；§终极愿景 producer 概述修正（`--prose` 两阶段 LLM + 三路径幂等，不再误写「模板化无 LLM」）；`/crsi` 命令清单补全 meta/interpret/critique/red-team/prose-clear 与 `/sis cleanup`。测试 1632 passed + 2 skipped                                                                       | 技术委员会 |
 | 2.4.1 | 2026-08-19 | CRSI producer 三路径同信号幂等去重：prose 路径 append-only ledger（`~/.mipham/crsi/prose-proposals.jsonl`，`proseProposalId` + `hasProposedProse`/`appendProseProposal`）+ 教训路径标题去重 + `/crsi propose --prose` 产出前查 ledger。`ProducerProposal.id` 由摆设变为真实去重键。测试 1630 passed + 2 skipped                                                                                        | 技术委员会 |
 | 2.4.0 | 2026-08-19 | CRSI 阶段 B 纵深收官：proposal-guard 结构预筛（补 PROTECTED_PATHS 评估机制 5 洞）+ 端到端任务运行器（C-MVP+C-2：runTask/runTaskN/compareRuns/runBeforeAfter）+ producer 散文提议（两阶段 LLM）+ `/crsi propose --prose` 接线。A1 边界决策落地 spec（LLM 只生成不判定）。测试 1624 passed + 2 skipped                                                                                                   | 技术委员会 |
 | 2.3.9 | 2026-08-18 | web-access 升级 v2.5.0：CDP Proxy 直连用户已登录 Chrome（4 脚本 + cdp-api.md 原样照搬 eze-is/web-access）；新增「技能资产」机制（bundled-skill-assets.ts + ensureSkillAssets 提取到 ~/.mipham/skills/）；standard 轨首个带可执行资产的 skill                                                                                                                                                           | 技术委员会 |
