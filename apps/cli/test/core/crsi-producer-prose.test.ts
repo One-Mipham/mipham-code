@@ -3,6 +3,7 @@ import type { Llm } from '../../src/providers/llm'
 import {
   selectTargetSkill,
   generateProseContent,
+  produceProseProposal,
   type CrsiSignal,
 } from '../../src/core/crsi-producer'
 
@@ -63,5 +64,45 @@ describe('generateProseContent', () => {
   it('LLM 返回空响应 → null', async () => {
     const llm = textLlm('')
     expect(await generateProseContent(SIGNAL, llm, 'f.md', 'old')).toBeNull()
+  })
+})
+
+function twoStageLlm(filePath: string, newContent: string): Llm {
+  let calls = 0
+  return {
+    chat: async function* () {
+      calls++
+      if (calls === 1) yield { type: 'text', content: filePath }
+      else yield { type: 'text', content: newContent }
+      yield { type: 'stop' }
+    },
+  }
+}
+
+describe('produceProseProposal', () => {
+  it('两阶段成功 → 返回提议', async () => {
+    const llm = twoStageLlm(
+      SKILL_FILES[0]!,
+      '---\nname: memory\ndescription: improved\n---\n\n# New body\n',
+    )
+    const readSkill = (p: string) => (p === SKILL_FILES[0] ? 'OLD-CONTENT' : '')
+    const result = await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill)
+    expect(result).not.toBeNull()
+    expect(result!.filePath).toBe(SKILL_FILES[0])
+    expect(result!.originalContent).toBe('OLD-CONTENT')
+    expect(result!.newContent).toContain('name: memory')
+  })
+
+  it('阶段 1 选不到 skill → null', async () => {
+    const llm = twoStageLlm('bad-path.md', 'x')
+    expect(await produceProseProposal(SIGNAL, llm, SKILL_FILES, () => '')).toBeNull()
+  })
+
+  it('读原文失败 → null', async () => {
+    const llm = twoStageLlm(SKILL_FILES[0]!, 'x')
+    const readSkill = () => {
+      throw new Error('no file')
+    }
+    expect(await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill)).toBeNull()
   })
 })

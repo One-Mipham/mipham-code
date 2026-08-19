@@ -284,3 +284,32 @@ export async function generateProseContent(
   if (!response) return null
   return stripMarkdownFence(response)
 }
+
+export interface ProseProposalResult {
+  filePath: string
+  newContent: string
+  originalContent: string
+  description: string
+}
+
+export async function produceProseProposal(
+  signal: CrsiSignal,
+  llm: Llm,
+  skillFiles: string[],
+  readSkill: (filePath: string) => string,
+): Promise<ProseProposalResult | null> {
+  const filePath = await selectTargetSkill(signal, llm, skillFiles)
+  if (!filePath) return null
+
+  let originalContent: string
+  try {
+    originalContent = readSkill(filePath)
+  } catch {
+    return null
+  }
+
+  const newContent = await generateProseContent(signal, llm, filePath, originalContent)
+  if (!newContent) return null
+
+  return { filePath, newContent, originalContent, description: signal.title }
+}
