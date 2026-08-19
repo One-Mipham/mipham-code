@@ -14,7 +14,7 @@
 
 - 判定一律确定性 ground-truth，零 LLM 裁判（A1 铁律）。
 - 冻结任务存为源码内 JSON（`import ... with { type: 'json' }`，binary-safe——同 `constitution-loader.ts` 模式，禁止 `readFileSync(new URL(...))`）。
-- 任务产物写 `tmpdir`，绝不碰真实仓库（隔离）。
+- 任务产物写 cwd 内 git-ignored 目录（`.mipham/task-runner`），绝不碰真实仓库源文件（隔离）。**架构约束**：Write 工具 `resolveSafe` 强制写文件在 `process.cwd()` 内，系统 tmpdir 会被拒。
 - 真实 LLM 只作**参数注入**，CI 测试用 mock Llm，不触发 provider 调用。
 - 提交信息遵循 Conventional Commits；每个 task 结束 commit 一次。
 

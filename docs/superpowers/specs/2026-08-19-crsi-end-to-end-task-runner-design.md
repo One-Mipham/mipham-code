@@ -72,7 +72,7 @@
 
 ### 3.3 隔离（复用）
 
-- **MVP**：代码生成任务写 `tmpdir`（任务产物是临时文件），不碰真实仓库。
+- **MVP**：代码生成任务写 cwd 内的 git-ignored 目录（`process.cwd()/.mipham/task-runner`），不碰真实仓库源文件。**架构约束**：Write 工具的 `resolveSafe` 强制「写文件必须在 cwd 内」（`engine.executeTool` 硬编码 `cwd: process.cwd()`），故产物不能写系统 tmpdir（会被拒）。
 - **成熟**：若任务要改真实文件，复用 `CrsiSandbox` 的 worktree 机制。
 
 ### 3.4 判定器 + 统计层（新建）
