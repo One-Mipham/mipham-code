@@ -23,6 +23,16 @@ export async function runSearch(
   return { stdout, timedOut, exitCode: proc.exitCode }
 }
 
+/** grep 输出上限：超过则显式截断并附标记（不能静默丢内容——模型会误以为看全了）。 */
+const GREP_MAX_OUTPUT_CHARS = 50_000
+
+/** 截断 grep 输出：超限时加 "(truncated)" 标记，避免静默截断。 */
+export function truncateGrepOutput(stdout: string): string {
+  const out = stdout || '(no matches)'
+  if (out.length <= GREP_MAX_OUTPUT_CHARS) return out
+  return `${out.slice(0, GREP_MAX_OUTPUT_CHARS)}\n\n... (truncated)`
+}
+
 export const grepTool: ToolDefinition = {
   name: 'Grep',
   description:
@@ -83,7 +93,7 @@ export const grepTool: ToolDefinition = {
       }
       if (exitCode === 1) return { success: true, content: '(no matches)' }
       if (exitCode === 0) {
-        return { success: true, content: stdout.slice(0, 50000) || '(no matches)' }
+        return { success: true, content: truncateGrepOutput(stdout) }
       }
       return {
         success: false,

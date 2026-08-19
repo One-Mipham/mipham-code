@@ -11,7 +11,7 @@ import { createReadTool, readToolService } from '../../src/tools/file/read'
 import { writeTool } from '../../src/tools/file/write'
 import { editTool } from '../../src/tools/file/edit'
 import { globTool } from '../../src/tools/file/glob'
-import { grepTool, runSearch } from '../../src/tools/file/grep'
+import { grepTool, runSearch, truncateGrepOutput } from '../../src/tools/file/grep'
 
 const readTool = createReadTool()
 
@@ -481,6 +481,24 @@ describe('Grep tool execution', () => {
     // Should find in .ts but exclude .txt
     expect(result.content).toContain('a.ts')
     expect(result.content).not.toContain('b.txt')
+  })
+})
+
+describe('truncateGrepOutput', () => {
+  it('leaves short output unchanged', () => {
+    expect(truncateGrepOutput('short\noutput')).toBe('short\noutput')
+  })
+
+  it('returns (no matches) for empty output', () => {
+    expect(truncateGrepOutput('')).toBe('(no matches)')
+  })
+
+  it('marks oversized output as truncated and caps it', () => {
+    const big = 'x'.repeat(60_000)
+    const out = truncateGrepOutput(big)
+    expect(out).toContain('(truncated)')
+    expect(out.length).toBeLessThan(60_000)
+    expect(out.startsWith('x'.repeat(50_000))).toBe(true)
   })
 })
 
