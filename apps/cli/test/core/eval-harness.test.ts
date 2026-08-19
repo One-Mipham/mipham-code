@@ -49,6 +49,14 @@ describe('runEval', () => {
     expect(ids).toContain('producer-rule-shape')
     expect(ids).toContain('producer-rule-idempotent')
   })
+
+  it('includes behavior task results in the report', () => {
+    const report = runEval()
+    const ids = report.results.map((r) => r.id)
+    expect(ids).toContain('behavior-rm-rf')
+    expect(ids).toContain('behavior-leak-anthropic')
+    expect(ids).toContain('behavior-leak-jwt')
+  })
 })
 
 describe('rewards log', () => {
