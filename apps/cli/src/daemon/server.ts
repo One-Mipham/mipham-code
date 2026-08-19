@@ -24,7 +24,9 @@ import { PermissionSystem } from '../core/permission'
 import type { ProviderRegistry } from '../providers/registry'
 import type { ToolDefinition, PermissionMode, PermissionRestrictions } from '../shared/types'
 import { createFeishuAdapter } from './feishu/adapter.js'
+import { createFeishuApi } from './feishu/api.js'
 import type { FeishuConfig } from './feishu/types.js'
+import { startHeartbeat } from './heartbeat'
 
 interface ServerConfig {
   db: DaemonDatabase
@@ -242,6 +244,24 @@ export function createServer(config: ServerConfig): Server<WsData> {
         model: feishu.model,
       })
     : undefined
+
+  // ── 心跳式通知：定时扫 pending（goal/schedule），只通知、不自主行动 ──
+  if (feishu) {
+    const feishuApi = createFeishuApi(feishu.config)
+    startHeartbeat({
+      source: {
+        listGoals: () => sm.listSessions().flatMap((s) => goalManager.getGoals(s.id)),
+        listSchedules: () => sm.listSessions().flatMap((s) => scheduleManager.getSchedules(s.id)),
+      },
+      push: (message) => {
+        for (const openId of feishu.config.allowedOpenIds) {
+          void feishuApi.sendText(openId, message).catch(() => {
+            /* 推送失败静默，不打断心跳 */
+          })
+        }
+      },
+    })
+  }
 
   const server = Bun.serve<WsData>({
     port,
