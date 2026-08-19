@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { loadRunnerTasks, judgeTask } from '../../src/core/task-runner'
+import { loadRunnerTasks, judgeTask, runTask } from '../../src/core/task-runner'
+import type { Llm } from '../../src/providers/llm'
 
 describe('loadRunnerTasks', () => {
   it('加载冻结任务集且结构合法', () => {
@@ -52,5 +53,49 @@ describe('judgeTask', () => {
     const v = judgeTask(task, JUDGE_DIR)
     expect(v.passed).toBe(false)
     expect(v.detail).toContain('not found')
+  })
+})
+
+const RUN_DIR = join(process.cwd(), '.mipham', 'task-runner-test')
+
+function makeWriterLlm(targetFile: string, content: string): Llm {
+  let calls = 0
+  return {
+    chat: async function* () {
+      calls++
+      if (calls === 1) {
+        yield {
+          type: 'tool_use',
+          toolUse: {
+            type: 'tool_use',
+            id: 'call_1',
+            name: 'Write',
+            input: { file_path: targetFile, content },
+          },
+        }
+      }
+      yield { type: 'stop' }
+    },
+  }
+}
+
+describe('runTask', () => {
+  it('mock Llm 写正确内容则通过', async () => {
+    rmSync(RUN_DIR, { recursive: true, force: true })
+    const task = loadRunnerTasks()[0]!
+    const llm = makeWriterLlm(
+      join(RUN_DIR, 'solution.ts'),
+      'export function answer(): number { return 42 }\n',
+    )
+    const result = await runTask(task, llm, { taskDir: RUN_DIR })
+    expect(result.passed).toBe(true)
+  })
+
+  it('mock Llm 写错误内容则失败', async () => {
+    rmSync(RUN_DIR, { recursive: true, force: true })
+    const task = loadRunnerTasks()[0]!
+    const llm = makeWriterLlm(join(RUN_DIR, 'solution.ts'), 'export const x = 1\n')
+    const result = await runTask(task, llm, { taskDir: RUN_DIR })
+    expect(result.passed).toBe(false)
   })
 })
