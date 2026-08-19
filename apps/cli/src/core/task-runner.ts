@@ -9,6 +9,7 @@ import { PermissionSystem } from './permission'
 import { ProviderRegistry } from '../providers/registry'
 import type { Llm } from '../providers/llm'
 import { createToolRegistry } from '../tools'
+import type { PermissionLevel } from '../shared'
 
 export type RunnerGroundTruth = { kind: 'file-contains'; file: string; contains: string[] }
 
@@ -47,7 +48,7 @@ export interface TaskRunResult {
 
 const TASK_DIR_PLACEHOLDER = '<taskDir>'
 
-function buildEngine(llm: Llm, permission: string): QueryEngine {
+function buildEngine(llm: Llm, permission: PermissionLevel): QueryEngine {
   const registry = new ProviderRegistry([], 'test', 'test-model')
   // 注册一个永不 chat 的占位 provider——llm 被 setLlm 覆盖，但 process() 内部
   // 多处调用 registry.getActive().config.id 记录 provider id，必须能取到。
@@ -69,7 +70,7 @@ function buildEngine(llm: Llm, permission: string): QueryEngine {
 export async function runTask(
   task: RunnerTask,
   llm: Llm,
-  opts: { taskDir?: string; permission?: string } = {},
+  opts: { taskDir?: string; permission?: PermissionLevel } = {},
 ): Promise<TaskRunResult> {
   const taskDir = opts.taskDir ?? join(process.cwd(), '.mipham', 'task-runner')
   const permission = opts.permission ?? 'bypassPermissions'
@@ -100,7 +101,7 @@ export async function runTaskN(
   task: RunnerTask,
   llm: Llm,
   n: number,
-  opts: { taskDir?: string; permission?: string } = {},
+  opts: { taskDir?: string; permission?: PermissionLevel } = {},
 ): Promise<TaskRunStats> {
   let passed = 0
   for (let i = 0; i < n; i++) {
