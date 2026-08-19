@@ -113,3 +113,28 @@ describe('runTaskN', () => {
     expect(stats.passRate).toBe(1)
   })
 })
+
+function makeCaptureLlm(): { llm: Llm; seen: string[] } {
+  const seen: string[] = []
+  const llm: Llm = {
+    chat: async function* (req) {
+      seen.push(req.systemPrompt ?? '')
+      yield { type: 'stop' }
+    },
+  }
+  return { llm, seen }
+}
+
+describe('runTask systemPrompt 注入', () => {
+  it('注入的散文进入 LLM 的 systemPrompt', async () => {
+    const { llm, seen } = makeCaptureLlm()
+    await runTask(loadRunnerTasks()[0]!, llm, { taskDir: RUN_DIR, systemPrompt: 'CUSTOM-PROSE' })
+    expect(seen.some((s) => s.includes('CUSTOM-PROSE'))).toBe(true)
+  })
+
+  it('未注入时 systemPrompt 为空', async () => {
+    const { llm, seen } = makeCaptureLlm()
+    await runTask(loadRunnerTasks()[0]!, llm, { taskDir: RUN_DIR })
+    expect(seen.some((s) => s.includes('CUSTOM-PROSE'))).toBe(false)
+  })
+})

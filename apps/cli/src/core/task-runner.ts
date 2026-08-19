@@ -48,7 +48,7 @@ export interface TaskRunResult {
 
 const TASK_DIR_PLACEHOLDER = '<taskDir>'
 
-function buildEngine(llm: Llm, permission: PermissionLevel): QueryEngine {
+function buildEngine(llm: Llm, permission: PermissionLevel, systemPrompt?: string): QueryEngine {
   const registry = new ProviderRegistry([], 'test', 'test-model')
   // 注册一个永不 chat 的占位 provider——llm 被 setLlm 覆盖，但 process() 内部
   // 多处调用 registry.getActive().config.id 记录 provider id，必须能取到。
@@ -61,6 +61,7 @@ function buildEngine(llm: Llm, permission: PermissionLevel): QueryEngine {
     healthCheck: async () => true,
   })
   const context = new ContextManager({ maxTokens: 100_000, compactionThreshold: 0.9 })
+  if (systemPrompt !== undefined) context.setSystemPrompt(systemPrompt)
   const tools = createToolRegistry()
   const engine = new QueryEngine(registry, context, tools, new PermissionSystem(permission))
   engine.setLlm(llm)
@@ -70,7 +71,7 @@ function buildEngine(llm: Llm, permission: PermissionLevel): QueryEngine {
 export async function runTask(
   task: RunnerTask,
   llm: Llm,
-  opts: { taskDir?: string; permission?: PermissionLevel } = {},
+  opts: { taskDir?: string; permission?: PermissionLevel; systemPrompt?: string } = {},
 ): Promise<TaskRunResult> {
   const taskDir = opts.taskDir ?? join(process.cwd(), '.mipham', 'task-runner')
   const permission = opts.permission ?? 'bypassPermissions'
@@ -79,7 +80,7 @@ export async function runTask(
   mkdirSync(taskDir, { recursive: true })
 
   const instruction = task.instruction.replaceAll(TASK_DIR_PLACEHOLDER, taskDir)
-  const engine = buildEngine(llm, permission)
+  const engine = buildEngine(llm, permission, opts.systemPrompt)
 
   for await (const _ of engine.process(instruction)) {
     /* drain agentic loop */
@@ -101,7 +102,7 @@ export async function runTaskN(
   task: RunnerTask,
   llm: Llm,
   n: number,
-  opts: { taskDir?: string; permission?: PermissionLevel } = {},
+  opts: { taskDir?: string; permission?: PermissionLevel; systemPrompt?: string } = {},
 ): Promise<TaskRunStats> {
   let passed = 0
   for (let i = 0; i < n; i++) {
