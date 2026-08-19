@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import type { Llm } from '../../src/providers/llm'
-import { selectTargetSkill, type CrsiSignal } from '../../src/core/crsi-producer'
+import {
+  selectTargetSkill,
+  generateProseContent,
+  type CrsiSignal,
+} from '../../src/core/crsi-producer'
 
 const SIGNAL: CrsiSignal = {
   category: 'timeout',
@@ -38,5 +42,26 @@ describe('selectTargetSkill', () => {
   it('LLM 返回不在列表内的路径 → null', async () => {
     const llm = textLlm('apps/cli/skills/standard/nonexistent.SKILL.md')
     expect(await selectTargetSkill(SIGNAL, llm, SKILL_FILES)).toBeNull()
+  })
+})
+
+describe('generateProseContent', () => {
+  it('LLM 返回新内容 → 返回（去 markdown 包裹）', async () => {
+    const llm = textLlm(
+      '```markdown\n---\nname: memory\ndescription: improved\n---\n\n# Improved\n```',
+    )
+    const result = await generateProseContent(
+      SIGNAL,
+      llm,
+      'apps/cli/skills/standard/memory.SKILL.md',
+      'old',
+    )
+    expect(result).toContain('name: memory')
+    expect(result).not.toContain('```')
+  })
+
+  it('LLM 返回空响应 → null', async () => {
+    const llm = textLlm('')
+    expect(await generateProseContent(SIGNAL, llm, 'f.md', 'old')).toBeNull()
   })
 })

@@ -242,3 +242,45 @@ export async function selectTargetSkill(
   if (!response) return null
   return extractFilePath(response, skillFiles)
 }
+
+const PROSE_GENERATE_PROMPT_VERSION = '1.0.0'
+
+function buildGenerateProsePrompt(
+  signal: CrsiSignal,
+  filePath: string,
+  originalContent: string,
+): string {
+  return [
+    '你是 CRSI producer。基于失败信号，改进目标 skill 的内容。',
+    '',
+    '失败信号：',
+    `- category: ${signal.category}`,
+    `- title: ${signal.title}`,
+    `- suggestion: ${signal.suggestion}`,
+    `- evidence: ${signal.evidence.join(' | ')}`,
+    '',
+    `目标文件：${filePath}`,
+    '',
+    '当前内容：',
+    originalContent,
+    '',
+    '请返回改进后的完整 markdown（保持 YAML frontmatter 的 name/description 字段，正文针对失败信号做针对性改进）。只返回 markdown，不要额外说明。',
+  ].join('\n')
+}
+
+function stripMarkdownFence(text: string): string {
+  const match = text.match(/^```(?:markdown|md)?\s*\n([\s\S]*?)\n```\s*$/)
+  return match ? match[1]! : text
+}
+
+export async function generateProseContent(
+  signal: CrsiSignal,
+  llm: Llm,
+  filePath: string,
+  originalContent: string,
+): Promise<string | null> {
+  const prompt = buildGenerateProsePrompt(signal, filePath, originalContent)
+  const response = await collectLlmText(llm, prompt)
+  if (!response) return null
+  return stripMarkdownFence(response)
+}
