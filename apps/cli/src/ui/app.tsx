@@ -12,7 +12,12 @@ import { saveProviderApiKey } from '../config/loader'
 import { AgentRegistry } from '../agent/agent-registry'
 import { getBackgroundAgentRegistry } from '../agent/background-registry'
 import { getMessageRouter, parseMention, resolveRecipientSession } from '../agent/message-router'
-import { discoverSessions } from '../agent/cross-session/discovery'
+import {
+  discoverSessions,
+  renameActiveSession,
+  deriveSessionTitle,
+  isDefaultSessionName,
+} from '../agent/cross-session/discovery'
 import { ChatPanel } from './chat'
 import { InputBar } from './input'
 import { ModelPicker } from './picker'
@@ -506,6 +511,21 @@ export function App({
       }
 
       // ── Normal message processing (AI chat) ──
+      // First user message: auto-name the session if it still carries the
+      // default cwd-basename name (respecting any manual /rename).
+      if (
+        engine
+          .getContext()
+          .getMessages()
+          .every((m) => m.role !== 'user')
+      ) {
+        const currentName = discoverSessions().find((s) => s.id === sessionId)?.name
+        if (isDefaultSessionName(currentName, process.cwd())) {
+          const title = deriveSessionTitle(input)
+          if (title && sessionId) renameActiveSession(sessionId, title)
+        }
+      }
+
       setMessages((prev) => [...prev, { role: 'user', content: input }])
       setIsLoading(true)
 

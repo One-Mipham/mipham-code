@@ -7,7 +7,7 @@ import {
   unlinkSync,
   statSync,
 } from 'node:fs'
-import { join } from 'node:path'
+import { join, basename } from 'node:path'
 import { homedir, hostname } from 'node:os'
 import type { SessionInfo } from '../../shared/types'
 
@@ -140,4 +140,29 @@ export function renameActiveSession(sessionId: string, newName: string): string 
   info.name = ensureUniqueSessionName(newName, others)
   writeFileSync(filePath, JSON.stringify(info, null, 2), 'utf-8')
   return info.name
+}
+
+/**
+ * Derive a human-readable session title from the first user message.
+ * Collapses whitespace and truncates to 40 chars. Returns null when the
+ * result is too short (< 3 chars) to be a meaningful title, so callers can
+ * keep the existing default name instead of degrading it.
+ */
+export function deriveSessionTitle(input: string): string | null {
+  const cleaned = input.replace(/\s+/g, ' ').trim()
+  if (cleaned.length < 3) return null
+  return cleaned.length > 40 ? cleaned.slice(0, 40) + '…' : cleaned
+}
+
+/**
+ * Whether `name` is still the auto-generated default (the cwd basename, or a
+ * uniqueness suffix like `-2`/`-10`). Used to avoid overwriting a name the
+ * user deliberately chose via /rename.
+ */
+export function isDefaultSessionName(name: string | undefined, cwd: string): boolean {
+  if (!name) return false
+  const base = basename(cwd) || 'session'
+  if (name === base) return true
+  if (!name.startsWith(base + '-')) return false
+  return /^\d+$/.test(name.slice(base.length + 1))
 }

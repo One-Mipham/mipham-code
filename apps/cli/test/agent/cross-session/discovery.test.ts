@@ -18,6 +18,8 @@ import {
   renameActiveSession,
   registerActiveSession,
   discoverSessions,
+  deriveSessionTitle,
+  isDefaultSessionName,
 } from '../../../src/agent/cross-session/discovery'
 import type { SessionInfo } from '../../../src/shared/types'
 
@@ -104,5 +106,49 @@ describe('stale session pruning', () => {
     registerActiveSession(makeSession('fresh-1', 'fresh'))
     const sessions = discoverSessions()
     expect(sessions.find((s) => s.id === 'fresh-1')).toBeDefined()
+  })
+})
+
+describe('deriveSessionTitle', () => {
+  it('keeps a short clean message as-is', () => {
+    expect(deriveSessionTitle('fix the login bug')).toBe('fix the login bug')
+  })
+
+  it('collapses newlines and repeated spaces to single spaces', () => {
+    expect(deriveSessionTitle('add\n  a  \n  feature')).toBe('add a feature')
+  })
+
+  it('truncates long input to 40 chars with ellipsis', () => {
+    const long = 'x'.repeat(100)
+    expect(deriveSessionTitle(long)).toBe('x'.repeat(40) + '…')
+  })
+
+  it('returns null for too-short input', () => {
+    expect(deriveSessionTitle('hi')).toBeNull()
+    expect(deriveSessionTitle('你好')).toBeNull()
+    expect(deriveSessionTitle('   ')).toBeNull()
+  })
+})
+
+describe('isDefaultSessionName', () => {
+  it('matches the bare cwd basename', () => {
+    expect(isDefaultSessionName('mipham-code', '/tmp/mipham-code')).toBe(true)
+  })
+
+  it('matches unique suffixes like -2 and -10', () => {
+    expect(isDefaultSessionName('mipham-code-2', '/tmp/mipham-code')).toBe(true)
+    expect(isDefaultSessionName('mipham-code-10', '/tmp/mipham-code')).toBe(true)
+  })
+
+  it('rejects a user-chosen name', () => {
+    expect(isDefaultSessionName('login-feature', '/tmp/mipham-code')).toBe(false)
+  })
+
+  it('rejects a non-numeric suffix', () => {
+    expect(isDefaultSessionName('mipham-code-feature', '/tmp/mipham-code')).toBe(false)
+  })
+
+  it('rejects undefined name', () => {
+    expect(isDefaultSessionName(undefined, '/tmp/mipham-code')).toBe(false)
   })
 })
