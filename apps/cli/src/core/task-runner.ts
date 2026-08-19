@@ -87,3 +87,25 @@ export async function runTask(
   const verdict = judgeTask(task, taskDir)
   return { taskId: task.id, passed: verdict.passed, detail: verdict.detail }
 }
+
+export interface TaskRunStats {
+  taskId: string
+  samples: number
+  passed: number
+  /** 0-1 */
+  passRate: number
+}
+
+export async function runTaskN(
+  task: RunnerTask,
+  llm: Llm,
+  n: number,
+  opts: { taskDir?: string; permission?: string } = {},
+): Promise<TaskRunStats> {
+  let passed = 0
+  for (let i = 0; i < n; i++) {
+    const result = await runTask(task, llm, opts)
+    if (result.passed) passed++
+  }
+  return { taskId: task.id, samples: n, passed, passRate: n > 0 ? passed / n : 0 }
+}

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { loadRunnerTasks, judgeTask, runTask } from '../../src/core/task-runner'
+import { loadRunnerTasks, judgeTask, runTask, runTaskN } from '../../src/core/task-runner'
 import type { Llm } from '../../src/providers/llm'
 
 describe('loadRunnerTasks', () => {
@@ -59,11 +59,11 @@ describe('judgeTask', () => {
 const RUN_DIR = join(process.cwd(), '.mipham', 'task-runner-test')
 
 function makeWriterLlm(targetFile: string, content: string): Llm {
-  let calls = 0
   return {
-    chat: async function* () {
-      calls++
-      if (calls === 1) {
+    chat: async function* (req) {
+      // 无状态：第一次 chat（尚无 assistant 消息）发起 Write，后续（continueWithTools）纯 stop。
+      const alreadyActed = req.messages.some((m) => m.role === 'assistant')
+      if (!alreadyActed) {
         yield {
           type: 'tool_use',
           toolUse: {
@@ -97,5 +97,19 @@ describe('runTask', () => {
     const llm = makeWriterLlm(join(RUN_DIR, 'solution.ts'), 'export const x = 1\n')
     const result = await runTask(task, llm, { taskDir: RUN_DIR })
     expect(result.passed).toBe(false)
+  })
+})
+
+describe('runTaskN', () => {
+  it('统计 n 次采样的通过率', async () => {
+    const task = loadRunnerTasks()[0]!
+    const llm = makeWriterLlm(
+      join(RUN_DIR, 'solution.ts'),
+      'export function answer(): number { return 42 }\n',
+    )
+    const stats = await runTaskN(task, llm, 2, { taskDir: RUN_DIR })
+    expect(stats.samples).toBe(2)
+    expect(stats.passed).toBe(2)
+    expect(stats.passRate).toBe(1)
   })
 })
