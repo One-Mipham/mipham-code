@@ -22,7 +22,7 @@ import { bootstrapProviders } from '../providers/bootstrap'
 import { createToolRegistry } from '../tools'
 import { PermissionSystem } from '../core/permission'
 import type { ProviderRegistry } from '../providers/registry'
-import type { ToolDefinition, PermissionMode } from '../shared/types'
+import type { ToolDefinition, PermissionMode, PermissionRestrictions } from '../shared/types'
 import { createFeishuAdapter } from './feishu/adapter.js'
 import type { FeishuConfig } from './feishu/types.js'
 
@@ -65,6 +65,18 @@ function resolveDaemonPermission(): PermissionMode {
   return fromEnv && DAEMON_PERMISSION_MODES.has(fromEnv as PermissionMode)
     ? (fromEnv as PermissionMode)
     : 'default'
+}
+
+/**
+ * Build the daemon's PermissionSystem, honoring org-level restrictions
+ * (permissionRestrictions). setRestrictions re-clamps the env-derived mode,
+ * so a `MIPHAM_DAEMON_PERMISSION=bypassPermissions` is downgraded when the
+ * config forbids it — mirroring the CLI's fail-closed behavior.
+ */
+export function buildDaemonPermission(restrictions?: PermissionRestrictions): PermissionSystem {
+  const permission = new PermissionSystem(resolveDaemonPermission())
+  if (restrictions) permission.setRestrictions(restrictions)
+  return permission
 }
 
 const DAEMON_DEFAULT_CONTEXT_WINDOW = 200_000
@@ -185,7 +197,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
       }
     }
 
-    const permission = new PermissionSystem(resolveDaemonPermission())
+    const permission = buildDaemonPermission(loadConfig(cwd).permissionRestrictions)
     const engine = new QueryEngine(sharedRegistry, context, sharedTools, permission)
     engine.setSessionId(sessionId)
     engineCache.set(sessionId, engine)
