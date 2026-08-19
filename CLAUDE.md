@@ -4,8 +4,8 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.3.9
-> **最后更新**: 2026-08-18 — web-access 升级 v2.5.0（CDP Proxy 直连已登录 Chrome + 技能资产机制）
+> **版本**: 2.4.0
+> **最后更新**: 2026-08-19 — CRSI 阶段 B 纵深收官（producer 散文提议 + 端到端任务运行器 + 结构预筛）
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -42,7 +42,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **eval harness** `/crsi eval` — `core/eval-harness.ts` 冻结 20 条 ground-truth 契约（12 机制：规则/宪法/沙箱边界/红队/producer 行为 + 8 行为缺口）+ rewards 日志 `~/.mipham/crsi/eval-scores.jsonl`，`runCrsiModification` 以「分数不退化」为第二道闸。8 行为缺口（rm -rf/管道投毒/git reset --hard/chmod 777/mkfs/dd→/dev//关停主机/crontab -r）已由固化 managed tool-params 规则覆盖 → 全翻转 PASS → 满分 100 =「证明更好」
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule]|eval` + `/sis errors|stats|clear`
-测试：1,567 测试（1565 passed + 2 skipped）
+测试：1,626 测试（1624 passed + 2 skipped）
 
 ---
 
@@ -79,7 +79,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 25 个内置技能（20 standard + 5 mipham）
-│   │   ├── test/               # 127 个测试文件，1567 个测试
+│   │   ├── test/               # 131 个测试文件，1626 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -102,7 +102,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（1567 个测试）
+pnpm test         # vitest run（1626 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -226,7 +226,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
 | E2E      | 1       | 8        | full-pipeline                                 |
 | Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **127** | **1567** | **0 失败** ✅（1565 passed + 2 skipped）      |
+| **合计** | **131** | **1626** | **0 失败** ✅（1624 passed + 2 skipped）      |
 
 > 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
 
@@ -284,6 +284,15 @@ GitHub Actions 5 阶段流水线：`typecheck → lint → format → build-cli 
 
 | 日期       | Commit    | 说明                                                                  |
 | ---------- | --------- | --------------------------------------------------------------------- |
+| 2026-08-19 | `3cf2b31` | feat(crsi): wire /crsi propose --prose into CLI                       |
+| 2026-08-19 | `551e9d1` | feat(crsi): producer prose proposal orchestration (two-stage LLM)     |
+| 2026-08-19 | `38cd106` | feat(crsi): producer prose proposal stage 1 — select target skill     |
+| 2026-08-19 | `5c25810` | feat(crsi): add runBeforeAfter two-round prose comparison             |
+| 2026-08-19 | `da6d1c8` | feat(crsi): add run comparison (compareRuns / isNotDegraded)          |
+| 2026-08-19 | `69dc96c` | feat(crsi): task-runner systemPrompt injection for prose comparison   |
+| 2026-08-19 | `e0afbf4` | feat(crsi): add task-runner end-to-end runTask (engine + setLlm)      |
+| 2026-08-19 | `96c1a4c` | feat(crsi): add proposal guard — structural pre-filter (block 2)      |
+| 2026-08-19 | `b15ef81` | fix(crsi): close eval-machinery self-reference gap in PROTECTED_PATHS |
 | 2026-08-18 | `062899d` | docs(claude): 待办收口 — 4 条已完成转档 + 测试数对齐 1561             |
 | 2026-08-18 | `ae54082` | fix(ci): guard JetBrains publish via env var, not if: secrets         |
 | 2026-08-18 | `eb4d2cc` | fix(ci): drop setup-gradle — working-directory on uses: schema 违规   |
@@ -383,6 +392,7 @@ mipham-code 变更（包名/版本）
 
 | 版本  | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                               | 维护人     |
 | ----- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| 2.4.0 | 2026-08-19 | CRSI 阶段 B 纵深收官：proposal-guard 结构预筛（补 PROTECTED_PATHS 评估机制 5 洞）+ 端到端任务运行器（C-MVP+C-2：runTask/runTaskN/compareRuns/runBeforeAfter）+ producer 散文提议（两阶段 LLM）+ `/crsi propose --prose` 接线。A1 边界决策落地 spec（LLM 只生成不判定）。测试 1624 passed + 2 skipped                                                                                                   | 技术委员会 |
 | 2.3.9 | 2026-08-18 | web-access 升级 v2.5.0：CDP Proxy 直连用户已登录 Chrome（4 脚本 + cdp-api.md 原样照搬 eze-is/web-access）；新增「技能资产」机制（bundled-skill-assets.ts + ensureSkillAssets 提取到 ~/.mipham/skills/）；standard 轨首个带可执行资产的 skill                                                                                                                                                           | 技术委员会 |
 | 2.3.8 | 2026-08-18 | 新增 doc-sync skill（借 Truthmark 的 Truth Sync 概念，Map/Check/Update/Verify 四步 + 不变量铁律：只碰 docs/truth/**）；修复 self-audit YAML（description 冒号未加引号 → 自 7006c83 起静默 skip，现 5 个 mipham skill 全加载）；skills 24→25；纠正 debug-loop（frontmatter name=debug-loop，文件名 systematic-debugging，2.3.7 误删）                                                                   | 技术委员会 |
 | 2.3.7 | 2026-08-18 | 全量数字对齐：skills 23→24（+self-audit）、tools 30→31（+listAgents）、slash 命令 93→102、「最近提交」表刷新至 08-18；修正标准技能列表（移除已删除的 debug-loop）                                                                                                                                                                                                                                      | 技术委员会 |
