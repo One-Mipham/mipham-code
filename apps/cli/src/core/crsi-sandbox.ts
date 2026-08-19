@@ -107,10 +107,15 @@ const PROTECTED_PATHS = [
   'apps/cli/src/vajra/constitution.ts',
   // eval harness
   'apps/cli/test/',
+  'apps/cli/src/core/eval-harness.ts',
+  'apps/cli/src/core/behavior-tasks.ts',
+  'apps/cli/src/core/behavior-tasks.json',
   // 改进机制自身
   'apps/cli/src/agent/effectiveness-tracker.ts',
   'apps/cli/src/core/meta-rule-engine.ts',
   'apps/cli/src/core/crsi-sandbox.ts',
+  'apps/cli/src/core/crsi-producer.ts',
+  'apps/cli/src/core/proposal-guard.ts',
 ]
 
 /** 是否命中只读边界。前缀匹配，目录条目以 `/` 结尾。 */
