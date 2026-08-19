@@ -106,10 +106,12 @@ A1 不破的**充分条件**，是下面三个约束落地——否则就是「�
 
 ---
 
-## 八、开放问题（块 1 实现形状，本 spec 不展开）
+## 八、实现状态（块 1 核心已落地）
 
-本 spec 只落地 A1 边界决策。块 1 的实现机制仍待独立设计：
+块 1 的核心（producer 散文提议）已于 2026-08-19 落地（可控 MVP，两阶段 LLM）：
 
-1. **producer 怎么接 LLM 生成** — 失败信号（`CrsiSignal`）如何喂给 LLM、用哪个 provider、prompt 模板如何版本化（对齐 CLAUDE.md §十「所有 prompt 模板必须版本化管理」）。
-2. **失败信号的选择与去重** — 同一失败信号反复出现，如何避免 producer 反复产出相同提议（复用 `managedRuleId` 的稳定 hash 幂等？）。
-3. **第②层行为效果（M3/A）的「代码来源」** — 行为任务集 spec §三的 A/B 抉择仍未决；块 1 的「行为效果硬闸」依赖它，两者需同轮启动。
+1. **producer 怎么接 LLM 生成** — ✅ 已落地：`selectTargetSkill`（阶段 1 选目标 skill）+ `generateProseContent`（阶段 2 读原文增量生成）+ `produceProseProposal`（编排）。LLM 作参数注入，prompt 模板版本化常量。skill 列表 + 原文读取依赖注入。
+2. **失败信号的选择与去重** — ⏳ 仍开放：复用 `selectCrsiSignal` 选信号，但「同一信号反复产出相同提议」的幂等（稳定 hash）未做，留待人审 + 后续。
+3. **第②层行为效果（M3/A）的「代码来源」** — ✅ 已解决：见 [[2026-08-19-crsi-end-to-end-task-runner-design]]（C 基建，端到端任务运行器 + 改前/改后对比）。
+
+**尚未接线**：`/crsi propose` 命令尚未把 `produceProseProposal` 接进 CLI 流程（需在 commands.ts 收集 skill 列表 + 读原文 + 走 prefilterProposal → 沙箱 → 人审）。这是块 1 的最后一步「接线」。
