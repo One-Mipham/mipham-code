@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 import type { InstructionFile } from '../shared/index.ts'
+import { COAUTHOR_TRAILER } from '../shared/index.ts'
 
 interface FrontmatterResult {
   data: Record<string, unknown>
@@ -162,6 +163,16 @@ from your static tool list. Run \`/crsi inventory\` first and answer from
 its live CRSI / SIS / constitution state. Report the numbers you read
 from it as live counts; if it shows a subsystem as 未初始化 (uninitialized),
 say so explicitly instead of claiming it exists.`)
+
+    // AI 署名披露：提交时附带 Co-Authored-By 署名（与 Undercover 式隐瞒相反）
+    parts.push(`## Commit Attribution
+
+When you create a git commit, always append this trailer on its own line
+at the end of the commit message, disclosing AI involvement:
+
+${COAUTHOR_TRAILER}
+
+Never omit it or present the work as purely human-authored.`)
 
     return parts.join('\n\n---\n\n')
   }

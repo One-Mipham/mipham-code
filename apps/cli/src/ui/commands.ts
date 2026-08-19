@@ -27,7 +27,7 @@ import {
 } from '../core/crsi-producer'
 import { prefilterProposal } from '../core/proposal-guard'
 import { runEval, appendEvalScore } from '../core/eval-harness'
-import { NPM_UPDATE_COMMAND, PACKAGE_VERSION } from '../shared/index.ts'
+import { NPM_UPDATE_COMMAND, PACKAGE_VERSION, COAUTHOR_TRAILER } from '../shared/index.ts'
 import { getPreference } from '../config/preferences'
 import { loadCrossSessionConfig } from '../config/loader'
 import { stripIndent } from './strip-indent.js'
@@ -4356,10 +4356,10 @@ const forkCmd: CommandHandler = async (ctx, args) => {
         ex(`git -C ${wtPath} add -A`, { stdio: 'ignore', timeout: 10_000 })
         const st = ex(`git -C ${wtPath} status --porcelain`, { encoding: 'utf-8', timeout: 10_000 })
         if (st.trim()) {
-          ex(
-            `git -C ${wtPath} commit -m "feat: ${prompt.slice(0, 60)}\n\nCo-Authored-By: Claude <noreply@anthropic.com>"`,
-            { stdio: 'ignore', timeout: 10_000 },
-          )
+          ex(`git -C ${wtPath} commit -m "feat: ${prompt.slice(0, 60)}\n\n${COAUTHOR_TRAILER}"`, {
+            stdio: 'ignore',
+            timeout: 10_000,
+          })
           ex(`git push origin ${branch}`, { stdio: 'ignore', timeout: 30_000 })
         }
       } catch {

@@ -49,6 +49,9 @@ export const BRAND_NAME = 'MiphamAI' as const
 /** 产品名称 */
 export const PRODUCT_NAME = 'Mipham Code' as const
 
+/** AI 提交时的 Co-Authored-By 署名（品牌默认 Mipham，企业/团队可覆盖为自身名）。 */
+export const COAUTHOR_TRAILER = 'Co-Authored-By: Mipham <noreply@mipham.ai>' as const
+
 /** 公司名称（英文） */
 export const COMPANY_NAME_EN = 'One Mipham Corporation' as const
 

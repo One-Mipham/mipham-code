@@ -21,7 +21,7 @@ Types: feat, fix, chore, docs, test, refactor, ci, perf, style, revert
 Co-author AI contributions:
 
 ```
-Co-Authored-By: Claude <noreply@anthropic.com>
+Co-Authored-By: Mipham <noreply@mipham.ai>
 ```
 
 ## Pull Requests
