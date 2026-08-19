@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "tasks": [
+    {
+      "id": "task-answer-fn",
+      "instruction": "用 Write 工具在 <taskDir>/solution.ts 写入一个 TypeScript 文件，导出 `export function answer(): number { return 42 }`。",
+      "groundTruth": {
+        "kind": "file-contains",
+        "file": "solution.ts",
+        "contains": ["export function answer", "42"]
+      }
+    }
+  ]
+}
