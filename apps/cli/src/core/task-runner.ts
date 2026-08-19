@@ -137,3 +137,27 @@ export function compareRuns(baseline: TaskRunStats, candidate: TaskRunStats): Ru
     improved: isImproved(baseline, candidate),
   }
 }
+
+export async function runBeforeAfter(
+  task: RunnerTask,
+  llm: Llm,
+  n: number,
+  opts: {
+    beforePrompt?: string
+    afterPrompt?: string
+    taskDir?: string
+    permission?: PermissionLevel
+  } = {},
+): Promise<RunComparison> {
+  const baseline = await runTaskN(task, llm, n, {
+    taskDir: opts.taskDir,
+    permission: opts.permission,
+    systemPrompt: opts.beforePrompt,
+  })
+  const candidate = await runTaskN(task, llm, n, {
+    taskDir: opts.taskDir,
+    permission: opts.permission,
+    systemPrompt: opts.afterPrompt,
+  })
+  return compareRuns(baseline, candidate)
+}

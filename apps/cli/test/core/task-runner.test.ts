@@ -7,6 +7,7 @@ import {
   judgeTask,
   runTask,
   runTaskN,
+  runBeforeAfter,
   isNotDegraded,
   isImproved,
   compareRuns,
@@ -176,5 +177,24 @@ describe('compareRuns 弱判', () => {
     const c = compareRuns(stats(2), stats(2))
     expect(c.notDegraded).toBe(true)
     expect(c.improved).toBe(false)
+  })
+})
+
+describe('runBeforeAfter', () => {
+  it('跑 baseline + candidate 两轮并对比', async () => {
+    const task = loadRunnerTasks()[0]!
+    const llm = makeWriterLlm(
+      join(RUN_DIR, 'solution.ts'),
+      'export function answer(): number { return 42 }\n',
+    )
+    const c = await runBeforeAfter(task, llm, 2, {
+      beforePrompt: 'OLD-PROSE',
+      afterPrompt: 'NEW-PROSE',
+      taskDir: RUN_DIR,
+    })
+    expect(c.baseline.samples).toBe(2)
+    expect(c.candidate.samples).toBe(2)
+    // mock Llm 不区分散文，两轮都写对 → 平手，不退化
+    expect(c.notDegraded).toBe(true)
   })
 })
