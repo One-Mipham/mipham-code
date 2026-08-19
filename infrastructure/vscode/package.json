@@ -2,7 +2,7 @@
   "name": "mipham-code",
   "displayName": "Mipham Code",
   "description": "Multi-model AI coding terminal for VS Code — 30 tools, 7 providers, background agents, plan mode",
-  "version": "0.49.0",
+  "version": "0.50.0",
   "publisher": "miphamai",
   "license": "Apache-2.0",
   "repository": "https://github.com/One-Mipham/mipham-code",
