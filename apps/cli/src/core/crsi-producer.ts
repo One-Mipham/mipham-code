@@ -195,7 +195,7 @@ const PROSE_SELECT_PROMPT_VERSION = '1.0.0'
 
 function buildSelectSkillPrompt(signal: CrsiSignal, skillFiles: string[]): string {
   return [
-    '你是 CRSI producer。给定失败信号，从候选 skill 文件列表中选出最相关的一个，返回其文件路径（只返回路径，一行，不要其他文字）。',
+    `你是 CRSI producer（producer-prose-select v${PROSE_SELECT_PROMPT_VERSION}）。给定失败信号，从候选 skill 文件列表中选出最相关的一个，返回其文件路径（只返回路径，一行，不要其他文字）。`,
     '',
     '失败信号：',
     `- category: ${signal.category}`,
@@ -251,7 +251,7 @@ function buildGenerateProsePrompt(
   originalContent: string,
 ): string {
   return [
-    '你是 CRSI producer。基于失败信号，改进目标 skill 的内容。',
+    `你是 CRSI producer（producer-prose-generate v${PROSE_GENERATE_PROMPT_VERSION}）。基于失败信号，改进目标 skill 的内容。`,
     '',
     '失败信号：',
     `- category: ${signal.category}`,
