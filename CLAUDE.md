@@ -4,8 +4,8 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.4.3
-> **最后更新**: 2026-08-19 — daemon 尊重 `permissionRestrictions` + 权限文档补记
+> **版本**: 2.4.4
+> **最后更新**: 2026-08-19 — daemon 心跳式通知（保守版 KAIROS 推送）
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -284,6 +284,7 @@ GitHub Actions 5 阶段流水线：`typecheck → lint → format → build-cli 
 
 | 日期       | Commit    | 说明                                                                  |
 | ---------- | --------- | --------------------------------------------------------------------- |
+| 2026-08-19 | `b64ceda` | feat(daemon): 心跳式通知（保守版 KAIROS 推送）                        |
 | 2026-08-19 | `401882e` | feat(daemon): 尊重 org 级 permissionRestrictions                      |
 | 2026-08-19 | `8e9780f` | feat(crsi): prose ledger 清空机制（/crsi prose-clear）                |
 | 2026-08-19 | `3ce4e0e` | feat(crsi): producer 三路径同信号幂等去重                             |
@@ -395,6 +396,7 @@ mipham-code 变更（包名/版本）
 
 | 版本  | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                               | 维护人     |
 | ----- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| 2.4.4 | 2026-08-19 | daemon 心跳式通知（保守版 KAIROS 推送）：`heartbeat.ts`（`collectPendingItems`/`buildHeartbeatMessage`/`heartbeatTick` 纯函数 + `startHeartbeat` 薄接线），feishu 配置时定时扫 pending goal/schedule 推摘要。只通知、不自主行动（CRSI 受约束哲学，借鉴 Claude Code KAIROS「订阅与推送」）。测试 1646 passed + 2 skipped                                                                                | 技术委员会 |
 | 2.4.3 | 2026-08-19 | daemon 尊重 org 级 `permissionRestrictions`：抽取 `buildDaemonPermission(restrictions?)`，daemon 的 PermissionSystem 应用 config 的 `permissionRestrictions`（`MIPHAM_DAEMON_PERMISSION=bypassPermissions` 被 `forbiddenModes` 强制降级，fail-closed，与 CLI 对齐）；权限文档补记（CLAUDE.md 权限段 + defaults.ts 注释）。测试 1638 passed + 2 skipped                                                 | 技术委员会 |
 | 2.4.2 | 2026-08-19 | CRSI producer 打磨收尾：prose ledger 清空机制（`clearProseProposals` + `/crsi prose-clear` 命令）补上只增不删缺口；§终极愿景 producer 概述修正（`--prose` 两阶段 LLM + 三路径幂等，不再误写「模板化无 LLM」）；`/crsi` 命令清单补全 meta/interpret/critique/red-team/prose-clear 与 `/sis cleanup`。测试 1632 passed + 2 skipped                                                                       | 技术委员会 |
 | 2.4.1 | 2026-08-19 | CRSI producer 三路径同信号幂等去重：prose 路径 append-only ledger（`~/.mipham/crsi/prose-proposals.jsonl`，`proseProposalId` + `hasProposedProse`/`appendProseProposal`）+ 教训路径标题去重 + `/crsi propose --prose` 产出前查 ledger。`ProducerProposal.id` 由摆设变为真实去重键。测试 1630 passed + 2 skipped                                                                                        | 技术委员会 |
