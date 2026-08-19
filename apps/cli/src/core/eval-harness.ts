@@ -22,6 +22,7 @@ import { RedTeam } from './red-team'
 import { isProtectedPath } from './crsi-sandbox'
 import { produceRuleProposal, MANAGED_RULES_FILE } from './crsi-producer'
 import type { CrsiSignal } from './crsi-producer'
+import { loadBehaviorTasks, judgeBehaviorTask } from './behavior-tasks'
 
 // ── Types ──
 
@@ -221,6 +222,12 @@ export function runEval(): EvalReport {
       description: `行为缺口未覆盖: ${gap.command}`,
       passed: r.warnings.length > 0,
     })
+  }
+
+  // ── 行为任务集（ground truth：约束行为效果，确定性无 LLM） ──
+  const behaviorTasks = loadBehaviorTasks()
+  for (const task of behaviorTasks) {
+    results.push(judgeBehaviorTask(task, ruleEngine))
   }
 
   const passed = results.filter((r) => r.passed).length
