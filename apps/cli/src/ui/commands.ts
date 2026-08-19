@@ -15,10 +15,13 @@ import { runCrsiModification, approvePending, rejectPending, hasPending } from '
 import {
   produceCrsiProposal,
   produceRuleProposal,
+  produceProseProposal,
   selectCrsiSignal,
+  collectSkillFiles,
   LESSONS_FILE,
   MANAGED_RULES_FILE,
 } from '../core/crsi-producer'
+import { prefilterProposal } from '../core/proposal-guard'
 import { runEval, appendEvalScore } from '../core/eval-harness'
 import { NPM_UPDATE_COMMAND, PACKAGE_VERSION } from '../shared/index.ts'
 import { getPreference } from '../config/preferences'
@@ -816,6 +819,55 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
     }).trim()
   } catch {
     // 非 git 目录 → 回退 cwd
+  }
+
+  // ── 散文提议路径：/crsi propose --prose 用 LLM 生成改 skill 散文提议 ──
+  if (args[0] === '--prose') {
+    const skillFiles = collectSkillFiles(root)
+    if (skillFiles.length === 0) {
+      return { content: '没有可改的 skill 文件。' }
+    }
+
+    const signal = selectCrsiSignal(insights, metaRules)
+    if (!signal) {
+      return { content: '没有足够的失败信号来生成散文提议。' }
+    }
+
+    const llm = ctx.engine.getLlm() ?? ctx.engine.getRegistry()
+    const { readFileSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const proposal = await produceProseProposal(signal, llm, skillFiles, (p) =>
+      readFileSync(join(root, p), 'utf-8'),
+    )
+    if (!proposal) {
+      return { content: '散文提议生成失败（LLM 未返回有效结果）。' }
+    }
+
+    const verdict = prefilterProposal({
+      id: `prose-${signal.title}`,
+      filePath: proposal.filePath,
+      kind: 'skill',
+      newContent: proposal.newContent,
+    })
+    if (!verdict.pass) {
+      return { content: `❌ 提议未通过预筛：${verdict.reasons.join('; ')}` }
+    }
+
+    const result = runCrsiModification({
+      description: proposal.description,
+      filePath: proposal.filePath,
+      newContent: proposal.newContent,
+      originalContent: proposal.originalContent,
+    })
+    if (!result.applied || result.phase === 'failed') {
+      return { content: `❌ 生成失败（phase: ${result.phase}）。\n${result.error ?? ''}` }
+    }
+
+    return {
+      content:
+        `✅ 已生成散文提议并跑过测试。审阅 diff：\n\n${result.diff}\n\n` +
+        '/crsi modify --approve 合并 | /crsi modify --reject 丢弃',
+    }
   }
 
   // ── 毕业路径：/crsi propose --rule 固化受管理规则（行为） ──
