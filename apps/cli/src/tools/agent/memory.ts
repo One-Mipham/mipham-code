@@ -1,8 +1,9 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { homedir } from 'node:os'
 import type { ToolDefinition } from '../../shared/index.ts'
 
-const MEMORY_DIR = join(process.env.HOME || '~', '.mipham', 'memory')
+const MEMORY_DIR = join(homedir(), '.mipham', 'memory')
 
 /**
  * Format a memory file with frontmatter, compatible with MemoryManager.parseMemoryFile.

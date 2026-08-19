@@ -1,7 +1,19 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { tmpdir } from 'node:os'
+import { homedir } from 'node:os'
+
+// Isolate the Memory tool from the real ~/.mipham — without this, its tests
+// write test-note/alpha/... into the live memory dir and cleanMemDir() rmSync's
+// the whole ~/.mipham/memory/ (deleting real memories). Mock homedir so memory
+// tests touch only a temp dir.
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>()
+  return {
+    ...actual,
+    homedir: () => `${actual.tmpdir()}/mipham-test-agent-tools`,
+  }
+})
 import type { ToolContext } from '../../src/shared'
 import { agentTool, resolveRunInBackground } from '../../src/tools/agent/agent'
 import { skillTool } from '../../src/tools/agent/skill'
@@ -192,7 +204,7 @@ describe('Memory tool definition', () => {
 })
 
 describe('Memory tool execution', () => {
-  const MEM_DIR = join(process.env.HOME || tmpdir(), '.mipham', 'memory')
+  const MEM_DIR = join(homedir(), '.mipham', 'memory')
 
   function cleanMemDir() {
     try {
