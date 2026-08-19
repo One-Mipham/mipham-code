@@ -13,6 +13,8 @@
 import type { CrsiInsight } from './auto-memory'
 import type { MetaRule } from './meta-rule-engine'
 import type { Llm } from '../providers/llm'
+import { readdirSync } from 'node:fs'
+import { join } from 'node:path'
 
 /** 教训文件（相对仓库根）。预建，沙箱只能改已存在文件。 */
 export const LESSONS_FILE = 'apps/cli/crsi-lessons.md'
@@ -312,4 +314,26 @@ export async function produceProseProposal(
   if (!newContent) return null
 
   return { filePath, newContent, originalContent, description: signal.title }
+}
+
+const SKILL_DIRS: Array<[string, string]> = [
+  ['standard', '.SKILL.md'],
+  ['mipham', '.mipham-skill.md'],
+]
+
+/** 收集仓库内所有 skill 文件（相对仓库根的路径），供 produceProseProposal 选目标。 */
+export function collectSkillFiles(root: string): string[] {
+  const files: string[] = []
+  for (const [dir, ext] of SKILL_DIRS) {
+    let entries: string[] = []
+    try {
+      entries = readdirSync(join(root, 'apps', 'cli', 'skills', dir))
+    } catch {
+      continue
+    }
+    for (const entry of entries) {
+      if (entry.endsWith(ext)) files.push(`apps/cli/skills/${dir}/${entry}`)
+    }
+  }
+  return files
 }

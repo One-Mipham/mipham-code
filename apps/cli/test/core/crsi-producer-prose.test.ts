@@ -1,9 +1,13 @@
 import { describe, it, expect } from 'vitest'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import type { Llm } from '../../src/providers/llm'
 import {
   selectTargetSkill,
   generateProseContent,
   produceProseProposal,
+  collectSkillFiles,
   type CrsiSignal,
 } from '../../src/core/crsi-producer'
 
@@ -104,5 +108,27 @@ describe('produceProseProposal', () => {
       throw new Error('no file')
     }
     expect(await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill)).toBeNull()
+  })
+})
+
+describe('collectSkillFiles', () => {
+  it('收集 standard + mipham 的 skill 文件（相对仓库根路径）', () => {
+    const root = join(tmpdir(), 'crsi-collect-test')
+    rmSync(root, { recursive: true, force: true })
+    mkdirSync(join(root, 'apps', 'cli', 'skills', 'standard'), { recursive: true })
+    mkdirSync(join(root, 'apps', 'cli', 'skills', 'mipham'), { recursive: true })
+    writeFileSync(join(root, 'apps', 'cli', 'skills', 'standard', 'a.SKILL.md'), 'x')
+    writeFileSync(join(root, 'apps', 'cli', 'skills', 'standard', 'b.SKILL.md'), 'x')
+    writeFileSync(join(root, 'apps', 'cli', 'skills', 'mipham', 'c.mipham-skill.md'), 'x')
+
+    const files = collectSkillFiles(root)
+    expect(files).toContain('apps/cli/skills/standard/a.SKILL.md')
+    expect(files).toContain('apps/cli/skills/standard/b.SKILL.md')
+    expect(files).toContain('apps/cli/skills/mipham/c.mipham-skill.md')
+    expect(files).toHaveLength(3)
+  })
+
+  it('目录不存在 → 空数组', () => {
+    expect(collectSkillFiles(join(tmpdir(), 'nonexistent-root-xyz'))).toEqual([])
   })
 })
