@@ -4,8 +4,8 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.4.5
-> **最后更新**: 2026-08-19 — AI 提交署名品牌化为 Mipham（Co-Authored-By 披露）
+> **版本**: 2.4.6
+> **最后更新**: 2026-08-19 — v0.50.0 发布（CRSI 幂等去重 + daemon 权限/心跳 + 署名 Mipham + 四渠道收口）
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -42,7 +42,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **eval harness** `/crsi eval` — `core/eval-harness.ts` 冻结 20 条 ground-truth 契约（12 机制：规则/宪法/沙箱边界/红队/producer 行为 + 8 行为缺口）+ rewards 日志 `~/.mipham/crsi/eval-scores.jsonl`，`runCrsiModification` 以「分数不退化」为第二道闸。8 行为缺口（rm -rf/管道投毒/git reset --hard/chmod 777/mkfs/dd→/dev//关停主机/crontab -r）已由固化 managed tool-params 规则覆盖 → 全翻转 PASS → 满分 100 =「证明更好」
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：1,632 测试（1630 passed + 2 skipped）
+测试：1,650 测试（1648 passed + 2 skipped）
 
 ---
 
@@ -79,7 +79,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 25 个内置技能（20 standard + 5 mipham）
-│   │   ├── test/               # 132 个测试文件，1632 个测试
+│   │   ├── test/               # 136 个测试文件，1650 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -102,7 +102,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（1632 个测试）
+pnpm test         # vitest run（1650 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -226,7 +226,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
 | E2E      | 1       | 8        | full-pipeline                                 |
 | Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **132** | **1632** | **0 失败** ✅（1630 passed + 2 skipped）      |
+| **合计** | **136** | **1650** | **0 失败** ✅（1648 passed + 2 skipped）      |
 
 > 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
 
@@ -282,37 +282,42 @@ GitHub Actions 5 阶段流水线：`typecheck → lint → format → build-cli 
 
 ## 最近提交
 
-| 日期       | Commit    | 说明                                                                  |
-| ---------- | --------- | --------------------------------------------------------------------- |
-| 2026-08-19 | `37fef20` | feat(attribution): AI 提交署名品牌化为 Mipham                         |
-| 2026-08-19 | `b64ceda` | feat(daemon): 心跳式通知（保守版 KAIROS 推送）                        |
-| 2026-08-19 | `401882e` | feat(daemon): 尊重 org 级 permissionRestrictions                      |
-| 2026-08-19 | `8e9780f` | feat(crsi): prose ledger 清空机制（/crsi prose-clear）                |
-| 2026-08-19 | `3ce4e0e` | feat(crsi): producer 三路径同信号幂等去重                             |
-| 2026-08-19 | `3cf2b31` | feat(crsi): wire /crsi propose --prose into CLI                       |
-| 2026-08-19 | `551e9d1` | feat(crsi): producer prose proposal orchestration (two-stage LLM)     |
-| 2026-08-19 | `38cd106` | feat(crsi): producer prose proposal stage 1 — select target skill     |
-| 2026-08-19 | `5c25810` | feat(crsi): add runBeforeAfter two-round prose comparison             |
-| 2026-08-19 | `da6d1c8` | feat(crsi): add run comparison (compareRuns / isNotDegraded)          |
-| 2026-08-19 | `69dc96c` | feat(crsi): task-runner systemPrompt injection for prose comparison   |
-| 2026-08-19 | `e0afbf4` | feat(crsi): add task-runner end-to-end runTask (engine + setLlm)      |
-| 2026-08-19 | `96c1a4c` | feat(crsi): add proposal guard — structural pre-filter (block 2)      |
-| 2026-08-19 | `b15ef81` | fix(crsi): close eval-machinery self-reference gap in PROTECTED_PATHS |
-| 2026-08-18 | `062899d` | docs(claude): 待办收口 — 4 条已完成转档 + 测试数对齐 1561             |
-| 2026-08-18 | `ae54082` | fix(ci): guard JetBrains publish via env var, not if: secrets         |
-| 2026-08-18 | `eb4d2cc` | fix(ci): drop setup-gradle — working-directory on uses: schema 违规   |
-| 2026-08-18 | `f0d0712` | chore: bump version to 0.48.0                                         |
-| 2026-08-18 | `93102f6` | ci: re-enable + auto-publish JetBrains plugin（已过审上线）           |
-| 2026-08-18 | `2e332b4` | chore(vscode): prepare 0.47.0 publish — real PNG icon                 |
-| 2026-08-18 | `0175208` | feat(i18n): wire config-wizard/goal/workflow/error-boundary + 65 keys |
-| 2026-08-18 | `33dbaa0` | fix(core): 1M context window — wire contextWindow through 3 gaps      |
-| 2026-08-18 | `5272bae` | fix(ci): 移除 JetBrains job + 修 setup-gradle 解析失败                |
-| 2026-08-18 | `ef4a54d` | fix(ci): release.yml JetBrains 构建 — setup-gradle@v4 移除废弃参数    |
-| 2026-08-18 | `da5ac88` | chore: bump version to 0.47.0                                         |
-| 2026-08-18 | `066ddff` | fix(daemon): Feishu 事件错误处理 — 防重试 + 验签失败 4xx              |
-| 2026-08-18 | `ac148b8` | fix(security): Feishu 事件流签名校验强制 encryptKey                   |
-| 2026-08-18 | `6acd911` | fix(security): Feishu env fail-closed — 无密钥不启用端点              |
-| 2026-08-18 | `7803425` | feat(daemon): 挂载 /feishu/event 路由 + env 接线                      |
+| 日期       | Commit    | 说明                                                                    |
+| ---------- | --------- | ----------------------------------------------------------------------- |
+| 2026-08-19 | `78ad8d6` | chore: bump version to 0.50.0                                           |
+| 2026-08-19 | `f1e1404` | docs(claude): 2.4.5 — AI 提交署名品牌化 + 测试数对齐 1649               |
+| 2026-08-19 | `37fef20` | feat(attribution): AI 提交署名品牌化为 Mipham                           |
+| 2026-08-19 | `996e305` | docs(claude): 2.4.4 — daemon 心跳式通知 + 测试数对齐 1648               |
+| 2026-08-19 | `b64ceda` | feat(daemon): 心跳式通知（保守版 KAIROS 推送）                          |
+| 2026-08-19 | `9da32ec` | docs(claude): 2.4.3 — daemon 尊重 permissionRestrictions + 权限文档补记 |
+| 2026-08-19 | `401882e` | feat(daemon): 尊重 org 级 permissionRestrictions                        |
+| 2026-08-19 | `167fee9` | fix(grep): 显式标记截断，避免静默丢内容                                 |
+| 2026-08-19 | `8e9780f` | feat(crsi): prose ledger 清空机制（/crsi prose-clear）                  |
+| 2026-08-19 | `3ce4e0e` | feat(crsi): producer 三路径同信号幂等去重                               |
+| 2026-08-19 | `3cf2b31` | feat(crsi): wire /crsi propose --prose into CLI                         |
+| 2026-08-19 | `551e9d1` | feat(crsi): producer prose proposal orchestration (two-stage LLM)       |
+| 2026-08-19 | `38cd106` | feat(crsi): producer prose proposal stage 1 — select target skill       |
+| 2026-08-19 | `5c25810` | feat(crsi): add runBeforeAfter two-round prose comparison               |
+| 2026-08-19 | `da6d1c8` | feat(crsi): add run comparison (compareRuns / isNotDegraded)            |
+| 2026-08-19 | `69dc96c` | feat(crsi): task-runner systemPrompt injection for prose comparison     |
+| 2026-08-19 | `e0afbf4` | feat(crsi): add task-runner end-to-end runTask (engine + setLlm)        |
+| 2026-08-19 | `96c1a4c` | feat(crsi): add proposal guard — structural pre-filter (block 2)        |
+| 2026-08-19 | `b15ef81` | fix(crsi): close eval-machinery self-reference gap in PROTECTED_PATHS   |
+| 2026-08-18 | `062899d` | docs(claude): 待办收口 — 4 条已完成转档 + 测试数对齐 1561               |
+| 2026-08-18 | `ae54082` | fix(ci): guard JetBrains publish via env var, not if: secrets           |
+| 2026-08-18 | `eb4d2cc` | fix(ci): drop setup-gradle — working-directory on uses: schema 违规     |
+| 2026-08-18 | `f0d0712` | chore: bump version to 0.48.0                                           |
+| 2026-08-18 | `93102f6` | ci: re-enable + auto-publish JetBrains plugin（已过审上线）             |
+| 2026-08-18 | `2e332b4` | chore(vscode): prepare 0.47.0 publish — real PNG icon                   |
+| 2026-08-18 | `0175208` | feat(i18n): wire config-wizard/goal/workflow/error-boundary + 65 keys   |
+| 2026-08-18 | `33dbaa0` | fix(core): 1M context window — wire contextWindow through 3 gaps        |
+| 2026-08-18 | `5272bae` | fix(ci): 移除 JetBrains job + 修 setup-gradle 解析失败                  |
+| 2026-08-18 | `ef4a54d` | fix(ci): release.yml JetBrains 构建 — setup-gradle@v4 移除废弃参数      |
+| 2026-08-18 | `da5ac88` | chore: bump version to 0.47.0                                           |
+| 2026-08-18 | `066ddff` | fix(daemon): Feishu 事件错误处理 — 防重试 + 验签失败 4xx                |
+| 2026-08-18 | `ac148b8` | fix(security): Feishu 事件流签名校验强制 encryptKey                     |
+| 2026-08-18 | `6acd911` | fix(security): Feishu env fail-closed — 无密钥不启用端点                |
+| 2026-08-18 | `7803425` | feat(daemon): 挂载 /feishu/event 路由 + env 接线                        |
 
 ---
 
@@ -397,6 +402,7 @@ mipham-code 变更（包名/版本）
 
 | 版本  | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                               | 维护人     |
 | ----- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| 2.4.6 | 2026-08-19 | v0.50.0 发布（版本 0.49.0→0.50.0 bump + GPG 签名 tag + Release CI 全绿：npm / GitHub Release 6 资产 / JetBrains / 4 平台二进制 + VS Code VSIX 上传）。Memory 工具存储路径隔离：MEMORY_DIR 从 process.env.HOME 改 os.homedir()（堵 E2E「Alice」泄漏），agent.test 补 homedir mock（不再 rmSync 真实 ~/.mipham/memory）。测试 1648 passed + 2 skipped                                                    | 技术委员会 |
 | 2.4.5 | 2026-08-19 | AI 提交署名品牌化：新增 `COAUTHOR_TRAILER` 共享常量（`Co-Authored-By: Mipham <noreply@mipham.ai>`），系统提示注入「Commit Attribution」块，修复 `/fork` 与 `github-ops` skill 硬编码的「Claude」署名。披露 AI 参与（与 Anthropic Undercover 式隐瞒相反）。测试 1647 passed + 2 skipped                                                                                                                 | 技术委员会 |
 | 2.4.4 | 2026-08-19 | daemon 心跳式通知（保守版 KAIROS 推送）：`heartbeat.ts`（`collectPendingItems`/`buildHeartbeatMessage`/`heartbeatTick` 纯函数 + `startHeartbeat` 薄接线），feishu 配置时定时扫 pending goal/schedule 推摘要。只通知、不自主行动（CRSI 受约束哲学，借鉴 Claude Code KAIROS「订阅与推送」）。测试 1646 passed + 2 skipped                                                                                | 技术委员会 |
 | 2.4.3 | 2026-08-19 | daemon 尊重 org 级 `permissionRestrictions`：抽取 `buildDaemonPermission(restrictions?)`，daemon 的 PermissionSystem 应用 config 的 `permissionRestrictions`（`MIPHAM_DAEMON_PERMISSION=bypassPermissions` 被 `forbiddenModes` 强制降级，fail-closed，与 CLI 对齐）；权限文档补记（CLAUDE.md 权限段 + defaults.ts 注释）。测试 1638 passed + 2 skipped                                                 | 技术委员会 |
