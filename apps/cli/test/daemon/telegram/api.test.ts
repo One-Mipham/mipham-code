@@ -40,4 +40,10 @@ describe('createTelegramApi', () => {
     const api = createTelegramApi({ botToken: '123:abc', allowedChatIds: [] })
     await expect(api.getUpdates(0, 30)).rejects.toThrow()
   })
+
+  it('HTTP 200 但 ok:false → data.ok 守卫抛错', async () => {
+    stubFetch({ ok: false, error_code: 401, description: 'Unauthorized' }, true)
+    const api = createTelegramApi({ botToken: '123:abc', allowedChatIds: [] })
+    await expect(api.getUpdates(0, 30)).rejects.toThrow('getUpdates failed: 401')
+  })
 })

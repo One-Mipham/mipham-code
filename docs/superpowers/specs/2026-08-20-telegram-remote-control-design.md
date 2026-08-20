@@ -175,14 +175,14 @@ getOrCreateByExternalUser(
 
 ## 六、安全模型
 
-| 威胁                      | 防御                                                                                                                            |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| 未授权用户指挥            | `TELEGRAM_ALLOWED_CHAT_IDS` 白名单（chat id 整数，仅 Bot 所有者/授权成员）                                                      |
-| Prompt injection 越权执行 | daemon 会话 `default` 权限（headless 无弹窗，ask 级 Bash/Write/Edit 拦）+ 白名单；上线前过 CLAUDE.md 红队 prompt-injection 测试 |
-| 洪水 / 滥用               | 复用 `RateLimiter`（按 chatId 为 key，独立限额）                                                                                |
-| 有害/敏感输出             | 响应内容过滤（NSFW / PII），对齐 CLAUDE.md AI 安全                                                                              |
-| 密钥泄漏                  | `TELEGRAM_BOT_TOKEN` 全 env 注入，禁止硬编码/日志                                                                               |
-| 更新重复投递              | `offset = update_id + 1` 幂等推进，重复 update_id 不重复处理                                                                    |
+| 威胁                      | 防御                                                                                                                                                                                         |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 未授权用户指挥            | `TELEGRAM_ALLOWED_CHAT_IDS` 白名单（chat id 整数，仅 Bot 所有者/授权成员）                                                                                                                   |
+| Prompt injection 越权执行 | daemon 会话 `default` 权限（headless 无弹窗，ask 级 Bash/Write/Edit 拦）+ 白名单；上线前过 CLAUDE.md 红队 prompt-injection 测试                                                              |
+| 洪水 / 滥用               | 复用 `RateLimiter`（按 chatId 为 key，独立限额）                                                                                                                                             |
+| 有害/敏感输出             | 响应内容过滤（NSFW / PII），对齐 CLAUDE.md AI 安全                                                                                                                                           |
+| 密钥泄漏                  | `TELEGRAM_BOT_TOKEN` 全 env 注入，禁止硬编码/日志                                                                                                                                            |
+| 更新重复投递              | `offset = update_id + 1` 幂等推进，重复 update_id 不重复处理（进程内不重复投递；崩溃/重启在 processPrompt 完成到 offset 推进之间可能重复执行，长轮询为 at-least-once，对齐 Feishu 重试姿态） |
 
 **依赖合规**：裸 `fetch`，零新增依赖，无 copyleft/GPL 风险。
 

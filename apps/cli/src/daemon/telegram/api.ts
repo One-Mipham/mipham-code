@@ -21,7 +21,10 @@ export function createTelegramApi(config: TelegramConfig): TelegramApi {
       const data = (await res.json()) as {
         ok: boolean
         result?: Array<{ update_id: number; message?: unknown }>
+        error_code?: number
+        description?: string
       }
+      if (!data.ok) throw new Error(`getUpdates failed: ${data.error_code ?? res.status}`)
       return data.result ?? []
     },
     async sendText(chatId, text) {
@@ -31,6 +34,12 @@ export function createTelegramApi(config: TelegramConfig): TelegramApi {
         body: JSON.stringify({ chat_id: chatId, text }),
       })
       if (!res.ok) throw new Error(`sendMessage ${res.status}`)
+      const data = (await res.json()) as {
+        ok: boolean
+        error_code?: number
+        description?: string
+      }
+      if (!data.ok) throw new Error(`sendMessage failed: ${data.error_code ?? res.status}`)
     },
   }
 }

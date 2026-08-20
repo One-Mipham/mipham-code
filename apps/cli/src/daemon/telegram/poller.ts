@@ -1,7 +1,7 @@
 import type { TelegramApi } from './api.js'
 import type { TelegramMessage } from './types.js'
 
-/** 从 update 提取文本消息；非文本/缺 message → null。chat.id 统一字符串化（64 位安全）。 */
+/** 从 update 提取文本消息；非文本/缺 message → null。chat.id 统一字符串化比对（id < 2^53；超范围 bigint 后续再引入）。 */
 export function extractTextMessage(update: unknown): TelegramMessage | null {
   const msg = (
     update as { message?: { chat?: { id?: number | string }; message_id?: number; text?: string } }
