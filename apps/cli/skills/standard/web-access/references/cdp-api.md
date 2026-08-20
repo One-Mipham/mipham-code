@@ -3,9 +3,10 @@
 ## 基础信息
 
 - 地址：`http://localhost:3456`
-- 启动：`node ~/.claude/skills/web-access/scripts/cdp-proxy.mjs &`
+- 启动：`node ~/.mipham/skills/web-access/scripts/cdp-proxy.mjs &`
 - 启动后持续运行，不建议主动停止（重启需 Chrome 重新授权）
 - 强制停止：`pkill -f cdp-proxy.mjs`
+- 鉴权：除 `/health` 外，所有端点要求请求头 `X-CDP-Token`，值 = `~/.mipham/skills/web-access/.cdp-token` 的内容（下方示例省略此头）
 
 ## API 端点
 

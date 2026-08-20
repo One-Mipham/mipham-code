@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const PROXY_SCRIPT = path.join(ROOT, 'scripts', 'cdp-proxy.mjs')
 const PROXY_PORT = Number(process.env.CDP_PROXY_PORT || 3456)
+const TOKEN_FILE = path.join(ROOT, '.cdp-token')
 
 // --- Node.js 版本检查 ---
 
@@ -94,8 +95,22 @@ async function detectChromePort() {
 
 // --- CDP Proxy 启动与等待 ---
 
+function readToken() {
+  try {
+    const t = fs.readFileSync(TOKEN_FILE, 'utf8').trim()
+    if (t) return t
+  } catch {
+    /* proxy 尚未生成 token */
+  }
+  return null
+}
+
 function httpGetJson(url, timeoutMs = 3000) {
-  return fetch(url, { signal: AbortSignal.timeout(timeoutMs) })
+  const token = readToken()
+  return fetch(url, {
+    signal: AbortSignal.timeout(timeoutMs),
+    headers: token ? { 'X-CDP-Token': token } : {},
+  })
     .then(async (res) => {
       try {
         return JSON.parse(await res.text())

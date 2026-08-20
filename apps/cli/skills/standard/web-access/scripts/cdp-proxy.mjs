@@ -4,11 +4,12 @@
 // Node.js 22+（使用原生 WebSocket）
 
 import http from 'node:http'
-import { URL } from 'node:url'
+import { URL, fileURLToPath } from 'node:url'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import net from 'node:net'
+import crypto from 'node:crypto'
 
 const PORT = parseInt(process.env.CDP_PROXY_PORT || '3456')
 let ws = null
@@ -18,6 +19,56 @@ const sessions = new Map() // targetId -> sessionId
 const managedTabs = new Map() // targetId -> { lastAccessed: number }
 const TAB_IDLE_TIMEOUT = parseInt(process.env.CDP_TAB_IDLE_TIMEOUT || '900000') // 15 min default
 const CLEANUP_INTERVAL = 60000 // sweep every 60s
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const TOKEN_FILE = path.join(ROOT, '.cdp-token')
+
+// --- 共享密钥鉴权 ---
+// 防御浏览器 CSRF 到 localhost：恶意网页能 fetch 127.0.0.1:3456，但读不到本文件。
+let authToken = null
+function readToken() {
+  try {
+    const t = fs.readFileSync(TOKEN_FILE, 'utf-8').trim()
+    if (t) return t
+  } catch {
+    /* 尚未生成 */
+  }
+  return null
+}
+function ensureToken() {
+  const existing = readToken()
+  if (existing) {
+    authToken = existing
+    return existing
+  }
+  authToken = crypto.randomBytes(32).toString('hex')
+  try {
+    fs.writeFileSync(TOKEN_FILE, authToken, { mode: 0o600 })
+  } catch {
+    /* 无写权限时仅内存持有，进程存活期内仍可鉴权 */
+  }
+  return authToken
+}
+
+// --- 窄 SSRF 防护 ---
+// 本工具用途即访问组织内网（SSO 后台/内部系统），故不做私有网段全量屏蔽；
+// 仅挡云元数据端点与非 http(s)/about 协议。完整 rebinding 防护见 src/security/url.ts。
+function validateNavUrl(rawUrl) {
+  let u
+  try {
+    u = new URL(rawUrl)
+  } catch {
+    return { ok: false, reason: 'invalid URL' }
+  }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:' && u.protocol !== 'about:') {
+    return { ok: false, reason: `unsupported protocol: ${u.protocol}` }
+  }
+  const host = u.hostname.toLowerCase()
+  if (host === '169.254.169.254' || host === 'metadata.google.internal') {
+    return { ok: false, reason: 'blocked: cloud metadata endpoint' }
+  }
+  return { ok: true }
+}
 
 // --- WebSocket 兼容层 ---
 let WS
@@ -378,6 +429,14 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
+    // 鉴权：非 /health 端点要求 X-CDP-Token（防浏览器 CSRF 到 localhost）
+    const provided = req.headers['x-cdp-token'] || ''
+    if (!authToken || provided !== authToken) {
+      res.statusCode = 401
+      res.end(JSON.stringify({ error: 'unauthorized: missing or invalid X-CDP-Token' }))
+      return
+    }
+
     await connect()
 
     // GET /targets - 列出所有页面
@@ -390,6 +449,12 @@ const server = http.createServer(async (req, res) => {
     // GET /new?url=xxx - 创建新后台 tab
     else if (pathname === '/new') {
       const targetUrl = q.url || 'about:blank'
+      const check = validateNavUrl(targetUrl)
+      if (!check.ok) {
+        res.statusCode = 400
+        res.end(JSON.stringify({ error: check.reason }))
+        return
+      }
       const resp = await sendCDP('Target.createTarget', { url: targetUrl, background: true })
       const targetId = resp.result.targetId
       managedTabs.set(targetId, { lastAccessed: Date.now() })
@@ -417,6 +482,12 @@ const server = http.createServer(async (req, res) => {
 
     // GET /navigate?target=xxx&url=yyy - 导航（自动等待加载）
     else if (pathname === '/navigate') {
+      const check = validateNavUrl(q.url || '')
+      if (!check.ok) {
+        res.statusCode = 400
+        res.end(JSON.stringify({ error: check.reason }))
+        return
+      }
       const sid = await ensureSession(q.target)
       const resp = await sendCDP('Page.navigate', { url: q.url }, sid)
 
@@ -722,6 +793,9 @@ async function main() {
     console.error(`[CDP Proxy] 端口 ${PORT} 已被占用`)
     process.exit(1)
   }
+
+  // 只有成功绑定端口的实例才生成/复用 token（避免多实例竞态）
+  ensureToken()
 
   server.listen(PORT, '127.0.0.1', () => {
     console.log(`[CDP Proxy] 运行在 http://localhost:${PORT}`)

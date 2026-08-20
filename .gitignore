@@ -13,3 +13,4 @@ out/
 *.vsix
 .vercel
 .worktrees/
+.cdp-token

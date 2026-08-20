@@ -44,7 +44,14 @@ node ~/.mipham/skills/web-access/scripts/check-deps.mjs
 
 通过 CDP Proxy 直连用户日常 Chrome，天然携带登录态。**不主动操作用户已有 tab**，所有操作在自己创建的后台 tab 中进行，任务结束关闭自建 tab（保留用户原 tab）。
 
-Proxy（`scripts/cdp-proxy.mjs`）由 `check-deps.mjs` 自动拉起并常驻。Proxy API（curl 调 `http://localhost:3456/...`）：
+Proxy（`scripts/cdp-proxy.mjs`）由 `check-deps.mjs` 自动拉起并常驻。Proxy 首次启动生成共享密钥 `~/.mipham/skills/web-access/.cdp-token`（0600），除 `/health` 外所有端点都要求请求头 `X-CDP-Token`。先取 token 再调 API：
+
+```bash
+TOKEN=$(cat ~/.mipham/skills/web-access/.cdp-token)
+curl -H "X-CDP-Token: $TOKEN" http://localhost:3456/targets
+```
+
+端点列表：
 
 | 端点                                       | 用途                                                                     |
 | ------------------------------------------ | ------------------------------------------------------------------------ |
@@ -122,8 +129,8 @@ Sources:
 - 不主动操作用户已有 tab；任务结束关闭自建 tab。
 - 不提交凭据（除非用户显式批准）。
 - 尊重 robots.txt 与速率限制；不抓 PII。
-- proxy 仅绑 127.0.0.1，不暴露外网；端口 3456 无鉴权，依赖本机信任边界，勿在共享/多用户主机运行。
-- ⚠️ proxy 不做 URL SSRF 校验（照搬上游，与 computer-use/Playwright 同类）：避免驱动 Chrome 访问本机内部服务/内网地址。
+- proxy 仅绑 127.0.0.1，不暴露外网；除 `/health` 外所有端点要求 `X-CDP-Token` 共享密钥（`~/.mipham/skills/web-access/.cdp-token`，0600），防浏览器 CSRF 到 localhost。勿在共享/多用户主机运行。
+- URL 过窄 SSRF 校验：拒绝非 http(s)/about 协议与云元数据端点（`169.254.169.254` / `metadata.google.internal`）。⚠️ 私有网段（10.x / 172.16 / 192.168 / localhost）**有意放行**——本工具用途即访问组织内网（SSO 后台/内部系统），与 web-fetch 的完整 SSRF 屏蔽不同。
 
 ## 何时不用本 skill
 
