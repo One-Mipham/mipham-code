@@ -10,7 +10,7 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.5.0
+> **版本**: 2.6.0
 > **最后更新**: 2026-08-20 — lint 39→0：死代码清理 + 7 命令补翻译（i18n 收口）
 > **维护人**: One Mipham Corporation 技术委员会
 
@@ -48,7 +48,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **eval harness** `/crsi eval` — `core/eval-harness.ts` 冻结 20 条 ground-truth 契约（12 机制：规则/宪法/沙箱边界/红队/producer 行为 + 8 行为缺口）+ rewards 日志 `~/.mipham/crsi/eval-scores.jsonl`，`runCrsiModification` 以「分数不退化」为第二道闸。8 行为缺口（rm -rf/管道投毒/git reset --hard/chmod 777/mkfs/dd→/dev//关停主机/crontab -r）已由固化 managed tool-params 规则覆盖 → 全翻转 PASS → 满分 100 =「证明更好」
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：1,687 测试（1685 passed + 2 skipped）
+测试：1,708 测试（1706 passed + 2 skipped）
 
 ---
 
@@ -85,7 +85,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 25 个内置技能（20 standard + 5 mipham）
-│   │   ├── test/               # 142 个测试文件，1687 个测试
+│   │   ├── test/               # 145 个测试文件，1708 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -108,7 +108,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（1687 个测试）
+pnpm test         # vitest run（1708 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -232,7 +232,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
 | E2E      | 1       | 8        | full-pipeline                                 |
 | Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **142** | **1687** | **0 失败** ✅（1685 passed + 2 skipped）      |
+| **合计** | **145** | **1708** | **0 失败** ✅（1706 passed + 2 skipped）      |
 
 > 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
 
@@ -290,6 +290,11 @@ GitHub Actions 5 阶段流水线：`typecheck → lint → format → build-cli 
 
 | 日期       | Commit    | 说明                                                                          |
 | ---------- | --------- | ----------------------------------------------------------------------------- |
+| 2026-08-20 | `5d8b24c` | chore: bump version to 0.52.0                                                 |
+| 2026-08-20 | `12a4839` | docs(spec): Obsidian Wiki 集成设计 — 通用 MCP 已接                            |
+| 2026-08-20 | `0fa2c5b` | fix(skills): 修 checkSkillShadow 斜杠 bug + 删 userInvocable 死字段           |
+| 2026-08-20 | `2cf3aa8` | perf(instructions): prompt-exclude 剥纯文档段省 41% 指令链 token              |
+| 2026-08-20 | `4758689` | chore(tokenizer): remove dead useRealTokenizer flag + unused TokenCounter     |
 | 2026-08-20 | `1400e5a` | feat(i18n): 7 命令补翻译 — crsi×3/dream/constitution/bug_report/changelog     |
 | 2026-08-20 | `ff0a7dd` | chore(lint): 清 32 处死代码 — 未用 import/变量/死 eslint 指令 + daemon 死状态 |
 | 2026-08-20 | `97b65d1` | refactor(security): 统一路径 glob 引擎 + 修路径匹配 + deny 示例互补           |
@@ -421,6 +426,7 @@ mipham-code 变更（包名/版本）
 
 | 版本  | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                                                                           | 维护人     |
 | ----- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| 2.6.0 | 2026-08-20 | v0.52.0 发版：指令链瘦身（CLAUDE.md frontmatter `prompt-exclude` 剥纯文档段 + `stripSections()`，实测省 41% token）+ skill sanitizer 修复（`checkSkillShadow` 斜杠 bug + 删 `userInvocable` 死字段 + 删过期 `/triage`）+ Obsidian Wiki 集成（通用 MCP `@zethictech/obsidian-mcp` 接现有 vault + spec）。测试 1706 passed + 2 skipped                                                                                                               | 技术委员会 |
 | 2.5.0 | 2026-08-20 | lint 39→0 收口：① 死代码清理（24 文件未用 import/变量/死 eslint 指令 + daemon 死状态字段，`exit-plan.ts` 删 `planDir` 级联 `_ctx`、`bin/mipham.ts` 删 token 块级联 4 动态 import，39→7）② 7 命令补翻译（`crsi_critique`/`crsi_interpret`/`crsi_red_team`/`dream`/`constitution`/`bug_report`/`changelog` 硬编码英文接 `t()`，~100 键 × en-US/zh-CN，`caughtBy?: string` 加 `?? 'unknown'` 兜底，7→0）。lint 首次归零。测试 1685 passed + 2 skipped | 技术委员会 |
 | 2.4.9 | 2026-08-20 | 安全线打磨：路径 glob 引擎统一（抽取 `globToRegexSource` 共享核心，`rules-loader` 复用，消除第三套 glob 翻译，修 `?`/转义/`**` 零层隐 bug）+ `matchBashRule` 路径工具改走 `matchPath`（`*` 不再跨 `/`，Windows 盘符冒号不 mangle）+ defaults deny 示例改互补路径（`.git-credentials`/`.npmrc`）+ `maskSearchOutput`/`maskGlobOutput` 存在性不对称加注释钉死意图。测试 1685 passed + 2 skipped                                                      | 技术委员会 |
 | 2.4.8 | 2026-08-20 | 安全线排查收官：Grep/Glob 敏感文件掩码（`credential-masker/search.ts` 的 `maskSearchOutput`/`maskGlobOutput` + `createGrepTool`/`createGlobTool` 工厂注入）+ allow/deny 规则系统接线（`MiphamConfig.permissionRules` 字段、`matchBashRule` 扩展 Read/Grep/Glob 路径匹配、`index.tsx`/daemon 注入）；配套 MIPHAM.md 2.2.0 结果前置人格。测试 1680 passed + 2 skipped                                                                                | 技术委员会 |
