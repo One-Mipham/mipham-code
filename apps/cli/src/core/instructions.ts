@@ -20,6 +20,35 @@ function parseFrontmatter(raw: string): FrontmatterResult {
   }
 }
 
+/** Strip the named sections (by heading title) from a markdown document. */
+export function stripSections(content: string, excluded: string[]): string {
+  if (excluded.length === 0) return content
+  const lines = content.split('\n')
+  const out: string[] = []
+  let skipLevel = 0
+  for (const line of lines) {
+    const m = line.match(/^(#{1,3})\s+(.+?)\s*$/)
+    if (m) {
+      const level = m[1]!.length
+      const title = m[2]!.trim()
+      if (excluded.includes(title)) {
+        skipLevel = level
+      } else if (skipLevel > 0 && level <= skipLevel) {
+        skipLevel = 0
+      }
+    }
+    if (skipLevel === 0) out.push(line)
+  }
+  return out.join('\n')
+}
+
+/** Normalize a `prompt-exclude` frontmatter value (YAML list or single string). */
+export function parsePromptExclude(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map((v) => String(v))
+  if (typeof value === 'string') return [value]
+  return []
+}
+
 export class InstructionsLoader {
   private instructions: InstructionFile[] = []
 
@@ -58,7 +87,13 @@ export class InstructionsLoader {
         directory: 'Directory Rules',
         user: 'User Preferences',
       }
-      parts.push(`<!-- ${levelLabel[inst.level] || inst.level} (${inst.path}) -->\n${inst.content}`)
+      // Strip doc-only sections declared via `prompt-exclude` frontmatter
+      // (changelog/roadmap/catalog are human-facing, not machine rules).
+      const content = stripSections(
+        inst.content,
+        parsePromptExclude(inst.frontmatter['prompt-exclude']),
+      )
+      parts.push(`<!-- ${levelLabel[inst.level] || inst.level} (${inst.path}) -->\n${content}`)
     }
 
     // P2-2: Inject current permission mode so the model knows its constraints

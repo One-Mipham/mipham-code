@@ -1,3 +1,9 @@
+---
+prompt-exclude:
+  - 最近提交
+  - 下一步计划
+---
+
 # CLAUDE.md
 
 > **项目**: Mipham Code — AI 编程终端
