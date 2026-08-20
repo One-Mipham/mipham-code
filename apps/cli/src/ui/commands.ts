@@ -3546,6 +3546,22 @@ const resumeCmd: CommandHandler = async (ctx, args) => {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Wiki Save
+// ═══════════════════════════════════════════════════════════════
+
+const saveCmd: CommandHandler = (ctx, args) => {
+  const t = resolveT(ctx)
+  const target = args.join(' ').trim()
+  const override = target
+    ? `\nUser override: "${target}". If it names a note type (synthesis/concept/source/decision/session), file under that type; otherwise treat it as the note title.`
+    : ''
+  return {
+    content: t('commands.save.content'),
+    forwardToAI: `Invoke the save-to-wiki skill (use the Skill tool) to save this conversation into the Obsidian wiki.${override}`,
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Memory Management
 // ═══════════════════════════════════════════════════════════════
 
@@ -4575,6 +4591,7 @@ const commandsListCmd: CommandHandler = () => {
     '/rename': 'Session & Identity',
     '/goal': 'Session & Identity',
     '/recap': 'Session & Identity',
+    '/save': 'Session & Identity',
     '/export': 'Session & Identity',
     '/doctor': 'Session & Identity',
     '/dream': 'Session & Identity',
@@ -4821,6 +4838,7 @@ registry.set('/resume', resumeCmd)
 registry.set('/resume last', resumeLastCmd)
 registry.set('/resume delete', resumeDeleteCmd)
 registry.set('/memory', memoryCmd)
+registry.set('/save', saveCmd)
 registry.set('/upgrade', upgradeCmd)
 
 // Project
@@ -4916,6 +4934,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/rename': 'Rename current session',
   '/goal': 'Set session goal',
   '/recap': 'Summarize session so far',
+  '/save': 'Save conversation to Obsidian wiki (skill: save-to-wiki)',
   '/export': 'Export conversation to file',
   '/doctor': 'System diagnostics',
   '/dream': 'Background memory consolidation',

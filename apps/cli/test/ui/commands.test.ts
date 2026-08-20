@@ -180,6 +180,47 @@ describe('/design', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════
+// /save — bridge to the save-to-wiki skill
+// ═══════════════════════════════════════════════════════════════
+
+describe('/save', () => {
+  it('registers /save', () => {
+    expect(getCommand('/save')).toBeDefined()
+  })
+
+  it('always returns forwardToAI that names the save-to-wiki skill', async () => {
+    const handler = getCommand('/save')!
+    const result = await handler(mkCtx(), [])
+    expect(result.forwardToAI).toBeDefined()
+    expect(result.forwardToAI).toContain('save-to-wiki')
+  })
+
+  it('passes an explicit type/title override through to forwardToAI', async () => {
+    const handler = getCommand('/save')!
+    const result = await handler(mkCtx(), ['concept', 'module-boundaries'])
+    expect(result.forwardToAI).toContain('concept module-boundaries')
+  })
+
+  it('has no override when called without args', async () => {
+    const handler = getCommand('/save')!
+    const result = await handler(mkCtx(), [])
+    expect(result.forwardToAI).not.toContain('User override')
+  })
+
+  it('shows a content message', async () => {
+    const handler = getCommand('/save')!
+    const result = await handler(mkCtx(), [])
+    expect(result.content).toContain('Save to Wiki')
+  })
+
+  it('has a description in getCommandList()', () => {
+    const list = getCommandList()
+    const byName = Object.fromEntries(list.map((e) => [e.name, e.description]))
+    expect(byName['/save']).toBeTruthy()
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
 // /loop
 // ═══════════════════════════════════════════════════════════════
 

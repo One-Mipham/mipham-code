@@ -10,8 +10,8 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.6.0
-> **最后更新**: 2026-08-20 — lint 39→0：死代码清理 + 7 命令补翻译（i18n 收口）
+> **版本**: 2.7.0
+> **最后更新**: 2026-08-20 — /save 命令 + save-to-wiki skill（Obsidian wiki 集成收口）
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -48,7 +48,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **eval harness** `/crsi eval` — `core/eval-harness.ts` 冻结 20 条 ground-truth 契约（12 机制：规则/宪法/沙箱边界/红队/producer 行为 + 8 行为缺口）+ rewards 日志 `~/.mipham/crsi/eval-scores.jsonl`，`runCrsiModification` 以「分数不退化」为第二道闸。8 行为缺口（rm -rf/管道投毒/git reset --hard/chmod 777/mkfs/dd→/dev//关停主机/crontab -r）已由固化 managed tool-params 规则覆盖 → 全翻转 PASS → 满分 100 =「证明更好」
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：1,708 测试（1706 passed + 2 skipped）
+测试：1,714 测试（1712 passed + 2 skipped）
 
 ---
 
@@ -84,8 +84,8 @@ mipham-code/
 │   │   │   ├── workflow/       # Workflow 运行时 + Schema 验证
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
-│   │   ├── skills/             # 25 个内置技能（20 standard + 5 mipham）
-│   │   ├── test/               # 145 个测试文件，1708 个测试
+│   │   ├── skills/             # 26 个内置技能（20 standard + 6 mipham）
+│   │   ├── test/               # 145 个测试文件，1714 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -108,7 +108,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（1708 个测试）
+pnpm test         # vitest run（1714 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -155,17 +155,17 @@ pnpm format       # Prettier
 | Computer（1）   | computer-use                                                                                               |
 | Scheduling（4） | schedule-wakeup, cron-create, cron-delete, cron-list                                                       |
 
-### Skills 系统（25 个内置技能）
+### Skills 系统（26 个内置技能）
 
 **Standard（20）**: code-review, codebase-design, compassionate-communication, debug-loop, doc-generator, domain-modeling, github-ops, grill-with-docs, implement, memory, mipham-code-setup, research, security-review, self-review, superpower, tdd, to-spec, triage, web-access, web-search
 
 > `web-access`（v2.5.0）是首个**带可执行资产**的 standard skill：CDP Proxy 直连用户已登录 Chrome（脚本随二进制内嵌，首次调用提取到 `~/.mipham/skills/web-access/`）。
 
-**Mipham Exclusive（5）**: om-artifact, om-model-optimize, om-security, self-audit, doc-sync
+**Mipham Exclusive（6）**: om-artifact, om-model-optimize, om-security, self-audit, doc-sync, save-to-wiki
 
 双轨运行时：standard 轨用于社区 Skills，mipham 轨用于 MiphamAI 专有功能。
 
-### Slash 命令系统（102 个）
+### Slash 命令系统（103 个）
 
 按分类：Session & Identity / Workflow / Tools & Skills / Model & Provider / Project / Code Quality / History / GitHub / Environment / Account / Agents / Artifact / Other（总数随版本演进，以 `/help` 实际列出为准）。
 
@@ -232,7 +232,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
 | E2E      | 1       | 8        | full-pipeline                                 |
 | Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **145** | **1708** | **0 失败** ✅（1706 passed + 2 skipped）      |
+| **合计** | **145** | **1714** | **0 失败** ✅（1712 passed + 2 skipped）      |
 
 > 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
 
@@ -426,6 +426,7 @@ mipham-code 变更（包名/版本）
 
 | 版本  | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                                                                           | 维护人     |
 | ----- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| 2.7.0 | 2026-08-20 | /save 命令 + save-to-wiki skill（Obsidian wiki 集成收口）：`/save` 斜杠命令（`forwardToAI` 桥到 save-to-wiki skill，支持 `/save [type] [name]`）+ 5 类 note 判定（synthesis/concept/source/decision/session）+ 单向打通（memory 指针 + wiki `saved_from`/`mipham_memory` 回标）+ MCP `create_note` 写入 + i18n 双语键。skills 25→26。测试 1712 passed + 2 skipped                                                                                  | 技术委员会 |
 | 2.6.0 | 2026-08-20 | v0.52.0 发版：指令链瘦身（CLAUDE.md frontmatter `prompt-exclude` 剥纯文档段 + `stripSections()`，实测省 41% token）+ skill sanitizer 修复（`checkSkillShadow` 斜杠 bug + 删 `userInvocable` 死字段 + 删过期 `/triage`）+ Obsidian Wiki 集成（通用 MCP `@zethictech/obsidian-mcp` 接现有 vault + spec）。测试 1706 passed + 2 skipped                                                                                                               | 技术委员会 |
 | 2.5.0 | 2026-08-20 | lint 39→0 收口：① 死代码清理（24 文件未用 import/变量/死 eslint 指令 + daemon 死状态字段，`exit-plan.ts` 删 `planDir` 级联 `_ctx`、`bin/mipham.ts` 删 token 块级联 4 动态 import，39→7）② 7 命令补翻译（`crsi_critique`/`crsi_interpret`/`crsi_red_team`/`dream`/`constitution`/`bug_report`/`changelog` 硬编码英文接 `t()`，~100 键 × en-US/zh-CN，`caughtBy?: string` 加 `?? 'unknown'` 兜底，7→0）。lint 首次归零。测试 1685 passed + 2 skipped | 技术委员会 |
 | 2.4.9 | 2026-08-20 | 安全线打磨：路径 glob 引擎统一（抽取 `globToRegexSource` 共享核心，`rules-loader` 复用，消除第三套 glob 翻译，修 `?`/转义/`**` 零层隐 bug）+ `matchBashRule` 路径工具改走 `matchPath`（`*` 不再跨 `/`，Windows 盘符冒号不 mangle）+ defaults deny 示例改互补路径（`.git-credentials`/`.npmrc`）+ `maskSearchOutput`/`maskGlobOutput` 存在性不对称加注释钉死意图。测试 1685 passed + 2 skipped                                                      | 技术委员会 |

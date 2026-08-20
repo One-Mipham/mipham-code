@@ -215,6 +215,9 @@
       "entered": "Entered plan mode.",
       "content": "── Plan Mode ──\n\nEntering plan mode — read-only analysis and design.\nUse EnterPlanMode to start, ExitPlanMode to submit for approval."
     },
+    "save": {
+      "content": "── Save to Wiki ──\n\nAnalyzing the conversation and filing the most valuable insight into your Obsidian wiki…"
+    },
     "diff": {
       "clean": "No uncommitted changes (working tree clean).",
       "title": "── Git Diff ──",

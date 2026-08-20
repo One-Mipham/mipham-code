@@ -2,7 +2,7 @@
 
 > **版本**: 1.0.0
 > **日期**: 2026-08-20
-> **状态**: MCP 接入已落地并验证；`/save` 工作流 skill 待决策
+> **状态**: MCP 接入已落地并验证；`/save` 工作流 skill 已落地（v0.52.0 之后）
 > **参考**: claude-obsidian 插件（`~/MiphamAI`）、`@zethictech/obsidian-mcp` v1.1.7
 
 ---
@@ -77,7 +77,7 @@
 
 ---
 
-## 五、待决策：`/save` 工作流 skill（C 方向）
+## 五、`/save` 工作流 skill（已落地）
 
 通用 MCP 给的是**底层读写 note** 能力，**不含** claude-obsidian 的「分析对话 → 归档成 wiki note」高层工作流。若要补齐：
 
@@ -85,7 +85,7 @@
 - **方案 C2（文件系统直连版）**：零 MCP 依赖，Read/Write/Glob 直接读写 `~/MiphamAI/wiki/`，复用 claude-obsidian 的 `save` skill 逻辑（`wiki-lock.sh` flock 锁 + 相对路径需改为绝对路径）。
 - **子问题**：是否让 Mipham Code 记忆（`~/.mipham/memory/`）与 wiki 互认（双向同步或单向写入）。
 
-> 建议 C1（复用已接 MCP，改动最小、有 Obsidian 感知）；但需先决定「记忆 ↔ wiki」关系再动手。
+> **最终决策（2026-08-20）**：**C1（MCP 版）+ 单向打通（留指针）+ 5 类 note 判定**。已落地 `save-to-wiki.mipham-skill.md` + `/save` 斜杠命令（`forwardToAI` 桥）。note 类型对齐 claude-obsidian 5 类：synthesis→`questions/`、concept→`concepts/`、source→`sources/`、decision→`meta/`、session→`sessions/`。轻度双向：memory 留 `reference` 指针（→ wiki 路径）+ wiki note frontmatter 加 `saved_from`/`mipham_memory` 回标（纯字符串，不产生 Obsidian 断链）。明确不做双向 sync。
 
 ---
 
@@ -98,4 +98,4 @@
 
 ## 七、结论
 
-「装 claude-obsidian 插件」不可行（目录插件格式不兼容），但「装通用 Obsidian」可行且已落地：走 MCP 标准协议，Mipham Code 客户端现成，显式指向现有 `~/MiphamAI` vault，无需重建。剩余唯一工程点是可选的 `/save` 高层工作流（§五），取决于「Mipham Code 记忆 ↔ wiki」是否要打通。
+「装 claude-obsidian 插件」不可行（目录插件格式不兼容），但「装通用 Obsidian」可行且已落地：走 MCP 标准协议，Mipham Code 客户端现成，显式指向现有 `~/MiphamAI` vault，无需重建。`/save` 高层工作流亦已落地（§五：C1 MCP 版 + 单向打通 + 5 类 note 判定）。

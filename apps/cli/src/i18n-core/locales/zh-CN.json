@@ -215,6 +215,9 @@
       "entered": "已进入计划模式。",
       "content": "── 计划模式 ──\n\n进入计划模式 — 只读分析与设计。\n使用 EnterPlanMode 开始，ExitPlanMode 提交审批。"
     },
+    "save": {
+      "content": "── 保存到 Wiki ──\n\n正在分析对话，并把最有价值的洞察归档到你的 Obsidian wiki…"
+    },
     "diff": {
       "clean": "没有未提交的更改（工作区干净）。",
       "title": "── Git Diff ──",

@@ -546,13 +546,13 @@ describe('Built-in skills', () => {
     loader.loadBuiltin(projectRoot)
 
     const all = loader.list()
-    expect(all.length).toBe(25) // 20 standard + 5 mipham
+    expect(all.length).toBe(26) // 20 standard + 6 mipham
 
     const standard = loader.listByType('standard')
     expect(standard.length).toBe(20)
 
     const mipham = loader.listByType('mipham')
-    expect(mipham.length).toBe(5)
+    expect(mipham.length).toBe(6)
   })
 
   it('every built-in skill has a name and description', () => {
@@ -629,6 +629,7 @@ describe('Built-in skills', () => {
       'om-artifact',
       'om-model-optimize',
       'om-security',
+      'save-to-wiki',
       'self-audit',
     ])
   })
