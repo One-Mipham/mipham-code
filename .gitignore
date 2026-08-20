@@ -14,3 +14,10 @@ out/
 .vercel
 .worktrees/
 .cdp-token
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+# (anchored to repo root: un-anchored `graft/` would also ignore .claude/skills/graft/)
+/graft/
+
+# Claude Code local settings (may contain secrets)
+.claude/settings.local.json
