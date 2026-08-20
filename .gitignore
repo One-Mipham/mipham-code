@@ -16,8 +16,10 @@ out/
 .cdp-token
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
-# (anchored to repo root: un-anchored `graft/` would also ignore .claude/skills/graft/)
-/graft/
+graft/
+# graft writes un-anchored `graft/`, which also matches the skill dir
+# `.claude/skills/graft/` — re-include it so the skill stays committable.
+!/.claude/skills/graft/
 
 # Claude Code local settings (may contain secrets)
 .claude/settings.local.json
