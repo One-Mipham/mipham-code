@@ -1,5 +1,6 @@
 import type { CommandHandler } from '../ui/commands'
 import { KeyManager } from '../config/keys-manager'
+import { getProviderApiKey } from '../config/loader'
 
 export const keysCmd: CommandHandler = async (_ctx, args) => {
   const manager = new KeyManager()
@@ -56,6 +57,31 @@ export const keysCmd: CommandHandler = async (_ctx, args) => {
       'Rotate expired keys with: /keys rotate <provider>',
     ]
     return { content: lines.join('\n') }
+  }
+
+  // /keys view <provider> — show the plaintext API key (decrypting if stored encrypted)
+  if (sub === 'view' || sub === 'show') {
+    const provider = args[1]
+    if (!provider) {
+      return { content: 'Usage: /keys view <provider>\n\nExample: /keys view deepseek' }
+    }
+    const key = getProviderApiKey(provider)
+    if (key === null) {
+      return {
+        content: `No API key found for provider "${provider}".\n\nIf it was stored encrypted, it may be unreadable (missing/corrupt credential key).`,
+      }
+    }
+    return {
+      content: [
+        '── Key View ──',
+        '',
+        `Provider: ${provider}`,
+        `API Key:  ${key}`,
+        '',
+        '⚠️  This is your plaintext API key. Do not share it or paste it anywhere.',
+        '    Rotate it at any time with /keys rotate <provider>.',
+      ].join('\n'),
+    }
   }
 
   // /keys (list)

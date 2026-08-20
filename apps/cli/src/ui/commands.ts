@@ -4665,6 +4665,7 @@ const commandsListCmd: CommandHandler = () => {
     '/keys': 'Account',
     '/keys rotate': 'Account',
     '/keys audit': 'Account',
+    '/keys view': 'Account',
     '/feedback': 'Account',
     '/agents': 'Agents',
     '/bg': 'Agents',
@@ -4847,6 +4848,7 @@ registry.set('/logout', logoutCmd)
 registry.set('/keys', keysCmd)
 registry.set('/keys rotate', keysCmd)
 registry.set('/keys audit', keysCmd)
+registry.set('/keys view', keysCmd)
 registry.set('/feedback', feedbackCmd)
 registry.set('/agents', agentsCmd)
 registry.set('/bg', bgCmd)
@@ -5006,6 +5008,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/keys': 'List API key rotation status',
   '/keys rotate': 'Rotate an API key',
   '/keys audit': 'Check for expired keys',
+  '/keys view': 'View a provider plaintext API key',
   '/feedback': 'Send feedback',
   '/agents': 'Agent view dashboard',
   '/bg': 'Run a background agent task',

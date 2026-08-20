@@ -10,11 +10,12 @@ vi.mock('node:os', async (importOriginal) => {
   }
 })
 
-import { rmSync } from 'node:fs'
+import { rmSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { tmpdir } from 'node:os'
+import { tmpdir, homedir } from 'node:os'
 import { keysCmd } from '../../src/commands/keys.js'
 import { KeyManager } from '../../src/config/keys-manager.js'
+import { saveProviderApiKey } from '../../src/config/loader.js'
 
 const TEST_HOME = join(tmpdir(), 'mipham-test-keys-home')
 
@@ -59,6 +60,20 @@ describe('Keys Commands', () => {
     // Fresh key should not be expired
     const result = await keysCmd({} as any, ['audit'])
     expect(result.content).toContain('All keys are within')
+  })
+
+  it('/keys view shows the plaintext API key', async () => {
+    // Seed a user-level config so saveProviderApiKey writes there (not project config).
+    mkdirSync(join(homedir(), '.mipham'), { recursive: true })
+    writeFileSync(join(homedir(), '.mipham', 'config.yml'), 'version: 1\n', 'utf-8')
+    saveProviderApiKey('deepseek', 'sk-view-789')
+    const result = await keysCmd({} as any, ['view', 'deepseek'])
+    expect(result.content).toContain('sk-view-789')
+  })
+
+  it('/keys view without provider shows usage', async () => {
+    const result = await keysCmd({} as any, ['view'])
+    expect(result.content).toContain('Usage: /keys view <provider>')
   })
 })
 

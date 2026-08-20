@@ -27,6 +27,7 @@ import {
   DEFAULT_BACKGROUND_AGENT_CONFIG,
   DEFAULT_CROSS_SESSION_CONFIG,
 } from './defaults'
+import { getCredentialKey, encryptApiKey, decryptApiKey, ENC_PREFIX } from './credential-crypto'
 
 const MIPHAM_HOME = join(homedir(), '.mipham')
 const BACKUP_PREFIX = 'config.backup-'
@@ -294,6 +295,9 @@ export function loadConfig(cwd: string = process.cwd()): MiphamConfig {
     backupConfig(userConfigPath)
   }
 
+  // ── Decrypt API keys at rest (enc:v1:) back to plaintext ──
+  decryptProviderApiKeys(config.providers)
+
   return config
 }
 
@@ -439,22 +443,68 @@ export function loadCrossSessionConfig(cwd: string = process.cwd()): CrossSessio
 }
 
 /**
+ * Decrypt any encrypted (`enc:v1:`) provider API keys in place, after config
+ * merge. Plaintext (legacy / env-template) values pass through untouched. On
+ * decrypt failure (missing/corrupt credential key) the key is cleared and a
+ * warning is written, so the provider surfaces "apiKey not set" rather than
+ * sending a garbage value.
+ */
+function decryptProviderApiKeys(providers: ProviderConfig[] | undefined): void {
+  if (!providers) return
+  const needsKey = providers.some((p) => p.apiKey.startsWith(ENC_PREFIX))
+  if (!needsKey) return
+  const key = getCredentialKey(MIPHAM_HOME)
+  for (const p of providers) {
+    if (!p.apiKey.startsWith(ENC_PREFIX)) continue
+    try {
+      p.apiKey = decryptApiKey(p.apiKey, key)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      process.stderr.write(
+        `⚠ Mipham Code: failed to decrypt API key for "${p.id}" (credential key missing/corrupt?): ${msg}\n`,
+      )
+      p.apiKey = ''
+    }
+  }
+}
+
+/**
+ * Read a single provider's API key from config.yml, decrypting it if stored
+ * encrypted. Returns null when the provider has no key or the key can't be
+ * decrypted. Used by `/keys view` to show the plaintext key on request.
+ */
+export function getProviderApiKey(providerId: string, cwd: string = process.cwd()): string | null {
+  const userConfigPath = join(MIPHAM_HOME, 'config.yml')
+  const projectConfigPath = join(cwd, '.mipham', 'config.yml')
+  const configPath = existsSync(userConfigPath) ? userConfigPath : projectConfigPath
+
+  try {
+    if (!existsSync(configPath)) return null
+    const raw = readFileSync(configPath, 'utf-8')
+    const doc = (parseYaml(raw) as Record<string, unknown>) || {}
+    const providers = (doc.providers as Array<Record<string, unknown>>) || []
+    const p = providers.find((x) => x.id === providerId)
+    if (!p || typeof p.apiKey !== 'string') return null
+    if (!p.apiKey.startsWith(ENC_PREFIX)) return p.apiKey
+    return decryptApiKey(p.apiKey, getCredentialKey(MIPHAM_HOME))
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    process.stderr.write(`⚠ Mipham Code: failed to read API key for "${providerId}": ${msg}\n`)
+    return null
+  }
+}
+
+/**
  * Persist an API key for a single provider to the user-level config.yml.
  * Reads the existing YAML, updates/replaces the provider's apiKey field,
  * and writes it back. Creates the config if it doesn't exist.
  *
  * Returns true on success, false on failure.
  */
-export function saveProviderApiKey(
-  providerId: string,
-  apiKey: string,
-  cwd: string = process.cwd(),
-): boolean {
-  const userConfigPath = join(MIPHAM_HOME, 'config.yml')
-  const projectConfigPath = join(cwd, '.mipham', 'config.yml')
-
-  // Prefer user-level config; fall back to project-level if no user config exists.
-  const configPath = existsSync(userConfigPath) ? userConfigPath : projectConfigPath
+export function saveProviderApiKey(providerId: string, apiKey: string): boolean {
+  // API keys are user-level secrets — always persist to the user config, never
+  // the project config (which lives in the repo and could be committed).
+  const configPath = join(MIPHAM_HOME, 'config.yml')
 
   try {
     mkdirSync(MIPHAM_HOME, { recursive: true, mode: 0o700 })
@@ -464,19 +514,20 @@ export function saveProviderApiKey(
     if (existsSync(configPath)) {
       const raw = readFileSync(configPath, 'utf-8')
       doc = (parseYaml(raw) as Record<string, unknown>) || {}
-    } else if (configPath === projectConfigPath) {
-      mkdirSync(join(cwd, '.mipham'), { recursive: true })
     }
 
     // Find and update the provider in the providers array
     const providers = (doc.providers as Array<Record<string, unknown>>) || []
     const idx = providers.findIndex((p) => p.id === providerId)
 
+    // Encrypt literal keys at rest (env-variable templates pass through).
+    const storedKey = encryptApiKey(apiKey, getCredentialKey(MIPHAM_HOME))
+
     if (idx >= 0) {
-      providers[idx] = { ...providers[idx], apiKey }
+      providers[idx] = { ...providers[idx], apiKey: storedKey }
     } else {
       // Provider not in config — append it
-      providers.push({ id: providerId, apiKey })
+      providers.push({ id: providerId, apiKey: storedKey })
     }
 
     doc.providers = providers
