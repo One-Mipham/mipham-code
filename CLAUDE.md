@@ -4,8 +4,8 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.4.6
-> **最后更新**: 2026-08-19 — v0.50.0 发布（CRSI 幂等去重 + daemon 权限/心跳 + 署名 Mipham + 四渠道收口）
+> **版本**: 2.4.7
+> **最后更新**: 2026-08-20 — Telegram 远程控制（长轮询 getUpdates，第二频道适配器，镜像飞书）
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -42,7 +42,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **eval harness** `/crsi eval` — `core/eval-harness.ts` 冻结 20 条 ground-truth 契约（12 机制：规则/宪法/沙箱边界/红队/producer 行为 + 8 行为缺口）+ rewards 日志 `~/.mipham/crsi/eval-scores.jsonl`，`runCrsiModification` 以「分数不退化」为第二道闸。8 行为缺口（rm -rf/管道投毒/git reset --hard/chmod 777/mkfs/dd→/dev//关停主机/crontab -r）已由固化 managed tool-params 规则覆盖 → 全翻转 PASS → 满分 100 =「证明更好」
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：1,650 测试（1648 passed + 2 skipped）
+测试：1,672 测试（1670 passed + 2 skipped）
 
 ---
 
@@ -79,7 +79,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 25 个内置技能（20 standard + 5 mipham）
-│   │   ├── test/               # 136 个测试文件，1650 个测试
+│   │   ├── test/               # 141 个测试文件，1672 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -102,7 +102,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（1650 个测试）
+pnpm test         # vitest run（1672 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -226,7 +226,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
 | E2E      | 1       | 8        | full-pipeline                                 |
 | Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **136** | **1650** | **0 失败** ✅（1648 passed + 2 skipped）      |
+| **合计** | **141** | **1672** | **0 失败** ✅（1670 passed + 2 skipped）      |
 
 > 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
 
@@ -393,7 +393,7 @@ mipham-code 变更（包名/版本）
 
 **待办**：
 
-1. **Bot 远程控制扩展** — Feishu 已落地（v0.47.0），补 Telegram/微信远程唤起（真缺口，IM SDK + 凭据 + prompt-injection，建议单独立项）
+1. **Bot 远程控制扩展** — Feishu（v0.47.0）+ Telegram（长轮询，本分支）已落地；微信/企业微信仍待补（IM SDK + 凭据 + prompt-injection，建议单独立项）
 2. **桌面 App** — macOS/Windows 桌面版（大工程，暂不排期）
 
 ---
@@ -402,6 +402,7 @@ mipham-code 变更（包名/版本）
 
 | 版本  | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                               | 维护人     |
 | ----- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| 2.4.7 | 2026-08-20 | Telegram 远程控制（第二频道适配器，镜像飞书）：`telegram/` 模块（types/fail-closed env/裸 fetch api/长轮询 poller/adapter 编排）+ server/index 接线 + 心跳推送 + poller→adapter→回发集成测试；`getOrCreateByFeishuOpenId` 泛化为 `getOrCreateByExternalUser`。测试 1670 passed + 2 skipped                                                                                                             | 技术委员会 |
 | 2.4.6 | 2026-08-19 | v0.50.0 发布（版本 0.49.0→0.50.0 bump + GPG 签名 tag + Release CI 全绿：npm / GitHub Release 6 资产 / JetBrains / 4 平台二进制 + VS Code VSIX 上传）。Memory 工具存储路径隔离：MEMORY_DIR 从 process.env.HOME 改 os.homedir()（堵 E2E「Alice」泄漏），agent.test 补 homedir mock（不再 rmSync 真实 ~/.mipham/memory）。测试 1648 passed + 2 skipped                                                    | 技术委员会 |
 | 2.4.5 | 2026-08-19 | AI 提交署名品牌化：新增 `COAUTHOR_TRAILER` 共享常量（`Co-Authored-By: Mipham <noreply@mipham.ai>`），系统提示注入「Commit Attribution」块，修复 `/fork` 与 `github-ops` skill 硬编码的「Claude」署名。披露 AI 参与（与 Anthropic Undercover 式隐瞒相反）。测试 1647 passed + 2 skipped                                                                                                                 | 技术委员会 |
 | 2.4.4 | 2026-08-19 | daemon 心跳式通知（保守版 KAIROS 推送）：`heartbeat.ts`（`collectPendingItems`/`buildHeartbeatMessage`/`heartbeatTick` 纯函数 + `startHeartbeat` 薄接线），feishu 配置时定时扫 pending goal/schedule 推摘要。只通知、不自主行动（CRSI 受约束哲学，借鉴 Claude Code KAIROS「订阅与推送」）。测试 1646 passed + 2 skipped                                                                                | 技术委员会 |
