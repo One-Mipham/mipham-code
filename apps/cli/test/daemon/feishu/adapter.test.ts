@@ -48,7 +48,7 @@ function makeDeps() {
   return {
     processPrompt,
     sm: {
-      getOrCreateByFeishuOpenId: vi.fn(() => ({
+      getOrCreateByExternalUser: vi.fn(() => ({
         id: 'sess-1',
         name: 'feishu-ou_1',
         cwd: '/tmp',

@@ -23,13 +23,14 @@ export class SessionManager {
     return this.db.listSessions(status)
   }
 
-  getOrCreateByFeishuOpenId(
-    openId: string,
+  getOrCreateByExternalUser(
+    channel: string,
+    userId: string,
     cwd: string,
     provider: string,
     model: string,
   ): DaemonSession {
-    const name = `feishu-${openId}`
+    const name = `${channel}-${userId}`
     const existing = this.db.listSessions().find((s) => s.name === name && s.status !== 'closed')
     if (existing) return existing
     return this.db.createSession({ name, cwd, provider, model })

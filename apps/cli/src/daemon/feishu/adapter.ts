@@ -28,7 +28,8 @@ export function createFeishuAdapter(config: FeishuConfig, deps: FeishuAdapterDep
       if (!allowed.has(msg.openId)) return
       if (!deps.rateLimiter.check(`feishu:${msg.openId}`).allowed) return
 
-      const session = deps.sm.getOrCreateByFeishuOpenId(
+      const session = deps.sm.getOrCreateByExternalUser(
+        'feishu',
         msg.openId,
         deps.cwd,
         deps.provider,

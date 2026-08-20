@@ -71,24 +71,25 @@ describe('SessionManager', () => {
     expect(closedId).toBe(s.id)
   })
 
-  it('getOrCreateByFeishuOpenId 复用同名非 closed 会话', () => {
+  it('getOrCreateByExternalUser 复用同名非 closed 会话', () => {
     const db = new DaemonDatabase(':memory:')
     db.init()
     const sm = new SessionManager(db)
-    const s1 = sm.getOrCreateByFeishuOpenId('ou_1', '/tmp', 'anthropic', 'claude')
-    const s2 = sm.getOrCreateByFeishuOpenId('ou_1', '/tmp', 'anthropic', 'claude')
+    const s1 = sm.getOrCreateByExternalUser('feishu', 'ou_1', '/tmp', 'anthropic', 'claude')
+    const s2 = sm.getOrCreateByExternalUser('feishu', 'ou_1', '/tmp', 'anthropic', 'claude')
     expect(s2.id).toBe(s1.id)
     expect(s2.name).toBe('feishu-ou_1')
     db.close()
   })
 
-  it('getOrCreateByFeishuOpenId 为不同 openId 建独立会话', () => {
+  it('getOrCreateByExternalUser 为不同 channel/userId 建独立会话', () => {
     const db = new DaemonDatabase(':memory:')
     db.init()
     const sm = new SessionManager(db)
-    const a = sm.getOrCreateByFeishuOpenId('ou_a', '/tmp', 'anthropic', 'claude')
-    const b = sm.getOrCreateByFeishuOpenId('ou_b', '/tmp', 'anthropic', 'claude')
+    const a = sm.getOrCreateByExternalUser('feishu', 'ou_a', '/tmp', 'anthropic', 'claude')
+    const b = sm.getOrCreateByExternalUser('telegram', '111', '/tmp', 'anthropic', 'claude')
     expect(b.id).not.toBe(a.id)
+    expect(b.name).toBe('telegram-111')
     db.close()
   })
 })
