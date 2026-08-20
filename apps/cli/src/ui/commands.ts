@@ -1244,7 +1244,7 @@ const crsiCritiqueCmd: CommandHandler = (ctx, args) => {
   const engine = ctx.engine
   const sc = engine.getSelfCritique?.()
   if (!sc) {
-    return { content: 'SelfCritique 未初始化。请确认 Mipham Code 版本 >= v0.34.0。' }
+    return { content: t('commands.crsi_critique.not_init') }
   }
 
   const sub = args[0]?.toLowerCase()
@@ -1254,42 +1254,44 @@ const crsiCritiqueCmd: CommandHandler = (ctx, args) => {
     sc.setEnabled(true)
     return {
       content: [
-        '## 🔍 Self-Critique: ON',
+        t('commands.crsi_critique.on_title'),
         '',
-        `Model: **${config.model || 'auto (fastest available)'}**`,
-        `Threshold: **${(config.threshold * 100).toFixed(0)}%**`,
-        `Target tools: **${config.targetTools.join(', ')}**`,
+        t('commands.crsi_critique.model', { model: config.model || 'auto (fastest available)' }),
+        t('commands.crsi_critique.threshold', { pct: (config.threshold * 100).toFixed(0) }),
+        t('commands.crsi_critique.target_tools', { tools: config.targetTools.join(', ') }),
         '',
-        'The AI will now critique its own tool calls before execution.',
-        'Safe + correct + necessary checks run before every targeted tool call.',
+        t('commands.crsi_critique.on_desc1'),
+        t('commands.crsi_critique.on_desc2'),
         '',
-        '💡 `/crsi critique off` to disable | `/crsi critique status` for current config',
+        t('commands.crsi_critique.on_hint'),
       ].join('\n'),
     }
   }
 
   if (sub === 'off' || sub === 'disable') {
     sc.setEnabled(false)
-    return {
-      content: '## 🔍 Self-Critique: OFF\n\nTool calls will execute without pre-flight critique.',
-    }
+    return { content: t('commands.crsi_critique.off_title') }
   }
 
   // status (default)
   const lines: string[] = [
-    '## 🔍 Self-Critique Status',
+    t('commands.crsi_critique.status_title'),
     '',
-    `State: **${config.enabled ? '🟢 Enabled' : '⚫ Disabled'}**`,
-    `Model: **${config.model || 'auto (fastest available)'}**`,
-    `Threshold: **${(config.threshold * 100).toFixed(0)}%** (below this → correction or block)`,
-    `Target tools: **${config.targetTools.length > 0 ? config.targetTools.join(', ') : 'all'}**`,
-    `Timeout: **${config.timeoutMs}ms**`,
+    t('commands.crsi_critique.state', {
+      state: config.enabled ? '🟢 Enabled' : '⚫ Disabled',
+    }),
+    t('commands.crsi_critique.model', { model: config.model || 'auto (fastest available)' }),
+    t('commands.crsi_critique.threshold_detail', { pct: (config.threshold * 100).toFixed(0) }),
+    t('commands.crsi_critique.target_tools', {
+      tools: config.targetTools.length > 0 ? config.targetTools.join(', ') : 'all',
+    }),
+    t('commands.crsi_critique.timeout', { ms: String(config.timeoutMs) }),
     '',
     '──',
-    '🔍 `/crsi critique on` — Enable self-critique',
-    '🔍 `/crsi critique off` — Disable self-critique',
+    t('commands.crsi_critique.status_on_hint'),
+    t('commands.crsi_critique.status_off_hint'),
     '',
-    '*Inspired by Anthropic RLAIF — AI critiques its own actions before execution.*',
+    t('commands.crsi_critique.inspired'),
   ]
 
   return { content: lines.join('\n') }
@@ -1304,7 +1306,7 @@ const crsiInterpretCmd: CommandHandler = (ctx, args) => {
   const engine = ctx.engine
   const toolFilter = args[0]?.toLowerCase()
 
-  const lines: string[] = ['## 🧠 CRSI Tool-Call Interpretability', '']
+  const lines: string[] = [t('commands.crsi_interpret.title'), '']
 
   // ── Error Signature Analysis ──
   const db = engine.getErrorSignatureDB?.()
@@ -1316,23 +1318,34 @@ const crsiInterpretCmd: CommandHandler = (ctx, args) => {
     if (sigs.length === 0) {
       lines.push(
         toolFilter
-          ? `No error signatures for tool \`${toolFilter}\`. CRSI immune memory is clean for this tool.`
-          : 'No active error signatures. CRSI immune memory is clean.',
+          ? t('commands.crsi_interpret.no_sigs_for_tool', { tool: toolFilter })
+          : t('commands.crsi_interpret.no_sigs'),
       )
     } else {
-      lines.push(`### 🛡️ Error Signatures${toolFilter ? ` — \`${toolFilter}\`` : ''}`, '')
+      lines.push(
+        t('commands.crsi_interpret.sigs_title', {
+          tool: toolFilter ? ` — \`${toolFilter}\`` : '',
+        }),
+        '',
+      )
       for (const sig of sigs.slice(0, 15)) {
         const bar =
           '█'.repeat(Math.round(sig.successRate * 10)) +
           '░'.repeat(10 - Math.round(sig.successRate * 10))
         lines.push(`- **${sig.toolName}**: \`${sig.pattern.slice(0, 60)}\``)
         lines.push(
-          `  Success: ${bar} ${Math.round(sig.successRate * 100)}% | ${sig.occurrences}x | ${sig.fixStrategy}`,
+          t('commands.crsi_interpret.sig_success', {
+            bar,
+            pct: String(Math.round(sig.successRate * 100)),
+            occurrences: String(sig.occurrences),
+            strategy: sig.fixStrategy,
+          }),
         )
-        lines.push(`  Fix: \`${sig.fixAction.slice(0, 80)}\``)
+        lines.push(t('commands.crsi_interpret.sig_fix', { fix: sig.fixAction.slice(0, 80) }))
         lines.push('')
       }
-      if (sigs.length > 15) lines.push(`... and ${sigs.length - 15} more signatures`, '')
+      if (sigs.length > 15)
+        lines.push(t('commands.crsi_interpret.sigs_more', { count: String(sigs.length - 15) }), '')
     }
   }
 
@@ -1341,8 +1354,8 @@ const crsiInterpretCmd: CommandHandler = (ctx, args) => {
   if (autoMemory) {
     const count = autoMemory.sessionReflectionCount ?? 0
     if (count > 0) {
-      lines.push('### 📊 CRSI Reflection Summary', '')
-      lines.push(`Turn reflections analyzed: **${count}**`)
+      lines.push(t('commands.crsi_interpret.reflection_title'), '')
+      lines.push(t('commands.crsi_interpret.reflections', { count: String(count) }))
       lines.push('')
     }
   }
@@ -1351,10 +1364,16 @@ const crsiInterpretCmd: CommandHandler = (ctx, args) => {
   const usage = engine.getUsageTracker?.()
   if (usage) {
     const summary = usage.getSummary()
-    lines.push('### 💰 Token Usage', '')
-    lines.push(`API input tokens:  ${summary.apiInputTokens.toLocaleString()}`)
-    lines.push(`API output tokens: ${summary.apiOutputTokens.toLocaleString()}`)
-    lines.push(`Estimated tokens:  ${summary.estimatedTokens.toLocaleString()}`)
+    lines.push(t('commands.crsi_interpret.usage_title'), '')
+    lines.push(
+      t('commands.crsi_interpret.api_in', { count: summary.apiInputTokens.toLocaleString() }),
+    )
+    lines.push(
+      t('commands.crsi_interpret.api_out', { count: summary.apiOutputTokens.toLocaleString() }),
+    )
+    lines.push(
+      t('commands.crsi_interpret.est_tokens', { count: summary.estimatedTokens.toLocaleString() }),
+    )
     lines.push('')
   }
 
@@ -1366,9 +1385,9 @@ const crsiInterpretCmd: CommandHandler = (ctx, args) => {
       if (analysis.systemHealth) {
         const h = analysis.systemHealth
         const bar = '█'.repeat(Math.round(h.score / 10)) + '░'.repeat(10 - Math.round(h.score / 10))
-        lines.push('### 🏥 System Health', '')
-        lines.push(`Overall: ${bar} **${h.score}/100**`)
-        lines.push(`Assessment: ${h.assessment}`)
+        lines.push(t('commands.crsi_interpret.health_title'), '')
+        lines.push(t('commands.crsi_interpret.overall', { bar, score: String(h.score) }))
+        lines.push(t('commands.crsi_interpret.assessment', { assessment: h.assessment }))
         if (h.components) {
           lines.push('')
           for (const [comp, score] of Object.entries(h.components)) {
@@ -1392,20 +1411,25 @@ const crsiInterpretCmd: CommandHandler = (ctx, args) => {
     const blocks = c.principles.filter((p) => p.enforce === 'block').length
     const warns = c.principles.filter((p) => p.enforce === 'warn').length
     const autos = c.principles.filter((p) => p.enforce === 'auto').length
-    lines.push('### ⚖️ Constitution', '')
+    lines.push(t('commands.crsi_interpret.constitution_title'), '')
     lines.push(
-      `Principles: **${c.principles.length}** (🚫 ${blocks} block | ⚠️ ${warns} warn | 🔄 ${autos} auto)`,
+      t('commands.crsi_interpret.principles', {
+        total: String(c.principles.length),
+        block: String(blocks),
+        warn: String(warns),
+        auto: String(autos),
+      }),
     )
-    lines.push(`Version: v${c.version}`)
+    lines.push(t('commands.crsi_interpret.version', { version: c.version }))
     lines.push('')
   }
 
   if (lines.length <= 2) {
-    lines.push('_Start using tools to populate CRSI interpretability data._')
+    lines.push(t('commands.crsi_interpret.empty'))
   }
 
   lines.push('──')
-  lines.push('🔍 Filter by tool: `/crsi interpret <tool-name>` (e.g. `/crsi interpret Bash`)')
+  lines.push(t('commands.crsi_interpret.filter_hint'))
 
   return { content: lines.join('\n') }
 }
@@ -1422,7 +1446,7 @@ const crsiRedTeamCmd: CommandHandler = async (ctx) => {
   const preflight = engine.getPreFlightChecker?.()
 
   if (!constitution || !preflight) {
-    return { content: 'Red-Team 需要 ConstitutionLoader 和 PreFlightChecker 均已初始化。' }
+    return { content: t('commands.crsi_red_team.not_init') }
   }
 
   const { RedTeam: RT } = await import('../../src/core/red-team.js')
@@ -1430,21 +1454,21 @@ const crsiRedTeamCmd: CommandHandler = async (ctx) => {
   const report = redTeam.run(constitution, preflight)
 
   const lines: string[] = [
-    '## 🔴 CRSI Red-Team Report',
+    t('commands.crsi_red_team.title'),
     '',
-    `Overall Score: **${report.score}/100**`,
+    t('commands.crsi_red_team.score', { score: String(report.score) }),
     '',
-    `| Metric | Count |`,
-    `|--------|------|`,
-    `| Total attacks | ${report.total} |`,
-    `| 🛡️ Correctly blocked | ${report.blocked} |`,
-    `| 🔴 Passed through (GAP) | ${report.passedThrough} |`,
-    `| ⚠️ False positives | ${report.falsePositives} |`,
+    t('commands.crsi_red_team.metric'),
+    t('commands.crsi_red_team.metric_sep'),
+    t('commands.crsi_red_team.total_attacks', { count: String(report.total) }),
+    t('commands.crsi_red_team.blocked', { count: String(report.blocked) }),
+    t('commands.crsi_red_team.passed_through', { count: String(report.passedThrough) }),
+    t('commands.crsi_red_team.false_positives', { count: String(report.falsePositives) }),
     '',
   ]
 
   // Per-principle breakdown
-  lines.push('### By Principle', '')
+  lines.push(t('commands.crsi_red_team.by_principle'), '')
   for (const [pid, stats] of Object.entries(report.byPrinciple)) {
     const pct = stats.total > 0 ? Math.round((stats.blocked / stats.total) * 100) : 100
     const bar = '█'.repeat(Math.round(pct / 10)) + '░'.repeat(10 - Math.round(pct / 10))
@@ -1456,11 +1480,14 @@ const crsiRedTeamCmd: CommandHandler = async (ctx) => {
   // Detail: passed-through attacks
   const gaps = report.results.filter((r) => r.attack.shouldBlock && !r.blocked)
   if (gaps.length > 0) {
-    lines.push('### 🔴 Security Gaps (Should Have Been Blocked)', '')
+    lines.push(t('commands.crsi_red_team.gaps_title'), '')
     for (const g of gaps) {
       lines.push(`- **${g.attack.principleId}**: ${g.attack.description}`)
       lines.push(
-        `  Tool: \`${g.attack.toolName}\` → Params: \`${JSON.stringify(g.attack.params).slice(0, 80)}\``,
+        t('commands.crsi_red_team.gap_tool', {
+          tool: g.attack.toolName,
+          params: JSON.stringify(g.attack.params).slice(0, 80),
+        }),
       )
     }
     lines.push('')
@@ -1469,21 +1496,25 @@ const crsiRedTeamCmd: CommandHandler = async (ctx) => {
   // Detail: caught attacks
   const caught = report.results.filter((r) => r.blocked)
   if (caught.length > 0) {
-    lines.push('### 🛡️ Successfully Blocked', '')
+    lines.push(t('commands.crsi_red_team.blocked_title'), '')
     for (const c of caught) {
-      lines.push(`- ${c.attack.principleId}: ${c.attack.description} → caught by **${c.caughtBy}**`)
+      lines.push(
+        t('commands.crsi_red_team.caught_by', {
+          principle: c.attack.principleId,
+          desc: c.attack.description,
+          caught: c.caughtBy ?? 'unknown',
+        }),
+      )
     }
     lines.push('')
   }
 
   if (report.score === 100) {
-    lines.push('🎉 **All attacks blocked!** The SIS immune system is fully operational.')
+    lines.push(t('commands.crsi_red_team.all_blocked'))
   } else if (report.score >= 80) {
-    lines.push(
-      '⚠️ Good coverage. Review the gaps above and add audit patterns to `ai-guardrails.yml`.',
-    )
+    lines.push(t('commands.crsi_red_team.good_coverage'))
   } else {
-    lines.push('🔴 **Critical gaps detected.** Prioritize fixing the passed-through attacks above.')
+    lines.push(t('commands.crsi_red_team.critical'))
   }
 
   return { content: lines.join('\n') }
@@ -1500,45 +1531,61 @@ const dreamCmd: CommandHandler = async (ctx, args) => {
 
   const engine = ctx.engine.getDreamEngine?.()
   if (!engine) {
-    return { content: 'DreamEngine 未初始化。请确认 Mipham Code 版本 >= v0.34.0。' }
+    return { content: t('commands.dream.not_init') }
   }
 
   if (status) {
     const history = engine.getDreamHistory()
     if (history.length === 0) {
-      return { content: '🌙 尚未运行过 Auto-Dream。使用 `/dream` 手动触发首次梦境整合。' }
+      return { content: t('commands.dream.no_history') }
     }
-    const lines: string[] = ['## 🌙 Auto-Dream 历史', '']
+    const lines: string[] = [t('commands.dream.history_title'), '']
     for (const entry of history.slice(0, 5)) {
       const ts = new Date(entry.timestamp).toLocaleString('zh-CN')
       const total = entry.actions.length
       const applied = entry.actions.filter((a) => a.autoApplied).length
       const flagged = entry.actions.filter((a) => !a.autoApplied).length
-      lines.push(`- **${ts}**: ${total} 行动 (${applied} 自动应用, ${flagged} 标记审查)`)
+      lines.push(
+        t('commands.dream.history_entry', {
+          time: ts,
+          total: String(total),
+          applied: String(applied),
+          flagged: String(flagged),
+        }),
+      )
     }
     return { content: lines.join('\n') }
   }
 
   const report = engine.dream({ aggressive })
   const lines: string[] = [
-    '## 🌙 Auto-Dream 完成',
+    t('commands.dream.done_title'),
     '',
-    `记忆整合: ${report.beforeCount} → ${report.afterCount}`,
-    ...(report.phases.deduplicated > 0 ? [`- 去重: ${report.phases.deduplicated} 条`] : []),
+    t('commands.dream.integrate', {
+      before: String(report.beforeCount),
+      after: String(report.afterCount),
+    }),
+    ...(report.phases.deduplicated > 0
+      ? [t('commands.dream.dedup', { count: String(report.phases.deduplicated) })]
+      : []),
     ...(report.phases.contradictionsFound > 0
-      ? [`- 矛盾冲突: ${report.phases.contradictionsFound} 处 (需人工裁决)`]
+      ? [t('commands.dream.contradiction', { count: String(report.phases.contradictionsFound) })]
       : []),
-    ...(report.phases.merged > 0 ? [`- 合并: ${report.phases.merged} 组`] : []),
+    ...(report.phases.merged > 0
+      ? [t('commands.dream.merge', { count: String(report.phases.merged) })]
+      : []),
     ...(report.phases.solidified > 0
-      ? [`- 模糊标记: ${report.phases.solidified} 条 (建议固化)`]
+      ? [t('commands.dream.solidify', { count: String(report.phases.solidified) })]
       : []),
-    ...(report.phases.pruned > 0 ? [`- 清理过期: ${report.phases.pruned} 条`] : []),
+    ...(report.phases.pruned > 0
+      ? [t('commands.dream.prune', { count: String(report.phases.pruned) })]
+      : []),
     '',
   ]
 
   const flagged = report.actions.filter((a) => !a.autoApplied)
   if (flagged.length > 0 && !aggressive) {
-    lines.push(`⚠️  ${flagged.length} 项待审查。使用 \`/dream --aggressive\` 自动应用所有操作。`)
+    lines.push(t('commands.dream.review_hint', { count: String(flagged.length) }))
     lines.push('')
     for (const action of flagged) {
       lines.push(`- [ ] **${action.type}**: ${action.description}`)
@@ -1546,7 +1593,7 @@ const dreamCmd: CommandHandler = async (ctx, args) => {
   }
 
   if (report.actions.length === 0) {
-    lines.push('✅ 记忆干净，无需整理。')
+    lines.push(t('commands.dream.clean'))
   }
 
   return { content: lines.join('\n') }
@@ -1561,7 +1608,7 @@ const constitutionCmd: CommandHandler = (ctx, args) => {
   const engine = ctx.engine
   const constitution = engine.getConstitutionLoader?.()
   if (!constitution) {
-    return { content: 'ConstitutionLoader 未初始化。请确认 Mipham Code 版本 >= v0.34.0。' }
+    return { content: t('commands.constitution.not_init') }
   }
 
   const subCmd = args[0]?.toLowerCase()
@@ -1571,11 +1618,11 @@ const constitutionCmd: CommandHandler = (ctx, args) => {
     const c = constitution.reload()
     return {
       content: [
-        '## ⚖️ Constitution Reloaded',
+        t('commands.constitution.reload_title'),
         '',
-        `Version: **v${c.version}**`,
-        `Principles: **${c.principles.length}**`,
-        `Path: \`${constitution.getPath()}\``,
+        t('commands.constitution.version', { version: c.version }),
+        t('commands.constitution.principles', { count: String(c.principles.length) }),
+        t('commands.constitution.path', { path: constitution.getPath() }),
         '',
         c.principles.map((p) => `- **${p.id}** [${p.enforce}]: ${p.text}`).join('\n'),
       ].join('\n'),
@@ -1585,9 +1632,13 @@ const constitutionCmd: CommandHandler = (ctx, args) => {
   // /constitution view (default)
   const c = constitution.load()
   const lines: string[] = [
-    '## ⚖️ Mipham Constitution',
+    t('commands.constitution.view_title'),
     '',
-    `Version: **v${c.version}** | Principles: **${c.principles.length}** | Path: \`${constitution.getPath()}\``,
+    t('commands.constitution.view_summary', {
+      version: c.version,
+      count: String(c.principles.length),
+      path: constitution.getPath(),
+    }),
     '',
     '---',
     '',
@@ -1599,20 +1650,18 @@ const constitutionCmd: CommandHandler = (ctx, args) => {
     lines.push('')
     lines.push(p.text)
     if (p.rationale) lines.push(`  *${p.rationale}*`)
-    if (p.scope) lines.push(`  Scope: \`${p.scope}\``)
-    if (p.tools) lines.push(`  Tools: ${p.tools.join(', ')}`)
+    if (p.scope) lines.push(t('commands.constitution.scope', { scope: p.scope }))
+    if (p.tools) lines.push(t('commands.constitution.tools', { tools: p.tools.join(', ') }))
     lines.push('')
   }
 
   lines.push('---')
   lines.push('')
-  lines.push('🔧 `/constitution reload` — 重新加载（修改 ai-guardrails.yml 后使用）')
-  lines.push('📝 编辑: `vi ~/.mipham/ai-guardrails.yml`')
-  lines.push('🗑️  重置: 删除 `~/.mipham/ai-guardrails.yml` 后执行 `/constitution reload`')
+  lines.push(t('commands.constitution.reload_hint'))
+  lines.push(t('commands.constitution.edit_hint'))
+  lines.push(t('commands.constitution.reset_hint'))
   lines.push('')
-  lines.push(
-    '*Inspired by Anthropic Constitutional AI. Mipham enforces these principles at runtime — auditable on every action.*',
-  )
+  lines.push(t('commands.constitution.inspired'))
 
   return { content: lines.join('\n') }
 }
@@ -1625,25 +1674,32 @@ const bugReportCmd: CommandHandler = async (ctx) => {
   const t = resolveT(ctx)
   const engine = ctx.engine
   const lines: string[] = [
-    '## 🐛 Bug Report',
+    t('commands.bug_report.title'),
     '',
-    '> Copy the report below and paste it into your GitHub Issue.',
+    t('commands.bug_report.hint'),
     '',
     '---',
     '',
   ]
 
   // ── Version & Runtime ──
-  lines.push('### Environment', '')
-  lines.push(`- **Mipham Code**: v${ctx.version}`)
-  lines.push(`- **Session**: ${ctx.sessionId}`)
-  lines.push(`- **Node**: ${process.version}`)
-  lines.push(`- **Platform**: ${process.platform} ${process.arch}`)
+  lines.push(t('commands.bug_report.env_title'), '')
+  lines.push(t('commands.bug_report.mipham', { version: ctx.version }))
+  lines.push(t('commands.bug_report.session', { id: ctx.sessionId }))
+  lines.push(t('commands.bug_report.node', { version: process.version }))
+  lines.push(t('commands.bug_report.platform', { platform: process.platform, arch: process.arch }))
   lines.push(
-    `- **OS**: ${process.platform === 'darwin' ? 'macOS' : process.platform === 'linux' ? 'Linux' : 'Windows'}`,
+    t('commands.bug_report.os', {
+      os:
+        process.platform === 'darwin'
+          ? 'macOS'
+          : process.platform === 'linux'
+            ? 'Linux'
+            : 'Windows',
+    }),
   )
-  lines.push(`- **Provider**: ${ctx.providerId}`)
-  lines.push(`- **Model**: ${ctx.modelId}`)
+  lines.push(t('commands.bug_report.provider', { provider: ctx.providerId }))
+  lines.push(t('commands.bug_report.model', { model: ctx.modelId }))
   lines.push('')
 
   // ── SIS errors ──
@@ -1652,10 +1708,16 @@ const bugReportCmd: CommandHandler = async (ctx) => {
     if (db) {
       const active = db.getActive()
       if (active.length > 0) {
-        lines.push('### Active Error Signatures', '')
+        lines.push(t('commands.bug_report.sigs_title'), '')
         for (const sig of active.slice(0, 10)) {
           lines.push(
-            `- \`${sig.id}\`: ${sig.pattern} (${sig.category}, ${sig.occurrences}x, ${(sig.successRate * 100).toFixed(0)}% success)`,
+            t('commands.bug_report.sig_entry', {
+              id: sig.id,
+              pattern: sig.pattern,
+              category: sig.category,
+              occurrences: String(sig.occurrences),
+              pct: (sig.successRate * 100).toFixed(0),
+            }),
           )
         }
         lines.push('')
@@ -1672,10 +1734,14 @@ const bugReportCmd: CommandHandler = async (ctx) => {
       const health = hookEngine.getHookHealth()
       const disabled = health.filter((h) => h.health.disabled)
       if (disabled.length > 0) {
-        lines.push('### Disabled Hooks', '')
+        lines.push(t('commands.bug_report.disabled_hooks'), '')
         for (const entry of disabled) {
           lines.push(
-            `- \`${entry.key}\`: ${entry.health.failures} failures, disabled at ${new Date(entry.health.disabledAt).toISOString()}`,
+            t('commands.bug_report.hook_entry', {
+              key: entry.key,
+              failures: String(entry.health.failures),
+              time: new Date(entry.health.disabledAt).toISOString(),
+            }),
           )
         }
         lines.push('')
@@ -1692,10 +1758,15 @@ const bugReportCmd: CommandHandler = async (ctx) => {
       const history = dreamEngine.getDreamHistory()
       if (history.length > 0) {
         const last = history[0]!
-        lines.push('### Last Auto-Dream', '')
-        lines.push(`- **Ran at**: ${last.timestamp}`)
+        lines.push(t('commands.bug_report.last_dream'), '')
+        lines.push(t('commands.bug_report.ran_at', { time: last.timestamp }))
         lines.push(
-          `- **Actions**: ${last.actions.length} (${last.actions.filter((a: { autoApplied: boolean }) => a.autoApplied).length} applied)`,
+          t('commands.bug_report.actions', {
+            total: String(last.actions.length),
+            applied: String(
+              last.actions.filter((a: { autoApplied: boolean }) => a.autoApplied).length,
+            ),
+          }),
         )
         lines.push('')
       }
@@ -1705,17 +1776,17 @@ const bugReportCmd: CommandHandler = async (ctx) => {
   }
 
   // ── Steps to reproduce (template) ──
-  lines.push('### Steps to Reproduce', '')
+  lines.push(t('commands.bug_report.steps_title'), '')
   lines.push('1. ')
   lines.push('2. ')
   lines.push('3. ')
   lines.push('')
-  lines.push('### Expected Behavior', '')
+  lines.push(t('commands.bug_report.expected'), '')
   lines.push('')
-  lines.push('### Actual Behavior', '')
+  lines.push(t('commands.bug_report.actual'), '')
   lines.push('')
   lines.push('---')
-  lines.push(`🤖 Generated with Mipham Code v${ctx.version}`)
+  lines.push(t('commands.bug_report.generated', { version: ctx.version }))
 
   return { content: lines.join('\n'), copyContent: lines.join('\n') }
 }
@@ -1728,7 +1799,7 @@ const bugReportCmd: CommandHandler = async (ctx) => {
 
 const changelogCmd: CommandHandler = async (ctx) => {
   const t = resolveT(ctx)
-  const lines: string[] = ['## 📋 Changelog', '']
+  const lines: string[] = [t('commands.changelog.title'), '']
 
   try {
     const { execSync } = await import('node:child_process')
@@ -1739,11 +1810,11 @@ const changelogCmd: CommandHandler = async (ctx) => {
       .slice(0, 15)
 
     if (tags.length === 0) {
-      lines.push('No version tags found.')
+      lines.push(t('commands.changelog.no_tags'))
       return { content: lines.join('\n') }
     }
 
-    lines.push(`Current: **v${ctx.version}**`, '')
+    lines.push(t('commands.changelog.current', { version: ctx.version }), '')
 
     for (let i = 0; i < tags.length; i++) {
       const tag = tags[i]!
@@ -1759,25 +1830,25 @@ const changelogCmd: CommandHandler = async (ctx) => {
           .filter(Boolean)
 
         const isCurrent = tag === `v${ctx.version}`
-        lines.push(`### ${tag}${isCurrent ? ' ← current' : ''}`, '')
+        lines.push(`### ${tag}${isCurrent ? t('commands.changelog.current_marker') : ''}`, '')
         if (log.length > 0) {
           for (const entry of log) {
             lines.push(`- ${entry}`)
           }
         } else {
-          lines.push('  _(release tag only)_')
+          lines.push(t('commands.changelog.release_only'))
         }
         lines.push('')
       } catch {
-        lines.push(`### ${tag}`, '', '  _(details unavailable)_', '')
+        lines.push(`### ${tag}`, '', t('commands.changelog.details_unavailable'), '')
       }
     }
   } catch {
-    lines.push('Unable to read git history. Make sure you are in the Mipham Code repository.')
+    lines.push(t('commands.changelog.no_git'))
   }
 
   lines.push('---')
-  lines.push(`Full history: \`git log --oneline\``)
+  lines.push(t('commands.changelog.full_history'))
 
   return { content: lines.join('\n') }
 }
