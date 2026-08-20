@@ -133,6 +133,8 @@ export interface MiphamConfig {
   permission: ToolPermission
   /** Org-level permission restrictions (forbiddenModes, maxAllowedMode). */
   permissionRestrictions?: PermissionRestrictions
+  /** User-defined permission rules (allow/deny patterns), wired into the runtime PermissionSystem. */
+  permissionRules?: { allow?: string[]; deny?: string[] }
   providers: ProviderConfig[]
   skills?: { paths: string[]; mcpServers: McpServerConfig[] }
   marketplace?: {

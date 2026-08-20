@@ -1,14 +1,15 @@
 import type { PermissionRuleEntry } from '../shared/index.ts'
 
-/**
- * Match a Bash(command_pattern) rule against an actual tool call.
- *
- * Pattern formats:
- *   "Bash"              → matches any Bash call
- *   "Bash(git:*)"       → matches "git status", "git diff --cached", etc.
- *   "Bash(npm test:*)"  → matches "npm test -- --coverage"
- *   "Write(/etc/*)"     → matches Write to /etc/passwd, /etc/hosts, etc.
- */
+// Match a tool(parameter) rule against an actual tool call.
+//
+// Pattern formats:
+//   "Bash"              → matches any Bash call
+//   "Bash(git:*)"       → matches "git status", "git diff --cached", etc.
+//   "Bash(npm test:*)"  → matches "npm test -- --coverage"
+//   "Write(/etc/*)"     → matches Write to /etc/passwd, /etc/hosts, etc.
+//   "Read(**/.ssh/*)"   → matches Read of any path under .ssh
+//   "Grep(**/vendor)"   → matches Grep rooted under a vendor directory
+//   "Glob(**/.ssh)"     → matches Glob rooted under a .ssh directory
 export function matchBashRule(
   pattern: string,
   toolName: string,
@@ -31,9 +32,15 @@ export function matchBashRule(
     return wildcardMatch(subPattern!, cmd.trim())
   }
 
-  // For Write/Edit: match against the file_path
-  if (baseTool === 'Write' || baseTool === 'Edit') {
+  // For Write/Edit/Read: match against the file_path
+  if (baseTool === 'Write' || baseTool === 'Edit' || baseTool === 'Read') {
     const path = String(toolInput.file_path || '')
+    return wildcardMatch(subPattern!, path)
+  }
+
+  // For Grep/Glob: match against the base search path (a directory)
+  if (baseTool === 'Grep' || baseTool === 'Glob') {
+    const path = String(toolInput.path || '')
     return wildcardMatch(subPattern!, path)
   }
 

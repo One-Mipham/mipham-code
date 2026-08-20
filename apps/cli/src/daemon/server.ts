@@ -75,13 +75,20 @@ function resolveDaemonPermission(): PermissionMode {
 
 /**
  * Build the daemon's PermissionSystem, honoring org-level restrictions
- * (permissionRestrictions). setRestrictions re-clamps the env-derived mode,
- * so a `MIPHAM_DAEMON_PERMISSION=bypassPermissions` is downgraded when the
- * config forbids it — mirroring the CLI's fail-closed behavior.
+ * (permissionRestrictions) and user-defined allow/deny rules. setRestrictions
+ * re-clamps the env-derived mode, so a `MIPHAM_DAEMON_PERMISSION=bypassPermissions`
+ * is downgraded when the config forbids it — mirroring the CLI's fail-closed behavior.
  */
-export function buildDaemonPermission(restrictions?: PermissionRestrictions): PermissionSystem {
+export function buildDaemonPermission(
+  restrictions?: PermissionRestrictions,
+  rules?: { allow?: string[]; deny?: string[] },
+): PermissionSystem {
   const permission = new PermissionSystem(resolveDaemonPermission())
   if (restrictions) permission.setRestrictions(restrictions)
+  if (rules) {
+    for (const rule of rules.allow ?? []) permission.allow(rule)
+    for (const rule of rules.deny ?? []) permission.deny(rule)
+  }
   return permission
 }
 
@@ -204,7 +211,11 @@ export function createServer(config: ServerConfig): Server<WsData> {
       }
     }
 
-    const permission = buildDaemonPermission(loadConfig(cwd).permissionRestrictions)
+    const daemonConfig = loadConfig(cwd)
+    const permission = buildDaemonPermission(
+      daemonConfig.permissionRestrictions,
+      daemonConfig.permissionRules,
+    )
     const engine = new QueryEngine(sharedRegistry, context, sharedTools, permission)
     engine.setSessionId(sessionId)
     engineCache.set(sessionId, engine)

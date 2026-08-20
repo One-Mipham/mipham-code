@@ -39,6 +39,33 @@ describe('matchBashRule', () => {
   it('handles missing command gracefully', () => {
     expect(matchBashRule('Bash(git:*)', 'Bash', {})).toBe(false)
   })
+
+  it('matches Read(file_path) pattern', () => {
+    expect(
+      matchBashRule('Read(**/.ssh/id_rsa)', 'Read', { file_path: '/home/u/.ssh/id_rsa' }),
+    ).toBe(true)
+    expect(matchBashRule('Read(**/.ssh/id_rsa)', 'Read', { file_path: '/home/u/app.ts' })).toBe(
+      false,
+    )
+  })
+
+  it('matches Grep(path) pattern', () => {
+    expect(
+      matchBashRule('Grep(**/node_modules)', 'Grep', { pattern: 'x', path: '/proj/node_modules' }),
+    ).toBe(true)
+    expect(
+      matchBashRule('Grep(**/node_modules)', 'Grep', { pattern: 'x', path: '/proj/src' }),
+    ).toBe(false)
+  })
+
+  it('matches Glob(path) pattern', () => {
+    expect(matchBashRule('Glob(**/.ssh)', 'Glob', { pattern: '**', path: '/home/u/.ssh' })).toBe(
+      true,
+    )
+    expect(matchBashRule('Glob(**/.ssh)', 'Glob', { pattern: '**', path: '/home/u/src' })).toBe(
+      false,
+    )
+  })
 })
 
 describe('compileRule', () => {

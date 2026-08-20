@@ -524,6 +524,12 @@ export async function runApp(options: RunOptions): Promise<void> {
     engine.getPermission().setRestrictions(config.permissionRestrictions)
   }
 
+  // Apply user-defined permission rules (allow/deny) — wire the rule system into runtime
+  if (config.permissionRules) {
+    for (const rule of config.permissionRules.allow ?? []) engine.getPermission().allow(rule)
+    for (const rule of config.permissionRules.deny ?? []) engine.getPermission().deny(rule)
+  }
+
   // Initialize agent registry and load plugin agents/skills/MCP/hooks
   const agentRegistry = new AgentRegistry()
   agentRegistry.loadUserAgents()

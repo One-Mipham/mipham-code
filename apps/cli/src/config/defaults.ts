@@ -16,6 +16,9 @@ export const DEFAULT_CONFIG: MiphamConfig = {
   // Org 级权限限制（可选）：forbiddenModes 禁指定模式 / maxAllowedMode 封顶层级；
   // 请求被禁模式时 fail-closed 降级（如 forbiddenModes:['bypassPermissions']）。
   // permissionRestrictions: { forbiddenModes: ['bypassPermissions'] },
+  // 用户自定义权限规则（可选）：allow/deny 模式接入运行时 PermissionSystem；
+  // deny 管「根本不该碰」的文件（与 credential_masking 的「可读但洗输出」互补，勿重叠）。
+  // permissionRules: { deny: ['Read(**/.ssh/id_rsa)', 'Read(**/*.pem)'] },
   providers: DEFAULT_PROVIDERS,
   marketplace: {
     strictKnownMarketplaces: [],
