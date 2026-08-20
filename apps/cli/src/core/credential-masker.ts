@@ -13,6 +13,7 @@ export { matchCredentialFile } from './credential-masker/matcher'
 export { maskContent } from './credential-masker/pipeline'
 export { maskOutput } from './credential-masker/output-scrub'
 export { filterEnv } from './credential-masker/env-filter'
+export { maskSearchOutput, maskGlobOutput } from './credential-masker/search'
 
 import { CREDENTIAL_SENTINEL } from './credential-masker/types'
 

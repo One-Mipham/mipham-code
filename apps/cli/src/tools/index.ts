@@ -5,8 +5,8 @@ import { toolService, collectTools } from './seam'
 import { readToolService } from './file/read'
 import { writeTool } from './file/write'
 import { editTool } from './file/edit'
-import { globTool } from './file/glob'
-import { grepTool } from './file/grep'
+import { globToolService } from './file/glob'
+import { grepToolService } from './file/grep'
 import { bashToolService } from './exec/bash'
 import { gitTool } from './exec/git'
 import { taskTool } from './exec/task'
@@ -49,8 +49,6 @@ export function createToolRegistry(
     // File tools
     writeTool,
     editTool,
-    globTool,
-    grepTool,
     // Exec tools
     gitTool,
     taskTool,
@@ -87,9 +85,11 @@ export function createToolRegistry(
   for (const tool of plainTools) {
     ctx.mount(toolService(withValidation(tool)))
   }
-  // 注入工具（credentials 依赖）：read + bash
+  // 注入工具（credentials 依赖）：read + bash + grep + glob
   ctx.mount(readToolService)
   ctx.mount(bashToolService)
+  ctx.mount(grepToolService)
+  ctx.mount(globToolService)
 
   return collectTools(ctx)
 }

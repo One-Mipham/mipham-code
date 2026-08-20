@@ -10,10 +10,12 @@ import { collectTools } from '../../src/tools/seam'
 import { createReadTool, readToolService } from '../../src/tools/file/read'
 import { writeTool } from '../../src/tools/file/write'
 import { editTool } from '../../src/tools/file/edit'
-import { globTool } from '../../src/tools/file/glob'
-import { grepTool, runSearch, truncateGrepOutput } from '../../src/tools/file/grep'
+import { createGlobTool } from '../../src/tools/file/glob'
+import { createGrepTool, runSearch, truncateGrepOutput } from '../../src/tools/file/grep'
 
 const readTool = createReadTool()
+const globTool = createGlobTool()
+const grepTool = createGrepTool()
 
 // ── Test context ──
 

@@ -5,6 +5,7 @@ export { MaskingPipeline, getPipeline, maskContent } from './pipeline'
 export { matchCredentialFile, matchPath, globToRegex } from './matcher'
 export { filterEnv } from './env-filter'
 export { maskOutput } from './output-scrub'
+export { maskSearchOutput, maskGlobOutput } from './search'
 
 // Strategies
 export { FullMaskingStrategy } from './strategies/full'
