@@ -485,6 +485,8 @@ export interface SkillDefinition {
   disableModelInvocation?: boolean
   /** When true, users can invoke this skill directly via /<name> */
   userInvocable?: boolean
+  /** External command-line binaries the skill requires (frontmatter: requires-bins). */
+  requiresBins?: string[]
   /** The markdown body content of the skill file (instructions for the AI to follow). */
   body?: string
 }

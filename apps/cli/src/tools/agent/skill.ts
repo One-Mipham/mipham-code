@@ -2,6 +2,7 @@ import type { ToolDefinition } from '../../shared'
 import { executeForkedSkill } from '../../skills/fork-executor'
 import { sanitizeSkillBody } from '../../skills/sanitizer'
 import { ensureSkillAssets } from '../../skills/skill-assets'
+import { checkRequiredBins } from '../../skills/bin-check'
 
 export const skillTool: ToolDefinition = {
   name: 'Skill',
@@ -45,6 +46,19 @@ export const skillTool: ToolDefinition = {
         ensureSkillAssets(skillName)
       } catch (err) {
         console.warn(`Skill asset extraction failed for "${skillName}":`, err)
+      }
+
+      // Preflight: fail fast with a clear error if a required binary is missing.
+      if (skill.requiresBins?.length) {
+        const missing = checkRequiredBins(skill.requiresBins)
+        if (missing.length > 0) {
+          const list = missing.map((b) => `\`${b}\``).join(', ')
+          return {
+            success: false,
+            content: '',
+            error: `Skill "${skillName}" requires ${list}, which ${missing.length === 1 ? 'is' : 'are'} not available on PATH. Install and retry.`,
+          }
+        }
       }
 
       // Check if skill has context: fork — execute in isolated subagent
