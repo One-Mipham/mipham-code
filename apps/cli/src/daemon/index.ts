@@ -25,6 +25,8 @@ import type { DaemonStatus } from './types'
 import { logger } from './logger'
 import { parseFeishuEnv } from './feishu/env.js'
 import type { FeishuConfig } from './feishu/types.js'
+import { parseTelegramEnv } from './telegram/env.js'
+import type { TelegramConfig } from './telegram/types.js'
 import { loadConfig } from '../config/loader'
 
 const HOME = homedir()
@@ -181,6 +183,21 @@ export async function startDaemon(): Promise<{ port: number; token: string }> {
     }
   }
 
+  // Telegram remote-control adapter（env 未配置时跳过；配置则解析 session 默认 provider/model）
+  const telegramConfig = parseTelegramEnv()
+  let telegram: { config: TelegramConfig; cwd: string; provider: string; model: string } | undefined
+  if (telegramConfig) {
+    const cfg = loadConfig()
+    // 取第一个非 upcoming（即非「待上线」）的 provider 及其首个 model
+    const provider = cfg.providers.find((p) => p.status !== 'upcoming') ?? cfg.providers[0]
+    telegram = {
+      config: telegramConfig,
+      cwd: process.env.TELEGRAM_CWD || process.cwd(),
+      provider: provider?.id ?? 'anthropic',
+      model: provider?.models?.[0]?.id ?? 'claude-sonnet-5',
+    }
+  }
+
   // Start HTTP server (Bun.serve starts listening immediately)
   const server = createServer({
     db,
@@ -196,6 +213,7 @@ export async function startDaemon(): Promise<{ port: number; token: string }> {
     scheduleManager,
     rateLimiter,
     feishu,
+    telegram,
   })
   activeServer = server
 

@@ -26,6 +26,9 @@ import type { ToolDefinition, PermissionMode, PermissionRestrictions } from '../
 import { createFeishuAdapter } from './feishu/adapter.js'
 import { createFeishuApi } from './feishu/api.js'
 import type { FeishuConfig } from './feishu/types.js'
+import { createTelegramAdapter } from './telegram/adapter.js'
+import { createTelegramApi } from './telegram/api.js'
+import type { TelegramConfig } from './telegram/types.js'
 import { startHeartbeat } from './heartbeat'
 
 interface ServerConfig {
@@ -42,6 +45,7 @@ interface ServerConfig {
   scheduleManager: ScheduleManager
   rateLimiter: RateLimiter
   feishu?: { config: FeishuConfig; cwd: string; provider: string; model: string }
+  telegram?: { config: TelegramConfig; cwd: string; provider: string; model: string }
 }
 
 interface WsData {
@@ -112,6 +116,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
     scheduleManager,
     rateLimiter,
     feishu,
+    telegram,
   } = config
 
   const wsClients = new Map<string, Set<ServerWebSocket<WsData>>>()
@@ -245,17 +250,44 @@ export function createServer(config: ServerConfig): Server<WsData> {
       })
     : undefined
 
+  // ── Telegram remote-control adapter（长轮询，无需 webhook 路由）──
+  const telegramAdapter = telegram
+    ? createTelegramAdapter(telegram.config, createTelegramApi(telegram.config), {
+        sm,
+        getOrCreateWorker,
+        rateLimiter,
+        cwd: telegram.cwd,
+        provider: telegram.provider,
+        model: telegram.model,
+      })
+    : undefined
+  telegramAdapter?.start()
+
   // ── 心跳式通知：定时扫 pending（goal/schedule），只通知、不自主行动 ──
+  const heartbeatSource = {
+    listGoals: () => sm.listSessions().flatMap((s) => goalManager.getGoals(s.id)),
+    listSchedules: () => sm.listSessions().flatMap((s) => scheduleManager.getSchedules(s.id)),
+  }
   if (feishu) {
     const feishuApi = createFeishuApi(feishu.config)
     startHeartbeat({
-      source: {
-        listGoals: () => sm.listSessions().flatMap((s) => goalManager.getGoals(s.id)),
-        listSchedules: () => sm.listSessions().flatMap((s) => scheduleManager.getSchedules(s.id)),
-      },
+      source: heartbeatSource,
       push: (message) => {
         for (const openId of feishu.config.allowedOpenIds) {
           void feishuApi.sendText(openId, message).catch(() => {
+            /* 推送失败静默，不打断心跳 */
+          })
+        }
+      },
+    })
+  }
+  if (telegram) {
+    const telegramApi = createTelegramApi(telegram.config)
+    startHeartbeat({
+      source: heartbeatSource,
+      push: (message) => {
+        for (const chatId of telegram.config.allowedChatIds) {
+          void telegramApi.sendText(chatId, message).catch(() => {
             /* 推送失败静默，不打断心跳 */
           })
         }
