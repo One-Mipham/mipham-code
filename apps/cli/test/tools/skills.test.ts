@@ -127,6 +127,54 @@ describe('SkillsLoader', () => {
     })
   })
 
+  describe('recall + buildSystemReminder', () => {
+    function seedSkills() {
+      const stdDir = join(tmpDir, 'skills', 'standard')
+      mkdirSync(stdDir, { recursive: true })
+      createSkillFile(stdDir, 'security-review.SKILL.md', {
+        name: 'security-review',
+        description: 'Security audit skill — vulnerability scanning',
+      })
+      createSkillFile(stdDir, 'codebase-design.SKILL.md', {
+        name: 'codebase-design',
+        description: 'Design codebase architecture',
+      })
+      createSkillFile(stdDir, 'debug-loop.SKILL.md', {
+        name: 'debug-loop',
+        description: 'Debug failures',
+      })
+      const loader = new SkillsLoader()
+      loader.loadBuiltin(tmpDir)
+      return loader
+    }
+
+    it('recall ranks the most relevant skill first', () => {
+      const loader = seedSkills()
+      const relevant = loader.recall('Run a security audit and scan for vulnerabilities', 2)
+      expect(relevant[0]?.name).toBe('security-review')
+    })
+
+    it('buildSystemReminder with context is selective', () => {
+      const loader = seedSkills()
+      const selective = loader.buildSystemReminder('security audit vulnerabilities')
+      const all = loader.buildSystemReminder()
+
+      expect(selective).toContain('security-review')
+      expect(selective).not.toContain('codebase-design')
+      expect(selective).not.toContain('debug-loop')
+
+      expect(all).toContain('security-review')
+      expect(all).toContain('codebase-design')
+      expect(all).toContain('debug-loop')
+    })
+
+    it('returns empty when nothing matches the context', () => {
+      const loader = seedSkills()
+      expect(loader.recall('xyzzy quux', 5)).toHaveLength(0)
+      expect(loader.buildSystemReminder('xyzzy quux')).toBe('')
+    })
+  })
+
   describe('loadBuiltinFromPackage', () => {
     it('loads the bundled skills shipped with the app (not cwd-relative)', () => {
       const loader = new SkillsLoader()

@@ -193,17 +193,42 @@ export class SkillsLoader implements Skills {
   }
 
   /**
-   * Build the system-reminder block for AI auto-triggering.
-   * Injects available skill names + descriptions so the AI can match
-   * user requests to relevant skills.
+   * Recall the skills most relevant to a context (e.g. the session's system
+   * prompt / project context), mirroring MemoryManager.recall's keyword
+   * scoring. Name keywords are a strong signal (+3); description keywords are
+   * weak (+1). Returns up to `limit` skills sorted by relevance.
    */
-  buildSystemReminder(maxTokens: number = 5000): string {
-    const skills = this.list().filter((s) => {
-      // Skip skills that disable model invocation
-      return !s.disableModelInvocation
-    })
+  recall(context: string, limit: number = 5): SkillDefinition[] {
+    const ctxWords = new Set(context.toLowerCase().split(/\s+/))
+    const scored: Array<{ skill: SkillDefinition; score: number }> = []
 
-    if (skills.length === 0) return ''
+    for (const skill of this.list()) {
+      if (skill.disableModelInvocation) continue
+      let score = 0
+      for (const word of skill.name.toLowerCase().split(/[-_\s]+/)) {
+        if (word.length > 2 && ctxWords.has(word)) score += 3
+      }
+      for (const word of skill.description.toLowerCase().split(/\s+/)) {
+        if (word.length > 3 && ctxWords.has(word)) score += 1
+      }
+      if (score > 0) scored.push({ skill, score })
+    }
+
+    scored.sort((a, b) => b.score - a.score)
+    return scored.slice(0, limit).map((s) => s.skill)
+  }
+
+  /**
+   * Build the system-reminder block for AI auto-triggering.
+   * With a `context`, only the most relevant skills are injected (selective,
+   * to save tokens); without one, all skills are listed.
+   */
+  buildSystemReminder(context?: string, maxTokens: number = 5000): string {
+    const selected = context
+      ? this.recall(context)
+      : this.list().filter((s) => !s.disableModelInvocation)
+
+    if (selected.length === 0) return ''
 
     const lines: string[] = [
       '<system-reminder>',
@@ -211,7 +236,7 @@ export class SkillsLoader implements Skills {
     ]
 
     let tokenBudget = 0
-    for (const skill of skills) {
+    for (const skill of selected) {
       const safeDesc = sanitizeSkillDescription(skill.description, skill.type)
       const entry = `- ${skill.name}: ${safeDesc}`
       const entryTokens = Math.ceil(entry.length / 4) + 1 // rough estimate

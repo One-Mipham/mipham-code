@@ -22,7 +22,6 @@ function parseFrontmatter(raw: string): FrontmatterResult {
 
 export class InstructionsLoader {
   private instructions: InstructionFile[] = []
-  private skillsReminder = ''
 
   loadAll(cwd: string): void {
     this.instructions = []
@@ -65,11 +64,6 @@ export class InstructionsLoader {
     // P2-2: Inject current permission mode so the model knows its constraints
     if (permissionMode) {
       parts.push(this.buildPermissionContext(permissionMode))
-    }
-
-    // Append skills reminder after all instructions
-    if (this.skillsReminder) {
-      parts.push(this.skillsReminder)
     }
 
     // Inject critical thinking self-check layer (for analysis/comparison tasks)
@@ -175,11 +169,6 @@ ${COAUTHOR_TRAILER}
 Never omit it or present the work as purely human-authored.`)
 
     return parts.join('\n\n---\n\n')
-  }
-
-  /** Set the skills system-reminder block to inject into the system prompt. */
-  setSkillsReminder(reminder: string): void {
-    this.skillsReminder = reminder
   }
 
   /**

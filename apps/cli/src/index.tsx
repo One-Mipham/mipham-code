@@ -281,12 +281,6 @@ export async function runApp(options: RunOptions): Promise<void> {
     skillsLoader.loadExternal(config.skills.paths)
   }
 
-  // Inject skills system-reminder into system prompt for AI auto-triggering
-  const skillsReminder = skillsLoader.buildSystemReminder()
-  if (skillsReminder) {
-    instructions.setSkillsReminder(skillsReminder)
-  }
-
   // Initialize plugin manager
   const pluginManager = new PluginManager()
 
@@ -372,9 +366,13 @@ export async function runApp(options: RunOptions): Promise<void> {
   if (context.getMessageCount() === 0) {
     const basePrompt = instructions.buildSystemPrompt(config.permission as string)
     const memoryReminder = loadSessionMemories(basePrompt)
+    const skillsReminder = skillsLoader.buildSystemReminder(basePrompt)
 
     // Inject previous session summary for AI continuity
     let prompt = basePrompt
+    if (skillsReminder) {
+      prompt = `${prompt}\n\n${skillsReminder}`
+    }
     if (memoryReminder) {
       prompt = `${prompt}\n\n${memoryReminder}`
     }
