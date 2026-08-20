@@ -28,7 +28,7 @@ export const DEFAULT_CONFIG: MiphamConfig = {
   },
   features: {
     mcp: { oauthEnabled: true },
-    context: { useRealTokenizer: true, adaptiveThresholds: true },
+    context: { adaptiveThresholds: true },
   },
   crsi: {
     ruleInjection: true,

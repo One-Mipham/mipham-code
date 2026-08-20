@@ -321,8 +321,6 @@ export async function runApp(options: RunOptions): Promise<void> {
   // Phase 9 feature flags (all default true — opt-out via config)
   const features = config.features || {}
   const adaptiveThresholds = features.context?.adaptiveThresholds !== false
-  // gated via TokenCounter — set to false to fall back to chars/4 heuristic
-  const _useRealTokenizer = features.context?.useRealTokenizer !== false
 
   const context = new ContextManager({
     maxTokens: contextMaxTokens,

@@ -151,7 +151,7 @@ export interface MiphamConfig {
 
 export interface FeatureFlags {
   mcp: { oauthEnabled: boolean }
-  context: { useRealTokenizer: boolean; adaptiveThresholds: boolean }
+  context: { adaptiveThresholds: boolean }
 }
 
 export interface CrsiConfig {
