@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest'
 import {
   matchPath,
   globToRegex,
+  globToRegexSource,
   matchCredentialFile,
 } from '../../../src/core/credential-masker/matcher'
 import type { CredentialMaskingConfig } from '../../../src/shared/types'
@@ -39,6 +40,27 @@ describe('matchPath', () => {
 
   it('no match returns false', () => {
     expect(matchPath('/home/user/config.yml', '.env*')).toBe(false)
+  })
+})
+
+describe('globToRegexSource', () => {
+  it('**/ matches zero or more path segments', () => {
+    const re = new RegExp('^' + globToRegexSource('src/**/*.ts') + '$')
+    expect(re.test('src/a/b/c.ts')).toBe(true)
+    expect(re.test('src/c.ts')).toBe(true) // zero-depth — **/ matches empty
+    expect(re.test('src/c.txt')).toBe(false)
+  })
+
+  it('* matches within a single segment (does not cross /)', () => {
+    const re = new RegExp('^' + globToRegexSource('src/*.ts') + '$')
+    expect(re.test('src/a.ts')).toBe(true)
+    expect(re.test('src/a/b.ts')).toBe(false)
+  })
+
+  it('escapes regex specials literally', () => {
+    const re = new RegExp(globToRegexSource('a.b'))
+    expect(re.test('a.b')).toBe(true)
+    expect(re.test('axb')).toBe(false)
   })
 })
 

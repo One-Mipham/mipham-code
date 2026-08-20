@@ -1,4 +1,5 @@
 import type { PermissionRuleEntry } from '../shared/index.ts'
+import { matchPath } from './credential-masker/matcher'
 
 // Match a tool(parameter) rule against an actual tool call.
 //
@@ -32,16 +33,19 @@ export function matchBashRule(
     return wildcardMatch(subPattern!, cmd.trim())
   }
 
-  // For Write/Edit/Read: match against the file_path
+  // For Write/Edit/Read: match against the file_path with path-glob semantics.
+  // Use matchPath (NOT wildcardMatch): wildcardMatch is tuned for Bash commands
+  // (`:` → colon-or-whitespace, `*` → `.*`), which is wrong for filesystem
+  // paths — `*` would cross `/` and Windows drive letters like `C:\` get mangled.
   if (baseTool === 'Write' || baseTool === 'Edit' || baseTool === 'Read') {
     const path = String(toolInput.file_path || '')
-    return wildcardMatch(subPattern!, path)
+    return matchPath(path, subPattern!)
   }
 
   // For Grep/Glob: match against the base search path (a directory)
   if (baseTool === 'Grep' || baseTool === 'Glob') {
     const path = String(toolInput.path || '')
-    return wildcardMatch(subPattern!, path)
+    return matchPath(path, subPattern!)
   }
 
   return false

@@ -66,6 +66,16 @@ describe('matchBashRule', () => {
       false,
     )
   })
+
+  it('treats * as a single path segment (does not cross /)', () => {
+    expect(matchBashRule('Read(/etc/*)', 'Read', { file_path: '/etc/passwd' })).toBe(true)
+    expect(matchBashRule('Read(/etc/*)', 'Read', { file_path: '/etc/nginx/sites/foo' })).toBe(false)
+  })
+
+  it('matches Windows drive-letter paths literally (colon not mangled)', () => {
+    expect(matchBashRule('Read(C:/Users/*)', 'Read', { file_path: 'C:/Users/alice' })).toBe(true)
+    expect(matchBashRule('Read(C:/Users/*)', 'Read', { file_path: 'D:/other' })).toBe(false)
+  })
 })
 
 describe('compileRule', () => {

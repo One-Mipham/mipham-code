@@ -65,13 +65,16 @@ export function matchPath(filePath: string, pattern: string): boolean {
 }
 
 /**
- * Convert a glob pattern to a RegExp.
- * - ** → .* (matches any path segments)
- * - *  → [^/]* (matches within a single segment)
- * - ?  → . (single char)
- * - All other special regex chars are escaped.
+ * Translate a glob pattern to an un-anchored RegExp source (no `^` or `$`).
+ * This is the shared path-glob core, reused by both credential-file matching
+ * (full-path anchored via `globToRegex`) and `.mipham/rules/` path scoping
+ * (suffix anchored in RulesLoader). Semantics:
+ * - ** → .*     (matches any number of path segments, crosses `/`)
+ * - *  → [^/]*  (matches within a single segment, does not cross `/`)
+ * - ?  → .      (single char)
+ * - regex specials are escaped (treated literally)
  */
-export function globToRegex(pattern: string): RegExp {
+export function globToRegexSource(pattern: string): string {
   let regexStr = ''
   let i = 0
   while (i < pattern.length) {
@@ -102,5 +105,13 @@ export function globToRegex(pattern: string): RegExp {
     }
     i++
   }
-  return new RegExp('^' + regexStr + '$')
+  return regexStr
+}
+
+/**
+ * Convert a glob pattern to a full-path-anchored RegExp (see `globToRegexSource`
+ * for the `*`/`**`/`?` translation and escaping rules).
+ */
+export function globToRegex(pattern: string): RegExp {
+  return new RegExp('^' + globToRegexSource(pattern) + '$')
 }

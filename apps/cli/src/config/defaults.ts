@@ -16,9 +16,11 @@ export const DEFAULT_CONFIG: MiphamConfig = {
   // Org 级权限限制（可选）：forbiddenModes 禁指定模式 / maxAllowedMode 封顶层级；
   // 请求被禁模式时 fail-closed 降级（如 forbiddenModes:['bypassPermissions']）。
   // permissionRestrictions: { forbiddenModes: ['bypassPermissions'] },
-  // 用户自定义权限规则（可选）：allow/deny 模式接入运行时 PermissionSystem；
-  // deny 管「根本不该碰」的文件（与 credential_masking 的「可读但洗输出」互补，勿重叠）。
-  // permissionRules: { deny: ['Read(**/.ssh/id_rsa)', 'Read(**/*.pem)'] },
+  // 用户自定义权限规则（可选）：allow/deny 接入运行时 PermissionSystem。
+  // mask 与 deny 互补、勿重叠（重叠则 deny 先触发、mask 轮不到 → 白做）：
+  //   - mask（credential_masking，默认开启）管「可读但含机密」：.env / .ssh/id_* / *.pem / *.key…
+  //   - deny 管「根本不该碰」且未被 mask 覆盖的文件：.git-credentials / .npmrc / .kube/config…
+  // permissionRules: { deny: ['Read(**/.git-credentials)', 'Read(**/.npmrc)'] },
   providers: DEFAULT_PROVIDERS,
   marketplace: {
     strictKnownMarketplaces: [],

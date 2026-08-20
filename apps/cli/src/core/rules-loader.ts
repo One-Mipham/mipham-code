@@ -19,6 +19,7 @@
 
 import { readdirSync, readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { globToRegexSource } from './credential-masker/matcher'
 
 interface RuleFile {
   name: string
@@ -117,18 +118,15 @@ export class RulesLoader {
   }
 
   /**
-   * Simple glob matching. Supports **, *, and exact file matching.
-   * Returns true if file matches pattern.
+   * Glob matching for path-scoped rules. Reuses the shared path-glob core
+   * (globToRegexSource) so `*`/`**`/`?` semantics match credential-file
+   * matching. Anchoring differs: rules match by *suffix* (a rule `*.ts`
+   * applies to any file ending in `.ts`), not full path.
    */
   private matchPath(file: string, pattern: string): boolean {
-    // Convert glob pattern to regex
-    let regexStr = pattern
-      .replace(/\./g, '\\.')
-      .replace(/\*\*/g, '<<GLOBSTAR>>')
-      .replace(/\*/g, '[^/]*')
-      .replace(/<<GLOBSTAR>>/g, '.*')
+    let regexStr = globToRegexSource(pattern)
 
-    // If pattern doesn't start with ** or *, anchor to be a suffix match
+    // If pattern doesn't start with ** or *, anchor to a suffix match
     if (!pattern.startsWith('**') && !pattern.startsWith('*')) {
       regexStr = regexStr + '$'
     }

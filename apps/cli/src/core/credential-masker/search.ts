@@ -11,6 +11,11 @@ import { CREDENTIAL_SENTINEL } from './types'
  * produces exactly one, so there is no cross-format ambiguity to guess at:
  *   - 'heading'  (ripgrep `--heading`): file path on its own line, then `N:content` lines
  *   - 'filename' (plain grep `-rn`):    `path:N:content` on a single line
+ *
+ * NOTE: the sensitive file's *path* stays visible — only its match content is
+ * masked. That's intentional for grep (a targeted search where the model already
+ * named the path); the secret is the content, not the location. Contrast
+ * `maskGlobOutput`, which hides the path entirely (enumeration's leak is existence).
  */
 export function maskSearchOutput(
   stdout: string,
@@ -54,6 +59,10 @@ export function maskSearchOutput(
 /**
  * Mask a glob file listing: sensitive file paths are replaced with the
  * credential sentinel so file enumeration can't reveal their existence.
+ *
+ * NOTE: unlike `maskSearchOutput` (which keeps the searched path visible and
+ * masks only content), glob hides the whole path — here the leak is the file's
+ * *existence*, not its content.
  */
 export function maskGlobOutput(paths: string, config?: CredentialMaskingConfig): string {
   if (!config?.enabled) return paths
