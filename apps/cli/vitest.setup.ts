@@ -188,7 +188,6 @@ if (!(globalThis.Bun as Record<string, unknown>).serve) {
           // Stream the response body.
           if (response.body) {
             const reader = response.body.getReader()
-            // eslint-disable-next-line no-constant-condition
             while (true) {
               const { done, value } = await reader.read()
               if (done) break
@@ -196,7 +195,7 @@ if (!(globalThis.Bun as Record<string, unknown>).serve) {
             }
           }
           res.end()
-        } catch (err) {
+        } catch {
           if (!res.headersSent) {
             res.writeHead(500, { 'Content-Type': 'application/json' })
           }

@@ -224,7 +224,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
 
   function getOrCreateWorker(
     sessionId: string,
-    ws?: ServerWebSocket<WsData>,
+    _ws?: ServerWebSocket<WsData>,
   ): SessionWorker | null {
     try {
       const session = db.getSession(sessionId)

@@ -46,7 +46,6 @@ async function fetchApi(path: string, options?: RequestInit) {
 }
 
 describe('Daemon HTTP Server', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let server: Server<any>
   let db: DaemonDatabase
   let sm: SessionManager

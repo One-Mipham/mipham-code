@@ -1015,7 +1015,7 @@ const securityCmd: CommandHandler = async () => {
   return { content: lines.join('\n') }
 }
 
-const trustCmd: CommandHandler = (ctx) => {
+const trustCmd: CommandHandler = (_ctx) => {
   const trust = getWorkspaceTrust()
   const cwd = process.cwd()
   const trusted = trust.listTrusted()

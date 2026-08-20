@@ -82,7 +82,7 @@ async function detectChromePort() {
       if (port > 0 && port < 65536 && (await checkPort(port))) {
         return port
       }
-    } catch (_) {}
+    } catch {}
   }
   // 回退：探测常见端口
   for (const port of [9222, 9229, 9333]) {

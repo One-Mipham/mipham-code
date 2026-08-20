@@ -84,7 +84,6 @@ export interface CrsiSessionReport {
 // ── Constants ──
 
 const WORKTREE_PREFIX = 'crsi-sandbox-'
-const MAX_WORKTREE_AGE_MS = 30 * 60 * 1000 // 30 minutes
 const TEST_TIMEOUT_MS = 120_000 // 2 minutes
 const REPORT_DIR = join(homedir(), '.mipham', 'crsi-sandbox')
 

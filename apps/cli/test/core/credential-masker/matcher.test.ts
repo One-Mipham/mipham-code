@@ -2,7 +2,6 @@ import { homedir } from 'node:os'
 import { describe, it, expect } from 'vitest'
 import {
   matchPath,
-  globToRegex,
   globToRegexSource,
   matchCredentialFile,
 } from '../../../src/core/credential-masker/matcher'

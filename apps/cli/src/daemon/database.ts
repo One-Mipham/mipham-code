@@ -289,7 +289,6 @@ export class DaemonDatabase {
     }
 
     vals.push(id)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.db.run(`UPDATE goals SET ${sets.join(', ')} WHERE id = ?`, vals as any)
   }
 

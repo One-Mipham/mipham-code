@@ -13,7 +13,7 @@
 
 import { MemoryManager, type MemoryEntry } from './memory/memory-manager.js'
 import type { PatternAnalyzer, Pattern } from '../agent/pattern-analyzer.js'
-import type { ExperienceRuleEngine, ToolRule } from './rule-engine.js'
+import type { ExperienceRuleEngine } from './rule-engine.js'
 import type { EffectivenessTracker } from '../agent/effectiveness-tracker.js'
 import type { ErrorSignatureDB } from './error-signature-db.js'
 import type { CrsiProvenanceBridge } from '../agent/crsi-provenance-bridge.js'
@@ -152,7 +152,7 @@ export class AutoMemoryEngine {
     modelId: string
     turnDurationMs: number
   }): TurnReflection {
-    const { sessionId, userMessage, assistantContent, toolCalls, modelProvider, modelId } = params
+    const { sessionId, userMessage, assistantContent, toolCalls } = params
 
     // 1. Categorize tool calls
     const successes: string[] = []
@@ -345,7 +345,7 @@ export class AutoMemoryEngine {
    * Only insights that are auto-applicable and have sufficient evidence
    * (≥ CRSI_RULE_THRESHOLD similar failures) are converted to rules.
    */
-  private feedCrsiPipeline(reflection: TurnReflection): void {
+  private feedCrsiPipeline(_reflection: TurnReflection): void {
     if (!this.ruleEngine || !this.patternAnalyzer) return
 
     // Count failures by category across ALL reflections (not just this one)

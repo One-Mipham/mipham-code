@@ -1,5 +1,4 @@
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import type { ToolDefinition } from '../../shared/index.ts'
 
 export const exitPlanModeTool: ToolDefinition = {
@@ -22,8 +21,7 @@ export const exitPlanModeTool: ToolDefinition = {
     },
     required: [],
   },
-  async execute(params, ctx) {
-    const planDir = join(ctx.cwd, '.mipham', 'plans')
+  async execute(params, _ctx) {
     const planFile = (params.planFile as string) || ''
 
     // Try to read the plan to confirm it exists

@@ -42,8 +42,6 @@ const DEFAULT_PORT = 45671
 let activeServer: Server<unknown> | null = null
 let activeDb: DaemonDatabase | null = null
 let activePool: WorkerPool | null = null
-let activeAgentManager: AgentManager | null = null
-let activeMessageBus: MessageBus | null = null
 let activeScheduleManager: ScheduleManager | null = null
 let activeRateLimiter: RateLimiter | null = null
 
@@ -152,9 +150,7 @@ export async function startDaemon(): Promise<{ port: number; token: string }> {
 
   // Create agent manager and message bus (Phase 3)
   const agentManager = new AgentManager(db)
-  activeAgentManager = agentManager
   const messageBus = new MessageBus()
-  activeMessageBus = messageBus
 
   // Create goal manager and schedule manager (Phase 4)
   const goalManager = new GoalManager(db)
@@ -267,10 +263,6 @@ export async function stopDaemon(force: boolean = false): Promise<void> {
     activeRateLimiter.stop()
     activeRateLimiter = null
   }
-
-  // Clean up agent manager and message bus (Phase 3)
-  activeAgentManager = null
-  activeMessageBus = null
 
   // Close database (commits any pending WAL)
   if (activeDb) {

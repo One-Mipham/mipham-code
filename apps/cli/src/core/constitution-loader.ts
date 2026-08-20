@@ -167,7 +167,6 @@ export class ConstitutionLoader {
     const result: MiphamConstitution = { version: '0.0.0', last_modified: '', principles: [] }
     let currentPrinciple: Partial<ConstitutionalPrinciple> | null = null
     let inPrinciples = false
-    let inList = false
 
     for (const line of lines) {
       const trimmed = line.trim()
@@ -188,7 +187,6 @@ export class ConstitutionLoader {
 
       // List items in principles
       if (inPrinciples && trimmed === '- id:') {
-        inList = true
         continue
       }
 

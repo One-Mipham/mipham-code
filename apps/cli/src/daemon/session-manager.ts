@@ -1,5 +1,5 @@
 import type { DaemonDatabase } from './database'
-import type { DaemonSession, SessionStatus } from './types'
+import type { DaemonSession } from './types'
 
 type SessionCloseCallback = (sessionId: string) => void
 

@@ -35,11 +35,9 @@ export class Database {
   run(sql: string, ...params: unknown[]): RunResult {
     const stmt = this.db.prepare(sql)
     // Support both array-style and variadic params (bun:sqlite compatibility)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (params.length === 1 && Array.isArray(params[0])) {
       return stmt.run(...(params[0] as any[])) as RunResult
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return stmt.run(...(params as any[])) as RunResult
   }
 

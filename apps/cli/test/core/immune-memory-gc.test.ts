@@ -54,7 +54,7 @@ describe('ImmuneMemoryGC', () => {
     })
 
     it('auto-retires zero-success signatures', () => {
-      const sig = db.insert(makeSig({ pattern: 'bad-fix' }))
+      db.insert(makeSig({ pattern: 'bad-fix' }))
       // Simulate many occurrences with zero successes
       for (let i = 0; i < 10; i++) {
         db.insert(makeSig({ pattern: 'bad-fix' }))
@@ -71,7 +71,7 @@ describe('ImmuneMemoryGC', () => {
         db.insert(makeSig({ pattern: 'good-fix' }))
         db.recordResult(sig.id, true)
       }
-      const report = gc.collect()
+      gc.collect()
       const active = db.getActive()
       // Should still be active since it has successes
       expect(active.some((s) => s.pattern === 'good-fix')).toBe(true)

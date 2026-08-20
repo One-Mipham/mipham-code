@@ -469,7 +469,6 @@ export class DreamEngine {
       const lines = match[1]!.split('\n')
       const fm: Record<string, unknown> = {}
       let currentNested: Record<string, unknown> | null = null
-      let nestedKey = ''
       for (const line of lines) {
         // Handle nested YAML (e.g. "metadata:\n  type: feedback")
         const nested = line.match(/^  (\w[\w\s]*?):\s*(.+)$/)
@@ -485,7 +484,6 @@ export class DreamEngine {
           if (val === '') {
             // Empty value → start nested block
             currentNested = {}
-            nestedKey = key
             fm[key] = currentNested
           } else {
             currentNested = null

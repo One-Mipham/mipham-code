@@ -1022,8 +1022,6 @@ const crsiHealthCmd: CommandHandler = async (ctx) => {
   lines.push('', '### 🛡️ SIS 自免疫子系统', '')
   if (db) {
     const stats = db.getStats()
-    const healthEmoji =
-      stats.avgSuccessRate >= 0.8 ? '🟢' : stats.avgSuccessRate >= 0.5 ? '🟡' : '🔴'
 
     lines.push(`| 指标 | 值 |`)
     lines.push(`|------|----|`)

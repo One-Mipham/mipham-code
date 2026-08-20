@@ -186,7 +186,6 @@ export class ContextManager {
   }
 
   async compact(heading: string): Promise<{ before: number; after: number }> {
-    const beforeMsgs = this.messages.length
     const beforeTokens = this.estimatedTokens
 
     if (this.messages.length <= 30) {

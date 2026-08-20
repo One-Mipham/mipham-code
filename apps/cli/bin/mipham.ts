@@ -530,9 +530,6 @@ async function runAgentCLI(): Promise<boolean> {
   if (args[0] !== 'agents' && args[0] !== 'agent') return false
 
   const { getPort, getDaemonStatus } = await import('../src/daemon/index')
-  const { join } = await import('node:path')
-  const { readFileSync, existsSync } = await import('node:fs')
-  const { homedir } = await import('node:os')
 
   // Check if daemon is running
   const status = getDaemonStatus()
@@ -542,11 +539,6 @@ async function runAgentCLI(): Promise<boolean> {
   }
 
   const port = getPort()
-  const tokenPath = join(homedir(), '.mipham', 'daemon.token')
-  let token = ''
-  if (existsSync(tokenPath)) {
-    token = readFileSync(tokenPath, 'utf-8').trim()
-  }
 
   const baseUrl = `http://127.0.0.1:${port}`
 
@@ -1020,7 +1012,7 @@ async function runTokenCLI(): Promise<boolean> {
   if (args[0] !== 'token') return false
 
   const { join } = await import('node:path')
-  const { readFileSync, existsSync } = await import('node:fs')
+  const { existsSync } = await import('node:fs')
   const { homedir } = await import('node:os')
   const { rotateToken, listTokens } = await import('../src/daemon/auth')
 

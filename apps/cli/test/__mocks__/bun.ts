@@ -142,10 +142,7 @@ export interface Server<WebSocketData = undefined> {
   stop(closeActiveConnections?: boolean): void
   ref(): void
   unref(): void
-  reload(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    options: any,
-  ): Server<WebSocketData>
+  reload(options: any): Server<WebSocketData>
   fetch(request: Request | string): Response | Promise<Response>
   upgrade(
     req: Request,
