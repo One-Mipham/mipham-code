@@ -11,7 +11,7 @@ prompt-exclude:
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
 > **版本**: 2.7.1
-> **最后更新**: 2026-08-20 — 并行测试隔离修复（fileParallelism false）
+> **最后更新**: 2026-08-20 — 并行测试隔离修复（mockReset → clearMocks）
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -427,7 +427,7 @@ mipham-code 变更（包名/版本）
 
 | 版本  | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                                                                           | 维护人     |
 | ----- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| 2.7.1 | 2026-08-20 | 修并行测试隔离（`vitest.config.ts` 加 `fileParallelism: false`）：全量并行跑偶发 ~68 失败（非确定性，串行/单文件全绿）。根因=多个测试文件 mutate 进程全局状态（`vi.stubGlobal('fetch')` / `vi.spyOn(Bun.*)` / `McpClient` 单例）+ 重共享资源操作（crsi-sandbox git worktree / mcp+task-runner+e2e 子进程 spawn）在 145 文件并发时竞态；串行化后确定性 1712 passed + 2 skipped。测试数不变 1714。                                                   | 技术委员会 |
+| 2.7.1 | 2026-08-20 | 修并行测试偶发失败：`vitest.config.ts` 的 `mockReset: true` → `clearMocks: true`。根因=`mockReset` 每测把 setup 的共享 `globalThis.Bun` mock（spawn/sleep/serve）实现重置为 undefined，跨 fork 复用文件泄漏，导致并行偶发失败（非确定性，串行/单文件全绿）；`clearMocks` 只清调用历史、保留实现，并行 20+ 轮连续全绿。测试数不变 1714。                                                                                                            | 技术委员会 |
 | 2.7.0 | 2026-08-20 | /save 命令 + save-to-wiki skill（Obsidian wiki 集成收口）：`/save` 斜杠命令（`forwardToAI` 桥到 save-to-wiki skill，支持 `/save [type] [name]`）+ 5 类 note 判定（synthesis/concept/source/decision/session）+ 单向打通（memory 指针 + wiki `saved_from`/`mipham_memory` 回标）+ MCP `create_note` 写入 + i18n 双语键。skills 25→26。测试 1712 passed + 2 skipped                                                                                  | 技术委员会 |
 | 2.6.0 | 2026-08-20 | v0.52.0 发版：指令链瘦身（CLAUDE.md frontmatter `prompt-exclude` 剥纯文档段 + `stripSections()`，实测省 41% token）+ skill sanitizer 修复（`checkSkillShadow` 斜杠 bug + 删 `userInvocable` 死字段 + 删过期 `/triage`）+ Obsidian Wiki 集成（通用 MCP `@zethictech/obsidian-mcp` 接现有 vault + spec）。测试 1706 passed + 2 skipped                                                                                                               | 技术委员会 |
 | 2.5.0 | 2026-08-20 | lint 39→0 收口：① 死代码清理（24 文件未用 import/变量/死 eslint 指令 + daemon 死状态字段，`exit-plan.ts` 删 `planDir` 级联 `_ctx`、`bin/mipham.ts` 删 token 块级联 4 动态 import，39→7）② 7 命令补翻译（`crsi_critique`/`crsi_interpret`/`crsi_red_team`/`dream`/`constitution`/`bug_report`/`changelog` 硬编码英文接 `t()`，~100 键 × en-US/zh-CN，`caughtBy?: string` 加 `?? 'unknown'` 兜底，7→0）。lint 首次归零。测试 1685 passed + 2 skipped | 技术委员会 |
