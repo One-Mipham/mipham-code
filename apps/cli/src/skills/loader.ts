@@ -182,7 +182,6 @@ export class SkillsLoader implements Skills {
         model: data.model as string | undefined,
         allowedTools: data['allowed-tools'] as string[] | undefined,
         disableModelInvocation: data['disable-model-invocation'] as boolean | undefined,
-        userInvocable: data['user-invocable'] as boolean | undefined,
         requiresBins: data['requires-bins'] as string[] | undefined,
       }
 

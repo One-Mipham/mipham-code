@@ -483,8 +483,6 @@ export interface SkillDefinition {
   allowedTools?: string[]
   /** When true, the skill is NOT shown in system-reminder for AI auto-triggering */
   disableModelInvocation?: boolean
-  /** When true, users can invoke this skill directly via /<name> */
-  userInvocable?: boolean
   /** External command-line binaries the skill requires (frontmatter: requires-bins). */
   requiresBins?: string[]
   /** The markdown body content of the skill file (instructions for the AI to follow). */

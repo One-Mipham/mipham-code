@@ -54,7 +54,6 @@ const BUILTIN_COMMANDS = new Set([
   '/sis',
   '/plan',
   '/no-plan',
-  '/triage',
   '/workflows',
   '/tasks',
 ])
@@ -182,7 +181,7 @@ export function checkSkillShadow(
   mcpToolNames?: string[],
 ): ShadowCheck {
   // Check against builtin commands
-  if (BUILTIN_COMMANDS.has(skillName)) {
+  if (BUILTIN_COMMANDS.has('/' + skillName)) {
     return { shadowed: true, conflictsWith: skillName, conflictType: 'command' }
   }
 
