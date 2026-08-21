@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { VimMotionEngine } from '../../src/ui/vim-motions.js'
+import { VimMotionEngine, handleSearchBackspace } from '../../src/ui/vim-motions.js'
 
 // ── Helpers ──
 
@@ -230,6 +230,24 @@ describe('VimMotionEngine', () => {
     const e = engine()
     const action = e.handleSearch('hello hello', 'hello')
     expect(action).toEqual({ cursor: 0 })
+  })
+
+  // ═══════════════════════════════════════════
+  // / — backspace in search mode
+  // ═══════════════════════════════════════════
+
+  it('should exit search mode when backspacing an empty query', () => {
+    // Pressing "/" then backspace must remove the slash (not trap the user)
+    expect(handleSearchBackspace('')).toEqual({ query: '', exit: true })
+  })
+
+  it('should trim one character when backspacing a non-empty query', () => {
+    expect(handleSearchBackspace('ab')).toEqual({ query: 'a', exit: false })
+  })
+
+  it('should stay in search mode when backspacing down to empty', () => {
+    // "a" → backspace → empty query, still searching; next backspace exits
+    expect(handleSearchBackspace('a')).toEqual({ query: '', exit: false })
   })
 
   // ═══════════════════════════════════════════

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { Box, Text, useInput } from 'ink'
 import TextInput from 'ink-text-input'
-import { VimMotionEngine, type VimMode } from './vim-motions.js'
+import { VimMotionEngine, handleSearchBackspace, type VimMode } from './vim-motions.js'
 import { getCommandList } from './commands.js'
 import { CommandPicker } from './command-picker.js'
 import { useI18n } from '../i18n-context'
@@ -274,7 +274,9 @@ export function InputBar({
         return
       }
       if (key.backspace || key.delete) {
-        setSearchQuery((q) => q.slice(0, -1))
+        const next = handleSearchBackspace(searchQuery)
+        setSearchQuery(next.query)
+        if (next.exit) setSearchMode(false)
         return
       }
       // Accumulate printable characters

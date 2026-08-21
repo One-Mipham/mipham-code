@@ -94,3 +94,20 @@ export interface VimAction {
   cursor?: number
   pending?: string
 }
+
+export interface SearchBackspaceResult {
+  query: string
+  /** true → the `/` prefix should be removed by exiting search mode */
+  exit: boolean
+}
+
+/**
+ * Backspace while in `/` search mode.
+ * Trims the query; when the query is already empty, signals that search mode
+ * should exit so the `/` placeholder disappears (the user can "delete" the
+ * slash instead of being trapped).
+ */
+export function handleSearchBackspace(query: string): SearchBackspaceResult {
+  if (query.length === 0) return { query: '', exit: true }
+  return { query: query.slice(0, -1), exit: false }
+}
