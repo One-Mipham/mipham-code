@@ -4,6 +4,7 @@ import type { FeishuConfig, FeishuTextMessage } from './types.js'
 import type { SessionManager } from '../session-manager'
 import type { SessionWorker } from '../session-worker'
 import type { RateLimiter } from '../rate-limiter'
+import { handleChannelMessage } from '../channel-message.js'
 
 export interface FeishuAdapterDeps {
   sm: SessionManager
@@ -24,33 +25,21 @@ export function createFeishuAdapter(config: FeishuConfig, deps: FeishuAdapterDep
   const allowed = new Set(config.allowedOpenIds)
 
   const onMessage = async (msg: FeishuTextMessage) => {
-    try {
-      if (!allowed.has(msg.openId)) return
-      if (!deps.rateLimiter.check(`feishu:${msg.openId}`).allowed) return
-
-      const session = deps.sm.getOrCreateByExternalUser(
-        'feishu',
-        msg.openId,
-        deps.cwd,
-        deps.provider,
-        deps.model,
-      )
-      const worker = deps.getOrCreateWorker(session.id)
-      if (!worker) {
-        await api.sendText(msg.openId, '（会话初始化失败，请稍后重试）')
-        return
-      }
-      await worker.processPrompt(msg.text)
-      const result = worker.getLastAssistantContent()
-      await api.sendText(msg.openId, result ? result.slice(0, 4000) : '（无回复）')
-    } catch (err) {
-      console.error('[feishu] message handling failed:', err)
-      try {
-        await api.sendText(msg.openId, '（处理失败，请稍后重试）')
-      } catch {
-        /* 忽略回送失败，确保不 rethrow → Feishu 不重试 */
-      }
-    }
+    await handleChannelMessage({
+      channel: 'feishu',
+      externalId: msg.openId,
+      text: msg.text,
+      allowed,
+      rateLimiter: deps.rateLimiter,
+      sm: deps.sm,
+      getOrCreateWorker: deps.getOrCreateWorker,
+      cwd: deps.cwd,
+      provider: deps.provider,
+      model: deps.model,
+      sendText: (id, t) => api.sendText(id, t),
+      maxLen: 4000,
+      logPrefix: '[feishu]',
+    })
   }
 
   const dispatcher = createFeishuEventDispatcher(config, onMessage)

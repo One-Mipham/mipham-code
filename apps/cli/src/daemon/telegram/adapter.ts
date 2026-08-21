@@ -3,6 +3,7 @@ import type { TelegramConfig, TelegramMessage } from './types.js'
 import type { SessionManager } from '../session-manager'
 import type { SessionWorker } from '../session-worker'
 import type { RateLimiter } from '../rate-limiter'
+import { handleChannelMessage } from '../channel-message.js'
 import { startTelegramPoller } from './poller.js'
 
 export interface TelegramAdapterDeps {
@@ -29,33 +30,21 @@ export function createTelegramAdapter(
   let stopPoller: (() => void) | null = null
 
   async function handleMessage(msg: TelegramMessage): Promise<void> {
-    try {
-      if (!allowed.has(msg.chatId)) return
-      if (!deps.rateLimiter.check(`telegram:${msg.chatId}`).allowed) return
-
-      const session = deps.sm.getOrCreateByExternalUser(
-        'telegram',
-        msg.chatId,
-        deps.cwd,
-        deps.provider,
-        deps.model,
-      )
-      const worker = deps.getOrCreateWorker(session.id)
-      if (!worker) {
-        await api.sendText(msg.chatId, '（会话初始化失败，请稍后重试）')
-        return
-      }
-      await worker.processPrompt(msg.text)
-      const result = worker.getLastAssistantContent()
-      await api.sendText(msg.chatId, result ? result.slice(0, 4096) : '（无回复）')
-    } catch (err) {
-      console.error('[telegram] message handling failed:', err)
-      try {
-        await api.sendText(msg.chatId, '（处理失败，请稍后重试）')
-      } catch {
-        /* 忽略回送失败，不 rethrow */
-      }
-    }
+    await handleChannelMessage({
+      channel: 'telegram',
+      externalId: msg.chatId,
+      text: msg.text,
+      allowed,
+      rateLimiter: deps.rateLimiter,
+      sm: deps.sm,
+      getOrCreateWorker: deps.getOrCreateWorker,
+      cwd: deps.cwd,
+      provider: deps.provider,
+      model: deps.model,
+      sendText: (id, t) => api.sendText(id, t),
+      maxLen: 4096,
+      logPrefix: '[telegram]',
+    })
   }
 
   return {
