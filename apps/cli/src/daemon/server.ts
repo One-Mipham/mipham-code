@@ -29,6 +29,9 @@ import type { FeishuConfig } from './feishu/types.js'
 import { createTelegramAdapter } from './telegram/adapter.js'
 import { createTelegramApi } from './telegram/api.js'
 import type { TelegramConfig } from './telegram/types.js'
+import { createWecomAdapter } from './wecom/adapter.js'
+import { createWecomApi } from './wecom/api.js'
+import type { WecomConfig } from './wecom/types.js'
 import { startHeartbeat } from './heartbeat'
 
 interface ServerConfig {
@@ -46,6 +49,7 @@ interface ServerConfig {
   rateLimiter: RateLimiter
   feishu?: { config: FeishuConfig; cwd: string; provider: string; model: string }
   telegram?: { config: TelegramConfig; cwd: string; provider: string; model: string }
+  wecom?: { config: WecomConfig; cwd: string; provider: string; model: string }
 }
 
 interface WsData {
@@ -124,6 +128,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
     rateLimiter,
     feishu,
     telegram,
+    wecom,
   } = config
 
   const wsClients = new Map<string, Set<ServerWebSocket<WsData>>>()
@@ -273,6 +278,19 @@ export function createServer(config: ServerConfig): Server<WsData> {
       })
     : undefined
   telegramAdapter?.start()
+
+  // ── 企业微信 remote-control adapter（长连接，无需 webhook 路由）──
+  const wecomAdapter = wecom
+    ? createWecomAdapter(wecom.config, createWecomApi(wecom.config), {
+        sm,
+        getOrCreateWorker,
+        rateLimiter,
+        cwd: wecom.cwd,
+        provider: wecom.provider,
+        model: wecom.model,
+      })
+    : undefined
+  wecomAdapter?.start()
 
   // ── 心跳式通知：定时扫 pending（goal/schedule），只通知、不自主行动 ──
   const heartbeatSource = {

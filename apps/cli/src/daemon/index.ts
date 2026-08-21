@@ -27,6 +27,8 @@ import { parseFeishuEnv } from './feishu/env.js'
 import type { FeishuConfig } from './feishu/types.js'
 import { parseTelegramEnv } from './telegram/env.js'
 import type { TelegramConfig } from './telegram/types.js'
+import { parseWecomEnv } from './wecom/env.js'
+import type { WecomConfig } from './wecom/types.js'
 import { loadConfig } from '../config/loader'
 
 const HOME = homedir()
@@ -194,6 +196,20 @@ export async function startDaemon(): Promise<{ port: number; token: string }> {
     }
   }
 
+  // 企业微信 remote-control adapter（env 未配置时跳过）
+  const wecomConfig = parseWecomEnv()
+  let wecom: { config: WecomConfig; cwd: string; provider: string; model: string } | undefined
+  if (wecomConfig) {
+    const cfg = loadConfig()
+    const provider = cfg.providers.find((p) => p.status !== 'upcoming') ?? cfg.providers[0]
+    wecom = {
+      config: wecomConfig,
+      cwd: process.env.WECOM_CWD || process.cwd(),
+      provider: provider?.id ?? 'anthropic',
+      model: provider?.models?.[0]?.id ?? 'claude-sonnet-5',
+    }
+  }
+
   // Start HTTP server (Bun.serve starts listening immediately)
   const server = createServer({
     db,
@@ -210,6 +226,7 @@ export async function startDaemon(): Promise<{ port: number; token: string }> {
     rateLimiter,
     feishu,
     telegram,
+    wecom,
   })
   activeServer = server
 
