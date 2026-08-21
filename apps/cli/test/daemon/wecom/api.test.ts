@@ -74,6 +74,12 @@ describe('createWecomApi', () => {
     expect(api.parseMessage({})).toBeNull()
   })
 
+  it('parseMessage null/undefined → null（不 throw）', () => {
+    const { api } = stubWs()
+    expect(api.parseMessage(null)).toBeNull()
+    expect(api.parseMessage(undefined)).toBeNull()
+  })
+
   it('isDisconnected 识别 disconnected_event', () => {
     const { api } = stubWs()
     expect(api.isDisconnected({ cmd: 'disconnected_event' })).toBe(true)

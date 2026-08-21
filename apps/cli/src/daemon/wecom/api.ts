@@ -41,6 +41,7 @@ export function createWecomApi(config: WecomConfig): WecomApi {
       }
     },
     parseMessage(frame) {
+      if (!frame || typeof frame !== 'object') return null
       const f = frame as {
         cmd?: string
         body?: { userid?: string; chatid?: string; msg_id?: string; content?: string }
