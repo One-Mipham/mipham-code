@@ -10,8 +10,8 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.7.2
-> **最后更新**: 2026-08-21 — 企业微信远程控制落地 + 测试数对齐 1745
+> **版本**: 2.8.0
+> **最后更新**: 2026-08-21 — v0.53.0 发版（企业微信远程控制 + graft + /save + vim 修复）+ 测试数对齐 1748
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -48,7 +48,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **eval harness** `/crsi eval` — `core/eval-harness.ts` 冻结 20 条 ground-truth 契约（12 机制：规则/宪法/沙箱边界/红队/producer 行为 + 8 行为缺口）+ rewards 日志 `~/.mipham/crsi/eval-scores.jsonl`，`runCrsiModification` 以「分数不退化」为第二道闸。8 行为缺口（rm -rf/管道投毒/git reset --hard/chmod 777/mkfs/dd→/dev//关停主机/crontab -r）已由固化 managed tool-params 规则覆盖 → 全翻转 PASS → 满分 100 =「证明更好」
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：1,745 测试（1743 passed + 2 skipped）
+测试：1,748 测试（1746 passed + 2 skipped）
 
 ---
 
@@ -85,7 +85,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 26 个内置技能（20 standard + 6 mipham）
-│   │   ├── test/               # 151 个测试文件，1745 个测试
+│   │   ├── test/               # 151 个测试文件，1748 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -108,7 +108,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（1745 个测试）
+pnpm test         # vitest run（1748 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -232,7 +232,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
 | E2E      | 1       | 8        | full-pipeline                                 |
 | Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **151** | **1745** | **0 失败** ✅（1743 passed + 2 skipped）      |
+| **合计** | **151** | **1748** | **0 失败** ✅（1746 passed + 2 skipped）      |
 
 > 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
 
@@ -427,6 +427,7 @@ mipham-code 变更（包名/版本）
 
 | 版本  | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                                                                           | 维护人     |
 | ----- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| 2.8.0 | 2026-08-21 | v0.53.0 发版：企业微信远程控制（`wecom/` 模块 9 commits，长连接 WebSocket 第 3 个 inbound 频道）+ graft 上下文图集成 + `/save` + save-to-wiki skill + vim 搜索模式 backspace 陷阱修复（`handleSearchBackspace` 纯函数空查询退出搜索）+ 测试并行隔离修复。四渠道全绿（npm `@miphamai/cli@0.53.0` / GitHub Release 6 资产 / JetBrains `publishPlugin` 自动上架 / VS Code VSIX 本地生成待网页上传）。测试 1746 passed + 2 skipped。                   | 技术委员会 |
 | 2.7.2 | 2026-08-21 | 企业微信远程控制落地（第 3 个 inbound 频道）：daemon 新增 `wecom/` 模块（types/env/api/ws-client/adapter，长连接 WebSocket `globalThis.WebSocket` 零依赖 + 心跳 30s/指数退避重连/disconnected_event 互踢），rule-of-three 抽共享 `channel-message.ts` 骨架（feishu/telegram 复用）；修 `parseMessage` null guard（防 malformed frame 崩 daemon 三渠道共进程）。9 commits（`7c10f1d..9f8c4ba`）。测试 1714→1745（1743 passed + 2 skipped）。        | 技术委员会 |
 | 2.7.1 | 2026-08-20 | 修并行测试偶发失败：`vitest.config.ts` 的 `mockReset: true` → `clearMocks: true`。根因=`mockReset` 每测把 setup 的共享 `globalThis.Bun` mock（spawn/sleep/serve）实现重置为 undefined，跨 fork 复用文件泄漏，导致并行偶发失败（非确定性，串行/单文件全绿）；`clearMocks` 只清调用历史、保留实现，并行 20+ 轮连续全绿。测试数不变 1714。                                                                                                            | 技术委员会 |
 | 2.7.0 | 2026-08-20 | /save 命令 + save-to-wiki skill（Obsidian wiki 集成收口）：`/save` 斜杠命令（`forwardToAI` 桥到 save-to-wiki skill，支持 `/save [type] [name]`）+ 5 类 note 判定（synthesis/concept/source/decision/session）+ 单向打通（memory 指针 + wiki `saved_from`/`mipham_memory` 回标）+ MCP `create_note` 写入 + i18n 双语键。skills 25→26。测试 1712 passed + 2 skipped                                                                                  | 技术委员会 |
