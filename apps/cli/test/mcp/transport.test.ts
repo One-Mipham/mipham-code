@@ -36,6 +36,15 @@ describe('StdioTransport', () => {
 
       await expect(promise).rejects.toThrow('Transport closed')
     })
+
+    it('times out a hung request at the configured timeout', async () => {
+      transport = new StdioTransport(200)
+      await transport.start('sleep', ['30'])
+
+      const started = Date.now()
+      await expect(transport.sendRequest('tools/call', {})).rejects.toThrow(/request timeout/)
+      expect(Date.now() - started).toBeLessThan(1000)
+    })
   })
 
   describe('request/response with mock server', () => {

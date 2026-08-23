@@ -1,9 +1,8 @@
 import type { JsonRpcRequest, JsonRpcResponse, JsonRpcNotification, JsonRpcError } from './types'
 import type { Transport, NotificationHandler } from './transport'
+import { DEFAULT_REQUEST_TIMEOUT_MS, requestTimeoutError } from './transport'
 
 type FetchFn = (input: string, init?: RequestInit) => Promise<Response>
-
-const REQUEST_TIMEOUT_MS = 60_000
 
 /**
  * Merge multiple SSE `data:` events into a single JSON-RPC result.
@@ -74,7 +73,10 @@ export class HttpTransport implements Transport {
   private closed = false
   private notificationHandlers: NotificationHandler[] = []
 
-  constructor(private fetchImpl: FetchFn = fetch as unknown as FetchFn) {}
+  constructor(
+    private fetchImpl: FetchFn = fetch as unknown as FetchFn,
+    private requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+  ) {}
 
   async start(
     url: string,
@@ -107,7 +109,7 @@ export class HttpTransport implements Transport {
     }
 
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+    const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs)
 
     try {
       const response = await this.fetchImpl(this.url, {
@@ -142,6 +144,11 @@ export class HttpTransport implements Transport {
         throw new Error(`MCP error ${json.error.code}: ${json.error.message}`)
       }
       return json.result
+    } catch (err) {
+      if (controller.signal.aborted) {
+        throw requestTimeoutError(method, this.requestTimeoutMs)
+      }
+      throw err
     } finally {
       clearTimeout(timer)
     }

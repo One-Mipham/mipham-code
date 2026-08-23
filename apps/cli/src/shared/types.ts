@@ -176,6 +176,8 @@ export interface McpServerConfig {
   /** HTTP: extra request headers (e.g. Authorization). */
   headers?: Record<string, string>
   env?: Record<string, string>
+  /** Per-server tool-call request timeout (ms). Overrides the 60s default. */
+  request_timeout_ms?: number
   auth?: {
     type: 'oauth'
     authorizationUrl: string

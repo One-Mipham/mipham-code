@@ -93,6 +93,62 @@ describe('McpClient', () => {
     })
   })
 
+  describe('callTool request timeout', () => {
+    it('times out a slow tool call when request_timeout_ms is set', async () => {
+      const mockFetch = vi.fn(async (input: string, init?: RequestInit) => {
+        const body = JSON.parse(init!.body as string) as { id: number; method: string }
+        const base = { jsonrpc: '2.0', id: body.id }
+        const headers = { 'content-type': 'application/json' }
+        const respond = (result: unknown) =>
+          new Response(JSON.stringify({ ...base, result }), { status: 200, headers })
+        if (body.method === 'initialize') {
+          return respond({
+            protocolVersion: '2024-11-05',
+            capabilities: { tools: {}, resources: {} },
+            serverInfo: { name: 'slow', version: '1.0.0' },
+          })
+        }
+        if (body.method === 'tools/list') {
+          return respond({
+            tools: [
+              {
+                name: 'search_graph',
+                description: '',
+                inputSchema: { type: 'object', properties: {} },
+              },
+            ],
+          })
+        }
+        if (body.method === 'tools/call') {
+          // A slow tool that only finishes when the abort signal fires.
+          return new Promise<Response>((_resolve, reject) => {
+            init!.signal?.addEventListener('abort', () =>
+              reject(new DOMException('Aborted', 'AbortError')),
+            )
+          })
+        }
+        return respond({})
+      })
+      vi.stubGlobal('fetch', mockFetch)
+
+      try {
+        const client = McpClient.getInstance()
+        await client.connect({
+          name: 'slow',
+          url: 'http://localhost:8005/mcp',
+          request_timeout_ms: 200,
+        })
+        const started = Date.now()
+        const result = await client.callTool('slow', 'search_graph', {})
+        expect(result.isError).toBe(true)
+        expect(result.content[0]!.text).toContain('request timeout')
+        expect(Date.now() - started).toBeLessThan(1000)
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+  })
+
   describe('multiple servers', () => {
     it('manages multiple connections', async () => {
       const client = McpClient.getInstance()

@@ -161,8 +161,8 @@ export class McpClient {
     if (existing?.status === 'connected') return
 
     const transport: StdioTransport | HttpTransport = config.url
-      ? new HttpTransport()
-      : new StdioTransport()
+      ? new HttpTransport(undefined, config.request_timeout_ms)
+      : new StdioTransport(config.request_timeout_ms)
     const protocol = new McpProtocol(transport)
 
     const connection: ActiveConnection = {

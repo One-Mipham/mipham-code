@@ -19,7 +19,12 @@ export interface Transport {
   isConnected(): boolean
 }
 
-const REQUEST_TIMEOUT_MS = 60_000
+export const DEFAULT_REQUEST_TIMEOUT_MS = 60_000
+
+/** Shared timeout error for both stdio and HTTP transports. */
+export function requestTimeoutError(method: string, ms: number): Error {
+  return new Error(`MCP request timeout: ${method} (${ms}ms)`)
+}
 
 // ── Environment variable security: block sensitive vars from MCP subprocess ──
 //
@@ -69,6 +74,7 @@ function buildProcEnv(extra?: Record<string, string>): Record<string, string> {
  * Uses Node.js child_process for portability across Bun and Node runtimes.
  */
 export class StdioTransport implements Transport {
+  constructor(private requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) {}
   private proc: ChildProcess | null = null
   private msgId = 0
   private pending = new Map<
@@ -169,8 +175,8 @@ export class StdioTransport implements Transport {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id)
-        reject(new Error(`MCP request timeout: ${method} (${REQUEST_TIMEOUT_MS}ms)`))
-      }, REQUEST_TIMEOUT_MS)
+        reject(requestTimeoutError(method, this.requestTimeoutMs))
+      }, this.requestTimeoutMs)
 
       this.pending.set(id, { resolve, reject, timer })
 
