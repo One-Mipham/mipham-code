@@ -101,6 +101,16 @@ export class InstructionsLoader {
       parts.push(this.buildPermissionContext(permissionMode))
     }
 
+    // 开场克制：寒暄只回一句短问候，不上能力清单（避免把「你好」当「你是谁」处理）
+    parts.push(`## Greeting Restraint
+
+When the user's message is only a greeting or small talk ("hello", "hi",
+"你好", "您好", "在吗", "早上好"), reply with ONE brief, warm line —
+e.g. "你好，我是 Mipham，有什么可以帮你的？" Do NOT introduce yourself,
+list your capabilities/tools/MCP servers, or enumerate what you can do.
+Only describe your capabilities when the user explicitly asks ("你是谁",
+"你能做什么", "what can you do", "introduce yourself").`)
+
     // Inject critical thinking self-check layer (for analysis/comparison tasks)
     parts.push(`## Critical Thinking Self-Check
 

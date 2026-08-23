@@ -7,6 +7,12 @@ describe('InstructionsLoader.buildSystemPrompt', () => {
     expect(prompt).toContain('Commit Attribution')
     expect(prompt).toContain('Co-Authored-By: Mipham <noreply@mipham.ai>')
   })
+
+  it('injects the greeting-restraint instruction (寒暄克制)', () => {
+    const prompt = new InstructionsLoader().buildSystemPrompt()
+    expect(prompt).toContain('Greeting Restraint')
+    expect(prompt).toContain('Do NOT introduce yourself')
+  })
 })
 
 describe('stripSections (prompt-exclude)', () => {
