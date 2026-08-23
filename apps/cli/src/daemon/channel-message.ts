@@ -3,7 +3,7 @@ import type { SessionWorker } from './session-worker'
 import type { RateLimiter } from './rate-limiter'
 
 export interface ChannelMessageOptions {
-  channel: string // 'feishu' | 'telegram' | 'wecom'
+  channel: string // 'feishu' | 'telegram' | 'wecom' | 'dingtalk'
   externalId: string // openId / chatId / userId
   text: string
   allowed: Set<string>
@@ -14,11 +14,11 @@ export interface ChannelMessageOptions {
   provider: string
   model: string
   sendText: (externalId: string, text: string) => Promise<void>
-  maxLen: number // 飞书 4000 / Telegram 4096 / 企微 2048
+  maxLen: number // 飞书 4000 / Telegram 4096 / 企微 2048 / 钉钉 2000
   logPrefix: string // '[feishu]' / '[telegram]' / '[wecom]'
 }
 
-/** 三频道共享的消息处理骨架：白名单→限流→会话→processPrompt→回发。 */
+/** 四频道共享的消息处理骨架：白名单→限流→会话→processPrompt→回发。 */
 export async function handleChannelMessage(opts: ChannelMessageOptions): Promise<void> {
   const {
     channel,

@@ -29,6 +29,8 @@ import { parseTelegramEnv } from './telegram/env.js'
 import type { TelegramConfig } from './telegram/types.js'
 import { parseWecomEnv } from './wecom/env.js'
 import type { WecomConfig } from './wecom/types.js'
+import { parseDingtalkEnv } from './dingtalk/env.js'
+import type { DingtalkConfig } from './dingtalk/types.js'
 import { loadConfig } from '../config/loader'
 
 const HOME = homedir()
@@ -210,6 +212,20 @@ export async function startDaemon(): Promise<{ port: number; token: string }> {
     }
   }
 
+  // 钉钉 remote-control adapter（Stream 长连接，env 未配置时跳过）
+  const dingtalkConfig = parseDingtalkEnv()
+  let dingtalk: { config: DingtalkConfig; cwd: string; provider: string; model: string } | undefined
+  if (dingtalkConfig) {
+    const cfg = loadConfig()
+    const provider = cfg.providers.find((p) => p.status !== 'upcoming') ?? cfg.providers[0]
+    dingtalk = {
+      config: dingtalkConfig,
+      cwd: process.env.DINGTALK_CWD || process.cwd(),
+      provider: provider?.id ?? 'anthropic',
+      model: provider?.models?.[0]?.id ?? 'claude-sonnet-5',
+    }
+  }
+
   // Start HTTP server (Bun.serve starts listening immediately)
   const server = createServer({
     db,
@@ -227,6 +243,7 @@ export async function startDaemon(): Promise<{ port: number; token: string }> {
     feishu,
     telegram,
     wecom,
+    dingtalk,
   })
   activeServer = server
 

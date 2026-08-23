@@ -32,6 +32,9 @@ import type { TelegramConfig } from './telegram/types.js'
 import { createWecomAdapter } from './wecom/adapter.js'
 import { createWecomApi } from './wecom/api.js'
 import type { WecomConfig } from './wecom/types.js'
+import { createDingtalkAdapter } from './dingtalk/adapter.js'
+import { createDingtalkApi } from './dingtalk/api.js'
+import type { DingtalkConfig } from './dingtalk/types.js'
 import { startHeartbeat } from './heartbeat'
 
 interface ServerConfig {
@@ -50,6 +53,7 @@ interface ServerConfig {
   feishu?: { config: FeishuConfig; cwd: string; provider: string; model: string }
   telegram?: { config: TelegramConfig; cwd: string; provider: string; model: string }
   wecom?: { config: WecomConfig; cwd: string; provider: string; model: string }
+  dingtalk?: { config: DingtalkConfig; cwd: string; provider: string; model: string }
 }
 
 interface WsData {
@@ -129,6 +133,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
     feishu,
     telegram,
     wecom,
+    dingtalk,
   } = config
 
   const wsClients = new Map<string, Set<ServerWebSocket<WsData>>>()
@@ -291,6 +296,19 @@ export function createServer(config: ServerConfig): Server<WsData> {
       })
     : undefined
   wecomAdapter?.start()
+
+  // ── 钉钉 remote-control adapter（Stream 长连接，无需 webhook 路由）──
+  const dingtalkAdapter = dingtalk
+    ? createDingtalkAdapter(dingtalk.config, createDingtalkApi(dingtalk.config), {
+        sm,
+        getOrCreateWorker,
+        rateLimiter,
+        cwd: dingtalk.cwd,
+        provider: dingtalk.provider,
+        model: dingtalk.model,
+      })
+    : undefined
+  dingtalkAdapter?.start()
 
   // ── 心跳式通知：定时扫 pending（goal/schedule），只通知、不自主行动 ──
   const heartbeatSource = {
