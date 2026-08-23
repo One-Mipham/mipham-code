@@ -4,6 +4,7 @@ import { createServer, Server } from 'node:http'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { McpServerConfig } from '../shared/types'
 import { TokenStore } from './token-store'
+import { fetchWithRetry } from '../providers/fetch-utils'
 import { createT } from '../i18n-core/t'
 import enUS from '../i18n-core/locales/en-US.json'
 import zhCN from '../i18n-core/locales/zh-CN.json'
@@ -148,15 +149,22 @@ export class OAuthClient {
       throw new Error(`No refresh token available for "${serverName}"`)
     }
     const auth = config.auth!
-    const response = await fetch(auth.tokenUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: saved.refreshToken,
-        client_id: auth.clientId,
-      }).toString(),
-    })
+    // A single failed refresh is often a transient network/server error, not a
+    // real revocation — retry (5xx/429/network) before forcing PKCE. 4xx (e.g.
+    // invalid_grant) is a genuine revocation and falls through to PKCE directly.
+    const response = await fetchWithRetry(
+      auth.tokenUrl,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: saved.refreshToken,
+          client_id: auth.clientId,
+        }).toString(),
+      },
+      { maxRetries: 1, baseDelay: 300 },
+    )
     if (!response.ok) {
       this.store.delete(serverName)
       const fresh = await this.executePkceFlow(config)

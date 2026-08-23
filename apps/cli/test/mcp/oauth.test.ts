@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import { OAuthClient } from '../../src/mcp/oauth'
 import { TokenStore } from '../../src/mcp/token-store'
 import { createServer, Server } from 'node:http'
@@ -143,4 +143,89 @@ describe('OAuthClient', () => {
     })
     expect(token).toBe('mock-access-token-123')
   }, 15000)
+
+  describe('refreshAccessToken retry', () => {
+    const config = {
+      name: 'retry-srv',
+      command: 'echo',
+      args: [],
+      auth: {
+        type: 'oauth' as const,
+        authorizationUrl: '',
+        tokenUrl: 'http://localhost/token',
+        clientId: '',
+      },
+    }
+
+    it('retries the refresh request before falling back to PKCE', async () => {
+      const store = new TokenStore(testDir)
+      store.save('retry-srv', {
+        accessToken: 'old-token',
+        refreshToken: 'refresh-me',
+        expiresAt: new Date(Date.now() - 3600000).toISOString(),
+      })
+      const client = new OAuthClient(store)
+
+      let attempts = 0
+      const fetchMock = vi.fn(async () => {
+        attempts++
+        if (attempts === 1) return new Response('oops', { status: 500 })
+        return new Response(
+          JSON.stringify({
+            access_token: 'fresh-token',
+            refresh_token: 'refresh-me',
+            expires_in: 3600,
+          }),
+          { status: 200 },
+        )
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      const pkceSpy = vi
+        .spyOn(client, 'executePkceFlow')
+        .mockRejectedValue(new Error('PKCE should not be called'))
+
+      try {
+        const token = await client.refreshAccessToken('retry-srv', config)
+        expect(token).toBe('fresh-token')
+        expect(attempts).toBe(2)
+        expect(pkceSpy).not.toHaveBeenCalled()
+      } finally {
+        pkceSpy.mockRestore()
+        vi.unstubAllGlobals()
+      }
+    })
+
+    it('falls back to PKCE after refresh retries are exhausted', async () => {
+      const store = new TokenStore(testDir)
+      store.save('retry-srv', {
+        accessToken: 'old-token',
+        refreshToken: 'refresh-me',
+        expiresAt: new Date(Date.now() - 3600000).toISOString(),
+      })
+      const client = new OAuthClient(store)
+
+      let attempts = 0
+      const fetchMock = vi.fn(async () => {
+        attempts++
+        return new Response('oops', { status: 500 })
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      const pkceSpy = vi.spyOn(client, 'executePkceFlow').mockResolvedValue({
+        accessToken: 'pkce-token',
+        refreshToken: 'pkce-refresh',
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      })
+
+      try {
+        const token = await client.refreshAccessToken('retry-srv', config)
+        expect(token).toBe('pkce-token')
+        expect(attempts).toBe(2)
+        expect(pkceSpy).toHaveBeenCalledTimes(1)
+        expect(store.load('retry-srv')).toBeNull()
+      } finally {
+        pkceSpy.mockRestore()
+        vi.unstubAllGlobals()
+      }
+    })
+  })
 })
