@@ -10,9 +10,12 @@ interface FrontmatterResult {
 }
 
 function parseFrontmatter(raw: string): FrontmatterResult {
-  const match = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/)
+  // Strip a leading UTF-8 BOM — otherwise `^---` never matches and a
+  // BOM-prefixed file is silently treated as body text (effectively ignored).
+  const src = raw.replace(/^\uFEFF/, '')
+  const match = src.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/)
   if (!match) {
-    return { data: {}, content: raw }
+    return { data: {}, content: src }
   }
   return {
     data: parseYaml(match[1] || '') as Record<string, unknown>,

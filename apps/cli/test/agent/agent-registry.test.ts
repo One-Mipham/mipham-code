@@ -47,6 +47,26 @@ You are a test agent. Do test things.`,
     expect(agent!.systemPrompt).toContain('You are a test agent.')
   })
 
+  it('loads an agent markdown file with a UTF-8 BOM prefix', () => {
+    const body = `---
+name: bom-agent
+description: Has a BOM.
+---
+You are a BOM-prefixed agent.`
+    mkdirSync(TEST_DIR, { recursive: true })
+    // Prepend a UTF-8 BOM (U+FEFF) — a BOM must not cause the file to be
+    // silently ignored (regression for the parseFrontmatter BOM strip).
+    writeFileSync(join(TEST_DIR, 'bom-agent.md'), '\uFEFF' + body, 'utf-8')
+
+    const registry = new AgentRegistry()
+    registry.loadDirectory(TEST_DIR, 'project')
+
+    const agent = registry.get('bom-agent')
+    expect(agent).toBeDefined()
+    expect(agent!.name).toBe('bom-agent')
+    expect(agent!.systemPrompt).toContain('You are a BOM-prefixed agent.')
+  })
+
   it('returns undefined for unknown agent', () => {
     const registry = new AgentRegistry()
     expect(registry.get('nonexistent')).toBeUndefined()
