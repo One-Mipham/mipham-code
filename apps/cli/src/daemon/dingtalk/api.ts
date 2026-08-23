@@ -12,6 +12,19 @@ export interface DingtalkApi {
   pong(ws: WebSocket, frame: unknown): void
 }
 
+/** 回帧信封：code 200 + 回显 headers.messageId。ack 与 pong 共用。 */
+function sendResponse(ws: WebSocket, frame: unknown, data: unknown): void {
+  const f = frame as { headers?: { messageId?: string } }
+  ws.send(
+    JSON.stringify({
+      code: 200,
+      headers: { contentType: 'application/json', messageId: f?.headers?.messageId ?? '' },
+      message: 'OK',
+      data,
+    }),
+  )
+}
+
 /**
  * 钉钉 Stream Mode 协议 codec。零依赖：HTTP 用裸 fetch（register + 回发），
  * WebSocket 用 globalThis.WebSocket（Node 22+ / Bun 原生）。ticket 一次性且
@@ -97,27 +110,11 @@ export function createDingtalkApi(
     },
 
     ack(ws, frame) {
-      const f = frame as { headers?: { messageId?: string } }
-      ws.send(
-        JSON.stringify({
-          code: 200,
-          headers: { contentType: 'application/json', messageId: f?.headers?.messageId ?? '' },
-          message: 'OK',
-          data: '{"response": null}',
-        }),
-      )
+      sendResponse(ws, frame, '{"response": null}')
     },
 
     pong(ws, frame) {
-      const f = frame as { headers?: { messageId?: string }; data?: unknown }
-      ws.send(
-        JSON.stringify({
-          code: 200,
-          headers: { contentType: 'application/json', messageId: f?.headers?.messageId ?? '' },
-          message: 'OK',
-          data: f?.data,
-        }),
-      )
+      sendResponse(ws, frame, (frame as { data?: unknown }).data)
     },
   }
 }
