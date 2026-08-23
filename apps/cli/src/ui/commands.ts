@@ -11,6 +11,8 @@ import type { PluginManager } from '../plugin/plugin-manager'
 import type { Message } from '../shared/types.js'
 import { McpClient } from '../mcp/client'
 import { buildCapabilityReport } from '../core/capability-inventory'
+import { InstructionsLoader } from '../core/instructions'
+import { findDerivableSections, DERIVABLE_HINTS } from '../core/claude-md-audit'
 import { runCrsiModification, approvePending, rejectPending, hasPending } from '../core/crsi-modify'
 import {
   produceCrsiProposal,
@@ -2908,8 +2910,6 @@ const doctorCmd: CommandHandler = async (ctx) => {
 
   // CLAUDE.md audit — flag sections the model can infer from the codebase
   try {
-    const { InstructionsLoader } = await import('../core/instructions')
-    const { findDerivableSections, DERIVABLE_HINTS } = await import('../core/claude-md-audit')
     const loader = new InstructionsLoader()
     loader.loadAll(process.cwd())
     const claudeFiles = loader.list().filter((f) => f.path.endsWith('CLAUDE.md'))
