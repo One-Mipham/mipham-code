@@ -430,6 +430,7 @@ export interface SessionInfo {
   cwd?: string
   provider?: string
   model?: string
+  crossSessionInbound?: CrossSessionInbound
 }
 
 // ── Background Agent Types ──

@@ -90,6 +90,16 @@ export class MessageRouter {
     }
     const targetSession = resolution.session!
 
+    // Recipient refuses inbound messages — report "refused" instead of a silent
+    // success so the sender knows the message was not delivered.
+    if (targetSession.crossSessionInbound === 'deny') {
+      return {
+        success: false,
+        routedTo: 'inbox',
+        error: `Session "${targetSession.name}" refuses inbound messages.`,
+      }
+    }
+
     // Get sender info — resolve the human-readable name when the sender is a
     // registered session, else fall back to the raw id (e.g. non-session senders).
     const senderName = discoverSessions().find((s) => s.id === from)?.name ?? from

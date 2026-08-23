@@ -558,12 +558,20 @@ export async function runApp(options: RunOptions): Promise<void> {
   // so `@mipham-code` can address this session; uniqueness is enforced against
   // other live sessions (suffix -2, -3, …). The id stays a stable `session-<ts>`.
   const defaultName = basename(process.cwd()) || 'session'
+
+  // Load cross-session config first so the registered SessionInfo carries this
+  // session's inbound policy — senders discover it and report "refused" instead
+  // of a silent drop when policy is 'deny'.
+  const crossSessionConfig = loadCrossSessionConfig(process.cwd())
+  engine.setCrossSessionConfig(crossSessionConfig)
+
   const sessionInfo = createSessionInfo(
     sessionName,
     ensureUniqueSessionName(defaultName, discoverSessions()),
     process.cwd(),
     defaultProvider,
     defaultModel,
+    crossSessionConfig.crossSessionInbound,
   )
   registerActiveSession(sessionInfo)
 
@@ -576,10 +584,6 @@ export async function runApp(options: RunOptions): Promise<void> {
   if (heartbeatInterval.unref) {
     heartbeatInterval.unref()
   }
-
-  // Load cross-session config and wire into the engine's inbound policy
-  const crossSessionConfig = loadCrossSessionConfig(process.cwd())
-  engine.setCrossSessionConfig(crossSessionConfig)
 
   // P2-1: Trigger SessionStart hooks after full initialization
   hookEngine.executeSessionStart(sessionName).catch(() => {

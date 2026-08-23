@@ -156,4 +156,25 @@ describe('MessageRouter', () => {
     // Cleanup
     unregisterSession('bare-name-id-xyz')
   })
+
+  it('reports "refused" when the recipient denies inbound messages', async () => {
+    const targetSession: SessionInfo = {
+      id: 'deny-session-1',
+      name: 'deny-target',
+      machine: 'test-host',
+      pid: 55557,
+      startedAt: new Date().toISOString(),
+      crossSessionInbound: 'deny',
+    }
+
+    registerActiveSession(targetSession)
+
+    const result = await router.route('test-sender', 'deny-session-1', 'Hello', 'Blocked?')
+    expect(result.success).toBe(false)
+    expect(result.routedTo).toBe('inbox')
+    expect(result.error).toContain('refuses')
+
+    // Cleanup
+    unregisterSession('deny-session-1')
+  })
 })

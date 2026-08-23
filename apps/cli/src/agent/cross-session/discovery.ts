@@ -9,7 +9,7 @@ import {
 } from 'node:fs'
 import { join, basename } from 'node:path'
 import { homedir, hostname } from 'node:os'
-import type { SessionInfo } from '../../shared/types'
+import type { SessionInfo, CrossSessionInbound } from '../../shared/types'
 
 const MIPHAM_HOME = join(homedir(), '.mipham')
 const ACTIVE_SESSIONS_DIR = join(MIPHAM_HOME, '.active-sessions')
@@ -97,6 +97,7 @@ export function createSessionInfo(
   cwd?: string,
   provider?: string,
   model?: string,
+  crossSessionInbound?: CrossSessionInbound,
 ): SessionInfo {
   return {
     id: sessionId,
@@ -107,6 +108,7 @@ export function createSessionInfo(
     cwd,
     provider,
     model,
+    crossSessionInbound,
   }
 }
 
