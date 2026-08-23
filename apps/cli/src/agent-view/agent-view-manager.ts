@@ -264,13 +264,12 @@ export class AgentViewManager {
    * Remove all completed and failed sessions (cleanup).
    */
   prune(): number {
+    const terminalIds = Array.from(this.sessions.entries())
+      .filter(([, session]) => session.status === 'completed' || session.status === 'failed')
+      .map(([id]) => id)
     let removed = 0
-    for (const [id, session] of this.sessions) {
-      if (session.status === 'completed' || session.status === 'failed') {
-        this.sessions.delete(id)
-        this.sessionOrder = this.sessionOrder.filter((oid) => oid !== id)
-        removed++
-      }
+    for (const id of terminalIds) {
+      if (this.remove(id)) removed++
     }
     return removed
   }
