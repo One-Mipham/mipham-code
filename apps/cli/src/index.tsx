@@ -28,7 +28,7 @@ import { QueryEngine } from './core/engine'
 import { ExperienceRuleEngine } from './core/rule-engine.js'
 import { SessionLog } from './core/session-log'
 import { SessionStore } from './core/session-store'
-import type { PermissionLevel, MiphamConfig } from './shared/types'
+import type { PermissionLevel, MiphamConfig, McpServerConfig } from './shared/types'
 import { SkillsLoader } from './skills/loader'
 import { PluginManager } from './plugin/plugin-manager'
 import { loadPlugins } from './plugin/plugin-loader'
@@ -192,6 +192,38 @@ function SetupGate(props: SetupGateProps) {
     sessionId: props.sessionId,
     agentViewManager: props.agentViewManager,
   })
+}
+
+/**
+ * Connect all MCP servers in parallel and register their tools into the shared
+ * registry. Runs lazily in the background so a slow or dead server (e.g. a 15s
+ * connect timeout) never blocks first paint. Failures are non-fatal.
+ */
+async function connectMcpServers(
+  mcpServers: McpServerConfig[],
+  tools: ReturnType<typeof createToolRegistry>,
+): Promise<void> {
+  if (mcpServers.length === 0) return
+  const mcp = McpClient.getInstance()
+  // Wire runtime tool-list changes before connect so mid-connect updates land.
+  syncMcpToolsOnChange(mcp, tools)
+  const results = await Promise.allSettled(
+    mcpServers.map(async (server) => {
+      await mcp.connect(server)
+      const count = registerMcpServerTools(server.name, tools)
+      if (count > 0) {
+        process.stderr.write(`[mcp] "${server.name}": registered ${count} tools\n`)
+      }
+    }),
+  )
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i]!
+    if (result.status === 'rejected') {
+      process.stderr.write(
+        `[mcp] Failed to connect "${mcpServers[i]!.name}": ${String(result.reason)}\n`,
+      )
+    }
+  }
 }
 
 export async function runApp(options: RunOptions): Promise<void> {
@@ -455,33 +487,10 @@ export async function runApp(options: RunOptions): Promise<void> {
   mountSkills(vajraContext, skillsLoader)
   mountLlm(vajraContext, registry)
 
-  // Connect MCP servers and register their tools into the tool registry.
-  // Uses Promise.allSettled for parallel connection — failures are non-fatal.
-  const mcpServers = config.skills?.mcpServers ?? []
-  if (mcpServers.length > 0) {
-    const mcp = McpClient.getInstance()
-    const results = await Promise.allSettled(
-      mcpServers.map(async (server) => {
-        await mcp.connect(server)
-        const count = registerMcpServerTools(server.name, tools)
-        if (count > 0) {
-          process.stderr.write(`[mcp] "${server.name}": registered ${count} tools\n`)
-        }
-      }),
-    )
-    // Log failures (non-fatal — app starts without that server's tools)
-    for (let i = 0; i < results.length; i++) {
-      const result = results[i]!
-      if (result.status === 'rejected') {
-        process.stderr.write(
-          `[mcp] Failed to connect "${mcpServers[i]!.name}": ${String(result.reason)}\n`,
-        )
-      }
-    }
-  }
-
-  // Wire runtime MCP tool changes (tools/list_changed) into the central registry.
-  syncMcpToolsOnChange(McpClient.getInstance(), tools)
+  // Connect MCP servers lazily in the background: the UI renders immediately,
+  // and each server's tools register into the shared registry as it connects.
+  // A dead server (e.g. a 15s connect timeout) no longer blocks startup.
+  void connectMcpServers(config.skills?.mcpServers ?? [], tools)
 
   // Initialize hook engine — register skill-defined hooks
   const hookEngine = new HookEngine()
