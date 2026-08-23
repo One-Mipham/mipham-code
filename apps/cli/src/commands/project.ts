@@ -7,6 +7,7 @@
  */
 import type { CommandHandler, CommandContext, CommandResult } from '../ui/commands.js'
 import { getWorkspaceTrust } from '../core/workspace-trust'
+import { atomicWriteFileSync } from '../shared/atomic-write'
 
 export {
   initCmd,
@@ -20,7 +21,7 @@ export {
 }
 
 const initCmd: CommandHandler = async (ctx) => {
-  const { existsSync, mkdirSync, writeFileSync } = await import('node:fs')
+  const { existsSync, mkdirSync } = await import('node:fs')
   const { join } = await import('node:path')
   const { homedir } = await import('node:os')
 
@@ -78,7 +79,7 @@ providers:
 ${providerYaml}
 `
 
-    writeFileSync(userConfigPath, configContent, 'utf-8')
+    atomicWriteFileSync(userConfigPath, configContent)
     return {
       content: `✅ Mipham Code initialized!
 
@@ -434,7 +435,7 @@ permission: ask
 providers:
 ${providerYaml}
 `
-    writeFileSync(configPath, defaultConfig, 'utf-8')
+    atomicWriteFileSync(configPath, defaultConfig)
     created.push('.mipham/config.yml')
   } else {
     skipped.push('.mipham/config.yml (already exists)')

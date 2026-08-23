@@ -6,11 +6,11 @@ import {
   readdirSync,
   unlinkSync,
   chmodSync,
-  writeFileSync,
 } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
+import { atomicWriteFileSync } from '../shared/atomic-write'
 import type {
   MiphamConfig,
   ProviderConfig,
@@ -533,7 +533,7 @@ export function saveProviderApiKey(providerId: string, apiKey: string): boolean 
     doc.providers = providers
 
     // Write back
-    writeFileSync(configPath, stringifyYaml(doc), { encoding: 'utf-8', mode: 0o600 })
+    atomicWriteFileSync(configPath, stringifyYaml(doc), { mode: 0o600 })
     return true
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)

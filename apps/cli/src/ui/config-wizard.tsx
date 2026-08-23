@@ -14,7 +14,8 @@ import { useI18n } from '../i18n-context'
 import TextInput from 'ink-text-input'
 import { DEFAULT_PROVIDERS, OLLAMA_PRESET_MODELS } from '../shared/constants'
 import type { ModelInfo } from '../shared/types'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync } from 'node:fs'
+import { atomicWriteFileSync } from '../shared/atomic-write'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { execSync } from 'node:child_process'
@@ -115,7 +116,7 @@ function writeConfigFile(providerId: string, modelId: string, apiKey: string): v
     ...models.map((m) => `      - id: ${m.id}`),
   ]
 
-  writeFileSync(join(configDir, 'config.yml'), lines.join('\n'), 'utf-8')
+  atomicWriteFileSync(join(configDir, 'config.yml'), lines.join('\n'))
 }
 
 function checkOllama(): { installed: boolean; running: boolean; models: string[] } {
