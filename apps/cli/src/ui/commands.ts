@@ -57,6 +57,7 @@ import {
 } from '../commands/project.js'
 import { themeCmd, releaseNotesCmd, ideCmd, terminalSetupCmd } from '../commands/environment.js'
 import { commitCmd, pushCmd, prCmd, issueCmd } from '../commands/git.js'
+import { suggestDirectories } from '../commands/cd-suggest.js'
 import { keysCmd } from '../commands/keys'
 import { workflowViewCmd, workflowWatchCmd } from '../commands/workflow-view.js'
 import { execSync } from 'node:child_process'
@@ -3183,7 +3184,12 @@ const cdCmd: CommandHandler = async (ctx, args) => {
   const resolved = resolve(target.replace(/^~/, process.env.HOME || '~'))
 
   if (!existsSync(resolved)) {
-    return { content: t('commands.cd.not_found', { path: resolved }) }
+    const suggestions = suggestDirectories(resolved)
+    let content = t('commands.cd.not_found', { path: resolved })
+    if (suggestions.length > 0) {
+      content += `\n\n${t('commands.cd.suggestions')}\n${suggestions.map((s) => `  ${s}`).join('\n')}`
+    }
+    return { content }
   }
 
   try {

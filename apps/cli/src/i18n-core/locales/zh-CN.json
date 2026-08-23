@@ -563,6 +563,7 @@
     "cd": {
       "usage": "用法: /cd <path>\n\n更改会话工作目录。\n示例: /cd ~/projects/my-app\n\n当前: {cwd}",
       "not_found": "❌ 目录未找到: {path}",
+      "suggestions": "你是想找：",
       "failed": "❌ 更改目录失败: {error}",
       "title": "── 目录已更改 ──",
       "content": "新目录: {path}\n\nAI 将相对于此目录工作。\n注意: 这会更改 Read、Write、Bash 等工具的文件系统根路径。"

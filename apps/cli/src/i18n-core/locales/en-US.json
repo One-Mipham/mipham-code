@@ -563,6 +563,7 @@
     "cd": {
       "usage": "Usage: /cd <path>\n\nChange the session working directory.\nExample: /cd ~/projects/my-app\n\nCurrent: {cwd}",
       "not_found": "❌ Directory not found: {path}",
+      "suggestions": "Did you mean:",
       "failed": "❌ Failed to change directory: {error}",
       "title": "── Directory Changed ──",
       "content": "New CWD: {path}\n\nThe AI will now work relative to this directory.\nNote: This changes the filesystem root for tools like Read, Write, Bash."
