@@ -32,6 +32,8 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
   const [peekingSessionId, setPeekingSessionId] = useState<string | null>(null)
   const [groupBy, setGroupBy] = useState<'status' | 'directory'>('status')
   const [feedback, setFeedback] = useState<string | null>(null)
+  // Bump to force flatList recompute after a session is removed (list membership change).
+  const [version, setVersion] = useState(0)
 
   // Flash a brief feedback message that auto-clears
   const showFeedback = useCallback((msg: string) => {
@@ -87,7 +89,7 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
     }
 
     return result
-  }, [manager, groupBy])
+  }, [manager, groupBy, version])
 
   // Flatten sessions only for navigation (skip headers)
   const sessionsOnly = useMemo(
@@ -137,6 +139,22 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
       const newTitle = `session-${Date.now().toString(36)}`
       manager.rename(current.session.id, newTitle)
       showFeedback(`Renamed to ${newTitle}`)
+      return
+    }
+
+    // Ctrl+X — permanently remove the selected session
+    if (key.ctrl && input === 'x') {
+      if (sessionsOnly.length === 0) {
+        showFeedback('No sessions to remove')
+        return
+      }
+      const current = sessionsOnly[selectedIndex]
+      if (!current) return
+      manager.remove(current.session.id)
+      setPeekingSessionId(null)
+      setSelectedIndex((prev) => Math.max(0, Math.min(prev, sessionsOnly.length - 2)))
+      setVersion((v) => v + 1)
+      showFeedback(`Removed ${current.session.title || current.session.id}`)
       return
     }
 
@@ -223,7 +241,8 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
         </Box>
         <Box>
           <Text dimColor>
-            j/k navigate · Space peek · Enter attach · Ctrl+T group · Ctrl+R rename · Esc back
+            j/k navigate · Space peek · Enter attach · Ctrl+T group · Ctrl+R rename · Ctrl+X remove
+            · Esc back
           </Text>
         </Box>
       </Box>

@@ -251,6 +251,16 @@ export class AgentViewManager {
   }
 
   /**
+   * Permanently remove a single session (any status). Returns true if found.
+   */
+  remove(id: string): boolean {
+    if (!this.sessions.has(id)) return false
+    this.sessions.delete(id)
+    this.sessionOrder = this.sessionOrder.filter((oid) => oid !== id)
+    return true
+  }
+
+  /**
    * Remove all completed and failed sessions (cleanup).
    */
   prune(): number {

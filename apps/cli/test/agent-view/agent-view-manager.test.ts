@@ -171,4 +171,31 @@ describe('AgentViewManager', () => {
     const session = mgr.create('Task A', 'Do A')
     expect(session.directory).toBe(process.cwd())
   })
+
+  // ═══════════════════════════════════════════
+  // remove
+  // ═══════════════════════════════════════════
+
+  it('should permanently remove a session by id', () => {
+    const mgr = makeManager()
+    const keep = mgr.create('Keep', 'Keep me')
+    const target = mgr.create('Remove', 'Remove me')
+
+    expect(mgr.remove(target.id)).toBe(true)
+    expect(mgr.get(target.id)).toBeUndefined()
+    expect(mgr.list().map((s) => s.id)).toEqual([keep.id])
+
+    // removing a non-existent session returns false
+    expect(mgr.remove('nonexistent')).toBe(false)
+  })
+
+  it('should remove a completed session without it reappearing in groups', () => {
+    const mgr = makeManager()
+    const done = mgr.create('Done', 'Done task')
+    mgr.updateStatus(done.id, 'completed')
+
+    mgr.remove(done.id)
+    expect(mgr.list()).toHaveLength(0)
+    expect(mgr.groupByStatus().completed).toHaveLength(0)
+  })
 })
