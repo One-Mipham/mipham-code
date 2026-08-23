@@ -30,4 +30,10 @@ describe('findDerivableSections', () => {
   it('returns empty for content with no derivable headings', () => {
     expect(findDerivableSections('')).toEqual([])
   })
+
+  it('does not flag workflow/deploy-chain headings (submodule workflow, deploy dependency chain)', () => {
+    const content = ['## 十五、Git Submodule 工作流', '### 部署依赖链', '## 依赖注入'].join('\n')
+
+    expect(findDerivableSections(content)).toEqual([])
+  })
 })

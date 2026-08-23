@@ -31,12 +31,15 @@ const PATTERNS: Array<{ pattern: RegExp; reason: DerivableReason }> = [
     reason: 'structure',
   },
   { pattern: /技术栈|tech\s*stack|technology\s*stack/i, reason: 'tech-stack' },
-  { pattern: /依赖|dependencies/i, reason: 'dependencies' },
+  { pattern: /依赖关系|依赖清单|dependencies/i, reason: 'dependencies' },
   {
     pattern: /最近提交|recent\s*commit|修订历史|revision\s*history|changelog|变更记录|变更历史/i,
     reason: 'commits',
   },
-  { pattern: /项目一览|项目清单|项目列表|子模块清单|submodule|catalog/i, reason: 'catalog' },
+  {
+    pattern: /项目一览|项目清单|项目列表|子模块清单|submodule\s*(list|catalog)|catalog/i,
+    reason: 'catalog',
+  },
   { pattern: /测试矩阵|test\s*matrix|测试覆盖|coverage/i, reason: 'tests' },
 ]
 
