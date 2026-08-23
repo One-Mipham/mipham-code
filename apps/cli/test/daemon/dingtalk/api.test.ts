@@ -2,7 +2,10 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { createDingtalkApi } from '../../../src/daemon/dingtalk/api.js'
 
 const fetchMock = vi.fn()
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  fetchMock.mockClear()
+})
 
 function stubFetch(json: unknown, ok = true) {
   fetchMock.mockResolvedValue(new Response(JSON.stringify(json), { status: ok ? 200 : 500 }))
