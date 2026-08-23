@@ -10,8 +10,8 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.10.0
-> **最后更新**: 2026-08-23 — 钉钉远程控制（Stream Mode 第 4 个 inbound 频道）+ 测试数对齐 1795
+> **版本**: 2.10.1
+> **最后更新**: 2026-08-23 — 钉钉 self-review 收尾（nextBackoff 抽共享 + 测试去重）+ 测试数对齐 1791
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -48,7 +48,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **eval harness** `/crsi eval` — `core/eval-harness.ts` 冻结 20 条 ground-truth 契约（12 机制：规则/宪法/沙箱边界/红队/producer 行为 + 8 行为缺口）+ rewards 日志 `~/.mipham/crsi/eval-scores.jsonl`，`runCrsiModification` 以「分数不退化」为第二道闸。8 行为缺口（rm -rf/管道投毒/git reset --hard/chmod 777/mkfs/dd→/dev//关停主机/crontab -r）已由固化 managed tool-params 规则覆盖 → 全翻转 PASS → 满分 100 =「证明更好」
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：1,795 测试（1793 passed + 2 skipped）
+测试：1,791 测试（1789 passed + 2 skipped）
 
 ---
 
@@ -85,7 +85,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 26 个内置技能（20 standard + 6 mipham）
-│   │   ├── test/               # 158 个测试文件，1795 个测试
+│   │   ├── test/               # 159 个测试文件，1791 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -108,7 +108,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（1795 个测试）
+pnpm test         # vitest run（1791 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -232,7 +232,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
 | E2E      | 1       | 8        | full-pipeline                                 |
 | Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **158** | **1795** | **0 失败** ✅（1793 passed + 2 skipped）      |
+| **合计** | **159** | **1791** | **0 失败** ✅（1789 passed + 2 skipped）      |
 
 > 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
 
@@ -427,6 +427,7 @@ mipham-code 变更（包名/版本）
 
 | 版本   | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | 维护人     |
 | ------ | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| 2.10.1 | 2026-08-23 | 钉钉 self-review 收尾：① `sendResponse` 回帧信封抽共享（ack/pong DRY）② `nextBackoff` 抽 `daemon/backoff.ts`（三频道 telegram/wecom/dingtalk 去重，规则三命中）③ 测试隔离修复 ×2（dingtalk/telegram api.test 显式 `mockClear` 兜底，单文件隔离跑时 `clearMocks` 不清 module 级 `vi.fn` 调用历史）。测试 1793→1789 passed + 2 skipped（dedup -4，159 文件）。                                                                                                                                                                                   | 技术委员会 |
 | 2.10.0 | 2026-08-23 | 钉钉远程控制落地（第 4 个 inbound 频道）：daemon 新增 `dingtalk/` 模块（types/env/api/ws-client/adapter），钉钉 Stream Mode 长连接（`globalThis.WebSocket` 零依赖；register HTTP 拿 endpoint+ticket → `?ticket=` 建连 → 服务端 ping/pong → CALLBACK 解析 → ack → sessionWebhook 回发；ticket 一次性 90s 过期故每次重连前重新 register）。复用 `channel-message.ts` 四频道共享骨架（feishu/telegram/wecom/dingtalk）。测试 1761→1793 passed + 2 skipped。                                                                                       | 技术委员会 |
 | 2.9.2  | 2026-08-23 | /doctor 加 CLAUDE.md 冗余章节审计（`claude-md-audit.ts` 纯函数 `findDerivableSections` 扫 `##`/`###` 标题匹配「可从代码推断」模式：目录结构/技术栈/依赖/提交历史/项目清单/测试数，接线 doctorCmd + i18n）。目标：帮维护者发现 `prompt-exclude` 候选、省上下文 token。测试 1756→1761 passed + 2 skipped。                                                                                                                                                                                                                                       | 技术委员会 |
 | 2.9.1  | 2026-08-23 | 可选打磨：#8 agents 视图 Ctrl+X 永久删除会话（`AgentViewManager.remove(id)` + dashboard Ctrl+X 绑定 + `version` 状态触发 `flatList` 重算，修 useMemo 列表成员变更不重算的隐患）。#5 EnterWorktree 外目录确认 / #9 状态列全宽 / #18 会话卡 running / #19 rm 残留 均判 N/A（架构无入口或已覆盖）；#2 /doctor 砍 CLAUDE.md 顺延。测试 1754→1756 passed + 2 skipped。                                                                                                                                                                              | 技术委员会 |
