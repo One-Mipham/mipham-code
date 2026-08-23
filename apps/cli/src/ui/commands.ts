@@ -2906,6 +2906,36 @@ const doctorCmd: CommandHandler = async (ctx) => {
     }
   }
 
+  // CLAUDE.md audit — flag sections the model can infer from the codebase
+  try {
+    const { InstructionsLoader } = await import('../core/instructions')
+    const { findDerivableSections, DERIVABLE_HINTS } = await import('../core/claude-md-audit')
+    const loader = new InstructionsLoader()
+    loader.loadAll(process.cwd())
+    const claudeFiles = loader.list().filter((f) => f.path.endsWith('CLAUDE.md'))
+
+    lines.push('')
+    lines.push(t('commands.doctor.audit_section'))
+    let found = false
+    for (const file of claudeFiles) {
+      const sections = findDerivableSections(file.content)
+      if (sections.length === 0) continue
+      found = true
+      lines.push(`  ${file.path}`)
+      for (const s of sections) {
+        lines.push(`    - "${s.heading}" — ${DERIVABLE_HINTS[s.reason]}`)
+      }
+    }
+    if (!found) {
+      lines.push(t('commands.doctor.audit_clean'))
+    } else {
+      lines.push('')
+      lines.push(t('commands.doctor.audit_found'))
+    }
+  } catch {
+    // best-effort — skip the audit on any failure
+  }
+
   return { content: lines.join('\n') }
 }
 

@@ -595,7 +595,10 @@
       "git_section": "── Git ──",
       "no_git": "  (not a git repository or git not available)",
       "skills_section": "── Skills ──",
-      "skills_unavailable": "  (skills info unavailable)"
+      "skills_unavailable": "  (skills info unavailable)",
+      "audit_section": "── CLAUDE.md Audit ──",
+      "audit_clean": "  ✓ no code-derivable sections found",
+      "audit_found": "Add the sections above to the `prompt-exclude` frontmatter to stop sending them to the model."
     },
     "plugins": {
       "unavailable": "PluginManager not available in this session.",
