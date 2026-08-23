@@ -1,10 +1,6 @@
 import type { DingtalkApi } from './api.js'
 import type { DingtalkMessage } from './types.js'
-
-/** 指数退避，封顶 30s。与 wecom/telegram 同源。 */
-export function nextBackoff(currentMs: number): number {
-  return Math.min(currentMs * 2, 30_000)
-}
+import { nextBackoff } from '../backoff.js'
 
 /**
  * 钉钉 Stream 长连接生命周期：register（HTTP 拿 endpoint+ticket）→ 建连 →

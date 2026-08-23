@@ -1,10 +1,6 @@
 import type { WecomApi } from './api.js'
 import type { WecomMessage } from './types.js'
-
-/** 指数退避，封顶 30s。与 telegram poller.nextBackoff 同源。 */
-export function nextBackoff(currentMs: number): number {
-  return Math.min(currentMs * 2, 30_000)
-}
+import { nextBackoff } from '../backoff.js'
 
 /** WebSocket 长连接生命周期：建连→subscribe→心跳→消息回调→断开重连。返回 stop。 */
 export function startWecomWs(

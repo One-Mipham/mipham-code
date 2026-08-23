@@ -1,10 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { nextBackoff, startWecomWs } from '../../../src/daemon/wecom/ws-client.js'
-
-describe('nextBackoff', () => {
-  it('指数退避', () => expect(nextBackoff(1000)).toBe(2000))
-  it('封顶 30s', () => expect(nextBackoff(20000)).toBe(30000))
-})
+import { startWecomWs } from '../../../src/daemon/wecom/ws-client.js'
 
 class MockWS {
   static instances: MockWS[] = []

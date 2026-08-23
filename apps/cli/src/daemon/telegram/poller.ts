@@ -1,5 +1,6 @@
 import type { TelegramApi } from './api.js'
 import type { TelegramMessage } from './types.js'
+import { nextBackoff } from '../backoff.js'
 
 /** 从 update 提取文本消息；非文本/缺 message → null。chat.id 统一字符串化比对（id < 2^53；超范围 bigint 后续再引入）。 */
 export function extractTextMessage(update: unknown): TelegramMessage | null {
@@ -14,11 +15,6 @@ export function extractTextMessage(update: unknown): TelegramMessage | null {
 export function nextOffset(updates: Array<{ update_id?: number }>, prevOffset: number): number {
   if (updates.length === 0) return prevOffset
   return Math.max(...updates.map((u) => u.update_id ?? prevOffset)) + 1
-}
-
-/** 指数退避，封顶 30s。 */
-export function nextBackoff(currentMs: number): number {
-  return Math.min(currentMs * 2, 30_000)
 }
 
 /** 长轮询循环（unref 不阻退出）。返回 stop 函数。循环行为由 Task 7 集成测试覆盖。 */

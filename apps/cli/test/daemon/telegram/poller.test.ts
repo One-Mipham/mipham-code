@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractTextMessage, nextOffset, nextBackoff } from '../../../src/daemon/telegram/poller.js'
+import { extractTextMessage, nextOffset } from '../../../src/daemon/telegram/poller.js'
 
 describe('extractTextMessage', () => {
   it('text 消息 → TelegramMessage', () => {
@@ -23,9 +23,4 @@ describe('nextOffset', () => {
   it('空列表沿用 prev', () => expect(nextOffset([], 5)).toBe(5))
   it('返回最大 update_id + 1', () =>
     expect(nextOffset([{ update_id: 3 }, { update_id: 7 }], 2)).toBe(8))
-})
-
-describe('nextBackoff', () => {
-  it('指数退避', () => expect(nextBackoff(1000)).toBe(2000))
-  it('封顶 30s', () => expect(nextBackoff(20000)).toBe(30000))
 })
