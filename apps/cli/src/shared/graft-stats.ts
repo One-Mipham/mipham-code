@@ -1,5 +1,5 @@
 import { readFileSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve, dirname } from 'node:path'
 
 /** Graft's hook-maintained stats cache (`graft/.cache/stats.json`). */
 export interface GraftStats {
@@ -32,5 +32,22 @@ export function readGraftStats(cwd: string): GraftStats | null {
     }
   } catch {
     return null
+  }
+}
+
+/**
+ * Find the nearest graft graph by walking up from `cwd` to the filesystem root.
+ * Graft builds its cache at the repo root (`graft/.cache/stats.json`), so this
+ * also resolves when `cwd` is a subdirectory of a graft-indexed repo — not only
+ * the repo root itself.
+ */
+export function findGraftStats(cwd: string): GraftStats | null {
+  let dir = resolve(cwd)
+  for (;;) {
+    const stats = readGraftStats(dir)
+    if (stats) return stats
+    const parent = dirname(dir)
+    if (parent === dir) return null
+    dir = parent
   }
 }
