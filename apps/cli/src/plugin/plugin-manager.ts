@@ -1,4 +1,12 @@
-import { mkdirSync, existsSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs'
+import {
+  mkdirSync,
+  existsSync,
+  writeFileSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  renameSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { execSync } from 'node:child_process'
@@ -78,50 +86,65 @@ export class PluginManager {
       return { success: false, message: `Invalid package name: "${packageName}"` }
     }
 
-    // Derive plugin name from npm package name (strip scope prefix)
-    const pluginName = packageName.replace(/^@.+\//, '').replace(/^mipham-plugin-/, '')
+    // Staging dir name derived from the npm package name (scope stripped). The
+    // final directory is renamed to the manifest `name` once validated — the two
+    // can differ (e.g. a scoped package whose manifest declares a shorter name).
+    const stagingName = packageName.replace(/^@.+\//, '').replace(/^mipham-plugin-/, '')
 
-    const destDir = join(this.pluginDir, pluginName)
-    if (existsSync(destDir)) {
+    const stagingDir = join(this.pluginDir, stagingName)
+    if (existsSync(stagingDir)) {
       return {
         success: false,
-        message: `Plugin "${pluginName}" is already installed`,
+        message: `Plugin "${stagingName}" is already installed`,
       }
     }
 
     try {
       // Install the npm package into the plugins directory
-      mkdirSync(destDir, { recursive: true })
+      mkdirSync(stagingDir, { recursive: true })
 
       // Create a minimal package.json so npm install works in a subdirectory
       writeFileSync(
-        join(destDir, 'package.json'),
+        join(stagingDir, 'package.json'),
         JSON.stringify({ private: true }, null, 2),
         'utf-8',
       )
 
-      execSync(`npm install ${packageName} --prefix "${destDir}" --no-save`, {
+      execSync(`npm install ${packageName} --prefix "${stagingDir}" --no-save`, {
         encoding: 'utf-8',
         stdio: 'pipe',
         timeout: 60_000,
       })
 
-      // npm installs the package into <destDir>/node_modules/<packageName>/ —
+      // npm installs the package into <stagingDir>/node_modules/<packageName>/ —
       // validate there, then flatten it to the plugin dir root so its layout
       // matches `install(sourcePath)`.
-      const pkgDir = join(destDir, 'node_modules', packageName)
+      const pkgDir = join(stagingDir, 'node_modules', packageName)
       const validation = validatePlugin(pkgDir)
       if (!validation.valid) {
         // Clean up on invalid plugin
-        rmSync(destDir, { recursive: true, force: true })
+        rmSync(stagingDir, { recursive: true, force: true })
         return { success: false, message: validation.errors.join('; ') }
       }
 
-      this.copyDir(pkgDir, destDir)
-      rmSync(join(destDir, 'node_modules'), { recursive: true, force: true })
+      this.copyDir(pkgDir, stagingDir)
+      rmSync(join(stagingDir, 'node_modules'), { recursive: true, force: true })
+
+      // Use the manifest `name` for the final directory + record + message so
+      // they all agree (npm package name is only the staging key).
+      const manifestName = validation.manifest?.name || stagingName
+      let destDir = stagingDir
+      if (manifestName !== stagingName) {
+        destDir = join(this.pluginDir, manifestName)
+        if (existsSync(destDir)) {
+          rmSync(stagingDir, { recursive: true, force: true })
+          return { success: false, message: `Plugin "${manifestName}" is already installed` }
+        }
+        renameSync(stagingDir, destDir)
+      }
 
       this.plugins.push({
-        name: validation.manifest?.name || pluginName,
+        name: manifestName,
         version: validation.manifest?.version || '0.0.0',
         path: destDir,
         enabled: true,
@@ -129,18 +152,18 @@ export class PluginManager {
       })
 
       this.saveState()
-      const similarWarning = this.findSimilarWarning(pluginName)
+      const similarWarning = this.findSimilarWarning(manifestName)
       return {
         success: true,
         message:
-          `Plugin "${pluginName}" installed from npm` +
+          `Plugin "${manifestName}" installed from npm` +
           (similarWarning ? `\n⚠ ${similarWarning}` : ''),
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       // Clean up on failure
       try {
-        rmSync(destDir, { recursive: true, force: true })
+        rmSync(stagingDir, { recursive: true, force: true })
       } catch {
         /* ok */
       }

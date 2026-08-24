@@ -87,7 +87,9 @@ async function runWorkflowCLI(): Promise<boolean> {
     })
 
   // Commander will handle --help, unknown commands, etc.
-  await program.parseAsync(process.argv)
+  // Skip node + script + the leading `workflow` keyword (already matched by the
+  // caller); `from: 'user'` stops commander from stripping two more elements.
+  await program.parseAsync(process.argv.slice(3), { from: 'user' })
   return true
 }
 
@@ -185,7 +187,9 @@ async function runPluginCLI(): Promise<boolean> {
       process.exit(result.success ? 0 : 1)
     })
 
-  await program.parseAsync(process.argv)
+  // Skip node + script + the leading `plugin` keyword (already matched by the
+  // caller); `from: 'user'` stops commander from stripping two more elements.
+  await program.parseAsync(process.argv.slice(3), { from: 'user' })
   return true
 }
 
