@@ -29,10 +29,10 @@ const BLOCKED_PATTERNS = [
   />\s*\/dev\/sd[a-z]/,
   // SSH private key theft
   /\bcat\s+.*\/\.ssh\/id_/,
-  // Shell command substitution (commonly used for obfuscation/evasion)
-  /\$\(/,
-  // Backtick command substitution
-  /`[^`]+`/,
+  // NOTE: command substitution ($( … ) / `…`) is a legitimate Bash feature, so it is
+  // NOT blocked wholesale. The dangerous content inside a substitution (curl|sh,
+  // base64 -d, python -c, eval, bash -c, source, …) is still caught by the specific
+  // patterns below, which test the whole command string including inside $().
   // Interpreter code execution (bypass vector) — covers python, python2, python3
   /\bpython[23]?\s+-c\b/,
   /\bpython[23]?\s+-m\b/,

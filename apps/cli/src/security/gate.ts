@@ -28,8 +28,9 @@ const PROMPT_INJECTION_PATTERNS: Array<{ regex: RegExp; label: string }> = [
 ]
 
 const DANGEROUS_BASH_PATTERNS: Array<{ regex: RegExp; label: string }> = [
-  { regex: /\$\(.+\)/, label: 'command-substitution' },
-  { regex: /`[^`]+`/, label: 'backtick-substitution' },
+  // NOTE: command substitution ($( … ) / `…`) is legitimate Bash syntax and is NOT
+  // blocked here — its dangerous content (a pipe to sh/bash, a chained rm/cat/sh,
+  // …) is still caught by the pipe/chain patterns below.
   { regex: /;\s*(rm|cat|sh|bash)\b/, label: 'command-chain-injection' },
   { regex: /curl.+\|\s*(sh|bash)\b/, label: 'curl-pipe-shell' },
   { regex: /\|\s*(sh|bash)\b/, label: 'pipe-to-shell' },

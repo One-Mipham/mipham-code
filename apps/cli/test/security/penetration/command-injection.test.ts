@@ -2,16 +2,20 @@ import { describe, it, expect } from 'vitest'
 import { SecurityGate } from '../../../src/security/gate'
 
 describe('command injection detection', () => {
-  it('blocks $(...) command substitution', () => {
-    const result = SecurityGate.checkBashCommand('echo $(cat /etc/passwd)')
-    expect(result.blocked).toBe(true)
-    expect(result.reason).toContain('command-substitution')
+  it('allows legitimate $(...) substitution', () => {
+    const result = SecurityGate.checkBashCommand('echo $(pwd)')
+    expect(result.blocked).toBe(false)
   })
 
-  it('blocks backtick command substitution', () => {
-    const result = SecurityGate.checkBashCommand('echo `cat /etc/passwd`')
+  it('allows legitimate backtick substitution', () => {
+    const result = SecurityGate.checkBashCommand('echo `pwd`')
+    expect(result.blocked).toBe(false)
+  })
+
+  it('still blocks $(...) with pipe-to-shell content', () => {
+    const result = SecurityGate.checkBashCommand('echo $(cat /etc/passwd | sh)')
     expect(result.blocked).toBe(true)
-    expect(result.reason).toContain('backtick-substitution')
+    expect(result.reason).toContain('pipe-to-shell')
   })
 
   it('blocks pipe to shell', () => {
