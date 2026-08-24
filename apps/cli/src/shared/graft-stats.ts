@@ -8,6 +8,7 @@ export interface GraftStats {
   staleCount: number
   dirty: boolean
   syncing: boolean
+  lastFile: string | null
 }
 
 /**
@@ -27,6 +28,7 @@ export function readGraftStats(cwd: string): GraftStats | null {
       staleCount: typeof raw.staleCount === 'number' ? raw.staleCount : 0,
       dirty: raw.dirty === true,
       syncing: raw.syncing === true,
+      lastFile: typeof raw.lastFile === 'string' ? raw.lastFile : null,
     }
   } catch {
     return null

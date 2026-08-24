@@ -33,6 +33,7 @@ describe('readGraftStats', () => {
         staleCount: 9,
         dirty: true,
         syncing: false,
+        lastFile: 'apps/cli/src/ui/app.tsx',
       }),
     )
     expect(readGraftStats(dir)).toEqual({
@@ -41,6 +42,7 @@ describe('readGraftStats', () => {
       staleCount: 9,
       dirty: true,
       syncing: false,
+      lastFile: 'apps/cli/src/ui/app.tsx',
     })
   })
 

@@ -1,6 +1,8 @@
 import React, { useState } from 'react'
 import { Box, Text } from 'ink'
+import { basename } from 'node:path'
 import { readGraftStats, type GraftStats } from '../shared/graft-stats'
+import { getGraftSavings } from '../shared/graft-savings'
 
 /** Freshness segment mirroring graft's own statusline (see @nanonets/graft format.js). */
 function freshnessSegment(stats: GraftStats): { label: string; color: string } {
@@ -12,23 +14,46 @@ function freshnessSegment(stats: GraftStats): { label: string; color: string } {
 }
 
 /**
- * Bottom-of-screen graft status line — mirrors graft's own "◤ graft · N nodes /
- * E edges · ✓ synced" bar. Reads the hook-maintained `graft/.cache/stats.json`
- * once at mount; returns null (renders nothing) when graft isn't built here.
+ * Bottom-of-screen graft status line — mirrors graft's own "◤ graft · …" bar:
+ *   ◤ graft · N nodes / E edges · ✓ synced · ~T tok saved
+ *   ▸ ctx X% · last: file
+ * Reads `graft/.cache/stats.json` once at mount; the session's tok-saved total
+ * is read live each render (the app re-renders on the agent tick). Returns
+ * null (renders nothing) when graft isn't built here.
  */
-export function GraftStatusLine({ cwd }: { cwd: string }) {
+export function GraftStatusLine({ cwd, ctxPct }: { cwd: string; ctxPct?: number }) {
   const [stats] = useState(() => readGraftStats(cwd))
   if (!stats) return null
   const fresh = freshnessSegment(stats)
+  const saved = getGraftSavings()
+  const lastFile = stats.lastFile ? basename(stats.lastFile) : null
+
+  const bottom: string[] = []
+  if (typeof ctxPct === 'number') bottom.push(`ctx ${ctxPct}%`)
+  if (lastFile) bottom.push(`last: ${lastFile}`)
+
   return (
-    <Box>
-      <Text dimColor>◤ </Text>
-      <Text color="blue">graft</Text>
-      <Text dimColor>
-        {' '}
-        · {stats.nodeCount} nodes / {stats.edgeCount} edges ·{' '}
-      </Text>
-      <Text color={fresh.color}>{fresh.label}</Text>
+    <Box flexDirection="column">
+      <Box>
+        <Text dimColor>◤ </Text>
+        <Text color="blue">graft</Text>
+        <Text dimColor>
+          {' '}
+          · {stats.nodeCount} nodes / {stats.edgeCount} edges ·{' '}
+        </Text>
+        <Text color={fresh.color}>{fresh.label}</Text>
+        {saved > 0 && (
+          <>
+            <Text dimColor> · </Text>
+            <Text color="blue">~{saved.toLocaleString()} tok saved</Text>
+          </>
+        )}
+      </Box>
+      {bottom.length > 0 && (
+        <Box>
+          <Text dimColor>▸ {bottom.join(' · ')}</Text>
+        </Box>
+      )}
     </Box>
   )
 }

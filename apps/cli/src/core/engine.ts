@@ -38,6 +38,7 @@ import { UsageTracker } from './usage-tracker'
 import { getMetrics } from './metrics'
 import { buildRequest, sendInferenceCheck, isInferenceHookEnabled } from './inference-hook'
 import { getFileInboxTransport } from '../agent/cross-session/file-inbox'
+import { accumulateGraftSavings } from '../shared/graft-savings'
 import { getMessageBus, type AgentMessage } from '../agent/message-bus'
 import { createT } from '../i18n-core/t'
 import enUS from '../i18n-core/locales/en-US.json'
@@ -1126,6 +1127,9 @@ export class QueryEngine {
         }
         tracker.persist()
       }
+
+      // Accumulate graft token savings from "[graft] tokens saved ≈ N" footers
+      accumulateGraftSavings(result.content)
 
       return result
     } catch (err) {

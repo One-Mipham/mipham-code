@@ -23,6 +23,17 @@ import { InputBar } from './input'
 import { ModelPicker } from './picker'
 import { AgentFooter, type AgentEntry } from './agent-footer'
 import { GraftStatusLine } from './graft-status'
+
+/** Current context-window usage % — undefined when unknown (remote stub). */
+function contextUsagePct(engine: QueryEngine | RemoteEngine): number | undefined {
+  const ctx = engine.getContext() as {
+    getEstimatedTokens(): number
+    getMaxTokens?(): number
+  }
+  const max = ctx.getMaxTokens?.()
+  if (!max || max <= 0) return undefined
+  return Math.round((ctx.getEstimatedTokens() / max) * 100)
+}
 import { AgentViewDashboard } from '../agent-view/dashboard'
 import type { AgentViewManager } from '../agent-view/agent-view-manager'
 import { WorkflowProgress } from './workflow-progress.js'
@@ -967,7 +978,7 @@ export function App({
             />
 
             {/* graft status line — mirrors graft's own "◤ graft · …" bar */}
-            <GraftStatusLine cwd={process.cwd()} />
+            <GraftStatusLine cwd={process.cwd()} ctxPct={contextUsagePct(engine)} />
 
             {/* Status line — Claude Code style */}
             <Box marginTop={1} flexDirection="column">
