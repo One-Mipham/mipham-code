@@ -806,8 +806,7 @@ export function App({
         abortRef.current.abort()
         return
       }
-      // When input is empty and not loading, let InputBar handle Escape
-      // (it toggles vim mode or clears pending sequences)
+      // Otherwise let InputBar handle Escape (clear draft, exit vim/search mode)
       return
     }
     // All other global hotkeys (Shift+Tab, Ctrl+P, Ctrl+F, Ctrl+O)

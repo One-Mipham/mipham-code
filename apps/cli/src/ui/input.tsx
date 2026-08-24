@@ -166,25 +166,46 @@ export function InputBar({
   // ── Vim motions: intercept keys in normal mode ──
 
   useInput((input, key) => {
-    // ── Escape: cancel loading → toggle vim mode ──
+    // ── Escape: universal "get back to typing" — never silently toggles vim ──
     if (key.escape) {
-      // Cancel search mode if active
+      // Exit search mode if active
       if (searchMode) {
         setSearchMode(false)
         setSearchQuery('')
         return
       }
-      // Escape while loading → abort (priority over vim toggle)
+      // Escape while loading → abort
       if (isLoading) {
         onCancel?.()
         return
       }
-      // Clear any pending multi-key sequence
-      if (vimPending.current) {
+      // In vim normal mode → back to insert (Escape is the universal exit)
+      if (vimEngine.current.mode === 'normal') {
         vimPending.current = null
+        setVimMode('insert')
+        vimEngine.current.mode = 'insert'
+        return
       }
-      setVimMode((prev) => (prev === 'insert' ? 'normal' : 'insert'))
-      vimEngine.current.mode = vimEngine.current.mode === 'insert' ? 'normal' : 'insert'
+      // Idle insert mode → clear the draft (the intuitive "cancel")
+      setValue('')
+      valueRef.current = ''
+      return
+    }
+
+    // ── Ctrl+E: deliberate toggle into/out of vim normal mode ──
+    // (moved off Escape so accidental Esc can't trap the user in normal mode)
+    if (key.ctrl && input === 'e') {
+      // ink-text-input inserts 'e' as literal text — revert it
+      setValue(valueBeforeShortcut.current)
+      if (searchMode) {
+        setSearchMode(false)
+        setSearchQuery('')
+      }
+      setVimMode((prev) => {
+        const next = prev === 'insert' ? 'normal' : 'insert'
+        vimEngine.current.mode = next
+        return next
+      })
       return
     }
 
@@ -404,7 +425,7 @@ export function InputBar({
       <Box>
         <Box marginRight={1}>
           <Text color={vimMode === 'normal' ? 'magenta' : isLoading ? 'yellow' : 'cyan'}>
-            {vimMode === 'normal' ? ':' : '>'}
+            {vimMode === 'normal' ? '[NORMAL]' : '>'}
           </Text>
         </Box>
         <TextInput

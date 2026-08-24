@@ -804,8 +804,8 @@
     "assistant": { "role_label": "Mipham Code" },
     "user": { "role_label": "User" },
     "input": {
-      "placeholder": "Type a message (Esc to cancel)...",
-      "vim_help": "[NORMAL] h/j/k/l w/b 0/$ dd yy p u / (Esc to insert)"
+      "placeholder": "Type a message (Esc to clear)...",
+      "vim_help": "[NORMAL] Esc to type · h/j/k/l w/b 0/$ · dd yy p u · / search"
     },
     "slash_hints": {
       "label": "Commands:",
@@ -942,7 +942,7 @@
     "mcp": { "name": "MCP", "description": "Manage MCP server connections" }
   },
   "errors": {
-    "tool_not_allowed": "Tool \"{name}\" requires user approval (permission: ask). The tool was not executed.",
+    "tool_not_allowed": "Tool \"{name}\" requires user approval (permission: ask). The tool was not executed. Press Shift+Tab to switch permission mode, or run /permissions.",
     "tool_blocked": "Tool \"{name}\" blocked by hook",
     "user_input_blocked": "User input blocked by hook.",
     "dlp_blocked": "Request blocked by DLP policy.",

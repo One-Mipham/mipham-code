@@ -804,8 +804,8 @@
     "assistant": { "role_label": "Mipham Code" },
     "user": { "role_label": "用户" },
     "input": {
-      "placeholder": "输入消息（Esc 取消）...",
-      "vim_help": "[NORMAL] h/j/k/l w/b 0/$ dd yy p u /（Esc 插入）"
+      "placeholder": "输入消息（Esc 清空）...",
+      "vim_help": "[NORMAL] Esc 回到打字 · h/j/k/l w/b 0/$ 移动 · dd yy p u · / 搜索"
     },
     "slash_hints": {
       "label": "命令：",
@@ -942,7 +942,7 @@
     "mcp": { "name": "MCP", "description": "管理 MCP 服务器连接" }
   },
   "errors": {
-    "tool_not_allowed": "工具 \"{name}\" 需要用户批准（权限：ask），未执行。",
+    "tool_not_allowed": "工具 \"{name}\" 需要用户批准（权限：ask），未执行。按 Shift+Tab 切换权限模式，或运行 /permissions。",
     "tool_blocked": "工具 \"{name}\" 被钩子拦截",
     "user_input_blocked": "用户输入被钩子拦截。",
     "dlp_blocked": "请求被 DLP 策略阻止。",
