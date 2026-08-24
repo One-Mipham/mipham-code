@@ -48,7 +48,7 @@ export class PluginManager {
     const similarWarning = this.findSimilarWarning(validation.manifest.name)
     this.plugins.push({
       name: validation.manifest.name,
-      version: validation.manifest.version,
+      version: validation.manifest.version || '0.0.0',
       path: destDir,
       enabled: true,
       installedAt: new Date().toISOString(),
@@ -106,13 +106,19 @@ export class PluginManager {
         timeout: 60_000,
       })
 
-      // Validate the installed plugin
-      const validation = validatePlugin(destDir)
+      // npm installs the package into <destDir>/node_modules/<packageName>/ —
+      // validate there, then flatten it to the plugin dir root so its layout
+      // matches `install(sourcePath)`.
+      const pkgDir = join(destDir, 'node_modules', packageName)
+      const validation = validatePlugin(pkgDir)
       if (!validation.valid) {
         // Clean up on invalid plugin
         rmSync(destDir, { recursive: true, force: true })
         return { success: false, message: validation.errors.join('; ') }
       }
+
+      this.copyDir(pkgDir, destDir)
+      rmSync(join(destDir, 'node_modules'), { recursive: true, force: true })
 
       this.plugins.push({
         name: validation.manifest?.name || pluginName,

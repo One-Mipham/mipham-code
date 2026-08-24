@@ -82,6 +82,11 @@ export class SkillsLoader implements Skills {
     }
   }
 
+  /** Load a single skill file by path (used by Claude plugins: `skills/<name>/SKILL.md`). */
+  loadSkillFile(path: string, type: 'standard' | 'mipham' = 'standard'): void {
+    this.tryLoad(path, type)
+  }
+
   get(name: string): SkillDefinition | undefined {
     return this.skills.get(name)
   }

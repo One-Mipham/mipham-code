@@ -7,6 +7,8 @@ import type { HookEngine } from '../core/hooks'
 import type { McpClient } from '../mcp/client'
 import { registerMcpServerTools } from '../mcp/registry'
 import { executeHook } from '../core/hooks-executor'
+import { detectPluginFormat } from './plugin-validator'
+import { loadClaudePlugin } from './claude-plugin'
 import type { McpServerConfig, ToolDefinition, HookConfig, HookEvent } from '../shared/types'
 
 /**
@@ -24,6 +26,29 @@ export function loadPlugins(
   toolsMap: Map<string, ToolDefinition>,
 ): void {
   for (const plugin of pluginManager.getEnabled()) {
+    // Claude marketplace plugins: load their portable content via the adapter.
+    if (detectPluginFormat(plugin.path) === 'claude') {
+      const claudeMcpServers = loadClaudePlugin(plugin.path, {
+        skillsLoader,
+        agentRegistry,
+        mcpClient,
+        toolsMap,
+      })
+      pluginManager.onRemove(plugin.name, () => {
+        for (const serverName of claudeMcpServers) {
+          try {
+            const toolNames = mcpClient.disconnect(serverName)
+            for (const toolName of toolNames) {
+              toolsMap.delete(`mcp__${serverName}__${toolName}`)
+            }
+          } catch {
+            /* best effort */
+          }
+        }
+      })
+      continue
+    }
+
     const mcpServers: string[] = []
     const hookEvents: HookEvent[] = []
 
