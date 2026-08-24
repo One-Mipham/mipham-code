@@ -396,7 +396,7 @@ export async function runApp(options: RunOptions): Promise<void> {
   if (context.getMessageCount() === 0) {
     const basePrompt = instructions.buildSystemPrompt(config.permission as string)
     const memoryReminder = loadSessionMemories(basePrompt)
-    const skillsReminder = skillsLoader.buildSystemReminder(basePrompt)
+    const skillsReminder = skillsLoader.buildSystemReminder()
 
     // Inject previous session summary for AI continuity
     let prompt = basePrompt

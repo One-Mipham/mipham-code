@@ -6,7 +6,7 @@ export interface Skills {
   get(name: string): SkillDefinition | undefined
   list(): SkillDefinition[]
   has(name: string): boolean
-  buildSystemReminder(context?: string, maxTokens?: number): string
+  buildSystemReminder(maxTokens?: number): string
 }
 
 /** 缝键：ctx.skills。 */

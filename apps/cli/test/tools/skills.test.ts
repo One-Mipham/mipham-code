@@ -127,7 +127,7 @@ describe('SkillsLoader', () => {
     })
   })
 
-  describe('recall + buildSystemReminder', () => {
+  describe('buildSystemReminder', () => {
     function seedSkills() {
       const stdDir = join(tmpDir, 'skills', 'standard')
       mkdirSync(stdDir, { recursive: true })
@@ -148,30 +148,13 @@ describe('SkillsLoader', () => {
       return loader
     }
 
-    it('recall ranks the most relevant skill first', () => {
+    it('lists every skill so the whole catalog is discoverable', () => {
       const loader = seedSkills()
-      const relevant = loader.recall('Run a security audit and scan for vulnerabilities', 2)
-      expect(relevant[0]?.name).toBe('security-review')
-    })
+      const reminder = loader.buildSystemReminder()
 
-    it('buildSystemReminder with context is selective', () => {
-      const loader = seedSkills()
-      const selective = loader.buildSystemReminder('security audit vulnerabilities')
-      const all = loader.buildSystemReminder()
-
-      expect(selective).toContain('security-review')
-      expect(selective).not.toContain('codebase-design')
-      expect(selective).not.toContain('debug-loop')
-
-      expect(all).toContain('security-review')
-      expect(all).toContain('codebase-design')
-      expect(all).toContain('debug-loop')
-    })
-
-    it('returns empty when nothing matches the context', () => {
-      const loader = seedSkills()
-      expect(loader.recall('xyzzy quux', 5)).toHaveLength(0)
-      expect(loader.buildSystemReminder('xyzzy quux')).toBe('')
+      expect(reminder).toContain('security-review')
+      expect(reminder).toContain('codebase-design')
+      expect(reminder).toContain('debug-loop')
     })
   })
 
