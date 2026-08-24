@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { Box, Text, useInput } from 'ink'
 import TextInput from 'ink-text-input'
-import { VimMotionEngine, handleSearchBackspace, type VimMode } from './vim-motions.js'
 import { getCommandList } from './commands.js'
 import { CommandPicker } from './command-picker.js'
 import { useI18n } from '../i18n-context'
@@ -20,7 +19,7 @@ interface InputBarProps {
   onToggleAgentView?: () => void
   /** Shift+Tab → cycle permission mode */
   onCyclePermission?: () => void
-  /** Escape → cancel loading (when input is empty) */
+  /** Escape → cancel loading / clear draft */
   onCancel?: () => void
 }
 
@@ -145,15 +144,6 @@ export function InputBar({
     prevLoading.current = isLoading
   }, [isLoading])
 
-  const [vimMode, setVimMode] = useState<VimMode>('insert')
-  // NOTE: Dual mode state — React state (vimMode) drives UI re-renders (prompt color,
-  // placeholder); engine mode (vimEngine.current.mode) drives logic inside useInput so
-  // the handler always reads the authoritative mode without stale-closure risk.
-  const vimEngine = useRef(new VimMotionEngine())
-  const vimPending = useRef<string | null>(null)
-  const [searchMode, setSearchMode] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
-
   // Track pre-shortcut value so we can revert ink-text-input's Ctrl-key insertions.
   // ink-text-input inserts 'p'/'f'/'o' for Ctrl+P/F/O (Ink normalizes control chars
   // to their letter names before passing to useInput).
@@ -163,53 +153,21 @@ export function InputBar({
     valueBeforeShortcut.current = value
   }, [value])
 
-  // ── Vim motions: intercept keys in normal mode ──
-
   useInput((input, key) => {
-    // ── Escape: universal "get back to typing" — never silently toggles vim ──
+    // ── Escape: cancel loading → clear draft ──
     if (key.escape) {
-      // Exit search mode if active
-      if (searchMode) {
-        setSearchMode(false)
-        setSearchQuery('')
-        return
-      }
       // Escape while loading → abort
       if (isLoading) {
         onCancel?.()
         return
       }
-      // In vim normal mode → back to insert (Escape is the universal exit)
-      if (vimEngine.current.mode === 'normal') {
-        vimPending.current = null
-        setVimMode('insert')
-        vimEngine.current.mode = 'insert'
-        return
-      }
-      // Idle insert mode → clear the draft (the intuitive "cancel")
+      // Idle → clear the draft (the intuitive "cancel")
       setValue('')
       valueRef.current = ''
       return
     }
 
-    // ── Ctrl+E: deliberate toggle into/out of vim normal mode ──
-    // (moved off Escape so accidental Esc can't trap the user in normal mode)
-    if (key.ctrl && input === 'e') {
-      // ink-text-input inserts 'e' as literal text — revert it
-      setValue(valueBeforeShortcut.current)
-      if (searchMode) {
-        setSearchMode(false)
-        setSearchQuery('')
-      }
-      setVimMode((prev) => {
-        const next = prev === 'insert' ? 'normal' : 'insert'
-        vimEngine.current.mode = next
-        return next
-      })
-      return
-    }
-
-    // ── Global hotkeys (work in both insert and normal modes) ──
+    // ── Global hotkeys ──
     // Shift+Tab → cycle permission mode
     if (key.shift && key.tab) {
       onCyclePermission?.()
@@ -242,121 +200,43 @@ export function InputBar({
       return
     }
 
-    // ── Arrow-key history navigation (insert mode only, Claude Code parity) ──
-    if (vimEngine.current.mode === 'insert' && !searchMode) {
-      if (key.upArrow || key.downArrow) {
-        // Ignore if picker is active (command picker handles its own arrows)
-        if (value.startsWith('/')) return
+    // ── Arrow-key history navigation (Claude Code parity) ──
+    if (key.upArrow || key.downArrow) {
+      // Ignore if picker is active (command picker handles its own arrows)
+      if (value.startsWith('/')) return
 
-        if (key.upArrow) {
-          if (submittedHistory.length === 0) return
-          // Save current draft the first time we enter history browsing
-          if (historyIndexRef.current === -1) {
-            // Flush any pending throttle so its deferred setValue doesn't overwrite
-            // history navigation (paste → immediate ↑ race). Save the latest value
-            // from the ref — state `value` is stale inside the throttle window.
-            if (onChangeTimerRef.current) {
-              clearTimeout(onChangeTimerRef.current)
-              onChangeTimerRef.current = null
-            }
-            savedDraftRef.current = valueRef.current
+      if (key.upArrow) {
+        if (submittedHistory.length === 0) return
+        // Save current draft the first time we enter history browsing
+        if (historyIndexRef.current === -1) {
+          // Flush any pending throttle so its deferred setValue doesn't overwrite
+          // history navigation (paste → immediate ↑ race). Save the latest value
+          // from the ref — state `value` is stale inside the throttle window.
+          if (onChangeTimerRef.current) {
+            clearTimeout(onChangeTimerRef.current)
+            onChangeTimerRef.current = null
           }
-          const newIndex = Math.min(historyIndexRef.current + 1, submittedHistory.length - 1)
-          historyIndexRef.current = newIndex
+          savedDraftRef.current = valueRef.current
+        }
+        const newIndex = Math.min(historyIndexRef.current + 1, submittedHistory.length - 1)
+        historyIndexRef.current = newIndex
+        setValue(submittedHistory[submittedHistory.length - 1 - newIndex]!)
+        return
+      }
+      if (key.downArrow) {
+        if (historyIndexRef.current === -1) return
+        const newIndex = historyIndexRef.current - 1
+        historyIndexRef.current = newIndex
+        if (newIndex === -1) {
+          // Back to the original draft
+          setValue(savedDraftRef.current)
+          savedDraftRef.current = ''
+        } else {
           setValue(submittedHistory[submittedHistory.length - 1 - newIndex]!)
-          return
         }
-        if (key.downArrow) {
-          if (historyIndexRef.current === -1) return
-          const newIndex = historyIndexRef.current - 1
-          historyIndexRef.current = newIndex
-          if (newIndex === -1) {
-            // Back to the original draft
-            setValue(savedDraftRef.current)
-            savedDraftRef.current = ''
-          } else {
-            setValue(submittedHistory[submittedHistory.length - 1 - newIndex]!)
-          }
-          return
-        }
-      }
-    }
-
-    if (vimEngine.current.mode !== 'normal') return
-
-    // Handle search mode — collect query characters
-    if (searchMode) {
-      if (key.return) {
-        const action = vimEngine.current.handleSearch(value, searchQuery)
-        if (action.text !== undefined) setValue(action.text)
-        // NOTE: action.cursor is not settable on ink-text-input — user repositions manually
-        setSearchMode(false)
-        setSearchQuery('')
         return
       }
-      if (key.backspace || key.delete) {
-        const next = handleSearchBackspace(searchQuery)
-        setSearchQuery(next.query)
-        if (next.exit) setSearchMode(false)
-        return
-      }
-      // Accumulate printable characters
-      if (input && input.length === 1 && !key.escape && !key.return) {
-        setSearchQuery((q) => q + input)
-      }
-      return
     }
-
-    // Handle pending two-key sequences (dd, yy)
-    if (vimPending.current !== null) {
-      if (vimPending.current === 'd' && input === 'd') {
-        const action = vimEngine.current.handleDD(value)
-        setValue(action.text ?? value)
-      } else if (vimPending.current === 'y' && input === 'y') {
-        vimEngine.current.handleYY(value)
-      }
-      // Always clear pending — even when second key doesn't match
-      vimPending.current = null
-      return
-    }
-
-    // Handle p (paste) — pastes clipboard at cursor position
-    if (input === 'p') {
-      const action = vimEngine.current.handlePaste(value, value.length)
-      if (action.text !== undefined) setValue(action.text)
-      return
-    }
-
-    // Handle u (undo)
-    if (input === 'u') {
-      const action = vimEngine.current.handleUndo(value)
-      if (action.text !== undefined) setValue(action.text)
-      return
-    }
-
-    // Handle / (enter search mode)
-    if (input === '/') {
-      setSearchMode(true)
-      setSearchQuery('')
-      return
-    }
-
-    // Handle single-key motions (h, j, k, l, w, b, 0, $, d, y)
-    const action = vimEngine.current.handleNormal(input, value, value.length)
-    if (!action) return
-
-    if (action.pending) {
-      vimPending.current = action.pending
-      return
-    }
-
-    if (action.text !== undefined) {
-      setValue(action.text)
-    }
-
-    // NOTE: action.cursor is returned by motions (h/j/k/l/w/b/0/$) but
-    // ink-text-input does not expose a programmatic cursor-position API.
-    // The cursor hint is informational only; the user repositions manually.
   })
 
   // ── Command picker state ──
@@ -365,7 +245,7 @@ export function InputBar({
 
   // Auto-activate picker when user types "/"
   useEffect(() => {
-    if (value.startsWith('/') && !prevValueRef.current.startsWith('/') && vimMode === 'insert') {
+    if (value.startsWith('/') && !prevValueRef.current.startsWith('/')) {
       setPickerActive(true)
     }
     // Dismiss picker when user clears the / prefix
@@ -373,7 +253,7 @@ export function InputBar({
       setPickerActive(false)
     }
     prevValueRef.current = value
-  }, [value, vimMode])
+  }, [value])
 
   // Keep valueRef in sync with state (so useInput handlers read latest value)
   useEffect(() => {
@@ -400,7 +280,7 @@ export function InputBar({
   }
 
   // ── Picker mode: CommandPicker overlay ──
-  if (pickerActive && vimMode === 'insert') {
+  if (pickerActive) {
     return (
       <Box flexDirection="column" marginTop={1}>
         <CommandPicker
@@ -424,15 +304,11 @@ export function InputBar({
     <Box flexDirection="column" marginTop={1}>
       <Box>
         <Box marginRight={1}>
-          <Text color={vimMode === 'normal' ? 'magenta' : isLoading ? 'yellow' : 'cyan'}>
-            {vimMode === 'normal' ? '[NORMAL]' : '>'}
-          </Text>
+          <Text color={isLoading ? 'yellow' : 'cyan'}>{'>'}</Text>
         </Box>
         <TextInput
           value={value}
           onChange={(val) => {
-            // Block text changes during search mode — keys go to search query
-            if (searchMode) return
             // Reset history browsing when user starts typing
             if (historyIndexRef.current !== -1) {
               historyIndexRef.current = -1
@@ -455,20 +331,12 @@ export function InputBar({
           }}
           onSubmit={handleSubmit}
           placeholder={
-            searchMode
-              ? `/${searchQuery}`
-              : vimMode === 'normal'
-                ? t('ui.input.vim_help')
-                : isLoading
-                  ? `${verb}...`
-                  : completionVerb
-                    ? completionVerb
-                    : t('ui.input.placeholder')
+            isLoading ? `${verb}...` : completionVerb ? completionVerb : t('ui.input.placeholder')
           }
         />
       </Box>
-      {/* Slash command hints — shown when typing / in INSERT mode (only when picker is NOT active) */}
-      {slashHints.length > 0 && vimMode === 'insert' && !pickerActive && (
+      {/* Slash command hints — shown when typing / (only when picker is NOT active) */}
+      {slashHints.length > 0 && !pickerActive && (
         <Box marginTop={1} flexDirection="column" gap={1}>
           <Text dimColor>{t('ui.slash_hints.label')} </Text>
           {slashHints.map((cmd, _i) => (
@@ -489,7 +357,7 @@ export function InputBar({
         </Box>
       )}
       {/* @mention hints — active sessions (cross-session messaging) */}
-      {mentionHints.length > 0 && vimMode === 'insert' && !pickerActive && (
+      {mentionHints.length > 0 && !pickerActive && (
         <Box marginTop={1} flexDirection="column" gap={1}>
           <Text dimColor>{t('ui.mention_hints.label')} </Text>
           {mentionHints.map((name) => (

@@ -804,8 +804,7 @@
     "assistant": { "role_label": "Mipham Code" },
     "user": { "role_label": "User" },
     "input": {
-      "placeholder": "Type a message (Esc to clear)...",
-      "vim_help": "[NORMAL] Esc to type · h/j/k/l w/b 0/$ · dd yy p u · / search"
+      "placeholder": "Type a message (Esc to clear)..."
     },
     "slash_hints": {
       "label": "Commands:",

@@ -791,7 +791,6 @@ export function App({
 
   useInput((_input, key) => {
     // Escape: close apiKeyPrompt → close picker → abort loading (does NOT exit app)
-    // Vim mode toggle is handled by InputBar
     if (key.escape) {
       if (apiKeyPrompt) {
         setApiKeyPrompt(null)
@@ -806,7 +805,7 @@ export function App({
         abortRef.current.abort()
         return
       }
-      // Otherwise let InputBar handle Escape (clear draft, exit vim/search mode)
+      // Otherwise let InputBar handle Escape (clear draft)
       return
     }
     // All other global hotkeys (Shift+Tab, Ctrl+P, Ctrl+F, Ctrl+O)

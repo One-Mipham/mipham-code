@@ -804,8 +804,7 @@
     "assistant": { "role_label": "Mipham Code" },
     "user": { "role_label": "用户" },
     "input": {
-      "placeholder": "输入消息（Esc 清空）...",
-      "vim_help": "[NORMAL] Esc 回到打字 · h/j/k/l w/b 0/$ 移动 · dd yy p u · / 搜索"
+      "placeholder": "输入消息（Esc 清空）..."
     },
     "slash_hints": {
       "label": "命令：",
