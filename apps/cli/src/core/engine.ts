@@ -764,7 +764,9 @@ export class QueryEngine {
   }
 
   private async *continueWithTools(signal?: AbortSignal): AsyncGenerator<StreamChunk> {
-    const MAX_TURNS = 20
+    // Tool-calling round cap. 20 was too low for real multi-step tasks — the model
+    // hit "max turns" and dropped pending tools mid-task. 100 stays bounded.
+    const MAX_TURNS = 100
     const toolDefs = this.getToolDefinitions()
 
     for (let turn = 0; turn < MAX_TURNS; turn++) {
