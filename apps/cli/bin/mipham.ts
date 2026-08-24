@@ -1054,6 +1054,21 @@ async function runTokenCLI(): Promise<boolean> {
 }
 
 async function main() {
+  // ── Deleted-cwd guard ──────────────────────────────────────────────────
+  // `process.cwd()` throws ENOENT when the directory the process was launched
+  // from no longer exists (e.g. a removed git worktree). Print a clear message
+  // instead of a raw crash dump (matches Claude Code 2.1.239).
+  const { isDeletedCwdError, deletedCwdMessage } = await import('../src/shared/deleted-cwd')
+  try {
+    process.cwd()
+  } catch (err) {
+    if (isDeletedCwdError(err)) {
+      console.error(deletedCwdMessage())
+      process.exit(1)
+    }
+    throw err
+  }
+
   // ── Disable terminal special characters ──────────────────────────────────
   // Terminal intercepts Ctrl+S (XOFF), Ctrl+T (SIGINFO/status), Ctrl+R (rprnt)
   // before the app sees them. Disable these so Agent Dashboard shortcuts work.
