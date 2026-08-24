@@ -22,6 +22,7 @@ import { ChatPanel } from './chat'
 import { InputBar } from './input'
 import { ModelPicker } from './picker'
 import { AgentFooter, type AgentEntry } from './agent-footer'
+import { GraftStatusLine } from './graft-status'
 import { AgentViewDashboard } from '../agent-view/dashboard'
 import type { AgentViewManager } from '../agent-view/agent-view-manager'
 import { WorkflowProgress } from './workflow-progress.js'
@@ -964,6 +965,9 @@ export function App({
               activeTool={activeTool}
               agentProgress={agentProgress}
             />
+
+            {/* graft status line — mirrors graft's own "◤ graft · …" bar */}
+            <GraftStatusLine cwd={process.cwd()} />
 
             {/* Status line — Claude Code style */}
             <Box marginTop={1} flexDirection="column">
