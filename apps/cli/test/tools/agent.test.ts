@@ -196,10 +196,10 @@ describe('Memory tool definition', () => {
     expect(params.required).toEqual(['action'])
   })
 
-  it('accepts action enum: read, write, list', () => {
+  it('accepts action enum: read, write, list, search', () => {
     const params = memoryTool.parameters as { properties: Record<string, unknown> }
     const action = params.properties.action as { enum: string[] }
-    expect(action.enum).toEqual(['read', 'write', 'list'])
+    expect(action.enum).toEqual(['read', 'write', 'list', 'search'])
   })
 })
 
