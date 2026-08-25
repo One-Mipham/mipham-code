@@ -419,4 +419,47 @@ describe('PermissionSystem', () => {
       expect(ps.getMode()).toBe('bypassPermissions')
     })
   })
+
+  // ═══════════════════════════════════════════
+  // explainDenial — rich denial reason (#52)
+  // ═══════════════════════════════════════════
+
+  describe('explainDenial', () => {
+    it('reports deny-rule with the matched pattern', () => {
+      const ps = new PermissionSystem()
+      ps.deny('Write')
+      const tool = makeTool('Write', 'bypass')
+      expect(ps.check(tool, {})).toBe('ask')
+      expect(ps.explainDenial(tool, {})).toMatchObject({
+        reason: 'deny-rule',
+        rulePattern: 'Write',
+      })
+    })
+
+    it('reports ask-rule with the matched pattern', () => {
+      const ps = new PermissionSystem()
+      ps.ask('Bash')
+      const tool = makeTool('Bash', 'bypass')
+      expect(ps.check(tool, {})).toBe('ask')
+      expect(ps.explainDenial(tool, {})).toMatchObject({
+        reason: 'ask-rule',
+        rulePattern: 'Bash',
+      })
+    })
+
+    it('reports mode-baseline under plan mode for a write tool', () => {
+      const ps = new PermissionSystem()
+      ps.setMode('plan')
+      const tool = makeTool('Write', 'bypass')
+      expect(ps.check(tool, {})).toBe('ask')
+      expect(ps.explainDenial(tool, {})).toMatchObject({ reason: 'mode-baseline' })
+    })
+
+    it('reports tool-default for an ask-permission tool', () => {
+      const ps = new PermissionSystem()
+      const tool = makeTool('Write', 'ask')
+      expect(ps.check(tool, {})).toBe('ask')
+      expect(ps.explainDenial(tool, {})).toMatchObject({ reason: 'tool-default' })
+    })
+  })
 })

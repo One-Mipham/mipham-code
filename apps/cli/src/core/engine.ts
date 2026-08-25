@@ -486,8 +486,11 @@ export class QueryEngine {
         yield chunk
 
         if (chunk.type === 'error') {
+          // #23: client-generated errors are system lines, not model output —
+          // store as `system` so resume renders an error line (⚠) rather than
+          // attributing the failure to the assistant.
           this.context.addMessage({
-            role: 'assistant',
+            role: 'system',
             content: t('errors.model_error', { error: chunk.error ?? 'Unknown error' }),
           })
           return
@@ -964,7 +967,7 @@ export class QueryEngine {
       // P1-4: Increment consecutive block counter; if limit exceeded,
       // tell the model to move on instead of retrying.
       const limitExceeded = this.permission.incrementBlockCounter()
-      const baseError = t('errors.tool_not_allowed', { name })
+      const baseError = this.buildDenialError(name, tool, params)
       const moveOnHint = limitExceeded
         ? '\n(Consecutive block limit reached. Please try a different approach or ask the user for guidance.)'
         : ''
@@ -1295,6 +1298,29 @@ export class QueryEngine {
 
   getTools(): Map<string, ToolDefinition> {
     return this.tools
+  }
+
+  /**
+   * Build a rich permission-denial error naming the mode (level), the setting
+   * (rule/level) that caused the denial, and the correct fix (#52).
+   */
+  private buildDenialError(
+    name: string,
+    tool: ToolDefinition,
+    params: Record<string, unknown>,
+  ): string {
+    const { reason, rulePattern } = this.permission.explainDenial(tool, params)
+    const mode = this.permission.getMode()
+    switch (reason) {
+      case 'deny-rule':
+        return t('errors.tool_denied_deny_rule', { name, pattern: rulePattern ?? '?' })
+      case 'ask-rule':
+        return t('errors.tool_denied_ask_rule', { name, pattern: rulePattern ?? '?' })
+      default:
+        // mode-baseline / tool-default / legacy-rule / system-default — a mode
+        // switch (or /permissions) resolves it.
+        return t('errors.tool_denied_mode', { name, mode })
+    }
   }
 
   getRuleEngine(): ExperienceRuleEngine | undefined {

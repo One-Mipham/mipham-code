@@ -429,7 +429,9 @@ describe('QueryEngine', () => {
 
       expect(chunks).toHaveLength(1)
       expect(chunks[0]?.type).toBe('error')
-      expect(context.getMessages()).toHaveLength(2) // user + error assistant
+      expect(context.getMessages()).toHaveLength(2) // user + error line
+      // #23: client error must persist as a system line, not model (assistant) output
+      expect(context.getMessages()[1]).toMatchObject({ role: 'system' })
     })
   })
 
@@ -508,7 +510,7 @@ describe('QueryEngine', () => {
       }
 
       const result = chunks.find((c) => c.type === 'tool_result')
-      expect(result?.content).toContain('requires user approval')
+      expect(result?.content).toContain('requires approval under "default" mode')
     })
   })
 

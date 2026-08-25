@@ -940,6 +940,9 @@
   },
   "errors": {
     "tool_not_allowed": "Tool \"{name}\" requires user approval (permission: ask). The tool was not executed. Press Shift+Tab to switch permission mode, or run /permissions.",
+    "tool_denied_deny_rule": "Tool \"{name}\" blocked by a deny rule (\"{pattern}\"). Deny rules override permission mode — try a different approach.",
+    "tool_denied_ask_rule": "Tool \"{name}\" requires approval (ask rule: \"{pattern}\"). Approve when prompted, or adjust the rule via /permissions.",
+    "tool_denied_mode": "Tool \"{name}\" requires approval under \"{mode}\" mode. Press Shift+Tab to switch permission mode, or run /permissions.",
     "tool_blocked": "Tool \"{name}\" blocked by hook",
     "user_input_blocked": "User input blocked by hook.",
     "dlp_blocked": "Request blocked by DLP policy.",

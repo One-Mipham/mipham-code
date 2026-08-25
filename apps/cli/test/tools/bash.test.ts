@@ -258,6 +258,48 @@ describe('detectViolations', () => {
 })
 
 // ============================================================
+// bash tool — sandbox violation reporting on exit 0
+// ============================================================
+
+describe('bash tool — sandbox violation on exit 0', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('surfaces violation details when command exits 0', async () => {
+    const proc = {
+      stdout: new ReadableStream({
+        start(c: ReadableStreamDefaultController) {
+          c.enqueue(new TextEncoder().encode('done\n'))
+          c.close()
+        },
+      }),
+      stderr: new ReadableStream({
+        start(c: ReadableStreamDefaultController) {
+          c.enqueue(new TextEncoder().encode('cat: /etc/shadow: Permission denied\n'))
+          c.close()
+        },
+      }),
+      exited: Promise.resolve(0),
+      kill: vi.fn(),
+    }
+    vi.spyOn(Bun, 'spawn').mockReturnValue(proc as any)
+
+    const result = await bashTool.execute({ command: 'cat /etc/shadow', description: 'test' }, ctx)
+    expect(result.success).toBe(true)
+    expect(result.content).toContain('Sandbox Violations')
+    expect(result.content).toContain('File access denied')
+  })
+
+  it('keeps clean output unchanged on exit 0 (no false violations)', async () => {
+    mockSafeSpawn()
+    const result = await bashTool.execute({ command: 'git status', description: 'test' }, ctx)
+    expect(result.success).toBe(true)
+    expect(result.content).not.toContain('Sandbox Violations')
+  })
+})
+
+// ============================================================
 // bashToolService — credential injection gating
 // ============================================================
 

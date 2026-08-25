@@ -62,6 +62,18 @@ function isVerificationCommand(input: Record<string, unknown>): boolean {
 
 const VALID_MODES: Set<string> = new Set<string>(MODE_CYCLE)
 
+/**
+ * Why a tool resolved to 'ask' — for rich denial errors (#52).
+ * Mirrors the resolution chain order in `check()` (first match wins).
+ */
+export type PermissionDenialReason =
+  | 'deny-rule' // org deny rule — overrides mode, cannot be switched away
+  | 'ask-rule' // explicit ask rule — still requires approval under any mode
+  | 'legacy-rule' // legacy exact-name rule (setRule)
+  | 'mode-baseline' // mode-specific default (acceptEdits/plan) → ask
+  | 'tool-default' // tool.permission === 'ask'
+  | 'system-default' // no rule, no tool permission → fallback ask
+
 export class PermissionSystem {
   private allowRules: PermissionRuleEntry[] = []
   private denyRules: PermissionRuleEntry[] = []
@@ -342,6 +354,39 @@ export class PermissionSystem {
 
   isBypassed(tool: ToolDefinition, input: Record<string, unknown>): boolean {
     return this.check(tool, input) === 'bypass'
+  }
+
+  /**
+   * Explain WHY a tool resolves to 'ask' (rich denial errors — #52).
+   *
+   * Only call after `check()` returns 'ask'; mirrors its resolution order
+   * (deny → ask → legacy → mode → tool → system). Returns the matched
+   * rule pattern when the denial came from a deny/ask rule.
+   */
+  explainDenial(
+    tool: ToolDefinition,
+    input: Record<string, unknown>,
+  ): { reason: PermissionDenialReason; rulePattern?: string } {
+    for (const rule of this.denyRules) {
+      if (this.ruleMatches(rule, tool, input)) {
+        return { reason: 'deny-rule', rulePattern: rule.pattern }
+      }
+    }
+    for (const rule of this.askRules) {
+      if (this.ruleMatches(rule, tool, input)) {
+        return { reason: 'ask-rule', rulePattern: rule.pattern }
+      }
+    }
+    if (this.legacyRules.has(tool.name)) {
+      return { reason: 'legacy-rule' }
+    }
+    if (this.modeBaseline(tool, input) !== 'mode-baseline') {
+      return { reason: 'mode-baseline' }
+    }
+    if (tool.permission) {
+      return { reason: 'tool-default' }
+    }
+    return { reason: 'system-default' }
   }
 
   // ── Helpers ──

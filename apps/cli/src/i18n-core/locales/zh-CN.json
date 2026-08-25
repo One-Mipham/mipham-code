@@ -940,6 +940,9 @@
   },
   "errors": {
     "tool_not_allowed": "工具 \"{name}\" 需要用户批准（权限：ask），未执行。按 Shift+Tab 切换权限模式，或运行 /permissions。",
+    "tool_denied_deny_rule": "工具 \"{name}\" 被拒绝规则（\"{pattern}\"）阻止。拒绝规则优先于权限模式 — 请改用其他方式。",
+    "tool_denied_ask_rule": "工具 \"{name}\" 需要批准（ask 规则：\"{pattern}\"）。请在提示时批准，或通过 /permissions 调整规则。",
+    "tool_denied_mode": "工具 \"{name}\" 在 \"{mode}\" 模式下需要批准。按 Shift+Tab 切换权限模式，或运行 /permissions。",
     "tool_blocked": "工具 \"{name}\" 被钩子拦截",
     "user_input_blocked": "用户输入被钩子拦截。",
     "dlp_blocked": "请求被 DLP 策略阻止。",
