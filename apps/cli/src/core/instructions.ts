@@ -1,8 +1,15 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { execSync } from 'node:child_process'
 import { parse as parseYaml } from 'yaml'
 import type { InstructionFile } from '../shared/index.ts'
 import { COAUTHOR_TRAILER } from '../shared/index.ts'
+import {
+  LESSONS_FILE,
+  extractCrsiLessonSummaries,
+  buildCrsiLessonsBlock,
+  type CrsiLessonSummary,
+} from './crsi-producer'
 
 interface FrontmatterResult {
   data: Record<string, unknown>
@@ -54,6 +61,7 @@ export function parsePromptExclude(value: unknown): string[] {
 
 export class InstructionsLoader {
   private instructions: InstructionFile[] = []
+  private crsiLessonSummaries: CrsiLessonSummary[] = []
 
   loadAll(cwd: string): void {
     this.instructions = []
@@ -74,6 +82,9 @@ export class InstructionsLoader {
     // Tier 3: User-level ~/.mipham/USER.md
     const home = process.env.HOME || '~'
     this.tryLoad(join(home, '.mipham', 'USER.md'), 'user')
+
+    // CRSI 教训召回：读 crsi-lessons.md 提取精华，注入系统提示（只写不读 → 写后召回）
+    this.crsiLessonSummaries = this.loadCrsiLessons(cwd)
   }
 
   buildSystemPrompt(permissionMode?: string): string {
@@ -206,6 +217,10 @@ its live CRSI / SIS / constitution state. Report the numbers you read
 from it as live counts; if it shows a subsystem as 未初始化 (uninitialized),
 say so explicitly instead of claiming it exists.`)
 
+    // CRSI 教训召回 — 把 crsi-lessons.md 的教训精华注入，让模型「写后召回」而非只写不读
+    const lessonsBlock = buildCrsiLessonsBlock(this.crsiLessonSummaries)
+    if (lessonsBlock) parts.push(lessonsBlock)
+
     // AI 署名披露：提交时附带 Co-Authored-By 署名（与 Undercover 式隐瞒相反）
     parts.push(`## Commit Attribution
 
@@ -217,6 +232,26 @@ ${COAUTHOR_TRAILER}
 Never omit it or present the work as purely human-authored.`)
 
     return parts.join('\n\n---\n\n')
+  }
+
+  /** 读 crsi-lessons.md（按仓库根定位）提取教训精华。读不到则返回空。 */
+  private loadCrsiLessons(cwd: string): CrsiLessonSummary[] {
+    let root = cwd
+    try {
+      root = execSync('git rev-parse --show-toplevel', {
+        cwd,
+        timeout: 5000,
+        encoding: 'utf-8',
+      }).trim()
+    } catch {
+      // 非 git 目录 → 回退 cwd
+    }
+    try {
+      const content = readFileSync(join(root, LESSONS_FILE), 'utf-8')
+      return extractCrsiLessonSummaries(content)
+    } catch {
+      return []
+    }
   }
 
   /**

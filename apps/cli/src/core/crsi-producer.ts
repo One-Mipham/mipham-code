@@ -80,6 +80,47 @@ export function buildLessonContent(signal: CrsiSignal, timestamp: string): strin
   return lines.join('\n')
 }
 
+/** 教训精华（标题 + 建议），用于运行时召回注入系统提示。 */
+export interface CrsiLessonSummary {
+  title: string
+  suggestion: string
+}
+
+/**
+ * 从 crsi-lessons.md 提取每条教训的「精华」（标题 + 建议），跳过证据段落。
+ * 这是「只写不读」缺口 → 「写后召回」的读取侧。
+ */
+export function extractCrsiLessonSummaries(content: string): CrsiLessonSummary[] {
+  const out: CrsiLessonSummary[] = []
+  let title = ''
+  for (const line of content.split('\n')) {
+    const h = line.match(/^##\s+(.+?)\s*$/)
+    if (h) {
+      title = h[1]!.trim()
+      continue
+    }
+    const s = line.match(/^-\s*建议[:：]\s*(.+)$/)
+    if (s && title) {
+      out.push({ title, suggestion: s[1]!.trim() })
+      title = ''
+    }
+  }
+  return out
+}
+
+/** 把教训精华渲染为系统提示召回块。无教训时返回空串。 */
+export function buildCrsiLessonsBlock(summaries: CrsiLessonSummary[]): string {
+  if (summaries.length === 0) return ''
+  const items = summaries.map((s, i) => `${i + 1}. **${s.title}**\n   ${s.suggestion}`).join('\n\n')
+  return `## CRSI Lessons (Self-Improvement Recall)
+
+These are hard-won lessons consolidated by the CRSI self-improvement
+loop from past sessions. Apply them proactively — do not repeat these
+mistakes:
+
+${items}`
+}
+
 /** 产出教训文件变更候选。无合格信号时返回 null。 */
 export function produceCrsiProposal(
   insights: CrsiInsight[],
