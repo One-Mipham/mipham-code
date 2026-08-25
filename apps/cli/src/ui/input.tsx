@@ -67,6 +67,14 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]!
 }
 
+/**
+ * 判断一次输入是否为「批量」（长度跳变 >1：粘贴 / IME 替换）。
+ * 批量输入需节流防渲染风暴；普通单字符输入应立即显示，无节流延迟。
+ */
+export function isBulkInput(prev: string, next: string): boolean {
+  return Math.abs(next.length - prev.length) > 1
+}
+
 export function InputBar({
   onSubmit,
   isLoading,
@@ -323,11 +331,18 @@ export function InputBar({
             // Normalize newlines → spaces. ink-text-input is single-line; multi-line
             // paste would trap arrow-key navigation on the first line.
             const normalized = val.replace(/\n/g, ' ')
-            // Throttle: first keystroke renders immediately, then batch at ~30fps.
-            // During paste, the terminal may send hundreds of characters in rapid
-            // succession — without throttling, each triggers a React render+Ink write
-            // cycle that starves the event loop and freezes the UI.
+            // 批量输入（paste/IME 替换）节流防渲染风暴；普通单字符输入立即显示，
+            // 避免 33ms trailing 的「慢半拍」尾巴。
+            const bulk = isBulkInput(valueRef.current, normalized)
             valueRef.current = normalized
+            if (!bulk) {
+              if (onChangeTimerRef.current) {
+                clearTimeout(onChangeTimerRef.current)
+                onChangeTimerRef.current = null
+              }
+              setValue(normalized)
+              return
+            }
             if (onChangeTimerRef.current) return // timer pending, latest value in ref
             setValue(normalized)
             onChangeTimerRef.current = setTimeout(() => {
