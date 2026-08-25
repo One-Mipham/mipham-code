@@ -10,8 +10,8 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.11.0
-> **最后更新**: 2026-08-24 — v0.56.0 发版（Claude 插件安装兼容 + Memory search + plugin/workflow CLI 修复）+ 测试数对齐 1820
+> **版本**: 2.12.0
+> **最后更新**: 2026-08-26 — v0.58.0 + 文档规范化补齐（删死文件 .eslintrc.json、补 .gitattributes / issue / PR 模板）+ 测试数对齐 1813 + CI 描述修正
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -48,22 +48,22 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **eval harness** `/crsi eval` — `core/eval-harness.ts` 冻结 20 条 ground-truth 契约（12 机制：规则/宪法/沙箱边界/红队/producer 行为 + 8 行为缺口）+ rewards 日志 `~/.mipham/crsi/eval-scores.jsonl`，`runCrsiModification` 以「分数不退化」为第二道闸。8 行为缺口（rm -rf/管道投毒/git reset --hard/chmod 777/mkfs/dd→/dev//关停主机/crontab -r）已由固化 managed tool-params 规则覆盖 → 全翻转 PASS → 满分 100 =「证明更好」
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：1,820 测试（1818 passed + 2 skipped）
+测试：1,813 测试（1811 passed + 2 skipped）
 
 ---
 
 ## 技术栈
 
-| 层         | 技术                                                       |
-| ---------- | ---------------------------------------------------------- |
-| CLI 运行时 | Bun 1.2+（推荐）/ Node.js 22+                              |
-| CLI 框架   | React 18 + Ink 5（终端 UI）                                |
-| Web        | Next.js 14 + React 18 + Tailwind CSS 3                     |
-| 语言       | TypeScript 5.5+（strict）                                  |
-| 包管理     | pnpm 9.15                                                  |
-| 测试       | Vitest 3（CLI）/ 测试框架待定（Web）                       |
-| CI/CD      | GitHub Actions（typecheck → lint → format → build → test） |
-| 共享库     | @mipham/shared（types, constants）                         |
+| 层         | 技术                                                                             |
+| ---------- | -------------------------------------------------------------------------------- |
+| CLI 运行时 | Bun 1.2+（推荐）/ Node.js 22+                                                    |
+| CLI 框架   | React 18 + Ink 5（终端 UI）                                                      |
+| Web        | Next.js 14 + React 18 + Tailwind CSS 3                                           |
+| 语言       | TypeScript 5.5+（strict）                                                        |
+| 包管理     | pnpm 9.15                                                                        |
+| 测试       | Vitest 3（CLI）/ 测试框架待定（Web）                                             |
+| CI/CD      | GitHub Actions（typecheck → lint → format → build → test → audit → penetration） |
+| 共享库     | @mipham/shared（types, constants）                                               |
 
 ### Monorepo 结构
 
@@ -85,7 +85,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 26 个内置技能（20 standard + 6 mipham）
-│   │   ├── test/               # 164 个测试文件，1820 个测试
+│   │   ├── test/               # 166 个测试文件，1813 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -108,7 +108,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（1820 个测试）
+pnpm test         # vitest run（1813 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -232,7 +232,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
 | E2E      | 1       | 8        | full-pipeline                                 |
 | Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **164** | **1820** | **0 失败** ✅（1818 passed + 2 skipped）      |
+| **合计** | **166** | **1813** | **0 失败** ✅（1811 passed + 2 skipped）      |
 
 > 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
 
@@ -242,7 +242,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 ## CI/CD
 
-GitHub Actions 5 阶段流水线：`typecheck → lint → format → build-cli → test`
+GitHub Actions 9 个 job 流水线：`typecheck → lint → format → build-cli → build-web → test → security-audit → penetration-test → install-scripts`
 
 触发: push/PR to master/main
 
@@ -420,6 +420,7 @@ mipham-code 变更（包名/版本）
 
 | 版本   | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | 维护人     |
 | ------ | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| 2.12.0 | 2026-08-26 | 文档规范化补齐：① 删死文件 `.eslintrc.json`（ESLint 10 纯 flat config，legacy 配置早已不读，且与 `eslint.config.js` 规则矛盾）② 补 `.gitattributes`（行尾 LF 规范化 + 16 类二进制资产标记）③ 补 `.github/ISSUE_TEMPLATE/`（bug/feature 模板）+ `PULL_REQUEST_TEMPLATE.md` ④ CI 描述修正（5 阶段 → 9 个 job：+ build-web / security-audit / penetration-test / install-scripts）⑤ 测试数对齐 1813（1811 passed + 2 skipped，166 文件；权限 6→4 收敛后较 1820 减 7）。                                                                                                       | 技术委员会 |
 | 2.11.0 | 2026-08-24 | v0.56.0 发版：① Claude marketplace 插件安装兼容（`plugin-validator` 识别 `.claude-plugin/plugin.json` 只需 name + 新 `claude-plugin.ts` 加载 skills/agents/MCP + `loadPlugins` 按 `detectPluginFormat` 分支，端到端验证 `@directive-run/claude-plugin` 12/12 skills）② `Memory` 工具加 `search` action（复用 `MemoryManager.recall` 对话中召回，参数 query）③ 修 `mipham plugin`/`workflow` 子命令（commander `parseAsync(process.argv)` → `slice(3)+from:'user'`）+ `installFromNpm` 用 manifest name 统一目录/记录/消息。测试 1791→1818 passed + 2 skipped（164 文件）。 | 技术委员会 |
 | 2.10.1 | 2026-08-23 | 钉钉 self-review 收尾：① `sendResponse` 回帧信封抽共享（ack/pong DRY）② `nextBackoff` 抽 `daemon/backoff.ts`（三频道 telegram/wecom/dingtalk 去重，规则三命中）③ 测试隔离修复 ×2（dingtalk/telegram api.test 显式 `mockClear` 兜底，单文件隔离跑时 `clearMocks` 不清 module 级 `vi.fn` 调用历史）。测试 1793→1789 passed + 2 skipped（dedup -4，159 文件）。                                                                                                                                                                                                               | 技术委员会 |
 | 2.10.0 | 2026-08-23 | 钉钉远程控制落地（第 4 个 inbound 频道）：daemon 新增 `dingtalk/` 模块（types/env/api/ws-client/adapter），钉钉 Stream Mode 长连接（`globalThis.WebSocket` 零依赖；register HTTP 拿 endpoint+ticket → `?ticket=` 建连 → 服务端 ping/pong → CALLBACK 解析 → ack → sessionWebhook 回发；ticket 一次性 90s 过期故每次重连前重新 register）。复用 `channel-message.ts` 四频道共享骨架（feishu/telegram/wecom/dingtalk）。测试 1761→1793 passed + 2 skipped。                                                                                                                   | 技术委员会 |

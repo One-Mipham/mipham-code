@@ -1,0 +1,22 @@
+# Normalize line endings: text files to LF, binary files untouched.
+* text=auto
+
+# Binary assets — never diff, never convert line endings
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.icns binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.zip binary
+*.gz binary
+*.tgz binary
+*.vsix binary
+*.db binary
+*.sqlite binary
+*.sqlite3 binary
