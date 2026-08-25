@@ -43,3 +43,15 @@
 - `/permissions` 显示旧的 3 级 auto/ask/bypass，与真实 6 模式不符，用户找不到如何授权 bash
 - 占位符写「Esc 取消」，但空闲时 Esc 实际切 vim 模式——文案与行为矛盾
 - 修复：重写 /permissions 显示真实 6 模式 + Shift+Tab；占位符改「Esc 清空」；拒绝提示补指引
+
+## onboarding: 用户「愣建文件夹」是产品缺引导，非用户错
+
+- 建议: 用户不会自觉走规范流程，产品必须主动引导——检测到空目录/未初始化项目时温和提示 `mipham init`，而非假设用户知道、让用户自己摸索。修根因（补引导入口）优先于怪用户「冷建立文件」。
+- 严重度: warning
+- 生成时间: 2026-08-25
+- 来源: 会话复盘（human + Claude Code，手动沉淀）
+
+### 证据
+
+- 用户「愣建文件夹/冷建立文件」→ 缺项目脚手架：`/init` 被「用户 config」占用（同名不同义），`/setup 1` 只生成 MIPHAM.md 不含 CLAUDE.md/README.md
+- 修复：新增 `mipham init` 脚手架（CLAUDE.md/MIPHAM.md/README.md + 可选 git init）+ 空目录启动提示
