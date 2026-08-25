@@ -960,6 +960,7 @@
     "mcp_register_failed": "[mcp] Failed to register tool \"{tool}\" from server \"{server}\": {error}",
     "max_tool_turns": "Max tool-calling turns ({max}) reached. Some tool calls were not executed.",
     "max_tool_turns_warning": "You've reached the maximum of {max} tool-calling rounds. {pending} tool call(s) were not executed. Please summarize what you found so far and any next steps the user should take.",
+    "turn_timeout": "Task produced no substantial output for {minutes} minutes and was stopped. Break the task into smaller steps or clarify the next step, then retry.",
     "mcp_not_connected": "Error: MCP server \"{server}\" not connected",
     "mcp_tool_error": "MCP tool error: {error}",
     "mcp_no_connection": "No connection for \"{name}\""

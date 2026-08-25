@@ -767,9 +767,23 @@ export class QueryEngine {
     // Tool-calling round cap. 20 was too low for real multi-step tasks — the model
     // hit "max turns" and dropped pending tools mid-task. 100 stays bounded.
     const MAX_TURNS = 100
+    // Task-level stall guard: a turn that produces no text or tool result for
+    // this long is considered stalled and stopped (prevents ~40-min idle spins).
+    const TURN_TIMEOUT_MS = 15 * 60 * 1000
+    let lastActivity = Date.now()
     const toolDefs = this.getToolDefinitions()
 
     for (let turn = 0; turn < MAX_TURNS; turn++) {
+      if (Date.now() - lastActivity > TURN_TIMEOUT_MS) {
+        yield {
+          type: 'warning',
+          content: t('errors.turn_timeout', {
+            minutes: String(Math.round(TURN_TIMEOUT_MS / 60000)),
+          }),
+        }
+        yield { type: 'stop' }
+        return
+      }
       const systemPrompt = this.context.getSystemPrompt()
       const messages = this.context.getMessages()
 
@@ -814,6 +828,7 @@ export class QueryEngine {
           if (chunk.type === 'text' && chunk.content) {
             assistantContent += chunk.content
             this.context.recordChunk(chunk.content)
+            lastActivity = Date.now()
           }
 
           if (chunk.reasoning_content) {
@@ -913,6 +928,7 @@ export class QueryEngine {
       // Execute tools and feed results back to the model for the next turn
       for (const toolUse of toolUses) {
         const result = await this.executeTool(toolUse.name, toolUse.input)
+        lastActivity = Date.now()
         yield {
           type: 'tool_result',
           tool_use_id: toolUse.id,

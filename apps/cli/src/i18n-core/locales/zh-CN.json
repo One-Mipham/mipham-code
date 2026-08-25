@@ -960,6 +960,7 @@
     "mcp_register_failed": "[mcp] 注册工具 \"{tool}\"（来自服务器 \"{server}\"）失败：{error}",
     "max_tool_turns": "超出最大工具调用轮次（{max}）。部分工具调用未执行。",
     "max_tool_turns_warning": "已达到最大 {max} 轮工具调用。{pending} 个工具调用未执行。请总结当前发现及后续步骤。",
+    "turn_timeout": "任务已超过 {minutes} 分钟无实质产出，已自动停止。建议拆分任务或明确下一步后重新发起。",
     "mcp_not_connected": "错误：MCP 服务器 \"{server}\" 未连接",
     "mcp_tool_error": "MCP 工具错误：{error}",
     "mcp_no_connection": "未找到 \"{name}\" 的连接"

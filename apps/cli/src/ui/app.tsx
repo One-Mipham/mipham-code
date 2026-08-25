@@ -90,8 +90,7 @@ interface AgentProgress {
 // Version is read fresh from package.json at startup via runApp prop
 // (bypasses Bun module caching after npm update)
 
-// Cycle order: Claude Code modes first (manual → accept edits → bypass),
-// then Mipham-specific modes (plan → auto → dont ask).
+// Cycle order: Claude Code modes (manual → accept edits → plan → bypass).
 const PERMISSION_MODES: PermissionMode[] = ['default', 'acceptEdits', 'plan', 'bypassPermissions']
 // Labels aligned with Claude Code terminology: describe behavior, not capability.
 // Claude Code modes: manual mode → accept edits on → plan → bypass.
@@ -179,6 +178,9 @@ export function App({
   const [goalText, setGoalText] = useState('')
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default')
   const abortRef = useRef<AbortController | null>(null)
+  // Monotonic turn id — lets a stale turn's finally() skip resetting shared UI
+  // state (isLoading/abortRef/progress) after a newer turn has already started.
+  const turnIdRef = useRef(0)
   // Stream buffer: accumulate text chunks and throttle state updates to ~16fps.
   // Without this, every SSE chunk triggers setMessages → copies full array →
   // re-renders ChatPanel → re-runs compactToolGroups O(n). At 20-50 chunks/sec
@@ -188,6 +190,11 @@ export function App({
     isFirst: boolean
     timer: ReturnType<typeof setTimeout> | null
   }>({ turnContent: '', isFirst: true, timer: null })
+  // Reasoning/thinking transparency: accumulate reasoning tokens and surface them
+  // as a live "thinking" indicator instead of silently dropping them.
+  const [thinkingText, setThinkingText] = useState('')
+  const thinkingRef = useRef('')
+  const thinkingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [agentProgress, setAgentProgress] = useState<AgentProgress | null>(null)
   // Multi-agent tracking: keyed by agent/task ID, shows all running + recently completed agents
   const [runningAgents, setRunningAgents] = useState<Record<string, AgentEntry>>({})
@@ -333,6 +340,7 @@ export function App({
   const handleSubmit = useCallback(
     async (input: string) => {
       if (!input.trim()) return
+      const turnId = ++turnIdRef.current
 
       // ── @mention: direct cross-session message — only when the name resolves
       // to a live session; otherwise fall through to normal AI processing so a
@@ -573,15 +581,36 @@ export function App({
           emotionPrefix ? emotionPrefix + input : input,
           controller.signal,
         )) {
-          // Reasoning content (DeepSeek V4 thinking mode) — silently consumed,
-          // not shown to user to avoid noise.
+          // Reasoning content (DeepSeek V4 thinking mode) — surface as a live
+          // "thinking" indicator so long reasoning passes don't look like a stall.
           if (chunk.reasoning_content) {
+            thinkingRef.current += chunk.reasoning_content
+            if (!thinkingTimerRef.current) {
+              thinkingTimerRef.current = setTimeout(() => {
+                thinkingTimerRef.current = null
+                setThinkingText(thinkingRef.current)
+              }, 60)
+            }
             continue
           }
 
           if (chunk.type === 'text' && chunk.content) {
             // New turn: push fresh assistant message, reset stream buffer
             if (isNewTurn) {
+              // Flush any accumulated reasoning as a collapsed history line
+              if (thinkingRef.current) {
+                const thought = thinkingRef.current
+                thinkingRef.current = ''
+                setThinkingText('')
+                if (thinkingTimerRef.current) {
+                  clearTimeout(thinkingTimerRef.current)
+                  thinkingTimerRef.current = null
+                }
+                setMessages((prev) => [
+                  ...prev,
+                  { role: 'system' as const, content: `💭 ${thought}` },
+                ])
+              }
               turnContent = chunk.content
               isNewTurn = false
               streamBufferRef.current = { turnContent: chunk.content, isFirst: false, timer: null }
@@ -756,16 +785,20 @@ export function App({
       } catch (err) {
         setMessages((prev) => [...prev, { role: 'system', content: `Error: ${String(err)}` }])
       } finally {
-        // Flush any remaining stream buffer before finishing
-        flushStreamBuffer()
-        setIsLoading(false)
-        abortRef.current = null
-        // Clear all progress/tool indicators
-        agentProgressRef.current = null
-        setAgentProgress(null)
-        activeToolRef.current = null
-        setActiveTool(null)
-        setAgentTick((t) => t + 1)
+        // Only the latest turn resets shared UI state — a stale turn's finally
+        // must not clobber a newer turn's isLoading/abortRef/progress.
+        if (turnIdRef.current === turnId) {
+          // Flush any remaining stream buffer before finishing
+          flushStreamBuffer()
+          setIsLoading(false)
+          abortRef.current = null
+          // Clear all progress/tool indicators
+          agentProgressRef.current = null
+          setAgentProgress(null)
+          activeToolRef.current = null
+          setActiveTool(null)
+          setAgentTick((t) => t + 1)
+        }
         // Auto-save checkpoint after each AI response
         if (assistantContent) {
           engine.getContext().saveCheckpoint('post-turn')
@@ -869,6 +902,7 @@ export function App({
           <>
             {/* Chat panel */}
             <ChatPanel messages={messages} focusMode={focusMode} />
+            {thinkingText ? <Text dimColor>💭 {thinkingText.slice(-200)}</Text> : null}
 
             {/* Input with separator lines */}
             {pickerOpen ? (

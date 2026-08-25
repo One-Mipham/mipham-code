@@ -266,9 +266,15 @@ export function InputBar({
       clearTimeout(onChangeTimerRef.current)
       onChangeTimerRef.current = null
     }
-    // Use latest value from ref (may be ahead of state during throttle)
-    const finalValue = val || valueRef.current
-    if (!finalValue.trim() || isLoading) return
+    // Use the latest value from the ref — state lags behind during throttle, and
+    // the onSubmit `val` is the stale controlled prop in that window.
+    const finalValue = valueRef.current || val
+    if (!finalValue.trim()) return
+    // Submitting while a response streams interrupts it (Claude Code parity)
+    // instead of silently dropping the input.
+    if (isLoading) {
+      onCancel?.()
+    }
     // Save to message history for arrow-key navigation
     setSubmittedHistory((prev) => [...prev, finalValue])
     historyIndexRef.current = -1
