@@ -11,8 +11,8 @@ describe('permission escalation prevention', () => {
   it('setMode accepts valid mode strings', async () => {
     const { PermissionSystem } = await import('../../../src/core/permission')
     const perm = new PermissionSystem()
-    perm.setMode('auto')
-    expect(perm.getMode()).toBe('auto')
+    perm.setMode('acceptEdits')
+    expect(perm.getMode()).toBe('acceptEdits')
   })
 
   it('setMode clamps to valid modes', async () => {

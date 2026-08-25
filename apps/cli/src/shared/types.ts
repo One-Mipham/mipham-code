@@ -130,7 +130,7 @@ export interface MiphamConfig {
   version: string
   defaultProvider: string
   defaultModel: string
-  permission: ToolPermission
+  permission: PermissionLevel
   /** Org-level permission restrictions (forbiddenModes, maxAllowedMode). */
   permissionRestrictions?: PermissionRestrictions
   /** User-defined permission rules (allow/deny patterns), wired into the runtime PermissionSystem. */
@@ -269,12 +269,11 @@ export interface InstructionFile {
 }
 
 // ── Permission Types ──
-/** Six explicit permission modes matching Claude Code's permission architecture */
-export type PermissionMode =
-  'default' | 'acceptEdits' | 'plan' | 'auto' | 'dontAsk' | 'bypassPermissions'
+/** Four explicit permission modes matching Claude Code's permission architecture */
+export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions'
 
-/** Backward-compatible alias: PermissionMode plus legacy 'ask' and 'bypass' */
-export type PermissionLevel = PermissionMode | 'ask' | 'bypass'
+/** Backward-compatible alias: PermissionMode plus legacy 'auto'/'ask'/'bypass' */
+export type PermissionLevel = PermissionMode | 'auto' | 'ask' | 'bypass'
 
 /** Org-level restrictions that cap or forbid specific permission modes. */
 export interface PermissionRestrictions {

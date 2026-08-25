@@ -10,8 +10,7 @@ export interface AgentFrontmatter {
   tools?: string // comma-separated allowlist
   disallowedTools?: string
   model?: string // 'sonnet' | 'opus' | 'haiku' | 'inherit' | full model ID
-  permissionMode?:
-    'default' | 'acceptEdits' | 'auto' | 'bypass' | 'plan' | 'bypassPermissions' | 'dontAsk'
+  permissionMode?: 'default' | 'acceptEdits' | 'bypass' | 'plan' | 'bypassPermissions'
   maxTurns?: number
   skills?: string
   background?: boolean

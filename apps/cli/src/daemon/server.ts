@@ -64,8 +64,6 @@ const DAEMON_PERMISSION_MODES: ReadonlySet<PermissionMode> = new Set<PermissionM
   'default',
   'acceptEdits',
   'plan',
-  'auto',
-  'dontAsk',
   'bypassPermissions',
 ])
 

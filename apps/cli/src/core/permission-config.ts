@@ -27,8 +27,6 @@ export const PERMISSION_MODE_HIERARCHY: PermissionMode[] = [
   'default',
   'acceptEdits',
   'plan',
-  'auto',
-  'dontAsk',
   'bypassPermissions',
 ]
 

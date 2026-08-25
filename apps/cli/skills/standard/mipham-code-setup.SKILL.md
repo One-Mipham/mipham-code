@@ -77,7 +77,7 @@ Project:       [✅/⬜] .mipham/  [✅/⬜] config.yml  [✅/⬜] MIPHAM.md
 User Config:   [✅/⬜] ~/.mipham/config.yml
 API Keys:      [N] set (list names or "none")
 Skills:        [N] installed
-Permissions:   [mode] (default/acceptEdits/plan/auto/dontAsk/bypass)
+Permissions:   [mode] (default/acceptEdits/plan/bypassPermissions)
 Trust:         [✅/⬜] workspace trusted
 ```
 
@@ -336,8 +336,6 @@ Or directly:
 | `default`           | Prompt for each tool            | Normal development (recommended)    |
 | `acceptEdits`       | Auto-allow edits, prompt others | Active coding sessions              |
 | `plan`              | Plan-only, no tool execution    | Design & architecture work          |
-| `auto`              | Auto-allow all                  | Trusted, frequent use               |
-| `dontAsk`           | Never auto-allow                | CI/CD safety                        |
 | `bypassPermissions` | Skip all checks                 | ⚠️ Only for fully trusted codebases |
 
 ### 6.2 — Configure
@@ -345,7 +343,7 @@ Or directly:
 In `.mipham/config.yml`:
 
 ```yaml
-permission: auto
+permission: default
 ```
 
 Or via slash command:
@@ -357,11 +355,9 @@ Or via slash command:
 
 ### 6.3 — CI/CD Safety
 
-For CI/CD environments, use `dontAsk` mode to prevent the AI from executing tools without explicit approval:
-
-```yaml
-permission: dontAsk
-```
+For CI/CD environments, use the `default` mode (the daemon default): headless
+sessions never prompt, so `ask`-level tools (Bash/Write/Edit) are blocked rather
+than auto-approved.
 
 ### ✅ Verification
 

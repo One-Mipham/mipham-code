@@ -757,8 +757,6 @@
       "manual": "手动模式",
       "accept_edits": "接受编辑",
       "plan_mode": "计划模式 / 只读",
-      "auto": "自动模式",
-      "dont_ask": "不再询问",
       "bypass": "绕过权限"
     },
     "loading": {

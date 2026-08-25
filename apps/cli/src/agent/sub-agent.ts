@@ -210,9 +210,6 @@ export class SubAgent {
           ? agentDef.permissionMode
           : 'inherit'
       subPermission = this.permission.createSubAgentPermission(agentPermMode)
-      // P0-5: Enable sub-agent safety mode — auto mode returns 'ask' for
-      // Bash/Write/Edit so hooks remain the safety gate in background agents.
-      subPermission.setSubAgentMode(true)
     }
 
     // Resolve execution directory: worktree isolation or process cwd

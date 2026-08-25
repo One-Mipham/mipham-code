@@ -10,20 +10,6 @@ import { matchBashRule, compileRule } from './permission-rules'
 import { loadPermissionConfig, nextMode, clampMode, MODE_CYCLE } from './permission-config'
 
 /**
- * Check if a Bash command is a git/gh operation using a destructive flag
- * (--force, --amend, --no-verify, --hard) that must never be auto-approved.
- * v2.1.229 alignment: these rewrite history / force-push, so they fall back
- * to explicit user confirmation even in auto mode.
- */
-function hasDangerousGitFlags(input: Record<string, unknown>): boolean {
-  const cmd = (input.command as string) || ''
-  // Detect a git/gh invocation anywhere in the command (not just `^git`), so
-  // `echo ok && git push --force` is still caught.
-  if (!/(?:^|[\s;&|])(?:sudo\s+)?(?:git|gh)\s+/.test(cmd)) return false
-  return /--force(?!-with-lease)\b|--amend\b|--no-verify\b|--hard\b/.test(cmd)
-}
-
-/**
  * Check if a Bash command is a "verification-only" command that should be
  * auto-approved in acceptEdits mode. These are non-destructive read/check
  * operations that form the core of the vibe coding edit→test→fix loop.
@@ -94,9 +80,6 @@ export class PermissionSystem {
   // ── Org-level restrictions (P0 security) ──
   private restrictions: PermissionRestrictions | undefined = undefined
 
-  // ── P0-5: Sub-agent mode (auto mode hardening for background tasks) ──
-  private isSubAgent = false
-
   // ── P1-4: Consecutive block counter (prevents infinite retry loops) ──
   private consecutiveBlockCount = 0
   private static readonly MAX_CONSECUTIVE_BLOCKS = 3
@@ -147,16 +130,6 @@ export class PermissionSystem {
 
   getRestrictions(): PermissionRestrictions | undefined {
     return this.restrictions
-  }
-
-  /**
-   * P0-5 (v2.1.222 alignment): Enable sub-agent safety mode.
-   * When true, auto mode returns 'ask' for Bash/Write/Edit tools instead of
-   * 'bypass', ensuring PreToolUse hooks remain the safety gate in background agents.
-   */
-  setSubAgentMode(enabled: boolean): void {
-    this.isSubAgent = enabled
-    this.invalidateCache()
   }
 
   /**
@@ -216,8 +189,6 @@ export class PermissionSystem {
 
     const modeMap: Record<string, PermissionMode> = {
       bypassPermissions: 'bypassPermissions',
-      dontAsk: 'dontAsk',
-      auto: 'auto',
       plan: 'plan',
       acceptEdits: 'acceptEdits',
       default: 'default',
@@ -418,30 +389,6 @@ export class PermissionSystem {
           ? 'bypass'
           : 'ask'
 
-      case 'auto':
-        // Safety checks handled by hook layer (PreToolUse hooks).
-        // Bypass the static permission system so hooks are the sole gate.
-        // Exception: SendMessage always goes through the permission classifier
-        // so deny/allow rules are honored for cross-session messages.
-        if (tool.name === 'SendMessage') {
-          return 'mode-baseline'
-        }
-        // P0-5: In sub-agent context, enforce 'ask' for destructive tools
-        // so hooks remain the sole safety gate. Without hooks, these tools
-        // would otherwise run completely un-gated in auto mode.
-        if (this.isSubAgent && ['Bash', 'Write', 'Edit'].includes(tool.name)) {
-          return 'ask'
-        }
-        // v2.1.229 alignment: destructive git/gh flags are never auto-approved.
-        if (tool.name === 'Bash' && input && hasDangerousGitFlags(input)) {
-          return 'ask'
-        }
-        return 'bypass'
-
-      case 'dontAsk':
-        // Only allowlisted tools free (already handled above); everything else requires approval
-        return 'ask'
-
       case 'bypassPermissions':
         return 'bypass'
 
@@ -453,11 +400,10 @@ export class PermissionSystem {
   // ── Legacy compatibility ──
 
   setDefaultLevel(level: PermissionLevel): void {
-    // Map legacy 3-level to new mode
-    let newMode: PermissionMode
-    if (level === 'auto') newMode = 'auto'
-    else if (level === 'bypass') newMode = 'bypassPermissions'
-    else newMode = 'default'
+    // Map legacy 3-level (auto/ask/bypass) to new 4-level mode.
+    // Legacy 'auto'/'ask' = "let each tool self-decide" → 'default'.
+    // Legacy 'bypass' → 'bypassPermissions'.
+    const newMode: PermissionMode = level === 'bypass' ? 'bypassPermissions' : 'default'
     this.mode = clampMode(newMode, this.restrictions)
     this.invalidateCache()
   }
@@ -465,8 +411,7 @@ export class PermissionSystem {
   getDefaultLevel(): PermissionLevel {
     // Legacy constructor fallback takes priority
     if (this.legacyDefaultFallback) return this.legacyDefaultFallback
-    if (this.mode === 'auto' || this.mode === 'bypassPermissions' || this.mode === 'dontAsk')
-      return 'bypass'
+    if (this.mode === 'bypassPermissions') return 'bypass'
     if (this.mode === 'plan') return 'ask'
     return 'auto'
   }

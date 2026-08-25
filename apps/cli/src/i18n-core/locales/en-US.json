@@ -757,8 +757,6 @@
       "manual": "manual mode",
       "accept_edits": "accept edits on",
       "plan_mode": "plan mode / read-only",
-      "auto": "auto mode",
-      "dont_ask": "don't ask",
       "bypass": "bypass"
     },
     "loading": {

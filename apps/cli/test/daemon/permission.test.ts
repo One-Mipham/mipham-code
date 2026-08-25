@@ -28,25 +28,25 @@ describe('buildDaemonPermission', () => {
   it('downgrades bypassPermissions when forbidden by restrictions', () => {
     process.env[ENV_KEY] = 'bypassPermissions'
     const ps = buildDaemonPermission({ forbiddenModes: ['bypassPermissions'] })
-    expect(ps.getMode()).toBe('dontAsk') // clamped to highest allowed
+    expect(ps.getMode()).toBe('plan') // clamped to highest allowed
   })
 
   it('honors env mode when restrictions allow it', () => {
-    process.env[ENV_KEY] = 'auto'
+    process.env[ENV_KEY] = 'acceptEdits'
     const ps = buildDaemonPermission({ forbiddenModes: ['bypassPermissions'] })
-    expect(ps.getMode()).toBe('auto')
+    expect(ps.getMode()).toBe('acceptEdits')
   })
 
   it('wires allow/deny rules into the permission system', () => {
-    process.env[ENV_KEY] = 'auto'
+    process.env[ENV_KEY] = 'default'
     const ps = buildDaemonPermission(undefined, {
       deny: ['Read(**/.ssh/id_rsa)'],
       allow: ['Read'],
     })
     const readTool = makeTool('Read')
-    // deny rule blocks a sensitive read even in auto mode (deny wins before mode baseline)
+    // deny rule blocks a sensitive read (deny wins before mode baseline)
     expect(ps.needsApproval(readTool, { file_path: '/home/u/.ssh/id_rsa' })).toBe(true)
-    // allow rule (and auto-mode baseline) permits a normal read
+    // allow rule permits a normal read
     expect(ps.isBypassed(readTool, { file_path: '/home/u/app.ts' })).toBe(true)
   })
 })

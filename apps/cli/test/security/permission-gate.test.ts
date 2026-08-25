@@ -42,16 +42,16 @@ const bypassTool: ToolDefinition = {
 // ============================================================
 
 describe('PermissionSystem', () => {
-  describe('default level: auto', () => {
-    const ps = new PermissionSystem('auto')
+  describe('default level: bypassPermissions', () => {
+    const ps = new PermissionSystem('bypassPermissions')
 
     it('auto tool does NOT need approval', () => {
       expect(ps.needsApproval(autoTool, {})).toBe(false)
     })
 
-    // In auto mode, safety is handled by PreToolUse hooks.
-    // The permission system bypasses all tools — even those with permission: 'ask'.
-    it('ask tool does NOT need approval (hooks handle safety)', () => {
+    // In bypassPermissions mode, the permission system bypasses all tools —
+    // even those with permission: 'ask'.
+    it('ask tool does NOT need approval', () => {
       expect(ps.needsApproval(askTool, {})).toBe(false)
     })
 
@@ -60,11 +60,11 @@ describe('PermissionSystem', () => {
       expect(ps.isBypassed(bypassTool, {})).toBe(true)
     })
 
-    it('all tools bypass in auto mode', () => {
+    it('all tools bypass in bypassPermissions mode', () => {
       expect(ps.check(autoTool, {})).toBe('bypass')
     })
 
-    it('even ask tools bypass in auto mode', () => {
+    it('even ask tools bypass in bypassPermissions mode', () => {
       expect(ps.check(askTool, {})).toBe('bypass')
     })
   })

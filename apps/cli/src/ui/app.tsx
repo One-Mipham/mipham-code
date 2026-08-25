@@ -92,23 +92,13 @@ interface AgentProgress {
 
 // Cycle order: Claude Code modes first (manual → accept edits → bypass),
 // then Mipham-specific modes (plan → auto → dont ask).
-const PERMISSION_MODES: PermissionMode[] = [
-  'default',
-  'acceptEdits',
-  'bypassPermissions',
-  'plan',
-  'auto',
-  'dontAsk',
-]
+const PERMISSION_MODES: PermissionMode[] = ['default', 'acceptEdits', 'plan', 'bypassPermissions']
 // Labels aligned with Claude Code terminology: describe behavior, not capability.
-// Claude Code modes: manual mode → accept edits on → bypass
-// Mipham extends with 3 extra modes (plan, auto, dontAsk) for finer control.
+// Claude Code modes: manual mode → accept edits on → plan → bypass.
 const PERMISSION_COLORS: Record<PermissionMode, string> = {
   default: 'white',
   acceptEdits: 'blue',
   plan: 'yellow',
-  auto: 'green',
-  dontAsk: 'cyan',
   bypassPermissions: 'red',
 }
 
@@ -165,8 +155,6 @@ export function App({
       default: t('ui.permission.manual'),
       acceptEdits: t('ui.permission.accept_edits'),
       plan: t('ui.permission.plan_mode'),
-      auto: t('ui.permission.auto'),
-      dontAsk: t('ui.permission.dont_ask'),
       bypassPermissions: t('ui.permission.bypass'),
     }),
     [t],
@@ -987,9 +975,8 @@ export function App({
                 <Text dimColor>
                   {' '}
                   ({t('ui.status.shift_tab_cycle')}: {PERMISSION_LABELS.default} ·{' '}
-                  {PERMISSION_LABELS.acceptEdits} · {PERMISSION_LABELS.bypassPermissions} ·{' '}
-                  {PERMISSION_LABELS.plan} · {PERMISSION_LABELS.auto} · {PERMISSION_LABELS.dontAsk})
-                  {' · '}
+                  {PERMISSION_LABELS.acceptEdits} · {PERMISSION_LABELS.plan} ·{' '}
+                  {PERMISSION_LABELS.bypassPermissions}){' · '}
                   {t('ui.status.esc_to_interrupt')}
                   {' · '}
                   {t('ui.status.left_for_agents')}

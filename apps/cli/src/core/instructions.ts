@@ -230,9 +230,6 @@ Never omit it or present the work as purely human-authored.`)
       acceptEdits:
         'You are in **acceptEdits** mode. File reads and edits are allowed; Bash requires approval.',
       plan: 'You are in **plan** mode. Only Read/Grep/Glob are allowed — no file modifications or command execution.',
-      auto: 'You are in **auto** mode. Most tools run without approval. If a tool is blocked by security policy or hooks, try a different approach instead of retrying.',
-      dontAsk:
-        'You are in **dontAsk** mode. All tools blocked unless explicitly allowlisted. Check your allow rules before acting.',
       bypassPermissions:
         'You are in **bypassPermissions** mode. All tools are allowed. Use this power responsibly.',
     }

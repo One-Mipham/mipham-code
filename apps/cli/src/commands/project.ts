@@ -111,7 +111,7 @@ const permissionsCmd: CommandHandler = (ctx) => {
   return {
     content: `─ Permission Settings ─
 
-Mode:       ${ctx.config.permission}
+Mode:       ${ctx.engine.getPermission().getMode()}
 Messages:   ${msgs.length} in context
 Tools:      ${ctx.engine.getTools().size} available
 
@@ -119,12 +119,10 @@ Switch mode with Shift+Tab. Modes (least → most permissive):
   default            — per-tool defaults (Bash/Write/Edit ask first)
   acceptEdits        — reads + edits free; Bash auto-runs read/check commands
   plan               — reads only (Read/Grep/Glob); nothing writes or runs
-  auto               — run everything without asking (hooks are the safety gate)
-  dontAsk            — only allowlisted tools free; everything else asks
   bypassPermissions  — skip ALL permission checks (⚠️ use with caution)
 
 To let Bash run without asking: press Shift+Tab until the status line shows
-"acceptEdits" (or "auto"), then send your message again.
+"acceptEdits", then send your message again.
 
 Current directory permissions:
   CWD:      ${process.cwd()}

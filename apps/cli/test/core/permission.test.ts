@@ -124,34 +124,6 @@ describe('PermissionSystem', () => {
   })
 
   // ═══════════════════════════════════════════
-  // dangerous git flags (v2.1.229 alignment)
-  // ═══════════════════════════════════════════
-
-  it('should require approval for git push --force in auto mode', () => {
-    const ps = new PermissionSystem('auto')
-    const bash = makeTool('Bash', 'ask', 'exec')
-    expect(ps.check(bash, { command: 'git push --force origin main' })).toBe('ask')
-  })
-
-  it('should require approval for git commit --amend in auto mode', () => {
-    const ps = new PermissionSystem('auto')
-    const bash = makeTool('Bash', 'ask', 'exec')
-    expect(ps.check(bash, { command: 'git commit --amend --no-edit' })).toBe('ask')
-  })
-
-  it('should NOT flag --force-with-lease (safe force push)', () => {
-    const ps = new PermissionSystem('auto')
-    const bash = makeTool('Bash', 'ask', 'exec')
-    expect(ps.check(bash, { command: 'git push --force-with-lease origin main' })).toBe('bypass')
-  })
-
-  it('should NOT flag non-git commands containing --force', () => {
-    const ps = new PermissionSystem('auto')
-    const bash = makeTool('Bash', 'ask', 'exec')
-    expect(ps.check(bash, { command: 'pnpm install --force' })).toBe('bypass')
-  })
-
-  // ═══════════════════════════════════════════
   // isBypassed
   // ═══════════════════════════════════════════
 
@@ -235,17 +207,15 @@ describe('PermissionSystem', () => {
   })
 
   // ═══════════════════════════════════════════
-  // Tier 2: 6-mode refactored PermissionSystem
+  // Tier 2: 4-mode refactored PermissionSystem
   // ═══════════════════════════════════════════
 
-  it('cycles through all 6 modes', () => {
+  it('cycles through all 4 modes', () => {
     const ps = new PermissionSystem('default')
     expect(ps.getMode()).toBe('default')
     ps.cycleMode()
     expect(ps.getMode()).toBe('acceptEdits')
     ps.cycleMode() // plan
-    ps.cycleMode() // auto
-    ps.cycleMode() // dontAsk
     ps.cycleMode() // bypassPermissions
     ps.cycleMode() // back to default
     expect(ps.getMode()).toBe('default')
@@ -256,19 +226,6 @@ describe('PermissionSystem', () => {
     ps.deny('Bash(rm -rf *)')
     const tool = makeTool('Bash', 'auto', 'exec')
     expect(ps.needsApproval(tool, { command: 'rm -rf /' })).toBe(true)
-  })
-
-  it('allow rule permits in dontAsk mode', () => {
-    const ps = new PermissionSystem('dontAsk')
-    ps.allow('Read')
-    const tool = makeTool('Read', 'auto', 'file')
-    expect(ps.isBypassed(tool, {})).toBe(true)
-  })
-
-  it('dontAsk mode blocks non-allowlisted tools', () => {
-    const ps = new PermissionSystem('dontAsk')
-    const tool = makeTool('Bash', 'auto', 'exec')
-    expect(ps.needsApproval(tool, { command: 'ls' })).toBe(true)
   })
 
   it('plan mode allows reads only', () => {
@@ -292,22 +249,22 @@ describe('PermissionSystem', () => {
     expect(ps.needsApproval(gitTool, { command: 'rm -rf /' })).toBe(true)
   })
 
-  // ── P1: Auto mode SendMessage goes through classifier ──
-  it('routes SendMessage through permission classifier in auto mode', () => {
-    const ps = new PermissionSystem('auto')
+  // ── P1: SendMessage goes through the permission classifier ──
+  it('routes SendMessage through permission classifier in default mode', () => {
+    const ps = new PermissionSystem('default')
     const sendMsg = makeTool('SendMessage', 'auto', 'agent')
 
-    // SendMessage in auto mode: goes through classifier → falls to tool.permission = 'auto'
+    // SendMessage falls through mode baseline to tool.permission = 'auto'
     expect(ps.check(sendMsg, { to: 'other', summary: 'test', message: 'hi' })).toBe('auto')
     expect(ps.needsApproval(sendMsg, { to: 'other', summary: 'test', message: 'hi' })).toBe(false)
   })
 
-  it('honors deny rules for SendMessage in auto mode', () => {
-    const ps = new PermissionSystem('auto')
+  it('honors deny rules for SendMessage in default mode', () => {
+    const ps = new PermissionSystem('default')
     ps.deny('SendMessage')
     const sendMsg = makeTool('SendMessage', 'auto', 'agent')
 
-    // Deny rule takes priority → blocked even in auto mode
+    // Deny rule takes priority → blocked
     expect(ps.needsApproval(sendMsg, { to: 'other', summary: 'test', message: 'hi' })).toBe(true)
   })
 
@@ -318,7 +275,7 @@ describe('PermissionSystem', () => {
   describe('restrictions — forbiddenModes', () => {
     it('cycles only through allowed modes when forbiddenModes is set', () => {
       const ps = new PermissionSystem('default')
-      ps.setRestrictions({ forbiddenModes: ['dontAsk', 'bypassPermissions'] })
+      ps.setRestrictions({ forbiddenModes: ['bypassPermissions'] })
 
       expect(ps.getMode()).toBe('default')
       ps.cycleMode()
@@ -326,9 +283,7 @@ describe('PermissionSystem', () => {
       ps.cycleMode()
       expect(ps.getMode()).toBe('plan')
       ps.cycleMode()
-      expect(ps.getMode()).toBe('auto')
-      ps.cycleMode()
-      // Should skip dontAsk and bypassPermissions, wrap to default
+      // Should skip bypassPermissions, wrap to default
       expect(ps.getMode()).toBe('default')
     })
 
@@ -337,15 +292,15 @@ describe('PermissionSystem', () => {
       ps.setRestrictions({ forbiddenModes: ['bypassPermissions'] })
 
       ps.setMode('bypassPermissions')
-      expect(ps.getMode()).toBe('dontAsk') // downgraded to highest allowed
+      expect(ps.getMode()).toBe('plan') // downgraded to highest allowed
     })
 
     it('allows modes not in forbidden list', () => {
       const ps = new PermissionSystem('default')
       ps.setRestrictions({ forbiddenModes: ['bypassPermissions'] })
 
-      ps.setMode('auto')
-      expect(ps.getMode()).toBe('auto')
+      ps.setMode('acceptEdits')
+      expect(ps.getMode()).toBe('acceptEdits')
     })
   })
 
@@ -382,7 +337,7 @@ describe('PermissionSystem', () => {
       const ps = new PermissionSystem('default')
       ps.setRestrictions({ maxAllowedMode: 'default' })
 
-      ps.setMode('auto')
+      ps.setMode('acceptEdits')
       expect(ps.getMode()).toBe('default')
 
       ps.cycleMode()
@@ -394,16 +349,14 @@ describe('PermissionSystem', () => {
     it('respects both forbiddenModes and maxAllowedMode', () => {
       const ps = new PermissionSystem('default')
       ps.setRestrictions({
-        maxAllowedMode: 'auto',
+        maxAllowedMode: 'acceptEdits',
         forbiddenModes: ['plan'],
       })
 
-      // allowed: default, acceptEdits, auto (plan forbidden, dontAsk/bypass above cap)
+      // allowed: default, acceptEdits (plan forbidden, bypassPermissions above cap)
       expect(ps.getMode()).toBe('default')
       ps.cycleMode()
       expect(ps.getMode()).toBe('acceptEdits')
-      ps.cycleMode()
-      expect(ps.getMode()).toBe('auto')
       ps.cycleMode()
       expect(ps.getMode()).toBe('default')
     })
@@ -432,15 +385,38 @@ describe('PermissionSystem', () => {
     it('loadConfig applies restrictions', () => {
       const ps = new PermissionSystem()
       ps.loadConfig({
-        mode: 'auto',
+        mode: 'bypassPermissions',
         restrictions: { maxAllowedMode: 'acceptEdits', forbiddenModes: ['plan'] },
       })
-      // auto is above acceptEdits cap → clamped to acceptEdits
+      // bypassPermissions is above acceptEdits cap → clamped to acceptEdits
       expect(ps.getMode()).toBe('acceptEdits')
       expect(ps.getRestrictions()).toEqual({
         maxAllowedMode: 'acceptEdits',
         forbiddenModes: ['plan'],
       })
+    })
+  })
+
+  describe('setDefaultLevel — legacy 3-level mapping', () => {
+    it('maps legacy "auto" (tool self-decide) to default mode, NOT 6-level auto', () => {
+      const ps = new PermissionSystem('default')
+      ps.setDefaultLevel('auto')
+      // Legacy config.permission='auto' means "let each tool decide", which is the
+      // 6-level 'default' mode. Mapping it to 6-level 'auto' would silently grant
+      // write/bash execution without approval (the "scary autonomous edits" bug).
+      expect(ps.getMode()).toBe('default')
+    })
+
+    it('maps legacy "ask" to default mode', () => {
+      const ps = new PermissionSystem('default')
+      ps.setDefaultLevel('ask')
+      expect(ps.getMode()).toBe('default')
+    })
+
+    it('maps legacy "bypass" to bypassPermissions mode', () => {
+      const ps = new PermissionSystem('default')
+      ps.setDefaultLevel('bypass')
+      expect(ps.getMode()).toBe('bypassPermissions')
     })
   })
 })
