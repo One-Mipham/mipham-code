@@ -24,8 +24,9 @@ function isRetryableError(err: unknown): boolean {
 /**
  * Fetch with optional timeout and retry with exponential backoff.
  *
- * Retries on: network errors, 5xx, 429.
- * Does NOT retry on: timeout (AbortError), 4xx (except 429).
+ * Retries on: network errors, 5xx, 429, and the internal timeout firing
+ *   (first-byte never arrived) — retried once as a transient network issue.
+ * Does NOT retry on: caller-initiated abort (init.signal), 4xx (except 429).
  */
 export async function fetchWithRetry(
   url: string,
@@ -38,7 +39,11 @@ export async function fetchWithRetry(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeout)
+    let timedOut = false
+    const timer = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, timeout)
     const signal = init.signal ? anySignal([init.signal, controller.signal]) : controller.signal
 
     try {
@@ -57,7 +62,16 @@ export async function fetchWithRetry(
       return response
     } catch (err) {
       lastErr = err
-      if (!isRetryableError(err) || attempt >= maxRetries) throw err
+      // First-byte timeout is transient → retry once. Caller abort is not.
+      const retryable = timedOut || isRetryableError(err)
+      if (!retryable || attempt >= maxRetries) {
+        if (timedOut) {
+          throw new Error(
+            `API Error: No response from API (timed out after ${Math.round(timeout / 1000)}s)`,
+          )
+        }
+        throw err
+      }
       await sleep(baseDelay * Math.pow(2, attempt))
     } finally {
       clearTimeout(timer)

@@ -10,8 +10,8 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.12.0
-> **最后更新**: 2026-08-26 — v0.58.0 + 文档规范化补齐（删死文件 .eslintrc.json、补 .gitattributes / issue / PR 模板）+ 测试数对齐 1813 + CI 描述修正
+> **版本**: 2.13.0
+> **最后更新**: 2026-08-26 — v0.58.0 + API 首字节超时兜底（CC #22）+ 文档规范化补齐 + 测试数对齐 1815
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -48,7 +48,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **eval harness** `/crsi eval` — `core/eval-harness.ts` 冻结 20 条 ground-truth 契约（12 机制：规则/宪法/沙箱边界/红队/producer 行为 + 8 行为缺口）+ rewards 日志 `~/.mipham/crsi/eval-scores.jsonl`，`runCrsiModification` 以「分数不退化」为第二道闸。8 行为缺口（rm -rf/管道投毒/git reset --hard/chmod 777/mkfs/dd→/dev//关停主机/crontab -r）已由固化 managed tool-params 规则覆盖 → 全翻转 PASS → 满分 100 =「证明更好」
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：1,813 测试（1811 passed + 2 skipped）
+测试：1,815 测试（1813 passed + 2 skipped）
 
 ---
 
@@ -85,7 +85,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 26 个内置技能（20 standard + 6 mipham）
-│   │   ├── test/               # 166 个测试文件，1813 个测试
+│   │   ├── test/               # 166 个测试文件，1815 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -108,7 +108,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（1813 个测试）
+pnpm test         # vitest run（1815 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -232,7 +232,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
 | E2E      | 1       | 8        | full-pipeline                                 |
 | Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **166** | **1813** | **0 失败** ✅（1811 passed + 2 skipped）      |
+| **合计** | **166** | **1815** | **0 失败** ✅（1813 passed + 2 skipped）      |
 
 > 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
 
@@ -420,6 +420,7 @@ mipham-code 变更（包名/版本）
 
 | 版本   | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | 维护人     |
 | ------ | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| 2.13.0 | 2026-08-26 | API 首字节超时兜底（对齐 CC #22）：`fetchWithRetry` 加 `timedOut` 标志区分「超时中止（重试一次，防瞬时抖动）」vs「用户取消（不重试）」，超时耗尽后抛清晰报错「API Error: No response from API」而非裸 `AbortError`；新增 2 测试（超时重试 + 调用方取消不重试）。测试 1813→1815 passed + 2 skipped（166 文件）。                                                                                                                                                                                                                                                            | 技术委员会 |
 | 2.12.0 | 2026-08-26 | 文档规范化补齐：① 删死文件 `.eslintrc.json`（ESLint 10 纯 flat config，legacy 配置早已不读，且与 `eslint.config.js` 规则矛盾）② 补 `.gitattributes`（行尾 LF 规范化 + 16 类二进制资产标记）③ 补 `.github/ISSUE_TEMPLATE/`（bug/feature 模板）+ `PULL_REQUEST_TEMPLATE.md` ④ CI 描述修正（5 阶段 → 9 个 job：+ build-web / security-audit / penetration-test / install-scripts）⑤ 测试数对齐 1813（1811 passed + 2 skipped，166 文件；权限 6→4 收敛后较 1820 减 7）。                                                                                                       | 技术委员会 |
 | 2.11.2 | 2026-08-25 | v0.58.0 发版：① 权限模式收敛 6→4 档对齐 Claude Code（删 auto/dontAsk；根因 legacy auto 同名不同义映射错）② 终端三类问题收尾（输入死锁 + 空转超时 + UI 冻结）③ CRSI 运行时召回（`crsi-lessons.md` 注入系统提示，教训从「只写不读」到「写后召回」）④ 普通打字立即显示（仅批量输入节流，消 33ms 慢半拍）⑤ `mipham init` 项目脚手架 + 空目录启动提示（解决「愣建文件夹」缺引导根因）⑥ 沉淀 onboarding 元教训。测试 1796→1811 passed + 2 skipped（163→166 文件）。                                                                                                              | 技术委员会 |
 | 2.11.1 | 2026-08-24 | v0.57.0 发版：① graft 底部状态行解耦 ctx% + 向上回溯探测 graft 图 ② `$()` 命令替换不再 blanket 拦截（安全放行）③ MAX_TURNS 20→100 避免复杂任务空转 ④ 权限授权指引 + Esc/vim 输入体验 ⑤ 删除 vim 模式（无人使用 + 曾致 Esc 陷阱）⑥ 沉淀会话复盘三教训（误伤正则/无用功能/文案漂移）。测试 1818→1796 passed + 2 skipped（164→163 文件）。                                                                                                                                                                                                                                    | 技术委员会 |
