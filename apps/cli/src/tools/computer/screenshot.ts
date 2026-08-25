@@ -52,6 +52,12 @@ $bitmap.Dispose()
     } catch {
       // ignore cleanup failures
     }
-    return { success: false, error: `Screenshot failed: ${String(err)}` }
+    // #57: on macOS a screencapture failure is almost always missing Screen
+    // Recording permission — point the user at the fix instead of a raw error.
+    const macHint =
+      process.platform === 'darwin'
+        ? '\n(macOS: grant Screen Recording permission in System Settings → Privacy & Security → Screen Recording)'
+        : ''
+    return { success: false, error: `Screenshot failed: ${String(err)}${macHint}` }
   }
 }

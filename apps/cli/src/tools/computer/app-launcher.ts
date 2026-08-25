@@ -34,6 +34,12 @@ export function launchApp(appName: string): { success: boolean; message: string 
     }
     return { success: true, message: `Launched: ${appName}` }
   } catch (err) {
-    return { success: false, message: `Failed to launch ${appName}: ${String(err)}` }
+    // #57: on macOS an `open -a` failure is often missing Automation permission —
+    // point the user at the fix instead of a raw error.
+    const macHint =
+      process.platform === 'darwin'
+        ? ' On macOS, grant Automation permission (System Settings → Privacy & Security → Automation) if prompted.'
+        : ''
+    return { success: false, message: `Failed to launch ${appName}: ${String(err)}${macHint}` }
   }
 }
