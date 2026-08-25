@@ -1057,6 +1057,36 @@ async function runTokenCLI(): Promise<boolean> {
   process.exit(1)
 }
 
+// ── mipham init [dir] — 生成规范项目文档 (CLAUDE.md/MIPHAM.md/README.md) ──
+async function runInitCLI(): Promise<boolean> {
+  const args = process.argv.slice(2)
+  if (args[0] !== 'init') return false
+
+  const { resolve } = await import('node:path')
+  const { homedir } = await import('node:os')
+  const { scaffoldProject } = await import('../src/core/project-scaffold')
+
+  const rawTarget = args.slice(1).find((a) => !a.startsWith('--'))
+  const targetDir = rawTarget ? resolve(rawTarget.replace(/^~/, homedir())) : process.cwd()
+
+  const gitInit = !args.includes('--no-git')
+  const result = scaffoldProject(targetDir, { gitInit })
+
+  const lines: string[] = ['', `✅ Mipham Code 项目已初始化：${targetDir}`, '']
+  if (result.created.length > 0) {
+    lines.push('已创建：')
+    for (const c of result.created) lines.push(`  ✅ ${c}`)
+  }
+  if (result.skipped.length > 0) {
+    lines.push('已存在（跳过）：')
+    for (const s of result.skipped) lines.push(`  ⏭  ${s}`)
+  }
+  if (result.gitInitialized) lines.push('  ✅ git init')
+  lines.push('', '下一步：', '  1. 填写各文档中的 [占位符]', '  2. 运行 mipham 开始协作')
+  console.log(lines.join('\n'))
+  process.exit(0)
+}
+
 async function main() {
   // ── Deleted-cwd guard ──────────────────────────────────────────────────
   // `process.cwd()` throws ENOENT when the directory the process was launched
@@ -1129,6 +1159,7 @@ async function main() {
 
 Usage:
   mipham                     Launch interactive CLI
+  mipham init [dir]          Scaffold a project (CLAUDE.md/MIPHAM.md/README.md)
   mipham update              Update to the latest version
   mipham upgrade             Same as 'mipham update'
   mipham daemon <cmd>        Daemon lifecycle (start, stop, status, restart)
@@ -1182,6 +1213,10 @@ npm:  https://www.npmjs.com/package/@miphamai/cli`)
   // ── Update / upgrade ──────────────────────────────────────────────────────
   const handledUpdate = await runUpdate()
   if (handledUpdate) return
+
+  // ── Init command ─────────────────────────────────────────────────────────
+  const handledInit = await runInitCLI()
+  if (handledInit) return
 
   // ── Daemon commands ───────────────────────────────────────────────────────
   const handledDaemon = await runDaemonCLI()

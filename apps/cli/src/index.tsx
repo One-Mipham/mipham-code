@@ -305,6 +305,14 @@ export async function runApp(options: RunOptions): Promise<void> {
   const instructions = new InstructionsLoader()
   instructions.loadAll(process.cwd())
 
+  // 空目录提示：愣建文件夹时温和提醒走 mipham init，而非默默开始（寒暄克制——一句即可）
+  const { isEmptyProject } = await import('./core/project-scaffold')
+  if (isEmptyProject(process.cwd())) {
+    console.log(
+      '\n💡 空目录。运行 `mipham init` 生成规范项目文档（CLAUDE.md / MIPHAM.md / README.md），或直接开始对话。\n',
+    )
+  }
+
   // Load skills
   const skillsLoader = new SkillsLoader()
   skillsLoader.loadBuiltinFromPackage()
