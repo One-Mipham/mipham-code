@@ -38,6 +38,7 @@ import { UsageTracker } from './usage-tracker'
 import { getMetrics } from './metrics'
 import { buildRequest, sendInferenceCheck, isInferenceHookEnabled } from './inference-hook'
 import { getFileInboxTransport } from '../agent/cross-session/file-inbox'
+import { registerWakeupHandler } from '../tools/scheduling/schedule-wakeup'
 import { accumulateGraftSavings } from '../shared/graft-savings'
 import { getMessageBus, type AgentMessage } from '../agent/message-bus'
 import { createT } from '../i18n-core/t'
@@ -101,6 +102,9 @@ export class QueryEngine {
   /** 注入的 LLM chat 缝。未设置时回退 this.registry（strangler-fig）。 */
   private llm?: Llm
 
+  /** Pending /loop re-invocation prompts, enqueued by the ScheduleWakeup timer. */
+  private wakeupQueue: string[] = []
+
   constructor(
     private registry: ProviderRegistry,
     private context: ContextManager,
@@ -109,6 +113,24 @@ export class QueryEngine {
     ruleEngine?: ExperienceRuleEngine,
   ) {
     this.ruleEngine = ruleEngine
+    // ScheduleWakeup 的 timer 到期后，把 loop prompt 交回本引擎 re-invoke。
+    registerWakeupHandler((_sessionId, prompt) => this.enqueueWakeup(prompt))
+  }
+
+  /** Enqueue a loop prompt for later re-invocation (keep-latest — drops older wakeups). */
+  enqueueWakeup(prompt: string): void {
+    // 队列只保留最新（丢弃旧唤醒，防堆积）
+    this.wakeupQueue = [prompt]
+  }
+
+  /** Pop the next pending wakeup prompt, or null when the queue is empty. */
+  dequeueWakeup(): string | null {
+    return this.wakeupQueue.shift() ?? null
+  }
+
+  /** Whether a wakeup prompt is pending re-invocation. */
+  hasPendingWakeup(): boolean {
+    return this.wakeupQueue.length > 0
   }
 
   /** Session identifier for cross-session messaging. Set by the app startup via setSessionId(). */
