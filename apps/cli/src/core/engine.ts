@@ -103,7 +103,7 @@ export class QueryEngine {
   private llm?: Llm
 
   /** Pending /loop re-invocation prompts, enqueued by the ScheduleWakeup timer. */
-  private wakeupQueue: string[] = []
+  private wakeupQueue: Array<{ prompt: string; noop: boolean }> = []
 
   constructor(
     private registry: ProviderRegistry,
@@ -114,17 +114,17 @@ export class QueryEngine {
   ) {
     this.ruleEngine = ruleEngine
     // ScheduleWakeup 的 timer 到期后，把 loop prompt 交回本引擎 re-invoke。
-    registerWakeupHandler((_sessionId, prompt) => this.enqueueWakeup(prompt))
+    registerWakeupHandler((_sessionId, prompt, noop) => this.enqueueWakeup(prompt, noop))
   }
 
   /** Enqueue a loop prompt for later re-invocation (keep-latest — drops older wakeups). */
-  enqueueWakeup(prompt: string): void {
+  enqueueWakeup(prompt: string, noop = false): void {
     // 队列只保留最新（丢弃旧唤醒，防堆积）
-    this.wakeupQueue = [prompt]
+    this.wakeupQueue = [{ prompt, noop }]
   }
 
   /** Pop the next pending wakeup prompt, or null when the queue is empty. */
-  dequeueWakeup(): string | null {
+  dequeueWakeup(): { prompt: string; noop: boolean } | null {
     return this.wakeupQueue.shift() ?? null
   }
 

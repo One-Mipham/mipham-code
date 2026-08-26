@@ -19,7 +19,7 @@ describe('ScheduleWakeup re-invocation', () => {
     expect(handler).not.toHaveBeenCalled()
 
     vi.advanceTimersByTime(60_000)
-    expect(handler).toHaveBeenCalledWith('sess-1', 'loop-1')
+    expect(handler).toHaveBeenCalledWith('sess-1', 'loop-1', false)
   })
 
   it('does not call handler after stop:true cancels the timer', async () => {

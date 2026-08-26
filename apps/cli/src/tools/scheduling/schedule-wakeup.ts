@@ -6,10 +6,12 @@ import type { ToolDefinition } from '../../shared/index.ts'
  */
 const activeTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
-let wakeupHandler: ((sessionId: string, prompt: string) => void) | null = null
+let wakeupHandler: ((sessionId: string, prompt: string, noop?: boolean) => void) | null = null
 
 /** 引擎在启动时注入——timer 到期后回调，把 loop prompt 交回引擎 re-invoke。 */
-export function registerWakeupHandler(fn: (sessionId: string, prompt: string) => void): void {
+export function registerWakeupHandler(
+  fn: (sessionId: string, prompt: string, noop?: boolean) => void,
+): void {
   wakeupHandler = fn
 }
 
@@ -38,6 +40,10 @@ export const scheduleWakeupTool: ToolDefinition = {
         type: 'boolean',
         description: 'Set to true to end the dynamic loop immediately.',
       },
+      noop: {
+        type: 'boolean',
+        description: 'true = 本轮无事可报（仅用于 UI 折叠空闲提示，不改变 re-invoke 语义）',
+      },
     },
     required: [],
   },
@@ -65,6 +71,7 @@ export const scheduleWakeupTool: ToolDefinition = {
     const delaySeconds = params.delaySeconds as number
     const prompt = (params.prompt as string) || ''
     const reason = (params.reason as string) || 'scheduled wakeup'
+    const noop = params.noop === true
 
     if (!delaySeconds || typeof delaySeconds !== 'number') {
       return {
@@ -93,7 +100,7 @@ export const scheduleWakeupTool: ToolDefinition = {
     const timerKey = `${sessionId}:wakeup`
     const timeoutId = setTimeout(() => {
       activeTimers.delete(timerKey)
-      wakeupHandler?.(sessionId, prompt)
+      wakeupHandler?.(sessionId, prompt, noop)
     }, delaySeconds * 1000)
 
     activeTimers.set(timerKey, timeoutId)

@@ -58,7 +58,7 @@ describe('QueryEngine — wakeup queue', () => {
     engine.enqueueWakeup('loop-prompt-A')
     engine.enqueueWakeup('loop-prompt-B') // A 被丢弃（只保留最新，spec §七）
     expect(engine.hasPendingWakeup()).toBe(true)
-    expect(engine.dequeueWakeup()).toBe('loop-prompt-B')
+    expect(engine.dequeueWakeup()?.prompt).toBe('loop-prompt-B')
     expect(engine.dequeueWakeup()).toBeNull()
   })
 
@@ -67,7 +67,7 @@ describe('QueryEngine — wakeup queue', () => {
     engine.enqueueWakeup('first')
     engine.enqueueWakeup('second')
     engine.enqueueWakeup('third')
-    expect(engine.dequeueWakeup()).toBe('third')
+    expect(engine.dequeueWakeup()?.prompt).toBe('third')
     expect(engine.hasPendingWakeup()).toBe(false)
   })
 
@@ -87,7 +87,7 @@ describe('QueryEngine — wakeup queue', () => {
     vi.advanceTimersByTime(60 * 1000)
 
     expect(engine.hasPendingWakeup()).toBe(true)
-    expect(engine.dequeueWakeup()).toBe('loop-prompt-timer')
+    expect(engine.dequeueWakeup()?.prompt).toBe('loop-prompt-timer')
     expect(engine.hasPendingWakeup()).toBe(false)
   })
 })

@@ -28,11 +28,11 @@ it('fixed-interval /loop re-invokes across two wakeups', async () => {
   expect(engine.hasPendingWakeup()).toBe(false) // timer not yet fired
   vi.advanceTimersByTime(60_000)
   expect(engine.hasPendingWakeup()).toBe(true)
-  expect(engine.dequeueWakeup()).toBe('poll')
+  expect(engine.dequeueWakeup()?.prompt).toBe('poll')
   expect(engine.hasPendingWakeup()).toBe(false)
 
   // Round 2: after draining, the next turn schedules again -> second wakeup re-enqueues
   await scheduleWakeupTool.execute({ delaySeconds: 60, prompt: 'poll-2', reason: 'test' }, ctx)
   vi.advanceTimersByTime(60_000)
-  expect(engine.dequeueWakeup()).toBe('poll-2')
+  expect(engine.dequeueWakeup()?.prompt).toBe('poll-2')
 })

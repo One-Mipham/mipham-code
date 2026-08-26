@@ -24,6 +24,7 @@ import { InputBar } from './input'
 import { ModelPicker } from './picker'
 import { AgentFooter, type AgentEntry } from './agent-footer'
 import { GraftStatusLine } from './graft-status'
+import { collapseNoopTicks } from './loop-noop'
 
 /** Current context-window usage % — undefined when unknown (remote stub). */
 function contextUsagePct(engine: QueryEngine | RemoteEngine): number | undefined {
@@ -183,6 +184,8 @@ export function App({
   // Monotonic turn id — lets a stale turn's finally() skip resetting shared UI
   // state (isLoading/abortRef/progress) after a newer turn has already started.
   const turnIdRef = useRef(0)
+  // Consecutive /loop noop wakeup count — used to fold repeated idle turns (#53).
+  const noopStreakRef = useRef(0)
   // Stream buffer: accumulate text chunks and throttle state updates to ~16fps.
   // Without this, every SSE chunk triggers setMessages → copies full array →
   // re-renders ChatPanel → re-runs compactToolGroups O(n). At 20-50 chunks/sec
@@ -346,7 +349,7 @@ export function App({
   // supplied by user turns (already stored in abortRef); loop turns pass none and runTurn
   // creates one so Escape/abort still works mid-loop-turn.
   const runTurn = useCallback(
-    async (input: string, source: 'user' | 'loop', controller?: AbortController) => {
+    async (input: string, source: 'user' | 'loop', controller?: AbortController, noop = false) => {
       void source // reserved for future user-vs-loop divergence; both paths share this body
       const turnId = ++turnIdRef.current
       const loopStartTokens =
@@ -355,6 +358,30 @@ export function App({
           : 0
       const ctrl = controller ?? new AbortController()
       if (!controller) abortRef.current = ctrl
+
+      // ── /loop idle folding (#53) ──
+      // Count consecutive noop wakeups; any non-noop loop turn or user turn resets.
+      if (source === 'loop' && noop) {
+        noopStreakRef.current++
+      } else {
+        noopStreakRef.current = 0
+      }
+      // The first noop tick renders normally; the 2nd+ fold into one idle line.
+      const foldIdle = source === 'loop' && noop && noopStreakRef.current >= 2
+      if (foldIdle) {
+        const ticks = Array.from({ length: noopStreakRef.current }, () => ({ noop: true }))
+        const folded = collapseNoopTicks(ticks)
+        setMessages((prev) => {
+          const updated = [...prev]
+          const last = updated[updated.length - 1]
+          if (last?.role === 'system' && last.content.startsWith('💤 idle ×')) {
+            last.content = folded
+          } else {
+            updated.push({ role: 'system', content: folded })
+          }
+          return updated
+        })
+      }
 
       let assistantContent = ''
       // Track whether we've started a new assistant turn — reset accumulator per turn
@@ -385,6 +412,7 @@ export function App({
           // Reasoning content (DeepSeek V4 thinking mode) — surface as a live
           // "thinking" indicator so long reasoning passes don't look like a stall.
           if (chunk.reasoning_content) {
+            if (foldIdle) continue // folded idle turns never surface reasoning
             thinkingRef.current += chunk.reasoning_content
             if (!thinkingTimerRef.current) {
               thinkingTimerRef.current = setTimeout(() => {
@@ -396,6 +424,8 @@ export function App({
           }
 
           if (chunk.type === 'text' && chunk.content) {
+            assistantContent += chunk.content
+            if (foldIdle) continue // suppress per-turn idle output; folded line already shown
             // New turn: push fresh assistant message, reset stream buffer
             if (isNewTurn) {
               // Flush any accumulated reasoning as a collapsed history line
@@ -439,7 +469,6 @@ export function App({
                 }, 60)
               }
             }
-            assistantContent += chunk.content
           }
 
           if (chunk.type === 'tool_use' && chunk.toolUse) {
@@ -636,7 +665,7 @@ export function App({
     // RemoteEngine (remote attach mode) has no wakeup queue — /loop is CLI-local.
     if (!('hasPendingWakeup' in engine)) return
     const next = engine.hasPendingWakeup() ? engine.dequeueWakeup() : null
-    if (next) await runTurn(next, 'loop')
+    if (next) await runTurn(next.prompt, 'loop', undefined, next.noop)
   }
 
   const handleSubmit = useCallback(
