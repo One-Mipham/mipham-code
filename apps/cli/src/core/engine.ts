@@ -105,6 +105,9 @@ export class QueryEngine {
   /** Pending /loop re-invocation prompts, enqueued by the ScheduleWakeup timer. */
   private wakeupQueue: Array<{ prompt: string; noop: boolean }> = []
 
+  /** Callback fired whenever a wakeup is enqueued (the ScheduleWakeup timer fired). */
+  private onWakeupEnqueued: (() => void) | null = null
+
   constructor(
     private registry: ProviderRegistry,
     private context: ContextManager,
@@ -121,6 +124,18 @@ export class QueryEngine {
   enqueueWakeup(prompt: string, noop = false): void {
     // 队列只保留最新（丢弃旧唤醒，防堆积）
     this.wakeupQueue = [{ prompt, noop }]
+    this.onWakeupEnqueued?.()
+  }
+
+  /** Register a callback fired whenever a wakeup is enqueued (the ScheduleWakeup
+   *  timer fired). The app subscribes to drain the queue while idle. */
+  setOnWakeupEnqueued(cb: (() => void) | null): void {
+    this.onWakeupEnqueued = cb
+  }
+
+  /** Empty the wakeup queue (stops re-invocation at the max-iteration guard). */
+  clearWakeupQueue(): void {
+    this.wakeupQueue = []
   }
 
   /** Pop the next pending wakeup prompt, or null when the queue is empty. */

@@ -51,6 +51,7 @@ import { useI18n } from '../i18n-context'
 import type { PermissionMode } from '../shared/index.ts'
 import { sanitizeForDisplay } from '../shared/sanitize.ts'
 import { recordLoopTurn, readAutoloopJournal } from '../commands/autoloop-journal.js'
+import { cancelAllSessionTimers } from '../tools/scheduling/schedule-wakeup.js'
 
 interface AppProps {
   engine: QueryEngine | RemoteEngine
@@ -163,6 +164,10 @@ export function App({
   )
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  /** Idle-drain tick — bumped by the engine's onEnqueue callback whenever the
+   *  ScheduleWakeup timer fires while the engine is idle. Drives the idle-drain
+   *  effect so a queued /loop wakeup re-invokes without waiting for user input. */
+  const [wakeupTick, setWakeupTick] = useState(0)
   const [providerId, setProviderId] = useState(initialProvider || config.defaultProvider)
   const [modelId, setModelId] = useState(initialModel || config.defaultModel)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -352,6 +357,10 @@ export function App({
     async (input: string, source: 'user' | 'loop', controller?: AbortController, noop = false) => {
       void source // reserved for future user-vs-loop divergence; both paths share this body
       const turnId = ++turnIdRef.current
+      // Loop turns set loading state here (user turns already do it in handleSubmit;
+      // the duplicate is idempotent). Without this, the idle-drain effect can't tell
+      // a loop turn is running and would drain the queue mid-turn.
+      setIsLoading(true)
       const loopStartTokens =
         source === 'loop' && 'hasPendingWakeup' in engine
           ? engine.getUsageTracker().totalApiTokens
@@ -645,6 +654,14 @@ export function App({
         if (journal && journal.status === 'active') {
           const delta = engine.getUsageTracker().totalApiTokens - loopStartTokens
           recordLoopTurn(input, assistantContent.slice(0, 200), delta)
+          // max-iteration guard: recordLoopTurn flips the journal to 'stopped' when
+          // iterations hit maxIterations. Stop re-invocation so the loop doesn't wake
+          // again after hitting the cap.
+          const after = readAutoloopJournal(input)
+          if (after && after.status !== 'active') {
+            if (sessionId) cancelAllSessionTimers(sessionId)
+            engine.clearWakeupQueue()
+          }
         }
       }
 
@@ -667,6 +684,27 @@ export function App({
     const next = engine.hasPendingWakeup() ? engine.dequeueWakeup() : null
     if (next) await runTurn(next.prompt, 'loop', undefined, next.noop)
   }
+
+  // ── /loop idle-drain trigger ──
+  // The ScheduleWakeup timer fires 60–3600s after the turn that scheduled it, while
+  // the engine is idle. At that moment enqueueWakeup only mutates the queue (no React
+  // state change, no poller), so the queue would sit undrained forever. Subscribe the
+  // engine's onEnqueue callback to a state bump; the idle-drain effect below then
+  // drains the queue and re-invokes runTurn.
+  useEffect(() => {
+    if (!('setOnWakeupEnqueued' in engine)) return
+    const qe = engine // narrow to QueryEngine for the cleanup closure
+    qe.setOnWakeupEnqueued(() => setWakeupTick((t) => t + 1))
+    return () => qe.setOnWakeupEnqueued(null)
+  }, [engine])
+
+  // When a wakeup is enqueued and the engine is idle, drain it now (the running turn's
+  // end-drain handles the busy case). `wakeupTick === 0` skips the mount-time run.
+  useEffect(() => {
+    if (wakeupTick === 0) return
+    if (isLoading) return
+    drainLoopQueueRef.current?.(turnIdRef.current)
+  }, [wakeupTick, isLoading])
 
   const handleSubmit = useCallback(
     async (input: string) => {

@@ -90,4 +90,20 @@ describe('QueryEngine — wakeup queue', () => {
     expect(engine.dequeueWakeup()?.prompt).toBe('loop-prompt-timer')
     expect(engine.hasPendingWakeup()).toBe(false)
   })
+
+  it('enqueueWakeup invokes the registered onWakeupEnqueued callback', () => {
+    const engine = makeTestEngine()
+    const fn = vi.fn()
+    engine.setOnWakeupEnqueued(fn)
+    engine.enqueueWakeup('loop-prompt')
+    expect(fn).toHaveBeenCalledTimes(1)
+  })
+
+  it('clearWakeupQueue empties the pending wakeup queue', () => {
+    const engine = makeTestEngine()
+    engine.enqueueWakeup('loop-prompt')
+    expect(engine.hasPendingWakeup()).toBe(true)
+    engine.clearWakeupQueue()
+    expect(engine.hasPendingWakeup()).toBe(false)
+  })
 })
