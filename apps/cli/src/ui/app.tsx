@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { Box, Text, useInput } from 'ink'
 import TextInput from 'ink-text-input'
 import { ErrorBoundary } from './error-boundary'
+import { formatThinking } from './thinking'
 import type { QueryEngine } from '../core/engine'
 import type { RemoteEngine } from '../daemon/remote-engine'
 import type { MiphamConfig } from '../shared/index.ts'
@@ -902,7 +903,14 @@ export function App({
           <>
             {/* Chat panel */}
             <ChatPanel messages={messages} focusMode={focusMode} />
-            {thinkingText ? <Text dimColor>💭 {thinkingText.slice(-200)}</Text> : null}
+            {(() => {
+              const indicator = formatThinking(
+                config.showThinking ?? 'minimal',
+                thinkingText,
+                t('ui.loading.thinking'),
+              )
+              return indicator ? <Text dimColor>{indicator}</Text> : null
+            })()}
 
             {/* Input with separator lines */}
             {pickerOpen ? (

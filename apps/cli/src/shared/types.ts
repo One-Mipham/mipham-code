@@ -135,6 +135,13 @@ export interface MiphamConfig {
   permissionRestrictions?: PermissionRestrictions
   /** User-defined permission rules (allow/deny patterns), wired into the runtime PermissionSystem. */
   permissionRules?: { allow?: string[]; deny?: string[] }
+  /**
+   * How to render the model's reasoning/thinking before the answer:
+   * - `off`     → hide entirely
+   * - `minimal` → content-free "thinking…" indicator (default)
+   * - `full`    → last 200 chars of the actual thinking text
+   */
+  showThinking?: 'off' | 'minimal' | 'full'
   providers: ProviderConfig[]
   skills?: { paths: string[]; mcpServers: McpServerConfig[] }
   marketplace?: {

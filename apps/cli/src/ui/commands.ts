@@ -545,6 +545,7 @@ const configCmd: CommandHandler = (ctx) => {
     `defaultProvider:  ${c.defaultProvider}`,
     `defaultModel:     ${c.defaultModel}`,
     `permission:       ${c.permission}`,
+    `showThinking:     ${c.showThinking ?? 'minimal'}`,
     `providers:        ${c.providers.length} configured`,
     '',
     `crossSessionInbound: ${xs.crossSessionInbound}`,
