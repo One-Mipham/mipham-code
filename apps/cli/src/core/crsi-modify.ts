@@ -13,7 +13,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { CrsiSandbox } from './crsi-sandbox'
+import { CrsiSandbox, validateBlastRadius } from './crsi-sandbox'
 import type { CrsiModificationResult } from './crsi-sandbox'
 import { runEval, appendEvalScore, getLastEvalScore } from './eval-harness'
 
@@ -28,6 +28,13 @@ export interface CrsiProposal {
   originalContent?: string
   /** 触发此改动的 CRSI insight id */
   crsiInsightId?: string
+  /**
+   * 完整覆盖（blast radius）：此改动触及的**所有**代码路径（文件列表）。
+   *
+   * 源于 2026-08-26 教训：修「思考转储」只接实时指示器、漏历史行冲刷路径——
+   * 局部正确、全局遗漏。自修改前必须摸清并声明全部受影响路径，否则 fail-closed 拒绝。
+   */
+  blastRadius?: string[]
 }
 
 // ── Pending proposal registry (两阶段闸门) ──
@@ -42,6 +49,25 @@ export function runCrsiModification(
   proposal: CrsiProposal,
   sandbox: CrsiSandbox = new CrsiSandbox(),
 ): CrsiModificationResult {
+  // 完整覆盖闸：自修改必须声明 blastRadius，否则 fail-closed（在 worktree 之前，零副作用）。
+  const blastRadiusError = validateBlastRadius(proposal)
+  if (blastRadiusError) {
+    return {
+      modification: {
+        id: 'crsi-mod-rejected-blast-radius',
+        description: proposal.description,
+        filePath: proposal.filePath,
+        newContent: proposal.newContent,
+        originalContent: proposal.originalContent ?? '',
+        crsiInsightId: proposal.crsiInsightId,
+        timestamp: new Date().toISOString(),
+      },
+      applied: false,
+      phase: 'failed',
+      error: blastRadiusError,
+    }
+  }
+
   sandbox.createWorktree()
 
   const applied = sandbox.applyModification({

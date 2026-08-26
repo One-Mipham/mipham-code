@@ -127,7 +127,13 @@ export function produceCrsiProposal(
   metaRules: MetaRule[],
   currentLessons: string,
   timestamp: string,
-): { description: string; filePath: string; newContent: string; originalContent: string } | null {
+): {
+  description: string
+  filePath: string
+  newContent: string
+  originalContent: string
+  blastRadius: string[]
+} | null {
   const signal = selectCrsiSignal(insights, metaRules)
   if (!signal) return null
 
@@ -142,6 +148,7 @@ export function produceCrsiProposal(
     filePath: LESSONS_FILE,
     newContent,
     originalContent: currentLessons,
+    blastRadius: [LESSONS_FILE],
   }
 }
 
@@ -215,7 +222,13 @@ export function renderManagedRuleSource(signal: CrsiSignal): string | null {
 export function produceRuleProposal(
   signal: CrsiSignal,
   currentManagedRules: string,
-): { description: string; filePath: string; newContent: string; originalContent: string } | null {
+): {
+  description: string
+  filePath: string
+  newContent: string
+  originalContent: string
+  blastRadius: string[]
+} | null {
   const ruleSource = renderManagedRuleSource(signal)
   if (!ruleSource) return null
 
@@ -232,6 +245,7 @@ export function produceRuleProposal(
     filePath: MANAGED_RULES_FILE,
     newContent,
     originalContent: currentManagedRules,
+    blastRadius: [MANAGED_RULES_FILE],
   }
 }
 

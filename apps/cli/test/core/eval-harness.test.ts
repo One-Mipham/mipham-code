@@ -21,8 +21,8 @@ beforeEach(() => {
 describe('runEval', () => {
   it('reports a full score after managed rules fill the behavior gaps', () => {
     const report = runEval()
-    expect(report.total).toBe(31)
-    expect(report.passed).toBe(31)
+    expect(report.total).toBe(32)
+    expect(report.passed).toBe(32)
     expect(report.score).toBe(100)
     // 8 个行为缺口全部翻转 PASS（固化 managed tool-params 规则后），无任何 FAIL
     expect(report.failures).toHaveLength(0)
@@ -31,6 +31,7 @@ describe('runEval', () => {
     expect(ids).toContain('rule-timeout')
     expect(ids).toContain('producer-rule-shape')
     expect(ids).toContain('red-team-zero-gaps')
+    expect(ids).toContain('blast-radius-gate')
   })
 
   it('covers all four CRSI contract dimensions', () => {

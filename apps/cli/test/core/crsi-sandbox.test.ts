@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { CrsiSandbox } from '../../src/core/crsi-sandbox'
+import { CrsiSandbox, validateBlastRadius } from '../../src/core/crsi-sandbox'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
@@ -20,6 +20,20 @@ vi.mock('node:os', async (importOriginal) => {
 // We read original content from CWD-relative paths: README.md = apps/cli/README.md.
 const WORKTREE_FILE = 'apps/cli/README.md'
 const CWD_FILE = 'README.md'
+
+describe('validateBlastRadius (完整覆盖闸)', () => {
+  it('rejects a missing blast radius', () => {
+    expect(validateBlastRadius({ blastRadius: undefined })).toBeTruthy()
+  })
+
+  it('rejects an empty blast radius', () => {
+    expect(validateBlastRadius({ blastRadius: [] })).toBeTruthy()
+  })
+
+  it('accepts a non-empty blast radius', () => {
+    expect(validateBlastRadius({ blastRadius: ['a.ts', 'b.ts'] })).toBeNull()
+  })
+})
 
 describe('CrsiSandbox', () => {
   let sandbox: CrsiSandbox

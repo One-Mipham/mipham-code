@@ -122,6 +122,24 @@ export function isProtectedPath(filePath: string): boolean {
   return PROTECTED_PATHS.some((p) => filePath === p || filePath.startsWith(p))
 }
 
+/**
+ * 完整覆盖闸（blast radius）：自修改 proposal 必须声明非空 blastRadius，否则拒绝。
+ *
+ * 源于 2026-08-26 教训：修「思考转储」只接实时指示器、漏历史行冲刷路径——
+ * 局部正确、全局遗漏。自修改前必须摸清并声明全部受影响路径，fail-closed。
+ *
+ * 返回错误字符串（拒绝理由），合法时返回 null。
+ */
+export function validateBlastRadius(proposal: { blastRadius?: string[] }): string | null {
+  if (!proposal.blastRadius || proposal.blastRadius.length === 0) {
+    return (
+      'blast radius 未声明：自修改必须枚举触及的全部代码路径。' +
+      '教训：两条渲染路径只接一条 = 局部正确全局遗漏。'
+    )
+  }
+  return null
+}
+
 // ── Sandbox ──
 
 export class CrsiSandbox {

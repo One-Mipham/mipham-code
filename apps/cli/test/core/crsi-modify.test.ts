@@ -36,7 +36,12 @@ describe('runCrsiModification', () => {
   it('rejects protected paths without running tests', () => {
     const sandbox = new CrsiSandbox()
     const result = runCrsiModification(
-      { description: 'blocked', filePath: 'apps/cli/test/foo.test.ts', newContent: '{}' },
+      {
+        description: 'blocked',
+        filePath: 'apps/cli/test/foo.test.ts',
+        newContent: '{}',
+        blastRadius: ['apps/cli/test/foo.test.ts'],
+      },
       sandbox,
     )
     expect(result.phase).toBe('failed')
@@ -53,7 +58,12 @@ describe('runCrsiModification', () => {
       output: '',
     })
     const result = runCrsiModification(
-      { description: 'safe change', filePath: WORKTREE_FILE, newContent: 'crsi-modify-test\n' },
+      {
+        description: 'safe change',
+        filePath: WORKTREE_FILE,
+        newContent: 'crsi-modify-test\n',
+        blastRadius: [WORKTREE_FILE],
+      },
       sandbox,
     )
     expect(result.phase).toBe('passed')
@@ -70,10 +80,26 @@ describe('runCrsiModification', () => {
       output: '',
     })
     const result = runCrsiModification(
-      { description: 'failing', filePath: WORKTREE_FILE, newContent: '{}' },
+      {
+        description: 'failing',
+        filePath: WORKTREE_FILE,
+        newContent: '{}',
+        blastRadius: [WORKTREE_FILE],
+      },
       sandbox,
     )
     expect(result.phase).toBe('failed')
+    expect(hasPending()).toBe(false)
+  })
+
+  it('rejects a proposal without declared blast radius (完整覆盖闸)', () => {
+    const sandbox = new CrsiSandbox()
+    const result = runCrsiModification(
+      { description: 'no blast radius', filePath: WORKTREE_FILE, newContent: '{}' },
+      sandbox,
+    )
+    expect(result.phase).toBe('failed')
+    expect(result.error).toContain('blast radius')
     expect(hasPending()).toBe(false)
   })
 })
@@ -93,7 +119,12 @@ describe('pending registry', () => {
       output: '',
     })
     runCrsiModification(
-      { description: 'pending', filePath: WORKTREE_FILE, newContent: 'pending-test\n' },
+      {
+        description: 'pending',
+        filePath: WORKTREE_FILE,
+        newContent: 'pending-test\n',
+        blastRadius: [WORKTREE_FILE],
+      },
       sandbox,
     )
     expect(hasPending()).toBe(true)
