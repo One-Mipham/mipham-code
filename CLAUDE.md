@@ -10,8 +10,8 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.17.0
-> **最后更新**: 2026-08-26 — CRSI 完整覆盖闸（blast-radius 预检 fail-closed：自修改 proposal 必须声明触及的全部代码路径）+ 测试数对齐 1859
+> **版本**: 2.18.0
+> **最后更新**: 2026-08-26 — AGENTS.md 兼容 + git 根→cwd 递归指令加载（三格式并存：AGENTS.md / CLAUDE.md / MIPHAM.md，就近优先）+ 测试数对齐 1865
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -49,7 +49,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **eval harness** `/crsi eval` — `core/eval-harness.ts` 冻结 21 条 ground-truth 契约（13 机制：规则/宪法/沙箱边界/完整覆盖闸/红队/producer 行为 + 8 行为缺口）+ rewards 日志 `~/.mipham/crsi/eval-scores.jsonl`，`runCrsiModification` 以「分数不退化」为第二道闸。8 行为缺口（rm -rf/管道投毒/git reset --hard/chmod 777/mkfs/dd→/dev//关停主机/crontab -r）已由固化 managed tool-params 规则覆盖 → 全翻转 PASS → 满分 100 =「证明更好」
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：1,859 测试（1857 passed + 2 skipped）
+测试：1,865 测试（1863 passed + 2 skipped）
 
 ---
 
@@ -86,7 +86,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 26 个内置技能（20 standard + 6 mipham）
-│   │   ├── test/               # 174 个测试文件，1859 个测试
+│   │   ├── test/               # 174 个测试文件，1865 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -109,7 +109,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（1859 个测试）
+pnpm test         # vitest run（1865 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -183,7 +183,7 @@ pnpm format       # Prettier
 - `context.ts` — 上下文管理（系统提示、历史压缩）
 - `permission.ts` — 权限控制（6 级：default/acceptEdits/plan/auto/dontAsk/bypassPermissions；`permissionRestrictions`（forbiddenModes/maxAllowedMode）org 级强制降级，请求被禁模式时 fail-closed）
 - `hooks.ts` — 生命周期钩子（13 种事件，含 SubagentStart/Stop/PostToolUseFailure）
-- `instructions.ts` — 指令加载链（Rismed_Ronxin → One_Mipham → mipham-code）
+- `instructions.ts` — 指令加载链（集团/公司/用户层 + git 根→cwd 递归项目层；逐目录读 AGENTS.md / AGENTS.override.md / CLAUDE.md / MIPHAM.md 三格式，就近优先、读全部不丢弃）
 - `rules-loader.ts` — 路径作用域规则（.mipham/rules/\*.md → glob 匹配 → 自动注入）
 
 ### Vajra-Hṛdaya 内核（自建服务内核）
@@ -233,7 +233,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
 | E2E      | 1       | 8        | full-pipeline                                 |
 | Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **174** | **1859** | **0 失败** ✅（1857 passed + 2 skipped）      |
+| **合计** | **174** | **1865** | **0 失败** ✅（1863 passed + 2 skipped）      |
 
 > 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
 
@@ -421,6 +421,7 @@ mipham-code 变更（包名/版本）
 
 | 版本   | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | 维护人     |
 | ------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| 2.18.0 | 2026-08-26 | AGENTS.md 兼容 + 递归指令加载（Phase 1+2）：① `InstructionsLoader.loadAll` 升级为「git 根 → cwd 递归 + 就近优先」，逐目录读 `AGENTS.md` / `AGENTS.override.md` / `CLAUDE.md` / `MIPHAM.md` 三格式并存（读全部不丢弃，MIPHAM→CLAUDE 相对序不变，仅前置 AGENTS 两条）② 集团/公司/用户层锚定 `gitRoot`（修子目录启动的相对路径漂移）③ 提取 `gitRoot` / `discoverDirectories` 纯函数 + `INSTRUCTION_FILENAMES` 常量，`loadCrsiLessons(root)` 收口。测试 1859→1865（1863 passed + 2 skipped，174 文件）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | 技术委员会 |
 | 2.17.0 | 2026-08-26 | CRSI 完整覆盖闸（blast-radius 预检 fail-closed）：把「两条渲染路径只接一条 = 局部正确全局遗漏」教训固化进自修改机制。① `CrsiProposal` 加 `blastRadius` 字段 + `validateBlastRadius` 纯函数（归位 `crsi-sandbox.ts`，与 `isProtectedPath` 同层闸）② `runCrsiModification` 入口 fail-closed 拦截（未声明/空 blast radius 拒绝，worktree 之前零副作用）③ producer 两路径（教训文件/受管理规则）产出补 blastRadius 声明 ④ eval-harness 加 `blast-radius-gate` 契约（12→13 机制，契约 20→21 条）。测试 1855→1859（1857 passed + 2 skipped，174 文件）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | 技术委员会 |
 | 2.16.0 | 2026-08-26 | v0.60.1 发版 — 干净输出开箱默认：① 思考大段转储修复（历史行冲刷路径尊重 showThinking，off/minimal/full）② 解耦开关（showCommandPicker 禁 `/` 选择器自动弹窗、showSchedulingNotices 静默 ⏰ Wakeup 通知，撤销 showSystemMessages 一刀切）③ 干净输出改为默认（thinking off / 调度通知 & 选择器关；Bash 工具活动/错误/命令输出始终保留）④ 回归测试锁定默认值（`test/config/defaults.test.ts`）⑤ 斜杠选择器内联参数修复（`/loop 60s echo hello` 不再「没有匹配」）。测试 1840→1855（1853 passed + 2 skipped，174 文件）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | 技术委员会 |
 | 2.15.0 | 2026-08-26 | /loop 唤醒全环（半环→全环，8 tasks + 1 fix）：① **Phase 1 真 re-invoke** — `registerWakeupHandler`（schedule-wakeup）+ engine 唤醒队列（`enqueueWakeup`/`dequeueWakeup`/`hasPendingWakeup`）+ app.tsx 抽 `runTurn` + turn 结束 drain + **idle-drain 触发器**（`onWakeupEnqueued`→state bump→useEffect，修最终审查抓的「timer 空闲触发后队列无人 drain」核心缺口） ② **Phase 2 token 记账** — journal `startTokens`/`totalTokens`/`maxIterations` + `recordLoopTokens`/`recordLoopTurn`，`/loop` 快照 startTokens，loop turn 结束自动 logAutoloopIteration + maxIteration 护栏真停 re-invoke ③ **Phase 3** — `/usage` Loops 段（`formatLoopRows`，#1）+ ScheduleWakeup `noop` 参数 + `collapseNoopTicks` 连续空闲折叠（#53）。测试 1821→1840（1838 passed + 2 skipped，171 文件）。                                                                                                                                                                                                                                 | 技术委员会 |
