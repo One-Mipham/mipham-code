@@ -68,3 +68,15 @@
 - 高中课标（20 科）PDF 抽取脚本 2026-08-25 一次性放 /tmp、未入库，事后连同 pdftotext 依赖一起丢失，无法复现抽取
 - 义务教育课标（16 科，1829 页图片型 PDF）2026-08-26 被迫从零重建抽取工具：装 pymupdf + pyobjc-Vision、重写 OCR 脚本、排查「无文本层需 OCR」
 - 修复：本次把 `extract_pdf_ocr.py` + `extract_dir_ocr.py` 固化进 `backend/scripts/` 并提交，杜绝二次丢失
+
+## research: 调研判断必须先读自身代码库再下结论
+
+- 建议: 对外部项目做「可借鉴点」分析时，声称「我们缺 X」之前必须先读自己的代码库验证是否真的缺。未经验证的判断写进交付报告，等于制造 doc-drift——把「我猜的」当「事实」给用户。
+- 严重度: warning
+- 生成时间: 2026-08-26
+- 来源: 会话复盘（human + Claude Code，手动沉淀）
+
+### 证据
+
+- 本次调研 A 项「启动 digest 回读」：报告称「CRSI 缺启动 digest 回读，值得补」，实际 `instructions.ts` 已实现（loadCrsiLessons + buildCrsiLessonsBlock + crsi-lessons-recall.test.ts 6 个测试）
+- 同一会话第二次：默认「/crsi propose 适用」却没读 selectCrsiSignal 的 autoApplicable 过滤（仅 timeout/tool-params），直到读码才发现不匹配
