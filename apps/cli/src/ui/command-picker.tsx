@@ -3,6 +3,7 @@ import { Box, Text, useInput } from 'ink'
 import TextInput from 'ink-text-input'
 import { useI18n } from '../i18n-context'
 import { getCommandList } from './commands.js'
+import { commandToken, hasInlineArgs } from './command-token.js'
 
 interface CommandPickerProps {
   /** Text already typed (e.g. "/", "/age") — used as initial filter */
@@ -60,9 +61,10 @@ export function CommandPicker({
   const [filter, setFilter] = useState(initialFilter)
   const [cursorIdx, setCursorIdx] = useState(0)
 
-  // Filter commands based on user input
+  // Filter commands based on user input (match on the command-name token, not the
+  // full line — so "/loop 60s echo hello" still matches "/loop").
   const filtered = useMemo(() => {
-    const q = filter.startsWith('/') ? filter.slice(1).toLowerCase() : filter.toLowerCase()
+    const q = commandToken(filter)
     if (!q) return allCommands
     return allCommands.filter(
       (cmd) => cmd.name.toLowerCase().includes(q) || cmd.description.toLowerCase().includes(q),
@@ -86,6 +88,19 @@ export function CommandPicker({
   const safeCursor = (i: number) =>
     filtered.length === 0 ? 0 : ((i % filtered.length) + filtered.length) % filtered.length
 
+  // Submit the selection: if the filter has inline args (e.g. "/loop 60s echo hello"),
+  // submit the full line so the args reach the command handler; otherwise submit the
+  // highlighted command name.
+  const submitSelection = () => {
+    const trimmed = filter.trim()
+    if (hasInlineArgs(trimmed)) {
+      onSelect(trimmed)
+      return
+    }
+    const selected = filtered[cursorIdx]
+    if (selected) onSelect(selected.name)
+  }
+
   useInput((_input, key) => {
     if (key.escape) {
       onClose()
@@ -93,10 +108,7 @@ export function CommandPicker({
     }
 
     if (key.return) {
-      const selected = filtered[cursorIdx]
-      if (selected) {
-        onSelect(selected.name)
-      }
+      submitSelection()
       return
     }
 
@@ -132,7 +144,7 @@ export function CommandPicker({
         {visible.map((cmd, i) => {
           const globalIdx = i + scrollStart
           const isCursor = globalIdx === cursorIdx
-          const query = filter.startsWith('/') ? filter.slice(1) : filter
+          const query = commandToken(filter)
           const segments = highlightMatches(cmd.name, query)
           const padLen = Math.max(0, 20 - cmd.name.length)
           return (
@@ -171,12 +183,7 @@ export function CommandPicker({
         <TextInput
           value={filter.startsWith('/') ? filter.slice(1) : filter}
           onChange={(val) => setFilter(`/${val}`)}
-          onSubmit={() => {
-            const selected = filtered[cursorIdx]
-            if (selected) {
-              onSelect(selected.name)
-            }
-          }}
+          onSubmit={() => submitSelection()}
           placeholder={t('ui.command_picker.placeholder')}
         />
       </Box>
