@@ -16,6 +16,9 @@ interface AutoloopJournal {
   startedAt: string
   lastIteration?: string
   logs: string[]
+  startTokens?: number
+  totalTokens: number
+  maxIterations: number
 }
 
 function journalPath(sessionId: string): string {
@@ -23,7 +26,11 @@ function journalPath(sessionId: string): string {
 }
 
 /** Create or reset an autonomous loop journal. */
-export function createAutoloopJournal(sessionId: string, prompt: string): AutoloopJournal {
+export function createAutoloopJournal(
+  sessionId: string,
+  prompt: string,
+  startTokens = 0,
+): AutoloopJournal {
   ensureDir()
   const journal: AutoloopJournal = {
     sessionId,
@@ -32,9 +39,20 @@ export function createAutoloopJournal(sessionId: string, prompt: string): Autolo
     iterations: 0,
     startedAt: new Date().toISOString(),
     logs: [],
+    startTokens,
+    totalTokens: 0,
+    maxIterations: 100,
   }
   writeFileSync(journalPath(sessionId), JSON.stringify(journal, null, 2), 'utf-8')
   return journal
+}
+
+/** Accumulate token usage into the loop journal. */
+export function recordLoopTokens(sessionId: string, delta: number): void {
+  const journal = readAutoloopJournal(sessionId)
+  if (!journal) return
+  journal.totalTokens += delta
+  writeFileSync(journalPath(sessionId), JSON.stringify(journal, null, 2), 'utf-8')
 }
 
 /** Read the journal for an autonomous loop. */

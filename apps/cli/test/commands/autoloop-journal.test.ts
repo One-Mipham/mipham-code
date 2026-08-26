@@ -6,6 +6,7 @@ import {
   completeAutoloopJournal,
   listActiveAutoloops,
   getAutoloopStatus,
+  recordLoopTokens,
 } from '../../src/commands/autoloop-journal.js'
 
 const SESSION_ID = 'test-autoloop-001'
@@ -79,5 +80,15 @@ describe('AutoloopJournal', () => {
     expect(status).toContain('build pipeline')
     expect(status).toContain('Running')
     expect(status).toContain('deploy step done')
+  })
+
+  it('records startTokens at creation and accumulates totalTokens via recordLoopTokens', () => {
+    const j = createAutoloopJournal('s1', 'monitor', 1000)
+    expect(j.startTokens).toBe(1000)
+    expect(j.totalTokens).toBe(0)
+    recordLoopTokens('s1', 250)
+    recordLoopTokens('s1', 300)
+    const after = readAutoloopJournal('s1')!
+    expect(after.totalTokens).toBe(550)
   })
 })
