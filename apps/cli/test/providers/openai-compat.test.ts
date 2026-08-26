@@ -117,6 +117,22 @@ describe('OpenAICompatProvider', () => {
     expect(messages[0]).toEqual({ role: 'system', content: 'You are helpful.' })
   })
 
+  it('should default max_tokens to 8192 when not specified', async () => {
+    let capturedBody: Record<string, unknown> = {}
+    const fetchMock = vi.fn().mockImplementation(async (_url, opts) => {
+      capturedBody = JSON.parse(opts.body as string)
+      return makeSSEResponse(['data: [DONE]'])
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new OpenAICompatProvider(makeConfig())
+    await collectChunks(
+      provider.chat({ model: 'gpt-5', messages: [{ role: 'user', content: 'hi' }] }),
+    )
+
+    expect(capturedBody.max_tokens).toBe(8192)
+  })
+
   it('should include tools with function wrapper', async () => {
     let capturedBody: Record<string, unknown> = {}
     const fetchMock = vi.fn().mockImplementation(async (_url, opts) => {

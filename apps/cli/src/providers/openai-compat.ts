@@ -21,7 +21,7 @@ export class OpenAICompatProvider implements ProviderInstance {
       model: req.model,
       messages: this.convertMessages(req.messages, req.systemPrompt),
       stream: true,
-      max_tokens: req.maxTokens,
+      max_tokens: req.maxTokens || 8192,
       temperature: req.temperature,
       tools: req.tools?.map((t) => ({ type: 'function', function: t })),
     }
