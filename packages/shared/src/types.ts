@@ -127,9 +127,18 @@ export interface MiphamConfig {
   version: string
   defaultProvider: string
   defaultModel: string
-  permission: ToolPermission
+  permission: PermissionLevel
   /** Org-level permission restrictions (forbiddenModes, maxAllowedMode). */
   permissionRestrictions?: PermissionRestrictions
+  /** User-defined permission rules (allow/deny patterns), wired into the runtime PermissionSystem. */
+  permissionRules?: { allow?: string[]; deny?: string[] }
+  /**
+   * How to render the model's reasoning/thinking before the answer:
+   * - `off`     → hide entirely
+   * - `minimal` → content-free "thinking…" indicator (default)
+   * - `full`    → last 200 chars of the actual thinking text
+   */
+  showThinking?: 'off' | 'minimal' | 'full'
   providers: ProviderConfig[]
   skills?: { paths: string[]; mcpServers: McpServerConfig[] }
   marketplace?: {
@@ -146,7 +155,7 @@ export interface MiphamConfig {
 
 export interface FeatureFlags {
   mcp: { oauthEnabled: boolean }
-  context: { useRealTokenizer: boolean; adaptiveThresholds: boolean }
+  context: { adaptiveThresholds: boolean }
 }
 
 export interface CrsiConfig {
@@ -264,12 +273,11 @@ export interface InstructionFile {
 }
 
 // ── Permission Types ──
-/** Six explicit permission modes matching Claude Code's permission architecture */
-export type PermissionMode =
-  'default' | 'acceptEdits' | 'plan' | 'auto' | 'dontAsk' | 'bypassPermissions'
+/** Four explicit permission modes matching Claude Code's permission architecture */
+export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions'
 
-/** Backward-compatible alias: PermissionMode plus legacy 'ask' and 'bypass' */
-export type PermissionLevel = PermissionMode | 'ask' | 'bypass'
+/** Backward-compatible alias: PermissionMode plus legacy 'auto'/'ask'/'bypass' */
+export type PermissionLevel = PermissionMode | 'auto' | 'ask' | 'bypass'
 
 /** Org-level restrictions that cap or forbid specific permission modes. */
 export interface PermissionRestrictions {
@@ -425,6 +433,7 @@ export interface SessionInfo {
   cwd?: string
   provider?: string
   model?: string
+  crossSessionInbound?: CrossSessionInbound
 }
 
 // ── Background Agent Types ──
