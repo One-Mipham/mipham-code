@@ -62,6 +62,7 @@ import { commitCmd, pushCmd, prCmd, issueCmd } from '../commands/git.js'
 import { suggestDirectories } from '../commands/cd-suggest.js'
 import { keysCmd } from '../commands/keys'
 import { workflowViewCmd, workflowWatchCmd } from '../commands/workflow-view.js'
+import { listActiveAutoloops, formatLoopRows } from '../commands/autoloop-journal.js'
 import { execSync } from 'node:child_process'
 import { OLLAMA_PRESET_MODELS } from '../shared/constants'
 import { renameActiveSession } from '../agent/cross-session/discovery'
@@ -2106,6 +2107,12 @@ const usageCmd: CommandHandler = (ctx) => {
   const toolSection =
     toolLines.length > 0 ? `\n${t('commands.usage.tool_section')}\n${toolLines.join('\n')}` : ''
 
+  const loops = listActiveAutoloops()
+  const loopSection =
+    loops.length > 0
+      ? `\n${t('commands.usage.loops_header')}\n${formatLoopRows(loops).join('\n')}`
+      : ''
+
   return {
     content: stripIndent`
       ${t('commands.usage.title')}
@@ -2116,7 +2123,7 @@ const usageCmd: CommandHandler = (ctx) => {
       ${t('commands.usage.model_line', { model: ctx.modelId })}
 
       ${'█'.repeat(Math.ceil(Number(pct) / 5))}${'░'.repeat(20 - Math.ceil(Number(pct) / 5))} ${pct}%
-      ${toolSection}
+      ${toolSection}${loopSection}
 
       ${t('commands.usage.hint')}
     `,

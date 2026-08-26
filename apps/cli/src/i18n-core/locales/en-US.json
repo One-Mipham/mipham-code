@@ -364,6 +364,7 @@
       "provider_line": "Provider:         {provider}",
       "model_line": "Model:            {model}",
       "tool_section": "── Per-Tool ──",
+      "loops_header": "── Autonomous Loops ──",
       "hint": "Use /context for detailed stats, /compact to free space."
     },
     "reload_skills": {

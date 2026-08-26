@@ -7,6 +7,8 @@
 
 import { describe, it, expect, vi } from 'vitest'
 
+import { formatLoopRows } from '../../src/commands/autoloop-journal'
+
 // ── Mock node:child_process before importing the module under test ──
 const mockExecSync = vi.fn()
 vi.mock('node:child_process', () => ({ execSync: mockExecSync }))
@@ -389,5 +391,29 @@ describe('/resume commands (Task 2.2)', () => {
     const handler = getCommand('/resume delete')!
     const result = await handler(mkCtx(), [])
     expect(result.content).toContain('Usage')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// /usage Loops section (formatLoopRows)
+// ═══════════════════════════════════════════════════════════════
+
+describe('formatLoopRows', () => {
+  it('formatLoopRows shows iterations/totalTokens/tokensPerRun/lastRun', () => {
+    const rows = formatLoopRows([
+      {
+        sessionId: 's1',
+        prompt: 'monitor CI',
+        status: 'active',
+        iterations: 4,
+        startedAt: new Date().toISOString(),
+        logs: [],
+        totalTokens: 800,
+        maxIterations: 100,
+      },
+    ])
+    expect(rows[0]).toContain('4 iterations')
+    expect(rows[0]).toContain('800 tokens')
+    expect(rows[0]).toContain('200 /run')
   })
 })

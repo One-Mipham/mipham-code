@@ -364,6 +364,7 @@
       "provider_line": "提供商:         {provider}",
       "model_line": "模型:            {model}",
       "tool_section": "── 按工具 ──",
+      "loops_header": "── 自动循环 ──",
       "hint": "使用 /context 查看详细统计，/compact 释放空间。"
     },
     "reload_skills": {

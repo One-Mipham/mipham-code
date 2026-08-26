@@ -8,7 +8,7 @@ function ensureDir(): void {
   if (!existsSync(AUTOLOOP_DIR)) mkdirSync(AUTOLOOP_DIR, { recursive: true })
 }
 
-interface AutoloopJournal {
+export interface AutoloopJournal {
   sessionId: string
   prompt: string
   status: 'active' | 'completed' | 'stopped'
@@ -114,6 +114,15 @@ export function listActiveAutoloops(): AutoloopJournal[] {
     }
   }
   return journals
+}
+
+/** Format active loop journals as one-line rows for the /usage panel. */
+export function formatLoopRows(journals: AutoloopJournal[]): string[] {
+  return journals.map((j) => {
+    const per = j.iterations > 0 ? Math.round(j.totalTokens / j.iterations) : 0
+    const last = j.lastIteration ? new Date(j.lastIteration).toLocaleString() : 'N/A'
+    return `${j.sessionId.slice(-8)}  🔄 ${j.iterations} iterations · ${j.totalTokens} tokens · ${per} /run · last ${last}`
+  })
 }
 
 /** Get the autonomous loop status message. */
