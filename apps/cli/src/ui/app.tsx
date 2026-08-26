@@ -446,10 +446,17 @@ export function App({
                   clearTimeout(thinkingTimerRef.current)
                   thinkingTimerRef.current = null
                 }
-                setMessages((prev) => [
-                  ...prev,
-                  { role: 'system' as const, content: `💭 ${thought}` },
-                ])
+                const thinkingLine = formatThinking(
+                  config.showThinking ?? 'minimal',
+                  thought,
+                  t('ui.loading.thinking'),
+                )
+                if (thinkingLine) {
+                  setMessages((prev) => [
+                    ...prev,
+                    { role: 'system' as const, content: thinkingLine },
+                  ])
+                }
               }
               turnContent = chunk.content
               isNewTurn = false
@@ -668,7 +675,7 @@ export function App({
       // Turn finished — drain any /loop wakeup queued while we were running.
       drainLoopQueueRef.current?.(turnId)
     },
-    [engine, syncBgAgents],
+    [engine, syncBgAgents, config, t],
   )
 
   // Ref-held drain breaks the runTurn ↔ drain circular useCallback dependency: runTurn
