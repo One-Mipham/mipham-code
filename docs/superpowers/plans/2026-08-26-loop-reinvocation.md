@@ -155,13 +155,12 @@ git commit -m "feat(loop): ScheduleWakeup timer 到期触发 onWakeup 回调（�
 import { describe, it, expect, vi } from 'vitest'
 
 // 构造一个最小 engine（mock provider 返回单个 text chunk），测队列三方法
-it('enqueue/dequeue/hasPending round-trips wakeup prompts', () => {
+it('enqueue/dequeue/hasPending round-trips wakeup prompts (keep latest)', () => {
   const engine = makeTestEngine()
   expect(engine.hasPendingWakeup()).toBe(false)
   engine.enqueueWakeup('loop-prompt-A')
-  engine.enqueueWakeup('loop-prompt-B')
+  engine.enqueueWakeup('loop-prompt-B') // A 被丢弃（只保留最新，spec §七）
   expect(engine.hasPendingWakeup()).toBe(true)
-  expect(engine.dequeueWakeup()).toBe('loop-prompt-A')
   expect(engine.dequeueWakeup()).toBe('loop-prompt-B')
   expect(engine.dequeueWakeup()).toBeNull()
 })
