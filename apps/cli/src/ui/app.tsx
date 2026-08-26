@@ -49,6 +49,7 @@ import {
 import { useI18n } from '../i18n-context'
 import type { PermissionMode } from '../shared/index.ts'
 import { sanitizeForDisplay } from '../shared/sanitize.ts'
+import { recordLoopTurn, readAutoloopJournal } from '../commands/autoloop-journal.js'
 
 interface AppProps {
   engine: QueryEngine | RemoteEngine
@@ -348,6 +349,10 @@ export function App({
     async (input: string, source: 'user' | 'loop', controller?: AbortController) => {
       void source // reserved for future user-vs-loop divergence; both paths share this body
       const turnId = ++turnIdRef.current
+      const loopStartTokens =
+        source === 'loop' && 'hasPendingWakeup' in engine
+          ? engine.getUsageTracker().totalApiTokens
+          : 0
       const ctrl = controller ?? new AbortController()
       if (!controller) abortRef.current = ctrl
 
@@ -601,6 +606,17 @@ export function App({
         }
         // Final sync of background agents after the turn completes
         syncBgAgents()
+      }
+
+      // End-of-loop-turn accounting: log iteration + token delta, and stop at the
+      // max-iteration guard. `input` is the loop id for /loop auto (ScheduleWakeup
+      // re-invokes runTurn(loopId, 'loop')); fixed-interval loops have no journal and skip.
+      if (source === 'loop' && 'hasPendingWakeup' in engine) {
+        const journal = readAutoloopJournal(input)
+        if (journal && journal.status === 'active') {
+          const delta = engine.getUsageTracker().totalApiTokens - loopStartTokens
+          recordLoopTurn(input, assistantContent.slice(0, 200), delta)
+        }
       }
 
       // Turn finished — drain any /loop wakeup queued while we were running.

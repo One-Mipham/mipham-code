@@ -66,6 +66,19 @@ export function readAutoloopJournal(sessionId: string): AutoloopJournal | null {
   }
 }
 
+/** End-of-loop-turn accounting: log the iteration, record the token delta, and
+ *  stop the loop if it has reached its max-iteration guard (spec §七). */
+export function recordLoopTurn(sessionId: string, summary: string, delta: number): void {
+  const journal = readAutoloopJournal(sessionId)
+  if (!journal || journal.status !== 'active') return
+  logAutoloopIteration(sessionId, summary)
+  recordLoopTokens(sessionId, delta)
+  const updated = readAutoloopJournal(sessionId)
+  if (updated && updated.iterations >= updated.maxIterations) {
+    completeAutoloopJournal(sessionId, 'stopped')
+  }
+}
+
 /** Log an iteration in the autonomous loop journal. */
 export function logAutoloopIteration(sessionId: string, summary: string): void {
   const journal = readAutoloopJournal(sessionId)

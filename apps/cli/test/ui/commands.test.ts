@@ -45,6 +45,7 @@ const mkCtx = () =>
         getEstimatedTokens: () => 0,
         getCheckpoints: () => [],
       }),
+      getUsageTracker: () => ({ totalApiTokens: 0 }),
       setGoal: vi.fn(),
     },
     config: { providers: {} },

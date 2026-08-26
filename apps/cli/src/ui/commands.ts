@@ -2619,7 +2619,7 @@ function parseInterval(raw: string): number | null {
   return null
 }
 
-const loopCmd: CommandHandler = async (_ctx, args) => {
+const loopCmd: CommandHandler = async (ctx, args) => {
   const sub = args[0]
 
   // ── /loop init — scaffold project vault ──
@@ -2721,7 +2721,7 @@ const loopCmd: CommandHandler = async (_ctx, args) => {
 
     const sessionId = `autoloop-${Date.now()}`
     const { createAutoloopJournal } = await import('../commands/autoloop-journal.js')
-    createAutoloopJournal(sessionId, prompt)
+    createAutoloopJournal(sessionId, prompt, ctx.engine.getUsageTracker().totalApiTokens)
 
     const autoPrompt =
       `## Autonomous Loop — ${sessionId}\n\n` +
@@ -2781,7 +2781,7 @@ const loopCmd: CommandHandler = async (_ctx, args) => {
     if (fullPrompt.length > 0) {
       const sessionId = `autoloop-${Date.now()}`
       const { createAutoloopJournal } = await import('../commands/autoloop-journal.js')
-      createAutoloopJournal(sessionId, fullPrompt)
+      createAutoloopJournal(sessionId, fullPrompt, ctx.engine.getUsageTracker().totalApiTokens)
 
       const autoPrompt =
         `## Autonomous Loop — ${sessionId}\n\n` +
