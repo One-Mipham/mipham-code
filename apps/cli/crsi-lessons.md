@@ -55,3 +55,16 @@
 
 - 用户「愣建文件夹/冷建立文件」→ 缺项目脚手架：`/init` 被「用户 config」占用（同名不同义），`/setup 1` 只生成 MIPHAM.md 不含 CLAUDE.md/README.md
 - 修复：新增 `mipham init` 脚手架（CLAUDE.md/MIPHAM.md/README.md + 可选 git init）+ 空目录启动提示
+
+## reproducibility: 一次性抽取工具必须入库（勿放 /tmp）
+
+- 建议: 任何「一次性」但未来可能复用的工具（PDF 抽取、数据清洗、迁移脚本）都必须固化入库并提交，不能留在 /tmp 或未提交的工作区。工具是「数据的钥匙」——丢了工具等于丢了重做数据的能力。可复现性 = 源数据 + 抽取工具 + 配方三者都进版本控制（大体积源数据可 gitignore，但工具与配方必须入库）。
+- 严重度: warning
+- 生成时间: 2026-08-26
+- 来源: 会话复盘（human + Claude Code，手动沉淀）
+
+### 证据
+
+- 高中课标（20 科）PDF 抽取脚本 2026-08-25 一次性放 /tmp、未入库，事后连同 pdftotext 依赖一起丢失，无法复现抽取
+- 义务教育课标（16 科，1829 页图片型 PDF）2026-08-26 被迫从零重建抽取工具：装 pymupdf + pyobjc-Vision、重写 OCR 脚本、排查「无文本层需 OCR」
+- 修复：本次把 `extract_pdf_ocr.py` + `extract_dir_ocr.py` 固化进 `backend/scripts/` 并提交，杜绝二次丢失
