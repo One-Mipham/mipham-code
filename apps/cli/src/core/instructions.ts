@@ -90,32 +90,47 @@ export function discoverDirectories(root: string, cwd: string): string[] {
   return dirs
 }
 
+/**
+ * 每目录内指令文件的读取顺序（后加载 = 更高优先级）。
+ * AGENTS.md（行业标准基线）→ AGENTS.override.md（Codex 覆盖层）→
+ * MIPHAM.md（Mipham 品牌）→ CLAUDE.md（Claude Code 兼容）。
+ * MIPHAM→CLAUDE 相对顺序保持现状不变，仅前置 AGENTS 两条，避免行为回归。
+ */
+export const INSTRUCTION_FILENAMES = [
+  'AGENTS.md',
+  'AGENTS.override.md',
+  'MIPHAM.md',
+  'CLAUDE.md',
+] as const
+
 export class InstructionsLoader {
   private instructions: InstructionFile[] = []
   private crsiLessonSummaries: CrsiLessonSummary[] = []
 
   loadAll(cwd: string): void {
     this.instructions = []
+    const root = gitRoot(cwd)
 
-    // Tier 1: Ancestor-level CLAUDE.md (for Claude Code compatibility)
-    // ../../ = Rismed_Ronxin_Capital
-    this.tryLoad(join(cwd, '..', '..', 'CLAUDE.md'), 'group')
-    // ../ = One_Mipham_Corporation
-    this.tryLoad(join(cwd, '..', 'CLAUDE.md'), 'company')
+    // Tier 1: 集团/公司策略（锚定仓库根，从任意子目录启动都正确；不读 AGENTS.md）
+    this.tryLoad(join(root, '..', '..', 'CLAUDE.md'), 'group') // Rismed_Ronxin_Capital
+    this.tryLoad(join(root, '..', 'CLAUDE.md'), 'company') // One_Mipham_Corporation
+    this.tryLoad(join(root, '..', 'MIPHAM.md'), 'group')
 
-    // Tier 1b: Group-level MIPHAM.md — One_Mipham_Corporation is the root
-    this.tryLoad(join(cwd, '..', 'MIPHAM.md'), 'group')
+    // Tier 2: 递归项目层 — git 根 → cwd，逐目录读，就近（cwd）最后 = 优先级最高
+    const dirs = discoverDirectories(root, cwd)
+    dirs.forEach((dir, i) => {
+      const level: InstructionFile['level'] = i === dirs.length - 1 ? 'project' : 'directory'
+      for (const name of INSTRUCTION_FILENAMES) {
+        this.tryLoad(join(dir, name), level)
+      }
+    })
 
-    // Tier 2: Project-level (CLAUDE.md + MIPHAM.md at cwd)
-    this.tryLoad(join(cwd, 'MIPHAM.md'), 'project')
-    this.tryLoad(join(cwd, 'CLAUDE.md'), 'project')
-
-    // Tier 3: User-level ~/.mipham/USER.md
+    // Tier 3: 用户层 ~/.mipham/USER.md
     const home = process.env.HOME || '~'
     this.tryLoad(join(home, '.mipham', 'USER.md'), 'user')
 
     // CRSI 教训召回：读 crsi-lessons.md 提取精华，注入系统提示（只写不读 → 写后召回）
-    this.crsiLessonSummaries = this.loadCrsiLessons(cwd)
+    this.crsiLessonSummaries = this.loadCrsiLessons(root)
   }
 
   buildSystemPrompt(permissionMode?: string): string {
@@ -266,17 +281,7 @@ Never omit it or present the work as purely human-authored.`)
   }
 
   /** 读 crsi-lessons.md（按仓库根定位）提取教训精华。读不到则返回空。 */
-  private loadCrsiLessons(cwd: string): CrsiLessonSummary[] {
-    let root = cwd
-    try {
-      root = execSync('git rev-parse --show-toplevel', {
-        cwd,
-        timeout: 5000,
-        encoding: 'utf-8',
-      }).trim()
-    } catch {
-      // 非 git 目录 → 回退 cwd
-    }
+  private loadCrsiLessons(root: string): CrsiLessonSummary[] {
     try {
       const content = readFileSync(join(root, LESSONS_FILE), 'utf-8')
       return extractCrsiLessonSummaries(content)

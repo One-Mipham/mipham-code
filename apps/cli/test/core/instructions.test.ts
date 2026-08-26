@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { join, resolve } from 'node:path'
+import { join, resolve, basename } from 'node:path'
 import { tmpdir } from 'node:os'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, realpathSync } from 'node:fs'
+import { execSync } from 'node:child_process'
 import {
   InstructionsLoader,
   stripSections,
@@ -88,5 +89,47 @@ describe('discoverDirectories', () => {
   })
   it('degrades to [cwd] when cwd is outside root', () => {
     expect(discoverDirectories('/repo', '/other')).toEqual([resolve('/other')])
+  })
+})
+
+describe('InstructionsLoader.loadAll (AGENTS.md 多格式 + 递归)', () => {
+  it('loads AGENTS.md alongside CLAUDE.md and MIPHAM.md, AGENTS first', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mipham-instr-'))
+    try {
+      writeFileSync(join(dir, 'AGENTS.md'), '# AGENTS rules\n- agent rule')
+      writeFileSync(join(dir, 'CLAUDE.md'), '# CLAUDE rules\n- claude rule')
+      writeFileSync(join(dir, 'MIPHAM.md'), '# MIPHAM rules\n- mipham rule')
+      const loader = new InstructionsLoader()
+      loader.loadAll(dir)
+      const files = loader.list().filter((f) => f.path.startsWith(dir))
+      const names = files.map((f) => basename(f.path))
+      expect(names).toContain('AGENTS.md')
+      expect(names).toContain('CLAUDE.md')
+      expect(names).toContain('MIPHAM.md')
+      expect(names.indexOf('AGENTS.md')).toBeLessThan(names.indexOf('MIPHAM.md'))
+      expect(names.indexOf('MIPHAM.md')).toBeLessThan(names.indexOf('CLAUDE.md'))
+      expect(files.find((f) => basename(f.path) === 'AGENTS.md')!.level).toBe('project')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('recursively loads subdirectory AGENTS.md as directory level', () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'mipham-instr-')))
+    try {
+      execSync('git init -q', { cwd: root })
+      writeFileSync(join(root, 'AGENTS.md'), '# root agents')
+      mkdirSync(join(root, 'apps'))
+      writeFileSync(join(root, 'apps', 'AGENTS.md'), '# apps agents')
+      const loader = new InstructionsLoader()
+      loader.loadAll(join(root, 'apps'))
+      const list = loader.list()
+      const rootAgents = list.find((f) => f.path === join(root, 'AGENTS.md'))
+      const appsAgents = list.find((f) => f.path === join(root, 'apps', 'AGENTS.md'))
+      expect(rootAgents!.level).toBe('directory')
+      expect(appsAgents!.level).toBe('project')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })
