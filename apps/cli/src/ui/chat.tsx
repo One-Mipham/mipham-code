@@ -6,13 +6,6 @@ import type { ChatMessage } from './app'
 interface ChatPanelProps {
   messages: ChatMessage[]
   focusMode?: boolean
-  /** When false, hide process/system noise (thinking, notices, tool activity) — show only user + assistant. */
-  showSystemMessages?: boolean
-}
-
-/** Drop process/system noise — keep only user prompts + assistant answers. */
-export function filterSystemMessages(messages: ChatMessage[]): ChatMessage[] {
-  return messages.filter((m) => m.role !== 'system')
 }
 
 /** Format cwd for display: replace HOME with ~, truncate if too long */
@@ -111,19 +104,15 @@ const MessageRow = React.memo(
     prev.msg.toolMeta?.collapsed === next.msg.toolMeta?.collapsed,
 )
 
-export function ChatPanel({ messages, focusMode, showSystemMessages = true }: ChatPanelProps) {
+export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
   const { t } = useI18n()
-  const visibleMessages = useMemo(
-    () => (showSystemMessages ? messages : filterSystemMessages(messages)),
-    [messages, showSystemMessages],
-  )
   // Memoize display message computation to avoid O(n) compact on every render.
   // During streaming, messages changes on every chunk; without memoization,
   // compactToolGroups/compactForFocus re-iterates the full message list on each
   // chunk, saturating the event loop at 20-50 chunks/sec.
   const displayMessages = useMemo(
-    () => (focusMode ? compactForFocus(visibleMessages) : compactToolGroups(visibleMessages)),
-    [visibleMessages, focusMode],
+    () => (focusMode ? compactForFocus(messages) : compactToolGroups(messages)),
+    [messages, focusMode],
   )
 
   return (

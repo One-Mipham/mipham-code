@@ -21,6 +21,8 @@ interface InputBarProps {
   onCyclePermission?: () => void
   /** Escape → cancel loading / clear draft */
   onCancel?: () => void
+  /** When false, don't auto-open the slash-command picker when typing `/`. */
+  showCommandPicker?: boolean
 }
 
 // ── Loading verb keys (i18n) ──
@@ -75,6 +77,11 @@ export function isBulkInput(prev: string, next: string): boolean {
   return Math.abs(next.length - prev.length) > 1
 }
 
+/** True when typing a leading `/` should auto-open the slash-command picker. */
+export function shouldAutoOpenPicker(value: string, prevValue: string, enabled: boolean): boolean {
+  return enabled && value.startsWith('/') && !prevValue.startsWith('/')
+}
+
 export function InputBar({
   onSubmit,
   isLoading,
@@ -84,6 +91,7 @@ export function InputBar({
   onToggleAgentView,
   onCyclePermission,
   onCancel,
+  showCommandPicker = true,
 }: InputBarProps) {
   const { t } = useI18n()
   const [value, setValue] = useState('')
@@ -251,9 +259,9 @@ export function InputBar({
   const [pickerActive, setPickerActive] = useState(false)
   const prevValueRef = useRef(value)
 
-  // Auto-activate picker when user types "/"
+  // Auto-activate picker when user types "/" (unless disabled via showCommandPicker)
   useEffect(() => {
-    if (value.startsWith('/') && !prevValueRef.current.startsWith('/')) {
+    if (shouldAutoOpenPicker(value, prevValueRef.current, showCommandPicker)) {
       setPickerActive(true)
     }
     // Dismiss picker when user clears the / prefix
@@ -261,7 +269,7 @@ export function InputBar({
       setPickerActive(false)
     }
     prevValueRef.current = value
-  }, [value])
+  }, [value, showCommandPicker])
 
   // Keep valueRef in sync with state (so useInput handlers read latest value)
   useEffect(() => {

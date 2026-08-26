@@ -547,7 +547,8 @@ const configCmd: CommandHandler = (ctx) => {
     `defaultModel:     ${c.defaultModel}`,
     `permission:       ${c.permission}`,
     `showThinking:     ${c.showThinking ?? 'minimal'}`,
-    `showSystemMessages: ${c.showSystemMessages ?? true}`,
+    `showSchedulingNotices: ${c.showSchedulingNotices ?? true}`,
+    `showCommandPicker: ${c.showCommandPicker ?? true}`,
     `providers:        ${c.providers.length} configured`,
     '',
     `crossSessionInbound: ${xs.crossSessionInbound}`,
@@ -2822,9 +2823,14 @@ const loopCmd: CommandHandler = async (ctx, args) => {
       { delaySeconds: seconds, reason: `Loop: ${prompt.slice(0, 40)}`, prompt },
       { cwd: process.cwd(), sessionId: 'loop-session', provider: '', model: '' },
     )
-    return result.success
-      ? { content: result.content }
-      : { content: `Loop failed: ${result.error || 'unknown error'}` }
+    if (!result.success) {
+      return { content: `Loop failed: ${result.error || 'unknown error'}` }
+    }
+    // When scheduling notices are hidden, stay silent — the loop is already scheduled.
+    if (ctx.config.showSchedulingNotices === false) {
+      return { content: '' }
+    }
+    return { content: result.content }
   } catch (e) {
     return { content: `Loop failed: ${e instanceof Error ? e.message : String(e)}` }
   }

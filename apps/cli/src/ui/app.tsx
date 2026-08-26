@@ -818,11 +818,11 @@ export function App({
             setApiKeyPrompt(result.needsApiKey)
             setApiKeyInput('')
           }
-          setMessages((prev) => [
-            ...prev,
-            { role: 'user', content: input },
-            { role: 'system', content: result.content },
-          ])
+          setMessages((prev) => {
+            const next: ChatMessage[] = [...prev, { role: 'user', content: input }]
+            if (result.content) next.push({ role: 'system', content: result.content })
+            return next
+          })
           if (result.needsApiKey) {
             // Don't process nextProvider/model when waiting for API key
             if (result.exit) process.exit(0)
@@ -960,11 +960,7 @@ export function App({
     return (
       <Box flexDirection="column" padding={1} height="100%">
         {/* Chat panel — show existing messages */}
-        <ChatPanel
-          messages={messages}
-          focusMode={false}
-          showSystemMessages={config.showSystemMessages ?? true}
-        />
+        <ChatPanel messages={messages} focusMode={false} />
 
         {/* API Key input prompt */}
         <Box flexDirection="column" marginTop={1}>
@@ -1027,11 +1023,7 @@ export function App({
         ) : (
           <>
             {/* Chat panel */}
-            <ChatPanel
-              messages={messages}
-              focusMode={focusMode}
-              showSystemMessages={config.showSystemMessages ?? true}
-            />
+            <ChatPanel messages={messages} focusMode={focusMode} />
             {(() => {
               const indicator = formatThinking(
                 config.showThinking ?? 'minimal',
@@ -1078,6 +1070,7 @@ export function App({
                 <InputBar
                   onSubmit={handleSubmit}
                   isLoading={isLoading}
+                  showCommandPicker={config.showCommandPicker ?? true}
                   onTogglePicker={() => setPickerOpen((prev) => !prev)}
                   onToggleFocus={() => setFocusMode((prev) => !prev)}
                   onToggleExpand={() => {

@@ -142,12 +142,10 @@ export interface MiphamConfig {
    * - `full`    → last 200 chars of the actual thinking text
    */
   showThinking?: 'off' | 'minimal' | 'full'
-  /**
-   * Hide process/system noise (thinking, loop notices, tool activity, errors,
-   * command output) — show only user prompts + assistant answers. Default true
-   * (show everything). Set false for a clean chat with only `◆ Mipham Code:` output.
-   */
-  showSystemMessages?: boolean
+  /** When false, hide the `⏰ Wakeup scheduled` scheduling confirmation notices. Default true. */
+  showSchedulingNotices?: boolean
+  /** When false, disable the slash-command picker auto-popup on `/`. Default true. */
+  showCommandPicker?: boolean
   providers: ProviderConfig[]
   skills?: { paths: string[]; mcpServers: McpServerConfig[] }
   marketplace?: {
