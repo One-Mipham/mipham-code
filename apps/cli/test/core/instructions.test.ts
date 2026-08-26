@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { InstructionsLoader, stripSections, parsePromptExclude } from '../../src/core/instructions'
+import { join, resolve } from 'node:path'
+import { tmpdir } from 'node:os'
+import { mkdtempSync, rmSync } from 'node:fs'
+import {
+  InstructionsLoader,
+  stripSections,
+  parsePromptExclude,
+  gitRoot,
+  discoverDirectories,
+} from '../../src/core/instructions'
 
 describe('InstructionsLoader.buildSystemPrompt', () => {
   it('injects the commit-attribution instruction (AI 署名披露)', () => {
@@ -52,5 +61,32 @@ describe('parsePromptExclude', () => {
     expect(parsePromptExclude(['最近提交', '下一步计划'])).toEqual(['最近提交', '下一步计划'])
     expect(parsePromptExclude('修订历史')).toEqual(['修订历史'])
     expect(parsePromptExclude(undefined)).toEqual([])
+  })
+})
+
+describe('gitRoot', () => {
+  it('falls back to cwd outside a git repo', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mipham-instr-'))
+    try {
+      expect(gitRoot(dir)).toBe(resolve(dir))
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('discoverDirectories', () => {
+  it('returns [root] when cwd equals root', () => {
+    expect(discoverDirectories('/repo', '/repo')).toEqual([resolve('/repo')])
+  })
+  it('walks root → cwd, nearest last', () => {
+    expect(discoverDirectories('/repo', '/repo/apps/cli')).toEqual([
+      resolve('/repo'),
+      resolve('/repo/apps'),
+      resolve('/repo/apps/cli'),
+    ])
+  })
+  it('degrades to [cwd] when cwd is outside root', () => {
+    expect(discoverDirectories('/repo', '/other')).toEqual([resolve('/other')])
   })
 })

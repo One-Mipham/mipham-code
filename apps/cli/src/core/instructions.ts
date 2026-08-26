@@ -1,5 +1,5 @@
 import { readFileSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve, relative, sep, isAbsolute } from 'node:path'
 import { execSync } from 'node:child_process'
 import { parse as parseYaml } from 'yaml'
 import type { InstructionFile } from '../shared/index.ts'
@@ -57,6 +57,37 @@ export function parsePromptExclude(value: unknown): string[] {
   if (Array.isArray(value)) return value.map((v) => String(v))
   if (typeof value === 'string') return [value]
   return []
+}
+
+/** 定位仓库根（git rev-parse --show-toplevel），非 git 目录回退 cwd。 */
+export function gitRoot(cwd: string): string {
+  try {
+    return execSync('git rev-parse --show-toplevel', {
+      cwd,
+      timeout: 5000,
+      encoding: 'utf-8',
+    }).trim()
+  } catch {
+    return cwd
+  }
+}
+
+/** 从仓库根到 cwd 的目录链（含两端），就近（cwd）在最后。cwd 不在 root 下时退化为 [cwd]。 */
+export function discoverDirectories(root: string, cwd: string): string[] {
+  const absRoot = resolve(root)
+  const absCwd = resolve(cwd)
+  if (absCwd === absRoot) return [absRoot]
+
+  const rel = relative(absRoot, absCwd)
+  if (rel.startsWith('..') || isAbsolute(rel)) return [absCwd]
+
+  const dirs = [absRoot]
+  let cur = absRoot
+  for (const seg of rel.split(sep)) {
+    cur = join(cur, seg)
+    dirs.push(cur)
+  }
+  return dirs
 }
 
 export class InstructionsLoader {
