@@ -338,220 +338,18 @@ export function App({
     [apiKeyPrompt, config, engine],
   )
 
-  const handleSubmit = useCallback(
-    async (input: string) => {
-      if (!input.trim()) return
+  // ── runTurn: renders a single AI turn (user-submitted or /loop re-invoked) ──
+  // Extracted from handleSubmit so scheduled /loop wakeups re-enter the same streaming
+  // path. `source` marks user vs loop turns (currently identical rendering — loop turns
+  // skip handleSubmit's user-message/emotion/session-setup prelude). `controller` is
+  // supplied by user turns (already stored in abortRef); loop turns pass none and runTurn
+  // creates one so Escape/abort still works mid-loop-turn.
+  const runTurn = useCallback(
+    async (input: string, source: 'user' | 'loop', controller?: AbortController) => {
+      void source // reserved for future user-vs-loop divergence; both paths share this body
       const turnId = ++turnIdRef.current
-
-      // ── @mention: direct cross-session message — only when the name resolves
-      // to a live session; otherwise fall through to normal AI processing so a
-      // leading `@word` (e.g. "@bob please review") isn't hijacked as a send. ──
-      const mention = parseMention(input)
-      if (mention && resolveRecipientSession(discoverSessions(), mention.name).session) {
-        if (!mention.message) {
-          setMessages((prev) => [
-            ...prev,
-            { role: 'user', content: input },
-            { role: 'system', content: 'Usage: @session-name <message>' },
-          ])
-          return
-        }
-        const mentionSummary =
-          mention.message.length > 50 ? mention.message.slice(0, 47) + '...' : mention.message
-        const result = await getMessageRouter().route(
-          sessionId || 'main',
-          mention.name,
-          mentionSummary,
-          mention.message,
-        )
-        setMessages((prev) => [
-          ...prev,
-          { role: 'user', content: input },
-          {
-            role: 'system',
-            content: result.success
-              ? `── Message sent to ${mention.name} ──${result.messageId ? `\nID: ${result.messageId}` : ''}`
-              : `❌ Failed to send to ${mention.name}: ${result.error}`,
-          },
-        ])
-        return
-      }
-
-      // ── Slash command dispatch ──
-      if (looksLikeSlashCommand(input)) {
-        const { command, args } = parseSlashCommand(input)
-
-        // /switch takes args, handled separately
-        if (command === '/switch') {
-          const result = await handleSwitch(mkCtx(), args)
-          if (result.needsApiKey) {
-            setApiKeyPrompt(result.needsApiKey)
-            setApiKeyInput('')
-            setMessages((prev) => [
-              ...prev,
-              { role: 'user', content: input },
-              { role: 'system', content: result.content },
-            ])
-          } else {
-            setMessages((prev) => [
-              ...prev,
-              { role: 'user', content: input },
-              { role: 'system', content: result.content },
-            ])
-            if (result.nextProvider) setProviderId(result.nextProvider)
-            if (result.nextModel) setModelId(result.nextModel)
-          }
-          if (result.exit) process.exit(0)
-          return
-        }
-
-        // /pick → open interactive model picker
-        if (command === '/pick' || command === '/model-picker') {
-          setPickerOpen(true)
-          return
-        }
-
-        // /quit and /exit are special
-        if (command === '/exit' || command === '/quit') {
-          process.exit(0)
-        }
-
-        // /focus toggle
-        if (command === '/focus') {
-          const nextFocus = !focusMode
-          setFocusMode(nextFocus)
-          setMessages((prev) => [
-            ...prev,
-            { role: 'user', content: input },
-            {
-              role: 'system',
-              content: nextFocus
-                ? '✓ Focus mode ON — showing only the most recent exchange. Type /focus again to show all.'
-                : '✓ Focus mode OFF — showing all messages.',
-            },
-          ])
-          return
-        }
-
-        let forwardToAI: string | undefined
-
-        const handler = getCommand(command)
-        if (handler) {
-          const result = await handler(mkCtx(), args)
-          forwardToAI = result.forwardToAI
-          // Handle API key prompt from command result
-          if (result.needsApiKey) {
-            setApiKeyPrompt(result.needsApiKey)
-            setApiKeyInput('')
-          }
-          setMessages((prev) => [
-            ...prev,
-            { role: 'user', content: input },
-            { role: 'system', content: result.content },
-          ])
-          if (result.needsApiKey) {
-            // Don't process nextProvider/model when waiting for API key
-            if (result.exit) process.exit(0)
-            return
-          }
-          if (result.clearMessages) setMessages([])
-          if (result.nextProvider) setProviderId(result.nextProvider)
-          if (result.nextModel) setModelId(result.nextModel)
-          if (result.exit) process.exit(0)
-          if (result.forwardedMessages && result.forwardedMessages.length > 0) {
-            const restored: ChatMessage[] = result.forwardedMessages.map((msg) => ({
-              role: msg.role,
-              content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
-            }))
-            if (result.resumeWarning) {
-              // Fix 7: Session isolation — add a visual separator between current session
-              // and restored history to prevent accidental leakage/confusion
-              const separator: ChatMessage = {
-                role: 'assistant' as const,
-                content: '── Restored session history below ──',
-              }
-              setMessages((prev) => [...prev, separator, ...restored])
-            } else {
-              setMessages((prev) => [...prev, ...restored])
-            }
-          }
-          if (result.copyContent) {
-            // Copy to clipboard via pbcopy (macOS) or clip (Windows)
-            try {
-              const { execSync } = await import('node:child_process')
-              if (process.platform === 'darwin') {
-                execSync('pbcopy', { input: result.copyContent })
-              } else if (process.platform === 'win32') {
-                execSync('clip', { input: result.copyContent })
-              }
-              // Linux: xclip or wl-copy not attempted to avoid dependency issues
-            } catch {
-              // Silent fail — content is still displayed
-            }
-          }
-        }
-
-        // Bridge: if command set forwardToAI, route the message to AI processing
-        if (forwardToAI) {
-          input = forwardToAI
-          // fall through to normal AI processing below
-        } else {
-          // No handler matched or handler didn't request AI routing — stop here
-          return
-        }
-      }
-
-      // ── Emotion detection: adjust behavior based on user's emotional state ──
-      // Uses regex heuristics (zero-latency) to detect frustration/impatience/confusion.
-      // When frustrated, prepends a terseness instruction to the user input so the
-      // AI model skips explanations and gets straight to the fix.
-      let emotionPrefix = ''
-      try {
-        const { EmotionDetector } = await import('../core/emotion-detector.js')
-        const detector = new EmotionDetector()
-        const result = detector.detect(input)
-        if (result.emotion === 'frustrated' || result.emotion === 'impatient') {
-          emotionPrefix = `[SYSTEM NOTE: The user is ${result.emotion}. Be extremely concise. Skip all explanations, preambles, and summaries. Output only the fix/result. No "here's what I did" or "let me explain". One sentence maximum before code.]\n\n`
-        } else if (result.emotion === 'confused') {
-          emotionPrefix = `[SYSTEM NOTE: The user seems confused. Explain more thoroughly, break down complex steps, and offer clarifying questions rather than assuming understanding.]\n\n`
-        }
-      } catch {
-        // Emotion detection is non-critical — fail silently
-      }
-
-      // ── Normal message processing (AI chat) ──
-      // First user message: auto-name the session if it still carries the
-      // default cwd-basename name (respecting any manual /rename).
-      if (
-        engine
-          .getContext()
-          .getMessages()
-          .every((m) => m.role !== 'user')
-      ) {
-        const currentName = discoverSessions().find((s) => s.id === sessionId)?.name
-        if (isDefaultSessionName(currentName, process.cwd())) {
-          const title = deriveSessionTitle(input)
-          if (title && sessionId) renameActiveSession(sessionId, title)
-        }
-      }
-
-      setMessages((prev) => [...prev, { role: 'user', content: input }])
-      setIsLoading(true)
-
-      // Start agent progress indicator immediately for ALL processing
-      const progressStart = Date.now()
-      const progress: AgentProgress = {
-        name: '',
-        description: '',
-        startTime: progressStart,
-        tokensUsed: 0,
-      }
-      agentProgressRef.current = progress
-      setAgentProgress(progress)
-      setAgentTick((t) => t + 1)
-
-      const controller = new AbortController()
-      abortRef.current = controller
+      const ctrl = controller ?? new AbortController()
+      if (!controller) abortRef.current = ctrl
 
       let assistantContent = ''
       // Track whether we've started a new assistant turn — reset accumulator per turn
@@ -578,10 +376,7 @@ export function App({
       }
 
       try {
-        for await (const chunk of engine.process(
-          emotionPrefix ? emotionPrefix + input : input,
-          controller.signal,
-        )) {
+        for await (const chunk of engine.process(input, ctrl.signal)) {
           // Reasoning content (DeepSeek V4 thinking mode) — surface as a live
           // "thinking" indicator so long reasoning passes don't look like a stall.
           if (chunk.reasoning_content) {
@@ -807,8 +602,244 @@ export function App({
         // Final sync of background agents after the turn completes
         syncBgAgents()
       }
+
+      // Turn finished — drain any /loop wakeup queued while we were running.
+      drainLoopQueueRef.current?.(turnId)
     },
-    [engine, mkCtx, syncBgAgents],
+    [engine, syncBgAgents],
+  )
+
+  // Ref-held drain breaks the runTurn ↔ drain circular useCallback dependency: runTurn
+  // calls drainLoopQueueRef.current (a stable ref object), and the drain closure captures
+  // the latest runTurn. Reassigned each render so it never holds a stale runTurn.
+  const drainLoopQueueRef = useRef<((turnId: number) => Promise<void>) | null>(null)
+  drainLoopQueueRef.current = async (turnId: number) => {
+    // User turn wins: if a user submitted meanwhile, turnId advanced and this loop wakeup
+    // yields (the next timer fire re-enqueues). Spec §六 — do not force it to run anyway.
+    if (turnIdRef.current !== turnId) return
+    // RemoteEngine (remote attach mode) has no wakeup queue — /loop is CLI-local.
+    if (!('hasPendingWakeup' in engine)) return
+    const next = engine.hasPendingWakeup() ? engine.dequeueWakeup() : null
+    if (next) await runTurn(next, 'loop')
+  }
+
+  const handleSubmit = useCallback(
+    async (input: string) => {
+      if (!input.trim()) return
+
+      // ── @mention: direct cross-session message — only when the name resolves
+      // to a live session; otherwise fall through to normal AI processing so a
+      // leading `@word` (e.g. "@bob please review") isn't hijacked as a send. ──
+      const mention = parseMention(input)
+      if (mention && resolveRecipientSession(discoverSessions(), mention.name).session) {
+        if (!mention.message) {
+          setMessages((prev) => [
+            ...prev,
+            { role: 'user', content: input },
+            { role: 'system', content: 'Usage: @session-name <message>' },
+          ])
+          return
+        }
+        const mentionSummary =
+          mention.message.length > 50 ? mention.message.slice(0, 47) + '...' : mention.message
+        const result = await getMessageRouter().route(
+          sessionId || 'main',
+          mention.name,
+          mentionSummary,
+          mention.message,
+        )
+        setMessages((prev) => [
+          ...prev,
+          { role: 'user', content: input },
+          {
+            role: 'system',
+            content: result.success
+              ? `── Message sent to ${mention.name} ──${result.messageId ? `\nID: ${result.messageId}` : ''}`
+              : `❌ Failed to send to ${mention.name}: ${result.error}`,
+          },
+        ])
+        return
+      }
+
+      // ── Slash command dispatch ──
+      if (looksLikeSlashCommand(input)) {
+        const { command, args } = parseSlashCommand(input)
+
+        // /switch takes args, handled separately
+        if (command === '/switch') {
+          const result = await handleSwitch(mkCtx(), args)
+          if (result.needsApiKey) {
+            setApiKeyPrompt(result.needsApiKey)
+            setApiKeyInput('')
+            setMessages((prev) => [
+              ...prev,
+              { role: 'user', content: input },
+              { role: 'system', content: result.content },
+            ])
+          } else {
+            setMessages((prev) => [
+              ...prev,
+              { role: 'user', content: input },
+              { role: 'system', content: result.content },
+            ])
+            if (result.nextProvider) setProviderId(result.nextProvider)
+            if (result.nextModel) setModelId(result.nextModel)
+          }
+          if (result.exit) process.exit(0)
+          return
+        }
+
+        // /pick → open interactive model picker
+        if (command === '/pick' || command === '/model-picker') {
+          setPickerOpen(true)
+          return
+        }
+
+        // /quit and /exit are special
+        if (command === '/exit' || command === '/quit') {
+          process.exit(0)
+        }
+
+        // /focus toggle
+        if (command === '/focus') {
+          const nextFocus = !focusMode
+          setFocusMode(nextFocus)
+          setMessages((prev) => [
+            ...prev,
+            { role: 'user', content: input },
+            {
+              role: 'system',
+              content: nextFocus
+                ? '✓ Focus mode ON — showing only the most recent exchange. Type /focus again to show all.'
+                : '✓ Focus mode OFF — showing all messages.',
+            },
+          ])
+          return
+        }
+
+        let forwardToAI: string | undefined
+
+        const handler = getCommand(command)
+        if (handler) {
+          const result = await handler(mkCtx(), args)
+          forwardToAI = result.forwardToAI
+          // Handle API key prompt from command result
+          if (result.needsApiKey) {
+            setApiKeyPrompt(result.needsApiKey)
+            setApiKeyInput('')
+          }
+          setMessages((prev) => [
+            ...prev,
+            { role: 'user', content: input },
+            { role: 'system', content: result.content },
+          ])
+          if (result.needsApiKey) {
+            // Don't process nextProvider/model when waiting for API key
+            if (result.exit) process.exit(0)
+            return
+          }
+          if (result.clearMessages) setMessages([])
+          if (result.nextProvider) setProviderId(result.nextProvider)
+          if (result.nextModel) setModelId(result.nextModel)
+          if (result.exit) process.exit(0)
+          if (result.forwardedMessages && result.forwardedMessages.length > 0) {
+            const restored: ChatMessage[] = result.forwardedMessages.map((msg) => ({
+              role: msg.role,
+              content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+            }))
+            if (result.resumeWarning) {
+              // Fix 7: Session isolation — add a visual separator between current session
+              // and restored history to prevent accidental leakage/confusion
+              const separator: ChatMessage = {
+                role: 'assistant' as const,
+                content: '── Restored session history below ──',
+              }
+              setMessages((prev) => [...prev, separator, ...restored])
+            } else {
+              setMessages((prev) => [...prev, ...restored])
+            }
+          }
+          if (result.copyContent) {
+            // Copy to clipboard via pbcopy (macOS) or clip (Windows)
+            try {
+              const { execSync } = await import('node:child_process')
+              if (process.platform === 'darwin') {
+                execSync('pbcopy', { input: result.copyContent })
+              } else if (process.platform === 'win32') {
+                execSync('clip', { input: result.copyContent })
+              }
+              // Linux: xclip or wl-copy not attempted to avoid dependency issues
+            } catch {
+              // Silent fail — content is still displayed
+            }
+          }
+        }
+
+        // Bridge: if command set forwardToAI, route the message to AI processing
+        if (forwardToAI) {
+          input = forwardToAI
+          // fall through to normal AI processing below
+        } else {
+          // No handler matched or handler didn't request AI routing — stop here
+          return
+        }
+      }
+
+      // ── Emotion detection: adjust behavior based on user's emotional state ──
+      // Uses regex heuristics (zero-latency) to detect frustration/impatience/confusion.
+      // When frustrated, prepends a terseness instruction to the user input so the
+      // AI model skips explanations and gets straight to the fix.
+      let emotionPrefix = ''
+      try {
+        const { EmotionDetector } = await import('../core/emotion-detector.js')
+        const detector = new EmotionDetector()
+        const result = detector.detect(input)
+        if (result.emotion === 'frustrated' || result.emotion === 'impatient') {
+          emotionPrefix = `[SYSTEM NOTE: The user is ${result.emotion}. Be extremely concise. Skip all explanations, preambles, and summaries. Output only the fix/result. No "here's what I did" or "let me explain". One sentence maximum before code.]\n\n`
+        } else if (result.emotion === 'confused') {
+          emotionPrefix = `[SYSTEM NOTE: The user seems confused. Explain more thoroughly, break down complex steps, and offer clarifying questions rather than assuming understanding.]\n\n`
+        }
+      } catch {
+        // Emotion detection is non-critical — fail silently
+      }
+
+      // ── Normal message processing (AI chat) ──
+      // First user message: auto-name the session if it still carries the
+      // default cwd-basename name (respecting any manual /rename).
+      if (
+        engine
+          .getContext()
+          .getMessages()
+          .every((m) => m.role !== 'user')
+      ) {
+        const currentName = discoverSessions().find((s) => s.id === sessionId)?.name
+        if (isDefaultSessionName(currentName, process.cwd())) {
+          const title = deriveSessionTitle(input)
+          if (title && sessionId) renameActiveSession(sessionId, title)
+        }
+      }
+
+      setMessages((prev) => [...prev, { role: 'user', content: input }])
+      setIsLoading(true)
+
+      // Start agent progress indicator immediately for ALL processing
+      const progressStart = Date.now()
+      const progress: AgentProgress = {
+        name: '',
+        description: '',
+        startTime: progressStart,
+        tokensUsed: 0,
+      }
+      agentProgressRef.current = progress
+      setAgentProgress(progress)
+      setAgentTick((t) => t + 1)
+
+      const controller = new AbortController()
+      abortRef.current = controller
+
+      await runTurn(emotionPrefix ? emotionPrefix + input : input, 'user', controller)
+    },
+    [engine, mkCtx, runTurn],
   )
 
   useInput((_input, key) => {
