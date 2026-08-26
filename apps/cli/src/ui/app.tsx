@@ -960,7 +960,11 @@ export function App({
     return (
       <Box flexDirection="column" padding={1} height="100%">
         {/* Chat panel — show existing messages */}
-        <ChatPanel messages={messages} focusMode={false} />
+        <ChatPanel
+          messages={messages}
+          focusMode={false}
+          showSystemMessages={config.showSystemMessages ?? true}
+        />
 
         {/* API Key input prompt */}
         <Box flexDirection="column" marginTop={1}>
@@ -1023,7 +1027,11 @@ export function App({
         ) : (
           <>
             {/* Chat panel */}
-            <ChatPanel messages={messages} focusMode={focusMode} />
+            <ChatPanel
+              messages={messages}
+              focusMode={focusMode}
+              showSystemMessages={config.showSystemMessages ?? true}
+            />
             {(() => {
               const indicator = formatThinking(
                 config.showThinking ?? 'minimal',

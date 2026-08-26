@@ -14,6 +14,7 @@ export const DEFAULT_CONFIG: MiphamConfig = {
   defaultModel: 'deepseek-v4-pro',
   permission: 'default',
   showThinking: 'minimal',
+  showSystemMessages: true,
   // Org 级权限限制（可选）：forbiddenModes 禁指定模式 / maxAllowedMode 封顶层级；
   // 请求被禁模式时 fail-closed 降级（如 forbiddenModes:['bypassPermissions']）。
   // permissionRestrictions: { forbiddenModes: ['bypassPermissions'] },
