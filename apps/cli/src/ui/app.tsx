@@ -447,7 +447,7 @@ export function App({
                   thinkingTimerRef.current = null
                 }
                 const thinkingLine = formatThinking(
-                  config.showThinking ?? 'minimal',
+                  config.showThinking ?? 'off',
                   thought,
                   t('ui.loading.thinking'),
                 )
@@ -1026,7 +1026,7 @@ export function App({
             <ChatPanel messages={messages} focusMode={focusMode} />
             {(() => {
               const indicator = formatThinking(
-                config.showThinking ?? 'minimal',
+                config.showThinking ?? 'off',
                 thinkingText,
                 t('ui.loading.thinking'),
               )
@@ -1070,7 +1070,7 @@ export function App({
                 <InputBar
                   onSubmit={handleSubmit}
                   isLoading={isLoading}
-                  showCommandPicker={config.showCommandPicker ?? true}
+                  showCommandPicker={config.showCommandPicker ?? false}
                   onTogglePicker={() => setPickerOpen((prev) => !prev)}
                   onToggleFocus={() => setFocusMode((prev) => !prev)}
                   onToggleExpand={() => {

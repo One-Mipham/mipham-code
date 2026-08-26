@@ -137,14 +137,14 @@ export interface MiphamConfig {
   permissionRules?: { allow?: string[]; deny?: string[] }
   /**
    * How to render the model's reasoning/thinking before the answer:
-   * - `off`     → hide entirely
-   * - `minimal` → content-free "thinking…" indicator (default)
+   * - `off`     → hide entirely (default — clean output)
+   * - `minimal` → content-free "thinking…" indicator
    * - `full`    → last 200 chars of the actual thinking text
    */
   showThinking?: 'off' | 'minimal' | 'full'
-  /** When false, hide the `⏰ Wakeup scheduled` scheduling confirmation notices. Default true. */
+  /** When false, hide the `⏰ Wakeup scheduled` scheduling confirmation notices. Default false. */
   showSchedulingNotices?: boolean
-  /** When false, disable the slash-command picker auto-popup on `/`. Default true. */
+  /** When false, disable the slash-command picker auto-popup on `/`. Default false. */
   showCommandPicker?: boolean
   providers: ProviderConfig[]
   skills?: { paths: string[]; mcpServers: McpServerConfig[] }
