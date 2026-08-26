@@ -6,6 +6,13 @@ import type { ToolDefinition } from '../../shared/index.ts'
  */
 const activeTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
+let wakeupHandler: ((sessionId: string, prompt: string) => void) | null = null
+
+/** 引擎在启动时注入——timer 到期后回调，把 loop prompt 交回引擎 re-invoke。 */
+export function registerWakeupHandler(fn: (sessionId: string, prompt: string) => void): void {
+  wakeupHandler = fn
+}
+
 export const scheduleWakeupTool: ToolDefinition = {
   name: 'ScheduleWakeup',
   description:
@@ -86,6 +93,7 @@ export const scheduleWakeupTool: ToolDefinition = {
     const timerKey = `${sessionId}:wakeup`
     const timeoutId = setTimeout(() => {
       activeTimers.delete(timerKey)
+      wakeupHandler?.(sessionId, prompt)
     }, delaySeconds * 1000)
 
     activeTimers.set(timerKey, timeoutId)
