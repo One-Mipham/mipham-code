@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { loadPerformanceTasks, judgeGeneratedCode } from '../../src/core/task-performance'
+import type { Llm } from '../../src/providers/llm'
+import {
+  loadPerformanceTasks,
+  judgeGeneratedCode,
+  stripCodeFences,
+  runTaskPerformance,
+} from '../../src/core/task-performance'
 
 describe('loadPerformanceTasks', () => {
   it('加载至少 1 个字段完整的任务', () => {
@@ -43,5 +49,34 @@ describe('judgeGeneratedCode', () => {
       "import { test, expect } from 'bun:test'\nimport { hang } from './solution'\ntest('hang', () => { expect(hang()).toBe(1) })"
     const verdict = judgeGeneratedCode(test, solution, { timeoutMs: 1000 })
     expect(verdict.passed).toBe(false)
+  })
+})
+
+describe('stripCodeFences', () => {
+  it('剥掉 markdown 代码块', () => {
+    const input = '```typescript\nexport function f() { return 1 }\n```'
+    const out = stripCodeFences(input)
+    expect(out).toContain('export function f()')
+    expect(out).not.toContain('```')
+  })
+})
+
+describe('runTaskPerformance', () => {
+  it('对 mock LLM 生成的代码打分', async () => {
+    const mockLlm: Llm = {
+      chat: async function* () {
+        yield {
+          type: 'text',
+          content:
+            'export function quicksort(arr: number[]): number[] { return [...arr].sort((a, b) => a - b) }',
+        }
+      },
+    }
+    const report = await runTaskPerformance(mockLlm)
+    expect(report.total).toBeGreaterThan(0)
+    expect(report.passed).toBeGreaterThanOrEqual(0)
+    expect(report.passed).toBeLessThanOrEqual(report.total)
+    expect(report.score).toBe(Math.round((report.passed / report.total) * 100))
+    expect(report.results.length).toBe(report.total)
   })
 })
