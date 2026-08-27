@@ -308,7 +308,7 @@ Never omit it or present the work as purely human-authored.`)
     const description = modeDescriptions[mode]
     if (!description) return ''
 
-    return `## Permission Context\n\n${description}\n\nWhen a tool is denied, do NOT retry with the same tool and similar parameters. Move on to a different approach or ask the user for guidance.`
+    return `## Permission Context\n\n${description}\n\nWhen a tool is denied, do NOT retry it or any other approval-gated tool — Bash, WebSearch, network, and Workflow are all blocked in this mode. If the task genuinely needs a blocked tool, STOP retrying and ask the user to switch to bypassPermissions (Shift+Tab) or add an allow rule (/permissions), then wait for the user's answer.`
   }
 
   list(): InstructionFile[] {

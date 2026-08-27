@@ -23,6 +23,13 @@ describe('InstructionsLoader.buildSystemPrompt', () => {
     expect(prompt).toContain('Greeting Restraint')
     expect(prompt).toContain('Do NOT introduce yourself')
   })
+
+  it('injects actionable permission-escalation guidance (连续被挡要止损并求助)', () => {
+    const prompt = new InstructionsLoader().buildSystemPrompt('default')
+    expect(prompt).toContain('STOP retrying')
+    expect(prompt).toContain('bypassPermissions')
+    expect(prompt).toContain('/permissions')
+  })
 })
 
 describe('stripSections (prompt-exclude)', () => {
