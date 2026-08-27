@@ -11,7 +11,7 @@ prompt-exclude:
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
 > **版本**: 2.19.0
-> **最后更新**: 2026-08-27 — CronCreate 落地（引擎 60s 轮询 fire 回当前会话）+ Memory 语义召回（本地 TF-IDF 余弦，CJK bigram）+ 测试数对齐 1901
+> **最后更新**: 2026-08-27 — CronCreate 落地（引擎 60s 轮询 fire 回当前会话）+ Memory 语义召回（本地 TF-IDF 余弦，CJK bigram）+ 测试数对齐 1902
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -49,7 +49,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **eval harness** `/crsi eval` — `core/eval-harness.ts` 冻结 21 条 ground-truth 契约（13 机制：规则/宪法/沙箱边界/完整覆盖闸/红队/producer 行为 + 8 行为缺口）+ rewards 日志 `~/.mipham/crsi/eval-scores.jsonl`，`runCrsiModification` 以「分数不退化」为第二道闸。8 行为缺口（rm -rf/管道投毒/git reset --hard/chmod 777/mkfs/dd→/dev//关停主机/crontab -r）已由固化 managed tool-params 规则覆盖 → 全翻转 PASS → 满分 100 =「证明更好」
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：1,901 测试（1899 passed + 2 skipped）
+测试：1,902 测试（1900 passed + 2 skipped）
 
 ---
 
@@ -86,7 +86,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 26 个内置技能（20 standard + 6 mipham）
-│   │   ├── test/               # 179 个测试文件，1901 个测试
+│   │   ├── test/               # 179 个测试文件，1902 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -109,7 +109,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（1901 个测试）
+pnpm test         # vitest run（1902 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -233,7 +233,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
 | E2E      | 1       | 8        | full-pipeline                                 |
 | Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **179** | **1901** | **0 失败** ✅（1899 passed + 2 skipped）      |
+| **合计** | **179** | **1902** | **0 失败** ✅（1900 passed + 2 skipped）      |
 
 > 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
 

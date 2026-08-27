@@ -16,7 +16,7 @@
 
 import { execSync } from 'node:child_process'
 import { mkdirSync, rmSync, existsSync, writeFileSync, readFileSync, readdirSync } from 'node:fs'
-import { join, resolve, sep } from 'node:path'
+import { join, resolve, sep, posix } from 'node:path'
 import { tmpdir, homedir } from 'node:os'
 import { randomUUID } from 'node:crypto'
 
@@ -115,6 +115,12 @@ const PROTECTED_PATHS = [
   'apps/cli/src/core/crsi-sandbox.ts',
   'apps/cli/src/core/crsi-producer.ts',
   'apps/cli/src/core/proposal-guard.ts',
+  // 2026-08-27 review 补齐：运行时执行/评估器，改掉会削弱 grader 或安全边界
+  'apps/cli/src/core/crsi-modify.ts',
+  'apps/cli/src/core/rule-engine.ts',
+  'apps/cli/src/core/red-team.ts',
+  'apps/cli/src/core/error-signature-db.ts',
+  'apps/cli/src/core/preflight-checker.ts',
 ]
 
 /** 是否命中只读边界。前缀匹配，目录条目以 `/` 结尾。 */
@@ -225,7 +231,10 @@ export class CrsiSandbox {
     }
 
     const worktreeRoot = resolve(this.worktreePath)
-    const targetPath = resolve(this.worktreePath, mod.filePath)
+    // Normalize "./" and "subdir/../" so the protected-path guard can't be evaded
+    // by a path that resolves back inside the worktree (raw prefix match would miss it).
+    const normalizedFilePath = posix.normalize(mod.filePath)
+    const targetPath = resolve(this.worktreePath, normalizedFilePath)
 
     // Path traversal guard: reject any target that resolves outside the sandbox worktree
     if (targetPath !== worktreeRoot && !targetPath.startsWith(worktreeRoot + sep)) {
@@ -237,7 +246,7 @@ export class CrsiSandbox {
 
     // Protected-path guard: the self-improvement loop must not modify the
     // constitution, eval harness, or improvement machinery itself.
-    if (isProtectedPath(mod.filePath)) {
+    if (isProtectedPath(normalizedFilePath)) {
       result.error = `Protected path: "${mod.filePath}" is read-only to the self-improvement loop.`
       result.phase = 'failed'
       this.sessionReport.modifications.push(result)
@@ -275,7 +284,7 @@ export class CrsiSandbox {
 
       // Generate diff
       try {
-        result.diff = execSync(`git diff -- "${mod.filePath}"`, {
+        result.diff = execSync(`git diff -- "${normalizedFilePath}"`, {
           cwd: this.worktreePath,
           timeout: 10_000,
           encoding: 'utf-8',

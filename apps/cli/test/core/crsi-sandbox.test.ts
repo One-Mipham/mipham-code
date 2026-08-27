@@ -150,12 +150,45 @@ describe('CrsiSandbox', () => {
         'apps/cli/src/core/crsi-sandbox.ts',
         'apps/cli/src/agent/effectiveness-tracker.ts',
         'apps/cli/test/core/crsi-sandbox.test.ts',
+        // 改进机制自身（2026-08-27 review 补齐：运行时执行/评估器，改掉会削弱 grader）
+        'apps/cli/src/core/crsi-modify.ts',
+        'apps/cli/src/core/rule-engine.ts',
+        'apps/cli/src/core/red-team.ts',
+        'apps/cli/src/core/error-signature-db.ts',
+        'apps/cli/src/core/preflight-checker.ts',
       ]
 
       for (const filePath of protectedFiles) {
         const result = sandbox.applyModification({
           id: `prot-${filePath.replace(/[^a-z0-9]/gi, '-')}`,
           description: 'Should be blocked by protected-path guard',
+          filePath,
+          newContent: '{}',
+          originalContent: '',
+          timestamp: new Date().toISOString(),
+        })
+
+        expect(result.applied).toBe(false)
+        expect(result.phase).toBe('failed')
+        expect(result.error).toContain('Protected path')
+      }
+    })
+
+    it('rejects protected paths even when obfuscated with ./ or subdir/../ prefixes', () => {
+      sandbox.createWorktree()
+
+      // Raw-string prefix match must not be evaded by a path that resolves back
+      // inside the worktree. normalize() canonicalizes these before the guard.
+      const obfuscatedPaths = [
+        './apps/cli/src/core/crsi-sandbox.ts',
+        'apps/cli/src/core/../core/crsi-sandbox.ts',
+        './apps/cli/src/core/eval-harness.ts',
+      ]
+
+      for (const filePath of obfuscatedPaths) {
+        const result = sandbox.applyModification({
+          id: `obf-${filePath.replace(/[^a-z0-9]/gi, '-')}`,
+          description: 'Should be blocked by protected-path guard (obfuscated path)',
           filePath,
           newContent: '{}',
           originalContent: '',
