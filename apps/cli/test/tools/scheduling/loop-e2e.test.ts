@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { it, expect, vi, afterEach } from 'vitest'
 import { scheduleWakeupTool } from '../../../src/tools/scheduling/schedule-wakeup'
 import { QueryEngine } from '../../../src/core/engine'
 import { ProviderRegistry } from '../../../src/providers/registry'
