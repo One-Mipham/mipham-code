@@ -106,3 +106,16 @@
 - OpenRSI（FrontisAI）调研：许可证是 **CC BY-NC 4.0（非商用）**，昨晚笔记只标了 HyperAgents 的 CC BY-NC-SA，漏了头号推荐 OpenRSI 的许可——Mipham Code（Apache-2.0 商业）不能抄代码/权重，只能借思想
 - OpenRSI 执行隔离：OpenMLE Sandbox = Docker/Podman **断网容器 + 资源/文件系统限制**（OS 级隔离、无 gVisor），自动评分在隔离容器内跑——强度「够用非顶级」
 - 可借鉴机制（思想层，不受许可限制）：① 四原子算子（Draft/Improve/Debug/Crossover）→ CRSI producer 补 **Crossover 算子** ②「改进率本身当优化目标」→ CRSI eval 从「分数不退化」升级「改进率不退化」 ③ 可验证任务环境规模化（5758 可执行任务）→ eval harness 扩展方向
+
+## crsi-design: 受约束 vs 无约束自改进——隔离与回滚是安全分水岭
+
+- 建议: 评估自改进系统时，「隔离」与「回滚」是安全的分水岭，比「许可证能否抄」更重要。无约束自改进（in-process exec / 猴子补丁、无沙箱、无快照）即便 MIT 许可可抄实现，也不该抄——那是生产级漏洞的根源。真正值得抄的是「接口层抽象」：把 reward/evaluate 显式化为 `policy → feedback` 接口，让评估器可插拔。
+- 严重度: warning
+- 生成时间: 2026-08-27
+- 来源: 会话复盘（human + Claude Code，手动沉淀）
+
+### 证据
+
+- Godel_Agent（北大 ArvidYin，**MIT 许可**）：`action_run_code` 用 `exec(code, globals())` + `subprocess.run(shell=True)` **无沙箱**执行；`action_adjust_logic` 用 `exec(compile())` + `setattr` 猴子补丁自修改；**无 snapshot/rollback**，改坏自己只靠 `evolve≥100` 的 `sys.exit(1)` 兜底；`goal_prompt` 明授 "unrestricted access / install external libraries"（可 `pip install` 任意包）
+- 对比：OpenRSI（CC BY-NC）有 Docker/Podman 断网容器隔离；CRSI 有 worktree + 全量测试 + diff + approve/reject + PROTECTED_PATHS + 分数不退化闸
+- 结论：**MIT 可抄 ≠ 该抄实现**；该抄的是「reward function = policy→feedback」这类接口抽象，落到 CRSI = `/crsi eval` 的 evaluate 抽成 `RewardFn` 接口（wiki 行动清单 D/E 延伸）
