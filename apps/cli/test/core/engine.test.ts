@@ -2,7 +2,11 @@ import { describe, it, expect } from 'vitest'
 import type { StreamChunk, ToolDefinition, ToolResult } from '../../src/shared/index.ts'
 import { QueryEngine, filterExpiredMessages } from '../../src/core/engine'
 import { SelfCritique } from '../../src/core/self-critique'
-import type { AgentMessage } from '../../src/agent/message-bus'
+import {
+  AgentMessageBus,
+  formatInboundMessage,
+  type AgentMessage,
+} from '../../src/agent/message-bus'
 import { ContextManager } from '../../src/core/context'
 import { PermissionSystem } from '../../src/core/permission'
 import { HookEngine } from '../../src/core/hooks'
@@ -68,6 +72,71 @@ function makeToolMap(tools: ToolDefinition[]): Map<string, ToolDefinition> {
 }
 
 // ── Tests ──
+
+describe('QueryEngine inbound message draining', () => {
+  it('drains unread bus messages addressed to "main" into the conversation', () => {
+    const registry = mockProviderRegistry()
+    const context = mockContext()
+    const engine = new QueryEngine(registry, context, makeToolMap([]))
+
+    const bus = new AgentMessageBus()
+    bus.post('bg-1', 'main', 'Task done', 'The background task finished.')
+
+    const injected = engine.drainInboundMessages(bus)
+
+    expect(injected).toBe(1)
+    expect(context.getMessages()).toContainEqual({
+      role: 'user',
+      content: '[Message from bg-1]: Task done\n\nThe background task finished.',
+    })
+  })
+
+  it('drains unread bus messages addressed to the session id into the conversation', () => {
+    const registry = mockProviderRegistry()
+    const context = mockContext()
+    const engine = new QueryEngine(registry, context, makeToolMap([]))
+    engine.setSessionId('session-abc')
+
+    const bus = new AgentMessageBus()
+    bus.post('other-session', 'session-abc', 'Hello', 'Cross-session reply.')
+
+    const injected = engine.drainInboundMessages(bus)
+
+    expect(injected).toBe(1)
+    expect(context.getMessages()).toContainEqual({
+      role: 'user',
+      content: '[Message from other-session]: Hello\n\nCross-session reply.',
+    })
+  })
+
+  it('marks drained messages read so they are not re-injected', () => {
+    const registry = mockProviderRegistry()
+    const context = mockContext()
+    const engine = new QueryEngine(registry, context, makeToolMap([]))
+
+    const bus = new AgentMessageBus()
+    bus.post('bg-1', 'main', 'Once', 'Only once.')
+
+    expect(engine.drainInboundMessages(bus)).toBe(1)
+    expect(engine.drainInboundMessages(bus)).toBe(0)
+    expect(context.getMessages()).toHaveLength(1)
+  })
+
+  it('formatInboundMessage formats from / summary / message', () => {
+    expect(
+      formatInboundMessage({
+        id: 'm1',
+        from: 'alice',
+        to: 'main',
+        summary: 'Heads up',
+        message: 'Body text',
+        timestamp: new Date(),
+        read: false,
+        type: 'message',
+      }),
+    ).toBe('[Message from alice]: Heads up\n\nBody text')
+  })
+})
 
 describe('QueryEngine', () => {
   describe('constructor and accessors', () => {

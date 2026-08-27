@@ -40,7 +40,12 @@ import { buildRequest, sendInferenceCheck, isInferenceHookEnabled } from './infe
 import { getFileInboxTransport } from '../agent/cross-session/file-inbox'
 import { registerWakeupHandler } from '../tools/scheduling/schedule-wakeup'
 import { accumulateGraftSavings } from '../shared/graft-savings'
-import { getMessageBus, type AgentMessage } from '../agent/message-bus'
+import {
+  getMessageBus,
+  formatInboundMessage,
+  type AgentMessage,
+  type AgentMessageBus,
+} from '../agent/message-bus'
 import { createT } from '../i18n-core/t'
 import enUS from '../i18n-core/locales/en-US.json'
 import zhCN from '../i18n-core/locales/zh-CN.json'
@@ -253,6 +258,28 @@ export class QueryEngine {
       // Best-effort: don't let a failed inbox poll break the turn
       console.warn('Cross-session inbox poll failed:', err)
     }
+  }
+
+  /**
+   * Drain unread inbound messages from the in-memory bus (addressed to this
+   * session or to "main") and inject them into the conversation as user-role
+   * notices. Returns the number of messages injected.
+   *
+   * The bus is the delivery channel for same-process SendMessage ("main",
+   * "bg-*", "sub-agent-*") and the re-post target of pollCrossSessionInbox;
+   * this is the missing "drain" step that surfaces those messages to the model.
+   */
+  drainInboundMessages(bus: AgentMessageBus = getMessageBus()): number {
+    const recipients = [...new Set([this.sessionId, 'main'])]
+    let injected = 0
+    for (const recipient of recipients) {
+      for (const msg of bus.poll(recipient)) {
+        this.context.addMessage({ role: 'user', content: formatInboundMessage(msg) })
+        injected++
+      }
+      bus.markAllRead(recipient)
+    }
+    return injected
   }
 
   /** Register a hook engine for pre/post tool-use lifecycle events. */
@@ -474,6 +501,8 @@ export class QueryEngine {
 
     // Poll for cross-session messages before each turn
     await this.pollCrossSessionInbox()
+    // Drain in-memory bus messages (same-process SendMessage + cross-session re-posts)
+    this.drainInboundMessages()
 
     // Fire UserPromptSubmit hooks before processing
     if (this.hookEngine) {

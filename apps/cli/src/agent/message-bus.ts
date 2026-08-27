@@ -24,6 +24,15 @@ export interface AgentMessage {
   type: AgentMessageType
 }
 
+/**
+ * Format an inbound message for injection into the conversation as a
+ * user-role notice (bracket-prefixed so the model reads it as a notice,
+ * not a direct user turn).
+ */
+export function formatInboundMessage(msg: AgentMessage): string {
+  return `[Message from ${msg.from}]: ${msg.summary}\n\n${msg.message}`
+}
+
 export class AgentMessageBus {
   private messages: AgentMessage[] = []
   private idCounter = 0
