@@ -29,6 +29,7 @@ import {
 } from '../core/crsi-producer'
 import { prefilterProposal } from '../core/proposal-guard'
 import { runEval, appendEvalScore } from '../core/eval-harness'
+import { runTaskPerformance } from '../core/task-performance'
 import { NPM_UPDATE_COMMAND, PACKAGE_VERSION, COAUTHOR_TRAILER } from '../shared/index.ts'
 import { getPreference } from '../config/preferences'
 import { loadCrossSessionConfig } from '../config/loader'
@@ -962,6 +963,25 @@ const crsiEvalCmd: CommandHandler = async () => {
   for (const r of report.results) {
     lines.push(
       `| ${r.description} | ${r.passed ? '✅' : '❌'}${r.detail ? ` — ${r.detail}` : ''} |`,
+    )
+  }
+  if (report.failures.length > 0) {
+    lines.push('', `❌ 失败任务: ${report.failures.join(', ')}`)
+  }
+  return { content: lines.join('\n') }
+}
+
+const crsiBenchCmd: CommandHandler = async (ctx) => {
+  const llm = ctx.engine.getLlm() ?? ctx.engine.getRegistry()
+  const report = await runTaskPerformance(llm)
+
+  const lines: string[] = ['## 🎯 CRSI 任务表现基准', '']
+  lines.push(`得分: **${report.score}/100** (${report.passed}/${report.total})`, '')
+  lines.push('| 任务 | 结果 |')
+  lines.push('|------|------|')
+  for (const r of report.results) {
+    lines.push(
+      `| ${r.description.slice(0, 60)} | ${r.passed ? '✅' : '❌'}${r.detail ? ` — ${r.detail.slice(0, 80)}` : ''} |`,
     )
   }
   if (report.failures.length > 0) {
@@ -4695,6 +4715,7 @@ const commandsListCmd: CommandHandler = () => {
     '/crsi propose': 'Tools & Skills',
     '/crsi prose-clear': 'Tools & Skills',
     '/crsi eval': 'Tools & Skills',
+    '/crsi bench': 'Tools & Skills',
     '/crsi meta': 'Tools & Skills',
     '/crsi interpret': 'Tools & Skills',
     '/crsi critique': 'Tools & Skills',
@@ -4853,6 +4874,7 @@ registry.set('/crsi modify', crsiModifyCmd)
 registry.set('/crsi propose', crsiProposeCmd)
 registry.set('/crsi prose-clear', crsiProseClearCmd)
 registry.set('/crsi eval', crsiEvalCmd)
+registry.set('/crsi bench', crsiBenchCmd)
 registry.set('/crsi meta', crsiMetaCmd)
 registry.set('/crsi interpret', crsiInterpretCmd)
 registry.set('/crsi critique', crsiCritiqueCmd)
@@ -5037,6 +5059,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
     '固化 CRSI 失败信号（默认教训 / --rule 受管理规则 / --prose 改 skill 散文），沙箱 + 人批准门控',
   '/crsi prose-clear': '清空散文提议去重 ledger（~/.mipham/crsi/prose-proposals.jsonl）',
   '/crsi eval': 'Run the ground-truth CRSI eval harness and record the score',
+  '/crsi bench': 'Run the LLM task-performance benchmark and report the score',
   '/crsi meta': 'RSI Level 3 meta-rule analysis — rules that improve the rules',
   '/crsi interpret': 'Tool-call behavior dashboard — error patterns, usage, health',
   '/crsi critique': 'Enable/disable RLAIF self-critique on tool calls',
