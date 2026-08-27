@@ -132,3 +132,16 @@
 - OpenRSI（CC BY-NC）源码核实：`run_task_process` 默认 `execution_mode="process"`（宿主机裸跑），`isolated` 是 opt-in——虽有 `test_isolated_mode_never_falls_back` 保证不静默降级，但「默认裸跑」仍是盲点；对比其 isolated 模式加固（`--cap-drop ALL` / `--no-new-privileges` / `--network none` / `--read-only` / `noexec,nosuid tmpfs` / pids·mem·cpu 上限）是认真做的
 - OpenRSI `overview.md` 反作弊：模型自报分数默认不作父代选择依据（`trust_model_validation_score=false`）
 - 映射 CRSI：CrsiSandbox 已用 worktree 隔离（比容器更保守）、eval harness 已独立评估（分数不退化闸）——本轮价值 = ① 把「隔离默认 fail-closed」显式固化 ② 把「自报分数只作诊断」显式进 eval harness 契约
+
+## eval-rigor: 晋升须统计严谨——因果归因 + 误提升预算 + 最小效应量
+
+- 建议: 自改进的「晋升/固化」不能只靠「整体分数不退化」这一道闸，须统计严谨：① **因果归因**——只有单组件变更（其余全同）才标因果，多组件/替换永不标因果（防「改 A 碰巧 B 变好」）② **误提升预算**——campaign 级 alpha 预留 + 块不相交道，防「试到够多总能过」③ **最小效应量**——置信区间须越过最小效应，而非「分数≥阈值」④ **原子激活**——不可变 manifest + 指针 CAS 替换，读者要么见旧要么见新。
+- 严重度: warning
+- 生成时间: 2026-08-27
+- 来源: 会话复盘（human + Claude Code，手动沉淀）
+
+### 证据
+
+- autocontext（Apache-2.0）`docs/context-bundles.md`：晋升八道检查，核心三条——「只有当比较恰好只省略一个 `(kind,key,digest)` 且其余全同时，才转 `causal_attribution.json`；替换/多组件永不标因果」、「campaign 级持久 alpha 预留 + 块不相交道」、「自适应确认置信区间须越过最小效应量」；激活 = 单个 `active.json` 原子指针替换 + compare-and-swap
+- 对照 CRSI：`/crsi eval` 冻结 21 契约但用「整体分数不退化」单道闸——缺因果归因、缺误提升预算、缺最小效应量，可逐条补强（延伸 blastRadius 教训 + wiki 行动 D）
+- kernel-evolution 补一句：「独立 primary/confirmation + per-case floor，不用一个聚合分掩盖某工作负载失败」
