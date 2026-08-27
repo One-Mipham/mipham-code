@@ -145,3 +145,16 @@
 - autocontext（Apache-2.0）`docs/context-bundles.md`：晋升八道检查，核心三条——「只有当比较恰好只省略一个 `(kind,key,digest)` 且其余全同时，才转 `causal_attribution.json`；替换/多组件永不标因果」、「campaign 级持久 alpha 预留 + 块不相交道」、「自适应确认置信区间须越过最小效应量」；激活 = 单个 `active.json` 原子指针替换 + compare-and-swap
 - 对照 CRSI：`/crsi eval` 冻结 21 契约但用「整体分数不退化」单道闸——缺因果归因、缺误提升预算、缺最小效应量，可逐条补强（延伸 blastRadius 教训 + wiki 行动 D）
 - kernel-evolution 补一句：「独立 primary/confirmation + per-case floor，不用一个聚合分掩盖某工作负载失败」
+
+## boundary: 自改进边界 ≠ 执行安全，语义边界优于路径黑名单
+
+- 建议: 评估自改进系统要把「自改进边界」和「执行安全」分开看，二者可独立强弱——一个项目可能「自改进保守、执行裸跑」。自改进边界用**语义**划分（「不可变基础 prompt」vs「可编辑补充状态」）比路径黑名单更清晰、更不易漏。
+- 严重度: warning
+- 生成时间: 2026-08-27
+- 来源: 会话复盘（human + Claude Code，手动沉淀）
+
+### 证据
+
+- prime-agent（MIT）`refinement.ts`：base system prompt「immutable and MUST NOT be rewritten」、只改 harness 状态、Never edit source files directly、快照 rollback——自改进边界保守 ✅；但 README 明说「用用户权限执行模型生成 Python/命令，worker/kernel 是**生命周期**隔离、**不是安全沙箱**」——执行安全裸跑 ❌。两层独立，之前 wiki 把「更保守」误写成「更安全」
+- `/refine` 要求每条 edit 附 scope metadata「帮助未来 review 理解预期 blast radius」——CRSI `blastRadius` 闸门的真实产品实现，验证 2.17.0 方向
+- 映射 CRSI：`crsi-sandbox.ts` 的 `PROTECTED_PATHS` 是路径黑名单，可改为显式「immutable base」语义清单
