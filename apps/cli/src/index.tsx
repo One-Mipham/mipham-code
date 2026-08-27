@@ -41,6 +41,7 @@ import { mountConstitution, createConstitution } from './core/constitution-seam'
 import { ConstitutionLoader } from './core/constitution-loader'
 import { McpClient } from './mcp/client'
 import { registerMcpServerTools, syncMcpToolsOnChange } from './mcp/registry'
+import { formatMcpConnectFailures, type McpConnectFailure } from './mcp/connect-failures'
 import { AgentRegistry } from './agent/agent-registry'
 import { HookEngine } from './core/hooks'
 import { ArtifactServer } from './artifacts/server'
@@ -203,8 +204,8 @@ function SetupGate(props: SetupGateProps) {
 async function connectMcpServers(
   mcpServers: McpServerConfig[],
   tools: ReturnType<typeof createToolRegistry>,
-): Promise<void> {
-  if (mcpServers.length === 0) return
+): Promise<McpConnectFailure[]> {
+  if (mcpServers.length === 0) return []
   const mcp = McpClient.getInstance()
   // Wire runtime tool-list changes before connect so mid-connect updates land.
   syncMcpToolsOnChange(mcp, tools)
@@ -217,14 +218,17 @@ async function connectMcpServers(
       }
     }),
   )
+  const failures: McpConnectFailure[] = []
   for (let i = 0; i < results.length; i++) {
     const result = results[i]!
     if (result.status === 'rejected') {
-      process.stderr.write(
-        `[mcp] Failed to connect "${mcpServers[i]!.name}": ${String(result.reason)}\n`,
-      )
+      const name = mcpServers[i]!.name
+      const reason = String(result.reason)
+      failures.push({ name, reason })
+      process.stderr.write(`[mcp] Failed to connect "${name}": ${reason}\n`)
     }
   }
+  return failures
 }
 
 export async function runApp(options: RunOptions): Promise<void> {
@@ -498,7 +502,7 @@ export async function runApp(options: RunOptions): Promise<void> {
   // Connect MCP servers lazily in the background: the UI renders immediately,
   // and each server's tools register into the shared registry as it connects.
   // A dead server (e.g. a 15s connect timeout) no longer blocks startup.
-  void connectMcpServers(config.skills?.mcpServers ?? [], tools)
+  const mcpConnectPromise = connectMcpServers(config.skills?.mcpServers ?? [], tools)
 
   // Initialize hook engine — register skill-defined hooks
   const hookEngine = new HookEngine()
@@ -562,6 +566,14 @@ export async function runApp(options: RunOptions): Promise<void> {
 
   // ── Cross-session messaging: register session, heartbeat, shutdown ──
   engine.setSessionId(sessionName)
+
+  // Surface MCP connect failures to the model once they settle, so it knows
+  // those servers' tools are unavailable (rather than silently concluding the
+  // tools don't exist). Injected asynchronously — never blocks first paint.
+  void mcpConnectPromise.then((failures) => {
+    const notice = formatMcpConnectFailures(failures)
+    if (notice) engine.getContext().addMessage({ role: 'user', content: notice })
+  })
   // Human-readable, cross-session-addressable name. Defaults to the cwd basename
   // so `@mipham-code` can address this session; uniqueness is enforced against
   // other live sessions (suffix -2, -3, …). The id stays a stable `session-<ts>`.

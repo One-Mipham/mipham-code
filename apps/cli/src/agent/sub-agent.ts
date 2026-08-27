@@ -319,6 +319,7 @@ export class SubAgent {
 
     const chunks: string[] = []
     const MAX_TOOL_TURNS = options.maxTurns || 5
+    let hitMaxTurns = false
 
     let currentMessages = messages
     let currentSystemPrompt = systemPrompt
@@ -360,7 +361,7 @@ export class SubAgent {
             })
           }
           if (chunk.type === 'error') {
-            throw new Error(`Sub-agent execution failed: ${chunk.error}`)
+            throw new Error(`Sub-agent execution failed (model ${finalModel}): ${chunk.error}`)
           }
           if (chunk.type === 'stop') {
             break
@@ -501,6 +502,9 @@ export class SubAgent {
 
         // Don't send system prompt on subsequent turns
         currentSystemPrompt = ''
+
+        // On the final permitted turn we still used tools → hit the cap.
+        if (turn === MAX_TOOL_TURNS - 1) hitMaxTurns = true
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -509,10 +513,18 @@ export class SubAgent {
       if (err instanceof Error && err.message.startsWith('Sub-agent')) {
         throw err
       }
-      throw new Error(`Sub-agent execution failed: ${String(err)}`)
+      throw new Error(`Sub-agent execution failed (model ${finalModel}): ${String(err)}`)
     }
 
-    return chunks.join('')
+    const result = chunks.join('')
+    if (hitMaxTurns) {
+      return (
+        `[partial result — sub-agent reached its ${MAX_TOOL_TURNS}-turn limit; ` +
+        'task may be incomplete. Use SendMessage to continue this sub-agent.]\n\n' +
+        result
+      )
+    }
+    return result
   }
 
   /**

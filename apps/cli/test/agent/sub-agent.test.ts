@@ -126,6 +126,16 @@ describe('SubAgent', () => {
     )
   })
 
+  it('includes the model name in a chat error', async () => {
+    const provider = createMockProvider([
+      { type: 'error', error: 'OpenAI API error 404: model not found' },
+    ])
+    const registry = createMockRegistry(provider)
+
+    const sub = new SubAgent(registry, TOOLS)
+    await expect(sub.execute('test', 'task', { type: 'general' })).rejects.toThrow('mock-model')
+  })
+
   it('uses agent definition system prompt when provided', async () => {
     let receivedSystemPrompt = ''
     const provider = createMockProvider([{ type: 'text', content: 'ok' }, { type: 'stop' }])
@@ -388,6 +398,30 @@ describe('SubAgent', () => {
     expect(warningMsg!.summary).toContain('unknown-model-xyz')
     expect(warningMsg!.summary).toContain('mock-model')
     expect(warningMsg!.type).toBe('warning')
+  })
+
+  it('marks result as partial when the sub-agent hits its max tool-turn limit', async () => {
+    // Always emits a tool_use so the loop never breaks early → hits maxTurns.
+    const provider = createMockProvider([
+      { type: 'tool_use', toolUse: { type: 'tool_use', id: '1', name: 'Bash', input: {} } },
+      { type: 'stop' },
+    ])
+    const registry = createMockRegistry(provider)
+
+    const bashTool: ToolDefinition = {
+      name: 'Bash',
+      description: 'bash',
+      category: 'exec',
+      permission: 'auto',
+      parameters: {},
+      execute: async () => ({ success: true, content: 'ran' }),
+    }
+    const tools = new Map([['Bash', bashTool]])
+
+    const sub = new SubAgent(registry, tools)
+    const result = await sub.execute('loop', 'task', { maxTurns: 2 })
+
+    expect(result).toContain('partial')
   })
 })
 

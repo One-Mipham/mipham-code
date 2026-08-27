@@ -49,7 +49,8 @@ function executeCommand(cfg: HookConfig, ctx: HookContext): HookResult {
     }
 
     // Non-zero exit: check for block signal (exit code 2)
-    const stderr = result.stderr?.toString() || ''
+    // 截断 stderr 防 MB 级 hook 输出溢出会话（对齐 HTTP hook 的 slice(0,2000)）。
+    const stderr = (result.stderr?.toString() || '').slice(0, 2000)
 
     if (result.status === 2) {
       return {

@@ -26,7 +26,7 @@ export function readClaudeManifest(dir: string): ClaudeManifest | null {
   const path = join(dir, '.claude-plugin', 'plugin.json')
   if (!existsSync(path)) return null
   try {
-    return JSON.parse(readFileSync(path, 'utf-8')) as ClaudeManifest
+    return JSON.parse(readFileSync(path, 'utf-8').replace(/^\uFEFF/, '')) as ClaudeManifest
   } catch {
     return null
   }

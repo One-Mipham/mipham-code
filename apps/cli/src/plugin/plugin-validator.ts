@@ -52,7 +52,7 @@ export function validatePlugin(dir: string): PluginValidation {
 
   const errors: string[] = []
   try {
-    const raw = readFileSync(resolved.path, 'utf-8')
+    const raw = readFileSync(resolved.path, 'utf-8').replace(/^\uFEFF/, '')
     const manifest = JSON.parse(raw) as PluginManifest
 
     if (!manifest.name || !/^[a-z0-9-]+$/.test(manifest.name)) {

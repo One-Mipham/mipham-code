@@ -66,6 +66,19 @@ describe('validatePlugin (Claude)', () => {
     expect(result.valid).toBe(false)
     expect(result.errors.join(' ')).toContain('Invalid plugin name')
   })
+
+  it('accepts a plugin.json with a UTF-8 BOM', () => {
+    const dir = join(TEST_HOME, 'bom-mipham')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(
+      join(dir, 'plugin.json'),
+      '\uFEFF' + JSON.stringify({ name: 'bom', version: '1.0.0' }),
+      'utf-8',
+    )
+    const result = validatePlugin(dir)
+    expect(result.valid).toBe(true)
+    expect(result.manifest?.name).toBe('bom')
+  })
 })
 
 describe('readClaudeManifest', () => {
@@ -80,6 +93,18 @@ describe('readClaudeManifest', () => {
     const dir = join(TEST_HOME, 'read-empty')
     mkdirSync(dir, { recursive: true })
     expect(readClaudeManifest(dir)).toBeNull()
+  })
+
+  it('reads a manifest with a UTF-8 BOM', () => {
+    const dir = join(TEST_HOME, 'bom-claude')
+    mkdirSync(join(dir, '.claude-plugin'), { recursive: true })
+    writeFileSync(
+      join(dir, '.claude-plugin', 'plugin.json'),
+      '\uFEFF' + JSON.stringify({ name: 'bom-claude' }),
+      'utf-8',
+    )
+    const manifest = readClaudeManifest(dir)
+    expect(manifest?.name).toBe('bom-claude')
   })
 })
 

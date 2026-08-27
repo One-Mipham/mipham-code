@@ -87,7 +87,7 @@ describe('QueryEngine inbound message draining', () => {
     expect(injected).toBe(1)
     expect(context.getMessages()).toContainEqual({
       role: 'user',
-      content: '[Message from bg-1]: Task done\n\nThe background task finished.',
+      content: 'Message from @bg-1: Task done',
     })
   })
 
@@ -105,7 +105,7 @@ describe('QueryEngine inbound message draining', () => {
     expect(injected).toBe(1)
     expect(context.getMessages()).toContainEqual({
       role: 'user',
-      content: '[Message from other-session]: Hello\n\nCross-session reply.',
+      content: 'Message from @other-session: Hello',
     })
   })
 
@@ -134,7 +134,7 @@ describe('QueryEngine inbound message draining', () => {
         read: false,
         type: 'message',
       }),
-    ).toBe('[Message from alice]: Heads up\n\nBody text')
+    ).toBe('Message from @alice: Heads up')
   })
 })
 

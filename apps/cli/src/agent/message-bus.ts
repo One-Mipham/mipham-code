@@ -26,11 +26,12 @@ export interface AgentMessage {
 
 /**
  * Format an inbound message for injection into the conversation as a
- * user-role notice (bracket-prefixed so the model reads it as a notice,
- * not a direct user turn).
+ * user-role notice. Collapsed to one line (`Message from @<sender>: <summary>`)
+ * so cross-session peer messages don't bloat the context; the full body stays
+ * in the bus for Ctrl+O expansion.
  */
 export function formatInboundMessage(msg: AgentMessage): string {
-  return `[Message from ${msg.from}]: ${msg.summary}\n\n${msg.message}`
+  return `Message from @${msg.from}: ${msg.summary}`
 }
 
 export class AgentMessageBus {
