@@ -119,3 +119,16 @@
 - Godel_Agent（北大 ArvidYin，**MIT 许可**）：`action_run_code` 用 `exec(code, globals())` + `subprocess.run(shell=True)` **无沙箱**执行；`action_adjust_logic` 用 `exec(compile())` + `setattr` 猴子补丁自修改；**无 snapshot/rollback**，改坏自己只靠 `evolve≥100` 的 `sys.exit(1)` 兜底；`goal_prompt` 明授 "unrestricted access / install external libraries"（可 `pip install` 任意包）
 - 对比：OpenRSI（CC BY-NC）有 Docker/Podman 断网容器隔离；CRSI 有 worktree + 全量测试 + diff + approve/reject + PROTECTED_PATHS + 分数不退化闸
 - 结论：**MIT 可抄 ≠ 该抄实现**；该抄的是「reward function = policy→feedback」这类接口抽象，落到 CRSI = `/crsi eval` 的 evaluate 抽成 `RewardFn` 接口（wiki 行动清单 D/E 延伸）
+
+## self-eval: 隔离须默认 fail-closed + 自报分数不可信
+
+- 建议: 自改进系统的两条执行安全铁律：① 隔离必须是**默认**且 fail-closed——找不到隔离设施就拒绝执行，不能「opt-in 才隔离、默认裸跑」；② **模型自报的分数不可信**，只能作诊断，父代选择/合入必须靠独立评估（沙箱重跑），不采纳模型自评。
+- 严重度: warning
+- 生成时间: 2026-08-27
+- 来源: 会话复盘（human + Claude Code，手动沉淀）
+
+### 证据
+
+- OpenRSI（CC BY-NC）源码核实：`run_task_process` 默认 `execution_mode="process"`（宿主机裸跑），`isolated` 是 opt-in——虽有 `test_isolated_mode_never_falls_back` 保证不静默降级，但「默认裸跑」仍是盲点；对比其 isolated 模式加固（`--cap-drop ALL` / `--no-new-privileges` / `--network none` / `--read-only` / `noexec,nosuid tmpfs` / pids·mem·cpu 上限）是认真做的
+- OpenRSI `overview.md` 反作弊：模型自报分数默认不作父代选择依据（`trust_model_validation_score=false`）
+- 映射 CRSI：CrsiSandbox 已用 worktree 隔离（比容器更保守）、eval harness 已独立评估（分数不退化闸）——本轮价值 = ① 把「隔离默认 fail-closed」显式固化 ② 把「自报分数只作诊断」显式进 eval harness 契约
