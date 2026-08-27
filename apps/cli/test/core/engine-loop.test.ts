@@ -107,3 +107,24 @@ describe('QueryEngine — wakeup queue', () => {
     expect(engine.hasPendingWakeup()).toBe(false)
   })
 })
+
+describe('QueryEngine — cron queue', () => {
+  it('enqueueCronPrompt/dequeueCronPrompt/hasPendingCron round-trip FIFO', () => {
+    const engine = makeTestEngine()
+    expect(engine.hasPendingCron()).toBe(false)
+    engine.enqueueCronPrompt('cron-A')
+    engine.enqueueCronPrompt('cron-B')
+    expect(engine.hasPendingCron()).toBe(true)
+    expect(engine.dequeueCronPrompt()).toBe('cron-A') // FIFO — first in, first out
+    expect(engine.dequeueCronPrompt()).toBe('cron-B')
+    expect(engine.dequeueCronPrompt()).toBeNull()
+  })
+
+  it('enqueueCronPrompt fires onWakeupEnqueued so the app idle-drain triggers', () => {
+    const engine = makeTestEngine()
+    const fn = vi.fn()
+    engine.setOnWakeupEnqueued(fn)
+    engine.enqueueCronPrompt('cron-X')
+    expect(fn).toHaveBeenCalledTimes(1)
+  })
+})

@@ -52,6 +52,7 @@ import type { PermissionMode } from '../shared/index.ts'
 import { sanitizeForDisplay } from '../shared/sanitize.ts'
 import { recordLoopTurn, readAutoloopJournal } from '../commands/autoloop-journal.js'
 import { cancelAllSessionTimers } from '../tools/scheduling/schedule-wakeup.js'
+import { startCronPoller } from '../core/cron-poller'
 
 interface AppProps {
   engine: QueryEngine | RemoteEngine
@@ -686,9 +687,16 @@ export function App({
     // User turn wins: if a user submitted meanwhile, turnId advanced and this loop wakeup
     // yields (the next timer fire re-enqueues). Spec §六 — do not force it to run anyway.
     if (turnIdRef.current !== turnId) return
-    // RemoteEngine (remote attach mode) has no wakeup queue — /loop is CLI-local.
+    // RemoteEngine (remote attach mode) has no wakeup queue — /loop + cron are CLI-local.
     if (!('hasPendingWakeup' in engine)) return
-    const next = engine.hasPendingWakeup() ? engine.dequeueWakeup() : null
+    // Cron first (absolute-time scheduled, FIFO — every due job fires), then /loop.
+    const cronPrompt = engine.hasPendingCron() ? engine.dequeueCronPrompt() : null
+    const next =
+      cronPrompt !== null
+        ? { prompt: cronPrompt, noop: false }
+        : engine.hasPendingWakeup()
+          ? engine.dequeueWakeup()
+          : null
     if (next) await runTurn(next.prompt, 'loop', undefined, next.noop)
   }
 
@@ -712,6 +720,17 @@ export function App({
     if (isLoading) return
     drainLoopQueueRef.current?.(turnIdRef.current)
   }, [wakeupTick, isLoading])
+
+  // ── cron poller ──
+  // Start the durable-cron poller so CronCreate jobs actually fire into this session.
+  // It enqueues due prompts into the engine's cron queue; the drain above re-invokes
+  // them. Cron is CLI-local (RemoteEngine has no cron queue), like /loop.
+  useEffect(() => {
+    if (!('hasPendingWakeup' in engine)) return
+    const qe = engine // narrow to QueryEngine for the cleanup closure
+    const stop = startCronPoller((prompt) => qe.enqueueCronPrompt(prompt))
+    return stop
+  }, [engine])
 
   const handleSubmit = useCallback(
     async (input: string) => {

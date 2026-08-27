@@ -105,6 +105,9 @@ export class QueryEngine {
   /** Pending /loop re-invocation prompts, enqueued by the ScheduleWakeup timer. */
   private wakeupQueue: Array<{ prompt: string; noop: boolean }> = []
 
+  /** Pending durable cron prompts, enqueued by the cron poller (FIFO — every due job fires). */
+  private cronQueue: string[] = []
+
   /** Callback fired whenever a wakeup is enqueued (the ScheduleWakeup timer fired). */
   private onWakeupEnqueued: (() => void) | null = null
 
@@ -146,6 +149,26 @@ export class QueryEngine {
   /** Whether a wakeup prompt is pending re-invocation. */
   hasPendingWakeup(): boolean {
     return this.wakeupQueue.length > 0
+  }
+
+  /** Enqueue a durable cron prompt for re-invocation (FIFO — every due job fires). */
+  enqueueCronPrompt(prompt: string): void {
+    // Dedup by prompt: a recurring job whose previous fire is still queued
+    // (slow turn) re-fires the same prompt — skip it rather than pile up.
+    if (!this.cronQueue.includes(prompt)) {
+      this.cronQueue.push(prompt)
+    }
+    this.onWakeupEnqueued?.()
+  }
+
+  /** Pop the next pending cron prompt, or null when the queue is empty. */
+  dequeueCronPrompt(): string | null {
+    return this.cronQueue.shift() ?? null
+  }
+
+  /** Whether a cron prompt is pending re-invocation. */
+  hasPendingCron(): boolean {
+    return this.cronQueue.length > 0
   }
 
   /** Session identifier for cross-session messaging. Set by the app startup via setSessionId(). */

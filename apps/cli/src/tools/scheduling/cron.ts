@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
 import type { ToolDefinition } from '../../shared/index.ts'
+import { computeNextFire } from '../../core/cron'
 
 const CRON_DIR = join(homedir(), '.mipham', 'cron')
 
@@ -17,12 +18,14 @@ function ensureCronDir(): void {
   if (!existsSync(CRON_DIR)) mkdirSync(CRON_DIR, { recursive: true })
 }
 
-interface CronJob {
+export interface CronJob {
   id: string
   cron: string
   prompt: string
   recurring: boolean
   createdAt: string
+  nextFire: string
+  lastFired: string | null
 }
 
 function jobPath(id: string): string {
@@ -33,18 +36,40 @@ function generateId(cron: string, prompt: string): string {
   return createHash('sha256').update(`${cron}:${prompt}`).digest('hex').slice(0, 12)
 }
 
-function readAllJobs(): CronJob[] {
+/**
+ * Read all durable cron jobs. Backfills `nextFire`/`lastFired` for files
+ * written before the executor landed (they only had id/cron/prompt/recurring).
+ */
+export function readAllJobs(): CronJob[] {
   ensureCronDir()
   const jobs: CronJob[] = []
   for (const file of readdirSync(CRON_DIR)) {
     if (!file.endsWith('.json')) continue
     try {
-      jobs.push(JSON.parse(readFileSync(join(CRON_DIR, file), 'utf-8')))
+      const parsed = JSON.parse(readFileSync(join(CRON_DIR, file), 'utf-8')) as Partial<CronJob>
+      if (!parsed.nextFire)
+        parsed.nextFire = computeNextFire(parsed.cron ?? '* * * * *', new Date())
+      if (parsed.lastFired === undefined) parsed.lastFired = null
+      jobs.push(parsed as CronJob)
     } catch {
       /* skip corrupt files */
     }
   }
   return jobs.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+}
+
+/** Persist a job (create or update) to its JSON file. */
+export function writeJob(job: CronJob): void {
+  ensureCronDir()
+  writeFileSync(jobPath(job.id), JSON.stringify(job, null, 2), 'utf-8')
+}
+
+/** Delete a job's file. Returns false when the job did not exist. */
+export function deleteJobFile(id: string): boolean {
+  const path = jobPath(id)
+  if (!existsSync(path)) return false
+  unlinkSync(path)
+  return true
 }
 
 export const cronCreateTool: ToolDefinition = {
@@ -82,17 +107,18 @@ export const cronCreateTool: ToolDefinition = {
     const recurring = params.recurring !== false
     const id = generateId(cron, prompt)
 
-    ensureCronDir()
-
+    const now = new Date()
     const job: CronJob = {
       id,
       cron,
       prompt: prompt.slice(0, 1000),
       recurring,
-      createdAt: new Date().toISOString(),
+      createdAt: now.toISOString(),
+      nextFire: computeNextFire(cron, now),
+      lastFired: null,
     }
 
-    writeFileSync(jobPath(id), JSON.stringify(job, null, 2), 'utf-8')
+    writeJob(job)
 
     const type = recurring ? 'recurring' : 'one-shot'
     return {
@@ -124,11 +150,9 @@ export const cronDeleteTool: ToolDefinition = {
   },
   async execute(params, _ctx) {
     const id = params.id as string
-    const path = jobPath(id)
-    if (!existsSync(path)) {
+    if (!deleteJobFile(id)) {
       return { success: false, content: '', error: `Cron job "${id}" not found.` }
     }
-    unlinkSync(path)
     return { success: true, content: `Cron job "${id}" deleted.` }
   },
 }
