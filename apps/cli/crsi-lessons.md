@@ -80,3 +80,16 @@
 
 - 本次调研 A 项「启动 digest 回读」：报告称「CRSI 缺启动 digest 回读，值得补」，实际 `instructions.ts` 已实现（loadCrsiLessons + buildCrsiLessonsBlock + crsi-lessons-recall.test.ts 6 个测试）
 - 同一会话第二次：默认「/crsi propose 适用」却没读 selectCrsiSignal 的 autoApplicable 过滤（仅 timeout/tool-params），直到读码才发现不匹配
+
+## correctness: 自我纠错必须闭环——发现错误要回改产物，不只写教训
+
+- 建议: 自我纠错不止「发现错误 → 沉淀教训」。发现自己交付的产物（笔记/报告/代码/文档）里有错误时，必须**先回去改掉错误产物本身**，再沉淀教训。教训是给「未来」的防复发机制，但「现在」的错误产物会继续误导读者/用户——只写教训不修产物 = 半成品纠错。
+- 严重度: warning
+- 生成时间: 2026-08-27
+- 来源: 会话复盘（human + Claude Code，手动沉淀）
+
+### 证据
+
+- 2026-08-26 RSI 调研会话：写 wiki 笔记 `rsi-open-source-research.md`，其中 A 项「启动 digest 回读应立即做」错误（`instructions.ts` 早已实现 loadCrsiLessons + buildCrsiLessonsBlock + crsi-lessons-recall.test.ts 6 测试）
+- AI 事后读码发现自己错了，commit 了教训 `0039122`（「调研判断必须先读自身代码库」），但没回去把错误笔记的 A 项改掉——错误产物原样留在 wiki，未来读者仍会被误导
+- 正确顺序：发现错误 → ① 立即回改错误产物 → ② 沉淀教训防复发（两步都要做，缺一是半成品）
