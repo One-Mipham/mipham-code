@@ -158,3 +158,16 @@
 - prime-agent（MIT）`refinement.ts`：base system prompt「immutable and MUST NOT be rewritten」、只改 harness 状态、Never edit source files directly、快照 rollback——自改进边界保守 ✅；但 README 明说「用用户权限执行模型生成 Python/命令，worker/kernel 是**生命周期**隔离、**不是安全沙箱**」——执行安全裸跑 ❌。两层独立，之前 wiki 把「更保守」误写成「更安全」
 - `/refine` 要求每条 edit 附 scope metadata「帮助未来 review 理解预期 blast radius」——CRSI `blastRadius` 闸门的真实产品实现，验证 2.17.0 方向
 - 映射 CRSI：`crsi-sandbox.ts` 的 `PROTECTED_PATHS` 是路径黑名单，可改为显式「immutable base」语义清单
+
+## learning: 失败先分类再学习 + 自改进只路由不禁用
+
+- 建议: 自改进系统的学习必须两步：① **失败先分类**——学习前先判「可恢复/环境性/用户驱动 vs 真缺陷」，可恢复失败只记录、不进成功率分母，否则会把成功率拉低、诱导系统误杀能用的能力；② **只路由、不禁用**——固化规则时加语义护栏，拒绝「禁用某内置能力」的 blanket 规则，强制改写成「prefer X over Y」。
+- 严重度: warning
+- 生成时间: 2026-08-27
+- 来源: 会话复盘（human + Claude Code，手动沉淀）
+
+### 证据
+
+- opencrabs（MIT）`feedback_policy.rs` `is_recoverable_tool_failure`：stale-hash 重试 / channel 未连接 / bash 环境性失败 ≠ 工具缺陷，若混入成功率会「拖着 RSI 禁用能用的工具」（#236 把 hashline_edit 升级成 blanket DO NOT USE）
+- `self_improve_guards.rs` `bans_builtin_tool`：语义精确拒绝「禁用内置工具」规则（区分禁用对象 / 推荐替代 / 非工具），强制「路由」
+- 映射 CRSI：producer 固化规则（`crsi-managed-rules.ts`）有同样风险——可加 ① 失败分类（SIS/EffectivenessTracker 学习前先判可恢复性）② 禁用护栏（拒绝「禁用某能力」规则，只许路由）
