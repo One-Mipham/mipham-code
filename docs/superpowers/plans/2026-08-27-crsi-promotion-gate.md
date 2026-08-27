@@ -6,6 +6,12 @@
 > **前情**: 承接 [[2026-08-19-crsi-behavior-task-suite-design]]（行为任务集）与受约束自改进闭环（`/crsi modify|propose|eval`）；本计划补上 `crsi-lessons.md` eval-rigor 教训明文记录的债务
 > **术语**: A1 铁律 = 绝不拿 LLM 当裁判；晋升 = 一次自改进改动通过 eval 闸门被合入
 
+> ⚠️ **【2026-08-27 评审结论】核心度量前提有误，暂不实施（除非先降级）。**
+> ① M1「因果归因」建在误读上：`runEval()` 评的是**当前仓库 CRSI 机制代码**（`eval-harness.ts` 冻结 21 契约），不是「本次 proposal 的改动效果」，且自改进 proposal 碰不到机制代码（PROTECTED_PATHS）→ `postScore` 恒等于 `baselineScore`、**delta 恒为 0**。
+> ② 故「因果归因」记录一个不动的 delta；「最小效应量」`delta >= MIN_EFFECT` 永远不满足（M2 已认 prose delta 恒 0，但此缺陷适用于 **lesson / managed-rule 全部**，不只 prose）。
+> ③ 真正的因果归因/改进率需「随 proposal 变化的任务表现评估」（behavior-task-suite M3 第二层），本计划把它列为非目标却仍称 M1「立即可执行」——自相矛盾。
+> **处置**：当作「已识别的缺口 + 待办清单」保留；若要落「审计 ledger」，须先去掉「因果归因」宣称、诚实降级为纯审计记录，另立计划。
+
 ---
 
 ## 一、背景与动机

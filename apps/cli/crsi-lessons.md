@@ -171,3 +171,17 @@
 - opencrabs（MIT）`feedback_policy.rs` `is_recoverable_tool_failure`：stale-hash 重试 / channel 未连接 / bash 环境性失败 ≠ 工具缺陷，若混入成功率会「拖着 RSI 禁用能用的工具」（#236 把 hashline_edit 升级成 blanket DO NOT USE）
 - `self_improve_guards.rs` `bans_builtin_tool`：语义精确拒绝「禁用内置工具」规则（区分禁用对象 / 推荐替代 / 非工具），强制「路由」
 - 映射 CRSI：producer 固化规则（`crsi-managed-rules.ts`）有同样风险——可加 ① 失败分类（SIS/EffectivenessTracker 学习前先判可恢复性）② 禁用护栏（拒绝「禁用某能力」规则，只许路由）
+
+## borrow-landing: 教训≠实现——借鉴调研须「落地对账」，别把「记了该做」当成「写了代码」
+
+- 建议: 对外部项目做「可借鉴点」调研后，产出必须显式对账三态：① **已写代码**（文件 + 行数）② **只记了教训**（markdown，未实现）③ **仍是待办**（教训里列「可借鉴」但没动工）。三者混进一个「已落地/已实现」清单，会把「记下了该做 X」误读成「X 已实现」——教训是「意图」，代码是「交付」，边界必须钉死。
+- 严重度: warning
+- 生成时间: 2026-08-27
+- 来源: 会话复盘（human + Claude Code，手动沉淀）
+
+### 证据
+
+- 2026-08-26 RSI 五家调研（OpenRSI / opencrabs / autocontext / prime-agent / Godel_Agent）→ 产出 6 条教训 + 1 份计划，被误记为「借鉴代码进仓库」
+- 实际落地对账：① **代码** = `recoverable-failure.ts`（27 行，open crabs 失败分类）唯一落地；② **教训** = `crsi-lessons.md` 6 条（borrow-analysis / crsi-design / self-eval / eval-rigor / boundary / learning）；③ **待办** = 因果归因、最小效应量、误提升预算、原子激活、语义边界、RewardFn、Crossover（都在教训里列为「可借鉴」，未写代码）
+- 混淆根因：Mipham Code(deepseek) 把 `recoverable-failure.ts` 的「失败分类」错叫「因果归因的第一步」，又把 eval-rigor 教训里「记了该做因果归因」当成「因果归因已实现」——「教训」与「代码」边界不清
+- 修复：本教训 + wiki `rsi-open-source-research.md` 补「落地对账」表，钉死「五家 → 6 教训 + 1 文件 + 若干待办」真实状态
