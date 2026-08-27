@@ -172,4 +172,13 @@ describe('MemoryManager', () => {
     // 'a' should come first (higher score)
     expect(names[0]).toBe('a')
   })
+
+  it('recall matches reworded CJK content via TF-IDF bigrams, not exact word match', () => {
+    const mm = new MemoryManager(TEST_DIR)
+    mm.write('release-note', '发布新版本到 npm', { type: 'project', relevance: [] })
+
+    // Reversed word order — the old split(/\s+/) lexical overlap would miss it.
+    const recalled = mm.recall('版本发布')
+    expect(recalled[0]!.name).toBe('release-note')
+  })
 })

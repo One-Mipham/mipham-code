@@ -8,6 +8,7 @@ import {
   statSync,
 } from 'node:fs'
 import { join, extname } from 'node:path'
+import { similarities } from './tfidf'
 
 export interface MemoryMetadata {
   type: 'user' | 'feedback' | 'project' | 'reference'
@@ -113,20 +114,21 @@ export class MemoryManager {
 
   recall(context: string, limit: number = 10): MemoryEntry[] {
     const contextLower = context.toLowerCase()
+    const entries = [...this.memories.values()]
+    // TF-IDF cosine similarity (CJK-bigram aware) replaces the old word-overlap.
+    const sims = similarities(
+      context,
+      entries.map((e) => e.content),
+    )
     const scored: Array<{ entry: MemoryEntry; score: number }> = []
     const seen = new Set<string>()
 
-    for (const entry of this.memories.values()) {
-      let score = 0
-      // Match against relevance tags
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i]!
+      let score = sims[i]! * 10
+      // Match against relevance tags (strong curated signal)
       for (const tag of entry.metadata.relevance) {
         if (contextLower.includes(tag.toLowerCase())) score += 3
-      }
-      // Match against content keywords
-      const contentWords = entry.content.toLowerCase().split(/\s+/)
-      const contextWords = new Set(contextLower.split(/\s+/))
-      for (const word of contentWords) {
-        if (contextWords.has(word) && word.length > 3) score += 1
       }
       if (score > 0) {
         scored.push({ entry, score })
