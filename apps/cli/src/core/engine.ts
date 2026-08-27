@@ -1203,7 +1203,10 @@ export class QueryEngine {
           const match = warning.match(/^\[rule:([^\]]+)\]/)
           const ruleId = match?.[1]
           if (ruleId) {
-            tracker.recordApplication(ruleId, result.success)
+            tracker.recordApplication(ruleId, result.success, {
+              toolName: name,
+              error: result.error,
+            })
           }
         }
         tracker.persist()

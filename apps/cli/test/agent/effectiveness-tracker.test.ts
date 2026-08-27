@@ -186,4 +186,47 @@ describe('EffectivenessTracker', () => {
 
     expect(() => tracker.evaluate()).not.toThrow()
   })
+
+  it('recoverable failure is recorded but excluded from the denominator', () => {
+    tracker.recordApplication('rule-env', true)
+    tracker.recordApplication('rule-env', false, {
+      toolName: 'Bash',
+      error: 'No such file or directory',
+    })
+
+    const eff = tracker.getEffectiveness('rule-env')
+    expect(eff!.appliedCount).toBe(1) // only the genuine success counts
+    expect(eff!.recoverableCount).toBe(1) // recoverable tracked separately
+  })
+
+  it('recoverable failures do not trigger auto-degrade', () => {
+    // 10 genuine successes + 20 recoverable failures → old behavior: 20/30 > 0.6 → degraded
+    for (let i = 0; i < 10; i++) tracker.recordApplication('rule-env', true)
+    for (let i = 0; i < 20; i++) {
+      tracker.recordApplication('rule-env', false, {
+        toolName: 'Bash',
+        error: 'connect ECONNREFUSED',
+      })
+    }
+
+    const result = tracker.evaluate()
+    expect(result.degradations).toEqual([])
+    expect(result.disables).toEqual([])
+
+    const eff = tracker.getEffectiveness('rule-env')
+    expect(eff!.status).toBe('active')
+    expect(eff!.postRuleFailureRate).toBe(0)
+  })
+
+  it('genuine failure still counts toward the denominator', () => {
+    for (let i = 0; i < 10; i++) {
+      tracker.recordApplication('rule-bad', false, {
+        toolName: 'Bash',
+        error: 'syntax error near unexpected token',
+      })
+    }
+
+    const result = tracker.evaluate()
+    expect(result.degradations).toEqual(['rule-bad'])
+  })
 })
