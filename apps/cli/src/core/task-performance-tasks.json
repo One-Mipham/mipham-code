@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "tasks": [
+    {
+      "id": "perf-impl-quicksort",
+      "category": "test-driven",
+      "prompt": "实现并导出 quicksort 函数：export function quicksort(arr: number[]): number[]。只输出 TypeScript 代码，不要解释、不要 markdown 代码块。",
+      "testCode": "import { test, expect } from 'bun:test'\nimport { quicksort } from './solution'\n\ntest('sorts numbers', () => {\n  expect(quicksort([3, 1, 4, 1, 5, 9, 2, 6])).toEqual([1, 1, 2, 3, 4, 5, 6, 9])\n  expect(quicksort([])).toEqual([])\n  expect(quicksort([7])).toEqual([7])\n})\n"
+    },
+    {
+      "id": "perf-impl-fibonacci",
+      "category": "test-driven",
+      "prompt": "实现并导出 fibonacci 函数：export function fibonacci(n: number): number。返回第 n 项（fibonacci(0)=0, fibonacci(1)=1）。只输出 TypeScript 代码，不要解释、不要 markdown 代码块。",
+      "testCode": "import { test, expect } from 'bun:test'\nimport { fibonacci } from './solution'\n\ntest('computes fibonacci', () => {\n  expect(fibonacci(0)).toBe(0)\n  expect(fibonacci(1)).toBe(1)\n  expect(fibonacci(10)).toBe(55)\n  expect(fibonacci(20)).toBe(6765)\n})\n"
+    },
+    {
+      "id": "perf-impl-binary-search",
+      "category": "test-driven",
+      "prompt": "实现并导出 binarySearch 函数：export function binarySearch(arr: number[], target: number): number。返回 target 的下标，不存在返回 -1。假设 arr 已升序。只输出 TypeScript 代码，不要解释、不要 markdown 代码块。",
+      "testCode": "import { test, expect } from 'bun:test'\nimport { binarySearch } from './solution'\n\ntest('finds target', () => {\n  expect(binarySearch([1, 2, 3, 4, 5], 3)).toBe(2)\n  expect(binarySearch([1, 2, 3, 4, 5], 1)).toBe(0)\n  expect(binarySearch([1, 2, 3, 4, 5], 99)).toBe(-1)\n})\n"
+    },
+    {
+      "id": "perf-impl-reverse-string",
+      "category": "test-driven",
+      "prompt": "实现并导出 reverseString 函数：export function reverseString(s: string): string。只输出 TypeScript 代码，不要解释、不要 markdown 代码块。",
+      "testCode": "import { test, expect } from 'bun:test'\nimport { reverseString } from './solution'\n\ntest('reverses', () => {\n  expect(reverseString('hello')).toBe('olleh')\n  expect(reverseString('')).toBe('')\n  expect(reverseString('a')).toBe('a')\n})\n"
+    },
+    {
+      "id": "perf-impl-max",
+      "category": "test-driven",
+      "prompt": "实现并导出 maxOf 函数：export function maxOf(arr: number[]): number。返回数组最大值，空数组返回 -Infinity。只输出 TypeScript 代码，不要解释、不要 markdown 代码块。",
+      "testCode": "import { test, expect } from 'bun:test'\nimport { maxOf } from './solution'\n\ntest('finds max', () => {\n  expect(maxOf([1, 5, 3, 9, 2])).toBe(9)\n  expect(maxOf([-1, -5, -3])).toBe(-1)\n  expect(maxOf([])).toBe(-Infinity)\n})\n"
+    }
+  ]
+}
