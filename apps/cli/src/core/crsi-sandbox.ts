@@ -136,11 +136,22 @@ export function isProtectedPath(filePath: string): boolean {
  *
  * 返回错误字符串（拒绝理由），合法时返回 null。
  */
-export function validateBlastRadius(proposal: { blastRadius?: string[] }): string | null {
+export function validateBlastRadius(proposal: {
+  filePath?: string
+  blastRadius?: string[]
+}): string | null {
+  const filePath = proposal.filePath
   if (!proposal.blastRadius || proposal.blastRadius.length === 0) {
     return (
       'blast radius 未声明：自修改必须枚举触及的全部代码路径。' +
       '教训：两条渲染路径只接一条 = 局部正确全局遗漏。'
+    )
+  }
+  // 2026-08-27 review：blastRadius 不能只自证「非空」，必须覆盖被修改文件本身
+  // （前缀匹配，目录条目以 / 结尾），否则声明形同虚设。
+  if (filePath && !proposal.blastRadius.some((p) => filePath === p || filePath.startsWith(p))) {
+    return (
+      `blast radius 未覆盖目标文件 "${filePath}"：` + '声明必须包含被修改文件本身（前缀匹配）。'
     )
   }
   return null

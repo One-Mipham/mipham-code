@@ -1233,7 +1233,6 @@ export class QueryEngine {
           const ruleId = match?.[1]
           if (ruleId) {
             tracker.recordApplication(ruleId, result.success, {
-              toolName: name,
               error: result.error,
             })
           }

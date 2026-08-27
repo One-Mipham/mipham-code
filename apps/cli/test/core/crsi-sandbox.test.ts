@@ -33,6 +33,33 @@ describe('validateBlastRadius (完整覆盖闸)', () => {
   it('accepts a non-empty blast radius', () => {
     expect(validateBlastRadius({ blastRadius: ['a.ts', 'b.ts'] })).toBeNull()
   })
+
+  it('rejects when blastRadius does not cover the target filePath', () => {
+    expect(
+      validateBlastRadius({
+        filePath: 'apps/cli/src/foo.ts',
+        blastRadius: ['apps/cli/src/bar.ts'],
+      }),
+    ).toBeTruthy()
+  })
+
+  it('accepts when blastRadius covers the target filePath exactly', () => {
+    expect(
+      validateBlastRadius({
+        filePath: 'apps/cli/src/foo.ts',
+        blastRadius: ['apps/cli/src/foo.ts'],
+      }),
+    ).toBeNull()
+  })
+
+  it('accepts when blastRadius covers the target filePath by directory prefix', () => {
+    expect(
+      validateBlastRadius({
+        filePath: 'apps/cli/test/foo.test.ts',
+        blastRadius: ['apps/cli/test/'],
+      }),
+    ).toBeNull()
+  })
 })
 
 describe('CrsiSandbox', () => {

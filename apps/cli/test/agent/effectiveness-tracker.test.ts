@@ -190,8 +190,7 @@ describe('EffectivenessTracker', () => {
   it('recoverable failure is recorded but excluded from the denominator', () => {
     tracker.recordApplication('rule-env', true)
     tracker.recordApplication('rule-env', false, {
-      toolName: 'Bash',
-      error: 'No such file or directory',
+      error: 'connect ECONNREFUSED',
     })
 
     const eff = tracker.getEffectiveness('rule-env')
@@ -204,7 +203,6 @@ describe('EffectivenessTracker', () => {
     for (let i = 0; i < 10; i++) tracker.recordApplication('rule-env', true)
     for (let i = 0; i < 20; i++) {
       tracker.recordApplication('rule-env', false, {
-        toolName: 'Bash',
         error: 'connect ECONNREFUSED',
       })
     }
@@ -221,7 +219,6 @@ describe('EffectivenessTracker', () => {
   it('genuine failure still counts toward the denominator', () => {
     for (let i = 0; i < 10; i++) {
       tracker.recordApplication('rule-bad', false, {
-        toolName: 'Bash',
         error: 'syntax error near unexpected token',
       })
     }

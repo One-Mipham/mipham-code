@@ -25,6 +25,7 @@ import { loadSessionMemories, getMemoryManager } from './core/memory/memory-load
 import { ContextManager } from './core/context'
 import { PrefixCacheTracker } from './core/context-token'
 import { QueryEngine } from './core/engine'
+import { generateSessionName } from './core/session-name'
 import { ExperienceRuleEngine } from './core/rule-engine.js'
 import { SessionLog } from './core/session-log'
 import { SessionStore } from './core/session-store'
@@ -325,8 +326,7 @@ export async function runApp(options: RunOptions): Promise<void> {
   const pluginManager = new PluginManager()
 
   // Generate session name for tracking (used by /cd to persist cwd)
-  const sessionName =
-    options.resume || `session-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`
+  const sessionName = generateSessionName(options.resume)
 
   // Initialize context — restore saved session if available
   // Read the active model's context window for dynamic max-token sizing.

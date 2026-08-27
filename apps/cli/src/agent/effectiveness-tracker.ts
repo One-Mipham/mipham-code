@@ -47,11 +47,7 @@ export class EffectivenessTracker {
     if (eff) eff.decisionId = decisionId
   }
 
-  recordApplication(
-    ruleId: string,
-    success: boolean,
-    opts?: { toolName?: string; error?: string },
-  ): void {
+  recordApplication(ruleId: string, success: boolean, opts?: { error?: string }): void {
     let eff = this.data.get(ruleId)
     if (!eff) {
       eff = {
@@ -69,7 +65,7 @@ export class EffectivenessTracker {
     }
 
     // 可恢复/环境性失败：仍记录，但不进成功率分母（防误降级/误禁用能用的规则）。
-    if (!success && opts?.error && isRecoverableToolFailure(opts.toolName ?? '', opts.error)) {
+    if (!success && opts?.error && isRecoverableToolFailure(opts.error)) {
       eff.recoverableCount = (eff.recoverableCount ?? 0) + 1
       return
     }
