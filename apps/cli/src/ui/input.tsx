@@ -128,6 +128,17 @@ export function InputBar({
   const suggestionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const suggestionReqIdRef = useRef(0)
 
+  // 统一清理：清 suggestion + 使在途/待发请求失效 + 取消防抖定时器。
+  // Escape / handleSubmit / 翻历史三处共用，避免各自手写漏掉某一环（rule of three）。
+  const clearSuggestion = () => {
+    setSuggestion(null)
+    suggestionReqIdRef.current++
+    if (suggestionTimerRef.current) {
+      clearTimeout(suggestionTimerRef.current)
+      suggestionTimerRef.current = null
+    }
+  }
+
   // Stabilize t ref — prevents stale closures in intervals and avoids
   // unnecessary effect re-runs when the i18n context value object changes.
   const tRef = useRef(t)
@@ -199,11 +210,7 @@ export function InputBar({
       // Idle → clear the draft (the intuitive "cancel")
       setValue('')
       valueRef.current = ''
-      setSuggestion(null)
-      if (suggestionTimerRef.current) {
-        clearTimeout(suggestionTimerRef.current)
-        suggestionTimerRef.current = null
-      }
+      clearSuggestion()
       return
     }
 
@@ -250,6 +257,9 @@ export function InputBar({
 
     // ── Arrow-key history navigation (Claude Code parity) ──
     if (key.upArrow || key.downArrow) {
+      // History navigation changes value via setValue (no onChange) — clear any
+      // ghost suggestion so a stale one isn't Tab-accepted onto a recalled entry.
+      clearSuggestion()
       // Ignore if picker is active (command picker handles its own arrows)
       if (value.startsWith('/')) return
 
@@ -331,7 +341,7 @@ export function InputBar({
     setValue('')
     valueRef.current = ''
     setPickerActive(false)
-    setSuggestion(null)
+    clearSuggestion()
   }
 
   // ── Picker mode: CommandPicker overlay ──
