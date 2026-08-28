@@ -66,8 +66,8 @@ async function fetchLatestVersionAsync(): Promise<string> {
 
 /** 非阻塞版本检查。离线/失败 → available=false（不惊扰用户）。 */
 export async function checkForUpdatesAsync(): Promise<UpdateCheck> {
-  const current = PACKAGE_VERSION
-  let latest = current
+  const current: string = PACKAGE_VERSION
+  let latest: string = current
   let available = false
   try {
     latest = await fetchLatestVersionAsync()
@@ -94,11 +94,11 @@ type UpdateStatus =
 
 ### 3.3 底部绿色通知（app.tsx 状态栏）
 
-在 `GraftStatusLine` 之后、`Status line`（权限模式行）之前渲染：
+在 `GraftStatusLine` 之后、`Status line`（权限模式行）之前渲染，**右对齐**（`flexDirection="row" justifyContent="flex-end" width="100%"`，带 `✔` 前缀，绿色）：
 
 ```typescript
 {updateStatus && (
-  <Box marginTop={1}>
+  <Box marginTop={1} flexDirection="row" justifyContent="flex-end" width="100%">
     <Text color="green">
       {updateStatus.state === 'installed'
         ? `✔ ${t('ui.status.update_installed_restart')}`

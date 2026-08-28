@@ -154,8 +154,8 @@ async function fetchLatestVersionAsync(): Promise<string> {
 
 /** 非阻塞版本检查。current 用 PACKAGE_VERSION（编译期常量，二进制下可靠）。离线/失败 → available: false。 */
 export async function checkForUpdatesAsync(): Promise<UpdateCheck> {
-  const current = PACKAGE_VERSION
-  let latest = current
+  const current: string = PACKAGE_VERSION
+  let latest: string = current
   let available = false
   try {
     latest = await fetchLatestVersionAsync()
@@ -243,9 +243,9 @@ useEffect(() => {
 **1e. 底部绿通知**（`<GraftStatusLine ... />` 之后、`{/* Status line — Claude Code style */}` 之前加）：
 
 ```typescript
-            {/* Update notification — green, mirrors Claude Code's "Update installed · Restart to apply" */}
+            {/* Update notification — green, right-aligned, mirrors Claude Code's "Update installed · Restart to apply" */}
             {updateStatus && (
-              <Box marginTop={1}>
+              <Box marginTop={1} flexDirection="row" justifyContent="flex-end" width="100%">
                 <Text color="green">
                   {updateStatus.state === 'installed'
                     ? `✔ ${t('ui.status.update_installed_restart')}`
