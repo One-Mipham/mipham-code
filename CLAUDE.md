@@ -11,7 +11,7 @@ prompt-exclude:
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
 > **版本**: 2.20.0
-> **最后更新**: 2026-08-27 — CC 2.1.246-247 借鉴落地 6 条 + 测试数对齐 1921
+> **最后更新**: 2026-08-27 — CC 2.1.246-247 借鉴落地 6 条 + 测试数对齐 1932
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -49,7 +49,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **eval harness** `/crsi eval` — `core/eval-harness.ts` 冻结 21 条 ground-truth 契约（13 机制：规则/宪法/沙箱边界/完整覆盖闸/红队/producer 行为 + 8 行为缺口）+ rewards 日志 `~/.mipham/crsi/eval-scores.jsonl`，`runCrsiModification` 以「分数不退化」为第二道闸。8 行为缺口（rm -rf/管道投毒/git reset --hard/chmod 777/mkfs/dd→/dev//关停主机/crontab -r）已由固化 managed tool-params 规则覆盖 → 全翻转 PASS → 满分 100 =「证明更好」
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：1,921 测试（1919 passed + 2 skipped）
+测试：1,932 测试（1930 passed + 2 skipped）
 
 ---
 
@@ -85,8 +85,8 @@ mipham-code/
 │   │   │   ├── workflow/       # Workflow 运行时 + Schema 验证
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
-│   │   ├── skills/             # 26 个内置技能（20 standard + 6 mipham）
-│   │   ├── test/               # 182 个测试文件，1921 个测试
+│   │   ├── skills/             # 27 个内置技能（21 standard + 6 mipham）
+│   │   ├── test/               # 183 个测试文件，1932 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -109,7 +109,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（1921 个测试）
+pnpm test         # vitest run（1932 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -156,9 +156,9 @@ pnpm format       # Prettier
 | Computer（1）   | computer-use                                                                                               |
 | Scheduling（4） | schedule-wakeup, cron-create, cron-delete, cron-list                                                       |
 
-### Skills 系统（26 个内置技能）
+### Skills 系统（27 个内置技能）
 
-**Standard（20）**: code-review, codebase-design, compassionate-communication, debug-loop, doc-generator, domain-modeling, github-ops, grill-with-docs, implement, memory, mipham-code-setup, research, security-review, self-review, superpower, tdd, to-spec, triage, web-access, web-search
+**Standard（21）**: code-review, codebase-design, compassionate-communication, debug-loop, doc-generator, domain-modeling, github-ops, grill-with-docs, implement, memory, mipham-code-setup, research, safe-coding, security-review, self-review, superpower, tdd, to-spec, triage, web-access, web-search
 
 > `web-access`（v2.5.0）是首个**带可执行资产**的 standard skill：CDP Proxy 直连用户已登录 Chrome（脚本随二进制内嵌，首次调用提取到 `~/.mipham/skills/web-access/`）。
 
@@ -233,7 +233,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
 | E2E      | 1       | 8        | full-pipeline                                 |
 | Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **182** | **1921** | **0 失败** ✅（1919 passed + 2 skipped）      |
+| **合计** | **183** | **1932** | **0 失败** ✅（1930 passed + 2 skipped）      |
 
 > 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
 
