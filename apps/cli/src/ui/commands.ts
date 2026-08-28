@@ -971,11 +971,26 @@ const crsiEvalCmd: CommandHandler = async () => {
   return { content: lines.join('\n') }
 }
 
-const crsiBenchCmd: CommandHandler = async (ctx) => {
+const crsiBenchCmd: CommandHandler = async (ctx, args) => {
   const llm = ctx.engine.getLlm() ?? ctx.engine.getRegistry()
-  const report = await runTaskPerformance(llm)
 
-  const lines: string[] = ['## 🎯 CRSI 任务表现基准', '']
+  const skillIdx = args.indexOf('--skill')
+  const skillName = skillIdx >= 0 ? args[skillIdx + 1] : undefined
+  let skill: { name: string; text: string } | undefined
+  if (skillName) {
+    const body = ctx.skillsLoader?.get(skillName)?.body
+    if (!body) {
+      return { content: `❌ 未找到 skill: ${skillName}` }
+    }
+    skill = { name: skillName, text: body }
+  }
+
+  const report = await runTaskPerformance(llm, skill ? { skill } : undefined)
+
+  const lines: string[] = [
+    '## 🎯 CRSI 任务表现基准' + (skill ? `（skill: ${skill.name}）` : ''),
+    '',
+  ]
   lines.push(`得分: **${report.score}/100** (${report.passed}/${report.total})`, '')
   lines.push('| 任务 | 结果 |')
   lines.push('|------|------|')
