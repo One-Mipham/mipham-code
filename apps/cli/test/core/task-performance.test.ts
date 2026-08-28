@@ -24,6 +24,13 @@ describe('loadPerformanceTasks', () => {
     const ids = tasks.map((t) => t.id)
     expect(new Set(ids).size).toBe(ids.length)
   })
+
+  it('safe-coding 任务带 skill 字段', () => {
+    const tasks = loadPerformanceTasks()
+    const safe = tasks.find((t) => t.id === 'perf-safe-parse-positive')
+    expect(safe).toBeDefined()
+    expect(safe?.skill).toBe('safe-coding')
+  })
 })
 
 describe('judgeGeneratedCode', () => {

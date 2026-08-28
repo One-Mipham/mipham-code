@@ -30,6 +30,13 @@
       "category": "test-driven",
       "prompt": "实现并导出 maxOf 函数：export function maxOf(arr: number[]): number。返回数组最大值，空数组返回 -Infinity。只输出 TypeScript 代码，不要解释、不要 markdown 代码块。",
       "testCode": "import { test, expect } from 'bun:test'\nimport { maxOf } from './solution'\n\ntest('finds max', () => {\n  expect(maxOf([1, 5, 3, 9, 2])).toBe(9)\n  expect(maxOf([-1, -5, -3])).toBe(-1)\n  expect(maxOf([])).toBe(-Infinity)\n})\n"
+    },
+    {
+      "id": "perf-safe-parse-positive",
+      "category": "test-driven",
+      "skill": "safe-coding",
+      "prompt": "实现并导出 parsePositiveNumber 函数：export function parsePositiveNumber(input: string): number。只输出 TypeScript 代码，不要解释、不要 markdown 代码块。",
+      "testCode": "import { test, expect } from 'bun:test'\nimport { parsePositiveNumber } from './solution'\n\ntest('rejects invalid input', () => {\n  expect(() => parsePositiveNumber(null as any)).toThrow(RangeError)\n  expect(() => parsePositiveNumber('')).toThrow(RangeError)\n  expect(() => parsePositiveNumber('abc')).toThrow(RangeError)\n})\ntest('parses valid', () => {\n  expect(parsePositiveNumber('42')).toBe(42)\n})\n"
     }
   ]
 }

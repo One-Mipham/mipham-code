@@ -14,6 +14,7 @@ export interface PerformanceTask {
   category: PerformanceTaskCategory
   prompt: string
   testCode: string
+  skill?: string // 绑定被测 skill 的名字（= skill frontmatter name）
 }
 
 export function loadPerformanceTasks(): PerformanceTask[] {
