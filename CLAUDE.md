@@ -11,7 +11,7 @@ prompt-exclude:
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
 > **版本**: 2.20.0
-> **最后更新**: 2026-08-28 — 改进轨落地（噪声自适应 verdict + 倒退才拦 + 改进率台账）+ 测试数对齐 1953
+> **最后更新**: 2026-08-28 — 改进轨 + 语义边界落地（PROTECTED_ROLES 语义清单 + 完整性自检契约）+ 测试数对齐 1957
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -38,7 +38,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 | ------------- | -------------------------------------------------------------------------------- | :---------: |
 | 🧠 学习       | PatternAnalyzer + AutoMemoryEngine + ExperienceRuleEngine + EffectivenessTracker | ✅ 2,121 行 |
 | 🛡️ 免疫 (SIS) | ErrorSignatureDB + PreFlightChecker                                              | ✅ P0 完成  |
-| 🔒 安全       | CrsiSandbox（5 阶段受控自修改）+ 只读边界（PROTECTED_PATHS）                     |  ✅ 551 行  |
+| 🔒 安全       | CrsiSandbox（5 阶段受控自修改）+ 只读边界（PROTECTED_ROLES 语义清单）            |  ✅ 551 行  |
 
 **受约束自改进闭环**（`执行 → 判定 → 反思 → 产出 → 验证 → 批准 → 固化`）：
 
@@ -50,7 +50,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：1,953 测试（1951 passed + 2 skipped）
+测试：1,957 测试（1955 passed + 2 skipped）
 
 ---
 
@@ -87,7 +87,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 27 个内置技能（21 standard + 6 mipham）
-│   │   ├── test/               # 184 个测试文件，1953 个测试
+│   │   ├── test/               # 184 个测试文件，1957 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -110,7 +110,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（1953 个测试）
+pnpm test         # vitest run（1957 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -234,7 +234,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
 | E2E      | 1       | 8        | full-pipeline                                 |
 | Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **184** | **1953** | **0 失败** ✅（1951 passed + 2 skipped）      |
+| **合计** | **184** | **1957** | **0 失败** ✅（1955 passed + 2 skipped）      |
 
 > 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
 
