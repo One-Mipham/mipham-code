@@ -67,14 +67,18 @@ export function selectCrsiSignal(
 }
 
 /** 模板化地把信号渲染成一段教训 markdown（不动 LLM）。 */
-export function buildLessonContent(signal: CrsiSignal, timestamp: string): string {
+export function buildLessonContent(
+  signal: CrsiSignal,
+  timestamp: string,
+  source = 'CRSI producer (autoApplicable)',
+): string {
   const lines: string[] = [
     `## ${signal.category}: ${signal.title}`,
     '',
     `- 建议: ${signal.suggestion}`,
   ]
   if (signal.severity) lines.push(`- 严重度: ${signal.severity}`)
-  lines.push(`- 生成时间: ${timestamp}`, '- 来源: CRSI producer (autoApplicable)', '', '### 证据')
+  lines.push(`- 生成时间: ${timestamp}`, `- 来源: ${source}`, '', '### 证据')
   for (const e of signal.evidence) lines.push(`- ${e}`)
   lines.push('')
   return lines.join('\n')
@@ -453,5 +457,124 @@ export function clearProseProposals(): number {
     return lines.length
   } catch {
     return 0
+  }
+}
+
+// ── Producer Crossover（第 4 原子算子）：合并两条重叠教训 ──
+// LLM 只生成（选对 + 合并版），判定全走确定性 guard + 沙箱 gate。A1 不破：无 LLM 自评。
+
+const CROSSOVER_PROMPT_VERSION = '1.0.0'
+
+function buildCrossoverPrompt(currentLessons: string): string {
+  return [
+    `你是 CRSI producer（producer-crossover v${CROSSOVER_PROMPT_VERSION}）。给定当前教训文件，找出两条主题重叠、可合并的教训，生成一条综合教训。`,
+    '',
+    '当前教训文件：',
+    currentLessons,
+    '',
+    '要求：',
+    '1. 找两条「主题重叠」的教训（例如都讲「读码优先」、都讲「隔离」），不要选主题无关的两条。',
+    '2. titleA / titleB 必须是文件中 `## ` 行的**完整文本**（含 category 前缀，逐字复制，不要改写）。',
+    '3. merged 是合并后的综合教训：category 沿用其中一个、title 概括两者、suggestion 综合两条的核心建议、evidence 综合两条的证据要点。',
+    '4. 只返回裸 JSON（不要 markdown 围栏、不要其他文字），格式：',
+    '{"titleA":"<完整 ## 行1>","titleB":"<完整 ## 行2>","merged":{"category":"...","title":"...","suggestion":"...","evidence":["...","..."]}}',
+  ].join('\n')
+}
+
+/** 剥 ```json 围栏（LLM 可能加）。 */
+function stripJsonFence(text: string): string {
+  const match = text.match(/^```(?:json)?\s*\n([\s\S]*?)\n```\s*$/)
+  return match ? match[1]! : text
+}
+
+/** Crossover 结果：两条教训的完整 ## 行 + 合并版。 */
+export interface CrossoverResult {
+  titleA: string
+  titleB: string
+  merged: CrsiSignal
+}
+
+/** 解析 crossover 结果；非法 / 字段缺失 → null。 */
+export function parseCrossoverResult(text: string): CrossoverResult | null {
+  try {
+    const obj = JSON.parse(stripJsonFence(text))
+    if (typeof obj.titleA !== 'string' || typeof obj.titleB !== 'string') return null
+    if (
+      !obj.merged ||
+      typeof obj.merged.category !== 'string' ||
+      typeof obj.merged.title !== 'string' ||
+      typeof obj.merged.suggestion !== 'string'
+    )
+      return null
+    const evidence = Array.isArray(obj.merged.evidence)
+      ? obj.merged.evidence.filter((e: unknown) => typeof e === 'string')
+      : []
+    return {
+      titleA: obj.titleA,
+      titleB: obj.titleB,
+      merged: {
+        category: obj.merged.category,
+        title: obj.merged.title,
+        suggestion: obj.merged.suggestion,
+        evidence,
+      },
+    }
+  } catch {
+    return null
+  }
+}
+
+/** 从教训文件移除若干 `## ` 段（header 须是 `## ` 行完整文本）。preamble 与其余教训不动。 */
+export function removeLessonSections(content: string, headers: string[]): string {
+  const lines = content.split('\n')
+  const out: string[] = []
+  let skipping = false
+  for (const line of lines) {
+    if (line.startsWith('## ')) {
+      skipping = headers.includes(line.trim())
+      if (skipping) continue
+    }
+    if (skipping) continue
+    out.push(line)
+  }
+  return out.join('\n')
+}
+
+/**
+ * Crossover：合并两条重叠教训 → 「删二增一」的教训文件变更候选。
+ * LLM 只生成（选对 + 合并版），guard 校验所选教训真实存在（fail-closed 防幻觉）。
+ */
+export async function produceCrossoverProposal(
+  llm: Llm,
+  currentLessons: string,
+  timestamp: string,
+): Promise<{
+  description: string
+  filePath: string
+  newContent: string
+  originalContent: string
+  blastRadius: string[]
+} | null> {
+  const response = await collectLlmText(llm, buildCrossoverPrompt(currentLessons))
+  if (!response) return null
+
+  const parsed = parseCrossoverResult(response)
+  if (!parsed) return null
+
+  const headerA = `## ${parsed.titleA}`
+  const headerB = `## ${parsed.titleB}`
+  if (parsed.titleA === parsed.titleB) return null
+  if (!currentLessons.includes(headerA) || !currentLessons.includes(headerB)) return null
+
+  const withoutTwo = removeLessonSections(currentLessons, [headerA, headerB])
+  const mergedSection = buildLessonContent(parsed.merged, timestamp, 'CRSI producer (crossover)')
+  const newContent = `${withoutTwo.trimEnd()}\n\n${mergedSection}\n`
+
+  return {
+    description: `CRSI crossover: ${parsed.titleA} + ${parsed.titleB}`,
+    filePath: LESSONS_FILE,
+    newContent,
+    originalContent: currentLessons,
+    blastRadius: [LESSONS_FILE],
   }
 }
