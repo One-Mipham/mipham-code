@@ -10,8 +10,8 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.20.0
-> **最后更新**: 2026-08-28 — 改进轨 + 语义边界落地（PROTECTED_ROLES 语义清单 + 完整性自检契约）+ 测试数对齐 1957
+> **版本**: 2.21.0
+> **最后更新**: 2026-08-28 — RewardFn 接口 + Crossover 算子落地（独立轨 5 项收官）+ 测试数对齐 1976
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -50,7 +50,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：1,957 测试（1955 passed + 2 skipped）
+测试：1,976 测试（1974 passed + 2 skipped）
 
 ---
 
@@ -87,7 +87,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 27 个内置技能（21 standard + 6 mipham）
-│   │   ├── test/               # 184 个测试文件，1957 个测试
+│   │   ├── test/               # 186 个测试文件，1976 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -110,7 +110,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（1957 个测试）
+pnpm test         # vitest run（1976 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -234,7 +234,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
 | E2E      | 1       | 8        | full-pipeline                                 |
 | Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **184** | **1957** | **0 失败** ✅（1955 passed + 2 skipped）      |
+| **合计** | **186** | **1976** | **0 失败** ✅（1974 passed + 2 skipped）      |
 
 > 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
 
@@ -422,6 +422,7 @@ mipham-code 变更（包名/版本）
 
 | 版本   | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | 维护人     |
 | ------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| 2.21.0 | 2026-08-28 | 独立轨 5 项收官——RewardFn 接口 + Crossover 算子：① RewardFn 接口 `core/reward-fn.ts`（`ScoreReport`/`RewardFn{name,description,evaluate()}`/`mechanismSentinel` 包 runEval/`taskPerformanceRewardFn` 包 runTaskPerformance/`listRewardFns` 注册表），`runCrsiModification` sync→async + `opts.rewardFn` 可插拔 gate（默认机制哨兵），台账 `appendEvalScore`/`getLastEvalScore` 按名键控（跨尺度隔离），`/crsi eval` 奖励仪表盘（注册表清单 + `--reward <name>`）；`reward-fn.ts` 进 `PROTECTED_ROLES.evaluator` + `PROTECTED_CRITICAL_FILES` ② Crossover 算子 `produceCrossoverProposal`（LLM 选两条重叠教训 + 生成合并版 → 精确行匹配 guard 防幻觉 → `removeLessonSections` 删二增一 → 走沙箱 gate），`buildLessonContent` 加可选 `source` 参数，`/crsi propose --crossover` 接线。测试 1957→1976（1974 passed + 2 skipped，186 文件）。                                                                                                                                                                          | 技术委员会 |
 | 2.20.0 | 2026-08-27 | CC 2.1.246-247 借鉴落地 6 条：① sub-agent 运行期错误带 model 名（诊断哪个模型 404/失败）② sub-agent maxTurns 到顶标记 `[partial result]` + SendMessage 续跑提示 ③ MCP server 连不上 → 异步注入通知告知模型「工具不可用」而非「工具不存在」（抽 `formatMcpConnectFailures` 纯函数）④ 跨会话消息折叠成一行 `Message from @sender: summary`（正文留 bus 待 Ctrl+O 展开）⑤ plugin.json UTF-8 BOM 剥离（`\uFEFF`，validator + claude-plugin 两处）⑥ hook command stderr 截断 2KB（防 MB 级输出溢出会话）。测试 1914→1921（1919 passed + 2 skipped，182 文件）。                                                                                                                                                                                                                                                                                                                                                                                                                                                         | 技术委员会 |
 | 2.19.0 | 2026-08-27 | CronCreate 落地 + Memory 语义召回：① `computeNextFire` 抽 `core/cron.ts` 共享（daemon+CLI 消第二套 cron 解析）② `CronJob` 加 `nextFire`/`lastFired`、`readAllJobs` 回填旧文件 ③ 新增 `core/cron-poller.ts`（60s 轮询 → 到期 job fire 回当前会话，复用 wakeup 队列 + idle-drain）④ `QueryEngine` 加独立 cron FIFO 队列（不动 /loop keep-latest——有 2 测试 + spec §七固化）⑤ Memory 语义召回：新增 `core/memory/tfidf.ts`（CJK 字符 bigram + ASCII 词 tokenize、cosine、similarities），`recall` 用 TF-IDF 余弦替换词重叠，保留 relevance tag/wikilink/时间衰减。测试 1865→1890（1888 passed + 2 skipped，178 文件）。                                                                                                                                                                                                                                                                                                                                                                                               | 技术委员会 |
 | 2.18.0 | 2026-08-26 | AGENTS.md 兼容 + 递归指令加载（Phase 1+2）：① `InstructionsLoader.loadAll` 升级为「git 根 → cwd 递归 + 就近优先」，逐目录读 `AGENTS.md` / `AGENTS.override.md` / `CLAUDE.md` / `MIPHAM.md` 三格式并存（读全部不丢弃，MIPHAM→CLAUDE 相对序不变，仅前置 AGENTS 两条）② 集团/公司/用户层锚定 `gitRoot`（修子目录启动的相对路径漂移）③ 提取 `gitRoot` / `discoverDirectories` 纯函数 + `INSTRUCTION_FILENAMES` 常量，`loadCrsiLessons(root)` 收口。测试 1859→1865（1863 passed + 2 skipped，174 文件）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | 技术委员会 |
