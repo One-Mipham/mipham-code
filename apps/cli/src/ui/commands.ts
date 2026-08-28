@@ -18,6 +18,7 @@ import {
   produceCrsiProposal,
   produceRuleProposal,
   produceProseProposal,
+  produceCrossoverProposal,
   selectCrsiSignal,
   collectSkillFiles,
   proseProposalId,
@@ -970,6 +971,38 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
     return {
       content:
         `✅ 已生成受管理规则并跑过测试。审阅 diff：\n\n${result.diff}\n\n` +
+        '/crsi modify --approve 合并 | /crsi modify --reject 丢弃',
+    }
+  }
+
+  // ── Crossover 路径：/crsi propose --crossover 合并两条重叠教训 ──
+  if (args[0] === '--crossover') {
+    const llm = ctx.engine.getLlm() ?? ctx.engine.getRegistry()
+    let current = ''
+    try {
+      const { readFileSync } = await import('node:fs')
+      const { join } = await import('node:path')
+      current = readFileSync(join(root, LESSONS_FILE), 'utf-8')
+    } catch {
+      current = ''
+    }
+    if (!current) {
+      return { content: '教训文件为空，无可合并。' }
+    }
+
+    const proposal = await produceCrossoverProposal(llm, current, new Date().toISOString())
+    if (!proposal) {
+      return { content: '没有找到可合并的重叠教训对。' }
+    }
+
+    const result = await runCrsiModification(proposal)
+    if (!result.applied || result.phase === 'failed') {
+      return { content: `❌ 合并失败（phase: ${result.phase}）。\n${result.error ?? ''}` }
+    }
+
+    return {
+      content:
+        `✅ 已生成合并教训并跑过测试。审阅 diff：\n\n${result.diff}\n\n` +
         '/crsi modify --approve 合并 | /crsi modify --reject 丢弃',
     }
   }
