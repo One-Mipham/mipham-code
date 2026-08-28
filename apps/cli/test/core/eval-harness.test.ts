@@ -84,4 +84,10 @@ describe('rewards log', () => {
     expect(getLastEvalScore('b')).toBe(40)
     expect(getLastEvalScore('c')).toBeNull()
   })
+
+  it('same-name records return the latest score (scan-from-end)', () => {
+    appendEvalScore('a', { score: 80, passed: 8, total: 10 })
+    appendEvalScore('a', { score: 40, passed: 4, total: 10 })
+    expect(getLastEvalScore('a')).toBe(40)
+  })
 })

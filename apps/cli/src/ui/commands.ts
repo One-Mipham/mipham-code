@@ -1039,7 +1039,9 @@ const crsiEvalCmd: CommandHandler = async (ctx, args) => {
   }
 
   // 奖励函数注册表（reward function = policy→feedback 抽象可见）
-  const fns = listRewardFns()
+  // 传 llm 列出完整注册表（task-performance 需 llm 才能跑，但构造它零 LLM 调用）。
+  const llm = ctx.engine.getLlm() ?? ctx.engine.getRegistry()
+  const fns = listRewardFns(llm)
   lines.push('', '## 🎁 奖励函数注册表', '')
   for (const f of fns) {
     lines.push(`- **${f.name}** — ${f.description}`)
