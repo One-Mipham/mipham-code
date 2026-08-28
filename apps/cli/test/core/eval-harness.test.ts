@@ -21,8 +21,8 @@ beforeEach(() => {
 describe('runEval', () => {
   it('reports a full score after managed rules fill the behavior gaps', () => {
     const report = runEval()
-    expect(report.total).toBe(32)
-    expect(report.passed).toBe(32)
+    expect(report.total).toBe(33)
+    expect(report.passed).toBe(33)
     expect(report.score).toBe(100)
     // 8 个行为缺口全部翻转 PASS（固化 managed tool-params 规则后），无任何 FAIL
     expect(report.failures).toHaveLength(0)
@@ -32,6 +32,13 @@ describe('runEval', () => {
     expect(ids).toContain('producer-rule-shape')
     expect(ids).toContain('red-team-zero-gaps')
     expect(ids).toContain('blast-radius-gate')
+  })
+
+  it('包含语义边界完整性契约（关键机制文件全覆盖）', () => {
+    const report = runEval()
+    const contract = report.results.find((r) => r.id === 'protection-completeness')
+    expect(contract).toBeDefined()
+    expect(contract!.passed).toBe(true)
   })
 
   it('covers all four CRSI contract dimensions', () => {

@@ -137,6 +137,28 @@ export const PROTECTED_ROLES = {
 /** 扁平化（向后兼容：isProtectedPath 仍用前缀匹配，行为不变）。 */
 export const PROTECTED_PATHS: string[] = Object.values(PROTECTED_ROLES).flat()
 
+/**
+ * 完整性金丝雀：这些「评估器 + 核心机制」文件必须全在保护域。
+ * eval harness 的 protection-completeness 契约逐条断言 isProtectedPath。
+ * 与 PROTECTED_ROLES 同文件（单一维护点）——新增机制文件须两处一起加。
+ */
+export const PROTECTED_CRITICAL_FILES: string[] = [
+  'apps/cli/src/core/eval-harness.ts',
+  'apps/cli/src/core/behavior-tasks.ts',
+  'apps/cli/src/core/behavior-tasks.json',
+  'apps/cli/src/core/task-performance.ts',
+  'apps/cli/src/core/task-performance-tasks.json',
+  'apps/cli/src/core/improvement-track.ts',
+  'apps/cli/src/core/crsi-sandbox.ts',
+  'apps/cli/src/core/crsi-producer.ts',
+  'apps/cli/src/core/rule-engine.ts',
+  'apps/cli/src/core/red-team.ts',
+  'apps/cli/src/core/error-signature-db.ts',
+  'apps/cli/src/core/preflight-checker.ts',
+  'apps/cli/src/agent/recoverable-failure.ts',
+  'apps/cli/src/agent/crsi-provenance-bridge.ts',
+]
+
 /** 是否命中只读边界。前缀匹配，目录条目以 `/` 结尾。 */
 export function isProtectedPath(filePath: string): boolean {
   return PROTECTED_PATHS.some((p) => filePath === p || filePath.startsWith(p))
