@@ -136,6 +136,15 @@ describe('produceCrossoverProposal', () => {
     expect(await produceCrossoverProposal(textLlm(bad), LESSONS, '2026-08-28')).toBeNull()
   })
 
+  it('titleA 是真实标题的前缀 → null（精确匹配，非子串）', async () => {
+    const prefix = JSON.stringify({
+      titleA: HEADER_A.slice(0, -1),
+      titleB: HEADER_B,
+      merged: { category: 'c', title: 't', suggestion: 's', evidence: [] },
+    })
+    expect(await produceCrossoverProposal(textLlm(prefix), LESSONS, '2026-08-28')).toBeNull()
+  })
+
   it('titleA === titleB → null', async () => {
     const same = JSON.stringify({
       titleA: HEADER_A,

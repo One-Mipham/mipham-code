@@ -474,7 +474,7 @@ function buildCrossoverPrompt(currentLessons: string): string {
     '',
     '要求：',
     '1. 找两条「主题重叠」的教训（例如都讲「读码优先」、都讲「隔离」），不要选主题无关的两条。',
-    '2. titleA / titleB 必须是文件中 `## ` 行的**完整文本**（含 category 前缀，逐字复制，不要改写）。',
+    '2. titleA / titleB 是 `## ` 之后、标题的完整文本（含 category 前缀，逐字复制，不要改写；**不含** `## ` 前缀本身）。',
     '3. merged 是合并后的综合教训：category 沿用其中一个、title 概括两者、suggestion 综合两条的核心建议、evidence 综合两条的证据要点。',
     '4. 只返回裸 JSON（不要 markdown 围栏、不要其他文字），格式：',
     '{"titleA":"<完整 ## 行1>","titleB":"<完整 ## 行2>","merged":{"category":"...","title":"...","suggestion":"...","evidence":["...","..."]}}',
@@ -564,7 +564,10 @@ export async function produceCrossoverProposal(
   const headerA = `## ${parsed.titleA}`
   const headerB = `## ${parsed.titleB}`
   if (parsed.titleA === parsed.titleB) return null
-  if (!currentLessons.includes(headerA) || !currentLessons.includes(headerB)) return null
+  // 精确行匹配（与 removeLessonSections 同语义）：子串 includes 会让「截断标题」漏过 guard、
+  // 却因 removeLessonSections 精确匹配删不掉 → 假「删二增一」实为「增一」。fail-closed 用精确匹配。
+  const lessonLines = currentLessons.split('\n').map((l) => l.trim())
+  if (!lessonLines.includes(headerA) || !lessonLines.includes(headerB)) return null
 
   const withoutTwo = removeLessonSections(currentLessons, [headerA, headerB])
   const mergedSection = buildLessonContent(parsed.merged, timestamp, 'CRSI producer (crossover)')
