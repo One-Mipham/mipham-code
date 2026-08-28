@@ -29,7 +29,7 @@ import {
 } from '../core/crsi-producer'
 import { prefilterProposal } from '../core/proposal-guard'
 import { runEval, appendEvalScore } from '../core/eval-harness'
-import { runTaskPerformance } from '../core/task-performance'
+import { runTaskPerformance, measureSkillDelta } from '../core/task-performance'
 import { NPM_UPDATE_COMMAND, PACKAGE_VERSION, COAUTHOR_TRAILER } from '../shared/index.ts'
 import { getPreference } from '../config/preferences'
 import { loadCrossSessionConfig } from '../config/loader'
@@ -795,6 +795,9 @@ const crsiModifyCmd: CommandHandler = async (ctx, args) => {
     // 文件不存在 → 宽松模式（originalContent 为空）
   }
 
+  const llm = ctx.engine.getLlm() ?? ctx.engine.getRegistry()
+  const delta = await measureSkillDelta(llm, { filePath, originalContent, newContent })
+
   const result = runCrsiModification({ description, filePath, newContent, originalContent })
   if (!result.applied || result.phase === 'failed') {
     return {
@@ -802,10 +805,15 @@ const crsiModifyCmd: CommandHandler = async (ctx, args) => {
     }
   }
 
+  const deltaLine = delta
+    ? `\n📈 改进信号 delta: ${delta.delta >= 0 ? '+' : ''}${delta.delta} (baseline ${delta.baseline.score} → post ${delta.post.score})`
+    : ''
+
   return {
     content:
       `✅ 测试通过。审阅下方 diff：\n\n${result.diff}\n\n` +
-      '/crsi modify --approve  合并\n/crsi modify --reject   丢弃',
+      deltaLine +
+      '\n/crsi modify --approve  合并\n/crsi modify --reject   丢弃',
   }
 }
 
