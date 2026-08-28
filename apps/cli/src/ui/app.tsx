@@ -227,9 +227,13 @@ export function App({
   const [runningAgents, setRunningAgents] = useState<Record<string, AgentEntry>>({})
   const [agentTick, setAgentTick] = useState(0)
   /** Active foreground tool indicator: [Bash command...], [Update file.ts...], etc. */
-  const [activeTool, setActiveTool] = useState<{ name: string; detail: string } | null>(null)
+  const [activeTool, setActiveTool] = useState<{
+    name: string
+    detail: string
+    startTime: number
+  } | null>(null)
   // Refs for immediate state (bypasses React batching so footer renders between rapid chunks)
-  const activeToolRef = useRef<{ name: string; detail: string } | null>(null)
+  const activeToolRef = useRef<{ name: string; detail: string; startTime: number } | null>(null)
   const agentProgressRef = useRef<AgentProgress | null>(null)
 
   // Tick timer for agent elapsed displays (re-renders every second while agents are running).
@@ -510,7 +514,7 @@ export function App({
             const detail = formatToolDetail(toolName, chunk.toolUse.input)
 
             // Show [ToolName detail...] activity indicator for ALL tools (via ref for immediate render)
-            const toolEntry = { name: toolDisplayName(toolName), detail }
+            const toolEntry = { name: toolDisplayName(toolName), detail, startTime: Date.now() }
             activeToolRef.current = toolEntry
             setActiveTool(toolEntry)
             setAgentTick((t) => t + 1)

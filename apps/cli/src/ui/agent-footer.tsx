@@ -25,7 +25,7 @@ interface AgentFooterProps {
   /** Tick counter for live elapsed-time re-renders. */
   tick: number
   /** Active foreground tool: shown as [ToolName detail...] before agent lines. */
-  activeTool?: { name: string; detail: string } | null
+  activeTool?: { name: string; detail: string; startTime: number } | null
   /** Inline agent progress from tool_use streaming: ✻ Gerund… (elapsed · tokens). */
   agentProgress?: AgentProgress | null
 }
@@ -117,6 +117,10 @@ export function AgentFooter({ agents, tick, activeTool, agentProgress }: AgentFo
           <Text color={toolIndicatorColor(activeTool!.name)}>
             {'  '}[{activeTool!.name} {activeTool!.detail.slice(0, 60)}
             {animatedDots(tick)}]
+          </Text>
+          <Text dimColor>
+            {' '}
+            {formatElapsed(Math.floor((Date.now() - activeTool!.startTime) / 1000))}
           </Text>
         </Box>
       )}
