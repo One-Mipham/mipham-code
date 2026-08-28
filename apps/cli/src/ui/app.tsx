@@ -26,6 +26,7 @@ import { InputBar } from './input'
 import { ModelPicker } from './picker'
 import { AgentFooter, type AgentEntry } from './agent-footer'
 import { GraftStatusLine } from './graft-status'
+import { checkForUpdatesAsync, type UpdateStatus } from '../shared/update'
 import { collapseNoopTicks } from './loop-noop'
 
 /** Current context-window usage % — undefined when unknown (remote stub). */
@@ -188,6 +189,21 @@ export function App({
   const [providerId, setProviderId] = useState(initialProvider || config.defaultProvider)
   const [modelId, setModelId] = useState(initialModel || config.defaultModel)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null)
+
+  // 启动后台查新版（非阻塞；离线静默失败）
+  useEffect(() => {
+    let cancelled = false
+    checkForUpdatesAsync().then((update) => {
+      if (!cancelled && update.available) {
+        setUpdateStatus({ state: 'available', latest: update.latest })
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const [agentViewOpen, setAgentViewOpen] = useState(false)
   const [apiKeyPrompt, setApiKeyPrompt] = useState<{
     providerId: string
@@ -327,6 +343,7 @@ export function App({
       setFocusMode: (on: boolean) => setFocusMode(on),
       setGoal: (text: string) => setGoalText(text),
       setUltracodeMode: (on: boolean) => setUltracodeMode(on),
+      setUpdateStatus: (s: UpdateStatus) => setUpdateStatus(s),
       skillsLoader,
       pluginManager,
       t,
@@ -1175,6 +1192,17 @@ export function App({
 
             {/* graft status line — mirrors graft's own "◤ graft · …" bar */}
             <GraftStatusLine cwd={process.cwd()} ctxPct={contextUsagePct(engine)} />
+
+            {/* Update notification — green, right-aligned, mirrors Claude Code's "Update installed · Restart to apply" */}
+            {updateStatus && (
+              <Box marginTop={1} flexDirection="row" justifyContent="flex-end" width="100%">
+                <Text color="green">
+                  {updateStatus.state === 'installed'
+                    ? `✔ ${t('ui.status.update_installed_restart')}`
+                    : `✔ ${t('ui.status.update_available', { version: updateStatus.latest })}`}
+                </Text>
+              </Box>
+            )}
 
             {/* Status line — Claude Code style */}
             <Box marginTop={1} flexDirection="column">

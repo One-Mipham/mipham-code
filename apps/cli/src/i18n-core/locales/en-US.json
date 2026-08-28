@@ -845,7 +845,9 @@
       "esc_to_interrupt": "esc to interrupt",
       "shift_tab_cycle": "shift+tab",
       "left_for_agents": "ctrl+g agents to manage",
-      "mipham_modes": "Mipham"
+      "mipham_modes": "Mipham",
+      "update_available": "Update available · v{version}",
+      "update_installed_restart": "Update installed · Restart to apply"
     },
     "wizard": {
       "header_subtitle": " — Configuration Wizard",

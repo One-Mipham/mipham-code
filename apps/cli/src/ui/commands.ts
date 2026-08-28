@@ -9,6 +9,7 @@ import type { MiphamConfig } from '../shared/index.ts'
 import type { SkillsLoader } from '../skills/loader'
 import type { PluginManager } from '../plugin/plugin-manager'
 import type { Message } from '../shared/types.js'
+import type { UpdateStatus } from '../shared/update'
 import { McpClient } from '../mcp/client'
 import { buildCapabilityReport } from '../core/capability-inventory'
 import { InstructionsLoader } from '../core/instructions'
@@ -94,6 +95,7 @@ export interface CommandContext {
   setFocusMode: (on: boolean) => void
   setGoal: (text: string) => void
   setUltracodeMode: (on: boolean) => void
+  setUpdateStatus: (s: UpdateStatus) => void
   skillsLoader?: SkillsLoader
   pluginManager?: PluginManager
   /** i18n translate function — populated from React tree via useI18n().
@@ -3857,6 +3859,7 @@ const upgradeCmd: CommandHandler = async (ctx) => {
   if (ok) {
     const configPath = getConfigPath()
     const { existsSync } = await import('node:fs')
+    ctx.setUpdateStatus({ state: 'installed', latest: update.latest })
     lines.push('')
     lines.push(t('commands.upgrade.updated', { version: update.latest }))
 

@@ -845,7 +845,9 @@
       "esc_to_interrupt": "Esc 中断",
       "shift_tab_cycle": "Shift+Tab",
       "left_for_agents": "ctrl+g 管理代理",
-      "mipham_modes": "Mipham独有"
+      "mipham_modes": "Mipham独有",
+      "update_available": "有新版 · v{version}",
+      "update_installed_restart": "更新已安装 · 重启生效"
     },
     "wizard": {
       "header_subtitle": " — 配置向导",
