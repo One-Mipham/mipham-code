@@ -228,7 +228,7 @@ C1/C2 一个 plan 两阶段（C2 依赖 C1 的导出）。
 
 ## 七、风险与开放问题
 
-1. **【LLM 幻觉标题】** LLM 可能返回改写的标题 → guard `includes(headerA)` 拦截（fail-closed 返回 null）。代价：偶发「找不到可合并对」，用户重跑即可。
+1. **【LLM 幻觉标题】** LLM 可能返回改写的标题 → guard 精确行匹配拦截（`lines.some(l => l.trim() === header)`，与 `removeLessonSections` 同语义，fail-closed 返回 null）。代价：偶发「找不到可合并对」，用户重跑即可。
 2. **【无重叠对】** 教训文件当前无重叠时，LLM 可能强凑两条或返回无效 → parse/guard 返回 null，命令报「没有可合并的重叠教训对」。诚实结果，非 bug。
 3. **【合并质量不可自动判定】** 合并版是否更好，人类审阅定夺（A1：不采纳 LLM 自评）。若合并质量差，用户 `--reject`。
 4. **【幂等从简】** 不加 ledger，靠 `hasPending()` + 合并后标题消失的自然 guard。rejected 后重跑会重选对（用户显式重调）。如需跨会话去重再加 crossover ledger（对标 prose ledger）。
