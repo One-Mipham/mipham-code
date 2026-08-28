@@ -798,7 +798,13 @@ const crsiModifyCmd: CommandHandler = async (ctx, args) => {
   const llm = ctx.engine.getLlm() ?? ctx.engine.getRegistry()
   const delta = await measureSkillDelta(llm, { filePath, originalContent, newContent })
 
-  const result = runCrsiModification({ description, filePath, newContent, originalContent })
+  const result = runCrsiModification({
+    description,
+    filePath,
+    newContent,
+    originalContent,
+    blastRadius: [filePath],
+  })
   if (!result.applied || result.phase === 'failed') {
     return {
       content: `❌ 修改未通过（phase: ${result.phase}）。\n${result.error ?? ''}`,
@@ -883,6 +889,7 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
       filePath: proposal.filePath,
       newContent: proposal.newContent,
       originalContent: proposal.originalContent,
+      blastRadius: [proposal.filePath],
     })
     if (!result.applied || result.phase === 'failed') {
       return { content: `❌ 生成失败（phase: ${result.phase}）。\n${result.error ?? ''}` }
