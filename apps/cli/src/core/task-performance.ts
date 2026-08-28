@@ -162,9 +162,16 @@ export async function measureSkillDelta(
 
   if (!loadPerformanceTasks().some((t) => t.skill === skillName)) return null
 
-  const baselineText = proposal.originalContent
-    ? parseFrontmatter(proposal.originalContent).content
-    : parseFrontmatter(readFileSync(proposal.filePath, 'utf-8')).content
+  let baselineText: string
+  if (proposal.originalContent !== undefined) {
+    baselineText = parseFrontmatter(proposal.originalContent).content
+  } else {
+    try {
+      baselineText = parseFrontmatter(readFileSync(proposal.filePath, 'utf-8')).content
+    } catch {
+      return null // 旧 skill 不可读 → 无可量
+    }
+  }
 
   const baseline = await runTaskPerformance(llm, { skill: { name: skillName, text: baselineText } })
   const post = await runTaskPerformance(llm, {

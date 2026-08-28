@@ -205,4 +205,17 @@ describe('measureSkillDelta', () => {
     expect(delta!.skillName).toBe('safe-coding')
     expect(delta!.delta).toBeGreaterThan(0)
   })
+
+  it('旧 skill 文件不可读 → null（不抛异常）', async () => {
+    const mockLlm: Llm = {
+      chat: async function* () {
+        yield { type: 'text', content: '' }
+      },
+    }
+    const delta = await measureSkillDelta(mockLlm, {
+      filePath: 'apps/cli/skills/standard/ghost-does-not-exist.SKILL.md',
+      newContent: '---\nname: safe-coding\ndescription: x\n---\nbody',
+    })
+    expect(delta).toBeNull()
+  })
 })
