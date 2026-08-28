@@ -29,7 +29,17 @@ import {
 } from '../core/crsi-producer'
 import { prefilterProposal } from '../core/proposal-guard'
 import { runEval, appendEvalScore } from '../core/eval-harness'
-import { runTaskPerformance, measureSkillDelta } from '../core/task-performance'
+import { runTaskPerformance, measureSkillDeltaRepeated } from '../core/task-performance'
+import { randomUUID } from 'node:crypto'
+import {
+  buildImprovementReport,
+  appendImprovement,
+  readImprovements,
+  improvementRate,
+  setPendingVerdict,
+  getPendingVerdict,
+  shouldBlockApproval,
+} from '../core/improvement-track'
 import { NPM_UPDATE_COMMAND, PACKAGE_VERSION, COAUTHOR_TRAILER } from '../shared/index.ts'
 import { getPreference } from '../config/preferences'
 import { loadCrossSessionConfig } from '../config/loader'
@@ -762,11 +772,16 @@ const crsiInventoryCmd: CommandHandler = async (ctx) => {
 
 const crsiModifyCmd: CommandHandler = async (ctx, args) => {
   if (args[0] === '--approve') {
+    if (shouldBlockApproval(getPendingVerdict() ?? 'inconclusive')) {
+      return { content: '❌ 任务表现倒退，禁止固化。请 /crsi modify --reject 丢弃，或改进后再试。' }
+    }
     const r = approvePending()
+    setPendingVerdict(null)
     return { content: r.success ? `✅ ${r.message}` : `⚠️ ${r.message}` }
   }
   if (args[0] === '--reject') {
     const r = rejectPending()
+    setPendingVerdict(null)
     return { content: r.success ? `✅ ${r.message}` : `⚠️ ${r.message}` }
   }
   if (args.length < 3) {
@@ -795,9 +810,6 @@ const crsiModifyCmd: CommandHandler = async (ctx, args) => {
     // 文件不存在 → 宽松模式（originalContent 为空）
   }
 
-  const llm = ctx.engine.getLlm() ?? ctx.engine.getRegistry()
-  const delta = await measureSkillDelta(llm, { filePath, originalContent, newContent })
-
   const result = runCrsiModification({
     description,
     filePath,
@@ -811,14 +823,36 @@ const crsiModifyCmd: CommandHandler = async (ctx, args) => {
     }
   }
 
-  const deltaLine = delta
-    ? `\n📈 改进信号 delta: ${delta.delta >= 0 ? '+' : ''}${delta.delta} (baseline ${delta.baseline.score} → post ${delta.post.score})`
-    : ''
+  // 测量在 runCrsiModification 成功后进行（避免 failed proposal 白跑 6 次 LLM 调用）。
+  const llm = ctx.engine.getLlm() ?? ctx.engine.getRegistry()
+  let improvementLine = ''
+  try {
+    const sample = await measureSkillDeltaRepeated(llm, { filePath, originalContent, newContent })
+    if (sample) {
+      const report = buildImprovementReport(sample, [filePath])
+      setPendingVerdict(report.verdict)
+      appendImprovement({ ...report, id: randomUUID(), timestamp: new Date().toISOString() })
+      const rate = improvementRate(readImprovements())
+      const label =
+        report.verdict === 'improved'
+          ? 'improved ✅'
+          : report.verdict === 'regressed'
+            ? 'regressed ⚠️'
+            : 'inconclusive'
+      const sign = report.deltaMean >= 0 ? '+' : ''
+      improvementLine =
+        `\n📊 改进判定: ${label} (delta ${sign}${report.deltaMean.toFixed(1)}, 噪声 ${report.noise.toFixed(1)}, 阈值 ${report.minEffect.toFixed(1)})` +
+        `\n   改进率: ${rate.improved}/${rate.total} (${(rate.rate * 100).toFixed(0)}%, Wilson 95% [${(rate.lo * 100).toFixed(0)}%, ${(rate.hi * 100).toFixed(0)}%])` +
+        (report.verdict === 'regressed' ? '\n   ⚠️ 任务表现倒退：--approve 将被拒绝。' : '')
+    }
+  } catch {
+    // 测量失败（LLM 不可用等）不阻断 modify 流程——改进信号是可选的。
+  }
 
   return {
     content:
-      `✅ 测试通过。审阅下方 diff：\n\n${result.diff}\n\n` +
-      deltaLine +
+      `✅ 测试通过。审阅下方 diff：\n\n${result.diff}\n` +
+      improvementLine +
       '\n/crsi modify --approve  合并\n/crsi modify --reject   丢弃',
   }
 }
