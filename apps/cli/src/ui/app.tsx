@@ -6,6 +6,8 @@ import { formatThinking } from './thinking'
 import type { QueryEngine } from '../core/engine'
 import type { RemoteEngine } from '../daemon/remote-engine'
 import type { MiphamConfig } from '../shared/index.ts'
+import type { Llm } from '../providers/llm'
+import { AUTOCOMPLETE_MAX_CONTEXT, type RecentMessage } from '../core/autocomplete'
 import type { SkillsLoader } from '../skills/loader'
 import type { PluginManager } from '../plugin/plugin-manager'
 import { setPreference } from '../config/preferences'
@@ -164,6 +166,20 @@ export function App({
     [t],
   )
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const autocompleteLlm = useMemo<Llm | undefined>(() => {
+    // RemoteEngine（daemon 远程）无本地 LLM → 补全禁用；QueryEngine 取注入 LLM 或回退 registry。
+    if (!('getLlm' in engine)) return undefined
+    return engine.getLlm() ?? engine.getRegistry()
+  }, [engine])
+
+  const recentMessages = useMemo<RecentMessage[]>(
+    () =>
+      messages
+        .filter((m) => m.role === 'user' || m.role === 'assistant')
+        .slice(-AUTOCOMPLETE_MAX_CONTEXT)
+        .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+    [messages],
+  )
   const [isLoading, setIsLoading] = useState(false)
   /** Idle-drain tick — bumped by the engine's onEnqueue callback whenever the
    *  ScheduleWakeup timer fires while the engine is idle. Drives the idle-drain
@@ -1089,6 +1105,13 @@ export function App({
                 <InputBar
                   onSubmit={handleSubmit}
                   isLoading={isLoading}
+                  llm={autocompleteLlm}
+                  recentMessages={recentMessages}
+                  autocompleteEnabled={
+                    !process.env.MIPHAM_DISABLE_AUTOCOMPLETE &&
+                    (config.autocomplete?.enabled ?? true)
+                  }
+                  autocompleteDebounceMs={config.autocomplete?.debounceMs ?? 400}
                   showCommandPicker={config.showCommandPicker ?? false}
                   onTogglePicker={() => setPickerOpen((prev) => !prev)}
                   onToggleFocus={() => setFocusMode((prev) => !prev)}

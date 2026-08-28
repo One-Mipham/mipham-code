@@ -5,6 +5,8 @@ import { getCommandList } from './commands.js'
 import { CommandPicker } from './command-picker.js'
 import { useI18n } from '../i18n-context'
 import { discoverSessions } from '../agent/cross-session/discovery'
+import { requestSuggestion, shouldAutocomplete, type RecentMessage } from '../core/autocomplete'
+import type { Llm } from '../providers/llm'
 
 interface InputBarProps {
   onSubmit: (input: string) => void
@@ -23,6 +25,14 @@ interface InputBarProps {
   onCancel?: () => void
   /** When false, don't auto-open the slash-command picker when typing `/`. */
   showCommandPicker?: boolean
+  /** LLM 续写建议所需的模型（app.tsx 传；RemoteEngine 下 undefined → 补全禁用）。 */
+  llm?: Llm
+  /** 最近对话上下文（供续写贴合）。 */
+  recentMessages?: RecentMessage[]
+  /** 默认 true；app.tsx 传 config.autocomplete?.enabled ?? true。 */
+  autocompleteEnabled?: boolean
+  /** 默认 400ms；app.tsx 传 config.autocomplete?.debounceMs ?? 400。 */
+  autocompleteDebounceMs?: number
 }
 
 // ── Loading verb keys (i18n) ──
@@ -92,6 +102,10 @@ export function InputBar({
   onCyclePermission,
   onCancel,
   showCommandPicker = true,
+  llm,
+  recentMessages,
+  autocompleteEnabled = true,
+  autocompleteDebounceMs = 400,
 }: InputBarProps) {
   const { t } = useI18n()
   const [value, setValue] = useState('')
@@ -108,6 +122,11 @@ export function InputBar({
   const [submittedHistory, setSubmittedHistory] = useState<string[]>([])
   const historyIndexRef = useRef(-1) // -1 = not browsing history
   const savedDraftRef = useRef('') // saved user draft before browsing history
+
+  // ── Ghost-text 自动补全 ──
+  const [suggestion, setSuggestion] = useState<string | null>(null)
+  const suggestionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const suggestionReqIdRef = useRef(0)
 
   // Stabilize t ref — prevents stale closures in intervals and avoids
   // unnecessary effect re-runs when the i18n context value object changes.
@@ -187,6 +206,14 @@ export function InputBar({
     // Shift+Tab → cycle permission mode
     if (key.shift && key.tab) {
       onCyclePermission?.()
+      return
+    }
+    // Tab → 接受 ghost-text 建议（复用 Ctrl-key 的 revert 手法）
+    if (key.tab && !key.shift && suggestion) {
+      const next = valueBeforeShortcut.current + suggestion
+      setValue(next)
+      valueRef.current = next
+      setSuggestion(null)
       return
     }
     // Ctrl+P → toggle model picker
@@ -299,6 +326,7 @@ export function InputBar({
     setValue('')
     valueRef.current = ''
     setPickerActive(false)
+    setSuggestion(null)
   }
 
   // ── Picker mode: CommandPicker overlay ──
@@ -339,6 +367,33 @@ export function InputBar({
             // Normalize newlines → spaces. ink-text-input is single-line; multi-line
             // paste would trap arrow-key navigation on the first line.
             const normalized = val.replace(/\n/g, ' ')
+            // ── Ghost-text 自动补全：每次输入清 suggestion + 重排防抖 ──
+            setSuggestion(null)
+            const suggestionReqId = ++suggestionReqIdRef.current
+            if (suggestionTimerRef.current) {
+              clearTimeout(suggestionTimerRef.current)
+              suggestionTimerRef.current = null
+            }
+            if (
+              llm &&
+              autocompleteEnabled &&
+              shouldAutocomplete(normalized, isLoading, pickerActive)
+            ) {
+              suggestionTimerRef.current = setTimeout(() => {
+                requestSuggestion(
+                  llm,
+                  recentMessages ?? [],
+                  normalized,
+                  () => suggestionReqId !== suggestionReqIdRef.current,
+                )
+                  .then((completion) => {
+                    if (completion) setSuggestion(completion)
+                  })
+                  .catch(() => {
+                    // 补全失败非关键——静默忽略
+                  })
+              }, autocompleteDebounceMs)
+            }
             // 批量输入（paste/IME 替换）节流防渲染风暴；普通单字符输入立即显示，
             // 避免 33ms trailing 的「慢半拍」尾巴。
             const bulk = isBulkInput(valueRef.current, normalized)
@@ -363,6 +418,7 @@ export function InputBar({
             isLoading ? `${verb}...` : completionVerb ? completionVerb : t('ui.input.placeholder')
           }
         />
+        {suggestion && <Text dimColor>{suggestion}</Text>}
       </Box>
       {/* Slash command hints — shown when typing / (only when picker is NOT active) */}
       {slashHints.length > 0 && !pickerActive && (
