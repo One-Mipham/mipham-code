@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { Box, Text, useInput } from 'ink'
 import TextInput from 'ink-text-input'
+import { execSync } from 'node:child_process'
 import { ErrorBoundary } from './error-boundary'
 import { formatThinking } from './thinking'
 import type { QueryEngine } from '../core/engine'
@@ -190,6 +191,15 @@ export function App({
   const [modelId, setModelId] = useState(initialModel || config.defaultModel)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null)
+  // Current git branch — read once at mount (not a git repo → null).
+  const [gitBranch] = useState<string | null>(() => {
+    try {
+      const b = execSync('git branch --show-current', { encoding: 'utf-8' }).trim()
+      return b || null
+    } catch {
+      return null
+    }
+  })
 
   // 启动后台查新版（非阻塞；离线静默失败）
   useEffect(() => {
@@ -1221,6 +1231,9 @@ export function App({
                 </Text>
               </Box>
             </Box>
+
+            {/* Git branch — dim, bottom-most, mirrors Claude Code's "⏺ main" */}
+            {gitBranch && <Text dimColor>⏺ {gitBranch}</Text>}
           </>
         )}
       </Box>
