@@ -10,6 +10,7 @@ import { readFileSync, existsSync, copyFileSync, mkdirSync, chmodSync } from 'no
 import { join } from 'node:path'
 import { execSync } from 'node:child_process'
 import { homedir } from 'node:os'
+import { PACKAGE_VERSION } from './package-info'
 
 const PACKAGE = '@miphamai/cli'
 const HOME = homedir()
@@ -188,6 +189,46 @@ export function restoreConfig(backupPath: string): boolean {
  */
 export function getConfigPath(): string {
   return CONFIG_PATH
+}
+
+/** 更新提示状态：有新版（未装）| 已装待重启。 */
+export type UpdateStatus = { state: 'available' | 'installed'; latest: string }
+
+/** registry /latest 端点（返回 {version}），npm → npmmirror 回退。 */
+const LATEST_URLS = [
+  'https://registry.npmjs.org/@miphamai%2fcli/latest',
+  'https://registry.npmmirror.com/@miphamai%2fcli/latest',
+]
+
+/** fetch 拉最新版本，npm → npmmirror 回退（超时 10s/个）。 */
+async function fetchLatestVersionAsync(): Promise<string> {
+  let lastError: unknown = null
+  for (const url of LATEST_URLS) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(10_000) })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = (await res.json()) as { version?: string }
+      if (data.version) return data.version
+      throw new Error('no version in response')
+    } catch (err) {
+      lastError = err
+    }
+  }
+  throw lastError ?? new Error('Failed to fetch latest version')
+}
+
+/** 非阻塞版本检查。current 用 PACKAGE_VERSION（编译期常量，二进制下可靠）。离线/失败 → available: false。 */
+export async function checkForUpdatesAsync(): Promise<UpdateCheck> {
+  const current: string = PACKAGE_VERSION
+  let latest: string = current
+  let available = false
+  try {
+    latest = await fetchLatestVersionAsync()
+    available = compareVersions(latest, current) > 0
+  } catch {
+    // offline → treat as up-to-date (don't alarm the user)
+  }
+  return { current, latest, available }
 }
 
 /**
