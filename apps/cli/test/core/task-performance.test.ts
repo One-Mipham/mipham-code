@@ -6,6 +6,7 @@ import {
   judgeGeneratedCode,
   stripCodeFences,
   runTaskPerformance,
+  measureSkillDelta,
 } from '../../src/core/task-performance'
 
 describe('loadPerformanceTasks', () => {
