@@ -359,6 +359,7 @@ describe('PROTECTED_ROLES (语义保护清单)', () => {
       'apps/cli/src/core/task-performance.ts',
       'apps/cli/src/core/task-performance-tasks.json',
       'apps/cli/src/core/improvement-track.ts',
+      'apps/cli/src/core/reward-fn.ts',
       'apps/cli/src/agent/recoverable-failure.ts',
       'apps/cli/src/agent/crsi-provenance-bridge.ts',
     ]

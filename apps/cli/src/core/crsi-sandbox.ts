@@ -113,6 +113,7 @@ export const PROTECTED_ROLES = {
     'apps/cli/src/core/task-performance.ts',
     'apps/cli/src/core/task-performance-tasks.json',
     'apps/cli/src/core/improvement-track.ts',
+    'apps/cli/src/core/reward-fn.ts',
   ],
   selfImprovement: [
     'apps/cli/src/agent/effectiveness-tracker.ts',
@@ -149,6 +150,7 @@ export const PROTECTED_CRITICAL_FILES: string[] = [
   'apps/cli/src/core/task-performance.ts',
   'apps/cli/src/core/task-performance-tasks.json',
   'apps/cli/src/core/improvement-track.ts',
+  'apps/cli/src/core/reward-fn.ts',
   'apps/cli/src/core/crsi-sandbox.ts',
   'apps/cli/src/core/crsi-producer.ts',
   'apps/cli/src/core/rule-engine.ts',
