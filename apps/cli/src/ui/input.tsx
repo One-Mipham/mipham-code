@@ -199,6 +199,11 @@ export function InputBar({
       // Idle → clear the draft (the intuitive "cancel")
       setValue('')
       valueRef.current = ''
+      setSuggestion(null)
+      if (suggestionTimerRef.current) {
+        clearTimeout(suggestionTimerRef.current)
+        suggestionTimerRef.current = null
+      }
       return
     }
 
