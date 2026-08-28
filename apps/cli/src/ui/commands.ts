@@ -29,6 +29,7 @@ import {
 } from '../core/crsi-producer'
 import { prefilterProposal } from '../core/proposal-guard'
 import { runEval, appendEvalScore } from '../core/eval-harness'
+import { listRewardFns } from '../core/reward-fn'
 import { runTaskPerformance, measureSkillDeltaRepeated } from '../core/task-performance'
 import { randomUUID } from 'node:crypto'
 import {
@@ -1001,7 +1002,26 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
   }
 }
 
-const crsiEvalCmd: CommandHandler = async () => {
+const crsiEvalCmd: CommandHandler = async (ctx, args) => {
+  const rewardIdx = args.indexOf('--reward')
+  const rewardName = rewardIdx >= 0 ? args[rewardIdx + 1] : undefined
+
+  if (rewardName) {
+    const llm = ctx.engine.getLlm() ?? ctx.engine.getRegistry()
+    const fns = listRewardFns(llm)
+    const fn = fns.find((f) => f.name === rewardName)
+    if (!fn) {
+      return {
+        content: `❌ 未知 reward: ${rewardName}。可用: ${fns.map((f) => f.name).join(', ')}`,
+      }
+    }
+    const report = await fn.evaluate()
+    appendEvalScore(fn.name, report)
+    return {
+      content: `得分 **${report.score}/100** (${report.passed}/${report.total})\n失败: ${report.failures.join(', ') || '无'}`,
+    }
+  }
+
   const report = runEval()
   appendEvalScore('mechanism-sentinel', report)
 
@@ -1017,6 +1037,15 @@ const crsiEvalCmd: CommandHandler = async () => {
   if (report.failures.length > 0) {
     lines.push('', `❌ 失败任务: ${report.failures.join(', ')}`)
   }
+
+  // 奖励函数注册表（reward function = policy→feedback 抽象可见）
+  const fns = listRewardFns()
+  lines.push('', '## 🎁 奖励函数注册表', '')
+  for (const f of fns) {
+    lines.push(`- **${f.name}** — ${f.description}`)
+  }
+  lines.push('', '`/crsi eval --reward <name>` 跑指定奖励函数')
+
   return { content: lines.join('\n') }
 }
 
