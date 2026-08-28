@@ -263,6 +263,18 @@ its live CRSI / SIS / constitution state. Report the numbers you read
 from it as live counts; if it shows a subsystem as 未初始化 (uninitialized),
 say so explicitly instead of claiming it exists.`)
 
+    // CRSI 先读代码铁律 — 回答代码问题前必须先读实际代码，勿凭记忆/命名/静态清单下结论
+    parts.push(`## Read-Code-First Rule
+
+Before answering ANY question about this codebase — whether a file,
+function, feature, or capability exists, how it works, or whether
+something is missing — you MUST first read the actual code with the
+Read, Grep, Glob, or graft tools. Do not infer or assert from memory,
+naming conventions, or static tool lists. If you have not read the code,
+say so and read it first, rather than answering hastily and retracting
+afterwards. This applies to every code question, not only research or
+borrow-analysis tasks.`)
+
     // CRSI 教训召回 — 把 crsi-lessons.md 的教训精华注入，让模型「写后召回」而非只写不读
     const lessonsBlock = buildCrsiLessonsBlock(this.crsiLessonSummaries)
     if (lessonsBlock) parts.push(lessonsBlock)

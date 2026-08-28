@@ -185,3 +185,16 @@
 - 实际落地对账：① **代码** = `recoverable-failure.ts`（27 行，open crabs 失败分类）唯一落地；② **教训** = `crsi-lessons.md` 6 条（borrow-analysis / crsi-design / self-eval / eval-rigor / boundary / learning）；③ **待办** = 因果归因、最小效应量、误提升预算、原子激活、语义边界、RewardFn、Crossover（都在教训里列为「可借鉴」，未写代码）
 - 混淆根因：Mipham Code(deepseek) 把 `recoverable-failure.ts` 的「失败分类」错叫「因果归因的第一步」，又把 eval-rigor 教训里「记了该做因果归因」当成「因果归因已实现」——「教训」与「代码」边界不清
 - 修复：本教训 + wiki `rsi-open-source-research.md` 补「落地对账」表，钉死「五家 → 6 教训 + 1 文件 + 若干待办」真实状态
+
+## read-first: 回答代码问题前必须先读代码（未读就下结论是禁止的）
+
+- 建议: 回答任何关于本代码库的问题（文件/函数/功能是否存在、如何工作、我们缺什么）前，必须先调 Read/Grep/Glob/graft 读实际代码；凭记忆/命名/静态清单下结论、答错后再认错，是禁止的。这条覆盖一切代码问答，不止调研/借鉴分析。
+- 严重度: critical
+- 生成时间: 2026-08-28
+- 来源: 会话复盘（human + Claude Code，手动沉淀）
+
+### 证据
+
+- Mipham Code 终端功能测试会话：连续多次草率回答用户代码问题后再认错，未先读代码
+- 现有 `research: 调研判断必须先读自身代码库` 教训只覆盖借鉴分析场景，漏出通用代码问答
+- 根因：教训是软摘要（低优先级召回），不是顶层硬约束；本次同步在 `instructions.ts` 加系统提示顶层铁律块（Read-Code-First Rule）
