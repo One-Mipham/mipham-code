@@ -88,40 +88,54 @@ const TEST_TIMEOUT_MS = 120_000 // 2 minutes
 const REPORT_DIR = join(homedir(), '.mipham', 'crsi-sandbox')
 
 /**
- * 自改进循环的只读边界（信任域隔离）。
+ * 自改进的「不可变基础」（immutable base）——按语义角色三类。
+ * 自改进循环可以改 skill/workflow/prompt/memory/教训/managed-rules，
+ * 但绝不能改以下三者，否则会削弱 grader 或安全边界：
+ *   constitution     —— 宪法/对齐：改掉 = 价值漂移优化掉安全边界
+ *   evaluator        —— 评估器/grader：改掉 = 改掉自己的评分标准（Goodhart 元劫持）
+ *   selfImprovement  —— 改进机制自身：改掉 = 递归改掉评估器/安全
  *
- * 这些路径是 CRSI 自改进的「慢通道」——宪法、eval harness、改进机制自身。
- * 自改进循环可以改 skill/workflow/prompt/memory，但绝不能改：
- *   1. 宪法（对齐本体 + 对齐缝 + 加载器）—— 否则价值漂移会「优化」掉安全边界
- *   2. eval harness（测试套件）—— 否则会改掉自己的评估标准（Goodhart 元劫持）
- *   3. 改进机制自身（有效性追踪 / 元规则引擎 / 沙箱）—— 否则递归会改掉评估器
- *
- * 注意：这是 fail-closed 边界——宁可多拦，不可漏拦。
+ * 注意：fail-closed——宁可多拦，不可漏拦。新增机制文件必须加进对应类别，
+ * 否则 eval harness 的 protection-completeness 契约会 fail。
  */
-const PROTECTED_PATHS = [
-  // 宪法（对齐）
-  'apps/cli/src/core/alignment-vocabulary.json',
-  'apps/cli/src/core/constitution-loader.ts',
-  'apps/cli/src/core/constitution-seam.ts',
-  'apps/cli/src/vajra/constitution.ts',
-  // eval harness
-  'apps/cli/test/',
-  'apps/cli/src/core/eval-harness.ts',
-  'apps/cli/src/core/behavior-tasks.ts',
-  'apps/cli/src/core/behavior-tasks.json',
-  // 改进机制自身
-  'apps/cli/src/agent/effectiveness-tracker.ts',
-  'apps/cli/src/core/meta-rule-engine.ts',
-  'apps/cli/src/core/crsi-sandbox.ts',
-  'apps/cli/src/core/crsi-producer.ts',
-  'apps/cli/src/core/proposal-guard.ts',
-  // 2026-08-27 review 补齐：运行时执行/评估器，改掉会削弱 grader 或安全边界
-  'apps/cli/src/core/crsi-modify.ts',
-  'apps/cli/src/core/rule-engine.ts',
-  'apps/cli/src/core/red-team.ts',
-  'apps/cli/src/core/error-signature-db.ts',
-  'apps/cli/src/core/preflight-checker.ts',
-]
+export const PROTECTED_ROLES = {
+  constitution: [
+    'apps/cli/src/core/alignment-vocabulary.json',
+    'apps/cli/src/core/constitution-loader.ts',
+    'apps/cli/src/core/constitution-seam.ts',
+    'apps/cli/src/vajra/constitution.ts',
+  ],
+  evaluator: [
+    'apps/cli/test/',
+    'apps/cli/src/core/eval-harness.ts',
+    'apps/cli/src/core/behavior-tasks.ts',
+    'apps/cli/src/core/behavior-tasks.json',
+    'apps/cli/src/core/task-performance.ts',
+    'apps/cli/src/core/task-performance-tasks.json',
+    'apps/cli/src/core/improvement-track.ts',
+  ],
+  selfImprovement: [
+    'apps/cli/src/agent/effectiveness-tracker.ts',
+    'apps/cli/src/agent/recoverable-failure.ts',
+    'apps/cli/src/agent/crsi-provenance-bridge.ts',
+    'apps/cli/src/agent/experience-rules.ts',
+    'apps/cli/src/agent/agent-experience.ts',
+    'apps/cli/src/core/meta-rule-engine.ts',
+    'apps/cli/src/core/crsi-sandbox.ts',
+    'apps/cli/src/core/crsi-producer.ts',
+    'apps/cli/src/core/proposal-guard.ts',
+    'apps/cli/src/core/crsi-modify.ts',
+    'apps/cli/src/core/rule-engine.ts',
+    'apps/cli/src/core/red-team.ts',
+    'apps/cli/src/core/error-signature-db.ts',
+    'apps/cli/src/core/preflight-checker.ts',
+    'apps/cli/src/core/permission-rules.ts',
+    'apps/cli/src/core/rules-loader.ts',
+  ],
+} as const
+
+/** 扁平化（向后兼容：isProtectedPath 仍用前缀匹配，行为不变）。 */
+export const PROTECTED_PATHS: string[] = Object.values(PROTECTED_ROLES).flat()
 
 /** 是否命中只读边界。前缀匹配，目录条目以 `/` 结尾。 */
 export function isProtectedPath(filePath: string): boolean {

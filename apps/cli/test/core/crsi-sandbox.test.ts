@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { CrsiSandbox, validateBlastRadius } from '../../src/core/crsi-sandbox'
+import {
+  CrsiSandbox,
+  validateBlastRadius,
+  isProtectedPath,
+  PROTECTED_ROLES,
+  PROTECTED_PATHS,
+} from '../../src/core/crsi-sandbox'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
@@ -338,5 +344,29 @@ describe('CrsiSandbox', () => {
       expect(report.summary.applied).toBe(2)
       expect(report.modifications).toHaveLength(3)
     })
+  })
+})
+
+describe('PROTECTED_ROLES (语义保护清单)', () => {
+  it('三类齐全且 PROTECTED_PATHS = flatten 三类', () => {
+    expect(Object.keys(PROTECTED_ROLES)).toEqual(['constitution', 'evaluator', 'selfImprovement'])
+    expect(PROTECTED_PATHS).toEqual(Object.values(PROTECTED_ROLES).flat())
+    expect(PROTECTED_PATHS.length).toBe(Object.values(PROTECTED_ROLES).flat().length)
+  })
+
+  it('补齐的评估器/机制文件已被保护', () => {
+    const newlyProtected = [
+      'apps/cli/src/core/task-performance.ts',
+      'apps/cli/src/core/task-performance-tasks.json',
+      'apps/cli/src/core/improvement-track.ts',
+      'apps/cli/src/agent/recoverable-failure.ts',
+      'apps/cli/src/agent/crsi-provenance-bridge.ts',
+    ]
+    for (const f of newlyProtected) expect(isProtectedPath(f)).toBe(true)
+  })
+
+  it('可编辑补充（producer 产物）不被保护', () => {
+    expect(isProtectedPath('apps/cli/src/core/crsi-managed-rules.ts')).toBe(false)
+    expect(isProtectedPath('apps/cli/crsi-lessons.md')).toBe(false)
   })
 })
