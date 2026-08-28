@@ -11,7 +11,7 @@ prompt-exclude:
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
 > **版本**: 2.20.0
-> **最后更新**: 2026-08-27 — CC 2.1.246-247 借鉴落地 6 条 + 测试数对齐 1936
+> **最后更新**: 2026-08-28 — 改进轨落地（噪声自适应 verdict + 倒退才拦 + 改进率台账）+ 测试数对齐 1953
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -47,9 +47,10 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **完整覆盖闸** `/crsi modify` 入口 — `crsi-sandbox.ts` `validateBlastRadius`：自修改 proposal 必须声明非空 `blastRadius`（触及的**全部**代码路径），否则 fail-closed 拒绝（今日「两条渲染路径只接一条 = 局部正确全局遗漏」教训固化）
 - **producer** `/crsi propose` — `core/crsi-producer.ts` 把失败信号转成三类候选：默认教训文件 `crsi-lessons.md`（模板化无 LLM）、`--rule` 固化受管理规则 `crsi-managed-rules.ts`（确定性行为，source='managed'）、`--prose` 两阶段 LLM 改 skill 散文（A1 边界首演：LLM 只生成不判定）；三路径同信号幂等
 - **eval harness** `/crsi eval` — `core/eval-harness.ts` 冻结 21 条 ground-truth 契约（13 机制：规则/宪法/沙箱边界/完整覆盖闸/红队/producer 行为 + 8 行为缺口）+ rewards 日志 `~/.mipham/crsi/eval-scores.jsonl`，`runCrsiModification` 以「分数不退化」为第二道闸。8 行为缺口（rm -rf/管道投毒/git reset --hard/chmod 777/mkfs/dd→/dev//关停主机/crontab -r）已由固化 managed tool-params 规则覆盖 → 全翻转 PASS → 满分 100 =「证明更好」
+- **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：1,936 测试（1934 passed + 2 skipped）
+测试：1,953 测试（1951 passed + 2 skipped）
 
 ---
 
@@ -86,7 +87,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 27 个内置技能（21 standard + 6 mipham）
-│   │   ├── test/               # 183 个测试文件，1936 个测试
+│   │   ├── test/               # 184 个测试文件，1953 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -109,7 +110,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（1936 个测试）
+pnpm test         # vitest run（1953 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -233,7 +234,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
 | E2E      | 1       | 8        | full-pipeline                                 |
 | Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **183** | **1936** | **0 失败** ✅（1934 passed + 2 skipped）      |
+| **合计** | **184** | **1953** | **0 失败** ✅（1951 passed + 2 skipped）      |
 
 > 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
 
