@@ -151,6 +151,8 @@ export interface MiphamConfig {
   features?: Partial<FeatureFlags>
   /** Phase 10 CRSI feature flags. All default to true. */
   crsi?: Partial<CrsiConfig>
+  /** Ghost-text 自动补全（输入续写）。默认 enabled: true、debounceMs: 400。 */
+  autocomplete?: Partial<AutocompleteConfig>
 }
 
 export interface FeatureFlags {
@@ -167,6 +169,11 @@ export interface CrsiConfig {
   autoPatternAnalysis: boolean
   /** Auto-degrade/disable low-effectiveness rules based on success-rate tracking. */
   autoRuleManagement: boolean
+}
+
+export interface AutocompleteConfig {
+  enabled: boolean
+  debounceMs: number
 }
 
 export interface McpServerConfig {
