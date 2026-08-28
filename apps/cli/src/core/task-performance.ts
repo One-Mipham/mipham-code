@@ -1,11 +1,12 @@
 // apps/cli/src/core/task-performance.ts
 // CRSI 任务表现评估器：LLM 生成代码 + 冻结测试判定，输出随改动变化的分数。
 import { execSync } from 'node:child_process'
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import tasksFile from './task-performance-tasks.json' with { type: 'json' }
 import type { Llm } from '../providers/llm'
+import { parseFrontmatter } from '../skills/loader'
 
 export type PerformanceTaskCategory = 'test-driven' | 'bug-fix'
 
@@ -126,5 +127,54 @@ export async function runTaskPerformance(
     score: results.length > 0 ? Math.round((passed / results.length) * 100) : 100,
     results,
     failures: results.filter((r) => !r.passed).map((r) => r.id),
+  }
+}
+
+export interface SkillDelta {
+  skillName: string
+  baseline: TaskPerformanceReport
+  post: TaskPerformanceReport
+  delta: number
+}
+
+/** 路径门：只认内置 skill 文件。 */
+function isSkillFile(filePath: string): boolean {
+  return (
+    filePath.startsWith('apps/cli/skills/') &&
+    (filePath.endsWith('.SKILL.md') || filePath.endsWith('.mipham-skill.md'))
+  )
+}
+
+/**
+ * 测一个改 skill 的 proposal 的任务表现 before/after delta。
+ * 返回 null：不是 skill 文件 / 无匹配任务集（无可量）。
+ * A1 不破：只调 runTaskPerformance（LLM 生成 + 冻结测试判定）。
+ */
+export async function measureSkillDelta(
+  llm: Llm,
+  proposal: { filePath: string; originalContent?: string; newContent: string },
+): Promise<SkillDelta | null> {
+  if (!isSkillFile(proposal.filePath)) return null
+
+  const newParsed = parseFrontmatter(proposal.newContent)
+  const skillName = typeof newParsed.data.name === 'string' ? newParsed.data.name : undefined
+  if (!skillName) return null
+
+  if (!loadPerformanceTasks().some((t) => t.skill === skillName)) return null
+
+  const baselineText = proposal.originalContent
+    ? parseFrontmatter(proposal.originalContent).content
+    : parseFrontmatter(readFileSync(proposal.filePath, 'utf-8')).content
+
+  const baseline = await runTaskPerformance(llm, { skill: { name: skillName, text: baselineText } })
+  const post = await runTaskPerformance(llm, {
+    skill: { name: skillName, text: newParsed.content },
+  })
+
+  return {
+    skillName,
+    baseline,
+    post,
+    delta: post.score - baseline.score,
   }
 }
