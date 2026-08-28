@@ -7,6 +7,7 @@ import {
   stripCodeFences,
   runTaskPerformance,
   measureSkillDelta,
+  measureSkillDeltaRepeated,
 } from '../../src/core/task-performance'
 
 describe('loadPerformanceTasks', () => {
@@ -217,5 +218,72 @@ describe('measureSkillDelta', () => {
       newContent: '---\nname: safe-coding\ndescription: x\n---\nbody',
     })
     expect(delta).toBeNull()
+  })
+})
+
+describe('measureSkillDeltaRepeated', () => {
+  it('非 skill 文件 → null', async () => {
+    const mockLlm: Llm = {
+      chat: async function* () {
+        yield { type: 'text', content: '' }
+      },
+    }
+    const s = await measureSkillDeltaRepeated(mockLlm, {
+      filePath: 'apps/cli/src/foo.ts',
+      originalContent: 'x',
+      newContent: 'y',
+    })
+    expect(s).toBeNull()
+  })
+
+  it('skill 文件但无绑定任务 → null', async () => {
+    const mockLlm: Llm = {
+      chat: async function* () {
+        yield { type: 'text', content: '' }
+      },
+    }
+    const s = await measureSkillDeltaRepeated(mockLlm, {
+      filePath: 'apps/cli/skills/standard/no-such-task-skill.SKILL.md',
+      newContent: '---\nname: no-such-task-skill\ndescription: x\n---\nbody',
+    })
+    expect(s).toBeNull()
+  })
+
+  it('safe-coding 强 skill → K 次采样分数数组正确（k=2）', async () => {
+    const mockLlm: Llm = {
+      chat: async function* (req) {
+        const sp = (req.systemPrompt ?? '') as string
+        if (sp.includes('校验')) {
+          yield {
+            type: 'text',
+            content:
+              'export function parsePositiveNumber(input: string): number { if (input == null || input === "" || isNaN(Number(input))) throw new RangeError("invalid input"); return Number(input) }',
+          }
+        } else {
+          yield {
+            type: 'text',
+            content:
+              'export function parsePositiveNumber(input: string): number { return Number(input) }',
+          }
+        }
+      },
+    }
+    const strong =
+      "---\nname: safe-coding\ndescription: x\n---\n处理外部/用户输入前必须校验：null、undefined、空字符串、格式非法时，抛出 RangeError，消息为 'invalid input'。"
+    const weak =
+      '---\nname: safe-coding\ndescription: x\n---\n你是一个编码智能体，尽力完成任务即可。'
+    const s = await measureSkillDeltaRepeated(
+      mockLlm,
+      {
+        filePath: 'apps/cli/skills/standard/safe-coding.SKILL.md',
+        originalContent: weak,
+        newContent: strong,
+      },
+      { k: 2 },
+    )
+    expect(s).not.toBeNull()
+    expect(s!.skillName).toBe('safe-coding')
+    expect(s!.baselineScores).toEqual([0, 0])
+    expect(s!.postScores).toEqual([100, 100])
   })
 })

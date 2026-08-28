@@ -137,6 +137,12 @@ export interface SkillDelta {
   delta: number
 }
 
+interface ResolvedSkillProposal {
+  skillName: string
+  baselineText: string
+  postText: string
+}
+
 /** 路径门：只认内置 skill 文件。 */
 function isSkillFile(filePath: string): boolean {
   return (
@@ -145,15 +151,12 @@ function isSkillFile(filePath: string): boolean {
   )
 }
 
-/**
- * 测一个改 skill 的 proposal 的任务表现 before/after delta。
- * 返回 null：不是 skill 文件 / 无匹配任务集（无可量）。
- * A1 不破：只调 runTaskPerformance（LLM 生成 + 冻结测试判定）。
- */
-export async function measureSkillDelta(
-  llm: Llm,
-  proposal: { filePath: string; originalContent?: string; newContent: string },
-): Promise<SkillDelta | null> {
+/** 解析改 skill 的 proposal → 名字 + 旧/新 body；非 skill / 无任务集 / 旧不可读 → null。 */
+function resolveSkillProposal(proposal: {
+  filePath: string
+  originalContent?: string
+  newContent: string
+}): ResolvedSkillProposal | null {
   if (!isSkillFile(proposal.filePath)) return null
 
   const newParsed = parseFrontmatter(proposal.newContent)
@@ -173,15 +176,69 @@ export async function measureSkillDelta(
     }
   }
 
-  const baseline = await runTaskPerformance(llm, { skill: { name: skillName, text: baselineText } })
+  return { skillName, baselineText, postText: newParsed.content }
+}
+
+/**
+ * 测一个改 skill 的 proposal 的任务表现 before/after delta。
+ * 返回 null：不是 skill 文件 / 无匹配任务集（无可量）。
+ * A1 不破：只调 runTaskPerformance（LLM 生成 + 冻结测试判定）。
+ */
+export async function measureSkillDelta(
+  llm: Llm,
+  proposal: { filePath: string; originalContent?: string; newContent: string },
+): Promise<SkillDelta | null> {
+  const resolved = resolveSkillProposal(proposal)
+  if (!resolved) return null
+
+  const baseline = await runTaskPerformance(llm, {
+    skill: { name: resolved.skillName, text: resolved.baselineText },
+  })
   const post = await runTaskPerformance(llm, {
-    skill: { name: skillName, text: newParsed.content },
+    skill: { name: resolved.skillName, text: resolved.postText },
   })
 
   return {
-    skillName,
+    skillName: resolved.skillName,
     baseline,
     post,
     delta: post.score - baseline.score,
   }
+}
+
+export interface SkillDeltaSample {
+  skillName: string
+  baselineScores: number[]
+  postScores: number[]
+}
+
+/**
+ * 多次采样 before/after（每次都是「LLM 生成 → 冻结测试判定」），供改进轨估噪声。
+ * 返回 null 门与 measureSkillDelta 相同。k 默认 3。
+ */
+export async function measureSkillDeltaRepeated(
+  llm: Llm,
+  proposal: { filePath: string; originalContent?: string; newContent: string },
+  opts?: { k?: number },
+): Promise<SkillDeltaSample | null> {
+  const resolved = resolveSkillProposal(proposal)
+  if (!resolved) return null
+
+  const k = opts?.k ?? 3
+  const baselineScores: number[] = []
+  const postScores: number[] = []
+  for (let i = 0; i < k; i++) {
+    const r = await runTaskPerformance(llm, {
+      skill: { name: resolved.skillName, text: resolved.baselineText },
+    })
+    baselineScores.push(r.score)
+  }
+  for (let i = 0; i < k; i++) {
+    const r = await runTaskPerformance(llm, {
+      skill: { name: resolved.skillName, text: resolved.postText },
+    })
+    postScores.push(r.score)
+  }
+
+  return { skillName: resolved.skillName, baselineScores, postScores }
 }
