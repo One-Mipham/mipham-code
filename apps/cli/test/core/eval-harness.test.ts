@@ -69,11 +69,19 @@ describe('runEval', () => {
 
 describe('rewards log', () => {
   it('getLastEvalScore returns null before any record', () => {
-    expect(getLastEvalScore()).toBeNull()
+    expect(getLastEvalScore('mechanism-sentinel')).toBeNull()
   })
 
   it('appendEvalScore then getLastEvalScore round-trips the score', () => {
-    appendEvalScore({ total: 10, passed: 8, score: 80, results: [], failures: [] })
-    expect(getLastEvalScore()).toBe(80)
+    appendEvalScore('mechanism-sentinel', { total: 10, passed: 8, score: 80 })
+    expect(getLastEvalScore('mechanism-sentinel')).toBe(80)
+  })
+
+  it('ledger keyed by name isolates scores', () => {
+    appendEvalScore('a', { score: 80, passed: 8, total: 10 })
+    appendEvalScore('b', { score: 40, passed: 4, total: 10 })
+    expect(getLastEvalScore('a')).toBe(80)
+    expect(getLastEvalScore('b')).toBe(40)
+    expect(getLastEvalScore('c')).toBeNull()
   })
 })

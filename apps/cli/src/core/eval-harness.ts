@@ -46,13 +46,17 @@ export interface EvalReport {
 
 const SCORES_FILE = join(homedir(), '.mipham', 'crsi', 'eval-scores.jsonl')
 
-/** 追加一次评估分数到 rewards 日志。 */
-export function appendEvalScore(report: EvalReport): void {
+/** 追加一次评估分数到 rewards 日志（按奖励函数名键控）。 */
+export function appendEvalScore(
+  name: string,
+  report: { score: number; passed: number; total: number },
+): void {
   try {
     mkdirSync(join(homedir(), '.mipham', 'crsi'), { recursive: true })
     appendFileSync(
       SCORES_FILE,
       JSON.stringify({
+        name,
         timestamp: new Date().toISOString(),
         score: report.score,
         passed: report.passed,
@@ -65,14 +69,16 @@ export function appendEvalScore(report: EvalReport): void {
   }
 }
 
-/** 读取最近一次评估分数（无记录时返回 null）。 */
-export function getLastEvalScore(): number | null {
+/** 读取某奖励函数最近一次分数（无记录时返回 null）。旧无 name 记录自然跳过。 */
+export function getLastEvalScore(name: string): number | null {
   try {
     if (!existsSync(SCORES_FILE)) return null
     const lines = readFileSync(SCORES_FILE, 'utf-8').trim().split('\n').filter(Boolean)
-    if (lines.length === 0) return null
-    const last = JSON.parse(lines[lines.length - 1]!) as { score?: number }
-    return typeof last.score === 'number' ? last.score : null
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const rec = JSON.parse(lines[i]!) as { name?: string; score?: number }
+      if (rec.name === name && typeof rec.score === 'number') return rec.score
+    }
+    return null
   } catch {
     return null
   }

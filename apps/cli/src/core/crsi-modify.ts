@@ -15,7 +15,8 @@
 import { randomUUID } from 'node:crypto'
 import { CrsiSandbox, validateBlastRadius } from './crsi-sandbox'
 import type { CrsiModificationResult } from './crsi-sandbox'
-import { runEval, appendEvalScore, getLastEvalScore } from './eval-harness'
+import { appendEvalScore, getLastEvalScore } from './eval-harness'
+import { mechanismSentinel, type RewardFn } from './reward-fn'
 
 export interface CrsiProposal {
   /** 人类可读的改动说明 */
@@ -45,10 +46,11 @@ let pendingSandbox: CrsiSandbox | null = null
  * 编排完整 5 阶段：createWorktree → applyModification → runTests →（失败自动
  * rollback）→ getDiff。测试通过后暂存为 pending，返回 diff 供人类审阅。
  */
-export function runCrsiModification(
+export async function runCrsiModification(
   proposal: CrsiProposal,
   sandbox: CrsiSandbox = new CrsiSandbox(),
-): CrsiModificationResult {
+  opts?: { rewardFn?: RewardFn },
+): Promise<CrsiModificationResult> {
   // 完整覆盖闸：自修改必须声明 blastRadius，否则 fail-closed（在 worktree 之前，零副作用）。
   const blastRadiusError = validateBlastRadius(proposal)
   if (blastRadiusError) {
@@ -96,18 +98,18 @@ export function runCrsiModification(
     return applied
   }
 
-  // Eval harness gate：CRSI 契约分数不得低于上次记录（防跨合并退化）。
-  // 分数反映「当前代码」的 CRSI 契约（隔离组件，与本次 worktree 改动无关），
-  // 所以它是「仓库的 CRSI 代码自上次评估以来是否退化」的哨兵。
-  const evalReport = runEval()
-  const last = getLastEvalScore()
-  if (last !== null && evalReport.score < last) {
+  // Reward gate：奖励分数不得低于上次记录（防跨合并退化）。
+  // 默认机制哨兵；可插拔——调用方传 opts.rewardFn 换用其他奖励源（如任务表现）。
+  const rewardFn = opts?.rewardFn ?? mechanismSentinel()
+  const report = await rewardFn.evaluate()
+  const last = getLastEvalScore(rewardFn.name)
+  if (last !== null && report.score < last) {
     sandbox.rollback()
     applied.phase = 'failed'
-    applied.error = `Eval regression: score ${evalReport.score} < last ${last}`
+    applied.error = `Reward regression (${rewardFn.name}): score ${report.score} < last ${last}`
     return applied
   }
-  appendEvalScore(evalReport)
+  appendEvalScore(rewardFn.name, report)
 
   applied.phase = 'passed'
   applied.diff = sandbox.getDiff()

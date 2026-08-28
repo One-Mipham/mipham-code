@@ -810,7 +810,7 @@ const crsiModifyCmd: CommandHandler = async (ctx, args) => {
     // 文件不存在 → 宽松模式（originalContent 为空）
   }
 
-  const result = runCrsiModification({
+  const result = await runCrsiModification({
     description,
     filePath,
     newContent,
@@ -918,7 +918,7 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
       return { content: `❌ 提议未通过预筛：${verdict.reasons.join('; ')}` }
     }
 
-    const result = runCrsiModification({
+    const result = await runCrsiModification({
       description: proposal.description,
       filePath: proposal.filePath,
       newContent: proposal.newContent,
@@ -961,7 +961,7 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
       }
     }
 
-    const result = runCrsiModification(proposal)
+    const result = await runCrsiModification(proposal)
     if (!result.applied || result.phase === 'failed') {
       return { content: `❌ 固化失败（phase: ${result.phase}）。\n${result.error ?? ''}` }
     }
@@ -989,7 +989,7 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
     return { content: '没有足够的失败信号（autoApplicable insight 或高置信元规则）来生成教训。' }
   }
 
-  const result = runCrsiModification(proposal)
+  const result = await runCrsiModification(proposal)
   if (!result.applied || result.phase === 'failed') {
     return { content: `❌ 生成失败（phase: ${result.phase}）。\n${result.error ?? ''}` }
   }
@@ -1003,7 +1003,7 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
 
 const crsiEvalCmd: CommandHandler = async () => {
   const report = runEval()
-  appendEvalScore(report)
+  appendEvalScore('mechanism-sentinel', report)
 
   const lines: string[] = ['## 🧪 CRSI Eval Harness', '']
   lines.push(`得分: **${report.score}/100** (${report.passed}/${report.total})`, '')
