@@ -75,12 +75,17 @@ export function stripCodeFences(text: string): string {
   return (fenced?.[1] ?? text).trim()
 }
 
-async function collectGeneratedCode(llm: Llm, prompt: string): Promise<string> {
+async function collectGeneratedCode(
+  llm: Llm,
+  prompt: string,
+  systemPrompt?: string,
+): Promise<string> {
   let text = ''
   const req = {
     model: '', // falsy → registry 回退到 active model
     messages: [{ role: 'user' as const, content: prompt }],
     temperature: 0, // 温度 0，近确定
+    ...(systemPrompt ? { systemPrompt } : {}),
   }
   for await (const chunk of llm.chat(req)) {
     if (chunk.type === 'text' && chunk.content) text += chunk.content
@@ -90,12 +95,13 @@ async function collectGeneratedCode(llm: Llm, prompt: string): Promise<string> {
 
 export async function runTaskPerformance(
   llm: Llm,
-  opts?: { timeoutMs?: number },
+  opts?: { timeoutMs?: number; skill?: { name: string; text: string } },
 ): Promise<TaskPerformanceReport> {
-  const tasks = loadPerformanceTasks()
+  const wanted = opts?.skill?.name
+  const tasks = loadPerformanceTasks().filter((t) => (t.skill ?? undefined) === wanted)
   const results: TaskPerformanceResult[] = []
   for (const task of tasks) {
-    const code = await collectGeneratedCode(llm, task.prompt)
+    const code = await collectGeneratedCode(llm, task.prompt, opts?.skill?.text)
     if (!code) {
       results.push({
         id: task.id,

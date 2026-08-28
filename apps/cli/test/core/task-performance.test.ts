@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { Llm } from '../../src/providers/llm'
+import type { ChatRequest } from '../../src/providers/registry'
 import {
   loadPerformanceTasks,
   judgeGeneratedCode,
@@ -85,5 +86,57 @@ describe('runTaskPerformance', () => {
     expect(report.passed).toBeLessThanOrEqual(report.total)
     expect(report.score).toBe(Math.round((report.passed / report.total) * 100))
     expect(report.results.length).toBe(report.total)
+  })
+})
+
+describe('runTaskPerformance skill 过滤与注入', () => {
+  it('无 skill 只跑通用任务（5 个）', async () => {
+    const mockLlm: Llm = {
+      chat: async function* () {
+        yield {
+          type: 'text',
+          content:
+            'export function quicksort(arr: number[]): number[] { return [...arr].sort((a, b) => a - b) }',
+        }
+      },
+    }
+    const report = await runTaskPerformance(mockLlm)
+    expect(report.total).toBe(5)
+    expect(report.results.some((r) => r.id === 'perf-safe-parse-positive')).toBe(false)
+  })
+
+  it('指定 skill 只跑绑定该 skill 的任务', async () => {
+    const mockLlm: Llm = {
+      chat: async function* () {
+        yield {
+          type: 'text',
+          content:
+            'export function parsePositiveNumber(input: string): number { return Number(input) }',
+        }
+      },
+    }
+    const report = await runTaskPerformance(mockLlm, {
+      skill: { name: 'safe-coding', text: '校验输入' },
+    })
+    expect(report.total).toBe(1)
+    expect(report.results[0]?.id).toBe('perf-safe-parse-positive')
+  })
+
+  it('有 skill 时把 skill 正文作为 systemPrompt 注入', async () => {
+    let captured: { systemPrompt?: string } | null = null
+    const mockLlm: Llm = {
+      chat: async function* (req: ChatRequest) {
+        captured = req
+        yield {
+          type: 'text',
+          content:
+            'export function parsePositiveNumber(input: string): number { return Number(input) }',
+        }
+      },
+    }
+    await runTaskPerformance(mockLlm, {
+      skill: { name: 'safe-coding', text: '必须校验输入' },
+    })
+    expect(captured!.systemPrompt).toBe('必须校验输入')
   })
 })
