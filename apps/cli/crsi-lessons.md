@@ -198,3 +198,29 @@
 - Mipham Code 终端功能测试会话：连续多次草率回答用户代码问题后再认错，未先读代码
 - 现有 `research: 调研判断必须先读自身代码库` 教训只覆盖借鉴分析场景，漏出通用代码问答
 - 根因：教训是软摘要（低优先级召回），不是顶层硬约束；本次同步在 `instructions.ts` 加系统提示顶层铁律块（Read-Code-First Rule）
+
+## correctness: argv 解析必须做引号感知 tokenize（裸 split 拆散带空格的参数）
+
+- 建议: 用 argv 数组 spawn 子进程时，绝不能 `command.split(/\s+/)` 裸拆——它不做引号解析，`-m "multi word"` 会被拆成多个参数（空格变分隔符、引号变字面字符）。必须用引号感知的 tokenizer（单引号/双引号/反斜杠转义），否则任何带空格的参数（commit message、`--author="John Doe"`、含空格文件名）都会失效。
+- 严重度: warning
+- 生成时间: 2026-08-29
+- 来源: 会话复盘（human + Claude Code，手动沉淀）
+
+### 证据
+
+- `git.ts:118` 用 `command.split(/\s+/)` 拆 `git commit -m "docs: add ..."` → `-m` 只吃到 `"docs:`，其余词全变 pathspec，报 `pathspec 'add' did not match`
+- 根因：`split(/\s+/)` 按空白正则拆分、不做 shell 引号解析；`bash.ts` 走 `bash -c` 交给 shell 解析所以无此 bug，只有 git 工具有
+- 修复：新增 `splitCommand()`（单/双引号 + 反斜杠转义），替换裸 split；+6 测试（1 集成捕获 argv + 5 单元），issue #22 关闭
+
+## security-rule: 安全正则须区分「执行」与「描述」——config user.* blanket 误拦说明文本
+
+- 建议: 危险命令正则（`DANGEROUS_GIT_PATTERNS` 等）对**命令字符串**做 blanket 匹配时，无法区分「我正要执行这个命令」vs「我在描述一个例子」（如 issue body / 说明文本里出现 `git config user.name` 字面量）。同一类「把合法描述当危险命令」的过度拦截，与教训 #1（`$()` blanket）同源——安全规则只拦「具体危险动作」，不拦「字面提及」。
+- 严重度: warning
+- 生成时间: 2026-08-29
+- 来源: 会话复盘（human + Claude Code，手动沉淀）
+
+### 证据
+
+- 建 issue #22 时，`gh issue create --body "..."` 里「影响面示例」出现 `git config user.name` 字面量，被 `bash.ts` 引入的 `DANGEROUS_GIT_PATTERNS`（`/\bconfig\s+.*user\./`）误判「身份伪造」拦截
+- 根因：`bash.ts` 把针对 git 命令的 `DANGEROUS_GIT_PATTERNS` 应用到**所有** bash 命令文本，`config user.*` 正则命中 body 里的描述性字面量
+- 状态：**未修复（open）**——与教训 #1 `$()` blanket 同源，需「只拦执行意图、不拦描述文本」的修复（如只对 `git ...` 前缀命令应用，或区分命令 vs 参数文本）
