@@ -75,6 +75,60 @@ function isOutsideWorktree(command: string, cwd: string): string | null {
   return null
 }
 
+/**
+ * Split a git command string into argv tokens, honoring shell-style quoting
+ * (single quotes, double quotes, and backslash escapes). Unlike a naive
+ * `split(/\s+/)`, this keeps `-m "multi word message"` as a single argument
+ * instead of splitting it into separate tokens.
+ */
+export function splitCommand(command: string): string[] {
+  const tokens: string[] = []
+  let current = ''
+  let inSingle = false
+  let inDouble = false
+
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i]!
+
+    if (inSingle) {
+      if (ch === "'") inSingle = false
+      else current += ch
+      continue
+    }
+
+    if (inDouble) {
+      if (ch === '"') inDouble = false
+      else if (ch === '\\' && i + 1 < command.length && '$`"\\'.includes(command[i + 1]!)) {
+        current += command[++i]!
+      } else {
+        current += ch
+      }
+      continue
+    }
+
+    if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') {
+      if (current !== '') {
+        tokens.push(current)
+        current = ''
+      }
+      continue
+    }
+
+    if (ch === "'") {
+      inSingle = true
+    } else if (ch === '"') {
+      inDouble = true
+    } else if (ch === '\\' && i + 1 < command.length) {
+      current += command[++i]!
+    } else {
+      current += ch
+    }
+  }
+
+  if (current !== '') tokens.push(current)
+  return tokens
+}
+
 export const gitTool: ToolDefinition = {
   name: 'Git',
   description: 'Execute git commands. Dangerous operations (force push, hard reset) are blocked.',
@@ -115,7 +169,7 @@ export const gitTool: ToolDefinition = {
     }
 
     try {
-      const proc = Bun.spawn(['git', ...command.split(/\s+/)], {
+      const proc = Bun.spawn(['git', ...splitCommand(command)], {
         cwd: ctx.cwd,
         stdout: 'pipe',
         stderr: 'pipe',

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import type { ToolContext } from '../../src/shared'
 import { createBashTool } from '../../src/tools/exec/bash'
-import { gitTool } from '../../src/tools/exec/git'
+import { gitTool, splitCommand } from '../../src/tools/exec/git'
 import { taskTool } from '../../src/tools/exec/task'
 
 const bashTool = createBashTool()
@@ -170,6 +170,17 @@ describe('Git tool execution', () => {
     expect(result.content).toContain('On branch master')
   })
 
+  it('preserves quoted arguments with spaces in the spawned argv', async () => {
+    let capturedCmd: string[] | undefined
+    const proc = createMockProc()
+    vi.spyOn(Bun, 'spawn').mockImplementation((cmd: any, _opts: any) => {
+      capturedCmd = cmd as string[]
+      return proc as any
+    })
+    await gitTool.execute({ command: 'commit -m "add feature x"' }, ctx)
+    expect(capturedCmd).toEqual(['git', 'commit', '-m', 'add feature x'])
+  })
+
   it('returns error for failed git commands', async () => {
     mockGitSpawn('', 'fatal: not a git repository', 128)
     const result = await gitTool.execute({ command: 'log' }, ctx)
@@ -191,6 +202,42 @@ describe('Git tool execution', () => {
     const result = await gitTool.execute({ command: 'push --force origin main' }, ctx)
     expect(result.success).toBe(false)
     expect(result.error).toContain('blocked')
+  })
+})
+
+// ============================================================
+// splitCommand — shell-quoting-aware argv tokenizer
+// ============================================================
+
+describe('splitCommand', () => {
+  it('splits on whitespace', () => {
+    expect(splitCommand('status')).toEqual(['status'])
+    expect(splitCommand('log --oneline -5')).toEqual(['log', '--oneline', '-5'])
+  })
+
+  it('preserves double-quoted arguments with spaces', () => {
+    expect(splitCommand('commit -m "multi word message"')).toEqual([
+      'commit',
+      '-m',
+      'multi word message',
+    ])
+  })
+
+  it('preserves single-quoted arguments with spaces', () => {
+    expect(splitCommand("commit -m 'multi word message'")).toEqual([
+      'commit',
+      '-m',
+      'multi word message',
+    ])
+  })
+
+  it('handles backslash-escaped spaces', () => {
+    expect(splitCommand('add file\\ with\\ spaces.txt')).toEqual(['add', 'file with spaces.txt'])
+  })
+
+  it('handles empty and whitespace-only input', () => {
+    expect(splitCommand('')).toEqual([])
+    expect(splitCommand('   ')).toEqual([])
   })
 })
 
