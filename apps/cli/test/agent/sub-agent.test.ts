@@ -78,6 +78,27 @@ describe('SubAgent', () => {
     expect(result).toContain('Task analysis complete.')
   })
 
+  it('reports cumulative token usage via onTokenUsage', async () => {
+    const provider = createMockProvider([
+      { type: 'text', content: 'partial' },
+      { type: 'usage', inputTokens: 100, outputTokens: 50 },
+      { type: 'text', content: ' done' },
+      { type: 'usage', inputTokens: 20, outputTokens: 30 },
+      { type: 'stop' },
+    ])
+    const registry = createMockRegistry(provider)
+
+    const totals: number[] = []
+    const sub = new SubAgent(registry, TOOLS)
+    await sub.execute('test', 'task', {
+      type: 'general',
+      onTokenUsage: (total) => totals.push(total),
+    })
+
+    // cumulative: (100+50) then +(20+30)
+    expect(totals).toEqual([150, 200])
+  })
+
   it('routes chat through injected Llm seam instead of registry active provider', async () => {
     // registry active provider 会产出 "from-registry"——必须被绕过
     const registryProvider = createMockProvider([

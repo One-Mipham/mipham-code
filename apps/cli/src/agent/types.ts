@@ -46,6 +46,8 @@ export interface SubAgentOptions {
   runInBackground?: boolean
   /** Optional callback for streaming progress chunks during background execution. */
   onProgress?: (chunk: string) => void
+  /** Optional callback reporting cumulative token usage (input + output) from the API stream. */
+  onTokenUsage?: (totalTokens: number) => void
   /** When set, tool executions use this path as cwd (git worktree isolation). */
   worktreePath?: string
   /** Seed the sub-agent with a parent conversation prefix (e.g., fork inheritance). */

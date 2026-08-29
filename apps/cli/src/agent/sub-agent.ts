@@ -73,8 +73,13 @@ export class SubAgent {
       const bgRegistry = getBackgroundAgentRegistry()
 
       const taskId = bgRegistry.spawn(description, agentType, async (signal) => {
-        // Run the synchronous execution inside the background executor
-        return this.runExecution(prompt, options, signal)
+        // Run the synchronous execution inside the background executor, reporting
+        // cumulative token usage back to the registry for live footer display.
+        const opts: SubAgentOptions = {
+          ...options,
+          onTokenUsage: (total) => bgRegistry.updateTokenUsage(taskId, total),
+        }
+        return this.runExecution(prompt, opts, signal)
       })
 
       // Register completion callback for hook firing
@@ -323,6 +328,7 @@ export class SubAgent {
 
     let currentMessages = messages
     let currentSystemPrompt = systemPrompt
+    let totalTokens = 0
 
     try {
       for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
@@ -365,6 +371,10 @@ export class SubAgent {
           }
           if (chunk.type === 'stop') {
             break
+          }
+          if (chunk.type === 'usage') {
+            totalTokens += (chunk.inputTokens ?? 0) + (chunk.outputTokens ?? 0)
+            if (options.onTokenUsage) options.onTokenUsage(totalTokens)
           }
         }
 

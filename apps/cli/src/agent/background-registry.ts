@@ -20,6 +20,8 @@ export interface BackgroundTask {
   status: BackgroundTaskStatus
   kind: BackgroundTaskKind
   startedAt: Date
+  /** Cumulative token usage (input + output) reported by the running task. */
+  tokensUsed: number
   completedAt?: Date
   result?: string
   error?: string
@@ -99,6 +101,7 @@ export class BackgroundAgentRegistry {
       status: 'running',
       kind,
       startedAt: now,
+      tokensUsed: 0,
       abortController: new AbortController(),
     }
 
@@ -175,6 +178,15 @@ export class BackgroundAgentRegistry {
    */
   listRunning(): BackgroundTask[] {
     return this.list().filter((t) => t.status === 'running')
+  }
+
+  /**
+   * Update the cumulative token usage reported by a running task.
+   * No-op if the task no longer exists.
+   */
+  updateTokenUsage(id: string, tokensUsed: number): void {
+    const task = this.tasks.get(id)
+    if (task) task.tokensUsed = tokensUsed
   }
 
   /**

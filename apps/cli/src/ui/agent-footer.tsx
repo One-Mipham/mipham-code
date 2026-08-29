@@ -101,6 +101,9 @@ function rotatingGerund(tick: number): string {
   return GERUNDS[Math.floor(tick / 2) % GERUNDS.length]!
 }
 
+/** Max agent lines to render before collapsing the rest into "↓ N more". */
+const MAX_AGENT_LINES = 5
+
 export function AgentFooter({ agents, tick, activeTool, agentProgress }: AgentFooterProps) {
   const { t } = useI18n()
   const hasAgents = agents.length > 0
@@ -118,6 +121,7 @@ export function AgentFooter({ agents, tick, activeTool, agentProgress }: AgentFo
             {'  '}[{activeTool!.name} {activeTool!.detail.slice(0, 60)}
             {animatedDots(tick)}]
           </Text>
+          <Box flexGrow={1} />
           <Text dimColor>
             {' '}
             {formatElapsed(Math.floor((Date.now() - activeTool!.startTime) / 1000))}
@@ -131,6 +135,7 @@ export function AgentFooter({ agents, tick, activeTool, agentProgress }: AgentFo
           <Text color="#FFA500">
             {'  '}✻ {rotatingGerund(tick)}…
           </Text>
+          <Box flexGrow={1} />
           <Text dimColor>
             {' ('}
             {formatElapsed(Math.floor((Date.now() - agentProgress!.startTime) / 1000))}
@@ -142,8 +147,8 @@ export function AgentFooter({ agents, tick, activeTool, agentProgress }: AgentFo
         </Box>
       )}
 
-      {/* Agent status lines */}
-      {agents.map((agent) => {
+      {/* Agent status lines — collapse to MAX_AGENT_LINES + "↓ N more" */}
+      {agents.slice(0, MAX_AGENT_LINES).map((agent) => {
         const elapsed = Math.floor((Date.now() - agent.startTime) / 1000)
         const isRunning = agent.status === 'running'
         const symbol = isRunning ? '◯' : '◼'
@@ -163,7 +168,8 @@ export function AgentFooter({ agents, tick, activeTool, agentProgress }: AgentFo
               {agent.name}
             </Text>
             <Text dimColor> {desc}</Text>
-            {/* Spacer pushes stats to the right — Ink handles this naturally */}
+            {/* Spacer pushes elapsed + tokens to the right edge */}
+            <Box flexGrow={1} />
             <Text dimColor>
               {'  '}
               {isRunning ? formatElapsed(elapsed) : t('ui.agent.finished')}
@@ -177,6 +183,11 @@ export function AgentFooter({ agents, tick, activeTool, agentProgress }: AgentFo
           </Box>
         )
       })}
+      {agents.length > MAX_AGENT_LINES && (
+        <Text dimColor>
+          {'  '}↓ {agents.length - MAX_AGENT_LINES} more
+        </Text>
+      )}
     </Box>
   )
 }

@@ -270,7 +270,23 @@ export function App({
       agentProgressRef.current !== null ||
       activeToolRef.current !== null
     if (!hasRunning) return
-    const i = setInterval(() => setAgentTick((t) => t + 1), 1000)
+    const i = setInterval(() => {
+      setAgentTick((t) => t + 1)
+      // Refresh live token counts for running background agents.
+      setRunningAgents((prev) => {
+        const bg = getBackgroundAgentRegistry()
+        let changed = false
+        const next = { ...prev }
+        for (const task of bg.list()) {
+          const cur = next[task.id]
+          if (cur && cur.status === 'running' && cur.tokensUsed !== task.tokensUsed) {
+            next[task.id] = { ...cur, tokensUsed: task.tokensUsed }
+            changed = true
+          }
+        }
+        return changed ? next : prev
+      })
+    }, 1000)
     return () => clearInterval(i)
   }, [runningAgents, agentProgress, activeTool])
 
@@ -282,14 +298,14 @@ export function App({
     setRunningAgents((prev) => {
       const next: Record<string, AgentEntry> = {}
       for (const task of all) {
-        // Preserve existing entry if it has more data (e.g. tokens accumulated during streaming)
+        // Preserve existing entry for metadata; tokens come from the registry task.
         const existing = prev[task.id]
         next[task.id] = {
           id: task.id,
           name: existing?.name || task.agentType.charAt(0).toUpperCase() + task.agentType.slice(1),
           description: existing?.description || task.description,
           startTime: existing?.startTime || task.startedAt.getTime(),
-          tokensUsed: existing?.tokensUsed || 0,
+          tokensUsed: task.tokensUsed ?? 0,
           status: task.status === 'running' ? 'running' : 'completed',
         }
       }
