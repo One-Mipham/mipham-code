@@ -1,7 +1,8 @@
-import { writeFileSync, mkdirSync, existsSync } from 'node:fs'
+import { mkdirSync, existsSync, constants } from 'node:fs'
 import { dirname } from 'node:path'
 import type { ToolDefinition } from '../../shared/index.ts'
 import { resolveSafe } from '../../security/path'
+import { writeFileNoFollow, isSymlinkLoop } from '../../security/fd'
 
 export const writeTool: ToolDefinition = {
   name: 'Write',
@@ -42,7 +43,25 @@ export const writeTool: ToolDefinition = {
     }
 
     mkdirSync(dirname(filePath), { recursive: true })
-    writeFileSync(filePath, content, 'utf-8')
+
+    // O_NOFOLLOW: reject a symlink swapped in after resolveSafe (TOCTOU) —
+    // writing through it would clobber an out-of-workspace target.
+    try {
+      writeFileNoFollow(
+        filePath,
+        content,
+        constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC,
+      )
+    } catch (err) {
+      if (isSymlinkLoop(err)) {
+        return {
+          success: false,
+          content: '',
+          error: `Refusing to write through a symbolic link: ${filePath}`,
+        }
+      }
+      throw err
+    }
 
     // Track as read since we just wrote it (future writes allowed)
     ctx.readFiles?.add(filePath)

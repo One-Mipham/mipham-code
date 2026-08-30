@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
@@ -381,6 +381,51 @@ describe('Edit tool execution', () => {
 })
 
 // ============================================================
+// Symlink escape protection (resolveSafe + O_NOFOLLOW chain)
+// ============================================================
+
+describe('symlink escape protection', () => {
+  let outside: string
+
+  beforeEach(() => {
+    outside = mkdtempSync(join(tmpdir(), 'mipham-outside-'))
+  })
+
+  afterEach(() => {
+    rmSync(outside, { recursive: true, force: true })
+  })
+
+  it('Read rejects a symlink pointing outside the workspace', async () => {
+    writeFileSync(join(outside, 'secret.txt'), 'top-secret')
+    symlinkSync(join(outside, 'secret.txt'), join(tmpDir, 'link.txt'))
+    await expect(readTool.execute({ file_path: join(tmpDir, 'link.txt') }, ctx)).rejects.toThrow(
+      /outside|protected/,
+    )
+  })
+
+  it('Write rejects a symlink pointing outside the workspace (target untouched)', async () => {
+    writeFileSync(join(outside, 'victim.txt'), 'original')
+    symlinkSync(join(outside, 'victim.txt'), join(tmpDir, 'link.txt'))
+    await expect(
+      writeTool.execute({ file_path: join(tmpDir, 'link.txt'), content: 'pwned' }, ctx),
+    ).rejects.toThrow(/outside|protected/)
+    expect(readFileSync(join(outside, 'victim.txt'), 'utf-8')).toBe('original')
+  })
+
+  it('Edit rejects a symlink pointing outside the workspace (target untouched)', async () => {
+    writeFileSync(join(outside, 'victim.txt'), 'hello world')
+    symlinkSync(join(outside, 'victim.txt'), join(tmpDir, 'link.txt'))
+    await expect(
+      editTool.execute(
+        { file_path: join(tmpDir, 'link.txt'), old_string: 'hello', new_string: 'pwned' },
+        ctx,
+      ),
+    ).rejects.toThrow(/outside|protected/)
+    expect(readFileSync(join(outside, 'victim.txt'), 'utf-8')).toBe('hello world')
+  })
+})
+
+// ============================================================
 // Glob Tool
 // ============================================================
 
@@ -483,6 +528,65 @@ describe('Grep tool execution', () => {
     // Should find in .ts but exclude .txt
     expect(result.content).toContain('a.ts')
     expect(result.content).not.toContain('b.txt')
+  })
+})
+
+describe('Grep fallback (find -type f) symlink safety', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('does not follow symlinks when rg is unavailable', async () => {
+    // Force the ripgrep fast-path to "error" (exit 2) so the find-based
+    // fallback runs; run the real `find` command for the fallback itself.
+    vi.spyOn(Bun, 'spawn').mockImplementation((cmd: string[], opts?: { cwd?: string }) => {
+      if (cmd[0] === 'rg') {
+        // An already-closed stream (a bare `new ReadableStream()` never closes,
+        // so `Response.text()` would hang). Emulate ripgrep erroring out.
+        const empty = Readable.toWeb(Readable.from([])) as unknown as ReadableStream
+        return {
+          stdout: empty,
+          stderr: empty,
+          exited: Promise.resolve(2),
+          get exitCode() {
+            return 2
+          },
+          kill: () => {},
+        } as any
+      }
+      const child = spawn(cmd[0]!, cmd.slice(1), {
+        cwd: opts?.cwd,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+      const exited = new Promise<number>((resolve) => {
+        child.on('close', (code) => resolve(code ?? 0))
+      })
+      return {
+        stdout: Readable.toWeb(child.stdout!) as unknown as ReadableStream,
+        stderr: Readable.toWeb(child.stderr!) as unknown as ReadableStream,
+        exited,
+        get exitCode() {
+          return child.exitCode
+        },
+        kill: () => child.kill(),
+      } as any
+    })
+
+    const outside = mkdtempSync(join(tmpdir(), 'mipham-grep-outside-'))
+    try {
+      writeFileSync(join(tmpDir, 'inside.txt'), 'NEEDLE inside')
+      writeFileSync(join(outside, 'secret.txt'), 'NEEDLE outside-secret')
+      symlinkSync(join(outside, 'secret.txt'), join(tmpDir, 'leak-link.txt'))
+
+      const result = await grepTool.execute({ pattern: 'NEEDLE', path: tmpDir }, ctx)
+      expect(result.success).toBe(true)
+      expect(result.content).toContain('inside.txt')
+      // The symlink to an out-of-workspace file must not be followed.
+      expect(result.content).not.toContain('outside-secret')
+      expect(result.content).not.toContain('secret.txt')
+    } finally {
+      rmSync(outside, { recursive: true, force: true })
+    }
   })
 })
 

@@ -1,6 +1,7 @@
-import { readFileSync, existsSync, statSync } from 'node:fs'
+import { readFileSync, fstatSync, closeSync, constants } from 'node:fs'
 import type { ToolDefinition, CredentialMaskingConfig } from '../../shared/index.ts'
 import { resolveSafe } from '../../security/path'
+import { openNoFollow, isSymlinkLoop } from '../../security/fd'
 import type { Service } from '../../vajra'
 import { toolKey } from '../seam'
 import { withValidation } from '../validation'
@@ -23,25 +24,44 @@ export function createReadTool(credentialConfig?: CredentialMaskingConfig): Tool
     },
     async execute(params, ctx) {
       const filePath = resolveSafe(ctx.cwd, params.file_path as string)
-      if (!existsSync(filePath)) {
-        return { success: false, content: '', error: `File not found: ${filePath}` }
-      }
-      const stat = statSync(filePath)
-      if (stat.isDirectory()) {
-        return { success: false, content: '', error: `Path is a directory: ${filePath}` }
-      }
-      // Prevent OOM on single-line files (e.g. 500MB JSON blob)
-      const MAX_FILE_SIZE = 50_000_000 // 50 MB
-      if (stat.size > MAX_FILE_SIZE) {
-        return {
-          success: false,
-          content: '',
-          error: `File too large (${(stat.size / 1e6).toFixed(1)} MB). Max: 50 MB. Use offset/limit for large files.`,
+
+      // O_NOFOLLOW: fail closed if the path was swapped to a symlink after
+      // resolveSafe (TOCTOU) — never follow it to read outside the workspace.
+      let fd: number
+      try {
+        fd = openNoFollow(filePath, constants.O_RDONLY)
+      } catch (err) {
+        if (isSymlinkLoop(err)) {
+          return { success: false, content: '', error: `Path is a symbolic link: ${filePath}` }
         }
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+          return { success: false, content: '', error: `File not found: ${filePath}` }
+        }
+        throw err
       }
+
+      let content: string
+      try {
+        const stat = fstatSync(fd)
+        if (stat.isDirectory()) {
+          return { success: false, content: '', error: `Path is a directory: ${filePath}` }
+        }
+        // Prevent OOM on single-line files (e.g. 500MB JSON blob)
+        const MAX_FILE_SIZE = 50_000_000 // 50 MB
+        if (stat.size > MAX_FILE_SIZE) {
+          return {
+            success: false,
+            content: '',
+            error: `File too large (${(stat.size / 1e6).toFixed(1)} MB). Max: 50 MB. Use offset/limit for large files.`,
+          }
+        }
+        content = readFileSync(fd, 'utf-8')
+      } finally {
+        closeSync(fd)
+      }
+
       const offset = (params.offset as number) || 0
       const limit = (params.limit as number) || 2000
-      const content = readFileSync(filePath, 'utf-8')
 
       // ── Read tracking: mark file as read for Write tool safety ──
       ctx.readFiles?.add(filePath)

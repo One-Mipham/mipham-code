@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest'
+import { mkdtempSync, writeFileSync, symlinkSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { maskSearchOutput, maskGlobOutput } from '../../../src/core/credential-masker/search'
 import type { CredentialMaskingConfig } from '../../../src/shared/types'
 
@@ -65,5 +68,56 @@ describe('maskGlobOutput', () => {
   it('passes through when disabled', () => {
     const out = maskGlobOutput('/home/user/.env\n', { ...config, enabled: false })
     expect(out).toContain('/home/user/.env')
+  })
+})
+
+describe('maskSearchOutput / maskGlobOutput — symlink-resolved matching', () => {
+  it('masks a symlink whose target matches a deny rule (filename format)', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'mipham-mask-'))
+    try {
+      const sensitive = join(tmp, '.env')
+      writeFileSync(sensitive, 'SECRET')
+      const link = join(tmp, 'harmless.txt')
+      symlinkSync(sensitive, link)
+
+      const out = maskSearchOutput(`${link}:1:leak-me\n`, config, 'filename')
+      expect(out).not.toContain('leak-me')
+      expect(out).toContain('__MIPHAM_CREDENTIAL_MASKED__')
+    } finally {
+      rmSync(tmp, { recursive: true, force: true })
+    }
+  })
+
+  it('masks a symlink whose target matches a deny rule (heading format)', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'mipham-mask-'))
+    try {
+      const sensitive = join(tmp, '.env')
+      writeFileSync(sensitive, 'SECRET')
+      const link = join(tmp, 'harmless.txt')
+      symlinkSync(sensitive, link)
+
+      const out = maskSearchOutput(`${link}\n1:leak-me\n`, config, 'heading')
+      expect(out).not.toContain('leak-me')
+      expect(out).toContain('__MIPHAM_CREDENTIAL_MASKED__')
+    } finally {
+      rmSync(tmp, { recursive: true, force: true })
+    }
+  })
+
+  it('masks a symlink whose target matches a deny rule (glob format)', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'mipham-mask-'))
+    try {
+      const sensitive = join(tmp, '.env')
+      writeFileSync(sensitive, 'SECRET')
+      const link = join(tmp, 'harmless.txt')
+      symlinkSync(sensitive, link)
+
+      const out = maskGlobOutput(`${link}\n${join(tmp, 'app.ts')}\n`, config)
+      expect(out).toContain('__MIPHAM_CREDENTIAL_MASKED__')
+      expect(out).toContain('app.ts')
+      expect(out).not.toContain('harmless.txt')
+    } finally {
+      rmSync(tmp, { recursive: true, force: true })
+    }
   })
 })

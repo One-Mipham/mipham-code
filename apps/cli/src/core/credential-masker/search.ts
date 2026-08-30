@@ -1,6 +1,21 @@
+import { realpathSync } from 'node:fs'
 import type { CredentialMaskingConfig } from '../../shared/index.ts'
 import { matchCredentialFile } from './matcher'
 import { CREDENTIAL_SENTINEL } from './types'
+
+/**
+ * Resolve a path through symlinks before deny-rule matching, so a symlink whose
+ * name is innocuous but whose target is a sensitive file is still masked —
+ * mirroring Read, which matches on the canonical path. Falls back to the raw
+ * path when the target doesn't exist (e.g. synthetic paths in tests).
+ */
+function resolveForMatch(p: string): string {
+  try {
+    return realpathSync(p)
+  } catch {
+    return p
+  }
+}
 
 /**
  * Mask grep/search output: any match line that belongs to a credential file
@@ -31,7 +46,9 @@ export function maskSearchOutput(
       const m = line.match(/^(.+?):(\d+):(.*)$/)
       if (m) {
         out.push(
-          matchCredentialFile(m[1]!, config) ? `${m[1]}:${m[2]}:${CREDENTIAL_SENTINEL}` : line,
+          matchCredentialFile(resolveForMatch(m[1]!), config)
+            ? `${m[1]}:${m[2]}:${CREDENTIAL_SENTINEL}`
+            : line,
         )
       } else {
         out.push(line)
@@ -49,7 +66,7 @@ export function maskSearchOutput(
       out.push(line) // blank separator — pass through, keep current file
       continue
     }
-    currentMasked = !!matchCredentialFile(line, config)
+    currentMasked = !!matchCredentialFile(resolveForMatch(line), config)
     out.push(line)
   }
 
@@ -68,6 +85,6 @@ export function maskGlobOutput(paths: string, config?: CredentialMaskingConfig):
   if (!config?.enabled) return paths
   return paths
     .split('\n')
-    .map((p) => (matchCredentialFile(p, config) ? CREDENTIAL_SENTINEL : p))
+    .map((p) => (matchCredentialFile(resolveForMatch(p), config) ? CREDENTIAL_SENTINEL : p))
     .join('\n')
 }

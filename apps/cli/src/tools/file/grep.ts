@@ -90,8 +90,22 @@ export function createGrepTool(credentialConfig?: CredentialMaskingConfig): Tool
         // rg not installed → fall through to grep
       }
 
-      // 2. fallback to plain grep
-      const grepArgs = ['grep', '-rn', pattern, searchPath]
+      // 2. fallback: `find -type f -exec grep -Hn {} +`
+      //    `-type f` skips symlinks (file and dir) so the fallback can't follow
+      //    one out of the workspace — macOS BSD `grep -r` follows symlinks and
+      //    would leak target contents, unlike ripgrep's default no-follow.
+      const grepArgs = [
+        'find',
+        searchPath,
+        '-type',
+        'f',
+        '-exec',
+        'grep',
+        '-Hn',
+        pattern,
+        '{}',
+        '+',
+      ]
       try {
         const { stdout, timedOut, exitCode } = await runSearch(grepArgs, ctx.cwd, GREP_TIMEOUT_MS)
         if (timedOut) {

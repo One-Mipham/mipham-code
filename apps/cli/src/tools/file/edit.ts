@@ -1,6 +1,7 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, closeSync, constants } from 'node:fs'
 import type { ToolDefinition } from '../../shared/index.ts'
 import { resolveSafe } from '../../security/path'
+import { openNoFollow, writeFileNoFollow, isSymlinkLoop } from '../../security/fd'
 
 /**
  * Characters considered part of an identifier in source code.
@@ -89,7 +90,22 @@ export const editTool: ToolDefinition = {
       }
     }
 
-    const content = readFileSync(filePath, 'utf-8')
+    // O_NOFOLLOW: fail closed on a symlink swapped in after resolveSafe (TOCTOU).
+    let rfd: number
+    try {
+      rfd = openNoFollow(filePath, constants.O_RDONLY)
+    } catch (err) {
+      if (isSymlinkLoop(err)) {
+        return { success: false, content: '', error: `Path is a symbolic link: ${filePath}` }
+      }
+      throw err
+    }
+    let content: string
+    try {
+      content = readFileSync(rfd, 'utf-8')
+    } finally {
+      closeSync(rfd)
+    }
 
     // ── Read tracking: mark as read before editing ──
     ctx.readFiles?.add(filePath)
@@ -114,28 +130,43 @@ export const editTool: ToolDefinition = {
       }
     }
 
+    let result: string
+    let count: number
     if (replaceAll) {
       // Build result by splicing at each match (in reverse so indices stay valid)
-      let result = content
+      result = content
       for (let i = matches.length - 1; i >= 0; i--) {
         const idx = matches[i]!
         result = result.slice(0, idx) + newStr + result.slice(idx + oldStr.length)
       }
-      writeFileSync(filePath, result, 'utf-8')
-      return { success: true, content: `Replaced ${matches.length} occurrences in ${filePath}` }
-    }
-
-    if (matches.length > 1) {
-      return {
-        success: false,
-        content: '',
-        error: 'old_string is not unique in file. Use replace_all or make it more specific.',
+      count = matches.length
+    } else {
+      if (matches.length > 1) {
+        return {
+          success: false,
+          content: '',
+          error: 'old_string is not unique in file. Use replace_all or make it more specific.',
+        }
       }
+
+      const idx = matches[0]!
+      result = content.slice(0, idx) + newStr + content.slice(idx + oldStr.length)
+      count = 1
     }
 
-    const idx = matches[0]!
-    const updated = content.slice(0, idx) + newStr + content.slice(idx + oldStr.length)
-    writeFileSync(filePath, updated, 'utf-8')
-    return { success: true, content: `Replaced 1 occurrence in ${filePath}` }
+    // O_NOFOLLOW: reject a symlink swapped in after the read (TOCTOU) instead of
+    // writing through it to an out-of-workspace target.
+    try {
+      writeFileNoFollow(filePath, result, constants.O_WRONLY | constants.O_TRUNC)
+    } catch (err) {
+      if (isSymlinkLoop(err)) {
+        return { success: false, content: '', error: `Path is a symbolic link: ${filePath}` }
+      }
+      throw err
+    }
+    return {
+      success: true,
+      content: `Replaced ${count} occurrence${count === 1 ? '' : 's'} in ${filePath}`,
+    }
   },
 }
