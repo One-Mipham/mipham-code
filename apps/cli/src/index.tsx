@@ -314,7 +314,7 @@ export async function runApp(options: RunOptions): Promise<void> {
   const { isEmptyProject } = await import('./core/project-scaffold')
   if (isEmptyProject(process.cwd())) {
     console.log(
-      '\n💡 空目录。运行 `mipham init` 生成规范项目文档（CLAUDE.md / MIPHAM.md / README.md），或直接开始对话。\n',
+      '\n💡 空目录。运行 `mipham init` 生成基础文档，或 `mipham init --full` 生成完整规范（八章 CLAUDE.md + 7 个 .md + .github 模板），或直接开始对话。\n',
     )
   }
 

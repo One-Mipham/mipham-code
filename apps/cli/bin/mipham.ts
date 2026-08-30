@@ -1070,7 +1070,14 @@ async function runInitCLI(): Promise<boolean> {
   const targetDir = rawTarget ? resolve(rawTarget.replace(/^~/, homedir())) : process.cwd()
 
   const gitInit = !args.includes('--no-git')
-  const result = scaffoldProject(targetDir, { gitInit })
+  const full = args.includes('--full')
+  const licenseArg = args.find((a) => a.startsWith('--license='))
+  const licenseVal = licenseArg?.split('=')[1]
+  const license =
+    licenseVal === 'mit' || licenseVal === 'apache' || licenseVal === 'proprietary'
+      ? licenseVal
+      : undefined
+  const result = scaffoldProject(targetDir, { gitInit, full, license })
 
   const lines: string[] = ['', `✅ Mipham Code 项目已初始化：${targetDir}`, '']
   if (result.created.length > 0) {
@@ -1160,6 +1167,9 @@ async function main() {
 Usage:
   mipham                     Launch interactive CLI
   mipham init [dir]          Scaffold a project (CLAUDE.md/MIPHAM.md/README.md)
+    --full                     Full scaffold: 8-section CLAUDE.md + 7 .md + .github templates
+    --license=<type>           mit | apache | proprietary (default: proprietary)
+    --no-git                   Skip git init
   mipham update              Update to the latest version
   mipham upgrade             Same as 'mipham update'
   mipham daemon <cmd>        Daemon lifecycle (start, stop, status, restart)

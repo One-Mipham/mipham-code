@@ -4,8 +4,11 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import {
   renderClaudeMd,
+  renderFullClaudeMd,
   renderReadmeMd,
   renderMiphamMd,
+  renderContributingMd,
+  renderLicenseMd,
   scaffoldProject,
   isEmptyProject,
 } from '../../src/core/project-scaffold'
@@ -108,5 +111,101 @@ describe('isEmptyProject', () => {
 
   it('returns false for a non-existent directory', () => {
     expect(isEmptyProject(join(tmpDir, 'missing'))).toBe(false)
+  })
+})
+
+describe('renderFullClaudeMd', () => {
+  it('renders an 8-section CLAUDE.md with governance sections', () => {
+    const out = renderFullClaudeMd('my-app')
+    expect(out).toContain('一、项目概述')
+    expect(out).toContain('二、AI 编码协作原则')
+    expect(out).toContain('三、合规与安全')
+    expect(out).toContain('八、代码评审检查清单')
+    expect(out).toContain('修订历史')
+    expect(out).toContain('Conventional Commits')
+  })
+})
+
+describe('renderLicenseMd', () => {
+  it('renders MIT license', () => {
+    expect(renderLicenseMd('mit')).toContain('MIT License')
+  })
+  it('renders Apache 2.0 license', () => {
+    expect(renderLicenseMd('apache')).toContain('Apache License 2.0')
+  })
+  it('renders Proprietary license', () => {
+    const out = renderLicenseMd('proprietary')
+    expect(out).toContain('Proprietary Software')
+    expect(out).toContain('All rights reserved')
+  })
+})
+
+describe('renderContributingMd', () => {
+  it('uses closed-source wording for proprietary', () => {
+    const out = renderContributingMd('my-app', 'proprietary')
+    expect(out).toContain('专有闭源商业软件')
+    expect(out).not.toContain('开源许可')
+  })
+  it('uses open-source wording for mit', () => {
+    const out = renderContributingMd('my-app', 'mit')
+    expect(out).toContain('MIT')
+    expect(out).toContain('开源许可')
+  })
+})
+
+describe('scaffoldProject --full', () => {
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'mipham-full-'))
+  })
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  const fullFiles = [
+    'CLAUDE.md',
+    'MIPHAM.md',
+    'README.md',
+    'SECURITY.md',
+    'CONTRIBUTING.md',
+    'CODE_OF_CONDUCT.md',
+    'DEVELOPMENT.md',
+    'TRADEMARKS.md',
+    'CHANGELOG.md',
+    'LICENSE',
+    '.github/pull_request_template.md',
+    '.github/CODEOWNERS',
+  ]
+
+  it('creates the complete .md set + .github templates', () => {
+    const projectDir = join(tmpDir, 'proj')
+    const result = scaffoldProject(projectDir, { full: true })
+
+    for (const f of fullFiles) {
+      expect(result.created).toContain(f)
+    }
+    expect(existsSync(join(projectDir, '.github/ISSUE_TEMPLATE/bug_report.md'))).toBe(true)
+    expect(existsSync(join(projectDir, '.github/ISSUE_TEMPLATE/feature_request.md'))).toBe(true)
+  })
+
+  it('uses the 8-section CLAUDE.md for --full', () => {
+    const projectDir = join(tmpDir, 'proj')
+    scaffoldProject(projectDir, { full: true })
+    expect(readFileSync(join(projectDir, 'CLAUDE.md'), 'utf-8')).toContain('八、代码评审检查清单')
+  })
+
+  it('writes MIT LICENSE and open-source CONTRIBUTING for --license=mit', () => {
+    const projectDir = join(tmpDir, 'proj')
+    scaffoldProject(projectDir, { full: true, license: 'mit' })
+    expect(readFileSync(join(projectDir, 'LICENSE'), 'utf-8')).toContain('MIT License')
+    expect(readFileSync(join(projectDir, 'CONTRIBUTING.md'), 'utf-8')).toContain('开源许可')
+  })
+
+  it('defaults to proprietary LICENSE for --full without --license', () => {
+    const projectDir = join(tmpDir, 'proj')
+    scaffoldProject(projectDir, { full: true })
+    expect(readFileSync(join(projectDir, 'LICENSE'), 'utf-8')).toContain('Proprietary Software')
   })
 })
