@@ -5,9 +5,16 @@
  * 历史越长，旧但相关的记忆越容易被埋掉。Recuris 的解法是把召回绑定到「当前还剩
  * 什么没做」（pending/in_progress），而不是只绑定到「刚说了什么」。
  *
- * 本模块只做一件事：把未完成任务渲染成紧凑的接地串，拼进 recall 的 query。
- * 纯只读、无状态推进（证据接地的状态推进留待 Phase 2）。
+ * 本文件分两层：
+ *  - Phase 1（纯只读）：`renderWorkingState(tasks)` 把「现有任务追踪」的未完成任务
+ *    渲染成紧凑接地串，拼进 recall 的 query（状态接地召回）。
+ *  - Phase 2（证据接地状态机）：`WorkingMemory` 类复现 Recuris「w_t → ρ → E_t → (a,o)
+ *    → C → w_{t+1}」环——`done` 只能由 PostFlightChecker 的 `supported` 决策推进，
+ *    `blocked` 由 `rejected` 置位；**没有「模型自称 done」的入口**（不信任模型叙事，
+ *    只信任工具/env 观察）。
  */
+
+import type { CheckerDecision } from './post-flight-checker'
 
 export interface WorkingGoal {
   subject: string
@@ -22,4 +29,66 @@ export function renderWorkingState(tasks: ReadonlyArray<WorkingGoal>): string {
     .map((t) => t.subject.trim())
     .filter(Boolean)
     .join('\n')
+}
+
+// ── Phase 2：证据接地状态机 ──
+
+export type GoalStatus = 'pending' | 'done' | 'blocked'
+
+export interface GoalState {
+  id: string
+  content: string
+  status: GoalStatus
+  /** 推进/置位时固化的证据（checkerId + reason），供审计「谁证明了这个状态」。 */
+  evidence: string[]
+}
+
+export class WorkingMemory {
+  private goals = new Map<string, GoalState>()
+
+  /** 注册一个待办目标（新目标默认 pending）。重复 id 只更新 content，不回退已验证的状态。 */
+  setGoal(id: string, content: string): void {
+    const existing = this.goals.get(id)
+    if (existing) {
+      existing.content = content
+    } else {
+      this.goals.set(id, { id, content, status: 'pending', evidence: [] })
+    }
+  }
+
+  /**
+   * 证据接地推进：`done` 只能由 checker `supported` 决策推进；`rejected` 置 `blocked`；
+   * `no-checker` 不改状态（模型自称不算）。已 `done` 的目标不再回退。
+   */
+  observe(goalId: string, decision: CheckerDecision): void {
+    const g = this.goals.get(goalId)
+    if (!g || g.status === 'done') return
+    if (decision.verdict === 'supported') {
+      g.status = 'done'
+      g.evidence.push(`supported:${decision.checkerId}`)
+    } else if (decision.verdict === 'rejected') {
+      g.status = 'blocked'
+      g.evidence.push(`rejected:${decision.checkerId}:${decision.reason}`)
+    }
+    // no-checker：证据不足，状态不变
+  }
+
+  getGoal(id: string): GoalState | undefined {
+    return this.goals.get(id)
+  }
+
+  /** 紧凑三态块（检索/系统提示用）；无任何目标时返回空串。 */
+  renderWorkingState(): string {
+    if (this.goals.size === 0) return ''
+    const byStatus: Record<GoalStatus, string[]> = { pending: [], done: [], blocked: [] }
+    for (const g of this.goals.values()) {
+      byStatus[g.status].push(g.content.trim())
+    }
+    return (['pending', 'done', 'blocked'] as const)
+      .map((s) => {
+        const items = byStatus[s].filter(Boolean)
+        return `[WORKING] ${s}: ${items.length > 0 ? items.join(', ') : '(none)'}`
+      })
+      .join('\n')
+  }
 }

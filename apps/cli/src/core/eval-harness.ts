@@ -19,6 +19,7 @@ import { ConstitutionLoader, DEFAULT_CONSTITUTION } from './constitution-loader'
 import { ErrorSignatureDB } from './error-signature-db'
 import { PreFlightChecker } from './preflight-checker'
 import { createDefaultPostFlightChecker } from './post-flight-checker'
+import { WorkingMemory } from './working-memory'
 import { RedTeam } from './red-team'
 import { isProtectedPath, validateBlastRadius, PROTECTED_CRITICAL_FILES } from './crsi-sandbox'
 import {
@@ -285,6 +286,23 @@ export function runEval(): EvalReport {
         'supported' &&
       postFlight.check('Bash', { params: {}, result: { success: false, content: '', error: 'x' } })
         .verdict === 'rejected',
+  })
+
+  // ── 工作记忆证据接地（ground truth：done 只能由 supported 推进，模型自称不算） ──
+  const wm = new WorkingMemory()
+  wm.setGoal('install-deps', 'install dependencies')
+  wm.observe('install-deps', { verdict: 'no-checker' })
+  const pendingAfterNoChecker = wm.getGoal('install-deps')!.status === 'pending'
+  wm.observe('install-deps', { verdict: 'supported', checkerId: 'bash-exit' })
+  const doneAfterSupported = wm.getGoal('install-deps')!.status === 'done'
+  wm.setGoal('edit-file', 'edit the file')
+  wm.observe('edit-file', { verdict: 'rejected', checkerId: 'edit-applied', reason: 'x' })
+  const blockedAfterRejected = wm.getGoal('edit-file')!.status === 'blocked'
+  results.push({
+    id: 'working-memory-evidence-gated',
+    description:
+      '工作记忆：done 只能由 checker supported 推进，rejected 置 blocked，模型自称（no-checker）不算',
+    passed: pendingAfterNoChecker && doneAfterSupported && blockedAfterRejected,
   })
 
   // ── 行为缺口（ground truth：当前无规则覆盖的确定性拦截，如实判 FAIL） ──

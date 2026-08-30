@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { renderWorkingState } from '../../src/core/working-memory'
+import { renderWorkingState, WorkingMemory } from '../../src/core/working-memory'
 import { MemoryManager } from '../../src/core/memory/memory-manager'
 
 describe('renderWorkingState', () => {
@@ -46,5 +46,55 @@ describe('recall grounding', () => {
     expect(grounded.map((m) => m.name)).toContain('deploy-checklist')
 
     rmSync(dir, { recursive: true, force: true })
+  })
+})
+
+describe('WorkingMemory (Phase 2 证据接地状态机)', () => {
+  it('renderWorkingState() 输出紧凑三态块，空状态渲染空串', () => {
+    const wm = new WorkingMemory()
+    expect(wm.renderWorkingState()).toBe('')
+
+    wm.setGoal('a', 'install deps')
+    wm.setGoal('b', 'write test')
+    wm.observe('b', { verdict: 'supported', checkerId: 'bash-exit' })
+    const out = wm.renderWorkingState()
+    expect(out).toContain('[WORKING] pending: install deps')
+    expect(out).toContain('[WORKING] done: write test')
+    expect(out).toContain('[WORKING] blocked: (none)')
+  })
+
+  it('done 只能由 checker supported 推进；rejected 置 blocked；no-checker 状态不变', () => {
+    const wm = new WorkingMemory()
+    wm.setGoal('g', 'do the thing')
+
+    // 模型自称不算：no-checker 不改状态
+    wm.observe('g', { verdict: 'no-checker' })
+    expect(wm.getGoal('g')!.status).toBe('pending')
+
+    // rejected → blocked（不是 done）
+    wm.observe('g', { verdict: 'rejected', checkerId: 'bash-exit', reason: 'exit 1' })
+    expect(wm.getGoal('g')!.status).toBe('blocked')
+    expect(wm.getGoal('g')!.evidence).toEqual(['rejected:bash-exit:exit 1'])
+
+    // blocked 可被后续 supported 推到 done（重试成功）
+    wm.observe('g', { verdict: 'supported', checkerId: 'bash-exit' })
+    expect(wm.getGoal('g')!.status).toBe('done')
+  })
+
+  it('done 后不再回退', () => {
+    const wm = new WorkingMemory()
+    wm.setGoal('g', 'x')
+    wm.observe('g', { verdict: 'supported', checkerId: 'bash-exit' })
+    wm.observe('g', { verdict: 'rejected', checkerId: 'bash-exit', reason: 'y' })
+    expect(wm.getGoal('g')!.status).toBe('done')
+  })
+
+  it('setGoal 重复 id 只更新 content，不回退已验证状态', () => {
+    const wm = new WorkingMemory()
+    wm.setGoal('g', 'original')
+    wm.observe('g', { verdict: 'supported', checkerId: 'bash-exit' })
+    wm.setGoal('g', 'updated')
+    expect(wm.getGoal('g')!.status).toBe('done')
+    expect(wm.getGoal('g')!.content).toBe('updated')
   })
 })
