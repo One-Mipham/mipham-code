@@ -4,10 +4,11 @@ import {
   readFileSync,
   writeFileSync,
   unlinkSync,
+  renameSync,
   existsSync,
   statSync,
 } from 'node:fs'
-import { join, extname } from 'node:path'
+import { join, extname, basename } from 'node:path'
 import { similarities } from './tfidf'
 
 export interface MemoryMetadata {
@@ -28,10 +29,43 @@ export interface MemoryEntry {
 
 const INDEX_FILE = 'MEMORY.md'
 const LINKS_FILE = 'links.json'
+const RECALL_STATS_FILE = 'recall-stats.json'
+const AUTO_PREFIX = 'auto-'
+/** 「从没被召回 + 过期」的 auto-* 记忆归档阈值（60 天）。 */
+const GC_STALE_MS = 60 * 24 * 60 * 60 * 1000
+/** 会话记忆合并的 TF-IDF 余弦阈值（> 此值聚成一簇）。 */
+const CONSOLIDATE_THRESHOLD = 0.5
+/** 写时去重的 TF-IDF 余弦阈值（> 此值视为近重复，合并而非新增）。高于合并阈值，只拦近重复。 */
+const DEDUP_THRESHOLD = 0.65
+
+/** 确定性 hash（无 Date.now / Math.random，同输入同输出 → 幂等 lesson 名）。 */
+function stableHash(s: string): string {
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+  return h.toString(36)
+}
+
+/** 写时去重：找同 type 且内容近重复（余弦 > 阈值）的现有记忆。纯函数便于测。 */
+export function findNearDuplicate(
+  candidates: ReadonlyArray<MemoryEntry>,
+  content: string,
+  type: string,
+): MemoryEntry | null {
+  for (const entry of candidates) {
+    if (entry.metadata.type !== type) continue
+    // auto-*（会话记忆，归合并管）与 lesson-*（合并产物）不做写时去重，
+    // 否则合并阶段 write 的 lesson 会被尚存的 auto-* 吸收掉。
+    if (entry.name.startsWith(AUTO_PREFIX) || entry.name.startsWith('lesson-')) continue
+    const sim = similarities(content, [entry.content])[0] ?? 0
+    if (sim > DEDUP_THRESHOLD) return entry
+  }
+  return null
+}
 
 export class MemoryManager {
   private memories = new Map<string, MemoryEntry>()
   private linkGraph: Map<string, Set<string>> = new Map()
+  private recallStats = new Map<string, { recallCount: number; lastRecalledAt: string }>()
   private contextMaxTokens = 200_000
 
   constructor(private memoryDir: string) {
@@ -46,6 +80,7 @@ export class MemoryManager {
   loadAll(): void {
     this.memories.clear()
     this.linkGraph.clear()
+    this.recallStats.clear()
     if (!existsSync(this.memoryDir)) return
 
     let entries: string[] = []
@@ -73,28 +108,32 @@ export class MemoryManager {
     if (!this.loadLinkGraph()) {
       this.rebuildLinkGraph()
     }
+    this.loadRecallStats()
   }
 
   write(name: string, content: string, metadata: MemoryMetadata): void {
-    // Dedup: same name = update, don't create duplicate
-    const formattedBody = this.formatMemoryBody(metadata, content)
+    // 同名 update（replace 语义）
     const existing = this.memories.get(name)
     if (existing) {
-      existing.content = formattedBody
-      existing.metadata = metadata
-      existing.description = metadata.relevance.join(', ')
-      existing.updatedAt = new Date()
-      this.memories.set(name, existing)
-      const body = this.formatMemoryFile(name, metadata, content)
-      writeFileSync(existing.filePath, body, 'utf-8')
-      this.updateWikilinks(name, content)
-      this.updateIndex()
+      this.updateEntry(existing, content, metadata)
       return
     }
 
+    // 写时去重：不同名但同 type + 内容近重复 → 合并进现有（union relevance），不新增（治「越存越乱」）。
+    const nearDup = findNearDuplicate([...this.memories.values()], content, metadata.type)
+    if (nearDup) {
+      const mergedMetadata: MemoryMetadata = {
+        ...metadata,
+        relevance: [...new Set([...nearDup.metadata.relevance, ...metadata.relevance])],
+      }
+      this.updateEntry(nearDup, content, mergedMetadata)
+      return
+    }
+
+    // 新建
     const fileName = `${name}.md`
     const filePath = join(this.memoryDir, fileName)
-
+    const formattedBody = this.formatMemoryBody(metadata, content)
     const body = this.formatMemoryFile(name, metadata, content)
     writeFileSync(filePath, body, 'utf-8')
 
@@ -112,12 +151,27 @@ export class MemoryManager {
     this.updateIndex()
   }
 
-  recall(context: string, limit: number = 10): MemoryEntry[] {
-    const contextLower = context.toLowerCase()
+  /** 更新一条现有记忆（内容/元数据/文件/索引）。同名 update 与近重复合并共用。 */
+  private updateEntry(entry: MemoryEntry, content: string, metadata: MemoryMetadata): void {
+    entry.content = this.formatMemoryBody(metadata, content)
+    entry.metadata = metadata
+    entry.description = metadata.relevance.join(', ')
+    entry.updatedAt = new Date()
+    const body = this.formatMemoryFile(entry.name, metadata, content)
+    writeFileSync(entry.filePath, body, 'utf-8')
+    this.updateWikilinks(entry.name, content)
+    this.updateIndex()
+  }
+
+  recall(context: string, limit: number = 10, grounding?: string): MemoryEntry[] {
+    // 状态接地（治「前存后忘」）：把「当前还剩什么没做」拼进 query，让召回绑定到
+    // 已验证的当前状态，而不是只绑定到「刚说了什么」。历史越长，旧但相关的记忆越不被埋。
+    const query = grounding ? `${grounding}\n${context}` : context
+    const contextLower = query.toLowerCase()
     const entries = [...this.memories.values()]
     // TF-IDF cosine similarity (CJK-bigram aware) replaces the old word-overlap.
     const sims = similarities(
-      context,
+      query,
       entries.map((e) => e.content),
     )
     const scored: Array<{ entry: MemoryEntry; score: number }> = []
@@ -161,7 +215,9 @@ export class MemoryManager {
     }
 
     scored.sort((a, b) => b.score - a.score)
-    return scored.slice(0, limit).map((s) => s.entry)
+    const top = scored.slice(0, limit).map((s) => s.entry)
+    this.recordRecall(top.map((e) => e.name))
+    return top
   }
 
   getLinkedMemories(name: string): MemoryEntry[] {
@@ -190,11 +246,98 @@ export class MemoryManager {
     this.updateIndex()
   }
 
-  buildSystemReminder(context: string, maxTokens?: number): string {
+  /**
+   * 淘汰：归档「从没被召回 + 过期」的 auto-* 记忆；手写记忆只报告不自动动。
+   * auto-* 是 `distillFromSession` 的产物（每次会话各写一条），是可安全淘汰的膨胀源；
+   * 用户手写进 candidates 待人工确认。
+   */
+  gc(): { archived: string[]; candidates: string[] } {
+    const archived: string[] = []
+    const candidates: string[] = []
+    const now = Date.now()
+
+    for (const [name, entry] of this.memories) {
+      const recallCount = this.recallStats.get(name)?.recallCount ?? 0
+      const age = now - entry.updatedAt.getTime()
+      if (recallCount > 0 || age <= GC_STALE_MS) continue
+
+      if (name.startsWith(AUTO_PREFIX)) {
+        this.archive(name, entry)
+        archived.push(name)
+      } else {
+        candidates.push(name)
+      }
+    }
+
+    return { archived, candidates }
+  }
+
+  /** 把一条记忆移到 archive/ 子目录并从内存/索引移除。loadAll 不递归，故天然不再加载。 */
+  private archive(name: string, entry: MemoryEntry): void {
+    try {
+      mkdirSync(join(this.memoryDir, 'archive'), { recursive: true })
+      renameSync(entry.filePath, join(this.memoryDir, 'archive', basename(entry.filePath)))
+    } catch {
+      // best-effort：rename 失败（文件已不在等）也不阻塞淘汰
+    }
+    this.memories.delete(name)
+    this.linkGraph.delete(name)
+    this.recallStats.delete(name)
+    this.saveLinkGraph()
+    this.saveRecallStats()
+    this.updateIndex()
+  }
+
+  /**
+   * 会话记忆合并：把 auto-* 聚簇成持久化 lesson-*（重叠的合并、去重，删原 auto-*）。
+   * 手动触发（/memory consolidate），不后台自动跑。返回创建的 lesson 数与删除的 auto-* 数。
+   */
+  consolidateAutoMemories(): { merged: number; removed: number } {
+    const autoEntries = [...this.memories.values()].filter((e) => e.name.startsWith(AUTO_PREFIX))
+    if (autoEntries.length === 0) return { merged: 0, removed: 0 }
+
+    // 贪心聚簇：与簇代表（首条）余弦 > 阈值则归入，否则新开一簇。
+    const clusters: MemoryEntry[][] = []
+    for (const entry of autoEntries) {
+      let placed = false
+      for (const cluster of clusters) {
+        const sim = similarities(cluster[0]!.content, [entry.content])[0] ?? 0
+        if (sim > CONSOLIDATE_THRESHOLD) {
+          cluster.push(entry)
+          placed = true
+          break
+        }
+      }
+      if (!placed) clusters.push([entry])
+    }
+
+    let merged = 0
+    let removed = 0
+    for (const cluster of clusters) {
+      const name = `lesson-${stableHash(
+        cluster
+          .map((e) => e.name)
+          .sort()
+          .join('|'),
+      )}`
+      const content = cluster.map((e) => e.content).join('\n\n')
+      const relevance = [...new Set(cluster.flatMap((e) => e.metadata.relevance))].slice(0, 10)
+      this.write(name, content, { type: 'feedback', relevance })
+      merged++
+      for (const member of cluster) {
+        this.delete(member.name)
+        removed++
+      }
+    }
+
+    return { merged, removed }
+  }
+
+  buildSystemReminder(context: string, maxTokens?: number, grounding?: string): string {
     // Adaptive budget: 5% of context window, min 5000, max 75000
     const effectiveMaxTokens =
       maxTokens ?? Math.max(5000, Math.min(75000, Math.floor(this.contextMaxTokens * 0.05)))
-    const relevant = this.recall(context, 10)
+    const relevant = this.recall(context, 10, grounding)
     if (relevant.length === 0) return ''
 
     const lines: string[] = ['<system-reminder>', 'Relevant memories from previous sessions:']
@@ -387,6 +530,49 @@ export class MemoryManager {
     } catch {
       // corrupt file — rebuild from source
       return false
+    }
+  }
+
+  /** 记录召回（质量信号）：被召回的条目 recallCount+1。写入 sidecar，不改记忆文件本身。 */
+  private recordRecall(names: string[]): void {
+    if (names.length === 0) return
+    const now = new Date().toISOString()
+    for (const name of names) {
+      const stats = this.recallStats.get(name)
+      if (stats) {
+        stats.recallCount++
+        stats.lastRecalledAt = now
+      } else {
+        this.recallStats.set(name, { recallCount: 1, lastRecalledAt: now })
+      }
+    }
+    this.saveRecallStats()
+  }
+
+  private saveRecallStats(): void {
+    const obj: Record<string, { recallCount: number; lastRecalledAt: string }> = {}
+    for (const [k, v] of this.recallStats) obj[k] = v
+    try {
+      writeFileSync(join(this.memoryDir, RECALL_STATS_FILE), JSON.stringify(obj, null, 2), 'utf-8')
+    } catch {
+      // best-effort — never block on stats write
+    }
+  }
+
+  private loadRecallStats(): void {
+    const path = join(this.memoryDir, RECALL_STATS_FILE)
+    if (!existsSync(path)) return
+    try {
+      const raw = JSON.parse(readFileSync(path, 'utf-8'))
+      for (const [k, v] of Object.entries(raw)) {
+        const rec = v as { recallCount?: number; lastRecalledAt?: string }
+        this.recallStats.set(k, {
+          recallCount: rec.recallCount ?? 0,
+          lastRecalledAt: rec.lastRecalledAt ?? '',
+        })
+      }
+    } catch {
+      // corrupt file — ignore
     }
   }
 

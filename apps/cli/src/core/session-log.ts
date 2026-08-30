@@ -2,6 +2,7 @@ import { appendFileSync, readFileSync, mkdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import type { Message, ToolUseContent, ToolResultContent, ToolResult } from '../shared/types'
+import type { CheckerDecision } from './post-flight-checker'
 
 export type SessionEvent =
   | {
@@ -20,6 +21,7 @@ export type SessionEvent =
   | { type: 'context/inject'; at: number; source: string; text: string }
   | { type: 'compaction/summary'; at: number; summary: string; replacedCount: number }
   | { type: 'compaction/rewrite'; at: number; messages: Message[] }
+  | { type: 'checker/decision'; at: number; toolName: string; decision: CheckerDecision }
 
 export function messageToEvents(msg: Message, at = 0): SessionEvent[] {
   if (msg.role === 'user') {
@@ -94,7 +96,7 @@ export function deriveMessages(events: SessionEvent[]): Message[] {
       // 快照替换：整个投影重建（微压缩/截断等结构性编辑的字节级复现）
       out = structuredClone(e.messages)
     }
-    // 'session/start' → 无消息
+    // 'session/start' / 'checker/decision' → 无消息（决策仅记录证据，不进投影，保字节级可逆）
   }
   return out
 }

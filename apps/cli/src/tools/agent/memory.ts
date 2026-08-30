@@ -3,6 +3,8 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import type { ToolDefinition } from '../../shared/index.ts'
 import { MemoryManager } from '../../core/memory/memory-manager'
+import { renderWorkingState } from '../../core/working-memory'
+import { getTasks } from '../exec/task'
 
 const MEMORY_DIR = join(homedir(), '.mipham', 'memory')
 
@@ -58,7 +60,9 @@ export const memoryTool: ToolDefinition = {
       if (!query) return { success: false, content: '', error: 'query is required' }
       const mm = new MemoryManager(MEMORY_DIR)
       mm.loadAll()
-      const results = mm.recall(query, 10)
+      // 状态接地（治「前存后忘」）：除了精确匹配 query，还带上「当前未完成任务」相关的记忆。
+      const grounding = renderWorkingState(getTasks())
+      const results = mm.recall(query, 10, grounding)
       if (results.length === 0) return { success: true, content: '(no matching memories)' }
       const lines = results.map((entry) => {
         const snippet = entry.content.replace(/\n+/g, ' ').trim().slice(0, 140)

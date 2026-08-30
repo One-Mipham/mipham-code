@@ -162,6 +162,44 @@ describe('runCrsiModification', () => {
     expect(result.phase).toBe('passed')
     expect(hasPending()).toBe(true)
   })
+
+  it('anchor regression rejects even when aggregate score does not drop', async () => {
+    const sandbox = new CrsiSandbox()
+    vi.spyOn(sandbox, 'runTests').mockReturnValue({
+      passed: true,
+      totalTests: 0,
+      failedTests: 0,
+      output: '',
+    })
+    const result = await runCrsiModification(
+      {
+        description: 'anchor-break',
+        filePath: WORKTREE_FILE,
+        newContent: '{}',
+        blastRadius: [WORKTREE_FILE],
+      },
+      sandbox,
+      {
+        rewardFn: {
+          name: 'anchor-test',
+          description: 'test',
+          evaluate: () => ({
+            total: 2,
+            passed: 1,
+            score: 50,
+            failures: [],
+            results: [
+              { id: 'constitution-facets', description: 'x', passed: false, role: 'anchor' },
+              { id: 'other', description: 'x', passed: true },
+            ],
+          }),
+        },
+      },
+    )
+    expect(result.phase).toBe('failed')
+    expect(result.error).toContain('Anchor regression')
+    expect(hasPending()).toBe(false)
+  })
 })
 
 describe('pending registry', () => {

@@ -29,6 +29,7 @@ import { CrsiProvenanceBridge } from '../agent/crsi-provenance-bridge.js'
 import { McpClient } from '../mcp/client.js'
 import { ErrorSignatureDB } from './error-signature-db.js'
 import { PreFlightChecker } from './preflight-checker.js'
+import { PostFlightChecker, createDefaultPostFlightChecker } from './post-flight-checker'
 import { AutoCorrector } from './auto-corrector.js'
 import { MetaRuleEngine } from './meta-rule-engine.js'
 import { DreamEngine } from './dream-engine.js'
@@ -83,6 +84,7 @@ export class QueryEngine {
   private _autoMemory?: AutoMemoryEngine
   private _errorSignatureDB?: ErrorSignatureDB
   private _preflightChecker?: PreFlightChecker
+  private _postFlightChecker?: PostFlightChecker
   private _autoCorrector?: AutoCorrector
   private _metaRuleEngine?: MetaRuleEngine
   private _dreamEngine?: DreamEngine
@@ -1243,6 +1245,21 @@ export class QueryEngine {
       // Accumulate graft token savings from "[graft] tokens saved ≈ N" footers
       accumulateGraftSavings(result.content)
 
+      // ── PostFlightChecker — 事后验证「观察是否支撑变更」（Recuris C 组件）──
+      // 默认 no-checker 静默、rejected 只记录不阻塞（第一阶段只产证据，不强制拦截）。
+      const decision = this.getPostFlightChecker().check(name, {
+        params: effectiveParams,
+        result,
+      })
+      if (decision.verdict !== 'no-checker') {
+        this.context.getLog()?.append({
+          type: 'checker/decision',
+          at: Date.now(),
+          toolName: name,
+          decision,
+        })
+      }
+
       return result
     } catch (err) {
       // P1-3: Trigger PostToolUseFailure hook on tool execution errors
@@ -1486,6 +1503,17 @@ export class QueryEngine {
       )
     }
     return this._preflightChecker
+  }
+
+  /**
+   * Recuris C 组件：Lazily-initialized PostFlightChecker singleton。
+   * 事后验证「工具/env 观察是否支撑变更」，与 PreFlightChecker（事前拦截）互补。
+   */
+  getPostFlightChecker(): PostFlightChecker {
+    if (!this._postFlightChecker) {
+      this._postFlightChecker = createDefaultPostFlightChecker()
+    }
+    return this._postFlightChecker
   }
 
   /**

@@ -20,6 +20,9 @@ import { homedir } from 'node:os'
 /** 教训文件（相对仓库根）。预建，沙箱只能改已存在文件。 */
 export const LESSONS_FILE = 'apps/cli/crsi-lessons.md'
 
+/** 组件归因（修复决策，非因果断言）：失败最可能被哪个记忆组件的局部干预修复。 */
+export type MemoryComponent = 'experiential' | 'working' | 'invocation' | 'checker'
+
 /** 归一化的教训信号（insight 与 meta-rule 的公共面）。 */
 export interface CrsiSignal {
   category: string
@@ -27,6 +30,12 @@ export interface CrsiSignal {
   severity?: string
   suggestion: string
   evidence: string[]
+  /**
+   * 组件归因：该失败最可能被哪个记忆组件的局部干预修复。
+   * 缺省 experiential（现状 = 教训/技能/受管理规则，全属 E）。
+   * working/invocation/checker 待 ②③ 落地后由对应信号源产出。
+   */
+  component?: MemoryComponent
 }
 
 const SEVERITY_RANK: Record<string, number> = { critical: 0, warning: 1, info: 2 }
@@ -76,6 +85,7 @@ export function buildLessonContent(
     `## ${signal.category}: ${signal.title}`,
     '',
     `- 建议: ${signal.suggestion}`,
+    `- 组件: ${signal.component ?? 'experiential'}`,
   ]
   if (signal.severity) lines.push(`- 严重度: ${signal.severity}`)
   lines.push(`- 生成时间: ${timestamp}`, `- 来源: ${source}`, '', '### 证据')
@@ -188,6 +198,9 @@ export function managedRuleId(signal: CrsiSignal): string {
  * 只支持 timeout / tool-params 两类确定性 category，其余返回 null。
  */
 export function renderManagedRuleSource(signal: CrsiSignal): string | null {
+  // managed-rule 是「行为固化」，只处理 experiential 组件（timeout/tool-params 本质是 E）。
+  // working/invocation/checker 的修复走各自组件路径，不进这里。
+  if ((signal.component ?? 'experiential') !== 'experiential') return null
   const id = managedRuleId(signal)
   const warning = signal.suggestion || `CRSI 自动固化: ${signal.title}`
 

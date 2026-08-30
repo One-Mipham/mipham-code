@@ -46,6 +46,7 @@ import {
 import { NPM_UPDATE_COMMAND, PACKAGE_VERSION, COAUTHOR_TRAILER } from '../shared/index.ts'
 import { getPreference } from '../config/preferences'
 import { loadCrossSessionConfig } from '../config/loader'
+import { getMemoryManager } from '../core/memory/memory-loader'
 import { stripIndent } from './strip-indent.js'
 import { createT } from '../i18n-core/t'
 import type { TranslationMap } from '../i18n-core/types'
@@ -3766,13 +3767,54 @@ const saveCmd: CommandHandler = (ctx, args) => {
 // Memory Management
 // ═══════════════════════════════════════════════════════════════
 
-const memoryCmd: CommandHandler = async (ctx) => {
+const memoryCmd: CommandHandler = async (ctx, args) => {
   const t = resolveT(ctx)
   const { existsSync, readdirSync, readFileSync, statSync } = await import('node:fs')
   const { join } = await import('node:path')
 
   const home = process.env.HOME || '~'
   const memoryDir = join(home, '.mipham', 'memory')
+
+  // /memory gc — 记忆卫生：归档「0 召回 + 过期」的 auto-* 记忆（手写只报告）
+  if (args[0]?.toLowerCase() === 'gc') {
+    const mm = getMemoryManager()
+    const { archived, candidates } = mm.gc()
+    const lines: string[] = [t('commands.memories.gc_title'), '']
+    if (archived.length === 0 && candidates.length === 0) {
+      lines.push(t('commands.memories.gc_none'))
+    } else {
+      if (archived.length > 0) {
+        lines.push(t('commands.memories.gc_archived', { count: String(archived.length) }))
+        lines.push(...archived.map((n) => `  - ${n}`))
+        lines.push('')
+      }
+      if (candidates.length > 0) {
+        lines.push(t('commands.memories.gc_candidates', { count: String(candidates.length) }))
+        lines.push(...candidates.map((n) => `  - ${n}`))
+        lines.push('')
+      }
+      lines.push(t('commands.memories.gc_done'))
+    }
+    return { content: lines.join('\n') }
+  }
+
+  // /memory consolidate — 会话记忆合并：把 auto-* 聚簇成持久化 lesson-*
+  if (args[0]?.toLowerCase() === 'consolidate') {
+    const mm = getMemoryManager()
+    const { merged, removed } = mm.consolidateAutoMemories()
+    const lines: string[] = [t('commands.memories.consolidate_title'), '']
+    if (removed === 0) {
+      lines.push(t('commands.memories.consolidate_none'))
+    } else {
+      lines.push(
+        t('commands.memories.consolidate_result', {
+          removed: String(removed),
+          merged: String(merged),
+        }),
+      )
+    }
+    return { content: lines.join('\n') }
+  }
 
   if (!existsSync(memoryDir)) {
     return { content: t('commands.memories.no_memories') }

@@ -2,7 +2,7 @@
 // 统一「给一个 policy 打分」：机制哨兵（runEval）与任务表现（runTaskPerformance）
 // 都 conform 成 RewardFn，自改进环的 verify 阶段可对任意奖励源比分数、判退化。
 import type { Llm } from '../providers/llm'
-import { runEval } from './eval-harness'
+import { runEval, type EvalResult } from './eval-harness'
 import { runTaskPerformance } from './task-performance'
 
 /** 奖励函数统一输出的「分数」形状——所有 RewardFn 的 evaluate 都产出它。 */
@@ -11,6 +11,8 @@ export interface ScoreReport {
   passed: number
   score: number // 0-100
   failures: string[]
+  /** 逐契约结果（机制哨兵 runEval 天然携带；任务表现等 reward 可缺省）。 */
+  results?: EvalResult[]
 }
 
 /** 奖励函数（reward function = policy→feedback）：一个具名、可替换的打分器。 */

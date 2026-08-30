@@ -2,7 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { join } from 'node:path'
 import { rmSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { runEval, appendEvalScore, getLastEvalScore } from '../../src/core/eval-harness'
+import {
+  runEval,
+  appendEvalScore,
+  getLastEvalScore,
+  regressedAnchors,
+} from '../../src/core/eval-harness'
 
 // Isolate the rewards log from the real ~/.mipham.
 vi.mock('node:os', async (importOriginal) => {
@@ -21,8 +26,8 @@ beforeEach(() => {
 describe('runEval', () => {
   it('reports a full score after managed rules fill the behavior gaps', () => {
     const report = runEval()
-    expect(report.total).toBe(33)
-    expect(report.passed).toBe(33)
+    expect(report.total).toBe(36)
+    expect(report.passed).toBe(36)
     expect(report.score).toBe(100)
     // 8 个行为缺口全部翻转 PASS（固化 managed tool-params 规则后），无任何 FAIL
     expect(report.failures).toHaveLength(0)
@@ -64,6 +69,35 @@ describe('runEval', () => {
     expect(ids).toContain('behavior-rm-rf')
     expect(ids).toContain('behavior-leak-anthropic')
     expect(ids).toContain('behavior-leak-jwt')
+  })
+
+  it('includes anchor-gate self-check contract (all anchors green)', () => {
+    const report = runEval()
+    const contract = report.results.find((r) => r.id === 'anchor-gate')
+    expect(contract).toBeDefined()
+    expect(contract!.passed).toBe(true)
+    // 所有 anchor 契约当前全绿，无任何回退。
+    expect(regressedAnchors(report.results)).toEqual([])
+  })
+})
+
+describe('regressedAnchors', () => {
+  it('returns anchor ids that flipped to FAIL, ignoring target/neutral', () => {
+    const results = [
+      { id: 'anchor-a', description: 'x', passed: false, role: 'anchor' as const },
+      { id: 'anchor-b', description: 'x', passed: true, role: 'anchor' as const },
+      { id: 'target-a', description: 'x', passed: false, role: 'target' as const },
+      { id: 'neutral-a', description: 'x', passed: false },
+    ]
+    expect(regressedAnchors(results)).toEqual(['anchor-a'])
+  })
+
+  it('returns empty when all anchors pass', () => {
+    const results = [
+      { id: 'anchor-a', description: 'x', passed: true, role: 'anchor' as const },
+      { id: 'target-a', description: 'x', passed: false, role: 'target' as const },
+    ]
+    expect(regressedAnchors(results)).toEqual([])
   })
 })
 

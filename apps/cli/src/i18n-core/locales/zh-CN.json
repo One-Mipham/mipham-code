@@ -407,7 +407,15 @@
       "error": "─ 记忆 ─\n\n无法读取记忆目录。",
       "location": "位置: {path}",
       "total": "总计:    {count} 条记忆",
-      "footer": "AI 使用记忆提供跨会话的个性化上下文。\n~/.mipham/memory/ 中每个文件代表一条已记住的事实或偏好。"
+      "footer": "AI 使用记忆提供跨会话的个性化上下文。\n~/.mipham/memory/ 中每个文件代表一条已记住的事实或偏好。",
+      "gc_title": "─ 记忆 GC ─",
+      "gc_none": "无需归档。所有 auto-* 记忆要么较新、要么已被召回。",
+      "gc_archived": "已归档（{count} 条）:",
+      "gc_candidates": "待人工确认（{count} 条）:",
+      "gc_done": "完成。归档文件已移到 ~/.mipham/memory/archive/",
+      "consolidate_title": "─ 记忆合并 ─",
+      "consolidate_none": "没有需要合并的 auto-* 记忆。",
+      "consolidate_result": "合并完成：删除 {removed} 条 auto-*，写入 {merged} 条 lesson-*。"
     },
     "upgrade": {
       "uptodate": "── 升级 Mipham Code ──\n\n当前版本: v{current}\n最新版本:          v{latest}\n\n✓ 已是最新版本。\n\n手动检查: https://www.npmjs.com/package/@miphamai/cli",

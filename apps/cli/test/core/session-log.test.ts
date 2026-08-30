@@ -331,3 +331,44 @@ describe('assistant/chunk stream replay', () => {
     expect(deriveMessages(events)).toEqual([{ role: 'assistant', content: 'Hello' }])
   })
 })
+
+describe('checker/decision (Recuris C 组件)', () => {
+  it('deriveMessages ignores checker/decision — 决策只记证据，不进投影（M1 字节级可逆）', () => {
+    const events: SessionEvent[] = [
+      { type: 'user/message', at: 1, message: { role: 'user', content: 'hi' } },
+      { type: 'assistant/message', at: 2, message: { role: 'assistant', content: 'ok' } },
+      {
+        type: 'checker/decision',
+        at: 3,
+        toolName: 'Bash',
+        decision: {
+          verdict: 'rejected',
+          checkerId: 'bash-exit',
+          reason: 'post-condition failed (bash-exit)',
+        },
+      },
+      { type: 'assistant/message', at: 4, message: { role: 'assistant', content: 'done' } },
+    ]
+    expect(deriveMessages(events)).toEqual([
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'ok' },
+      { role: 'assistant', content: 'done' },
+    ])
+  })
+
+  it('assertModelVisible passes when a checker/decision sits between logged messages', () => {
+    const log = new SessionLog('checker-decision-test')
+    log.append({ type: 'user/message', at: 1, message: { role: 'user', content: 'run it' } })
+    log.append({
+      type: 'checker/decision',
+      at: 2,
+      toolName: 'Bash',
+      decision: { verdict: 'supported', checkerId: 'bash-exit' },
+    })
+    log.append({ type: 'assistant/message', at: 3, message: { role: 'assistant', content: 'ran' } })
+    assertModelVisible(log.events(), [
+      { role: 'user', content: 'run it' },
+      { role: 'assistant', content: 'ran' },
+    ])
+  })
+})

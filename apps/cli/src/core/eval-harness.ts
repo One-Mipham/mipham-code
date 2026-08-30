@@ -18,19 +18,30 @@ import { ExperienceRuleEngine } from './rule-engine'
 import { ConstitutionLoader, DEFAULT_CONSTITUTION } from './constitution-loader'
 import { ErrorSignatureDB } from './error-signature-db'
 import { PreFlightChecker } from './preflight-checker'
+import { createDefaultPostFlightChecker } from './post-flight-checker'
 import { RedTeam } from './red-team'
 import { isProtectedPath, validateBlastRadius, PROTECTED_CRITICAL_FILES } from './crsi-sandbox'
-import { produceRuleProposal, MANAGED_RULES_FILE } from './crsi-producer'
+import {
+  produceRuleProposal,
+  MANAGED_RULES_FILE,
+  buildLessonContent,
+  renderManagedRuleSource,
+} from './crsi-producer'
 import type { CrsiSignal } from './crsi-producer'
 import { loadBehaviorTasks, judgeBehaviorTask } from './behavior-tasks'
 
 // ── Types ──
+
+/** 契约角色：anchor = 安全/机制不变量（门强制不许回退）；target = 缺口/覆盖（应被补）。 */
+export type ContractRole = 'anchor' | 'target' | 'neutral'
 
 export interface EvalResult {
   id: string
   description: string
   passed: boolean
   detail?: string
+  /** 契约角色。缺省 neutral。 */
+  role?: ContractRole
 }
 
 export interface EvalReport {
@@ -40,6 +51,29 @@ export interface EvalReport {
   score: number
   results: EvalResult[]
   failures: string[]
+}
+
+/** anchor 契约 id 集合：安全/机制不变量，绝不许回退。门（crsi-modify）强制此集合零回退。 */
+export const ANCHOR_CONTRACT_IDS: ReadonlySet<string> = new Set([
+  'rule-timeout',
+  'rule-git-force',
+  'rule-disabled-skip',
+  'constitution-8-principles',
+  'constitution-facets',
+  'constitution-preamble',
+  'sandbox-protected-constitution',
+  'sandbox-protected-tests',
+  'sandbox-protected-machinery',
+  'protection-completeness',
+  'blast-radius-gate',
+  'red-team-zero-gaps',
+  'producer-rule-shape',
+  'producer-rule-idempotent',
+])
+
+/** 细粒度防回退：返回 role==='anchor' 且已 FAIL 的契约 id。空 = 无 anchor 回退。 */
+export function regressedAnchors(results: EvalResult[]): string[] {
+  return results.filter((r) => r.role === 'anchor' && !r.passed).map((r) => r.id)
 }
 
 // ── Rewards log (path A Phase 1: 奖励信号持久化) ──
@@ -228,6 +262,31 @@ export function runEval(): EvalReport {
       ruleProposal !== null && produceRuleProposal(frozenSignal, ruleProposal.newContent) === null,
   })
 
+  // ── 组件归因（ground truth：缺省 experiential、显式组件透传、非 experiential 不进 managed-rule） ──
+  results.push({
+    id: 'producer-component-tag',
+    description: '组件归因：缺省 experiential、显式组件透传、非 experiential 不进 managed-rule',
+    passed:
+      buildLessonContent(frozenSignal, 't', 'src').includes('- 组件: experiential') &&
+      buildLessonContent({ ...frozenSignal, component: 'checker' }, 't', 'src').includes(
+        '- 组件: checker',
+      ) &&
+      renderManagedRuleSource({ ...frozenSignal, component: 'working' }) === null &&
+      renderManagedRuleSource(frozenSignal) !== null,
+  })
+
+  // ── 事后检查器（ground truth：exit 0 判 supported、exit 非 0 判 rejected） ──
+  const postFlight = createDefaultPostFlightChecker()
+  results.push({
+    id: 'postflight-bash-exit',
+    description: '事后检查器：bash exit 0 判 supported、exit 非 0 判 rejected',
+    passed:
+      postFlight.check('Bash', { params: {}, result: { success: true, content: '' } }).verdict ===
+        'supported' &&
+      postFlight.check('Bash', { params: {}, result: { success: false, content: '', error: 'x' } })
+        .verdict === 'rejected',
+  })
+
   // ── 行为缺口（ground truth：当前无规则覆盖的确定性拦截，如实判 FAIL） ──
   // producer 固化 tool-params 规则后，这些缺口翻转 PASS → 分数上升 =「证明更好」。
   const behaviorGaps: Array<{ id: string; command: string }> = [
@@ -246,14 +305,29 @@ export function runEval(): EvalReport {
       id: gap.id,
       description: `行为缺口未覆盖: ${gap.command}`,
       passed: r.warnings.length > 0,
+      role: 'target',
     })
   }
 
   // ── 行为任务集（ground truth：约束行为效果，确定性无 LLM） ──
   const behaviorTasks = loadBehaviorTasks()
   for (const task of behaviorTasks) {
-    results.push(judgeBehaviorTask(task, ruleEngine))
+    results.push({ ...judgeBehaviorTask(task, ruleEngine), role: 'target' })
   }
+
+  // 角色标注：anchor 走集中清单（门保护面单一真源），target 已在上方循环内联。
+  for (const r of results) {
+    if (ANCHOR_CONTRACT_IDS.has(r.id)) r.role = 'anchor'
+  }
+
+  // anchor 自检（ground truth：所有 anchor 契约必须全绿，否则门拒）。
+  const anchorFailures = results.filter((r) => r.role === 'anchor' && !r.passed).map((r) => r.id)
+  results.push({
+    id: 'anchor-gate',
+    description: '所有 anchor 契约必须全绿（细粒度防回退闸）',
+    passed: anchorFailures.length === 0,
+    ...(anchorFailures.length > 0 ? { detail: `回退的 anchor: ${anchorFailures.join(', ')}` } : {}),
+  })
 
   const passed = results.filter((r) => r.passed).length
   return {

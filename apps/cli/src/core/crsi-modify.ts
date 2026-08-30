@@ -15,7 +15,7 @@
 import { randomUUID } from 'node:crypto'
 import { CrsiSandbox, validateBlastRadius } from './crsi-sandbox'
 import type { CrsiModificationResult } from './crsi-sandbox'
-import { appendEvalScore, getLastEvalScore } from './eval-harness'
+import { appendEvalScore, getLastEvalScore, regressedAnchors } from './eval-harness'
 import { mechanismSentinel, type RewardFn } from './reward-fn'
 
 export interface CrsiProposal {
@@ -102,6 +102,15 @@ export async function runCrsiModification(
   // 默认机制哨兵；可插拔——调用方传 opts.rewardFn 换用其他奖励源（如任务表现）。
   const rewardFn = opts?.rewardFn ?? mechanismSentinel()
   const report = await rewardFn.evaluate()
+  // 细粒度防回退：anchor 契约（安全/机制不变量）任一翻转 PASS→FAIL 即拒，
+  // 即使总分因新增契约而上升也被拦（比「总分不退化」更严格）。
+  const anchors = regressedAnchors(report.results ?? [])
+  if (anchors.length > 0) {
+    sandbox.rollback()
+    applied.phase = 'failed'
+    applied.error = `Anchor regression: ${anchors.join(', ')}`
+    return applied
+  }
   const last = getLastEvalScore(rewardFn.name)
   if (last !== null && report.score < last) {
     sandbox.rollback()
