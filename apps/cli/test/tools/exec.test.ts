@@ -3,6 +3,7 @@ import type { ToolContext } from '../../src/shared'
 import { createBashTool } from '../../src/tools/exec/bash'
 import { gitTool, splitCommand } from '../../src/tools/exec/git'
 import { taskTool } from '../../src/tools/exec/task'
+import { recordToolEvidence, clearEvidenceLog } from '../../src/core/working-memory'
 
 const bashTool = createBashTool()
 
@@ -325,6 +326,29 @@ describe('Task tool execution', () => {
     )
     expect(r.success).toBe(false)
     expect(r.error).toContain('not found')
+  })
+
+  it('软门：无 supported 证据时 completed 标记 unverified 但放行', async () => {
+    clearEvidenceLog()
+    const create = await taskTool.execute({ action: 'create', subject: 'No evidence' }, ctx)
+    const taskId = create.content.match(/#(\d+)/)?.[1] ?? '1'
+    const update = await taskTool.execute({ action: 'update', taskId, status: 'completed' }, ctx)
+    expect(update.success).toBe(true) // 放行（软门）
+    const get = await taskTool.execute({ action: 'get', taskId }, ctx)
+    expect(get.content).toContain('Completion evidence: unverified')
+    clearEvidenceLog()
+  })
+
+  it('有 supported 证据时 completed 标记 supported', async () => {
+    clearEvidenceLog()
+    const create = await taskTool.execute({ action: 'create', subject: 'With evidence' }, ctx)
+    const taskId = create.content.match(/#(\d+)/)?.[1] ?? '1'
+    recordToolEvidence('Bash', { verdict: 'supported', checkerId: 'bash-exit' })
+    const update = await taskTool.execute({ action: 'update', taskId, status: 'completed' }, ctx)
+    expect(update.success).toBe(true)
+    const get = await taskTool.execute({ action: 'get', taskId }, ctx)
+    expect(get.content).toContain('Completion evidence: supported')
+    clearEvidenceLog()
   })
 
   it('errors for unknown action', async () => {

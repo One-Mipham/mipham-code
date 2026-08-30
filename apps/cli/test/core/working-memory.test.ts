@@ -2,7 +2,13 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { renderWorkingState, WorkingMemory } from '../../src/core/working-memory'
+import {
+  renderWorkingState,
+  WorkingMemory,
+  recordToolEvidence,
+  hasSupportedEvidenceSince,
+  clearEvidenceLog,
+} from '../../src/core/working-memory'
 import { MemoryManager } from '../../src/core/memory/memory-manager'
 
 describe('renderWorkingState', () => {
@@ -96,5 +102,34 @@ describe('WorkingMemory (Phase 2 证据接地状态机)', () => {
     wm.setGoal('g', 'updated')
     expect(wm.getGoal('g')!.status).toBe('done')
     expect(wm.getGoal('g')!.content).toBe('updated')
+  })
+
+  it('syncFromTasks 从 TaskList 重建状态：pending/in_progress→pending，completed→done，failed→blocked，deleted 跳过', () => {
+    const wm = new WorkingMemory()
+    wm.syncFromTasks([
+      { id: '1', subject: 'a', status: 'in_progress' },
+      { id: '2', subject: 'b', status: 'completed' },
+      { id: '3', subject: 'c', status: 'failed' },
+      { id: '4', subject: 'd', status: 'deleted' },
+    ])
+    expect(wm.getGoal('1')!.status).toBe('pending')
+    expect(wm.getGoal('2')!.status).toBe('done')
+    expect(wm.getGoal('3')!.status).toBe('blocked')
+    expect(wm.getGoal('4')).toBeUndefined()
+    expect(wm.renderWorkingState()).toContain('[WORKING] done: b')
+    expect(wm.renderWorkingState()).toContain('[WORKING] blocked: c')
+  })
+})
+
+describe('证据账本', () => {
+  it('recordToolEvidence 忽略 no-checker，记录 supported/rejected；hasSupportedEvidenceSince 按时窗判定', () => {
+    clearEvidenceLog()
+    const t0 = Date.now()
+    recordToolEvidence('Bash', { verdict: 'no-checker' }) // 不产证据
+    recordToolEvidence('Bash', { verdict: 'supported', checkerId: 'bash-exit' })
+    expect(hasSupportedEvidenceSince(t0)).toBe(true)
+    expect(hasSupportedEvidenceSince(Date.now() + 1)).toBe(false) // 未来时窗无证据
+    clearEvidenceLog()
+    expect(hasSupportedEvidenceSince(t0)).toBe(false) // 清空后无证据
   })
 })

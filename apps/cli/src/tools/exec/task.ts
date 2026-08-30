@@ -1,4 +1,5 @@
 import type { ToolDefinition } from '../../shared/index.ts'
+import { hasSupportedEvidenceSince } from '../../core/working-memory'
 
 export interface Task {
   id: string
@@ -11,6 +12,8 @@ export interface Task {
   blockedBy: string[]
   owner?: string
   createdAt: string
+  /** 完成证据：completed 时是否有 supported 决策接地（软门，unverified 只标记不阻断）。 */
+  completionEvidence?: 'supported' | 'unverified'
   /** Background task output content (set when a background agent completes). */
   output?: string
   /** Background task error message (set when a background agent fails). */
@@ -218,6 +221,9 @@ export const taskTool: ToolDefinition = {
         `Status: ${task.status}`,
         `Description: ${task.description || '(none)'}`,
       ]
+      if (task.completionEvidence) {
+        lines.push(`Completion evidence: ${task.completionEvidence}`)
+      }
       if (task.activeForm) lines.push(`Active form: ${task.activeForm}`)
       if (task.owner) lines.push(`Owner: ${task.owner}`)
       if (task.blocks.length) lines.push(`Blocks: ${task.blocks.join(', ')}`)
@@ -255,7 +261,16 @@ export const taskTool: ToolDefinition = {
       if (params.subject !== undefined) task.subject = params.subject as string
       if (params.description !== undefined) task.description = params.description as string
       if (params.activeForm !== undefined) task.activeForm = params.activeForm as string
-      if (params.status !== undefined) task.status = params.status as Task['status']
+      if (params.status !== undefined) {
+        task.status = params.status as Task['status']
+        // 完成证据门（软门）：completed 时按「自任务创建以来是否有 supported 决策」标记。
+        // unverified 只标记不阻断（对齐 CRSI「最小干预」）。
+        if (params.status === 'completed') {
+          task.completionEvidence = hasSupportedEvidenceSince(new Date(task.createdAt).getTime())
+            ? 'supported'
+            : 'unverified'
+        }
+      }
       if (params.owner !== undefined) task.owner = params.owner as string
 
       // Merge dependency arrays
@@ -281,10 +296,14 @@ export const taskTool: ToolDefinition = {
       const blockedNote = isBlocked(task)
         ? ` (blocked — waiting on: ${getBlockingIds(task).join(', ')})`
         : ''
+      const unverifiedNote =
+        task.status === 'completed' && task.completionEvidence === 'unverified'
+          ? '\n⚠ completed without verified evidence (no supported tool decision since task start)'
+          : ''
 
       return {
         success: true,
-        content: `Task #${taskId} updated.\n${formatTask(task)}${blockedNote}`,
+        content: `Task #${taskId} updated.\n${formatTask(task)}${blockedNote}${unverifiedNote}`,
       }
     }
 

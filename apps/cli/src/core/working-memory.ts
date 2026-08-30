@@ -43,6 +43,13 @@ export interface GoalState {
   evidence: string[]
 }
 
+/** 从现有任务追踪（Task 工具的 Task 列表）同步的最小结构，避免 import Task 造成循环依赖。 */
+export interface TaskLike {
+  id: string
+  subject: string
+  status: string
+}
+
 export class WorkingMemory {
   private goals = new Map<string, GoalState>()
 
@@ -77,6 +84,18 @@ export class WorkingMemory {
     return this.goals.get(id)
   }
 
+  /** 从现有任务追踪（Task 工具的 Task 列表）重建目标状态——TaskList 是唯一真源。
+   *  pending/in_progress → pending；completed → done；failed → blocked；deleted 跳过。 */
+  syncFromTasks(tasks: ReadonlyArray<TaskLike>): void {
+    this.goals.clear()
+    for (const t of tasks) {
+      if (t.status === 'deleted') continue
+      const status: GoalStatus =
+        t.status === 'completed' ? 'done' : t.status === 'failed' ? 'blocked' : 'pending'
+      this.goals.set(t.id, { id: t.id, content: t.subject, status, evidence: [] })
+    }
+  }
+
   /** 紧凑三态块（检索/系统提示用）；无任何目标时返回空串。 */
   renderWorkingState(): string {
     if (this.goals.size === 0) return ''
@@ -91,4 +110,31 @@ export class WorkingMemory {
       })
       .join('\n')
   }
+}
+
+// ── 证据账本（engine post-flight 后写入；Task 完成门读取） ──
+
+export interface ToolEvidence {
+  toolName: string
+  decision: CheckerDecision
+  at: number
+}
+
+/** 会话级证据账本（对齐 Task 工具的 module-level `tasks` Map，session 生命周期）。 */
+const evidenceLog: ToolEvidence[] = []
+
+/** 记录一次工具事后决策。no-checker 不产证据（忽略）。engine post-flight 后调用。 */
+export function recordToolEvidence(toolName: string, decision: CheckerDecision): void {
+  if (decision.verdict === 'no-checker') return
+  evidenceLog.push({ toolName, decision, at: Date.now() })
+}
+
+/** 某时间点之后是否有 supported 决策（用于任务完成证据门）。 */
+export function hasSupportedEvidenceSince(sinceAt: number): boolean {
+  return evidenceLog.some((e) => e.decision.verdict === 'supported' && e.at >= sinceAt)
+}
+
+/** 测试用：清空证据账本（避免跨测试污染）。 */
+export function clearEvidenceLog(): void {
+  evidenceLog.length = 0
 }

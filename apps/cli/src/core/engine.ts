@@ -30,6 +30,7 @@ import { McpClient } from '../mcp/client.js'
 import { ErrorSignatureDB } from './error-signature-db.js'
 import { PreFlightChecker } from './preflight-checker.js'
 import { PostFlightChecker, createDefaultPostFlightChecker } from './post-flight-checker'
+import { recordToolEvidence } from './working-memory'
 import { AutoCorrector } from './auto-corrector.js'
 import { MetaRuleEngine } from './meta-rule-engine.js'
 import { DreamEngine } from './dream-engine.js'
@@ -1251,6 +1252,8 @@ export class QueryEngine {
         params: effectiveParams,
         result,
       })
+      // 证据账本：supported/rejected 回灌工作记忆（供 Task 完成门读取）
+      recordToolEvidence(name, decision)
       if (decision.verdict !== 'no-checker') {
         this.context.getLog()?.append({
           type: 'checker/decision',
