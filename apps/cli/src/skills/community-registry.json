@@ -77,5 +77,21 @@
     "file": "frontend-design.SKILL.md",
     "category": "Design",
     "author": "Anthropic"
+  },
+  {
+    "name": "grill-me",
+    "description": "A relentless one-question-at-a-time interview that stress-tests your plan or design",
+    "url": "https://github.com/mattpocock/skills",
+    "file": "skills/productivity/grill-me/SKILL.md",
+    "category": "Development",
+    "author": "Matt Pocock"
+  },
+  {
+    "name": "eli5",
+    "description": "Explain any topic like the user knows nothing about it, using an HTML artifact with big pictures and few words",
+    "url": "https://github.com/anthropics/claude-plugins-community",
+    "file": "eli5/skills/eli5/SKILL.md",
+    "category": "Communication",
+    "author": "Anthropic"
   }
 ]
