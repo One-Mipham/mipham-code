@@ -5,13 +5,19 @@
  * from remote sources (GitHub repos, direct URLs).
  */
 
-import { existsSync, mkdirSync, writeFileSync, readdirSync, unlinkSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  writeFileSync,
+  readdirSync,
+  unlinkSync,
+  readFileSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
-import { spawnSync } from 'node:child_process'
-import { URL } from 'node:url'
 import type { MiphamConfig } from '../shared/types.js'
 import communitySkills from './community-registry.json'
+import { readMarketplaces, findSkillInMarketplaces, downloadFile } from './marketplace'
 
 const SKILLS_DIR = join(homedir(), '.mipham', 'skills')
 
@@ -117,17 +123,13 @@ function isMarketplaceAllowed(url: string, config?: MiphamConfig['marketplace'])
  * Clones the repo to a temp directory, copies the skill file(s),
  * and cleans up.
  */
-export function installSkill(
+export async function installSkill(
   skillName: string,
   marketplaceConfig?: MiphamConfig['marketplace'],
-): InstallResult {
+): Promise<InstallResult> {
   const entry = COMMUNITY_SKILLS.find((s) => s.name === skillName)
   if (!entry) {
-    return {
-      success: false,
-      name: skillName,
-      message: `Skill "${skillName}" not found in the registry. Use /browse-skills to see available skills.`,
-    }
+    return installFromMarketplace(skillName, marketplaceConfig)
   }
 
   // Check marketplace restrictions
@@ -165,7 +167,7 @@ export function installSkill(
   try {
     // Download the skill file from GitHub raw content
     const rawUrl = githubRawUrl(entry.url, entry.file || `${skillName}.SKILL.md`)
-    const content = downloadFile(rawUrl)
+    const content = await downloadFile(rawUrl)
 
     // Validate it's a proper skill file (has frontmatter)
     if (!content.includes('---')) {
@@ -194,12 +196,73 @@ export function installSkill(
 }
 
 /**
+ * Install a skill by discovering it across the user's marketplace sources.
+ * Called when the name is not in the built-in community registry.
+ */
+async function installFromMarketplace(
+  skillName: string,
+  marketplaceConfig?: MiphamConfig['marketplace'],
+): Promise<InstallResult> {
+  const sources = readMarketplaces((p) => (existsSync(p) ? readFileSync(p, 'utf-8') : null))
+  const found = await findSkillInMarketplaces(skillName, sources, globalThis.fetch, downloadFile)
+
+  if (!found) {
+    return {
+      success: false,
+      name: skillName,
+      message: `Skill "${skillName}" not found in the registry or any marketplace. Use /browse-skills or /browse-marketplace.`,
+    }
+  }
+  if (!isMarketplaceAllowed(found.rawUrl, marketplaceConfig)) {
+    return {
+      success: false,
+      name: skillName,
+      message: `Skill "${skillName}" is from a blocked or unapproved marketplace: ${found.rawUrl}`,
+    }
+  }
+
+  const destPath = join(SKILLS_DIR, `${found.name}.SKILL.md`)
+  if (existsSync(destPath)) {
+    return {
+      success: false,
+      name: found.name,
+      message: `Skill "${found.name}" is already installed. Remove it first to reinstall.`,
+    }
+  }
+
+  mkdirSync(SKILLS_DIR, { recursive: true })
+  try {
+    const content = await downloadFile(found.rawUrl)
+    if (!content.includes('---')) {
+      return {
+        success: false,
+        name: found.name,
+        message: `Downloaded file does not appear to be a valid skill (missing frontmatter).`,
+      }
+    }
+    writeFileSync(destPath, content, 'utf-8')
+    return {
+      success: true,
+      name: found.name,
+      message: `Skill "${found.name}" installed from ${found.source.owner}/${found.source.repo} to ${destPath}\nRun /reload-skills to activate it.`,
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return {
+      success: false,
+      name: found.name,
+      message: `Failed to install "${found.name}": ${msg}`,
+    }
+  }
+}
+
+/**
  * Install a skill from a direct URL (GitHub raw, gist, or any HTTP URL).
  */
-export function installSkillFromUrl(
+export async function installSkillFromUrl(
   url: string,
   marketplaceConfig?: MiphamConfig['marketplace'],
-): InstallResult {
+): Promise<InstallResult> {
   // Check marketplace restrictions
   if (!isMarketplaceAllowed(url, marketplaceConfig)) {
     return {
@@ -222,7 +285,7 @@ export function installSkillFromUrl(
   mkdirSync(destDir, { recursive: true })
 
   try {
-    const content = downloadFile(url)
+    const content = await downloadFile(url)
 
     if (!content.includes('---')) {
       return {
@@ -287,53 +350,4 @@ export function removeSkill(skillName: string): InstallResult {
 function githubRawUrl(repoUrl: string, file: string): string {
   const base = repoUrl.replace('https://github.com/', 'https://raw.githubusercontent.com/')
   return `${base}/main/${file}`
-}
-
-/** Allowed domains for remote skill installation */
-const ALLOWED_DOMAINS = [
-  'raw.githubusercontent.com',
-  'github.com',
-  'gist.githubusercontent.com',
-  'gitlab.com',
-]
-
-/**
- * Download a file from a URL using curl with spawn (no shell injection).
- * Only allows HTTPS URLs from known safe domains.
- */
-function downloadFile(rawUrl: string): string {
-  let parsed: URL
-  try {
-    parsed = new URL(rawUrl)
-  } catch {
-    throw new Error(`Invalid URL: ${rawUrl}`)
-  }
-
-  // Protocol must be HTTPS
-  if (parsed.protocol !== 'https:') {
-    throw new Error(`Only HTTPS URLs are allowed (got: ${parsed.protocol})`)
-  }
-
-  // Domain must be in allowlist
-  if (!ALLOWED_DOMAINS.some((d) => parsed.hostname === d || parsed.hostname.endsWith('.' + d))) {
-    throw new Error(
-      `Domain not allowed: ${parsed.hostname}. Allowed: ${ALLOWED_DOMAINS.join(', ')}`,
-    )
-  }
-
-  // Use spawnSync with args array — no shell, no injection
-  const result = spawnSync('curl', ['-fsSL', rawUrl], {
-    encoding: 'utf-8',
-    timeout: 15_000,
-    stdio: ['pipe', 'pipe', 'pipe'],
-  })
-
-  if (result.error) {
-    throw new Error(`Failed to download: ${result.error.message}`)
-  }
-  if (result.status !== 0) {
-    throw new Error(`Download failed with status ${result.status}`)
-  }
-
-  return result.stdout
 }

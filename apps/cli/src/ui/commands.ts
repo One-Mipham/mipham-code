@@ -2360,9 +2360,9 @@ const installSkillCmd: CommandHandler = async (ctx, args) => {
   let result: { success: boolean; name: string; message: string }
 
   if (target.startsWith('http://') || target.startsWith('https://')) {
-    result = installSkillFromUrl(target, marketplaceConfig)
+    result = await installSkillFromUrl(target, marketplaceConfig)
   } else {
-    result = installSkill(target, marketplaceConfig)
+    result = await installSkill(target, marketplaceConfig)
   }
 
   return {
@@ -2382,6 +2382,83 @@ const removeSkillCmd: CommandHandler = async (_ctx, args) => {
   return {
     content: result.success ? `✅ ${result.message}` : `❌ ${result.message}`,
   }
+}
+
+const marketplaceCmd: CommandHandler = async (_ctx, args) => {
+  const {
+    readMarketplaces,
+    addMarketplace,
+    removeMarketplace,
+    isValidMarketplaceRef,
+    MARKETPLACES_PATH,
+  } = await import('../skills/marketplace')
+  const { readFileSync, writeFileSync, existsSync, mkdirSync } = await import('node:fs')
+  const { dirname } = await import('node:path')
+
+  const readSources = () =>
+    readMarketplaces((p) => (existsSync(p) ? readFileSync(p, 'utf-8') : null))
+
+  const sub = args[0]
+  const ref = args[1]
+
+  if (!sub || sub === 'list') {
+    const sources = readSources()
+    const lines = ['── Marketplace Sources ──', '']
+    for (const s of sources) lines.push(`  ${s.owner}/${s.repo}`)
+    lines.push(
+      '',
+      'Add:    /marketplace add <owner>/<repo>',
+      'Remove: /marketplace remove <owner>/<repo>',
+    )
+    return { content: lines.join('\n') }
+  }
+
+  if (sub === 'add' || sub === 'remove') {
+    if (!ref) return { content: `Usage: /marketplace ${sub} <owner>/<repo>` }
+    const [owner, repo] = ref.split('/')
+    if (!owner || !repo || !isValidMarketplaceRef(owner, repo)) {
+      return { content: `❌ Invalid marketplace ref "${ref}". Expected <owner>/<repo>.` }
+    }
+    const current = readSources()
+    const result =
+      sub === 'add' ? addMarketplace(current, owner, repo) : removeMarketplace(current, owner, repo)
+    const changed = 'added' in result ? result.added : result.removed
+    try {
+      mkdirSync(dirname(MARKETPLACES_PATH), { recursive: true })
+      writeFileSync(MARKETPLACES_PATH, JSON.stringify(result.sources, null, 2), 'utf-8')
+    } catch (err) {
+      return { content: `❌ Failed to save marketplaces: ${String(err)}` }
+    }
+    if (sub === 'add') {
+      return {
+        content: changed ? `✅ Added ${owner}/${repo}` : `ℹ ${owner}/${repo} already exists`,
+      }
+    }
+    return { content: changed ? `✅ Removed ${owner}/${repo}` : `ℹ ${owner}/${repo} not found` }
+  }
+
+  return { content: 'Usage: /marketplace add|list|remove [owner/repo]' }
+}
+
+const browseMarketplaceCmd: CommandHandler = async (_ctx) => {
+  const { readMarketplaces, discoverSkills, downloadFile } = await import('../skills/marketplace')
+  const { readFileSync, existsSync } = await import('node:fs')
+
+  const sources = readMarketplaces((p) => (existsSync(p) ? readFileSync(p, 'utf-8') : null))
+  const lines = ['── Marketplace Skills ──', '']
+  for (const source of sources) {
+    lines.push(`  ${source.owner}/${source.repo}:`)
+    try {
+      const skills = await discoverSkills(source, globalThis.fetch, downloadFile)
+      if (skills.length === 0) lines.push('    (no skills found)')
+      for (const s of skills) lines.push(`    ${s.name.padEnd(24)} ${s.description}`)
+    } catch {
+      lines.push('    (failed to discover — check network / rate limit)')
+    }
+    lines.push('')
+  }
+  lines.push('Install: /install-skill <name>')
+  return { content: lines.join('\n') }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -4985,6 +5062,8 @@ const commandsListCmd: CommandHandler = () => {
     '/reload-skills': 'Tools & Skills',
     '/browse-skills': 'Tools & Skills',
     '/install-skill': 'Tools & Skills',
+    '/marketplace': 'Tools & Skills',
+    '/browse-marketplace': 'Tools & Skills',
     '/remove-skill': 'Tools & Skills',
     '/mcp': 'Tools & Skills',
     '/plugins': 'Plugins',
@@ -5145,6 +5224,8 @@ registry.set('/skills', skillsCmd)
 registry.set('/reload-skills', reloadSkillsCmd)
 registry.set('/browse-skills', browseSkillsCmd)
 registry.set('/install-skill', installSkillCmd)
+registry.set('/marketplace', marketplaceCmd)
+registry.set('/browse-marketplace', browseMarketplaceCmd)
 registry.set('/remove-skill', removeSkillCmd)
 registry.set('/plugins', pluginsCmd)
 registry.set('/browse-plugins', browsePluginsCmd)
@@ -5331,6 +5412,8 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/reload-skills': 'Reload all skills',
   '/browse-skills': 'Browse community skill marketplace',
   '/install-skill': 'Install a skill by name or URL',
+  '/marketplace': 'Manage marketplace sources (add/list/remove)',
+  '/browse-marketplace': 'Browse skills across all marketplace sources',
   '/remove-skill': 'Remove an installed skill',
   '/mcp': 'MCP server status',
   '/plugins': 'List installed plugins',
