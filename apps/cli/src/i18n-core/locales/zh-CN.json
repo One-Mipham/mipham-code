@@ -579,7 +579,7 @@
     },
     "hooks": {
       "title": "── 钩子 ──",
-      "no_hooks": "── 钩子 ──\n\n未配置钩子。\n\n在 .mipham/hooks/ 中创建钩子脚本:\n  pre-tool-use.sh   — 在每次工具执行前运行\n  post-tool-use.sh  — 在每次工具执行后运行\n  stop.sh           — 会话结束时运行\n\n使用 /loop init 初始化钩子目录。",
+      "no_hooks": "── 钩子 ──\n\n未配置钩子。\n\n在 .mipham/settings.json 的 hooks 段配置钩子:\n  PreToolUse   — 工具执行前\n  PostToolUse  — 工具执行后\n  Stop         — 会话结束\n\n命令钩子从 stdin 读 JSON，exit 2 拦截（stderr 作理由）。\n使用 /loop init 初始化 settings.json。",
       "location": "位置: {path}",
       "found": "找到 {count} 个钩子。",
       "error": "── 钩子 ──\n\n无法读取钩子目录。"

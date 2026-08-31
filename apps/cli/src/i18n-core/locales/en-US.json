@@ -579,7 +579,7 @@
     },
     "hooks": {
       "title": "── Hooks ──",
-      "no_hooks": "── Hooks ──\n\nNo hooks configured.\n\nCreate hook scripts in .mipham/hooks/:\n  pre-tool-use.sh   — runs before each tool\n  post-tool-use.sh  — runs after each tool\n  stop.sh           — runs when session ends\n\nUse /loop init to scaffold hooks directory.",
+      "no_hooks": "── Hooks ──\n\nNo hooks configured.\n\nConfigure hooks in .mipham/settings.json under the hooks section:\n  PreToolUse   — before each tool\n  PostToolUse  — after each tool\n  Stop         — on session end\n\nCommand hooks read JSON from stdin; exit 2 blocks (stderr as reason).\nUse /loop init to scaffold settings.json.",
       "location": "Location: {path}",
       "found": "{count} hook(s) found.",
       "error": "── Hooks ──\n\nCould not read hooks directory."

@@ -64,10 +64,6 @@ function writeTemplate(
  * ├── .mipham/
  * │   ├── CLAUDE.md
  * │   ├── settings.json
- * │   ├── hooks/
- * │   │   ├── pre-tool-use.sh
- * │   │   ├── post-tool-use.sh
- * │   │   └── stop.sh
  * │   ├── agents/
  * │   │   └── verifier.md
  * │   └── skills/
@@ -102,13 +98,6 @@ export function scaffoldLoopKit(basePath: string): ScaffoldResult {
 
   // ── .mipham/settings.json ──
   writeTemplate(join(miphamDir, 'settings.json'), TEMPLATES.settingsJson, false, created, skipped)
-
-  // ── .mipham/hooks/ ──
-  const hooksDir = join(miphamDir, 'hooks')
-  ensureDir(hooksDir, created, skipped)
-  writeTemplate(join(hooksDir, 'pre-tool-use.sh'), TEMPLATES.preToolUse, true, created, skipped)
-  writeTemplate(join(hooksDir, 'post-tool-use.sh'), TEMPLATES.postToolUse, true, created, skipped)
-  writeTemplate(join(hooksDir, 'stop.sh'), TEMPLATES.stopHook, true, created, skipped)
 
   // ── .mipham/agents/ ──
   const agentsDir = join(miphamDir, 'agents')
@@ -180,7 +169,20 @@ const TEMPLATES = {
           deny: [],
         },
         hooks: {
-          PreToolUse: [],
+          // 示例：PreToolUse 拦截 Bash。脚本从 stdin 读 JSON（tool_name/tool_input），
+          // 输出 hookSpecificOutput JSON 决定 allow/deny；exit 2 = 拦截（stderr 作理由）。
+          PreToolUse: [
+            {
+              matcher: 'Bash',
+              hooks: [
+                {
+                  type: 'command',
+                  command: 'your-hook-script.sh',
+                  timeout: 60,
+                },
+              ],
+            },
+          ],
           PostToolUse: [],
           Stop: [],
           SessionStart: [],
@@ -191,37 +193,6 @@ const TEMPLATES = {
       null,
       2,
     ) + '\n',
-
-  preToolUse: `#!/bin/bash
-# PreToolUse hook — runs before each tool execution.
-# Tool name passed as \$1, input JSON as \$2.
-# Exit non-zero to block the tool.
-# Write JSON to stdout to modify the tool input.
-
-TOOL_NAME="\$1"
-TOOL_INPUT="\$2"
-
-echo "{\\"decision\\": \\"allow\\"}" >&2
-exit 0
-`,
-
-  postToolUse: `#!/bin/bash
-# PostToolUse hook — runs after each tool execution.
-# Tool name passed as \$1, result JSON as \$2.
-
-TOOL_NAME="\$1"
-TOOL_RESULT="\$2"
-
-exit 0
-`,
-
-  stopHook: `#!/bin/bash
-# Stop hook — runs when the AI session ends.
-# Use for cleanup, notifications, or saving state.
-
-echo "Session ended at \$(date)" >&2
-exit 0
-`,
 
   verifierAgent: `# Verifier Agent
 
@@ -290,7 +261,7 @@ Verify staged changes against coding standards, security rules, and best practic
 
 ## Structure
 
-- \`.mipham/\` — Mipham Code configuration (CLAUDE.md, settings, hooks, agents, skills)
+- \`.mipham/\` — Mipham Code configuration (CLAUDE.md, settings.json, agents, skills)
 - \`.mcp.json\` — MCP server configuration
 - \`MEMORY.md\` — AI persistent memory
 - \`run.sh\` — Project launcher

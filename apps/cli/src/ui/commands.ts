@@ -3616,42 +3616,44 @@ const cdCmd: CommandHandler = async (ctx, args) => {
 
 const hooksCmd: CommandHandler = async (ctx) => {
   const t = resolveT(ctx)
-  const { existsSync, readdirSync } = await import('node:fs')
-  const { join } = await import('node:path')
-  const cwd = process.cwd()
-  const hooksDir = join(cwd, '.mipham', 'hooks')
+  const { loadSettingsJson } = await import('../config/loader')
+  const settingsJson = loadSettingsJson(process.cwd())
 
-  if (!existsSync(hooksDir)) {
+  const hooks = settingsJson.hooks as Record<
+    string,
+    Array<{ matcher?: string; hooks: Array<{ type: string; command?: string }> }>
+  >
+
+  const configured = Object.entries(hooks).filter(
+    ([, entries]) => Array.isArray(entries) && entries.length > 0,
+  )
+
+  if (configured.length === 0) {
     return { content: t('commands.hooks.no_hooks') }
   }
 
-  try {
-    const files = readdirSync(hooksDir).filter((f) => f.endsWith('.sh'))
-    const lines: string[] = [
-      t('commands.hooks.title'),
-      '',
-      t('commands.hooks.location', { path: hooksDir }),
-      '',
-    ]
+  const lines: string[] = [
+    t('commands.hooks.title'),
+    '',
+    t('commands.hooks.location', { path: '.mipham/settings.json' }),
+    '',
+  ]
 
-    for (const f of files) {
-      try {
-        const stat = (await import('node:fs')).statSync(join(hooksDir, f))
-        const isExec = (stat.mode & 0o111) !== 0
-        lines.push(
-          `  ${isExec ? '✅' : '⚠️'} ${f}${isExec ? '' : ' (not executable — run chmod +x)'}`,
-        )
-      } catch {
-        lines.push(`  📄 ${f}`)
+  let count = 0
+  for (const [eventName, entries] of configured) {
+    for (const entry of entries) {
+      for (const hook of entry.hooks) {
+        count++
+        const matcher = entry.matcher || '*'
+        const cmd = hook.type === 'command' && hook.command ? hook.command : hook.type
+        lines.push(`  ${eventName} [${matcher}] → ${cmd}`)
       }
     }
-
-    lines.push('')
-    lines.push(t('commands.hooks.found', { count: String(files.length) }))
-    return { content: lines.join('\n') }
-  } catch {
-    return { content: t('commands.hooks.error') }
   }
+
+  lines.push('')
+  lines.push(t('commands.hooks.found', { count: String(count) }))
+  return { content: lines.join('\n') }
 }
 
 const hooksHealthCmd: CommandHandler = (ctx) => {
@@ -5496,7 +5498,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/stats': 'Show session usage statistics',
   '/summary': 'Generate session summary',
   '/cd': 'Change session working directory',
-  '/hooks': 'Manage lifecycle hook scripts',
+  '/hooks': 'List configured hooks from settings.json',
   '/hooks health': 'Check hook health — see failures, disabled hooks, recovery status',
   '/hooks enable': 'Manually re-enable a hook that was auto-disabled after repeated failures',
   '/batch': 'Apply changes across multiple files',
