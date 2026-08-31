@@ -622,7 +622,12 @@
       "cache_clean": "✓ no corrupt cache lines",
       "cache_found": "⚠ {path}: {count} corrupt line(s)",
       "cache_cleaned": "✓ cleaned {path}: removed {count} line(s)",
-      "cache_hint": "Run /fix cache --apply to remove corrupt lines"
+      "cache_hint": "Run /fix cache --apply to remove corrupt lines",
+      "test_usage": "Usage: /fix test <test-file> [--apply]\n\nLLM-driven repair of a failing test (test frozen, source only). Dry-run by default; --apply writes the fix.",
+      "test_no_llm": "No LLM available in this session — cannot generate a fix.",
+      "test_fixed": "✓ fixed {test} (source {source}, {attempts} attempt(s))",
+      "test_failed": "✗ could not fix {test}: {detail}",
+      "test_hint": "Run /fix test <file> --apply to write the fix."
     },
     "plugins": {
       "unavailable": "PluginManager not available in this session.",

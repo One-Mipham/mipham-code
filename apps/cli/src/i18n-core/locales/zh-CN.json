@@ -622,7 +622,12 @@
       "cache_clean": "✓ 缓存无损坏行",
       "cache_found": "⚠ {path}: {count} 行损坏",
       "cache_cleaned": "✓ 已清理 {path}: 移除 {count} 行",
-      "cache_hint": "使用 /fix cache --apply 清理损坏行"
+      "cache_hint": "使用 /fix cache --apply 清理损坏行",
+      "test_usage": "用法: /fix test <测试文件> [--apply]\n\nLLM 自动修复失败测试（测试冻结，只改源码）。默认 dry-run，--apply 落盘。",
+      "test_no_llm": "当前会话无可用 LLM，无法生成修复。",
+      "test_fixed": "✓ 已修复 {test}（源码 {source}，{attempts} 次尝试）",
+      "test_failed": "✗ 未能修复 {test}: {detail}",
+      "test_hint": "使用 /fix test <文件> --apply 落盘修复。"
     },
     "plugins": {
       "unavailable": "当前会话中 PluginManager 不可用。",

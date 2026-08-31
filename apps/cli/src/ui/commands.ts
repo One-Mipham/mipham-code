@@ -15,6 +15,7 @@ import { buildCapabilityReport } from '../core/capability-inventory'
 import { InstructionsLoader } from '../core/instructions'
 import { findDerivableSections, DERIVABLE_HINTS } from '../core/claude-md-audit'
 import { fixDoctor, fixConfig, fixCache, selectRepoClaudeFiles } from '../core/fix'
+import { fixCodeTarget } from '../core/fix-code'
 import { runCrsiModification, approvePending, rejectPending, hasPending } from '../core/crsi-modify'
 import {
   produceCrsiProposal,
@@ -33,7 +34,11 @@ import {
 import { prefilterProposal } from '../core/proposal-guard'
 import { runEval, appendEvalScore } from '../core/eval-harness'
 import { listRewardFns } from '../core/reward-fn'
-import { runTaskPerformance, measureSkillDeltaRepeated } from '../core/task-performance'
+import {
+  runTaskPerformance,
+  measureSkillDeltaRepeated,
+  stripCodeFences,
+} from '../core/task-performance'
 import { randomUUID } from 'node:crypto'
 import {
   buildImprovementReport,
@@ -3190,7 +3195,7 @@ const fixCmd: CommandHandler = async (ctx, args) => {
   const { homedir } = await import('node:os')
   const { parse: parseYaml } = await import('yaml')
 
-  const target = args.find((a) => a === 'doctor' || a === 'config' || a === 'cache')
+  const target = args.find((a) => a === 'doctor' || a === 'config' || a === 'cache' || a === 'test')
   const dryRun = args.includes('--dry-run')
   const apply = args.includes('--apply')
 
@@ -3291,6 +3296,75 @@ const fixCmd: CommandHandler = async (ctx, args) => {
         }
       } else {
         lines.push(t('commands.fix.cache_hint'))
+      }
+    }
+    lines.push('')
+  }
+
+  if (!target || target === 'test') {
+    const testFile = args.find(
+      (a) =>
+        !a.startsWith('--') && a !== 'test' && a !== 'doctor' && a !== 'config' && a !== 'cache',
+    )
+    if (!testFile) {
+      lines.push(t('commands.fix.test_usage'))
+    } else {
+      const llm = ctx.engine.getLlm() ?? ctx.engine.getRegistry()
+      if (!llm) {
+        lines.push(t('commands.fix.test_no_llm'))
+      } else {
+        const { execSync } = await import('node:child_process')
+        const { dirname, resolve } = await import('node:path')
+        const result = await fixCodeTarget(
+          {
+            runVitest: (file) => {
+              try {
+                const output = execSync(`pnpm vitest run '${file}'`, {
+                  cwd: process.cwd(),
+                  encoding: 'utf-8',
+                  stdio: ['ignore', 'pipe', 'pipe'],
+                })
+                return { exitCode: 0, output }
+              } catch (e) {
+                const err = e as { stdout?: string; stderr?: string }
+                return { exitCode: 1, output: `${err.stdout ?? ''}${err.stderr ?? ''}` }
+              }
+            },
+            readFile: readSafe,
+            writeFile: (p, c) => writeFileSync(p, c, 'utf-8'),
+            generateFix: async (prompt) => {
+              let text = ''
+              for await (const chunk of llm.chat({
+                model: '',
+                messages: [{ role: 'user' as const, content: prompt }],
+                temperature: 0,
+              })) {
+                if (chunk.type === 'text' && chunk.content) text += chunk.content
+              }
+              return stripCodeFences(text)
+            },
+            resolveSourceFile: (tf, specifier) => {
+              const base = resolve(dirname(tf), specifier)
+              return /\.[cm]?[jt]sx?$/.test(base) ? base : `${base}.ts`
+            },
+          },
+          testFile,
+          { apply: apply && !dryRun, maxRetries: 3 },
+        )
+        if (result.fixed) {
+          lines.push(
+            t('commands.fix.test_fixed', {
+              test: result.testFile,
+              source: result.sourceFile ?? '-',
+              attempts: String(result.attempts),
+            }),
+          )
+          if (!apply) lines.push(t('commands.fix.test_hint'))
+        } else {
+          lines.push(
+            t('commands.fix.test_failed', { test: result.testFile, detail: result.detail ?? '' }),
+          )
+        }
       }
     }
     lines.push('')
