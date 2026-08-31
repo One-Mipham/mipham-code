@@ -224,3 +224,16 @@
 - 建 issue #22 时，`gh issue create --body "..."` 里「影响面示例」出现 `git config user.name` 字面量，被 `bash.ts` 引入的 `DANGEROUS_GIT_PATTERNS`（`/\bconfig\s+.*user\./`）误判「身份伪造」拦截
 - 根因：`bash.ts` 把针对 git 命令的 `DANGEROUS_GIT_PATTERNS` 应用到**所有** bash 命令文本，`config user.*` 正则命中 body 里的描述性字面量
 - 状态：**未修复（open）**——与教训 #1 `$()` blanket 同源，需「只拦执行意图、不拦描述文本」的修复（如只对 `git ...` 前缀命令应用，或区分命令 vs 参数文本）
+
+## verify-before-build: 对标外部生态前先核实「标准是否真实存在」+「自身是否已实现」
+
+- 建议: 收到「对标 X / 兼容 X 生态」的需求时，动手写码前必须过两道核实：① **外部标准真实性**——查官方文档/真实生态，确认 X 的标准究竟是什么（文件是 .md 还是 .json、确切文件名、schema），禁止凭命名臆测（把「SKILL.md 单文件约定」臆测成「SKILLS.md」、把 settings.json / plugin.json / .mcp.json 臆测成 HOOKS.md / PLUGINS.md / MCP.md）；② **自身现状**——grep/read/graft 查自己是否已实现，禁止凭印象说「我们缺 X」然后从零重复造。两道核实都没做就直接开发 = 先造空中楼阁再返工，白费一整轮。
+- 严重度: critical
+- 生成时间: 2026-08-31
+- 来源: 会话复盘（human + Claude Code，手动沉淀）
+
+### 证据
+
+- 用户要求「兼容 AGENTS.md / SKILLS.md 等生态文件」，Claude 凭臆测发明 SKILLS.md / HOOKS.md / PLUGINS.md / MCP.md 四个 .md「标准」并开发对应读取代码（instructions.ts），用户点破这些 .md 根本不存在——真实生态是 SKILL.md 单文件约定 + settings.json（permissions+hooks）+ plugin.json（.claude-plugin）+ .mcp.json，**全是 JSON 不是 .md**
+- 用户再问「是否对标开发 hooks/plugins/MCP 走 JSON」，Claude 凭印象以为「没做」，读码才发现 executeHook（hooks-executor.ts）、loadHookConfigs（hooks-config.ts）、loadMcpJson（loader.ts）、claude-plugin.ts 早已实现——真正缺的只有 loadHookConfigs 零调用点（没接线到 settings.json 读取）
+- 双重弯路同一根因：① 未核实外部标准真实性 → 开发了不存在的东西；② 未查自身现状 → 差点从零重复造已存在的轮子
