@@ -609,6 +609,21 @@
       "audit_clean": "  ✓ no code-derivable sections found",
       "audit_found": "Add the sections above to the `prompt-exclude` frontmatter to stop sending them to the model."
     },
+    "fix": {
+      "title": "── Fix ──",
+      "dryrun_banner": "[dry-run] preview — no changes written",
+      "doctor_clean": "✓ no code-derivable CLAUDE.md sections to fix",
+      "doctor_fixed": "✓ {path}: added prompt-exclude [{added}]",
+      "config_clean": "✓ config healthy, no disabled hooks",
+      "config_corrupt": "⚠ {path}: config corrupt",
+      "config_restored": "✓ restored config from backup: {path}",
+      "hook_disabled": "⚠ hook disabled: {key}",
+      "hook_reenabled": "✓ re-enabled hook: {key}",
+      "cache_clean": "✓ no corrupt cache lines",
+      "cache_found": "⚠ {path}: {count} corrupt line(s)",
+      "cache_cleaned": "✓ cleaned {path}: removed {count} line(s)",
+      "cache_hint": "Run /fix cache --apply to remove corrupt lines"
+    },
     "plugins": {
       "unavailable": "PluginManager not available in this session.",
       "title": "── Installed Plugins ──",

@@ -609,6 +609,21 @@
       "audit_clean": "  ✓ 未发现可从代码推断的冗余章节",
       "audit_found": "将上述章节加入 `prompt-exclude` frontmatter，可停止发送给模型、节省 token。"
     },
+    "fix": {
+      "title": "── 修复 ──",
+      "dryrun_banner": "[dry-run] 预览模式 — 不落盘",
+      "doctor_clean": "✓ CLAUDE.md 无需要修复的冗余章节",
+      "doctor_fixed": "✓ {path}: 已加 prompt-exclude [{added}]",
+      "config_clean": "✓ 配置无损坏、hooks 无禁用",
+      "config_corrupt": "⚠ {path}: 配置损坏",
+      "config_restored": "✓ 已从备份恢复 config: {path}",
+      "hook_disabled": "⚠ hook 已禁用: {key}",
+      "hook_reenabled": "✓ 已重新启用 hook: {key}",
+      "cache_clean": "✓ 缓存无损坏行",
+      "cache_found": "⚠ {path}: {count} 行损坏",
+      "cache_cleaned": "✓ 已清理 {path}: 移除 {count} 行",
+      "cache_hint": "使用 /fix cache --apply 清理损坏行"
+    },
     "plugins": {
       "unavailable": "当前会话中 PluginManager 不可用。",
       "title": "── 已安装插件 ──",

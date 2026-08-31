@@ -11,12 +11,12 @@ import {
   type CrsiLessonSummary,
 } from './crsi-producer'
 
-interface FrontmatterResult {
+export interface FrontmatterResult {
   data: Record<string, unknown>
   content: string
 }
 
-function parseFrontmatter(raw: string): FrontmatterResult {
+export function parseFrontmatter(raw: string): FrontmatterResult {
   // Strip a leading UTF-8 BOM — otherwise `^---` never matches and a
   // BOM-prefixed file is silently treated as body text (effectively ignored).
   const src = raw.replace(/^\uFEFF/, '')

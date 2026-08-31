@@ -14,6 +14,7 @@ import { McpClient } from '../mcp/client'
 import { buildCapabilityReport } from '../core/capability-inventory'
 import { InstructionsLoader } from '../core/instructions'
 import { findDerivableSections, DERIVABLE_HINTS } from '../core/claude-md-audit'
+import { fixDoctor, fixConfig, fixCache, selectRepoClaudeFiles } from '../core/fix'
 import { runCrsiModification, approvePending, rejectPending, hasPending } from '../core/crsi-modify'
 import {
   produceCrsiProposal,
@@ -45,7 +46,7 @@ import {
 } from '../core/improvement-track'
 import { NPM_UPDATE_COMMAND, PACKAGE_VERSION, COAUTHOR_TRAILER } from '../shared/index.ts'
 import { getPreference } from '../config/preferences'
-import { loadCrossSessionConfig } from '../config/loader'
+import { loadCrossSessionConfig, tryRestoreFromBackup } from '../config/loader'
 import { getMemoryManager } from '../core/memory/memory-loader'
 import { stripIndent } from './strip-indent.js'
 import { createT } from '../i18n-core/t'
@@ -3105,6 +3106,122 @@ const doctorCmd: CommandHandler = async (ctx) => {
   return { content: lines.join('\n') }
 }
 
+const fixCmd: CommandHandler = async (ctx, args) => {
+  const t = resolveT(ctx)
+  const { readFileSync, writeFileSync } = await import('node:fs')
+  const { join } = await import('node:path')
+  const { homedir } = await import('node:os')
+  const { parse: parseYaml } = await import('yaml')
+
+  const target = args.find((a) => a === 'doctor' || a === 'config' || a === 'cache')
+  const dryRun = args.includes('--dry-run')
+  const apply = args.includes('--apply')
+
+  const lines: string[] = [t('commands.fix.title')]
+  if (dryRun) lines.push(t('commands.fix.dryrun_banner'))
+  lines.push('')
+
+  const readSafe = (p: string): string | null => {
+    try {
+      return readFileSync(p, 'utf-8')
+    } catch {
+      return null
+    }
+  }
+
+  if (!target || target === 'doctor') {
+    const loader = new InstructionsLoader()
+    loader.loadAll(process.cwd())
+    const files = selectRepoClaudeFiles(loader.list())
+    const result = fixDoctor(files, {
+      read: readSafe,
+      write: (p, c) => {
+        if (!dryRun) writeFileSync(p, c, 'utf-8')
+      },
+    })
+    if (result.fixed.length === 0) {
+      lines.push(t('commands.fix.doctor_clean'))
+    } else {
+      for (const f of result.fixed) {
+        lines.push(t('commands.fix.doctor_fixed', { path: f.path, added: f.added.join(', ') }))
+      }
+    }
+    lines.push('')
+  }
+
+  if (!target || target === 'config') {
+    const home = homedir()
+    const configPaths = [
+      join(process.cwd(), '.mipham', 'config.yml'),
+      join(home, '.mipham', 'config.yml'),
+    ]
+    const hookEngine = ctx.engine.getHookEngine?.()
+    const result = fixConfig({
+      configPaths,
+      read: readSafe,
+      parseYaml,
+      restore: (p) => tryRestoreFromBackup(p),
+      hookHealth: () =>
+        hookEngine
+          ? hookEngine.getHookHealth().map((h) => ({ key: h.key, disabled: h.health.disabled }))
+          : [],
+      reEnableHook: (k) => (hookEngine ? hookEngine.reEnableHook(k) : false),
+      dryRun,
+    })
+    if (result.corruptConfigs.length === 0 && result.disabledHooks.length === 0) {
+      lines.push(t('commands.fix.config_clean'))
+    } else {
+      for (const p of result.restoredConfigs) {
+        lines.push(t('commands.fix.config_restored', { path: p }))
+      }
+      for (const p of result.corruptConfigs.filter((p) => !result.restoredConfigs.includes(p))) {
+        lines.push(t('commands.fix.config_corrupt', { path: p }))
+      }
+      for (const k of result.reenabledHooks) {
+        lines.push(t('commands.fix.hook_reenabled', { key: k }))
+      }
+      for (const k of result.disabledHooks.filter((k) => !result.reenabledHooks.includes(k))) {
+        lines.push(t('commands.fix.hook_disabled', { key: k }))
+      }
+    }
+    lines.push('')
+  }
+
+  if (!target || target === 'cache') {
+    const crsiDir = join(homedir(), '.mipham', 'crsi')
+    const cacheFiles = ['eval-scores.jsonl', 'improvements.jsonl', 'prose-proposals.jsonl'].map(
+      (f) => join(crsiDir, f),
+    )
+    const result = fixCache(
+      cacheFiles,
+      {
+        read: readSafe,
+        write: (p, c) => writeFileSync(p, c, 'utf-8'),
+      },
+      apply && !dryRun,
+    )
+    if (result.files.length === 0) {
+      lines.push(t('commands.fix.cache_clean'))
+    } else {
+      for (const f of result.files) {
+        lines.push(
+          t('commands.fix.cache_found', { path: f.path, count: String(f.corruptLines.length) }),
+        )
+      }
+      if (apply && !dryRun) {
+        for (const c of result.cleaned) {
+          lines.push(t('commands.fix.cache_cleaned', { path: c.path, count: String(c.removed) }))
+        }
+      } else {
+        lines.push(t('commands.fix.cache_hint'))
+      }
+    }
+    lines.push('')
+  }
+
+  return { content: lines.join('\n').trimEnd() }
+}
+
 // ═══════════════════════════════════════════════════════════════
 // GitHub & Git Workflow Commands (Claude Code parity)
 // ═══════════════════════════════════════════════════════════════
@@ -5079,6 +5196,7 @@ registry.set('/pr-comments', prCommentsCmd)
 
 // Session Management
 registry.set('/doctor', doctorCmd)
+registry.set('/fix', fixCmd)
 registry.set('/export', exportCmd)
 registry.set('/resume', resumeCmd)
 registry.set('/resume last', resumeLastCmd)
@@ -5183,6 +5301,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/save': 'Save conversation to Obsidian wiki (skill: save-to-wiki)',
   '/export': 'Export conversation to file',
   '/doctor': 'System diagnostics',
+  '/fix': 'Deterministic self-repair: doctor/config/cache',
   '/dream': 'Background memory consolidation',
   '/constitution': 'View or reload constitutional principles',
   '/bug-report': 'Generate diagnostic report for GitHub Issues',

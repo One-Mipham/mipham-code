@@ -139,7 +139,7 @@ function backupConfig(configPath: string): void {
  * Try to restore config from the most recent backup.
  * Returns true if restored successfully.
  */
-function tryRestoreFromBackup(configPath: string): boolean {
+export function tryRestoreFromBackup(configPath: string): boolean {
   try {
     if (!existsSync(MIPHAM_HOME)) return false
     const files = readdirSync(MIPHAM_HOME)
