@@ -10,6 +10,7 @@ import {
   loadInferenceHookConfig,
   loadCredentialMaskingConfig,
   loadCrossSessionConfig,
+  loadSettingsJson,
 } from './config/loader'
 import {
   registerActiveSession,
@@ -44,6 +45,7 @@ import { registerMcpServerTools, syncMcpToolsOnChange } from './mcp/registry'
 import { formatMcpConnectFailures, type McpConnectFailure } from './mcp/connect-failures'
 import { AgentRegistry } from './agent/agent-registry'
 import { HookEngine } from './core/hooks'
+import { loadHookConfigs } from './core/hooks-config'
 import { ArtifactServer } from './artifacts/server'
 import { getMetrics } from './core/metrics'
 import { getWorkspaceTrust } from './core/workspace-trust'
@@ -514,6 +516,12 @@ export async function runApp(options: RunOptions): Promise<void> {
     }
   }
 
+  // Register settings.json hooks (Claude Code convention — additive across levels)
+  const settingsJson = loadSettingsJson(process.cwd())
+  for (const def of loadHookConfigs(settingsJson.hooks)) {
+    hookEngine.register(def)
+  }
+
   // Start artifact server (lazy — first artifact creation triggers listening)
   const artifactsDir = join(process.cwd(), MIPHAM_DIR, ARTIFACTS_DIR)
   const artifactServer = new ArtifactServer(artifactsDir, ARTIFACT_PORT)
@@ -546,6 +554,10 @@ export async function runApp(options: RunOptions): Promise<void> {
     for (const rule of config.permissionRules.allow ?? []) engine.getPermission().allow(rule)
     for (const rule of config.permissionRules.deny ?? []) engine.getPermission().deny(rule)
   }
+
+  // Apply settings.json permissions (allow/deny) — Claude Code convention
+  for (const rule of settingsJson.permissions.allow) engine.getPermission().allow(rule)
+  for (const rule of settingsJson.permissions.deny) engine.getPermission().deny(rule)
 
   // Initialize agent registry and load plugin agents/skills/MCP/hooks
   const agentRegistry = new AgentRegistry()

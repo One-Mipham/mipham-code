@@ -1,22 +1,27 @@
 import type { HookConfig, HookEvent, HookDefinition, HookContext } from '../shared/index.ts'
 import { executeHook } from './hooks-executor'
 
-interface HookConfigEntry {
+export interface HookConfigEntry {
   matcher: string
   hooks: HookConfig[]
 }
 
-interface SettingsHooks {
+/** `settings.json` `hooks` section — one matcher-group list per event. */
+export interface SettingsHooks {
   PreToolUse?: HookConfigEntry[]
   PostToolUse?: HookConfigEntry[]
+  PostToolUseFailure?: HookConfigEntry[]
+  SessionStart?: HookConfigEntry[]
+  SessionEnd?: HookConfigEntry[]
+  Notification?: HookConfigEntry[]
   Stop?: HookConfigEntry[]
   UserPromptSubmit?: HookConfigEntry[]
   PreCompact?: HookConfigEntry[]
   PostCompact?: HookConfigEntry[]
-  SessionStart?: HookConfigEntry[]
-  SessionEnd?: HookConfigEntry[]
-  Notification?: HookConfigEntry[]
   ConfigChange?: HookConfigEntry[]
+  SubagentStart?: HookConfigEntry[]
+  SubagentStop?: HookConfigEntry[]
+  PreInference?: HookConfigEntry[]
 }
 
 /**

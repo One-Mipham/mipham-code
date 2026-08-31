@@ -28,6 +28,7 @@ import {
   DEFAULT_CROSS_SESSION_CONFIG,
 } from './defaults'
 import { getCredentialKey, encryptApiKey, decryptApiKey, ENC_PREFIX } from './credential-crypto'
+import type { SettingsHooks } from '../core/hooks-config'
 
 const MIPHAM_HOME = join(homedir(), '.mipham')
 const BACKUP_PREFIX = 'config.backup-'
@@ -214,6 +215,60 @@ function loadMcpJson(cwd: string): McpServerConfig[] {
   }
 
   return servers
+}
+
+/**
+ * Parsed `settings.json` (Claude Code convention): hooks + permissions.
+ * Hooks are additive across levels; permissions allow/deny are deduped unions.
+ */
+export interface SettingsJson {
+  hooks: SettingsHooks
+  permissions: { allow: string[]; deny: string[] }
+}
+
+/**
+ * Load `settings.json` — project-level `.mipham/settings.json` then user-level
+ * `~/.mipham/settings.json`. Mirrors the Claude Code convention (hooks additive,
+ * permissions merged), so users can migrate their Claude settings unchanged.
+ */
+export function loadSettingsJson(cwd: string = process.cwd()): SettingsJson {
+  const hooks: SettingsHooks = {}
+  const permissions = { allow: [] as string[], deny: [] as string[] }
+
+  const searchPaths = [join(cwd, '.mipham', 'settings.json'), join(MIPHAM_HOME, 'settings.json')]
+
+  for (const path of searchPaths) {
+    try {
+      if (!existsSync(path)) continue
+      const raw = readFileSync(path, 'utf-8')
+      const parsed = JSON.parse(raw) as {
+        hooks?: Record<string, unknown>
+        permissions?: { allow?: unknown; deny?: unknown }
+      }
+
+      if (parsed.hooks && typeof parsed.hooks === 'object') {
+        for (const [eventName, entries] of Object.entries(parsed.hooks)) {
+          if (!Array.isArray(entries)) continue
+          const bucket = (hooks as Record<string, unknown[]>)[eventName]
+          ;(hooks as Record<string, unknown[]>)[eventName] = [...(bucket ?? []), ...entries]
+        }
+      }
+
+      if (parsed.permissions) {
+        for (const key of ['allow', 'deny'] as const) {
+          const list = parsed.permissions[key]
+          if (!Array.isArray(list)) continue
+          for (const p of list) {
+            if (typeof p === 'string' && !permissions[key].includes(p)) permissions[key].push(p)
+          }
+        }
+      }
+    } catch {
+      // Silently skip malformed or missing settings.json files
+    }
+  }
+
+  return { hooks, permissions }
 }
 
 export function loadConfig(cwd: string = process.cwd()): MiphamConfig {
