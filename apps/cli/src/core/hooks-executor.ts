@@ -30,22 +30,101 @@ function substituteVars(template: string, ctx: HookContext): string {
     .replace(/\$SESSION_ID/g, ctx.sessionId)
 }
 
+/**
+ * Build the Claude Code protocol stdin JSON for a hook script. Mirrors the
+ * fields Claude Code passes (session_id / hook_event_name / cwd / tool_name /
+ * tool_input / tool_response) so hand-written Claude hooks can migrate
+ * unchanged.
+ */
+export function buildHookStdin(ctx: HookContext, cwd: string): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    session_id: ctx.sessionId,
+    hook_event_name: ctx.event,
+    cwd,
+  }
+  if (ctx.toolName) payload.tool_name = ctx.toolName
+  if (ctx.toolInput) payload.tool_input = ctx.toolInput
+  if (ctx.toolResult) payload.tool_response = ctx.toolResult
+  return payload
+}
+
+/**
+ * Parse a hook script's stdout JSON into a HookResult, following the Claude
+ * Code output contract. Supports the modern `hookSpecificOutput` carrier
+ * (permissionDecision / updatedInput / additionalContext) plus the legacy
+ * root-level `decision` and `continue` fields. Non-JSON or empty stdout = allow.
+ */
+export function parseHookStdout(stdout: string | null | undefined, _ctx: HookContext): HookResult {
+  if (!stdout) return { allowed: true }
+
+  let parsed: Record<string, unknown>
+  try {
+    parsed = JSON.parse(stdout) as Record<string, unknown>
+  } catch {
+    return { allowed: true }
+  }
+
+  const hso = parsed.hookSpecificOutput as Record<string, unknown> | undefined
+  if (hso) {
+    const decision = hso.permissionDecision as string | undefined
+    const reason = hso.permissionDecisionReason as string | undefined
+    const additionalContext = hso.additionalContext as string | undefined
+    const updatedInput = hso.updatedInput as Record<string, unknown> | undefined
+
+    if (decision === 'deny') {
+      return { allowed: false, reason: reason ?? 'Denied by hook', additionalContext }
+    }
+    if (decision === 'allow') {
+      return {
+        allowed: true,
+        permissionDecision: 'allow',
+        modifiedInput: updatedInput,
+        additionalContext,
+      }
+    }
+    if (decision === 'ask') {
+      return { allowed: true, permissionDecision: 'ask', additionalContext }
+    }
+    if (decision === 'defer') {
+      return { allowed: true, permissionDecision: 'defer', additionalContext }
+    }
+    if (additionalContext) {
+      return { allowed: true, additionalContext }
+    }
+  }
+
+  // Legacy root-level decision: block / approve
+  if (parsed.decision === 'block') {
+    return { allowed: false, reason: (parsed.reason as string) ?? 'Blocked by hook' }
+  }
+
+  // Stop-style events: continue:false
+  if (parsed.continue === false) {
+    return { allowed: false, reason: (parsed.stopReason as string) ?? 'Stopped by hook' }
+  }
+
+  return { allowed: true }
+}
+
 function executeCommand(cfg: HookConfig, ctx: HookContext): HookResult {
   if (!cfg.command) return { allowed: true }
 
   try {
     const args = cfg.args ? cfg.args.map((a) => substituteVars(a, ctx)) : []
 
-    // Use spawnSync with array args — no shell, no command injection
+    // Use spawnSync with array args — no shell, no command injection.
+    // Pass the Claude-protocol stdin JSON so scripts can read structured context.
+    const input = JSON.stringify(buildHookStdin(ctx, process.cwd()))
     const result = spawnSync(cfg.command, args, {
-      timeout: 30_000,
+      timeout: (cfg.timeout ?? 60) * 1000,
       encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
+      input,
     })
 
-    // Exit code 0 = success, allow
+    // Exit code 0 = success — parse the stdout JSON for structured decisions.
     if (result.status === 0) {
-      return { allowed: true }
+      return parseHookStdout(result.stdout, ctx)
     }
 
     // Non-zero exit: check for block signal (exit code 2)

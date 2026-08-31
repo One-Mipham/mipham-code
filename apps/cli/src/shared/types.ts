@@ -234,6 +234,8 @@ export interface HookConfig {
   headers?: Record<string, string>
   mcpServer?: string
   mcpTool?: string
+  /** Command timeout in seconds (Claude Code default is 60). */
+  timeout?: number
   continueOnBlock?: boolean
 }
 
