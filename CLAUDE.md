@@ -10,8 +10,8 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.26.0
-> **最后更新**: 2026-08-30 — 文件工具 O_NOFOLLOW 防 symlink TOCTOU
+> **版本**: 2.27.0
+> **最后更新**: 2026-08-31 — v0.70.0 发版（marketplace 源机制 + hooks 对标 Claude Code + /fix test 第二阶段）
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -50,7 +50,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：2,022 测试（2020 passed + 2 skipped）
+测试：2,133 测试（2131 passed + 2 skipped）
 
 ---
 
@@ -87,7 +87,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 27 个内置技能（21 standard + 6 mipham）
-│   │   ├── test/               # 190 个测试文件，2022 个测试
+│   │   ├── test/               # 201 个测试文件，2133 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -110,7 +110,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（2022 个测试）
+pnpm test         # vitest run（2133 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -234,7 +234,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
 | E2E      | 1       | 8        | full-pipeline                                 |
 | Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **190** | **2022** | **0 失败** ✅（2020 passed + 2 skipped）      |
+| **合计** | **201** | **2133** | **0 失败** ✅（2131 passed + 2 skipped）      |
 
 > 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
 
@@ -292,6 +292,15 @@ GitHub Actions 9 个 job 流水线：`typecheck → lint → format → build-cl
 
 | 日期       | Commit    | 说明                                                                                         |
 | ---------- | --------- | -------------------------------------------------------------------------------------------- |
+| 2026-08-31 | `4d33709` | chore: bump version to v0.70.0                                                               |
+| 2026-08-31 | `4e732cd` | feat(cli): /fix test 命令接线 + i18n                                                         |
+| 2026-08-31 | `d5669d7` | feat(cli): /fix test 核心 — LLM 修复失败测试（复用 bench 冻结判定）                          |
+| 2026-08-31 | `4c03180` | refactor(cli): /loop init 删 .sh 约定 + /hooks 指向 settings.json                            |
+| 2026-08-31 | `378fea6` | feat(cli): settings.json hooks 接线                                                          |
+| 2026-08-31 | `e83d1f3` | feat(cli): hooks stdin/stdout JSON 协议对齐 Claude Code                                      |
+| 2026-08-31 | `5d36132` | docs(crsi): 教训 verify-before-build — 对标前先核实标准+自身现状                             |
+| 2026-08-31 | `cbb67bc` | feat(cli): community registry 加 grill-me + eli5                                             |
+| 2026-08-31 | `a7b8fd0` | feat(cli): marketplace 源机制 — 任意公开仓库 skill 可装                                      |
 | 2026-08-24 | `df92d4c` | chore: bump version to 0.56.0                                                                |
 | 2026-08-24 | `17208c7` | feat(memory): Memory 工具加 search action（对话中召回）                                      |
 | 2026-08-24 | `bcabc89` | fix(cli): 修 plugin/workflow 子命令 argv 解析 + installFromNpm 名一致                        |
@@ -422,6 +431,7 @@ mipham-code 变更（包名/版本）
 
 | 版本   | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | 维护人     |
 | ------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| 2.27.0 | 2026-08-31 | v0.70.0 发版：① marketplace 源机制（任意公开仓库 skill 可装，GitHub API trees 发现 + curl 下载，`/marketplace` + `/browse-marketplace` 命令）② community registry 加 grill-me/eli5 ③ hooks 全链路对标 Claude Code（stdin/stdout JSON 协议 buildHookStdin/parseHookStdout + settings.json 接线 loadSettingsJson + `/loop init` 删 .sh 约定 + `/hooks` 指向 settings.json）④ `/fix test` 第二阶段（LLM 修复失败测试，复用 bench 冻结判定，测试冻结只改源码、默认 dry-run）+ CRSI 教训 verify-before-build。测试 2131 passed + 2 skipped（201 文件）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                | 技术委员会 |
 | 2.26.0 | 2026-08-30 | 文件工具 symlink TOCTOU 防护（对齐 Claude Code v2.1.251 安全修复）：① read/write/edit 改 fd-based 读写 + `O_NOFOLLOW`（新增 `security/fd.ts` 的 openNoFollow/writeFileNoFollow/isSymlinkLoop），关「`resolveSafe` 解析后、读写前路径被换 symlink」的 TOCTOU 竞态窗口，symlink 时 ELOOP fail-closed ② grep fallback 由 `grep -rn` 改 `find -type f -exec grep -Hn {} +`（`-type f` 跳过 symlink，堵 macOS BSD `grep -r` 跟随 symlink 泄漏目标内容）③ `credential-masker/search.ts` 掩码前 `resolveForMatch` realpath（symlink 目标命中 deny 规则才掩码，对齐 Read canonical 匹配）。+12 测试（fd.test.ts 5 + file.test.ts 4 + search.test.ts 3）。全量 190 文件 2020 passed + 2 skipped。                                                                                                                                                                                                                                                                                                                           | 技术委员会 |
 | 2.25.0 | 2026-08-30 | `mipham init` 分级脚手架 + 完整模板：① `project-scaffold.ts` 新增 `full`/`license` 参数——`--full` 生成完整 .md 体系（八章 CLAUDE.md + SECURITY/CONTRIBUTING/CODE_OF_CONDUCT/DEVELOPMENT/TRADEMARKS/CHANGELOG/LICENSE + .github PR/Issue/CODEOWNERS 四件套）② LICENSE 三选（proprietary 默认 / mit / apache），CONTRIBUTING 措辞随之区分开源/闭源 ③ `bin/mipham.ts` 解析 `--full`/`--license=` + help 文案更新 ④ 空目录提示升级（`mipham init` 或 `mipham init --full`）。根因：用户「愣建文件夹」补课暴露 init 只覆盖 3 基础文件，缺完整规范体系。测试 1991→2001（project-scaffold +10）。                                                                                                                                                                                                                                                                                                                                                                                                                         | 技术委员会 |
 | 2.24.0 | 2026-08-28 | 先读代码铁律（软约束升硬）：① `instructions.ts` 新增顶层 `Read-Code-First Rule` 系统提示块（回答代码问题前必须先 Read/Grep/Glob/graft 读实际代码，凭记忆/命名/静态清单下结论是禁止的，与「Capability Self-Report Rule」并列）② `crsi-lessons.md` 追加 `read-first` 教训（severity: critical），把「先读代码」从 `research`（仅借鉴分析）泛化到一切代码问答。根因：终端连续草率回答后认错——「先读代码」此前只是窄范围软教训，非顶层硬约束；A1 铁律决定「硬性」= 顶层提示 + critical 教训，而非确定性 match/fix 闸。测试 1991 不变（1989 passed + 2 skipped，188 文件）。                                                                                                                                                                                                                                                                                                                                                                                                                                            | 技术委员会 |
