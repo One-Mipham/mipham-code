@@ -5,6 +5,7 @@ import {
   produceCrsiProposal,
   produceRuleProposal,
   managedRuleId,
+  hasDisableIntent,
   proseProposalId,
   LESSONS_FILE,
   MANAGED_RULES_FILE,
@@ -40,6 +41,66 @@ function metaRule(overrides: Partial<MetaRule> = {}): MetaRule {
     ...overrides,
   }
 }
+
+describe('hasDisableIntent / 只路由不禁用护栏', () => {
+  it('detects disable-intent suggestion', () => {
+    expect(
+      hasDisableIntent({
+        category: 'tool-params',
+        title: 'x',
+        suggestion: '禁用 Bash 工具',
+        evidence: [],
+      }),
+    ).toBe(true)
+    expect(
+      hasDisableIntent({
+        category: 'tool-params',
+        title: 'x',
+        suggestion: 'never use the Bash tool',
+        evidence: [],
+      }),
+    ).toBe(true)
+  })
+
+  it('does not flag routing/prefer suggestions', () => {
+    expect(
+      hasDisableIntent({
+        category: 'tool-params',
+        title: 'x',
+        suggestion: '给危险命令加警告',
+        evidence: [],
+      }),
+    ).toBe(false)
+    expect(
+      hasDisableIntent({
+        category: 'timeout',
+        title: 'x',
+        suggestion: '增加 timeout',
+        evidence: [],
+      }),
+    ).toBe(false)
+  })
+
+  it('produceRuleProposal rejects disable-intent rules', () => {
+    const signal = {
+      category: 'tool-params',
+      title: '禁用 Bash',
+      suggestion: '禁用 Bash 工具',
+      evidence: [],
+    }
+    expect(produceRuleProposal(signal, `// file\n${MANAGED_RULE_MARKER}\n`)).toBeNull()
+  })
+
+  it('produceRuleProposal still produces non-disable rules', () => {
+    const signal = {
+      category: 'tool-params',
+      title: '危险命令',
+      suggestion: '给危险命令加警告',
+      evidence: [],
+    }
+    expect(produceRuleProposal(signal, `// file\n${MANAGED_RULE_MARKER}\n`)).not.toBeNull()
+  })
+})
 
 describe('selectCrsiSignal', () => {
   it('prioritizes critical insight over warning', () => {

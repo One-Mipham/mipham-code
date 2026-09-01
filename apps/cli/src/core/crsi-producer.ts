@@ -235,6 +235,19 @@ export function renderManagedRuleSource(signal: CrsiSignal): string | null {
   return null
 }
 
+/**
+ * 只路由不禁用护栏（CRSI 教训 #learning）：拒绝「禁用某内置能力」的 blanket 规则。
+ * 命中返回 true——producer 拒绝产出 managed rule，强制改写成「prefer X over Y」路由。
+ */
+const DISABLE_INTENT_RE =
+  /(禁用|禁止|停用|封禁)[^，。\n]{0,20}(工具|能力|功能|tool|capabilit)|\bnever\s+use\b|\bdon'?t\s+use\b|\bdo\s+not\s+use\b/i
+
+/** 检测信号是否表达「禁用某能力」的 blanket 意图（而非「prefer X over Y」路由）。 */
+export function hasDisableIntent(signal: CrsiSignal): boolean {
+  if (/^(disable|ban|never-use|never_use)$/.test(signal.category)) return true
+  return DISABLE_INTENT_RE.test(`${signal.category} ${signal.title} ${signal.suggestion}`)
+}
+
 /** 产出受管理规则变更候选（毕业路径）。无合格信号 / 同名规则已存在时返回 null。 */
 export function produceRuleProposal(
   signal: CrsiSignal,
@@ -246,6 +259,8 @@ export function produceRuleProposal(
   originalContent: string
   blastRadius: string[]
 } | null {
+  // 只路由不禁用护栏：拒绝「禁用某内置能力」的 blanket 规则。
+  if (hasDisableIntent(signal)) return null
   const ruleSource = renderManagedRuleSource(signal)
   if (!ruleSource) return null
 
