@@ -139,6 +139,7 @@
 - 严重度: warning
 - 生成时间: 2026-08-27
 - 来源: 会话复盘（human + Claude Code，手动沉淀）
+- 落地: ④ 原子激活已实现（2026-09-01 `f852214`）——`improvement-track.ts` 台账 `appendImprovement` 走 `atomicWriteFileSync`（temp+rename）、`readImprovements` 坏行跳过不抛、`setPendingVerdict` 由易失内存变量升级为 `pending-verdict.json` 原子 manifest；① ② ③ 早由同文件落地（causal / minEffect / Wilson）。
 
 ### 证据
 
@@ -183,6 +184,7 @@
 
 - 2026-08-26 RSI 五家调研（OpenRSI / opencrabs / autocontext / prime-agent / Godel_Agent）→ 产出 6 条教训 + 1 份计划，被误记为「借鉴代码进仓库」
 - 实际落地对账：① **代码** = `recoverable-failure.ts`（27 行，open crabs 失败分类）唯一落地；② **教训** = `crsi-lessons.md` 6 条（borrow-analysis / crsi-design / self-eval / eval-rigor / boundary / learning）；③ **待办** = 因果归因、最小效应量、误提升预算、原子激活、语义边界、RewardFn、Crossover（都在教训里列为「可借鉴」，未写代码）
+- 事后对账（2026-09-01）：上条「待办」7 项已全部落地 → 因果归因/最小效应量/误提升预算/原子激活 = `improvement-track.ts`（`causal` L66 / `computeMinEffect` / `wilsonInterval` + `improvementSignalStrong` / `atomicWriteFileSync` + `pendingVerdictPath`）；语义边界 = `crsi-sandbox.ts` `PROTECTED_ROLES`；RewardFn = `reward-fn.ts`；Crossover = `crsi-producer.ts` `produceCrossoverProposal`。待办清零。
 - 混淆根因：Mipham Code(deepseek) 把 `recoverable-failure.ts` 的「失败分类」错叫「因果归因的第一步」，又把 eval-rigor 教训里「记了该做因果归因」当成「因果归因已实现」——「教训」与「代码」边界不清
 - 修复：本教训 + wiki `rsi-open-source-research.md` 补「落地对账」表，钉死「五家 → 6 教训 + 1 文件 + 若干待办」真实状态
 
