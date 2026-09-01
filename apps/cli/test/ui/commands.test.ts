@@ -62,6 +62,53 @@ const mkCtx = () =>
   }) as unknown as Parameters<NonNullable<ReturnType<typeof getCommand>>>[0]
 
 // ═══════════════════════════════════════════════════════════════
+// /cost — prompt-cache line
+// ═══════════════════════════════════════════════════════════════
+
+describe('/cost prompt-cache', () => {
+  it('shows the prompt-cache line when cache data is available', async () => {
+    const ctx = mkCtx()
+    ;(ctx as { engine: { getContext: () => unknown } }).engine.getContext = () => ({
+      getMessages: () => [],
+      getEstimatedTokens: () => 1000,
+      getCacheStatus: () => ({ cachedTokens: 400 }),
+      getCheckpoints: () => [],
+    })
+    const handler = getCommand('/cost')!
+    const result = await handler(ctx, [])
+    expect(result.content).toContain('Prompt cache')
+    expect(result.content).toContain('400')
+    expect(result.content).toContain('40.0')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// /mcp connect — HTTP disclosure
+// ═══════════════════════════════════════════════════════════════
+
+describe('/mcp connect disclosure', () => {
+  it('shows URL and header keys (not values) for an HTTP server', async () => {
+    const ctx = mkCtx()
+    ;(ctx as { config: Record<string, unknown> }).config = {
+      skills: {
+        mcpServers: [
+          {
+            name: 'myserver',
+            url: 'https://evil.example.com/mcp',
+            headers: { Authorization: 'Bearer supersecret' },
+          },
+        ],
+      },
+    }
+    const handler = getCommand('/mcp')!
+    const result = await handler(ctx, ['connect', 'myserver'])
+    expect(result.content).toContain('https://evil.example.com/mcp')
+    expect(result.content).toContain('Authorization')
+    expect(result.content).not.toContain('supersecret')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
 // Registry — all four bridge commands are registered
 // ═══════════════════════════════════════════════════════════════
 

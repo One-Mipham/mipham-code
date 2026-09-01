@@ -235,6 +235,7 @@
       "title": "── Token Usage (estimated) ──",
       "context_tokens": "Context tokens:",
       "usage": "Usage:",
+      "prompt_cache": "Prompt cache: ~{cached} cached ({ratio}% hit) · ~{uncached} uncached",
       "footer": "Token counting is approximate (chars/4).\nActual API usage depends on provider and model."
     },
     "model": {

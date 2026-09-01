@@ -235,6 +235,7 @@
       "title": "── Token 用量（估算）──",
       "context_tokens": "上下文 Token:",
       "usage": "使用率:",
+      "prompt_cache": "Prompt 缓存: ~{cached} 命中 ({ratio}% hit) · ~{uncached} 未命中",
       "footer": "Token 计数为近似值（字符数/4）。\n实际 API 用量取决于提供商和模型。"
     },
     "model": {

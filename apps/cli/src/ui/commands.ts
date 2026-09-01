@@ -400,11 +400,20 @@ const statusCmd: CommandHandler = async (ctx) => {
 const costCmd: CommandHandler = (ctx) => {
   const t = resolveT(ctx)
   const tokens = ctx.engine.getContext().getEstimatedTokens()
+  const cacheStatus = ctx.engine.getContext().getCacheStatus()
+  const cachedTokens = cacheStatus.cachedTokens
+  const hitRatio = tokens > 0 ? Math.min(1, cachedTokens / tokens) : 0
+  const uncachedTokens = Math.max(0, tokens - cachedTokens)
   return {
     content: stripIndent`
       ${t('commands.context_tokens.title')}
       ${t('commands.context_tokens.context_tokens')} ~${tokens.toLocaleString()} / 200,000
       ${t('commands.context_tokens.usage')} ${((tokens / 200_000) * 100).toFixed(1)}%
+      ${t('commands.context_tokens.prompt_cache', {
+        cached: cachedTokens.toLocaleString(),
+        ratio: (hitRatio * 100).toFixed(1),
+        uncached: uncachedTokens.toLocaleString(),
+      })}
 
       ${t('commands.context_tokens.footer')}
     `,
@@ -4495,6 +4504,14 @@ const mcpCmd: CommandHandler = async (ctx, args) => {
       }
     }
     const via = config.url ? 'HTTP' : 'stdio'
+    if (config.url) {
+      const headerKeys = config.headers ? Object.keys(config.headers) : []
+      const headerLine = headerKeys.length > 0 ? `\nHeaders to send: ${headerKeys.join(', ')}` : ''
+      return {
+        content: `── MCP Connect: ${name} ──\n\nConnecting via HTTP\nURL: ${config.url}${headerLine}\n\n⚠️ Verify the URL — any configured headers (e.g. Authorization) will be sent to this server.`,
+        forwardToAI: `Connect to MCP server "${name}" using McpClient.getInstance().connect(config), then register its tools. Report the result.`,
+      }
+    }
     return {
       content: `── MCP Connect: ${name} ──\n\nConnecting via ${via}...`,
       forwardToAI: `Connect to MCP server "${name}" using McpClient.getInstance().connect(config), then register its tools. Report the result.`,
