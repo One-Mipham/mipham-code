@@ -96,11 +96,12 @@ export class OpenAICompatProvider implements ProviderInstance {
         if (data === '[DONE]') {
           // Emit any pending tool calls before stopping
           for (const [, tc] of pendingToolCalls) {
+            if (!tc.name) continue // drop malformed tool call (missing name)
             yield {
               type: 'tool_use',
               toolUse: {
                 type: 'tool_use',
-                id: tc.id,
+                id: tc.id || `call_${Date.now()}`,
                 name: tc.name,
                 input: this.safeParseJson(tc.arguments),
               },
@@ -155,6 +156,7 @@ export class OpenAICompatProvider implements ProviderInstance {
           if (choice.finish_reason === 'tool_calls') {
             // Emit fully accumulated tool calls
             for (const [, tc] of pendingToolCalls) {
+              if (!tc.name) continue // drop malformed tool call (missing name)
               yield {
                 type: 'tool_use',
                 toolUse: {

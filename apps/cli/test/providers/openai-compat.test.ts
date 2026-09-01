@@ -221,6 +221,44 @@ describe('OpenAICompatProvider', () => {
     expect(toolUses[0]!.toolUse!.input).toEqual({ file: 'a.ts' })
   })
 
+  it('assigns a fallback id to a tool call missing an id', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        makeSSEResponse([
+          'data: {"choices":[{"delta":{"tool_calls":[{"function":{"name":"read","arguments":"{\\"file\\":\\"a.ts\\"}"}}]},"index":0}]}',
+          'data: [DONE]',
+        ]),
+      )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new OpenAICompatProvider(makeConfig())
+    const chunks = await collectChunks(provider.chat({ model: 'gpt-5', messages: [] }))
+
+    const toolUses = chunks.filter((c) => c.type === 'tool_use')
+    expect(toolUses).toHaveLength(1)
+    expect(toolUses[0]!.toolUse!.id).toMatch(/^call_/)
+    expect(toolUses[0]!.toolUse!.name).toBe('read')
+  })
+
+  it('drops a tool call missing a name', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        makeSSEResponse([
+          'data: {"choices":[{"delta":{"tool_calls":[{"id":"call_1","function":{"arguments":"{\\"x\\":1}"}}]},"index":0}]}',
+          'data: [DONE]',
+        ]),
+      )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new OpenAICompatProvider(makeConfig())
+    const chunks = await collectChunks(provider.chat({ model: 'gpt-5', messages: [] }))
+
+    const toolUses = chunks.filter((c) => c.type === 'tool_use')
+    expect(toolUses).toHaveLength(0)
+  })
+
   // ═══════════════════════════════════════════
   // chat — error handling
   // ═══════════════════════════════════════════
