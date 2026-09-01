@@ -1,8 +1,9 @@
 // CRSI 改进轨：噪声自适应改进判定 + 台账 + pending verdict 闸。
 // A1 不破：verdict / minEffect / 改进率全是确定性算术（均值/标准差/阈值/Wilson），无 LLM 裁判。
-import { appendFileSync, readFileSync, existsSync, mkdirSync } from 'node:fs'
+import { readFileSync, existsSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
+import { atomicWriteFileSync } from '../shared/atomic-write'
 import type { SkillDeltaSample } from './task-performance'
 
 export type ImprovementVerdict = 'improved' | 'regressed' | 'inconclusive'
@@ -115,7 +116,11 @@ export function improvementPath(): string {
 export function appendImprovement(record: ImprovementRecord): void {
   const file = improvementPath()
   mkdirSync(join(homedir(), '.mipham', 'crsi'), { recursive: true })
-  appendFileSync(file, JSON.stringify(record) + '\n', 'utf-8')
+  // 原子激活（④）：整账本读-改-写 + temp 文件 rename（见 shared/atomic-write），读者要么见旧要么见新。
+  // 非原子的 appendFileSync 写中途崩溃会留撕裂行，readImprovements 会 JSON.parse 抛错。
+  const existing = readImprovements()
+  existing.push(record)
+  atomicWriteFileSync(file, existing.map((r) => JSON.stringify(r)).join('\n') + '\n')
 }
 
 export function readImprovements(): ImprovementRecord[] {
@@ -124,19 +129,42 @@ export function readImprovements(): ImprovementRecord[] {
   return readFileSync(file, 'utf-8')
     .split('\n')
     .filter((line) => line.trim() !== '')
-    .map((line) => JSON.parse(line) as ImprovementRecord)
+    .flatMap((line) => {
+      try {
+        return [JSON.parse(line) as ImprovementRecord]
+      } catch {
+        return [] // 残留撕裂/坏行跳过，不抛（原子激活的容错侧）
+      }
+    })
 }
 
 // ── pending verdict 闸（倒退才拦） ──
+// 原子激活（④）：pending verdict 是「激活指针」，持久化为不可变 manifest + 原子替换
+// （temp+rename，见 shared/atomic-write），替代易失内存变量（进程重启即丢、无 manifest）。
 
-let pendingVerdict: ImprovementVerdict | null = null
+export function pendingVerdictPath(): string {
+  return join(homedir(), '.mipham', 'crsi', 'pending-verdict.json')
+}
 
 export function setPendingVerdict(v: ImprovementVerdict | null): void {
-  pendingVerdict = v
+  const file = pendingVerdictPath()
+  if (v === null) {
+    rmSync(file, { force: true }) // 原子清除（unlink 原子）
+    return
+  }
+  mkdirSync(join(homedir(), '.mipham', 'crsi'), { recursive: true })
+  atomicWriteFileSync(file, JSON.stringify({ verdict: v, timestamp: new Date().toISOString() }))
 }
 
 export function getPendingVerdict(): ImprovementVerdict | null {
-  return pendingVerdict
+  const file = pendingVerdictPath()
+  if (!existsSync(file)) return null
+  try {
+    const parsed = JSON.parse(readFileSync(file, 'utf-8')) as { verdict: ImprovementVerdict }
+    return parsed.verdict
+  } catch {
+    return null // manifest 损坏 → 视为无 pending（与旧 `?? 'inconclusive'` 的 fail-open 一致）
+  }
 }
 
 export function shouldBlockApproval(v: ImprovementVerdict): boolean {

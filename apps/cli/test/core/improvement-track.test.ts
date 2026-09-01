@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { homedir } from 'node:os'
-import { rmSync } from 'node:fs'
+import { rmSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 
 vi.mock('node:os', async (importOriginal) => {
@@ -127,6 +127,60 @@ describe('pending 闸', () => {
     expect(shouldBlockApproval('regressed')).toBe(true)
     expect(shouldBlockApproval('improved')).toBe(false)
     expect(shouldBlockApproval('inconclusive')).toBe(false)
+  })
+})
+
+describe('④ 原子激活 — 台账原子写', () => {
+  it('撕裂/坏行被 readImprovements 跳过，不抛', () => {
+    const dir = join(homedir(), '.mipham', 'crsi')
+    mkdirSync(dir, { recursive: true })
+    const good = mkRecord('improved')
+    writeFileSync(
+      join(dir, 'improvements.jsonl'),
+      JSON.stringify(good) + '\n{"torn": tru\n',
+      'utf-8',
+    )
+    const all = readImprovements()
+    expect(all).toHaveLength(1)
+    expect(all[0]!.id).toBe(good.id)
+  })
+
+  it('append 走 temp+rename，无 .tmp 残留', () => {
+    appendImprovement(mkRecord('improved'))
+    expect(existsSync(join(homedir(), '.mipham', 'crsi', 'improvements.jsonl.tmp'))).toBe(false)
+  })
+
+  it('append 后账本自愈：坏行被重写剔除', () => {
+    const dir = join(homedir(), '.mipham', 'crsi')
+    mkdirSync(dir, { recursive: true })
+    const good = mkRecord('improved')
+    writeFileSync(join(dir, 'improvements.jsonl'), JSON.stringify(good) + '\n{bad\n', 'utf-8')
+    appendImprovement(mkRecord('regressed'))
+    const all = readImprovements()
+    expect(all).toHaveLength(2)
+    expect(all.every((r) => r.id && r.verdict)).toBe(true)
+  })
+})
+
+describe('④ 原子激活 — pending 指针 manifest', () => {
+  it('set 写入 manifest 文件，get 从文件读回', () => {
+    setPendingVerdict('regressed')
+    expect(existsSync(join(homedir(), '.mipham', 'crsi', 'pending-verdict.json'))).toBe(true)
+    expect(getPendingVerdict()).toBe('regressed')
+  })
+
+  it('set(null) 原子清除 manifest', () => {
+    setPendingVerdict('regressed')
+    setPendingVerdict(null)
+    expect(existsSync(join(homedir(), '.mipham', 'crsi', 'pending-verdict.json'))).toBe(false)
+    expect(getPendingVerdict()).toBeNull()
+  })
+
+  it('manifest 坏内容 → get 返回 null 不抛', () => {
+    const dir = join(homedir(), '.mipham', 'crsi')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'pending-verdict.json'), '{broken', 'utf-8')
+    expect(getPendingVerdict()).toBeNull()
   })
 })
 
