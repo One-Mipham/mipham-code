@@ -416,7 +416,10 @@
       "gc_done": "Done. Archived files moved to ~/.mipham/memory/archive/",
       "consolidate_title": "─ Memory Consolidate ─",
       "consolidate_none": "No auto-* memories to consolidate.",
-      "consolidate_result": "Consolidated: {removed} auto-* removed, {merged} lessons written."
+      "consolidate_result": "Consolidated: {removed} auto-* removed, {merged} lessons written.",
+      "dedup_title": "─ Memory Near-Duplicates ─",
+      "dedup_none": "No near-duplicate memories found.",
+      "dedup_footer": "Pairs above the TF-IDF cosine threshold. Merge is manual — run /memory consolidate for auto-* clustering, or edit the files directly."
     },
     "upgrade": {
       "uptodate": "── Upgrade Mipham Code ──\n\nCurrent version: v{current}\nLatest:          v{latest}\n\n✓ Already up to date.\n\nTo check manually: https://www.npmjs.com/package/@miphamai/cli",

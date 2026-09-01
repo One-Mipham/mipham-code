@@ -181,4 +181,14 @@ describe('MemoryManager', () => {
     const recalled = mm.recall('版本发布')
     expect(recalled[0]!.name).toBe('release-note')
   })
+
+  it('lists near-duplicate pairs across types (read-only report)', () => {
+    const mm = new MemoryManager(TEST_DIR)
+    // 不同 type → 写时去重（findNearDuplicate 只拦同 type）不合并，两条都留存
+    mm.write('note-a', '完全相同的记忆内容', { type: 'user', relevance: ['x'] })
+    mm.write('note-b', '完全相同的记忆内容', { type: 'reference', relevance: ['x'] })
+    const pairs = mm.listNearDuplicates()
+    expect(pairs).toHaveLength(1)
+    expect([pairs[0]!.a, pairs[0]!.b].sort()).toEqual(['note-a', 'note-b'])
+  })
 })

@@ -4095,6 +4095,23 @@ const memoryCmd: CommandHandler = async (ctx, args) => {
     return { content: lines.join('\n') }
   }
 
+  // /memory dedup — 只读近重复报告：列出 TF-IDF 余弦 > 阈值的近重复对，用户决定是否合并
+  if (args[0]?.toLowerCase() === 'dedup') {
+    const mm = getMemoryManager()
+    const pairs = mm.listNearDuplicates()
+    const lines: string[] = [t('commands.memories.dedup_title'), '']
+    if (pairs.length === 0) {
+      lines.push(t('commands.memories.dedup_none'))
+    } else {
+      for (const { a, b, similarity } of pairs) {
+        lines.push(`  ${a} ↔ ${b}  (${(similarity * 100).toFixed(0)}%)`)
+      }
+      lines.push('')
+      lines.push(t('commands.memories.dedup_footer'))
+    }
+    return { content: lines.join('\n') }
+  }
+
   if (!existsSync(memoryDir)) {
     return { content: t('commands.memories.no_memories') }
   }

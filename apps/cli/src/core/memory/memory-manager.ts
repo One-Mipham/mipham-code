@@ -9,7 +9,7 @@ import {
   statSync,
 } from 'node:fs'
 import { join, extname, basename } from 'node:path'
-import { similarities } from './tfidf'
+import { similarities, findNearDuplicates } from './tfidf'
 
 export interface MemoryMetadata {
   type: 'user' | 'feedback' | 'project' | 'reference'
@@ -331,6 +331,26 @@ export class MemoryManager {
     }
 
     return { merged, removed }
+  }
+
+  /**
+   * 只读「近重复报告」：跨所有记忆（含手写）列出 TF-IDF 余弦 > 阈值的近重复对，
+   * 供 /memory dedup 展示。只检测不合并——合并是用户的决定（写时去重已拦新增，
+   * 这里报告存量近重复供人工审视）。
+   */
+  listNearDuplicates(
+    threshold: number = DEDUP_THRESHOLD,
+  ): Array<{ a: string; b: string; similarity: number }> {
+    const entries = [...this.memories.values()]
+    const pairs = findNearDuplicates(
+      entries.map((e) => e.content),
+      threshold,
+    )
+    return pairs.map(({ i, j, similarity }) => ({
+      a: entries[i]!.name,
+      b: entries[j]!.name,
+      similarity,
+    }))
   }
 
   buildSystemReminder(context: string, maxTokens?: number, grounding?: string): string {

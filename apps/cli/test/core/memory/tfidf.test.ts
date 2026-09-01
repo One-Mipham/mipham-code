@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tokenize, cosine, similarities } from '../../../src/core/memory/tfidf'
+import { tokenize, cosine, similarities, findNearDuplicates } from '../../../src/core/memory/tfidf'
 
 describe('tokenize', () => {
   it('emits character bigrams for CJK runs', () => {
@@ -63,5 +63,24 @@ describe('similarities', () => {
   it('returns zero scores when the query shares nothing with any doc', () => {
     const scores = similarities('完全无关', ['aaa bbb ccc'])
     expect(scores[0]).toBe(0)
+  })
+})
+
+describe('findNearDuplicates', () => {
+  it('flags identical docs as a near-duplicate pair (similarity ≈ 1)', () => {
+    const pairs = findNearDuplicates(['same text here', 'same text here', 'other topic'], 0.5)
+    expect(pairs).toHaveLength(1)
+    expect(pairs[0]!.i).toBe(0)
+    expect(pairs[0]!.j).toBe(1)
+    expect(pairs[0]!.similarity).toBeCloseTo(1)
+  })
+
+  it('returns empty when no pair exceeds the threshold', () => {
+    expect(findNearDuplicates(['aaa bbb', 'ccc ddd', 'eee fff'], 0.1)).toHaveLength(0)
+  })
+
+  it('sorts pairs by similarity descending', () => {
+    const pairs = findNearDuplicates(['alpha beta', 'alpha beta', 'alpha gamma'], 0)
+    expect(pairs[0]!.similarity).toBeGreaterThan(pairs[1]!.similarity)
   })
 })

@@ -106,3 +106,33 @@ export function similarities(query: string, docs: string[]): number[] {
   const queryVec = tfidfVector(queryTokens, df, numDocs)
   return docTokens.map((tokens) => cosine(queryVec, tfidfVector(tokens, df, numDocs)))
 }
+
+/**
+ * All pairs (i < j) of docs whose TF-IDF cosine similarity is `> threshold`,
+ * sorted by similarity descending. Deterministic near-duplicate detection —
+ * flags candidates for manual merge, never merges automatically.
+ */
+export function findNearDuplicates(
+  docs: string[],
+  threshold: number,
+): Array<{ i: number; j: number; similarity: number }> {
+  const docTokens = docs.map(tokenize)
+  const numDocs = docs.length
+
+  const df = new Map<string, number>()
+  for (const tokens of docTokens) {
+    for (const term of new Set(tokens)) {
+      df.set(term, (df.get(term) ?? 0) + 1)
+    }
+  }
+
+  const vectors = docTokens.map((tokens) => tfidfVector(tokens, df, numDocs))
+  const pairs: Array<{ i: number; j: number; similarity: number }> = []
+  for (let i = 0; i < numDocs; i++) {
+    for (let j = i + 1; j < numDocs; j++) {
+      const similarity = cosine(vectors[i]!, vectors[j]!)
+      if (similarity > threshold) pairs.push({ i, j, similarity })
+    }
+  }
+  return pairs.sort((a, b) => b.similarity - a.similarity)
+}

@@ -416,7 +416,10 @@
       "gc_done": "完成。归档文件已移到 ~/.mipham/memory/archive/",
       "consolidate_title": "─ 记忆合并 ─",
       "consolidate_none": "没有需要合并的 auto-* 记忆。",
-      "consolidate_result": "合并完成：删除 {removed} 条 auto-*，写入 {merged} 条 lesson-*。"
+      "consolidate_result": "合并完成：删除 {removed} 条 auto-*，写入 {merged} 条 lesson-*。",
+      "dedup_title": "─ 记忆近重复 ─",
+      "dedup_none": "未发现近重复记忆。",
+      "dedup_footer": "以上为 TF-IDF 余弦超过阈值的近重复对。合并需手动——auto-* 走 /memory consolidate 聚簇，或直接编辑文件。"
     },
     "upgrade": {
       "uptodate": "── 升级 Mipham Code ──\n\n当前版本: v{current}\n最新版本:          v{latest}\n\n✓ 已是最新版本。\n\n手动检查: https://www.npmjs.com/package/@miphamai/cli",
