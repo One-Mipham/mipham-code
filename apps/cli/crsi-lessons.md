@@ -254,9 +254,9 @@
 - Claude Code 漏洞前提 =「auto mode 黑名单分类器按内容自动放行」；Mipham =「白名单 auto-approve + 默认 ask」，前提不成立 → 结论应为「不适用」而非「确认缺失」
 - 修复：对标文档 #1 改「不适用」+ 新增 §三 专项核查 + §附 误判复盘；本条教训固化进 crsi-lessons.md
 
-## causal-memory: Zeva 因果交互记忆——对齐 CRSI + 3 条因果归因深化缺口
+## causal-memory: Zeva 因果交互记忆——对齐 CRSI + 2 条因果归因深化缺口
 
-- 建议: Zeva（arXiv 2608.30880）核心论点「存 action→state-change 的**因果关系**，而非 observation 片段」对齐 Mipham CRSI 的「不 retrain、只注入」路线，但暴露 3 条「因果归因」可深化的真缺口：① **阶段条件检索**——Zeva 用 phase token 按任务阶段索引记忆，Mipham recall 只有 TF-IDF cosine + category + path，缺「阶段」维度（编码任务天然有 读码→规划→实现→测试→review）② **结构化因果边**——Zeva 显式存 (action, state-change, 方向) 三元组，Mipham 的 `causal: changeSet.length === 1` 是粗布尔，非「哪个改动→哪个效果→哪个方向」的一等对象 ③ **确定性相似度合并**——Zeva 用 similarity-based merging 自动合并 PIM，Mipham 的 tfidf.ts cosine 只召回不合并，合并走 LLM crossover（手动触发），可补确定性「相似度>阈值→提示/合并近重复教训」。
+- 建议: Zeva（arXiv 2608.30880）核心论点「存 action→state-change 的**因果关系**，而非 observation 片段」对齐 Mipham CRSI 的「不 retrain、只注入」路线，但暴露 2 条「因果归因」可深化的真缺口：① **阶段条件检索**——Zeva 用 phase token 按任务阶段索引记忆，Mipham recall 只有 TF-IDF cosine + category + path，缺「阶段」维度（编码任务天然有 读码→规划→实现→测试→review）② **结构化因果边**——Zeva 显式存 (action, state-change, 方向) 三元组，Mipham 的 `causal: changeSet.length === 1` 是粗布尔，非「哪个改动→哪个效果→哪个方向」的一等对象 ③ 确定性相似度合并——已实现（见证据「已实现」项）。
 - 严重度: warning
 - 生成时间: 2026-09-01
 - 来源: 会话复盘（human + Claude Code，手动沉淀）
@@ -266,5 +266,6 @@
 - Zeva（清华 AIR + 域变换）三组件：Causal Interaction Extractor（CTE 融合视觉 latent + 动作 + 观测到的状态变化 → phase token + causal signal）、双时标记忆（BIT 近期 attempt 内 + PIM 跨 attempt 相似度合并）、In-Context Policy Injection（phase-conditioned retrieval → Causal Prompt → 注入冻结 diffusion policy 的 full-attention 块）
 - 对齐（已覆盖 / 领先）：冻结参数 + 记忆侧学习 = CRSI 核心；自进化随经验提升 = improvement-track（verdict + improvementRate + Wilson CI）；防错误经验积累 = eval harness 33 契约 + 分数不退化闸 + 只拦 regressed（**领先**——这是 Zeva 明列的 open challenge，我们已有确定性格门）；因果归因 = `causal`；合并 = crossover 算子；双时标 = session-log vs memory/lessons
 - 不适用（别硬套）：视觉 latent / diffusion policy / full-attention 注入是具身 VLA 实现细节，Mipham 对应物是 prompt 注入（已覆盖）；连续物理状态空间 vs 编码任务离散状态（测试通过/失败、diff）
-- 待办（3 真缺口，未写代码）：① phase 维度检索键 ② 结构化因果边 (change→effect→方向) ③ 确定性相似度合并——均收敛到「把因果从粗布尔深化为一等对象」，接 eval-rigor #11 方向
+- 待办（2 真缺口，未写代码）：① phase 维度检索键 ② 结构化因果边 (change→effect→方向)——接 eval-rigor #11 方向
+- 已实现（verify-before-build 复现）：③ 确定性相似度合并——初判为缺口，读码发现 `memory-manager.ts` 早有 `findNearDuplicate`（写时去重，`DEDUP_THRESHOLD` 0.65，同 type 余弦>阈值→合并 union relevance）+ `consolidateAutoMemories`（贪心聚簇 auto-* → lesson-*，`CONSOLIDATE_THRESHOLD` 0.5），都是确定性 cosine 无 LLM。误判根因：把 LESSON 的 LLM crossover 与 MEMORY 的确定性去重混为一谈
 - 转帖标题出入（verify-before-build 复现）：转帖写「In-Context Causal Interaction Memory for Embodied Action Generalization」，arXiv 实为「In-Context Causal Learning for Generalizable Embodied Manipulation」——「Causal Interaction Memory」是机制名不是标题
