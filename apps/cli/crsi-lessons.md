@@ -237,3 +237,17 @@
 - 用户要求「兼容 AGENTS.md / SKILLS.md 等生态文件」，Claude 凭臆测发明 SKILLS.md / HOOKS.md / PLUGINS.md / MCP.md 四个 .md「标准」并开发对应读取代码（instructions.ts），用户点破这些 .md 根本不存在——真实生态是 SKILL.md 单文件约定 + settings.json（permissions+hooks）+ plugin.json（.claude-plugin）+ .mcp.json，**全是 JSON 不是 .md**
 - 用户再问「是否对标开发 hooks/plugins/MCP 走 JSON」，Claude 凭印象以为「没做」，读码才发现 executeHook（hooks-executor.ts）、loadHookConfigs（hooks-config.ts）、loadMcpJson（loader.ts）、claude-plugin.ts 早已实现——真正缺的只有 loadHookConfigs 零调用点（没接线到 settings.json 读取）
 - 双重弯路同一根因：① 未核实外部标准真实性 → 开发了不存在的东西；② 未查自身现状 → 差点从零重复造已存在的轮子
+
+## security-benchmark: 对标安全漏洞须验证前提——黑名单缺模式 ≠ 有漏洞
+
+- 建议: 对标外部项目的安全修复时，不能「它修了 X 类型漏洞、我黑名单没这个模式 → 我也缺 X」。必须先追「这条命令在自身权限模型里到底走哪条路径」：漏洞成立的前提（如「按内容自动放行看似无害命令」的启发式）在自身架构里是否真的存在。黑名单是「阻断侧」（deny），漏洞通常出在「放行侧」（auto-approve）——只读黑名单、没读放行侧决策流程就下「确认缺失」，是机械套用。白名单 auto-approve + 默认 ask 的架构，漏洞前提天然不成立。
+- 严重度: warning
+- 生成时间: 2026-09-01
+- 来源: 会话复盘（human + Claude Code，手动沉淀）
+
+### 证据
+
+- 对标 Claude Code v2.1.251「Bash 权限自动放行整数 shell 变量算术赋值（OPTIND=1/0、RANDOM=2+2）」：初版只读黑名单 `security/gate.ts:30-38`（4 条 DANGEROUS_BASH_PATTERNS，无算术赋值模式）就断言「确认缺失，建议做」
+- 误判根因：未读 Bash 权限决策流程。真相——Bash 默认 `permission: 'ask'`（`bash.ts:313`），唯一「按内容自动放行」路径是 acceptEdits 模式的 `isVerificationCommand`（`permission.ts:17-61`），是**白名单**（L22 排除 shell 元字符 + 只匹配 pnpm test/tsc/git status 等显式命令），`OPTIND=1/0` 不含白名单命令名 → 落到 ask，**无自动放行路径**
+- Claude Code 漏洞前提 =「auto mode 黑名单分类器按内容自动放行」；Mipham =「白名单 auto-approve + 默认 ask」，前提不成立 → 结论应为「不适用」而非「确认缺失」
+- 修复：对标文档 #1 改「不适用」+ 新增 §三 专项核查 + §附 误判复盘；本条教训固化进 crsi-lessons.md
