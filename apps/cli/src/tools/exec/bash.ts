@@ -130,7 +130,10 @@ export function isBlocked(command: string): string | null {
 
   // Detect dangerous git operations invoked via Bash — anywhere in the command,
   // so `echo ok && git push --force` is still caught (not just `^git`).
-  if (/(?:^|[\s;&|])(?:sudo\s+)?(?:git|gh)\s+/.test(normalized)) {
+  // `gh` is deliberately NOT scanned: DANGEROUS_GIT_PATTERNS are all git
+  // subcommands (push/reset/clean/…), and scanning `gh` only produced false
+  // positives (e.g. `gh issue create --body "...git config user.name..."`).
+  if (/(?:^|[\s;&|])(?:sudo\s+)?git\s+/.test(normalized)) {
     for (const { pattern, description } of DANGEROUS_GIT_PATTERNS) {
       if (pattern.test(normalized)) {
         return `Dangerous git command blocked: "${description}". Run manually if intended.`

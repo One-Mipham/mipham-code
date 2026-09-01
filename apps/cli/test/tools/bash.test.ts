@@ -152,6 +152,25 @@ describe('bash git guardrail parity', () => {
     )
     expect(result.success).toBe(true)
   })
+
+  it('allows gh commands carrying git-like text in arguments (执行 vs 描述)', async () => {
+    mockSafeSpawn()
+    const result = await bashTool.execute(
+      { command: 'gh issue create --body "git config user.name"', description: 'test' },
+      ctx,
+    )
+    expect(result.success).toBe(true)
+  })
+
+  it('still blocks git config identity spoofing', async () => {
+    mockSafeSpawn()
+    const result = await bashTool.execute(
+      { command: 'git config user.name "attacker"', description: 'test' },
+      ctx,
+    )
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Dangerous git command blocked')
+  })
 })
 
 // ============================================================
