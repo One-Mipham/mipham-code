@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { matchBashRule, wildcardMatch, compileRule } from '../../src/core/permission-rules'
+import {
+  matchBashRule,
+  wildcardMatch,
+  compileRule,
+  splitShellSegments,
+  extractBashFileAccess,
+} from '../../src/core/permission-rules'
 
 describe('wildcardMatch', () => {
   it('matches exact strings', () => {
@@ -75,6 +81,116 @@ describe('matchBashRule', () => {
   it('matches Windows drive-letter paths literally (colon not mangled)', () => {
     expect(matchBashRule('Read(C:/Users/*)', 'Read', { file_path: 'C:/Users/alice' })).toBe(true)
     expect(matchBashRule('Read(C:/Users/*)', 'Read', { file_path: 'D:/other' })).toBe(false)
+  })
+})
+
+describe('splitShellSegments', () => {
+  it('splits a compound command on &&, ;, |, ||, and newline', () => {
+    expect(splitShellSegments('foo && rm -rf /')).toEqual(['foo', 'rm -rf /'])
+    expect(splitShellSegments('cd /tmp; rm -rf /')).toEqual(['cd /tmp', 'rm -rf /'])
+    expect(splitShellSegments('git status | rm -rf /')).toEqual(['git status', 'rm -rf /'])
+    expect(splitShellSegments('npm test || rm -rf /')).toEqual(['npm test', 'rm -rf /'])
+    expect(splitShellSegments('a\nb')).toEqual(['a', 'b'])
+  })
+
+  it('keeps a single simple command intact', () => {
+    expect(splitShellSegments('git status')).toEqual(['git status'])
+  })
+
+  it('returns [] for empty/whitespace input', () => {
+    expect(splitShellSegments('')).toEqual([])
+    expect(splitShellSegments('   ')).toEqual([])
+  })
+})
+
+describe('extractBashFileAccess', () => {
+  it('extracts read paths from reader commands', () => {
+    expect(extractBashFileAccess('cat .git-credentials').read).toContain('.git-credentials')
+    expect(extractBashFileAccess('tac .git-credentials').read).toContain('.git-credentials')
+    expect(extractBashFileAccess('egrep pattern .git-credentials').read).toContain(
+      '.git-credentials',
+    )
+  })
+
+  it('extracts read paths from input redirects', () => {
+    expect(extractBashFileAccess('cat < .git-credentials').read).toContain('.git-credentials')
+  })
+
+  it('extracts write paths from output redirects', () => {
+    expect(extractBashFileAccess('echo x > .npmrc').write).toContain('.npmrc')
+    expect(extractBashFileAccess('echo x >> .npmrc').write).toContain('.npmrc')
+  })
+
+  it('extracts write paths from in-place editors', () => {
+    expect(extractBashFileAccess("sed -i 's/x/y/' .npmrc").write).toContain('.npmrc')
+  })
+
+  it('returns no paths for unrelated commands', () => {
+    expect(extractBashFileAccess('echo hello')).toEqual({ read: [], write: [] })
+    expect(extractBashFileAccess('git status').read).toEqual([])
+  })
+
+  it('extracts read paths from command substitution and backticks', () => {
+    expect(extractBashFileAccess('echo $(cat .git-credentials)').read).toContain('.git-credentials')
+    expect(extractBashFileAccess('echo `cat .git-credentials`').read).toContain('.git-credentials')
+  })
+})
+
+describe('matchBashRule — Bash rules match compound-command segments', () => {
+  it('matches a segment buried in a compound command', () => {
+    expect(matchBashRule('Bash(rm *)', 'Bash', { command: 'foo && rm -rf /' })).toBe(true)
+    expect(matchBashRule('Bash(rm *)', 'Bash', { command: 'cd /tmp; rm -rf /' })).toBe(true)
+    expect(matchBashRule('Bash(rm *)', 'Bash', { command: 'git status | rm -rf /' })).toBe(true)
+    expect(matchBashRule('Bash(rm *)', 'Bash', { command: 'npm test || rm -rf /' })).toBe(true)
+  })
+
+  it('does not match when no segment matches', () => {
+    expect(matchBashRule('Bash(rm *)', 'Bash', { command: 'git status && npm test' })).toBe(false)
+  })
+})
+
+describe('matchBashRule — Read/Write/Edit rules match Bash file access', () => {
+  it('matches a Read(path) rule against a reader command via Bash', () => {
+    expect(
+      matchBashRule('Read(.git-credentials)', 'Bash', { command: 'cat .git-credentials' }),
+    ).toBe(true)
+    expect(
+      matchBashRule('Read(.git-credentials)', 'Bash', { command: 'tac .git-credentials' }),
+    ).toBe(true)
+    expect(
+      matchBashRule('Read(.git-credentials)', 'Bash', {
+        command: 'egrep pattern .git-credentials',
+      }),
+    ).toBe(true)
+  })
+
+  it('matches a Read(path) rule against an input redirect via Bash', () => {
+    expect(
+      matchBashRule('Read(.git-credentials)', 'Bash', { command: 'cat < .git-credentials' }),
+    ).toBe(true)
+  })
+
+  it('matches a Write/Edit(path) rule against an output redirect via Bash', () => {
+    expect(matchBashRule('Edit(.npmrc)', 'Bash', { command: 'echo x > .npmrc' })).toBe(true)
+    expect(matchBashRule('Write(.npmrc)', 'Bash', { command: 'echo x >> .npmrc' })).toBe(true)
+  })
+
+  it('matches an Edit(path) rule against an in-place editor via Bash', () => {
+    expect(matchBashRule('Edit(.npmrc)', 'Bash', { command: "sed -i 's/x/y/' .npmrc" })).toBe(true)
+  })
+
+  it('does not match an unrelated path', () => {
+    expect(matchBashRule('Read(.git-credentials)', 'Bash', { command: 'cat .npmrc' })).toBe(false)
+    expect(matchBashRule('Read(.git-credentials)', 'Bash', { command: 'echo hello' })).toBe(false)
+  })
+
+  it('matches a Read(path) rule against a command substitution via Bash', () => {
+    expect(
+      matchBashRule('Read(.git-credentials)', 'Bash', { command: 'echo $(cat .git-credentials)' }),
+    ).toBe(true)
+    expect(
+      matchBashRule('Read(.git-credentials)', 'Bash', { command: 'echo `cat .git-credentials`' }),
+    ).toBe(true)
   })
 })
 
