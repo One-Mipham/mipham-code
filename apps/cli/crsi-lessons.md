@@ -269,3 +269,16 @@
 - 待办（2 真缺口，未写代码）：① phase 维度检索键 ② 结构化因果边 (change→effect→方向)——接 eval-rigor #11 方向
 - 已实现（verify-before-build 复现）：③ 确定性相似度合并——初判为缺口，读码发现 `memory-manager.ts` 早有 `findNearDuplicate`（写时去重，`DEDUP_THRESHOLD` 0.65，同 type 余弦>阈值→合并 union relevance）+ `consolidateAutoMemories`（贪心聚簇 auto-* → lesson-*，`CONSOLIDATE_THRESHOLD` 0.5），都是确定性 cosine 无 LLM。误判根因：把 LESSON 的 LLM crossover 与 MEMORY 的确定性去重混为一谈
 - 转帖标题出入（verify-before-build 复现）：转帖写「In-Context Causal Interaction Memory for Embodied Action Generalization」，arXiv 实为「In-Context Causal Learning for Generalizable Embodied Manipulation」——「Causal Interaction Memory」是机制名不是标题
+
+## network-fallback: 网络降级只能靠 CDP，curl/Jina/DuckDuckGo 是伪改进
+
+- 建议: 联网工具（WebFetch/WebSearch）遇网络直连受限（GFW）时，「加 curl/Jina 降级」或「加 DuckDuckGo 免 key 回退」是伪改进——它们同样被墙。唯一可靠通道是用户 Chrome（CDP，web-access skill）。落地应是「失败信号明确提示改用 web-access」，保持模型编排回退，而非工具层硬编码降级（避免耦合 web-access 的 localhost:3456 proxy）。
+- 严重度: warning
+- 生成时间: 2026-09-02
+- 来源: 会话复盘（human + Claude Code，手动沉淀）
+
+### 证据
+
+- 实测本机（2026-09-02）：原生 fetch（WebFetch 用）、curl → raw.githubusercontent.com、curl → r.jina.ai（Jina）均超时（exit 28，GFW 封锁）；唯一成功的是 CDP（用户 Chrome，web-access skill 走 localhost:3456），拿到 604KB changelog
+- 结论：DuckDuckGo / Brave / Jina 全是被墙对象，「免 key 回退」与「curl/Jina 降级」在 GFW 环境同样失败，属「改了也没用」
+- 落地：WebFetch/WebSearch 失败信号 + 无 key 场景补「建议走 web-access(CDP)」提示（web-fetch.ts / web-search.ts）；不加工具层自动降级，回退决策仍在模型

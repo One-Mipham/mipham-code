@@ -102,6 +102,7 @@ describe('WebFetch tool execution', () => {
     const result = await webFetchTool.execute({ url: 'https://invalid.test' }, ctx)
     expect(result.success).toBe(false)
     expect(result.error).toContain('Fetch failed')
+    expect(result.error).toContain('web-access')
   })
 
   it('truncates long responses to 100K chars', async () => {
@@ -191,6 +192,7 @@ describe('WebSearch tool execution', () => {
     expect(result.content).toContain('vitest tutorial')
     expect(result.content).toContain('not yet configured')
     expect(result.content).toContain('brave.com/search/api/')
+    expect(result.content).toContain('web-access')
   })
 
   it('mentions Brave Search API setup instructions', async () => {

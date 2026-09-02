@@ -126,6 +126,8 @@ export const webSearchTool: ToolDefinition = {
           'Alternatives (add API key for any):',
           '   TAVILY_API_KEY   — https://tavily.com',
           '   SERPAPI_API_KEY  — https://serpapi.com',
+          '',
+          'No API key? Use the web-access skill (CDP through your logged-in Chrome) for live web search.',
         ].join('\n'),
       }
     }
@@ -199,7 +201,7 @@ export const webSearchTool: ToolDefinition = {
       const message =
         err instanceof Error && err.name === 'AbortError'
           ? 'Search timed out (15s). Try a more specific query.'
-          : `Search failed: ${String(err)}`
+          : `Search failed: ${String(err)}. If direct network is blocked, retry via the web-access skill (CDP through the user's logged-in Chrome).`
       return { success: false, content: '', error: message }
     }
   },

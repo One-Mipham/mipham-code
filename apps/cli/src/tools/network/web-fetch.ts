@@ -276,7 +276,7 @@ export const webFetchTool: ToolDefinition = {
       const message =
         err instanceof Error && err.name === 'AbortError'
           ? 'Request timed out (30s)'
-          : `Fetch failed: ${String(err)}`
+          : `Fetch failed: ${String(err)}. If direct network is blocked, retry via the web-access skill (CDP through the user's logged-in Chrome).`
       return { success: false, content: '', error: message }
     }
   },
