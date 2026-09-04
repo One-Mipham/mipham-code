@@ -10,8 +10,8 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.29.0
-> **最后更新**: 2026-09-02 — CC 2.1.257 借鉴落地 — Bash 安全规则边界修复（#52+#44）+ 测试对齐 2170
+> **版本**: 2.30.0
+> **最后更新**: 2026-09-04 — v0.74.0 发版 — 粘贴乱序/丢失/冻住修复（换 ink-text-input）+ CRSI self-report-diagnostic 锚点 + 测试对齐 2193
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -50,7 +50,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：2,170 测试（2168 passed + 2 skipped）
+测试：2,193 测试（2191 passed + 2 skipped）
 
 ---
 
@@ -87,7 +87,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 27 个内置技能（21 standard + 6 mipham）
-│   │   ├── test/               # 201 个测试文件，2170 个测试
+│   │   ├── test/               # 202 个测试文件，2193 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -110,7 +110,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（2170 个测试）
+pnpm test         # vitest run（2193 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -234,7 +234,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
 | E2E      | 1       | 8        | full-pipeline                                 |
 | Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **201** | **2170** | **0 失败** ✅（2168 passed + 2 skipped）      |
+| **合计** | **202** | **2193** | **0 失败** ✅（2191 passed + 2 skipped）      |
 
 > 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
 
@@ -292,6 +292,9 @@ GitHub Actions 9 个 job 流水线：`typecheck → lint → format → build-cl
 
 | 日期       | Commit    | 说明                                                                                         |
 | ---------- | --------- | -------------------------------------------------------------------------------------------- |
+| 2026-09-04 | `1a9efcf` | chore: bump version to 0.74.0                                                                |
+| 2026-09-04 | `8052dcf` | fix(ui): 换掉 ink-text-input — 粘贴分块原子追加，根治乱序/丢失/冻住                          |
+| 2026-09-04 | `f7e61c9` | feat(crsi): eval harness 加 self-report-diagnostic 锚点                                      |
 | 2026-08-31 | `4d33709` | chore: bump version to v0.70.0                                                               |
 | 2026-08-31 | `4e732cd` | feat(cli): /fix test 命令接线 + i18n                                                         |
 | 2026-08-31 | `d5669d7` | feat(cli): /fix test 核心 — LLM 修复失败测试（复用 bench 冻结判定）                          |
@@ -431,6 +434,7 @@ mipham-code 变更（包名/版本）
 
 | 版本   | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | 维护人     |
 | ------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| 2.30.0 | 2026-09-04 | v0.74.0 发版：① CRSI eval harness 加 self-report-diagnostic 锚点（评分路径无 LLM——4 评分组件 ruleEngine/constitution/errorDB/preflight 不暴露 chat 能力，分数只来自 ground-truth 非模型自报，若注入 LLM 立即 FAIL、anchor gate 拒固化；测试 37→38）② 聊天输入框粘贴乱序/丢失/冻住修复（根因 = Ink 分块投递 + ink-text-input 分块切片插入读渲染闭包旧值 → 换 MiphamTextInput ref 原子追加 + normalizeInput 扩 [\r\n\t]+ 补漏 \r + 删 33ms 节流 + 删 Ctrl revert）。测试 2191 passed + 2 skipped（202 文件）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | 技术委员会 |
 | 2.29.0 | 2026-09-02 | CC 2.1.257 借鉴落地（#52+#44 同根因）：Bash 安全规则匹配边界修复——① Read/Write/Edit deny 规则扩展到 Bash 命令触碰的文件（reader 命令 cat/tac/egrep… + `<`/`>` 重定向 + `$(...)`/反引号命令替换，复用 matchPath 匹配）② Bash 规则匹配从「锚定前缀」改为「复合命令分段」（splitShellSegments 按 shell 分隔符拆分，`rm -rf /` 埋在 `foo && rm -rf /` 仍命中）。堵住 `cat .git-credentials` 绕过 `Read(.git-credentials)` deny 规则的安全洞。+17 测试（permission-rules）。测试 2168 passed + 2 skipped（201 文件）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | 技术委员会 |
 | 2.28.0 | 2026-09-01 | CRSI 教训落地对账三连：① #17 安全——git 危险守卫移除 gh（DANGEROUS_GIT_PATTERNS 全是 git 子命令，扫 gh 纯误伤描述文本）+2 测试 ② #13 CRSI——managed rule 禁用护栏（hasDisableIntent 只路由不禁用，拒绝「禁用某能力」的 blanket 规则）+4 测试 ③ #11 eval-rigor ④ 原子激活——improvement-track 台账 appendFileSync → atomicWriteFileSync（temp+rename）、readImprovements 坏行跳过、setPendingVerdict 易失内存变量 → pending-verdict.json 原子 manifest（读者要么见旧要么见新）+6 测试。测试 2147 passed + 2 skipped（201 文件）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | 技术委员会 |
 | 2.27.0 | 2026-08-31 | v0.70.0 发版：① marketplace 源机制（任意公开仓库 skill 可装，GitHub API trees 发现 + curl 下载，`/marketplace` + `/browse-marketplace` 命令）② community registry 加 grill-me/eli5 ③ hooks 全链路对标 Claude Code（stdin/stdout JSON 协议 buildHookStdin/parseHookStdout + settings.json 接线 loadSettingsJson + `/loop init` 删 .sh 约定 + `/hooks` 指向 settings.json）④ `/fix test` 第二阶段（LLM 修复失败测试，复用 bench 冻结判定，测试冻结只改源码、默认 dry-run）+ CRSI 教训 verify-before-build。测试 2131 passed + 2 skipped（201 文件）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                | 技术委员会 |
