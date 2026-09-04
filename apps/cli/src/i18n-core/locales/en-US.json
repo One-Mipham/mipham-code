@@ -780,7 +780,7 @@
   "ui": {
     "banner": {
       "title": "Mipham Code",
-      "subtitle": "AI-Powered Programming Assistant",
+      "subtitle": "AI-Powered Super Agent",
       "tagline": "Multi-model / Multi-provider / Skills & Tools / Open-core",
       "start_message": "Type a message to start. /help for commands",
       "controls_hint": "Ctrl+P pick model · Esc to exit",

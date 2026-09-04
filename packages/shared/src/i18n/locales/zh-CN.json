@@ -616,7 +616,7 @@
   "ui": {
     "banner": {
       "title": "Mipham Code",
-      "subtitle": "AI 驱动的编程助手",
+      "subtitle": "AI 驱动的超级智能体",
       "tagline": "多模型 / 多提供商 / 技能与工具 / 开源核心",
       "start_message": "输入消息开始。 /help 查看命令",
       "controls_hint": "Ctrl+P 选择模型 · Esc 退出",
