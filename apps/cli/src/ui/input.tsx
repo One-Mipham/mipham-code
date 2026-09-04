@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { Box, Text, useInput } from 'ink'
-import TextInput from 'ink-text-input'
 import { getCommandList } from './commands.js'
 import { CommandPicker } from './command-picker.js'
 import { useI18n } from '../i18n-context'
@@ -80,16 +79,91 @@ function pick<T>(arr: T[]): T {
 }
 
 /**
- * 判断一次输入是否为「批量」（长度跳变 >1：粘贴 / IME 替换）。
- * 批量输入需节流防渲染风暴；普通单字符输入应立即显示，无节流延迟。
+ * 归一化输入：多行粘贴折叠成单行（CR/LF/Tab → 空格）。
+ * ink-text-input 是单行组件，嵌入的 \r 会拉回行首覆盖显示、\n 会 trap 光标。
  */
-export function isBulkInput(prev: string, next: string): boolean {
-  return Math.abs(next.length - prev.length) > 1
+export function normalizeInput(input: string): string {
+  return input.replace(/[\r\n\t]+/g, ' ')
 }
 
 /** True when typing a leading `/` should auto-open the slash-command picker. */
 export function shouldAutoOpenPicker(value: string, prevValue: string, enabled: boolean): boolean {
   return enabled && value.startsWith('/') && !prevValue.startsWith('/')
+}
+
+/**
+ * Mipham 自有的单行文本输入，替代 ink-text-input。
+ *
+ * 为什么不用 ink-text-input：它把粘贴按「光标偏移切片插入」逐块处理，而
+ * cursorOffset 与受控 value 都来自渲染闭包——Ink 会把长粘贴按 stdin read()
+ * 边界拆成多块，同一轮 synchronous flush 里后续块读到的仍是旧值，于是「覆盖
+ * 前块 / 插到中段」，表现为粘贴内容乱序、丢失、冻住。
+ *
+ * 这里用 ref 做同步真值：每块按当前 ref 原子追加（光标恒在末尾），不依赖
+ * React 渲染时序，分块粘贴自然累积成完整文本。
+ */
+function MiphamTextInput({
+  value,
+  onChange,
+  onSubmit,
+  placeholder = '',
+  focus = true,
+}: {
+  value: string
+  onChange: (next: string) => void
+  onSubmit: (value: string) => void
+  placeholder?: string
+  focus?: boolean
+}) {
+  // 同步真值：valueRef 永远是最新文本；受控 value 仅在渲染时落后于 ref。
+  const valueRef = useRef(value)
+
+  // 外部改动（箭头历史回填、提交清空）时，把真值对齐回受控 prop。
+  useEffect(() => {
+    valueRef.current = value
+  }, [value])
+
+  useInput(
+    (input, key) => {
+      if (!focus) return
+      // 上行/下行/制表/Ctrl 由 InputBar 自己的 useInput 处理（历史导航、热键）。
+      if (key.upArrow || key.downArrow || key.tab || (key.shift && key.tab) || key.ctrl) return
+
+      if (key.return) {
+        onSubmit(valueRef.current)
+        return
+      }
+      if (key.backspace || key.delete) {
+        if (valueRef.current.length > 0) {
+          const next = valueRef.current.slice(0, -1)
+          valueRef.current = next
+          onChange(next)
+        }
+        return
+      }
+
+      // 打字 / 粘贴：归一化控制符后原子追加（光标恒在末尾）。
+      const cleaned = normalizeInput(input)
+      if (!cleaned) return
+      const next = valueRef.current + cleaned
+      valueRef.current = next
+      onChange(next)
+    },
+    { isActive: focus },
+  )
+
+  return (
+    <Text>
+      {value.length === 0 && placeholder ? (
+        <Text dimColor>{placeholder}</Text>
+      ) : (
+        <>
+          {value}
+          <Text inverse> </Text>
+        </>
+      )}
+    </Text>
+  )
 }
 
 export function InputBar({
@@ -110,10 +184,7 @@ export function InputBar({
   const { t } = useI18n()
   const [value, setValue] = useState('')
   // Ref mirror of value — used by useInput to read latest without stale closure.
-  // Also used by throttled onChange to hold the latest pending value.
   const valueRef = useRef(value)
-  // Throttle timer for onChange — prevents React render floods during paste.
-  const onChangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [verb, setVerb] = useState(() => t(pick(LOADING_KEYS)))
   const [completionVerb, setCompletionVerb] = useState<string | null>(null)
   const prevLoading = useRef(isLoading)
@@ -190,15 +261,6 @@ export function InputBar({
     prevLoading.current = isLoading
   }, [isLoading])
 
-  // Track pre-shortcut value so we can revert ink-text-input's Ctrl-key insertions.
-  // ink-text-input inserts 'p'/'f'/'o' for Ctrl+P/F/O (Ink normalizes control chars
-  // to their letter names before passing to useInput).
-  const valueBeforeShortcut = useRef(value)
-  // Keep the ref in sync with state on every change that isn't a Ctrl shortcut revert.
-  useEffect(() => {
-    valueBeforeShortcut.current = value
-  }, [value])
-
   useInput((input, key) => {
     // ── Escape: cancel loading → clear draft ──
     if (key.escape) {
@@ -220,9 +282,9 @@ export function InputBar({
       onCyclePermission?.()
       return
     }
-    // Tab → 接受 ghost-text 建议（复用 Ctrl-key 的 revert 手法）
+    // Tab → 接受 ghost-text 建议
     if (key.tab && !key.shift && suggestion) {
-      const next = valueBeforeShortcut.current + suggestion
+      const next = valueRef.current + suggestion
       setValue(next)
       valueRef.current = next
       setSuggestion(null)
@@ -230,27 +292,22 @@ export function InputBar({
     }
     // Ctrl+P → toggle model picker
     // NOTE: Ink passes input=keypress.name (just 'p') when ctrl is true, not raw \x10.
-    // ink-text-input inserts 'p' as literal text — revert it.
     if (key.ctrl && input === 'p') {
-      setValue(valueBeforeShortcut.current)
       onTogglePicker?.()
       return
     }
     // Ctrl+F → toggle focus mode
     if (key.ctrl && input === 'f') {
-      setValue(valueBeforeShortcut.current)
       onToggleFocus?.()
       return
     }
     // Ctrl+O → expand/collapse last tool call
     if (key.ctrl && input === 'o') {
-      setValue(valueBeforeShortcut.current)
       onToggleExpand?.()
       return
     }
     // Ctrl+G → toggle agent view dashboard
     if (key.ctrl && input === 'g') {
-      setValue(valueBeforeShortcut.current)
       onToggleAgentView?.()
       return
     }
@@ -267,13 +324,7 @@ export function InputBar({
         if (submittedHistory.length === 0) return
         // Save current draft the first time we enter history browsing
         if (historyIndexRef.current === -1) {
-          // Flush any pending throttle so its deferred setValue doesn't overwrite
-          // history navigation (paste → immediate ↑ race). Save the latest value
-          // from the ref — state `value` is stale inside the throttle window.
-          if (onChangeTimerRef.current) {
-            clearTimeout(onChangeTimerRef.current)
-            onChangeTimerRef.current = null
-          }
+          // Save the latest value from the ref — state `value` may lag a render.
           savedDraftRef.current = valueRef.current
         }
         const newIndex = Math.min(historyIndexRef.current + 1, submittedHistory.length - 1)
@@ -319,13 +370,7 @@ export function InputBar({
   }, [value])
 
   const handleSubmit = (val: string) => {
-    // Flush any pending throttled onChange before submitting
-    if (onChangeTimerRef.current) {
-      clearTimeout(onChangeTimerRef.current)
-      onChangeTimerRef.current = null
-    }
-    // Use the latest value from the ref — state lags behind during throttle, and
-    // the onSubmit `val` is the stale controlled prop in that window.
+    // Use the latest value from the ref; `val` is the value passed by MiphamTextInput.
     const finalValue = valueRef.current || val
     if (!finalValue.trim()) return
     // Submitting while a response streams interrupts it (Claude Code parity)
@@ -371,7 +416,7 @@ export function InputBar({
         <Box marginRight={1}>
           <Text color={isLoading ? 'yellow' : 'cyan'}>{'>'}</Text>
         </Box>
-        <TextInput
+        <MiphamTextInput
           value={value}
           onChange={(val) => {
             // Reset history browsing when user starts typing
@@ -379,9 +424,6 @@ export function InputBar({
               historyIndexRef.current = -1
               savedDraftRef.current = ''
             }
-            // Normalize newlines → spaces. ink-text-input is single-line; multi-line
-            // paste would trap arrow-key navigation on the first line.
-            const normalized = val.replace(/\n/g, ' ')
             // ── Ghost-text 自动补全：每次输入清 suggestion + 重排防抖 ──
             setSuggestion(null)
             const suggestionReqId = ++suggestionReqIdRef.current
@@ -389,16 +431,12 @@ export function InputBar({
               clearTimeout(suggestionTimerRef.current)
               suggestionTimerRef.current = null
             }
-            if (
-              llm &&
-              autocompleteEnabled &&
-              shouldAutocomplete(normalized, isLoading, pickerActive)
-            ) {
+            if (llm && autocompleteEnabled && shouldAutocomplete(val, isLoading, pickerActive)) {
               suggestionTimerRef.current = setTimeout(() => {
                 requestSuggestion(
                   llm,
                   recentMessages ?? [],
-                  normalized,
+                  val,
                   () => suggestionReqId !== suggestionReqIdRef.current,
                 )
                   .then((completion) => {
@@ -409,24 +447,8 @@ export function InputBar({
                   })
               }, autocompleteDebounceMs)
             }
-            // 批量输入（paste/IME 替换）节流防渲染风暴；普通单字符输入立即显示，
-            // 避免 33ms trailing 的「慢半拍」尾巴。
-            const bulk = isBulkInput(valueRef.current, normalized)
-            valueRef.current = normalized
-            if (!bulk) {
-              if (onChangeTimerRef.current) {
-                clearTimeout(onChangeTimerRef.current)
-                onChangeTimerRef.current = null
-              }
-              setValue(normalized)
-              return
-            }
-            if (onChangeTimerRef.current) return // timer pending, latest value in ref
-            setValue(normalized)
-            onChangeTimerRef.current = setTimeout(() => {
-              onChangeTimerRef.current = null
-              setValue(valueRef.current)
-            }, 33) // ~30fps
+            valueRef.current = val
+            setValue(val)
           }}
           onSubmit={handleSubmit}
           placeholder={
