@@ -225,11 +225,11 @@
 
 - 建 issue #22 时，`gh issue create --body "..."` 里「影响面示例」出现 `git config user.name` 字面量，被 `bash.ts` 引入的 `DANGEROUS_GIT_PATTERNS`（`/\bconfig\s+.*user\./`）误判「身份伪造」拦截
 - 根因：`bash.ts` 把针对 git 命令的 `DANGEROUS_GIT_PATTERNS` 应用到**所有** bash 命令文本，`config user.*` 正则命中 body 里的描述性字面量
-- 状态：**未修复（open）**——与教训 #1 `$()` blanket 同源，需「只拦执行意图、不拦描述文本」的修复（如只对 `git ...` 前缀命令应用，或区分命令 vs 参数文本）
+- 状态：**已修复（2026-09-01 2.28.0）**——`bash.ts` 加 git 前缀门 `/(?:^|[\s;&|])git\s+/`，只对含 `git ` 子命令的文本扫 `DANGEROUS_GIT_PATTERNS`，`gh` 不再扫；`bash.test.ts:156-173` 锁死「`gh issue create --body "git config user.name"` 放行」+「`git config user.name "attacker"` 拦截」
 
 ## verify-before-build: 对标外部生态前先核实「标准是否真实存在」+「自身是否已实现」
 
-- 建议: 收到「对标 X / 兼容 X 生态」的需求时，动手写码前必须过两道核实：① **外部标准真实性**——查官方文档/真实生态，确认 X 的标准究竟是什么（文件是 .md 还是 .json、确切文件名、schema），禁止凭命名臆测（把「SKILL.md 单文件约定」臆测成「SKILLS.md」、把 settings.json / plugin.json / .mcp.json 臆测成 HOOKS.md / PLUGINS.md / MCP.md）；② **自身现状**——grep/read/graft 查自己是否已实现，禁止凭印象说「我们缺 X」然后从零重复造。两道核实都没做就直接开发 = 先造空中楼阁再返工，白费一整轮。
+- 建议: 收到「对标 X / 兼容 X 生态」的需求时，动手写码前必须过三道核实：① **外部标准真实性**——查官方文档/真实生态，确认 X 的标准究竟是什么（文件是 .md 还是 .json、确切文件名、schema），禁止凭命名臆测（把「SKILL.md 单文件约定」臆测成「SKILLS.md」、把 settings.json / plugin.json / .mcp.json 臆测成 HOOKS.md / PLUGINS.md / MCP.md）；② **自身现状**——grep/read/graft 查自己是否已实现，禁止凭印象说「我们缺 X」然后从零重复造；③ **目标自身是否回退**——读目标的 CHANGELOG **后续版本段**（不只当前版），看该机制/修复有没有在后面的版本被 Revert / Changed back——上游「加了又回退」= 该方案有过度/缺陷，是上游自己否定的信号，对标者照抄会复刻一个被否的方案。三道核实都没做就直接开发 = 先造空中楼阁再返工，白费一整轮。
 - 严重度: critical
 - 生成时间: 2026-08-31
 - 来源: 会话复盘（human + Claude Code，手动沉淀）
@@ -239,6 +239,7 @@
 - 用户要求「兼容 AGENTS.md / SKILLS.md 等生态文件」，Claude 凭臆测发明 SKILLS.md / HOOKS.md / PLUGINS.md / MCP.md 四个 .md「标准」并开发对应读取代码（instructions.ts），用户点破这些 .md 根本不存在——真实生态是 SKILL.md 单文件约定 + settings.json（permissions+hooks）+ plugin.json（.claude-plugin）+ .mcp.json，**全是 JSON 不是 .md**
 - 用户再问「是否对标开发 hooks/plugins/MCP 走 JSON」，Claude 凭印象以为「没做」，读码才发现 executeHook（hooks-executor.ts）、loadHookConfigs（hooks-config.ts）、loadMcpJson（loader.ts）、claude-plugin.ts 早已实现——真正缺的只有 loadHookConfigs 零调用点（没接线到 settings.json 读取）
 - 双重弯路同一根因：① 未核实外部标准真实性 → 开发了不存在的东西；② 未查自身现状 → 差点从零重复造已存在的轮子
+- ③ 的实演（2026-09-04）：Claude Code 2.1.259 加了「Read() deny 规则扩展到 Bash 参数」，2.1.260 直接回退（"Reverted the 2.1.259 change applying Read() deny rules to Bash arguments; it denied `npm run build` under a `Read(./**/build/**)` rule in every mode and made `cd … && grep` prompt even in auto mode"）。Mipham v0.72.0（`7446106`，#52+#44）独立落地了同类 Read→Bash deny 扩展，但范围更保守（只扫 reader/writer 命令白名单 + 重定向，不扫任意参数/选项值），天然避开上游两个假阳性。教训：只读 2.1.259 会以为该机制值得照抄，读到 2.1.260 才知上游自己否掉了它。落地：P0 回归测试锁死 `npm run build` / `cd src && grep foo` 不被 `Read(./**/build/**)` 误拦（permission-rules.test.ts）。
 
 ## security-benchmark: 对标安全漏洞须验证前提——黑名单缺模式 ≠ 有漏洞
 
@@ -266,7 +267,7 @@
 - Zeva（清华 AIR + 域变换）三组件：Causal Interaction Extractor（CTE 融合视觉 latent + 动作 + 观测到的状态变化 → phase token + causal signal）、双时标记忆（BIT 近期 attempt 内 + PIM 跨 attempt 相似度合并）、In-Context Policy Injection（phase-conditioned retrieval → Causal Prompt → 注入冻结 diffusion policy 的 full-attention 块）
 - 对齐（已覆盖 / 领先）：冻结参数 + 记忆侧学习 = CRSI 核心；自进化随经验提升 = improvement-track（verdict + improvementRate + Wilson CI）；防错误经验积累 = eval harness 33 契约 + 分数不退化闸 + 只拦 regressed（**领先**——这是 Zeva 明列的 open challenge，我们已有确定性格门）；因果归因 = `causal`；合并 = crossover 算子；双时标 = session-log vs memory/lessons
 - 不适用（别硬套）：视觉 latent / diffusion policy / full-attention 注入是具身 VLA 实现细节，Mipham 对应物是 prompt 注入（已覆盖）；连续物理状态空间 vs 编码任务离散状态（测试通过/失败、diff）
-- 待办（2 真缺口，未写代码）：① phase 维度检索键 ② 结构化因果边 (change→effect→方向)——接 eval-rigor #11 方向
+- 深化方向（2 真缺口，但**无观察痛点、暂不实现**——2026-09-04 决策）：① phase 维度检索键 ② 结构化因果边 (change→effect→方向)。属 borrow-driven 非 pain-driven，按 `simplicity` 教训搁置（「差异化/创新本身不是加功能的理由」）；等真实需求（召回误阶段 / 因果误判）出现再动，接 eval-rigor #11 方向
 - 已实现（verify-before-build 复现）：③ 确定性相似度合并——初判为缺口，读码发现 `memory-manager.ts` 早有 `findNearDuplicate`（写时去重，`DEDUP_THRESHOLD` 0.65，同 type 余弦>阈值→合并 union relevance）+ `consolidateAutoMemories`（贪心聚簇 auto-* → lesson-*，`CONSOLIDATE_THRESHOLD` 0.5），都是确定性 cosine 无 LLM。误判根因：把 LESSON 的 LLM crossover 与 MEMORY 的确定性去重混为一谈
 - 转帖标题出入（verify-before-build 复现）：转帖写「In-Context Causal Interaction Memory for Embodied Action Generalization」，arXiv 实为「In-Context Causal Learning for Generalizable Embodied Manipulation」——「Causal Interaction Memory」是机制名不是标题
 
