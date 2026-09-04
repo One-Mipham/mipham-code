@@ -630,6 +630,28 @@ export async function runApp(options: RunOptions): Promise<void> {
 
   // Auto-save session on exit
   let saved = false
+
+  // Persist the current session under its real name. Shared by saveAndExit and
+  // the process 'exit' safety net — the two paths must stay identical, or the
+  // session gets saved under a different (timestamped) name and /resume breaks.
+  const persistSession = () => {
+    if (context.getMessageCount() === 0) return
+    const log = context.getLog()
+    if (log) {
+      SessionStore.saveLog(sessionName, log, {
+        provider: defaultProvider,
+        model: defaultModel,
+        cwd: process.cwd(),
+      })
+    } else {
+      SessionStore.save(sessionName, context.getMessages(), {
+        provider: defaultProvider,
+        model: defaultModel,
+        cwd: process.cwd(),
+      })
+    }
+  }
+
   const saveAndExit = () => {
     saved = true
     clearInterval(heartbeatInterval)
@@ -637,22 +659,7 @@ export async function runApp(options: RunOptions): Promise<void> {
     // P2-1: Trigger SessionEnd hooks before cleanup (best-effort)
     hookEngine.executeSessionEnd(sessionName).catch(() => {})
     artifactServer.stop()
-    if (context.getMessageCount() > 0) {
-      const log = context.getLog()
-      if (log) {
-        SessionStore.saveLog(sessionName, log, {
-          provider: defaultProvider,
-          model: defaultModel,
-          cwd: process.cwd(),
-        })
-      } else {
-        SessionStore.save(sessionName, context.getMessages(), {
-          provider: defaultProvider,
-          model: defaultModel,
-          cwd: process.cwd(),
-        })
-      }
-    }
+    persistSession()
     // Finalize the session — write session summary + flush CRSI effectiveness
     // (evaluate rules and apply auto-degrade/disable). Best-effort: the
     // self-improvement closeout must never block session exit.
@@ -667,27 +674,25 @@ export async function runApp(options: RunOptions): Promise<void> {
 
   process.on('SIGINT', saveAndExit)
   process.on('SIGTERM', saveAndExit)
+  // Terminal close / SSH disconnect sends SIGHUP (not SIGINT/SIGTERM); without
+  // a handler the session log is silently dropped on those paths.
+  process.on('SIGHUP', saveAndExit)
 
-  // Safety net: auto-save on exit for paths that bypass saveAndExit
+  // Safety net: persist on exit for paths that bypass saveAndExit (e.g. /exit
+  // and /quit call process.exit(0) directly). saveAndExit already persists;
+  // guard on !saved to avoid double-writing.
   process.on('exit', () => {
     clearInterval(heartbeatInterval)
     unregisterSession(sessionName)
     // Finalize the session on non-interactive exit paths
-    // (daemon worker / crash / kill) that bypass saveAndExit. saveAndExit
-    // already finalizes; guard on !saved to avoid double-evaluating.
+    // (daemon worker / crash / kill) that bypass saveAndExit.
     if (!saved) {
       try {
         engine.getAutoMemory().finalizeSession()
       } catch {
         // ignore — CRSI closeout is non-critical
       }
-    }
-    if (!saved && context.getMessageCount() > 0) {
-      SessionStore.autoSave(context.getMessages(), {
-        provider: defaultProvider,
-        model: defaultModel,
-        cwd: process.cwd(),
-      })
+      persistSession()
       // Distill learnings from the last 5 user messages into memory
       const allMessages = context.getMessages()
       const userMessages = allMessages
