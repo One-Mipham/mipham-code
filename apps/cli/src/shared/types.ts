@@ -315,6 +315,8 @@ export interface PermissionRuleEntry {
   pattern: string // e.g., "Bash(git:*)"
   level: 'allow' | 'deny' | 'ask'
   compiled: RegExp
+  /** Set when the pattern is structurally invalid and can never match. */
+  invalid?: string
 }
 
 export interface PermissionRule {

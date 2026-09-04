@@ -251,8 +251,37 @@ export function wildcardMatch(pattern: string, input: string): boolean {
   return new RegExp(regexStr).test(input)
 }
 
+/**
+ * Validate a rule pattern string's structure, mirroring exactly what
+ * `matchBashRule` / `ruleMatches` will actually match. A pattern that is
+ * syntactically valid but never matches (e.g. `Bash(ls) x`, `Read(foo`,
+ * `Bash()`) is silently dead today — this returns a human-readable reason so
+ * the caller can report it as an invalid setting instead of ignoring it.
+ *
+ * Returns null when the pattern is valid, or a reason string when malformed.
+ */
+export function validateRulePattern(pattern: string): string | null {
+  if (!pattern.trim()) return 'rule pattern is empty'
+
+  if (pattern.includes('(')) {
+    if (!pattern.includes(')')) return 'unclosed parenthesis'
+    // Empty parameter: `Bash()` or `Bash( )`
+    if (/\(\s*\)$/.test(pattern)) return 'empty parameter'
+    // Must be exactly `ToolName(param)` with nothing before or after.
+    if (!/^(\w+)\((.+)\)$/.test(pattern)) {
+      return 'unexpected text after the closing parenthesis'
+    }
+    return null
+  }
+
+  // No parenthesis → must be a plain tool name (matched via `pattern === tool.name`).
+  if (!/^\w+$/.test(pattern)) return 'not a single tool name'
+  return null
+}
+
 /** Compile a rule pattern string into a PermissionRuleEntry. */
 export function compileRule(pattern: string, level: 'allow' | 'deny' | 'ask'): PermissionRuleEntry {
+  const invalid = validateRulePattern(pattern)
   const regexStr =
     '^' +
     pattern
@@ -261,5 +290,5 @@ export function compileRule(pattern: string, level: 'allow' | 'deny' | 'ask'): P
       .replace(/\\\*/g, '.*')
       .replace(/\\\?/g, '.') +
     '$'
-  return { pattern, level, compiled: new RegExp(regexStr) }
+  return { pattern, level, compiled: new RegExp(regexStr), ...(invalid ? { invalid } : {}) }
 }

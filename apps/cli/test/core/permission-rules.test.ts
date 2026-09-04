@@ -3,6 +3,7 @@ import {
   matchBashRule,
   wildcardMatch,
   compileRule,
+  validateRulePattern,
   splitShellSegments,
   extractBashFileAccess,
 } from '../../src/core/permission-rules'
@@ -194,10 +195,77 @@ describe('matchBashRule — Read/Write/Edit rules match Bash file access', () =>
   })
 })
 
+describe('matchBashRule — conservative scoping avoids upstream false positives', () => {
+  // Claude Code 2.1.259 extended Read() deny rules to ALL Bash arguments, then
+  // 2.1.260 REVERTED it: it denied `npm run build` under `Read(./**/build/**)`
+  // in every mode and made `cd … && grep` prompt even in auto mode. Mipham's
+  // version only scans reader/writer commands + redirects, so these do NOT match.
+  it('does not match `npm run build` under a Read(./**/build/**) rule', () => {
+    expect(matchBashRule('Read(./**/build/**)', 'Bash', { command: 'npm run build' })).toBe(false)
+  })
+
+  it('does not match `cd src && grep foo` under a Read(./**/build/**) rule', () => {
+    expect(matchBashRule('Read(./**/build/**)', 'Bash', { command: 'cd src && grep foo' })).toBe(
+      false,
+    )
+  })
+
+  it('does not match a git subcommand under a Read rule (git is not a reader/writer)', () => {
+    expect(matchBashRule('Read(./**/build/**)', 'Bash', { command: 'git grep foo ./src' })).toBe(
+      false,
+    )
+  })
+})
+
+describe('validateRulePattern', () => {
+  it('accepts a plain tool name', () => {
+    expect(validateRulePattern('Bash')).toBeNull()
+    expect(validateRulePattern('Write')).toBeNull()
+  })
+
+  it('accepts a well-formed parenthesized rule', () => {
+    expect(validateRulePattern('Bash(git:*)')).toBeNull()
+    expect(validateRulePattern('Read(**/.ssh/id_rsa)')).toBeNull()
+    expect(validateRulePattern('Write(/etc/*)')).toBeNull()
+  })
+
+  it('accepts parentheses inside the path', () => {
+    expect(validateRulePattern('Read(./dir/(name)/file)')).toBeNull()
+  })
+
+  it('flags an empty or whitespace-only pattern', () => {
+    expect(validateRulePattern('')).not.toBeNull()
+    expect(validateRulePattern('   ')).not.toBeNull()
+  })
+
+  it('flags an unclosed parenthesis', () => {
+    expect(validateRulePattern('Read(foo')).not.toBeNull()
+  })
+
+  it('flags text after the closing parenthesis', () => {
+    expect(validateRulePattern('Bash(ls) x')).not.toBeNull()
+    expect(validateRulePattern('Read(/a/b) ')).not.toBeNull()
+  })
+
+  it('flags an empty parameter', () => {
+    expect(validateRulePattern('Bash()')).not.toBeNull()
+  })
+
+  it('flags a non-word plain name', () => {
+    expect(validateRulePattern('Bash x')).not.toBeNull()
+  })
+})
+
 describe('compileRule', () => {
   it('compiles pattern to regex', () => {
     const rule = compileRule('Bash(git:*)', 'allow')
     expect(rule.level).toBe('allow')
     expect(rule.compiled.test('Bash(git status)')).toBe(true)
+    expect(rule.invalid).toBeUndefined()
+  })
+
+  it('marks a malformed pattern invalid', () => {
+    const rule = compileRule('Bash(ls) x', 'deny')
+    expect(rule.invalid).toBeDefined()
   })
 })

@@ -95,6 +95,9 @@ export function buildDaemonPermission(
     for (const rule of rules.allow ?? []) permission.allow(rule)
     for (const rule of rules.deny ?? []) permission.deny(rule)
   }
+  for (const msg of permission.getInvalidRules()) {
+    process.stderr.write(`⚠ Mipham Code: ${msg}\n`)
+  }
   return permission
 }
 

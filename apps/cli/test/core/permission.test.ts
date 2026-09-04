@@ -462,4 +462,26 @@ describe('PermissionSystem', () => {
       expect(ps.explainDenial(tool, {})).toMatchObject({ reason: 'tool-default' })
     })
   })
+
+  describe('getInvalidRules', () => {
+    it('returns empty when all rules are well-formed', () => {
+      const ps = new PermissionSystem()
+      ps.deny('Read(**/.git-credentials)')
+      ps.allow('Bash(git:*)')
+      expect(ps.getInvalidRules()).toEqual([])
+    })
+
+    it('reports a malformed rule across allow/deny/ask', () => {
+      const ps = new PermissionSystem()
+      ps.deny('Bash(ls) x')
+      ps.allow('Read(foo')
+      ps.ask('Bash()')
+      const invalid = ps.getInvalidRules()
+      expect(invalid).toHaveLength(3)
+      const joined = invalid.join('\n')
+      expect(joined).toContain('"Bash(ls) x"')
+      expect(joined).toContain('"Read(foo"')
+      expect(joined).toContain('"Bash()"')
+    })
+  })
 })

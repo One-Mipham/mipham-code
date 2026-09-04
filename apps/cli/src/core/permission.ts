@@ -489,6 +489,24 @@ export class PermissionSystem {
     this.invalidateCache()
   }
 
+  /**
+   * Report any rule whose pattern is structurally invalid and can therefore
+   * never match (e.g. `Bash(ls) x`, `Read(foo`, `Bash()`). These are silently
+   * dead today — callers should surface them as invalid settings rather than
+   * let a deny rule fail closed without the user noticing.
+   */
+  getInvalidRules(): string[] {
+    const invalid: string[] = []
+    for (const entry of [...this.allowRules, ...this.denyRules, ...this.askRules]) {
+      if (entry.invalid) {
+        invalid.push(
+          `permission rule "${entry.pattern}" is invalid (${entry.invalid}) and will never match`,
+        )
+      }
+    }
+    return invalid
+  }
+
   removeRule(toolName: string): void {
     this.legacyRules.delete(toolName)
     this.removeRuleFromArrays(toolName)

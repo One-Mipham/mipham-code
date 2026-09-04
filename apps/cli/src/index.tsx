@@ -559,6 +559,12 @@ export async function runApp(options: RunOptions): Promise<void> {
   for (const rule of settingsJson.permissions.allow) engine.getPermission().allow(rule)
   for (const rule of settingsJson.permissions.deny) engine.getPermission().deny(rule)
 
+  // Surface malformed permission rules as warnings instead of silently letting
+  // them never match (e.g. a deny rule typed `Bash(ls) x` would fail closed).
+  for (const msg of engine.getPermission().getInvalidRules()) {
+    process.stderr.write(`⚠ Mipham Code: ${msg}\n`)
+  }
+
   // Initialize agent registry and load plugin agents/skills/MCP/hooks
   const agentRegistry = new AgentRegistry()
   agentRegistry.loadUserAgents()
