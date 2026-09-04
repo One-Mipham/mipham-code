@@ -11,7 +11,7 @@
   "models": [
     {
       "id": "om-v5-flash",
-      "name": "OM V5 Flash",
+      "name": "om-V5-Flash",
       "providerId": "mipham",
       "contextWindow": 16384,
       "maxOutput": 4096,
@@ -19,17 +19,8 @@
       "status": "active"
     },
     {
-      "id": "om-v5-pro",
-      "name": "OM V5 Pro",
-      "providerId": "mipham",
-      "contextWindow": 131072,
-      "maxOutput": 16384,
-      "vision": false,
-      "status": "active"
-    },
-    {
       "id": "om-v5-visual",
-      "name": "OM V5 Visual",
+      "name": "om-V5-Visual",
       "providerId": "mipham",
       "contextWindow": 65536,
       "maxOutput": 4096,
@@ -37,8 +28,17 @@
       "status": "active"
     },
     {
+      "id": "om-v5-pro",
+      "name": "om-V5-Pro",
+      "providerId": "mipham",
+      "contextWindow": 131072,
+      "maxOutput": 16384,
+      "vision": false,
+      "status": "active"
+    },
+    {
       "id": "om-v5-apex",
-      "name": "OM V5 Apex",
+      "name": "om-V5-Apex",
       "providerId": "mipham",
       "contextWindow": 200000,
       "maxOutput": 32768,
@@ -46,5 +46,5 @@
       "status": "active"
     }
   ],
-  "synced_at": "2026-08-04T00:00:00Z"
+  "synced_at": "2026-09-04T02:32:33.479Z"
 }

@@ -3,8 +3,11 @@
  * Sync Mipham model definitions from Engine → mipham-code.
  *
  * Fetches GET /v1/mipham-models from the Engine API and writes the result
- * to packages/shared/src/mipham-models.json.  This JSON is the single
- * source of truth for MiphamAI provider models in mipham-code.
+ * to BOTH vendored copies:
+ *   - packages/shared/src/mipham-models.json  (npm-published shared package)
+ *   - apps/cli/src/shared/mipham-models.json  (CLI's self-contained snapshot)
+ * The two must stay identical — the CLI binary cannot import from
+ * packages/shared at runtime, so it ships its own copy.
  *
  * Usage:
  *   bun run scripts/sync-mipham-models.ts [--engine-url <url>]
@@ -22,11 +25,13 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 
-const SHARED_DIR = resolve(
-  dirname(new URL(import.meta.url).pathname),
-  '../../../packages/shared/src',
-)
-const OUTPUT_FILE = resolve(SHARED_DIR, 'mipham-models.json')
+const SCRIPT_DIR = dirname(new URL(import.meta.url).pathname)
+// Two vendored copies must stay in sync (see header comment). The CLI reads the
+// apps/cli copy; the shared package reads the packages/shared copy.
+const OUTPUT_FILES = [
+  resolve(SCRIPT_DIR, '../../../packages/shared/src/mipham-models.json'),
+  resolve(SCRIPT_DIR, '../src/shared/mipham-models.json'),
+]
 
 interface EngineModel {
   id: string
@@ -125,7 +130,7 @@ async function main() {
     status: 'active',
   }
   try {
-    const existing: SnapshotFile = JSON.parse(readFileSync(OUTPUT_FILE, 'utf-8'))
+    const existing: SnapshotFile = JSON.parse(readFileSync(OUTPUT_FILES[0]!, 'utf-8'))
     provider = existing.provider
   } catch {
     // Use defaults
@@ -140,8 +145,10 @@ async function main() {
     synced_at: new Date().toISOString(),
   }
 
-  writeFileSync(OUTPUT_FILE, JSON.stringify(snapshot, null, 2) + '\n')
-  console.log(`✅ Synced ${models.length} Mipham models → packages/shared/src/mipham-models.json`)
+  for (const file of OUTPUT_FILES) {
+    writeFileSync(file, JSON.stringify(snapshot, null, 2) + '\n')
+  }
+  console.log(`✅ Synced ${models.length} Mipham models → packages/shared + apps/cli/src/shared`)
   console.log(`   Synced at: ${snapshot.synced_at}`)
   for (const m of models) {
     console.log(`   • ${m.id} (ctx=${m.contextWindow.toLocaleString()}, status=${m.status})`)
