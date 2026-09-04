@@ -283,3 +283,17 @@
 - 实测本机（2026-09-02）：原生 fetch（WebFetch 用）、curl → raw.githubusercontent.com、curl → r.jina.ai（Jina）均超时（exit 28，GFW 封锁）；唯一成功的是 CDP（用户 Chrome，web-access skill 走 localhost:3456），拿到 604KB changelog
 - 结论：DuckDuckGo / Brave / Jina 全是被墙对象，「免 key 回退」与「curl/Jina 降级」在 GFW 环境同样失败，属「改了也没用」
 - 落地：WebFetch/WebSearch 失败信号 + 无 key 场景补「建议走 web-access(CDP)」提示（web-fetch.ts / web-search.ts）；不加工具层自动降级，回退决策仍在模型
+
+## tool-fallback-worse-than-primary: 工具回退路径不能比主路径更糟——exit 2（权限）≠ 未安装
+
+- 建议: 工具「主路径失败 → 回退」时，必须区分「主工具未安装」与「主工具报错退出」。rg exit 2（如 macOS 保护目录 `Operation not permitted`）≠ rg 未装，不应路由到更慢的 `find -type f -exec grep` 回退——回退会撞同样的不可读路径、慢一个量级，把「秒级错误」放大成「分钟级超时」。顶层目录（家目录/根目录）搜索是病态输入，应 fail-fast 让模型指定项目目录，而非硬扫。落地：Grep 加 `isTopLevelScope` 守卫 + exit 2 直接返回（find 回退仅留给 `Bun.spawn` 抛 ENOENT）。
+- 严重度: warning
+- 生成时间: 2026-09-04
+- 来源: 会话复盘（human + Claude Code，手动沉淀）
+
+### 证据
+
+- 用户长期反馈「从家目录/子目录启动 Mipham Code，Grep 特别慢、有时 15 分钟无响应」
+- 复现：家目录 400GB（Rismed_Ronxin_Capital 295G + Downloads 49G + Library 40G）；`rg "编程助手" ~` 撞 ~/Library 的 macOS 保护目录（Operation not permitted, os error 1）退出 code 2，几秒即退；但 grep.ts 把 exit 2 当「rg 出错」→ 回退 `find -type f -exec grep -Hn {} +`，硬扫 400GB 超过 120s GREP_TIMEOUT_MS 超时；模型拿「超时」原样重扫 → 反复 120s × N = 15 分钟，最终 TURN_TIMEOUT_MS(15min) 兜底掐断（表象「没消息了」）
+- 误判根因：`find` 回退本意是「rg 未安装」兜底（`Bun.spawn` 抛 ENOENT 进 catch），却把「rg 安装但 exit 2」也路由进回退（代码里 exit 2 落穿到 find）
+- 修复（81da469）：① `isTopLevelScope` 顶层范围 fail-fast ② exit 2 返回部分结果/清晰报错 ③ 修正 symlink 测试 mock（exit 2 → spawn ENOENT）
