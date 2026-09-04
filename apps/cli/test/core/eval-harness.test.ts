@@ -26,8 +26,8 @@ beforeEach(() => {
 describe('runEval', () => {
   it('reports a full score after managed rules fill the behavior gaps', () => {
     const report = runEval()
-    expect(report.total).toBe(37)
-    expect(report.passed).toBe(37)
+    expect(report.total).toBe(38)
+    expect(report.passed).toBe(38)
     expect(report.score).toBe(100)
     // 8 个行为缺口全部翻转 PASS（固化 managed tool-params 规则后），无任何 FAIL
     expect(report.failures).toHaveLength(0)
@@ -78,6 +78,16 @@ describe('runEval', () => {
     expect(contract!.passed).toBe(true)
     // 所有 anchor 契约当前全绿，无任何回退。
     expect(regressedAnchors(report.results)).toEqual([])
+  })
+
+  it('locks self-report-diagnostic as an anchor: no LLM in the scoring path', () => {
+    const report = runEval()
+    const contract = report.results.find((r) => r.id === 'self-report-diagnostic')
+    expect(contract).toBeDefined()
+    // anchor 角色：门（crsi-modify）强制此契约零回退。
+    expect(contract!.role).toBe('anchor')
+    // 评分路径无 LLM：分数只来自 ground-truth 契约，非模型自报。
+    expect(contract!.passed).toBe(true)
   })
 })
 

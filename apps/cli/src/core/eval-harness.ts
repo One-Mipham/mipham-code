@@ -70,6 +70,7 @@ export const ANCHOR_CONTRACT_IDS: ReadonlySet<string> = new Set([
   'red-team-zero-gaps',
   'producer-rule-shape',
   'producer-rule-idempotent',
+  'self-report-diagnostic',
 ])
 
 /** 细粒度防回退：返回 role==='anchor' 且已 FAIL 的契约 id。空 = 无 anchor 回退。 */
@@ -332,6 +333,21 @@ export function runEval(): EvalReport {
   for (const task of behaviorTasks) {
     results.push({ ...judgeBehaviorTask(task, ruleEngine), role: 'target' })
   }
+
+  // ── 自报分数只作诊断：评分路径无 LLM，分数来自 ground-truth 契约而非模型自报 ──
+  // anchor 锁死「评分组件不暴露 LLM 的 chat 能力」。4 个组件（ruleEngine/constitution/
+  // errorDB/preflight）都是确定性组件（runEval 同步评分）。若未来有人把 LLM 注入评分
+  // 路径（给组件挂 chat / Llm 接口），此契约立即 FAIL，anchor gate 拒绝固化——即「自报
+  // 分数不可信」的机器可判定信号。
+  const scoringComponents = [ruleEngine, constitution, errorDB, preflight]
+  const llmInjected = scoringComponents.some(
+    (c) => typeof (c as { chat?: unknown }).chat === 'function',
+  )
+  results.push({
+    id: 'self-report-diagnostic',
+    description: '评分无 LLM：机制哨兵组件不暴露 chat 能力（分数只来自 ground-truth，非模型自报）',
+    passed: !llmInjected,
+  })
 
   // 角色标注：anchor 走集中清单（门保护面单一真源），target 已在上方循环内联。
   for (const r of results) {
