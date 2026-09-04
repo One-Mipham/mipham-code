@@ -11,7 +11,12 @@ import { createReadTool, readToolService } from '../../src/tools/file/read'
 import { writeTool } from '../../src/tools/file/write'
 import { editTool } from '../../src/tools/file/edit'
 import { createGlobTool } from '../../src/tools/file/glob'
-import { createGrepTool, runSearch, truncateGrepOutput } from '../../src/tools/file/grep'
+import {
+  createGrepTool,
+  runSearch,
+  truncateGrepOutput,
+  isTopLevelScope,
+} from '../../src/tools/file/grep'
 
 const readTool = createReadTool()
 const globTool = createGlobTool()
@@ -537,22 +542,11 @@ describe('Grep fallback (find -type f) symlink safety', () => {
   })
 
   it('does not follow symlinks when rg is unavailable', async () => {
-    // Force the ripgrep fast-path to "error" (exit 2) so the find-based
-    // fallback runs; run the real `find` command for the fallback itself.
+    // Force ripgrep to be "unavailable" (Bun.spawn throws ENOENT) so the
+    // find-based fallback runs; run the real `find` command for the fallback.
     vi.spyOn(Bun, 'spawn').mockImplementation((cmd: string[], opts?: { cwd?: string }) => {
       if (cmd[0] === 'rg') {
-        // An already-closed stream (a bare `new ReadableStream()` never closes,
-        // so `Response.text()` would hang). Emulate ripgrep erroring out.
-        const empty = Readable.toWeb(Readable.from([])) as unknown as ReadableStream
-        return {
-          stdout: empty,
-          stderr: empty,
-          exited: Promise.resolve(2),
-          get exitCode() {
-            return 2
-          },
-          kill: () => {},
-        } as any
+        throw Object.assign(new Error('Executable not found in $PATH: "rg"'), { code: 'ENOENT' })
       }
       const child = spawn(cmd[0]!, cmd.slice(1), {
         cwd: opts?.cwd,
@@ -587,6 +581,63 @@ describe('Grep fallback (find -type f) symlink safety', () => {
     } finally {
       rmSync(outside, { recursive: true, force: true })
     }
+  })
+})
+
+describe('Grep top-level scope guard', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('flags the home directory and filesystem root', () => {
+    expect(isTopLevelScope('/Users/me', '/Users/me')).toBe(true)
+    expect(isTopLevelScope('/', '/Users/me')).toBe(true)
+  })
+
+  it('does not flag a normal project directory', () => {
+    expect(isTopLevelScope('/Users/me/code/my-project', '/Users/me')).toBe(false)
+  })
+
+  it('fails fast when searching from a top-level directory without a path', async () => {
+    // The guard must return before any spawn — a spawn here would mean the guard
+    // failed and we started scanning a huge tree. Use filesystem root `/` (always
+    // exists and is canonical) since homedir() is mocked to a non-existent path.
+    vi.spyOn(Bun, 'spawn').mockImplementation((cmd: string[]) => {
+      throw new Error(`unexpected spawn of ${cmd[0]} — scope guard must fail before spawning`)
+    })
+    const result = await grepTool.execute({ pattern: 'needle' }, { ...ctx, cwd: '/' })
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Specify a project directory')
+  })
+})
+
+describe('Grep rg exit 2 (error) does not fall back to find', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('returns a narrow-scope error instead of stalling the find fallback', async () => {
+    // rg exits 2 with empty stdout (permission denied) — must NOT run the
+    // slow `find` fallback (which would spawn a real find over cwd).
+    vi.spyOn(Bun, 'spawn').mockImplementation((cmd: string[]) => {
+      if (cmd[0] === 'rg') {
+        const empty = Readable.toWeb(Readable.from([])) as unknown as ReadableStream
+        return {
+          stdout: empty,
+          stderr: empty,
+          exited: Promise.resolve(2),
+          get exitCode() {
+            return 2
+          },
+          kill: () => {},
+        } as any
+      }
+      throw new Error(`unexpected spawn of ${cmd[0]} — find fallback must not run`)
+    })
+
+    const result = await grepTool.execute({ pattern: 'needle', path: tmpDir }, ctx)
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('rg error (exit 2)')
   })
 })
 

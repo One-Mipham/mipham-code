@@ -1,3 +1,5 @@
+import { homedir } from 'node:os'
+import { parse } from 'node:path'
 import type { ToolDefinition, CredentialMaskingConfig } from '../../shared/index.ts'
 import { resolveSafe } from '../../security/path'
 import type { Service } from '../../vajra'
@@ -37,6 +39,15 @@ export function truncateGrepOutput(stdout: string): string {
   return `${out.slice(0, GREP_MAX_OUTPUT_CHARS)}\n\n... (truncated)`
 }
 
+/**
+ * 判断搜索根是否是「顶层目录」（家目录或文件系统根）。这类范围扫描的是海量
+ * 文件树（macOS ~/Library 有数百万受保护文件），会让 rg exit 2、find 回退卡
+ * 满 120s。顶层范围应 fail-fast，让模型指定项目目录，而不是静默全盘扫。
+ */
+export function isTopLevelScope(searchPath: string, home = homedir()): boolean {
+  return searchPath === home || searchPath === parse(searchPath).root
+}
+
 export function createGrepTool(credentialConfig?: CredentialMaskingConfig): ToolDefinition {
   return {
     name: 'Grep',
@@ -65,6 +76,20 @@ export function createGrepTool(credentialConfig?: CredentialMaskingConfig): Tool
       const searchPath = resolveSafe(ctx.cwd, (params.path as string) || '.')
       const include = params.include as string | undefined
 
+      // Scope guard: a top-level search root (home or filesystem root) scans an
+      // enormous tree and stalls the find fallback for minutes. Fail fast and
+      // ask for a project-scoped path instead of silently scanning everything.
+      if (!params.path && isTopLevelScope(searchPath)) {
+        return {
+          success: false,
+          content: '',
+          error:
+            `Search scope is the home directory / filesystem root (${searchPath}) — too large ` +
+            'and contains protected directories. Specify a project directory with "path", ' +
+            'or cd into the project first.',
+        }
+      }
+
       // 1. ripgrep (fast path)
       const rgArgs = ['rg', '-n', '--heading', '--color=never', '-M', '500', pattern]
       if (include) rgArgs.push('--glob', include)
@@ -85,9 +110,30 @@ export function createGrepTool(credentialConfig?: CredentialMaskingConfig): Tool
             content: maskSearchOutput(stdout || '(no matches)', credentialConfig, 'heading'),
           }
         }
-        // rg exit 2 (error) or null (killed) → fall through to grep
+        // rg exit 2 (error, e.g. permission denied on protected dirs) — do NOT
+        // fall back to the slow `find -type f` scan (it hits the same unreadable
+        // paths and stalls on huge trees). Return partial matches if any, else
+        // a clear narrow-scope error.
+        if (stdout && stdout.trim()) {
+          return {
+            success: true,
+            content: maskSearchOutput(
+              stdout +
+                '\n\n(rg exited 2 — some paths unreadable; narrow scope for complete results)',
+              credentialConfig,
+              'heading',
+            ),
+          }
+        }
+        return {
+          success: false,
+          content: '',
+          error:
+            'rg error (exit 2) — likely permission denied on a large/protected tree. ' +
+            'Narrow scope with "path" (project directory) and "include".',
+        }
       } catch {
-        // rg not installed → fall through to grep
+        // rg not installed → fall through to grep (find + grep fallback)
       }
 
       // 2. fallback: `find -type f -exec grep -Hn {} +`
