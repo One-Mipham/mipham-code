@@ -6,6 +6,7 @@
  */
 import type { QueryEngine } from '../core/engine'
 import type { MiphamConfig } from '../shared/index.ts'
+import { formatContextWindow } from '../shared/format'
 import type { SkillsLoader } from '../skills/loader'
 import type { PluginManager } from '../plugin/plugin-manager'
 import type { Message } from '../shared/types.js'
@@ -438,7 +439,7 @@ const modelsCmd: CommandHandler = (ctx) => {
         .filter((m) => m.status === 'active')
         .map(
           (m) =>
-            `  ${p.id.padEnd(12)} ${m.id.padEnd(30)} ${m.contextWindow.toLocaleString()} ctx  ${m.vision ? '🖼' : '📝'}`,
+            `  ${p.id.padEnd(12)} ${m.id.padEnd(30)} ${formatContextWindow(m.contextWindow)} ctx  ${m.vision ? '🖼' : '📝'}`,
         ),
     )
 

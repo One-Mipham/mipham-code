@@ -198,7 +198,7 @@ export function ModelPicker({
                 </Text>
                 <Text dimColor>
                   {'   '}
-                  {m.id} · {m.contextWindow.toLocaleString()} ctx
+                  {m.id}
                   {m.vision ? ' · 🖼 vision' : ''}
                 </Text>
               </Box>

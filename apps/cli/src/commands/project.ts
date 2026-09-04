@@ -553,9 +553,7 @@ async function setupStep3(ctx: CommandContext): Promise<CommandResult> {
     lines.push(`  ${p.id}${p.id === ctx.providerId ? ' ← current' : ''}`)
     for (const m of p.models.filter((m) => m.status === 'active')) {
       const marker = m.id === ctx.modelId ? ' ★' : '  '
-      lines.push(
-        `${marker}  ${m.id.padEnd(30)} ${m.contextWindow.toLocaleString()} ctx  ${m.vision ? '🖼' : '📝'}`,
-      )
+      lines.push(`${marker}  ${m.id.padEnd(30)}  ${m.vision ? '🖼' : '📝'}`)
     }
     lines.push('')
   }
