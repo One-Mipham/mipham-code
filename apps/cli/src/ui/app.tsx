@@ -9,6 +9,7 @@ import type { RemoteEngine } from '../daemon/remote-engine'
 import type { MiphamConfig } from '../shared/index.ts'
 import type { Llm } from '../providers/llm'
 import { AUTOCOMPLETE_MAX_CONTEXT, type RecentMessage } from '../core/autocomplete'
+import { resolveGitPr, prColor, type GitPr } from '../core/git-pr'
 import type { SkillsLoader } from '../skills/loader'
 import type { PluginManager } from '../plugin/plugin-manager'
 import { setPreference } from '../config/preferences'
@@ -200,6 +201,18 @@ export function App({
       return null
     }
   })
+  // Current branch's PR (head = branch) — async detect; gh unavailable / no PR → null.
+  const [gitPr, setGitPr] = useState<GitPr | null>(null)
+  useEffect(() => {
+    if (!gitBranch) return
+    let cancelled = false
+    resolveGitPr(gitBranch).then((pr) => {
+      if (!cancelled) setGitPr(pr)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [gitBranch])
 
   // 启动后台查新版（非阻塞；离线静默失败）
   useEffect(() => {
@@ -1249,7 +1262,12 @@ export function App({
             </Box>
 
             {/* Git branch — dim, bottom-most, mirrors Claude Code's "⏺ main" */}
-            {gitBranch && <Text dimColor>⏺ {gitBranch}</Text>}
+            {gitBranch && (
+              <Box>
+                <Text dimColor>⏺ {gitBranch}</Text>
+                {gitPr && <Text color={prColor(gitPr)}> · PR #{gitPr.number}</Text>}
+              </Box>
+            )}
           </>
         )}
       </Box>
