@@ -1,6 +1,12 @@
 import { describe, it, expect, vi } from 'vitest'
 import { SkillsLoader } from '../../src/skills/loader'
 
+// Isolate skill usage recording from the real ~/.mipham/skill-usage.json — a
+// successful execute now calls recordSkillUsage, which must not pollute live data.
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>()
+  return { ...actual, homedir: () => `${actual.tmpdir()}/mipham-test-skill-assets` }
+})
 vi.mock('../../src/skills/skill-assets', () => ({ ensureSkillAssets: vi.fn() }))
 import { ensureSkillAssets } from '../../src/skills/skill-assets'
 import { skillTool } from '../../src/tools/agent/skill'

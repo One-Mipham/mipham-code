@@ -3,6 +3,7 @@ import { executeForkedSkill } from '../../skills/fork-executor'
 import { sanitizeSkillBody } from '../../skills/sanitizer'
 import { ensureSkillAssets } from '../../skills/skill-assets'
 import { checkRequiredBins } from '../../skills/bin-check'
+import { recordSkillUsage } from '../../skills/usage'
 
 export const skillTool: ToolDefinition = {
   name: 'Skill',
@@ -82,6 +83,7 @@ export const skillTool: ToolDefinition = {
             ctx.llm,
           )
           // Return to AI as internal context
+          recordSkillUsage(skillName)
           return { success: true, content: `[Forked skill "${skillName}" result]:\n${result}` }
         } catch (err) {
           return {
@@ -108,6 +110,7 @@ export const skillTool: ToolDefinition = {
         bodyText,
       ].filter(Boolean)
 
+      recordSkillUsage(skillName)
       return { success: true, content: lines.join('\n') }
     }
 

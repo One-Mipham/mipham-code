@@ -613,6 +613,16 @@
       "audit_clean": "  ✓ no code-derivable sections found",
       "audit_found": "Add the sections above to the `prompt-exclude` frontmatter to stop sending them to the model."
     },
+    "skillDoctor": {
+      "title": "── Skill Doctor ──",
+      "unavailable": "  (skills info unavailable)",
+      "summary": "Loaded {total} skills — ~{tokens} tokens in context. {unused} never used (~{unusedTokens} tokens reclaimable).",
+      "unused_header": "Never used:",
+      "used_header": "Recently used:",
+      "never": "never used",
+      "days_ago": "{days}d ago",
+      "today": "today"
+    },
     "fix": {
       "title": "── Fix ──",
       "dryrun_banner": "[dry-run] preview — no changes written",

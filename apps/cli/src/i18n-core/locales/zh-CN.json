@@ -613,6 +613,16 @@
       "audit_clean": "  ✓ 未发现可从代码推断的冗余章节",
       "audit_found": "将上述章节加入 `prompt-exclude` frontmatter，可停止发送给模型、节省 token。"
     },
+    "skillDoctor": {
+      "title": "── 技能体检 ──",
+      "unavailable": "  （技能信息不可用）",
+      "summary": "已加载 {total} 个技能 — 占 context ~{tokens} tokens。{unused} 个从未使用（可省 ~{unusedTokens} tokens）。",
+      "unused_header": "从未使用：",
+      "used_header": "最近使用：",
+      "never": "从未使用",
+      "days_ago": "{days} 天前",
+      "today": "今天"
+    },
     "fix": {
       "title": "── 修复 ──",
       "dryrun_banner": "[dry-run] 预览模式 — 不落盘",

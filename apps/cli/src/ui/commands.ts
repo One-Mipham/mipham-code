@@ -8,6 +8,7 @@ import type { QueryEngine } from '../core/engine'
 import type { MiphamConfig } from '../shared/index.ts'
 import { formatContextWindow } from '../shared/format'
 import type { SkillsLoader } from '../skills/loader'
+import { loadSkillUsage } from '../skills/usage'
 import type { PluginManager } from '../plugin/plugin-manager'
 import type { Message } from '../shared/types.js'
 import type { UpdateStatus } from '../shared/update'
@@ -3198,6 +3199,71 @@ const doctorCmd: CommandHandler = async (ctx) => {
   return { content: lines.join('\n') }
 }
 
+const skillDoctorCmd: CommandHandler = async (ctx) => {
+  const t = resolveT(ctx)
+  const lines: string[] = [t('commands.skillDoctor.title'), '']
+
+  const loader = ctx.skillsLoader
+  if (!loader) {
+    lines.push(t('commands.skillDoctor.unavailable'))
+    return { content: lines.join('\n') }
+  }
+
+  const skills = loader.list()
+  const usage = loadSkillUsage()
+
+  // Per-skill context cost = the reminder entry estimate (matches buildSystemReminder).
+  const rows = skills.map((s) => {
+    const entry = `- ${s.name}: ${s.description}`
+    return {
+      name: s.name,
+      type: s.type,
+      tokens: Math.ceil(entry.length / 4) + 1,
+      lastUsed: usage.get(s.name),
+    }
+  })
+
+  const unused = rows.filter((r) => r.lastUsed === undefined)
+  const used = rows
+    .filter((r) => r.lastUsed !== undefined)
+    .sort((a, b) => b.lastUsed! - a.lastUsed!)
+  const totalTokens = rows.reduce((sum, r) => sum + r.tokens, 0)
+  const unusedTokens = unused.reduce((sum, r) => sum + r.tokens, 0)
+
+  const age = (ts: number): string => {
+    const days = Math.floor((Date.now() - ts) / 86400000)
+    if (days <= 0) return t('commands.skillDoctor.today')
+    return t('commands.skillDoctor.days_ago', { days: String(days) })
+  }
+
+  lines.push(
+    t('commands.skillDoctor.summary', {
+      total: String(skills.length),
+      tokens: String(totalTokens),
+      unused: String(unused.length),
+      unusedTokens: String(unusedTokens),
+    }),
+  )
+  lines.push('')
+
+  if (unused.length > 0) {
+    lines.push(t('commands.skillDoctor.unused_header'))
+    for (const r of unused) {
+      lines.push(`  • ${r.name} (${r.type}) — ~${r.tokens} tokens`)
+    }
+    lines.push('')
+  }
+
+  if (used.length > 0) {
+    lines.push(t('commands.skillDoctor.used_header'))
+    for (const r of used) {
+      lines.push(`  • ${r.name} (${r.type}) — ${age(r.lastUsed!)}`)
+    }
+  }
+
+  return { content: lines.join('\n') }
+}
+
 const fixCmd: CommandHandler = async (ctx, args) => {
   const t = resolveT(ctx)
   const { readFileSync, writeFileSync } = await import('node:fs')
@@ -5143,6 +5209,7 @@ const commandsListCmd: CommandHandler = () => {
     '/save': 'Session & Identity',
     '/export': 'Session & Identity',
     '/doctor': 'Session & Identity',
+    '/skill-doctor': 'Session & Identity',
     '/dream': 'Session & Identity',
     '/constitution': 'Session & Identity',
     '/bug-report': 'Session & Identity',
@@ -5388,6 +5455,7 @@ registry.set('/pr-comments', prCommentsCmd)
 
 // Session Management
 registry.set('/doctor', doctorCmd)
+registry.set('/skill-doctor', skillDoctorCmd)
 registry.set('/fix', fixCmd)
 registry.set('/export', exportCmd)
 registry.set('/resume', resumeCmd)
@@ -5493,6 +5561,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/save': 'Save conversation to Obsidian wiki (skill: save-to-wiki)',
   '/export': 'Export conversation to file',
   '/doctor': 'System diagnostics',
+  '/skill-doctor': 'Show unused skills and their context cost',
   '/fix': 'Deterministic self-repair: doctor/config/cache',
   '/dream': 'Background memory consolidation',
   '/constitution': 'View or reload constitutional principles',
