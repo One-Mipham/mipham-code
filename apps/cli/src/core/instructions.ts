@@ -275,6 +275,15 @@ say so and read it first, rather than answering hastily and retracting
 afterwards. This applies to every code question, not only research or
 borrow-analysis tasks.`)
 
+    // CRSI code-review 合并门 — 合并 PR 前必须先 review，勿靠「碰巧触发」
+    parts.push(`## Code-Review Merge Gate
+
+Before merging a PR or committing changes that have not been
+code-reviewed, run a code review first (the /code-review command or the
+code-review skill) and address its findings. Do not rely on "the user
+happened to ask" to trigger a review — review proactively as a fixed
+step before merge.`)
+
     // CRSI 教训召回 — 把 crsi-lessons.md 的教训精华注入，让模型「写后召回」而非只写不读
     const lessonsBlock = buildCrsiLessonsBlock(this.crsiLessonSummaries)
     if (lessonsBlock) parts.push(lessonsBlock)

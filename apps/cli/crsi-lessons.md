@@ -297,3 +297,27 @@
 - 复现：家目录 400GB（Rismed_Ronxin_Capital 295G + Downloads 49G + Library 40G）；`rg "编程助手" ~` 撞 ~/Library 的 macOS 保护目录（Operation not permitted, os error 1）退出 code 2，几秒即退；但 grep.ts 把 exit 2 当「rg 出错」→ 回退 `find -type f -exec grep -Hn {} +`，硬扫 400GB 超过 120s GREP_TIMEOUT_MS 超时；模型拿「超时」原样重扫 → 反复 120s × N = 15 分钟，最终 TURN_TIMEOUT_MS(15min) 兜底掐断（表象「没消息了」）
 - 误判根因：`find` 回退本意是「rg 未安装」兜底（`Bun.spawn` 抛 ENOENT 进 catch），却把「rg 安装但 exit 2」也路由进回退（代码里 exit 2 落穿到 find）
 - 修复（81da469）：① `isTopLevelScope` 顶层范围 fail-fast ② exit 2 返回部分结果/清晰报错 ③ 修正 symlink 测试 mock（exit 2 → spawn ENOENT）
+
+## code-review-gate: PR 合并前必须 code-review（不能靠「碰巧触发」）
+
+- 建议: 合并 PR 或提交未经 review 的改动前，必须先跑 code-review（`/code-review` 命令或 code-review skill）并处理其发现，不能依赖「用户恰好问起」才被动触发 review。主动 review 是合并流程的固定环节，不是可选步骤。
+- 严重度: critical
+- 生成时间: 2026-09-05
+- 来源: om-1 会话沉淀（human + Claude Code，手动沉淀）
+
+### 证据
+
+- om-1 会话（2026-09-05）：用户问起 PR #3 才顺带触发 code-review → 发现 15 个 bug；若只查 COS 进度、不主动 review，这些修复就走不到
+- 教训：review 不应依赖「碰巧触发」，应作为合并前的固定闸门
+
+## correctness: 判断「是否已完成」必须查完整性（size/hash），不能只查存在
+
+- 建议: 判断任务/文件/传输「是否已完成」，必须校验 size / hash 等完整性指标，不能只查「存在」——半截状态是中断的常态，`if exists` 会把截断产物误当完整。
+- 严重度: warning
+- 生成时间: 2026-09-05
+- 来源: om-1 会话沉淀（human + Claude Code，手动沉淀）
+
+### 证据
+
+- om-1 会话：`head_object` 不查 size、截断输出被 `if exists` 当完整、gzip 截断在 `decompress` + `is_tarfile` 两处抛 EOFError
+- 教训：中断恢复后判断「已完成」必须核对体积/校验和，而非只看文件/对象是否存在
