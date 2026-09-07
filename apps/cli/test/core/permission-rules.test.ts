@@ -150,6 +150,24 @@ describe('matchBashRule — Bash rules match compound-command segments', () => {
   })
 })
 
+describe('matchBashRule — Bash rules recurse into command substitutions', () => {
+  it('matches a $() substitution buried in a variable assignment', () => {
+    expect(matchBashRule('Bash(rm *)', 'Bash', { command: 'REPORTTIME=$(rm -rf ~)' })).toBe(true)
+  })
+
+  it('matches a backtick substitution', () => {
+    expect(matchBashRule('Bash(rm *)', 'Bash', { command: 'REPORTTIME=`rm -rf ~`' })).toBe(true)
+  })
+
+  it('matches a substitution inside a compound command', () => {
+    expect(matchBashRule('Bash(rm *)', 'Bash', { command: 'foo && echo $(rm -rf ~)' })).toBe(true)
+  })
+
+  it('does not match when the substitution contains a different command', () => {
+    expect(matchBashRule('Bash(rm *)', 'Bash', { command: 'REPORTTIME=$(git status)' })).toBe(false)
+  })
+})
+
 describe('matchBashRule — Read/Write/Edit rules match Bash file access', () => {
   it('matches a Read(path) rule against a reader command via Bash', () => {
     expect(

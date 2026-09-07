@@ -146,6 +146,24 @@ function extractSubstitutions(command: string): string[] {
 }
 
 /**
+ * Flatten a command into every matchable sub-command: its shell segments plus
+ * the commands nested inside `$(...)`/backtick substitutions (recursively). So
+ * a `Bash(rm *)` deny rule also matches `REPORTTIME=$(rm -rf ~)` — zsh evaluates
+ * substitutions in REPORTTIME/REPORTMEMORY/DIRSTACKSIZE assignments immediately.
+ * Over-matching is the safe direction for a deny rule.
+ */
+function flattenCommand(command: string): string[] {
+  const out: string[] = []
+  for (const seg of splitShellSegments(command)) {
+    out.push(seg)
+    for (const inner of extractSubstitutions(seg)) {
+      out.push(...flattenCommand(inner))
+    }
+  }
+  return out
+}
+
+/**
  * Detect reader/writer commands at the front of each shell segment and recurse
  * into command substitutions, so `echo $(cat .git-credentials)` is caught.
  */
@@ -215,10 +233,11 @@ export function matchBashRule(
   if (toolName !== baseTool!) return false
 
   // For Bash: match against the command string (any segment of a compound
-  // command — `rm -rf /` buried in `foo && rm -rf /` still matches).
+  // command — `rm -rf /` buried in `foo && rm -rf /` still matches — or a
+  // `$(...)`/backtick substitution, so `Bash(rm *)` catches `x=$(rm -rf ~)`).
   if (baseTool === 'Bash') {
     const cmd = String(toolInput.command || '')
-    return splitShellSegments(cmd).some((seg) => wildcardMatch(subPattern!, seg))
+    return flattenCommand(cmd).some((seg) => wildcardMatch(subPattern!, seg))
   }
 
   // For Write/Edit/Read: match against the file_path with path-glob semantics.
