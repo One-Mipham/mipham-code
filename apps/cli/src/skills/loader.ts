@@ -204,8 +204,15 @@ export class SkillsLoader implements Skills {
    * the Skill tool. A single full listing keeps the whole catalog discoverable:
    * at session start there is no query to match against, so a keyword "recall"
    * would silently hide most skills. Capped at `maxTokens` to stay bounded.
+   *
+   * `mode` controls the startup token budget:
+   * - `full` (default): name + full description
+   * - `compact`: name + description collapsed to one short line
+   * - `off`: no reminder at all
    */
-  buildSystemReminder(maxTokens: number = 5000): string {
+  buildSystemReminder(maxTokens: number = 5000, mode: 'full' | 'compact' | 'off' = 'full'): string {
+    if (mode === 'off') return ''
+
     const selected = this.list().filter((s) => !s.disableModelInvocation)
 
     if (selected.length === 0) return ''
@@ -218,7 +225,8 @@ export class SkillsLoader implements Skills {
     let tokenBudget = 0
     for (const skill of selected) {
       const safeDesc = sanitizeSkillDescription(skill.description, skill.type)
-      const entry = `- ${skill.name}: ${safeDesc}`
+      const desc = mode === 'compact' ? truncateSkillDescription(safeDesc) : safeDesc
+      const entry = `- ${skill.name}: ${desc}`
       const entryTokens = Math.ceil(entry.length / 4) + 1 // rough estimate
       if (tokenBudget + entryTokens > maxTokens) break
 
@@ -241,4 +249,14 @@ export class SkillsLoader implements Skills {
     const base = path.split('/').pop() || ''
     return base.replace(/\.(SKILL|mipham-skill)\.md$/i, '')
   }
+}
+
+const COMPACT_DESC_MAX_CHARS = 80
+
+/** Compact reminder: collapse a description to a single short line. */
+function truncateSkillDescription(desc: string): string {
+  const firstLine = desc.split('\n')[0]?.trim() ?? ''
+  return firstLine.length > COMPACT_DESC_MAX_CHARS
+    ? firstLine.slice(0, COMPACT_DESC_MAX_CHARS) + '…'
+    : firstLine
 }

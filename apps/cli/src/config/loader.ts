@@ -341,6 +341,7 @@ export function loadConfig(cwd: string = process.cwd()): MiphamConfig {
       skills: {
         paths: config.skills?.paths ?? [],
         mcpServers: [...existingServers, ...newFromJson],
+        reminder: config.skills?.reminder,
       },
     }
   }

@@ -147,7 +147,12 @@ export interface MiphamConfig {
   /** When false, disable the slash-command picker auto-popup on `/`. Default false. */
   showCommandPicker?: boolean
   providers: ProviderConfig[]
-  skills?: { paths: string[]; mcpServers: McpServerConfig[] }
+  skills?: {
+    paths: string[]
+    mcpServers: McpServerConfig[]
+    /** Startup skill-list budget: full (default) | compact (one-line desc) | off. */
+    reminder?: 'full' | 'compact' | 'off'
+  }
   marketplace?: {
     /** If set, only allow installs from matching repos (e.g. ["One-Mipham/*"]) */
     strictKnownMarketplaces?: string[]

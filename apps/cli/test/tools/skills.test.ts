@@ -156,6 +156,37 @@ describe('SkillsLoader', () => {
       expect(reminder).toContain('codebase-design')
       expect(reminder).toContain('debug-loop')
     })
+
+    it('off mode returns an empty reminder', () => {
+      const loader = seedSkills()
+      expect(loader.buildSystemReminder(5000, 'off')).toBe('')
+    })
+
+    it('compact mode still lists every skill name', () => {
+      const loader = seedSkills()
+      const reminder = loader.buildSystemReminder(5000, 'compact')
+
+      expect(reminder).toContain('security-review')
+      expect(reminder).toContain('codebase-design')
+      expect(reminder).toContain('debug-loop')
+    })
+
+    it('compact mode truncates long descriptions to one short line', () => {
+      const stdDir = join(tmpDir, 'skills', 'standard')
+      mkdirSync(stdDir, { recursive: true })
+      const longDesc = 'x'.repeat(120)
+      createSkillFile(stdDir, 'long-desc.SKILL.md', {
+        name: 'long-desc',
+        description: longDesc,
+      })
+      const loader = new SkillsLoader()
+      loader.loadBuiltin(tmpDir)
+
+      const reminder = loader.buildSystemReminder(5000, 'compact')
+      expect(reminder).toContain('long-desc')
+      expect(reminder).toContain('…')
+      expect(reminder).not.toContain(longDesc)
+    })
   })
 
   describe('loadBuiltinFromPackage', () => {
