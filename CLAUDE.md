@@ -130,17 +130,22 @@ pnpm format       # Prettier
 
 ## 架构设计
 
-### Provider 层（7 家，按字母序）
+### Provider 层（12 家，按字母序）
 
-| Provider  | 类型                     | 路由                              |
-| --------- | ------------------------ | --------------------------------- |
-| anthropic | 原生（Anthropic SDK）    | `providers/anthropic.ts`          |
-| deepseek  | OpenAI 兼容              | `providers/openai-compat.ts`      |
-| doubao    | OpenAI 兼容（ByteDance） | `providers/openai-compat.ts`      |
-| hunyuan   | OpenAI 兼容（Tencent）   | `providers/openai-compat.ts`      |
-| mipham    | 待上线                   | `providers/registry.ts`（已注册） |
-| openai    | OpenAI 兼容              | `providers/openai-compat.ts`      |
-| qwen      | OpenAI 兼容              | `providers/openai-compat.ts`      |
+| Provider       | 类型                        | 路由                         |
+| -------------- | --------------------------- | ---------------------------- |
+| anthropic      | 原生（Anthropic SDK）       | `providers/anthropic.ts`     |
+| deepseek       | OpenAI 兼容                 | `providers/openai-compat.ts` |
+| doubao         | OpenAI 兼容（ByteDance）    | `providers/openai-compat.ts` |
+| google         | OpenAI 兼容（Gemini）       | `providers/openai-compat.ts` |
+| hunyuan        | OpenAI 兼容（Tencent）      | `providers/openai-compat.ts` |
+| kimi           | OpenAI 兼容（Moonshot）     | `providers/openai-compat.ts` |
+| minimax        | OpenAI 兼容（MiniMax 国内） | `providers/openai-compat.ts` |
+| minimax-global | OpenAI 兼容（MiniMax 国际） | `providers/openai-compat.ts` |
+| mipham         | OpenAI 兼容（MiphamAI）     | `providers/registry.ts`      |
+| ollama         | OpenAI 兼容（本地）         | `providers/openai-compat.ts` |
+| openai         | OpenAI 兼容                 | `providers/openai-compat.ts` |
+| qwen           | OpenAI 兼容                 | `providers/openai-compat.ts` |
 
 模型按能力等级排序（Ultra → Pro → Plus → Flash → Lite），Ctrl+P 调用两级选择器。
 

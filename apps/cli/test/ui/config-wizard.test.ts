@@ -110,8 +110,8 @@ describe('ConfigWizard Cloud path', () => {
       expect(ids).not.toContain('mipham')
     })
 
-    it('has exactly 8 cloud providers', () => {
-      expect(CLOUD_PROVIDERS).toHaveLength(8)
+    it('has exactly 10 cloud providers', () => {
+      expect(CLOUD_PROVIDERS).toHaveLength(10)
     })
 
     it('all providers have at least 1 active model', () => {

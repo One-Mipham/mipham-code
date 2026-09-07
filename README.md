@@ -115,18 +115,20 @@ Or project-level `.mipham/config.yml` in your repository.
 
 ## Supported Models
 
-| Provider        | Models                                                  | Context    | Status   |
-| --------------- | ------------------------------------------------------- | ---------- | -------- |
-| Anthropic       | Claude Opus 4.8, Sonnet 4.6, Haiku 4.5                  | 200K–1M    | Active   |
-| OpenAI          | GPT-5.5, GPT-5.4, GPT-5.4 Mini                          | 400K–1.05M | Active   |
-| Google Gemini   | Gemini 3.0 Pro, 3.0 Flash, 2.5 Pro                      | 128K–2M    | Active   |
-| DeepSeek        | V4 Pro, V4 Flash                                        | 1M         | Active   |
-| 豆包 (字节跳动) | Seed 2.0 Pro/Code/Lite/Mini, Seed 1.6/Flash             | 256K       | Active   |
-| 腾讯混元        | Hy3 Preview, 2.0 Think/Instruct, TurboS, T1, A13B, Lite | 32K–256K   | Active   |
-| 通义千问        | Qwen Plus, Qwen Max                                     | 128K       | Active   |
-| MiphamAI        | OM V5 Pro, OM V5 Flash, OM V5 Visual                    | 200K–1M    | Upcoming |
+| Provider        | Models                                                        | Context    | Status   |
+| --------------- | ------------------------------------------------------------- | ---------- | -------- |
+| Anthropic       | Claude Mythos 5, Fable 5, Opus 5/4.8, Sonnet 5/4.6, Haiku 4.5 | 200K–1M    | Active   |
+| OpenAI          | GPT-6 Astra, GPT-5.5, GPT-5.4, GPT-5.4 Mini                   | 400K–1.05M | Active   |
+| Google Gemini   | Gemini 3.0 Pro, 3.0 Flash, 2.5 Pro                            | 128K–2M    | Active   |
+| DeepSeek        | V4 Pro, V4 Flash                                              | 1M         | Active   |
+| 豆包 (字节跳动) | Seed 2.0 Pro/Code/Lite/Mini, Seed 1.6/Flash                   | 256K       | Active   |
+| 腾讯混元        | Hy3 Preview, 2.0 Think/Instruct, TurboS, T1, A13B, Lite       | 32K–256K   | Active   |
+| 通义千问        | Qwen Plus, Qwen Max                                           | 128K       | Active   |
+| Kimi (月之暗面) | K3, Latest, Moonshot v1 8K/32K/128K                           | 8K–1M      | Active   |
+| MiniMax         | M2.7, M2, Text 01（国内 / 国际）                              | 200K–1M    | Active   |
+| MiphamAI        | OM V5 Pro, OM V5 Flash, OM V5 Visual                          | 200K–1M    | Upcoming |
 
-**共 8 家提供商，40+ 模型。** 设置 API Key 即可使用：
+**共 10 家提供商，45+ 模型。** 设置 API Key 即可使用：
 
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."      # Anthropic Claude
@@ -136,6 +138,9 @@ export DEEPSEEK_API_KEY="sk-..."           # DeepSeek
 export DOUBAO_API_KEY="..."                # 豆包 (火山引擎)
 export HUNYUAN_API_KEY="..."               # 腾讯混元
 export QWEN_API_KEY="sk-..."               # 通义千问 (阿里云)
+export KIMI_API_KEY="sk-..."               # Kimi (月之暗面)
+export MINIMAX_API_KEY="..."               # MiniMax (国内)
+export MINIMAX_GLOBAL_API_KEY="..."        # MiniMax (国际)
 ```
 
 ## Development
