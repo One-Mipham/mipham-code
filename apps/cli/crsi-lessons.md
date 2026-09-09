@@ -321,3 +321,16 @@
 
 - om-1 会话：`head_object` 不查 size、截断输出被 `if exists` 当完整、gzip 截断在 `decompress` + `is_tarfile` 两处抛 EOFError
 - 教训：中断恢复后判断「已完成」必须核对体积/校验和，而非只看文件/对象是否存在
+
+## diagnosis: 诊断日志必须读到实际执行结果，别停在脚本回显/关键词命中
+
+- 建议: 查 CI/日志判断条件步骤（if/else）的真实结果时，必须读到「实际执行标记」（`> Task :xxx`、`BUILD SUCCESSFUL/FAILED`、`##[error]`、exit code），不能停在关键词命中或脚本回显。GitHub Actions 会先回显整个 run 脚本（含 if/else 两分支的 echo 文字）再执行，grep 命中的「X not set」可能是 else 分支的 echo 脚本原文，不代表 else 真执行了——关键词命中 ≠ 行为发生。
+- 严重度: warning
+- 生成时间: 2026-09-09
+- 来源: 会话复盘（human + Claude Code，手动沉淀）
+
+### 证据
+
+- 发版 v0.77.1 时误判「JetBrains token 空、插件没上架」：`grep "not set"` 命中 `echo "JETBRAINS_MARKETPLACE_TOKEN not set — skipping"` 这行，实为 run 块脚本回显、非执行结果
+- 真实执行在后面：`> Task :publishPlugin` + `BUILD SUCCESSFUL in 14s`，证明 token 有效、发布成功
+- 代价：用户白生成 token、白改 2FA、虚惊一场；教训 = 要看匹配行之后的实际执行行，别停在回显
