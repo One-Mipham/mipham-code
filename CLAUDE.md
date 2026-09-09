@@ -10,8 +10,8 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.31.0
-> **最后更新**: 2026-09-05 — /skill-doctor（未使用 skill + context 成本）+ 状态栏 PR 指示器（⏺ branch · PR #N）+ 测试对齐 2214
+> **版本**: 2.32.0
+> **最后更新**: 2026-09-09 — 不可信内容规则（读外部产出当数据不当指令）+ 依赖安全修复（next/sharp/js-yaml CVE）+ 测试对齐 2222
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -50,7 +50,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：2,214 测试（2212 passed + 2 skipped）
+测试：2,222 测试（2220 passed + 2 skipped）
 
 ---
 
@@ -87,7 +87,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 27 个内置技能（21 standard + 6 mipham）
-│   │   ├── test/               # 205 个测试文件，2214 个测试
+│   │   ├── test/               # 205 个测试文件，2222 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -110,7 +110,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（2214 个测试）
+pnpm test         # vitest run（2222 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -239,7 +239,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
 | E2E      | 1       | 8        | full-pipeline                                 |
 | Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **205** | **2214** | **0 失败** ✅（2212 passed + 2 skipped）      |
+| **合计** | **205** | **2222** | **0 失败** ✅（2220 passed + 2 skipped）      |
 
 > 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
 
@@ -295,68 +295,72 @@ GitHub Actions 9 个 job 流水线：`typecheck → lint → format → build-cl
 
 ## 最近提交
 
-| 日期       | Commit    | 说明                                                                                         |
-| ---------- | --------- | -------------------------------------------------------------------------------------------- |
-| 2026-09-05 | `30cde83` | feat(cli): 状态栏 PR 指示器 — ⏺ branch 旁显示 PR #N（按状态着色）                            |
-| 2026-09-05 | `01fae25` | feat(cli): /skill-doctor — 显示未使用 skill + context 成本，按证据 prune                     |
-| 2026-09-05 | `247de87` | feat(crsi): 固化 om-1 两教训 — code-review 合并门（硬约束）+ 断点续传查完整性（软教训）      |
-| 2026-09-04 | `1a9efcf` | chore: bump version to 0.74.0                                                                |
-| 2026-09-04 | `8052dcf` | fix(ui): 换掉 ink-text-input — 粘贴分块原子追加，根治乱序/丢失/冻住                          |
-| 2026-09-04 | `f7e61c9` | feat(crsi): eval harness 加 self-report-diagnostic 锚点                                      |
-| 2026-08-31 | `4d33709` | chore: bump version to v0.70.0                                                               |
-| 2026-08-31 | `4e732cd` | feat(cli): /fix test 命令接线 + i18n                                                         |
-| 2026-08-31 | `d5669d7` | feat(cli): /fix test 核心 — LLM 修复失败测试（复用 bench 冻结判定）                          |
-| 2026-08-31 | `4c03180` | refactor(cli): /loop init 删 .sh 约定 + /hooks 指向 settings.json                            |
-| 2026-08-31 | `378fea6` | feat(cli): settings.json hooks 接线                                                          |
-| 2026-08-31 | `e83d1f3` | feat(cli): hooks stdin/stdout JSON 协议对齐 Claude Code                                      |
-| 2026-08-31 | `5d36132` | docs(crsi): 教训 verify-before-build — 对标前先核实标准+自身现状                             |
-| 2026-08-31 | `cbb67bc` | feat(cli): community registry 加 grill-me + eli5                                             |
-| 2026-08-31 | `a7b8fd0` | feat(cli): marketplace 源机制 — 任意公开仓库 skill 可装                                      |
-| 2026-08-24 | `df92d4c` | chore: bump version to 0.56.0                                                                |
-| 2026-08-24 | `17208c7` | feat(memory): Memory 工具加 search action（对话中召回）                                      |
-| 2026-08-24 | `bcabc89` | fix(cli): 修 plugin/workflow 子命令 argv 解析 + installFromNpm 名一致                        |
-| 2026-08-24 | `0b27285` | feat(plugin): 支持安装 Claude marketplace 插件                                               |
-| 2026-08-24 | `ba13d02` | feat(graft): 移植 tool-savings 累加 + ctx% 行（方案 B）                                      |
-| 2026-08-24 | `1ba65e3` | feat(ui): 底部 graft 状态行 — 读 graft/.cache/stats.json 显示图规模+新鲜度                   |
-| 2026-08-24 | `7919483` | fix(skills): 系统提示列出全部 26 个技能而非随机 top-5                                        |
-| 2026-08-24 | `26347b8` | fix(startup): 启动目录已删时打印清晰提示而非原始崩溃                                         |
-| 2026-08-23 | `643408b` | chore: bump version to 0.55.0                                                                |
-| 2026-08-23 | `cf24cab` | feat(cross-session): 拒绝方回「refused」而非静默成功                                         |
-| 2026-08-23 | `2179ba1` | chore(core): 删死代码 output-styles.ts（零引用，未接线）                                     |
-| 2026-08-23 | `276d120` | fix(loader): 剥离 UTF-8 BOM — 带 BOM 的 .md 不再被静默忽略                                   |
-| 2026-08-23 | `c36b661` | fix(config): 原子写 config.yml — 防中断写坏触发备份回滚                                      |
-| 2026-08-23 | `8c1c033` | feat(mcp): 懒连接 — 后台连，死 server 不再阻塞启动 15s                                       |
-| 2026-08-23 | `eae0356` | feat(prompt): 寒暄克制 — 问候只回一句，不上能力清单                                          |
-| 2026-08-23 | `e599caf` | chore: bump version to 0.54.0                                                                |
-| 2026-08-23 | `7db55d4` | docs(claude): 2.10.1 — nextBackoff 抽共享 + 测试数对齐 1791                                  |
-| 2026-08-23 | `0815820` | refactor(daemon): extract nextBackoff to shared backoff module (rule of three)               |
-| 2026-08-23 | `c6f38bc` | fix(telegram): clear fetch mock between tests for isolated-run determinism                   |
-| 2026-08-23 | `3aadf3e` | fix(dingtalk): clear fetch mock between tests for isolated-run determinism                   |
-| 2026-08-23 | `9f5e3da` | refactor(dingtalk): extract sendResponse envelope helper to DRY ack/pong                     |
-| 2026-08-23 | `9f337d5` | docs(claude): 2.10.0 — 钉钉远程控制落地 + 测试数对齐 1795                                    |
-| 2026-08-23 | `48513cf` | feat(dingtalk): wire daemon into server + index                                              |
-| 2026-08-23 | `9b20c26` | feat(dingtalk): add stream-mode bot module (env/api/ws-client/adapter + tests)               |
-| 2026-08-23 | `147e45b` | refactor(doctor): static-import audit helpers instead of dynamic import                      |
-| 2026-08-23 | `43aa25b` | docs(claude): 测试数对齐 1763                                                                |
-| 2026-08-23 | `d156869` | fix(doctor): tighten audit patterns — drop submodule-workflow & deploy-chain false positives |
-| 2026-08-23 | `9b79fde` | docs(claude): 2.9.2 — /doctor CLAUDE.md 审计 + 测试数对齐 1762                               |
-| 2026-08-23 | `833ba2c` | feat(doctor): audit CLAUDE.md for code-derivable sections (prompt-exclude candidates)        |
-| 2026-08-23 | `116504b` | refactor(agents): prune delegates to remove — single source of session deletion              |
-| 2026-08-23 | `b6d3752` | docs(claude): 2.9.1 — agents 视图 Ctrl+X 删除 + 测试数对齐 1758                              |
-| 2026-08-23 | `9ab86a1` | feat(agents): Ctrl+X permanently removes a session in agent view                             |
-| 2026-08-23 | `a0255f1` | docs(claude): 2.9.0 — Claude Code 2.1.206 借鉴落地 3 条 + 测试数对齐 1756                    |
-| 2026-08-23 | `30f547d` | feat(commands): /cd suggests matching directories on not-found                               |
-| 2026-08-23 | `1344a0a` | feat(mcp): per-server request_timeout_ms overrides 60s tool-call default                     |
-| 2026-08-23 | `98cf831` | feat(mcp): OAuth refresh retries transient failures before PKCE fallback                     |
-| 2026-08-21 | `4543fd1` | docs(claude): 2.8.0 — v0.53.0 修订历史 + 测试数对齐 1748                                     |
-| 2026-08-21 | `0b44d91` | chore: bump version to 0.53.0                                                                |
-| 2026-08-21 | `73f9b16` | docs(readme): 新增 Vim Mode 输入模式说明 + 搜索模式踩坑提醒                                  |
-| 2026-08-21 | `7c03b18` | fix(vim): backspace on empty / search query exits search mode                                |
-| 2026-08-21 | `9a2742e` | docs(claude): 企业微信远程控制落地 + 测试数对齐 1745                                         |
-| 2026-08-21 | `9f8c4ba` | docs(wecom): 企业微信远程控制 design spec + implementation plan                              |
-| 2026-08-21 | `96c055c` | fix(wecom): guard parseMessage against null frame                                            |
-| 2026-08-21 | `e6723b2` | test(wecom): add ws-client→adapter→reply integration test                                    |
-| 2026-08-21 | `34f211e` | feat(wecom): wire adapter into daemon server                                                 |
+| 日期       | Commit    | 说明                                                                                            |
+| ---------- | --------- | ----------------------------------------------------------------------------------------------- |
+| 2026-09-09 | `e64b481` | chore: bump version to 0.77.1                                                                   |
+| 2026-09-09 | `1d65950` | fix(security): 修 audit 高危依赖 — next 15.5.25（2 critical RCE）+ sharp 0.35.4 + js-yaml 4.3.2 |
+| 2026-09-09 | `6fe90b0` | chore: bump version to 0.77.0                                                                   |
+| 2026-09-09 | `5409743` | feat(security): 不可信内容规则 — 读外部产出当数据不当指令（双层固化）                           |
+| 2026-09-05 | `30cde83` | feat(cli): 状态栏 PR 指示器 — ⏺ branch 旁显示 PR #N（按状态着色）                               |
+| 2026-09-05 | `01fae25` | feat(cli): /skill-doctor — 显示未使用 skill + context 成本，按证据 prune                        |
+| 2026-09-05 | `247de87` | feat(crsi): 固化 om-1 两教训 — code-review 合并门（硬约束）+ 断点续传查完整性（软教训）         |
+| 2026-09-04 | `1a9efcf` | chore: bump version to 0.74.0                                                                   |
+| 2026-09-04 | `8052dcf` | fix(ui): 换掉 ink-text-input — 粘贴分块原子追加，根治乱序/丢失/冻住                             |
+| 2026-09-04 | `f7e61c9` | feat(crsi): eval harness 加 self-report-diagnostic 锚点                                         |
+| 2026-08-31 | `4d33709` | chore: bump version to v0.70.0                                                                  |
+| 2026-08-31 | `4e732cd` | feat(cli): /fix test 命令接线 + i18n                                                            |
+| 2026-08-31 | `d5669d7` | feat(cli): /fix test 核心 — LLM 修复失败测试（复用 bench 冻结判定）                             |
+| 2026-08-31 | `4c03180` | refactor(cli): /loop init 删 .sh 约定 + /hooks 指向 settings.json                               |
+| 2026-08-31 | `378fea6` | feat(cli): settings.json hooks 接线                                                             |
+| 2026-08-31 | `e83d1f3` | feat(cli): hooks stdin/stdout JSON 协议对齐 Claude Code                                         |
+| 2026-08-31 | `5d36132` | docs(crsi): 教训 verify-before-build — 对标前先核实标准+自身现状                                |
+| 2026-08-31 | `cbb67bc` | feat(cli): community registry 加 grill-me + eli5                                                |
+| 2026-08-31 | `a7b8fd0` | feat(cli): marketplace 源机制 — 任意公开仓库 skill 可装                                         |
+| 2026-08-24 | `df92d4c` | chore: bump version to 0.56.0                                                                   |
+| 2026-08-24 | `17208c7` | feat(memory): Memory 工具加 search action（对话中召回）                                         |
+| 2026-08-24 | `bcabc89` | fix(cli): 修 plugin/workflow 子命令 argv 解析 + installFromNpm 名一致                           |
+| 2026-08-24 | `0b27285` | feat(plugin): 支持安装 Claude marketplace 插件                                                  |
+| 2026-08-24 | `ba13d02` | feat(graft): 移植 tool-savings 累加 + ctx% 行（方案 B）                                         |
+| 2026-08-24 | `1ba65e3` | feat(ui): 底部 graft 状态行 — 读 graft/.cache/stats.json 显示图规模+新鲜度                      |
+| 2026-08-24 | `7919483` | fix(skills): 系统提示列出全部 26 个技能而非随机 top-5                                           |
+| 2026-08-24 | `26347b8` | fix(startup): 启动目录已删时打印清晰提示而非原始崩溃                                            |
+| 2026-08-23 | `643408b` | chore: bump version to 0.55.0                                                                   |
+| 2026-08-23 | `cf24cab` | feat(cross-session): 拒绝方回「refused」而非静默成功                                            |
+| 2026-08-23 | `2179ba1` | chore(core): 删死代码 output-styles.ts（零引用，未接线）                                        |
+| 2026-08-23 | `276d120` | fix(loader): 剥离 UTF-8 BOM — 带 BOM 的 .md 不再被静默忽略                                      |
+| 2026-08-23 | `c36b661` | fix(config): 原子写 config.yml — 防中断写坏触发备份回滚                                         |
+| 2026-08-23 | `8c1c033` | feat(mcp): 懒连接 — 后台连，死 server 不再阻塞启动 15s                                          |
+| 2026-08-23 | `eae0356` | feat(prompt): 寒暄克制 — 问候只回一句，不上能力清单                                             |
+| 2026-08-23 | `e599caf` | chore: bump version to 0.54.0                                                                   |
+| 2026-08-23 | `7db55d4` | docs(claude): 2.10.1 — nextBackoff 抽共享 + 测试数对齐 1791                                     |
+| 2026-08-23 | `0815820` | refactor(daemon): extract nextBackoff to shared backoff module (rule of three)                  |
+| 2026-08-23 | `c6f38bc` | fix(telegram): clear fetch mock between tests for isolated-run determinism                      |
+| 2026-08-23 | `3aadf3e` | fix(dingtalk): clear fetch mock between tests for isolated-run determinism                      |
+| 2026-08-23 | `9f5e3da` | refactor(dingtalk): extract sendResponse envelope helper to DRY ack/pong                        |
+| 2026-08-23 | `9f337d5` | docs(claude): 2.10.0 — 钉钉远程控制落地 + 测试数对齐 1795                                       |
+| 2026-08-23 | `48513cf` | feat(dingtalk): wire daemon into server + index                                                 |
+| 2026-08-23 | `9b20c26` | feat(dingtalk): add stream-mode bot module (env/api/ws-client/adapter + tests)                  |
+| 2026-08-23 | `147e45b` | refactor(doctor): static-import audit helpers instead of dynamic import                         |
+| 2026-08-23 | `43aa25b` | docs(claude): 测试数对齐 1763                                                                   |
+| 2026-08-23 | `d156869` | fix(doctor): tighten audit patterns — drop submodule-workflow & deploy-chain false positives    |
+| 2026-08-23 | `9b79fde` | docs(claude): 2.9.2 — /doctor CLAUDE.md 审计 + 测试数对齐 1762                                  |
+| 2026-08-23 | `833ba2c` | feat(doctor): audit CLAUDE.md for code-derivable sections (prompt-exclude candidates)           |
+| 2026-08-23 | `116504b` | refactor(agents): prune delegates to remove — single source of session deletion                 |
+| 2026-08-23 | `b6d3752` | docs(claude): 2.9.1 — agents 视图 Ctrl+X 删除 + 测试数对齐 1758                                 |
+| 2026-08-23 | `9ab86a1` | feat(agents): Ctrl+X permanently removes a session in agent view                                |
+| 2026-08-23 | `a0255f1` | docs(claude): 2.9.0 — Claude Code 2.1.206 借鉴落地 3 条 + 测试数对齐 1756                       |
+| 2026-08-23 | `30f547d` | feat(commands): /cd suggests matching directories on not-found                                  |
+| 2026-08-23 | `1344a0a` | feat(mcp): per-server request_timeout_ms overrides 60s tool-call default                        |
+| 2026-08-23 | `98cf831` | feat(mcp): OAuth refresh retries transient failures before PKCE fallback                        |
+| 2026-08-21 | `4543fd1` | docs(claude): 2.8.0 — v0.53.0 修订历史 + 测试数对齐 1748                                        |
+| 2026-08-21 | `0b44d91` | chore: bump version to 0.53.0                                                                   |
+| 2026-08-21 | `73f9b16` | docs(readme): 新增 Vim Mode 输入模式说明 + 搜索模式踩坑提醒                                     |
+| 2026-08-21 | `7c03b18` | fix(vim): backspace on empty / search query exits search mode                                   |
+| 2026-08-21 | `9a2742e` | docs(claude): 企业微信远程控制落地 + 测试数对齐 1745                                            |
+| 2026-08-21 | `9f8c4ba` | docs(wecom): 企业微信远程控制 design spec + implementation plan                                 |
+| 2026-08-21 | `96c055c` | fix(wecom): guard parseMessage against null frame                                               |
+| 2026-08-21 | `e6723b2` | test(wecom): add ws-client→adapter→reply integration test                                       |
+| 2026-08-21 | `34f211e` | feat(wecom): wire adapter into daemon server                                                    |
 
 ---
 
@@ -442,6 +446,7 @@ mipham-code 变更（包名/版本）
 
 | 版本   | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | 维护人     |
 | ------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| 2.32.0 | 2026-09-09 | v0.77.0 + v0.77.1 发版：① 不可信内容规则——读外部产出当数据不当指令，双层固化（`instructions.ts` 顶层 `## Untrusted-Content Rule` always-on + `self-critique.ts` `CRITIQUE_PROMPT` Safety criteria 审计准则 opt-in，对齐 CC 2.1.265 artifact 不可信内容标记）② 依赖安全修复——next 15.5.23→15.5.25 修 2 critical RCE + sharp 0.35.3→0.35.4 修 libheif + js-yaml 4.3.1→4.3.2 修 maxTotalMergeKeys，`pnpm audit --audit-level=high` 归零（仅剩 4 moderate）。测试 2220 passed + 2 skipped（2222 总，205 文件）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | 技术委员会 |
 | 2.31.0 | 2026-09-05 | /skill-doctor + 状态栏 PR 指示器（对标 CC 2.1.261）：① `/skill-doctor` 显示未使用 skill + context 成本（新增 `skills/usage.ts` 跨会话持久化 `~/.mipham/skill-usage.json` 原子写 + skill 工具成功路径记录调用 + 双语 i18n）② 状态栏 PR 指示器（新增 `core/git-pr.ts`：parseGitPr/prColor/resolveGitPr，`gh pr list --head` 异步检测，merged 紫 / approved 绿 / changes 黄 / closed·draft 灰，gh 不可用静默降级）。测试 2212 passed + 2 skipped（205 文件）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | 技术委员会 |
 | 2.30.0 | 2026-09-04 | v0.74.0 发版：① CRSI eval harness 加 self-report-diagnostic 锚点（评分路径无 LLM——4 评分组件 ruleEngine/constitution/errorDB/preflight 不暴露 chat 能力，分数只来自 ground-truth 非模型自报，若注入 LLM 立即 FAIL、anchor gate 拒固化；测试 37→38）② 聊天输入框粘贴乱序/丢失/冻住修复（根因 = Ink 分块投递 + ink-text-input 分块切片插入读渲染闭包旧值 → 换 MiphamTextInput ref 原子追加 + normalizeInput 扩 [\r\n\t]+ 补漏 \r + 删 33ms 节流 + 删 Ctrl revert）。测试 2191 passed + 2 skipped（202 文件）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | 技术委员会 |
 | 2.29.0 | 2026-09-02 | CC 2.1.257 借鉴落地（#52+#44 同根因）：Bash 安全规则匹配边界修复——① Read/Write/Edit deny 规则扩展到 Bash 命令触碰的文件（reader 命令 cat/tac/egrep… + `<`/`>` 重定向 + `$(...)`/反引号命令替换，复用 matchPath 匹配）② Bash 规则匹配从「锚定前缀」改为「复合命令分段」（splitShellSegments 按 shell 分隔符拆分，`rm -rf /` 埋在 `foo && rm -rf /` 仍命中）。堵住 `cat .git-credentials` 绕过 `Read(.git-credentials)` deny 规则的安全洞。+17 测试（permission-rules）。测试 2168 passed + 2 skipped（201 文件）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | 技术委员会 |
