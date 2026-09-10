@@ -320,7 +320,7 @@ export function createBashTool(credentialConfig?: CredentialMaskingConfig): Tool
         command: { type: 'string', description: 'The bash command to execute' },
         description: {
           type: 'string',
-          description: 'What this command does (for audit log)',
+          description: 'What this command does, in plain words (do not echo the command itself)',
         },
         timeout: {
           type: 'integer',
