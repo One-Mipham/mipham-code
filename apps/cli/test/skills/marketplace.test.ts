@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   parseSkillFrontmatter,
   isValidMarketplaceRef,
+  isValidSkillName,
   readMarketplaces,
   addMarketplace,
   removeMarketplace,
@@ -46,6 +47,32 @@ describe('isValidMarketplaceRef', () => {
     expect(isValidMarketplaceRef('a/b', 'skills')).toBe(false)
     expect(isValidMarketplaceRef('anthropics', 'repo with space')).toBe(false)
     expect(isValidMarketplaceRef('anthropics', 'repo@evil')).toBe(false)
+  })
+})
+
+describe('isValidSkillName', () => {
+  it('accepts kebab-case, dotted, and underscored names', () => {
+    expect(isValidSkillName('eli5')).toBe(true)
+    expect(isValidSkillName('grill-me')).toBe(true)
+    expect(isValidSkillName('doc-sync')).toBe(true)
+    expect(isValidSkillName('foo.bar')).toBe(true)
+    expect(isValidSkillName('foo_bar')).toBe(true)
+  })
+
+  it('rejects path traversal and separators', () => {
+    expect(isValidSkillName('../../evil')).toBe(false)
+    expect(isValidSkillName('foo/bar')).toBe(false)
+    expect(isValidSkillName('/etc/passwd')).toBe(false)
+    expect(isValidSkillName('..')).toBe(false)
+    expect(isValidSkillName('.')).toBe(false)
+    expect(isValidSkillName('foo\\bar')).toBe(false)
+  })
+
+  it('rejects empty, leading-dot, and whitespace names', () => {
+    expect(isValidSkillName('')).toBe(false)
+    expect(isValidSkillName('.hidden')).toBe(false)
+    expect(isValidSkillName('has space')).toBe(false)
+    expect(isValidSkillName('tab\tname')).toBe(false)
   })
 })
 

@@ -54,6 +54,17 @@ export function isValidMarketplaceRef(owner: string, repo: string): boolean {
 }
 
 /**
+ * A skill name is used as a filename segment when installing from a marketplace.
+ * It must be a single safe segment: start with an alphanumeric and contain only
+ * alphanumerics, dots, dashes, and underscores — no path separators (`/`, `\`),
+ * no leading dot (so `..` cannot traverse), no whitespace. Marketplace frontmatter
+ * is untrusted, so this gate fails closed before the name ever touches a path.
+ */
+export function isValidSkillName(name: string): boolean {
+  return /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(name)
+}
+
+/**
  * Read the marketplace sources from disk. A missing or corrupt file falls back
  * to the default Anthropic sources.
  */

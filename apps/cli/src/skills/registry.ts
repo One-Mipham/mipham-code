@@ -17,7 +17,12 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import type { MiphamConfig } from '../shared/types.js'
 import communitySkills from './community-registry.json'
-import { readMarketplaces, findSkillInMarketplaces, downloadFile } from './marketplace'
+import {
+  readMarketplaces,
+  findSkillInMarketplaces,
+  downloadFile,
+  isValidSkillName,
+} from './marketplace'
 
 const SKILLS_DIR = join(homedir(), '.mipham', 'skills')
 
@@ -221,6 +226,14 @@ async function installFromMarketplace(
     }
   }
 
+  if (!isValidSkillName(found.name)) {
+    return {
+      success: false,
+      name: found.name,
+      message: `Refusing to install skill with unsafe name "${found.name}": skill names must be a single safe filename segment (letters, digits, dots, dashes, underscores).`,
+    }
+  }
+
   const destPath = join(SKILLS_DIR, `${found.name}.SKILL.md`)
   if (existsSync(destPath)) {
     return {
@@ -279,6 +292,14 @@ export async function installSkillFromUrl(
       .pop()
       ?.replace(/\.(SKILL\.)?md$/i, '') || 'custom-skill'
 
+  if (!isValidSkillName(name)) {
+    return {
+      success: false,
+      name,
+      message: `Refusing to install from URL with unsafe name "${name}": skill names must be a single safe filename segment (letters, digits, dots, dashes, underscores).`,
+    }
+  }
+
   const destDir = join(SKILLS_DIR)
   const destPath = join(destDir, `${name}.SKILL.md`)
 
@@ -322,6 +343,14 @@ export function listInstalledSkills(): string[] {
  * Remove an installed skill.
  */
 export function removeSkill(skillName: string): InstallResult {
+  if (!isValidSkillName(skillName)) {
+    return {
+      success: false,
+      name: skillName,
+      message: `Refusing to remove skill with unsafe name "${skillName}": skill names must be a single safe filename segment (letters, digits, dots, dashes, underscores).`,
+    }
+  }
+
   const destPath = join(SKILLS_DIR, `${skillName}.SKILL.md`)
   if (!existsSync(destPath)) {
     return { success: false, name: skillName, message: `Skill "${skillName}" is not installed.` }
