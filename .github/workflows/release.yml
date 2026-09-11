@@ -123,7 +123,13 @@ jobs:
           JETBRAINS_MARKETPLACE_TOKEN: ${{ secrets.JETBRAINS_MARKETPLACE_TOKEN }}
         run: |
           if [ -n "$JETBRAINS_MARKETPLACE_TOKEN" ]; then
-            ./gradlew publishPlugin --no-daemon --console=plain
+            if ./gradlew publishPlugin --no-daemon --console=plain > /tmp/jb-publish.log 2>&1; then
+              echo "JetBrains plugin published."
+            elif grep -q "already contains version" /tmp/jb-publish.log; then
+              echo "Version already on JetBrains Marketplace — skipping (idempotent)."
+            else
+              echo "publishPlugin failed:"; cat /tmp/jb-publish.log; exit 1
+            fi
           else
             echo "JETBRAINS_MARKETPLACE_TOKEN not set — skipping publish (build only)."
           fi
@@ -147,7 +153,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Install npm 11 (OIDC trusted publishing requires npm ≥ 11.5.1)
-        run: npm install -g npm@11
+        run: sudo npm install -g npm@11
 
       - name: Smoke test npm package (pack + clean install + resolve imports)
         run: bash scripts/smoke.sh apps/cli
