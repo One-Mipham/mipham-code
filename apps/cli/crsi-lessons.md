@@ -334,3 +334,16 @@
 - 发版 v0.77.1 时误判「JetBrains token 空、插件没上架」：`grep "not set"` 命中 `echo "JETBRAINS_MARKETPLACE_TOKEN not set — skipping"` 这行，实为 run 块脚本回显、非执行结果
 - 真实执行在后面：`> Task :publishPlugin` + `BUILD SUCCESSFUL in 14s`，证明 token 有效、发布成功
 - 代价：用户白生成 token、白改 2FA、虚惊一场；教训 = 要看匹配行之后的实际执行行，别停在回显
+
+## verify-mechanism-currency: 推荐修复方案前先核实机制当前可行性（外部机制可能已下线/变更）
+
+- 建议: 推荐「用什么 token 类型 / 用哪个 CI 特性 / 调哪个 API / 用哪个 CLI 子命令」这类**外部机制**作为修复方案前，必须先核实该机制**当下是否仍存在、仍可行**——工具链会被下线、改名、改语义，而记忆不会自动更新。凭旧记忆推荐一个已废弃的机制，等于把「我猜的当前可行」当「事实」给用户，浪费一整轮。与现有教训的分工：`read-first` 管「答代码题前先读代码」，`verify-before-build` 管「对标前核实标准真实性 + 自身现状」，本条管「推荐外部机制前核实其当下存在性」——「核实」家族的第三个触发面，非重复。
+- 严重度: warning
+- 生成时间: 2026-09-11
+- 来源: 会话复盘（human + Claude Code，手动沉淀）
+
+### 证据
+
+- 发版 v0.78.0 修 npm 2FA（2026-09-11）：我凭旧记忆推荐「用 Automation token 绕过 2FA」，用户纠正「前天走过没走通，因为现在没有 Automation」；查证 Automation token 已于 **2025-12 被 npm 下线**，granular token 也不绕 2FA（必报 EOTP）
+- 正解 = OIDC trusted publishing（不存 token、不要 OTP）；但「推荐已下线机制」这一步纯属浪费——若先核实「Automation 当下是否仍存在」就不会推荐错
+- 复发面广：npm token 类型、GitHub Actions 特性、API 端点、CLI 子命令都会在无感时被废弃/改名/改语义，推荐前须查官方当前文档而非依赖记忆
