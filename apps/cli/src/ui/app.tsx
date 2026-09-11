@@ -1244,7 +1244,7 @@ export function App({
             )}
 
             {/* Status line — Claude Code style */}
-            <Box marginTop={1} flexDirection="column">
+            <Box flexDirection="column">
               <Box flexDirection="row">
                 <Text color={PERMISSION_COLORS[permissionMode]}>
                   ⏵⏵ {PERMISSION_LABELS[permissionMode]}
