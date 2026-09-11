@@ -10,8 +10,8 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.34.1
-> **最后更新**: 2026-09-11 — 新增 trim-process-prose skill + npm 发布切 OIDC trusted publishing（Automation 已下线）
+> **版本**: 2.35.0
+> **最后更新**: 2026-09-11 — v0.79.0 发版（光标移动 + backspace 回归修复 + UI 修复）+ npm OIDC 已验证绿
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -50,7 +50,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：2,225 测试（2223 passed + 2 skipped）
+测试：2,246 测试（2244 passed + 2 skipped）
 
 ---
 
@@ -87,7 +87,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 205 个测试文件，2225 个测试
+│   │   ├── test/               # 206 个测试文件，2246 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -110,7 +110,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（2225 个测试）
+pnpm test         # vitest run（2246 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -239,7 +239,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
 | E2E      | 1       | 8        | full-pipeline                                 |
 | Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **205** | **2225** | **0 失败** ✅（2223 passed + 2 skipped）      |
+| **合计** | **206** | **2246** | **0 失败** ✅（2244 passed + 2 skipped）      |
 
 > 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
 
@@ -297,6 +297,21 @@ GitHub Actions 9 个 job 流水线：`typecheck → lint → format → build-cl
 
 | 日期       | Commit    | 说明                                                                                            |
 | ---------- | --------- | ----------------------------------------------------------------------------------------------- |
+| 2026-09-11 | `c9c683b` | fix(ui): backspace 回归修复 + 历史导航抽纯函数                                                  |
+| 2026-09-11 | `1c5c6c6` | fix(ci): release 管线两处修复 — npm 11 安装用 sudo + JetBrains 重复版本幂等跳过                 |
+| 2026-09-11 | `20c093a` | chore: bump version to 0.79.0                                                                   |
+| 2026-09-11 | `2a8affa` | fix(ui): 底部状态行行距统一                                                                     |
+| 2026-09-11 | `fa2a615` | fix(ui): graft/ctx 状态行去掉 dim 字体                                                          |
+| 2026-09-11 | `23fdfb0` | fix(ui): 欢迎屏 /help 重复                                                                      |
+| 2026-09-11 | `e9840c9` | feat(cli): 光标左右移动 — applyEdit 纯函数 + MiphamTextInput 光标跟踪                           |
+| 2026-09-11 | `c80ab42` | docs(crsi): 教训 verify-mechanism-currency — 推荐外部机制前核实其当下可行性                     |
+| 2026-09-11 | `f53dc46` | docs(claude): 2.34.1 — npm 发布切 OIDC trusted publishing                                       |
+| 2026-09-11 | `1dbf615` | ci(release): switch npm publish to OIDC trusted publishing                                      |
+| 2026-09-11 | `7fe4eac` | fix(skills): regenerate bundled-skills snapshot                                                 |
+| 2026-09-11 | `3439d62` | chore: bump version to 0.78.0                                                                   |
+| 2026-09-11 | `53b2e2a` | feat(skills): add trim-process-prose, remove pre-push-checks                                    |
+| 2026-09-11 | `b8d0831` | fix(skills): rename systematic-debugging → debug-loop                                           |
+| 2026-09-10 | `638e7cf` | docs(claude): 2.33.0 — v0.77.2 发版：marketplace 路径净化 + Bash description 指引               |
 | 2026-09-10 | `f0f4a8a` | chore: bump version to 0.77.2                                                                   |
 | 2026-09-10 | `abff0c2` | docs(claude): 测试数对齐 2225（2223 passed + 2 skipped）                                        |
 | 2026-09-10 | `73ff508` | feat(cli): Bash 工具 description 指引 — 大白话描述命令，不回显命令本身                          |
@@ -450,7 +465,8 @@ mipham-code 变更（包名/版本）
 
 | 版本   | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | 维护人     |
 | ------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
-| 2.34.1 | 2026-09-11 | npm 发布切 OIDC trusted publishing——Automation token 已下线（2025-12）、granular token publish 必 EOTP；`release.yml` publish job 改 `id-token: write` + `npm install -g npm@11` + `npm publish --provenance`，删 `Setup npm auth`（NPM_TOKEN）；npm 侧配 Trusted Publisher（One-Mipham/mipham-code/release.yml，勾 publish directly）。⚠️ 下次发版验 OIDC 绿后再删 NPM_TOKEN secret。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | 技术委员会 |
+| 2.35.0 | 2026-09-11 | v0.79.0 + v0.79.1 发版：① 光标左右移动——`input.tsx` 新增 `applyEdit`/`keyToEditAction` 纯函数 + 光标跟踪，左右箭头移动光标、定点删插 ② backspace 回归修复——Ink 5.2.1 把 macOS Backspace（\x7f）解析成 `key.delete`（非 `key.backspace`=\x08），上轮拆分致按 Backspace 走向前删、光标在末尾不删；合并两者为向后删 ③ 历史导航抽 `navigateHistory` 纯函数（逻辑不变，证「上下键动不了」是空历史非 bug）④ 欢迎屏 /help 重复 ⑤ graft/ctx 状态行去 dim 字体 ⑥ 底部状态行行距统一。CI：npm 发布 OIDC 首次跑通（`sudo npm install -g npm@11` 解 EACCES + JetBrains publishPlugin 重复版本幂等跳过）。测试 2244 passed + 2 skipped（2246 总，206 文件）。                                                                                                                                                                                                                                                                                                                                                                   | 技术委员会 |
+| 2.34.1 | 2026-09-11 | npm 发布切 OIDC trusted publishing——Automation token 已下线（2025-12）、granular token publish 必 EOTP；`release.yml` publish job 改 `id-token: write` + `npm install -g npm@11` + `npm publish --provenance`，删 `Setup npm auth`（NPM_TOKEN）；npm 侧配 Trusted Publisher（One-Mipham/mipham-code/release.yml，勾 publish directly）。✅ 已验证绿（v0.79.0 首跑通过）——可删 NPM_TOKEN secret。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | 技术委员会 |
 | 2.34.0 | 2026-09-11 | 新增 trim-process-prose skill（standard 21→22，共 27→28）——清理 AI 写进代码/注释/commit 的过程叙述（「只有 HEAD 读者能独立解析」过滤，keep 事实/drop 过程，对齐 DeepSeek Harness dsh-trim-cot-leakage）。压测结论：trim RED/GREEN 分离干净 ✅；pre-push-checks 三 no-skill 样本均 scoped 正确、目标失败未触发 → 判定对强模型冗余，删除不 ship。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | 技术委员会 |
 | 2.33.0 | 2026-09-10 | v0.77.2 发版：① marketplace 路径净化——未净化 skill 名（frontmatter 攻击者可控）拼进文件路径可 path traversal，新增 `isValidSkillName` 闸门在 `installFromMarketplace` / `installSkillFromUrl` / `removeSkill` 三处写盘/删除前 fail-closed 拒绝（对齐 CC 2.1.267 marketplace 路径绕过 containment）② Bash 工具 description 参数改「in plain words (do not echo the command itself)」③ 测试数对齐 2225。测试 2223 passed + 2 skipped（2225 总，205 文件）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | 技术委员会 |
 | 2.32.0 | 2026-09-09 | v0.77.0 + v0.77.1 发版：① 不可信内容规则——读外部产出当数据不当指令，双层固化（`instructions.ts` 顶层 `## Untrusted-Content Rule` always-on + `self-critique.ts` `CRITIQUE_PROMPT` Safety criteria 审计准则 opt-in，对齐 CC 2.1.265 artifact 不可信内容标记）② 依赖安全修复——next 15.5.23→15.5.25 修 2 critical RCE + sharp 0.35.3→0.35.4 修 libheif + js-yaml 4.3.1→4.3.2 修 maxTotalMergeKeys，`pnpm audit --audit-level=high` 归零（仅剩 4 moderate）。测试 2220 passed + 2 skipped（2222 总，205 文件）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | 技术委员会 |
