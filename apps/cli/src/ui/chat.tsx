@@ -135,9 +135,7 @@ export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
           </Box>
           <Text dimColor>{t('ui.banner.tagline')}</Text>
           <Box marginTop={1}>
-            <Text dimColor>
-              {t('ui.banner.start_message')} <Text color="yellow">/help</Text>
-            </Text>
+            <Text dimColor>{t('ui.banner.start_message')}</Text>
           </Box>
           <Box marginTop={1}>
             <Text dimColor>{t('ui.banner.controls_hint')}</Text>
