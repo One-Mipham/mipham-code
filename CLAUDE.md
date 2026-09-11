@@ -10,8 +10,8 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.33.0
-> **最后更新**: 2026-09-10 — v0.77.2 发版：marketplace 路径净化（未净化 skill 名 path traversal）+ Bash description 指引 + 测试对齐 2225
+> **版本**: 2.34.0
+> **最后更新**: 2026-09-11 — 新增 trim-process-prose skill（standard 22 + mipham 6 = 28）；删除 pre-push-checks（压测证对强模型冗余）
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -86,7 +86,7 @@ mipham-code/
 │   │   │   ├── workflow/       # Workflow 运行时 + Schema 验证
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
-│   │   ├── skills/             # 27 个内置技能（21 standard + 6 mipham）
+│   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
 │   │   ├── test/               # 205 个测试文件，2225 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
@@ -162,9 +162,9 @@ pnpm format       # Prettier
 | Computer（1）   | computer-use                                                                                               |
 | Scheduling（4） | schedule-wakeup, cron-create, cron-delete, cron-list                                                       |
 
-### Skills 系统（27 个内置技能）
+### Skills 系统（28 个内置技能）
 
-**Standard（21）**: code-review, codebase-design, compassionate-communication, debug-loop, doc-generator, domain-modeling, github-ops, grill-with-docs, implement, memory, mipham-code-setup, research, safe-coding, security-review, self-review, superpower, tdd, to-spec, triage, web-access, web-search
+**Standard（22）**: code-review, codebase-design, compassionate-communication, debug-loop, doc-generator, domain-modeling, github-ops, grill-with-docs, implement, memory, mipham-code-setup, research, safe-coding, security-review, self-review, superpower, tdd, to-spec, triage, trim-process-prose, web-access, web-search
 
 > `web-access`（v2.5.0）是首个**带可执行资产**的 standard skill：CDP Proxy 直连用户已登录 Chrome（脚本随二进制内嵌，首次调用提取到 `~/.mipham/skills/web-access/`）。
 
@@ -450,6 +450,7 @@ mipham-code 变更（包名/版本）
 
 | 版本   | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | 维护人     |
 | ------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| 2.34.0 | 2026-09-11 | 新增 trim-process-prose skill（standard 21→22，共 27→28）——清理 AI 写进代码/注释/commit 的过程叙述（「只有 HEAD 读者能独立解析」过滤，keep 事实/drop 过程，对齐 DeepSeek Harness dsh-trim-cot-leakage）。压测结论：trim RED/GREEN 分离干净 ✅；pre-push-checks 三 no-skill 样本均 scoped 正确、目标失败未触发 → 判定对强模型冗余，删除不 ship。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | 技术委员会 |
 | 2.33.0 | 2026-09-10 | v0.77.2 发版：① marketplace 路径净化——未净化 skill 名（frontmatter 攻击者可控）拼进文件路径可 path traversal，新增 `isValidSkillName` 闸门在 `installFromMarketplace` / `installSkillFromUrl` / `removeSkill` 三处写盘/删除前 fail-closed 拒绝（对齐 CC 2.1.267 marketplace 路径绕过 containment）② Bash 工具 description 参数改「in plain words (do not echo the command itself)」③ 测试数对齐 2225。测试 2223 passed + 2 skipped（2225 总，205 文件）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | 技术委员会 |
 | 2.32.0 | 2026-09-09 | v0.77.0 + v0.77.1 发版：① 不可信内容规则——读外部产出当数据不当指令，双层固化（`instructions.ts` 顶层 `## Untrusted-Content Rule` always-on + `self-critique.ts` `CRITIQUE_PROMPT` Safety criteria 审计准则 opt-in，对齐 CC 2.1.265 artifact 不可信内容标记）② 依赖安全修复——next 15.5.23→15.5.25 修 2 critical RCE + sharp 0.35.3→0.35.4 修 libheif + js-yaml 4.3.1→4.3.2 修 maxTotalMergeKeys，`pnpm audit --audit-level=high` 归零（仅剩 4 moderate）。测试 2220 passed + 2 skipped（2222 总，205 文件）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | 技术委员会 |
 | 2.31.0 | 2026-09-05 | /skill-doctor + 状态栏 PR 指示器（对标 CC 2.1.261）：① `/skill-doctor` 显示未使用 skill + context 成本（新增 `skills/usage.ts` 跨会话持久化 `~/.mipham/skill-usage.json` 原子写 + skill 工具成功路径记录调用 + 双语 i18n）② 状态栏 PR 指示器（新增 `core/git-pr.ts`：parseGitPr/prColor/resolveGitPr，`gh pr list --head` 异步检测，merged 紫 / approved 绿 / changes 黄 / closed·draft 灰，gh 不可用静默降级）。测试 2212 passed + 2 skipped（205 文件）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | 技术委员会 |
