@@ -86,6 +86,50 @@ export function normalizeInput(input: string): string {
   return input.replace(/[\r\n\t]+/g, ' ')
 }
 
+/** Cursor-aware edit state — value plus the insertion point (0..value.length). */
+export interface EditState {
+  value: string
+  cursor: number
+}
+
+/** A single editing keystroke, normalized away from Ink's key object for testability. */
+export type EditAction =
+  | { type: 'moveLeft' }
+  | { type: 'moveRight' }
+  | { type: 'backspace' }
+  | { type: 'delete' }
+  | { type: 'insert'; text: string }
+
+/**
+ * Pure cursor-editing transition. Returns a new state (or the same state when
+ * the action is a no-op). Cursor is always clamped to [0, value.length].
+ */
+export function applyEdit(state: EditState, action: EditAction): EditState {
+  const { value, cursor } = state
+  switch (action.type) {
+    case 'moveLeft':
+      return { value, cursor: Math.max(0, cursor - 1) }
+    case 'moveRight':
+      return { value, cursor: Math.min(value.length, cursor + 1) }
+    case 'backspace':
+      if (cursor === 0) return state
+      return {
+        value: value.slice(0, cursor - 1) + value.slice(cursor),
+        cursor: cursor - 1,
+      }
+    case 'delete':
+      if (cursor >= value.length) return state
+      return { value: value.slice(0, cursor) + value.slice(cursor + 1), cursor }
+    case 'insert': {
+      if (!action.text) return state
+      return {
+        value: value.slice(0, cursor) + action.text + value.slice(cursor),
+        cursor: cursor + action.text.length,
+      }
+    }
+  }
+}
+
 /** True when typing a leading `/` should auto-open the slash-command picker. */
 export function shouldAutoOpenPicker(value: string, prevValue: string, enabled: boolean): boolean {
   return enabled && value.startsWith('/') && !prevValue.startsWith('/')
@@ -99,8 +143,8 @@ export function shouldAutoOpenPicker(value: string, prevValue: string, enabled: 
  * 边界拆成多块，同一轮 synchronous flush 里后续块读到的仍是旧值，于是「覆盖
  * 前块 / 插到中段」，表现为粘贴内容乱序、丢失、冻住。
  *
- * 这里用 ref 做同步真值：每块按当前 ref 原子追加（光标恒在末尾），不依赖
- * React 渲染时序，分块粘贴自然累积成完整文本。
+ * 这里用 ref 做同步真值：每块按当前 ref 在光标处原子插入（默认光标在末尾），
+ * 不依赖 React 渲染时序，分块粘贴自然累积成完整文本。
  */
 function MiphamTextInput({
   value,
@@ -117,10 +161,19 @@ function MiphamTextInput({
 }) {
   // 同步真值：valueRef 永远是最新文本；受控 value 仅在渲染时落后于 ref。
   const valueRef = useRef(value)
+  // 光标插入点（0..value.length）：cursorRef 供 useInput 同步读，cursor state 驱动渲染。
+  const [cursor, setCursor] = useState(value.length)
+  const cursorRef = useRef(cursor)
 
-  // 外部改动（箭头历史回填、提交清空）时，把真值对齐回受控 prop。
+  // 外部改动（箭头历史回填、提交/Esc 清空）时把真值对齐回受控 prop，光标归位到末尾。
+  // 组件自身 edit 在 onChange 前已同步更新 valueRef，故 ref 与 prop 相等时跳过，
+  // 避免把「中段插入」后的光标错误拉回末尾。
   useEffect(() => {
-    valueRef.current = value
+    if (valueRef.current !== value) {
+      valueRef.current = value
+      cursorRef.current = value.length
+      setCursor(value.length)
+    }
   }, [value])
 
   useInput(
@@ -133,21 +186,26 @@ function MiphamTextInput({
         onSubmit(valueRef.current)
         return
       }
-      if (key.backspace || key.delete) {
-        if (valueRef.current.length > 0) {
-          const next = valueRef.current.slice(0, -1)
-          valueRef.current = next
-          onChange(next)
-        }
-        return
-      }
 
-      // 打字 / 粘贴：归一化控制符后原子追加（光标恒在末尾）。
-      const cleaned = normalizeInput(input)
-      if (!cleaned) return
-      const next = valueRef.current + cleaned
-      valueRef.current = next
-      onChange(next)
+      // 把按键归一化为一次光标编辑：左/右移动，退格/删除，或光标处插入（打字/粘贴）。
+      const state: EditState = { value: valueRef.current, cursor: cursorRef.current }
+      let action: EditAction | null = null
+      if (key.leftArrow) action = { type: 'moveLeft' }
+      else if (key.rightArrow) action = { type: 'moveRight' }
+      else if (key.backspace) action = { type: 'backspace' }
+      else if (key.delete) action = { type: 'delete' }
+      else {
+        const cleaned = normalizeInput(input)
+        if (cleaned) action = { type: 'insert', text: cleaned }
+      }
+      if (!action) return
+
+      const next = applyEdit(state, action)
+      valueRef.current = next.value
+      cursorRef.current = next.cursor
+      setCursor(next.cursor)
+      // 纯移动不通知父组件（文本未变），只在文本变化时 onChange。
+      if (next.value !== state.value) onChange(next.value)
     },
     { isActive: focus },
   )
@@ -158,8 +216,9 @@ function MiphamTextInput({
         <Text dimColor>{placeholder}</Text>
       ) : (
         <>
-          {value}
-          <Text inverse> </Text>
+          {value.slice(0, cursor)}
+          <Text inverse>{value[cursor] ?? ' '}</Text>
+          {value.slice(cursor + 1)}
         </>
       )}
     </Text>
