@@ -130,6 +130,64 @@ export function applyEdit(state: EditState, action: EditAction): EditState {
   }
 }
 
+/**
+ * Map an Ink key object + raw input to a cursor-editing action (null when the key
+ * isn't an edit). Extracted from the MiphamTextInput useInput handler so the macOS
+ * Backspace quirk is unit-testable.
+ *
+ * Ink 5.2.1 parses the macOS Backspace key (terminal sends \x7f) as `key.delete`,
+ * NOT `key.backspace` (that's \x08). So both must map to a backward delete; the
+ * true forward-Delete key (\x1b[3~) is also parsed as `key.delete` by Ink and is
+ * rare, so it deliberately stays backward-delete too.
+ */
+export function keyToEditAction(
+  key: { leftArrow?: boolean; rightArrow?: boolean; backspace?: boolean; delete?: boolean },
+  input: string,
+): EditAction | null {
+  if (key.leftArrow) return { type: 'moveLeft' }
+  if (key.rightArrow) return { type: 'moveRight' }
+  if (key.backspace || key.delete) return { type: 'backspace' }
+  const cleaned = normalizeInput(input)
+  if (cleaned) return { type: 'insert', text: cleaned }
+  return null
+}
+
+/** Browsing state for arrow-key history navigation. */
+export interface HistoryNavState {
+  history: string[]
+  index: number // -1 = not browsing
+  savedDraft: string // draft saved on first up-arrow
+}
+
+/**
+ * Pure history-navigation transition. Returns the value to display plus the
+ * updated browsing state, or null when the key is a no-op (empty history for up,
+ * or not browsing for down).
+ */
+export function navigateHistory(
+  state: HistoryNavState,
+  dir: 'up' | 'down',
+  draft: string,
+): { index: number; savedDraft: string; value: string } | null {
+  if (dir === 'up') {
+    if (state.history.length === 0) return null
+    const savedDraft = state.index === -1 ? draft : state.savedDraft
+    const index = Math.min(state.index + 1, state.history.length - 1)
+    return { index, savedDraft, value: state.history[state.history.length - 1 - index]! }
+  }
+  // down
+  if (state.index === -1) return null
+  const index = state.index - 1
+  if (index === -1) {
+    return { index, savedDraft: '', value: state.savedDraft }
+  }
+  return {
+    index,
+    savedDraft: state.savedDraft,
+    value: state.history[state.history.length - 1 - index]!,
+  }
+}
+
 /** True when typing a leading `/` should auto-open the slash-command picker. */
 export function shouldAutoOpenPicker(value: string, prevValue: string, enabled: boolean): boolean {
   return enabled && value.startsWith('/') && !prevValue.startsWith('/')
@@ -188,16 +246,10 @@ function MiphamTextInput({
       }
 
       // 把按键归一化为一次光标编辑：左/右移动，退格/删除，或光标处插入（打字/粘贴）。
+      // macOS Backspace 发 \x7f，被 Ink 映射成 key.delete（非 key.backspace），
+      // 故 keyToEditAction 里两者都按向后删处理。
       const state: EditState = { value: valueRef.current, cursor: cursorRef.current }
-      let action: EditAction | null = null
-      if (key.leftArrow) action = { type: 'moveLeft' }
-      else if (key.rightArrow) action = { type: 'moveRight' }
-      else if (key.backspace) action = { type: 'backspace' }
-      else if (key.delete) action = { type: 'delete' }
-      else {
-        const cleaned = normalizeInput(input)
-        if (cleaned) action = { type: 'insert', text: cleaned }
-      }
+      const action = keyToEditAction(key, input)
       if (!action) return
 
       const next = applyEdit(state, action)
@@ -379,30 +431,19 @@ export function InputBar({
       // Ignore if picker is active (command picker handles its own arrows)
       if (value.startsWith('/')) return
 
-      if (key.upArrow) {
-        if (submittedHistory.length === 0) return
-        // Save current draft the first time we enter history browsing
-        if (historyIndexRef.current === -1) {
-          // Save the latest value from the ref — state `value` may lag a render.
-          savedDraftRef.current = valueRef.current
-        }
-        const newIndex = Math.min(historyIndexRef.current + 1, submittedHistory.length - 1)
-        historyIndexRef.current = newIndex
-        setValue(submittedHistory[submittedHistory.length - 1 - newIndex]!)
-        return
-      }
-      if (key.downArrow) {
-        if (historyIndexRef.current === -1) return
-        const newIndex = historyIndexRef.current - 1
-        historyIndexRef.current = newIndex
-        if (newIndex === -1) {
-          // Back to the original draft
-          setValue(savedDraftRef.current)
-          savedDraftRef.current = ''
-        } else {
-          setValue(submittedHistory[submittedHistory.length - 1 - newIndex]!)
-        }
-        return
+      const result = navigateHistory(
+        {
+          history: submittedHistory,
+          index: historyIndexRef.current,
+          savedDraft: savedDraftRef.current,
+        },
+        key.upArrow ? 'up' : 'down',
+        valueRef.current,
+      )
+      if (result) {
+        historyIndexRef.current = result.index
+        savedDraftRef.current = result.savedDraft
+        setValue(result.value)
       }
     }
   })
