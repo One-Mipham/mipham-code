@@ -38,16 +38,16 @@ export function GraftStatusLine({ cwd, ctxPct }: { cwd: string; ctxPct?: number 
     <Box flexDirection="column">
       {stats && fresh && (
         <Box>
-          <Text dimColor>◤ </Text>
+          <Text>◤ </Text>
           <Text color="blue">graft</Text>
-          <Text dimColor>
+          <Text>
             {' '}
             · {stats.nodeCount} nodes / {stats.edgeCount} edges ·{' '}
           </Text>
           <Text color={fresh.color}>{fresh.label}</Text>
           {saved > 0 && (
             <>
-              <Text dimColor> · </Text>
+              <Text> · </Text>
               <Text color="blue">~{saved.toLocaleString()} tok saved</Text>
             </>
           )}
@@ -55,7 +55,7 @@ export function GraftStatusLine({ cwd, ctxPct }: { cwd: string; ctxPct?: number 
       )}
       {bottom.length > 0 && (
         <Box>
-          <Text dimColor>▸ {bottom.join(' · ')}</Text>
+          <Text>▸ {bottom.join(' · ')}</Text>
         </Box>
       )}
     </Box>
