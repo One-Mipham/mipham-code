@@ -135,10 +135,10 @@ export function applyEdit(state: EditState, action: EditAction): EditState {
  * isn't an edit). Extracted from the MiphamTextInput useInput handler so the macOS
  * Backspace quirk is unit-testable.
  *
- * Ink 5.2.1 parses the macOS Backspace key (terminal sends \x7f) as `key.delete`,
- * NOT `key.backspace` (that's \x08). So both must map to a backward delete; the
- * true forward-Delete key (\x1b[3~) is also parsed as `key.delete` by Ink and is
- * rare, so it deliberately stays backward-delete too.
+ * Ink 7 correctly distinguishes the physical Backspace key (terminal sends \x7f →
+ * `key.backspace`) from the forward-Delete key (\x1b[3~ → `key.delete`). Ink 5.2.1
+ * misparsed both as `key.delete`, which the old backspace fix worked around by
+ * treating `key.delete` as backward-delete.
  */
 export function keyToEditAction(
   key: { leftArrow?: boolean; rightArrow?: boolean; backspace?: boolean; delete?: boolean },
@@ -146,7 +146,8 @@ export function keyToEditAction(
 ): EditAction | null {
   if (key.leftArrow) return { type: 'moveLeft' }
   if (key.rightArrow) return { type: 'moveRight' }
-  if (key.backspace || key.delete) return { type: 'backspace' }
+  if (key.backspace) return { type: 'backspace' }
+  if (key.delete) return { type: 'delete' }
   const cleaned = normalizeInput(input)
   if (cleaned) return { type: 'insert', text: cleaned }
   return null

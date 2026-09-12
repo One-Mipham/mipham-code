@@ -75,11 +75,12 @@ describe('keyToEditAction', () => {
     expect(keyToEditAction({ backspace: true }, '')).toEqual({ type: 'backspace' })
   })
 
-  // Regression: macOS Backspace sends \x7f, which Ink 5.2.1 parses as key.delete
-  // (not key.backspace, which is \x08). Treating key.delete as a forward delete
-  // made Backspace a no-op at the end of the line.
-  it('treats key.delete as a backward delete (macOS Backspace is \\x7f)', () => {
-    expect(keyToEditAction({ delete: true }, '')).toEqual({ type: 'backspace' })
+  // Ink 7 distinguishes the physical Backspace (\x7f → key.backspace) from the
+  // forward-Delete key (\x1b[3~ → key.delete). Ink 5.2.1 misparsed both as
+  // key.delete, which made treating key.delete as forward-delete break Backspace;
+  // that quirk is gone in Ink 7, so key.delete is forward delete again.
+  it('maps key.delete to a forward delete (Ink 7 Delete key is \\x1b[3~)', () => {
+    expect(keyToEditAction({ delete: true }, '')).toEqual({ type: 'delete' })
   })
 
   it('maps plain input to an insert at the cursor', () => {
