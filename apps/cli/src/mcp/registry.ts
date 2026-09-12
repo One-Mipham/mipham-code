@@ -117,21 +117,19 @@ export function registerMcpServerTools(
       const tool = convertMcpTool(serverName, mcpTool)
 
       if (toolsMap.has(tool.name)) {
-        process.stderr.write(
-          t('errors.mcp_register_collision', { name: tool.name, server: serverName }) + '\n',
-        )
+        console.error(t('errors.mcp_register_collision', { name: tool.name, server: serverName }))
         continue
       }
 
       toolsMap.set(tool.name, tool)
       registered++
     } catch (err) {
-      process.stderr.write(
+      console.error(
         t('errors.mcp_register_failed', {
           tool: mcpTool.name,
           server: serverName,
           error: String(err),
-        }) + '\n',
+        }),
       )
     }
   }

@@ -1,6 +1,6 @@
 ---
 model: mipham-code
-version: 2.3.0
+version: 2.3.1
 privacy: project
 language: zh-CN
 ---
@@ -140,7 +140,7 @@ language: zh-CN
 
 - 运行时: Bun 1.2+ · TypeScript strict · ESM
 - 包管理: pnpm workspace
-- CLI UI: React 18 + Ink 5
+- CLI UI: React 19 + Ink 7
 - Web: Next.js 14+ App Router + Tailwind CSS
 - 测试: Vitest · Lint: ESLint + Prettier
 

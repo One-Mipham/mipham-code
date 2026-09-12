@@ -216,7 +216,7 @@ async function connectMcpServers(
       await mcp.connect(server)
       const count = registerMcpServerTools(server.name, tools)
       if (count > 0) {
-        process.stderr.write(`[mcp] "${server.name}": registered ${count} tools\n`)
+        console.log(`[mcp] "${server.name}": registered ${count} tools`)
       }
     }),
   )
@@ -227,7 +227,7 @@ async function connectMcpServers(
       const name = mcpServers[i]!.name
       const reason = String(result.reason)
       failures.push({ name, reason })
-      process.stderr.write(`[mcp] Failed to connect "${name}": ${reason}\n`)
+      console.error(`[mcp] Failed to connect "${name}": ${reason}`)
     }
   }
   return failures
