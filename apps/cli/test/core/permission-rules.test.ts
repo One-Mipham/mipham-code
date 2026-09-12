@@ -168,6 +168,25 @@ describe('matchBashRule — Bash rules recurse into command substitutions', () =
   })
 })
 
+describe('matchBashRule — Bash rules strip wrapper prefix commands', () => {
+  it('matches a Bash(pattern) rule against a wrapped command', () => {
+    expect(matchBashRule('Bash(rm *)', 'Bash', { command: 'sudo rm -rf /' })).toBe(true)
+    expect(matchBashRule('Bash(rm *)', 'Bash', { command: 'timeout 5 rm -rf /' })).toBe(true)
+    expect(matchBashRule('Bash(rm *)', 'Bash', { command: 'env -C /tmp rm -rf /' })).toBe(true)
+    expect(matchBashRule('Bash(git:*)', 'Bash', { command: 'sudo git status' })).toBe(true)
+  })
+
+  it('matches a wrapped command inside a compound command', () => {
+    expect(matchBashRule('Bash(rm *)', 'Bash', { command: 'git status && sudo rm -rf /' })).toBe(
+      true,
+    )
+  })
+
+  it('does not strip a non-wrapper command', () => {
+    expect(matchBashRule('Bash(rm *)', 'Bash', { command: 'echo rm -rf /' })).toBe(false)
+  })
+})
+
 describe('matchBashRule — Read/Write/Edit rules match Bash file access', () => {
   it('matches a Read(path) rule against a reader command via Bash', () => {
     expect(
@@ -210,6 +229,63 @@ describe('matchBashRule — Read/Write/Edit rules match Bash file access', () =>
     expect(
       matchBashRule('Read(.git-credentials)', 'Bash', { command: 'echo `cat .git-credentials`' }),
     ).toBe(true)
+  })
+})
+
+describe('matchBashRule — prefix wrapper commands do not bypass Read/Write/Edit rules', () => {
+  it('matches a reader command wrapped by sudo/env/timeout/nohup/command/eval/nice/xargs', () => {
+    for (const cmd of [
+      'sudo cat .git-credentials',
+      'env cat .git-credentials',
+      'timeout 5 cat .git-credentials',
+      'nohup cat .git-credentials',
+      'command cat .git-credentials',
+      'eval cat .git-credentials',
+      'nice cat .git-credentials',
+      'xargs cat .git-credentials',
+    ]) {
+      expect(matchBashRule('Read(.git-credentials)', 'Bash', { command: cmd })).toBe(true)
+    }
+  })
+
+  it('matches a writer command wrapped by a prefix command', () => {
+    expect(matchBashRule('Edit(.npmrc)', 'Bash', { command: 'sudo tee .npmrc' })).toBe(true)
+    expect(matchBashRule('Edit(.npmrc)', 'Bash', { command: 'timeout 5 sed -i x .npmrc' })).toBe(
+      true,
+    )
+  })
+
+  it('matches through prefix options (env -C, sudo -u, nice -n)', () => {
+    expect(
+      matchBashRule('Read(.git-credentials)', 'Bash', {
+        command: 'env -C /tmp cat .git-credentials',
+      }),
+    ).toBe(true)
+    expect(
+      matchBashRule('Read(.git-credentials)', 'Bash', {
+        command: 'sudo -u root cat .git-credentials',
+      }),
+    ).toBe(true)
+    expect(
+      matchBashRule('Read(.git-credentials)', 'Bash', {
+        command: 'nice -n 5 cat .git-credentials',
+      }),
+    ).toBe(true)
+  })
+
+  it('does not treat a reader-named argument of a non-wrapper command as a command', () => {
+    expect(
+      matchBashRule('Read(.git-credentials)', 'Bash', { command: 'echo cat .git-credentials' }),
+    ).toBe(false)
+  })
+})
+
+describe('extractBashFileAccess — prefix wrapper commands', () => {
+  it('extracts the file from a wrapped reader command', () => {
+    expect(extractBashFileAccess('sudo cat .git-credentials').read).toContain('.git-credentials')
+    expect(extractBashFileAccess('env -C /tmp cat .git-credentials').read).toContain(
+      '.git-credentials',
+    )
   })
 })
 

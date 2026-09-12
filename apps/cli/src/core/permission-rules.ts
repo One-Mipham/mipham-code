@@ -64,6 +64,56 @@ const WRITER_COMMANDS = new Set([
 ])
 
 /**
+ * Commands that wrap another command as their payload. A Read/Edit deny rule
+ * must still apply when the reader/writer is wrapped (`sudo cat X`, `env -C / X`,
+ * `timeout 5 X`) — otherwise the wrapper silently bypasses the rule.
+ */
+const PREFIX_COMMANDS = new Set([
+  'sudo',
+  'doas',
+  'nohup',
+  'command',
+  'exec',
+  'nice',
+  'timeout',
+  'env',
+  'xargs',
+  'eval',
+  'stdbuf',
+])
+
+/** Value-taking options of wrapper commands (consume the following token). */
+const PREFIX_VALUE_OPTIONS = new Set([
+  '-u',
+  '--user',
+  '-g',
+  '--group',
+  '-h',
+  '--host',
+  '-p',
+  '--prompt', // sudo/doas
+  '-n',
+  '--adjustment', // nice (and xargs --max-args)
+  '-k',
+  '--kill-after',
+  '-s',
+  '--signal', // timeout
+  '-C',
+  '--chdir',
+  '--unset',
+  '-S',
+  '--split-string', // env
+  '-a',
+  '--arg-file',
+  '-E',
+  '--eof',
+  '-I',
+  '--replace',
+  '-P',
+  '--max-procs', // xargs
+])
+
+/**
  * Split a (possibly compound) shell command into simple-command segments, so a
  * Bash(pattern) rule matches any segment rather than only the whole string
  * (`rm -rf /` buried in `foo && rm -rf /` must still match).
@@ -156,11 +206,53 @@ function flattenCommand(command: string): string[] {
   const out: string[] = []
   for (const seg of splitShellSegments(command)) {
     out.push(seg)
+    const stripped = stripPrefixCommand(seg)
+    if (stripped !== seg) out.push(stripped)
     for (const inner of extractSubstitutions(seg)) {
       out.push(...flattenCommand(inner))
     }
   }
   return out
+}
+
+/**
+ * Resolve the effective command and its arguments after any wrapper prefix
+ * commands (`sudo`, `env`, `timeout`, …). Skips the wrapper and its own options
+ * (flags, the values of value-taking flags, `env`'s `VAR=value` assignments, and
+ * `timeout`'s positional duration) to reach the real command. Conservative, not a
+ * full parser: only recognized wrappers are stripped, so an unrecognized token is
+ * always treated as the command (never skipped) — which over-matches, the safe
+ * direction for a deny rule.
+ */
+function effectiveCommand(tokens: string[]): { base: string; args: string[] } {
+  let i = 0
+  while (i < tokens.length) {
+    const name = (tokens[i] || '').split('/').pop() || ''
+    if (!PREFIX_COMMANDS.has(name)) break
+    i++ // skip the wrapper
+    while (i < tokens.length && tokens[i]!.startsWith('-')) {
+      const opt = tokens[i]!
+      i++
+      if (PREFIX_VALUE_OPTIONS.has(opt) && i < tokens.length) i++ // skip the flag's value
+    }
+    if (name === 'env') {
+      while (i < tokens.length && tokens[i]!.includes('=')) i++ // `VAR=value` assignments
+    }
+    if (name === 'timeout') i++ // positional duration
+  }
+  if (i >= tokens.length) return { base: '', args: [] }
+  return { base: (tokens[i] || '').split('/').pop() || '', args: tokens.slice(i + 1) }
+}
+
+/** A command with any wrapper prefix commands stripped, so `sudo rm -rf /`
+ *  matches a `Bash(rm *)` rule. Returns the input unchanged when there is no
+ *  wrapper (or nothing but wrappers). */
+function stripPrefixCommand(command: string): string {
+  const tokens = command.split(/\s+/).filter(Boolean)
+  if (tokens.length === 0) return command
+  const { base, args } = effectiveCommand(tokens)
+  if (!base) return command
+  return [base, ...args].join(' ')
 }
 
 /**
@@ -171,8 +263,7 @@ function scanReaderWriterCommands(command: string, read: string[], write: string
   for (const seg of splitShellSegments(command)) {
     const tokens = seg.split(/\s+/).filter(Boolean)
     if (tokens.length > 0) {
-      const base = (tokens[0] || '').split('/').pop() || ''
-      const args = tokens.slice(1)
+      const { base, args } = effectiveCommand(tokens)
       if (READER_COMMANDS.has(base)) {
         // `sed -i` / `perl -i` read AND write their file args.
         const inPlace = args.some((a) => a === '-i' || a.startsWith('--in-place'))
