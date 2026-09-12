@@ -10,8 +10,8 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.36.1
-> **最后更新**: 2026-09-12 — v0.80.1 发版（MCP 注册消息改走 console 修 banner 重复）
+> **版本**: 2.37.0
+> **最后更新**: 2026-09-12 — v0.81.0 发版（CC 2.1.268+269 对标落地：前缀命令绕过 deny 修复 + workflow 并发上限可配置）
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -50,7 +50,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：2,246 测试（2244 passed + 2 skipped）
+测试：2,258 测试（2256 passed + 2 skipped）
 
 ---
 
@@ -87,7 +87,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 206 个测试文件，2246 个测试
+│   │   ├── test/               # 206 个测试文件，2258 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -110,7 +110,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（2246 个测试）
+pnpm test         # vitest run（2258 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -239,7 +239,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
 | E2E      | 1       | 8        | full-pipeline                                 |
 | Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **206** | **2246** | **0 失败** ✅（2244 passed + 2 skipped）      |
+| **合计** | **206** | **2258** | **0 失败** ✅（2256 passed + 2 skipped）      |
 
 > 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
 
@@ -470,6 +470,7 @@ mipham-code 变更（包名/版本）
 
 | 版本   | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | 维护人     |
 | ------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| 2.37.0 | 2026-09-12 | CC 2.1.268+269 对标落地（一次补两份，267 之后增量 ~140 条）：① 安全——前缀命令（sudo/env/timeout/nohup/command/eval/nice/xargs/doas/exec/stdbuf）绕过 Read/Edit/Bash deny 规则，新增 `PREFIX_COMMANDS` + `effectiveCommand()` 剥离包装命令定位真命令，`stripPrefixCommand()` 让 `sudo rm -rf /` 命中 `Bash(rm *)` ② workflow——`parallel()` 并发上限可配置 `MIPHAM_WORKFLOW_MAX_CONCURRENT_AGENTS`（1–256）覆盖 CPU 默认 16。+12 测试（permission-rules +8、parallel +4）。全量 2258（2256 passed + 2 skipped）。v0.81.0 发版。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | 技术委员会 |
 | 2.36.1 | 2026-09-12 | v0.80.1 发版：修欢迎屏 banner 间歇重复（v0.80.0 的 Ink 5→7 升级未根治，banner 仍复现）。真根因 = MCP 注册/连接消息用 `process.stderr.write` 直写 stderr，绕过 Ink patchConsole 的 clear/restore 光标追踪 → 启动时 banner 首行 ghost/重复（跨 Ink 5/7 复现，非版本 bug）；改 `console.log`/`console.error`（走 writeToStdout/Stderr 安全路径）。涉及 `index.tsx`（registered/failed）+ `registry.ts`（collision/register_failed）。技术栈文档同步：MIPHAM.md → React 19 + Ink 7（v2.3.1）、CLAUDE.md 技术栈表。测试 2244 passed + 2 skipped。                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | 技术委员会 |
 | 2.36.0 | 2026-09-12 | v0.80.0 发版：升级 `ink 5.2.1→7.1.1` + `react 18.3.1→19.3.0`（`react-devtools-core`→8、`@types/react`→19），尝试修欢迎屏 banner 间歇重复（当时判为 Ink 5.2.1 输出层 diff bug，上游 issue #909 同类——实为误判，banner 在 v0.80.0 仍复现，真根因见 2.36.1）。附带 `keyToEditAction` 区分 `key.backspace`(\x7f 退格) 与 `key.delete`(\x1b[3~ 前删)。测试 2244 passed + 2 skipped（2246 总，206 文件）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | 技术委员会 |
 | 2.35.0 | 2026-09-11 | v0.79.0 + v0.79.1 发版：① 光标左右移动——`input.tsx` 新增 `applyEdit`/`keyToEditAction` 纯函数 + 光标跟踪，左右箭头移动光标、定点删插 ② backspace 回归修复——Ink 5.2.1 把 macOS Backspace（\x7f）解析成 `key.delete`（非 `key.backspace`=\x08），上轮拆分致按 Backspace 走向前删、光标在末尾不删；合并两者为向后删 ③ 历史导航抽 `navigateHistory` 纯函数（逻辑不变，证「上下键动不了」是空历史非 bug）④ 欢迎屏 /help 重复 ⑤ graft/ctx 状态行去 dim 字体 ⑥ 底部状态行行距统一。CI：npm 发布 OIDC 首次跑通（`sudo npm install -g npm@11` 解 EACCES + JetBrains publishPlugin 重复版本幂等跳过）。测试 2244 passed + 2 skipped（2246 总，206 文件）。                                                                                                                                                                                                                                                                                                                                                                   | 技术委员会 |
