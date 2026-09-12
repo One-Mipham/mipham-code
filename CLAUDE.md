@@ -60,7 +60,7 @@ CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|
 | ---------- | -------------------------------------------------------------------------------- |
 | CLI 运行时 | Bun 1.2+（推荐）/ Node.js 22+                                                    |
 | CLI 框架   | React 19 + Ink 7（终端 UI）                                                      |
-| Web        | Next.js 14 + React 18 + Tailwind CSS 3                                           |
+| Web        | Next.js 15 + React 19 + Tailwind CSS 3                                           |
 | 语言       | TypeScript 5.5+（strict）                                                        |
 | 包管理     | pnpm 9.15                                                                        |
 | 测试       | Vitest 3（CLI）/ 测试框架待定（Web）                                             |

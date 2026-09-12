@@ -141,7 +141,7 @@ language: zh-CN
 - 运行时: Bun 1.2+ · TypeScript strict · ESM
 - 包管理: pnpm workspace
 - CLI UI: React 19 + Ink 7
-- Web: Next.js 14+ App Router + Tailwind CSS
+- Web: Next.js 15+ App Router + Tailwind CSS
 - 测试: Vitest · Lint: ESLint + Prettier
 
 ## 四、编码规则
