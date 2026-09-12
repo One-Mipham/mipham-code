@@ -347,3 +347,31 @@
 - 发版 v0.78.0 修 npm 2FA（2026-09-11）：我凭旧记忆推荐「用 Automation token 绕过 2FA」，用户纠正「前天走过没走通，因为现在没有 Automation」；查证 Automation token 已于 **2025-12 被 npm 下线**，granular token 也不绕 2FA（必报 EOTP）
 - 正解 = OIDC trusted publishing（不存 token、不要 OTP）；但「推荐已下线机制」这一步纯属浪费——若先核实「Automation 当下是否仍存在」就不会推荐错
 - 复发面广：npm token 类型、GitHub Actions 特性、API 端点、CLI 子命令都会在无感时被废弃/改名/改语义，推荐前须查官方当前文档而非依赖记忆
+
+## dependency-blast-radius: 依赖 major 升级须跑全仓验证，不能只看子项目
+
+- 建议: 升级跨包共享的依赖（尤其 `@types/react`/`@types/node` 这类类型包，或任何多包共用的依赖）时，必须跑全 workspace 的 typecheck + build（`pnpm -r typecheck` + `pnpm -r build`），不能只跑改了依赖的那个子项目。major 升级会经 pnpm 提升/peer 解析波及兄弟包——**子项目全绿 ≠ 全仓全绿**；且不能只拿 Release 管线（常只 build CLI）当验证。
+- 严重度: warning
+- 生成时间: 2026-09-12
+- 来源: 会话复盘（human + Claude Code，手动沉淀）
+
+### 证据
+
+- v0.80.0 升级 CLI 的 `@types/react` 18→19（Ink 7 需要），只验了 CLI 的 typecheck/test/build 全绿就发版
+- pnpm 把 `@types/react@19` 提升到共享位置 `.pnpm/node_modules/@types/react`，`next@15.5` 的 `.d.ts` 里 `import 'react'` 解析到 @19，与 web 的 @18 冲突 → CI build-web + typecheck 双双红（TS2322 ReactNode bigint + TS2742 Element 非可移植）
+- Release workflow（只 build CLI）绿了、完整 CI 红了——验证面错误，把「CLI 子项目绿」误当「全仓绿」
+- 修复：web 统一升 React 19（Next 15.5 官方支持），全 workspace 收敛单一 `@types/react` 版本
+
+## verify-root-cause: 根因未证伪就发版——浪费周期 + 侵蚀信任
+
+- 建议: 修复间歇性/渲染类 bug，静态分析 + 上游 issue 类比得出的根因假设不足以支撑发版。必须 ① 真实环境复现，或 ② 让用户实测证伪后，才宣称「已修复」。基于单一假设发版，假设错了 = 白费一个发版周期 + 让用户白测一轮 + 侵蚀信任。
+- 严重度: warning
+- 生成时间: 2026-09-12
+- 来源: 会话复盘（human + Claude Code，手动沉淀）
+
+### 证据
+
+- banner 重复 bug 先判「Ink 5.2.1 输出层 diff bug」（类比上游 issue #909）→ 升 Ink 5→7 + React 19 发 v0.80.0 → 用户实测仍复现、证伪
+- 二次定位才找到真根因：MCP 注册/连接消息用 `process.stderr.write` 直写 stderr，绕过 Ink `patchConsole` 的光标追踪 → banner 首行 ghost/重复（跨 Ink 5/7 复现，非版本 bug）
+- 修复：改 `console.log`/`console.error` 走安全路径；v0.80.1 用户实测无重复，根因坐实
+- 教训：渲染类 bug 的「输出层 diff」判断，要真实终端实测，不能类比上游 issue 就发版
