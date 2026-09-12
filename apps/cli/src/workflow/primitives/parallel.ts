@@ -23,7 +23,21 @@ function detectParallelism(): number {
   return os.cpus().length || 1
 }
 
-const MAX_CONCURRENT = Math.max(1, Math.min(16, detectParallelism()))
+/**
+ * Resolve the concurrency cap for parallel() fan-out. Defaults to CPU-derived
+ * parallelism capped at 16. An explicit `MIPHAM_WORKFLOW_MAX_CONCURRENT_AGENTS`
+ * (1–256) overrides it, for inference-bound fan-outs whose bottleneck is LLM
+ * latency rather than CPU. Invalid / out-of-range values fall back to the default.
+ */
+export function resolveMaxConcurrent(envValue: string | undefined): number {
+  if (envValue !== undefined && envValue !== '') {
+    const n = Number(envValue)
+    if (Number.isInteger(n) && n >= 1) return Math.min(n, 256)
+  }
+  return Math.max(1, Math.min(16, detectParallelism()))
+}
+
+const MAX_CONCURRENT = resolveMaxConcurrent(process.env.MIPHAM_WORKFLOW_MAX_CONCURRENT_AGENTS)
 
 /**
  * Simple async semaphore for concurrency limiting.

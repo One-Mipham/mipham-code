@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parallel } from '../../src/workflow/primitives/parallel'
+import { parallel, resolveMaxConcurrent } from '../../src/workflow/primitives/parallel'
 
 describe('parallel', () => {
   it('runs all thunks and returns results in input order', async () => {
@@ -22,5 +22,30 @@ describe('parallel', () => {
 
   it('returns an empty array for no thunks', async () => {
     expect(await parallel([])).toEqual([])
+  })
+})
+
+describe('resolveMaxConcurrent', () => {
+  it('returns the CPU-derived cap (1–16) when unset', () => {
+    const n = resolveMaxConcurrent(undefined)
+    expect(n).toBeGreaterThanOrEqual(1)
+    expect(n).toBeLessThanOrEqual(16)
+  })
+
+  it('honours an explicit 1–256 value', () => {
+    expect(resolveMaxConcurrent('1')).toBe(1)
+    expect(resolveMaxConcurrent('32')).toBe(32)
+    expect(resolveMaxConcurrent('256')).toBe(256)
+  })
+
+  it('clamps values above 256', () => {
+    expect(resolveMaxConcurrent('999')).toBe(256)
+  })
+
+  it('falls back to the default for empty, non-numeric, zero, and negative values', () => {
+    expect(resolveMaxConcurrent('')).toBeGreaterThanOrEqual(1)
+    expect(resolveMaxConcurrent('abc')).toBeGreaterThanOrEqual(1)
+    expect(resolveMaxConcurrent('0')).toBeGreaterThanOrEqual(1)
+    expect(resolveMaxConcurrent('-5')).toBeGreaterThanOrEqual(1)
   })
 })
