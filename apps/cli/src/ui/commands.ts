@@ -18,6 +18,7 @@ import { InstructionsLoader } from '../core/instructions'
 import { findDerivableSections, DERIVABLE_HINTS } from '../core/claude-md-audit'
 import { fixDoctor, fixConfig, fixCache, selectRepoClaudeFiles } from '../core/fix'
 import { fixCodeTarget } from '../core/fix-code'
+import { homedir } from 'node:os'
 import { runCrsiModification, approvePending, rejectPending, hasPending } from '../core/crsi-modify'
 import {
   produceCrsiProposal,
@@ -2573,7 +2574,7 @@ const installPluginCmd: CommandHandler = async (ctx, args) => {
 
   if (isLocalPath) {
     const { resolve } = await import('node:path')
-    const resolved = resolve(target.replace(/^~/, process.env.HOME || '~'))
+    const resolved = resolve(target.replace(/^~/, homedir()))
     result = manager.install(resolved)
   } else {
     // Treat as npm package name
@@ -2882,7 +2883,7 @@ const loopCmd: CommandHandler = async (ctx, args) => {
     const { scaffoldLoopKit } = await import('../commands/loop-scaffold')
     const { created, skipped } = scaffoldLoopKit(targetPath)
     const { resolve } = await import('node:path')
-    const resolved = resolve(targetPath.replace(/^~/, process.env.HOME || '~'))
+    const resolved = resolve(targetPath.replace(/^~/, homedir()))
 
     const lines: string[] = ['── LoopKit Vault Created ──', '', `Location: ${resolved}`, '']
 
@@ -3721,7 +3722,7 @@ const cdCmd: CommandHandler = async (ctx, args) => {
 
   const { existsSync } = await import('node:fs')
   const { resolve } = await import('node:path')
-  const resolved = resolve(target.replace(/^~/, process.env.HOME || '~'))
+  const resolved = resolve(target.replace(/^~/, homedir()))
 
   if (!existsSync(resolved)) {
     const suggestions = suggestDirectories(resolved)
@@ -4118,7 +4119,7 @@ const memoryCmd: CommandHandler = async (ctx, args) => {
   const { existsSync, readdirSync, readFileSync, statSync } = await import('node:fs')
   const { join } = await import('node:path')
 
-  const home = process.env.HOME || '~'
+  const home = homedir()
   const memoryDir = join(home, '.mipham', 'memory')
 
   // /memory gc — 记忆卫生：归档「0 召回 + 过期」的 auto-* 记忆（手写只报告）
@@ -4320,7 +4321,7 @@ const workflowsCmd: CommandHandler = async () => {
 
   const locations = [
     join(process.cwd(), '.claude', 'workflows'),
-    join(process.env.HOME || '~', '.claude', 'workflows'),
+    join(homedir(), '.claude', 'workflows'),
   ]
 
   const lines: string[] = ['─ Workflows ─', '']
@@ -4418,7 +4419,7 @@ const workflowRunCmd = async (name: string): Promise<CommandResult> => {
 
   const locations = [
     join(process.cwd(), '.claude', 'workflows'),
-    join(process.env.HOME || '~', '.claude', 'workflows'),
+    join(homedir(), '.claude', 'workflows'),
   ]
 
   for (const loc of locations) {
@@ -4739,7 +4740,7 @@ const logoutCmd: CommandHandler = async () => {
   const { existsSync } = await import('node:fs')
   const { join } = await import('node:path')
 
-  const home = process.env.HOME || '~'
+  const home = homedir()
   const userConfig = join(home, '.mipham', 'config.yml')
   const hasUserConfig = existsSync(userConfig)
 

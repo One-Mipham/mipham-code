@@ -8,6 +8,7 @@
 import type { CommandHandler, CommandContext, CommandResult } from '../ui/commands.js'
 import { getWorkspaceTrust } from '../core/workspace-trust'
 import { atomicWriteFileSync } from '../shared/atomic-write'
+import { homedir } from 'node:os'
 
 export {
   initCmd,
@@ -311,7 +312,7 @@ const setupCmd: CommandHandler = async (ctx, args) => {
   const { existsSync } = await import('node:fs')
   const { join } = await import('node:path')
   const cwd = process.cwd()
-  const home = process.env.HOME || '~'
+  const home = homedir()
 
   const hasProjectMipham = existsSync(join(cwd, 'MIPHAM.md'))
   const hasProjectConfig = existsSync(join(cwd, '.mipham', 'config.yml'))
@@ -688,7 +689,7 @@ permission boundaries. Adding directories here extends read/write access.`,
 
   const { existsSync } = await import('node:fs')
   const { resolve } = await import('node:path')
-  const resolved = resolve(dir.replace(/^~/, process.env.HOME || '~'))
+  const resolved = resolve(dir.replace(/^~/, homedir()))
 
   if (!existsSync(resolved)) {
     return { content: `✗ Directory not found: ${resolved}\n\nCheck the path and try again.` }

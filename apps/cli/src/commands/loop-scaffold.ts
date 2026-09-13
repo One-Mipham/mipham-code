@@ -11,6 +11,7 @@
 
 import { mkdirSync, writeFileSync, existsSync, chmodSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { homedir } from 'node:os'
 
 export interface ScaffoldResult {
   created: string[]
@@ -87,7 +88,7 @@ export function scaffoldLoopKit(basePath: string): ScaffoldResult {
   const created: string[] = []
   const skipped: string[] = []
 
-  const resolved = resolve(basePath.replace(/^~/, process.env.HOME || '~'))
+  const resolved = resolve(basePath.replace(/^~/, homedir()))
   const miphamDir = join(resolved, '.mipham')
 
   // ── .mipham/ root ──

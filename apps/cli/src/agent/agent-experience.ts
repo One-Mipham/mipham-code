@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
+import { homedir } from 'node:os'
 import { ExperienceRuleExtractor, type ExperienceRule } from './experience-rules.js'
 
 const MAX_EXPERIENCES = 20
@@ -10,7 +11,7 @@ export class AgentExperience {
 
   constructor(
     private readonly agentName: string,
-    baseDir: string = join(process.env.HOME || '~', '.mipham', 'agent-memory'),
+    baseDir: string = join(homedir(), '.mipham', 'agent-memory'),
   ) {
     this.expDir = join(baseDir, agentName)
     this.expFile = join(this.expDir, 'experience.md')

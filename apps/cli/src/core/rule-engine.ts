@@ -1,6 +1,7 @@
 import type { ExperienceRule } from '../agent/experience-rules.js'
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
+import { homedir } from 'node:os'
 import { MANAGED_RULES } from './crsi-managed-rules'
 
 export interface ToolRule {
@@ -61,7 +62,7 @@ export class ExperienceRuleEngine {
   private rules: ToolRule[]
   private storePath: string
 
-  constructor(storeDir: string = join(process.env.HOME || '~', '.mipham', 'rule-engine')) {
+  constructor(storeDir: string = join(homedir(), '.mipham', 'rule-engine')) {
     this.rules = [...BUILTIN_RULES, ...MANAGED_RULES].map((r) => ({ ...r }))
     this.storePath = join(storeDir, 'rules.json')
     this.load()

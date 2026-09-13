@@ -2,6 +2,7 @@ import React, { useMemo } from 'react'
 import { Box, Text } from 'ink'
 import { useI18n } from '../i18n-context'
 import type { ChatMessage } from './app'
+import { homedir } from 'node:os'
 
 interface ChatPanelProps {
   messages: ChatMessage[]
@@ -11,7 +12,7 @@ interface ChatPanelProps {
 /** Format cwd for display: replace HOME with ~, truncate if too long */
 function displayCwd(): string {
   const cwd = process.cwd()
-  const home = process.env.HOME || ''
+  const home = homedir()
   if (home && cwd.startsWith(home)) {
     return '~' + cwd.slice(home.length)
   }

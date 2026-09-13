@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { join, resolve, relative, sep, isAbsolute } from 'node:path'
+import { homedir } from 'node:os'
 import { execSync } from 'node:child_process'
 import { parse as parseYaml } from 'yaml'
 import type { InstructionFile } from '../shared/index.ts'
@@ -126,7 +127,7 @@ export class InstructionsLoader {
     })
 
     // Tier 3: 用户层 ~/.mipham/USER.md
-    const home = process.env.HOME || '~'
+    const home = homedir()
     this.tryLoad(join(home, '.mipham', 'USER.md'), 'user')
 
     // CRSI 教训召回：读 crsi-lessons.md 提取精华，注入系统提示（只写不读 → 写后召回）
