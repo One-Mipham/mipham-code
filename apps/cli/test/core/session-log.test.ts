@@ -1,6 +1,18 @@
+import { describe, it, expect, afterEach, vi } from 'vitest'
+
+// Isolate session log storage to a temp homedir (same pattern as cron.test.ts)
+// so tests never touch the developer's real ~/.mipham/sessions/.
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>()
+  return {
+    ...actual,
+    homedir: () => `${actual.tmpdir()}/mipham-test-session-log`,
+  }
+})
+
 import { existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, it, expect, afterEach } from 'vitest'
+import { homedir } from 'node:os'
 import {
   messageToEvents,
   deriveMessages,
@@ -69,7 +81,7 @@ describe('messageToEvents ↔ deriveMessages round-trip', () => {
   })
 })
 
-const HOME = process.env.HOME || '~'
+const HOME = homedir()
 const LOG_DIR = join(HOME, '.mipham', 'sessions')
 
 describe('SessionLog append-only', () => {

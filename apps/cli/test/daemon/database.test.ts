@@ -174,7 +174,8 @@ describe('DaemonDatabase', () => {
     // Create a fake JSONL session file
     const { mkdirSync, writeFileSync } = await import('node:fs')
     const { join } = await import('node:path')
-    const sessionsDir = join(process.env.HOME || '/tmp', '.mipham', 'sessions')
+    const { homedir } = await import('node:os')
+    const sessionsDir = join(homedir(), '.mipham', 'sessions')
     mkdirSync(sessionsDir, { recursive: true })
     const oldSession = {
       metadata: {

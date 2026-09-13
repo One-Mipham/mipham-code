@@ -1,6 +1,7 @@
 // apps/cli/src/daemon/database.ts
 import { Database } from 'bun:sqlite'
 import { readdirSync, readFileSync, existsSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type {
   DaemonSession,
@@ -339,7 +340,7 @@ export class DaemonDatabase {
   // ── Migration ──────────────────────────────────────────────
 
   migrateFromJsonl(): number {
-    const sessionsDir = join(process.env.HOME || '/tmp', '.mipham', 'sessions')
+    const sessionsDir = join(homedir(), '.mipham', 'sessions')
 
     if (!existsSync(sessionsDir)) return 0
 

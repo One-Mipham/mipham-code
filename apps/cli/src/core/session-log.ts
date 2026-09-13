@@ -1,4 +1,5 @@
 import { appendFileSync, readFileSync, mkdirSync, existsSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import type { Message, ToolUseContent, ToolResultContent, ToolResult } from '../shared/types'
@@ -101,7 +102,7 @@ export function deriveMessages(events: SessionEvent[]): Message[] {
   return out
 }
 
-const HOME = process.env.HOME || '~'
+const HOME = homedir()
 const LOG_DIR = join(HOME, '.mipham', 'sessions')
 
 /** 将会话名消毒为安全文件名（与 SessionStore 共用；防路径穿越）。 */

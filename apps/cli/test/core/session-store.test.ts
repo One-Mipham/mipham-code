@@ -1,10 +1,22 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+
+// Isolate session storage to a temp homedir (same pattern as cron.test.ts) so
+// tests never touch the developer's real ~/.mipham/sessions/.
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>()
+  return {
+    ...actual,
+    homedir: () => `${actual.tmpdir()}/mipham-test-session-store`,
+  }
+})
+
 import { existsSync, rmSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
+import { homedir } from 'node:os'
 import { SessionStore } from '../../src/core/session-store'
 import { SessionLog } from '../../src/core/session-log'
 
-const HOME = process.env.HOME || '~'
+const HOME = homedir()
 const SESSIONS_DIR = join(HOME, '.mipham', 'sessions')
 const INDEX_FILE = join(SESSIONS_DIR, '.index.json')
 const SUMMARIES_DIR = join(SESSIONS_DIR, '.summaries')
@@ -59,6 +71,15 @@ describe('SessionStore', () => {
     it('returns null for non-existent session', () => {
       const loaded = SessionStore.load('nonexistent-session-999')
       expect(loaded).toBeNull()
+    })
+  })
+
+  describe('session dir resolution', () => {
+    it('resolves sessions under os.homedir(), never a literal "~" in cwd', () => {
+      SessionStore.save('test-home-resolve', [{ role: 'user', content: 'x' }])
+      const expected = join(homedir(), '.mipham', 'sessions', 'test-home-resolve.jsonl')
+      expect(existsSync(expected)).toBe(true)
+      SessionStore.delete('test-home-resolve')
     })
   })
 
