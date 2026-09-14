@@ -415,3 +415,17 @@
 - 同一目录另有 `mipham-security.php`、`disable-google-fonts.php` 两份，同样是服务器独占状态；2026-09-14 三份一并收进 `websites` 仓库新建的 `server/` 目录（镜像线上绝对路径），PR One-Mipham/websites#8
 - **`scp` 只覆盖不删除** —— 仓库缺一个文件时投递不会报错，所以两侧对账必须比对 sha256，不能靠「投过了」判断；判断是否被覆盖同理不能比大小（同名同大小不同字节已实际发生过，见 `correctness`）
 - 目录看起来像代码，最容易被误当「提交即生效」—— 该目录 README 已把「push ≠ 部署」写成显式警告
+
+## merge-absorption: 判「是否已并入主干」必须比树，不能数提交——squash 对提交级信号不可见
+
+- 建议: 核对一条分支的工作是否已进主干时，判据的**粒度必须与合并操作的粒度对齐**。squash 合并把 N 个提交压成 1 个，于是两类提交级信号会**假报「未合并」**：① `git log main..branch` 列出全部 N 个「独有」提交——单个提交不再是 main 的祖先；② `git cherry main branch` 全报 `+`——patch-id 逐个对不上。两者对 squash 都是盲的。唯一可靠的判据是**比树**：`git diff --name-status branch main` 无 `D`/`A` 项、且 `M` 项方向全部朝主干，才说明分支内容 ⊆ 主干。与 `signal-discrimination` 的分工：那条讲信号在**同一状态下**不区分成败（失败态也命中同样的串）；本条讲信号**测量对象错了**——ancestry 与 patch-id 度量的是提交，而问题问的是内容，粒度不匹配，信号本身是准的。与 `correctness`（判断是否完成须查 size/hash）的分工：那条管单个产物的完整性，本条管分支的并入状态。
+- 严重度: warning
+- 生成时间: 2026-09-14
+- 来源: gitlink 收口会话（human + Claude Code，手动沉淀）
+
+### 证据
+
+- **实例一**：`release/1.0.1-signoff` 若按 `git log origin/main..release/1.0.1-signoff` 判断，会列出 **16 个**「独有」提交，看着像整批未合并的发布工作。实际是 PR #1 squash 成 `7900d48` 一个提交。树比较判明已并入：无 `D`/`A` 项、3 个 `M` 项方向全部朝 main，且分支的 `build-binaries.yml` blob `81894706` **正是 main 上 `7900d48` 的 blob**
+- **实例二**：`fix/windows-deploy-key-format` 的 `git cherry origin/main branch` 三个提交全报 `+`（未吸收），与「该分支刚被 squash 合并成 `432830f`」**直接矛盾**。改用树比较（`git diff --name-status 83c49cf origin/main` 仅 2 个 `M`、无 `D`）才判明已吸收。同一天两次踩同一个坑
+- 两次都发生在**删分支前的安全检查**上——若信了提交级信号，会得出「未合并、不能删」的反向结论；反过来在「确认已完成」的场景里，同一个盲区会让人**重放已落地的工作**（重复合并、重复施加同一改动）
+- 补充：删掉 squash 分支不会丢粒度历史——GitHub 在 `refs/pull/<N>/head` 下保留该 PR 的全部提交，仍可按需回溯
