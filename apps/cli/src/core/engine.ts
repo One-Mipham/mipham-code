@@ -1038,6 +1038,10 @@ export class QueryEngine {
         })
         this.context.addToolResult(toolUse.id, result)
       }
+
+      // Path-scoped rules for files touched in this round: process() injects for
+      // the first tool round only, so the multi-turn rounds need their own call.
+      this.injectRules()
     }
     // Max turns reached — safety limit, stop gracefully
   }

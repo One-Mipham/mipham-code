@@ -16,8 +16,43 @@ import type { Llm } from '../../src/providers/llm'
 import { mountLlm } from '../../src/providers/llm'
 import { recordLlm, replayLlm } from '../../src/providers/llm-replay'
 import { SessionLog, replayChunks } from '../../src/core/session-log'
+import { RulesLoader } from '../../src/core/rules-loader'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 // ── Helpers ──
+
+/** Make a workspace holding `.mipham/rules/<name>.md`; returns its root. */
+function makeRulesWorkspace(rules: Record<string, string>): string {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'mipham-rules-')))
+  const dir = join(root, '.mipham', 'rules')
+  mkdirSync(dir, { recursive: true })
+  for (const [name, body] of Object.entries(rules)) {
+    writeFileSync(join(dir, name), body)
+  }
+  return root
+}
+
+/** Flatten every message in the conversation to text, for substring assertions. */
+function conversationText(context: ContextManager): string {
+  return context
+    .getMessages()
+    .map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))
+    .join('\n')
+}
+
+/** A `Read` tool that touches `filePath` — `Read` is one of the file tools the
+ *  engine tracks for path-scoped rule matching. */
+function readToolTouching(filePath: string, onExecute: () => void): ToolDefinition {
+  return {
+    ...mockTool('Read'),
+    execute: async () => {
+      onExecute()
+      return { success: true, content: `read ${filePath}` }
+    },
+  }
+}
 
 function mockProviderRegistry(chatImpl?: () => AsyncGenerator<StreamChunk>) {
   const registry = new ProviderRegistry(
@@ -263,6 +298,82 @@ describe('QueryEngine', () => {
       }
 
       expect(capturedSkills).toBe(fakeSkills)
+    })
+  })
+
+  describe('rules seam — setRulesLoader', () => {
+    /** Provider whose n-th chat call emits a Read of `paths[n]`, then stops. */
+    function readPathPerTurn(paths: string[]) {
+      let turn = 0
+      return mockProviderRegistry(async function* () {
+        const n = turn++
+        const file = paths[n]
+        if (file) {
+          yield {
+            type: 'tool_use',
+            toolUse: { type: 'tool_use', id: `c${n}`, name: 'Read', input: { file_path: file } },
+          }
+        }
+        yield { type: 'stop' }
+      })
+    }
+
+    it('injects path-scoped rules for files touched by the first tool round', async () => {
+      const root = makeRulesWorkspace({ 'a.md': '---\npaths: "a.ts"\n---\nRULE-A\n' })
+      const context = mockContext()
+      const engine = new QueryEngine(
+        readPathPerTurn(['src/a.ts']),
+        context,
+        makeToolMap([readToolTouching('src/a.ts', () => {})]),
+      )
+      engine.setRulesLoader(new RulesLoader(root))
+
+      for await (const _ of engine.process('read a')) {
+        /* drain */
+      }
+
+      expect(conversationText(context)).toContain('RULE-A')
+      rmSync(root, { recursive: true, force: true })
+    })
+
+    it('injects rules for files touched in later tool rounds of the same turn', async () => {
+      // Two tool rounds in one user turn: round 1 (from process()) touches a.ts,
+      // round 2 (from continueWithTools()) touches b.ts. Both paths must inject —
+      // wiring only the first is the "two render paths, one wired" failure mode
+      // this repo has already fixed once (see CLAUDE.md 完整覆盖闸).
+      const root = makeRulesWorkspace({ 'b.md': '---\npaths: "b.ts"\n---\nRULE-B\n' })
+      const context = mockContext()
+      const engine = new QueryEngine(
+        readPathPerTurn(['src/a.ts', 'src/b.ts']),
+        context,
+        makeToolMap([readToolTouching('src/b.ts', () => {})]),
+      )
+      engine.setRulesLoader(new RulesLoader(root))
+
+      for await (const _ of engine.process('read a then b')) {
+        /* drain */
+      }
+
+      expect(conversationText(context)).toContain('RULE-B')
+      rmSync(root, { recursive: true, force: true })
+    })
+
+    it('injects nothing when no rule matches the touched file', async () => {
+      const root = makeRulesWorkspace({ 'b.md': '---\npaths: "b.ts"\n---\nRULE-B\n' })
+      const context = mockContext()
+      const engine = new QueryEngine(
+        readPathPerTurn(['docs/readme.md']),
+        context,
+        makeToolMap([readToolTouching('docs/readme.md', () => {})]),
+      )
+      engine.setRulesLoader(new RulesLoader(root))
+
+      for await (const _ of engine.process('read docs')) {
+        /* drain */
+      }
+
+      expect(conversationText(context)).not.toContain('RULE-B')
+      rmSync(root, { recursive: true, force: true })
     })
   })
 

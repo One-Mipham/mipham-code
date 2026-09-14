@@ -26,6 +26,7 @@ import { loadSessionMemories, getMemoryManager } from './core/memory/memory-load
 import { ContextManager } from './core/context'
 import { PrefixCacheTracker } from './core/context-token'
 import { QueryEngine } from './core/engine'
+import { RulesLoader } from './core/rules-loader'
 import { generateSessionName } from './core/session-name'
 import { ExperienceRuleEngine } from './core/rule-engine.js'
 import { SessionLog } from './core/session-log'
@@ -534,6 +535,10 @@ export async function runApp(options: RunOptions): Promise<void> {
   engine.setAgentViewManager(agentViewManager)
   engine.setSkills(vajraContext.get(SKILLS_KEY)!)
   engine.setLlm(vajraContext.get(LLM_KEY)!)
+
+  // Path-scoped rules (.mipham/rules/*.md) — injected when the AI touches a
+  // matching file. Loaded once at startup; setRulesLoader performs the load.
+  engine.setRulesLoader(new RulesLoader(process.cwd()))
 
   // Wire inference hooks (DLP) configuration
   const inferenceHookConfig = loadInferenceHookConfig()
