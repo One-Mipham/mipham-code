@@ -375,3 +375,43 @@
 - 二次定位才找到真根因：MCP 注册/连接消息用 `process.stderr.write` 直写 stderr，绕过 Ink `patchConsole` 的光标追踪 → banner 首行 ghost/重复（跨 Ink 5/7 复现，非版本 bug）
 - 修复：改 `console.log`/`console.error` 走安全路径；v0.80.1 用户实测无重复，根因坐实
 - 教训：渲染类 bug 的「输出层 diff」判断，要真实终端实测，不能类比上游 issue 就发版
+
+## signal-discrimination: 用信号下结论前，先确认「没修好」时长什么样
+
+- 建议: 任何用来判定「安全 / 已修复 / 能力可用」的信号，必须先确认它在**反例**下的取值 —— 不具区分度的信号会把「失败」读成「成功」。两种高频形态：① 匹配模式在失败态下**同样命中**；② 状态码**不是产生它的那一层**的语义。下结论前统一问一句：**如果它没修好，我看到的会是什么？** 答案与现在相同时，这个信号作废，换一个。与 `diagnosis` 的分工：那条讲「命中的文本没被执行」（CI 脚本回显），本条讲「命中的文本本身没有区分力」——信号是真的、也执行了，只是它不区分成败。
+- 严重度: critical
+- 生成时间: 2026-09-14
+- 来源: 服务器安全加固会话（human + Claude Code，手动沉淀）
+
+### 证据
+
+- **误报一（TLS 协议）**：以 `openssl s_client -tls1 … | grep -c "Cipher is"` 判定 TLS 1.0/1.1 可协商，据此向用户报告「实测可协商，违反集团 CLAUDE.md §一」。实际该串**同样匹配握手失败的 `Cipher is (NONE)`** —— 把「被拒绝」数成了「可协商」。正确读法是看输出的 `Protocol` 字段。同一解析错误还制造了第二份误报「TLS 1.3 拒绝」（经复测 3 次 + 对照 cloudflare.com 证伪）
+- **误报二（REST 批量端点）**：POST `/?rest_route=/batch/v1` 内层用 `GET` 得 HTTP 400，据此差点判定「端点已加固」。实为 WordPress **先校验参数、后查权限** —— 400 是参数校验报的，不证明鉴权生效；换成规范的内层 `POST` 后返回 **207 Multi-Status**，批量外壳未经认证即已执行。修复后重测：**外层 207 → 401，而内层那个 401 自始至终是幌子**
+- 两个误报同一根因，且发生在同一天、同一类任务（安全加固复核）上 —— 说明这不是偶发手误，是判据层面的系统性缺口
+- 闭环：错误产物（写有错误结论的记忆文件）已就地证伪改正，非只写教训 —— 见 `correctness`
+
+## verify-target: 校验命令的默认目标可能不是运行中的那一份
+
+- 建议: 跑「校验 / 语法检查」类命令（`nginx -t`、`configtest`、`lint --config` 等）前，先确认它检查的是**运行时真正加载的那份文件 / 配置**。工具无参数时的默认路径可能与实际运行实例不一致 —— 绿灯只证明「被检查的那份」没问题，不证明线上没问题。判据：看运行中进程的启动参数（`ps`），以它的 `-c` / `--config` 为准。与同族 `verify-*` 的分工：`verify-before-build` 管「对标前核实标准真实性」，`verify-mechanism-currency` 管「推荐外部机制前核实其当下存在性」，`verify-root-cause` 管「发版前证伪根因」，本条管「跑校验前核实它瞄的是哪个对象」。
+- 严重度: warning
+- 生成时间: 2026-09-14
+- 来源: 服务器安全加固会话（human + Claude Code，手动沉淀）
+
+### 证据
+
+- 宝塔环境下 `nginx -t` 默认读 `/etc/nginx/nginx.conf`（另一个独立的 2484 B 文件），而运行中的 master 用的是 `-c /www/server/nginx/conf/nginx.conf`。改完四个 vhost 后 `nginx -t` 的绿灯**与线上实际加载的配置无关** —— 必须 `/www/server/nginx/sbin/nginx -t -c /www/server/nginx/conf/nginx.conf`
+- 同源坑（同一环境）：`nginx -s reload` 报 `invalid PID number "" in /run/nginx.pid`，宝塔的 pid 在 `/www/server/nginx/logs/nginx.pid` —— 操作对象与运行实例脱节，会同时污染「校验」与「重载」两个动作，故 reload 也要走 `/etc/init.d/nginx reload`
+
+## config-provenance: 生产服务器上的手工配置会静默丢失——须入库，且 push ≠ 部署
+
+- 建议: 手工落在生产服务器上的配置（vhost、mu-plugin、systemd unit、面板配置）必须纳入版本控制，并在库内**显式标明它不是自动部署的**。这类文件有两种独立死法：① 被安全扫描当可疑物扫进隔离归档；② 无人知道它该在跑，重装/迁移后消失。两者都**不留任何痕迹** —— 出事后连「它曾经存在过」都无法证明。入库时镜像线上绝对路径，并把「投递命令 + 哈希比对方式」写进同目录 README。与 `reproducibility` 的分工：那条管「一次性工具别放 /tmp」（本地可复现性），本条管「生产侧手工配置的留痕」（线上可审计性）。
+- 严重度: warning
+- 生成时间: 2026-09-14
+- 来源: 服务器安全加固会话（human + Claude Code，手动沉淀）
+
+### 证据
+
+- 2026-07 入侵的缓解件（`wp2shell-batch-guard.php`，716 B，防御件非后门）写在服务器上后，被 YunJing 安全扫描扫进隔离归档 `QuaraV2/` —— **从未部署到线上，也无人知晓它该在跑**，同一入口因此敞开到 2026-09-14 才被复核发现并重新封堵
+- 同一目录另有 `mipham-security.php`、`disable-google-fonts.php` 两份，同样是服务器独占状态；2026-09-14 三份一并收进 `websites` 仓库新建的 `server/` 目录（镜像线上绝对路径），PR One-Mipham/websites#8
+- **`scp` 只覆盖不删除** —— 仓库缺一个文件时投递不会报错，所以两侧对账必须比对 sha256，不能靠「投过了」判断；判断是否被覆盖同理不能比大小（同名同大小不同字节已实际发生过，见 `correctness`）
+- 目录看起来像代码，最容易被误当「提交即生效」—— 该目录 README 已把「push ≠ 部署」写成显式警告
