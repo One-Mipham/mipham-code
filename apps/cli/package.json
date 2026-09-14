@@ -38,7 +38,8 @@
     "dev": "bun run bin/mipham.ts",
     "build": "bun run scripts/generate-bundled-skills.ts && bun build --compile --minify ./bin/mipham.ts --outfile dist/mipham",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "knip": "knip --production --no-progress --no-exit-code"
   },
   "dependencies": {
     "@larksuiteoapi/node-sdk": "^1.73.0",

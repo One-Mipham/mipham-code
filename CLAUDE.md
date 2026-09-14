@@ -4,8 +4,8 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.37.0
-> **最后更新**: 2026-09-12 — v0.81.0 发版（CC 2.1.268+269 对标落地：前缀命令绕过 deny 修复 + workflow 并发上限可配置）
+> **版本**: 2.37.1
+> **最后更新**: 2026-09-14 — 文档事实校正：标注 vajra/compose 通路未接 live startup（真叶子 plan-runner 仅测试覆盖）+ knip 未接线检测报告制落地 + 陈旧数字校正（测试数 2259→2266、Vitest 3→5）+ 测试分项表按 `test/` 各目录实测重算
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -44,7 +44,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：2,259 测试（2257 passed + 2 skipped）
+测试：2,266 测试（2264 passed + 2 skipped）
 
 ---
 
@@ -57,7 +57,7 @@ CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|
 | Web        | Next.js 15 + React 19 + Tailwind CSS 3                                           |
 | 语言       | TypeScript 5.5+（strict）                                                        |
 | 包管理     | pnpm 9.15                                                                        |
-| 测试       | Vitest 3（CLI）/ 测试框架待定（Web）                                             |
+| 测试       | Vitest 5（CLI）/ 测试框架待定（Web）                                             |
 | CI/CD      | GitHub Actions（typecheck → lint → format → build → test → audit → penetration） |
 | 共享库     | @mipham/shared（types, constants）                                               |
 
@@ -81,7 +81,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 206 个测试文件，2259 个测试
+│   │   ├── test/               # 206 个测试文件，2266 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -104,7 +104,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（2259 个测试）
+pnpm test         # vitest run（2266 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -190,13 +190,13 @@ pnpm format       # Prettier
 
 Vajra-Hṛdaya（金刚·心）是 Mipham Code **自建的可组合服务内核**，概念对标 Cordis「心」（借概念不借代码，机制自造、词汇自立）。把 CLI 的「能力」（工具、LLM、skills、编排）统一抽象为可挂载的 `Service`，用作用域 + 事件 + 依赖注入组合，收三条 harness 旧账（测试可观测性 / 编排边界 / 版本依赖治理）。
 
-| 原语       | 模块                        | 说明                                                                                                                                                              |
-| ---------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Context    | `vajra/context.ts`          | 作用域（`scope` keyed 缓存 + 局部遮蔽）+ 依赖注入（`provide`/`get`/`inject`）+ 事件派发（`emit`/`waterfall`/`parallel`/`serial`）+ 生命周期（`effect`/`dispose`） |
-| Service    | `vajra/service.ts`          | `Service`（`inject?` + `apply(ctx)`）+ `ServiceStatus` 状态机（inactive/loading/active/unloading/failed）                                                         |
-| 事件契约   | `vajra/events.ts`           | `DispatchMode`（emit/waterfall/parallel/serial）+ `EventMap`（declaration merging 扩展，不改内核）                                                                |
-| 声明式组合 | `vajra/compose/`            | `BundleLine`/`Bundle`/`Profile` 类型 + `assemble`（concat + patch 按 id 整行替换）+ `mountProfile` + `dumpConfig`                                                 |
-| 真叶子     | `vajra/leaf/plan-runner.ts` | SDD 编排作为内核 Service：逐任务 `ctx.scope` + `ctx.llm` 一击 + `ctx.emit` 进度事件                                                                               |
+| 原语       | 模块                        | 说明                                                                                                                                                                            |
+| ---------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Context    | `vajra/context.ts`          | 作用域（`scope` keyed 缓存 + 局部遮蔽）+ 依赖注入（`provide`/`get`/`inject`）+ 事件派发（`emit`/`waterfall`/`parallel`/`serial`）+ 生命周期（`effect`/`dispose`）               |
+| Service    | `vajra/service.ts`          | `Service`（`inject?` + `apply(ctx)`）+ `ServiceStatus` 状态机（inactive/loading/active/unloading/failed）                                                                       |
+| 事件契约   | `vajra/events.ts`           | `DispatchMode`（emit/waterfall/parallel/serial）+ `EventMap`（declaration merging 扩展，不改内核）                                                                              |
+| 声明式组合 | `vajra/compose/`            | `BundleLine`/`Bundle`/`Profile` 类型 + `assemble`（concat + patch 按 id 整行替换）+ `mountProfile` + `dumpConfig`                                                               |
+| 真叶子     | `vajra/leaf/plan-runner.ts` | SDD 编排作为内核 Service（逐任务 `ctx.scope` + `ctx.llm` 一击 + `ctx.emit` 进度事件）；**内核能力证明，仅测试覆盖 —— profile-driven live startup 按 M3 决策未接，生产无调用者** |
 
 四缝（把 harness 旧能力升为 Service，strangler fig 收账）：
 
@@ -226,18 +226,29 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 ## 测试
 
-| 层级     | 文件数  | 测试数   | 覆盖范围                                      |
-| -------- | ------- | -------- | --------------------------------------------- |
-| Provider | 4       | 66       | anthropic, bootstrap, openai-compat, registry |
-| Core     | 3       | 60       | context, hooks, permission                    |
-| Tools    | 5       | 132      | agent, exec, file, network-system, skills     |
-| E2E      | 1       | 8        | full-pipeline                                 |
-| Other    | 31      | 263      | commands, skills, scheduling, ui, memory 等   |
-| **合计** | **206** | **2259** | **0 失败** ✅（2257 passed + 2 skipped）      |
+| 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                   |
+| --------------- | ------- | -------- | -------------------------------------------------------------------------- |
+| core            | 70      | 955      | engine / context / permission / hooks / crsi / memory / instructions 等    |
+| tools           | 20      | 329      | bash / file / exec / skill / agent / scheduling / seam                     |
+| daemon          | 30      | 153      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / logger          |
+| ui              | 11      | 151      | commands / input / config-wizard / loop / skill-doctor                     |
+| agent           | 11      | 108      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker |
+| security        | 10      | 96       | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）         |
+| providers       | 7       | 89       | anthropic / openai-compat / registry / llm-replay / bootstrap              |
+| mcp             | 8       | 79       | client / transport / oauth / token-store / registry（含 2 skipped）        |
+| workflow        | 7       | 55       | runtime / loop / parallel / sandbox / journal / verify                     |
+| vajra           | 6       | 53       | context / events / service / compose / leaf（自建内核）                    |
+| shared          | 7       | 44       | arg-validation / deleted-cwd / sanitize / graft / update-async             |
+| skills          | 5       | 35       | sanitizer / marketplace / fork-executor / skill-assets                     |
+| commands        | 4       | 30       | keys / cd-suggest / loop-scaffold / autoloop-journal                       |
+| plugin          | 2       | 28       | claude-plugin / plugin-manager                                             |
+| artifacts       | 1       | 22       | versioning                                                                 |
+| config          | 5       | 22       | credential-crypto / loader-encryption / defaults / settings-json           |
+| agent-view      | 1       | 9        | agent-view-manager                                                         |
+| e2e             | 1       | 8        | full-pipeline                                                              |
+| **合计**        | **206** | **2266** | **0 失败** ✅（2264 passed + 2 skipped）                                   |
 
-> 注：上表分项为历史快照；总数以 CI 为准（含 `test/vajra/` 内核测试）。
-
-测试框架: Vitest 3，mock: `test/__mocks__/bun.ts`
+测试框架: Vitest 5，mock: `test/__mocks__/bun.ts`
 
 ---
 
@@ -380,10 +391,11 @@ mipham-code 变更（包名/版本）
 
 ### 修订历史
 
-| 版本   | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | 维护人     |
-| ------ | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| 2.37.0 | 2026-09-12 | CC 2.1.268+269 对标落地（一次补两份，267 之后增量 ~140 条）：① 安全——前缀命令（sudo/env/timeout/nohup/command/eval/nice/xargs/doas/exec/stdbuf）绕过 Read/Edit/Bash deny 规则，新增 `PREFIX_COMMANDS` + `effectiveCommand()` 剥离包装命令定位真命令，`stripPrefixCommand()` 让 `sudo rm -rf /` 命中 `Bash(rm *)` ② workflow——`parallel()` 并发上限可配置 `MIPHAM_WORKFLOW_MAX_CONCURRENT_AGENTS`（1–256）覆盖 CPU 默认 16。+12 测试（permission-rules +8、parallel +4）。全量 2258（2256 passed + 2 skipped）。v0.81.0 发版。                | 技术委员会 |
-| 2.36.1 | 2026-09-12 | v0.80.1 发版：修欢迎屏 banner 间歇重复（v0.80.0 的 Ink 5→7 升级未根治，banner 仍复现）。真根因 = MCP 注册/连接消息用 `process.stderr.write` 直写 stderr，绕过 Ink patchConsole 的 clear/restore 光标追踪 → 启动时 banner 首行 ghost/重复（跨 Ink 5/7 复现，非版本 bug）；改 `console.log`/`console.error`（走 writeToStdout/Stderr 安全路径）。涉及 `index.tsx`（registered/failed）+ `registry.ts`（collision/register_failed）。技术栈文档同步：MIPHAM.md → React 19 + Ink 7（v2.3.1）、CLAUDE.md 技术栈表。测试 2244 passed + 2 skipped。 | 技术委员会 |
+| 版本   | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | 维护人     |
+| ------ | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| 2.37.1 | 2026-09-14 | 文档事实校正（无代码改动）：`vajra/compose` 通路经核实**未接 live startup** —— `mountProfile`/`mountLines` 生产零调用，四缝为 `index.tsx:492-502` 手写直连；真叶子 `plan-runner` 仅 `test/vajra/leaf/plan-runner.test.ts` 覆盖，生产既无 `Plan` 生产者也无 `PLAN_RUNNER_KEY` 消费者。此推迟系 M3 计划明文决策（`docs/superpowers/plans/2026-08-15-vajra-hrdaya-m3-declarative-composition.md` L7/L19「不接 live startup」，同 M2b/M2c 先例），非遗漏；CLAUDE.md 原「真叶子」措辞读如已交付能力，补限定。附：knip v6.35.1 报告制落地（`apps/cli/knip.json` + `pnpm knip`，带 `--no-exit-code`，未接 CI）用于检测未接线机制。另校正两处陈旧数字：① 测试数 2259→**2266**（2264 passed + 2 skipped，206 文件，本次实测全绿）② `Vitest 3`→**Vitest 5**（`package.json` 声明 `^5.0.0`，实测 vitest@5.0.0）；③ 测试分项表按 `test/` 各目录实测重算 —— 原 5 行分项合计 529 ≠ 合计 2266，改为 18 行真实目录（行合计 = 206 文件 / 2266 测试，自洽），删去「历史快照」注。 | 技术委员会 |
+| 2.37.0 | 2026-09-12 | CC 2.1.268+269 对标落地（一次补两份，267 之后增量 ~140 条）：① 安全——前缀命令（sudo/env/timeout/nohup/command/eval/nice/xargs/doas/exec/stdbuf）绕过 Read/Edit/Bash deny 规则，新增 `PREFIX_COMMANDS` + `effectiveCommand()` 剥离包装命令定位真命令，`stripPrefixCommand()` 让 `sudo rm -rf /` 命中 `Bash(rm *)` ② workflow——`parallel()` 并发上限可配置 `MIPHAM_WORKFLOW_MAX_CONCURRENT_AGENTS`（1–256）覆盖 CPU 默认 16。+12 测试（permission-rules +8、parallel +4）。全量 2258（2256 passed + 2 skipped）。v0.81.0 发版。                                                                                                                                                                                                                                                                                                                                                                                                                                   | 技术委员会 |
+| 2.36.1 | 2026-09-12 | v0.80.1 发版：修欢迎屏 banner 间歇重复（v0.80.0 的 Ink 5→7 升级未根治，banner 仍复现）。真根因 = MCP 注册/连接消息用 `process.stderr.write` 直写 stderr，绕过 Ink patchConsole 的 clear/restore 光标追踪 → 启动时 banner 首行 ghost/重复（跨 Ink 5/7 复现，非版本 bug）；改 `console.log`/`console.error`（走 writeToStdout/Stderr 安全路径）。涉及 `index.tsx`（registered/failed）+ `registry.ts`（collision/register_failed）。技术栈文档同步：MIPHAM.md → React 19 + Ink 7（v2.3.1）、CLAUDE.md 技术栈表。测试 2244 passed + 2 skipped。                                                                                                                                                                                                                                                                                                                                                                                                                    | 技术委员会 |
 
-> **完整修订历史**（v1.0.0–v2.37.0，共 80 条）→ [`docs/claude-md-history.md`](docs/claude-md-history.md)。
+> **完整修订历史**（v1.0.0–v2.37.1，共 81 条）→ [`docs/claude-md-history.md`](docs/claude-md-history.md)。
 > 需要查「某条规则是哪一版引入的、当时为什么改、谁审的」时读它。
