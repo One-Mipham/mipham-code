@@ -174,6 +174,9 @@ jobs:
     name: GitHub Release
     runs-on: ubuntu-latest
     needs: [build, test, dmg, jetbrains]
+    # jetbrains 不列入条件：Marketplace 上架失败不该抹掉用户的二进制/DMG。
+    # 它仍留在 needs 里，保证 release 等它跑完再取 artifact（去掉会与上传竞态）。
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.test.result == 'success' && needs.dmg.result == 'success' }}
     permissions:
       contents: write
     steps:
