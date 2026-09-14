@@ -2,6 +2,8 @@ node_modules/
 dist/
 .next/
 out/
+# vitest coverage output (`pnpm coverage`) — regenerable, report-only
+coverage/
 *.log
 .env
 .env.local
