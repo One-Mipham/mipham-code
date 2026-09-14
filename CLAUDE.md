@@ -300,13 +300,13 @@ GitHub Actions 9 个 job 流水线：`typecheck → lint → format → build-cl
 
 ## 最近提交
 
-| 日期       | Commit    | 说明                                                                      |
-| ---------- | --------- | ------------------------------------------------------------------------- |
-| 2026-09-14 | `91f066c` | chore: bump version to 0.81.5                                             |
-| 2026-09-14 | `8ea14b6` | docs(skills): superpower 2.1.0 —— 选择性吸收上游增量 + 修三处悬空技能引用 |
-| 2026-09-14 | `2535429` | chore(vscode): 扩展 bump 0.81.4 —— CHANGELOG 回填 0.75.0–0.81.2           |
-| 2026-09-14 | `3538a49` | fix(daemon): 校验 Origin 与会话 cwd —— 任意网页此前可驱动 agent 读全盘    |
-| 2026-09-14 | `c821531` | chore: bump version to 0.81.3                                             |
+| 日期       | Commit    | 说明                                                                               |
+| ---------- | --------- | ---------------------------------------------------------------------------------- |
+| 2026-09-14 | `de63964` | docs(jetbrains): PUBLISH.md —— 补 IDE 授权说明 + 版本号改以 gradle.properties 为准 |
+| 2026-09-14 | `91f066c` | chore: bump version to 0.81.5                                                      |
+| 2026-09-14 | `8ea14b6` | docs(skills): superpower 2.1.0 —— 选择性吸收上游增量 + 修三处悬空技能引用          |
+| 2026-09-14 | `2535429` | chore(vscode): 扩展 bump 0.81.4 —— CHANGELOG 回填 0.75.0–0.81.2                    |
+| 2026-09-14 | `3538a49` | fix(daemon): 校验 Origin 与会话 cwd —— 任意网页此前可驱动 agent 读全盘             |
 
 > **完整记录** → [`docs/claude-md-history.md`](docs/claude-md-history.md)：最近提交全表 + v1.0.0 起全部修订。
 > 需要查「某次改动属于哪次提交 / 哪一版」时读它。
