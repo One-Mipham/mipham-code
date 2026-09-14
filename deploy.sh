@@ -3,9 +3,8 @@
 # Mipham Code — 统一部署入口
 # ================================================================
 # 用法:
-#   ./deploy.sh all          — 部署所有（主站 + 静态页 + marketplace + developer）
+#   ./deploy.sh all          — 部署所有（主站 + marketplace + developer）
 #   ./deploy.sh main         — 仅部署主站（含 /mipham-code 页面）
-#   ./deploy.sh code         — 仅部署 Mipham Code 静态子页面
 #   ./deploy.sh marketplace  — 仅部署 Marketplace（端口 3008）
 #   ./deploy.sh developer    — 仅部署 Developer（端口 3009）
 #   ./deploy.sh status       — 检查所有服务状态
@@ -68,14 +67,6 @@ deploy_main() {
   log "PM2 已重启"
 }
 
-deploy_code_static() {
-  echo "========================================="
-  echo "  Mipham Code 静态页 → /mipham-code/install|docs|dashboard.html"
-  echo "========================================="
-  cd "$SCRIPT_DIR"
-  bash deploy-cn.sh
-}
-
 deploy_marketplace() {
   echo "========================================="
   echo "  Marketplace → onemipham.com/marketplace（SSR, 端口 3008）"
@@ -100,9 +91,6 @@ case "$CMD" in
     deploy_main
     log "主站部署完成 → https://onemipham.com/mipham-code"
     ;;
-  code)
-    deploy_code_static
-    ;;
   marketplace)
     deploy_marketplace
     ;;
@@ -111,13 +99,12 @@ case "$CMD" in
     ;;
   all)
     deploy_main
-    deploy_code_static
     deploy_marketplace
     deploy_developer
     log "全部部署完成"
     ;;
   *)
-    echo "用法: $0 {all|main|code|marketplace|developer|status}"
+    echo "用法: $0 {all|main|marketplace|developer|status}"
     exit 1
     ;;
 esac
