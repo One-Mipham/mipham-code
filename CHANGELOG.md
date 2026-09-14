@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.81.5] — 2026-09-14
+
+> 0.81.4 未作产品版本发布 —— 该号已被 VS Code 扩展的 changelog-only 重发占用（仍跑 CLI 0.81.3），产品线故跳至 0.81.5。
+
+### Security
+
+- **daemon 外部 API 此前可被任意网页驱动** —— 两道「安全」机制实际都只防「响应被读到」，不防「请求被发出」：`auth.ts` 用 socket IP 判 loopback 即免鉴权，而浏览器发出的请求源 IP 同样是 `127.0.0.1`（Chrome 视 `http://127.0.0.1` 为可信来源，HTTPS 页面也不触发混合内容拦截）；`cors.ts` 只在响应上加 ACAO 头，而 `mode: 'no-cors'` 强制 `text/plain`（属 CORS 安全列表内，**不触发预检**），`await req.json()` 也不看 Content-Type → 请求照发、handler 照跑。WebSocket 握手更根本不受同源策略约束：浏览器会带 `Origin` 但不会拦连接，服务端不校验即等于全开。完整攻击链：恶意网页 → WS 或 `POST /api/v1/sessions` 带任意 `cwd`（此前零校验）→ 驱动 agent 读取该目录下任意文件（`read` 为 `auto` 级，`BLOCKED_PATHS` 不含主目录）→ 结果经 WS 流回页面；`createSchedule` 还会持久化并在重启后仍存活。RCE 仅被 `write` / `edit` / `bash` 的 `ask` 挡住，而 daemon 中 `ask` 等于拒绝。修复：新增 `originMiddleware` —— 无 `Origin`（CLI / curl）放行以保持既有行为不变，有 `Origin` 且不在 `MIPHAM_CORS_ORIGINS` 白名单则 403，置于 WS upgrade 之前故握手一并覆盖（刻意不复用 `isLocalhostOrigin`，其子串匹配会让 `https://localhost.evil.example` 通过）；`POST /api/v1/sessions` 的 `cwd` 须为已信任 workspace 或 daemon 启动目录子树内。已验证 Bun 与 Node/undici 的 WS 客户端均不发 `Origin`，CLI 行为不变
+
+### Changed
+
+- 内置 `superpower` skill 2.0.0 → 2.1.0：选择性吸收上游 `obra/superpowers` 增量 —— `<SUBAGENT-STOP>` 守卫（子代理拿到具体任务时忽略此技能）、announce 约定（`Using [skill] to [purpose]`）、Red Flags 表 5 → 12 行
+- 修正该 skill 中引用了 Mipham 并不存在的技能名（`brainstorming` / `systematic-debugging` / `frontend-design` / `mcp-builder` → `to-spec` / `debug-loop` / `implement` / `codebase-design`），并补全 `User Instructions` 的优先级链（用户指令 > 技能 > 默认行为）。明确**不**引入上游 `Platform Adaptation` —— 那是 Codex / Pi / Antigravity / Hermes 各家 harness 的分支指引，对本项目自己的 harness 无意义
+
 ## [0.81.3] — 2026-09-14
 
 ### Fixed

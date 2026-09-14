@@ -3,6 +3,17 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.81.5 — 2026-09-14
+
+- Version sync with Mipham Code CLI 0.81.5 (product line skips 0.81.4, which this
+  extension consumed for a changelog-only republish)
+- Security: the daemon's external API now validates `Origin` and the session `cwd` — a web
+  page in the user's own browser could previously drive the agent into reading any file
+  under a directory of its choosing
+- Built-in `superpower` skill 2.1.0 — lifted the `<SUBAGENT-STOP>` guard, the announce
+  convention, and the expanded Red Flags table from upstream; fixed four skill names it
+  referenced that do not exist in Mipham Code
+
 ## 0.81.4 — 2026-09-14
 
 - Changelog-only republish: adds the 0.75.0–0.81.2 entries that had gone missing.
