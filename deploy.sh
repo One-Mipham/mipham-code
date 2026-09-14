@@ -85,7 +85,7 @@ deploy_developer() {
 
 case "$CMD" in
   status)
-    show_status
+    # 状态由 case 之后的 show_status 统一打印；此处不再调用，否则会打印两遍
     ;;
   main)
     deploy_main
