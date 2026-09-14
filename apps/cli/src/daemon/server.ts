@@ -9,7 +9,9 @@ import type { GoalManager } from './goal-manager'
 import type { ScheduleManager } from './schedule-manager'
 import { authMiddleware, rotateToken } from './auth'
 import { RateLimiter } from './rate-limiter'
-import { corsMiddleware, addCorsHeaders } from './cors'
+import { corsMiddleware, originMiddleware, addCorsHeaders } from './cors'
+import { isCwdAllowed } from './workspace-guard'
+import { getWorkspaceTrust } from '../core/workspace-trust'
 import { PACKAGE_VERSION } from '../shared/package-info'
 import { WorkerPool } from './worker-pool'
 import { logger } from './logger'
@@ -138,6 +140,11 @@ export function createServer(config: ServerConfig): Server<WsData> {
   } = config
 
   const wsClients = new Map<string, Set<ServerWebSocket<WsData>>>()
+
+  // Captured once: a later chdir must not move the boundary that callers'
+  // session cwd values are validated against.
+  const daemonRoot = process.cwd()
+  const isTrustedWorkspace = (dir: string) => getWorkspaceTrust().isTrusted(dir)
 
   function broadcast(sessionId: string, data: unknown): void {
     const clients = wsClients.get(sessionId)
@@ -361,6 +368,13 @@ export function createServer(config: ServerConfig): Server<WsData> {
         return await feishuAdapter.handleEvent(req)
       }
 
+      // ── Origin gate ─────────────────────────────────
+      // Runs before the WebSocket upgrade below, which is what makes the
+      // upgrade path covered by it: browsers attach Origin to a WS handshake
+      // but never block the connection themselves.
+      const originError = originMiddleware(req)
+      if (originError) return originError
+
       // ── Rate limiting (skip health endpoint) ──────────
       if (path !== '/api/v1/health') {
         const ip = server.requestIP(req)?.address || 'unknown'
@@ -420,9 +434,21 @@ export function createServer(config: ServerConfig): Server<WsData> {
       // ── Sessions CRUD ───────────────────────────────
       if (method === 'POST' && path === '/api/v1/sessions') {
         const body = await jsonBody()
+        // The session cwd is the read containment boundary — it may only be a
+        // trusted workspace or somewhere inside the daemon's own directory.
+        const cwd = typeof body.cwd === 'string' && body.cwd ? body.cwd : daemonRoot
+        if (!isCwdAllowed(cwd, isTrustedWorkspace, daemonRoot)) {
+          return json(
+            {
+              ok: false,
+              error: 'cwd must be a trusted workspace or inside the daemon directory',
+            },
+            { status: 403 },
+          )
+        }
         const session = sm.createSession(
           (body.name as string) || 'unnamed',
-          (body.cwd as string) || process.cwd(),
+          cwd,
           (body.provider as string) || 'unknown',
           (body.model as string) || 'unknown',
         )
@@ -673,7 +699,12 @@ export function createServer(config: ServerConfig): Server<WsData> {
                 description: 'Health check and daemon stats',
               },
               { method: 'GET', path: '/api/v1/stats', description: 'Database statistics' },
-              { method: 'POST', path: '/api/v1/sessions', description: 'Create a new session' },
+              {
+                method: 'POST',
+                path: '/api/v1/sessions',
+                description:
+                  'Create a new session (cwd must be a trusted workspace or inside the daemon directory)',
+              },
               { method: 'GET', path: '/api/v1/sessions', description: 'List sessions' },
               { method: 'GET', path: '/api/v1/sessions/:id', description: 'Get session details' },
               { method: 'DELETE', path: '/api/v1/sessions/:id', description: 'Close a session' },

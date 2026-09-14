@@ -28,6 +28,24 @@ function isAllowedOrigin(origin: string): boolean {
 }
 
 /**
+ * Reject any request whose Origin is present but not allow-listed.
+ *
+ * The CORS headers above only stop a page from *reading* a reply — they do not
+ * stop it from *sending* the request (a `text/plain` body is a CORS-safelisted
+ * content type, so no preflight is triggered at all), and WebSocket handshakes
+ * are not subject to the same-origin policy in the first place. Origin is the
+ * one signal that distinguishes a foreign page from the CLI, which sends none:
+ * absent Origin passes through unchanged, any other Origin must be listed in
+ * MIPHAM_CORS_ORIGINS. Note that `isLocalhostOrigin` is deliberately NOT used
+ * here — its substring match would accept `https://localhost.evil.example`.
+ */
+export function originMiddleware(request: Request): Response | null {
+  const origin = request.headers.get('origin')
+  if (!origin || isAllowedOrigin(origin)) return null
+  return Response.json({ ok: false, error: 'Origin not allowed' }, { status: 403 })
+}
+
+/**
  * Handle CORS preflight (OPTIONS) requests.
  *
  * Returns a Response with CORS headers only for explicitly allow-listed external

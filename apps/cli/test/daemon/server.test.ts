@@ -45,6 +45,40 @@ async function fetchApi(path: string, options?: RequestInit) {
   })
 }
 
+/** Send a raw HTTP request (WS handshake or plain GET) and return the status code. */
+function rawStatus(path: string, extraHeaders: Record<string, string> = {}): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const socket = new Socket()
+    let response = ''
+    socket.on('data', (data) => {
+      response += data.toString()
+      const match = response.match(/HTTP\/1\.\d (\d+)/)
+      if (match) {
+        resolve(parseInt(match[1]!, 10))
+        socket.destroy()
+      }
+    })
+    socket.on('error', reject)
+    socket.setTimeout(5000, () => {
+      socket.destroy()
+      reject(new Error('Socket timeout'))
+    })
+    socket.connect(TEST_PORT, '127.0.0.1', () => {
+      const headers = Object.entries(extraHeaders)
+        .map(([k, v]) => `${k}: ${v}\r\n`)
+        .join('')
+      socket.write(`GET ${path} HTTP/1.1\r\nHost: 127.0.0.1:${TEST_PORT}\r\n${headers}\r\n`)
+    })
+  })
+}
+
+const WS_HANDSHAKE = {
+  Upgrade: 'websocket',
+  Connection: 'Upgrade',
+  'Sec-WebSocket-Key': 'dGhlIHNhbXBsZSBub25jZQ==',
+  'Sec-WebSocket-Version': '13',
+}
+
 describe('Daemon HTTP Server', () => {
   let server: Server<any>
   let db: DaemonDatabase
@@ -102,7 +136,7 @@ describe('Daemon HTTP Server', () => {
       method: 'POST',
       body: JSON.stringify({
         name: 'api-test',
-        cwd: '/tmp/test',
+        cwd: process.cwd(),
         provider: 'anthropic',
         model: 'claude-sonnet-5',
       }),
@@ -126,7 +160,12 @@ describe('Daemon HTTP Server', () => {
     // Create first
     const create = await fetchApi('/api/v1/sessions', {
       method: 'POST',
-      body: JSON.stringify({ name: 'to-delete', cwd: '/tmp', provider: 'openai', model: 'gpt-5' }),
+      body: JSON.stringify({
+        name: 'to-delete',
+        cwd: process.cwd(),
+        provider: 'openai',
+        model: 'gpt-5',
+      }),
     })
     const { session } = (await create.json()).data
 
@@ -173,5 +212,75 @@ describe('Daemon HTTP Server', () => {
       })
     })
     expect(status).toBe(200)
+  })
+
+  // ── Origin gate: a foreign web page must not drive the daemon ────────
+  // CORS headers only stop a page from *reading* a reply; they do not stop it
+  // from *sending* the request. Origin is what separates a page from the CLI,
+  // which sends none — so absent Origin passes and any other Origin is refused.
+
+  it('rejects a state-changing request carrying a non-allow-listed Origin', async () => {
+    const before = (await (await fetchApi('/api/v1/sessions')).json()).data.sessions.length
+    const res = await fetchApi('/api/v1/sessions', {
+      method: 'POST',
+      headers: { Origin: 'https://evil.example' },
+      body: JSON.stringify({
+        name: 'cross-origin',
+        cwd: process.cwd(),
+        provider: 'anthropic',
+        model: 'claude-sonnet-5',
+      }),
+    })
+    expect(res.status).toBe(403)
+    const after = (await (await fetchApi('/api/v1/sessions')).json()).data.sessions.length
+    expect(after).toBe(before) // no session was created
+  })
+
+  it('allows a request with no Origin (CLI / curl)', async () => {
+    const res = await fetchApi('/api/v1/sessions')
+    expect(res.status).toBe(200)
+  })
+
+  it('rejects a WebSocket upgrade from a non-allow-listed Origin', async () => {
+    const status = await rawStatus('/api/v1/sessions/whatever/stream', {
+      ...WS_HANDSHAKE,
+      Origin: 'https://evil.example',
+    })
+    expect(status).toBe(403)
+  })
+
+  it('lets a WebSocket upgrade with no Origin past the Origin gate', async () => {
+    // The test mock's upgrade() always returns false, so the request falls
+    // through to 404. What matters is that the Origin gate did NOT stop it.
+    const status = await rawStatus('/api/v1/sessions/whatever/stream', WS_HANDSHAKE)
+    expect(status).toBe(404)
+  })
+
+  // ── cwd guard: the session cwd is the read containment boundary ──────
+
+  it('rejects a session cwd outside the trusted workspaces and the daemon root', async () => {
+    const res = await fetchApi('/api/v1/sessions', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'escape',
+        cwd: '/tmp/not-a-trusted-workspace',
+        provider: 'anthropic',
+        model: 'claude-sonnet-5',
+      }),
+    })
+    expect(res.status).toBe(403)
+  })
+
+  it('rejects traversal that climbs out of the daemon root', async () => {
+    const res = await fetchApi('/api/v1/sessions', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'escape-2',
+        cwd: `${process.cwd()}/../../../../..`,
+        provider: 'anthropic',
+        model: 'claude-sonnet-5',
+      }),
+    })
+    expect(res.status).toBe(403)
   })
 })

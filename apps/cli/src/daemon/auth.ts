@@ -72,6 +72,10 @@ export function listTokens(tokenPath: string): string[] {
  * In the default 127.0.0.1-only configuration, all requests are implicitly
  * trusted and auth is bypassed. Auth enforcement activates when
  * MIPHAM_BIND=0.0.0.0 for remote access.
+ *
+ * Loopback says *where* a request came from, not *who* sent it — a web page in
+ * the user's own browser is also loopback. Two guards close that gap:
+ * `originMiddleware` in cors.ts and the session cwd check in workspace-guard.ts.
  */
 export function authMiddleware(
   request: Request,
