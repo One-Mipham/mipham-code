@@ -36,4 +36,39 @@ describe('findDerivableSections', () => {
 
     expect(findDerivableSections(content)).toEqual([])
   })
+
+  it('skips a section already disclosed behind a .md pointer', () => {
+    const content = [
+      '## 最近提交',
+      '',
+      '| 2026-09-12 | `abc1234` | chore: bump |',
+      '',
+      '> 完整记录 → [docs/claude-md-history.md](docs/claude-md-history.md)',
+    ].join('\n')
+
+    expect(findDerivableSections(content)).toEqual([])
+  })
+
+  it('still flags an undisclosed section of the same title', () => {
+    const content = [
+      '## 修订历史',
+      '',
+      '| 2.0.0 | 2026-01-01 | 初版 |',
+      '| 1.0.0 | 2025-01-01 | |',
+    ].join('\n')
+
+    expect(findDerivableSections(content).map((r) => r.heading)).toEqual(['修订历史'])
+  })
+
+  it('scopes the pointer guard per section — a link elsewhere does not suppress a match', () => {
+    const content = [
+      '## 最近提交',
+      '| 2026-09-12 | `abc1234` | chore |',
+      '',
+      '## 技术栈',
+      '> 见 [docs/tech-stack.md](docs/tech-stack.md)',
+    ].join('\n')
+
+    expect(findDerivableSections(content).map((r) => r.heading)).toEqual(['最近提交'])
+  })
 })

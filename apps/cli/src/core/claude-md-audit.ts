@@ -44,21 +44,45 @@ const PATTERNS: Array<{ pattern: RegExp; reason: DerivableReason }> = [
 ]
 
 /**
- * Return `##`/`###` headings whose title matches a derivable-content pattern,
- * in document order. Headings without a match are ignored.
+ * A section that already points at another doc has been disclosed — there is
+ * nothing left to exclude, so the audit stays silent about it.
+ */
+const DOC_POINTER = /\]\([^)\s]*\.md(?:[#?][^)\s]*)?\)/
+
+/**
+ * Return `##`/`###` headings whose title matches a derivable-content pattern and
+ * whose body is not already disclosed behind a `.md` pointer, in document order.
+ * Headings without a match are ignored.
  */
 export function findDerivableSections(content: string): DerivableSection[] {
   const found: DerivableSection[] = []
+  let heading: string | null = null
+  let reason: DerivableReason | null = null
+  let body: string[] = []
+
+  const flush = () => {
+    if (heading !== null && reason !== null && !DOC_POINTER.test(body.join('\n'))) {
+      found.push({ heading, reason })
+    }
+    heading = null
+    reason = null
+    body = []
+  }
+
   for (const line of content.split('\n')) {
     const m = line.match(/^(#{2,3})\s+(.+?)\s*$/)
-    if (!m) continue
-    const heading = m[2]!.trim()
-    for (const { pattern, reason } of PATTERNS) {
-      if (pattern.test(heading)) {
-        found.push({ heading, reason })
-        break
+    if (m) {
+      flush()
+      const title = m[2]!.trim()
+      const hit = PATTERNS.find(({ pattern }) => pattern.test(title))
+      if (hit) {
+        heading = title
+        reason = hit.reason
       }
+      continue
     }
+    if (heading !== null) body.push(line)
   }
+  flush()
   return found
 }
