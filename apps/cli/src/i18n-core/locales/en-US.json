@@ -901,6 +901,7 @@
       "mode_title": "Choose connection method:",
       "mode_cloud": "🌐 Cloud AI models (recommended)",
       "mode_local": "🖥️ Local models (Ollama)",
+      "mode_cloud_hint": " {count} cloud providers built in",
       "mode_local_hint": " Requires Ollama installed with models downloaded",
       "nav_hint": "↑↓ select · Enter confirm · Esc back",
       "provider_title": "Choose AI model provider:",

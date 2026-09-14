@@ -901,6 +901,7 @@
       "mode_title": "选择模型连接方式：",
       "mode_cloud": "🌐 云端 AI 模型（推荐）",
       "mode_local": "🖥️ 本地模型（Ollama）",
+      "mode_cloud_hint": " 内置 {count} 家云端供应商",
       "mode_local_hint": " 需要提前安装 Ollama 并下载模型",
       "nav_hint": "↑↓ 选择 · Enter 确认 · Esc 返回",
       "provider_title": "选择 AI 模型提供商：",
