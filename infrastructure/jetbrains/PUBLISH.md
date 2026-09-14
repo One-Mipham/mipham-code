@@ -11,6 +11,11 @@
 2. **License**：Apache-2.0（已随仓库提供 `LICENSE`）。
 3. **Marketplace Token**：https://plugins.jetbrains.com/author/me/tokens 生成 token。
    - 令牌只通过环境变量注入，**绝不写进代码或提交到仓库**（已接入 `build.gradle.kts`）。
+4. **IDE 授权**：**不需要**。构建平台是 IntelliJ IDEA **Community Edition** ——
+   `build.gradle.kts` 的 `intellij` 未设 `type`，缺省即 `IC`，`./gradlew runIde` 起的沙箱
+   同样是 IC。插件只依赖 `com.intellij.modules.platform` + `org.jetbrains.plugins.terminal`，
+   不含 Ultimate 专属模块，`untilBuild` 无上界 → IC 及各家免费 IDE 均可安装。
+   发布只用 Marketplace token（第 3 条），与 IDE 订阅无关。
 
 ## 首次发布（需先注册插件清单）
 
@@ -47,11 +52,11 @@ export JETBRAINS_MARKETPLACE_TOKEN="<你的 token>"
 
 ## 关键约束
 
-- **版本必须递增**：改 `gradle.properties` 的 `pluginVersion`（当前 0.47.0）。
-  Marketplace 拒绝重复版本。
+- **版本必须递增**：改 `gradle.properties` 的 `pluginVersion` —— 它是插件版本号的
+  **唯一真源**，本文档不重复写死。Marketplace 拒绝重复版本。
 - **`build/` 和 `.gradle/` 是构建产物**，已在 `.gitignore` 排除，不要提交。
 - **本地验证**：发布前先 `./gradlew buildPlugin`，产物在
-  `build/distributions/mipham-code-jetbrains-0.47.0.zip`，可在 IDE 里
+  `build/distributions/mipham-code-jetbrains-<pluginVersion>.zip`，可在 IDE 里
   **Settings → Plugins → ⚙️ → Install Plugin from Disk** 安装自测。
 
 ## 上架后
