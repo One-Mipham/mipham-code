@@ -11,6 +11,23 @@ const REPO_ROOT = path.resolve(HERE, '../../../..')
 const FIXTURE = path.join(HERE, 'fixtures', 'floating-promise.ts')
 
 /**
+ * The one test in the suite that cannot fit in the 5s default.
+ *
+ * It is the only place that runs type-aware linting in-process: ESLint has to
+ * build a TypeScript program before it can answer. Under v8 coverage the
+ * compiler itself is instrumented while it does that, so the two costs
+ * compound instead of adding. Measured against the exact command CI runs
+ * (`pnpm --filter @miphamai/cli coverage`): ~2.4s bare, ~10s under coverage
+ * locally, and **25.9s on a CI runner** — which is why the Test job went red on
+ * every push rather than flaking.
+ *
+ * A generous bound is the right shape here: the failure mode is slowness, not a
+ * hang — the work is bounded (lint one file) — and a shared runner is slower
+ * than a dev machine by a factor nothing else in the suite approaches.
+ */
+const TYPE_AWARE_LINT_TIMEOUT_MS = 60_000
+
+/**
  * `eslint .` deliberately skips the fixtures directory, so a green repo-wide lint
  * run says nothing about whether `no-floating-promises` can actually fire — it
  * would stay green even if the rule were misconfigured. This re-lints the
@@ -24,28 +41,32 @@ describe('no-floating-promises is enforced, not merely declared', () => {
     expect(existsSync(FIXTURE)).toBe(true)
   })
 
-  it('flags the floating promise in the fixture', async () => {
-    // `overrideConfigFile: true` drops the repo config, and with it the ignore
-    // entry that hides this fixture. The parser/plugin are CommonJS default
-    // exports, hence the cast to ESLint's flat-config shape.
-    const overrideConfig = [
-      {
-        files: ['**/*.ts'],
-        languageOptions: {
-          parser: tsParser,
-          parserOptions: { projectService: true, tsconfigRootDir: REPO_ROOT },
+  it(
+    'flags the floating promise in the fixture',
+    async () => {
+      // `overrideConfigFile: true` drops the repo config, and with it the ignore
+      // entry that hides this fixture. The parser/plugin are CommonJS default
+      // exports, hence the cast to ESLint's flat-config shape.
+      const overrideConfig = [
+        {
+          files: ['**/*.ts'],
+          languageOptions: {
+            parser: tsParser,
+            parserOptions: { projectService: true, tsconfigRootDir: REPO_ROOT },
+          },
+          plugins: { '@typescript-eslint': tsPlugin },
+          rules: { '@typescript-eslint/no-floating-promises': 'error' },
         },
-        plugins: { '@typescript-eslint': tsPlugin },
-        rules: { '@typescript-eslint/no-floating-promises': 'error' },
-      },
-    ] as unknown as Linter.Config[]
+      ] as unknown as Linter.Config[]
 
-    const eslint = new ESLint({ cwd: REPO_ROOT, overrideConfigFile: true, overrideConfig })
+      const eslint = new ESLint({ cwd: REPO_ROOT, overrideConfigFile: true, overrideConfig })
 
-    const results = await eslint.lintFiles([FIXTURE])
+      const results = await eslint.lintFiles([FIXTURE])
 
-    expect(results.flatMap((r) => r.messages.map((m) => m.ruleId))).toEqual([
-      '@typescript-eslint/no-floating-promises',
-    ])
-  })
+      expect(results.flatMap((r) => r.messages.map((m) => m.ruleId))).toEqual([
+        '@typescript-eslint/no-floating-promises',
+      ])
+    },
+    TYPE_AWARE_LINT_TIMEOUT_MS,
+  )
 })
