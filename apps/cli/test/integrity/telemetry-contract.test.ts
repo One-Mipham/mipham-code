@@ -8,6 +8,11 @@
  *     调用被折叠进 `__other__`，T4 据此投票时会看到「没人用」。
  * 两者都是「两边都绿、数据没了」，类型检查与各自的测试都看不见。
  *
+ * 第三种同类漂移不在字段上而在**目的地**上：`OFFICIAL_TELEMETRY_ENDPOINT`（常量）
+ * 与 `deploy/nginx/log.onemipham.com.conf`（真正提供服务的那份配置）一旦不一致，
+ * 每个事件都 404 —— 而 4xx 被客户端当作「永久不可接受」直接删条，同样是无声全丢。
+ * 两者分处两个 app，没有任何语言层面的东西会把它们连起来。
+ *
  * 之所以放在 `apps/cli/test/` 而不是 `apps/telemetry/test/`：注册表真源在 CLI 侧
  * （`createToolRegistry` / `getCommandLabelNames`），放在这里 `apps/telemetry` 的依赖图里
  * 就永远不会有 ink/react。
@@ -24,11 +29,13 @@ import { recordCommand, recordToolCall } from '../../src/telemetry/index'
 import { buildSessionEvent, COUNTER_WHITELIST, SCHEMA_VERSION } from '../../src/telemetry/payload'
 import { buildCrashEvent, recordCrash } from '../../src/telemetry/crash'
 import { runtimeTag } from '../../src/telemetry/redact'
+import { OFFICIAL_TELEMETRY_ENDPOINT } from '../../src/telemetry/endpoint'
 
 const CLI_DIR = join(import.meta.dirname, '..', '..')
 const REPO_ROOT = join(CLI_DIR, '..', '..')
 const TELEMETRY_DIR = join(REPO_ROOT, 'apps', 'telemetry')
 const ALLOWLIST_PATH = join(TELEMETRY_DIR, 'src', 'allowlist.json')
+const VHOST_PATH = join(TELEMETRY_DIR, 'deploy', 'nginx', 'log.onemipham.com.conf')
 
 /**
  * 置 1 时重写 allowlist.json 而不是断言。这是唯一的重新生成入口 ——
@@ -277,5 +284,57 @@ describe('遥测契约：runtime/platform 模式必须接受真实产物', () =>
 
     const platform = `${process.platform}/${process.arch}`
     expect(PLATFORM_PATTERN.test(platform), `实际值 = ${platform}`).toBe(true)
+  })
+})
+
+/**
+ * 把 vhost 当**配置**读，而不是当文本读。
+ *
+ * nginx 的 `#`…行尾是注释，而这份文件正好在散文里讨论着我们要解析的那几条指令。
+ * 实测过，这个差别只在一个方向上成立，而那个方向恰恰是致命的：现今注释里那句
+ * `location = /v1/events` 后面跟的是句号不是 `{`，所以**不**会被下面的模式命中；
+ * 但**把真的块整块注释掉**（这正是有人要停用它时的写法）会被命中 ——
+ * 于是原样解析会从注释里读出路径、断言照样绿，而线上每个事件都 404。
+ * 剥注释因此是有施加点的，不是防御性冗余。
+ */
+function vhostConfig(): string {
+  return readFileSync(VHOST_PATH, 'utf-8').replace(/#[^\n]*/g, '')
+}
+
+describe('遥测契约：endpoint 指向的正是这份 vhost 提供的目的地', () => {
+  /**
+   * 注意 `endpoint.test.ts` 已把 host 与 path 钉成**字面量**了 —— 那是第二份手抄的真源，
+   * 钉住的是「常量没被顺手改掉」。这里钉的是另一半、此前完全无人看守的那一半：
+   * 常量与**真正会被部署的那份配置**是不是同一个目的地。
+   */
+  it('URL 的 path == vhost 里 location = 的 path', () => {
+    const paths = Array.from(vhostConfig().matchAll(/\blocation\s*=\s*(\S+)\s*\{/g), (m) => m[1]!)
+
+    // 恰好一个。0 个 = 正则过期，或整个块被删/被注释掉；>1 个 = 多出第二个精确块。
+    // 让这条先红，而不是把两种情况甩给下面的相等断言 —— 那样给出的失败信息会误导
+    // （「expected '/v1/events' to be undefined」读起来像常量错了，其实是配置没了）。
+    expect(
+      paths,
+      `vhost 里 location = 块应恰好一个，实得：${paths.join(' | ') || '（无）'}`,
+    ).toHaveLength(1)
+    expect(new URL(OFFICIAL_TELEMETRY_ENDPOINT).pathname).toBe(paths[0])
+  })
+
+  /**
+   * 同一失败模式在**主机名那一半**：端点换了域名而 vhost 没跟上（或反之），事件落到
+   * 一个不解析、或不服务这个主机名的地址上 —— 同样是无声全丢。
+   *
+   * 断言的是**整份文件的全部 server_name**，因为两个 server 块都必须在场：
+   * 443 块错了 ⇒ 事件到不了应用；80 块错了 ⇒ 它不再匹配本主机，明文请求会落到该端口的
+   * 默认 server 上（本组织惯例是 301 跳 https），而集团 §二 要求传输层 TLS 1.3 ——
+   * 明文第一跳即违规（vhost 里那段 `return 444` 的长注释讲的正是这件事）。
+   */
+  it('URL 的 host == vhost 的每个 server_name', () => {
+    const names = Array.from(vhostConfig().matchAll(/\bserver_name\s+([^;]+);/g), (m) =>
+      m[1]!.trim().split(/\s+/),
+    ).flat()
+
+    expect(names.length, 'vhost 里一个 server_name 都没找到 —— 正则过期了').toBeGreaterThan(0)
+    expect([...new Set(names)].sort()).toEqual([new URL(OFFICIAL_TELEMETRY_ENDPOINT).host])
   })
 })
