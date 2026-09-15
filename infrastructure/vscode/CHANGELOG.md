@@ -3,6 +3,20 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.81.6 — 2026-09-15
+
+- Version sync with Mipham Code CLI 0.81.6
+- Security: `Read(...)` deny rules missed a whole class of commands that read a file and
+  write to stdout (`fmt secret`, `column -t secret`), so a denied file still reached the
+  Bash tool's read path — 20 readers added, none of them treated as writers
+- Security: `/clear` and `/resume` left the session's read-before-write record intact, so a
+  fresh conversation could overwrite a file it had never read. The record is now dropped
+  whenever the message history is replaced
+- Fixed: a burst of MCP `tools/list_changed` notifications each triggered their own
+  `tools/list` round trip plus a full downstream re-registration — sustained CPU and a
+  re-registration storm. Refreshes are now coalesced per connection (250 ms debounce with a
+  2000 ms ceiling), and the pending timer is cleared on disconnect / reconnect
+
 ## 0.81.5 — 2026-09-14
 
 - Version sync with Mipham Code CLI 0.81.5 (product line skips 0.81.4, which this

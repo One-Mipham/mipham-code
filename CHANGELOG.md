@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.81.6] — 2026-09-15
+
+### Security
+
+- **`Read(...)` deny 规则可被「读文件写 stdout」的命令绕过** —— `READER_COMMANDS` 缺了整类读者命令：`fmt secret` / `column -t secret` 同样把文件送进了工具的读路径，检查器却认不出这条命令是读者。补 20 条 —— 文本格式化/变换 `fmt column pr fold expand unexpand rev look bat`，结构化读者与字节工具 `jq yq base64 md5sum sha1sum sha256sum shasum cksum sum cmp iconv`。均只入读列表、不入写列表（`md5sum secret` 不该被 `Edit(...)` 规则拦下）。命令名单是唯一缺口：扫描器对每个非 `-` 开头的参数都入读列表（选项值也当路径，只多不少），文件跟在哪个选项后面不影响命中
+- **`/clear` 与 `/resume` 未清空文件读取追踪** —— `engine.readFiles` 是会话级「读过才能覆盖」的凭据（`write` 工具 fail-closed 依据它拦下覆盖未读文件），却只在**同一段对话**内成立：`/clear` 清空历史、`/resume` 载入另一段历史，两者都不碰它 → 新对话可以覆盖它从没读过的文件。新增 `QueryEngine.resetFileTracking()`，在「消息历史被替换」的两条路径上调用。清空是 fail-closed 方向 —— 未读文件宁可要求重读，不可静默覆盖
+
+### Fixed
+
+- **MCP `tools/list_changed` 通知紧循环放大** —— 此前是「一条通知 → 一次 `tools/list` round trip → 一次下游全量重注册」，服务器按工具逐条通知（或陷入循环）时这个 1:1 就是放大器：持续高 CPU + 重注册风暴。改为每连接合并刷新：250ms 去抖窗口 + **2000ms 上限**（纯 trailing 去抖会被「永不停止通知」的服务器无限推后），in-flight 期间到达的通知排队补跑一次、不丢变更；`disconnect` / `closeAll` / `reconnect` 三处清定时器（`reconnect` 必需 —— 同名重连会让遗留定时器打到新连接上），定时器 `unref()` 不吊住 CLI 进程退出
+
 ## [0.81.5] — 2026-09-14
 
 > 0.81.4 未作产品版本发布 —— 该号已被 VS Code 扩展的 changelog-only 重发占用（仍跑 CLI 0.81.3），产品线故跳至 0.81.5。
