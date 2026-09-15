@@ -40,7 +40,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "knip": "knip --production --no-progress --no-exit-code",
-    "coverage": "vitest run --coverage --coverage.provider=v8 --coverage.include='src/**/*.{ts,tsx}' --coverage.reporter=text-summary --coverage.reporter=json-summary"
+    "coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@larksuiteoapi/node-sdk": "^1.73.0",
