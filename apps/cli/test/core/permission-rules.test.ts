@@ -289,6 +289,81 @@ describe('extractBashFileAccess — prefix wrapper commands', () => {
   })
 })
 
+describe('matchBashRule — Read rules cover text/byte readers', () => {
+  // A formatter reads its file argument and writes to stdout, so `fmt secret` /
+  // `column -t secret` reached the file through the Bash tool while the checker
+  // did not recognise the command as a reader — `Read(secret)` let it past.
+  // Mipham's scanner already treats every non-flag argument of a known reader as
+  // a path, so the missing piece was the command list itself.
+  it('matches a Read(path) rule against a formatter that writes to stdout', () => {
+    for (const cmd of [
+      'fmt .git-credentials',
+      'column -t .git-credentials',
+      'pr .git-credentials',
+      'fold -w 40 .git-credentials',
+      'expand .git-credentials',
+      'unexpand .git-credentials',
+      'rev .git-credentials',
+      'look .git-credentials',
+      'bat .git-credentials',
+    ]) {
+      expect(matchBashRule('Read(.git-credentials)', 'Bash', { command: cmd })).toBe(true)
+    }
+  })
+
+  it('matches a Read(path) rule against a structured/byte reader', () => {
+    for (const cmd of [
+      'jq . .git-credentials',
+      'yq . .git-credentials',
+      'base64 .git-credentials',
+      'md5sum .git-credentials',
+      'sha256sum .git-credentials',
+      'shasum .git-credentials',
+      'cksum .git-credentials',
+      'iconv -f utf-8 .git-credentials',
+      'cmp .git-credentials /dev/null',
+    ]) {
+      expect(matchBashRule('Read(.git-credentials)', 'Bash', { command: cmd })).toBe(true)
+    }
+  })
+
+  it('finds the file even when it follows an unrecognized option', () => {
+    // The upstream bug: an option the checker does not know about sat between
+    // the command and the path, and the path was never scanned.
+    expect(
+      matchBashRule('Read(.git-credentials)', 'Bash', {
+        command: 'fmt -w 80 .git-credentials',
+      }),
+    ).toBe(true)
+    expect(
+      matchBashRule('Read(.git-credentials)', 'Bash', {
+        command: 'column -t -s, .git-credentials',
+      }),
+    ).toBe(true)
+  })
+
+  it('applies the same reader set behind a prefix wrapper', () => {
+    expect(
+      matchBashRule('Read(.git-credentials)', 'Bash', {
+        command: 'sudo fmt .git-credentials',
+      }),
+    ).toBe(true)
+    expect(
+      matchBashRule('Read(.git-credentials)', 'Bash', {
+        command: 'echo $(jq . .git-credentials)',
+      }),
+    ).toBe(true)
+  })
+
+  it('does not match an unrelated path', () => {
+    expect(matchBashRule('Read(.git-credentials)', 'Bash', { command: 'fmt .npmrc' })).toBe(false)
+  })
+
+  it('does not treat the new readers as writers', () => {
+    expect(extractBashFileAccess('md5sum .git-credentials').write).not.toContain('.git-credentials')
+  })
+})
+
 describe('matchBashRule — conservative scoping avoids upstream false positives', () => {
   // Claude Code 2.1.259 extended Read() deny rules to ALL Bash arguments, then
   // 2.1.260 REVERTED it: it denied `npm run build` under `Read(./**/build/**)`

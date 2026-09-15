@@ -43,6 +43,30 @@ const READER_COMMANDS = new Set([
   'view',
   'zcat',
   'bzcat',
+  // Text formatters/transforms that take an input file and write to stdout.
+  // These were missing, so `Read(secret)` was bypassed by `fmt secret` /
+  // `column -t secret` — the file sits after the command's own options.
+  'fmt',
+  'column',
+  'pr',
+  'fold',
+  'expand',
+  'unexpand',
+  'rev',
+  'look',
+  'bat',
+  // Structured readers and byte-level utilities that read their file argument.
+  'jq',
+  'yq',
+  'base64',
+  'md5sum',
+  'sha1sum',
+  'sha256sum',
+  'shasum',
+  'cksum',
+  'sum',
+  'cmp',
+  'iconv',
 ])
 
 /** Commands that write/modify a file (bypass Write()/Edit() rules today). */
