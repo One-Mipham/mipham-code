@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os'
 import { rmSync, mkdirSync } from 'node:fs'
 import { enqueueSync, readQueue, type QueuedEvent } from '../../src/telemetry/queue'
 import { flushQueue, flushQueueInBackground } from '../../src/telemetry/transport'
+import { OFFICIAL_TELEMETRY_ENDPOINT } from '../../src/telemetry/endpoint'
 
 const HOME = `${tmpdir()}/mipham-test-tel-transport`
 const ENDPOINT = 'https://telemetry.example/v1/events'
@@ -39,9 +40,17 @@ afterAll(() => rmSync(HOME, { recursive: true, force: true }))
 
 describe('transport — the zero-network guarantee', () => {
   // ROADMAP's hard requirement for T1: "off" must be an assertion, not a
-  // promise. These three states are the ones a user can actually be in.
+  // promise.
+  //
+  // An empty endpoint is no longer the shipped default — the resolver now
+  // supplies a real URL — but it is still a reachable state, and it is the one
+  // the `none` sentinel produces. The *default* case is covered in
+  // `index.test.ts` ("sends nothing and writes no queue file before anyone
+  // opts in"), which is now the only place the "off ⇒ no network" guarantee is
+  // asserted end to end: `initTelemetry` checks `consent.enabled` before it
+  // ever reaches this function.
 
-  it('sends nothing when the endpoint is empty — the shipped default', async () => {
+  it('sends nothing when the endpoint is empty — where the none sentinel lands', async () => {
     enqueueSync(event('a'))
     const result = await flushQueue('')
     expect(fetchMock).not.toHaveBeenCalled()
@@ -54,11 +63,21 @@ describe('transport — the zero-network guarantee', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('the background flush is a no-op with no endpoint', async () => {
+  it('the background flush is a no-op with no destination', async () => {
     enqueueSync(event('a'))
     flushQueueInBackground('')
     await Promise.resolve()
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('does send to the shipped endpoint when that is the one configured', async () => {
+    // The complement of the three above, and the reason they are no longer
+    // sufficient on their own: an empty destination is now the exception, so
+    // "sends nothing" has to be shown next to "sends here".
+    enqueueSync(event('a'))
+    const result = await flushQueue(OFFICIAL_TELEMETRY_ENDPOINT)
+    expect(result).toEqual({ sent: 1, failed: 0 })
+    expect(fetchMock.mock.calls[0]![0]).toBe(OFFICIAL_TELEMETRY_ENDPOINT)
   })
 })
 

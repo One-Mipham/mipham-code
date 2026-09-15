@@ -65,6 +65,7 @@ import {
   resetInstallId,
 } from '../telemetry/consent'
 import { getTelemetryConsent, enableTelemetryNow } from '../telemetry/index'
+import { NO_ENDPOINT } from '../telemetry/endpoint'
 import { stripIndent } from './strip-indent.js'
 import { createT } from '../i18n-core/t'
 import type { TranslationMap } from '../i18n-core/types'
@@ -3839,20 +3840,34 @@ const telemetryCmd: CommandHandler = async (ctx, args) => {
 
   if (sub === 'endpoint') {
     const url = args[1]
-    if (!url) return { content: 'Usage: /telemetry endpoint <url>' }
+    if (!url) return { content: 'Usage: /telemetry endpoint <url|none>' }
     setTelemetryEndpoint(url)
-    return { content: `✓ Endpoint set to ${url}` }
+    return {
+      content:
+        url === NO_ENDPOINT
+          ? '✓ Destination cleared. Telemetry stays on, but nothing is ever sent.'
+          : `✓ Endpoint set to ${url}`,
+    }
   }
 
   if (sub !== 'status') {
     return {
-      content: 'Usage: /telemetry [status|on|off|reset-id|endpoint <url>]',
+      content: 'Usage: /telemetry [status|on|off|reset-id|endpoint <url|none>]',
     }
   }
 
   // ── status ──
   const consent = getTelemetryConsent() ?? resolveTelemetry()
   const settings = readTelemetrySettings('user')
+  // Two ways for `endpoint` to be empty, and they mean different things: never
+  // resolved (the kill switch fired first) or deliberately cleared (the `none`
+  // sentinel). A third — nothing configured — is unreachable now that the
+  // default is a real URL, which is why this used to be a one-line fallback.
+  const destination = consent.endpoint
+    ? consent.endpoint
+    : consent.endpointSource === 'off'
+      ? '_(not resolved — telemetry is off)_'
+      : '_(nothing — the `none` sentinel cleared it)_'
   const lines = [
     '## 📡 Telemetry',
     '',
@@ -3860,7 +3875,8 @@ const telemetryCmd: CommandHandler = async (ctx, args) => {
     `| --- | --- |`,
     `| State | ${consent.enabled ? '🟢 enabled' : '⚪ disabled'} |`,
     `| Decided by | \`${consent.source}\` |`,
-    `| Endpoint | ${consent.endpoint || '_(unset — nothing is ever sent)_'} |`,
+    `| Endpoint | ${destination} |`,
+    `| Source | \`${consent.endpointSource}\` |`,
     `| Install id | ${settings.installId ?? '_(not yet generated)_'} |`,
     `| Prompted | ${settings.promptedAt ?? '_(never)_'} |`,
     '',

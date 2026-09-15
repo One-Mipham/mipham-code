@@ -21,6 +21,7 @@ import {
   isInteractive,
   telemetryDir,
 } from '../../src/telemetry/consent'
+import { OFFICIAL_TELEMETRY_ENDPOINT, NO_ENDPOINT } from '../../src/telemetry/endpoint'
 
 const HOME = `${tmpdir()}/mipham-test-tel-consent`
 const PROJECT = `${tmpdir()}/mipham-test-tel-project`
@@ -54,7 +55,14 @@ describe('consent — hard kill switch', () => {
     reset()
     writeSettings(USER_SETTINGS, { telemetry: { enabled: true } })
     const consent = resolveTelemetry(PROJECT, { MIPHAM_TELEMETRY: 'off' })
-    expect(consent).toEqual({ enabled: false, endpoint: '', source: 'env-off' })
+    // Literally nothing: not the user's endpoint, not the shipped default. The
+    // switch is resolved before a destination is ever looked at.
+    expect(consent).toEqual({
+      enabled: false,
+      endpoint: '',
+      source: 'env-off',
+      endpointSource: 'off',
+    })
   })
 })
 
@@ -100,8 +108,33 @@ describe('consent — three tiers', () => {
     ).toBe('https://b.example/x')
   })
 
-  it('defaults the endpoint to empty — no phantom URL ships in the binary', () => {
-    expect(resolveTelemetry(PROJECT, NO_ENV).endpoint).toBe('')
+  it('defaults the endpoint to the official receiver, and names the default as its source', () => {
+    const consent = resolveTelemetry(PROJECT, NO_ENV)
+    expect(consent.endpoint).toBe(OFFICIAL_TELEMETRY_ENDPOINT)
+    expect(consent.endpointSource).toBe('default')
+  })
+
+  it('reports which tier supplied the destination', () => {
+    writeSettings(USER_SETTINGS, { telemetry: { enabled: true, endpoint: 'https://a.example/x' } })
+    expect(resolveTelemetry(PROJECT, NO_ENV).endpointSource).toBe('user')
+    expect(
+      resolveTelemetry(PROJECT, { MIPHAM_TELEMETRY_ENDPOINT: 'https://b.example/x' })
+        .endpointSource,
+    ).toBe('env')
+  })
+
+  it('honours the none sentinel: still opted in, but sending nowhere', () => {
+    writeSettings(USER_SETTINGS, { telemetry: { enabled: true, endpoint: NO_ENDPOINT } })
+    const consent = resolveTelemetry(PROJECT, NO_ENV)
+    expect(consent.enabled).toBe(true)
+    expect(consent.endpoint).toBe('')
+    expect(consent.endpointSource).toBe('user')
+
+    // An empty override is *not* the same thing — being falsy, it falls through
+    // to the shipped default and the machine starts sending. The sentinel is
+    // the only way to say "nowhere", which is the whole reason it exists.
+    writeSettings(USER_SETTINGS, { telemetry: { enabled: true, endpoint: '' } })
+    expect(resolveTelemetry(PROJECT, NO_ENV).endpoint).toBe(OFFICIAL_TELEMETRY_ENDPOINT)
   })
 
   it('fails closed on a malformed settings.json instead of throwing', () => {

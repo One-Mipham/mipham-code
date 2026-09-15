@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { readSettingsDoc, writeSettingsDoc, settingsPathFor } from '../config/loader'
+import { resolveEndpoint, type EndpointSource } from './endpoint'
 
 /**
  * Consent for telemetry.
@@ -35,6 +36,14 @@ export interface TelemetryConsent {
   enabled: boolean
   endpoint: string
   source: ConsentSource
+  /**
+   * Which tier supplied `endpoint` — `env`, `user`, or the shipped `default`.
+   * `off` when the hard kill switch fired first and no destination was resolved
+   * at all. Kept separate from `source` because "who decided whether to
+   * collect" and "who decided where to send" are different questions, and a
+   * user debugging an unexpected destination needs the second one.
+   */
+  endpointSource: EndpointSource | 'off'
 }
 
 /**
@@ -71,6 +80,10 @@ export function readTelemetrySettings(
 /**
  * Decide whether to collect, and where to send.
  *
+ * The two are resolved independently. Having a destination is not consent to
+ * send to it (see `resolveEndpoint` for the destination chain, including the
+ * `none` sentinel); `endpointSource` reports which tier supplied it.
+ *
  * Three tiers, fail-closed:
  *   1. `MIPHAM_TELEMETRY=off` — hard off, overrides everything.
  *   2. user `settings.json` `telemetry.enabled === true` — the user's own consent.
@@ -90,15 +103,21 @@ export function resolveTelemetry(
   cwd: string = process.cwd(),
   env: NodeJS.ProcessEnv = process.env,
 ): TelemetryConsent {
-  if (isHardDisabled(env)) return { enabled: false, endpoint: '', source: 'env-off' }
+  if (isHardDisabled(env)) {
+    return { enabled: false, endpoint: '', source: 'env-off', endpointSource: 'off' }
+  }
 
   const user = readTelemetrySettings('user', cwd)
   const project = readTelemetrySettings('project', cwd)
-  const endpoint = env.MIPHAM_TELEMETRY_ENDPOINT || user.endpoint || ''
+  const { endpoint, source: endpointSource } = resolveEndpoint(user.endpoint, env)
 
-  if (project.enabled === false) return { enabled: false, endpoint, source: 'project-veto' }
-  if (user.enabled === true) return { enabled: true, endpoint, source: 'user-optin' }
-  return { enabled: false, endpoint, source: 'default-off' }
+  if (project.enabled === false) {
+    return { enabled: false, endpoint, source: 'project-veto', endpointSource }
+  }
+  if (user.enabled === true) {
+    return { enabled: true, endpoint, source: 'user-optin', endpointSource }
+  }
+  return { enabled: false, endpoint, source: 'default-off', endpointSource }
 }
 
 function patchUserTelemetry(patch: TelemetrySettings, cwd: string): void {
@@ -142,7 +161,12 @@ export function setTelemetryEnabled(enabled: boolean, cwd: string = process.cwd(
   patchUserTelemetry({ enabled }, cwd)
 }
 
-/** Endpoint override, persisted by `/telemetry endpoint <url>`. */
+/**
+ * Endpoint override, persisted by `/telemetry endpoint <url>`.
+ *
+ * `none` is accepted and stored like any other value: the sentinel is
+ * interpreted at resolution time (`resolveEndpoint`), not at write time.
+ */
 export function setTelemetryEndpoint(endpoint: string, cwd: string = process.cwd()): void {
   patchUserTelemetry({ endpoint }, cwd)
 }

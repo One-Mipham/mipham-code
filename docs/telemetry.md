@@ -43,8 +43,14 @@ must be a deliberate, persistent act.
 ### Endpoint
 
 `MIPHAM_TELEMETRY_ENDPOINT`, or `telemetry.endpoint` in settings, or
-`/telemetry endpoint <url>`. **It ships empty.** With no endpoint configured the
-CLI still records locally but sends nothing, ever.
+`/telemetry endpoint <url>`. First match wins; when none of them is set the CLI
+uses the official receiver, **`https://log.onemipham.com/v1/events`**.
+
+`/telemetry endpoint none` means _nowhere_: telemetry stays on and keeps
+recording locally, but nothing ever leaves the machine. An empty value does not
+do this — being falsy it falls through to the next tier, which is why the
+sentinel exists. `/telemetry status` reports which tier supplied the
+destination.
 
 ## When data moves
 
@@ -96,9 +102,11 @@ carry data this page promises not to send.
 | `crsi_rule_applications` | `mipham_code_crsi_rule_applications_total` | total             |
 | `sis_interceptions`      | `mipham_code_sis_interceptions_total`      | total             |
 
-Label cardinality is bounded by construction — there are only as many command
-names as the CLI ships and as many tool names as the registry declares. Counts
-are plain integers; nothing is per-user and nothing is per-event.
+Label cardinality is bounded, but not the same way on both sides. `tool_calls`
+is closed by construction — there are only as many tool names as the tool
+registry declares. `command_calls` is **not**: that name is whatever the user
+typed, so anything unrecognised is collapsed to `/unknown` before it is counted.
+Counts are plain integers; nothing is per-user and nothing is per-event.
 
 ## The `crash` event
 

@@ -51,6 +51,7 @@ import { ArtifactServer } from './artifacts/server'
 import { getMetrics } from './core/metrics'
 import { initTelemetry, enableTelemetryNow } from './telemetry/index'
 import { wasPrompted, markPrompted, isInteractive, setTelemetryEnabled } from './telemetry/consent'
+import { officialEndpointHost } from './telemetry/endpoint'
 import { getWorkspaceTrust } from './core/workspace-trust'
 import { ARTIFACTS_DIR, ARTIFACT_PORT, MIPHAM_DIR } from './shared/constants'
 import { AgentViewManager } from './agent-view/agent-view-manager'
@@ -170,6 +171,10 @@ async function promptForTelemetryConsent(): Promise<void> {
     process.stderr.write('\n')
     process.stderr.write('  If enabled, Mipham Code sends counts of which commands and\n')
     process.stderr.write('  tools you use, plus the app version, runtime and platform.\n')
+    // The destination, adjacent to what travels — consent is to an address,
+    // not to a category of data. Derived from the endpoint constant so a
+    // future move cannot leave this line naming the previous host.
+    process.stderr.write(`  They are sent to ${officialEndpointHost()}.\n`)
     process.stderr.write('  It does not send your code, prompts, file contents, file\n')
     process.stderr.write('  paths, project names or API keys.\n')
     process.stderr.write('\n')
