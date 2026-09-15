@@ -38,6 +38,7 @@ import { createDingtalkAdapter } from './dingtalk/adapter.js'
 import { createDingtalkApi } from './dingtalk/api.js'
 import type { DingtalkConfig } from './dingtalk/types.js'
 import { startHeartbeat } from './heartbeat'
+import { wireDaemonEngine } from './engine-capabilities'
 
 interface ServerConfig {
   db: DaemonDatabase
@@ -236,6 +237,14 @@ export function createServer(config: ServerConfig): Server<WsData> {
     )
     const engine = new QueryEngine(sharedRegistry, context, sharedTools, permission)
     engine.setSessionId(sessionId)
+    // Same engine capabilities as the interactive CLI — see engine-capabilities.ts.
+    // Must stay immediately after setSessionId and before the cache insert, so no
+    // path can obtain a half-wired engine.
+    wireDaemonEngine(engine, {
+      cwd,
+      registry: sharedRegistry,
+      skillsPaths: daemonConfig.skills?.paths,
+    })
     engineCache.set(sessionId, engine)
     return engine
   }

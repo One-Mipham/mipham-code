@@ -4,6 +4,8 @@
  * 本仓库已发生四次同类事故，共同点都是**引用方与被引用方分处不同文件**，
  * 于是类型检查与既有测试都看不见：
  *   1. `core/rules-loader.ts` 只定义不接线（`setRulesLoader` 全仓库零调用点）
+ *      （**现已于 2.37.3 接线**；daemon 侧是同类残留，由 `daemon-capability-parity.test.ts`
+ *      在 T5 收口 —— 这条留着是因为它记的是**缺陷类**，不是某个文件的历史状态）
  *   2. 内置 `superpower` skill 残留上游技能名（`brainstorming` / `mcp-builder` 等）
  *   3. VS Code 扩展注入 `MIPHAM_IDE` 环境变量，CLI 侧零消费者
  *   4. `/todos` 的提示词、参考表与 locale 文案引用 `TaskCreate` / `TaskList` 等

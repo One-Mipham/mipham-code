@@ -1333,7 +1333,15 @@ export class QueryEngine {
     return this.llm
   }
 
-  /** 注入 LLM 适配缝（换 chat 实现）。 */
+  /**
+   * 注入 LLM 适配缝（换 chat 实现）。
+   *
+   * 不变量：**缝 = 与 `registry` 不同的对象**。`chatWithFallback` 靠
+   * `this.llm !== this.registry` 判定「这个缝是否拥有整个 chat 流程」——
+   * 而生产路径注入的恰恰就是 registry 本身（`providers/llm.ts` 的 `mountLlm`
+   * 是原样 `provide(LLM_KEY, llm)`，`index.tsx` 把 `registry` 传了进去）。
+   * 若改成「非空即缝」，provider 回退分支就永远走不到，回退只活在测试里。
+   */
   setLlm(llm: Llm): void {
     this.llm = llm
   }
@@ -1384,8 +1392,11 @@ export class QueryEngine {
     }
 
     // ── Fallback: configured default provider, once ──
-    // 若已注入 Llm 缝，缝拥有整个 chat 流程——不回退（避免切 registry 状态 + 二次调用）
-    if (this.llm) {
+    // 若注入了**异己**的 Llm 缝，缝拥有整个 chat 流程——不回退（避免切 registry 状态 + 二次调用）。
+    // `!== this.registry` 不可省：生产路径注入的正是 registry 自己（`index.tsx` →
+    // `mountLlm(vajraContext, registry)` → `setLlm`），按「非空即缝」判定会让本分支
+    // 在生产恒不可达，而测试里构造引擎时不注入缝 ⇒ 套件全绿也发现不了。
+    if (this.llm && this.llm !== this.registry) {
       yield { type: 'error', error: failure }
       return
     }

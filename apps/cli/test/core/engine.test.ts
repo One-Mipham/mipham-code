@@ -86,6 +86,58 @@ function mockContext(): ContextManager {
   return new ContextManager({ maxTokens: 100_000, compactionThreshold: 0.9 })
 }
 
+/**
+ * A registry whose **active** provider always fails, with a healthy default to
+ * fall back to. Counts attempts per side so a test can assert *how many* chats ran
+ * (a fallback that retries when it shouldn't is as wrong as one that never fires).
+ */
+function failingActiveRegistry(calls: { active: number; fallback: number }): ProviderRegistry {
+  const registry = new ProviderRegistry([], 'good', 'good-model')
+  registry.register('good', {
+    config: {
+      id: 'good',
+      name: 'Good',
+      protocol: 'openai-compatible' as const,
+      apiKey: 'k',
+      models: [
+        {
+          id: 'good-model',
+          name: 'Good Model',
+          providerId: 'good',
+          contextWindow: 1000,
+          maxOutput: 100,
+          vision: false,
+          status: 'active' as const,
+        },
+      ],
+    },
+    chat: async function* () {
+      calls.fallback++
+      yield { type: 'text', content: 'fallback response' }
+      yield { type: 'stop' }
+    },
+    listModels: async () => [],
+    healthCheck: async () => true,
+  })
+  registry.register('bad', {
+    config: {
+      id: 'bad',
+      name: 'Bad',
+      protocol: 'openai-compatible' as const,
+      apiKey: 'k',
+      models: [],
+    },
+    chat: async function* () {
+      calls.active++
+      throw new Error('ECONNREFUSED: connection refused')
+    },
+    listModels: async () => [],
+    healthCheck: async () => true,
+  })
+  registry.switchProvider('bad', 'bad-model')
+  return registry
+}
+
 function mockTool(
   name: string,
   impl?: (params: Record<string, unknown>) => Promise<ToolResult>,
@@ -455,6 +507,54 @@ describe('QueryEngine', () => {
       expect(chunks.some((c) => c.type === 'text' && c.content === 'fallback response')).toBe(true)
       // Active provider should now be the default (good)
       expect(registry.getActive().config.id).toBe('good')
+    })
+
+    it('keeps falling back when the injected Llm seam IS the registry (the production shape)', async () => {
+      const calls = { active: 0, fallback: 0 }
+      const registry = failingActiveRegistry(calls)
+      const engine = new QueryEngine(registry, mockContext(), makeToolMap([]))
+      // 生产路径注入的就是 registry 自己：`index.tsx:611` 把 `mountLlm(vajraContext, registry)`
+      // 塞回来的东西交给 setLlm，而 `mountLlm` 只是原样 provide（providers/llm.ts:14-16）。
+      // 若 `chatWithFallback` 按「非空即缝」判定，这个注入会让回退分支在生产**恒不可达** ——
+      // 而上面那条测试构造引擎时不注入缝，于是套件全绿也发现不了。这条测试就是那个缝。
+      engine.setLlm(registry)
+
+      const chunks: StreamChunk[] = []
+      for await (const chunk of engine.process('hi')) {
+        chunks.push(chunk)
+      }
+
+      expect(chunks.some((c) => c.type === 'warning')).toBe(true)
+      expect(chunks.some((c) => c.type === 'text' && c.content === 'fallback response')).toBe(true)
+      expect(registry.getActive().config.id).toBe('good')
+      expect(calls).toEqual({ active: 1, fallback: 1 })
+    })
+
+    it('does not fall back when a genuinely foreign Llm seam owns the chat flow', async () => {
+      const calls = { active: 0, fallback: 0 }
+      const registry = failingActiveRegistry(calls)
+      const engine = new QueryEngine(registry, mockContext(), makeToolMap([]))
+      let seamCalls = 0
+      const seam: Llm = {
+        chat: async function* () {
+          seamCalls++
+          yield { type: 'error' as const, error: 'seam failed' }
+        },
+      }
+      engine.setLlm(seam)
+
+      const chunks: StreamChunk[] = []
+      for await (const chunk of engine.process('hi')) {
+        chunks.push(chunk)
+      }
+
+      // 异己缝拥有整个 chat 流程：只调一次、不回退、不切 registry 状态。
+      // 这条与上一条互为约束 —— 少了它，把回退判据整个删掉也能让上一条变绿。
+      expect(seamCalls).toBe(1)
+      expect(calls).toEqual({ active: 0, fallback: 0 })
+      expect(chunks.some((c) => c.type === 'warning')).toBe(false)
+      expect(chunks.some((c) => c.type === 'error')).toBe(true)
+      expect(registry.getActive().config.id).toBe('bad')
     })
   })
 
