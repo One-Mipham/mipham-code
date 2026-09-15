@@ -694,6 +694,39 @@ describe('QueryEngine', () => {
     })
   })
 
+  describe('resetFileTracking', () => {
+    it('clears the read-before-write record the tools receive', async () => {
+      let seen: Set<string> | undefined
+      const probe: ToolDefinition = {
+        ...mockTool('probe'),
+        execute: async (_params, ctx) => {
+          seen = ctx.readFiles
+          ctx.readFiles?.add('/tmp/already-read.txt') // stands in for the Read tool
+          return { success: true, content: 'ok' }
+        },
+      }
+      const registry = mockProviderRegistry(async function* () {
+        yield {
+          type: 'tool_use',
+          toolUse: { type: 'tool_use', id: 'call_1', name: 'probe', input: {} },
+        }
+        yield { type: 'stop' }
+      })
+      const engine = new QueryEngine(registry, mockContext(), makeToolMap([probe]))
+
+      const chunks: StreamChunk[] = []
+      for await (const chunk of engine.process('probe')) chunks.push(chunk)
+
+      expect(seen?.has('/tmp/already-read.txt')).toBe(true)
+
+      // The engine hands this exact Set to every tool, so a /clear or /resume
+      // must empty it — otherwise a fresh conversation can overwrite a file it
+      // never read.
+      engine.resetFileTracking()
+      expect(seen?.size).toBe(0)
+    })
+  })
+
   describe('hook integration', () => {
     it('should invoke PreToolUse hook and allow execution', async () => {
       const tool = mockTool('read')

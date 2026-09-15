@@ -227,6 +227,9 @@ export class RemoteEngine {
   /** No-op: reasoning effort is managed by the daemon session. */
   setEffort(_level: string): void {}
 
+  /** No-op: file-read tracking lives with the daemon's own engine. */
+  resetFileTracking(): void {}
+
   /** Remote mode has no local agent registry. */
   getAgentRegistry(): undefined {
     return undefined

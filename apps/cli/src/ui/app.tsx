@@ -927,6 +927,13 @@ export function App({
           if (result.nextProvider) setProviderId(result.nextProvider)
           if (result.nextModel) setModelId(result.nextModel)
           if (result.exit) process.exit(0)
+          if (result.clearMessages || (result.forwardedMessages?.length ?? 0) > 0) {
+            // The conversation this session is looking at just changed (/clear,
+            // /resume) — the read-before-write record belongs to the old one.
+            // Clearing is the fail-closed direction: an unread file must be
+            // re-read rather than silently overwritten.
+            engine.resetFileTracking()
+          }
           if (result.forwardedMessages && result.forwardedMessages.length > 0) {
             const restored: ChatMessage[] = result.forwardedMessages.map((msg) => ({
               role: msg.role,

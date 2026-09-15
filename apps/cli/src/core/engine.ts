@@ -193,6 +193,19 @@ export class QueryEngine {
     this.effort = level
   }
 
+  /**
+   * Forget which files the Read tool has loaded.
+   *
+   * The read-before-write guard (`tools/file/write.ts`) refuses to overwrite a
+   * file this session has not read. That record is per-conversation, so it has
+   * to be dropped whenever the conversation is not the same one anymore —
+   * `/clear` and `/resume` both replace the message history. Carrying it over
+   * let a fresh conversation silently overwrite a file it had never read.
+   */
+  resetFileTracking(): void {
+    this.readFiles.clear()
+  }
+
   /** Set the session identifier (called from index.tsx at startup with the actual session name). */
   setSessionId(id: string): void {
     this.sessionId = id
