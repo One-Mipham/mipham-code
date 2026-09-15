@@ -4,8 +4,8 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.39.0
-> **最后更新**: 2026-09-15 — T3b ESLint type-checked：`eslint.config.js` 接 `projectService` + `allowDefaultProject`，`@typescript-eslint/no-floating-promises` 以 **`error`** 落地，据此修掉 15 处真悬挂 Promise；新增 `test/integrity/lint-rules.test.ts` 证明规则真能触发。测试 2492 → 2494（222 文件）
+> **版本**: 2.40.0
+> **最后更新**: 2026-09-15 — T1b 遥测接收端本体：新建 `apps/telemetry/`（公开只写端点，**只存按接收日分区的维度聚合**，零新增依赖）+ 跨 app 契约测试 `apps/cli/test/integrity/telemetry-contract.test.ts` + CI 接线。**此提交后 CLI 的默认端点仍然是空的** —— 端点常量在 T1b 第 7 步才落地。测试 2494 → 2503（222 → 223 文件）
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -44,7 +44,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：2,494 测试（2492 passed + 2 skipped，0 失败）
+测试：2,503 测试（2501 passed + 2 skipped，0 失败）
 
 ---
 
@@ -81,8 +81,11 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 222 个测试文件，2494 个测试
+│   │   ├── test/               # 223 个测试文件，2503 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
+│   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
+│   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
+│   │   └── test/               # 12 个测试文件，176 个测试
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
 ├── packages/
@@ -104,8 +107,15 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（2494 个测试）
+pnpm test         # vitest run（2503 个测试）
 pnpm typecheck    # tsc --noEmit
+
+# Telemetry（接收端）
+cd apps/telemetry
+pnpm test         # vitest run（176 个测试）
+pnpm build        # tsc -p tsconfig.build.json && cp src/allowlist.json dist/
+pnpm start        # node dist/server.js（默认 127.0.0.1:9099）
+pnpm report       # node dist/report.js --since 7d [--json] [--raw]
 
 # Web
 cd apps/web
@@ -177,7 +187,7 @@ pnpm format       # Prettier
 - **自动分析引擎** — 对话后自动识别值得持久化的信息
 - 存储位置：`~/.mipham/memory/*.md`（YAML frontmatter + Markdown）
 
-### 遥测与崩溃上报（T1，CLI 侧）
+### 遥测与崩溃上报（T1 CLI 侧 + T1b 接收端）
 
 `src/telemetry/`：**默认关闭**，`/telemetry status|on|off|reset-id|endpoint` 控制，开关落
 `settings.json`（**不落 `config.yml`** —— 那会让首装向导因「文件已存在」而永不再现，且其浅合并
@@ -193,7 +203,29 @@ home 下第一段 → `<dir>`（否则 `~/proj/...` 仍泄露项目名），只�
 工具计数有**两条路径**，两处都要接并有**一致性断言测试**：主漏斗 `engine.ts` `executeTool`（入口计数）
 与旁路 `agent/sub-agent.ts`（直接 `tool.execute`，workflow 经它派生）。只接一条 ⇒ 子代理与 workflow
 的调用**一次都统计不到**。数据字典：[`docs/telemetry.md`](docs/telemetry.md)。
-**接收端（T1b）未建** —— 端点默认留空，未配置时**零网络请求**（有断言测试）。
+
+**接收端（T1b）**：`apps/telemetry/` —— `log.onemipham.com/v1/events`，**公开、只写、无读端点**
+（CLI 请求不带鉴权头，而本仓库 Apache 2.0 发布到 npm ⇒ 硬编码 token 不是秘密）。
+**只存维度聚合**：按**服务端接收日**（UTC，不可伪造）分区，客户端 `occurredAt` 只进偏移桶。
+四组关键决策：① **服务端状态码由客户端 ack 语义倒推决定** —— `transport.ts:58` 把 2xx 与 4xx
+一律 ack 删条，所以 **429 绝对禁止**（它既在 `RETRYABLE_STATUSES` 里被重试 2 次、又终归 4xx
+被静默丢弃，等于「1 次信号换 3 次请求后永久丢失」），过载一律 **503**；**且绝不发 `Retry-After`**
+（`fetch-utils.ts:54` 无上限信任它、`sleep` 持有事件循环 ⇒ `Retry-After: 3600` 就是挂住一小时）。
+② **校验前向兼容**：`400` 是销毁数据的按钮，只在「非 JSON / 非对象 / 缺 `id`·`kind`」时用；
+不认识 `schemaVersion` **不拒收**（服务端必然滞后于客户端发布），字段级问题只丢字段。
+③ **`counters` 用服务端 allowlist 而非基数上限** —— 端点是公开无鉴权的写端点，数值上限可被
+**填满**（发满垃圾 label 把真实 label 挤进 `__other__` ⇒ 毒化 T4 赖以投票的数据）；allowlist
+由脚本从 CLI 源码派生 + 完整性测试逐字比对。**不存任何原始 label**（`docs/telemetry.md`
+承诺 no free text，而 `command_calls.<用户敲的东西>` 正是自由文本）。
+④ **装机数用 HLL 不用精确集合** —— 精确集合落盘的恰恰就是「当天的安装清单」，是逐安装日志；
+`installId` 只在内存里喂 HLL。**去重单边偏置**（bloom 假阳性被 exact 集救援、exact 逐出当新）
+⇒ 误差只会虚高、**永不误删唯一事件**（T4 按**存在性**投票，误删 ⇒ 删活代码）。
+**`stackFrames` 发得出、存不下** —— 「只存聚合」下一个字节都留不下，故同批按 `schemaVersion: 2`
+从线上拿掉（**顺序不可颠倒**：服务端先上线接受 v1）。
+**诚实边界：204 不代表已持久化**（每 25 条 / 10s 才 flush，SIGKILL 丢最近一个窗口）。
+**端点常量与 CLI 默认值在 T1b 第 7 步才落地** —— 在此之前端点默认仍留空，未配置时**零网络请求**
+（有断言测试）。跨 app 契约测试 `apps/cli/test/integrity/telemetry-contract.test.ts` 是
+「契约漂移 ⇒ 每个事件 404 ⇒ 静默全丢」的**唯一机械防线**。
 
 ### 核心引擎
 
@@ -244,29 +276,36 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 ## 测试
 
-| 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                |
-| --------------- | ------- | -------- | ------------------------------------------------------------------------------------------------------- |
-| core            | 73      | 1009     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                         |
-| tools           | 20      | 339      | bash / file / exec / skill / agent / scheduling / seam                                                  |
-| daemon          | 31      | 166      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / workspace-guard / logger                     |
-| ui              | 11      | 157      | commands / input / config-wizard / loop / skill-doctor                                                  |
-| agent           | 11      | 108      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                              |
-| security        | 10      | 96       | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                      |
-| providers       | 7       | 89       | anthropic / openai-compat / registry / llm-replay / bootstrap                                           |
-| mcp             | 8       | 83       | client / transport / oauth / token-store / registry（含 2 skipped）                                     |
-| workflow        | 7       | 55       | runtime / loop / parallel / sandbox / journal / verify                                                  |
-| vajra           | 6       | 53       | context / events / service / compose / leaf（自建内核）                                                 |
-| shared          | 7       | 44       | arg-validation / deleted-cwd / sanitize / graft / update-async                                          |
-| commands        | 6       | 48       | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers                     |
-| skills          | 5       | 35       | sanitizer / marketplace / fork-executor / skill-assets                                                  |
-| config          | 5       | 30       | credential-crypto / loader-encryption / defaults / settings-json                                        |
-| plugin          | 2       | 28       | claude-plugin / plugin-manager                                                                          |
-| artifacts       | 1       | 22       | versioning                                                                                              |
-| agent-view      | 1       | 9        | agent-view-manager                                                                                      |
-| e2e             | 1       | 8        | full-pipeline                                                                                           |
-| integrity       | 2       | 11       | 引用完整性守卫（工具名 / 技能清单 / IDE 环境变量 / 工具总数 / 文档体积与滚动窗口）+ ESLint 规则生效证明 |
-| telemetry       | 8       | 104      | redact / consent / queue / payload / crash / transport / 门面 / 双路径计数一致性                        |
-| **合计**        | **222** | **2494** | **0 失败** ✅（2492 passed + 2 skipped）                                                                |
+| 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                          |
+| --------------- | ------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| core            | 73      | 1009     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                   |
+| tools           | 20      | 339      | bash / file / exec / skill / agent / scheduling / seam                                                                                                            |
+| daemon          | 31      | 166      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / workspace-guard / logger                                                                               |
+| ui              | 11      | 157      | commands / input / config-wizard / loop / skill-doctor                                                                                                            |
+| agent           | 11      | 108      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                        |
+| security        | 10      | 96       | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                |
+| providers       | 7       | 89       | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                     |
+| mcp             | 8       | 83       | client / transport / oauth / token-store / registry（含 2 skipped）                                                                                               |
+| workflow        | 7       | 55       | runtime / loop / parallel / sandbox / journal / verify                                                                                                            |
+| vajra           | 6       | 53       | context / events / service / compose / leaf（自建内核）                                                                                                           |
+| shared          | 7       | 44       | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                    |
+| commands        | 6       | 48       | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers                                                                               |
+| skills          | 5       | 35       | sanitizer / marketplace / fork-executor / skill-assets                                                                                                            |
+| config          | 5       | 30       | credential-crypto / loader-encryption / defaults / settings-json                                                                                                  |
+| plugin          | 2       | 28       | claude-plugin / plugin-manager                                                                                                                                    |
+| artifacts       | 1       | 22       | versioning                                                                                                                                                        |
+| agent-view      | 1       | 9        | agent-view-manager                                                                                                                                                |
+| e2e             | 1       | 8        | full-pipeline                                                                                                                                                     |
+| integrity       | 3       | 20       | 引用完整性守卫（工具名 / 技能清单 / IDE 环境变量 / 工具总数 / 文档体积与滚动窗口）+ ESLint 规则生效证明 + **遥测 endpoint 契约**（CLI ↔ `apps/telemetry` 逐字段） |
+| telemetry       | 8       | 104      | redact / consent / queue / payload / crash / transport / 门面 / 双路径计数一致性                                                                                  |
+| **合计**        | **223** | **2503** | **0 失败** ✅（2501 passed + 2 skipped）                                                                                                                          |
+
+> **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 176 测试，自带
+> `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。
+> **跑 `apps/cli` 全量必须 `cd apps/cli` 再跑**，`--root apps/cli` **不够** —— MCP 测试
+> spawn 子进程（`bun run test/mcp/mock-server.ts`）且 `StdioTransport.start` 不传 `cwd`，
+> 子进程继承 `process.cwd()`；从仓库根跑会 **31 个假红**（`mcp/*` 28 + `crsi-sandbox` 3），
+> 全是路径问题，别去查 MCP 代码。
 
 > **若本机 `git` 报 Xcode 许可证未接受**：`core/crsi-*` 与 `core/instructions` 中 21 个测试会 shell 调真
 > `git`，会被一并挡住而**假红**（极易误判为回归 —— 曾实际发生）。判定方法：把这些文件单独跑一遍，
@@ -330,11 +369,11 @@ GitHub Actions 9 个 job 流水线：`typecheck → lint → format → build-cl
 
 | 日期       | Commit    | 说明                                                                                    |
 | ---------- | --------- | --------------------------------------------------------------------------------------- |
+| 2026-09-15 | `84ab202` | feat(telemetry): T1b 接收端本体 —— 公开只写端点，只存维度聚合                           |
 | 2026-09-15 | `750c77a` | chore(lint): 开 ESLint type-checked —— no-floating-promises 落 error + 15 处修复（T3b） |
 | 2026-09-15 | `9f0f275` | feat(telemetry): 遥测 + 崩溃上报（CLI 侧）—— 默认关闭 / 零出网 / 脱敏截断栈（T1）       |
 | 2026-09-15 | `4433548` | ci(coverage): 覆盖率阈值门禁 —— 配置归位 + 阈值 + CI 执行路径（T3a）                    |
 | 2026-09-15 | `983ba55` | fix(init): 预置全部云端 provider —— 过滤运行时 status 恒得 1 家                         |
-| 2026-09-15 | `fdb1259` | fix: 七项修复批次 —— 活文档校正 / bash -c 绕过 deny / workflow 归一 / 修订历史滚动窗口  |
 
 > **完整记录** → [`docs/claude-md-history.md`](docs/claude-md-history.md)：最近提交全表 + v1.0.0 起全部修订。
 > 需要查「某次改动属于哪次提交 / 哪一版」时读它。
@@ -429,13 +468,14 @@ mipham-code 变更（包名/版本）
 
 | 版本   | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | 维护人     |
 | ------ | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| 2.40.0 | 2026-09-15 | **遥测接收端（T1b）本体** —— 新建 `apps/telemetry/`（公开只写端点，**只存按服务端接收日分区的维度聚合**，零运行时依赖）。四组要害：**状态码由客户端 ack 语义倒推**（2xx/4xx 都被 ack 删条 ⇒ 429 绝对禁止、过载一律 503，且**绝不发 `Retry-After`**）；**去重单边偏置**（误差只会虚高，永不误删唯一事件 —— T4 按存在性投票删代码）；**基数用服务端 allowlist 而非数值上限**（公开写端点的数值上限可被填满，恰好毒掉 T4 投票依据）；`stackFrames` 接受但**不留存**（「只存聚合」下留不下）。**构建修正**：`tsc` 只 emit `.ts`，`src/allowlist.json` 未进 `dist/` ⇒ 构建产物启动即 ENOENT，而 vitest 原地转换让套件全绿 —— 已把拷贝并入 build 并加 `test/integrity/build-completeness.test.ts` 守住。测试 2494 → 2503（222 → 223 文件）。**本条为摘要，全文见 [history.md](docs/claude-md-history.md)。**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | 技术委员会 |
 | 2.39.0 | 2026-09-15 | **开 ESLint type-checked（T3b）** —— `eslint.config.js` 接 `parserOptions.projectService` + `allowDefaultProject`，`@typescript-eslint/no-floating-promises` 钉在 **`error`**，据此修掉 15 处真悬挂 Promise。三点都属「差一点就等于没做」：① **必须落 `error`，不能落 `warn`** —— 根 lint 脚本是裸 `eslint .`、**无 `--max-warnings`**，写成 `warn` 等于零强制（本仓库第三次「有定义、无施加点」，前两次是 `rules-loader` 接线与覆盖率阈值没有 CI 执行路径）。② **`allowDefaultProject` 不是可选项** —— `apps/cli/scripts/*.ts` / `vitest.config.ts` / `vitest.setup.ts` 都不在任何 tsconfig 内，`projectService` 会对它们整份文件抛解析错，而**解析错会静默压掉该文件的全部规则**；补上白名单后立刻浮出一个此前被掩盖的真悬挂 Promise（`sync-mipham-models.ts` 的 `main()`）。③ **既有告警不是「几百条」**（那是 ROADMAP 的估量），实为 14 条 + 5 个解析错，15 处按语义分类修、不搞一刀切：`void` 标记 9 处（刻意的 fire-and-forget，其中 `mcp/client.ts` 的 `disconnect()` 是**同步**签名、物理上无法 await）、补 `.catch()` 2 处（注释承诺了「离线静默失败」却根本没有 catch）、`await` 3 处（顺序确实错了，如 `stopDaemon` 文档承诺「无论成败都清理 PID/端口」却没等 `stop()`）。**验收证明** `apps/cli/test/integrity/lint-rules.test.ts` + fixture —— **不能用「仓库 lint 绿」当证明**（fixture 故意是错的、已被 `eslint .` 忽略，规则即使配置错仓库照样全绿），该测试以 `overrideConfigFile: true` + 内联配置重跑 fixture，断言恰好只报出这条规则。顺带修掉一个 ignore 缺口：ESLint 9+ 默认 lint dotfile，运行时产物 `apps/cli/.mipham/task-runner-test/solution.ts` 一直被当成项目源码解析。零新增依赖。测试 2492 → 2494（221 → 222 文件）。 | 技术委员会 |
 | 2.38.0 | 2026-09-15 | **遥测 + 崩溃上报（T1，CLI 侧）** —— 新建 `src/telemetry/`（门面/开关/队列/白名单/发送/脱敏/崩溃）+ `/telemetry status\|on\|off\|reset-id\|endpoint` 命令；端点默认留空（未配置时**零网络请求**，有断言），接收端另立 T1b。四组关键决策：① 开关落 `settings.json` 而**非** `config.yml` —— 后者是首装向导的存在性判据（写它 = 向导从此不再出现），且其合并是**浅合并**（补一个键会打掉 `crsi:`/`features:`/`autocomplete:` 的默认值）；`settings.json` 是全仓库唯一能保留未建模键的写入器，故导出既有两个私有 helper 复用而非新写合并器。② 三级 fail-closed：`MIPHAM_TELEMETRY=off` 硬关 > 用户 opt-in > 项目**只能否决不能授予**（否则 clone 一个仓库即被它代授同意）；**故意不提供**授予同意的环境变量（同意必须是持久、刻意的动作）。③ 采集与发送**解耦** —— `process.on('exit')` 不能 await，故退出**同步**落队列（0600、上限 100 条）、**下次启动**异步发送（失败静默留队）。④ 崩溃处理器**记录后必须 exit**（装错即把崩溃变成静默挂起）且**无条件安装**（关闭遥测时也装 —— 它是防挂起的那一环）；栈**脱敏截断**：cwd → `<cwd>`、home → `~`、home 下第一段 → `<dir>`（否则 `~/proj/…` 仍泄露项目名），只发消息 sha256 前 16 位不发正文。工具计数有**两条路径且都接了**（`engine.executeTool` 主漏斗 + `sub-agent.ts` 旁路；workflow 经它派生），另配「双路径记同一个数」一致性断言 —— 只接一条则子代理与 workflow 的调用**一次都统计不到**。白名单而非整表快照（整表会把**未来**新增的计数器自动带上，而其 label 可能带 PII），键集合有测试锁死。零新增依赖。数据字典：[`docs/telemetry.md`](docs/telemetry.md)。测试 2388 → 2492（213 → 221 文件，新增 `test/telemetry/` 8 文件 104 用例）。                                                   | 技术委员会 |
 | 2.37.9 | 2026-09-15 | **覆盖率阈值门禁（T3a）**：① 配置归位 `vitest.config.ts` 并新增 `coverage.thresholds`（此前**零阈值**，配置散在 `package.json` 的脚本命令行上）② CI test job 接上 `--coverage` 执行路径（此前**不跑** ⇒ 即使有阈值也无人执行它，同 `rules-loader` 型「有定义、无调用点」）。阈值**取 CI 条件实测值**而非本地值（无 API key 时 E2E 整段跳过，各项比本地低约 0.3 点，按本地设会 CI 误红），回退一档：行/语句 54、函数 59、分支 44；棘轮只升不降。红绿三步实跑验证。测试数不变（2388 / 213 文件）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | 技术委员会 |
 | 2.37.8 | 2026-09-15 | `/init` 与 `/setup 1` 预置 provider **恒得 1 家** —— 生成器拿 `ctx.config.providers.filter(p => p.status === 'active')` 当**代码生成**来源，而 12 家里只有 `mipham` 声明顶层 status（其余全在 model 层）⇒ 结构性恒为 1。改接随包清单 `CLOUD_PROVIDERS`（10 家）；家数与 `# Location:` 声明不再硬编码/不再失真；顺带修出「带连字符 id 生成非法环境变量名」（`MINIMAX-GLOBAL_API_KEY` 无法 `export`）。测试 2378 → 2388（213 文件）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | 技术委员会 |
-| 2.37.7 | 2026-09-15 | 七项修复批次 + 新纪律「文档任何时刻正确」（改被测数量的提交须同提交内回填数字）。① 活文档事实校正（`apps/cli/README.md` 版本号与计数、根 README 工具数、PRODUCT.md 标明定格）② `bash -c 'cat x'` 绕过 `Read(x)` deny —— `-c` payload 作嵌套命令行递归解析，深度上限 5 ③ workflow 脚本读写归一 ④ `MIPHAM_DIR` 同名不同义拆为 `MIPHAM_HOME` ⑤ 修订历史成文 5 行滚动窗口 + 守卫 + 搬运，56,001 → 25,810 字符。测试 2361 → 2378。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | 技术委员会 |
 
 > **本表只留最近 5 行**（滚动窗口，见上方 `## 最近提交` 的同名约定）—— 上表列的是**摘要**，
+
 > 被挤掉的行与每条的全文本都在 history.md，逐字未删。
 >
 > **完整修订历史**（v1.0.0–v2.39.0，共 91 条）→ [`docs/claude-md-history.md`](docs/claude-md-history.md)。
