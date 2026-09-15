@@ -369,7 +369,7 @@ export class ContextManager {
     if (usage > microThreshold) {
       this.compressionPending = true
       // Schedule microcompact asynchronously (fire-and-forget)
-      Promise.resolve().then(() => {
+      void Promise.resolve().then(() => {
         this.runMicrocompact()
         this.compressionPending = false
       })

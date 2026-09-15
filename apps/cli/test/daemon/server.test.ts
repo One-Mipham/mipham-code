@@ -116,8 +116,8 @@ describe('Daemon HTTP Server', () => {
     }
   })
 
-  afterAll(() => {
-    server.stop()
+  afterAll(async () => {
+    await server.stop()
     db.close()
     cleanDb()
   })

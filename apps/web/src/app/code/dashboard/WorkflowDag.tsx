@@ -107,7 +107,7 @@ export function WorkflowDag({ entries, runId }: WorkflowDagProps) {
       }
     }
 
-    loadMermaid()
+    void loadMermaid()
   }, [entries, runId])
 
   if (error) {

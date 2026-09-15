@@ -86,7 +86,7 @@ export class SubAgent {
       // Register completion callback for hook firing
       bgRegistry.onComplete(taskId, (task) => {
         if (this.hookEngine) {
-          this.hookEngine.executeSubagentStop(
+          void this.hookEngine.executeSubagentStop(
             agentType,
             description,
             taskId,

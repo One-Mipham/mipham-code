@@ -1309,4 +1309,4 @@ Docs: https://onemipham.com/mipham-code
   }
 }
 
-main()
+void main()

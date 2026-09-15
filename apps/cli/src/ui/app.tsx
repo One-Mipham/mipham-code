@@ -208,9 +208,13 @@ export function App({
   useEffect(() => {
     if (!gitBranch) return
     let cancelled = false
-    resolveGitPr(gitBranch).then((pr) => {
-      if (!cancelled) setGitPr(pr)
-    })
+    resolveGitPr(gitBranch)
+      .then((pr) => {
+        if (!cancelled) setGitPr(pr)
+      })
+      .catch(() => {
+        /* best effort — the PR badge is decoration, never worth surfacing */
+      })
     return () => {
       cancelled = true
     }
@@ -219,11 +223,15 @@ export function App({
   // 启动后台查新版（非阻塞；离线静默失败）
   useEffect(() => {
     let cancelled = false
-    checkForUpdatesAsync().then((update) => {
-      if (!cancelled && update.available) {
-        setUpdateStatus({ state: 'available', latest: update.latest })
-      }
-    })
+    checkForUpdatesAsync()
+      .then((update) => {
+        if (!cancelled && update.available) {
+          setUpdateStatus({ state: 'available', latest: update.latest })
+        }
+      })
+      .catch(() => {
+        /* offline — silent, per the comment above */
+      })
     return () => {
       cancelled = true
     }
@@ -752,7 +760,7 @@ export function App({
       }
 
       // Turn finished — drain any /loop wakeup queued while we were running.
-      drainLoopQueueRef.current?.(turnId)
+      void drainLoopQueueRef.current?.(turnId)
     },
     [engine, syncBgAgents, config, t],
   )
@@ -796,7 +804,7 @@ export function App({
   useEffect(() => {
     if (wakeupTick === 0) return
     if (isLoading) return
-    drainLoopQueueRef.current?.(turnIdRef.current)
+    void drainLoopQueueRef.current?.(turnIdRef.current)
   }, [wakeupTick, isLoading])
 
   // ── cron poller ──

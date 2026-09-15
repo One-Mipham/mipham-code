@@ -276,7 +276,10 @@ export async function stopDaemon(force: boolean = false): Promise<void> {
 
   // Stop HTTP server (disconnects WebSocket clients)
   if (activeServer) {
-    activeServer.stop()
+    // Awaited: the PID/port cleanup below is documented to run regardless of
+    // failure, so a rejection must not skip it — but the stop must finish before
+    // this function reports the daemon as stopped.
+    await activeServer.stop().catch(() => {})
     activeServer = null
   }
 

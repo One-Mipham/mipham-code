@@ -4,8 +4,8 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.38.0
-> **最后更新**: 2026-09-15 — T1 遥测 + 崩溃上报（CLI 侧）：新增 `src/telemetry/`（默认关闭 / 三级 fail-closed 开关 / 退出同步落盘 / 启动异步发送 / 脱敏截断栈）+ `/telemetry` 命令；接收端另立 T1b。测试 2388 → 2492（221 文件）
+> **版本**: 2.39.0
+> **最后更新**: 2026-09-15 — T3b ESLint type-checked：`eslint.config.js` 接 `projectService` + `allowDefaultProject`，`@typescript-eslint/no-floating-promises` 以 **`error`** 落地，据此修掉 15 处真悬挂 Promise；新增 `test/integrity/lint-rules.test.ts` 证明规则真能触发。测试 2492 → 2494（222 文件）
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -44,7 +44,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：2,492 测试（2490 passed + 2 skipped，0 失败）
+测试：2,494 测试（2492 passed + 2 skipped，0 失败）
 
 ---
 
@@ -81,7 +81,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 221 个测试文件，2492 个测试
+│   │   ├── test/               # 222 个测试文件，2494 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -104,7 +104,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（2492 个测试）
+pnpm test         # vitest run（2494 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -244,36 +244,36 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 ## 测试
 
-| 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                            |
-| --------------- | ------- | -------- | ----------------------------------------------------------------------------------- |
-| core            | 73      | 1009     | engine / context / permission / hooks / crsi / memory / instructions / paths 等     |
-| tools           | 20      | 339      | bash / file / exec / skill / agent / scheduling / seam                              |
-| daemon          | 31      | 166      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / workspace-guard / logger |
-| ui              | 11      | 157      | commands / input / config-wizard / loop / skill-doctor                              |
-| agent           | 11      | 108      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker          |
-| security        | 10      | 96       | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                  |
-| providers       | 7       | 89       | anthropic / openai-compat / registry / llm-replay / bootstrap                       |
-| mcp             | 8       | 83       | client / transport / oauth / token-store / registry（含 2 skipped）                 |
-| workflow        | 7       | 55       | runtime / loop / parallel / sandbox / journal / verify                              |
-| vajra           | 6       | 53       | context / events / service / compose / leaf（自建内核）                             |
-| shared          | 7       | 44       | arg-validation / deleted-cwd / sanitize / graft / update-async                      |
-| commands        | 6       | 48       | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers |
-| skills          | 5       | 35       | sanitizer / marketplace / fork-executor / skill-assets                              |
-| config          | 5       | 30       | credential-crypto / loader-encryption / defaults / settings-json                    |
-| plugin          | 2       | 28       | claude-plugin / plugin-manager                                                      |
-| artifacts       | 1       | 22       | versioning                                                                          |
-| agent-view      | 1       | 9        | agent-view-manager                                                                  |
-| e2e             | 1       | 8        | full-pipeline                                                                       |
-| integrity       | 1       | 9        | 引用完整性守卫（工具名 / 技能清单 / IDE 环境变量 / 工具总数 / 文档体积与滚动窗口）  |
-| telemetry       | 8       | 104      | redact / consent / queue / payload / crash / transport / 门面 / 双路径计数一致性    |
-| **合计**        | **221** | **2492** | **0 失败** ✅（2490 passed + 2 skipped）                                            |
+| 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                |
+| --------------- | ------- | -------- | ------------------------------------------------------------------------------------------------------- |
+| core            | 73      | 1009     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                         |
+| tools           | 20      | 339      | bash / file / exec / skill / agent / scheduling / seam                                                  |
+| daemon          | 31      | 166      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / workspace-guard / logger                     |
+| ui              | 11      | 157      | commands / input / config-wizard / loop / skill-doctor                                                  |
+| agent           | 11      | 108      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                              |
+| security        | 10      | 96       | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                      |
+| providers       | 7       | 89       | anthropic / openai-compat / registry / llm-replay / bootstrap                                           |
+| mcp             | 8       | 83       | client / transport / oauth / token-store / registry（含 2 skipped）                                     |
+| workflow        | 7       | 55       | runtime / loop / parallel / sandbox / journal / verify                                                  |
+| vajra           | 6       | 53       | context / events / service / compose / leaf（自建内核）                                                 |
+| shared          | 7       | 44       | arg-validation / deleted-cwd / sanitize / graft / update-async                                          |
+| commands        | 6       | 48       | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers                     |
+| skills          | 5       | 35       | sanitizer / marketplace / fork-executor / skill-assets                                                  |
+| config          | 5       | 30       | credential-crypto / loader-encryption / defaults / settings-json                                        |
+| plugin          | 2       | 28       | claude-plugin / plugin-manager                                                                          |
+| artifacts       | 1       | 22       | versioning                                                                                              |
+| agent-view      | 1       | 9        | agent-view-manager                                                                                      |
+| e2e             | 1       | 8        | full-pipeline                                                                                           |
+| integrity       | 2       | 11       | 引用完整性守卫（工具名 / 技能清单 / IDE 环境变量 / 工具总数 / 文档体积与滚动窗口）+ ESLint 规则生效证明 |
+| telemetry       | 8       | 104      | redact / consent / queue / payload / crash / transport / 门面 / 双路径计数一致性                        |
+| **合计**        | **222** | **2494** | **0 失败** ✅（2492 passed + 2 skipped）                                                                |
 
 > **若本机 `git` 报 Xcode 许可证未接受**：`core/crsi-*` 与 `core/instructions` 中 21 个测试会 shell 调真
 > `git`，会被一并挡住而**假红**（极易误判为回归 —— 曾实际发生）。判定方法：把这些文件单独跑一遍，
 > 看报错是否为 `You have not agreed to the Xcode license agreements`；或直接 `/usr/bin/git --version`。
 > 一次解决：`sudo xcodebuild -license accept`（**保持 Xcode 为活动开发者目录**，不影响 §十六 的打包公证；
 > 换 `xcode-select -s` 到 CommandLineTools 则会连带把 `productbuild` / `xcrun notarytool` 切走，勿用）。
-> 2026-09-15 已在本机执行，全量 **2490 passed + 2 skipped / 0 失败**。
+> 2026-09-15 已在本机执行，全量 **2492 passed + 2 skipped / 0 失败**。
 
 测试框架: Vitest 5，mock: `test/__mocks__/bun.ts`
 
@@ -317,6 +317,7 @@ GitHub Actions 9 个 job 流水线：`typecheck → lint → format → build-cl
 - 工具实现必须通过 permission 层审核
 - Skills 文件后缀：standard 为 `.SKILL.md`，mipham 为 `.mipham-skill.md`
 - 代码风格：ESLint（flat config）+ Prettier，CI 强制执行
+- **ESLint 已开 type-checked**：`@typescript-eslint/no-floating-promises` 钉在 **`error`**（根 lint 脚本是裸 `eslint .`、**无 `--max-warnings`** ⇒ 写成 `warn` 等于零强制）；type-aware 规则依赖 `parserOptions.projectService`，`scripts/`、`vitest.config.ts` 等不在任何 tsconfig 里的入口须列进 `allowDefaultProject`（否则该文件抛解析错、**所有规则对它静默失效**）。仓库绿证明不了规则能触发（fixture 被 `eslint .` 忽略），生效证明在 `test/integrity/lint-rules.test.ts`
 - 提交信息遵循 Conventional Commits
 - **安全拒绝**: 拒绝编写恶意代码、恶意软件相关文件；授权安全测试（渗透测试、CTF）例外
 - **任务执行流程**: 搜索理解代码库 → 实现方案 → 验证测试 → lint/typecheck，每步有明确验证点

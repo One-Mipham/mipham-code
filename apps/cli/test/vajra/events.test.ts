@@ -76,9 +76,9 @@ describe('event mode is a compile-time contract', () => {
   it('dispatch methods reject wrong-mode events at the type level', () => {
     const ctx = new Context()
     ctx.emit('t/emit')
-    ctx.waterfall<number>('t/wf', 1)
+    void ctx.waterfall<number>('t/wf', 1)
     // @ts-expect-error — 't/emit' 不是 waterfall 模式
-    ctx.waterfall<number>('t/emit', 1)
+    void ctx.waterfall<number>('t/emit', 1)
     // @ts-expect-error — 't/wf' 不是 emit 模式
     ctx.emit('t/wf')
   })

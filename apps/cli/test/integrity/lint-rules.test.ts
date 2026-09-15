@@ -1,0 +1,51 @@
+import { describe, expect, it } from 'vitest'
+import { ESLint, type Linter } from 'eslint'
+import tsParser from '@typescript-eslint/parser'
+import tsPlugin from '@typescript-eslint/eslint-plugin'
+import path from 'node:path'
+import { existsSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+
+const HERE = path.dirname(fileURLToPath(import.meta.url))
+const REPO_ROOT = path.resolve(HERE, '../../../..')
+const FIXTURE = path.join(HERE, 'fixtures', 'floating-promise.ts')
+
+/**
+ * `eslint .` deliberately skips the fixtures directory, so a green repo-wide lint
+ * run says nothing about whether `no-floating-promises` can actually fire — it
+ * would stay green even if the rule were misconfigured. This re-lints the
+ * fixture with the same parser + rule wiring to prove the rule bites.
+ */
+describe('no-floating-promises is enforced, not merely declared', () => {
+  it('resolves the repo root from the fixture', () => {
+    // Pins REPO_ROOT: if this walks off the repo, `tsconfigRootDir` below would
+    // point above the tsconfig and the type-aware rule would go quiet.
+    expect(existsSync(path.join(REPO_ROOT, 'apps/cli/tsconfig.json'))).toBe(true)
+    expect(existsSync(FIXTURE)).toBe(true)
+  })
+
+  it('flags the floating promise in the fixture', async () => {
+    // `overrideConfigFile: true` drops the repo config, and with it the ignore
+    // entry that hides this fixture. The parser/plugin are CommonJS default
+    // exports, hence the cast to ESLint's flat-config shape.
+    const overrideConfig = [
+      {
+        files: ['**/*.ts'],
+        languageOptions: {
+          parser: tsParser,
+          parserOptions: { projectService: true, tsconfigRootDir: REPO_ROOT },
+        },
+        plugins: { '@typescript-eslint': tsPlugin },
+        rules: { '@typescript-eslint/no-floating-promises': 'error' },
+      },
+    ] as unknown as Linter.Config[]
+
+    const eslint = new ESLint({ cwd: REPO_ROOT, overrideConfigFile: true, overrideConfig })
+
+    const results = await eslint.lintFiles([FIXTURE])
+
+    expect(results.flatMap((r) => r.messages.map((m) => m.ruleId))).toEqual([
+      '@typescript-eslint/no-floating-promises',
+    ])
+  })
+})

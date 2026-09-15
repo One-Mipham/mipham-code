@@ -221,7 +221,7 @@ export class McpClient {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         try {
-          connection.transport.close()
+          await connection.transport.close()
         } catch {
           /* ok */
         }
@@ -339,7 +339,9 @@ export class McpClient {
 
     this.cancelToolsRefresh(conn)
     try {
-      conn.transport.close()
+      // disconnect() is synchronous and returns the removed names, so this close
+      // is best-effort and must not be awaited.
+      void conn.transport.close()
     } catch {
       /* best effort */
     }
