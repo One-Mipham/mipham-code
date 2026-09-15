@@ -4,8 +4,8 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.44.0
-> **最后更新**: 2026-09-15 — **T5 未接线收口**：daemon 侧接上 `setSkills`/`setRulesLoader`/`setHookEngine`/`setAgentRegistry`/`setLlm`（新增 `src/daemon/engine-capabilities.ts` 把装配收成一个点）；**先修** `engine.ts` 的回退判据 —— 生产注入的缝就是 registry 自己，按「非空即缝」判定会让 **CLI 的 provider 回退在生产恒不可达**。测试 2533 → 2547（225 → 227 文件）
+> **版本**: 2.45.0
+> **最后更新**: 2026-09-15 — **T4 死代码盘点**：knip 12 个候选走完四步协议 → **5 条真未接线 / 7 条假报**（假报全因 `knip.json` 忽略 `bin/**`，而入口 `bin/mipham.ts` 用动态 `await import()` 加载依赖）。5 条里**删 3 留 2**：`core/task-runner.ts` 与双轨 Runtime 两条自 v0.1.0 起生产零引用故删除；`vajra/leaf/plan-runner.ts`（M3 决策不接）、`providers/llm-replay.ts`（测试夹具）具名豁免。测试 2547 → 2512（227 文件不变）
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -44,7 +44,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：2,547 测试（2545 passed + 2 skipped，0 失败）
+测试：2,512 测试（2510 passed + 2 skipped，0 失败）
 
 ---
 
@@ -73,7 +73,7 @@ mipham-code/
 │   │   │   ├── vajra/          # Vajra-Hṛdaya 自建内核（context/service/events/compose/leaf）
 │   │   │   ├── providers/      # anthropic, openai-compat, registry, bootstrap
 │   │   │   ├── tools/          # 31 个工具（file/exec/agent/network/system/scheduling/artifact/computer）
-│   │   │   ├── skills/         # loader + standard/mipham 双轨运行时
+│   │   │   ├── skills/         # loader（Skills 唯一接线路径）
 │   │   │   ├── mcp/            # MCP 客户端 + Tool Search
 │   │   │   ├── agent/          # 后台 Agent、消息总线、类型定义
 │   │   │   ├── agent-view/     # Agent 会话管理 UI
@@ -81,7 +81,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 227 个测试文件，2547 个测试
+│   │   ├── test/               # 227 个测试文件，2512 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -107,7 +107,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（2547 个测试）
+pnpm test         # vitest run（2512 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~9 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -175,7 +175,7 @@ pnpm format       # Prettier
 
 **Mipham Exclusive（6）**: om-artifact, om-model-optimize, om-security, self-audit, doc-sync, save-to-wiki
 
-双轨运行时：standard 轨用于社区 Skills，mipham 轨用于 MiphamAI 专有功能。
+**「双轨运行时」已于 T4 删除**：`src/skills/{standard,mipham}/runtime.ts` 自 v0.1.0（`27609bf`）起生产零引用 —— `loader.ts` **从不加载它们**，是又一例「有定义、无施加点」。Skills 的实际生效路径只有 `loader.ts` 一条。
 
 ### Slash 命令系统（137 个）
 
@@ -295,8 +295,8 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 73      | 1011     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
-| tools           | 20      | 339      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
+| core            | 72      | 996      | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
+| tools           | 20      | 313      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 32      | 173      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                                             |
 | ui              | 11      | 157      | commands / input / config-wizard / loop / skill-doctor                                                                                                                      |
 | agent           | 11      | 108      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
@@ -313,14 +313,15 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | artifacts       | 1       | 22       | versioning                                                                                                                                                                  |
 | agent-view      | 1       | 9        | agent-view-manager                                                                                                                                                          |
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
-| integrity       | 5       | 39       | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
+| integrity       | 6       | 45       | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 120      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **227** | **2547** | **0 失败** ✅（2545 passed + 2 skipped）                                                                                                                                    |
+| **合计**        | **227** | **2512** | **0 失败** ✅（2510 passed + 2 skipped）                                                                                                                                    |
 
 > **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 179 测试，自带
 > `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。
-> `integrity` 行的 5 个守卫含本批新增的 **daemon 能力对等**（`daemon-capability-parity.test.ts`：
-> 引擎 14 个注入点全集 − 具名豁免表 = daemon 实接集，两向相等、陈旧豁免为红）。**注意别把这类
+> `integrity` 行的 6 个守卫含 **daemon 能力对等**（`daemon-capability-parity.test.ts`：14 个注入点
+> 全集 − 具名豁免表 = daemon 实接集，两向相等）与 **T4 未接线处置**（`unwired-disposition.test.ts`：
+> 删的必须不存在、留的必须仍零引用，陈旧豁免为红）。**注意别把这类
 > 说明写进上表单元格** —— 该列宽由最宽一行决定，加长一行 prettier 会重排全表 23 行（本批实测
 > +2,662 字符，正是 `CLAUDE.md` 越过 40k 的那一次）。
 > **跑 `apps/cli` 全量必须 `cd apps/cli` 再跑**，`--root apps/cli` **不够** —— MCP 测试
@@ -333,7 +334,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 > 看报错是否为 `You have not agreed to the Xcode license agreements`；或直接 `/usr/bin/git --version`。
 > 一次解决：`sudo xcodebuild -license accept`（**保持 Xcode 为活动开发者目录**，不影响 §十六 的打包公证；
 > 换 `xcode-select -s` 到 CommandLineTools 则会连带把 `productbuild` / `xcrun notarytool` 切走，勿用）。
-> 2026-09-15 已在本机执行，全量 **2545 passed + 2 skipped / 0 失败**。
+> 2026-09-15 已在本机执行，全量 **2510 passed + 2 skipped / 0 失败**。
 
 测试框架: Vitest 5，mock: `test/__mocks__/bun.ts`
 
@@ -489,15 +490,15 @@ mipham-code 变更（包名/版本）
 
 | 版本   | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | 维护人     |
 | ------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| 2.45.0 | 2026-09-15 | **T4 · 死代码 / 价值盘点** —— 标准 DevOps 工具链**回答不了「这文件活着吗」**（`rules-loader` 事故：lint / typecheck / 安全审计全绿、knip 也没报，靠覆盖率实测才发现）。四步协议（knip → 覆盖率 ∩ → `git log -S` 考古 → 遥测投票）跑完：**12 个候选 → 5 条真未接线 / 7 条假报**。**假报根因在配置**：`knip.json` 的 `ignore` 含 `bin/**`，而 `bin/mipham.ts` 是真实入口且用**动态 `await import()`** 加载依赖 ⇒ 只经它可达的文件一律误报。三条要害：① `git log -S` 用**函数**名（不是文件名）—— 本例 5 条零命中 = 「从没接过线」，故无需兼容层；② 第 4 步遥测投票**不适用本批**（它们是 command / tool 之外的**子系统**，为「证明没人用」新埋点 = 先污染口径再读它）⇒ 改用 knip 清单作存在性证据；③ **豁免写进守卫、不写进 `ignore`** —— 它们**确实是**未使用文件，那是真阳性，按掉等于放弃信号（宽 `ignore` 已害过一次，就是上面那 7 条）。**落点** `test/integrity/unwired-disposition.test.ts`（删的必须不存在 + 留的必须仍零引用 + 零引用集合恰等于保留表 + 7 条假报经 `bin/` 可达），红绿实跑（复活被删文件 ⇒ 2 红、接上 `plan-runner` ⇒ 2 红）。测试 2547 → 2512（227 文件不变；`core` 996、`tools` 313、`integrity` 45）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | 技术委员会 |
 | 2.44.0 | 2026-09-15 | **T5 · 未接线收口（daemon ↔ CLI 能力对等）** —— 「两条渲染路径只接一条」的**第二次发生**（第一次是 `rules-loader`）。**锚点更正**：原文 `server.ts:177` 是空行，真装配块在 `:237` 的 `getOrCreateEngine`；**「constitution 一个都没接」是误报、已删**（`align:` 全仓库无人声明，真正执行原则的那条链一直活着）。**缺口不同质**：`setSkills` 缺是**必错**（工具挂进注册表却没 loader ⇒ 每次调用都返回错误）；`setRulesLoader`/`setHookEngine`/`setAgentRegistry` 缺是**静默退化**；`setLlm` 是**反例** —— 不接反而对，故**顺序不可颠倒**：先修语义（生产注入的缝正是 registry 自己，按「非空即缝」判定 ⇒ **CLI 的 provider 回退在生产恒不可达、只活在测试里**，旧测试不注入缝、走的正是生产已不走的那条路）。**落点**：新增 `daemon/engine-capabilities.ts`（`server.ts` 两行，调用在 `engineCache.set` 之前）+ 源码对等守卫（14 个注入点 − 9 条具名豁免，两向相等、陈旧豁免为红、每条带源码锚点）+ 行为测试（真跑 `process()`：Skill 真拉起、规则真注入、hooks 真注册、agents 真解析、回退仍活）。三条豁免的诚实理由：`setCrossSessionConfig` **不是「没调用」**（`process()` 每次都跑 `pollCrossSessionInbox()`）、`setCrsiConfig` 全仓库零调用点、`setInferenceHookConfig` 是**数据出境面**、已立岔路口 **#4**。**红绿实跑**：判据改回 `if (this.llm)` ⇒ 红；抽掉三条接线 ⇒ 5 红；删 `wireDaemonEngine(` ⇒ 红。**文档单位更正**：「7 组」复现不出来，改按文件数。**登记不修**：settings.json 的 allow/deny 到不了 daemon、工具上下文 cwd 是 daemon 根。**有意排除**：daemon 无系统提示（另立条目）。测试 2533 → 2547（225 → 227 文件）。**本条为摘要，全文见 [history.md](docs/claude-md-history.md)。**                                                                                  | 技术委员会 |
 | 2.43.0 | 2026-09-15 | **T3c · 变异测试落地（首批 6 文件，基线 8.02%）** —— 覆盖率只证明「行被执行过」，不证明「测得住」。新增 `apps/cli/stryker.config.json`（Stryker 10 + vitest-runner，devDependency，Apache-2.0）+ `mutate` 脚本 + 范围守卫 `test/integrity/mutation-wiring.test.ts`；`.stryker-tmp/`、`reports/` 挡在 git 与 ESLint 之外。**基线实跑取得（不估）**：1621 变异体 / 130 killed / 1311 survived / 180 no-coverage = **8.02%**，6 文件，8m55s，退出码 0。范围 = `src/core/crsi-*` + `src/core/permission*`，**`crsi-sandbox.ts` 延后第二批**（其 `runTests()` 在临时 worktree 里 `execSync('pnpm test')` 跑整套套件 ⇒ 每个踩到它的变异体都要付一次全量，足以独自吃光预算）—— 这是对新事实的范围收窄，理由写进 ROADMAP 不静默改。五个非直觉机制：① **静态变异体的死活取决于整份 `mutate` 清单**、不是它自己那个文件（模块级变异体无 `coveredBy` ⇒ 跑本次相关集全部测试；实测单跑 41.18% vs 批内 35.29%）⇒ 趋势比较必须固定同一份配置；② `vitest.related` 默认 true 是 9 分钟而非几小时的**唯一**原因；③ 沙箱**深一层** ⇒ 凡数 `..` 定位仓库根的地方静默指错（改锚 `pnpm-workspace.yaml`）；④ `process.chdir()` 在 vitest-runner 里直接抛（`pool: 'threads'` 写死）；⑤ 沙箱**只在成功后才清**，残留副本（实测 3 目录 / 269 MB）让 ESLint 凭空报 **1809 个 error**—— ESLint 不读 `.gitignore`，Prettier 读。验收不能只写配置：临时 `break: 99` 实跑 ⇒ exit 1、`mutate` 指向不存在路径 ⇒ 守卫红。不设 `break`（同 T3a 先出基线）、不进 CI 每次 push、不修存活变异体。测试 2525 → 2533（224 → 225 文件）。**本条为摘要，全文见 [history.md](docs/claude-md-history.md)。**                                                                                                                            | 技术委员会 |
 | 2.42.0 | 2026-09-15 | **T1b 接收端上线 + 客户端 `schemaVersion: 2` 撤帧** —— ① 端点 `log.onemipham.com` 在主机 2 起服务；验收不取「脚本说成功」，三条独立证据：`deploy.sh --check` = no drift、journald 的 `key=e2bebea5` 与 `keys init` 指纹一致、真 CLI 端到端两跑（2 事件 / 2 会话 / 2 安装，unknown 与 discarded 全 0）。② `stackFrames` 不再上网 —— 服务端从来不存（「只存聚合」下帧串无处安放），发了只白送 ~3 KB/次与一个隐私面；帧仍**脱敏**但只留本进程内存（不落盘、不上网），`frameCount` 保留。**顺序不可颠倒**（服务端必须先接受 v1），而 v1 已发布收不回来 ⇒ 汇聚路径长期保留，契约测试改**双向钉**（本批产物 `=== 0`、手写 v1 体 `=== 2`：只测前者 ⇒ 把脱敏整块删掉也能绿，只测后者 ⇒ 新契约无人守）。代价已认下并写进公开文档：**崩溃通道永远不能告诉你崩在哪一行**。③ **如实记录的偏离（§二 例外申请范畴）**：端点实际 **TLS 1.2 + 1.3** —— 主机 2 的 nginx 1.24.0 上，握手版本由该 443 地址的**默认 server** 决定（版本在 ClientHello 时定死，**早于** nginx 的 SNI 回调），官方 wontfix 到 **1.29.2**；故 vhost 里写 `TLSv1.3;` 无效，改为如实声明（行为一字不变、配置不再说谎，且将来升到 ≥1.29.2 时行为不会**突然**改变）。**教训：本机验过 ≠ 验的是生产那个对象** —— 本机 1.31.5 已带该修复、主机 1.24.0 不带；我一度据此宣布假设被证伪，是错的，已更正到 vhost 注释、`deploy/README.md` 与计划文件。④ 文档回填 `docs/telemetry.md`（撤帧 + 新增「接收端保留什么」）/ `apps/telemetry/README.md` / `ROADMAP.md`（`T1b` 标 `[x]` + **写死与 `T4` 的分工**：遥测只对 command / tool 形态投票，`task-runner` / 双轨 Runtime / `plan-runner` 改由 knip 未接线清单判定，**不得为此新增计数器**）。测试 2523 → 2525（224 文件）。**本条为摘要，全文见 [history.md](docs/claude-md-history.md)。** |
 | 2.41.0 | 2026-09-15 | **`command_name` 基数无界修复（T1b 前置）** —— `command_calls` 的 label 直接来自用户输入（`parseSlashCommand` 返回 `parts[0]?.toLowerCase()`），而计数点 `app.tsx` 刻意放在注册表查询**之前**（`/switch` `/pick` `/model-picker` `/exit` `/quit` `/focus` 六个都提前 return）。两者相乘 ⇒ 敲 `/foobar` 当场新造一条序列，且**基数没有任何上界**：`payload.ts` 的 `MAX_LABEL_LENGTH` 只 `slice` **值**的长度、不限制键的个数。该文件同处的注释「Label cardinality is bounded by construction」对 `tool_name` 成立（工具集由注册表声明），对 `command_name` 是**事实错误**，已订正。修法：`commandLabelFor()` 认识就记它自己、不认识归 `/unknown`；`getCommandLabelNames()` （注册表 ∪ 预注册表别名 ∪ `/unknown`）成为服务端 allowlist 的派生源，allowlist 随之重新生成（138 → 140 条）。两处反直觉：`/model-picker` 是**用户可敲但不在注册表**里的别名，朴素的 `getCommand(name) === undefined` 会把它误归桶；收敛桶自己**也必须**进 allowlist，否则 `/unknown` 会被服务端再折叠进 `__other__`，等于白收敛（T4 正是读这张表投票）。`PRE_REGISTRY_COMMANDS` 与 `app.tsx` 是两处必须同步的清单，靠约定维护正是本仓库反复吃过的「有定义、无施加点」—— 故加守卫直接扫 `app.tsx` 的 `command === '/x'` 字面量，断言每个都在标签集里（已用「加一个假命令 ⇒ 必须红」验证有施加点）。零新增依赖。测试 2503 → 2506（223 文件不变）。                                                                                                                                                                                                                                                                                                                                                                  | 技术委员会 |
-| 2.40.0 | 2026-09-15 | **遥测接收端（T1b）本体** —— 新建 `apps/telemetry/`（公开只写端点，**只存按服务端接收日分区的维度聚合**，零运行时依赖）。四组要害：**状态码由客户端 ack 语义倒推**（2xx/4xx 都被 ack 删条 ⇒ 429 绝对禁止、过载一律 503，且**绝不发 `Retry-After`**）；**去重单边偏置**（误差只会虚高，永不误删唯一事件 —— T4 按存在性投票删代码）；**基数用服务端 allowlist 而非数值上限**（公开写端点的数值上限可被填满，恰好毒掉 T4 投票依据）；`stackFrames` 接受但**不留存**（「只存聚合」下留不下）。**构建修正**：`tsc` 只 emit `.ts`，`src/allowlist.json` 未进 `dist/` ⇒ 构建产物启动即 ENOENT，而 vitest 原地转换让套件全绿 —— 已把拷贝并入 build 并加 `test/integrity/build-completeness.test.ts` 守住。测试 2494 → 2503（222 → 223 文件）。**本条为摘要，全文见 [history.md](docs/claude-md-history.md)。**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | 技术委员会 |
 
 > **本表只留最近 5 行**（滚动窗口，见上方 `## 最近提交` 的同名约定）—— 上表列的是**摘要**，
 
 > 被挤掉的行与每条的全文本都在 history.md，逐字未删。
 >
-> **完整修订历史**（v1.0.0–v2.44.0，共 96 条）→ [`docs/claude-md-history.md`](docs/claude-md-history.md)。
+> **完整修订历史**（v1.0.0–v2.45.0，共 97 条）→ [`docs/claude-md-history.md`](docs/claude-md-history.md)。
 > 需要查「某条规则是哪一版引入的、当时为什么改、谁审的」时读它。
