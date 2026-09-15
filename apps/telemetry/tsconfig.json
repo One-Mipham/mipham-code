@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Overrides the base's `bundler` resolution on purpose. This app is not
+    // bundled — `tsc` emits it and plain `node` runs the output — so specifiers
+    // must survive compilation as Node ESM expects them (explicit `.js`).
+    // `bundler` would let extensionless imports through typecheck and then fail
+    // at runtime, which is the one failure mode a typecheck is supposed to catch.
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["src", "test"]
+}

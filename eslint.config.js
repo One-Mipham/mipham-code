@@ -41,6 +41,7 @@ export default [
             'apps/cli/scripts/*.ts',
             'apps/cli/vitest.config.ts',
             'apps/cli/vitest.setup.ts',
+            'apps/telemetry/vitest.config.ts',
           ],
         },
         tsconfigRootDir: __dirname,

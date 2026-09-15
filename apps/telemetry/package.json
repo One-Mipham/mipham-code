@@ -1,0 +1,24 @@
+{
+  "name": "@mipham/telemetry",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mipham Code telemetry collector — a public, write-only endpoint for CLI session and crash events",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && cp src/allowlist.json dist/allowlist.json",
+    "start": "node dist/server.js",
+    "report": "node dist/report.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.19",
+    "@vitest/coverage-v8": "^5.0.0",
+    "vitest": "^5.0.0"
+  }
+}
