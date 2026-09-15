@@ -9,6 +9,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { spawnSync } from 'node:child_process'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { loadAllowlist } from '../src/allowlist.js'
 import { dayKey } from '../src/aggregate.js'
@@ -35,6 +36,16 @@ afterEach(() => {
   vi.useRealTimers()
   dirs.length = 0
 })
+
+/**
+ * A pid that is not running. `spawnSync` reaps the child before returning, so
+ * by the time it hands back `.pid` the kernel has already released it.
+ */
+function deadPid(): number {
+  const child = spawnSync(process.execPath, ['-e', ''])
+  if (child.pid === undefined) throw new Error('spawnSync returned no pid')
+  return child.pid
+}
 
 function event(id = 'e1', overrides: Record<string, unknown> = {}): NormalizedEvent {
   const result = validateEvent(sessionEvent(overrides, { id }), ALLOWLIST)
@@ -221,6 +232,34 @@ describe('the instance lock', () => {
     lock.acquire()
     lock.release()
     lock.release()
+  })
+
+  // The three cases below are the whole point of reading the pid back. Without
+  // them the lock leaks on any start failure — `main()` acquires it and then
+  // runs everything that can throw under a catch that exits without releasing —
+  // and the next start dies with LockHeldError forever, which under
+  // `Restart=on-failure` is an unrecoverable restart loop.
+  it('reclaims a lock whose holder is gone, and claims it for this process', () => {
+    const lock = new InstanceLock(tempDir())
+    writeFileSync(lock.path, String(deadPid()))
+
+    expect(() => lock.acquire()).not.toThrow()
+    // Rewritten, not merely unlinked: the next reader must see a live holder.
+    expect(readFileSync(lock.path, 'utf-8')).toBe(String(process.pid))
+    lock.release()
+  })
+
+  it('reclaims a lock file left empty by a crash between create and write', () => {
+    const lock = new InstanceLock(tempDir())
+    writeFileSync(lock.path, '')
+    expect(() => lock.acquire()).not.toThrow()
+    lock.release()
+  })
+
+  it('refuses a lock file whose contents it did not write', () => {
+    const lock = new InstanceLock(tempDir())
+    writeFileSync(lock.path, 'not-a-pid')
+    expect(() => lock.acquire()).toThrow(LockHeldError)
   })
 })
 

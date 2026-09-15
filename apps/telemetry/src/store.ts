@@ -47,13 +47,35 @@ export class LockHeldError extends Error {
  * An exclusive instance lock, held for the process lifetime.
  *
  * `open` with `wx` is atomic at the kernel level, which is the only way to
- * decide this without a race. A stale lock from a killed process would block
- * every future start, so the alternative — writing a pid and checking it — buys
- * a liveness check at the cost of a much harder correctness argument. The unit
- * file uses `Restart=on-failure` with `KillSignal=SIGTERM`, and the release
- * path runs on both SIGTERM and normal exit; SIGKILL is the residual, and it
- * requires manual cleanup. That is the honest trade, recorded rather than
- * hidden: a refused start is loud and safe, a clobbered day is silent and not.
+ * decide "who is first" without a race. On top of that the file carries the
+ * holder's pid, and a lock whose holder is gone is reclaimed.
+ *
+ * **Why the pid is read back.** An earlier version wrote the pid but never
+ * looked at it, on the argument that only SIGKILL could leak a lock and that a
+ * refused start is loud and safe while a clobbered day is silent and unsafe.
+ * The first half of that is wrong, and `main()` shows why: `createCollector`
+ * acquires the lock, and *then* everything that can fail — `listen` (EADDRINUSE
+ * on a port squatter or a config typo), decrypting a day that will not open —
+ * runs inside a `try` whose catch logs and exits. None of those paths call
+ * `shutdown()`, so **any start failure leaks the lock, not just SIGKILL**.
+ * Reproduced: a start that fails on EADDRINUSE leaves the file behind, and the
+ * next start dies with `LockHeldError` forever. Paired with the unit's
+ * `Restart=on-failure` that is an unrecoverable restart loop — and the unit
+ * also sets `MemoryMax`, whose OOM path is itself a SIGKILL, so the two
+ * interact rather than being independent.
+ *
+ * The correctness argument the old comment worried about is not that hard, and
+ * the parts that are subtle all resolve *towards* refusing to start:
+ *   · a live pid ⇒ someone holds it, refuse. No signal is ever sent.
+ *   · `EPERM` ⇒ the process exists under another uid ⇒ alive, refuse.
+ *   · pid reuse ⇒ `kill` succeeds on an unrelated process, so we refuse. The
+ *     cost is a stale lock that needs manual cleanup, i.e. the old behaviour,
+ *     reached only in the rare case rather than the common one.
+ *   · content we did not write (not empty, not decimal) ⇒ refuse. The only
+ *     writer is `#tryAcquire`, so anything else was put there by hand.
+ * A clobbered day is still impossible: reclaiming happens only after `kill`
+ * has said the holder is gone, and the subsequent `wx` open is still atomic
+ * against every other process doing the same thing.
  */
 export class InstanceLock {
   #fd: number | undefined
@@ -65,12 +87,63 @@ export class InstanceLock {
 
   acquire(): void {
     mkdirSync(dirname(this.path), { recursive: true })
+    if (this.#tryAcquire()) return
+    if (!this.#reclaimIfDead()) throw new LockHeldError(this.path)
+    // One retry. It can only fail if another process claimed the lock in the
+    // gap between the unlink and this open, which is a genuine second instance.
+    if (!this.#tryAcquire()) throw new LockHeldError(this.path)
+  }
+
+  /** Atomic create-and-claim. False means someone else holds it. */
+  #tryAcquire(): boolean {
     try {
       this.#fd = openSync(this.path, 'wx', 0o600)
-      writeSync(this.#fd, String(process.pid))
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new LockHeldError(this.path)
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false
       throw error
+    }
+    writeSync(this.#fd, String(process.pid))
+    return true
+  }
+
+  /**
+   * Delete the lock file if its holder is gone. True means "try again".
+   *
+   * An empty file is treated as reclaimable: `#tryAcquire` creates the file and
+   * writes the pid in the next statement, so empty content means the process
+   * died in that window. It is a two-syscall window, but the alternative —
+   * refusing forever over a file that says nothing — is the exact
+   * unrecoverable-startup failure this method exists to remove.
+   */
+  #reclaimIfDead(): boolean {
+    let raw: string
+    try {
+      raw = readFileSync(this.path, 'utf-8').trim()
+    } catch {
+      // It vanished between the failed open and now. Let the retry decide.
+      return true
+    }
+    if (raw !== '') {
+      if (!/^\d+$/.test(raw)) return false
+      if (this.#isAlive(Number(raw))) return false
+    }
+    try {
+      unlinkSync(this.path)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /** Signal 0 sends nothing; it only asks the kernel whether the pid exists. */
+  #isAlive(pid: number): boolean {
+    try {
+      process.kill(pid, 0)
+      return true
+    } catch (error) {
+      // ESRCH is the only answer that means "gone". EPERM means it is there
+      // but owned by another user, which is still alive.
+      return (error as NodeJS.ErrnoException).code !== 'ESRCH'
     }
   }
 

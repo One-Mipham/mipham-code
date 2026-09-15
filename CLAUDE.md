@@ -85,7 +85,7 @@ mipham-code/
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
-│   │   └── test/               # 12 个测试文件，176 个测试
+│   │   └── test/               # 12 个测试文件，179 个测试
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
 ├── packages/
@@ -112,7 +112,7 @@ pnpm typecheck    # tsc --noEmit
 
 # Telemetry（接收端）
 cd apps/telemetry
-pnpm test         # vitest run（176 个测试）
+pnpm test         # vitest run（179 个测试）
 pnpm build        # tsc -p tsconfig.build.json && cp src/allowlist.json dist/
 pnpm start        # node dist/server.js（默认 127.0.0.1:9099）
 pnpm report       # node dist/report.js --since 7d [--json] [--raw]
@@ -300,7 +300,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | telemetry       | 8       | 104      | redact / consent / queue / payload / crash / transport / 门面 / 双路径计数一致性                                                                                  |
 | **合计**        | **223** | **2503** | **0 失败** ✅（2501 passed + 2 skipped）                                                                                                                          |
 
-> **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 176 测试，自带
+> **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 179 测试，自带
 > `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。
 > **跑 `apps/cli` 全量必须 `cd apps/cli` 再跑**，`--root apps/cli` **不够** —— MCP 测试
 > spawn 子进程（`bun run test/mcp/mock-server.ts`）且 `StdioTransport.start` 不传 `cwd`，
