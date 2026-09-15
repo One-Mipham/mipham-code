@@ -44,7 +44,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：2,360 测试（2358 passed + 2 skipped，0 失败）
+测试：2,361 测试（2359 passed + 2 skipped，0 失败）
 
 ---
 
@@ -81,7 +81,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 212 个测试文件，2360 个测试
+│   │   ├── test/               # 212 个测试文件，2361 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -104,7 +104,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（2360 个测试）
+pnpm test         # vitest run（2361 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -246,8 +246,8 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | artifacts       | 1       | 22       | versioning                                                                          |
 | agent-view      | 1       | 9        | agent-view-manager                                                                  |
 | e2e             | 1       | 8        | full-pipeline                                                                       |
-| integrity       | 1       | 6        | 引用完整性守卫（工具名 / 技能清单 / IDE 环境变量契约）                              |
-| **合计**        | **212** | **2360** | **0 失败** ✅（2358 passed + 2 skipped）                                            |
+| integrity       | 1       | 7        | 引用完整性守卫（工具名 / 技能清单 / IDE 环境变量 / 工具总数）                       |
+| **合计**        | **212** | **2361** | **0 失败** ✅（2359 passed + 2 skipped）                                            |
 
 > **若本机 `git` 报 Xcode 许可证未接受**：`core/crsi-*` 与 `core/instructions` 中 21 个测试会 shell 调真
 > `git`，会被一并挡住而**假红**（极易误判为回归 —— 曾实际发生）。判定方法：把这些文件单独跑一遍，
@@ -310,11 +310,11 @@ GitHub Actions 9 个 job 流水线：`typecheck → lint → format → build-cl
 
 | 日期       | Commit    | 说明                                                                         |
 | ---------- | --------- | ---------------------------------------------------------------------------- |
+| 2026-09-15 | `7740eff` | fix(docs): 工具数声明对齐注册表 31 + 新增「工具总数」守卫                    |
 | 2026-09-15 | `300be1c` | fix(security): 引用完整性四组收口 —— 路径归一 / 权限持久化 / 幻影引用 / 守卫 |
 | 2026-09-15 | `9f2a3ad` | fix(security): /clear 与 /resume 重置文件读取追踪                            |
 | 2026-09-15 | `bed9b89` | fix(mcp): tools/list_changed 通知合并刷新，去掉紧循环放大                    |
 | 2026-09-15 | `5b1c430` | fix(security): Read 规则覆盖 fmt/column 等读者命令                           |
-| 2026-09-14 | `36c9fe3` | fix(ci): jetbrains 上架失败不再吞掉整个 GitHub Release                       |
 
 > **完整记录** → [`docs/claude-md-history.md`](docs/claude-md-history.md)：最近提交全表 + v1.0.0 起全部修订。
 > 需要查「某次改动属于哪次提交 / 哪一版」时读它。
