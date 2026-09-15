@@ -49,6 +49,8 @@ import { HookEngine } from './core/hooks'
 import { loadHookConfigs } from './core/hooks-config'
 import { ArtifactServer } from './artifacts/server'
 import { getMetrics } from './core/metrics'
+import { initTelemetry, enableTelemetryNow } from './telemetry/index'
+import { wasPrompted, markPrompted, isInteractive, setTelemetryEnabled } from './telemetry/consent'
 import { getWorkspaceTrust } from './core/workspace-trust'
 import { ARTIFACTS_DIR, ARTIFACT_PORT, MIPHAM_DIR } from './shared/constants'
 import { AgentViewManager } from './agent-view/agent-view-manager'
@@ -130,6 +132,68 @@ async function checkWorkspaceTrust(): Promise<void> {
       rl.close()
       process.exit(1)
     }
+  } finally {
+    rl.close()
+  }
+}
+
+/**
+ * One-time telemetry opt-in.
+ *
+ * Asked once per machine and never again — including when the answer is "no",
+ * which is why the marker (`telemetry.promptedAt`) is separate from the consent
+ * itself: otherwise "asked and declined" and "never asked" would look identical
+ * and the question would reappear on every launch.
+ *
+ * Two ways this deliberately does *not* ask:
+ *   - when a marker already exists;
+ *   - when there is no TTY to answer on (piped stdin, daemon, CI) — a prompt
+ *     there would block forever on input that cannot arrive.
+ *
+ * In the second case the marker is left **unwritten**: burning it on a headless
+ * run would mean a user whose first invocation was `mipham -p "…"` is never
+ * offered the choice at all. Staying off by default costs nothing, and a later
+ * interactive run still asks.
+ */
+async function promptForTelemetryConsent(): Promise<void> {
+  if (wasPrompted()) return
+  if (!isInteractive()) return
+
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stderr, // stderr, so it cannot corrupt stdout rendering
+  })
+
+  try {
+    process.stderr.write('\n')
+    process.stderr.write('  Telemetry — optional, and off unless you say yes.\n')
+    process.stderr.write('\n')
+    process.stderr.write('  If enabled, Mipham Code sends counts of which commands and\n')
+    process.stderr.write('  tools you use, plus the app version, runtime and platform.\n')
+    process.stderr.write('  It does not send your code, prompts, file contents, file\n')
+    process.stderr.write('  paths, project names or API keys.\n')
+    process.stderr.write('\n')
+    process.stderr.write('  Change it any time with /telemetry on or /telemetry off.\n')
+    process.stderr.write('\n')
+
+    const answer = await new Promise<string>((resolve) => {
+      rl.question('  Enable anonymous usage statistics? [y/N]: ', (a) =>
+        resolve(a.trim().toLowerCase()),
+      )
+    })
+
+    const accepted = answer === 'y' || answer === 'yes'
+    setTelemetryEnabled(accepted)
+    markPrompted()
+    if (accepted) {
+      // Take effect in this session, not the next one.
+      enableTelemetryNow()
+      process.stderr.write('  ✓ Telemetry enabled. Thank you.\n\n')
+    } else {
+      process.stderr.write('  ✓ Telemetry stays off.\n\n')
+    }
+  } catch {
+    // Never let a question about diagnostics stop the CLI from starting.
   } finally {
     rl.close()
   }
@@ -238,6 +302,11 @@ export async function runApp(options: RunOptions): Promise<void> {
   // Metrics: count CLI invocation + active session
   getMetrics().cliInvocations.inc()
   getMetrics().activeSessions.inc()
+
+  // Telemetry: resolve consent, install crash handlers, register the exit
+  // flush, and drain anything a previous session left queued. Does nothing
+  // observable when telemetry is off (the shipped default).
+  initTelemetry()
 
   // ── Workspace Trust Check ──
   await checkWorkspaceTrust()
@@ -716,6 +785,11 @@ export async function runApp(options: RunOptions): Promise<void> {
   const hasUserConfig = existsSync(join(homedir(), '.mipham', 'config.yml'))
   const hasProjectConfig = existsSync(join(process.cwd(), '.mipham', 'config.yml'))
   const needsSetup = !hasUserConfig && !hasProjectConfig
+
+  // Only ask when the first-run wizard is *not* about to take over the
+  // terminal — two prompts queued at once is a worse first impression than a
+  // question asked on the second launch.
+  if (!needsSetup) await promptForTelemetryConsent()
 
   const { waitUntilExit } = render(
     React.createElement(I18nProvider, {

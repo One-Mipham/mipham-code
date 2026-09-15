@@ -57,6 +57,14 @@ import { NPM_UPDATE_COMMAND, PACKAGE_VERSION, COAUTHOR_TRAILER } from '../shared
 import { getPreference } from '../config/preferences'
 import { loadCrossSessionConfig, tryRestoreFromBackup } from '../config/loader'
 import { getMemoryManager } from '../core/memory/memory-loader'
+import {
+  resolveTelemetry,
+  readTelemetrySettings,
+  setTelemetryEnabled,
+  setTelemetryEndpoint,
+  resetInstallId,
+} from '../telemetry/consent'
+import { getTelemetryConsent, enableTelemetryNow } from '../telemetry/index'
 import { stripIndent } from './strip-indent.js'
 import { createT } from '../i18n-core/t'
 import type { TranslationMap } from '../i18n-core/types'
@@ -3810,6 +3818,57 @@ const hooksCmd: CommandHandler = async (ctx) => {
   return { content: lines.join('\n') }
 }
 
+const telemetryCmd: CommandHandler = async (ctx, args) => {
+  const sub = (args[0] ?? 'status').toLowerCase()
+
+  if (sub === 'on' || sub === 'off') {
+    const enable = sub === 'on'
+    setTelemetryEnabled(enable)
+    if (enable) enableTelemetryNow()
+    return {
+      content: enable
+        ? '✓ Telemetry enabled. Anonymous usage counts will be sent to the configured endpoint.'
+        : '✓ Telemetry disabled. Nothing is collected and no queue file is written.',
+    }
+  }
+
+  if (sub === 'reset-id') {
+    const id = resetInstallId()
+    return { content: `✓ New anonymous install id: ${id}` }
+  }
+
+  if (sub === 'endpoint') {
+    const url = args[1]
+    if (!url) return { content: 'Usage: /telemetry endpoint <url>' }
+    setTelemetryEndpoint(url)
+    return { content: `✓ Endpoint set to ${url}` }
+  }
+
+  if (sub !== 'status') {
+    return {
+      content: 'Usage: /telemetry [status|on|off|reset-id|endpoint <url>]',
+    }
+  }
+
+  // ── status ──
+  const consent = getTelemetryConsent() ?? resolveTelemetry()
+  const settings = readTelemetrySettings('user')
+  const lines = [
+    '## 📡 Telemetry',
+    '',
+    `| Field | Value |`,
+    `| --- | --- |`,
+    `| State | ${consent.enabled ? '🟢 enabled' : '⚪ disabled'} |`,
+    `| Decided by | \`${consent.source}\` |`,
+    `| Endpoint | ${consent.endpoint || '_(unset — nothing is ever sent)_'} |`,
+    `| Install id | ${settings.installId ?? '_(not yet generated)_'} |`,
+    `| Prompted | ${settings.promptedAt ?? '_(never)_'} |`,
+    '',
+    'Full data dictionary: `docs/telemetry.md`',
+  ]
+  return { content: lines.join('\n') }
+}
+
 const hooksHealthCmd: CommandHandler = (ctx) => {
   const hookEngine = ctx.engine.getHookEngine?.()
   if (!hookEngine) {
@@ -5310,6 +5369,7 @@ const commandsListCmd: CommandHandler = () => {
     '/keys audit': 'Account',
     '/keys view': 'Account',
     '/feedback': 'Account',
+    '/telemetry': 'Account',
     '/agents': 'Agents',
     '/bg': 'Agents',
     '/fork': 'Agents',
@@ -5531,6 +5591,7 @@ registry.set('/cd', cdCmd)
 registry.set('/hooks', hooksCmd)
 registry.set('/hooks health', hooksHealthCmd)
 registry.set('/hooks enable', hooksEnableCmd)
+registry.set('/telemetry', telemetryCmd)
 registry.set('/batch', batchCmd)
 
 // ═══════════════════════════════════════════════════════════════
@@ -5687,6 +5748,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/hooks health': 'Check hook health — see failures, disabled hooks, recovery status',
   '/hooks enable': 'Manually re-enable a hook that was auto-disabled after repeated failures',
   '/batch': 'Apply changes across multiple files',
+  '/telemetry': 'Show or change anonymous usage-reporting settings',
 }
 
 export function getCommandList(): CommandEntry[] {

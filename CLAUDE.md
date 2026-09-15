@@ -4,8 +4,8 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.37.9
-> **最后更新**: 2026-09-15 — 覆盖率阈值门禁（T3a）：配置归位 `vitest.config.ts` + 阈值（行/语句 54、函数 59、分支 44，取 CI 条件实测值回退一档）+ CI test job 接上 `--coverage` 执行路径；红绿三步验证通过；测试数不变（2388）
+> **版本**: 2.38.0
+> **最后更新**: 2026-09-15 — T1 遥测 + 崩溃上报（CLI 侧）：新增 `src/telemetry/`（默认关闭 / 三级 fail-closed 开关 / 退出同步落盘 / 启动异步发送 / 脱敏截断栈）+ `/telemetry` 命令；接收端另立 T1b。测试 2388 → 2492（221 文件）
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -44,7 +44,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：2,388 测试（2386 passed + 2 skipped，0 失败）
+测试：2,492 测试（2490 passed + 2 skipped，0 失败）
 
 ---
 
@@ -81,7 +81,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 213 个测试文件，2388 个测试
+│   │   ├── test/               # 221 个测试文件，2492 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -104,7 +104,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（2388 个测试）
+pnpm test         # vitest run（2492 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -166,7 +166,7 @@ pnpm format       # Prettier
 
 双轨运行时：standard 轨用于社区 Skills，mipham 轨用于 MiphamAI 专有功能。
 
-### Slash 命令系统（136 个）
+### Slash 命令系统（137 个）
 
 按分类：Session & Identity / Workflow / Tools & Skills / Model & Provider / Project / Code Quality / History / GitHub / Environment / Account / Agents / Artifact / Other（总数随版本演进，以 `/help` 实际列出为准）。
 
@@ -176,6 +176,24 @@ pnpm format       # Prettier
 - **`/memory` 命令** — 用户查看所有已存记忆
 - **自动分析引擎** — 对话后自动识别值得持久化的信息
 - 存储位置：`~/.mipham/memory/*.md`（YAML frontmatter + Markdown）
+
+### 遥测与崩溃上报（T1，CLI 侧）
+
+`src/telemetry/`：**默认关闭**，`/telemetry status|on|off|reset-id|endpoint` 控制，开关落
+`settings.json`（**不落 `config.yml`** —— 那会让首装向导因「文件已存在」而永不再现，且其浅合并
+会打掉兄弟表默认值）。三级 fail-closed：`MIPHAM_TELEMETRY=off` 硬关 > 用户 opt-in > 项目
+**只能否决**（否则 clone 一个仓库 = 被它代授同意）。无任何环境变量可授予同意。
+
+采集与发送**必须解耦**：`process.on('exit')` 不能 await ⇒ 退出时**同步**落本地队列
+（`~/.mipham/telemetry/queue.jsonl`，0600，上限 100 条），**下次启动**异步发送（失败静默留队）。
+崩溃上报装 `uncaughtException`/`unhandledRejection`（**记录后必须 exit，否则崩溃变静默挂起**），
+且**无条件安装**（关闭遥测时也装 —— 它是防挂起的那一环）。栈**脱敏截断**：cwd → `<cwd>`、home → `~`、
+home 下第一段 → `<dir>`（否则 `~/proj/...` 仍泄露项目名），只发消息 hash 不发正文。
+
+工具计数有**两条路径**，两处都要接并有**一致性断言测试**：主漏斗 `engine.ts` `executeTool`（入口计数）
+与旁路 `agent/sub-agent.ts`（直接 `tool.execute`，workflow 经它派生）。只接一条 ⇒ 子代理与 workflow
+的调用**一次都统计不到**。数据字典：[`docs/telemetry.md`](docs/telemetry.md)。
+**接收端（T1b）未建** —— 端点默认留空，未配置时**零网络请求**（有断言测试）。
 
 ### 核心引擎
 
@@ -247,14 +265,15 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | agent-view      | 1       | 9        | agent-view-manager                                                                  |
 | e2e             | 1       | 8        | full-pipeline                                                                       |
 | integrity       | 1       | 9        | 引用完整性守卫（工具名 / 技能清单 / IDE 环境变量 / 工具总数 / 文档体积与滚动窗口）  |
-| **合计**        | **213** | **2388** | **0 失败** ✅（2386 passed + 2 skipped）                                            |
+| telemetry       | 8       | 104      | redact / consent / queue / payload / crash / transport / 门面 / 双路径计数一致性    |
+| **合计**        | **221** | **2492** | **0 失败** ✅（2490 passed + 2 skipped）                                            |
 
 > **若本机 `git` 报 Xcode 许可证未接受**：`core/crsi-*` 与 `core/instructions` 中 21 个测试会 shell 调真
 > `git`，会被一并挡住而**假红**（极易误判为回归 —— 曾实际发生）。判定方法：把这些文件单独跑一遍，
 > 看报错是否为 `You have not agreed to the Xcode license agreements`；或直接 `/usr/bin/git --version`。
 > 一次解决：`sudo xcodebuild -license accept`（**保持 Xcode 为活动开发者目录**，不影响 §十六 的打包公证；
 > 换 `xcode-select -s` 到 CommandLineTools 则会连带把 `productbuild` / `xcrun notarytool` 切走，勿用）。
-> 2026-09-15 已在本机执行，全量 **2386 passed + 2 skipped / 0 失败**。
+> 2026-09-15 已在本机执行，全量 **2490 passed + 2 skipped / 0 失败**。
 
 测试框架: Vitest 5，mock: `test/__mocks__/bun.ts`
 

@@ -10,6 +10,7 @@ import type { PermissionSystem } from '../core/permission'
 import { AgentExperience } from './agent-experience'
 import { PatternAnalyzer } from './pattern-analyzer.js'
 import { getWorkspaceTrust } from '../core/workspace-trust'
+import { recordToolCall } from '../telemetry/index'
 import type { ExperienceRuleEngine } from '../core/rule-engine.js'
 
 // Singleton instances (created lazily)
@@ -396,6 +397,15 @@ export class SubAgent {
           if (signal?.aborted) {
             throw new DOMException('Aborted', 'AbortError')
           }
+
+          // Counted here, at dispatch, mirroring `Engine.executeTool`'s entry
+          // increment — this loop bypasses `executeTool` entirely and
+          // reimplements the hook/permission steps itself, so without this line
+          // every tool call made inside a sub-agent (and therefore inside a
+          // workflow, which derives sub-agents) is invisible to the metrics
+          // registry. Same failure shape as the two "one of two paths wired"
+          // bugs this repo has already recorded.
+          recordToolCall(tu.name)
 
           const tool = this.toolRegistry.get(tu.name)
           if (!tool) {

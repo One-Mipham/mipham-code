@@ -285,7 +285,7 @@ export function settingsPathFor(scope: SettingsScope, cwd: string = process.cwd(
  * (hooks, and anything a future version adds). A malformed file is an error,
  * not something to clobber — the user's other settings live in the same file.
  */
-function readSettingsDoc(path: string): Record<string, unknown> {
+export function readSettingsDoc(path: string): Record<string, unknown> {
   if (!existsSync(path)) return {}
   let parsed: unknown
   try {
@@ -299,7 +299,7 @@ function readSettingsDoc(path: string): Record<string, unknown> {
   return parsed as Record<string, unknown>
 }
 
-function writeSettingsDoc(path: string, doc: Record<string, unknown>): void {
+export function writeSettingsDoc(path: string, doc: Record<string, unknown>): void {
   mkdirSync(dirname(path), { recursive: true })
   atomicWriteFileSync(path, JSON.stringify(doc, null, 2) + '\n')
 }

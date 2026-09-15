@@ -278,6 +278,9 @@ export class MetricsRegistry {
   /** Tool call counter, labelled by tool_name.  Callers use .inc({tool_name}). */
   readonly toolCalls: Counter
 
+  /** Slash-command counter, labelled by command_name. Callers use .inc({command_name}). */
+  readonly commandCalls: Counter
+
   /** Model API request counter, labelled by provider and model. */
   readonly modelRequests: Counter
 
@@ -307,6 +310,11 @@ export class MetricsRegistry {
     )
 
     this.toolCalls = this.counter('mipham_code_tool_calls_total', 'Number of tool invocations')
+
+    this.commandCalls = this.counter(
+      'mipham_code_command_calls_total',
+      'Number of slash-command invocations',
+    )
 
     this.modelRequests = this.counter(
       'mipham_code_model_requests_total',

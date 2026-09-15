@@ -165,3 +165,4 @@ Apache 2.0 — see [LICENSE](./LICENSE)
 - **Website**: [mipham.ai/code](https://mipham.ai/code)
 - **Documentation**: [mipham.ai/code/docs](https://mipham.ai/code/docs)
 - **GitHub**: [github.com/One-Mipham/mipham-code](https://github.com/One-Mipham/mipham-code)
+- **Telemetry & privacy**: [docs/telemetry.md](./docs/telemetry.md) — off by default; the full data dictionary

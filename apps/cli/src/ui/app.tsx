@@ -14,6 +14,8 @@ import type { SkillsLoader } from '../skills/loader'
 import type { PluginManager } from '../plugin/plugin-manager'
 import { setPreference } from '../config/preferences'
 import { saveProviderApiKey } from '../config/loader'
+import { recordCommand } from '../telemetry/index'
+import { recordCrash } from '../telemetry/crash'
 import { AgentRegistry } from '../agent/agent-registry'
 import { getBackgroundAgentRegistry } from '../agent/background-registry'
 import { getMessageRouter, parseMention, resolveRecipientSession } from '../agent/message-router'
@@ -850,6 +852,12 @@ export function App({
       if (looksLikeSlashCommand(input)) {
         const { command, args } = parseSlashCommand(input)
 
+        // Counted here rather than at the registry lookup below: /switch, /pick,
+        // /model-picker, /exit, /quit and /focus are special-cased and return
+        // before ever reaching it, so counting there would silently under-report
+        // six of the most-used commands.
+        recordCommand(command)
+
         // /switch takes args, handled separately
         if (command === '/switch') {
           const result = await handleSwitch(mkCtx(), args)
@@ -1099,7 +1107,16 @@ export function App({
   }
 
   return (
-    <ErrorBoundary>
+    <ErrorBoundary
+      onError={(error) => {
+        // The boundary's own job is *surviving* a render error — it renders a
+        // fallback and the session continues. But this is the exact failure the
+        // boundary was written for (a frozen layout with a live process, i.e. a
+        // silent hang), so record it as a crash signal rather than letting it
+        // vanish once the fallback paints over the evidence.
+        recordCrash(error, 'render')
+      }}
+    >
       <Box flexDirection="column" padding={1} height="100%">
         {/* Workflow progress — auto-detects active workflows, renders nothing when idle */}
         <WorkflowProgress />
