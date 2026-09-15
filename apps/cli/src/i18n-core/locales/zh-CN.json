@@ -286,7 +286,7 @@
       "list_fetching": "正在获取当前任务列表...",
       "create_title": "── 创建任务 ──",
       "default_title": "── 任务管理 ──",
-      "default_body": "AI 通过 TaskCreate、TaskList、TaskUpdate 和 TaskGet 工具管理任务状态。\n任务显示在 /tasks 视图中，并在会话期间保持。"
+      "default_body": "AI 通过 Task 工具的 \"create\"、\"list\"、\"update\" 和 \"get\" action 管理任务状态。\n任务显示在 /tasks 视图中，并在会话期间保持。"
     },
     "copy": {
       "confirmed": "✓ 已复制 {count} 条助手回复到剪贴板。",
@@ -304,8 +304,8 @@
     },
     "task_list": {
       "title": "── 后台任务 ──",
-      "detected": "在此会话中检测到 {count} 次任务操作。\n\n使用 Task 工具（TaskCreate / TaskUpdate / TaskList）管理结构化任务跟踪。",
-      "no_tasks": "尚未跟踪任何任务。使用 TaskCreate、TaskUpdate 和 TaskList 工具管理结构化任务。",
+      "detected": "在此会话中检测到 {count} 次任务操作。\n\n使用 Task 工具（action \"create\" / \"update\" / \"list\"）管理结构化任务跟踪。",
+      "no_tasks": "尚未跟踪任何任务。使用 Task 工具的 action \"create\"、\"update\" 或 \"list\" 管理结构化任务。",
       "reference": "快速参考:",
       "legacy_hint": "输入 /todos 使用旧版任务界面。"
     },
@@ -985,10 +985,9 @@
     "mcp": { "name": "MCP", "description": "管理 MCP 服务器连接" }
   },
   "errors": {
-    "tool_not_allowed": "工具 \"{name}\" 需要用户批准（权限：ask），未执行。按 Shift+Tab 切换权限模式，或运行 /permissions。",
-    "tool_denied_deny_rule": "工具 \"{name}\" 被拒绝规则（\"{pattern}\"）阻止。拒绝规则优先于权限模式 — 请改用其他方式。",
-    "tool_denied_ask_rule": "工具 \"{name}\" 需要批准（ask 规则：\"{pattern}\"）。请在提示时批准，或通过 /permissions 调整规则。",
-    "tool_denied_mode": "工具 \"{name}\" 在 \"{mode}\" 模式下需要批准。按 Shift+Tab 切换权限模式，或运行 /permissions。",
+    "tool_denied_deny_rule": "工具 \"{name}\" 被拒绝规则（\"{pattern}\"）阻止。拒绝规则优先于权限模式 — 请改用其他方式，或移除该规则：/permissions remove \"{pattern}\"",
+    "tool_denied_ask_rule": "工具 \"{name}\" 需要批准（ask 规则：\"{pattern}\"）。请在提示时批准，或不再询问：/permissions allow \"{pattern}\"",
+    "tool_denied_mode": "工具 \"{name}\" 在 \"{mode}\" 模式下需要批准。按 Shift+Tab 切换权限模式，或不再询问：/permissions allow \"{name}\"（更窄的 \"{name}(arg)\" 亦可）",
     "tool_blocked": "工具 \"{name}\" 被钩子拦截",
     "user_input_blocked": "用户输入被钩子拦截。",
     "dlp_blocked": "请求被 DLP 策略阻止。",

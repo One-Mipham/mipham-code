@@ -105,9 +105,63 @@ Run /setup for the full wizard, or /config to view current settings.`,
   }
 }
 
-const permissionsCmd: CommandHandler = (ctx) => {
+const permissionsCmd: CommandHandler = async (ctx, args) => {
   const c = ctx.engine.getContext()
   const msgs = c.getMessages()
+
+  // ── Rule persistence: allow/deny/remove <rule> [--user] ──
+  const positional = args.filter((a) => !a.startsWith('--'))
+  const scope: 'project' | 'user' = args.includes('--user') ? 'user' : 'project'
+  const verb = positional[0]
+  const rule = positional[1]
+
+  if (verb === 'allow' || verb === 'deny' || verb === 'remove') {
+    const { validateRulePattern } = await import('../core/permission-rules')
+    const { addSettingsRule, removeSettingsRule, settingsPathFor } =
+      await import('../config/loader')
+
+    // A rule that can't match is worse than no rule: it reads as protection
+    // that isn't there. Validate before writing.
+    const invalid = validateRulePattern(rule ?? '')
+    const usage =
+      `Usage: /permissions <allow|deny|remove> <rule> [--user]\n\n` +
+      `  rule   Tool pattern — "Bash" or "Bash(npm test)".\n` +
+      `  --user Write to ~/.mipham/settings.json instead of .mipham/settings.json.`
+
+    if (verb !== 'remove' && !rule) {
+      return { content: `Missing rule.\n\n${usage}` }
+    }
+    if (invalid && verb !== 'remove') {
+      return { content: `Invalid rule "${rule}": ${invalid}.\n\n${usage}` }
+    }
+
+    const perm = ctx.engine.getPermission()
+
+    if (verb === 'remove') {
+      const removed = removeSettingsRule(rule!, scope)
+      if (!removed) {
+        return { content: `No rule "${rule}" in ${settingsPathFor(scope)}.` }
+      }
+      perm.removeRule(rule!)
+      return {
+        content: `Removed from ${removed.path}\n\npermissions.${removed.key}:\n  ${rule}`,
+      }
+    }
+
+    const path = addSettingsRule(verb, rule!, scope)
+    if (verb === 'allow') perm.allow(rule!)
+    else perm.deny(rule!)
+    return {
+      content:
+        `Added to ${path}\n\n` +
+        `permissions.${verb}:\n  ${rule}\n\n` +
+        `This rule persists across sessions and applies from now on.`,
+    }
+  }
+
+  const settings = await import('../config/loader').then((m) => m.loadSettingsJson())
+  const ruleLines = (label: string, rules: string[]) =>
+    rules.length > 0 ? `  ${label}\n${rules.map((r) => `    ${r}`).join('\n')}` : `  no ${label}`
 
   return {
     content: `─ Permission Settings ─
@@ -124,6 +178,15 @@ Switch mode with Shift+Tab. Modes (least → most permissive):
 
 To let Bash run without asking: press Shift+Tab until the status line shows
 "acceptEdits", then send your message again.
+
+Persisted rules (settings.json):
+${ruleLines('allow', settings.permissions.allow)}
+${ruleLines('deny', settings.permissions.deny)}
+
+Persist a rule with:
+  /permissions allow "Bash(npm test)"     → .mipham/settings.json
+  /permissions deny  "Bash(rm *)" --user  → ~/.mipham/settings.json
+  /permissions remove "Bash(npm test)"
 
 Current directory permissions:
   CWD:      ${process.cwd()}

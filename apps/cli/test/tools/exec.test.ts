@@ -3,6 +3,7 @@ import type { ToolContext } from '../../src/shared'
 import { createBashTool } from '../../src/tools/exec/bash'
 import { gitTool, splitCommand } from '../../src/tools/exec/git'
 import { taskTool } from '../../src/tools/exec/task'
+import { exitWorktreeTool } from '../../src/tools/exec/exit-worktree'
 import { recordToolEvidence, clearEvidenceLog } from '../../src/core/working-memory'
 
 const bashTool = createBashTool()
@@ -355,5 +356,99 @@ describe('Task tool execution', () => {
     const r = await taskTool.execute({ action: 'nonexistent' }, ctx)
     expect(r.success).toBe(false)
     expect(r.error).toContain('Unknown action')
+  })
+})
+
+// ============================================================
+// C1 — worktree isolation covers BOTH roots
+//
+// Worktrees moved from .claude/worktrees/ to .mipham/worktrees/. The
+// enforcement points (Bash cd escape, Git outside-path reference) must
+// recognize the new prefix AND keep recognizing the old one, otherwise
+// every worktree created before the move silently loses its protection.
+// These tests pin that: same assertion, two cwds.
+// ============================================================
+
+describe('C1 — worktree isolation covers both roots', () => {
+  const NEW_WT = '/proj/.mipham/worktrees/w1'
+  const LEGACY_WT = '/proj/.claude/worktrees/w1'
+  const at = (cwd: string): ToolContext => ({ ...ctx, cwd })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  // ── Bash: cd escape ──
+
+  it('blocks cd escape from a worktree under .mipham/worktrees/', async () => {
+    mockSpawn()
+    const result = await bashTool.execute({ command: 'cd /etc && cat passwd' }, at(NEW_WT))
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Worktree isolation')
+  })
+
+  it('blocks cd escape from a legacy worktree under .claude/worktrees/', async () => {
+    mockSpawn()
+    const result = await bashTool.execute({ command: 'cd /etc && cat passwd' }, at(LEGACY_WT))
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Worktree isolation')
+  })
+
+  it('allows cd inside the project from a .mipham worktree', async () => {
+    mockSpawn()
+    const result = await bashTool.execute({ command: 'cd /proj/src && ls' }, at(NEW_WT))
+    expect(result.success).toBe(true)
+  })
+
+  it('leaves cwd outside any worktree unconstrained', async () => {
+    mockSpawn()
+    const result = await bashTool.execute({ command: 'cd /etc && ls' }, at('/proj/src'))
+    expect(result.success).toBe(true)
+  })
+
+  // ── Git: reference outside the worktree ──
+
+  it('blocks an outside --work-tree reference from a .mipham worktree', async () => {
+    mockSpawn()
+    const result = await gitTool.execute({ command: 'status --work-tree=/other' }, at(NEW_WT))
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Worktree isolation')
+  })
+
+  it('blocks an outside --work-tree reference from a legacy .claude worktree', async () => {
+    mockSpawn()
+    const result = await gitTool.execute({ command: 'status --work-tree=/other' }, at(LEGACY_WT))
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Worktree isolation')
+  })
+
+  it('allows a --work-tree reference inside the project', async () => {
+    mockSpawn()
+    const result = await gitTool.execute({ command: 'status --work-tree=/proj/other' }, at(NEW_WT))
+    expect(result.success).toBe(true)
+  })
+
+  // ── ExitWorktree: path validation accepts both roots ──
+
+  it('accepts a worktree path under the new .mipham root', async () => {
+    mockSpawn(`worktree ${NEW_WT}\n`)
+    const result = await exitWorktreeTool.execute({ path: NEW_WT, action: 'keep' }, at('/proj'))
+    expect(result.success).toBe(true)
+  })
+
+  it('accepts a worktree path under the legacy .claude root', async () => {
+    mockSpawn(`worktree ${LEGACY_WT}\n`)
+    const result = await exitWorktreeTool.execute({ path: LEGACY_WT, action: 'keep' }, at('/proj'))
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects a path under neither root', async () => {
+    mockSpawn()
+    const result = await exitWorktreeTool.execute(
+      { path: '/proj/.mipham/worktrees-evil/w1', action: 'keep' },
+      at('/proj'),
+    )
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('is not under')
   })
 })

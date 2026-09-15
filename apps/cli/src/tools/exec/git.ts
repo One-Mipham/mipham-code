@@ -1,4 +1,5 @@
 import type { ToolDefinition } from '../../shared/index.ts'
+import { findWorktreeMarker } from '../../core/paths.ts'
 
 // P0-4 (v2.1.222 alignment): Regex-based word-boundary patterns replace
 // fragile substring matching. Each pattern describes what it blocks.
@@ -52,14 +53,23 @@ export const DANGEROUS_GIT_PATTERNS: Array<{ pattern: RegExp; description: strin
  * when operating in a worktree context.
  */
 function isOutsideWorktree(command: string, cwd: string): string | null {
-  const WORKTREE_MARKER = '.claude/worktrees/'
-  if (!cwd.includes(WORKTREE_MARKER)) return null
+  // 标记取自 core/paths.ts：新目录与历史 .claude/worktrees/ 都认，隔离度只增不减。
+  const marker = findWorktreeMarker(cwd)
+  if (!marker) return null
 
-  // Extract the project root (everything before .claude/worktrees/)
-  const worktreeRoot = cwd.substring(0, cwd.indexOf(WORKTREE_MARKER))
+  // Extract the project root (everything before the worktree marker)
+  const worktreeRoot = marker.root
 
-  // Detect git commands that reference the main checkout path
-  const mainCheckoutPaths = [/\b--work-tree=([^\s]+)/g, /\b--git-dir=([^\s]+)/g, /\b-C\s+([^\s]+)/g]
+  // Detect git commands that reference the main checkout path.
+  // NOTE: no `\b` before the leading `-` — `\b` needs a word/non-word
+  // transition and `-` is itself a non-word char, so `\b--work-tree=` never
+  // matched anything and this whole check was silently dead. `-C` needs an
+  // explicit boundary because without one it would match inside a path.
+  const mainCheckoutPaths = [
+    /--work-tree=([^\s]+)/g,
+    /--git-dir=([^\s]+)/g,
+    /(?:^|\s)-C\s+([^\s]+)/g,
+  ]
 
   for (const pathPattern of mainCheckoutPaths) {
     let match: RegExpExecArray | null

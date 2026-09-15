@@ -484,4 +484,33 @@ describe('PermissionSystem', () => {
       expect(joined).toContain('"Bash()"')
     })
   })
+
+  // A rule added mid-session must take effect for a tool+input pair that was
+  // already checked — otherwise `/permissions allow X` writes settings.json and
+  // silently does nothing until restart.
+  describe('rule mutation invalidates the decision cache', () => {
+    it('allow() affects an already-checked tool', () => {
+      const ps = new PermissionSystem('plan')
+      const tool = makeTool('Write', 'ask', 'file')
+      expect(ps.check(tool, {})).toBe('ask')
+      ps.allow('Write')
+      expect(ps.check(tool, {})).toBe('bypass')
+    })
+
+    it('deny() affects an already-checked tool', () => {
+      const ps = new PermissionSystem('bypassPermissions')
+      const tool = makeTool('Bash', 'auto', 'exec')
+      expect(ps.check(tool, {})).toBe('bypass')
+      ps.deny('Bash')
+      expect(ps.check(tool, {})).toBe('ask')
+    })
+
+    it('ask() affects an already-checked tool', () => {
+      const ps = new PermissionSystem('bypassPermissions')
+      const tool = makeTool('Read', 'auto', 'file')
+      expect(ps.check(tool, {})).toBe('bypass')
+      ps.ask('Read')
+      expect(ps.check(tool, {})).toBe('ask')
+    })
+  })
 })

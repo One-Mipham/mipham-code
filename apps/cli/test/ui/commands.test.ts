@@ -38,12 +38,12 @@ const { getCommand, getCommandNames, getCommandList, looksLikeSlashCommand, pars
   }
 
 // Minimal CommandContext stub
-const mkCtx = () =>
+const mkCtx = (messages: unknown[] = []) =>
   ({
     engine: {
       getTools: () => new Map(),
       getContext: () => ({
-        getMessages: () => [],
+        getMessages: () => messages,
         getEstimatedTokens: () => 0,
         getCheckpoints: () => [],
       }),
@@ -345,9 +345,68 @@ describe('/goal', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════
-// Public API helpers
+// /tasks — 任务工具历史扫描（/todos 是转交 AI 的旧版入口，不扫历史）
 // ═══════════════════════════════════════════════════════════════
 
+/** 造一条带 tool_use 块的助手消息。 */
+const toolUseMessage = (name: string) => ({
+  role: 'assistant',
+  content: [{ type: 'tool_use', id: 'tu_1', name, input: {} }],
+})
+
+describe('/tasks', () => {
+  it('识别历史里真实的 Task 工具调用', () => {
+    const handler = getCommand('/tasks')!
+    const withTask = handler(mkCtx([toolUseMessage('Task')]), []).content
+    const withoutTask = handler(mkCtx([]), []).content
+    // 修复前过滤条件找的是一组不存在的工具名，故两种情况渲染结果相同（永远是「无任务」）
+    expect(withTask).not.toBe(withoutTask)
+  })
+
+  it('其他工具的调用不算任务操作', () => {
+    const handler = getCommand('/tasks')!
+    const withBash = handler(mkCtx([toolUseMessage('Bash')]), []).content
+    const withoutTask = handler(mkCtx([]), []).content
+    expect(withBash).toBe(withoutTask)
+  })
+
+  it('非数组 content 的历史消息不会导致崩溃', () => {
+    const handler = getCommand('/tasks')!
+    const textOnly = handler(mkCtx([{ role: 'user', content: 'hello' }]), []).content
+    expect(textOnly).toBe(handler(mkCtx([]), []).content)
+  })
+})
+
+describe('/todos forwardToAI 指向真实工具', () => {
+  it('create 转交的提示词使用 Task 工具与 action 参数', () => {
+    const result = getCommand('/todos')!(mkCtx(), ['create', 'Add', 'auth']) as {
+      forwardToAI?: string
+    }
+    expect(result.forwardToAI).toContain('Task')
+    expect(result.forwardToAI).toContain('"create"')
+  })
+
+  it('list 转交的提示词使用 Task 工具与 action 参数', () => {
+    const result = getCommand('/todos')!(mkCtx(), ['list']) as { forwardToAI?: string }
+    expect(result.forwardToAI).toContain('Task')
+    expect(result.forwardToAI).toContain('"list"')
+  })
+})
+
+describe('/goal --decompose 指向真实工具', () => {
+  it('拆解提示词使用 Task 工具与 action 参数', () => {
+    const ctx = mkCtx()
+    const result = getCommand('/goal')!(ctx, ['Ship', 'it', '--decompose']) as {
+      forwardToAI?: string
+    }
+    expect(result.forwardToAI).toContain('Task')
+    expect(result.forwardToAI).toContain('"create"')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// Public API helpers
+// ═══════════════════════════════════════════════════════════════
 describe('slash command public API', () => {
   it('looksLikeSlashCommand detects slash-prefixed input', () => {
     expect(looksLikeSlashCommand('/help')).toBe(true)

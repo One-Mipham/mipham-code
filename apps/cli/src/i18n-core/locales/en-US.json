@@ -286,7 +286,7 @@
       "list_fetching": "Fetching current task list...",
       "create_title": "── Create Task ──",
       "default_title": "── Task Management ──",
-      "default_body": "The AI manages task state via TaskCreate, TaskList, TaskUpdate, and TaskGet tools.\nTasks appear in the /tasks view and persist across the session."
+      "default_body": "The AI manages task state via the Task tool, using the \"create\", \"list\", \"update\", and \"get\" actions.\nTasks appear in the /tasks view and persist across the session."
     },
     "copy": {
       "confirmed": "✓ Copied {count} assistant response(s) to clipboard.",
@@ -304,8 +304,8 @@
     },
     "task_list": {
       "title": "── Background Tasks ──",
-      "detected": "{count} task operations detected in this session.\n\nUse Task tool (TaskCreate / TaskUpdate / TaskList) to manage structured task tracking.",
-      "no_tasks": "No tasks tracked yet. Use TaskCreate, TaskUpdate, and TaskList tools to manage structured tasks.",
+      "detected": "{count} task operations detected in this session.\n\nUse the Task tool (action \"create\" / \"update\" / \"list\") to manage structured task tracking.",
+      "no_tasks": "No tasks tracked yet. Use the Task tool with action \"create\", \"update\", or \"list\" to manage structured tasks.",
       "reference": "Quick reference:",
       "legacy_hint": "Type /todos for the legacy task interface."
     },
@@ -985,10 +985,9 @@
     "mcp": { "name": "MCP", "description": "Manage MCP server connections" }
   },
   "errors": {
-    "tool_not_allowed": "Tool \"{name}\" requires user approval (permission: ask). The tool was not executed. Press Shift+Tab to switch permission mode, or run /permissions.",
-    "tool_denied_deny_rule": "Tool \"{name}\" blocked by a deny rule (\"{pattern}\"). Deny rules override permission mode — try a different approach.",
-    "tool_denied_ask_rule": "Tool \"{name}\" requires approval (ask rule: \"{pattern}\"). Approve when prompted, or adjust the rule via /permissions.",
-    "tool_denied_mode": "Tool \"{name}\" requires approval under \"{mode}\" mode. Press Shift+Tab to switch permission mode, or run /permissions.",
+    "tool_denied_deny_rule": "Tool \"{name}\" blocked by a deny rule (\"{pattern}\"). Deny rules override permission mode — try a different approach, or drop the rule with: /permissions remove \"{pattern}\"",
+    "tool_denied_ask_rule": "Tool \"{name}\" requires approval (ask rule: \"{pattern}\"). Approve when prompted, or stop being asked with: /permissions allow \"{pattern}\"",
+    "tool_denied_mode": "Tool \"{name}\" requires approval under \"{mode}\" mode. Press Shift+Tab to switch permission mode, or stop being asked with: /permissions allow \"{name}\" (or a narrower \"{name}(arg)\")",
     "tool_blocked": "Tool \"{name}\" blocked by hook",
     "user_input_blocked": "User input blocked by hook.",
     "dlp_blocked": "Request blocked by DLP policy.",

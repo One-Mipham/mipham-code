@@ -215,14 +215,17 @@ export class PermissionSystem {
 
   allow(rule: string): void {
     this.allowRules.push(compileRule(rule, 'allow'))
+    this.invalidateCache()
   }
 
   deny(rule: string): void {
     this.denyRules.push(compileRule(rule, 'deny'))
+    this.invalidateCache()
   }
 
   ask(rule: string): void {
     this.askRules.push(compileRule(rule, 'ask'))
+    this.invalidateCache()
   }
 
   loadConfig(raw: {

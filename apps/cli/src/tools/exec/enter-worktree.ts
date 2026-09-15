@@ -1,10 +1,11 @@
 import type { ToolDefinition } from '../../shared/index.ts'
+import { worktreeRoot } from '../../core/paths.ts'
 
 export const enterWorktreeTool: ToolDefinition = {
   name: 'EnterWorktree',
   description:
     'Create an isolated git worktree for parallel development. ' +
-    'Creates a new worktree at .claude/worktrees/<name> on its own branch. ' +
+    'Creates a new worktree at .mipham/worktrees/<name> on its own branch. ' +
     'Use this when you need to work on a separate task without affecting the main workspace. ' +
     'Pair with ExitWorktree to clean up when done.',
   category: 'exec',
@@ -56,10 +57,10 @@ export const enterWorktreeTool: ToolDefinition = {
 
     const cwd = ctx.cwd
     const { resolve } = await import('node:path')
-    const worktreePath = resolve(`${cwd}/.claude/worktrees/${name}`)
-    const allowedPrefix = resolve(`${cwd}/.claude/worktrees/`)
+    const worktreePath = resolve(worktreeRoot(cwd), name)
+    const allowedPrefix = resolve(worktreeRoot(cwd))
 
-    // Defense-in-depth: verify resolved path is within .claude/worktrees/
+    // Defense-in-depth: verify resolved path stays within the worktree root
     if (
       !worktreePath.startsWith(allowedPrefix + '/') &&
       worktreePath !== allowedPrefix.slice(0, -1)
@@ -67,7 +68,7 @@ export const enterWorktreeTool: ToolDefinition = {
       return {
         success: false,
         content: '',
-        error: 'Worktree path must be within .claude/worktrees/.',
+        error: 'Worktree path must be within .mipham/worktrees/.',
       }
     }
 

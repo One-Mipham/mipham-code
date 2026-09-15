@@ -16,6 +16,7 @@ import { McpClient } from '../mcp/client'
 import { buildCapabilityReport } from '../core/capability-inventory'
 import { InstructionsLoader } from '../core/instructions'
 import { findDerivableSections, DERIVABLE_HINTS } from '../core/claude-md-audit'
+import { worktreeRoot } from '../core/paths.ts'
 import { fixDoctor, fixConfig, fixCache, selectRepoClaudeFiles } from '../core/fix'
 import { fixCodeTarget } from '../core/fix-code'
 import { homedir } from 'node:os'
@@ -251,7 +252,7 @@ const helpCmd: CommandHandler = (ctx) => {
       /init          Initialize .mipham config
       /setup         Guided project setup wizard
       /recommend     Analyze project + recommend setup
-      /permissions   Show permission settings
+      /permissions   Show or persist permission rules
       /add-dir <dir> Add workspace directory
       /security      Security review checklist
       /audit         Same as /security
@@ -2076,8 +2077,8 @@ const todosCmd: CommandHandler = (_ctx, args) => {
       return { content: t('commands.todos.usage_create') }
     }
     return {
-      content: `${t('commands.todos.create_title')}\n\nCreating task: "${title.trim()}"\n\nPassing to AI for structured task creation with TaskCreate...`,
-      forwardToAI: `Create a new task using TaskCreate with subject "${title.trim()}". Set a clear description and activeForm.`,
+      content: `${t('commands.todos.create_title')}\n\nCreating task: "${title.trim()}"\n\nPassing to AI for structured task creation with the Task tool...`,
+      forwardToAI: `Create a new task using the Task tool with action "create" and subject "${title.trim()}". Set a clear description and activeForm.`,
     }
   }
 
@@ -2092,7 +2093,7 @@ const todosCmd: CommandHandler = (_ctx, args) => {
           ${t('commands.todos.item_create')}
       `,
       forwardToAI:
-        'Use TaskList to show all current tasks. Present them in a clear summary grouped by status (pending/in_progress/completed). If there are no tasks, suggest creating one.',
+        'Use the Task tool with action "list" to show all current tasks. Present them in a clear summary grouped by status (pending/in_progress/completed). If there are no tasks, suggest creating one.',
     }
   }
 
@@ -2104,7 +2105,8 @@ const todosCmd: CommandHandler = (_ctx, args) => {
 
       ${t('commands.todos.default_body')}
     `,
-    forwardToAI: 'Use TaskList to show all current tasks, then present them clearly.',
+    forwardToAI:
+      'Use the Task tool with action "list" to show all current tasks, then present them clearly.',
   }
 }
 
@@ -2192,7 +2194,7 @@ const goalCmd: CommandHandler = (ctx, args) => {
   if (decompose) {
     lines.push(t('commands.goal.decompose_enabled'))
     // Decompose by creating initial subtasks
-    const decomposeMsg = `Break down this goal into 3-5 subtasks: "${goal}". For each subtask, use TaskCreate with the subject and description. Mark each as blocked by the previous one to create a dependency chain.`
+    const decomposeMsg = `Break down this goal into 3-5 subtasks: "${goal}". For each subtask, use the Task tool with action "create", giving the subject and description. Mark each as blocked by the previous one to create a dependency chain.`
     return {
       content: lines.join('\n'),
       forwardToAI: decomposeMsg,
@@ -2813,12 +2815,12 @@ const tasksCmd: CommandHandler = (ctx) => {
   const c = ctx.engine.getContext()
   const msgs = c.getMessages()
 
-  // Scan for task-related tool uses in message history
+  // Scan for task-related tool uses in message history.
+  // 任务工具只有一个 `Task`，动作走 action 参数 —— 过滤条件必须按真实工具名匹配，
+  // 否则计数恒为 0，「已检测到 N 次任务操作」这条分支永远不可达。
   const toolUses = msgs.flatMap((m) => {
     if (Array.isArray(m.content)) {
-      return m.content.filter(
-        (b) => b.type === 'tool_use' && ['TaskCreate', 'TaskUpdate', 'TaskList'].includes(b.name),
-      )
+      return m.content.filter((b) => b.type === 'tool_use' && b.name === 'Task')
     }
     return []
   })
@@ -2830,12 +2832,13 @@ const tasksCmd: CommandHandler = (ctx) => {
       ${toolUses.length > 0 ? t('commands.task_list.detected', { count: String(toolUses.length) }) : t('commands.task_list.no_tasks')}
 
       ${t('commands.task_list.reference')}
-        TaskCreate  — create a new task
-        TaskList    — list all tasks
-        TaskUpdate  — update task status
-        TaskGet     — get task details
-        TaskOutput  — get background task output
-        TaskStop    — stop a running task
+        Task(action: "create")  — create a new task
+        Task(action: "list")    — list all tasks
+        Task(action: "update")  — update task status
+        Task(action: "get")     — get task details
+        Task(action: "delete")  — delete a task
+        Task(action: "output")  — get background task output
+        Task(action: "stop")    — stop a running task
 
       ${t('commands.task_list.legacy_hint')}
     `,
@@ -5003,7 +5006,7 @@ const forkCmd: CommandHandler = async (ctx, args) => {
     .slice(0, 40)
   const name = `${slug}-${Date.now().toString(36)}`
   const branch = `worktree/${name}`
-  const wtPath = join(process.cwd(), '.claude', 'worktrees', name)
+  const wtPath = join(worktreeRoot(process.cwd()), name)
 
   try {
     execSync(`git worktree add -b ${branch} ${wtPath} HEAD`, { stdio: 'ignore', timeout: 30_000 })
@@ -5640,7 +5643,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/loop': 'Run prompt on interval',
   '/init': 'Initialize .mipham config',
   '/setup': 'Guided project setup wizard',
-  '/permissions': 'Show permission settings',
+  '/permissions': 'Show or persist permission rules',
   '/add-dir': 'Add workspace directory',
   '/recommend': 'Analyze project + recommend skills & setup',
   '/security': 'Security review checklist',

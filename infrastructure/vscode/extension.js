@@ -124,7 +124,6 @@ function openMiphamTerminal() {
     miphamTerminal = vscode.window.createTerminal({
       name: terminalName,
       cwd: workspaceRoot,
-      env: { MIPHAM_IDE: 'vscode' },
     })
     miphamTerminal.sendText([miphamPath, ...flags].join(' '))
   } else {
@@ -132,7 +131,6 @@ function openMiphamTerminal() {
     miphamTerminal = vscode.window.createTerminal({
       name: terminalName,
       cwd: workspaceRoot,
-      env: { MIPHAM_IDE: 'vscode' },
     })
     miphamTerminal.sendText([bunPath, miphamPath, ...flags].filter(Boolean).join(' '))
   }

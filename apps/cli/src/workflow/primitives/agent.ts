@@ -1,8 +1,10 @@
+import { join } from 'node:path'
 import { SubAgent } from '../../agent/sub-agent'
 import type { ProviderRegistry } from '../../providers/registry'
 import type { Llm } from '../../providers/llm'
 import type { ToolDefinition } from '../../shared/index.ts'
 import type { PermissionSystem } from '../../core/permission'
+import { worktreeRoot } from '../../core/paths.ts'
 import { validateJSONSchema, formatValidationErrors } from '../schema-validator'
 
 export interface WorkflowAgentOpts {
@@ -32,7 +34,7 @@ export interface WorkflowAgentOpts {
  *   4. Returns the validated object, or { raw, validationErrors } on final failure.
  *
  * When `isolation: 'worktree'` is set:
- *   1. A git worktree is created at .claude/worktrees/wf-<slug>
+ *   1. A git worktree is created at .mipham/worktrees/wf-<slug>
  *   2. The sub-agent runs with its cwd set to the worktree path
  *   3. Changes are auto-committed (best-effort)
  *   4. The worktree is cleaned up after execution
@@ -60,7 +62,7 @@ export async function workflowAgent(
   if (opts.isolation === 'worktree') {
     const slug = `wf-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
     worktreeBranch = `worktree/${slug}`
-    worktreePath = `.claude/worktrees/${slug}`
+    worktreePath = join(worktreeRoot(process.cwd()), slug)
 
     const proc = Bun.spawn(['git', 'worktree', 'add', '-b', worktreeBranch, worktreePath, 'HEAD'], {
       stdout: 'pipe',

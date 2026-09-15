@@ -2,6 +2,7 @@ import type { ToolDefinition, CredentialMaskingConfig } from '../../shared/index
 import { sanitizeCommand } from '../../shared/sanitize.ts'
 import { DANGEROUS_GIT_PATTERNS } from './git.ts'
 import { isUncOrDevicePath } from '../../security/path.ts'
+import { findWorktreeMarker } from '../../core/paths.ts'
 import type { Service } from '../../vajra'
 import { toolKey } from '../seam'
 import { withValidation } from '../validation'
@@ -334,9 +335,10 @@ export function createBashTool(credentialConfig?: CredentialMaskingConfig): Tool
       const timeout = Math.min((params.timeout as number) || 120_000, 600_000)
 
       // P0-4: Worktree isolation — block cd escape attempts
-      const WORKTREE_MARKER = '.claude/worktrees/'
-      if (ctx.cwd.includes(WORKTREE_MARKER)) {
-        const worktreeRoot = ctx.cwd.substring(0, ctx.cwd.indexOf(WORKTREE_MARKER))
+      // 标记取自 core/paths.ts：新目录与历史 .claude/worktrees/ 都认，
+      // 隔离度只增不减（只认新前缀会让旧工作树失去保护）。
+      const worktreeMarker = findWorktreeMarker(ctx.cwd)
+      if (worktreeMarker) {
         // Detect cd to absolute paths outside the worktree
         const cdEscapePattern = /\bcd\s+(?:"([^"]+)"|'([^']+)'|([^\s;|&]+))/
         const cdMatch = command.match(cdEscapePattern)
@@ -346,7 +348,7 @@ export function createBashTool(credentialConfig?: CredentialMaskingConfig): Tool
           const resolved = target.startsWith('/')
             ? target
             : `${ctx.cwd}/${target}`.replace(/\/\.\//g, '/')
-          if (!resolved.startsWith(ctx.cwd) && !resolved.startsWith(worktreeRoot + '/')) {
+          if (!resolved.startsWith(ctx.cwd) && !resolved.startsWith(worktreeMarker.root + '/')) {
             return {
               success: false,
               content: '',

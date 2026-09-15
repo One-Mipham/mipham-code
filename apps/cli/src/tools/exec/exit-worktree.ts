@@ -1,4 +1,5 @@
 import type { ToolDefinition } from '../../shared/index.ts'
+import { worktreeRoots } from '../../core/paths.ts'
 
 export const exitWorktreeTool: ToolDefinition = {
   name: 'ExitWorktree',
@@ -13,7 +14,8 @@ export const exitWorktreeTool: ToolDefinition = {
     properties: {
       path: {
         type: 'string',
-        description: 'Absolute path to the worktree to exit. Must be under .claude/worktrees/.',
+        description:
+          'Absolute path to the worktree to exit. Must be under .mipham/worktrees/ (or the legacy .claude/worktrees/).',
       },
       action: {
         type: 'string',
@@ -34,18 +36,21 @@ export const exitWorktreeTool: ToolDefinition = {
     const action = params.action as string
     const discardChanges = params.discard_changes === true
 
-    // Validate the path is under .claude/worktrees
+    // Validate the path is under a worktree root（新目录优先，兼容历史 .claude/）
     const cwd = ctx.cwd
     const { resolve } = await import('node:path')
     const resolvedPath = resolve(worktreePath)
-    const allowedPrefix = resolve(`${cwd}/.claude/worktrees/`)
+    const roots = worktreeRoots(cwd).map((root) => resolve(root))
+    const inWorktree = roots.some(
+      (root) => resolvedPath === root || resolvedPath.startsWith(root + '/'),
+    )
 
-    if (!resolvedPath.startsWith(allowedPrefix)) {
+    if (!inWorktree) {
       return {
         success: false,
         content: '',
         error:
-          `Path "${worktreePath}" is not under .claude/worktrees/. ` +
+          `Path "${worktreePath}" is not under .mipham/worktrees/ or .claude/worktrees/. ` +
           `Only worktrees created by EnterWorktree can be managed here.`,
       }
     }

@@ -7,7 +7,7 @@ import {
   unlinkSync,
   chmodSync,
 } from 'node:fs'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
 import { homedir } from 'node:os'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { atomicWriteFileSync } from '../shared/atomic-write'
@@ -269,6 +269,87 @@ export function loadSettingsJson(cwd: string = process.cwd()): SettingsJson {
   }
 
   return { hooks, permissions }
+}
+
+/** Which settings.json a permission rule is persisted to. */
+export type SettingsScope = 'project' | 'user'
+
+export function settingsPathFor(scope: SettingsScope, cwd: string = process.cwd()): string {
+  return scope === 'user'
+    ? join(MIPHAM_HOME, 'settings.json')
+    : join(cwd, '.mipham', 'settings.json')
+}
+
+/**
+ * Read a settings.json as a plain object, preserving any key we don't model
+ * (hooks, and anything a future version adds). A malformed file is an error,
+ * not something to clobber — the user's other settings live in the same file.
+ */
+function readSettingsDoc(path: string): Record<string, unknown> {
+  if (!existsSync(path)) return {}
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(readFileSync(path, 'utf-8'))
+  } catch {
+    throw new Error(`${path} is not valid JSON. Fix or remove it, then retry.`)
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${path} does not contain a JSON object. Fix or remove it, then retry.`)
+  }
+  return parsed as Record<string, unknown>
+}
+
+function writeSettingsDoc(path: string, doc: Record<string, unknown>): void {
+  mkdirSync(dirname(path), { recursive: true })
+  atomicWriteFileSync(path, JSON.stringify(doc, null, 2) + '\n')
+}
+
+/**
+ * Persist one rule into `permissions.<key>` of a scope's settings.json.
+ * Idempotent: re-adding an existing rule leaves the file unchanged.
+ * Returns the path written.
+ */
+export function addSettingsRule(
+  key: 'allow' | 'deny',
+  rule: string,
+  scope: SettingsScope = 'project',
+  cwd: string = process.cwd(),
+): string {
+  const path = settingsPathFor(scope, cwd)
+  const doc = readSettingsDoc(path)
+  const perms = (doc.permissions ?? {}) as Record<string, unknown>
+  const list = Array.isArray(perms[key]) ? perms[key] : []
+  const strings = (list as unknown[]).filter((r): r is string => typeof r === 'string')
+  if (!strings.includes(rule)) strings.push(rule)
+  perms[key] = strings
+  doc.permissions = perms
+  writeSettingsDoc(path, doc)
+  return path
+}
+
+/**
+ * Remove a rule from whichever `permissions` list holds it. Returns the path
+ * and key it was removed from, or null when the rule was not present.
+ */
+export function removeSettingsRule(
+  rule: string,
+  scope: SettingsScope = 'project',
+  cwd: string = process.cwd(),
+): { path: string; key: 'allow' | 'deny' } | null {
+  const path = settingsPathFor(scope, cwd)
+  const doc = readSettingsDoc(path)
+  const perms = (doc.permissions ?? {}) as Record<string, unknown>
+
+  for (const key of ['allow', 'deny'] as const) {
+    if (!Array.isArray(perms[key])) continue
+    const list = (perms[key] as unknown[]).filter((r): r is string => typeof r === 'string')
+    if (!list.includes(rule)) continue
+    perms[key] = list.filter((r) => r !== rule)
+    doc.permissions = perms
+    writeSettingsDoc(path, doc)
+    return { path, key }
+  }
+  return null
 }
 
 export function loadConfig(cwd: string = process.cwd()): MiphamConfig {

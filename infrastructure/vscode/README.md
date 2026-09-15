@@ -7,7 +7,6 @@ Multi-model AI coding terminal integrated into VS Code. 30 tools, 7 AI providers
 - **Integrated Terminal** — `Cmd+Esc` launches Mipham Code in the VS Code terminal
 - **Status Bar** — Shows active provider/model, click to focus terminal
 - **Quick Config** — "Mipham Code: Open Config" opens your `.mipham/config.yml`
-- **File Context** — `MIPHAM_IDE=vscode` env var for workspace-aware AI
 - **Keybindings** — `Cmd+Esc` (start), `Cmd+Shift+M` (focus terminal)
 - **Auto-Detection** — Finds Bun runtime and Mipham Code installation automatically
 
