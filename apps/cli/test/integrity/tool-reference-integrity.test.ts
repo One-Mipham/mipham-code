@@ -9,7 +9,7 @@
  *   4. `/todos` 的提示词、参考表与 locale 文案引用 `TaskCreate` / `TaskList` 等
  *      不存在的工具名（真实工具只有一个 `Task`，动作走 `action` 参数）
  *
- * 本文件用两条机器可校验的契约覆盖其中两类。守卫的价值取决于**不误报**——
+ * 本文件用四段机器可校验的契约覆盖上述缺陷类。守卫的价值取决于**不误报**——
  * 实测（2026-09-15）扫描命中 6 个幻影名（分布在 10 处），误报 0；被排除的合法词
  * `GitHub` / `GitLab` / `ConfigChange` 见 ALLOWED_NON_TOOL_WORDS。误报的处理方式是
  * **加白名单并写明理由**，不是放宽规则、更不是删掉守卫。
@@ -133,6 +133,73 @@ describe('工具名引用完整性', () => {
         ? ''
         : `发现 ${hits.size} 个像工具名但不存在的引用：\n${report}\n\n` +
             '若确为误报，加入 ALLOWED_NON_TOOL_WORDS 并写明理由；若是真实引用，改成注册表中的真实工具名。',
+    ).toBe('')
+  })
+})
+
+describe('工具总数声明完整性', () => {
+  const registered = createToolRegistry().size
+
+  /**
+   * 工具总数声明，形如 `31 个工具` / `16 tools`。
+   *
+   * 中文侧要求带「个」是有意的：`（1/34 工具）`（CLAUDE.md 待办一节）说的是
+   * Obsidian MCP 服务器自己的第 1/34 个工具，不是本项目的工具总数，不匹配才不误报。
+   * 与技能清单守卫同理 —— 守卫的成败取决于不误报。
+   */
+  const TOOL_TOTAL_RE = /(\d+)\s*个(?:内置)?工具|(\d+)\+?\s+tools?\b/g
+
+  /**
+   * 时间点记录 —— 自证定格、或本身就是逐版本流水。里面的旧数字在写下时是对的，
+   * 改它等于篡改一份有日期的记录：
+   *   - `CHANGELOG.md`：逐版本流水，每条记的是发布当时的事实
+   *   - `PRODUCT.md`：抬头写明 `Version 1.0.0 | Date 2026-06-10` 的定格规格书，
+   *     通篇是 0.5.x 时代的事实（8 providers / 16 tools / 13 skills / 28+ models）。
+   *     它不是「被漏改」，是**不该改** —— 其 §5.1 的 16 正是那张表的真实行数，自洽。
+   *     （真问题是 `apps/cli/README.md` 把它当「当前规格」链出去，属另一件事。）
+   *
+   * 同类另见 `docs/superpowers/**`（设计规格与实施计划）、`docs/claude-md-history.md`、
+   * `docs/mipham-code-v0.5.9-wechat-article.md` —— 它们本就不在扫描面内。
+   *
+   * 但**扫描面必须铺到全部活文档**：只扫「已经修好的那几个」的守卫是空转的，那正是
+   * 本文件开头警告的静默恒真。
+   */
+  const POINT_IN_TIME_ROOT_DOCS = new Set(['CHANGELOG.md', 'PRODUCT.md'])
+  const liveDocs = [
+    ...readdirSync(REPO_ROOT)
+      .filter((f) => f.endsWith('.md') && !POINT_IN_TIME_ROOT_DOCS.has(f))
+      .map((f) => join(REPO_ROOT, f)),
+    join(CLI_DIR, 'README.md'),
+    join(REPO_ROOT, 'infrastructure', 'vscode', 'README.md'),
+  ]
+
+  it('活文档里的工具总数声明与注册表一致', () => {
+    const problems: string[] = []
+    let claims = 0
+
+    for (const file of liveDocs) {
+      const rel = file.slice(REPO_ROOT.length + 1)
+      readFileSync(file, 'utf-8')
+        .split('\n')
+        .forEach((line, i) => {
+          for (const match of line.matchAll(TOOL_TOTAL_RE)) {
+            claims++
+            const declared = Number(match[1] ?? match[2])
+            if (declared !== registered) {
+              problems.push(
+                `  ${rel}:${i + 1}: 声明 ${declared} 个工具，注册表实际 ${registered} 个`,
+              )
+            }
+          }
+        })
+    }
+
+    expect(claims, '没有扫到任何工具总数声明——正则可能已与文档写法脱节').toBeGreaterThan(0)
+    expect(
+      problems.join('\n'),
+      `工具总数声明与注册表不一致：\n${problems.join('\n')}\n\n` +
+        `真源是 createToolRegistry()（${registered} 个）。` +
+        '若某处并非本项目的工具总数（例如第三方服务器的工具数），改写措辞使其不匹配，不要放宽正则。',
     ).toBe('')
   })
 })

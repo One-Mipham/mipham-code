@@ -1,6 +1,6 @@
 # Mipham Code — VS Code Extension
 
-Multi-model AI coding terminal integrated into VS Code. 30 tools, 7 AI providers, background agents, plan mode, workflow orchestration — now inside your editor.
+Multi-model AI coding terminal integrated into VS Code. 31 tools, 7 AI providers, background agents, plan mode, workflow orchestration — now inside your editor.
 
 ## Features
 

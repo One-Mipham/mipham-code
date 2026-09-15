@@ -72,7 +72,7 @@ mipham-code/
 │   │   │   ├── core/           # engine, context, permission, hooks, instructions, rules-loader, session-log
 │   │   │   ├── vajra/          # Vajra-Hṛdaya 自建内核（context/service/events/compose/leaf）
 │   │   │   ├── providers/      # anthropic, openai-compat, registry, bootstrap
-│   │   │   ├── tools/          # 30 个工具（file/exec/agent/network/system/scheduling/artifact/computer）
+│   │   │   ├── tools/          # 31 个工具（file/exec/agent/network/system/scheduling/artifact/computer）
 │   │   │   ├── skills/         # loader + standard/mipham 双轨运行时
 │   │   │   ├── mcp/            # MCP 客户端 + Tool Search
 │   │   │   ├── agent/          # 后台 Agent、消息总线、类型定义
