@@ -18,14 +18,21 @@ const FIXTURE = path.join(HERE, 'fixtures', 'floating-promise.ts')
  * compiler itself is instrumented while it does that, so the two costs
  * compound instead of adding. Measured against the exact command CI runs
  * (`pnpm --filter @miphamai/cli coverage`): ~2.4s bare, ~10s under coverage
- * locally, and **25.9s on a CI runner** — which is why the Test job went red on
- * every push rather than flaking.
+ * locally, and 25.9s / 28.9s / 31.2s across three consecutive CI runs — which
+ * is why the Test job went red on every push rather than flaking.
+ *
+ * Note the *drift* in those three numbers: they only rise. The cost is building
+ * a TS program over everything the cli tsconfig includes, which grows with the
+ * repo, so this bound is chasing a moving target — re-measure before assuming
+ * the headroom below still holds.
  *
  * A generous bound is the right shape here: the failure mode is slowness, not a
  * hang — the work is bounded (lint one file) — and a shared runner is slower
- * than a dev machine by a factor nothing else in the suite approaches.
+ * than a dev machine by a factor nothing else in the suite approaches. 120s
+ * leaves ~4x headroom over the slowest run so far and costs nothing; a bound
+ * this loose still catches a genuine hang, which is all it is for.
  */
-const TYPE_AWARE_LINT_TIMEOUT_MS = 60_000
+const TYPE_AWARE_LINT_TIMEOUT_MS = 120_000
 
 /**
  * `eslint .` deliberately skips the fixtures directory, so a green repo-wide lint
