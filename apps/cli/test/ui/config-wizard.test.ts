@@ -3,7 +3,7 @@
  *
  * Ink component testing requires a TTY, so we test the data layer:
  * - State transition validity (Cloud path, Esc back-navigation)
- * - Config file generation for all 8 cloud providers
+ * - Config file generation for every `CLOUD_PROVIDERS` entry
  * - Edge cases (empty API key, no active models, whitespace trimming)
  */
 

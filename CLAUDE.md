@@ -44,7 +44,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：2,378 测试（2376 passed + 2 skipped，0 失败）
+测试：2,388 测试（2386 passed + 2 skipped，0 失败）
 
 ---
 
@@ -81,7 +81,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 212 个测试文件，2378 个测试
+│   │   ├── test/               # 213 个测试文件，2388 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   └── web/                    # Web 产品页（Next.js）
 │       └── src/app/code/       # 6 个页面组件
@@ -104,7 +104,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（2378 个测试）
+pnpm test         # vitest run（2388 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Web
@@ -239,7 +239,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | workflow        | 7       | 55       | runtime / loop / parallel / sandbox / journal / verify                              |
 | vajra           | 6       | 53       | context / events / service / compose / leaf（自建内核）                             |
 | shared          | 7       | 44       | arg-validation / deleted-cwd / sanitize / graft / update-async                      |
-| commands        | 5       | 38       | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions                  |
+| commands        | 6       | 48       | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers |
 | skills          | 5       | 35       | sanitizer / marketplace / fork-executor / skill-assets                              |
 | config          | 5       | 30       | credential-crypto / loader-encryption / defaults / settings-json                    |
 | plugin          | 2       | 28       | claude-plugin / plugin-manager                                                      |
@@ -247,14 +247,14 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | agent-view      | 1       | 9        | agent-view-manager                                                                  |
 | e2e             | 1       | 8        | full-pipeline                                                                       |
 | integrity       | 1       | 9        | 引用完整性守卫（工具名 / 技能清单 / IDE 环境变量 / 工具总数 / 文档体积与滚动窗口）  |
-| **合计**        | **212** | **2378** | **0 失败** ✅（2376 passed + 2 skipped）                                            |
+| **合计**        | **213** | **2388** | **0 失败** ✅（2386 passed + 2 skipped）                                            |
 
 > **若本机 `git` 报 Xcode 许可证未接受**：`core/crsi-*` 与 `core/instructions` 中 21 个测试会 shell 调真
 > `git`，会被一并挡住而**假红**（极易误判为回归 —— 曾实际发生）。判定方法：把这些文件单独跑一遍，
 > 看报错是否为 `You have not agreed to the Xcode license agreements`；或直接 `/usr/bin/git --version`。
 > 一次解决：`sudo xcodebuild -license accept`（**保持 Xcode 为活动开发者目录**，不影响 §十六 的打包公证；
 > 换 `xcode-select -s` 到 CommandLineTools 则会连带把 `productbuild` / `xcrun notarytool` 切走，勿用）。
-> 2026-09-15 已在本机执行，全量 **2376 passed + 2 skipped / 0 失败**。
+> 2026-09-15 已在本机执行，全量 **2386 passed + 2 skipped / 0 失败**。
 
 测试框架: Vitest 5，mock: `test/__mocks__/bun.ts`
 

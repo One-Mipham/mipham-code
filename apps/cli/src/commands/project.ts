@@ -8,6 +8,7 @@
 import type { CommandHandler, CommandContext, CommandResult } from '../ui/commands.js'
 import { getWorkspaceTrust } from '../core/workspace-trust'
 import { atomicWriteFileSync } from '../shared/atomic-write'
+import { CLOUD_PROVIDERS } from '../config/wizard-config'
 import { homedir } from 'node:os'
 
 export {
@@ -19,6 +20,18 @@ export {
   promptAuditCmd,
   securityCmd,
   trustCmd,
+}
+
+/**
+ * provider id → 环境变量名，例如 `minimax-global` → `MINIMAX_GLOBAL_API_KEY`。
+ *
+ * 非字母数字字符必须归一为 `_`：生成的模板里写着 `export <名字>=...`，
+ * 而带连字符的 `export MINIMAX-GLOBAL_API_KEY=…` 是 shell 语法错误
+ * （`openai-compat.ts` 的 `${VAR}` 解析器另一条 `$VAR` 分支也只认
+ * `[A-Z_][A-Z0-9_]*`）。`/init` 过去只输出无连字符的 mipham，所以这条一直不可达。
+ */
+function envVarFor(providerId: string): string {
+  return `${providerId.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_API_KEY`
 }
 
 const initCmd: CommandHandler = async (ctx) => {
@@ -33,8 +46,11 @@ const initCmd: CommandHandler = async (ctx) => {
   if (!existsSync(userConfigPath)) {
     mkdirSync(join(home, '.mipham'), { recursive: true })
 
-    const activeProviders = ctx.config.providers.filter((p) => p.status === 'active')
-    const providerYaml = activeProviders
+    // 生成物必须来自随包发布的清单，不能来自 ctx.config —— 后者的 status 表达
+    // 的是「用户停用了哪家」这个**运行时**状态，而 12 家里只有 mipham 声明了它
+    // （其余 status 全在 model 层），拿它筛会恒得 1 家。
+    const presetProviders = CLOUD_PROVIDERS
+    const providerYaml = presetProviders
       .map((p) => {
         const tips: Record<string, string> = {
           anthropic: '# Get key: https://console.anthropic.com/',
@@ -51,7 +67,7 @@ const initCmd: CommandHandler = async (ctx) => {
         return `  ${comment}
   - id: ${p.id}
     name: "${p.name}"${baseUrlLine}
-    apiKey: "\${${p.id.toUpperCase()}_API_KEY}"`
+    apiKey: "\${${envVarFor(p.id)}}"`
       })
       .join('\n\n')
 
@@ -75,7 +91,7 @@ defaultProvider: ${ctx.providerId}
 defaultModel: ${ctx.modelId}
 permission: ask
 
-# ── Providers (${activeProviders.length} pre-configured — just add your API keys) ──
+# ── Providers (${presetProviders.length} pre-configured — just add your API keys) ──
 providers:
 ${providerYaml}
 `
@@ -84,14 +100,14 @@ ${providerYaml}
     return {
       content: `✅ Mipham Code initialized!
 
-Created: ~/.mipham/config.yml (${activeProviders.length} providers pre-configured)
+Created: ~/.mipham/config.yml (${presetProviders.length} providers pre-configured)
 
 Next steps:
   1. Edit ~/.mipham/config.yml — replace API key placeholders with your real keys
   2. Run mipham to start
 
 Providers configured:
-${activeProviders.map((p) => `  • ${p.name} — ${p.id.toUpperCase()}_API_KEY`).join('\n')}
+${presetProviders.map((p) => `  • ${p.name} — ${envVarFor(p.id)}`).join('\n')}
 
 Tip: /setup for the full 6-step wizard.`,
     }
@@ -447,8 +463,9 @@ async function setupStep1(ctx: CommandContext): Promise<CommandResult> {
   if (!existsSync(configPath)) {
     // Generate a user-friendly config with all providers pre-populated.
     // Users just need to replace the API key placeholders with their real keys.
-    const activeProviders = ctx.config.providers.filter((p) => p.status === 'active')
-    const providerYaml = activeProviders
+    // 同 /init：清单来自 CLOUD_PROVIDERS，与运行时 status 无关（见上方注释）。
+    const presetProviders = CLOUD_PROVIDERS
+    const providerYaml = presetProviders
       .map((p) => {
         const comment =
           p.id === 'anthropic'
@@ -472,12 +489,12 @@ async function setupStep1(ctx: CommandContext): Promise<CommandResult> {
         return `  ${comment}
   - id: ${p.id}
     name: "${p.name}"${baseUrlLine}
-    apiKey: "\${${p.id.toUpperCase()}_API_KEY}"`
+    apiKey: "\${${envVarFor(p.id)}}"`
       })
       .join('\n\n')
 
     const defaultConfig = `# Mipham Code — User Configuration
-# Location: ~/.mipham/config.yml
+# Location: <project>/.mipham/config.yml  (project-level; ~/.mipham/config.yml is the user-level file — both are read)
 # Docs:     https://mipham.ai/code/docs/config
 #
 # ═══ Quick Start ═══
@@ -496,7 +513,7 @@ defaultProvider: ${ctx.providerId}
 defaultModel: ${ctx.modelId}
 permission: ask
 
-# ── Providers (8 configured, just add your API keys) ──
+# ── Providers (${presetProviders.length} pre-configured — just add your API keys) ──
 providers:
 ${providerYaml}
 `
