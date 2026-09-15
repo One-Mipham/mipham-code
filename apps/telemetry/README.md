@@ -85,6 +85,14 @@ pnpm coverage      # 阈值在 vitest.config.ts
 `include options-ssl-nginx.conf` 会让 TLS 1.2 依然协商成功，而 `nginx -t`、
 读配置、grep 三道检查**全都看不出来**。
 
+> 上线后又证实了第二层：本 vhost 里那行 `ssl_protocols` 在主机 2 上**根本不是**
+> 决定握手版本的那一行 —— 版本在 OpenSSL 处理 ClientHello 时定死，早于 SNI 回调，
+> 所以由**该 443 地址的默认 server（api）**说了算（nginx 官方文档原话
+> 「protocols should be specified only for a default server」，wontfix 到
+> 1.29.2）。**本机 nginx 1.31.5 带这条修复、主机 2 的 1.24.0 不带** ⇒
+> 「在本机验一遍」从根上证明不了生产行为。现状与决策见
+> [`deploy/README.md`](deploy/README.md) 的「已知的诚实边界」。
+
 ```bash
 bash deploy/verify-vhost.sh     # 本机拿真 vhost 起对照 nginx，验 TLS/状态码/重定向
 ```
