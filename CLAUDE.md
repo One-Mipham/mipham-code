@@ -44,7 +44,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：2,503 测试（2501 passed + 2 skipped，0 失败）
+测试：2,506 测试（2504 passed + 2 skipped，0 失败）
 
 ---
 
@@ -81,7 +81,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 223 个测试文件，2503 个测试
+│   │   ├── test/               # 223 个测试文件，2506 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -107,7 +107,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（2503 个测试）
+pnpm test         # vitest run（2506 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Telemetry（接收端）
@@ -296,9 +296,9 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | artifacts       | 1       | 22       | versioning                                                                                                                                                        |
 | agent-view      | 1       | 9        | agent-view-manager                                                                                                                                                |
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                     |
-| integrity       | 3       | 20       | 引用完整性守卫（工具名 / 技能清单 / IDE 环境变量 / 工具总数 / 文档体积与滚动窗口）+ ESLint 规则生效证明 + **遥测 endpoint 契约**（CLI ↔ `apps/telemetry` 逐字段） |
+| integrity       | 3       | 23       | 引用完整性守卫（工具名 / 技能清单 / IDE 环境变量 / 工具总数 / 文档体积与滚动窗口）+ ESLint 规则生效证明 + **遥测 endpoint 契约**（CLI ↔ `apps/telemetry` 逐字段） |
 | telemetry       | 8       | 104      | redact / consent / queue / payload / crash / transport / 门面 / 双路径计数一致性                                                                                  |
-| **合计**        | **223** | **2503** | **0 失败** ✅（2501 passed + 2 skipped）                                                                                                                          |
+| **合计**        | **223** | **2506** | **0 失败** ✅（2504 passed + 2 skipped）                                                                                                                          |
 
 > **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 179 测试，自带
 > `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。
@@ -312,7 +312,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 > 看报错是否为 `You have not agreed to the Xcode license agreements`；或直接 `/usr/bin/git --version`。
 > 一次解决：`sudo xcodebuild -license accept`（**保持 Xcode 为活动开发者目录**，不影响 §十六 的打包公证；
 > 换 `xcode-select -s` 到 CommandLineTools 则会连带把 `productbuild` / `xcrun notarytool` 切走，勿用）。
-> 2026-09-15 已在本机执行，全量 **2492 passed + 2 skipped / 0 失败**。
+> 2026-09-15 已在本机执行，全量 **2504 passed + 2 skipped / 0 失败**。
 
 测试框架: Vitest 5，mock: `test/__mocks__/bun.ts`
 

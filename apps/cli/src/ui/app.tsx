@@ -48,6 +48,7 @@ import type { AgentViewManager } from '../agent-view/agent-view-manager'
 import { WorkflowProgress } from './workflow-progress.js'
 import { GoalProgress } from './goal-progress.js'
 import {
+  commandLabelFor,
   getCommand,
   looksLikeSlashCommand,
   parseSlashCommand,
@@ -864,7 +865,10 @@ export function App({
         // /model-picker, /exit, /quit and /focus are special-cased and return
         // before ever reaching it, so counting there would silently under-report
         // six of the most-used commands.
-        recordCommand(command)
+        //
+        // `commandLabelFor` collapses unrecognised names into `/unknown` — see it
+        // for why an unbounded `command_name` is not a cosmetic problem.
+        recordCommand(commandLabelFor(command))
 
         // /switch takes args, handled separately
         if (command === '/switch') {

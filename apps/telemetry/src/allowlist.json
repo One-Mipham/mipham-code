@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFrom": ["createToolRegistry()", "getCommandNames()"],
+  "generatedFrom": ["createToolRegistry()", "getCommandLabelNames()"],
   "labels": {
     "command_calls": [
       "/add-dir",
@@ -79,6 +79,7 @@
       "/mcp",
       "/memory",
       "/model",
+      "/model-picker",
       "/models",
       "/no-plan",
       "/ollama-refresh",
@@ -132,6 +133,7 @@
       "/trust",
       "/ultracode",
       "/undo",
+      "/unknown",
       "/upgrade",
       "/usage",
       "/verify",

@@ -5606,6 +5606,47 @@ export function getCommandNames(): string[] {
   return Array.from(registry.keys()).sort()
 }
 
+/**
+ * The commands `app.tsx` intercepts **before** the registry lookup.
+ *
+ * They return early and never reach `getCommand`, so the registry is not
+ * authoritative for them. `/model-picker` is the one that is not a registry key
+ * at all — the other five are, so listing them here is belt-and-braces rather
+ * than a claim that they are missing.
+ */
+const PRE_REGISTRY_COMMANDS = ['/switch', '/pick', '/model-picker', '/exit', '/quit', '/focus']
+
+/**
+ * The bucket an unrecognised command name is recorded under.
+ *
+ * **Why this exists.** `parseSlashCommand` returns `parts[0]` — whatever the user
+ * typed. Without a convergence point, `/foobar` mints a `command_calls./foobar`
+ * series on the spot, and nothing bounds the number of series:
+ * `MAX_LABEL_LENGTH` in `payload.ts` truncates the **value**, not the key count.
+ * `tool_name` really is closed by construction (the registry declares the tool
+ * set); `command_name` is not.
+ */
+export const UNKNOWN_COMMAND = '/unknown'
+
+/** The label a command name is recorded under: itself if we ship it, else the bucket. */
+export function commandLabelFor(command: string): string {
+  if (registry.has(command) || PRE_REGISTRY_COMMANDS.includes(command)) return command
+  return UNKNOWN_COMMAND
+}
+
+/**
+ * Every label `command_calls` can carry — the source the collector's allowlist is
+ * generated from.
+ *
+ * Two more than `getCommandNames()`: `/model-picker` (user-typable, not a registry
+ * key) and `UNKNOWN_COMMAND`. Miss either and the allowlist does not contain it,
+ * so the collector folds those events into `__other__` — and `__other__` is
+ * exactly what T4 must not be reading when it votes.
+ */
+export function getCommandLabelNames(): string[] {
+  return Array.from(new Set([...registry.keys(), ...PRE_REGISTRY_COMMANDS, UNKNOWN_COMMAND])).sort()
+}
+
 export interface CommandEntry {
   name: string
   description: string

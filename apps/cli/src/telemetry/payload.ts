@@ -63,8 +63,11 @@ function firstLabelValue(labels: string): string {
  *   `mipham_code_cli_invocations_total`              → `cli_invocations`
  *   `mipham_code_tool_calls_total{tool_name="Bash"}` → `tool_calls.Bash`
  *
- * Label cardinality is bounded by construction — there are only as many tool
- * names as the registry declares and as many commands as the CLI ships.
+ * Label cardinality: `tool_name` is closed by construction — there are only as
+ * many tool names as the registry declares. `command_name` is **not**: it comes
+ * from user input, so the caller is responsible for collapsing unrecognised
+ * names (see `commandLabelFor` in `ui/commands.ts`). `MAX_LABEL_LENGTH` below
+ * truncates a value, it does not bound how many keys there are.
  */
 export function snapshotCounters(): Record<string, number> {
   const metrics = getMetrics()

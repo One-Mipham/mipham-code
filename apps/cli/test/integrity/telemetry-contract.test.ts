@@ -9,7 +9,7 @@
  * 两者都是「两边都绿、数据没了」，类型检查与各自的测试都看不见。
  *
  * 之所以放在 `apps/cli/test/` 而不是 `apps/telemetry/test/`：注册表真源在 CLI 侧
- * （`createToolRegistry` / `getCommandNames`），放在这里 `apps/telemetry` 的依赖图里
+ * （`createToolRegistry` / `getCommandLabelNames`），放在这里 `apps/telemetry` 的依赖图里
  * 就永远不会有 ink/react。
  */
 
@@ -19,7 +19,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { createToolRegistry } from '../../src/tools/index'
-import { getCommandNames } from '../../src/ui/commands'
+import { commandLabelFor, getCommandLabelNames, UNKNOWN_COMMAND } from '../../src/ui/commands'
 import { recordCommand, recordToolCall } from '../../src/telemetry/index'
 import { buildSessionEvent, COUNTER_WHITELIST, SCHEMA_VERSION } from '../../src/telemetry/payload'
 import { buildCrashEvent, recordCrash } from '../../src/telemetry/crash'
@@ -42,10 +42,18 @@ interface AllowlistFile {
   labels: Record<string, string[]>
 }
 
-/** 从两个注册表推导出服务端应当收录的标签集合。 */
-function deriveLabels(): Record<string, string[]> {
+/**
+ * 从两个注册表推导出服务端应当收录的标签集合。
+ *
+ * 工具侧用注册表原样。命令侧用 `getCommandLabelNames()` 而非 `getCommandNames()` ——
+ * 后者只含注册表键，而 `command_calls` 记的是**用户敲的那个字符串**：`/model-picker`
+ * 是用户可敲但未进注册表的别名，`/unknown` 是未注册名的收敛桶。两者都不在
+ * `getCommandNames()` 里，漏了它们就会被服务端折叠进 `__other__` —— 而 T4 正是靠
+ * 这张表投票，读 `__other__` 等于读「没人用」。
+ */
+function deriveLabels(): { command_calls: string[]; tool_calls: string[] } {
   const tools = Array.from(createToolRegistry().keys()).sort()
-  const commands = getCommandNames().slice().sort()
+  const commands = getCommandLabelNames()
   return { command_calls: commands, tool_calls: tools }
 }
 
@@ -54,13 +62,13 @@ function readAllowlist(): AllowlistFile {
 }
 
 describe('遥测契约：接收端 allowlist 与 CLI 注册表不漂移', () => {
-  it('allowlist.json 与 createToolRegistry()/getCommandNames() 逐字一致', () => {
+  it('allowlist.json 与 createToolRegistry()/getCommandLabelNames() 逐字一致', () => {
     const derived = deriveLabels()
 
     if (UPDATE) {
       const next: AllowlistFile = {
         version: 1,
-        generatedFrom: ['createToolRegistry()', 'getCommandNames()'],
+        generatedFrom: ['createToolRegistry()', 'getCommandLabelNames()'],
         labels: derived,
       }
       writeFileSync(ALLOWLIST_PATH, JSON.stringify(next, null, 2) + '\n', 'utf-8')
@@ -84,6 +92,42 @@ describe('遥测契约：接收端 allowlist 与 CLI 注册表不漂移', () => 
     const derived = deriveLabels()
     expect(derived.command_calls.length).toBeGreaterThan(0)
     expect(derived.tool_calls.length).toBeGreaterThan(0)
+  })
+})
+
+describe('遥测契约：command_name 的基数在客户端收敛', () => {
+  it('未注册的命令名归入 UNKNOWN_COMMAND，不新造序列', () => {
+    expect(commandLabelFor('/foobar')).toBe(UNKNOWN_COMMAND)
+    expect(commandLabelFor('/telemetry')).toBe('/telemetry')
+    // /model-picker 是用户可敲但**不在注册表**里的别名 —— 它在 app.tsx 里被特殊处理。
+    // 朴素的 `getCommand(name) === undefined ? unknown : name` 会把它误归桶。
+    expect(commandLabelFor('/model-picker')).toBe('/model-picker')
+    // 大小写不敏感，与 parseSlashCommand 的 toLowerCase 一致。
+    expect(commandLabelFor('/TELEMETRY')).toBe(UNKNOWN_COMMAND)
+  })
+
+  it('UNKNOWN_COMMAND 在允许清单里 —— 否则收敛桶自己会被折叠进 __other__', () => {
+    expect(getCommandLabelNames()).toContain(UNKNOWN_COMMAND)
+  })
+
+  /**
+   * 这条是「`PRE_REGISTRY_COMMANDS` 与 app.tsx 各自漂移」的唯一机械防线。
+   *
+   * app.tsx 里每写一个 `command === '/x'`，就等于新增一个能到达 `recordCommand`
+   * 的标签 —— 而那个字面量不在任何注册表里，没有任何别的东西会发现它漏了。
+   * 靠约定维护一张必须与另一个文件同步的清单，正是本仓库反复吃过的
+   * 「有定义、无施加点」。所以直接扫源码断言。
+   */
+  it('app.tsx 里特殊处理的每个命令字面量都是合法标签', () => {
+    const src = readFileSync(join(CLI_DIR, 'src', 'ui', 'app.tsx'), 'utf-8')
+    const literals = Array.from(src.matchAll(/command === '([^']+)'/g), (m) => m[1]!)
+    expect(literals.length).toBeGreaterThan(0) // 扫不到就说明正则过期了，别让断言空转
+    const known = new Set(getCommandLabelNames())
+    const missing = literals.filter((name) => !known.has(name))
+    expect(
+      missing,
+      `app.tsx 特殊处理但这些名字不在 getCommandLabelNames() 里：${missing.join(', ')}`,
+    ).toEqual([])
   })
 })
 
