@@ -794,6 +794,105 @@ describe('QueryEngine', () => {
     })
   })
 
+  // ── T12-A：工具成败位必须活着穿出 engine ────────────────────────────────
+  //
+  // 此前 `tool_result` 只有 `content`，成败被并进正文 ⇒ 无头路径（daemon / Bot /
+  // schedules）分不出「工具跑成功」与「工具被拒/报错」，第三方基准驱动因此拿不到
+  // 工具级读数。协议侧 `ServerToolResultMessage.isError` 早就声明了，只是没人填。
+  describe('tool_result 的成败位（T12-A）', () => {
+    it('失败的工具调用标 isError，且错误文案仍在 content 里', async () => {
+      const tool: ToolDefinition = { ...mockTool('bash'), permission: 'ask' }
+      const registry = mockProviderRegistry(async function* () {
+        yield {
+          type: 'tool_use',
+          toolUse: { type: 'tool_use', id: 'call_1', name: 'bash', input: { command: 'ls' } },
+        }
+        yield { type: 'stop' }
+      })
+      const engine = new QueryEngine(
+        registry,
+        mockContext(),
+        makeToolMap([tool]),
+        new PermissionSystem('default'),
+      )
+
+      const chunks: StreamChunk[] = []
+      for await (const chunk of engine.process('run command')) {
+        chunks.push(chunk)
+      }
+
+      const result = chunks.find((c) => c.type === 'tool_result')
+      expect(result?.isError).toBe(true)
+      expect(result?.content).toContain('requires approval under "default" mode')
+    })
+
+    it('成功的工具调用标 isError: false（字段恒在，消费端无需分辨 undefined）', async () => {
+      const tool = mockTool('read', async () => ({ success: true, content: 'file content' }))
+      const registry = mockProviderRegistry(async function* () {
+        yield {
+          type: 'tool_use',
+          toolUse: { type: 'tool_use', id: 'call_1', name: 'read', input: { path: '/f.txt' } },
+        }
+        yield { type: 'stop' }
+      })
+      const engine = new QueryEngine(registry, mockContext(), makeToolMap([tool]))
+
+      const chunks: StreamChunk[] = []
+      for await (const chunk of engine.process('read file')) {
+        chunks.push(chunk)
+      }
+
+      const result = chunks.find((c) => c.type === 'tool_result')
+      expect(result?.isError).toBe(false)
+      expect(result?.content).toBe('file content')
+    })
+
+    // `process()` 只跑第一轮工具（engine.ts:699 那处会展平 error），多轮全走
+    // `continueWithTools()`（engine.ts:1038）—— 后者此前连展平都没有，直接
+    // `content: result.content`，而失败结果的 content 恰是空串 ⇒ 模型收到一个
+    // **空** tool_result，错误文案整个丢失。所以这条单独测。
+    it('多轮循环里的失败：既标 isError，也不把错误文案丢成空串', async () => {
+      let call = 0
+      const okTool = mockTool('Read', async () => ({ success: true, content: 'file body' }))
+      const askTool: ToolDefinition = { ...mockTool('bash'), permission: 'ask' }
+      const registry = mockProviderRegistry(async function* () {
+        call += 1
+        if (call === 1) {
+          yield {
+            type: 'tool_use',
+            toolUse: { type: 'tool_use', id: 'c1', name: 'Read', input: { path: 'a.py' } },
+          }
+        } else if (call === 2) {
+          yield {
+            type: 'tool_use',
+            toolUse: { type: 'tool_use', id: 'c2', name: 'bash', input: { command: 'ls' } },
+          }
+        } else {
+          yield { type: 'text', content: '收尾' }
+        }
+        yield { type: 'stop' }
+      })
+      const engine = new QueryEngine(
+        registry,
+        mockContext(),
+        makeToolMap([okTool, askTool]),
+        new PermissionSystem('default'),
+      )
+
+      const chunks: StreamChunk[] = []
+      for await (const chunk of engine.process('go')) {
+        chunks.push(chunk)
+      }
+
+      // 前置断言：第二轮真的跑了（否则下面的 find 找不到 c2，测试会假绿）
+      expect(call).toBeGreaterThanOrEqual(3)
+      const failed = chunks.find((c) => c.type === 'tool_result' && c.tool_use_id === 'c2')
+      if (!failed) throw new Error('第二轮 tool_result 未产出 —— 多轮路径没走到')
+      expect(failed.content).toContain('requires approval under "default" mode')
+      expect(failed.isError).toBe(true)
+    })
+  })
+
   describe('resetFileTracking', () => {
     it('clears the read-before-write record the tools receive', async () => {
       let seen: Set<string> | undefined

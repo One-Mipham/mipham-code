@@ -99,10 +99,10 @@ const CHUNKS: StreamChunk[] = [
   { type: 'stop' },
 ]
 
-async function run() {
+async function run(chunks: StreamChunk[] = CHUNKS) {
   const db = makeDb()
   const ws = makeWs()
-  const worker = new SessionWorker(scriptedEngine(CHUNKS), db as any, { ...SESSION })
+  const worker = new SessionWorker(scriptedEngine(chunks), db as any, { ...SESSION })
   worker.addClient(ws as any)
   await worker.processPrompt('calc.py 是做什么的？')
   return { db, ws }
@@ -134,5 +134,24 @@ describe('SessionWorker.processPrompt — 一次回合的真实 chunk 序列', (
   it('done 恰好一次 —— 去掉 break 后的新终止路径不得重复收尾', async () => {
     const { ws } = await run()
     expect(ws.sent.filter((m) => m.type === 'done')).toHaveLength(1)
+  })
+
+  // ── T12-A：成败位必须活着穿到 WS 上 ──────────────────────────────────────
+  // 协议侧 `ServerToolResultMessage.isError` 早已声明（attach-protocol.ts:33），
+  // 此前从未有人填过。不填 ⇒ 第三方基准驱动只看到一串 tool_result，分不出
+  // 「工具跑了」与「工具被拒/报错」，失败归因只能靠解析正文散文。
+  it('失败的工具结果带 isError:true 广播出去', async () => {
+    const { ws } = await run([
+      { type: 'tool_result', tool_use_id: 'c1', content: 'permission denied', isError: true },
+    ])
+    const results = ws.sent.filter((m) => m.type === 'tool_result')
+    expect(results).toHaveLength(1)
+    expect(results[0]).toMatchObject({ toolId: 'c1', isError: true })
+  })
+
+  it('成功时 isError:false —— 与失败同形不同值，协议上可判别', async () => {
+    const { ws } = await run([{ type: 'tool_result', tool_use_id: 'c1', content: 'ok' }])
+    const results = ws.sent.filter((m) => m.type === 'tool_result')
+    expect(results[0]).toMatchObject({ toolId: 'c1', isError: false })
   })
 })

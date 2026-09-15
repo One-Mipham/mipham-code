@@ -20,7 +20,7 @@
 
 | 维度            | 现状                                                                                                                                                                                                                                                                                   | 判定                                                                   |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| 测试            | 2516（2514 passed + 2 skipped），227 文件（另有 `apps/telemetry` 独立工作区 179 用例 / 12 文件）                                                                                                                                                                                       | ✅ 数量充足                                                            |
+| 测试            | 2521（2519 passed + 2 skipped），227 文件（另有 `apps/telemetry` 独立工作区 179 用例 / 12 文件）                                                                                                                                                                                       | ✅ 数量充足                                                            |
 | CI              | 9 job：typecheck / lint / format / build-cli / build-web / test / security-audit / penetration-test / install-scripts                                                                                                                                                                  | ✅ 齐全                                                                |
 | 覆盖率          | 本地（有 API key）行 56.76% / 分支 47.8% / 函数 62.35% / 语句 56.54%（2026-09-15 T1 落地后实测；阈值仍取 CI 条件值）                                                                                                                                                                   | ✅ 偏低但**已有阈值门禁 + CI 执行路径**（T3a，2026-09-15）             |
 | 变异测试        | **基线 7.05%**（144 killed / 1507 survived / 393 no-coverage，共 2044 变异体 · **7 文件全接** · 实跑 8m26s，2026-09-15）；**口径已变，不与首批 8.02% 比**（首批 6 文件 / 1621 变异体 —— 是加文件稀释，不是回归）；**这是起点不是目标** —— `break` 阈值故意未设，待办是补断言而非调阈值 | ⚠️ 有基线、**分数很低**（T3c，2026-09-15）                             |
@@ -126,7 +126,7 @@ trac #844 / #2352，直到 1.29.2 才修。故 vhost 里写 `TLSv1.3;` 是**无�
 - 每任务 token / 成本
 - 复现命令与随机种子
 
-**前置**：① Docker 干净环境（官方 harness 需容器）；② **基准 daemon 的权限策略 —— ✅ 已定（2026-09-15）**：`bypassPermissions` 走进程级 `MIPHAM_DAEMON_PERMISSION`，配专用 daemon + 临时工作区 + 跑完即杀（决议与行为实证见文末「已决议的岔路口」）。**发布物必须写明 mode 与该行 env** —— 不写，第三方复现不出同一份成绩。
+**前置**：① Docker 干净环境（官方 harness 需容器）；② **基准 daemon 的权限策略 —— ✅ 已定（2026-09-15）**：`bypassPermissions` 走进程级 `MIPHAM_DAEMON_PERMISSION`，配专用 daemon + 临时工作区 + 跑完即杀（决议与行为实证见文末「已决议的岔路口」）。**发布物必须写明 mode 与该行 env** —— 不写，第三方复现不出同一份成绩；③ **工具成败位可读 —— ⏳ T12，A 段已落地（2026-09-16）、B 段待决**：不解决则低分时分不清「模型没做出来」与「我们的权限层把工具吃了」，分数报得出、辩护不了。
 
 **验收**：第三方可按文档复现出同量级分数
 
@@ -496,6 +496,45 @@ Stryker 把整个包复制到 `apps/cli/.stryker-tmp/sandbox-<id>/` 里跑 —�
 
 ---
 
+### [ ] T12 · 工具成败位在无头路径上不可读（T2 的**仪器**前置）
+
+**为什么**：T2 的分数要能被**辩护**，不只是被**报出**。官方 harness 判分看容器最终状态、
+**不读**我们的 chunk ⇒ 这条**不卡判分**；它卡的是**归因** —— 跑出 0 分时，分不清「模型没做出来」
+与「我们的权限层把工具吃了」。这与基准运行选 `bypassPermissions` 要防的是**同一类污染**。
+
+**现状（2026-09-15 核实）**：成败位**两端都建得好** —— 源头是 `ToolResult.success`（MCP 工具
+从 `isError` 派生，`tools/system/mcp.ts:70`），CLI 落盘端是 JSONL 的 `tool/result` 事件带**全量**
+`ToolResult`（实测 **381/381 条**都带 `success`）。**中间三条边界各丢一次**：
+
+| #   | 边界                                                                                                            | 后果                                                             | 性质   |
+| --- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------ |
+| 1   | `engine.ts` 的 `tool_result` chunk 构造（`process` 与 `continueWithTools` **两处**）—— `StreamChunk` 无承载字段 | 无头路径**分不出**工具成功与失败                                 | **缺** |
+| 2   | 投影消息 `ToolResultContent`（无 `is_error`）+ `providers/anthropic.ts`                                         | **模型被告知**每次工具调用都成功了                               | **缺** |
+| 3   | `core/session-log.ts` 的 `messageToEvents` 写死 `success: true`                                                 | message→event **伪造**成功（旧格式迁移会把历史里的失败洗成成功） | **假** |
+
+**两条反直觉佐证**：① `~/.mipham/sessions/*.jsonl` 一条都不带，**不是** code path 的问题 ——
+是 `daemon/server.ts` 构造 `ContextManager` 时**没传 `log`** ⇒ `context.ts:153` 的 `if (this.log)`
+在无头路径恒 false，**daemon 一条 JSONL 都不写**；② REST 出口救不了：`messages` 表**没有 success 列**
+（`daemon/database.ts:170`），`GET /api/v1/sessions/:id/messages` 结构上带不出这个位。
+
+**A 段（2026-09-16 落地）**：`StreamChunk.isError`（两份 `types.ts` 同步）→ 两处构造点填
+`!result.success` → `session-worker` 映进**已声明、只是从没人填**的 `ServerToolResultMessage.isError`
+（`attach-protocol.ts:33`）；`remote-engine` 回程同补 —— 只填出口不填入口，字段出了 WS 就回不来。
+**顺带修掉一个更重的缺陷**：`continueWithTools` 那处此前**连展平都没有**、直接发 `result.content`，
+而失败结果的 `content` 恰是**空串**（错误在 `error` 里）⇒ **多轮循环里工具失败时，模型收到一个
+空 `tool_result`，错误文案整个丢失**（红测实测 `expected '' to contain …`）。
+
+**B 段（未做，**单独决策**）**：给 `ToolResultContent` 加 `is_error`，让 `messageToEvents` 读真值
+而非写死 `true`，`anthropic.ts` 据此传真实 `is_error`。它动**已发布的 `packages/shared` 契约**
+与 **session-log 的字节级互逆不变量** —— 该不变量**保得住**（展平表达式两侧对称，把 `error` 一并
+还原即可），但改契约要先拍板。
+
+**验收**：失败的工具调用在 WS 上带 `isError: true`、成功带 `false`；多轮路径的失败结果**不丢**错误文案。
+
+**估量**：A 段小（5 文件 + 5 条测试）；B 段中（改已发布契约 + 不变量）
+
+---
+
 ## P1 — 决定能不能卖
 
 ### [x] T5 · 未接线收口 ✅ 已于 2026-09-15 落地
@@ -675,7 +714,9 @@ agents 真解析、provider 回退仍活着）。
      已落地         →  已埋点（T1b ✅ 接收端已上线）  →  已落地（12 候选 → 5 真未接线，删 3 留 2）
 
 第 2 步（最高杠杆，但要一个决策）
-  T2 公开基准  ← 需拍板：Terminal-Bench 还是 SWE-bench Verified
+  T12 工具成败位（T2 的仪器前置）  →  T2 公开基准
+      A 段 ✅ 已落地（2026-09-16）  →  ← 需拍板：Terminal-Bench 还是 SWE-bench Verified
+      B 段 ⏳ 待单独决策（改已发布契约）
 
 第 3 步（补齐质量证据）
   T3b ✅ ESLint type-checked  →  T3c ✅ 变异测试（**7 文件全接**）  →  T5 ✅ 未接线收口
@@ -687,7 +728,8 @@ agents 真解析、provider 回退仍活着）。
 
 **`T3a`、`T1`（CLI 侧）、`T3b`、`T1b`（接收端上线）、`T3c`（首批）、`T5` 与 `T4` 已于 2026-09-15 落地**（见上）。
 第 1 步（闭环三件）**已整条走完**：埋点（`T1`）→ 出口（`T1b`）→ 据此清账（`T4`）。
-**第 2 步 `T2` 仍卡在岔路口 #2**（Terminal-Bench 还是 SWE-bench Verified），**第 3 步已走完**。
+**第 2 步 `T2` 仍卡在岔路口 #2**（Terminal-Bench 还是 SWE-bench Verified），**第 3 步已走完**；
+其仪器前置 **`T12` A 段已于 2026-09-16 落地**（B 段待单独决策）。
 
 **关于 `T4` 第 4 步的时间窗 —— 结论是「本批用不上」**：遥测聚合按接收日分区，本意是要等数据
 积累出可投票的量；但 T4 实跑后 5 条真未接线**全部是 command / tool 之外的子系统**，本就落在
@@ -739,3 +781,4 @@ agents 真解析、provider 回退仍活着）。
 | 2026-09-15 | **T4 落地（死代码 / 价值盘点）**：`T4` 由 `[ ]` 改为 `[x]`。四步协议（knip → 覆盖率 ∩ → `git log -S` 考古 → 遥测投票）走完一次，**12 个候选 → 5 条真未接线 / 7 条假报**。**假报根因在配置而非 knip 本身**：`knip.json` 的 `ignore` 含 `bin/**`，而 `bin/mipham.ts` 是真实入口且用**动态 `await import()`** 加载依赖（如 `:1204` 供 `--dump-config`）⇒ 只经它可达的文件一律被误报；7 条已**具名**记入守卫（**不写进 `ignore`** —— 那会让真信号沉默，本仓库已为宽 `ignore` 付过一次学费）。**第 3 步的判据是「函数名」不是「文件名」**（`git log -S "new Foo"`），本例 5 条**零命中 = 从没接过线**（不是「曾接过后来拔了」）⇒ 无需兼容层。**第 4 步遥测投票本批不适用**并已回填说明：5 条全是 command / tool 之外的**子系统**，本就落在 T1b 时写死的「适用范围」豁免里 ⇒ 改用 knip 未接线清单判定，**第 4 步没有阻塞这条线**（数据窗留给将来重跑）。**处置：删 3 留 2** —— 删 `core/task-runner.ts` + `core/task-runner-tasks.json`（已被 `core/task-performance.ts` 取代）、`skills/standard/runtime.ts` + `skills/mipham/runtime.ts`（「双轨运行时」自 v0.1.0 `27609bf` 起生产零引用，`loader.ts` 从不加载，空目录一并删）、`test/core/task-runner.test.ts`；留 `vajra/leaf/plan-runner.ts`（Vajra「真叶子」的能力证明，按 M3 决策有意不接）与 `providers/llm-replay.ts`（provider-swap 的**测试夹具**，不是死代码），各带具名理由。**落点** `apps/cli/test/integrity/unwired-disposition.test.ts`：① 判删的必须不存在；② 判留的必须存在**且仍生产零引用**（被接上 ⇒ 豁免过期 ⇒ 红）；③ **生产零引用集合恰等于保留表**（新冒出的未接线文件不会溜过）；④ 7 条假报确实经 `bin/` 可达。**红绿实跑**：复活被删文件 ⇒ 2 红；接上 `plan-runner` ⇒ 2 红且提示「已被接线，请撤掉豁免」。**守卫自身两坑（正是它要抓的缺陷类）**：解析器漏认**带真实扩展名**的说明符（`from '../../core/paths.ts'`）⇒ 活模块被判未接线（静默假阴性），被自己的「集合相等」断言当场抓出；`productionImporters` 起初 O(n²) 重读全盘撞穿 5s 超时（7381ms → 单遍建表 169ms）。**同批回填**：`CLAUDE.md` 2547 → 2512（`core` 1011 → 996、`tools` 339 → 313、`integrity` 39 → 45）、`skills/` 树标签与「双轨运行时」散文、`ROADMAP` 基线表与执行序。删除 5 文件 / 新增 1 守卫文件，测试 2547 → 2512（227 文件不变）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | 2026-09-15 | **T3c 第二批落地（范围 7 文件全接）+ 一次证伪自己的对照实验**：`crsi-sandbox.ts` 接进 `mutate`（`DEFERRED_TO_BATCH_2` 清空为 `[]` —— 保留空数组是因为它值在**形状**不在内容：下次真要延后谁，加一项即被守卫可见地记下）。**基线 7.05%**（144 killed / 1507 survived / 393 no-coverage，2044 变异体 · 7 文件 · 8m26s · 退出码 0）。**当初延后的理由被实测证伪**：`runTests()` 的唯一生产调用点 `crsi-modify.ts:92` 在 `crsi-modify.test.ts` 里被 **6 处** `vi.spyOn(sandbox,'runTests')` 整个 mock 掉，`crsi-sandbox.test.ts` 提到它的次数是 **0** ⇒ 其方法体（`:360`–`:425`）的变异体**全落 `NoCoverage`**，而 Stryker 对 no-coverage 变异体**什么都不跑** ⇒「每个踩到该路径的变异体都要付一次全量」里**一个都不存在**；实测总数 **+423**、no-coverage **+213**、**总耗时反降**（8m55s → 8m26s）。**对照实验（本轮最有价值的产出，也是花了 8 分钟才敢下的结论）**：拿**完全相同**的 6 文件范围复跑 ⇒ **137 killed / 8.45%**，而批次一记录的是 **130 / 8.02%** ⇒ **同一配置 killed 差 7 个（0.43 个点）**，误差集中在 `crsi-producer.ts`（55–64）与 `permission-config.ts`（7–9）。据此**推翻两条既有/将写的结论**：① 原「±1 抖动、摊到 1621 上是 0.06 个点、对基线无实质影响」是在**单文件**上量的，**外推到整批低了 7 倍** ⇒ 补两条禁令（单文件百分比不可当精确值读、整批 <0.5 点差异不可解释）；② 我原本准备写进文档的「加文件 ⇒ 静态变异体相关集变化 ⇒ −5」被**直接证伪**（复跑比原值还高）⇒ **在两个各自带 ±7 噪声的读数之间做减法，减出来的不是效应量，是噪声的差**。**方法学更正**：`reports/mutation/mutation.json` **不能**用于跨运行 diff —— 变异体 `id` 按 `mutate` 清单顺序全局递增，中间插一个文件会把其后所有文件的 id 整体推移（首次按 id 比对只匹配上 700/1621 却"成功"吐出 58 个翻转，**全是假的**）；改用位置键虽能匹配回 1621，但会把同位置同名变异体折叠。⇒ **三方并列的逐文件表才是可信来源。** 文档同批回填：`ROADMAP` 基线表 / 执行序 / 「下一件未阻塞」/ 读数纪律两条 / 「范围收窄」全段改写、`CLAUDE.md` 2.45.0 → 2.46.0。**测试数与文件数不变**（本次只动配置与守卫注释，未增删测试）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | 2026-09-15 | **T2 起手：daemon 权限策略决议 + Run 2 行为实证**。T2 起手先验「无头路径能不能跑基准」，答案是**不能** —— 由此挖出并修掉 `session-worker` 在 `stop` 上的 `break`（见 `33074f3`：那个缺陷让无头路径**一个工具都执行不了**）。本轮定第二件事：**`bypassPermissions`**，只经进程级 env 给，配专用 daemon + 临时工作区 + 跑完即杀。**理由不是方便，是读数归属** —— `default` 下 Bash 必被拒（无审批层），`acceptEdits` 下带管道的命令全被我们自己的元字符闸挡掉，两者产出的都是**关于我们权限过滤器的报告**。**Run 2 = 该策略的验收，跑的是对照而非单跑**（单跑证明不了任何事：模型完全可能压根不碰 Bash 而用 Read 答了）。同一条带管道命令：`default` ⇒ `Tool "Bash" requires approval under "default" mode.`，模型随后拒绝猜值；`bypassPermissions` ⇒ 真输出 `18227FA8CF436E99801BE973288959BE`，与独立复核逐字相同。**顺带核实两条**：① T5 登记的「工具上下文 cwd 是 daemon 根而非会话 cwd」**实测坐实**（`pwd` 回 `/private/tmp/probeA` 而非 `.../work`；相对路径命令因此静默返回 `(no output)`，管道退出码取末段 `tr` 故仍为 0）；② **`ServerToolResultMessage.isError` 是零生产者的协议字段**（`attach-protocol.ts:33` 声明、`session-worker.ts:325-333` 从不设），而引擎在 chunk 边界就把成败位并进了 `content`（`engine.ts:704`）⇒ **无头路径上第三方基准驱动分不出工具成功与失败** —— 与 `stopReason` 恒为 `end_turn` 是同一类盲区、第二次发生，对 T2 直接承重（待立项）。**无代码变更**（仅文档；探针在 `/tmp`，不进仓库）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| 2026-09-16 | **T12 立项（工具成败位）+ A 段落地**：经核实这**不是「缺一个字段」，是成败位在三条边界上各丢一次、且性质不同**。**两端都建得好**：源头是 `ToolResult.success`（MCP 工具从 `isError` 派生），CLI 落盘端是 JSONL 的 `tool/result` 事件带**全量** `ToolResult`（实测 **381/381 条**都带 `success`）。**三条边界**：① `engine.ts` 两处 `tool_result` 构造 —— `StreamChunk` 无承载字段（**缺**）；② 投影消息 `ToolResultContent` 无 `is_error` + `providers/anthropic.ts` ⇒ **模型被告知每次工具调用都成功了**（**缺**）；③ `session-log.ts` 的 `messageToEvents` 写死 `success: true` ⇒ message→event **伪造**成功，旧格式迁移会把历史里的失败洗成成功（**假** —— 比前两条重，前两条是读不到，它是写下一个错的值）。**两条反直觉佐证**：`~/.mipham/sessions/*.jsonl` 一条都不带**不是** code path 的问题，是 `daemon/server.ts` 构造 `ContextManager` 时**没传 `log`** ⇒ `context.ts:153` 的 `if (this.log)` 在无头路径恒 false、daemon **一条 JSONL 都不写**；REST 也救不了 —— `messages` 表**没有 success 列**，`GET /api/v1/sessions/:id/messages` 结构上带不出这个位。**A 段（本轮）**：`StreamChunk.isError`（两份 `types.ts` 同步）→ 两处构造点填 `!result.success` → `session-worker` 映进**已声明、只是从没人填**的 `ServerToolResultMessage.isError`；`remote-engine` 回程同补（只填出口不填入口 ⇒ 字段出了 WS 就回不来，接远端 daemon 的 CLI 依旧失明）。**顺带修掉一个更重的缺陷**：`continueWithTools` 那处此前**连展平都没有**、直接发 `result.content`，而失败结果的 `content` 恰是**空串**（错误在 `error` 里）⇒ **多轮循环里工具失败时模型收到一个空 `tool_result`，错误文案整个丢失**（红测实测 `expected '' to contain …`）。**先补测试再修**：5 条新用例（轮 1 失败标 `true` / 成功标 `false` / 多轮失败既标 `true` 又不丢文案 / WS 出口 `true` / 成功 `false`），红绿实跑 **5 红 → 全绿**。**编号更正**：原提议 `T9` 实为**已占用** —— P2 段的 `T9/T10/T11` 是**表格行不是标题**，先前只 grep 了 `### [ ]` 标题故漏看，改 **T12**。**B 段未做、单独决策**：给 `ToolResultContent` 加 `is_error`，动**已发布的 `packages/shared` 契约**与 session-log 的字节级互逆不变量（该不变量**保得住** —— 展平表达式两侧对称，把 `error` 一并还原即可）。测试 2516 → 2521（227 文件不变）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | 技术委员会 |

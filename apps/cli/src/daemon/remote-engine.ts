@@ -387,6 +387,8 @@ export class RemoteEngine {
           type: 'tool_result',
           tool_use_id: msg.toolId,
           content: msg.content,
+          // 回程也要带上，否则字段出了 WS 就回不来 —— 接远端 daemon 的 CLI 依旧失明。
+          isError: msg.isError,
         }
       }
 

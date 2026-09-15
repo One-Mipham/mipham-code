@@ -701,6 +701,7 @@ export class QueryEngine {
         type: 'tool_result',
         tool_use_id: toolUse.id,
         content: result.success ? result.content : result.error || result.content,
+        isError: !result.success,
       }
 
       // Collect tool call record for CRSI auto-reflection
@@ -1040,7 +1041,10 @@ export class QueryEngine {
         yield {
           type: 'tool_result',
           tool_use_id: toolUse.id,
-          content: result.content,
+          // 失败结果的 `content` 是空串（错误在 `error` 里，见 executeTool 的拒绝分支）
+          // —— 直接发 `content` 会让模型收到一个**空** tool_result，错误文案整个丢失。
+          content: result.success ? result.content : result.error || result.content,
+          isError: !result.success,
         }
 
         // DeepSeek V4 thinking mode requires reasoning_content on every assistant message

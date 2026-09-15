@@ -328,6 +328,7 @@ export class SessionWorker {
           sessionId: this.session.id,
           toolId: chunk.tool_use_id ?? 'unknown',
           content: chunk.content ?? '',
+          isError: chunk.isError ?? false,
         }
         return msg
       }

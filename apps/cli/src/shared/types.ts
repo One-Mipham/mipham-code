@@ -112,6 +112,13 @@ export interface StreamChunk {
   content?: string
   toolUse?: ToolUseContent
   tool_use_id?: string
+  /**
+   * Failed tool result (type: 'tool_result'). The engine always sets it — `false`
+   * for success, so consumers never have to treat `undefined` as a third state.
+   * Without it the success bit is unrecoverable downstream: `content` carries
+   * either the output or the error text, and the two are indistinguishable.
+   */
+  isError?: boolean
   error?: string
   /** DeepSeek reasoning tokens accumulated during this stream. */
   reasoning_content?: string
