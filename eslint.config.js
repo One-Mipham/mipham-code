@@ -23,6 +23,12 @@ export default [
       '**/.mipham/**',
       // Fixtures are deliberately wrong; see test/integrity/lint-rules.test.ts.
       'apps/cli/test/integrity/fixtures/**',
+      // Stryker's sandbox: a full copy of apps/cli (`pnpm mutate`). Same dotfile
+      // trap as `.mipham` above — and it is not merely transient: Stryker removes
+      // the temp dir only after a *successful* run, so an interrupted or failed
+      // one leaves a copy behind (observed: 3 dirs / 269 MB), which then turns
+      // `pnpm lint` red with ~1,800 errors from files nobody edited.
+      '**/.stryker-tmp/**',
     ],
   },
   ...compat.extends('plugin:@typescript-eslint/recommended'),

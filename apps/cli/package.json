@@ -40,7 +40,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "knip": "knip --production --no-progress --no-exit-code",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage",
+    "mutate": "stryker run"
   },
   "dependencies": {
     "@larksuiteoapi/node-sdk": "^1.73.0",
@@ -53,6 +54,8 @@
   },
   "devDependencies": {
     "@mipham/shared": "workspace:*",
+    "@stryker-mutator/core": "10.0.0",
+    "@stryker-mutator/vitest-runner": "10.0.0",
     "@types/bun": "^1.4.2",
     "@types/node": "^22.19.19",
     "@types/react": "^19.3.0",

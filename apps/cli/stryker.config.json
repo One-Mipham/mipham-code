@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "packageManager": "pnpm",
+  "testRunner": "vitest",
+  "plugins": ["@stryker-mutator/vitest-runner"],
+  "coverageAnalysis": "perTest",
+  "reporters": ["clear-text", "progress", "json"],
+  "mutate": [
+    "src/core/crsi-managed-rules.ts",
+    "src/core/crsi-modify.ts",
+    "src/core/crsi-producer.ts",
+    "src/core/permission-config.ts",
+    "src/core/permission-rules.ts",
+    "src/core/permission.ts"
+  ],
+  "thresholds": {
+    "high": 80,
+    "low": 60,
+    "break": null
+  },
+  "concurrency": 9
+}

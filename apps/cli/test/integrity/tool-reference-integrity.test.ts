@@ -18,13 +18,32 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { readFileSync, readdirSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 
 import { createToolRegistry } from '../../src/tools/index'
 
+/**
+ * 向上走到仓库根（以 `pnpm-workspace.yaml` 为锚），而不是数 `..` 的层数。
+ *
+ * 数层数只在「本文件恰好处在真实树里那个深度」时成立，而这个前提并不牢靠：
+ * Stryker 把整个包复制到 `apps/cli/.stryker-tmp/sandbox-N/` 里跑测试，文件比真实树
+ * **深一层**，于是原本的 `join(CLI_DIR, '..', '..')` 会停在 `apps/cli` 而不是仓库根。
+ * 以标记文件为锚则与嵌套深度无关。本文件自带此函数而不抽公共模块，是全仓库守卫
+ * 一贯的约定（每个守卫文件自足）。
+ */
+function findRepoRoot(from: string): string {
+  let dir = from
+  for (;;) {
+    if (existsSync(join(dir, 'pnpm-workspace.yaml'))) return dir
+    const parent = dirname(dir)
+    if (parent === dir) throw new Error(`未能在 ${from} 之上找到仓库根（pnpm-workspace.yaml）`)
+    dir = parent
+  }
+}
+
 const CLI_DIR = join(import.meta.dirname, '..', '..')
-const REPO_ROOT = join(CLI_DIR, '..', '..')
+const REPO_ROOT = findRepoRoot(CLI_DIR)
 
 /** 扫描面 = `src/` + `bin/`，含 `.json`。locale JSON 必须在内，见下。 */
 const SCAN_ROOTS = [join(CLI_DIR, 'src'), join(CLI_DIR, 'bin')]

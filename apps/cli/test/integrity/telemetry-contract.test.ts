@@ -21,7 +21,7 @@
 import { describe, it, expect } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 import { createToolRegistry } from '../../src/tools/index'
 import { commandLabelFor, getCommandLabelNames, UNKNOWN_COMMAND } from '../../src/ui/commands'
@@ -30,10 +30,48 @@ import { buildSessionEvent, COUNTER_WHITELIST, SCHEMA_VERSION } from '../../src/
 import { buildCrashEvent, recordCrash } from '../../src/telemetry/crash'
 import { runtimeTag } from '../../src/telemetry/redact'
 import { OFFICIAL_TELEMETRY_ENDPOINT } from '../../src/telemetry/endpoint'
+import type * as TelemetrySchema from '../../../../apps/telemetry/src/schema'
+import type * as TelemetryValidate from '../../../../apps/telemetry/src/validate'
+import type * as TelemetryAllowlist from '../../../../apps/telemetry/src/allowlist'
+
+/**
+ * 向上走到仓库根（以 `pnpm-workspace.yaml` 为锚），而不是数 `..` 的层数。
+ *
+ * 数层数只在「本文件恰好处在真实树里那个深度」时成立，而这个前提并不牢靠：
+ * Stryker 把整个包复制到 `apps/cli/.stryker-tmp/sandbox-N/` 里跑测试，文件比真实树
+ * **深一层**，于是原本的 `join(CLI_DIR, '..', '..')` 会停在 `apps/cli` 而不是仓库根 ——
+ * 实测它把接收端 allowlist 解析成 `apps/cli/apps/telemetry/src/allowlist.json`，
+ * 整条契约守卫连同 vhost 目的地断言一起失效（变异测试的干跑因此直接失败）。
+ * 以标记文件为锚则与嵌套深度无关。本文件自带此函数而不抽公共模块，是全仓库守卫
+ * 一贯的约定（每个守卫文件自足，见 `tool-reference-integrity.test.ts` 同名字段）。
+ */
+function findRepoRoot(from: string): string {
+  let dir = from
+  for (;;) {
+    if (existsSync(join(dir, 'pnpm-workspace.yaml'))) return dir
+    const parent = dirname(dir)
+    if (parent === dir) throw new Error(`未能在 ${from} 之上找到仓库根（pnpm-workspace.yaml）`)
+    dir = parent
+  }
+}
 
 const CLI_DIR = join(import.meta.dirname, '..', '..')
-const REPO_ROOT = join(CLI_DIR, '..', '..')
+const REPO_ROOT = findRepoRoot(CLI_DIR)
 const TELEMETRY_DIR = join(REPO_ROOT, 'apps', 'telemetry')
+
+/**
+ * 引入接收端源码 —— 运行时走**标记锚定的绝对路径**，不走字面相对层数。
+ *
+ * 与上面 `findRepoRoot` 同一个根因：字面量 `'../../../../apps/telemetry/src/schema'`
+ * 只在「本文件恰好在真实树里那个深度」时成立，沙箱里深一层 ⇒ 解析到不存在的
+ * `apps/cli/apps/telemetry/src/schema`（实测干跑即因此失败）。
+ * 类型仍取自上面三条 `import type` 的字面量：类型位在转换时被抹掉、运行时从不解析，
+ * 只有 `tsc` 读它，而 `tsc` 永远跑在真实树里 —— 故契约的类型安全不减。
+ */
+async function importTelemetry<T>(module: string): Promise<T> {
+  return (await import(join(TELEMETRY_DIR, 'src', module))) as T
+}
+
 const ALLOWLIST_PATH = join(TELEMETRY_DIR, 'src', 'allowlist.json')
 const VHOST_PATH = join(TELEMETRY_DIR, 'deploy', 'nginx', 'log.onemipham.com.conf')
 
@@ -140,7 +178,7 @@ describe('遥测契约：command_name 的基数在客户端收敛', () => {
 
 describe('遥测契约：接收端的 counter 家族集合与客户端白名单一致', () => {
   it('COUNTER_FAMILIES == COUNTER_WHITELIST 去掉 mipham_code_ 前缀与 _total 后缀', async () => {
-    const { COUNTER_FAMILIES } = await import('../../../../apps/telemetry/src/schema')
+    const { COUNTER_FAMILIES } = await importTelemetry<typeof TelemetrySchema>('schema')
 
     const expected = COUNTER_WHITELIST.map((name) =>
       name.replace(/^mipham_code_/, '').replace(/_total$/, ''),
@@ -159,8 +197,8 @@ function overTheWire(event: unknown): unknown {
 
 describe('遥测契约：真实 payload 能被接收端解析', () => {
   it('buildSessionEvent 的产物 validateEvent ⇒ ok:true，且标签被 allowlist 认出', async () => {
-    const { validateEvent } = await import('../../../../apps/telemetry/src/validate')
-    const { loadAllowlist } = await import('../../../../apps/telemetry/src/allowlist')
+    const { validateEvent } = await importTelemetry<typeof TelemetryValidate>('validate')
+    const { loadAllowlist } = await importTelemetry<typeof TelemetryAllowlist>('allowlist')
 
     // 先真的记一次，让 snapshotCounters() 里出现一个有标签的计数器 ——
     // 否则 counters 是空的，标签解析这条路根本没被测到。
@@ -206,8 +244,8 @@ describe('遥测契约：真实 payload 能被接收端解析', () => {
   })
 
   it('MCP 工具名归 __mcp__，未注册的工具名归 __other__ —— 两者不能混', async () => {
-    const { validateEvent } = await import('../../../../apps/telemetry/src/validate')
-    const { loadAllowlist } = await import('../../../../apps/telemetry/src/allowlist')
+    const { validateEvent } = await importTelemetry<typeof TelemetryValidate>('validate')
+    const { loadAllowlist } = await importTelemetry<typeof TelemetryAllowlist>('allowlist')
 
     const body = {
       id: '00000000-0000-4000-8000-000000000001',
@@ -236,8 +274,8 @@ describe('遥测契约：真实 payload 能被接收端解析', () => {
   })
 
   it('buildCrashEvent 的产物 validateEvent ⇒ ok:true，且**不带**帧（v2）', async () => {
-    const { validateEvent } = await import('../../../../apps/telemetry/src/validate')
-    const { loadAllowlist } = await import('../../../../apps/telemetry/src/allowlist')
+    const { validateEvent } = await importTelemetry<typeof TelemetryValidate>('validate')
+    const { loadAllowlist } = await importTelemetry<typeof TelemetryAllowlist>('allowlist')
 
     recordCrash(new TypeError('contract probe'), 'uncaughtException')
     const raw = buildCrashEvent('00000000-0000-4000-8000-000000000000')
@@ -258,8 +296,8 @@ describe('遥测契约：真实 payload 能被接收端解析', () => {
   })
 
   it('v1 形态（带帧）仍然被接受，且丢弃量被**报告**出来', async () => {
-    const { validateEvent } = await import('../../../../apps/telemetry/src/validate')
-    const { loadAllowlist } = await import('../../../../apps/telemetry/src/allowlist')
+    const { validateEvent } = await importTelemetry<typeof TelemetryValidate>('validate')
+    const { loadAllowlist } = await importTelemetry<typeof TelemetryAllowlist>('allowlist')
 
     // 已发布的 CLI 还装着 v1，抓包就是长这样：帧在，服务端不留。
     // 这条断言守的是「发了却必然丢掉」不能退化成「看起来根本没发」——
@@ -306,7 +344,7 @@ describe('遥测契约：runtime/platform 模式必须接受真实产物', () =>
    * 用真实产物的形状钉住它，而不是我手写的样例。
    */
   it('runtimeTag() 的实际输出被 RUNTIME_PATTERN 接受', async () => {
-    const { RUNTIME_PATTERN } = await import('../../../../apps/telemetry/src/schema')
+    const { RUNTIME_PATTERN } = await importTelemetry<typeof TelemetrySchema>('schema')
 
     expect(RUNTIME_PATTERN.test(runtimeTag()), `真实 runtimeTag() = ${runtimeTag()}`).toBe(true)
     // 两种形态都要在，否则这条守卫只在当前运行时上有意义。
@@ -318,7 +356,7 @@ describe('遥测契约：runtime/platform 模式必须接受真实产物', () =>
   })
 
   it('platformTag() 的实际输出被 PLATFORM_PATTERN 接受', async () => {
-    const { PLATFORM_PATTERN } = await import('../../../../apps/telemetry/src/schema')
+    const { PLATFORM_PATTERN } = await importTelemetry<typeof TelemetrySchema>('schema')
 
     const platform = `${process.platform}/${process.arch}`
     expect(PLATFORM_PATTERN.test(platform), `实际值 = ${platform}`).toBe(true)

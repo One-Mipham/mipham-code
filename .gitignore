@@ -4,6 +4,11 @@ dist/
 out/
 # vitest coverage output (`pnpm coverage`) — regenerable, report-only
 coverage/
+# Stryker mutation-testing output (`pnpm mutate`) — regenerable, report-only.
+# `.stryker-tmp/` is the sandbox Stryker copies sources into; `reports/` holds the
+# json score the ROADMAP baseline was read from.
+.stryker-tmp/
+reports/
 *.log
 .env
 .env.local

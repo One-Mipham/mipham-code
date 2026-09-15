@@ -7,8 +7,28 @@ import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
-const REPO_ROOT = path.resolve(HERE, '../../../..')
+const REPO_ROOT = findRepoRoot(path.resolve(HERE, '../..'))
 const FIXTURE = path.join(HERE, 'fixtures', 'floating-promise.ts')
+
+/**
+ * 向上走到仓库根（以 `pnpm-workspace.yaml` 为锚），而不是数 `..` 的层数。
+ *
+ * 数层数只在「本文件恰好处在真实树里那个深度」时成立，而这个前提并不牢靠：
+ * Stryker 把整个包复制到 `apps/cli/.stryker-tmp/sandbox-N/` 里跑测试，文件比真实树
+ * **深一层**，于是原本的 `resolve(HERE, '../../../..')` 会停在 `.stryker-tmp` 而不是
+ * 仓库根 —— `tsconfigRootDir` 随之指错，type-aware 规则会**静默**失效（它本就是本
+ * 文件要防的那种失效）。以标记文件为锚则与嵌套深度无关；本文件自带此函数而不抽公共
+ * 模块，是全仓库守卫一贯的约定（每个守卫文件自足）。
+ */
+function findRepoRoot(from: string): string {
+  let dir = from
+  for (;;) {
+    if (existsSync(path.join(dir, 'pnpm-workspace.yaml'))) return dir
+    const parent = path.dirname(dir)
+    if (parent === dir) throw new Error(`未能在 ${from} 之上找到仓库根（pnpm-workspace.yaml）`)
+    dir = parent
+  }
+}
 
 /**
  * The one test in the suite that cannot fit in the 5s default.

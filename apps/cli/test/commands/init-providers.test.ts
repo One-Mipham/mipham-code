@@ -31,7 +31,20 @@ import type { CommandContext } from '../../src/ui/commands'
 
 const MIPHAM_HOME = join(homedir(), '.mipham')
 const PROJECT_CWD = join(tmpdir(), 'mipham-test-init-providers-cwd')
-const ORIGINAL_CWD = process.cwd()
+
+/**
+ * 让被测代码看到的 cwd 指向临时项目目录（`setupCmd` 读 `process.cwd()`）。
+ *
+ * 不用 `process.chdir()`：那是进程级全局突变，而 Stryker 的 vitest-runner 把测试跑在
+ * worker 线程里（`pool: 'threads'` 在它源码里写死、无覆盖入口），线程里 chdir 直接抛
+ * "process.chdir() is not supported in workers" —— 后果不是这一个文件红，而是整个
+ * 变异测试的干跑失败。spy 只改 `process.cwd()` 的返回值，两种跑池下行为一致，也不再
+ * 需要 afterEach 把整个进程的 cwd 搬回去（本仓库两次测试隔离事故的共同点正是这种
+ * 进程级可变状态）。
+ */
+function useProjectCwd(): void {
+  vi.spyOn(process, 'cwd').mockReturnValue(PROJECT_CWD)
+}
 
 function fakeCtx(): CommandContext {
   return {
@@ -59,7 +72,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  process.chdir(ORIGINAL_CWD)
+  vi.restoreAllMocks()
   rmSync(MIPHAM_HOME, { recursive: true, force: true })
   rmSync(PROJECT_CWD, { recursive: true, force: true })
 })
@@ -90,7 +103,7 @@ describe('/init 预置的 provider 清单', () => {
 
 describe('/setup 1 预置的 provider 清单', () => {
   it('与 /init 使用同一份清单', async () => {
-    process.chdir(PROJECT_CWD)
+    useProjectCwd()
     await setupCmd(fakeCtx(), ['1'])
     const yaml = readFileSync(join(PROJECT_CWD, '.mipham', 'config.yml'), 'utf-8')
 
@@ -98,7 +111,7 @@ describe('/setup 1 预置的 provider 清单', () => {
   })
 
   it('模板注释里的家数是算出来的，不是硬编码的 8', async () => {
-    process.chdir(PROJECT_CWD)
+    useProjectCwd()
     await setupCmd(fakeCtx(), ['1'])
     const yaml = readFileSync(join(PROJECT_CWD, '.mipham', 'config.yml'), 'utf-8')
     const n = providerIdsIn(yaml).length
@@ -156,7 +169,7 @@ describe('生成的 API key 占位符是合法的 shell 环境变量名', () => 
   })
 
   it('/setup 1', async () => {
-    process.chdir(PROJECT_CWD)
+    useProjectCwd()
     await setupCmd(fakeCtx(), ['1'])
     const names = envVarsIn(readFileSync(join(PROJECT_CWD, '.mipham', 'config.yml'), 'utf-8'))
 
