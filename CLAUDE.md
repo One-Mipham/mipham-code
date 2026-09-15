@@ -390,11 +390,11 @@ GitHub Actions 9 个 job 流水线：`typecheck → lint → format → build-cl
 
 | 日期       | Commit    | 说明                                                                     |
 | ---------- | --------- | ------------------------------------------------------------------------ |
+| 2026-09-15 | `3519fb1` | fix(daemon): 收口未接线能力 —— daemon ↔ CLI 能力对等（T5）               |
 | 2026-09-15 | `5b9075b` | test(cli): 变异测试落地 —— 首批 6 文件基线 8.02% + 范围守卫（T3c）       |
 | 2026-09-15 | `fba2b45` | docs(claude): 2.42.0 —— T1b 上线 + 撤帧 + 数字回填                       |
 | 2026-09-15 | `e7bfd89` | refactor(telemetry)!: schemaVersion 2 —— stackFrames 不再上网            |
 | 2026-09-15 | `2ca222c` | fix(telemetry): vhost 如实声明 TLSv1.2+1.3 —— 握手版本由默认 server 决定 |
-| 2026-09-15 | `33c64be` | test(telemetry): endpoint ↔ vhost 目的地契约守卫（T1b 第 8 步）          |
 
 > **完整记录** → [`docs/claude-md-history.md`](docs/claude-md-history.md)：最近提交全表 + v1.0.0 起全部修订。
 > 需要查「某次改动属于哪次提交 / 哪一版」时读它。
