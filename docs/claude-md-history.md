@@ -7,6 +7,10 @@
 
 | 日期       | Commit    | 说明                                                                                            |
 | ---------- | --------- | ----------------------------------------------------------------------------------------------- |
+| 2026-09-15 | `5b9075b` | test(cli): 变异测试落地 —— 首批 6 文件基线 8.02% + 范围守卫（T3c）                              |
+| 2026-09-15 | `fba2b45` | docs(claude): 2.42.0 —— T1b 上线 + 撤帧 + 数字回填                                              |
+| 2026-09-15 | `e7bfd89` | refactor(telemetry)!: schemaVersion 2 —— stackFrames 不再上网                                   |
+| 2026-09-15 | `2ca222c` | fix(telemetry): vhost 如实声明 TLSv1.2+1.3 —— 握手版本由默认 server 决定                        |
 | 2026-09-15 | `33c64be` | test(telemetry): endpoint ↔ vhost 目的地契约守卫（T1b 第 8 步）                                 |
 | 2026-09-15 | `5f256c7` | test(cli): type-aware lint 用例上界 60s → 120s（实测耗时单调爬升）                              |
 | 2026-09-15 | `a62ef48` | fix(cli): 去掉 tsconfig 里空转的 rootDir/outDir —— Type Check 自 84ab202 起恒红                 |

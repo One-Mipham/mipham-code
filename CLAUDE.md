@@ -384,13 +384,13 @@ GitHub Actions 9 个 job 流水线：`typecheck → lint → format → build-cl
 
 ## 最近提交
 
-| 日期       | Commit    | 说明                                                                            |
-| ---------- | --------- | ------------------------------------------------------------------------------- |
-| 2026-09-15 | `33c64be` | test(telemetry): endpoint ↔ vhost 目的地契约守卫（T1b 第 8 步）                 |
-| 2026-09-15 | `5f256c7` | test(cli): type-aware lint 用例上界 60s → 120s（实测耗时单调爬升）              |
-| 2026-09-15 | `a62ef48` | fix(cli): 去掉 tsconfig 里空转的 rootDir/outDir —— Type Check 自 84ab202 起恒红 |
-| 2026-09-15 | `61dcde9` | fix(test): 给进程内 type-aware lint 用例 60s 超时 —— CI Test job 恒红           |
-| 2026-09-15 | `d8a7c1d` | feat(telemetry): 官方默认端点 + none 哨兵（T1b 第 7 步）                        |
+| 日期       | Commit    | 说明                                                                     |
+| ---------- | --------- | ------------------------------------------------------------------------ |
+| 2026-09-15 | `5b9075b` | test(cli): 变异测试落地 —— 首批 6 文件基线 8.02% + 范围守卫（T3c）       |
+| 2026-09-15 | `fba2b45` | docs(claude): 2.42.0 —— T1b 上线 + 撤帧 + 数字回填                       |
+| 2026-09-15 | `e7bfd89` | refactor(telemetry)!: schemaVersion 2 —— stackFrames 不再上网            |
+| 2026-09-15 | `2ca222c` | fix(telemetry): vhost 如实声明 TLSv1.2+1.3 —— 握手版本由默认 server 决定 |
+| 2026-09-15 | `33c64be` | test(telemetry): endpoint ↔ vhost 目的地契约守卫（T1b 第 8 步）          |
 
 > **完整记录** → [`docs/claude-md-history.md`](docs/claude-md-history.md)：最近提交全表 + v1.0.0 起全部修订。
 > 需要查「某次改动属于哪次提交 / 哪一版」时读它。
