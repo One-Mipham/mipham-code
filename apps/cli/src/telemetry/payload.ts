@@ -16,8 +16,21 @@ import { runtimeTag } from './redact'
  * See `docs/telemetry.md` for the public data dictionary.
  */
 
-/** Bumped whenever the payload shape changes, so the endpoint can evolve. */
-export const SCHEMA_VERSION = 1
+/**
+ * Bumped whenever the payload shape changes, so the endpoint can evolve.
+ *
+ * v2 (this version) = the crash event no longer carries `stackFrames`.
+ * The collector never kept them — "dimensional aggregates only" leaves a frame
+ * string nowhere to live — so sending them bought ~3 KB per crash of transfer
+ * and a privacy surface in exchange for nothing. The frame *count* stays: it is
+ * what keeps "this stack was short" distinguishable from "this stack was cut",
+ * and it is a single integer.
+ *
+ * The ordering was not optional: the collector had to accept v1 **before** any
+ * client stopped sending frames. Checked in `apps/telemetry/src/schema.ts`,
+ * which lists both versions.
+ */
+export const SCHEMA_VERSION = 2
 
 /**
  * Counter family names cleared for upload, as they appear in the registry.

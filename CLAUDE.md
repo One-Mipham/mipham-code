@@ -44,7 +44,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：2,523 测试（2521 passed + 2 skipped，0 失败）
+测试：2,525 测试（2523 passed + 2 skipped，0 失败）
 
 ---
 
@@ -81,7 +81,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 224 个测试文件，2523 个测试
+│   │   ├── test/               # 224 个测试文件，2525 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -107,7 +107,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（2523 个测试）
+pnpm test         # vitest run（2525 个测试）
 pnpm typecheck    # tsc --noEmit
 
 # Telemetry（接收端）
@@ -220,8 +220,11 @@ home 下第一段 → `<dir>`（否则 `~/proj/...` 仍泄露项目名），只�
 ④ **装机数用 HLL 不用精确集合** —— 精确集合落盘的恰恰就是「当天的安装清单」，是逐安装日志；
 `installId` 只在内存里喂 HLL。**去重单边偏置**（bloom 假阳性被 exact 集救援、exact 逐出当新）
 ⇒ 误差只会虚高、**永不误删唯一事件**（T4 按**存在性**投票，误删 ⇒ 删活代码）。
-**`stackFrames` 发得出、存不下** —— 「只存聚合」下一个字节都留不下，故同批按 `schemaVersion: 2`
-从线上拿掉（**顺序不可颠倒**：服务端先上线接受 v1）。
+**`stackFrames` 已按 `schemaVersion: 2` 从线上撤掉（2026-09-15 落地）** —— 「只存聚合」下帧串
+一个字节都留不下（服务端的汇聚路径至今仍在，只为已发布、收不回来的 v1 客户端），发它只换来
+~3 KB/次与一个隐私面。**帧仍脱敏、但只留本进程内存**（不落盘、不上网），`frameCount` 保留 ——
+它才是「栈短」与「栈被截」的区分依据。**顺序不可颠倒**（服务端必须先接受 v1），且这次撤帧
+的代价已认下：**崩溃通道永远不能告诉你崩在哪一行**。
 **诚实边界：204 不代表已持久化**（每 25 条 / 10s 才 flush，SIGKILL 丢最近一个窗口）。
 **端点默认已不是空串**（T1b 第 7 步落地）：`resolveEndpoint()` 按 `env > 用户 settings > 官方接收端`
 解析，`OFFICIAL_TELEMETRY_ENDPOINT` 就是 `log.onemipham.com` 那条路径；`'none'` 哨兵是**唯一**能
@@ -300,9 +303,9 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | artifacts       | 1       | 22       | versioning                                                                                                                                                                          |
 | agent-view      | 1       | 9        | agent-view-manager                                                                                                                                                                  |
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                                       |
-| integrity       | 3       | 25       | 引用完整性守卫（工具名 / 技能清单 / IDE 环境变量 / 工具总数 / 文档体积与滚动窗口）+ ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地） |
-| telemetry       | 9       | 119      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                         |
-| **合计**        | **224** | **2523** | **0 失败** ✅（2521 passed + 2 skipped）                                                                                                                                            |
+| integrity       | 3       | 26       | 引用完整性守卫（工具名 / 技能清单 / IDE 环境变量 / 工具总数 / 文档体积与滚动窗口）+ ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地） |
+| telemetry       | 9       | 120      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                         |
+| **合计**        | **224** | **2525** | **0 失败** ✅（2523 passed + 2 skipped）                                                                                                                                            |
 
 > **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 179 测试，自带
 > `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。
@@ -316,7 +319,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 > 看报错是否为 `You have not agreed to the Xcode license agreements`；或直接 `/usr/bin/git --version`。
 > 一次解决：`sudo xcodebuild -license accept`（**保持 Xcode 为活动开发者目录**，不影响 §十六 的打包公证；
 > 换 `xcode-select -s` 到 CommandLineTools 则会连带把 `productbuild` / `xcrun notarytool` 切走，勿用）。
-> 2026-09-15 已在本机执行，全量 **2521 passed + 2 skipped / 0 失败**。
+> 2026-09-15 已在本机执行，全量 **2523 passed + 2 skipped / 0 失败**。
 
 测试框架: Vitest 5，mock: `test/__mocks__/bun.ts`
 

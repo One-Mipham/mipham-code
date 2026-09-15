@@ -235,7 +235,7 @@ describe('遥测契约：真实 payload 能被接收端解析', () => {
     expect(result.event.counters['tool_calls.__other__']).toBe(1)
   })
 
-  it('buildCrashEvent 的产物 validateEvent ⇒ ok:true 且帧被丢弃', async () => {
+  it('buildCrashEvent 的产物 validateEvent ⇒ ok:true，且**不带**帧（v2）', async () => {
     const { validateEvent } = await import('../../../../apps/telemetry/src/validate')
     const { loadAllowlist } = await import('../../../../apps/telemetry/src/allowlist')
 
@@ -253,9 +253,47 @@ describe('遥测契约：真实 payload 能被接收端解析', () => {
     expect(result.event.errorName).toBe('TypeError')
     expect(result.event.origin).toBe('uncaughtException')
     expect(result.notes.fieldsDropped).toEqual([])
-    // 服务端不留帧，但必须**报告**它收到了多少 —— 否则「发了却必然丢掉」
-    // 会退化成「看起来根本没发」。
-    expect(result.notes.framesDiscarded).toBeGreaterThan(0)
+    // v2 起客户端不发帧 —— 这一条钉的是「线上没有帧」，不是「服务端不存帧」。
+    expect(result.notes.framesDiscarded).toBe(0)
+  })
+
+  it('v1 形态（带帧）仍然被接受，且丢弃量被**报告**出来', async () => {
+    const { validateEvent } = await import('../../../../apps/telemetry/src/validate')
+    const { loadAllowlist } = await import('../../../../apps/telemetry/src/allowlist')
+
+    // 已发布的 CLI 还装着 v1，抓包就是长这样：帧在，服务端不留。
+    // 这条断言守的是「发了却必然丢掉」不能退化成「看起来根本没发」——
+    // framesDiscarded 是那笔代价的账，没有它，v1 的帧就是无声消失。
+    // 用的是**手写** v1 体，不是当次 buildCrashEvent 的产物：后者已经不发帧了，
+    // 拿它来测这条等于什么都没测。
+    const v1 = {
+      id: '00000000-0000-4000-8000-000000000002',
+      kind: 'crash',
+      payload: {
+        installId: '00000000-0000-4000-8000-000000000000',
+        schemaVersion: 1,
+        occurredAt: '2026-09-15T00:00:00.000Z',
+        appVersion: '0.81.6',
+        runtime: 'node@22',
+        platform: 'linux/x64',
+        errorName: 'TypeError',
+        messageHash: '0123456789abcdef',
+        stackFrames: ['at a (<cwd>/a.ts:1:1)', 'at b (<cwd>/b.ts:2:2)'],
+        frameCount: 7,
+        origin: 'uncaughtException',
+      },
+    }
+
+    const result = validateEvent(overTheWire(v1), loadAllowlist(), 'application/json')
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.event.kind).toBe('crash')
+    if (result.event.kind !== 'crash') return
+
+    expect(result.notes.unknownSchema).toBe(false)
+    expect(result.notes.framesDiscarded).toBe(2)
+    expect(result.event.frameCount).toBe(7)
   })
 })
 

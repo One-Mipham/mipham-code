@@ -1,8 +1,9 @@
 # Telemetry and crash reporting
 
-Mipham Code can report **anonymous usage counts** and **redacted crash stacks**.
-This page is the full data dictionary: it lists every field the CLI can send, and
-the things it promises never to send.
+Mipham Code can report **anonymous usage counts** and **crash summaries** — the
+type, depth and message digest of a crash, never its stack. This page is the full
+data dictionary: it lists every field the CLI can send, and the things it promises
+never to send.
 
 **Telemetry is off unless you turn it on.** With it off, no counters leave the
 process, no queue file is created, and no request is made.
@@ -110,37 +111,88 @@ Counts are plain integers; nothing is per-user and nothing is per-event.
 
 ## The `crash` event
 
-Sent when a session recorded a crash. The stack is **redacted and truncated**.
+Sent when a session recorded a crash.
 
-| Field           | Type       | Notes                                                           |
-| --------------- | ---------- | --------------------------------------------------------------- |
-| `installId`     | uuid       | Same id as above                                                |
-| `schemaVersion` | int        |                                                                 |
-| `occurredAt`    | ISO 8601   |                                                                 |
-| `appVersion`    | string     |                                                                 |
-| `runtime`       | string     |                                                                 |
-| `platform`      | string     |                                                                 |
-| `errorName`     | string     | e.g. `TypeError`                                                |
-| `messageHash`   | string     | SHA-256 of the message, first 16 hex chars — **never the text** |
-| `stackFrames`   | `string[]` | Redacted, first 15 frames                                       |
-| `frameCount`    | number     | Total frames _before_ truncation                                |
-| `origin`        | string     | `uncaughtException`, `unhandledRejection`, or `render`          |
+| Field           | Type     | Notes                                                           |
+| --------------- | -------- | --------------------------------------------------------------- |
+| `installId`     | uuid     | Same id as above                                                |
+| `schemaVersion` | int      |                                                                 |
+| `occurredAt`    | ISO 8601 |                                                                 |
+| `appVersion`    | string   |                                                                 |
+| `runtime`       | string   |                                                                 |
+| `platform`      | string   |                                                                 |
+| `errorName`     | string   | e.g. `TypeError`                                                |
+| `messageHash`   | string   | SHA-256 of the message, first 16 hex chars — **never the text** |
+| `frameCount`    | number   | How many frames the stack had                                   |
+| `origin`        | string   | `uncaughtException`, `unhandledRejection`, or `render`          |
 
 Only a digest of the error message is sent, because messages routinely embed
-paths and user data. `frameCount` is reported alongside the truncated frames so
-that "this stack was short" stays distinguishable from "this stack was cut".
+paths and user data.
 
-Redaction, applied to every frame: the current working directory becomes
-`<cwd>`, your home directory becomes `~`, and the first path segment under home is
-collapsed to `<dir>` — so a frame under home but outside the project cannot
-disclose the project's name. Line and column numbers are kept, because a stack
-without them cannot be acted on.
+### Why there are no stack frames
+
+Schema v1 sent `stackFrames` — redacted, first 15 — and the receiver threw them
+away on arrival: "dimensional aggregates only" leaves a frame string nowhere to
+live. Sending them bought ~3 KB per crash of transfer and a privacy surface in
+exchange for nothing, so **v2 stopped sending them**.
+
+A crash report can therefore tell you the crash type, its depth, and how many
+installations hit it — **never which line it happened on**. Locating a stack
+would need a separate, explicitly consented channel; it is not this one.
+
+The frames are still redacted, but they stay in the process's memory for the
+session and are never written to disk or sent. Redaction: the current working
+directory becomes `<cwd>`, your home directory becomes `~`, and the first path
+segment under home is collapsed to `<dir>` — so a frame under home but outside
+the project cannot disclose the project's name. Line and column numbers are kept,
+because a stack without them cannot be acted on.
+
+`frameCount` stays, so that "this stack was short" remains distinguishable from
+"this stack was cut".
+
+> The receiver still accepts the v1 format, because v1 clients are installed and
+> cannot be recalled. Their frames are counted (`framesDiscarded`) and dropped —
+> the count is the receipt that they were sent and not kept.
 
 ### Crashes are caught even when telemetry is off
 
 The crash handlers are installed unconditionally: they are what stops a crash
 from becoming a silent hang. When telemetry is off, the record stays on your
 machine and is never uploaded.
+
+## What the receiver keeps
+
+The official receiver (`https://log.onemipham.com/v1/events`) is **public and
+write-only**: the CLI carries no credential — it cannot, since the client is
+published to npm — and there is no read endpoint. What it can do with an event is
+therefore deliberately narrow:
+
+- **Dimensional aggregates only**, partitioned by the **day the server received
+  it** (UTC). The client's `occurredAt` is never used as a partition key: an
+  unvalidated timestamp is an unbounded dimension, so it only becomes an offset
+  bucket.
+- **No free text at all.** Counter labels are matched against a server-side
+  allowlist; anything unrecognised is folded into `__other__` and the original
+  label is not written anywhere. An allowlist rather than a numeric cap, because
+  the endpoint is unauthenticated: a cap can be _filled_ with junk, which would
+  push real labels out of their own buckets.
+- **No install ids.** `installId` feeds a HyperLogLog sketch and is never
+  persisted — a plain set would itself be the day's install list.
+- **No stack frames** — see the note above.
+- **No read path at all**, not even an authenticated one. Reading is the offline
+  `report` command; a read endpoint would expose far more than a write endpoint
+  can.
+
+Two consequences worth knowing:
+
+- **A `204` does not mean persisted.** The receiver flushes every 25 accepted
+  events or every 10 seconds, so a kill in that window loses the increment. A
+  crash _before_ the 204 leaves the client's queue intact and the event is
+  resent; the narrower window — acked, then killed before the flush — is the one
+  that actually loses data.
+- Aggregates live under `/var/lib/mipham-telemetry`, encrypted at rest
+  (AES-256-GCM, key in `/etc/mipham-telemetry/aggregate.key`). **Losing that key
+  makes every day's file unreadable** — it is not derivable from anything else.
 
 ## What is never collected
 

@@ -14,6 +14,7 @@ import {
   resetCrashState,
   type CrashSinks,
 } from '../../src/telemetry/crash'
+import { SCHEMA_VERSION } from '../../src/telemetry/payload'
 
 const CWD = '/Users/zqxuser/proj'
 
@@ -168,8 +169,18 @@ describe('crash — capture', () => {
       'platform',
       'runtime',
       'schemaVersion',
-      'stackFrames',
     ])
+  })
+
+  it('keeps the frames local: recorded on the machine, absent from the wire', () => {
+    // v2 的全部要点。记录里**有**帧（本地诊断用），事件里**没有**（服务端从来不存，
+    // 发了只是白送 ~3 KB 与一个隐私面）。两件事必须同时成立 —— 只测「事件里没有」
+    // 的话，把 redactStack 整个删掉也能绿。
+    handleFatal(new Error('boom'), 'uncaughtException', spies())
+
+    expect(getLastCrash()!.stackFrames.length).toBeGreaterThan(0)
+    expect(buildCrashEvent('id')!.payload).not.toHaveProperty('stackFrames')
+    expect(buildCrashEvent('id')!.payload.schemaVersion).toBe(SCHEMA_VERSION)
   })
 })
 

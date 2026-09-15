@@ -28,6 +28,15 @@ export type CrashOrigin = 'uncaughtException' | 'unhandledRejection' | 'render'
 export interface CrashRecord {
   errorName: string
   messageHash: string
+  /**
+   * Redacted frames, **local to this process** — never on the wire.
+   *
+   * Until schema v2 the payload carried these; the collector discarded them on
+   * arrival (a frame string has nowhere to live in dimensional aggregates), so
+   * v2 stopped sending them. They are still redacted here rather than dropped
+   * raw: this record is what a local diagnostic reads, and the redaction
+   * guarantee must not depend on which consumer is asking.
+   */
   stackFrames: string[]
   frameCount: number
   origin: CrashOrigin
@@ -163,6 +172,9 @@ export function resetCrashState(): void {
 /**
  * The `crash` event. Holds a message *digest*, never the message text: error
  * messages routinely embed paths and user data.
+ *
+ * No `stackFrames` since schema v2 — see `SCHEMA_VERSION` in `payload.ts` and
+ * the `stackFrames` note on `CrashRecord`.
  */
 export function buildCrashEvent(installId: string): QueuedEvent | null {
   if (!lastCrash) return null
@@ -178,7 +190,6 @@ export function buildCrashEvent(installId: string): QueuedEvent | null {
       platform: `${process.platform}/${process.arch}`,
       errorName: lastCrash.errorName,
       messageHash: lastCrash.messageHash,
-      stackFrames: lastCrash.stackFrames,
       frameCount: lastCrash.frameCount,
       origin: lastCrash.origin,
     },

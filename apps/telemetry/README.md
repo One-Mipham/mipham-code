@@ -37,7 +37,9 @@ snake_case 信封**不兼容**（那是另一条路径，本服务不解析它�
 - 分区键 = **服务端接收日（UTC）**，不可伪造。客户端 `occurredAt` 只进偏移桶
   （未校验的时间戳是无界维度）
 - `installId` **只喂 HLL**（寄存器，不落任何 id）—— 精确集合落盘的恰恰是「当天的安装清单」
-- `stackFrames` 接受但**不留存**，代价记在 `framesDiscarded`
+- `stackFrames` 接受但**不留存**，代价记在 `framesDiscarded`。**这只对 v1 客户端有意义**：
+  客户端自 schema v2 起不再发帧（服务端从来不存 ⇒ 发了只是白送 ~3 KB 与一个隐私面），
+  但 v1 的已发布二进制收不回来，故这条汇聚路径必须长期留着
 - `counters` 的 label 走**服务端 allowlist**，未收录折叠 `__other__`；
   **原始 label 一个字节都不落盘**（`docs/telemetry.md` 承诺的 no free text）。
   用 allowlist 而不是数值上限，是因为端点是公开无鉴权的：上限可以被填满，
@@ -73,7 +75,8 @@ pnpm coverage      # 阈值在 vitest.config.ts
   客户端没收到 204 ⇒ 留队 ⇒ 重发（自愈）；真正会丢的是「已回 204、然后在 flush
   前被杀」这个更窄的窗口
 - **崩溃通道能告诉你「什么类型、多深、多少个安装」，但永远不能告诉你崩在哪一行。**
-  `stackFrames` 在网络上传输了（所以 `docs/telemetry.md` 没撒谎），只是服务端不保留
+  v1 客户端确实在网络上发了帧（所以 `docs/telemetry.md` 当时没撒谎），只是服务端一个字节
+  不留；v2 起客户端干脆不发 —— 让「发了却必然丢掉」不再需要被解释
 - **截断必须与数据同框**：报告把 `__other__` / `labelsOverflow` / `fieldDropped.*` /
   `dedupUnsure` 并排印在真实行旁边 —— 否则「某命令 0 次」与「被折叠进 other」会被
   读成同一件事

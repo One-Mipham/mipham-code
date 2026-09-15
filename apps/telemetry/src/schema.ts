@@ -16,13 +16,16 @@
 export const SCHEMA_VERSION_V1 = 1
 
 /**
- * The version the client will move to when it stops sending `stackFrames`.
+ * The version the client moved to when it stopped sending `stackFrames`.
  *
- * Listed here from day one even though no client emits it yet: the collector
- * deploys *before* the client change (that ordering is mandatory — a client that
- * stopped sending frames to a collector that could not parse its events would
- * lose them all), so listing it early costs nothing and spares the `unknownSchema`
- * counter a burst of false positives on the day v2 ships.
+ * It was listed here from day one even though no client emitted it then: the
+ * collector deploys *before* the client change (that ordering is mandatory — a
+ * client that stopped sending frames to a collector that could not parse its
+ * events would lose them all), so listing it early cost nothing and spared the
+ * `unknownSchema` counter a burst of false positives on the day v2 shipped.
+ *
+ * Both versions are live traffic now: v1 clients are still installed. v1 events
+ * arrive with frames, which this collector counts (`framesDiscarded`) and drops.
  */
 export const SCHEMA_VERSION_V2 = 2
 

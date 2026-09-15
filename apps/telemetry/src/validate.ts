@@ -103,10 +103,11 @@ export interface NormalizedCrashEvent {
   /**
    * No `stackFrames` field, deliberately.
    *
-   * The client sends them; this boundary is where they stop. "Dimensional
+   * v1 clients still send them; this boundary is where they stop. "Dimensional
    * aggregates only" means a frame string has nowhere to live, so accepting it
    * further would only create the false impression that it is being collected.
-   * The count of what was discarded is reported instead.
+   * The count of what was discarded is reported instead. (v2 clients — the ones
+   * released after this collector — send no frames at all.)
    */
 }
 
