@@ -245,4 +245,68 @@ describe('McpClient', () => {
       }
     })
   })
+
+  describe('tools/list_changed coalescing', () => {
+    // The notification handler is wired to a private method; spy on the round
+    // trip it triggers to observe how many refreshes a burst actually causes.
+    function protocolOf(client: McpClient, name: string) {
+      const conn = (
+        client as unknown as {
+          connections: Map<string, { protocol: { listTools(): Promise<unknown[]> } }>
+        }
+      ).connections.get(name)
+      if (!conn) throw new Error(`no connection "${name}"`)
+      return conn.protocol
+    }
+
+    async function connectMock(): Promise<McpClient> {
+      const client = McpClient.getInstance()
+      await client.connect({
+        name: 'mock',
+        command: 'bun',
+        args: ['run', 'test/mcp/mock-server.ts'],
+      })
+      return client
+    }
+
+    const settle = (ms = 600) => new Promise((r) => setTimeout(r, ms))
+
+    it('coalesces a burst of notifications into one tools/list round trip', async () => {
+      const client = await connectMock()
+      const listTools = vi.spyOn(protocolOf(client, 'mock'), 'listTools')
+
+      // A server emitting one notification per added tool looks like this.
+      for (let i = 0; i < 50; i++) client.onToolsChanged('mock')
+      await settle()
+
+      expect(listTools).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not latch — a later notification triggers another refresh', async () => {
+      const client = await connectMock()
+      const listTools = vi.spyOn(protocolOf(client, 'mock'), 'listTools')
+
+      client.onToolsChanged('mock')
+      await settle()
+      client.onToolsChanged('mock')
+      await settle()
+
+      expect(listTools).toHaveBeenCalledTimes(2)
+    })
+
+    it('drops a pending refresh when the server is disconnected', async () => {
+      const client = await connectMock()
+      const listTools = vi.spyOn(protocolOf(client, 'mock'), 'listTools')
+
+      client.onToolsChanged('mock')
+      client.disconnect('mock')
+      await settle()
+
+      expect(listTools).not.toHaveBeenCalled()
+    })
+
+    it('ignores a notification for an unknown server', () => {
+      expect(() => McpClient.getInstance().onToolsChanged('nope')).not.toThrow()
+    })
+  })
 })
