@@ -54,14 +54,24 @@ const IN_SCOPE = readdirSync(CORE_DIR)
   .sort()
 
 /**
- * 有意延后到第二批的文件 —— 理由见 ROADMAP 的 T3c 落地结果段。
+ * 有意延后到第二批的文件 —— 现为**空**（2026-09-15 第二批落地，`crsi-sandbox.ts` 已接入）。
  *
- * `crsi-sandbox.ts:368` 的 `runTests()` 会在临时 worktree 里跑**整套**测试
- * （`execSync('pnpm test')`，120s 超时），踩到该路径的每个变异体都要付一次全量套件
- * （现约 2525 个测试），足以独自吃光整个预算，且跑动期间反复动真仓库。
- * 这张表是要**明写**的：多一个文件悄悄溜进来由这条守卫拦下，而不是靠谁记得。
+ * 这张表保留成空数组而不是删掉：它的价值是**形状**，不是内容 —— 下次真要延后谁，
+ * 往这里加一项即被守卫可见地记下，而不是让 `mutate` 悄悄少一个文件。
+ *
+ * **第一批的延后理由已被实测证伪，逐字记在这里免得有人照着它再延一次**：当时的判断是
+ * 「`runTests()` 会在临时 worktree 里 `execSync('pnpm test')` 跑整套套件，每个踩到该路径的
+ * 变异体都要付一次全量」，听起来无懈可击 —— 但它默认了**有人覆盖那条路径**。实际是：
+ * `runTests()` 的唯一生产调用点 `crsi-modify.ts:92` 在 `crsi-modify.test.ts` 里被 6 处
+ * `vi.spyOn(sandbox, 'runTests').mockReturnValue(...)` 整个 mock 掉，`crsi-sandbox.test.ts`
+ * 也从不调用它 ⇒ `runTests()` 体内（360–425 行）的变异体全部落 `NoCoverage`，
+ * 而 Stryker 对 no-coverage 变异体**什么都不跑**。
+ *
+ * 真正的成本在别处且可承受：`crsi-sandbox.test.ts` 在约 20 处**真的 `git worktree add`**
+ * （30s 超时）；干跑实测 423 变异体、初始跑 169 测试 / 8 秒 / 退出码 0。
+ * 教训与 `rules-loader` / 双轨 Runtime 同源：**「这机制的代价」要先查「谁在用它」**。
  */
-const DEFERRED_TO_BATCH_2 = ['crsi-sandbox.ts']
+const DEFERRED_TO_BATCH_2: string[] = []
 
 /**
  * `mutate` 的每一项都必须是**平铺路径**。
