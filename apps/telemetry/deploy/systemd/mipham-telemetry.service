@@ -1,0 +1,73 @@
+# Mipham Code — 遥测接收端 unit
+#
+# 落盘: /etc/systemd/system/mipham-telemetry.service
+# 起停: systemctl enable --now mipham-telemetry
+# 日志: journalctl -u mipham-telemetry -f
+#
+# `environment.d` / `EnvironmentFile` 二者只能选一个：这里用 EnvironmentFile，
+# 因为变量名与默认值都是 `src/config.ts` 里 `env.MIPHAM_TELEMETRY_*` 的逐字对应，
+# 而环境文件是运维能直接看、直接改、且**不经过 `systemctl show`** 的那一份。
+#
+# **密钥不是环境变量，是路径。** `MIPHAM_TELEMETRY_KEY_PATH` 指过去，值本身从不进
+# 环境 —— 环境变量会出现在 `systemctl show`、`/proc/<pid>/environ`、以及崩溃转储里。
+
+[Unit]
+Description=Mipham Code telemetry collector (public write-only endpoint)
+Documentation=https://github.com/One-Mipham/mipham-code/tree/main/apps/telemetry
+After=network.target
+# 不是 network-online：本服务只绑 127.0.0.1，不解析任何域名、不连任何上游。
+# 要求 network-online 只会在开机时白等一个并不需要的依赖。
+
+[Service]
+Type=simple
+User=mipham-telemetry
+Group=mipham-telemetry
+
+EnvironmentFile=/etc/mipham-telemetry/telemetry.env
+ExecStart=/opt/node/bin/node /opt/mipham-telemetry/dist/server.js
+WorkingDirectory=/opt/mipham-telemetry
+
+# **SIGTERM 是唯一的优雅出口。** server.ts 收到后先 `server.close()` 停止接受新连接、
+# 再 flush、最后释放 `.lock`。用 SIGKILL（systemd 默认的 KillSignal 是 SIGTERM，
+# 但 `systemctl kill -s SIGKILL` 或 timeout 到点都会绕过它）会让最近一个刷新窗口
+# 的聚合直接消失，且 `.lock` 残留 ⇒ 下次启动拒绝启动。
+KillSignal=SIGTERM
+# server.ts 内部有一个 8s 的 `unref()` 硬退出兜底（flush 卡住时自救）。
+# 这里给 10s，是为了让**那个兜底先到**：若给到 8s 以下，systemd 会先发 SIGKILL，
+# 我们就永远看不到应用自己写的那行 `flushing and exiting` 日志。
+TimeoutStopSec=10
+
+Restart=on-failure
+RestartSec=5s
+
+# --- 沙箱 ---------------------------------------------------------------
+NoNewPrivileges=true
+# 绑 9099（非特权端口）、不 setuid、不加载内核模块 ⇒ 能力集可以清空。
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+# AF_NETLINK 不是多余的：glibc 的 getaddrinfo 会用它枚举网络接口。
+
+# 既有的每日聚合文件 —— 是 ProtectSystem=strict 之下**唯一**可写路径。
+ReadWritePaths=/var/lib/mipham-telemetry
+
+# **刻意不设**，写在这里免得下一个人「顺手统一」：
+#   · `MemoryDenyWriteExecute=true` —— V8 要 JIT，设了进程起不来。
+#   · `SystemCallFilter=@system-service` —— 它对 Node 通常是安全的，但**本机无法验证**
+#     （我们没有 systemd 可跑），而它的失败形态是「服务起不来 + 一条看不懂的 EPERM」。
+#     要在主机上实跑过再决定，不靠推断上线。
+
+# 那些「有界」声明（allowlist / Bloom 容量 / 精确集上限）的**外部兜底**：
+# 哪天哪处算错导致内存无界增长，cgroup 杀掉本进程，而不是拖垮同机的 quant 与 api。
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target
