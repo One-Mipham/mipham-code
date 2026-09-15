@@ -1,6 +1,6 @@
-# Mipham Code v0.5.9
+# Mipham Code v0.81.6
 
-**Multi-model open-core intelligent coding terminal** — 9 AI providers, 66 commands, 31 tools, 14 skills + marketplace, self-update. AI-assisted code generation, security auditing, MCP protocol, and extensible skills — in a single CLI.
+**Multi-model open-core intelligent coding terminal** — 12 AI providers, 136 commands, 31 tools, 28 skills + marketplace, self-update. AI-assisted code generation, security auditing, MCP protocol, and extensible skills — in a single CLI.
 
 Built by [One Mipham Corporation](https://onemipham.com) (北京华安麦逄科技有限公司) | Brand: MiphamAI
 
@@ -15,13 +15,13 @@ Requirements: **Bun 1.2+** (recommended) or **Node.js 22+**
 
 ## Features
 
-- **9 AI Providers** — Anthropic Claude · OpenAI GPT · DeepSeek · Kimi (Moonshot) · Google Gemini · Doubao 豆包 · Tencent Hunyuan 混元 · Qwen 通义千问 · MiphamAI
-- **66 Slash Commands** — Interactive command picker (↑↓ Enter Esc), intuitive command interface, zero re-learning
-- **16 Built-in Tools** — File ops, shell execution, agent dispatch, MCP integration, web search
-- **14 Skills + Marketplace** — 11 standard + 3 Mipham-exclusive skills. `/browse-skills` `/install-skill` community marketplace
+- **12 AI Providers** — Anthropic Claude · OpenAI GPT · DeepSeek · Kimi (Moonshot) · Google Gemini · Doubao 豆包 · Tencent Hunyuan 混元 · Qwen 通义千问 · MiniMax（国内 / 国际）· Ollama（本地）· MiphamAI
+- **136 Slash Commands** — Interactive command picker (↑↓ Enter Esc), intuitive command interface, zero re-learning
+- **31 Built-in Tools** — File ops, shell execution, agent dispatch, MCP integration, web search
+- **28 Skills + Marketplace** — 22 standard + 6 Mipham-exclusive skills. `/browse-skills` `/install-skill` community marketplace
 - **Self-Update** — `mipham update` / `/upgrade` — one command to check, backup config, upgrade, restore. API keys preserved
 - **Smart Recommendations** — `/recommend` analyzes your project, suggests skills, providers, and config
-- **One-Click Config** — `/init` generates config.yml with all 9 providers pre-populated (just replace API keys)
+- **One-Click Config** — `/init` generates config.yml with the providers pre-populated (just replace API keys)
 - **MCP Protocol** — Full JSON-RPC 2.0 stdio transport for external server integration
 - **Security Hardened** — Path sandbox · SSRF protection · Bash blacklist · Permission gating · Parameter validation · command injection prevention · API key redaction
 - **Config Resilience** — YAML error recovery, deep merge providers, auto-backup (5 copies), corruption auto-restore
@@ -34,7 +34,7 @@ Requirements: **Bun 1.2+** (recommended) or **Node.js 22+**
 mipham
 
 # First run auto-initializes config. Or:
-/init     # Generate ~/.mipham/config.yml with 9 providers pre-configured
+/init     # Generate ~/.mipham/config.yml with providers pre-configured
 
 # Set API keys (env vars or config.yml)
 export DEEPSEEK_API_KEY="sk-..."
@@ -73,7 +73,7 @@ Press **Ctrl+P** for model picker · **Shift+Tab** to cycle permission mode · *
 - [Website (International)](https://mipham.ai/mipham-code)
 - [国内站](https://onemipham.com/mipham-code)
 - [GitHub](https://github.com/One-Mipham/mipham-code)
-- [Product Specification](https://github.com/One-Mipham/mipham-code/blob/main/PRODUCT.md)
+- [Product Specification (v1.0.0, 2026-06-10 snapshot)](https://github.com/One-Mipham/mipham-code/blob/main/PRODUCT.md) — frozen, not current
 - [npm](https://www.npmjs.com/package/@miphamai/cli)
 
 ## License

@@ -16,7 +16,7 @@ import { McpClient } from '../mcp/client'
 import { buildCapabilityReport } from '../core/capability-inventory'
 import { InstructionsLoader } from '../core/instructions'
 import { findDerivableSections, DERIVABLE_HINTS } from '../core/claude-md-audit'
-import { worktreeRoot } from '../core/paths.ts'
+import { worktreeRoot, workflowScriptDir, workflowScriptDirs } from '../core/paths.ts'
 import { fixDoctor, fixConfig, fixCache, selectRepoClaudeFiles } from '../core/fix'
 import { fixCodeTarget } from '../core/fix-code'
 import { homedir } from 'node:os'
@@ -4322,10 +4322,7 @@ const workflowsCmd: CommandHandler = async () => {
   const { existsSync, readdirSync, readFileSync } = await import('node:fs')
   const { join } = await import('node:path')
 
-  const locations = [
-    join(process.cwd(), '.claude', 'workflows'),
-    join(homedir(), '.claude', 'workflows'),
-  ]
+  const locations = workflowScriptDirs(process.cwd())
 
   const lines: string[] = ['─ Workflows ─', '']
   let found = 0
@@ -4363,10 +4360,11 @@ const workflowsCmd: CommandHandler = async () => {
     lines.push('No workflow scripts found.')
     lines.push('')
     lines.push('Workflows are multi-agent orchestration scripts stored in:')
-    lines.push('  .claude/workflows/   (project-level)')
-    lines.push('  ~/.claude/workflows/ (user-level)')
+    lines.push('  .mipham/workflows/   (project-level — new scripts go here)')
+    lines.push('  .claude/workflows/   (project-level, legacy — still read)')
+    lines.push('  ~/.claude/workflows/ (user-level, legacy — still read)')
     lines.push('')
-    lines.push('Create a .js file in either location to add a workflow.')
+    lines.push('Create a .js file in either project location to add a workflow.')
   } else {
     lines.push('')
     lines.push(`${found} workflow(s) found.`)
@@ -4384,14 +4382,20 @@ const workflowSaveCmd = async (name: string): Promise<CommandResult> => {
   const { existsSync, mkdirSync, writeFileSync, readFileSync } = await import('node:fs')
   const { join } = await import('node:path')
 
-  const targetDir = join(process.cwd(), '.claude', 'workflows')
+  const targetDir = workflowScriptDir(process.cwd())
   if (!existsSync(targetDir)) {
     mkdirSync(targetDir, { recursive: true })
   }
 
-  // Read the last-run state persisted by the Workflow tool
-  const stateFile = join(targetDir, '.last-run.json')
-  if (!existsSync(stateFile)) {
+  // Read the last-run state persisted by the Workflow tool. Every readable
+  // location is checked, not just the writable one: a run that predates the
+  // move to `.mipham/` left its state in `.claude/workflows/`, so looking in
+  // the new directory alone would report "no recent run" on the first save
+  // after upgrading.
+  const stateFile = workflowScriptDirs(process.cwd())
+    .map((dir) => join(dir, '.last-run.json'))
+    .find((file) => existsSync(file))
+  if (!stateFile) {
     return { content: 'No recent workflow run found. Run a workflow first with /workflow <task>.' }
   }
 
@@ -4420,10 +4424,7 @@ const workflowRunCmd = async (name: string): Promise<CommandResult> => {
 
   const safeName = name.replace(/[^a-zA-Z0-9_-]/g, '-')
 
-  const locations = [
-    join(process.cwd(), '.claude', 'workflows'),
-    join(homedir(), '.claude', 'workflows'),
-  ]
+  const locations = workflowScriptDirs(process.cwd())
 
   for (const loc of locations) {
     const scriptPath = join(loc, `${safeName}.js`)
@@ -4438,7 +4439,9 @@ const workflowRunCmd = async (name: string): Promise<CommandResult> => {
   }
 
   return {
-    content: `Workflow "${safeName}" not found in .claude/workflows/ or ~/.claude/workflows/`,
+    content:
+      `Workflow "${safeName}" not found in .mipham/workflows/, ` +
+      `.claude/workflows/ or ~/.claude/workflows/`,
   }
 }
 

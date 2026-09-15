@@ -138,6 +138,34 @@ const PREFIX_VALUE_OPTIONS = new Set([
 ])
 
 /**
+ * Shell interpreters whose `-c` argument is itself a complete command line.
+ *
+ * Deliberately NOT added to PREFIX_COMMANDS: that table shares
+ * PREFIX_VALUE_OPTIONS, where `-s` means `timeout --signal` — a shell's option
+ * grammar (`-c`, merged clusters like `-lc`, `-o <name>`) has nothing in common
+ * with a wrapper's value-taking options, and its payload is a *new command line*
+ * to re-parse rather than "the real command".
+ *
+ * This table is a security surface, not a compatibility surface: every name
+ * added is another matching path. Deliberately excluded — interpreters that
+ * evaluate *another language* (`node -e`, `python -c`, `awk`), remote execution
+ * (`ssh host '…'`, `docker exec`), script files (`bash x.sh`, `source x.sh`,
+ * whose payload is a file rather than a command line), and `find -exec`.
+ */
+const SHELL_COMMANDS = new Set(['bash', 'sh', 'zsh', 'dash', 'ksh', 'ash'])
+
+/** Shell short-option letters that consume the next token as a value (`-o pipefail`). */
+const SHELL_VALUE_LETTERS = 'o'
+
+/** Shell long options that consume the next token as a value. */
+const SHELL_VALUE_OPTIONS = new Set(['--init-file', '--rcfile'])
+
+/** How many `-c` / `$()` payload levels are re-parsed. Shared by both recursion
+ *  paths — a single counter is what makes the bound hold; separate counters
+ *  would let `bash -c 'bash -c "$(…)"'` alternate past it. */
+const MAX_COMMAND_DEPTH = 5
+
+/**
  * Split a (possibly compound) shell command into simple-command segments, so a
  * Bash(pattern) rule matches any segment rather than only the whole string
  * (`rm -rf /` buried in `foo && rm -rf /` must still match).
@@ -221,20 +249,28 @@ function extractSubstitutions(command: string): string[] {
 
 /**
  * Flatten a command into every matchable sub-command: its shell segments plus
- * the commands nested inside `$(...)`/backtick substitutions (recursively). So
- * a `Bash(rm *)` deny rule also matches `REPORTTIME=$(rm -rf ~)` — zsh evaluates
- * substitutions in REPORTTIME/REPORTMEMORY/DIRSTACKSIZE assignments immediately.
- * Over-matching is the safe direction for a deny rule.
+ * the commands nested inside `$(...)`/backtick substitutions and shell `-c`
+ * payloads (recursively, bounded by MAX_COMMAND_DEPTH). So a `Bash(rm *)` deny
+ * rule also matches `REPORTTIME=$(rm -rf ~)` — zsh evaluates substitutions in
+ * REPORTTIME/REPORTMEMORY/DIRSTACKSIZE assignments immediately — and
+ * `bash -c 'rm -rf /'`. Over-matching is the safe direction for a deny rule.
  */
-function flattenCommand(command: string): string[] {
+function flattenCommand(command: string, depth = 0): string[] {
   const out: string[] = []
   for (const seg of splitShellSegments(command)) {
     out.push(seg)
     const stripped = stripPrefixCommand(seg)
     if (stripped !== seg) out.push(stripped)
     for (const inner of extractSubstitutions(seg)) {
-      out.push(...flattenCommand(inner))
+      out.push(...flattenCommand(inner, depth + 1))
     }
+    // A shell `-c` payload is a command line in its own right, so `Bash(rm *)`
+    // must also match `bash -c 'rm -rf /'`. Past the depth bound recursion stops
+    // outright rather than pushing the raw payload: the raw text
+    // (`bash -c 'rm -rf /'`) matches no `rm …` pattern anyway, and stopping
+    // keeps the boundary predictable.
+    const { payload } = effectiveCommand(seg.split(/\s+/).filter(Boolean))
+    if (payload && depth < MAX_COMMAND_DEPTH) out.push(...flattenCommand(payload, depth + 1))
   }
   return out
 }
@@ -248,8 +284,13 @@ function flattenCommand(command: string): string[] {
  * always treated as the command (never skipped) — which over-matches, the safe
  * direction for a deny rule.
  */
-function effectiveCommand(tokens: string[]): { base: string; args: string[] } {
+function effectiveCommand(tokens: string[]): {
+  base: string
+  args: string[]
+  payload: string | null
+} {
   let i = 0
+  let payload: string | null = null
   while (i < tokens.length) {
     const name = (tokens[i] || '').split('/').pop() || ''
     if (!PREFIX_COMMANDS.has(name)) break
@@ -263,9 +304,65 @@ function effectiveCommand(tokens: string[]): { base: string; args: string[] } {
       while (i < tokens.length && tokens[i]!.includes('=')) i++ // `VAR=value` assignments
     }
     if (name === 'timeout') i++ // positional duration
+    // `eval`'s remaining arguments are themselves a command line, and must be
+    // captured here rather than via the SHELL_COMMANDS branch below: `eval "cat
+    // secret"` tokenizes to ['eval', '"cat', 'secret"'], so the base degrades to
+    // `"cat` — a name no command set contains. The quotes land on *different*
+    // tokens, so de-quoting a single token cannot recover it either.
+    if (name === 'eval' && payload === null && i < tokens.length) {
+      payload = stripQuotes(tokens.slice(i).join(' '))
+    }
   }
-  if (i >= tokens.length) return { base: '', args: [] }
-  return { base: (tokens[i] || '').split('/').pop() || '', args: tokens.slice(i + 1) }
+  if (i >= tokens.length) return { base: '', args: [], payload }
+  const base = (tokens[i] || '').split('/').pop() || ''
+  if (payload === null && SHELL_COMMANDS.has(base)) payload = shellPayload(tokens, i)
+  return { base, args: tokens.slice(i + 1), payload }
+}
+
+/**
+ * The command string a shell runs via `-c` (`bash -c 'cat X'`). Only `-c` yields
+ * a nested command line — a script-file operand (`bash x.sh`) does not — so the
+ * scan stops at the first non-flag token, per getopt: `bash script.sh -c foo` is
+ * NOT a payload. Short options are walked as a cluster because shells accept
+ * `-lc` / `-xc` / `-euo pipefail`, which a flat option table (PREFIX_VALUE_OPTIONS)
+ * can never match.
+ *
+ * The payload is reassembled from every remaining token rather than taken from
+ * the one right after `-c`: it is a single shell word that routinely contains
+ * spaces (`'while read f; do cat "$f"; done'`), so whitespace tokenization has
+ * split it apart.
+ */
+function shellPayload(tokens: string[], start: number): string | null {
+  let i = start + 1
+  while (i < tokens.length) {
+    const t = tokens[i]!
+    if (!/^[-+]/.test(t) || t === '-' || t === '+') return null // first operand ends option parsing
+    if (t === '--') return null
+    if (t.startsWith('--')) {
+      i += SHELL_VALUE_OPTIONS.has(t) ? 2 : 1
+      continue
+    }
+    const body = t.slice(1)
+    let consumed = 0
+    let inline: string | null = null
+    for (let k = 0; k < body.length; k++) {
+      const letter = body[k]!
+      if (letter === 'c') {
+        inline = body.slice(k + 1) // `-c'cat X'` attaches the payload to the flag
+        break
+      }
+      if (SHELL_VALUE_LETTERS.includes(letter)) {
+        if (k + 1 >= body.length) consumed = 1 // value is the next token
+        break
+      }
+    }
+    if (inline !== null) {
+      const tail = tokens.slice(i + 1).join(' ')
+      return stripQuotes([inline, tail].filter(Boolean).join(' ')) || null
+    }
+    i += 1 + consumed
+  }
+  return null
 }
 
 /** A command with any wrapper prefix commands stripped, so `sudo rm -rf /`
@@ -281,13 +378,19 @@ function stripPrefixCommand(command: string): string {
 
 /**
  * Detect reader/writer commands at the front of each shell segment and recurse
- * into command substitutions, so `echo $(cat .git-credentials)` is caught.
+ * into command substitutions and shell `-c` payloads, so both
+ * `echo $(cat .git-credentials)` and `bash -c 'cat .git-credentials'` are caught.
  */
-function scanReaderWriterCommands(command: string, read: string[], write: string[]): void {
+function scanReaderWriterCommands(
+  command: string,
+  read: string[],
+  write: string[],
+  depth = 0,
+): void {
   for (const seg of splitShellSegments(command)) {
     const tokens = seg.split(/\s+/).filter(Boolean)
     if (tokens.length > 0) {
-      const { base, args } = effectiveCommand(tokens)
+      const { base, args, payload } = effectiveCommand(tokens)
       if (READER_COMMANDS.has(base)) {
         // `sed -i` / `perl -i` read AND write their file args.
         const inPlace = args.some((a) => a === '-i' || a.startsWith('--in-place'))
@@ -303,9 +406,14 @@ function scanReaderWriterCommands(command: string, read: string[], write: string
           write.push(stripQuotes(arg))
         }
       }
+      // Re-parse a shell `-c` payload: `bash -c 'cat secret'` reads `secret`
+      // just as directly as `cat secret` does.
+      if (payload && depth < MAX_COMMAND_DEPTH) {
+        scanReaderWriterCommands(payload, read, write, depth + 1)
+      }
     }
     for (const inner of extractSubstitutions(seg)) {
-      scanReaderWriterCommands(inner, read, write)
+      scanReaderWriterCommands(inner, read, write, depth + 1)
     }
   }
 }

@@ -7,6 +7,7 @@
  * 突然失去隔离保护（隔离度只许增不许减）。
  */
 
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { MIPHAM_DIR } from '../shared/constants.ts'
 
@@ -49,4 +50,30 @@ export function findWorktreeMarker(cwd: string): { root: string; marker: string 
     if (index !== -1) return { root: cwd.substring(0, index).replace(/\/+$/, ''), marker }
   }
   return null
+}
+
+/**
+ * 新建 workflow 脚本的目录（绝对路径）。与 worktree 同理：写入落在 `.mipham/`。
+ *
+ * 注意别与**运行产物**目录混淆：`~/.mipham/workflows/<runId>/`（见
+ * `workflow/journal.ts`）同名但不同义，装的是 journal 与转录。两者靠「非递归
+ * readdir + 只收 .js」区分，属巧合而非设计，故本函数绝不返回那个根。
+ */
+export function workflowScriptDir(cwd: string): string {
+  return join(cwd, MIPHAM_DIR, 'workflows')
+}
+
+/**
+ * 全部可读的 workflow 脚本目录，写入根在前。
+ *
+ * 读侧必须同时认新旧前缀，否则升级后第一次 `/workflow save` 会失败 ——
+ * 上一次运行的 `.last-run.json` 还在旧目录里。用户级旧前缀也保留在列，
+ * 但**没有**对应的 `~/.mipham/workflows` 用户级脚本根：那里是运行产物的地盘。
+ */
+export function workflowScriptDirs(cwd: string): string[] {
+  return [
+    workflowScriptDir(cwd),
+    join(cwd, LEGACY_CLAUDE_DIR, 'workflows'),
+    join(homedir(), LEGACY_CLAUDE_DIR, 'workflows'),
+  ]
 }

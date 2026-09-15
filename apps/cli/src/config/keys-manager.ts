@@ -3,8 +3,8 @@ import { join, dirname } from 'node:path'
 import { homedir } from 'node:os'
 import { saveProviderApiKey } from './loader'
 
-const MIPHAM_DIR = join(homedir(), '.mipham')
-const KEYS_FILE = join(MIPHAM_DIR, 'keys.json')
+const MIPHAM_HOME = join(homedir(), '.mipham')
+const KEYS_FILE = join(MIPHAM_HOME, 'keys.json')
 const EXPIRY_DAYS = 90
 
 export interface KeyEntry {
@@ -84,7 +84,7 @@ export class KeyManager {
 
     // Backup old entry if it exists
     if (existing) {
-      const backupDir = join(MIPHAM_DIR, 'keys')
+      const backupDir = join(MIPHAM_HOME, 'keys')
       mkdirSync(backupDir, { recursive: true })
       const backupPath = join(backupDir, `${provider}.backup`)
       writeFileSync(backupPath, JSON.stringify(existing, null, 2) + '\n', { mode: 0o600 })

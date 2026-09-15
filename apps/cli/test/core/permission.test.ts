@@ -228,6 +228,18 @@ describe('PermissionSystem', () => {
     expect(ps.needsApproval(tool, { command: 'rm -rf /' })).toBe(true)
   })
 
+  it('deny beats allow when both match the same command', () => {
+    // flattenCommand feeds allow rules as well as deny rules, so teaching it to
+    // see through shell `-c` payloads widens what gets auto-approved too. Deny
+    // must still short-circuit first (check(): deny → ask → allow), otherwise
+    // the fix would trade a bypass for an over-permissive allow.
+    const ps = new PermissionSystem()
+    ps.allow('Bash(cat:*)')
+    ps.deny('Read(.git-credentials)')
+    const tool = makeTool('Bash', 'auto', 'exec')
+    expect(ps.check(tool, { command: "bash -c 'cat .git-credentials'" })).toBe('ask')
+  })
+
   it('plan mode allows reads only', () => {
     const ps = new PermissionSystem('plan')
     const readTool = makeTool('Read', 'auto', 'file')

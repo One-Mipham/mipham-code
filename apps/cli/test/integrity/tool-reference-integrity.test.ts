@@ -9,7 +9,9 @@
  *   4. `/todos` 的提示词、参考表与 locale 文案引用 `TaskCreate` / `TaskList` 等
  *      不存在的工具名（真实工具只有一个 `Task`，动作走 `action` 参数）
  *
- * 本文件用四段机器可校验的契约覆盖上述缺陷类。守卫的价值取决于**不误报**——
+ * 本文件用五段机器可校验的契约：前四段覆盖上述缺陷类，第五段守的是文档体积与
+ * 两张变更记录表的行数上限（CLAUDE.md 拆分后 17 小时内又长回 56k，约定此前只存在于
+ * 记忆里、未落到纸面也无人守）。守卫的价值取决于**不误报**——
  * 实测（2026-09-15）扫描命中 6 个幻影名（分布在 10 处），误报 0；被排除的合法词
  * `GitHub` / `GitLab` / `ConfigChange` 见 ALLOWED_NON_TOOL_WORDS。误报的处理方式是
  * **加白名单并写明理由**，不是放宽规则、更不是删掉守卫。
@@ -146,8 +148,12 @@ describe('工具总数声明完整性', () => {
    * 中文侧要求带「个」是有意的：`（1/34 工具）`（CLAUDE.md 待办一节）说的是
    * Obsidian MCP 服务器自己的第 1/34 个工具，不是本项目的工具总数，不匹配才不误报。
    * 与技能清单守卫同理 —— 守卫的成败取决于不误报。
+   *
+   * 英文侧必须容忍中间夹着的 `Built-in`：README 惯用「数字 + Built-in Tools」这种写法，
+   * 数字与 `tools` 并不相邻，原先的 `(\d+)\+?\s+tools?\b` 因此**根本扫不到它** ——
+   * 扫描面里那两行正是靠这个漏洞一直活着（2026-09-15 补，先红后绿）。
    */
-  const TOOL_TOTAL_RE = /(\d+)\s*个(?:内置)?工具|(\d+)\+?\s+tools?\b/g
+  const TOOL_TOTAL_RE = /(\d+)\s*个(?:内置)?工具|(\d+)\s*\+?\s*(?:Built-in\s+)?[Tt]ools?\b/g
 
   /**
    * 时间点记录 —— 自证定格、或本身就是逐版本流水。里面的旧数字在写下时是对的，
@@ -331,5 +337,90 @@ describe('IDE 扩展环境变量契约', () => {
     ).toBe('')
     // 注：当前扩展不注入任何 MIPHAM_* 变量，故本条目前恒真。
     // 它是绊线——新增注入而没有消费者时会立刻变红，正是 MIPHAM_IDE 当初的形态。
+  })
+})
+
+/**
+ * 变更记录滚动窗口与文档体积。
+ *
+ * 守的是一类与「引用了不存在的东西」不同的缺陷：**没有上限的累积**。
+ * CLAUDE.md 的 `## 最近提交` 一直是 5 行滚动窗口，但这条约定在拆分之前的全仓库
+ * 文档里一字未写（grep `5 行` / `滚动` / `上限` 零命中），于是 `### 修订历史`
+ * 无人看管地长到 8 行 / 26,229 字符 = 全文 60%，拆分 17 小时后整份文件从
+ * 21,193 长回 56,001 字符（+164%），二次越过当初触发拆分的 40k 红线。
+ * 成文 + 守卫 + 把旧条目搬进 `docs/claude-md-history.md`，三者缺一不可。
+ *
+ * 刻意**不用** `prompt-exclude` / 按标题剥整段的办法来「减重」：按标题剥会把
+ * `> 完整修订历史 → docs/claude-md-history.md` 那行指针一起剥掉，读者反而失去去路
+ * （拆分提交 a278151 已记录此教训）。
+ */
+describe('变更记录滚动窗口与文档体积', () => {
+  const CLAUDE_MD = join(REPO_ROOT, 'CLAUDE.md')
+  /** 每张变更记录表保留的数据行数上限。 */
+  const MAX_ROWS = 5
+  /** CLAUDE.md 全文字符预算——当初触发拆分的那条红线。 */
+  const MAX_CHARS = 40_000
+  /** 搬运目的地，仅用于报错文案。 */
+  const ARCHIVE = 'docs/claude-md-history.md'
+
+  /**
+   * 取 `heading` 下列第一张表的数据行。
+   *
+   * 用**结构**判定而非列名：markdown 表必定是 `表头 | 分隔行 | 数据…`，故分隔行
+   * 之前的一律不算数据。这样列名一改、列序一调，判定都不会跟着错——按列名匹配
+   * 正是那种「文档写法一变守卫就静默恒真」的写法。
+   */
+  function tableRows(src: string, heading: string): string[] {
+    const lines = src.split('\n')
+    const start = lines.findIndex((l) => l.startsWith(heading))
+    if (start === -1) return []
+
+    const rows: string[] = []
+    let inTable = false
+    for (let i = start + 1; i < lines.length; i++) {
+      const line = lines[i]!
+      if (line.startsWith('## ') || line.startsWith('---')) break
+      if (!line.startsWith('|')) {
+        if (inTable) break // 表格结束
+        continue
+      }
+      if (/^\|[\s|:-]+\|$/.test(line)) {
+        inTable = true // 分隔行：其后才是数据行
+        continue
+      }
+      if (inTable) rows.push(line)
+    }
+    return rows
+  }
+
+  it('两张变更记录表都不超过滚动窗口', () => {
+    const src = readFileSync(CLAUDE_MD, 'utf-8')
+    const recent = tableRows(src, '## 最近提交')
+    const revisions = tableRows(src, '### 修订历史')
+
+    // 标题一改名这两条就会静默恒真，所以先确认确实扫到了表。
+    expect(recent.length, '没有扫到「最近提交」的数据行——标题或表格写法可能已变').toBeGreaterThan(0)
+    expect(
+      revisions.length,
+      '没有扫到「修订历史」的数据行——标题或表格写法可能已变',
+    ).toBeGreaterThan(0)
+
+    expect(
+      recent.length,
+      `「最近提交」有 ${recent.length} 行，上限 ${MAX_ROWS}——挤掉最旧的一条`,
+    ).toBeLessThanOrEqual(MAX_ROWS)
+    expect(
+      revisions.length,
+      `「修订历史」有 ${revisions.length} 行，上限 ${MAX_ROWS}——` +
+        `挤掉的行搬进 ${ARCHIVE}（全表在那里），CLAUDE.md 只留简介`,
+    ).toBeLessThanOrEqual(MAX_ROWS)
+  })
+
+  it('CLAUDE.md 保持在体积预算内', () => {
+    const chars = readFileSync(CLAUDE_MD, 'utf-8').length
+    expect(
+      chars,
+      `CLAUDE.md 已 ${chars} 字符，预算 ${MAX_CHARS}——` + `把最旧的行搬进 ${ARCHIVE} 换取体积`,
+    ).toBeLessThanOrEqual(MAX_CHARS)
   })
 })

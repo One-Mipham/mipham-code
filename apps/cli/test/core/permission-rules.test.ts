@@ -287,6 +287,15 @@ describe('extractBashFileAccess — prefix wrapper commands', () => {
       '.git-credentials',
     )
   })
+
+  it('extracts the file from a reader inside a -c payload', () => {
+    expect(extractBashFileAccess("bash -c 'cat .git-credentials'").read).toContain(
+      '.git-credentials',
+    )
+    expect(extractBashFileAccess("sudo bash -c 'cat .git-credentials'").read).toContain(
+      '.git-credentials',
+    )
+  })
 })
 
 describe('matchBashRule — Read rules cover text/byte readers', () => {
@@ -364,6 +373,90 @@ describe('matchBashRule — Read rules cover text/byte readers', () => {
   })
 })
 
+describe('matchBashRule — Read/Write/Edit rules see through shell -c payloads', () => {
+  // A shell's `-c` argument is itself a complete command line, so it must be
+  // re-parsed rather than treated as an opaque operand: otherwise
+  // `bash -c 'cat .git-credentials'` slips past a `Read(.git-credentials)` deny
+  // rule by adding four characters in front.
+  it('matches a Read(path) rule behind every common shell invocation', () => {
+    for (const command of [
+      "bash -c 'cat .git-credentials'",
+      "sh -c 'cat .git-credentials'",
+      "zsh -c 'cat .git-credentials'",
+      'dash -c "cat .git-credentials"',
+      'ksh -c "cat .git-credentials"',
+      "bash -lc 'cat .git-credentials'", // merged short-option cluster
+      "bash -ic 'cat .git-credentials'",
+      "bash -xc 'cat .git-credentials'",
+      "bash -o pipefail -c 'cat .git-credentials'", // -o takes a value
+      "bash -euo pipefail -c 'cat .git-credentials'",
+      "bash --norc -c 'cat .git-credentials'",
+      "/bin/bash -c 'cat .git-credentials'", // basename, not the full path
+      "env sh -c 'cat .git-credentials'",
+      "sudo bash -c 'cat .git-credentials'",
+      "sudo -u root sh -c 'cat .git-credentials'",
+    ]) {
+      expect(matchBashRule('Read(.git-credentials)', 'Bash', { command }), command).toBe(true)
+    }
+  })
+
+  it('parses a payload that spans several whitespace tokens', () => {
+    // The payload is one shell word but several whitespace tokens — taking only
+    // the token right after `-c` would yield `'cat`, which is not a reader.
+    expect(matchBashRule('Read(b)', 'Bash', { command: "bash -c 'cat a b'" })).toBe(true)
+  })
+
+  it('matches through a doubly nested shell', () => {
+    expect(
+      matchBashRule('Read(.git-credentials)', 'Bash', {
+        command: `bash -c 'bash -c "cat .git-credentials"'`,
+      }),
+    ).toBe(true)
+  })
+
+  it('matches an eval payload quoted as a single argument', () => {
+    // `eval "cat X"` tokenizes to ['eval', '"cat', 'X"'] — the quotes land on
+    // different tokens, so the base degrades to `"cat` and no reader is seen.
+    expect(
+      matchBashRule('Read(.git-credentials)', 'Bash', { command: 'eval "cat .git-credentials"' }),
+    ).toBe(true)
+  })
+
+  it('propagates Write/Edit rules into a -c payload', () => {
+    expect(matchBashRule('Write(.npmrc)', 'Bash', { command: "bash -c 'rm .npmrc'" })).toBe(true)
+    expect(matchBashRule('Edit(.npmrc)', 'Bash', { command: "sh -c 'sed -i s/a/b/ .npmrc'" })).toBe(
+      true,
+    )
+  })
+
+  it('stops at the first operand so a script argument is not a payload', () => {
+    // `-c` here belongs to the script, not to a shell: option parsing ended at
+    // `script.sh`, so nothing is re-parsed.
+    expect(
+      matchBashRule('Read(.git-credentials)', 'Bash', {
+        command: "bash script.sh -c 'cat .git-credentials'",
+      }),
+    ).toBe(false)
+  })
+})
+
+describe('matchBashRule — Bash rules match -c payloads', () => {
+  it('matches a Bash(pattern) rule against a payload', () => {
+    expect(matchBashRule('Bash(rm *)', 'Bash', { command: "bash -c 'rm -rf /'" })).toBe(true)
+    expect(matchBashRule('Bash(git:*)', 'Bash', { command: 'bash -c "git status"' })).toBe(true)
+  })
+
+  it('bounds payload recursion', () => {
+    const nest = (n: number) => {
+      let s = 'rm -rf /'
+      for (let i = 0; i < n; i++) s = `bash -c '${s}'`
+      return s
+    }
+    expect(matchBashRule('Bash(rm *)', 'Bash', { command: nest(3) })).toBe(true)
+    expect(matchBashRule('Bash(rm *)', 'Bash', { command: nest(20) })).toBe(false)
+  })
+})
+
 describe('matchBashRule — conservative scoping avoids upstream false positives', () => {
   // Claude Code 2.1.259 extended Read() deny rules to ALL Bash arguments, then
   // 2.1.260 REVERTED it: it denied `npm run build` under `Read(./**/build/**)`
@@ -383,6 +476,29 @@ describe('matchBashRule — conservative scoping avoids upstream false positives
     expect(matchBashRule('Read(./**/build/**)', 'Bash', { command: 'git grep foo ./src' })).toBe(
       false,
     )
+  })
+
+  // Re-parsing a `-c` payload must not turn a quoted string into a command:
+  // the payload is only re-parsed when a shell actually runs it, never when it
+  // is merely an argument to `echo`.
+  it('does not treat a quoted -c string as a command', () => {
+    expect(matchBashRule('Read(secret)', 'Bash', { command: `echo "bash -c 'cat secret'"` })).toBe(
+      false,
+    )
+    expect(matchBashRule('Read(secret)', 'Bash', { command: `bash -c 'echo "cat secret"'` })).toBe(
+      false,
+    )
+    expect(matchBashRule('Bash(rm *)', 'Bash', { command: `bash -c 'echo "rm -rf /"'` })).toBe(
+      false,
+    )
+  })
+
+  it('does not extend a Read rule to every argument of a -c payload', () => {
+    // Same shape as the 2.1.259→2.1.260 rollback above, one level deeper: the
+    // payload's args are `npm`'s, not paths anyone is reading.
+    expect(
+      matchBashRule('Read(./**/build/**)', 'Bash', { command: "bash -c 'npm run build'" }),
+    ).toBe(false)
   })
 })
 

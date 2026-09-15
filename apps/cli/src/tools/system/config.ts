@@ -4,8 +4,8 @@ import { homedir } from 'node:os'
 import { parse as parseYaml, stringify } from 'yaml'
 import type { ToolDefinition } from '../../shared/index.ts'
 
-const MIPHAM_DIR = join(homedir(), '.mipham')
-const USER_CONFIG = join(MIPHAM_DIR, 'config.yml')
+const MIPHAM_HOME = join(homedir(), '.mipham')
+const USER_CONFIG = join(MIPHAM_HOME, 'config.yml')
 
 export const configTool: ToolDefinition = {
   name: 'Config',
@@ -26,7 +26,7 @@ export const configTool: ToolDefinition = {
     required: ['action'],
   },
   async execute(params, _ctx) {
-    mkdirSync(MIPHAM_DIR, { recursive: true })
+    mkdirSync(MIPHAM_HOME, { recursive: true })
     const action = params.action as string
 
     let config: Record<string, unknown> = {}

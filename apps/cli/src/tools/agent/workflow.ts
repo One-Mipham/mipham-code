@@ -1,5 +1,6 @@
 import type { ToolDefinition } from '../../shared/index.ts'
 import { runWorkflow } from '../../workflow/runtime'
+import { workflowScriptDir } from '../../core/paths.ts'
 import type { QueryEngine } from '../../core/engine'
 
 export const workflowTool: ToolDefinition = {
@@ -108,10 +109,11 @@ export const workflowTool: ToolDefinition = {
       )
 
       // Persist last-run state for /workflow save
+      let persistWarning = ''
       try {
         const { existsSync, mkdirSync, writeFileSync } = await import('node:fs')
         const { join } = await import('node:path')
-        const workflowsDir = join(process.cwd(), '.claude', 'workflows')
+        const workflowsDir = workflowScriptDir(process.cwd())
         if (!existsSync(workflowsDir)) {
           mkdirSync(workflowsDir, { recursive: true })
         }
@@ -120,8 +122,13 @@ export const workflowTool: ToolDefinition = {
           JSON.stringify({ runId, script, timestamp: new Date().toISOString() }),
           'utf-8',
         )
-      } catch {
-        // best-effort — don't fail the workflow if state persistence fails
+      } catch (err) {
+        // Persistence stays best-effort — the workflow itself succeeded, so a
+        // disk error must not fail it. But it must not be *silent* either:
+        // swallowing this made the next `/workflow save` report "No recent
+        // workflow run found" while the script sat intact in
+        // ~/.mipham/workflows/<runId>/script.js.
+        persistWarning = `\n\n⚠️  Could not persist last-run state for /workflow save: ${String(err)}`
       }
 
       let content = `Workflow ${runId} completed.\n\n`
@@ -130,7 +137,7 @@ export const workflowTool: ToolDefinition = {
       }
       content += `Result:\n${typeof result === 'string' ? result : JSON.stringify(result, null, 2)}`
 
-      return { success: true, content }
+      return { success: true, content: content + persistWarning }
     } catch (err) {
       return {
         success: false,
