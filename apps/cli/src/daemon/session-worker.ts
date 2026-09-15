@@ -152,10 +152,12 @@ export class SessionWorker {
           if (chunk.outputTokens) totalOutputTokens += chunk.outputTokens
         }
 
-        // Stop signal from engine — includes 'stop' and 'error' types
-        if (chunk.type === 'stop') {
-          break
-        }
+        // Deliberately NO break on 'stop' — the chunk type is overloaded here.
+        // Providers emit a provider-level 'stop' unconditionally at the end of
+        // EVERY LLM stream, including tool-call turns; the engine still has to
+        // execute those tools and run the continuation turns after it. The
+        // engine's own terminal 'stop' is always followed by `return`, so
+        // letting the generator run out is the only correct termination.
       }
     } catch (err) {
       stopReason = 'error'
