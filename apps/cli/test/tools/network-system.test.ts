@@ -1,7 +1,20 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
+// Isolate this file from the real ~/.mipham. The config tool resolves its store
+// from os.homedir(), and this file used to rmSync() the user's live config.yml
+// (and write theme / editor.fontSize into it) on every run. Same approach as
+// test/config/loader-restore.test.ts.
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>()
+  return {
+    ...actual,
+    homedir: () => `${actual.tmpdir()}/mipham-test-network-system`,
+  }
+})
+
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import type { ToolContext } from '../../src/shared'
 import { webFetchTool } from '../../src/tools/network/web-fetch'
 import { webSearchTool } from '../../src/tools/network/web-search'
@@ -237,16 +250,17 @@ describe('Config tool definition', () => {
 })
 
 describe('Config tool execution', () => {
-  // Config writes to ~/.mipham/config.yml. Clean up before/after tests.
-  const CONFIG_DIR = join(process.env.HOME || tmpdir(), '.mipham')
-  const CONFIG_FILE = join(CONFIG_DIR, 'config.yml')
+  // The config tool resolves its store from os.homedir(), which the file-level
+  // mock above redirects into a temp dir — this is NOT the user's ~/.mipham.
+  const CONFIG_DIR = join(homedir(), '.mipham')
 
   function cleanConfig() {
-    try {
-      rmSync(CONFIG_FILE, { force: true })
-    } catch {
-      /* ok */
+    // Fail closed: never touch anything outside tmpdir. If the vi.mock above is
+    // ever dropped, CONFIG_DIR would silently become the live config dir again.
+    if (!CONFIG_DIR.startsWith(tmpdir())) {
+      throw new Error(`refusing to clean ${CONFIG_DIR}: outside ${tmpdir()}`)
     }
+    rmSync(CONFIG_DIR, { recursive: true, force: true })
   }
 
   beforeEach(() => {
