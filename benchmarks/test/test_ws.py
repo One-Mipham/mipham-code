@@ -122,5 +122,76 @@ class FrameParserTest(unittest.TestCase):
             parser.feed(ws.encode_frame(ws.OP_TEXT, b"ab", mask=False, fin=False))
 
 
+class FakeSocket:
+    """A socket-shaped object that replays canned bytes and records writes."""
+
+    def __init__(self, incoming: bytes) -> None:
+        self._incoming = bytearray(incoming)
+        self.sent = bytearray()
+        self.closed = False
+
+    def recv(self, _size: int) -> bytes:
+        if not self._incoming:
+            return b""
+        chunk = bytes(self._incoming[:7])  # deliberately not aligned to frames
+        del self._incoming[:7]
+        return chunk
+
+    def sendall(self, data: bytes) -> None:
+        self.sent += data
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class WsConnectionTest(unittest.TestCase):
+    def _connection(self, incoming: bytes) -> tuple[ws.WsConnection, FakeSocket]:
+        sock = FakeSocket(incoming)
+        return ws.WsConnection(sock), sock
+
+    def test_recv_text_returns_the_payload(self):
+        conn, _ = self._connection(ws.encode_frame(ws.OP_TEXT, b"hi", mask=False))
+        self.assertEqual(conn.recv_text(), "hi")
+
+    def test_recv_text_answers_ping_with_pong_then_yields_text(self):
+        conn, sock = self._connection(
+            ws.encode_frame(ws.OP_PING, b"ping-payload", mask=False)
+            + ws.encode_frame(ws.OP_TEXT, b"after-ping", mask=False)
+        )
+        self.assertEqual(conn.recv_text(), "after-ping")
+        expected = ws.encode_frame(ws.OP_PONG, b"ping-payload", mask=True)
+        self.assertEqual(sock.sent[:2], expected[:2])  # opcode + masked length
+        self.assertEqual(
+            bytes(b ^ sock.sent[2:6][i % 4] for i, b in enumerate(sock.sent[6:])),
+            b"ping-payload",
+        )
+
+    def test_recv_text_returns_none_on_close(self):
+        conn, _ = self._connection(ws.encode_frame(ws.OP_CLOSE, b"", mask=False))
+        self.assertIsNone(conn.recv_text())
+
+    def test_recv_text_raises_when_peer_disappears(self):
+        sock = FakeSocket(b"")
+        with self.assertRaises(ws.WsError):
+            ws.WsConnection(sock).recv_text()
+
+    def test_close_sends_a_close_frame_and_closes_the_socket(self):
+        conn, sock = self._connection(b"")
+        conn.close()
+        self.assertEqual(sock.sent[0], 0x88)  # FIN + close opcode
+        self.assertTrue(sock.closed)
+
+    def test_connect_rejects_a_handshake_without_a_valid_accept(self):
+        key_ok = ws.compute_accept("dGhlIHNhbXBsZSBub25jZQ==")
+        self.assertEqual(key_ok, "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=")
+
+        class RefusingSocket(FakeSocket):
+            def __init__(self) -> None:
+                super().__init__(b"HTTP/1.1 403 Forbidden\r\n\r\n")
+
+        with self.assertRaises(ws.WsError):
+            ws.WsConnection._from_socket(RefusingSocket(), "dGhlIHNhbXBsZSBub25jZQ==")
+
+
 if __name__ == "__main__":
     unittest.main()

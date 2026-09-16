@@ -14,6 +14,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import os
+import socket
 import struct
 
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -116,3 +117,97 @@ class FrameParser:
         if not first & 0x80:
             raise WsError("fragmented frames are not supported")
         return opcode, payload
+
+
+class WsConnection:
+    """One WebSocket connection: text in, text out, control frames handled."""
+
+    def __init__(self, sock: socket.socket) -> None:
+        self._sock = sock
+        self._parser = FrameParser()
+        self._ready: list[tuple[int, bytes]] = []
+
+    @classmethod
+    def connect(
+        cls,
+        host: str,
+        port: int,
+        path: str,
+        *,
+        timeout_sec: float | None = None,
+    ) -> "WsConnection":
+        sock = socket.create_connection((host, port), timeout=timeout_sec)
+        key = base64.b64encode(os.urandom(16)).decode("ascii")
+        request = (
+            f"GET {path} HTTP/1.1\r\n"
+            f"Host: {host}:{port}\r\n"
+            "Upgrade: websocket\r\n"
+            "Connection: Upgrade\r\n"
+            f"Sec-WebSocket-Key: {key}\r\n"
+            "Sec-WebSocket-Version: 13\r\n"
+            "\r\n"
+        )
+        sock.sendall(request.encode("ascii"))
+        return cls._from_socket(sock, key)
+
+    @classmethod
+    def _from_socket(cls, sock: socket.socket, key: str) -> "WsConnection":
+        raw = b""
+        while b"\r\n\r\n" not in raw:
+            chunk = sock.recv(4096)
+            if not chunk:
+                raise WsError("connection closed during handshake")
+            raw += chunk
+        header = raw.decode("latin-1")
+        status = header.split("\r\n", 1)[0]
+        if "101" not in status:
+            raise WsError(f"handshake rejected: {status}")
+        expected = compute_accept(key)
+        for line in header.split("\r\n"):
+            name, _, value = line.partition(":")
+            if name.strip().lower() == "sec-websocket-accept":
+                if value.strip() != expected:
+                    raise WsError("Sec-WebSocket-Accept does not match the key we sent")
+                conn = cls(sock)
+                # Anything the server sent after the handshake is already ours.
+                _, _, rest = raw.partition(b"\r\n\r\n")
+                if rest:
+                    conn._ready.extend(conn._parser.feed(rest))
+                return conn
+        raise WsError("handshake carried no Sec-WebSocket-Accept")
+
+    def _next_frame(self) -> tuple[int, bytes]:
+        while not self._ready:
+            chunk = self._sock.recv(65536)
+            if not chunk:
+                raise WsError("connection closed by peer")
+            self._ready.extend(self._parser.feed(chunk))
+        return self._ready.pop(0)
+
+    def send_text(self, text: str) -> None:
+        self._sock.sendall(encode_frame(OP_TEXT, text.encode("utf-8"), mask=True))
+
+    def recv_text(self) -> str | None:
+        """The next text message, or ``None`` once the peer closes."""
+        while True:
+            opcode, payload = self._next_frame()
+            if opcode == OP_TEXT:
+                return payload.decode("utf-8")
+            if opcode == OP_CLOSE:
+                return None
+            if opcode == OP_PING:
+                self._sock.sendall(encode_frame(OP_PONG, payload, mask=True))
+                continue
+            if opcode == OP_PONG:
+                continue
+            raise WsError(f"unsupported opcode 0x{opcode:x}")
+
+    def close(self) -> None:
+        try:
+            self._sock.sendall(encode_frame(OP_CLOSE, b"", mask=True))
+        except OSError:
+            pass
+        try:
+            self._sock.close()
+        except OSError:
+            pass
