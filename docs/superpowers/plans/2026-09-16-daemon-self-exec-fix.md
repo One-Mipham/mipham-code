@@ -833,3 +833,125 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 **类型一致性核对**：`SpawnPlan`（Task 1）→ `planDaemonSpawn()` 返回，Task 2 的 `startDetachedDaemon` 消费 `.command/.args/.options/.logPath`，命名一致；`DaemonLaunch`（Task 2 定义）→ Task 3 Step 5/6 消费 `.ok/.pid/.port/.reason`，一致；`DAEMON_ENTRY`/`userArgs`（Task 1 定义）→ Task 3 Step 4 消费，一致。
 
 **占位符扫描**：无 TBD/TODO；每个代码步骤都给了可直接落盘的完整实现。
+
+---
+
+## 执行偏差（Ruling 29 / 30）
+
+> **本节由执行者事后补写，上文一个字都未改动。** 上文 Task 1 的 `isScriptPath` /
+> `selfArgvPrefix(argv1, execPath)` / `userArgs(argv, argv1)`（`:39`、`:69`、`:77`、`:82`、
+> `:150-161`、`:188`）**已经作废** —— 它们锚在**臆想的 argv 形状**上，不是 bun 产生的形状。
+> 篡改计划正文等于抹掉「当时为什么这么写」这条证据，故只在此处指认它。
+
+### 实测（bun 1.3.14；两种模式各跑一次探针）
+
+| 模式                                | `process.argv`                                        | `process.execPath` | `argv[0] === execPath` | 用户参数起点 |
+| ----------------------------------- | ----------------------------------------------------- | ------------------ | :--------------------: | :----------: |
+| 源码 `bun run bin/mipham.ts daemon` | `["<…>/bun.exe", "<abs>/bin/mipham.ts", "daemon", …]` | `<…>/bun.exe`      |        **true**        |      2       |
+| 产物 `dist/mipham daemon`           | `["bun", "/$bunfs/root/mipham", "daemon", …]`         | `<…>/dist/mipham`  |       **false**        |    **2**     |
+
+**两种世界都在用户参数前放恰好两个元素。** 这正是 `bin/mipham.ts` 全文 **12 处**
+`process.argv.slice(2)` 所依据的模型 —— 不是新规则，是本仓库一直以来的规则。
+
+### 原判别式错在哪
+
+`isScriptPath` 用「`argv[1]` 有没有 `.ts/.js` 扩展名」分辨模式。产物侧 `argv[1]` 是**无扩展名的
+`$bunfs` 路径**，于是被判成**第一个用户参数** ⇒ `userArgs` 只切掉 1 ⇒ `argv[0]` 留下
+`/$bunfs/root/mipham` ⇒ `main()` 顶部 `argv[0] === DAEMON_ENTRY` **恒为假** ⇒ **`__daemon` 分支在产物里不可达**。
+源码模式恰好判对，**所以 Task 1–3 的单测全绿**。产物侧实跑报 `Unknown command: mipham __daemon`。
+
+### 现行签名（三个函数被改写）
+
+```ts
+export function selfArgvPrefix(
+  argv0: string | undefined,
+  argv1: string | undefined,
+  execPath: string,
+): string[]
+export function userArgs(argv: readonly string[]): string[] // = argv.slice(2)
+export function planDaemonSpawn(opts?: {
+  argv0?: string | undefined
+  argv1?: string | undefined
+  execPath?: string
+  extraArgs?: string[]
+  logPath?: string
+}): SpawnPlan
+```
+
+判别式只剩一个问题：**解释器是不是在 argv[0]**（`argv0 === execPath`）。
+产物侧 argv[1] 是**只存在于二进制内部**的路径，故再 exec 只能不带脚本。
+`isScriptPath` 已删除，全仓库零命中。落地于 `116b695`
+（`fix(daemon): 产物 argv 是 [bun, $bunfs…] —— 判别式改用「解释器是否在前」`）。
+
+### 结论 —— 本节存在的理由
+
+**Task 1–3 的绿灯不是「覆盖到了」，是「覆盖了一个不存在的世界」。**
+Task 1 第 2 条测试（`selfArgvPrefix('daemon', …)`，`:64`）与 `userArgs` 的两条测试（`:77`、`:82`），
+喂进去的都是**本计划自己编的** argv 形状；形状断言一旦锚在臆想形状上，**比没有测试更糟** —— 它给的是绿灯。
+
+**编得有多像真的**：计划给产物侧编的形状是 `['/opt/mipham/dist/mipham', DAEMON_ENTRY]` ——
+**两项**；真实的产物 argv 是 `['bun', '/$bunfs/root/mipham', DAEMON_ENTRY]` —— **三项**。
+旧 `userArgs` 是 `argv.slice(1 + (isScriptPath(argv1) ? 1 : 0))`，在两项编造形状上恰好切对
+（`argv[1]` = `'__daemon'` 无扩展名 ⇒ 切 1 ⇒ `['__daemon']`，绿），在真实三项上切错
+（`argv[1]` = `/$bunfs/…` 无扩展名 ⇒ 切 1 ⇒ **`['/$bunfs/root/mipham', '__daemon']`**，分派条件恒假）。
+**两个形状的差别只是「少了 `bun` 那一项」** —— 这一项之差，就是「测试全绿」与「产物里根本进不去」之间的全部距离。
+
+**而抓到这个 bug 的，正是这份计划设计的那个仪器**：Task 4 的产物冒烟（`scripts/smoke-daemon.sh`）。
+计划自己的仪器，抓住了计划自己引入的 bug —— 这也是为什么「单测抓形状、产物抓行为」两条都要有：
+单测跑在源码下，而**这个 bug 只在编译产物里存在**，单测结构性够不到它。
+
+---
+
+## 执行偏差（续）—— Task 4 的 shell 里两处不安全写法（Ruling 36）
+
+> 与上一节同理：**上文一字未改**。上文 Task 4 的代码块（`:719` 与 `:749`）**已经作废**，
+> 理由不是「风格」，是它**照抄即重造缺陷**。
+
+### 一、`:719` `trap 'rm -rf "$WORK"' EXIT` —— 删除没有守卫
+
+daemon 的 `daemon.pid` / `daemon.port` / `daemon.db` 全在 `$WORK/home` 下，cwd 是 `$WORK/task`。
+在 `set -e` 下，**任何在一次成功 `start` 之后的中止**（以及计划自己的 FAIL 路径）都会走到这个 trap，
+把活着的 daemon 的 state 从它脚下删掉 —— 进程还持着 `127.0.0.1:45671`，而磁盘上已无据可查。
+计划把它写成一行，等于**把「清理临时目录」与「杀掉一个活进程的 state」混为一谈**。
+
+执行时改为：`stop` 尽力而为（`|| true` 保留）→ **捕获** `status` 输出 → 命中「仍在 running」则
+**保留 `$WORK`、打印告警、`exit 1`**；只有探针不再说 running 才 `rm -rf`。
+
+**一个必须写下来的细节**：这里的 `exit 1` **不是状态修饰，它是 `rm -rf` 前面那道跳过**。
+`case` 命中后没有 `exit` 就直落到函数末尾的 `rm -rf`。实测（只删掉这一行）：`EXIT=0`、
+**同样打印那条告警**、`$WORK` 被删而 PID 仍在 LISTEN —— **两件坏事同时发生：删了活 daemon 的 state，再谎报通过。**
+执行者一度把这一行当作「可删的状态修饰」并在报告里给了删除建议；该建议**是错的**，已作废。
+
+### 二、`:749` `if ! run_cli daemon status | grep -q 'Daemon: running'` —— 探针的失败模式是静默假阴性
+
+同一个惯用法在计划里出现在两处（就绪检查 `:749`，以及执行时新增的删除闸）。它在**两个方向**上都会骗人：
+
+- 当作**删除闸**：`set -o pipefail` 下，`grep -q` 读完第一行即退出 ⇒ 生产者拿 SIGPIPE ⇒ 管道非零
+  ⇒ 在 `if` 里读成「没匹配」⇒ **把活着的 daemon 读成已停** ⇒ 正是要防的那次删除。
+- 当作**就绪检查**：同一个误读，方向变成 `! (...)` 为真 ⇒ **健康的一跑被判 FAIL**，即假红。
+
+**实测（这才是本节的关键）**：**拿真的 `mipham daemon status` 量，两者当前都不发生** ——
+naive **0/100** 与 **0/500** 次误读、捕获式 0/500、连 `run_cli daemon status | head -1` 都 **rc=0 五次全中**。
+机制：该命令先做完 I/O 再打印四行短输出，消费者一次读一个缓冲即拿到全部，**生产者从不比消费者活得短** ⇒ 无 EPIPE。
+合成一个「分次写、跨消费者退出」的慢生产者，同一个管道**确实**给 141。
+
+⇒ 结论是**潜伏，不是现实**：危害属于「生产者跨消费者退出而分次写」这一类，今天的 `status` 不落在这个类里；
+一旦它加一行慢 I/O 或多打几行，**`:749` 会比删除闸先坏**，且坏的方向是假红。
+
+执行时的处置因此是**分开的**，而不是一律照改：**守着删除的那处换成捕获式**（那里误读的代价是删活 state，
+且这是本次要修的缺陷本身）；**计划明文规定的 FAIL 路径那处原样保留**（计划正文是权威文档，
+而该处当前不触发）。**统一两处惯用法应作为后续任务处理** —— 先改计划（本节即指认），再改代码。
+
+### 三、两节的共同点 —— 这才是本节存在的理由
+
+**这份计划里凡「判别式」与「探针」，都被写成了不安全的形状。**
+Task 1 的判别式锚在**臆想的 argv 形状**上（上一节），Task 4 的探针用了一个**失败模式是静默假阴性**的惯用法（本节）。
+两者的病理相同：**判断「我处在哪个世界」的那一行，写的是作者以为的形状，而不是量出来的形状**；
+而且**两者都不会被单测抓到** —— 前者因为单测跑在另一个世界里；后者因为**没有任何测试文件引用
+`scripts/smoke-daemon.sh`**（`git grep -l` 的全部引用是 CI、两份活文档、本计划与脚本自身），
+而 CI **恰在 `ci.yml:72`、`:74` 两处**调用它，**两处都是 happy path** —— 即那两个守卫分支
+（保留 `$WORK`、以及探针误读）**在 CI 里一次都不会被执行**。
+
+**抓到它们的分别是**：Task 1 的 bug 由**这份计划自己设计的仪器**（Task 4 的产物冒烟）抓到；
+Task 4 的探针危害由**执行者**在实现时量出来，而它当时对抗的是**派单指令里推荐的写法** ——
+即这条教训同样适用于**「派单时规定的机制，派单者自己也没量过」**。
