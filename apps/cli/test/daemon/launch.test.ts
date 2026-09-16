@@ -25,46 +25,56 @@ import {
   userArgs,
 } from '../../src/daemon/launch'
 
+// Measured on bun 1.3.14 — 这两条是 bun 真正产生的形状，不是我们希望它产生的。
+// 本文件原先给编译产物编了一个 ['/opt/mipham/dist/mipham', '__daemon']：bun 从不
+// 产生它（产物里 argv[0] 是字面量 "bun"、argv[1] 是只存在于二进制内部的 $bunfs
+// 路径），于是那条用例在错的模型上恒绿 —— 正是本 bug 逃过 Task 1–3 的原因。
+// **形状断言必须锚在实测形状上：锚在臆想形状上的断言比没有测试更糟。**
+const SOURCE_ARGV = ['/usr/local/bin/bun', '/repo/apps/cli/bin/mipham.ts', DAEMON_ENTRY]
+const COMPILED_ARGV = ['bun', '/$bunfs/root/mipham', DAEMON_ENTRY]
+
 describe('selfArgvPrefix', () => {
-  it('源码模式：argv[1] 是脚本 ⇒ 可执行文件后必须再传一次脚本路径', () => {
-    expect(selfArgvPrefix('bin/mipham.ts', '/usr/local/bin/bun')).toEqual([
+  it('源码模式：解释器在 argv[0] ⇒ 可执行文件后必须再传一次脚本路径', () => {
+    expect(selfArgvPrefix(SOURCE_ARGV[0], SOURCE_ARGV[1], '/usr/local/bin/bun')).toEqual([
       '/usr/local/bin/bun',
-      resolve('bin/mipham.ts'),
+      resolve('/repo/apps/cli/bin/mipham.ts'),
     ])
   })
 
-  it('编译产物：argv[1] 是用户参数，绝不能被当成脚本路径', () => {
-    expect(selfArgvPrefix('daemon', '/opt/mipham/dist/mipham')).toEqual(['/opt/mipham/dist/mipham'])
+  it('编译产物：argv[0] 是字面量 "bun"（≠ execPath）⇒ 只重跑 execPath，不带 $bunfs 路径', () => {
+    const plan = selfArgvPrefix(COMPILED_ARGV[0], COMPILED_ARGV[1], '/opt/mipham/dist/mipham')
+    expect(plan).toEqual(['/opt/mipham/dist/mipham'])
   })
 
   it('绝不产出裸 "bun" —— 编译产物存在的全部意义就是用户不必装 Bun', () => {
-    for (const argv1 of ['daemon', 'bin/mipham.ts', undefined]) {
-      expect(selfArgvPrefix(argv1, '/opt/mipham/dist/mipham')).not.toContain('bun')
+    for (const argv1 of [COMPILED_ARGV[1], SOURCE_ARGV[1], undefined]) {
+      expect(selfArgvPrefix(SOURCE_ARGV[0], argv1, '/opt/mipham/dist/mipham')).not.toContain('bun')
     }
   })
 })
 
 describe('userArgs', () => {
-  it('源码模式：argv 前两项是 bun 与脚本路径', () => {
-    const argv = ['/usr/local/bin/bun', 'bin/mipham.ts', DAEMON_ENTRY]
-    expect(userArgs(argv, argv[1])).toEqual([DAEMON_ENTRY])
+  it('源码模式：用户参数从下标 2 起', () => {
+    expect(userArgs(SOURCE_ARGV)).toEqual([DAEMON_ENTRY])
   })
 
-  it('编译产物：argv 首项就是程序本身，用户参数从下标 1 开始', () => {
-    const argv = ['/opt/mipham/dist/mipham', DAEMON_ENTRY]
-    expect(userArgs(argv, argv[1])).toEqual([DAEMON_ENTRY])
+  it('编译产物：同样从下标 2 起（argv[1] 的 $bunfs 路径不是用户参数）', () => {
+    // 这一条就是当初能抓住本 bug 的那条：判别式一改成「有没有扩展名」，
+    // 它就断言不出 [DAEMON_ENTRY]，`main()` 的 __daemon 分支随即不可达。
+    expect(userArgs(COMPILED_ARGV)).toEqual([DAEMON_ENTRY])
   })
 })
 
 describe('planDaemonSpawn', () => {
   it('args 里绝不能再出现 execPath —— spawn() 自己把它设成 argv[0]', () => {
     const plan = planDaemonSpawn({
-      argv1: 'daemon',
+      argv0: COMPILED_ARGV[0],
+      argv1: COMPILED_ARGV[1],
       execPath: '/opt/mipham/dist/mipham',
       logPath: '/tmp/x/daemon.log',
     })
     expect(plan.command).toBe('/opt/mipham/dist/mipham')
-    // 编译产物：argv = [binary, '__daemon', …]。`spawn(command, args)` 把 command
+    // 编译产物：argv = [execPath, '__daemon', …]。`spawn(command, args)` 把 command
     // 放在 argv[0]（node 与 bun 一致，实测），所以 args[0] 就是 argv[1]。
     expect(plan.args[0]).toBe(DAEMON_ENTRY)
 
@@ -72,20 +82,50 @@ describe('planDaemonSpawn', () => {
     // 且只出现一次。args[0] 若再放 execPath，argv[1] 就成了 bun 自己的二进制，
     // 运行时把它当脚本解析 ⇒ `error: Unexpected <binary>`，脚本根本跑不到。
     const source = planDaemonSpawn({
-      argv1: 'bin/mipham.ts',
+      argv0: SOURCE_ARGV[0],
+      argv1: SOURCE_ARGV[1],
       execPath: '/usr/local/bin/bun',
       logPath: '/tmp/x/daemon.log',
     })
-    expect(source.args).toEqual([resolve('bin/mipham.ts'), DAEMON_ENTRY])
+    expect(source.args).toEqual([resolve('/repo/apps/cli/bin/mipham.ts'), DAEMON_ENTRY])
+  })
+
+  it('闭环：plan 产出的 argv 被子进程回读时，两种模式都解析出 __daemon', () => {
+    // planDaemonSpawn 决定子进程 argv 的尾部，userArgs 在子进程里解析它 —— 单看任何
+    // 一侧都发现不了本 bug（形状对、模型错），闭环才抓得住。
+    // 两种模式的 *前两项* 不同（实测，见文件顶部）：源码是 spawn 自己写的
+    // [command, 脚本]，产物是运行时改写/插入的 ["bun", $bunfs 入口]。这正是不变量
+    // 只可能是「前两项之后就是用户参数」，而不是「argv[1] 是不是脚本路径」的原因。
+    const source = planDaemonSpawn({
+      argv0: SOURCE_ARGV[0],
+      argv1: SOURCE_ARGV[1],
+      execPath: '/usr/local/bin/bun',
+    })
+    expect(userArgs([source.command, ...source.args])).toEqual([DAEMON_ENTRY])
+
+    const compiled = planDaemonSpawn({
+      argv0: COMPILED_ARGV[0],
+      argv1: COMPILED_ARGV[1],
+      execPath: '/opt/mipham/dist/mipham',
+    })
+    expect(userArgs(['bun', '/$bunfs/root/mipham', ...compiled.args])).toEqual([DAEMON_ENTRY])
   })
 
   it('不带 cwd —— 继承是 §2.2 的契约，显式传值会把它变成可静默改动的配置', () => {
-    const plan = planDaemonSpawn({ argv1: 'daemon', execPath: '/opt/mipham/dist/mipham' })
+    const plan = planDaemonSpawn({
+      argv0: COMPILED_ARGV[0],
+      argv1: COMPILED_ARGV[1],
+      execPath: '/opt/mipham/dist/mipham',
+    })
     expect('cwd' in plan.options).toBe(false)
   })
 
   it('detached + unref 语义：detached 为真', () => {
-    const plan = planDaemonSpawn({ argv1: 'daemon', execPath: '/opt/mipham/dist/mipham' })
+    const plan = planDaemonSpawn({
+      argv0: COMPILED_ARGV[0],
+      argv1: COMPILED_ARGV[1],
+      execPath: '/opt/mipham/dist/mipham',
+    })
     expect(plan.options.detached).toBe(true)
   })
 })

@@ -22,24 +22,46 @@ export const DAEMON_ENTRY = '__daemon'
 const DEFAULT_LOG_FILE = join(homedir(), '.mipham', 'daemon.log')
 
 /**
- * Is this argv[1] a script path rather than a user argument?
+ * argv prefix that re-runs *this* program.
  *
- * In source mode argv[1] is the entry script; in a compiled binary argv[1] is
- * already the first user argument. Extensions are the discriminator: `daemon`
- * has none, every entry script has one.
+ * Is an interpreter sitting in front of this program? That — and only that —
+ * is what decides whether the re-exec has to re-pass a script path. Measured on
+ * bun 1.3.14; these are the shapes bun actually produces:
+ *
+ *   bun run bin/mipham.ts daemon start
+ *     argv     = ["<…>/bun.exe", "<abs>/bin/mipham.ts", "daemon", "start"]
+ *     execPath = "<…>/bun.exe"           ← argv[0] IS the interpreter
+ *   dist/mipham daemon start
+ *     argv     = ["bun", "/$bunfs/root/mipham", "daemon", "start"]
+ *     execPath = "<…>/dist/mipham"       ← argv[0] is not; the entry lives inside
+ *
+ * Both shapes put exactly TWO entries in front of the user's own arguments,
+ * which is why the rest of bin/mipham.ts parses with `process.argv.slice(2)`
+ * in either mode. Only the re-exec prefix has to tell the two apart — and the
+ * compiled entry is a `$bunfs` path that exists only inside the binary, so no
+ * re-exec can ever name it: the artifact re-runs `execPath` with no script.
+ *
+ * (Until this was measured the discriminator was "does argv[1] end in .ts/.js",
+ * so it read the compiled `$bunfs` entry as the first *user argument* — and the
+ * `__daemon` branch became unreachable in the artifact while source mode, where
+ * the heuristic happens to be right, stayed green.)
  */
-function isScriptPath(argv1: string | undefined): boolean {
-  return typeof argv1 === 'string' && /\.(ts|tsx|js|mjs|cjs)$/.test(argv1)
+export function selfArgvPrefix(
+  argv0: string | undefined,
+  argv1: string | undefined,
+  execPath: string,
+): string[] {
+  return argv0 === execPath && typeof argv1 === 'string' ? [execPath, resolve(argv1)] : [execPath]
 }
 
-/** argv prefix that re-runs *this* program. */
-export function selfArgvPrefix(argv1: string | undefined, execPath: string): string[] {
-  return isScriptPath(argv1) ? [execPath, resolve(argv1 as string)] : [execPath]
-}
-
-/** The user-facing arguments, with the interpreter/script prefix stripped. */
-export function userArgs(argv: readonly string[], argv1: string | undefined): string[] {
-  return argv.slice(1 + (isScriptPath(argv1) ? 1 : 0))
+/**
+ * The user-facing arguments, with the interpreter/script prefix stripped.
+ *
+ * Always two, in both modes — same model as the `process.argv.slice(2)` used
+ * throughout bin/mipham.ts. See `selfArgvPrefix` for the measured shapes.
+ */
+export function userArgs(argv: readonly string[]): string[] {
+  return argv.slice(2)
 }
 
 export interface SpawnPlan {
@@ -56,12 +78,14 @@ export interface SpawnPlan {
  */
 export function planDaemonSpawn(
   opts: {
+    argv0?: string | undefined
     argv1?: string | undefined
     execPath?: string
     extraArgs?: string[]
     logPath?: string
   } = {},
 ): SpawnPlan {
+  const argv0 = 'argv0' in opts ? opts.argv0 : process.argv[0]
   const argv1 = 'argv1' in opts ? opts.argv1 : process.argv[1]
   const execPath = opts.execPath ?? process.execPath
   return {
@@ -72,7 +96,11 @@ export function planDaemonSpawn(
     // reads it as *the script to execute*: node/bun then parse the interpreter's
     // own binary as source and die with `error: Unexpected <binary>` before the
     // script ever runs. Verified identical on node v24 and bun 1.3.14.
-    args: [...selfArgvPrefix(argv1, execPath).slice(1), DAEMON_ENTRY, ...(opts.extraArgs ?? [])],
+    args: [
+      ...selfArgvPrefix(argv0, argv1, execPath).slice(1),
+      DAEMON_ENTRY,
+      ...(opts.extraArgs ?? []),
+    ],
     // No `cwd`: the child must inherit this process's working directory.
     // `daemonRoot = process.cwd()` is the daemon's path allowlist boundary.
     options: { detached: true, env: { ...process.env } },

@@ -1089,7 +1089,7 @@ async function main() {
   // interactive TTY — the stty block would run against a detached child whose
   // stdio is the daemon log. The sentinel is stripped here because the two
   // entry points have different argv shapes (see runDaemonProcess).
-  const argv = userArgs(process.argv, process.argv[1])
+  const argv = userArgs(process.argv)
   if (argv[0] === DAEMON_ENTRY) {
     const { runDaemonProcess } = await import('../src/daemon/launch')
     await runDaemonProcess(argv.slice(1))
