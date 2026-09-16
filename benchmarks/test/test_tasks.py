@@ -49,13 +49,13 @@ class RecordedSelectionTest(unittest.TestCase):
         repos = [name.split("__", 1)[0] for name in tasks.PHASE2_EXPECTED]
         self.assertEqual(len(set(repos)), 10)
 
-    def test_phase2_names_are_the_first_of_their_repository(self):
-        # Pins the *rule*, not just the list: any name that sorts before a
-        # recorded one but shares its repository would mean the rule changed.
-        for name in tasks.PHASE2_EXPECTED:
-            repo = name.split("__", 1)[0]
-            earlier = [n for n in tasks.PHASE2_EXPECTED if n.split("__", 1)[0] == repo]
-            self.assertEqual(earlier, [name])
+    def test_phase2_names_are_in_lexicographic_order(self):
+        # A necessary condition of the rule, not the rule itself: taking the
+        # first name per repository in lexicographic order can only ever yield a
+        # sorted list, so an out-of-order record means the rule was not applied.
+        # It cannot pin the rule — a list holding each repository's *last* name
+        # would also be sorted. Pinning it needs the dataset, which Phase 2 has.
+        self.assertEqual(list(tasks.PHASE2_EXPECTED), sorted(tasks.PHASE2_EXPECTED))
 
 
 if __name__ == "__main__":
