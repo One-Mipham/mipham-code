@@ -10,7 +10,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { loadAllowlist } from '../src/allowlist.js'
 import { dayKey } from '../src/aggregate.js'
 import { decrypt, encrypt } from '../src/crypto.js'
@@ -31,6 +31,26 @@ function tempDir(): string {
   dirs.push(dir)
   return dir
 }
+
+/**
+ * Pin the wall clock to `DAY_ONE` for every test.
+ *
+ * `AggregateStore`'s constructor derives its day from the real clock
+ * (`store.ts`: `dayKey(new Date())`), but the fixtures below are written
+ * against `DAY_ONE`. Without this the two agree only on the single calendar
+ * day that happens to equal `DAY_ONE`; on every other day `flush(DAY_ONE)`
+ * takes the rollover branch instead of the write branch — it seals *today's*
+ * file and then loads a day that was never written.
+ *
+ * `afterEach` has restored real timers since this file was written; this is
+ * the half that was missing, and without it that restore was dead code.
+ * `toFake: ['Date']` only — the stores are synchronous, so there is no timer
+ * surface worth faking.
+ */
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(DAY_ONE)
+})
 
 afterEach(() => {
   vi.useRealTimers()
