@@ -279,10 +279,31 @@ describe('compaction/rewrite stream position', () => {
 })
 
 describe('tool/result carries full ToolResult', () => {
-  it('messageToEvents derives success:true best-effort from a tool_result block', () => {
+  it('messageToEvents treats an absent is_error as success (legacy messages)', () => {
     const m: Message = {
       role: 'user',
       content: [{ type: 'tool_result', tool_use_id: 't1', content: 'body' }],
+    }
+    expect(messageToEvents(m)).toEqual([
+      { type: 'tool/result', at: 0, id: 't1', result: { success: true, content: 'body' } },
+    ])
+    expect(deriveMessages(messageToEvents(m))).toEqual([m])
+  })
+
+  it('messageToEvents reads is_error instead of fabricating success', () => {
+    const m: Message = {
+      role: 'user',
+      content: [{ type: 'tool_result', tool_use_id: 't1', content: 'boom', is_error: true }],
+    }
+    expect(messageToEvents(m)).toEqual([
+      { type: 'tool/result', at: 0, id: 't1', result: { success: false, content: 'boom' } },
+    ])
+  })
+
+  it('round-trips a failed tool_result block byte-identically', () => {
+    const m: Message = {
+      role: 'user',
+      content: [{ type: 'tool_result', tool_use_id: 't1', content: 'boom', is_error: true }],
     }
     expect(deriveMessages(messageToEvents(m))).toEqual([m])
   })
@@ -297,7 +318,10 @@ describe('tool/result carries full ToolResult', () => {
       },
     ]
     expect(deriveMessages(events)).toEqual([
-      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'boom' }] },
+      {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 't1', content: 'boom', is_error: true }],
+      },
     ])
   })
 
@@ -308,6 +332,26 @@ describe('tool/result carries full ToolResult', () => {
     expect(deriveMessages(events)).toEqual([
       { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }] },
     ])
+  })
+
+  it('deriveMessages carries is_error for a failed tool and omits it for a successful one', () => {
+    const events: SessionEvent[] = [
+      {
+        type: 'tool/result',
+        at: 1,
+        id: 'f',
+        result: { success: false, content: 'partial', error: 'boom' },
+      },
+      { type: 'tool/result', at: 2, id: 's', result: { success: true, content: 'ok' } },
+    ]
+    const derived = deriveMessages(events)
+    expect(derived[0]).toEqual({
+      role: 'user',
+      content: [{ type: 'tool_result', tool_use_id: 'f', content: 'boom', is_error: true }],
+    })
+    // 成功路径保持逐字节不变：该键「不存在」，而不是被写成 false
+    const okBlock = (derived[1]!.content as unknown as Array<Record<string, unknown>>)[0]!
+    expect('is_error' in okBlock).toBe(false)
   })
 
   it('backward-compat: old tool/result with content:string still derives', () => {

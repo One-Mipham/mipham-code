@@ -40,6 +40,14 @@ export interface ToolResultContent {
   type: 'tool_result'
   tool_use_id: string
   content: string
+  /**
+   * Failed tool call. Set **only on failure** — absent means success, matching
+   * Anthropic's own `tool_result` block. Unlike `StreamChunk.isError`, this value
+   * crosses persistence (session JSONL, daemon `messages` table), where rows
+   * written before this field existed stay readable, so `undefined` cannot be
+   * eliminated — always compare with `=== true`.
+   */
+  is_error?: boolean
 }
 export interface ThinkingContent {
   type: 'thinking'

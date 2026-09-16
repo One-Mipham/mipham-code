@@ -339,6 +339,8 @@ export class AnthropicProvider implements ProviderInstance {
                 type: 'tool_result',
                 tool_use_id: block.tool_use_id,
                 content: block.content,
+                // 只在失败时下发 —— 成功请求体与改动前逐字节相同，不引入 prompt-cache 前缀抖动
+                ...(block.is_error === true ? { is_error: true } : {}),
               }
 
             default:

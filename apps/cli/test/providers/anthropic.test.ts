@@ -514,6 +514,44 @@ describe('AnthropicProvider', () => {
     const resultBlock = messages[0]!.content[0]!
     expect(resultBlock.type).toBe('tool_result')
     expect(resultBlock.tool_use_id).toBe('call_1')
+    // 成功路径的请求体与今日逐字节相同：该键「不存在」，不是被写成 false
+    expect('is_error' in resultBlock).toBe(false)
+  })
+
+  it('should pass is_error through for a failed tool_result', async () => {
+    let capturedBody: Record<string, unknown> = {}
+    const fetchMock = vi.fn().mockImplementation(async (_url, opts) => {
+      capturedBody = JSON.parse(opts.body as string)
+      return makeSSEResponse(['data: {"type":"message_stop"}'])
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new AnthropicProvider(makeConfig())
+    await collectChunks(
+      provider.chat({
+        model: 'claude-sonnet-4-6',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: 'call_1',
+                content: 'boom',
+                is_error: true,
+              },
+            ],
+          },
+        ],
+      }),
+    )
+
+    const messages = capturedBody.messages as Array<{
+      role: string
+      content: Array<Record<string, unknown>>
+    }>
+    // 不传 ⇒ 模型被告知每次工具调用都成功
+    expect(messages[0]!.content[0]!.is_error).toBe(true)
   })
 
   // ═══════════════════════════════════════════

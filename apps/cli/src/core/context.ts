@@ -146,7 +146,15 @@ export class ContextManager {
     const content = result.success ? result.content : result.error || result.content
     const msg: Message = {
       role: 'user',
-      content: [{ type: 'tool_result', tool_use_id: toolUseId, content }],
+      content: [
+        {
+          type: 'tool_result',
+          tool_use_id: toolUseId,
+          content,
+          // 成功不写该键 —— 与 session-log.deriveMessages 的展平式对称（保字节级互逆）
+          ...(result.success ? {} : { is_error: true }),
+        },
+      ],
     }
     this.messages.push(msg)
     this.estimatedTokens += this.estimateTokens(JSON.stringify(msg.content))

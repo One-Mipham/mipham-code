@@ -444,6 +444,50 @@ describe('SubAgent', () => {
 
     expect(result).toContain('partial')
   })
+
+  it('feeds a failed tool back to the model with is_error set', async () => {
+    const captured: ChatRequest[] = []
+    const provider: ProviderInstance = {
+      config: { id: 'mock', name: 'Mock', protocol: 'openai-compatible', apiKey: '', models: [] },
+      async *chat(req: ChatRequest): AsyncGenerator<StreamChunk> {
+        captured.push(req)
+        if (captured.length === 1) {
+          yield {
+            type: 'tool_use',
+            toolUse: { type: 'tool_use', id: '1', name: 'Bash', input: {} },
+          }
+        }
+        yield { type: 'stop' }
+      },
+      async listModels() {
+        return []
+      },
+      async healthCheck() {
+        return true
+      },
+    }
+    const registry = createMockRegistry(provider)
+
+    const bashTool: ToolDefinition = {
+      name: 'Bash',
+      description: 'bash',
+      category: 'exec',
+      permission: 'auto',
+      parameters: {},
+      execute: async () => ({ success: false, content: '', error: 'boom' }),
+    }
+    const sub = new SubAgent(registry, new Map([['Bash', bashTool]]))
+    await sub.execute('run', 'task', { maxTurns: 2 })
+
+    expect(captured).toHaveLength(2)
+    const block = (
+      captured[1]!.messages.at(-1)!.content as unknown as Array<Record<string, unknown>>
+    )[0]!
+    expect(block.type).toBe('tool_result')
+    // 失败结果的 content 是空串（错误在 error 里）—— 展平后必须是错误文案
+    expect(block.content).toBe('boom')
+    expect(block.is_error).toBe(true)
+  })
 })
 
 describe('AgentExperience', () => {

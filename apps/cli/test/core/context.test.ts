@@ -482,10 +482,28 @@ describe('ContextManager log integration', () => {
     cm.setLog(log)
     cm.addToolResult('t1', { success: false, content: 'partial', error: 'boom' })
     expect(cm.getMessages()).toEqual([
-      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'boom' }] },
+      {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 't1', content: 'boom', is_error: true }],
+      },
     ])
     const raw = log.events().find((e) => e.type === 'tool/result')
     expect(raw).toMatchObject({ id: 't1', result: { success: false, error: 'boom' } })
+  })
+
+  it('addToolResult leaves the projection of a successful tool without is_error', () => {
+    const cm = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
+    cm.addToolResult('t1', { success: true, content: 'ok' })
+    const block = (cm.getMessages()[0]!.content as unknown as Array<Record<string, unknown>>)[0]!
+    expect('is_error' in block).toBe(false)
+  })
+
+  it('addToolResult projection round-trips through the session log', () => {
+    const cm = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
+    const log = new SessionLog('tool-result-roundtrip')
+    cm.setLog(log)
+    cm.addToolResult('t1', { success: false, content: 'partial', error: 'boom' })
+    expect(deriveMessages(log.events())).toEqual(cm.getMessages())
   })
 
   it('recordChunk appends chunks to log but not to projection', () => {

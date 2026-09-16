@@ -500,6 +500,7 @@ export class SubAgent {
                   content: displayResult.success
                     ? displayResult.content
                     : displayResult.error || displayResult.content,
+                  ...(displayResult.success ? {} : { is_error: true }),
                 },
               ],
             })

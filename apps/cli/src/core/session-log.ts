@@ -36,7 +36,8 @@ export function messageToEvents(msg: Message, at = 0): SessionEvent[] {
             type: 'tool/result',
             at,
             id: r.tool_use_id,
-            result: { success: true, content: r.content },
+            // 读真值：旧消息无 is_error ⇒ 视为成功（向后兼容，无需迁移）
+            result: { success: !(r.is_error === true), content: r.content },
           },
         ]
       }
@@ -80,7 +81,15 @@ export function deriveMessages(events: SessionEvent[]): Message[] {
       const content = result.success ? result.content : result.error || result.content
       out.push({
         role: 'user',
-        content: [{ type: 'tool_result', tool_use_id: e.id, content }],
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: e.id,
+            content,
+            // 展平式的对称边：成功不写该键（与 messageToEvents 侧对称，保字节级互逆）
+            ...(result.success ? {} : { is_error: true }),
+          },
+        ],
       })
     } else if (e.type === 'context/inject') {
       out.push({ role: 'user', content: e.text })
