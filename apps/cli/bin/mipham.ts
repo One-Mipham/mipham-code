@@ -6,6 +6,8 @@
 
 export {} // ensure module scope (prevents global name collisions)
 
+import { DAEMON_ENTRY, userArgs } from '../src/daemon/launch'
+
 async function runWorkflowCLI(): Promise<boolean> {
   const args = process.argv.slice(2)
   if (args[0] !== 'workflow') return false
@@ -324,8 +326,6 @@ async function runDaemonCLI(): Promise<boolean> {
 
   const subcmd = args[1]
 
-  const { spawn } = await import('node:child_process')
-
   if (subcmd === 'start') {
     const { getDaemonStatus } = await import('../src/daemon/index')
     const status = getDaemonStatus()
@@ -335,23 +335,13 @@ async function runDaemonCLI(): Promise<boolean> {
     }
 
     console.log('Starting daemon...')
-    const daemonScript = new URL('./daemon.ts', import.meta.url).pathname
-    const child = spawn('bun', ['run', daemonScript], {
-      detached: true,
-      stdio: 'ignore',
-      env: { ...process.env },
-    })
-    child.unref()
-
-    // Wait briefly for daemon to write PID/port files
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-
-    const newStatus = getDaemonStatus()
-    if (newStatus) {
-      console.log(`Daemon started (PID: ${newStatus.pid}, Port: ${newStatus.port})`)
-    } else {
-      console.log('Daemon started (PID unknown — check `mipham daemon status`)')
+    const { startDetachedDaemon } = await import('../src/daemon/launch')
+    const launch = await startDetachedDaemon()
+    if (!launch.ok) {
+      console.error(`Failed to start daemon: ${launch.reason}`)
+      process.exit(1)
     }
+    console.log(`Daemon started (PID: ${launch.pid}, Port: ${launch.port})`)
     process.exit(0)
   }
 
@@ -397,15 +387,13 @@ async function runDaemonCLI(): Promise<boolean> {
       await new Promise((resolve) => setTimeout(resolve, 500))
     }
 
-    const daemonScript = new URL('./daemon.ts', import.meta.url).pathname
-    const child = spawn('bun', ['run', daemonScript], {
-      detached: true,
-      stdio: 'ignore',
-      env: { ...process.env },
-    })
-    child.unref()
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    console.log('Daemon restarted.')
+    const { startDetachedDaemon } = await import('../src/daemon/launch')
+    const launch = await startDetachedDaemon()
+    if (!launch.ok) {
+      console.error(`Failed to restart daemon: ${launch.reason}`)
+      process.exit(1)
+    }
+    console.log(`Daemon restarted (PID: ${launch.pid}, Port: ${launch.port})`)
     process.exit(0)
   }
 
@@ -1095,6 +1083,19 @@ async function runInitCLI(): Promise<boolean> {
 }
 
 async function main() {
+  // ── Hidden daemon entry ────────────────────────────────────────────────
+  // `daemon start` re-execs this same program with `__daemon` (see
+  // src/daemon/launch.ts). This must come first: everything below assumes an
+  // interactive TTY — the stty block would run against a detached child whose
+  // stdio is the daemon log. The sentinel is stripped here because the two
+  // entry points have different argv shapes (see runDaemonProcess).
+  const argv = userArgs(process.argv, process.argv[1])
+  if (argv[0] === DAEMON_ENTRY) {
+    const { runDaemonProcess } = await import('../src/daemon/launch')
+    await runDaemonProcess(argv.slice(1))
+    return
+  }
+
   // ── Deleted-cwd guard ──────────────────────────────────────────────────
   // `process.cwd()` throws ENOENT when the directory the process was launched
   // from no longer exists (e.g. a removed git worktree). Print a clear message

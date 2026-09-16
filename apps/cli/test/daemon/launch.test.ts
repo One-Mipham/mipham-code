@@ -1,4 +1,6 @@
-import { resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 
 // startDetachedDaemon() plans a spawn whose logPath defaults to
@@ -55,15 +57,26 @@ describe('userArgs', () => {
 })
 
 describe('planDaemonSpawn', () => {
-  it('子进程的 argv[0] 是 process.execPath（注入值），且带 __daemon 入口', () => {
+  it('args 里绝不能再出现 execPath —— spawn() 自己把它设成 argv[0]', () => {
     const plan = planDaemonSpawn({
       argv1: 'daemon',
       execPath: '/opt/mipham/dist/mipham',
       logPath: '/tmp/x/daemon.log',
     })
     expect(plan.command).toBe('/opt/mipham/dist/mipham')
-    expect(plan.args[0]).toBe('/opt/mipham/dist/mipham')
-    expect(plan.args).toContain(DAEMON_ENTRY)
+    // 编译产物：argv = [binary, '__daemon', …]。`spawn(command, args)` 把 command
+    // 放在 argv[0]（node 与 bun 一致，实测），所以 args[0] 就是 argv[1]。
+    expect(plan.args[0]).toBe(DAEMON_ENTRY)
+
+    // 源码模式：argv = [bun, script, '__daemon', …] ⇒ args 必须从脚本路径起，
+    // 且只出现一次。args[0] 若再放 execPath，argv[1] 就成了 bun 自己的二进制，
+    // 运行时把它当脚本解析 ⇒ `error: Unexpected <binary>`，脚本根本跑不到。
+    const source = planDaemonSpawn({
+      argv1: 'bin/mipham.ts',
+      execPath: '/usr/local/bin/bun',
+      logPath: '/tmp/x/daemon.log',
+    })
+    expect(source.args).toEqual([resolve('bin/mipham.ts'), DAEMON_ENTRY])
   })
 
   it('不带 cwd —— 继承是 §2.2 的契约，显式传值会把它变成可静默改动的配置', () => {
@@ -210,5 +223,26 @@ describe('startDetachedDaemon 不谎报', () => {
     expect(captured.args).toContain(DAEMON_ENTRY)
     // 否则「用了 pollMs」与「随便传了个数」不可区分。
     expect(slept).toEqual([7])
+  })
+})
+
+const CLI_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
+
+describe('__daemon 分支可达', () => {
+  it('bin/mipham.ts 在 main() 顶部按 DAEMON_ENTRY 分派', () => {
+    const src = readFileSync(join(CLI_ROOT, 'bin', 'mipham.ts'), 'utf-8')
+    // main() 的第一句必须是这个分派：其后的代码假定交互式 TTY（stty），
+    // 而 daemon 是 detached + stdio ignore 起来的。
+    const mainStart = src.indexOf('async function main()')
+    expect(mainStart).toBeGreaterThan(-1)
+    const head = src.slice(mainStart, mainStart + 600)
+    expect(head).toContain('DAEMON_ENTRY')
+  })
+
+  it('bin/daemon.ts 不再自己实现 daemon 进程体，改为委托', () => {
+    const src = readFileSync(join(CLI_ROOT, 'bin', 'daemon.ts'), 'utf-8')
+    expect(src).toContain('runDaemonProcess')
+    // 两份实现就是「两条渲染路径只接一条」的温床
+    expect(src).not.toContain('process.env.MIPHAM_PORT =')
   })
 })

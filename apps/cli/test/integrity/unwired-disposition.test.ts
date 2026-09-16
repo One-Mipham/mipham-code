@@ -69,12 +69,6 @@ const KEPT_UNWIRED: Array<{ path: string; why: string }> = [
     path: 'src/providers/llm-replay.ts',
     why: 'provider-swap 的测试基础设施（record/replay），是 test/core/engine.test.ts 证明 ctx.llm 可换的唯一支撑 —— 它是测试夹具，不是死代码',
   },
-  {
-    // ⚠️ 临时条目（「还没接」，非「不打算接」）：消费方由紧随的 Task 2 落在同文件，
-    // 并接进 bin/mipham.ts ⇒ 接线后本行**必须删除**（否则守卫会红）。
-    path: 'src/daemon/launch.ts',
-    why: 'daemon 自启 re-exec 修复的最底层：selfArgvPrefix / userArgs / planDaemonSpawn 纯函数（形状可单测，行为由 Task 4 产物冒烟覆盖）；消费方 startDetachedDaemon 在 Task 2 落地',
-  },
 ]
 
 /**

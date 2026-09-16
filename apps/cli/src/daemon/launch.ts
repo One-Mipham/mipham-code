@@ -66,7 +66,13 @@ export function planDaemonSpawn(
   const execPath = opts.execPath ?? process.execPath
   return {
     command: execPath,
-    args: [...selfArgvPrefix(argv1, execPath), DAEMON_ENTRY, ...(opts.extraArgs ?? [])],
+    // `selfArgvPrefix` returns the child's *argv*, so it starts with argv[0] —
+    // but spawn() sets argv[0] from `command` itself, so that element has to be
+    // dropped here. Keeping it puts `execPath` at argv[1], where the runtime
+    // reads it as *the script to execute*: node/bun then parse the interpreter's
+    // own binary as source and die with `error: Unexpected <binary>` before the
+    // script ever runs. Verified identical on node v24 and bun 1.3.14.
+    args: [...selfArgvPrefix(argv1, execPath).slice(1), DAEMON_ENTRY, ...(opts.extraArgs ?? [])],
     // No `cwd`: the child must inherit this process's working directory.
     // `daemonRoot = process.cwd()` is the daemon's path allowlist boundary.
     options: { detached: true, env: { ...process.env } },
@@ -175,4 +181,35 @@ export async function startDetachedDaemon(
     ok: false,
     reason: `daemon did not become ready within ${opts.timeoutMs ?? READY_TIMEOUT_MS}ms (log: ${plan.logPath})`,
   }
+}
+
+/**
+ * The daemon process body, shared by the `__daemon` branch of the compiled
+ * binary and by `bin/daemon.ts` (source mode). One implementation, two entry
+ * points — a second copy is how "two render paths, only one wired" starts.
+ *
+ * The two callers pass *different* argv slices and that is deliberate: the
+ * compiled binary is `[binary, '__daemon', ...]` while the source entry is
+ * `[bun, 'bin/daemon.ts', ...]`, so the `__daemon` branch strips the sentinel
+ * (and `bin/daemon.ts` relies on the default) rather than either of them
+ * handing over a raw `process.argv` tail.
+ */
+export async function runDaemonProcess(argv: string[] = process.argv.slice(2)): Promise<void> {
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--port' && argv[i + 1]) process.env.MIPHAM_PORT = argv[i + 1]
+    if (argv[i] === '--bind' && argv[i + 1]) process.env.MIPHAM_BIND = argv[i + 1]
+  }
+
+  const { startDaemon, stopDaemon } = await import('./index')
+  const { port } = await startDaemon()
+
+  console.log(`Daemon running on http://127.0.0.1:${port}`)
+  console.log(`PID: ${process.pid}`)
+
+  const shutdown = async (): Promise<void> => {
+    await stopDaemon(true)
+    process.exit(0)
+  }
+  process.on('SIGTERM', () => void shutdown())
+  process.on('SIGINT', () => void shutdown())
 }
