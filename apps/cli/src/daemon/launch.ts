@@ -76,10 +76,12 @@ export interface SpawnPlan {
  * missing cwd, detached) is assertable in a unit test that runs under the
  * source tree — where the original bug does *not* reproduce.
  *
- * `argv0` defaults to the real `process.argv[0]`, while `argv1` and `execPath`
- * are independently overridable — so a caller that passes only `argv1` silently
- * gets *source-mode* semantics (`argv0 !== execPath`, hence no script element).
- * Simulating the compiled shape requires passing `argv0` as well.
+ * `argv0`/`argv1` default to the real `process.argv[0]`/`process.argv[1]` and
+ * `execPath` to the real `process.execPath`. The branch is decided by
+ * `argv0 === execPath` alone, so `argv1` on its own cannot select a shape:
+ * equal ⇒ the *source* shape (an interpreter in front of a script path, so the
+ * script element is re-sent); unequal ⇒ the bare `[execPath]` of the *compiled*
+ * shape. To force the compiled shape, pass `argv0` as well.
  */
 export function planDaemonSpawn(
   opts: {
