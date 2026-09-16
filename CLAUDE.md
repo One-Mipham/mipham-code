@@ -391,11 +391,11 @@ GitHub Actions 9 个 job 流水线：`typecheck → lint → format → build-cl
 
 | 日期       | Commit    | 说明                                                                                          |
 | ---------- | --------- | --------------------------------------------------------------------------------------------- |
+| 2026-09-16 | `9839f77` | fix(cli): 模型不再被告知每次工具调用都成功 —— is_error 贯通投影与日志（T12-B）                |
 | 2026-09-16 | `5f23c02` | test(cli): network-system 用例不再删写真 ~/.mipham/config.yml                                 |
 | 2026-09-16 | `90ac5a3` | fix(cli): 工具成败位在无头路径上不可读 —— isError 补齐 + 多轮循环空 tool_result 修复（T12-A） |
 | 2026-09-16 | `34e85a7` | docs(roadmap): T2 起手 —— daemon 权限策略决议 + Run 2 行为实证                                |
 | 2026-09-15 | `33074f3` | fix(daemon): 无头路径不再丢弃引擎的工具循环 —— `stop` 上的 `break`（T2 起手）                 |
-| 2026-09-15 | `963abc3` | test(cli): 变异测试范围补齐 —— crsi-sandbox 接入，7.05%（T3c 第二批）                         |
 
 > **完整记录** → [`docs/claude-md-history.md`](docs/claude-md-history.md)：最近提交全表 + v1.0.0 起全部修订。
 > 需要查「某次改动属于哪次提交 / 哪一版」时读它。
