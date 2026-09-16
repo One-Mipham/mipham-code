@@ -53,7 +53,13 @@ const DELETED: Array<{ path: string; why: string }> = [
   { path: 'test/core/task-runner.test.ts', why: '被测模块已删，测试不能独自留下' },
 ]
 
-/** 判为**保留**：有明确用途，但不接生产。必须存在且生产零引用。 */
+/**
+ * 判为**保留**：有明确用途，但不接生产。必须存在且生产零引用。
+ *
+ * 允许**临时**条目（「还没接」而非「不打算接」）：新文件一旦生产零引用就该被
+ * 看见，而第 2 条规则（保留项被接上 ⇒ 陈旧豁免为红）就是它的到期机制 ——
+ * 接线者会被测试直接点名要求撤掉本行。临时条目须在 `why` 里写明去向。
+ */
 const KEPT_UNWIRED: Array<{ path: string; why: string }> = [
   {
     path: 'src/vajra/leaf/plan-runner.ts',
@@ -62,6 +68,12 @@ const KEPT_UNWIRED: Array<{ path: string; why: string }> = [
   {
     path: 'src/providers/llm-replay.ts',
     why: 'provider-swap 的测试基础设施（record/replay），是 test/core/engine.test.ts 证明 ctx.llm 可换的唯一支撑 —— 它是测试夹具，不是死代码',
+  },
+  {
+    // ⚠️ 临时条目（「还没接」，非「不打算接」）：消费方由紧随的 Task 2 落在同文件，
+    // 并接进 bin/mipham.ts ⇒ 接线后本行**必须删除**（否则守卫会红）。
+    path: 'src/daemon/launch.ts',
+    why: 'daemon 自启 re-exec 修复的最底层：selfArgvPrefix / userArgs / planDaemonSpawn 纯函数（形状可单测，行为由 Task 4 产物冒烟覆盖）；消费方 startDetachedDaemon 在 Task 2 落地',
   },
 ]
 
