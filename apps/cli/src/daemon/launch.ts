@@ -73,3 +73,106 @@ export function planDaemonSpawn(
     logPath: opts.logPath ?? DEFAULT_LOG_FILE,
   }
 }
+
+export interface DaemonLaunch {
+  ok: boolean
+  pid?: number
+  port?: number
+  reason?: string
+}
+
+interface DaemonStatusLike {
+  pid: number
+  port: number
+}
+
+/** Injection seam: real implementations by default, fakes in unit tests. */
+export interface LaunchDeps {
+  spawnFn?: typeof spawn
+  getStatus?: () => DaemonStatusLike | null
+  sleep?: (ms: number) => Promise<void>
+}
+
+const READY_TIMEOUT_MS = 10_000
+const POLL_INTERVAL_MS = 100
+
+async function defaultGetStatus(): Promise<DaemonStatusLike | null> {
+  const { getDaemonStatus } = await import('./index')
+  return getDaemonStatus()
+}
+
+function tailLog(logPath: string, maxBytes = 800): string {
+  try {
+    const size = statSync(logPath).size
+    const start = Math.max(0, size - maxBytes)
+    return readFileSync(logPath, 'utf-8').slice(start).trim()
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Start the daemon detached and *wait until it is actually up*.
+ *
+ * Never reports success on an unknown child: the previous implementation
+ * printed "Daemon started (PID unknown …)" and exited 0 whenever the pid file
+ * was missing, which turned every launch failure into a silent one.
+ */
+export async function startDetachedDaemon(
+  opts: { timeoutMs?: number; pollMs?: number; deps?: LaunchDeps } = {},
+): Promise<DaemonLaunch> {
+  const deps = opts.deps ?? {}
+  const spawnFn = deps.spawnFn ?? spawn
+  const getStatus = deps.getStatus ?? defaultGetStatus
+  const sleep = deps.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)))
+
+  const already = await getStatus()
+  if (already) return { ok: true, pid: already.pid, port: already.port }
+
+  const plan = planDaemonSpawn()
+  mkdirSync(dirname(plan.logPath), { recursive: true, mode: 0o700 })
+
+  let spawnError: Error | null = null
+  let exitCode: number | null = null
+  // The child inherits this fd; closing ours does not close theirs.
+  const logFd = openSync(plan.logPath, 'a', 0o600)
+  let child: ReturnType<typeof spawn>
+  try {
+    child = spawnFn(plan.command, plan.args, {
+      ...plan.options,
+      stdio: ['ignore', 'ignore', logFd],
+    })
+  } finally {
+    closeSync(logFd)
+  }
+  child.on('error', (err: Error) => {
+    spawnError = err
+  })
+  child.on('exit', (code: number | null) => {
+    exitCode = code ?? -1
+  })
+  child.unref()
+
+  const deadline = Date.now() + (opts.timeoutMs ?? READY_TIMEOUT_MS)
+  const pollMs = opts.pollMs ?? POLL_INTERVAL_MS
+  while (Date.now() < deadline) {
+    await sleep(pollMs)
+    if (spawnError) {
+      const err: Error = spawnError
+      return { ok: false, reason: `daemon failed to spawn: ${err.message}` }
+    }
+    const status = await getStatus()
+    if (status) return { ok: true, pid: status.pid, port: status.port }
+    if (exitCode !== null) {
+      const tail = tailLog(plan.logPath)
+      return {
+        ok: false,
+        reason: `daemon exited with code ${exitCode}${tail ? `:\n${tail}` : ''}`,
+      }
+    }
+  }
+  return {
+    ok: false,
+    reason: `daemon did not become ready within ${opts.timeoutMs ?? READY_TIMEOUT_MS}ms (log: ${plan.logPath})`,
+  }
+}
