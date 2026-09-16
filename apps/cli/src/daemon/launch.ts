@@ -77,11 +77,14 @@ export interface SpawnPlan {
  * source tree — where the original bug does *not* reproduce.
  *
  * `argv0`/`argv1` default to the real `process.argv[0]`/`process.argv[1]` and
- * `execPath` to the real `process.execPath`. The branch is decided by
- * `argv0 === execPath` alone, so `argv1` on its own cannot select a shape:
- * equal ⇒ the *source* shape (an interpreter in front of a script path, so the
- * script element is re-sent); unequal ⇒ the bare `[execPath]` of the *compiled*
- * shape. To force the compiled shape, pass `argv0` as well.
+ * `execPath` to the real `process.execPath`. The branch is
+ * `argv0 === execPath && typeof argv1 === 'string'` — *both* conjuncts, and the
+ * second is reachable without passing `argv0`: `planDaemonSpawn({ argv1:
+ * undefined })` keeps the default equality (true whenever the calling process is
+ * in source mode) and fails the `typeof`, so it gets the *compiled* shape.
+ * Both satisfied ⇒ the *source* shape (an interpreter in front of a script path,
+ * so the script element is re-sent); otherwise ⇒ the bare `[execPath]` of the
+ * *compiled* shape. To force the compiled shape, pass `argv0` as well.
  */
 export function planDaemonSpawn(
   opts: {
