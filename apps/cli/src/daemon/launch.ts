@@ -75,6 +75,11 @@ export interface SpawnPlan {
  * Pure: computes the spawn call without performing it, so the shape (argv[0],
  * missing cwd, detached) is assertable in a unit test that runs under the
  * source tree — where the original bug does *not* reproduce.
+ *
+ * `argv0` defaults to the real `process.argv[0]`, while `argv1` and `execPath`
+ * are independently overridable — so a caller that passes only `argv1` silently
+ * gets *source-mode* semantics (`argv0 !== execPath`, hence no script element).
+ * Simulating the compiled shape requires passing `argv0` as well.
  */
 export function planDaemonSpawn(
   opts: {

@@ -11,7 +11,7 @@ set -euo pipefail
 
 CLI_DIR="${1:-apps/cli}"
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+HOME_ISOLATED=0
 
 # PATH used for *invoking the artifact* only. Stripping it around the whole
 # script would break the compile step, and a compile failure (127) would then
@@ -20,6 +20,21 @@ trap 'rm -rf "$WORK"' EXIT
 # ambient PATH: `bun build` needs bun, the artifact must not.
 RUN_PATH="${RUN_PATH:-$PATH}"
 run_cli() { env PATH="$RUN_PATH" "$WORK/mipham" "$@"; }
+
+# Teardown stops the daemon *before* deleting its HOME. The daemon's pid/port/db
+# files all live under $WORK/home and its cwd is $WORK/task, so `rm -rf $WORK`
+# under a live process deletes the state out from under it and leaves it holding
+# port 45671 with nothing on disk left to find it by — the FAIL path below exits
+# with the daemon still alive, and so does any `set -e` abort after a start.
+# Guarded on HOME_ISOLATED: before HOME is redirected, `daemon stop` would read
+# the *developer's* real ~/.mipham/daemon.pid and kill their daemon.
+cleanup() {
+  if [ "$HOME_ISOLATED" = 1 ]; then
+    run_cli daemon stop >/dev/null 2>&1 || true
+  fi
+  rm -rf "$WORK"
+}
+trap cleanup EXIT
 
 echo "→ Compiling the CLI into $WORK"
 (cd "$CLI_DIR" &&
@@ -30,6 +45,8 @@ echo "→ Compiling the CLI into $WORK"
 # Never touch the developer's real daemon state.
 export HOME="$WORK/home"
 mkdir -p "$HOME"
+# From here on a `daemon stop` in the EXIT trap can only reach the isolated daemon.
+HOME_ISOLATED=1
 
 # Run from a dedicated directory: cwd is contract, not incidental — the daemon
 # uses it as its path allowlist root.
