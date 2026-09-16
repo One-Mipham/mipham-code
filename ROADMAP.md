@@ -728,6 +728,23 @@ agents 真解析、provider 回退仍活着）。
       （不 bump reqId、不清定时器）；当前不可达（有建议显示 ⇒ 上次请求已结束），
       但「接受后继续续写」一加就是洞。
 
+- [ ] **D9** · `scripts/smoke-daemon.sh` 的三处遗留 —— ① **惯用法未统一**：删除闸已改成
+      「捕获输出 → `case`」，就绪检查仍是 `daemon status | grep -q 'Daemon: running'`
+      （计划正文如此规定，故原样保留；危害属「生产者跨消费者退出而分次写」那一类，
+      `daemon status` 今天不落在这个类里 —— 见计划 §执行偏差 Ruling 36 的实测）。
+      ② **两个守卫分支在 CI 里零执行**：`ci.yml` 调它两次（`:72`、`:74`），两次都走
+      happy path ⇒ 「保留 `$WORK`」与「探针误读」这两条分支从未被跑过。③ **超时路径
+      不回收它自己起出来的 daemon**：有界重试用尽后只打印告警 + `exit 1`，不做 `kill`
+      （同样的性质在 `startDetachedDaemon` 的超时分支上也成立：`ok:false` 而子进程仍在）。
+      **代价**：② 意味着这三条分支的首次真实执行会发生在别人推的 CI 上；**触发**：下次
+      动这个脚本或 `ci.yml` 时一并统一惯用法 + 给守卫分支补负向用例
+- [ ] **D10** · `~/.mipham/daemon.log`（本次工作新增的常驻 sink）**无轮转** ——
+      `startDetachedDaemon` 每次都以追加方式 `openSync(logPath, 'a')`，并把该 fd 作为
+      daemon 的 stdout/stderr；`daemon/logger.ts` 逐事件写一行 JSON，全仓库无任何
+      轮转 / 截断 / 上限（`git grep` 零命中）。**代价**：一次崩溃重启循环就能把它写到
+      撑满磁盘，而**撑满之后 daemon 自己的启动失败原因恰好写在那个写不进去的日志里**；
+      **触发**：`~/.mipham/` 下出现第二个常驻日志时一并做轮转
+
 ---
 
 ## 建议的推进顺序

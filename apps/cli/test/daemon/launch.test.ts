@@ -23,6 +23,7 @@ import {
   selfArgvPrefix,
   startDetachedDaemon,
   userArgs,
+  waitForDaemonExit,
 } from '../../src/daemon/launch'
 
 // Measured on bun 1.3.14 — 这两条是 bun 真正产生的形状，不是我们希望它产生的。
@@ -127,6 +128,17 @@ describe('planDaemonSpawn', () => {
       execPath: '/opt/mipham/dist/mipham',
     })
     expect(plan.options.detached).toBe(true)
+  })
+
+  it('判别式是**两个**合取项：argv1 存在但值不是字符串 ⇒ 产物形状，不去 resolve 它', () => {
+    // 判别式写的是 `argv0 === execPath && typeof argv1 === 'string'`，两个条件。
+    // 这里只传递第二个的失效方式（`'argv1' in opts` 为真、值为 undefined），
+    // 第一个用默认值 —— 实测（node 下 `process.argv[0] === process.execPath`）为真，
+    // 于是结论只可能来自 `typeof` 那一项。删掉它，分支就会去 `resolve(undefined)`
+    // 并抛 TypeError：这正是「源码形状」那条路在做的事，而它在产物里是错的
+    // （$bunfs 路径不存在于任何新进程可读的地方，见 selfArgvPrefix 的注释）。
+    const plan = planDaemonSpawn({ argv1: undefined, logPath: '/tmp/x/daemon.log' })
+    expect(plan.args).toEqual([DAEMON_ENTRY])
   })
 })
 
@@ -267,6 +279,66 @@ describe('startDetachedDaemon 不谎报', () => {
 })
 
 const CLI_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
+
+describe('waitForDaemonExit —— restart 等老 daemon 真的退', () => {
+  it('status 变 null ⇒ true，一拿到就不再 poll', async () => {
+    let calls = 0
+    const slept: number[] = []
+    const gone = await waitForDaemonExit({
+      pollMs: 5,
+      deps: {
+        // 前两次仍在、第三次起为 null
+        getStatus: () => (++calls < 3 ? { pid: 7, port: 1234 } : null),
+        sleep: async (ms: number) => {
+          slept.push(ms)
+        },
+      },
+    })
+    expect(gone).toBe(true)
+    // 至少一次：一次都不问就报 true 的「等」不是等。
+    expect(calls).toBe(3)
+    // 有界：睡的次数恰好等于「读到仍在」的次数，而不是空转到某个常数。
+    expect(slept).toEqual([5, 5])
+  })
+
+  it('老 daemon 始终不退 ⇒ false，且按 timeoutMs/pollMs 有界（绝不真等 10s）', async () => {
+    vi.useFakeTimers()
+    try {
+      const slept: number[] = []
+      const gone = await waitForDaemonExit({
+        timeoutMs: 30,
+        pollMs: 10,
+        deps: {
+          getStatus: () => ({ pid: 7, port: 1234 }),
+          // 假时钟随假 sleep 前进，否则 timeoutMs 只能用**真**墙钟度量，
+          // 这条用例就得真等 30ms——而默认值是 10s。
+          sleep: async (ms: number) => {
+            slept.push(ms)
+            vi.advanceTimersByTime(ms)
+          },
+        },
+      })
+      expect(gone).toBe(false)
+      expect(slept).toEqual([10, 10, 10])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('问之前就已经不在了 ⇒ true，一次都不睡', async () => {
+    const slept: number[] = []
+    const gone = await waitForDaemonExit({
+      deps: {
+        getStatus: () => null,
+        sleep: async (ms: number) => {
+          slept.push(ms)
+        },
+      },
+    })
+    expect(gone).toBe(true)
+    expect(slept).toEqual([])
+  })
+})
 
 describe('__daemon 分支可达', () => {
   it('bin/mipham.ts 在 main() 顶部按 DAEMON_ENTRY 分派', () => {

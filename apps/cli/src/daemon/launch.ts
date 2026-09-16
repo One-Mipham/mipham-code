@@ -139,6 +139,8 @@ export interface LaunchDeps {
 
 const READY_TIMEOUT_MS = 10_000
 const POLL_INTERVAL_MS = 100
+/** How long `restart` waits for the *old* daemon to go before refusing. */
+const OLD_DAEMON_EXIT_TIMEOUT_MS = 10_000
 
 async function defaultGetStatus(): Promise<DaemonStatusLike | null> {
   const { getDaemonStatus } = await import('./index')
@@ -218,6 +220,38 @@ export async function startDetachedDaemon(
   return {
     ok: false,
     reason: `daemon did not become ready within ${opts.timeoutMs ?? READY_TIMEOUT_MS}ms (log: ${plan.logPath})`,
+  }
+}
+
+/**
+ * Wait until the daemon we just signalled is *gone*.
+ *
+ * `restart` used to SIGTERM and then sleep a fixed 500 ms. That is a guess, and
+ * the guess is load-bearing: `startDetachedDaemon()` opens with a probe of
+ * `getStatus()` and returns whatever pid/port it finds there. A pid file the old
+ * daemon has not unlinked yet therefore reads as "already running" — `restart`
+ * then reports `Daemon restarted (PID: <old>)` and exits 0 having started
+ * nothing, and the old daemon finishes exiting afterwards, leaving none. That is
+ * the same "reports success with no daemon behind it" failure this module exists
+ * to remove, reintroduced on a new write point.
+ *
+ * Returns true once `getStatus()` goes null, false if it never does before the
+ * deadline. `false` is a refusal, not a warning: the caller must not start.
+ */
+export async function waitForDaemonExit(
+  opts: { timeoutMs?: number; pollMs?: number; deps?: LaunchDeps } = {},
+): Promise<boolean> {
+  const deps = opts.deps ?? {}
+  const getStatus = deps.getStatus ?? defaultGetStatus
+  const sleep = deps.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)))
+  const deadline = Date.now() + (opts.timeoutMs ?? OLD_DAEMON_EXIT_TIMEOUT_MS)
+  const pollMs = opts.pollMs ?? POLL_INTERVAL_MS
+
+  for (;;) {
+    const status = await getStatus()
+    if (!status) return true
+    if (Date.now() >= deadline) return false
+    await sleep(pollMs)
   }
 }
 

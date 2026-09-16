@@ -5,7 +5,7 @@
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
 > **版本**: 2.50.0
-> **最后更新**: 2026-09-16 — **daemon 自启在编译产物里真能起来（T2 Plan A）**：自启改「re-exec 自己」（`process.execPath`），不再依赖 PATH 上的 `bun`；argv 判别式由「argv[1] 有没有扩展名」换成**实测形状** —— 产物 argv 是 `["bun","/$bunfs/root/mipham",…]`，旧式把 `$bunfs` 入口当成首个用户参数 ⇒ `__daemon` 分支在产物里**不可达**；起不来不再谎报成功。新增产物冒烟 `scripts/smoke-daemon.sh` 并接进 CI。测试 2528 → 2545
+> **最后更新**: 2026-09-16 — **daemon 自启在编译产物里真能起来（T2 Plan A）**：自启改「re-exec 自己」（`process.execPath`），不再依赖 PATH 上的 `bun`；argv 判别式由「argv[1] 有没有扩展名」换成**实测形状** —— 产物 argv 是 `["bun","/$bunfs/root/mipham",…]`，旧式把 `$bunfs` 入口当成首个用户参数 ⇒ `__daemon` 分支在产物里**不可达**；起不来不再谎报成功。新增产物冒烟 `scripts/smoke-daemon.sh` 并接进 CI。测试 2528 → 2545（本轮评审修复后 2549）
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -44,7 +44,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：2,545 测试（2543 passed + 2 skipped，0 失败）
+测试：2,549 测试（2547 passed + 2 skipped，0 失败）
 
 ---
 
@@ -81,7 +81,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 228 个测试文件，2545 个测试
+│   │   ├── test/               # 228 个测试文件，2549 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -107,7 +107,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（2545 个测试）
+pnpm test         # vitest run（2549 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~9 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -297,7 +297,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | core            | 72      | 1004     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
 | tools           | 20      | 313      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
-| daemon          | 33      | 196      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                                             |
+| daemon          | 33      | 200      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                                             |
 | ui              | 11      | 157      | commands / input / config-wizard / loop / skill-doctor                                                                                                                      |
 | agent           | 11      | 109      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
 | security        | 10      | 96       | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
@@ -315,7 +315,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integrity       | 6       | 45       | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 120      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **228** | **2545** | **0 失败** ✅（2543 passed + 2 skipped）                                                                                                                                    |
+| **合计**        | **228** | **2549** | **0 失败** ✅（2547 passed + 2 skipped）                                                                                                                                    |
 
 > **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 179 测试，自带
 > `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。

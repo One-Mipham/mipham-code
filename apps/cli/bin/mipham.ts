@@ -377,6 +377,7 @@ async function runDaemonCLI(): Promise<boolean> {
 
   if (subcmd === 'restart') {
     const { getDaemonStatus } = await import('../src/daemon/index')
+    const { startDetachedDaemon, waitForDaemonExit } = await import('../src/daemon/launch')
     const status = getDaemonStatus()
     if (status) {
       try {
@@ -384,10 +385,22 @@ async function runDaemonCLI(): Promise<boolean> {
       } catch {
         // Process may have already exited
       }
-      await new Promise((resolve) => setTimeout(resolve, 500))
+      // A fixed sleep here is a guess, and the guess is load-bearing:
+      // startDetachedDaemon() opens by probing getStatus(), so a pid file the old
+      // daemon has not unlinked yet reads as "already running" — restart would
+      // then report success for a start it never performed. Wait for the old
+      // daemon to be *gone*; if it never goes, refuse instead of starting blind.
+      const waitStarted = Date.now()
+      const gone = await waitForDaemonExit()
+      if (!gone) {
+        const waitedMs = Date.now() - waitStarted
+        console.error(
+          `Refusing to restart: old daemon (PID: ${status.pid}) is still running after ${waitedMs}ms`,
+        )
+        process.exit(1)
+      }
     }
 
-    const { startDetachedDaemon } = await import('../src/daemon/launch')
     const launch = await startDetachedDaemon()
     if (!launch.ok) {
       console.error(`Failed to restart daemon: ${launch.reason}`)
