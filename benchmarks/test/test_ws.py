@@ -19,10 +19,31 @@ class EncodeFrameTest(unittest.TestCase):
         self.assertEqual(frame[0], 0x81)  # FIN + text opcode
         self.assertEqual(frame[1], 0x85)  # mask bit + length 5
         key = frame[2:6]
+        # This verifies the payload against the key read out of the *same*
+        # frame, so it is satisfied by any key at all — including a constant.
+        # It pins the layout and the XOR, not the entropy: that is what the
+        # next test is for.
         self.assertEqual(
             bytes(b ^ key[i % 4] for i, b in enumerate(frame[6:])),
             b"hello",
         )
+
+    def test_masking_key_is_not_a_constant(self):
+        # RFC 6455 §5.3 requires the masking key to come from a strong source
+        # of entropy. Nothing above tests that: reading the key back out of the
+        # frame and un-XORing with it proves consistency, never randomness, and
+        # b"\x00\x00\x00\x00" is a valid-looking key (the XOR is the identity).
+        # So pin the property directly — two encodes of the same payload must
+        # not reuse a key. That kills every key computed from this call's own
+        # inputs (constant, all-zero, payload- or opcode-derived) at a
+        # false-failure probability of 2**-32 — but it does *not* catch a key
+        # derived from call history: a counter returns two different values
+        # here while staying fully deterministic. Separating that from
+        # os.urandom needs statistical testing, which is out of scope. This
+        # pins the property every honest implementation satisfies.
+        first = ws.encode_frame(ws.OP_TEXT, b"hello", mask=True)[2:6]
+        second = ws.encode_frame(ws.OP_TEXT, b"hello", mask=True)[2:6]
+        self.assertNotEqual(first, second)
 
     def test_unmasked_frame_carries_payload_verbatim(self):
         frame = ws.encode_frame(ws.OP_TEXT, b"hello", mask=False)
@@ -36,6 +57,23 @@ class EncodeFrameTest(unittest.TestCase):
         eight = ws.encode_frame(ws.OP_TEXT, b"x" * 65536, mask=False)
         self.assertEqual(eight[1], 127)
         self.assertEqual(eight[2:10], b"\x00\x00\x00\x00\x00\x01\x00\x00")
+
+    def test_masked_extended_lengths_keep_the_mask_bit(self):
+        # Every boundary case above passes mask=False, so the `flag | 126` and
+        # `flag | 127` branches are never exercised with the mask bit set — a
+        # mutant dropping `flag` in either survives. A masked frame's key sits
+        # at 2 + len(extended length): 4 for 16-bit, 10 for 64-bit, versus 2
+        # for the 7-bit case the first test covers. Pin the bit *and* the
+        # layout, since Task 2's parser must read that offset back.
+        for payload, key_at in ((b"x" * 126, 4), (b"x" * 65536, 10)):
+            frame = ws.encode_frame(ws.OP_TEXT, payload, mask=True)
+            self.assertEqual(frame[1] & 0x80, 0x80, len(payload))
+            key = frame[key_at : key_at + 4]
+            self.assertEqual(
+                bytes(b ^ key[i % 4] for i, b in enumerate(frame[key_at + 4 :])),
+                payload,
+                len(payload),
+            )
 
     def test_fin_flag_is_clearable(self):
         self.assertEqual(ws.encode_frame(ws.OP_TEXT, b"", mask=False, fin=False)[0], 0x01)
