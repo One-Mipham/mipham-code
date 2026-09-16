@@ -61,3 +61,58 @@ def encode_frame(opcode: int, payload: bytes, *, mask: bool, fin: bool = True) -
     else:
         out += payload
     return bytes(out)
+
+
+class FrameParser:
+    """Incremental frame decoder: feed arbitrary chunks, get whole frames.
+
+    Buffers whatever cannot be completed yet, so the caller never has to
+    think about TCP segmentation.
+    """
+
+    def __init__(self) -> None:
+        self._buf = bytearray()
+
+    def feed(self, data: bytes) -> list[tuple[int, bytes]]:
+        self._buf += data
+        frames: list[tuple[int, bytes]] = []
+        while True:
+            frame = self._take()
+            if frame is None:
+                return frames
+            frames.append(frame)
+
+    def _take(self) -> tuple[int, bytes] | None:
+        buf = self._buf
+        if len(buf) < 2:
+            return None
+        first, second = buf[0], buf[1]
+        opcode = first & 0x0F
+        masked = bool(second & 0x80)
+        length = second & 0x7F
+        offset = 2
+        if length == 126:
+            if len(buf) < offset + 2:
+                return None
+            length = struct.unpack("!H", bytes(buf[offset : offset + 2]))[0]
+            offset += 2
+        elif length == 127:
+            if len(buf) < offset + 8:
+                return None
+            length = struct.unpack("!Q", bytes(buf[offset : offset + 8]))[0]
+            offset += 8
+        key = b""
+        if masked:
+            if len(buf) < offset + 4:
+                return None
+            key = bytes(buf[offset : offset + 4])
+            offset += 4
+        if len(buf) < offset + length:
+            return None
+        payload = bytes(buf[offset : offset + length])
+        del buf[: offset + length]
+        if masked:
+            payload = _xor(payload, key)
+        if not first & 0x80:
+            raise WsError("fragmented frames are not supported")
+        return opcode, payload

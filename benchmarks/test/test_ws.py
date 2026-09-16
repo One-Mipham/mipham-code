@@ -79,5 +79,48 @@ class EncodeFrameTest(unittest.TestCase):
         self.assertEqual(ws.encode_frame(ws.OP_TEXT, b"", mask=False, fin=False)[0], 0x01)
 
 
+class FrameParserTest(unittest.TestCase):
+    def test_whole_frame(self):
+        parser = ws.FrameParser()
+        self.assertEqual(parser.feed(b"\x81\x05hello"), [(ws.OP_TEXT, b"hello")])
+
+    def test_split_across_every_boundary_is_identical(self):
+        parser_whole = ws.FrameParser()
+        frame = ws.encode_frame(ws.OP_TEXT, b"a longer payload", mask=True)
+        self.assertEqual(parser_whole.feed(frame), [(ws.OP_TEXT, b"a longer payload")])
+
+        for cut in range(1, len(frame)):
+            parser = ws.FrameParser()
+            frames = parser.feed(frame[:cut]) + parser.feed(frame[cut:])
+            self.assertEqual(frames, [(ws.OP_TEXT, b"a longer payload")], f"cut={cut}")
+
+    def test_partial_frame_is_withheld(self):
+        parser = ws.FrameParser()
+        self.assertEqual(parser.feed(b"\x81\x05hel"), [])
+        self.assertEqual(parser.feed(b"lo"), [(ws.OP_TEXT, b"hello")])
+
+    def test_two_frames_in_one_chunk(self):
+        parser = ws.FrameParser()
+        chunk = b"\x81\x03one" + b"\x81\x03two"
+        self.assertEqual(parser.feed(chunk), [(ws.OP_TEXT, b"one"), (ws.OP_TEXT, b"two")])
+
+    def test_extended_length_16_bit(self):
+        parser = ws.FrameParser()
+        payload = b"x" * 300
+        frame = ws.encode_frame(ws.OP_TEXT, payload, mask=False)
+        self.assertEqual(parser.feed(frame), [(ws.OP_TEXT, payload)])
+
+    def test_extended_length_64_bit(self):
+        parser = ws.FrameParser()
+        payload = b"y" * 70000
+        frame = ws.encode_frame(ws.OP_TEXT, payload, mask=False)
+        self.assertEqual(parser.feed(frame), [(ws.OP_TEXT, payload)])
+
+    def test_fragmented_frame_is_rejected_loudly(self):
+        parser = ws.FrameParser()
+        with self.assertRaises(ws.WsError):
+            parser.feed(ws.encode_frame(ws.OP_TEXT, b"ab", mask=False, fin=False))
+
+
 if __name__ == "__main__":
     unittest.main()
