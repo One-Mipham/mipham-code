@@ -1,7 +1,7 @@
 """Minimal RFC 6455 client, text frames only.
 
 The Python standard library ships no WebSocket client and this repository
-takes no third-party dependencies, so the ~130 lines here *are* the client
+takes no third-party dependencies, so what is here *is* the client
 (spec §3.5 calls this the one real cost of the adapter approach).
 
 Client-to-server frames MUST be masked and server-to-client frames MUST NOT
