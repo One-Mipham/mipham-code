@@ -144,7 +144,10 @@ describe('startDetachedDaemon 不谎报', () => {
       },
     })
     expect(result.ok).toBe(false)
-    expect(result.reason).toContain('3')
+    // 必须钉退出码字样，不能只断 '3'：超时分支的 reason 里带着 logPath，而 mock
+    // home 是 <tmpdir>/mipham-test-daemon-launch —— 路径本身就含 '3'，于是断言在
+    // 错的分支上也通过，删掉整个早退分支它照样绿。
+    expect(result.reason).toContain('exited with code 3')
   })
 
   it('始终不 ready ⇒ ok:false（旧实现在这里打印成功并 exit 0）', async () => {
@@ -170,5 +173,42 @@ describe('startDetachedDaemon 不谎报', () => {
     })
     expect(result).toEqual({ ok: true, pid: 7, port: 1234 })
     expect(spawned).toBe(0)
+  })
+
+  it('调用点的形状：spawn 实参带 detached/env、绝不带 cwd，且 pollMs 真的生效', async () => {
+    const child = fakeChild()
+    let calls = 0
+    // Task 1 钉的是 planDaemonSpawn 的**返回值**；这里是调用点的**实参**，两者可以
+    // 各自被改坏。丢掉 detached ⇒ daemon 随父 shell 一起死；加 cwd ⇒ 违反 §2.2
+    // 的唯一硬接口（cwd 必须继承，它是 daemon 的路径白名单边界）。
+    const captured: { args?: readonly string[]; options?: Record<string, unknown> } = {}
+    const slept: number[] = []
+    const result = await startDetachedDaemon({
+      pollMs: 7,
+      deps: {
+        spawnFn: ((_command: string, args: readonly string[], options: Record<string, unknown>) => {
+          captured.args = args
+          captured.options = options
+          return child
+        }) as never,
+        // 首次 null（spawn 前的探活），其后 ready：non-null 会走 already 早退，
+        // 而 spawn 一次都不会发生。
+        getStatus: () => (calls++ === 0 ? null : { pid: 4242, port: 45671 }),
+        sleep: async (ms: number) => {
+          slept.push(ms)
+        },
+      },
+    })
+
+    expect(result.ok).toBe(true)
+    expect(captured.options?.detached).toBe(true)
+    expect(captured.options && 'cwd' in captured.options).toBe(false)
+    expect(captured.options?.env).toBeInstanceOf(Object)
+    expect(Object.keys((captured.options?.env ?? {}) as object).length).toBe(
+      Object.keys(process.env).length,
+    )
+    expect(captured.args).toContain(DAEMON_ENTRY)
+    // 否则「用了 pollMs」与「随便传了个数」不可区分。
+    expect(slept).toEqual([7])
   })
 })
