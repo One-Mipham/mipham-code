@@ -32,13 +32,22 @@ run_cli() { env PATH="$RUN_PATH" "$WORK/mipham" "$@"; }
 # So: stop (best effort) → ask status → only if it no longer says running is
 # $WORK deleted. When it does still say running, $WORK is *kept* and its path
 # printed, so a live orphan's state stays findable on disk instead of being
-# destroyed; the exit status stays non-zero either way.
+# destroyed. The `exit` in that branch is load-bearing, not a status choice:
+# `rm -rf` sits *after* the `case`, so deleting the `exit` falls straight
+# through to it — same WARN text, $WORK gone while the daemon's pid is still
+# listening (measured; the exit *status* in that variant depends on how the trap
+# was reached, the deletion does not). The clean-success path takes neither
+# branch and still exits 0.
 #
-# Status output is captured, not piped into `grep -q`: status prints four lines
-# when running, so `grep -q` exits after the first and `set -o pipefail` turns
-# the producer's SIGPIPE into a non-zero pipeline — under `if` that reads as
-# "no match", i.e. a live daemon as stopped, i.e. exactly the delete being
-# prevented. (Measured: such a pipeline is 141 despite matching.)
+# Status output is captured, not piped into `grep -q`: `grep -q` exits on its
+# first match, and `set -o pipefail` turns a producer's SIGPIPE into a non-zero
+# pipeline — under `if` that reads as "no match", i.e. a live daemon as stopped,
+# i.e. exactly the delete being prevented. The hazard belongs to any producer
+# still writing when the reader exits, not to `daemon status` specifically: the
+# 141 was measured on a synthetic slow producer. The real status does not
+# exercise it today — its four short lines are all in the pipe before `grep -q`
+# exits, so no write ever sees EPIPE (measured rc=0, repeatedly) — but that is a
+# timing property, and capturing the output does not depend on it.
 #
 # Guarded on HOME_ISOLATED: before HOME is redirected, `daemon stop` and
 # `daemon status` would both read the *developer's* real ~/.mipham/daemon.pid.
