@@ -273,6 +273,41 @@ class DeadlineStickinessTest(_RunHarness):
         self.assertEqual(self.result_on_disk()["status"], "budget_exceeded")
 
 
+class DaemonErrorFrameTest(_RunHarness):
+    """An `error` frame is a report, not a terminator.
+
+    The daemon broadcasts `error` from its catch (session-worker.ts:164) and
+    then `done` unconditionally after it (:197), and :168 explicitly refuses to
+    rewrite a stop reason of `error` — so `done` always follows `error`. Ending
+    the read loop on `error` therefore stops one frame early: the `done` is
+    never read, `turns` never counts it, and the daemon's own error text is
+    dropped, leaving an errored task byte-identical to a clean one. Which is
+    the failure T2 exists to remove: a score you can report but not defend.
+    """
+
+    budget = "100"
+    frames = (
+        json.dumps({"type": "error", "message": "provider exploded"}),
+        json.dumps({"type": "done", "stopReason": "error"}),
+    )
+
+    def test_the_error_frame_is_disclosed_and_the_run_ends_on_done(self):
+        result = main.run()
+
+        transcript = Path(self.env["MIPHAM_TRANSCRIPT_PATH"]).read_text(encoding="utf-8")
+        self.assertEqual(
+            len(transcript.splitlines()),
+            2,
+            "the loop stopped on the error frame, so the done frame was never read",
+        )
+        self.assertEqual(result["turns"], 1)
+        self.assertEqual(result["stopReason"], "error")
+        self.assertEqual(result["error"], "provider exploded")
+        # No new status word: an errored turn is still a completed turn, and
+        # `stopReason` plus `error` are what say how it ended.
+        self.assertEqual(result["status"], "done")
+
+
 class ConnectionTimeoutTest(_RunHarness):
     def test_the_socket_timeout_is_the_deadline_not_a_round_number(self):
         # The loop's deadline check only runs between reads, so a daemon that

@@ -220,7 +220,14 @@ def run() -> dict:
                     # never keep spending because the task looks close to done.
                     result["status"] = "budget_exceeded"
                     connection.send_text(json.dumps({"type": "interrupt", "sessionId": session_id}))
-                if state.finished:
+                if message["type"] == protocol.DONE:
+                    # The completion criterion is the `done` frame and nothing
+                    # else (spec §3.3). `state.finished` is also set by an
+                    # `error` frame (protocol.py:77), and the daemon broadcasts
+                    # `error` *and then* `done` (session-worker.ts:164, :197) —
+                    # breaking on `finished` stops one frame early, loses the
+                    # turn the `done` would have counted, and swallows the
+                    # daemon's error text.
                     if result["status"] == "running":
                         result["status"] = "done"
                     break
@@ -239,6 +246,12 @@ def run() -> dict:
     finally:
         if connection is not None:
             connection.close()
+        # The daemon's error frame is the only place its failure text exists;
+        # without this an errored run is recorded with `error: null`. It never
+        # overwrites an existing value, so a more specific exception raised on
+        # our side keeps priority.
+        if result["error"] is None and state.last_error:
+            result["error"] = state.last_error
         result["elapsedSec"] = round(time.monotonic() - started, 3)
         _write_result(result_path, result)
     return result
