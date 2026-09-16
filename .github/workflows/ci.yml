@@ -65,6 +65,13 @@ jobs:
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @miphamai/cli build
+      # 判据不能只有一次：CI 的 PATH 恒含 bun（上面的 setup-bun），只跑默认 PATH
+      # 判的是两种判据里**弱的那一种**；而「用户机器上没有 bun」恰是编译产物存在的
+      # 全部理由。RUN_PATH 只作用于**调用产物**那几次，编译步骤仍用环境 PATH。
+      - name: Compiled-binary daemon smoke test
+        run: bash scripts/smoke-daemon.sh apps/cli
+      - name: Compiled-binary daemon smoke test (bun off PATH)
+        run: RUN_PATH=/usr/bin:/bin bash scripts/smoke-daemon.sh apps/cli
 
   build-web:
     name: Build Web
