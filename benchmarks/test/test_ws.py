@@ -181,16 +181,65 @@ class WsConnectionTest(unittest.TestCase):
         self.assertEqual(sock.sent[0], 0x88)  # FIN + close opcode
         self.assertTrue(sock.closed)
 
-    def test_connect_rejects_a_handshake_without_a_valid_accept(self):
-        key_ok = ws.compute_accept("dGhlIHNhbXBsZSBub25jZQ==")
-        self.assertEqual(key_ok, "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=")
+    def test_connect_accepts_a_correct_accept(self):
+        # Positive control. Without it, every negative test below would still
+        # pass against an implementation that raised unconditionally.
+        key = "dGhlIHNhbXBsZSBub25jZQ=="
+        self.assertEqual(ws.compute_accept(key), "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=")
 
+        class AcceptingSocket(FakeSocket):
+            def __init__(self) -> None:
+                super().__init__(
+                    b"HTTP/1.1 101 Switching Protocols\r\n"
+                    b"Upgrade: websocket\r\n"
+                    b"Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"
+                    b"\r\n"
+                )
+
+        conn = ws.WsConnection._from_socket(AcceptingSocket(), key)
+        self.assertIsInstance(conn, ws.WsConnection)
+
+    def test_connect_rejects_a_non_101_status(self):
         class RefusingSocket(FakeSocket):
             def __init__(self) -> None:
                 super().__init__(b"HTTP/1.1 403 Forbidden\r\n\r\n")
 
         with self.assertRaises(ws.WsError):
             ws.WsConnection._from_socket(RefusingSocket(), "dGhlIHNhbXBsZSBub25jZQ==")
+
+    def test_connect_rejects_a_mismatched_accept(self):
+        # The header carries a *real* accept value — just one computed from a
+        # different key — so this proves the comparison is keyed to the key we
+        # actually sent, not merely that some header was present.
+        class MismatchedSocket(FakeSocket):
+            def __init__(self) -> None:
+                super().__init__(
+                    b"HTTP/1.1 101 Switching Protocols\r\n"
+                    b"Upgrade: websocket\r\n"
+                    b"Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"
+                    b"\r\n"
+                )
+
+        with self.assertRaises(ws.WsError):
+            ws.WsConnection._from_socket(
+                MismatchedSocket(), "AAAAAAAAAAAAAAAAAAAAAA=="
+            )
+
+    def test_connect_rejects_a_101_without_an_accept_header(self):
+        class NoHeaderSocket(FakeSocket):
+            def __init__(self) -> None:
+                super().__init__(
+                    b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n\r\n"
+                )
+
+        with self.assertRaises(ws.WsError):
+            ws.WsConnection._from_socket(NoHeaderSocket(), "dGhlIHNhbXBsZSBub25jZQ==")
+
+    def test_recv_text_raises_on_invalid_utf8(self):
+        frame = ws.encode_frame(ws.OP_TEXT, b"\xff\xfe", mask=False)
+        conn, _ = self._connection(frame)
+        with self.assertRaises(ws.WsError):
+            conn.recv_text()
 
 
 if __name__ == "__main__":

@@ -192,7 +192,10 @@ class WsConnection:
         while True:
             opcode, payload = self._next_frame()
             if opcode == OP_TEXT:
-                return payload.decode("utf-8")
+                try:
+                    return payload.decode("utf-8")
+                except UnicodeDecodeError as exc:
+                    raise WsError("text frame is not valid UTF-8") from exc
             if opcode == OP_CLOSE:
                 return None
             if opcode == OP_PING:
