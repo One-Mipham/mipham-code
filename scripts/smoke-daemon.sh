@@ -26,11 +26,32 @@ run_cli() { env PATH="$RUN_PATH" "$WORK/mipham" "$@"; }
 # under a live process deletes the state out from under it and leaves it holding
 # port 45671 with nothing on disk left to find it by — the FAIL path below exits
 # with the daemon still alive, and so does any `set -e` abort after a start.
-# Guarded on HOME_ISOLATED: before HOME is redirected, `daemon stop` would read
-# the *developer's* real ~/.mipham/daemon.pid and kill their daemon.
+#
+# The delete is gated on *proved not running*, never on "we tried": `daemon stop`
+# can fail while the daemon lives on, and `|| true` is exactly what hides that.
+# So: stop (best effort) → ask status → only if it no longer says running is
+# $WORK deleted. When it does still say running, $WORK is *kept* and its path
+# printed, so a live orphan's state stays findable on disk instead of being
+# destroyed; the exit status stays non-zero either way.
+#
+# Status output is captured, not piped into `grep -q`: status prints four lines
+# when running, so `grep -q` exits after the first and `set -o pipefail` turns
+# the producer's SIGPIPE into a non-zero pipeline — under `if` that reads as
+# "no match", i.e. a live daemon as stopped, i.e. exactly the delete being
+# prevented. (Measured: such a pipeline is 141 despite matching.)
+#
+# Guarded on HOME_ISOLATED: before HOME is redirected, `daemon stop` and
+# `daemon status` would both read the *developer's* real ~/.mipham/daemon.pid.
 cleanup() {
   if [ "$HOME_ISOLATED" = 1 ]; then
     run_cli daemon stop >/dev/null 2>&1 || true
+    status_out="$(run_cli daemon status 2>/dev/null || true)"
+    case "$status_out" in
+      *'Daemon: running'*)
+        echo "✗ WARN: daemon is still running — keeping $WORK so its state stays findable"
+        exit 1
+        ;;
+    esac
   fi
   rm -rf "$WORK"
 }
