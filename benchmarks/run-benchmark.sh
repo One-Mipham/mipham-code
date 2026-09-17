@@ -34,9 +34,13 @@ DATASETS="$BENCH/.datasets"
 # below is not a label -- it is half of a path, and the other half is -o. All
 # three uses (the --job-name flag, the fail-closed precheck, the assembly root)
 # read it from here so they cannot drift apart: two expressions that happen to
-# spell the same path today would stop agreeing silently, and both failure
-# directions are quiet -- the precheck would guard a directory nobody writes to,
-# and the assembly would read one nobody wrote.
+# spell the same path today would stop agreeing silently. Of the two failure
+# directions, one is still quiet -- if these expressions ever stopped agreeing,
+# the precheck would guard a directory nobody writes to, and nothing would ever
+# say it had stopped protecting anything. That silence is why it has to be one
+# expression. The other direction, the assembly reading a directory nobody
+# wrote, is no longer quiet: the assembly's own `is_dir()` test and its
+# `not rows` test both exit non-zero and name the directory in question.
 JOB_NAME="phase$PHASE"
 JOBS="$BENCH/jobs/$JOB_NAME"
 JOB_DIR="$JOBS/$JOB_NAME"
@@ -114,9 +118,14 @@ if [ "$TASKS_ONLY" -eq 0 ]; then
   # the same directory as the first. harbor will not stop it: when the recorded
   # config matches, `Job.create` resumes the old job and the final result.json is
   # `self._existing_trial_results + trial_results` (harbor/job.py:1056) -- one
-  # number covering two different moments. Only a *differing* config is refused
-  # (FileExistsError, harbor/job.py:257), so the case that does the damage is
-  # exactly the case harbor lets through.
+  # number covering two different moments. harbor does refuse some resumptions,
+  # each on a named condition: a config.json that differs -- FileExistsError in
+  # `_maybe_init_existing_job` (harbor/job.py:256); a trial config matching no
+  # existing trial -- ValueError in `_init_remaining_trial_configs` (:363); a
+  # lock.json that will not parse -- ValueError, "refusing to overwrite it"
+  # (:904); or one that parses but differs -- FileExistsError in `_write_job_lock`
+  # (:911). None of those is the case that does the damage: config equal and
+  # trials equal is exactly the case harbor lets through.
   # (Read from harbor's source on 2026-09-17, not measured by running it: that
   # would mean starting containers. Fix B is written so this path is unreachable
   # either way, which is why we can leave it unmeasured.)
@@ -128,13 +137,40 @@ if [ "$TASKS_ONLY" -eq 0 ]; then
     {
       echo "refusing to run: job directory already exists: $JOB_DIR"
       echo "  it holds:"
+      shown=0
       for entry in "$JOB_DIR"/*; do
         [ -e "$entry" ] || continue
         echo "    ${entry##*/}"
+        shown=$((shown + 1))
       done
+      # The glob above never matches dotfiles, and an unmatched glob stays
+      # literal (that is what the -e test is for, since dotglob/nullglob are
+      # off -- bash 3.2.57 on this host). So an empty directory and one holding
+      # only dotfiles would print the same nothing above. Tell them apart:
+      # git metadata and .lock files land in these directories, and a reader
+      # deciding whether to delete one needs to know they are there.
+      if [ "$shown" -eq 0 ]; then
+        hidden=0
+        for entry in "$JOB_DIR"/.[!.]* "$JOB_DIR"/..?*; do
+          [ -e "$entry" ] || continue
+          hidden=$((hidden + 1))
+        done
+        if [ "$hidden" -eq 0 ]; then
+          echo "    (nothing at all: the directory is empty)"
+        else
+          echo "    (no non-hidden entries; $hidden hidden one(s) exist but"
+          echo "    are not listed above)"
+        fi
+      fi
       echo "  a run started here would be merged into it, and the assembly step"
       echo "  would then report both runs as one phase. Move it aside or delete"
       echo "  it by hand, then re-run."
+      echo "  Harbor can also resume: when the recorded config matches it claims"
+      echo "  the trials already there, runs only the missing ones, and folds the"
+      echo "  new results into the same result.json. Whether to spend on that"
+      echo "  resume or start the phase over is a person's decision, not this"
+      echo "  script's -- and reaching that path means stepping around this gate"
+      echo "  deliberately. This refusal is deliberate too."
     } >&2
     exit 1
   fi
