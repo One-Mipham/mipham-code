@@ -44,9 +44,9 @@ PROXY="${MIPHAM_BENCH_PROXY:-http://127.0.0.1:7897}"
 # The gate is instrument boot time, not the task's own clock (that stays at
 # task.toml's [agent] timeout_sec -- 900-12000 s across phase 1's ten tasks --
 # untouched), so widening it makes measurement possible rather than making the
-# benchmark easier. 3 matches the two runs that actually got past setup; a value
-# nobody has run under would make the real run stricter than the run that proved
-# the instrument works.
+# benchmark easier. 3 is the only multiplier with a clean record -- the default
+# gate is one for two (125.3 s through, 360.0 s killed), 3 is two for two (239.5 s,
+# 249.2 s). An un-run value would leave the real run's gate unproven.
 SETUP_TIMEOUT_MULT="${MIPHAM_BENCH_SETUP_TIMEOUT_MULT:-3}"
 
 # The adapter imports harbor, so every Python here has to run under an
