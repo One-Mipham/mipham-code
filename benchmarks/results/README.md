@@ -139,3 +139,163 @@ output 超过 8192（8,879 / 8,565 / 11,326）⇒ 至少那三题的请求上限
 **机制未查明：只登记读数，不给归因。**
 
 **官方分数（harbor 报的，不是我们算的）**：`Mean: 0.000`，8 题 reward **全为 0.0**。
+
+---
+
+## Phase 2 · SWE-bench Verified 逐条核对（T18）
+
+> 与上一节同构：面向公众的披露落在 `../README.md` 的 Phase 2 一节，本节是**内部核对记录**。
+>
+> 数据源：`phase2-swebench-verified.json` 的 `totals` 与 `trials[].result`；**分数不在那份 JSON 里**
+> （单题 `result` 的键与 Phase 1 逐字同构，**没有 reward / resolved / passed**）⇒ 分数取自**作业目录里的
+> verifier 产物**：`../jobs/phase2/phase2/<trial>/verifier/reward.txt`（9 个）与同目录 `report.json`（9 个）。
+> `../jobs/` **被 gitignore**，故下面给的是路径而不是链接。
+
+### ① 两个数必须一起读：完成题数与官方分数
+
+| 读数                                      | 值                                                                         | 来源                                                                     |
+| ----------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| **官方分数**（harbor 报的，不是我们算的） | **`Mean: 0.900`**                                                          | `jobs/phase2/phase2/result.json` 的 `stats.evals.<key>.metrics[0].mean`  |
+| **分母**                                  | **10** = harbor 的 `n_trials: 9` **+** `n_errors: 1`（那 1 题按 0 分并入） | 同上，`n_trials` / `n_errors` 两字段；`n_total_trials: 10`               |
+| **逐题 reward**                           | 9 题**全为 `1.0`**                                                         | 同文件 `reward_stats.reward["1.0"]`（9 个 trial 名）与 9 个 `reward.txt` |
+| **完成题数**（本仓口径）                  | **9**（`totals.completedTasks`，只数 `status == "done"`）                  | `phase2-swebench-verified.json` 的 `totals`                              |
+| **有 verifier 读数的题数**                | **9 / 9 全 `resolved: true`**                                              | 9 个 `report.json`（见 ③）                                               |
+
+**这三行必须一起读，缺一行就误导**：
+
+- `0.900` 而**不是** `1.000` —— 差的不是「有一题答错」，而是**有一题根本没跑起来**
+  （astropy，见 ④）。分母是 10，其中 9 题 reward 1.0、1 题按 0 计入。
+- `0.900` 而**不是**「9 题里答对 9 题」的分母 9 —— 两个说法都指向 9 个 1.0，但**分母不同**。
+- `Mean` 是 **harbor 报的**；本节的 `9/9 resolved` 是**我们读 verifier 产物**读出来的。
+  两者一致，但**不是同一个来源**。
+
+**两个必须在同一句里出现的数**（Phase 1 的教训，携带项 15 逐字要求）：
+**完成题数 9 / 10**（9 × `done` + 1 × 网络故障）**而**「官方分数 `Mean: 0.900`、9 题 reward 全 1.0」。
+**`done` 不是通过** —— 判分由 harbor 的 verifier 做，读数从 verifier 产物里取；
+**拿 `done` 冒充通过，正是本计划的立项理由所反对的那件事。**
+
+### ② 一个容易读错的字段：harbor 的 `n_completed_trials` 是 10
+
+`stats.n_completed_trials` = **10**（`n_errored_trials` = 1）。**harbor 把出错的那一题也算作「已完成」**
+—— 同一读法在 Phase 1 也成立。所以：
+
+- `n_completed_trials: 10` **不是**「10 题都跑完了」，更**不是**「10 题都答对了」；
+- 本仓归档里的 `completedTasks: 9` 又是**第三个口径**（`status == "done"`）；
+- **`completedTasks: 9` 也不等于「答对 9 题」** —— 它只说明这 9 题的回合正常结束。
+  「答对」只有 verifier 产物能说（③）。
+
+### ③ verifier 判分的读数与来源（9 题，逐题读）
+
+来源 = `jobs/phase2/phase2/<trial>/verifier/` 下的两个文件，**逐题打开读**，不是转述：
+
+| 题                                 | `reward.txt` | `report.json`：`patch_successfully_applied` / `resolved` | `FAIL_TO_PASS` | `PASS_TO_PASS` |
+| ---------------------------------- | ------------ | -------------------------------------------------------- | -------------- | -------------- |
+| `django__django-10097`             | `1`          | `true` / `true`                                          | 438/438        | 1432/1432      |
+| `matplotlib__matplotlib-13989`     | `1`          | `true` / `true`                                          | 1/1            | 411/411        |
+| `mwaskom__seaborn-3069`            | `1`          | `true` / `true`                                          | 2/2            | 94/94          |
+| `pallets__flask-5014`              | `1`          | `true` / `true`                                          | 1/1            | 59/59          |
+| `psf__requests-1142`               | `1`          | `true` / `true`                                          | 1/1            | 5/5            |
+| `pydata__xarray-2905`              | `1`          | `true` / `true`                                          | 1/1            | 364/364        |
+| `pylint-dev__pylint-4551`          | `1`          | `true` / `true`                                          | 10/10          | 0/0            |
+| `pytest-dev__pytest-10051`         | `1`          | `true` / `true`                                          | 1/1            | 15/15          |
+| `scikit-learn__scikit-learn-10297` | `1`          | `true` / `true`                                          | 1/1            | 28/28          |
+
+`report.json` 的结构是**单键**：`{"<task-id>": {"patch_is_None", "patch_exists",
+"patch_successfully_applied", "resolved", "tests_status": {"FAIL_TO_PASS": {"success":
+[...], "failure": [...]}, "PASS_TO_PASS": ..., "FAIL_TO_FAIL": ..., "PASS_TO_FAIL": ...}}}`。
+上表两列是 `success` 的条数 / `success + failure` 的条数；**9 题的 `failure` 全为空**，
+`FAIL_TO_FAIL` 与 `PASS_TO_FAIL` 四类计数**也全为 0**。
+`reward.txt` 的内容逐字是 `1`（两字节，带换行）。
+
+**不能从 `report.json` 反推的东西**：`FAIL_TO_PASS` 的条数**不是**题目难度指标 ——
+`pylint-dev__pylint-4551` 是 10/10 且 `PASS_TO_PASS` 为 0/0（该题只声明 F2P），
+`django__django-10097` 是 438/438 + 1432/1432。两个数字量级差三个数量级，rewards 都是 1。
+
+### ④ 第 10 题：基础设施故障，不是答错
+
+`astropy__astropy-12907` 的 `verifier/` 目录**存在但一个文件都没有**（`find … -type f | wc -l` = **0**）
+—— **这一栏要写准**：不是「没有 verifier 目录」，而是「目录建了、里面是空的」。
+它的 `result.json` 里 `verifier_result: null`、`agent_result: null`、`verifier: null`、
+`agent_execution: null`，`verifier_environment_mode: "shared"`，`exception` 非 null。
+
+**归因（读数，不是推测）** —— `jobs/phase2/phase2/job.log` 与 `exception.txt` 逐字：
+
+```
+curl: (56) OpenSSL SSL_read: error:0A000126:SSL routines::unexpected eof while reading, errno 0
+Classified failed command as NetworkConnectionError (pattern: 'curl: \(\d+\)')
+Not retrying trial because the maximum number of retries has been reached
+```
+
+失败发生在 **agent 安装那一步**（`install_command()` 里的 `curl` 取 `mipham-linux-x64`），
+**在 agent 跑起来之前** ⇒ **verifier 从未有机会运行**。
+⇒ 这一题的 `Mean` 贡献是 **0**，且它**不是**「模型答错」。**两者在本轮披露里必须分开**。
+
+### ⑤ 每题的 token 与墙钟（与 Phase 1 并列，携带项 15 / 计划 Task 17 Step 3）
+
+| 题                                 |         tokens | `elapsedSec` | 本轮开局余量（`budgetTokens`） |
+| ---------------------------------- | -------------: | -----------: | -----------------------------: |
+| `django__django-10097`             |        642,271 |      171.691 |                     23,145,750 |
+| `pytest-dev__pytest-10051`         |      1,456,484 |      289.760 |                     22,503,479 |
+| `pallets__flask-5014`              |        597,722 |      141.079 |                     21,046,995 |
+| `mwaskom__seaborn-3069`            |      9,940,821 |      634.632 |                     20,449,273 |
+| `matplotlib__matplotlib-13989`     |        571,210 |      116.087 |                     10,508,452 |
+| `psf__requests-1142`               |        475,546 |      116.538 |                      9,937,242 |
+| `pylint-dev__pylint-4551`          |      3,769,038 |      435.163 |                      9,461,696 |
+| `pydata__xarray-2905`              |      3,224,297 |      443.432 |                      5,692,658 |
+| `scikit-learn__scikit-learn-10297` |        886,949 |      164.944 |                      2,468,361 |
+| **合计（9 题）**                   | **21,564,338** |  **2,513.3** |                                |
+
+**`budgetTokens` 这一列要读准**：它是**该题开局时台账里还剩多少**，**不是**「本轮上限」——
+按 trial 顺序逐题递减（`23,145,750 − 已花`）。**不要把它读成「每题上限 23,145,750」**，
+也不要因为第一题恰好等于本轮上限就以为整列都是那个值。
+
+**与 Phase 1 并列**（这是计划 Task 17 Step 3 点名的第 1 条对账）：
+
+| 读数           | Phase 1（8 题） | Phase 2（9 题） |    比 |
+| -------------- | --------------: | --------------: | ----: |
+| 合计 tokens    |       7,973,562 |      21,564,338 | 2.70× |
+| 每题**中位数** |         394,667 |         886,949 | 2.25× |
+| 每题**均值**   |      996,695.25 |    2,396,037.56 | 2.40× |
+| 最大单题       |       3,353,233 |       9,940,821 | 2.96× |
+| 最小单题       |          15,009 |         475,546 | 31.7× |
+| 本轮上限       |      50,505,050 |      23,145,750 |     — |
+| 用量 / 上限    |          15.79% |          93.17% |     — |
+
+**Phase 2 的每题中位数是 Phase 1 的 2.25 倍** —— 按计划 Task 17 Step 3 第 1 条，
+**如实写出来**：校准（`phase2-calibration.json` 的 `10,000,000`）**取小了**，
+本轮实际施加的是 **23,145,750**（R127 按 T16 单题实测 `x₁ = 1,543,050` 重推：
+`10 × x₁ × 1.5`）。**不去回改 Phase 1，也不去改校准产物。**
+两个数一起给：**校准文件写的 `10,000,000`** 与 **本轮实际施加的 `23,145,750`**。
+
+**这一列的另一半**：Phase 2 花了上限的 **93.17%**（余 1,581,412），**上限没有咬住**
+（`budgetExceededTasks: 0`）—— 但**单题最贵的 `mwaskom__seaborn-3069` 花了 9,940,821，
+是校准值 10,000,000 的 99.4%**：若真按校准值施加，**这一题一个人就吃满整轮**。
+（该题的 `elapsedSec` 也是最长：634.6 s，是 9 题中位数的 3.7 倍。）
+
+### ⑥ 墙钟、平台与可复现性
+
+- **作业窗口**（`jobs/phase2/phase2/result.json` 的 `started_at` / `finished_at`）：
+  `2026-09-17T23:48:19.240742` → `2026-09-18T01:12:29.004466` = **5,049.8 s = 84.2 分钟**。
+  逐题 `elapsedSec` 合计 2,513.3 s ⇒ **约 50% 的窗口花在 10 个容器/镜像的准备上**。
+  对照 Phase 1 的窗口：`13:35:10.719539` → `16:23:56.778424` = **10,126.1 s = 168.8 分钟**。
+  **两面都要写清**：Phase 2 的窗口更短，**但两者的镜像预拉取方式不同**（见下），故**不可据此说 Phase 2 更快**。
+- **x86 模拟**：宿主是 `arm64`，而本轮 10 题的**题目镜像全部是 `linux/amd64`** ——
+  读数取法有两条，**都是逐题读、不是推断**：(a) 10 个题目 `Dockerfile` 的 `FROM` 行**全部**是
+  `swebench/sweb.eval.x86_64.<owner>_1776_<repo>:latest`（`grep -c` = 10/10）；
+  (b) 对本地这 10 个镜像跑 `docker image inspect <img> --format '{{.Os}}/{{.Architecture}}'`
+  ⇒ **10/10 都是 `linux/amd64`**。⇒ **两阶段全程都在 x86_64 模拟下**，
+  **模拟对耗时有实质影响**，两阶段的墙钟与 token **都带这一项，拆不开**。
+- **一条不能拿来当平台证据的字段**：`install_command()` 取的是
+  `mipham-linux-x64` —— 打开 `benchmarks/harbor/mipham_code.py` 可见它**写死**（不读容器架构）
+  ⇒ **那个文件名不构成「容器是 x86_64」的证据**。
+- **可复现性**：与 Phase 1 同 —— **没有设置采样 seed**（Harbor 与 provider 均未固定），
+  逐题输出不可逐字重放。可复现的是流程与判据。复现命令见 `../README.md` 的 Phase 2 一节。
+- **本轮 9 题的二进制与 Phase 1 是同一个**：`@miphamai/cli v0.81.7`、
+  sha256 `a0fa72aaa529b94e45d34049d30e7a30d02ba3769da2c189d94f9347a9e8d670`
+  ⇒ **两阶段的成绩可直接比二进制版本**（这是本轮少有的、两阶段口径确实一致的维度）。
+- **一条可比性的诚实边界**：Phase 2 的镜像**在作业窗口之前就已预拉取**（Task 16 的集成门与准备步骤），
+  而 Phase 1 **没有任何记录**说明它的镜像是否也在窗口外预拉取过 ⇒
+  **两个窗口不可直接相减**去谈「模拟慢了/快了」。
+- **另一条**：Phase 1 有 4 题 `deadline_exceeded`，其 `elapsedSec` 被 840 s 的 exec 超时**压在天花板上**
+  （826.2 / 821.4 / 829.1 / 842.1）⇒ Phase 1 的 `elapsedSec` 合计**是下界**，不是真实耗时。
+  Phase 2 **没有截尾题**（9 题全 `status: done`）。

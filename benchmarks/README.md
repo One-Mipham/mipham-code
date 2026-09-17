@@ -7,6 +7,11 @@
 > 两条事实）在 [`results/README.md`](results/README.md) —— 本文件不复述它。**但本文件确有**逐题的
 > `status` 与 tokens（§三 ③）：那是披露 ③ 本身强制要求的一张表，不是对那份记录的复制。
 > 抄成两份的那一份一定会先腐烂，这是本仓「假主张要按拷贝修」的教训。
+>
+> **自 T18 起，本文件同时承载 Phase 2（SWE-bench Verified）的披露** —— 追加在本文件
+> **末尾**的「公开基准 · Phase 2」一节。**H1 与以上各节标题仍是 Task 14 写下的 Phase 1 原文，
+> 逐字未动**：下面的「五条强制披露」「规格分歧」「仪器与平台」「已知限制」讲的是 Phase 1，
+> Phase 2 的同名内容在末尾那一节里另起。
 
 ## 结论
 
@@ -219,3 +224,198 @@ alexgshaw/circuit-fibsqrt:20251031
 
 本目录的代码是仓库的一部分，随仓库的 Apache 2.0 许可发布。数据集与容器镜像**不在本仓库内**
 （见「一、复现命令」）；其许可与使用条款以各自上游为准。
+
+---
+
+# 公开基准 · Phase 2（SWE-bench Verified）
+
+> Phase 2 的**逐条内部核对记录**（每题材 token 与墙钟、verifier 逐题读数、第 10 题的故障归因）
+> 在 [`results/README.md`](results/README.md) 的 Phase 2 一节 —— 本文件不复述它。
+>
+> 上面 Phase 1 部分的**五条强制披露在 Phase 2 同样成立**（scaffold 成绩不是裸能力 / `k=1` 报的是
+> pass@1 / 每题材 tokens 与成本 / 复现命令 + 无 seed / 模型选型理由）。逐条对应见本节「五」。
+
+## 结论
+
+Phase 2（`swebench-verified@1.0`，**10 题、10 个不同仓库**，`k=1`）跑完：harbor 建了 10 个 trial，
+**9 题跑到了 agent 结果，第 10 题在 agent 安装阶段因网络故障中断**（见「六、已知限制」）。
+
+**两个数必须一起读**（Phase 1 的教训）：
+
+- **完成题数 9 / 10**（9 × `status: done` + 1 × 网络故障）；
+- **官方分数 `Mean: 0.900`** —— 分母是 **10**：harbor 自己的 `n_trials: 9` **加** `n_errors: 1`，
+  **出错那一题按 0 分并入**。**9 题的 reward 全为 `1.0`**。
+
+⇒ `0.900` 而**不是** `1.000`，差的不是「有一题答错」，而是**有一题根本没跑起来**；
+`0.900` 而**不是**「9 题里答对 9 题」的分母 9 —— 两个说法都指向那 9 个 `1.0`，但**分母不同**。
+**`done` 不是通过**：判分由 harbor 的 verifier 做，读数取 verifier 产物（「四」）。
+
+9 题合计 **21,564,338 tokens**，是**本轮实际施加的上限 23,145,750** 的 **93.17%**（余 1,581,412，
+**上限一次都没有咬住**）。
+
+## 一、复现命令
+
+与 Phase 1 同构：**两条网络依赖分开写**，代理**只**挂在数据集那一条上（`github.com` 被墙），
+模型调用走**无代理**的 `api.deepseek.com:443`。
+
+### 1. 数据集（唯一需要代理的一条）
+
+```bash
+HTTPS_PROXY=http://127.0.0.1:7897 HTTP_PROXY=http://127.0.0.1:7897 \
+  harbor datasets download swebench-verified@1.0 -o benchmarks/.datasets
+```
+
+落地 `benchmarks/.datasets/swebench-verified/`（同样被 `benchmarks/.gitignore` 忽略，**不随仓库分发**）。
+
+### 2. 选题重算与断言（不花钱）
+
+```bash
+python3 -m benchmarks.tasks \
+  --dataset-dir benchmarks/.datasets/swebench-verified --rule first-repos --n 10 --expect-recorded
+```
+
+规则与 Phase 1 同节「二、选题规则」：**取字典序最前的 10 个仓库各自的第一题**，
+**先于任何结果确定**。（纯字典序会从 `astropy` **一个**仓库里取满 10 题 —— 那是**一个**代码库。）
+
+### 3. 跑分（无代理）
+
+```bash
+export DEEPSEEK_API_KEY=...        # 只写变量名；值不进代码、不进日志、不进提交
+export DOCKER_DEFAULT_PLATFORM=linux/amd64
+CEILING=23145750 \
+MIPHAM_LEDGER_CEILING="$CEILING" \
+MIPHAM_BENCH_LEDGER="$PWD/benchmarks/results/ledger-phase2.json" \
+  bash benchmarks/run-benchmark.sh --phase 2 --fresh
+```
+
+**三处不可省、也不可拆到两条命令里**：
+
+1. **`DOCKER_DEFAULT_PLATFORM=linux/amd64`**（**本机必须**）。不带它的实测代价有一次先例：
+   `jobs/phase2-gate/` 那一跑 **40.4 秒、`n_trials: 0`、`n_errors: 1`（`RuntimeError`）**，
+   而 **harbor 的退出码是 0** —— **退出码 0 是误导**，判据只能是「trial 有没有真跑起来」。
+2. **`MIPHAM_LEDGER_CEILING`** 与 **`MIPHAM_BENCH_LEDGER`**：Phase 2 用**独立的台账**
+   `results/ledger-phase2.json`，**不与 Phase 1 共用**（共用会让两次作业的用量互相吃掉对方的额度）。
+3. **`CEILING` 是 `23145750`，不是校准文件里的 `10,000,000`**。两个数都写在这里：
+   校准产物 `results/phase2-calibration.json` 记的是 **`10,000,000`**；
+   **本轮实际施加的是 `23,145,750`**（= `10 × 1,543,050 × 1.5`，由 T16 的单题实测 `x₁` 重推）。
+   运行期那条命令的自证是 stdout 的 `ceiling=` 行 —— 读到 `10000000` **不是「校准值」，是参数没生效**。
+
+## 二、x86 模拟的实测读数与它对墙钟的影响
+
+**宿主是 `arm64`，而本轮 10 题的题目镜像全部是 `linux/amd64`** ⇒ **全程在 x86_64 模拟下**。
+这个结论有**两条逐题读、非推断**的取法：
+
+```bash
+# (a) 题目 Dockerfile 的 FROM 行 —— 10/10 都是 x86_64 的 swebench 镜像
+grep -h -m1 '^FROM' benchmarks/.datasets/swebench-verified/*/environment/Dockerfile
+# (b) 本地这 10 个镜像自己的平台
+docker image inspect <img> --format '{{.Os}}/{{.Architecture}}'
+```
+
+(a) 的 10 行全部形如 `FROM swebench/sweb.eval.x86_64.<owner>_1776_<repo>:latest`（`grep -c` = **10/10**）；
+(b) 对这 10 个镜像逐个读，**10/10 都是 `linux/amd64`**。
+
+**一条不能拿来当平台证据的字段**：adapter 的 `install_command()` 取的是
+`mipham-linux-x64` —— 它在 `benchmarks/harbor/mipham_code.py` 里**写死**（**不读容器架构**）
+⇒ **那个文件名不构成「容器是 x86_64」的证据**，别拿它当第二条。
+
+**对墙钟的影响（实测，不是估算）**：
+
+| 读数                           | 值                                                  | 取法                                        |
+| ------------------------------ | --------------------------------------------------- | ------------------------------------------- |
+| Phase 2 作业窗口               | **5,049.8 s = 84.2 分钟**                           | `jobs/phase2/phase2/result.json` 首尾时间戳 |
+| Phase 2 逐题 `elapsedSec` 合计 | **2,513.3 s**（9 题，中位数 171.7 s，最长 634.6 s） | 归档逐题字段求和                            |
+| Phase 1 作业窗口               | **10,126.1 s = 168.8 分钟**                         | `jobs/phase1/phase1/result.json` 首尾时间戳 |
+| Phase 1 逐题 `elapsedSec` 合计 | **4,127.7 s**（8 题，中位数 547.3 s，最长 842.1 s） | 归档逐题字段求和                            |
+
+**本节的诚实边界，两条都要写**：
+
+1. **「Phase 2 窗口更短」不可读成「模拟对 Phase 2 影响更小」** —— 两个窗口里**有多少是镜像准备**不同：
+   Phase 2 的 10 个镜像**在作业窗口之前**就已预拉取（Task 16 的集成门与准备步骤），
+   而 Phase 1 **没有任何记录**说明它的镜像是否也在窗口外预拉取过。
+   Phase 2 的 5,049.8 s 里有约 **50%** 不在逐题 `elapsedSec` 里（容器/镜像准备），
+   Phase 1 那 10,126.1 s 的同项占比**无从对比**。
+2. **两阶段都在同一模拟下**，所以**没有任何一条读数能把「模拟的代价」单独拆出来** ——
+   本文件给的是**带模拟的绝对值**，不是「比原生慢 N 倍」。
+3. **Phase 1 的 `elapsedSec` 合计是下界**：它有 4 题 `deadline_exceeded`，`elapsedSec` 被 840 s 的
+   exec 超时压在天花板上（826.2 / 821.4 / 829.1 / 842.1）。Phase 2 没有截尾题（9 题全 `done`）。
+
+## 三、两阶段的每题 token 对比
+
+| 读数           | Phase 1（8 题） | Phase 2（9 题） |    比 |
+| -------------- | --------------: | --------------: | ----: |
+| 合计 tokens    |       7,973,562 |      21,564,338 | 2.70× |
+| 每题**中位数** |         394,667 |         886,949 | 2.25× |
+| 每题**均值**   |      996,695.25 |    2,396,037.56 | 2.40× |
+| 最大单题       |       3,353,233 |       9,940,821 | 2.96× |
+| 最小单题       |          15,009 |         475,546 | 31.7× |
+| 本轮上限       |      50,505,050 |      23,145,750 |     — |
+| 用量 / 上限    |          15.79% |          93.17% |     — |
+| 触发上限的题数 |               0 |               0 |     — |
+
+**Phase 2 的每题中位数是 Phase 1 的 2.25 倍** —— 如实写出来：**Phase 2 的校准取小了**。
+本轮实际施加的上限经 T16 的单题实测重推过一次（`10,000,000` → `23,145,750`），
+**校准产物一个字未改，Phase 1 的读数也不回改**。
+
+**一条要一起读的余量读数**：Phase 2 花了上限的 **93.17%**，余 **1,581,412** —— 而
+**单题最贵的 `mwaskom__seaborn-3069` 一个人就花了 9,940,821**，是**校准值 `10,000,000` 的 99.4%**：
+**若真按校准值施加，这一题一个人就吃满整轮。** 逐题数字见 [`results/README.md`](results/README.md)。
+
+**一条口径说明**：归档里逐题的 `budgetTokens` 是**该题开局时台账还剩多少**（按 trial 顺序逐题递减），
+**不是「每题上限」** —— Phase 2 那一列从 23,145,750 一路降到 2,468,361。**不要整列读成同一个值。**
+
+## 四、verifier 判分的读数与来源
+
+**来源 = 作业目录里的 verifier 产物**，逐题读，不是转述：
+
+```bash
+ls benchmarks/jobs/phase2/phase2/*/verifier/reward.txt   # 9 个
+cat benchmarks/jobs/phase2/phase2/<trial>/verifier/reward.txt
+```
+
+| 读数                                                          | 值                                                                                         |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `reward.txt`（逐题）                                          | **9 个，内容都是 `1`**；第 10 题 `astropy__astropy-12907` **目录在、文件为空**（0 个文件） |
+| `report.json` 的 `resolved`                                   | **9 / 9 全 `true`**                                                                        |
+| `report.json` 的 `patch_successfully_applied`                 | **9 / 9 全 `true`**                                                                        |
+| `tests_status` 的 `failure` / `FAIL_TO_FAIL` / `PASS_TO_FAIL` | **9 题全空 / 全 0**                                                                        |
+
+**`Mean: 0.900` 是 harbor 报的**（`jobs/phase2/phase2/result.json` 的 `stats.evals.<key>.metrics[0].mean`），
+**逐题 `resolved` 是我们读 verifier 产物读出来的** —— 两者一致，但**不是同一个来源**。
+
+**一个容易读错的字段**：`stats.n_completed_trials` = **10**。harbor **把出错的那一题也算作「已完成」**
+（Phase 1 同样如此）⇒ 它**不是**「10 题都跑完了」，更**不是**「10 题都答对了」。
+本仓归档里的 `completedTasks: 9` 是**第三个口径**（`status == "done"`），
+而它**同样不等于「答对 9 题」**。
+
+**第 10 题的故障是基础设施，不是答错**：`jobs/phase2/phase2/job.log` 与
+`astropy__astropy-12907__T8b4Vq4/exception.txt` 逐字给出
+`curl: (56) OpenSSL SSL_read: … unexpected eof while reading`，被 harbor 归类为
+`NetworkConnectionError`。失败发生在 **agent 安装那一步**（取 `mipham-linux-x64` 的 `curl`），
+**在 agent 跑起来之前** ⇒ **verifier 从未有机会运行**（该题 `verifier_result: null`、
+`agent_result: null`）。**「没跑起来」与「答错」在本披露里必须分开。**
+
+## 五、与 Phase 1 五条强制披露的对应
+
+| Phase 1 的披露                       | Phase 2 的对应                                                                                                                          |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| ① 这是 scaffold 成绩，不是模型裸能力 | **同样成立** —— 容器隔离、工具集与系统依赖仍由 Harbor 提供                                                                              |
+| ② 报的是 pass@1，不是 pass@k         | **同样成立**：`k = 1`，**读不出**做对率与方差                                                                                           |
+| ③ 每任务 tokens 与成本               | 见「三」的并列表；**成本区间与 Phase 1 同形**（`usage` 只给两个总数、无 cache 命中拆分 ⇒ 只能给区间，且**本轮落在哪个计价窗口不可知**） |
+| ④ 复现命令 + seed                    | 见「一」；**同样没有设置采样 seed**（Harbor 与 provider 均未固定）⇒ 逐题输出不可逐字重放                                                |
+| ⑤ 模型选型与自家模型摸底             | **同一个发布模型** `deepseek-v4-pro`（理由见 Phase 1 那一条）；自家模型那半两阶段共用，未重测                                           |
+
+## 六、已知限制（Phase 2）
+
+1. **9 题不是 10 题。** harbor 建了 10 个 trial，`astropy__astropy-12907` 在 **agent 安装阶段**
+   因瞬时网络故障中断（`curl: (56)`，`NetworkConnectionError`）⇒ **它的分数贡献是 0，且它不是答错**。
+   本轮**没有重跑它**。
+2. **`Mean: 0.900` 的分母是 10，不是 9。** 见「结论」。
+3. **pass@1**：`k = 1`，没有多次采样的信息。
+4. **单机单次**：1 台主机、1 次运行、10 题。**10 题不可外推为全量成绩**。
+5. **x86 模拟**（见「二」）：宿主 arm64、题目镜像 linux/amd64 ⇒ **全程模拟**，对耗时有实质影响。
+6. **两阶段的墙钟不可直接相减**（镜像是何时拉取的，两阶段的记录不同 ⇒ 见「二」的边界 1）。
+7. **`n_cache_tokens` / `cost_usd` 未填** —— 与 Phase 1 同因：WS `usage` 协议不提供 cache 命中拆分。
+8. **本轮跑的那个二进制与 Phase 1 是同一个**（`@miphamai/cli v0.81.7`，
+   sha256 `a0fa72aaa529…d670`）⇒ **二进制版本这一项两阶段确实一致**，可以比。
+9. **这些测试与验收运行都不在 CI 里**（同 Phase 1 的第 7 条）。

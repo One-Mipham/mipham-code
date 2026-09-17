@@ -27,6 +27,7 @@
 - **选题规则先于任何结果确定。**（§4.2 —— 「按数据集任务目录名的字典序，取前 10。规则**先于任何结果**确定，不含人工判断 ⇒ 结构上无法挑题。」）Phase 2 用同一精神的可机器编码变体，见 Task 6。
 - **五条强制披露，一条都不能少。**（§4.1 —— ① scaffold 成绩不是模型裸能力 ② pass@1 非 pass@k ③ 每任务 tokens 与成本 ④ 复现命令 + seed ⑤ 模型选型与自家模型摸底）
 - **零新增第三方依赖。** 仓库没有任何 Python（`git ls-files | grep -cE '\.py$'` = 0），`benchmarks/` 是第一份；测试用 stdlib `unittest`，不自造许可证审查负担。
+- **宿主前提：`benchmarks/run-benchmark.sh` 必须能在 bash 3.2 下跑。** 本机 `/bin/bash` 是 **3.2.57**（macOS 自带），而 4.0+ 的内建（`mapfile` / `readarray` / `declare -A` 等）在这里**不存在** —— 用了它们的脚本会在**第一步就 `command not found`（退出码 127）**，报出的错与被执行的那段逻辑毫无关系。实测：计划早期版本 Task 11 Step 2 的 `mapfile -t TASKS < <(…)` 正是这一形态，已改为 `mktemp` + `while IFS= read -r` + `trap`（登记 #16）。**新增 shell 一律先 `bash -n` 再 `--tasks-only` 空跑**（Task 11 Step 2 就是为此存在）。
 - **交付物按 §五：** 适配器 `benchmarks/harbor/mipham_code.py` / 复现脚本 / 结果 JSON / 根 `README.md`（复现命令 + 选题规则 + 五条披露）/ 产品页 `../websites/domestic/`、`../websites/international/`（**父仓子模块，按 §十五 规矩走**）。
 - **子模块红线：** 永不在父仓库中修改子模块文件。改 `websites` 必须在 `websites/` 内 commit/push，父仓只 `git add websites` 更新 gitlink。每次父仓提交前跑 `git ls-files -s <sub>` == 子模块 HEAD。
 - **`--ae` 是唯一的环境通道。**（本计划的规定，理由见「架构决定 ④」）adapter 的一切可调量走 `--ae KEY=VALUE` + `self._get_env("KEY")`，不走 `-ak`。实测：`--ae` 落进 `AgentConfig.env` 并在 `--print-config` 里打码显示，`-ak` 落进 `kwargs` 且**未声明的 kwarg 静默进 kwargs 不报错** —— 即 `-ak` 打错字会静默失效（本仓库「有定义、无施加点」的又一形态）。
@@ -1044,8 +1045,15 @@ class DaemonClientTest(unittest.TestCase):
         self.port = self.server.server_address[1]
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
-        self.addCleanup(self.server.shutdown)
+        # addCleanup runs LIFO, so these must be registered in reverse of the
+        # order they have to run (shutdown -> server_close -> join):
+        # join() on a thread parked in serve_forever() only returns once
+        # shutdown() has been called, and shutdown() does not close the
+        # listening socket — skipping server_close() leaks it until GC, which
+        # surfaces as a ResourceWarning in the middle of the next test.
         self.addCleanup(self.thread.join)
+        self.addCleanup(self.server.server_close)
+        self.addCleanup(self.server.shutdown)
 
     def test_read_port_returns_the_integer_in_the_port_file(self):
         with tempfile.TemporaryDirectory() as home:
@@ -1304,7 +1312,10 @@ class SelectFirstReposTest(unittest.TestCase):
         )
 
     def test_a_name_without_a_separator_is_its_own_repository(self):
-        self.assertEqual(tasks.select_first_repos(["alpha", "alpha__x-1"], 2), ["alpha", "alpha__x-1"])
+        # The second name must come from a *different* repository prefix: a
+        # separator-less name's repository is the whole name, so pairing it with
+        # "alpha__x-1" would collide on "alpha" and be deduped away.
+        self.assertEqual(tasks.select_first_repos(["alpha", "beta__x-1"], 2), ["alpha", "beta__x-1"])
 
 
 class RecordedSelectionTest(unittest.TestCase):
@@ -1318,13 +1329,13 @@ class RecordedSelectionTest(unittest.TestCase):
         repos = [name.split("__", 1)[0] for name in tasks.PHASE2_EXPECTED]
         self.assertEqual(len(set(repos)), 10)
 
-    def test_phase2_names_are_the_first_of_their_repository(self):
-        # Pins the *rule*, not just the list: any name that sorts before a
-        # recorded one but shares its repository would mean the rule changed.
-        for name in tasks.PHASE2_EXPECTED:
-            repo = name.split("__", 1)[0]
-            earlier = [n for n in tasks.PHASE2_EXPECTED if n.split("__", 1)[0] == repo]
-            self.assertEqual(earlier, [name])
+    def test_phase2_names_are_in_lexicographic_order(self):
+        # A necessary condition of the rule, not the rule itself: taking the
+        # first name per repository in lexicographic order can only ever yield a
+        # sorted list, so an out-of-order record means the rule was not applied.
+        # It cannot pin the rule — a list holding each repository's *last* name
+        # would also be sorted. Pinning it needs the dataset, which Phase 2 has.
+        self.assertEqual(list(tasks.PHASE2_EXPECTED), sorted(tasks.PHASE2_EXPECTED))
 
 
 if __name__ == "__main__":
@@ -2005,12 +2016,22 @@ def run() -> dict:
         with transcript_path.open("a", encoding="utf-8") as transcript:
             while True:
                 if time.monotonic() - started > deadline_sec:
-                    result["status"] = "deadline_exceeded"
+                    # Guarded, like the `done` branch below: the statuses are
+                    # not interchangeable. `budget_exceeded` is a disclosed
+                    # overspend (spec §六) and exits 0; `deadline_exceeded` is
+                    # infrastructure. Overwriting one with the other hides the
+                    # disclosure and flips the exit code to 1.
+                    if result["status"] == "running":
+                        result["status"] = "deadline_exceeded"
                     connection.send_text(json.dumps({"type": "interrupt", "sessionId": session_id}))
                     break
                 raw = connection.recv_text()
                 if raw is None:
-                    result["status"] = "stream_closed"
+                    # Same guard, same reason: `done` may never arrive (worker
+                    # crashed, socket dropped), and a closed stream must not
+                    # relabel a run we already stopped for budget.
+                    if result["status"] == "running":
+                        result["status"] = "stream_closed"
                     break
                 message = protocol.reduce_message(state, raw)
                 transcript.write(raw + "\n")
@@ -2029,7 +2050,14 @@ def run() -> dict:
                     # never keep spending because the task looks close to done.
                     result["status"] = "budget_exceeded"
                     connection.send_text(json.dumps({"type": "interrupt", "sessionId": session_id}))
-                if state.finished:
+                if message["type"] == protocol.DONE:
+                    # The completion criterion is the `done` frame and nothing
+                    # else (spec §3.3). `state.finished` is also set by an
+                    # `error` frame (protocol.py:77), and the daemon broadcasts
+                    # `error` *and then* `done` (session-worker.ts:164, :197) —
+                    # breaking on `finished` stops one frame early, loses the
+                    # turn the `done` would have counted, and swallows the
+                    # daemon's error text.
                     if result["status"] == "running":
                         result["status"] = "done"
                     break
@@ -2048,6 +2076,12 @@ def run() -> dict:
     finally:
         if connection is not None:
             connection.close()
+        # The daemon's error frame is the only place its failure text exists;
+        # without this an errored run is recorded with `error: null`. It never
+        # overwrites an existing value, so a more specific exception raised on
+        # our side keeps priority.
+        if result["error"] is None and state.last_error:
+            result["error"] = state.last_error
         result["elapsedSec"] = round(time.monotonic() - started, 3)
         _write_result(result_path, result)
     return result
@@ -2066,7 +2100,12 @@ if __name__ == "__main__":
 - [ ] **Step 4: 跑测试，确认通过**
 
 Run: `"$BH" -m unittest benchmarks.test.test_driver_main -v`
-Expected: PASS（6 个测试）
+Expected: PASS —— **测试数不写进验收槽位，以 `unittest` 实跑输出为准。**
+原文写「6 个测试」，是照本 Step 1 代码块里的用例数推演出来的**预测值**；而落地文件
+（`grep -c 'def test_' benchmarks/test/test_driver_main.py`）是 **10** ——
+差额来自后续修复轮补的守卫位点用例（`budget_exceeded` 不被 `stream_closed` / `deadline_exceeded`
+改写各一条、`error` 帧被披露一条），逐条有理由，不是超范围发挥。
+把一个推演值放进验收槽位，会让「实测与它不一致」被读成缺陷 —— 要修的是这个**槽位形态**，不是那个数。
 
 - [ ] **Step 5: 提交**
 
@@ -2099,7 +2138,12 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 **Interfaces:**
 
-- Consumes: 无
+- Consumes: **Task 8 的 `benchmarks/harbor/driver/main.py`** —— 具体是它的 `main.REQUIRED_ENV`
+  （`driver_env()` 的契约就是「返回值必须覆盖它」，见下）与 `main.MIPHAM_*` 环境键名约定。
+  **原文写「无」是假的**：本任务的 `test_adapter.py` 与 Step 3 都依赖这个 import
+  （落地：`from benchmarks.harbor.driver import main as driver_main`，测试按
+  `set(driver_main.REQUIRED_ENV) - supplied` 断言，**不抄键名**）；
+  而 `Consumes` 是派发时唯一告知「本任务依赖谁」的字段 —— 写「无」会让人跳过那个 import 而**今天照样全绿**。
 - Produces:
   - `mipham_code.MiphamCodeOptions(InstalledAgentOptions)`（空）
   - `mipham_code.MiphamCode(BaseInstalledAgent)`，类属性：
@@ -2356,7 +2400,19 @@ class MiphamCode(BaseInstalledAgent):
 - [ ] **Step 4: 跑测试，确认通过**
 
 Run: `"$BH" -m unittest benchmarks.test.test_adapter -v`
-Expected: PASS（9 个测试 —— `ModuleShapeTest` 5 + `InstallCommandTest` 1 + `DriverEnvContractTest` 3）
+Expected: **6 PASS / 3 ERROR**（`ModuleShapeTest` 5 + `InstallCommandTest` 1 通过；
+`DriverEnvContractTest` 3 条 **error**，由 Task 10 的 `run()` 转绿）—— **不是全绿，且这是有意的。**
+三条 error 的成因：`DriverEnvContractTest` 必须先实例化 `MiphamCode`（测试里的 `_agent()`）才能断言，
+而 `harbor/agents/base.py:354-355` 的 `run` 是 `@abstractmethod`、`BaseInstalledAgent`
+（`harbor/agents/installed/base.py:321`）**没有**实现它 ⇒ Step 3 只给 `install()` + `driver_env()`
+时实例化会抛 `TypeError: Can't instantiate abstract class MiphamCode without an implementation
+for abstract method 'run'`。
+**不要为了让本行读起来是绿的，就在 Step 3 里加一个 stub `run()`**：那会让验收断言一个不成立的形状，
+且与 Task 10 的 `run()` 合成一个雷（同一个类体里两次定义 `run`，谁胜取决于编辑落点）。
+也**不要**把 `DriverEnvContractTest` 挪到 Task 10：那会让 `driver_env()` 在写下它的那个任务里
+没有任何测试钉它。**本行的验收判据是「6 PASS / 3 ERROR」，不是「9 PASS」。**
+Task 9 落地后的实测读数逐字为：`Ran 9 tests … FAILED (errors=3)`、`EXIT=1`。
+以 `unittest` 实跑输出为准。
 
 - [ ] **Step 5: 让 harbor 自己审一遍这个适配器**
 
@@ -2407,8 +2463,18 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 **Files:**
 
-- Modify: `benchmarks/harbor/mipham_code.py`（追加 `_upload_driver`、`_upload_prompt`、`_read_result`、`run`）
+- Modify: `benchmarks/harbor/mipham_code.py`（**实现 `run`**，并追加 `_upload_driver`、`_upload_prompt`、`_read_result`、`parse_result`、`apply_context`）
 - Test: `benchmarks/test/test_adapter.py`（追加一个 `TestCase` 类）
+
+> **本行原先只列四个成员，与同任务的 Interfaces 块（六个）自相矛盾** —— 少 `parse_result`
+> 与 `apply_context`，而 Step 3 逐字给出了这两个方法的实现。危害低（实现者照 Step 3 写就会写出来），
+> 但一个只读 Files 行的读者会以为只需加四个成员。**以 Interfaces 块为准。**
+>
+> **「实现 `run`」不是「追加 `run`」**：Task 9 的 Step 3 有意只写 `install()` + `driver_env()`，
+> 而 `run` 在 `harbor/agents/base.py:354-355` 是 `@abstractmethod`、`BaseInstalledAgent`
+> （`harbor/agents/installed/base.py:321`）没实现它 ⇒ Task 9 的三条 `DriverEnvContractTest`
+> 因无法实例化 `MiphamCode` 而 error。**这三条 error 是本任务要关掉的那一笔**，
+> 不是「Task 9 漏了一件事」。
 
 **Interfaces:**
 
@@ -2608,6 +2674,7 @@ from benchmarks import budget   # 注意：adapter 由 harbor 导入，故依赖
         await self._upload_prompt(environment, instruction)
 
         result: dict = {}
+        readable = False
         readback = "cat " + (EnvironmentPaths.agent_dir / self._RESULT_FILENAME).as_posix()
         try:
             # One call, all seven steps: HOME has to be identical for the whole
@@ -2625,23 +2692,62 @@ from benchmarks import budget   # 注意：adapter 由 harbor 导入，故依赖
             # the run's own exception.
             with contextlib.suppress(Exception):
                 completed = await self.exec_as_agent(environment, command=readback)
-                result = self.parse_result(completed.stdout)
+                try:
+                    parsed = self.parse_result(completed.stdout)
+                except (ValueError, TypeError) as exc:
+                    # A truncated write looks exactly like "the driver never
+                    # wrote anything" once the suppress swallows it, and this
+                    # file is the only disclosure the paid run leaves behind.
+                    # TypeError as well as ValueError: valid JSON that is not an
+                    # object (e.g. "[1,2]") makes parse_result's dict() raise
+                    # TypeError, which would otherwise slip past this branch and
+                    # be swallowed into the very ambiguity it exists to remove.
+                    result = {"error": f"unreadable driver result: {exc}"}
+                else:
+                    result = parsed
+                    # A non-empty report means the driver accounted for itself;
+                    # an empty readback means it never got that far.
+                    readable = bool(parsed)
+            # remaining() is the ceiling's only enforcement point and Task 13
+            # audits the ledger arithmetically, so a 0 recorded because nothing
+            # could be read must not be written the same way as a 0 the driver
+            # actually reported. A real session id stays the bare note -- Task 13
+            # joins ledger entries to trials through it.
+            note = str(result.get("sessionId") or "")
+            if not note:
+                note = "no-session" if readable else "spend-unknown"
+            result["ledgerNote"] = note
             with contextlib.suppress(Exception):
                 ledger.record(
                     (result.get("usage") or {}).get("inputTokens", 0)
                     + (result.get("usage") or {}).get("outputTokens", 0),
-                    note=str(result.get("sessionId") or ""),
+                    note=note,
                 )
 
         self.apply_context(context, result)
 ```
+
+> **`spend-unknown` 是「0 不是读数」的标记 —— Task 13 必须数它。** 台账记的是 `usage` 里的
+> 两个总数之和；**读不到结果时那个 0 不是读数**，所以这里不是记 0 就完事，而是把
+> `ledgerNote` 分成三种：真 session id（Task 13 靠它把台账条目与 trial 对上）、
+> `no-session`（读到了报告，报告里就是没有 session）、`spend-unknown`（**什么都没读到**）。
+> 第三种是上限唯一会**静默放宽**的方向 —— 上限的用途是封顶，误差必须偏「多算」。
+> **Task 13 Step 3 的披露义务（判据 4）**：数 `spend-unknown` 的条数，> 0 时必须在披露里写明
+> 「这几个 0 不是读数，上限被高估 `条目数 × 该题预算` 量级」。**不要**把 `tokens` 字段改成最坏情况
+> —— 那会把「实际花费」这个语义换掉，是另一件事（登记 #15）。
 
 > **`cwd=None` 是对的，但不够。** `environments/base.py` 的 `_upload_environment_dir_after_start` 已经替 harbor 发现过 workdir（`task_env_config.workdir`，为空时跑 `pwd`），而 terminal-bench 与 SWE-bench 的 `task.toml` **都没有 `[environment] workdir`** ⇒ 发现结果是容器内 `pwd`。adapter 拿不到那个值，所以 driver 在容器里读 `os.getcwd()` —— 第 8 件已经这么做。`cwd=None` 表示「继承 harbor 的默认工作目录」，即同一个目录。**Task 12 的集成门必须实测这一点**（见该任务的断言）。
 
 - [ ] **Step 4: 跑测试，确认通过**
 
 Run: `"$BH" -m unittest benchmarks.test.test_adapter -v`
-Expected: PASS（13 个测试）
+Expected: PASS —— **测试数不写进验收槽位，以 `unittest` 实跑输出为准。**
+原文写「13 个测试」是**推演值**：`ModuleShapeTest` 5 + Task 10 的 8 = 13，**漏了**
+`InstallCommandTest` 1 与 `DriverEnvContractTest` 3。计划内部当时就有两个互斥的数
+（Task 9 Step 4 写 9、本行写 13，而 9 已含那 4 条）。Task 10 交回时的实测读数是
+**17 = 9 + 8**；此后修复轮又补了用例，所以「今天这个文件里有几条」**不是**本行的验收判据。
+**判据只有一条：全部 PASS。** 把一个推演值放进验收槽位，会让「实测与它不一致」被读成缺陷 ——
+要修的是这个**槽位形态**，不是那个数。
 
 - [ ] **Step 5: 提交**
 
@@ -2698,13 +2804,24 @@ FRESH=0
 TASKS_ONLY=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --phase) PHASE="$2"; shift 2 ;;
+    --phase) [ $# -ge 2 ] || { echo "usage: $0 --phase 1|2 [--fresh] [--tasks-only]" >&2; exit 2; }; PHASE="$2"; shift 2 ;;
     --fresh) FRESH=1; shift ;;
     --tasks-only) TASKS_ONLY=1; shift ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
 
+# These two dataset ids are copies of `benchmarks/tasks.py`'s PHASE1_DATASET /
+# PHASE2_DATASET (:18/:19), and `DATASET` is what gets asserted against the
+# recorded selection and written to the archive -- so a drift here would not be
+# a cosmetic mismatch. They belong to the module; read them from it:
+#
+#   DATASET="$("$PYTHON" -c "from benchmarks import tasks; print(tasks.PHASE${PHASE}_DATASET)")"
+#
+# Same for the ledger ceiling below. **State of the landed artifact** (2026-09-17):
+# `benchmarks/run-benchmark.sh:25`/`:26` and `:108`/`:110` **still write the
+# literals**. `A 表第 11 行` asked for this and it was not closed -- recorded
+# here as what the artifact is, **not** as "already taken from the module".
 case "$PHASE" in
   1) DATASET="terminal-bench@2.0";  DATASET_DIR_NAME="terminal-bench";     RULE="first";       N=10; EXEC_TIMEOUT=840  ;;
   2) DATASET="swebench-verified@1.0"; DATASET_DIR_NAME="swebench-verified"; RULE="first-repos"; N=10; EXEC_TIMEOUT=2940 ;;
@@ -2743,28 +2860,64 @@ if [ ! -d "$DATASET_DIR" ]; then
 fi
 
 # ── 2. selection: recomputed from the download, asserted against the record ──
-mapfile -t TASKS < <("$PYTHON" -m benchmarks.tasks \
-  --dataset-dir "$DATASET_DIR" --rule "$RULE" --n "$N" --expect-recorded)
+# Read the list through a file rather than `mapfile`: that builtin is bash 4+,
+# and the bash on this host is 3.2.57. `set -e` still propagates the assertion.
+# **Host prerequisite: this loop has to run under bash 3.2** -- `mapfile` dies
+# with `command not found` (exit 127) before any selection logic is reached, so
+# the failure would say nothing about the selection.
+SELECTION="$(mktemp)"
+trap 'rm -f "$SELECTION"' EXIT
+"$PYTHON" -m benchmarks.tasks \
+  --dataset-dir "$DATASET_DIR" --rule "$RULE" --n "$N" --expect-recorded > "$SELECTION"
+TASKS=()
+while IFS= read -r task; do
+  if [ -n "$task" ]; then TASKS+=("$task"); fi
+done < "$SELECTION"
 [ "${#TASKS[@]}" -eq "$N" ] || { echo "expected $N tasks, got ${#TASKS[@]}" >&2; exit 1; }
 INCLUDE=()
+# ⚠️ **The three array expansions in this section share one guard** -- this one,
+# the `printf` below, and `"${INCLUDE[@]:-}"` in step 4. Two of them are covered
+# by `:-` today and this one is not, but the line above asserts `#TASKS[@] == N`
+# and exits 1 first, so under the current call shape this one is unreachable
+# either way. **If a future phase ever takes N == 0**, fix this line too -- and
+# then use `${TASKS[@]+"${TASKS[@]}"}`, **not `:-`**: `:-` injects one empty word
+# into the expansion (measured on bash 3.2.57), which would send `-i ""` to
+# `harbor run` and turn a loud `exit 1` into a junk call.
 for task in "${TASKS[@]}"; do INCLUDE+=(-i "$task"); done
-printf 'tasks: %s\n' "${TASKS[*]}"
+printf 'tasks: %s\n' "${TASKS[*]:-}"
 
 # ── 3. ledger ───────────────────────────────────────────────────────────────
+# The ceiling is not retyped here. `benchmarks/budget.py:18` owns the value
+# (`DEFAULT_CEILING = 50_505_050`); a second copy written here would be the same
+# number in a shape grep cannot pair with the original (`50505050`, no
+# underscores). Ask the module:
+CEILING="${MIPHAM_LEDGER_CEILING:-$("$PYTHON" -c 'from benchmarks import budget; print(budget.DEFAULT_CEILING)')}"
+# Passing `--ceiling` explicitly means `budget.py:79`'s own default never gets a
+# chance to apply, so this variable is the only place the value is decided.
 if [ "$FRESH" -eq 1 ]; then
-  "$PYTHON" -m benchmarks.budget --path "$LEDGER" init --ceiling "${MIPHAM_LEDGER_CEILING:-50505050}" --fresh
+  "$PYTHON" -m benchmarks.budget --path "$LEDGER" init --ceiling "$CEILING" --fresh
 else
-  "$PYTHON" -m benchmarks.budget --path "$LEDGER" init --ceiling "${MIPHAM_LEDGER_CEILING:-50505050}"
+  "$PYTHON" -m benchmarks.budget --path "$LEDGER" init --ceiling "$CEILING"
 fi
 "$PYTHON" -m benchmarks.budget --path "$LEDGER" show
 
 # ── 4. the run ──────────────────────────────────────────────────────────────
 if [ "$TASKS_ONLY" -eq 0 ]; then
   : "${DEEPSEEK_API_KEY:?DEEPSEEK_API_KEY must be set in the host environment}"
+  # The adapter resolves that path from its own process environment
+  # (`mipham_code.ledger_path()` reads `os.environ`). The --ae line below goes
+  # to the *container*, where nothing reads it -- the driver's REQUIRED_ENV does
+  # not list the key -- so it cannot be the channel. Without this export the two
+  # sides agree only by coincidence: the script's default and the adapter's
+  # fallback are two independently written expressions that happen to spell the
+  # same file today. Were they ever to diverge, the ceiling would silently stop
+  # biting -- every task would get the full budget -- while the archive still
+  # read as "nothing was spent".
+  export MIPHAM_BENCH_LEDGER="$LEDGER"
   mkdir -p "$JOBS"
   harbor run \
     -p "$DATASET_DIR" \
-    "${INCLUDE[@]}" \
+    "${INCLUDE[@]:-}" \
     -a 'benchmarks.harbor.mipham_code:MiphamCode' \
     -m 'deepseek/deepseek-v4-pro' \
     -n 1 -k 1 \
@@ -2777,10 +2930,20 @@ if [ "$TASKS_ONLY" -eq 0 ]; then
 fi
 
 # ── 5. assembly ─────────────────────────────────────────────────────────────
-"$PYTHON" - "$JOBS" "$RESULTS/phase$PHASE-${DATASET%%@*}.json" "$LEDGER" <<'PY'
+# Guarded on the same flag as step 4: with --tasks-only there are no trials to
+# assemble, and an archive written under this name would be a 0-trial file
+# wearing the deliverable's exact name. `results/` is not gitignored and Task 13
+# Step 4 adds the whole directory, so that file would be committed as the
+# phase's record if a real run later failed and left it on disk.
+if [ "$TASKS_ONLY" -eq 0 ]; then
+"$PYTHON" - "$JOBS" "$RESULTS/phase$PHASE-${DATASET%%@*}.json" "$LEDGER" "$DATASET" <<'PY'
 import json, sys
 from pathlib import Path
 
+# argv[1]/[2]/[3] map to jobs root / output path / ledger path, one for one.
+# The dataset id is a *fourth* argument: it is not derivable from any of the
+# three above (argv[2] is an output path), and writing that path into the
+# archive's own `dataset` field made the file lie about which dataset it holds.
 jobs_dir, out_path, ledger_path = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
 ledger = json.loads(Path(ledger_path).read_text()) if Path(ledger_path).exists() else {"ceiling": None, "entries": []}
 
@@ -2793,7 +2956,7 @@ total_in = sum((r["result"].get("usage") or {}).get("inputTokens", 0) for r in r
 total_out = sum((r["result"].get("usage") or {}).get("outputTokens", 0) for r in rows)
 summary = {
     "schemaVersion": 1,
-    "dataset": sys.argv[2],
+    "dataset": sys.argv[4],
     "trials": rows,
     "totals": {
         "inputTokens": total_in,
@@ -2808,7 +2971,48 @@ out_path.parent.mkdir(parents=True, exist_ok=True)
 out_path.write_text(json.dumps(summary, indent=2) + "\n")
 print(f"wrote {out_path}: {len(rows)} trials, {total_in + total_out} tokens")
 PY
+fi
 ```
+
+> **这条配方会把 `DEEPSEEK_API_KEY` 的值放进宿主 `harbor run` 的 argv（登记 #19）。** 已知、有界：
+> 本机是单用户工作站，威胁面是「同机其它用户 `ps`」。**保留它**，理由三条：(a) 本轮真跑在即，
+> 换通道就是换一条 Task 12/13 依赖的运行配方；(b) 威胁面有界；(c) 替代通道的语义当时未验 ——
+> 用一个没验过的通道替一条已知形状的通道，是把「有界的已知暴露」换成「未知形状的暴露」。
+>
+> **替代通道 `--env-file` 的语义（已测，但只测到函数级，端到端「未验」）**：
+> `harbor run --help` 原文是 `Path to a .env file to load into environment.`，而
+> `harbor/cli/jobs.py:1439-1443` 收到的 `--env-file` 走的是 `load_dotenv(env_file, override=True)`
+> ⇒ 它进的是**宿主 CLI 进程的 `os.environ`**，**不是容器**；`jobs.py:2136-2138` 的
+> `explicit_env_file_keys`（`:223` 用来免掉宿主环境确认提示）是同一结论的第二处证据。
+> **本轮实测读数**（`/tmp/t18_envfile_probe.py`，直接调 harbor 自己的两个函数，不跑 `harbor run`）：
+> `load_dotenv` 前 key 不在 `os.environ`、后在其中；agent 那一段仍要靠
+> `--ae 'DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}'`（**单引号**，让模板而不是宿主 shell 展开）+
+> `resolve_env_vars()` 取值（实测解析结果与宿主值相等）。⇒ 可行的形态是
+> **`--env-file <仓外 0600 文件>` + `--ae '<KEY>=${<KEY>}'`**，argv 里只剩**名字**。
+> **两个「未验」必须写清楚**：(1) 端到端未跑（跑 `harbor run` 是禁止的，`--dry-run` 是它的子命令
+> 所以同样不可用）；(2) 「秘密落一个仓外 0600、用完即删的 `.env`」是否可接受，**是一条新判断**
+> —— 本仓口径「秘密不入库 = 不进任何 git 仓库」，一个仓外文件不违反它，但也不因此自动成立。
+> ⇒ **`:204` 的 `--ae "DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY"` 本轮不动**；
+> 上面这两条实测只作为将来换通道的起点。
+>
+> **坐标订正（T18，2026-09-17 就地加）**：本句原写 **`:105`/`:199`**，两处都已**陈旧** ——
+> 实测此刻那条 `--ae "DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY"` 在 `benchmarks/run-benchmark.sh` 的
+> **`:204`**（`:187` 是 `: "${DEEPSEEK_API_KEY:?…}"` 那道读取＋校验；原写的 `:199` 现已是
+> `export MIPHAM_BENCH_LEDGER="$LEDGER"`）。**「本轮不动」这个结论不变，变的只是指路的坐标**，
+> 指向 `:204`（内容锚点：`--ae "DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY" \`）。
+>
+> **补一条 `--print-config` 的读数（T18 实测，须与上段的两个「未验」并列读）**：
+> `--print-config` **不是**子命令，而是与 `--dry-run` 并列的**旗标**（`harbor/cli/jobs.py:424-427`，
+> 逐字 `help="Print the resolved JobConfig JSON and exit."`；两者互斥见 `jobs.py:1385-1386`）——
+> 上段写的「`--dry-run` 是它的子命令」是**措辞错误**，已按源码订正。它落在 `_execute_job()` 里
+> **打印后立即 `return`**（`jobs.py:2002-2013`），位置**在任何 job 目录、容器、网络调用之前**
+> ⇒ 它**不产生作业、不花钱、不改任何状态**。
+>
+> **如实披露**：T18 在早前一轮**用过它三次**（探针 2/3 用的是仓外 0600 的临时 env 文件，已删）——
+> 那是「跑了 `harbor run` 的一个旗标」这一事实，记在此处，不辩解；未跑任何 trial。
+> **读数**：探针 2/3 打印的 `--ae` 值**未被展开**（逐字打出 `${MIPHAM_T18_PROBE}`）
+> ⇒ **`--print-config` 无法判别「值 vs 模板」**，故它**不能**用来验 `--env-file` + `--ae '<KEY>=${<KEY>}'`
+> 这条通道 —— 上面那两个「未验」**因此仍然是未验**，不因这次读数升级。
 
 - [ ] **Step 2: 语法检查 + 只跑选题目录（不花钱）**
 
@@ -2912,10 +3116,27 @@ cd <repo root>
 python3 - <<'PY'
 import json, os, pathlib
 # 只记事实：这一题的 driver 结果 + 用的镜像 + 平台
+# ⚠️ 写盘那一行必须走 redact（见下）：
+# from benchmarks.redact import redact
+# out_path.write_text(redact(json.dumps(summary, indent=2) + "\n"))
 PY
 ```
 
 把这一题的 `mipham-result.json`、`agent/mipham-driver.log` 的尾部、以及宿主机 `uname -m` / `docker version --format '{{.Server.Os}}/{{.Server.Arch}}'` 记进 `benchmarks/results/integration-gate.json`。
+
+> **该文件必须由代码产出、且必须经 `benchmarks.redact` —— 不许手写一份 JSON 再 `git add`（登记 #23）。**
+> 它不是被忽略的文件（`benchmarks/.gitignore` 只忽略 `jobs/`、`.datasets/`、`results/ledger*`、`__pycache__/`），
+> 会进**公开**仓库；而字段集里的 **`driverLogTail`** 是这批字段里**唯一**可能带出密钥形态的一项 ——
+> 容器是以 `--ae "DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY"` 起的，driver 日志正是在那个环境里产生的，
+> 而 `benchmarks/redact.py:25` 的判据类 `sk-[A-Za-z0-9_-]{8,}` 就是为这类字符串设的。
+> 形状照 Task 11 的相位归档（一个 heredoc 进来的 python 脚本，`from benchmarks.redact import redact`，
+> 最后一行 `out_path.write_text(redact(json.dumps(summary, indent=2) + "\n"))`）。
+> **判据（评审可直接读 diff 判）**：diff 里必须存在**一个调用 `redact` 的写点** ——
+> 一份纯 JSON 的新增文件**不满足**这条，即使它今天看起来干净。
+> **若手边没有能 `import benchmarks.redact` 的解释器**：**停下报告**，不许退回「手写 JSON + `git add`」
+> 再在报告里写一句「看起来没有密钥」。
+> **这条义务没有自动守卫**（如实写明）：没有任何测试会因为跳过 `redact` 而变红 ——
+> 计划没有给本任务任何测试，而被守的文件当时还不存在。兜底只有两条：**照做** + **评审读 diff 核**。
 
 - [ ] **Step 5: 提交**
 
@@ -2982,11 +3203,22 @@ PY
 - `usage` 与 `sessionCounters` 是否一致；不一致的题逐题列出
 - 总 token 数与上限的比值
 - 总成本**写成区间**，不是精确值（`usage` 无 cache 命中拆分 —— spec §六）
+- **判据 4（台账里的 `spend-unknown` 条数）**：数一遍台账里 `note == "spend-unknown"` 的条数。
+  `> 0` 时**必须**在披露里写明「这几个 0 **不是读数**，上限因此被高估 `条目数 × 该题预算` 量级」
+  —— 记 0 是上限唯一会**静默放宽**的方向，而上限的用途是封顶（误差必须偏「多算」）。
+  `no-session`（读到了报告、报告里没有 session）是另一回事，分开数、不要合并（登记 #15）
 
 - [ ] **Step 4: 提交**
 
 ```bash
-git add benchmarks/results/
+# 显式路径，不用目录级 `git add benchmarks/results/`：`benchmarks/budget.py`
+# 在 `results/` 里造出同族三个运行态文件 —— `ledger.json.lock`（`budget.py:54`
+# 创建且永不删除）、`ledger.json.tmp`（`:66`，死在写入与 `os.replace` 之间时会
+# 留下含完整台账的副本）、`ledger-phase2.json` —— 而 `.gitignore` 只忽略了
+# `results/ledger.json` 这一个名字。目录级 add 会把它们扫进一个**公开**仓库。
+git add benchmarks/results/phase1-terminal-bench.json
+# 提交前确认没有运行态文件被 stage（零输出才算过）
+git status --porcelain | grep -E 'ledger' || echo "ok: no ledger* staged"
 git commit -m "docs(bench): Phase 1 Terminal-Bench 10 题结果落盘（T2 Plan B 第 13 件）
 
 结果文件只放机器读数：每题 token 来自 WS usage（协议事实），并与
@@ -3071,28 +3303,21 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 ```bash
 cd <repo root>
-python3 - <<'PY'
-import json, math
-p1 = json.load(open('benchmarks/results/phase1-terminal-bench.json'))
-tot = p1['totals']
-completed = [r for r in p1['trials'] if r['result']['status'] == 'done']
-per_task = [r['result']['usage']['inputTokens'] + r['result']['usage']['outputTokens'] for r in completed]
-per_task.sort()
-median = per_task[len(per_task)//2] if per_task else 0
-mean = sum(per_task)//len(per_task) if per_task else 0
-print(json.dumps({
-  "phase1_total_tokens": tot['tokens'],
-  "phase1_completed": len(completed),
-  "phase1_budget_exceeded": tot['budgetExceededTasks'],
-  "per_task_median": median,
-  "per_task_mean": mean,
-  "per_task_max": per_task[-1] if per_task else 0,
-  "suggested_phase2_ceiling": max(median, mean) * 10,
-}, indent=2))
-PY
+# 规则句是权威，而它**自己那段脚本没有实现它**（三处，见下面的规则段）⇒ 实现按规则句改，
+# 并落进仓库，好让「这个数怎么算出来的」可被独立重跑，而不是只留一句自述。
+python3 benchmarks/calibrate-phase2.py            # 打印 derivation 子树
+python3 benchmarks/calibrate-phase2.py --check    # 与已提交的产物逐字段比；不一致则非零退出
 ```
 
-**规则（写进 `benchmarks/results/phase2-calibration.json`，含本段脚本的原始输出）：** 上限 = 10 ×（Phase 1 已完成题目的**每题材 token 中位数与均值中的较大者**，向上取整到 10 万）。取较大者是让上限偏向不中止；若 Phase 1 有题被上限中止，**必须**把被中止题的实际花费也算进这两个统计量 —— 否则校准会把「花到哪就停了」当成「花完了」，从而把新上限设低。
+**规则（写进 `benchmarks/results/phase2-calibration.json`，含上面脚本的原始输出）：** 上限 = 10 ×（Phase 1 已完成题目的**每题材 token 中位数与均值中的较大者**，向上取整到 10 万）。取较大者是让上限偏向不中止；若 Phase 1 有题被上限中止，**必须**把被中止题的实际花费也算进这两个统计量 —— 否则校准会把「花到哪就停了」当成「花完了」，从而把新上限设低。
+
+**这段脚本原先有三处不实现上面那句话（登记 #14）—— 记录在此，因为产物会把自己的规则文字当元数据存下来，而两者看起来完全自洽：**
+
+- **上中位数不是中位数**：脚本 `median = per_task[len(per_task)//2]`，偶数个样本（本例 n=10）取到的是**第 6 小**，不是中间两个的均值。
+- **没有取整**：脚本 `max(median, mean) * 10`，规则句要求**向上取整到 10 万**。
+- **集合方向相反（三处里最重）**：脚本 `completed = [r for r in ... if r['result']['status'] == 'done']` 把**所有非 `done`** 的题都排除了 —— 这比规则句那半句（「被上限中止的题」）排得**更狠**，因为它连 `deadline_exceeded` 一起丢掉。规则句自己的理由是「否则会把『花到哪就停了』当成『花完了』」，那条理由**不支持**任何排除方向。
+
+**实际落了哪一组**：以规则句为准，但按**理由**而不是按名词取集合 ⇒ 选中 **C = 每一道带 `usage` 的题，无论状态**（`done` / `deadline_exceeded` / `budget_exceeded`）。产物 `derivation.sets` 三组并列（A = 只 `done`、B = `done` + `budget_exceeded`、C = 全部有 `usage` 的），`crosschecks` 逐条给出「换用上中位数 / 换用下取整均值，上限是否变」的布尔读数。**这两条（理由压过名词、以及三组并列）是刻意偏离，不是实现细节** —— 偏离全文在产物自己的 `deviation` 子树里。
 
 - [ ] **Step 2: 写校准记录**
 
