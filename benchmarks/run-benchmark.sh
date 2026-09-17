@@ -130,12 +130,12 @@ if [ "$TASKS_ONLY" -eq 0 ]; then
   # (:911). None of those is the case that does the damage -- with one
   # exception. Config equal and trials equal is exactly the case harbor lets
   # through *except* for lock.json, which is a gate of its own and compares task
-  # *contents*: `JobLock`'s trials hold `TaskLock.digest`, a content hash
-  # (Packager.compute_content_hash, harbor/models/job/lock.py:616), while
-  # config.json records where the task is and never what is in it (TaskConfig)
-  # -- so editing a task in place leaves config.json identical, passes the
-  # checks above, and is refused by lock.json alone. A plain repeated run is
-  # still let through.
+  # *contents*: `JobLock`'s trials hold `TaskLock.digest`, a hash of the task's
+  # contents (`Packager.compute_content_hash`, used in `_build_lock_trial_task`,
+  # harbor/models/job/lock.py:597), while config.json records where the task is
+  # and never what is in it (TaskConfig) -- so editing a task in place leaves
+  # config.json identical, passes the checks above, and is refused by lock.json
+  # alone. A plain repeated run is still let through.
   # (Read from harbor's source on 2026-09-17, not measured by running it: that
   # would mean starting containers. Fix B is written so this path is unreachable
   # either way, which is why we can leave it unmeasured.)
