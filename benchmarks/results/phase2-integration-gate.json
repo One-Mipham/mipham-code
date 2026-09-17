@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "hostArch": "arm64",
+  "dockerPlatform": "linux/arm64",
+  "image": "hb__e3787f38820643664713fba1d6e80f5a",
+  "trial": "pallets__fla<redacted>",
+  "result": {
+    "schemaVersion": 1,
+    "status": "done",
+    "error": null,
+    "workdir": "/testbed",
+    "budgetTokens": 42505795,
+    "usage": {
+      "inputTokens": 1537200,
+      "outputTokens": 5850
+    },
+    "sessionCounters": {
+      "id": "f03e2fdc-cc6f-4f12-bcaf-ca537844bf5b",
+      "name": "mipham-code-t2",
+      "cwd": "/testbed",
+      "provider": "deepseek",
+      "model": "deepseek-v4-pro",
+      "status": "active",
+      "createdAt": "2026-09-17T11:07:58.020Z",
+      "updatedAt": "2026-09-17T11:10:11.308Z",
+      "closedAt": null,
+      "turnCount": 1,
+      "tokenIn": 1537200,
+      "tokenOut": 5850
+    },
+    "turns": 1,
+    "toolResults": {
+      "total": 30,
+      "errors": 4
+    },
+    "stopReason": "end_turn",
+    "binaryPath": "/tmp/mipham/mipham",
+    "binaryVersion": "@miphamai/cli v0.81.7",
+    "binarySha256": "a0fa72aaa529b94e45d34049d30e7a30d02ba3769da2c189d94f9347a9e8d670",
+    "sessionId": "f03e2fdc-cc6f-4f12-bcaf-ca537844bf5b",
+    "elapsedSec": 136.143
+  },
+  "driverLogTail": "Starting daemon...\nDaemon started (PID: 1495, Port: 45671)",
+  "manifests": {
+    "command": "docker manifest inspect <image> | python3 -c ...  (NOT RUN: daemon had no proxy at the time)",
+    "substitute": "host-side read of the registry manifests API via HTTPS_PROXY=http://127.0.0.1:7897, Accept: application/vnd.oci.image.index.v1+json",
+    "images": {
+      "swebench/sweb.eval.x86_64.django_1776_django-15098:latest": {
+        "mediaType": "application/vnd.oci.image.index.v1+json",
+        "indexDigest": "sha256:5e4e354d124aef08bbad1d086bc043571187382d0382a69cb0c1df1e0baf8be8",
+        "platforms": [
+          ["linux", "amd64"],
+          ["unknown", "unknown"]
+        ],
+        "hasAmd64": true,
+        "hasArm64": false,
+        "amd64Digest": "sha256:e08a44a2dd643ea52827ac099e826e64645fdea72cc31763d1a0facc791d205d"
+      },
+      "swebench/sweb.eval.x86_64.pallets_1776_flask-5014:latest": {
+        "mediaType": "application/vnd.oci.image.index.v1+json",
+        "indexDigest": "sha256:bde4fbdafa36141d4396944da88ec37aabdef612ed36920090675bccd0ca5d72",
+        "platforms": [
+          ["linux", "amd64"],
+          ["unknown", "unknown"]
+        ],
+        "hasAmd64": true,
+        "hasArm64": false,
+        "amd64Digest": "sha256:eaf597005c159361cb8ee26018fb3741b320f331065f0c95726d83ccf2f1fba4"
+      }
+    },
+    "localImageEvidence": {
+      "ref": "swebench/sweb.eval.x86_64.pallets_1776_flask-5014:latest",
+      "id": "sha256:bf8242431f5c177d67996b3c888a0f51e4bb7bd0b67009bee6c70842baca1241",
+      "os": "linux",
+      "architecture": "amd64",
+      "source": "docker pull --platform linux/amd64 registry-1.docker.io/<ref> (explicit registry host bypasses the mirror list) + docker tag"
+    },
+    "platformPin": {
+      "env": "DOCKER_DEFAULT_PLATFORM=linux/amd64",
+      "why": "BuildKit resolves FROM for the host platform (arm64); this image has no arm64 variant, so it queried the registry even with the image present locally. Measured A/B: without the pin `#2 load metadata` -> 401 from docker.m.daocloud.io; with it `#2 load metadata DONE 0.0s` and `#4 FROM ... DONE 0.1s` (local).",
+      "outsideObject": true
+    }
+  },
+  "declaredArtifacts": {
+    "verdict": "N/A \u00b7 \u673a\u5236\u4e0d\u9002\u7528",
+    "taskToml": "benchmarks/.datasets/swebench-verified/pallets__flask-5014/task.toml",
+    "taskTomlTopLevelKeys": ["agent", "environment", "metadata", "verifier"],
+    "verifierKeys": ["timeout_sec"],
+    "artifactsKeyPresent": false,
+    "verifierEnvironmentPresent": false,
+    "environmentWorkdirPresent": false,
+    "criterion": {
+      "source": "harbor/models/task/verifier_mode.py:10-26 (resolve_task_verifier_mode = _resolve_mode(...) or SHARED)",
+      "environment_mode_is_not_none": false,
+      "environment_is_not_none": false,
+      "resolvedVerifierMode": "SHARED",
+      "dispatch": "harbor/trial/trial.py:667 (if mode == SEPARATE) else _run_shared_verifier (:677-679)"
+    },
+    "why": "verifier runs in the agent's own container => there is no artifacts-transfer step, so the artifacts-coverage gate does not apply to this task (not 'passed', not 'not run').",
+    "tenTaskScan": "all ten PHASE2_EXPECTED tasks have no `artifacts` key and no `verifier.environment` => all SHARED"
+  }
+}
