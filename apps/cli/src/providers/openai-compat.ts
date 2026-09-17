@@ -17,11 +17,16 @@ export class OpenAICompatProvider implements ProviderInstance {
       ) || 'https://api.openai.com/v1'
     const apiKey = this.resolveApiKey(this.config.apiKey)
 
+    // Priority: explicit request override (summarizer / sub-agent call sites) >
+    // the model's declared ceiling > 8192. The fallback stays: local `ollama`
+    // model ids are not in `config.models`, so their real ceiling is unknown.
+    const declaredMaxOutput = this.config.models.find((m) => m.id === req.model)?.maxOutput
+
     const body = {
       model: req.model,
       messages: this.convertMessages(req.messages, req.systemPrompt),
       stream: true,
-      max_tokens: req.maxTokens || 8192,
+      max_tokens: req.maxTokens || declaredMaxOutput || 8192,
       temperature: req.temperature,
       tools: req.tools?.map((t) => ({ type: 'function', function: t })),
     }
@@ -172,6 +177,14 @@ export class OpenAICompatProvider implements ProviderInstance {
 
           if (choice.finish_reason === 'stop') {
             yield { type: 'stop', reasoning_content: reasoningContent }
+          }
+
+          if (choice.finish_reason === 'length') {
+            // Truncated: the accumulated tool calls were cut off mid-arguments, so
+            // their JSON is incomplete. Drop them rather than dispatching a broken
+            // call, and clear the map so the `[DONE]` handler can't emit them either.
+            pendingToolCalls.clear()
+            yield { type: 'stop', reasoning_content: reasoningContent, truncated: true }
           }
         } catch {
           // skip unparseable chunks

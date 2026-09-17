@@ -138,6 +138,15 @@ export interface StreamChunk {
   inputTokens?: number
   /** API-reported output token count (type: 'usage'). */
   outputTokens?: number
+  /**
+   * The provider stopped because it hit the output token ceiling
+   * (OpenAI `finish_reason: 'length'` / Anthropic `stop_reason: 'max_tokens'`).
+   * Set **only when true** — absent on every normal stop, so the success path
+   * stays byte-identical. Without it a truncated turn is indistinguishable
+   * from a turn the model chose to end: the provider emits its terminal stop
+   * either way, and tool calls cut off mid-arguments are dropped silently.
+   */
+  truncated?: boolean
 }
 
 // ── Config Types ──

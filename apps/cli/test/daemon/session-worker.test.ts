@@ -154,4 +154,40 @@ describe('SessionWorker.processPrompt — 一次回合的真实 chunk 序列', (
     const results = ws.sent.filter((m) => m.type === 'tool_result')
     expect(results[0]).toMatchObject({ toolId: 'c1', isError: false })
   })
+
+  // ── 输出被截断：stopReason 必须分得出「撞上限」与「模型自己结束」 ───────────
+  // `stopReason` 原是三值常量（end_turn / interrupted / error），含义是「这轮没有
+  // 中止、没有抛错」—— **结构上无法表达截断**。provider 侧新加的 `truncated` 标记
+  // 若不在这一层被读出来，基准产物读到的仍是一个合法结束。
+  it('test_a_truncated_turn_is_reported_as_output_limit', async () => {
+    // 会让这条失败的改动：不观察 `chunk.truncated`（截断又落回 end_turn），
+    // 或把取值写成 provider 私有的 `'max_tokens'` / `'length'`。
+    const { ws } = await run([
+      { type: 'text', content: '半截话' },
+      { type: 'stop', truncated: true },
+    ])
+    const done = ws.sent.filter((m) => m.type === 'done')
+    expect(done).toHaveLength(1)
+    expect(done[0]).toMatchObject({ stopReason: 'output_limit' })
+  })
+
+  it('抛错的回合不被 output_limit 改写', async () => {
+    // 会让这条失败的改动：把 output_limit 写成无条件赋值（覆写更坏的那个事实）。
+    const db = makeDb()
+    const ws = makeWs()
+    const engine = {
+      async *process() {
+        yield { type: 'stop', truncated: true } as StreamChunk
+        throw new Error('boom')
+      },
+      getLastAssistantContent: () => undefined,
+      getContext: () => ({ getMessages: () => [] }),
+    } as any
+    const worker = new SessionWorker(engine, db as any, { ...SESSION })
+    worker.addClient(ws as any)
+    await worker.processPrompt('go')
+
+    const done = ws.sent.filter((m) => m.type === 'done')
+    expect(done[0]).toMatchObject({ stopReason: 'error' })
+  })
 })

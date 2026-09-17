@@ -117,7 +117,13 @@ describe('OpenAICompatProvider', () => {
     expect(messages[0]).toEqual({ role: 'system', content: 'You are helpful.' })
   })
 
-  it('should default max_tokens to 8192 when not specified', async () => {
+  // 原测试名 `should default max_tokens to 8192 when not specified` 断言的是**旧（错）行为**：
+  // 它把「模型声明的 maxOutput 从不被使用」这个缺陷固化成了绿灯（`makeConfig()` 给 gpt-5
+  // 声明了 maxOutput: 32_000，而发出的永远是 8192）。故拆成两条：一条把声明值换成正确行为，
+  // 一条保留原测试的真意 —— 兜底仍在（未声明的模型 id 没有可发的上限）。
+  it('sends the declared maxOutput instead of the 8192 fallback (gpt-5 → 32000)', async () => {
+    // 会让这条失败的改动：把 max_tokens 退回 `req.maxTokens || 8192`（声明值再次无施加点），
+    // 或改成 `req.maxTokens` 缺省时忽略 config.models 里的声明。
     let capturedBody: Record<string, unknown> = {}
     const fetchMock = vi.fn().mockImplementation(async (_url, opts) => {
       capturedBody = JSON.parse(opts.body as string)
@@ -128,6 +134,24 @@ describe('OpenAICompatProvider', () => {
     const provider = new OpenAICompatProvider(makeConfig())
     await collectChunks(
       provider.chat({ model: 'gpt-5', messages: [{ role: 'user', content: 'hi' }] }),
+    )
+
+    expect(capturedBody.max_tokens).toBe(32_000)
+  })
+
+  it('falls back to 8192 when the model declares no maxOutput', async () => {
+    // 会让这条失败的改动：把声明值路径写成无兜底（未声明的 id ⇒ undefined ⇒ 请求体
+    // 少一个 max_tokens，或发出 `max_tokens: undefined`）。
+    let capturedBody: Record<string, unknown> = {}
+    const fetchMock = vi.fn().mockImplementation(async (_url, opts) => {
+      capturedBody = JSON.parse(opts.body as string)
+      return makeSSEResponse(['data: [DONE]'])
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new OpenAICompatProvider(makeConfig())
+    await collectChunks(
+      provider.chat({ model: 'not-a-declared-model', messages: [{ role: 'user', content: 'hi' }] }),
     )
 
     expect(capturedBody.max_tokens).toBe(8192)
@@ -257,6 +281,95 @@ describe('OpenAICompatProvider', () => {
 
     const toolUses = chunks.filter((c) => c.type === 'tool_use')
     expect(toolUses).toHaveLength(0)
+  })
+
+  // ═══════════════════════════════════════════
+  // chat — output truncation (finish_reason: 'length')
+  // ═══════════════════════════════════════════
+
+  it('test_a_length_finish_reason_marks_the_stop_as_truncated', async () => {
+    // 会让这条失败的改动：删掉 `finish_reason === 'length'` 分支（截断重新落回
+    // 「两个分支都不进」的洞里，末帧无条件 stop 抹平一切），或让该分支的 stop
+    // 不带 truncated；以及在无条件兜底 stop 上也设 truncated（那会把正常结束标成截断）。
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        makeSSEResponse([
+          'data: {"choices":[{"delta":{"content":"半截话"},"index":0}]}',
+          'data: {"choices":[{"finish_reason":"length"}],"index":0}',
+        ]),
+      )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new OpenAICompatProvider(makeConfig())
+    const chunks = await collectChunks(provider.chat({ model: 'gpt-5', messages: [] }))
+
+    const truncatedStops = chunks.filter((c) => c.type === 'stop' && c.truncated === true)
+    expect(truncatedStops).toHaveLength(1)
+  })
+
+  it('test_a_normal_stop_does_not_carry_the_truncated_key', async () => {
+    // 会让这条失败的改动：把 truncated 恒设（`truncated: false` 出现在每个 stop 上）——
+    // 那会让每一次正常结束的 WS 消息都多一个字段（一次 prompt-cache 前缀抖动）。
+    // **只断 `truncated === false` 抓不到这种改动**：`toEqual` 忽略值为 `undefined`
+    // 的属性，故必须用 `'truncated' in chunk === false` 钉住键本身不存在。
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        makeSSEResponse([
+          'data: {"choices":[{"delta":{"content":"done"},"index":0}]}',
+          'data: {"choices":[{"finish_reason":"stop"}],"index":0}',
+          'data: [DONE]',
+        ]),
+      )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new OpenAICompatProvider(makeConfig())
+    const chunks = await collectChunks(provider.chat({ model: 'gpt-5', messages: [] }))
+
+    const stops = chunks.filter((c) => c.type === 'stop')
+    expect(stops.length).toBeGreaterThan(0)
+    for (const stop of stops) {
+      expect('truncated' in stop).toBe(false)
+    }
+  })
+
+  it('test_a_truncated_turn_drops_the_incomplete_tool_call', async () => {
+    // 会让这条失败的改动：在 length 分支只 yield stop、忘了 `pendingToolCalls.clear()`
+    // —— 随后的 `[DONE]` 处理分支会把参数被截断的半个 tool_call 当完整调用下发
+    // （`safeParseJson` 对坏 JSON 返回 `{ _raw: … }`，调用方看到的是一个参数错的调用）。
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        makeSSEResponse([
+          'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"read","arguments":"{\\"file\\":\\"a.t"}}]},"index":0}]}',
+          'data: {"choices":[{"finish_reason":"length"}],"index":0}',
+          'data: [DONE]',
+        ]),
+      )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new OpenAICompatProvider(makeConfig())
+    const chunks = await collectChunks(provider.chat({ model: 'gpt-5', messages: [] }))
+
+    expect(chunks.filter((c) => c.type === 'tool_use')).toHaveLength(0)
+  })
+
+  it('test_the_request_sends_the_models_declared_max_output', async () => {
+    // 会让这条失败的改动：`max_tokens` 退回常量兜底（`req.maxTokens || 8192`），
+    // 或把优先级顺序调成「声明值 > 显式 req.maxTokens」。
+    let capturedBody: Record<string, unknown> = {}
+    const fetchMock = vi.fn().mockImplementation(async (_url, opts) => {
+      capturedBody = JSON.parse(opts.body as string)
+      return makeSSEResponse(['data: [DONE]'])
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new OpenAICompatProvider(makeConfig())
+    await collectChunks(provider.chat({ model: 'gpt-5', messages: [] }))
+
+    // gpt-5 在 makeConfig() 里声明 maxOutput: 32_000
+    expect(capturedBody.max_tokens).toBe(32_000)
   })
 
   // ═══════════════════════════════════════════

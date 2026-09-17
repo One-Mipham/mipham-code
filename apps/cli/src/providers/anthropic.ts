@@ -33,7 +33,9 @@ interface AnthropicSSEEvent {
     text?: string
     thinking?: string
     partial_json?: string
+    stop_reason?: string | null
   }
+  stop_reason?: string | null
   error?: { type: string; message: string }
   usage?: { input_tokens: number; output_tokens: number }
 }
@@ -52,12 +54,21 @@ export class AnthropicProvider implements ProviderInstance {
     let currentToolId = ''
     let accumulatedToolInput = ''
 
+    // Set when the provider reports `stop_reason: 'max_tokens'` — the turn was cut
+    // off at the output ceiling rather than ended by the model.
+    let truncated = false
+
     const messages = this.convertMessages(req.messages)
     this.markPrefixCacheBreakpoint(messages)
 
+    // Priority: explicit request override (summarizer / sub-agent call sites) >
+    // the model's declared ceiling > 4096. The fallback stays: a model id that
+    // isn't in `config.models` has no known ceiling.
+    const declaredMaxOutput = this.config.models.find((m) => m.id === req.model)?.maxOutput
+
     const body: Record<string, unknown> = {
       model: req.model,
-      max_tokens: req.maxTokens || 4096,
+      max_tokens: req.maxTokens || declaredMaxOutput || 4096,
       stream: true,
       messages,
     }
@@ -223,11 +234,18 @@ export class AnthropicProvider implements ProviderInstance {
               if (event.delta?.type === 'input_json_delta' && event.delta.partial_json) {
                 accumulatedToolInput += event.delta.partial_json
               }
+              // `max_tokens` means the turn hit the output ceiling. Without this the
+              // truncation is indistinguishable from `end_turn`: both arrive here and
+              // the terminal stop below looks the same either way.
+              const stopReason = event.delta?.stop_reason ?? event.stop_reason
+              if (stopReason === 'max_tokens') {
+                truncated = true
+              }
               break
             }
 
             case 'message_stop': {
-              yield { type: 'stop' }
+              yield truncated ? { type: 'stop', truncated: true } : { type: 'stop' }
               return
             }
 

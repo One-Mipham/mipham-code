@@ -126,6 +126,9 @@ export class SessionWorker {
     let totalInputTokens = 0
     let totalOutputTokens = 0
     let stopReason: string = 'end_turn'
+    // The provider hit its output ceiling at least once in this turn. Reported only
+    // when nothing worse happened — the three original values keep their precedence.
+    let truncated = false
 
     try {
       for await (const chunk of this.engine.process(prompt, signal)) {
@@ -152,6 +155,13 @@ export class SessionWorker {
           if (chunk.outputTokens) totalOutputTokens += chunk.outputTokens
         }
 
+        // A turn cut off at the provider's output ceiling must not be reported as a
+        // clean finish — downstream (the benchmark driver reads stopReason) would
+        // read a truncated trial as a legitimate ending.
+        if (chunk.type === 'stop' && chunk.truncated) {
+          truncated = true
+        }
+
         // Deliberately NO break on 'stop' — the chunk type is overloaded here.
         // Providers emit a provider-level 'stop' unconditionally at the end of
         // EVERY LLM stream, including tool-call turns; the engine still has to
@@ -167,6 +177,11 @@ export class SessionWorker {
     // ── Check interrupt after catch (catch won't fire for AbortError in async generators) ──
     if (signal.aborted && stopReason !== 'error') {
       stopReason = 'interrupted'
+    }
+
+    // ── Truncation is the weakest signal: interrupted / error still win ──
+    if (truncated && stopReason === 'end_turn') {
+      stopReason = 'output_limit'
     }
 
     // Step 4: Persist assistant response and finalize

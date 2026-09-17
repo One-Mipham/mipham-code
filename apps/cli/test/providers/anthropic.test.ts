@@ -649,6 +649,115 @@ describe('AnthropicProvider', () => {
   })
 
   // ═══════════════════════════════════════════
+  // chat — output truncation (stop_reason: 'max_tokens')
+  // ═══════════════════════════════════════════
+
+  it('test_a_max_tokens_stop_reason_marks_the_stop_as_truncated', async () => {
+    // 会让这条失败的改动：message_delta 分支不读 stop_reason（`stop_reason: 'max_tokens'`
+    // 又被吞掉），或 message_stop 仍无条件发不带 truncated 的 stop；以及在无条件兜底
+    // stop（chat 末尾那条）上也设 truncated（那会把正常结束标成截断）。
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        makeSSEResponse([
+          'data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}',
+          'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"半截话"}}',
+          'data: {"type":"content_block_stop","index":0}',
+          'data: {"type":"message_delta","delta":{"stop_reason":"max_tokens","stop_sequence":null},"usage":{"output_tokens":8192}}',
+          'data: {"type":"message_stop"}',
+        ]),
+      )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new AnthropicProvider(makeConfig())
+    const chunks = await collectChunks(
+      provider.chat({ model: 'claude-sonnet-4-6', messages: [{ role: 'user', content: 'hi' }] }),
+    )
+
+    const truncatedStops = chunks.filter((c) => c.type === 'stop' && c.truncated === true)
+    expect(truncatedStops).toHaveLength(1)
+  })
+
+  it('test_a_normal_stop_reason_does_not_carry_the_truncated_key', async () => {
+    // 会让这条失败的改动：把 truncated 恒设（每个 stop 都带 `truncated: false`），
+    // 或把 `end_turn` / `tool_use` / `stop_sequence` 也当成截断。
+    // **只断 `truncated === false` 抓不到恒设** —— `toEqual` 忽略值为 `undefined` 的属性。
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        makeSSEResponse([
+          'data: {"type":"content_block_stop","index":0}',
+          'data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":12}}',
+          'data: {"type":"message_stop"}',
+        ]),
+      )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new AnthropicProvider(makeConfig())
+    const chunks = await collectChunks(
+      provider.chat({ model: 'claude-sonnet-4-6', messages: [{ role: 'user', content: 'hi' }] }),
+    )
+
+    const stops = chunks.filter((c) => c.type === 'stop')
+    expect(stops.length).toBeGreaterThan(0)
+    for (const stop of stops) {
+      expect('truncated' in stop).toBe(false)
+    }
+  })
+
+  it('test_a_top_level_stop_reason_is_also_honored', async () => {
+    // 会让这条失败的改动：只认 `delta.stop_reason` 而丢掉事件级字段（本仓
+    // `AnthropicSSEEvent` 声明了它；brief §一.4(b) 也按事件级 `event.stop_reason` 描述）。
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        makeSSEResponse([
+          'data: {"type":"message_delta","stop_reason":"max_tokens","usage":{"output_tokens":8192}}',
+          'data: {"type":"message_stop"}',
+        ]),
+      )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new AnthropicProvider(makeConfig())
+    const chunks = await collectChunks(
+      provider.chat({ model: 'claude-sonnet-4-6', messages: [{ role: 'user', content: 'hi' }] }),
+    )
+
+    expect(chunks.filter((c) => c.type === 'stop' && c.truncated === true)).toHaveLength(1)
+  })
+
+  it('test_the_request_sends_the_models_declared_max_output', async () => {
+    // 会让这条失败的改动：`max_tokens` 退回常量 4096（声明值无施加点）。
+    let capturedBody: Record<string, unknown> = {}
+    const fetchMock = vi.fn().mockImplementation(async (_url, opts) => {
+      capturedBody = JSON.parse(opts.body as string)
+      return makeSSEResponse(['data: {"type":"message_stop"}'])
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new AnthropicProvider(makeConfig())
+    await collectChunks(provider.chat({ model: 'claude-sonnet-4-6', messages: [] }))
+
+    // claude-sonnet-4-6 在 makeConfig() 里声明 maxOutput: 128_000
+    expect(capturedBody.max_tokens).toBe(128_000)
+  })
+
+  it('falls back to 4096 when the model declares no maxOutput', async () => {
+    // 会让这条失败的改动：声明值路径写成无兜底（未声明的 id ⇒ 请求体少一个 max_tokens）。
+    let capturedBody: Record<string, unknown> = {}
+    const fetchMock = vi.fn().mockImplementation(async (_url, opts) => {
+      capturedBody = JSON.parse(opts.body as string)
+      return makeSSEResponse(['data: {"type":"message_stop"}'])
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new AnthropicProvider(makeConfig())
+    await collectChunks(provider.chat({ model: 'not-a-declared-model', messages: [] }))
+
+    expect(capturedBody.max_tokens).toBe(4096)
+  })
+
+  // ═══════════════════════════════════════════
   // listModels
   // ═══════════════════════════════════════════
 
