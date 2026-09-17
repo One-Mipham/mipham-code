@@ -1,0 +1,414 @@
+{
+  "schemaVersion": 1,
+  "dataset": "swebench-verified@1.0",
+  "trials": [
+    {
+      "trial": "django__django-10097__FNKHehU",
+      "result": {
+        "schemaVersion": 1,
+        "status": "done",
+        "error": null,
+        "workdir": "/testbed",
+        "budgetTokens": 23145750,
+        "usage": {
+          "inputTokens": 632305,
+          "outputTokens": 9966
+        },
+        "sessionCounters": {
+          "id": "ccafcf9f-6afd-46fc-b57b-5431daabdd93",
+          "name": "mipham-code-t2",
+          "cwd": "/testbed",
+          "provider": "deepseek",
+          "model": "deepseek-v4-pro",
+          "status": "active",
+          "createdAt": "2026-09-17T15:49:35.979Z",
+          "updatedAt": "2026-09-17T15:52:24.903Z",
+          "closedAt": null,
+          "turnCount": 1,
+          "tokenIn": 632305,
+          "tokenOut": 9966
+        },
+        "turns": 1,
+        "toolResults": {
+          "total": 34,
+          "errors": 5
+        },
+        "stopReason": "end_turn",
+        "binaryPath": "/tmp/mipham/mipham",
+        "binaryVersion": "@miphamai/cli v0.81.7",
+        "binarySha256": "a0fa72aaa529b94e45d34049d30e7a30d02ba3769da2c189d94f9347a9e8d670",
+        "sessionId": "ccafcf9f-6afd-46fc-b57b-5431daabdd93",
+        "elapsedSec": 171.691
+      }
+    },
+    {
+      "trial": "matplotlib__matplotlib-13989__L4EKnnY",
+      "result": {
+        "schemaVersion": 1,
+        "status": "done",
+        "error": null,
+        "workdir": "/testbed",
+        "budgetTokens": 10508452,
+        "usage": {
+          "inputTokens": 565229,
+          "outputTokens": 5981
+        },
+        "sessionCounters": {
+          "id": "7644dbf7-1b1d-4c0a-9e87-2128decb909f",
+          "name": "mipham-code-t2",
+          "cwd": "/testbed",
+          "provider": "deepseek",
+          "model": "deepseek-v4-pro",
+          "status": "active",
+          "createdAt": "2026-09-17T16:39:06.142Z",
+          "updatedAt": "2026-09-17T16:40:59.583Z",
+          "closedAt": null,
+          "turnCount": 1,
+          "tokenIn": 565229,
+          "tokenOut": 5981
+        },
+        "turns": 1,
+        "toolResults": {
+          "total": 31,
+          "errors": 5
+        },
+        "stopReason": "end_turn",
+        "binaryPath": "/tmp/mipham/mipham",
+        "binaryVersion": "@miphamai/cli v0.81.7",
+        "binarySha256": "a0fa72aaa529b94e45d34049d30e7a30d02ba3769da2c189d94f9347a9e8d670",
+        "sessionId": "7644dbf7-1b1d-4c0a-9e87-2128decb909f",
+        "elapsedSec": 116.087
+      }
+    },
+    {
+      "trial": "mwaskom__seaborn-3069__g7TcRAH",
+      "result": {
+        "schemaVersion": 1,
+        "status": "done",
+        "error": null,
+        "workdir": "/testbed",
+        "budgetTokens": 20449273,
+        "usage": {
+          "inputTokens": 9906019,
+          "outputTokens": 34802
+        },
+        "sessionCounters": {
+          "id": "1571d61c-464b-4cf7-954a-e3d9d322e177",
+          "name": "mipham-code-t2",
+          "cwd": "/testbed",
+          "provider": "deepseek",
+          "model": "deepseek-v4-pro",
+          "status": "active",
+          "createdAt": "2026-09-17T16:24:30.210Z",
+          "updatedAt": "2026-09-17T16:35:02.079Z",
+          "closedAt": null,
+          "turnCount": 1,
+          "tokenIn": 9906019,
+          "tokenOut": 34802
+        },
+        "turns": 1,
+        "toolResults": {
+          "total": 72,
+          "errors": 11
+        },
+        "stopReason": "end_turn",
+        "binaryPath": "/tmp/mipham/mipham",
+        "binaryVersion": "@miphamai/cli v0.81.7",
+        "binarySha256": "a0fa72aaa529b94e45d34049d30e7a30d02ba3769da2c189d94f9347a9e8d670",
+        "sessionId": "1571d61c-464b-4cf7-954a-e3d9d322e177",
+        "elapsedSec": 634.632
+      }
+    },
+    {
+      "trial": "pallets__fla<redacted>",
+      "result": {
+        "schemaVersion": 1,
+        "status": "done",
+        "error": null,
+        "workdir": "/testbed",
+        "budgetTokens": 21046995,
+        "usage": {
+          "inputTokens": 592103,
+          "outputTokens": 5619
+        },
+        "sessionCounters": {
+          "id": "c2c8b7fe-9d1a-4af9-aae8-7b1662c0aad8",
+          "name": "mipham-code-t2",
+          "cwd": "/testbed",
+          "provider": "deepseek",
+          "model": "deepseek-v4-pro",
+          "status": "active",
+          "createdAt": "2026-09-17T16:18:11.618Z",
+          "updatedAt": "2026-09-17T16:20:29.871Z",
+          "closedAt": null,
+          "turnCount": 1,
+          "tokenIn": 592103,
+          "tokenOut": 5619
+        },
+        "turns": 1,
+        "toolResults": {
+          "total": 33,
+          "errors": 10
+        },
+        "stopReason": "end_turn",
+        "binaryPath": "/tmp/mipham/mipham",
+        "binaryVersion": "@miphamai/cli v0.81.7",
+        "binarySha256": "a0fa72aaa529b94e45d34049d30e7a30d02ba3769da2c189d94f9347a9e8d670",
+        "sessionId": "c2c8b7fe-9d1a-4af9-aae8-7b1662c0aad8",
+        "elapsedSec": 141.079
+      }
+    },
+    {
+      "trial": "psf__requests-1142__5Bq9gWu",
+      "result": {
+        "schemaVersion": 1,
+        "status": "done",
+        "error": null,
+        "workdir": "/testbed",
+        "budgetTokens": 9937242,
+        "usage": {
+          "inputTokens": 468386,
+          "outputTokens": 7160
+        },
+        "sessionCounters": {
+          "id": "8049ec83-aa15-463b-b06f-79bae16e95d8",
+          "name": "mipham-code-t2",
+          "cwd": "/testbed",
+          "provider": "deepseek",
+          "model": "deepseek-v4-pro",
+          "status": "active",
+          "createdAt": "2026-09-17T16:44:38.036Z",
+          "updatedAt": "2026-09-17T16:46:31.862Z",
+          "closedAt": null,
+          "turnCount": 1,
+          "tokenIn": 468386,
+          "tokenOut": 7160
+        },
+        "turns": 1,
+        "toolResults": {
+          "total": 31,
+          "errors": 4
+        },
+        "stopReason": "end_turn",
+        "binaryPath": "/tmp/mipham/mipham",
+        "binaryVersion": "@miphamai/cli v0.81.7",
+        "binarySha256": "a0fa72aaa529b94e45d34049d30e7a30d02ba3769da2c189d94f9347a9e8d670",
+        "sessionId": "8049ec83-aa15-463b-b06f-79bae16e95d8",
+        "elapsedSec": 116.538
+      }
+    },
+    {
+      "trial": "pydata__xarray-2905__xMqLTAn",
+      "result": {
+        "schemaVersion": 1,
+        "status": "done",
+        "error": null,
+        "workdir": "/testbed",
+        "budgetTokens": 5692658,
+        "usage": {
+          "inputTokens": 3204283,
+          "outputTokens": 20014
+        },
+        "sessionCounters": {
+          "id": "11288408-c349-4904-bc71-693f03088f65",
+          "name": "mipham-code-t2",
+          "cwd": "/testbed",
+          "provider": "deepseek",
+          "model": "deepseek-v4-pro",
+          "status": "active",
+          "createdAt": "2026-09-17T16:58:56.797Z",
+          "updatedAt": "2026-09-17T17:06:17.470Z",
+          "closedAt": null,
+          "turnCount": 1,
+          "tokenIn": 3204283,
+          "tokenOut": 20014
+        },
+        "turns": 1,
+        "toolResults": {
+          "total": 76,
+          "errors": 6
+        },
+        "stopReason": "end_turn",
+        "binaryPath": "/tmp/mipham/mipham",
+        "binaryVersion": "@miphamai/cli v0.81.7",
+        "binarySha256": "a0fa72aaa529b94e45d34049d30e7a30d02ba3769da2c189d94f9347a9e8d670",
+        "sessionId": "11288408-c349-4904-bc71-693f03088f65",
+        "elapsedSec": 443.432
+      }
+    },
+    {
+      "trial": "pylint-dev__pylint-4551__SQnEg4H",
+      "result": {
+        "schemaVersion": 1,
+        "status": "done",
+        "error": null,
+        "workdir": "/testbed",
+        "budgetTokens": 9461696,
+        "usage": {
+          "inputTokens": 3742218,
+          "outputTokens": 26820
+        },
+        "sessionCounters": {
+          "id": "82117280-b7d7-43dd-9b30-5d4bef78b978",
+          "name": "mipham-code-t2",
+          "cwd": "/testbed",
+          "provider": "deepseek",
+          "model": "deepseek-v4-pro",
+          "status": "active",
+          "createdAt": "2026-09-17T16:49:24.448Z",
+          "updatedAt": "2026-09-17T16:56:36.245Z",
+          "closedAt": null,
+          "turnCount": 1,
+          "tokenIn": 3742218,
+          "tokenOut": 26820
+        },
+        "turns": 1,
+        "toolResults": {
+          "total": 84,
+          "errors": 17
+        },
+        "stopReason": "end_turn",
+        "binaryPath": "/tmp/mipham/mipham",
+        "binaryVersion": "@miphamai/cli v0.81.7",
+        "binarySha256": "a0fa72aaa529b94e45d34049d30e7a30d02ba3769da2c189d94f9347a9e8d670",
+        "sessionId": "82117280-b7d7-43dd-9b30-5d4bef78b978",
+        "elapsedSec": 435.163
+      }
+    },
+    {
+      "trial": "pytest-dev__pytest-10051__yEUrcqE",
+      "result": {
+        "schemaVersion": 1,
+        "status": "done",
+        "error": null,
+        "workdir": "/testbed",
+        "budgetTokens": 22503479,
+        "usage": {
+          "inputTokens": 1443185,
+          "outputTokens": 13299
+        },
+        "sessionCounters": {
+          "id": "98ef9347-56f6-4611-8e40-f5aace7ef5c9",
+          "name": "mipham-code-t2",
+          "cwd": "/testbed",
+          "provider": "deepseek",
+          "model": "deepseek-v4-pro",
+          "status": "active",
+          "createdAt": "2026-09-17T16:06:52.135Z",
+          "updatedAt": "2026-09-17T16:11:38.933Z",
+          "closedAt": null,
+          "turnCount": 1,
+          "tokenIn": 1443185,
+          "tokenOut": 13299
+        },
+        "turns": 1,
+        "toolResults": {
+          "total": 42,
+          "errors": 5
+        },
+        "stopReason": "end_turn",
+        "binaryPath": "/tmp/mipham/mipham",
+        "binaryVersion": "@miphamai/cli v0.81.7",
+        "binarySha256": "a0fa72aaa529b94e45d34049d30e7a30d02ba3769da2c189d94f9347a9e8d670",
+        "sessionId": "98ef9347-56f6-4611-8e40-f5aace7ef5c9",
+        "elapsedSec": 289.76
+      }
+    },
+    {
+      "trial": "scikit-learn__scikit-learn-10297__KkuaEwv",
+      "result": {
+        "schemaVersion": 1,
+        "status": "done",
+        "error": null,
+        "workdir": "/testbed",
+        "budgetTokens": 2468361,
+        "usage": {
+          "inputTokens": 876924,
+          "outputTokens": 10025
+        },
+        "sessionCounters": {
+          "id": "938f7f15-ae4b-4417-8676-0fb8e883eb88",
+          "name": "mipham-code-t2",
+          "cwd": "/testbed",
+          "provider": "deepseek",
+          "model": "deepseek-v4-pro",
+          "status": "active",
+          "createdAt": "2026-09-17T17:08:58.463Z",
+          "updatedAt": "2026-09-17T17:11:40.738Z",
+          "closedAt": null,
+          "turnCount": 1,
+          "tokenIn": 876924,
+          "tokenOut": 10025
+        },
+        "turns": 1,
+        "toolResults": {
+          "total": 41,
+          "errors": 5
+        },
+        "stopReason": "end_turn",
+        "binaryPath": "/tmp/mipham/mipham",
+        "binaryVersion": "@miphamai/cli v0.81.7",
+        "binarySha256": "a0fa72aaa529b94e45d34049d30e7a30d02ba3769da2c189d94f9347a9e8d670",
+        "sessionId": "938f7f15-ae4b-4417-8676-0fb8e883eb88",
+        "elapsedSec": 164.944
+      }
+    }
+  ],
+  "totals": {
+    "inputTokens": 21430652,
+    "outputTokens": 133686,
+    "tokens": 21564338,
+    "budgetExceededTasks": 0,
+    "completedTasks": 9
+  },
+  "ledger": {
+    "ceiling": 23145750,
+    "entries": [
+      {
+        "tokens": 642271,
+        "note": "ccafcf9f-6afd-46fc-b57b-5431daabdd93",
+        "at": "2026-09-17T15:52:25+00:00"
+      },
+      {
+        "tokens": 1456484,
+        "note": "98ef9347-56f6-4611-8e40-f5aace7ef5c9",
+        "at": "2026-09-17T16:11:39+00:00"
+      },
+      {
+        "tokens": 597722,
+        "note": "c2c8b7fe-9d1a-4af9-aae8-7b1662c0aad8",
+        "at": "2026-09-17T16:20:30+00:00"
+      },
+      {
+        "tokens": 9940821,
+        "note": "1571d61c-464b-4cf7-954a-e3d9d322e177",
+        "at": "2026-09-17T16:35:02+00:00"
+      },
+      {
+        "tokens": 571210,
+        "note": "7644dbf7-1b1d-4c0a-9e87-2128decb909f",
+        "at": "2026-09-17T16:40:59+00:00"
+      },
+      {
+        "tokens": 475546,
+        "note": "8049ec83-aa15-463b-b06f-79bae16e95d8",
+        "at": "2026-09-17T16:46:32+00:00"
+      },
+      {
+        "tokens": 3769038,
+        "note": "82117280-b7d7-43dd-9b30-5d4bef78b978",
+        "at": "2026-09-17T16:56:36+00:00"
+      },
+      {
+        "tokens": 3224297,
+        "note": "11288408-c349-4904-bc71-693f03088f65",
+        "at": "2026-09-17T17:06:17+00:00"
+      },
+      {
+        "tokens": 886949,
+        "note": "938f7f15-ae4b-4417-8676-0fb8e883eb88",
+        "at": "2026-09-17T17:11:40+00:00"
+      }
+    ]
+  }
+}
