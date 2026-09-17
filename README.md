@@ -81,7 +81,7 @@ pnpm monorepo
 │   ├── src/core/        # Engine, context, permission, hooks, instructions
 │   ├── src/providers/   # Anthropic, OpenAI-compat, provider registry
 │   ├── src/tools/       # 31 tools: file, exec, agent, network, system, scheduling, artifact, computer
-│   ├── src/skills/      # Skills loader + standard/mipham runtimes
+│   ├── src/skills/      # Skills loader + marketplace
 │   ├── src/mcp/         # MCP stdio client
 │   └── src/ui/          # React/Ink chat UI
 └── apps/web/            # @mipham/web — Next.js product page
