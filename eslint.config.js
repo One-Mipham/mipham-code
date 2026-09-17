@@ -29,6 +29,15 @@ export default [
       // one leaves a copy behind (observed: 3 dirs / 269 MB), which then turns
       // `pnpm lint` red with ~1,800 errors from files nobody edited.
       '**/.stryker-tmp/**',
+      // Downloaded benchmark datasets and their runtime output. Same trap as
+      // `.stryker-tmp` above — these are gitignored, but ESLint does not read
+      // `.gitignore`, and upstream task fixtures are not ours to lint: the
+      // `terminal-bench@2.0` set ships `make-doom-for-mips/.../vm.js` (uses
+      // `require()`) and `install-windows-3.11/.../webaudio.js`. Paths are
+      // anchored rather than `**/jobs/**` so an unrelated `jobs/` directory
+      // elsewhere cannot be silently exempted.
+      'benchmarks/.datasets/**',
+      'benchmarks/jobs/**',
     ],
   },
   ...compat.extends('plugin:@typescript-eslint/recommended'),
