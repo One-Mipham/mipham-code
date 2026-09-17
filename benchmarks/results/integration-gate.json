@@ -2,30 +2,43 @@
   "schemaVersion": 1,
   "hostArch": "arm64",
   "dockerPlatform": "linux/arm64",
-  "image": "alexgshaw/circuit-fibsqrt:20251031",
-  "trial": "circuit-fibsqrt__edL6PnK",
+  "image": "\u672a\u8bb0\u5f55",
+  "trial": "circuit-fibsqrt__YbEPBT4",
   "result": {
     "schemaVersion": 1,
-    "status": "daemon_start_failed",
-    "error": "`daemon start` exited 1",
+    "status": "done",
+    "error": null,
     "workdir": "/app",
     "budgetTokens": 50505050,
     "usage": {
-      "inputTokens": 0,
-      "outputTokens": 0
+      "inputTokens": 17086,
+      "outputTokens": 8607
     },
-    "sessionCounters": null,
-    "turns": 0,
+    "sessionCounters": {
+      "id": "84e1e7c7-46b7-411d-85f1-bfb9d9b0355d",
+      "name": "mipham-code-t2",
+      "cwd": "/app",
+      "provider": "deepseek",
+      "model": "deepseek-v4-pro",
+      "status": "active",
+      "createdAt": "2026-09-17T03:16:44.577Z",
+      "updatedAt": "2026-09-17T03:19:14.850Z",
+      "closedAt": null,
+      "turnCount": 1,
+      "tokenIn": 17086,
+      "tokenOut": 8607
+    },
+    "turns": 1,
     "toolResults": {
-      "total": 0,
+      "total": 2,
       "errors": 0
     },
-    "stopReason": null,
+    "stopReason": "end_turn",
     "binaryPath": "/tmp/mipham/mipham",
-    "binaryVersion": "@miphamai/cli v0.81.6",
-    "binarySha256": "90a2c8895ea3d10f6cb0256ca72dc3905409a89b03ad2d9ad4c8ff59605bbf1d",
-    "sessionId": null,
-    "elapsedSec": 1.581
+    "binaryVersion": "@miphamai/cli v0.81.7",
+    "binarySha256": "a0fa72aaa529b94e45d34049d30e7a30d02ba3769da2c189d94f9347a9e8d670",
+    "sessionId": "84e1e7c7-46b7-411d-85f1-bfb9d9b0355d",
+    "elapsedSec": 152.935
   },
-  "driverLogTail": "Starting daemon...\n716 |     var file = this.spawnfile = options.file, spawnargs;\n717 |     if (options.args === @undefined)\n718 |       spawnargs = this.spawnargs = [];\n719 |     else\n720 |       validateArray(options.args, \"options.args\"), spawnargs = this.spawnargs = options.args;\n721 |       if (this.#handle = Bun.spawn({\n                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   ^\nerror: Executable not found in $PATH: \"bun\"\n      path: \"bun\",\n     errno: -2,\n   syscall: \"spawn bun\",\n spawnargs: [ \"run\", \"/$bunfs/root/daemon.ts\" ],\n      code: \"ENOENT\"\n\n      at spawn (node:child_process:721:35)\n      at spawn (node:child_process:22:39)\n      at FQe (/$bunfs/root/mipham-linux-x64:8951:6990)\n      at async LQe (/$bunfs/root/mipham-linux-x64:8982:623)\n\nBun v1.4.2 (Linux x64)"
+  "driverLogTail": "Starting daemon...\nDaemon started (PID: 22523, Port: 45671)"
 }
