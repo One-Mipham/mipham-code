@@ -156,6 +156,14 @@ pnpm lint       # Run linting
 pnpm test       # Run tests
 ```
 
+## 公开基准
+
+Phase 1（`terminal-bench@2.0`，10 题，`k=1`）已跑完：8 题跑到了 agent 结果，harbor 报的官方分数为 `Mean: 0.000`（8 题 reward 全 0.0）；合计 7,973,562 tokens —— 是 50.5M 上限的 15.79%。
+
+- **结果文件**: [`benchmarks/results/phase1-terminal-bench.json`](./benchmarks/results/phase1-terminal-bench.json)
+- **复现**: `benchmarks/run-benchmark.sh --phase 1`
+- **完整披露**: [`benchmarks/README.md`](./benchmarks/README.md) —— 五条强制披露、选题规则、规格分歧与已知限制的全文都在那里，此处不复制。
+
 ## License
 
 Apache 2.0 — see [LICENSE](./LICENSE)
