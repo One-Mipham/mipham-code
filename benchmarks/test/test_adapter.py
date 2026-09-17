@@ -58,14 +58,17 @@ class DriverEnvContractTest(unittest.TestCase):
     model under test.
     """
 
-    def _agent(self, **extra: str) -> mipham_code.MiphamCode:
+    def _agent(self, model_name: str | None = None, **extra: str) -> mipham_code.MiphamCode:
         # logs_dir is the only required constructor argument; model_name=None
         # makes _init_model_info() return early, so this touches no registry
-        # and no network. extra_env is the same slot `--ae` fills.
+        # and no network. A non-None model_name only adds that method's pure
+        # string split: MODEL_CONNECTION is a ClassVar read lazily, and only
+        # from to_agent_info(), which nothing here calls. extra_env is the
+        # same slot `--ae` fills.
         env = {"DEEPSEEK_API_KEY": "placeholder"}
         env.update(extra)
         return mipham_code.MiphamCode(
-            logs_dir=Path(tempfile.mkdtemp()), extra_env=env
+            logs_dir=Path(tempfile.mkdtemp()), model_name=model_name, extra_env=env
         )
 
     def test_driver_env_supplies_every_key_the_driver_requires(self):
@@ -96,6 +99,50 @@ class DriverEnvContractTest(unittest.TestCase):
             ],
             "acceptEdits",
         )
+
+    def test_a_fused_model_name_is_reachable_by_the_cli(self):
+        """Fails the moment driver_env forwards self.model_name raw again.
+
+        harbor stores the fused `provider/model` string that `-m` was given
+        (verified: trial config.json carried `"deepseek/deepseek-v4-pro"`),
+        while the CLI's endpoint accepts only the bare name — a fused value is
+        a 400 on the very first model call, which scores every task 0 for a
+        reason that looks like the model failing. Replacing the forwarded
+        value with anything not derived from harbor's own split fails here.
+        """
+        env = self._agent(model_name="deepseek/deepseek-v4-pro").driver_env()
+        self.assertEqual(env["MIPHAM_SESSION_MODEL"], "deepseek-v4-pro")
+        self.assertEqual(env["MIPHAM_SESSION_PROVIDER"], "deepseek")
+
+    def test_a_bare_model_name_keeps_the_default_provider(self):
+        """Fails if the parsed provider is forwarded unguarded instead of behind an `or`.
+
+        A bare name is the normal case for a single-provider benchmark, and
+        harbor is explicit that it leaves `_parsed_model_provider` as None
+        when the name carries no "/". Dropping that middle guard sends the
+        driver a provider of None — or, once stringified, the literal
+        "None" — which is not a provider the endpoint knows either. (This one
+        is a regression guard: it passes before the fix, because the old code
+        also forwarded a bare name unchanged. It is here so a later rewrite of
+        the same two lines cannot quietly make bare names unrepresentable.)
+        """
+        env = self._agent(model_name="deepseek-v4-pro").driver_env()
+        self.assertEqual(env["MIPHAM_SESSION_MODEL"], "deepseek-v4-pro")
+        self.assertEqual(env["MIPHAM_SESSION_PROVIDER"], "deepseek")
+
+    def test_the_ae_channel_still_overrides_the_parsed_name(self):
+        """Fails if the parsed name is promoted above _get_env.
+
+        `--ae` is the documented escape hatch for running something other than
+        `-m`, and it is what got the last integration gate past this defect.
+        Putting harbor's parse first would keep `--ae` looking supported while
+        doing nothing whenever `-m` is fused — exactly the silent no-op the
+        options docstring warns about.
+        """
+        env = self._agent(
+            model_name="deepseek/deepseek-v4-pro", MIPHAM_SESSION_MODEL="other-model"
+        ).driver_env()
+        self.assertEqual(env["MIPHAM_SESSION_MODEL"], "other-model")
 
 
 class ParseResultTest(unittest.TestCase):

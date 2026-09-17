@@ -116,9 +116,18 @@ class MiphamCode(BaseInstalledAgent):
                 EnvironmentPaths.agent_dir / self._DRIVER_LOG_FILENAME
             ).as_posix(),
             "DEEPSEEK_API_KEY": api_key,
-            "MIPHAM_SESSION_PROVIDER": self._get_env("MIPHAM_SESSION_PROVIDER") or "deepseek",
+            # `--ae` stays the explicit override; otherwise take harbor's own
+            # parse of `-m provider/model` (base.py `_init_model_info`, which
+            # splits on the first "/"). Forwarding `self.model_name` raw is what
+            # sent `deepseek/deepseek-v4-pro` to an endpoint that accepts only
+            # the bare name: harbor *displays* the parsed name and *stores* the
+            # fused one, and only the display path was right.
+            "MIPHAM_SESSION_PROVIDER": self._get_env("MIPHAM_SESSION_PROVIDER")
+            or self._parsed_model_provider
+            or "deepseek",
             "MIPHAM_SESSION_MODEL": self._get_env("MIPHAM_SESSION_MODEL")
-            or (self.model_name or "deepseek-v4-pro"),
+            or self._parsed_model_name
+            or "deepseek-v4-pro",
             "MIPHAM_EXEC_TIMEOUT_SEC": self._get_env("MIPHAM_EXEC_TIMEOUT_SEC") or "840",
             # Required by REQUIRED_ENV, so it has to be supplied here: without
             # it the driver raises before its first step and *every* trial
