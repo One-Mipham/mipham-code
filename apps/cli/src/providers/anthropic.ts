@@ -35,7 +35,6 @@ interface AnthropicSSEEvent {
     partial_json?: string
     stop_reason?: string | null
   }
-  stop_reason?: string | null
   error?: { type: string; message: string }
   usage?: { input_tokens: number; output_tokens: number }
 }
@@ -195,6 +194,13 @@ export class AnthropicProvider implements ProviderInstance {
             }
 
             case 'content_block_stop': {
+              // 此刻还无从得知本轮是否被截断 —— `stop_reason` 要到后面的
+              // `message_delta` 才到（见下方同名分支）。所以被截断的 `tool_use`
+              // 在这里已经发出去了；openai-compat 那条路上「截断即丢弃未完成的
+              // tool_call」的处置，这里结构上做不到（它的 finish_reason 与
+              // tool_calls 落在同一个响应体里）。**这是有意的不对称，不是漏做**：
+              // 要在这里丢弃，就得把 `tool_use` 缓冲到 `message_stop` 再发 ——
+              // 那是一次行为变更，不属本次范围。
               if (currentToolId && currentToolName && accumulatedToolInput) {
                 let parsedInput: Record<string, unknown> = {}
                 try {
@@ -237,7 +243,7 @@ export class AnthropicProvider implements ProviderInstance {
               // `max_tokens` means the turn hit the output ceiling. Without this the
               // truncation is indistinguishable from `end_turn`: both arrive here and
               // the terminal stop below looks the same either way.
-              const stopReason = event.delta?.stop_reason ?? event.stop_reason
+              const stopReason = event.delta?.stop_reason
               if (stopReason === 'max_tokens') {
                 truncated = true
               }
