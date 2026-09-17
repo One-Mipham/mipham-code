@@ -5,3 +5,5 @@ apps/cli/src/skills/bundled-skill-assets.ts
 pnpm-lock.yaml
 infrastructure/jetbrains/build/
 infrastructure/jetbrains/.gradle/
+benchmarks/.datasets/
+benchmarks/jobs/
