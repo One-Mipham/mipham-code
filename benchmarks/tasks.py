@@ -35,10 +35,10 @@ PHASE1_EXPECTED: tuple[str, ...] = (
     "chess-best-move",
     "circuit-fibsqrt",
 )
-# Carried over from the plan and NOT yet checked against any dataset: SWE-bench
-# Verified is not downloaded (confirming it is Phase 2's job), so nothing in this
-# repository can check it today. `--rule first-repos --expect-recorded` becomes
-# that check the moment the dataset lands.
+# Checked: the dataset is downloaded (benchmarks/.datasets/swebench-verified,
+# 500 tasks, gitignored) and `--rule first-repos --expect-recorded` recomputed
+# the list below from those files and agreed with it, so this is a validated
+# assertion rather than a plan artefact carried forward unchecked.
 PHASE2_EXPECTED: tuple[str, ...] = (
     "astropy__astropy-12907",
     "django__django-10097",

@@ -36,13 +36,17 @@ DATASET_DIR="$DATASETS/$DATASET_DIR_NAME"
 LEDGER="${MIPHAM_BENCH_LEDGER:-$RESULTS/ledger.json}"
 PROXY="${MIPHAM_BENCH_PROXY:-http://127.0.0.1:7897}"
 # Harbor's default agent_setup gate is 360 s. The in-container install path --
-# apt-get (measured 110 s) plus the 85 MB binary download (measured 145 s) --
-# runs at 71% of it, and one trial has already been killed at exactly 360.0 s.
+# apt-get (110 s) plus the 85 MB binary download (145 s) -- took 255 s end to
+# end, 71% of the gate, and one trial has already been killed at exactly
+# 360.0 s. Read 255 s as one measurement, not the expected cost: the same
+# agent_setup step produced 125.3 s the same morning, so the spread across
+# observations -- 125 s / 255 s / over 360 s -- straddles the gate.
 # The gate is instrument boot time, not the task's own clock (that stays at
-# task.toml's 3600 s, untouched), so widening it makes measurement possible
-# rather than making the benchmark easier. 3 matches the two runs that actually
-# got past setup; a value nobody has run under would make the real run
-# stricter than the run that proved the instrument works.
+# task.toml's [agent] timeout_sec -- 900-12000 s across phase 1's ten tasks --
+# untouched), so widening it makes measurement possible rather than making the
+# benchmark easier. 3 matches the two runs that actually got past setup; a value
+# nobody has run under would make the real run stricter than the run that proved
+# the instrument works.
 SETUP_TIMEOUT_MULT="${MIPHAM_BENCH_SETUP_TIMEOUT_MULT:-3}"
 
 # The adapter imports harbor, so every Python here has to run under an
