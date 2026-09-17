@@ -71,10 +71,14 @@ class FrameParser:
     think about TCP segmentation.
 
     Contract: once :meth:`feed` raises :class:`WsError` this parser must not
-    be reused. The offending frame is dropped from the buffer before the
-    raise, so the parser is left mid-stream and would resynchronise on
-    whatever bytes follow rather than on a frame boundary; discard it and
-    build a new one.
+    be reused. The offending frame is already removed from the buffer by the
+    time the raise happens, so what is left does start on a frame boundary --
+    which is not a resynchronisation point. The raise means that frame had its
+    FIN bit clear, so the peer is mid-message and what arrives next is that
+    message's continuation, carried under opcode ``0x0``; the consumer,
+    :meth:`WsConnection.recv_text`, has no branch for ``0x0`` and raises on it.
+    Resuming here would hand the caller the tail of a message it already
+    refused. Discard this parser and build a new one.
     """
 
     def __init__(self) -> None:

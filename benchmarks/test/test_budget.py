@@ -61,6 +61,9 @@ class LedgerTest(unittest.TestCase):
             ledger._write(1000, [])
         self.assertEqual(len(sources), 2)
         self.assertNotEqual(sources[0], sources[1])
+        # Same directory as the ledger, or the `os.replace` in `_write` is
+        # cross-device and therefore not atomic.
+        self.assertEqual(os.path.dirname(sources[0]), os.path.dirname(self.path))
 
     def test_concurrent_records_do_not_lose_a_write(self):
         # The adapter is one process per task; without the lock two tasks
