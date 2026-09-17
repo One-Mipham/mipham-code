@@ -1,4 +1,4 @@
 jobs/
 .datasets/
-results/ledger.json
+results/ledger*
 __pycache__/
