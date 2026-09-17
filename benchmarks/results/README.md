@@ -9,7 +9,7 @@ runtime state and is gitignored. The verbatim container output stays in
 ## Phase 1 · Terminal-Bench 逐条核对（T13 Step 3）
 
 > 本节是 **T13 Step 3 点名的五件事的逐条核对记录**。面向公众的五条强制披露
-> （spec §4.1）在 `../README.md`（Task 14 创建）—— 本节不复制它们。
+> （spec §4.1）稍后落在 `benchmarks/README.md` —— 本节不复制它们。
 >
 > 数据源：`phase1-terminal-bench.json` 的 `totals` 与 `trials[].result`。
 > `usage` 来自 adapter 对 WS 流的累加（**协议事实**）；`sessionCounters` 来自
@@ -29,11 +29,12 @@ runtime state and is gitignored. The verbatim container output stays in
 | `build-pov-ray`              | `deadline_exceeded` |       591,738 |       7,974 |       599,712 |
 | **合计（8 题）**             |                     | **7,842,050** | **131,512** | **7,973,562** |
 
-**10 题里只有 8 题产出了 trial。** 另两题在 harbor 层就没有结果文件
-（`jobs/phase1/phase1/<trial>/agent/mipham-result.json` 不存在）：`bn-fit-modify`
-与 `break-filter-js-from-html`，对应 harbor 记的 `NetworkConnectionError` ×1 与
-`EnvironmentStartTimeoutError` ×1。**故上表 `totals` 是 8 题的合计，不是 10 题的**
-—— 不可与全量 10 题的成绩比对。`completedTasks: 4` 只数 `status == "done"`。
+**harbor 建了 10 个 trial，10 个 trial 目录也都在；其中 8 个跑到了 agent 结果，
+另 2 个没有结果文件**（`jobs/phase1/phase1/<trial>/agent/mipham-result.json` 不存在）：
+`bn-fit-modify`（`EnvironmentStartTimeoutError`）与 `break-filter-js-from-html`
+（`NetworkConnectionError`）—— 这两个错误类型是**逐题读各自的 `result.json`** 得来的，
+**不是按题目顺序推的**（按位置读会读反）。**故上表 `totals` 是 8 题的合计，
+不是 10 题的** —— 不可与全量 10 题的成绩比对。`completedTasks: 4` 只数 `status == "done"`。
 
 ### ② 触发上限的题数
 
@@ -74,7 +75,8 @@ runtime state and is gitignored. The verbatim container output stays in
 
 `usage` 只给 `inputTokens` / `outputTokens` 两个总数，**没有 cache 命中拆分**，
 而命中价是未命中的 1/30 ⇒ 账单与 token 数无法一一对上，只能给区间。按 spec §六
-写下的两个输入价（$0.022 命中 / $0.66 未命中，每 1M）与峰值 output $3.96 / 1M：
+写下的**谷段**两个输入价（$0.022 命中 / $0.66 未命中，每 1M）与**峰段** output
+$3.96 / 1M：
 
 |                    | 算法                   | 美元 |
 | ------------------ | ---------------------- | ---: |
@@ -82,9 +84,20 @@ runtime state and is gitignored. The verbatim container output stays in
 | input · 全部未命中 | 7,842,050 × 0.66 / 1M  | 5.18 |
 | input · 全部命中   | 7,842,050 × 0.022 / 1M | 0.17 |
 
-⇒ **$0.69 – $5.70**，相对「≤ $200 整轮」是 **0.35% – 2.85%**。
-区间**整个宽度**都来自 cache 命中拆分这一项未知数。
-即便输入未命中价实际高 10 倍，上端也只到 ~$52，仍在 $200 之内。
+⇒ **$0.69 – $5.70**（**两个端点都以谷段输入价计价**），相对「≤ $200 整轮」是
+**0.35% – 2.85%**。
+
+区间里有**两个**未知数，不是一个：
+
+1. **cache 命中拆分** —— `usage` 只给两个总数、不给拆分。这一项决定端点是 $0.69 还是 $5.70。
+2. **本轮落在哪个计价窗口** —— 输入价那对是**谷段**价，而 output 按**峰段**计价。
+   **峰段输入价没有被记录**：全仓查不到峰/谷时段的定义（`16:30` / `00:30` / `08:30` /
+   `北京时间` 均零命中）。若这一跑落在峰段，输入更贵，**真实账单可能高于 $5.70**，
+   且**两个端点会一起上移**。
+
+**所以上表是「谷段计价下的区间」，不是「成本的上界」**，也不是「成本一定落在其中」。
+$200 那条比对的余量极大（即便输入价高 10 倍，上端也只到 ~$52），故这层不确定性
+不影响「远低于上限」这个结论 —— 但**不能**由这三点推成「$5.70 就是上限」。
 
 ---
 
@@ -93,8 +106,15 @@ runtime state and is gitignored. The verbatim container output stays in
 **核对结果：无，故 `integration-gate.json` 本次未改。** 门里记的那笔是
 `circuit-fibsqrt__YbEPBT4`（output 8607，`usage` 与 `sessionCounters` 一致）；
 本轮同题是**另一次采样** `circuit-fibsqrt__RWekihS`（output 8565）。两次是**不同 trial**，
-不构成对门的否证 —— 本轮**未固定采样 seed**（见 Task 14 的披露 ④）。
-门的 `hostArch: arm64` / `dockerPlatform: linux/arm64` 与本轮 8 题逐字相同。
+不构成对门的否证 —— 本轮**未固定采样 seed**（Harbor 与 provider 均未固定），
+因此逐题输出不可逐字重放，可复现的是流程与判据。
+**门的 `hostArch` / `dockerPlatform` 无法与本轮比对** —— `phase1-terminal-bench.json`
+**根本不记录这两个字段**（其全部键路径里都没有），adapter 也没写。
+「同一台主机、同一天」是**推断，不是读数**；门的这两个值因此是**唯一有记录的那一份**，
+本轮结果文件里没有可与它对照的副本。
+
+另需注意：门的 `dockerPlatform` 记的值**本身就另有存疑**（该字段记的可能是另一个对象，
+已单独登记），故 **Task 14 不应把它当作本轮的运行平台复述**。
 
 ---
 
@@ -105,7 +125,8 @@ runtime state and is gitignored. The verbatim container output stays in
 `4a7724b` 与 `b3dd310` **不是 `v0.81.7` 的祖先** —— 实测
 `git merge-base --is-ancestor 4a7724b v0.81.7` 退出码非零（`v0.81.7` = `665ca9a`）。
 ⇒ 本轮**结构上不可能**出现 `output_limit` 标记。这**不是**「没有发生截断」的证据，
-而是「那个标记不在这个二进制里」。**R61 那条判据因此仍未回答，且无法由本轮回答。**
+而是「那个标记不在这个二进制里」。**「截断会发生、且标记应出现」这条判据因此仍未回答，
+且无法由本轮回答。**
 
 **二、一个未解释的整数边界。** `adaptive-rejection-sampler` 的 `outputTokens`
 **恰好是 8192**（2 的幂），`stopReason` 却是 `end_turn`，且该题
