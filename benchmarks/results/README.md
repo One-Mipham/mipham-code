@@ -216,7 +216,7 @@ output 超过 8192（8,879 / 8,565 / 11,326）⇒ 至少那三题的请求上限
 `astropy__astropy-12907` 的 `verifier/` 目录**存在但一个文件都没有**（`find … -type f | wc -l` = **0**）
 —— **这一栏要写准**：不是「没有 verifier 目录」，而是「目录建了、里面是空的」。
 它的 `result.json` 里 `verifier_result: null`、`agent_result: null`、`verifier: null`、
-`agent_execution: null`，`verifier_environment_mode: "shared"`，`exception` 非 null。
+`agent_execution: null`，`verifier_environment_mode: "shared"`，`exception_info` 非 null。
 
 **归因（读数，不是推测）** —— `jobs/phase2/phase2/job.log` 与 `exception.txt` 逐字：
 

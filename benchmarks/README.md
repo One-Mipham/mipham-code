@@ -306,13 +306,20 @@ MIPHAM_BENCH_LEDGER="$PWD/benchmarks/results/ledger-phase2.json" \
 这个结论有**两条逐题读、非推断**的取法：
 
 ```bash
-# (a) 题目 Dockerfile 的 FROM 行 —— 10/10 都是 x86_64 的 swebench 镜像
-grep -h -m1 '^FROM' benchmarks/.datasets/swebench-verified/*/environment/Dockerfile
+# (a) 题目 Dockerfile 的 FROM 行 —— 逐题点名本轮这 10 题，使打印出来的 10 行就是读数本身。
+#     不能通配整个 glob：那个目录是全量数据集，有 500 个 Dockerfile ⇒ 会打出 500 行。
+for t in astropy__astropy-12907 django__django-10097 matplotlib__matplotlib-13989 \
+         mwaskom__seaborn-3069 pallets__flask-5014 psf__requests-1142 \
+         pylint-dev__pylint-4551 pydata__xarray-2905 pytest-dev__pytest-10051 \
+         scikit-learn__scikit-learn-10297; do
+  grep -h -m1 '^FROM' "benchmarks/.datasets/swebench-verified/$t/environment/Dockerfile"
+done
 # (b) 本地这 10 个镜像自己的平台
 docker image inspect <img> --format '{{.Os}}/{{.Architecture}}'
 ```
 
-(a) 的 10 行全部形如 `FROM swebench/sweb.eval.x86_64.<owner>_1776_<repo>:latest`（`grep -c` = **10/10**）；
+(a) 上面那条 `for` 循环输出 **10 行**（`… done | wc -l` = `10`，不是通配 glob 的 500 行），
+全部形如 `FROM swebench/sweb.eval.x86_64.<owner>_1776_<repo>:latest`（`… done | grep -c 'sweb.eval.x86_64'` = **10/10**）；
 (b) 对这 10 个镜像逐个读，**10/10 都是 `linux/amd64`**。
 
 **一条不能拿来当平台证据的字段**：adapter 的 `install_command()` 取的是
