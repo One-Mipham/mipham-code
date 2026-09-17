@@ -2,10 +2,10 @@
 
 Phase 1 uses the dataset's own lexicographic order, exactly as the spec states.
 Phase 2 needs a variant because SWE-bench Verified task names are
-``<owner>__<repo>-<pr>``: lexicographic order is expected to concentrate on
-whichever owner-repo sorts first — measuring one codebase rather than ten (not
-verified: that listing is not downloaded yet). The variant is the same rule with
-the repository as the unit — still no human judgement, still
+``<owner>__<repo>-<pr>``: lexicographic order does concentrate on whichever
+owner-repo sorts first — checked against the downloaded listing, it picks ten
+tasks from astropy alone, one codebase rather than ten. The variant is the same
+rule with the repository as the unit — still no human judgement, still
 computable from the dataset listing alone.
 """
 
