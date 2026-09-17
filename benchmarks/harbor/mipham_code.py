@@ -12,6 +12,9 @@ credential is ``DEEPSEEK_API_KEY``, forwarded from the host environment through
 
 from __future__ import annotations
 
+import contextlib
+import json
+import os
 import tempfile
 from pathlib import Path
 from typing import override
@@ -22,6 +25,8 @@ from harbor.agents.options import InstalledAgentOptions
 from harbor.environments.base import BaseEnvironment
 from harbor.models.agent.context import AgentContext
 from harbor.models.trial.paths import EnvironmentPaths
+
+from benchmarks import budget  # adapter is imported by harbor, so this needs PYTHONPATH=<repo root>
 
 
 class MiphamCodeOptions(InstalledAgentOptions):
@@ -130,3 +135,134 @@ class MiphamCode(BaseInstalledAgent):
             ("curl", "bash", "ca_certificates", "coreutils", "python3"),
         )
         await self.exec_as_agent(environment, command=self.install_command())
+
+    _DRIVER_MODULE = "benchmarks.harbor.driver"
+    _LEDGER_ENV = "MIPHAM_BENCH_LEDGER"
+
+    @staticmethod
+    def ledger_path() -> Path:
+        """``benchmarks/results/ledger.json``.
+
+        Resolved from this file's own location rather than the process's cwd:
+        harbor imports the adapter from wherever it happens to be running, and
+        a cwd-relative path would silently write a *second* ledger — which
+        looks exactly like a fresh, unspent budget.
+        """
+        override = os.environ.get(MiphamCode._LEDGER_ENV)
+        if override:
+            return Path(override)
+        return Path(__file__).resolve().parents[1] / "results" / "ledger.json"
+
+    @staticmethod
+    def parse_result(stdout: str) -> dict:
+        text = (stdout or "").strip()
+        if not text:
+            return {}
+        try:
+            return dict(json.loads(text))
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"driver produced no parsable result: {text[:200]!r}") from exc
+
+    @staticmethod
+    def apply_context(context: AgentContext, result: dict) -> None:
+        """Fill AgentContext from the driver's report.
+
+        ``n_cache_tokens`` and ``cost_usd`` stay None on purpose: the WS usage
+        frame carries two totals and no cache-hit split, so anything filled in
+        there would be invented (spec §六).
+        """
+        usage = result.get("usage") or {}
+        if usage.get("inputTokens") is not None:
+            context.n_input_tokens = int(usage["inputTokens"])
+        if usage.get("outputTokens") is not None:
+            context.n_output_tokens = int(usage["outputTokens"])
+        context.metadata = {
+            "mipham": {
+                "status": result.get("status"),
+                "error": result.get("error"),
+                "turns": result.get("turns"),
+                "stopReason": result.get("stopReason"),
+                "toolResults": result.get("toolResults"),
+                "sessionCounters": result.get("sessionCounters"),
+                "binaryVersion": result.get("binaryVersion"),
+                "binarySha256": result.get("binarySha256"),
+                "budgetTokens": result.get("budgetTokens"),
+                "elapsedSec": result.get("elapsedSec"),
+                "workdir": result.get("workdir"),
+                "sessionId": result.get("sessionId"),
+                "ledgerError": result.get("ledgerError"),
+            }
+        }
+
+    async def _upload_driver(self, environment: BaseEnvironment) -> None:
+        await environment.upload_dir(
+            Path(__file__).resolve().parent / "driver",
+            self._DRIVER_DIR,
+        )
+
+    async def _upload_prompt(self, environment: BaseEnvironment, instruction: str) -> None:
+        """Upload the task text as a file.
+
+        Never interpolate it into a shell command: task instructions contain
+        quotes, backticks and newlines, and a quoting bug here would corrupt
+        the prompt in a way that still produces a plausible-looking score.
+        """
+        handle = tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".txt", delete=False)
+        try:
+            with handle:
+                handle.write(instruction)
+            await environment.upload_file(handle.name, self._PROMPT_PATH)
+        finally:
+            with contextlib.suppress(OSError):
+                os.unlink(handle.name)
+
+    @override
+    @with_prompt_template
+    async def run(
+        self,
+        instruction: str,
+        environment: BaseEnvironment,
+        context: AgentContext,
+    ) -> None:
+        env = self.driver_env()
+        ledger = budget.Ledger(self.ledger_path())
+        env["MIPHAM_BUDGET_TOKENS"] = str(ledger.remaining())
+
+        await self._upload_driver(environment)
+        await self._upload_prompt(environment, instruction)
+
+        result: dict = {}
+        readback = "cat " + (EnvironmentPaths.agent_dir / self._RESULT_FILENAME).as_posix()
+        try:
+            # One call, all seven steps: HOME has to be identical for the whole
+            # daemon lifetime, and this is the only frame that guarantees it.
+            await self.exec_as_agent(
+                environment,
+                command=f"python3 {self._DRIVER_DIR}/main.py",
+                env=env,
+                cwd=None,  # harbor discovered the workdir itself (see below)
+                timeout_sec=int(env["MIPHAM_EXEC_TIMEOUT_SEC"]),
+            )
+        finally:
+            # The driver rewrites its result on every state change, so even a
+            # killed run leaves something to read back. Best effort: never mask
+            # the run's own exception.
+            with contextlib.suppress(Exception):
+                completed = await self.exec_as_agent(environment, command=readback)
+                try:
+                    result = self.parse_result(completed.stdout)
+                except ValueError as exc:
+                    # A truncated write looks exactly like "the driver never
+                    # wrote anything" once the suppress swallows it, and this
+                    # file is the only disclosure the paid run leaves behind.
+                    result = {"error": f"unreadable driver result: {exc}"}
+            try:
+                ledger.record(
+                    (result.get("usage") or {}).get("inputTokens", 0)
+                    + (result.get("usage") or {}).get("outputTokens", 0),
+                    note=str(result.get("sessionId") or ""),
+                )
+            except Exception as exc:
+                result["ledgerError"] = str(exc)
+
+        self.apply_context(context, result)

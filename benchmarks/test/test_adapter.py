@@ -2,6 +2,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from harbor.models.agent.context import AgentContext
+
+from benchmarks import budget
 from benchmarks.harbor import mipham_code
 from benchmarks.harbor.driver import main as driver_main
 
@@ -89,6 +92,68 @@ class DriverEnvContractTest(unittest.TestCase):
             ],
             "acceptEdits",
         )
+
+
+class ParseResultTest(unittest.TestCase):
+    def test_round_trips_the_driver_json(self):
+        parsed = mipham_code.MiphamCode.parse_result('{"status":"done","usage":{"inputTokens":7}}')
+        self.assertEqual(parsed["status"], "done")
+
+    def test_an_empty_stdout_is_an_empty_result_not_a_crash(self):
+        # A run that died before writing anything still has to produce a
+        # results row — that row is the disclosure.
+        self.assertEqual(mipham_code.MiphamCode.parse_result(""), {})
+
+    def test_garbage_is_reported_not_swallowed(self):
+        with self.assertRaises(ValueError):
+            mipham_code.MiphamCode.parse_result("cat: no such file")
+
+
+class ApplyContextTest(unittest.TestCase):
+    def _result(self) -> dict:
+        return {
+            "status": "done",
+            "usage": {"inputTokens": 1234, "outputTokens": 567},
+            "turns": 3,
+            "toolResults": {"total": 9, "errors": 2},
+            "sessionCounters": {"tokenIn": 1234, "tokenOut": 567},
+            "binaryVersion": "@miphamai/cli v0.81.6",
+            "binarySha256": "deadbeef",
+            "budgetTokens": 50_000_000,
+            "workdir": "/app",
+        }
+
+    def test_tokens_come_from_the_protocol(self):
+        context = AgentContext()
+        mipham_code.MiphamCode.apply_context(context, self._result())
+        self.assertEqual(context.n_input_tokens, 1234)
+        self.assertEqual(context.n_output_tokens, 567)
+
+    def test_cost_and_cache_are_left_unset(self):
+        # usage carries two totals and no cache-hit split (spec §六), so any
+        # number here would be invented.
+        context = AgentContext()
+        mipham_code.MiphamCode.apply_context(context, self._result())
+        self.assertIsNone(context.cost_usd)
+        self.assertIsNone(context.n_cache_tokens)
+
+    def test_metadata_carries_what_the_results_file_needs(self):
+        context = AgentContext()
+        mipham_code.MiphamCode.apply_context(context, self._result())
+        self.assertEqual(context.metadata["mipham"]["toolResults"]["errors"], 2)
+        self.assertEqual(context.metadata["mipham"]["binarySha256"], "deadbeef")
+
+    def test_missing_usage_leaves_the_tokens_unset_rather_than_zero(self):
+        context = AgentContext()
+        mipham_code.MiphamCode.apply_context(context, {"status": "budget_exceeded"})
+        self.assertIsNone(context.n_input_tokens)
+
+
+class LedgerPathTest(unittest.TestCase):
+    def test_ledger_path_is_inside_the_package(self):
+        path = mipham_code.MiphamCode.ledger_path()
+        self.assertEqual(path.parent.name, "results")
+        self.assertEqual(path.parent.parent.name, "benchmarks")
 
 
 if __name__ == "__main__":
