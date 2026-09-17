@@ -14,7 +14,7 @@ FRESH=0
 TASKS_ONLY=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --phase) PHASE="$2"; shift 2 ;;
+    --phase) [ $# -ge 2 ] || { echo "usage: $0 --phase 1|2 [--fresh] [--tasks-only]" >&2; exit 2; }; PHASE="$2"; shift 2 ;;
     --fresh) FRESH=1; shift ;;
     --tasks-only) TASKS_ONLY=1; shift ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
@@ -72,7 +72,7 @@ done < "$SELECTION"
 [ "${#TASKS[@]}" -eq "$N" ] || { echo "expected $N tasks, got ${#TASKS[@]}" >&2; exit 1; }
 INCLUDE=()
 for task in "${TASKS[@]}"; do INCLUDE+=(-i "$task"); done
-printf 'tasks: %s\n' "${TASKS[*]}"
+printf 'tasks: %s\n' "${TASKS[*]:-}"
 
 # ── 3. ledger ───────────────────────────────────────────────────────────────
 if [ "$FRESH" -eq 1 ]; then
@@ -97,7 +97,7 @@ if [ "$TASKS_ONLY" -eq 0 ]; then
   export MIPHAM_BENCH_LEDGER="$LEDGER"
   harbor run \
     -p "$DATASET_DIR" \
-    "${INCLUDE[@]}" \
+    "${INCLUDE[@]:-}" \
     -a 'benchmarks.harbor.mipham_code:MiphamCode' \
     -m 'deepseek/deepseek-v4-pro' \
     -n 1 -k 1 \
@@ -110,7 +110,13 @@ if [ "$TASKS_ONLY" -eq 0 ]; then
 fi
 
 # ── 5. assembly ─────────────────────────────────────────────────────────────
-"$PYTHON" - "$JOBS" "$RESULTS/phase$PHASE-${DATASET%%@*}.json" "$LEDGER" <<'PY'
+# Guarded on the same flag as step 4: with --tasks-only there are no trials to
+# assemble, and an archive written under this name would be a 0-trial file
+# wearing the deliverable's exact name. `results/` is not gitignored and the
+# commit step adds the whole directory, so that file would be committed as the
+# phase's record if a real run later failed and left it on disk.
+if [ "$TASKS_ONLY" -eq 0 ]; then
+  "$PYTHON" - "$JOBS" "$RESULTS/phase$PHASE-${DATASET%%@*}.json" "$LEDGER" "$DATASET" <<'PY'
 import json, sys
 from pathlib import Path
 
@@ -131,7 +137,7 @@ total_in = sum((r["result"].get("usage") or {}).get("inputTokens", 0) for r in r
 total_out = sum((r["result"].get("usage") or {}).get("outputTokens", 0) for r in rows)
 summary = {
     "schemaVersion": 1,
-    "dataset": sys.argv[2],
+    "dataset": sys.argv[4],
     "trials": rows,
     "totals": {
         "inputTokens": total_in,
@@ -146,3 +152,4 @@ out_path.parent.mkdir(parents=True, exist_ok=True)
 out_path.write_text(redact(json.dumps(summary, indent=2) + "\n"))
 print(f"wrote {out_path}: {len(rows)} trials, {total_in + total_out} tokens")
 PY
+fi
