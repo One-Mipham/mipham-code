@@ -39,7 +39,7 @@
 
 1. **「官方现役数据集 66 题」（spec `:8`、`:14`、§七#10）** —— 实测 `harbor datasets download terminal-bench@2.0` 落地 **89 个任务目录**（`Successfully downloaded 89 task(s)`）。两个读数可能都对而对象不同：**66** 是上游仓库 `laude-institute/terminal-bench-2` 的 `tasks/dataset.toml` 里 `[[tasks]]` 的出现次数，**89** 是 Harbor registry 的 `terminal-bench@2.0` 条目；`harbor run -d terminal-bench@2.0` 实际调度的是后者。**本计划的选题规则施加在 89 上**，因为那是被调度的对象；不去断言哪个数字「对」。
 2. **标题里的「Terminal-Bench 4.0」（spec `:1`、`:14`）** —— registry 里没有任何 4.0 条目；实际用的是 `terminal-bench@2.0`（entry 名 `terminal-bench`，89 题）。计划统一写 `terminal-bench@2.0`。
-3. **规格没有任何代理披露** —— 而 dataset 下载在**本机**必须走 `127.0.0.1:7897`（`github.com` 被墙），模型调用走**无代理**的 `api.deepseek.com:443`（实测 TLS 1.3 / 0.96s 国内直连）。规格自己立的原则是「可复现性不该依赖一条代理链路」，所以这两条网络依赖**必须分开写进披露**。本计划的做法是把代理**只挂在数据集下载那一条命令上**（`harbor datasets download`），`harbor run` 一律用 `-p <本地目录>` 且不继承代理 —— 既分开披露，也避免代理变量渗进容器把模型调用带偏。
+3. **规格没有一处讲「数据集下载在宿主侧走代理」**（规格 `docs/superpowers/specs/2026-09-16-t2-terminal-bench-design.md` 里「代理」5 处：`:164`/`:166`/`:273`/`:274`/`:337`，**全部在容器→宿主 / 模型调用侧**；这一条描述的是**规格该说而没说**，不是可测读数）—— 而 dataset 下载在**本机**必须走 `127.0.0.1:7897`（`github.com` 被墙），模型调用走**无代理**的 `api.deepseek.com:443`（实测 TLS 1.3 / 0.96s 国内直连）。规格自己立的原则是「可复现性不该依赖一条代理链路」，所以这两条网络依赖**必须分开写进披露**。本计划的做法是把代理**只挂在数据集下载那一条命令上**（`harbor datasets download`），`harbor run` 一律用 `-p <本地目录>` 且不继承代理 —— 既分开披露，也避免代理变量渗进容器把模型调用带偏。
 4. **规格通篇没有 SWE-bench 阶段** —— 用户 2026-09-16 追加「两个都测」，本计划的 Phase 2 是它的唯一权威描述。
 
 ---

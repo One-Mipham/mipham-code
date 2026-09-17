@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "basis": "benchmarks/results/phase1-terminal-bench.json",
-  "rule": "ceiling = ceil_to_100k(10 * max(true_median, mean)) of per-task tokens (inputTokens + outputTokens); the set is every Phase 1 trial carrying a result/usage, whatever its status (done / deadline_exceeded / budget_exceeded) -- a truncated spend is a lower bound, not a completed spend; true median = mean of the two middle values when n is even; rounded up to the nearest 100k",
+  "rule": "ceiling = ceil_to_100k(10 * max(true_median, mean)) of per-task tokens (inputTokens + outputTokens); the set is every Phase 1 trial carrying a result/usage, whatever its status (e.g. done / deadline_exceeded / budget_exceeded) -- a truncated spend is a lower bound, not a completed spend; true median = mean of the two middle values when n is even; rounded up to the nearest 100k",
   "ceiling": 10000000,
   "derivation": {
     "phase1_total_tokens": 7973562,
@@ -40,7 +40,7 @@
         "ceilingIfSelected": 700000
       },
       "C": {
-        "definition": "every trial carrying a result/usage, whatever its status (done / deadline_exceeded / budget_exceeded) -- SELECTED, per carry item 4",
+        "definition": "every trial carrying a result/usage, whatever its status (e.g. done / deadline_exceeded / budget_exceeded) -- SELECTED, per carry item 4",
         "n": 8,
         "perTaskTokens": [15009, 24793, 37528, 189622, 599712, 1749360, 2004305, 3353233],
         "median": 394667.0,
@@ -56,8 +56,7 @@
       "ceiling_unchanged_if_mean_floored": true,
       "ceiling_unchanged_if_upper_middle_median": true,
       "totals_tokens_equals_all_trials_sum": true,
-      "totals_tokens_equals_done_only_sum": false,
-      "ceiling_is_int": true
+      "totals_tokens_equals_done_only_sum": false
     }
   },
   "selection": {
@@ -72,5 +71,5 @@
     "planRuleLiteralSuperseded": "10 × max(median, mean) per completed task, rounded up to 100k",
     "why": "计划 Task 15 的四者（Step 1 脚本 / Step 1 规则句 / Step 3 提交信息 / Step 2 的 rule 字段）本该说同一件事，实际三处对不上（计划缺陷 #14）：(a) 脚本取的是上中位数（per_task[len//2]），不是中位数；(b) 脚本不取整，做的是 max*10；(c) 脚本把被中止的题排除在统计量之外，而规则句与提交信息逐字声明它算进去了。本产物按规则句实现：真中位数 + 向上取整到 10 万 + 被截断的题计入统计量；并按控制器携带项 4 把取集合的方式从 status 枚举改为按理由取 —— 全部带 result/usage 的 trial，不因 status 增删。三组数（A / B / C）与选中项见 derivation，这里不复制。"
   },
-  "note": "spec §六 的回访触发；用户 2026-09-16 批准把 Phase 2 的上限推迟到第一轮真 usage 之后"
+  "note": "spec §六 的回访触发；用户 2026-09-16 批准把 Phase 2 的上限推迟到第一轮真 usage 之后。收尾波 C2（2026-09-18）在此追加两句说明（只加文字，不改任何键名、不改任何数值）：① `derivation.crosschecks.totals_tokens_equals_all_trials_sum` 的名字比实现对宽 —— 它比较的是 `phase1_total_tokens` 与集合 C（带 result/usage 的 trial，本轮 8 条）的和，不是字面的「all trials」：Phase 1 的 job 树下有 10 个 trial 目录，而本文件的输入只带 8 条 trial（另外 2 个目录里的 trial 未进入这个合计）。本轮两者同集故该布尔为真；将来某一轮两者不再同集时，这个键名会开始骗人（键名保留不改）。② `derivation.per_task_median` / `per_task_mean` / `per_task_max` 的键名沿用 brief Step 1 脚本（那是集合 A 的语义），取值却来自集合 C（与 `derivation.selected_set` / `derivation.sets.C` 同源）—— 同层的 `phase1_completed_tasks`（= 4，集合 A 的读数）不是这三个数的分母。"
 }

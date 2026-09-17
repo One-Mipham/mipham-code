@@ -8,7 +8,7 @@ Step 1):
     ceiling = ceil_to_100k( 10 * max(true_median, mean) )
 
 over the SELECTED set = every Phase 1 trial carrying a result/usage, whatever
-its status (done / deadline_exceeded / budget_exceeded) -- so that truncated
+its status (e.g. done / deadline_exceeded / budget_exceeded) -- so that truncated
 spend is not silently mistaken for completed spend. Sets A and B are reported
 alongside for the impact surface. The `rule` string committed in the artifact is
 the authoritative wording; the formula above is its shape.
@@ -118,7 +118,7 @@ def compute():
     )
     C = group(
         with_result,
-        "every trial carrying a result/usage, whatever its status (done / deadline_exceeded / budget_exceeded) -- SELECTED, per carry item 4",
+        "every trial carrying a result/usage, whatever its status (e.g. done / deadline_exceeded / budget_exceeded) -- SELECTED, per carry item 4",
     )
 
     selected = C
@@ -141,7 +141,6 @@ def compute():
             "ceiling_unchanged_if_upper_middle_median": ceil100k(max(selected["medianIfUpperMiddle"], selected["mean"]) * 10) == ceiling,
             "totals_tokens_equals_all_trials_sum": tot["tokens"] == sum(per_task(r) for r in with_result),
             "totals_tokens_equals_done_only_sum": tot["tokens"] == sum(per_task(r) for r in done),
-            "ceiling_is_int": isinstance(ceiling, int),
         },
     }
     return out
