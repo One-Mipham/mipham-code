@@ -7,3 +7,4 @@ infrastructure/jetbrains/build/
 infrastructure/jetbrains/.gradle/
 benchmarks/.datasets/
 benchmarks/jobs/
+.superpowers/sdd/
