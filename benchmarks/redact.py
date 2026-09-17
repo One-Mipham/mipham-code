@@ -18,11 +18,11 @@ PLACEHOLDER = "<redacted>"
 #: environment at call time and is never printed, logged, or written anywhere.
 API_KEY_ENV = "DEEPSEEK_API_KEY"
 
-#: ``sk-`` followed by a token run. Independent of `API_KEY_ENV` on purpose:
+#: A *standalone* ``sk-`` followed by a token run (not preceded by a word character). Independent of `API_KEY_ENV` on purpose:
 #: the driver and the daemon surface text that came from elsewhere, and whether
 #: that text can echo some *other* key has never been measured. This arm does
 #: not depend on that measurement.
-_TOKEN_SHAPE = re.compile(r"sk-[A-Za-z0-9_-]{8,}")
+_TOKEN_SHAPE = re.compile(r"(?<![A-Za-z0-9_])sk-[A-Za-z0-9_-]{8,}")
 
 
 def redact(text: str, secret: str | None = None) -> str:
