@@ -191,6 +191,8 @@ class MiphamCode(BaseInstalledAgent):
                 "workdir": result.get("workdir"),
                 "sessionId": result.get("sessionId"),
                 "ledgerError": result.get("ledgerError"),
+                "ledgerNote": result.get("ledgerNote"),
+                "execError": result.get("execError"),
             }
         }
 
@@ -232,6 +234,8 @@ class MiphamCode(BaseInstalledAgent):
         await self._upload_prompt(environment, instruction)
 
         result: dict = {}
+        readable = False
+        exec_error: str | None = None
         readback = "cat " + (EnvironmentPaths.agent_dir / self._RESULT_FILENAME).as_posix()
         try:
             # One call, all seven steps: HOME has to be identical for the whole
@@ -243,6 +247,13 @@ class MiphamCode(BaseInstalledAgent):
                 cwd=None,  # harbor discovered the workdir itself (see below)
                 timeout_sec=int(env["MIPHAM_EXEC_TIMEOUT_SEC"]),
             )
+        except Exception as exc:
+            # exec_as_agent raises on any non-zero exit, and the driver exits 1
+            # for every status except ``done`` and ``budget_exceeded``, so
+            # deadline_exceeded / stream_closed / failed all arrive here.
+            # Letting that escape would skip apply_context below — reporting
+            # nothing for exactly the trials the result file exists to disclose.
+            exec_error = f"{type(exc).__name__}: {exc}"
         finally:
             # The driver rewrites its result on every state change, so even a
             # killed run leaves something to read back. Best effort: never mask
@@ -250,19 +261,40 @@ class MiphamCode(BaseInstalledAgent):
             with contextlib.suppress(Exception):
                 completed = await self.exec_as_agent(environment, command=readback)
                 try:
-                    result = self.parse_result(completed.stdout)
-                except ValueError as exc:
+                    parsed = self.parse_result(completed.stdout)
+                except (ValueError, TypeError) as exc:
                     # A truncated write looks exactly like "the driver never
                     # wrote anything" once the suppress swallows it, and this
                     # file is the only disclosure the paid run leaves behind.
+                    # TypeError as well as ValueError: valid JSON that is not an
+                    # object (e.g. "[1,2]") makes parse_result's dict() raise
+                    # TypeError, which would otherwise slip past this branch and
+                    # be swallowed into the very ambiguity it exists to remove.
                     result = {"error": f"unreadable driver result: {exc}"}
+                else:
+                    result = parsed
+                    # A non-empty report means the driver accounted for itself;
+                    # an empty readback means it never got that far.
+                    readable = bool(parsed)
+            # remaining() is the ceiling's only enforcement point and Task 13
+            # audits the ledger arithmetically, so a 0 recorded because nothing
+            # could be read must not be written the same way as a 0 the driver
+            # actually reported. A real session id stays the bare note — Task 13
+            # joins ledger entries to trials through it.
+            note = str(result.get("sessionId") or "")
+            if not note:
+                note = "no-session" if readable else "spend-unknown"
+            result["ledgerNote"] = note
             try:
                 ledger.record(
                     (result.get("usage") or {}).get("inputTokens", 0)
                     + (result.get("usage") or {}).get("outputTokens", 0),
-                    note=str(result.get("sessionId") or ""),
+                    note=note,
                 )
             except Exception as exc:
                 result["ledgerError"] = str(exc)
+
+        if exec_error is not None:
+            result["execError"] = exec_error
 
         self.apply_context(context, result)

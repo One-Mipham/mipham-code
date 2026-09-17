@@ -1,6 +1,10 @@
+import asyncio
+import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from harbor.models.agent.context import AgentContext
 
@@ -154,6 +158,149 @@ class LedgerPathTest(unittest.TestCase):
         path = mipham_code.MiphamCode.ledger_path()
         self.assertEqual(path.parent.name, "results")
         self.assertEqual(path.parent.parent.name, "benchmarks")
+
+
+class _CompletedExec:
+    """Stands in for harbor's CommandResult: ``run()`` only reads ``stdout``."""
+
+    def __init__(self, stdout: str) -> None:
+        self.stdout = stdout
+
+
+class _FakeEnvironment:
+    """Only the two channel calls ``run()`` makes."""
+
+    def __init__(self) -> None:
+        self.prompt: str | None = None
+        self.driver_source_dir: Path | None = None
+        self.targets: list[str] = []
+
+    async def upload_dir(self, source_dir, target_dir) -> None:
+        self.driver_source_dir = Path(source_dir)
+        self.targets.append(target_dir)
+
+    async def upload_file(self, source_path, target_path) -> None:
+        self.prompt = Path(source_path).read_text(encoding="utf-8")
+        self.targets.append(target_path)
+
+
+class RunTest(unittest.TestCase):
+    """``run()`` end to end against a fake environment.
+
+    The branches below — driver exits non-zero, readback unreadable or absent,
+    spend that cannot be known — are exactly the trials the result file exists
+    to disclose, so they are the ones most worth pinning. Every other test in
+    this suite is synchronous, so ``run()`` is driven with ``asyncio.run``
+    rather than through an async test case class.
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.ledger_path = Path(self._tmp.name) / "ledger.json"
+        self._previous_ledger_env = os.environ.get(mipham_code.MiphamCode._LEDGER_ENV)
+        os.environ[mipham_code.MiphamCode._LEDGER_ENV] = str(self.ledger_path)
+        self.addCleanup(self._restore_ledger_env)
+
+    def _restore_ledger_env(self) -> None:
+        if self._previous_ledger_env is None:
+            os.environ.pop(mipham_code.MiphamCode._LEDGER_ENV, None)
+        else:
+            os.environ[mipham_code.MiphamCode._LEDGER_ENV] = self._previous_ledger_env
+
+    def _run(self, *, driver_raises: Exception | None = None, readback: str = ""):
+        captured: dict = {}
+
+        class Probe(mipham_code.MiphamCode):
+            async def exec_as_agent(
+                self, environment, command, env=None, cwd=None, timeout_sec=None
+            ):
+                if command.startswith("cat "):
+                    return _CompletedExec(readback)
+                captured["driver_env"] = env
+                if driver_raises is not None:
+                    raise driver_raises
+                return _CompletedExec("")
+
+        agent = Probe(
+            logs_dir=Path(self._tmp.name),
+            extra_env={"DEEPSEEK_API_KEY": "placeholder"},
+        )
+        environment = _FakeEnvironment()
+        context = AgentContext()
+        asyncio.run(agent.run("do the task", environment, context))
+        return context, captured, environment
+
+    def _ledger_entries(self) -> list[dict]:
+        return budget.Ledger(self.ledger_path).entries()
+
+    def test_a_failed_driver_still_reports(self):
+        # exec_as_agent raises on any non-zero exit, and the driver exits 1 for
+        # every status except done and budget_exceeded — so deadline_exceeded,
+        # stream_closed and failed all land here. While that exception escaped,
+        # apply_context never ran and those trials reported nothing at all.
+        context, _, _ = self._run(
+            driver_raises=RuntimeError("exit status 1"),
+            readback=json.dumps({"status": "deadline_exceeded"}),
+        )
+        self.assertEqual(context.metadata["mipham"]["status"], "deadline_exceeded")
+        self.assertIn("exit status 1", context.metadata["mipham"]["execError"])
+
+    def test_the_exec_error_survives_an_unreadable_readback(self):
+        context, _, _ = self._run(driver_raises=RuntimeError("exit status 1"))
+        self.assertIn("exit status 1", context.metadata["mipham"]["execError"])
+
+    def test_valid_json_that_is_not_an_object_is_reported_not_swallowed(self):
+        # dict([1, 2]) raises TypeError, not ValueError, so it slipped past the
+        # unreadable branch and was swallowed by the surrounding suppress —
+        # reproducing the very ambiguity between "wrote nothing" and "what it
+        # wrote cannot be read" that the branch exists to remove.
+        context, _, _ = self._run(readback="[1, 2]")
+        error = context.metadata["mipham"]["error"]
+        self.assertIsNotNone(error, "an unparsable result must not look like a run that never wrote one")
+        self.assertIn("unreadable driver result", error)
+
+    def test_a_ledger_failure_still_lands_in_the_metadata(self):
+        # apply_context has to run *after* ledger.record, or a ledgerError set
+        # by record's own except branch never reaches the results file.
+        with mock.patch.object(budget.Ledger, "record", side_effect=OSError("read-only")):
+            context, _, _ = self._run(readback=json.dumps({"status": "done", "sessionId": "s-1"}))
+        self.assertEqual(context.metadata["mipham"]["ledgerError"], "read-only")
+        self.assertEqual(context.metadata["mipham"]["status"], "done")
+
+    def test_a_named_session_is_still_the_ledger_note(self):
+        # Task 13 joins ledger entries to trials through this value; it must
+        # stay the bare session id whenever there is one.
+        self._run(
+            readback=json.dumps(
+                {
+                    "status": "done",
+                    "sessionId": "s-42",
+                    "usage": {"inputTokens": 3, "outputTokens": 2},
+                }
+            )
+        )
+        entries = self._ledger_entries()
+        self.assertEqual([entry["note"] for entry in entries], ["s-42"])
+        self.assertEqual(entries[0]["tokens"], 5)
+
+    def test_an_unreadable_readback_records_unknown_spend_not_zero(self):
+        # A bare 0 here is indistinguishable from a task that genuinely spent
+        # nothing, and remaining() is the ceiling's only enforcement point.
+        self._run(readback='{"status": "do')
+        self.assertEqual([entry["note"] for entry in self._ledger_entries()], ["spend-unknown"])
+
+    def test_an_absent_result_records_unknown_spend(self):
+        self._run(readback="")
+        self.assertEqual([entry["note"] for entry in self._ledger_entries()], ["spend-unknown"])
+
+    def test_a_readable_result_with_no_session_is_a_genuine_zero(self):
+        # The result was read, so the driver accounted for itself: 0 tokens is
+        # its answer rather than our ignorance.
+        self._run(readback=json.dumps({"status": "failed"}))
+        entries = self._ledger_entries()
+        self.assertEqual([entry["note"] for entry in entries], ["no-session"])
+        self.assertEqual(entries[0]["tokens"], 0)
 
 
 if __name__ == "__main__":
