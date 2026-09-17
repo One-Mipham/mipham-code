@@ -3,6 +3,17 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.81.7 — 2026-09-17
+
+- Version sync with Mipham Code CLI 0.81.7
+- Fixed: `mipham daemon start` could not start the daemon from the compiled binary — the
+  self-spawn assumed the source-mode argv, so `bun` was absent from PATH and the `$bunfs`
+  entry point was unreadable by the newly spawned interpreter. The daemon now re-execs
+  itself (`process.execPath`), and the argv discriminator asks one question: is the
+  interpreter in `argv[0]`. Startup failures report a non-zero exit code plus stderr
+  instead of printing a `Daemon started` that never happened, and `daemon restart` waits
+  for the old daemon to actually exit rather than reporting the old pid as the new one
+
 ## 0.81.6 — 2026-09-15
 
 - Version sync with Mipham Code CLI 0.81.6

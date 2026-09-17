@@ -63,7 +63,7 @@
 | `options_model`                                                             | **必需** —— 不声明报 `Agent 'mipham-code' does not declare an options_model`                                                                                                                                                                                    |
 | 本地数据集                                                                  | `harbor datasets download terminal-bench@2.0 -o <out>`（**位置参数，没有 `-d`**）⇒ `<out>/terminal-bench/<task>/`，89 个                                                                                                                                        |
 | 跑本地数据集                                                                | `harbor run -p <out>/terminal-bench -i <name> ...`（`-p/--path` = "Path to a local task or dataset directory"）                                                                                                                                                 |
-| 二进制                                                                      | `https://github.com/One-Mipham/mipham-code/releases/download/v0.81.6/mipham-linux-x64`（`apps/cli/package.json` version = `0.81.6`，与 release tag 一致；**钉 tag 不用 `latest`**）                                                                             |
+| 二进制                                                                      | `https://github.com/One-Mipham/mipham-code/releases/download/v0.81.7/mipham-linux-x64`（`apps/cli/package.json` version = `0.81.7`，与 release tag 一致；**钉 tag 不用 `latest`**）                                                                             |
 | Python 解释器                                                               | adapter 测试必须用**能 import harbor 的解释器**：`~/.local/share/uv/tools/harbor/bin/python`                                                                                                                                                                    |
 | Phase 1 十题（`sorted()` 前 10，已对 89 个真实目录名验过）                  | `adaptive-rejection-sampler` `bn-fit-modify` `break-filter-js-from-html` `build-cython-ext` `build-pmars` `build-pov-ray` `caffe-cifar-10` `cancel-async-tasks` `chess-best-move` `circuit-fibsqrt`                                                             |
 | Phase 2 十题（`sorted()` 后按 `__` 前缀去重取前 10 个仓库，各取字典序首个） | `astropy__astropy-12907` `django__django-10097` `matplotlib__matplotlib-13989` `mwaskom__seaborn-3069` `pallets__flask-5014` `psf__requests-1142` `pydata__xarray-2905` `pylint-dev__pylint-4551` `pytest-dev__pytest-10051` `scikit-learn__scikit-learn-10297` |
@@ -2261,7 +2261,7 @@ class MiphamCode(BaseInstalledAgent):
     options_model = MiphamCodeOptions
 
     _BINARY_URL = (
-        "https://github.com/One-Mipham/mipham-code/releases/download/v0.81.6/mipham-linux-x64"
+        "https://github.com/One-Mipham/mipham-code/releases/download/v0.81.7/mipham-linux-x64"
     )
     _BINARY_PATH = "/tmp/mipham/mipham"
     _DRIVER_DIR = "/logs/agent/mipham-driver"
@@ -2383,7 +2383,7 @@ spec §3.2：走 prebuilt 二进制不走 install.sh —— 实测 install.sh �
 Debian 里先报 No runtime detected、装了 Bun 又死在 unzip is required，
 mipham 一个都没装上。
 
-二进制钉 tag v0.81.6（与 apps/cli/package.json 的 version 一致），不用
+二进制钉 tag v0.81.7（与 apps/cli/package.json 的 version 一致），不用
 releases/latest：成绩公布之后 latest 会漂，而结果文件的意义正是「别人
 能重装到同一个版本」。装到 /tmp/mipham 而非 /usr/local/bin，因为
 exec_as_agent 以 agent 用户跑。
@@ -2454,7 +2454,7 @@ class ApplyContextTest(unittest.TestCase):
             "turns": 3,
             "toolResults": {"total": 9, "errors": 2},
             "sessionCounters": {"tokenIn": 1234, "tokenOut": 567},
-            "binaryVersion": "@miphamai/cli v0.81.6",
+            "binaryVersion": "@miphamai/cli v0.81.7",
             "binarySha256": "deadbeef",
             "budgetTokens": 50_000_000,
             "workdir": "/app",
@@ -3428,3 +3428,12 @@ git commit -m "chore: gitlink 同步 websites —— Mipham Code 基准页"
 
 1. **规格分歧四条**（本计划「规格分歧」一节）—— 是否落进规格。计划按实测执行、不改规格；Task 18 会写一份修订申请。
 2. **Task 19 的 `git push`**（子模块 `websites` 与父仓）—— 按长期规则，每次 push 都需要新的明确授权。
+
+---
+
+## 执行偏差记录
+
+- 2026-09-17 —— 上述 4 行的二进制钉子由 `v0.81.6` 移到 `v0.81.7`（`:66` 那行含两个字面，
+  一并改）。原因：`v0.81.6` 的 commit 早于 Plan A（`116b695`），其二进制里 daemon 起不来，
+  集成门因此在 1.581 秒内以 `daemon_start_failed` 收场；`v0.81.7` 是第一个含该修复的发布。
+  本节的用途只是让后来的读者知道这两处数字为何不一致，**不改动本计划其余任何断言**。

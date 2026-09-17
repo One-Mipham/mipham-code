@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.81.7] — 2026-09-17
+
+### Fixed
+
+- **`mipham daemon start` 在编译产物里起不来** —— 自启命令假设了源码模式的 argv（`spawn('bun', ['run', <path>])`），而在产物里这条路双错：`bun` 不在 PATH（产物存在的全部理由就是用户不必装 Bun），且入口是 `$bunfs` 虚拟路径、新起的解释器读不到。改为 re-exec 自身（`process.execPath`）。同批修掉 argv 判别式：产物实测 argv 为 `["bun","/$bunfs/root/mipham",…]`，`$bunfs` 入口没有扩展名，旧判据据此把它当成第一个用户参数，`__daemon` 分支在产物里因此不可达（源码模式恰好判对，故单测全绿）。判别式改为只问一件事 —— 解释器是否在 `argv[0]`
+- **daemon 起不来时谎报成功** —— `daemon start` 现在轮询就绪，spawn 失败、早退、超时三条路径一律走非零退出码 + stderr，不再打印假的 `Daemon started`；`daemon restart` 同批修掉「把旧 pid 当新结果」—— 旧实现发 `SIGTERM` 后固定等 500 ms 就启新进程，而后者开篇探测的 pid 文件尚未被旧进程 unlink，于是打印 `Daemon restarted (PID: <旧>)` 并正常退出，实际一个都没起来。改为轮询到旧 daemon 真退，等不到即拒绝
+
 ## [0.81.6] — 2026-09-15
 
 ### Security

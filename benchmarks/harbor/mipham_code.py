@@ -45,7 +45,7 @@ class MiphamCode(BaseInstalledAgent):
     options_model = MiphamCodeOptions
 
     _BINARY_URL = (
-        "https://github.com/One-Mipham/mipham-code/releases/download/v0.81.6/mipham-linux-x64"
+        "https://github.com/One-Mipham/mipham-code/releases/download/v0.81.7/mipham-linux-x64"
     )
     _BINARY_PATH = "/tmp/mipham/mipham"
     _DRIVER_DIR = "/logs/agent/mipham-driver"

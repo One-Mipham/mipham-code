@@ -3,7 +3,7 @@
 > **定位**: 从「工程纪律已经不错」走到「可证明、可观测、可售卖」的推进清单
 > **建立**: 2026-09-15
 > **维护人**: One Mipham Corporation 技术委员会
-> **基线版本**: v0.81.6
+> **基线版本**: v0.81.7
 
 本文件记录**尚未做**的事，不记录已完成的事实（那些在 [`CLAUDE.md`](./CLAUDE.md) 与
 [`docs/claude-md-history.md`](./docs/claude-md-history.md)）。任务用 `T<n>` 编号，稳定不变，

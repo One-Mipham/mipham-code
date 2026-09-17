@@ -121,7 +121,7 @@ class ApplyContextTest(unittest.TestCase):
             "turns": 3,
             "toolResults": {"total": 9, "errors": 2},
             "sessionCounters": {"tokenIn": 1234, "tokenOut": 567},
-            "binaryVersion": "@miphamai/cli v0.81.6",
+            "binaryVersion": "@miphamai/cli v0.81.7",
             "binarySha256": "deadbeef",
             "budgetTokens": 50_000_000,
             "workdir": "/app",
