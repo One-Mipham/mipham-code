@@ -121,6 +121,39 @@ class FrameParserTest(unittest.TestCase):
         with self.assertRaises(ws.WsError):
             parser.feed(ws.encode_frame(ws.OP_TEXT, b"ab", mask=False, fin=False))
 
+    def test_masked_extended_length_round_trips(self):
+        # Every extended-length case above passes mask=False, and every masked
+        # case above is short — so no test reads a masked frame whose length
+        # sits in the extended field. That is the one combination where the
+        # masking key's offset moves (2+2 for 16-bit, 2+8 for 64-bit, versus
+        # 2 for the 7-bit case), so a parser that read the key at a fixed
+        # offset would pass every other test here and still mangle this one.
+        for payload in (b"x" * 300, b"y" * 70000):
+            parser = ws.FrameParser()
+            frame = ws.encode_frame(ws.OP_TEXT, payload, mask=True)
+            self.assertEqual(parser.feed(frame), [(ws.OP_TEXT, payload)], len(payload))
+
+    def test_masked_extended_length_split_at_every_header_boundary(self):
+        # The split test above sweeps a *short* masked frame, so it reaches
+        # only two of the four `return None` exits. These cuts land in each of
+        # them on the extended-length path: mid-length-field, mid-key, and
+        # with a complete header but an incomplete payload.
+        for payload, header in ((b"x" * 300, 2 + 2 + 4), (b"y" * 70000, 2 + 8 + 4)):
+            frame = ws.encode_frame(ws.OP_TEXT, payload, mask=True)
+            for cut in [1, *range(2, header + 1), len(frame) - 1]:
+                parser = ws.FrameParser()
+                label = f"payload={len(payload)} cut={cut}"
+                self.assertEqual(parser.feed(frame[:cut]), [], label)
+                self.assertEqual(parser.feed(frame[cut:]), [(ws.OP_TEXT, payload)], label)
+
+    def test_a_complete_frame_before_a_half_frame_is_delivered_first(self):
+        # What is whole must come back without waiting for what follows: a
+        # parser that only returned on an empty buffer would deadlock a caller
+        # that reads one frame at a time.
+        parser = ws.FrameParser()
+        self.assertEqual(parser.feed(b"\x81\x03one" + b"\x81\x05he"), [(ws.OP_TEXT, b"one")])
+        self.assertEqual(parser.feed(b"llo"), [(ws.OP_TEXT, b"hello")])
+
 
 class FakeSocket:
     """A socket-shaped object that replays canned bytes and records writes."""
@@ -240,6 +273,51 @@ class WsConnectionTest(unittest.TestCase):
         conn, _ = self._connection(frame)
         with self.assertRaises(ws.WsError):
             conn.recv_text()
+
+    def test_recv_text_ignores_a_pong_and_yields_the_next_text(self):
+        # A pong is a control frame the peer may send at any time; it carries
+        # no message, so it must be stepped over rather than handed to the
+        # caller or treated as unknown.
+        conn, _ = self._connection(
+            ws.encode_frame(ws.OP_PONG, b"unsolicited", mask=False)
+            + ws.encode_frame(ws.OP_TEXT, b"after-pong", mask=False)
+        )
+        self.assertEqual(conn.recv_text(), "after-pong")
+
+    def test_recv_text_raises_on_an_unknown_opcode(self):
+        # 0x3 is a reserved non-control opcode. RFC 6455 §5.2 says a peer must
+        # fail the connection on one, and silently skipping it would leave the
+        # caller reading a stream whose framing it cannot account for. A valid
+        # text frame trails it, and the message is checked, so this cannot be
+        # satisfied by a socket that merely ran dry — either would raise
+        # WsError too, and only one of them is the behaviour under test.
+        conn, _ = self._connection(
+            ws.encode_frame(0x3, b"", mask=False) + ws.encode_frame(ws.OP_TEXT, b"after", mask=False)
+        )
+        with self.assertRaises(ws.WsError) as caught:
+            conn.recv_text()
+        self.assertIn("0x3", str(caught.exception))
+
+    def test_a_frame_in_the_handshake_segment_is_not_lost(self):
+        # A server may write the 101 response and the first frame without
+        # waiting for us in between. Those bytes arrive in the same `recv` as
+        # the headers, so they have to be handed to the parser rather than
+        # discarded with `raw` — and FakeSocket hands them over in 7-byte
+        # chunks, so the tail also crosses a recv boundary mid-frame.
+        key = "dGhlIHNhbXBsZSBub25jZQ=="
+        greeting = ws.encode_frame(ws.OP_TEXT, b"already-here", mask=False)
+
+        class GreetingSocket(FakeSocket):
+            def __init__(self) -> None:
+                super().__init__(
+                    b"HTTP/1.1 101 Switching Protocols\r\n"
+                    b"Upgrade: websocket\r\n"
+                    b"Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"
+                    b"\r\n" + greeting
+                )
+
+        conn = ws.WsConnection._from_socket(GreetingSocket(), key)
+        self.assertEqual(conn.recv_text(), "already-here")
 
 
 if __name__ == "__main__":

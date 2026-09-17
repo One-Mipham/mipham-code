@@ -69,6 +69,12 @@ class FrameParser:
 
     Buffers whatever cannot be completed yet, so the caller never has to
     think about TCP segmentation.
+
+    Contract: once :meth:`feed` raises :class:`WsError` this parser must not
+    be reused. The offending frame is dropped from the buffer before the
+    raise, so the parser is left mid-stream and would resynchronise on
+    whatever bytes follow rather than on a frame boundary; discard it and
+    build a new one.
     """
 
     def __init__(self) -> None:
