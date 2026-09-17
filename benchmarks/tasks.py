@@ -67,13 +67,16 @@ def select_first_repos(names: list[str], n: int) -> list[str]:
     chosen: list[str] = []
     seen: set[str] = set()
     for name in sorted(names):
+        # Checked before the append, not after: with the guard after it the
+        # loop's first pass makes `len(chosen)` 1, so `n == 0` never breaks and
+        # the caller gets one entry per repository instead of none.
+        if len(chosen) == n:
+            break
         repository = _repository(name)
         if repository in seen:
             continue
         seen.add(repository)
         chosen.append(name)
-        if len(chosen) == n:
-            break
     return chosen
 
 

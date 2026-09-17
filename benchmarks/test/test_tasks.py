@@ -31,6 +31,16 @@ class SelectFirstReposTest(unittest.TestCase):
             ["astropy__astropy-12907", "django__django-10097", "psf__requests-1142"],
         )
 
+    def test_n_zero_selects_nothing(self):
+        # The exit guard sits *after* the append, so `len(chosen) == n` is
+        # never 0 on entry and `break` is unreachable when n == 0: the loop
+        # runs to the end and returns one entry per repository, which is the
+        # opposite of "the first zero of them" and disagrees with
+        # `select_first(names, 0) == []`.
+        names = ["astropy__astropy-6938", "django__django-10874", "psf__requests-1142"]
+        self.assertEqual(tasks.select_first_repos(names, 0), [])
+        self.assertEqual(tasks.select_first(names, 0), [])
+
     def test_a_name_without_a_separator_is_its_own_repository(self):
         # The second name must come from a *different* repository prefix: a
         # separator-less name's repository is the whole name, so pairing it with
