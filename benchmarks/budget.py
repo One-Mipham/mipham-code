@@ -13,6 +13,7 @@ import fcntl
 import json
 import os
 import sys
+import tempfile
 from datetime import datetime, timezone
 
 DEFAULT_CEILING = 50_505_050
@@ -63,8 +64,16 @@ class Ledger:
                 fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
     def _write(self, ceiling: int, entries: list[dict]) -> None:
-        tmp = self.path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as handle:
+        # The temp name is unique per call. A fixed `self.path + ".tmp"` is
+        # one file shared by every writer, so two writers that overlap inside
+        # it truncate and interleave each other's bytes and the ledger lands
+        # unparseable (measured: `JSONDecodeError: Extra data`). The file has
+        # to sit in the ledger's own directory for the rename to be atomic.
+        directory = os.path.dirname(os.path.abspath(self.path))
+        handle_fd, tmp = tempfile.mkstemp(
+            dir=directory, prefix=os.path.basename(self.path) + ".", suffix=".tmp"
+        )
+        with os.fdopen(handle_fd, "w", encoding="utf-8") as handle:
             json.dump({"ceiling": ceiling, "entries": entries}, handle, indent=2)
             handle.write("\n")
         os.replace(tmp, self.path)

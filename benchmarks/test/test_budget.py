@@ -3,6 +3,7 @@ import os
 import tempfile
 import threading
 import unittest
+from unittest import mock
 
 from benchmarks import budget
 
@@ -39,6 +40,27 @@ class LedgerTest(unittest.TestCase):
         self.assertEqual(state["ceiling"], 100)
         self.assertEqual(state["entries"][0]["note"], "circuit-fibsqrt")
         self.assertEqual(state["entries"][0]["at"], "2026-09-17T00:00:00Z")
+
+    def test_each_write_works_in_its_own_temp_file(self):
+        # A fixed `path + ".tmp"` is shared by every writer, so two writers
+        # interleave inside the same file and the ledger lands unparseable —
+        # measured as `JSONDecodeError: Extra data` before this was fixed.
+        # This pins the naming, which is what makes that tear impossible;
+        # that the outcome holds under the lock is
+        # `test_concurrent_records_do_not_lose_a_write`'s job, not this one's.
+        ledger = budget.Ledger(self.path, ceiling=1000)
+        sources: list[str] = []
+        real_replace = os.replace
+
+        def recording_replace(src, dst):
+            sources.append(os.fspath(src))
+            return real_replace(src, dst)
+
+        with mock.patch.object(budget.os, "replace", recording_replace):
+            ledger._write(1000, [])
+            ledger._write(1000, [])
+        self.assertEqual(len(sources), 2)
+        self.assertNotEqual(sources[0], sources[1])
 
     def test_concurrent_records_do_not_lose_a_write(self):
         # The adapter is one process per task; without the lock two tasks
