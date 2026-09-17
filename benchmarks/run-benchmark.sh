@@ -30,7 +30,16 @@ esac
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BENCH="$REPO_ROOT/benchmarks"
 DATASETS="$BENCH/.datasets"
-JOBS="$BENCH/jobs/phase$PHASE"
+# harbor builds the directory it writes as `jobs_dir / job_name`, so the name
+# below is not a label -- it is half of a path, and the other half is -o. All
+# three uses (the --job-name flag, the fail-closed precheck, the assembly root)
+# read it from here so they cannot drift apart: two expressions that happen to
+# spell the same path today would stop agreeing silently, and both failure
+# directions are quiet -- the precheck would guard a directory nobody writes to,
+# and the assembly would read one nobody wrote.
+JOB_NAME="phase$PHASE"
+JOBS="$BENCH/jobs/$JOB_NAME"
+JOB_DIR="$JOBS/$JOB_NAME"
 RESULTS="$BENCH/results"
 DATASET_DIR="$DATASETS/$DATASET_DIR_NAME"
 LEDGER="${MIPHAM_BENCH_LEDGER:-$RESULTS/ledger.json}"
@@ -97,8 +106,40 @@ fi
 
 # ── 4. the run ──────────────────────────────────────────────────────────────
 if [ "$TASKS_ONLY" -eq 0 ]; then
-  : "${DEEPSEEK_API_KEY:?DEEPSEEK_API_KEY must be set in the host environment}"
   mkdir -p "$JOBS"
+
+  # ── fail-closed: never run into a job directory that already exists ─────────
+  # harbor writes to `jobs_dir / job_name` and mkdirs it with `exist_ok=True`
+  # (harbor/job.py:113, :638), so a second run under the same --job-name lands in
+  # the same directory as the first. harbor will not stop it: when the recorded
+  # config matches, `Job.create` resumes the old job and the final result.json is
+  # `self._existing_trial_results + trial_results` (harbor/job.py:1056) -- one
+  # number covering two different moments. Only a *differing* config is refused
+  # (FileExistsError, harbor/job.py:257), so the case that does the damage is
+  # exactly the case harbor lets through.
+  # (Read from harbor's source on 2026-09-17, not measured by running it: that
+  # would mean starting containers. Fix B is written so this path is unreachable
+  # either way, which is why we can leave it unmeasured.)
+  # Those trials are money already spent (phase 1: 7.97M tokens), so this stops
+  # and hands the decision back: move the directory aside or delete it by hand.
+  # This script does neither -- it is in no position to judge which trials are
+  # still wanted.
+  if [ -e "$JOB_DIR" ]; then
+    {
+      echo "refusing to run: job directory already exists: $JOB_DIR"
+      echo "  it holds:"
+      for entry in "$JOB_DIR"/*; do
+        [ -e "$entry" ] || continue
+        echo "    ${entry##*/}"
+      done
+      echo "  a run started here would be merged into it, and the assembly step"
+      echo "  would then report both runs as one phase. Move it aside or delete"
+      echo "  it by hand, then re-run."
+    } >&2
+    exit 1
+  fi
+
+  : "${DEEPSEEK_API_KEY:?DEEPSEEK_API_KEY must be set in the host environment}"
   # The adapter is the only writer of the ledger, and it resolves that path from
   # its own process environment (`mipham_code.ledger_path()`). The --ae line
   # below goes to the *container*, where nothing reads it, so it cannot be the
@@ -114,7 +155,7 @@ if [ "$TASKS_ONLY" -eq 0 ]; then
     -a 'benchmarks.harbor.mipham_code:MiphamCode' \
     -m 'deepseek/deepseek-v4-pro' \
     -n 1 -k 1 \
-    -o "$JOBS" --job-name "phase$PHASE" \
+    -o "$JOBS" --job-name "$JOB_NAME" \
     --ae "DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY" \
     --ae MIPHAM_DAEMON_PERMISSION=bypassPermissions \
     --ae "MIPHAM_EXEC_TIMEOUT_SEC=$EXEC_TIMEOUT" \
@@ -129,8 +170,12 @@ fi
 # wearing the deliverable's exact name. `results/` is not gitignored and the
 # commit step adds the whole directory, so that file would be committed as the
 # phase's record if a real run later failed and left it on disk.
+# The root handed over is this run's own job directory, not $JOBS: rglob from
+# $JOBS would also swallow any directory that ever lands beside it. Phase 1 got
+# away with it only because a person moved its failed attempts out to
+# jobs/prior-phase1 by hand -- that was a naming convention, not a guarantee.
 if [ "$TASKS_ONLY" -eq 0 ]; then
-  "$PYTHON" - "$JOBS" "$RESULTS/phase$PHASE-${DATASET%%@*}.json" "$LEDGER" "$DATASET" <<'PY'
+  "$PYTHON" - "$JOB_DIR" "$RESULTS/phase$PHASE-${DATASET%%@*}.json" "$LEDGER" "$DATASET" <<'PY'
 import json, sys
 from pathlib import Path
 
@@ -139,13 +184,25 @@ from pathlib import Path
 # fail, the script stops before writing -- which is the direction to fail in.
 from benchmarks.redact import redact
 
-jobs_dir, out_path, ledger_path = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
+job_dir, out_path, ledger_path = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
+
+# The root must be this run's job directory and it must hold trials. A missing
+# or empty one means the run did not happen the way step 4 believes it did, and
+# the archive below would then be written anyway -- as a 0-trial file wearing
+# the phase's name. Stop instead; saying "nothing was spent" is the one reading
+# that must never be produced by accident.
+if not job_dir.is_dir():
+    sys.exit(f"assembly root is not a directory: {job_dir}")
+
 ledger = json.loads(Path(ledger_path).read_text()) if Path(ledger_path).exists() else {"ceiling": None, "entries": []}
 
 rows = []
-for result_file in sorted(jobs_dir.rglob("mipham-result.json")):
+for result_file in sorted(job_dir.rglob("mipham-result.json")):
     trial_dir = result_file.parent.parent
     rows.append({"trial": trial_dir.name, "result": json.loads(result_file.read_text())})
+
+if not rows:
+    sys.exit(f"assembly root holds no trials: {job_dir}")
 
 total_in = sum((r["result"].get("usage") or {}).get("inputTokens", 0) for r in rows)
 total_out = sum((r["result"].get("usage") or {}).get("outputTokens", 0) for r in rows)
