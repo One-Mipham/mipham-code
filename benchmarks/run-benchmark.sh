@@ -39,8 +39,11 @@ DATASETS="$BENCH/.datasets"
 # the precheck would guard a directory nobody writes to, and nothing would ever
 # say it had stopped protecting anything. That silence is why it has to be one
 # expression. The other direction, the assembly reading a directory nobody
-# wrote, is no longer quiet: the assembly's own `is_dir()` test and its
-# `not rows` test both exit non-zero and name the directory in question.
+# wrote, is no longer silent in two shapes: a root that is not a directory, and
+# a root holding no trial, each make the assembly exit non-zero and name the
+# directory. One shape still slips through -- a root that exists and holds
+# trials that are not this run's, e.g. the drifted parent, where both tests pass
+# and the archive is written. Only the expressions agreeing prevents that one.
 JOB_NAME="phase$PHASE"
 JOBS="$BENCH/jobs/$JOB_NAME"
 JOB_DIR="$JOBS/$JOB_NAME"
@@ -124,8 +127,14 @@ if [ "$TASKS_ONLY" -eq 0 ]; then
   # existing trial -- ValueError in `_init_remaining_trial_configs` (:363); a
   # lock.json that will not parse -- ValueError, "refusing to overwrite it"
   # (:904); or one that parses but differs -- FileExistsError in `_write_job_lock`
-  # (:911). None of those is the case that does the damage: config equal and
-  # trials equal is exactly the case harbor lets through.
+  # (:911). None of those is the case that does the damage -- with one
+  # exception. Config equal and trials equal is exactly the case harbor lets
+  # through *except* for lock.json, which is a gate of its own and compares task
+  # *contents*: `JobLock`'s trials hold `TaskLock.digest`, a content hash
+  # (Packager.compute_content_hash, harbor/models/job/lock.py:616), while
+  # config.json records only the task's path/name/ref (TaskConfig) -- so editing
+  # a task in place leaves config.json identical, passes the checks above, and
+  # is refused by lock.json alone. A plain repeated run is still let through.
   # (Read from harbor's source on 2026-09-17, not measured by running it: that
   # would mean starting containers. Fix B is written so this path is unreachable
   # either way, which is why we can leave it unmeasured.)
@@ -145,10 +154,12 @@ if [ "$TASKS_ONLY" -eq 0 ]; then
       done
       # The glob above never matches dotfiles, and an unmatched glob stays
       # literal (that is what the -e test is for, since dotglob/nullglob are
-      # off -- bash 3.2.57 on this host). So an empty directory and one holding
-      # only dotfiles would print the same nothing above. Tell them apart:
-      # git metadata and .lock files land in these directories, and a reader
-      # deciding whether to delete one needs to know they are there.
+      # off -- bash 3.2.57 on this host). So an empty directory and one whose
+      # every entry is hidden from this glob print the same nothing above, and
+      # the reader cannot tell which of the two they are looking at. That is the
+      # problem: this listing is what they decide on, and deleting an empty
+      # directory is not the same act as deleting a non-empty one. Hence the
+      # counter below -- say which case this is.
       if [ "$shown" -eq 0 ]; then
         hidden=0
         for entry in "$JOB_DIR"/.[!.]* "$JOB_DIR"/..?*; do
