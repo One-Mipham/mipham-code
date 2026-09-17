@@ -65,8 +65,8 @@ PROXY="${MIPHAM_BENCH_PROXY:-http://127.0.0.1:7897}"
 # 249.2 s). An un-run value would leave the real run's gate unproven.
 SETUP_TIMEOUT_MULT="${MIPHAM_BENCH_SETUP_TIMEOUT_MULT:-3}"
 
-# The adapter imports harbor, so every Python here has to run under an
-# interpreter that can import it. Find one instead of assuming.
+# The adapter imports harbor, so this script finds an interpreter that can
+# import it instead of assuming.
 PYTHON="${MIPHAM_BENCH_PYTHON:-}"
 if [ -z "$PYTHON" ]; then
   for candidate in python3 "$HOME/.local/share/uv/tools/harbor/bin/python"; do
@@ -117,14 +117,15 @@ if [ "$TASKS_ONLY" -eq 0 ]; then
 
   # ── fail-closed: never run into a job directory that already exists ─────────
   # harbor writes to `jobs_dir / job_name` and mkdirs it with `exist_ok=True`
-  # (harbor/job.py:113, :638), so a second run under the same --job-name lands in
+  # (harbor/job.py:113), so a second run under the same --job-name lands in
   # the same directory as the first. harbor will not stop it: when the recorded
   # config matches, `Job.create` resumes the old job and the final result.json is
   # `self._existing_trial_results + trial_results` (harbor/job.py:1056) -- one
   # number covering two different moments. harbor does refuse some resumptions,
   # each on a named condition: a config.json that differs -- FileExistsError in
-  # `_maybe_init_existing_job` (harbor/job.py:256); a trial config matching no
-  # existing trial -- ValueError in `_init_remaining_trial_configs` (:363); a
+  # `_maybe_init_existing_job` (harbor/job.py:256); an existing trial config
+  # matching no planned trial -- ValueError in `_init_remaining_trial_configs`
+  # (:363); a
   # lock.json that will not parse -- ValueError, "refusing to overwrite it"
   # (:904); or one that parses but differs -- FileExistsError in `_write_job_lock`
   # (:911). None of those is the case that does the damage -- with one
@@ -132,8 +133,9 @@ if [ "$TASKS_ONLY" -eq 0 ]; then
   # through *except* for lock.json, a gate of its own that compares task contents.
   # A plain repeated run is still let through.
   # (Read from harbor's source on 2026-09-17, not measured by running it: that
-  # would mean starting containers. Fix B is written so this path is unreachable
-  # either way, which is why we can leave it unmeasured.)
+  # would mean starting containers. The fail-closed precheck below is written
+  # so this path is unreachable either way, which is why we can leave it
+  # unmeasured.)
   # Those trials are money already spent (phase 1: 7.97M tokens), so this stops
   # and hands the decision back: move the directory aside or delete it by hand.
   # This script does neither -- it is in no position to judge which trials are
@@ -183,7 +185,7 @@ if [ "$TASKS_ONLY" -eq 0 ]; then
   fi
 
   : "${DEEPSEEK_API_KEY:?DEEPSEEK_API_KEY must be set in the host environment}"
-  # The adapter is the only writer of the ledger, and it resolves that path from
+  # The adapter resolves that path from
   # its own process environment (`mipham_code.ledger_path()`). The --ae line
   # below goes to the *container*, where nothing reads it, so it cannot be the
   # channel. Without this export the two sides agree only by coincidence: the
