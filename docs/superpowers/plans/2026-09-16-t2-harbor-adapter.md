@@ -3128,7 +3128,9 @@ PY
 > 它不是被忽略的文件（`benchmarks/.gitignore` 只忽略 `jobs/`、`.datasets/`、`results/ledger*`、`__pycache__/`），
 > 会进**公开**仓库；而字段集里的 **`driverLogTail`** 是这批字段里**唯一**可能带出密钥形态的一项 ——
 > 容器是以 `--ae "DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY"` 起的，driver 日志正是在那个环境里产生的，
-> 而 `benchmarks/redact.py:25` 的判据类 `sk-[A-Za-z0-9_-]{8,}` 就是为这类字符串设的。
+> 而 `benchmarks/redact.py:25` 的判据类 `(?<![A-Za-z0-9_])sk-[A-Za-z0-9_-]{8,}` 就是为这类字符串设的
+> （**收尾波 C5 已给该判据类加前导边界锚**：未锚的旧形会误啃 `integration_gate.py` 写进**已提交**产物的假 trial 名
+> `pallets__flask-5014__…`。本句所指的对象未变，只是那一处的判据类跟着收紧）。
 > 形状照 Task 11 的相位归档（一个 heredoc 进来的 python 脚本，`from benchmarks.redact import redact`，
 > 最后一行 `out_path.write_text(redact(json.dumps(summary, indent=2) + "\n"))`）。
 > **判据（评审可直接读 diff 判）**：diff 里必须存在**一个调用 `redact` 的写点** ——
