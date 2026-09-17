@@ -35,6 +35,15 @@ RESULTS="$BENCH/results"
 DATASET_DIR="$DATASETS/$DATASET_DIR_NAME"
 LEDGER="${MIPHAM_BENCH_LEDGER:-$RESULTS/ledger.json}"
 PROXY="${MIPHAM_BENCH_PROXY:-http://127.0.0.1:7897}"
+# Harbor's default agent_setup gate is 360 s. The in-container install path --
+# apt-get (measured 110 s) plus the 85 MB binary download (measured 145 s) --
+# runs at 71% of it, and one trial has already been killed at exactly 360.0 s.
+# The gate is instrument boot time, not the task's own clock (that stays at
+# task.toml's 3600 s, untouched), so widening it makes measurement possible
+# rather than making the benchmark easier. 3 matches the two runs that actually
+# got past setup; a value nobody has run under would make the real run
+# stricter than the run that proved the instrument works.
+SETUP_TIMEOUT_MULT="${MIPHAM_BENCH_SETUP_TIMEOUT_MULT:-3}"
 
 # The adapter imports harbor, so every Python here has to run under an
 # interpreter that can import it. Find one instead of assuming.
@@ -106,6 +115,7 @@ if [ "$TASKS_ONLY" -eq 0 ]; then
     --ae MIPHAM_DAEMON_PERMISSION=bypassPermissions \
     --ae "MIPHAM_EXEC_TIMEOUT_SEC=$EXEC_TIMEOUT" \
     --ae "MIPHAM_BENCH_LEDGER=$LEDGER" \
+    --agent-setup-timeout-multiplier "$SETUP_TIMEOUT_MULT" \
     -y
 fi
 
