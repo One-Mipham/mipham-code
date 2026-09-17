@@ -15,7 +15,7 @@ Mipham Code is an open-core, multi-model intelligent coding terminal built with 
 - **Multi-Model**: Connect to Claude, GPT, DeepSeek, Qwen, and MiphamAI models
 - **Open-Core**: Apache 2.0 licensed — free and open-source
 - **31 Built-in Tools**: File ops, shell commands, git, web search, MCP protocol, agents
-- **Skills System**: 13 built-in skills (11 standard + 2 Mipham exclusive) + dual-track runtime
+- **Skills System**: 28 built-in skills (22 standard + 6 Mipham exclusive) + marketplace
 - **Streaming**: Real-time SSE streaming with tool use support
 - **Fast**: Built on Bun runtime, sub-millisecond tool execution
 
