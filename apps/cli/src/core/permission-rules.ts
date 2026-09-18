@@ -193,6 +193,76 @@ function stripQuotes(s: string): string {
   return s
 }
 
+/** Shell 结构符号：分组与取反 —— 它们自身不是命令，紧跟其后的是。 */
+const LEADING_SHELL_PUNCT = new Set(['(', '{', '!'])
+
+/** Shell 关键字：其后才是真正的命令（`do rm -rf x` 执行的命令是 `rm`）。 */
+const LEADING_SHELL_KEYWORDS = new Set([
+  'do',
+  'then',
+  'else',
+  'elif',
+  'if',
+  'while',
+  'until',
+  'for',
+  'case',
+  'time',
+  'coproc',
+])
+
+/** 一条前导赋值：`NAME=value`（name 是合法标识符，`=` 前无引号）。 */
+const LEADING_ASSIGNMENT_RE = /^[A-Za-z_][A-Za-z0-9_]*=/
+
+/**
+ * 剥掉一段 shell 片段**前导**的噪声 token，露出真正的基命令。
+ *
+ * 为什么需要它：`Bash(rm *)` / `Read(secret)` 这类规则要匹配的是**命令本身**，
+ * 而 shell 允许在命令前放赋值（`IFS=x rm -rf x`）、分组符号（`( rm -rf x )`）、
+ * 关键字（`for …; do rm -rf x; done`）。这些都不改变「执行了什么命令」，却足以
+ * 让匹配器看不到 `rm`，于是 deny 规则被一个空格级的改写绕过。
+ *
+ * 只剥前导、可反复剥（`FOO=1 ! rm …`）。剥多了一律是过匹配，而 deny 规则的过
+ * 匹配是安全方向。关键字自己的裸 flag 也一并剥掉（`time -p rm …` 里的 `-p`），
+ * 否则关键字被剥走后会剩下 `-p rm …`，仍然看不见 `rm`。
+ *
+ * 不剥尾随符号（`rm -rf x )` 里的 `)`）：`wildcardMatch` 的 `*` 已经吃掉它。
+ */
+export function stripLeadingShellNoise(segment: string): string {
+  let tokens = segment.trim().split(/\s+/).filter(Boolean)
+  let stripped = false
+  let skipFlags = false
+  for (;;) {
+    const head = tokens[0]
+    if (!head) break
+    if (skipFlags && /^--?[A-Za-z]/.test(head)) {
+      tokens = tokens.slice(1)
+      stripped = true
+      continue
+    }
+    skipFlags = false
+    const bare = head.replace(/^[({!]+/, '') // `(!` 这类连写
+    if (bare !== head) {
+      tokens = bare ? [bare, ...tokens.slice(1)] : tokens.slice(1)
+      stripped = true
+      continue
+    }
+    if (LEADING_SHELL_PUNCT.has(head) || LEADING_ASSIGNMENT_RE.test(head)) {
+      tokens = tokens.slice(1)
+      stripped = true
+      continue
+    }
+    if (LEADING_SHELL_KEYWORDS.has(head)) {
+      tokens = tokens.slice(1)
+      stripped = true
+      skipFlags = true // `time -p rm …` —— 关键字自己的裸 flag 不是命令
+      continue
+    }
+    break
+  }
+  return stripped ? tokens.join(' ') : segment
+}
+
 function uniq(items: string[]): string[] {
   return [...new Set(items)]
 }
@@ -261,6 +331,12 @@ function flattenCommand(command: string, depth = 0): string[] {
     out.push(seg)
     const stripped = stripPrefixCommand(seg)
     if (stripped !== seg) out.push(stripped)
+    // 剥掉前导噪声后的形态也要参与匹配：`IFS=x rm -rf x` / `( rm -rf x )` /
+    // `for …; do rm -rf x; done` 执行的仍是 `rm`，规则必须看得见它。同一个函数
+    // 也被 scanReaderWriterCommands 用（Read/Write/Edit 桥接那条路径）—— 两条
+    // 路径共用一份归一化，只接一条就是只修一半。
+    const denoised = stripLeadingShellNoise(seg)
+    if (denoised !== seg) out.push(denoised)
     for (const inner of extractSubstitutions(seg)) {
       out.push(...flattenCommand(inner, depth + 1))
     }
@@ -388,7 +464,10 @@ function scanReaderWriterCommands(
   depth = 0,
 ): void {
   for (const seg of splitShellSegments(command)) {
-    const tokens = seg.split(/\s+/).filter(Boolean)
+    // 先剥前导噪声再 tokenize：`IFS=x cat secret` / `! cat secret` /
+    // `time -p cat secret` 读的是同一个文件，Read() 规则必须看得见 `cat`。
+    // 与 flattenCommand 共用 stripLeadingShellNoise —— 两条路径一份归一化。
+    const tokens = stripLeadingShellNoise(seg).split(/\s+/).filter(Boolean)
     if (tokens.length > 0) {
       const { base, args, payload } = effectiveCommand(tokens)
       if (READER_COMMANDS.has(base)) {

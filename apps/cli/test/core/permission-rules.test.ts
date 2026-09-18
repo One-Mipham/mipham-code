@@ -554,3 +554,37 @@ describe('compileRule', () => {
     expect(rule.invalid).toBeDefined()
   })
 })
+
+describe('基命令前的 shell 噪声 —— Bash 通配匹配', () => {
+  const denyRm = (cmd: string) => matchBashRule('Bash(rm *)', 'Bash', { command: cmd })
+
+  it.each([
+    ['裸命令', 'rm -rf x'],
+    ['圆括号分组', '( rm -rf x )'],
+    ['花括号分组', '{ rm -rf x; }'],
+    ['复合命令里的分组', 'echo hi && ( rm -rf x )'],
+    ['前导赋值', 'FOO=bar rm -rf x'],
+    ['IFS 赋值', 'IFS=x rm -rf x'],
+    ['LD_PRELOAD 赋值', 'LD_PRELOAD=x rm -rf x'],
+    ['取反', '! rm -rf x'],
+    ['time 关键字', 'time -p rm -rf x'],
+    ['for 循环体', 'for f in *; do rm -rf x; done'],
+  ])('%s：%s 命中 Bash(rm *)', (_label, cmd) => {
+    expect(denyRm(cmd)).toBe(true)
+  })
+})
+
+describe('基命令前的 shell 噪声 —— Read 桥接', () => {
+  const denyRead = (cmd: string) => matchBashRule('Read(secret)', 'Bash', { command: cmd })
+
+  it.each([
+    ['裸命令', 'cat secret'],
+    ['前导赋值', 'FOO=bar cat secret'],
+    ['IFS 赋值', 'IFS=x cat secret'],
+    ['LD_PRELOAD 赋值', 'LD_PRELOAD=x cat secret'],
+    ['取反', '! cat secret'],
+    ['time 关键字', 'time -p cat secret'],
+  ])('%s：%s 命中 Read(secret)', (_label, cmd) => {
+    expect(denyRead(cmd)).toBe(true)
+  })
+})
