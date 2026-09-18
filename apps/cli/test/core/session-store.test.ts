@@ -10,7 +10,15 @@ vi.mock('node:os', async (importOriginal) => {
   }
 })
 
-import { existsSync, mkdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { SessionStore } from '../../src/core/session-store'
@@ -106,6 +114,63 @@ describe('SessionStore', () => {
       const session = list.find((s) => s.name === 'test-count')
       expect(session).toBeDefined()
       expect(session!.messageCount).toBe(3)
+    })
+
+    // 从前 try 包住整个 for 循环：第一个文件抛异常，list() 就 return [] ——
+    // 一个坏会话文件让 /resume 一个会话都不显示，而其余文件全都好好的。
+    it('一个坏会话文件只赔上它自己，不吞掉整张列表', () => {
+      SessionStore.save('test-list-good', [{ role: 'user', content: 'fine' }])
+      mkdirSync(SESSIONS_DIR, { recursive: true })
+      const bad = join(SESSIONS_DIR, 'test-list-bad.jsonl')
+      // 合法 JSON、不合法事件 —— 投影会在这里抛（rewrite 少 messages ⇒ out 变 undefined）
+      writeFileSync(
+        bad,
+        '{"type":"compaction/rewrite","at":1}\n{"type":"user/message","at":2,"message":{"role":"user","content":"x"}}\n',
+        'utf-8',
+      )
+      try {
+        const names = SessionStore.list().map((s) => s.name)
+        expect(names).toContain('test-list-good')
+        // 坏行被丢掉后，这个文件剩下的那条合法事件仍然算数 —— 是**救回来半份**，
+        // 不是整份跳过（跳过才是把可用数据扔了）
+        const rescued = SessionStore.list().find((s) => s.name === 'test-list-bad')
+        expect(rescued?.messageCount).toBe(1)
+      } finally {
+        rmSync(bad, { force: true })
+      }
+    })
+
+    it('读不出来的文件（权限）也只赔上它自己', () => {
+      // 这一条测的是**逐文件兜底**本身，与坏内容无关：内容全合法，IO 层抛。
+      SessionStore.save('test-list-good3', [{ role: 'user', content: 'fine' }])
+      const locked = join(SESSIONS_DIR, 'test-list-locked.jsonl')
+      writeFileSync(
+        locked,
+        '{"type":"user/message","at":1,"message":{"role":"user","content":"x"}}\n',
+        'utf-8',
+      )
+      chmodSync(locked, 0o000)
+      try {
+        expect(() => readFileSync(locked, 'utf-8')).toThrow() // 正控：这个文件确实读不了
+        expect(SessionStore.list().map((s) => s.name)).toContain('test-list-good3')
+      } finally {
+        chmodSync(locked, 0o600)
+        rmSync(locked, { force: true })
+      }
+    })
+
+    it('全是坏行的文件仍被跳过（不塞一个空会话进列表）', () => {
+      SessionStore.save('test-list-good2', [{ role: 'user', content: 'fine' }])
+      mkdirSync(SESSIONS_DIR, { recursive: true })
+      const bad = join(SESSIONS_DIR, 'test-list-bad2.jsonl')
+      writeFileSync(bad, 'null\n', 'utf-8')
+      try {
+        // 正控：单独看这个文件，它必须仍然被跳过（而不是被当成空会话塞进列表）
+        expect(SessionStore.load('test-list-bad2')).toBeNull()
+        expect(SessionStore.list().map((s) => s.name)).toContain('test-list-good2')
+      } finally {
+        rmSync(bad, { force: true })
+      }
     })
   })
 

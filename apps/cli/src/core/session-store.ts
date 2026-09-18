@@ -212,6 +212,11 @@ export class SessionStore {
 
   /**
    * List all saved sessions, most recent first.
+   *
+   * 单个文件读不出来只赔上它自己 —— 这里是为**逐文件**兜底，不是给整个列表兜底：
+   * 从前 try 包住整个 for 循环，第一个抛异常的文件就让 `/resume` 一条会话都不显示，
+   * 而其余文件全是好的。读不出来的（坏结构、半截写、I/O 错）直接跳过：连 metadata
+   * 都建不出来的会话没法在列表里表示。
    */
   static list(): SessionMetadata[] {
     ensureDir()
@@ -220,7 +225,12 @@ export class SessionStore {
       const sessions: SessionMetadata[] = []
       for (const file of files) {
         const name = file.replace('.jsonl', '')
-        const session = SessionStore.load(name)
+        let session: StoredSession | null = null
+        try {
+          session = SessionStore.load(name)
+        } catch {
+          continue
+        }
         if (session?.metadata) {
           sessions.push(session.metadata)
         }

@@ -163,13 +163,56 @@ export class SessionLog {
       const trimmed = line.trim()
       if (!trimmed) continue
       try {
-        log.buf.push(JSON.parse(trimmed) as SessionEvent)
+        const parsed: unknown = JSON.parse(trimmed)
+        if (!isValidEvent(parsed)) continue
+        log.buf.push(parsed)
       } catch {
         // 跳过损坏行
       }
     }
     log.flushed = log.buf.length
     return log
+  }
+}
+
+/**
+ * 事件结构校验 —— 磁盘→内存的**唯一**入口（`open()`）用它挡掉坏行。
+ *
+ * 只校验 `deriveMessages` 会解引用的字段：这不是 schema 校验，是「投影不许崩」的
+ * 最低门槛。**合法 JSON 不等于合法事件** —— `null`、`{"type":"user/message"}`（无
+ * message）、`{"type":"compaction/rewrite"}`（无 messages）都过得了 `JSON.parse`，
+ * 却让投影抛 TypeError（rewrite 那条更狠：`out` 直接变 `undefined`，下一条就炸），
+ * 而 `/resume` 那条链上没有 try 兜它。坏行来自手写/拼接/半截重排，不是本进程写的。
+ *
+ * 不校验 `session/start`、`assistant/chunk`、`checker/decision`：投影对它们无分支；
+ * 未知类型一律放行（前向兼容 —— 认不出来不等于要销毁它）。
+ */
+function isValidEvent(e: unknown): e is SessionEvent {
+  if (!e || typeof e !== 'object') return false
+  const ev = e as Record<string, unknown>
+  if (typeof ev.type !== 'string') return false
+  switch (ev.type) {
+    case 'user/message':
+    case 'assistant/message':
+      return !!ev.message && typeof ev.message === 'object'
+    case 'tool/call':
+      return (
+        typeof ev.id === 'string' &&
+        typeof ev.name === 'string' &&
+        !!ev.input &&
+        typeof ev.input === 'object'
+      )
+    case 'tool/result':
+      // 只要求 id：`result`（新格式）与 `content`（旧 JSONL）都可缺省，派生侧已兜底
+      return typeof ev.id === 'string'
+    case 'context/inject':
+      return typeof ev.text === 'string'
+    case 'compaction/summary':
+      return typeof ev.summary === 'string'
+    case 'compaction/rewrite':
+      return Array.isArray(ev.messages)
+    default:
+      return true
   }
 }
 

@@ -10,7 +10,7 @@ vi.mock('node:os', async (importOriginal) => {
   }
 })
 
-import { existsSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import {
@@ -426,5 +426,129 @@ describe('checker/decision (Recuris C 组件)', () => {
       { role: 'user', content: 'run it' },
       { role: 'assistant', content: 'ran' },
     ])
+  })
+})
+
+// ============================================================
+// 合法 JSON ≠ 合法事件。
+//
+// `open()` 原先只 catch `JSON.parse`，于是 `null`、`{"type":"user/message"}`（无
+// message）、`{"type":"compaction/rewrite"}`（无 messages）这些**能过 JSON.parse**
+// 的行走进了 buf，而 `deriveMessages` 对它们直接解引用 —— 一条垃圾行就让整份历史
+// 投影抛 TypeError。落盘路径（append/flush）是可信的，坏行来自手写、拼接、半截重排，
+// 所以门槛放在磁盘→内存那唯一一个入口上。
+// ============================================================
+
+describe('open() 丢弃结构不合法的行', () => {
+  const SESSIONS_DIR = join(homedir(), '.mipham', 'sessions')
+
+  function writeLines(name: string, lines: string[]): string {
+    mkdirSync(SESSIONS_DIR, { recursive: true })
+    const path = join(SESSIONS_DIR, `${sanitizeSessionName(name)}.jsonl`)
+    writeFileSync(path, lines.map((l) => l + '\n').join(''), 'utf-8')
+    return path
+  }
+
+  function cleanup(name: string): void {
+    const path = join(SESSIONS_DIR, `${sanitizeSessionName(name)}.jsonl`)
+    if (existsSync(path)) rmSync(path)
+  }
+
+  it('正控：合法行一条都不丢', () => {
+    const name = 'open-valid-control'
+    writeLines(name, [
+      '{"type":"user/message","at":1,"message":{"role":"user","content":"hi"}}',
+      '{"type":"assistant/chunk","at":2,"chunk":"He"}',
+      '{"type":"assistant/message","at":3,"message":{"role":"assistant","content":"Hello"}}',
+      '{"type":"tool/call","at":4,"id":"t1","name":"Read","input":{"path":"a.ts"}}',
+    ])
+    try {
+      const events = SessionLog.open(name).events()
+      expect(events).toHaveLength(4)
+      expect(deriveMessages(events)).toEqual([
+        { role: 'user', content: 'hi' },
+        { role: 'assistant', content: 'Hello' },
+        {
+          role: 'assistant',
+          content: [{ type: 'tool_use', id: 't1', name: 'Read', input: { path: 'a.ts' } }],
+          reasoning_content: '',
+        },
+      ])
+    } finally {
+      cleanup(name)
+    }
+  })
+
+  it('null / 非对象行被丢弃，其余事件照常派生', () => {
+    const name = 'open-nonobject-lines'
+    writeLines(name, [
+      '{"type":"user/message","at":1,"message":{"role":"user","content":"hi"}}',
+      'null',
+      '42',
+      '"just a string"',
+      '[1,2]',
+      '{"type":"assistant/message","at":6,"message":{"role":"assistant","content":"ok"}}',
+    ])
+    try {
+      const log = SessionLog.open(name)
+      expect(log.events()).toHaveLength(2)
+      expect(deriveMessages(log.events())).toEqual([
+        { role: 'user', content: 'hi' },
+        { role: 'assistant', content: 'ok' },
+      ])
+    } finally {
+      cleanup(name)
+    }
+  })
+
+  it('缺 payload 的事件行被丢弃 —— 不把 undefined 推进历史', () => {
+    const name = 'open-missing-payload'
+    writeLines(name, [
+      '{"type":"user/message","at":1}',
+      '{"type":"assistant/message","at":2,"message":"不是对象"}',
+      '{"type":"context/inject","at":3}',
+      '{"type":"tool/result","at":4}',
+      '{"type":"compaction/summary","at":5}',
+      '{"type":"user/message","at":6,"message":{"role":"user","content":"survivor"}}',
+    ])
+    try {
+      const log = SessionLog.open(name)
+      expect(log.events()).toHaveLength(1)
+      expect(deriveMessages(log.events())).toEqual([{ role: 'user', content: 'survivor' }])
+    } finally {
+      cleanup(name)
+    }
+  })
+
+  it('compaction/rewrite 缺 messages 被丢弃 —— 投影不被抹成 undefined', () => {
+    const name = 'open-rewrite-missing-messages'
+    writeLines(name, [
+      '{"type":"user/message","at":1,"message":{"role":"user","content":"before"}}',
+      '{"type":"compaction/rewrite","at":2}',
+      '{"type":"user/message","at":3,"message":{"role":"user","content":"after"}}',
+    ])
+    try {
+      const log = SessionLog.open(name)
+      expect(deriveMessages(log.events())).toEqual([
+        { role: 'user', content: 'before' },
+        { role: 'user', content: 'after' },
+      ])
+    } finally {
+      cleanup(name)
+    }
+  })
+
+  it('合法的 compaction/rewrite 仍然整体替换投影（守住正控的另一半）', () => {
+    const name = 'open-rewrite-valid'
+    writeLines(name, [
+      '{"type":"user/message","at":1,"message":{"role":"user","content":"before"}}',
+      '{"type":"compaction/rewrite","at":2,"messages":[{"role":"user","content":"snapshot"}]}',
+    ])
+    try {
+      const log = SessionLog.open(name)
+      expect(deriveMessages(log.events())).toEqual([{ role: 'user', content: 'snapshot' }])
+    } finally {
+      cleanup(name)
+    }
   })
 })
