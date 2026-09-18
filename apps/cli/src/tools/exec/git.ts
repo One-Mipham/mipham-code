@@ -1,5 +1,7 @@
+import { resolve } from 'node:path'
 import type { ToolDefinition } from '../../shared/index.ts'
 import { findWorktreeMarker } from '../../core/paths.ts'
+import { isWithin } from '../../security/path.ts'
 
 // P0-4 (v2.1.222 alignment): Regex-based word-boundary patterns replace
 // fragile substring matching. Each pattern describes what it blocks.
@@ -75,8 +77,11 @@ function isOutsideWorktree(command: string, cwd: string): string | null {
     let match: RegExpExecArray | null
     while ((match = pathPattern.exec(command)) !== null) {
       const refPath = match[1]!
-      // If the referenced path is outside the worktree, block it
-      if (!refPath.startsWith(cwd) && !refPath.startsWith(worktreeRoot + '/')) {
+      // 归一后按**路径分段**判归属，不用字符串前缀：此前 `refPath.startsWith(cwd)`
+      // 从不解析 `..`，`--work-tree=/proj/../etc` 因为「以 /proj/ 开头」被放行，
+      // 而 git 拿到的是 /etc。判据与 Bash 守卫（resolveWorktreeEscape）同一套。
+      const resolved = resolve(cwd, refPath)
+      if (!isWithin(resolved, cwd) && !isWithin(resolved, worktreeRoot)) {
         return `Git command references path outside worktree: ${refPath}`
       }
     }

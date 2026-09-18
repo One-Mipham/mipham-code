@@ -445,6 +445,24 @@ describe('C1 — worktree isolation covers both roots', () => {
     expect(result.success).toBe(true)
   })
 
+  // 下面两条此前是**活绕过**：判据是字符串前缀比较且从不归一，`/proj/../etc`
+  // 因为「以 /proj/ 开头」被放行，而 git 实际拿到的是 /etc。
+
+  it('blocks a --work-tree reference that climbs out with ..', async () => {
+    mockSpawn()
+    const result = await gitTool.execute({ command: 'status --work-tree=/proj/../etc' }, at(NEW_WT))
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Worktree isolation')
+  })
+
+  it('allows a relative --work-tree reference that stays in the project', async () => {
+    // 语义变更，明说：归一后被判定「在项目内」的相对引用由「拦」改为「放」，
+    // 与 Bash 守卫同一套判据（resolve 后按路径分段比较）。判据边界仍是项目根。
+    mockSpawn()
+    const result = await gitTool.execute({ command: 'status --work-tree=sub' }, at(NEW_WT))
+    expect(result.success).toBe(true)
+  })
+
   // ── ExitWorktree: path validation accepts both roots ──
 
   it('accepts a worktree path under the new .mipham root', async () => {
