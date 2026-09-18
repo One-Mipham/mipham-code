@@ -608,3 +608,13 @@ describe('timeout 的位置参数只吃 duration', () => {
     expect(matchBashRule('Read(secret)', 'Bash', { command: 'time -p cat secret' })).toBe(true)
   })
 })
+
+describe('进程替换里的命令同样被解析', () => {
+  it.each([
+    ['读侧 <(...)', 'cat <(cat secret)'],
+    ['写侧 >(...)', 'tee >(cat secret)'],
+    ['嵌在复合命令里', 'echo hi && cat <(cat secret)'],
+  ])('%s：%s 命中 Read(secret)', (_label, cmd) => {
+    expect(matchBashRule('Read(secret)', 'Bash', { command: cmd })).toBe(true)
+  })
+})

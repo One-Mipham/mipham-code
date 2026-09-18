@@ -317,6 +317,12 @@ function extractSubstitutions(command: string): string[] {
   while ((m = dollarParen.exec(command)) !== null) inners.push(m[1]!)
   const backtick = /`([^`]*)`/g
   while ((m = backtick.exec(command)) !== null) inners.push(m[1]!)
+  // 进程替换 `<(cmd)` / `>(cmd)`：`cat <(cat secret)` 里读 secret 的是里层的
+  // `cat`，外层只是把它的 stdout 当成一个文件名。参数排除 `<>` 是因为
+  // `<(cat secret)` 的捕获若允许 `>`，遇到 `>(...)` 形态会被提前截断；非嵌套组
+  // 由调用方的递归处理。
+  const procSub = /[<>]\(([^()<>]*)\)/g
+  while ((m = procSub.exec(command)) !== null) inners.push(m[1]!)
   return inners
 }
 
