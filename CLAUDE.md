@@ -4,8 +4,8 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.50.0
-> **最后更新**: 2026-09-16 — **daemon 自启在编译产物里真能起来（T2 Plan A）**：自启改「re-exec 自己」（`process.execPath`），不再依赖 PATH 上的 `bun`；argv 判别式由「argv[1] 有没有扩展名」换成**实测形状** —— 产物 argv 是 `["bun","/$bunfs/root/mipham",…]`，旧式把 `$bunfs` 入口当成首个用户参数 ⇒ `__daemon` 分支在产物里**不可达**；起不来不再谎报成功。新增产物冒烟 `scripts/smoke-daemon.sh` 并接进 CI。测试 2528 → 2545（本轮评审修复后 2549）
+> **版本**: 2.51.0
+> **最后更新**: 2026-09-18 — **权限解析加固（Phase 1）**：修掉六个「规则装得上、就是不命中」的绕过 —— 基命令前的 shell 噪声、`timeout` 位置参数、进程替换里的命令、`~`/`$HOME` 不展开、永不匹配的参数化规则（静默空防护）、worktree 逃逸守卫的两个活绕过；外加执行中在 `git.ts` 撞见的同族活绕过（不在原清单内）。一致性守卫配**负对照**。测试 2560 → 2629
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -40,11 +40,11 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **沙箱入口** `/crsi modify` — `core/crsi-modify.ts` 两阶段闸门（worktree → 测试 → diff → `--approve`/`--reject`）
 - **完整覆盖闸** `/crsi modify` 入口 — `crsi-sandbox.ts` `validateBlastRadius`：自修改 proposal 必须声明非空 `blastRadius`（触及的**全部**代码路径），否则 fail-closed 拒绝（今日「两条渲染路径只接一条 = 局部正确全局遗漏」教训固化）
 - **producer** `/crsi propose` — `core/crsi-producer.ts` 把失败信号转成四类候选：默认教训文件 `crsi-lessons.md`（模板化无 LLM）、`--rule` 固化受管理规则 `crsi-managed-rules.ts`（确定性行为，source='managed'）、`--prose` 两阶段 LLM 改 skill 散文（A1 边界首演：LLM 只生成不判定）、`--crossover` LLM 选两条重叠教训合并（精确行匹配 guard 防幻觉，删二增一）；三信号路径同信号幂等
-- **eval harness** `/crsi eval` — `core/eval-harness.ts` 冻结 33 条 ground-truth 契约（规则/宪法/沙箱边界/完整覆盖闸/语义边界/红队/producer/行为缺口/行为任务）+ rewards 日志 `~/.mipham/crsi/eval-scores.jsonl`，`runCrsiModification` 以「分数不退化」为第二道闸。8 行为缺口（rm -rf/管道投毒/git reset --hard/chmod 777/mkfs/dd→/dev//关停主机/crontab -r）已由固化 managed tool-params 规则覆盖 → 全翻转 PASS → 满分 100 =「证明更好」
+- **eval harness** `/crsi eval` — `core/eval-harness.ts` 冻结 38 条 ground-truth 契约（规则/宪法/沙箱边界/完整覆盖闸/语义边界/红队/producer/行为缺口/行为任务）+ rewards 日志 `~/.mipham/crsi/eval-scores.jsonl`，`runCrsiModification` 以「分数不退化」为第二道闸。8 行为缺口（rm -rf/管道投毒/git reset --hard/chmod 777/mkfs/dd→/dev//关停主机/crontab -r）已由固化 managed tool-params 规则覆盖 → 全翻转 PASS → 满分 100 =「证明更好」
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：2,560 测试（2558 passed + 2 skipped，0 失败）
+测试：2,629 测试（2627 passed + 2 skipped，0 失败）
 
 ---
 
@@ -81,7 +81,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 228 个测试文件，2560 个测试
+│   │   ├── test/               # 228 个测试文件，2629 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -107,7 +107,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（2560 个测试）
+pnpm test         # vitest run（2629 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~9 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -295,8 +295,8 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 72      | 1004     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
-| tools           | 20      | 313      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
+| core            | 72      | 1058     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
+| tools           | 20      | 328      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 33      | 202      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                                             |
 | ui              | 11      | 157      | commands / input / config-wizard / loop / skill-doctor                                                                                                                      |
 | agent           | 11      | 109      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
@@ -315,7 +315,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integrity       | 6       | 45       | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 120      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **228** | **2560** | **0 失败** ✅（2558 passed + 2 skipped）                                                                                                                                    |
+| **合计**        | **228** | **2629** | **0 失败** ✅（2627 passed + 2 skipped）                                                                                                                                    |
 
 > **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 179 测试，自带
 > `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。
@@ -391,9 +391,9 @@ GitHub Actions 9 个 job 流水线：`typecheck → lint → format → build-cl
 
 | 日期       | Commit    | 说明                                                                                       |
 | ---------- | --------- | ------------------------------------------------------------------------------------------ |
+| 2026-09-18 | `0a67604` | fix(permission): 权限解析加固 —— 六个绕过与静默空防护（Phase 1，8 笔）                     |
 | 2026-09-16 | `b62cc17` | test(daemon): 编译产物冒烟 —— 起不来就红（T2 Plan A 第 4 件：脚本 + CI 两条）              |
 | 2026-09-16 | `116b695` | fix(daemon): 产物里 daemon 真能起来 —— re-exec 自身 + argv 判别式改用实测形状（T2 Plan A） |
-| 2026-09-16 | `9839f77` | fix(cli): 模型不再被告知每次工具调用都成功 —— is_error 贯通投影与日志（T12-B）             |
 
 > **完整记录** → [`docs/claude-md-history.md`](docs/claude-md-history.md)：两张表的全表 + v1.0.0 起全部修订，
 > 查「某次改动属于哪次提交 / 哪一版」时读它。
@@ -487,10 +487,10 @@ mipham-code 变更（包名/版本）
 
 | 版本   | 日期       | 变更内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | 维护人     |
 | ------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| 2.51.0 | 2026-09-18 | **权限解析加固（Phase 1，8 笔 `8d19601`→`0a67604`）** —— 主线是「规则装得上、就是不命中」：①基命令前的 shell 噪声（`( rm )`/`IFS=x rm`/`time -p rm`/`! rm`）让 deny 规则被一个空格级改写绕过；②`timeout` 的位置参数被无条件当 duration 吃掉；③进程替换 `<(cat secret)` 里的命令不被解析；④`~`/`$HOME` 不展开（规则写绝对路径、用户敲 `~` 即等于放行）；⑤`validateRulePattern` 只看结构不看工具名 ⇒ `WebFetch(*)`/`Task(*)` 这类**永不命中**的规则静默装得上（空防护）。⑥worktree 逃逸守卫三处缺陷：字符串拼接不归一 `..`、只看第一个 `cd`、前缀比较当归属判定 —— 前两处是**活绕过**（旧判据已实测复现放行），第三处只被 root 那个析取项兜住，**不声称修掉了可被利用的洞**。⑦执行中在 `git.ts` 撞见同族活绕过（`--work-tree=/proj/../etc` 因「以 /proj/ 开头」放行，而 git 拿到的是 /etc），**不在原 27 条清单内**，同一套判据一并修。两条纪律：守卫必配**负对照**（摘掉读路径的归一化 ⇒ 恰好 6 条 Read 桥接用例变红、Bash 侧仍绿）；计划里 Task 6 的测试期望**是我写错的**（把项目根内的兄弟目录当成该拦，实际按既有语义应放行），按磁盘上的真语义订正后执行。测试 2560 → 2629（228 文件不变），core 1004→1058、tools 313→328。**本条为摘要，全文见 [history.md](docs/claude-md-history.md)。**                                                                                                                                                                                                                                                                                                                                                                                      |
 | 2.50.0 | 2026-09-16 | **T2 · daemon 自启在编译产物里真能起来（Plan A）** —— 病根是「自启命令假设了源码模式的 argv」。旧实现 `spawn('bun', ['run', <path>])` 在产物里双错：`bun` 不在 PATH（产物存在的全部理由就是用户不必装 Bun），且 `import.meta.url` 是 `$bunfs` 虚拟路径、新起的解释器读不到。改为 **re-exec 自己**（`spawn(process.execPath, […, '__daemon'])`、`detached`、**不传 `cwd`** —— 继承是 §2.2 的硬接口，`daemonRoot = process.cwd()` 是路径白名单边界）。四件交付：① 起不来不再**谎报**成功（轮询就绪 + spawn 错 / 早退带退出码 / 超时三条失败路径，全走非零退出码 + stderr）；② `bin/daemon.ts` 与 `__daemon` 分支共用**一份** `runDaemonProcess`（两份实现就是「两条渲染路径只接一条」的温床）；③ 产物层冒烟 `scripts/smoke-daemon.sh`（编译 → `daemon start` → status 必须 running → stop；`RUN_PATH` 只收窄**调用产物**那几次，编译步骤仍用环境 PATH，否则 127 会让「修复没到位」由无关证据判出），并进 CI `build-cli` 两条（默认 PATH 与 bun 移出 PATH 各一）；④ 修掉**判别式**：`userArgs` 原按「argv[1] 有没有 `.ts/.js` 扩展名」分辨，而产物 argv 实测为 `["bun","/$bunfs/root/mipham",…]` —— `$bunfs` 入口**没有扩展名**却被读成第一个用户参数，`__daemon` 分支遂在产物里不可达（源码模式恰好判对 ⇒ 单测全绿）。新判别式只问一件事：**解释器是否在 argv[0]**（`argv0 === execPath`），两种模式都恰有两项合成前缀 —— 与 `bin/mipham.ts` 里 12 处 `process.argv.slice(2)` 同一模型。**方法学**：`launch.test.ts` 原先给产物编了一个 bun 从不产生的 argv 形状，形状断言锚在臆想形状上比没有测试更糟 —— 它给了绿灯。**本条为摘要，全文见 [history.md](docs/claude-md-history.md)。** | 技术委员会 |
 | 2.49.0 | 2026-09-16 | **T12 · 工具成败位贯通三条边界 —— B 段落地，T12 结项** —— A 段修的是「无头路径**读不到**」，B 段修的是**模型那一条**：投影消息 `ToolResultContent` 没有 `is_error`、`anthropic.ts` 照此下发 ⇒ **模型被告知每次工具调用都成功**；`session-log.messageToEvents` 又把 `success` 写死 `true` ⇒ **伪造**（比前者更坏：前者是读不到，它写下一个错值）。**本次唯一要拍板的是字段形状，选了「只在失败时出现」** —— A 段给 `StreamChunk.isError` 选「恒设」的理由在这里**不成立**：它要过 `daemon/database.ts` 的 messages 表与旧 JSONL，**历史数据里没有这个字段**，`undefined` 在可预见的将来不可能消除 ⇒ 恒设只剩代价（成功路径字节全变 + 请求体多一个 `is_error: false`，一次 prompt-cache 前缀抖动）。**五个改动点**：两份 `types.ts`（双副本，逐字节 diff 为空）→ `context.addToolResult`（engine 两条路径的**唯一投影写点**）→ `agent/sub-agent.ts`（**第二个独立投影写点** —— 漏它即是「两条路径只接一条」的第三次）→ `session-log` 读写两侧 → `anthropic.ts` 只在失败时下发。**字节级互逆不变量保住**：展平式两侧对称、成功侧不写该键，且用 `'is_error' in block === false` 钉住「成功路径与改动前逐字节相同」—— 只断 `=== false` 是**抓不到恒设**的。**先红后绿**：7 条新测（session-log 3 红 / context 2 红 / anthropic 1 红 / sub-agent 1 红）。**明确不改**：`openai-compat.ts`（OpenAI 的 tool 消息结构上无此位）、`session-worker`/`remote-engine`（A 段已通）、microcompact（`...block` 展开天然保留）、daemon messages 表（无该列）。测试 2521 → 2528。**本条为摘要，全文见 [history.md](docs/claude-md-history.md)。**                                                      | 技术委员会 |
-| 2.48.0 | 2026-09-16 | **T12 · 工具成败位在无头路径上不可读 —— A 段落地（B 段待单独决策）** —— T2 的**仪器**前置：不分清「模型没做出来」与「权限层把工具吃了」，分数报得出、辩护不了（官方 harness 的判定有**两种模式**：**`SEPARATE`** 才跑在独立 verifier 容器里、只读 `task.toml` 声明的 `artifacts`；**默认是 `SHARED`** —— verifier 在 agent 自己的容器里跑（`harbor/models/task/verifier_mode.py:10-26`，`trial/trial.py:667` 分派），**SWE-bench Verified 十题实测全属 SHARED**。两种模式下都**不读我们的 chunk** ⇒ 挡的是**归因**不是**打分**；2026-09-16 订正原记的「按容器终态判定」）。成败位在**三处**被销毁或伪造：① `StreamChunk` 无此字段 ⇒ `ServerToolResultMessage.isError` 声明了从未被填（**缺**）；② `ToolResultContent` 无 `is_error` ⇒ **模型被告知每次调用都成功**（**缺**）；③ `session-log.ts:39` 硬编码 `success: true` ⇒ **伪造**（**假**）。A 段修 ①，并挖出 `continueWithTools()` 未 flatten ⇒ **失败工具的 `error` 文案在多轮循环里整个丢失**（红测钉死）。修法 = 统一 flatten + `isError` **恒设**，WS **去/回程都带**，双副本 `types.ts` 同步。编号更正：T9 → T12（T9–T11 已被 P2 表格占用）。测试 2516 → 2521。**本条为摘要，全文见 [history.md](docs/claude-md-history.md)。**                                                                                                                                                                                                                                                                                                                                                                                            | 技术委员会 |
 
 > **本表只留最近 3 行**（滚动窗口，同上方约定）—— 上表是**摘要**，每条全文与被挤掉的行都在 history.md。
-> **完整修订历史**（v1.0.0–v2.50.0，共 102 条）→ [`docs/claude-md-history.md`](docs/claude-md-history.md)：
+> **完整修订历史**（v1.0.0–v2.51.0，共 103 条）→ [`docs/claude-md-history.md`](docs/claude-md-history.md)：
 > 查「某条规则是哪一版引入的、当时为什么改、谁审的」时读它。
