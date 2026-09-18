@@ -1,9 +1,9 @@
 import { createServer, type Server } from 'node:http'
-import { createReadStream, existsSync, statSync } from 'node:fs'
+import type { Socket } from 'node:net'
+import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs'
 import { join, normalize, extname } from 'node:path'
 import { ARTIFACT_ALLOWED_EXTENSIONS } from '../shared/constants'
 import { readManifest } from './manifest'
-import { ArtifactVersioning } from './versioning'
 import type { ArtifactEntry } from '../shared/types'
 import { getMetrics } from '../core/metrics'
 
@@ -29,12 +29,11 @@ export class ArtifactServer {
   private started = false
   private sseClients: SseClient[] = []
   private sseIdCounter = 0
-  private versioning: ArtifactVersioning
+  private sockets = new Set<Socket>()
 
   constructor(artifactsDir: string, preferredPort: number) {
     this.artifactsDir = artifactsDir
     this.port = preferredPort
-    this.versioning = new ArtifactVersioning(artifactsDir)
   }
 
   /** Notify all connected SSE clients to reload. Called after artifact changes. */
@@ -82,6 +81,12 @@ export class ArtifactServer {
       this.server = null
       this.started = false
     }
+
+    // `close()` only stops *accepting* — sockets already established (a browser's
+    // keep-alive, an SSE stream) stay open and keep being served, so a "stopped"
+    // server answers on the old port until the client hangs up. Destroy them.
+    for (const socket of this.sockets) socket.destroy()
+    this.sockets.clear()
   }
 
   getPort(): number {
@@ -113,6 +118,10 @@ export class ArtifactServer {
     return new Promise((resolve, reject) => {
       const srv = createServer((req, res) => {
         this.handleRequest(req, res)
+      })
+      srv.on('connection', (socket) => {
+        this.sockets.add(socket)
+        socket.on('close', () => this.sockets.delete(socket))
       })
       srv.on('error', reject)
       srv.listen(port, () => {
@@ -216,8 +225,31 @@ export class ArtifactServer {
     })
   }
 
-  /** Per-artifact SSE stream: pushes content updates to connected browsers every 500ms. */
+  /**
+   * Per-artifact SSE stream: pushes the artifact's content to connected browsers
+   * every 500ms, so a page can follow an artifact the AI rewrites in place.
+   *
+   * Resolves the file through `resolveFile` — the same coordinate the gallery
+   * links to and the same traversal guard the static path uses — and 404s when no
+   * artifact carries that name, instead of holding a stream open on a file that
+   * does not exist.
+   */
   private handleNameSse(name: string, res: any): void {
+    const entry = readManifest(this.artifactsDir).artifacts.find((a) => a.name === name)
+    if (!entry) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' })
+      res.end(`No artifact named "${name}"`)
+      return
+    }
+
+    const ext = entry.type === 'svg' ? '.svg' : '.html'
+    const { filePath, error, status } = this.resolveFile(`/${entry.sessionId}/${entry.name}${ext}`)
+    if (error) {
+      res.writeHead(status || 404, { 'Content-Type': 'text/plain' })
+      res.end(error)
+      return
+    }
+
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -225,10 +257,18 @@ export class ArtifactServer {
       'Access-Control-Allow-Origin': '*',
     })
 
+    let last: string | null = null
     const interval = setInterval(() => {
-      const content = this.versioning.getVersion(name)
-      if (content) {
-        res.write(`data: ${JSON.stringify({ type: 'update', name, content })}\n\n`)
+      try {
+        const content = readFileSync(filePath, 'utf-8')
+        // Only on change: without this the stream re-sends the whole file every
+        // 500ms per client for as long as the tab stays open.
+        if (content !== last) {
+          last = content
+          res.write(`data: ${JSON.stringify({ type: 'update', name, content })}\n\n`)
+        }
+      } catch {
+        // Momentarily absent (archiving renames it) — skip this tick, try the next.
       }
     }, 500)
 

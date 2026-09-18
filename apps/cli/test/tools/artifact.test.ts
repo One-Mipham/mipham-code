@@ -2,6 +2,8 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { connect } from 'node:net'
+import { once } from 'node:events'
 import { ArtifactServer } from '../../src/artifacts/server'
 import { artifactsRoot } from '../../src/artifacts/paths'
 import { artifactTool } from '../../src/tools/artifact/artifact'
@@ -123,5 +125,76 @@ describe('Artifact 坐标一致', () => {
 
     expect(out.content).toContain('No artifact named')
     expect(spawnMock).not.toHaveBeenCalled()
+  })
+
+  // ============================================================
+  // 按名字订阅（GET /:name/sse）。
+  //
+  // 这条路由原先接的是另一套版本机制（<root>/<name>/current.html），而写那个文件的
+  // 方法全仓库零调用点 ⇒ 流永远推不出一个字节，却始终回 200 挂着。它现在读的是工具
+  // 真正写下的那份文件；下面两条把它钉在「有内容」与「没有就 404」两端。
+  // ============================================================
+
+  /** 取到第一段包含 `needle` 的 SSE 数据（单次 write 未必落在一个 chunk 里）。 */
+  async function firstSseMatch(url: string, needle: string): Promise<string> {
+    const ctrl = new AbortController()
+    const res = await fetch(url, { signal: ctrl.signal })
+    expect(res.status).toBe(200)
+
+    const reader = res.body!.getReader()
+    const decoder = new TextDecoder()
+    let seen = ''
+    try {
+      for (let i = 0; i < 5 && !seen.includes(needle); i++) {
+        const { value, done } = await reader.read()
+        if (done) break
+        seen += decoder.decode(value)
+      }
+    } finally {
+      ctrl.abort()
+    }
+    return seen
+  }
+
+  it('按名字订阅推的是工具写下的那份内容', async () => {
+    const { port, content } = await writeArtifact()
+
+    const seen = await firstSseMatch(
+      `http://localhost:${port}/probe-artifact/sse`,
+      'probe-artifact',
+    )
+
+    expect(seen).toContain(JSON.stringify(content))
+  })
+
+  it('按名字订阅一个不存在的 artifact → 404，而不是一条挂着的空流', async () => {
+    const { port } = await writeArtifact()
+
+    const res = await fetch(`http://localhost:${port}/no-such-artifact/sse`)
+
+    expect(res.status).toBe(404)
+    expect(await res.text()).toContain('No artifact named')
+  })
+
+  // ============================================================
+  // stop() 要真的停。
+  //
+  // `server.close()` 只停止**接收新连接**：已经建立的连接（浏览器的 keep-alive、
+  // 一条 SSE 流）会继续被服务。测试里这会以「换了个测试仍在跟上一个 server 说话」
+  // 的形态出现 —— 本文件每个用例都复用 ARTIFACT_PORT，而上一个 server 的目录已被
+  // afterEach 删掉，于是请求落到一个 manifest 为空的服务端上，随机 404。
+  // ============================================================
+
+  it('stop() 断开已建立的连接，而不是只停止接收新连接', async () => {
+    const { port } = await writeArtifact()
+
+    const socket = connect(port, '127.0.0.1')
+    await once(socket, 'connect')
+    expect(socket.destroyed).toBe(false)
+
+    server!.stop()
+
+    await once(socket, 'close')
+    expect(socket.destroyed).toBe(true)
   })
 })
