@@ -49,9 +49,12 @@ runtime state and is gitignored. The verbatim container output stays in
 本文件**不建议**为此在 Phase 1 命令上加 `--fresh`：`--fresh` 落在它上**不可逆**
 （`--fresh` 只许落在本轮自己、确认可弃的账本上），而这份账本**恢复起来只有一条手工路子** ——
 12 条里 **11 条**逐字存于**已跟踪的** `phase1-terminal-bench.json` 的 `ledger.entries`（连同
-`ledger.ceiling` = `50505050`），第 **12** 条（那笔 Phase-2 支出）**任何受跟踪文件里都没有**、
-只在本披露里逐字存着；而 `budget.py` 的子命令只有 `init` 与 `show`（**没有导入**）⇒ 那 11 条得用
-`Ledger.record()` 逐条写回，或直接改这份 JSON。
+`ledger.ceiling` = `50505050`），第 **12** 条（那笔 Phase-2 支出）**不以任何受跟踪 JSON 条目的
+形式存在**：它只以**引文**形式存着（就是**本文件**上面那段披露里逐字引的那条 —— 而本文件本身
+是受跟踪的，故「任何受跟踪文件里都没有」这种写法会当场把自己否掉；同值的 `note` 另在受跟踪的
+`phase2-integration-gate.json` 里以 `sessionCounters.id` 与 `sessionId` 的角色各出现一次，
+那是另一个角色、不是这条记录）；而 `budget.py` 的子命令只有 `init` 与 `show`（**没有导入**）
+⇒ 那 11 条得用 `Ledger.record()` 逐条写回，或直接改这份 JSON。
 （**订正**：此处原写「无备份」，实测为假 —— 假在「备份不存在」，不在「`--fresh` 不可逆」。）
 那条命令**保持原文**（`5070f36` 版计划 `:3406`）—— 它记录的是当时实跑的命令，改动它等于让计划声称跑过一条没跑过的命令。
 

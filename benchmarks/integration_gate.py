@@ -17,7 +17,7 @@ Two artifacts share this writer, and they do **not** carry the same field set:
 
 The two extra blocks are assembled by the **caller** and merged into the record
 this module builds -- this module does not produce them, and Task 16's Produces
-block is where their names and shapes come from. That is not licence to drop
+block is where their names come from. That is not licence to drop
 them: re-running this module against the Phase-2 output path without them would
 silently delete the only place the ``SHARED`` / ``"N/A · 机制不适用"`` finding
 lives.
