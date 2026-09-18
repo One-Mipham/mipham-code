@@ -9,7 +9,7 @@ import {
 } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
-import { execSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { validatePlugin } from './plugin-validator'
 
 const PLUGIN_DIR = join(homedir(), '.mipham', 'plugins')
@@ -110,11 +110,22 @@ export class PluginManager {
         'utf-8',
       )
 
-      execSync(`npm install ${packageName} --prefix "${stagingDir}" --no-save`, {
-        encoding: 'utf-8',
-        stdio: 'pipe',
-        timeout: 60_000,
-      })
+      // `--ignore-scripts`: without it, installing a plugin runs that package's
+      // preinstall/install/postinstall hooks as the current user — arbitrary
+      // code execution from any npm package, reachable via `/install-plugin`.
+      // A plugin only needs to *be* files on disk; it never needs a build step
+      // of its own to be loaded from here. `execFileSync` (argv array, no
+      // shell) keeps the command line independent of packageName, so package
+      // name validation is not the only thing standing between us and a shell.
+      execFileSync(
+        'npm',
+        ['install', packageName, '--prefix', stagingDir, '--no-save', '--ignore-scripts'],
+        {
+          encoding: 'utf-8',
+          stdio: 'pipe',
+          timeout: 60_000,
+        },
+      )
 
       // npm installs the package into <stagingDir>/node_modules/<packageName>/ —
       // validate there, then flatten it to the plugin dir root so its layout

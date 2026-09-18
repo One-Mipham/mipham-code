@@ -1,8 +1,15 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { PluginManager } from '../../src/plugin/plugin-manager'
+
+const childProcessMock = vi.hoisted(() => ({ execFileSync: vi.fn() }))
+
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>()
+  return { ...actual, execFileSync: childProcessMock.execFileSync }
+})
 
 const TEST_HOME = join(tmpdir(), 'mipham-plugin-test-' + Date.now())
 
@@ -189,5 +196,70 @@ describe('PluginManager', () => {
       expect(plugins4).toHaveLength(1)
       expect(plugins4[0]!.enabled).toBe(false)
     })
+  })
+})
+
+// ============================================================
+// installFromNpm — 从 npm 装插件时的脚本执行面
+//
+// 装一个包 = 让它的 postinstall/preinstall 以当前用户全权跑一遍。
+// 对「装插件」这个动作来说那是我们不想要的副作用：插件本身只需
+// 要是磁盘上的一份文件。本组把 argv 形状钉住，防它再被改回去。
+// ============================================================
+
+describe('installFromNpm 的安装命令', () => {
+  let npmPluginDir: string
+
+  beforeEach(() => {
+    npmPluginDir = join(
+      TEST_HOME,
+      'npm-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+    )
+    mkdirSync(npmPluginDir, { recursive: true })
+    childProcessMock.execFileSync.mockReset()
+    // 让被装的包在 npm 装完之后真的「存在」：按 --prefix 造出
+    // node_modules/<pkg>/plugin.json，装完的校验步骤才能走通。
+    childProcessMock.execFileSync.mockImplementation((_cmd: string, args: string[]) => {
+      const prefix = args[args.indexOf('--prefix') + 1]!
+      const pkgDir = join(prefix, 'node_modules', args[1]!)
+      mkdirSync(pkgDir, { recursive: true })
+      writeFileSync(
+        join(pkgDir, 'plugin.json'),
+        JSON.stringify({ name: 'npm-plugin', version: '2.0.0' }),
+        'utf-8',
+      )
+      return ''
+    })
+  })
+
+  afterEach(() => {
+    rmSync(TEST_HOME, { recursive: true, force: true })
+  })
+
+  it('不给被装包执行 postinstall 的机会（--ignore-scripts）', () => {
+    new PluginManager(npmPluginDir).installFromNpm('npm-plugin')
+    const args = childProcessMock.execFileSync.mock.calls[0]![1] as string[]
+    expect(args).toContain('--ignore-scripts')
+  })
+
+  it('经 execFileSync 以 argv 数组调用，不经 shell 拼接', () => {
+    new PluginManager(npmPluginDir).installFromNpm('npm-plugin')
+    const [cmd, args] = childProcessMock.execFileSync.mock.calls[0]! as [string, string[]]
+    expect(cmd).toBe('npm')
+    expect(Array.isArray(args)).toBe(true)
+    expect(args).toContain('--no-save')
+    expect(args).toContain('--prefix')
+  })
+
+  it('仍然把包装进插件目录并登记（修复未破坏安装流程）', () => {
+    const result = new PluginManager(npmPluginDir).installFromNpm('npm-plugin')
+    expect(result.success).toBe(true)
+    expect(result.message).toContain('npm-plugin')
+  })
+
+  it('拒绝非法包名时根本不调用 npm', () => {
+    const result = new PluginManager(npmPluginDir).installFromNpm('evil; rm -rf /')
+    expect(result.success).toBe(false)
+    expect(childProcessMock.execFileSync).not.toHaveBeenCalled()
   })
 })

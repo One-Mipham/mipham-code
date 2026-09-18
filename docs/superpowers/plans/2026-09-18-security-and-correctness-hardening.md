@@ -73,14 +73,16 @@
 
 ### Phase 5 — 剩余（4 条，低危/体验）
 
-| #   | 缺陷                                                                                                                          | 坐标                           | 证据                      |
-| --- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ------------------------- |
-| 24  | Glob 的 500 上限静默（同一份代码里 Grep 特意加了 `(truncated)` 标记，理由还写在注释里）                                       | `glob.ts:30`                   | 子代理实测 800→500 无标记 |
-| 25  | Grep 的 `catch {}` 把任何异常都解释成「rg 未安装」⇒ 错误信息指向错误根因                                                      | `grep.ts:135`                  | 子代理读码                |
-| 26  | Edit 审批预览 `slice(0,60)` 按 UTF-16 码元切，劈开代理对 ⇒ 末尾半个 emoji                                                     | `ui/app.tsx:128`               | 子代理实测                |
-| 27  | 插件安装 `execSync('npm install … --no-save')` 无 `--ignore-scripts`、无完整性校验 ⇒ 任意 npm 包的 postinstall 以用户全权运行 | `plugin/plugin-manager.ts:113` | 读码                      |
+| #   | 缺陷                                                                                                                                                    | 坐标                           | 证据                      |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ------------------------- |
+| 24  | Glob 的 500 上限静默（同一份代码里 Grep 特意加了 `(truncated)` 标记，理由还写在注释里）                                                                 | `glob.ts:30`                   | 子代理实测 800→500 无标记 |
+| 25  | Grep 的 `catch {}` 把任何异常都解释成「rg 未安装」⇒ 错误信息指向错误根因                                                                                | `grep.ts:135`                  | 子代理读码                |
+| 26  | Edit 审批预览 `slice(0,60)` 按 UTF-16 码元切，劈开代理对 ⇒ 末尾半个 emoji                                                                               | `ui/app.tsx:128`               | 子代理实测                |
+| 27  | ✅ **已修（2026-09-18，早于 Phase 2）** 插件安装 `execSync('npm install … --no-save')` 无 `--ignore-scripts` ⇒ 任意 npm 包的 postinstall 以用户全权运行 | `plugin/plugin-manager.ts:113` | 读码                      |
 
-> **#27 优先级单列**：它是本清单里唯一「一条命令拿到全权执行」的路径（`/install-plugin` 可达）。虽被排在 Phase 5，但它与 Phase 1 同属「安全」族 —— 若 Phase 1 之后仍有预算，应提前到 Phase 2 之前。
+> **#27 已按本条优先级提前执行（2026-09-18，排在 Phase 2 之前）**：`--ignore-scripts` + `execFileSync` argv 数组，测试 2629 → 2633。**「无完整性校验」一节未做**，理由记在下面的「不做」表 —— npm 自身按 registry 元数据校验 tarball 完整性，「无校验」指的是**没有独立信任锚**（不钉版本、无 lockfile），补它需要在装插件这条路上引入版本钉死策略，属另一个决策，不在本批做。
+>
+> **原记**：它是本清单里唯一「一条命令拿到全权执行」的路径（`/install-plugin` 可达）。虽被排在 Phase 5，但它与 Phase 1 同属「安全」族 —— 应提前到 Phase 2 之前。
 
 ---
 
@@ -951,7 +953,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - **Phase 2（输出上限与错误分类）**：`grep.ts` 三件事一次做完 —— rg 路径也走 `truncateGrepOutput`；find 回退的 `exitCode===1` 改为「stderr 非空则报错」；`runSearch` 消费 stderr 并返回。Glob 的 500 上限加 `(truncated)` 标记（与 Grep 同一原则，理由已写在 `grep.ts:32` 的注释里）。验收：造一个超过 50k 字符的命中集，断言输出带标记；PATH 去掉 rg 后断言非法正则以错误收场。
 - **Phase 3（数据落点与并发写）**：Artifact 目录同源（并给 `saveVersion` 接上调用点）+ `atomicWriteFileSync` 唯一临时名 + `CronJob` 加 `cwd`/`sessionId` 并按 cwd 过滤 + `read.ts` 按需读窗口。验收：Artifact 发布后 fetch 自己回报的 URL 必须 200；两个不同 cwd 建的同名任务互不可见。
 - **Phase 4（接线与配置）**：`BLOCKED_PATHS` 存解析后形态 + `validateRulePattern` 已做 + `mergeConfig` 深合并 + `.mcp.json` 补齐两个字段 + Stop hook 的 `decision` 贯通 + SubagentStart/Stop matcher 按 agent 类型过滤 + 子代理 ctx 补齐 + HTTP MCP 通知处理器接线。验收：每条都要有「改动前红、改动后绿」的测试，不留只读码结论。
-- **Phase 5（剩余）**：**#27 插件安装 `--ignore-scripts` 应提前到 Phase 2 之前**（唯一一条能拿到全权执行的路径）；其余为体验项。
+- **Phase 5（剩余）**：#27 已提前执行完毕（2026-09-18）；其余为体验项。
 
 ### 每条批次结束时的固定动作
 
