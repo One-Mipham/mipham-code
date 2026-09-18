@@ -654,3 +654,34 @@ describe('路径形规则：~ 与已知变量的展开', () => {
     expect(expandKnownPathVars('a/~/b')).toBe('a/~/b')
   })
 })
+
+describe('validateRulePattern 拒绝永不匹配的参数化规则', () => {
+  it.each(['WebFetch(*)', 'Task(*)', 'MultiEdit(/x)', 'BashTool(*)'])(
+    '%s：该工具的参数化规则永远匹配不上，必须报错',
+    (pattern) => {
+      const reason = validateRulePattern(pattern)
+      expect(reason).not.toBeNull()
+      expect(reason).toMatch(/not supported/i)
+    },
+  )
+
+  it('mcp__ 工具的参数化规则同样被拒（matchBashRule 的 baseTool 集合里没有它）', () => {
+    expect(validateRulePattern('mcp__srv__tool(*)')).toMatch(/not supported/i)
+  })
+
+  it.each([
+    'Bash(rm *)',
+    'Read(**)',
+    'Write(/etc/*)',
+    'Edit(*.ts)',
+    'Grep(**/vendor)',
+    'Glob(**/.ssh)',
+  ])('支持的工具名仍然合法：%s', (pattern) => {
+    expect(validateRulePattern(pattern)).toBeNull()
+  })
+
+  it('裸工具名不受影响', () => {
+    expect(validateRulePattern('Bash')).toBeNull()
+    expect(validateRulePattern('WebFetch')).toBeNull()
+  })
+})

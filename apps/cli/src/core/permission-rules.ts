@@ -536,6 +536,13 @@ function scanReaderWriterCommands(
   }
 }
 
+/**
+ * `matchBashRule` 真正会按参数匹配工具名的集合。**与 matchBashRule 的分支一一
+ * 对应** —— 那里 `return false` 的工具，参数化规则在 validateRulePattern 里必须
+ * 被拒（否则规则永远不命中，是静默空防护）。改一边必须改另一边。
+ */
+const PARAMETERISED_TOOLS = new Set(['Bash', 'Read', 'Write', 'Edit', 'Grep', 'Glob'])
+
 // Match a tool(parameter) rule against an actual tool call.
 //
 // Pattern formats:
@@ -618,6 +625,10 @@ export function wildcardMatch(pattern: string, input: string): boolean {
  * `Bash()`) is silently dead today — this returns a human-readable reason so
  * the caller can report it as an invalid setting instead of ignoring it.
  *
+ * 校验的是**结构 + 工具名**（后者见 PARAMETERISED_TOOLS）。**不**校验子模式本身
+ * 能否匹配任何东西 —— `Bash(zzz *)` 合法、装得上、只是不会命中，那是用户自己的
+ * 选择，不是配置错误。
+ *
  * Returns null when the pattern is valid, or a reason string when malformed.
  */
 export function validateRulePattern(pattern: string): string | null {
@@ -628,8 +639,15 @@ export function validateRulePattern(pattern: string): string | null {
     // Empty parameter: `Bash()` or `Bash( )`
     if (/\(\s*\)$/.test(pattern)) return 'empty parameter'
     // Must be exactly `ToolName(param)` with nothing before or after.
-    if (!/^(\w+)\((.+)\)$/.test(pattern)) {
+    const shape = pattern.match(/^(\w+)\((.+)\)$/)
+    if (!shape) {
       return 'unexpected text after the closing parenthesis'
+    }
+    // 工具名必须落在 matchBashRule 真正会按参数匹配的那一集合里，否则这条规则是
+    // **静默空防护**：语法合法、装得上、永远不命中，而用户以为配了保护。
+    const tool = shape[1]!
+    if (!PARAMETERISED_TOOLS.has(tool)) {
+      return `parameterised rules are not supported for tool "${tool}" (it would never match)`
     }
     return null
   }
