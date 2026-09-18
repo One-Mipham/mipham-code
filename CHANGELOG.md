@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.81.8] — 2026-09-18
+
+### Added
+
+- **基准适配器与两轮结果落库（开发工具，不进 CLI 产物）** —— `benchmarks/` 下新增 Harbor 适配器（手写 RFC6455 客户端 / daemon REST 客户端 / 七步 driver / 作业级 token 台账 / 复现脚本），两轮结果（`terminal-bench@2.0` 10 题、`swebench-verified@1.0` 10 题）与各自的可重跑脚本一并入库。**这两个数是仪器验通的读数、不是成绩** —— 题量 11% / 2%、未固定 seed、`k=1`、跑在 x86 模拟下；完整口径、选题规则与已知限制见 `benchmarks/README.md`
+
+### Security
+
+- **`Bash(...)` deny 规则可被「基命令前的 shell 噪声」绕过** —— `( rm -rf x )`、`{ rm -rf x; }`、`! rm -rf x`、`FOO=bar rm -rf x`、`IFS=x rm -rf x`、`for f in *; do rm -rf x; done` 都让规则匹配器看不到真正的基命令（同一条噪声也让 `Read(secret)` 漏判）。根因是命令解析有**四条各自 tokenize 的路径**，而「剥掉前导噪声」这条知识只被其中一条知道一半；修法不是给四处各打一个补丁，而是抽成**一个**导出函数、两条匹配路径都经过它 —— 只接一条等于只修一半。同批修掉四类同族绕过：`timeout --preserve-status cat secret` 的 `cat` 不再被当成 duration 吃掉；进程替换 `<(…)` / `>(…)` 里的命令递归解析；`~` 与 `$HOME` 展开（`cat ~/.ssh/id_rsa` 不再绕过绝对路径规则）；worktree 逃逸守卫改用路径解析（原实现拼接式解析不归一 `..`、只看第一个 `cd`、用字符串前缀判归属）
+- **从 npm 装插件不再执行被装包的安装脚本** —— `execSync('npm install … --no-save')` 缺 `--ignore-scripts`，任意 npm 包的 `postinstall` 因而以用户全权运行；改为 `--ignore-scripts` + `execFileSync` argv 数组
+
+### Fixed
+
+- **Artifact 工具回报的 URL 必然 404** —— 工具写 `<cwd>/artifacts`、服务端根在 `<cwd>/.mipham/artifacts`，两个目录不同源；收进单一解析函数，`/artifact open` 与 `/artifact list` 不再写死会话 id
+- **两套并行版本机制删掉一套** —— 被删那套的唯一写者自落地起**零调用点**（它维护的 `current.html` 从未存在过），`/artifact` 按名字订阅改为读工具真正写下的那份文件、找不到即 404（此前挂着一条永不产出内容的 200 空流）。删除当场暴露 `stop()` 只调 `server.close()` —— 它只停止**接收新连接**，已建立的 socket 仍在被服务 ⇒「已停止」的服务器还在旧端口应答
+- **manifest 的读与写分家** —— 去重只按 `name`（而 manifest 是全局一份、条目自带 `sessionId`）⇒ 两个会话的同名 artifact 互相顶掉；读失败静默当空、而写路径紧接着整份重写 ⇒ 一份坏索引被覆盖成「只有这一条」。改为按 `name`+`sessionId` 去重、坏索引改名隔离（字节保留）、索引原子写
+- **`Read` 声称支持 offset/limit 却先整读再切片** —— 超限一律报错，而错误里建议的「use offset/limit」对它要救的那类文件根本不可执行；改为直接从 fd 取窗口、文件大小闸换成扫描预算（20 MB 文件的 2000 行窗口：旧路径 RSS +141.5 MB，新路径 ~0）
+- **定时任务没有归属目录** —— 存储是全局单店、`ctx` 被丢弃 ⇒ 任何目录建的任务被任何其他目录的会话执行，且 id 只由 `cron+prompt` 决定、跨项目碰撞。加 `cwd`/`sessionId` 并按 `cwd` 过滤；更早写的无 `cwd` 任务**照发不误**（不静默停掉用户已建的日程），列表把它们标 `[无归属]` 并给出处置办法
+- **`atomicWriteFileSync` 的固定 `.tmp` 名在并发写者之间互撞** —— A 的 rename 把 B 的内容搬到位、B 再抛 ENOENT ⇒ 丢写；改为 pid + 随机后缀、异常路径清孤儿
+- **`/resume` 的健壮性** —— `SessionLog.open()` 是磁盘→内存的唯一入口，却只 `JSON.parse` 不校验，而**合法 JSON 不等于合法事件**（`compaction/rewrite` 少 `messages` ⇒ 投影时 `out` 变 `undefined` 即抛）；`SessionStore.list()` 的 `try` 又包住整个 `for` ⇒ 一个坏文件让 `/resume` **一个会话都不显示**。改为入口逐条校验（只校验投影真有分支的变体、未知 `type` 放行）+ 列表逐文件兜底
+- **三个状态文件非原子写** —— `preferences.json` / `keys.json` / `config.yml` 都是裸 `writeFileSync` **原地截断**，而三个读侧都把「读不出来」吞成空 ⇒ 丢的是**整份**；`keys.json` 还是「转了一半」（写固定名 `.tmp` 却不 rename，留下一份废物、目标仍非原子）。改原子写并统一 `0o600`
+- **搜索工具的两处错判** —— `grep` 的输出上限只接 find 回退一条路径（rg 快路径原样返回，46 万字符照发）；find 回退把「出错」读成「无匹配」（BSD `find` 在正则非法 / 目录不可读 / grep 不存在这三种情形下退出码都是 1）；`runSearch` 的 stderr 从不消费 ⇒ Node 下 stderr 超阈值即卡满 120 s 超时兜底
+- **CLI 输出被静默截断** —— 声明了上限却没有施加点，截断与正常结束不可分
+
 ## [0.81.7] — 2026-09-17
 
 ### Added

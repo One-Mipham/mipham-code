@@ -156,13 +156,21 @@ pnpm lint       # Run linting
 pnpm test       # Run tests
 ```
 
-## 公开基准
+## 基准（仪器验通，不作为成绩）
 
-Phase 1（`terminal-bench@2.0`，10 题，`k=1`）已跑完：8 题跑到了 agent 结果，harbor 报的官方分数为 `Mean: 0.000`（8 题 reward 全 0.0）；合计 7,973,562 tokens —— 是 50.5M 上限的 15.79%。
+本节的两个数是**把跑分仪器验通**的读数，**不是成绩** —— 我们不拿它们对外引用。理由可核，不是谦辞：
 
-Phase 2（`swebench-verified@1.0`，10 题 / 10 个不同仓库，`k=1`）也已跑完：9 题跑到了 agent 结果，官方分数为 `Mean: 0.900`（9 题 reward 全 1.0；分母 10 含 1 个网络故障的 trial，按 0 分并入）；合计 21,564,338 tokens。
+- **题量**：两轮各跑 10 题，而 `terminal-bench@2.0` 的题库是 **89** 题、`swebench-verified@1.0` 是 **500** 题 ⇒ 样本是 11% 与 2%；且**不是随机抽样**（前者取字典序前 10，后者取前 10 个仓库各自的第 1 题）。
+- **未固定 seed**：两轮的记录里都没有 seed 字段 ⇒ 这一轮不可复现。
+- **`k=1`**：每题只跑一次，分不出「能干」与「完美」—— 下面 9/10 的 95% Wilson 区间宽到 `[0.60, 0.98]`。
+- **跑在 x86 模拟下**：宿主 arm64、镜像全是 `linux/amd64` ⇒ 墙钟时间受影响；Phase 1 的 4 题超时里有 3 题是编译型任务，**「超时是平台惩罚还是模型不行」尚未归因**。
 
-**两个数必须成对读**：只报「完成题数」会显得比实际好，只报「官方分数」会显得比实际差。
+读数如下（**两个数必须成对读**：只报「完成题数」会显得比实际好，只报「官方分数」会显得比实际差）：
+
+| 轮次    | 数据集                                                  | 跑到 agent 结果 | harbor 报的分数                                                                   | tokens                          |
+| ------- | ------------------------------------------------------- | --------------: | --------------------------------------------------------------------------------- | ------------------------------- |
+| Phase 1 | `terminal-bench@2.0`（10 题，`k=1`）                    |          8 / 10 | `Mean: 0.000`（8 题 reward 全 0.0）                                               | 7,973,562 = 50.5M 上限的 15.79% |
+| Phase 2 | `swebench-verified@1.0`（10 题 / 10 个不同仓库，`k=1`） |          9 / 10 | `Mean: 0.900`（9 题 reward 全 1.0；分母 10 含 1 个网络故障的 trial，按 0 分并入） | 21,564,338                      |
 
 - **结果文件**: [`benchmarks/results/phase1-terminal-bench.json`](./benchmarks/results/phase1-terminal-bench.json)、[`benchmarks/results/phase2-swebench-verified.json`](./benchmarks/results/phase2-swebench-verified.json)
 - **复现**: 见 [`benchmarks/README.md`](./benchmarks/README.md) 的跑分一节 —— `DOCKER_DEFAULT_PLATFORM=linux/amd64`、数据集下载与三个台账变量**都不可省**（不带的实测代价有先例：40.4 秒、`n_trials: 0`），故不在此处复制成一行。
