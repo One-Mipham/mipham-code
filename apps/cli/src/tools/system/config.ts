@@ -1,7 +1,8 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
+import { readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { parse as parseYaml, stringify } from 'yaml'
+import { atomicWriteFileSync } from '../../shared/atomic-write'
 import type { ToolDefinition } from '../../shared/index.ts'
 
 const MIPHAM_HOME = join(homedir(), '.mipham')
@@ -60,7 +61,10 @@ export const configTool: ToolDefinition = {
         obj = obj[k] as Record<string, unknown>
       }
       obj[keys[keys.length - 1]!] = params.value
-      writeFileSync(USER_CONFIG, stringify(config), 'utf-8')
+      // 原子写 + 0o600：这是整份 read-modify-write，裸 writeFileSync 原地截断 ——
+      // 崩在写中途就留下半截 YAML，而权限由 umask 决定（典型 0644），比同一份配置的
+      // 另一个写者 saveProviderApiKey（loader.ts，0600 原子写）更松。
+      atomicWriteFileSync(USER_CONFIG, stringify(config), { mode: 0o600 })
       return { success: true, content: `Set ${key} = ${params.value}` }
     }
 

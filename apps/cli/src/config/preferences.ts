@@ -5,9 +5,10 @@
  * NOT for config.yml settings — those belong in the YAML config system.
  * NOT for secrets — this file is plain JSON, not encrypted.
  */
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
+import { readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
+import { atomicWriteFileSync } from '../shared/atomic-write'
 
 const PREFS_PATH = join(homedir(), '.mipham', 'preferences.json')
 
@@ -27,7 +28,9 @@ function writePrefs(prefs: Record<string, string>): void {
   try {
     const dir = join(homedir(), '.mipham')
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 })
-    writeFileSync(PREFS_PATH, JSON.stringify(prefs, null, 2), { mode: 0o600, encoding: 'utf-8' })
+    // 原子写：裸 writeFileSync 原地截断，崩在写中途就留下一份不可解析的文件，
+    // 而 readPrefs 把不可解析吞成「空」⇒ **全部**偏好静默消失（不是丢一项）。
+    atomicWriteFileSync(PREFS_PATH, JSON.stringify(prefs, null, 2), { mode: 0o600 })
   } catch {
     // best-effort; never crash because preferences failed to save
   }

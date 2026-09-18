@@ -12,9 +12,10 @@ vi.mock('node:os', async (importOriginal) => {
   }
 })
 
-import { rmSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
+import { parse as parseYaml } from 'yaml'
 import type { ToolContext } from '../../src/shared'
 import { webFetchTool } from '../../src/tools/network/web-fetch'
 import { webSearchTool } from '../../src/tools/network/web-search'
@@ -269,6 +270,27 @@ describe('Config tool execution', () => {
 
   afterEach(() => {
     cleanConfig()
+  })
+
+  // config.yml 的写路径原先走裸 writeFileSync ⇒ 权限由 umask 决定（典型 0644）。
+  // 同一份配置的另一个写者 saveProviderApiKey（loader.ts:673）用的是 0600 的原子写，
+  // 于是 Config 工具会把这份文件悄悄放宽。写坏的方向同样是「静默变空」：整份
+  // read-modify-write 被打断，下一次读到的就是半截 YAML。
+  it('写 config.yml 是原子的，且权限落在 0o600', async () => {
+    await configTool.execute({ action: 'set', key: 'theme', value: 'dark' }, ctx)
+
+    const configFile = join(CONFIG_DIR, 'config.yml')
+    expect(existsSync(configFile)).toBe(true) // 正控：目标文件确实写出来了
+    expect(parseYaml(readFileSync(configFile, 'utf-8'))).toMatchObject({ theme: 'dark' })
+    // 写到一半崩掉留下的临时文件不该留在配置目录里
+    expect(readdirSync(CONFIG_DIR).filter((f) => f.includes('.tmp'))).toEqual([])
+    expect(statSync(configFile).mode & 0o777).toBe(0o600)
+
+    // 「原子」的直接证据：原地截断重写保持同一个 inode，写临时文件再 rename 才会换。
+    const before = statSync(configFile).ino
+    await configTool.execute({ action: 'set', key: 'theme', value: 'light' }, ctx)
+    expect(parseYaml(readFileSync(configFile, 'utf-8'))).toMatchObject({ theme: 'light' })
+    expect(statSync(configFile).ino).not.toBe(before)
   })
 
   it('lists empty config', async () => {

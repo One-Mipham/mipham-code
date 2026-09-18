@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { homedir } from 'node:os'
+import { atomicWriteFileSync } from '../shared/atomic-write'
 import { saveProviderApiKey } from './loader'
 
 const MIPHAM_HOME = join(homedir(), '.mipham')
@@ -39,14 +40,12 @@ function loadKeys(): KeysData {
 
 function saveKeys(data: KeysData): void {
   mkdirSync(dirname(KEYS_FILE), { recursive: true })
-  const tmp = KEYS_FILE + '.tmp'
-  writeFileSync(tmp, JSON.stringify(data, null, 2) + '\n', { mode: 0o600 })
-  writeFileSync(KEYS_FILE, JSON.stringify(data, null, 2) + '\n', { mode: 0o600 })
-  try {
-    chmodSync(KEYS_FILE, 0o600)
-  } catch {
-    // chmod on Windows is a no-op
-  }
+  // 从前这里「转了一半」：先写一个固定名的 `.tmp`，**然后不 rename、直接再写一遍
+  // 目标**。留在磁盘上的 `.tmp` 是废物，目标仍然非原子 —— 并发 `/keys rotate` 撞进
+  // 同一个临时名，或写到一半被打断，`loadKeys` 把不可解析的 JSON 吞成 `{}`
+  // （见上面的 catch）⇒ 全部轮换元数据静默消失。atomicWriteFileSync 自己写唯一名
+  // 临时文件再 rename，两者一起解决。
+  atomicWriteFileSync(KEYS_FILE, JSON.stringify(data, null, 2) + '\n', { mode: 0o600 })
 }
 
 function daysSince(iso: string): number {

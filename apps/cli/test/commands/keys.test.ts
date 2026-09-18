@@ -10,7 +10,15 @@ vi.mock('node:os', async (importOriginal) => {
   }
 })
 
-import { rmSync, mkdirSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir, homedir } from 'node:os'
 import { keysCmd } from '../../src/commands/keys.js'
@@ -128,6 +136,36 @@ describe('KeyManager', () => {
     manager.ensureEntry('fresh-key')
     const reminder = manager.getExpiryReminder()
     expect(reminder).toBeNull()
+  })
+
+  // ============================================================
+  // keys.json 的写路径曾经是「转了一半」：先写一个固定名的 `.tmp`，**然后不 rename、
+  // 直接再写一遍目标**。丢在磁盘上的 `.tmp` 是废物，目标仍然非原子 —— 并发
+  // `/keys rotate` 撞进同一个临时名，或写到一半被打断，`loadKeys` 把不可解析的
+  // JSON 吞成 `{}`（:35-37），全部轮换元数据静默消失。
+  // ============================================================
+  it('保存后不留固定名的 .tmp 残骸（写的是同一个原子路径）', () => {
+    const manager = new KeyManager()
+    manager.ensureEntry('anthropic')
+
+    const keysFile = join(TEST_HOME, '.mipham', 'keys.json')
+    expect(existsSync(keysFile)).toBe(true) // 正控：它确实写了目标文件
+    expect(JSON.parse(readFileSync(keysFile, 'utf-8')).anthropic).toBeTruthy()
+    expect(existsSync(keysFile + '.tmp')).toBe(false)
+    expect(readdirSync(join(TEST_HOME, '.mipham')).filter((f) => f.includes('.tmp'))).toEqual([])
+  })
+
+  it('rotate 之后同样不留 .tmp 残骸，且换 inode（rename 而非原地重写）', () => {
+    const manager = new KeyManager()
+    manager.ensureEntry('anthropic')
+
+    const keysFile = join(TEST_HOME, '.mipham', 'keys.json')
+    const before = statSync(keysFile).ino
+    manager.rotate('anthropic', 'sk-test-atomic-write')
+
+    expect(JSON.parse(readFileSync(keysFile, 'utf-8')).anthropic).toBeTruthy()
+    expect(existsSync(keysFile + '.tmp')).toBe(false)
+    expect(statSync(keysFile).ino).not.toBe(before)
   })
 
   it('audit returns only expired keys', () => {
