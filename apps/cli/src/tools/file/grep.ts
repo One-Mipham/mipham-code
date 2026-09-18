@@ -16,17 +16,23 @@ export async function runSearch(
   cmd: string[],
   cwd: string,
   timeoutMs: number,
-): Promise<{ stdout: string; timedOut: boolean; exitCode: number | null }> {
+): Promise<{ stdout: string; stderr: string; timedOut: boolean; exitCode: number | null }> {
   const proc = Bun.spawn(cmd, { cwd, stdout: 'pipe', stderr: 'pipe' })
   let timedOut = false
   const timer = setTimeout(() => {
     timedOut = true
     proc.kill()
   }, timeoutMs)
-  const stdout = await new Response(proc.stdout).text()
+  // 两条管道必须**并发**读。先读满 stdout 再读 stderr 会在子进程写满
+  // stderr（~64 KB 管道缓冲）时死锁：它阻塞在 write 上不退出，stdout 也就
+  // 永远读不到 EOF —— 只能等超时兜底，而超时会把「慢」和「错」说成同一件事。
+  const [stdout, stderr] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ])
   await proc.exited
   clearTimeout(timer)
-  return { stdout, timedOut, exitCode: proc.exitCode }
+  return { stdout, stderr, timedOut, exitCode: proc.exitCode }
 }
 
 /** grep 输出上限：超过则显式截断并附标记（不能静默丢内容——模型会误以为看全了）。 */
@@ -107,7 +113,9 @@ export function createGrepTool(credentialConfig?: CredentialMaskingConfig): Tool
         if (exitCode === 0) {
           return {
             success: true,
-            content: maskSearchOutput(stdout || '(no matches)', credentialConfig, 'heading'),
+            content: truncateGrepOutput(
+              maskSearchOutput(stdout || '(no matches)', credentialConfig, 'heading'),
+            ),
           }
         }
         // rg exit 2 (error, e.g. permission denied on protected dirs) — do NOT
@@ -117,12 +125,11 @@ export function createGrepTool(credentialConfig?: CredentialMaskingConfig): Tool
         if (stdout && stdout.trim()) {
           return {
             success: true,
-            content: maskSearchOutput(
-              stdout +
-                '\n\n(rg exited 2 — some paths unreadable; narrow scope for complete results)',
-              credentialConfig,
-              'heading',
-            ),
+            // 先截断正文、再拼注解：注解拼在截断之内的话，它自己会被切掉，
+            // 模型拿到的就是一句没头没尾的提示。
+            content:
+              truncateGrepOutput(maskSearchOutput(stdout, credentialConfig, 'heading')) +
+              '\n\n(rg exited 2 — some paths unreadable; narrow scope for complete results)',
           }
         }
         return {
@@ -153,7 +160,11 @@ export function createGrepTool(credentialConfig?: CredentialMaskingConfig): Tool
         '+',
       ]
       try {
-        const { stdout, timedOut, exitCode } = await runSearch(grepArgs, ctx.cwd, GREP_TIMEOUT_MS)
+        const { stdout, stderr, timedOut, exitCode } = await runSearch(
+          grepArgs,
+          ctx.cwd,
+          GREP_TIMEOUT_MS,
+        )
         if (timedOut) {
           return {
             success: false,
@@ -161,7 +172,17 @@ export function createGrepTool(credentialConfig?: CredentialMaskingConfig): Tool
             error: `Grep timed out after ${GREP_TIMEOUT_MS / 1000}s — narrow scope with "path" and "include".`,
           }
         }
-        if (exitCode === 1) return { success: true, content: '(no matches)' }
+        // 退出码 1 在 find 这里是**两件事**：真的没搜到，和「根本没搜成」
+        // —— 目录不可读、grep 正则非法、grep 不在 PATH，BSD find 全都退 1。
+        // 后者一律伴随 stderr，所以用 stderr 而非退出码分辨；不加这一刀，
+        // 模型会被告知「没有匹配」，而真相是这次搜索压根没跑起来。
+        if (exitCode === 1) {
+          const err = stderr.trim()
+          if (err) {
+            return { success: false, content: '', error: `Search failed: ${err.slice(0, 500)}` }
+          }
+          return { success: true, content: '(no matches)' }
+        }
         if (exitCode === 0) {
           return {
             success: true,
@@ -171,7 +192,10 @@ export function createGrepTool(credentialConfig?: CredentialMaskingConfig): Tool
         return {
           success: false,
           content: '',
-          error: 'grep failed. Install ripgrep: brew install ripgrep',
+          error:
+            `grep failed (exit ${exitCode})` +
+            (stderr.trim() ? `: ${stderr.trim().slice(0, 500)}` : '') +
+            '. Install ripgrep: brew install ripgrep',
         }
       } catch {
         return {

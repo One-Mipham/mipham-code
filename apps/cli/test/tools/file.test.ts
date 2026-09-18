@@ -619,19 +619,11 @@ describe('Grep rg exit 2 (error) does not fall back to find', () => {
   it('returns a narrow-scope error instead of stalling the find fallback', async () => {
     // rg exits 2 with empty stdout (permission denied) — must NOT run the
     // slow `find` fallback (which would spawn a real find over cwd).
+    // 这里原先给 stdout 与 stderr 传的是**同一个**流对象；bun 从不这样返回，
+    // 而 runSearch 现在两条管道并发读，同一个流读两次会抛（流被锁）。
+    // 换成 fakeProc：两个独立的流，与真实形状一致。
     vi.spyOn(Bun, 'spawn').mockImplementation((cmd: string[]) => {
-      if (cmd[0] === 'rg') {
-        const empty = Readable.toWeb(Readable.from([])) as unknown as ReadableStream
-        return {
-          stdout: empty,
-          stderr: empty,
-          exited: Promise.resolve(2),
-          get exitCode() {
-            return 2
-          },
-          kill: () => {},
-        } as any
-      }
+      if (cmd[0] === 'rg') return fakeProc('', '', 2)
       throw new Error(`unexpected spawn of ${cmd[0]} — find fallback must not run`)
     })
 
@@ -674,5 +666,126 @@ describe('Grep tool timeout (stall guard)', () => {
     expect(timedOut).toBe(true)
     // Returned promptly (~100ms), not after the full 5s sleep.
     expect(Date.now() - t0).toBeLessThan(4000)
+  })
+})
+
+// ============================================================
+// Phase 2 — 输出上限与错误分类
+//
+// 两条搜索路径（rg 快路径 / find 回退）此前在同一个函数里被区别对待：
+// 只有回退那条截断、只有回退那条把退出码 1 当「无匹配」，而两条路径的
+// stderr 都没人读。下面把三件事分别在**两条路径**上钉住。
+// ============================================================
+
+/** 造一个假的 spawn 结果；stdout / stderr 必须是**两个**流（bun 从不同一个）。 */
+function fakeProc(stdoutText: string, stderrText: string, exitCode: number) {
+  // 必须是 Buffer 块：`Readable.from(['str'])` 产出的是字符串块，
+  // `new Response(stream)` 只认 Uint8Array，读的时候抛 "Received non-Uint8Array chunk"。
+  const stream = (s: string) =>
+    Readable.toWeb(Readable.from(s ? [Buffer.from(s)] : [])) as unknown as ReadableStream
+  return {
+    stdout: stream(stdoutText),
+    stderr: stream(stderrText),
+    exited: Promise.resolve(exitCode),
+    get exitCode() {
+      return exitCode
+    },
+    kill: () => {},
+  } as any
+}
+
+describe('Grep rg 快路径也走上限', () => {
+  beforeEach(mockRealSpawn)
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  const HUGE = 'x'.repeat(60_000)
+
+  it('rg exit 0 的超限输出被截断并加标记', async () => {
+    vi.spyOn(Bun, 'spawn').mockImplementation((cmd: string[]) => {
+      if (cmd[0] === 'rg') return fakeProc(HUGE, '', 0)
+      throw new Error(`unexpected spawn of ${cmd[0]} — rg 成功时不该走 find 回退`)
+    })
+    const r = await grepTool.execute({ pattern: 'needle', path: tmpDir }, ctx)
+    expect(r.success).toBe(true)
+    expect(r.content).toContain('(truncated)')
+    expect(r.content.length).toBeLessThan(60_000)
+  })
+
+  it('rg exit 2 的部分结果被截断，但注解不被截断吃掉', async () => {
+    vi.spyOn(Bun, 'spawn').mockImplementation((cmd: string[]) => {
+      if (cmd[0] === 'rg') return fakeProc(HUGE, '', 2)
+      throw new Error(`unexpected spawn of ${cmd[0]} — exit 2 不该走 find 回退`)
+    })
+    const r = await grepTool.execute({ pattern: 'needle', path: tmpDir }, ctx)
+    expect(r.success).toBe(true)
+    expect(r.content).toContain('(truncated)')
+    // 注解是我们自己加的，必须留在截断之外，否则模型看到的是一句被劈开的提示
+    expect(r.content).toContain('rg exited 2')
+  })
+})
+
+describe('Grep find 回退不再把「出错」读成「无匹配」', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  /** rg 不可用 ⇒ 落回 find；find 按给定读数返回。 */
+  function mockFindOnly(stdoutText: string, stderrText: string, exitCode: number) {
+    vi.spyOn(Bun, 'spawn').mockImplementation((cmd: string[]) => {
+      if (cmd[0] === 'rg') {
+        throw Object.assign(new Error('Executable not found in $PATH: "rg"'), { code: 'ENOENT' })
+      }
+      if (cmd[0] === 'find') return fakeProc(stdoutText, stderrText, exitCode)
+      throw new Error(`unexpected spawn of ${cmd[0]}`)
+    })
+  }
+
+  it('退出码 1 且 stderr 非空 ⇒ 报错，不报「无匹配」', async () => {
+    mockFindOnly('', 'find: grep: No such file or directory', 1)
+    const r = await grepTool.execute({ pattern: 'needle', path: tmpDir }, ctx)
+    expect(r.success).toBe(false)
+    expect(r.error).toContain('No such file or directory')
+    expect(r.content).not.toBe('(no matches)')
+  })
+
+  it('正对照：退出码 1 且 stderr 为空 ⇒ 仍然报「无匹配」', async () => {
+    // 没有这条，「把 exit 1 一律改成报错」也能让上一条变绿 —— 那会把
+    // 真正的「搜索无结果」变成错误，是同一个 bug 的镜像。
+    mockFindOnly('', '', 1)
+    const r = await grepTool.execute({ pattern: 'needle', path: tmpDir }, ctx)
+    expect(r.success).toBe(true)
+    expect(r.content).toBe('(no matches)')
+  })
+})
+
+describe('runSearch 消费 stderr', () => {
+  beforeEach(mockRealSpawn)
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('回传 stderr 的内容', async () => {
+    const { stdout, stderr } = await runSearch(
+      [process.execPath, '-e', 'console.log("out"); process.stderr.write("err")'],
+      tmpDir,
+      10_000,
+    )
+    expect(stdout.trim()).toBe('out')
+    expect(stderr).toBe('err')
+  })
+
+  it('stderr 超过管道缓冲也不卡死', async () => {
+    // 300 KB 远超 ~64 KB 的管道缓冲：不并发读 stderr 的话，子进程会在写
+    // stderr 时阻塞、永不退出，于是 stdout 也永远读不完 —— 只能等超时。
+    const { timedOut, stdout, stderr } = await runSearch(
+      [process.execPath, '-e', 'process.stderr.write("x".repeat(300000)); console.log("out")'],
+      tmpDir,
+      5_000,
+    )
+    expect(timedOut).toBe(false)
+    expect(stdout.trim()).toBe('out')
+    expect(stderr.length).toBe(300_000)
   })
 })
