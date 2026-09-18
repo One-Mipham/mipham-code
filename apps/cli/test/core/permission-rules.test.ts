@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import {
   matchBashRule,
   wildcardMatch,
@@ -6,6 +8,7 @@ import {
   validateRulePattern,
   splitShellSegments,
   extractBashFileAccess,
+  expandKnownPathVars,
 } from '../../src/core/permission-rules'
 
 describe('wildcardMatch', () => {
@@ -616,5 +619,38 @@ describe('进程替换里的命令同样被解析', () => {
     ['嵌在复合命令里', 'echo hi && cat <(cat secret)'],
   ])('%s：%s 命中 Read(secret)', (_label, cmd) => {
     expect(matchBashRule('Read(secret)', 'Bash', { command: cmd })).toBe(true)
+  })
+})
+
+describe('路径形规则：~ 与已知变量的展开', () => {
+  const home = homedir()
+  const target = join(home, '.ssh', 'id_rsa')
+
+  it('~ 展开为 home，命中绝对路径形规则', () => {
+    expect(matchBashRule(`Read(${target})`, 'Bash', { command: 'cat ~/.ssh/id_rsa' })).toBe(true)
+  })
+
+  it('$HOME 展开', () => {
+    expect(matchBashRule(`Read(${target})`, 'Bash', { command: 'cat $HOME/.ssh/id_rsa' })).toBe(
+      true,
+    )
+  })
+
+  it('${HOME} 花括号形态', () => {
+    expect(matchBashRule(`Read(${target})`, 'Bash', { command: 'cat ${HOME}/.ssh/id_rsa' })).toBe(
+      true,
+    )
+  })
+
+  it('路径通配规则对展开后的绝对路径依然有效', () => {
+    expect(matchBashRule('Read(**/.ssh/*)', 'Bash', { command: 'cat ~/.ssh/id_rsa' })).toBe(true)
+  })
+
+  it('未知变量原样保留，不被展开成空串', () => {
+    expect(extractBashFileAccess('cat $UNSET_VAR/secret').read).toContain('$UNSET_VAR/secret')
+  })
+
+  it('~ 只在开头展开，不在词中出现的位置展开', () => {
+    expect(expandKnownPathVars('a/~/b')).toBe('a/~/b')
   })
 })

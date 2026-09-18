@@ -1,3 +1,5 @@
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import type { PermissionRuleEntry } from '../shared/index.ts'
 import { matchPath } from './credential-masker/matcher'
 
@@ -277,6 +279,29 @@ export interface BashFileAccess {
 }
 
 /**
+ * 展开候选路径里**已知**的变量：前导 `~`、`$HOME`/`${HOME}`。
+ *
+ * 为什么需要：规则里写的是绝对路径（`Read(/Users/me/.ssh/id_rsa)`），而用户敲的
+ * 是同一个文件的另一种拼法（`cat ~/.ssh/id_rsa`）—— 不展开即等于放行。展开后
+ * 两种拼法落到同一个字符串上，绝对路径形与路径通配形（如「.ssh 下任意文件」）
+ * 规则都能命中。
+ *
+ * **只展开 HOME**。`$FOO` 这类未知变量原样保留：展开它需要求值环境，静默展开成
+ * 空串会让 `/x/$FOO/y` 变成 `/x//y` —— 那是**新增**一个漏判方向，比不展开更坏。
+ * `$PWD` 同理需要 cwd，而 `matchBashRule` 的调用点拿不到 cwd，故未覆盖。这两条
+ * 都是本函数已知的边界，不是遗漏。
+ *
+ * `~` 只在**开头**展开（`a/~/b` 里的 `~` 是普通字符，shell 也不展开它）。
+ */
+export function expandKnownPathVars(p: string): string {
+  const home = homedir() // 每次取，不在模块加载时绑定（HOME 可能被测试隔离改写）
+  let out = p
+  if (out === '~') out = home
+  else if (out.startsWith('~/')) out = join(home, out.slice(2))
+  return out.replace(/\$\{?HOME\}?/g, home)
+}
+
+/**
  * Extract the file paths a Bash command reads or writes, so Read()/Write()/
  * Edit() deny rules also apply to Bash (not just the Read/Write/Edit tools).
  * Covers redirects (`<` reads, `>`/`>>` writes) and reader/writer command
@@ -304,7 +329,9 @@ export function extractBashFileAccess(command: string): BashFileAccess {
   //    recursing into `$(...)` / backtick substitutions.
   scanReaderWriterCommands(command, read, write)
 
-  return { read: uniq(read), write: uniq(write) }
+  // 展开放在出口这一处，而不是每个 push 点 —— 重定向与读/写命令、以及它们的
+  // 递归内层都汇进这两个数组，一处展开即全覆盖。
+  return { read: uniq(read.map(expandKnownPathVars)), write: uniq(write.map(expandKnownPathVars)) }
 }
 
 /** Extract the inner commands of `$(...)` and backtick substitutions. */
