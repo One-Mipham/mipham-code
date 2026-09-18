@@ -202,11 +202,18 @@ export const cronListTool: ToolDefinition = {
     const lines = [`── Scheduled Cron Jobs (${jobs.length}) ──`, '']
     for (const j of jobs) {
       const type = j.recurring ? 'recurring' : 'one-shot'
-      // 目录要看得见：任务被限定在建立它的那个目录，从别的项目 `/cron` 列出来时
-      // 用户得能看出它为什么不在自己这里跑。旧文件没有 cwd，就不显示。
-      lines.push(`${j.id}  ${j.cron}  ${type}${j.cwd ? `  [${j.cwd}]` : ''}`)
+      // 目录要看得见：任务被限定在建立它的那个目录，从别的项目 `/schedule` 列出来时
+      // 用户得能看出它为什么不在自己这里跑。**没有 cwd 的旧文件恰恰相反** —— 它在任何
+      // 目录都会执行，而这里是唯一能看见那件事的地方，所以必须显式标出来（留空等于
+      // 把「无归属」显示成「和别的任务一样」）。
+      lines.push(`${j.id}  ${j.cron}  ${type}  ${j.cwd ? `[${j.cwd}]` : '[无归属]'}`)
       lines.push(`  ${j.prompt.slice(0, 100)}`)
       lines.push('')
+    }
+
+    if (jobs.some((j) => !j.cwd)) {
+      lines.push('⚠️ [无归属] 是加 cwd 字段之前写的任务：没有目录可判，任何项目里都会执行。')
+      lines.push('   消除办法：在目标目录里用 CronCreate 重建，或让 Mipham 用 CronDelete 删掉。')
     }
 
     return { success: true, content: lines.join('\n') }
