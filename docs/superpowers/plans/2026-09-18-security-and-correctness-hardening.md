@@ -50,23 +50,23 @@
 
 ### Phase 3 — 数据落点与并发写（5 条）
 
-| #   | 缺陷                                                                                                                                                             | 坐标                                           | 证据                                                                |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------- |
-| 11  | ✅ **已修** Artifact 工具写 `<cwd>/artifacts`，ArtifactServer 根是 `<cwd>/.mipham/artifacts` ⇒ 工具回报的 URL **100% 404**                                       | `artifact.ts:61` vs `index.tsx:601`            | 自测（我读了这两行 + `constants.ts:541,558`）+ 子代理实测 fetch 404 |
-| 12  | ⚠️ **半修**（见下）`versioning.saveVersion` 零调用 ⇒ 「恢复上一版」能力从未被喂过；`manifest.archiveVersion` 文件不在时静默跳过归档却照常推进版本号              | `versioning.ts:33`、`manifest.ts:80`           | 子代理实测                                                          |
-| 13  | ✅ **已修** `atomicWriteFileSync` 用固定 `.tmp` 名 ⇒ 并发写者互撞、读者可读到半截内容                                                                            | `shared/atomic-write.ts:14`                    | 读码                                                                |
-| 14  | ✅ **已修** 定时任务无 `cwd`/`sessionId`（`ctx` 被丢弃），存储是全局单店 ⇒ **任何**目录建的任务被任何其他目录的会话执行；id 仅由 `cron+prompt` 决定 ⇒ 跨项目碰撞 | `cron.ts:15,21-29,36,104`、`cron-poller.ts:28` | 自测（我读了接口与 `_ctx`）+ 子代理实测落盘 JSON 无 cwd             |
-| 15  | ✅ **已修** 大文件 `read.ts` 先整读再取 offset/limit ⇒ 报错建议「Use offset/limit」不可执行；`split('\n')` 实体化每一行 ⇒ 20MB 文件吃 364MB RSS                  | `read.ts:50-58,63-64,90-91`                    | 子代理实测                                                          |
+| #   | 缺陷                                                                                                                                                                                                                                                                                                                                                                                                                                                  | 坐标                                                | 证据                                                                |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------- |
+| 11  | ✅ **已修** Artifact 工具写 `<cwd>/artifacts`，ArtifactServer 根是 `<cwd>/.mipham/artifacts` ⇒ 工具回报的 URL **100% 404**                                                                                                                                                                                                                                                                                                                            | `artifact.ts:61` vs `index.tsx:601`                 | 自测（我读了这两行 + `constants.ts:541,558`）+ 子代理实测 fetch 404 |
+| 12  | ✅ **已修** 两套并行版本机制**删掉一套**：`versioning.ts` 的唯一写者 `saveVersion` 自落地起零调用点（「恢复上一版」从未被喂过，它维护的 `current.html` 从未存在）⇒ 删除该模块 + 其 22 条测试 + `server.ts` 构造点，`/artifact` 按名字订阅改读工具**真正写下的那份文件**、找不到即 404（此前挂着一条永不产出内容的 200 空流）；另一半 `manifest.archiveVersion` 文件不在时静默跳过归档却照常推进版本号 ⇒ 找不到即返回 `undefined`、manifest 一字节不动 | `manifest.ts:80`、`artifacts/versioning.ts`（已删） | 子代理实测 + 两条负控                                               |
+| 13  | ✅ **已修** `atomicWriteFileSync` 用固定 `.tmp` 名 ⇒ 并发写者互撞、读者可读到半截内容                                                                                                                                                                                                                                                                                                                                                                 | `shared/atomic-write.ts:14`                         | 读码                                                                |
+| 14  | ✅ **已修** 定时任务无 `cwd`/`sessionId`（`ctx` 被丢弃），存储是全局单店 ⇒ **任何**目录建的任务被任何其他目录的会话执行；id 仅由 `cron+prompt` 决定 ⇒ 跨项目碰撞                                                                                                                                                                                                                                                                                      | `cron.ts:15,21-29,36,104`、`cron-poller.ts:28`      | 自测（我读了接口与 `_ctx`）+ 子代理实测落盘 JSON 无 cwd             |
+| 15  | ✅ **已修** 大文件 `read.ts` 先整读再取 offset/limit ⇒ 报错建议「Use offset/limit」不可执行；`split('\n')` 实体化每一行 ⇒ 20MB 文件吃 364MB RSS                                                                                                                                                                                                                                                                                                       | `read.ts:50-58,63-64,90-91`                         | 子代理实测                                                          |
 
-> **本批执行中撞见、未修（如实记）**：
+> **本批执行中撞见的三条，已就地修好（见 `2.55.0`）**：
 >
-> - `addToManifest`（`manifest.ts:39`）只按 `name` 去重，而 manifest 是**全局一份**（`index.json` 落在 artifactsRoot，
->   条目自带 `sessionId`）⇒ 两个会话各发布一个同名 artifact，后者的条目顶掉前者；前者的文件还在磁盘上，却从索引里
->   消失（`list` 看不到、`open` 找不到）。
-> - 同一处更坏的一条：`readManifest` 解析失败时**静默返回空 manifest**，而 `addToManifest` 紧接着整份重写 ⇒ 一份
->   损坏的 `index.json` 会被下一次发布覆盖成「只有这一条」，索引全丢。
-> - #14 的遗留：更早写的 cron 文件没有 `cwd`，轮询照发（**刻意**，否则用户已建的日程会静默停掉）—— 代价是这些
->   **旧任务仍然跨项目执行**，直到用户重建它们。
+> - `addToManifest` 只按 `name` 去重，而 manifest 是**全局一份**（条目自带 `sessionId`）⇒ 两个会话的同名 artifact
+>   互相顶掉，落选者文件还在磁盘上却从索引里消失；
+> - `readManifest` 解析失败静默返回空 manifest，而写路径紧接着整份重写 ⇒ 一份坏索引被下一次发布覆盖成「只有这一条」。
+>   两条同修：读/写分两条路径、坏文件改名隔离（`.corrupt-<ts>`，字节保留）并把路径回传进工具输出、索引改原子写并显式 `0o644`、
+>   去重与 `archiveVersion` 查找统一按 `name`+`sessionId`。
+> - #14 的遗留**有意保留、行为未变**：更早写的 cron 文件没有 `cwd`，轮询照发（否则用户已建的日程会静默停掉）—— 代价是这些旧任务
+>   仍跨项目执行。现在列表把它们标成 `[无归属]` 并给出处置办法，**执行行为本身没有改**。
 
 ### Phase 4 — 接线与配置（8 条）
 
@@ -961,7 +961,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 ### 后续批次骨架（各自独立成计划）
 
 - **Phase 2（输出上限与错误分类）**：`grep.ts` 三件事一次做完 —— rg 路径也走 `truncateGrepOutput`；find 回退的 `exitCode===1` 改为「stderr 非空则报错」；`runSearch` 消费 stderr 并返回。Glob 的 500 上限加 `(truncated)` 标记（与 Grep 同一原则，理由已写在 `grep.ts:32` 的注释里）。验收：造一个超过 50k 字符的命中集，断言输出带标记；PATH 去掉 rg 后断言非法正则以错误收场。
-- **Phase 3（数据落点与并发写）**：Artifact 目录同源（并给 `saveVersion` 接上调用点）+ `atomicWriteFileSync` 唯一临时名 + `CronJob` 加 `cwd`/`sessionId` 并按 cwd 过滤 + `read.ts` 按需读窗口。验收：Artifact 发布后 fetch 自己回报的 URL 必须 200；两个不同 cwd 建的同名任务互不可见。
+- **Phase 3（数据落点与并发写）**：Artifact 目录同源（`saveVersion` 那条并行机制后经拍板**删除**，不接调用点）+ `atomicWriteFileSync` 唯一临时名 + `CronJob` 加 `cwd`/`sessionId` 并按 cwd 过滤 + `read.ts` 按需读窗口。验收：Artifact 发布后 fetch 自己回报的 URL 必须 200；两个不同 cwd 建的同名任务互不可见。
 - **Phase 4（接线与配置）**：`BLOCKED_PATHS` 存解析后形态 + `validateRulePattern` 已做 + `mergeConfig` 深合并 + `.mcp.json` 补齐两个字段 + Stop hook 的 `decision` 贯通 + SubagentStart/Stop matcher 按 agent 类型过滤 + 子代理 ctx 补齐 + HTTP MCP 通知处理器接线。验收：每条都要有「改动前红、改动后绿」的测试，不留只读码结论。
 - **Phase 5（剩余）**：#27 已提前执行完毕（2026-09-18）；其余为体验项。
 
