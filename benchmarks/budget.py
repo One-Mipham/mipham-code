@@ -16,6 +16,21 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 
+# The ceiling's unit is a *round*, and its basis is money, not measurement:
+#   $200 (the round's dollar budget) / $3.96 per 1M output tokens (the dearest
+#   rate on the price list) = 50,505,050 tokens.
+# Taking the dearest rate is what makes the bound hold *independently of how the
+# spend is composed*: cached or uncached, input or output, the bill for this many
+# tokens cannot exceed the dollar budget. See spec §六 and, for the convention,
+# benchmarks/README.md (Phase 2, "上限的口径").
+#
+# This field is a guard rail, NOT a forecast. Do not replace it with "what we
+# expect a round to cost": a forecast lands on the expected *total*, so using one
+# as the ceiling makes the job stop on its last task by construction. Measured
+# 2026-09-17 (Phase 2): headroom 1,581,412 < mean per-task 2,396,038 -- it did not
+# bite only because the 10th task died during agent install. The calibrated number
+# in `results/phase2-calibration.json` is a forecast: disclosure, never a
+# `--ceiling` input.
 DEFAULT_CEILING = 50_505_050
 
 
