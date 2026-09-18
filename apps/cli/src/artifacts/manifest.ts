@@ -1,47 +1,95 @@
-import {
-  readFileSync,
-  writeFileSync,
-  existsSync,
-  mkdirSync,
-  renameSync,
-  copyFileSync,
-  unlinkSync,
-} from 'node:fs'
+import { readFileSync, existsSync, mkdirSync, renameSync, copyFileSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
+import { atomicWriteFileSync } from '../shared/atomic-write'
 import type { ArtifactManifest, ArtifactEntry } from '../shared/types'
+
+function emptyManifest(): ArtifactManifest {
+  return { version: 1, artifacts: [] }
+}
 
 /**
  * Read the artifact manifest from disk, or return an empty one if it doesn't exist.
+ *
+ * An unreadable index also yields an empty manifest — the callers here only *show*
+ * artifacts (gallery, `/artifact list`), and showing none beats throwing at them.
+ * Writers must not go through this path: see `readManifestForUpdate`.
  */
 export function readManifest(dir: string): ArtifactManifest {
   const path = join(dir, 'index.json')
   if (!existsSync(path)) {
-    return { version: 1, artifacts: [] }
+    return emptyManifest()
   }
   try {
     return JSON.parse(readFileSync(path, 'utf-8'))
   } catch {
-    return { version: 1, artifacts: [] }
+    return emptyManifest()
+  }
+}
+
+/**
+ * Read the manifest for a caller that is about to write it back.
+ *
+ * The difference from `readManifest` is what happens when the file exists but does
+ * not parse: a writer must not treat that as "empty", because writing back an
+ * empty manifest replaces every other artifact's entry with nothing — the files
+ * stay on disk, but the gallery and `/artifact list` lose them. So the unreadable
+ * file is renamed aside (bytes kept, recoverable by hand) and reported, and the
+ * caller decides what to tell the user.
+ */
+function readManifestForUpdate(dir: string): {
+  manifest: ArtifactManifest
+  quarantined?: string
+} {
+  const path = join(dir, 'index.json')
+  if (!existsSync(path)) return { manifest: emptyManifest() }
+  try {
+    return { manifest: JSON.parse(readFileSync(path, 'utf-8')) }
+  } catch {
+    const quarantined = `${path}.corrupt-${new Date().toISOString().replace(/[:.]/g, '-')}`
+    // If this rename fails we let it throw: the alternative is overwriting the
+    // only copy of the index with a manifest built from nothing.
+    renameSync(path, quarantined)
+    return { manifest: emptyManifest(), quarantined }
   }
 }
 
 /**
  * Write the manifest to disk, creating parent directories as needed.
+ *
+ * Atomic: a crash mid-write used to leave a truncated `index.json`, which is
+ * exactly the corruption `readManifestForUpdate` then has to quarantine.
  */
 export function writeManifest(dir: string, manifest: ArtifactManifest): void {
   mkdirSync(dir, { recursive: true })
-  writeFileSync(join(dir, 'index.json'), JSON.stringify(manifest, null, 2), 'utf-8')
+  atomicWriteFileSync(join(dir, 'index.json'), JSON.stringify(manifest, null, 2), {
+    mode: 0o644,
+  })
 }
 
 /**
  * Add an entry to the manifest and persist it.
- * If an entry with the same name already exists, it is replaced.
+ *
+ * An entry is identified by `name` **and** `sessionId`, matching how the tool
+ * looks one up: the manifest is a single global `index.json` holding every
+ * session's artifacts, so keying on the name alone made two sessions publishing
+ * the same name overwrite each other's entry — the loser's file stayed on disk
+ * but vanished from the index.
+ *
+ * Returns the written manifest plus, when the previous index was unreadable, the
+ * path its bytes were moved to — the caller is expected to say so rather than
+ * let an artifact appear to publish cleanly over a lost index.
  */
-export function addToManifest(dir: string, entry: ArtifactEntry, port?: number): ArtifactManifest {
-  const manifest = readManifest(dir)
+export function addToManifest(
+  dir: string,
+  entry: ArtifactEntry,
+  port?: number,
+): { manifest: ArtifactManifest; quarantined?: string } {
+  const { manifest, quarantined } = readManifestForUpdate(dir)
   if (port !== undefined) manifest.port = port
 
-  const idx = manifest.artifacts.findIndex((a) => a.name === entry.name)
+  const idx = manifest.artifacts.findIndex(
+    (a) => a.name === entry.name && a.sessionId === entry.sessionId,
+  )
   if (idx >= 0) {
     manifest.artifacts[idx] = entry
   } else {
@@ -49,7 +97,7 @@ export function addToManifest(dir: string, entry: ArtifactEntry, port?: number):
   }
 
   writeManifest(dir, manifest)
-  return manifest
+  return { manifest, quarantined }
 }
 
 /**
@@ -91,9 +139,12 @@ export function archiveVersion(dir: string, entry: ArtifactEntry): string | unde
     unlinkSync(currentPath)
   }
 
-  // Update manifest entry
+  // Update manifest entry — keyed on name *and* session, like every other
+  // lookup here: a same-named artifact in another session is a different one.
   const manifest = readManifest(dir)
-  const artifact = manifest.artifacts.find((a) => a.name === entry.name)
+  const artifact = manifest.artifacts.find(
+    (a) => a.name === entry.name && a.sessionId === entry.sessionId,
+  )
   if (artifact) {
     const versions = artifact.versions || ['v1']
     versions.push(versionTag)

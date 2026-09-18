@@ -103,7 +103,7 @@ export const artifactTool: ToolDefinition = {
     const prev = manifestPre.artifacts.find((a) => a.name === name && a.sessionId === ctx.sessionId)
     const versionCount = prev?.versionCount || (isUpdate ? 1 : undefined)
 
-    addToManifest(
+    const { quarantined } = addToManifest(
       baseDir,
       {
         name,
@@ -127,6 +127,12 @@ export const artifactTool: ToolDefinition = {
     const galleryUrl = port ? `http://localhost:${port}` : undefined
     const versionLine = archivedVersion ? `   Prev archived as: ${archivedVersion}` : ''
     const galleryLine = galleryUrl ? `Gallery: ${galleryUrl}` : ''
+    // The index was unreadable and got moved aside, so this publish started from
+    // nothing: say it here, or the user reads "saved" and never learns that the
+    // rest of the index is now a file next to it.
+    const warnLine = quarantined
+      ? `   ⚠️  Index was unreadable; previous index kept at ${quarantined}`
+      : ''
 
     return {
       success: true,
@@ -135,6 +141,7 @@ export const artifactTool: ToolDefinition = {
         `   URL:  ${url}`,
         `   Size: ${size.toLocaleString()} bytes`,
         versionLine,
+        warnLine,
         galleryLine,
         '',
         `Open in browser: /artifact open ${name}`,
