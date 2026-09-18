@@ -37,17 +37,23 @@ runtime state and is gitignored. The verbatim container output stays in
 不是 10 题的** —— 不可与全量 10 题的成绩比对。`completedTasks: 4` 只数 `status == "done"`。
 
 **一笔跨阶段的花销记在 Phase 1 的账本上（2026-09-18 补记，按裁决如实记、不改史）。**
-活账本 `ledger.json`（**被 gitignore、无备份**）此刻比上表多 **1 条 / 1,543,050 tokens**：
-那是 Phase 2 集成门那一跑留下的 —— 计划 Task 16 Step 3 的命令（计划 `:3404`）
-`--ae "MIPHAM_BENCH_LEDGER=$PWD/benchmarks/results/ledger.json"` **被按原文执行**，
-于是 Phase 2 的一笔花销进了 **Phase 1** 的账本；而计划 `:3444` 自己写着两个阶段**不应共账本**
-（「共用会让两次作业的用量互相吃掉对方的额度」）。多出的那条逐字为
+活账本 `ledger.json`（**被 gitignore**）此刻比上表多 **1 条 / 1,543,050 tokens**：
+那是 Phase 2 集成门那一跑留下的 —— 计划 Task 16 Step 3 的命令 **被按原文执行**
+（`--ae "MIPHAM_BENCH_LEDGER=$PWD/benchmarks/results/ledger.json"`；该行在 `5070f36` 版计划
+是 `:3406`），于是 Phase 2 的一笔花销进了 **Phase 1** 的账本；而同一任务的 Produces 自己写着
+两个阶段**不应共账本**（同版 `:3448`：「独立台账，不与 Phase 1 共用，否则两次作业的用量会
+互相吃掉对方的额度」）。多出的那条逐字为
 `{'at': '2026-09-17T11:10:11+00:00', 'tokens': 1543050, 'note': 'f03e2fdc-cc6f-4f12-bcaf-ca537844bf5b'}`。
 **上表的 Phase-1 读数不受影响** —— 它取自归档那一刻的快照（11 条 / 7,999,255），早于这笔。
 **复现 Phase 1 的人会继承这 1.54M 的既有支出**（`init` 不加 `--fresh` 时保留原条目）。
-本文件**不建议**为此在 Phase 1 命令上加 `--fresh`：`ledger.json` 无备份，
-`--fresh` 落在它上**不可逆**（`--fresh` 只许落在本轮自己、确认可弃的账本上）。
-计划 `:3404` 那条命令**保持原文** —— 它记录的是当时实跑的命令，改动它等于让计划声称跑过一条没跑过的命令。
+本文件**不建议**为此在 Phase 1 命令上加 `--fresh`：`--fresh` 落在它上**不可逆**
+（`--fresh` 只许落在本轮自己、确认可弃的账本上），而这份账本**恢复起来只有一条手工路子** ——
+12 条里 **11 条**逐字存于**已跟踪的** `phase1-terminal-bench.json` 的 `ledger.entries`（连同
+`ledger.ceiling` = `50505050`），第 **12** 条（那笔 Phase-2 支出）**任何受跟踪文件里都没有**、
+只在本披露里逐字存着；而 `budget.py` 的子命令只有 `init` 与 `show`（**没有导入**）⇒ 那 11 条得用
+`Ledger.record()` 逐条写回，或直接改这份 JSON。
+（**订正**：此处原写「无备份」，实测为假 —— 假在「备份不存在」，不在「`--fresh` 不可逆」。）
+那条命令**保持原文**（`5070f36` 版计划 `:3406`）—— 它记录的是当时实跑的命令，改动它等于让计划声称跑过一条没跑过的命令。
 
 ### ② 触发上限的题数
 

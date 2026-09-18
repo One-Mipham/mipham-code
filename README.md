@@ -165,7 +165,7 @@ Phase 2（`swebench-verified@1.0`，10 题 / 10 个不同仓库，`k=1`）也已
 **两个数必须成对读**：只报「完成题数」会显得比实际好，只报「官方分数」会显得比实际差。
 
 - **结果文件**: [`benchmarks/results/phase1-terminal-bench.json`](./benchmarks/results/phase1-terminal-bench.json)、[`benchmarks/results/phase2-swebench-verified.json`](./benchmarks/results/phase2-swebench-verified.json)
-- **复现**: 见 [`benchmarks/README.md`](./benchmarks/README.md) 的跑分一节 —— `DOCKER_DEFAULT_PLATFORM=linux/amd64`、数据集下载与三个台账变量**都不可省**（不带的实测代价有先例：40.4 秒、`n_trials: 0`，而 harbor 的**退出码是 0**），故不在此处复制成一行。
+- **复现**: 见 [`benchmarks/README.md`](./benchmarks/README.md) 的跑分一节 —— `DOCKER_DEFAULT_PLATFORM=linux/amd64`、数据集下载与三个台账变量**都不可省**（不带的实测代价有先例：40.4 秒、`n_trials: 0`），故不在此处复制成一行。
 - **完整披露**: [`benchmarks/README.md`](./benchmarks/README.md) —— 五条强制披露、选题规则、规格分歧与已知限制的全文都在那里，此处不复制。
 
 ## License

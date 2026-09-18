@@ -16,10 +16,11 @@ Two artifacts share this writer, and they do **not** carry the same field set:
   16's Produces block and absent from Task 12's.
 
 The two extra blocks are assembled by the **caller** and merged into the record
-this module builds -- this module does not produce them, which is why grepping
-it for those names finds nothing. That is not licence to drop them: re-running
-this module against the Phase-2 output path without them would silently delete
-the only place the ``SHARED`` / ``"N/A · 机制不适用"`` finding lives.
+this module builds -- this module does not produce them, and Task 16's Produces
+block is where their names and shapes come from. That is not licence to drop
+them: re-running this module against the Phase-2 output path without them would
+silently delete the only place the ``SHARED`` / ``"N/A · 机制不适用"`` finding
+lives.
 
 Why this is a module rather than a shell heredoc: the record is committed to a
 public repository and ``driverLogTail`` is text produced inside the container —
