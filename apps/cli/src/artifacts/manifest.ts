@@ -64,30 +64,35 @@ export function getSessionArtifacts(dir: string, sessionId: string): ArtifactEnt
  * Archive an existing artifact file by renaming it with a version tag.
  * e.g. dashboard.html → dashboard.v1.html, dashboard.v1.html → dashboard.v2.html.
  *
- * Returns the version tag assigned to the archived file.
+ * Returns the version tag assigned to the archived file, or `undefined` when
+ * there was nothing to archive — in which case the manifest is left untouched.
+ *
+ * 「没归档就什么都不记」是刻意的：源文件找不到时照样推进版本号、往 `versions` 里
+ * 塞一个标签，等于在 manifest 里留一版磁盘上并不存在的版本。走到那条路并不难
+ * —— 条目按 name 找、文件按 `<session>/<name><ext>` 找，把同一个名字从 html 改
+ * 成 svg 就错开了。宁可少记一版，也不能记一版假的。
  */
-export function archiveVersion(dir: string, entry: ArtifactEntry): string {
-  const manifest = readManifest(dir)
-  const versionCount = (entry.versionCount || 1) + 1
+export function archiveVersion(dir: string, entry: ArtifactEntry): string | undefined {
   const ext = entry.type === 'svg' ? '.svg' : '.html'
-  const versionTag = `v${versionCount}`
-
-  // Rename the current file to a versioned copy
   const baseName = entry.name
   const currentPath = join(dir, entry.sessionId, `${baseName}${ext}`)
+
+  if (!existsSync(currentPath)) return undefined
+
+  const versionCount = (entry.versionCount || 1) + 1
+  const versionTag = `v${versionCount}`
   const archivedPath = join(dir, entry.sessionId, `${baseName}.${versionTag}${ext}`)
 
-  if (existsSync(currentPath)) {
-    try {
-      renameSync(currentPath, archivedPath)
-    } catch {
-      // If rename fails (e.g. cross-device), copy instead
-      copyFileSync(currentPath, archivedPath)
-      unlinkSync(currentPath)
-    }
+  try {
+    renameSync(currentPath, archivedPath)
+  } catch {
+    // If rename fails (e.g. cross-device), copy instead
+    copyFileSync(currentPath, archivedPath)
+    unlinkSync(currentPath)
   }
 
   // Update manifest entry
+  const manifest = readManifest(dir)
   const artifact = manifest.artifacts.find((a) => a.name === entry.name)
   if (artifact) {
     const versions = artifact.versions || ['v1']
