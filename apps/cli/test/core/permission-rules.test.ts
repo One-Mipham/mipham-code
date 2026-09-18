@@ -9,6 +9,7 @@ import {
   splitShellSegments,
   extractBashFileAccess,
   expandKnownPathVars,
+  stripLeadingShellNoise,
 } from '../../src/core/permission-rules'
 
 describe('wildcardMatch', () => {
@@ -683,5 +684,39 @@ describe('validateRulePattern 拒绝永不匹配的参数化规则', () => {
   it('裸工具名不受影响', () => {
     expect(validateRulePattern('Bash')).toBeNull()
     expect(validateRulePattern('WebFetch')).toBeNull()
+  })
+})
+
+// ============================================================
+// 两条匹配路径的一致性守卫（防「只接一条」）
+// ============================================================
+
+describe('两条匹配路径共用同一份归一化（防「只接一条」）', () => {
+  // 同一段噪声，Bash 通配路径（flattenCommand）与 Read 桥接路径
+  // （scanReaderWriterCommands）必须都看得见真命令。
+  //
+  // 为什么单列这个 describe：两条路径各解析各的，正是这一族绕过得以存在的结构
+  // 原因。给两条路径接了同一份归一化之后，这个守卫把该约束固化下来 —— 后来者
+  // 只改一条，这里必红。
+  const NOISY = ['( cmd )', '{ cmd; }', '! cmd', 'FOO=bar cmd', 'IFS=x cmd', 'time -p cmd']
+
+  it.each(NOISY)('噪声形态 %s：Bash 通配路径看得见', (tpl) => {
+    const command = tpl.replace('cmd', 'rm -rf x')
+    expect(matchBashRule('Bash(rm *)', 'Bash', { command })).toBe(true)
+  })
+
+  it.each(NOISY)('噪声形态 %s：Read 桥接路径也看得见', (tpl) => {
+    const command = tpl.replace('cmd', 'cat secret')
+    expect(matchBashRule('Read(secret)', 'Bash', { command })).toBe(true)
+    // 反面对照：噪声 token 自己不该被当成读目标。少了它，「两条路径都命中」
+    // 也可能只是恰好都从噪声里捞到了同一个东西。
+    expect(extractBashFileAccess(command).read).not.toContain('cmd')
+  })
+
+  it('归一化可反复施加（剥多了一律是过匹配，但重复施不该继续变化）', () => {
+    for (const tpl of NOISY) {
+      const once = stripLeadingShellNoise(tpl.replace('cmd', 'rm -rf x'))
+      expect(stripLeadingShellNoise(once)).toBe(once)
+    }
   })
 })
