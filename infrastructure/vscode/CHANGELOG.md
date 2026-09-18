@@ -3,6 +3,26 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.81.8 — 2026-09-18
+
+- Version sync with Mipham Code CLI 0.81.8
+- Security: `Bash(...)` deny rules could be walked around by putting shell noise in
+  front of the base command (`( rm -rf x )`, `FOO=bar rm -rf x`, `! rm -rf x`,
+  `for f in *; do rm -rf x; done`) — the matcher never saw the real command. Four
+  more of that family went with it: `timeout --preserve-status cat secret`, process
+  substitution, `~` / `$HOME` expansion, and a worktree-escape guard that compared
+  path strings instead of resolving them
+- Security: installing a plugin from npm no longer runs the package's install
+  scripts — `npm install --no-save` was missing `--ignore-scripts`, so any
+  `postinstall` ran with the user's full privileges
+- Fixed: `/resume` no longer loses the whole session list to a single unreadable
+  file; `Read`'s advertised `offset`/`limit` now avoid reading the whole file
+  instead of erroring on it; `preferences.json` / `keys.json` / `config.yml` are
+  written atomically rather than truncated in place
+- Added: a Harbor benchmark adapter under `benchmarks/` (development tooling — it
+  ships nothing into the CLI). The two rounds recorded there are instrument checks,
+  not scores
+
 ## 0.81.7 — 2026-09-17
 
 - Version sync with Mipham Code CLI 0.81.7
