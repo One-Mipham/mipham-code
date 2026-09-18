@@ -10,7 +10,7 @@ vi.mock('node:os', async (importOriginal) => {
   }
 })
 
-import { existsSync, rmSync, unlinkSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { SessionStore } from '../../src/core/session-store'
