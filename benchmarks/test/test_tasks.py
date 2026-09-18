@@ -32,11 +32,13 @@ class SelectFirstReposTest(unittest.TestCase):
         )
 
     def test_n_zero_selects_nothing(self):
-        # The exit guard sits *after* the append, so `len(chosen) == n` is
-        # never 0 on entry and `break` is unreachable when n == 0: the loop
-        # runs to the end and returns one entry per repository, which is the
-        # opposite of "the first zero of them" and disagrees with
-        # `select_first(names, 0) == []`.
+        # Regression guard for the defect this test was written against: the
+        # exit guard *used to* sit after the append, so `len(chosen) == n` was
+        # never 0 on entry and `break` was unreachable when n == 0 -- the loop
+        # ran to the end and returned one entry per repository, the opposite of
+        # "the first zero of them" and in disagreement with
+        # `select_first(names, 0) == []`. `tasks.select_first_repos` now checks
+        # *before* the append (see the comment there).
         names = ["astropy__astropy-6938", "django__django-10874", "psf__requests-1142"]
         self.assertEqual(tasks.select_first_repos(names, 0), [])
         self.assertEqual(tasks.select_first(names, 0), [])

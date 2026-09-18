@@ -282,11 +282,27 @@ python3 -m benchmarks.tasks \
 ```bash
 export DEEPSEEK_API_KEY=...        # 只写变量名；值不进代码、不进日志、不进提交
 export DOCKER_DEFAULT_PLATFORM=linux/amd64
-CEILING=23145750 \
-MIPHAM_LEDGER_CEILING="$CEILING" \
-MIPHAM_BENCH_LEDGER="$PWD/benchmarks/results/ledger-phase2.json" \
-  bash benchmarks/run-benchmark.sh --phase 2 --fresh
+export CEILING=23145750
+export MIPHAM_LEDGER_CEILING="$CEILING"
+export MIPHAM_BENCH_LEDGER="$PWD/benchmarks/results/ledger-phase2.json"
+bash benchmarks/run-benchmark.sh --phase 2 --fresh
 ```
+
+**这三行必须分行、且每行都带 `export` —— 这不是格式偏好。** 写成链式
+`CEILING=23145750 MIPHAM_LEDGER_CEILING="$CEILING" … cmd` 时，`$CEILING` 在**前一条赋值生效之前**
+就被展开成空串；实测（外部命令读自己的环境，四种 shell 各跑一次）：
+
+| shell       | 链式一行给的 `MIPHAM_LEDGER_CEILING` | 上面分行给的值 |
+| ----------- | ------------------------------------ | -------------- |
+| bash 3.2.57 | **空**                               | 23145750       |
+| sh          | **空**                               | 23145750       |
+| zsh 5.9     | 23145750                             | 23145750       |
+| dash        | 23145750                             | 23145750       |
+
+空不是报错：`run-benchmark.sh:108`/`:110` 会回落到 `${MIPHAM_LEDGER_CEILING:-50505050}`，
+即 **Phase 1 的上限** —— 于是**在 bash 里复制粘贴这段的人，拿到的是一个比 23145750 松 2.2 倍的界，
+而且 `--fresh` 会把上一个账本不可逆地清掉**。链式形态在 zsh 里恰好正确，所以它「在我这儿是好的」，
+在读者那儿是坏的 —— 这是最难诊断的一种形状。分行 + `export` 四种 shell 全部取到 `23145750`。
 
 **三处不可省、也不可拆到两条命令里**：
 
@@ -298,7 +314,10 @@ MIPHAM_BENCH_LEDGER="$PWD/benchmarks/results/ledger-phase2.json" \
 3. **`CEILING` 是 `23145750`，不是校准文件里的 `10,000,000`**。两个数都写在这里：
    校准产物 `results/phase2-calibration.json` 记的是 **`10,000,000`**；
    **本轮实际施加的是 `23,145,750`**（= `10 × 1,543,050 × 1.5`，由 T16 的单题实测 `x₁` 重推）。
-   运行期那条命令的自证是 stdout 的 `ceiling=` 行 —— 读到 `10000000` **不是「校准值」，是参数没生效**。
+   运行期那条命令的自证是 stdout 的 `ceiling=` 行：**`23145750` 才是「参数生效」**。
+   读到 **`50505050`**（脚本在 `MIPHAM_LEDGER_CEILING` 为空时的兜底 = **Phase 1 的上限**）就是
+   参数**没送进去** —— 上面的分行写法正是为堵这个。校准产物里那个 `10,000,000` 只是校准记录，
+   **从未被施加过**，见到它同样不是「生效」。
 
 ## 二、x86 模拟的实测读数与它对墙钟的影响
 
@@ -364,12 +383,22 @@ docker image inspect <img> --format '{{.Os}}/{{.Architecture}}'
 本轮实际施加的上限经 T16 的单题实测重推过一次（`10,000,000` → `23,145,750`），
 **校准产物一个字未改，Phase 1 的读数也不回改**。
 
+这条重推的**依据**是**规格分歧的第 5 条** —— 「`10 ×` 被写成**每题**的放大因子，却消费在
+**整轮共享池**里」。它**不在**本文件 §一 那四条里（那四条按 [`四、规格分歧四条`](#四规格分歧四条) 的定义
+只描述 Phase 1），是 T15 审查时新发现、由控制器裁决写进修订申请的第 5 条，全文见
+[`../docs/superpowers/specs/2026-09-17-t2-spec-amendments.md`](../docs/superpowers/specs/2026-09-17-t2-spec-amendments.md) §五。
+**读懂它才知道校准值为什么不是施加值**，也才知道 `calibrate-phase2.py` 的推导为何与计划 Step 1 的脚本不同。
+
 **一条要一起读的余量读数**：Phase 2 花了上限的 **93.17%**，余 **1,581,412** —— 而
 **单题最贵的 `mwaskom__seaborn-3069` 一个人就花了 9,940,821**，是**校准值 `10,000,000` 的 99.4%**：
 **若真按校准值施加，这一题一个人就吃满整轮。** 逐题数字见 [`results/README.md`](results/README.md)。
 
-**一条口径说明**：归档里逐题的 `budgetTokens` 是**该题开局时台账还剩多少**（按 trial 顺序逐题递减），
-**不是「每题上限」** —— Phase 2 那一列从 23,145,750 一路降到 2,468,361。**不要整列读成同一个值。**
+**一条口径说明**：归档里逐题的 `budgetTokens` 是**该题开局时台账还剩多少**，
+**不是「每题上限」**。它在**台账时间序**上逐题递减（Phase 2：23,145,750 → … → 2,468,361），
+但**归档里的逐题顺序是题名字典序、不是运行顺序**，所以那一列**看上去是起起落落** ——
+实测按行序有**四次回升**（23,145,750 → 10,508,452 → 20,449,273 → 21,046,995 → 9,937,242 →
+5,692,658 → 9,461,696 → 22,503,479 → 2,468,361）。运行顺序可由台账条目的 `at` 时间戳还原。
+**不要整列读成同一个值，也不要按归档行序读成递减。**
 
 ## 四、verifier 判分的读数与来源
 

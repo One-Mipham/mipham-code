@@ -36,6 +36,19 @@ runtime state and is gitignored. The verbatim container output stays in
 **不是按题目顺序推的**（按位置读会读反）。**故上表 `totals` 是 8 题的合计，
 不是 10 题的** —— 不可与全量 10 题的成绩比对。`completedTasks: 4` 只数 `status == "done"`。
 
+**一笔跨阶段的花销记在 Phase 1 的账本上（2026-09-18 补记，按裁决如实记、不改史）。**
+活账本 `ledger.json`（**被 gitignore、无备份**）此刻比上表多 **1 条 / 1,543,050 tokens**：
+那是 Phase 2 集成门那一跑留下的 —— 计划 Task 16 Step 3 的命令（计划 `:3404`）
+`--ae "MIPHAM_BENCH_LEDGER=$PWD/benchmarks/results/ledger.json"` **被按原文执行**，
+于是 Phase 2 的一笔花销进了 **Phase 1** 的账本；而计划 `:3444` 自己写着两个阶段**不应共账本**
+（「共用会让两次作业的用量互相吃掉对方的额度」）。多出的那条逐字为
+`{'at': '2026-09-17T11:10:11+00:00', 'tokens': 1543050, 'note': 'f03e2fdc-cc6f-4f12-bcaf-ca537844bf5b'}`。
+**上表的 Phase-1 读数不受影响** —— 它取自归档那一刻的快照（11 条 / 7,999,255），早于这笔。
+**复现 Phase 1 的人会继承这 1.54M 的既有支出**（`init` 不加 `--fresh` 时保留原条目）。
+本文件**不建议**为此在 Phase 1 命令上加 `--fresh`：`ledger.json` 无备份，
+`--fresh` 落在它上**不可逆**（`--fresh` 只许落在本轮自己、确认可弃的账本上）。
+计划 `:3404` 那条命令**保持原文** —— 它记录的是当时实跑的命令，改动它等于让计划声称跑过一条没跑过的命令。
+
 ### ② 触发上限的题数
 
 `budgetExceededTasks` = **0**。没有任何一题的 `status` 是 `budget_exceeded`
@@ -134,9 +147,20 @@ $200 那条比对的余量极大（即便输入价高 10 倍，上端也只到 ~
 **二、一个未解释的整数边界。** `adaptive-rejection-sampler` 的 `outputTokens`
 **恰好是 8192**（2 的幂），`stopReason` 却是 `end_turn`，且该题
 `toolResults.total: 0`、`turns: 1` —— **一次工具调用都没有发生**。
-8192 是 `apps/cli/src/providers/openai-compat.ts:29` 的兜底常量，但同轮另有三题
-output 超过 8192（8,879 / 8,565 / 11,326）⇒ 至少那三题的请求上限高于 8192。
-**机制未查明：只登记读数，不给归因。**
+8192 在 `apps/cli/src/providers/openai-compat.ts:29` 是**第三顺位**的兜底
+（该行现在是 `req.maxTokens || declaredMaxOutput || 8192`），不是「那个上限」。
+
+**同轮另有三题 output 超过 8192（8,879 / 8,565 / 11,326）—— 但这不构成对 8192 的否证。**
+逐题读那三行：`caffe-cifar-10`（`toolResults.total: 4`）、`circuit-fibsqrt`（2）、
+`cancel-async-tasks`（11），**`turns` 都是 1**。`usage.outputTokens` 是**一轮里所有 LLM 往返的合计**，
+所以合计超过 8192 说明不了任何**单次请求**的上限 —— 这三行对本问题是**不承重的**。
+
+**能承重的是本题这一行**：`turns: 1`、`toolResults.total: 0`（**一次工具调用都没有**）、
+**恰好落在 8192**、`stopReason` 却是 `end_turn`。单次往返恰好撞在一个兜底常量上，是
+`4a7724b` 后来修掉的**静默截断**会呈现的形状 —— 而该修复**不在**跑本轮的二进制里（见上一节），
+故本轮本就**不可能**给出 `output_limit` 标记。
+**机制未查明：只登记读数，不给归因。** 但状态要从「轶事」升成「判据」：
+**下一轮跑到这里，本行必须不再出现；再出现就是回归。**
 
 **官方分数（harbor 报的，不是我们算的）**：`Mean: 0.000`，8 题 reward **全为 0.0**。
 
@@ -182,7 +206,15 @@ output 超过 8192（8,879 / 8,565 / 11,326）⇒ 至少那三题的请求上限
 - `n_completed_trials: 10` **不是**「10 题都跑完了」，更**不是**「10 题都答对了」；
 - 本仓归档里的 `completedTasks: 9` 又是**第三个口径**（`status == "done"`）；
 - **`completedTasks: 9` 也不等于「答对 9 题」** —— 它只说明这 9 题的回合正常结束。
-  「答对」只有 verifier 产物能说（③）。
+
+**一条跨组件的缝（2026-09-18 记，供下一轮读数不被误读）**：回合在 provider 上限处被截断时，
+它**仍然**会以 WS `done` 收尾 ⇒ driver 记 `status: "done"`（`benchmarks/harbor/driver/main.py:231-232`）
+⇒ **计入 `totals.completedTasks`**，而 `stopReason` 同时记下 `output_limit`（`main.py:216`，
+由 adapter 原样带出，`benchmarks/harbor/mipham_code.py:190-193`）。判据仍是「**只认 WS `done`**」——
+这是对的；但推论是 **`completedTasks` 会把被截断的回合算进去**。另：openai-compat 那条路径上
+被截断的 tool call 现在是**丢弃**的（`tools/pendingToolCalls.clear()`），会拉低 `toolResults.total`。
+⇒ 下一轮这个数**不能读成「答对了」**，也不能单独读成「跑完了」。
+「答对」只有 verifier 产物能说（③）。
 
 ### ③ verifier 判分的读数与来源（9 题，逐题读）
 

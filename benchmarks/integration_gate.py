@@ -4,8 +4,22 @@ One paid trial's evidence, recorded in the one place that survives: the raw
 artifacts live under ``benchmarks/jobs/``, which is gitignored, so
 ``results/integration-gate.json`` is the only thing a later task can read. Task
 13 Step 3 and Task 14's instrumentation section consume it directly, which is
-why the field set is fixed by the task brief and not by this file's convenience:
-``{schemaVersion, hostArch, dockerPlatform, image, trial, result, driverLogTail}``.
+why the field set is fixed by the task brief and not by this file's convenience.
+
+Two artifacts share this writer, and they do **not** carry the same field set:
+
+* ``results/integration-gate.json`` (Task 12) -- seven keys:
+  ``{schemaVersion, hostArch, dockerPlatform, image, trial, result, driverLogTail}``
+* ``results/phase2-integration-gate.json`` (Task 16) -- nine keys: the same
+  seven, plus ``declaredArtifacts`` (the verifier-mode / ``task.toml``
+  measurement) and ``manifests`` (the platform disclosure), both named in Task
+  16's Produces block and absent from Task 12's.
+
+The two extra blocks are assembled by the **caller** and merged into the record
+this module builds -- this module does not produce them, which is why grepping
+it for those names finds nothing. That is not licence to drop them: re-running
+this module against the Phase-2 output path without them would silently delete
+the only place the ``SHARED`` / ``"N/A · 机制不适用"`` finding lives.
 
 Why this is a module rather than a shell heredoc: the record is committed to a
 public repository and ``driverLogTail`` is text produced inside the container —
