@@ -53,7 +53,8 @@ import { initTelemetry, enableTelemetryNow } from './telemetry/index'
 import { wasPrompted, markPrompted, isInteractive, setTelemetryEnabled } from './telemetry/consent'
 import { officialEndpointHost } from './telemetry/endpoint'
 import { getWorkspaceTrust } from './core/workspace-trust'
-import { ARTIFACTS_DIR, ARTIFACT_PORT, MIPHAM_DIR } from './shared/constants'
+import { ARTIFACT_PORT } from './shared/constants'
+import { artifactsRoot } from './artifacts/paths'
 import { AgentViewManager } from './agent-view/agent-view-manager'
 import { AgentViewDashboard } from './agent-view/dashboard'
 import { createT } from './i18n-core/t'
@@ -598,7 +599,7 @@ export async function runApp(options: RunOptions): Promise<void> {
   }
 
   // Start artifact server (lazy — first artifact creation triggers listening)
-  const artifactsDir = join(process.cwd(), MIPHAM_DIR, ARTIFACTS_DIR)
+  const artifactsDir = artifactsRoot(process.cwd())
   const artifactServer = new ArtifactServer(artifactsDir, ARTIFACT_PORT)
 
   // Create query engine

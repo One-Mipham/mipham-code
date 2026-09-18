@@ -1,7 +1,8 @@
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ToolDefinition } from '../../shared/index.ts'
-import { ARTIFACTS_DIR, ARTIFACT_MAX_SIZE } from '../../shared/constants'
+import { ARTIFACT_MAX_SIZE } from '../../shared/constants'
+import { artifactsRoot } from '../../artifacts/paths'
 import { addToManifest, readManifest, archiveVersion } from '../../artifacts/manifest'
 
 const NAME_PATTERN = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/
@@ -57,8 +58,10 @@ export const artifactTool: ToolDefinition = {
       }
     }
 
-    // Determine output paths
-    const baseDir = join(ctx.cwd, ARTIFACTS_DIR)
+    // Determine output paths — the server's root, the manifest's home and this
+    // directory are one and the same; computing it here is what made the URL a
+    // guaranteed 404 before.
+    const baseDir = artifactsRoot(ctx.cwd)
     const sessionDir = join(baseDir, ctx.sessionId)
     mkdirSync(sessionDir, { recursive: true })
 

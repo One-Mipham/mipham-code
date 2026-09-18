@@ -5191,10 +5191,23 @@ const artifactOpenCmd: CommandHandler = async (ctx, args) => {
     return { content: 'Usage: /artifact open <name>\nExample: /artifact open dashboard' }
   }
 
-  const sessionId = 'session-1' // default session
-  const port = 9876
-  const ext = name.endsWith('.svg') ? '' : '.html'
-  const url = `http://localhost:${port}/${sessionId}/${name}${ext}`
+  const { readManifest } = await import('../artifacts/manifest')
+  const { artifactsRoot } = await import('../artifacts/paths')
+  const manifest = readManifest(artifactsRoot(process.cwd()))
+
+  // 先找本会话，再退到任意会话：文件在磁盘上跨会话留存，而 `open` 是用户手敲的。
+  // 原先写死 `session-1` + 端口 9876，工具回报的却是真会话 id 和**实际**端口
+  // （服务端遇到端口占用会自增），所以这条命令从构造上就打不开任何东西。
+  const entry =
+    manifest.artifacts.find((a) => a.name === name && a.sessionId === ctx.sessionId) ??
+    manifest.artifacts.find((a) => a.name === name)
+
+  if (!entry) {
+    return { content: `✗ No artifact named "${name}". Run /artifact list to see them.` }
+  }
+
+  // 用工具落盘时记下的 URL —— 那就是它印给用户的同一个坐标，两边不该各算一次。
+  const url = entry.url
 
   try {
     await openBrowser(url)
@@ -5204,13 +5217,14 @@ const artifactOpenCmd: CommandHandler = async (ctx, args) => {
   }
 }
 
-const artifactListCmd: CommandHandler = async (_ctx, _args) => {
-  const { getSessionArtifacts } = await import('../artifacts/manifest')
-  const { join } = await import('node:path')
-  const { ARTIFACTS_DIR } = await import('../shared/constants')
+const artifactListCmd: CommandHandler = async (ctx, _args) => {
+  const { readManifest, getSessionArtifacts } = await import('../artifacts/manifest')
+  const { artifactsRoot } = await import('../artifacts/paths')
 
-  const dir = join(process.cwd(), ARTIFACTS_DIR)
-  const entries = getSessionArtifacts(dir, 'session-1')
+  const dir = artifactsRoot(process.cwd())
+  // 会话 id 取自真实上下文，不是写死的 'session-1' —— 工具落盘时写的是真 id，
+  // 写死的那一支必然过滤出空列表。
+  const entries = getSessionArtifacts(dir, ctx.sessionId)
 
   if (entries.length === 0) {
     return {
@@ -5226,7 +5240,9 @@ const artifactListCmd: CommandHandler = async (_ctx, _args) => {
     )
   }
   lines.push('', `  ${entries.length} artifact(s) — /artifact open <name> to view`)
-  lines.push(`  Gallery: http://localhost:9876`)
+  // 画廊端口同样不写死：用最近一次落盘记下的那个（服务端会因端口占用自增）。
+  const { port } = readManifest(dir)
+  if (port) lines.push(`  Gallery: http://localhost:${port}`)
 
   return { content: lines.join('\n') }
 }
