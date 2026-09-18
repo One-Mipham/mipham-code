@@ -113,8 +113,13 @@ function findExistingParent(p: string): string | undefined {
 
 /**
  * Check if `child` is within `parent` (or equal to it).
+ *
+ * Compares path segments, not string prefixes: `/a/b-evil` is NOT within
+ * `/a/b`. Both sides are expected to be resolved (no `..`, no trailing slash
+ * beyond the root). The trailing-slash normalization below is for callers that
+ * hand in an unresolved string such as `/proj/src/`.
  */
-function isWithin(child: string, parent: string): boolean {
+export function isWithin(child: string, parent: string): boolean {
   // Normalize trailing slashes for comparison
   const c = child.endsWith('/') ? child.slice(0, -1) : child
   const p = parent.endsWith('/') ? parent.slice(0, -1) : parent

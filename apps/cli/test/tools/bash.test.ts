@@ -2,7 +2,12 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import type { ToolContext } from '../../src/shared'
 import { Context } from '../../src/vajra'
 import { collectTools } from '../../src/tools/seam'
-import { createBashTool, detectViolations, bashToolService } from '../../src/tools/exec/bash'
+import {
+  createBashTool,
+  detectViolations,
+  bashToolService,
+  resolveWorktreeEscape,
+} from '../../src/tools/exec/bash'
 
 const bashTool = createBashTool()
 
@@ -337,5 +342,73 @@ describe('bashToolService (credential injection)', () => {
     })
     expect(mounted.status()).toBe('active')
     expect(collectTools(ctx).has('Bash')).toBe(true)
+  })
+})
+
+// ============================================================
+// worktree 逃逸判定
+// ============================================================
+
+describe('worktree 逃逸判定', () => {
+  // 真实形状：cwd 在 .mipham/worktrees/<name> 之下，root 是项目根
+  // （findWorktreeMarker 取 marker 之前的部分 —— 见 core/paths.ts:47）。
+  const WT = '/proj/.mipham/worktrees/w1'
+  const ROOT = '/proj'
+  const escape = (cmd: string) => resolveWorktreeEscape(WT, ROOT, cmd)
+
+  // ── 真逃逸 ──
+
+  it('绝对路径逃逸被拦', () => {
+    expect(escape('cd /etc')).toBe('/etc')
+  })
+
+  it('相对路径里的 .. 被真解析（此前是字符串拼接，原样放行）', () => {
+    expect(escape('cd sub/../../../../../etc')).toBe('sub/../../../../../etc')
+  })
+
+  it('逐级 .. 走出项目被拦', () => {
+    expect(escape('cd ../../../..')).toBe('../../../..')
+  })
+
+  it('每一个 cd 都检查（此前只 match 第一个）', () => {
+    expect(escape('cd sub && cd /etc')).toBe('/etc')
+  })
+
+  it('引号包裹的目标同样被检查', () => {
+    expect(escape('cd "/etc"')).toBe('/etc')
+  })
+
+  // ── 区内：不误伤 ──
+
+  it('区内子目录放行', () => {
+    expect(escape('cd sub/dir')).toBeNull()
+  })
+
+  it('回到工作树上一级（仍在项目内）放行', () => {
+    expect(escape('cd ..')).toBeNull()
+  })
+
+  it('项目内其它目录放行', () => {
+    expect(escape('cd /proj/src')).toBeNull()
+  })
+
+  it('无 cd 时无事发生', () => {
+    expect(escape('ls -la')).toBeNull()
+  })
+
+  // ── 语义锚点：边界是「项目根」，不是 cwd 的字符串前缀 ──
+
+  it('恰好回到项目根放行、再上一级被拦', () => {
+    // 两个用例只差一级 `..`，一起把边界钉死在 ROOT 上。
+    expect(escape('cd ../../..')).toBeNull()
+    expect(escape('cd ../../../..')).toBe('../../../..')
+  })
+
+  it('字符串前缀相同的兄弟目录在项目内，按既有语义放行', () => {
+    // cwd 的字符串前缀兄弟（w1-evil）仍在 /proj 之下。判定用的是「是否在项目根内」，
+    // 与既有的「allows cd inside the project from a .mipham worktree」同一语义。
+    // 注意：不能用 startsWith(cwd) 当判据 —— 那会把 w1-evil 判成「在 cwd 里」，
+    // 只是因为 root 那个析取项兜住了，这个错误才没显形。
+    expect(escape('cd /proj/.mipham/worktrees/w1-evil')).toBeNull()
   })
 })

@@ -400,6 +400,23 @@ describe('C1 — worktree isolation covers both roots', () => {
     expect(result.success).toBe(true)
   })
 
+  // 下面两条此前是**活绕过**：守卫在，但解析方式让它们通过。
+  // 纯函数断言与这里互为「只接一条」的防线 —— 前者绿而守卫没接上时，这里红。
+
+  it('blocks a relative .. walk that stays string-prefixed to cwd', async () => {
+    mockSpawn()
+    const result = await bashTool.execute({ command: 'cd ../../../.. && ls' }, at(NEW_WT))
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Worktree isolation')
+  })
+
+  it('blocks an escape hidden behind a second cd', async () => {
+    mockSpawn()
+    const result = await bashTool.execute({ command: 'cd sub && cd /etc && ls' }, at(NEW_WT))
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Worktree isolation')
+  })
+
   it('leaves cwd outside any worktree unconstrained', async () => {
     mockSpawn()
     const result = await bashTool.execute({ command: 'cd /etc && ls' }, at('/proj/src'))

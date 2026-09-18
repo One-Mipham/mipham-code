@@ -1,7 +1,8 @@
+import { resolve } from 'node:path'
 import type { ToolDefinition, CredentialMaskingConfig } from '../../shared/index.ts'
 import { sanitizeCommand } from '../../shared/sanitize.ts'
 import { DANGEROUS_GIT_PATTERNS } from './git.ts'
-import { isUncOrDevicePath } from '../../security/path.ts'
+import { isUncOrDevicePath, isWithin } from '../../security/path.ts'
 import { findWorktreeMarker } from '../../core/paths.ts'
 import type { Service } from '../../vajra'
 import { toolKey } from '../seam'
@@ -308,6 +309,36 @@ function parseErrorLocations(stderr: string): ErrorLocation[] {
   return unique.slice(0, 10)
 }
 
+/**
+ * 找出命令里第一个 `cd` 到工作区之外的**目标原样字符串**（供错误文案用）；
+ * 无逃逸返回 null。判定边界是 `worktreeRoot`（项目根），不是 `cwd` ——
+ * 既有行为即如此：`cd <项目内其它目录>` 放行（见 test/tools/exec.test.ts
+ * 「allows cd inside the project from a .mipham worktree」）。
+ *
+ * 此前三个缺陷，其中两个是活的绕过：
+ *  - 相对路径用字符串拼接而非 `resolve`：`cd ../../../..` 拼出来的串仍以
+ *    cwd 开头，于是被当成「在区内」放行 —— **活绕过**；
+ *  - `command.match(...)` 非全局，只看第一个 `cd`，`cd sub && cd /etc` 的
+ *    后半段完全不检查 —— **活绕过**；
+ *  - 归属判定用 `resolved.startsWith(cwd)` 字符串前缀比较，`/proj/w1-evil`
+ *    会被判成「在 /proj/w1 里」；它只被 root 那个析取项兜住才没显形，故一并
+ *    改成按路径分段比较的 `isWithin`。
+ */
+export function resolveWorktreeEscape(
+  cwd: string,
+  worktreeRoot: string,
+  command: string,
+): string | null {
+  const cdRe = /\bcd\s+(?:"([^"]+)"|'([^']+)'|([^\s;|&]+))/g
+  for (const m of command.matchAll(cdRe)) {
+    const target = m[1] ?? m[2] ?? m[3]
+    if (!target) continue
+    const resolved = resolve(cwd, target)
+    if (!isWithin(resolved, cwd) && !isWithin(resolved, worktreeRoot)) return target
+  }
+  return null
+}
+
 export function createBashTool(credentialConfig?: CredentialMaskingConfig): ToolDefinition {
   return {
     name: 'Bash',
@@ -339,23 +370,14 @@ export function createBashTool(credentialConfig?: CredentialMaskingConfig): Tool
       // 隔离度只增不减（只认新前缀会让旧工作树失去保护）。
       const worktreeMarker = findWorktreeMarker(ctx.cwd)
       if (worktreeMarker) {
-        // Detect cd to absolute paths outside the worktree
-        const cdEscapePattern = /\bcd\s+(?:"([^"]+)"|'([^']+)'|([^\s;|&]+))/
-        const cdMatch = command.match(cdEscapePattern)
-        if (cdMatch) {
-          const target = cdMatch[1] || cdMatch[2] || cdMatch[3] || ''
-          // Resolve relative to cwd
-          const resolved = target.startsWith('/')
-            ? target
-            : `${ctx.cwd}/${target}`.replace(/\/\.\//g, '/')
-          if (!resolved.startsWith(ctx.cwd) && !resolved.startsWith(worktreeMarker.root + '/')) {
-            return {
-              success: false,
-              content: '',
-              error:
-                `Worktree isolation: cannot cd outside worktree directory. ` +
-                `Attempted: ${target}. Use tools within the worktree only.`,
-            }
+        const escapeTarget = resolveWorktreeEscape(ctx.cwd, worktreeMarker.root, command)
+        if (escapeTarget !== null) {
+          return {
+            success: false,
+            content: '',
+            error:
+              `Worktree isolation: cannot cd outside worktree directory. ` +
+              `Attempted: ${escapeTarget}. Use tools within the worktree only.`,
           }
         }
       }
