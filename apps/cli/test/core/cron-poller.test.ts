@@ -91,3 +91,49 @@ describe('cron-poller — checkCronJobs', () => {
     expect(new Date(recur.nextFire).getTime()).toBeGreaterThan(now.getTime())
   })
 })
+
+// ============================================================
+// 轮询只认自己这个目录的任务。
+//
+// 存储是全局单店（~/.mipham/cron/），轮询器每个会话都在跑，而 prompt 会被塞进
+// **当前会话**执行 —— 不过滤目录，就等于「在 A 项目建的日程，被 B 项目里开着的
+// 会话执行」，prompt 在错误的代码库里展开。同时别的目录的任务不该被这次轮询
+// 推进（那会让它在自己目录里少发一次）。
+//
+// 这组不需要自己的清理块：断言都按 id 取，前面 describe 留下的任务要么已被推进
+// 到未来、要么已被删。顺带一提，**别**在这里加 `rmSync(homedir(), …)` —— 本仓库
+// 有过「测试对真 home 删真 config」的事故（那类路径靠 mock 挡，mock 一旦失效就是
+// 真删）。
+// ============================================================
+
+describe('cron-poller — 目录归属', () => {
+  it('只发本目录的任务；别的目录的任务既不发出、也不被推进', () => {
+    writeJob(makeJob({ id: 'in-alpha', cwd: '/proj/alpha', prompt: 'alpha-work', nextFire: past }))
+    writeJob(makeJob({ id: 'in-beta', cwd: '/proj/beta', prompt: 'beta-work', nextFire: past }))
+
+    const enqueue = vi.fn()
+    const fired = checkCronJobs(enqueue, now, '/proj/alpha')
+
+    expect(fired).toBe(1)
+    expect(enqueue).toHaveBeenCalledTimes(1)
+    expect(enqueue).toHaveBeenCalledWith('alpha-work')
+
+    const remaining = readAllJobs()
+    const beta = remaining.find((j) => j.id === 'in-beta')!
+    expect(beta.nextFire).toBe(past) // 一点没动
+    expect(beta.lastFired).toBeNull()
+
+    const alpha = remaining.find((j) => j.id === 'in-alpha')!
+    expect(alpha.lastFired).toBe(now.toISOString())
+  })
+
+  it('没有 cwd 的旧文件仍然照发（不静默停掉用户已建的日程）', () => {
+    writeJob(makeJob({ id: 'legacy', prompt: 'legacy-work', nextFire: past }))
+
+    const enqueue = vi.fn()
+    const fired = checkCronJobs(enqueue, now, '/proj/alpha')
+
+    expect(fired).toBe(1)
+    expect(enqueue).toHaveBeenCalledWith('legacy-work')
+  })
+})

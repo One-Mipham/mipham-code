@@ -79,3 +79,44 @@ describe('CronCreate tool — job file shape', () => {
     expect(new Date(legacy!.nextFire).getTime()).toBeGreaterThan(Date.now())
   })
 })
+
+// ============================================================
+// 任务属于**某个目录的某个会话**。
+//
+// CronCreate 原先丢掉整个 ctx：落盘的 job 只有 cron/prompt/recurring，id 由
+// `cron:prompt` 哈希而来、存储又是全局单店。两个后果都不是理论上的：
+//   ① 在 A 目录建的日程，会被**任何**别的目录里跑着的会话执行（prompt 在错误的
+//      项目里展开）；
+//   ② 两个目录建同一个 cron+prompt，第二个直接覆盖第一个（同一个文件名）。
+// ============================================================
+
+describe('CronCreate tool — 任务的归属', () => {
+  const ctxIn = (cwd: string, sessionId = 'sess-a'): ToolContext => ({
+    cwd,
+    sessionId,
+    provider: 'test',
+    model: 'test-model',
+  })
+
+  it('落盘带上 cwd 与 sessionId', async () => {
+    await cronCreateTool.execute(
+      { cron: '0 9 * * *', prompt: 'scoped-job' },
+      ctxIn('/proj/alpha', 'sess-alpha'),
+    )
+
+    const job = readAllJobs().find((j) => j.prompt === 'scoped-job')!
+    expect(job.cwd).toBe('/proj/alpha')
+    expect(job.sessionId).toBe('sess-alpha')
+  })
+
+  it('同一 cron+prompt 在两个目录下是两个任务（id 含 cwd，不互相覆盖）', async () => {
+    const spec = { cron: '30 4 * * *', prompt: 'same-name-job' }
+    await cronCreateTool.execute(spec, ctxIn('/proj/alpha'))
+    await cronCreateTool.execute(spec, ctxIn('/proj/beta'))
+
+    const jobs = readAllJobs().filter((j) => j.prompt === 'same-name-job')
+    expect(jobs).toHaveLength(2)
+    expect(new Set(jobs.map((j) => j.cwd))).toEqual(new Set(['/proj/alpha', '/proj/beta']))
+    expect(new Set(jobs.map((j) => j.id)).size).toBe(2)
+  })
+})

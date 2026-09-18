@@ -26,14 +26,31 @@ export interface CronJob {
   createdAt: string
   nextFire: string
   lastFired: string | null
+  /**
+   * The directory this job belongs to. The store is global (`~/.mipham/cron/`)
+   * and every session's poller reads all of it, so without this a job created in
+   * project A gets executed by whichever session in project B happens to be
+   * running — its prompt expands against the wrong codebase.
+   *
+   * Optional because files written before this field existed genuinely lack it;
+   * the poller treats a missing `cwd` as "any directory" so those keep firing.
+   */
+  cwd?: string
+  /** Session that created the job. Informational — the poller keys on `cwd`. */
+  sessionId?: string
 }
 
 function jobPath(id: string): string {
   return join(CRON_DIR, `${id}.json`)
 }
 
-function generateId(cron: string, prompt: string): string {
-  return createHash('sha256').update(`${cron}:${prompt}`).digest('hex').slice(0, 12)
+/**
+ * Job id includes `cwd`: keyed on `cron:prompt` alone, creating the same schedule
+ * in two directories wrote to the same file and the second silently replaced the
+ * first.
+ */
+function generateId(cron: string, prompt: string, cwd: string): string {
+  return createHash('sha256').update(`${cwd}:${cron}:${prompt}`).digest('hex').slice(0, 12)
 }
 
 /**
@@ -101,11 +118,11 @@ export const cronCreateTool: ToolDefinition = {
     },
     required: ['cron', 'prompt'],
   },
-  async execute(params, _ctx) {
+  async execute(params, ctx) {
     const cron = params.cron as string
     const prompt = params.prompt as string
     const recurring = params.recurring !== false
-    const id = generateId(cron, prompt)
+    const id = generateId(cron, prompt, ctx.cwd)
 
     const now = new Date()
     const job: CronJob = {
@@ -116,6 +133,8 @@ export const cronCreateTool: ToolDefinition = {
       createdAt: now.toISOString(),
       nextFire: computeNextFire(cron, now),
       lastFired: null,
+      cwd: ctx.cwd,
+      sessionId: ctx.sessionId,
     }
 
     writeJob(job)
@@ -127,6 +146,7 @@ export const cronCreateTool: ToolDefinition = {
         `Created ${type} cron job.\n` +
         `ID: ${id}\n` +
         `Schedule: ${cron}\n` +
+        `Scoped to: ${ctx.cwd}\n` +
         `Prompt: "${prompt.slice(0, 80)}${prompt.length > 80 ? '...' : ''}"`,
     }
   },
@@ -182,7 +202,9 @@ export const cronListTool: ToolDefinition = {
     const lines = [`── Scheduled Cron Jobs (${jobs.length}) ──`, '']
     for (const j of jobs) {
       const type = j.recurring ? 'recurring' : 'one-shot'
-      lines.push(`${j.id}  ${j.cron}  ${type}`)
+      // 目录要看得见：任务被限定在建立它的那个目录，从别的项目 `/cron` 列出来时
+      // 用户得能看出它为什么不在自己这里跑。旧文件没有 cwd，就不显示。
+      lines.push(`${j.id}  ${j.cron}  ${type}${j.cwd ? `  [${j.cwd}]` : ''}`)
       lines.push(`  ${j.prompt.slice(0, 100)}`)
       lines.push('')
     }
