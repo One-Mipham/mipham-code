@@ -106,6 +106,9 @@ const PREFIX_COMMANDS = new Set([
   'stdbuf',
 ])
 
+/** `timeout` 的 duration 形态：`5` / `0.5` / `30s` / `2m` / `1h` / `1d`。 */
+const TIMEOUT_DURATION_RE = /^\d+(\.\d+)?[smhd]?$/
+
 /** Value-taking options of wrapper commands (consume the following token). */
 const PREFIX_VALUE_OPTIONS = new Set([
   '-u',
@@ -379,7 +382,10 @@ function effectiveCommand(tokens: string[]): {
     if (name === 'env') {
       while (i < tokens.length && tokens[i]!.includes('=')) i++ // `VAR=value` assignments
     }
-    if (name === 'timeout') i++ // positional duration
+    // `timeout` 的位置参数是 duration，**不是**必然存在：`timeout 5 cmd` 有，
+    // `timeout --preserve-status cmd` 没有。无条件 `i++` 会把后者真正的命令
+    // （`cat`）当成 duration 吃掉，基命令退化成它的第一个参数。
+    if (name === 'timeout' && i < tokens.length && TIMEOUT_DURATION_RE.test(tokens[i]!)) i++
     // `eval`'s remaining arguments are themselves a command line, and must be
     // captured here rather than via the SHELL_COMMANDS branch below: `eval "cat
     // secret"` tokenizes to ['eval', '"cat', 'secret"'], so the base degrades to

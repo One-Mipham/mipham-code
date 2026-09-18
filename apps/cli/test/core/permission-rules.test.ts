@@ -588,3 +588,23 @@ describe('基命令前的 shell 噪声 —— Read 桥接', () => {
     expect(denyRead(cmd)).toBe(true)
   })
 })
+
+describe('timeout 的位置参数只吃 duration', () => {
+  it('带 duration：仍能认出真正的命令', () => {
+    expect(matchBashRule('Read(secret)', 'Bash', { command: 'timeout 5 cat secret' })).toBe(true)
+  })
+
+  it('不带 duration、只有裸 flag：不能把命令当 duration 吃掉', () => {
+    expect(
+      matchBashRule('Read(secret)', 'Bash', { command: 'timeout --preserve-status cat secret' }),
+    ).toBe(true)
+  })
+
+  it('duration 带单位后缀', () => {
+    expect(matchBashRule('Read(secret)', 'Bash', { command: 'timeout 30s cat secret' })).toBe(true)
+  })
+
+  it('防回归：time -p 不把 -p 当取值选项（-p 是 sudo 的取值选项）', () => {
+    expect(matchBashRule('Read(secret)', 'Bash', { command: 'time -p cat secret' })).toBe(true)
+  })
+})
