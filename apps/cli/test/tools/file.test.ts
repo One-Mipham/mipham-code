@@ -1,10 +1,19 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync } from 'node:fs'
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  truncateSync,
+  realpathSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
 import { Readable } from 'node:stream'
-import type { ToolContext } from '../../src/shared'
+import type { ToolContext, CredentialMaskingConfig } from '../../src/shared'
 import { Context } from '../../src/vajra'
 import { collectTools } from '../../src/tools/seam'
 import { createReadTool, readToolService } from '../../src/tools/file/read'
@@ -17,6 +26,7 @@ import {
   truncateGrepOutput,
   isTopLevelScope,
 } from '../../src/tools/file/grep'
+import { CREDENTIAL_SENTINEL } from '../../src/core/credential-masker'
 
 const readTool = createReadTool()
 const globTool = createGlobTool()
@@ -130,6 +140,125 @@ describe('Read tool execution', () => {
     const result = await readTool.execute({ file_path: join(tmpDir, 'test.txt') }, ctx)
     expect(result.success).toBe(true)
     expect(result.content).toContain('hello world')
+  })
+})
+
+// ============================================================
+// 大文件：offset/limit 必须真的能起作用。
+//
+// 原实现把整个文件读进内存之后**才**取 offset/limit，文件超过 50 MB 时直接回
+// `File too large … Use offset/limit for large files.` —— 这条建议不可执行：
+// 带上 offset/limit 重发，走进的是同一个分支、拿到的是同一句话。另一半是
+// `content.split('\n')`：为了返回 limit 行，它给**整个文件**的每一行都建了一个
+// JS 字符串。
+//
+// 下面用稀疏文件造「60 MB 的文件」：头部写真实内容，其余 truncate 撑长度，
+// 磁盘上并不真落 60 MB。
+// ============================================================
+
+describe('Read tool — 大文件与行窗口', () => {
+  /** 头部写真实内容，其余 truncate 成稀疏空洞。 */
+  function sparseFile(name: string, head: string, size: number): string {
+    const p = join(tmpDir, name)
+    writeFileSync(p, head)
+    truncateSync(p, size)
+    return p
+  }
+
+  /** 行窗口的期望呈现：`     3\ttext`。测试里独立写一遍，当作格式的地面真值。 */
+  function expectWindow(lines: string[], offset: number): string {
+    return lines.map((l, i) => `${String(offset + i + 1).padStart(6, ' ')}\t${l}`).join('\n')
+  }
+
+  it('超过 50 MB 的文件也能取到头部若干行', async () => {
+    const p = sparseFile('huge.log', 'alpha\nbeta\ngamma\n', 60_000_000)
+    const result = await readTool.execute({ file_path: p, offset: 0, limit: 3 }, ctx)
+    expect(result.success).toBe(true)
+    expect(result.content).toBe(expectWindow(['alpha', 'beta', 'gamma'], 0))
+  })
+
+  it('整行都没有的 60 MB 文件按扫描上限报错，而不是把它整个读进内存', async () => {
+    const p = sparseFile('blob.json', '{"a":1', 60_000_000)
+    const result = await readTool.execute({ file_path: p }, ctx)
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/too large/i)
+  })
+
+  it('窗口跨 64 KiB 读块边界时多字节字符不被截断', async () => {
+    // 每行 101 个「中」(303 B) + '\n' = 304 B ⇒ 第 65536 字节落在某个字符中间：
+    // 65_536 = 215·304 + 176，而 176 不是 3 的倍数 —— 字符占 65534–65536。
+    const line = '中'.repeat(101)
+    const lines = Array.from({ length: 300 }, () => line)
+    const p = join(tmpDir, 'wide.txt')
+    writeFileSync(p, lines.join('\n') + '\n')
+
+    // ① 整窗（> 64 KiB，必须跨过那个边界）
+    const whole = await readTool.execute({ file_path: p, offset: 0, limit: 300 }, ctx)
+    expect(whole.success).toBe(true)
+    expect(whole.content).toBe(expectWindow(lines, 0))
+
+    // ② 窗口起点落在第二个读块里（扫描要数完第一块中的所有换行）
+    const mid = await readTool.execute({ file_path: p, offset: 215, limit: 3 }, ctx)
+    expect(mid.success).toBe(true)
+    expect(mid.content).toBe(expectWindow([line, line, line], 215))
+  })
+
+  it('凭据掩码路径与直读路径对同一窗口给出逐字相同的结果', async () => {
+    // passthrough 规则：路径命中该文件，但提取模式什么都不匹配 ⇒ 内容原样返回。
+    // 两条路径于是只差「行窗口从哪儿切」，输出必须逐字相同 —— 掩码那条走的是
+    // 整串内容，直读那条走的是 fd，两条路对不上就是窗口实现分叉。
+    const cases: Array<[number, number]> = [
+      [0, 5],
+      [1, 2],
+      [2, 5],
+      [9, 3],
+    ]
+    const fixtures = [
+      { name: 'empty.txt', text: '' },
+      { name: 'one.txt', text: 'only' },
+      { name: 'trailing.txt', text: 'a\nb\n' },
+      { name: 'plain.txt', text: 'a\nb\nc\nd\ne' },
+      { name: 'wide.txt', text: `${'中'.repeat(101)}\n${'文'.repeat(101)}\n` },
+    ]
+    const config = (files: CredentialMaskingConfig['files']): CredentialMaskingConfig => ({
+      enabled: true,
+      files,
+      output_scrubbing: { enabled: false, patterns: [] },
+      env_filter: { enabled: false, patterns: [] },
+    })
+
+    for (const f of fixtures) {
+      const p = join(tmpDir, f.name)
+      writeFileSync(p, f.text)
+      // 规则匹配的是**解析后**的路径（resolveSafe 会 realpath：macOS 上
+      // /var/folders/… → /private/var/folders/…），所以规则也得写 realpath ——
+      // 否则规则不命中，下面比的就成了直读路径跟它自己。
+      const realPath = realpathSync(p)
+      const maskedTool = createReadTool(
+        config([
+          {
+            path: realPath,
+            mode: 'extract',
+            extract: [{ pattern: 'ZZZ_NEVER_MATCHES_ZZZ' }],
+            onExtractNoMatch: 'passthrough',
+          },
+        ]),
+      )
+      // 正对照：同一条路径换成 full 规则必须拿到哨兵 —— 这一条才证明「掩码那条路
+      // 真的被走到了」，等价断言才有意义。
+      const sentinelTool = createReadTool(config([{ path: realPath, mode: 'full' }]))
+
+      for (const [offset, limit] of cases) {
+        const expected = expectWindow(f.text.split('\n').slice(offset, offset + limit), offset)
+        const plain = await readTool.execute({ file_path: p, offset, limit }, ctx)
+        const masked = await maskedTool.execute({ file_path: p, offset, limit }, ctx)
+        const sentinel = await sentinelTool.execute({ file_path: p, offset, limit }, ctx)
+        expect(plain.success).toBe(true)
+        expect(plain.content).toBe(expected)
+        expect(sentinel.content).toBe(CREDENTIAL_SENTINEL)
+        expect(masked.content).toBe(expected)
+      }
+    }
   })
 })
 
