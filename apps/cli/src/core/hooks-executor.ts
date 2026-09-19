@@ -106,11 +106,25 @@ export function parseHookStdout(stdout: string | null | undefined, _ctx: HookCon
   return { allowed: true }
 }
 
-function executeCommand(cfg: HookConfig, ctx: HookContext): HookResult {
+async function executeCommand(cfg: HookConfig, ctx: HookContext): Promise<HookResult> {
   if (!cfg.command) return { allowed: true }
 
   try {
     const args = cfg.args ? cfg.args.map((a) => substituteVars(a, ctx)) : []
+
+    // A hook command is a child of this process, so a bare `spawnSync` would hand
+    // it the whole environment — every provider key and bot secret included. Bash
+    // has been masking these since E1; hooks were the remaining door, so they use
+    // the same policy. User level only: `HookContext` carries no cwd, so there is
+    // no session scope to read a project section from (and the registry already
+    // settled that a project section cannot be applied to a cross-session spawn).
+    const { loadUserCredentialMaskingConfig } = await import('../config/loader')
+    const { filterEnv } = await import('./credential-masker')
+    const masking = loadUserCredentialMaskingConfig()
+    const env =
+      masking.enabled && masking.env_filter.enabled
+        ? filterEnv(process.env as Record<string, string | undefined>, masking)
+        : undefined
 
     // Use spawnSync with array args — no shell, no command injection.
     // Pass the Claude-protocol stdin JSON so scripts can read structured context.
@@ -120,6 +134,9 @@ function executeCommand(cfg: HookConfig, ctx: HookContext): HookResult {
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
       input,
+      // `undefined` = inherit, which is what node does by default; passing it
+      // explicitly keeps the two branches visible at one site.
+      env,
     })
 
     // Exit code 0 = success — parse the stdout JSON for structured decisions.

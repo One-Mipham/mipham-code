@@ -165,3 +165,25 @@ export function getWorkspaceTrust(): WorkspaceTrust {
 export function resetWorkspaceTrust(): void {
   _instance = null
 }
+
+/**
+ * Say out loud that repository-controlled config was skipped because this
+ * workspace is not trusted.
+ *
+ * Call this only when hooks were *actually* withheld — `SettingsJson` reports
+ * that (`projectHooksSkipped`), so this cannot announce a skip that never
+ * happened.
+ *
+ * Deliberately not silent. When there is no TTY the trust prompt cannot be
+ * asked, so the answer is "no" and the hooks stay out — but a gate that fails
+ * without saying so is indistinguishable from one that passed, and the user is
+ * left wondering why their hooks do nothing. Written to stderr so it cannot
+ * corrupt stdout rendering.
+ */
+export function warnProjectHooksSkipped(cwd: string): void {
+  process.stderr.write(
+    `⚠️  Workspace not trusted: skipped hooks from ${join(cwd, '.mipham', 'settings.json')}\n` +
+      `    (hooks run commands — repository-controlled). Trust this directory in an interactive\n` +
+      `    session to enable them.\n`,
+  )
+}

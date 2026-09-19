@@ -3780,7 +3780,13 @@ const cdCmd: CommandHandler = async (ctx, args) => {
 const hooksCmd: CommandHandler = async (ctx) => {
   const t = resolveT(ctx)
   const { loadSettingsJson } = await import('../config/loader')
-  const settingsJson = loadSettingsJson(process.cwd())
+  // This command *displays* the configured list, so it asks for the project file
+  // explicitly — the loader's default drops project hooks (they are
+  // repository-controlled code execution) and would hide hooks that really do
+  // run here. `/hooks` is a TUI command, and the TUI only starts after
+  // `checkWorkspaceTrust()` has settled the question, so nothing is being
+  // misrepresented by listing them.
+  const settingsJson = loadSettingsJson(process.cwd(), { includeProjectHooks: true })
 
   const hooks = settingsJson.hooks as Record<
     string,

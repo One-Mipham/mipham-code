@@ -17,6 +17,7 @@ import {
   WorkspaceTrust,
   getWorkspaceTrust,
   resetWorkspaceTrust,
+  warnProjectHooksSkipped,
 } from '../../src/core/workspace-trust'
 
 const TRUST_STORE_PATH = join(homedir(), '.mipham', 'trusted-workspaces.json')
@@ -193,5 +194,25 @@ describe('getWorkspaceTrust singleton', () => {
     resetWorkspaceTrust()
     const b = getWorkspaceTrust()
     expect(a).not.toBe(b)
+  })
+})
+
+/**
+ * The skip has to be *sayable*. A gate that silently does nothing looks exactly
+ * like a gate that passed — which is the failure this audit keeps finding, and
+ * the reason the non-TTY path no longer answers "untrusted" with silence.
+ */
+describe('warnProjectHooksSkipped', () => {
+  it('names the file it skipped, so the skip is not silent', () => {
+    const write = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+    try {
+      warnProjectHooksSkipped('/tmp/some-workspace')
+
+      const printed = write.mock.calls.map((c) => String(c[0])).join('')
+      expect(printed).toContain(join('/tmp/some-workspace', '.mipham', 'settings.json'))
+      expect(printed).toContain('hooks')
+    } finally {
+      write.mockRestore()
+    }
   })
 })

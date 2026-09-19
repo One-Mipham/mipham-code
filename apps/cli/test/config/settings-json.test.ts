@@ -32,7 +32,7 @@ describe('loadSettingsJson', () => {
     expect(loadSettingsJson(CWD)).toEqual({ hooks: {}, permissions: { allow: [], deny: [] } })
   })
 
-  it('loads project-level hooks', () => {
+  it('loads project-level hooks when the caller vouches for the workspace', () => {
     writeFileSync(
       join(CWD, '.mipham', 'settings.json'),
       JSON.stringify({
@@ -41,7 +41,7 @@ describe('loadSettingsJson', () => {
         },
       }),
     )
-    const r = loadSettingsJson(CWD)
+    const r = loadSettingsJson(CWD, { includeProjectHooks: true })
     expect(r.hooks.PreToolUse).toHaveLength(1)
     expect(r.hooks.PreToolUse![0]!.matcher).toBe('Bash')
   })
@@ -59,8 +59,76 @@ describe('loadSettingsJson', () => {
         hooks: { PreToolUse: [{ matcher: 'Edit', hooks: [{ type: 'command', command: 'u.sh' }] }] },
       }),
     )
-    const r = loadSettingsJson(CWD)
+    const r = loadSettingsJson(CWD, { includeProjectHooks: true })
     expect(r.hooks.PreToolUse).toHaveLength(2)
+  })
+
+  // The project file is repository-controlled and its `hooks` spawn processes,
+  // so reading them is an explicit act. The default is the closed direction: a
+  // caller that has not established trust gets user hooks only.
+  it('drops project hooks by default — they are repository-controlled code execution', () => {
+    writeFileSync(
+      join(CWD, '.mipham', 'settings.json'),
+      JSON.stringify({
+        hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'p.sh' }] }] },
+      }),
+    )
+    writeFileSync(
+      join(MIPHAM_HOME, 'settings.json'),
+      JSON.stringify({
+        hooks: { PreToolUse: [{ matcher: 'Edit', hooks: [{ type: 'command', command: 'u.sh' }] }] },
+      }),
+    )
+
+    const r = loadSettingsJson(CWD)
+
+    // Not merely "fewer" — the project entry must be absent by name, so a
+    // future change that merges it under a different key still reddens here.
+    expect(r.hooks.PreToolUse).toHaveLength(1)
+    expect(r.hooks.PreToolUse![0]!.matcher).toBe('Edit')
+  })
+
+  // Guard against over-gating: the same file also carries `permissions`, and
+  // that question is answered elsewhere (allow rules are capped by the mode
+  // ceiling — P2). Trust has no say in it.
+  it('still merges project permissions with the default gate closed', () => {
+    writeFileSync(
+      join(CWD, '.mipham', 'settings.json'),
+      JSON.stringify({ permissions: { allow: ['Bash(git:*)'], deny: ['Bash(rm:*)'] } }),
+    )
+    const r = loadSettingsJson(CWD)
+    expect(r.permissions.allow).toEqual(['Bash(git:*)'])
+    expect(r.permissions.deny).toEqual(['Bash(rm:*)'])
+  })
+
+  // The skip is reported from the same parse that would have read the hooks, so
+  // a caller announcing it cannot announce one that never happened.
+  it('reports the skip when project hooks really were withheld', () => {
+    writeFileSync(
+      join(CWD, '.mipham', 'settings.json'),
+      JSON.stringify({
+        hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'p.sh' }] }] },
+      }),
+    )
+    expect(loadSettingsJson(CWD).projectHooksSkipped).toBe(true)
+  })
+
+  it('reports no skip when the project file declared no hooks', () => {
+    writeFileSync(
+      join(CWD, '.mipham', 'settings.json'),
+      JSON.stringify({ permissions: { allow: ['Read'] } }),
+    )
+    expect(loadSettingsJson(CWD).projectHooksSkipped).toBeUndefined()
+  })
+
+  it('reports no skip when the caller vouched for the workspace', () => {
+    writeFileSync(
+      join(CWD, '.mipham', 'settings.json'),
+      JSON.stringify({
+        hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'p.sh' }] }] },
+      }),
+    )
+    expect(loadSettingsJson(CWD, { includeProjectHooks: true }).projectHooksSkipped).toBeUndefined()
   })
 
   it('loads and dedupes permissions allow/deny across levels', () => {

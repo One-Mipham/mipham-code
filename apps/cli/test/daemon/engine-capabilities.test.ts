@@ -11,11 +11,26 @@
  * 直接构造引擎 + 真实工具注册表，走 `engine.process()`。
  */
 
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
+
+// Isolate from the real ~/.mipham. Two reasons, not one: `createToolRegistry()`
+// reads the user-level masking policy there, and the project-hooks gate now
+// consults the *trust store*, which also lives under the home directory — a test
+// that read the real one would pass or fail according to whether the machine
+// running it happens to have the temp root trusted.
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>()
+  return {
+    ...actual,
+    homedir: () => `${actual.tmpdir()}/mipham-test-daemon-caps`,
+  }
+})
+
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { wireDaemonEngine } from '../../src/daemon/engine-capabilities'
+import { getWorkspaceTrust, resetWorkspaceTrust } from '../../src/core/workspace-trust'
 import { QueryEngine } from '../../src/core/engine'
 import { ContextManager } from '../../src/core/context'
 import { createToolRegistry } from '../../src/tools'
@@ -39,6 +54,11 @@ function makeWorkspace(): string {
 
 afterEach(() => {
   while (created.length > 0) rmSync(created.pop()!, { recursive: true, force: true })
+  // The trust store is a module-level singleton over a file in the (mocked)
+  // home — without this, a test that trusts its workspace would hand that trust
+  // to every later test.
+  resetWorkspaceTrust()
+  rmSync(join(homedir(), '.mipham'), { recursive: true, force: true })
 })
 
 function mockContext(): ContextManager {
@@ -274,6 +294,10 @@ describe('wireDaemonEngine — behaviour', () => {
 
   it('D4: settings.json hooks are registered for this cwd', async () => {
     const cwd = makeWorkspace()
+    // Trust first: project-level hooks are repository-controlled code execution,
+    // so the loader reads them only when the caller vouches for the workspace.
+    // This test is the *trusted* half; D4b is the other.
+    getWorkspaceTrust().trust(cwd)
     mkdirSync(join(cwd, '.mipham'), { recursive: true })
     // matcher 用一个**全局唯一**的字面量：`loadSettingsJson` 同时读 `<cwd>/.mipham`
     // 与 `MIPHAM_HOME`（`config/loader.ts:238`），而 setup 把 homedir mock 成所有测试
@@ -313,6 +337,78 @@ describe('wireDaemonEngine — behaviour', () => {
     // matcher 执行不会炸」，注册本身由上面的 `listHooks()` 负责。
     const result = await hooks!.executePreToolUse('DaemonCapsProbeTool', {}, 's1')
     expect(result.allowed).toBe(true)
+  })
+
+  // N1's daemon half. `isCwdAllowed` admits any session cwd inside the daemon's
+  // own root without consulting trust (`workspace-guard.ts:27`), and this path
+  // never runs the interactive prompt — so before the gate landed, a daemon
+  // started in an untrusted clone would spawn that repo's hook commands on
+  // request. The claim under test is asymmetric on purpose: the *project* hook
+  // must be gone while the *user-level* hook survives, so this cannot pass by
+  // registering nothing at all.
+  it('D4b: project hooks are dropped for an untrusted cwd, user hooks kept', async () => {
+    const cwd = makeWorkspace()
+    mkdirSync(join(cwd, '.mipham'), { recursive: true })
+    writeFileSync(
+      join(cwd, '.mipham', 'settings.json'),
+      JSON.stringify({
+        hooks: { PreToolUse: [{ matcher: 'UntrustedProjectProbe', hooks: [{ type: 'code' }] }] },
+      }),
+    )
+    mkdirSync(join(homedir(), '.mipham'), { recursive: true })
+    writeFileSync(
+      join(homedir(), '.mipham', 'settings.json'),
+      JSON.stringify({
+        hooks: { PreToolUse: [{ matcher: 'TrustedUserProbe', hooks: [{ type: 'code' }] }] },
+      }),
+    )
+
+    const registry = scriptedRegistry([
+      async function* () {
+        yield { type: 'stop' }
+      },
+    ])
+    const engine = newEngine(registry)
+    const write = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+    try {
+      wireDaemonEngine(engine, { cwd, registry })
+
+      const registered = engine
+        .getHookEngine()!
+        .listHooks()
+        .map((h) => `${h.event}:${h.toolName ?? '*'}`)
+
+      expect(registered).toEqual(['PreToolUse:TrustedUserProbe'])
+      expect(registered).not.toContain('PreToolUse:UntrustedProjectProbe')
+
+      // The skip is not silent — a gate that fails quietly is indistinguishable
+      // from one that passed.
+      expect(write.mock.calls.map((c) => String(c[0])).join('')).toContain('skipped hooks from')
+    } finally {
+      write.mockRestore()
+    }
+  })
+
+  // The other half of the same judgement: a workspace with no hooks at all is
+  // not a workspace whose hooks were skipped. Warning there would be a claim
+  // about an object that never existed.
+  it('D4c: an untrusted cwd with no project hooks warns about nothing', () => {
+    const cwd = makeWorkspace()
+
+    const registry = scriptedRegistry([
+      async function* () {
+        yield { type: 'stop' }
+      },
+    ])
+    const engine = newEngine(registry)
+    const write = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+    try {
+      wireDaemonEngine(engine, { cwd, registry })
+
+      expect(write.mock.calls.map((c) => String(c[0])).join('')).not.toContain('skipped hooks')
+    } finally {
+      write.mockRestore()
+    }
   })
 
   it('D5: project agents load from the session cwd', () => {

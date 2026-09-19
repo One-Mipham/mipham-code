@@ -31,6 +31,7 @@ import { RulesLoader } from '../core/rules-loader'
 import { HookEngine } from '../core/hooks'
 import { loadHookConfigs } from '../core/hooks-config'
 import { loadSettingsJson } from '../config/loader'
+import { getWorkspaceTrust, warnProjectHooksSkipped } from '../core/workspace-trust'
 import { AgentRegistry } from '../agent/agent-registry'
 
 export interface DaemonEngineCapabilities {
@@ -91,7 +92,14 @@ function hooksFor(cwd: string, skills: SkillsLoader): HookEngine {
   for (const skill of skills.list()) {
     for (const hook of skill.hooks ?? []) engine.register(hook)
   }
-  for (const def of loadHookConfigs(loadSettingsJson(cwd).hooks)) engine.register(def)
+  // 项目级 hooks 是仓库可控的代码执行面，且 daemon 这条路径**从不**经过交互式信任
+  // 询问 —— 而 `isCwdAllowed` 只要求会话 cwd 在 daemon 根目录之内（`workspace-guard.ts:27`
+  // `isWithin(cwd, daemonRoot) || isTrusted(cwd)`）⇒ 在未信任的克隆里启动的 daemon，
+  // 以前会照着那个仓库的 settings.json 起子进程。未信任即不加载，并说出口。
+  const projectHooksTrusted = getWorkspaceTrust().isTrusted(cwd)
+  const settings = loadSettingsJson(cwd, { includeProjectHooks: projectHooksTrusted })
+  if (settings.projectHooksSkipped) warnProjectHooksSkipped(cwd)
+  for (const def of loadHookConfigs(settings.hooks)) engine.register(def)
   hookCache.set(cwd, engine)
   return engine
 }

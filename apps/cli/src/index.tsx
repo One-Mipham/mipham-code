@@ -53,7 +53,7 @@ import { getMetrics } from './core/metrics'
 import { initTelemetry, enableTelemetryNow } from './telemetry/index'
 import { wasPrompted, markPrompted, isInteractive, setTelemetryEnabled } from './telemetry/consent'
 import { officialEndpointHost } from './telemetry/endpoint'
-import { getWorkspaceTrust } from './core/workspace-trust'
+import { getWorkspaceTrust, warnProjectHooksSkipped } from './core/workspace-trust'
 import { ARTIFACT_PORT } from './shared/constants'
 import { artifactsRoot } from './artifacts/paths'
 import { AgentViewManager } from './agent-view/agent-view-manager'
@@ -609,8 +609,17 @@ export async function runApp(options: RunOptions): Promise<void> {
     }
   }
 
-  // Register settings.json hooks (Claude Code convention — additive across levels)
-  const settingsJson = loadSettingsJson(process.cwd())
+  // Register settings.json hooks (Claude Code convention — additive across levels).
+  // Project-level hooks are repository-controlled shell commands, so they are only
+  // read once this workspace is trusted. On a TTY `checkWorkspaceTrust()` above has
+  // already asked — and exited the process on "no". With no TTY it *cannot* ask, so
+  // the answer is "no" and the hooks stay out rather than running unasked; that
+  // skip is announced, since silence would look the same as having passed.
+  const projectHooksTrusted = getWorkspaceTrust().isTrusted(process.cwd())
+  const settingsJson = loadSettingsJson(process.cwd(), {
+    includeProjectHooks: projectHooksTrusted,
+  })
+  if (settingsJson.projectHooksSkipped) warnProjectHooksSkipped(process.cwd())
   for (const def of loadHookConfigs(settingsJson.hooks)) {
     hookEngine.register(def)
   }

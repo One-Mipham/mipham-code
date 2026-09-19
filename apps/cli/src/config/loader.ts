@@ -251,20 +251,44 @@ function loadMcpJson(cwd: string): McpServerConfig[] {
 export interface SettingsJson {
   hooks: SettingsHooks
   permissions: { allow: string[]; deny: string[] }
+  /**
+   * Present (and `true`) only when the project-level file really did declare
+   * hooks and they were withheld because the caller did not vouch for the
+   * workspace. Absent in every other case — including "the file has no hooks",
+   * so a caller announcing the skip cannot announce one that never happened.
+   */
+  projectHooksSkipped?: true
 }
 
 /**
  * Load `settings.json` — project-level `.mipham/settings.json` then user-level
  * `~/.mipham/settings.json`. Mirrors the Claude Code convention (hooks additive,
  * permissions merged), so users can migrate their Claude settings unchanged.
+ *
+ * `includeProjectHooks` defaults to **false**, because the project-level file is
+ * repository-controlled and its `hooks` are shell commands this process will
+ * spawn — reading them is an act of trust, not a default. Callers that have
+ * established trust (or that only *display* the configured list) opt in
+ * explicitly. The flag gates hooks only: `permissions` still merge from both
+ * levels, since that question is answered by the mode ceiling, not by trust.
  */
-export function loadSettingsJson(cwd: string = process.cwd()): SettingsJson {
+export function loadSettingsJson(
+  cwd: string = process.cwd(),
+  options: { includeProjectHooks?: boolean } = {},
+): SettingsJson {
   const hooks: SettingsHooks = {}
   const permissions = { allow: [] as string[], deny: [] as string[] }
+  let projectHooksSkipped = false
 
-  const searchPaths = [join(cwd, '.mipham', 'settings.json'), join(MIPHAM_HOME, 'settings.json')]
+  const searchPaths = [
+    {
+      path: join(cwd, '.mipham', 'settings.json'),
+      readHooks: options.includeProjectHooks ?? false,
+    },
+    { path: join(MIPHAM_HOME, 'settings.json'), readHooks: true },
+  ]
 
-  for (const path of searchPaths) {
+  for (const { path, readHooks } of searchPaths) {
     try {
       if (!existsSync(path)) continue
       const raw = readFileSync(path, 'utf-8')
@@ -273,7 +297,16 @@ export function loadSettingsJson(cwd: string = process.cwd()): SettingsJson {
         permissions?: { allow?: unknown; deny?: unknown }
       }
 
-      if (parsed.hooks && typeof parsed.hooks === 'object') {
+      if (!readHooks) {
+        // "Was anything actually withheld?" is answered from the same parse that
+        // would have read it, so the skip notice cannot outrun the fact.
+        const declared = Object.values(parsed.hooks ?? {}).some(
+          (entries) => Array.isArray(entries) && entries.length > 0,
+        )
+        if (declared) projectHooksSkipped = true
+      }
+
+      if (readHooks && parsed.hooks && typeof parsed.hooks === 'object') {
         for (const [eventName, entries] of Object.entries(parsed.hooks)) {
           if (!Array.isArray(entries)) continue
           const bucket = (hooks as Record<string, unknown[]>)[eventName]
@@ -295,7 +328,9 @@ export function loadSettingsJson(cwd: string = process.cwd()): SettingsJson {
     }
   }
 
-  return { hooks, permissions }
+  // Key added only when true: `toEqual` distinguishes `false` from absent, and
+  // "no project hooks" must stay indistinguishable from "nothing to report".
+  return projectHooksSkipped ? { hooks, permissions, projectHooksSkipped } : { hooks, permissions }
 }
 
 /** Which settings.json a permission rule is persisted to. */
