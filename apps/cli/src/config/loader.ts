@@ -509,10 +509,19 @@ export function loadInferenceHookConfig(): InferenceHookConfig {
  *
  * A malformed file leaves `merged` untouched — so a config that cannot be read
  * costs you the *overrides*, never the masking itself (the defaults are on).
+ *
+ * `allowLoosening` is the same split as `baseUrl` in `mergeProviders`: the
+ * user's own `~/.mipham/config.yml` is trusted and may set anything, while a
+ * **project** file is whatever the repo you cloned shipped. Project level may
+ * only tighten — switch masking on and add rules, never switch it off or drop a
+ * rule. Otherwise one line in a cloned repo silently takes away a control the
+ * user already had (`enabled: false`), or `files: [...]` replaces the defaults
+ * wholesale and the SSH private-key rule stops being masked.
  */
 function mergeCredentialMaskingFile(
   merged: CredentialMaskingConfig,
   path: string,
+  allowLoosening: boolean,
 ): CredentialMaskingConfig {
   try {
     if (!existsSync(path)) return merged
@@ -520,16 +529,27 @@ function mergeCredentialMaskingFile(
     const parsed = parseYaml(raw) as Record<string, unknown>
     const section = parsed.credential_masking as Partial<CredentialMaskingConfig> | undefined
     if (!section) return merged
+
+    // Tightening can only ever turn a switch on, never off.
+    const flag = (next: boolean | undefined, cur: boolean): boolean =>
+      allowLoosening ? (next ?? cur) : cur || (next ?? false)
+
+    // Tightening adds rules instead of replacing them. Earlier rules stay in
+    // front because `matchCredentialFile` returns the **first** match — so a
+    // project cannot weaken a path's mode by adding a second rule for it.
+    const rules = <T>(next: T[] | undefined, cur: T[]): T[] =>
+      allowLoosening ? (next ?? cur) : [...cur, ...(next ?? [])]
+
     return {
-      enabled: section.enabled ?? merged.enabled,
-      files: section.files ?? merged.files,
+      enabled: flag(section.enabled, merged.enabled),
+      files: rules(section.files, merged.files),
       output_scrubbing: {
-        enabled: section.output_scrubbing?.enabled ?? merged.output_scrubbing.enabled,
-        patterns: section.output_scrubbing?.patterns ?? merged.output_scrubbing.patterns,
+        enabled: flag(section.output_scrubbing?.enabled, merged.output_scrubbing.enabled),
+        patterns: rules(section.output_scrubbing?.patterns, merged.output_scrubbing.patterns),
       },
       env_filter: {
-        enabled: section.env_filter?.enabled ?? merged.env_filter.enabled,
-        patterns: section.env_filter?.patterns ?? merged.env_filter.patterns,
+        enabled: flag(section.env_filter?.enabled, merged.env_filter.enabled),
+        patterns: rules(section.env_filter?.patterns, merged.env_filter.patterns),
       },
     }
   } catch {
@@ -540,19 +560,14 @@ function mergeCredentialMaskingFile(
 
 /**
  * Load credential masking configuration from the same config sources.
- * Merges project-level over user-level. Returns defaults if no section present.
+ * Returns defaults if no section present.
+ *
+ * User level first (trusted, may loosen), then project level (tighten only).
  */
 export function loadCredentialMaskingConfig(cwd: string = process.cwd()): CredentialMaskingConfig {
-  const configPath = join(cwd, '.mipham', 'config.yml')
-  const userConfigPath = join(MIPHAM_HOME, 'config.yml')
-
   let merged = { ...DEFAULT_CREDENTIAL_MASKING_CONFIG }
-
-  const paths = [userConfigPath, configPath] // project wins (loaded last)
-  for (const path of paths) {
-    merged = mergeCredentialMaskingFile(merged, path)
-  }
-
+  merged = mergeCredentialMaskingFile(merged, join(MIPHAM_HOME, 'config.yml'), true)
+  merged = mergeCredentialMaskingFile(merged, join(cwd, '.mipham', 'config.yml'), false)
   return merged
 }
 
@@ -570,6 +585,7 @@ export function loadUserCredentialMaskingConfig(): CredentialMaskingConfig {
   return mergeCredentialMaskingFile(
     { ...DEFAULT_CREDENTIAL_MASKING_CONFIG },
     join(MIPHAM_HOME, 'config.yml'),
+    true,
   )
 }
 
