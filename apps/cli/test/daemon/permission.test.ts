@@ -28,7 +28,10 @@ describe('buildDaemonPermission', () => {
   it('downgrades bypassPermissions when forbidden by restrictions', () => {
     process.env[ENV_KEY] = 'bypassPermissions'
     const ps = buildDaemonPermission({ forbiddenModes: ['bypassPermissions'] })
-    expect(ps.getMode()).toBe('plan') // clamped to highest allowed
+    // Clamped to the **widest** allowed mode below the requested one —— acceptEdits，
+    // 不是 plan。旧断言写的是 plan，读的是旧的层级表（plan 排在 acceptEdits 之上）
+    // ⇒ 把宽严判反了：降级反而落到比 acceptEdits **更窄**的一档。见 permission-config.ts。
+    expect(ps.getMode()).toBe('acceptEdits')
   })
 
   it('honors env mode when restrictions allow it', () => {

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import type { ToolDefinition } from '../../src/shared'
+import type { PermissionMode, ToolDefinition } from '../../src/shared'
 import { PermissionSystem } from '../../src/core/permission'
+import { PERMISSION_MODE_HIERARCHY } from '../../src/core/permission-config'
 
 // ── Helpers ──
 
@@ -304,7 +305,9 @@ describe('PermissionSystem', () => {
       ps.setRestrictions({ forbiddenModes: ['bypassPermissions'] })
 
       ps.setMode('bypassPermissions')
-      expect(ps.getMode()).toBe('plan') // downgraded to highest allowed
+      // 次宽的允许模式是 acceptEdits，不是 plan —— plan 排在它下面（P4 修正了顺序；
+      // 旧顺序让这条落到更严的 plan 上，那是顺序错的产物，不是有意的保守）。
+      expect(ps.getMode()).toBe('acceptEdits')
     })
 
     it('allows modes not in forbidden list', () => {
@@ -321,14 +324,11 @@ describe('PermissionSystem', () => {
       const ps = new PermissionSystem('default')
       ps.setRestrictions({ maxAllowedMode: 'plan' })
 
-      expect(ps.getMode()).toBe('default')
-      ps.cycleMode()
-      expect(ps.getMode()).toBe('acceptEdits')
-      ps.cycleMode()
+      // plan 是**最严**的一档（P4），所以 default 也在上限之上，一并被钳下来 ——
+      // 上限之下只剩 plan 一个模式，循环因此是定点。
       expect(ps.getMode()).toBe('plan')
       ps.cycleMode()
-      // Should wrap back to default, skipping auto/dontAsk/bypassPermissions
-      expect(ps.getMode()).toBe('default')
+      expect(ps.getMode()).toBe('plan')
     })
 
     it('downgrades mode when set above maxAllowedMode', () => {
@@ -345,15 +345,16 @@ describe('PermissionSystem', () => {
       expect(ps.getMode()).toBe('plan')
     })
 
-    it('maxAllowedMode=default allows only default', () => {
+    it('maxAllowedMode=default 保留 default 与 plan（plan 更严，不算越上限）', () => {
       const ps = new PermissionSystem('default')
       ps.setRestrictions({ maxAllowedMode: 'default' })
 
       ps.setMode('acceptEdits')
       expect(ps.getMode()).toBe('default')
 
+      // 保留集是「按层级过滤后的循环」，只剩 default 与 plan ⇒ 在两者间交替
       ps.cycleMode()
-      expect(ps.getMode()).toBe('default')
+      expect(ps.getMode()).toBe('plan')
     })
   })
 
@@ -523,6 +524,88 @@ describe('PermissionSystem', () => {
       expect(ps.check(tool, {})).toBe('bypass')
       ps.ask('Read')
       expect(ps.check(tool, {})).toBe('ask')
+    })
+  })
+
+  // ═══════════════════════════════════════════
+  // P4 — 层级顺序必须等于真实宽严（plan 才是最严的一档）
+  // ═══════════════════════════════════════════
+
+  describe('P4 — 层级顺序与真实宽严一致', () => {
+    // 用 `needsApproval` **实测**每一档放行哪些工具。探针不读层级表，所以它给出的是
+    // 测量值；下面那条断言把层级表钉在这个测量值上 —— 两者不一致就红。
+    const PROBES: ToolDefinition[] = [
+      makeTool('Read', 'auto', 'file'),
+      makeTool('Grep', 'auto', 'file'),
+      makeTool('Glob', 'auto', 'file'),
+      makeTool('Write', 'ask', 'file'),
+      makeTool('Edit', 'ask', 'file'),
+      makeTool('Bash', 'ask', 'exec'),
+      makeTool('git', 'auto', 'exec'),
+      makeTool('task', 'auto', 'exec'),
+      makeTool('web-fetch', 'auto', 'network'),
+      makeTool('memory', 'auto', 'agent'),
+      makeTool('cron', 'auto', 'scheduling'),
+    ]
+    const passesIn = (mode: PermissionMode, tool: ToolDefinition): boolean =>
+      !new PermissionSystem(mode).needsApproval(tool, { command: 'pnpm test' })
+    /** a 放行的每一样，b 也放行 —— 即 a 不比 b 宽。 */
+    const notWiderThan = (a: PermissionMode, b: PermissionMode): boolean =>
+      PROBES.every((t) => !passesIn(a, t) || passesIn(b, t))
+
+    it('探针自检：plan 只放行只读三件套', () => {
+      expect(PROBES.filter((t) => passesIn('plan', t)).map((t) => t.name)).toEqual([
+        'Read',
+        'Grep',
+        'Glob',
+      ])
+    })
+
+    it('层级表首位 = 实测最严的那一档（数组与测量同源，不是各说各话）', () => {
+      const ALL: PermissionMode[] = ['default', 'acceptEdits', 'plan', 'bypassPermissions']
+      const narrowest = ALL.filter((m) => ALL.every((o) => o === m || notWiderThan(m, o)))
+      // 实测的唯一答案就是 plan：它同时严格窄于 default（后者放行 git / task /
+      // web-fetch / memory / cron 这些 `permission: 'auto'` 的非文件工具）与
+      // acceptEdits（后者放行 Write/Edit）。层级表若把 default 排回首位，这里就红。
+      expect(narrowest).toEqual(['plan'])
+      expect(PERMISSION_MODE_HIERARCHY[0]).toBe(narrowest[0])
+    })
+
+    it('上限 plan 不再放行 acceptEdits 或 default（两者都比 plan 宽）', () => {
+      const ps = new PermissionSystem('default')
+      ps.setRestrictions({ maxAllowedMode: 'plan' })
+
+      ps.setMode('acceptEdits')
+      expect(ps.getMode()).toBe('plan')
+      ps.setMode('default')
+      expect(ps.getMode()).toBe('plan')
+    })
+
+    it('上限 plan 的循环一档都不再经过 acceptEdits / default / bypassPermissions', () => {
+      const ps = new PermissionSystem('default')
+      ps.setRestrictions({ maxAllowedMode: 'plan' })
+
+      const visited = [ps.getMode()]
+      for (let i = 0; i < 5; i++) visited.push(ps.cycleMode())
+      expect(visited).not.toContain('acceptEdits')
+      expect(visited).not.toContain('default')
+      expect(visited).not.toContain('bypassPermissions')
+    })
+
+    it('未受限时的循环顺序不变（default → acceptEdits → plan → bypassPermissions）', () => {
+      const ps = new PermissionSystem('default')
+      expect(ps.cycleMode()).toBe('acceptEdits')
+      expect(ps.cycleMode()).toBe('plan')
+      expect(ps.cycleMode()).toBe('bypassPermissions')
+      expect(ps.cycleMode()).toBe('default')
+    })
+
+    it('禁用 bypass 后请求 bypass ⇒ 落到次宽的 acceptEdits（顺序修正的连带结果，如实钉住）', () => {
+      const ps = new PermissionSystem('default')
+      ps.setRestrictions({ forbiddenModes: ['bypassPermissions'] })
+
+      ps.setMode('bypassPermissions')
+      expect(ps.getMode()).toBe('acceptEdits')
     })
   })
 })

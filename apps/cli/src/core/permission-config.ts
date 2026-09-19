@@ -20,21 +20,47 @@ export function loadPermissionConfig(raw: Partial<PermissionConfig> = {}): Permi
 }
 
 /**
- * Permission modes ordered from least to most permissive.
- * Used to enforce maxAllowedMode: any mode ranked higher than the cap is forbidden.
+ * Nominal permissiveness ranking, least → most permissive. Two consumers only:
+ * `maxAllowedMode` (drop every mode ranked above the cap) and `clampMode` (walk
+ * downward to the nearest allowed mode below the one requested).
+ *
+ * **The four modes are not totally ordered in reality**, so this array carries
+ * only the relations that are actually measurable:
+ *
+ * - `plan` is strictly the narrowest. It passes only Read/Grep/Glob and sends
+ *   *everything* else to approval, while `default` passes every tool that
+ *   declares `permission: 'auto'` — git, task, web-fetch, cron, memory, … So a
+ *   cap of `'plan'` must not admit `default`, and `plan` belongs at the bottom.
+ * - `acceptEdits` and `default` are **incomparable**: acceptEdits auto-approves
+ *   Write/Edit and verification-only Bash that `default` asks about, while
+ *   `default` auto-approves the non-file `'auto'` tools that acceptEdits asks
+ *   about. No total order is faithful there, so the ranking only needs to carry
+ *   the relations the two consumers rely on.
+ *
+ * The array used to read `default → acceptEdits → plan → …`, which **inverted**
+ * both `plan` relations rather than merely approximating them: `maxAllowedMode:
+ * 'plan'` admitted acceptEdits *and* default — the ceiling let through the wider
+ * mode each time. The pairs are pinned by a probe in `test/core/permission.test.ts`
+ * (P4) so the claim stays measured rather than asserted.
  */
 export const PERMISSION_MODE_HIERARCHY: PermissionMode[] = [
+  'plan',
   'default',
   'acceptEdits',
-  'plan',
   'bypassPermissions',
 ]
 
-/** Valid mode transition order for Shift+Tab cycling. */
-export const MODE_CYCLE: PermissionMode[] = [...PERMISSION_MODE_HIERARCHY]
+/**
+ * Shift+Tab cycling order — deliberately **not** the permissiveness order above.
+ * The cycle is UX (manual → accept edits → plan → bypass); only the hierarchy
+ * answers "is this mode wider than that one". Keeping them separate is what lets
+ * `forbiddenModes` drop an entry from the cycle without disturbing the ranking
+ * that `clampMode` walks.
+ */
+export const MODE_CYCLE: PermissionMode[] = ['default', 'acceptEdits', 'plan', 'bypassPermissions']
 
 /** Resolve which modes are actually permitted given the restrictions. */
-export function getAllowedModes(restrictions?: PermissionRestrictions): PermissionMode[] {
+function getAllowedModes(restrictions?: PermissionRestrictions): PermissionMode[] {
   let allowed = [...MODE_CYCLE]
 
   if (restrictions?.forbiddenModes && restrictions.forbiddenModes.length > 0) {
@@ -50,14 +76,6 @@ export function getAllowedModes(restrictions?: PermissionRestrictions): Permissi
   }
 
   return allowed
-}
-
-/** Check whether a given mode is permitted under the restrictions. */
-export function isModeAllowed(
-  mode: PermissionMode,
-  restrictions?: PermissionRestrictions,
-): boolean {
-  return getAllowedModes(restrictions).includes(mode)
 }
 
 /**
