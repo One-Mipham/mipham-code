@@ -3,6 +3,9 @@ import type { ToolDefinition } from '../../shared/index.ts'
 import { findWorktreeMarker } from '../../core/paths.ts'
 import { isWithin } from '../../security/path.ts'
 
+/** Generous enough for a clone or fetch, short enough to bound a hung git. */
+const GIT_TIMEOUT_MS = 120_000
+
 // P0-4 (v2.1.222 alignment): Regex-based word-boundary patterns replace
 // fragile substring matching. Each pattern describes what it blocks.
 export const DANGEROUS_GIT_PATTERNS: Array<{ pattern: RegExp; description: string }> = [
@@ -87,6 +90,60 @@ function isOutsideWorktree(command: string, cwd: string): string | null {
     }
   }
 
+  return null
+}
+
+/**
+ * Git options whose value is a program git will execute. The regex list above
+ * covers command execution reached through config keys; these are the ones it
+ * does not name at all, and each was confirmed to run an arbitrary local
+ * program: `ls-remote --upload-pack=/tmp/x.sh <path>`, `push --receive-pack=…`,
+ * and `--exec-path=<dir>` followed by a planted `<dir>/git-<subcommand>`.
+ */
+const PROGRAM_EXECUTING_OPTIONS = ['--upload-pack', '--receive-pack', '--exec-path']
+
+/** Config keys whose value git runs as a program. */
+const PROGRAM_EXECUTING_CONFIG_KEY =
+  /^(?:core\.(?:sshCommand|pager|askpass|editor)|alias\.|credential\.helper)/i
+
+/**
+ * Find an argv entry that makes git execute a program the caller named.
+ *
+ * This runs on the parsed argv rather than the raw command string. The regex
+ * list above is organised by *spelling*, so it has to anticipate every way the
+ * text can be written — `" -c " + "core.pager=…" ` written with quotes between
+ * the two halves never matches it, yet git receives the same two tokens. argv
+ * is what git actually gets, so it has no such gap.
+ */
+export function findProgramExecutingArg(argv: string[]): string | null {
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]!
+
+    for (const opt of PROGRAM_EXECUTING_OPTIONS) {
+      // `--upload-pack=<exec>` and `--upload-pack <exec>` are both accepted.
+      if (arg === opt) return `${arg} ${argv[i + 1] ?? ''}`
+      if (arg.startsWith(`${opt}=`)) return arg
+    }
+
+    // `-c<key>=<value>` / `--config=<key>=<value>`. `--config=…` is checked
+    // first so `/^-c[^-]/` cannot swallow it.
+    const attached = arg.startsWith('--config=')
+      ? arg.slice('--config='.length)
+      : /^-c[^-]/.test(arg)
+        ? arg.slice(2)
+        : null
+    if (attached !== null && PROGRAM_EXECUTING_CONFIG_KEY.test(attached)) return arg
+
+    // `-c <key>=<value>` / `--config <key>=<value>`. A bare `-c` also means
+    // "reuse this commit" for `git commit`, but that value never contains `=`,
+    // so the config read cannot swallow it.
+    if ((arg === '-c' || arg === '--config') && i + 1 < argv.length) {
+      const next = argv[i + 1]!
+      if (next.includes('=') && PROGRAM_EXECUTING_CONFIG_KEY.test(next)) {
+        return `${arg} ${next}`
+      }
+    }
+  }
   return null
 }
 
@@ -183,14 +240,32 @@ export const gitTool: ToolDefinition = {
       }
     }
 
+    // Git runs without an approval prompt (`permission: 'auto'`), so an option
+    // that names a program to execute is a code-execution path Bash would have
+    // had to ask for. Checked on argv, which is what git is handed below.
+    const argv = splitCommand(command)
+    const execArg = findProgramExecutingArg(argv)
+    if (execArg) {
+      return {
+        success: false,
+        content: '',
+        error: `Dangerous git option blocked: "${execArg}" makes git run an arbitrary program. Run manually if intended.`,
+      }
+    }
+
     try {
-      const proc = Bun.spawn(['git', ...splitCommand(command)], {
+      const proc = Bun.spawn(['git', ...argv], {
         cwd: ctx.cwd,
         stdout: 'pipe',
         stderr: 'pipe',
       })
+
+      // Bounded like Bash: a git command that blocks on a pager, a credential
+      // prompt, or an unreachable remote would otherwise hang the turn forever.
+      const timer = setTimeout(() => proc.kill(), GIT_TIMEOUT_MS)
       const output = await new Response(proc.stdout).text()
       const exitCode = await proc.exited
+      clearTimeout(timer)
 
       if (exitCode !== 0) {
         const stderr = await new Response(proc.stderr).text()

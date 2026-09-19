@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import type { ToolContext } from '../../src/shared'
 import { createBashTool } from '../../src/tools/exec/bash'
-import { gitTool, splitCommand } from '../../src/tools/exec/git'
+import { gitTool, splitCommand, findProgramExecutingArg } from '../../src/tools/exec/git'
 import { taskTool } from '../../src/tools/exec/task'
 import { exitWorktreeTool } from '../../src/tools/exec/exit-worktree'
 import { recordToolEvidence, clearEvidenceLog } from '../../src/core/working-memory'
@@ -204,6 +204,107 @@ describe('Git tool execution', () => {
     const result = await gitTool.execute({ command: 'push --force origin main' }, ctx)
     expect(result.success).toBe(false)
     expect(result.error).toContain('blocked')
+  })
+})
+
+// ============================================================
+// Git options that execute a program
+// ============================================================
+//
+// Git runs without an approval prompt, and these options name a program for it
+// to execute — each one confirmed to run a local script:
+//   ls-remote --upload-pack=/tmp/x.sh <path>
+//   push --receive-pack=/tmp/x.sh <remote>
+//   --exec-path=<dir> with a planted <dir>/git-<subcommand>
+// The regex list could not catch them: it is organised by spelling, so a
+// spelling it does not anticipate is simply not blocked.
+
+describe('findProgramExecutingArg', () => {
+  it('flags the program-executing options, attached and detached', () => {
+    expect(findProgramExecutingArg(['ls-remote', '--upload-pack=/tmp/x.sh', '/p'])).toBe(
+      '--upload-pack=/tmp/x.sh',
+    )
+    expect(findProgramExecutingArg(['ls-remote', '--upload-pack', '/tmp/x.sh', '/p'])).toBe(
+      '--upload-pack /tmp/x.sh',
+    )
+    expect(findProgramExecutingArg(['push', '--receive-pack=/tmp/x.sh', 'origin'])).toContain(
+      '--receive-pack',
+    )
+    expect(findProgramExecutingArg(['--exec-path=/tmp/evil', 'status'])).toBe(
+      '--exec-path=/tmp/evil',
+    )
+  })
+
+  it('flags program-executing config keys in every spelling', () => {
+    expect(findProgramExecutingArg(['-ccore.sshCommand=/tmp/x.sh', 'fetch'])).toContain(
+      'core.sshCommand',
+    )
+    expect(findProgramExecutingArg(['-c', 'core.pager=/tmp/x.sh', 'log'])).toContain('core.pager')
+    expect(findProgramExecutingArg(['--config=core.askpass=/tmp/x.sh', 'fetch'])).toContain(
+      'core.askpass',
+    )
+    expect(findProgramExecutingArg(['--config', 'alias.s=/tmp/x.sh', 's'])).toContain('alias.s')
+  })
+
+  it('leaves ordinary git commands alone', () => {
+    expect(findProgramExecutingArg(['status'])).toBeNull()
+    expect(findProgramExecutingArg(['ls-remote', 'origin'])).toBeNull()
+    expect(findProgramExecutingArg(['log', '--oneline', '-n', '5'])).toBeNull()
+    expect(findProgramExecutingArg(['cat-file', '-p', 'HEAD'])).toBeNull()
+    // `-c` also means "reuse this commit" for `git commit`, whose value has no
+    // `=`; the config read must not swallow it.
+    expect(findProgramExecutingArg(['commit', '-c', 'HEAD~1'])).toBeNull()
+    expect(findProgramExecutingArg(['-c', 'color.ui=always', 'log'])).toBeNull()
+  })
+})
+
+describe('Git tool: program-executing options', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('blocks the options that make git run a program', async () => {
+    const blocked = [
+      'ls-remote --upload-pack=/tmp/x.sh /tmp/repo',
+      'ls-remote --upload-pack /tmp/x.sh /tmp/repo',
+      'push --receive-pack=/tmp/x.sh origin main',
+      '--exec-path=/tmp/evil status',
+    ]
+    for (const cmd of blocked) {
+      const result = await gitTool.execute({ command: cmd }, ctx)
+      expect(result.success, `expected "${cmd}" to be blocked`).toBe(false)
+      expect(result.error).toContain('makes git run an arbitrary program')
+    }
+  })
+
+  it('does not spawn anything when it blocks one', async () => {
+    const spawn = vi.spyOn(Bun, 'spawn')
+    await gitTool.execute({ command: 'ls-remote --upload-pack=/tmp/x.sh /tmp/repo' }, ctx)
+    expect(spawn).not.toHaveBeenCalled()
+  })
+
+  // The counterweight: a rule that simply refused every `ls-remote` would pass
+  // the tests above while breaking the tool.
+  it('still runs the same commands without the option', async () => {
+    let capturedCmd: string[] | undefined
+    vi.spyOn(Bun, 'spawn').mockImplementation((cmd: any) => {
+      capturedCmd = cmd as string[]
+      return createMockProc('ok') as any
+    })
+
+    const safe = await gitTool.execute({ command: 'ls-remote origin' }, ctx)
+    expect(safe.success).toBe(true)
+    expect(capturedCmd).toEqual(['git', 'ls-remote', 'origin'])
+
+    const fetch = await gitTool.execute({ command: 'fetch origin' }, ctx)
+    expect(fetch.success).toBe(true)
+  })
+
+  it('keeps blocking the config-key spellings it always blocked', async () => {
+    for (const cmd of ['-c core.pager=cat log', 'config alias.s !sh']) {
+      const result = await gitTool.execute({ command: cmd }, ctx)
+      expect(result.success, `expected "${cmd}" to stay blocked`).toBe(false)
+    }
   })
 })
 
