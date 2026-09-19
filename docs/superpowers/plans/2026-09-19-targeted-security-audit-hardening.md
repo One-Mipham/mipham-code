@@ -248,6 +248,34 @@ permission 层**模式降级**（不是匹配）、daemon **外部 API**、命�
   子代理已证 `detached`+组杀**确实能收掉孙进程**（对照能红）。
 - **E5–E8**：各自独立小修；E7 与刚落的 2.58.0 #25（错误归因）同族，照那条的风格写。
 
+### 批次 3 落地状态（2026-09-19 收工）
+
+七笔：`f0cc571`(E1) / `ecb16df`(E2) / `0956d4b`(E3) / `237870e`(E5) / `ecf1e35`(E6) / `f021fe9`(E7) / `26153a2`(E8)。
+七条全落，零延期。测试 2725 → 2767（235 → 241 文件）；typecheck / prettier / lint 全绿；`/crsi eval` 不退化。
+
+**与本节原计划的偏差（如实记）：**
+
+1. **E1 的修法落在注册表而不是 daemon 调用点**。原计划写「把 `createToolRegistry()` 的无参调用改成显式传入
+   由配置派生的 ctx」。落地时发现真正的问题在**默认值的方向**：`defaultVajraContext()` 注入的是一个
+   `DISABLED_CREDENTIAL_MASKING_CONFIG`，注释自称「对齐 pre-seam 行为」—— 掩码是安全控制，「没配置就关掉」
+   是错的默认值。**在注册表里改方向，daemon 侧一个字都不用动**，比在调用点补 ctx 更小也更难复发
+   （补调用点只堵住今天已知的那一处）。只取**用户级**配置：注册表是进程级单例、各会话 cwd 不同，
+   套项目级会让规则溢到别的会话。
+2. **E8 的第一项（「worktree 逃逸守卫是字符串比对、别名 cwd 可绕过、探针已红」）是陈旧读数**。
+   该守卫已于 `23b6154`（2026-09-18，本 HEAD 的祖先）改成 `resolve` + `isWithin`，那次提交**删掉的行**
+   逐字就是本行描述的字符串比对。计划自己标的证据等级也写着「读码 + 探针（**未找到路径**）」。
+   ⇒ **不复述为「本轮已修」**。E8 实际修的是它的另外两项（`ExitWorktree` 的 `process.cwd()` 基数、
+   第 67 行的 `includes` 子串判定），并顺带收口 E5 提交里记过的同族第 98 行。
+   核实方法：`git merge-base --is-ancestor 23b6154 HEAD` + `git log -S isWithin`。
+3. **E7 计划里写的 `Exit code 143` 是错的，实测 137**（发的是 SIGKILL 不是 SIGTERM）。**以实测为准**。
+4. **§五 第 4 步「`/crsi eval` 应打印 `score=100 passed=38/38`」描述不实**：harness 是**断言**不是打印 ——
+   `cd apps/cli && npx vitest run test/core/eval-harness.test.ts` 跑出 13 个用例全绿，屏幕上一个分数都不印。
+   判据应写成「13 条契约用例全绿（内含 38/38 与 score=100 的断言）」。
+
+**本条并入 E8 后复量的两点未修观察**（属另一件事，不排期）：`cd <symlink>` 落点在工作树外时逃逸守卫不响
+（`isWithin` 不做 realpath），`pushd /etc` 也不响（正则只认 `cd`）。不修的理由：收紧的只是 `cd` 这一种拼写，
+同一个 Bash 工具不 `cd` 也能读 `/etc/passwd`，收紧了并不关掉任何真实访问面 —— 那是仪式不是检查。
+
 ### 批次 4 — P 族：P1 + P2 + P3 + P4 + P5 + P6
 
 - **P1**：`permissionRestrictions` 的**格式校验 + 警告**，照 `getInvalidRules()` 的既有形状
