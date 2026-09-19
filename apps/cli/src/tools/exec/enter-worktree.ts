@@ -126,8 +126,14 @@ export const enterWorktreeTool: ToolDefinition = {
 
       // Create worktree with new branch
       const branchName = `worktree/${name}`
+      // `--` ends git's option parsing. `baseRef` comes from the model and is
+      // otherwise unvalidated, so without it a ref spelled `--force` is read as
+      // an *option*: measured on this machine, `git worktree add -b b <path>
+      // --force` succeeds, while a bogus ref in that same slot is `fatal:
+      // invalid reference`. After `--` git reads it as a ref and rejects
+      // nonsense, which is what a bad base ref should do.
       const proc = Bun.spawn(
-        ['git', 'worktree', 'add', '-b', branchName, worktreePath, resolvedBaseRef],
+        ['git', 'worktree', 'add', '-b', branchName, worktreePath, '--', resolvedBaseRef],
         { cwd, stdout: 'pipe', stderr: 'pipe' },
       )
       const _stdout = await new Response(proc.stdout).text()
