@@ -406,6 +406,7 @@
     },
     "upgrade": {
       "uptodate": "── 升级 Mipham Code ──\n\n当前版本: v{current}\n最新版本:          v{latest}\n\n✓ 已是最新版本。\n\n手动检查: https://www.npmjs.com/package/@miphamai/cli",
+      "check_failed": "── 升级 Mipham Code ──\n\n✗ 无法连接 npm registry —— 无法判断 v{current} 是否已是最新版本。\n  未做任何改动。请检查网络后重试: /upgrade",
       "title": "── 升级 Mipham Code ──",
       "available": "当前版本: v{current}\n最新版本:          v{latest}\n\n→ 发现新版本！正在更新...",
       "updated": "✓ 已更新至 @miphamai/cli v{version}",

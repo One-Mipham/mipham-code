@@ -19,6 +19,7 @@ describe('checkForUpdatesAsync', () => {
     const r = await checkForUpdatesAsync()
     expect(r.available).toBe(true)
     expect(r.latest).toBe('9.9.9')
+    expect(r.checked).toBe(true)
   })
 
   it('同版本 → available: false', async () => {
@@ -28,9 +29,13 @@ describe('checkForUpdatesAsync', () => {
     )
     const r = await checkForUpdatesAsync()
     expect(r.available).toBe(false)
+    expect(r.checked).toBe(true) // 「问过了」与「没问成」必须分得开
   })
 
-  it('离线/失败 → available: false（兜底不惊扰）', async () => {
+  it('离线/失败 → available: false 且 checked: false（兜底不惊扰，但不冒充答案）', async () => {
+    // `checked` 是这条缺陷的判据：没有它，`available: false` 既表示「查过、是最新」
+    // 也表示「没查成」，`/upgrade` 于是对后者印了前者。
+    // 负控：把 `checked = true` 的赋值挪进 catch，或删掉 catch 里的初值，本断言即红。
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => {
@@ -39,6 +44,7 @@ describe('checkForUpdatesAsync', () => {
     )
     const r = await checkForUpdatesAsync()
     expect(r.available).toBe(false)
+    expect(r.checked).toBe(false)
   })
 
   it('npm 失败 → npmmirror 回退', async () => {
@@ -50,6 +56,7 @@ describe('checkForUpdatesAsync', () => {
     const r = await checkForUpdatesAsync()
     expect(r.available).toBe(true)
     expect(r.latest).toBe('9.9.9')
+    expect(r.checked).toBe(true)
     expect(mock).toHaveBeenCalledTimes(2)
   })
 })

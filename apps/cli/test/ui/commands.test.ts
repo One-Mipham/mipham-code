@@ -641,3 +641,38 @@ describe('formatLoopRows', () => {
     expect(rows[0]).toContain('200 /run')
   })
 })
+
+// ═══════════════════════════════════════════════════════════════
+// /upgrade — registry 够不着时不得说成「已是最新」
+// ═══════════════════════════════════════════════════════════════
+
+describe('/upgrade when the registry cannot be reached', () => {
+  it('says the check failed, instead of "Already up to date"', async () => {
+    // 走**真实链路**，不 mock 自家模块：execSync('npm view …') 三次尝试全抛
+    // ⇒ fetchLatestVersion 抛 ⇒ checkForUpdates 的 catch ⇒ checked: false。
+    // 缺陷原形：`available: false` 被当成「查过且是最新」，于是离线时印
+    // 「✓ Already up to date (vX → vX)」，连「查过一次」都没有透露。
+    const { getCurrentVersion } = await import('../../src/shared/update')
+    mockExecSync.mockImplementation(() => {
+      throw new Error('getaddrinfo ENOTFOUND registry.npmjs.org')
+    })
+    const handler = getCommand('/upgrade')!
+    const result = await handler(mkCtx(), [])
+    expect(result.content).toContain('Could not reach the npm registry')
+    // 负控：删掉 `if (!update.checked)` 那段早期 return，本行即红。
+    expect(result.content).not.toContain('Already up to date')
+    // {current} 必须真填进去（t() 把没给的占位符换成空串，不会报错）
+    expect(result.content).toContain(getCurrentVersion())
+  })
+
+  it('still says "Already up to date" when the check really succeeded', async () => {
+    const { getCurrentVersion } = await import('../../src/shared/update')
+    // 判别力的另一半：不能连「查过了、确实是最新」也一起吞掉 ——
+    // 若把判据写成「拿不到新版就报查不到」，这条会红。
+    mockExecSync.mockReturnValue(`"${getCurrentVersion()}"`)
+    const handler = getCommand('/upgrade')!
+    const result = await handler(mkCtx(), [])
+    expect(result.content).toContain('Already up to date')
+    expect(result.content).not.toContain('Could not reach')
+  })
+})

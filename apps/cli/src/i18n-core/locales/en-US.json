@@ -423,6 +423,7 @@
     },
     "upgrade": {
       "uptodate": "── Upgrade Mipham Code ──\n\nCurrent version: v{current}\nLatest:          v{latest}\n\n✓ Already up to date.\n\nTo check manually: https://www.npmjs.com/package/@miphamai/cli",
+      "check_failed": "── Upgrade Mipham Code ──\n\n✗ Could not reach the npm registry — unable to tell whether v{current} is the latest.\n  Nothing was changed. Check your network, then retry: /upgrade",
       "title": "── Upgrade Mipham Code ──",
       "available": "Current version: v{current}\nLatest:          v{latest}\n\n→ New version available! Updating...",
       "updated": "✓ Updated to @miphamai/cli v{version}",

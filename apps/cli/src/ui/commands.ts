@@ -4362,6 +4362,16 @@ const upgradeCmd: CommandHandler = async (ctx) => {
 
   const update = checkForUpdates()
 
+  // The registry was never reached. "Already up to date" would be a claim we
+  // cannot support: `checkForUpdates` leaves `latest === current` on failure, so
+  // the old code printed "✓ Already up to date (v0.81.8 → v0.81.8)" while
+  // offline and gave no hint that a check had even been attempted.
+  // (`mipham update` on the CLI path already says "Could not determine latest
+  // version" — this is the TUI's equivalent.)
+  if (!update.checked) {
+    return { content: t('commands.upgrade.check_failed', { current: update.current }) }
+  }
+
   if (!update.available) {
     return {
       content: t('commands.upgrade.uptodate', { current: update.current, latest: update.latest }),

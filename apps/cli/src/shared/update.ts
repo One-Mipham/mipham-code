@@ -26,10 +26,20 @@ const REGISTRIES = [
 export interface UpdateCheck {
   /** Current installed version */
   current: string
-  /** Latest version on npm */
+  /** Latest version on npm — only meaningful when `checked` is true */
   latest: string
   /** Whether an update is available */
   available: boolean
+  /**
+   * Whether the registry was actually reached.
+   *
+   * `false` means `latest`/`available` carry **no information**: the check
+   * failed and `latest` is just `current`. Without this field the two states
+   * are the same value — "we asked, you're current" and "we couldn't ask" both
+   * read as `available: false`, which is how `/upgrade` came to print
+   * "Already up to date" while offline.
+   */
+  checked: boolean
 }
 
 /**
@@ -101,15 +111,19 @@ export function checkForUpdates(): UpdateCheck {
   const current = getCurrentVersion()
   let latest = current
   let available = false
+  let checked = false
 
   try {
     latest = fetchLatestVersion()
     available = compareVersions(latest, current) > 0
+    checked = true
   } catch {
-    // If we can't reach npm, treat as up-to-date (don't alarm the user)
+    // Registry unreachable — stay quiet rather than alarm, but do **not** claim
+    // we are current: `checked: false` is what lets `/upgrade` say "couldn't
+    // check" instead of "Already up to date".
   }
 
-  return { current, latest, available }
+  return { current, latest, available, checked }
 }
 
 /**
@@ -222,13 +236,16 @@ export async function checkForUpdatesAsync(): Promise<UpdateCheck> {
   const current: string = PACKAGE_VERSION
   let latest: string = current
   let available = false
+  let checked = false
   try {
     latest = await fetchLatestVersionAsync()
     available = compareVersions(latest, current) > 0
+    checked = true
   } catch {
-    // offline → treat as up-to-date (don't alarm the user)
+    // offline → don't alarm the user, but don't report `available: false` as if
+    // it were an answer either (`checked` is what keeps the two apart)
   }
-  return { current, latest, available }
+  return { current, latest, available, checked }
 }
 
 /**
