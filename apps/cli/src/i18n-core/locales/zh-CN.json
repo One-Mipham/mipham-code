@@ -585,6 +585,9 @@
       "title": "── 钩子 ──",
       "no_hooks": "── 钩子 ──\n\n未配置钩子。\n\n在 .mipham/settings.json 的 hooks 段配置钩子:\n  PreToolUse   — 工具执行前\n  PostToolUse  — 工具执行后\n  Stop         — 会话结束\n\n命令钩子从 stdin 读 JSON，exit 2 拦截（stderr 作理由）。\n使用 /loop init 初始化 settings.json。",
       "location": "位置: {path}",
+      "source_user": "用户级",
+      "source_project": "项目级",
+      "gated": "⚠️  工作区未受信任，不会运行",
       "found": "找到 {count} 个钩子。",
       "error": "── 钩子 ──\n\n无法读取钩子目录。"
     },

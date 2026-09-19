@@ -56,6 +56,7 @@ import {
 import { NPM_UPDATE_COMMAND, PACKAGE_VERSION, COAUTHOR_TRAILER } from '../shared/index.ts'
 import { getPreference } from '../config/preferences'
 import { loadCrossSessionConfig, tryRestoreFromBackup } from '../config/loader'
+import { getWorkspaceTrust } from '../core/workspace-trust'
 import { getMemoryManager } from '../core/memory/memory-loader'
 import {
   resolveTelemetry,
@@ -3780,24 +3781,42 @@ const cdCmd: CommandHandler = async (ctx, args) => {
 const hooksCmd: CommandHandler = async (ctx) => {
   const t = resolveT(ctx)
   const { loadSettingsJson } = await import('../config/loader')
+  const cwd = process.cwd()
   // This command *displays* the configured list, so it asks for the project file
   // explicitly — the loader's default drops project hooks (they are
   // repository-controlled code execution) and would hide hooks that really do
-  // run here. `/hooks` is a TUI command, and the TUI only starts after
-  // `checkWorkspaceTrust()` has settled the question, so nothing is being
-  // misrepresented by listing them.
-  const settingsJson = loadSettingsJson(process.cwd(), { includeProjectHooks: true })
+  // exist here.
+  //
+  // Two calls, one per source: the merged list cannot say which entry came from
+  // which file, and the two are not governed alike — only the project file's
+  // entries are gated on workspace trust.
+  const userHooks = loadSettingsJson(cwd).hooks
+  const projectHooks = loadSettingsJson(cwd, { includeProjectHooks: true }).projectHooks ?? {}
 
-  const hooks = settingsJson.hooks as Record<
-    string,
-    Array<{ matcher?: string; hooks: Array<{ type: string; command?: string }> }>
-  >
+  // Listing them is not the same claim as their running. Project hooks are
+  // gated, and this command renders them even when the gate is shut — so the
+  // display has to name the source and say which entries will not run.
+  const gated = !getWorkspaceTrust().isTrusted(cwd)
 
-  const configured = Object.entries(hooks).filter(
-    ([, entries]) => Array.isArray(entries) && entries.length > 0,
-  )
+  type Entry = { matcher?: string; hooks: Array<{ type: string; command?: string }> }
+  const sources: Array<{ project: boolean; hooks: Record<string, Entry[]> }> = [
+    { project: true, hooks: projectHooks as Record<string, Entry[]> },
+    { project: false, hooks: userHooks as Record<string, Entry[]> },
+  ]
 
-  if (configured.length === 0) {
+  // Event → its entries, project first — the order the merged list produced, so
+  // a trusted workspace's output is unchanged by the split.
+  const byEvent = new Map<string, Array<{ entry: Entry; project: boolean }>>()
+  for (const { project, hooks } of sources) {
+    for (const [eventName, entries] of Object.entries(hooks)) {
+      if (!Array.isArray(entries) || entries.length === 0) continue
+      const bucket = byEvent.get(eventName) ?? []
+      for (const entry of entries) bucket.push({ entry, project })
+      byEvent.set(eventName, bucket)
+    }
+  }
+
+  if (byEvent.size === 0) {
     return { content: t('commands.hooks.no_hooks') }
   }
 
@@ -3809,13 +3828,15 @@ const hooksCmd: CommandHandler = async (ctx) => {
   ]
 
   let count = 0
-  for (const [eventName, entries] of configured) {
-    for (const entry of entries) {
+  for (const [eventName, bucket] of byEvent) {
+    for (const { entry, project } of bucket) {
       for (const hook of entry.hooks) {
         count++
         const matcher = entry.matcher || '*'
         const cmd = hook.type === 'command' && hook.command ? hook.command : hook.type
-        lines.push(`  ${eventName} [${matcher}] → ${cmd}`)
+        const source = t(project ? 'commands.hooks.source_project' : 'commands.hooks.source_user')
+        const suffix = project && gated ? `  ${t('commands.hooks.gated')}` : ''
+        lines.push(`  [${source}] ${eventName} [${matcher}] → ${cmd}${suffix}`)
       }
     }
   }

@@ -585,6 +585,9 @@
       "title": "── Hooks ──",
       "no_hooks": "── Hooks ──\n\nNo hooks configured.\n\nConfigure hooks in .mipham/settings.json under the hooks section:\n  PreToolUse   — before each tool\n  PostToolUse  — after each tool\n  Stop         — on session end\n\nCommand hooks read JSON from stdin; exit 2 blocks (stderr as reason).\nUse /loop init to scaffold settings.json.",
       "location": "Location: {path}",
+      "source_user": "user",
+      "source_project": "project",
+      "gated": "⚠️  workspace not trusted — will not run",
       "found": "{count} hook(s) found.",
       "error": "── Hooks ──\n\nCould not read hooks directory."
     },

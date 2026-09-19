@@ -131,6 +131,66 @@ describe('loadSettingsJson', () => {
     expect(loadSettingsJson(CWD, { includeProjectHooks: true }).projectHooksSkipped).toBeUndefined()
   })
 
+  // The merged `hooks` list is provenance-free: once project and user entries sit
+  // in one bucket, no caller can tell which is which — and the two are governed
+  // differently (project hooks are gated on workspace trust, user hooks are not).
+  // A caller that *displays* the list sees project hooks even when they are
+  // gated, so it needs the split to say so.
+  describe('project hook provenance', () => {
+    const PROJECT_HOOK = { type: 'command', command: 'p.sh' }
+    const USER_HOOK = { type: 'command', command: 'u.sh' }
+
+    function writeProject(hooks: unknown): void {
+      writeFileSync(join(CWD, '.mipham', 'settings.json'), JSON.stringify({ hooks }))
+    }
+    function writeUser(hooks: unknown): void {
+      writeFileSync(join(MIPHAM_HOME, 'settings.json'), JSON.stringify({ hooks }))
+    }
+
+    it('separates the project file’s entries from the merged list', () => {
+      writeProject({ PreToolUse: [{ matcher: 'Bash', hooks: [PROJECT_HOOK] }] })
+      writeUser({ PreToolUse: [{ matcher: 'Edit', hooks: [USER_HOOK] }] })
+
+      const r = loadSettingsJson(CWD, { includeProjectHooks: true })
+
+      expect(r.projectHooks?.PreToolUse).toHaveLength(1)
+      expect(r.projectHooks?.PreToolUse?.[0]?.hooks).toEqual([PROJECT_HOOK])
+      // …and the merge is untouched: both entries still arrive, project first.
+      expect(r.hooks.PreToolUse).toHaveLength(2)
+      expect(r.hooks.PreToolUse?.[1]?.hooks).toEqual([USER_HOOK])
+    })
+
+    it('omits projectHooks when the caller did not vouch for the workspace', () => {
+      writeProject({ PreToolUse: [{ matcher: 'Bash', hooks: [PROJECT_HOOK] }] })
+
+      const r = loadSettingsJson(CWD)
+
+      expect(r.projectHooks).toBeUndefined()
+      expect(r.projectHooksSkipped).toBe(true)
+    })
+
+    it('omits projectHooks when the project file declared none', () => {
+      writeProject({})
+      writeUser({ PreToolUse: [{ matcher: 'Edit', hooks: [USER_HOOK] }] })
+
+      const r = loadSettingsJson(CWD, { includeProjectHooks: true })
+
+      // Same "only when it happened" rule as `projectHooksSkipped`: an empty
+      // marker must stay indistinguishable from no marker, or a caller tags
+      // user hooks as gated on the strength of a file with nothing in it.
+      expect(r.projectHooks).toBeUndefined()
+      expect(r.hooks.PreToolUse).toHaveLength(1)
+    })
+
+    it('omits projectHooks when the project file declared only empty buckets', () => {
+      writeProject({ PreToolUse: [] })
+
+      const r = loadSettingsJson(CWD, { includeProjectHooks: true })
+
+      expect(r.projectHooks).toBeUndefined()
+    })
+  })
+
   it('loads and dedupes permissions allow/deny across levels', () => {
     writeFileSync(
       join(CWD, '.mipham', 'settings.json'),

@@ -258,6 +258,16 @@ export interface SettingsJson {
    * so a caller announcing the skip cannot announce one that never happened.
    */
   projectHooksSkipped?: true
+  /**
+   * The subset of `hooks` that came from the project-level file — the entries
+   * the workspace-trust gate governs. Absent unless the caller vouched for the
+   * workspace *and* that file really declared hooks.
+   *
+   * Needed because `hooks` is provenance-free once merged: project and user
+   * entries sit in one bucket, yet only one of the two is gated. A caller that
+   * lists the merged form therefore cannot say which entries will run.
+   */
+  projectHooks?: SettingsHooks
 }
 
 /**
@@ -279,16 +289,19 @@ export function loadSettingsJson(
   const hooks: SettingsHooks = {}
   const permissions = { allow: [] as string[], deny: [] as string[] }
   let projectHooksSkipped = false
+  // The project file's entries, kept out of the merge so provenance survives it.
+  const projectHooks: SettingsHooks = {}
 
-  const searchPaths = [
+  const searchPaths: Array<{ path: string; readHooks: boolean; isProject?: boolean }> = [
     {
       path: join(cwd, '.mipham', 'settings.json'),
       readHooks: options.includeProjectHooks ?? false,
+      isProject: true,
     },
     { path: join(MIPHAM_HOME, 'settings.json'), readHooks: true },
   ]
 
-  for (const { path, readHooks } of searchPaths) {
+  for (const { path, readHooks, isProject } of searchPaths) {
     try {
       if (!existsSync(path)) continue
       const raw = readFileSync(path, 'utf-8')
@@ -311,6 +324,13 @@ export function loadSettingsJson(
           if (!Array.isArray(entries)) continue
           const bucket = (hooks as Record<string, unknown[]>)[eventName]
           ;(hooks as Record<string, unknown[]>)[eventName] = [...(bucket ?? []), ...entries]
+          if (isProject) {
+            const pBucket = (projectHooks as Record<string, unknown[]>)[eventName]
+            ;(projectHooks as Record<string, unknown[]>)[eventName] = [
+              ...(pBucket ?? []),
+              ...entries,
+            ]
+          }
         }
       }
 
@@ -328,9 +348,16 @@ export function loadSettingsJson(
     }
   }
 
-  // Key added only when true: `toEqual` distinguishes `false` from absent, and
-  // "no project hooks" must stay indistinguishable from "nothing to report".
-  return projectHooksSkipped ? { hooks, permissions, projectHooksSkipped } : { hooks, permissions }
+  // Keys added only when they have something to say: `toEqual` distinguishes
+  // `false` from absent, and "no project hooks" must stay indistinguishable from
+  // "nothing to report" — an empty marker would let a caller tag user hooks as
+  // gated on the strength of a file with nothing in it.
+  const result: SettingsJson = { hooks, permissions }
+  if (projectHooksSkipped) result.projectHooksSkipped = true
+  if (Object.values(projectHooks).some((entries) => Array.isArray(entries) && entries.length > 0)) {
+    result.projectHooks = projectHooks
+  }
+  return result
 }
 
 /** Which settings.json a permission rule is persisted to. */
