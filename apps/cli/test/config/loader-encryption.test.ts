@@ -67,3 +67,48 @@ describe('config.yml API key encryption', () => {
     expect(getProviderApiKey('nonexistent')).toBeNull()
   })
 })
+
+// ============================================================
+// 一份手写的 config.yml 可以把 `apiKey` 写成任何 YAML 值。
+//
+// 同文件的兄弟读取器早已把这条不变式写在代码里 —— getProviderApiKey 的
+// `typeof p.apiKey !== 'string'` 守卫就是它 —— 但 decryptProviderApiKeys
+// 这一处没有施加。于是「配置里写了个数字」不再是「这个 provider 没配密钥」，
+// 而是整个 CLI 起不来（.startsWith on a number）。
+//
+// 判据要能失败：修前每一条都抛，修后每一条都必须安静地当成「没有密钥」。
+// ============================================================
+describe('non-string apiKey / malformed providers do not crash config loading', () => {
+  const MALFORMED: Array<[string, string]> = [
+    ['a number', '    apiKey: 12345\n'],
+    ['a boolean', '    apiKey: true\n'],
+    ['an object', '    apiKey: { nested: value }\n'],
+    ['an array', '    apiKey: [a, b]\n'],
+  ]
+
+  it.each(MALFORMED)('survives apiKey being %s — reads it as "no key"', (_label, line) => {
+    const configPath = join(MIPHAM_HOME, 'config.yml')
+    const readDeepseek = () => loadConfig(FAKE_CWD).providers.find((p) => p.id === 'deepseek')
+
+    // Baseline: the same provider with `apiKey` omitted entirely.
+    writeFileSync(configPath, 'version: 1\nproviders:\n  - id: deepseek\n', 'utf-8')
+    const omitted = readDeepseek()
+
+    writeFileSync(configPath, `version: 1\nproviders:\n  - id: deepseek\n${line}`, 'utf-8')
+    expect(() => loadConfig(FAKE_CWD)).not.toThrow()
+
+    // The contract is "a malformed value is treated as no value" — so compare
+    // against the omitted case rather than against a literal I would be guessing.
+    expect(readDeepseek()).toEqual(omitted)
+  })
+
+  it('survives a null entry in providers', () => {
+    writeFileSync(join(MIPHAM_HOME, 'config.yml'), 'version: 1\nproviders:\n  - null\n', 'utf-8')
+    expect(() => loadConfig(FAKE_CWD)).not.toThrow()
+  })
+
+  it('survives providers being a string', () => {
+    writeFileSync(join(MIPHAM_HOME, 'config.yml'), 'version: 1\nproviders: nope\n', 'utf-8')
+    expect(() => loadConfig(FAKE_CWD)).not.toThrow()
+  })
+})

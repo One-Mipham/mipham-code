@@ -65,10 +65,21 @@ function mergeProviders(
   const merged = [...baseProviders]
 
   for (const op of overrideProviders) {
+    // This array comes straight out of hand-written YAML: an entry can be
+    // `null`, or a bare scalar (iterating `providers: nope` yields its
+    // characters). Neither is a provider config, and neither should reach the
+    // field reads below.
+    if (!op || typeof op !== 'object') continue
+
+    // A non-string `apiKey` (a number, a list, a nested map) is not a secret.
+    // It reads as "no key" — the same invariant getProviderApiKey enforces —
+    // rather than reaching a `.startsWith` and taking the whole CLI down.
+    const apiKey = typeof op.apiKey === 'string' ? op.apiKey : undefined
+
     const idx = merged.findIndex((bp) => bp.id === op.id)
     if (idx === -1) {
       // Provider not in defaults — add it wholesale (custom provider)
-      merged.push(op)
+      merged.push(apiKey === undefined ? op : { ...op, apiKey })
       continue
     }
 
@@ -82,7 +93,7 @@ function mergeProviders(
       // sent, so only trusted (user-level) config may override it. Untrusted
       // (project-level) config cannot redirect a built-in provider's traffic.
       baseUrl: allowBaseUrlOverride ? (op.baseUrl ?? base.baseUrl) : base.baseUrl,
-      apiKey: op.apiKey ?? base.apiKey,
+      apiKey: apiKey ?? base.apiKey,
       models: op.models?.length ? op.models : base.models,
       status: op.status ?? base.status,
     }
@@ -604,11 +615,15 @@ export function loadCrossSessionConfig(cwd: string = process.cwd()): CrossSessio
  */
 function decryptProviderApiKeys(providers: ProviderConfig[] | undefined): void {
   if (!providers) return
-  const needsKey = providers.some((p) => p.apiKey.startsWith(ENC_PREFIX))
-  if (!needsKey) return
+  // Same invariant as getProviderApiKey: only a string can carry the `enc:v1:`
+  // prefix, so a malformed entry counts as "no key" instead of throwing on
+  // `.startsWith` and taking the whole CLI down at startup.
+  const isEncrypted = (p: ProviderConfig | null): boolean =>
+    !!p && typeof p.apiKey === 'string' && p.apiKey.startsWith(ENC_PREFIX)
+  if (!providers.some(isEncrypted)) return
   const key = getCredentialKey(MIPHAM_HOME)
   for (const p of providers) {
-    if (!p.apiKey.startsWith(ENC_PREFIX)) continue
+    if (!isEncrypted(p)) continue
     try {
       p.apiKey = decryptApiKey(p.apiKey, key)
     } catch (err: unknown) {
