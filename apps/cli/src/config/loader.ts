@@ -91,16 +91,44 @@ function mergeProviders(
   return merged
 }
 
+/**
+ * Merge `override` into `base`, recursing into plain objects so that a source
+ * setting one branch of an object does not drop the other source's siblings
+ * (`features.mcp` must not wipe `features.context`).
+ *
+ * Arrays and scalars replace: a project's `skills.paths` must not append to the
+ * user's list. Objects are rebuilt with spread rather than assignment — a parsed
+ * `__proto__` key is then copied as an ordinary own property instead of
+ * mutating the result's prototype.
+ */
+function mergeObjects<T extends Record<string, unknown>>(base: T, override: T): T {
+  let merged: Record<string, unknown> = { ...base }
+  for (const [key, value] of Object.entries(override)) {
+    const existing = (base as Record<string, unknown>)[key]
+    merged = {
+      ...merged,
+      [key]:
+        isPlainObject(value) && isPlainObject(existing) ? mergeObjects(existing, value) : value,
+    }
+  }
+  return merged as T
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 function mergeConfig(
   base: MiphamConfig,
   override: Partial<MiphamConfig>,
   allowBaseUrlOverride: boolean,
 ): MiphamConfig {
-  const merged: MiphamConfig = { ...base, ...override }
+  const merged = mergeObjects(
+    base as unknown as Record<string, unknown>,
+    override as Record<string, unknown>,
+  ) as unknown as MiphamConfig
   if (override.providers) {
     merged.providers = mergeProviders(base.providers, override.providers, allowBaseUrlOverride)
-  } else {
-    merged.providers = base.providers
   }
   return merged
 }
@@ -182,31 +210,19 @@ function loadMcpJson(cwd: string): McpServerConfig[] {
     try {
       if (!existsSync(path)) continue
       const raw = readFileSync(path, 'utf-8')
+      // Every McpServerConfig field is optional here (the name comes from the
+      // key), so a field added to the type is accepted without touching this.
       const parsed = JSON.parse(raw) as {
-        mcpServers?: Record<
-          string,
-          {
-            command?: string
-            args?: string[]
-            url?: string
-            headers?: Record<string, string>
-            env?: Record<string, string>
-          }
-        >
+        mcpServers?: Record<string, Partial<McpServerConfig>>
       }
 
       if (parsed.mcpServers) {
         for (const [name, cfg] of Object.entries(parsed.mcpServers)) {
           // Avoid duplicates by name
           if (servers.some((s) => s.name === name)) continue
-          servers.push({
-            name,
-            command: cfg.command,
-            args: cfg.args || [],
-            url: cfg.url,
-            headers: cfg.headers,
-            env: cfg.env,
-          })
+          // Spread the whole entry rather than re-listing fields: hand-rebuilding
+          // the object silently dropped request_timeout_ms and auth.
+          servers.push({ ...cfg, name, args: cfg.args || [] })
         }
       }
     } catch {
