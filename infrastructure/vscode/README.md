@@ -28,7 +28,7 @@ Search "Mipham Code" in the Extensions view (`Cmd+Shift+X`), or install from the
 ```bash
 cd infrastructure/vscode
 npx vsce package
-code --install-extension mipham-code-0.48.0.vsix
+code --install-extension mipham-code-<版本>.vsix
 ```
 
 ### Development (symlink)

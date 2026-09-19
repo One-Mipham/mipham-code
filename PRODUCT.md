@@ -33,8 +33,8 @@ Brand:    MiphamAI (One Mipham Corporation)
 Tagline:  Multi-Model Open-Core Intelligent Coding Terminal
          多模型开源核心智能编程终端
 
-International:  https://mipham.ai/code       (Global, GitHub, npm)
-China Mainland: https://onemipham.com/code     (中国大陆，访问更快)
+International:  https://mipham.ai/code       (308 → /mipham-code)  (Global, GitHub, npm)
+China Mainland: https://onemipham.com/mipham-code  (中国大陆，访问更快；**`/code` 是 404**)
 ```
 
 ---
@@ -562,7 +562,7 @@ docs: description
 | Discussions   | https://github.com/One-Mipham/mipham-code/discussions |
 | Email         | feedback@mipham.ai                                    |
 | International | https://mipham.ai/code                                |
-| 中国大陆      | https://onemipham.com/code                            |
+| 中国大陆      | https://onemipham.com/mipham-code                     |
 
 ---
 
