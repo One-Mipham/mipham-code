@@ -69,11 +69,27 @@ export const DEFAULT_CREDENTIAL_MASKING_CONFIG: CredentialMaskingConfig = {
   ],
   output_scrubbing: {
     enabled: true,
-    patterns: ['(?i)(api[_-]?key|secret|token|password|credential)\\s*[:=]\\s*\\S+'],
+    // 名字那一段：`_key` 出现在标识符**中间**也算（`AWS_ACCESS_KEY_ID=…`），但**不许吞掉
+    // 词后面的字符** —— 否则 `"keys": […]`、`total tokens: 1234` 这类**不是秘密**的输出
+    // 会被整段擦掉。中间那对引号可选，为的是 JSON 形状的 `"apiKey": "…"`。
+    patterns: [
+      '(?i)(api[_-]?key|[A-Za-z0-9_.-]*[_-]key[A-Za-z0-9_.-]*|secret|token|password|credential|[_-]pat)["\']?\\s*[:=]\\s*["\']?\\S+',
+    ],
   },
   env_filter: {
     enabled: true,
-    patterns: ['(?i)(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH)$'],
+    // 按**词**匹配，不是按后缀：`AWS_ACCESS_KEY_ID`（词在中间）、`GH_PAT`、`HTTP_AUTHORIZATION`
+    // 都算，而 `MONKEY` / `KEYBOARD_LAYOUT` 不算。
+    //
+    // 这个限定是必需的，不是洁癖：`AUTH` 若按**段**匹配，`SSH_AUTH_SOCK` 会被掩掉 ——
+    // Bash 里的 ssh / git push 当场找不到 agent；`KEY` 若按**子串**匹配，`MONKEY`、
+    // `KEYBOARD_LAYOUT` 中招。同理 `PWD` 只认 `_PWD$`（`MYSQL_PWD`），不认裸 `PWD`。
+    patterns: [
+      '(?i)(^|_)(KEY|APIKEY|TOKEN|SECRET)(_|$)',
+      '(?i)(PASSWORD|CREDENTIAL)',
+      '(?i)(^|_)(AUTH|AUTHORIZATION|PAT)$',
+      '(?i)_PWD$',
+    ],
   },
 }
 
