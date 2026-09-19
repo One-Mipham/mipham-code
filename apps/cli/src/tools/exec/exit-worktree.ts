@@ -1,5 +1,5 @@
 import type { ToolDefinition } from '../../shared/index.ts'
-import { worktreeRoots } from '../../core/paths.ts'
+import { listsWorktree, worktreeRoots } from '../../core/paths.ts'
 
 export const exitWorktreeTool: ToolDefinition = {
   name: 'ExitWorktree',
@@ -39,7 +39,10 @@ export const exitWorktreeTool: ToolDefinition = {
     // Validate the path is under a worktree root（新目录优先，兼容历史 .claude/）
     const cwd = ctx.cwd
     const { resolve } = await import('node:path')
-    const resolvedPath = resolve(worktreePath)
+    // 基数必须是 `cwd`（= ctx.cwd）：下面每一个 `Bun.spawn` 都带 `cwd: ctx.cwd`，
+    // 单参数 `resolve()` 却拿 `process.cwd()` 当归宿 —— 相对路径于是「校验的是 A、
+    // 执行的是 B」。两者在 daemon（ctx.cwd 是会话工作区、不是进程启动目录）下分叉。
+    const resolvedPath = resolve(cwd, worktreePath)
     const roots = worktreeRoots(cwd).map((root) => resolve(root))
     const inWorktree = roots.some(
       (root) => resolvedPath === root || resolvedPath.startsWith(root + '/'),
@@ -64,7 +67,7 @@ export const exitWorktreeTool: ToolDefinition = {
       })
       const listOutput = await new Response(listProc.stdout).text()
 
-      if (!listOutput.includes(worktreePath)) {
+      if (!listsWorktree(listOutput, resolvedPath)) {
         return {
           success: false,
           content: '',

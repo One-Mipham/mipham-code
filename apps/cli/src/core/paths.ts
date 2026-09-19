@@ -7,8 +7,9 @@
  * 突然失去隔离保护（隔离度只许增不许减）。
  */
 
+import { realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { MIPHAM_DIR } from '../shared/constants.ts'
 
 /** 只读兼容目录名。 */
@@ -31,6 +32,48 @@ export function worktreeRoot(cwd: string): string {
 /** 历史与当前的全部 worktree 根目录，写入根在前。 */
 export function worktreeRoots(cwd: string): string[] {
   return [worktreeRoot(cwd), join(cwd, LEGACY_CLAUDE_DIR, 'worktrees')]
+}
+
+/**
+ * 规范化 worktree 路径，两侧都过一遍才谈得上比较。
+ *
+ * 叶子不存在是常态（工作树已被删、或路径是模型编出来的），此时 `realpathSync`
+ * 会抛 —— 那就只规范父目录、最后一段按原样留着，否则「叶子没了」会被误读成
+ * 「拼法不同」（明明同一个路径，却因为 P 的拼法与 git 打印的不同而判成不在）。
+ */
+function canonicalWorktreePath(path: string): string {
+  const trimmed = path.endsWith('/') && path !== '/' ? path.slice(0, -1) : path
+  try {
+    return realpathSync(trimmed)
+  } catch {
+    try {
+      return join(realpathSync(dirname(trimmed)), basename(trimmed))
+    } catch {
+      return trimmed
+    }
+  }
+}
+
+/**
+ * `git worktree list --porcelain` 里是否**确实**列出了 `target` 这个工作树。
+ *
+ * 不能用 `output.includes(target)`：那是子串判定，本机实测（真 git，建出 `w1`
+ * 与 `w10`）它错在三个方向 ——
+ *   - `.../w1` 命中 **`.../w10` 那一行**（前缀当成同一个）⇒ 不存在被判成存在。
+ *     EnterWorktree 那侧因此连 `w1` 都建不出来：明明没有，它报 already exists；
+ *   - 带尾斜杠的 `.../w1/` 一行都不命中 ⇒ 存在被判成 not found；
+ *   - git 打印 **realpath 拼法**（`mktemp -d /tmp/x` 建的在 porcelain 里是
+ *     `/private/tmp/x/...`）⇒ 别名拼法一头都命中不了，而 EnterWorktree 的成功
+ *     文案里印的正是它自己算出来的那个拼法，模型照抄回来必然吃 not found。
+ *
+ * 判据是**相等**（名字比对），不是包含 —— 工作树列表里列的就是工作树根。
+ */
+export function listsWorktree(output: string, target: string): boolean {
+  const want = canonicalWorktreePath(target)
+  return output
+    .split('\n')
+    .filter((line) => line.startsWith('worktree '))
+    .some((line) => canonicalWorktreePath(line.slice('worktree '.length).trim()) === want)
 }
 
 /**

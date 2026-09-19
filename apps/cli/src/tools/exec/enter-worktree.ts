@@ -1,5 +1,5 @@
 import type { ToolDefinition } from '../../shared/index.ts'
-import { worktreeRoot } from '../../core/paths.ts'
+import { listsWorktree, worktreeRoot } from '../../core/paths.ts'
 
 export const enterWorktreeTool: ToolDefinition = {
   name: 'EnterWorktree',
@@ -95,7 +95,7 @@ export const enterWorktreeTool: ToolDefinition = {
         stderr: 'pipe',
       })
       const existingWorktrees = await new Response(checkProc.stdout).text()
-      if (existingWorktrees.includes(worktreePath)) {
+      if (listsWorktree(existingWorktrees, worktreePath)) {
         return {
           success: true,
           content:
