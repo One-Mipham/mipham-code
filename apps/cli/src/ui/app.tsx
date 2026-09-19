@@ -114,6 +114,34 @@ const PERMISSION_COLORS: Record<PermissionMode, string> = {
   bypassPermissions: 'red',
 }
 
+/** 页脚读模式所需的最小面 —— `QueryEngine` 与 `RemoteEngine` 都满足。 */
+export type PermissionSource = {
+  setMode(mode: PermissionMode): void
+  getMode(): PermissionMode
+}
+
+/**
+ * 页脚那一行是**执行的镜像，不是本地猜的值**。
+ *
+ * 组织级限制（`maxAllowedMode` / `forbiddenModes`）会在 `setMode` 里**静默改写**你请求的
+ * 那一档，所以页脚存「请求值」就会报出一个引擎不会给你的权限 —— 说放行、实际审批。
+ * 初始值与每次 Shift+Tab 都从这里回读。
+ */
+export function livePermissionMode(permission: PermissionSource): PermissionMode {
+  return permission.getMode()
+}
+
+/** 走一档 Shift+Tab 循环，然后**回读**真正生效的模式（上限可能把这一档压回去）。 */
+export function cyclePermissionMode(
+  permission: PermissionSource,
+  current: PermissionMode,
+): PermissionMode {
+  const idx = PERMISSION_MODES.indexOf(current)
+  const next = PERMISSION_MODES[(idx + 1) % PERMISSION_MODES.length]!
+  permission.setMode(next)
+  return permission.getMode()
+}
+
 /** 预览截断按 UTF-16 码元计数，落点若正好夹在一个代理对中间，切完就留下
  *  **半个** emoji（终端渲染成 U+FFFD）。落点是高代理时后退一个码元即可。 */
 export function truncateForDisplay(text: string, max: number): string {
@@ -260,7 +288,11 @@ export function App({
   const [focusMode, setFocusMode] = useState(false)
   const [_ultracodeMode, setUltracodeMode] = useState(false)
   const [goalText, setGoalText] = useState('')
-  const [permissionMode, setPermissionMode] = useState<PermissionMode>('default')
+  // 初始值取自 live 权限系统 —— 启动时 config 的模式可能已被组织级限制钳到别处
+  // （页脚写死 'default' 时会与执行不一致，且偏差方向是「报得比实际宽」）。
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>(() =>
+    livePermissionMode(engine.getPermission()),
+  )
   const abortRef = useRef<AbortController | null>(null)
   // Monotonic turn id — lets a stale turn's finally() skip resetting shared UI
   // state (isLoading/abortRef/progress) after a newer turn has already started.
@@ -1248,12 +1280,7 @@ export function App({
                     })
                   }}
                   onCyclePermission={() => {
-                    setPermissionMode((prev) => {
-                      const idx = PERMISSION_MODES.indexOf(prev)
-                      const next = PERMISSION_MODES[(idx + 1) % PERMISSION_MODES.length]!
-                      engine.getPermission().setMode(next)
-                      return next
-                    })
+                    setPermissionMode((prev) => cyclePermissionMode(engine.getPermission(), prev))
                   }}
                   onCancel={() => {
                     if (abortRef.current) {

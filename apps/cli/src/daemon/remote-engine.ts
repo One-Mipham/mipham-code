@@ -18,7 +18,7 @@
 //   engine.close()
 
 import type { ClientPromptMessage, ClientInterruptMessage, ServerMessage } from './attach-protocol'
-import type { StreamChunk } from '../shared/types'
+import type { PermissionMode, StreamChunk } from '../shared/types'
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
@@ -258,11 +258,16 @@ export class RemoteEngine {
   }
 
   /** Returns a stub permission object so slash commands don't crash. */
-  getPermission(): { setMode(_mode: string): void } {
+  getPermission(): { setMode(_mode: PermissionMode): void; getMode(): PermissionMode } {
+    // Remote mode: permissions are managed by the daemon, and the attach protocol has
+    // no read-back — so `getMode` reports the last mode the user asked for (which is
+    // what the footer has always shown here), not a value the daemon never confirmed.
+    let requested: PermissionMode = 'default'
     return {
-      setMode: (_mode: string) => {
-        // Remote mode: permissions are managed by the daemon
+      setMode: (mode: PermissionMode) => {
+        requested = mode
       },
+      getMode: () => requested,
     }
   }
 

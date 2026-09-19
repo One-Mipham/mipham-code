@@ -32,6 +32,7 @@ import { ExperienceRuleEngine } from './core/rule-engine.js'
 import { SessionLog } from './core/session-log'
 import { SessionStore } from './core/session-store'
 import type { PermissionLevel, MiphamConfig, McpServerConfig } from './shared/types'
+import { PermissionSystem } from './core/permission'
 import { SkillsLoader } from './skills/loader'
 import { PluginManager } from './plugin/plugin-manager'
 import { loadPlugins } from './plugin/plugin-loader'
@@ -375,6 +376,22 @@ export async function runApp(options: RunOptions): Promise<void> {
   // Load configuration
   const config = loadConfig()
 
+  // Permission policy is built **here**, before the system prompt exists, so the prompt
+  // can describe the mode the engine will actually run in. Building the prompt from
+  // `config.permission` handed the model a value that org restrictions can silently
+  // rewrite (and that may not even be a mode name — `bypass`/`auto`/`ask` inject nothing
+  // at all). The engine is created much later, after tools/hooks/vajra are mounted, so
+  // this instance is what gets handed to it rather than a second one built inside.
+  const permission = new PermissionSystem('default')
+  // Sync with config (fix: UI shows "auto" but engine defaulted to bypass-legacy)
+  if (config.permission) {
+    permission.setDefaultLevel(config.permission as PermissionLevel)
+  }
+  // Apply org-level permission restrictions (P0: bypassPermissions policy gap)
+  if (config.permissionRestrictions) {
+    permission.setRestrictions(config.permissionRestrictions)
+  }
+
   // Detect locale and create translation function
   const locale = detectLocale({ lang: options.lang })
   const t = createT(localeBundles[locale] || enUS, enUS)
@@ -479,12 +496,12 @@ export async function runApp(options: RunOptions): Promise<void> {
         }
       }
       context.restoreLog(log)
-      context.setSystemPrompt(instructions.buildSystemPrompt(config.permission as string))
+      context.setSystemPrompt(instructions.buildSystemPrompt(permission.getMode()))
     }
   }
 
   if (context.getMessageCount() === 0) {
-    const basePrompt = instructions.buildSystemPrompt(config.permission as string)
+    const basePrompt = instructions.buildSystemPrompt(permission.getMode())
     const memoryReminder = loadSessionMemories(basePrompt)
     const skillsReminder = skillsLoader.buildSystemReminder(5000, config.skills?.reminder ?? 'full')
 
@@ -604,7 +621,7 @@ export async function runApp(options: RunOptions): Promise<void> {
 
   // Create query engine
   const ruleEngine = new ExperienceRuleEngine()
-  const engine = new QueryEngine(registry, context, tools, undefined, ruleEngine)
+  const engine = new QueryEngine(registry, context, tools, permission, ruleEngine)
   engine.setHookEngine(hookEngine)
   engine.setArtifactServer(artifactServer)
   engine.setAgentViewManager(agentViewManager)
@@ -619,15 +636,8 @@ export async function runApp(options: RunOptions): Promise<void> {
   const inferenceHookConfig = loadInferenceHookConfig()
   engine.setInferenceHookConfig(inferenceHookConfig)
 
-  // Sync engine permission with config (fix: UI shows "auto" but engine defaulted to bypass-legacy)
-  if (config.permission) {
-    engine.getPermission().setDefaultLevel(config.permission as PermissionLevel)
-  }
-
-  // Apply org-level permission restrictions (P0: bypassPermissions policy gap)
-  if (config.permissionRestrictions) {
-    engine.getPermission().setRestrictions(config.permissionRestrictions)
-  }
+  // `config.permission` / `permissionRestrictions` are applied up top, on the instance
+  // handed to `new QueryEngine(...)` — the same one whose mode the system prompt reads.
 
   // Apply user-defined permission rules (allow/deny) — wire the rule system into runtime
   if (config.permissionRules) {
