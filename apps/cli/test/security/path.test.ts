@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { resolveSafe, isUncOrDevicePath } from '../../src/security/path'
@@ -84,6 +84,26 @@ describe('resolveSafe', () => {
       expect(() => resolveSafe(tmpDir, '../../../tmp/hack.ts')).toThrow(
         'outside the project workspace',
       )
+    })
+  })
+
+  describe('blocked system directories', () => {
+    // The blocked list is matched against a canonical path, so the list itself
+    // must be canonical: on macOS /etc is a symlink to /private/etc, and a
+    // literal entry can never equal the resolved form it is compared against.
+    const realEtc = realpathSync('/etc')
+
+    it('rejects a file inside a blocked dir when cwd IS that dir', () => {
+      expect(() => resolveSafe(realEtc, 'hosts')).toThrow(/protected system directory/)
+    })
+
+    it('rejects a file inside a blocked dir when cwd is an unresolved alias', () => {
+      expect(() => resolveSafe('/etc', 'hosts')).toThrow(/protected system directory/)
+    })
+
+    it('rejects a nested file inside a blocked dir with no symlink in the path', () => {
+      // Within cwd, so check 1 cannot fire — this is the blocked-list check alone.
+      expect(() => resolveSafe(realEtc, 'ssl/certs')).toThrow(/protected system directory/)
     })
   })
 

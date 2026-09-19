@@ -8,6 +8,24 @@ import { realpathSync, existsSync } from 'node:fs'
 const BLOCKED_PATHS = ['/etc', '/proc', '/sys', '/dev', '/boot', '/root']
 
 /**
+ * The same list in canonical form.
+ *
+ * The check below compares against an already-resolved path, so the entries
+ * must be resolved too: on macOS `/etc` is a symlink to `/private/etc`, and
+ * comparing `/private/etc/x` against the literal `/etc` never matched — the
+ * check was dead there. Entries that don't exist yet keep their literal form
+ * (there is nothing to resolve, and a later `realpathSync` of the same path
+ * cannot produce a different spelling).
+ */
+const BLOCKED_CANONICAL: string[] = BLOCKED_PATHS.map((p) => {
+  try {
+    return existsSync(p) ? realpathSync(p) : p
+  } catch {
+    return p
+  }
+})
+
+/**
  * Windows UNC paths and NT/Win32/DOS device-namespace prefixes.
  *
  * Accessing a UNC path (\\server\share) triggers SMB negotiation on Windows,
@@ -86,7 +104,7 @@ export function resolveSafe(cwd: string, inputPath: string): string {
   }
 
   // Check 2: must not target sensitive system directories
-  for (const blocked of BLOCKED_PATHS) {
+  for (const blocked of BLOCKED_CANONICAL) {
     if (canonical === blocked || canonical.startsWith(blocked + '/')) {
       throw new Error(
         `Path rejected: "${inputPath}" resolves to a protected system directory (${blocked}).`,
