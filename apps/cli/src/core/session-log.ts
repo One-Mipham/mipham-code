@@ -78,7 +78,11 @@ export function deriveMessages(events: SessionEvent[]): Message[] {
       // 兼容旧 JSONL（存 content:string）；新格式存 result:ToolResult（含 success/error）
       const eo = e as unknown as { id: string; result?: ToolResult; content?: string }
       const result: ToolResult = eo.result ?? { success: true, content: eo.content ?? '' }
-      const content = result.success ? result.content : result.error || result.content
+      // `?? ''`：成功但没记下 content 的事件（`JSON.stringify` 会把 `undefined` 的键整个
+      // 抹掉，所以它在盘上长这样：`{"success":true}`）投影出来必须是**字符串**。
+      // 投影负责形状、provider 负责出网合法（`tool_result.content` 是 `string`）；
+      // 这里留 `undefined` 会让 `JSON.stringify` 同样抹掉该键，把问题送到线上。
+      const content = (result.success ? result.content : result.error || result.content) ?? ''
       out.push({
         role: 'user',
         content: [

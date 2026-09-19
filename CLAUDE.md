@@ -4,9 +4,9 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.72.0
-> **最后更新**: 2026-09-19 — **三个状态文件「合法 JSON 但不合法形状」+ 写在原地（⑩⑪⑬）** —— 两个缺陷形状，各自都只差一道判据。**其一：`JSON.parse` 被当成校验。** `plugin-manager.ts` 的 `loadState()` 直接把解析结果当 `InstalledPlugin[]` 收下，而 `{}`/`null`/`"x"`/`123` **四者全过 `JSON.parse`** ⇒ 之后任何 `.find`/`.filter`/`.map` 落在非数组上抛，**一条 `state.json` 让每条插件命令一起挂**；`keys-manager.ts` 的 `loadKeys` 位置更靠前 —— `null` 被原样返回，`Object.entries(null)` 在 **`list()`（启动路径）** 上抛；`workspace-trust.ts` 只查 `version !== 1`，守的是**字段**、不是形状：`{"version":1}` 照样过闸，随后 `for (const trusted of this.store.directories)` 在 `undefined` 上抛，非字符串项同理（`isTrusted` 对每项调 `.toLowerCase()`）。三处一律收在**入口**（解析后先验形，形状不对按**空表**起步），不是在各调用点补 `try`。**其二：写是原地截断。** `PluginManager.saveState()` 与 `WorkspaceTrust.save()` 都是裸 `writeFileSync`，而两侧的读都把「读不出来」吞成**空 / 重置** ⇒ 一次被打断的写不是「丢一条记录」：插件列表静默清空、**用户批准过的每个目录静默退回未信任**（fail-closed，但用户永远不知道自己为什么又被问一遍）。两处改 `atomicWriteFileSync`。**判据取 inode、不取权限、不取「无 `.tmp` 残骸」** —— `{ mode: 0o600 }` 的裸写同时满足后两者。**五条负控红集两两不同**，各只红一个测试：C1 插件形状 / C2 插件原子 / C3 键表形状 / C4 信任表形状 / C5 信任表原子。**如实记**：C5 首跑 **0 failed** —— 信任表那条原子写改动**当时没有任何断言**，是把它改回去跑一遍、发现全绿才照出来的；补上 inode 用例后 C5 才红。负控一律 `cp` 存档还原并核 sha256（`git checkout --` 回滚到 HEAD、会抹掉未提交的被测工作，2.70.0 那笔栽过），三个源文件还原后 sha 与改前逐一相符。测试 2868 → **2876**（249 文件不变）。
-> **前一条（2.71.0）**: 2026-09-19 — **worktree 会话里项目规则静默失效（⑦）** —— 形状是**读取点少了一层根**：`RulesLoader` 只读 `join(cwd, '.mipham', 'rules')`，而 `.mipham/` 在 `.gitignore:15` 里、`EnterWorktree` 又把工作树建在 `.mipham/worktrees/<name>`（`tools/exec/enter-worktree.ts`）⇒ **真实 `git worktree add` 的检出里根本没有 `.mipham/`**（scratch 仓实跑确认：pre-fix 在 worktree cwd 下 `count() = 0`、注入块 **0 字符**、**没有任何提示**；同一份规则在主树 `count() = 1`）。改法是把「项目根」这一层补回来 —— cwd 落在 worktree 标记内时追加读 `<项目根>/.mipham/rules`，复用 **`findWorktreeMarker()`**（git/bash 工具用的同一个检测，不另造第二条判断路径）；同名规则**就近优先**（worktree 内定义的覆盖项目级）。两条读路径抽成同一个 `readDir()` —— 不抽就是本仓库反复栽的「两条渲染路径只接一条」。三条负控**红集互不相同**：删回退 ⇒ 只红 worktree 那条；删去重 ⇒ 只红「就近优先」；把标记检测换成**盲目的上级跳转** ⇒ 红 worktree + 「普通子目录不许够到项目根」两条（这一条同时证明了第三条断言有判别力 —— 第一版跳转层数写错，红集与删回退重合，等于没验）。**边界如实记**：检测是标记式的，建在 `.mipham/worktrees/` 与 `.claude/worktrees/` 之外的 worktree 不覆盖。测试 2865 → **2868**（249 文件不变）。
+> **版本**: 2.73.0
+> **最后更新**: 2026-09-19 — **出网载荷里的空块，与「不可审计的字符集」（⑧⑭⑮）** —— 三条是同一个形状在别处又长了一遍：**一个字面量集合 / 一次早期把关，都只覆盖了它被写下的那处**。**⑮ `providers/anthropic.ts` 的 `convertMessages`** 会产出**必然被 API 拒**的块 —— `default: return { type:'text', text:'' }`（认不出的块类型一律变成空 text 块）、字符串分支对空串照样发、`tool_result` 的 `content` 可能是空串或整个缺失。因为每条消息都是**历史**，一个空块让这个会话**之后每一轮**都 400 —— 失败面不是「这一轮」。收口三处：空 text 块统一 filter 掉；`tool_result` 空 content 补 `(no output)` 占位（`''` / `undefined` / `[]` 同义）；块被滤空的消息**整条**不下发（空 content 数组同样被拒）。**⑭ `core/session-log.ts` 的 `deriveMessages`** 是同一形状的上游：`tool_result.content` 缺字段时投影出 `undefined`，而 `JSON.stringify` **把值为 undefined 的键整个抹掉** ⇒ 投影里看不出来、到请求体上变成「这个 tool_result 没有 content」。判据取 `JSON.parse(JSON.stringify(block))` —— 那正是出网前的形状。分工：**投影负责形状，provider 负责出网合法**。**⑧ `shared/sanitize.ts`** 的剥离集合写成 16 个**字面量**不可见字符 ⇒ 不可审计，tag 块（U+E0000–E007F）在**每个邻族都已覆盖**的情况下漏着。改写为 `\u{…}` 转义并补入（外加 U+061C / 115F / 1160 / 180E / 3164 / FFA0），边界由用例钉住（两端点都在集合内、紧邻的 U+E0080 不在）。**变体选择符刻意不收** —— emoji 承重，且 `sanitizeParams` 的产物会被**真正执行**（`tools/validation.ts` 把 `cleanParams` 交给 `tool.execute`），剥掉等于静默改写要写盘的内容；出于同一原因，⑧ 的**执行面**（权限检查看的是原参数、执行的是剥离后参数）留作分歧、不平移，理由写进代码注释。**负控红集两两不同**：A 字符串分支空串 ⇒ 仅红 1 条；B tool_result 占位 ⇒ 仅红 1 条；D 空 text filter ⇒ 仅红 1 条；E「块被滤空」闸 ⇒ 仅红 1 条；⑭ ⇒ 仅红 3 条。**如实记两条**：① 撤掉「未知块类型返回 null」**单独不可观测** —— filter 已覆盖同一条路径，那是冗余而非覆盖；② E 那条闸**原本零覆盖**（撤掉它全绿、无一条红），是负控照出来的，已补用例。测试 2876 → **2891**（249 文件不变；`core` 1130→1134、`providers` 99→106、`shared` 52→56）。
+> **前一条（2.72.0）**: 2026-09-19 — **三个状态文件「合法 JSON 但不合法形状」+ 写在原地（⑩⑪⑬）** —— 两个缺陷形状，各自都只差一道判据。**其一：`JSON.parse` 被当成校验。** `plugin-manager.ts` 的 `loadState()` 直接把解析结果当 `InstalledPlugin[]` 收下，而 `{}`/`null`/`"x"`/`123` **四者全过 `JSON.parse`** ⇒ 之后任何 `.find`/`.filter`/`.map` 落在非数组上抛，**一条 `state.json` 让每条插件命令一起挂**；`keys-manager.ts` 的 `loadKeys` 位置更靠前 —— `null` 被原样返回，`Object.entries(null)` 在 **`list()`（启动路径）** 上抛；`workspace-trust.ts` 只查 `version !== 1`，守的是**字段**、不是形状：`{"version":1}` 照样过闸，随后 `for (const trusted of this.store.directories)` 在 `undefined` 上抛，非字符串项同理（`isTrusted` 对每项调 `.toLowerCase()`）。三处一律收在**入口**（解析后先验形，形状不对按**空表**起步），不是在各调用点补 `try`。**其二：写是原地截断。** `PluginManager.saveState()` 与 `WorkspaceTrust.save()` 都是裸 `writeFileSync`，而两侧的读都把「读不出来」吞成**空 / 重置** ⇒ 一次被打断的写不是「丢一条记录」：插件列表静默清空、**用户批准过的每个目录静默退回未信任**（fail-closed，但用户永远不知道自己为什么又被问一遍）。两处改 `atomicWriteFileSync`。**判据取 inode、不取权限、不取「无 `.tmp` 残骸」** —— `{ mode: 0o600 }` 的裸写同时满足后两者。**五条负控红集两两不同**，各只红一个测试：C1 插件形状 / C2 插件原子 / C3 键表形状 / C4 信任表形状 / C5 信任表原子。**如实记**：C5 首跑 **0 failed** —— 信任表那条原子写改动**当时没有任何断言**，是把它改回去跑一遍、发现全绿才照出来的；补上 inode 用例后 C5 才红。负控一律 `cp` 存档还原并核 sha256（`git checkout --` 回滚到 HEAD、会抹掉未提交的被测工作，2.70.0 那笔栽过），三个源文件还原后 sha 与改前逐一相符。测试 2868 → **2876**（249 文件不变）。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -45,7 +45,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：2,876 测试（2,874 passed + 2 skipped，0 失败）
+测试：2,891 测试（2,889 passed + 2 skipped，0 失败）
 
 ---
 
@@ -82,7 +82,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 249 个测试文件，2876 个测试
+│   │   ├── test/               # 249 个测试文件，2891 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -108,7 +108,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（2876 个测试）
+pnpm test         # vitest run（2891 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~9 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -296,17 +296,17 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 74      | 1130     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
+| core            | 74      | 1134     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
 | tools           | 25      | 383      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 34      | 213      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
 | ui              | 16      | 192      | commands / input / config-wizard / loop / skill-doctor                                                                                                                      |
 | agent           | 11      | 117      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
 | security        | 10      | 99       | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
-| providers       | 7       | 99       | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
+| providers       | 7       | 106      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
 | mcp             | 8       | 89       | client / transport / oauth / token-store / registry（含 2 skipped）                                                                                                         |
 | workflow        | 7       | 55       | runtime / loop / parallel / sandbox / journal / verify                                                                                                                      |
 | vajra           | 6       | 53       | context / events / service / compose / leaf（自建内核）                                                                                                                     |
-| shared          | 8       | 52       | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                              |
+| shared          | 8       | 56       | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                              |
 | commands        | 7       | 59       | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers                                                                                         |
 | skills          | 5       | 35       | sanitizer / marketplace / fork-executor / skill-assets                                                                                                                      |
 | config          | 9       | 68       | credential-crypto / loader-encryption / defaults / settings-json / preferences                                                                                              |
@@ -316,7 +316,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integrity       | 8       | 54       | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 120      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **249** | **2876** | **0 失败** ✅（2874 passed + 2 skipped）                                                                                                                                    |
+| **合计**        | **249** | **2891** | **0 失败** ✅（2889 passed + 2 skipped）                                                                                                                                    |
 
 > **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 179 测试，自带
 > `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。

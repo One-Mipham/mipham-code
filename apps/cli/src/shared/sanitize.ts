@@ -10,14 +10,39 @@
  * to ASCII equivalents for permission checks.
  */
 
-const DANGEROUS_UNICODE = /[​‌‍‎‏‪‫‬‭‮⁠⁦⁧⁨⁩﻿]/g
+/**
+ * Invisible/formatting code points that can hide content.
+ *
+ * Written as `\u{…}` escapes (hence the `u` flag) so the set is *auditable*: the
+ * same list spelled as literal characters is unreviewable in a diff, which is how
+ * the tag block (U+E0000–E007F) went missing while every neighbouring family was
+ * already covered.
+ *
+ * Deliberately **not** included — variation selectors (U+FE00–FE0F):
+ * - they are load-bearing in emoji (e.g. U+2764 U+FE0F), so stripping them
+ *   visibly changes text;
+ * - `sanitizeParams` feeds `tool.execute` (`tools/validation.ts`), so the strip is
+ *   applied to what tools *write to disk*, not only to what gets pattern-matched.
+ *   Adding them here would silently rewrite file contents.
+ *
+ * The tag block (U+E0000–E007F) *is* included: it is invisible in itself, and the
+ * only sequences that use it (subdivision flags, e.g. U+1F3F4 + a tag run) degrade
+ * to the bare black flag — which renders the same.
+ */
+const DANGEROUS_UNICODE =
+  /[\u{061C}\u{115F}-\u{1160}\u{180E}\u{200B}-\u{200F}\u{202A}-\u{202E}\u{2060}\u{2066}-\u{2069}\u{3164}\u{FEFF}\u{FFA0}\u{E0000}-\u{E007F}]/gu
 
 /**
  * Strip dangerous invisible Unicode characters from a string.
  * - Zero-width: U+200B (ZWSP), U+200C (ZWNJ), U+200D (ZWJ), U+200E/F (LTR/RTL marks)
- * - Bidi controls: U+202A-E, U+2066-9
+ * - Bidi controls: U+202A-E, U+2066-9, U+061C (Arabic letter mark)
  * - Word joiner: U+2060
  * - BOM: U+FEFF
+ * - Invisible fillers: U+115F/1160 (Hangul choseong/jungseong), U+3164 (Hangul),
+ *   U+FFA0 (halfwidth Hangul), U+180E (Mongolian vowel separator)
+ * - Tag characters: U+E0000-E007F (deprecated, invisible, hide arbitrary text)
+ *
+ * See `DANGEROUS_UNICODE` for which *adjacent* families are left in place, and why.
  */
 export function stripDangerousUnicode(input: string): string {
   if (!input) return input

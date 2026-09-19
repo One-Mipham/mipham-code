@@ -552,3 +552,59 @@ describe('open() 丢弃结构不合法的行', () => {
     }
   })
 })
+
+/**
+ * 投影的产物要**是**一条合法消息，不是「大致像」。
+ *
+ * `tool_result.content` 的类型是 `string`，而 `JSON.stringify` 会把值为
+ * `undefined` 的键整个抹掉 —— 所以 `content: undefined` 在投影里看不出来，
+ * 到了请求体上就变成「这个 tool_result 没有 content」。判据取
+ * `JSON.parse(JSON.stringify(block))`：那正是出网前的形状。
+ */
+describe('deriveMessages — tool_result 的 content 永远是字符串', () => {
+  const project = (events: unknown[]): Record<string, unknown> => {
+    const msgs = deriveMessages(events as SessionEvent[])
+    return JSON.parse(JSON.stringify(msgs[0])) as Record<string, unknown>
+  }
+
+  it('事件里没有 content（`{"success":true}`）时投影出空串，而不是丢键', () => {
+    // 盘上真的会有这种事件：写它的时候是 `{success: true, content: undefined}`。
+    const block = (
+      project([{ type: 'tool/result', at: 1, id: 't1', result: { success: true } }])
+        .content as Array<Record<string, unknown>>
+    )[0]!
+    expect(block).toHaveProperty('content')
+    expect(block.content).toBe('')
+  })
+
+  it('失败且 error 与 content 都没有时同样是空串', () => {
+    const block = (
+      project([{ type: 'tool/result', at: 1, id: 't1', result: { success: false } }])
+        .content as Array<Record<string, unknown>>
+    )[0]!
+    expect(block.content).toBe('')
+    expect(block.is_error).toBe(true)
+  })
+
+  it('有内容的成功结果逐字还原（正控：上面的判据不是恒真的）', () => {
+    const block = (
+      project([
+        { type: 'tool/result', at: 1, id: 't1', result: { success: true, content: '12 files' } },
+      ]).content as Array<Record<string, unknown>>
+    )[0]!
+    expect(block).toEqual({ type: 'tool_result', tool_use_id: 't1', content: '12 files' })
+  })
+
+  it('贯通两端：content 缺失的 tool_result 块落盘再读出来仍是字符串', () => {
+    // 模拟真实来路 —— 引擎构造的块少了 content（类型上不该发生，线上会发生）。
+    const m = {
+      role: 'user',
+      content: [{ type: 'tool_result', tool_use_id: 't1' }],
+    } as unknown as Message
+
+    const onDisk = JSON.parse(JSON.stringify(messageToEvents(m))) as SessionEvent[]
+    const block = (project(onDisk).content as Array<Record<string, unknown>>)[0]!
+    expect(block.content).toBe('')
+    expect(block.tool_use_id).toBe('t1')
+  })
+})

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import type { ProviderConfig, StreamChunk } from '@mipham/shared'
+import type { Message, ProviderConfig, StreamChunk } from '@mipham/shared'
 import { AnthropicProvider } from '../../src/providers/anthropic'
 
 // ── Helpers ──
@@ -786,5 +786,155 @@ describe('AnthropicProvider', () => {
     const config = makeConfig()
     const provider = new AnthropicProvider(config)
     expect(provider.config).toBe(config)
+  })
+})
+
+// ═══════════════════════════════════════════
+// convertMessages — 出网载荷的空块
+//
+// Anthropic 对空 text 块与空 tool_result.content 是**整条请求 400**，
+// 而每条消息都是历史 ⇒ 一个空块让这个会话之后每一轮都发不出去。
+// convertMessages 是私有的、且此前没有测试，所以经 provider.chat() 从
+// 真实请求体上验 —— 断言的正是发出去的那个字节串，不是某个中间态。
+// ═══════════════════════════════════════════
+
+describe('AnthropicProvider — 出网载荷里不留空块', () => {
+  const originalFetch = globalThis.fetch
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch
+  })
+
+  async function convertVia(messages: Message[]): Promise<Array<Record<string, unknown>>> {
+    let captured: Array<Record<string, unknown>> = []
+    globalThis.fetch = vi.fn().mockImplementation(async (_url, opts) => {
+      captured = JSON.parse(opts.body as string).messages
+      return makeSSEResponse(['data: {"type":"message_stop"}'])
+    }) as unknown as typeof fetch
+
+    await collectChunks(
+      new AnthropicProvider(makeConfig()).chat({ model: 'claude-sonnet-4-6', messages }),
+    )
+    return captured
+  }
+
+  it('空字符串内容不产出空 text 块，整条消息也不下发', async () => {
+    const out = await convertVia([
+      { role: 'user', content: '' },
+      { role: 'user', content: '   ' },
+    ])
+
+    // '   ' 是**非空**文本（合法），空串那条则整条消失 —— 断言这个区别，
+    // 而不是「什么都不发」。
+    expect(out).toHaveLength(1)
+    expect(JSON.stringify(out)).not.toContain('"text":""')
+  })
+
+  it('块数组里的空 text 块被丢掉，同一消息的其他块保留', async () => {
+    const out = await convertVia([
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: '先说这句' },
+          { type: 'text', text: '' },
+          { type: 'tool_use', id: 'tu_1', name: 'read', input: { path: 'a.ts' } },
+        ],
+      },
+    ])
+
+    const blocks = out[0]!.content as Array<Record<string, unknown>>
+    expect(blocks.map((b) => b.type)).toEqual(['thinking', 'text', 'tool_use'])
+    expect(blocks[1]!.text).toBe('先说这句')
+    expect(JSON.stringify(out)).not.toContain('"text":""')
+  })
+
+  it("空 content 的 tool_result 拿到占位文案（`''` 与缺失字段两种来路）", async () => {
+    const out = await convertVia([
+      {
+        role: 'user',
+        content: [
+          { type: 'tool_result', tool_use_id: 'a', content: '' },
+          // 投影层缺失该字段时这里是 `undefined` —— 类型上不该发生，线上会发生。
+          { type: 'tool_result', tool_use_id: 'b', content: undefined as unknown as string },
+        ],
+      },
+    ])
+
+    const blocks = out[0]!.content as Array<Record<string, unknown>>
+    expect(blocks[0]!.content).toBe('(no output)')
+    expect(blocks[1]!.content).toBe('(no output)')
+  })
+
+  it('非空 tool_result 逐字保留（正控：上面的判据不是恒真的）', async () => {
+    const out = await convertVia([
+      {
+        role: 'user',
+        content: [
+          { type: 'tool_result', tool_use_id: 'a', content: '12 files' },
+          { type: 'tool_result', tool_use_id: 'b', content: 'boom', is_error: true },
+        ],
+      },
+    ])
+
+    const blocks = out[0]!.content as Array<Record<string, unknown>>
+    expect(blocks[0]).toEqual({ type: 'tool_result', tool_use_id: 'a', content: '12 files' })
+    expect(blocks[1]).toEqual({
+      type: 'tool_result',
+      tool_use_id: 'b',
+      content: 'boom',
+      is_error: true,
+    })
+  })
+
+  it('块被滤空的消息整条不下发 —— 空 content 数组同样被 API 拒', async () => {
+    // 这条覆盖的是 `kept.length === 0` 那道闸：上面几条都留着至少一个块，
+    // 撤掉它测试全绿 ⇒ 闸本身没有被验到。
+    const out = await convertVia([
+      { role: 'user', content: [{ type: 'text', text: '' }] },
+      { role: 'user', content: '这句在' },
+    ])
+
+    expect(out).toHaveLength(1)
+    expect((out[0]!.content as Array<Record<string, unknown>>)[0]!.text).toBe('这句在')
+    for (const m of out) expect((m.content as unknown[]).length).toBeGreaterThan(0)
+  })
+
+  it('认不出的块类型被丢掉，而不是变成必然被拒的空 text 块', async () => {
+    const out = await convertVia([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: '看这张图' },
+          { type: 'video', source: 'whatever' },
+        ] as unknown as Message['content'],
+      },
+    ])
+
+    const blocks = out[0]!.content as Array<Record<string, unknown>>
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0]).toEqual({ type: 'text', text: '看这张图' })
+  })
+
+  it('正常历史逐字不变，且每条消息都带非空 content 数组', async () => {
+    const out = await convertVia([
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'hello' },
+    ])
+
+    // 不写 toEqual：真请求体上 markPrefixCacheBreakpoint 会给倒数第二条
+    // 消息的末块补 cache_control —— 那个字段属于另一条路径，不该由本组钉住。
+    expect(out.map((m) => m.role)).toEqual(['user', 'assistant'])
+    expect((out[0]!.content as Array<Record<string, unknown>>)[0]).toMatchObject({
+      type: 'text',
+      text: 'hi',
+    })
+    expect(out[1]!.content).toEqual([
+      { type: 'thinking', thinking: '' },
+      { type: 'text', text: 'hello' },
+    ])
+    for (const m of out) {
+      expect(Array.isArray(m.content)).toBe(true)
+      expect((m.content as unknown[]).length).toBeGreaterThan(0)
+    }
   })
 })

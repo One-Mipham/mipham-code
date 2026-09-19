@@ -39,6 +39,27 @@ interface AnthropicSSEEvent {
   usage?: { input_tokens: number; output_tokens: number }
 }
 
+/**
+ * Stand-in for a tool result that has no content of its own.
+ *
+ * `tool_result.content` is normalized to a text block server-side, and an empty
+ * one is rejected with a 400 — which fails the *whole* request, history
+ * included. Multiple paths produce one: a tool that reports success with no
+ * output (`content: ''`), a failed tool with no message, and a log projection
+ * whose `content` never got written (`undefined`). All of them mean the same
+ * thing to the model, so they get the same words.
+ */
+const NO_TOOL_OUTPUT = '(no output)'
+
+/**
+ * An empty text block is not a stylistic wart — Anthropic rejects it with a 400,
+ * and since every message in the request is history, one such block makes the
+ * conversation permanently unsendable (every later turn re-sends it).
+ */
+function isEmptyTextBlock(block: Record<string, unknown>): boolean {
+  return block.type === 'text' && block.text === ''
+}
+
 export class AnthropicProvider implements ProviderInstance {
   private baseUrl = 'https://api.anthropic.com/v1'
   private anthropicVersion = '2023-06-01'
@@ -302,17 +323,23 @@ export class AnthropicProvider implements ProviderInstance {
       if (msg.role === 'system') continue
 
       if (typeof msg.content === 'string') {
-        const content: unknown[] = [{ type: 'text', text: msg.content }]
+        const content: unknown[] = []
+        // 空串不产出 text 块（见 isEmptyTextBlock）：用户发了个空消息、或工具返回
+        // 空内容时会走到这里，而它会让之后每一轮都 400。
+        if (msg.content !== '') content.push({ type: 'text', text: msg.content })
         // DeepSeek V4 thinking mode via Anthropic endpoint: every assistant
         // message must contain a thinking block if any message in history does.
         if (msg.role === 'assistant') {
           const thinkingText = (msg as any).reasoning_content || ''
           content.unshift({ type: 'thinking', thinking: thinkingText })
         }
-        result.push({
-          role: msg.role,
-          content,
-        })
+        // 全部内容都被滤掉的消息**整条**不下发 —— 空 content 数组同样被 API 拒。
+        if (content.length > 0) {
+          result.push({
+            role: msg.role,
+            content,
+          })
+        }
       } else {
         const blocks = (msg.content as ContentBlock[]).map((block) => {
           switch (block.type) {
@@ -362,22 +389,32 @@ export class AnthropicProvider implements ProviderInstance {
               return {
                 type: 'tool_result',
                 tool_use_id: block.tool_use_id,
-                content: block.content,
+                // 空 content 同样整条请求被拒（见 NO_TOOL_OUTPUT）。`||` 而非 `=== ''`：
+                // 投影层缺失该字段时这里是 `undefined`，空数组同理。
+                content: block.content || NO_TOOL_OUTPUT,
                 // 只在失败时下发 —— 成功请求体与改动前逐字节相同，不引入 prompt-cache 前缀抖动
                 ...(block.is_error === true ? { is_error: true } : {}),
               }
 
             default:
-              return { type: 'text', text: '' }
+              // 未知块类型**无法**原样表达，而 `{type:'text',text:''}` 是一个必然被拒
+              // 的载荷 —— 改成丢这一个块（下面的 filter），而不是拿它毒掉整条请求。
+              return null
           }
-        })
+        }) as (Record<string, unknown> | null)[]
+
+        // 丢掉表达不出来的块（未知类型）与空的 text 块。
+        const kept = blocks.filter(
+          (b): b is Record<string, unknown> => b !== null && !isEmptyTextBlock(b),
+        )
 
         // DeepSeek V4 thinking mode via Anthropic endpoint: every assistant
         // message must contain a thinking block if any message in history does.
-        if (msg.role === 'assistant' && !blocks.some((b: any) => b.type === 'thinking')) {
-          blocks.unshift({ type: 'thinking', thinking: '' })
+        if (msg.role === 'assistant' && !kept.some((b) => b.type === 'thinking')) {
+          kept.unshift({ type: 'thinking', thinking: '' })
         }
-        result.push({ role: msg.role, content: blocks })
+        if (kept.length === 0) continue
+        result.push({ role: msg.role, content: kept })
       }
     }
 
