@@ -12,8 +12,8 @@
  *      不存在的工具名（真实工具只有一个 `Task`，动作走 `action` 参数）
  *
  * 本文件用五段机器可校验的契约：前四段覆盖上述缺陷类，第五段守的是文档体积与
- * 两张变更记录表的行数上限（CLAUDE.md 拆分后 17 小时内又长回 56k，约定此前只存在于
- * 记忆里、未落到纸面也无人守）。守卫的价值取决于**不误报**——
+ * 两张变更记录表的**去向**（CLAUDE.md 拆分后 17 小时内又长回 56k，约定此前只存在于
+ * 记忆里、未落到纸面也无人守；2026-09-19 起两表整体移出，正文只留指针）。守卫的价值取决于**不误报**——
  * 实测（2026-09-15）扫描命中 6 个幻影名（分布在 10 处），误报 0；被排除的合法词
  * `GitHub` / `GitLab` / `ConfigChange` 见 ALLOWED_NON_TOOL_WORDS。误报的处理方式是
  * **加白名单并写明理由**，不是放宽规则、更不是删掉守卫。
@@ -362,7 +362,7 @@ describe('IDE 扩展环境变量契约', () => {
 })
 
 /**
- * 变更记录滚动窗口与文档体积。
+ * 变更记录表的**去向**与文档体积。
  *
  * 守的是一类与「引用了不存在的东西」不同的缺陷：**没有上限的累积**。
  * CLAUDE.md 的 `## 最近提交` 曾是 5 行滚动窗口（2026-09-18 收窄至 3），但这条约定在拆分之前的全仓库
@@ -371,42 +371,72 @@ describe('IDE 扩展环境变量契约', () => {
  * 21,193 长回 56,001 字符（+164%），二次越过当初触发拆分的 40k 红线。
  * 成文 + 守卫 + 把旧条目搬进 `docs/claude-md-history.md`，三者缺一不可。
  *
+ * **2026-09-19（2.66.0）契约换向：两张表整体移出，正文只留指针。** 收紧窗口治不了本 ——
+ * 窗口只约束**行数**，而 prettier 把列宽设成**最宽那一行**、全表按它补齐 ⇒ 新增一行的边际
+ * 成本 ≈ 最宽行宽 × 行数；只要表还住在文件里，每次改动就必然增长（实测「挤掉最宽行换更窄的」
+ * 这一手最多净省 2,102 字符，而移出的是 8,230 = 全文 21.9%）。代价是**存档与指针从此都是
+ * 承重的**，故断言换向：两段**零数据行** + 各段正文**含指向存档的链接** + **存档在位、两张
+ * 全表都还在**。最后一条补的是一个真实的洞 —— 此前全仓库无任何测试读 `docs/claude-md-history.md`
+ * （`ARCHIVE` 当时只是报错文案里的一个字符串），删掉它是一条全绿的路径。
+ *
  * 刻意**不用** `prompt-exclude` / 按标题剥整段的办法来「减重」：按标题剥会把
- * `> 完整修订历史 → docs/claude-md-history.md` 那行指针一起剥掉，读者反而失去去路
- * （拆分提交 a278151 已记录此教训）。
+ * `> 完整记录 → docs/claude-md-history.md` 那行指针一起剥掉，读者反而失去去路
+ * （拆分提交 a278151 已记录此教训）。指针现在是那两段**唯一**的内容，更剥不得。
  */
-describe('变更记录滚动窗口与文档体积', () => {
+describe('变更记录表的去向与文档体积', () => {
   const CLAUDE_MD = join(REPO_ROOT, 'CLAUDE.md')
-  /**
-   * 每张变更记录表保留的数据行数上限。
-   *
-   * 2026-09-18 由 5 收窄至 3。原上限只约束**行数**、不约束**行长**，而实测体积主项是
-   * 行长 —— markdown 表经 prettier 补齐后，表头 + 分隔行的对齐空白**正比于最长那行**
-   * （收窄前这两行合计 3,147 字符，占全文 8%），行一变长，空白得跟着长两遍。
-   */
-  const MAX_ROWS = 3
   /** CLAUDE.md 全文字符预算——当初触发拆分的那条红线。 */
   const MAX_CHARS = 40_000
-  /** 搬运目的地，仅用于报错文案。 */
+  /** 两张表的搬运目的地：正文指针必须指向它，它本身也必须真的还在。 */
   const ARCHIVE = 'docs/claude-md-history.md'
+  const ARCHIVE_PATH = join(REPO_ROOT, ARCHIVE)
+  /**
+   * 两段的**段名**。
+   *
+   * 按名字定位、不按 `#` 层级 —— CLAUDE.md 里是 `### 修订历史`、存档里是 `## 修订历史`，
+   * 层级是排版细节，名字才是锚。
+   */
+  const SECTIONS = ['最近提交', '修订历史']
+
+  const HEADING_RE = /^#{2,}\s/
+
+  /** 该行是不是标题「name」（`##` 及以上层级）。 */
+  function isHeading(line: string, name: string): boolean {
+    return HEADING_RE.test(line) && line.replace(/^#+\s+/, '').trim() === name
+  }
 
   /**
-   * 取 `heading` 下列第一张表的数据行。
+   * 取「name」那一段的行（标题之后 → 下一个标题 / `---` / 文末）；**标题不存在时返回 `null`**。
+   *
+   * `null` 与空数组必须分开：重命名标题与「段内确实没有内容」是两件事，混成一个就会让
+   * 「标题被改名」读成「表已经没有了」而**静默恒真** —— 那正是本文件一开始要防的那种假绿。
+   */
+  function section(src: string, name: string): string[] | null {
+    const lines = src.split('\n')
+    const start = lines.findIndex((l) => isHeading(l, name))
+    if (start === -1) return null
+
+    const out: string[] = []
+    for (let i = start + 1; i < lines.length; i++) {
+      const line = lines[i]!
+      // 下一个标题（任意层级）或分隔线即段末。
+      if (HEADING_RE.test(line) || line.startsWith('---')) break
+      out.push(line)
+    }
+    return out
+  }
+
+  /**
+   * 从一段正文里取第一张表的数据行。
    *
    * 用**结构**判定而非列名：markdown 表必定是 `表头 | 分隔行 | 数据…`，故分隔行
    * 之前的一律不算数据。这样列名一改、列序一调，判定都不会跟着错——按列名匹配
    * 正是那种「文档写法一变守卫就静默恒真」的写法。
    */
-  function tableRows(src: string, heading: string): string[] {
-    const lines = src.split('\n')
-    const start = lines.findIndex((l) => l.startsWith(heading))
-    if (start === -1) return []
-
+  function tableRows(lines: string[]): string[] {
     const rows: string[] = []
     let inTable = false
-    for (let i = start + 1; i < lines.length; i++) {
-      const line = lines[i]!
-      if (line.startsWith('## ') || line.startsWith('---')) break
+    for (const line of lines) {
       if (!line.startsWith('|')) {
         if (inTable) break // 表格结束
         continue
@@ -420,34 +450,62 @@ describe('变更记录滚动窗口与文档体积', () => {
     return rows
   }
 
-  it('两张变更记录表都不超过滚动窗口', () => {
+  it('两段标题都还在，且正文各留指向存档的指针', () => {
     const src = readFileSync(CLAUDE_MD, 'utf-8')
-    const recent = tableRows(src, '## 最近提交')
-    const revisions = tableRows(src, '### 修订历史')
 
-    // 标题一改名这两条就会静默恒真，所以先确认确实扫到了表。
-    expect(recent.length, '没有扫到「最近提交」的数据行——标题或表格写法可能已变').toBeGreaterThan(0)
-    expect(
-      revisions.length,
-      '没有扫到「修订历史」的数据行——标题或表格写法可能已变',
-    ).toBeGreaterThan(0)
+    for (const name of SECTIONS) {
+      const body = section(src, name)
+      // 标题一改名，下面每条断言都会静默恒真，所以先确认标题还在。
+      expect(body, `CLAUDE.md 里没有标题「${name}」——这段去哪了？`).not.toBeNull()
+      expect(
+        body?.join('\n'),
+        `「${name}」段正文没有指向 ${ARCHIVE} 的链接——表移出后，指针是唯一的去路`,
+      ).toContain(`](${ARCHIVE})`)
+    }
+  })
 
+  it('两张变更记录表都已移出 CLAUDE.md——段内不得再有数据行', () => {
+    const src = readFileSync(CLAUDE_MD, 'utf-8')
+
+    for (const name of SECTIONS) {
+      const body = section(src, name)
+      expect(body, `CLAUDE.md 里没有标题「${name}」`).not.toBeNull()
+
+      const rows = tableRows(body!)
+      expect(
+        rows.length,
+        `「${name}」段里还有 ${rows.length} 行表数据——表住在 CLAUDE.md 里就必然随每次改动增长` +
+          `（prettier 按最宽行补齐，一行代价 ≈ 最宽行宽 × 行数）；全表在 ${ARCHIVE}`,
+      ).toBe(0)
+    }
+  })
+
+  it('存档文件在位，且两张全表都还在里面', () => {
     expect(
-      recent.length,
-      `「最近提交」有 ${recent.length} 行，上限 ${MAX_ROWS}——挤掉最旧的一条`,
-    ).toBeLessThanOrEqual(MAX_ROWS)
-    expect(
-      revisions.length,
-      `「修订历史」有 ${revisions.length} 行，上限 ${MAX_ROWS}——` +
-        `挤掉的行搬进 ${ARCHIVE}（全表在那里），CLAUDE.md 只留简介`,
-    ).toBeLessThanOrEqual(MAX_ROWS)
+      existsSync(ARCHIVE_PATH),
+      `${ARCHIVE} 不存在——表移出 CLAUDE.md 之后，它是唯一的全量记录`,
+    ).toBe(true)
+
+    const src = readFileSync(ARCHIVE_PATH, 'utf-8')
+    for (const name of SECTIONS) {
+      const body = section(src, name)
+      expect(body, `${ARCHIVE} 里没有标题「${name}」`).not.toBeNull()
+
+      const rows = tableRows(body!)
+      expect(
+        rows.length,
+        `${ARCHIVE} 的「${name}」表只剩 ${rows.length} 行——CLAUDE.md 已不再保留任何条目，` +
+          `被挤出的行全落在这里，删空即内容不可恢复`,
+      ).toBeGreaterThan(0)
+    }
   })
 
   it('CLAUDE.md 保持在体积预算内', () => {
     const chars = readFileSync(CLAUDE_MD, 'utf-8').length
     expect(
       chars,
-      `CLAUDE.md 已 ${chars} 字符，预算 ${MAX_CHARS}——` + `把最旧的行搬进 ${ARCHIVE} 换取体积`,
+      `CLAUDE.md 已 ${chars} 字符，预算 ${MAX_CHARS}——` +
+        `新增解释性内容写进表外散文（表内一格会让全表各行补一次 pad）`,
     ).toBeLessThanOrEqual(MAX_CHARS)
   })
 })
