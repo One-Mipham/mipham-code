@@ -53,10 +53,29 @@ describe('Daemon Auth', () => {
   })
 
   it('rejects wrong-length token safely', () => {
-    // verifyToken uses timing-safe comparison via Bun.password.constantTimeCompare
     const token = generateToken()
-    // Wrong length should still fail safely
+    // Wrong length should still fail safely, and must not throw: the comparison
+    // primitive used here (node:crypto timingSafeEqual) raises RangeError when
+    // the two buffers differ in length, so the length check has to come first.
     expect(verifyToken(token, 'short')).toBe(false)
+    expect(verifyToken('short', token)).toBe(false)
+  })
+
+  it('does not depend on Bun.password', () => {
+    // Regression guard for the bug this test file shipped with: verifyToken
+    // called `Bun.password.constantTimeCompare`, which does not exist on bun
+    // 1.3.14 — so every authenticated remote request threw a TypeError (500).
+    // The vitest mock supplied the missing method, which is why nothing caught
+    // it. Removing Bun.password entirely must not change the answer.
+    const saved = (globalThis.Bun as Record<string, unknown>).password
+    try {
+      delete (globalThis.Bun as Record<string, unknown>).password
+      const token = generateToken()
+      expect(verifyToken(token, token)).toBe(true)
+      expect(verifyToken(token, 'wrong-token')).toBe(false)
+    } finally {
+      ;(globalThis.Bun as Record<string, unknown>).password = saved
+    }
   })
 })
 

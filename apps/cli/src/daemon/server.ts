@@ -140,6 +140,12 @@ export function createServer(config: ServerConfig): Server<WsData> {
     dingtalk,
   } = config
 
+  // Mutable: `POST /api/v1/auth/rotate` replaces the live token. Destructuring
+  // `token` above yields a const, so the rotate route could only ever write the
+  // new token to disk — the running server kept accepting the old one and
+  // rejected the one it had just handed out.
+  let activeToken = token
+
   const wsClients = new Map<string, Set<ServerWebSocket<WsData>>>()
 
   // Captured once: a later chdir must not move the boundary that callers'
@@ -362,6 +368,23 @@ export function createServer(config: ServerConfig): Server<WsData> {
   const server = Bun.serve<WsData>({
     port,
     hostname,
+    // The fetch handler below has no top-level try/catch, so anything it throws
+    // reaches Bun — and `development` is true unless NODE_ENV=production, which
+    // for a daemon bound to MIPHAM_BIND=0.0.0.0 means an unauthenticated peer
+    // gets Bun's development error overlay. Measured on bun 1.3.14: with the
+    // flag off the body is a 67,154-byte HTML application; with it on, 21 bytes
+    // of plain text.
+    //
+    // Not established, and so not claimed: that the overlay hands back the
+    // source. Re-requesting the failing URL with the overlay's own Accept
+    // header, guessing the on-disk path, and /bun:info all failed to return the
+    // thrown text in a local probe (every unmatched path returned the same
+    // shell). What is certain is the shape: a developer debugging UI, shipped
+    // with its own JS, served to whoever sent the request.
+    //
+    // Set explicitly rather than relying on NODE_ENV — how an exposed daemon
+    // answers an error must not depend on the user's environment.
+    development: false,
     async fetch(req, server) {
       // ── CORS preflight ──────────────────────────────
       const corsResponse = corsMiddleware(req)
@@ -397,7 +420,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
       }
 
       // ── Auth check ──────────────────────────────────
-      const authError = authMiddleware(req, token, server.requestIP(req)?.address)
+      const authError = authMiddleware(req, activeToken, server.requestIP(req)?.address)
       if (authError) return addCorsHeaders(authError, req)
 
       // Helper: create JSON response with CORS headers for external origins
@@ -691,6 +714,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
       // ── Auth: rotate token ───────────────────────────
       if (method === 'POST' && path === '/api/v1/auth/rotate') {
         const newToken = rotateToken(tokenPath)
+        activeToken = newToken
         return json({ ok: true, data: { token: newToken } })
       }
 

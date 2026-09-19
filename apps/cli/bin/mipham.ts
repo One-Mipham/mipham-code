@@ -1037,6 +1037,11 @@ async function runTokenCLI(): Promise<boolean> {
     console.log(`  Old token: ${oldTokens[0]?.slice(0, 16) ?? 'none'}...`)
     console.log(`  New token: ${newToken.slice(0, 16)}...`)
     console.log(`  Full token: ${newToken}`)
+    // This rewrites the token file only. A running daemon holds its token in
+    // memory, so it keeps accepting the old one until it restarts — saying so
+    // is the difference between a rotation the user believes happened and one
+    // that did.
+    console.log(`  Note: a running daemon keeps the previous token until it restarts.`)
     process.exit(0)
   }
 

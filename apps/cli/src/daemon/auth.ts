@@ -1,15 +1,7 @@
 // apps/cli/src/daemon/auth.ts
-import { randomBytes } from 'node:crypto'
+import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
-
-/**
- * bun-types@1.3.14 lacks constantTimeCompare in type definitions,
- * though the method exists at Bun 1.2+ runtime.
- */
-interface PasswordWithCompare {
-  constantTimeCompare(a: Buffer, b: Buffer): boolean
-}
 
 /**
  * Generate a 64-character hex token using cryptographically secure random bytes.
@@ -35,14 +27,23 @@ export function loadOrCreateToken(tokenPath: string): string {
 
 /**
  * Verify a provided token against the expected token.
- * Uses Bun's constant-time comparison to prevent timing attacks.
+ * Uses a constant-time comparison to prevent timing attacks.
+ *
+ * `Bun.password` has no `constantTimeCompare` — on bun 1.3.14 it is
+ * `['hash','hashSync','verify','verifySync']`. Calling it threw a TypeError, so
+ * every authenticated remote request got a 500 instead of the intended 200/403.
+ * Node's `timingSafeEqual` is the same primitive and works under Bun.
+ *
+ * Length is checked first because `timingSafeEqual` throws RangeError when the
+ * buffers differ in length; unequal length is itself a mismatch, so returning
+ * false early leaks nothing that comparing would not.
  */
 export function verifyToken(expected: string, provided: string): boolean {
   if (!provided || !expected) return false
-  return (Bun.password as unknown as PasswordWithCompare).constantTimeCompare(
-    Buffer.from(expected),
-    Buffer.from(provided),
-  )
+  const a = Buffer.from(expected)
+  const b = Buffer.from(provided)
+  if (a.length !== b.length) return false
+  return timingSafeEqual(a, b)
 }
 
 /**

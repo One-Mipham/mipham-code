@@ -122,6 +122,17 @@ describe('Daemon HTTP Server', () => {
     cleanDb()
   })
 
+  it('serves in production mode, not Bun development mode', () => {
+    // With `development` left at Bun's default, an exception thrown before the
+    // auth check is rendered as Bun's development error page — whose body
+    // carries the failing source frame and the absolute install path — to an
+    // unauthenticated peer. Asserting the flag is all this suite can do: the
+    // mock replaces Bun.serve with a Node http server, so the real error page
+    // never exists here. The behavioural claim ("the 500 body contains no
+    // source") is only verifiable against real Bun.
+    expect(server.development).toBe(false)
+  })
+
   it('GET /api/v1/health returns ok', async () => {
     const res = await fetch(apiUrl('/api/v1/health'))
     const body = await res.json()
@@ -282,5 +293,47 @@ describe('Daemon HTTP Server', () => {
       }),
     })
     expect(res.status).toBe(403)
+  })
+
+  // ── Remote peer: the auth branch that loopback short-circuits ────────
+  // Every other case in this file arrives as 127.0.0.1, which `authMiddleware`
+  // accepts before it ever reads the Authorization header. Those tests were
+  // green even while `verifyToken` threw for *every* caller — the daemon's auth
+  // path had no end-to-end coverage at all.
+
+  /** Run `fn` with the socket peer reported as `address` instead of loopback. */
+  async function asRemotePeer<T>(address: string, fn: () => Promise<T>): Promise<T> {
+    ;(globalThis as Record<string, unknown>).__miphamTestPeer = address
+    try {
+      return await fn()
+    } finally {
+      delete (globalThis as Record<string, unknown>).__miphamTestPeer
+    }
+  }
+
+  it('rejects a remote request with no Authorization header', async () => {
+    const status = await asRemotePeer('203.0.113.7', async () => {
+      const res = await fetch(apiUrl('/api/v1/sessions'))
+      return res.status
+    })
+    expect(status).toBe(401)
+  })
+
+  it('rejects a remote request with a wrong token', async () => {
+    const status = await asRemotePeer('203.0.113.7', async () => {
+      const res = await fetch(apiUrl('/api/v1/sessions'), {
+        headers: { Authorization: 'Bearer not-the-token' },
+      })
+      return res.status
+    })
+    expect(status).toBe(403)
+  })
+
+  it('accepts a remote request carrying the valid token', async () => {
+    const status = await asRemotePeer('203.0.113.7', async () => {
+      const res = await fetchApi('/api/v1/sessions')
+      return res.status
+    })
+    expect(status).toBe(200)
   })
 })

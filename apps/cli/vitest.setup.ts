@@ -9,7 +9,6 @@
  * (e.g. vi.spyOn(Bun, 'spawn')) to simulate different behaviours.
  */
 import { vi } from 'vitest'
-import { timingSafeEqual } from 'node:crypto'
 import { createServer as createHttpServer } from 'node:http'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
@@ -60,12 +59,17 @@ if (typeof globalThis.Bun === 'undefined') {
       stream: () => new ReadableStream(),
     })),
 
-    // Bun.password — constant-time comparison using Node.js crypto.timingSafeEqual
+    // Bun.password — hash/verify only.
+    //
+    // This mock used to supply `constantTimeCompare`, which the real runtime does
+    // NOT have: on bun 1.3.14 `Object.keys(Bun.password)` is
+    // ['hash','hashSync','verify','verifySync']. Supplying it here is what kept
+    // the suite green while the shipped `verifyToken` threw a TypeError against
+    // real Bun — a test double that was *more capable* than the thing it stood
+    // in for, and therefore hid the defect instead of catching it.
     password: {
-      constantTimeCompare: (a: Buffer, b: Buffer): boolean => {
-        if (a.length !== b.length) return false
-        return timingSafeEqual(a, b)
-      },
+      hash: vi.fn(() => Promise.resolve('$mocked$')),
+      verify: vi.fn(() => Promise.resolve(false)),
     },
 
     // Bun.write() — no-op
@@ -103,6 +107,7 @@ if (!(globalThis.Bun as Record<string, unknown>).serve) {
     (config: {
       port: number
       hostname: string
+      development?: boolean
       fetch: (req: Request, server: Record<string, unknown>) => Response | Promise<Response> | void
       websocket?: Record<string, unknown>
     }) => {
@@ -111,7 +116,8 @@ if (!(globalThis.Bun as Record<string, unknown>).serve) {
       const mockServer: Record<string, unknown> = {
         port: config.port,
         hostname: config.hostname,
-        development: false,
+        // Mirrors Bun's own default: development unless NODE_ENV=production.
+        development: config.development ?? process.env.NODE_ENV !== 'production',
         pendingRequests: 0,
         pendingWebSockets: 0,
         _http: null as ReturnType<typeof createHttpServer> | null,
@@ -135,8 +141,14 @@ if (!(globalThis.Bun as Record<string, unknown>).serve) {
           return false
         },
         requestIP(_req: Request): { address: string; family: string; port: number } | null {
-          // In test environment, return localhost — sufficient for rate limiter tests
-          return { address: '127.0.0.1', family: 'IPv4', port: 0 }
+          // Defaults to loopback, which is what the CLI's own daemon sockets
+          // look like. A test can set `globalThis.__miphamTestPeer` to a
+          // non-loopback address to exercise the paths that only run for remote
+          // peers — auth in particular, which loopback short-circuits before it
+          // ever reads the Authorization header.
+          const peer = (globalThis as Record<string, unknown>).__miphamTestPeer as
+            string | undefined
+          return { address: peer ?? '127.0.0.1', family: 'IPv4', port: 0 }
         },
       }
 
