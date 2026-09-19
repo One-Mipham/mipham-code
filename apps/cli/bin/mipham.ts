@@ -1037,11 +1037,13 @@ async function runTokenCLI(): Promise<boolean> {
     console.log(`  Old token: ${oldTokens[0]?.slice(0, 16) ?? 'none'}...`)
     console.log(`  New token: ${newToken.slice(0, 16)}...`)
     console.log(`  Full token: ${newToken}`)
-    // This rewrites the token file only. A running daemon holds its token in
-    // memory, so it keeps accepting the old one until it restarts — saying so
-    // is the difference between a rotation the user believes happened and one
-    // that did.
-    console.log(`  Note: a running daemon keeps the previous token until it restarts.`)
+    // This rewrites the token file only — it does NOT reach a running daemon,
+    // which holds its token in memory and therefore keeps AUTHENTICATING the
+    // old one. Different from POST /api/v1/auth/rotate, which swaps the live
+    // token immediately; saying which one this is, and how to finish it, is the
+    // difference between a rotation the user believes happened and one that did.
+    console.log(`  ⚠️  A running daemon still ACCEPTS the old token until it restarts.`)
+    console.log(`      Restart it to complete rotation: mipham daemon restart`)
     process.exit(0)
   }
 

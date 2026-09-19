@@ -4,9 +4,9 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.67.0
-> **最后更新**: 2026-09-19 — **用量显示改为向引擎取值，「分母」不再由 UI 自己写死** —— 六个命令各自硬编码一份 `200,000` 当上下文窗口分母、并印死「compaction at 90% (180,000 tokens)」，而引擎真值是**跟着模型走的**：`maxTokens` = 模型注册表声明的窗口（1M/256K/128K/32K 都有），阈值 `Math.max(0.9, 1 − 50000/w)` ⇒ 200K/500K 为 90%、**1M 为 95%**。故 1M 模型上显示**偏高约 5 倍**、压缩点也说错。改为一律问 `getMaxTokens()` / `getCompactionThreshold()`（后者早已存在、**零调用点**）。**一处不在代码里**：`/stats` 的 `200,000` 是**抄进 i18n 文案**的（`commands.stats.tokens`，en+zh 同改）⇒ 只改 `commands.ts` 会留下一条**陈旧渲染路径**，正是本仓库反复栽的「按拷贝修」。**判据不设豁免名单** —— 第一版测试按「我以为谁印窗口」手工二分、把 `/stats` 划了出去，于是**恰恰是它漏网**。测试 2823 → 2835（245 文件不变）。
-> **前一条（2.66.0）**: 2026-09-19 — **两张变更记录表整体移出本文件，正文只留指针** —— 治的是反复「超限 → 压缩 → 又超限」的病根：**一张每次改动都必须增长的表，住在一个有 40k 预算、每次会话整份加载的文件里**。放大机制是 prettier 把 markdown 表的列宽设成**最宽那一行**、全表按它补齐 ⇒ 新增一行的边际成本 ≈ 最宽行宽 × 行数，**不是该行自身的长度**（实测：一行写成 1,023 字符 ⇒ 整表 3,432 → 9,383）。收紧窗口治不了本 —— 窗口只约束行数、不约束行长，「挤掉最宽行换更窄的」这一手最多净省 2,102，而两段合计 **8,230 字符 = 全文 21.9%**。移出后本文件 **37,663 → 30,658**（−7,005），余量 **2,337 → 9,342**，且**从此不随每次改动增长**。**契约随之换向**（`tool-reference-integrity.test.ts`）：两段**零数据行** + 各段正文**含指向存档的链接** + 标题仍在（防改名让前两条静默恒真）+ **存档在位且两张全表各有数据行** —— 最后一条补的是一个真实的洞：此前**全仓库无任何测试读 `docs/claude-md-history.md`**（它当时只是报错文案里的一个字符串），删掉它是一条**全绿**的路径。四条负控红集互不相同（塞回一行 ⇒ 1 红、删指针 ⇒ 1 红、改标题名 ⇒ 3 红、清空存档 ⇒ 1 红）。**顺带把「逐字不丢」变真**：此前它对 2.62.0 已不成立（子句级实测 4/8 不在档），2.63.0–2.65.0 同样残缺（2/8、1/8、1/11）⇒ 本笔把三行窗口行逐字移入存档的「窗口行存档」。测试 2821 → 2823（245 文件不变）。
+> **版本**: 2.68.0
+> **最后更新**: 2026-09-19 — **`mipham token rotate` 的收尾提示改成它真正在做的事** —— 旧文只有一句「a running daemon keeps the previous token until it restarts」，读起来像「稍后会自己同步」，而这条命令（`bin/mipham.ts`）**只重写令牌文件**、跑在另一个进程里 ⇒ **正在运行的 daemon 仍然接受旧令牌**（它把令牌持在内存中），**新令牌也不被它接受**。这与 `POST /api/v1/auth/rotate` 是两条路：那条在内存里换掉 `activeToken` ⇒ 旧令牌**当场 403**（`auth-rotate.test.ts` 原有那条断言的正是它）。提示改为明说「仍然接受旧令牌」并给出动作 `mipham daemon restart`。**行为断言配了测试**：新增一条 describe 真跑 CLI 那条路径 —— 文件里旧令牌已消失，而同一个 daemon 仍认它、且不认新的；负控把 `.toBe(403)` 翻成 `.toBe(200)` 得 1 failed，判别力是真的。测试 2835 → 2836（245 文件不变）。
+> **前一条（2.67.0）**: 2026-09-19 — **用量显示改为向引擎取值，「分母」不再由 UI 自己写死** —— 六个命令各自硬编码一份 `200,000` 当上下文窗口分母、并印死「compaction at 90% (180,000 tokens)」，而引擎真值是**跟着模型走的**：`maxTokens` = 模型注册表声明的窗口（1M/256K/128K/32K 都有），阈值 `Math.max(0.9, 1 − 50000/w)` ⇒ 200K/500K 为 90%、**1M 为 95%**。故 1M 模型上显示**偏高约 5 倍**、压缩点也说错。改为一律问 `getMaxTokens()` / `getCompactionThreshold()`（后者早已存在、**零调用点**）。**一处不在代码里**：`/stats` 的 `200,000` 是**抄进 i18n 文案**的（`commands.stats.tokens`，en+zh 同改）⇒ 只改 `commands.ts` 会留下一条**陈旧渲染路径**，正是本仓库反复栽的「按拷贝修」。**判据不设豁免名单** —— 第一版测试按「我以为谁印窗口」手工二分、把 `/stats` 划了出去，于是**恰恰是它漏网**。测试 2823 → 2835（245 文件不变）。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -45,7 +45,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：2,835 测试（2,833 passed + 2 skipped，0 失败）
+测试：2,836 测试（2,834 passed + 2 skipped，0 失败）
 
 ---
 
@@ -82,7 +82,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 245 个测试文件，2835 个测试
+│   │   ├── test/               # 245 个测试文件，2836 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -108,7 +108,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（2835 个测试）
+pnpm test         # vitest run（2836 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~9 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -298,7 +298,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | core            | 73      | 1118     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
 | tools           | 25      | 383      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
-| daemon          | 34      | 212      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
+| daemon          | 34      | 213      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
 | ui              | 14      | 184      | commands / input / config-wizard / loop / skill-doctor                                                                                                                      |
 | agent           | 11      | 115      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
 | security        | 10      | 99       | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
@@ -316,7 +316,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integrity       | 8       | 52       | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 120      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **245** | **2835** | **0 失败** ✅（2833 passed + 2 skipped）                                                                                                                                    |
+| **合计**        | **245** | **2836** | **0 失败** ✅（2834 passed + 2 skipped）                                                                                                                                    |
 
 > **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 179 测试，自带
 > `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。
