@@ -190,6 +190,11 @@ describe('工具总数声明完整性', () => {
    *
    * 但**扫描面必须铺到全部活文档**：只扫「已经修好的那几个」的守卫是空转的，那正是
    * 本文件开头警告的静默恒真。
+   *
+   * **扫描面按「载体」枚举，不按扩展名**：上面那条 `endsWith('.md')` 只捞得到 Markdown，
+   * 于是任何**非 .md 的载体**同样写着工具总数却一路全绿 —— `infrastructure/vscode/package.json`
+   * 的 `description`（Marketplace 列表页正文）就这样带着 `30 tools` 活到 2026-09-20。
+   * 新增载体时把它加进下面这个数组，**不要**把判据放宽成「扫到就算」。
    */
   const POINT_IN_TIME_ROOT_DOCS = new Set(['CHANGELOG.md', 'PRODUCT.md'])
   const liveDocs = [
@@ -198,6 +203,8 @@ describe('工具总数声明完整性', () => {
       .map((f) => join(REPO_ROOT, f)),
     join(CLI_DIR, 'README.md'),
     join(REPO_ROOT, 'infrastructure', 'vscode', 'README.md'),
+    // 非 .md 载体：扩展清单。它进 VSIX、直接渲染在 Marketplace 列表页，与 README 同为公开文案。
+    join(REPO_ROOT, 'infrastructure', 'vscode', 'package.json'),
   ]
 
   it('活文档里的工具总数声明与注册表一致', () => {
