@@ -48,6 +48,18 @@ export class HookEngine {
   /** Health tracking per hook key (event[:toolName]) */
   private health = new Map<string, HookHealth>()
 
+  /**
+   * The workspace this engine's hooks run *for*.
+   *
+   * Settled at construction because one engine belongs to one session, not to one
+   * hook. The default is exactly right for the one-shot CLI, whose process cwd
+   * *is* the session cwd — but the daemon serves many sessions from one process,
+   * so it must pass the session's cwd. Left to the executor's own
+   * `process.cwd()`, every daemon hook would run in — and be told it is in — the
+   * directory the daemon happened to be started from.
+   */
+  constructor(private readonly cwd: string = process.cwd()) {}
+
   register(hook: HookDefinition): void {
     this.hooks.push(hook)
   }
@@ -307,6 +319,10 @@ export class HookEngine {
     const matching = this.hooks.filter(
       (h) => h.event === event && this.matchesMatcher(h.toolName, toolName),
     )
+
+    // Stamped here rather than at each `executeX`: the cwd is a property of the
+    // engine, and every context this engine hands out needs it.
+    ctx.cwd = this.cwd
 
     const result: HookResult = { allowed: true }
 

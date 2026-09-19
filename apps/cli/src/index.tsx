@@ -599,8 +599,10 @@ export async function runApp(options: RunOptions): Promise<void> {
   // A dead server (e.g. a 15s connect timeout) no longer blocks startup.
   const mcpConnectPromise = connectMcpServers(config.skills?.mcpServers ?? [], tools)
 
-  // Initialize hook engine — register skill-defined hooks
-  const hookEngine = new HookEngine()
+  // Initialize hook engine — register skill-defined hooks.
+  // CLI 是一次性进程，会话 cwd 就是 `process.cwd()`；写出来是为了与 daemon 那处
+  // （`daemon/engine-capabilities.ts` 传会话 cwd）成对照，别让哪边看起来像漏了。
+  const hookEngine = new HookEngine(process.cwd())
   for (const skill of skillsLoader.list()) {
     if (skill.hooks) {
       for (const hook of skill.hooks) {

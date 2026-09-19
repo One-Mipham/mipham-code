@@ -88,7 +88,9 @@ function skillsFor(cwd: string, paths?: string[]): SkillsLoader {
 function hooksFor(cwd: string, skills: SkillsLoader): HookEngine {
   const cached = hookCache.get(cwd)
   if (cached) return cached
-  const engine = new HookEngine()
+  // 会话 cwd 必须显式传：daemon 一个进程服务多个会话，`process.cwd()` 是它自己被
+  // 启动时所在的目录，不属于任何会话 —— hooks 会在那里跑，并且**被告知**它在那里。
+  const engine = new HookEngine(cwd)
   for (const skill of skills.list()) {
     for (const hook of skill.hooks ?? []) engine.register(hook)
   }

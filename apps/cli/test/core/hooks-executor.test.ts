@@ -10,7 +10,11 @@ vi.mock('node:os', async (importOriginal) => {
   }
 })
 
-type SpawnOptions = { env?: Record<string, string | undefined> }
+type SpawnOptions = {
+  env?: Record<string, string | undefined>
+  cwd?: string
+  input?: string
+}
 
 // Mock spawnSync so we can exercise the command-hook output path without a real
 // subprocess (and deterministically emit a large stderr). Captured rather than
@@ -87,5 +91,50 @@ describe('executeHook (command) — environment', () => {
     // …while the rest of the environment still arrives, so this cannot pass by
     // handing the hook an empty env.
     expect(options.env!.MIPHAM_HOOK_PROBE_NAME).toBe(BENIGN)
+  })
+})
+
+/**
+ * Which workspace a hook runs *for* is not the same question as which one this
+ * process was started in. `executeCommand` answered both with `process.cwd()`,
+ * which is right for the one-shot CLI and wrong for the daemon — it serves many
+ * sessions from one process, and its own cwd belongs to none of them.
+ *
+ * Two separate surfaces, both wrong in the same direction, so both are asserted:
+ * the `cwd` field the hook *reads* out of stdin, and the directory the hook
+ * *runs* in. Fixing only one would leave the stdin field claiming a workspace the
+ * hook is not actually in.
+ */
+describe('executeHook (command) — session cwd', () => {
+  const SESSION_CWD = '/sessions/probe'
+
+  beforeEach(() => {
+    spawnSyncMock.mockClear()
+  })
+
+  it('spawns in the session cwd and says so on stdin', async () => {
+    await executeHook(
+      { type: 'command', command: 'probe-hook', args: [] },
+      {
+        ...ctx,
+        cwd: SESSION_CWD,
+      },
+    )
+
+    const options = spawnSyncMock.mock.calls[0]![2] as SpawnOptions
+    expect(options.cwd).toBe(SESSION_CWD)
+
+    const stdin = JSON.parse(options.input!) as { cwd?: string }
+    expect(stdin.cwd).toBe(SESSION_CWD)
+    // …and not merely "defined": the wrong value is the specific one this fix is
+    // about, and `process.cwd()` is what it used to be.
+    expect(options.cwd).not.toBe(process.cwd())
+  })
+
+  it('falls back to this process’ cwd when the context carries none', async () => {
+    await executeHook({ type: 'command', command: 'probe-hook', args: [] }, ctx)
+
+    const options = spawnSyncMock.mock.calls[0]![2] as SpawnOptions
+    expect(options.cwd).toBe(process.cwd())
   })
 })

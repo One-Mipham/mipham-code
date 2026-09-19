@@ -411,6 +411,40 @@ describe('wireDaemonEngine — behaviour', () => {
     }
   })
 
+  // A hook runs *for a session*, so "where am I" has to mean that session's cwd.
+  // The daemon serves many sessions from one process, and `process.cwd()` is the
+  // directory the daemon itself was started in — which belongs to none of them.
+  // Observed through the handler rather than through a new getter: what matters
+  // is the value that actually reaches a hook, not one stored beside it.
+  it('D4d: hooks run for the session cwd, not the daemon’s own', async () => {
+    const cwd = makeWorkspace()
+    const registry = scriptedRegistry([
+      async function* () {
+        yield { type: 'stop' }
+      },
+    ])
+    const engine = newEngine(registry)
+    wireDaemonEngine(engine, { cwd, registry })
+
+    const seen: Array<string | undefined> = []
+    engine.getHookEngine()!.register({
+      event: 'PreToolUse',
+      toolName: 'DaemonCwdProbe',
+      handler: async (c) => {
+        seen.push(c.cwd)
+        return { allowed: true }
+      },
+    })
+
+    await engine.getHookEngine()!.executePreToolUse('DaemonCwdProbe', {}, 's1')
+
+    expect(seen).toEqual([cwd])
+    // The regression this pins: `makeWorkspace()` is a temp dir, so before the
+    // fix this read the *daemon's* cwd. Asserting `not.toBe` keeps the test
+    // honest if the two ever coincide by accident.
+    expect(seen[0]).not.toBe(process.cwd())
+  })
+
   it('D5: project agents load from the session cwd', () => {
     const cwd = makeWorkspace()
     mkdirSync(join(cwd, '.mipham', 'agents'), { recursive: true })

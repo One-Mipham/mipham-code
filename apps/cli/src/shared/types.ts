@@ -276,6 +276,14 @@ export interface HookDefinition {
 
 export interface HookContext {
   event: HookEvent
+  /**
+   * The workspace this invocation is for.
+   *
+   * Stamped by `HookEngine` from its own cwd; hooks read it out of stdin and run
+   * in it. It is the *session's* cwd, which is not `process.cwd()` in the daemon
+   * (many sessions, one process).
+   */
+  cwd?: string
   toolName?: string
   toolInput?: Record<string, unknown>
   toolResult?: ToolResult

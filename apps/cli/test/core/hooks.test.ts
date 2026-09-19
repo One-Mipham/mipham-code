@@ -527,4 +527,40 @@ describe('HookEngine', () => {
       expect(result.decision).toBeUndefined()
     })
   })
+
+  // ═══════════════════════════════════════════
+  // Session cwd
+  // ═══════════════════════════════════════════
+
+  describe('session cwd', () => {
+    it('stamps the engine cwd onto every hook context', async () => {
+      const engine = new HookEngine('/sessions/probe')
+      const seen: Array<string | undefined> = []
+      engine.register(
+        makeHook('PreToolUse', async (c) => {
+          seen.push(c.cwd)
+          return { allowed: true }
+        }),
+      )
+
+      await engine.executePreToolUse('Bash', {}, 's1')
+
+      expect(seen).toEqual(['/sessions/probe'])
+    })
+
+    it('defaults to this process’ cwd, which is the session cwd for the one-shot CLI', async () => {
+      const engine = new HookEngine()
+      const seen: Array<string | undefined> = []
+      engine.register(
+        makeHook('PreToolUse', async (c) => {
+          seen.push(c.cwd)
+          return { allowed: true }
+        }),
+      )
+
+      await engine.executePreToolUse('Bash', {}, 's1')
+
+      expect(seen).toEqual([process.cwd()])
+    })
+  })
 })

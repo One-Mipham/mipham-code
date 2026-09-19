@@ -115,9 +115,10 @@ async function executeCommand(cfg: HookConfig, ctx: HookContext): Promise<HookRe
     // A hook command is a child of this process, so a bare `spawnSync` would hand
     // it the whole environment — every provider key and bot secret included. Bash
     // has been masking these since E1; hooks were the remaining door, so they use
-    // the same policy. User level only: `HookContext` carries no cwd, so there is
-    // no session scope to read a project section from (and the registry already
-    // settled that a project section cannot be applied to a cross-session spawn).
+    // the same policy. Resolved at **user level** — the same choice E1 made for
+    // every spawn it could not scope to one session's project section
+    // (`tools/index.ts:45-48`). Scoping it to `ctx.cwd` now that this file has one
+    // would be a masking-policy change, not a plumbing fix, so it is not made here.
     const { loadUserCredentialMaskingConfig } = await import('../config/loader')
     const { filterEnv } = await import('./credential-masker')
     const masking = loadUserCredentialMaskingConfig()
@@ -126,14 +127,24 @@ async function executeCommand(cfg: HookConfig, ctx: HookContext): Promise<HookRe
         ? filterEnv(process.env as Record<string, string | undefined>, masking)
         : undefined
 
+    // Which workspace the hook is *for* is the session's business, not this
+    // process's — the daemon runs many sessions and its own cwd belongs to none of
+    // them. `HookEngine` stamps `ctx.cwd`; the fallback covers a context built by
+    // hand, and is exactly right for the one-shot CLI.
+    const cwd = ctx.cwd ?? process.cwd()
+
     // Use spawnSync with array args — no shell, no command injection.
     // Pass the Claude-protocol stdin JSON so scripts can read structured context.
-    const input = JSON.stringify(buildHookStdin(ctx, process.cwd()))
+    const input = JSON.stringify(buildHookStdin(ctx, cwd))
     const result = spawnSync(cfg.command, args, {
       timeout: (cfg.timeout ?? 60) * 1000,
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
       input,
+      // Both halves of "where is this hook": the directory it runs in, and the
+      // `cwd` it reads off stdin. Fixing only one leaves the hook told it is
+      // somewhere it is not.
+      cwd,
       // `undefined` = inherit, which is what node does by default; passing it
       // explicitly keeps the two branches visible at one site.
       env,
