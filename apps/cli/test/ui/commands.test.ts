@@ -109,6 +109,48 @@ describe('/mcp connect disclosure', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════
+// /mcp reconnect — the recovery path for a lost connection
+// ═══════════════════════════════════════════════════════════════
+
+describe('/mcp reconnect', () => {
+  // Imported lazily: importing the client statically would be hoisted above
+  // `mockExecSync`, and the node:child_process mock factory would run too early.
+  const loadClient = async () => (await import('../../src/mcp/client')).McpClient
+
+  it('routes to McpClient.reconnect rather than the status listing', async () => {
+    const client = (await loadClient()).getInstance()
+    const spy = vi.spyOn(client, 'reconnect').mockResolvedValue(undefined)
+    try {
+      const result = await getCommand('/mcp')!(mkCtx(), ['reconnect', 'myserver'])
+
+      expect(spy).toHaveBeenCalledWith('myserver')
+      expect(result.content).toContain('myserver')
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('reports a failed reconnect instead of throwing', async () => {
+    const client = (await loadClient()).getInstance()
+    const spy = vi.spyOn(client, 'reconnect').mockRejectedValue(new Error('no such server'))
+    try {
+      const result = await getCommand('/mcp')!(mkCtx(), ['reconnect', 'ghost'])
+
+      expect(result.content).toContain('ghost')
+      expect(result.content).toMatch(/no such server|failed/i)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('asks for a server name when none is given', async () => {
+    const result = await getCommand('/mcp')!(mkCtx(), ['reconnect'])
+
+    expect(result.content).toMatch(/usage/i)
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
 // Registry — all four bridge commands are registered
 // ═══════════════════════════════════════════════════════════════
 

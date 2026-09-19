@@ -4700,6 +4700,29 @@ const mcpCmd: CommandHandler = async (ctx, args) => {
     }
   }
 
+  // /mcp reconnect <name>
+  if (sub === 'reconnect') {
+    const name = args[1]
+    if (!name) return { content: 'Usage: /mcp reconnect <server-name>' }
+    try {
+      await client.reconnect(name)
+      const count = client.getTools(name).length
+      return {
+        content: `── MCP Reconnect: ${name} ──\n\nReconnected — ${count} tool(s) rediscovered.`,
+      }
+    } catch (err) {
+      return {
+        content: [
+          `── MCP Reconnect: ${name} ──`,
+          '',
+          `Failed: ${String(err)}`,
+          '',
+          `The server stayed disconnected. Check that it is reachable, then retry — or use /mcp connect ${name}.`,
+        ].join('\n'),
+      }
+    }
+  }
+
   // /mcp reload
   if (sub === 'reload') {
     return {
@@ -4749,6 +4772,7 @@ const mcpCmd: CommandHandler = async (ctx, args) => {
   lines.push('── Commands ──')
   lines.push('  /mcp connect <name>    Connect to a server (OAuth or stdio)')
   lines.push('  /mcp disconnect <name>  Disconnect from a server')
+  lines.push('  /mcp reconnect <name>  Reconnect a dropped server (with backoff)')
   lines.push('  /mcp reload            Disconnect all and reconnect')
   lines.push('')
   lines.push('── Protocol ──')

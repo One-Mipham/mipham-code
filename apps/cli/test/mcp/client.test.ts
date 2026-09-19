@@ -1,6 +1,51 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { McpClient } from '../../src/mcp/client'
 
+/** Minimal HTTP MCP endpoint: answers initialize / tools/list, then can go away. */
+function httpEndpoint(state: { reachable: boolean }) {
+  return async (_url: string, init?: RequestInit): Promise<Response> => {
+    if (!state.reachable) throw new TypeError('fetch failed')
+
+    const body = JSON.parse(String(init?.body ?? '{}')) as {
+      id?: number
+      method?: string
+    }
+    const reply = (result: unknown): Response =>
+      new Response(JSON.stringify({ jsonrpc: '2.0', id: body.id, result }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+
+    if (body.method === 'initialize') {
+      return reply({
+        protocolVersion: '2024-11-05',
+        capabilities: { tools: { listChanged: true } },
+        serverInfo: { name: 'http-mock', version: '1.0.0' },
+      })
+    }
+    if (body.method === 'tools/list') {
+      return reply({ tools: [{ name: 'echo', description: 'Echo', inputSchema: {} }] })
+    }
+    if (body.method === 'tools/call') {
+      const params = (JSON.parse(String(init?.body ?? '{}')) as { params?: { name?: string } })
+        .params
+      if (params?.name !== 'echo') {
+        return new Response(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: body.id,
+            error: { code: -32601, message: `Unknown tool: ${params?.name}` },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        )
+      }
+      return reply({ content: [{ type: 'text', text: 'Echo: hi' }] })
+    }
+    // notifications/initialized has no id and no response body.
+    return new Response('', { status: 202 })
+  }
+}
+
 describe('McpClient', () => {
   afterEach(async () => {
     await McpClient.getInstance().closeAll()
@@ -307,6 +352,47 @@ describe('McpClient', () => {
 
     it('ignores a notification for an unknown server', () => {
       expect(() => McpClient.getInstance().onToolsChanged('nope')).not.toThrow()
+    })
+  })
+
+  describe('liveness', () => {
+    it('reports a connection whose server went away as errored', async () => {
+      // Without this the connection keeps status 'connected' forever, so /mcp
+      // shows a green server that answers nothing — and only a reconnect can
+      // clear it.
+      const state = { reachable: true }
+      vi.stubGlobal('fetch', httpEndpoint(state))
+      try {
+        const client = McpClient.getInstance()
+        await client.connect({ name: 'flaky', url: 'http://localhost:8004/mcp' })
+        expect(client.getConnection('flaky')!.status).toBe('connected')
+
+        state.reachable = false
+        const result = await client.callTool('flaky', 'echo', { message: 'hi' })
+
+        expect(result.isError).toBe(true)
+        expect(client.getConnection('flaky')!.status).toBe('error')
+        expect(client.getConnectedServers()).not.toContain('flaky')
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+
+    it('keeps a reachable server connected when a tool call fails', async () => {
+      // Guard: a tool that errors is not a dead connection.
+      const state = { reachable: true }
+      vi.stubGlobal('fetch', httpEndpoint(state))
+      try {
+        const client = McpClient.getInstance()
+        await client.connect({ name: 'flaky', url: 'http://localhost:8004/mcp' })
+
+        const result = await client.callTool('flaky', 'nonexistent', {})
+
+        expect(result.isError).toBe(true)
+        expect(client.getConnection('flaky')!.status).toBe('connected')
+      } finally {
+        vi.unstubAllGlobals()
+      }
     })
   })
 })

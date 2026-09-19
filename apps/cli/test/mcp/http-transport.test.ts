@@ -129,6 +129,79 @@ describe('HttpTransport', () => {
       transport = new HttpTransport(fetchImpl)
       await expect(transport.sendRequest('tools/list')).rejects.toThrow('not connected')
     })
+
+    it('marks the transport disconnected when the server cannot be reached', async () => {
+      // fetch itself rejected: no HTTP response ever arrived, so the endpoint is
+      // not usable. Reporting "connected" here is what leaves /mcp showing a
+      // green server that answers nothing.
+      fetchImpl = async () => {
+        throw new TypeError('fetch failed')
+      }
+      transport = new HttpTransport(fetchImpl)
+      await transport.start('http://localhost:8004/mcp')
+
+      await expect(transport.sendRequest('tools/list')).rejects.toThrow('fetch failed')
+      expect(transport.isConnected()).toBe(false)
+    })
+
+    it('stays connected when the server answers with an HTTP error', async () => {
+      // Guard: a rejected status (401, 500) proves the endpoint IS reachable —
+      // only a request that never got an answer counts as a lost connection.
+      fetchImpl = async () => jsonResponse({ detail: 'nope' }, 401)
+      transport = new HttpTransport(fetchImpl)
+      await transport.start('http://localhost:8004/mcp')
+
+      await expect(transport.sendRequest('tools/list')).rejects.toThrow()
+      expect(transport.isConnected()).toBe(true)
+    })
+  })
+
+  describe('onNotification', () => {
+    it('dispatches a notification interleaved with the response', async () => {
+      // Streamable HTTP carries server-initiated notifications on the same SSE
+      // stream as the response to the request in flight.
+      fetchImpl = async () =>
+        sseResponse([
+          'data: {"jsonrpc":"2.0","method":"notifications/tools/list_changed"}\n\n',
+          'data: {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"echo"}]}}\n\n',
+        ])
+      transport = new HttpTransport(fetchImpl)
+      await transport.start('http://localhost:8004/mcp')
+
+      const seen: string[] = []
+      transport.onNotification((n) => seen.push(n.method))
+
+      const result = (await transport.sendRequest('tools/list')) as {
+        tools: Array<{ name: string }>
+      }
+
+      expect(seen).toEqual(['notifications/tools/list_changed'])
+      // The notification must not be mistaken for part of the response.
+      expect(result.tools).toHaveLength(1)
+    })
+
+    it('dispatches a notification alongside a chunked tool result', async () => {
+      // The other branch of the reassembler: several result frames plus a
+      // notification, where the notification previously counted as a chunk.
+      fetchImpl = async () =>
+        sseResponse([
+          'data: {"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"part1"}]},"isError":false}\n\n',
+          'data: {"jsonrpc":"2.0","method":"notifications/tools/list_changed"}\n\n',
+          'data: {"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"part2"}]},"isError":false}\n\n',
+        ])
+      transport = new HttpTransport(fetchImpl)
+      await transport.start('http://localhost:8004/mcp')
+
+      const seen: string[] = []
+      transport.onNotification((n) => seen.push(n.method))
+
+      const result = (await transport.sendRequest('tools/call')) as {
+        content: Array<{ type: string; text?: string }>
+      }
+
+      expect(seen).toEqual(['notifications/tools/list_changed'])
+      expect(result.content[0]!.text).toBe('part1part2')
+    })
   })
 
   describe('sendNotification', () => {

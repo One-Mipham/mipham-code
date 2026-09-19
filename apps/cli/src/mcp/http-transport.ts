@@ -12,7 +12,10 @@ type FetchFn = (input: string, init?: RequestInit) => Promise<Response>
  * result text (this is how Forge's `/mcp` streams progressive chunks). We
  * reassemble those slices so callers see one complete result.
  */
-function parseSseResponse(body: string): unknown {
+function parseSseResponse(
+  body: string,
+  onNotification?: (notification: JsonRpcNotification) => void,
+): unknown {
   const messages: Array<{ id?: number; result?: unknown; error?: JsonRpcError }> = []
 
   for (const block of body.split(/\n\n/)) {
@@ -21,7 +24,16 @@ function parseSseResponse(body: string): unknown {
       const payload = line.slice('data:'.length).trim()
       if (!payload) continue
       try {
-        messages.push(JSON.parse(payload))
+        const message = JSON.parse(payload) as JsonRpcResponse & JsonRpcNotification
+        // Server-initiated notifications (e.g. tools/list_changed) arrive on the
+        // same stream as the response to the request in flight. They carry no id
+        // and are not part of that response, so hand them off rather than letting
+        // them count as a result — or as a chunk of one.
+        if (message.method !== undefined && message.id === undefined) {
+          onNotification?.(message as JsonRpcNotification)
+          continue
+        }
+        messages.push(message)
       } catch {
         // Skip unparseable event lines
       }
@@ -111,6 +123,10 @@ export class HttpTransport implements Transport {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs)
 
+    // Did an HTTP response come back at all? A rejected fetch or a timeout means
+    // the endpoint is unreachable; an error *status* only means it said no.
+    let reachable = false
+
     try {
       const response = await this.fetchImpl(this.url, {
         method: 'POST',
@@ -123,6 +139,7 @@ export class HttpTransport implements Transport {
         signal: controller.signal,
         redirect: 'manual',
       })
+      reachable = true
 
       if (!response.ok) {
         let detail = `HTTP ${response.status}`
@@ -136,7 +153,7 @@ export class HttpTransport implements Transport {
 
       const contentType = response.headers.get('content-type') || ''
       if (contentType.includes('text/event-stream')) {
-        return parseSseResponse(await response.text())
+        return parseSseResponse(await response.text(), (n) => this.dispatchNotification(n))
       }
 
       const json = (await response.json()) as JsonRpcResponse
@@ -146,7 +163,15 @@ export class HttpTransport implements Transport {
       return json.result
     } catch (err) {
       if (controller.signal.aborted) {
+        // The endpoint never answered. Every later request would hang the same
+        // way, so the transport reports itself disconnected — the same state a
+        // stdio transport reaches when its process exits — until reconnect()
+        // replaces it.
+        this.closed = true
         throw requestTimeoutError(method, this.requestTimeoutMs)
+      }
+      if (!reachable) {
+        this.closed = true
       }
       throw err
     } finally {
@@ -180,6 +205,13 @@ export class HttpTransport implements Transport {
 
   onNotification(handler: NotificationHandler): void {
     this.notificationHandlers.push(handler)
+  }
+
+  /** Hand a server-initiated notification to every registered handler. */
+  private dispatchNotification(notification: JsonRpcNotification): void {
+    for (const handler of this.notificationHandlers) {
+      handler(notification)
+    }
   }
 
   async close(): Promise<void> {

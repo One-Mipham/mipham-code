@@ -187,6 +187,12 @@ export class McpClient {
     connection.toolsRefreshInFlight = true
     try {
       await this.applyToolsChanged(name)
+    } catch {
+      // A refresh against a server that has gone away must not surface as an
+      // unhandled rejection out of a timer callback — record the lost
+      // connection instead.
+      const current = this.connections.get(name)
+      if (current) this.markIfTransportLost(name, current)
     } finally {
       // Re-read: the server may have been disconnected while we were awaiting.
       const current = this.connections.get(name)
@@ -427,10 +433,28 @@ export class McpClient {
     try {
       return await conn.protocol.callTool(toolName, params)
     } catch (err) {
+      this.markIfTransportLost(serverName, conn)
       return {
         content: [{ type: 'text', text: t('errors.mcp_tool_error', { error: String(err) }) }],
         isError: true,
       }
     }
+  }
+
+  /**
+   * Downgrade a connection whose transport has gone away.
+   *
+   * A tool call can fail because the *tool* failed or because the server did, and
+   * only the transport can tell those apart: a closed transport answers nothing
+   * from now on. Without this the connection stays 'connected' and `/mcp` keeps
+   * showing green for a server that is gone.
+   */
+  private markIfTransportLost(name: string, connection: ActiveConnection): void {
+    if (connection.transport.isConnected()) return
+    if (connection.status === 'error') return
+
+    connection.status = 'error'
+    connection.error = 'Connection lost — the transport is no longer connected'
+    this.emit('disconnected', name, connection.error)
   }
 }
