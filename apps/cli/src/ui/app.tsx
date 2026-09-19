@@ -114,9 +114,18 @@ const PERMISSION_COLORS: Record<PermissionMode, string> = {
   bypassPermissions: 'red',
 }
 
+/** 预览截断按 UTF-16 码元计数，落点若正好夹在一个代理对中间，切完就留下
+ *  **半个** emoji（终端渲染成 U+FFFD）。落点是高代理时后退一个码元即可。 */
+export function truncateForDisplay(text: string, max: number): string {
+  if (text.length <= max) return text
+  const last = text.charCodeAt(max - 1)
+  const end = last >= 0xd800 && last <= 0xdbff ? max - 1 : max
+  return text.slice(0, end)
+}
+
 /** Format a tool's input parameters into a compact one-line detail string.
  *  Tool display names follow Claude Code convention: Write/Edit → Update. */
-function formatToolDetail(name: string, input: Record<string, unknown>): string {
+export function formatToolDetail(name: string, input: Record<string, unknown>): string {
   switch (name) {
     case 'Bash':
       return sanitizeForDisplay((input.command as string) || '')
@@ -125,13 +134,13 @@ function formatToolDetail(name: string, input: Record<string, unknown>): string 
     case 'Write':
       return (input.file_path as string) || '' // displayed as "Update" in chat
     case 'Edit':
-      return `${(input.file_path as string) || ''}: ${((input.old_string as string) || '').slice(0, 60)}` // displayed as "Update" in chat
+      return `${(input.file_path as string) || ''}: ${truncateForDisplay((input.old_string as string) || '', 60)}` // displayed as "Update" in chat
     case 'Grep':
       return (input.pattern as string) || ''
     case 'Glob':
       return (input.pattern as string) || ''
     case 'Agent':
-      return `${(input.subagent_type as string) || 'general'}, "${((input.description as string) || (input.prompt as string) || '').slice(0, 80)}"`
+      return `${(input.subagent_type as string) || 'general'}, "${truncateForDisplay((input.description as string) || (input.prompt as string) || '', 80)}"`
     case 'WebSearch':
       return (input.query as string) || ''
     case 'WebFetch':
@@ -139,7 +148,7 @@ function formatToolDetail(name: string, input: Record<string, unknown>): string 
     case 'Task':
       return `"${(input.subject as string) || ''}"`
     default:
-      return JSON.stringify(input).slice(0, 80)
+      return truncateForDisplay(JSON.stringify(input), 80)
   }
 }
 

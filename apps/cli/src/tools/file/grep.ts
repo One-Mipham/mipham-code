@@ -54,6 +54,27 @@ export function isTopLevelScope(searchPath: string, home = homedir()): boolean {
   return searchPath === home || searchPath === parse(searchPath).root
 }
 
+/** 把未知异常变成一句可读的原因（`code` 才是可操作的部分：ENOENT / EAGAIN）。 */
+function describeError(err: unknown): string {
+  if (err instanceof Error) {
+    const code = (err as { code?: unknown }).code
+    return typeof code === 'string' ? `${code}: ${err.message}` : err.message
+  }
+  return String(err)
+}
+
+/**
+ * 只有「rg 不在 PATH」才该回退到 `find`。别的异常（EAGAIN / EPERM / spawn
+ * 失败）说明 rg 装了却起不来 —— 那不是回退能解决的问题，再起一个 find 只会
+ * 换来第二个失败，而错误信息里的「去装 ripgrep」会把排查方向整条带偏。
+ */
+function isMissingBinary(err: unknown): boolean {
+  if (!(err instanceof Error)) return false
+  if ((err as { code?: unknown }).code === 'ENOENT') return true
+  // 有些抛出方只给句子不给 code。
+  return /ENOENT|not found|no such file or directory/i.test(err.message)
+}
+
 export function createGrepTool(credentialConfig?: CredentialMaskingConfig): ToolDefinition {
   return {
     name: 'Grep',
@@ -139,7 +160,14 @@ export function createGrepTool(credentialConfig?: CredentialMaskingConfig): Tool
             'rg error (exit 2) — likely permission denied on a large/protected tree. ' +
             'Narrow scope with "path" (project directory) and "include".',
         }
-      } catch {
+      } catch (err) {
+        if (!isMissingBinary(err)) {
+          return {
+            success: false,
+            content: '',
+            error: `ripgrep failed: ${describeError(err)}`,
+          }
+        }
         // rg not installed → fall through to grep (find + grep fallback)
       }
 
@@ -197,11 +225,13 @@ export function createGrepTool(credentialConfig?: CredentialMaskingConfig): Tool
             (stderr.trim() ? `: ${stderr.trim().slice(0, 500)}` : '') +
             '. Install ripgrep: brew install ripgrep',
         }
-      } catch {
+      } catch (err) {
+        // 这里回退自己起不来 —— 报回退的真实原因，别再断言「rg 没装」
+        // （走到这一步的路径本来就有「rg 没装」和「装了但起不来」两种）。
         return {
           success: false,
           content: '',
-          error: 'grep failed. Install ripgrep: brew install ripgrep',
+          error: `Search failed to start: ${describeError(err)}`,
         }
       }
     },

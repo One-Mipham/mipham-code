@@ -609,6 +609,25 @@ describe('Glob tool execution', () => {
     expect(result.success).toBe(true)
     expect(result.content).toContain('single.js')
   })
+
+  it('marks the 500-match cap as truncated instead of dropping matches silently', async () => {
+    // 505 个匹配 ⇒ 必然撞上限。截断本身不是缺陷，**不告知**才是：模型会把
+    // 「只看到 500 条」当成「一共就 500 条」，而同一份代码里 Grep 特意加了
+    // `(truncated)` 标记。判据 = 既看到 500 条正文、也看到被截的说明。
+    for (let i = 0; i < 505; i++) writeFileSync(join(tmpDir, `f${i}.txt`), '')
+    const result = await globTool.execute({ pattern: '*.txt', path: tmpDir }, ctx)
+    expect(result.success).toBe(true)
+    expect(result.content.split('\n').filter((line) => line.endsWith('.txt'))).toHaveLength(500)
+    expect(result.content).toContain('(truncated')
+  })
+
+  it('does not claim truncation when every match fits', async () => {
+    // 反方向：小结果集不得出现标记 —— 一条永远为真的提示等于没有提示。
+    writeFileSync(join(tmpDir, 'only.txt'), '')
+    const result = await globTool.execute({ pattern: '*.txt', path: tmpDir }, ctx)
+    expect(result.success).toBe(true)
+    expect(result.content).not.toContain('(truncated')
+  })
 })
 
 // ============================================================
@@ -759,6 +778,41 @@ describe('Grep rg exit 2 (error) does not fall back to find', () => {
     const result = await grepTool.execute({ pattern: 'needle', path: tmpDir }, ctx)
     expect(result.success).toBe(false)
     expect(result.error).toContain('rg error (exit 2)')
+  })
+})
+
+describe('Grep error attribution (rg 起不来 ≠ rg 没装)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('names the real cause when rg fails to start for a reason other than ENOENT', async () => {
+    // rg 装了却起不来（资源耗尽之类）时，回退到 find 只会换来第二个失败，
+    // 而错误信息里的「装 ripgrep 就好了」会把排查方向整条带偏。
+    vi.spyOn(Bun, 'spawn').mockImplementation((cmd: string[]) => {
+      if (cmd[0] === 'rg') throw Object.assign(new Error('spawn EAGAIN'), { code: 'EAGAIN' })
+      throw new Error(`unexpected spawn of ${cmd[0]} — 非 ENOENT 失败不得回退到 find`)
+    })
+
+    const result = await grepTool.execute({ pattern: 'needle', path: tmpDir }, ctx)
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('EAGAIN')
+    expect(result.error).not.toContain('Install ripgrep')
+  })
+
+  it('names the real cause when the find fallback itself cannot start', async () => {
+    // rg 确实不在 PATH（ENOENT）⇒ 走回退；回退也起不来时，报的是**回退**的
+    // 真实原因，而不是一句「去装 ripgrep」（那时 ripgrep 根本不是问题所在）。
+    vi.spyOn(Bun, 'spawn').mockImplementation((cmd: string[]) => {
+      if (cmd[0] === 'rg')
+        throw Object.assign(new Error('Executable not found'), { code: 'ENOENT' })
+      throw new Error('EMFILE: too many open files')
+    })
+
+    const result = await grepTool.execute({ pattern: 'needle', path: tmpDir }, ctx)
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('EMFILE')
+    expect(result.error).not.toContain('Install ripgrep')
   })
 })
 
