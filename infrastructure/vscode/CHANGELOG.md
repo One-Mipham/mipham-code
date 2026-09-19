@@ -3,6 +3,29 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.81.9 — 2026-09-19
+
+- Version sync with Mipham Code CLI 0.81.9
+- Security: `Bash(...)` allow rules were granted when **any** segment of a compound
+  command matched, so `Bash(git:*)` authorised `git status && rm -rf ./src` without
+  a prompt; allow rules now require **every** segment to match
+- Security: the invisible-Unicode strip set was written as 16 literal characters
+  (unreviewable in a diff) and was missing the tag block, which can hide arbitrary
+  text inside a command; rewritten as escapes, set completed, boundaries pinned
+- Fixed: an empty `tool_result.content` is rejected by the API and takes the **whole
+  request — history included** — with it, so one empty block made a conversation
+  permanently unsendable
+- Fixed: project rules were silently dead in worktree sessions — `.mipham/` is
+  gitignored and worktrees live under `.mipham/worktrees/`, so the real checkout
+  never had that directory
+- Fixed: `/upgrade` reported "already up to date" when the registry was unreachable;
+  "never asked" and "asked, you are current" were the same value
+- Fixed: three state files accepted any valid JSON regardless of shape, so `{}` /
+  `null` / `123` took down whole commands; reads now validate shape at the entry
+  point, and the writes are atomic
+- Fixed: `/bg` and `/mcp disconnect` both reported success for work they had not
+  done (prompt never reached the model; tools stayed callable)
+
 ## 0.81.8 — 2026-09-18
 
 - Version sync with Mipham Code CLI 0.81.8
