@@ -1,4 +1,5 @@
 import { resolve } from 'node:path'
+import { existsSync } from 'node:fs'
 import type { ToolDefinition, CredentialMaskingConfig } from '../../shared/index.ts'
 import { sanitizeCommand } from '../../shared/sanitize.ts'
 import { DANGEROUS_GIT_PATTERNS } from './git.ts'
@@ -363,7 +364,22 @@ export function createBashTool(credentialConfig?: CredentialMaskingConfig): Tool
     },
     async execute(params, ctx) {
       const command = params.command as string
-      const timeout = Math.min((params.timeout as number) || 120_000, 600_000)
+      const requestedTimeout = params.timeout as number | undefined
+      // A negative timeout is not "no timeout". `Math.min(-1 || 120_000, 600_000)` is `-1`,
+      // and `setTimeout(fn, -1)` is clamped to **1 ms** — so the command is group-killed on
+      // the spot and reported as a bare `Exit code 137` (measured with real bun). Node does
+      // warn, but only on stderr, where the model never sees it. Refuse rather than silently
+      // reinterpret; `0`, `NaN` and `undefined` already fall back to the default via `||`.
+      if (typeof requestedTimeout === 'number' && requestedTimeout < 0) {
+        return {
+          success: false,
+          content: '',
+          error:
+            `timeout must not be negative (got ${requestedTimeout}ms). ` +
+            `Omit it for the 120000ms default.`,
+        }
+      }
+      const timeout = Math.min(requestedTimeout || 120_000, 600_000)
 
       // P0-4: Worktree isolation — block cd escape attempts
       // 标记取自 core/paths.ts：新目录与历史 .claude/worktrees/ 都认，
@@ -415,7 +431,14 @@ export function createBashTool(credentialConfig?: CredentialMaskingConfig): Tool
         const stdoutRead = new Response(proc.stdout).text()
         const stderrRead = new Response(proc.stderr).text()
 
-        const timer = setTimeout(() => killProcessGroup(proc.pid), timeout)
+        // Remember whether we were the ones who killed it: the exit code is 137 and
+        // stderr is empty either way, so the model cannot tell a timeout from the
+        // command's own failure (measured with real bun — both are `Exit code 137: `).
+        let timedOut = false
+        const timer = setTimeout(() => {
+          timedOut = true
+          killProcessGroup(proc.pid)
+        }, timeout)
         const exitCode = await proc.exited
         clearTimeout(timer)
 
@@ -470,7 +493,9 @@ export function createBashTool(credentialConfig?: CredentialMaskingConfig): Tool
           return {
             success: false,
             content: errorContent,
-            error: `Exit code ${exitCode}: ${stderr.slice(0, 1_000)}`,
+            error: timedOut
+              ? `Command timed out after ${timeout}ms (killed): ${stderr.slice(0, 1_000)}`
+              : `Exit code ${exitCode}: ${stderr.slice(0, 1_000)}`,
           }
         }
 
@@ -480,10 +505,19 @@ export function createBashTool(credentialConfig?: CredentialMaskingConfig): Tool
         }
         return { success: true, content: successContent }
       } catch (err) {
+        // A missing `cwd` and a missing `bash` both surface as the *same*
+        // `ENOENT: no such file or directory, posix_spawn 'bash'` (measured), which reads
+        // as "bash is not installed" and points the model at the wrong root cause. The cwd
+        // is the one we can actually check — so check it, and only claim it when it is
+        // genuinely absent, or a truly missing bash would get relabelled as a bad cwd.
+        const code = (err as NodeJS.ErrnoException | undefined)?.code
         return {
           success: false,
           content: '',
-          error: `Command failed: ${String(err)}`,
+          error:
+            code === 'ENOENT' && !existsSync(ctx.cwd)
+              ? `Working directory does not exist: ${ctx.cwd}`
+              : `Command failed: ${String(err)}`,
         }
       }
     },
