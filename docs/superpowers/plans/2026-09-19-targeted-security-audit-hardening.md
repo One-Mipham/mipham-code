@@ -364,13 +364,56 @@ N-C 摘掉 `env` 传参 ⇒ **1 红**。
 **两条未修观察（如实记，不在本项范围）**：
 
 1. `hooksFor` 生成 hook stdin 与 `spawnSync` 的隐式 cwd 用的都是 `process.cwd()`，而这里本该是**会话 cwd**
-   —— 与 E8 同族（`process.cwd()` 之于 `ctx.cwd`），且是既有偏差。
-2. `/hooks` 在未信任状态下仍列项目 hooks，且**不标注**其已被闸住。
+   —— 与 E8 同族（`process.cwd()` 之于 `ctx.cwd`），且是既有偏差。**已于 2.64.0 落地**（见下节）。
+2. `/hooks` 在未信任状态下仍列项目 hooks，且**不标注**其已被闸住。**截至 2.64.0 仍开放。**
 
 **本笔同时是排版事故的现场（同族第二次栽，如实记）**：修订历史新行第一次写成「单元格内嵌竖线」⇒
 markdown 表把它读成列分隔符，prettier 把整表重排、`CLAUDE.md` 39,223 → **40,826，越过 40k 上限**。
 改法是不在单元格里放竖线（写成「或……二者其一」），并把判据定成**竖线根数 + `diff --stat` 零 deletion**。
 落定 39,796 字符（余 204）。
+
+### 观察② 落地状态（2026-09-19，一笔 `b3c0dd41`，`CLAUDE.md` 2.64.0）
+
+缺陷形状与 E8 同族：**判据拿的是近似的替身**。`executeCommand` 用 `process.cwd()` 同时回答了两个问题，
+而两个都不属于本进程：
+
+- hook **在哪个目录跑** —— `spawnSync` 没给 `cwd`，于是继承本进程的；
+- hook **被告知**自己在哪 —— stdin 的 `cwd` 字段（`buildHookStdin`）也填它。
+
+一次性 CLI 上两边恰好都对（会话 cwd 就是 `process.cwd()`）。daemon 一个进程服务多个会话，
+`process.cwd()` 是它自己被启动时所在的目录、**不属于任何会话** ⇒ 每个 daemon hook 都落在那里跑、并读到那里。
+
+**改法是接线，不是改 `hooksFor` 的参数。** 会话 cwd 一路都是拿得到的
+（`server.ts` `getOrCreateEngine(sessionId, session.cwd, …)` → `wireDaemonEngine(engine, { cwd })` →
+`hooksFor(opts.cwd, skills)`），只有 `executeCommand` 把它重新推导成了进程 cwd。
+`HookContext` 增可选 `cwd`，由 `HookEngine` 在 `runHooks` **一处**盖章 —— ctx 由 13 个 `executeX`
+各自构造，逐处写必然漏掉几个；而 cwd 是**引擎**的属性，不是某次调用或某个 hook 的属性。
+两个构造点各自表态：daemon 传会话 cwd，CLI 显式传 `process.cwd()`（写出来是为了与 daemon 那处成对照）。
+
+**两份副本同改**：`apps/cli/src/shared/types.ts` 是 `packages/shared/` 的 vendored 副本，而 `src/**`
+import 前者、测试 import 后者 —— 只改一份 typecheck 立刻红（本次实际发生）。`packages/shared` 是发布出去的那份。
+
+**判据是「两半都断言」**：跑在哪 + 被告知在哪。只修一半等于让 hook 被告知一个它不在的地方 ——
+这正是本条缺陷的形状，所以只断「`cwd` 存在」不够；`hooks-executor.test.ts` 另反向断言它**不是** `process.cwd()`。
+
+**三条负控红集互不相同**（每条从同一份干净快照起、先断言匹配数再落补丁，还原后逐文件 SHA-256 比对）：
+撤掉 `spawnSync` 的 `cwd` ⇒ **2 红**；撤掉 `runHooks` 的盖章 ⇒ **3 红**；daemon 退回默认构造 ⇒ **1 红**
+（正是 D4d ⇒ 该用例真的钉在 daemon 的传参上，不是被引擎默认值顺带满足的）。
+
+**过程中一次事故（如实记）**：负控脚本第一版在**每次**运行开头做备份 ⇒ B 备份的是 A 打过补丁的盘、
+C 又备份了两者，红集 2 → 5 → 5，B 与 C 不可区分（「三条互不相同」当时是假的）；还原循环也写错，
+三个备份全写进同一个文件，把 A、B 的补丁**留在了盘上**。重写为「一次快照 + 每条只落一个补丁 + 还原后
+SHA-256 比对」后才拿到互不相同的红集。
+
+**一条没写的用例（如实记）**：「不覆盖调用方已设的 `ctx.cwd`」在公开 API 上不可达
+（`executePreToolUse` 不接受 cwd），断言无法失败 —— 与其写一条永远绿的用例，不如不加；
+盖章因此是普通赋值而非 `??=`，也没有为此引入无人调用的分支。
+
+**未修观察（如实记，不属本笔范围）**：hook 的凭据掩码仍取**用户级**配置，而交互式 CLI 的 Bash 拿的是
+**项目级**（`index.tsx` 自己的 ctx）。`HookContext` 现在带 cwd 了，按会话收敛在技术上成为可能 ——
+那是**掩码策略**的改动（多会话进程里项目段该不该施加于 spawn），不是接线，另案。
+
+**剩下一件**：观察② 之外的两个观察里，`/hooks` 在未信任状态下仍列项目 hooks 且不标注 —— 仍开放。
 
 ## 三、已被本轮验证「仍然成立」的旧修复（不重报，仅备查）
 
