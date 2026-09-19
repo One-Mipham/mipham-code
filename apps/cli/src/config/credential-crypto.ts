@@ -5,6 +5,7 @@ import {
   mkdirSync,
   chmodSync,
   copyFileSync,
+  statSync,
 } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
@@ -51,18 +52,40 @@ export function getCredentialKey(keyDir: string): Buffer {
 }
 
 /**
+ * Read the key, tightening a mode that drifted open. A crash between a bare
+ * write and its follow-up `chmod`, or a key left by an older version, stays
+ * world-readable forever otherwise — the read path is the only place that
+ * would ever notice.
+ */
+function readKeyFile(keyPath: string): Buffer {
+  if ((statSync(keyPath).mode & 0o777) !== 0o400) chmodSync(keyPath, 0o400)
+  return readFileSync(keyPath)
+}
+
+/**
  * Load the 32-byte encryption key from `keyPath`, creating a fresh random key
  * (with owner-only read permissions) on first use.
  */
 export function getOrCreateKey(keyPath: string): Buffer {
   if (existsSync(keyPath)) {
-    return readFileSync(keyPath)
+    return readKeyFile(keyPath)
   }
   const key = randomBytes(KEY_LENGTH)
-  mkdirSync(dirname(keyPath), { recursive: true })
-  writeFileSync(keyPath, key)
-  chmodSync(keyPath, 0o400)
-  return key
+  mkdirSync(dirname(keyPath), { recursive: true, mode: 0o700 })
+  try {
+    // `wx`, not a bare write: this key is the only thing that can decrypt every
+    // `enc:v1:` value under it, so overwriting a key another process just wrote
+    // is irreversible and silent — from then on each side holds ciphertext the
+    // other cannot open. Making *this* attempt fail is the cheap direction.
+    // (Residual window: a racing writer may still be mid-write, in which case
+    // the re-read below can catch a short key. Closing that needs locking, not
+    // a flag, and is not what this guard is for.)
+    writeFileSync(keyPath, key, { mode: 0o400, flag: 'wx' })
+    return key
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
+    return readKeyFile(keyPath)
+  }
 }
 
 /** Encrypt plaintext with AES-256-GCM. Returns `base64(iv || authTag || ciphertext)`. */
