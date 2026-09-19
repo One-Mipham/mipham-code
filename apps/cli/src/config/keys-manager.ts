@@ -32,7 +32,13 @@ function loadKeys(): KeysData {
   if (!existsSync(KEYS_FILE)) return {}
   try {
     const raw = readFileSync(KEYS_FILE, 'utf-8')
-    return JSON.parse(raw) as KeysData
+    const parsed: unknown = JSON.parse(raw)
+    // Valid JSON is not necessarily a key map. `null` throws straight out of
+    // `Object.entries` in `list()` — i.e. on the startup path, not in some corner
+    // — and an array or a scalar yields entries with none of the fields, which
+    // reads as "not expired" instead of as corrupt.
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    return parsed as KeysData
   } catch {
     return {}
   }

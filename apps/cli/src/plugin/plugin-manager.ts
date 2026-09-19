@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { execFileSync } from 'node:child_process'
 import { validatePlugin } from './plugin-validator'
+import { atomicWriteFileSync } from '../shared/atomic-write'
 
 const PLUGIN_DIR = join(homedir(), '.mipham', 'plugins')
 
@@ -287,7 +288,12 @@ export class PluginManager {
   private loadState(): void {
     try {
       if (existsSync(this.statePath)) {
-        this.plugins = JSON.parse(readFileSync(this.statePath, 'utf-8'))
+        const parsed: unknown = JSON.parse(readFileSync(this.statePath, 'utf-8'))
+        // Parsing is not validating: `{}` / `null` / `"x"` are all valid JSON and
+        // all make the readers below throw (`.find`/`.filter`/`.map` on a
+        // non-array), so a file that is merely *shaped* wrong took down every
+        // plugin command instead of starting empty.
+        this.plugins = Array.isArray(parsed) ? (parsed as InstalledPlugin[]) : []
       }
     } catch {
       this.plugins = []
@@ -295,6 +301,11 @@ export class PluginManager {
   }
 
   private saveState(): void {
-    writeFileSync(this.statePath, JSON.stringify(this.plugins, null, 2), 'utf-8')
+    // Was a bare writeFileSync: an interrupted write left unparseable JSON, and
+    // `loadState` swallows that into `[]` ⇒ the installed-plugin list silently
+    // vanished. Atomic write means a reader sees the old list or the new one.
+    atomicWriteFileSync(this.statePath, JSON.stringify(this.plugins, null, 2) + '\n', {
+      mode: 0o600,
+    })
   }
 }

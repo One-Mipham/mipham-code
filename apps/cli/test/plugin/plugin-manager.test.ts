@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdirSync, writeFileSync, rmSync, readdirSync, existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { PluginManager } from '../../src/plugin/plugin-manager'
@@ -206,6 +206,65 @@ describe('PluginManager', () => {
 // 对「装插件」这个动作来说那是我们不想要的副作用：插件本身只需
 // 要是磁盘上的一份文件。本组把 argv 形状钉住，防它再被改回去。
 // ============================================================
+
+describe('PluginManager — state.json 的形状与原子写', () => {
+  let dir: string
+
+  beforeEach(() => {
+    dir = join(TEST_HOME, 'state-' + Math.random().toString(36).slice(2, 8))
+    mkdirSync(dir, { recursive: true })
+  })
+
+  it('state.json 是合法 JSON 但不是数组时启动为空列表，而不是抛', () => {
+    // `{}` / `null` / `"x"` 都能被 JSON.parse 接受，`loadState` 原先直接把它当
+    // `InstalledPlugin[]` 收下 ⇒ 之后任何 `.find`/`.filter` 都抛，整条插件命令
+    // 挂掉。判据取「构造 + 读取不抛且为空」，不是「文件被删掉」。
+    for (const bad of ['{}', 'null', '"x"', '123']) {
+      writeFileSync(join(dir, 'state.json'), bad, 'utf-8')
+      const m = new PluginManager(dir)
+      expect(m.list()).toEqual([])
+      expect(m.getEnabled()).toEqual([])
+    }
+  })
+
+  it('合法数组仍然照常加载（正控：上面的判据不是恒真的）', () => {
+    writeFileSync(
+      join(dir, 'state.json'),
+      JSON.stringify([
+        {
+          name: 'kept',
+          version: '1.0.0',
+          path: '/tmp/kept',
+          enabled: true,
+          installedAt: new Date().toISOString(),
+        },
+      ]),
+      'utf-8',
+    )
+
+    expect(new PluginManager(dir).list().map((p) => p.name)).toEqual(['kept'])
+  })
+
+  it('写入是原子的（换 inode），且不留临时文件', () => {
+    const m = new PluginManager(dir)
+    m.install(createTempPlugin('first'))
+    const statePath = join(dir, 'state.json')
+    expect(existsSync(statePath)).toBe(true)
+
+    // 裸 writeFileSync 是原地截断重写 ⇒ inode 不变；先写同目录临时文件再 rename
+    // 才换 inode。权限与「无 .tmp 残骸」都证明不了这一点。
+    const before = statSync(statePath).ino
+    m.install(createTempPlugin('second'))
+    expect(
+      m
+        .list()
+        .map((p) => p.name)
+        .sort(),
+    ).toEqual(['first', 'second']) // 正控：内容真变了
+    expect(statSync(statePath).ino).not.toBe(before)
+    expect(readdirSync(dir).filter((f) => f.includes('.tmp'))).toEqual([])
+  })
+})
 
 describe('installFromNpm 的安装命令', () => {
   let npmPluginDir: string

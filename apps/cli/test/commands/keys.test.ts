@@ -86,6 +86,26 @@ describe('Keys Commands', () => {
 })
 
 describe('KeyManager', () => {
+  it('keys.json 存的是合法 JSON 但不是一个键表时按空处理，而不是抛', () => {
+    // `null` 是这里最要命的一个：`JSON.parse` 接受它，`loadKeys` 原先直接当
+    // `KeysData` 返回，然后 `Object.entries(null)` 在 **list() 里**抛 —— 也就是
+    // 启动路径上，不是某个角落。/keys 一敲就崩。
+    const keysFile = join(TEST_HOME, '.mipham', 'keys.json')
+    mkdirSync(join(TEST_HOME, '.mipham'), { recursive: true })
+
+    for (const bad of ['null', '"x"', '[1,2]', '7']) {
+      writeFileSync(keysFile, bad, 'utf-8')
+      const manager = new KeyManager()
+      expect(manager.list()).toEqual([])
+    }
+  })
+
+  it('合法的键表仍然照常读出来（正控：上面的判据不是恒真的）', () => {
+    const manager = new KeyManager()
+    manager.ensureEntry('control-provider')
+    expect(new KeyManager().list().map((s) => s.provider)).toContain('control-provider')
+  })
+
   it('ensureEntry creates entry for new provider', () => {
     const manager = new KeyManager()
     manager.ensureEntry('openai-test')

@@ -1,6 +1,7 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
+import { readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join, dirname, resolve } from 'node:path'
 import { homedir } from 'node:os'
+import { atomicWriteFileSync } from '../shared/atomic-write'
 
 const MIPHAM_HOME = join(homedir(), '.mipham')
 const TRUST_STORE_PATH = join(MIPHAM_HOME, 'trusted-workspaces.json')
@@ -67,8 +68,16 @@ export class WorkspaceTrust {
       }
       const raw = readFileSync(TRUST_STORE_PATH, 'utf-8')
       const parsed = JSON.parse(raw) as TrustedWorkspaces
-      if (parsed.version !== 1) {
-        // Unknown version — reset
+      // The version check alone guarded a *field* while leaving the shape open:
+      // `{ version: 1 }` passes it and then `for (const trusted of
+      // this.store.directories)` throws on `undefined`. Entries must be strings
+      // too — `isTrusted` calls `.toLowerCase()` on each one.
+      if (
+        parsed.version !== 1 ||
+        !Array.isArray(parsed.directories) ||
+        !parsed.directories.every((d) => typeof d === 'string')
+      ) {
+        // Unknown version or malformed shape — reset
         return { version: 1, directories: [], updatedAt: new Date().toISOString() }
       }
       return parsed
@@ -84,7 +93,14 @@ export class WorkspaceTrust {
         mkdirSync(MIPHAM_HOME, { recursive: true })
       }
       this.store.updatedAt = new Date().toISOString()
-      writeFileSync(TRUST_STORE_PATH, JSON.stringify(this.store, null, 2), 'utf-8')
+      // Atomic: this store's own reader swallows a parse failure into a *reset
+      // store* (see `load`'s catch), so a write interrupted midway does not just
+      // lose the record — it silently un-trusts every directory the user had
+      // approved. Fail-closed, but the user never learns why they are being
+      // asked again.
+      atomicWriteFileSync(TRUST_STORE_PATH, JSON.stringify(this.store, null, 2) + '\n', {
+        mode: 0o600,
+      })
     } catch {
       // Best-effort: don't crash if we can't save
     }

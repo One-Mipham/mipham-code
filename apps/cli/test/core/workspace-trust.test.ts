@@ -10,7 +10,16 @@ vi.mock('node:os', async (importOriginal) => {
   }
 })
 
-import { rmSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import {
+  rmSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  realpathSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
 import {
@@ -42,6 +51,57 @@ describe('WorkspaceTrust', () => {
 
   it('starts with empty trust list', () => {
     expect(trust.listTrusted()).toEqual([])
+  })
+
+  it('版本对了但 directories 缺失/形状不对时按空信任表处理，而不是抛', () => {
+    // 原先只查 `version !== 1`：`{ version: 1 }` 过闸，随后
+    // `for (const trusted of this.store.directories)` 在 isTrusted 上抛。
+    // 非字符串项同理 —— isTrusted 对每一项调 `.toLowerCase()`。
+    mkdirSync(join(homedir(), '.mipham'), { recursive: true })
+
+    for (const bad of [
+      '{"version":1}',
+      '{"version":1,"directories":null}',
+      '{"version":1,"directories":[1]}',
+    ]) {
+      writeFileSync(TRUST_STORE_PATH, bad, 'utf-8')
+      resetWorkspaceTrust()
+      const t = new WorkspaceTrust()
+      expect(t.listTrusted()).toEqual([])
+      expect(t.isTrusted('/tmp')).toBe(false)
+    }
+  })
+
+  it('合法信任表仍然照常读出来（正控：上面的判据不是恒真的）', () => {
+    // realpathSync: trust() 存的是 realpath（macOS 上 /tmp → /private/tmp），
+    // 拿原始路径断言会红在一个与形状校验无关的原因上。
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'trust-ok-')))
+    const t = new WorkspaceTrust()
+    t.trust(dir)
+    resetWorkspaceTrust()
+    expect(new WorkspaceTrust().listTrusted()).toEqual([dir])
+    try {
+      rmSync(dir, { recursive: true, force: true })
+    } catch {}
+  })
+
+  it('写入是原子的（换 inode），且不留临时文件', () => {
+    // 这张表的读侧把「读不出来」吞成**空信任表**（load 的 catch），所以写到一半
+    // 被打断不是「丢一条记录」，而是静默把用户批准过的每个目录都退回未信任。
+    // 权限与「无 .tmp 残骸」都证明不了原子性：裸 writeFileSync 原地截断，inode 不变。
+    const dir1 = join(tmpdir(), 'atomic-trust-a')
+    const dir2 = join(tmpdir(), 'atomic-trust-b')
+    mkdirSync(dir1, { recursive: true })
+    mkdirSync(dir2, { recursive: true })
+
+    trust.trust(dir1)
+    const before = statSync(TRUST_STORE_PATH).ino
+    trust.trust(dir2)
+
+    // 正控：内容真的变了（否则 inode 那条判据可能只是因为压根没写）
+    expect(new WorkspaceTrust().listTrusted()).toHaveLength(2)
+    expect(statSync(TRUST_STORE_PATH).ino).not.toBe(before)
+    expect(readdirSync(join(homedir(), '.mipham')).filter((f) => f.includes('.tmp'))).toEqual([])
   })
 
   it('trusts a directory', () => {
