@@ -1,6 +1,6 @@
 import type { ProviderRegistry } from '../providers/registry'
 import type { Llm } from '../providers/llm'
-import type { ToolDefinition } from '../shared/index.ts'
+import type { ToolDefinition, ToolContext } from '../shared/index.ts'
 import type { SubAgentType, SubAgentOptions, AgentDefinition } from './types'
 import { createAgentContext } from './agent-context'
 import { getBackgroundAgentRegistry } from './background-registry'
@@ -331,6 +331,27 @@ export class SubAgent {
     let currentSystemPrompt = systemPrompt
     let totalTokens = 0
 
+    // Context for the sub-agent's own tool calls. Built once per run: the caller's
+    // services (skills, agents, artifacts, rules) are inherited so tools that need
+    // them keep working one level down, while everything specific to this run
+    // overrides them. `readFiles` is per-run rather than per-turn — Write's
+    // read-before-write guard is meaningless if the record is thrown away between
+    // turns, and per-run keeps it scoped to this agent instead of widening it to
+    // the parent's set.
+    const toolContext: ToolContext = {
+      ...options.toolContext,
+      cwd: execCwd,
+      sessionId: 'sub-agent',
+      provider: '',
+      model: finalModel,
+      registry: this.registry,
+      toolRegistry: this.toolRegistry,
+      permissionSystem: subPermission,
+      ruleEngine: this.ruleEngine,
+      llm: this.llm,
+      readFiles: new Set<string>(),
+    }
+
     try {
       for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
         // Check abort signal
@@ -456,12 +477,7 @@ export class SubAgent {
           }
 
           try {
-            const result = await tool.execute(effectiveInput, {
-              cwd: execCwd,
-              sessionId: 'sub-agent',
-              provider: '',
-              model: finalModel,
-            })
+            const result = await tool.execute(effectiveInput, toolContext)
 
             // ── P0-5: Run PostToolUse hooks ──
             let displayResult = result

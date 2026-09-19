@@ -4,7 +4,8 @@ import { getMessageBus } from '../../src/agent/message-bus'
 import { AgentExperience } from '../../src/agent/agent-experience'
 import type { ProviderRegistry, ProviderInstance, ChatRequest } from '../../src/providers/registry'
 import type { Llm } from '../../src/providers/llm'
-import type { ToolDefinition, StreamChunk, Message } from '../../src/shared/index.ts'
+import type { ToolDefinition, StreamChunk, Message, ToolContext } from '../../src/shared/index.ts'
+import type { PermissionSystem } from '../../src/core/permission'
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -282,6 +283,99 @@ describe('SubAgent', () => {
     await sub.execute('test', 'test', { worktreePath: '/tmp/test-worktree' })
 
     expect(capturedCwd).toBe('/tmp/test-worktree')
+  })
+
+  // ── Tool context handed to nested tool calls ──
+
+  /** A tool that captures the context it was executed with. */
+  function makeCapturingTool(sink: { ctx?: ToolContext }): ToolDefinition {
+    return {
+      name: 'Bash',
+      description: 'captures ctx',
+      category: 'exec',
+      permission: 'auto',
+      parameters: { type: 'object', properties: {} },
+      execute: async (_params, ctx) => {
+        sink.ctx = ctx
+        return { success: true, content: 'ok' }
+      },
+    }
+  }
+
+  function oneToolCallProvider(): ProviderInstance {
+    return createMockProvider([
+      {
+        type: 'tool_use',
+        toolUse: { type: 'tool_use', id: '1', name: 'Bash', input: { command: 'true' } },
+      },
+      { type: 'text', content: '' },
+      { type: 'stop' },
+      { type: 'text', content: 'done' },
+      { type: 'stop' },
+    ])
+  }
+
+  it('carries the inherited tool context into nested tool calls', async () => {
+    const sink: { ctx?: ToolContext } = {}
+    const tools = new Map([['Bash', makeCapturingTool(sink)]])
+    const registry = createMockRegistry(oneToolCallProvider())
+    const skillsLoader = {
+      get: () => undefined,
+      list: () => [],
+    } as unknown as ToolContext['skillsLoader']
+    const agentRegistry = { resolve: () => undefined } as unknown as ToolContext['agentRegistry']
+
+    const sub = new SubAgent(registry, tools)
+    await sub.execute('do it', 'delegated', { toolContext: { skillsLoader, agentRegistry } })
+
+    // Without these, the Agent / Workflow / Skill tools fail inside a sub-agent.
+    expect(sink.ctx?.skillsLoader).toBe(skillsLoader)
+    expect(sink.ctx?.agentRegistry).toBe(agentRegistry)
+  })
+
+  it('hands nested tools its own registries and per-run fields', async () => {
+    const sink: { ctx?: ToolContext } = {}
+    const tools = new Map([['Bash', makeCapturingTool(sink)]])
+    const registry = createMockRegistry(oneToolCallProvider())
+
+    const sub = new SubAgent(registry, tools)
+    await sub.execute('do it', 'delegated', {})
+
+    expect(sink.ctx?.registry).toBe(registry)
+    expect(sink.ctx?.toolRegistry).toBe(tools)
+    expect(sink.ctx?.sessionId).toBe('sub-agent')
+  })
+
+  it('hands nested tools the clamped permission, never the parent permission', async () => {
+    const sink: { ctx?: ToolContext } = {}
+    const tools = new Map([['Bash', makeCapturingTool(sink)]])
+    const registry = createMockRegistry(oneToolCallProvider())
+    const clamped = { needsApproval: () => false } as unknown as PermissionSystem
+    const parent = {
+      needsApproval: () => true,
+      createSubAgentPermission: () => clamped,
+    } as unknown as PermissionSystem
+
+    const sub = new SubAgent(registry, tools, parent)
+    await sub.execute('do it', 'delegated', {})
+
+    expect(sink.ctx?.permissionSystem).toBe(clamped)
+    expect(sink.ctx?.permissionSystem).not.toBe(parent)
+  })
+
+  it('gives nested tools a read set, so a read-then-write works inside a sub-agent', async () => {
+    const sink: { ctx?: ToolContext } = {}
+    const tools = new Map([['Bash', makeCapturingTool(sink)]])
+    const registry = createMockRegistry(oneToolCallProvider())
+
+    const sub = new SubAgent(registry, tools)
+    await sub.execute('do it', 'delegated', {})
+
+    // Write's guard needs a live set: with `readFiles` undefined its `add` is a
+    // no-op, so an existing file could never be overwritten even after reading.
+    expect(sink.ctx?.readFiles).toBeInstanceOf(Set)
+    sink.ctx?.readFiles?.add('/tmp/example.ts')
+    expect(sink.ctx?.readFiles?.has('/tmp/example.ts')).toBe(true)
   })
 
   it('falls back to parent model when modelOverride specifies unknown model', async () => {

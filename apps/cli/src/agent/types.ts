@@ -1,6 +1,6 @@
 // apps/cli/src/agent/types.ts
 
-import type { Message } from '../shared/index.ts'
+import type { Message, ToolContext } from '../shared/index.ts'
 
 export type SubAgentType = 'general' | 'explore' | 'plan' | 'code-review'
 
@@ -54,4 +54,11 @@ export interface SubAgentOptions {
   inheritContext?: { messages: Message[] }
   /** CRSI: when false, skip pattern analysis after agent execution. Default true. */
   autoPatternAnalysis?: boolean
+  /**
+   * The caller's tool context, inherited by the sub-agent's own tool calls so
+   * that services only the caller holds (skills, agents, artifacts, rules) keep
+   * working one level down. The sub-agent's own per-run fields win over whatever
+   * is passed through here, so only the services need to be supplied.
+   */
+  toolContext?: Partial<ToolContext>
 }

@@ -88,6 +88,9 @@ export const agentTool: ToolDefinition = {
         type: agentType,
         agentDef,
         runInBackground,
+        // Hand the caller's services down: the sub-agent keeps running the same
+        // skills/agents/artifacts, and only the fields it owns are overridden.
+        toolContext: ctx,
       })
 
       // If background execution, also register in the task system for Task tool integration
