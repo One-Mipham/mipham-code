@@ -31,13 +31,21 @@ import { listAgentsTool } from './agent/list-agents'
 import { computerUseTool } from './computer/computer-use'
 import { scheduleWakeupTool } from './scheduling/schedule-wakeup.js'
 import { cronCreateTool, cronDeleteTool, cronListTool } from './scheduling/cron.js'
-import { DISABLED_CREDENTIAL_MASKING_CONFIG } from '../config/defaults'
+import { loadUserCredentialMaskingConfig } from '../config/loader'
 
 function defaultVajraContext(): Context {
   const ctx = new Context()
-  // 掩码中立默认：无参调用（daemon/workflow）保持 Read/Bash 挂载，但不启用掩码，
-  // 对齐 pre-seam 行为（那些路径从不调用 setter）。显式开启掩码走 index.tsx 的加载配置。
-  ctx.provide('credentials', DISABLED_CREDENTIAL_MASKING_CONFIG)
+  // Fail-closed 默认：无参调用（daemon / workflow）拿到的是**用户级**掩码策略，
+  // 且配置读不出来时留下的是默认值（掩码开），不是一块关掉的掩码。
+  //
+  // 原先给的是 DISABLED 配置，理由是「对齐 pre-seam 行为」—— 但掩码是安全控制，
+  // 「没配置就关掉」是把默认值的方向定反了：daemon 里 Read/Bash/Grep/Glob 的
+  // 掩码整套失效，子进程继承完整 process.env、输出不擦洗。
+  //
+  // 只取用户级、不取项目级：注册表是 daemon 进程级的一个实例而会话 cwd 各不相同
+  // （见 `loadUserCredentialMaskingConfig` 的注释），把某个项目的段套上去等于让它溢到
+  // 别的会话。交互式 CLI 走 index.tsx 自己的 ctx（含项目级），不经过这里。
+  ctx.provide('credentials', loadUserCredentialMaskingConfig())
   return ctx
 }
 

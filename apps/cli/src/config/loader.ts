@@ -505,6 +505,40 @@ export function loadInferenceHookConfig(): InferenceHookConfig {
 }
 
 /**
+ * Overlay one config file's `credential_masking` section onto `merged`.
+ *
+ * A malformed file leaves `merged` untouched — so a config that cannot be read
+ * costs you the *overrides*, never the masking itself (the defaults are on).
+ */
+function mergeCredentialMaskingFile(
+  merged: CredentialMaskingConfig,
+  path: string,
+): CredentialMaskingConfig {
+  try {
+    if (!existsSync(path)) return merged
+    const raw = readFileSync(path, 'utf-8')
+    const parsed = parseYaml(raw) as Record<string, unknown>
+    const section = parsed.credential_masking as Partial<CredentialMaskingConfig> | undefined
+    if (!section) return merged
+    return {
+      enabled: section.enabled ?? merged.enabled,
+      files: section.files ?? merged.files,
+      output_scrubbing: {
+        enabled: section.output_scrubbing?.enabled ?? merged.output_scrubbing.enabled,
+        patterns: section.output_scrubbing?.patterns ?? merged.output_scrubbing.patterns,
+      },
+      env_filter: {
+        enabled: section.env_filter?.enabled ?? merged.env_filter.enabled,
+        patterns: section.env_filter?.patterns ?? merged.env_filter.patterns,
+      },
+    }
+  } catch {
+    // Silently skip malformed configs
+    return merged
+  }
+}
+
+/**
  * Load credential masking configuration from the same config sources.
  * Merges project-level over user-level. Returns defaults if no section present.
  */
@@ -516,31 +550,27 @@ export function loadCredentialMaskingConfig(cwd: string = process.cwd()): Creden
 
   const paths = [userConfigPath, configPath] // project wins (loaded last)
   for (const path of paths) {
-    try {
-      if (!existsSync(path)) continue
-      const raw = readFileSync(path, 'utf-8')
-      const parsed = parseYaml(raw) as Record<string, unknown>
-      const section = parsed.credential_masking as Partial<CredentialMaskingConfig> | undefined
-      if (section) {
-        merged = {
-          enabled: section.enabled ?? merged.enabled,
-          files: section.files ?? merged.files,
-          output_scrubbing: {
-            enabled: section.output_scrubbing?.enabled ?? merged.output_scrubbing.enabled,
-            patterns: section.output_scrubbing?.patterns ?? merged.output_scrubbing.patterns,
-          },
-          env_filter: {
-            enabled: section.env_filter?.enabled ?? merged.env_filter.enabled,
-            patterns: section.env_filter?.patterns ?? merged.env_filter.patterns,
-          },
-        }
-      }
-    } catch {
-      // Silently skip malformed configs
-    }
+    merged = mergeCredentialMaskingFile(merged, path)
   }
 
   return merged
+}
+
+/**
+ * User-level masking policy only (`~/.mipham/config.yml`), without any project
+ * section.
+ *
+ * The tool registry is one instance per daemon process, while sessions carry
+ * different cwds (`createToolRegistry()` in `daemon/server.ts` is memoized) —
+ * so a project's section cannot be applied to it without leaking one project's
+ * policy into another session. User level is the only scope that is true for
+ * every session the registry serves.
+ */
+export function loadUserCredentialMaskingConfig(): CredentialMaskingConfig {
+  return mergeCredentialMaskingFile(
+    { ...DEFAULT_CREDENTIAL_MASKING_CONFIG },
+    join(MIPHAM_HOME, 'config.yml'),
+  )
 }
 
 /**
