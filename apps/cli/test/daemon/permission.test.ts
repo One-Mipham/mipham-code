@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import type { ToolDefinition } from '../../src/shared'
+import type { PermissionRestrictions, ToolDefinition } from '../../src/shared'
 import { buildDaemonPermission } from '../../src/daemon/server'
 
 const ENV_KEY = 'MIPHAM_DAEMON_PERMISSION'
@@ -38,6 +38,16 @@ describe('buildDaemonPermission', () => {
     process.env[ENV_KEY] = 'acceptEdits'
     const ps = buildDaemonPermission({ forbiddenModes: ['bypassPermissions'] })
     expect(ps.getMode()).toBe('acceptEdits')
+  })
+
+  it('写错的 restrictions 不再静默失效：钉到最严一档并留下告警（P1 · daemon 通道）', () => {
+    process.env[ENV_KEY] = 'bypassPermissions'
+    const ps = buildDaemonPermission({
+      maxAllowedMode: 'acceptedit',
+    } as unknown as PermissionRestrictions)
+
+    expect(ps.getMode()).toBe('plan')
+    expect(ps.getInvalidRestrictions().join('\n')).toContain('acceptedit')
   })
 
   it('wires allow/deny rules into the permission system', () => {

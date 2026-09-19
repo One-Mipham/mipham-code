@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { PermissionMode, ToolDefinition } from '../../src/shared'
+import type { PermissionMode, PermissionRestrictions, ToolDefinition } from '../../src/shared'
 import { PermissionSystem } from '../../src/core/permission'
 import { PERMISSION_MODE_HIERARCHY } from '../../src/core/permission-config'
 
@@ -606,6 +606,101 @@ describe('PermissionSystem', () => {
 
       ps.setMode('bypassPermissions')
       expect(ps.getMode()).toBe('acceptEdits')
+    })
+  })
+
+  // ═══════════════════════════════════════════
+  // P1 — 写错的 permissionRestrictions 必须告警并 fail-closed
+  // ═══════════════════════════════════════════
+
+  describe('P1 — 写错的 permissionRestrictions 不再静默失效', () => {
+    /** 模拟 JSON 配置真能塞进来的东西：运行时没有任何类型检查。 */
+    const garbage = (v: unknown): PermissionRestrictions => v as PermissionRestrictions
+    const warnings = (ps: PermissionSystem): string => ps.getInvalidRestrictions().join('\n')
+
+    it('正常配置：零告警、行为与从前一致（对照组）', () => {
+      const ps = new PermissionSystem('default')
+      ps.setRestrictions({ forbiddenModes: ['bypassPermissions'], maxAllowedMode: 'acceptEdits' })
+
+      expect(ps.getInvalidRestrictions()).toEqual([])
+      ps.setMode('bypassPermissions')
+      expect(ps.getMode()).toBe('acceptEdits')
+    })
+
+    it('模式名错拼 ⇒ 告警点名该条目，且模式钉到最严一档（不是忽略）', () => {
+      const ps = new PermissionSystem('bypassPermissions')
+      ps.setRestrictions(garbage({ forbiddenModes: ['bypass-permissions'] }))
+
+      // 忽略 = fail-open（今天的行为：什么都不禁）；告警 + 钉最严才是 fail-closed
+      expect(ps.getMode()).toBe('plan')
+      expect(warnings(ps)).toContain('forbiddenModes[0]')
+      expect(warnings(ps)).toContain('bypass-permissions')
+    })
+
+    it('值写成标量而不是数组 ⇒ 告警并钉住（今天它会整条静默失效）', () => {
+      const ps = new PermissionSystem('bypassPermissions')
+      ps.setRestrictions(garbage({ forbiddenModes: 'bypassPermissions' }))
+
+      expect(ps.getMode()).toBe('plan')
+      expect(warnings(ps)).toContain('must be an array')
+    })
+
+    it('maxAllowedMode 错拼 ⇒ 告警并钉住（今天它让上限整个跳过、什么都不限）', () => {
+      const ps = new PermissionSystem('bypassPermissions')
+      ps.setRestrictions(garbage({ maxAllowedMode: 'acceptedit' }))
+
+      expect(ps.getMode()).toBe('plan')
+      expect(warnings(ps)).toContain('acceptedit')
+    })
+
+    it('键名错拼（forbiddenMode 漏了 s）⇒ 告警 —— 否则整条策略静默失效', () => {
+      const ps = new PermissionSystem('bypassPermissions')
+      ps.setRestrictions(garbage({ forbiddenMode: ['bypassPermissions'] }))
+
+      expect(ps.getMode()).toBe('plan')
+      expect(warnings(ps)).toContain('forbiddenMode')
+    })
+
+    it('整条限制不是对象 ⇒ 告警并钉住', () => {
+      const ps = new PermissionSystem('bypassPermissions')
+      ps.setRestrictions(garbage('bypassPermissions'))
+
+      expect(ps.getMode()).toBe('plan')
+      expect(warnings(ps)).toContain('not an object')
+    })
+
+    it('大小写与遗留别名照旧认（PLAN / Bypass）', () => {
+      const ps = new PermissionSystem('default')
+      ps.setRestrictions(garbage({ forbiddenModes: ['Bypass', 'PLAN'] }))
+
+      expect(ps.getInvalidRestrictions()).toEqual([])
+      expect(ps.getRestrictions()?.forbiddenModes).toEqual(['bypassPermissions', 'plan'])
+    })
+
+    it('空对象 = 没有限制，不告警', () => {
+      const ps = new PermissionSystem('default')
+      ps.setRestrictions(garbage({}))
+      expect(ps.getInvalidRestrictions()).toEqual([])
+      expect(ps.getRestrictions()).toBeUndefined()
+    })
+
+    it('幂等：已规范化的限制再喂一次不再告警（子代理会原样转交一次）', () => {
+      const ps = new PermissionSystem('default')
+      ps.setRestrictions({ maxAllowedMode: 'plan' })
+      expect(ps.getInvalidRestrictions()).toEqual([])
+
+      ps.setRestrictions(ps.getRestrictions())
+      expect(ps.getInvalidRestrictions()).toEqual([])
+      expect(ps.getMode()).toBe('plan')
+    })
+
+    it('两条通道互不串：限制的告警不进规则通道，反之亦然', () => {
+      const ps = new PermissionSystem('default')
+      ps.allow('Read')
+      ps.setRestrictions(garbage({ maxAllowedMode: 'nope' }))
+
+      expect(warnings(ps)).toContain('nope')
+      expect(ps.getInvalidRules()).toEqual([])
     })
   })
 })

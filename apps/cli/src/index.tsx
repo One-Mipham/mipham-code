@@ -645,6 +645,12 @@ export async function runApp(options: RunOptions): Promise<void> {
     process.stderr.write(`⚠ Mipham Code: ${msg}\n`)
   }
 
+  // Same warning channel for malformed restrictions (P1) — a typo'd
+  // `forbiddenModes`/`maxAllowedMode` used to leave the policy silently inert.
+  for (const msg of engine.getPermission().getInvalidRestrictions()) {
+    process.stderr.write(`⚠ Mipham Code: ${msg}\n`)
+  }
+
   // Initialize agent registry and load plugin agents/skills/MCP/hooks
   const agentRegistry = new AgentRegistry()
   agentRegistry.loadUserAgents()

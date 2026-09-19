@@ -101,6 +101,10 @@ export function buildDaemonPermission(
   for (const msg of permission.getInvalidRules()) {
     process.stderr.write(`⚠ Mipham Code: ${msg}\n`)
   }
+  // Sibling channel for malformed restrictions (P1) — same as the CLI entry.
+  for (const msg of permission.getInvalidRestrictions()) {
+    process.stderr.write(`⚠ Mipham Code: ${msg}\n`)
+  }
   return permission
 }
 

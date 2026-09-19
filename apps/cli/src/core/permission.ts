@@ -7,7 +7,13 @@ import type {
 } from '../shared/index.ts'
 import type { PermissionRuleEntry } from '../shared/index.ts'
 import { matchBashRule, compileRule } from './permission-rules'
-import { loadPermissionConfig, nextMode, clampMode, MODE_CYCLE } from './permission-config'
+import {
+  loadPermissionConfig,
+  nextMode,
+  clampMode,
+  normalizeRestrictions,
+  MODE_CYCLE,
+} from './permission-config'
 
 /**
  * Check if a Bash command is a "verification-only" command that should be
@@ -78,6 +84,8 @@ export class PermissionSystem {
   private allowRules: PermissionRuleEntry[] = []
   private denyRules: PermissionRuleEntry[] = []
   private askRules: PermissionRuleEntry[] = []
+  /** Malformed `permissionRestrictions` entries from the last set/load — see below. */
+  private restrictionWarnings: string[] = []
   /** Legacy exact-name rules for backward compat (set via setRule with 'auto' level). */
   private legacyRules = new Map<string, PermissionLevel>()
   /** Legacy default level from constructor when passed non-mode values like 'ask' or 'bypass'. */
@@ -130,14 +138,31 @@ export class PermissionSystem {
 
   // ── Restrictions (P0: org-level policy gap) ──
 
-  /** Apply org-level permission restrictions. Overwrites any previous restrictions. */
-  setRestrictions(restrictions: PermissionRestrictions | undefined): void {
+  /**
+   * Apply org-level permission restrictions. Overwrites any previous restrictions.
+   *
+   * The value is **validated and normalized** first: a config typo used to leave the
+   * whole policy silently inert (fail-open). Anything unrecognizable is now reported
+   * via `getInvalidRestrictions()` and pins the mode to the strictest (`P1`).
+   */
+  setRestrictions(raw: PermissionRestrictions | undefined): void {
+    const { restrictions, invalid } = normalizeRestrictions(raw)
     this.restrictions = restrictions
+    this.restrictionWarnings = invalid
     // Re-clamp current mode against new restrictions
     if (restrictions) {
       this.mode = clampMode(this.mode, restrictions)
     }
     this.invalidateCache()
+  }
+
+  /**
+   * Malformed `permissionRestrictions` entries, one message each — the sibling of
+   * `getInvalidRules()`. Callers are expected to surface these to stderr; a silent
+   * return here means a policy the operator believes is enforced isn't.
+   */
+  getInvalidRestrictions(): string[] {
+    return this.restrictionWarnings
   }
 
   getRestrictions(): PermissionRestrictions | undefined {
@@ -242,7 +267,13 @@ export class PermissionSystem {
         restrictions: PermissionRestrictions
       }>,
     )
-    this.mode = clampMode(config.mode, config.restrictions ?? this.restrictions)
+    // Same validation as setRestrictions — a config typo must not silently drop the cap
+    if (config.restrictions) {
+      const { restrictions, invalid } = normalizeRestrictions(config.restrictions)
+      this.restrictions = restrictions
+      this.restrictionWarnings = invalid
+    }
+    this.mode = clampMode(config.mode, this.restrictions)
 
     this.allowRules = []
     this.denyRules = []
@@ -253,10 +284,6 @@ export class PermissionSystem {
     }
     for (const rule of config.deny) {
       this.denyRules.push(compileRule(rule, 'deny'))
-    }
-
-    if (config.restrictions) {
-      this.restrictions = config.restrictions
     }
 
     this.invalidateCache()
