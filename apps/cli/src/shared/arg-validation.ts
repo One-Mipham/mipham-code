@@ -29,7 +29,42 @@ const KNOWN_COMMANDS = [
   'help',
 ]
 
-const KNOWN_FLAGS = ['--version', '-v', '-V', '--help', '-h', '--dump-config', '--safe-mode']
+const KNOWN_FLAGS = [
+  '--version',
+  '-v',
+  '-V',
+  '--help',
+  '-h',
+  '--dump-config',
+  '--safe-mode',
+  '--resume',
+]
+
+/**
+ * Flags that consume the **next** argument as their value. That value is not a
+ * command, so it must not go through the unknown-command check: with
+ * `mipham --resume "my session"` the old scan found the first token that didn't
+ * start with `-`, concluded the user had typed a command, and reported
+ * `Unknown command: mipham my session` — blaming the session name and never
+ * mentioning `--resume`, the one argument that was actually wrong.
+ */
+const VALUE_FLAGS = ['--resume']
+
+/**
+ * The first token that would be read as a command, skipping flags and the values
+ * of value-taking flags. `null` when there is none.
+ */
+function firstPositional(args: string[]): string | null {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!
+    if (arg.startsWith('-')) {
+      if (VALUE_FLAGS.includes(arg)) i++ // its value is not a command
+      continue
+    }
+    return arg
+  }
+  return null
+}
 
 /** Levenshtein edit distance between two strings. */
 function levenshtein(a: string, b: string): number {
@@ -64,7 +99,7 @@ function closest(target: string, candidates: string[], maxDist = 3): string[] {
  * command is present, instead of falling through to the interactive CLI.
  */
 export function detectUnknownArgument(args: string[]): UnknownArgument | null {
-  const firstArg = args.find((a) => !a.startsWith('-'))
+  const firstArg = firstPositional(args)
   if (firstArg && !KNOWN_COMMANDS.includes(firstArg)) {
     return { kind: 'command', arg: firstArg, suggestions: closest(firstArg, KNOWN_COMMANDS) }
   }

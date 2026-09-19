@@ -108,6 +108,10 @@ export async function workflowAgent(
         modelOverride: opts.model,
         allowedTools: undefined, // use all tools by default
         worktreePath,
+        // The prompt is computed by the script, not typed by the user — say so,
+        // so text the script relayed from a file or another agent cannot pass
+        // as the user's own opening instruction.
+        promptOrigin: 'script',
       })
 
       lastResult = textResult

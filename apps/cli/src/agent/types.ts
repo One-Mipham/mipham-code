@@ -52,6 +52,12 @@ export interface SubAgentOptions {
   worktreePath?: string
   /** Seed the sub-agent with a parent conversation prefix (e.g., fork inheritance). */
   inheritContext?: { messages: Message[] }
+  /**
+   * Who authored the prompt. `'script'` marks text computed by a workflow
+   * script — which is not the user speaking, even though it arrives as the
+   * sub-agent's opening user turn. Defaults to `'user'`.
+   */
+  promptOrigin?: 'user' | 'script'
   /** CRSI: when false, skip pattern analysis after agent execution. Default true. */
   autoPatternAnalysis?: boolean
   /**

@@ -256,11 +256,16 @@ export class QueryEngine {
           }
 
           if (policy === 'ask') {
-            // Mark as awaiting approval — the model should verify with the user before acting
+            // Mark as awaiting approval — the model should verify with the user before acting.
+            //
+            // The instruction goes in the *summary*, because that is the only field
+            // `formatInboundMessage` delivers. Putting it in the body (as it was) is
+            // how a consent gate ends up authored and never applied: the recipient saw
+            // "[Awaiting Approval]" but not what to do about it.
             bus.post(
               msg.from,
               msg.to,
-              `[Awaiting Approval] ${msg.summary}`,
+              `[Awaiting Approval — verify with the user before acting] ${msg.summary}`,
               `[Cross-session message from ${msg.from} — verify with user before acting]\n\n${msg.message}`,
               'warning',
             )

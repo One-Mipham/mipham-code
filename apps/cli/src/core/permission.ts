@@ -426,9 +426,15 @@ export class PermissionSystem {
     tool: ToolDefinition,
     input: Record<string, unknown>,
   ): boolean {
-    // Try Bash-style matching first
+    // Try Bash-style matching first.
+    //
+    // The compound-command rule differs by direction, and the rule's own
+    // `level` is what decides it: a **deny/ask** rule matches if *any* part of
+    // a compound command matches (wide on purpose), while an **allow** rule
+    // matches only if *every* part does. Without that, `Bash(git:*)` grants
+    // `git status && rm -rf ./src` outright — see matchBashRule's `segmentMode`.
     if (rule.pattern.includes('(')) {
-      return matchBashRule(rule.pattern, tool.name, input)
+      return matchBashRule(rule.pattern, tool.name, input, rule.level === 'allow' ? 'all' : 'any')
     }
     // Simple tool name match
     return rule.pattern === tool.name || rule.compiled.test(tool.name)

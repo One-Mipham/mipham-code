@@ -26,9 +26,16 @@ export interface AgentMessage {
 
 /**
  * Format an inbound message for injection into the conversation as a
- * user-role notice. Collapsed to one line (`Message from @<sender>: <summary>`)
- * so cross-session peer messages don't bloat the context; the full body stays
- * in the bus for Ctrl+O expansion.
+ * user-role notice.
+ *
+ * Deliberately one line (`Message from @<sender>: <summary>`): a peer's full
+ * body would land as a user-role turn in the recipient's own context.
+ *
+ * The summary is therefore the **only** field that reaches the model. The body
+ * is kept on the bus object but nothing ever surfaces it — `drainInboundMessages`
+ * calls `markAllRead` immediately after injecting, no UI reads it back, and
+ * Ctrl+O is bound to "expand last tool call" (`ui/input.tsx`), not to this.
+ * Anything the sender needs read has to go in the summary.
  */
 export function formatInboundMessage(msg: AgentMessage): string {
   return `Message from @${msg.from}: ${msg.summary}`

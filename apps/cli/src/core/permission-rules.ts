@@ -557,6 +557,7 @@ export function matchBashRule(
   pattern: string,
   toolName: string,
   toolInput: Record<string, unknown>,
+  segmentMode: 'any' | 'all' = 'any',
 ): boolean {
   // Check if pattern has a parenthesized sub-pattern
   const parenMatch = pattern.match(/^(\w+)\((.+)\)$/)
@@ -567,6 +568,20 @@ export function matchBashRule(
 
   const [, baseTool, subPattern] = parenMatch
 
+  // How a *compound* command is judged when only some parts match:
+  //   'any' (deny / ask) — one matching part is enough. Deliberately wide: a
+  //     deny rule that misses a part is a hole, so `foo && rm -rf /` must be
+  //     caught by `Bash(rm *)`.
+  //   'all' (allow) — every part must match. An allow rule is a *grant*, and
+  //     granting on one matching part hands over the whole compound command:
+  //     `Bash(git:*)` plus `git status && rm -rf ./src` used to return
+  //     `bypass` with no prompt at all.
+  // The `length > 0` guard is load-bearing: `[].every()` is `true`, so a
+  // command with no matchable segment (or no extracted file access) would
+  // otherwise satisfy **any** allow rule — a fail-open of its own.
+  const qualifies = (items: string[], match: (s: string) => boolean): boolean =>
+    segmentMode === 'all' ? items.length > 0 && items.every(match) : items.some(match)
+
   // A Read/Write/Edit rule must also refuse a Bash command that touches the
   // same file (via a reader/editor command or a redirect), not only the
   // Read/Write/Edit tool itself. Otherwise `cat .git-credentials` bypasses a
@@ -575,7 +590,7 @@ export function matchBashRule(
     const cmd = String(toolInput.command || '')
     const access = extractBashFileAccess(cmd)
     const paths = baseTool === 'Read' ? access.read : access.write
-    return paths.some((p) => matchPath(p, subPattern!))
+    return qualifies(paths, (p) => matchPath(p, subPattern!))
   }
 
   if (toolName !== baseTool!) return false
@@ -585,7 +600,7 @@ export function matchBashRule(
   // `$(...)`/backtick substitution, so `Bash(rm *)` catches `x=$(rm -rf ~)`).
   if (baseTool === 'Bash') {
     const cmd = String(toolInput.command || '')
-    return flattenCommand(cmd).some((seg) => wildcardMatch(subPattern!, seg))
+    return qualifies(flattenCommand(cmd), (seg) => wildcardMatch(subPattern!, seg))
   }
 
   // For Write/Edit/Read: match against the file_path with path-glob semantics.

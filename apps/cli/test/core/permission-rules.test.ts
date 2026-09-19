@@ -51,6 +51,42 @@ describe('matchBashRule', () => {
     expect(matchBashRule('Bash(git:*)', 'Bash', {})).toBe(false)
   })
 
+  it('judges a compound command by every segment under segmentMode "all"', () => {
+    // 'any' (the default, used by deny/ask) is deliberately wide; 'all' (used
+    // by allow) requires every segment, because an allow rule is a grant.
+    const compound = { command: 'git status && rm -rf ./src' }
+
+    expect(matchBashRule('Bash(git:*)', 'Bash', compound, 'any')).toBe(true)
+    expect(matchBashRule('Bash(git:*)', 'Bash', compound, 'all')).toBe(false)
+
+    // All segments matching still matches under 'all' — the rule is not dead.
+    const allGit = { command: 'git status && git diff' }
+    expect(matchBashRule('Bash(git:*)', 'Bash', allGit, 'all')).toBe(true)
+
+    // A single-segment command is unaffected by the mode.
+    expect(matchBashRule('Bash(git:*)', 'Bash', { command: 'git status' }, 'all')).toBe(true)
+  })
+
+  it('does not let an unmatched-empty segment list satisfy segmentMode "all"', () => {
+    // `[].every()` is `true`, so without the length guard an allow rule would
+    // be satisfied by a command that flattens to nothing — a fail-open of its
+    // own, introduced by the very change that closes the compound-command one.
+    for (const command of ['', '   ', '\n']) {
+      expect(matchBashRule('Bash(git:*)', 'Bash', { command }, 'all')).toBe(false)
+    }
+  })
+
+  it('judges extracted file access by every path under segmentMode "all"', () => {
+    // Same direction, on the read-via-Bash branch: an allow rule for one path
+    // must not cover a command that also touches another.
+    const twoReads = { command: 'cat /tmp/ok.txt /etc/shadow' }
+    expect(matchBashRule('Read(/tmp/*)', 'Bash', twoReads, 'any')).toBe(true)
+    expect(matchBashRule('Read(/tmp/*)', 'Bash', twoReads, 'all')).toBe(false)
+
+    const noAccess = { command: 'echo hi' }
+    expect(matchBashRule('Read(/tmp/*)', 'Bash', noAccess, 'all')).toBe(false)
+  })
+
   it('matches Read(file_path) pattern', () => {
     expect(
       matchBashRule('Read(**/.ssh/id_rsa)', 'Read', { file_path: '/home/u/.ssh/id_rsa' }),

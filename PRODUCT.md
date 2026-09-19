@@ -440,10 +440,13 @@ Layer 5: Parameter Validation
 
 ### 10.2 Lifecycle
 
-1. **Startup** — Auto-load most recent session if `--resume` flag
+1. **Startup** — `--resume "<name>"` restores that session's transcript into the model's context;
+   with no flag, only the most recent session's **summary** is injected as context
 2. **During Chat** — Checkpoint saved after each AI response
 3. **Exit** — SIGINT/SIGTERM triggers auto-save
-4. **Restore** — `/resume <name>` or `mipham --resume "<name>"`
+4. **Restore** — `mipham --resume "<name>"` (new process, restores context);
+   in-app `/resume last` loads the most recent session's messages into the view only —
+   it does not change the model's context. `/resume <name>` prints a session's details.
 
 ---
 

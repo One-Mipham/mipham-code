@@ -1210,6 +1210,7 @@ Usage:
 Flags:
   --dump-config              Print the assembled profile tree
   --safe-mode                Skip custom agents, skills, hooks, plugins
+  --resume <name>            Open a saved session (see /resume for names)
   --version, -v, -V          Print version
 
 Docs: https://mipham.ai/code
@@ -1306,9 +1307,35 @@ npm:  https://www.npmjs.com/package/@miphamai/cli`)
     process.env.MIPHAM_SAFE_MODE = '1'
   }
 
+  // Parse --resume <name>: open a saved session instead of starting a new one.
+  // `runApp` has accepted `options.resume` all along — it restores the session log
+  // and chdirs to the cwd recorded in the session's `session/start` event — but
+  // **nothing ever passed it**, so the documented `mipham --resume "<name>"` was
+  // unreachable in practice.
+  const resumeIdx = process.argv.indexOf('--resume')
+  let resumeName: string | undefined
+  if (resumeIdx !== -1) {
+    resumeName = process.argv[resumeIdx + 1]
+    if (!resumeName || resumeName.startsWith('-')) {
+      console.error('Usage: mipham --resume "<session-name>"')
+      console.error('Run `mipham` and use /resume to list saved sessions.')
+      process.exit(1)
+    }
+    // Fail loudly on an unknown name. `SessionStore.loadLog` returns an *empty* log
+    // for a missing name, which the startup path reads as "nothing to restore" and
+    // opens a fresh session — so a typo would silently start a new conversation
+    // under a name the user thought they were resuming.
+    const { SessionStore } = await import('../src/core/session-store')
+    if (SessionStore.loadLog(resumeName).events().length === 0) {
+      console.error(`Session "${resumeName}" not found.`)
+      console.error('Run `mipham` and use /resume to list saved sessions.')
+      process.exit(1)
+    }
+  }
+
   try {
     const { runApp } = await import('../src/index')
-    await runApp({ version: APP_VERSION })
+    await runApp({ version: APP_VERSION, resume: resumeName })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     if (msg.includes('react-devtools-core')) {

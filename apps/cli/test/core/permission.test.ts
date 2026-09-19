@@ -241,6 +241,35 @@ describe('PermissionSystem', () => {
     expect(ps.check(tool, { command: "bash -c 'cat .git-credentials'" })).toBe('ask')
   })
 
+  it('an allow rule does not carry a compound command past its unmatched half', () => {
+    // The mirror of the case above, in the other direction. `matchBashRule`
+    // judged every compound command by "some segment matches": right for deny
+    // (wide on purpose) and wrong for allow, which is a *grant*. `Bash(git:*)`
+    // handed over `git status && rm -rf ./src` as `bypass` — no prompt at all —
+    // and the hard gate does not catch it either, because a relative path is
+    // absent from BLOCKED_PATTERNS (`rm -rf /` still is).
+    //
+    // `permission: 'ask'` matters: with the default `'auto'` the tool is
+    // already auto-approved, so a `bypass`/`ask` swap would change nothing.
+    // `'ask'` is the real Bash tool's declared level (`tools/exec/bash.ts`).
+    const ps = new PermissionSystem()
+    ps.allow('Bash(git:*)')
+    const tool = makeTool('Bash', 'ask', 'exec')
+
+    // Baseline: with no rule at all, both halves are gated identically.
+    expect(ps.needsApproval(tool, { command: 'git status && rm -rf ./src' })).toBe(true)
+    expect(ps.check(tool, { command: 'git status && rm -rf ./src' })).toBe('ask')
+
+    // The regression: the allowed half must not carry the other half through.
+    // (Pre-fix this was `'bypass'` / `false` — no prompt.)
+    expect(ps.check(tool, { command: 'git status && rm -rf ./src' })).toBe('ask')
+    expect(ps.needsApproval(tool, { command: 'git status && rm -rf ./src' })).toBe(true)
+
+    // Every segment matching still gets the grant — the rule is not dead.
+    expect(ps.check(tool, { command: 'git status && git diff' })).toBe('bypass')
+    expect(ps.needsApproval(tool, { command: 'git status && git diff' })).toBe(false)
+  })
+
   it('plan mode allows reads only', () => {
     const ps = new PermissionSystem('plan')
     const readTool = makeTool('Read', 'auto', 'file')

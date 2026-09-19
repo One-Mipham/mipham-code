@@ -13,6 +13,7 @@ import type { PluginManager } from '../plugin/plugin-manager'
 import type { Message } from '../shared/types.js'
 import type { UpdateStatus } from '../shared/update'
 import { McpClient } from '../mcp/client'
+import { unregisterMcpServerTools } from '../mcp/registry'
 import { buildCapabilityReport } from '../core/capability-inventory'
 import { InstructionsLoader } from '../core/instructions'
 import { findDerivableSections, DERIVABLE_HINTS } from '../core/claude-md-audit'
@@ -4129,7 +4130,12 @@ const resumeLastCmd: CommandHandler = async (ctx) => {
             loaded: String(messages.length),
             total: String(session.messages.length),
           })
-        : t('commands.resume.restored_full_footer', { loaded: String(messages.length) }),
+        : t('commands.resume.restored_full_footer', {
+            loaded: String(messages.length),
+            // 文案里的 `{name}` 必须真给：`t()` 把没给的占位符替换成**空串**
+            // （`t.ts` 的 `params[k] ?? ''`），漏掉就静默印出 `--resume ""`。
+            name: latest.name,
+          }),
     ].join('\n'),
     forwardedMessages: messages,
     resumeWarning: true,
@@ -4725,13 +4731,23 @@ const mcpCmd: CommandHandler = async (ctx, args) => {
   if (sub === 'disconnect') {
     const name = args[1]
     if (!name) return { content: 'Usage: /mcp disconnect <server-name>' }
-    const tools = client.disconnect(name)
+    client.disconnect(name)
+    // Dropping the connection is not dropping the tools. They live in the
+    // engine's registry — the map the model actually calls — and closing the
+    // transport leaves every one of them registered and selectable, failing
+    // only at call time. Count what the registry actually gave up, not what the
+    // connection used to hold: those are different objects and only one of them
+    // is what "removed" refers to.
+    const toolsMap = ctx.engine.getTools()
+    const before = toolsMap.size
+    unregisterMcpServerTools(name, toolsMap)
+    const removed = before - toolsMap.size
     return {
       content: [
         `── MCP Disconnect: ${name} ──`,
         '',
-        tools.length > 0
-          ? `Disconnected. ${tools.length} tool(s) removed.`
+        removed > 0
+          ? `Disconnected. ${removed} tool(s) removed.`
           : 'Disconnected (no tools were registered).',
       ].join('\n'),
     }
@@ -5055,7 +5071,7 @@ Or use the Agent tool in a conversation to launch a sub-agent.`,
   return { content: lines.join('\n') }
 }
 
-const bgCmd: CommandHandler = (ctx, args) => {
+const bgCmd: CommandHandler = async (ctx, args) => {
   const prompt = args.join(' ')
   if (!prompt.trim()) {
     return {
@@ -5084,6 +5100,49 @@ Background agents appear in the Agent View dashboard (/agents).`,
 
   agentViewManager.addMessage(session.id, { role: 'user', content: prompt })
   agentViewManager.updateStatus(session.id, 'working')
+  session.kind = 'unattended'
+
+  // A session row is not a task. Without the spawn below this command only ever
+  // wrote a dashboard entry and reported success — the prompt was never handed
+  // to a model, and the row sat at `working` forever.
+  const bgReg = (await import('../agent/background-registry')).getBackgroundAgentRegistry()
+  bgReg.spawn(
+    prompt,
+    'general',
+    async (_signal) => {
+      const { SubAgent } = await import('../agent/sub-agent')
+      const sa = new SubAgent(
+        ctx.engine.getRegistry(),
+        ctx.engine.getTools(),
+        ctx.engine.getPermission(),
+        undefined,
+        undefined,
+        ctx.engine.getLlm(),
+      )
+      try {
+        // The prompt came from the user typing `/bg …`, so it stays unframed —
+        // unlike a workflow script's computed prompt.
+        const result = await sa.execute(prompt, 'bg: ' + prompt.slice(0, 60), { type: 'general' })
+        agentViewManager.addMessage(session.id, {
+          role: 'assistant',
+          content: result || '(no output)',
+        })
+        agentViewManager.updateStatus(session.id, 'completed')
+        return result
+      } catch (err) {
+        // Leave the row honest on failure too — a session stuck at `working`
+        // after its executor died is the same lie as never spawning at all.
+        const message = err instanceof Error ? err.message : String(err)
+        agentViewManager.addMessage(session.id, {
+          role: 'assistant',
+          content: `Background agent failed: ${message}`,
+        })
+        agentViewManager.updateStatus(session.id, 'failed')
+        throw err
+      }
+    },
+    'unattended',
+  )
 
   return {
     content: `✓ Background agent spawned: ${session.id}
