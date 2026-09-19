@@ -558,7 +558,7 @@
     "stats": {
       "title": "── 会话统计 ──",
       "messages": "消息:        {total}（{user} 用户, {assistant} AI, {system} 系统）",
-      "tokens": "Token:          ~{tokens} / 200,000",
+      "tokens": "Token:          ~{tokens} / {max}",
       "tools": "可用工具:  {count}",
       "provider": "提供商:         {provider}",
       "model": "模型:            {model}",

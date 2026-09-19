@@ -364,14 +364,18 @@ const contextCmd: CommandHandler = (ctx) => {
   const tokens = c.getEstimatedTokens()
   const msgs = c.getMessages()
   const systemPromptLen = c.getSystemPrompt().length
+  // 窗口与阈值一律问引擎：模型注册表里 1M/256K/128K/32K 都有，写死 200K 会
+  // 让 1M 模型显示约 5 倍偏高的百分比，并把压缩点说成 90%（实际 95%）。
+  const maxTokens = c.getMaxTokens()
+  const threshold = c.getCompactionThreshold()
   return {
     content: stripIndent`
       ${t('commands.context.title')}
       ${t('commands.context.messages')}       ${msgs.length}
-      ${t('commands.context.estimated_tokens')} ${tokens.toLocaleString()} / 200,000
-      ${t('commands.context.usage_pct')}           ${((tokens / 200_000) * 100).toFixed(1)}%
+      ${t('commands.context.estimated_tokens')} ${tokens.toLocaleString()} / ${maxTokens.toLocaleString()}
+      ${t('commands.context.usage_pct')}           ${((tokens / maxTokens) * 100).toFixed(1)}%
       ${t('commands.context.system_prompt')}   ${systemPromptLen.toLocaleString()} chars (~${Math.ceil(systemPromptLen / 4).toLocaleString()} tokens)
-      ${t('commands.context.compaction')}      at 90% (${(200_000 * 0.9).toLocaleString()} tokens)
+      ${t('commands.context.compaction')}      at ${(threshold * 100).toFixed(0)}% (${Math.round(maxTokens * threshold).toLocaleString()} tokens)
     `,
   }
 }
@@ -396,7 +400,7 @@ const statusCmd: CommandHandler = async (ctx) => {
       ${t('commands.status.provider')}   ${ctx.providerId}
       ${t('commands.status.model')}      ${ctx.modelId}
       ${t('commands.status.messages')}   ${c.getMessages().length}
-      ${t('commands.status.tokens')}     ~${c.getEstimatedTokens().toLocaleString()} / 200,000
+      ${t('commands.status.tokens')}     ~${c.getEstimatedTokens().toLocaleString()} / ${c.getMaxTokens().toLocaleString()}
       ${t('commands.status.tools')}      ${tools.size} ${t('commands.status.loaded')}
       ${t('commands.status.permission')} ${ctx.config.permission}
 
@@ -413,16 +417,18 @@ const statusCmd: CommandHandler = async (ctx) => {
 
 const costCmd: CommandHandler = (ctx) => {
   const t = resolveT(ctx)
-  const tokens = ctx.engine.getContext().getEstimatedTokens()
-  const cacheStatus = ctx.engine.getContext().getCacheStatus()
+  const c = ctx.engine.getContext()
+  const tokens = c.getEstimatedTokens()
+  const cacheStatus = c.getCacheStatus()
   const cachedTokens = cacheStatus.cachedTokens
   const hitRatio = tokens > 0 ? Math.min(1, cachedTokens / tokens) : 0
   const uncachedTokens = Math.max(0, tokens - cachedTokens)
+  const maxTokens = c.getMaxTokens()
   return {
     content: stripIndent`
       ${t('commands.context_tokens.title')}
-      ${t('commands.context_tokens.context_tokens')} ~${tokens.toLocaleString()} / 200,000
-      ${t('commands.context_tokens.usage')} ${((tokens / 200_000) * 100).toFixed(1)}%
+      ${t('commands.context_tokens.context_tokens')} ~${tokens.toLocaleString()} / ${maxTokens.toLocaleString()}
+      ${t('commands.context_tokens.usage')} ${((tokens / maxTokens) * 100).toFixed(1)}%
       ${t('commands.context_tokens.prompt_cache', {
         cached: cachedTokens.toLocaleString(),
         ratio: (hitRatio * 100).toFixed(1),
@@ -2258,7 +2264,7 @@ const usageCmd: CommandHandler = (ctx) => {
   const c = ctx.engine.getContext()
   const estTokens = c.getEstimatedTokens()
   const msgs = c.getMessages()
-  const maxTokens = 200_000
+  const maxTokens = c.getMaxTokens()
   const pct = ((estTokens / maxTokens) * 100).toFixed(1)
 
   const tracker = ctx.engine.getUsageTracker()
@@ -3134,9 +3140,10 @@ const doctorCmd: CommandHandler = async (ctx) => {
   const c = ctx.engine.getContext()
   const msgs = c.getMessages()
   const tokens = c.getEstimatedTokens()
+  const maxTokens = c.getMaxTokens()
   lines.push(`Messages     ${msgs.length}`)
   lines.push(
-    `Tokens       ~${tokens.toLocaleString()} / 200,000 (${((tokens / 200_000) * 100).toFixed(1)}%)`,
+    `Tokens       ~${tokens.toLocaleString()} / ${maxTokens.toLocaleString()} (${((tokens / maxTokens) * 100).toFixed(1)}%)`,
   )
   lines.push(`Checkpoints  ${c.getCheckpoints().length}`)
 
@@ -3638,13 +3645,16 @@ const statsCmd: CommandHandler = (ctx) => {
       assistant: String(assistantMsgs),
       system: String(systemMsgs),
     }),
-    t('commands.stats.tokens', { tokens: tokens.toLocaleString() }),
+    t('commands.stats.tokens', {
+      tokens: tokens.toLocaleString(),
+      max: c.getMaxTokens().toLocaleString(),
+    }),
     t('commands.stats.tools', { count: String(tools.size) }),
     t('commands.stats.provider', { provider: ctx.providerId }),
     t('commands.stats.model', { model: ctx.modelId }),
     t('commands.stats.permission', { permission: ctx.config.permission }),
     '',
-    t('commands.stats.usage', { pct: ((tokens / 200_000) * 100).toFixed(1) }),
+    t('commands.stats.usage', { pct: ((tokens / c.getMaxTokens()) * 100).toFixed(1) }),
   ]
 
   // ── CRSI & SIS extensions ──

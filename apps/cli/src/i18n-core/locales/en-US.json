@@ -558,7 +558,7 @@
     "stats": {
       "title": "── Session Stats ──",
       "messages": "Messages:        {total} ({user} user, {assistant} AI, {system} system)",
-      "tokens": "Tokens:          ~{tokens} / 200,000",
+      "tokens": "Tokens:          ~{tokens} / {max}",
       "tools": "Tools available:  {count}",
       "provider": "Provider:         {provider}",
       "model": "Model:            {model}",

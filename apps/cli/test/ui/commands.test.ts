@@ -73,12 +73,88 @@ describe('/cost prompt-cache', () => {
       getEstimatedTokens: () => 1000,
       getCacheStatus: () => ({ cachedTokens: 400 }),
       getCheckpoints: () => [],
+      getMaxTokens: () => 200_000,
     })
     const handler = getCommand('/cost')!
     const result = await handler(ctx, [])
     expect(result.content).toContain('Prompt cache')
     expect(result.content).toContain('400')
     expect(result.content).toContain('40.0')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// 上下文用量显示 —— 分母必须来自引擎，不得硬编码
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * 这批断言用 **1M 窗口** 做输入：硬编码 `200_000` 的实现会同时漏掉
+ * `1,000,000` 并印出 `200,000`，故**两个方向都能红**。
+ *
+ * 引擎侧的真值来自 `ContextManager`：`getMaxTokens()` 是模型注册表里声明的窗口
+ * （1M/256K/128K/32K 都有），`getCompactionThreshold()` 是 `max(0.9, 1 − 50000/w)`
+ * —— 即 200K/500K→90%、1M→95%。显示与执行是两份数时，「显示面的诚实边界比执行面窄」。
+ */
+const mkCtxWithWindow = (maxTokens: number, threshold: number, tokens: number) => {
+  const ctx = mkCtx()
+  const e = ctx as unknown as {
+    engine: {
+      getContext: () => unknown
+      getRegistry: () => undefined
+      getUsageTracker: () => unknown
+    }
+    config: { providers: unknown[] }
+  }
+  e.engine.getContext = () => ({
+    getMessages: () => [],
+    getEstimatedTokens: () => tokens,
+    getCheckpoints: () => [],
+    getSystemPrompt: () => '',
+    getCacheStatus: () => ({ cachedTokens: 0 }),
+    getMaxTokens: () => maxTokens,
+    getCompactionThreshold: () => threshold,
+  })
+  e.engine.getRegistry = () => undefined
+  e.engine.getUsageTracker = () => ({
+    getSummary: () => ({ apiInputTokens: 0, apiOutputTokens: 0, tools: {} }),
+  })
+  e.config.providers = []
+  return ctx
+}
+
+describe('上下文用量显示跟随引擎的窗口与阈值', () => {
+  /**
+   * 六个命令**全都**印「已用 / 窗口」两端 ⇒ 断言一律照全套跑。
+   *
+   * 曾把这份名单按「我以为谁印窗口」手工二分（把 `/stats` 划了出去），结果漏掉了
+   * 它的硬编码 —— 那个 `200,000` 不在 `commands.ts` 里，是**抄进 i18n 文案**的
+   * （`commands.stats.tokens`）。**手工维护的豁免名单就是下一处漏网**，故不设名单。
+   */
+  const CMDS = ['/context', '/status', '/cost', '/usage', '/doctor', '/stats']
+
+  const run = (cmd: string) => getCommand(cmd)!(mkCtxWithWindow(1_000_000, 0.95, 100_000), [])
+
+  it.each(CMDS)('%s 的分母是引擎窗口（1M），不是写死的 200,000', async (cmd) => {
+    const { content } = await run(cmd)
+    expect(content).toContain('1,000,000')
+    expect(content).not.toContain('200,000')
+  })
+
+  // `/status` 只印窗口两端、不印百分比，故单列。
+  it.each(CMDS.filter((c) => c !== '/status'))(
+    '%s 的百分比按引擎窗口算（100K / 1M ⇒ 10.0%，非写死的 50.0%）',
+    async (cmd) => {
+      const { content } = await run(cmd)
+      expect(content).toContain('10.0')
+      expect(content).not.toContain('50.0')
+    },
+  )
+
+  it('/context 的压缩点取自引擎阈值（1M ⇒ 95%），不是写死的 90%', async () => {
+    const { content } = await run('/context')
+    expect(content).toContain('95%')
+    expect(content).toContain('950,000')
+    expect(content).not.toContain('180,000')
   })
 })
 
