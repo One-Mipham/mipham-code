@@ -703,4 +703,58 @@ describe('PermissionSystem', () => {
       expect(ps.getInvalidRules()).toEqual([])
     })
   })
+
+  // ═══════════════════════════════════════════
+  // P2 — 上限必须同时约束 allow 规则通道
+  // ═══════════════════════════════════════════
+
+  describe('P2 — maxAllowedMode 也约束 allow 规则通道', () => {
+    const bash = (): ToolDefinition => makeTool('Bash', 'ask', 'exec')
+
+    it('无限制时 allow 规则照旧直接放行（对照组：本项不动默认行为）', () => {
+      const ps = new PermissionSystem('default')
+      ps.allow('Bash(git:*)')
+
+      expect(ps.needsApproval(bash(), { command: 'git push origin main' })).toBe(false)
+    })
+
+    it('上限 acceptEdits：规则不能放行上限自己都要审批的命令', () => {
+      const ps = new PermissionSystem('default')
+      ps.setRestrictions({ maxAllowedMode: 'acceptEdits' })
+      ps.allow('Bash')
+
+      // 上限自己就放行的（仅验证类命令）不受影响 —— 上限不是把整条通道封死
+      expect(ps.needsApproval(bash(), { command: 'pnpm test' })).toBe(false)
+      // 上限之外（acceptEdits 对这一条本就返回 ask）：规则被压回审批
+      expect(ps.needsApproval(bash(), { command: 'git push origin main' })).toBe(true)
+    })
+
+    it('上限 plan：读仍在限内（规则有效），写被压回审批', () => {
+      const ps = new PermissionSystem('default')
+      ps.setRestrictions({ maxAllowedMode: 'plan' })
+      ps.allow('Read')
+      ps.allow('Write')
+
+      expect(ps.needsApproval(makeTool('Read', 'auto', 'file'), { file_path: 'a.ts' })).toBe(false)
+      expect(ps.needsApproval(makeTool('Write', 'ask', 'file'), { file_path: 'a.ts' })).toBe(true)
+    })
+
+    it('上限 default：落在工具自身声明上（该档即「交给工具自决」）', () => {
+      const ps = new PermissionSystem('default')
+      ps.setRestrictions({ maxAllowedMode: 'default' })
+      ps.allow('Bash')
+      ps.allow('git')
+
+      expect(ps.needsApproval(bash(), { command: 'git push' })).toBe(true) // tool 声明 ask
+      expect(ps.needsApproval(makeTool('git', 'auto', 'exec'), { command: 'push' })).toBe(false) // auto
+    })
+
+    it('只有 forbiddenModes 时不动 allow 规则通道（范围钉住：本项只管上限）', () => {
+      const ps = new PermissionSystem('default')
+      ps.setRestrictions({ forbiddenModes: ['bypassPermissions'] })
+      ps.allow('Bash(git:*)')
+
+      expect(ps.needsApproval(bash(), { command: 'git push origin main' })).toBe(false)
+    })
+  })
 })

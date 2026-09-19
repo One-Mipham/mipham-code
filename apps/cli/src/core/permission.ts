@@ -337,10 +337,10 @@ export class PermissionSystem {
       }
     }
 
-    // 3. Check allow rules
+    // 3. Check allow rules — but an org ceiling still applies (see allowRuleDecision)
     for (const rule of this.allowRules) {
       if (this.ruleMatches(rule, tool, input)) {
-        const result: PermissionLevel = 'bypass'
+        const result = this.allowRuleDecision(tool, input)
         this.checkCache.set(cacheKey, result)
         return result
       }
@@ -434,11 +434,46 @@ export class PermissionSystem {
     return rule.pattern === tool.name || rule.compiled.test(tool.name)
   }
 
+  /**
+   * An allow rule matched — what does it actually grant?
+   *
+   * Without an org ceiling it grants `'bypass'` (unchanged behavior). With
+   * `maxAllowedMode` set, the rule may only grant what **the ceiling's own
+   * baseline** would grant: the ceiling is an upper bound on permissiveness, and
+   * a rule is a *source of permission* — letting it jump over the ceiling is the
+   * same defect one layer in. So `allow: ['Bash']` under a ceiling of
+   * `acceptEdits` still permits verification-only Bash, while `git push` falls
+   * back to approval.
+   *
+   * Decided here, at check time, rather than inside `allow()`: `setRestrictions`
+   * may land **after** the rules are registered (`loadConfig`, sub-agents handed
+   * the same restrictions), and a rule registered before the ceiling would
+   * otherwise keep its old meaning.
+   *
+   * Only `maxAllowedMode` gates this. `forbiddenModes` is about *which mode you
+   * may sit in*, not about what a rule may grant, so a `forbiddenModes`-only
+   * config behaves exactly as before.
+   *
+   * The `'mode-baseline'` sentinel (mode `default`) resolves to `tool.permission`
+   * and stops there — deliberately not continuing to the legacy fallback of
+   * `check()` step 7. That fallback can only ever be *wider* than `'ask'`, and a
+   * ceiling must not hand out more than the un-restricted chain would.
+   */
+  private allowRuleDecision(tool: ToolDefinition, input: Record<string, unknown>): PermissionLevel {
+    const cap = this.restrictions?.maxAllowedMode
+    if (!cap) return 'bypass'
+
+    const baseline = this.modeBaseline(tool, input, cap)
+    const level = baseline === 'mode-baseline' ? (tool.permission ?? 'ask') : baseline
+    return level === 'ask' ? 'ask' : 'bypass'
+  }
+
   private modeBaseline(
     tool: ToolDefinition,
     input?: Record<string, unknown>,
+    mode: PermissionMode = this.mode,
   ): PermissionLevel | 'mode-baseline' {
-    switch (this.mode) {
+    switch (mode) {
       case 'default':
         // Delegate to tool.permission (backward compat)
         return 'mode-baseline'
