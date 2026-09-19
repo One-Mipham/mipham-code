@@ -4,9 +4,9 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.70.0
-> **最后更新**: 2026-09-19 — **`/upgrade` 在连不上 registry 时报「已是最新」（⑫）** —— 缺陷形状是**失败与成功共用一条渲染路径**：`shared/update.ts` 的 `checkForUpdates` 以 `let latest = current` 起手、`catch {}` 只注释「treat as up-to-date」，于是「问过了、你就是最新」与「根本没问成」落在**同一个值**上，`/upgrade` 对后者印了前者 —— 离线时输出 `✓ Already up to date (v0.81.8 → v0.81.8)`，读者无法知道根本没连上。改法是给 `UpdateCheck` 加 **`checked: boolean`**（唯一能区分这两态的信息，只在 `try` 里置真），并在 `upgradeCmd` 前置一条早返回，印「✗ 无法连接 npm registry —— 无法判断 v{current} 是否已是最新版本。未做任何改动」。**同步/异步两条路径同改**（`checkForUpdates` + `checkForUpdatesAsync`）—— 只接一条正是本仓库反复栽的「两条渲染路径只接一条」。对照取在**同一个用户问题的另一条路上**：`mipham update`（`bin/mipham.ts:265`）早就说 "✗ Could not determine latest version"，**说谎的只有 TUI 这条**。四条负控各自只红一个测试：C1 删早返回 ⇒ 命中 `toContain('Could not reach…')`；C4 去掉 `{current}` 参数 ⇒ **同一个测试**却命中 `toContain('0.81.8')`（同名不同断言）；C2/C3 分别打在同步 `checked` 与异步 `catch` 上。**如实记**：负控还原步骤曾用 `git checkout --`，它还原到 **HEAD 而非改前状态**，把未提交的 ⑫ 改动一并抹掉 —— 此后一律 `cp` 存档还原并核 sha256。测试 2863 → **2865**（249 文件不变）。
-> **前一条（2.69.0）**: 2026-09-19 — **CC 2.1.277/278 考古出的 15 条真缺口，首批 7 条落地（①②③④⑤⑥⑨）** —— 七条同一形状：**声称与实际不符**，其中六条是「有定义、无施加点」。① **allow 规则的复合命令绕过**（安全面）：`Bash(git:*)` 一口授权 `git status && rm -rf ./src`、**不弹提示** —— 匹配一直按 `some` 判，而 allow 是**授予**不是**过滤** ⇒ 现按规则自身的 `level` 分向：deny/ask 留 `some`（宽是对的，漏一段即洞），allow 改 `every`；`items.length > 0` 守卫承重（`[].every()` 为真 ⇒ 无可匹配段时满足任何 allow 规则）。② workflow 脚本算出的 prompt 以**真实 user 回合**注入子代理 ⇒ 加 `promptOrigin:'script'` 框定。③ `/bg` 建好 dashboard 行、报「✓ Background agent spawned」，而 **prompt 从未交给模型**、行永停 `working`。④ `/mcp disconnect` 只关连接却报「N tool(s) removed」，工具仍在引擎注册表里**可调用** —— 判据是那张 map 而非那句字符串。⑤ 跨会话 `ask` 的「先问用户」写在 **body**，而投递只走 **summary** ⇒ 同意闸写出来、从未被施加。⑨ `mipham --resume "<name>"` 是文档教给用户的**假入口**（`runApp` 早已实现、**零调用点**传过，且 `--resume` 不在 `KNOWN_FLAGS`）⇒ 接通链路 + 未知会话名 fail-loud；同批订正三处「`/resume last` 把历史交给模型」的**文案谎言**（它只渲染视图，模型上下文不变）。测试 2836 → **2863**（249 文件）；每条配负控（撤改法即红、红集互不相同）。**如实记**：`test/tools` 有一次未能复现的单次失败。
+> **版本**: 2.71.0
+> **最后更新**: 2026-09-19 — **worktree 会话里项目规则静默失效（⑦）** —— 形状是**读取点少了一层根**：`RulesLoader` 只读 `join(cwd, '.mipham', 'rules')`，而 `.mipham/` 在 `.gitignore:15` 里、`EnterWorktree` 又把工作树建在 `.mipham/worktrees/<name>`（`tools/exec/enter-worktree.ts`）⇒ **真实 `git worktree add` 的检出里根本没有 `.mipham/`**（scratch 仓实跑确认：pre-fix 在 worktree cwd 下 `count() = 0`、注入块 **0 字符**、**没有任何提示**；同一份规则在主树 `count() = 1`）。改法是把「项目根」这一层补回来 —— cwd 落在 worktree 标记内时追加读 `<项目根>/.mipham/rules`，复用 **`findWorktreeMarker()`**（git/bash 工具用的同一个检测，不另造第二条判断路径）；同名规则**就近优先**（worktree 内定义的覆盖项目级）。两条读路径抽成同一个 `readDir()` —— 不抽就是本仓库反复栽的「两条渲染路径只接一条」。三条负控**红集互不相同**：删回退 ⇒ 只红 worktree 那条；删去重 ⇒ 只红「就近优先」；把标记检测换成**盲目的上级跳转** ⇒ 红 worktree + 「普通子目录不许够到项目根」两条（这一条同时证明了第三条断言有判别力 —— 第一版跳转层数写错，红集与删回退重合，等于没验）。**边界如实记**：检测是标记式的，建在 `.mipham/worktrees/` 与 `.claude/worktrees/` 之外的 worktree 不覆盖。测试 2865 → **2868**（249 文件不变）。
+> **前一条（2.70.0）**: 2026-09-19 — **`/upgrade` 在连不上 registry 时报「已是最新」（⑫）** —— 缺陷形状是**失败与成功共用一条渲染路径**：`shared/update.ts` 的 `checkForUpdates` 以 `let latest = current` 起手、`catch {}` 只注释「treat as up-to-date」，于是「问过了、你就是最新」与「根本没问成」落在**同一个值**上，`/upgrade` 对后者印了前者 —— 离线时输出 `✓ Already up to date (v0.81.8 → v0.81.8)`，读者无法知道根本没连上。改法是给 `UpdateCheck` 加 **`checked: boolean`**（唯一能区分这两态的信息，只在 `try` 里置真），并在 `upgradeCmd` 前置一条早返回，印「✗ 无法连接 npm registry —— 无法判断 v{current} 是否已是最新版本。未做任何改动」。**同步/异步两条路径同改**（`checkForUpdates` + `checkForUpdatesAsync`）—— 只接一条正是本仓库反复栽的「两条渲染路径只接一条」。对照取在**同一个用户问题的另一条路上**：`mipham update`（`bin/mipham.ts:265`）早就说 "✗ Could not determine latest version"，**说谎的只有 TUI 这条**。四条负控各自只红一个测试：C1 删早返回 ⇒ 命中 `toContain('Could not reach…')`；C4 去掉 `{current}` 参数 ⇒ **同一个测试**却命中 `toContain('0.81.8')`（同名不同断言）；C2/C3 分别打在同步 `checked` 与异步 `catch` 上。**如实记**：负控还原步骤曾用 `git checkout --`，它还原到 **HEAD 而非改前状态**，把未提交的 ⑫ 改动一并抹掉 —— 此后一律 `cp` 存档还原并核 sha256。测试 2863 → **2865**（249 文件不变）。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -82,7 +82,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 249 个测试文件，2865 个测试
+│   │   ├── test/               # 249 个测试文件，2868 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -108,7 +108,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（2865 个测试）
+pnpm test         # vitest run（2868 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~9 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -296,7 +296,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 74      | 1124     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
+| core            | 74      | 1127     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
 | tools           | 25      | 383      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 34      | 213      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
 | ui              | 16      | 192      | commands / input / config-wizard / loop / skill-doctor                                                                                                                      |
@@ -316,7 +316,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integrity       | 8       | 54       | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 120      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **249** | **2865** | **0 失败** ✅（2863 passed + 2 skipped）                                                                                                                                    |
+| **合计**        | **249** | **2868** | **0 失败** ✅（2866 passed + 2 skipped）                                                                                                                                    |
 
 > **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 179 测试，自带
 > `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。

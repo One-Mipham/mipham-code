@@ -20,6 +20,7 @@
 import { readdirSync, readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { globToRegexSource } from './credential-masker/matcher'
+import { findWorktreeMarker } from './paths.ts'
 
 interface RuleFile {
   name: string
@@ -31,9 +32,27 @@ interface RuleFile {
 export class RulesLoader {
   private rules: RuleFile[] = []
   private rulesDir: string
+  /**
+   * Rules directory of the **project the cwd belongs to**, when cwd sits inside
+   * one of our worktrees; `null` otherwise.
+   *
+   * `.mipham/` is gitignored, so a worktree checkout never contains
+   * `.mipham/rules` — `git worktree add .mipham/worktrees/w1` produces a tree
+   * with no `.mipham/` at all (measured). Reading only `cwd` therefore made
+   * every project rule invisible inside a worktree session, **silently**: zero
+   * rules, no warning, empty context block.
+   *
+   * Detection is marker-based (`findWorktreeMarker`, the same one the git/bash
+   * tools use) — a worktree created outside `.mipham/worktrees/` and
+   * `.claude/worktrees/` is not covered.
+   */
+  private projectRulesDir: string | null
 
   constructor(cwd: string) {
     this.rulesDir = join(cwd, '.mipham', 'rules')
+    const marker = findWorktreeMarker(cwd)
+    const projectRulesDir = marker ? join(marker.root, '.mipham', 'rules') : null
+    this.projectRulesDir = projectRulesDir === this.rulesDir ? null : projectRulesDir
   }
 
   /**
@@ -41,16 +60,27 @@ export class RulesLoader {
    */
   load(): void {
     this.rules = []
-    if (!existsSync(this.rulesDir)) return
+    this.readDir(this.rulesDir)
+    if (this.projectRulesDir) this.readDir(this.projectRulesDir)
+  }
 
+  /**
+   * Read every `.md` in `dir` into `this.rules`. A name already loaded wins —
+   * "nearest first": a rule the worktree defines overrides the project copy.
+   */
+  private readDir(dir: string): void {
+    if (!existsSync(dir)) return
     try {
-      const files = readdirSync(this.rulesDir).filter((f) => f.endsWith('.md'))
+      const seen = new Set(this.rules.map((r) => r.name))
+      const files = readdirSync(dir).filter((f) => f.endsWith('.md'))
       for (const file of files) {
-        const filepath = join(this.rulesDir, file)
+        const name = file.replace(/\.md$/, '')
+        if (seen.has(name)) continue
         try {
-          const raw = readFileSync(filepath, 'utf-8')
+          const raw = readFileSync(join(dir, file), 'utf-8')
           const { paths, description, content } = this.parseRule(raw, file)
-          this.rules.push({ name: file.replace(/\.md$/, ''), paths, description, content })
+          this.rules.push({ name, paths, description, content })
+          seen.add(name)
         } catch {
           // Skip unparseable files
         }

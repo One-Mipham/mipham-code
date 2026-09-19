@@ -93,6 +93,53 @@ describe('RulesLoader — loading', () => {
   })
 })
 
+describe('RulesLoader — linked worktree', () => {
+  // `.mipham/` is gitignored, so a worktree checkout carries no `.mipham/rules`:
+  // `git worktree add .mipham/worktrees/w1` was run for real against a scratch
+  // repo and the checkout contains no `.mipham/` at all. Reading only `cwd`
+  // therefore meant a worktree session saw **zero** project rules, silently.
+  const worktree = (name: string): string => {
+    const dir = join(root, '.mipham', 'worktrees', name)
+    mkdirSync(dir, { recursive: true })
+    return dir
+  }
+
+  it('loads the project rules when cwd is inside a worktree', () => {
+    writeRule('always.md', 'Project-wide.\n')
+
+    const loader = new RulesLoader(worktree('w1'))
+    loader.load()
+
+    expect(loader.list()).toEqual(['always'])
+    expect(loader.buildContextBlock([])).toContain('Project-wide.')
+  })
+
+  it('prefers a worktree-local rule over the project rule of the same name', () => {
+    writeRule('always.md', 'From the project.\n')
+    const wt = worktree('w2')
+    mkdirSync(join(wt, '.mipham', 'rules'), { recursive: true })
+    writeFileSync(join(wt, '.mipham', 'rules', 'always.md'), 'From the worktree.\n')
+
+    const loader = new RulesLoader(wt)
+    loader.load()
+
+    expect(loader.list()).toEqual(['always'])
+    expect(loader.buildContextBlock([])).toContain('From the worktree.')
+    expect(loader.buildContextBlock([])).not.toContain('From the project.')
+  })
+
+  it('does not reach for a project root from an ordinary subdirectory', () => {
+    writeRule('always.md', 'Project-wide.\n')
+
+    // `/proj/src` is not a worktree marker path ⇒ no fallback, and no
+    // `.mipham/rules` of its own ⇒ nothing loads.
+    const loader = new RulesLoader(join(root, 'src'))
+    loader.load()
+
+    expect(loader.count()).toBe(0)
+  })
+})
+
 describe('RulesLoader — path matching', () => {
   it('matches a rule only against files its glob covers', () => {
     writeRule('cli.md', '---\npaths: "apps/cli/src/**/*.ts"\n---\nCLI rules.\n')
