@@ -6,7 +6,7 @@ import { createAgentContext } from './agent-context'
 import { getBackgroundAgentRegistry } from './background-registry'
 import { getMessageBus } from './message-bus'
 import type { HookEngine } from '../core/hooks'
-import type { PermissionSystem } from '../core/permission'
+import { PermissionSystem } from '../core/permission'
 import { AgentExperience } from './agent-experience'
 import { PatternAnalyzer } from './pattern-analyzer.js'
 import { getWorkspaceTrust } from '../core/workspace-trust'
@@ -217,6 +217,12 @@ export class SubAgent {
           : 'inherit'
       subPermission = this.permission.createSubAgentPermission(agentPermMode)
     }
+
+    // Absence is not a licence to run everything. With no permission system handed in,
+    // fall back to the CLI's own default mode — which still defers to each tool's own
+    // `permission` field — instead of skipping the check entirely. `default` mode is
+    // what the CLI itself runs under, so this is the same policy, not a stricter one.
+    const gate = subPermission ?? new PermissionSystem('default')
 
     // Resolve execution directory: worktree isolation or process cwd
     const execCwd = options.worktreePath || process.cwd()
@@ -463,10 +469,10 @@ export class SubAgent {
 
           // Security: check permission before executing.
           // Sub-agents run without user interaction — tools requiring approval are rejected.
-          // When permission system is absent (undefined), allow all tools (backward compat
-          // for tests and headless usage). When present, always enforce approval checks.
+          // The gate is never absent: when nobody handed in a permission system, `gate` is
+          // the CLI's default mode (see above), so this check always runs.
           // P0-3: Uses isolated subPermission (clamped by org restrictions) instead of parent's.
-          if (subPermission?.needsApproval(tool, effectiveInput)) {
+          if (gate.needsApproval(tool, effectiveInput)) {
             currentMessages.push({
               role: 'user' as const,
               content:

@@ -582,6 +582,74 @@ describe('SubAgent', () => {
     expect(block.content).toBe('boom')
     expect(block.is_error).toBe(true)
   })
+
+  // ═══════════════════════════════════════════
+  // P6 — 没有权限系统 ≠ 不做检查
+  // ═══════════════════════════════════════════
+
+  describe('P6 — 权限系统缺席时的语义', () => {
+    /** 记下「工具到底跑没跑」的探针 —— 判据取执行，不取返回文案。 */
+    function makeProbeTool(permission: ToolDefinition['permission'], sink: { ran: boolean }) {
+      return {
+        name: 'Bash',
+        description: 'probe',
+        category: 'exec' as const,
+        permission,
+        parameters: { type: 'object', properties: {} },
+        execute: async () => {
+          sink.ran = true
+          return { success: true, content: 'ran' }
+        },
+      } satisfies ToolDefinition
+    }
+
+    /**
+     * 第一轮发一次工具调用，之后收敛成文本回复。
+     * 真实 provider 不会每轮重放同一个 `tool_use` —— 重放会把循环一路推到 maxTurns，
+     * 于是「拒绝之后循环照常走完」这条断言就测不到东西了。
+     */
+    function toolUseThenDone(): ProviderInstance {
+      let turn = 0
+      return {
+        ...createMockProvider([]),
+        async *chat(): AsyncGenerator<StreamChunk> {
+          turn += 1
+          if (turn === 1) {
+            yield {
+              type: 'tool_use',
+              toolUse: { type: 'tool_use', id: '1', name: 'Bash', input: {} },
+            }
+          } else {
+            yield { type: 'text', content: 'done' }
+          }
+          yield { type: 'stop' }
+        },
+      }
+    }
+
+    it('需要审批的工具**不执行**（非交互上下文里 ask 就是拒绝，而不是放行）', async () => {
+      const sink = { ran: false }
+      const registry = createMockRegistry(toolUseThenDone())
+      // 第三个参数（权限系统）缺席 —— 正是 `?.` 让整道检查消失的那条路
+      const sub = new SubAgent(registry, new Map([['Bash', makeProbeTool('ask', sink)]]))
+
+      const result = await sub.execute('run', 'task')
+
+      expect(sink.ran).toBe(false)
+      // 循环照常走完（拒绝是「继续」不是崩溃）
+      expect(result).toContain('done')
+    })
+
+    it('对照组：同一个缺席权限系统的子代理，声明 auto 的工具照旧执行（不是一刀切拒绝）', async () => {
+      const sink = { ran: false }
+      const registry = createMockRegistry(toolUseThenDone())
+      const sub = new SubAgent(registry, new Map([['Bash', makeProbeTool('auto', sink)]]))
+
+      await sub.execute('run', 'task')
+
+      expect(sink.ran).toBe(true)
+    })
+  })
 })
 
 describe('AgentExperience', () => {
