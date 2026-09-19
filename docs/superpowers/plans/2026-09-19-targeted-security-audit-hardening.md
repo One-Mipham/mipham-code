@@ -289,6 +289,50 @@ permission 层**模式降级**（不是匹配）、daemon **外部 API**、命�
 
 ---
 
+### 批次 4 落地状态（2026-09-19 收工）
+
+五笔 / 六条：`8c4dc128`(P4) / `5af57957`(P1) / `8459185d`(P2) / `e728884e`(P3+P5) / `9170fae2`(P6)
+—— P3 与 P5 同源、合并为一笔。六条全落，零延期。测试 2767 → 2800（241 → 244 文件）；
+typecheck / eslint / prettier 全绿；`/crsi eval` 38 条冻结契约不退化。
+
+**与本节原计划的偏差（如实记）：**
+
+1. **P2 走的是第三条路，原计划给的两条都没选**。原计划写「把上限判据提到 `check()` 第 3 步之前，
+   或让 `allow()` 感知 `this.restrictions`（后者更小）」。落地时选了**在 allow 命中之后单独判一次**
+   （`allowRuleDecision`）：让 `allow()` 感知 restrictions 会把**注册当时**的状态冻进规则，而
+   `setRestrictions` 在 `index.tsx` 里是**条件调用**（`if (config.permissionRestrictions)`）、
+   且 `loadConfig` 是第二条落点 ⇒「先 setRestrictions 再 allow」这个顺序前提是真会破的。
+   把判据放在 check 时，前提就不存在了。**如实记**：今天两处生产入口恰好都先 setRestrictions，
+   故两种设计的**当前**行为等价 —— 选后者是为了去掉那个隐式前提，不是修一个正在发生的 bug。
+2. **判据的边界是有意停住的**：`allowRuleDecision` 取「上限那一档自己的基线」，遇到
+   `'mode-baseline'`（`default` 档）时**停在 `tool.permission`**，不再往 `check()` 第 7 步的
+   legacy 兜底走 —— 那个兜底只可能比 `'ask'` 更宽，够到它就等于把上限交给一个更宽的来源。
+3. **P3/P5 的修法不在页脚，在装配点**。原计划只写「状态与执行同源」。落地把权限系统**建一次**
+   （`index.tsx` 的配置加载处）、交给 `new QueryEngine(...)`，页脚与系统提示都回读这一个实例。
+   理由：在页脚侧「照 config 再算一遍」正是本仓库反复出现的形状（同一个量算两处、只接一处）。
+   `RemoteEngine` 的桩补 `getMode`，报**用户最后请求的那一档** —— 与页脚原有行为逐字相同。
+4. **`getAllowedModes` / `isModeAllowed` 按计划的「要么接线要么删」处置完毕**：`isModeAllowed`
+   全仓库零引用（含文件内）⇒ 删；`getAllowedModes` 唯一消费者在同文件内 ⇒ 撤 export。
+   与 T4 同形（删的必须不存在、留的必须仍零引用）。
+5. **P4 存在一处有意偏离**：`forbiddenModes: ['bypassPermissions']` 的兜底从 `plan` 变
+   `acceptEdits`，即降级结果**更宽** —— 旧值偏窄本身就是「越过目标」的产物，不是另设的安全边界。
+   行为变更点名：`maxAllowedMode: 'plan'` 现在只保留 plan（此前保留三档）；
+   `maxAllowedMode: 'default'` 现在保留 plan + default。两处都是**收紧**。
+6. **P6 未找到活的产出路径**（如实记）：四处 `SubAgent` 构造点（`tools/agent/agent.ts`、
+   `workflow/primitives/agent.ts`、`skills/fork-executor.ts`、`ui/commands.ts`）加 `engine.ts:1219`
+   的工具上下文**全都传了**权限系统。本项关闭的是 fail-open 的**默认姿态**，不是已观测到的利用。
+   缺省档取 `default` 是**量出来的**而非猜的：负控把缺省档换成 `bypassPermissions` 只 1 红、
+   换成 `plan` 会红 6 条（其中 4 条既有用例证明这条路径在测试里一直是活的）。
+
+**两条未修观察（属另一件事，不排期）：**
+
+1. **Shift+Tab 之后系统提示那段 `## Permission Context` 不重建**，仍描述切换前的模式。不修的理由：
+   重建要动整份系统提示，代价是每次切档都让 provider 的 prompt cache 失效；且被拦下时
+   `explainDenial` 会说清是哪条规则/哪一档拦的。本项只保证**建它那一刻**用的是真对象。
+2. **喂给嵌套工具的 `permissionSystem: subPermission` 刻意不动** —— 子代理自己的闸修好了，但嵌套
+   工具上下文里那个字段在「调用方没传权限系统」时仍是 `undefined`。属另一个决定（嵌套工具的语义
+   与子代理自身的闸不是同一件事），此处只记录。
+
 ## 三、已被本轮验证「仍然成立」的旧修复（不重报，仅备查）
 
 每条都配有**能失败的对照**：
