@@ -401,15 +401,35 @@ export function createBashTool(credentialConfig?: CredentialMaskingConfig): Tool
           stdout: 'pipe',
           stderr: 'pipe',
           env: spawnEnv,
+          // Own process group. Required for the group kill below to reach
+          // grandchildren — and for it to target *our* group at all: without
+          // this the child inherits the parent's pgid, so `kill(-pid)` aims at
+          // the wrong group and fails (or, worse, hits the parent's).
+          detached: true,
         })
 
-        const timer = setTimeout(() => proc.kill(), timeout)
-        const rawOutput = await new Response(proc.stdout).text()
+        // Start reading at once — a child that fills the pipe buffer blocks on
+        // write and would then never exit — but do **not** await here: if a
+        // descendant inherits the pipe and outlives the shell, EOF never comes,
+        // and awaiting this before `exited` is what hung the call for good.
+        const stdoutRead = new Response(proc.stdout).text()
+        const stderrRead = new Response(proc.stderr).text()
+
+        const timer = setTimeout(() => killProcessGroup(proc.pid), timeout)
         const exitCode = await proc.exited
         clearTimeout(timer)
 
+        // The shell is gone, so only a pipe-holding descendant can still be
+        // holding these up. Released by the group kill, at most once.
+        let released = false
+        const release = () => {
+          if (released) return
+          released = true
+          killProcessGroup(proc.pid)
+        }
+        const rawOutput = await settlePipe(stdoutRead, release)
         // Read stderr for violation detection and error reporting
-        const rawStderr = await new Response(proc.stderr).text()
+        const rawStderr = await settlePipe(stderrRead, release)
 
         // ── Credential masking: scrub output ──
         let output = rawOutput
@@ -468,6 +488,52 @@ export function createBashTool(credentialConfig?: CredentialMaskingConfig): Tool
       }
     },
   }
+}
+
+/** Grace given to a descendant still holding the output pipe after the shell itself has exited. */
+const PIPE_GRACE_MS = 1_000
+
+/**
+ * Kill a whole process group. `proc.kill()` reaches only the direct child, so a
+ * `bash -c` that spawned its own children leaves them orphaned and unnotified.
+ * The negative pid addresses the group led by that pid, which exists only when
+ * the child was spawned `detached` — verified on this host: without it the
+ * child's pgid is the *parent's* group, and this call fails with ESRCH rather
+ * than reaching the grandchildren.
+ */
+export function killProcessGroup(pid: number | undefined): void {
+  if (pid === undefined || pid <= 0) return
+  try {
+    process.kill(-pid, 'SIGKILL')
+  } catch (err: unknown) {
+    // ESRCH: the group is already gone, which is the normal case when the
+    // command finished on its own. Anything else means a group kill isn't
+    // available here, so fall back to the direct child.
+    if ((err as NodeJS.ErrnoException).code === 'ESRCH') return
+    try {
+      process.kill(pid, 'SIGKILL')
+    } catch {
+      // Already gone.
+    }
+  }
+}
+
+/**
+ * Await an already-started pipe read, but not forever. A descendant that
+ * inherited the pipe keeps EOF from arriving, and that read is what used to
+ * hang the call after the command itself had finished. Once the grace expires,
+ * take the group down — which closes the pipe — and finish the read.
+ */
+async function settlePipe<T>(read: Promise<T>, release: () => void): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const stalled = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), PIPE_GRACE_MS)
+  })
+  const winner = await Promise.race([read, stalled])
+  clearTimeout(timer)
+  if (winner !== null) return winner
+  release()
+  return read
 }
 
 export const bashToolService: Service = {
