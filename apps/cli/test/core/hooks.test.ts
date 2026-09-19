@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { HookDefinition, HookResult, ToolResult } from '@mipham/shared'
 import { HookEngine } from '../../src/core/hooks'
+import { loadHookConfigs } from '../../src/core/hooks-config'
 
 // ── Helpers ──
 
@@ -390,5 +391,140 @@ describe('HookEngine', () => {
     )
 
     expect(result.allowed).toBe(true)
+  })
+
+  // ═══════════════════════════════════════════
+  // Subagent matchers — the matcher is the agent type
+  // ═══════════════════════════════════════════
+
+  describe('subagent event matchers', () => {
+    it('runs a SubagentStart hook only for the agent type it matches', async () => {
+      const engine = new HookEngine()
+      const exploreHandler = makePassHandler()
+      const generalHandler = makePassHandler()
+
+      engine.register(makeHook('SubagentStart', exploreHandler, 'Explore'))
+      engine.register(makeHook('SubagentStart', generalHandler, 'general'))
+
+      await engine.executeSubagentStart('Explore', 'find the parser', 's1')
+
+      expect(exploreHandler).toHaveBeenCalledTimes(1)
+      expect(generalHandler).not.toHaveBeenCalled()
+    })
+
+    it('runs a SubagentStop hook only for the agent type it matches', async () => {
+      const engine = new HookEngine()
+      const exploreHandler = makePassHandler()
+      const generalHandler = makePassHandler()
+
+      engine.register(makeHook('SubagentStop', exploreHandler, 'Explore'))
+      engine.register(makeHook('SubagentStop', generalHandler, 'general'))
+
+      await engine.executeSubagentStop('general', 'write the doc', 's1', true, 'done')
+
+      expect(generalHandler).toHaveBeenCalledTimes(1)
+      expect(exploreHandler).not.toHaveBeenCalled()
+    })
+
+    it('honours a regex matcher over agent types', async () => {
+      // loadHookConfigs compiles the matcher as a RegExp, so an alternation must
+      // select more than one agent type.
+      const engine = new HookEngine()
+      const handler = makePassHandler()
+
+      engine.register(makeHook('SubagentStart', handler, 'Explore|Plan'))
+
+      await engine.executeSubagentStart('Plan', 'plan the work', 's1')
+      expect(handler).toHaveBeenCalledTimes(1)
+
+      await engine.executeSubagentStart('general', 'do the work', 's1')
+      expect(handler).toHaveBeenCalledTimes(1)
+    })
+
+    it('still runs an unrestricted SubagentStart hook for every agent type', async () => {
+      const engine = new HookEngine()
+      const handler = makePassHandler()
+
+      engine.register(makeHook('SubagentStart', handler)) // no matcher
+
+      await engine.executeSubagentStart('general', 'do the work', 's1')
+
+      expect(handler).toHaveBeenCalledTimes(1)
+    })
+
+    it('passes the agent type to the hook as the tool name', async () => {
+      const engine = new HookEngine()
+      const handler = makePassHandler()
+
+      engine.register(makeHook('SubagentStart', handler))
+
+      await engine.executeSubagentStart('Explore', 'find the parser', 's1')
+
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({ event: 'SubagentStart', toolName: 'Explore' }),
+      )
+    })
+
+    it('filters through the settings.json path, matcher wrapper included', async () => {
+      // The real path: loadHookConfigs wraps each hook with the matcher test.
+      // A command hook that always exits 2 makes "did it run" observable.
+      const engine = new HookEngine()
+      const defs = loadHookConfigs({
+        SubagentStart: [
+          {
+            matcher: 'Explore|Plan',
+            hooks: [{ type: 'command' as const, command: '/bin/sh', args: ['-c', 'exit 2'] }],
+          },
+        ],
+      })
+      expect(defs).toHaveLength(1)
+      engine.register(defs[0]!)
+
+      const matched = await engine.executeSubagentStart('Plan', 'plan the work', 's1')
+      expect(matched.allowed).toBe(false)
+
+      const unmatched = await engine.executeSubagentStart('general', 'do the work', 's1')
+      expect(unmatched.allowed).toBe(true)
+    })
+  })
+
+  // ═══════════════════════════════════════════
+  // Stop hook block signal
+  // ═══════════════════════════════════════════
+
+  describe('Stop hook blocking', () => {
+    it('surfaces a blocking hook as a block decision', async () => {
+      // engine.ts continues the turn on `decision === 'block'`. A hook that says
+      // "do not stop" returns allowed:false, so the decision must be derived.
+      const engine = new HookEngine()
+      engine.register(makeHook('Stop', makeDenyHandler('tests are failing')))
+
+      const result = await engine.executeStop('s1')
+
+      expect(result.decision).toBe('block')
+      expect(result.reason).toBe('tests are failing')
+    })
+
+    it('leaves a non-blocking Stop hook without a decision', async () => {
+      const engine = new HookEngine()
+      engine.register(makeHook('Stop', makePassHandler()))
+
+      const result = await engine.executeStop('s1')
+
+      expect(result.decision).toBeUndefined()
+      expect(result.allowed).toBe(true)
+    })
+
+    it('does not turn a PreToolUse deny into a Stop block', async () => {
+      // The decision is a Stop-only signal — a denied tool must not be read as
+      // "keep working" by the engine's Stop path.
+      const engine = new HookEngine()
+      engine.register(makeHook('PreToolUse', makeDenyHandler('no')))
+
+      const result = await engine.executePreToolUse('Bash', {}, 's1')
+
+      expect(result.allowed).toBe(false)
+      expect(result.decision).toBeUndefined()
+    })
   })
 })

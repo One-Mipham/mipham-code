@@ -98,7 +98,12 @@ export class HookEngine {
 
   async executeStop(sessionId: string): Promise<HookResult> {
     const ctx: HookContext = { event: 'Stop', sessionId }
-    return this.runHooks('Stop', undefined, ctx)
+    const result = await this.runHooks('Stop', undefined, ctx)
+
+    // A blocking Stop hook arrives as a deny (exit code 2, `decision: block`, or
+    // `continue: false`), but the engine's Stop path reads `decision`. Derive it
+    // here rather than at each producer so every form reaches "do not stop yet".
+    return result.allowed ? result : { ...result, decision: 'block' }
   }
 
   async executeUserPromptSubmit(prompt: string, sessionId: string): Promise<HookResult> {
@@ -134,9 +139,12 @@ export class HookEngine {
     const ctx: HookContext = {
       event: 'SubagentStart',
       sessionId,
+      // The agent type plays the role a tool name plays for PreToolUse: it is
+      // what a settings.json `matcher` selects on.
+      toolName: agentType,
       toolInput: { agentType, description },
     }
-    return this.runHooks('SubagentStart', undefined, ctx)
+    return this.runHooks('SubagentStart', agentType, ctx)
   }
 
   async executeSubagentStop(
@@ -149,10 +157,12 @@ export class HookEngine {
     const ctx: HookContext = {
       event: 'SubagentStop',
       sessionId,
+      // Matcher target — see executeSubagentStart.
+      toolName: agentType,
       toolInput: { agentType, description, success },
       toolResult: result ? { success, content: result.slice(0, 2000) } : undefined,
     }
-    return this.runHooks('SubagentStop', undefined, ctx)
+    return this.runHooks('SubagentStop', agentType, ctx)
   }
 
   async executePostToolUseFailure(
@@ -268,13 +278,34 @@ export class HookEngine {
 
   // ── Core execution ──
 
+  /**
+   * Does a hook's `matcher` select this invocation?
+   *
+   * No matcher means every invocation of the event. Otherwise the stored matcher
+   * is a regex — `loadHookConfigs` compiles it as one — tested against the name
+   * this event filters on: the tool name for tool events, the agent type for the
+   * subagent events. Events that carry no such name (Stop, SessionStart, …) are
+   * not filtered here.
+   */
+  private matchesMatcher(matcher: string | undefined, name: string | undefined): boolean {
+    if (!matcher || !name) return true
+    try {
+      return new RegExp(matcher).test(name)
+    } catch {
+      // An uncompilable pattern cannot get this far through loadHookConfigs,
+      // which compiles every matcher when it loads. Keep such a hook running
+      // rather than dropping it silently.
+      return true
+    }
+  }
+
   private async runHooks(
     event: HookEvent,
     toolName: string | undefined,
     ctx: HookContext,
   ): Promise<HookResult> {
     const matching = this.hooks.filter(
-      (h) => h.event === event && (!toolName || !h.toolName || h.toolName === toolName),
+      (h) => h.event === event && this.matchesMatcher(h.toolName, toolName),
     )
 
     const result: HookResult = { allowed: true }
