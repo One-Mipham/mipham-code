@@ -22,6 +22,10 @@ export interface ImprovementReport {
   noise: number
   minEffect: number
   verdict: ImprovementVerdict
+  /** ε：提交者事前写下的预期提升点数。缺席 = 该记录没有预登记。 */
+  predictedDelta?: number
+  /** 预测是否命中。与 predictedDelta 同时出现、同时缺席（JSON 序列化会丢掉 undefined 键）。 */
+  predictionHit?: boolean
 }
 
 export interface ImprovementRecord extends ImprovementReport {
@@ -55,6 +59,7 @@ function stdDev(xs: number[]): number {
 export function buildImprovementReport(
   sample: SkillDeltaSample,
   changeSet: string[],
+  predicted?: number,
 ): ImprovementReport {
   const deltaMean = mean(sample.postScores) - mean(sample.baselineScores)
   const noise = stdDev(sample.baselineScores)
@@ -70,6 +75,11 @@ export function buildImprovementReport(
     noise,
     minEffect,
     verdict,
+    // 两个字段同生同灭：缺席预测必须**键不存在**，而不是 predictionHit: false ——
+    // 后者会让「我们没预测」被算进 predictionHitRate 的分母。
+    ...(predicted !== undefined
+      ? { predictedDelta: predicted, predictionHit: predictionHit(predicted, deltaMean) }
+      : {}),
   }
 }
 
@@ -115,6 +125,24 @@ export function improvementSignalStrong(records: ImprovementRecord[]): boolean {
  */
 export function predictionHit(predicted: number | undefined, deltaMean: number): boolean {
   return predicted !== undefined && deltaMean >= predicted
+}
+
+/**
+ * ε 命中率。分母 = **有预测的记录数**（判据取 `predictedDelta !== undefined`），
+ * 复用既有 wilsonInterval。无预测的记录既不入分子也不入分母。
+ */
+export function predictionHitRate(records: ImprovementRecord[]): {
+  total: number
+  hits: number
+  rate: number
+  lo: number
+  hi: number
+} {
+  const judged = records.filter((r) => r.predictedDelta !== undefined)
+  const total = judged.length
+  const hits = judged.filter((r) => r.predictionHit === true).length
+  const { lo, hi } = wilsonInterval(hits, total)
+  return { total, hits, rate: total === 0 ? 0 : hits / total, lo, hi }
 }
 
 // ── 台账 ──

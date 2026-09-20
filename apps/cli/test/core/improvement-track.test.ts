@@ -16,6 +16,7 @@ import {
   improvementRate,
   improvementSignalStrong,
   predictionHit,
+  predictionHitRate,
   appendImprovement,
   readImprovements,
   setPendingVerdict,
@@ -85,6 +86,58 @@ describe('predictionHit', () => {
     // ε 是提交者自己写下的数，判据就是「达到没达到」。
     // 若这里叠一层 minEffect(20)，(−5, −10) 会被判 false —— 那是把两个数打架。
     expect(predictionHit(-10, -5)).toBe(true)
+  })
+})
+
+describe('predictionHitRate', () => {
+  function rec(predictedDelta?: number, hit?: boolean): ImprovementRecord {
+    return {
+      skillName: 's',
+      changeSet: ['f.md'],
+      causal: true,
+      baselineScores: [50],
+      postScores: [70],
+      deltaMean: 20,
+      noise: 0,
+      minEffect: 20,
+      verdict: 'improved',
+      id: 'x',
+      timestamp: '2026-09-20T00:00:00.000Z',
+      ...(predictedDelta !== undefined ? { predictedDelta, predictionHit: hit } : {}),
+    }
+  }
+
+  it('分母只数有预测的记录，缺席既不入分子也不入分母', () => {
+    const r = predictionHitRate([rec(10, true), rec(50, false), rec()])
+    expect(r.total).toBe(2)
+    expect(r.hits).toBe(1)
+    expect(r.rate).toBe(0.5)
+  })
+
+  it('全部缺席 → total 0、rate 0，不除零', () => {
+    const r = predictionHitRate([rec(), rec()])
+    expect(r.total).toBe(0)
+    expect(r.rate).toBe(0)
+    expect(r.lo).toBe(0)
+  })
+})
+
+describe('buildImprovementReport 带预测', () => {
+  const SAMPLE = { skillName: 's', baselineScores: [50, 50], postScores: [70, 70] }
+
+  it('给了预测 → 两个字段都写上', () => {
+    const r = buildImprovementReport(SAMPLE, ['f.md'], 10)
+    expect(r.deltaMean).toBe(20)
+    expect(r.predictedDelta).toBe(10)
+    expect(r.predictionHit).toBe(true) // 20 ≥ 10
+  })
+
+  it('没给预测 → 两个字段都不出现（而非 false）', () => {
+    const r = buildImprovementReport(SAMPLE, ['f.md'])
+    // 关键：缺席必须缺席。写成 predictionHit: false 会让「无预测」被算进分母，
+    // 命中率就被「我们没预测」稀释成 0。
+    expect('predictedDelta' in r).toBe(false)
+    expect('predictionHit' in r).toBe(false)
   })
 })
 
