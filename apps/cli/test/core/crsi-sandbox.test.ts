@@ -250,16 +250,21 @@ describe('validateMergeConvergence (合并型收敛闸)', () => {
     ).toBeNull()
   })
 
-  it('filePath 缺失（两侧内容相同）→ 走字节尺子，不涨 ⇒ 通过', () => {
-    // 两个内容都在、而 filePath 缺席，才走到 `proposal.filePath ?? ''`：省掉它是把这条
-    // 合并按**字节**尺子量（空串不命中教训/规则两条分派），两侧等长 ⇒ 无一项上升。
-    expect(
-      validateMergeConvergence({
-        originalContent: 'abc',
-        newContent: 'abc',
-        merge: true,
-      }),
-    ).toBeNull()
+  it('filePath 缺失 → 按字节尺子判：教训段数不涨而字节涨 ⇒ 拒绝', () => {
+    // 两个内容都在、而 filePath 缺席，才走到 `proposal.filePath ?? ''`。夹具刻意让**两把尺子分歧**：
+    //   lessons 1 → 1（不涨）    bytes 8 → 11（涨）
+    // 于是「缺路径的合并按哪把尺子量」成了可观测的：分派到教训 ⇒ 无一项上升 ⇒ null；
+    // 分派到字节 ⇒ 字节上升 ⇒ 拒绝。旧夹具（'abc' → 'abc'）两侧读数全等，两把尺子都给 null，
+    // 名字里的分派事实**钉不住** —— 把 `?? ''` 改成 `?? LESSONS_FILE` 曾经一条都不红。
+    // 如实记：字面量 `''` 本身仍未被钉住 —— 任何非教训、非规则文件的路径都走同一分支、
+    // 读数完全相同（`?? 'no-such-file.md'` 同样全绿），本用例钉的是**该走字节尺子**，不是那个空串。
+    const r = validateMergeConvergence({
+      originalContent: '## a: 1\n',
+      newContent: '## a: 1\n\n\n\n',
+      merge: true,
+    })
+    expect(r).not.toBeNull()
+    expect(r!).toContain('字节数 8 → 11')
   })
 })
 
