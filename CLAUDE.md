@@ -4,9 +4,9 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.75.0
-> **最后更新**: 2026-09-20 — **B_H 合并型收敛闸自己也被闸保护：`merge-convergence-gate`（39 → 40，anchor 16 → 17）** —— Task 8 落地的 `validateMergeConvergence`（`core/crsi-sandbox.ts`：合并型提案不得把脚手架抬高）此前**没有任何冻结契约**，与 2.74.0 的 ε 是同一形状：`runEval` 的 39 条里没有一条读它 ⇒ 把「增长即拒」改成恒 `null`（闸整个失效）、或把 `merge !== true` 那道早期返回翻面，`/crsi eval` 依旧满分、anchor 闸也拦不住 —— 因为**闸只认 `ANCHOR_CONTRACT_IDS` 里登记过的 id**。本笔补一条真值表契约并**登记为 anchor**，三条判据覆盖 (merge × 增长方向) 全表：净增 + `merge: true` ⇒ 非 null（拒）；删二增一 + `merge: true` ⇒ null（通过）；净增 + `merge` 未声明 ⇒ null（不受此闸）。**第三条承重**：撤掉 `if (proposal.merge !== true) return null` 后它立刻红 —— 少了它，「非合并型提案被此闸误拦」不可观测。**负控如实记**：删掉那一行后本文件 **2 红**（`:30` `report.passed` 40 → **38**、`:78` `anchor-gate` 自检 FAIL），`regressedAnchors = ['merge-convergence-gate']`、`anchor-gate.detail` 点名它，`report.score` 100 → 95 ⇒ **登记行是唯一的保护**（`ANCHOR_CONTRACT_IDS` 全仓只有一个消费者 `eval-harness.ts` 的 `role = 'anchor'` 回填，且**无测试断言其大小** ⇒ 16 → 17 对测试不可见）。契约落地后 restore 自 `cp` 存档、sha256 逐字相符。**本笔零新增测试** —— 只加一次 `results.push` 加一行登记、无新 `it()`，故测试总数不变（**249 文件 / 2931 测试 = 2929 passed + 2 skipped**，`test/core` 74/1167 逐目录复核）；四处文档计数**已与真值相符、无需回填**。`CLAUDE.md` 仅 `:44` 一行活计数改动（`冻结 39 条` → `40 条`）；`:463` 的 `冻结 10 条` 在 2026-08-17 的带日期叙事里、描述**当时**，**故意未改**。
-> **前一条（2.74.0）**: 2026-09-20 — **ε 的判定侧自己也被锚住：`prediction-hit-truth-table`（38 → 39，anchor 15 → 16）** —— 2.73.0 把「命中」定义为 `predictionHit`（`core/improvement-track.ts:129`，判据 `predicted !== undefined && deltaMean >= predicted`），但**那个判定函数本身没有任何冻结契约**：`runEval` 的 38 条里没有一条读它 ⇒ 把 `>=` 翻成 `>`、或把 `minEffect` 那层统计阈值重新叠回去，`/crsi eval` 依旧满分、anchor 闸也拦不住 —— **闸只认 `ANCHOR_CONTRACT_IDS` 里登记过的 id，而它的名字当时不在里面**。本笔补一条真值表契约并登记为 anchor，四条判据全落在**返回值**上：`predictionHit(50, 20) === false`（写下 50、实测 20 ⇒ 未达不算命中）、`predictionHit(10, 20) === true`（达到即命中，不叠加统计阈值）、`predictionHit(20, 20) === true`（**恰好相等算命中**）、`predictionHit(undefined, 20) === false`（缺席恒 false）。**`(20, 20)` 那条承重**：判据是 `deltaMean >= predicted`，而 `>=` 与 `>` **只在 `predicted === deltaMean` 处分歧** ⇒ 少了它，「把 `>=` 翻成 `>`」在本契约上**不可观测**。**第一版正是如此**（三条判据没有一个跨边界）：改 `>` 后本文件 **13/13 全绿**、契约仍 39/39 满分 ⇒「本笔已堵上该洞」当场是**假主张**；补入此条后复跑，改 `>` ⇒ 本契约 **FAIL** + `anchor-gate` 连锁红（`report.passed` 39 → 37）。多个不同输入（50 / 10 / 20 对同一个 `deltaMean = 20`）是刻意的 —— 单一输入配一个断言常量，可以被生产里写死的常量满足。**三条负控，红集按两个作用域分别记**：A 改成 `return predicted !== undefined`（有预测就算命中）；B 改成 `return false`（永不命中）；C = A 的破坏 + 从 `ANCHOR_CONTRACT_IDS` 删掉那一行。**文件面**（只跑 `test/core/eval-harness.test.ts`）：A 2 红、B 2 红、C 1 红 —— A 与 B **在这个作用域下无法区分**。**套件面**（全量 `pnpm test`，按测试身份）：**A 6 红、B 8 红、C 3 红，两两不同** —— B 比 A 多红 `improvement-track.test.ts` 的「`buildImprovementReport` 带预测 → 两个字段都写上」与「`predictionHit` 不叠加 `minEffect`」两条。**两个读数都是真的，差别只在作用域**：闸（`/crsi modify`）判的是 `regressedAnchors`（`crsi-modify.ts:114`）⇒ **闸这一层 A 与 B 不可区分**（本契约只回一个布尔、不带 `detail`；两者都是 `regressedAnchors = ['prediction-hit-truth-table']`、都拒）；**C 恰恰是可区分的那个** —— 删掉登记行后契约照样 FAIL，但 `regressedAnchors = []`、闸**放行**，正是它证明那句登记承重。套件面的区分力则来自契约之外的既有单测，那些不是 anchor、不进闸。**如实记**：本笔**零新增测试** —— 改的是既有断言（`38` → `39`）加一次 `results.push`，故四处文档计数**已与真值相符、无需回填**（真值由 `pnpm test` 产出：249 文件 / 2913 测试 = 2911 passed + 2 skipped；`test/core` 74/1149、`test/ui` 16/199 逐目录复核）。测试 **2913 不变**（249 文件不变）。负控一律 `cp` 存档、还原后核 sha256（两个源文件还原后 sha 与改前逐字相符）；`apps/cli/README.md`（worktree 夹具）diff **零行**。
+> **版本**: 2.76.0
+> **最后更新**: 2026-09-20 — **T11 那两处独立陈述接上了守卫：`anchor-contract-wiring`（249 → 250 文件，2931 → 2935 测试）** —— Task 11 把 anchor 真源移进契约**定义处**（15 处内联覆盖 17 个 id）后，`ANCHOR_CONTRACT_IDS` 退成**独立声明**：两处陈述同一件事 ⇒ 它们**可能不一致，而此前没有任何东西会注意到**。缺口不是推测 —— T11 评审已物理证明：故意把 `postflight-bash-exit` 标成 anchor ⇒ 派生集 17 → 18、那张契约 `role` 变 `anchor`，**而 2931 个测试全绿** ⇒ 误标（安全不变量被悄悄降级或升级）在守卫落地前**不可观测**。新守卫 `test/integrity/anchor-contract-wiring.test.ts` 两向比对：声明−内联（拼错 / 漏登记）与内联−声明（新加的安全契约忘了进表 —— `red-team-zero-gaps` 与 `blast-radius-gate` 当初正是这样进来的）各一条判据；第三条是**空转守卫**（判据若坏成恒空，上面两条会「两边都空」而全绿，故断言内联集 ≥15）；第四条自带正控 + 负控（把 `blast-radius-gate` 敲成 `-gates` ⇒ 报「一缺一多」两条）。**负控如实记**：T12-N1（从声明里删 `'blast-radius-gate',`）与 T12-N2（删掉那处 `anchor: true,`）**各 2 红、测试身份相同**（`两向相等` + `判据能失败`），与 brief 预期的「红集不同」**不符**；但两者**断言方向相反**（N1 报 `内联未声明: blast-radius-gate`、N2 报 `声明未内联: blast-radius-gate`）⇒ 两条 filter 各自都在跑 —— Step 4 真正要问的那件事（「是否只有一向有效」）由断言内容回答，不由测试名回答。**零新增契约、零生产代码改动**：加的是守卫测试 ⇒ `runEval().total` 仍 40、`ANCHOR_CONTRACT_IDS` 仍 17，`:44` 的「冻结 40 条」与 `test/core`（74/1167）**不动**。同提交回填活文档计数（`:48` `2,931`→`2,935`、`:85` `249/2931`→`250/2935`、`:111` `2931`→`2935`、`:317` integrity 行 8/54 → 9/58、`:319` 合计 249/2931/2929 → 250/2935/2933）；把 2.74.0 那行**逐字**移进 `docs/claude-md-history.md` 的窗口行存档（`grep -Fxf` + `diff` 精确匹配）。
+> **前一条（2.75.0）**: 2026-09-20 — **B_H 合并型收敛闸自己也被闸保护：`merge-convergence-gate`（39 → 40，anchor 16 → 17）** —— Task 8 落地的 `validateMergeConvergence`（`core/crsi-sandbox.ts`：合并型提案不得把脚手架抬高）此前**没有任何冻结契约**，与 2.74.0 的 ε 是同一形状：`runEval` 的 39 条里没有一条读它 ⇒ 把「增长即拒」改成恒 `null`（闸整个失效）、或把 `merge !== true` 那道早期返回翻面，`/crsi eval` 依旧满分、anchor 闸也拦不住 —— 因为**闸只认 `ANCHOR_CONTRACT_IDS` 里登记过的 id**。本笔补一条真值表契约并**登记为 anchor**，三条判据覆盖 (merge × 增长方向) 全表：净增 + `merge: true` ⇒ 非 null（拒）；删二增一 + `merge: true` ⇒ null（通过）；净增 + `merge=false` ⇒ null（不受此闸）。**第三条承重**：撤掉 `if (proposal.merge !== true) return null` 后它立刻红 —— 少了它，「非合并型提案被此闸误拦」不可观测。**负控如实记**：删掉那一行后本文件 **2 红**（`:30` `report.passed` 40 → **38**、`:78` `anchor-gate` 自检 FAIL），`regressedAnchors = ['merge-convergence-gate']`、`anchor-gate.detail` 点名它，`report.score` 100 → 95 ⇒ **登记行是唯一的保护**（`ANCHOR_CONTRACT_IDS` 全仓只有一个消费者 `eval-harness.ts` 的 `role = 'anchor'` 回填，且**无测试断言其大小** ⇒ 16 → 17 对测试不可见）。契约落地后 restore 自 `cp` 存档、sha256 逐字相符。**本笔零新增测试** —— 只加一次 `results.push` 加一行登记、无新 `it()`，故测试总数不变（**249 文件 / 2931 测试 = 2929 passed + 2 skipped**，`test/core` 74/1167 逐目录复核）；四处文档计数**已与真值相符、无需回填**。`CLAUDE.md` 仅 `:44` 一行活计数改动（`冻结 39 条` → `40 条`）；`:463` 的 `冻结 10 条` 在 2026-08-17 的带日期叙事里、描述**当时**，**故意未改**。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -45,7 +45,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：2,931 测试（2,929 passed + 2 skipped，0 失败）
+测试：2,935 测试（2,933 passed + 2 skipped，0 失败）
 
 ---
 
@@ -82,7 +82,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 249 个测试文件，2931 个测试
+│   │   ├── test/               # 250 个测试文件，2935 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -108,7 +108,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（2931 个测试）
+pnpm test         # vitest run（2935 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~9 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -314,9 +314,9 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | artifacts       | 1       | 6        | manifest                                                                                                                                                                    |
 | agent-view      | 1       | 9        | agent-view-manager                                                                                                                                                          |
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
-| integrity       | 8       | 54       | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
+| integrity       | 9       | 58       | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 120      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **249** | **2931** | **0 失败** ✅（2929 passed + 2 skipped）                                                                                                                                    |
+| **合计**        | **250** | **2935** | **0 失败** ✅（2933 passed + 2 skipped）                                                                                                                                    |
 
 > **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 179 测试，自带
 > `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。
