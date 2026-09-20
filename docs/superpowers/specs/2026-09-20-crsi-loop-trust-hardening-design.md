@@ -60,11 +60,13 @@
 
 - `PROSE_GENERATE_PROMPT_VERSION` `'1.0.0'` → `'1.1.0'`（`crsi-producer.ts:339`）。
 - prompt 要求模型**先声明意图、再给内容**：响应第一行为一行 JSON `{"expectedDelta": <number>, "risk": "<string>"}`，其后为 skill 正文。
-- 解析（**顺序明确，两种情况互不混淆**）：
-  1. 对**原始响应**做 `trim()`，取第一条非空行。若该行是 ` ```json ` 或 ` ``` ` 围栏，跳过它再取下一行。
-  2. 对该行尝试 `JSON.parse`：成功**且**结果是非 null 对象**且** `expectedDelta` 是 number ⇒ 该行是 ε，**从正文中剥除**（连同其后的空行），余下部分照今天的路径走 `stripMarkdownFence`。
-  3. 其余任何情况（首行不是 JSON、`parse` 抛错、结果是数组/标量、`expectedDelta` 缺失）⇒ **ε 缺席，整份原始响应一字不改地**走 `stripMarkdownFence`，与今天完全同行为。
-- 模型可显式写 `"expectedDelta": null` 表示「无法预测」，与缺字段同义（仍剥除该行，只是不产生 `predictedDelta`）。
+- 解析（**顺序明确：先归一化，后嗅探**）：
+  1. 先对**原始响应**做 `stripMarkdownFence` —— 与今天同一步、同一函数，处理「整份响应被围栏包住」的情况。
+  2. 在**归一化后**的文本上取第一条非空行，尝试 `JSON.parse`。
+  3. 成功**且**结果是非 null 对象**且**含 `expectedDelta` 键 ⇒ 该行是 ε，**从正文中剥除**（连同其后空行），余下即正文。
+  4. 其余任何情况（首行不是 JSON、`parse` 抛错、结果是数组/标量、无 `expectedDelta` 键）⇒ **ε 缺席，正文 = 第 1 步的产物，一字不动**，与今天完全同行为。
+- 模型可显式写 `"expectedDelta": null` 表示「无法预测」：**该行仍被剥除**，只是不产生 `predictedDelta`。
+- **为什么必须先归一化再嗅探**：`stripMarkdownFence` 的正则锚在**串首**（`/^```(?:markdown|md)?\s*\n…\n```\s*$/`）。若先剥「首行围栏」再嗅探，正文尾部的那个 ` ``` ` 就再没有东西去剥它 ⇒ 一个孤零零的尾部围栏会进入写盘路径。顺序反过来则两个问题一起消失：围栏先被整体处理掉，剩下的首行才是干净的 JSON。
 
 **为什么一行前缀而不是把正文改成 JSON**：正文路径（`stripMarkdownFence` → `runCrsiModification` 写盘）保持不变，改动面只有「首行嗅探 + 剥除」；且缺前缀时行为与今天完全一致。
 
@@ -238,7 +240,8 @@ RSIH 的做法（`test/pi-surface.test.ts`）是让真源成为**类型声明**�
 
 按既有硬纪律「改被测数量的提交须同提交内回填活文档数字」：
 
-- `apps/cli/README.md` 与 `CLAUDE.md` 中的测试数（当前 249 文件 / 2891 测试）、anchor 数、契约数。
+- `CLAUDE.md` 中的测试数（当前 249 文件 / 2891 测试）、anchor 数、契约数。
+  **订正（2026-09-20 实测）**：本节初稿写「`apps/cli/README.md` 与 `CLAUDE.md`」，前者为误 —— `apps/cli/README.md` **不含任何计数**（`grep -nE "[0-9]{4}|2891|1134|测试|test"` 仅 1 处命中，是 `:76` 的 `v1.0.0` 版本文案链接）。且它是 `crsi-modify.test.ts` / `crsi-sandbox.test.ts` 的工作树夹具，工作区对它有任何未提交改动会让 `crsi-sandbox` **恒 3 红** ⇒ 本批不应改动它。
 - `CLAUDE.md` 头部 `最后更新` 行 + 修订历史窗口行（严格遵守 5 行窗口，被挤出行逐字移入 `docs/claude-md-history.md`）。
 - 父仓 gitlink 同步与本仓交付分开，不混提交。
 
