@@ -337,12 +337,15 @@ export function runEval(): EvalReport {
   }
 
   // ── ε 预测命中真值表（ground truth：命中判据不叠加统计阈值） ──
+  // `(20, 20)` 那条**承重**：判据是 `deltaMean >= predicted` 而 `>=` 与 `>` 只在
+  // `predicted === deltaMean` 处分歧 ⇒ 少了它，「把 >= 翻成 >」在契约上不可观测。
   results.push({
     id: 'prediction-hit-truth-table',
-    description: 'predictionHit 真值表：达到预测算命中、未达不算、缺席恒 false（不入命中率分母）',
+    description: 'predictionHit 真值表（返回值）：未达不算、达到或恰好相等算命中、缺席恒 false',
     passed:
       predictionHit(50, 20) === false &&
       predictionHit(10, 20) === true &&
+      predictionHit(20, 20) === true &&
       predictionHit(undefined, 20) === false,
   })
 
