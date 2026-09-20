@@ -9,6 +9,7 @@ import {
   rejectPending,
   hasPending,
 } from '../../src/core/crsi-modify'
+import type { CrsiProposal } from '../../src/core/crsi-modify'
 import { appendEvalScore } from '../../src/core/eval-harness'
 
 // Isolate the sandbox report dir (matching crsi-sandbox.test.ts).
@@ -229,5 +230,20 @@ describe('pending registry', () => {
     const r = rejectPending()
     expect(r.success).toBe(true)
     expect(hasPending()).toBe(false)
+  })
+})
+
+describe('CrsiProposal ε 字段（类型面）', () => {
+  it('expectedEffect / risk / merge 均为可选，缺席时对象仍合法', () => {
+    const bare: CrsiProposal = {
+      description: 'd',
+      filePath: 'apps/cli/src/foo.ts',
+      newContent: 'x',
+      blastRadius: ['apps/cli/src/foo.ts'],
+    }
+    expect(bare.expectedEffect).toBeUndefined()
+    const full: CrsiProposal = { ...bare, expectedEffect: 12, risk: '可能变慢' }
+    expect(full.expectedEffect).toBe(12)
+    expect(full.risk).toBe('可能变慢')
   })
 })

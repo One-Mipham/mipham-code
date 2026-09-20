@@ -970,11 +970,36 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
       return { content: `❌ 生成失败（phase: ${result.phase}）。\n${result.error ?? ''}` }
     }
 
+    // ε 预登记落地：prose 路径此前**不测量**（measureSkillDeltaRepeated 全仓库只有手工路径一个
+    // 调用点）⇒ ε 曾在 A 流程登记、判定侧在 B 流程，两端永不相遇。这里补上测量。
+    // 成本：每次提案多 6 次 LLM 调用（同手工路径 :867 的注释）。
+    let predictionLine = ''
+    try {
+      const sample = await measureSkillDeltaRepeated(llm, {
+        filePath: proposal.filePath,
+        originalContent: proposal.originalContent,
+        newContent: proposal.newContent,
+      })
+      if (sample) {
+        const report = buildImprovementReport(sample, [proposal.filePath], proposal.expectedEffect)
+        setPendingVerdict(report.verdict)
+        appendImprovement({ ...report, id: randomUUID(), timestamp: new Date().toISOString() })
+        if (report.predictionHit !== undefined) {
+          predictionLine =
+            `\n🎯 ε 预测命中: ${report.predictionHit ? '命中 ✅' : '未命中 ⚠️'}` +
+            `（预测 ${report.predictedDelta}，实际 delta ${report.deltaMean.toFixed(1)}）`
+        }
+      }
+    } catch {
+      // 测量失败（LLM 不可用等）不阻断提案流程 —— 与手工路径 :889 的处置一致。
+    }
+
     appendProseProposal({ id, filePath: proposal.filePath, timestamp: new Date().toISOString() })
 
     return {
       content:
         `✅ 已生成散文提议并跑过测试。审阅 diff：\n\n${result.diff}\n\n` +
+        predictionLine +
         '/crsi modify --approve 合并 | /crsi modify --reject 丢弃',
     }
   }

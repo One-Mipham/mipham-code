@@ -5,7 +5,7 @@
  * plus the gitDiffBridgeCmd factory and parseInterval helper.
  */
 
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { formatLoopRows } from '../../src/commands/autoloop-journal'
 
@@ -674,5 +674,147 @@ describe('/upgrade when the registry cannot be reached', () => {
     const result = await handler(mkCtx(), [])
     expect(result.content).toContain('Already up to date')
     expect(result.content).not.toContain('Could not reach')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// /crsi propose --prose —— ε 的**登记侧**必须与**判定侧**相遇
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * 缺陷原形：`measureSkillDeltaRepeated` 全仓库只有手工路径一个调用点，四条 producer 路径
+ * 调完 `runCrsiModification` 就返回 ⇒ ε 曾在一个流程登记、判定侧在另一个流程，两端永不相遇。
+ * 因此「整段测量被删掉」原本是**全绿**的 —— 本文件就是补上那道覆盖。
+ *
+ * **不 mock 被测对象**：`buildImprovementReport` 取真身（它才是把 ε 带进记录的那一环，
+ * 对它做断言等于断言自己的桩）。只 mock「刻意不测的东西」：LLM 生成提议、以及
+ * `runCrsiModification` 的真 worktree + 全量测试开销，外加两个**会写真实 home 目录**的落盘函数。
+ *
+ * ⚠️ `hasPending()` 是 handler 的第一行，读**真实磁盘状态**：本机若存有待批准提案，handler
+ * 会提前返回，本文件就**静默地什么都没断言**。故它必须被钉成 false。
+ */
+const h = vi.hoisted(() => ({
+  measure: vi.fn(),
+  appendImprovement: vi.fn(),
+  setPendingVerdict: vi.fn(),
+  appendProseProposal: vi.fn(),
+  runCrsiModification: vi.fn(),
+  hasPending: vi.fn(() => false),
+  produceProseProposal: vi.fn(),
+  collectSkillFiles: vi.fn(),
+  selectCrsiSignal: vi.fn(),
+  proseProposalId: vi.fn(() => 'prose-id-1'),
+  hasProposedProse: vi.fn(() => false),
+  prefilterProposal: vi.fn(() => ({ pass: true, reasons: [] })),
+}))
+
+vi.mock('../../src/core/crsi-modify', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/core/crsi-modify')>()),
+  hasPending: h.hasPending,
+  runCrsiModification: h.runCrsiModification,
+}))
+
+vi.mock('../../src/core/crsi-producer', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/core/crsi-producer')>()),
+  produceProseProposal: h.produceProseProposal,
+  collectSkillFiles: h.collectSkillFiles,
+  selectCrsiSignal: h.selectCrsiSignal,
+  proseProposalId: h.proseProposalId,
+  hasProposedProse: h.hasProposedProse,
+  appendProseProposal: h.appendProseProposal,
+}))
+
+vi.mock('../../src/core/proposal-guard', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/core/proposal-guard')>()),
+  prefilterProposal: h.prefilterProposal,
+}))
+
+vi.mock('../../src/core/task-performance', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/core/task-performance')>()),
+  measureSkillDeltaRepeated: h.measure,
+}))
+
+vi.mock('../../src/core/improvement-track', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/core/improvement-track')>()),
+  appendImprovement: h.appendImprovement,
+  setPendingVerdict: h.setPendingVerdict,
+}))
+
+const PROSE_FILE = 'apps/cli/skills/research/SKILL.md'
+
+const PROSE_PROPOSAL = {
+  filePath: PROSE_FILE,
+  newContent: '---\nname: research\n---\n\n新正文\n',
+  originalContent: '---\nname: research\n---\n\n旧正文\n',
+  description: '把这条教训写进 skill 散文',
+  expectedEffect: 7,
+  risk: '可能让 skill 变长',
+}
+
+/**
+ * deltaMean = mean([57,57,57]) − mean([50,50,50]) = **7.0**，与 ε 相等。
+ * 取这个数是为了让 `predictionHit(7, 7.0)` 落在判据的**边界上**（`>=` 为真、`>` 为假），
+ * 且它由真身 `buildImprovementReport` 算出，不是我们写死的判定结果。
+ */
+const SAMPLE = { skillName: 'research', baselineScores: [50, 50, 50], postScores: [57, 57, 57] }
+
+const mkProseCtx = () => {
+  const ctx = mkCtx()
+  ;(ctx as unknown as { engine: Record<string, unknown> }).engine.getLlm = () => ({})
+  return ctx
+}
+
+beforeEach(() => {
+  h.hasPending.mockReturnValue(false)
+  h.measure.mockResolvedValue(SAMPLE)
+  h.runCrsiModification.mockResolvedValue({ applied: true, phase: 'done', diff: 'DIFF' })
+  h.produceProseProposal.mockResolvedValue(PROSE_PROPOSAL)
+  h.collectSkillFiles.mockReturnValue([PROSE_FILE])
+  h.selectCrsiSignal.mockReturnValue({
+    category: 'c',
+    title: 't',
+    suggestion: 's',
+    evidence: ['e'],
+  })
+  h.proseProposalId.mockReturnValue('prose-id-1')
+  h.hasProposedProse.mockReturnValue(false)
+  h.prefilterProposal.mockReturnValue({ pass: true, reasons: [] })
+  h.appendProseProposal.mockReturnValue(undefined)
+  h.appendImprovement.mockReturnValue(undefined)
+  h.setPendingVerdict.mockReturnValue(undefined)
+})
+
+describe('/crsi propose --prose 把 ε 送进判定侧', () => {
+  // 负控 N-A（删掉整段测量）：本条与下一条**同时**红。
+  it('成功提案之后真的跑了测量（用的是这份提议的路径与内容）', async () => {
+    const handler = getCommand('/crsi propose')!
+    const result = await handler(mkProseCtx(), ['--prose'])
+
+    // 先钉住「走到了测量那一步」—— 否则 handler 一旦提前返回，下面几条会以
+    // 「mock 没被调用」的形式红，读起来像是测量写错了。
+    expect(result.content).toContain('✅ 已生成散文提议并跑过测试')
+    expect(h.measure).toHaveBeenCalledWith(expect.anything(), {
+      filePath: PROSE_PROPOSAL.filePath,
+      originalContent: PROSE_PROPOSAL.originalContent,
+      newContent: PROSE_PROPOSAL.newContent,
+    })
+    expect(h.setPendingVerdict).toHaveBeenCalled()
+  })
+
+  // 负控 N-B（第三个实参改传 undefined）：**只有**本条红 —— 这才证明「登记过的那个 ε」
+  // 本身在旅行，而不只是「有东西被测量了」。
+  it('进台账的那条记录带的是登记过的那一个 ε，且判定已经算出', async () => {
+    const handler = getCommand('/crsi propose')!
+    const result = await handler(mkProseCtx(), ['--prose'])
+
+    const record = h.appendImprovement.mock.calls[0]?.[0] as {
+      predictedDelta?: number
+      predictionHit?: boolean
+      changeSet?: string[]
+    }
+    expect(record.predictedDelta).toBe(7)
+    expect(record.predictionHit).toBe(true)
+    expect(record.changeSet).toEqual([PROSE_PROPOSAL.filePath])
+    expect(result.content).toContain('🎯 ε 预测命中: 命中 ✅')
   })
 })

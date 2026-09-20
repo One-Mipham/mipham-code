@@ -36,6 +36,13 @@ export interface CrsiProposal {
    * 局部正确、全局遗漏。自修改前必须摸清并声明全部受影响路径，否则 fail-closed 拒绝。
    */
   blastRadius?: string[]
+  /**
+   * ε：提交者**事前**写下的预期效果（任务表现提升点数）。
+   * 缺席 = 不预测。判定见 improvement-track 的 predictionHit。
+   */
+  expectedEffect?: number
+  /** R：风险声明（这次改动可能在哪方面变差）。缺席 = 未声明。 */
+  risk?: string
 }
 
 // ── Pending proposal registry (两阶段闸门) ──
