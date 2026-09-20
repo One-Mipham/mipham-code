@@ -106,7 +106,7 @@ describe('measureScaffold (脚手架计数)', () => {
   it('分派按解析后的路径：`./` 前缀与绝对形式同样算作教训文件', () => {
     // 字面量比较时这两种写法都会静默落到 **字节** 分支 —— 而那正是注释里说
     // 绝不该用在教训文件上的那把尺子（示例：'./apps/cli/crsi-lessons.md' 得 lessons 0）。
-    // 兄弟守卫 `isProtectedPath` 本身不做规范化（纯前缀比较）；是调用点 `CrsiSandbox.apply`
+    // 兄弟守卫 `isProtectedPath` 本身不做规范化（纯前缀比较）；是调用点 `CrsiSandbox.applyModification`
     // 先 `posix.normalize` 再调它（`proposal-guard.ts` 那条调用点未规范化）。
     expect(measureScaffold('./apps/cli/crsi-lessons.md', '## a: 1\n').lessons).toBe(1)
     expect(measureScaffold(resolve(LESSONS_FILE), '## a: 1\n').lessons).toBe(1)
@@ -231,6 +231,35 @@ describe('validateMergeConvergence (合并型收敛闸)', () => {
     })
     expect(r).not.toBeNull()
     expect(r!).toContain('字节数')
+    // 另两条分支的理由串都钉了数（`2 → 3` / `1 → 2`），这条不钉的话，把两个插值换成
+    // 常量仍然全绿 —— 那条理由就只剩标签可查、数不可查。
+    expect(r!).toContain('3 → 4')
+  })
+
+  it('只缺 newContent（有基线）→ 不拦，且不崩', () => {
+    // 上面那条的两个夹具都缺 originalContent ⇒ 只靠 `!proposal.originalContent` 那一半就满足，
+    // 把 `|| !proposal.newContent` 单独删掉照样全绿。它承重：缺 newContent 时
+    // measureScaffold(filePath, undefined) 会抛 TypeError（content.split），
+    // 而 Task 9 会把 proposal.newContent 直接透传进来。
+    expect(
+      validateMergeConvergence({
+        filePath: LESSONS_FILE,
+        originalContent: '## a: 1\n',
+        merge: true,
+      }),
+    ).toBeNull()
+  })
+
+  it('filePath 缺失（两侧内容相同）→ 走字节尺子，不涨 ⇒ 通过', () => {
+    // 两个内容都在、而 filePath 缺席，才走到 `proposal.filePath ?? ''`：省掉它是把这条
+    // 合并按**字节**尺子量（空串不命中教训/规则两条分派），两侧等长 ⇒ 无一项上升。
+    expect(
+      validateMergeConvergence({
+        originalContent: 'abc',
+        newContent: 'abc',
+        merge: true,
+      }),
+    ).toBeNull()
   })
 })
 

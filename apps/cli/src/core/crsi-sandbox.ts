@@ -211,7 +211,7 @@ export function validateBlastRadius(proposal: {
  *
  * 分派按**解析后**的路径（`resolve` 两侧同调，`cwd` 相消）—— 字面量比较时，`./` 前缀或
  * 绝对形式的教训路径会静默落到**字节**分支，而那正是上面说绝不该用在教训文件上的那把尺子。
- * 兄弟守卫 `isProtectedPath` 本身不做规范化（纯前缀比较）；是调用点 `CrsiSandbox.apply`
+ * 兄弟守卫 `isProtectedPath` 本身不做规范化（纯前缀比较）；是调用点 `CrsiSandbox.applyModification`
  * 先 `posix.normalize` 再调它（`proposal-guard.ts` 那条调用点未规范化）。
  */
 export function measureScaffold(
