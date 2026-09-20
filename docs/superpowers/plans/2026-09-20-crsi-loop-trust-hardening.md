@@ -832,19 +832,17 @@ Expected: FAIL —— `expected 38 to be 39`。**这一条同时是「新契约�
 
 **插入锚点**：紧接在 `self-report-diagnostic` 那次 `results.push({`（`:346`）**之前**。该位置在行为任务循环之后、自检契约之前，不依赖任何会被后续改动挪动的行号。
 
-````ts
-
 ```ts
-  // ── ε 预测命中真值表（ground truth：命中判据不叠加统计阈值） ──
-  results.push({
-    id: 'prediction-hit-truth-table',
-    description: 'predictionHit 真值表：达到预测算命中、未达不算、缺席恒 false（不入命中率分母）',
-    passed:
-      predictionHit(50, 20) === false &&
-      predictionHit(10, 20) === true &&
-      predictionHit(undefined, 20) === false,
-  })
-````
+// ── ε 预测命中真值表（ground truth：命中判据不叠加统计阈值） ──
+results.push({
+  id: 'prediction-hit-truth-table',
+  description: 'predictionHit 真值表：达到预测算命中、未达不算、缺席恒 false（不入命中率分母）',
+  passed:
+    predictionHit(50, 20) === false &&
+    predictionHit(10, 20) === true &&
+    predictionHit(undefined, 20) === false,
+})
+```
 
 并在 `ANCHOR_CONTRACT_IDS` 里加 `'prediction-hit-truth-table',`（保持既有次序风格，加在 `'self-report-diagnostic',` 之前）。
 
