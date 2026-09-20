@@ -211,7 +211,8 @@ export function validateBlastRadius(proposal: {
  *
  * 分派按**解析后**的路径（`resolve` 两侧同调，`cwd` 相消）—— 字面量比较时，`./` 前缀或
  * 绝对形式的教训路径会静默落到**字节**分支，而那正是上面说绝不该用在教训文件上的那把尺子。
- * 兄弟守卫 `isProtectedPath` 同样先规范化再比。
+ * 兄弟守卫 `isProtectedPath` 本身不做规范化（纯前缀比较）；是调用点 `CrsiSandbox.apply`
+ * 先 `posix.normalize` 再调它（`proposal-guard.ts` 那条调用点未规范化）。
  */
 export function measureScaffold(
   filePath: string,
@@ -226,6 +227,37 @@ export function measureScaffold(
     return { lessons: 0, rules, bytes: 0 }
   }
   return { lessons: 0, rules: 0, bytes: Buffer.byteLength(content, 'utf-8') }
+}
+
+/**
+ * 合并型提案的收敛闸（B_H）。**零写死常数** —— 它不设上界，只要求「合并这件事本身别把
+ * 脚手架抬高」。RSIH 的 ‖H‖≤B_H 需要一个数，是因为它必须允许学到上界、到顶再强制合并；
+ * 本仓已有 dedup 那一半（教训按 `## category: title` 幂等、规则按 id 幂等），
+ * 缺的只是另一半，而那一半不需要数：**闸只在「试图整合」那一刻开火**。
+ *
+ * 返回拒绝理由，合法时返回 null（同 validateBlastRadius 的签名）。
+ */
+export function validateMergeConvergence(proposal: {
+  filePath?: string
+  originalContent?: string
+  newContent?: string
+  merge?: boolean
+}): string | null {
+  if (proposal.merge !== true) return null
+  // 无基线不是有增长：手工路径在文件不存在时正是这个形态（commands.ts 的宽松模式）。
+  if (!proposal.originalContent || !proposal.newContent) return null
+
+  const filePath = proposal.filePath ?? ''
+  const before = measureScaffold(filePath, proposal.originalContent)
+  const after = measureScaffold(filePath, proposal.newContent)
+
+  const rose: string[] = []
+  if (after.lessons > before.lessons) rose.push(`教训段数 ${before.lessons} → ${after.lessons}`)
+  if (after.rules > before.rules) rose.push(`规则条数 ${before.rules} → ${after.rules}`)
+  if (after.bytes > before.bytes) rose.push(`字节数 ${before.bytes} → ${after.bytes}`)
+  if (rose.length === 0) return null
+
+  return `合并型提案必须收敛，但脚手架增长了：${rose.join('；')}。`
 }
 
 // ── Sandbox ──

@@ -6,6 +6,7 @@ import {
   PROTECTED_ROLES,
   PROTECTED_PATHS,
   measureScaffold,
+  validateMergeConvergence,
 } from '../../src/core/crsi-sandbox'
 import { LESSONS_FILE, MANAGED_RULES_FILE } from '../../src/core/crsi-producer'
 import { existsSync, readFileSync } from 'node:fs'
@@ -105,7 +106,8 @@ describe('measureScaffold (脚手架计数)', () => {
   it('分派按解析后的路径：`./` 前缀与绝对形式同样算作教训文件', () => {
     // 字面量比较时这两种写法都会静默落到 **字节** 分支 —— 而那正是注释里说
     // 绝不该用在教训文件上的那把尺子（示例：'./apps/cli/crsi-lessons.md' 得 lessons 0）。
-    // 兄弟守卫 isProtectedPath 同样先规范化再比。
+    // 兄弟守卫 `isProtectedPath` 本身不做规范化（纯前缀比较）；是调用点 `CrsiSandbox.apply`
+    // 先 `posix.normalize` 再调它（`proposal-guard.ts` 那条调用点未规范化）。
     expect(measureScaffold('./apps/cli/crsi-lessons.md', '## a: 1\n').lessons).toBe(1)
     expect(measureScaffold(resolve(LESSONS_FILE), '## a: 1\n').lessons).toBe(1)
   })
@@ -128,6 +130,107 @@ describe('measureScaffold (脚手架计数)', () => {
     // 下面两个输入（2 / 5 字节）才是让那条硬编码现形的那一半。
     expect(measureScaffold('x.md', 'ab').bytes).toBe(2)
     expect(measureScaffold('x.md', '悲ab').bytes).toBe(5)
+  })
+})
+
+describe('validateMergeConvergence (合并型收敛闸)', () => {
+  const TWO = '## a: 1\n\n## b: 2\n'
+
+  it('合并型净增 → 拒绝，且理由点名是哪一项上升', () => {
+    const r = validateMergeConvergence({
+      filePath: LESSONS_FILE,
+      originalContent: TWO,
+      newContent: `${TWO}\n## c: 3\n`,
+      merge: true,
+    })
+    expect(r).not.toBeNull()
+    expect(r!).toContain('教训段数')
+    expect(r!).toContain('2 → 3')
+  })
+
+  it('受管理规则文件合并型净增 → 拒绝，且理由点名规则条数', () => {
+    // 上面那条走的是**教训**分支，规则文件的 rules 在两侧同为 0 —— 缺了本用例，
+    // `if (after.rules > before.rules)` 那一行被整行删掉也全绿（红集 ∅）。
+    const r = validateMergeConvergence({
+      filePath: MANAGED_RULES_FILE,
+      originalContent: "{\n  id: 'a',\n}\n",
+      newContent: "{\n  id: 'a',\n}, {\n  id: 'b',\n}\n",
+      merge: true,
+    })
+    expect(r).not.toBeNull()
+    expect(r!).toContain('规则条数')
+    expect(r!).toContain('1 → 2')
+  })
+
+  it('合并型「删二增一」→ 通过', () => {
+    expect(
+      validateMergeConvergence({
+        filePath: LESSONS_FILE,
+        originalContent: TWO,
+        newContent: '## ab: merged\n',
+        merge: true,
+      }),
+    ).toBeNull()
+  })
+
+  it('合并后不涨 → 通过', () => {
+    expect(
+      validateMergeConvergence({
+        filePath: LESSONS_FILE,
+        originalContent: TWO,
+        newContent: TWO,
+        merge: true,
+      }),
+    ).toBeNull()
+  })
+
+  it('`merge !== true` → 不拦（新增型提案不受此闸，幂等仍生效）', () => {
+    // 学习这件事本身就是增长：produceCrsiProposal 只能追加，每条新信号净 +1 段。
+    // 对新增型开火 === 永久禁掉 /crsi propose。
+    expect(
+      validateMergeConvergence({
+        filePath: LESSONS_FILE,
+        originalContent: TWO,
+        newContent: `${TWO}\n## c: 3\n`,
+        merge: false,
+      }),
+    ).toBeNull()
+    expect(
+      validateMergeConvergence({
+        filePath: LESSONS_FILE,
+        originalContent: TWO,
+        newContent: `${TWO}\n## c: 3\n`,
+      }),
+    ).toBeNull()
+  })
+
+  it('无基线（空串 / undefined）→ 不拦：无基线不是有增长', () => {
+    expect(
+      validateMergeConvergence({
+        filePath: LESSONS_FILE,
+        originalContent: '',
+        newContent: '## a: 1\n\n## b: 2\n\n## c: 3\n',
+        merge: true,
+      }),
+    ).toBeNull()
+    expect(
+      validateMergeConvergence({
+        filePath: LESSONS_FILE,
+        newContent: '## a: 1\n',
+        merge: true,
+      }),
+    ).toBeNull()
+  })
+
+  it('skill 文件走字节数：合并后变长 → 拒绝', () => {
+    const r = validateMergeConvergence({
+      filePath: 'apps/cli/skills/standard/x.SKILL.md',
+      originalContent: 'abc',
+      newContent: 'abcd',
+      merge: true,
+    })
+    expect(r).not.toBeNull()
+    expect(r!).toContain('字节数')
   })
 })
 
