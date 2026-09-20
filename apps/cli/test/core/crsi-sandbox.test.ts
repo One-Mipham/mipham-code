@@ -264,7 +264,10 @@ describe('validateMergeConvergence (合并型收敛闸)', () => {
       merge: true,
     })
     expect(r).not.toBeNull()
-    expect(r!).toContain('字节数 8 → 11')
+    // 整串精确匹配，不用 toContain：子串判据下，一个同时含两个夹具数字的常量
+    // （'字节数 8 → 11 3 → 4'）能同时满足本条与兄弟字节用例；精确匹配堵掉这条路，
+    // 并顺带把名字里的「教训段数不涨」钉住 —— 夹具若改成教训也涨，本行会红。
+    expect(r!).toBe('合并型提案必须收敛，但脚手架增长了：字节数 8 → 11。')
   })
 })
 
