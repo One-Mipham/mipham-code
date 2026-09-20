@@ -75,8 +75,11 @@ export function buildImprovementReport(
     noise,
     minEffect,
     verdict,
-    // 两个字段同生同灭：缺席预测必须**键不存在**，而不是 predictionHit: false ——
-    // 后者会让「我们没预测」被算进 predictionHitRate 的分母。
+    // 两个字段同生同灭：缺席预测必须**键不存在**，而不是 predictionHit: false。
+    // 理由**不是**「predictionHit: false 会被算进分母」—— 分母只认 `predictedDelta !== undefined`
+    //（只写 `predictionHit: false` 而不写 `predictedDelta` 会被整条忽略）。真正的风险是**反过来的半条**：
+    // 有 `predictedDelta` 而无 `predictionHit` ⇒ 该条进了分母，却永远不可能被算成命中
+    //（分子只认 `predictionHit === true`），等于一条静默的「未命中」。
     ...(predicted !== undefined
       ? { predictedDelta: predicted, predictionHit: predictionHit(predicted, deltaMean) }
       : {}),
