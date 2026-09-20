@@ -15,6 +15,7 @@ import {
   wilsonInterval,
   improvementRate,
   improvementSignalStrong,
+  predictionHit,
   appendImprovement,
   readImprovements,
   setPendingVerdict,
@@ -69,6 +70,21 @@ describe('buildImprovementReport', () => {
     )
     expect(report.causal).toBe(false)
     expect(report.verdict).toBe('inconclusive')
+  })
+})
+
+describe('predictionHit', () => {
+  it('真值表：达到预测算命中、未达不算、缺席恒 false', () => {
+    expect(predictionHit(10, 20)).toBe(true) // 实际 20 ≥ 预测 10
+    expect(predictionHit(50, 20)).toBe(false) // 实际 20 < 预测 50
+    expect(predictionHit(20, 20)).toBe(true) // 等号算命中（贴线达成）
+    expect(predictionHit(undefined, 20)).toBe(false)
+  })
+
+  it('不叠加 minEffect：负 delta 对上负预测照样算命中', () => {
+    // ε 是提交者自己写下的数，判据就是「达到没达到」。
+    // 若这里叠一层 minEffect(20)，(−5, −10) 会被判 false —— 那是把两个数打架。
+    expect(predictionHit(-10, -5)).toBe(true)
   })
 })
 

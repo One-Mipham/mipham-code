@@ -107,6 +107,16 @@ export function improvementSignalStrong(records: ImprovementRecord[]): boolean {
   return records.length > 0 && lo > FALSE_POSITIVE_BASELINE
 }
 
+/**
+ * 预测命中：事前写下的点数被实际达到。缺席预测（undefined）不计入。
+ *
+ * 刻意**不叠加 `minEffect`** —— ε 是提交者自己写下的数，判据就是「达到没达到」；
+ * 再套一层统计阈值会让两个数打架，且使「命中」不可复算。
+ */
+export function predictionHit(predicted: number | undefined, deltaMean: number): boolean {
+  return predicted !== undefined && deltaMean >= predicted
+}
+
 // ── 台账 ──
 
 export function improvementPath(): string {
