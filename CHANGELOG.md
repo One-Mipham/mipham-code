@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.82.0] — 2026-09-20
+
+### Added
+
+- **CRSI ε 预登记**：`/crsi propose` 的候选须声明 `expectedEffect` 与 `risk`，改进台账新增
+  `predictionHit` / `predictionHitRate`，`/crsi stats` 显示 ε 命中率与作废条款
+- **CRSI 合并型收敛闸** `validateMergeConvergence`：`--crossover` 提案声明 `merge`，脚手架复杂度
+  不得被合并型提案抬高；配套度量侧 `measureScaffold`（prompt 段数 / memory 条数 / 技能数）
+- **anchor 契约两向守卫**（`test/integrity/anchor-contract-wiring.test.ts`）：`ANCHOR_CONTRACT_IDS`
+  的声明与契约定义处的 `anchor: true` 标记两向比对，任一方向不相等都会失败
+
+### Fixed
+
+- VS Code 扩展公开文案两个计数与真源不一致：AI provider 数 `7` → `12`、工具数 `30` → `31`；
+  并补上按「载体」枚举扫描面的工具总数守卫（原先只扫 `.md`，`package.json` 的 `description` 因此全绿）
+
 ## [0.81.9] — 2026-09-19
 
 ### Security

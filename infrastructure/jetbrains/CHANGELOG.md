@@ -1,5 +1,9 @@
 # Mipham Code — JetBrains Plugin Changelog
 
+## 0.82.0 (2026-09-20)
+
+- Version sync with Mipham Code CLI 0.82.0
+
 ## 0.44.3 (2026-08-17)
 
 - Add plugin logo (`META-INF/pluginIcon.svg` + `pluginIcon_dark.svg`, 40×40 vector)

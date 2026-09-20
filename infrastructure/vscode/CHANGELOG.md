@@ -3,6 +3,13 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.82.0 — 2026-09-20
+
+- Version sync with Mipham Code CLI 0.82.0
+- Public copy counts realigned with their sources: AI providers 7 → 12, tools 30 → 31
+- New guard for the total tool count, scanning by _carrier_ rather than only `.md`
+  (a bare `.md`-only sweep left `package.json`'s `description` permanently green)
+
 ## 0.81.9 — 2026-09-19
 
 - Version sync with Mipham Code CLI 0.81.9
