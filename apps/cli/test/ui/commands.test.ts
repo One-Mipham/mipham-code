@@ -702,6 +702,7 @@ const h = vi.hoisted(() => ({
   measure: vi.fn(),
   appendImprovement: vi.fn(),
   setPendingVerdict: vi.fn(),
+  readImprovements: vi.fn((): unknown[] => []),
   appendProseProposal: vi.fn(),
   runCrsiModification: vi.fn(),
   produceProseProposal: vi.fn(),
@@ -741,6 +742,7 @@ vi.mock('../../src/core/improvement-track', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/core/improvement-track')>()),
   appendImprovement: h.appendImprovement,
   setPendingVerdict: h.setPendingVerdict,
+  readImprovements: h.readImprovements,
 }))
 
 const PROSE_FILE = 'apps/cli/skills/research/SKILL.md'
@@ -837,5 +839,115 @@ describe('/crsi propose --prose 把 ε 送进判定侧', () => {
     expect(secondRecord.predictedDelta).toBe(9)
     expect(secondRecord.predictionHit).toBe(false)
     expect(second.content).toContain('未命中 ⚠️')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// /crsi stats —— ε 命中率段与**作废条款**
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * 作废条款（「样本不足就不下结论；台账满了而判定样本仍很小 ⇒ 机制本身坏了」）是 ε 值得
+ * 登记的全部理由，所以这一段有**三条支路**，其中两条的比较恰好是边界：`pred.total < 5`
+ * 与 `records.length >= 20`。只跑一条成功路径的话，把 `<` 写成 `<=`、或整段删掉那道 20 条闸，
+ * 都会**全绿**上线 —— 下面的 19/20 与 2/4/5 两组夹具就是为了让这两个方向的变异体都能死
+ * （19 与 20 成对钉 `>=`；判定侧取 **2 / 4 / 5** 三个读数，是为了让「写死一个数字」的
+ * 变异体在**消息文本**里也活不下来 —— 详见第一条用例上的注释）。
+ *
+ * 判据取真身 `predictionHitRate`（**刻意不 mock 它** —— 对判定侧做桩，等于断言自己的桩），
+ * 只 mock `readImprovements`：它是这一段里唯一会读真实 home 目录
+ * （`~/.mipham/crsi/improvements.jsonl`）的一环。engine 只取真值 + 空规则表，
+ * 让前面那段规则统计走空、命令一定会走到 ε 段。
+ *
+ * **一个夹具喂两个数**：`readImprovements()` 返回的是**原始数组** ⇒ 它的 `length` 就是作废条款里的
+ * `records.length`；`predictionHitRate` 再从这同一个数组里 filter 出「有 ε 预登记」的记录作分母。
+ * `n` / `judged` / `hits` 三个数各自独立传入，故断言值**跟着夹具走**，而不是跟着写死的字面量走。
+ * 命中率刻意用两组不同的 (judged, hits)：生产端若把某个数写死，两条不可能同时绿
+ * （同批 T4 的教训 —— fixture、断言常量、算出的值三者同为 7 时，写死常量的变异体存活）。
+ */
+const mkRecords = (n: number, judged: number, hits: number): unknown[] =>
+  Array.from({ length: n }, (_, i) => ({
+    id: `r${i}`,
+    timestamp: '2026-01-01T00:00:00.000Z',
+    skillName: 'research',
+    changeSet: [],
+    causal: true,
+    baselineScores: [],
+    postScores: [],
+    deltaMean: 0,
+    noise: 0,
+    minEffect: 0,
+    verdict: 'inconclusive',
+    // 同生同灭：缺席预测必须**键不存在**（`predictionHit: false` 会被算进分母）。
+    ...(i < judged ? { predictedDelta: 1, predictionHit: i < hits } : {}),
+  }))
+
+/** `getActiveRules()` 空表 ⇒ 规则统计段不进；`getEffectivenessTracker()` 缺席 ⇒ effs 为空、跳过后进 ε 段。 */
+const mkCrsiStatsCtx = () => {
+  const ctx = mkCtx()
+  const e = ctx as unknown as { engine: Record<string, unknown> }
+  e.engine.getRuleEngine = () => ({ getActiveRules: () => [] })
+  e.engine.getEffectivenessTracker = () => undefined
+  return ctx
+}
+
+const runCrsiStats = async () => {
+  const handler = getCommand('/crsi stats')!
+  return (await handler(mkCrsiStatsCtx(), [])).content
+}
+
+describe('/crsi stats 的 ε 段与作废条款', () => {
+  beforeEach(() => {
+    h.readImprovements.mockReturnValue([])
+  })
+
+  // 负控 N10（删掉内层 `if (records.length >= 20)` 整块）：**只有下一条**红。
+  // 负控 N11（把分支放宽成 `pred.total < 0`）：**本条与下一条**同时红 —— 红集与 N10 不同，
+  // 故这两条负控各自证明的是不同的东西。
+  //
+  // 本条取 judged = **2**（而非 brief 表格里的 4）：两条「样本不足」用例若都取 4，则那句里的
+  // 数字只有一个读数，「把 `${pred.total}` 写成字面量 4」的变异体**实测存活**（N13，4 条全绿）。
+  // 判定门槛那一侧由下面 2 / 4 / 5 三个读数一起钉住：`< 5` 要 5 条为真、4 条为假；
+  // `< 4` 那种再偏一位的变异体由下一条（judged = 4）杀死。
+  it('样本不足：判定 2 条 / 台账 19 条 ⇒ 只报「样本不足」，不报机制失效', async () => {
+    const ledger = 19
+    const judged = 2
+    h.readImprovements.mockReturnValue(mkRecords(ledger, judged, 0))
+
+    const content = await runCrsiStats()
+    // 非空转保证：先钉住确实走到了 ε 段，否则下面两条 not.toContain 会因「整段不存在」而假绿。
+    expect(content).toContain('### ε 预测命中（prose 路径）')
+    expect(content).toContain(`样本不足（判定记录 ${judged} 条，需 ≥ 5）—— 不下结论。`)
+    // 台账 19 条还差一条 ⇒ 尚未到「机制失效」的门槛（20 是门槛，19 与 20 成对钉住 `>=`）。
+    expect(content).not.toContain('机制失效')
+    expect(content).not.toContain('命中率:')
+  })
+
+  it('机制失效：台账满 20 条而判定样本仍 4 条 ⇒ 样本不足与机制失效同时出现', async () => {
+    const ledger = 20
+    const judged = 4
+    h.readImprovements.mockReturnValue(mkRecords(ledger, judged, 0))
+
+    const content = await runCrsiStats()
+    expect(content).toContain(`样本不足（判定记录 ${judged} 条，需 ≥ 5）—— 不下结论。`)
+    expect(content).toContain('⚠️ ε 机制失效：prose 路径使用率过低')
+  })
+
+  it('命中率：判定 5 条命中 4 ⇒ 打印 4/5、80% 与 Wilson 区间', async () => {
+    h.readImprovements.mockReturnValue(mkRecords(5, 5, 4))
+
+    const content = await runCrsiStats()
+    expect(content).toContain('命中率: 4/5 (80%, Wilson 95% [38%, 96%])')
+    // 5 条正好落在门槛上 ⇒ 必须是命中率支路，不能是「样本不足」那一侧。
+    expect(content).not.toContain('样本不足')
+    expect(content).not.toContain('机制失效')
+  })
+
+  it('命中率跟着夹具走：换一组判定 6 条命中 2 ⇒ 4/5 那组数不可能同时出现', async () => {
+    h.readImprovements.mockReturnValue(mkRecords(9, 6, 2))
+
+    const content = await runCrsiStats()
+    expect(content).toContain('命中率: 2/6 (33%, Wilson 95% [10%, 70%])')
+    expect(content).not.toContain('4/5')
   })
 })

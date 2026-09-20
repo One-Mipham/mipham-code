@@ -50,6 +50,7 @@ import {
   appendImprovement,
   readImprovements,
   improvementRate,
+  predictionHitRate,
   setPendingVerdict,
   getPendingVerdict,
   shouldBlockApproval,
@@ -802,6 +803,25 @@ const crsiStatsCmd: CommandHandler = async (ctx) => {
         lines.push(`- ${d.ruleId} (failure rate ${Math.round(d.postRuleFailureRate * 100)}%)`)
       }
     }
+  }
+
+  // ── ε 预测命中（prose 路径） ──
+  // 作废条款：样本不足就不下结论；台账攒够 20 条而判定样本仍 < 5 ⇒ 明写机制失效。
+  // 只打印、不写台账：本命令是只读的，而该结论每次都能从同一份 improvements.jsonl 重算出来。
+  const records = readImprovements()
+  const pred = predictionHitRate(records)
+  lines.push('')
+  lines.push('### ε 预测命中（prose 路径）')
+  if (pred.total < 5) {
+    lines.push(`样本不足（判定记录 ${pred.total} 条，需 ≥ 5）—— 不下结论。`)
+    if (records.length >= 20) {
+      lines.push('⚠️ ε 机制失效：prose 路径使用率过低（记录总数已达 20 而判定样本仍 < 5）。')
+    }
+  } else {
+    lines.push(
+      `命中率: ${pred.hits}/${pred.total} (${(pred.rate * 100).toFixed(0)}%, ` +
+        `Wilson 95% [${(pred.lo * 100).toFixed(0)}%, ${(pred.hi * 100).toFixed(0)}%])`,
+    )
   }
 
   return { content: lines.join('\n') }
