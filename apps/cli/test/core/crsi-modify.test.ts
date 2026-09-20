@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { CrsiSandbox } from '../../src/core/crsi-sandbox'
+import { LESSONS_FILE } from '../../src/core/crsi-producer'
 import {
   runCrsiModification,
   approvePending,
@@ -201,6 +202,30 @@ describe('runCrsiModification', () => {
     expect(result.error).toContain('Anchor regression')
     expect(hasPending()).toBe(false)
   })
+
+  it('合并型净增被 fail-closed 拒绝，且不创建 worktree（收敛闸）', async () => {
+    const sandbox = new CrsiSandbox(process.cwd())
+    const spy = vi.spyOn(sandbox, 'createWorktree')
+    const result = await runCrsiModification(
+      {
+        description: 'grow',
+        filePath: LESSONS_FILE,
+        originalContent: '## a: 1\n',
+        newContent: '## a: 1\n\n## b: 2\n',
+        blastRadius: [LESSONS_FILE],
+        merge: true,
+      },
+      sandbox,
+    )
+    expect(result.applied).toBe(false)
+    expect(result.phase).toBe('failed')
+    expect(result.error).toContain('必须收敛')
+    // 闸的位置由 spy 钉住：createWorktree 一次都没被调用 ⇒ 零副作用。
+    // getDiff() 返回 '' 只是 worktreePath 未设的结果 —— 建了再 removeWorktree 回滚
+    // 也会把它置回 undefined，两种情形同样为 '' ⇒ 它不证据位置，别拿它当判据。
+    expect(spy).not.toHaveBeenCalled()
+    expect(sandbox.getDiff()).toBe('')
+  })
 })
 
 describe('pending registry', () => {
@@ -245,5 +270,7 @@ describe('CrsiProposal ε 字段（类型面）', () => {
     const full: CrsiProposal = { ...bare, expectedEffect: 12, risk: '可能变慢' }
     expect(full.expectedEffect).toBe(12)
     expect(full.risk).toBe('可能变慢')
+    const merged: CrsiProposal = { ...bare, merge: true }
+    expect(merged.merge).toBe(true)
   })
 })

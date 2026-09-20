@@ -13,7 +13,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { CrsiSandbox, validateBlastRadius } from './crsi-sandbox'
+import { CrsiSandbox, validateBlastRadius, validateMergeConvergence } from './crsi-sandbox'
 import type { CrsiModificationResult } from './crsi-sandbox'
 import { appendEvalScore, getLastEvalScore, regressedAnchors } from './eval-harness'
 import { mechanismSentinel, type RewardFn } from './reward-fn'
@@ -43,6 +43,12 @@ export interface CrsiProposal {
   expectedEffect?: number
   /** R：风险声明（这次改动可能在哪方面变差）。缺席 = 未声明。 */
   risk?: string
+  /**
+   * 声明这是一次**合并型**提案（整合已有内容，而非新增）。
+   * 只有它为 true 时 `validateMergeConvergence` 才开火 —— 学习本身就是增长，
+   * 对新增型设非增长约束等于永久禁掉 `/crsi propose`。
+   */
+  merge?: boolean
 }
 
 // ── Pending proposal registry (两阶段闸门) ──
@@ -74,6 +80,26 @@ export async function runCrsiModification(
       applied: false,
       phase: 'failed',
       error: blastRadiusError,
+    }
+  }
+
+  // B_H 收敛闸：合并型提案不得抬高脚手架成本。
+  // 位置与 blast radius 闸同序 —— 都在 worktree 之前，纯字符串比较、零磁盘 I/O、零副作用。
+  const convergenceError = validateMergeConvergence(proposal)
+  if (convergenceError) {
+    return {
+      modification: {
+        id: 'crsi-mod-rejected-merge-convergence',
+        description: proposal.description,
+        filePath: proposal.filePath,
+        newContent: proposal.newContent,
+        originalContent: proposal.originalContent ?? '',
+        crsiInsightId: proposal.crsiInsightId,
+        timestamp: new Date().toISOString(),
+      },
+      applied: false,
+      phase: 'failed',
+      error: convergenceError,
     }
   }
 

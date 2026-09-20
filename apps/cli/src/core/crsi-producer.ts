@@ -650,6 +650,7 @@ export async function produceCrossoverProposal(
   newContent: string
   originalContent: string
   blastRadius: string[]
+  merge: boolean
 } | null> {
   const response = await collectLlmText(llm, buildCrossoverPrompt(currentLessons))
   if (!response) return null
@@ -675,5 +676,6 @@ export async function produceCrossoverProposal(
     newContent,
     originalContent: currentLessons,
     blastRadius: [LESSONS_FILE],
+    merge: true,
   }
 }

@@ -5,6 +5,7 @@ import {
   removeLessonSections,
   produceCrossoverProposal,
 } from '../../src/core/crsi-producer'
+import { validateMergeConvergence } from '../../src/core/crsi-sandbox'
 
 function textLlm(text: string): Llm {
   return {
@@ -117,6 +118,11 @@ describe('produceCrossoverProposal', () => {
   it('产出删二增一的教训变更候选', async () => {
     const p = await produceCrossoverProposal(textLlm(JSON_RESULT), LESSONS, '2026-08-28')
     expect(p).not.toBeNull()
+    expect(p!.merge).toBe(true)
+    // 正控接上闸本身：本用例只调 producer，**不进** runCrsiModification ⇒ 若不断言这一条，
+    // 「闸放行合并」就只是假设而非证据（闸在这条路径上根本没被调用）。实测尺子：3 → 2 段。
+    // 判别力：把 measureScaffold 的比较方向翻成 `after.lessons < before.lessons` ⇒ 本条变红。
+    expect(validateMergeConvergence(p!)).toBeNull()
     expect(p!.filePath).toBe('apps/cli/crsi-lessons.md')
     expect(p!.blastRadius).toEqual(['apps/cli/crsi-lessons.md'])
     expect(p!.originalContent).toBe(LESSONS)
