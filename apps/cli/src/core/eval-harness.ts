@@ -29,6 +29,7 @@ import {
   renderManagedRuleSource,
 } from './crsi-producer'
 import type { CrsiSignal } from './crsi-producer'
+import { predictionHit } from './improvement-track'
 import { loadBehaviorTasks, judgeBehaviorTask } from './behavior-tasks'
 
 // ── Types ──
@@ -70,6 +71,7 @@ export const ANCHOR_CONTRACT_IDS: ReadonlySet<string> = new Set([
   'red-team-zero-gaps',
   'producer-rule-shape',
   'producer-rule-idempotent',
+  'prediction-hit-truth-table',
   'self-report-diagnostic',
 ])
 
@@ -333,6 +335,16 @@ export function runEval(): EvalReport {
   for (const task of behaviorTasks) {
     results.push({ ...judgeBehaviorTask(task, ruleEngine), role: 'target' })
   }
+
+  // ── ε 预测命中真值表（ground truth：命中判据不叠加统计阈值） ──
+  results.push({
+    id: 'prediction-hit-truth-table',
+    description: 'predictionHit 真值表：达到预测算命中、未达不算、缺席恒 false（不入命中率分母）',
+    passed:
+      predictionHit(50, 20) === false &&
+      predictionHit(10, 20) === true &&
+      predictionHit(undefined, 20) === false,
+  })
 
   // ── 自报分数只作诊断：评分路径无 LLM，分数来自 ground-truth 契约而非模型自报 ──
   // anchor 锁死「评分组件不暴露 LLM 的 chat 能力」。4 个组件（ruleEngine/constitution/
