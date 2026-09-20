@@ -5,7 +5,9 @@ import {
   isProtectedPath,
   PROTECTED_ROLES,
   PROTECTED_PATHS,
+  measureScaffold,
 } from '../../src/core/crsi-sandbox'
+import { LESSONS_FILE, MANAGED_RULES_FILE } from '../../src/core/crsi-producer'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
@@ -65,6 +67,50 @@ describe('validateBlastRadius (完整覆盖闸)', () => {
         blastRadius: ['apps/cli/test/'],
       }),
     ).toBeNull()
+  })
+})
+
+describe('measureScaffold (脚手架计数)', () => {
+  it('教训文件 → 数 `## ` 段数，不计字节', () => {
+    const c = '## a: 1\n\n### 证据\n\n- x\n\n## b: 2\n'
+    const m = measureScaffold(LESSONS_FILE, c)
+    expect(m.lessons).toBe(2)
+    expect(m.rules).toBe(0)
+    // 字节刻意不计：合并会重写散文，字节随措辞涨落 —— 计入会让「删二增一」
+    // 因新段更长而被误拦，即闸挡掉它本该允许的那件事。
+    expect(m.bytes).toBe(0)
+  })
+
+  it('`### ` 不算一段（与 removeLessonSections 的口径一致）', () => {
+    expect(measureScaffold(LESSONS_FILE, '### 证据\n\n## a: 1\n').lessons).toBe(1)
+  })
+
+  it("受管理规则文件 → 数 `id: '` 条数", () => {
+    const c = "{\n  id: 'a',\n}, {\n  id: 'b',\n}\n"
+    const m = measureScaffold(MANAGED_RULES_FILE, c)
+    expect(m.rules).toBe(2)
+    expect(m.lessons).toBe(0)
+    expect(m.bytes).toBe(0)
+  })
+
+  it('其余文件（skill 等）→ 退到 UTF-8 字节数', () => {
+    const m = measureScaffold('apps/cli/skills/standard/memory.SKILL.md', 'abc')
+    expect(m.bytes).toBe(3)
+    expect(m.lessons).toBe(0)
+    expect(m.rules).toBe(0)
+  })
+
+  it('多字节按字节数不按字符数', () => {
+    // '悲' 是 3 字节。写成 content.length 会得 1 —— 那是另一个对象的读数。
+    expect(measureScaffold('x.md', '悲').bytes).toBe(3)
+  })
+
+  it('fallback 的字节数随输入变，不是常数 3', () => {
+    // 上面两条 fallback 用例喂的都是 3 字节的输入（'abc' / '悲'）—— 两者读数相同，
+    // 没有跨越被测值：把 fallback 写成 `return { ..., bytes: 3 }` 它们照样全绿。
+    // 下面两个输入（2 / 5 字节）才是让那条硬编码现形的那一半。
+    expect(measureScaffold('x.md', 'ab').bytes).toBe(2)
+    expect(measureScaffold('x.md', '悲ab').bytes).toBe(5)
   })
 })
 

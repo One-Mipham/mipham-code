@@ -19,6 +19,7 @@ import { mkdirSync, rmSync, existsSync, writeFileSync, readFileSync, readdirSync
 import { join, resolve, sep, posix } from 'node:path'
 import { tmpdir, homedir } from 'node:os'
 import { randomUUID } from 'node:crypto'
+import { LESSONS_FILE, MANAGED_RULES_FILE } from './crsi-producer'
 
 // ── Types ──
 
@@ -193,6 +194,32 @@ export function validateBlastRadius(proposal: {
     )
   }
   return null
+}
+
+/**
+ * 脚手架三项计数（B_H 的度量）。按 filePath 分派语义单位：
+ * 教训段数 / 受管理规则条数 / 其余按 UTF-8 字节数。
+ *
+ * **为什么教训/规则文件不计字节**：合并会重写散文，字节数随措辞涨落。把字节计入，
+ * 会让「删二增一」因新写的合并段比原来两段更长而被误拦 —— 即闸会挡掉它本该允许的那件事。
+ * skill 文件没有可用的语义单位（它的「条数」就是文件本身），才退到字节数。
+ *
+ * `## ` 的口径与 `removeLessonSections` / `extractCrsiLessonSummaries` 逐字一致 ——
+ * 闸数的必须是 crossover 真正删得掉的那些单位，否则两把尺子会各说各话。
+ */
+export function measureScaffold(
+  filePath: string,
+  content: string,
+): { lessons: number; rules: number; bytes: number } {
+  if (filePath === LESSONS_FILE) {
+    const lessons = content.split('\n').filter((l) => l.startsWith('## ')).length
+    return { lessons, rules: 0, bytes: 0 }
+  }
+  if (filePath === MANAGED_RULES_FILE) {
+    const rules = (content.match(/id: '/g) ?? []).length
+    return { lessons: 0, rules, bytes: 0 }
+  }
+  return { lessons: 0, rules: 0, bytes: Buffer.byteLength(content, 'utf-8') }
 }
 
 // ── Sandbox ──
