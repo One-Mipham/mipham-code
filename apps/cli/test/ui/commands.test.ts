@@ -690,8 +690,13 @@ describe('/upgrade when the registry cannot be reached', () => {
  * 对它做断言等于断言自己的桩）。只 mock「刻意不测的东西」：LLM 生成提议、以及
  * `runCrsiModification` 的真 worktree + 全量测试开销，外加两个**会写真实 home 目录**的落盘函数。
  *
- * ⚠️ `hasPending()` 是 handler 的第一行，读**真实磁盘状态**：本机若存有待批准提案，handler
- * 会提前返回，本文件就**静默地什么都没断言**。故它必须被钉成 false。
+ * ⚠️ **非空转保证**在下面 (a) 条：handler 的第一行是 `if (hasPending())` 早退，而 (a) 断言返回文案
+ * 含 `✅ 已生成散文提议并跑过测试` ⇒ 一旦早退即**红**（关门实验：把 `hasPending` 钉成 `true`，
+ * 两条同时红 —— 不是「静默地什么都没断言」）。
+ *
+ * 因此这里**刻意不覆盖 `hasPending`**：它是 `return pendingSandbox !== null`，一个**模块内存单例**
+ * （不是磁盘状态），而本文件已把 `runCrsiModification` mock 掉 ⇒ 该单例在本文件内不可能被置位，
+ * 覆盖它只会让本文件少走一道真实的闸门，换不来任何隔离。
  */
 const h = vi.hoisted(() => ({
   measure: vi.fn(),
@@ -699,7 +704,6 @@ const h = vi.hoisted(() => ({
   setPendingVerdict: vi.fn(),
   appendProseProposal: vi.fn(),
   runCrsiModification: vi.fn(),
-  hasPending: vi.fn(() => false),
   produceProseProposal: vi.fn(),
   collectSkillFiles: vi.fn(),
   selectCrsiSignal: vi.fn(),
@@ -710,7 +714,6 @@ const h = vi.hoisted(() => ({
 
 vi.mock('../../src/core/crsi-modify', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/core/crsi-modify')>()),
-  hasPending: h.hasPending,
   runCrsiModification: h.runCrsiModification,
 }))
 
@@ -765,7 +768,6 @@ const mkProseCtx = () => {
 }
 
 beforeEach(() => {
-  h.hasPending.mockReturnValue(false)
   h.measure.mockResolvedValue(SAMPLE)
   h.runCrsiModification.mockResolvedValue({ applied: true, phase: 'done', diff: 'DIFF' })
   h.produceProseProposal.mockResolvedValue(PROSE_PROPOSAL)
@@ -816,5 +818,24 @@ describe('/crsi propose --prose 把 ε 送进判定侧', () => {
     expect(record.predictionHit).toBe(true)
     expect(record.changeSet).toEqual([PROSE_PROPOSAL.filePath])
     expect(result.content).toContain('🎯 ε 预测命中: 命中 ✅')
+
+    // ── 判别力的另一半：ε 必须是**跟着提议走的值**，而不是一个恰好等于 7 的常数 ──
+    // 只跑 ε=7 时，「读 `proposal.expectedEffect`」与「写死字面量 7」**不可区分**
+    // （fixture、断言常量、算出的 deltaMean 三者同为 7）⇒ 写死 ε 的变异体存活。
+    // 换成 ε=9 再跑一次：任何写死常量的生产实现都会红，而边界用例（上面 ε=7 那半）不丢。
+    // ε=9 与 deltaMean 7.0 的关系：真身判据是 `deltaMean >= predicted`、**刻意不叠 minEffect 容差**
+    // （见 improvement-track 的 predictionHit 注释）⇒ 7 >= 9 为假，故这里断言的是**布尔值本身**，
+    // 而不是退让成 `!== undefined`。
+    h.appendImprovement.mockClear()
+    h.produceProseProposal.mockResolvedValue({ ...PROSE_PROPOSAL, expectedEffect: 9 })
+
+    const second = await handler(mkProseCtx(), ['--prose'])
+    const secondRecord = h.appendImprovement.mock.calls[0]?.[0] as {
+      predictedDelta?: number
+      predictionHit?: boolean
+    }
+    expect(secondRecord.predictedDelta).toBe(9)
+    expect(secondRecord.predictionHit).toBe(false)
+    expect(second.content).toContain('未命中 ⚠️')
   })
 })
