@@ -850,8 +850,8 @@ describe('/crsi propose --prose 把 ε 送进判定侧', () => {
  * 作废条款（「样本不足就不下结论；台账满了而判定样本仍很小 ⇒ 机制本身坏了」）是 ε 值得
  * 登记的全部理由，所以这一段有**三条支路**，其中两条的比较恰好是边界：`pred.total < 5`
  * 与 `records.length >= 20`。只跑一条成功路径的话，把 `<` 写成 `<=`、或整段删掉那道 20 条闸，
- * 都会**全绿**上线 —— 下面的 19/20 与 2/4/5 两组夹具就是为了让这两个方向的变异体都能死
- * （19 与 20 成对钉 `>=`；判定侧取 **2 / 4 / 5** 三个读数，是为了让「写死一个数字」的
+ * 都会**全绿**上线 —— 下面的 19/20 与判定侧多读数两组夹具就是为了让这两个方向的变异体都能死
+ * （19 与 20 成对钉 `>=`；判定侧取 **2 / 4 / 5 / 6** 四个读数，是为了让「写死一个数字」的
  * 变异体在**消息文本**里也活不下来 —— 详见第一条用例上的注释）。
  *
  * 判据取真身 `predictionHitRate`（**刻意不 mock 它** —— 对判定侧做桩，等于断言自己的桩），
@@ -878,7 +878,11 @@ const mkRecords = (n: number, judged: number, hits: number): unknown[] =>
     noise: 0,
     minEffect: 0,
     verdict: 'inconclusive',
-    // 同生同灭：缺席预测必须**键不存在**（`predictionHit: false` 会被算进分母）。
+    // 同生同灭：真源 `buildImprovementReport` 里两条键要么一起写、要么都不写，本夹具照抄这个形状。
+    // 理由**不是**「`predictionHit: false` 会被算进分母」—— 分母只认 `predictedDelta !== undefined`
+    // （只写 `predictionHit: false` 而不写 `predictedDelta` 会被整条忽略）。真正的风险是**反过来的半条**：
+    // 有 `predictedDelta` 而无 `predictionHit` ⇒ 该条进了分母，却永远不可能被算成命中
+    //（分子只认 `predictionHit === true`），等于一条静默的「未命中」。
     ...(i < judged ? { predictedDelta: 1, predictionHit: i < hits } : {}),
   }))
 
@@ -901,14 +905,13 @@ describe('/crsi stats 的 ε 段与作废条款', () => {
     h.readImprovements.mockReturnValue([])
   })
 
-  // 负控 N10（删掉内层 `if (records.length >= 20)` 整块）：**只有下一条**红。
-  // 负控 N11（把分支放宽成 `pred.total < 0`）：**本条与下一条**同时红 —— 红集与 N10 不同，
-  // 故这两条负控各自证明的是不同的东西。
+  // 负控 N10（删掉内层 `if (records.length >= 20)` 整块）：**只有「机制失效」那条**红。
+  // 负控 N11（把分支放宽成 `pred.total < 0`）：**三条「样本不足」用例**同时红。
   //
   // 本条取 judged = **2**（而非 brief 表格里的 4）：两条「样本不足」用例若都取 4，则那句里的
   // 数字只有一个读数，「把 `${pred.total}` 写成字面量 4」的变异体**实测存活**（N13，4 条全绿）。
-  // 判定门槛那一侧由下面 2 / 4 / 5 三个读数一起钉住：`< 5` 要 5 条为真、4 条为假；
-  // `< 4` 那种再偏一位的变异体由下一条（judged = 4）杀死。
+  // 判定门槛那一侧由 2 / 4 / 5 / 6 四个读数一起钉住：`< 5` 要 5 条为真、4 条为假；
+  // `< 4` 那种再偏一位的变异体由后面两条（judged = 4）杀死。
   it('样本不足：判定 2 条 / 台账 19 条 ⇒ 只报「样本不足」，不报机制失效', async () => {
     const ledger = 19
     const judged = 2
@@ -921,6 +924,18 @@ describe('/crsi stats 的 ε 段与作废条款', () => {
     // 台账 19 条还差一条 ⇒ 尚未到「机制失效」的门槛（20 是门槛，19 与 20 成对钉住 `>=`）。
     expect(content).not.toContain('机制失效')
     expect(content).not.toContain('命中率:')
+  })
+
+  // 机制失效是**合取**（台账 ≥ 20 **且** total < 5）。本条钉的是它的**左下角**：台账差一条、
+  // 判定数又够不到门槛 ⇒ 两条消息都不该出现。judged 取 **4**（而不是 2）是刻意的：
+  // 它是 `total < 5` 判据的**边界值**（4 假 / 5 真），故「判据偏一位成 `< 4`」的变异体（N14）
+  // 会在本条与「机制失效」那条同时红 —— 红集由此与 N10（只红「机制失效」）**分开**。
+  it('样本不足（边界另一角）：台账 19 条、判定 4 条 ⇒ 仍然只报「样本不足」', async () => {
+    h.readImprovements.mockReturnValue(mkRecords(19, 4, 0))
+
+    const content = await runCrsiStats()
+    expect(content).toContain('样本不足（判定记录 4 条，需 ≥ 5）—— 不下结论。')
+    expect(content).not.toContain('机制失效')
   })
 
   it('机制失效：台账满 20 条而判定样本仍 4 条 ⇒ 样本不足与机制失效同时出现', async () => {
