@@ -42,9 +42,14 @@
  * **产出本身**在抽取器读它时撒谎 —— 工厂把 `anchor` 以**非枚举自有属性**或**读时 getter** 补回：
  * 抽取器读得到（属性访问），而旧判据 `expect(runEval()).toEqual(original.runEval())` 看不见
  * （`toEqual` 比的是**可枚举自有属性**）。
- * **这一轴已由第 3 条末尾的显式投影比较闭合**（R5 实测：`heal_nonenum` / `heal_getter` 在旧深比下
- * `EXIT 0 / 4 passed`、在投影下 `EXIT 1`；控制格 `heal_enum` 与 `heal_nonenum` **只差
- * `enumerable` 一个字**，两种判据下都红 ⇒ 隔离出「唯一差别就是它」）。
+ * **这一轴已由第 3 条末尾的显式投影比较闭合 —— 但「红在哪条判据上」必须分开说**（R5 复评实测）：
+ * 新版上 `heal_nonenum` / `heal_getter`（+ 真删 `merge-convergence-gate` 的 `anchor: true,`）
+ * **红在 clos3** —— 而 clos3 看的是 `role`，与 `enumerable` 一个字不相干 ⇒ 这一对**只证明存在性**
+ *（修前绿 / 修后红），**不构成「投影闭了这一轴」的证据**。该轴的隔离证据是另两格：
+ * ① 出货件侧（旧深比）：`heal_enum` 红 / `heal_nonenum` 绿 ⇒ `enumerable` 是唯一差别；
+ * ② 新版侧（clos3 中和后）：`heal_nonenum` 红在**投影** ⇒ 投影确实承重。
+ * ⚠️ 新版上 `heal_enum` 与 `heal_nonenum` 是**同因同断言**（都红在 clos3），并排红说明不了
+ * `enumerable` 有任何作用 —— 别把「两格都红」读成「隔离出了唯一差别」。
  *
  * **第三条残留轴（R5 补记，本文件**闭不掉**）：有状态载体。** 工厂只在**被比较的那一次调用**上
  * 返回真产出，其余调用照旧伪装：
@@ -55,9 +60,19 @@
  *   n++
  *   const t = actual.runEval()
  *   if (n === 8) return t // 被比较的那一次：说真话
- *   return 照 heal_enum 的写法补回 anchor // 其余调用：伪装
+ *   // 其余调用：伪装 —— 必须**同时**补 `anchor` **与** `role`
+ *   return 照 heal_enum 的写法补回 anchor，并把 role 一并补成 'anchor'
  * }
  * ```
+ *
+ * **`role` 那一半是承重的，不是修饰**：角色派生跑在 `runEval()` **内部**、且在 `anchor` 被删
+ * **之后**（`eval-harness.ts` 末尾：`for (const r of results) if (r.anchor) r.role = 'anchor'`）；
+ * 载体是在拿到产出**之后**才把 `anchor` 贴回去的，故 `role` 仍是 `undefined` ⇒ **clos3 无条件红**
+ * （它过滤的正是 `ANCHOR_CONTRACT_IDS.has(r.id) && r.role !== 'anchor'`），与 K 取几无关。
+ * ⇒ 只补 `anchor`（= 照 `heal_enum` 原样：它的写法就是 `{ ...x, anchor: true }`，**不含** `role`）
+ * 时 **K = 1..12 全红、没有任何 K 能 `EXIT 0`**；补 `anchor` + `role` 才有唯一绿 —— 两个读数
+ * 都是 R5 复评实测。**照本配方复现时别少补 `role`**：少了它，读者会把「全 K 红」读成
+ * 「这个残余已经不存在」，进而**删掉一条正确的登记**（这正是本批招牌缺陷类最坏的形态）。
  *
  * R5 实测：**本文件**上是 `n === 8` 才 `EXIT 0 / 4 passed`（真删一处 `anchor: true` 照样 4 绿；
  * `n === 7` 与 `n === 24` 都是 `EXIT 1`）；同一载体在**修前的出货件**上要 `n === 7`
@@ -210,8 +225,10 @@ describe('anchor 契约接线', () => {
     // **与 clos1 的关系（R5 订正，存在性而非顺序）**：两条闭包**各自只闭一个方向、互不覆盖**，
     // 且**与两条断言在文件里的先后位置无关**。clos2 的 `baseline` 由 `real = runEval()` 派生，
     // 而 clos1 读的是 `ANCHOR_CONTRACT_IDS` —— 两者之间**没有蕴含关系**，clos1 绿**不**蕴含
-    // `baseline` 来自真产出（R5 实测：`heal_nonenum` 载体下 clos1 绿、`baseline` 已被污染、
-    // 而本文件仍 4 绿）。把本行挪到 clos1 **之后**、再叠一次真降级 `:405`，红绿**不变**
+    // `baseline` 来自真产出（R5 实测：`heal_nonenum` 载体下 clos1 绿、`baseline` 已被污染 ——
+    // **不带**真降级时本文件 4 绿，**带**真降级 `:405` 时 1 failed（红在 clos3）；两个读数说的是
+    // 同一件事：clos1 绿**不**蕴含 `baseline` 来自真产出）。把本行挪到 clos1 **之后**、
+    // 再叠一次真降级 `:405`，红绿**不变**
     //（R5 实测两格：无载体 ⇒ 仍 `EXIT 1 / 3 failed`；`heal_nonenum` 载体 ⇒ 仍 `EXIT 1 / 1 failed`）。
     expect(inlinedAnchorIds()).toEqual(baseline)
 
@@ -247,9 +264,9 @@ describe('anchor 契约接线', () => {
     // ⇒ 出货件转 **2 failed**、第 3 条整体转绿（R5 实测：换成 `'rule-git-force'`）⇒ 那一条红正是它。
     // 换的目标必须是**已声明**的 anchor id：换成非 anchor 的 id 会让本行的预期落空，那是另一条红。
     // 本文件上这一对是 3 failed **对** 3 failed —— 因为 clos3 在本行**之前**先红，而 vitest 的
-    // `expect` 一失败就中止本条 `it` 的后续断言（R5 实测：这会让受 mock 的 `runEval()` 调用次数
-    // 从 9 掉到 8）。别把「这里出现过它」读成「它被测到了」；**逐条**覆盖声明 id 的是上面那个
-    // 逐契约循环。
+    // `expect` 一失败就中止本条 `it` 的后续断言（本行与末尾投影比较那**两次** `runEval()` 调用
+    // 都被跳过 —— R5 复评用 mock 侧计数器实测：9 → **7**，不是 8）。别把「这里出现过它」读成
+    // 「它被测到了」；**逐条**覆盖声明 id 的是上面那个逐契约循环。
     expect(inlinedAnchorIds()).toContain('rule-timeout')
 
     // ── 委派自检：本条（以及第 1/2/4 条）用的必须是**真实现** ──
