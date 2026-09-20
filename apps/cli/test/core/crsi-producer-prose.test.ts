@@ -149,6 +149,22 @@ describe('produceProseProposal', () => {
     expect(result!.newContent).toContain('name: memory')
   })
 
+  it('两阶段成功 + ε 预登记 → 提议带上 expectedEffect 与 risk', async () => {
+    // 解析（parseProsePrediction）与提议（ProseProposalResult）之间那一步此前零覆盖：
+    // 两处条件展开被删掉后，全量 2904 测试仍全绿 —— 因为还没有生产消费者读这两个字段。
+    const llm = twoStageLlm(
+      SKILL_FILES[0]!,
+      '{"expectedDelta": 7, "risk": "可能与 memory 技能重叠"}\n---\nname: memory\ndescription: improved\n---\n\n# New body\n',
+    )
+    const readSkill = (p: string) => (p === SKILL_FILES[0] ? 'OLD-CONTENT' : '')
+    const result = await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill)
+    expect(result).not.toBeNull()
+    expect(result!.expectedEffect).toBe(7)
+    expect(result!.risk).toBe('可能与 memory 技能重叠')
+    // ε 那一行是元数据、不是正文：它必须已被剥掉，不能被写进 skill 文件
+    expect(result!.newContent).not.toContain('expectedDelta')
+  })
+
   it('阶段 1 选不到 skill → null', async () => {
     const llm = twoStageLlm('bad-path.md', 'x')
     expect(await produceProseProposal(SIGNAL, llm, SKILL_FILES, () => '')).toBeNull()
