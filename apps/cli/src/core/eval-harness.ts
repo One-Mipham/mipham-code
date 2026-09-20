@@ -21,10 +21,16 @@ import { PreFlightChecker } from './preflight-checker'
 import { createDefaultPostFlightChecker } from './post-flight-checker'
 import { WorkingMemory } from './working-memory'
 import { RedTeam } from './red-team'
-import { isProtectedPath, validateBlastRadius, PROTECTED_CRITICAL_FILES } from './crsi-sandbox'
+import {
+  isProtectedPath,
+  validateBlastRadius,
+  validateMergeConvergence,
+  PROTECTED_CRITICAL_FILES,
+} from './crsi-sandbox'
 import {
   produceRuleProposal,
   MANAGED_RULES_FILE,
+  LESSONS_FILE,
   buildLessonContent,
   renderManagedRuleSource,
 } from './crsi-producer'
@@ -72,6 +78,7 @@ export const ANCHOR_CONTRACT_IDS: ReadonlySet<string> = new Set([
   'producer-rule-shape',
   'producer-rule-idempotent',
   'prediction-hit-truth-table',
+  'merge-convergence-gate',
   'self-report-diagnostic',
 ])
 
@@ -347,6 +354,31 @@ export function runEval(): EvalReport {
       predictionHit(10, 20) === true &&
       predictionHit(20, 20) === true &&
       predictionHit(undefined, 20) === false,
+  })
+
+  // ── B_H 合并型收敛闸（ground truth：净增被拒、删二增一通过、非合并型不受此闸） ──
+  results.push({
+    id: 'merge-convergence-gate',
+    description: '合并型净增被拒、删二增一通过、merge 未声明的净增放行',
+    passed:
+      validateMergeConvergence({
+        filePath: LESSONS_FILE,
+        originalContent: '## a: 1\n\n## b: 2\n',
+        newContent: '## a: 1\n\n## b: 2\n\n## c: 3\n',
+        merge: true,
+      }) !== null &&
+      validateMergeConvergence({
+        filePath: LESSONS_FILE,
+        originalContent: '## a: 1\n\n## b: 2\n',
+        newContent: '## ab: merged\n',
+        merge: true,
+      }) === null &&
+      validateMergeConvergence({
+        filePath: LESSONS_FILE,
+        originalContent: '## a: 1\n',
+        newContent: '## a: 1\n\n## b: 2\n',
+        merge: false,
+      }) === null,
   })
 
   // ── 自报分数只作诊断：评分路径无 LLM，分数来自 ground-truth 契约而非模型自报 ──
