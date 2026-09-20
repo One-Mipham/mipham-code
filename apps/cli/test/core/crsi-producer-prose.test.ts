@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { Llm } from '../../src/providers/llm'
 import {
+  parseProsePrediction,
   selectTargetSkill,
   generateProseContent,
   produceProseProposal,
@@ -50,6 +51,57 @@ describe('selectTargetSkill', () => {
   })
 })
 
+describe('parseProsePrediction', () => {
+  it('首行是带 expectedDelta 的 JSON → 剥除该行，产出 ε', () => {
+    const r = parseProsePrediction('{"expectedDelta": 12, "risk": "可能变慢"}\n\n# Body\n')
+    expect(r.body).toBe('# Body\n')
+    expect(r.expectedEffect).toBe(12)
+    expect(r.risk).toBe('可能变慢')
+  })
+
+  it('整份响应被围栏包住 → 先剥围栏，JSON 仍被认出', () => {
+    // 这是「必须先归一化再嗅探」的那条路径：stripMarkdownFence 的正则锚在串首，
+    // 若先手工剥首行围栏，正文尾部的 ``` 就再没有东西去剥它。
+    const raw = '```markdown\n{"expectedDelta": 7}\n\n# Body\n```'
+    const r = parseProsePrediction(raw)
+    expect(r.expectedEffect).toBe(7)
+    // 尾换行被 stripMarkdownFence 吃掉（正则里的 `\n` 字面量紧邻闭合围栏，不属捕获组 1）
+    // ⇒ 围栏路径的正文末尾没有换行；这是该函数既有性质，非本次改动引入。
+    expect(r.body).toBe('# Body')
+    expect(r.body).not.toContain('```')
+  })
+
+  it('expectedDelta 为 null → 剥行但不产生预测', () => {
+    const r = parseProsePrediction('{"expectedDelta": null}\n\n# Body\n')
+    expect(r.body).toBe('# Body\n')
+    expect('expectedEffect' in r).toBe(false)
+  })
+
+  it('首行不是 JSON → 正文一字不改（N9 的判据）', () => {
+    const raw = '# Body\n{"expectedDelta": 5}\n'
+    const r = parseProsePrediction(raw)
+    expect(r.body).toBe(raw)
+    expect('expectedEffect' in r).toBe(false)
+  })
+
+  it('首行是 JSON 但无 expectedDelta 键 → 不吃掉它', () => {
+    const raw = '{"note": "hi"}\n\n# Body\n'
+    const r = parseProsePrediction(raw)
+    expect(r.body).toBe(raw)
+  })
+
+  it('首行是裸标量 / 数组 → 不吃', () => {
+    expect(parseProsePrediction('42\n\n# Body\n').body).toBe('42\n\n# Body\n')
+    expect(parseProsePrediction('["a"]\n\n# Body\n').body).toBe('["a"]\n\n# Body\n')
+  })
+
+  it('expectedDelta 是字符串 → 剥行但不产生预测', () => {
+    const r = parseProsePrediction('{"expectedDelta": "12"}\n\n# Body\n')
+    expect(r.body).toBe('# Body\n')
+    expect('expectedEffect' in r).toBe(false)
+  })
+})
+
 describe('generateProseContent', () => {
   it('LLM 返回新内容 → 返回（去 markdown 包裹）', async () => {
     const llm = textLlm(
@@ -61,8 +113,8 @@ describe('generateProseContent', () => {
       'apps/cli/skills/standard/memory.SKILL.md',
       'old',
     )
-    expect(result).toContain('name: memory')
-    expect(result).not.toContain('```')
+    expect(result!.body).toContain('name: memory')
+    expect(result!.body).not.toContain('```')
   })
 
   it('LLM 返回空响应 → null', async () => {

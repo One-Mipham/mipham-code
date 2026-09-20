@@ -336,7 +336,7 @@ export async function selectTargetSkill(
   return extractFilePath(response, skillFiles)
 }
 
-const PROSE_GENERATE_PROMPT_VERSION = '1.0.0'
+const PROSE_GENERATE_PROMPT_VERSION = '1.1.0'
 
 function buildGenerateProsePrompt(
   signal: CrsiSignal,
@@ -357,7 +357,12 @@ function buildGenerateProsePrompt(
     '当前内容：',
     originalContent,
     '',
-    '请返回改进后的完整 markdown（保持 YAML frontmatter 的 name/description 字段，正文针对失败信号做针对性改进）。只返回 markdown，不要额外说明。',
+    '返回格式（严格遵守，两段）：',
+    '第 1 行：一行 JSON，写下你对这次改动的**预期效果**与**风险**：',
+    '{"expectedDelta": <number 或 null>, "risk": "<字符串>"}',
+    '- expectedDelta 是预期该 skill 的任务表现提升**点数**（可正可负；无法预测写 null）。',
+    '- risk 是这次改动可能在哪方面变差（一句话）。',
+    '第 2 行起：改进后的完整 markdown（保持 YAML frontmatter 的 name/description 字段，正文针对失败信号做针对性改进）。不要用代码围栏包住。',
   ].join('\n')
 }
 
@@ -366,16 +371,68 @@ function stripMarkdownFence(text: string): string {
   return match ? match[1]! : text
 }
 
+/** prose 提议的解析产物：正文 + 可选的事前预登记（ε 与风险声明）。 */
+export interface ProsePrediction {
+  body: string
+  /** ε：事前写下的预期提升点数。缺席 = 模型没预测（含显式写 null）。 */
+  expectedEffect?: number
+  /** R：风险声明。缺席 = 未声明。 */
+  risk?: string
+}
+
+/**
+ * 解析 prose 响应：可选的一行 JSON 前缀（ε）+ 正文。
+ *
+ * 顺序是**先归一化、后嗅探**（不可颠倒）：stripMarkdownFence 的正则锚在串首
+ * （/^```(?:markdown|md)?\s*\n…\n```\s*$/）。若先剥「首行围栏」再嗅探，正文尾部的
+ * 那个 ``` 就再没有东西去剥它 ⇒ 孤立的尾部围栏会进入写盘路径。
+ *
+ * 认领标记是**含 `expectedDelta` 键**（盖住 number 与显式 null 两种写法）；
+ * 其余任何情况都走兜底 —— 正文 = 归一化后的原文，一字不改。
+ */
+export function parseProsePrediction(raw: string): ProsePrediction {
+  const stripped = stripMarkdownFence(raw)
+  const lines = stripped.split('\n')
+  const firstIdx = lines.findIndex((l) => l.trim() !== '')
+  if (firstIdx === -1) return { body: stripped }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(lines[firstIdx]!.trim())
+  } catch {
+    return { body: stripped } // 首行不是 JSON → 兜底
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return { body: stripped }
+  }
+  const rec = parsed as { expectedDelta?: unknown; risk?: unknown }
+  if (!('expectedDelta' in rec)) return { body: stripped } // 不带 ε 的 JSON 不吃
+
+  const expectedEffect = typeof rec.expectedDelta === 'number' ? rec.expectedDelta : undefined
+  const risk = typeof rec.risk === 'string' ? rec.risk : undefined
+  // 剥掉 JSON 行本身 + 紧随其后的空行
+  const body = lines
+    .slice(firstIdx + 1)
+    .join('\n')
+    .replace(/^[ \t]*\n/, '')
+
+  return {
+    body,
+    ...(expectedEffect !== undefined ? { expectedEffect } : {}),
+    ...(risk !== undefined ? { risk } : {}),
+  }
+}
+
 export async function generateProseContent(
   signal: CrsiSignal,
   llm: Llm,
   filePath: string,
   originalContent: string,
-): Promise<string | null> {
+): Promise<ProsePrediction | null> {
   const prompt = buildGenerateProsePrompt(signal, filePath, originalContent)
   const response = await collectLlmText(llm, prompt)
   if (!response) return null
-  return stripMarkdownFence(response)
+  return parseProsePrediction(response)
 }
 
 export interface ProseProposalResult {
@@ -383,6 +440,10 @@ export interface ProseProposalResult {
   newContent: string
   originalContent: string
   description: string
+  /** ε：由模型在正文之前写下（见 parseProsePrediction）。 */
+  expectedEffect?: number
+  /** R：风险声明。 */
+  risk?: string
 }
 
 export async function produceProseProposal(
@@ -401,10 +462,17 @@ export async function produceProseProposal(
     return null
   }
 
-  const newContent = await generateProseContent(signal, llm, filePath, originalContent)
-  if (!newContent) return null
+  const generated = await generateProseContent(signal, llm, filePath, originalContent)
+  if (!generated || !generated.body) return null
 
-  return { filePath, newContent, originalContent, description: signal.title }
+  return {
+    filePath,
+    newContent: generated.body,
+    originalContent,
+    description: signal.title,
+    ...(generated.expectedEffect !== undefined ? { expectedEffect: generated.expectedEffect } : {}),
+    ...(generated.risk !== undefined ? { risk: generated.risk } : {}),
+  }
 }
 
 const SKILL_DIRS: Array<[string, string]> = [
