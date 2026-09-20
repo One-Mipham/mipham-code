@@ -204,18 +204,24 @@ export function validateBlastRadius(proposal: {
  * 会让「删二增一」因新写的合并段比原来两段更长而被误拦 —— 即闸会挡掉它本该允许的那件事。
  * skill 文件没有可用的语义单位（它的「条数」就是文件本身），才退到字节数。
  *
- * `## ` 的口径与 `removeLessonSections` / `extractCrsiLessonSummaries` 逐字一致 ——
- * 闸数的必须是 crossover 真正删得掉的那些单位，否则两把尺子会各说各话。
+ * `## ` 的口径与 `removeLessonSections` 逐字一致 —— 闸数的必须是 crossover 真正删得掉的那些
+ * 单位，否则两把尺子会各说各话。**刻意不声称与 `extractCrsiLessonSummaries` 一致**：后者用
+ * `/^##\s+(.+?)\s*$/`，还认 `##\t`，而 `startsWith('## ')` 不认（`'##\ta: 1'` 在此计 0、
+ * 在那里计 1）。闸依赖的是「删得掉」，故按前者对齐；这个差是选择，不是遗漏。
+ *
+ * 分派按**解析后**的路径（`resolve` 两侧同调，`cwd` 相消）—— 字面量比较时，`./` 前缀或
+ * 绝对形式的教训路径会静默落到**字节**分支，而那正是上面说绝不该用在教训文件上的那把尺子。
+ * 兄弟守卫 `isProtectedPath` 同样先规范化再比。
  */
 export function measureScaffold(
   filePath: string,
   content: string,
 ): { lessons: number; rules: number; bytes: number } {
-  if (filePath === LESSONS_FILE) {
+  if (resolve(filePath) === resolve(LESSONS_FILE)) {
     const lessons = content.split('\n').filter((l) => l.startsWith('## ')).length
     return { lessons, rules: 0, bytes: 0 }
   }
-  if (filePath === MANAGED_RULES_FILE) {
+  if (resolve(filePath) === resolve(MANAGED_RULES_FILE)) {
     const rules = (content.match(/id: '/g) ?? []).length
     return { lessons: 0, rules, bytes: 0 }
   }

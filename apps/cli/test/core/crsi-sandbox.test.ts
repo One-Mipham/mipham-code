@@ -9,7 +9,7 @@ import {
 } from '../../src/core/crsi-sandbox'
 import { LESSONS_FILE, MANAGED_RULES_FILE } from '../../src/core/crsi-producer'
 import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { homedir } from 'node:os'
 
 // Isolate the sandbox report dir from the real ~/.mipham — finalize() persists
@@ -91,6 +91,23 @@ describe('measureScaffold (脚手架计数)', () => {
     expect(m.rules).toBe(2)
     expect(m.lessons).toBe(0)
     expect(m.bytes).toBe(0)
+  })
+
+  it('受管理规则文件的条数随输入变，不是常数 2', () => {
+    // 上面那条只喂了一个 2 条的夹具 —— 单一取值下「数出来的 2」与「写死的 2」不可区分。
+    // 下面两个输入（1 / 0 条）才是让那条硬编码现形的那一半。
+    expect(measureScaffold(MANAGED_RULES_FILE, "{\n  id: 'a',\n}\n").rules).toBe(1)
+    expect(measureScaffold(MANAGED_RULES_FILE, 'export const RULES: unknown[] = []\n').rules).toBe(
+      0,
+    )
+  })
+
+  it('分派按解析后的路径：`./` 前缀与绝对形式同样算作教训文件', () => {
+    // 字面量比较时这两种写法都会静默落到 **字节** 分支 —— 而那正是注释里说
+    // 绝不该用在教训文件上的那把尺子（示例：'./apps/cli/crsi-lessons.md' 得 lessons 0）。
+    // 兄弟守卫 isProtectedPath 同样先规范化再比。
+    expect(measureScaffold('./apps/cli/crsi-lessons.md', '## a: 1\n').lessons).toBe(1)
+    expect(measureScaffold(resolve(LESSONS_FILE), '## a: 1\n').lessons).toBe(1)
   })
 
   it('其余文件（skill 等）→ 退到 UTF-8 字节数', () => {
