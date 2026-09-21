@@ -12,6 +12,7 @@ import {
   computeMinEffect,
   classifyDelta,
   buildImprovementReport,
+  formatCostLine,
   wilsonInterval,
   improvementRate,
   improvementSignalStrong,
@@ -71,6 +72,75 @@ describe('buildImprovementReport', () => {
     )
     expect(report.causal).toBe(false)
     expect(report.verdict).toBe('inconclusive')
+  })
+})
+
+describe('代价维（B2）：只记录，不进闸', () => {
+  const withCost = {
+    skillName: 's',
+    baselineScores: [50, 50],
+    postScores: [70, 70],
+    baselineDurations: [100, 120],
+    postDurations: [300, 340],
+  }
+
+  it('耗时数组原样进报告', () => {
+    const r = buildImprovementReport(withCost, ['f.md'])
+    expect(r.baselineDurations).toEqual([100, 120])
+    expect(r.postDurations).toEqual([300, 340])
+  })
+
+  it('判定与统计量完全不受耗时影响 —— 同一组分数，有无耗时逐字相同', () => {
+    // 这是「不进闸」的机械判据：代价维一旦渗进 verdict / deltaMean / noise / minEffect，
+    // 两条报告就不再相等。注意断言比的是**这些量本身**，不是整对象
+    // ——整对象当然不等（耗时数组必然不同），那会把这个判据变成永远为真的仪式。
+    const without = buildImprovementReport(
+      { skillName: 's', baselineScores: [50, 50], postScores: [70, 70] },
+      ['f.md'],
+    )
+    const with_ = buildImprovementReport(withCost, ['f.md'])
+    expect(with_.verdict).toBe(without.verdict)
+    expect(with_.deltaMean).toBe(without.deltaMean)
+    expect(with_.noise).toBe(without.noise)
+    expect(with_.minEffect).toBe(without.minEffect)
+    expect(with_.causal).toBe(without.causal)
+  })
+
+  it('样本没有耗时 → 报告里两个键都不出现（缺席，而非空数组）', () => {
+    // 与 B1 的 results 键同一条承重判据：写成 [] 会让「本次没测代价」与
+    // 「本次测了、代价为零次采样」不可区分。旧记录本就没有这两个键。
+    const r = buildImprovementReport(
+      { skillName: 's', baselineScores: [50, 50], postScores: [70, 70] },
+      ['f.md'],
+    )
+    expect('baselineDurations' in r).toBe(false)
+    expect('postDurations' in r).toBe(false)
+  })
+})
+
+describe('formatCostLine（代价维的只读展示）', () => {
+  const base = { skillName: 's', baselineScores: [50, 50], postScores: [70, 70] }
+
+  it('有代价 → 打印前/后均值，并给出倍数', () => {
+    const r = buildImprovementReport(
+      { ...base, baselineDurations: [1000, 1200], postDurations: [3000, 3400] },
+      ['f.md'],
+    )
+    expect(formatCostLine(r)).toBe('⏱️ 代价: 均值 1100ms → 3200ms（×2.9）')
+  })
+
+  it('缺席 → null（调用方据此整行不打印，而不是打一行空/NaN）', () => {
+    expect(formatCostLine(buildImprovementReport(base, ['f.md']))).toBeNull()
+  })
+
+  it('基线均值为 0 → 不给倍数，不出现 Infinity/NaN', () => {
+    const r = buildImprovementReport(
+      { ...base, baselineDurations: [0, 0], postDurations: [100, 100] },
+      ['f.md'],
+    )
+    const line = formatCostLine(r)!
+    expect(line).toBe('⏱️ 代价: 均值 0ms → 100ms')
+    expect(line).not.toMatch(/Infinity|NaN|×/)
   })
 })
 

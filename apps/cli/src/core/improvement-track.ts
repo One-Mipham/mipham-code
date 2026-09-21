@@ -26,6 +26,13 @@ export interface ImprovementReport {
   predictedDelta?: number
   /** 预测是否命中。与 predictedDelta 同时出现、同时缺席（JSON 序列化会丢掉 undefined 键）。 */
   predictionHit?: boolean
+  /**
+   * B2 代价维：与分数数组逐项对齐的前/后耗时。**只记录，不进任何门禁** ——
+   * `verdict` / `deltaMean` / `minEffect` 一律不看这两个字段。
+   * 缺席（而非空数组）= 该记录早于代价维落地，或该样本未记代价。
+   */
+  baselineDurations?: number[]
+  postDurations?: number[]
 }
 
 export interface ImprovementRecord extends ImprovementReport {
@@ -82,6 +89,11 @@ export function buildImprovementReport(
     //（分子只认 `predictionHit === true`），等于一条静默的「未命中」。
     ...(predicted !== undefined
       ? { predictedDelta: predicted, predictionHit: predictionHit(predicted, deltaMean) }
+      : {}),
+    // 代价维：**两条同生同灭**，与上面 ε 那条同理 —— 只写一半（有 baselineDurations
+    // 而无 postDurations）会让「代价」这件事在记录里既非有也非无，读侧无从判断。
+    ...(sample.baselineDurations !== undefined && sample.postDurations !== undefined
+      ? { baselineDurations: sample.baselineDurations, postDurations: sample.postDurations }
       : {}),
   }
 }
@@ -146,6 +158,24 @@ export function predictionHitRate(records: ImprovementRecord[]): {
   const hits = judged.filter((r) => r.predictionHit === true).length
   const { lo, hi } = wilsonInterval(hits, total)
   return { total, hits, rate: total === 0 ? 0 : hits / total, lo, hi }
+}
+
+/**
+ * 代价维的只读展示（B2）：前/后均值一行。两个耗时数组缺席 → null，调用方据此整行不打印。
+ *
+ * **刻意不下结论**：倍数只是描述，不是判据。把「代价过高」变成 verdict 的一部分需要
+ * 样本量支撑，而当前 k 默认 3、`minEffect` 已经要 `max(20, 2×噪声)` —— 再塞一个维度
+ * 只会把统计问题变得更糟。所以这里只回答「花了多少」，不回答「值不值」。
+ *
+ * 基线均值为 0 时**不给倍数**：那个比值是 ∞（或 0/0 的 NaN），打出来是假读数。
+ */
+export function formatCostLine(report: ImprovementReport): string | null {
+  const { baselineDurations: before_, postDurations: after_ } = report
+  if (before_ === undefined || after_ === undefined) return null
+  const before = Math.round(mean(before_))
+  const after = Math.round(mean(after_))
+  const line = `⏱️ 代价: 均值 ${before}ms → ${after}ms`
+  return before > 0 ? `${line}（×${(after / before).toFixed(1)}）` : line
 }
 
 // ── 台账 ──

@@ -843,6 +843,52 @@ describe('/crsi propose --prose 把 ε 送进判定侧', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════
+// B2 代价维 —— **两条渲染路径**都得接
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * 记在报告上（`formatCostLine` 的纯函数测试在 `test/core/improvement-track.test.ts`）不等于
+ * 用户看得见。`/crsi` 有**两条**渲染路径 —— 手工 `modify` 的审阅面板与 prose `propose` 的提案回执 ——
+ * 只接一条就是本仓库记过的「局部正确全局遗漏」，故这一段**两条路径各一条**，任一条漏接即红。
+ *
+ * 夹具取 1000ms → 2900ms：倍数 2.9 与均值都是 `formatCostLine` 自己算出来的，不是抄下来的断言常量。
+ * （ctx 用 `mkProseCtx`：它相对 `mkCtx` 只多一项 `engine.getLlm`，而手工路径在 `commands.ts:894`
+ * 同样要它 —— 那个名字说的是它当初为谁而写，不是说它只能给谁用。）
+ */
+const COST_SAMPLE = {
+  ...SAMPLE,
+  baselineDurations: [1000, 1000, 1000],
+  postDurations: [2900, 2900, 2900],
+}
+const COST_LINE = '⏱️ 代价: 均值 1000ms → 2900ms（×2.9）'
+
+describe('B2 代价维的展示接线', () => {
+  it('手工路径 /crsi modify：审阅面板上打出代价行', async () => {
+    h.measure.mockResolvedValue(COST_SAMPLE)
+    const handler = getCommand('/crsi modify')!
+    const result = await handler(mkProseCtx(), ['d', PROSE_FILE, '新正文'])
+    expect(result.content).toContain(COST_LINE)
+  })
+
+  it('prose 路径 /crsi propose --prose：提案回执上打出代价行', async () => {
+    h.measure.mockResolvedValue(COST_SAMPLE)
+    const handler = getCommand('/crsi propose')!
+    const result = await handler(mkProseCtx(), ['--prose'])
+    expect(result.content).toContain(COST_LINE)
+  })
+
+  it('样本没有代价维 → 两条路径都整行不打印（不是打一行 0ms）', async () => {
+    // 缺席必须表现为**没有这一行**：写成「均值 0ms → 0ms」会让「没测代价」与
+    // 「测了、耗时为零」在回执上同形 —— 与 B1 的 `results` 键同一条承重判据。
+    h.measure.mockResolvedValue(SAMPLE) // SAMPLE 无 durations 两个键
+    const manual = await getCommand('/crsi modify')!(mkProseCtx(), ['d', PROSE_FILE, '新正文'])
+    expect(manual.content).not.toContain('⏱️ 代价')
+    const prose = await getCommand('/crsi propose')!(mkProseCtx(), ['--prose'])
+    expect(prose.content).not.toContain('⏱️ 代价')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
 // /crsi stats —— ε 命中率段与**作废条款**
 // ═══════════════════════════════════════════════════════════════
 

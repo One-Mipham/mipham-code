@@ -53,6 +53,7 @@ import {
 import { randomUUID } from 'node:crypto'
 import {
   buildImprovementReport,
+  formatCostLine,
   appendImprovement,
   readImprovements,
   improvementRate,
@@ -907,9 +908,12 @@ const crsiModifyCmd: CommandHandler = async (ctx, args) => {
             ? 'regressed ⚠️'
             : 'inconclusive'
       const sign = report.deltaMean >= 0 ? '+' : ''
+      // B2 代价维：只展示、不进判定（`formatCostLine` 缺席时返回 null ⇒ 整行不打）。
+      const costLine = formatCostLine(report)
       improvementLine =
         `\n📊 改进判定: ${label} (delta ${sign}${report.deltaMean.toFixed(1)}, 噪声 ${report.noise.toFixed(1)}, 阈值 ${report.minEffect.toFixed(1)})` +
         `\n   改进率: ${rate.improved}/${rate.total} (${(rate.rate * 100).toFixed(0)}%, Wilson 95% [${(rate.lo * 100).toFixed(0)}%, ${(rate.hi * 100).toFixed(0)}%])` +
+        (costLine ? `\n${costLine}` : '') +
         (report.verdict === 'regressed' ? '\n   ⚠️ 任务表现倒退：--approve 将被拒绝。' : '')
     }
   } catch {
@@ -1015,6 +1019,10 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
             `\n🎯 ε 预测命中: ${report.predictionHit ? '命中 ✅' : '未命中 ⚠️'}` +
             `（预测 ${report.predictedDelta}，实际 delta ${report.deltaMean.toFixed(1)}）`
         }
+        // B2 代价维：**与手工路径同一行读数**，两条渲染路径都接（只接一条即本仓库记过的
+        // 「局部正确全局遗漏」）。ε 行可以有、代价行可以没有，故各自独立追加。
+        const costLine = formatCostLine(report)
+        if (costLine) predictionLine += `\n${costLine}`
       }
     } catch {
       // 测量失败（LLM 不可用等）不阻断提案流程 —— 与手工路径 :889 的处置一致。

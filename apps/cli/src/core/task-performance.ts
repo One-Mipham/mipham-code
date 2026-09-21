@@ -68,6 +68,8 @@ export interface TaskPerformanceReport {
   score: number
   results: TaskPerformanceResult[]
   failures: string[]
+  /** B2 代价维：整轮（LLM 生成 + 冻结测试判定）的墙钟耗时。只记录，不参与任何判定。 */
+  durationMs: number
 }
 
 /** 剥掉 LLM 可能包裹的 markdown 代码块（```ts ... ```），拿到裸代码。 */
@@ -101,6 +103,7 @@ export async function runTaskPerformance(
   const wanted = opts?.skill?.name
   const tasks = loadPerformanceTasks().filter((t) => (t.skill ?? undefined) === wanted)
   const results: TaskPerformanceResult[] = []
+  const startedAt = Date.now()
   for (const task of tasks) {
     const code = await collectGeneratedCode(llm, task.prompt, opts?.skill?.text)
     if (!code) {
@@ -127,6 +130,7 @@ export async function runTaskPerformance(
     score: results.length > 0 ? Math.round((passed / results.length) * 100) : 100,
     results,
     failures: results.filter((r) => !r.passed).map((r) => r.id),
+    durationMs: Date.now() - startedAt,
   }
 }
 
@@ -210,6 +214,13 @@ export interface SkillDeltaSample {
   skillName: string
   baselineScores: number[]
   postScores: number[]
+  /**
+   * B2 代价维：与分数数组**逐项对齐**的耗时（第 i 项就是产出第 i 个分数的那次采样）。
+   * 缺席 = 该样本未记代价（旧记录 / 旧调用点），读侧须按「缺席」处理、不得当成 0。
+   * 只记录，不参与改进判定 —— 样本量 k=3 时再加一个维度只会让统计问题更糟。
+   */
+  baselineDurations?: number[]
+  postDurations?: number[]
 }
 
 /**
@@ -227,18 +238,28 @@ export async function measureSkillDeltaRepeated(
   const k = opts?.k ?? 3
   const baselineScores: number[] = []
   const postScores: number[] = []
+  const baselineDurations: number[] = []
+  const postDurations: number[] = []
   for (let i = 0; i < k; i++) {
     const r = await runTaskPerformance(llm, {
       skill: { name: resolved.skillName, text: resolved.baselineText },
     })
     baselineScores.push(r.score)
+    baselineDurations.push(r.durationMs)
   }
   for (let i = 0; i < k; i++) {
     const r = await runTaskPerformance(llm, {
       skill: { name: resolved.skillName, text: resolved.postText },
     })
     postScores.push(r.score)
+    postDurations.push(r.durationMs)
   }
 
-  return { skillName: resolved.skillName, baselineScores, postScores }
+  return {
+    skillName: resolved.skillName,
+    baselineScores,
+    postScores,
+    baselineDurations,
+    postDurations,
+  }
 }

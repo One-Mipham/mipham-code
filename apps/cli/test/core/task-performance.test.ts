@@ -286,4 +286,56 @@ describe('measureSkillDeltaRepeated', () => {
     expect(s!.baselineScores).toEqual([0, 0])
     expect(s!.postScores).toEqual([100, 100])
   })
+
+  it('代价维：K 次采样各自记时，耗时数组与分数数组等长', async () => {
+    // B2：分数持平但耗时翻倍的改动，在判定里与白捡的胜利同形 —— 除非代价被记下来。
+    // 这里只钉「记下来了、形状与分数对齐」，不钉任何阈值（代价不进闸）。
+    const mockLlm: Llm = {
+      chat: async function* (req) {
+        const sp = (req.systemPrompt ?? '') as string
+        yield {
+          type: 'text',
+          content: sp.includes('校验')
+            ? 'export function parsePositiveNumber(input: string): number { if (input == null || input === "" || isNaN(Number(input))) throw new RangeError("invalid input"); return Number(input) }'
+            : 'export function parsePositiveNumber(input: string): number { return Number(input) }',
+        }
+      },
+    }
+    const strong =
+      "---\nname: safe-coding\ndescription: x\n---\n处理外部/用户输入前必须校验：null、undefined、空字符串、格式非法时，抛出 RangeError，消息为 'invalid input'。"
+    const weak =
+      '---\nname: safe-coding\ndescription: x\n---\n你是一个编码智能体，尽力完成任务即可。'
+    const s = await measureSkillDeltaRepeated(
+      mockLlm,
+      {
+        filePath: 'apps/cli/skills/standard/safe-coding.SKILL.md',
+        originalContent: weak,
+        newContent: strong,
+      },
+      { k: 2 },
+    )
+    expect(s).not.toBeNull()
+    // 与分数数组同长：耗时的第 i 项就是产出分数第 i 项的那次采样。
+    expect(s!.baselineDurations).toHaveLength(s!.baselineScores.length)
+    expect(s!.postDurations).toHaveLength(s!.postScores.length)
+    expect(s!.baselineDurations!.every((d) => d >= 0)).toBe(true)
+    expect(s!.postDurations!.every((d) => d >= 0)).toBe(true)
+  })
+})
+
+describe('runTaskPerformance 的代价维（B2）', () => {
+  it('整轮耗时记在报告上', async () => {
+    const mockLlm: Llm = {
+      chat: async function* () {
+        yield {
+          type: 'text',
+          content:
+            'export function parsePositiveNumber(input: string): number { if (input == null || input === "" || isNaN(Number(input))) throw new RangeError("invalid input"); return Number(input) }',
+        }
+      },
+    }
+    const r = await runTaskPerformance(mockLlm, { skill: { name: 'safe-coding', text: '校验' } })
+    expect(typeof r.durationMs).toBe('number')
+    expect(r.durationMs!).toBeGreaterThanOrEqual(0)
+  })
 })
