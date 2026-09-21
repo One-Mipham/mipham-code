@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import {
   extractCrsiLessonSummaries,
   buildCrsiLessonsBlock,
@@ -81,5 +83,28 @@ describe('InstructionsLoader CRSI lessons recall (integration)', () => {
     const loader = new InstructionsLoader()
     loader.loadAll(process.cwd())
     expect(loader.buildSystemPrompt()).toContain('CRSI Lessons')
+  })
+})
+
+// 真账本的**完整性**：抽取器会静默丢弃「有标题但 建议 行缺失/格式漂移」的块
+// （见上方 'skips a lesson that has a heading but no 建议 line'）—— 而上面那条集成测试
+// 只断言 block「存在」、不钉条数，报不出「某条没进去」。此处按「每个 ## 块都必须被抽出」
+// 断言，**不钉条数**（钉了以后每加一条就红）。
+describe('crsi-lessons.md 真文件完整性（不钉条数）', () => {
+  const real = readFileSync(resolve(__dirname, '../../crsi-lessons.md'), 'utf-8')
+  const blocks = real.split(/^## /m).slice(1)
+
+  it('每个 ## 块都产出一条非空建议 —— 无一被静默丢弃', () => {
+    const got = extractCrsiLessonSummaries(real)
+    const orphans = blocks
+      .map((b) => (b.split('\n')[0] ?? '').trim())
+      .filter((t) => !got.some((s) => s.title === t))
+    expect(orphans).toEqual([])
+    expect(got).toHaveLength(blocks.length)
+  })
+
+  it('负对照：伪造标题在真账本里报未命中', () => {
+    const titles = new Set(extractCrsiLessonSummaries(real).map((s) => s.title))
+    expect(titles.has('不存在的轴: 这条标题是伪造的')).toBe(false)
   })
 })
