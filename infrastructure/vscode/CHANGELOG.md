@@ -3,6 +3,15 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.83.0 — 2026-09-21
+
+- Version sync with Mipham Code CLI 0.83.0
+- New: the CRSI eval ledger now records every contract's `{id, passed, role}` instead of an
+  aggregate score alone, so `/crsi eval` can show _which_ contract flipped (a real regression and
+  a one-off flake look identical in the aggregate)
+- New: the improvement ledger records before/after durations alongside scores, shown as one line
+  by `/crsi modify` and `/crsi propose --prose`; durations are recorded only and gate nothing
+
 ## 0.82.0 — 2026-09-20
 
 - Version sync with Mipham Code CLI 0.82.0

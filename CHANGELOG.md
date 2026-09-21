@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.83.0] — 2026-09-21
+
+### Added
+
+- **CRSI 账本按契约粒度落盘（B1）**：`appendEvalScore` 从「只落聚合分数」改为同时落每条契约的
+  `{id, passed, role}`；新增 `getContractHistory` 与纯函数 `diffContractHistory`（五态
+  `regressed` / `fixed` / `flaky` / `new` / `gone`），`/crsi eval` 只读展示契约级差异 ——
+  此前账本只能回答「总分涨没涨」，回答不了「是哪条契约翻的」，而真回归与单次抖动在聚合层同形。
+  旧记录没有 `results` 键（**缺席而非空数组**），读取侧跳过；新记录每条约 2–3 KB，
+  `eval-scores.jsonl` 仍是 append-only、**当前无轮转**
+- **CRSI 代价维（B2）**：`runTaskPerformance` 报告新增 `durationMs`，改进台账新增与分数数组
+  **逐项对齐**的 `baselineDurations` / `postDurations`，两条渲染路径（`/crsi modify` 与
+  `/crsi propose --prose`）经 `formatCostLine` 展示「均值 → 均值（×倍数）」一行。
+  **只记录、不进任何闸门**：`verdict` / `deltaMean` / `noise` / `minEffect` 一律不看耗时字段
+
 ## [0.82.0] — 2026-09-20
 
 ### Added
