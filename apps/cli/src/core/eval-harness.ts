@@ -97,10 +97,24 @@ export function regressedAnchors(results: EvalResult[]): string[] {
 
 const SCORES_FILE = join(homedir(), '.mipham', 'crsi', 'eval-scores.jsonl')
 
+/** 落盘的契约粒度投影 —— 只要 id/passed/role（EvalResult 的 description/detail 不落盘）。 */
+export interface ContractResultRecord {
+  id: string
+  passed: boolean
+  role?: ContractRole
+}
+
+/** 一次评估的契约粒度快照：契约 id → 是否通过。 */
+export type ContractSnapshot = Record<string, boolean>
+
+function toContractResultRecord(r: EvalResult): ContractResultRecord {
+  return { id: r.id, passed: r.passed, ...(r.role ? { role: r.role } : {}) }
+}
+
 /** 追加一次评估分数到 rewards 日志（按奖励函数名键控）。 */
 export function appendEvalScore(
   name: string,
-  report: { score: number; passed: number; total: number },
+  report: { score: number; passed: number; total: number; results?: EvalResult[] },
 ): void {
   try {
     mkdirSync(join(homedir(), '.mipham', 'crsi'), { recursive: true })
@@ -112,6 +126,9 @@ export function appendEvalScore(
         score: report.score,
         passed: report.passed,
         total: report.total,
+        // 契约粒度（B1）。缺省不写该键：B1 之前落盘的旧记录没有它，
+        // 读取侧跳过 —— 这是向后兼容的承重判据，别改成 `results: []`。
+        ...(report.results ? { results: report.results.map(toContractResultRecord) } : {}),
       }) + '\n',
       'utf-8',
     )
@@ -133,6 +150,105 @@ export function getLastEvalScore(name: string): number | null {
   } catch {
     return null
   }
+}
+
+/**
+ * 某奖励函数最近 n 次**按契约粒度**落盘的记录，新→旧。
+ *
+ * 只认带 `results` 的记录 —— B1 之前落盘的旧记录（只有聚合分数）被跳过，
+ * 于是调用方不必区分新旧形态。逐行容错：坏行跳过而不是让整条历史归零
+ * （`fixCache` 负责清理坏行）。
+ */
+export function getContractHistory(name: string, n = 3): ContractSnapshot[] {
+  try {
+    if (!existsSync(SCORES_FILE)) return []
+    const lines = readFileSync(SCORES_FILE, 'utf-8').trim().split('\n').filter(Boolean)
+    const out: ContractSnapshot[] = []
+    for (let i = lines.length - 1; i >= 0 && out.length < n; i--) {
+      let rec: { name?: string; results?: ContractResultRecord[] }
+      try {
+        rec = JSON.parse(lines[i]!) as { name?: string; results?: ContractResultRecord[] }
+      } catch {
+        continue
+      }
+      if (rec.name !== name || !Array.isArray(rec.results)) continue
+      const snap: ContractSnapshot = {}
+      for (const r of rec.results) {
+        if (typeof r?.id === 'string') snap[r.id] = r.passed === true
+      }
+      out.push(snap)
+    }
+    return out
+  } catch {
+    return []
+  }
+}
+
+export type ContractDelta = 'regressed' | 'fixed' | 'flaky' | 'new' | 'gone'
+
+/**
+ * 纯函数：当前 run vs 历史 → 每条契约的变化。**只报变化**，未变化的契约不出现。
+ *
+ * delta 判据（`history` 新→旧）：
+ *   - 历史上没出现过                  → `new`
+ *   - 历史上 true/false 都出现过       → `flaky`（压过 regressed/fixed：抖动的契约
+ *                                        不该被报成「已修复」或「回归」）
+ *   - 上次与本次相反                  → `regressed`（上次 PASS→本次 FAIL）/ `fixed`
+ *   - 本次没有但历史有                → `gone`
+ *
+ * 为什么 `flaky` 要压过相邻两次的比较：只比相邻两次会把一个每次都在翻的契约
+ * 误报成「真回归」，而那正是这个账本要区分开的东西。
+ */
+export function diffContractHistory(
+  current: ContractResultRecord[],
+  history: ContractSnapshot[],
+): { id: string; delta: ContractDelta; role?: ContractRole }[] {
+  const out: { id: string; delta: ContractDelta; role?: ContractRole }[] = []
+  const seen = new Set<string>()
+  for (const c of current) {
+    seen.add(c.id)
+    const past = history.filter((h) => c.id in h).map((h) => h[c.id] === true)
+    let delta: ContractDelta
+    if (past.length === 0) delta = 'new'
+    else if (past.includes(true) && past.includes(false)) delta = 'flaky'
+    else if (past[0] === !c.passed) delta = c.passed ? 'fixed' : 'regressed'
+    else continue // 未变化
+    out.push({ id: c.id, delta, ...(c.role ? { role: c.role } : {}) })
+  }
+  for (const h of history) {
+    for (const id of Object.keys(h)) {
+      if (seen.has(id)) continue
+      seen.add(id)
+      out.push({ id, delta: 'gone' })
+    }
+  }
+  return out
+}
+
+/**
+ * 把 diffContractHistory 的结果渲染成展示行。纯函数——不做 I/O、不读时钟。
+ * 返回空数组表示「无变化」，调用方据此决定是否打印标题。
+ */
+export function renderContractDiff(
+  deltas: { id: string; delta: ContractDelta; role?: ContractRole }[],
+): string[] {
+  const text: Record<ContractDelta, string> = {
+    regressed: '上次 PASS，本次 FAIL（回归）',
+    fixed: '上次 FAIL，本次 PASS（已修复）',
+    flaky: '近几次结果不一致（抖动）',
+    new: '本次新增的契约',
+    gone: '本次未出现（已移出契约集）',
+  }
+  const icon: Record<ContractDelta, string> = {
+    regressed: '❌',
+    fixed: '✅',
+    flaky: '⚠️',
+    new: '🆕',
+    gone: '➖',
+  }
+  return deltas.map(
+    (d) => `${icon[d.delta]} ${d.id} ← ${text[d.delta]}${d.role ? ` \`${d.role}\`` : ''}`,
+  )
 }
 
 // ── Harness ──

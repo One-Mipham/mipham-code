@@ -37,7 +37,13 @@ import {
   MANAGED_RULES_FILE,
 } from '../core/crsi-producer'
 import { prefilterProposal } from '../core/proposal-guard'
-import { runEval, appendEvalScore } from '../core/eval-harness'
+import {
+  runEval,
+  appendEvalScore,
+  getContractHistory,
+  diffContractHistory,
+  renderContractDiff,
+} from '../core/eval-harness'
 import { listRewardFns } from '../core/reward-fn'
 import {
   runTaskPerformance,
@@ -1132,14 +1138,26 @@ const crsiEvalCmd: CommandHandler = async (ctx, args) => {
         content: `❌ 未知 reward: ${rewardName}。可用: ${fns.map((f) => f.name).join(', ')}`,
       }
     }
+    // 先读后写：比较基准是「上一次已落盘的态」，不依赖刚写进去那条排第几。
+    const prev = getContractHistory(fn.name)
     const report = await fn.evaluate()
+    const deltaLines = report.results
+      ? renderContractDiff(diffContractHistory(report.results, prev))
+      : []
     appendEvalScore(fn.name, report)
     return {
-      content: `得分 **${report.score}/100** (${report.passed}/${report.total})\n失败: ${report.failures.join(', ') || '无'}`,
+      content: [
+        `得分 **${report.score}/100** (${report.passed}/${report.total})`,
+        `失败: ${report.failures.join(', ') || '无'}`,
+        ...(deltaLines.length > 0 ? ['', '### 与上次相比', ...deltaLines] : []),
+      ].join('\n'),
     }
   }
 
+  // 先读后写（同上）：基准是上一次落盘的态。
+  const prevSnapshot = getContractHistory('mechanism-sentinel')
   const report = runEval()
+  const deltaLines = renderContractDiff(diffContractHistory(report.results, prevSnapshot))
   appendEvalScore('mechanism-sentinel', report)
 
   const lines: string[] = ['## 🧪 CRSI Eval Harness', '']
@@ -1153,6 +1171,11 @@ const crsiEvalCmd: CommandHandler = async (ctx, args) => {
   }
   if (report.failures.length > 0) {
     lines.push('', `❌ 失败任务: ${report.failures.join(', ')}`)
+  }
+  // 只读展示：账本按契约粒度落盘后，才能回答「是哪条契约翻的」。
+  // 这里不做任何自动决策——闸门仍只看 regressedAnchors / score。
+  if (deltaLines.length > 0) {
+    lines.push('', '### 与上次相比', ...deltaLines)
   }
 
   // 奖励函数注册表（reward function = policy→feedback 抽象可见）
