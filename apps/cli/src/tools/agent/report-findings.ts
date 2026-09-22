@@ -7,7 +7,7 @@ export const reportFindingsTool: ToolDefinition = {
     'Use this to output structured review results with file, line, summary, ' +
     'failure_scenario, and category. Findings are ranked most-severe first.',
   category: 'agent',
-  permission: 'auto',
+  permission: 'self',
   parameters: {
     type: 'object',
     properties: {

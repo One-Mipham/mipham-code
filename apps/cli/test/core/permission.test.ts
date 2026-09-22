@@ -7,7 +7,7 @@ import { PERMISSION_MODE_HIERARCHY } from '../../src/core/permission-config'
 
 function makeTool(
   name: string,
-  permission: ToolDefinition['permission'] = 'auto',
+  permission: ToolDefinition['permission'] = 'self',
   category: ToolDefinition['category'] = 'file',
 ): ToolDefinition {
   return {
@@ -29,17 +29,17 @@ describe('PermissionSystem', () => {
 
   it('should return tool default permission when no rule set', () => {
     const ps = new PermissionSystem()
-    const tool = makeTool('read', 'auto')
+    const tool = makeTool('read', 'self')
 
-    expect(ps.check(tool, {})).toBe('auto')
+    expect(ps.check(tool, {})).toBe('self')
   })
 
   it('should respect defaultLevel in constructor', () => {
     const ps = new PermissionSystem('ask')
-    const tool = makeTool('read', 'auto')
+    const tool = makeTool('read', 'self')
 
-    // Tool default is 'auto', but no rules → returns tool default (not constructor default)
-    expect(ps.check(tool, {})).toBe('auto')
+    // Tool default is 'self', but no rules → returns tool default (not constructor default)
+    expect(ps.check(tool, {})).toBe('self')
   })
 
   it('should return ask for tools with ask permission', () => {
@@ -62,7 +62,7 @@ describe('PermissionSystem', () => {
 
   it('should override tool permission with explicit rule', () => {
     const ps = new PermissionSystem()
-    const tool = makeTool('read', 'auto')
+    const tool = makeTool('read', 'self')
 
     ps.setRule('read', 'ask')
     expect(ps.check(tool, {})).toBe('ask')
@@ -70,7 +70,7 @@ describe('PermissionSystem', () => {
 
   it('should allow rule to escalate from auto to ask', () => {
     const ps = new PermissionSystem()
-    const tool = makeTool('read', 'auto')
+    const tool = makeTool('read', 'self')
 
     ps.setRule('read', 'ask')
     expect(ps.check(tool, {})).toBe('ask')
@@ -80,17 +80,17 @@ describe('PermissionSystem', () => {
     const ps = new PermissionSystem()
     const tool = makeTool('write', 'ask')
 
-    ps.setRule('write', 'auto')
-    expect(ps.check(tool, {})).toBe('auto')
+    ps.setRule('write', 'self')
+    expect(ps.check(tool, {})).toBe('self')
   })
 
   it('should remove rule and fall back to tool default', () => {
     const ps = new PermissionSystem()
-    const tool = makeTool('read', 'auto')
+    const tool = makeTool('read', 'self')
 
     ps.setRule('read', 'ask')
     ps.removeRule('read')
-    expect(ps.check(tool, {})).toBe('auto')
+    expect(ps.check(tool, {})).toBe('self')
   })
 
   it('should handle removing non-existent rule gracefully', () => {
@@ -111,14 +111,14 @@ describe('PermissionSystem', () => {
 
   it('should return false for auto-permission tools', () => {
     const ps = new PermissionSystem()
-    const tool = makeTool('read', 'auto')
+    const tool = makeTool('read', 'self')
 
     expect(ps.needsApproval(tool, {})).toBe(false)
   })
 
   it('should reflect rule override in needsApproval', () => {
     const ps = new PermissionSystem()
-    const tool = makeTool('read', 'auto')
+    const tool = makeTool('read', 'self')
 
     ps.setRule('read', 'ask')
     expect(ps.needsApproval(tool, {})).toBe(true)
@@ -144,7 +144,7 @@ describe('PermissionSystem', () => {
 
   it('should reflect rule override in isBypassed', () => {
     const ps = new PermissionSystem()
-    const tool = makeTool('read', 'auto')
+    const tool = makeTool('read', 'self')
 
     ps.setRule('read', 'bypass')
     expect(ps.isBypassed(tool, {})).toBe(true)
@@ -162,7 +162,7 @@ describe('PermissionSystem', () => {
     expect(rules.get('read')).toBe('ask')
 
     // Mutating the copy should not affect original
-    rules.set('read', 'auto')
+    rules.set('read', 'self')
     expect(ps.listRules().get('read')).toBe('ask')
   })
 
@@ -179,10 +179,10 @@ describe('PermissionSystem', () => {
   it('should filter tools by category', () => {
     const ps = new PermissionSystem()
     const tools = new Map<string, ToolDefinition>([
-      ['read', makeTool('read', 'auto', 'file')],
+      ['read', makeTool('read', 'self', 'file')],
       ['write', makeTool('write', 'ask', 'file')],
       ['bash', makeTool('bash', 'ask', 'exec')],
-      ['git', makeTool('git', 'auto', 'exec')],
+      ['git', makeTool('git', 'self', 'exec')],
     ])
 
     const fileTools = ps.getByCategory(tools, 'file')
@@ -194,7 +194,7 @@ describe('PermissionSystem', () => {
   it('should apply rule overrides in category results', () => {
     const ps = new PermissionSystem()
     ps.setRule('read', 'ask')
-    const tools = new Map<string, ToolDefinition>([['read', makeTool('read', 'auto', 'file')]])
+    const tools = new Map<string, ToolDefinition>([['read', makeTool('read', 'self', 'file')]])
 
     const results = ps.getByCategory(tools, 'file')
     expect(results[0]!.level).toBe('ask') // overridden
@@ -202,7 +202,7 @@ describe('PermissionSystem', () => {
 
   it('should return empty array for category with no matches', () => {
     const ps = new PermissionSystem()
-    const tools = new Map<string, ToolDefinition>([['read', makeTool('read', 'auto', 'file')]])
+    const tools = new Map<string, ToolDefinition>([['read', makeTool('read', 'self', 'file')]])
 
     expect(ps.getByCategory(tools, 'network')).toHaveLength(0)
   })
@@ -225,7 +225,7 @@ describe('PermissionSystem', () => {
   it('deny rule blocks even when mode is bypassPermissions', () => {
     const ps = new PermissionSystem('bypassPermissions')
     ps.deny('Bash(rm -rf *)')
-    const tool = makeTool('Bash', 'auto', 'exec')
+    const tool = makeTool('Bash', 'self', 'exec')
     expect(ps.needsApproval(tool, { command: 'rm -rf /' })).toBe(true)
   })
 
@@ -237,7 +237,7 @@ describe('PermissionSystem', () => {
     const ps = new PermissionSystem()
     ps.allow('Bash(cat:*)')
     ps.deny('Read(.git-credentials)')
-    const tool = makeTool('Bash', 'auto', 'exec')
+    const tool = makeTool('Bash', 'self', 'exec')
     expect(ps.check(tool, { command: "bash -c 'cat .git-credentials'" })).toBe('ask')
   })
 
@@ -249,7 +249,7 @@ describe('PermissionSystem', () => {
     // and the hard gate does not catch it either, because a relative path is
     // absent from BLOCKED_PATTERNS (`rm -rf /` still is).
     //
-    // `permission: 'ask'` matters: with the default `'auto'` the tool is
+    // `permission: 'ask'` matters: with the default `'self'` the tool is
     // already auto-approved, so a `bypass`/`ask` swap would change nothing.
     // `'ask'` is the real Bash tool's declared level (`tools/exec/bash.ts`).
     const ps = new PermissionSystem()
@@ -272,8 +272,8 @@ describe('PermissionSystem', () => {
 
   it('plan mode allows reads only', () => {
     const ps = new PermissionSystem('plan')
-    const readTool = makeTool('Read', 'auto', 'file')
-    const bashTool = makeTool('Bash', 'auto', 'exec')
+    const readTool = makeTool('Read', 'self', 'file')
+    const bashTool = makeTool('Bash', 'self', 'exec')
     expect(ps.isBypassed(readTool, {})).toBe(true)
     expect(ps.needsApproval(bashTool, {})).toBe(true)
   })
@@ -286,7 +286,7 @@ describe('PermissionSystem', () => {
       deny: ['Bash(rm *)'],
     })
     expect(ps.getMode()).toBe('acceptEdits')
-    const gitTool = makeTool('Bash', 'auto', 'exec')
+    const gitTool = makeTool('Bash', 'self', 'exec')
     expect(ps.isBypassed(gitTool, { command: 'git status' })).toBe(true)
     expect(ps.needsApproval(gitTool, { command: 'rm -rf /' })).toBe(true)
   })
@@ -294,17 +294,17 @@ describe('PermissionSystem', () => {
   // ── P1: SendMessage goes through the permission classifier ──
   it('routes SendMessage through permission classifier in default mode', () => {
     const ps = new PermissionSystem('default')
-    const sendMsg = makeTool('SendMessage', 'auto', 'agent')
+    const sendMsg = makeTool('SendMessage', 'self', 'agent')
 
-    // SendMessage falls through mode baseline to tool.permission = 'auto'
-    expect(ps.check(sendMsg, { to: 'other', summary: 'test', message: 'hi' })).toBe('auto')
+    // SendMessage falls through mode baseline to tool.permission = 'self'
+    expect(ps.check(sendMsg, { to: 'other', summary: 'test', message: 'hi' })).toBe('self')
     expect(ps.needsApproval(sendMsg, { to: 'other', summary: 'test', message: 'hi' })).toBe(false)
   })
 
   it('honors deny rules for SendMessage in default mode', () => {
     const ps = new PermissionSystem('default')
     ps.deny('SendMessage')
-    const sendMsg = makeTool('SendMessage', 'auto', 'agent')
+    const sendMsg = makeTool('SendMessage', 'self', 'agent')
 
     // Deny rule takes priority → blocked
     expect(ps.needsApproval(sendMsg, { to: 'other', summary: 'test', message: 'hi' })).toBe(true)
@@ -440,12 +440,17 @@ describe('PermissionSystem', () => {
   })
 
   describe('setDefaultLevel — legacy 3-level mapping', () => {
-    it('maps legacy "auto" (tool self-decide) to default mode, NOT 6-level auto', () => {
+    it('maps legacy "self" (tool self-decide) to default mode, NOT a permissive one', () => {
       const ps = new PermissionSystem('default')
-      ps.setDefaultLevel('auto')
-      // Legacy config.permission='auto' means "let each tool decide", which is the
-      // 6-level 'default' mode. Mapping it to 6-level 'auto' would silently grant
-      // write/bash execution without approval (the "scary autonomous edits" bug).
+      ps.setDefaultLevel('self')
+      // The legacy level means "let each tool decide", which is the 'default'
+      // mode — not a permissive one. `fc5afd3a` (2026-08-25) was exactly this
+      // collision: back when the level was *spelled* 'auto', a
+      // `config.permission: auto` meaning "tool self-decides" was mapped onto the
+      // then-current 'auto' mode and silently granted write/bash without approval
+      // (the "scary autonomous edits" bug). The level was renamed to 'self' on
+      // 2026-09-22 to retire that spelling before the classifier mode took the
+      // name 'auto'; this test pins that the mapping still lands on 'default'.
       expect(ps.getMode()).toBe('default')
     })
 
@@ -541,7 +546,7 @@ describe('PermissionSystem', () => {
 
     it('deny() affects an already-checked tool', () => {
       const ps = new PermissionSystem('bypassPermissions')
-      const tool = makeTool('Bash', 'auto', 'exec')
+      const tool = makeTool('Bash', 'self', 'exec')
       expect(ps.check(tool, {})).toBe('bypass')
       ps.deny('Bash')
       expect(ps.check(tool, {})).toBe('ask')
@@ -549,7 +554,7 @@ describe('PermissionSystem', () => {
 
     it('ask() affects an already-checked tool', () => {
       const ps = new PermissionSystem('bypassPermissions')
-      const tool = makeTool('Read', 'auto', 'file')
+      const tool = makeTool('Read', 'self', 'file')
       expect(ps.check(tool, {})).toBe('bypass')
       ps.ask('Read')
       expect(ps.check(tool, {})).toBe('ask')
@@ -564,17 +569,17 @@ describe('PermissionSystem', () => {
     // 用 `needsApproval` **实测**每一档放行哪些工具。探针不读层级表，所以它给出的是
     // 测量值；下面那条断言把层级表钉在这个测量值上 —— 两者不一致就红。
     const PROBES: ToolDefinition[] = [
-      makeTool('Read', 'auto', 'file'),
-      makeTool('Grep', 'auto', 'file'),
-      makeTool('Glob', 'auto', 'file'),
+      makeTool('Read', 'self', 'file'),
+      makeTool('Grep', 'self', 'file'),
+      makeTool('Glob', 'self', 'file'),
       makeTool('Write', 'ask', 'file'),
       makeTool('Edit', 'ask', 'file'),
       makeTool('Bash', 'ask', 'exec'),
-      makeTool('git', 'auto', 'exec'),
-      makeTool('task', 'auto', 'exec'),
-      makeTool('web-fetch', 'auto', 'network'),
-      makeTool('memory', 'auto', 'agent'),
-      makeTool('cron', 'auto', 'scheduling'),
+      makeTool('git', 'self', 'exec'),
+      makeTool('task', 'self', 'exec'),
+      makeTool('web-fetch', 'self', 'network'),
+      makeTool('memory', 'self', 'agent'),
+      makeTool('cron', 'self', 'scheduling'),
     ]
     const passesIn = (mode: PermissionMode, tool: ToolDefinition): boolean =>
       !new PermissionSystem(mode).needsApproval(tool, { command: 'pnpm test' })
@@ -594,7 +599,7 @@ describe('PermissionSystem', () => {
       const ALL: PermissionMode[] = ['default', 'acceptEdits', 'plan', 'bypassPermissions']
       const narrowest = ALL.filter((m) => ALL.every((o) => o === m || notWiderThan(m, o)))
       // 实测的唯一答案就是 plan：它同时严格窄于 default（后者放行 git / task /
-      // web-fetch / memory / cron 这些 `permission: 'auto'` 的非文件工具）与
+      // web-fetch / memory / cron 这些 `permission: 'self'` 的非文件工具）与
       // acceptEdits（后者放行 Write/Edit）。层级表若把 default 排回首位，这里就红。
       expect(narrowest).toEqual(['plan'])
       expect(PERMISSION_MODE_HIERARCHY[0]).toBe(narrowest[0])
@@ -764,7 +769,7 @@ describe('PermissionSystem', () => {
       ps.allow('Read')
       ps.allow('Write')
 
-      expect(ps.needsApproval(makeTool('Read', 'auto', 'file'), { file_path: 'a.ts' })).toBe(false)
+      expect(ps.needsApproval(makeTool('Read', 'self', 'file'), { file_path: 'a.ts' })).toBe(false)
       expect(ps.needsApproval(makeTool('Write', 'ask', 'file'), { file_path: 'a.ts' })).toBe(true)
     })
 
@@ -775,7 +780,7 @@ describe('PermissionSystem', () => {
       ps.allow('git')
 
       expect(ps.needsApproval(bash(), { command: 'git push' })).toBe(true) // tool 声明 ask
-      expect(ps.needsApproval(makeTool('git', 'auto', 'exec'), { command: 'push' })).toBe(false) // auto
+      expect(ps.needsApproval(makeTool('git', 'self', 'exec'), { command: 'push' })).toBe(false) // tool declares 'self'
     })
 
     it('只有 forbiddenModes 时不动 allow 规则通道（范围钉住：本项只管上限）', () => {

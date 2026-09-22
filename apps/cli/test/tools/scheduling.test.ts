@@ -21,7 +21,7 @@ describe('ScheduleWakeup tool definition', () => {
   it('has correct metadata', () => {
     expect(scheduleWakeupTool.name).toBe('ScheduleWakeup')
     expect(scheduleWakeupTool.category).toBe('scheduling')
-    expect(scheduleWakeupTool.permission).toBe('auto')
+    expect(scheduleWakeupTool.permission).toBe('self')
   })
 })
 

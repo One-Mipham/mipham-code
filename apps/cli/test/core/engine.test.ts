@@ -146,7 +146,7 @@ function mockTool(
     name,
     description: `Tool: ${name}`,
     category: 'system',
-    permission: 'auto',
+    permission: 'self',
     parameters: {},
     execute: impl || (async () => ({ success: true, content: `${name} done` })),
   }

@@ -115,7 +115,7 @@ describe('Skill tool definition', () => {
   it('has correct metadata', () => {
     expect(skillTool.name).toBe('Skill')
     expect(skillTool.category).toBe('agent')
-    expect(skillTool.permission).toBe('auto')
+    expect(skillTool.permission).toBe('self')
   })
 
   it('requires skill parameter', () => {
@@ -156,7 +156,7 @@ describe('Plan tool definition', () => {
   it('has correct metadata', () => {
     expect(planTool.name).toBe('Plan')
     expect(planTool.category).toBe('agent')
-    expect(planTool.permission).toBe('auto')
+    expect(planTool.permission).toBe('self')
   })
 
   it('has empty required parameters', () => {
@@ -188,7 +188,7 @@ describe('Memory tool definition', () => {
   it('has correct metadata', () => {
     expect(memoryTool.name).toBe('Memory')
     expect(memoryTool.category).toBe('agent')
-    expect(memoryTool.permission).toBe('auto')
+    expect(memoryTool.permission).toBe('self')
   })
 
   it('requires action parameter', () => {

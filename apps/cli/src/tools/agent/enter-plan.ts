@@ -10,7 +10,7 @@ export const enterPlanModeTool: ToolDefinition = {
     'Use this before writing code to design an implementation approach, ' +
     'explore the codebase, and get user approval before executing changes.',
   category: 'agent',
-  permission: 'auto',
+  permission: 'self',
   parameters: {
     type: 'object',
     properties: {

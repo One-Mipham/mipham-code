@@ -15,7 +15,7 @@ export function createGlobTool(credentialConfig?: CredentialMaskingConfig): Tool
     name: 'Glob',
     description: 'Find files matching a glob pattern.',
     category: 'file',
-    permission: 'auto',
+    permission: 'self',
     parameters: {
       type: 'object',
       properties: {

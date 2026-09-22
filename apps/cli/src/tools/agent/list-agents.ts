@@ -8,7 +8,7 @@ export const listAgentsTool: ToolDefinition = {
     'Returns session ID, name, machine, working directory, provider, and model for each session. ' +
     'Use with SendMessage to communicate across sessions.',
   category: 'agent',
-  permission: 'auto',
+  permission: 'self',
   parameters: {
     type: 'object',
     properties: {

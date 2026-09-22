@@ -175,7 +175,7 @@ describe('mcp/registry', () => {
         name: 'mcp__test-srv__echo',
         description: 'existing',
         category: 'system',
-        permission: 'auto',
+        permission: 'self',
         parameters: {},
         async execute() {
           return { success: true, content: '' }

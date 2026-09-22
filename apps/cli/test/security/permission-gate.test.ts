@@ -8,7 +8,7 @@ const autoTool: ToolDefinition = {
   name: 'Read',
   description: 'Read a file',
   category: 'file',
-  permission: 'auto',
+  permission: 'self',
   parameters: { type: 'object', properties: {}, required: [] },
   async execute() {
     return { success: true, content: 'ok' }
@@ -73,8 +73,8 @@ describe('PermissionSystem', () => {
     const ps = new PermissionSystem('ask')
 
     it('tool permission takes precedence over default level', () => {
-      // Tool-level 'auto' still wins over constructor default 'ask'
-      expect(ps.check(autoTool, {})).toBe('auto')
+      // Tool-level 'self' still wins over constructor default 'ask'
+      expect(ps.check(autoTool, {})).toBe('self')
       expect(ps.needsApproval(autoTool, {})).toBe(false)
       // Tool-level 'ask' still needs approval
       expect(ps.needsApproval(askTool, {})).toBe(true)
@@ -86,7 +86,7 @@ describe('PermissionSystem', () => {
 
     it('tool permission takes precedence over default level', () => {
       // Tool-level permissions still respected even with bypass default
-      expect(ps.check(autoTool, {})).toBe('auto')
+      expect(ps.check(autoTool, {})).toBe('self')
       expect(ps.needsApproval(autoTool, {})).toBe(false)
       expect(ps.needsApproval(askTool, {})).toBe(true)
       expect(ps.isBypassed(bypassTool, {})).toBe(true)
@@ -112,7 +112,7 @@ describe('PermissionSystem', () => {
     })
 
     it('rule for one tool does not affect others', () => {
-      const ps = new PermissionSystem('auto')
+      const ps = new PermissionSystem('self')
       ps.setRule('Bash', 'bypass')
       expect(ps.needsApproval(askTool, {})).toBe(false) // overridden
       expect(ps.needsApproval(autoTool, {})).toBe(false) // unchanged
@@ -121,7 +121,7 @@ describe('PermissionSystem', () => {
 
   describe('listRules', () => {
     it('returns a copy of rules map', () => {
-      const ps = new PermissionSystem('auto')
+      const ps = new PermissionSystem('self')
       ps.setRule('Bash', 'bypass')
       ps.setRule('Edit', 'ask')
 
@@ -132,7 +132,7 @@ describe('PermissionSystem', () => {
     })
 
     it('modifying returned map does not affect original', () => {
-      const ps = new PermissionSystem('auto')
+      const ps = new PermissionSystem('self')
       const rules = ps.listRules()
       rules.set('Fake', 'bypass')
       expect(ps.listRules().has('Fake')).toBe(false)
@@ -141,7 +141,7 @@ describe('PermissionSystem', () => {
 
   describe('getByCategory', () => {
     it('filters tools by category', () => {
-      const ps = new PermissionSystem('auto')
+      const ps = new PermissionSystem('self')
       const tools = new Map<string, ToolDefinition>()
       tools.set('Read', autoTool)
       tools.set('Bash', askTool)

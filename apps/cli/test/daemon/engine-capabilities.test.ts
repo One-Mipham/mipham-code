@@ -176,7 +176,7 @@ function readToolTouching(filePath: string): ToolDefinition {
     name: 'Read',
     description: 'Read a file',
     category: 'system',
-    permission: 'auto',
+    permission: 'self',
     parameters: {},
     execute: async () => ({ success: true, content: `read ${filePath}` }),
   }

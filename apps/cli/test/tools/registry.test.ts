@@ -52,7 +52,7 @@ describe('createToolRegistry (seam)', () => {
           name: 'CustomPluginTool',
           description: 'plugin',
           category: 'system',
-          permission: 'auto',
+          permission: 'self',
           parameters: {},
           execute: async () => ({ success: true, content: 'ok' }),
         })

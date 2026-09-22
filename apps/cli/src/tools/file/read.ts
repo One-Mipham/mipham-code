@@ -121,7 +121,7 @@ export function createReadTool(credentialConfig?: CredentialMaskingConfig): Tool
     description:
       'Read a file from the local filesystem. Supports offset and limit for large files.',
     category: 'file',
-    permission: 'auto',
+    permission: 'self',
     parameters: {
       type: 'object',
       properties: {

@@ -249,7 +249,7 @@ describe('SubAgent', () => {
       name: 'Read',
       description: 'read',
       category: 'file',
-      permission: 'auto',
+      permission: 'self',
       parameters: {},
       execute: async () => ({ success: true, content: '' }),
     }
@@ -307,7 +307,7 @@ describe('SubAgent', () => {
       name: 'Bash',
       description: 'captures cwd',
       category: 'exec',
-      permission: 'auto',
+      permission: 'self',
       parameters: { type: 'object', properties: {} },
       execute: async (_params, ctx) => {
         capturedCwd = ctx.cwd
@@ -342,7 +342,7 @@ describe('SubAgent', () => {
       name: 'Bash',
       description: 'captures ctx',
       category: 'exec',
-      permission: 'auto',
+      permission: 'self',
       parameters: { type: 'object', properties: {} },
       execute: async (_params, ctx) => {
         sink.ctx = ctx
@@ -576,7 +576,7 @@ describe('SubAgent', () => {
       name: 'Bash',
       description: 'bash',
       category: 'exec',
-      permission: 'auto',
+      permission: 'self',
       parameters: {},
       execute: async () => ({ success: true, content: 'ran' }),
     }
@@ -615,7 +615,7 @@ describe('SubAgent', () => {
       name: 'Bash',
       description: 'bash',
       category: 'exec',
-      permission: 'auto',
+      permission: 'self',
       parameters: {},
       execute: async () => ({ success: false, content: '', error: 'boom' }),
     }
@@ -692,7 +692,7 @@ describe('SubAgent', () => {
     it('对照组：同一个缺席权限系统的子代理，声明 auto 的工具照旧执行（不是一刀切拒绝）', async () => {
       const sink = { ran: false }
       const registry = createMockRegistry(toolUseThenDone())
-      const sub = new SubAgent(registry, new Map([['Bash', makeProbeTool('auto', sink)]]))
+      const sub = new SubAgent(registry, new Map([['Bash', makeProbeTool('self', sink)]]))
 
       await sub.execute('run', 'task')
 

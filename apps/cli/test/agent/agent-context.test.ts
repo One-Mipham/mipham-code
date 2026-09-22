@@ -20,7 +20,7 @@ function makeTools(): Map<string, ToolDefinition> {
     name: 'read',
     description: 'Read a file',
     category: 'file',
-    permission: 'auto',
+    permission: 'self',
     parameters: {},
     execute: async () => ({ success: true, content: '' }),
   }

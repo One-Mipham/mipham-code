@@ -205,7 +205,7 @@ export const gitTool: ToolDefinition = {
   name: 'Git',
   description: 'Execute git commands. Dangerous operations (force push, hard reset) are blocked.',
   category: 'exec',
-  permission: 'auto',
+  permission: 'self',
   parameters: {
     type: 'object',
     properties: {
@@ -240,7 +240,7 @@ export const gitTool: ToolDefinition = {
       }
     }
 
-    // Git runs without an approval prompt (`permission: 'auto'`), so an option
+    // Git runs without an approval prompt (`permission: 'self'`), so an option
     // that names a program to execute is a code-execution path Bash would have
     // had to ask for. Checked on argv, which is what git is handed below.
     const argv = splitCommand(command)

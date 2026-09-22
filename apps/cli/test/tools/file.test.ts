@@ -77,7 +77,7 @@ describe('Read tool definition', () => {
   it('has correct metadata', () => {
     expect(readTool.name).toBe('Read')
     expect(readTool.category).toBe('file')
-    expect(readTool.permission).toBe('auto')
+    expect(readTool.permission).toBe('self')
   })
 
   it('requires file_path parameter', () => {
@@ -567,7 +567,7 @@ describe('Glob tool definition', () => {
   it('has correct metadata', () => {
     expect(globTool.name).toBe('Glob')
     expect(globTool.category).toBe('file')
-    expect(globTool.permission).toBe('auto')
+    expect(globTool.permission).toBe('self')
   })
 
   it('requires pattern parameter', () => {
@@ -638,7 +638,7 @@ describe('Grep tool definition', () => {
   it('has correct metadata', () => {
     expect(grepTool.name).toBe('Grep')
     expect(grepTool.category).toBe('file')
-    expect(grepTool.permission).toBe('auto')
+    expect(grepTool.permission).toBe('self')
   })
 
   it('requires pattern parameter', () => {

@@ -20,7 +20,7 @@ export const scheduleWakeupTool: ToolDefinition = {
   description:
     'Schedule when to resume work in /loop dynamic mode — the user invoked /loop without an interval, asking you to self-pace iterations of a specific task. Do NOT schedule a short-interval wakeup to poll for background work you started — when harness-tracked work finishes, you are re-invoked automatically. The runtime clamps to [60, 3600].',
   category: 'scheduling',
-  permission: 'auto',
+  permission: 'self',
   parameters: {
     type: 'object',
     properties: {

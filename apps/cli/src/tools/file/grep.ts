@@ -88,7 +88,7 @@ export function createGrepTool(credentialConfig?: CredentialMaskingConfig): Tool
       '(glob pattern, e.g. "*.ts") before searching. ' +
       'The `pattern` parameter accepts full regex syntax (e.g., "log.*Error", "\\bclass\\s+\\w+").',
     category: 'file',
-    permission: 'auto',
+    permission: 'self',
     parameters: {
       type: 'object',
       properties: {

@@ -8,7 +8,7 @@ const readTool: ToolDefinition = {
   name: 'Read',
   description: 'read a file',
   category: 'file',
-  permission: 'auto',
+  permission: 'self',
   parameters: {
     type: 'object',
     properties: { file_path: { type: 'string' } },
@@ -36,7 +36,7 @@ describe('tool seam', () => {
       name: 'CustomTool',
       description: 'a plugin tool',
       category: 'system',
-      permission: 'auto',
+      permission: 'self',
       parameters: {},
       execute: async () => ({ success: true, content: 'custom' }),
     }
@@ -61,7 +61,7 @@ describe('tool seam', () => {
       name: 'read',
       description: 'parent read',
       category: 'file',
-      permission: 'auto',
+      permission: 'self',
       parameters: {},
       execute: async () => ({ success: true, content: 'A' }),
     }
@@ -69,7 +69,7 @@ describe('tool seam', () => {
       name: 'read',
       description: 'child read',
       category: 'file',
-      permission: 'auto',
+      permission: 'self',
       parameters: {},
       execute: async () => ({ success: true, content: 'B' }),
     }

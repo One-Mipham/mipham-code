@@ -32,10 +32,10 @@ describe('permission escalation prevention', () => {
     const { PermissionSystem } = await import('../../../src/core/permission')
     const perm = new PermissionSystem('default')
     const result = perm.check(
-      { name: 'read', permission: 'auto', category: 'file', description: 'test tool' } as any,
+      { name: 'read', permission: 'self', category: 'file', description: 'test tool' } as any,
       {} as any,
     )
-    expect(['deny', 'ask', 'allow', 'auto']).toContain(result)
+    expect(['deny', 'ask', 'allow', 'self']).toContain(result)
   })
 
   it('cycleMode advances to the next mode', async () => {

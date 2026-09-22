@@ -614,7 +614,7 @@ A 段给 `StreamChunk.isError` 选「恒设」的理由在这里**不成立**：
 
 **已认下的后果（不静默收窄）**
 
-- **接 `setSkills` 给 daemon 开出一条新的远程可达路径**：`Skill` 工具是 `permission: 'auto'`，
+- **接 `setSkills` 给 daemon 开出一条新的远程可达路径**：`Skill` 工具是 `permission: 'self'`，
   接上后渠道调用者（飞书 / Telegram / 企业微信 / 钉钉）驱动的会话可以拉起本地已装 skill，
   skill 正文进入对话。执行腿仍被权限钳住，但两点不受权限管：`ensureSkillAssets` 在**任何权限检查
   之前**就写文件；`recordSkillUsage` 对 `~/.mipham/skill-usage.json` 是无锁读改写（并发会话丢更新，

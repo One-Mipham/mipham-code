@@ -135,7 +135,7 @@ describe('Git tool definition', () => {
   it('has correct metadata', () => {
     expect(gitTool.name).toBe('Git')
     expect(gitTool.category).toBe('exec')
-    expect(gitTool.permission).toBe('auto')
+    expect(gitTool.permission).toBe('self')
   })
 
   it('requires command parameter', () => {
@@ -352,7 +352,7 @@ describe('Task tool definition', () => {
   it('has correct metadata', () => {
     expect(taskTool.name).toBe('Task')
     expect(taskTool.category).toBe('exec')
-    expect(taskTool.permission).toBe('auto')
+    expect(taskTool.permission).toBe('self')
   })
 
   it('requires action parameter', () => {

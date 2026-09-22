@@ -29,11 +29,11 @@ export function loadPermissionConfig(raw: Partial<PermissionConfig> = {}): Permi
  *
  * - `plan` is strictly the narrowest. It passes only Read/Grep/Glob and sends
  *   *everything* else to approval, while `default` passes every tool that
- *   declares `permission: 'auto'` — git, task, web-fetch, cron, memory, … So a
+ *   declares `permission: 'self'` — git, task, web-fetch, cron, memory, … So a
  *   cap of `'plan'` must not admit `default`, and `plan` belongs at the bottom.
  * - `acceptEdits` and `default` are **incomparable**: acceptEdits auto-approves
  *   Write/Edit and verification-only Bash that `default` asks about, while
- *   `default` auto-approves the non-file `'auto'` tools that acceptEdits asks
+ *   `default` auto-approves the non-file `'self'` tools that acceptEdits asks
  *   about. No total order is faithful there, so the ranking only needs to carry
  *   the relations the two consumers rely on.
  *

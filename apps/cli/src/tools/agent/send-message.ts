@@ -8,7 +8,7 @@ export const sendMessageTool: ToolDefinition = {
     'Use "main" for the parent conversation, a background task ID for same-process agents, ' +
     'or a session ID (or unique session name) for cross-session messaging (use ListAgents to discover sessions).',
   category: 'agent',
-  permission: 'auto',
+  permission: 'self',
   parameters: {
     type: 'object',
     properties: {

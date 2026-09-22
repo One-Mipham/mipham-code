@@ -61,7 +61,7 @@ export const taskTool: ToolDefinition = {
     'background task output/stop, and status workflow: pending → in_progress → completed. ' +
     'Use for complex multi-step tasks, session tracking, and organizing work.',
   category: 'exec',
-  permission: 'auto',
+  permission: 'self',
   parameters: {
     type: 'object',
     properties: {

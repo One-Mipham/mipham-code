@@ -9,7 +9,7 @@ export const exitPlanModeTool: ToolDefinition = {
     'After calling this, present your plan and ask the user to confirm. ' +
     'The user can approve by saying "approved" or "/approve", or by cycling to acceptEdits mode with Shift+Tab.',
   category: 'agent',
-  permission: 'auto',
+  permission: 'self',
   parameters: {
     type: 'object',
     properties: {

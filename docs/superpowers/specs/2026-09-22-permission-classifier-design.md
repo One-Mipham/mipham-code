@@ -40,6 +40,8 @@
 1. **我们的 `default` 档行为等于 CC 的 `dontAsk`**（CC 原文 "deny if not pre-approved"），而非 CC 的 `default`（"prompts for dangerous operations"）—— 因为我们没有弹窗。这是「0 学习成本」至今未达成的另一半原因（**本文档不解决这一半**，仅记录）。
 2. **CC 的宽严梯子与我们的 `PERMISSION_MODE_HIERARCHY` 同形**，CC 只是在 `acceptEdits` 与 `bypassPermissions` 之间多插了一个 `auto`。因此「加 `auto` 档」在架构上是**填空**，不是改造。
 
+   **限定（2026-09-22 补，别把这句当全称读）**：「同形」只在**两个消费者依赖的那些关系**上成立。`permission-config.ts:26-45` 已明载这张表**不是**全序 —— `acceptEdits` 与 `default` 是**不可比**的（前者放行 Write/Edit 而后者问，后者放行非文件的 `'self'` 工具而前者问），所以数组只承载可测的关系。CC 的 `Jo` 把 `default`/`dontAsk`/`bubble` 并列在 1 也是同一回事。`auto` 插在 `acceptEdits` 与 `bypassPermissions` 之间这一点**是可测的**（它严格宽于前者：前者只放行文件编辑、它放行任何通过分类器的东西），故这句在**该位置上**成立，不是整表同构。
+
 ### 历史的教训（不可重犯）
 
 `fc5afd3a` 删除 `auto` 的直接起因是**同名不同义**：config 里的 `permission: auto`（3 档时代的"工具自决"）被 `setDefaultLevel` 映射到 6 档时代的 `auto`（"全自动执行"），用户启动即落入静默改文件。本次要把 `auto` 请回来，**必须先把那个名字腾干净**（决策 1）。
@@ -61,7 +63,7 @@
 
 ### 3.1 遗留 `'auto'` 级别退役（决策 1 的第一步）
 
-**事实**：`PermissionLevel` 里的 `'auto'`（`src/shared/types.ts`）**是半活的**——由 21 处工具声明 `permission: 'auto'` 与 `setRule(name,'auto')` **产出**，但 `src/` 内**没有任何代码分支读它**（`needsApproval` 只比 `'ask'`，`isBypassed` 只比 `'bypass'` 且自身无生产调用者）。它今天的意思是"放行，但没被标成 bypass"——一个无人读的区分。
+**事实**：`PermissionLevel` 里的 `'auto'`（`src/shared/types.ts`）**是半活的**——由 **20** 处工具声明 `permission: 'auto'` 与 `setRule(name,'auto')` **产出**，但 `src/` 内**没有任何代码分支读它**（`needsApproval` 只比 `'ask'`，`isBypassed` 只比 `'bypass'` 且自身无生产调用者）。它当时的意思是"放行，但没被标成 bypass"——一个无人读的区分。**这 20 处正是决策 1 的退役对象，已由 Step 1 落到 `'self'`。**（初稿写的「21 处」是错的：`rg -o "permission: 'auto'"` 把 `git.ts:243` 与 `permission-config.ts:32` 两条**注释**也算进去了；按声明行数 `rg "^\s+permission: 'self'," src/tools/` 实测 **20**。）
 
 **改法**：级别名 `'auto'` → `'self'`，值语义一字不改。
 
@@ -161,7 +163,7 @@ interface ApprovalDecision {
 
 承重细节：
 
-- **第 2 步是兼容性保证**：所有非 `ask` 判定原样；`bypassPermissions` / `acceptEdits` / `plan` / allow 规则 / 21 处 `permission:'auto'`（退役后为 `'self'`）工具声明的行为全部不变。
+- **第 2 步是兼容性保证**：所有非 `ask` 判定原样；`bypassPermissions` / `acceptEdits` / `plan` / allow 规则 / **20** 处 `permission:'self'` 工具声明的行为全部不变。
 - **第 4 步必须是允许清单**：`CLASSIFIABLE = new Set(['mode-baseline','tool-default','system-default'])`。若放行 `deny-rule` / `ask-rule` 产生的 `ask`，分类器即成为**绕开全部组织级拒绝规则的万能通道**。`legacy-rule` 也刻意排除（`setRule(name,'ask')` 同时写入 `askRules`，会以 `ask-rule` 形态出现，排除它零成本且更保守）。
 - **第 7 步复用 `allowRuleDecision()`**：该方法注释已论证"规则是权限来源，跳过上限是同一缺陷往里一层"。复用 ⇒ 分类器**永不强于一条 allow 规则**，且 `maxAllowedMode` 自动封顶。**绝不可写裸的 `return 'bypass'`**。
 - **新增 `PermissionDenialReason = 'classifier-deny'`**，且**必须区分两种拒绝**：策略拒绝（终局）vs 引擎故障拿住（可重试）。理由串要如实说明可重试，否则模型会以为被否决而放弃——这是 CC 明确区分的事。
@@ -175,9 +177,9 @@ case 'auto':
   return 'ask'      // 承重
 ```
 
-`check()` 的第 5 步（`modeBaseline`）**跑在第 6 步（`tool.permission`）之前**，而全仓库有 **21 处工具声明**写着 `permission: 'auto'`（退役后 `'self'`）。
+`check()` 的第 5 步（`modeBaseline`）**跑在第 6 步（`tool.permission`）之前**，而全仓库有 **20 处工具声明**写着 `permission: 'self'`。
 
-- 若该 case 返回 `'mode-baseline'`：这 21 个工具**保持自动放行、分类器根本见不到它们** ⇒ `auto` 档在最要紧的地方反而比 `default` 宽，且是"半坏"而非"明显坏"。
+- 若该 case 返回 `'mode-baseline'`：这 20 个工具**保持自动放行、分类器根本见不到它们** ⇒ `auto` 档在最要紧的地方反而比 `default` 宽，且是"半坏"而非"明显坏"。
 - 返回 `'ask'`：分类器看到**每一次**调用，与 CC 的 `cVe`（`auto → classify`）一致。
 - 与决策 4 不冲突：基线是 `ask`，分类器拒绝只是**保留**既有 `ask`，并未制造新拒绝。
 

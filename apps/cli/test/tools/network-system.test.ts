@@ -39,7 +39,7 @@ describe('WebFetch tool definition', () => {
   it('has correct metadata', () => {
     expect(webFetchTool.name).toBe('WebFetch')
     expect(webFetchTool.category).toBe('network')
-    expect(webFetchTool.permission).toBe('auto')
+    expect(webFetchTool.permission).toBe('self')
   })
 
   it('requires url parameter', () => {
@@ -178,7 +178,7 @@ describe('WebSearch tool definition', () => {
   it('has correct metadata', () => {
     expect(webSearchTool.name).toBe('WebSearch')
     expect(webSearchTool.category).toBe('network')
-    expect(webSearchTool.permission).toBe('auto')
+    expect(webSearchTool.permission).toBe('self')
   })
 
   it('requires query parameter', () => {

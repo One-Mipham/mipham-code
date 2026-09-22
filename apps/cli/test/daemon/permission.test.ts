@@ -9,7 +9,7 @@ function makeTool(name: string): ToolDefinition {
     name,
     description: `${name} tool`,
     category: 'file',
-    permission: 'auto',
+    permission: 'self',
     parameters: { type: 'object', properties: {} },
     execute: async () => ({ success: true, content: '' }),
   }

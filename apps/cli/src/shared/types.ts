@@ -67,7 +67,14 @@ export interface Message {
 }
 
 // ── Tool Types ──
-export type ToolPermission = 'auto' | 'ask' | 'bypass'
+/**
+ * Legacy 3-level tool permission (predates `PermissionMode`).
+ * `'self'` means "let the tool self-decide" — i.e. allowed, but not flagged as `'bypass'`.
+ * Renamed from `'auto'` (2026-09-22) so that `auto` can name the *classifier mode*
+ * without a second meaning living in `PermissionLevel` — see
+ * `docs/superpowers/specs/2026-09-22-permission-classifier-design.md` §3.1.
+ */
+export type ToolPermission = 'self' | 'ask' | 'bypass'
 export type ToolCategory =
   'file' | 'exec' | 'agent' | 'network' | 'system' | 'artifact' | 'scheduling'
 
@@ -329,8 +336,15 @@ export interface InstructionFile {
 /** Four explicit permission modes matching Claude Code's permission architecture */
 export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions'
 
-/** Backward-compatible alias: PermissionMode plus legacy 'auto'/'ask'/'bypass' */
-export type PermissionLevel = PermissionMode | 'auto' | 'ask' | 'bypass'
+/**
+ * Backward-compatible alias: `PermissionMode` plus the legacy 3-level
+ * `'self'`/`'ask'`/`'bypass'`. The legacy level was named `'auto'` until 2026-09-22;
+ * that name now belongs to the classifier mode, so the two can no longer be
+ * confused for one another (the `fc5afd3a` incident was exactly that confusion:
+ * a config `permission: auto` meaning "tool self-decides" silently becoming
+ * "run everything").
+ */
+export type PermissionLevel = PermissionMode | 'self' | 'ask' | 'bypass'
 
 /** Org-level restrictions that cap or forbid specific permission modes. */
 export interface PermissionRestrictions {

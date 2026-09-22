@@ -16,7 +16,7 @@ export const toolSearchTool: ToolDefinition = {
     'Use this to discover tools on demand instead of loading all tool definitions into context. ' +
     'Returns matching tool names with their server and description.',
   category: 'system',
-  permission: 'auto',
+  permission: 'self',
   parameters: {
     type: 'object',
     properties: {

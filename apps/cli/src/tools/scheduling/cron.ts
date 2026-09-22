@@ -97,7 +97,7 @@ export const cronCreateTool: ToolDefinition = {
     'For one-shot: set recurring:false with pinned minute/hour/day-of-month/month. ' +
     'Durable — survives restarts, written to ~/.mipham/cron/.',
   category: 'scheduling',
-  permission: 'auto',
+  permission: 'self',
   parameters: {
     type: 'object',
     properties: {
@@ -157,7 +157,7 @@ export const cronDeleteTool: ToolDefinition = {
   description:
     'Cancel a cron job previously scheduled with CronCreate. Removes from ~/.mipham/cron/.',
   category: 'scheduling',
-  permission: 'auto',
+  permission: 'self',
   parameters: {
     type: 'object',
     properties: {
@@ -181,7 +181,7 @@ export const cronListTool: ToolDefinition = {
   name: 'CronList',
   description: 'List all cron jobs scheduled via CronCreate, both durable and session-only.',
   category: 'scheduling',
-  permission: 'auto',
+  permission: 'self',
   parameters: {
     type: 'object',
     properties: {},

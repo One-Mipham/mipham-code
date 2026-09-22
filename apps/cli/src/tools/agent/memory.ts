@@ -29,7 +29,7 @@ export const memoryTool: ToolDefinition = {
   name: 'Memory',
   description: 'Read, write, list, and search persistent memory files in ~/.mipham/memory/.',
   category: 'agent',
-  permission: 'auto',
+  permission: 'self',
   parameters: {
     type: 'object',
     properties: {

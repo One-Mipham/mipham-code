@@ -7,7 +7,7 @@ export const planTool: ToolDefinition = {
   description:
     'Enter plan mode — read-only analysis and design. Creates a structured plan file in .mipham/plans/.',
   category: 'agent',
-  permission: 'auto',
+  permission: 'self',
   parameters: {
     type: 'object',
     properties: {

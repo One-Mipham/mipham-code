@@ -148,7 +148,7 @@ export const webFetchTool: ToolDefinition = {
   description:
     'Fetches a URL, converts the page to markdown. HTTP is upgraded to HTTPS. Cross-host redirects are returned to the caller. Responses are cached for 15 minutes per URL.',
   category: 'network',
-  permission: 'auto',
+  permission: 'self',
   parameters: {
     type: 'object',
     properties: {

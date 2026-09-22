@@ -30,7 +30,7 @@ function toolSpy(): { tool: ToolDefinition; calls: () => number } {
       name: TOOL,
       description: 'test tool',
       category: 'exec',
-      permission: 'auto',
+      permission: 'self',
       parameters: { type: 'object', properties: {} },
       execute: async () => {
         n++

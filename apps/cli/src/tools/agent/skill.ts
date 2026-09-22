@@ -10,7 +10,7 @@ export const skillTool: ToolDefinition = {
   description:
     'Execute a skill (.SKILL.md or .mipham-skill.md) by name. Skills extend AI capabilities with specialized instructions.',
   category: 'agent',
-  permission: 'auto',
+  permission: 'self',
   parameters: {
     type: 'object',
     properties: {

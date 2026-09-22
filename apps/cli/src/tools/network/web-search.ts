@@ -81,7 +81,7 @@ export const webSearchTool: ToolDefinition = {
   description:
     'Search the web via Brave Search API. Returns result blocks with titles, URLs, and descriptions. Set BRAVE_API_KEY to enable.',
   category: 'network',
-  permission: 'auto',
+  permission: 'self',
   parameters: {
     type: 'object',
     properties: {

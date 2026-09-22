@@ -86,7 +86,7 @@ export class PermissionSystem {
   private askRules: PermissionRuleEntry[] = []
   /** Malformed `permissionRestrictions` entries from the last set/load — see below. */
   private restrictionWarnings: string[] = []
-  /** Legacy exact-name rules for backward compat (set via setRule with 'auto' level). */
+  /** Legacy exact-name rules for backward compat (set via setRule with 'self' level). */
   private legacyRules = new Map<string, PermissionLevel>()
   /** Legacy default level from constructor when passed non-mode values like 'ask' or 'bypass'. */
   private legacyDefaultFallback: PermissionLevel | null = null
@@ -296,7 +296,7 @@ export class PermissionSystem {
    * 1. Deny rules → block
    * 2. Ask rules → require approval
    * 3. Allow rules → permit
-   * 4. Legacy exact-name rules (backward compat — e.g. setRule('tool', 'auto'))
+   * 4. Legacy exact-name rules (backward compat — e.g. setRule('tool', 'self'))
    * 5. Mode baseline → mode-specific default (overrides tool.permission for explicit modes)
    * 6. Tool's own permission → tool-specific default (backward compat)
    * 7. Legacy constructor fallback (when constructed with 'ask'/'bypass')
@@ -516,8 +516,8 @@ export class PermissionSystem {
   // ── Legacy compatibility ──
 
   setDefaultLevel(level: PermissionLevel): void {
-    // Map legacy 3-level (auto/ask/bypass) to new 4-level mode.
-    // Legacy 'auto'/'ask' = "let each tool self-decide" → 'default'.
+    // Map legacy 3-level (self/ask/bypass) to new 4-level mode.
+    // Legacy 'self'/'ask' = "let each tool self-decide" → 'default'.
     // Legacy 'bypass' → 'bypassPermissions'.
     const newMode: PermissionMode = level === 'bypass' ? 'bypassPermissions' : 'default'
     this.mode = clampMode(newMode, this.restrictions)
@@ -529,7 +529,7 @@ export class PermissionSystem {
     if (this.legacyDefaultFallback) return this.legacyDefaultFallback
     if (this.mode === 'bypassPermissions') return 'bypass'
     if (this.mode === 'plan') return 'ask'
-    return 'auto'
+    return 'self'
   }
 
   setRule(toolNameOrRule: string | PermissionRule, level?: PermissionLevel): void {
@@ -542,7 +542,7 @@ export class PermissionSystem {
         // Also sync to new-style arrays for listRules / new API consistency
         if (level === 'bypass') this.allow(toolName)
         else if (level === 'ask') this.ask(toolName)
-        // 'auto' is stored only in legacyRules (returns 'auto', not 'bypass')
+        // 'self' is stored only in legacyRules (returns 'self', not 'bypass')
       }
     } else {
       const rule = toolNameOrRule
