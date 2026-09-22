@@ -3,6 +3,17 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.1 — 2026-09-23
+
+- Version sync with Mipham Code CLI 0.85.1
+- Fixed: pressing Ctrl-C during `mipham update` could still leave a half-written install. The
+  rollback added in 0.85.0 runs inside the CLI process, but the terminal delivers SIGINT to the
+  whole foreground process group — the CLI and npm died together, so the rollback never ran. The
+  install step now runs detached (its own process group, so the terminal's SIGINT cannot reach
+  npm) and the CLI holds a SIGINT guard for the duration of the install, released on both the
+  success and the failure path. The trade-off, stated plainly: **Ctrl-C is ignored while the
+  install runs** — to interrupt it, kill the process from another terminal
+
 ## 0.85.0 — 2026-09-22
 
 - Version sync with Mipham Code CLI 0.85.0
