@@ -759,9 +759,25 @@ agents 真解析、provider 回退仍活着）。
       `test/integrity/shared-vendor-parity.test.ts` 把整族收进一张表、**按形状分三档**（逐字节 3 对 /
       只差头部块注释 1 对 / 成员集合 1 对转既有守卫 + 一条「它是例外」的锚），四条断言全部实跑负控、
       各红一个用例、还原后 sha256 逐字相符。
-- [ ] **D6** · 国内站 `src/app/try/page.tsx` 是**死代码** —— `/try` 已被 redirect 到
+- [x] **D6** · 国内站 `src/app/try/page.tsx` 是**死代码** —— `/try` 已被 redirect 到
       `/mipham-code`（`next.config.mjs`），永不渲染；且内容严重过时（`config.yaml` 应为
-      `config.yml`；`--provider`/`--model` flag 不存在；`providers:` 写成 map 而真实 schema 是数组）
+      `config.yml`；`--provider`/`--model` flag 不存在；`providers:` 写成 map 而真实 schema 是数组）。
+      **已收口 —— 但收在另一个仓库里**：本条目登记在 `mipham-code` 的背景下，而对象属于
+      `websites` 子模块（**全路径** `websites/domestic/apps/onemipham.com/src/app/try/page.tsx`），
+      故修复走的是 `websites` 自己的分支/PR（**PR #21** squash，`42c45de` → `f35735e`，提交信息即
+      `chore(domestic): 删掉 /try 死代码页 —— 308 重定向早已接管（ROADMAP D6）`），
+      整个 `src/app/try/` 目录删除、185 行。**关键判据**：`next.config.mjs` 里那条 **308 带 `permanent: true`**
+      早已接管该路径 ⇒ 删文件**不会**让它变 404（若只写 redirect 而没有永久语义，这次删除才会把页面打成
+      硬 404 —— 顺序检查是这一步的前提，不是附带说明）。
+      **删前逐条复核过时内容**（对象已删，下面是 `git show f35735e^:…` 的实测读数）：
+      ① `config.yaml` 出现 **3** 次、`config.yml` **0** 次 ⇒ 文件名确实写错（真源是 `config.yml`）；
+      ② `providers:` 在 `:154` 下**缩进成 map**（`deepseek:` 再嵌一层），而真实 schema 是数组；
+      ③ 页面 `:87` 确实调了 `mipham --provider … --model …`，而 CLI 入口 `apps/cli/bin/mipham.ts`
+      对这两个串**零命中**（正对照：`--resume` 在同一文件 5 次）⇒ **「不存在」的主语是 CLI、不是页面**
+      —— 页面把它们当真实接口宣传，正是这次要删的理由。故不是「删一个也许还有用的页面」。
+      **⚠️ 未部署** —— 生产行为不变（308 早已在），部署需单独授权。
+      **口径**：跨仓库收口不改变本条目的归属，但要写清「修复落在哪个仓库 + 全路径」，否则后来者
+      会在 `mipham-code` 的 `apps/` 里找一个从不存在的页面。
 - [x] **D7** · **上下键历史导航** —— **已收口（2.92.0）**。原文「仍是 open bug …… `navigateHistory`
       纯函数已正确，问题在**接线层**」**猜对了方向、指错了对象**：纯函数确实是对的，而接线层的
       **基本路径也是对的** —— 新写的接线层测试（`test/ui/input-history-wiring.test.ts`；此前 `test/ui/`
