@@ -268,6 +268,10 @@ export function App({
   const [providerId, setProviderId] = useState(initialProvider || config.defaultProvider)
   const [modelId, setModelId] = useState(initialModel || config.defaultModel)
   const [pickerOpen, setPickerOpen] = useState(false)
+  // ↑/↓ 翻历史用的已提交输入。**必须住在这里而不是 InputBar 里** —— InputBar 会被
+  // 卸载（pickerOpen 三元 / apiKeyPrompt 早退 / Ctrl+G），组件内 state 随之清零，
+  // 于是「开一次模型选择器，历史就没了」（ROADMAP D7）。
+  const [inputHistory, setInputHistory] = useState<string[]>([])
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null)
   // Current git branch — read once at mount (not a git repo → null).
   const [gitBranch] = useState<string | null>(() => {
@@ -1279,6 +1283,8 @@ export function App({
                 <InputBar
                   onSubmit={handleSubmit}
                   isLoading={isLoading}
+                  history={inputHistory}
+                  onHistoryAppend={(v) => setInputHistory((prev) => [...prev, v])}
                   llm={autocompleteLlm}
                   recentMessages={recentMessages}
                   autocompleteEnabled={

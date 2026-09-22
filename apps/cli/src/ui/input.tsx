@@ -24,6 +24,14 @@ interface InputBarProps {
   onCancel?: () => void
   /** When false, don't auto-open the slash-command picker when typing `/`. */
   showCommandPicker?: boolean
+  /**
+   * ↑/↓ 翻历史用的已提交输入。**由调用方持有，不放本组件内** —— app.tsx 有三条路径把
+   * InputBar 整个卸载（`pickerOpen` 三元 / `apiKeyPrompt` 早退 / Ctrl+G），
+   * 放在这里会被卸载清空（ROADMAP D7）。
+   */
+  history: string[]
+  /** 提交时把该条追加进 history（由调用方落 state）。 */
+  onHistoryAppend: (value: string) => void
   /** LLM 续写建议所需的模型（app.tsx 传；RemoteEngine 下 undefined → 补全禁用）。 */
   llm?: Llm
   /** 最近对话上下文（供续写贴合）。 */
@@ -288,6 +296,8 @@ export function InputBar({
   onCyclePermission,
   onCancel,
   showCommandPicker = true,
+  history,
+  onHistoryAppend,
   llm,
   recentMessages,
   autocompleteEnabled = true,
@@ -302,7 +312,9 @@ export function InputBar({
   const prevLoading = useRef(isLoading)
 
   // ── Message history for arrow-key navigation (Claude Code parity) ──
-  const [submittedHistory, setSubmittedHistory] = useState<string[]>([])
+  // `history` 由调用方持有（见 InputBarProps.history）：本组件不拥有它，因为
+  // app.tsx 会卸载本组件，而卸载会清空组件内 state（ROADMAP D7）。
+  // 下面两个 ref 是**浏览游标**、不是历史本体，随卸载重置才是对的。
   const historyIndexRef = useRef(-1) // -1 = not browsing history
   const savedDraftRef = useRef('') // saved user draft before browsing history
 
@@ -434,7 +446,7 @@ export function InputBar({
 
       const result = navigateHistory(
         {
-          history: submittedHistory,
+          history,
           index: historyIndexRef.current,
           savedDraft: savedDraftRef.current,
         },
@@ -480,7 +492,7 @@ export function InputBar({
       onCancel?.()
     }
     // Save to message history for arrow-key navigation
-    setSubmittedHistory((prev) => [...prev, finalValue])
+    onHistoryAppend(finalValue)
     historyIndexRef.current = -1
     savedDraftRef.current = ''
     onSubmit(finalValue)
