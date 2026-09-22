@@ -4,9 +4,9 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.92.0
-> **最后更新**: 2026-09-22 — **上下键历史导航（ROADMAP D7）—— 先钉红/绿再修；「纯函数对、问题在接线层」这句猜对了方向、但指错了对象** —— ① 先补**接线层**测试（`test/ui/input-history-wiring.test.ts`；此前 `test/ui/` 17 个文件**无一条**渲染 `InputBar`）：按键走 ink 的 raw 序列。**基本路径本就绿** —— 提交后 ↑ 调回、↑ 后 ↓ 回空草稿、空历史 ↑ 无操作 ⇒ 原文「上下键历史导航仍是 open bug」在这条路径上**复现不出来**。② 真缺口在**另一条**：`submittedHistory` 是 `InputBar` 的**局部 state**（`input.tsx:305`），而 `app.tsx` 有三条路径把 `InputBar` **整个卸载**（`pickerOpen ? <ModelPicker/> : <Box>…<InputBar/>…</Box>` —— 三元两支**组件类型不同** ⇒ React 卸载而非复用；`if (apiKeyPrompt)` 整棵早退；Ctrl+G）⇒ 每卸载一次历史清零，「开一次模型选择器，刚才敲的就没了」。③ 修法：历史**提到 `app.tsx`**（`inputHistory` state），`InputBar` 收 `history` + `onHistoryAppend` 两个**必填** prop；两个游标 ref （`historyIndexRef`/`savedDraftRef`）**留在组件内** —— 它们是浏览游标，随卸载重置才是对的。④ **负控实跑**：按旧形状把历史变异回组件内（3 处锚点各命中 1 次）⇒ **只有卸载那条红**、正对照（同样重渲染但不卸载）仍绿 ⇒ 该用例是真判据不是仪式；还原后 sha256 与变异前**逐字相符**。⑤ 边界（只提不改）：草稿 `value` 仍住组件内、切 picker 一样丢；历史**不从会话日志回填**。测试 3,051 → **3,056**（255 → **256** 文件，0 失败）。
-> **前一条（2.91.0）**: 2026-09-22 — **`USER_CONFIG_DIR` 已删（ROADMAP D4）—— 同一目录名的第三个名字收掉，`'.mipham'` 每侧只剩 `MIPHAM_DIR` 一处定义** —— 先复核**零消费者**（不是照着条目信）：全仓不除噪命中只有三类，① 定义处本身（两份 `constants.ts`）、② 两份**历史档**（`docs/claude-md-history.md` 的 2.37.7 逐字存档 —— 那一条正是当初**报告**此债的原文、`docs/superpowers/plans/2026-05-31-*.md` 的时点计划）、③ 我自己 D3 那笔的变更记录 —— **零 import 点**；两份 barrel 又都是 `export * from './constants'` ⇒ 删定义即足，**无需改 barrel**。两侧同删（D5 的 byte 档守卫要求镜像，只删一侧会红）：删后两份 sha256 均为 `bb156a36…`、逐字节仍相等，`git diff --numstat` 两侧各为 `0 1`（只删不增）。**负控实跑**：把那行**只加回副本侧** ⇒ byte 档按预期变红，失败信息点名「`constants.ts: 第 542 行：契约=[export const MEMORY_DIR = 'memory'] 副本=[export const USER_CONFIG_DIR = '.mipham']`」—— 即「D4 这个删除是被守着的」，不是删完没人看。**过程事故（已回退）**：负控的还原步写了 `cd ..`，从 `apps/cli` 只退到 `apps/`，于是 `cp` 打到不存在的路径、紧接的 `rm` 又把备份删掉 ⇒ 副本侧一度仍停在变异体上；已按「删掉那一行」修回，并与负控前的 sha256 **逐字核对相符**（这也是修复成立的判据，不是「看着对」）。**测试数不变**：255 文件 / 3,051 测试、0 失败 —— 删的是零消费者的死导出，既有测试全绿即「无消费方」这一前提的第二重证明。（另注：同一目录名还有第四个名字 —— `commands/environment.ts` 往生成的 shell 脚本里写 `MIPHAM_HOME` 环境变量，全仓零读取者，按约定只提不删。）
+> **版本**: 2.93.0
+> **最后更新**: 2026-09-22 — **Shift+Tab 四档循环的接线层测试 —— 链条本来就是活的，缺的是一条「能红」的判据** —— 用户的要求是「可以切换的四模式要有实际的接线，不能有死代码/空代码」，实测：`Shift+Tab → onCyclePermission → cyclePermissionMode → permission.setMode` 整条链早已接上，四档也各有真语义（`plan` 只读 / `acceptEdits` 写放行 / `default` 要问 / `auto` 无分类器时 fail-closed）。① **新测试** `test/ui/permission-cycle-wiring.test.ts`（9 用例 / 3 组）：**按键那一跳**（真终端发的 `\x1b[Z`，不是直接调 handler）、**转盘走完整圈**（真 `PermissionSystem`，每一档复核「页脚读数与引擎状态逐字相同」）、**四档语义各不相同**（拿真 `check()` 逐档读数，并断言 `acceptEdits.write ≠ plan.write`、`auto.write ≠ bypassPermissions.write` —— 转盘能转 ≠ 四档不是同一个东西）。② **为什么此前测不到**：`cyclePermissionMode` 只有**纯函数**用例，而接线只有**源码字符串**断言（`toContain('onCyclePermission')`）—— 字符串在、接线断，它照样绿。③ **四条负控全部实跑**：①禁用 `key.shift && key.tab` 分支 ⇒ **只有**「真终端那串」红、两条对照（裸 Tab / ↑）仍绿；②禁用 `acceptEdits` 的写放行 ⇒ 两条分界用例红；③`cyclePermissionMode` 恒返回 slot 0 ⇒ 走圈用例红；④交换 `MODE_CYCLE` 第 2/3 档 ⇒ **只有那条字面量钉子红**，而锚在 `MODE_CYCLE` 上的断言**照样绿** —— 这正是加钉子的理由（否则重排转盘无人变红）。四条还原后 sha256 与变异前逐字相符。④ **边界（只提不改）**：不渲染整个 `App`（需 ~16 个 engine 方法桩，桩本身可能比真对象更宽）⇒ 「页脚确实调用这两个入口」仍由 `test/integrity/permission-status-parity.test.ts` 从源码侧断。测试 3,056 → **3,065**（256 → **257** 文件，0 失败）。
+> **前一条（2.92.0）**: 2026-09-22 — **上下键历史导航（ROADMAP D7）—— 先钉红/绿再修；「纯函数对、问题在接线层」这句猜对了方向、但指错了对象** —— ① 先补**接线层**测试（`test/ui/input-history-wiring.test.ts`；此前 `test/ui/` 17 个文件**无一条**渲染 `InputBar`）：按键走 ink 的 raw 序列。**基本路径本就绿** —— 提交后 ↑ 调回、↑ 后 ↓ 回空草稿、空历史 ↑ 无操作 ⇒ 原文「上下键历史导航仍是 open bug」在这条路径上**复现不出来**。② 真缺口在**另一条**：`submittedHistory` 是 `InputBar` 的**局部 state**（`input.tsx:305`），而 `app.tsx` 有三条路径把 `InputBar` **整个卸载**（`pickerOpen ? <ModelPicker/> : <Box>…<InputBar/>…</Box>` —— 三元两支**组件类型不同** ⇒ React 卸载而非复用；`if (apiKeyPrompt)` 整棵早退；Ctrl+G）⇒ 每卸载一次历史清零，「开一次模型选择器，刚才敲的就没了」。③ 修法：历史**提到 `app.tsx`**（`inputHistory` state），`InputBar` 收 `history` + `onHistoryAppend` 两个**必填** prop；两个游标 ref （`historyIndexRef`/`savedDraftRef`）**留在组件内** —— 它们是浏览游标，随卸载重置才是对的。④ **负控实跑**：按旧形状把历史变异回组件内（3 处锚点各命中 1 次）⇒ **只有卸载那条红**、正对照（同样重渲染但不卸载）仍绿 ⇒ 该用例是真判据不是仪式；还原后 sha256 与变异前**逐字相符**。⑤ 边界（只提不改）：草稿 `value` 仍住组件内、切 picker 一样丢；历史**不从会话日志回填**。测试 3,051 → **3,056**（255 → **256** 文件，0 失败）。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -45,7 +45,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：3,056 测试（3,054 passed + 2 skipped，0 失败）
+测试：3,065 测试（3,063 passed + 2 skipped，0 失败）
 
 ---
 
@@ -82,7 +82,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 256 个测试文件，3056 个测试
+│   │   ├── test/               # 257 个测试文件，3065 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -108,7 +108,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（3051 个测试）
+pnpm test         # vitest run（3065 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~9 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -299,7 +299,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | core            | 76      | 1260     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
 | tools           | 25      | 383      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 34      | 213      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
-| ui              | 18      | 211      | commands / input / config-wizard / loop / skill-doctor                                                                                                                      |
+| ui              | 19      | 220      | commands / input / config-wizard / loop / skill-doctor                                                                                                                      |
 | agent           | 11      | 117      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
 | security        | 10      | 99       | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
 | providers       | 7       | 106      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
@@ -316,7 +316,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integrity       | 11      | 72       | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 120      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **256** | **3056** | **0 失败** ✅（3054 passed + 2 skipped）                                                                                                                                    |
+| **合计**        | **257** | **3065** | **0 失败** ✅（3063 passed + 2 skipped）                                                                                                                                    |
 
 > **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 179 测试，自带
 > `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。
