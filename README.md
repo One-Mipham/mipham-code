@@ -53,24 +53,25 @@ brew install mipham
 
 ```bash
 mipham --version
-# → 0.2.2
+# → @miphamai/cli v0.83.0
 ```
 
 ### Run
 
 ```bash
-# 启动 Claude Sonnet
-export ANTHROPIC_API_KEY="sk-ant-..."
-mipham --model claude-sonnet-4-6
-
-# 启动 DeepSeek
-export DEEPSEEK_API_KEY="sk-..."
-mipham --provider deepseek --model deepseek-v4-pro
-
-# 启动 OpenAI
-export OPENAI_API_KEY="sk-proj-..."
-mipham --provider openai --model gpt-5.4
+export ANTHROPIC_API_KEY="sk-ant-..."   # 至少配一家 provider 的 key
+mipham                                  # 启动用的是 config.yml 里的 defaultProvider / defaultModel
 ```
+
+```bash
+mipham
+# 启动后按 Ctrl+P（或输入 /pick）—— 两级选择器：provider → model
+# 也可直接 /switch <provider> <model>，例如 /switch deepseek deepseek-v4-pro
+```
+
+> `mipham` 本身**不解析** `--model` / `--provider`。入口只认这五个 flag：
+> `--version`（`-v`/`-V`）/ `--help`（`-h`）/ `--dump-config` / `--safe-mode` / `--resume`。
+> 选模型走上面的两条路，落盘位置与默认值见下节 **Configuration**。
 
 ## Architecture
 
@@ -92,7 +93,7 @@ pnpm monorepo
 | Command                      | Description                                                |
 | ---------------------------- | ---------------------------------------------------------- |
 | `Ctrl+P` or `/pick`          | **Interactive model picker** (two-level: provider → model) |
-| `/help`                      | Show all available commands (40+)                          |
+| `/help`                      | Show all available commands (137)                          |
 | `/model`                     | Show current model                                         |
 | `/models`                    | List available models                                      |
 | `/providers`                 | List configured providers                                  |
@@ -105,30 +106,36 @@ pnpm monorepo
 Create `~/.mipham/config.yml`:
 
 ```yaml
-version: '0.2.0'
+version: '0.83.0'
 defaultProvider: anthropic
 defaultModel: claude-sonnet-4-6
-permission: auto
+permission: default
 ```
 
 Or project-level `.mipham/config.yml` in your repository.
 
+> `permission` 取五个档位之一：`default`（默认）/ `acceptEdits` / `plan` / `auto` / `bypassPermissions`。
+> ⚠️ **`auto` 不是「让工具自行决定」** —— 那是它 3 档时代的旧义；现在指的是「由分类器自动放行」。
+> 同名不同义，别照旧文档抄。
+
 ## Supported Models
 
-| Provider        | Models                                                        | Context    | Status   |
-| --------------- | ------------------------------------------------------------- | ---------- | -------- |
-| Anthropic       | Claude Mythos 5, Fable 5, Opus 5/4.8, Sonnet 5/4.6, Haiku 4.5 | 200K–1M    | Active   |
-| OpenAI          | GPT-6 Astra, GPT-5.5, GPT-5.4, GPT-5.4 Mini                   | 400K–1.05M | Active   |
-| Google Gemini   | Gemini 3.0 Pro, 3.0 Flash, 2.5 Pro                            | 128K–2M    | Active   |
-| DeepSeek        | V4 Pro, V4 Flash                                              | 1M         | Active   |
-| 豆包 (字节跳动) | Seed 2.0 Pro/Code/Lite/Mini, Seed 1.6/Flash                   | 256K       | Active   |
-| 腾讯混元        | Hy3 Preview, 2.0 Think/Instruct, TurboS, T1, A13B, Lite       | 32K–256K   | Active   |
-| 通义千问        | Qwen Plus, Qwen Max                                           | 128K       | Active   |
-| Kimi (月之暗面) | K3, Latest, Moonshot v1 8K/32K/128K                           | 8K–1M      | Active   |
-| MiniMax         | M2.7, M2, Text 01（国内 / 国际）                              | 200K–1M    | Active   |
-| MiphamAI        | OM V5 Pro, OM V5 Flash, OM V5 Visual                          | 200K–1M    | Upcoming |
+| Provider        | Models                                                        | Context    | Status |
+| --------------- | ------------------------------------------------------------- | ---------- | ------ |
+| Anthropic       | Claude Mythos 5, Fable 5, Opus 5/4.8, Sonnet 5/4.6, Haiku 4.5 | 200K–1M    | Active |
+| OpenAI          | GPT-6 Astra, GPT-5.5, GPT-5.4, GPT-5.4 Mini, GPT-5.3 Codex    | 400K–1.05M | Active |
+| Google Gemini   | Gemini 3.0 Pro, 3.0 Flash, 2.5 Pro                            | 1M         | Active |
+| DeepSeek        | V4 Pro, V4 Flash                                              | 1M         | Active |
+| 豆包 (字节跳动) | Seed 2.0 Pro/Code/Lite/Mini, Seed 1.6/Flash                   | 256K       | Active |
+| 腾讯混元        | Hy3 Preview, 2.0 Think/Instruct, TurboS, T1, A13B, Lite       | 32K–256K   | Active |
+| 通义千问        | Qwen Plus, Qwen Max                                           | 128K       | Active |
+| Kimi (月之暗面) | K3, Latest, Moonshot v1 8K/32K/128K                           | 8K–1M      | Active |
+| MiniMax (国内)  | M2.7, M2, Text 01                                             | 200K–1M    | Active |
+| MiniMax (国际)  | M2.7, M2, Text 01                                             | 200K–1M    | Active |
+| MiphamAI        | OM V5 Flash/Visual/Pro/Apex                                   | 16K–200K   | Active |
+| Ollama (本地)   | 本机已装模型（`ollama list` 动态发现）                        | —          | Active |
 
-**共 10 家提供商，45+ 模型。** 设置 API Key 即可使用：
+**共 12 家提供商，48 个模型。** 设置 API Key 即可使用：
 
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."      # Anthropic Claude
@@ -141,7 +148,10 @@ export QWEN_API_KEY="sk-..."               # 通义千问 (阿里云)
 export KIMI_API_KEY="sk-..."               # Kimi (月之暗面)
 export MINIMAX_API_KEY="..."               # MiniMax (国内)
 export MINIMAX_GLOBAL_API_KEY="..."        # MiniMax (国际)
+export MIPHAM_API_KEY="..."                # MiphamAI (官方模型)
 ```
+
+> Ollama 不需要 key —— 走本机 `http://localhost:11434/v1`，模型列表动态发现。
 
 ## Development
 

@@ -699,11 +699,35 @@ agents 真解析、provider 回退仍活着）。
 
 按「精准修改」原则此前只报告、未自行改动：
 
-- [ ] **D1** · 根 `README.md` 非存在的 flag —— `--model` / `--provider`（`:64/:68/:72`）在
-      `apps/cli/bin/mipham.ts` 里根本不存在。⚠️ **待决策**：改文档抹掉，还是实现这两个 flag
-- [ ] **D2** · 根 `README.md` 其余陈旧数字（`:18` 技能数、`:56` `→ 0.2.2`、`:95` `40+`、
-      `:108` `version: '0.2.0'`、`:111` `permission: auto`、`:129` MiphamAI 标 `Upcoming` 实为
-      `active`、`:131` 供应商家数）
+- [x] **D1** · 根 `README.md` 非存在的 flag —— `--model` / `--provider`（原 `:64/:68/:72`）在
+      `apps/cli/bin/mipham.ts` 里根本不存在（实测该文件里这两个串**零命中**；入口只认
+      `--version`/`-v`/`-V`、`--help`/`-h`、`--dump-config`、`--safe-mode`、`--resume`）。
+      **2026-09-22 裁定：改文档抹掉**（岔路口 #3 → 已决议）。Run 段改写为真实接口 ——
+      env key + `config.yml` 的 `defaultProvider`/`defaultModel`，或启动后 `Ctrl+P` / `/pick`
+      两级选择器 / `/switch <provider> <model>`；并显式写明「本 CLI 不解析这两个 flag」。
+      **flag 本身仍未实现** ⇒ 已立为独立 feature：见下方 **D11**。
+- [x] **D2** · 根 `README.md` 其余陈旧数字 —— **2026-09-22 全清**（逐条实测，非估算）：
+      `:56` `→ 0.2.2` → `@miphamai/cli v0.83.0`（入口打印的正是 `PACKAGE_NAME` + `PACKAGE_VERSION`）；
+      `:95` `/help (40+)` → **137**（`registry.set('/…')` 实测 137 个、全唯一）；
+      `:108` `version: '0.2.0'` → `'0.83.0'`（`config/defaults.ts:12` 取的就是 `PACKAGE_VERSION`）；
+      `:111` `permission: auto` → `default`（`defaults.ts:15`），并就地标注「`auto` 现在是分类器档，
+      **不是**旧义『让工具自行决定』」—— 这行本身就是 `fc5afd3a` 事故的输入，属安全相关而非单纯陈旧；
+      `:131` 「10 家 / 45+」→ **12 家 / 48 个模型**。
+      **同批实测出 D2 原单未列的 6 处**：模型表**整行缺 ollama**；OpenAI 缺 `GPT-5.3 Codex`；
+      MiphamAI 缺 `OM V5 Apex` 且 status 标 `Upcoming` 而真值是 `active`（`shared/types.ts` 的
+      `status?: 'active' | 'upcoming'`）；Google 的 Context 写 `128K–2M` 实为 **1M**（三个模型全是
+      `1000000`）；MiphamAI 的 Context 写 `200K–1M` 实为 **16K–200K**（上限 `200000`）；
+      export 表缺 `MIPHAM_API_KEY`。另把 MiniMax 一行拆成「国内 / 国际」两行 —— 原表 10 行对 12 家，
+      拆后**行数与 provider 数 1:1**。`:18` 技能数（28 = 22+6）与 `:17`/`:83` 工具数（31）**实测本就
+      正确**、未动。
+      **病根同批收口**：这几个数此前**没有任何守卫** —— 工具总数被守着、技能清单被守着，夹在中间的
+      provider/model 数正好落在缝里。已在 `test/integrity/tool-reference-integrity.test.ts` 补第六段
+      `提供商与模型总数声明完整性`（真源 `DEFAULT_PROVIDERS`，扫描面与本文件其余段**共用**同一份
+      `liveDocs`）。**负控两条实跑**：把 `:138` 的 provider 数从 12 改成 10 ⇒ 红，故障信息点名该行
+      并写出真实值；把模型数从 48 改成 45 ⇒ 同样红；两侧还原后 sha256 与改动前逐字相符。
+      （**引文此处刻意不逐字抄故障信息** —— 那串里带着「N 家提供商 / N 个模型」的旧值，而 ROADMAP
+      本身就是扫描面内的活文档：逐字抄等于把两个**错的**计数写进一份被守卫的文档里。**这条坑是本
+      守卫上线后第一个咬到的对象，且咬的是它自己的变更记录。**）
 - [ ] **D3** · `~/.mipham` 在 `src` 里 **8 处各自独立定义** —— 单一真源缺失；
       `src/core/paths.ts` 是自然落点
 - [ ] **D4** · `USER_CONFIG_DIR` 零消费者（`src/shared/constants.ts`）—— 同一目录名的第三个名字
@@ -744,6 +768,13 @@ agents 真解析、provider 回退仍活着）。
       轮转 / 截断 / 上限（`git grep` 零命中）。**代价**：一次崩溃重启循环就能把它写到
       撑满磁盘，而**撑满之后 daemon 自己的启动失败原因恰好写在那个写不进去的日志里**；
       **触发**：`~/.mipham/` 下出现第二个常驻日志时一并做轮转
+- [ ] **D11** · **（自 D1 转来）实现 `--model` / `--provider` 顶层 flag** —— 2026-09-22 裁定
+      「先改文档」，故当前状态是**文档与代码一致（都说没有）**，而不是功能可用。
+      要做的话：`bin/mipham.ts` 需在 `runApp()` 之前解析这两个参数并覆盖
+      `defaultProvider`/`defaultModel`（现入口只用 `process.argv.includes(...)` 逐个探，
+      **没有解析器**），且必须定清楚它与 `--dump-config` 的优先级、以及与项目级
+      `.mipham/config.yml` 的覆盖关系。**触发**：出现**非交互式**选型的真实需求时（CI / 脚本）——
+      人用场景已由 `Ctrl+P` / `/pick` / `/switch` 覆盖，故这不是缺口、是待需求
 
 ---
 
@@ -792,7 +823,6 @@ agents 真解析、provider 回退仍活着）。
 
 | #   | 决策                                                                                            | 阻塞                  |
 | --- | ----------------------------------------------------------------------------------------------- | --------------------- |
-| 3   | `README` 的 `--model`/`--provider`：**改文档**还是**实现 flag**                                 | D1                    |
 | 4   | daemon 会话要不要接 **PreInference DLP**（`setInferenceHookConfig`）—— 接了就是**对话正文出境** | 无（T5 已按豁免放行） |
 
 ### 已决议（保留记录，供回访）
@@ -803,7 +833,9 @@ agents 真解析、provider 回退仍活着）。
 | 2026-09-15 | 基准 daemon 的**权限策略**（T2 起手时暴露）           | **`bypassPermissions`**，只经**进程级 env**（`MIPHAM_DAEMON_PERMISSION`）给，配专用 daemon + 临时工作区 + 跑完即杀。**另两档产出的读数是关于我们自己权限过滤器的报告，却会挂上模型名字**：`default` 下 Bash/Write/Edit 是 `permission: 'ask'`（`tools/exec/bash.ts:317`）而 daemon 无审批层 ⇒ 引擎把拒绝当 `tool_result` 回给模型（`engine.ts:1075-1088`），工具一次都不执行；`acceptEdits` 只对 Bash 放行白名单**且**要求命令不含任何 shell 元字符（`;` `&` \| `>` `<` 反引号 `$`，`permission.ts:22`）⇒ 带管道的命令一条都过不去。**行为实证**（Run 2 对照：同一 daemon、同一模型、同一条带管道命令）：`default` ⇒ `Tool "Bash" requires approval under "default" mode.`，模型随后明确拒绝猜值；`bypassPermissions` ⇒ 真输出大写 md5，与独立复核逐字相同。**降级边界**：mode 只被 `permissionRestrictions` 降（`clampMode`，`permission-config.ts:37-51`），而它只来自工作区 `loadConfig(cwd)` ⇒ **基准工作区必须干净**。日常 `mipham daemon start` 仍走 `default`，`resolveDaemonPermission()` 兜底不动。发布物须写明 mode 与该行 env | T2     |
 | 2026-09-16 | 基准选 **Terminal-Bench** 还是 **SWE-bench Verified** | **Terminal-Bench** —— 更贴近 agent 真实形态（ROADMAP 原记的判断），用户 2026-09-16 上午明确。**同批定下三件**：① 发布模型 = **`deepseek-v4-pro`**（第三方，**产品判断** —— 真实基准走成熟模型，成绩才可解释、可复现；**与自家模型摸底解耦**，§1.4 是顺带摸底、不是选型依据）；② 开工规模 = **10 题 × k=1**（循「先 spike 再全量」惯例，避免管线隐病一次烧掉全量）；③ 接入路线 = **A+**（修 daemon 自启 + Harbor 适配器直驱 daemon REST API）—— 其中 daemon 自启那半已于同日落地（Plan A，2.50.0）。设计与仪器：`docs/superpowers/specs/2026-09-16-t2-terminal-bench-design.md`（spike 已验通官方现役数据集 **66 题** / 预置镜像 / oracle 基线 1.000）                                                                                                                                                                                                                                                                                                                                                                                    | T2     |
 
-> 编号稳定不复用：#1 与 **#2** 已关闭，后续新增岔路口从 **#4** 起编号。
+| 2026-09-22 | 根 `README.md` 的 `--model`/`--provider`：**改文档**还是**实现 flag**（岔路口 #3） | **改文档抹掉** —— 实测这两个串在 `bin/mipham.ts` 里**零命中**（入口只认 `--version`/`-v`/`-V`、`--help`/`-h`、`--dump-config`、`--safe-mode`、`--resume`），该功能**从未存在**。不选「实现」，理由是**人用场景已有覆盖**（启动后 `Ctrl+P` / `/pick` 两级选择器、`/switch <provider> <model>`），而非交互式选型**目前没有真实需求** —— 为一个假设需求加参数解析，正撞「不添加未被要求的可配置性」。文档已改写为真实接口并明写「本 CLI 不解析这两个 flag」；实现本身转为 **D11**，由需求触发。 | D1 / D11 |
+
+> 编号稳定不复用：#1 / **#2** / **#3** 已关闭（#3 = `README` 的 `--model`/`--provider`，2026-09-22 裁定改文档），后续新增岔路口从 **#5** 起编号。
 
 ---
 

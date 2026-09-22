@@ -4,9 +4,9 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.87.0
-> **最后更新**: 2026-09-22 — **两份 `types.ts` 的成员集合守卫：契约漏了三个字段、一处散文默认值是假的，而此前没有任何东西会变红** —— `packages/shared/src/types.ts` 是契约，`apps/cli/src/shared/types.ts` 是它的 **vendor 副本**（重复是刻意的：npm 包要自包含，**不能**改成从 `@mipham/shared` re-export，那会在 publish 时崩）。这份刻意重复的代价一直没人付：`'auto'` 曾**只**落在副本里、契约那边漏了，**零测试变红**。本笔补上守卫，并先把利息还清 —— 实测两文件相差 **5 个 hunk**，分类后 **3 类合法**（副本的 vendoring 抬头、副本末尾 3 个 CLI 内部类型、契约侧更完整的散文），**2 类是漏同步**：① `MiphamConfig` 缺 `showSchedulingNotices` / `showCommandPicker`；② `HookConfig` 缺 `timeout`。三处都补进契约（新增字段全为可选 ⇒ 对消费方 `apps/web` 向后兼容）。**同笔修掉一处假文档**：契约把 `showThinking` 的默认写成 `minimal`，而代码是 `off` —— 四处独立读数一致（`config/defaults.ts:16` 的字面量、`ui/app.tsx:616` 与 `:1238` 的 `?? 'off'`、`ui/commands.ts:609`）。新守卫 `test/integrity/shared-types-parity.test.ts` 断三条：契约的每个声明副本都得有（**shared-only 实测为空集**）；两边都有的声明**成员集合相等**（interface 比成员名、type 别名比字面量）；只在副本里的声明必须落在具名豁免表（当前恰好 `ToolContext` / `ToolDefinition` / `SkillDefinition`）。**两处非显然的工程点**：① 比较前必须**先剥注释** —— 不剥的话两处散文里的引号（契约的 `'auto'`、副本的 `'ask'`）会各自污染字面量集合，实测**假红**；② 逐一核对而非抽查：契约 **49** 声明 / 副本 **52** / 共同 **49** / 成员差异 **0**，豁免表差集逐字相符（所有读数由命令产出，不是估的）。**负控两条实跑、各红一个用例、`cp` 还原后 sha256 逐字相符（`9b461f34…`）**：① 把 `timeout` 从副本删掉 ⇒ 成员集合红，失败信息**点名 `HookConfig`** 并列出两边差集；② 往副本塞一个契约里没有的声明 ⇒ 豁免表红。**如实记边界**：守卫只比**成员/字面量集合，不比散文** —— 上面那处假默认值**不会**让它变红，别把绿读成「文档是对的」（这条已写进两个文件的文档注释与该测试头部）。顺带订正一处读不出的计数：测试表下那句「`integrity` 行的 **8** 个守卫」与当时实有的 9 个守卫文件对不上，改为可测量的 **10 个守卫文件**。测试 3,041 → **3,046**（253 → **254** 文件，0 失败；`test/integrity` 9/62 → **10/67**）。本笔仅显式 add 具名路径、**未用 `git add -A`**。
-> **前一条（2.86.0）**: 2026-09-22 — **权限分类器（对齐 CC 的 `auto` 档）后续：页脚字形按档取 —— 决策 9 的另一半落地，`default` 那一档不再显示「自动接受」** —— 设计文档决策 9（2026-09-22 追加）写着页脚字形取自 CC 二进制里那四个格：`default` **什么都不显示**、`acceptEdits` 与 `auto` 是 `⏵⏵`、`plan` 是 `⏸`；Step 6/7 只做了标签派生、**漏了字形**，`ui/app.tsx` 对每一档硬写 `⏵⏵` ⇒ `default` 档（默认档、也是最常见的档）的用户读到一个**它并不具备的「自动接受」字形** —— 与 P3 同族：**读到的权限比实际宽**。现改为 `PERMISSION_GLYPHS`（穷尽 `Record<PermissionMode, string>`，漏键即编译错，与 `PERMISSION_COLORS` 同形）+ `permissionGlyphPrefix()`（**无字形时连分隔空格都不留**，否则 `default` 那行以空格起头），页脚改用后者。`bypassPermissions` 在 CC 的转盘上**没有对应格**（它 4 格、我们 5 档）⇒ **保留** `⏵⏵`：无从对照时不动它，是最小的选择而不是新决定（注释与设计文档同记）。**三层判据**：映射由 `test/ui/permission-mode.test.ts` 钉住（五档逐字 + 分隔空格）；**接线**由 `test/integrity/permission-status-parity.test.ts` 新增 P3b 从源码侧断（负锚：硬写的 `⏵⏵ {PERMISSION_LABELS` 不得回来）—— 只测映射就是「有定义、无施加点」，本仓反复栽的那族。**负控两条实跑、全红、sha256 逐字相符（`c68c3f79…`）**：① `default` 的映射改回 `'⏵⏵'` ⇒ 用例红（`expected '⏵⏵ ' to be ''`）；② 页脚改回硬写的 `⏵⏵` ⇒ P3b 红。**如实记两条自踩**：ⓐ 我写的负控脚本里有 `git checkout -- src/ui/app.tsx`（本想做还原兜底）⇒ 它**把工作树还原到 HEAD、当场抹掉刚写的改动**，而 `||` 后面的兜底因此不执行；随后负控②的读数是**在 HEAD 上**取得的（机理与我要的不同，但「HEAD 红 / 改后绿」正是负控要的形状）。此后改用 python 双向 + sha256，**不再用 `git checkout` 做还原**。ⓑ 同一份假主张的第二份拷贝：`test/ui/permission-mode.test.ts` 文件头原写「页脚那行 `⏵⏵ <模式>`」，改成 `<字形> <模式>`（按对象扫、不按短语改）。同笔订正设计文档第 77 行（决策 9 记为**已落地**，并记 `auto` 的配色已随 Step 6 定为 `magenta`）。测试 3,039 → **3,041**（253 文件不变；`test/ui` 17/205 → **17/206**，`test/integrity` 9/61 → **9/62**）。本笔仅显式 add 具名路径、**未用 `git add -A`**。
+> **版本**: 2.88.0
+> **最后更新**: 2026-09-22 — **根 `README.md` 的假主张全清（D1+D2），并为这一族补上守卫** —— 逐条实测（不是估的）：`:56` `→ 0.2.2` → `@miphamai/cli v0.83.0`；`:95` `/help (40+)` → **137**（`registry.set('/…')` 实测 137 个且全唯一）；`:108` `version: '0.2.0'` → `'0.83.0'`；`:111` `permission: auto` → `default`，并就地标注 **`auto` 是分类器档、不是旧义「让工具自行决定」**—— 这行本身就是 `fc5afd3a` 事故的输入，属**安全相关**而非单纯陈旧；`:131` 「10 家 / 45+」→ **12 家 / 48 个模型**。**D2 原单未列的 6 处也是实测出来的**：模型表**整行缺 ollama**、OpenAI 缺 `GPT-5.3 Codex`、MiphamAI 缺 `OM V5 Apex` 且 status 标`Upcoming` 而真值是 `active`（`status?: 'active' | 'upcoming'`）、Google 的 Context 写 `128K–2M` 实为 **1M**（三个模型全是 `1000000`）、MiphamAI 的 Context 写 `200K–1M` 实为 **16K–200K**、export 表缺 `MIPHAM_API_KEY`；另把 MiniMax 拆成「国内 / 国际」两行，使**表行数与 provider 数 1:1**。`:17`/`:83` 工具数（31）与 `:18` 技能数（28）**实测本就正确**、未动。**D1 裁定「改文档抹掉」**（岔路口 #3 → 已决议）：`--model`/`--provider` 在 `bin/mipham.ts` **零命中**，入口只认 `--version`/`-v`/`-V`、`--help`/`-h`、`--dump-config`、`--safe-mode`、`--resume`；Run 段改为真实接口（env key + `config.yml` 的 `defaultProvider`/`defaultModel`，或 `Ctrl+P` / `/pick` / `/switch`），实现本身转 **D11**（待需求）。**病根同批收口**：这几个数此前**无人守** —— 工具总数被守、技能清单被守，夹在中间的 provider/model 数落在缝里 ⇒ `tool-reference-integrity.test.ts` 补第六段 `提供商与模型总数声明完整性`，真源 `DEFAULT_PROVIDERS`，扫描面与本文件其余段**共用同一份模块级 `liveDocs`**（原来那份在 describe 内，两段各枚举一份必漂）。**负控两条实跑**：provider 数改 10 / 模型数改 45 各红一次、信息点名 `README.md:138`，还原后 sha256 逐字相符。**这条守卫上线后连咬两次，两次咬的都是它自己的变更记录** —— ① 原稿把负控的失败信息逐字抄进 ROADMAP，那串里带着 provider 的旧值，而 ROADMAP 就在扫描面内；② 订正后本行自己又在**描述这个坑的那句话里**写了同一个旧值 ⇒ 两处都改成不落进正则的措辞（这是该文件既有的处置规矩：**改写措辞**，不放宽正则）。测试 3,046 → **3,047**（254 文件不变，0 失败；`test/integrity` 10/67 → **10/68**）。
+> **前一条（2.87.0）**: 2026-09-22 — **两份 `types.ts` 的成员集合守卫：契约漏了三个字段、一处散文默认值是假的，而此前没有任何东西会变红** —— `packages/shared/src/types.ts` 是契约，`apps/cli/src/shared/types.ts` 是它的 **vendor 副本**（重复是刻意的：npm 包要自包含，**不能**改成从 `@mipham/shared` re-export，那会在 publish 时崩）。这份刻意重复的代价一直没人付：`'auto'` 曾**只**落在副本里、契约那边漏了，**零测试变红**。本笔补上守卫，并先把利息还清 —— 实测两文件相差 **5 个 hunk**，分类后 **3 类合法**（副本的 vendoring 抬头、副本末尾 3 个 CLI 内部类型、契约侧更完整的散文），**2 类是漏同步**：① `MiphamConfig` 缺 `showSchedulingNotices` / `showCommandPicker`；② `HookConfig` 缺 `timeout`。三处都补进契约（新增字段全为可选 ⇒ 对消费方 `apps/web` 向后兼容）。**同笔修掉一处假文档**：契约把 `showThinking` 的默认写成 `minimal`，而代码是 `off` —— 四处独立读数一致（`config/defaults.ts:16` 的字面量、`ui/app.tsx:616` 与 `:1238` 的 `?? 'off'`、`ui/commands.ts:609`）。新守卫 `test/integrity/shared-types-parity.test.ts` 断三条：契约的每个声明副本都得有（**shared-only 实测为空集**）；两边都有的声明**成员集合相等**（interface 比成员名、type 别名比字面量）；只在副本里的声明必须落在具名豁免表（当前恰好 `ToolContext` / `ToolDefinition` / `SkillDefinition`）。**两处非显然的工程点**：① 比较前必须**先剥注释** —— 不剥的话两处散文里的引号（契约的 `'auto'`、副本的 `'ask'`）会各自污染字面量集合，实测**假红**；② 逐一核对而非抽查：契约 **49** 声明 / 副本 **52** / 共同 **49** / 成员差异 **0**，豁免表差集逐字相符（所有读数由命令产出，不是估的）。**负控两条实跑、各红一个用例、`cp` 还原后 sha256 逐字相符（`9b461f34…`）**：① 把 `timeout` 从副本删掉 ⇒ 成员集合红，失败信息**点名 `HookConfig`** 并列出两边差集；② 往副本塞一个契约里没有的声明 ⇒ 豁免表红。**如实记边界**：守卫只比**成员/字面量集合，不比散文** —— 上面那处假默认值**不会**让它变红，别把绿读成「文档是对的」（这条已写进两个文件的文档注释与该测试头部）。顺带订正一处读不出的计数：测试表下那句「`integrity` 行的 **8** 个守卫」与当时实有的 9 个守卫文件对不上，改为可测量的 **10 个守卫文件**。测试 3,041 → **3,046**（253 → **254** 文件，0 失败；`test/integrity` 9/62 → **10/67**）。本笔仅显式 add 具名路径、**未用 `git add -A`**。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -45,7 +45,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：3,046 测试（3,044 passed + 2 skipped，0 失败）
+测试：3,047 测试（3,045 passed + 2 skipped，0 失败）
 
 ---
 
@@ -82,7 +82,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 254 个测试文件，3046 个测试
+│   │   ├── test/               # 254 个测试文件，3047 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -108,7 +108,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（3046 个测试）
+pnpm test         # vitest run（3047 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~9 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -314,9 +314,9 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | artifacts       | 1       | 6        | manifest                                                                                                                                                                    |
 | agent-view      | 1       | 9        | agent-view-manager                                                                                                                                                          |
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
-| integrity       | 10      | 67       | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
+| integrity       | 10      | 68       | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 120      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **254** | **3046** | **0 失败** ✅（3044 passed + 2 skipped）                                                                                                                                    |
+| **合计**        | **254** | **3047** | **0 失败** ✅（3045 passed + 2 skipped）                                                                                                                                    |
 
 > **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 179 测试，自带
 > `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。

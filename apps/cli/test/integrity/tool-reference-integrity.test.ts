@@ -11,9 +11,11 @@
  *   4. `/todos` 的提示词、参考表与 locale 文案引用 `TaskCreate` / `TaskList` 等
  *      不存在的工具名（真实工具只有一个 `Task`，动作走 `action` 参数）
  *
- * 本文件用五段机器可校验的契约：前四段覆盖上述缺陷类，第五段守的是文档体积与
+ * 本文件用六段机器可校验的契约：前四段覆盖上述缺陷类，第五段守的是文档体积与
  * 两张变更记录表的**去向**（CLAUDE.md 拆分后 17 小时内又长回 56k，约定此前只存在于
- * 记忆里、未落到纸面也无人守；2026-09-19 起两表整体移出，正文只留指针）。守卫的价值取决于**不误报**——
+ * 记忆里、未落到纸面也无人守；2026-09-19 起两表整体移出，正文只留指针），第六段守
+ * **事实计数声明**（提供商 / 模型总数 —— 2026-09-22 补：它夹在被守着的工具总数与技能清单
+ * 之间，一直没人守，实测已漂到「10 家提供商，45+ 模型」）。守卫的价值取决于**不误报**——
  * 实测（2026-09-15）扫描命中 6 个幻影名（分布在 10 处），误报 0；被排除的合法词
  * `GitHub` / `GitLab` / `ConfigChange` 见 ALLOWED_NON_TOOL_WORDS。误报的处理方式是
  * **加白名单并写明理由**，不是放宽规则、更不是删掉守卫。
@@ -23,6 +25,7 @@ import { describe, it, expect } from 'vitest'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
+import { DEFAULT_PROVIDERS } from '../../src/shared/constants'
 import { createToolRegistry } from '../../src/tools/index'
 
 /**
@@ -50,6 +53,41 @@ const REPO_ROOT = findRepoRoot(CLI_DIR)
 /** 扫描面 = `src/` + `bin/`，含 `.json`。locale JSON 必须在内，见下。 */
 const SCAN_ROOTS = [join(CLI_DIR, 'src'), join(CLI_DIR, 'bin')]
 const SCANNED_EXTENSIONS = ['.ts', '.tsx', '.json']
+
+/**
+ * 时间点记录 —— 自证定格、或本身就是逐版本流水。里面的旧数字在写下时是对的，
+ * 改它等于篡改一份有日期的记录：
+ *   - `CHANGELOG.md`：逐版本流水，每条记的是发布当时的事实
+ *   - `PRODUCT.md`：抬头写明 `Version 1.0.0 | Date 2026-06-10` 的定格规格书，
+ *     通篇是 0.5.x 时代的事实（8 providers / 16 tools / 13 skills / 28+ models）。
+ *     它不是「被漏改」，是**不该改** —— 其 §5.1 的 16 正是那张表的真实行数，自洽。
+ *     （真问题是 `apps/cli/README.md` 把它当「当前规格」链出去，属另一件事。）
+ *
+ * 同类另见 `docs/superpowers/**`（设计规格与实施计划）、`docs/claude-md-history.md`、
+ * `docs/mipham-code-v0.5.9-wechat-article.md` —— 它们本就不在扫描面内。
+ *
+ * 但**扫描面必须铺到全部活文档**：只扫「已经修好的那几个」的守卫是空转的，那正是
+ * 本文件开头警告的静默恒真。
+ *
+ * **扫描面按「载体」枚举，不按扩展名**：上面那条 `endsWith('.md')` 只捞得到 Markdown，
+ * 于是任何**非 .md 的载体**同样写着工具总数却一路全绿 —— `infrastructure/vscode/package.json`
+ * 的 `description`（Marketplace 列表页正文）就这样带着 `30 tools` 活到 2026-09-20。
+ * 新增载体时把它加进下面这个数组，**不要**把判据放宽成「扫到就算」。
+ *
+ * **本数组是模块级的、供本文件各段守卫共用**（不是「抽公共模块」—— 那个约定禁止的是跨文件
+ * 共用，见上面 `findRepoRoot` 的注释）。提供商 / 模型总数与工具总数写在**同一批载体**上，
+ * 各段各枚举一份，两边的扫描面就会各自漂走。
+ */
+const POINT_IN_TIME_ROOT_DOCS = new Set(['CHANGELOG.md', 'PRODUCT.md'])
+const liveDocs = [
+  ...readdirSync(REPO_ROOT)
+    .filter((f) => f.endsWith('.md') && !POINT_IN_TIME_ROOT_DOCS.has(f))
+    .map((f) => join(REPO_ROOT, f)),
+  join(CLI_DIR, 'README.md'),
+  join(REPO_ROOT, 'infrastructure', 'vscode', 'README.md'),
+  // 非 .md 载体：扩展清单。它进 VSIX、直接渲染在 Marketplace 列表页，与 README 同为公开文案。
+  join(REPO_ROOT, 'infrastructure', 'vscode', 'package.json'),
+]
 
 /**
  * 形如「已注册工具名 + 大写开头的后缀」但不是已注册工具名的词。
@@ -176,37 +214,6 @@ describe('工具总数声明完整性', () => {
    */
   const TOOL_TOTAL_RE = /(\d+)\s*个(?:内置)?工具|(\d+)\s*\+?\s*(?:Built-in\s+)?[Tt]ools?\b/g
 
-  /**
-   * 时间点记录 —— 自证定格、或本身就是逐版本流水。里面的旧数字在写下时是对的，
-   * 改它等于篡改一份有日期的记录：
-   *   - `CHANGELOG.md`：逐版本流水，每条记的是发布当时的事实
-   *   - `PRODUCT.md`：抬头写明 `Version 1.0.0 | Date 2026-06-10` 的定格规格书，
-   *     通篇是 0.5.x 时代的事实（8 providers / 16 tools / 13 skills / 28+ models）。
-   *     它不是「被漏改」，是**不该改** —— 其 §5.1 的 16 正是那张表的真实行数，自洽。
-   *     （真问题是 `apps/cli/README.md` 把它当「当前规格」链出去，属另一件事。）
-   *
-   * 同类另见 `docs/superpowers/**`（设计规格与实施计划）、`docs/claude-md-history.md`、
-   * `docs/mipham-code-v0.5.9-wechat-article.md` —— 它们本就不在扫描面内。
-   *
-   * 但**扫描面必须铺到全部活文档**：只扫「已经修好的那几个」的守卫是空转的，那正是
-   * 本文件开头警告的静默恒真。
-   *
-   * **扫描面按「载体」枚举，不按扩展名**：上面那条 `endsWith('.md')` 只捞得到 Markdown，
-   * 于是任何**非 .md 的载体**同样写着工具总数却一路全绿 —— `infrastructure/vscode/package.json`
-   * 的 `description`（Marketplace 列表页正文）就这样带着 `30 tools` 活到 2026-09-20。
-   * 新增载体时把它加进下面这个数组，**不要**把判据放宽成「扫到就算」。
-   */
-  const POINT_IN_TIME_ROOT_DOCS = new Set(['CHANGELOG.md', 'PRODUCT.md'])
-  const liveDocs = [
-    ...readdirSync(REPO_ROOT)
-      .filter((f) => f.endsWith('.md') && !POINT_IN_TIME_ROOT_DOCS.has(f))
-      .map((f) => join(REPO_ROOT, f)),
-    join(CLI_DIR, 'README.md'),
-    join(REPO_ROOT, 'infrastructure', 'vscode', 'README.md'),
-    // 非 .md 载体：扩展清单。它进 VSIX、直接渲染在 Marketplace 列表页，与 README 同为公开文案。
-    join(REPO_ROOT, 'infrastructure', 'vscode', 'package.json'),
-  ]
-
   it('活文档里的工具总数声明与注册表一致', () => {
     const problems: string[] = []
     let claims = 0
@@ -234,6 +241,75 @@ describe('工具总数声明完整性', () => {
       `工具总数声明与注册表不一致：\n${problems.join('\n')}\n\n` +
         `真源是 createToolRegistry()（${registered} 个）。` +
         '若某处并非本项目的工具总数（例如第三方服务器的工具数），改写措辞使其不匹配，不要放宽正则。',
+    ).toBe('')
+  })
+})
+
+describe('提供商与模型总数声明完整性', () => {
+  const registeredProviders = DEFAULT_PROVIDERS.length
+  const registeredModels = DEFAULT_PROVIDERS.reduce((n, p) => n + p.models.length, 0)
+
+  /**
+   * 供应商 / 模型总数声明，形如 `12 家提供商` / `12 providers` / `48 个模型`。
+   *
+   * 为什么要这条守卫（2026-09-22）：根 `README.md` 曾同时写着「10 家提供商，45+ 模型」、
+   * 模型表**整行缺 ollama**、OpenAI 少一个模型、MiphamAI 的 status 标 `Upcoming` 而真值是
+   * `active`（`shared/types.ts` 的 `status?: 'active' | 'upcoming'`）—— 一条都不红。原因与
+   * 工具总数那次同形：**这几个数没有真源守卫**。工具总数被守着（上一段）、技能清单被守着
+   * （下一段），夹在两者之间的提供商 / 模型数正好落在缝里。而真源就在本文件的依赖图上。
+   *
+   * 中文侧要求带「家」/「个」是有意的（同上一段）：放开成 `(\d+)\s*模型` 会去匹配
+   * 「3 个模型可选」这类**别的**计数 —— 守卫的成败取决于不误报。
+   *
+   * **已知边界**：因此 `45+ 模型`（无「个」）这一形态**不**被模型那半匹配 —— 2026-09-22
+   * 修掉的那行原本正是这个写法，它是靠同一句里的 `10 家提供商` 被逮住的。这是取舍不是漏洞：
+   * 收紧一侧换来的是零误报。
+   */
+  const PROVIDER_TOTAL_RE = /(\d+)\s*家(?:提供商|供应商)|(\d+)\s*providers?\b/g
+  const MODEL_TOTAL_RE = /(\d+)\s*个模型|(\d+)\s*models?\b/g
+
+  it('活文档里的提供商 / 模型总数声明与注册表一致', () => {
+    const problems: string[] = []
+    let providerClaims = 0
+    let modelClaims = 0
+
+    for (const file of liveDocs) {
+      const rel = file.slice(REPO_ROOT.length + 1)
+      readFileSync(file, 'utf-8')
+        .split('\n')
+        .forEach((line, i) => {
+          for (const match of line.matchAll(PROVIDER_TOTAL_RE)) {
+            providerClaims++
+            const declared = Number(match[1] ?? match[2])
+            if (declared !== registeredProviders) {
+              problems.push(
+                `  ${rel}:${i + 1}: 声明 ${declared} 家提供商，注册表实际 ${registeredProviders} 家`,
+              )
+            }
+          }
+          for (const match of line.matchAll(MODEL_TOTAL_RE)) {
+            modelClaims++
+            const declared = Number(match[1] ?? match[2])
+            if (declared !== registeredModels) {
+              problems.push(
+                `  ${rel}:${i + 1}: 声明 ${declared} 个模型，注册表实际 ${registeredModels} 个`,
+              )
+            }
+          }
+        })
+    }
+
+    expect(
+      providerClaims,
+      '没有扫到任何提供商总数声明 —— 正则可能已与文档写法脱节',
+    ).toBeGreaterThan(0)
+    expect(modelClaims, '没有扫到任何模型总数声明 —— 正则可能已与文档写法脱节').toBeGreaterThan(0)
+    expect(
+      problems.join('\n'),
+      `提供商 / 模型总数声明与注册表不一致：\n${problems.join('\n')}\n\n` +
+        `真源是 DEFAULT_PROVIDERS（src/shared/constants.ts）—— ${registeredProviders} 家 / ` +
+        `${registeredModels} 个模型。若某处并非本项目的总数（例如第三方服务商数），` +
+        '改写措辞使其不匹配，不要放宽正则。',
     ).toBe('')
   })
 })
