@@ -4,9 +4,9 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.88.0
-> **最后更新**: 2026-09-22 — **根 `README.md` 的假主张全清（D1+D2），并为这一族补上守卫** —— 逐条实测（不是估的）：`:56` `→ 0.2.2` → `@miphamai/cli v0.83.0`；`:95` `/help (40+)` → **137**（`registry.set('/…')` 实测 137 个且全唯一）；`:108` `version: '0.2.0'` → `'0.83.0'`；`:111` `permission: auto` → `default`，并就地标注 **`auto` 是分类器档、不是旧义「让工具自行决定」**—— 这行本身就是 `fc5afd3a` 事故的输入，属**安全相关**而非单纯陈旧；`:131` 「10 家 / 45+」→ **12 家 / 48 个模型**。**D2 原单未列的 6 处也是实测出来的**：模型表**整行缺 ollama**、OpenAI 缺 `GPT-5.3 Codex`、MiphamAI 缺 `OM V5 Apex` 且 status 标`Upcoming` 而真值是 `active`（`status?: 'active' | 'upcoming'`）、Google 的 Context 写 `128K–2M` 实为 **1M**（三个模型全是 `1000000`）、MiphamAI 的 Context 写 `200K–1M` 实为 **16K–200K**、export 表缺 `MIPHAM_API_KEY`；另把 MiniMax 拆成「国内 / 国际」两行，使**表行数与 provider 数 1:1**。`:17`/`:83` 工具数（31）与 `:18` 技能数（28）**实测本就正确**、未动。**D1 裁定「改文档抹掉」**（岔路口 #3 → 已决议）：`--model`/`--provider` 在 `bin/mipham.ts` **零命中**，入口只认 `--version`/`-v`/`-V`、`--help`/`-h`、`--dump-config`、`--safe-mode`、`--resume`；Run 段改为真实接口（env key + `config.yml` 的 `defaultProvider`/`defaultModel`，或 `Ctrl+P` / `/pick` / `/switch`），实现本身转 **D11**（待需求）。**病根同批收口**：这几个数此前**无人守** —— 工具总数被守、技能清单被守，夹在中间的 provider/model 数落在缝里 ⇒ `tool-reference-integrity.test.ts` 补第六段 `提供商与模型总数声明完整性`，真源 `DEFAULT_PROVIDERS`，扫描面与本文件其余段**共用同一份模块级 `liveDocs`**（原来那份在 describe 内，两段各枚举一份必漂）。**负控两条实跑**：provider 数改 10 / 模型数改 45 各红一次、信息点名 `README.md:138`，还原后 sha256 逐字相符。**这条守卫上线后连咬两次，两次咬的都是它自己的变更记录** —— ① 原稿把负控的失败信息逐字抄进 ROADMAP，那串里带着 provider 的旧值，而 ROADMAP 就在扫描面内；② 订正后本行自己又在**描述这个坑的那句话里**写了同一个旧值 ⇒ 两处都改成不落进正则的措辞（这是该文件既有的处置规矩：**改写措辞**，不放宽正则）。测试 3,046 → **3,047**（254 文件不变，0 失败；`test/integrity` 10/67 → **10/68**）。
-> **前一条（2.87.0）**: 2026-09-22 — **两份 `types.ts` 的成员集合守卫：契约漏了三个字段、一处散文默认值是假的，而此前没有任何东西会变红** —— `packages/shared/src/types.ts` 是契约，`apps/cli/src/shared/types.ts` 是它的 **vendor 副本**（重复是刻意的：npm 包要自包含，**不能**改成从 `@mipham/shared` re-export，那会在 publish 时崩）。这份刻意重复的代价一直没人付：`'auto'` 曾**只**落在副本里、契约那边漏了，**零测试变红**。本笔补上守卫，并先把利息还清 —— 实测两文件相差 **5 个 hunk**，分类后 **3 类合法**（副本的 vendoring 抬头、副本末尾 3 个 CLI 内部类型、契约侧更完整的散文），**2 类是漏同步**：① `MiphamConfig` 缺 `showSchedulingNotices` / `showCommandPicker`；② `HookConfig` 缺 `timeout`。三处都补进契约（新增字段全为可选 ⇒ 对消费方 `apps/web` 向后兼容）。**同笔修掉一处假文档**：契约把 `showThinking` 的默认写成 `minimal`，而代码是 `off` —— 四处独立读数一致（`config/defaults.ts:16` 的字面量、`ui/app.tsx:616` 与 `:1238` 的 `?? 'off'`、`ui/commands.ts:609`）。新守卫 `test/integrity/shared-types-parity.test.ts` 断三条：契约的每个声明副本都得有（**shared-only 实测为空集**）；两边都有的声明**成员集合相等**（interface 比成员名、type 别名比字面量）；只在副本里的声明必须落在具名豁免表（当前恰好 `ToolContext` / `ToolDefinition` / `SkillDefinition`）。**两处非显然的工程点**：① 比较前必须**先剥注释** —— 不剥的话两处散文里的引号（契约的 `'auto'`、副本的 `'ask'`）会各自污染字面量集合，实测**假红**；② 逐一核对而非抽查：契约 **49** 声明 / 副本 **52** / 共同 **49** / 成员差异 **0**，豁免表差集逐字相符（所有读数由命令产出，不是估的）。**负控两条实跑、各红一个用例、`cp` 还原后 sha256 逐字相符（`9b461f34…`）**：① 把 `timeout` 从副本删掉 ⇒ 成员集合红，失败信息**点名 `HookConfig`** 并列出两边差集；② 往副本塞一个契约里没有的声明 ⇒ 豁免表红。**如实记边界**：守卫只比**成员/字面量集合，不比散文** —— 上面那处假默认值**不会**让它变红，别把绿读成「文档是对的」（这条已写进两个文件的文档注释与该测试头部）。顺带订正一处读不出的计数：测试表下那句「`integrity` 行的 **8** 个守卫」与当时实有的 9 个守卫文件对不上，改为可测量的 **10 个守卫文件**。测试 3,041 → **3,046**（253 → **254** 文件，0 失败；`test/integrity` 9/62 → **10/67**）。本笔仅显式 add 具名路径、**未用 `git add -A`**。
+> **版本**: 2.89.0
+> **最后更新**: 2026-09-22 — **vendored 族整族的对等守卫（ROADMAP D5）—— 这一族 5 对里，此前只有 1 对有人守** —— 债务条目写的是「两个 `constants.ts` 已分叉且无守卫」，**实测只有后半句成立**：两侧（`packages/shared/src/` 与 `apps/cli/src/shared/`）均为 562 行、sha256 逐字相同 ⇒ 记下这处订正、**不照着假前提动手**。真正的缺口是**覆盖面**：`types.ts` 有守卫，另 4 对（`constants.ts` / `mipham-models.json` / `index.ts` / `package-info.ts`）**一个字节都不比**，而模型快照与 provider 端点常量的全部价值就在值上。新守卫 `test/integrity/shared-vendor-parity.test.ts` 把整族收进一张表、**按形状分三档**（「对等」在这一族里不是一种关系）：① **byte** 3 对逐字节相等 —— 成员集合**比不出值漂移**，故这档刻意用最强判据；② **comments-only** 1 对（`package-info.ts`）只差**头部块注释**、正文自第 11 行起逐字相同（diff 实测只有那一段），故**只剥块注释、不剥 `//`** —— 该文件里没有 `//` 行注释，而剥 `//` 会把字符串里的 URL 一起截掉（那条边界已记在 types 守卫头部）；③ **members** 1 对（`types.ts`）由既有守卫覆盖，本文件**不重复实现**，只加一条**例外锚**：断言它既非字节相等、也非剥注释相等 ⇒ 一旦有人把正文也同步了，这条红并提示把它改判进上面两档。四条断言**全部实跑负控**、各红一个用例、失败信息点名到文件与行号，还原后 sha256 逐字相符：改副本值 ⇒ byte 档红；改 `package-info.ts` 正文 ⇒ comments-only 档红；用契约覆盖 `types.ts` 副本 ⇒ 例外锚红；挪走副本 `index.ts` ⇒ 正对照红（并如期级联到 byte 档，因为读它会抛）。**如实记边界**（已写进文件头）：新文件只比**文本**、不比语义 —— 两份同时被改成同一个错值**不会**让它红，别把这里的绿读成「值是对的」。测试 3,047 → **3,051**（254 → **255** 文件，0 失败；`test/integrity` 10/68 → **11/72**）。
+> **前一条（2.88.0）**: 2026-09-22 — **根 `README.md` 的假主张全清（D1+D2），并为这一族补上守卫** —— 逐条实测（不是估的）：`:56` `→ 0.2.2` → `@miphamai/cli v0.83.0`；`:95` `/help (40+)` → **137**（`registry.set('/…')` 实测 137 个且全唯一）；`:108` `version: '0.2.0'` → `'0.83.0'`；`:111` `permission: auto` → `default`，并就地标注 **`auto` 是分类器档、不是旧义「让工具自行决定」**—— 这行本身就是 `fc5afd3a` 事故的输入，属**安全相关**而非单纯陈旧；`:131` 「10 家 / 45+」→ **12 家 / 48 个模型**。**D2 原单未列的 6 处也是实测出来的**：模型表**整行缺 ollama**、OpenAI 缺 `GPT-5.3 Codex`、MiphamAI 缺 `OM V5 Apex` 且 status 标`Upcoming` 而真值是 `active`（`status?: 'active' | 'upcoming'`）、Google 的 Context 写 `128K–2M` 实为 **1M**（三个模型全是 `1000000`）、MiphamAI 的 Context 写 `200K–1M` 实为 **16K–200K**、export 表缺 `MIPHAM_API_KEY`；另把 MiniMax 拆成「国内 / 国际」两行，使**表行数与 provider 数 1:1**。`:17`/`:83` 工具数（31）与 `:18` 技能数（28）**实测本就正确**、未动。**D1 裁定「改文档抹掉」**（岔路口 #3 → 已决议）：`--model`/`--provider` 在 `bin/mipham.ts` **零命中**，入口只认 `--version`/`-v`/`-V`、`--help`/`-h`、`--dump-config`、`--safe-mode`、`--resume`；Run 段改为真实接口（env key + `config.yml` 的 `defaultProvider`/`defaultModel`，或 `Ctrl+P` / `/pick` / `/switch`），实现本身转 **D11**（待需求）。**病根同批收口**：这几个数此前**无人守** —— 工具总数被守、技能清单被守，夹在中间的 provider/model 数落在缝里 ⇒ `tool-reference-integrity.test.ts` 补第六段 `提供商与模型总数声明完整性`，真源 `DEFAULT_PROVIDERS`，扫描面与本文件其余段**共用同一份模块级 `liveDocs`**（原来那份在 describe 内，两段各枚举一份必漂）。**负控两条实跑**：provider 数改 10 / 模型数改 45 各红一次、信息点名 `README.md:138`，还原后 sha256 逐字相符。**这条守卫上线后连咬两次，两次咬的都是它自己的变更记录** —— ① 原稿把负控的失败信息逐字抄进 ROADMAP，那串里带着 provider 的旧值，而 ROADMAP 就在扫描面内；② 订正后本行自己又在**描述这个坑的那句话里**写了同一个旧值 ⇒ 两处都改成不落进正则的措辞（这是该文件既有的处置规矩：**改写措辞**，不放宽正则）。测试 3,046 → **3,047**（254 文件不变，0 失败；`test/integrity` 10/67 → **10/68**）。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -45,7 +45,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：3,047 测试（3,045 passed + 2 skipped，0 失败）
+测试：3,051 测试（3,049 passed + 2 skipped，0 失败）
 
 ---
 
@@ -82,7 +82,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 254 个测试文件，3047 个测试
+│   │   ├── test/               # 255 个测试文件，3051 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -108,7 +108,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（3047 个测试）
+pnpm test         # vitest run（3051 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~9 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -314,13 +314,13 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | artifacts       | 1       | 6        | manifest                                                                                                                                                                    |
 | agent-view      | 1       | 9        | agent-view-manager                                                                                                                                                          |
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
-| integrity       | 10      | 68       | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
+| integrity       | 11      | 72       | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 120      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **254** | **3047** | **0 失败** ✅（3045 passed + 2 skipped）                                                                                                                                    |
+| **合计**        | **255** | **3051** | **0 失败** ✅（3049 passed + 2 skipped）                                                                                                                                    |
 
 > **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 179 测试，自带
 > `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。
-> `integrity` 行的 10 个守卫文件含 **daemon 能力对等**（`daemon-capability-parity.test.ts`：14 个注入点
+> `integrity` 行的 11 个守卫文件含 **daemon 能力对等**（`daemon-capability-parity.test.ts`：14 个注入点
 > 全集 − 具名豁免表 = daemon 实接集，两向相等）与 **T4 未接线处置**（`unwired-disposition.test.ts`：
 > 删的必须不存在、留的必须仍零引用，陈旧豁免为红）。**注意别把这类
 > 说明写进上表单元格** —— 该列宽由最宽一行决定，加长一行 prettier 会重排全表 23 行（本批实测
