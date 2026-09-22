@@ -51,11 +51,38 @@ export const PERMISSION_MODE_HIERARCHY: PermissionMode[] = [
 ]
 
 /**
- * Shift+Tab cycling order — deliberately **not** the permissiveness order above.
- * The cycle is UX (manual → accept edits → plan → bypass); only the hierarchy
- * answers "is this mode wider than that one". Keeping them separate is what lets
- * `forbiddenModes` drop an entry from the cycle without disturbing the ranking
- * that `clampMode` walks.
+ * Every **legal** mode — the full internal enumeration, and the base set that
+ * `forbiddenModes` / `maxAllowedMode` are applied to.
+ *
+ * Deliberately a separate array from `MODE_CYCLE`, and deliberately able to be a
+ * **superset** of it: `bypassPermissions` is reachable through config /
+ * `MIPHAM_DAEMON_PERMISSION` / settings without being something a user can
+ * Shift+Tab into. Claude Code arranges it the same way — its descriptor table
+ * lists `bypassPermissions` while its cycle array does not.
+ *
+ * **The two arrays must not be collapsed back into one.** `getAllowedModes`
+ * filters *this* array, never `MODE_CYCLE`. If it filtered the cycle, then the
+ * moment the cycle stops listing `bypassPermissions`, a config requesting it
+ * would be silently walked *down* to `acceptEdits` by `clampMode` — a quiet
+ * downgrade of a security-relevant setting, with every existing test still
+ * green. The fixed point is pinned by a probe in `test/core/permission.test.ts`
+ * (P4b).
+ *
+ * Order is insignificant to both consumers except in one place: `clampMode`'s
+ * last-resort fallback is `allowed[0]`, so `default` stays first.
+ */
+export const ALL_MODES: PermissionMode[] = ['default', 'acceptEdits', 'plan', 'bypassPermissions']
+
+/**
+ * Shift+Tab cycling order — **what the user actually presses through**. Also
+ * deliberately **not** the permissiveness order above: the cycle is UX, and only
+ * the hierarchy answers "is this mode wider than that one". Keeping them
+ * separate is what lets `forbiddenModes` drop an entry from the cycle without
+ * disturbing the ranking that `clampMode` walks.
+ *
+ * Today this coincides with `ALL_MODES`. They diverge as soon as a mode becomes
+ * legal-without-being-cyclable — that divergence is the entire reason there are
+ * two arrays, so do not "simplify" one back into the other.
  */
 export const MODE_CYCLE: PermissionMode[] = ['default', 'acceptEdits', 'plan', 'bypassPermissions']
 
@@ -173,9 +200,15 @@ export function normalizeRestrictions(raw: unknown): {
   return { restrictions, invalid }
 }
 
-/** Resolve which modes are actually permitted given the restrictions. */
+/**
+ * Resolve which modes are actually permitted given the restrictions.
+ *
+ * Filtered from `ALL_MODES` (the full legal set), **not** from `MODE_CYCLE` —
+ * see `ALL_MODES` for what filtering the cycle would silently do to
+ * `bypassPermissions`. `nextMode` re-intersects with the cycle afterwards.
+ */
 function getAllowedModes(restrictions?: PermissionRestrictions): PermissionMode[] {
-  let allowed = [...MODE_CYCLE]
+  let allowed = [...ALL_MODES]
 
   if (restrictions?.forbiddenModes && restrictions.forbiddenModes.length > 0) {
     const forbidden = new Set(restrictions.forbiddenModes)
@@ -218,11 +251,17 @@ export function nextMode(
   current: PermissionMode,
   restrictions?: PermissionRestrictions,
 ): PermissionMode {
+  // The user-facing cycle is `MODE_CYCLE`, narrowed by what the restrictions
+  // leave allowed — so reading the *cycle's* order (not `getAllowedModes`'
+  // order) is what keeps Shift+Tab on the same path once the two arrays
+  // diverge. An off-cycle mode (or one forbidden here) is not `indexOf`-able
+  // and falls through to `clampMode`.
   const allowed = getAllowedModes(restrictions)
-  const idx = allowed.indexOf(current)
+  const cycle = MODE_CYCLE.filter((m) => allowed.includes(m))
+  const idx = cycle.indexOf(current)
   if (idx === -1) {
-    // Current mode is not in the allowed set — clamp then find next
+    // Current mode is not on the allowed cycle — clamp then find next
     return clampMode(current, restrictions)
   }
-  return allowed[(idx + 1) % allowed.length]!
+  return cycle[(idx + 1) % cycle.length]!
 }

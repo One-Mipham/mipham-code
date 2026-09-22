@@ -12,7 +12,7 @@ import {
   nextMode,
   clampMode,
   normalizeRestrictions,
-  MODE_CYCLE,
+  ALL_MODES,
 } from './permission-config'
 
 /**
@@ -66,7 +66,13 @@ function isVerificationCommand(input: Record<string, unknown>): boolean {
   return verifyPatterns.some((p) => p.test(cmd))
 }
 
-const VALID_MODES: Set<string> = new Set<string>(MODE_CYCLE)
+/**
+ * Which `PermissionLevel` spellings the constructor accepts as an actual
+ * *mode*. Filtered from `ALL_MODES`, **not** `MODE_CYCLE`: `bypassPermissions`
+ * is a legal destination even though it is not part of the Shift+Tab cycle, and
+ * reading the cycle here would quietly demote it to the legacy-level fallback.
+ */
+const VALID_MODES: Set<string> = new Set<string>(ALL_MODES)
 
 /**
  * Why a tool resolved to 'ask' — for rich denial errors (#52).

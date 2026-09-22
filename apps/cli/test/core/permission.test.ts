@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import type { PermissionMode, PermissionRestrictions, ToolDefinition } from '../../src/shared'
 import { PermissionSystem } from '../../src/core/permission'
-import { PERMISSION_MODE_HIERARCHY } from '../../src/core/permission-config'
+import {
+  ALL_MODES,
+  MODE_CYCLE,
+  PERMISSION_MODE_HIERARCHY,
+  clampMode,
+} from '../../src/core/permission-config'
 
 // ── Helpers ──
 
@@ -640,6 +645,54 @@ describe('PermissionSystem', () => {
 
       ps.setMode('bypassPermissions')
       expect(ps.getMode()).toBe('acceptEdits')
+    })
+  })
+
+  // ═══════════════════════════════════════════
+  // P4b — 合法档位集（ALL_MODES）与转盘（MODE_CYCLE）是两张表
+  // ═══════════════════════════════════════════
+
+  describe('P4b — ALL_MODES 是合法档位集，MODE_CYCLE 只是转盘', () => {
+    /**
+     * 这两张表今天**内容相同**，所以本组用例现在全都绿，看起来像在测空气。
+     * 它的价值在下一次两张表分道扬镳的时刻：`getAllowedModes` 一旦被改回过滤
+     * `MODE_CYCLE`，第一条就会红 —— 那一刻 `clampMode('bypassPermissions')` 会
+     * 沿途下走到 `acceptEdits`，即一次**静默降档**，而其余测试全绿。
+     * 两条负控都实跑过（都在 `permission-config.ts` 上做，做完 `cp` 还原并逐字比对 sha256）：
+     *
+     * - **两张表被合并**（转盘去掉 `bypassPermissions` + `getAllowedModes` 改回过滤
+     *   `MODE_CYCLE`）：本条报 `expected 'acceptEdits' to be 'bypassPermissions'`
+     *   —— 那行差异就是静默降档本身。这正是本组要抓的那一种坏法。
+     * - **只做前半步**（转盘变短、`getAllowedModes` 仍过滤 `ALL_MODES`）：本条
+     *   **保持绿**（确实没有任何降档，拆分正在起作用），但 P4 的
+     *   `cycles through all 4 modes` 与 `未受限时的循环顺序不变…` 两条转红
+     *   —— 转盘变短本身不是静默的，它被那两条钉住了。
+     */
+    it('合法档位集里的每一档都是 clampMode 的不动点（无限制时不许被改写）', () => {
+      for (const mode of ALL_MODES) {
+        expect(clampMode(mode, undefined)).toBe(mode)
+        // 构造函数走另一条路（VALID_MODES），一并钉住：认得出它就不该退化成遗留级别。
+        expect(new PermissionSystem(mode).getMode()).toBe(mode)
+      }
+    })
+
+    it('转盘里的每一档都必须是合法档位（否则转盘会报出一个构造函数不认的模式）', () => {
+      for (const mode of MODE_CYCLE) expect(ALL_MODES).toContain(mode)
+    })
+
+    it('显式禁用 bypassPermissions 仍然生效 —— 显式禁用 ≠ 静默降档', () => {
+      const ps = new PermissionSystem('default')
+      ps.setRestrictions({ forbiddenModes: ['bypassPermissions'] })
+
+      ps.setMode('bypassPermissions')
+      expect(ps.getMode()).not.toBe('bypassPermissions')
+    })
+
+    it('循环只在转盘上走，永不落到转盘之外的档位', () => {
+      const ps = new PermissionSystem('default')
+      for (let i = 0; i < MODE_CYCLE.length * 3; i++) {
+        expect(MODE_CYCLE).toContain(ps.cycleMode())
+      }
     })
   })
 

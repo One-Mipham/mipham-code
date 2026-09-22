@@ -4,9 +4,9 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.78.0
-> **最后更新**: 2026-09-21 — **CRSI 代价维落地（B2）：分数持平而耗时翻倍的改动，此前与白捡的胜利在账本里同形** —— 三段改动，**只记录、不进闸**。① `TaskPerformanceReport` 加**必填** `durationMs`（`runTaskPerformance` 在任务循环前起表，整轮 = LLM 生成 + 冻结测试判定）；② `SkillDeltaSample` / `ImprovementReport` 加可选 `baselineDurations` / `postDurations`，**与分数数组逐项对齐**（第 i 项就是产出第 i 个分数的那次采样），`buildImprovementReport` 里**两条同生同灭**地写 （与 ε 那条同一条判据：只写一半会让「代价」这件事在记录里既非有也非无，读侧无从判断）；③ 新增纯函数 `formatCostLine`：均值一行 + 倍数，**缺席 → null ⇒ 调用方整行不打印**（不是打一行 `0ms`），基线均值为 0 **不给倍数**（那个比值是 ∞ 或 0÷0，打出来是假读数）。**接线两条渲染路径** —— 手工 `/crsi modify` 的 `improvementLine` 与 prose `/crsi propose --prose` 的 `predictionLine`；只接一条就是本仓库记过的「局部正确全局遗漏」，故两条各一条接线测试。**零进闸**（用户裁定「只记录、先别进闸」）：`verdict` / `deltaMean` / `noise` / `minEffect` / `causal` 一律不看这两个字段 —— 样本量 k 默认 3 时再塞一个统计维度只会让问题更糟。**写侧有读侧**：`formatCostLine` 是这两个字段目前**唯一**的消费者 —— 记一个没有读者的字段就是 B1 之前的老毛病。测试 2,949 → **2,960**（2,958 passed + 2 skipped，251 文件不变；`test/core` 74/1179 → 74/1187、`test/ui` 17/201 → 17/204）。**负控如实记**：两条路径的接线测试在接线前**各自红**（先写过 RED 态），缺席分支另跑一控 —— 把 `formatCostLine` 的缺席返回从 `null` 改成哨兵字符串 ⇒ **2 红**（纯函数那条 + 接线那条），`cp` 存档还原后 sha256 逐字相符（`bb2fa499…`）。**来源**：Dream-RSI（arXiv 2609.14858）的 B2 意图是「离线评估要能看见的不只是分数」；其机制在此仓库无对应物，故只借这一条原则。
-> **前一条（2.77.0）**: 2026-09-21 — **CRSI 账本按契约粒度落盘（B1）：`appendEvalScore` 从「只落聚合分数」改为同时落每条契约的 `{id, passed, role}`** —— 动机是一道**可观测性缺口**：账本此前只有 `score`/`passed`/`total`，故只能回答「总分涨没涨」，回答不了「**是哪条契约翻的**」，而真回归与单次抖动在聚合层**同形**。改法三段：`appendEvalScore` 的 `report` 放宽为 `results?: EvalResult[]`，有则以 `toContractResultRecord` 投影落盘（**只 `id`/`passed`/`role`，`description`/`detail` 不落**）；新增 `getContractHistory(name, n=3)` 按新→旧读回 `ContractSnapshot[]`（id → passed）；纯函数 `diffContractHistory` 判五态 `regressed`/`fixed`/`flaky`/`new`/`gone`，`renderContractDiff` 渲染，`/crsi eval` 两处调用点（`--reward` 与 `mechanism-sentinel`）接**只读**展示。**顺序承重**：刻意先读后写（`getContractHistory` → `appendEvalScore` → 渲染），比较基准是「**上一次已落盘的态**」，不依赖刚写入那条排第几。**向后兼容的承重判据**：`results` 键**缺省不写**（B1 之前落盘的旧记录没有它），读取侧跳过 —— **别改成 `results: []`**，那会让旧记录被读成「零条契约」而把整表报成 `gone`。**`flaky` 压过相邻两次判定**：只看相邻两次会把振荡读成 `regressed` 或 `fixed`（取决于末次方向），故先看窗口内是否**两种结果都出现过**。**零新增契约、闸门不动**：`runEval().total` 仍 40、`ANCHOR_CONTRACT_IDS` 仍 17，`crsi-modify` 仍只看 `regressedAnchors` / `score`；不做「按历史自动决策」、不引入数字上界、不动账本轮转。**如实记两项成本**：① 每条记录多约 2–3 KB（40 契约），而 `eval-scores.jsonl` 是 append-only、**当前无轮转** —— 本次不动（超范围），但这是本笔带来的真实成本；② `flaky` 只看最近 `n=3` 次快照，`n` 越小越容易把长期振荡读成抖动（`n` 是常数、无自适应）。**来源**：Dream-RSI（arXiv 2609.14858）「累积历史的粒度决定了你能离线评估什么」这一**设计原则**；其机制（发现树 / 可编程探索策略 / replay 模拟器）在本仓库**无对应物、不可照搬**，故只借原则不搬结构。测试 2,935 → **2,949**（2,947 passed + 2 skipped，250 → 251 文件；`test/core` 74/1167 → 74/1179、`test/ui` 16/199 → 17/201）。新增覆盖两处：`test/core/eval-harness.test.ts` 12 条纯函数契约，`test/ui/crsi-eval-contract-diff.test.ts` 2 条**接线**契约 —— 后者钉「先读后写」（对调两行即红，已跑负控核对，见下）。**负控如实记**：把 `commands.ts` 的读/写两行对调后，`crsi-eval-contract-diff.test.ts` **1 红 1 绿** —— 红的正是承重那条「先读后写」，第二条（跨次抖动）对顺序不敏感而照样绿；还原用 `cp` 存档、sha256 逐字相符（`27c07716…`）。
+> **版本**: 2.79.0
+> **最后更新**: 2026-09-22 — **权限分类器（对齐 CC 的 `auto` 档）Step 2：把「合法档位集」与「转盘」拆成两张表** —— 纯机制拆分，**行为零变化**。原状是 `MODE_CYCLE` 一个数组兼任两个身份：`getAllowedModes` 的合法档位基集（喂 `clampMode` / `maxAllowedMode` / `forbiddenModes`）与「用户 Shift+Tab 走的那几格」，而 `app.tsx:107` 另有一份会漂移的转盘副本。Step 6 要让 `bypassPermissions` **退出转盘、但仍是合法档位**（这正是 CC 的结构：其描述表列 `bypassPermissions`，转盘数组不列），届时若 `getAllowedModes` 仍过滤 `MODE_CYCLE`，`clampMode('bypassPermissions')` 会沿层级**下走到 `acceptEdits`** —— 一次**静默降档**，安全相关，且现有测试全绿。故本轮新增 `ALL_MODES`（全四档），`getAllowedModes` 改过滤它；`nextMode` 改成 `MODE_CYCLE ∩ getAllowedModes()`（读**转盘**顺序，两张表分道后 Shift+Tab 仍走同一条路）；`permission.ts:69` 的 `VALID_MODES` 同步改用 `ALL_MODES`（否则构造函数会把 `bypassPermissions` 当成认不出的遗留级别、退回 `legacyDefaultFallback`）。`ALL_MODES` 首位仍是 `default`：`clampMode` 最后兜底取 `allowed[0]`，顺序有意义。**两张表今天内容相同 ⇒ 新用例现在全部是绿的**，其价值在下一次分道时兑现，故**负控如实记**（两条都实跑，都在 `permission-config.ts` 上做，`cp` 存档还原后 sha256 逐字相符 `6a765741…`）：① **两张表被合并**（转盘去掉 `bypassPermissions` + `getAllowedModes` 改回过滤 `MODE_CYCLE`）⇒ P4b 的「不动点」探测报 `expected 'acceptEdits' to be 'bypassPermissions'` —— 那行断言差异就是降档本身；② **只做前半步**（转盘变短、`getAllowedModes` 不动）⇒ P4b **保持绿**（确实没发生降档，拆分正在起作用），变红的是 P4 既有的 `cycles through all 4 modes` 与「未受限时的循环顺序不变」两条 —— 即**转盘变短这件事本身并不静默**，它被那两条钉住了。测试 2,962 → **2,966**（2,964 passed + 2 skipped，251 文件不变；`test/core` 74/1189 → 74/1193）。**基数为何不是 2.78.0 行里的 2,960 —— 如实记一次陈旧账**：本笔只新增 **4** 条，另 **2** 条是 `d836990a`（真账本完整性守卫）留下的，那笔在**父仓**记过 `2,960 → 2,962`（并如实写明「该文件是改不是增」），但**子仓 `CLAUDE.md` 从未回填** ⇒ 2.78.0 行的 `2,960` 与 `test/core` 的 `1187` 一直各比实际**少 2**。本条一并订正两处（实测 `npx vitest run test/core/` = 74 文件 / **1193** 测试）。**Step 6 才改转盘内容与页脚标签**，故中间态**不存在三档转盘**，页脚与 `nextMode` 不会各说各话。
+> **前一条（2.78.0）**: 2026-09-21 — **CRSI 代价维落地（B2）：分数持平而耗时翻倍的改动，此前与白捡的胜利在账本里同形** —— 三段改动，**只记录、不进闸**。① `TaskPerformanceReport` 加**必填** `durationMs`（`runTaskPerformance` 在任务循环前起表，整轮 = LLM 生成 + 冻结测试判定）；② `SkillDeltaSample` / `ImprovementReport` 加可选 `baselineDurations` / `postDurations`，**与分数数组逐项对齐**（第 i 项就是产出第 i 个分数的那次采样），`buildImprovementReport` 里**两条同生同灭**地写 （与 ε 那条同一条判据：只写一半会让「代价」这件事在记录里既非有也非无，读侧无从判断）；③ 新增纯函数 `formatCostLine`：均值一行 + 倍数，**缺席 → null ⇒ 调用方整行不打印**（不是打一行 `0ms`），基线均值为 0 **不给倍数**（那个比值是 ∞ 或 0÷0，打出来是假读数）。**接线两条渲染路径** —— 手工 `/crsi modify` 的 `improvementLine` 与 prose `/crsi propose --prose` 的 `predictionLine`；只接一条就是本仓库记过的「局部正确全局遗漏」，故两条各一条接线测试。**零进闸**（用户裁定「只记录、先别进闸」）：`verdict` / `deltaMean` / `noise` / `minEffect` / `causal` 一律不看这两个字段 —— 样本量 k 默认 3 时再塞一个统计维度只会让问题更糟。**写侧有读侧**：`formatCostLine` 是这两个字段目前**唯一**的消费者 —— 记一个没有读者的字段就是 B1 之前的老毛病。测试 2,949 → **2,960**（2,958 passed + 2 skipped，251 文件不变；`test/core` 74/1179 → 74/1187、`test/ui` 17/201 → 17/204）。**负控如实记**：两条路径的接线测试在接线前**各自红**（先写过 RED 态），缺席分支另跑一控 —— 把 `formatCostLine` 的缺席返回从 `null` 改成哨兵字符串 ⇒ **2 红**（纯函数那条 + 接线那条），`cp` 存档还原后 sha256 逐字相符（`bb2fa499…`）。**来源**：Dream-RSI（arXiv 2609.14858）的 B2 意图是「离线评估要能看见的不只是分数」；其机制在此仓库无对应物，故只借这一条原则。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -45,7 +45,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：2,960 测试（2,958 passed + 2 skipped，0 失败）
+测试：2,966 测试（2,964 passed + 2 skipped，0 失败）
 
 ---
 
@@ -82,7 +82,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 251 个测试文件，2960 个测试
+│   │   ├── test/               # 251 个测试文件，2966 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -108,7 +108,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（2960 个测试）
+pnpm test         # vitest run（2966 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~9 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -296,7 +296,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 74      | 1187     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
+| core            | 74      | 1193     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
 | tools           | 25      | 383      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 34      | 213      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
 | ui              | 17      | 204      | commands / input / config-wizard / loop / skill-doctor                                                                                                                      |
@@ -316,7 +316,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integrity       | 9       | 58       | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 120      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **251** | **2960** | **0 失败** ✅（2958 passed + 2 skipped）                                                                                                                                    |
+| **合计**        | **251** | **2966** | **0 失败** ✅（2964 passed + 2 skipped）                                                                                                                                    |
 
 > **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 179 测试，自带
 > `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。

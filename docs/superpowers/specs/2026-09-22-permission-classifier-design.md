@@ -96,18 +96,27 @@
 
 ### 3.2 `ALL_MODES` / `MODE_CYCLE` 拆分（决策 2）
 
-**关键事实（易误判）**：`MODE_CYCLE` **不是**转盘。转盘是 `src/ui/app.tsx` 里自己的一份数组。`MODE_CYCLE` 全仓库只被 `src/core/permission.ts` 一处 import，其真实身份是 `getAllowedModes()`（`src/core/permission-config.ts`）的**合法档位基集**，喂给 `clampMode()`。
+**关键事实（易误判）**：`MODE_CYCLE` 此前**不是**转盘。转盘是 `src/ui/app.tsx:107` 里自己的一份数组（`PERMISSION_MODES`），而 `MODE_CYCLE` 全仓库只被 `src/core/permission.ts` 一处 import（喂 `VALID_MODES`），其真实身份是 `getAllowedModes()`（`src/core/permission-config.ts`）的**合法档位基集**，喂给 `clampMode()`。
 
 **因此若直接把 `bypassPermissions` 从 `MODE_CYCLE` 拿掉**：`clampMode('bypassPermissions', …)` 找不到该档，会沿层级往下走并返回 **`acceptEdits`** ⇒ config 写 `permission: bypassPermissions` 的人被**静默降档**；`nextMode` 再也返回不了它；`forbiddenModes: ['bypassPermissions']` 变成空操作。静默、安全相关、且**现有测试全绿**。
 
-**必须四处一起改**：
+**四处一起改（Step 2 已落地）**：
 
 1. 新增 `ALL_MODES`（全部合法档位）。
 2. `getAllowedModes()` 过滤 `ALL_MODES`，不再过滤 `MODE_CYCLE` —— 这一步才保住 `clampMode` 与 `maxAllowedMode` 正确。
-3. `nextMode()` 改为取 `MODE_CYCLE ∩ getAllowedModes(...)`。
+3. `nextMode()` 改为取 `MODE_CYCLE ∩ getAllowedModes(...)`（读**转盘**顺序，两张表分道后 Shift+Tab 仍走同一条路）。
 4. `src/core/permission.ts` 的 `VALID_MODES` 改为 `new Set(ALL_MODES)`，**不是** `new Set(MODE_CYCLE)`。
 
-同时让 `app.tsx` 改为 import `MODE_CYCLE`，去掉会漂移的副本。
+**Step 2 是纯机制拆分，行为零变化** —— 两张表当时**内容相同**（都是四档）。这带来一条必须讲清的性质：**新加的用例此刻全是绿的，它的价值在下次分道时才兑现**。故 Step 2 的验收靠**负控**而不是靠新用例变绿：
+
+- ① **两张表被合并**（转盘去掉 `bypassPermissions` + `getAllowedModes` 改回过滤 `MODE_CYCLE`）⇒ P4b 的不动点探测报 `expected 'acceptEdits' to be 'bypassPermissions'` —— 那行断言差异**就是降档本身**。
+- ② **只做前半步**（转盘变短、`getAllowedModes` 不动）⇒ P4b **保持绿**（确实没降档，拆分正在起作用），变红的是 P4 既有的 `cycles through all 4 modes` 与「未受限时的循环顺序不变」两条 ⇒ **转盘变短本身并不静默**，它被那两条钉住了。
+
+两次负控都在 `permission-config.ts` 上做，`cp` 存档还原后 sha256 逐字相符（`6a765741…`）。
+
+**转盘内容的改动刻意推到 Step 6**，与 `app.tsx`、`nextMode` 同一笔：Step 2 若先把 `bypassPermissions` 从 `MODE_CYCLE` 摘掉，而 `'auto'` 要到 Step 4 才成为合法档位，中间态就会是一个**三档转盘**，且 `app.tsx` 那份副本仍走四档 ⇒ 页脚与 `nextMode` 各说各话。**Step 6 一笔之内**把 `MODE_CYCLE` 改成 `['default','acceptEdits','plan','auto']` 并让 `app.tsx` import 它，转盘全程保持四档且与页脚同源。
+
+**硬约束（用户明示）**：终端页脚上 `graft | ctx` 那两行是 `app.tsx:1305` 的 `<GraftStatusLine cwd={…} ctxPct={…} />`，与权限页脚（`:1318` 起）是**两个独立 JSX 元素**。Step 6 只动权限那一段，`GraftStatusLine` 的调用与 `graft-status.tsx` 一行不改；改完用 `git diff` 逐行核对，确认 diff 里没有任何 `GraftStatusLine` / `graft-status` / `ctxPct` 相关行。
 
 ### 3.3 分层：`auto` 在层级表里的位置
 
