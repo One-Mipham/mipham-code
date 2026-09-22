@@ -118,8 +118,9 @@ describe('/permissions — rule persistence & mode help', () => {
   // `/config permission <level>` — an invocation that has never done anything,
   // since `/config`'s handler takes no arguments. `/permissions` listed five
   // modes under the heading "Switch mode with Shift+Tab" although the wheel
-  // reaches four and omits `bypassPermissions`. Both now render from one table
-  // plus `MODE_CYCLE`.
+  // reaches four: `bypassPermissions` is legal but not cyclable, so it is listed
+  // as a mode and never as a key you can press. Both views now render from one
+  // table plus `MODE_CYCLE`, which is what keeps that heading honest.
 
   it('/permissions lists every mode as a table row and states the wheel separately', async () => {
     const { content } = await permissionsCmd(makeCtx(), [])

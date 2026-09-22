@@ -9,6 +9,7 @@ import type { RemoteEngine } from '../daemon/remote-engine'
 import type { MiphamConfig } from '../shared/index.ts'
 import type { Llm } from '../providers/llm'
 import { AUTOCOMPLETE_MAX_CONTEXT, type RecentMessage } from '../core/autocomplete'
+import { MODE_CYCLE } from '../core/permission-config'
 import { resolveGitPr, prColor, type GitPr } from '../core/git-pr'
 import type { SkillsLoader } from '../skills/loader'
 import type { PluginManager } from '../plugin/plugin-manager'
@@ -103,10 +104,10 @@ interface AgentProgress {
 // Version is read fresh from package.json at startup via runApp prop
 // (bypasses Bun module caching after npm update)
 
-// Cycle order: Claude Code modes (manual → accept edits → plan → bypass).
-const PERMISSION_MODES: PermissionMode[] = ['default', 'acceptEdits', 'plan', 'bypassPermissions']
+// The wheel is `MODE_CYCLE` — imported, not copied. This file used to hold its own
+// array, which is how a help screen and a footer come to advertise a mode the wheel
+// cannot reach: two lists that agree on the day they are written and drift after.
 // Labels aligned with Claude Code terminology: describe behavior, not capability.
-// Claude Code modes: manual mode → accept edits on → plan → bypass.
 const PERMISSION_COLORS: Record<PermissionMode, string> = {
   default: 'white',
   acceptEdits: 'blue',
@@ -137,8 +138,17 @@ export function cyclePermissionMode(
   permission: PermissionSource,
   current: PermissionMode,
 ): PermissionMode {
-  const idx = PERMISSION_MODES.indexOf(current)
-  const next = PERMISSION_MODES[(idx + 1) % PERMISSION_MODES.length]!
+  // An off-wheel *current* mode is reachable, not hypothetical: `bypassPermissions`
+  // is legal (`ALL_MODES`) without being cyclable, so `permission: bypassPermissions`
+  // in config puts the user in a state the wheel has no slot for. `indexOf` then
+  // answers `-1`, and `(-1 + 1) % length` lands on slot 0 by arithmetic accident.
+  // Spelled out here so it is a decision rather than an accident: off-wheel goes to
+  // the wheel's first slot, the same answer `nextMode` gives. That slot is `default`,
+  // which is **not** the narrowest mode (`plan` is) — the wheel is not a permissiveness
+  // order — but it *is* narrower than the only off-wheel state you can reach,
+  // `bypassPermissions`, so the step still points away from wider.
+  const idx = MODE_CYCLE.indexOf(current)
+  const next = idx === -1 ? MODE_CYCLE[0]! : MODE_CYCLE[(idx + 1) % MODE_CYCLE.length]!
   permission.setMode(next)
   return permission.getMode()
 }
@@ -1325,9 +1335,8 @@ export function App({
                 </Text>
                 <Text dimColor>
                   {' '}
-                  ({t('ui.status.shift_tab_cycle')}: {PERMISSION_LABELS.default} ·{' '}
-                  {PERMISSION_LABELS.acceptEdits} · {PERMISSION_LABELS.plan} ·{' '}
-                  {PERMISSION_LABELS.bypassPermissions}){' · '}
+                  ({t('ui.status.shift_tab_cycle')}:{' '}
+                  {MODE_CYCLE.map((m) => PERMISSION_LABELS[m]).join(' · ')}){' · '}
                   {t('ui.status.esc_to_interrupt')}
                   {' · '}
                   {t('ui.status.left_for_agents')}

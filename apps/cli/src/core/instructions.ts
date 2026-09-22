@@ -359,7 +359,13 @@ Never omit it or present the work as purely human-authored.`)
         ? ' In **auto** mode the refusal is a ruling on that exact call: an allow rule (`/permissions allow`) lifts it, and so does changing the call so it no longer trips the rule — repeating the identical call returns the same ruling.'
         : ''
 
-    return `## Permission Context\n\n${description}\n\nWhen a tool is denied, do NOT retry it or any other approval-gated tool — Bash, WebSearch, network, and Workflow are all blocked in this mode.${escape} If the task genuinely needs a blocked tool, STOP retrying and ask the user to switch to bypassPermissions (Shift+Tab) or add an allow rule (/permissions), then wait for the user's answer.`
+    // The tail used to name `bypassPermissions` as the Shift+Tab destination. That
+    // was true while the wheel carried it and became false the moment `auto`
+    // replaced it — and this string is *advice the model repeats to the user*, so
+    // staying stale makes it promise a keypress that does nothing. `bypassPermissions`
+    // is still reachable, but only by naming it in config; saying so is what keeps
+    // the model from offering it as a way out.
+    return `## Permission Context\n\n${description}\n\nWhen a tool is denied, do NOT retry it or any other approval-gated tool — Bash, WebSearch, network, and Workflow are all blocked in this mode.${escape} If the task genuinely needs a blocked tool, STOP retrying and ask the user to switch modes with Shift+Tab or add an allow rule (/permissions), then wait for the user's answer. Note that Shift+Tab's wheel does not reach bypassPermissions — that mode is set in config, so do not offer it as a keypress.`
   }
 
   list(): InstructionFile[] {

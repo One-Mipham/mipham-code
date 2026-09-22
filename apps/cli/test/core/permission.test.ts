@@ -336,7 +336,10 @@ describe('PermissionSystem', () => {
       ps.cycleMode()
       expect(ps.getMode()).toBe('plan')
       ps.cycleMode()
-      // Should skip bypassPermissions, wrap to default
+      // bypassPermissions is skipped — twice over: forbidden here, and never on
+      // the wheel in the first place. The wheel carries on to `auto`.
+      expect(ps.getMode()).toBe('auto')
+      ps.cycleMode()
       expect(ps.getMode()).toBe('default')
     })
 
@@ -768,12 +771,29 @@ describe('PermissionSystem', () => {
       expect(visited).not.toContain('bypassPermissions')
     })
 
-    it('未受限时的循环顺序不变（default → acceptEdits → plan → bypassPermissions）', () => {
+    it('未受限时的循环顺序（default → acceptEdits → plan → auto，四档全是合法档位）', () => {
       const ps = new PermissionSystem('default')
       expect(ps.cycleMode()).toBe('acceptEdits')
       expect(ps.cycleMode()).toBe('plan')
-      expect(ps.cycleMode()).toBe('bypassPermissions')
+      expect(ps.cycleMode()).toBe('auto')
+      // Four presses return to the start: the wheel is `MODE_CYCLE`, and
+      // `bypassPermissions` — legal, just not cyclable — is deliberately not on it.
       expect(ps.cycleMode()).toBe('default')
+    })
+
+    it('落在转盘之外的档位按 Shift+Tab 不会被卡住（bypassPermissions 是可达状态）', () => {
+      // `permission: bypassPermissions` in config / MIPHAM_DAEMON_PERMISSION puts
+      // the user on a mode the wheel has no slot for. `nextMode`'s off-cycle branch
+      // used to answer `clampMode(current)` — and clamping an *allowed* mode is the
+      // identity — so Shift+Tab was a no-op there, and `nextMode` handed back a mode
+      // the wheel cannot reach. Guard both halves: it must move, and never to bypass.
+      const ps = new PermissionSystem('bypassPermissions')
+      expect(ps.getMode()).toBe('bypassPermissions')
+
+      const next = ps.cycleMode()
+      expect(next).not.toBe('bypassPermissions')
+      expect(MODE_CYCLE).toContain(next)
+      expect(next).toBe('default') // the least permissive end — safe to be wrong toward
     })
 
     it('禁用 bypass 后请求 bypass ⇒ 落到次宽的 auto（层级表插档的连带结果，如实钉住）', () => {
@@ -887,19 +907,23 @@ describe('PermissionSystem', () => {
 
   describe('P4b — ALL_MODES 是合法档位集，MODE_CYCLE 只是转盘', () => {
     /**
-     * 这两张表今天**内容相同**，所以本组用例现在全都绿，看起来像在测空气。
-     * 它的价值在下一次两张表分道扬镳的时刻：`getAllowedModes` 一旦被改回过滤
-     * `MODE_CYCLE`，第一条就会红 —— 那一刻 `clampMode('bypassPermissions')` 会
-     * 沿途下走到 `acceptEdits`，即一次**静默降档**，而其余测试全绿。
-     * 两条负控都实跑过（都在 `permission-config.ts` 上做，做完 `cp` 还原并逐字比对 sha256）：
+     * 这两张表**今天内容不同**（`auto` 在转盘上、`bypassPermissions` 不在），所以本组
+     * 用例第一次是**真的在承重**，不再是「等将来分叉」的占位：`getAllowedModes` 一旦被
+     * 改回过滤 `MODE_CYCLE`，第一条立刻红 —— 那一刻 `clampMode('bypassPermissions')`
+     * 会沿途下走到层级表的下一格（**今天实测是 `auto`**；`auto` 进层级表之前是
+     * `acceptEdits` —— 落点随层级表移动，别把某一版的读数当成性质），即一次
+     * **静默降档**，而其余测试全绿。
      *
-     * - **两张表被合并**（转盘去掉 `bypassPermissions` + `getAllowedModes` 改回过滤
-     *   `MODE_CYCLE`）：本条报 `expected 'acceptEdits' to be 'bypassPermissions'`
-     *   —— 那行差异就是静默降档本身。这正是本组要抓的那一种坏法。
-     * - **只做前半步**（转盘变短、`getAllowedModes` 仍过滤 `ALL_MODES`）：本条
-     *   **保持绿**（确实没有任何降档，拆分正在起作用），但 P4 的
-     *   `cycles through all 4 modes` 与 `未受限时的循环顺序不变…` 两条转红
-     *   —— 转盘变短本身不是静默的，它被那两条钉住了。
+     * 负控实跑过（在 `permission-config.ts` 上做，做完 `cp` 还原并逐字比对 sha256）：
+     *
+     * - **两张表被合并**（`getAllowedModes` 改回过滤 `MODE_CYCLE`）：第一条报
+     *   `expected 'auto' to be 'bypassPermissions'`（1 failed | 3 passed | 99 skipped）——
+     *   那行差异就是静默降档本身。**落点是 `auto` 而不是 `acceptEdits`**：`clampMode`
+     *   沿层级表下走，而 `auto` 现在正坐在 `bypassPermissions` 下面一格 —— 同一处坏法的
+     *   观测值随层级表变过，本条记的是**实测**值。这正是本组要抓的那一种坏法。
+     * - **转盘变短、`getAllowedModes` 仍过滤 `ALL_MODES`**：本条**保持绿**（确实没有任何
+     *   降档，拆分正在起作用），但循环顺序由 P4 那两条钉住
+     *   —— 转盘变短本身不是静默的。
      */
     it('合法档位集里的每一档都是 clampMode 的不动点（无限制时不许被改写）', () => {
       for (const mode of ALL_MODES) {

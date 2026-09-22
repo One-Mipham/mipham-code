@@ -65,10 +65,12 @@ function renderModeTable(): string {
  * list as if it were the other is what the old copy did, and it is how a help
  * screen comes to advertise a mode the wheel cannot reach.
  *
- * `src/ui/app.tsx` still keeps its own copy of this order (`PERMISSION_MODES`);
- * the two agree today (both are `default → acceptEdits → plan →
- * bypassPermissions`). Until that copy is deleted, this line follows `MODE_CYCLE`
- * — the canonical table — and not the wheel.
+ * `src/ui/app.tsx` used to keep its own copy of this order (`PERMISSION_MODES`).
+ * The two happened to agree on the day each was written — which is the state that
+ * reads as safe and is not: the copy is what would have kept the footer saying
+ * `bypassPermissions` after the wheel moved to `auto`. It now imports `MODE_CYCLE`
+ * like this file does, so the help line and the footer are one list by
+ * construction.
  */
 function renderCycleLine(): string {
   return MODE_CYCLE.join(' → ')

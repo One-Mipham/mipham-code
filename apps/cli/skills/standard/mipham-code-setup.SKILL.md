@@ -356,7 +356,9 @@ refusal is _not_ a policy decision and can be retried.
 ### 6.2 — Configure
 
 Press **Shift+Tab** to change the mode live; it cycles
-`default → acceptEdits → plan → bypassPermissions` and lasts for the session only.
+`default → acceptEdits → plan → auto` and lasts for the session only.
+`bypassPermissions` is a legal mode but is deliberately **not** on the wheel —
+it is reached by naming it in config, where the user has said what they mean.
 
 To persist a mode for a project, in `.mipham/config.yml`:
 

@@ -114,11 +114,18 @@ export const ALL_MODES: PermissionMode[] = [
  * separate is what lets `forbiddenModes` drop an entry from the cycle without
  * disturbing the ranking that `clampMode` walks.
  *
- * Today this coincides with `ALL_MODES`. They diverge as soon as a mode becomes
- * legal-without-being-cyclable — that divergence is the entire reason there are
- * two arrays, so do not "simplify" one back into the other.
+ * The two arrays **differ**, and that is the whole reason both exist:
+ * `bypassPermissions` is a legal mode that no Shift+Tab reaches (asked for
+ * through config / `MIPHAM_DAEMON_PERMISSION` / settings, where the user named
+ * it explicitly), while `auto` is on the wheel. Collapsing them back into one
+ * would either drop a legal mode or advertise one the wheel cannot reach —
+ * **do not "simplify" one back into the other.**
+ *
+ * Both of those are load-bearing, so an off-wheel *current* mode is a real state
+ * (`permission: bypassPermissions` in config, then Shift+Tab). `nextMode` owns
+ * the rule for it — see there.
  */
-export const MODE_CYCLE: PermissionMode[] = ['default', 'acceptEdits', 'plan', 'bypassPermissions']
+export const MODE_CYCLE: PermissionMode[] = ['default', 'acceptEdits', 'plan', 'auto']
 
 /** 规范形 → 把别名与大小写归一到一个键上（键一律小写）。 */
 const MODE_ALIASES: Record<string, PermissionMode> = {
@@ -295,8 +302,18 @@ export function nextMode(
   const cycle = MODE_CYCLE.filter((m) => allowed.includes(m))
   const idx = cycle.indexOf(current)
   if (idx === -1) {
-    // Current mode is not on the allowed cycle — clamp then find next
-    return clampMode(current, restrictions)
+    // `current` is off the cycle: legal-but-uncyclable (`bypassPermissions`) or
+    // forbidden by the restrictions. Reading "clamp then find next" as
+    // `return clampMode(current)` returns `current` itself in the first case —
+    // clamping an *allowed* mode is the identity — so Shift+Tab would do nothing
+    // and `nextMode` would hand back a mode the wheel cannot reach. Clamp *onto*
+    // the cycle, then advance from there; if that still lands off-cycle, take the
+    // cycle's first entry. That entry is `default`, which is not the narrowest mode
+    // on the wheel (`plan` is) — the wheel is not a permissiveness order — but the
+    // only off-wheel state reachable is `bypassPermissions`, so the fallback still
+    // steps away from wider rather than toward it.
+    const onCycle = cycle.indexOf(clampMode(current, restrictions))
+    return onCycle === -1 ? (cycle[0] ?? current) : cycle[(onCycle + 1) % cycle.length]!
   }
   return cycle[(idx + 1) % cycle.length]!
 }

@@ -324,8 +324,18 @@ export interface InstructionFile {
 }
 
 // ── Permission Types ──
-/** Four explicit permission modes matching Claude Code's permission architecture */
-export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions'
+/**
+ * Permission modes, matching Claude Code's permission architecture.
+ *
+ * The CLI **vendors a copy** of this union at `apps/cli/src/shared/types.ts`
+ * (so the npm package stays self-contained), and that copy carries the
+ * long-form rationale plus a fifth member this line used to lack: `'auto'`,
+ * the classifier mode. Nothing mechanically enforces the two member lists
+ * staying equal: `'auto'` landed in the copy, was missed here, and **nothing
+ * reddened** — the only cross-copy sync script (`scripts/sync-mipham-models.ts`)
+ * covers the models JSON, not this file. So when you touch one, read the other.
+ */
+export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'auto' | 'bypassPermissions'
 
 /**
  * Backward-compatible alias: `PermissionMode` plus the legacy 3-level

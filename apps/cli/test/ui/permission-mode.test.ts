@@ -16,6 +16,7 @@
 import { describe, it, expect } from 'vitest'
 import { livePermissionMode, cyclePermissionMode } from '../../src/ui/app'
 import { PermissionSystem } from '../../src/core/permission'
+import { MODE_CYCLE } from '../../src/core/permission-config'
 
 describe('P3 — 页脚状态与执行同源', () => {
   it('初始值取自 live 权限系统，而不是本地字面量（上限把 default 压成了 plan）', () => {
@@ -49,5 +50,24 @@ describe('P3 — 页脚状态与执行同源', () => {
     expect(cyclePermissionMode(ps, 'default')).toBe('acceptEdits')
     expect(cyclePermissionMode(ps, 'acceptEdits')).toBe('plan')
     expect(ps.getMode()).toBe('plan')
+  })
+
+  // 转盘到不了的档位是**可达状态**（`permission: bypassPermissions` 写在 config 里），
+  // 所以这条分支是真的会被走到，不是防御性代码。
+  it('转盘之外的档位（bypassPermissions）按 Shift+Tab 回到转盘上，而不是原地不动', () => {
+    const ps = new PermissionSystem('bypassPermissions')
+
+    const shown = cyclePermissionMode(ps, 'bypassPermissions')
+
+    // 本条**不是**在抓旧缺陷：旧写法 `PERMISSION_MODES[(-1 + 1) % 4]` 同样落在 slot 0，
+    // 属于「算对了但不是想对了」—— 而且那时 `bypassPermissions` 还在转盘上，`idx` 根本
+    // 到不了 -1，这条分支是**不可达**的。Step 7 把它变成可达（`auto` 进转盘、
+    // `bypassPermissions` 出转盘），于是「落点是什么」得从算术巧合升格成一个明确的决定，
+    // 本条就是那个决定的锚。负控实跑过：把守卫改成 `idx === -1 ? current : …`，本条立刻红
+    // —— `expected 'bypassPermissions' not to be 'bypassPermissions'`，即转盘卡死。
+    expect(shown).not.toBe('bypassPermissions')
+    expect(MODE_CYCLE).toContain(shown)
+    expect(shown).toBe('default')
+    expect(ps.getMode()).toBe(shown)
   })
 })
