@@ -11,6 +11,7 @@ import type { ChatRequest } from '../providers/registry'
 import type { Llm } from '../providers/llm'
 import { ContextManager } from './context'
 import { PermissionSystem } from './permission'
+import type { ApprovalDecision } from './permission'
 import type { HookEngine } from './hooks'
 import type { ArtifactServer } from '../artifacts/server'
 import type { AgentRegistry } from '../agent/agent-registry'
@@ -701,7 +702,7 @@ export class QueryEngine {
     const toolCallRecords: ToolCallRecord[] = []
     for (const toolUse of toolUses) {
       const toolStart = Date.now()
-      const result = await this.executeTool(toolUse.name, toolUse.input)
+      const result = await this.executeTool(toolUse.name, toolUse.input, signal)
       yield {
         type: 'tool_result',
         tool_use_id: toolUse.id,
@@ -1041,7 +1042,7 @@ export class QueryEngine {
 
       // Execute tools and feed results back to the model for the next turn
       for (const toolUse of toolUses) {
-        const result = await this.executeTool(toolUse.name, toolUse.input)
+        const result = await this.executeTool(toolUse.name, toolUse.input, signal)
         lastActivity = Date.now()
         yield {
           type: 'tool_result',
@@ -1068,7 +1069,11 @@ export class QueryEngine {
     // Max turns reached — safety limit, stop gracefully
   }
 
-  private async executeTool(name: string, params: Record<string, unknown>): Promise<ToolResult> {
+  private async executeTool(
+    name: string,
+    params: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<ToolResult> {
     getMetrics().toolCalls.inc({ tool_name: name })
     const tool = this.tools.get(name)
     if (!tool) {
@@ -1080,12 +1085,20 @@ export class QueryEngine {
       return { success: false, content: '', error: `Unknown tool: ${name}${hint}` }
     }
 
-    // Security: check permission before executing
-    if (this.permission.needsApproval(tool, params)) {
+    // Security: check permission before executing.
+    //
+    // `resolveApproval` answers the same question `needsApproval` did for every mode
+    // except `auto`, where it additionally lets the classifier rule on a call the
+    // static chain could only refuse. It is deliberately a superset — the earlier
+    // `needsApproval(...)` check would have been a *second* gate, and a second gate
+    // is how a call refused here gets allowed there. The signal is the caller's, so
+    // an interrupt cancels a ruling in flight (the classifier denies on abort).
+    const decision = await this.permission.resolveApproval(tool, params, { signal })
+    if (decision.level === 'ask') {
       // P1-4: Increment consecutive block counter; if limit exceeded,
       // tell the model to move on instead of retrying.
       const limitExceeded = this.permission.incrementBlockCounter()
-      const baseError = this.buildDenialError(name, tool, params)
+      const baseError = this.buildDenialError(name, tool, params, decision)
       const moveOnHint = limitExceeded
         ? '\n(Consecutive block limit reached. Please try a different approach or ask the user for guidance.)'
         : ''
@@ -1451,12 +1464,31 @@ export class QueryEngine {
   /**
    * Build a rich permission-denial error naming the mode (level), the setting
    * (rule/level) that caused the denial, and the correct fix (#52).
+   *
+   * The `decision` comes from `resolveApproval` and is used rather than re-derived:
+   * `explainDenial` can only describe the *static* chain, so for a classifier
+   * refusal it would report the underlying `mode-baseline`/`tool-default` and tell
+   * the model to switch modes — advice that changes nothing, because the refusal is
+   * the classifier's, not the mode's. The parameter is optional so the static path
+   * keeps working unchanged where no decision is at hand.
    */
   private buildDenialError(
     name: string,
     tool: ToolDefinition,
     params: Record<string, unknown>,
+    decision?: ApprovalDecision,
   ): string {
+    if (decision?.source === 'classifier' && decision.denialReason === 'classifier-deny') {
+      // Two different facts, and the model acts differently on each: a policy
+      // refusal is final, while an unreachable/unreadable classifier means the call
+      // was *held back* and a retry is appropriate. Telling it "denied" for the
+      // second makes it abandon work that was never actually judged.
+      const reason = decision.classifierReason ?? ''
+      return decision.retryable
+        ? t('errors.tool_denied_classifier_unavailable', { name, reason })
+        : t('errors.tool_denied_classifier', { name, reason })
+    }
+
     const { reason, rulePattern } = this.permission.explainDenial(tool, params)
     const mode = this.permission.getMode()
     switch (reason) {

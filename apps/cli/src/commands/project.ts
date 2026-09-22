@@ -32,14 +32,13 @@ export {
  * carry its own hand-written list, and they had already drifted: `/setup 5` was
  * still listing the retired 3-level `auto`/`ask`/`bypass` spellings and telling
  * the user to run `/config permission <level>` — a command that has never existed
- * (`/config` takes no arguments). Descriptions state what the mode does **today**;
- * `auto`'s marker comes off when the classifier is wired.
+ * (`/config` takes no arguments). Descriptions state what the mode does **today**.
  */
 const MODE_DESCRIPTIONS: Record<PermissionMode, string> = {
   plan: 'reads only (Read/Grep/Glob); nothing writes or runs',
   default: 'per-tool defaults (Bash/Write/Edit are refused, not queued)',
   acceptEdits: 'reads + edits free; Bash auto-runs read/check commands',
-  auto: 'a classifier decides each call that would otherwise be refused (⚠️ classifier not wired yet — such calls are still refused)',
+  auto: 'a classifier rules on each call that would otherwise be refused (reads are never gated)',
   bypassPermissions: 'skip ALL permission checks (⚠️ use with caution)',
 }
 

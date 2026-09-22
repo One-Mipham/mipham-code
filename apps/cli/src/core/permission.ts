@@ -14,6 +14,23 @@ import {
   normalizeRestrictions,
   ALL_MODES,
 } from './permission-config'
+import type { PermissionClassifier } from './permission-classifier'
+
+/**
+ * A tool that only reads: it cannot modify a file or run anything.
+ *
+ * Named and shared because two modes now depend on the same judgement — `plan`
+ * allows exactly these and nothing else, and `auto` lets them past the classifier.
+ * Two hand-written copies of this list are how the two modes would come to disagree
+ * about what "read-only" means, which is the shape of defect this file has already
+ * been bitten by more than once.
+ *
+ * The `category === 'file'` half is load-bearing rather than redundant: it keeps a
+ * future non-file tool that happens to be called `Read` out of the carve-out.
+ */
+function isReadOnlyTool(tool: ToolDefinition): boolean {
+  return tool.category === 'file' && ['Read', 'Grep', 'Glob'].includes(tool.name)
+}
 
 /**
  * Check if a Bash command is a "verification-only" command that should be
@@ -104,6 +121,51 @@ export type PermissionDenialReason =
   | 'mode-baseline' // mode-specific default (acceptEdits/plan) → ask
   | 'tool-default' // tool.permission === 'ask'
   | 'system-default' // no rule, no tool permission → fallback ask
+  | 'classifier-deny' // `auto` mode's classifier ruled against the call
+
+/**
+ * Which denial reasons `auto` mode's classifier is allowed to rule on — an
+ * **allowlist**, not a denylist, and the direction is the whole point.
+ *
+ * `deny-rule` and `ask-rule` are absent deliberately: those are decisions a human
+ * wrote down. Adding them here would silently turn the classifier into a universal
+ * bypass of every org-level rule — the one thing the mode must never be. A reason
+ * missing from this set therefore fails **closed** (the call stays `'ask'`), which
+ * is why the set is spelled as the reasons that are *permitted*, not the ones that
+ * are not.
+ *
+ * `legacy-rule` is absent for the same reason as the rules: it is an explicit
+ * per-tool decision from `setRule()`. `classifier-deny` is absent because it is not
+ * a *static* reason at all — `explainDenial()` never returns it.
+ */
+const CLASSIFIABLE: ReadonlySet<PermissionDenialReason> = new Set<PermissionDenialReason>([
+  'mode-baseline',
+  'tool-default',
+  'system-default',
+])
+
+/**
+ * What a tool call actually resolved to, after the classifier has had its say.
+ *
+ * `level` is what the caller acts on (`'ask'` ⇒ blocked). `source` records whether
+ * the decision was the static chain's or the classifier's, so a caller can word the
+ * denial correctly: telling a model "denied" when the classifier was merely
+ * unreachable makes it abandon the task, while the honest reading is "this did not
+ * run, a retry is appropriate".
+ */
+export interface ApprovalDecision {
+  level: PermissionLevel
+  source: 'static' | 'classifier'
+  /** Why it is `'ask'`. Present on every denial, from either source. */
+  denialReason?: PermissionDenialReason
+  /** The classifier's own one-line justification, when it ruled. */
+  classifierReason?: string
+  /**
+   * `true` ⇒ held back because the classifier could not be reached or its answer
+   * could not be read — **not** a policy decision, and worth retrying.
+   */
+  retryable?: boolean
+}
 
 export class PermissionSystem {
   private allowRules: PermissionRuleEntry[] = []
@@ -124,6 +186,19 @@ export class PermissionSystem {
   private checkCache = new Map<string, PermissionLevel>()
   private cacheMode: PermissionMode | null = null
 
+  /**
+   * Cache for classifier rulings, same key as `checkCache`. Only **terminal**
+   * rulings are stored — see `resolveApproval`.
+   */
+  private classifierCache = new Map<string, ApprovalDecision>()
+
+  /**
+   * The `auto`-mode classifier, when one was handed in. Absent is a legal state
+   * (every other mode ignores it, and `auto` without one fails closed), so nothing
+   * here assumes it exists.
+   */
+  private classifier: PermissionClassifier | undefined = undefined
+
   // ── Org-level restrictions (P0 security) ──
   private restrictions: PermissionRestrictions | undefined = undefined
 
@@ -134,7 +209,32 @@ export class PermissionSystem {
   /** Invalidate the permission cache (called on any rule/mode change). */
   private invalidateCache(): void {
     this.checkCache.clear()
+    this.classifierCache.clear()
     this.cacheMode = null
+  }
+
+  /**
+   * Hand in the classifier that `auto` mode consults. Separating this from the
+   * constructor keeps the permission system free of provider/registry imports: the
+   * wiring site (the CLI entry, where the registry exists) builds the classifier and
+   * attaches it here. `undefined` removes it, which makes `auto` refuse every gated
+   * call again — fail-closed, not fail-open.
+   *
+   * The seam deliberately lives on the permission system rather than on the engine:
+   * an engine-side setter would be a new engine capability that the daemon would
+   * then have to match or be given a named exemption from
+   * (`test/integrity/daemon-capability-parity.test.ts`). The cost of that choice is
+   * stated where it matters: this guard therefore cannot see whether anyone ever
+   * calls this, which is why the wiring has its own source-side assertion.
+   */
+  setClassifier(classifier: PermissionClassifier | undefined): void {
+    this.classifier = classifier
+    this.invalidateCache()
+  }
+
+  /** Whether an `auto`-mode classifier is attached. For diagnostics, not decisions. */
+  hasClassifier(): boolean {
+    return this.classifier !== undefined
   }
 
   constructor(modeOrLevel: PermissionLevel = 'default') {
@@ -239,6 +339,23 @@ export class PermissionSystem {
       subPerm.deny(denyEntry.pattern)
     }
 
+    // The classifier travels with the `auto` mode, not with the agent: a sub-agent
+    // gets it exactly when its *resolved* mode is `auto`, and not otherwise. That
+    // makes the two natural ways in behave consistently — an agent that names `auto`
+    // explicitly, and one that inherits from a parent already sitting in `auto`
+    // (`resolveAgentMode` reads `inherit` as "the parent's mode"). Inheriting the
+    // label without the engine would be the worst of both: a sub-agent pinned to a
+    // mode whose only substance is a classifier it does not have, refusing every
+    // gated call with a message about a mode that is working fine for its parent.
+    //
+    // No sub-agent lands here by default: the default mode is `default`, so this is
+    // opt-in through the mode itself. What is *not* inherited is any allowance —
+    // `resolvedMode` is already clamped against the org restrictions above, so an
+    // org that caps the mode also removes the classifier.
+    if (resolvedMode === 'auto' && this.classifier) {
+      subPerm.setClassifier(this.classifier)
+    }
+
     return subPerm
   }
 
@@ -341,7 +458,7 @@ export class PermissionSystem {
     }
 
     // ── Cache lookup (P2): reuse decision for same tool+mode+input ──
-    const cacheKey = tool.name + '|' + JSON.stringify(input, Object.keys(input).sort())
+    const cacheKey = this.cacheKey(tool, input)
     if (this.cacheMode === this.mode) {
       const cached = this.checkCache.get(cacheKey)
       if (cached !== undefined) return cached
@@ -451,6 +568,106 @@ export class PermissionSystem {
     return { reason: 'system-default' }
   }
 
+  /**
+   * Same key both caches use. Extracted rather than written twice: two copies of a
+   * cache key would drift, and a key that drifts is a cache that answers for the
+   * wrong call.
+   */
+  private cacheKey(tool: ToolDefinition, input: Record<string, unknown>): string {
+    return tool.name + '|' + JSON.stringify(input, Object.keys(input).sort())
+  }
+
+  /**
+   * Resolve a call to a decision, consulting `auto` mode's classifier when — and
+   * only when — the static chain answered `'ask'` for a reason a classifier is
+   * allowed to rule on.
+   *
+   * **The step order below is the security contract, not an implementation
+   * detail.** Each numbered step exists to close a specific way this could go
+   * wrong, and reordering them is how the mode would become a bypass:
+   *
+   * 1. `check()` first, untouched. Everything it decides *without* asking —
+   *    `bypassPermissions`, `acceptEdits`, `plan`, allow rules, tool defaults that
+   *    are not `'ask'` — is returned verbatim. This is the compatibility guarantee:
+   *    non-`'ask'` decisions are byte-for-byte what they were before this method
+   *    existed, and the classifier is never even consulted for them.
+   * 2. Only `'ask'` continues, and only for a reason in `CLASSIFIABLE`. A denial
+   *    caused by a deny rule, an ask rule, or a legacy exact-name rule stops here
+   *    and stays denied. Without this step the classifier would be a universal
+   *    bypass of every rule a human wrote.
+   * 3. `auto` without a classifier stops here too, still `'ask'` — fail-closed.
+   * 4. A ruling of "allow" is **not** returned as `'bypass'`. It is re-derived
+   *    through `allowRuleDecision()`, the same ceiling-aware path an allow *rule*
+   *    takes, so the classifier can never grant more than a rule could and an org's
+   *    `maxAllowedMode` caps it automatically.
+   *
+   * A refusal is always `'ask'` — never a new kind of denial. The classifier may
+   * only ever turn a blocked call into a running one; it cannot manufacture a
+   * denial the static chain did not already produce. Read the other way round: it
+   * can only *narrow* what runs, never widen the gate.
+   *
+   * Caching: rulings are cached on the same key as `check()`, but a ruling that came
+   * from an engine failure is **not** cached. Its own verdict says a retry is
+   * appropriate (`retryable`), and a cache would make that false by replaying the
+   * failure without asking anyone.
+   */
+  async resolveApproval(
+    tool: ToolDefinition,
+    input: Record<string, unknown>,
+    opts: { signal?: AbortSignal } = {},
+  ): Promise<ApprovalDecision> {
+    // 1. The static chain decides everything it can decide without asking.
+    const level = this.check(tool, input)
+    if (level !== 'ask') return { level, source: 'static' }
+
+    // 2. Why it is 'ask' — and may a classifier rule on that reason at all?
+    const { reason } = this.explainDenial(tool, input)
+    if (!CLASSIFIABLE.has(reason)) return { level: 'ask', source: 'static', denialReason: reason }
+
+    // 3. Only `auto` consults a classifier, and only if one was handed in.
+    if (!this.classifier || this.mode !== 'auto') {
+      return { level: 'ask', source: 'static', denialReason: reason }
+    }
+
+    const key = this.cacheKey(tool, input)
+    const cached = this.classifierCache.get(key)
+    if (cached) return cached
+
+    const verdict = await this.classifier.classify({
+      tool: tool.name,
+      input,
+      mode: this.mode,
+      reason,
+      signal: opts.signal,
+    })
+
+    if (verdict.allow) {
+      // 4. An allow is re-derived through the rule path, so the org ceiling applies.
+      const decision: ApprovalDecision = {
+        level: this.allowRuleDecision(tool, input),
+        source: 'classifier',
+        classifierReason: verdict.reason,
+      }
+      // Only cache a ruling that actually let the call through, or one the
+      // classifier refused on policy. (`allowRuleDecision` can still answer 'ask'
+      // under a ceiling — that is a terminal answer too, so it caches.)
+      this.classifierCache.set(key, decision)
+      return decision
+    }
+
+    const decision: ApprovalDecision = {
+      level: 'ask',
+      source: 'classifier',
+      denialReason: 'classifier-deny',
+      classifierReason: verdict.reason,
+      retryable: verdict.retryable,
+    }
+    // A retryable failure is a statement that asking again is appropriate; caching
+    // it would contradict the field we just set.
+    if (!verdict.retryable) this.classifierCache.set(key, decision)
+    return decision
+  }
+
   // ── Helpers ──
 
   private ruleMatches(
@@ -533,31 +750,40 @@ export class PermissionSystem {
 
       case 'plan':
         // Only reads, no writes or executes
-        return tool.category === 'file' && ['Read', 'Grep', 'Glob'].includes(tool.name)
-          ? 'bypass'
-          : 'ask'
+        return isReadOnlyTool(tool) ? 'bypass' : 'ask'
 
       case 'auto':
-        // The whole mode, in one line. Returning the sentinel `'mode-baseline'`
-        // here instead — the instinct, since `default` does exactly that — would
-        // be a **half-broken** mode rather than an obviously broken one: `check()`
-        // reaches the baseline at step 5, *before* step 6 reads `tool.permission`,
-        // and 20 tools declare `permission: 'self'`. They would keep
-        // auto-approving, so the calls the classifier most needs to see are the
-        // ones it never sees, while every other tool routes correctly.
+        // Reads stay free; everything else is handed to the classifier.
         //
-        // (20 is counted from `createToolRegistry()`, not from grep: the literal
-        // `permission: 'self'` also appears in prose comments — including, once,
-        // in this very rationale, which is how the first draft said 22.)
+        // The tempting one-liner is `return 'ask'` — every call ruled on, which is
+        // what a mode table reading `auto → classify` suggests. Measured against the
+        // actual registry, that one-liner is a broken mode: 20 of the 31 tools
+        // declare `permission: 'self'`, and the list includes **Read, Grep and
+        // Glob**. Gating those makes `auto` the only mode in the ladder that cannot
+        // read a file without an LLM round-trip — every other mode (including
+        // `plan`) allows reads unconditionally — and when the classifier is
+        // unreachable, fail-closed means the agent cannot even read. A gate that
+        // fails catastrophically on the most benign operation is not a conservative
+        // gate; it is a broken one.
         //
-        // A literal `'ask'` makes step 5 return, so **every** call in this mode
-        // reaches `resolveApproval` and the classifier rules on all of them —
-        // matching Claude Code, whose mode table maps `auto` to `classify`.
+        // So reads are carved out using `plan`'s own definition of read-only rather
+        // than a second list, and everything else — `Bash`, `Write`, `Edit`, and the
+        // `self`-declared tools that can reach outside this machine (`Git`,
+        // `WebFetch`, `CronCreate`, `Task`, `Memory`, …) — reaches
+        // `resolveApproval`. That is the half the classifier is actually needed for,
+        // and leaving them to auto-approve would be the fail-open version of this
+        // mistake.
         //
-        // This does not contradict "the classifier may only allow, never deny":
-        // the baseline is `'ask'` (which is what an un-configured Mipham already
-        // answers), and a classifier refusal merely *keeps* that `'ask'`.
-        return 'ask'
+        // Returning the sentinel `'mode-baseline'` instead would hand those tools to
+        // step 6 of `check()`, i.e. `tool.permission` — `'self'` for all 20, so they
+        // would auto-approve and the classifier would never see them. (20 is counted
+        // from `createToolRegistry()`, not from grep: the literal `permission: 'self'`
+        // also appears in prose comments.)
+        //
+        // This does not contradict "the classifier may only allow, never deny": the
+        // baseline is `'ask'` (what an un-configured Mipham already answers), and a
+        // classifier refusal merely *keeps* that `'ask'`.
+        return isReadOnlyTool(tool) ? 'bypass' : 'ask'
 
       case 'bypassPermissions':
         return 'bypass'

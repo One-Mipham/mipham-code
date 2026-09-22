@@ -498,12 +498,22 @@ export class SubAgent {
           // The gate is never absent: when nobody handed in a permission system, `gate` is
           // the CLI's default mode (see above), so this check always runs.
           // P0-3: Uses isolated subPermission (clamped by org restrictions) instead of parent's.
-          if (gate.needsApproval(tool, effectiveInput)) {
+          //
+          // `resolveApproval` replaces `needsApproval` here for the same reason as in
+          // `engine.ts`: in `auto` mode the static chain can only say `'ask'`, and the
+          // classifier is what turns that into a running call. `gate` only carries a
+          // classifier when the sub-agent's resolved mode is `auto` (see
+          // `createSubAgentPermission`), so the default sub-agent is unchanged.
+          const decision = await gate.resolveApproval(tool, effectiveInput, { signal })
+          if (decision.level === 'ask') {
             currentMessages.push({
               role: 'user' as const,
               content:
                 `Tool "${tu.name}" requires user approval (permission: ask). ` +
-                `Cannot execute in non-interactive sub-agent context.`,
+                `Cannot execute in non-interactive sub-agent context.` +
+                (decision.source === 'classifier' && decision.classifierReason
+                  ? ` Classifier: ${decision.classifierReason}`
+                  : ''),
             })
             continue
           }

@@ -792,6 +792,173 @@ describe('QueryEngine', () => {
       const result = chunks.find((c) => c.type === 'tool_result')
       expect(result?.content).toContain('requires approval under "default" mode')
     })
+
+    // ── auto 档：分类器真的挡在闸门上（不是只有单测在过家家） ──────────────
+    //
+    // 这一组每条都数 `classify()` 被调了几次。只断言结果的话，「放行 ⇒ 执行」在
+    // `bypassPermissions` 下也成立（那是空断言），且一条把每次调用都送去问 LLM 的
+    // 实现同样全绿 —— 计数把两者都钉死。
+    describe('auto 档的分类器闸门', () => {
+      const bashTool = (onRun: () => void): ToolDefinition => ({
+        ...mockTool('bash', async () => {
+          onRun()
+          return { success: true, content: 'ran' }
+        }),
+        permission: 'ask',
+      })
+
+      /**
+       * 只在**第一轮**发这一次工具调用，之后给纯文本收尾。
+       *
+       * 发满每一轮会让引擎一遍遍重放同一次调用（被拒也算一轮），于是「执行了几次」
+       * 的读数变成引擎的轮数上限而不是 1 —— 计数断言就成了在量别的东西。
+       */
+      const oneBashCall = (name = 'bash') => {
+        let turn = 0
+        return mockProviderRegistry(async function* () {
+          if (turn++ > 0) {
+            yield { type: 'text' as const, content: 'done' }
+            yield { type: 'stop' as const }
+            return
+          }
+          yield {
+            type: 'tool_use',
+            toolUse: { type: 'tool_use', id: 'call_1', name, input: { command: 'ls' } },
+          }
+          yield { type: 'stop' }
+        })
+      }
+
+      async function run(engine: QueryEngine): Promise<StreamChunk | undefined> {
+        const chunks: StreamChunk[] = []
+        for await (const chunk of engine.process('run command')) chunks.push(chunk)
+        return chunks.find((c) => c.type === 'tool_result')
+      }
+
+      it('分类器放行 ⇒ 工具真的执行了，且只问了它一次', async () => {
+        let ran = 0
+        let asked = 0
+        const permission = new PermissionSystem('auto')
+        permission.setClassifier({
+          version: 'test',
+          classify: async () => {
+            asked++
+            return { allow: true }
+          },
+        })
+        const engine = new QueryEngine(
+          oneBashCall(),
+          mockContext(),
+          makeToolMap([bashTool(() => ran++)]),
+          permission,
+        )
+
+        const result = await run(engine)
+        expect(result?.content).toBe('ran')
+        expect(result?.isError).toBe(false)
+        expect(ran).toBe(1)
+        expect(asked).toBe(1)
+      })
+
+      it('分类器拒绝 ⇒ 工具没执行，且错误串带上它的理由', async () => {
+        let ran = 0
+        const permission = new PermissionSystem('auto')
+        permission.setClassifier({
+          version: 'test',
+          classify: async () => ({ allow: false, reason: 'irreversible local destruction' }),
+        })
+        const engine = new QueryEngine(
+          oneBashCall(),
+          mockContext(),
+          makeToolMap([bashTool(() => ran++)]),
+          permission,
+        )
+
+        const result = await run(engine)
+        expect(ran).toBe(0)
+        expect(result?.isError).toBe(true)
+        expect(result?.content).toContain('irreversible local destruction')
+        // 拒绝不得被说成「切个模式就好了」：策略拒绝换模式也没用。
+        expect(result?.content).not.toContain('Shift+Tab')
+      })
+
+      it('引擎故障拿住 ⇒ 错误串直言这不是裁决、可以重试（否则模型会直接放弃任务）', async () => {
+        let ran = 0
+        const permission = new PermissionSystem('auto')
+        permission.setClassifier({
+          version: 'test',
+          classify: async () => ({
+            allow: false,
+            reason: 'classifier unreachable',
+            retryable: true,
+          }),
+        })
+        const engine = new QueryEngine(
+          oneBashCall(),
+          mockContext(),
+          makeToolMap([bashTool(() => ran++)]),
+          permission,
+        )
+
+        const result = await run(engine)
+        expect(ran).toBe(0)
+        expect(result?.content).toContain('classifier unreachable')
+        expect(result?.isError).toBe(true)
+        // 两种拒绝必须能分辨：说「被否决」会让模型直接放弃任务，而这句说的是
+        // 「从未被裁决、可以重试」—— 且它才是指向 Shift+Tab 的那一条。
+        expect(result?.content).toContain('NOT a policy decision')
+        expect(result?.content).toContain('Shift+Tab')
+      })
+
+      it('静态已放行的调用绕过分类器（auto 档的只读豁免，一次都不问）', async () => {
+        let ran = 0
+        let asked = 0
+        const permission = new PermissionSystem('auto')
+        permission.setClassifier({
+          version: 'test',
+          classify: async () => {
+            asked++
+            return { allow: false } // 反着答：真被问到就必然拒绝
+          },
+        })
+        // 名字必须**逐字**是 `Read`：只读豁免按类别 + 名字两道判，`read` 不在其内
+        // —— 这正是「将来某个叫 read 的非文件工具不得静默走只读通道」那一半。
+        const readTool: ToolDefinition = {
+          ...mockTool('Read', async () => {
+            ran++
+            return { success: true, content: 'file content' }
+          }),
+          category: 'file',
+          permission: 'self',
+        }
+        const engine = new QueryEngine(
+          oneBashCall('Read'),
+          mockContext(),
+          makeToolMap([readTool]),
+          permission,
+        )
+
+        const result = await run(engine)
+        expect(result?.content).toBe('file content')
+        expect(ran).toBe(1)
+        expect(asked).toBe(0)
+      })
+
+      it('auto 档没挂分类器 ⇒ 被门控的工具不执行（fail-closed）', async () => {
+        let ran = 0
+        const engine = new QueryEngine(
+          oneBashCall(),
+          mockContext(),
+          makeToolMap([bashTool(() => ran++)]),
+          new PermissionSystem('auto'),
+        )
+
+        const result = await run(engine)
+        expect(ran).toBe(0)
+        expect(result?.isError).toBe(true)
+        expect(result?.content).toContain('"auto" mode')
+      })
+    })
   })
 
   // ── T12-A：工具成败位必须活着穿出 engine ────────────────────────────────

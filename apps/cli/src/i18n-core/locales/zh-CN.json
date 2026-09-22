@@ -993,6 +993,8 @@
     "tool_denied_deny_rule": "工具 \"{name}\" 被拒绝规则（\"{pattern}\"）阻止。拒绝规则优先于权限模式 — 请改用其他方式，或移除该规则：/permissions remove \"{pattern}\"",
     "tool_denied_ask_rule": "工具 \"{name}\" 需要批准（ask 规则：\"{pattern}\"）。请在提示时批准，或不再询问：/permissions allow \"{pattern}\"",
     "tool_denied_mode": "工具 \"{name}\" 在 \"{mode}\" 模式下需要批准。按 Shift+Tab 切换权限模式，或不再询问：/permissions allow \"{name}\"（更窄的 \"{name}(arg)\" 亦可）",
+    "tool_denied_classifier": "工具 \"{name}\" 在 auto 模式下被权限分类器拦下（{reason}）。这是策略裁决、不是故障 —— 切换模式不会改变它，把同一次调用原样重发也只会得到同一个裁决。请改变这次调用使其不再触犯该规则，或直接放行：/permissions allow \"{name}\"",
+    "tool_denied_classifier_unavailable": "工具 \"{name}\" 被暂缓：auto 模式的分类器不可达，或其回复无法解析（{reason}）。这**不是**策略裁决 —— 该调用从未被裁决，重试是恰当的。若持续发生，按 Shift+Tab 切换模式。",
     "tool_blocked": "工具 \"{name}\" 被钩子拦截",
     "user_input_blocked": "用户输入被钩子拦截。",
     "dlp_blocked": "请求被 DLP 策略阻止。",

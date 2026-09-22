@@ -113,14 +113,23 @@ export interface PermissionClassifier {
 
 export interface PermissionClassifierConfig {
   /**
-   * Model id. Required, and never guessed: the wiring site resolves it from the
-   * provider registry, the same way every other secondary LLM call in this repo
-   * does. A classifier that silently picked its own model would rule with a
-   * different one than the operator configured.
+   * Read the model to rule with, **at ruling time** — a thunk, not a string.
+   *
+   * The wiring site passes `() => registry.getActiveModel()`. Reading it once at
+   * construction would freeze whichever model happened to be active at startup, and
+   * a user who then switches models (to a cheaper one, say) would keep paying for
+   * the old one with no visible sign of it. Same reasoning as the repo's other
+   * secondary call: `self-critique.ts` also resolves its model per call rather than
+   * storing it.
+   *
+   * It is required and never guessed: a classifier that silently picked its own
+   * model would rule with a different one than the operator configured.
    */
-  model: string
-  timeoutMs: number
-  maxInputChars: number
+  resolveModel: () => string
+  /** Defaults to `DEFAULT_CLASSIFIER_TIMEOUT_MS`. */
+  timeoutMs?: number
+  /** Defaults to `DEFAULT_MAX_INPUT_CHARS`. */
+  maxInputChars?: number
 }
 
 // ── Rule asset ──
@@ -365,20 +374,26 @@ export function parseClassifierResponse(text: string): ParsedVerdict {
 export class LlmPermissionClassifier implements PermissionClassifier {
   readonly version = PROMPT_VERSION
 
+  private readonly timeoutMs: number
+  private readonly maxInputChars: number
+
   constructor(
     private readonly llm: Llm,
     private readonly config: PermissionClassifierConfig,
-  ) {}
+  ) {
+    this.timeoutMs = config.timeoutMs ?? DEFAULT_CLASSIFIER_TIMEOUT_MS
+    this.maxInputChars = config.maxInputChars ?? DEFAULT_MAX_INPUT_CHARS
+  }
 
   async classify(req: ClassifierRequest): Promise<ClassifierVerdict> {
-    const prompt = buildClassifierPrompt(req, this.config.maxInputChars)
+    const prompt = buildClassifierPrompt(req, this.maxInputChars)
 
     const controller = new AbortController()
     let timedOut = false
     const timer = setTimeout(() => {
       timedOut = true
       controller.abort()
-    }, this.config.timeoutMs)
+    }, this.timeoutMs)
     const onExternalAbort = (): void => controller.abort()
     req.signal?.addEventListener('abort', onExternalAbort, { once: true })
 
@@ -386,7 +401,7 @@ export class LlmPermissionClassifier implements PermissionClassifier {
     let streamError: string | undefined
     try {
       for await (const chunk of this.llm.chat({
-        model: this.config.model,
+        model: this.config.resolveModel(),
         messages: [{ role: 'user', content: prompt }],
         maxTokens: 200,
         temperature: 0,
@@ -401,7 +416,7 @@ export class LlmPermissionClassifier implements PermissionClassifier {
       return {
         allow: false,
         reason: timedOut
-          ? `classifier timed out after ${this.config.timeoutMs}ms`
+          ? `classifier timed out after ${this.timeoutMs}ms`
           : `classifier unavailable: ${message(error)}`,
         retryable: true,
       }

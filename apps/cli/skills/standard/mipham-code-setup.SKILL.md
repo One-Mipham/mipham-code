@@ -345,10 +345,13 @@ for your answer. That makes `default` the strictest _usable_ mode for Bash and
 file writes; `auto` is the mode that lets gated calls proceed without a human,
 by having a classifier rule on each one.
 
-**`auto` is not wired yet (as of 2026-09-22).** The classifier exists but nothing
-calls it, so selecting `auto` currently **refuses every gated call**. That is
-fail-closed — nothing runs that shouldn't — but the mode does not yet do what the
-table above promises. Prefer `acceptEdits` until the classifier is connected.
+**What `auto` actually gates.** Reads (Read/Grep/Glob) are never sent to the
+classifier — gating them would make `auto` the only mode in the ladder that cannot
+open a file without a round-trip to another model. Everything else that the static
+chain would refuse goes to the classifier, which can only **lift** a refusal: a
+deny rule or an `ask` rule is never overridden. If the classifier cannot be reached
+or answers unusably, the call is refused (fail-closed) with a message saying the
+refusal is _not_ a policy decision and can be retried.
 
 ### 6.2 — Configure
 

@@ -33,6 +33,7 @@ import { SessionLog } from './core/session-log'
 import { SessionStore } from './core/session-store'
 import type { PermissionLevel, MiphamConfig, McpServerConfig } from './shared/types'
 import { PermissionSystem } from './core/permission'
+import { LlmPermissionClassifier } from './core/permission-classifier'
 import { SkillsLoader } from './skills/loader'
 import { PluginManager } from './plugin/plugin-manager'
 import { loadPlugins } from './plugin/plugin-loader'
@@ -400,6 +401,21 @@ export async function runApp(options: RunOptions): Promise<void> {
   const defaultProvider = options.provider || config.defaultProvider
   const defaultModel = options.model || config.defaultModel
   const registry = bootstrapProviders(config.providers, defaultProvider, defaultModel)
+
+  // Attach `auto` mode's classifier here, where the provider registry exists —
+  // `PermissionSystem` itself imports no provider module, so the classifier is handed
+  // in rather than built inside. Doing it on the permission system instead of the
+  // engine is deliberate: an engine-side setter would be a new engine capability the
+  // daemon would then have to match or be exempted from
+  // (`test/integrity/daemon-capability-parity.test.ts`). Because that guard therefore
+  // cannot see this line, the wiring is asserted separately at the source level.
+  //
+  // The model is resolved per ruling through the thunk: capturing the active model
+  // here would freeze it at whatever was active at startup, so a user who switches to
+  // a cheaper model would keep paying for the old one with nothing on screen to say so.
+  permission.setClassifier(
+    new LlmPermissionClassifier(registry, { resolveModel: () => registry.getActiveModel() }),
+  )
 
   // Load instructions
   const instructions = new InstructionsLoader()

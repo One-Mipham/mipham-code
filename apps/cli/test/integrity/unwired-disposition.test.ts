@@ -62,10 +62,6 @@ const DELETED: Array<{ path: string; why: string }> = [
  */
 const KEPT_UNWIRED: Array<{ path: string; why: string }> = [
   {
-    path: 'src/core/permission-classifier.ts',
-    why: '**临时**：`auto` 档的分类器本体（prompt / 三分法规则 / fail-closed 解析），独立落地并单测。去向 = 经 `PermissionSystem.resolveApproval` 接进 `engine.ts` 的工具闸门（`docs/superpowers/specs/2026-09-22-permission-classifier-design.md` 的 Step 5）；接上即本行到期，第 2 条规则会点名要求撤掉。',
-  },
-  {
     path: 'src/vajra/leaf/plan-runner.ts',
     why: 'Vajra 内核「真叶子」的能力证明（SDD 编排作为内核 Service）；profile-driven live startup 按 M3 决策有意不接，生产无调用者',
   },

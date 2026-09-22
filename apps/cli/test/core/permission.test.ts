@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { beforeAll, describe, it, expect } from 'vitest'
 import type {
   PermissionLevel,
   PermissionMode,
@@ -6,6 +6,7 @@ import type {
   ToolDefinition,
 } from '../../src/shared'
 import { PermissionSystem } from '../../src/core/permission'
+import type { PermissionClassifier } from '../../src/core/permission-classifier'
 import {
   ALL_MODES,
   MODE_CYCLE,
@@ -693,22 +694,46 @@ describe('PermissionSystem', () => {
     })
 
     /**
-     * 静态宽度**测不出来的**档位 —— `auto` 把裁决委托给运行期的分类器：它的静态链对
-     * 每一次调用都答 `'ask'`，于是 `passesIn('auto', t)` 恒为 false，本探针会把它量成
-     * 「比 plan 还窄」。那不是它窄，是**量错了对象**（量的是静态基线，不是这一档）。
+     * 静态宽度**测不出来的**档位 —— `auto` 把裁决委托给运行期的分类器，本探针读的是
+     * 同步的 `check()`（静态基线），所以量出来的是**基线**，不是这一档的真实宽度。
      *
-     * 留在域里的后果很具体：`narrowest` 会翻成 `['auto']`，而层级表第一档是 plan ——
-     * 断言逼着人去把层级表首位改成 auto，即把「运行期委托档」放到最严的位置上。
+     * 留在域里的后果很具体：`auto` 的静态基线（只读三件套放行，其余一律 `ask`）与
+     * `plan` **逐项相同**，`narrowest` 会因此翻成 `['auto', 'plan']` 或把层级表首位
+     * 指向 `auto`，即把「运行期委托档」放到最严的位置上。
      *
-     * 所以它被**具名排除**，且排除集合本身由测量**导出**（见下条）：哪天又出现一个
-     * 静态上什么都不放行的档位，这条会红，逼人来认领，而不是静默扩大排除面。
+     * 排除集合由**测量**导出，不是宣布 —— 判据是「挂上一个一律放行的分类器之后，
+     * `resolveApproval` 比 `check` 更宽」的档位。这正是「委托给运行期」的可测定义。
+     *
+     * 上一版的判据是「静态上什么都不放行」。它随 `auto` 拿到只读豁免而失效：口径一
+     * 变，那个predicate 就再也指不到任何档位（`passNothing` 恒为空集），而空集与
+     * 「没有委托档」在断言里同形 —— 检查自己出事了，所以换成本条。
+     *
+     * 声明与测量分开写是有意的：哪天又有档位开始运行期委托，测量值会变大而声明不会，
+     * 这条立刻红，逼人来认领，而不是静默扩大排除面。
      */
-    const RUNTIME_DELEGATING: PermissionMode[] = ['auto']
-    const STATICALLY_MEASURABLE = ALL_MODES.filter((m) => !RUNTIME_DELEGATING.includes(m))
+    const DELEGATING_DECLARED: PermissionMode[] = ['auto']
+    let RUNTIME_DELEGATING: PermissionMode[] = []
 
-    it('被排除在宽度探针外的，恰好是「静态上什么都不放行」的那些档位（导出，不是宣布）', () => {
-      const passNothing = ALL_MODES.filter((m) => PROBES.every((t) => !passesIn(m, t)))
-      expect(passNothing).toEqual(RUNTIME_DELEGATING)
+    beforeAll(async () => {
+      RUNTIME_DELEGATING = []
+      for (const m of ALL_MODES) {
+        const ps = new PermissionSystem(m)
+        ps.setClassifier({ version: 'width-probe', classify: async () => ({ allow: true }) })
+        for (const t of PROBES) {
+          if (passesIn(m, t)) continue // 静态已放行 ⇒ 无从观察「更宽」
+          const d = await ps.resolveApproval(t, { command: 'pnpm test' })
+          if (d.level !== 'ask') {
+            RUNTIME_DELEGATING.push(m)
+            break
+          }
+        }
+      }
+    })
+
+    const STATICALLY_MEASURABLE = ALL_MODES.filter((m) => !DELEGATING_DECLARED.includes(m))
+
+    it('被排除在宽度探针外的，恰好是「运行期会委托出去」的那些档位（导出，不是宣布）', () => {
+      expect(RUNTIME_DELEGATING).toEqual(DELEGATING_DECLARED)
     })
 
     it('层级表首位 = 实测最严的那一档（数组与测量同源，不是各说各话）', () => {
@@ -803,25 +828,40 @@ describe('PermissionSystem', () => {
       expect(ps.getMode()).toBe('acceptEdits')
     })
 
-    it('auto 的静态基线对每一次调用都答 ask —— 含 `permission: self` 的工具', () => {
-      // 这一条守的是承重的那一行（`modeBaseline` 的 `case 'auto': return 'ask'`）。
+    it('auto 的静态基线只放行只读三件套，其余一律 ask —— 含 `permission: self` 的非文件工具', () => {
+      // 这一条守的是承重的那一行（`modeBaseline` 的 `case 'auto'`）。
       // 若它改成 `'mode-baseline'`（直觉做法，`default` 就是那样），`check()` 的
-      // 第 5 步会放行、继续走到第 6 步读 `tool.permission`，于是 22 个声明
+      // 第 5 步会放行、继续走到第 6 步读 `tool.permission`，于是 20 个声明
       // `permission: 'self'` 的工具**永远见不到分类器** —— 半坏，不是明显坏。
-      // 断言里点名 `self` 工具，正是为了钉住「第 5 步不得让位给第 6 步」。
+      // 断言里点名非文件的 `self` 工具，正是为了钉住「第 5 步不得让位给第 6 步」。
+      //
+      // 只读三件套是**有意**让位的（`isReadOnlyTool`，与 plan 同一份判据）：把读也
+      // 拦进分类器，会让 auto 成为整条梯子里唯一「开个文件都要跨模型往返」的档，
+      // 且分类器一旦不可达就连读都做不了。所以这里的豁免是契约的一部分，不是漏网。
       const ps = new PermissionSystem('auto')
       for (const tool of [
-        makeTool('Read', 'self', 'file'),
         makeTool('git', 'self', 'exec'),
         makeTool('web-fetch', 'self', 'network'),
+        makeTool('task', 'self', 'exec'),
+        makeTool('memory', 'self', 'agent'),
+        makeTool('cron', 'self', 'scheduling'),
         makeTool('Bash', 'ask', 'exec'),
         makeTool('Write', 'ask', 'file'),
         // 最强的一根探针：**声明 `permission: 'bypass'` 的工具在 auto 档也必须被问**。
         // 第 6 步会原样返回 `'bypass'`，所以只要基线让位给它，这条立刻红。
         makeTool('DeclaredBypass', 'bypass', 'exec'),
+        // 类别那一半是承重的：名字叫 Read 但**不是** file 类别的工具不得吃豁免。
+        // 只按名字判断的话，将来任何一个叫 Read 的非文件工具都会静默走只读通道。
+        makeTool('Read', 'self', 'network'),
       ]) {
         expect(ps.check(tool, { command: 'pnpm test' }), `${tool.name} 在 auto 档应问`).toBe('ask')
         expect(ps.explainDenial(tool, { command: 'pnpm test' }).reason).toBe('mode-baseline')
+      }
+
+      for (const name of ['Read', 'Grep', 'Glob']) {
+        expect(ps.check(makeTool(name, 'self', 'file'), {}), `${name} 是只读，不该问`).toBe(
+          'bypass',
+        )
       }
     })
 
@@ -886,6 +926,223 @@ describe('PermissionSystem', () => {
       for (let i = 0; i < MODE_CYCLE.length * 3; i++) {
         expect(MODE_CYCLE).toContain(ps.cycleMode())
       }
+    })
+  })
+
+  // ═══════════════════════════════════════════
+  // P5 — `resolveApproval`：只可放行，不可否决
+  // ═══════════════════════════════════════════
+
+  describe('P5 — resolveApproval（分类器可介入的范围）', () => {
+    const bash = (): ToolDefinition => makeTool('Bash', 'ask', 'exec')
+    const BASH_INPUT = { command: 'pnpm test' }
+
+    /**
+     * 一律放行的分类器，并记下每次被问到什么。「问了没有」是契约的一半 —— 只测结果
+     * 的话，一条把每次调用都送去问 LLM（包括静态已放行的）的实现同样会全绿。
+     */
+    function alwaysAllow(): { classifier: PermissionClassifier; asked: string[] } {
+      const asked: string[] = []
+      return {
+        asked,
+        classifier: {
+          version: 'test',
+          classify: async (req) => {
+            asked.push(`${req.tool}:${req.reason}`)
+            return { allow: true }
+          },
+        },
+      }
+    }
+
+    it('auto 档没挂分类器 ⇒ 仍然 ask（fail-closed，不是静默放行）', async () => {
+      const ps = new PermissionSystem('auto')
+      expect(await ps.resolveApproval(bash(), BASH_INPUT)).toEqual({
+        level: 'ask',
+        source: 'static',
+        denialReason: 'mode-baseline',
+      })
+    })
+
+    it('auto 之外的档位即使挂了分类器也不问 —— 分类器是 auto 档的组成，不是全局后门', async () => {
+      const ps = new PermissionSystem('default')
+      const { classifier, asked } = alwaysAllow()
+      ps.setClassifier(classifier)
+
+      expect((await ps.resolveApproval(bash(), BASH_INPUT)).level).toBe('ask')
+      expect(asked).toEqual([])
+    })
+
+    it('放行 ⇒ bypass，来源记为 classifier，且恰好问了它一次', async () => {
+      const ps = new PermissionSystem('auto')
+      const { classifier, asked } = alwaysAllow()
+      ps.setClassifier(classifier)
+
+      expect(await ps.resolveApproval(bash(), BASH_INPUT)).toMatchObject({
+        level: 'bypass',
+        source: 'classifier',
+      })
+      expect(asked).toEqual(['Bash:mode-baseline'])
+
+      // 同一次调用再问一遍不再命中分类器（裁决已缓存）。
+      expect((await ps.resolveApproval(bash(), BASH_INPUT)).level).toBe('bypass')
+      expect(asked).toHaveLength(1)
+    })
+
+    it('静态已放行的调用一次都不问分类器（非 ask 判定逐字节不变）', async () => {
+      const ps = new PermissionSystem('auto')
+      const { classifier, asked } = alwaysAllow()
+      ps.setClassifier(classifier)
+
+      expect(await ps.resolveApproval(makeTool('Read', 'self', 'file'), {})).toEqual({
+        level: 'bypass',
+        source: 'static',
+      })
+      expect(asked).toEqual([])
+    })
+
+    it('deny 规则不可被分类器覆盖 —— 否则它成了绕开组织规则的万能通道', async () => {
+      const ps = new PermissionSystem('auto')
+      const { classifier, asked } = alwaysAllow()
+      ps.setClassifier(classifier)
+      ps.deny('Bash')
+
+      expect(await ps.resolveApproval(bash(), BASH_INPUT)).toMatchObject({
+        level: 'ask',
+        source: 'static',
+        denialReason: 'deny-rule',
+      })
+      expect(asked).toEqual([])
+    })
+
+    it('ask 规则不可被覆盖 —— 这一条是人写下来的', async () => {
+      const ps = new PermissionSystem('auto')
+      const { classifier, asked } = alwaysAllow()
+      ps.setClassifier(classifier)
+      ps.ask('Bash')
+
+      expect(await ps.resolveApproval(bash(), BASH_INPUT)).toMatchObject({
+        level: 'ask',
+        denialReason: 'ask-rule',
+      })
+      expect(asked).toEqual([])
+    })
+
+    it('缓存过的放行会被新增的 deny 规则作废（裁决不是免死金牌）', async () => {
+      const ps = new PermissionSystem('auto')
+      const { classifier, asked } = alwaysAllow()
+      ps.setClassifier(classifier)
+
+      expect((await ps.resolveApproval(bash(), BASH_INPUT)).level).toBe('bypass')
+      ps.deny('Bash')
+      expect(await ps.resolveApproval(bash(), BASH_INPUT)).toMatchObject({
+        level: 'ask',
+        denialReason: 'deny-rule',
+      })
+      expect(asked).toHaveLength(1)
+    })
+
+    it('可重试的引擎故障不缓存（否则 `retryable: true` 当场变成假话）', async () => {
+      const ps = new PermissionSystem('auto')
+      let n = 0
+      ps.setClassifier({
+        version: 'test',
+        classify: async () => {
+          n++
+          return { allow: false, reason: 'classifier unreachable', retryable: true }
+        },
+      })
+
+      const first = await ps.resolveApproval(bash(), BASH_INPUT)
+      expect(first).toMatchObject({ denialReason: 'classifier-deny', retryable: true })
+      await ps.resolveApproval(bash(), BASH_INPUT)
+      expect(n).toBe(2)
+    })
+
+    it('策略拒绝会缓存 —— 同一次调用反复问同一个问题只是烧 token', async () => {
+      const ps = new PermissionSystem('auto')
+      let n = 0
+      ps.setClassifier({
+        version: 'test',
+        classify: async () => {
+          n++
+          return { allow: false, reason: 'irreversible local destruction' }
+        },
+      })
+
+      expect(await ps.resolveApproval(bash(), BASH_INPUT)).toMatchObject({
+        denialReason: 'classifier-deny',
+        classifierReason: 'irreversible local destruction',
+      })
+      expect((await ps.resolveApproval(bash(), BASH_INPUT)).retryable).toBeUndefined()
+      expect(n).toBe(1)
+    })
+
+    /**
+     * 上限把「放行」重新按**上限档的静态授予**推导（`allowRuleDecision`），于是
+     * `maxAllowedMode: 'auto'` 恰好把分类器**废掉**：非只读工具在 auto 档的静态
+     * 授予就是 `ask`，而只读三件套根本走不到分类器。
+     *
+     * 方向是对的 —— 上限越高能跑的东西越多（不设上限 ⇒ 放行；上限 auto ⇒ 拒绝），
+     * 单调，没有反转，所以不是安全缺陷。代价也是真的：`maxAllowedMode: 'auto'`
+     * 读起来像「允许 auto 档」，实际让 auto 退化成 plan 的行为。想要的运维写法是
+     * 不设上限、或设成 `bypassPermissions`（上限管的是**档位**，不是逐次裁决）。
+     * 这一条**故意不是**断言「本该如此」，而是钉住现行为，免得它悄悄改成别的样子。
+     */
+    it('上限 auto：分类器放行仍落回 ask（上限的静态授予说了算）', async () => {
+      const ps = new PermissionSystem('auto')
+      const { classifier } = alwaysAllow()
+      ps.setClassifier(classifier)
+      ps.setRestrictions({ maxAllowedMode: 'auto' })
+
+      expect(ps.getMode()).toBe('auto') // 档位没被降级 —— 界面仍显示 auto
+      expect(await ps.resolveApproval(bash(), BASH_INPUT)).toMatchObject({
+        level: 'ask',
+        source: 'classifier',
+      })
+    })
+
+    it('上限 bypassPermissions：分类器放行照常生效（对照上一条）', async () => {
+      const ps = new PermissionSystem('auto')
+      const { classifier } = alwaysAllow()
+      ps.setClassifier(classifier)
+      ps.setRestrictions({ maxAllowedMode: 'bypassPermissions' })
+
+      expect((await ps.resolveApproval(bash(), BASH_INPUT)).level).toBe('bypass')
+    })
+
+    it('分类器随 auto **档**传播到子代理（不是随代理）', async () => {
+      const ps = new PermissionSystem('auto')
+      const { classifier, asked } = alwaysAllow()
+      ps.setClassifier(classifier)
+
+      const inherited = ps.createSubAgentPermission('inherit')
+      expect(inherited.getMode()).toBe('auto')
+      expect(inherited.hasClassifier()).toBe(true)
+      expect((await inherited.resolveApproval(bash(), BASH_INPUT)).level).toBe('bypass')
+
+      // 子代理自己挑了别的档位 ⇒ 不带分类器，那条路必须仍是硬拒。
+      const explicit = ps.createSubAgentPermission('default')
+      expect(explicit.hasClassifier()).toBe(false)
+      expect((await explicit.resolveApproval(bash(), BASH_INPUT)).level).toBe('ask')
+
+      expect(asked).toHaveLength(1)
+    })
+
+    it('分类器不会被绕过 auto 档拿到（改档之后再改回来，仍是当前那个）', async () => {
+      const ps = new PermissionSystem('auto')
+      const { classifier } = alwaysAllow()
+      ps.setClassifier(classifier)
+
+      ps.setMode('plan')
+      expect((await ps.resolveApproval(bash(), BASH_INPUT)).level).toBe('ask')
+      ps.setMode('auto')
+      expect((await ps.resolveApproval(bash(), BASH_INPUT)).level).toBe('bypass')
+
+      // 交回 undefined 就真的没有了 —— setter 不是只能加。
+      ps.setClassifier(undefined)
+      expect(ps.hasClassifier()).toBe(false)
+      expect((await ps.resolveApproval(bash(), BASH_INPUT)).level).toBe('ask')
     })
   })
 

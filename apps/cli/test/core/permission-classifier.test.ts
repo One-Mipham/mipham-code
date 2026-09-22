@@ -56,10 +56,12 @@ function text(s: string): StreamChunk {
 
 function classifier(
   llm: Llm,
-  overrides: Partial<{ timeoutMs: number; maxInputChars: number }> = {},
+  overrides: Partial<{ timeoutMs: number; maxInputChars: number; model: string }> = {},
 ) {
   return new LlmPermissionClassifier(llm, {
-    model: 'test-model',
+    // A thunk, so the test can also prove *when* it is read (see the
+    // "reads the model at ruling time" case).
+    resolveModel: () => overrides.model ?? 'test-model',
     timeoutMs: overrides.timeoutMs ?? 2000,
     maxInputChars: overrides.maxInputChars ?? DEFAULT_MAX_INPUT_CHARS,
   })
@@ -69,11 +71,7 @@ function req(overrides: Partial<ClassifierRequest> = {}): ClassifierRequest {
   return {
     tool: 'Bash',
     input: { command: 'rm -rf ./build' },
-    // `auto` is not a `PermissionMode` member yet — it joins the union with the
-    // mode itself. Nothing in this module branches on `mode` (it is carried for
-    // the record and rendered into the prompt), so the tests drive it with a
-    // real member until then.
-    mode: 'default',
+    mode: 'auto',
     reason: 'tool-default',
     ...overrides,
   }
@@ -201,7 +199,7 @@ describe('prompt 构建', () => {
   it('prompt 里带上了只读上下文（工具 / 档位 / 为何被判 ask）', () => {
     const prompt = buildClassifierPrompt(req({ reason: 'deny-rule' }))
     expect(prompt).toContain('TOOL: Bash')
-    expect(prompt).toContain('MODE: default')
+    expect(prompt).toContain('MODE: auto') // `req()` 用的就是 auto —— 分类器只在那一档出现
     expect(prompt).toContain('ASKED BECAUSE: deny-rule')
   })
 })
@@ -304,6 +302,21 @@ describe('LlmPermissionClassifier —— 引擎故障一律 fail-closed', () => 
     await classifier(llm).classify(req({ signal: controller.signal }))
     expect(requests[0]).toMatchObject({ model: 'test-model', temperature: 0 })
     expect(requests[0]!.signal).toBeDefined()
+  })
+
+  it('每次裁决都重读模型：会话中换模型，分类器跟着换', async () => {
+    // 构造期捕获模型字符串会让两次裁决都用第一个模型 —— 用户换了更便宜的模型、
+    // 账单却还挂在旧的上面，且屏幕上没有任何迹象。所以 `resolveModel` 是 thunk
+    // 而不是 string。这条断言在「构造期捕获」的实现下会是 ['first-model',
+    // 'first-model']，翻红。
+    let current = 'first-model'
+    const { llm, requests } = makeLlm([text('<block>no</block>'), text('<block>no</block>')])
+    // 只给 resolveModel：超时与入参上限走模块默认值（也是这一条顺带证明的）。
+    const c = new LlmPermissionClassifier(llm, { resolveModel: () => current })
+    await c.classify(req())
+    current = 'second-model'
+    await c.classify(req())
+    expect(requests.map((r) => r.model)).toEqual(['first-model', 'second-model'])
   })
 
   it('version 存在且等于 PROMPT_VERSION（审计要能对上规则版本）', () => {

@@ -12,6 +12,11 @@
  * 都测不到「调用点用的是哪个值」—— 把真对象算对了、却仍把替身传进去，行为用例全绿。
  * 故这里断**调用点本身**：两处组装点必须把 live 权限系统的模式交给 `buildSystemPrompt`，
  * 页脚的两个入口必须回读 live 系统。判据是「负锚在场即红」，不是「读起来像对的」。
+ *
+ * 第三组（`auto` 档分类器的接线）形状相同而更极端：`src/index.tsx` **不在任何行为
+ * 用例的覆盖里**。删掉那一行 `permission.setClassifier(`，typecheck / lint / 全量测试
+ * 全绿，而 `auto` 档退回「每一次被门控的调用都拒」—— `core/rules-loader.ts` 那次
+ * 「有定义、无施加点」的复刻。故与 P3/P5 同处一室。
  */
 
 import { describe, it, expect } from 'vitest'
@@ -23,8 +28,16 @@ const CLI_DIR = join(import.meta.dirname, '..', '..')
 
 const read = (rel: string): string => readFileSync(join(CLI_DIR, rel), 'utf8')
 
+/** 只剥注释。**已知边界**：不剥字符串字面量 —— 故下面的锚一律写全「接收者.方法(」，
+ *  单个词（`resolveApproval`）谁都可能在散文或消息串里写出来，全形不像。 */
+const stripComments = (src: string): string =>
+  src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ')
+
 const INDEX = read('src/index.tsx')
 const APP = read('src/ui/app.tsx')
+const ENGINE = stripComments(read('src/core/engine.ts'))
+const SUB_AGENT = stripComments(read('src/agent/sub-agent.ts'))
+const INDEX_CODE = stripComments(INDEX)
 
 describe('状态与执行同源（P3 / P5）', () => {
   it('正对照：两个文件确实读到了内容（否则下面的断言是空集上的空话）', () => {
@@ -46,5 +59,48 @@ describe('状态与执行同源（P3 / P5）', () => {
     expect(APP).not.toMatch(/useState<PermissionMode>\(\s*'/)
     // 循环：必须把**读回的值**作为结果，而不是请求的那一档
     expect(APP).toMatch(/cyclePermissionMode\(engine\.getPermission\(\)/)
+  })
+})
+
+describe('`auto` 档分类器的接线（三个点，缺一处就是「实现了但从不生效」）', () => {
+  it('剥离器真的在做事（剥不掉注释的话，下面三条都是空的）', () => {
+    const fake = [
+      'const a = 1 // gate.resolveApproval(tool, input)',
+      '/* this.permission.resolveApproval(a, b) */',
+      'const b = 2',
+    ].join('\n')
+    expect(stripComments(fake)).not.toContain('resolveApproval')
+    expect(stripComments(fake)).toContain('const b = 2')
+  })
+
+  it('两个闸门都在 `await …resolveApproval(` 上，且不再走同步的 `needsApproval(`', () => {
+    // 闸门问的必须是完整裁决（`ApprovalDecision`），不是布尔 —— 两个调用点都要
+    // 用它区分「策略拒绝」与「分类器不可达」，而 `needsApproval()` 只有 true/false。
+    // 漏一个 `await` 则是 lint 的 `no-floating-promises`（error 档）—— 这里再加一道。
+    for (const [name, src, anchor] of [
+      ['engine.ts', ENGINE, /await this\.permission\.resolveApproval\(/],
+      ['sub-agent.ts', SUB_AGENT, /await gate\.resolveApproval\(/],
+    ] as const) {
+      expect(src, `${name}: 闸门没有走 resolveApproval ⇒ 分类器永不生效`).toMatch(anchor)
+      expect(src, `${name}: 闸门还留着同步的 needsApproval(`).not.toContain('needsApproval(')
+    }
+  })
+
+  it('分类器在启动时挂到 live 权限系统上（这一行没有任何行为用例看得见）', () => {
+    expect(INDEX_CODE, 'index.tsx 没有构造分类器').toContain('new LlmPermissionClassifier(')
+    expect(INDEX_CODE, 'index.tsx 没有把它挂上去').toMatch(/permission\.setClassifier\(/)
+
+    // 挂上去的必须挂在 `PermissionSystem` 上（`index.tsx` 里那个 live 对象）。
+    // 挂到别处（比如给 engine 加一个 setter）会让 daemon 对等守卫要么被迫同步接、
+    // 要么被迫写具名豁免 —— 那条守卫**看不见**这一行，所以由这里来断。
+    expect(INDEX_CODE).toMatch(/permission\.setClassifier\(\s*\n?\s*new LlmPermissionClassifier\(/)
+
+    // 模型必须在**裁决时**取：冻成字符串会让「用户切到便宜模型」继续按老模型计费，
+    // 且界面上没有任何东西会说这件事。
+    const ctor = /new LlmPermissionClassifier\(([\s\S]*?)\)\n/.exec(INDEX_CODE)
+    expect(ctor, '没抓到构造参数，下面的断言会变成空话').not.toBeNull()
+    expect(ctor![1], '模型参数不是个 thunk ⇒ 启动时就被冻住').toContain('=>')
+    expect(ctor![1]).toContain('getActiveModel()')
+    expect(ctor![1], 'resolveModel 又被写成了字面量').not.toMatch(/resolveModel:\s*['"`]/)
   })
 })

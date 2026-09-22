@@ -399,9 +399,17 @@ describe('SubAgent', () => {
     const sink: { ctx?: ToolContext } = {}
     const tools = new Map([['Bash', makeCapturingTool(sink)]])
     const registry = createMockRegistry(oneToolCallProvider())
-    const clamped = { needsApproval: () => false } as unknown as PermissionSystem
+    // 闸门问的是 `resolveApproval`（同步的 `needsApproval` 只回答「分类器之前的
+    // 答案」，两个调用点要的是完整裁决）。假对象必须把这一半也实现出来 ——
+    // 少一个方法时这里会**抛错**而不是静默放行，但那是运气，不是设计。
+    // 两侧刻意给出**相反**的裁决：子代理若误用父级的闸门，工具就一次都不会跑，
+    // 下面的 `sink.ctx` 立刻是 undefined。
+    const clamped = {
+      resolveApproval: async () => ({ level: 'bypass', source: 'static' }),
+    } as unknown as PermissionSystem
     const parent = {
       needsApproval: () => true,
+      resolveApproval: async () => ({ level: 'ask', source: 'static', denialReason: 'deny-rule' }),
       createSubAgentPermission: () => clamped,
     } as unknown as PermissionSystem
 
