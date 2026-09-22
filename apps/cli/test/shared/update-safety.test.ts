@@ -219,7 +219,9 @@ describe('performUpdate —— 终端 Ctrl-C 不能把安装打断到一半', ()
     // 边界：这里断的是「选项送出去了」；「detached 真的换了进程组」是 Node/POSIX 的行为，
     // 已用真命令行探针在本机验过（detached 的子进程 pgid ≠ 父进程，未 detached 的 == 父进程），
     // 但那是探针不是本套件 —— 别把这条绿读成「进程组语义已被 CI 覆盖」。
-    expect(seen[0].detached).toBe(true)
+    // `!` 而非 `?.`：上面一行已经断言了长度；用 `?.` 会把「选项没送出去」与「对象是 undefined」
+    // 混成同一条失败，弱化断言。
+    expect(seen[0]!.detached).toBe(true)
   })
 
   it('安装窗口内 CLI 挂着 SIGINT 守位，装完立刻撤掉', () => {
