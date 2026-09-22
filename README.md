@@ -28,7 +28,7 @@ Mipham Code is an open-core, multi-model intelligent coding terminal built with 
 
 ### Install
 
-> ⚠️ **从 0.84.0 及更早版本升级：请先别用 `mipham update`**
+> ⚠️ **从 0.85.0 及更早版本升级：请先别用 `mipham update`**
 >
 > 0.84.0 及更早版本给安装步骤挂了 **10 分钟超时**，而这个包有 84 MB / 6,601 个文件 ——
 > 慢网络（国内直连 npm 常常超过 10 分钟）下，计时器会在安装**中途**杀掉 npm，留下
@@ -36,8 +36,9 @@ Mipham Code is an open-core, multi-model intelligent coding terminal built with 
 > `mipham update` 也一起没了。`/upgrade` 同理。
 >
 > 请改用下面方式一或方式二升级 —— 由 npm 直接在你的终端里执行，**不设超时**，装得再慢也不会被砍。
-> 升到 **0.85.0** 后 `mipham update` 已修好（不再带超时；装前快照、装后实跑 launcher 自证、
-> 失败自动回滚），可以正常使用。
+> 升到 **0.85.1** 后 `mipham update` 可以正常使用：不再带超时；装前快照、装后实跑 launcher 自证、
+> 失败自动回滚；安装窗口内按 Ctrl-C 也不会再打断安装（**该窗口内 Ctrl-C 会被忽略**，要中断请另开
+> 一个终端杀进程）。
 
 **方式一：官方一键安装脚本（推荐）**
 
@@ -64,7 +65,7 @@ brew install mipham
 
 ```bash
 mipham --version
-# → @miphamai/cli v0.85.0
+# → @miphamai/cli v0.85.1
 ```
 
 ### Run
