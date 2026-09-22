@@ -10,7 +10,8 @@ import { rmSync, mkdirSync, readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { PermissionSystem } from '../../src/core/permission'
-import { permissionsCmd } from '../../src/commands/project'
+import { permissionsCmd, setupCmd } from '../../src/commands/project'
+import { ALL_MODES, MODE_CYCLE, PERMISSION_MODE_HIERARCHY } from '../../src/core/permission-config'
 import type { ToolDefinition } from '../../src/shared'
 
 const CWD = join(homedir(), 'proj')
@@ -33,7 +34,7 @@ const writeTool: ToolDefinition = {
  * (b) takes effect in the live permission system, not just on next start, and
  * (c) refuses a rule that could never match.
  */
-describe('/permissions — rule persistence', () => {
+describe('/permissions — rule persistence & mode help', () => {
   let perm: PermissionSystem
 
   function makeCtx() {
@@ -43,6 +44,7 @@ describe('/permissions — rule persistence', () => {
         getContext: () => ({ getMessages: () => [] }),
         getTools: () => new Map(),
       },
+      config: { permission: 'default' },
       t: (k: string) => k,
     } as unknown as Parameters<typeof permissionsCmd>[0]
   }
@@ -107,5 +109,61 @@ describe('/permissions — rule persistence', () => {
     const result = await permissionsCmd(makeCtx(), [])
     expect(result.content).toContain('Write')
     expect(result.content).toContain('/permissions allow')
+  })
+
+  // ── Mode help must describe the controls that exist ──
+  //
+  // Both views had drifted: `/setup 5` still listed the retired 3-level
+  // `auto`/`ask`/`bypass` spellings and told the user to run
+  // `/config permission <level>` — an invocation that has never done anything,
+  // since `/config`'s handler takes no arguments. `/permissions` listed five
+  // modes under the heading "Switch mode with Shift+Tab" although the wheel
+  // reaches four and omits `bypassPermissions`. Both now render from one table
+  // plus `MODE_CYCLE`.
+
+  it('/permissions lists every mode as a table row and states the wheel separately', async () => {
+    const { content } = await permissionsCmd(makeCtx(), [])
+
+    for (const mode of ALL_MODES) {
+      // Anchored to a table row, not a bare substring: "auto-runs" inside
+      // acceptEdits' description would satisfy `toContain('auto')` by itself.
+      expect(content, mode).toMatch(new RegExp(`^ {2}${mode}\\s+— `, 'm'))
+    }
+
+    // The heading says "least → most permissive", so the rows must be rendered in
+    // `PERMISSION_MODE_HIERARCHY` order — that array is the ranking `clampMode`
+    // walks, and the old hand-written list had `default` before `plan`, which
+    // inverted the ladder the heading claimed to describe.
+    const rows = PERMISSION_MODE_HIERARCHY.map((m) => content.indexOf(`\n  ${m} `))
+    expect(rows).not.toContain(-1)
+    expect(rows).toEqual([...rows].sort((a, b) => a - b))
+
+    // The wheel is a *separate* set from the legal modes, hence its own line rather
+    // than one list doing double duty. Derived from `MODE_CYCLE`, so the line
+    // follows the wheel if its membership changes.
+    expect(content).toContain(`Shift+Tab cycles: ${MODE_CYCLE.join(' → ')}`)
+
+    expect(content).not.toContain('/config permission')
+  })
+
+  it('/setup 5 shows the live mode beside the config value, and no invented schema', async () => {
+    const { content } = await setupCmd(makeCtx(), ['5'])
+
+    for (const mode of ALL_MODES) {
+      expect(content, mode).toMatch(new RegExp(`^ {2}${mode}\\s+— `, 'm'))
+    }
+    expect(content).toContain(`Shift+Tab cycles: ${MODE_CYCLE.join(' → ')}`)
+
+    // Two different facts, both shown: `perm` is in `plan` while the config file
+    // says `default`. They diverge the moment Shift+Tab is pressed (the wheel is
+    // session-only) or the file holds a legacy spelling — reporting only one of
+    // them is how the old copy came to call `auto`/`ask`/`bypass` "levels".
+    expect(content).toMatch(/Current mode:\s+plan/)
+    expect(content).toMatch(/config\.yml:\s+default/)
+
+    // The invented per-tool-category schema lived here. The loader never read it,
+    // so following it changed nothing.
+    expect(content).not.toContain('file: ask')
+    expect(content).not.toContain('/config permission')
   })
 })

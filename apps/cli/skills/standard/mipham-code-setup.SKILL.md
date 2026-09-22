@@ -345,13 +345,23 @@ for your answer. That makes `default` the strictest _usable_ mode for Bash and
 file writes; `auto` is the mode that lets gated calls proceed without a human,
 by having a classifier rule on each one.
 
+**`auto` is not wired yet (as of 2026-09-22).** The classifier exists but nothing
+calls it, so selecting `auto` currently **refuses every gated call**. That is
+fail-closed — nothing runs that shouldn't — but the mode does not yet do what the
+table above promises. Prefer `acceptEdits` until the classifier is connected.
+
 ### 6.2 — Configure
 
-In `.mipham/config.yml`:
+Press **Shift+Tab** to change the mode live; it cycles
+`default → acceptEdits → plan → bypassPermissions` and lasts for the session only.
+
+To persist a mode for a project, in `.mipham/config.yml`:
 
 ```yaml
 permission: default
 ```
+
+Any mode name from the table above is accepted, including `bypassPermissions`.
 
 Or via slash command:
 

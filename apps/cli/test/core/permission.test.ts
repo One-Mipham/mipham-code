@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import type { PermissionMode, PermissionRestrictions, ToolDefinition } from '../../src/shared'
+import type {
+  PermissionLevel,
+  PermissionMode,
+  PermissionRestrictions,
+  ToolDefinition,
+} from '../../src/shared'
 import { PermissionSystem } from '../../src/core/permission'
 import {
   ALL_MODES,
@@ -454,7 +459,7 @@ describe('PermissionSystem', () => {
     })
   })
 
-  describe('setDefaultLevel — legacy 3-level mapping', () => {
+  describe('setDefaultLevel — legacy levels and real mode names', () => {
     it('maps legacy "self" (tool self-decide) to default mode, NOT a permissive one', () => {
       const ps = new PermissionSystem('default')
       ps.setDefaultLevel('self')
@@ -479,6 +484,83 @@ describe('PermissionSystem', () => {
       const ps = new PermissionSystem('default')
       ps.setDefaultLevel('bypass')
       expect(ps.getMode()).toBe('bypassPermissions')
+    })
+
+    it('leaves every legacy spelling unreported — they are mapped, not dropped', () => {
+      for (const legacy of ['self', 'ask', 'bypass'] as const) {
+        const ps = new PermissionSystem('default')
+        ps.setDefaultLevel(legacy)
+        // Silence is the contract for a *recognized* value, legacy or not. Only a
+        // value that is neither is something the operator needs to hear about.
+        expect(ps.getInvalidPermissionMode(), `permission: ${legacy}`).toEqual([])
+      }
+    })
+
+    it('honours every real mode name — the "permission: plan" regression', () => {
+      // Until 2.82.0 this method read `level === 'bypass' ? 'bypassPermissions' :
+      // 'default'`, so *every* mode name a user could write in config.yml —
+      // including `plan` and `auto` and `bypassPermissions` itself — landed on
+      // `default` with no warning and no error. `default` auto-approves every tool
+      // declaring `permission: 'self'` (git, task, web-fetch, cron, memory, …)
+      // while `plan` admits only reads: a user asking to NARROW the gate got a
+      // wider one, silently. Each mode name must now land on itself.
+      for (const mode of ALL_MODES) {
+        const ps = new PermissionSystem('default')
+        ps.setDefaultLevel(mode)
+        expect(ps.getMode(), `permission: ${mode}`).toBe(mode)
+        expect(ps.getInvalidPermissionMode(), `permission: ${mode}`).toEqual([])
+      }
+    })
+
+    it('an unknown value pins "default" and reports it', () => {
+      const ps = new PermissionSystem('default')
+      ps.setDefaultLevel('manaul' as PermissionLevel)
+
+      expect(ps.getMode()).toBe('default')
+      const warnings = ps.getInvalidPermissionMode()
+      expect(warnings).toHaveLength(1)
+      // The message has to be actionable — it echoes the bad value and names every
+      // accepted spelling, legacy one included.
+      for (const mode of ALL_MODES) expect(warnings[0]).toContain(mode)
+      expect(warnings[0]).toContain('manaul')
+      expect(warnings[0]).toContain('bypass')
+    })
+
+    it('reports an unknown value of a non-string type instead of throwing', () => {
+      // The value comes from YAML, so `permission: 42` reaches this method as a
+      // number — the discriminator must answer false for it, not explode.
+      const ps = new PermissionSystem('default')
+      ps.setDefaultLevel(42 as unknown as PermissionLevel)
+
+      expect(ps.getMode()).toBe('default')
+      expect(ps.getInvalidPermissionMode()[0]).toContain('42')
+    })
+
+    it('a later recognized value clears the previous warning', () => {
+      const ps = new PermissionSystem('default')
+      ps.setDefaultLevel('nope' as PermissionLevel)
+      expect(ps.getInvalidPermissionMode()).toHaveLength(1)
+
+      ps.setDefaultLevel('acceptEdits')
+      expect(ps.getMode()).toBe('acceptEdits')
+      expect(ps.getInvalidPermissionMode()).toEqual([])
+    })
+
+    it('org restrictions still cap a requested mode name', () => {
+      // Discriminating on purpose: the ceiling admits `default` too, so this can
+      // only land on `acceptEdits` if the mode name was actually honoured — the
+      // old `… : 'default'` mapping yields `default` here and fails.
+      const honoured = new PermissionSystem('default')
+      honoured.setRestrictions({ maxAllowedMode: 'acceptEdits' })
+      honoured.setDefaultLevel('acceptEdits')
+      expect(honoured.getMode()).toBe('acceptEdits')
+
+      // And the ceiling still bites above the request: getMode() reports the
+      // clamped destination, never the value asked for.
+      const capped = new PermissionSystem('default')
+      capped.setRestrictions({ maxAllowedMode: 'plan' })
+      capped.setDefaultLevel('bypassPermissions')
+      expect(capped.getMode()).toBe('plan')
     })
   })
 

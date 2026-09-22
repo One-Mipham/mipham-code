@@ -75,6 +75,25 @@ function isVerificationCommand(input: Record<string, unknown>): boolean {
 const VALID_MODES: Set<string> = new Set<string>(ALL_MODES)
 
 /**
+ * Legacy 3-level spellings, still honoured — and still **silent**, because they
+ * are *mapped* rather than ignored: `'self'`/`'ask'` both meant "let each tool
+ * self-decide" (→ `'default'`), `'bypass'` → `'bypassPermissions'`.
+ *
+ * They predate `PermissionMode` and stay accepted so an old `config.yml` keeps
+ * working. They are also why `setDefaultLevel` cannot use `VALID_MODES` as its
+ * only test: a legacy spelling and a mode name must both count as *recognized*,
+ * while only a value that is neither gets a warning.
+ */
+const LEGACY_LEVEL_MODES: Record<string, PermissionMode> = {
+  self: 'default',
+  ask: 'default',
+  bypass: 'bypassPermissions',
+}
+
+/** Human-readable mode list for warnings — derived, so no message can hold a stale copy. */
+const MODE_LIST = ALL_MODES.join(', ')
+
+/**
  * Why a tool resolved to 'ask' — for rich denial errors (#52).
  * Mirrors the resolution chain order in `check()` (first match wins).
  */
@@ -92,6 +111,8 @@ export class PermissionSystem {
   private askRules: PermissionRuleEntry[] = []
   /** Malformed `permissionRestrictions` entries from the last set/load — see below. */
   private restrictionWarnings: string[] = []
+  /** Unrecognized `permission:` value from the last `setDefaultLevel` — third of the warning family. */
+  private levelWarnings: string[] = []
   /** Legacy exact-name rules for backward compat (set via setRule with 'self' level). */
   private legacyRules = new Map<string, PermissionLevel>()
   /** Legacy default level from constructor when passed non-mode values like 'ask' or 'bypass'. */
@@ -548,12 +569,47 @@ export class PermissionSystem {
 
   // ── Legacy compatibility ──
 
-  setDefaultLevel(level: PermissionLevel): void {
-    // Map legacy 3-level (self/ask/bypass) to new 4-level mode.
-    // Legacy 'self'/'ask' = "let each tool self-decide" → 'default'.
-    // Legacy 'bypass' → 'bypassPermissions'.
-    const newMode: PermissionMode = level === 'bypass' ? 'bypassPermissions' : 'default'
-    this.mode = clampMode(newMode, this.restrictions)
+  /**
+   * Set the default mode from a `permission:` config value. Accepts **both** the
+   * legacy 3-level spellings and any real mode name.
+   *
+   * This used to read `newMode = level === 'bypass' ? 'bypassPermissions' :
+   * 'default'` — i.e. it honoured exactly one string and sent everything else to
+   * `'default'`. Every mode name a user could write in `config.yml` therefore
+   * landed on `default` **silently**: `permission: plan` became a mode that
+   * auto-approves every tool declaring `permission: 'self'` (git, task,
+   * web-fetch, cron, memory, …), so the user believes they narrowed the gate
+   * while it moved the other way; `permission: bypassPermissions` and
+   * `permission: auto` did not do what they say either. No warning, no error,
+   * no way to tell — the same fail-open shape `normalizeRestrictions` was written
+   * to fix, arriving through a different door. Hence the same remedy: honour what
+   * is recognized, pin a safe fallback for what is not, and **say so** through
+   * `getInvalidPermissionMode()`.
+   *
+   * `VALID_MODES` is the discriminator, deliberately the same one the constructor
+   * uses — so a `permission:` value and a `new PermissionSystem(...)` argument
+   * cannot drift apart in which spellings they accept.
+   *
+   * The fallback for an unrecognized value stays `'default'`: the caller asked for
+   * a mode we cannot name, and `default` is the only mode that is not *wider* than
+   * a well-formed request (`plan` is narrower; the rest are comparable or wider).
+   * The org restrictions are applied last, so a clamped mode is what actually lands
+   * — `getMode()` reports the clamped value, never the requested one.
+   */
+  setDefaultLevel(level: PermissionLevel | PermissionMode): void {
+    const mode: PermissionMode | undefined = VALID_MODES.has(level)
+      ? (level as PermissionMode)
+      : LEGACY_LEVEL_MODES[level]
+
+    // Only a value that is neither a mode name nor a legacy spelling warns. The
+    // legacy ones are mapped, not dropped, so they have nothing to report.
+    this.levelWarnings = mode
+      ? []
+      : [
+          `permission "${String(level)}" is not a permission mode; valid: ${MODE_LIST} (legacy spellings also accepted: ${Object.keys(LEGACY_LEVEL_MODES).join(', ')}). Using "default".`,
+        ]
+
+    this.mode = clampMode(mode ?? 'default', this.restrictions)
     this.invalidateCache()
   }
 
@@ -563,6 +619,16 @@ export class PermissionSystem {
     if (this.mode === 'bypassPermissions') return 'bypass'
     if (this.mode === 'plan') return 'ask'
     return 'self'
+  }
+
+  /**
+   * Unrecognized `permission:` values from the last `setDefaultLevel`, one message
+   * each — third member of the warning family beside `getInvalidRules()` and
+   * `getInvalidRestrictions()`. Callers surface all three to stderr; a silent
+   * return here means the gate is not where the user's config says it is.
+   */
+  getInvalidPermissionMode(): string[] {
+    return this.levelWarnings
   }
 
   setRule(toolNameOrRule: string | PermissionRule, level?: PermissionLevel): void {

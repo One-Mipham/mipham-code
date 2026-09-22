@@ -672,6 +672,14 @@ export async function runApp(options: RunOptions): Promise<void> {
     process.stderr.write(`⚠ Mipham Code: ${msg}\n`)
   }
 
+  // Third channel: an unrecognized `permission:` value in config.yml. Until
+  // `setDefaultLevel` honoured real mode names, *no* value except `bypass` could
+  // report anything — they all just became `default`. Warnings are collected on the
+  // instance, so this has to run after the config was applied above.
+  for (const msg of engine.getPermission().getInvalidPermissionMode()) {
+    process.stderr.write(`⚠ Mipham Code: ${msg}\n`)
+  }
+
   // Initialize agent registry and load plugin agents/skills/MCP/hooks
   const agentRegistry = new AgentRegistry()
   agentRegistry.loadUserAgents()

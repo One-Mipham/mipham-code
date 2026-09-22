@@ -6,9 +6,11 @@
  * /security, /audit, /prompt-audit
  */
 import type { CommandHandler, CommandContext, CommandResult } from '../ui/commands.js'
+import type { PermissionMode } from '../shared/index.ts'
 import { getWorkspaceTrust } from '../core/workspace-trust'
 import { atomicWriteFileSync } from '../shared/atomic-write'
 import { CLOUD_PROVIDERS } from '../config/wizard-config'
+import { MODE_CYCLE, PERMISSION_MODE_HIERARCHY } from '../core/permission-config'
 import { homedir } from 'node:os'
 
 export {
@@ -20,6 +22,57 @@ export {
   promptAuditCmd,
   securityCmd,
   trustCmd,
+}
+
+/**
+ * One description per mode — exhaustive by type, so adding a member to
+ * `PermissionMode` fails to compile until it is described here.
+ *
+ * `/permissions` and `/setup 5` both render from this single table. Each used to
+ * carry its own hand-written list, and they had already drifted: `/setup 5` was
+ * still listing the retired 3-level `auto`/`ask`/`bypass` spellings and telling
+ * the user to run `/config permission <level>` — a command that has never existed
+ * (`/config` takes no arguments). Descriptions state what the mode does **today**;
+ * `auto`'s marker comes off when the classifier is wired.
+ */
+const MODE_DESCRIPTIONS: Record<PermissionMode, string> = {
+  plan: 'reads only (Read/Grep/Glob); nothing writes or runs',
+  default: 'per-tool defaults (Bash/Write/Edit are refused, not queued)',
+  acceptEdits: 'reads + edits free; Bash auto-runs read/check commands',
+  auto: 'a classifier decides each call that would otherwise be refused (⚠️ classifier not wired yet — such calls are still refused)',
+  bypassPermissions: 'skip ALL permission checks (⚠️ use with caution)',
+}
+
+/**
+ * The mode table, in `PERMISSION_MODE_HIERARCHY` order — i.e. least → most
+ * permissive, which is what the heading above it claims. The order comes from the
+ * hierarchy array, never from this file, so it cannot disagree with the ranking
+ * `clampMode` actually walks.
+ */
+function renderModeTable(): string {
+  return PERMISSION_MODE_HIERARCHY.map((m) => `  ${m.padEnd(19)}— ${MODE_DESCRIPTIONS[m]}`).join(
+    '\n',
+  )
+}
+
+/**
+ * What Shift+Tab reaches, in the order the wheel visits it — derived from
+ * `MODE_CYCLE` rather than hand-written.
+ *
+ * Deliberately its **own line**, not the table above: the table is the
+ * permissiveness ladder (every legal mode, in `PERMISSION_MODE_HIERARCHY` order)
+ * while this is the cycle, and those two are *allowed* to differ — that is the
+ * entire reason `ALL_MODES` and `MODE_CYCLE` are separate arrays. Rendering one
+ * list as if it were the other is what the old copy did, and it is how a help
+ * screen comes to advertise a mode the wheel cannot reach.
+ *
+ * `src/ui/app.tsx` still keeps its own copy of this order (`PERMISSION_MODES`);
+ * the two agree today (both are `default → acceptEdits → plan →
+ * bypassPermissions`). Until that copy is deleted, this line follows `MODE_CYCLE`
+ * — the canonical table — and not the wheel.
+ */
+function renderCycleLine(): string {
+  return MODE_CYCLE.join(' → ')
 }
 
 /**
@@ -89,7 +142,7 @@ const initCmd: CommandHandler = async (ctx) => {
 # ── Defaults ──
 defaultProvider: ${ctx.providerId}
 defaultModel: ${ctx.modelId}
-permission: ask
+permission: default
 
 # ── Providers (${presetProviders.length} pre-configured — just add your API keys) ──
 providers:
@@ -186,13 +239,12 @@ Mode:       ${ctx.engine.getPermission().getMode()}
 Messages:   ${msgs.length} in context
 Tools:      ${ctx.engine.getTools().size} available
 
-Switch mode with Shift+Tab. Modes (least → most permissive):
-  default            — per-tool defaults (Bash/Write/Edit ask first)
-  acceptEdits        — reads + edits free; Bash auto-runs read/check commands
-  plan               — reads only (Read/Grep/Glob); nothing writes or runs
-  auto               — a classifier rules on every call (destructive / injected /
-                       credential-seeking calls are blocked, the rest run)
-  bypassPermissions  — skip ALL permission checks (⚠️ use with caution)
+Shift+Tab cycles: ${renderCycleLine()} (this session only).
+To persist a mode, set \`permission:\` in .mipham/config.yml — every mode below is
+accepted there.
+
+Modes (least → most permissive):
+${renderModeTable()}
 
 To let Bash run without asking: press Shift+Tab until the status line shows
 "acceptEdits", then send your message again.
@@ -513,7 +565,7 @@ async function setupStep1(ctx: CommandContext): Promise<CommandResult> {
 # ── Defaults ──
 defaultProvider: ${ctx.providerId}
 defaultModel: ${ctx.modelId}
-permission: ask
+permission: default
 
 # ── Providers (${presetProviders.length} pre-configured — just add your API keys) ──
 providers:
@@ -689,14 +741,19 @@ async function setupStep5(ctx: CommandContext): Promise<CommandResult> {
   return {
     content: `── Step 5: Permissions Setup ──
 
-Current mode: ${ctx.config.permission}
+Current mode:  ${ctx.engine.getPermission().getMode()}
+config.yml:    ${ctx.config.permission}
 
-Permission levels:
-  auto    — Run tools automatically (suitable for sandboxed envs)
-  ask     — Prompt before each tool execution (default, recommended)
-  bypass  — Skip all checks (⚠ only for trusted codebases)
+Shift+Tab cycles: ${renderCycleLine()} (this session only).
 
-  Change with: /config permission <level>
+Modes (least → most permissive):
+${renderModeTable()}
+
+To persist one for a project, .mipham/config.yml:
+  permission: acceptEdits
+  permissionRules:
+    allow: ["Bash(npm test)"]     # or: /permissions allow "Bash(npm test)"
+    deny:  ["Bash(rm *)"]
 
 Available tools (${ctx.engine.getTools().size}):
   File:  read, write, edit, glob, grep
@@ -704,12 +761,6 @@ Available tools (${ctx.engine.getTools().size}):
   Agent: agent, memory, plan, skill
   Net:   web-fetch, web-search
   Sys:   config, mcp
-
-Each tool category can be configured independently in .mipham/config.yml:
-  permissions:
-    file: ask
-    exec: ask
-    network: auto
 
 Next: /setup 6 for shell integration`,
   }
@@ -786,7 +837,8 @@ To persist across sessions, add to .mipham/config.yml:
       - ${resolved}
 
 The AI can now access files in this directory.
-Permission level is controlled by /config permission <level>.`,
+Permission mode: Shift+Tab cycles ${renderCycleLine()} (this session);
+\`permission:\` in .mipham/config.yml persists one.`,
   }
 }
 
