@@ -270,7 +270,7 @@ case 'auto':
 **判据（仓库既有纪律）**：仓库绿证明不了规则能触发。负控分三层，缺一层则该缺陷可静默通过。
 
 - **Layer 1 · 接线（源码侧）**：先剥注释**与字符串字面量**（否则一句提到 `resolveApproval` 的注释就能让守卫变绿），再断言两个闸门的表达式是 `await …resolveApproval(` 且该处不再有 `needsApproval(`；并先断言枚举数 `> 0`，防空转通过。**没有这一层，分类器可以完全实现、完全单测通过、却永不接线。**
-- **Layer 2 · 行为（双向 + 计数 spy）**：模式必须选**静态链判 `ask`** 的（如 `default` 档 + `permission:'ask'` 的 Bash），否则"放行 ⇒ 执行"在 `bypassPermissions` 下也成立、是空的。四条：无分类器 ⇒ 不执行；放行 ⇒ 执行且 `classifierCalls === 1`；拒绝 ⇒ 不执行且错误串含分类器理由；**静态已放行的调用 ⇒ `classifierCalls === 0`**（钉死"非 ask 判定逐字节不变"）。
+- **Layer 2 · 行为（双向 + 计数 spy）**：模式必须选**静态链判 `ask`** 的（如 `default` 档 + `permission:'ask'` 的 Bash），否则"放行 ⇒ 执行"在 `bypassPermissions` 下也成立、是空的。四条：无分类器 ⇒ 不执行；放行 ⇒ 执行且分类器**恰好被咨询 1 次**；拒绝 ⇒ 不执行且错误串含分类器理由；**静态已放行的调用 ⇒ 分类器一次都没被咨询**（钉死"非 ask 判定逐字节不变"）。计数由 `test/core/permission.test.ts` 里 `alwaysAllow()` 返回的 `asked` 记录器断言（`toHaveLength(1)` / `toEqual([])`）——**2026-09-22 订正**：本文档此前把这个记录器写成一个**全仓不存在的名字** `classifierCalls`，照着它去 grep 会得出「Layer 2 未接线」这个**错误结论**（四条断言实际都在）。
 - **Layer 3 · 安全性质**：`deny` 规则不可被覆盖；`ask` 规则不可被覆盖；`maxAllowedMode: 'plan'` 下分类器放行仍为 `ask`；分类器抛错 / 超时 / 返回垃圾 ⇒ 仍 `ask`（fail-closed，**必须显式断言**，因为同仓库的 `self-critique` 是反的）；**工具入参中的 prompt 注入**不得变成放行——这是**解析器**测试，若实现是 grep 响应里有没有 `allow` 就会红。
 
 **其他机械守卫**：
