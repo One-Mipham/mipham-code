@@ -10,6 +10,7 @@
     "src/core/crsi-modify.ts",
     "src/core/crsi-sandbox.ts",
     "src/core/crsi-producer.ts",
+    "src/core/permission-classifier.ts",
     "src/core/permission-config.ts",
     "src/core/permission-rules.ts",
     "src/core/permission.ts"
