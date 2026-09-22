@@ -15,6 +15,7 @@ import {
   ALL_MODES,
 } from './permission-config'
 import type { PermissionClassifier } from './permission-classifier'
+import { recordClassifierRuling } from './permission-audit'
 
 /**
  * A tool that only reads: it cannot modify a file or run anything.
@@ -652,7 +653,7 @@ export class PermissionSystem {
       // classifier refused on policy. (`allowRuleDecision` can still answer 'ask'
       // under a ceiling — that is a terminal answer too, so it caches.)
       this.classifierCache.set(key, decision)
-      return decision
+      return this.ruled(tool, decision, 'allow')
     }
 
     const decision: ApprovalDecision = {
@@ -665,6 +666,33 @@ export class PermissionSystem {
     // A retryable failure is a statement that asking again is appropriate; caching
     // it would contradict the field we just set.
     if (!verdict.retryable) this.classifierCache.set(key, decision)
+    return this.ruled(tool, decision, 'deny')
+  }
+
+  /**
+   * 记一条裁决，再把**同一个对象**交回去：放行那一支此前是**无声**的，而无人值守的
+   * 子代理 + 无声放行是最坏的组合（`permission-audit.ts` 文件头有完整的来龙去脉）。
+   *
+   * 这个私有方法的存在方式就是那条不变量 —— 返回 `source: 'classifier'` 与落一条台账
+   * 在代码上**分不开**：两处都在这里出口，将来加第三条路也必须过这里。
+   *
+   * **缓存命中不在此列**（`resolveApproval` 在调用分类器之前就返回了）：那时分类器
+   * 根本没被咨询，写一行等于声称有一个没人做过的裁决。
+   */
+  private ruled(
+    tool: ToolDefinition,
+    decision: ApprovalDecision,
+    verdict: 'allow' | 'deny',
+  ): ApprovalDecision {
+    recordClassifierRuling({
+      mode: this.mode,
+      tool: tool.name,
+      verdict,
+      level: decision.level,
+      reason: decision.classifierReason,
+      retryable: decision.retryable,
+      denialReason: decision.denialReason,
+    })
     return decision
   }
 

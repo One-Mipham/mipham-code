@@ -225,7 +225,24 @@ case 'auto':
 2. 成本按「被门控工具 × 子代理 × 轮次」相乘。
 3. **放行没有审计通道**：`sub-agent.ts` 的闸门只有**拒绝**的通知路径，放行是无声的。**无人值守 + 无声放行是最坏的组合。**
 
-**做法**：`createSubAgentPermission()` 仅在 `agentDef.permissionMode` 解析为 `auto` 时才复制分类器——这已经是写 agent 定义的人一次明确、可审计的动作，且天然受 `maxAllowedMode` 封顶。另需为**每一处**分类器放行补一条可审计记录。
+**做法**：`createSubAgentPermission()` 仅在 `agentDef.permissionMode` 解析为 `auto` 时才复制分类器——这已经是写 agent 定义的人一次明确、可审计的动作，且天然受 `maxAllowedMode` 封顶。另需为**每一处**分类器放行补一条可审计记录（见 §3.8）。
+
+### 3.8 分类器裁决台账（落地上的一处偏离）
+
+上一条的「补审计记录」实现为 `src/core/permission-audit.ts` —— 本机 append-only JSONL（`~/.mipham/permission-audit.jsonl`，0600），**记录点在 `PermissionSystem.resolveApproval()` 内部**，即裁决的出生地。
+
+**为什么记在出生地而不是两个闸门上。** 两道闸门（`engine.ts` / `sub-agent.ts`）都只是消费者；记录挂在那里就是「两条路径只接一条」那族缺陷的形状，且将来第三个闸门不会有任何东西提醒你。记在出生地是**构造上**覆盖全部闸门的。
+
+**为什么不用会话日志事件（对原计划的一处偏离）。** 起初选的是 `session-log` 的 `checker/decision` 事件（同类先例，本地 append-only、不外发、不碰遥测 allowlist 契约）。动手前实测发现**子代理根本没有 `SessionLog`** —— `SubAgent` 的构造函数里没有这个参数，六个 `new SubAgent(...)` 都不传。走会话日志就只能覆盖引擎那一半，而风险 8 的对象恰恰是子代理。要覆盖它就得新拉一条日志管线，代价远大于收益。故改为**模块级台账**：无管线、无注入点，也不给 `engine` 添新能力（因此不牵动 `daemon-capability-parity.test.ts`）。
+
+**记什么**：`at` / `mode` / `tool` / `verdict`（分类器说了什么）/ `level`（最终落定的档位）/ `reason` / `retryable` / `denialReason`。
+`verdict` 与 `level` **必须两个都记**：分类器放行走的是 `allowRuleDecision()`，组织级 `maxAllowedMode` 会在那里把它压回 `ask`。只记 `verdict` 会把「上限否决」读成「放行」，只记 `level` 会把「分类器同意但被封顶」读成「分类器拒绝」——两种单字段读法都是错的。
+
+**不记什么**：**绝不记工具入参**。入参里有文件正文、命令行、凭据片段。这不是新的暴露面（同一次调用在会话日志里以全量入参 + 全量结果落盘，台账严格更少），但**是一条明确的边界**：「`auto` 放行了哪条 Bash」只能从分类器自己的 `reason` 里读，读不到命令原文。
+
+**一行 = 一条裁决，不是一次执行**：`classifierCache` 命中**不写**——那时分类器根本没被咨询，写一行等于声称有一个没人做过的裁决。执行次数要问 gate 侧的指标或会话日志。
+
+**失败姿态**：写失败**永不抛**（一次台账写失败不该掀翻一次工具调用），但第一次失败往 stderr 说一句、之后不再重复——这个模块存在的意义就是消掉「无声」，写不进去还一声不响等于把无声装了回来。
 
 ---
 
@@ -242,6 +259,7 @@ case 'auto':
 | 6   | 转盘 / 标签 / i18n（两份 locale）                                                                              | `PERMISSION_COLORS` / `PERMISSION_LABELS` 是穷尽 `Record`，漏键即编译错                                     |
 | 7   | `instructions.ts` 的 `modeDescriptions`、`commands/project.ts`、`agent/types.ts`、`permission.ts` 的 `modeMap` | 漏键 ⇒ 系统提示对权限什么都不说                                                                             |
 | 8   | 守卫与负控（§五）                                                                                              | —                                                                                                           |
+| 9   | 裁决台账 `permission-audit.ts` + 在 `resolveApproval` 的两处分类器出口落账（§3.8）                             | 三条负控实跑（删掉落账 / 提前到静态出口 / 提前到 `CLASSIFIABLE` 之前）各自变红                              |
 
 **改 `bundled-skills.ts` 前先查** `test/integrity/tool-reference-integrity.test.ts` 是否守那份技能正文。
 
@@ -268,16 +286,16 @@ case 'auto':
 
 ## 六、风险
 
-| #   | 风险                                                   | 处置                                                            |
-| --- | ------------------------------------------------------ | --------------------------------------------------------------- |
-| 1   | **名字碰撞**（最高概率 / 最高影响）                    | 决策 1；Step 1 独立成笔且"行为不变"可测                         |
-| 2   | **静默未接线**                                         | 只有 Layer 1 能抓                                               |
-| 3   | 分类器成为**上限旁路**                                 | §3.5 第 7 步必须走 `allowRuleDecision`                          |
-| 4   | 分类器成为**拒绝规则旁路**                             | §3.5 第 4 步必须是允许清单                                      |
-| 5   | 层级表**漏项** ⇒ 组织上限整体失效（fail-open、无提示） | 显式"全员在场"断言                                              |
-| 6   | 被门控路径上的**延迟**（每次阻塞一个 LLM 往返）        | 超时要比 `self-critique` 更紧，且超时 fail-closed               |
-| 7   | **daemon 策略漂移**                                    | `DAEMON_PERMISSION_MODES` 默认保持 `'default'`，运维自行 opt-in |
-| 8   | 子代理 / 后台**无声放行**                              | 决策 5 + 每处放行补审计记录                                     |
+| #   | 风险                                                   | 处置                                                                      |
+| --- | ------------------------------------------------------ | ------------------------------------------------------------------------- |
+| 1   | **名字碰撞**（最高概率 / 最高影响）                    | 决策 1；Step 1 独立成笔且"行为不变"可测                                   |
+| 2   | **静默未接线**                                         | 只有 Layer 1 能抓                                                         |
+| 3   | 分类器成为**上限旁路**                                 | §3.5 第 7 步必须走 `allowRuleDecision`                                    |
+| 4   | 分类器成为**拒绝规则旁路**                             | §3.5 第 4 步必须是允许清单                                                |
+| 5   | 层级表**漏项** ⇒ 组织上限整体失效（fail-open、无提示） | 显式"全员在场"断言                                                        |
+| 6   | 被门控路径上的**延迟**（每次阻塞一个 LLM 往返）        | 超时要比 `self-critique` 更紧，且超时 fail-closed                         |
+| 7   | **daemon 策略漂移**                                    | `DAEMON_PERMISSION_MODES` 默认保持 `'default'`，运维自行 opt-in           |
+| 8   | 子代理 / 后台**无声放行**                              | 决策 5 + 每处放行补审计记录（§3.8 已落地：记在 `resolveApproval` 出生地） |
 
 ---
 
