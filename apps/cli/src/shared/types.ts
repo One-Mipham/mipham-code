@@ -353,6 +353,12 @@ export interface InstructionFile {
  *   measurement of the wrong object, not a fact about `auto`.
  * - A mode whose static baseline is `'ask'` must not be *reached* by a caller
  *   that never consults the classifier, or it degrades into "refuse everything".
+ *
+ * This copy is kept in step with `packages/shared/src/types.ts` mechanically:
+ * `test/integrity/shared-types-parity.test.ts` asserts that every declaration
+ * the two files share has the same member set (and, for union aliases, the same
+ * literal set). Member *lists* are all it covers — a stale prose default is
+ * still a human's to catch.
  */
 export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'auto' | 'bypassPermissions'
 

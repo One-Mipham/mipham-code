@@ -4,9 +4,9 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.86.0
-> **最后更新**: 2026-09-22 — **权限分类器（对齐 CC 的 `auto` 档）后续：页脚字形按档取 —— 决策 9 的另一半落地，`default` 那一档不再显示「自动接受」** —— 设计文档决策 9（2026-09-22 追加）写着页脚字形取自 CC 二进制里那四个格：`default` **什么都不显示**、`acceptEdits` 与 `auto` 是 `⏵⏵`、`plan` 是 `⏸`；Step 6/7 只做了标签派生、**漏了字形**，`ui/app.tsx` 对每一档硬写 `⏵⏵` ⇒ `default` 档（默认档、也是最常见的档）的用户读到一个**它并不具备的「自动接受」字形** —— 与 P3 同族：**读到的权限比实际宽**。现改为 `PERMISSION_GLYPHS`（穷尽 `Record<PermissionMode, string>`，漏键即编译错，与 `PERMISSION_COLORS` 同形）+ `permissionGlyphPrefix()`（**无字形时连分隔空格都不留**，否则 `default` 那行以空格起头），页脚改用后者。`bypassPermissions` 在 CC 的转盘上**没有对应格**（它 4 格、我们 5 档）⇒ **保留** `⏵⏵`：无从对照时不动它，是最小的选择而不是新决定（注释与设计文档同记）。**三层判据**：映射由 `test/ui/permission-mode.test.ts` 钉住（五档逐字 + 分隔空格）；**接线**由 `test/integrity/permission-status-parity.test.ts` 新增 P3b 从源码侧断（负锚：硬写的 `⏵⏵ {PERMISSION_LABELS` 不得回来）—— 只测映射就是「有定义、无施加点」，本仓反复栽的那族。**负控两条实跑、全红、sha256 逐字相符（`c68c3f79…`）**：① `default` 的映射改回 `'⏵⏵'` ⇒ 用例红（`expected '⏵⏵ ' to be ''`）；② 页脚改回硬写的 `⏵⏵` ⇒ P3b 红。**如实记两条自踩**：ⓐ 我写的负控脚本里有 `git checkout -- src/ui/app.tsx`（本想做还原兜底）⇒ 它**把工作树还原到 HEAD、当场抹掉刚写的改动**，而 `||` 后面的兜底因此不执行；随后负控②的读数是**在 HEAD 上**取得的（机理与我要的不同，但「HEAD 红 / 改后绿」正是负控要的形状）。此后改用 python 双向 + sha256，**不再用 `git checkout` 做还原**。ⓑ 同一份假主张的第二份拷贝：`test/ui/permission-mode.test.ts` 文件头原写「页脚那行 `⏵⏵ <模式>`」，改成 `<字形> <模式>`（按对象扫、不按短语改）。同笔订正设计文档第 77 行（决策 9 记为**已落地**，并记 `auto` 的配色已随 Step 6 定为 `magenta`）。测试 3,039 → **3,041**（253 文件不变；`test/ui` 17/205 → **17/206**，`test/integrity` 9/61 → **9/62**）。本笔仅显式 add 具名路径、**未用 `git add -A`**。
-> **前一条（2.85.0）**: 2026-09-22 — **权限分类器（对齐 CC 的 `auto` 档）Step 9 —— 风险 8 收口：`auto` 的每一次裁决都落一条本地台账，放行不再是无声的** —— 新模块 `core/permission-audit.ts`（`~/.mipham/permission-audit.jsonl`，append-only JSONL、目录 `0700` / 文件 `0600`、只在本机、不上网）。**为什么非做不可**：`source: 'classifier'` 在 `resolveApproval()` 里被造出来，随后只在**拒绝**那一支被两个闸门读走（`engine.ts` / `sub-agent.ts` 的 `decision.source === 'classifier'` 都嵌在拒绝分支里），放行那一支直接丢掉 ⇒「`auto` 到底批过什么」在本机**没有任何一处读得出来**；而子代理与后台是**无人值守**的，那条闸门只有拒绝的通知路径 —— 无人值守 + 无声放行是最坏的组合。**记录点选在裁决的出生地**（`resolveApproval` 的两条分类器出口，经新增私有方法 `ruled()` 收敛成唯一出口）而不是两道闸门上：出生地是**构造上**覆盖全部闸门的唯一位置，将来第三个闸门自动在内；挂在闸门上就是本仓库反复栽的那族形状（两条路径只接一条）。**如实记一处对计划的偏离**：原计划走会话日志事件，动手前实测 **`SubAgent` 的构造函数里没有 `SessionLog` 参数** ⇒ 那条路只覆盖引擎那一半，而风险 8 的对象恰恰是子代理；补一条日志管线代价远大于收益，故改为模块级台账（也因此不给 engine 添新能力，不牵动 `daemon-capability-parity.test.ts`）。**台账记什么是被两个字段钉死的**：`verdict`（分类器说了什么）与 `level`（这一支最终落定的档位）**必须都记** —— 放行走 `allowRuleDecision()`，组织级 `maxAllowedMode` 在那一步会把它压回 `ask`；只记 `verdict` 会把上限否决读成放行，只记 `level` 会把「同意但被封顶」读成「分类器拒绝」，两种单字段读法都是错的。**绝不记工具入参**（入参里有文件正文、命令行、凭据片段），并用一条测试把这句话变成可测量的：把哨兵串塞进命令里，断言整份落盘内容**不含它**、也不含 `command` 这个键 —— 边界如实写明：「`auto` 放行了哪一条 Bash」只能从分类器自己的 `reason` 读，读不到命令原文（要还原到那一层请去会话日志：引擎路径有，子代理路径没有）。**一行 = 一条裁决，不是一次执行**：`classifierCache` 命中**不写**（那时分类器根本没被咨询），有对应用例钉住。**失败姿态**：写失败永不抛（一次台账写失败不该掀翻一次工具调用），但第一次失败往 stderr 说一句、之后不再重复 —— 这个模块存在的全部意义就是消掉「无声」，写不进去还一声不响等于把它装了回来。**负控四条实跑、全红、`cp` 还原后 sha256 逐字相符（`89656a72…`）**：① 删掉 `ruled()` 里的落账 ⇒ **6 红**（全是接线用例）；② 落账提前到静态出口 ⇒ 1 红；③ 提前到 `CLASSIFIABLE` 允许清单之前 ⇒ 1 红；④ 新文件不登记进 `stryker.config.json` 的 `mutate` ⇒ `mutation-wiring.test.ts` 红并**点名 `permission-audit.ts`**（它从磁盘枚举 `permission*.ts`，那条守卫正是为逼出这一次有意识的决定）。**如实记我自己写下的两条**：ⓐ 测试助手的计数最初写成 **getter**，一解构就求值成快照 ⇒「问了 0 次」的断言在分类器明明被问过之后**照样绿**，是不能失败的检查；ⓑ 上限用例最初封 `maxAllowedMode: 'plan'`，而 `setRestrictions` 会**重钳当前档位** ⇒ `mode` 本身变成 `plan`、分类器根本不被咨询（实测读到 `source:'static'`），改封 `'auto'` 才落在「档位仍是 auto、放行被上限否决」那一支。**测试隔离是实测过的**（路径**调用时现算** + 文件级 `vi.mock('node:os')`）：全量 253 文件跑完后，真实 `~/.mipham/permission-audit.jsonl` **不存在**。⚠️ 全量跑两遍：一遍 253/3039 全绿；另一遍红在 `test/e2e/full-pipeline.test.ts`（该文件头部自述「→ Real API」，两次红的是**不同**用例、分别 30s / 60s 超时，单独重跑 8/8 绿）⇒ 与本笔无关的真 API 抖动。**如实记一条边界（不是遗漏）**：台账读侧只有 `readClassifierRulings()`，**没有 CLI 入口**（无 `/permission audit`）—— 本笔只保证「留得下痕迹」，**看**的界面没有。同笔订正本文件一处过期计数：`session-log.ts` 的 `SessionEvent` 实测 **10** 个变体（原文写「七变体」）。测试 3,027 → **3,039**（3,037 passed + 2 skipped，253 文件；`test/core` 75/1,248 → **76/1,260**）。本笔仅显式 add 具名路径、**未用 `git add -A`**。
+> **版本**: 2.87.0
+> **最后更新**: 2026-09-22 — **两份 `types.ts` 的成员集合守卫：契约漏了三个字段、一处散文默认值是假的，而此前没有任何东西会变红** —— `packages/shared/src/types.ts` 是契约，`apps/cli/src/shared/types.ts` 是它的 **vendor 副本**（重复是刻意的：npm 包要自包含，**不能**改成从 `@mipham/shared` re-export，那会在 publish 时崩）。这份刻意重复的代价一直没人付：`'auto'` 曾**只**落在副本里、契约那边漏了，**零测试变红**。本笔补上守卫，并先把利息还清 —— 实测两文件相差 **5 个 hunk**，分类后 **3 类合法**（副本的 vendoring 抬头、副本末尾 3 个 CLI 内部类型、契约侧更完整的散文），**2 类是漏同步**：① `MiphamConfig` 缺 `showSchedulingNotices` / `showCommandPicker`；② `HookConfig` 缺 `timeout`。三处都补进契约（新增字段全为可选 ⇒ 对消费方 `apps/web` 向后兼容）。**同笔修掉一处假文档**：契约把 `showThinking` 的默认写成 `minimal`，而代码是 `off` —— 四处独立读数一致（`config/defaults.ts:16` 的字面量、`ui/app.tsx:616` 与 `:1238` 的 `?? 'off'`、`ui/commands.ts:609`）。新守卫 `test/integrity/shared-types-parity.test.ts` 断三条：契约的每个声明副本都得有（**shared-only 实测为空集**）；两边都有的声明**成员集合相等**（interface 比成员名、type 别名比字面量）；只在副本里的声明必须落在具名豁免表（当前恰好 `ToolContext` / `ToolDefinition` / `SkillDefinition`）。**两处非显然的工程点**：① 比较前必须**先剥注释** —— 不剥的话两处散文里的引号（契约的 `'auto'`、副本的 `'ask'`）会各自污染字面量集合，实测**假红**；② 逐一核对而非抽查：契约 **49** 声明 / 副本 **52** / 共同 **49** / 成员差异 **0**，豁免表差集逐字相符（所有读数由命令产出，不是估的）。**负控两条实跑、各红一个用例、`cp` 还原后 sha256 逐字相符（`9b461f34…`）**：① 把 `timeout` 从副本删掉 ⇒ 成员集合红，失败信息**点名 `HookConfig`** 并列出两边差集；② 往副本塞一个契约里没有的声明 ⇒ 豁免表红。**如实记边界**：守卫只比**成员/字面量集合，不比散文** —— 上面那处假默认值**不会**让它变红，别把绿读成「文档是对的」（这条已写进两个文件的文档注释与该测试头部）。顺带订正一处读不出的计数：测试表下那句「`integrity` 行的 **8** 个守卫」与当时实有的 9 个守卫文件对不上，改为可测量的 **10 个守卫文件**。测试 3,041 → **3,046**（253 → **254** 文件，0 失败；`test/integrity` 9/62 → **10/67**）。本笔仅显式 add 具名路径、**未用 `git add -A`**。
+> **前一条（2.86.0）**: 2026-09-22 — **权限分类器（对齐 CC 的 `auto` 档）后续：页脚字形按档取 —— 决策 9 的另一半落地，`default` 那一档不再显示「自动接受」** —— 设计文档决策 9（2026-09-22 追加）写着页脚字形取自 CC 二进制里那四个格：`default` **什么都不显示**、`acceptEdits` 与 `auto` 是 `⏵⏵`、`plan` 是 `⏸`；Step 6/7 只做了标签派生、**漏了字形**，`ui/app.tsx` 对每一档硬写 `⏵⏵` ⇒ `default` 档（默认档、也是最常见的档）的用户读到一个**它并不具备的「自动接受」字形** —— 与 P3 同族：**读到的权限比实际宽**。现改为 `PERMISSION_GLYPHS`（穷尽 `Record<PermissionMode, string>`，漏键即编译错，与 `PERMISSION_COLORS` 同形）+ `permissionGlyphPrefix()`（**无字形时连分隔空格都不留**，否则 `default` 那行以空格起头），页脚改用后者。`bypassPermissions` 在 CC 的转盘上**没有对应格**（它 4 格、我们 5 档）⇒ **保留** `⏵⏵`：无从对照时不动它，是最小的选择而不是新决定（注释与设计文档同记）。**三层判据**：映射由 `test/ui/permission-mode.test.ts` 钉住（五档逐字 + 分隔空格）；**接线**由 `test/integrity/permission-status-parity.test.ts` 新增 P3b 从源码侧断（负锚：硬写的 `⏵⏵ {PERMISSION_LABELS` 不得回来）—— 只测映射就是「有定义、无施加点」，本仓反复栽的那族。**负控两条实跑、全红、sha256 逐字相符（`c68c3f79…`）**：① `default` 的映射改回 `'⏵⏵'` ⇒ 用例红（`expected '⏵⏵ ' to be ''`）；② 页脚改回硬写的 `⏵⏵` ⇒ P3b 红。**如实记两条自踩**：ⓐ 我写的负控脚本里有 `git checkout -- src/ui/app.tsx`（本想做还原兜底）⇒ 它**把工作树还原到 HEAD、当场抹掉刚写的改动**，而 `||` 后面的兜底因此不执行；随后负控②的读数是**在 HEAD 上**取得的（机理与我要的不同，但「HEAD 红 / 改后绿」正是负控要的形状）。此后改用 python 双向 + sha256，**不再用 `git checkout` 做还原**。ⓑ 同一份假主张的第二份拷贝：`test/ui/permission-mode.test.ts` 文件头原写「页脚那行 `⏵⏵ <模式>`」，改成 `<字形> <模式>`（按对象扫、不按短语改）。同笔订正设计文档第 77 行（决策 9 记为**已落地**，并记 `auto` 的配色已随 Step 6 定为 `magenta`）。测试 3,039 → **3,041**（253 文件不变；`test/ui` 17/205 → **17/206**，`test/integrity` 9/61 → **9/62**）。本笔仅显式 add 具名路径、**未用 `git add -A`**。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -45,7 +45,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：3,041 测试（3,039 passed + 2 skipped，0 失败）
+测试：3,046 测试（3,044 passed + 2 skipped，0 失败）
 
 ---
 
@@ -82,7 +82,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 253 个测试文件，3041 个测试
+│   │   ├── test/               # 254 个测试文件，3046 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -108,7 +108,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（3041 个测试）
+pnpm test         # vitest run（3046 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~9 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -314,13 +314,13 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | artifacts       | 1       | 6        | manifest                                                                                                                                                                    |
 | agent-view      | 1       | 9        | agent-view-manager                                                                                                                                                          |
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
-| integrity       | 9       | 62       | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
+| integrity       | 10      | 67       | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 120      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **253** | **3041** | **0 失败** ✅（3039 passed + 2 skipped）                                                                                                                                    |
+| **合计**        | **254** | **3046** | **0 失败** ✅（3044 passed + 2 skipped）                                                                                                                                    |
 
 > **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 179 测试，自带
 > `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。
-> `integrity` 行的 8 个守卫含 **daemon 能力对等**（`daemon-capability-parity.test.ts`：14 个注入点
+> `integrity` 行的 10 个守卫文件含 **daemon 能力对等**（`daemon-capability-parity.test.ts`：14 个注入点
 > 全集 − 具名豁免表 = daemon 实接集，两向相等）与 **T4 未接线处置**（`unwired-disposition.test.ts`：
 > 删的必须不存在、留的必须仍零引用，陈旧豁免为红）。**注意别把这类
 > 说明写进上表单元格** —— 该列宽由最宽一行决定，加长一行 prettier 会重排全表 23 行（本批实测

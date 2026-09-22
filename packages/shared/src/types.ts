@@ -165,11 +165,15 @@ export interface MiphamConfig {
   permissionRules?: { allow?: string[]; deny?: string[] }
   /**
    * How to render the model's reasoning/thinking before the answer:
-   * - `off`     → hide entirely
-   * - `minimal` → content-free "thinking…" indicator (default)
+   * - `off`     → hide entirely (default — clean output)
+   * - `minimal` → content-free "thinking…" indicator
    * - `full`    → last 200 chars of the actual thinking text
    */
   showThinking?: 'off' | 'minimal' | 'full'
+  /** When false, hide the `⏰ Wakeup scheduled` scheduling confirmation notices. Default false. */
+  showSchedulingNotices?: boolean
+  /** When false, disable the slash-command picker auto-popup on `/`. Default false. */
+  showCommandPicker?: boolean
   providers: ProviderConfig[]
   skills?: {
     paths: string[]
@@ -263,6 +267,8 @@ export interface HookConfig {
   headers?: Record<string, string>
   mcpServer?: string
   mcpTool?: string
+  /** Command timeout in seconds (Claude Code default is 60). */
+  timeout?: number
   continueOnBlock?: boolean
 }
 
@@ -328,12 +334,18 @@ export interface InstructionFile {
  * Permission modes, matching Claude Code's permission architecture.
  *
  * The CLI **vendors a copy** of this union at `apps/cli/src/shared/types.ts`
- * (so the npm package stays self-contained), and that copy carries the
- * long-form rationale plus a fifth member this line used to lack: `'auto'`,
- * the classifier mode. Nothing mechanically enforces the two member lists
- * staying equal: `'auto'` landed in the copy, was missed here, and **nothing
- * reddened** — the only cross-copy sync script (`scripts/sync-mipham-models.ts`)
- * covers the models JSON, not this file. So when you touch one, read the other.
+ * (so the npm package stays self-contained) and carries the long-form rationale
+ * there — why `bypassPermissions` is legal but off the Shift+Tab cycle, and why
+ * `auto`'s ruling is delegated to the classifier rather than decided statically.
+ * Read that copy before changing what a mode does.
+ *
+ * The two copies are kept in step mechanically: `test/integrity/shared-types-parity.test.ts`
+ * asserts that every declaration this file shares with its copy has the same
+ * member set (and, for union aliases, the same literal set). Nothing enforced
+ * this before 2026-09-22 — `'auto'` landed in the copy, was missed here, and
+ * **nothing reddened**. That guard covers member lists only: prose defaults
+ * (`showThinking`'s "default" was documented here as `minimal` while the code
+ * used `off`) still need a human to notice.
  */
 export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'auto' | 'bypassPermissions'
 
