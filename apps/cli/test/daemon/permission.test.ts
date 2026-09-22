@@ -28,10 +28,17 @@ describe('buildDaemonPermission', () => {
   it('downgrades bypassPermissions when forbidden by restrictions', () => {
     process.env[ENV_KEY] = 'bypassPermissions'
     const ps = buildDaemonPermission({ forbiddenModes: ['bypassPermissions'] })
-    // Clamped to the **widest** allowed mode below the requested one —— acceptEdits，
-    // 不是 plan。旧断言写的是 plan，读的是旧的层级表（plan 排在 acceptEdits 之上）
-    // ⇒ 把宽严判反了：降级反而落到比 acceptEdits **更窄**的一档。见 permission-config.ts。
-    expect(ps.getMode()).toBe('acceptEdits')
+    // Clamped to the **widest** allowed mode below the requested one. 这条断言改过
+    // 两次，两次都只是因为层级表里「夹在中间的那一档」变了：plan ⇒ acceptEdits
+    // ⇒ **auto**（auto 已插到 acceptEdits 与 bypassPermissions 之间，即 CC 的排序）。
+    // 方向仍然是收窄（auto ⊂ bypass），见 test/core/permission.test.ts 的完整论证。
+    //
+    // ⚠️ **对 daemon 而言这一档今天是「全拒」**：daemon 还没有分类器（Step 5/6），
+    // 而 auto 的静态基线恒为 'ask' ⇒ 每个工具调用都被拒。这是 fail-closed，
+    // 不是提权 —— 但「运维把 bypass 写进 MIPHAM_DAEMON_PERMISSION、又在
+    // restrictions 里禁掉 bypass」这个组合，从「静默放行一切」变成「一个都不做」，
+    // 服务的可观测表现是任务全失败。接线分类器之前，这段组合必须被知道。
+    expect(ps.getMode()).toBe('auto')
   })
 
   it('honors env mode when restrictions allow it', () => {

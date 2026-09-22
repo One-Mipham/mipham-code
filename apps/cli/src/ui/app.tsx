@@ -111,6 +111,7 @@ const PERMISSION_COLORS: Record<PermissionMode, string> = {
   default: 'white',
   acceptEdits: 'blue',
   plan: 'yellow',
+  auto: 'magenta',
   bypassPermissions: 'red',
 }
 
@@ -204,6 +205,7 @@ export function App({
       default: t('ui.permission.manual'),
       acceptEdits: t('ui.permission.accept_edits'),
       plan: t('ui.permission.plan_mode'),
+      auto: t('ui.permission.auto_mode'),
       bypassPermissions: t('ui.permission.bypass'),
     }),
     [t],

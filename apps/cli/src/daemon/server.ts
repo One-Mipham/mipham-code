@@ -63,10 +63,25 @@ interface WsData {
   sessionId: string
 }
 
+/**
+ * Values `MIPHAM_DAEMON_PERMISSION` accepts. The **default stays `'default'`**;
+ * every widening is an explicit operator choice.
+ *
+ * `'auto'` is accepted, and today it means **every tool call is refused**: the
+ * mode's static baseline answers `'ask'` for all of them, and the daemon has no
+ * classifier to rule on the `'ask'` (the classifier is wired in the CLI's
+ * `index.tsx`, not here). Refusing with the mode named is the honest reading —
+ * `auto` means "there is no human to ask, let a classifier decide", and with no
+ * classifier there is nothing to decide with. The alternative (leaving it out of
+ * this set) would silently fall back to `'default'`, which is *more* permissive
+ * than what was asked for; a silent widening is the worse of the two ways to be
+ * wrong. This entry becomes useful the day the daemon builds a classifier.
+ */
 const DAEMON_PERMISSION_MODES: ReadonlySet<PermissionMode> = new Set<PermissionMode>([
   'default',
   'acceptEdits',
   'plan',
+  'auto',
   'bypassPermissions',
 ])
 

@@ -10,7 +10,10 @@ export interface AgentFrontmatter {
   tools?: string // comma-separated allowlist
   disallowedTools?: string
   model?: string // 'sonnet' | 'opus' | 'haiku' | 'inherit' | full model ID
-  permissionMode?: 'default' | 'acceptEdits' | 'bypass' | 'plan' | 'bypassPermissions'
+  // Hand-written union rather than `PermissionMode`: it also admits the legacy
+  // `'bypass'` alias that `resolveAgentMode` normalizes. Adding a mode to
+  // `PermissionMode` does **not** fail to compile here — keep the two in step.
+  permissionMode?: 'default' | 'acceptEdits' | 'bypass' | 'plan' | 'auto' | 'bypassPermissions'
   maxTurns?: number
   skills?: string
   background?: boolean

@@ -230,8 +230,13 @@ export class PermissionSystem {
     // Normalize aliases
     const normalized = agentMode === 'bypass' ? 'bypassPermissions' : agentMode
 
+    // Hand-written map, so a mode missing from it does not fail to compile: it
+    // falls to the `|| 'default'` below and the agent silently runs narrower than
+    // it asked for. `auto` therefore has to be added here *and* in
+    // `agent/types.ts`'s union — the type does not force either.
     const modeMap: Record<string, PermissionMode> = {
       bypassPermissions: 'bypassPermissions',
+      auto: 'auto',
       plan: 'plan',
       acceptEdits: 'acceptEdits',
       default: 'default',
@@ -510,6 +515,28 @@ export class PermissionSystem {
         return tool.category === 'file' && ['Read', 'Grep', 'Glob'].includes(tool.name)
           ? 'bypass'
           : 'ask'
+
+      case 'auto':
+        // The whole mode, in one line. Returning the sentinel `'mode-baseline'`
+        // here instead — the instinct, since `default` does exactly that — would
+        // be a **half-broken** mode rather than an obviously broken one: `check()`
+        // reaches the baseline at step 5, *before* step 6 reads `tool.permission`,
+        // and 20 tools declare `permission: 'self'`. They would keep
+        // auto-approving, so the calls the classifier most needs to see are the
+        // ones it never sees, while every other tool routes correctly.
+        //
+        // (20 is counted from `createToolRegistry()`, not from grep: the literal
+        // `permission: 'self'` also appears in prose comments — including, once,
+        // in this very rationale, which is how the first draft said 22.)
+        //
+        // A literal `'ask'` makes step 5 return, so **every** call in this mode
+        // reaches `resolveApproval` and the classifier rules on all of them —
+        // matching Claude Code, whose mode table maps `auto` to `classify`.
+        //
+        // This does not contradict "the classifier may only allow, never deny":
+        // the baseline is `'ask'` (which is what an un-configured Mipham already
+        // answers), and a classifier refusal merely *keeps* that `'ask'`.
+        return 'ask'
 
       case 'bypassPermissions':
         return 'bypass'

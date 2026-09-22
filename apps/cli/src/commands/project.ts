@@ -190,6 +190,8 @@ Switch mode with Shift+Tab. Modes (least → most permissive):
   default            — per-tool defaults (Bash/Write/Edit ask first)
   acceptEdits        — reads + edits free; Bash auto-runs read/check commands
   plan               — reads only (Read/Grep/Glob); nothing writes or runs
+  auto               — a classifier rules on every call (destructive / injected /
+                       credential-seeking calls are blocked, the rest run)
   bypassPermissions  — skip ALL permission checks (⚠️ use with caution)
 
 To let Bash run without asking: press Shift+Tab until the status line shows

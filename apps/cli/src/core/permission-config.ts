@@ -42,11 +42,39 @@ export function loadPermissionConfig(raw: Partial<PermissionConfig> = {}): Permi
  * 'plan'` admitted acceptEdits *and* default — the ceiling let through the wider
  * mode each time. The pairs are pinned by a probe in `test/core/permission.test.ts`
  * (P4) so the claim stays measured rather than asserted.
+ *
+ * `auto` sits between `acceptEdits` and `bypassPermissions` — the same rung Claude
+ * Code puts it on. It has to sit above `acceptEdits`, because at runtime the
+ * classifier may allow calls `acceptEdits` refuses (network, non-verification
+ * Bash), so a ceiling of `acceptEdits` must not admit it. Its own static baseline
+ * grants nothing at all, which is why the P4 width probe **excludes** it by name:
+ * measuring "who is narrower" on the static chain would otherwise call `auto` the
+ * narrowest mode of all and point the hierarchy's first slot at it.
+ *
+ * **Every member of `PermissionMode` must appear here.** A missing member makes
+ * `indexOf` return `-1`, and `getAllowedModes` then skips the whole ceiling
+ * (`if (capIdx >= 0)`) — the org-level cap goes silently inert, fail-open, with no
+ * warning anywhere. There is a compile-time-exhaustive coverage assertion for this
+ * in `test/core/permission.test.ts` (P4c); the ordering probe (P4) catches a wrong
+ * *order* but never a *missing* entry.
+ *
+ * **Inserting `auto` moved a fallback destination, on purpose and without a
+ * failure.** `clampMode` answers "the highest allowed mode at or below `desired`",
+ * so every mode gains a neighbour below it. A config that forbids
+ * `bypassPermissions` and then requests it now lands on `auto` — previously
+ * `acceptEdits`. Both readings satisfy the contract and `auto` is a strict subset
+ * of `bypassPermissions` at runtime (it gates each call), so the move narrows
+ * rather than escalates; but it *is* a change in what those configs do, and it is
+ * pinned in `test/core/permission.test.ts` and `test/daemon/permission.test.ts`
+ * rather than left to be discovered. **Until the classifier is wired, `auto`'s
+ * static baseline is `ask` throughout, so that landing means "every call
+ * refused"** — fail-closed, and honest, but not a behaviour to install by accident.
  */
 export const PERMISSION_MODE_HIERARCHY: PermissionMode[] = [
   'plan',
   'default',
   'acceptEdits',
+  'auto',
   'bypassPermissions',
 ]
 
@@ -71,7 +99,13 @@ export const PERMISSION_MODE_HIERARCHY: PermissionMode[] = [
  * Order is insignificant to both consumers except in one place: `clampMode`'s
  * last-resort fallback is `allowed[0]`, so `default` stays first.
  */
-export const ALL_MODES: PermissionMode[] = ['default', 'acceptEdits', 'plan', 'bypassPermissions']
+export const ALL_MODES: PermissionMode[] = [
+  'default',
+  'acceptEdits',
+  'plan',
+  'auto',
+  'bypassPermissions',
+]
 
 /**
  * Shift+Tab cycling order — **what the user actually presses through**. Also
@@ -91,6 +125,7 @@ const MODE_ALIASES: Record<string, PermissionMode> = {
   default: 'default',
   plan: 'plan',
   acceptedits: 'acceptEdits',
+  auto: 'auto',
   bypasspermissions: 'bypassPermissions',
   bypass: 'bypassPermissions', // 遗留 3 档名（PermissionLevel 里的 'bypass'）
 }
@@ -98,7 +133,7 @@ const MODE_ALIASES: Record<string, PermissionMode> = {
 /** 认不出的配置一律按这一档收紧 —— 层级表首位即最严的一档（与 P4 同一真源）。 */
 const STRICTEST_MODE: PermissionMode = PERMISSION_MODE_HIERARCHY[0]!
 
-const VALID_MODE_LIST = 'default, plan, acceptEdits, bypassPermissions'
+const VALID_MODE_LIST = 'default, plan, acceptEdits, auto, bypassPermissions'
 
 /** 可读的类型名 —— 报错要说清「你给的是个字符串」，而不是只说 invalid。 */
 function describeValue(value: unknown): string {

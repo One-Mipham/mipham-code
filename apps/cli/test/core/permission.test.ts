@@ -339,9 +339,19 @@ describe('PermissionSystem', () => {
       ps.setRestrictions({ forbiddenModes: ['bypassPermissions'] })
 
       ps.setMode('bypassPermissions')
-      // 次宽的允许模式是 acceptEdits，不是 plan —— plan 排在它下面（P4 修正了顺序；
-      // 旧顺序让这条落到更严的 plan 上，那是顺序错的产物，不是有意的保守）。
-      expect(ps.getMode()).toBe('acceptEdits')
+      // 请求 bypass 被禁 ⇒ 落到层级表上「次宽的允许档」。这条断言**第三次**被改，
+      // 三次改的都是同一个原因：夹在中间的那一档变了（plan⇒acceptEdits⇒auto）。
+      //
+      // 为什么 `auto` 方向上是安全的：它是 bypass 的**严格子集**（bypass 无门放行一切，
+      // auto 对每一次调用先过分类器），所以「落到 auto」相对请求是**收窄**，不是提权。
+      // 为什么它仍有分量、必须记下来：auto 是运行期裁决，能放行 acceptEdits 会拦下的
+      // 调用（非校验型 Bash、网络）。所以对一个「明令禁掉 bypass」的配置，落点从
+      // 「静默放行写文件」变成「每一次调用都被门」，语义确实变了。
+      //
+      // **未接线期间的后果（Step 5 之前）**：分类器还没接，auto 的静态基线恒为 ask
+      // ⇒ 该配置下**每个工具调用都被拒**。fail-closed 方向，但服务会像坏了一样安静，
+      // 所以 daemon 侧另有一条测试与一段注释点名这件事。
+      expect(ps.getMode()).toBe('auto')
     })
 
     it('allows modes not in forbidden list', () => {
@@ -600,9 +610,29 @@ describe('PermissionSystem', () => {
       ])
     })
 
+    /**
+     * 静态宽度**测不出来的**档位 —— `auto` 把裁决委托给运行期的分类器：它的静态链对
+     * 每一次调用都答 `'ask'`，于是 `passesIn('auto', t)` 恒为 false，本探针会把它量成
+     * 「比 plan 还窄」。那不是它窄，是**量错了对象**（量的是静态基线，不是这一档）。
+     *
+     * 留在域里的后果很具体：`narrowest` 会翻成 `['auto']`，而层级表第一档是 plan ——
+     * 断言逼着人去把层级表首位改成 auto，即把「运行期委托档」放到最严的位置上。
+     *
+     * 所以它被**具名排除**，且排除集合本身由测量**导出**（见下条）：哪天又出现一个
+     * 静态上什么都不放行的档位，这条会红，逼人来认领，而不是静默扩大排除面。
+     */
+    const RUNTIME_DELEGATING: PermissionMode[] = ['auto']
+    const STATICALLY_MEASURABLE = ALL_MODES.filter((m) => !RUNTIME_DELEGATING.includes(m))
+
+    it('被排除在宽度探针外的，恰好是「静态上什么都不放行」的那些档位（导出，不是宣布）', () => {
+      const passNothing = ALL_MODES.filter((m) => PROBES.every((t) => !passesIn(m, t)))
+      expect(passNothing).toEqual(RUNTIME_DELEGATING)
+    })
+
     it('层级表首位 = 实测最严的那一档（数组与测量同源，不是各说各话）', () => {
-      const ALL: PermissionMode[] = ['default', 'acceptEdits', 'plan', 'bypassPermissions']
-      const narrowest = ALL.filter((m) => ALL.every((o) => o === m || notWiderThan(m, o)))
+      const narrowest = STATICALLY_MEASURABLE.filter((m) =>
+        STATICALLY_MEASURABLE.every((o) => o === m || notWiderThan(m, o)),
+      )
       // 实测的唯一答案就是 plan：它同时严格窄于 default（后者放行 git / task /
       // web-fetch / memory / cron 这些 `permission: 'self'` 的非文件工具）与
       // acceptEdits（后者放行 Write/Edit）。层级表若把 default 排回首位，这里就红。
@@ -639,12 +669,93 @@ describe('PermissionSystem', () => {
       expect(ps.cycleMode()).toBe('default')
     })
 
-    it('禁用 bypass 后请求 bypass ⇒ 落到次宽的 acceptEdits（顺序修正的连带结果，如实钉住）', () => {
+    it('禁用 bypass 后请求 bypass ⇒ 落到次宽的 auto（层级表插档的连带结果，如实钉住）', () => {
       const ps = new PermissionSystem('default')
       ps.setRestrictions({ forbiddenModes: ['bypassPermissions'] })
 
       ps.setMode('bypassPermissions')
+      // `auto` 插在 acceptEdits 与 bypassPermissions 之间（就是 CC 的 `zo` 排序），
+      // 于是「次宽的允许档」从 acceptEdits 变成 auto。两者都符合 `clampMode`
+      // 「≤ 请求档的最高允许档」的契约，且 auto 是 bypass 的**严格子集**
+      // ⇒ 依然是收窄，不是提权。（上一条 `:344` 有同一处的完整论证。）
+      expect(ps.getMode()).toBe('auto')
+    })
+  })
+
+  // ═══════════════════════════════════════════
+  // P4c — `auto` 档：静态基线恒为 ask，且层级表必须收全每一个档位
+  // ═══════════════════════════════════════════
+
+  describe('P4c — auto 档的静态形状与层级表全员在场', () => {
+    it('**每个**档位都在层级表里 —— 漏一个会让组织级上限整体静默失效', () => {
+      // 这张表是**编译期穷尽**的：往 `PermissionMode` 里加一个成员而不改这里，
+      // `tsc` 会报「缺少属性」。它存在的理由不是好看，而是层级表本身**不会**
+      // 因为漏项而报错 —— `indexOf` 给 -1，`permission-config.ts` 的
+      // `if (capIdx >= 0)` 于是整条上限被跳过（fail-open，无任何提示）。
+      const EVERY_MODE: Record<PermissionMode, true> = {
+        default: true,
+        acceptEdits: true,
+        plan: true,
+        auto: true,
+        bypassPermissions: true,
+      }
+      const members = Object.keys(EVERY_MODE) as PermissionMode[]
+      expect([...ALL_MODES].sort()).toEqual([...members].sort())
+      for (const m of members) {
+        expect(PERMISSION_MODE_HIERARCHY, `${m} 不在层级表里 ⇒ org 上限会静默失效`).toContain(m)
+      }
+    })
+
+    it('auto 夹在 acceptEdits 与 bypassPermissions 之间（运行期可比 acceptEdits 更宽）', () => {
+      const h = PERMISSION_MODE_HIERARCHY
+      expect(h.indexOf('auto')).toBeGreaterThan(h.indexOf('acceptEdits'))
+      expect(h.indexOf('auto')).toBeLessThan(h.indexOf('bypassPermissions'))
+    })
+
+    it('上限 acceptEdits 时 auto 不可达 —— 否则上限会把「比它宽的一档」放进来', () => {
+      const ps = new PermissionSystem('default')
+      ps.setRestrictions({ maxAllowedMode: 'acceptEdits' })
+
+      ps.setMode('auto')
+      expect(ps.getMode()).not.toBe('auto')
       expect(ps.getMode()).toBe('acceptEdits')
+    })
+
+    it('auto 的静态基线对每一次调用都答 ask —— 含 `permission: self` 的工具', () => {
+      // 这一条守的是承重的那一行（`modeBaseline` 的 `case 'auto': return 'ask'`）。
+      // 若它改成 `'mode-baseline'`（直觉做法，`default` 就是那样），`check()` 的
+      // 第 5 步会放行、继续走到第 6 步读 `tool.permission`，于是 22 个声明
+      // `permission: 'self'` 的工具**永远见不到分类器** —— 半坏，不是明显坏。
+      // 断言里点名 `self` 工具，正是为了钉住「第 5 步不得让位给第 6 步」。
+      const ps = new PermissionSystem('auto')
+      for (const tool of [
+        makeTool('Read', 'self', 'file'),
+        makeTool('git', 'self', 'exec'),
+        makeTool('web-fetch', 'self', 'network'),
+        makeTool('Bash', 'ask', 'exec'),
+        makeTool('Write', 'ask', 'file'),
+        // 最强的一根探针：**声明 `permission: 'bypass'` 的工具在 auto 档也必须被问**。
+        // 第 6 步会原样返回 `'bypass'`，所以只要基线让位给它，这条立刻红。
+        makeTool('DeclaredBypass', 'bypass', 'exec'),
+      ]) {
+        expect(ps.check(tool, { command: 'pnpm test' }), `${tool.name} 在 auto 档应问`).toBe('ask')
+        expect(ps.explainDenial(tool, { command: 'pnpm test' }).reason).toBe('mode-baseline')
+      }
+    })
+
+    it('auto 不是 bypass：允许规则/上限之外的一切都不被它放行', () => {
+      const ps = new PermissionSystem('auto')
+      expect(ps.isBypassed(makeTool('Bash', 'ask', 'exec'), { command: 'pnpm test' })).toBe(false)
+      expect(ps.getDefaultLevel()).toBe('self')
+    })
+
+    it('agent 要 auto 就能拿到 auto（手写 modeMap 漏项会静默落到 default）', () => {
+      const sub = new PermissionSystem('default').createSubAgentPermission('auto')
+      expect(sub.getMode()).toBe('auto')
+      // 对照：认不出的值仍落到 default —— 证明上一条抓的是映射表，不是「谁都给 auto」
+      expect(new PermissionSystem('default').createSubAgentPermission('nope').getMode()).toBe(
+        'default',
+      )
     })
   })
 

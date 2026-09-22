@@ -77,7 +77,7 @@ Project:       [✅/⬜] .mipham/  [✅/⬜] config.yml  [✅/⬜] MIPHAM.md
 User Config:   [✅/⬜] ~/.mipham/config.yml
 API Keys:      [N] set (list names or "none")
 Skills:        [N] installed
-Permissions:   [mode] (default/acceptEdits/plan/bypassPermissions)
+Permissions:   [mode] (default/acceptEdits/plan/auto/bypassPermissions)
 Trust:         [✅/⬜] workspace trusted
 ```
 
@@ -331,12 +331,19 @@ Or directly:
 
 ### 6.1 — Permission Modes
 
-| Mode                | Behavior                        | Use Case                            |
-| ------------------- | ------------------------------- | ----------------------------------- |
-| `default`           | Prompt for each tool            | Normal development (recommended)    |
-| `acceptEdits`       | Auto-allow edits, prompt others | Active coding sessions              |
-| `plan`              | Plan-only, no tool execution    | Design & architecture work          |
-| `bypassPermissions` | Skip all checks                 | ⚠️ Only for fully trusted codebases |
+| Mode                | Behavior                               | Use Case                                  |
+| ------------------- | -------------------------------------- | ----------------------------------------- |
+| `default`           | Ask-first tools are refused (see note) | Normal development (recommended)          |
+| `acceptEdits`       | Auto-allow edits, ask for other tools  | Active coding sessions                    |
+| `plan`              | Plan-only, no tool execution           | Design & architecture work                |
+| `auto`              | A classifier rules on every call       | Long unattended runs you still want gated |
+| `bypassPermissions` | Skip all checks                        | ⚠️ Only for fully trusted codebases       |
+
+**Note on `default`**: Mipham Code has no interactive approval prompt, so "ask"
+means the call is **refused** with a message naming the mode — it is not queued
+for your answer. That makes `default` the strictest _usable_ mode for Bash and
+file writes; `auto` is the mode that lets gated calls proceed without a human,
+by having a classifier rule on each one.
 
 ### 6.2 — Configure
 

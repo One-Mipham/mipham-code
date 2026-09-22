@@ -333,8 +333,28 @@ export interface InstructionFile {
 }
 
 // ── Permission Types ──
-/** Four explicit permission modes matching Claude Code's permission architecture */
-export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions'
+/**
+ * Permission modes, matching Claude Code's permission architecture.
+ *
+ * `bypassPermissions` is legal but **off the Shift+Tab cycle** — the cycle is the
+ * four slots Claude Code's own cycle array lists (`default`, `acceptEdits`,
+ * `plan`, `auto`), while this union is the full set the config may request. See
+ * `ALL_MODES` / `MODE_CYCLE` in `core/permission-config.ts` for why those two
+ * arrays are separate, and why merging them silently demotes
+ * `bypassPermissions`.
+ *
+ * `auto` behaves unlike the other four: it does not decide anything statically.
+ * Its baseline answers `'ask'` for **every** call, and the ruling is delegated to
+ * the LLM permission classifier (`core/permission-classifier.ts`). Two
+ * consequences worth knowing before reading code that switches on this union:
+ *
+ * - `auto` has **no static width**, so a "which mode is narrower" measurement
+ *   taken from the static chain reads it as narrower than `plan` — a
+ *   measurement of the wrong object, not a fact about `auto`.
+ * - A mode whose static baseline is `'ask'` must not be *reached* by a caller
+ *   that never consults the classifier, or it degrades into "refuse everything".
+ */
+export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'auto' | 'bypassPermissions'
 
 /**
  * Backward-compatible alias: `PermissionMode` plus the legacy 3-level
