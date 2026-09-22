@@ -60,6 +60,15 @@ describe('状态与执行同源（P3 / P5）', () => {
     // 循环：必须把**读回的值**作为结果，而不是请求的那一档
     expect(APP).toMatch(/cyclePermissionMode\(engine\.getPermission\(\)/)
   })
+
+  it('P3b：页脚字形按档取，不是写死的 `⏵⏵`', () => {
+    // 决策 9 的另一半（`default` 那一档 CC 什么都不显示）。映射本身由
+    // `test/ui/permission-mode.test.ts` 钉住，这里断的是**接线**：把字形写回 JSX 字面量，
+    // 那张表就成了「有定义、无施加点」—— 而且缺陷全绿：`default` 档会显示一个它并不具备的
+    // 「自动接受」字形，读到的权限比实际宽，与 P3 同族。
+    expect(APP).not.toMatch(/⏵⏵ \{PERMISSION_LABELS/)
+    expect(APP).toMatch(/permissionGlyphPrefix\(permissionMode\)/)
+  })
 })
 
 describe('`auto` 档分类器的接线（三个点，缺一处就是「实现了但从不生效」）', () => {

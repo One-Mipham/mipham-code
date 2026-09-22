@@ -74,7 +74,7 @@
 
 8. **档位总数 = 5，不加 `dontAsk`**（2026-09-22 追加，用户裁定）。对齐后的形状：转盘 4 档（`default`/`acceptEdits`/`plan`/`auto`）+ 合法但不上转盘的 `bypassPermissions`。**这与 CC 的结构一致** —— `Xo` 里 `bypassPermissions` 与 `dontAsk` 都不在 `W` 里。
    CC 的第 6 档 `dontAsk` **明确不加**：它的语义是「不问、未预先批准就拒」（同表 `title:"Don't Ask"`），**而我们的 `default` 今天就是这个行为**（我们没有弹窗）。加进来等于同一行为挂两个名字，正是本次要消掉的那种混乱。
-9. **档位字形也取自 `W`**（2026-09-22 追加）。两个最小化标识符的取值已在二进制里解出（偏移 `172130538`）：`$Pe="⏸"`（`⏸`）、`Ije="⏵⏵"`（`⏵⏵`）。故 CC 的每格是 `default → ""`（**空，什么都不显示**）、`acceptEdits → ⏵⏵`、`plan → ⏸`、`auto → ⏵⏵`；**我们页脚对每一档都硬写了 `⏵⏵`**。落地时改成按档取字形。**颜色 token 未映射**（`text`/`autoAccept`/`planMode`/`warning` 是 CC 的主题 token，与 Ink 的颜色名不是一套），本轮**保留我们现有配色**并给 `auto` 一个新色，留待 Step 6 定；这是一处**已知偏离，不是遗漏**。
+9. **档位字形也取自 `W`**（2026-09-22 追加）。两个最小化标识符的取值已在二进制里解出（偏移 `172130538`）：`$Pe="⏸"`（`⏸`）、`Ije="⏵⏵"`（`⏵⏵`）。故 CC 的每格是 `default → ""`（**空，什么都不显示**）、`acceptEdits → ⏵⏵`、`plan → ⏸`、`auto → ⏵⏵`；**我们页脚此前对每一档都硬写了 `⏵⏵`**。**已于 2026-09-22 落地**：`ui/app.tsx` 新增 `PERMISSION_GLYPHS`（穷尽 `Record<PermissionMode, string>`，漏键即编译错）+ `permissionGlyphPrefix()`，页脚改用后者（`default` 那一档连分隔空格都不留）。`bypassPermissions` 在 CC 的转盘上**没有对应格**（它的转盘 4 格、我们是 5 档）⇒ **保留** `⏵⏵`：无从对照时不动它，是最小的选择而不是新决定。**颜色 token 未映射**（`text`/`autoAccept`/`planMode`/`warning` 是 CC 的主题 token，与 Ink 的颜色名不是一套），**保留我们现有配色**并给 `auto` 一个新色 —— 已随 Step 6 定为 `magenta`（`PERMISSION_COLORS.auto`），这是同一处**已知偏离，不是遗漏**。
 
 ---
 

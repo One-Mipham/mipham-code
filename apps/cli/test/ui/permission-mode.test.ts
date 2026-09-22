@@ -1,7 +1,7 @@
 /**
  * P3 — 页脚的状态必须与执行**同源**。
  *
- * 页脚那行 `⏵⏵ <模式>` 是用户判断「我现在有什么权限」的唯一读数，而它此前读的是
+ * 页脚那行 `<字形> <模式>` 是用户判断「我现在有什么权限」的唯一读数，而它此前读的是
  * **本地猜的值**：初始值写死 `'default'`，Shift+Tab 之后存的是**请求的那一档** ——
  * 两者都不等于引擎实际所在的模式。组织级限制（`maxAllowedMode` / `forbiddenModes`）
  * 会**静默改写**你请求的那一档，于是页脚报的恰好是那个「更宽」的值：说放行、实际审批，
@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { livePermissionMode, cyclePermissionMode } from '../../src/ui/app'
+import { livePermissionMode, cyclePermissionMode, permissionGlyphPrefix } from '../../src/ui/app'
 import { PermissionSystem } from '../../src/core/permission'
 import { MODE_CYCLE } from '../../src/core/permission-config'
 
@@ -69,5 +69,25 @@ describe('P3 — 页脚状态与执行同源', () => {
     expect(MODE_CYCLE).toContain(shown)
     expect(shown).toBe('default')
     expect(ps.getMode()).toBe(shown)
+  })
+})
+
+/**
+ * 设计文档决策 9 的另一半：页脚字形**按档取**，不再是每一档都硬写 `⏵⏵`。
+ *
+ * 取值逐字对齐 CC 那四个格（`$Pe="⏸"` / `Ije="⏵⏵"`）：`default` 空、`acceptEdits` 与
+ * `auto` 是 `⏵⏵`、`plan` 是 `⏸`。`bypassPermissions` 在 CC 的转盘上没有对应格，保留
+ * 既有渲染 —— 这一条把「保留」也钉住，免得将来被当成漏项顺手改掉。
+ *
+ * 本条钉的是**映射与那个分隔空格**：字形错了、或者 `default` 那一档留下一个起头空格，
+ * 都会直接改变用户读到的那一行。**接线**（页脚确实用这个前缀）不在本文件里断。
+ */
+describe('页脚字形按档取（决策 9）', () => {
+  it('五档各自的字形与分隔空格（`default` 连空格都不留）', () => {
+    expect(permissionGlyphPrefix('default')).toBe('')
+    expect(permissionGlyphPrefix('acceptEdits')).toBe('⏵⏵ ')
+    expect(permissionGlyphPrefix('plan')).toBe('⏸ ')
+    expect(permissionGlyphPrefix('auto')).toBe('⏵⏵ ')
+    expect(permissionGlyphPrefix('bypassPermissions')).toBe('⏵⏵ ')
   })
 })

@@ -116,6 +116,31 @@ const PERMISSION_COLORS: Record<PermissionMode, string> = {
   bypassPermissions: 'red',
 }
 
+// 页脚那一行的**字形**，取值与 Claude Code 二进制里那四个格逐字对齐（`$Pe="⏸"` /
+// `Ije="⏵⏵"`）：`default` **什么都不显示**、`acceptEdits` 与 `auto` 都是 `⏵⏵`、`plan` 是 `⏸`。
+// 这本是设计文档决策 9 的一半，Step 6/7 只做了标签派生、漏了字形，此处补上。
+// `bypassPermissions` 在 CC 的转盘上没有对应格（它的转盘 4 格、我们这张是 5 档），
+// 无从对照 ⇒ **保留既有渲染** `⏵⏵`，是最小的选择而不是新决定。
+// 穷尽 `Record` 与 `PERMISSION_COLORS` 同形：将来加档位忘了字形是**编译错**，不是静默空串。
+const PERMISSION_GLYPHS: Record<PermissionMode, string> = {
+  default: '',
+  acceptEdits: '⏵⏵',
+  plan: '⏸',
+  auto: '⏵⏵',
+  bypassPermissions: '⏵⏵',
+}
+
+/**
+ * 页脚前缀 = `<字形> `，**没有字形时连那个空格都不留**（否则 `default` 那一行会以空格起头）。
+ *
+ * 与 `PERMISSION_LABELS` 合成**单独一个**文本节点交给 Ink：分两处写时，中间那点缩进是否
+ * 落成空格取决于 JSX 的空白折叠规则 —— 一件与权限无关、却会改变用户读到的东西的巧合。
+ */
+export function permissionGlyphPrefix(mode: PermissionMode): string {
+  const glyph = PERMISSION_GLYPHS[mode]
+  return glyph ? `${glyph} ` : ''
+}
+
 /** 页脚读模式所需的最小面 —— `QueryEngine` 与 `RemoteEngine` 都满足。 */
 export type PermissionSource = {
   setMode(mode: PermissionMode): void
@@ -1331,7 +1356,7 @@ export function App({
             <Box flexDirection="column">
               <Box flexDirection="row">
                 <Text color={PERMISSION_COLORS[permissionMode]}>
-                  ⏵⏵ {PERMISSION_LABELS[permissionMode]}
+                  {permissionGlyphPrefix(permissionMode) + PERMISSION_LABELS[permissionMode]}
                 </Text>
                 <Text dimColor>
                   {' '}
