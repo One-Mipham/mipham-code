@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.84.0] — 2026-09-22
+
+### Added
+
+- **权限分类器（`auto` 档）从设计到接线**：`core/permission-classifier.ts`（**fail-closed**，与既有
+  `self-critique` 的 fail-open **刻意相反**）+ 接到全仓**仅有的两处**运行期闸门。安全契约是四步顺序：
+  非 `ask` 判定原样返回 ⇒ 分类器只在允许清单内介入（否则成为绕开人写规则的万能通道）⇒
+  无分类器 / 非 `auto` 则 fail-closed ⇒ 放行经 `allowRuleDecision()` 重新推导（永不强于一条
+  allow 规则、组织级上限自动封顶）
+- **分类器裁决台账** `core/permission-audit.ts`：`auto` 档的每一次裁决落
+  `~/.mipham/permission-audit.jsonl`（append-only，目录 0700 / 文件 0600）。记录点选在裁决的
+  **出生地** `resolveApproval()`（经 `ruled()` 收敛成唯一出口）而非两道闸门 —— 出生地**构造上**
+  覆盖全部闸门。`verdict` 与 `level` **必须都记**：放行经 `allowRuleDecision()`，而组织级上限会把
+  它压回 `ask`，只记一个会把「封顶」读成「放行」。**绝不记工具入参**
+- **页脚字形按档取**：`PERMISSION_GLYPHS`（穷尽 `Record<PermissionMode, string>`，漏键即编译错）
+  - `permissionGlyphPrefix()` —— `default` 档（默认、最常见）此前读到**它并不具备**的
+    「自动接受」字形 `⏵⏵`
+- **接线层测试**（此前 `test/ui/` 17 个文件**无一条**渲染 `InputBar`）：
+  `test/ui/permission-cycle-wiring.test.ts` —— 按键那一跳（喂真终端发的 `\x1b[Z`，不是直接调
+  handler）、转盘走完整圈（真 `PermissionSystem`，逐档复核页脚读数与引擎状态逐字相同）、
+  四档语义各不相同（拿真 `check()` 逐档读数）；以及 `test/ui/input-history-wiring.test.ts`
+- **对等守卫**：vendored 族**整族**（`test/integrity/shared-vendor-parity.test.ts`，按
+  byte / comments-only / members 三档形状 —— 5 对里此前只有 1 对有人守）、两份 `types.ts` 的
+  成员集合（`test/integrity/shared-types-parity.test.ts`）、根 README 的提供商与模型计数
+
+### Changed
+
+- `MODE_CYCLE` 末位由 `bypassPermissions` 改为 `auto` —— 前者仍**合法**、config /
+  `MIPHAM_DAEMON_PERMISSION` / settings 可指名（「合法集 ⊇ 转盘」的结构不变，两张表**刻意不合并**）；
+  `ALL_MODES` / `MODE_CYCLE` 同步拆开
+- `~/.mipham` 收成单一真源：89 处字面量收敛到 `core/paths.ts` 的 `miphamHome(...segments)`
+  （52 文件 / 62 调用点，必须**调用时**求值）；项目内沿用该文件已有的
+  `join(<dir>, MIPHAM_DIR, …)` 惯用法，不造第三个 helper
+- 遗留的 `'auto'` **级别**退役为 `'self'` —— 该级别全仓**零消费者** ⇒「行为不变」这一断言是**可测**的
+
+### Fixed
+
+- **输入历史每开一次模型选择器就清零**：`submittedHistory` 住在 `InputBar` 的**局部 state**，而
+  `app.tsx` 有**三条路径把它整个卸载**（picker 三元两支组件类型不同 ⇒ 卸载而非复用、
+  `apiKeyPrompt` 整棵早退、Ctrl+G）。历史改由 `app.tsx` 持有，两个浏览游标 ref 留在组件内
+  （它们随卸载重置才是对的）
+- **`config.yml` 的 `permission:` 真的认模式名**：旧实现只认 `bypass` 一个串，其余**静默落
+  `default`** ⇒ 用户想**收窄**而闸门**反向移动**
+- 两份 `types.ts`：契约补回漏掉的三个可选字段（对 `apps/web` 向后兼容），并修掉一处**假默认值**
+  （契约写 `showThinking` 默认 `minimal`，而代码四处读数一致为 `off`）
+- 设计文档 §五 Layer 2 的记录器名（原写全仓**零命中**的 `classifierCalls` ⇒ 照此 grep 会得出
+  「Layer 2 未接线」这个**错误结论**，而四条断言都在）
+- 根 `README.md` 的假主张清理（含提供商 / 模型计数）
+
+### Removed
+
+- `USER_CONFIG_DIR` —— 同一目录名的第三个名字；先复核**零消费者**（不是照着条目信），再两侧同删
+
 ## [0.83.0] — 2026-09-21
 
 ### Added

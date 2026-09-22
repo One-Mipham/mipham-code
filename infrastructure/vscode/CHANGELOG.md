@@ -3,6 +3,25 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.84.0 — 2026-09-22
+
+- Version sync with Mipham Code CLI 0.84.0
+- New: a permission classifier for the `auto` mode — fail-closed, wired to the only two runtime
+  gates. It may only narrow what an allow rule already permits, never widen it, and an
+  organization-level ceiling still caps it
+- New: every `auto`-mode verdict is appended to `~/.mipham/permission-audit.jsonl`
+  (append-only, 0700/0600). Both the verdict and the level are recorded — the ceiling can turn a
+  would-be allow back into an ask — and tool arguments are never recorded
+- New: the footer glyph is now chosen per mode; the `default` mode no longer shows the
+  auto-accept glyph that it does not have
+- Fixed: input history was emptied every time the model picker opened — it lived inside a
+  component that `app.tsx` unmounts on three separate paths. It is now held by `app.tsx`
+- Fixed: `config.yml`'s `permission:` now recognises mode names. Previously every value except
+  `bypass` silently fell back to `default`, so asking to narrow a mode could move the gate the
+  other way
+- Under the hood: the Shift+Tab four-mode cycle and the input history now have wiring-layer tests
+  that drive real key sequences, instead of only pure functions and source-text assertions
+
 ## 0.83.0 — 2026-09-21
 
 - Version sync with Mipham Code CLI 0.83.0
