@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, execSync } from 'node:child_process'
 import {
   chmodSync,
   existsSync,
@@ -185,6 +185,85 @@ describe('performUpdate —— 我们自己绝不能杀掉安装进程', () => {
     // 负控：把 `timeout: 600_000` 加回去，本断言即红。判据是「有没有一个能在
     // 正常安装途中开火的计时器」—— 本机实测该包下载 >11 分钟，而它设在 10 分钟。
     expect(seen[0]).not.toHaveProperty('timeout')
+  })
+})
+
+/**
+ * 0.85.0 修好了「装前快照 / 装后自证 / 失败回滚」，但**回滚代码跑在 CLI 进程里** ——
+ * 终端按 Ctrl-C 时 SIGINT 发给**整个前台进程组**，CLI 与 npm 一起死 ⇒ catch 永远不执行，
+ * 用户手里还是半截树、而且**没有人回滚**。
+ *
+ * 两道守卫，缺一被保下来的都只是一半：
+ *   · `detached: true`（调用点）—— npm 自成进程组，终端的 SIGINT 到不了它；
+ *   · `blockSigintDuringInstall()` —— CLI 自己不被那条信号打死，好让 catch/自证/回滚有机会跑。
+ *
+ * **边界（只做了一半，如实记下）**：
+ *   1. 「安装期间 Ctrl-C 会被忽略」是本修法的**代价**，不是附带好处 —— 用户按了没用，
+ *      要中断只能另开一个终端杀进程。本次只落了代码与测试；**发布那一笔必须写进
+ *      `CHANGELOG.md`**（用户可见的行为变化）。
+ *   2. TUI（`/upgrade`）路径自带 SIGINT 处理，安装完成后它仍可能被投递；本守位只保证
+ *      **CLI 在安装窗口内不死**，不改 TUI 的行为。
+ *   3. 根因（npm 全局安装**没有原子换手**）没动 —— 真正扛得住 SIGKILL 的是 staging prefix
+ *      + 原子换手，那是 ROADMAP 上另一条（D12），本轮不做。
+ */
+describe('performUpdate —— 终端 Ctrl-C 不能把安装打断到一半', () => {
+  it('install 这一步带 detached:true（npm 自成进程组，终端的 SIGINT 到不了它）', () => {
+    const seen: Array<Record<string, unknown>> = []
+    performUpdate('9.9.9', undefined, {
+      paths: resolveInstallPaths(f.fromDir),
+      backupRoot: f.backupRoot,
+      install: fakeNpm(f, 'ok', '9.9.9', seen),
+    })
+    expect(seen).toHaveLength(1)
+    // 负控：删掉调用点的 `detached: true`，本断言即红。
+    // 边界：这里断的是「选项送出去了」；「detached 真的换了进程组」是 Node/POSIX 的行为，
+    // 已用真命令行探针在本机验过（detached 的子进程 pgid ≠ 父进程，未 detached 的 == 父进程），
+    // 但那是探针不是本套件 —— 别把这条绿读成「进程组语义已被 CI 覆盖」。
+    expect(seen[0].detached).toBe(true)
+  })
+
+  it('安装窗口内 CLI 挂着 SIGINT 守位，装完立刻撤掉', () => {
+    const base = process.listenerCount('SIGINT')
+    let during = -1
+    performUpdate('9.9.9', undefined, {
+      paths: resolveInstallPaths(f.fromDir),
+      backupRoot: f.backupRoot,
+      install: (cmd, opts) => {
+        during = process.listenerCount('SIGINT')
+        fakeNpm(f, 'ok', '9.9.9')(cmd, opts)
+      },
+    })
+    expect(during).toBe(base + 1)
+    // 漏撤的话，handler 会活到进程结束 —— TUI 里 Ctrl-C 从此**永远**没反应，比原来更糟。
+    expect(process.listenerCount('SIGINT')).toBe(base)
+  })
+
+  it('安装中途抛错时守位也要撤掉（挂在 finally 上，不是只有成功路径）', () => {
+    const base = process.listenerCount('SIGINT')
+    performUpdate('9.9.9', undefined, {
+      paths: resolveInstallPaths(f.fromDir),
+      backupRoot: f.backupRoot,
+      install: fakeNpm(f, 'killed', '9.9.9'),
+    })
+    expect(process.listenerCount('SIGINT')).toBe(base)
+  })
+
+  it('真往自己发一个 SIGINT（终端那条 Ctrl-C 打到 CLI 的形状）：进程活着，安装照跑完', () => {
+    // 负控：把 `blockSigintDuringInstall()` 换成空壳（`() => () => {}`），**本进程当场死**
+    // —— vitest 会把该 worker 记成失败。这条负控是「进程死」而不是「断言红」，跑它之前
+    // 先确认 vitest 真的把它算失败（实测过才写在这里）。
+    const r = performUpdate('9.9.9', undefined, {
+      paths: resolveInstallPaths(f.fromDir),
+      backupRoot: f.backupRoot,
+      install: (cmd, opts) => {
+        process.kill(process.pid, 'SIGINT')
+        // 阻塞着收信号 —— 正是事故的时序：信号到达时事件循环在 execSync 里。
+        execSync('sleep 0.3')
+        fakeNpm(f, 'ok', '9.9.9')(cmd, opts)
+      },
+    })
+    expect(r.ok).toBe(true)
+    expect(r.verified).toBe(true)
   })
 })
 

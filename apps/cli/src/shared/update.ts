@@ -320,8 +320,36 @@ export function verifyInstalledVersion(paths: InstallPaths, expected: string): I
 /**
  * 传给 npm 调用的选项。**只此一处** —— 默认 runner 原样转发它，所以测试断的选项
  * 与生产跑的是同一个对象，不是一个长得像的副本。
+ *
+ * `detached: true`：npm 自成**进程组** ⇒ 终端按 Ctrl-C 时内核发出的 SIGINT
+ * （只发给**前台**进程组）到不了它。没有这一条，Ctrl-C 会把 CLI 与 npm 一起打死在
+ * `reify` 中间 —— 旧树已删、新树没写完。它与 `blockSigintDuringInstall()` 是一对：
+ * 那条保住 CLI（好让下面的 catch 有机会回滚），这条保住 npm。
  */
-export type InstallOptions = { encoding: 'utf-8'; stdio: 'inherit' }
+export type InstallOptions = { encoding: 'utf-8'; stdio: 'inherit'; detached: true }
+
+/**
+ * 安装期间把 CLI 自己的 SIGINT 挡掉，返回「撤销」函数。
+ *
+ * 回滚代码就在 `performUpdate` 的 catch 里 —— 而终端按 Ctrl-C 时 SIGINT 发给**整个
+ * 前台进程组**，CLI 与 npm 会一起死 ⇒ catch 永远不执行，用户手里留下半截树且**无人回滚**
+ * （2026-09-22 事故里「回滚写了却没跑」的那一格）。
+ *
+ * ⚠️ 挂了 handler 之后信号**不会立刻**变成 JS 回调：事件循环正阻塞在 `execSync` 里，
+ * 回调要等它返回才跑（实测打印顺序是「execSync 返回」在前、「handler 跑了」在后）。
+ * 所以**不能**用一个标志位判断「用户按过 Ctrl-C」—— 读完 execSync 立刻看，它一定还是
+ * `false`。本函数只保证进程活着，不做上报。
+ *
+ * ⚠️ 「安装期间 Ctrl-C 会被忽略」是**用户可见的行为变化** —— 本次改动只落在代码与测试，
+ * 发布那一笔必须写进 `CHANGELOG.md`（别忘了它是代价，不是附带好处）。
+ */
+function blockSigintDuringInstall(): () => void {
+  const swallow = (): void => {}
+  process.on('SIGINT', swallow)
+  return () => {
+    process.off('SIGINT', swallow)
+  }
+}
 
 /** 执行 `npm install -g`。可注入 —— 测试永不联网。 */
 export type InstallRunner = (command: string, options: InstallOptions) => void
@@ -381,20 +409,36 @@ export function performUpdate(
   if (paths)
     snap = snapshotInstall(paths, readPkgVersion(paths.pkgDir) ?? getCurrentVersion(), backupRoot)
 
+  // 安装期间两道守卫（缺一，被保下来的都只有一半）：
+  //   · 这里 —— CLI 自己不被 SIGINT 打死，好让下面的 catch/回滚有机会跑；
+  //   · 下面的 `detached: true` —— npm 自成进程组，终端的 SIGINT 到不了它。
+  //
+  // 守位只盖住「npm 在跑」这一段 —— 也就是**唯一会破坏磁盘**的那一段。两端各留一个
+  // 未覆盖的窄口，各自无害：① 它前面的快照（复制 6601 个文件）期间按 Ctrl-C ⇒ CLI 退出、
+  // npm 从未启动，旧树完好；② 它后面的自证（只读：读 package.json + 跑一次 launcher）
+  // 期间按 Ctrl-C ⇒ 不再自动回滚，但树是**完整的**，不是「一个 CLI 都没有」。
+  const unblockSigint = blockSigintDuringInstall()
   try {
     // 这里**故意不设 timeout**。任何一个能在正常安装途中开火的计时器，开火那一刻就是破坏
     // 本身：npm 被 SIGTERM 时会留下半截树（旧包已删、新包没写完）⇒ 用户一个 CLI 都没有，
     // 连 `mipham update` 本身也没了。本机实测这个包的下载要 11 分钟以上，而原来设在 10 分钟。
     // 进度由 npm 自己印在用户终端上（stdio: 'inherit'），要中断交由用户决定。
+    //
+    // detached 只换进程组、不换等待语义 —— 实测 execSync 照样阻塞到 npm 退出（1.01s vs
+    // 未 detached 的 1.02s），所以自证仍在装完之后；stdio:'inherit' 下它的输出也照样
+    // 打在用户终端上（两条通道都实测可见）。
     install(`npm install -g ${PACKAGE}@${version}${registryFlag}`, {
       encoding: 'utf-8',
       stdio: 'inherit',
+      detached: true,
     })
   } catch (err) {
     const rolledBack = paths && snap ? restoreInstall(snap, paths) : false
     discardSnapshot(snap)
     const detail = err instanceof Error && err.message ? `（${err.message.split('\n')[0]}）` : ''
     return { ok: false, verified: false, rolledBack, reason: `安装进程被中断${detail}` }
+  } finally {
+    unblockSigint()
   }
 
   if (!paths) {

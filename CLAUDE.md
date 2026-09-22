@@ -4,9 +4,9 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.0
-> **最后更新**: 2026-09-22 — **`mipham update` 把用户的 CLI 整个弄没了 —— 事故复盘 + 根因修复（自更新的安全网）** —— **真实事故**：v0.84.0 发布后用户机器上 `mipham: command not found`。**根因**：`performUpdate()` 用 `execSync('npm install -g …', { timeout: 600_000 })`，而 npm 全局安装是**就地重写**包目录 —— 没有原子换手。SIGTERM 落在 `reify` 中间 ⇒ 旧树已删、新树没写完 ⇒ 用户**一个 CLI 都没有**，连 `mipham update` 本身也没了（自锁）；bin/ 里只剩 npm 的临时符号链接。**这个「保护」会在一次正常安装途中开火，而开火本身就是破坏**：本机实测该包 84 MB / 6601 文件，这条链路上要 **>11 分钟**，而计时器设在 10 分钟。**② 装完不自证**：旧代码印 `✓ Updated` 后写 「Run 'mipham --version' to verify」—— 把唯一的检查推给用户，而那时旧安装早已不在。**修法**（`shared/update.ts`）：① `resolveInstallPaths()` 推出 prefix/pkgDir/launcher，对照物是 `<prefix>/bin/npm`（真 node prefix 一定有它）—— 推不出就返回 **null，不猜**；② 安装**前**把整份 `<pkgDir>` + launcher 快照进 `~/.mipham/backups/cli-<ver>-<ts>/`（launcher 存在**包副本之外**，否则会被当成多余文件还原进 pkgDir；上一次的 `cli-*` 残留先清）；③ 安装**不再带任何 timeout**（进度由 npm 自己印在终端上，要中断交由用户）；④ 装完**自证两关**：`package.json` 版本 == 目标 **且** launcher 实跑 `--version` 报出目标；⑤ 任一步失败 ⇒ 还原快照并如实上报。`performUpdate` 改返回 `UpdateResult { ok, verified, rolledBack, version?, reason? }`，两个调用点同改：删掉「你自己去验证」，失败时说清**为什么**与**你手里还有没有 CLI**，`verified:false` 不再冒充成功（`/upgrade` 也不再把「装坏了」置成「已装待重启」）。**14 条新测试**（`test/shared/update-safety.test.ts`）全部真跑真文件、不打桩。**三条负控实跑**：① 把 10 分钟计时器加回调用点 ⇒ 只红 timeout 那条；② `restoreInstall` 直接返回 true ⇒ 5 条回滚用例红；③ `verifyInstalledVersion` 恒 ok ⇒ 3 条自证用例红；还原后 sha256 逐字相符。**第一次负控回来是绿的 —— 那是真发现、不是通过**：它变异的是**默认 runner**，而每条用例都注入自己的 runner ⇒ 断言的对象与生产的对象是**两个东西**；改成默认 runner **转发调用点的选项**（单一真源）才闭合。**生产路径实证**：拿真函数跑真安装 ⇒ prefix 解析正确、对照物在场、`verifyInstalledVersion(p, '0.84.0')` = ok（launcher 真的被执行）。**边界**：本修法只保护**已经装上它**的机器 —— 0.84.0 上跑 `mipham update` 用的仍是旧代码与那个计时器；更强的 Design B（staging prefix + 原子换手，可扛 SIGKILL）未做。测试 3,065 → **3,079**（257 → **258** 文件，0 失败）。
-> **前一条（2.93.0）**: 2026-09-22 — **Shift+Tab 四档循环的接线层测试 —— 链条本来就是活的，缺的是一条「能红」的判据** —— 用户的要求是「可以切换的四模式要有实际的接线，不能有死代码/空代码」，实测：`Shift+Tab → onCyclePermission → cyclePermissionMode → permission.setMode` 整条链早已接上，四档也各有真语义（`plan` 只读 / `acceptEdits` 写放行 / `default` 要问 / `auto` 无分类器时 fail-closed）。① **新测试** `test/ui/permission-cycle-wiring.test.ts`（9 用例 / 3 组）：**按键那一跳**（真终端发的 `\x1b[Z`，不是直接调 handler）、**转盘走完整圈**（真 `PermissionSystem`，每一档复核「页脚读数与引擎状态逐字相同」）、**四档语义各不相同**（拿真 `check()` 逐档读数，并断言 `acceptEdits.write ≠ plan.write`、`auto.write ≠ bypassPermissions.write` —— 转盘能转 ≠ 四档不是同一个东西）。② **为什么此前测不到**：`cyclePermissionMode` 只有**纯函数**用例，而接线只有**源码字符串**断言（`toContain('onCyclePermission')`）—— 字符串在、接线断，它照样绿。③ **四条负控全部实跑**：①禁用 `key.shift && key.tab` 分支 ⇒ **只有**「真终端那串」红、两条对照（裸 Tab / ↑）仍绿；②禁用 `acceptEdits` 的写放行 ⇒ 两条分界用例红；③`cyclePermissionMode` 恒返回 slot 0 ⇒ 走圈用例红；④交换 `MODE_CYCLE` 第 2/3 档 ⇒ **只有那条字面量钉子红**，而锚在 `MODE_CYCLE` 上的断言**照样绿** —— 这正是加钉子的理由（否则重排转盘无人变红）。四条还原后 sha256 与变异前逐字相符。④ **边界（只提不改）**：不渲染整个 `App`（需 ~16 个 engine 方法桩，桩本身可能比真对象更宽）⇒ 「页脚确实调用这两个入口」仍由 `test/integrity/permission-status-parity.test.ts` 从源码侧断。测试 3,056 → **3,065**（256 → **257** 文件，0 失败）。
+> **版本**: 2.94.1
+> **最后更新**: 2026-09-23 — **终端 Ctrl-C 曾能把安装打断到一半 —— 0.85.0 的回滚，跑在「它自己也会被杀死」的那个进程里** —— 0.85.0 的「装前快照 / 装后自证 / 失败回滚」修的是 SIGTERM（计时器那条路），而 **Ctrl-C 是另一个信号、另一条路**：终端按 Ctrl-C 时内核把 SIGINT 发给**整个前台进程组** —— CLI 与 npm **一起**死 ⇒ `performUpdate` 的 catch 永不执行，用户手里仍是半截树，而且这次**没有人回滚**。所以「有回滚」≠「Ctrl-C 安全」；判据要问两句：**回滚跑在哪个进程里**、**杀死它的那条信号会不会连它一起带走**。两道守卫，缺一被保下来的都只是一半：① 调用点加 `detached: true` ⇒ npm 自成**进程组**，终端的 SIGINT 到不了它（实测 `execSync` 认可 detached：子进程 pgid ≠ 父进程；**仍阻塞等它退出** 1.01s vs 1.02s ⇒ 自证仍在装完之后；`stdio:'inherit'` 下输出照样打在用户终端上）；② `blockSigintDuringInstall()` ⇒ CLI 自己挂 SIGINT 守位（挂在 `finally` 上 —— 漏撤的话 TUI 里 Ctrl-C **从此永远**没反应，比原来更糟），好让 catch/自证/回滚有机会跑。**4 条新测试**（`update-safety`，真发信号、真阻塞在 `execSync` 里）；**三条负控实跑**：① 删调用点 `detached:true` ⇒ 只红那条断言；② 删 `finally` ⇒ 只红两条「撤掉守位」；③ 守位换空壳 ⇒ **vitest worker 当场被 SIGINT 杀死**（`Errors 1 error`）—— 这条负控的形式是「进程死」而非「断言红」，跑它之前先确认过 vitest 真把它算失败；三处还原后 sha256 逐字相符。**边界**：安装期间 Ctrl-C 会被**忽略**（要中断只能另开终端杀进程 —— 这是本修法认下的代价，不是附带好处）；TUI `/upgrade` 自带 SIGINT 处理，装完后仍可能被投递；根因（npm 全局安装**没有原子换手**）未动 —— 能扛 SIGKILL 的原子换手仍是 **ROADMAP D12**。测试 3,079 → **3,083**（258 文件，0 失败）。
+> **前一条（2.94.0）**: 2026-09-22 — **`mipham update` 把用户的 CLI 整个弄没了 —— 事故复盘 + 根因修复（自更新的安全网）** —— **真实事故**：v0.84.0 发布后用户机器上 `mipham: command not found`。**根因**：`performUpdate()` 用 `execSync('npm install -g …', { timeout: 600_000 })`，而 npm 全局安装是**就地重写**包目录 —— 没有原子换手。SIGTERM 落在 `reify` 中间 ⇒ 旧树已删、新树没写完 ⇒ 用户**一个 CLI 都没有**，连 `mipham update` 本身也没了（自锁）；bin/ 里只剩 npm 的临时符号链接。**这个「保护」会在一次正常安装途中开火，而开火本身就是破坏**：本机实测该包 84 MB / 6601 文件，这条链路上要 **>11 分钟**，而计时器设在 10 分钟。**② 装完不自证**：旧代码印 `✓ Updated` 后写 「Run 'mipham --version' to verify」—— 把唯一的检查推给用户，而那时旧安装早已不在。**修法**（`shared/update.ts`）：① `resolveInstallPaths()` 推出 prefix/pkgDir/launcher，对照物是 `<prefix>/bin/npm`（真 node prefix 一定有它）—— 推不出就返回 **null，不猜**；② 安装**前**把整份 `<pkgDir>` + launcher 快照进 `~/.mipham/backups/cli-<ver>-<ts>/`（launcher 存在**包副本之外**，否则会被当成多余文件还原进 pkgDir；上一次的 `cli-*` 残留先清）；③ 安装**不再带任何 timeout**（进度由 npm 自己印在终端上，要中断交由用户）；④ 装完**自证两关**：`package.json` 版本 == 目标 **且** launcher 实跑 `--version` 报出目标；⑤ 任一步失败 ⇒ 还原快照并如实上报。`performUpdate` 改返回 `UpdateResult { ok, verified, rolledBack, version?, reason? }`，两个调用点同改：删掉「你自己去验证」，失败时说清**为什么**与**你手里还有没有 CLI**，`verified:false` 不再冒充成功（`/upgrade` 也不再把「装坏了」置成「已装待重启」）。**14 条新测试**（`test/shared/update-safety.test.ts`）全部真跑真文件、不打桩。**三条负控实跑**：① 把 10 分钟计时器加回调用点 ⇒ 只红 timeout 那条；② `restoreInstall` 直接返回 true ⇒ 5 条回滚用例红；③ `verifyInstalledVersion` 恒 ok ⇒ 3 条自证用例红；还原后 sha256 逐字相符。**第一次负控回来是绿的 —— 那是真发现、不是通过**：它变异的是**默认 runner**，而每条用例都注入自己的 runner ⇒ 断言的对象与生产的对象是**两个东西**；改成默认 runner **转发调用点的选项**（单一真源）才闭合。**生产路径实证**：拿真函数跑真安装 ⇒ prefix 解析正确、对照物在场、`verifyInstalledVersion(p, '0.84.0')` = ok（launcher 真的被执行）。**边界**：本修法只保护**已经装上它**的机器 —— 0.84.0 上跑 `mipham update` 用的仍是旧代码与那个计时器；更强的 Design B（staging prefix + 原子换手，可扛 SIGKILL）未做。测试 3,065 → **3,079**（257 → **258** 文件，0 失败）。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -45,7 +45,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：3,079 测试（3,077 passed + 2 skipped，0 失败）
+测试：3,083 测试（3,081 passed + 2 skipped，0 失败）
 
 ---
 
@@ -82,7 +82,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 258 个测试文件，3079 个测试
+│   │   ├── test/               # 258 个测试文件，3083 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -108,7 +108,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（3079 个测试）
+pnpm test         # vitest run（3083 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~9 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -316,7 +316,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integrity       | 11      | 72       | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 120      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **258** | **3079** | **0 失败** ✅（3077 passed + 2 skipped）                                                                                                                                    |
+| **合计**        | **258** | **3083** | **0 失败** ✅（3081 passed + 2 skipped）                                                                                                                                    |
 
 > **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 179 测试，自带
 > `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。
