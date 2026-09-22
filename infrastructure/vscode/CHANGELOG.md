@@ -3,6 +3,18 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.0 — 2026-09-22
+
+- Version sync with Mipham Code CLI 0.85.0
+- Fixed: `mipham update` could delete your CLI entirely. `npm install -g` rewrites the package
+  directory in place (it is not an atomic swap), and the install step was wrapped in a 10-minute
+  timeout — while the package is 84 MB / 6,601 files and can take longer than that on a slow link.
+  A timer that fires mid-install leaves neither the old version nor the new one, so `mipham`
+  disappeared, together with the very `mipham update` command you would retry with. The install
+  step no longer carries a timeout (only the read-only registry lookups do), and an update now
+  snapshots the install first, verifies afterwards by actually running the launcher, and rolls
+  back if that check fails
+
 ## 0.84.0 — 2026-09-22
 
 - Version sync with Mipham Code CLI 0.84.0
