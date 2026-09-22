@@ -1,11 +1,11 @@
 import { readFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
 import { atomicWriteFileSync } from '../shared/atomic-write'
+import { miphamHome } from '../core/paths.ts'
 
 // Skill 使用记录：name → 最近调用时间戳（epoch ms）。持久化到 ~/.mipham/skill-usage.json，
 // 供 /skill-doctor 识别「从未被调用」的 skill（跨会话累积，按证据 prune）。
-const USAGE_DIR = join(homedir(), '.mipham')
+const USAGE_DIR = miphamHome()
 const USAGE_FILE = join(USAGE_DIR, 'skill-usage.json')
 
 /** 读 skill 使用记录。文件缺失或损坏（非法 JSON / 类型不符）→ 空 Map，绝不抛错。 */

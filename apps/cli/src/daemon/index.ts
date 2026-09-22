@@ -8,7 +8,6 @@
 import { join } from 'node:path'
 import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from 'node:fs'
 import { createServer as createNetServer } from 'node:net'
-import { homedir } from 'node:os'
 import type { Server } from 'bun'
 import { DaemonDatabase } from './database'
 import { SessionManager } from './session-manager'
@@ -32,9 +31,9 @@ import type { WecomConfig } from './wecom/types.js'
 import { parseDingtalkEnv } from './dingtalk/env.js'
 import type { DingtalkConfig } from './dingtalk/types.js'
 import { loadConfig } from '../config/loader'
+import { miphamHome } from '../core/paths.ts'
 
-const HOME = homedir()
-const MIPHAM_HOME = join(HOME, '.mipham')
+const MIPHAM_HOME = miphamHome()
 const DB_PATH = join(MIPHAM_HOME, 'daemon.db')
 const TOKEN_PATH = join(MIPHAM_HOME, 'daemon.token')
 const PID_FILE = join(MIPHAM_HOME, 'daemon.pid')

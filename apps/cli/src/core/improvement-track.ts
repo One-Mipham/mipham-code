@@ -1,10 +1,9 @@
 // CRSI 改进轨：噪声自适应改进判定 + 台账 + pending verdict 闸。
 // A1 不破：verdict / minEffect / 改进率全是确定性算术（均值/标准差/阈值/Wilson），无 LLM 裁判。
 import { readFileSync, existsSync, mkdirSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
-import { homedir } from 'node:os'
 import { atomicWriteFileSync } from '../shared/atomic-write'
 import type { SkillDeltaSample } from './task-performance'
+import { miphamHome } from './paths.ts'
 
 export type ImprovementVerdict = 'improved' | 'regressed' | 'inconclusive'
 
@@ -181,12 +180,12 @@ export function formatCostLine(report: ImprovementReport): string | null {
 // ── 台账 ──
 
 export function improvementPath(): string {
-  return join(homedir(), '.mipham', 'crsi', 'improvements.jsonl')
+  return miphamHome('crsi', 'improvements.jsonl')
 }
 
 export function appendImprovement(record: ImprovementRecord): void {
   const file = improvementPath()
-  mkdirSync(join(homedir(), '.mipham', 'crsi'), { recursive: true })
+  mkdirSync(miphamHome('crsi'), { recursive: true })
   // 原子激活（④）：整账本读-改-写 + temp 文件 rename（见 shared/atomic-write），读者要么见旧要么见新。
   // 非原子的 appendFileSync 写中途崩溃会留撕裂行，readImprovements 会 JSON.parse 抛错。
   const existing = readImprovements()
@@ -214,7 +213,7 @@ export function readImprovements(): ImprovementRecord[] {
 // （temp+rename，见 shared/atomic-write），替代易失内存变量（进程重启即丢、无 manifest）。
 
 export function pendingVerdictPath(): string {
-  return join(homedir(), '.mipham', 'crsi', 'pending-verdict.json')
+  return miphamHome('crsi', 'pending-verdict.json')
 }
 
 export function setPendingVerdict(v: ImprovementVerdict | null): void {
@@ -223,7 +222,7 @@ export function setPendingVerdict(v: ImprovementVerdict | null): void {
     rmSync(file, { force: true }) // 原子清除（unlink 原子）
     return
   }
-  mkdirSync(join(homedir(), '.mipham', 'crsi'), { recursive: true })
+  mkdirSync(miphamHome('crsi'), { recursive: true })
   atomicWriteFileSync(file, JSON.stringify({ verdict: v, timestamp: new Date().toISOString() }))
 }
 

@@ -7,9 +7,9 @@ import {
   readdirSync,
 } from 'node:fs'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
+import { miphamHome } from '../core/paths.ts'
 
-const WORKFLOW_DIR = join(homedir(), '.mipham', 'workflows')
+const WORKFLOW_DIR = miphamHome('workflows')
 
 export interface JournalEntry {
   seq: number

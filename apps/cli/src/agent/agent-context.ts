@@ -1,13 +1,14 @@
 // apps/cli/src/agent/agent-context.ts
 import { readdirSync, readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
 import { ContextManager } from '../core/context'
 import type { ToolDefinition } from '../shared/index.ts'
 import type { AgentDefinition } from './types'
 import type { CrsiConfig } from '../shared/index.ts'
 import { AgentExperience } from './agent-experience'
 import { ExperienceRuleExtractor } from './experience-rules.js'
+import { miphamHome } from '../core/paths.ts'
+import { MIPHAM_DIR } from '../shared/constants.ts'
 
 export interface AgentContextResult {
   context: ContextManager
@@ -26,17 +27,16 @@ function loadAgentMemory(
   crsiRuleInjection = true,
 ): string {
   let memoryDir: string
-  const home = homedir()
 
   switch (scope) {
     case 'user':
-      memoryDir = join(home, '.mipham', 'agent-memory', agentName)
+      memoryDir = miphamHome('agent-memory', agentName)
       break
     case 'project':
-      memoryDir = join(process.cwd(), '.mipham', 'agent-memory', agentName)
+      memoryDir = join(process.cwd(), MIPHAM_DIR, 'agent-memory', agentName)
       break
     case 'local':
-      memoryDir = join(process.cwd(), '.mipham', 'agent-memory-local', agentName)
+      memoryDir = join(process.cwd(), MIPHAM_DIR, 'agent-memory-local', agentName)
       break
   }
 

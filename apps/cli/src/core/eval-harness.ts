@@ -12,7 +12,7 @@
  */
 
 import { join } from 'node:path'
-import { tmpdir, homedir } from 'node:os'
+import { tmpdir } from 'node:os'
 import { mkdirSync, appendFileSync, readFileSync, existsSync } from 'node:fs'
 import { ExperienceRuleEngine } from './rule-engine'
 import { ConstitutionLoader, DEFAULT_CONSTITUTION } from './constitution-loader'
@@ -37,6 +37,7 @@ import {
 import type { CrsiSignal } from './crsi-producer'
 import { predictionHit } from './improvement-track'
 import { loadBehaviorTasks, judgeBehaviorTask } from './behavior-tasks'
+import { miphamHome } from './paths.ts'
 
 // ── Types ──
 
@@ -95,7 +96,7 @@ export function regressedAnchors(results: EvalResult[]): string[] {
 
 // ── Rewards log (path A Phase 1: 奖励信号持久化) ──
 
-const SCORES_FILE = join(homedir(), '.mipham', 'crsi', 'eval-scores.jsonl')
+const SCORES_FILE = miphamHome('crsi', 'eval-scores.jsonl')
 
 /** 落盘的契约粒度投影 —— 只要 id/passed/role（EvalResult 的 description/detail 不落盘）。 */
 export interface ContractResultRecord {
@@ -117,7 +118,7 @@ export function appendEvalScore(
   report: { score: number; passed: number; total: number; results?: EvalResult[] },
 ): void {
   try {
-    mkdirSync(join(homedir(), '.mipham', 'crsi'), { recursive: true })
+    mkdirSync(miphamHome('crsi'), { recursive: true })
     appendFileSync(
       SCORES_FILE,
       JSON.stringify({

@@ -8,10 +8,11 @@ import {
   statSync,
 } from 'node:fs'
 import { join, basename } from 'node:path'
-import { homedir, hostname } from 'node:os'
+import { hostname } from 'node:os'
 import type { SessionInfo, CrossSessionInbound } from '../../shared/types'
+import { miphamHome } from '../../core/paths.ts'
 
-const MIPHAM_HOME = join(homedir(), '.mipham')
+const MIPHAM_HOME = miphamHome()
 const ACTIVE_SESSIONS_DIR = join(MIPHAM_HOME, '.active-sessions')
 
 /** A session whose heartbeat file hasn't been touched in this long is dead. */

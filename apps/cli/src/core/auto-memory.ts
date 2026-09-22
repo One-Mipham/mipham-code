@@ -18,8 +18,7 @@ import type { EffectivenessTracker } from '../agent/effectiveness-tracker.js'
 import type { ErrorSignatureDB } from './error-signature-db.js'
 import type { CrsiProvenanceBridge } from '../agent/crsi-provenance-bridge.js'
 import { getMetrics } from './metrics'
-import { join } from 'node:path'
-import { homedir } from 'node:os'
+import { miphamHome } from './paths.ts'
 
 // ── Types ──
 
@@ -74,7 +73,7 @@ export interface TurnReflection {
 
 // ── Constants ──
 
-const DEFAULT_MEMORY_DIR = join(homedir(), '.mipham', 'memory')
+const DEFAULT_MEMORY_DIR = miphamHome('memory')
 
 /** Minimum number of similar failures before a CRSI rule is generated. */
 const CRSI_RULE_THRESHOLD = 2

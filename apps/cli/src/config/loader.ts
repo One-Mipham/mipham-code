@@ -8,7 +8,6 @@ import {
   chmodSync,
 } from 'node:fs'
 import { join, dirname } from 'node:path'
-import { homedir } from 'node:os'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { atomicWriteFileSync } from '../shared/atomic-write'
 import type {
@@ -29,8 +28,10 @@ import {
 } from './defaults'
 import { getCredentialKey, encryptApiKey, decryptApiKey, ENC_PREFIX } from './credential-crypto'
 import type { SettingsHooks } from '../core/hooks-config'
+import { miphamHome } from '../core/paths.ts'
+import { MIPHAM_DIR } from '../shared/constants.ts'
 
-const MIPHAM_HOME = join(homedir(), '.mipham')
+const MIPHAM_HOME = miphamHome()
 const BACKUP_PREFIX = 'config.backup-'
 
 /**
@@ -212,7 +213,7 @@ export function tryRestoreFromBackup(configPath: string): boolean {
 function loadMcpJson(cwd: string): McpServerConfig[] {
   const servers: McpServerConfig[] = []
   const searchPaths = [
-    join(cwd, '.mipham', 'mcp.json'),
+    join(cwd, MIPHAM_DIR, 'mcp.json'),
     join(cwd, '.mcp.json'),
     join(MIPHAM_HOME, 'mcp.json'),
   ]
@@ -294,7 +295,7 @@ export function loadSettingsJson(
 
   const searchPaths: Array<{ path: string; readHooks: boolean; isProject?: boolean }> = [
     {
-      path: join(cwd, '.mipham', 'settings.json'),
+      path: join(cwd, MIPHAM_DIR, 'settings.json'),
       readHooks: options.includeProjectHooks ?? false,
       isProject: true,
     },
@@ -366,7 +367,7 @@ export type SettingsScope = 'project' | 'user'
 export function settingsPathFor(scope: SettingsScope, cwd: string = process.cwd()): string {
   return scope === 'user'
     ? join(MIPHAM_HOME, 'settings.json')
-    : join(cwd, '.mipham', 'settings.json')
+    : join(cwd, MIPHAM_DIR, 'settings.json')
 }
 
 /**
@@ -442,7 +443,7 @@ export function removeSettingsRule(
 }
 
 export function loadConfig(cwd: string = process.cwd()): MiphamConfig {
-  const configPath = join(cwd, '.mipham', 'config.yml')
+  const configPath = join(cwd, MIPHAM_DIR, 'config.yml')
   const userConfigPath = join(MIPHAM_HOME, 'config.yml')
 
   let config = { ...DEFAULT_CONFIG }
@@ -629,7 +630,7 @@ function mergeCredentialMaskingFile(
 export function loadCredentialMaskingConfig(cwd: string = process.cwd()): CredentialMaskingConfig {
   let merged = { ...DEFAULT_CREDENTIAL_MASKING_CONFIG }
   merged = mergeCredentialMaskingFile(merged, join(MIPHAM_HOME, 'config.yml'), true)
-  merged = mergeCredentialMaskingFile(merged, join(cwd, '.mipham', 'config.yml'), false)
+  merged = mergeCredentialMaskingFile(merged, join(cwd, MIPHAM_DIR, 'config.yml'), false)
   return merged
 }
 
@@ -655,7 +656,7 @@ export function loadUserCredentialMaskingConfig(): CredentialMaskingConfig {
  * Load background agent configuration from config sources.
  */
 export function loadBackgroundAgentConfig(cwd: string = process.cwd()): BackgroundAgentConfig {
-  const configPath = join(cwd, '.mipham', 'config.yml')
+  const configPath = join(cwd, MIPHAM_DIR, 'config.yml')
   const userConfigPath = join(MIPHAM_HOME, 'config.yml')
 
   let merged = { ...DEFAULT_BACKGROUND_AGENT_CONFIG }
@@ -688,7 +689,7 @@ export function loadBackgroundAgentConfig(cwd: string = process.cwd()): Backgrou
  * Merges project-level over user-level. Returns defaults if no section present.
  */
 export function loadCrossSessionConfig(cwd: string = process.cwd()): CrossSessionConfig {
-  const configPath = join(cwd, '.mipham', 'config.yml')
+  const configPath = join(cwd, MIPHAM_DIR, 'config.yml')
   const userConfigPath = join(MIPHAM_HOME, 'config.yml')
 
   let merged = { ...DEFAULT_CROSS_SESSION_CONFIG }
@@ -751,7 +752,7 @@ function decryptProviderApiKeys(providers: ProviderConfig[] | undefined): void {
  */
 export function getProviderApiKey(providerId: string, cwd: string = process.cwd()): string | null {
   const userConfigPath = join(MIPHAM_HOME, 'config.yml')
-  const projectConfigPath = join(cwd, '.mipham', 'config.yml')
+  const projectConfigPath = join(cwd, MIPHAM_DIR, 'config.yml')
   const configPath = existsSync(userConfigPath) ? userConfigPath : projectConfigPath
 
   try {

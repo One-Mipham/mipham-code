@@ -1,8 +1,9 @@
 import { readFileSync, existsSync, readdirSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { join, extname } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 import type { AgentDefinition, SubAgentType } from './types'
+import { miphamHome } from '../core/paths.ts'
+import { MIPHAM_DIR } from '../shared/constants.ts'
 
 interface FrontmatterResult {
   data: Record<string, unknown>
@@ -91,13 +92,12 @@ export class AgentRegistry {
 
   /** Load project-level agents from .mipham/agents/ */
   loadProjectAgents(cwd: string): void {
-    this.loadDirectory(join(cwd, '.mipham', 'agents'), 'project')
+    this.loadDirectory(join(cwd, MIPHAM_DIR, 'agents'), 'project')
   }
 
   /** Load user-level agents from ~/.mipham/agents/ */
   loadUserAgents(): void {
-    const home = homedir()
-    this.loadDirectory(join(home, '.mipham', 'agents'), 'user')
+    this.loadDirectory(miphamHome('agents'), 'user')
   }
 
   /** Get a custom agent by name. Returns undefined for builtins. */

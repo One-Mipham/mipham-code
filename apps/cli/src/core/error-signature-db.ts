@@ -16,8 +16,8 @@
 
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
 import { randomUUID } from 'node:crypto'
+import { miphamHome } from './paths.ts'
 
 // ── Types ──
 
@@ -61,7 +61,7 @@ export interface ErrorSignatureStats {
 
 // ── Constants ──
 
-const DEFAULT_STORE_DIR = join(homedir(), '.mipham', 'sis')
+const DEFAULT_STORE_DIR = miphamHome('sis')
 const STORE_FILE = 'error-signatures.json'
 const MIN_SUCCESS_RATE = 0.5 // below this → degraded
 const RETIREMENT_RATE = 0.2 // below this and > 90 days old → retired

@@ -1,6 +1,5 @@
 import React from 'react'
 import { join, basename } from 'node:path'
-import { homedir } from 'node:os'
 import { existsSync } from 'node:fs'
 import { render } from 'ink'
 import * as readline from 'node:readline'
@@ -55,7 +54,7 @@ import { initTelemetry, enableTelemetryNow } from './telemetry/index'
 import { wasPrompted, markPrompted, isInteractive, setTelemetryEnabled } from './telemetry/consent'
 import { officialEndpointHost } from './telemetry/endpoint'
 import { getWorkspaceTrust, warnProjectHooksSkipped } from './core/workspace-trust'
-import { ARTIFACT_PORT } from './shared/constants'
+import { ARTIFACT_PORT, MIPHAM_DIR } from './shared/constants'
 import { artifactsRoot } from './artifacts/paths'
 import { AgentViewManager } from './agent-view/agent-view-manager'
 import { AgentViewDashboard } from './agent-view/dashboard'
@@ -66,6 +65,7 @@ import { ConfigWizard } from './ui/config-wizard'
 import enUS from './i18n-core/locales/en-US.json' with { type: 'json' }
 import zhCN from './i18n-core/locales/zh-CN.json' with { type: 'json' }
 import type { TranslationMap } from './i18n-core/types'
+import { miphamHome } from './core/paths.ts'
 
 // Locale bundles — defined at module level so the remote-attach branch can
 // reference them before the full bootstrap path runs.
@@ -545,8 +545,8 @@ export async function runApp(options: RunOptions): Promise<void> {
     // First-run setup detection: inject mipham-code-setup guidance when
     // no project or user config exists. This mirrors Claude Code's first-run
     // onboarding flow — the AI proactively offers to help configure the tool.
-    const hasProjectConfig = existsSync(join(process.cwd(), '.mipham', 'config.yml'))
-    const hasUserConfig = existsSync(join(homedir(), '.mipham', 'config.yml'))
+    const hasProjectConfig = existsSync(join(process.cwd(), MIPHAM_DIR, 'config.yml'))
+    const hasUserConfig = existsSync(miphamHome('config.yml'))
     const hasMiphamMd = existsSync(join(process.cwd(), 'MIPHAM.md'))
     if (!hasProjectConfig && !hasUserConfig) {
       const setupReminder = [
@@ -839,8 +839,8 @@ export async function runApp(options: RunOptions): Promise<void> {
   })
 
   // ── First-run detection: show interactive ConfigWizard if no config exists ──
-  const hasUserConfig = existsSync(join(homedir(), '.mipham', 'config.yml'))
-  const hasProjectConfig = existsSync(join(process.cwd(), '.mipham', 'config.yml'))
+  const hasUserConfig = existsSync(miphamHome('config.yml'))
+  const hasProjectConfig = existsSync(join(process.cwd(), MIPHAM_DIR, 'config.yml'))
   const needsSetup = !hasUserConfig && !hasProjectConfig
 
   // Only ask when the first-run wizard is *not* about to take over the

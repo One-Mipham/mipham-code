@@ -1,5 +1,10 @@
 /**
- * 项目内数据目录的路径单一真源。
+ * 数据目录的路径单一真源 —— **项目内** `.mipham/` 与**用户级** `~/.mipham`。
+ *
+ * 目录名 `.mipham` 曾在 `src/` 里散落成几十处各自独立的字面量：用户级写
+ * `join(homedir(), '.mipham', …)`、项目内写 `join(cwd, '.mipham', …)`，两级的根
+ * 因此都没人守。现在字面量只剩 `shared/constants.ts` 的 `MIPHAM_DIR` 一处 ——
+ * 用户级一律经 `miphamHome()`，项目内一律经 `join(<dir>, MIPHAM_DIR, …)`。
  *
  * 写入一律落在 `.mipham/`（我们自己的目录）；`.claude/` 只保留**只读兼容** ——
  * 早期版本把 worktree 建在 `.claude/worktrees/` 下，那些工作树今天仍要可列举、
@@ -119,4 +124,19 @@ export function workflowScriptDirs(cwd: string): string[] {
     join(cwd, LEGACY_CLAUDE_DIR, 'workflows'),
     join(homedir(), LEGACY_CLAUDE_DIR, 'workflows'),
   ]
+}
+
+/* ── 用户级数据根 ──────────────────────────────────────────────────────── */
+
+/**
+ * 用户级数据根目录 `~/.mipham`，后可接任意子路径。
+ *
+ * `homedir()` 在**调用时**求值，与改造前的调用点语义一致 —— 调用点若在模块作用域，
+ * 本函数也在那时求值。这不是可有可无的细节：`config/loader.ts` 的 `MIPHAM_HOME` 正是
+ * 模块作用域捕获的，测试靠 `vi.mock('node:os')` + `vi.hoisted` 抢在 import 之前装
+ * mock 才拦得住它（见 `test/telemetry/index.test.ts` 顶部那条注释）。故本函数**不得**
+ * 改成在别处预先算好再传进来 —— 那会把「调用时求值」换成「导入时求值」。
+ */
+export function miphamHome(...segments: string[]): string {
+  return join(homedir(), MIPHAM_DIR, ...segments)
 }

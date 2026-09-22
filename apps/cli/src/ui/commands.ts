@@ -17,7 +17,7 @@ import { unregisterMcpServerTools } from '../mcp/registry'
 import { buildCapabilityReport } from '../core/capability-inventory'
 import { InstructionsLoader } from '../core/instructions'
 import { findDerivableSections, DERIVABLE_HINTS } from '../core/claude-md-audit'
-import { worktreeRoot, workflowScriptDir, workflowScriptDirs } from '../core/paths.ts'
+import { miphamHome, workflowScriptDir, workflowScriptDirs, worktreeRoot } from '../core/paths.ts'
 import { fixDoctor, fixConfig, fixCache, selectRepoClaudeFiles } from '../core/fix'
 import { fixCodeTarget } from '../core/fix-code'
 import { homedir } from 'node:os'
@@ -108,7 +108,7 @@ import { keysCmd } from '../commands/keys'
 import { workflowViewCmd, workflowWatchCmd } from '../commands/workflow-view.js'
 import { listActiveAutoloops, formatLoopRows } from '../commands/autoloop-journal.js'
 import { execSync } from 'node:child_process'
-import { OLLAMA_PRESET_MODELS } from '../shared/constants'
+import { MIPHAM_DIR, OLLAMA_PRESET_MODELS } from '../shared/constants'
 import { renameActiveSession } from '../agent/cross-session/discovery'
 
 export interface CommandContext {
@@ -3366,7 +3366,6 @@ const fixCmd: CommandHandler = async (ctx, args) => {
   const t = resolveT(ctx)
   const { readFileSync, writeFileSync } = await import('node:fs')
   const { join } = await import('node:path')
-  const { homedir } = await import('node:os')
   const { parse: parseYaml } = await import('yaml')
 
   const target = args.find((a) => a === 'doctor' || a === 'config' || a === 'cache' || a === 'test')
@@ -3406,11 +3405,7 @@ const fixCmd: CommandHandler = async (ctx, args) => {
   }
 
   if (!target || target === 'config') {
-    const home = homedir()
-    const configPaths = [
-      join(process.cwd(), '.mipham', 'config.yml'),
-      join(home, '.mipham', 'config.yml'),
-    ]
+    const configPaths = [join(process.cwd(), MIPHAM_DIR, 'config.yml'), miphamHome('config.yml')]
     const hookEngine = ctx.engine.getHookEngine?.()
     const result = fixConfig({
       configPaths,
@@ -3444,7 +3439,7 @@ const fixCmd: CommandHandler = async (ctx, args) => {
   }
 
   if (!target || target === 'cache') {
-    const crsiDir = join(homedir(), '.mipham', 'crsi')
+    const crsiDir = miphamHome('crsi')
     const cacheFiles = ['eval-scores.jsonl', 'improvements.jsonl', 'prose-proposals.jsonl'].map(
       (f) => join(crsiDir, f),
     )
@@ -3670,7 +3665,7 @@ const filesCmd: CommandHandler = async (ctx) => {
   try {
     const entries = readdirSync(cwd, { withFileTypes: true })
     const items = entries
-      .filter((e) => !e.name.startsWith('.') || e.name === '.mipham' || e.name === '.mcp.json')
+      .filter((e) => !e.name.startsWith('.') || e.name === MIPHAM_DIR || e.name === '.mcp.json')
       .slice(0, 40)
       .map((e) => {
         const icon = e.isDirectory() ? '📁' : '📄'
@@ -4316,8 +4311,7 @@ const memoryCmd: CommandHandler = async (ctx, args) => {
   const { existsSync, readdirSync, readFileSync, statSync } = await import('node:fs')
   const { join } = await import('node:path')
 
-  const home = homedir()
-  const memoryDir = join(home, '.mipham', 'memory')
+  const memoryDir = miphamHome('memory')
 
   // /memory gc — 记忆卫生：归档「0 召回 + 过期」的 auto-* 记忆（手写只报告）
   if (args[0]?.toLowerCase() === 'gc') {
@@ -4982,10 +4976,8 @@ const loginCmd: CommandHandler = (ctx) => {
 
 const logoutCmd: CommandHandler = async () => {
   const { existsSync } = await import('node:fs')
-  const { join } = await import('node:path')
 
-  const home = homedir()
-  const userConfig = join(home, '.mipham', 'config.yml')
+  const userConfig = miphamHome('config.yml')
   const hasUserConfig = existsSync(userConfig)
 
   return {
@@ -5027,9 +5019,8 @@ const feedbackCmd: CommandHandler = async (ctx, args) => {
     try {
       const { writeFileSync, mkdirSync, existsSync } = await import('node:fs')
       const { join } = await import('node:path')
-      const { homedir } = await import('node:os')
 
-      const dir = join(homedir(), '.mipham', 'feedback')
+      const dir = miphamHome('feedback')
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
 
       const ts = new Date().toISOString().replace(/[:.]/g, '-')

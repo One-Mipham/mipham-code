@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import { join } from 'node:path'
-import { homedir } from 'node:os'
 import { readSettingsDoc, writeSettingsDoc, settingsPathFor } from '../config/loader'
 import { resolveEndpoint, type EndpointSource } from './endpoint'
+import { miphamHome } from '../core/paths.ts'
 
 /**
  * Consent for telemetry.
@@ -205,5 +204,5 @@ export function isInteractive(
 
 /** `~/.mipham/telemetry` — the queue directory. */
 export function telemetryDir(): string {
-  return join(homedir(), '.mipham', 'telemetry')
+  return miphamHome('telemetry')
 }

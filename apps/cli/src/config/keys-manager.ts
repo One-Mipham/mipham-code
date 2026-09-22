@@ -1,10 +1,10 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs'
 import { join, dirname } from 'node:path'
-import { homedir } from 'node:os'
 import { atomicWriteFileSync } from '../shared/atomic-write'
 import { saveProviderApiKey } from './loader'
+import { miphamHome } from '../core/paths.ts'
 
-const MIPHAM_HOME = join(homedir(), '.mipham')
+const MIPHAM_HOME = miphamHome()
 const KEYS_FILE = join(MIPHAM_HOME, 'keys.json')
 const EXPIRY_DAYS = 90
 

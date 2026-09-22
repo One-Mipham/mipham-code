@@ -35,7 +35,7 @@ import {
   statSync,
 } from 'node:fs'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
+import { miphamHome } from './paths.ts'
 
 // ── Types ──
 
@@ -78,7 +78,7 @@ interface MemoryFile {
 
 // ── Constants ──
 
-const DEFAULT_MEMORY_DIR = join(homedir(), '.mipham', 'memory')
+const DEFAULT_MEMORY_DIR = miphamHome('memory')
 const STALE_DAYS = 30
 const SIMILARITY_THRESHOLD = 0.65
 

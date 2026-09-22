@@ -12,6 +12,8 @@ import { atomicWriteFileSync } from '../shared/atomic-write'
 import { CLOUD_PROVIDERS } from '../config/wizard-config'
 import { MODE_CYCLE, PERMISSION_MODE_HIERARCHY } from '../core/permission-config'
 import { homedir } from 'node:os'
+import { miphamHome } from '../core/paths.ts'
+import { MIPHAM_DIR } from '../shared/constants.ts'
 
 export {
   initCmd,
@@ -90,15 +92,12 @@ function envVarFor(providerId: string): string {
 
 const initCmd: CommandHandler = async (ctx) => {
   const { existsSync, mkdirSync } = await import('node:fs')
-  const { join } = await import('node:path')
-  const { homedir } = await import('node:os')
 
-  const home = homedir()
-  const userConfigPath = join(home, '.mipham', 'config.yml')
+  const userConfigPath = miphamHome('config.yml')
 
   // Generate user-friendly config if it doesn't exist yet
   if (!existsSync(userConfigPath)) {
-    mkdirSync(join(home, '.mipham'), { recursive: true })
+    mkdirSync(miphamHome(), { recursive: true })
 
     // 生成物必须来自随包发布的清单，不能来自 ctx.config —— 后者的 status 表达
     // 的是「用户停用了哪家」这个**运行时**状态，而 12 家里只有 mipham 声明了它
@@ -393,7 +392,7 @@ const recommendCmd: CommandHandler = async (ctx) => {
   lines.push('── Configuration Tips ──')
   lines.push('')
 
-  const hasProjectMipham = existsSync(join(cwd, '.mipham'))
+  const hasProjectMipham = existsSync(join(cwd, MIPHAM_DIR))
   if (!hasProjectMipham) {
     lines.push('  /setup 1     Initialize .mipham/ + MIPHAM.md + config.yml')
   }
@@ -446,12 +445,11 @@ const setupCmd: CommandHandler = async (ctx, args) => {
   const { existsSync } = await import('node:fs')
   const { join } = await import('node:path')
   const cwd = process.cwd()
-  const home = homedir()
 
   const hasProjectMipham = existsSync(join(cwd, 'MIPHAM.md'))
-  const hasProjectConfig = existsSync(join(cwd, '.mipham', 'config.yml'))
-  const hasUserConfig = existsSync(join(home, '.mipham', 'config.yml'))
-  const hasMiphamDir = existsSync(join(cwd, '.mipham'))
+  const hasProjectConfig = existsSync(join(cwd, MIPHAM_DIR, 'config.yml'))
+  const hasUserConfig = existsSync(miphamHome('config.yml'))
+  const hasMiphamDir = existsSync(join(cwd, MIPHAM_DIR))
 
   const activeProviders = ctx.config.providers.filter((p) => p.status === 'active').length
   const totalProviders = ctx.config.providers.length
@@ -499,7 +497,7 @@ async function setupStep1(ctx: CommandContext): Promise<CommandResult> {
   const { join } = await import('node:path')
   const cwd = process.cwd()
 
-  const miphamDir = join(cwd, '.mipham')
+  const miphamDir = join(cwd, MIPHAM_DIR)
   const miphamPath = join(cwd, 'MIPHAM.md')
   const configPath = join(miphamDir, 'config.yml')
 
@@ -927,8 +925,8 @@ const promptAuditCmd: CommandHandler = async () => {
 
   // Files to scan
   const scanDirs = [
-    join(cwd, '.mipham', 'skills'),
-    join(cwd, '.mipham', 'rules'),
+    join(cwd, MIPHAM_DIR, 'skills'),
+    join(cwd, MIPHAM_DIR, 'rules'),
     join(cwd, '.claude'),
   ]
   const skillFiles: string[] = []

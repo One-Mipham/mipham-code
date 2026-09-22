@@ -8,11 +8,11 @@ import {
   existsSync,
   statSync,
 } from 'node:fs'
-import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import type { Message } from '../shared/types'
 import { sanitizeSessionName, SessionLog, deriveMessages, messageToEvents } from './session-log'
+import { miphamHome } from './paths.ts'
 
 export interface SessionMetadata {
   name: string
@@ -29,8 +29,7 @@ export interface StoredSession {
   messages: Message[]
 }
 
-const HOME = homedir()
-const SESSIONS_DIR = join(HOME, '.mipham', 'sessions')
+const SESSIONS_DIR = miphamHome('sessions')
 const INDEX_FILE = join(SESSIONS_DIR, '.index.json')
 const SUMMARIES_DIR = join(SESSIONS_DIR, '.summaries')
 

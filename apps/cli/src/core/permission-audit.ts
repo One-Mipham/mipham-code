@@ -32,10 +32,10 @@
  */
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname } from 'node:path'
 import type { PermissionLevel, PermissionMode } from '../shared/index.ts'
 import type { PermissionDenialReason } from './permission'
+import { miphamHome } from './paths.ts'
 
 /** 一条分类器裁决。 */
 export interface ClassifierRulingRecord {
@@ -67,7 +67,7 @@ export interface ClassifierRulingRecord {
  * 但那是「恰好也对」，这里不复制那个形状。
  */
 export function permissionAuditPath(): string {
-  return join(homedir(), '.mipham', 'permission-audit.jsonl')
+  return miphamHome('permission-audit.jsonl')
 }
 
 /** 整个进程只说一次 —— 见 `recordClassifierRuling` 的失败分支。 */

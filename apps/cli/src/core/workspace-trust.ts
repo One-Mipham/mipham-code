@@ -1,9 +1,10 @@
 import { readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join, dirname, resolve } from 'node:path'
-import { homedir } from 'node:os'
 import { atomicWriteFileSync } from '../shared/atomic-write'
+import { miphamHome } from './paths.ts'
+import { MIPHAM_DIR } from '../shared/constants.ts'
 
-const MIPHAM_HOME = join(homedir(), '.mipham')
+const MIPHAM_HOME = miphamHome()
 const TRUST_STORE_PATH = join(MIPHAM_HOME, 'trusted-workspaces.json')
 
 export interface TrustedWorkspaces {
@@ -198,7 +199,7 @@ export function resetWorkspaceTrust(): void {
  */
 export function warnProjectHooksSkipped(cwd: string): void {
   process.stderr.write(
-    `⚠️  Workspace not trusted: skipped hooks from ${join(cwd, '.mipham', 'settings.json')}\n` +
+    `⚠️  Workspace not trusted: skipped hooks from ${join(cwd, MIPHAM_DIR, 'settings.json')}\n` +
       `    (hooks run commands — repository-controlled). Trust this directory in an interactive\n` +
       `    session to enable them.\n`,
   )

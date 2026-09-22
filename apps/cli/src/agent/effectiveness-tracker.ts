@@ -1,8 +1,8 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
-import { homedir } from 'node:os'
 import type { CrsiProvenanceBridge, CrsiVerdict } from './crsi-provenance-bridge.js'
 import { isRecoverableToolFailure } from './recoverable-failure.js'
+import { miphamHome } from '../core/paths.ts'
 
 export interface RuleEffectiveness {
   ruleId: string
@@ -32,7 +32,7 @@ export class EffectivenessTracker {
   private storePath: string
   private provenanceBridge?: CrsiProvenanceBridge
 
-  constructor(storeDir: string = join(homedir(), '.mipham', 'rule-engine')) {
+  constructor(storeDir: string = miphamHome('rule-engine')) {
     this.storePath = join(storeDir, STORE_FILE)
     this.data = new Map()
   }

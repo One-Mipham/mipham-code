@@ -1,8 +1,8 @@
 import { mkdirSync, readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
+import { miphamHome } from '../core/paths.ts'
 
-const AUTOLOOP_DIR = join(homedir(), '.mipham', 'autoloop')
+const AUTOLOOP_DIR = miphamHome('autoloop')
 
 function ensureDir(): void {
   if (!existsSync(AUTOLOOP_DIR)) mkdirSync(AUTOLOOP_DIR, { recursive: true })

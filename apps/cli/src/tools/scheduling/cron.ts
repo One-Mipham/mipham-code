@@ -8,11 +8,11 @@ import {
 } from 'node:fs'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
-import { homedir } from 'node:os'
 import type { ToolDefinition } from '../../shared/index.ts'
 import { computeNextFire } from '../../core/cron'
+import { miphamHome } from '../../core/paths.ts'
 
-const CRON_DIR = join(homedir(), '.mipham', 'cron')
+const CRON_DIR = miphamHome('cron')
 
 function ensureCronDir(): void {
   if (!existsSync(CRON_DIR)) mkdirSync(CRON_DIR, { recursive: true })

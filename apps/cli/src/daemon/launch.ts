@@ -13,13 +13,13 @@
 
 import { spawn, type SpawnOptions } from 'node:child_process'
 import { closeSync, mkdirSync, openSync, readFileSync, statSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
+import { miphamHome } from '../core/paths.ts'
 
 /** argv sentinel that re-enters this program as a daemon. Not user-facing. */
 export const DAEMON_ENTRY = '__daemon'
 
-const DEFAULT_LOG_FILE = join(homedir(), '.mipham', 'daemon.log')
+const DEFAULT_LOG_FILE = miphamHome('daemon.log')
 
 /**
  * argv prefix that re-runs *this* program.

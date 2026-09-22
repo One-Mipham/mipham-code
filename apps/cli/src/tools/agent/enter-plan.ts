@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ToolDefinition } from '../../shared/index.ts'
+import { MIPHAM_DIR } from '../../shared/constants.ts'
 
 export const enterPlanModeTool: ToolDefinition = {
   name: 'EnterPlanMode',
@@ -26,7 +27,7 @@ export const enterPlanModeTool: ToolDefinition = {
     const description = (params.description as string) || 'Implementation Plan'
 
     // Create plan file
-    const planDir = join(ctx.cwd, '.mipham', 'plans')
+    const planDir = join(ctx.cwd, MIPHAM_DIR, 'plans')
     mkdirSync(planDir, { recursive: true })
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)

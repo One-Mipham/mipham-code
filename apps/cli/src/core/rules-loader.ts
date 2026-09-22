@@ -21,6 +21,7 @@ import { readdirSync, readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { globToRegexSource } from './credential-masker/matcher'
 import { findWorktreeMarker } from './paths.ts'
+import { MIPHAM_DIR } from '../shared/constants.ts'
 
 interface RuleFile {
   name: string
@@ -49,9 +50,9 @@ export class RulesLoader {
   private projectRulesDir: string | null
 
   constructor(cwd: string) {
-    this.rulesDir = join(cwd, '.mipham', 'rules')
+    this.rulesDir = join(cwd, MIPHAM_DIR, 'rules')
     const marker = findWorktreeMarker(cwd)
-    const projectRulesDir = marker ? join(marker.root, '.mipham', 'rules') : null
+    const projectRulesDir = marker ? join(marker.root, MIPHAM_DIR, 'rules') : null
     this.projectRulesDir = projectRulesDir === this.rulesDir ? null : projectRulesDir
   }
 

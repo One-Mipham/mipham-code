@@ -1,11 +1,11 @@
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
 import { parse as parseYaml } from 'yaml'
 import type { SkillDefinition } from '../shared/index.ts'
 import type { Skills } from './seam'
 import { sanitizeSkillDescription, sanitizeSkillBody, checkSkillShadow } from './sanitizer.js'
 import { BUNDLED_SKILLS, type BundledSkill } from './bundled-skills'
+import { miphamHome } from '../core/paths.ts'
 
 interface FrontmatterResult {
   data: Record<string, unknown>
@@ -240,8 +240,7 @@ export class SkillsLoader implements Skills {
 
   /** Load skills from ~/.mipham/skills/ (user home directory). */
   loadUserSkills(): void {
-    const home = homedir()
-    const userSkillsPath = join(home, '.mipham', 'skills')
+    const userSkillsPath = miphamHome('skills')
     this.loadExternal([userSkillsPath])
   }
 

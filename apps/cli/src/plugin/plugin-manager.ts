@@ -8,12 +8,12 @@ import {
   renameSync,
 } from 'node:fs'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
 import { execFileSync } from 'node:child_process'
 import { validatePlugin } from './plugin-validator'
 import { atomicWriteFileSync } from '../shared/atomic-write'
+import { miphamHome } from '../core/paths.ts'
 
-const PLUGIN_DIR = join(homedir(), '.mipham', 'plugins')
+const PLUGIN_DIR = miphamHome('plugins')
 
 export interface InstalledPlugin {
   name: string

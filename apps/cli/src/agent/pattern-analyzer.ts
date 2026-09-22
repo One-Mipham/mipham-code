@@ -1,9 +1,8 @@
 import { readdirSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
-import { homedir } from 'node:os'
 import { AgentExperience } from './agent-experience.js'
 import { parseFailureEntries, categorize, type ExperienceRule } from './experience-rules.js'
 import type { ToolRule } from '../core/rule-engine.js'
+import { miphamHome } from '../core/paths.ts'
 
 export interface Pattern {
   id: string
@@ -18,7 +17,7 @@ export interface Pattern {
 
 export class PatternAnalyzer {
   analyzeAgent(agentName: string, baseDir?: string): Pattern[] {
-    const dir = baseDir || join(homedir(), '.mipham', 'agent-memory')
+    const dir = baseDir || miphamHome('agent-memory')
     const exp = new AgentExperience(agentName, dir)
     const content = exp.getExperience()
     if (!content) return []
@@ -55,7 +54,7 @@ export class PatternAnalyzer {
   }
 
   analyzeAllAgents(baseDir?: string): Pattern[] {
-    const dir = baseDir || join(homedir(), '.mipham', 'agent-memory')
+    const dir = baseDir || miphamHome('agent-memory')
     if (!existsSync(dir)) return []
 
     let agents: string[]

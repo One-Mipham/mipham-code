@@ -9,12 +9,11 @@
 import { readFileSync, existsSync, copyFileSync, mkdirSync, chmodSync } from 'node:fs'
 import { join } from 'node:path'
 import { execSync } from 'node:child_process'
-import { homedir } from 'node:os'
 import { PACKAGE_VERSION } from './package-info'
+import { miphamHome } from '../core/paths.ts'
 
 const PACKAGE = '@miphamai/cli'
-const HOME = homedir()
-const MIPHAM_HOME = join(HOME, '.mipham')
+const MIPHAM_HOME = miphamHome()
 const CONFIG_PATH = join(MIPHAM_HOME, 'config.yml')
 
 // Registry fallback chain: npm default → npmmirror (China mirror)

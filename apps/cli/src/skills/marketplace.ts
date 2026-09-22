@@ -5,12 +5,11 @@
  * registry so users can add any public repo as a source.
  */
 import { parse as parseYaml } from 'yaml'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { URL } from 'node:url'
+import { miphamHome } from '../core/paths.ts'
 
-export const MARKETPLACES_PATH = join(homedir(), '.mipham', 'marketplaces.json')
+export const MARKETPLACES_PATH = miphamHome('marketplaces.json')
 
 export interface SkillFrontmatter {
   name: string

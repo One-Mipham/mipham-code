@@ -6,6 +6,7 @@
  */
 import type { CommandHandler } from '../ui/commands.js'
 import { NPM_INSTALL_COMMAND } from '../shared/index.ts'
+import { miphamHome } from '../core/paths.ts'
 
 export { themeCmd, releaseNotesCmd, ideCmd, terminalSetupCmd }
 
@@ -186,7 +187,7 @@ const terminalSetupCmd: CommandHandler = async () => {
   const lines: string[] = ['── Terminal Setup ──', '']
 
   // ── 1. Generate standalone shell setup script ──
-  const miphamDir = join(home, '.mipham')
+  const miphamDir = miphamHome()
   mkdirSync(miphamDir, { recursive: true })
 
   const shellScript = join(miphamDir, 'shell-setup.sh')

@@ -1,12 +1,12 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
 import type { ToolDefinition } from '../../shared/index.ts'
 import { MemoryManager } from '../../core/memory/memory-manager'
 import { renderWorkingState } from '../../core/working-memory'
 import { getTasks } from '../exec/task'
+import { miphamHome } from '../../core/paths.ts'
 
-const MEMORY_DIR = join(homedir(), '.mipham', 'memory')
+const MEMORY_DIR = miphamHome('memory')
 
 /**
  * Format a memory file with frontmatter, compatible with MemoryManager.parseMemoryFile.

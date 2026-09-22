@@ -8,8 +8,8 @@ import {
   chmodSync,
 } from 'node:fs'
 import { join, dirname } from 'node:path'
-import { homedir } from 'node:os'
 import { encrypt, decrypt, getCredentialKey } from '../config/credential-crypto'
+import { miphamHome } from '../core/paths.ts'
 
 interface TokenData {
   accessToken: string
@@ -24,7 +24,7 @@ export class TokenStore {
   private storeDir: string
 
   constructor(storeDir?: string) {
-    this.storeDir = storeDir || join(homedir(), '.mipham', 'mcp-tokens')
+    this.storeDir = storeDir || miphamHome('mcp-tokens')
     this.key = getCredentialKey(dirname(this.storeDir))
   }
 

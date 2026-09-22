@@ -15,7 +15,7 @@ import type { MetaRule } from './meta-rule-engine'
 import type { Llm } from '../providers/llm'
 import { readdirSync, appendFileSync, readFileSync, existsSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
+import { miphamHome } from './paths.ts'
 
 /** 教训文件（相对仓库根）。预建，沙箱只能改已存在文件。 */
 export const LESSONS_FILE = 'apps/cli/crsi-lessons.md'
@@ -514,7 +514,7 @@ export interface ProseProposalRecord {
 }
 
 function proseLedgerFile(): string {
-  return join(homedir(), '.mipham', 'crsi', 'prose-proposals.jsonl')
+  return miphamHome('crsi', 'prose-proposals.jsonl')
 }
 
 /** 该信号是否已生成过散文提议。 */
@@ -537,7 +537,7 @@ export function hasProposedProse(id: string): boolean {
 /** 追加一条散文提议记录（append-only，非关键——失败不影响提议本身）。 */
 export function appendProseProposal(record: ProseProposalRecord): void {
   try {
-    mkdirSync(join(homedir(), '.mipham', 'crsi'), { recursive: true })
+    mkdirSync(miphamHome('crsi'), { recursive: true })
     appendFileSync(proseLedgerFile(), JSON.stringify(record) + '\n', 'utf-8')
   } catch {
     // ledger 非关键，失败不影响提议本身

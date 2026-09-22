@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
-import { homedir } from 'node:os'
 import { BUNDLED_SKILL_ASSETS, type BundledSkillAsset } from './bundled-skill-assets'
+import { miphamHome } from '../core/paths.ts'
 
 export interface SkillAssetsOptions {
   /** Base dir under which assets land as `<baseDir>/<skillName>/...`. Defaults to `~/.mipham/skills`. */
@@ -20,7 +20,7 @@ export interface SkillAssetsOptions {
  */
 export function ensureSkillAssets(skillName: string, opts?: SkillAssetsOptions): string | null {
   const map = opts?.assets ?? BUNDLED_SKILL_ASSETS
-  const base = opts?.baseDir ?? join(homedir(), '.mipham', 'skills')
+  const base = opts?.baseDir ?? miphamHome('skills')
   const list = map[skillName]
   if (!list) return null
   const root = join(base, skillName)

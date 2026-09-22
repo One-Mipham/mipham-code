@@ -1,11 +1,11 @@
 import { readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
 import { parse as parseYaml, stringify } from 'yaml'
 import { atomicWriteFileSync } from '../../shared/atomic-write'
 import type { ToolDefinition } from '../../shared/index.ts'
+import { miphamHome } from '../../core/paths.ts'
 
-const MIPHAM_HOME = join(homedir(), '.mipham')
+const MIPHAM_HOME = miphamHome()
 const USER_CONFIG = join(MIPHAM_HOME, 'config.yml')
 
 export const configTool: ToolDefinition = {

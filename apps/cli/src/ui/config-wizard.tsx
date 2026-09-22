@@ -17,10 +17,10 @@ import type { ModelInfo } from '../shared/types'
 import { mkdirSync } from 'node:fs'
 import { atomicWriteFileSync } from '../shared/atomic-write'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
 import { execSync } from 'node:child_process'
 import { getCredentialKey, encryptApiKey } from '../config/credential-crypto'
 import { CLOUD_PROVIDERS, getActiveModels, buildConfigYaml } from '../config/wizard-config'
+import { miphamHome } from '../core/paths.ts'
 
 // ── Types ──
 
@@ -38,7 +38,7 @@ const SELECTED_COLOR = 'cyan'
 // ── Helpers ──
 
 function writeConfigFile(providerId: string, modelId: string, apiKey: string): void {
-  const configDir = join(homedir(), '.mipham')
+  const configDir = miphamHome()
   mkdirSync(configDir, { recursive: true })
 
   const models = providerId === 'ollama' ? getOllamaModelListForConfig() : []

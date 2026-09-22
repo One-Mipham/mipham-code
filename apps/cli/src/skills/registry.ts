@@ -14,7 +14,6 @@ import {
   readFileSync,
 } from 'node:fs'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
 import type { MiphamConfig } from '../shared/types.js'
 import communitySkills from './community-registry.json'
 import {
@@ -23,8 +22,9 @@ import {
   downloadFile,
   isValidSkillName,
 } from './marketplace'
+import { miphamHome } from '../core/paths.ts'
 
-const SKILLS_DIR = join(homedir(), '.mipham', 'skills')
+const SKILLS_DIR = miphamHome('skills')
 
 // ═══════════════════════════════════════════════════════════════
 // Community Skill Registry

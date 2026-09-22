@@ -9,12 +9,11 @@ import {
   lstatSync,
 } from 'node:fs'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
 import type { CrossSessionTransport } from './transport'
 import type { AgentMessage } from '../message-bus'
 import type { SessionInfo } from '../../shared/types'
 
-const MIPHAM_HOME = join(homedir(), '.mipham')
+const MIPHAM_HOME = miphamHome()
 const INBOX_DIR = join(MIPHAM_HOME, 'inbox')
 
 /** True if a path exists and is a symbolic link (symlink-attack guard). */
@@ -138,6 +137,7 @@ export class FileInboxTransport implements CrossSessionTransport {
 
 // Import discoverSessions lazily to avoid circular dependency
 import { discoverSessions } from './discovery'
+import { miphamHome } from '../../core/paths.ts'
 
 // ── Singleton ──
 

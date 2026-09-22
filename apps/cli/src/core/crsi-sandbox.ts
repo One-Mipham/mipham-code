@@ -17,9 +17,10 @@
 import { execSync } from 'node:child_process'
 import { mkdirSync, rmSync, existsSync, writeFileSync, readFileSync, readdirSync } from 'node:fs'
 import { join, resolve, sep, posix } from 'node:path'
-import { tmpdir, homedir } from 'node:os'
+import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
 import { LESSONS_FILE, MANAGED_RULES_FILE } from './crsi-producer'
+import { miphamHome } from './paths.ts'
 
 // ── Types ──
 
@@ -86,7 +87,7 @@ export interface CrsiSessionReport {
 
 const WORKTREE_PREFIX = 'crsi-sandbox-'
 const TEST_TIMEOUT_MS = 120_000 // 2 minutes
-const REPORT_DIR = join(homedir(), '.mipham', 'crsi-sandbox')
+const REPORT_DIR = miphamHome('crsi-sandbox')
 
 /**
  * 自改进的「不可变基础」（immutable base）——按语义角色三类。
