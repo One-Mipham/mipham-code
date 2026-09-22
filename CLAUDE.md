@@ -4,9 +4,9 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.93.0
-> **最后更新**: 2026-09-22 — **Shift+Tab 四档循环的接线层测试 —— 链条本来就是活的，缺的是一条「能红」的判据** —— 用户的要求是「可以切换的四模式要有实际的接线，不能有死代码/空代码」，实测：`Shift+Tab → onCyclePermission → cyclePermissionMode → permission.setMode` 整条链早已接上，四档也各有真语义（`plan` 只读 / `acceptEdits` 写放行 / `default` 要问 / `auto` 无分类器时 fail-closed）。① **新测试** `test/ui/permission-cycle-wiring.test.ts`（9 用例 / 3 组）：**按键那一跳**（真终端发的 `\x1b[Z`，不是直接调 handler）、**转盘走完整圈**（真 `PermissionSystem`，每一档复核「页脚读数与引擎状态逐字相同」）、**四档语义各不相同**（拿真 `check()` 逐档读数，并断言 `acceptEdits.write ≠ plan.write`、`auto.write ≠ bypassPermissions.write` —— 转盘能转 ≠ 四档不是同一个东西）。② **为什么此前测不到**：`cyclePermissionMode` 只有**纯函数**用例，而接线只有**源码字符串**断言（`toContain('onCyclePermission')`）—— 字符串在、接线断，它照样绿。③ **四条负控全部实跑**：①禁用 `key.shift && key.tab` 分支 ⇒ **只有**「真终端那串」红、两条对照（裸 Tab / ↑）仍绿；②禁用 `acceptEdits` 的写放行 ⇒ 两条分界用例红；③`cyclePermissionMode` 恒返回 slot 0 ⇒ 走圈用例红；④交换 `MODE_CYCLE` 第 2/3 档 ⇒ **只有那条字面量钉子红**，而锚在 `MODE_CYCLE` 上的断言**照样绿** —— 这正是加钉子的理由（否则重排转盘无人变红）。四条还原后 sha256 与变异前逐字相符。④ **边界（只提不改）**：不渲染整个 `App`（需 ~16 个 engine 方法桩，桩本身可能比真对象更宽）⇒ 「页脚确实调用这两个入口」仍由 `test/integrity/permission-status-parity.test.ts` 从源码侧断。测试 3,056 → **3,065**（256 → **257** 文件，0 失败）。
-> **前一条（2.92.0）**: 2026-09-22 — **上下键历史导航（ROADMAP D7）—— 先钉红/绿再修；「纯函数对、问题在接线层」这句猜对了方向、但指错了对象** —— ① 先补**接线层**测试（`test/ui/input-history-wiring.test.ts`；此前 `test/ui/` 17 个文件**无一条**渲染 `InputBar`）：按键走 ink 的 raw 序列。**基本路径本就绿** —— 提交后 ↑ 调回、↑ 后 ↓ 回空草稿、空历史 ↑ 无操作 ⇒ 原文「上下键历史导航仍是 open bug」在这条路径上**复现不出来**。② 真缺口在**另一条**：`submittedHistory` 是 `InputBar` 的**局部 state**（`input.tsx:305`），而 `app.tsx` 有三条路径把 `InputBar` **整个卸载**（`pickerOpen ? <ModelPicker/> : <Box>…<InputBar/>…</Box>` —— 三元两支**组件类型不同** ⇒ React 卸载而非复用；`if (apiKeyPrompt)` 整棵早退；Ctrl+G）⇒ 每卸载一次历史清零，「开一次模型选择器，刚才敲的就没了」。③ 修法：历史**提到 `app.tsx`**（`inputHistory` state），`InputBar` 收 `history` + `onHistoryAppend` 两个**必填** prop；两个游标 ref （`historyIndexRef`/`savedDraftRef`）**留在组件内** —— 它们是浏览游标，随卸载重置才是对的。④ **负控实跑**：按旧形状把历史变异回组件内（3 处锚点各命中 1 次）⇒ **只有卸载那条红**、正对照（同样重渲染但不卸载）仍绿 ⇒ 该用例是真判据不是仪式；还原后 sha256 与变异前**逐字相符**。⑤ 边界（只提不改）：草稿 `value` 仍住组件内、切 picker 一样丢；历史**不从会话日志回填**。测试 3,051 → **3,056**（255 → **256** 文件，0 失败）。
+> **版本**: 2.94.0
+> **最后更新**: 2026-09-22 — **`mipham update` 把用户的 CLI 整个弄没了 —— 事故复盘 + 根因修复（自更新的安全网）** —— **真实事故**：v0.84.0 发布后用户机器上 `mipham: command not found`。**根因**：`performUpdate()` 用 `execSync('npm install -g …', { timeout: 600_000 })`，而 npm 全局安装是**就地重写**包目录 —— 没有原子换手。SIGTERM 落在 `reify` 中间 ⇒ 旧树已删、新树没写完 ⇒ 用户**一个 CLI 都没有**，连 `mipham update` 本身也没了（自锁）；bin/ 里只剩 npm 的临时符号链接。**这个「保护」会在一次正常安装途中开火，而开火本身就是破坏**：本机实测该包 84 MB / 6601 文件，这条链路上要 **>11 分钟**，而计时器设在 10 分钟。**② 装完不自证**：旧代码印 `✓ Updated` 后写 「Run 'mipham --version' to verify」—— 把唯一的检查推给用户，而那时旧安装早已不在。**修法**（`shared/update.ts`）：① `resolveInstallPaths()` 推出 prefix/pkgDir/launcher，对照物是 `<prefix>/bin/npm`（真 node prefix 一定有它）—— 推不出就返回 **null，不猜**；② 安装**前**把整份 `<pkgDir>` + launcher 快照进 `~/.mipham/backups/cli-<ver>-<ts>/`（launcher 存在**包副本之外**，否则会被当成多余文件还原进 pkgDir；上一次的 `cli-*` 残留先清）；③ 安装**不再带任何 timeout**（进度由 npm 自己印在终端上，要中断交由用户）；④ 装完**自证两关**：`package.json` 版本 == 目标 **且** launcher 实跑 `--version` 报出目标；⑤ 任一步失败 ⇒ 还原快照并如实上报。`performUpdate` 改返回 `UpdateResult { ok, verified, rolledBack, version?, reason? }`，两个调用点同改：删掉「你自己去验证」，失败时说清**为什么**与**你手里还有没有 CLI**，`verified:false` 不再冒充成功（`/upgrade` 也不再把「装坏了」置成「已装待重启」）。**14 条新测试**（`test/shared/update-safety.test.ts`）全部真跑真文件、不打桩。**三条负控实跑**：① 把 10 分钟计时器加回调用点 ⇒ 只红 timeout 那条；② `restoreInstall` 直接返回 true ⇒ 5 条回滚用例红；③ `verifyInstalledVersion` 恒 ok ⇒ 3 条自证用例红；还原后 sha256 逐字相符。**第一次负控回来是绿的 —— 那是真发现、不是通过**：它变异的是**默认 runner**，而每条用例都注入自己的 runner ⇒ 断言的对象与生产的对象是**两个东西**；改成默认 runner **转发调用点的选项**（单一真源）才闭合。**生产路径实证**：拿真函数跑真安装 ⇒ prefix 解析正确、对照物在场、`verifyInstalledVersion(p, '0.84.0')` = ok（launcher 真的被执行）。**边界**：本修法只保护**已经装上它**的机器 —— 0.84.0 上跑 `mipham update` 用的仍是旧代码与那个计时器；更强的 Design B（staging prefix + 原子换手，可扛 SIGKILL）未做。测试 3,065 → **3,079**（257 → **258** 文件，0 失败）。
+> **前一条（2.93.0）**: 2026-09-22 — **Shift+Tab 四档循环的接线层测试 —— 链条本来就是活的，缺的是一条「能红」的判据** —— 用户的要求是「可以切换的四模式要有实际的接线，不能有死代码/空代码」，实测：`Shift+Tab → onCyclePermission → cyclePermissionMode → permission.setMode` 整条链早已接上，四档也各有真语义（`plan` 只读 / `acceptEdits` 写放行 / `default` 要问 / `auto` 无分类器时 fail-closed）。① **新测试** `test/ui/permission-cycle-wiring.test.ts`（9 用例 / 3 组）：**按键那一跳**（真终端发的 `\x1b[Z`，不是直接调 handler）、**转盘走完整圈**（真 `PermissionSystem`，每一档复核「页脚读数与引擎状态逐字相同」）、**四档语义各不相同**（拿真 `check()` 逐档读数，并断言 `acceptEdits.write ≠ plan.write`、`auto.write ≠ bypassPermissions.write` —— 转盘能转 ≠ 四档不是同一个东西）。② **为什么此前测不到**：`cyclePermissionMode` 只有**纯函数**用例，而接线只有**源码字符串**断言（`toContain('onCyclePermission')`）—— 字符串在、接线断，它照样绿。③ **四条负控全部实跑**：①禁用 `key.shift && key.tab` 分支 ⇒ **只有**「真终端那串」红、两条对照（裸 Tab / ↑）仍绿；②禁用 `acceptEdits` 的写放行 ⇒ 两条分界用例红；③`cyclePermissionMode` 恒返回 slot 0 ⇒ 走圈用例红；④交换 `MODE_CYCLE` 第 2/3 档 ⇒ **只有那条字面量钉子红**，而锚在 `MODE_CYCLE` 上的断言**照样绿** —— 这正是加钉子的理由（否则重排转盘无人变红）。四条还原后 sha256 与变异前逐字相符。④ **边界（只提不改）**：不渲染整个 `App`（需 ~16 个 engine 方法桩，桩本身可能比真对象更宽）⇒ 「页脚确实调用这两个入口」仍由 `test/integrity/permission-status-parity.test.ts` 从源码侧断。测试 3,056 → **3,065**（256 → **257** 文件，0 失败）。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -45,7 +45,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：3,065 测试（3,063 passed + 2 skipped，0 失败）
+测试：3,079 测试（3,077 passed + 2 skipped，0 失败）
 
 ---
 
@@ -82,7 +82,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 257 个测试文件，3065 个测试
+│   │   ├── test/               # 258 个测试文件，3079 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -108,7 +108,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（3065 个测试）
+pnpm test         # vitest run（3079 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~9 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -306,7 +306,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | mcp             | 8       | 89       | client / transport / oauth / token-store / registry（含 2 skipped）                                                                                                         |
 | workflow        | 7       | 55       | runtime / loop / parallel / sandbox / journal / verify                                                                                                                      |
 | vajra           | 6       | 53       | context / events / service / compose / leaf（自建内核）                                                                                                                     |
-| shared          | 8       | 56       | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                              |
+| shared          | 9       | 70       | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                              |
 | commands        | 7       | 61       | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers                                                                                         |
 | skills          | 5       | 35       | sanitizer / marketplace / fork-executor / skill-assets                                                                                                                      |
 | config          | 9       | 68       | credential-crypto / loader-encryption / defaults / settings-json / preferences                                                                                              |
@@ -316,7 +316,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integrity       | 11      | 72       | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 120      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **257** | **3065** | **0 失败** ✅（3063 passed + 2 skipped）                                                                                                                                    |
+| **合计**        | **258** | **3079** | **0 失败** ✅（3077 passed + 2 skipped）                                                                                                                                    |
 
 > **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 179 测试，自带
 > `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。

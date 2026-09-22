@@ -289,10 +289,18 @@ async function runUpdate(): Promise<boolean> {
   console.log()
   console.log(`Updating ${PACKAGE} to v${latestVersion}...`)
 
-  const ok = performUpdate(latestVersion, workingRegistry)
-  if (!ok) {
+  const result = performUpdate(latestVersion, workingRegistry)
+  if (!result.ok) {
     console.log()
-    console.log(`✗ Update failed.`)
+    console.log(`✗ Update failed: ${result.reason ?? 'unknown error'}`)
+    if (result.rolledBack) {
+      console.log(
+        `  Your previous install (v${currentVersion}) has been restored — mipham still works.`,
+      )
+    } else {
+      console.log('  ⚠ The previous install could not be restored.')
+      console.log(`    Reinstall with: npm install -g ${PACKAGE}@${currentVersion}`)
+    }
     if (backupPath && existsSync(backupPath)) {
       console.log(`  Your config backup is at: ${backupPath}`)
     }
@@ -313,8 +321,15 @@ async function runUpdate(): Promise<boolean> {
   }
 
   console.log()
-  console.log(`✓ Updated to ${PACKAGE} v${latestVersion}`)
-  console.log(`  Run 'mipham --version' to verify.`)
+  if (result.verified) {
+    // 自证已经跑过（包版本 + launcher 实跑），不再把验证推给用户。
+    console.log(`✓ Updated to ${PACKAGE} v${latestVersion} — verified.`)
+  } else {
+    console.log(`⚠ Installed ${PACKAGE} v${latestVersion}, but could not verify it.`)
+    console.log(`  ${result.reason ?? ''}`)
+    console.log(`  Please check: mipham --version`)
+    process.exit(1)
+  }
   process.exit(0)
 }
 

@@ -430,7 +430,10 @@
       "config_preserved": "✓ Config preserved: {path}",
       "config_restored": "✓ Config restored from backup.",
       "old_version_warning": "⚠ The running Mipham Code process is still the old version.\n  Run `mipham` again to use the new version, or `mipham --version` to verify.",
-      "update_failed": "✗ Update failed.\n  Try manually: {command}\n  Your config backup is at: {path}"
+      "update_failed": "✗ Update failed: {reason}{rolledBack}\n  Try manually: {command}\n  Your config backup is at: {path}",
+      "rolled_back": "\n  Your previous install was restored — mipham still works.",
+      "no_rollback": "\n  ⚠ Your previous install could not be restored — reinstall it manually (see below).",
+      "unverified": "⚠ Installed, but could not verify the new version: {reason}"
     },
     "no_plan": {
       "confirmed": "✓ Plan mode exited. Your plan has been discarded.\n\nContinue chatting as normal, or type /plan to start a new plan."

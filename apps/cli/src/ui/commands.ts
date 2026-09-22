@@ -4461,14 +4461,19 @@ const upgradeCmd: CommandHandler = async (ctx) => {
     lines.push(`Config backed up to: ${backupPath}`)
   }
 
-  const ok = performUpdate(update.latest)
+  const result = performUpdate(update.latest)
 
-  if (ok) {
+  if (result.ok) {
     const configPath = getConfigPath()
     const { existsSync } = await import('node:fs')
-    ctx.setUpdateStatus({ state: 'installed', latest: update.latest })
+    // 只有自证通过才置「已装待重启」—— 装坏了还提示重启，是在骗用户。
+    if (result.verified) ctx.setUpdateStatus({ state: 'installed', latest: update.latest })
     lines.push('')
     lines.push(t('commands.upgrade.updated', { version: update.latest }))
+
+    if (!result.verified) {
+      lines.push(t('commands.upgrade.unverified', { reason: result.reason ?? '' }))
+    }
 
     if (existsSync(configPath)) {
       lines.push(t('commands.upgrade.config_preserved', { path: configPath }))
@@ -4482,8 +4487,17 @@ const upgradeCmd: CommandHandler = async (ctx) => {
     lines.push(t('commands.upgrade.old_version_warning'))
   } else {
     lines.push('')
+    // 失败信息必须回答两件事：为什么，以及**我手里还有没有 CLI**。
+    const rollbackNote = t(
+      result.rolledBack ? 'commands.upgrade.rolled_back' : 'commands.upgrade.no_rollback',
+    )
     lines.push(
-      t('commands.upgrade.update_failed', { command: NPM_UPDATE_COMMAND, path: backupPath || '' }),
+      t('commands.upgrade.update_failed', {
+        reason: result.reason ?? '',
+        command: NPM_UPDATE_COMMAND,
+        path: backupPath || '',
+        rolledBack: rollbackNote,
+      }),
     )
   }
 

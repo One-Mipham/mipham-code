@@ -6,9 +6,21 @@
  * use the same logic.
  */
 
-import { readFileSync, existsSync, copyFileSync, mkdirSync, chmodSync } from 'node:fs'
-import { join } from 'node:path'
-import { execSync } from 'node:child_process'
+import {
+  readFileSync,
+  existsSync,
+  copyFileSync,
+  mkdirSync,
+  chmodSync,
+  cpSync,
+  rmSync,
+  readdirSync,
+  lstatSync,
+  readlinkSync,
+  symlinkSync,
+} from 'node:fs'
+import { join, resolve } from 'node:path'
+import { execSync, execFileSync } from 'node:child_process'
 import { PACKAGE_VERSION } from './package-info'
 import { miphamHome } from '../core/paths.ts'
 
@@ -150,20 +162,204 @@ function isValidSemver(v: string): boolean {
   return SEMVER_RE.test(v)
 }
 
+/** 全局安装的三个位置。 */
+export interface InstallPaths {
+  /** node prefix，例如 ~/.nvm/versions/node/v24.14.0 */
+  prefix: string
+  /** <prefix>/lib/node_modules/@miphamai/cli */
+  pkgDir: string
+  /** <prefix>/bin/mipham（Windows 下是 mipham.cmd） */
+  launcher: string
+}
+
 /**
- * Perform the actual update via npm install -g.
- * Validates the version string before shell execution (prevents command injection).
+ * 推出全局安装路径。`fromDir` 只为测试可注入，默认本模块所在目录（<pkgDir>/src/shared）。
  *
- * @param version  Target semver version (must pass isValidSemver).
- * @param registry Optional npm registry URL — when provided the install uses it
- *                 directly (useful when the primary registry is slow, e.g. China).
- *                 Falls back to the npm default if omitted.
- * Returns true on success.
+ * 推不出时返回 **null**，绝不猜：`../../../..` 只是算术，它不能证明这个路径真的是一个
+ * node prefix。对照物是 `<prefix>/bin/npm` —— 真 prefix 一定有，猜出来的路径不一定有。
  */
-export function performUpdate(version: string, registry?: string): boolean {
+export function resolveInstallPaths(fromDir?: string): InstallPaths | null {
+  const base = fromDir ?? import.meta.dirname
+  if (!base) return null
+  const pkgDir = resolve(base, '..', '..')
+  if (!existsSync(join(pkgDir, 'package.json'))) return null
+  const prefix = resolve(pkgDir, '..', '..', '..', '..')
+  if (process.platform === 'win32') {
+    return { prefix, pkgDir, launcher: join(prefix, 'mipham.cmd') }
+  }
+  if (!existsSync(join(prefix, 'bin', 'npm'))) return null
+  return { prefix, pkgDir, launcher: join(prefix, 'bin', 'mipham') }
+}
+
+/** 安装前的快照。npm 是就地重写，出事时没有第二份可选 —— 只有这个。 */
+interface InstallSnapshot {
+  dir: string
+  pkgCopy: string
+  launcherExisted: boolean
+  /** 符号链接的原样目标（相对路径也要原样存回） */
+  launcherTarget: string | null
+  /** 普通文件形态的 launcher 存到包副本**之外**，否则会被当成多出来的文件还原进 pkgDir */
+  launcherFile: string | null
+}
+
+const SNAPSHOT_PREFIX = 'cli-'
+
+function readPkgVersion(pkgDir: string): string | undefined {
+  try {
+    return (JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf-8')) as { version?: string })
+      .version
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * 把当前安装整份存下来。返回 null 表示**存不下来** —— 那时不得回滚（没有可回的东西）。
+ * 会先清掉上一次运行留下的 `cli-*` 残留：那是被中断的上一次，它备份的树早已不是任何人的安装。
+ */
+function snapshotInstall(
+  paths: InstallPaths,
+  label: string,
+  backupRoot: string,
+): InstallSnapshot | null {
+  try {
+    mkdirSync(backupRoot, { recursive: true, mode: 0o700 })
+    for (const entry of readdirSync(backupRoot)) {
+      if (entry.startsWith(SNAPSHOT_PREFIX))
+        rmSync(join(backupRoot, entry), { recursive: true, force: true })
+    }
+    const dir = join(
+      backupRoot,
+      `${SNAPSHOT_PREFIX}${label}-${new Date().toISOString().replace(/[:.]/g, '-')}`,
+    )
+    const pkgCopy = join(dir, 'pkg')
+    cpSync(paths.pkgDir, pkgCopy, { recursive: true })
+
+    let launcherExisted = false
+    let launcherTarget: string | null = null
+    let launcherFile: string | null = null
+    try {
+      launcherExisted = true
+      if (lstatSync(paths.launcher).isSymbolicLink()) {
+        launcherTarget = readlinkSync(paths.launcher)
+      } else {
+        launcherFile = join(dir, 'launcher')
+        copyFileSync(paths.launcher, launcherFile)
+      }
+    } catch {
+      launcherExisted = false // launcher 本来就不在，快照还原不了从未存在的东西
+    }
+    return { dir, pkgCopy, launcherExisted, launcherTarget, launcherFile }
+  } catch {
+    return null
+  }
+}
+
+/** 把快照放回去。返回是否放成功 —— 失败必须如实上报，不能让调用方以为用户还有 CLI。 */
+function restoreInstall(snap: InstallSnapshot, paths: InstallPaths): boolean {
+  try {
+    rmSync(paths.pkgDir, { recursive: true, force: true })
+    cpSync(snap.pkgCopy, paths.pkgDir, { recursive: true })
+    if (snap.launcherExisted && !existsSync(paths.launcher)) {
+      if (snap.launcherTarget !== null) {
+        symlinkSync(snap.launcherTarget, paths.launcher)
+      } else if (snap.launcherFile !== null) {
+        copyFileSync(snap.launcherFile, paths.launcher)
+        chmodSync(paths.launcher, 0o755)
+      }
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
+function discardSnapshot(snap: InstallSnapshot | null): void {
+  if (!snap) return
+  try {
+    rmSync(snap.dir, { recursive: true, force: true })
+  } catch {
+    // 删不掉就留着；下一次运行开头的清理会收掉它
+  }
+}
+
+export interface InstallVerification {
+  ok: boolean
+  /** 包自报的版本 */
+  actual?: string
+  reason?: string
+}
+
+/**
+ * 装完之后的**自证**。两关，缺一不可：
+ *   1. `<pkgDir>/package.json` 的版本就是目标版本（事故里它连同整棵树一起没了）；
+ *   2. **launcher 真的能跑**并报出目标版本 —— 用户敲的是 `mipham --version`，不是读文件。
+ * 只查退出码、或只查文件在不在，都会把「装坏了」读成成功。
+ */
+export function verifyInstalledVersion(paths: InstallPaths, expected: string): InstallVerification {
+  const actual = readPkgVersion(paths.pkgDir)
+  if (actual === undefined) return { ok: false, reason: '安装树不完整：读不到 package.json' }
+  if (actual !== expected)
+    return { ok: false, actual, reason: `包装成了 ${actual}，目标是 ${expected}` }
+  try {
+    const out = execFileSync(paths.launcher, ['--version'], {
+      encoding: 'utf-8',
+      timeout: 20_000,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: process.platform === 'win32',
+    }).trim()
+    if (!out.includes(expected))
+      return { ok: false, actual, reason: `launcher 报告 "${out}"，不含 ${expected}` }
+  } catch (err) {
+    const detail = err instanceof Error ? err.message.split('\n')[0] : String(err)
+    return { ok: false, actual, reason: `launcher 跑不起来：${detail}` }
+  }
+  return { ok: true, actual }
+}
+
+/**
+ * 传给 npm 调用的选项。**只此一处** —— 默认 runner 原样转发它，所以测试断的选项
+ * 与生产跑的是同一个对象，不是一个长得像的副本。
+ */
+export type InstallOptions = { encoding: 'utf-8'; stdio: 'inherit' }
+
+/** 执行 `npm install -g`。可注入 —— 测试永不联网。 */
+export type InstallRunner = (command: string, options: InstallOptions) => void
+
+export interface UpdateDeps {
+  install?: InstallRunner
+  /** 覆盖路径解析；传 `null` 表示「推不出布局」。默认自动推断。 */
+  paths?: InstallPaths | null
+  /** 快照根目录，默认 `~/.mipham/backups`。 */
+  backupRoot?: string
+}
+
+export interface UpdateResult {
+  ok: boolean
+  /** 只有跑过自证才算 true —— 「装完没验证」不许冒充成功 */
+  verified: boolean
+  /** 失败后旧安装是否被放了回去 */
+  rolledBack: boolean
+  version?: string
+  reason?: string
+}
+
+/**
+ * 真正执行更新：先快照 → `npm install -g` → 自证 → 失败则回滚。
+ *
+ * 校验版本号后再进 shell（防命令注入）。
+ *
+ * @param version  目标 semver（必须通过 isValidSemver）。
+ * @param registry 可选 registry URL，只接受已知 URL；省略则用 npm 默认。
+ */
+export function performUpdate(
+  version: string,
+  registry?: string,
+  deps: UpdateDeps = {},
+): UpdateResult {
   if (!isValidSemver(version)) {
     process.stderr.write(`⚠ Refusing to install invalid version: "${version}"\n`)
-    return false
+    return { ok: false, verified: false, rolledBack: false, reason: `版本号非法：${version}` }
   }
 
   // Sanitize registry — only allow known URLs to prevent command injection
@@ -172,16 +368,56 @@ export function performUpdate(version: string, registry?: string): boolean {
 
   const registryFlag = safeRegistry ? ` --registry=${safeRegistry}` : ''
 
+  const paths = deps.paths !== undefined ? deps.paths : resolveInstallPaths()
+  const backupRoot = deps.backupRoot ?? join(miphamHome(), 'backups')
+  /** 生产用的 runner：把调用点给的选项原样交给 execSync（不另起一套）。 */
+  const defaultInstall: InstallRunner = (command, options) => {
+    execSync(command, options)
+  }
+  const install: InstallRunner = deps.install ?? defaultInstall
+
+  // 快照必须在安装**之前**：npm 就地重写全局包目录，安装一旦开始，旧树就没了。
+  let snap: InstallSnapshot | null = null
+  if (paths)
+    snap = snapshotInstall(paths, readPkgVersion(paths.pkgDir) ?? getCurrentVersion(), backupRoot)
+
   try {
-    execSync(`npm install -g ${PACKAGE}@${version}${registryFlag}`, {
+    // 这里**故意不设 timeout**。任何一个能在正常安装途中开火的计时器，开火那一刻就是破坏
+    // 本身：npm 被 SIGTERM 时会留下半截树（旧包已删、新包没写完）⇒ 用户一个 CLI 都没有，
+    // 连 `mipham update` 本身也没了。本机实测这个包的下载要 11 分钟以上，而原来设在 10 分钟。
+    // 进度由 npm 自己印在用户终端上（stdio: 'inherit'），要中断交由用户决定。
+    install(`npm install -g ${PACKAGE}@${version}${registryFlag}`, {
       encoding: 'utf-8',
       stdio: 'inherit',
-      timeout: 600_000, // 10 min — slow networks (e.g. China → npmjs) may need 7+ min
     })
-    return true
-  } catch {
-    return false
+  } catch (err) {
+    const rolledBack = paths && snap ? restoreInstall(snap, paths) : false
+    discardSnapshot(snap)
+    const detail = err instanceof Error && err.message ? `（${err.message.split('\n')[0]}）` : ''
+    return { ok: false, verified: false, rolledBack, reason: `安装进程被中断${detail}` }
   }
+
+  if (!paths) {
+    // 推不出布局 ⇒ 自证不了。如实返回「装了但没验证」，绝不印「✓ 已更新」。
+    discardSnapshot(snap)
+    return {
+      ok: true,
+      verified: false,
+      rolledBack: false,
+      version,
+      reason: '无法定位全局安装路径，未能验证',
+    }
+  }
+
+  const check = verifyInstalledVersion(paths, version)
+  if (!check.ok) {
+    const rolledBack = snap ? restoreInstall(snap, paths) : false
+    discardSnapshot(snap)
+    return { ok: false, verified: false, rolledBack, version, reason: check.reason }
+  }
+
+  discardSnapshot(snap)
+  return { ok: true, verified: true, rolledBack: false, version }
 }
 
 /**
