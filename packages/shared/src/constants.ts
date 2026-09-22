@@ -539,7 +539,6 @@ export const TOOL_CATEGORIES = [
 ] as const
 export const CONFIG_FILE_NAME = 'config.yml'
 export const MIPHAM_DIR = '.mipham'
-export const USER_CONFIG_DIR = '.mipham'
 export const MEMORY_DIR = 'memory'
 
 /** 预置 Ollama 模型 — 与 ollama list 结果合并去重后展示 */
