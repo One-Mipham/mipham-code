@@ -31,7 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 原来那句 `Run 'mipham --version' to verify` 是把唯一的检查甩给用户，而那时旧安装**已经**被毁了
 
   **边界（诚实说明）**：这套保护**只对已经装上它的机器生效** —— 修好之前发布的版本跑
-  `mipham update` 用的仍是旧代码与旧计时器。更彻底的做法（装进 staging prefix、校验通过后对包目录
+  `mipham update` 用的仍是旧代码与旧计时器，而**它们唯一的自助升级路径恰好就是坏掉的那条**：
+  等到 10 分钟会被计时器砍，中途 Ctrl-C 同样砍在 `reify` 中间，两条路留下的是同一个半截树
+  ⇒ **升级到本版请直接用 `npm install -g @miphamai/cli`（或重跑安装脚本），不要用 `mipham update`
+  自举**。更彻底的做法（装进 staging prefix、校验通过后对包目录
   与 launcher 做两次同文件系统内的 `rename`，可扛 SIGKILL）记在 `ROADMAP.md` **D12**，本版未做。
   测试 3,065 → 3,079（257 → 258 文件）。
 
