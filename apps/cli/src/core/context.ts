@@ -37,6 +37,14 @@ interface Checkpoint {
 export class ContextManager {
   private messages: Message[] = []
   private systemPrompt = ''
+  /**
+   * 系统提示里的**权限段**是读时派生的，不是组装时烘进 `systemPrompt` 的一份拷贝。
+   *
+   * 烘进去的那份拷贝会与执行分叉：Shift+Tab 之后闸门与页脚都变了，模型手里还是旧指令
+   * —— 往窄切是自纠正的（模型比闸门更保守），**往宽切**则让模型拒绝做它已经被允许做的事。
+   * `index.tsx` 把它接到 live `PermissionSystem.getMode()` 上，于是切一次档，下一次请求就变。
+   */
+  private permissionContextSource: (() => string) | null = null
   private estimatedTokens = 0
   private checkpoints: Checkpoint[] = []
   private checkpointCounter = 0
@@ -116,11 +124,32 @@ export class ContextManager {
 
   setSystemPrompt(prompt: string): void {
     this.systemPrompt = prompt
-    this.estimatedTokens = this.estimateTokens(prompt)
+    this.estimatedTokens = this.estimateTokens(this.composedSystemPrompt())
+  }
+
+  /**
+   * 接线点（`index.tsx`）：把权限段接到 live `PermissionSystem.getMode()` 上。
+   *
+   * 传 `null` 撤销。**不接**时系统提示里没有权限段（这里是唯一的施加点，故
+   * `test/integrity/permission-status-parity.test.ts` 从源码侧断这一行在场）。
+   */
+  setPermissionContextSource(fn: (() => string) | null): void {
+    this.permissionContextSource = fn
+  }
+
+  /**
+   * 存储的提示 + 读时派生的权限段。
+   *
+   * 段尾追加（而非插回原来的中段位置）是刻意的：只切档时**前缀保持不变**，
+   * 提供方的 prefix cache 仍能命中到权限段之前的部分。
+   */
+  private composedSystemPrompt(): string {
+    const block = this.permissionContextSource?.() ?? ''
+    return block ? `${this.systemPrompt}\n\n---\n\n${block}` : this.systemPrompt
   }
 
   getSystemPrompt(): string {
-    return this.systemPrompt
+    return this.composedSystemPrompt()
   }
 
   addMessage(msg: Message): void {
@@ -239,7 +268,7 @@ export class ContextManager {
     }
 
     // Re-estimate tokens
-    this.estimatedTokens = this.estimateTokens(this.systemPrompt)
+    this.estimatedTokens = this.estimateTokens(this.composedSystemPrompt())
     for (const msg of this.messages) {
       this.estimatedTokens += this.estimateTokens(
         typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
@@ -257,7 +286,7 @@ export class ContextManager {
     this.messages = []
     this.checkpoints = []
     this.checkpointCounter = 0
-    this.estimatedTokens = this.estimateTokens(this.systemPrompt)
+    this.estimatedTokens = this.estimateTokens(this.composedSystemPrompt())
   }
 
   getMessageCount(): number {
@@ -273,7 +302,7 @@ export class ContextManager {
   replaceMessages(messages: Message[]): void {
     this.messages = messages
     // Re-estimate tokens
-    this.estimatedTokens = this.estimateTokens(this.systemPrompt)
+    this.estimatedTokens = this.estimateTokens(this.composedSystemPrompt())
     for (const msg of messages) {
       this.estimatedTokens += this.estimateTokens(
         typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
@@ -418,7 +447,7 @@ export class ContextManager {
 
   /** Re-estimate tokens from system prompt + current messages. */
   private reEstimateTokens(): void {
-    this.estimatedTokens = this.estimateTokens(this.systemPrompt)
+    this.estimatedTokens = this.estimateTokens(this.composedSystemPrompt())
     for (const msg of this.messages) {
       this.estimatedTokens += this.estimateTokens(
         typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),

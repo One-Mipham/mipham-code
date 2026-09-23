@@ -133,7 +133,16 @@ export class InstructionsLoader {
     this.crsiLessonSummaries = this.loadCrsiLessons(root)
   }
 
-  buildSystemPrompt(permissionMode?: string): string {
+  /**
+   * The base prompt. **Deliberately takes no permission mode** — the mode is not a
+   * component of the prompt that gets assembled once, it is the answer to "which gate
+   * will run this call", and that answer changes mid-session (Shift+Tab). Baking it in
+   * here froze a copy: narrowing was self-correcting (the model obeys a gate that is now
+   * wider than it was told), but *widening* left the model refusing work it was already
+   * allowed to do. `ContextManager.setPermissionContextSource` derives the section on
+   * every read instead, so `permission.getMode()` is never sampled once and cached.
+   */
+  buildSystemPrompt(): string {
     const parts: string[] = []
 
     for (const inst of this.instructions) {
@@ -156,11 +165,8 @@ export class InstructionsLoader {
       parts.push(`<!-- ${levelLabel[inst.level] || inst.level} (${inst.path}) -->\n${content}`)
     }
 
-    // P2-2: Inject current permission mode so the model knows its constraints
-    if (permissionMode) {
-      parts.push(this.buildPermissionContext(permissionMode))
-    }
-
+    // P2-2 的权限段**不在**这里 —— 见 `buildPermissionBlock` 与
+    // `ContextManager.setPermissionContextSource`（读时派生，故切档即生效）。
     // 开场克制：寒暄只回一句短问候，不上能力清单（避免把「你好」当「你是谁」处理）
     parts.push(`## Greeting Restraint
 
@@ -322,10 +328,15 @@ Never omit it or present the work as purely human-authored.`)
   }
 
   /**
-   * P2-2: Build a permission-mode context block for the system prompt.
-   * Tells the model its current permission level and what to expect.
+   * P2-2: the permission-mode section of the system prompt. Tells the model its
+   * current permission level and what to expect.
+   *
+   * Public because it is now called **per request** rather than at assembly: the
+   * context holds a source that calls this with `permission.getMode()` at read time
+   * (`ContextManager.setPermissionContextSource`), so a mid-session Shift+Tab moves
+   * the text and the gate together. Pure — it reads no loaded instruction files.
    */
-  private buildPermissionContext(mode: string): string {
+  buildPermissionBlock(mode: string): string {
     // Hand-written map, and a missing key is **silent**: the `if (!description)`
     // below returns `''`, so the system prompt would simply say nothing about
     // permissions rather than warn. Every `PermissionMode` member needs a line.

@@ -3,14 +3,18 @@
  *
  * 两处缺陷的形状相同：**读的是「近似的替身」，不是真对象** ——
  * - P5：系统提示拿到的是 `config.permission` 这个**原始配置值**。它可能根本不是合法模式
- *   （`bypass` / `auto` / `ask` / 错拼），此时 `buildPermissionContext` 返回空串 ⇒ 提示里
- *   **一个字都不提权限**；而即使拼写合法，组织级限制也会把实际模式钳到别处 ⇒ 模型被告知
- *   的模式与它真正被允许做的事不一致，且偏差方向**偏宽**。
+ *   （`bypass` / `ask` / 错拼），此时 `buildPermissionBlock` 返回空串 ⇒ 提示里**一个字都
+ *   不提权限**；而即使拼写合法，组织级限制也会把实际模式钳到别处 ⇒ 模型被告知的模式与它
+ *   真正被允许做的事不一致，且偏差方向**偏宽**。
+ *   **2026-09-23 的第二形态**：修好「读哪个值」之后，剩下的缺口是「**什么时候**读」——
+ *   模式是在组装提示那一刻采样的，于是 Shift+Tab 切档后模型仍读着旧指令。往窄切是自纠正的
+ *   （模型比闸门更保守），**往宽切**则让它拒绝做已经允许的事。修法是取消采样：权限段改由
+ *   `ContextManager` 读时派生（接线点是 `setPermissionContextSource`），两处组装点不再带模式。
  * - P3：页脚那一行读的是本地的 `useState`，初始值写死 `'default'`、循环后存请求值。
  *
  * 两者的**行为**用例（`test/core/permission.test.ts`、`test/ui/permission-mode.test.ts`）
  * 都测不到「调用点用的是哪个值」—— 把真对象算对了、却仍把替身传进去，行为用例全绿。
- * 故这里断**调用点本身**：两处组装点必须把 live 权限系统的模式交给 `buildSystemPrompt`，
+ * 故这里断**调用点本身**：权限段的唯一施加点必须接 live 权限系统、且不得有人把模式烘进提示，
  * 页脚的两个入口必须回读 live 系统。判据是「负锚在场即红」，不是「读起来像对的」。
  *
  * 第三组（`auto` 档分类器的接线）形状相同而更极端：`src/index.tsx` **不在任何行为
@@ -45,13 +49,24 @@ describe('状态与执行同源（P3 / P5）', () => {
     expect(APP).toContain('onCyclePermission')
   })
 
-  it('P5：两处系统提示组装点都拿到 live 权限系统的模式，而不是 config 的原始值', () => {
-    // 恰好两处：`--resume` 那条进路与全新会话那条 —— 只接一个，另一个进路上的模型
-    // 仍然收到原始值（与 P1 的「两条通道」同形）。
-    const arg = /buildSystemPrompt\(permission\.getMode\(\)\)/g
-    expect(INDEX.match(arg)?.length).toBe(2)
-    // 负锚：原始配置值不得再直接进提示
+  it('P5：权限段读时派生 —— 接到 live 权限系统上，且没有任何地方把模式烘进提示', () => {
+    // 施加点唯一：`ContextManager.setPermissionContextSource`。删掉这一行，系统提示里就
+    // 一个字都不提权限（静默、全绿）—— 与上面 `setClassifier` 那次「有定义、无施加点」同形。
+    // 交给它的必须是 live `permission.getMode()`，不是 `config.permission` 那个原始值：
+    // 组织级限制会静默改写它，偏差方向还是「报得比实际宽」。
+    expect(INDEX_CODE, 'index.tsx 没有把权限段接到 live 权限系统上').toMatch(
+      /setPermissionContextSource\([\s\S]{0,80}?buildPermissionBlock\(permission\.getMode\(\)\)/,
+    )
+    // 负锚一：原始配置值不得进提示
     expect(INDEX).not.toMatch(/buildSystemPrompt\(config\.permission/)
+    // 负锚二：**任何地方都不得再把模式烘进提示**。烘进去的那份是模式的一份拷贝，会话中途
+    // 切档后它与执行分叉：往宽切时闸门开了、模型仍读着旧指令去拒绝已允许的事（本条要关掉的
+    // 形状）；往窄切是自纠正的，所以旧形状只在一半方向上咬人、更难被发现。
+    expect(INDEX).not.toMatch(/buildSystemPrompt\(permission\.getMode\(\)\)/)
+    expect(INDEX).not.toMatch(/buildSystemPrompt\(\s*['"`]/)
+    expect(INDEX, '两处组装点都必须是不带参数的 buildSystemPrompt()').toMatch(
+      /buildSystemPrompt\(\)/,
+    )
   })
 
   it('P3：页脚的两个入口都回读 live 系统，而不是本地猜的值', () => {

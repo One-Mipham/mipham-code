@@ -25,10 +25,18 @@ describe('InstructionsLoader.buildSystemPrompt', () => {
   })
 
   it('injects actionable permission-escalation guidance (连续被挡要止损并求助)', () => {
-    const prompt = new InstructionsLoader().buildSystemPrompt('default')
-    expect(prompt).toContain('STOP retrying')
-    expect(prompt).toContain('bypassPermissions')
-    expect(prompt).toContain('/permissions')
+    const block = new InstructionsLoader().buildPermissionBlock('default')
+    expect(block).toContain('STOP retrying')
+    expect(block).toContain('bypassPermissions')
+    expect(block).toContain('/permissions')
+  })
+
+  it('base prompt 不含权限段 —— 它由 ContextManager 读时派生，不是两处各存一份', () => {
+    // 这条是「两份拷贝会分叉」的机械防线：谁把模式重新烘回 `buildSystemPrompt`，
+    // 系统提示里就会同时出现烘死的旧段与派生的新段（互相矛盾），这里立刻红。
+    const prompt = new InstructionsLoader().buildSystemPrompt()
+    expect(prompt).not.toContain('## Permission Context')
+    expect(prompt).not.toContain('STOP retrying')
   })
 })
 

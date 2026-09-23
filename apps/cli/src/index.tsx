@@ -382,12 +382,13 @@ export async function runApp(options: RunOptions): Promise<void> {
   // Load configuration
   const config = loadConfig()
 
-  // Permission policy is built **here**, before the system prompt exists, so the prompt
-  // can describe the mode the engine will actually run in. Building the prompt from
-  // `config.permission` handed the model a value that org restrictions can silently
-  // rewrite (and that may not even be a mode name — `bypass`/`auto`/`ask` inject nothing
-  // at all). The engine is created much later, after tools/hooks/vajra are mounted, so
-  // this instance is what gets handed to it rather than a second one built inside.
+  // Permission policy is built **here**, before anything can describe it. Neither the
+  // prompt nor the engine may read `config.permission`: org restrictions silently
+  // rewrite it, and it may not even be a mode name — `bypass`/`ask`/a typo inject
+  // nothing at all. The engine is created much later, after tools/hooks/vajra are
+  // mounted, so this instance is what gets handed to it rather than a second one built
+  // inside; the system prompt's permission section reads its `getMode()` per request
+  // (wired at `setPermissionContextSource` below), so it cannot drift from execution.
   const permission = new PermissionSystem('default')
   // Sync with config (fix: UI shows "auto" but engine defaulted to bypass-legacy)
   if (config.permission) {
@@ -500,6 +501,11 @@ export async function runApp(options: RunOptions): Promise<void> {
   // Cache-aware microcompaction: track the provider's prompt-cache prefix.
   context.setCacheTracker(new PrefixCacheTracker())
 
+  // 权限段**读时派生**，不在组装时烘进提示。烘进去的是模式的一份拷贝，而模式会在会话中途
+  // 变（Shift+Tab）：往窄切是自纠正的，**往宽切**则让模型拿着旧指令拒绝做它已被允许做的事。
+  // 这里接的是 live `permission` —— 同一实例也交给引擎去执行，故下一次请求就与新档一致。
+  context.setPermissionContextSource(() => instructions.buildPermissionBlock(permission.getMode()))
+
   // Adaptive memory budget: scale with model's context window
   getMemoryManager().setContextWindow(modelContextWindow)
 
@@ -517,12 +523,12 @@ export async function runApp(options: RunOptions): Promise<void> {
         }
       }
       context.restoreLog(log)
-      context.setSystemPrompt(instructions.buildSystemPrompt(permission.getMode()))
+      context.setSystemPrompt(instructions.buildSystemPrompt())
     }
   }
 
   if (context.getMessageCount() === 0) {
-    const basePrompt = instructions.buildSystemPrompt(permission.getMode())
+    const basePrompt = instructions.buildSystemPrompt()
     const memoryReminder = loadSessionMemories(basePrompt)
     const skillsReminder = skillsLoader.buildSystemReminder(5000, config.skills?.reminder ?? 'full')
 
