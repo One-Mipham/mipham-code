@@ -116,6 +116,16 @@ export function parseHookStdout(stdout: string | null | undefined, _ctx: HookCon
  * at all. Empty stderr is what made them one string with a benign non-zero exit
  * that printed nothing — `Hook warning (<cmd>): ` with the reason left blank.
  *
+ * A fourth shape is **not** a failure of the run at all: `EPIPE` on the write that
+ * hands the child its stdin payload, which is what happens whenever the child
+ * exits without reading it (measured: `status` survives — `exit 0` → 0, `exit 3`
+ * → 3 — and `signal` stays null). Hook commands routinely ignore stdin, and whether
+ * that write loses its race is a property of the scheduler, not of the hook: it
+ * never occurred on the dev machine and reddened CI on a faster one. Read as the
+ * cause, it **replaced** the child's real result — `Hook warning (<cmd>): boom`
+ * and `killed by SIGTERM` both came back as `Hook error (<cmd>): EPIPE`. So EPIPE
+ * is exempt from the two decisions below, and speaks only when nothing else can.
+ *
  * Named here rather than in the caller's `catch`, which cannot see any of them:
  * it runs only when `spawnSync` itself throws.
  */
@@ -124,15 +134,24 @@ function spawnFailureCause(
   timeoutSeconds: number,
 ): string | null {
   const err = result.error as { code?: string; message?: string } | undefined
-  if (err) {
+  const hasExit = typeof result.status === 'number'
+  const writeFailed = err?.code === 'EPIPE'
+
+  if (err && !writeFailed) {
     if (err.code === 'ETIMEDOUT') return `timed out after ${timeoutSeconds}s`
     return err.message
       ? `${err.code ?? 'spawn failed'}: ${err.message}`
       : (err.code ?? 'spawn failed')
   }
-  if (result.signal && (result.status === null || result.status === undefined)) {
+
+  if (result.signal && !hasExit) {
     return `killed by ${result.signal}`
   }
+
+  // No branch for "EPIPE and nothing else": a failed write presupposes a child that
+  // was spawned and reaped, so `status` or `signal` is always present alongside it
+  // (`exit 0`/`exit 3` → 0/3, `kill -TERM $$` → SIGTERM). Unreachable error
+  // handling is what the exemption above is meant to avoid, not to add.
   return null
 }
 
