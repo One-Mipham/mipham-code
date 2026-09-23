@@ -65,7 +65,7 @@ brew install mipham
 
 ```bash
 mipham --version
-# → @miphamai/cli v0.85.1
+# → @miphamai/cli v0.85.2
 ```
 
 ### Run
