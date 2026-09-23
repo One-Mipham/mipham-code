@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.85.3] — 2026-09-23
+
+### Added
+
+- **`--permission <mode>`** —— 这个选项一路都在（`RunOptions.permission`），只是**没有任何调用点
+  传过它**：非交互场景从前只能靠 `MIPHAM_DAEMON_PERMISSION`（daemon 专属）。现在
+  `mipham --permission plan` 启动即 `plan` 档。
+- **`settings.json` 的 `permissions.defaultMode`** —— 档位的门多了一扇，规则一句话可复述：
+  **天花板只能由操作者自己的文件移动**。优先级 `--permission` > 用户级 `settings.json` >
+  用户级 `config.yml` > 内建 `default`；**项目级的 `.mipham/config.yml` 与 `.mipham/settings.json`
+  不是门** —— 它们跟着代码一起来（clone 一个仓库不等于被它代授一个档位），写了就拒、并在 stderr
+  点名那个值与路径。
+
+### Fixed
+
+- **系统提示里的权限段冻在启动时** —— `buildSystemPrompt(permission.getMode())` 只在建 prompt
+  那一刻为真，Shift+Tab 之后**没有任何地方重设** ⇒ 往宽切档时闸门开了、模型手里的指令还是旧的
+  （它会拒绝做**已经允许**的事）。现在由 `ContextManager` **读时派生**，缝留在上下文层 ——
+  那正是「谁被顺带改变」的边界（daemon 的 ContextManager 本就不设系统提示）。
+- **子代理从不知道自己处在哪一档** —— 它的提示是按 agent 定义拼的，从不含权限段。现在报**它
+  自己的**档（读闸门的**结果**，不是定义里那个字符串：组织级 `maxAllowedMode` 会静默钳走），
+  且必须落在**真正发出去的那份提示**上 —— 挂错地方的接线是装饰，请求里一个字都到不了。
+- **remote attach 时切档什么都不发到线上** —— 页脚在本地、闸门在 daemon，`set_mode` 之前一个字
+  都不过网。
+- **四条报告面报的是配置里的替身** —— `/status`、`/doctor`、`/stats` 与 `/setup` 的状态面板读的
+  都是 `config.permission`，而配置文件只是几扇门里的一扇（Shift+Tab、组织级钳制、用户
+  `settings.json` 都会移动真正生效的那一档）⇒ 它们可以点名一个**不是**正在拒绝调用的档。现在
+  它们读引擎所在的档。`/config` 的 `permission:` 行与 `/setup 5` 的两值并陈**有意保留**：前者
+  是配置文件转储，后者本来就是教这两者会分叉的地方。
+
+测试 3,231 → 3,288（271 文件，0 失败）。
+
 ## [0.85.2] — 2026-09-23
 
 ### Security

@@ -3,6 +3,33 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.3 — 2026-09-23
+
+- Version sync with Mipham Code CLI 0.85.3
+- Added: `--permission <mode>`. The option existed all along (`RunOptions.permission`) but no call
+  site ever passed it, so non-interactive runs could only pick a mode through the daemon-only
+  `MIPHAM_DAEMON_PERMISSION`. `mipham --permission plan` now starts in `plan`
+- Added: `permissions.defaultMode` in `settings.json` is now a door for the mode. The rule is one
+  sentence: **only the operator's own files move the ceiling.** `--permission` beats user-level
+  `settings.json`, which beats user-level `config.yml`, which beats the built-in `default`.
+  Project-level `.mipham/config.yml` and `.mipham/settings.json` are **not doors at all** — they
+  arrive with the code, and cloning a repository is not consenting to the mode it ships. Setting
+  one there is refused, and the value and path are named on stderr
+- Fixed: the permission block in the system prompt was frozen at startup. It was built once from
+  the mode in hand and nothing rebuilt it, so after Shift+Tab the gate allowed more while the
+  model still held the older instruction — it would refuse work it was now allowed to do. It is
+  now derived at read time, with the seam in the context layer, which is what keeps the change
+  from reaching sessions that set no system prompt at all
+- Fixed: a subagent never knew which mode it was in. Its prompt is assembled from the agent
+  definition and carried no permission block. It now reports **its own** mode — read from the
+  gate's result, not from the definition, which the org-level ceiling can silently clamp — and it
+  lands on the prompt that is actually sent
+- Fixed: switching mode over a remote attach sent nothing over the wire. The footer was local and
+  the gate was in the daemon, so a mode change made before `set_mode` was a local edit of a label
+- Fixed: four report surfaces (`/status`, `/doctor`, `/stats`, `/setup`) read the substitute in the
+  config file rather than the live gate, so they could name a mode that was not the one refusing
+  calls — the `settings.json` door above widened that window further
+
 ## 0.85.2 — 2026-09-23
 
 - Version sync with Mipham Code CLI 0.85.2
