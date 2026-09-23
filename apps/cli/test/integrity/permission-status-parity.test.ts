@@ -1,7 +1,7 @@
 /**
- * P3 + P5 — 状态（页脚 / 系统提示）与执行必须**同源**，这一条只能从源码侧断。
+ * P3 + P5 + P6 — 状态（页脚 / 系统提示）与执行必须**同源**，这一条只能从源码侧断。
  *
- * 两处缺陷的形状相同：**读的是「近似的替身」，不是真对象** ——
+ * 三处缺陷的形状相同：**读的是「近似的替身」，不是真对象** ——
  * - P5：系统提示拿到的是 `config.permission` 这个**原始配置值**。它可能根本不是合法模式
  *   （`bypass` / `ask` / 错拼），此时 `buildPermissionBlock` 返回空串 ⇒ 提示里**一个字都
  *   不提权限**；而即使拼写合法，组织级限制也会把实际模式钳到别处 ⇒ 模型被告知的模式与它
@@ -10,6 +10,9 @@
  *   模式是在组装提示那一刻采样的，于是 Shift+Tab 切档后模型仍读着旧指令。往窄切是自纠正的
  *   （模型比闸门更保守），**往宽切**则让它拒绝做已经允许的事。修法是取消采样：权限段改由
  *   `ContextManager` 读时派生（接线点是 `setPermissionContextSource`），两处组装点不再带模式。
+ * - P6：子代理的系统提示里从来没有权限段 —— `sub-agent.ts` 拼的是自己那一份，与上下文的
+ *   系统提示是**两份**，于是它对当前档一无所知。它要报的是**自己的**档（定义写
+ *   `permissionMode: 'inherit'` 时那才等于父档，由 `createSubAgentPermission` 解析）。
  * - P3：页脚那一行读的是本地的 `useState`，初始值写死 `'default'`、循环后存请求值。
  *
  * 两者的**行为**用例（`test/core/permission.test.ts`、`test/ui/permission-mode.test.ts`）
@@ -66,6 +69,29 @@ describe('状态与执行同源（P3 / P5）', () => {
     expect(INDEX).not.toMatch(/buildSystemPrompt\(\s*['"`]/)
     expect(INDEX, '两处组装点都必须是不带参数的 buildSystemPrompt()').toMatch(
       /buildSystemPrompt\(\)/,
+    )
+  })
+
+  it('P6：子代理报自己的档 —— 权限段落在**真正发出去**的那份提示上', () => {
+    // 子代理的请求读的是本文件里的局部变量 `currentSystemPrompt`，**从不读上下文**的
+    // 系统提示（那是引擎的行为）。所以权限段只能加在那里：挂在
+    // `ContextManager.setPermissionContextSource` 上会是一处**装饰** —— 接线在场、请求里
+    // 一个字都到不了。行为用例（`test/agent/sub-agent-permission-prompt.test.ts`）断的是
+    // 发出去的那份，看不见「接线接在哪个对象上」，故这一半在这里断。
+    expect(SUB_AGENT, '子代理的权限段没有接在闸门上').toMatch(
+      /buildPermissionBlock\(gate\.getMode\(\)\)/,
+    )
+    // 负锚一：不得改读父系统 —— 定义指名了自己那一档时，父档不是它的档。
+    expect(SUB_AGENT, '报的是父档 ⇒ 与 P5 同族：模型拿到的权限说明不是它的').not.toMatch(
+      /buildPermissionBlock\(this\.permission/,
+    )
+    // 负锚二：不得把模式烘成字面量 —— 换一档就静默说谎，且没有行为用例看得见。
+    expect(SUB_AGENT).not.toMatch(/buildPermissionBlock\(\s*['"`]/)
+    // 负锚三：不得改挂到上下文那条读时缝上 —— 这是一个**实测过的**假修法：接线在场、
+    // 上面那条正锚也照样命中，但请求读的是局部变量，线上一个字都收不到
+    // （负控 NC4：5 条行为用例全红，而只断「调用在不在」的守卫**放它过去**）。
+    expect(SUB_AGENT, '挂在上下文上是装饰 —— 子代理的请求从不读上下文').not.toContain(
+      'setPermissionContextSource',
     )
   })
 

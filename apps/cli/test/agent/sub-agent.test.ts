@@ -232,7 +232,11 @@ describe('SubAgent', () => {
     const sub = new SubAgent(registry, TOOLS)
     await sub.execute('test', 'test task', { agentDef })
 
-    expect(receivedSystemPrompt).toBe('You are a custom agent. Be concise.')
+    // 本条要钉的是「用的是定义里那份，不是内建的 `TYPE_SYSTEM_PROMPTS`」。断言写成整串
+    // 相等 ⇒ 末尾追加权限段（子代理现在报自己的档）就会红，而它并没有改变这个意图 ——
+    // 故改成「定义那份逐字在最前」，并顺手钉住追加段在场（不再是可有可无的尾巴）。
+    expect(receivedSystemPrompt.startsWith('You are a custom agent. Be concise.')).toBe(true)
+    expect(receivedSystemPrompt).toContain('## Permission Context')
   })
 
   it('scopes tools based on agent definition allowlist', async () => {
@@ -408,10 +412,12 @@ describe('SubAgent', () => {
     // 这个假对象必须实现循环**实际调用**的那几个方法：裁决之外，现在还多了
     // 「连续被拒」那一对护栏（放行清零 / 被拒计数）。少一个就会抛错，而抛错是
     // 运气不是设计 —— 所以这里补齐，不是靠调用点少调一次。
+    // `getMode` 同理（系统提示里的权限段按它取，取到的是**子代理自己**的档）。
     const clamped = {
       resolveApproval: async () => ({ level: 'bypass', source: 'static' }),
       incrementBlockCounter: () => false,
       resetBlockCounter: () => {},
+      getMode: () => 'acceptEdits' as const,
     } as unknown as PermissionSystem
     const parent = {
       needsApproval: () => true,

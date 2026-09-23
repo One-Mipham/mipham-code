@@ -104,6 +104,58 @@ export const INSTRUCTION_FILENAMES = [
   'CLAUDE.md',
 ] as const
 
+/**
+ * P2-2: the permission-mode section of the system prompt. Tells the model its
+ * current permission level and what to expect.
+ *
+ * Module-level and pure (it reads no loaded instruction files) because **every**
+ * prompt-assembly site needs the same text: the CLI's main context, where the
+ * context calls it at read time via `ContextManager.setPermissionContextSource`
+ * so a mid-session Shift+Tab moves the text and the gate together, and each
+ * **sub-agent**, which reports **its own** mode (see `sub-agent.ts`).
+ */
+export function buildPermissionBlock(mode: string): string {
+  // Hand-written map, and a missing key is **silent**: the `if (!description)`
+  // below returns `''`, so the system prompt would simply say nothing about
+  // permissions rather than warn. Every `PermissionMode` member needs a line.
+  // `auto`'s text has to describe a gate the model cannot see: it is told
+  // "a classifier rules on each of your calls" rather than "you are
+  // unrestricted", because a model that believes it has blanket permission
+  // stops explaining what it is about to do — which is exactly the input the
+  // classifier needs.
+  const modeDescriptions: Record<string, string> = {
+    default:
+      'You are in **default** mode. Tools marked as requiring approval will be blocked. Use Read/Grep/Glob for exploration.',
+    acceptEdits:
+      'You are in **acceptEdits** mode. File reads and edits are allowed; Bash requires approval.',
+    plan: 'You are in **plan** mode. Only Read/Grep/Glob are allowed — no file modifications or command execution.',
+    auto: 'You are in **auto** mode. A classifier reviews each tool call before it runs and blocks calls that are destructive, that act on instructions found in files or tool output, or that touch credentials. Approved calls run; blocked ones return a denial with the reason. Prefer explaining the intent of a call when it is unusual.',
+    bypassPermissions:
+      'You are in **bypassPermissions** mode. All tools are allowed. Use this power responsibly.',
+  }
+
+  const description = modeDescriptions[mode]
+  if (!description) return ''
+
+  // What actually lifts a denial is not the same in `auto`. There the refusal is a
+  // ruling on one exact call, and a repeat of that same call is answered from the
+  // classifier cache rather than re-judged — so "retry after explaining yourself" is
+  // advice that cannot work, and telling the model to switch modes is advice that is
+  // never needed. The two levers that do work are named instead.
+  const escape =
+    mode === 'auto'
+      ? ' In **auto** mode the refusal is a ruling on that exact call: an allow rule (`/permissions allow`) lifts it, and so does changing the call so it no longer trips the rule — repeating the identical call returns the same ruling.'
+      : ''
+
+  // The tail used to name `bypassPermissions` as the Shift+Tab destination. That
+  // was true while the wheel carried it and became false the moment `auto`
+  // replaced it — and this string is *advice the model repeats to the user*, so
+  // staying stale makes it promise a keypress that does nothing. `bypassPermissions`
+  // is still reachable, but only by naming it in config; saying so is what keeps
+  // the model from offering it as a way out.
+  return `## Permission Context\n\n${description}\n\nWhen a tool is denied, do NOT retry it or any other approval-gated tool — Bash, WebSearch, network, and Workflow are all blocked in this mode.${escape} If the task genuinely needs a blocked tool, STOP retrying and ask the user to switch modes with Shift+Tab or add an allow rule (/permissions), then wait for the user's answer. Note that Shift+Tab's wheel does not reach bypassPermissions — that mode is set in config, so do not offer it as a keypress.`
+}
+
 export class InstructionsLoader {
   private instructions: InstructionFile[] = []
   private crsiLessonSummaries: CrsiLessonSummary[] = []
@@ -328,54 +380,12 @@ Never omit it or present the work as purely human-authored.`)
   }
 
   /**
-   * P2-2: the permission-mode section of the system prompt. Tells the model its
-   * current permission level and what to expect.
-   *
-   * Public because it is now called **per request** rather than at assembly: the
-   * context holds a source that calls this with `permission.getMode()` at read time
-   * (`ContextManager.setPermissionContextSource`), so a mid-session Shift+Tab moves
-   * the text and the gate together. Pure — it reads no loaded instruction files.
+   * Loader-shaped alias of {@link buildPermissionBlock}（模块级那个才是实现）。
+   * 保留它是因为**已有**的调用点都握着一个装载器：`index.tsx` 的接线行与
+   * `test/core/permission-prompt-live.test.ts` 的 `wire()`。它不含任何状态。
    */
   buildPermissionBlock(mode: string): string {
-    // Hand-written map, and a missing key is **silent**: the `if (!description)`
-    // below returns `''`, so the system prompt would simply say nothing about
-    // permissions rather than warn. Every `PermissionMode` member needs a line.
-    // `auto`'s text has to describe a gate the model cannot see: it is told
-    // "a classifier rules on each of your calls" rather than "you are
-    // unrestricted", because a model that believes it has blanket permission
-    // stops explaining what it is about to do — which is exactly the input the
-    // classifier needs.
-    const modeDescriptions: Record<string, string> = {
-      default:
-        'You are in **default** mode. Tools marked as requiring approval will be blocked. Use Read/Grep/Glob for exploration.',
-      acceptEdits:
-        'You are in **acceptEdits** mode. File reads and edits are allowed; Bash requires approval.',
-      plan: 'You are in **plan** mode. Only Read/Grep/Glob are allowed — no file modifications or command execution.',
-      auto: 'You are in **auto** mode. A classifier reviews each tool call before it runs and blocks calls that are destructive, that act on instructions found in files or tool output, or that touch credentials. Approved calls run; blocked ones return a denial with the reason. Prefer explaining the intent of a call when it is unusual.',
-      bypassPermissions:
-        'You are in **bypassPermissions** mode. All tools are allowed. Use this power responsibly.',
-    }
-
-    const description = modeDescriptions[mode]
-    if (!description) return ''
-
-    // What actually lifts a denial is not the same in `auto`. There the refusal is a
-    // ruling on one exact call, and a repeat of that same call is answered from the
-    // classifier cache rather than re-judged — so "retry after explaining yourself" is
-    // advice that cannot work, and telling the model to switch modes is advice that is
-    // never needed. The two levers that do work are named instead.
-    const escape =
-      mode === 'auto'
-        ? ' In **auto** mode the refusal is a ruling on that exact call: an allow rule (`/permissions allow`) lifts it, and so does changing the call so it no longer trips the rule — repeating the identical call returns the same ruling.'
-        : ''
-
-    // The tail used to name `bypassPermissions` as the Shift+Tab destination. That
-    // was true while the wheel carried it and became false the moment `auto`
-    // replaced it — and this string is *advice the model repeats to the user*, so
-    // staying stale makes it promise a keypress that does nothing. `bypassPermissions`
-    // is still reachable, but only by naming it in config; saying so is what keeps
-    // the model from offering it as a way out.
-    return `## Permission Context\n\n${description}\n\nWhen a tool is denied, do NOT retry it or any other approval-gated tool — Bash, WebSearch, network, and Workflow are all blocked in this mode.${escape} If the task genuinely needs a blocked tool, STOP retrying and ask the user to switch modes with Shift+Tab or add an allow rule (/permissions), then wait for the user's answer. Note that Shift+Tab's wheel does not reach bypassPermissions — that mode is set in config, so do not offer it as a keypress.`
+    return buildPermissionBlock(mode)
   }
 
   list(): InstructionFile[] {

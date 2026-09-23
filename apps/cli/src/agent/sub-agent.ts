@@ -7,6 +7,7 @@ import { getBackgroundAgentRegistry } from './background-registry'
 import { formatInboundMessage, getMessageBus } from './message-bus'
 import type { HookEngine } from '../core/hooks'
 import { PermissionSystem } from '../core/permission'
+import { buildPermissionBlock } from '../core/instructions'
 import { AgentExperience } from './agent-experience'
 import { PatternAnalyzer } from './pattern-analyzer.js'
 import { getWorkspaceTrust } from '../core/workspace-trust'
@@ -388,7 +389,24 @@ export class SubAgent {
     let hitMaxTurns = false
 
     let currentMessages = messages
-    let currentSystemPrompt = systemPrompt
+    // ── 子代理报**它自己的档**，不是父档 ──
+    // `gate` 是每个工具调用真正过的那个闸门（上面构造的那个，缺省是 `default`）；
+    // 闸门的模式取自 `createSubAgentPermission` 的**解析结果** —— 定义写了
+    // `permissionMode` 的就是它自己那一档，写 `inherit` 的才是父档 —— 这里只读结果、
+    // 不重算，免得同一个事实有第二份推导。读 `getMode()` 而不是定义里那个字符串：
+    // 组织级上限（`maxAllowedMode`/`forbiddenModes`）会静默把模式钳走，报请求档就是
+    // 报得比实际宽 —— 与系统提示那边（`index.tsx` 的接线行）同一个理由。
+    //
+    // 它烘在**这一处**而不是走 `ContextManager.setPermissionContextSource`：子代理的请求
+    // 读的是下面这个局部变量（`systemPrompt: currentSystemPrompt`），**从不读上下文**的
+    // 系统提示 —— 挂在上下文上会是一处装饰（有接线、请求里一个字都到不了），正是本仓库
+    // 反复收的那种账。同样因为后续回合把提示清成 `''`（`currentSystemPrompt = ''`，
+    // 首轮才带系统提示），
+    // 权限段随**唯一**带提示的那一轮走，而不是每轮派生。
+    const permissionBlock = buildPermissionBlock(gate.getMode())
+    let currentSystemPrompt = permissionBlock
+      ? `${systemPrompt}\n\n---\n\n${permissionBlock}`
+      : systemPrompt
     let totalTokens = 0
 
     // Context for the sub-agent's own tool calls. Built once per run: the caller's
