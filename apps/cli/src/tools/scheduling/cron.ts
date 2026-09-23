@@ -1,11 +1,5 @@
-import {
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-  unlinkSync,
-  readdirSync,
-  existsSync,
-} from 'node:fs'
+import { mkdirSync, readFileSync, unlinkSync, readdirSync, existsSync } from 'node:fs'
+import { atomicWriteFileSync } from '../../shared/atomic-write'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import type { ToolDefinition } from '../../shared/index.ts'
@@ -78,7 +72,7 @@ export function readAllJobs(): CronJob[] {
 /** Persist a job (create or update) to its JSON file. */
 export function writeJob(job: CronJob): void {
   ensureCronDir()
-  writeFileSync(jobPath(job.id), JSON.stringify(job, null, 2), 'utf-8')
+  atomicWriteFileSync(jobPath(job.id), JSON.stringify(job, null, 2), { mode: 0o644 })
 }
 
 /** Delete a job's file. Returns false when the job did not exist. */

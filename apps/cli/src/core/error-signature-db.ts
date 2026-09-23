@@ -14,7 +14,8 @@
  *   PreFlightChecker.check() → ErrorSignatureDB.match()
  */
 
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { mkdirSync, readFileSync, existsSync } from 'node:fs'
+import { atomicWriteFileSync } from '../shared/atomic-write'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { miphamHome } from './paths.ts'
@@ -101,7 +102,7 @@ export class ErrorSignatureDB {
     try {
       mkdirSync(join(this.storePath, '..'), { recursive: true })
       const arr = Array.from(this.signatures.values())
-      writeFileSync(this.storePath, JSON.stringify(arr, null, 2), 'utf-8')
+      atomicWriteFileSync(this.storePath, JSON.stringify(arr, null, 2), { mode: 0o644 })
       this.dirty = false
     } catch {
       // Best-effort persistence — never crash on write failure

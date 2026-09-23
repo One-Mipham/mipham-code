@@ -1,17 +1,16 @@
-import {
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  writeFileSync,
-  unlinkSync,
-  renameSync,
-  existsSync,
-  statSync,
-} from 'node:fs'
+import { mkdirSync, readdirSync, unlinkSync, existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import type { Message } from '../shared/types'
-import { sanitizeSessionName, SessionLog, deriveMessages, messageToEvents } from './session-log'
+import {
+  sanitizeSessionName,
+  SessionLog,
+  deriveMessages,
+  messageToEvents,
+  isValidMessage,
+} from './session-log'
+import { atomicWriteFileSync } from '../shared/atomic-write'
+import { readRegularFileSync } from '../shared/regular-file'
 import { miphamHome } from './paths.ts'
 
 export interface SessionMetadata {
@@ -54,6 +53,25 @@ function filePath(name: string): string {
   return join(SESSIONS_DIR, `${sanitizeSessionName(name)}.jsonl`)
 }
 
+/**
+ * 旧格式快照（单 JSON 对象 `{metadata, messages}`）的形状闸。
+ *
+ * `'metadata' in parsed` 拦不住 `{"metadata": null, …}` —— `in` 看的是**键在不在**，
+ * 而 `/resume <name>` 紧接着就读 `session.metadata.name`，那条链上没有 try（实测
+ * `TypeError`）。`messages` 的元素同理：`[null]` 会一路送到 UI 的
+ * `forwardedMessages.map((msg) => msg.role)`（`app.tsx:1041`）与 provider 的内容分支。
+ *
+ * 形状不对**整份返回 null**，而不是把坏元素过滤掉：调用方随即回落到事件日志那条路，
+ * 读不出来会如实报 load failed；过滤则会凭空造出一段残缺历史 —— 静默改写用户数据。
+ */
+function asStoredSnapshot(parsed: unknown): StoredSession | null {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+  const { metadata, messages } = parsed as { metadata?: unknown; messages?: unknown }
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null
+  if (!Array.isArray(messages) || !messages.every(isValidMessage)) return null
+  return { metadata: metadata as SessionMetadata, messages: messages as Message[] }
+}
+
 export class SessionStore {
   /**
    * Save a session as JSONL (one JSON object per line).
@@ -79,10 +97,11 @@ export class SessionStore {
       messages,
     }
 
-    // Atomic write: write to temp file, then rename (same-fs rename is atomic)
-    const tmp = path + '.tmp'
-    writeFileSync(tmp, JSON.stringify(session) + '\n', { encoding: 'utf-8', mode: 0o600 })
-    renameSync(tmp, path)
+    // Atomic write: write to temp file, then rename (same-fs rename is atomic).
+    // 临时名由 atomicWriteFileSync 生成（pid + 随机后缀）—— 从前这里是固定的
+    // `path + '.tmp'`，两个进程同时存同一个会话时，先 rename 的那个会把**后一个**写者的
+    // 内容搬进目标，而它自己的 rename 再抛 ENOENT：在一个「目标永不半截」的函数里丢一次写。
+    atomicWriteFileSync(path, JSON.stringify(session) + '\n', { mode: 0o600 })
 
     // Incremental index update — only touch this session's entry
     try {
@@ -123,18 +142,12 @@ export class SessionStore {
   /** 从磁盘重开一个 SessionLog（不存在返回空 log）。旧格式快照自动迁移为事件日志。 */
   static loadLog(name: string): SessionLog {
     const path = filePath(name)
-    if (!existsSync(path)) return SessionLog.open(name)
     try {
-      const raw = readFileSync(path, 'utf-8')
-      const parsed = JSON.parse(raw) as unknown
-      if (
-        parsed &&
-        typeof parsed === 'object' &&
-        'metadata' in parsed &&
-        Array.isArray((parsed as { messages?: unknown }).messages)
-      ) {
+      const raw = readRegularFileSync(path)
+      if (raw === null) return SessionLog.open(name)
+      const old = asStoredSnapshot(JSON.parse(raw))
+      if (old) {
         // 旧格式快照 → 迁移为事件日志（重写文件，避免后续 append 混格式）
-        const old = parsed as StoredSession
         const log = new SessionLog(name)
         log.append({
           type: 'session/start',
@@ -160,19 +173,12 @@ export class SessionStore {
    */
   static load(name: string): StoredSession | null {
     const path = filePath(name)
-    if (!existsSync(path)) return null
-
     try {
-      const raw = readFileSync(path, 'utf-8')
-      // 旧格式：单 JSON 对象 {metadata, messages}
-      const parsed = JSON.parse(raw) as unknown
-      if (
-        parsed &&
-        typeof parsed === 'object' &&
-        'metadata' in parsed &&
-        Array.isArray((parsed as { messages?: unknown }).messages)
-      ) {
-        return parsed as StoredSession
+      const raw = readRegularFileSync(path)
+      if (raw !== null) {
+        // 旧格式：单 JSON 对象 {metadata, messages}
+        const old = asStoredSnapshot(JSON.parse(raw))
+        if (old) return old
       }
     } catch {
       // 多行 JSONL → 新格式，走事件解析
@@ -295,7 +301,7 @@ export class SessionStore {
       }
     }
 
-    writeFileSync(INDEX_FILE, JSON.stringify(index, null, 2), { encoding: 'utf-8', mode: 0o600 })
+    atomicWriteFileSync(INDEX_FILE, JSON.stringify(index, null, 2), { mode: 0o600 })
   }
 
   /**
@@ -323,7 +329,7 @@ export class SessionStore {
     } else {
       index.push(entry)
     }
-    writeFileSync(INDEX_FILE, JSON.stringify(index, null, 2), { encoding: 'utf-8', mode: 0o600 })
+    atomicWriteFileSync(INDEX_FILE, JSON.stringify(index, null, 2), { mode: 0o600 })
   }
 
   /**
@@ -340,8 +346,7 @@ export class SessionStore {
         ? `${safeRaw.slice(0, 80)}-${createHash('sha256').update(safeRaw).digest('hex').slice(0, 16)}`
         : safeRaw
     const summaryPath = join(SUMMARIES_DIR, `${safe}.md`)
-    writeFileSync(summaryPath, `# ${name}\n\n${summary}\n\nTags: ${tags.join(', ')}\n`, {
-      encoding: 'utf-8',
+    atomicWriteFileSync(summaryPath, `# ${name}\n\n${summary}\n\nTags: ${tags.join(', ')}\n`, {
       mode: 0o600,
     })
 
@@ -365,7 +370,7 @@ export class SessionStore {
           tags,
         })
       }
-      writeFileSync(INDEX_FILE, JSON.stringify(index, null, 2), { encoding: 'utf-8', mode: 0o600 })
+      atomicWriteFileSync(INDEX_FILE, JSON.stringify(index, null, 2), { mode: 0o600 })
     } catch {
       // Index write is best-effort
     }
@@ -414,11 +419,26 @@ export class SessionStore {
 
   /**
    * Read the raw index file, returning empty array if missing or corrupt.
+   *
+   * 「corrupt」不只是语法错：`null`、`{"a":1}`、`[1,2]` 都过得了 `JSON.parse`。放它们
+   * 过去，`getLatest()` 会按数组用它 —— `null` 在启动路径（`index.tsx` 建系统提示时）
+   * 抛 `TypeError: index.length`；`[1,2]` 更安静：`getLatest()` 返回数字 `1`，调用方接着
+   * 读 `latest.name` 拿到 `undefined`，再喂给 `load()` ⇒ `name.replace` 抛。条目还必须
+   * 有**字符串 name**：索引条目的第一用途就是当文件名用。
    */
   private static loadIndexRaw(): SessionIndexEntry[] {
-    if (!existsSync(INDEX_FILE)) return []
+    const raw = readRegularFileSync(INDEX_FILE)
+    if (raw === null) return []
     try {
-      return JSON.parse(readFileSync(INDEX_FILE, 'utf-8'))
+      const parsed: unknown = JSON.parse(raw)
+      if (!Array.isArray(parsed)) return []
+      return parsed.filter(
+        (e): e is SessionIndexEntry =>
+          !!e &&
+          typeof e === 'object' &&
+          typeof (e as { name?: unknown }).name === 'string' &&
+          (e as { name: string }).name.length > 0,
+      )
     } catch {
       return []
     }

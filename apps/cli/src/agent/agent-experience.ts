@@ -1,4 +1,5 @@
-import { mkdirSync, readFileSync, writeFileSync, existsSync, unlinkSync } from 'node:fs'
+import { mkdirSync, readFileSync, existsSync, unlinkSync } from 'node:fs'
+import { atomicWriteFileSync } from '../shared/atomic-write'
 import { join } from 'node:path'
 import { ExperienceRuleExtractor, type ExperienceRule } from './experience-rules.js'
 import { miphamHome } from '../core/paths.ts'
@@ -109,6 +110,6 @@ export class AgentExperience {
       },
     )
 
-    writeFileSync(this.expFile, content, 'utf-8')
+    atomicWriteFileSync(this.expFile, content, { mode: 0o644 })
   }
 }

@@ -16,6 +16,7 @@
 
 import { execSync } from 'node:child_process'
 import { mkdirSync, rmSync, existsSync, writeFileSync, readFileSync, readdirSync } from 'node:fs'
+import { atomicWriteFileSync } from '../shared/atomic-write'
 import { join, resolve, sep, posix } from 'node:path'
 import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
@@ -642,7 +643,7 @@ export class CrsiSandbox {
     // Persist to ~/.mipham/crsi-sandbox/
     const reportPath = join(REPORT_DIR, `${this.sessionReport.sessionId}.json`)
     try {
-      writeFileSync(reportPath, JSON.stringify(this.sessionReport, null, 2), 'utf-8')
+      atomicWriteFileSync(reportPath, JSON.stringify(this.sessionReport, null, 2), { mode: 0o644 })
     } catch {
       // Best-effort persistence
     }

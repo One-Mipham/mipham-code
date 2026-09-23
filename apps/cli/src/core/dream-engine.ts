@@ -25,15 +25,8 @@
  *     → Write consolidated memory + generate DreamReport
  */
 
-import {
-  readdirSync,
-  readFileSync,
-  writeFileSync,
-  unlinkSync,
-  existsSync,
-  mkdirSync,
-  statSync,
-} from 'node:fs'
+import { readdirSync, readFileSync, unlinkSync, existsSync, mkdirSync, statSync } from 'node:fs'
+import { atomicWriteFileSync } from '../shared/atomic-write'
 import { join } from 'node:path'
 import { miphamHome } from './paths.ts'
 
@@ -320,7 +313,8 @@ export class DreamEngine {
         try {
           const links = secondary.map((s) => `- See also: [[${s.name}]]`).join('\n')
           const updated = primary.content + `\n\n## Related\n${links}`
-          writeFileSync(primary.path, updated, 'utf-8')
+          // 记忆正文：与 memory-manager 同权限语义（用户可读可编辑的内容）。
+          atomicWriteFileSync(primary.path, updated, { mode: 0o644 })
 
           for (const s of secondary) {
             try {
@@ -532,7 +526,7 @@ export class DreamEngine {
       log.unshift({ timestamp, actions })
       // Keep last 10 dream cycles
       if (log.length > 10) log = log.slice(0, 10)
-      writeFileSync(this.dreamLog, JSON.stringify(log, null, 2), 'utf-8')
+      atomicWriteFileSync(this.dreamLog, JSON.stringify(log, null, 2), { mode: 0o644 })
     } catch {
       // Best-effort persistence
     }

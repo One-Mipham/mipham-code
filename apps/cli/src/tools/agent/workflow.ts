@@ -111,16 +111,19 @@ export const workflowTool: ToolDefinition = {
       // Persist last-run state for /workflow save
       let persistWarning = ''
       try {
-        const { existsSync, mkdirSync, writeFileSync } = await import('node:fs')
+        const { existsSync, mkdirSync } = await import('node:fs')
+        const { atomicWriteFileSync } = await import('../../shared/atomic-write')
         const { join } = await import('node:path')
         const workflowsDir = workflowScriptDir(process.cwd())
         if (!existsSync(workflowsDir)) {
           mkdirSync(workflowsDir, { recursive: true })
         }
-        writeFileSync(
+        // 机器状态（每次 run 重写，`/workflow save` 会读回）：非原子写留下的半截 JSON
+        // 会让那条读取抛解析错。
+        atomicWriteFileSync(
           join(workflowsDir, '.last-run.json'),
           JSON.stringify({ runId, script, timestamp: new Date().toISOString() }),
-          'utf-8',
+          { mode: 0o644 },
         )
       } catch (err) {
         // Persistence stays best-effort — the workflow itself succeeded, so a

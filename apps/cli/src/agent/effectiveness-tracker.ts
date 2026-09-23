@@ -1,4 +1,5 @@
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { mkdirSync, readFileSync, existsSync } from 'node:fs'
+import { atomicWriteFileSync } from '../shared/atomic-write'
 import { join, dirname } from 'node:path'
 import type { CrsiProvenanceBridge, CrsiVerdict } from './crsi-provenance-bridge.js'
 import { isRecoverableToolFailure } from './recoverable-failure.js'
@@ -174,7 +175,7 @@ export class EffectivenessTracker {
     for (const [k, v] of this.data) {
       obj[k] = v
     }
-    writeFileSync(this.storePath, JSON.stringify(obj, null, 2), 'utf-8')
+    atomicWriteFileSync(this.storePath, JSON.stringify(obj, null, 2), { mode: 0o644 })
   }
 
   load(): void {

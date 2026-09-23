@@ -31,10 +31,11 @@
  * 「分类器裁过什么」，不是「某条命令跑了几次」；执行次数要问 gate 侧的指标或会话日志。
  */
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { PermissionLevel, PermissionMode } from '../shared/index.ts'
 import type { PermissionDenialReason } from './permission'
+import { appendRegularFileSync } from '../shared/regular-file'
 import { miphamHome } from './paths.ts'
 
 /** 一条分类器裁决。 */
@@ -85,11 +86,17 @@ export function recordClassifierRuling(record: Omit<ClassifierRulingRecord, 'at'
   try {
     const file = permissionAuditPath()
     mkdirSync(dirname(file), { recursive: true, mode: 0o700 })
-    appendFileSync(file, JSON.stringify({ at: new Date().toISOString(), ...record }) + '\n', {
-      encoding: 'utf-8',
-      // 只在创建时生效；已存在的文件不会被改权限。
-      mode: 0o600,
-    })
+    // 台账路径上是个 FIFO 时**不写**也**不挂**（`appendFileSync` 会打开它写 ⇒ 等到有
+    // 读者为止）：当成一次写失败，走下面那条「第一次说一句」的路。
+    if (
+      !appendRegularFileSync(
+        file,
+        JSON.stringify({ at: new Date().toISOString(), ...record }) + '\n',
+        { mode: 0o600 },
+      )
+    ) {
+      throw new Error(`${file} is not a regular file`)
+    }
   } catch (err) {
     if (!warnedOnce) {
       warnedOnce = true

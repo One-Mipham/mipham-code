@@ -1,4 +1,5 @@
-import { mkdirSync, readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs'
+import { mkdirSync, readFileSync, readdirSync, existsSync } from 'node:fs'
+import { atomicWriteFileSync } from '../shared/atomic-write'
 import { join } from 'node:path'
 import { miphamHome } from '../core/paths.ts'
 
@@ -43,7 +44,7 @@ export function createAutoloopJournal(
     totalTokens: 0,
     maxIterations: 100,
   }
-  writeFileSync(journalPath(sessionId), JSON.stringify(journal, null, 2), 'utf-8')
+  atomicWriteFileSync(journalPath(sessionId), JSON.stringify(journal, null, 2), { mode: 0o644 })
   return journal
 }
 
@@ -52,7 +53,7 @@ export function recordLoopTokens(sessionId: string, delta: number): void {
   const journal = readAutoloopJournal(sessionId)
   if (!journal) return
   journal.totalTokens += delta
-  writeFileSync(journalPath(sessionId), JSON.stringify(journal, null, 2), 'utf-8')
+  atomicWriteFileSync(journalPath(sessionId), JSON.stringify(journal, null, 2), { mode: 0o644 })
 }
 
 /** Read the journal for an autonomous loop. */
@@ -88,7 +89,7 @@ export function logAutoloopIteration(sessionId: string, summary: string): void {
   journal.logs.push(`[${journal.lastIteration}] #${journal.iterations}: ${summary.slice(0, 200)}`)
   // Keep last 50 log entries
   if (journal.logs.length > 50) journal.logs = journal.logs.slice(-50)
-  writeFileSync(journalPath(sessionId), JSON.stringify(journal, null, 2), 'utf-8')
+  atomicWriteFileSync(journalPath(sessionId), JSON.stringify(journal, null, 2), { mode: 0o644 })
 }
 
 /** Mark an autonomous loop as completed or stopped. */
@@ -97,7 +98,7 @@ export function completeAutoloopJournal(sessionId: string, status: 'completed' |
   if (!journal) return
   journal.status = status
   journal.lastIteration = new Date().toISOString()
-  writeFileSync(journalPath(sessionId), JSON.stringify(journal, null, 2), 'utf-8')
+  atomicWriteFileSync(journalPath(sessionId), JSON.stringify(journal, null, 2), { mode: 0o644 })
 }
 
 /** List all active autonomous loops. */

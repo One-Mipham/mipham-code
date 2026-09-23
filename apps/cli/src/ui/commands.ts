@@ -2504,7 +2504,8 @@ const marketplaceCmd: CommandHandler = async (_ctx, args) => {
     isValidMarketplaceRef,
     MARKETPLACES_PATH,
   } = await import('../skills/marketplace')
-  const { readFileSync, writeFileSync, existsSync, mkdirSync } = await import('node:fs')
+  const { readFileSync, existsSync, mkdirSync } = await import('node:fs')
+  const { atomicWriteFileSync } = await import('../shared/atomic-write')
   const { dirname } = await import('node:path')
 
   const readSources = () =>
@@ -2537,7 +2538,9 @@ const marketplaceCmd: CommandHandler = async (_ctx, args) => {
     const changed = 'added' in result ? result.added : result.removed
     try {
       mkdirSync(dirname(MARKETPLACES_PATH), { recursive: true })
-      writeFileSync(MARKETPLACES_PATH, JSON.stringify(result.sources, null, 2), 'utf-8')
+      atomicWriteFileSync(MARKETPLACES_PATH, JSON.stringify(result.sources, null, 2), {
+        mode: 0o644,
+      })
     } catch (err) {
       return { content: `❌ Failed to save marketplaces: ${String(err)}` }
     }

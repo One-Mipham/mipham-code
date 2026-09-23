@@ -1,12 +1,5 @@
-import {
-  existsSync,
-  readFileSync,
-  writeFileSync,
-  mkdirSync,
-  unlinkSync,
-  readdirSync,
-  chmodSync,
-} from 'node:fs'
+import { existsSync, readFileSync, mkdirSync, unlinkSync, readdirSync, chmodSync } from 'node:fs'
+import { atomicWriteFileSync } from '../shared/atomic-write'
 import { join, dirname } from 'node:path'
 import { encrypt, decrypt, getCredentialKey } from '../config/credential-crypto'
 import { miphamHome } from '../core/paths.ts'
@@ -42,7 +35,7 @@ export class TokenStore {
       createdAt: data.createdAt || new Date().toISOString(),
     })
     const encrypted = encrypt(json, this.key)
-    writeFileSync(filePath, encrypted, { mode: 0o600 })
+    atomicWriteFileSync(filePath, encrypted, { mode: 0o600 })
     try {
       chmodSync(filePath, 0o600)
     } catch {

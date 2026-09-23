@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs'
+import { readFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs'
+import { atomicWriteFileSync } from '../../shared/atomic-write'
 import { join } from 'node:path'
 import type { ToolDefinition } from '../../shared/index.ts'
 import { MemoryManager } from '../../core/memory/memory-manager'
@@ -83,7 +84,8 @@ export const memoryTool: ToolDefinition = {
 
     if (action === 'write') {
       const body = formatMemory(name, params.content as string)
-      writeFileSync(filePath, body, 'utf-8')
+      // 与 MemoryManager 写的是同一批 .md：两侧都走原子写，权限语义保持一致。
+      atomicWriteFileSync(filePath, body, { mode: 0o644 })
       return { success: true, content: `Memory "${name}" written` }
     }
 

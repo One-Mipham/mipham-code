@@ -1,12 +1,5 @@
-import {
-  readdirSync,
-  readFileSync,
-  writeFileSync,
-  existsSync,
-  mkdirSync,
-  unlinkSync,
-  statSync,
-} from 'node:fs'
+import { readdirSync, readFileSync, existsSync, mkdirSync, unlinkSync, statSync } from 'node:fs'
+import { atomicWriteFileSync } from '../../shared/atomic-write'
 import { join, basename } from 'node:path'
 import { hostname } from 'node:os'
 import type { SessionInfo, CrossSessionInbound } from '../../shared/types'
@@ -25,7 +18,7 @@ const STALE_SESSION_TTL_MS = 10 * 60 * 1000 // 10 min — heartbeat is 30s
 export function registerActiveSession(info: SessionInfo): void {
   mkdirSync(ACTIVE_SESSIONS_DIR, { recursive: true })
   const filePath = join(ACTIVE_SESSIONS_DIR, `${info.id}.json`)
-  writeFileSync(filePath, JSON.stringify(info, null, 2), 'utf-8')
+  atomicWriteFileSync(filePath, JSON.stringify(info, null, 2), { mode: 0o644 })
 }
 
 /**
@@ -36,7 +29,7 @@ export function heartbeatSession(sessionId: string): void {
   if (existsSync(filePath)) {
     // Touch the file by rewriting it
     const raw = readFileSync(filePath, 'utf-8')
-    writeFileSync(filePath, raw, 'utf-8') // updates mtime
+    atomicWriteFileSync(filePath, raw, { mode: 0o644 }) // updates mtime
   }
 }
 
@@ -141,7 +134,7 @@ export function renameActiveSession(sessionId: string, newName: string): string 
   const info = JSON.parse(raw) as SessionInfo
   const others = discoverSessions().filter((s) => s.id !== sessionId)
   info.name = ensureUniqueSessionName(newName, others)
-  writeFileSync(filePath, JSON.stringify(info, null, 2), 'utf-8')
+  atomicWriteFileSync(filePath, JSON.stringify(info, null, 2), { mode: 0o644 })
   return info.name
 }
 

@@ -13,7 +13,8 @@
 
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { mkdirSync, appendFileSync, readFileSync, existsSync } from 'node:fs'
+import { mkdirSync, readFileSync, existsSync } from 'node:fs'
+import { appendRegularFileSync } from '../shared/regular-file'
 import { ExperienceRuleEngine } from './rule-engine'
 import { ConstitutionLoader, DEFAULT_CONSTITUTION } from './constitution-loader'
 import { ErrorSignatureDB } from './error-signature-db'
@@ -119,7 +120,7 @@ export function appendEvalScore(
 ): void {
   try {
     mkdirSync(miphamHome('crsi'), { recursive: true })
-    appendFileSync(
+    appendRegularFileSync(
       SCORES_FILE,
       JSON.stringify({
         name,
@@ -131,7 +132,6 @@ export function appendEvalScore(
         // 读取侧跳过 —— 这是向后兼容的承重判据，别改成 `results: []`。
         ...(report.results ? { results: report.results.map(toContractResultRecord) } : {}),
       }) + '\n',
-      'utf-8',
     )
   } catch {
     // rewards 日志是非关键的——失败不影响评估本身

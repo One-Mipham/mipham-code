@@ -1,5 +1,6 @@
 import type { ExperienceRule } from '../agent/experience-rules.js'
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
+import { mkdirSync, readFileSync, existsSync } from 'node:fs'
+import { atomicWriteFileSync } from '../shared/atomic-write'
 import { join, dirname } from 'node:path'
 import { MANAGED_RULES } from './crsi-managed-rules'
 import { miphamHome } from './paths.ts'
@@ -160,7 +161,7 @@ export class ExperienceRuleEngine {
     const nonBuiltin = this.rules.filter((r) => r.source !== 'builtin' && r.source !== 'managed')
     const dir = dirname(this.storePath)
     mkdirSync(dir, { recursive: true })
-    writeFileSync(this.storePath, JSON.stringify(nonBuiltin, null, 2), 'utf-8')
+    atomicWriteFileSync(this.storePath, JSON.stringify(nonBuiltin, null, 2), { mode: 0o644 })
   }
 
   /** Load persisted runtime rules from disk. Rejects rules whose IDs conflict with builtin/managed. */

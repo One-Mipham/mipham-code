@@ -13,8 +13,9 @@
 import type { CrsiInsight } from './auto-memory'
 import type { MetaRule } from './meta-rule-engine'
 import type { Llm } from '../providers/llm'
-import { readdirSync, appendFileSync, readFileSync, existsSync, mkdirSync, rmSync } from 'node:fs'
+import { readdirSync, readFileSync, existsSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { appendRegularFileSync } from '../shared/regular-file'
 import { miphamHome } from './paths.ts'
 
 /** 教训文件（相对仓库根）。预建，沙箱只能改已存在文件。 */
@@ -538,7 +539,8 @@ export function hasProposedProse(id: string): boolean {
 export function appendProseProposal(record: ProseProposalRecord): void {
   try {
     mkdirSync(miphamHome('crsi'), { recursive: true })
-    appendFileSync(proseLedgerFile(), JSON.stringify(record) + '\n', 'utf-8')
+    // FIFO 路径上「写不进去」与下面的 catch 同级：ledger 非关键，但**不挂**。
+    appendRegularFileSync(proseLedgerFile(), JSON.stringify(record) + '\n')
   } catch {
     // ledger 非关键，失败不影响提议本身
   }

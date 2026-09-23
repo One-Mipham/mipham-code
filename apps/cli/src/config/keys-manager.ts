@@ -1,4 +1,4 @@
-import { writeFileSync, mkdirSync, chmodSync } from 'node:fs'
+import { mkdirSync, chmodSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { atomicWriteFileSync } from '../shared/atomic-write'
 import { readRegularFileSync } from '../shared/regular-file'
@@ -95,7 +95,7 @@ export class KeyManager {
       const backupDir = join(MIPHAM_HOME, 'keys')
       mkdirSync(backupDir, { recursive: true })
       const backupPath = join(backupDir, `${provider}.backup`)
-      writeFileSync(backupPath, JSON.stringify(existing, null, 2) + '\n', { mode: 0o600 })
+      atomicWriteFileSync(backupPath, JSON.stringify(existing, null, 2) + '\n', { mode: 0o600 })
       try {
         chmodSync(backupPath, 0o600)
       } catch {

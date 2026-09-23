@@ -13,7 +13,8 @@
  * Format: YAML with schema validation
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
+import { readFileSync, mkdirSync, existsSync } from 'node:fs'
+import { atomicWriteFileSync } from '../shared/atomic-write'
 import { miphamHome } from './paths.ts'
 import alignmentVocabulary from './alignment-vocabulary.json' with { type: 'json' }
 
@@ -103,7 +104,7 @@ export class ConstitutionLoader {
     try {
       const dir = miphamHome()
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-      writeFileSync(this.path, this.serializeToYaml(DEFAULT_CONSTITUTION), 'utf-8')
+      atomicWriteFileSync(this.path, this.serializeToYaml(DEFAULT_CONSTITUTION), { mode: 0o644 })
     } catch {
       // Best-effort — default constitution works in-memory
     }

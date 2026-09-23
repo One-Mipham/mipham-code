@@ -1,6 +1,7 @@
 // apps/cli/src/daemon/auth.ts
 import { randomBytes, timingSafeEqual } from 'node:crypto'
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
+import { readFileSync, existsSync, mkdirSync } from 'node:fs'
+import { atomicWriteFileSync } from '../shared/atomic-write'
 import { dirname } from 'node:path'
 
 /**
@@ -21,7 +22,7 @@ export function loadOrCreateToken(tokenPath: string): string {
 
   const token = generateToken()
   mkdirSync(dirname(tokenPath), { recursive: true, mode: 0o700 })
-  writeFileSync(tokenPath, token, { mode: 0o600 })
+  atomicWriteFileSync(tokenPath, token, { mode: 0o600 })
   return token
 }
 
@@ -51,7 +52,7 @@ export function verifyToken(expected: string, provided: string): boolean {
  */
 export function rotateToken(tokenPath: string): string {
   const token = generateToken()
-  writeFileSync(tokenPath, token, { mode: 0o600 })
+  atomicWriteFileSync(tokenPath, token, { mode: 0o600 })
   return token
 }
 

@@ -1,8 +1,9 @@
-import { appendFileSync, readFileSync, mkdirSync, existsSync } from 'node:fs'
+import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import type { Message, ToolUseContent, ToolResultContent, ToolResult } from '../shared/types'
 import type { CheckerDecision } from './post-flight-checker'
+import { appendRegularFileSync, readRegularFileSync } from '../shared/regular-file'
 import { miphamHome } from './paths.ts'
 
 export type SessionEvent =
@@ -117,6 +118,9 @@ export function deriveMessages(events: SessionEvent[]): Message[] {
 
 const LOG_DIR = miphamHome('sessions')
 
+/** 一次性告警：日志路径不是普通文件（写不进去），每个进程只说一句。 */
+let warnedNotAppendable = false
+
 /** 将会话名消毒为安全文件名（与 SessionStore 共用；防路径穿越）。 */
 export function sanitizeSessionName(name: string): string {
   const safe = name.replace(/[^a-zA-Z0-9_-]/g, '_')
@@ -147,22 +151,34 @@ export class SessionLog {
     // Session logs contain full conversation + tool results (possibly credentials):
     // restrict to owner-only (dir 0700, file 0600).
     mkdirSync(LOG_DIR, { recursive: true, mode: 0o700 })
+    const path = join(LOG_DIR, `${sanitizeSessionName(this.name)}.jsonl`)
+    let wrote = 0
     for (const e of this.buf.slice(this.flushed)) {
-      appendFileSync(
-        join(LOG_DIR, `${sanitizeSessionName(this.name)}.jsonl`),
-        JSON.stringify(e) + '\n',
-        { encoding: 'utf-8', mode: 0o600 },
-      )
+      // FIFO/socket 路径上「写不进去」而不是**干等**（`appendFileSync` 会打开目标写）。
+      // 写失败时**不推进** flushed：这些事件还算未落盘，路径恢复后下一次 save 会补上。
+      if (!appendRegularFileSync(path, JSON.stringify(e) + '\n', { mode: 0o600 })) {
+        if (!warnedNotAppendable) {
+          warnedNotAppendable = true
+          process.stderr.write(
+            `⚠ Mipham Code: ${path} is not a regular file — session log events were not written.\n`,
+          )
+        }
+        break
+      }
+      wrote++
     }
-    this.flushed = this.buf.length
+    this.flushed += wrote
   }
 
   /** 从既有 JSONL 打开，逐行解析为事件（已落盘事件标记为已 flush）。 */
   static open(name: string): SessionLog {
     const log = new SessionLog(name)
     const path = join(LOG_DIR, `${sanitizeSessionName(name)}.jsonl`)
-    if (!existsSync(path)) return log
-    for (const line of readFileSync(path, 'utf-8').split('\n')) {
+    // 类型闸在读取之前：`SessionStore.load` 在快照读不出来时**回落到这里**，所以路径上
+    // 是个 FIFO 时不能在这里换个函数继续等 —— 读不动就当空日志（见 shared/regular-file.ts）。
+    const raw = readRegularFileSync(path)
+    if (raw === null) return log
+    for (const line of raw.split('\n')) {
       const trimmed = line.trim()
       if (!trimmed) continue
       try {
@@ -179,6 +195,23 @@ export class SessionLog {
 }
 
 /**
+ * 消息形状闸 —— 投影与**出网**两侧都会解引用的字段的最低门槛，不是 schema 校验。
+ *
+ * 从前这里只查「`message` 是个对象」，于是 `{"type":"user/message","message":{}}`
+ * 一路活到线上：投影照原样收下它，provider 侧读到 `content` 为 `undefined` 走
+ * 「非字符串即 `ContentBlock[]`」那条分支，`.filter` 当场 TypeError（实测）。
+ * `content` 数组里的块同理 —— provider 会 `b.type` 逐个读。
+ */
+export function isValidMessage(m: unknown): boolean {
+  if (!m || typeof m !== 'object') return false
+  const msg = m as Record<string, unknown>
+  if (msg.role !== 'user' && msg.role !== 'assistant' && msg.role !== 'system') return false
+  const content = msg.content
+  if (typeof content === 'string') return true
+  return Array.isArray(content) && content.every((b) => !!b && typeof b === 'object')
+}
+
+/**
  * 事件结构校验 —— 磁盘→内存的**唯一**入口（`open()`）用它挡掉坏行。
  *
  * 只校验 `deriveMessages` 会解引用的字段：这不是 schema 校验，是「投影不许崩」的
@@ -186,6 +219,9 @@ export class SessionLog {
  * message）、`{"type":"compaction/rewrite"}`（无 messages）都过得了 `JSON.parse`，
  * 却让投影抛 TypeError（rewrite 那条更狠：`out` 直接变 `undefined`，下一条就炸），
  * 而 `/resume` 那条链上没有 try 兜它。坏行来自手写/拼接/半截重排，不是本进程写的。
+ *
+ * 带 message 的事件还要过 `isValidMessage`：投影只把它 `push` 进数组、自己不碰字段，
+ * 所以「投影不许崩」在这里**不够** —— 崩点在下游（provider 分支、UI 的 `msg.role`）。
  *
  * 不校验 `session/start`、`assistant/chunk`、`checker/decision`：投影对它们无分支；
  * 未知类型一律放行（前向兼容 —— 认不出来不等于要销毁它）。
@@ -197,7 +233,7 @@ function isValidEvent(e: unknown): e is SessionEvent {
   switch (ev.type) {
     case 'user/message':
     case 'assistant/message':
-      return !!ev.message && typeof ev.message === 'object'
+      return isValidMessage(ev.message)
     case 'tool/call':
       return (
         typeof ev.id === 'string' &&
@@ -213,7 +249,8 @@ function isValidEvent(e: unknown): e is SessionEvent {
     case 'compaction/summary':
       return typeof ev.summary === 'string'
     case 'compaction/rewrite':
-      return Array.isArray(ev.messages)
+      // 快照替换：整份投影由它重建 ⇒ 元素形状与 message 事件同罪
+      return Array.isArray(ev.messages) && ev.messages.every(isValidMessage)
     default:
       return true
   }

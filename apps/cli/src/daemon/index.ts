@@ -6,7 +6,8 @@
 // getPort()      reads the last known port from disk
 
 import { join } from 'node:path'
-import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from 'node:fs'
+import { existsSync, readFileSync, unlinkSync, mkdirSync } from 'node:fs'
+import { atomicWriteFileSync } from '../shared/atomic-write'
 import { createServer as createNetServer } from 'node:net'
 import type { Server } from 'bun'
 import { DaemonDatabase } from './database'
@@ -247,8 +248,8 @@ export async function startDaemon(): Promise<{ port: number; token: string }> {
   activeServer = server
 
   // Write PID and port files
-  writeFileSync(PID_FILE, String(process.pid))
-  writeFileSync(PORT_FILE, String(port))
+  atomicWriteFileSync(PID_FILE, String(process.pid), { mode: 0o644 })
+  atomicWriteFileSync(PORT_FILE, String(port), { mode: 0o644 })
 
   return { port, token }
 }

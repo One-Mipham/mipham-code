@@ -1,6 +1,5 @@
 import {
   mkdirSync,
-  writeFileSync,
   readdirSync,
   readFileSync,
   unlinkSync,
@@ -8,6 +7,7 @@ import {
   renameSync,
   lstatSync,
 } from 'node:fs'
+import { atomicWriteFileSync } from '../../shared/atomic-write'
 import { join } from 'node:path'
 import type { CrossSessionTransport } from './transport'
 import type { AgentMessage } from '../message-bus'
@@ -69,7 +69,7 @@ export class FileInboxTransport implements CrossSessionTransport {
 
       // Atomic write: temp file then rename
       const tmpPath = filePath + '.tmp'
-      writeFileSync(tmpPath, JSON.stringify(envelope, null, 2), 'utf-8')
+      atomicWriteFileSync(tmpPath, JSON.stringify(envelope, null, 2), { mode: 0o644 })
       renameSync(tmpPath, filePath)
 
       return true

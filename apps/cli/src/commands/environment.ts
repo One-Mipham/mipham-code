@@ -89,7 +89,8 @@ Full changelog: https://mipham.ai/code/releases`,
 // ═══════════════════════════════════════════════════════════════
 
 const ideCmd: CommandHandler = async (_ctx) => {
-  const { mkdirSync, writeFileSync } = await import('node:fs')
+  const { mkdirSync } = await import('node:fs')
+  const { atomicWriteFileSync } = await import('../shared/atomic-write')
   const { join } = await import('node:path')
 
   const cwd = process.cwd()
@@ -121,7 +122,7 @@ const ideCmd: CommandHandler = async (_ctx) => {
       },
     },
   }
-  writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8')
+  atomicWriteFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', { mode: 0o644 })
   files.push('.vscode/settings.json')
 
   // ── keybindings.json: Cmd+Esc launch ──
@@ -137,7 +138,7 @@ const ideCmd: CommandHandler = async (_ctx) => {
       command: 'workbench.action.terminal.new',
     },
   ]
-  writeFileSync(keybindingsPath, JSON.stringify(keybindings, null, 2) + '\n', 'utf-8')
+  atomicWriteFileSync(keybindingsPath, JSON.stringify(keybindings, null, 2) + '\n', { mode: 0o644 })
   files.push('.vscode/keybindings.json')
 
   // ── extensions.json: recommended ──
@@ -145,7 +146,7 @@ const ideCmd: CommandHandler = async (_ctx) => {
   const extensions = {
     recommendations: ['miphamai.mipham-code'],
   }
-  writeFileSync(extensionsPath, JSON.stringify(extensions, null, 2) + '\n', 'utf-8')
+  atomicWriteFileSync(extensionsPath, JSON.stringify(extensions, null, 2) + '\n', { mode: 0o644 })
   files.push('.vscode/extensions.json')
 
   return {
@@ -178,8 +179,9 @@ const ideCmd: CommandHandler = async (_ctx) => {
 // ═══════════════════════════════════════════════════════════════
 
 const terminalSetupCmd: CommandHandler = async () => {
-  const { writeFileSync, appendFileSync, existsSync, mkdirSync, readFileSync } =
-    await import('node:fs')
+  const { existsSync, mkdirSync, readFileSync } = await import('node:fs')
+  const { atomicWriteFileSync } = await import('../shared/atomic-write')
+  const { appendRegularFileSync } = await import('../shared/regular-file')
   const { join } = await import('node:path')
   const { homedir } = await import('node:os')
 
@@ -210,7 +212,7 @@ const terminalSetupCmd: CommandHandler = async () => {
     '  export MIPHAM_PROVIDER=$(grep "defaultProvider:" ~/.mipham/config.yml | awk "{print \$2}")',
     'fi',
   ].join('\n')
-  writeFileSync(shellScript, shellContent + '\n', 'utf-8')
+  atomicWriteFileSync(shellScript, shellContent + '\n', { mode: 0o644 })
   lines.push(`  ✅ Generated: ${shellScript}`)
 
   // ── 2. Append to shell profile ──
@@ -224,7 +226,8 @@ const terminalSetupCmd: CommandHandler = async () => {
     if (existing.includes('shell-setup.sh')) {
       lines.push(`  ⏭  ${profileName} already has Mipham Code integration`)
     } else {
-      appendFileSync(profilePath, sourceLine, 'utf-8')
+      // 写不进去（含 profile 路径上是个 FIFO）就与下面 catch 同路：把命令印给用户。
+      if (!appendRegularFileSync(profilePath, sourceLine)) throw new Error('not a regular file')
       lines.push(`  ✅ Added to ~/${profileName}`)
     }
   } catch {

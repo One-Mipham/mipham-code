@@ -1,4 +1,4 @@
-import { readFileSync, statSync } from 'node:fs'
+import { appendFileSync, existsSync, readFileSync, statSync } from 'node:fs'
 
 /**
  * 路径是不是**普通文件** —— 判据是文件**类型**，不是存在性。
@@ -41,4 +41,23 @@ export function readRegularFileSync(path: string): string | null {
   } catch {
     return null
   }
+}
+
+/**
+ * 追加写入，只在目标**是普通文件或还不存在**时才写；返回是否真的写了。
+ *
+ * `appendFileSync` 会**打开目标写** —— 目标若是 FIFO 就等到有读者为止，与读侧同一个
+ * 坑，只是撞在写这一侧（配置备份的 `copyFileSync` 当初也是这么挂住的）。「还不存在」
+ * 必须放行：追加写天然承担创建。
+ *
+ * 返回 `false` 的意思是**没写**，调用方得知道自己丢了什么 —— 别把「跳过」当成功。
+ */
+export function appendRegularFileSync(
+  path: string,
+  content: string,
+  options: { mode?: number } = {},
+): boolean {
+  if (existsSync(path) && !isRegularFile(path)) return false
+  appendFileSync(path, content, { encoding: 'utf-8', mode: options.mode ?? 0o600 })
+  return true
 }

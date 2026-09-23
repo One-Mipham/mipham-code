@@ -2,13 +2,13 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
-  writeFileSync,
   unlinkSync,
   renameSync,
   existsSync,
   statSync,
 } from 'node:fs'
 import { join, extname, basename } from 'node:path'
+import { atomicWriteFileSync } from '../../shared/atomic-write'
 import { similarities, findNearDuplicates } from './tfidf'
 
 export interface MemoryMetadata {
@@ -135,7 +135,9 @@ export class MemoryManager {
     const filePath = join(this.memoryDir, fileName)
     const formattedBody = this.formatMemoryBody(metadata, content)
     const body = this.formatMemoryFile(name, metadata, content)
-    writeFileSync(filePath, body, 'utf-8')
+    // 原子写：从前是裸 writeFileSync，写到一半被杀留下的半截 JSON 会被读侧的 catch 当成
+    // 「文件损坏」清空 —— 一次崩溃赔上全部记忆/规则/统计，不是丢一条。
+    atomicWriteFileSync(filePath, body, { mode: 0o644 })
 
     const entry: MemoryEntry = {
       name,
@@ -158,7 +160,9 @@ export class MemoryManager {
     entry.description = metadata.relevance.join(', ')
     entry.updatedAt = new Date()
     const body = this.formatMemoryFile(entry.name, metadata, content)
-    writeFileSync(entry.filePath, body, 'utf-8')
+    // 原子写：从前是裸 writeFileSync，写到一半被杀留下的半截 JSON 会被读侧的 catch 当成
+    // 「文件损坏」清空 —— 一次崩溃赔上全部记忆/规则/统计，不是丢一条。
+    atomicWriteFileSync(entry.filePath, body, { mode: 0o644 })
     this.updateWikilinks(entry.name, content)
     this.updateIndex()
   }
@@ -465,7 +469,7 @@ export class MemoryManager {
       lines.push(`- [${entry.name}](${entry.name}.md) — ${entry.description}`)
     }
 
-    writeFileSync(join(this.memoryDir, INDEX_FILE), lines.join('\n') + '\n', 'utf-8')
+    atomicWriteFileSync(join(this.memoryDir, INDEX_FILE), lines.join('\n') + '\n', { mode: 0o644 })
   }
 
   private extractWikilinks(content: string): string[] {
@@ -532,7 +536,7 @@ export class MemoryManager {
       obj[k] = Array.from(v)
     }
     try {
-      writeFileSync(join(this.memoryDir, LINKS_FILE), JSON.stringify(obj, null, 2), 'utf-8')
+      atomicWriteFileSync(join(this.memoryDir, LINKS_FILE), JSON.stringify(obj, null, 2))
     } catch {
       // best-effort — never block on cache write
     }
@@ -573,7 +577,7 @@ export class MemoryManager {
     const obj: Record<string, { recallCount: number; lastRecalledAt: string }> = {}
     for (const [k, v] of this.recallStats) obj[k] = v
     try {
-      writeFileSync(join(this.memoryDir, RECALL_STATS_FILE), JSON.stringify(obj, null, 2), 'utf-8')
+      atomicWriteFileSync(join(this.memoryDir, RECALL_STATS_FILE), JSON.stringify(obj, null, 2))
     } catch {
       // best-effort — never block on stats write
     }
