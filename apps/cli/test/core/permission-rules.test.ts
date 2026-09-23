@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { mkdtempSync, symlinkSync, realpathSync, writeFileSync } from 'node:fs'
 import {
   matchBashRule,
   wildcardMatch,
@@ -754,5 +755,50 @@ describe('两条匹配路径共用同一份归一化（防「只接一条」）'
       const once = stripLeadingShellNoise(tpl.replace('cmd', 'rm -rf x'))
       expect(stripLeadingShellNoise(once)).toBe(once)
     }
+  })
+})
+
+// 规则判定的是操作**落在哪里**，不只是模型把它拼成什么样。`notes.txt` 是指向
+// `.env` 的符号链接时，「读 notes.txt」就是「读 .env」—— 而规则只看得到拼法。
+//
+// 这里只钉 deny/ask 方向（`segmentMode === 'any'`，也是默认值）：它漏一次就是
+// 一个洞，而补上落点只会**多**命中、不会少 ⇒ 严格 fail-closed。
+// allow 方向仍按字面拼法判，那是**已知缺口**不是疏漏 —— 要收紧它必须**同时**
+// 规范化 pattern，理由见 `matchPathRule` 的注释。
+describe('路径型规则按「落点」判定（deny/ask 方向）', () => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'mipham-rule-link-')))
+  const secret = join(dir, '.env')
+  const link = join(dir, 'notes.txt')
+  const plain = join(dir, 'plain.txt')
+  writeFileSync(secret, 'SECRET=1')
+  writeFileSync(plain, 'nothing here')
+  symlinkSync(secret, link)
+
+  it('正对照：字面命中时照旧命中，无关路径照旧不命中', () => {
+    // 少了这两条，下面「经链接也命中」只能证明这个函数对什么都返回真。
+    expect(matchBashRule('Read(**/.env)', 'Read', { file_path: secret })).toBe(true)
+    expect(matchBashRule('Read(**/.env)', 'Read', { file_path: join(dir, 'other.txt') })).toBe(
+      false,
+    )
+  })
+
+  it('Read：读一个指向 .env 的链接算命中（从前漏）', () => {
+    expect(matchBashRule('Read(**/.env)', 'Read', { file_path: link })).toBe(true)
+  })
+
+  it('Bash：cat 一个指向 .env 的链接同样算命中（同一条规则、另一条分支）', () => {
+    expect(matchBashRule('Read(**/.env)', 'Bash', { command: `cat ${link}` })).toBe(true)
+  })
+
+  it('Grep：根是链接、落点是 .env 也算命中', () => {
+    expect(matchBashRule('Grep(**/.env)', 'Grep', { path: link })).toBe(true)
+  })
+
+  it('反面对照：落点**能**解析但与模式无关 ⇒ 仍不命中（不是恒真）', () => {
+    expect(matchBashRule('Read(**/.env)', 'Read', { file_path: plain })).toBe(false)
+  })
+
+  it('反面对照：落点不存在（无 realpath）⇒ 只剩字面判据，仍不命中', () => {
+    expect(matchBashRule('Read(**/.env)', 'Read', { file_path: join(dir, 'nope.txt') })).toBe(false)
   })
 })

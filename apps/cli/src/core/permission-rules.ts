@@ -1,5 +1,6 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { realpathSync } from 'node:fs'
 import type { PermissionRuleEntry } from '../shared/index.ts'
 import { matchPath } from './credential-masker/matcher'
 
@@ -543,6 +544,38 @@ function scanReaderWriterCommands(
  */
 const PARAMETERISED_TOOLS = new Set(['Bash', 'Read', 'Write', 'Edit', 'Grep', 'Glob'])
 
+/**
+ * Match a path rule against the path an operation *lands* on, not just the one
+ * it was spelled with. `notes.txt` symlinked to `.env` **is** a read of `.env`,
+ * and the rule only ever sees the spelling the model sent.
+ *
+ * Only the **deny/ask** direction resolves (`segmentMode === 'any'`). For it a
+ * miss is a hole, and the resolved form can only *add* matches, never remove
+ * one — so this direction is strictly fail-closed and cannot un-protect
+ * anything that is protected today.
+ *
+ * The **allow** direction deliberately keeps matching the literal spelling, and
+ * that is a known hole rather than an oversight: an allow rule that grants every
+ * `.txt` file still grants a read of a `.txt` symlinked to `.env`. Closing it
+ * means matching the landing path on this side too, which is only sound
+ * **together with** canonicalising the *pattern* — otherwise an allow rule for
+ * `/tmp/**` stops matching `/private/tmp/x` (macOS) and one for `/tmp/new.txt`
+ * stops matching anything at all, since a leaf that does not exist yet has no
+ * realpath while its pattern prefix does. Half of that change would trade a
+ * silent grant for a silent refusal; it is its own piece of work.
+ */
+function matchPathRule(path: string, pattern: string, segmentMode: 'any' | 'all'): boolean {
+  if (matchPath(path, pattern)) return true
+  if (segmentMode === 'all') return false
+  try {
+    return matchPath(realpathSync(path), pattern)
+  } catch {
+    // Nothing on disk to resolve (ENOENT, EACCES, a path the model invented) —
+    // there is no second spelling to try, and the literal already missed.
+    return false
+  }
+}
+
 // Match a tool(parameter) rule against an actual tool call.
 //
 // Pattern formats:
@@ -590,7 +623,7 @@ export function matchBashRule(
     const cmd = String(toolInput.command || '')
     const access = extractBashFileAccess(cmd)
     const paths = baseTool === 'Read' ? access.read : access.write
-    return qualifies(paths, (p) => matchPath(p, subPattern!))
+    return qualifies(paths, (p) => matchPathRule(p, subPattern!, segmentMode))
   }
 
   if (toolName !== baseTool!) return false
@@ -609,13 +642,13 @@ export function matchBashRule(
   // paths — `*` would cross `/` and Windows drive letters like `C:\` get mangled.
   if (baseTool === 'Write' || baseTool === 'Edit' || baseTool === 'Read') {
     const path = String(toolInput.file_path || '')
-    return matchPath(path, subPattern!)
+    return matchPathRule(path, subPattern!, segmentMode)
   }
 
   // For Grep/Glob: match against the base search path (a directory)
   if (baseTool === 'Grep' || baseTool === 'Glob') {
     const path = String(toolInput.path || '')
-    return matchPath(path, subPattern!)
+    return matchPathRule(path, subPattern!, segmentMode)
   }
 
   return false
