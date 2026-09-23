@@ -205,7 +205,12 @@ export class PermissionSystem {
 
   // ── P1-4: Consecutive block counter (prevents infinite retry loops) ──
   private consecutiveBlockCount = 0
-  private static readonly MAX_CONSECUTIVE_BLOCKS = 3
+  /**
+   * Shared by both tool loops — `Engine.executeTool` and the sub-agent's own
+   * turn loop (which bypasses the engine and reimplements the permission step).
+   * Public so the second reader cannot drift to its own number.
+   */
+  static readonly MAX_CONSECUTIVE_BLOCKS = 3
 
   /** Invalidate the permission cache (called on any rule/mode change). */
   private invalidateCache(): void {

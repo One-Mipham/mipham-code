@@ -535,6 +535,12 @@ export class SubAgent {
           // `createSubAgentPermission`), so the default sub-agent is unchanged.
           const decision = await gate.resolveApproval(tool, effectiveInput, { signal })
           if (decision.level === 'ask') {
+            // Same circuit breaker as `Engine.executeTool`, sharing its threshold:
+            // after this many refusals in a row, say so, so the model stops
+            // re-issuing the call. It matters more here — a sub-agent gets five
+            // turns and cannot ask anyone, so a silent retry loop spends the whole
+            // run on a route that is closed to it.
+            const limitExceeded = gate.incrementBlockCounter()
             currentMessages.push({
               role: 'user' as const,
               content:
@@ -542,10 +548,15 @@ export class SubAgent {
                 `Cannot execute in non-interactive sub-agent context.` +
                 (decision.source === 'classifier' && decision.classifierReason
                   ? ` Classifier: ${decision.classifierReason}`
+                  : '') +
+                (limitExceeded
+                  ? '\n(Consecutive block limit reached. This route stays closed for the rest of this run — try a different approach instead of retrying this call.)'
                   : ''),
             })
             continue
           }
+          // Allowed — the streak is broken (mirrors the engine's reset).
+          gate.resetBlockCounter()
 
           try {
             const result = await tool.execute(effectiveInput, toolContext)

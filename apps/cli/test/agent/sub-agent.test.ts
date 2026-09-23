@@ -6,7 +6,7 @@ import { AgentExperience } from '../../src/agent/agent-experience'
 import type { ProviderRegistry, ProviderInstance, ChatRequest } from '../../src/providers/registry'
 import type { Llm } from '../../src/providers/llm'
 import type { ToolDefinition, StreamChunk, Message, ToolContext } from '../../src/shared/index.ts'
-import type { PermissionSystem } from '../../src/core/permission'
+import { PermissionSystem } from '../../src/core/permission'
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -405,8 +405,13 @@ describe('SubAgent', () => {
     // 少一个方法时这里会**抛错**而不是静默放行，但那是运气，不是设计。
     // 两侧刻意给出**相反**的裁决：子代理若误用父级的闸门，工具就一次都不会跑，
     // 下面的 `sink.ctx` 立刻是 undefined。
+    // 这个假对象必须实现循环**实际调用**的那几个方法：裁决之外，现在还多了
+    // 「连续被拒」那一对护栏（放行清零 / 被拒计数）。少一个就会抛错，而抛错是
+    // 运气不是设计 —— 所以这里补齐，不是靠调用点少调一次。
     const clamped = {
       resolveApproval: async () => ({ level: 'bypass', source: 'static' }),
+      incrementBlockCounter: () => false,
+      resetBlockCounter: () => {},
     } as unknown as PermissionSystem
     const parent = {
       needsApproval: () => true,
@@ -842,5 +847,102 @@ describe('SubAgent — 后台 agent 的收件箱', () => {
 
     // And it is consumed, not re-injected on every later turn.
     expect(getMessageBus().unreadCount(id)).toBe(0)
+  })
+})
+
+/**
+ * `Engine.executeTool` counts consecutive permission refusals and, past the
+ * limit, tells the model to stop retrying the call. The sub-agent's turn loop
+ * bypasses `executeTool` and reimplements that step, so it had no such counter:
+ * a model that kept re-issuing a refused call spent its five turns on a closed
+ * route with nothing to tell it so.
+ */
+describe('SubAgent — 连续被拒的熔断', () => {
+  it('拒到上限后明确叫停，而不是让它一轮轮重试', async () => {
+    const snapshots: Message[][] = []
+    let call = 0
+    const ran: string[] = []
+
+    const askTool: ToolDefinition = {
+      name: 'Bash',
+      description: 'needs approval',
+      category: 'exec',
+      permission: 'ask',
+      parameters: { type: 'object', properties: {} },
+      execute: async () => {
+        ran.push('Bash')
+        return { success: true, content: 'should never run' }
+      },
+    }
+    const okTool: ToolDefinition = {
+      name: 'Read',
+      description: 'allowed',
+      category: 'file',
+      permission: 'self',
+      parameters: { type: 'object', properties: {} },
+      execute: async () => {
+        ran.push('Read')
+        return { success: true, content: 'file body' }
+      },
+    }
+
+    const provider: ProviderInstance = {
+      config: { id: 'mock', name: 'Mock', protocol: 'openai-compatible', apiKey: '', models: [] },
+      async *chat(req: ChatRequest): AsyncGenerator<StreamChunk> {
+        snapshots.push([...req.messages])
+        call++
+        if (call === 6) {
+          // 收尾轮里不再要工具 ⇒ 循环正常结束，而**最后一轮**的请求才看得见
+          // 全部四条拒信（第 4 条是在第 5 次请求发出之后才推入上下文的）。
+          yield { type: 'text', content: 'done' }
+          yield { type: 'stop' }
+          return
+        }
+        // 第 2 轮夹一次放行：它把连击打断，是「重置换行」那一半的对照。
+        const name = call === 2 ? 'Read' : 'Bash'
+        yield {
+          type: 'tool_use',
+          toolUse: { type: 'tool_use', id: `c${call}`, name, input: {} },
+        }
+        yield { type: 'stop' }
+      },
+      async listModels() {
+        return []
+      },
+      async healthCheck() {
+        return true
+      },
+    }
+
+    const registry = createMockRegistry(provider)
+    const sub = new SubAgent(
+      registry,
+      new Map([
+        ['Bash', askTool],
+        ['Read', okTool],
+      ]),
+      new PermissionSystem('default'),
+    )
+
+    await sub.execute('do the work', 'task', {
+      type: 'general',
+      autoPatternAnalysis: false,
+      maxTurns: 6,
+    })
+
+    const denials = snapshots
+      .at(-1)!
+      .map((m) => (typeof m.content === 'string' ? m.content : ''))
+      .filter((c) => c.includes('requires user approval'))
+    expect(denials.length).toBe(4)
+    expect(denials[0]).not.toContain('Consecutive block limit')
+    expect(denials[1]).not.toContain('Consecutive block limit')
+    // 第 3 条必须**仍然没有**提示：中间那次放行把连击清零了。没有重置的话，计数
+    // 在第 3 条就是 3 ⇒ 它会提前触发 —— 这一行就是重置那一半的判据。
+    expect(denials[2]).not.toContain('Consecutive block limit')
+    expect(denials[3]).toContain('Consecutive block limit')
+
+    // 被拒的一路一次都没真跑；中间那次放行的跑了 —— 否则上面的重置断言没有对照。
+    expect(ran).toEqual(['Read'])
   })
 })
