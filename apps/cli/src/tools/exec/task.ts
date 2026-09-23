@@ -1,4 +1,5 @@
 import type { ToolDefinition } from '../../shared/index.ts'
+import type { BackgroundAgentRegistry, BackgroundTask } from '../../agent/background-registry'
 import { hasSupportedEvidenceSince } from '../../core/working-memory'
 
 export interface Task {
@@ -14,9 +15,7 @@ export interface Task {
   createdAt: string
   /** 完成证据：completed 时是否有 supported 决策接地（软门，unverified 只标记不阻断）。 */
   completionEvidence?: 'supported' | 'unverified'
-  /** Background task output content (set when a background agent completes). */
-  output?: string
-  /** Background task error message (set when a background agent fails). */
+  /** Set by the `stop` action on a running task ("Task stopped by user."). */
   outputError?: string
 }
 
@@ -34,6 +33,66 @@ function formatTask(t: Task): string {
   const blocked = t.blockedBy.length ? ` waits:[${t.blockedBy.join(',')}]` : ''
   const owner = t.owner ? ` @${t.owner}` : ''
   return `[${t.status}] #${t.id}: ${t.subject}${owner}${blocks}${blocked}${meta}`
+}
+
+/**
+ * Render a **background agent** the way the `output` action renders a session task.
+ *
+ * Background agents are not in the local `tasks` map: BackgroundAgentRegistry mints
+ * their ids in a separate space (`bg-<n>-<base36>`) and keeps results on the registry
+ * itself. The Agent tool hands those ids to the model with an explicit
+ * `Use Task output taskId="bg-…"` line, so this action has to answer for them —
+ * without this path the advertised call can only return `Task #bg-… not found`.
+ */
+function formatBackgroundOutput(bg: BackgroundTask): {
+  success: boolean
+  content: string
+  error?: string
+} {
+  const head = `Background task ${bg.id}`
+  const meta = `Status: ${bg.status}\nAgent type: ${bg.agentType}\nTask: ${bg.description}`
+
+  if (bg.status === 'running') {
+    return {
+      success: true,
+      content: `${head} is still running — output not yet available.\n${meta}\n\nUse Task output again once it completes.`,
+    }
+  }
+
+  if (bg.status === 'failed') {
+    return {
+      success: false,
+      content: '',
+      error: `${head} failed: ${bg.error ?? '(no error recorded)'}`,
+    }
+  }
+
+  return {
+    success: true,
+    content: `── ${head} Output ──\n${meta}\n\n${(bg.result ?? '(no output recorded)').slice(0, 5000)}`,
+  }
+}
+
+/** Stop a running background agent through the registry that owns it. */
+function stopBackgroundTask(
+  bg: BackgroundTask,
+  registry: BackgroundAgentRegistry,
+): { success: boolean; content: string; error?: string } {
+  if (bg.status !== 'running') {
+    return {
+      success: true,
+      content: `Background task ${bg.id} is already ${bg.status}. Nothing to stop.`,
+    }
+  }
+  // `stop()` also returns false when the task is no longer running (it completed
+  // between the lookup above and this call), so the message must not claim why.
+  const aborted = registry.stop(bg.id)
+  return {
+    success: true,
+    content: aborted
+      ? `Background task ${bg.id} stopped.\nTask: ${bg.description}`
+      : `Background task ${bg.id} was not stopped — it is no longer running.`,
+  }
 }
 
 /** Check if a task is blocked — has unresolved dependencies. */
@@ -238,11 +297,6 @@ export const taskTool: ToolDefinition = {
         }
       }
       if (task.metadata) lines.push(`Metadata: ${JSON.stringify(task.metadata)}`)
-      if (task.output) {
-        lines.push('')
-        lines.push('── Output ──')
-        lines.push(task.output.slice(0, 2000))
-      }
       if (task.outputError) {
         lines.push('')
         lines.push(`── Error ──`)
@@ -320,7 +374,14 @@ export const taskTool: ToolDefinition = {
     if (action === 'output') {
       const taskId = params.taskId as string
       const task = tasks.get(taskId)
-      if (!task) return { success: false, content: '', error: `Task #${taskId} not found` }
+      if (!task) {
+        // Not a session task — it may be a background agent id (`bg-…`), which is
+        // the id space this action is advertised for. The registry is wired onto
+        // the tool context by the engine (`engine.ts` defaultToolContext).
+        const bg = _ctx.backgroundAgentRegistry?.get(taskId)
+        if (bg) return formatBackgroundOutput(bg)
+        return { success: false, content: '', error: `Task #${taskId} not found` }
+      }
 
       if (task.status === 'pending') {
         return {
@@ -333,13 +394,6 @@ export const taskTool: ToolDefinition = {
         return {
           success: true,
           content: `Task #${taskId} is still running — output not yet available.\nStatus: in_progress\nSubject: ${task.subject}\n\nUse Task output again once the task completes.`,
-        }
-      }
-
-      if (task.status === 'completed' && task.output) {
-        return {
-          success: true,
-          content: `── Task #${taskId} Output ──\nStatus: completed\nSubject: ${task.subject}\n\n${task.output.slice(0, 5000)}`,
         }
       }
 
@@ -361,7 +415,15 @@ export const taskTool: ToolDefinition = {
     if (action === 'stop') {
       const taskId = params.taskId as string
       const task = tasks.get(taskId)
-      if (!task) return { success: false, content: '', error: `Task #${taskId} not found` }
+      if (!task) {
+        // Background agent id (`bg-…`) — the other id space. The local branch
+        // below only marks a status; an actual running agent is aborted through
+        // the registry that owns it.
+        const registry = _ctx.backgroundAgentRegistry
+        const bg = registry?.get(taskId)
+        if (registry && bg) return stopBackgroundTask(bg, registry)
+        return { success: false, content: '', error: `Task #${taskId} not found` }
+      }
 
       if (task.status === 'completed' || task.status === 'deleted') {
         return {
@@ -376,21 +438,11 @@ export const taskTool: ToolDefinition = {
         return { success: true, content: `Task #${taskId} cancelled (was pending).` }
       }
 
-      // For in_progress tasks: mark as failed — actual process termination is handled
-      // by BackgroundAgentRegistry.stop() when wired via the engine context
+      // For in_progress session tasks: mark as failed. There is no process behind
+      // one — a *background agent* is aborted by stopBackgroundTask() above, which
+      // the registry owns.
       task.status = 'failed'
       task.outputError = 'Task stopped by user.'
-
-      // If BackgroundAgentRegistry is available in context, try to abort
-      if (_ctx.registry) {
-        // Signal to any background registry that this task should stop
-        // The background registry will be injected via the engine context
-        const bgRegistry = (_ctx as unknown as Record<string, unknown>).backgroundAgentRegistry as
-          { stop(id: string): boolean } | undefined
-        if (bgRegistry) {
-          bgRegistry.stop(taskId)
-        }
-      }
 
       return { success: true, content: `Task #${taskId} stopped.` }
     }

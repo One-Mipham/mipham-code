@@ -3,6 +3,7 @@ import type { ToolContext } from '../../src/shared'
 import { createBashTool } from '../../src/tools/exec/bash'
 import { gitTool, splitCommand, findProgramExecutingArg } from '../../src/tools/exec/git'
 import { taskTool } from '../../src/tools/exec/task'
+import { BackgroundAgentRegistry } from '../../src/agent/background-registry'
 import { exitWorktreeTool } from '../../src/tools/exec/exit-worktree'
 import { recordToolEvidence, clearEvidenceLog } from '../../src/core/working-memory'
 
@@ -586,5 +587,147 @@ describe('C1 — worktree isolation covers both roots', () => {
     )
     expect(result.success).toBe(false)
     expect(result.error).toContain('is not under')
+  })
+})
+
+// ============================================================
+// Task tool — background agent ids (`bg-…`)
+//
+// The Agent tool advertises `Use Task output taskId="bg-…"` / `Use Task stop
+// taskId="bg-…"`, but the store above mints ids "1", "2", … — the two id spaces
+// never intersect, so before this path existed the advertised call could only
+// return `Task #bg-… not found`. These drive a **real** registry (no stub): the
+// id space is the thing under test, so stubbing it would test the stub.
+// ============================================================
+
+describe('Task tool — background agent ids', () => {
+  const withRegistry = (backgroundAgentRegistry: BackgroundAgentRegistry): ToolContext => ({
+    ...ctx,
+    backgroundAgentRegistry,
+  })
+
+  /** Spawn a real task that stays `running` until something aborts it. */
+  function spawnRunning(
+    registry: BackgroundAgentRegistry,
+    description = 'Do background work',
+  ): string {
+    return registry.spawn(
+      description,
+      'general',
+      (signal) =>
+        new Promise<string>((_, reject) => {
+          signal.addEventListener('abort', () =>
+            reject(Object.assign(new Error('aborted'), { name: 'AbortError' })),
+          )
+        }),
+    )
+  }
+
+  it('output reports a running background agent instead of "not found"', async () => {
+    const registry = new BackgroundAgentRegistry()
+    const id = spawnRunning(registry)
+
+    const r = await taskTool.execute({ action: 'output', taskId: id }, withRegistry(registry))
+
+    expect(r.error).toBeUndefined()
+    expect(r.content).toContain(`Background task ${id}`)
+    expect(r.content).toContain('still running')
+    expect(r.content).toContain('Do background work')
+  })
+
+  it('output returns the result of a completed background agent', async () => {
+    const registry = new BackgroundAgentRegistry()
+    const id = registry.spawn('Summarize the repo', 'explore', async () => 'THE RESULT')
+    await new Promise<void>((resolve) => registry.onComplete(id, () => resolve()))
+
+    const r = await taskTool.execute({ action: 'output', taskId: id }, withRegistry(registry))
+
+    expect(r.success).toBe(true)
+    expect(r.content).toContain('THE RESULT')
+  })
+
+  it("output surfaces a failed background agent's error", async () => {
+    const registry = new BackgroundAgentRegistry()
+    const id = registry.spawn('Explode', 'general', async () => {
+      throw new Error('kaboom')
+    })
+    await new Promise<void>((resolve) => registry.onComplete(id, () => resolve()))
+
+    const r = await taskTool.execute({ action: 'output', taskId: id }, withRegistry(registry))
+
+    expect(r.success).toBe(false)
+    expect(r.error).toContain('kaboom')
+  })
+
+  it('stop aborts the background agent through its registry', async () => {
+    const registry = new BackgroundAgentRegistry()
+    const id = spawnRunning(registry)
+
+    const r = await taskTool.execute({ action: 'stop', taskId: id }, withRegistry(registry))
+
+    expect(r.success).toBe(true)
+    expect(r.content).toContain(`Background task ${id} stopped`)
+    // The observable effect of stop(), not the message it printed.
+    expect(registry.get(id)!.abortController.signal.aborted).toBe(true)
+  })
+
+  it('stop on an already-finished background agent says so without aborting', async () => {
+    const registry = new BackgroundAgentRegistry()
+    const id = registry.spawn('Quick', 'general', async () => 'done')
+    await new Promise<void>((resolve) => registry.onComplete(id, () => resolve()))
+
+    const r = await taskTool.execute({ action: 'stop', taskId: id }, withRegistry(registry))
+
+    expect(r.success).toBe(true)
+    expect(r.content).toContain('already completed')
+  })
+
+  // ── 对照：查不到时必须仍说「找不到」，本地任务不得被改道 ──
+
+  it('an unknown id is still "not found", with or without a registry', async () => {
+    const registry = new BackgroundAgentRegistry()
+    const without = await taskTool.execute({ action: 'output', taskId: 'bg-404-nope' }, ctx)
+    const withReg = await taskTool.execute(
+      { action: 'output', taskId: 'bg-404-nope' },
+      withRegistry(registry),
+    )
+
+    expect(without.success).toBe(false)
+    expect(without.error).toContain('not found')
+    expect(withReg.success).toBe(false)
+    expect(withReg.error).toContain('not found')
+  })
+
+  it('a local session id is still served from the local store when a registry is present', async () => {
+    const registry = new BackgroundAgentRegistry()
+    const create = await taskTool.execute(
+      { action: 'create', subject: 'Local one' },
+      withRegistry(registry),
+    )
+    const localId = /Task #(\S+) created/.exec(create.content)![1]!
+
+    const r = await taskTool.execute({ action: 'output', taskId: localId }, withRegistry(registry))
+
+    expect(r.content).toContain('Local one')
+  })
+
+  it('stop on a local in-progress task still only marks it failed', async () => {
+    const registry = new BackgroundAgentRegistry()
+    const create = await taskTool.execute(
+      { action: 'create', subject: 'Local run' },
+      withRegistry(registry),
+    )
+    const localId = /Task #(\S+) created/.exec(create.content)![1]!
+    await taskTool.execute(
+      { action: 'update', taskId: localId, status: 'in_progress' },
+      withRegistry(registry),
+    )
+
+    const r = await taskTool.execute({ action: 'stop', taskId: localId }, withRegistry(registry))
+
+    expect(r.content).toContain(`Task #${localId} stopped.`)
+    const get = await taskTool.execute({ action: 'get', taskId: localId }, withRegistry(registry))
+    expect(get.content).toContain('failed')
+    expect(get.content).toContain('stopped by user')
   })
 })
