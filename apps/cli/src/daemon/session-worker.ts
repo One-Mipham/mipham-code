@@ -22,7 +22,7 @@ import type { ServerWebSocket } from 'bun'
 import type { QueryEngine } from '../core/engine'
 import type { DaemonDatabase } from './database'
 import type { DaemonSession, MessageRecord } from './types'
-import type { StreamChunk } from '../shared/types'
+import type { PermissionMode, StreamChunk } from '../shared/types'
 import type {
   ClientInterruptMessage,
   ServerMessage,
@@ -47,6 +47,8 @@ export interface SessionStateSnapshot {
   status: string
   /** Last N messages for context restoration on attach. */
   messages: MessageRecord[]
+  /** 本会话闸门当前生效的档位 —— attach 的客户端据此初始化页脚。 */
+  permissionMode: PermissionMode
 }
 
 // ── SessionWorker ─────────────────────────────────────────────────────────
@@ -234,6 +236,33 @@ export class SessionWorker {
     this.interrupt()
   }
 
+  // ── Permission Mode ────────────────────────────────────────────────────
+
+  /**
+   * Apply a permission mode to this session's live gate and return the mode that
+   * actually took effect.
+   *
+   * Through `engine.getPermission()` — the very object the engine's tool gate reads
+   * (`engine.ts` `this.permission.resolveApproval(…)`), so this is not a copy that
+   * the gate never sees.
+   *
+   * **Returns the effective mode, never the requested one.** Org-level
+   * `permissionRestrictions` silently rewrite what you ask for inside `setMode`, so
+   * echoing the request back would tell the attaching client's footer it has a
+   * permission the daemon will not grant — "says allowed, actually asks". The
+   * daemon is the only authority on this value; the client displays what it is told.
+   */
+  setPermissionMode(mode: PermissionMode): PermissionMode {
+    const permission = this.engine.getPermission()
+    permission.setMode(mode)
+    return permission.getMode()
+  }
+
+  /** The mode currently in effect for this session's gate. */
+  getPermissionMode(): PermissionMode {
+    return this.engine.getPermission().getMode()
+  }
+
   // ── Session State ──────────────────────────────────────────────────────
 
   /**
@@ -250,6 +279,7 @@ export class SessionWorker {
       turnCount: this.session.turnCount,
       status: this.session.status,
       messages,
+      permissionMode: this.getPermissionMode(),
     }
   }
 
@@ -413,6 +443,9 @@ export class SessionWorker {
       provider: state.provider,
       model: state.model,
       turnCount: state.turnCount,
+      // 带上生效档，否则新 attach 的客户端只能猜 `default` —— 在 `MIPHAM_DAEMON_PERMISSION`
+      // 或上一次 `set_mode` 把 daemon 定在别处时，页脚从第一帧起就与闸门不符。
+      mode: state.permissionMode,
     }
     try {
       ws.send(JSON.stringify(msg))

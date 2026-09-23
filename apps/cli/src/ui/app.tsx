@@ -341,6 +341,14 @@ export function App({
   const [permissionMode, setPermissionMode] = useState<PermissionMode>(() =>
     livePermissionMode(engine.getPermission()),
   )
+  // 远端 attach：闸门在 daemon 上，而它的答案是**异步**来的（组织级限制会在那边把请求
+  // 静默钳小）。按键不等于渲染，所以只靠上行的 `useState` 初始化 + 按键回读，页脚会永远
+  // 停在钳制前的那一档 —— 报得比实际宽。本地引擎没有这条订阅：它的 `getMode()` 在
+  // `setMode` 返回时就已经是钳后值。
+  useEffect(() => {
+    if (!('onPermissionModeChange' in engine)) return
+    return engine.onPermissionModeChange((mode) => setPermissionMode(mode))
+  }, [engine])
   const abortRef = useRef<AbortController | null>(null)
   // Monotonic turn id — lets a stale turn's finally() skip resetting shared UI
   // state (isLoading/abortRef/progress) after a newer turn has already started.

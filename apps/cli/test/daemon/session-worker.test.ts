@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { SessionWorker } from '../../src/daemon/session-worker'
+import { PermissionSystem } from '../../src/core/permission'
 import type { StreamChunk } from '../../src/shared/types'
 import type { DaemonSession, MessageRecord } from '../../src/daemon/types'
 import type { ServerMessage } from '../../src/daemon/attach-protocol'
@@ -74,12 +75,15 @@ function makeWs() {
 
 /** 假引擎：把一整回合的 chunk 原样吐出来，不做任何取舍。 */
 function scriptedEngine(chunks: StreamChunk[]) {
+  const permission = new PermissionSystem('default')
   return {
     async *process(_prompt: string, _signal?: AbortSignal) {
       for (const chunk of chunks) yield chunk
     },
     getLastAssistantContent: () => undefined,
     getContext: () => ({ getMessages: () => [] }),
+    // `attach` 快照要报当前档（`sendState`），所以连「只跑 prompt」的用例也得给闸门。
+    getPermission: () => permission,
   } as any
 }
 
@@ -182,6 +186,7 @@ describe('SessionWorker.processPrompt — 一次回合的真实 chunk 序列', (
       },
       getLastAssistantContent: () => undefined,
       getContext: () => ({ getMessages: () => [] }),
+      getPermission: () => new PermissionSystem('default'),
     } as any
     const worker = new SessionWorker(engine, db as any, { ...SESSION })
     worker.addClient(ws as any)
@@ -189,5 +194,65 @@ describe('SessionWorker.processPrompt — 一次回合的真实 chunk 序列', (
 
     const done = ws.sent.filter((m) => m.type === 'done')
     expect(done[0]).toMatchObject({ stopReason: 'error' })
+  })
+})
+
+// ── 权限档位：daemon 侧那一半（闸门真的动了） ──────────────────────────────
+//
+// 观测点选在**引擎手里那个 `PermissionSystem`** 上，而不是返回值的字面：只有当
+// `setPermissionMode` 改到了闸门读的**同一个对象**时，「返回生效档」这句话才成立。
+// 组织级限制在 `setMode` 内部静默钳制，所以「请求 bypass、拿回的不是 bypass」正是
+// 必须复现的那一格 —— 报请求值就是那条老缺陷的形状：说放行、实际审批。
+
+describe('SessionWorker — 权限档位', () => {
+  /** 假引擎，只带一个**真**权限系统（不是替身：钳制要在它里面发生）。 */
+  function gateEngine(permission: PermissionSystem) {
+    return {
+      getPermission: () => permission,
+      getLastAssistantContent: () => undefined,
+      getContext: () => ({ getMessages: () => [] }),
+    } as any
+  }
+
+  function workerFor(permission: PermissionSystem) {
+    return new SessionWorker(gateEngine(permission), makeDb() as any, { ...SESSION })
+  }
+
+  it('正对照：没有限制时请求什么就是什么', () => {
+    // 缺这条，「返回被钳制过的值」与「永远返回别的东西」分不开。
+    const permission = new PermissionSystem('default')
+    expect(workerFor(permission).setPermissionMode('acceptEdits')).toBe('acceptEdits')
+  })
+
+  it('改的是 live 闸门：引擎手里那个对象跟着动', () => {
+    const permission = new PermissionSystem('default')
+    const worker = workerFor(permission)
+    worker.setPermissionMode('plan')
+    expect(permission.getMode()).toBe('plan')
+    expect(worker.getPermissionMode()).toBe('plan')
+  })
+
+  it('返回**钳后**值：组织级限制静默改写请求，报请求值就是报得比实际宽', () => {
+    const permission = new PermissionSystem('default')
+    permission.setRestrictions({ forbiddenModes: ['bypassPermissions'] })
+    const effective = workerFor(permission).setPermissionMode('bypassPermissions')
+    if (effective === 'bypassPermissions') throw new Error('钳制没生效，这条用例失去意义')
+    expect(effective).toBe(permission.getMode())
+  })
+
+  it('attach 快照带的是**当前**档：客户端不必猜 default', () => {
+    const permission = new PermissionSystem('acceptEdits')
+    const worker = workerFor(permission)
+
+    const first = makeWs()
+    worker.addClient(first as any)
+    expect(first.sent[0]).toMatchObject({ type: 'session_state', mode: 'acceptEdits' })
+
+    // 换一档后再 attach：读的是**发送时**的活值，不是构造时的快照（否则新客户端
+    // 从第一帧起就与闸门不符）。
+    worker.setPermissionMode('plan')
+    const second = makeWs()
+    worker.addClient(second as any)
+    expect(second.sent[0]).toMatchObject({ type: 'session_state', mode: 'plan' })
   })
 })

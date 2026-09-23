@@ -24,11 +24,21 @@
  * 用例的覆盖里**。删掉那一行 `permission.setClassifier(`，typecheck / lint / 全量测试
  * 全绿，而 `auto` 档退回「每一次被门控的调用都拒」—— `core/rules-loader.ts` 那次
  * 「有定义、无施加点」的复刻。故与 P3/P5 同处一室。
+ *
+ * P7（`mipham attach` 切档）同族，但**缺口在网的对面**：页脚在本地、闸门在 daemon 上，
+ * `set_mode` 之前一个字都不过网 ⇒「Shift+Tab 按了、页脚走了、而 daemon 照旧」。客户端
+ * 那一半已由 `test/daemon/remote-engine.test.ts` 从**帧序列**上断死（顺序、内容、
+ * 不钉不该钉的档）；这里断的是行为用例**够不到**的两处：daemon 的 WS 分发（在
+ * `createServer` 的闭包里，而测试环境的 `upgrade()` 恒返回 false ⇒ 帧永远进不去）与
+ * 引擎重建时的档位来源。另加一条跨进程**契约**守卫：协议两侧各写各的字面量，
+ * 拼错一处就是「每帧都被 `default: break` 静默丢掉」，与遥测那条契约漂移同形。
  */
 
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { ALL_MODES } from '../../src/core/permission-config'
+import { DAEMON_PERMISSION_MODES } from '../../src/daemon/server'
 
 /** 同 `permission-warning-channels.test.ts`：锚定包目录（`apps/cli/`）。 */
 const CLI_DIR = join(import.meta.dirname, '..', '..')
@@ -45,6 +55,26 @@ const APP = read('src/ui/app.tsx')
 const ENGINE = stripComments(read('src/core/engine.ts'))
 const SUB_AGENT = stripComments(read('src/agent/sub-agent.ts'))
 const INDEX_CODE = stripComments(INDEX)
+const SERVER = stripComments(read('src/daemon/server.ts'))
+const PROTOCOL = read('src/daemon/attach-protocol.ts')
+
+/**
+ * 取出 `case '<name>': { … }` 分支的正文（按花括号配平，不看缩进 —— 缩进锚会在
+ * prettier 重排整段时假红）。
+ */
+function caseBody(src: string, name: string): string | null {
+  const start = src.indexOf(`case '${name}': {`)
+  if (start === -1) return null
+  let depth = 0
+  for (let i = src.indexOf('{', start); i < src.length; i++) {
+    if (src[i] === '{') depth += 1
+    else if (src[i] === '}') {
+      depth -= 1
+      if (depth === 0) return src.slice(start, i + 1)
+    }
+  }
+  return null
+}
 
 describe('状态与执行同源（P3 / P5）', () => {
   it('正对照：两个文件确实读到了内容（否则下面的断言是空集上的空话）', () => {
@@ -109,6 +139,78 @@ describe('状态与执行同源（P3 / P5）', () => {
     // 「自动接受」字形，读到的权限比实际宽，与 P3 同族。
     expect(APP).not.toMatch(/⏵⏵ \{PERMISSION_LABELS/)
     expect(APP).toMatch(/permissionGlyphPrefix\(permissionMode\)/)
+  })
+})
+
+describe('P7 — `mipham attach` 切档过网（页脚在本地、闸门在 daemon）', () => {
+  it('提取器真的在做事（配平失败的话下面几条断的是空串）', () => {
+    const fake =
+      "switch (t) {\n  case 'a': {\n    if (x) { y() }\n    break\n  }\n  case 'b': break\n}"
+    const body = caseBody(fake, 'a')
+    expect(body).toContain('y()')
+    expect(body).not.toContain("case 'b'")
+    expect(caseBody(fake, 'zzz')).toBeNull()
+  })
+
+  it('P7a：协议两侧说的是同一种消息（各写各的字面量 ⇒ 漂移后每帧被静默丢掉）', () => {
+    // daemon 的分发末尾是 `default: break`，客户端拼错一个字母就是「没有任何回音」——
+    // 与遥测那条「契约漂移 ⇒ 每个事件 404 ⇒ 静默全丢」同形，且更难看到。
+    expect(PROTOCOL, '协议里没有 set_mode').toContain("type: 'set_mode'")
+    expect(PROTOCOL, 'session_state 没带档位 ⇒ 新 attach 的客户端只能猜 default').toMatch(
+      /ServerSessionStateMessage[\s\S]{0,220}?mode: PermissionMode/,
+    )
+    expect(read('src/daemon/remote-engine.ts'), '客户端没有发 set_mode').toContain(
+      "type: 'set_mode'",
+    )
+    expect(caseBody(SERVER, 'set_mode'), 'daemon 不认这个类型').not.toBeNull()
+  })
+
+  it('P7b：daemon 施加到 live 闸门，回播**生效**档，不认的值 fail-closed', () => {
+    const body = caseBody(SERVER, 'set_mode')
+    expect(body, '没抓到 case 体，下面全是空话').not.toBeNull()
+    const src = body!
+
+    // 值来自不可信输入（另一个进程的字节），必须先过白名单再施加
+    expect(src, '没有校验就施加 ⇒ 一个 attach 能往闸门里塞任意字符串').toMatch(
+      /DAEMON_PERMISSION_MODES\.has\(/,
+    )
+    // 施加点必须是 worker（它拿到的是引擎手里那个 live PermissionSystem）
+    expect(src, '没有改到会话的闸门').toMatch(/worker\.setPermissionMode\(/)
+    // 回播的必须是**生效**值：报请求值就是那条老缺陷的形状 —— 说放行、实际审批
+    expect(src, '回播的不是生效值').toMatch(/mode: effective/)
+    expect(src, '回播了请求值').not.toMatch(/mode: (requested|raw)\b/)
+    // 会话身份取自 socket，绝不取自 payload —— 否则一个 attach 能改**别的**会话的闸门
+    expect(src, '用了 payload 里的 sessionId').not.toMatch(/parsed\.sessionId/)
+  })
+
+  it('P7c：worker 被空闲回收后重建，档位不静默退回 env', () => {
+    // 引擎不是永久的：`WorkerPool` 会回收空闲 worker，下一次 prompt 从
+    // `resolveDaemonPermission()`（env）重建 —— 页脚还停在用户选的那一档，而闸门已经
+    // 悄悄换了方向（往宽、往窄都是错，且没有任何东西会说出口）。
+    expect(SERVER, '重建引擎时没有恢复用户选过的档').toMatch(
+      /sessionModes\.get\(sessionId\)[\s\S]{0,80}?permission\.setMode\(/,
+    )
+  })
+
+  it('P7d：页脚订阅 daemon 的答复（钳制在那边发生，答复是异步来的）', () => {
+    // `App` 不在任何行为用例的覆盖里（没有任何测试渲染它），而言论侧唯一能看见的
+    // 就是这一行。少了它：钳制发生时页脚永远停在请求的那一档。
+    expect(APP, '页脚没有订阅 daemon 的档位答复').toMatch(
+      /onPermissionModeChange\([\s\S]{0,40}?setPermissionMode\(/,
+    )
+    expect(APP, '没有做能力判别 ⇒ 本地引擎上没有这个方法').toContain(
+      "'onPermissionModeChange' in engine",
+    )
+    expect(stripComments(read('src/daemon/remote-engine.ts')), 'RemoteEngine 没有这条订阅').toMatch(
+      /onPermissionModeChange\(/,
+    )
+  })
+
+  it('P7e：daemon 的白名单不是手抄的第二份表（drift 即「env 收、set_mode 放」）', () => {
+    // 两份表并存且自称同一个集合。加一档却忘了这里 ⇒ 同一个档位走 env 进得来、
+    // 走 `set_mode` 进不来（客户端按了没反应），或反之。要改就得**同时**决定
+    // daemon 拿新档怎么办（`auto` 那条注释就是一次这样的决定）。
+    expect([...DAEMON_PERMISSION_MODES].sort()).toEqual([...ALL_MODES].sort())
   })
 })
 

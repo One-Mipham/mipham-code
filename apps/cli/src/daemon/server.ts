@@ -67,6 +67,13 @@ interface WsData {
  * Values `MIPHAM_DAEMON_PERMISSION` accepts. The **default stays `'default'`**;
  * every widening is an explicit operator choice.
  *
+ * Also the whitelist an attached client's `set_mode` is measured against: a mode the
+ * daemon does not understand must not be applied (fail-closed) — the client's footer
+ * is a *display* of this gate, never its input. Keeping both uses on one set means a
+ * mode the daemon declines via env is declined via `set_mode` too; a second hand-kept
+ * list would let the two drift (`test/integrity/permission-status-parity.test.ts` P7
+ * pins this set against `ALL_MODES`).
+ *
  * `'auto'` is accepted, and today it means **every tool call is refused**: the
  * mode's static baseline answers `'ask'` for all of them, and the daemon has no
  * classifier to rule on the `'ask'` (the classifier is wired in the CLI's
@@ -77,7 +84,7 @@ interface WsData {
  * than what was asked for; a silent widening is the worse of the two ways to be
  * wrong. This entry becomes useful the day the daemon builds a classifier.
  */
-const DAEMON_PERMISSION_MODES: ReadonlySet<PermissionMode> = new Set<PermissionMode>([
+export const DAEMON_PERMISSION_MODES: ReadonlySet<PermissionMode> = new Set<PermissionMode>([
   'default',
   'acceptEdits',
   'plan',
@@ -207,6 +214,19 @@ export function createServer(config: ServerConfig): Server<WsData> {
   let sharedRegistry: ProviderRegistry | null = null
   let sharedTools: Map<string, ToolDefinition> | null = null
 
+  /**
+   * The mode each session's client last asked for (`set_mode`), so a **rebuilt** engine
+   * comes back on the user's mode instead of the env default.
+   *
+   * Why not just read it back off the live engine: engines are not permanent. `WorkerPool`
+   * evicts an idle worker, which drops `engineCache`'s entry too, and the next prompt
+   * rebuilds from `resolveDaemonPermission()` — the env value. Without this map the gate
+   * silently reverts (narrower *or* wider than the footer says) and nothing announces it.
+   * Stored as **requested**, not effective: `setMode` re-clamps on the way in, so the
+   * rebuilt engine lands on the same value the first one did.
+   */
+  const sessionModes = new Map<string, PermissionMode>()
+
   function getOrCreateEngine(
     sessionId: string,
     cwd: string,
@@ -260,6 +280,10 @@ export function createServer(config: ServerConfig): Server<WsData> {
       daemonConfig.permissionRestrictions,
       daemonConfig.permissionRules,
     )
+    // After `setRestrictions` (inside the builder) so this goes through the same clamp the
+    // first engine did — see `sessionModes`. Absent entry ⇒ env mode, unchanged.
+    const requestedMode = sessionModes.get(sessionId)
+    if (requestedMode) permission.setMode(requestedMode)
     const engine = new QueryEngine(sharedRegistry, context, sharedTools, permission)
     engine.setSessionId(sessionId)
     // Same engine capabilities as the interactive CLI — see engine-capabilities.ts.
@@ -873,6 +897,32 @@ export function createServer(config: ServerConfig): Server<WsData> {
             if (worker) {
               worker.interrupt()
             }
+            break
+          }
+
+          case 'set_mode': {
+            // The client pressed Shift+Tab; the gate moves **here**, not in the client's
+            // footer. `sessionId` comes from the socket, never from the payload: the same
+            // message must not be able to move another session's gate.
+            const requested: unknown = parsed.mode
+            const known =
+              typeof requested === 'string' &&
+              DAEMON_PERMISSION_MODES.has(requested as PermissionMode)
+
+            // Materialize the worker when needed — a mode with no engine behind it is not a
+            // mode, and without this the very first keypress (before any prompt) would fall
+            // through and leave the footer's value unconfirmed. Cheap after the first time.
+            const worker = getOrCreateWorker(sessionId, ws)
+            if (!worker) return
+
+            if (known) sessionModes.set(sessionId, requested as PermissionMode)
+            // An unrecognized value changes nothing (fail-closed) — but the client is still
+            // told the **effective** mode, so its footer lands back on a mode this daemon
+            // really will grant instead of parking on one it never accepted.
+            const effective = known
+              ? worker.setPermissionMode(requested as PermissionMode)
+              : worker.getPermissionMode()
+            broadcast(sessionId, { type: 'mode', sessionId, mode: effective })
             break
           }
 

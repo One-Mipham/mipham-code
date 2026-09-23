@@ -17,7 +17,13 @@
 //   }
 //   engine.close()
 
-import type { ClientPromptMessage, ClientInterruptMessage, ServerMessage } from './attach-protocol'
+import type {
+  ClientPromptMessage,
+  ClientInterruptMessage,
+  ClientSetModeMessage,
+  ServerMessage,
+} from './attach-protocol'
+import { ALL_MODES } from '../core/permission-config'
 import type { PermissionMode, StreamChunk } from '../shared/types'
 
 // ── Public API ───────────────────────────────────────────────────────────────
@@ -54,6 +60,45 @@ export class RemoteEngine {
   /** Whether this engine has been explicitly closed. */
   private closed = false
 
+  /** In-flight connection attempt. See `ensureConnected()`. */
+  private connecting: Promise<void> | null = null
+
+  // ── Permission mode (the gate lives on the daemon) ───────────────────────
+  //
+  // Two values, and the difference between them is the whole contract:
+  //
+  // - `modeChosen` — the mode **this client's user** picked on this attach. Set by a
+  //   keypress (so the footer advances immediately — `cyclePermissionMode` computes the
+  //   next slot from `getMode()`'s read-back, and a `getMode` that only reported confirmed
+  //   values would freeze the wheel), then overwritten by the daemon's answer, because org
+  //   level `permissionRestrictions` silently rewrite a request and the daemon is the only
+  //   side that can see the clamp. A non-null value is a standing instruction and gets
+  //   re-asserted before every prompt.
+  // - `modeConfirmed` — what the daemon said is in effect, from a `mode` frame or an
+  //   attach snapshot. **Display only, never asserted**: it is how a client that has not
+  //   picked anything learns the session's mode, and re-sending it would let a bystander
+  //   push its own guess over an operator's `MIPHAM_DAEMON_PERMISSION` — a silent override
+  //   by a client that never expressed an intent.
+  private modeChosen: PermissionMode | null = null
+  private modeConfirmed: PermissionMode | null = null
+
+  /** Viewers of the confirmed mode (the TUI footer). See `onPermissionModeChange`. */
+  private readonly modeListeners = new Set<(mode: PermissionMode) => void>()
+
+  /**
+   * One stable object — **not** a fresh closure per `getPermission()` call.
+   *
+   * `app.tsx` calls `getPermission()` per keypress (`cyclePermissionMode(engine.getPermission(), …)`
+   * and the initial `useState`), so a per-call object-throws away everything it was told:
+   * the mode read back is a brand-new `'default'` and nothing is ever sent to the daemon.
+   */
+  private readonly permissionFacade = {
+    setMode: (mode: PermissionMode): void => {
+      this.requestMode(mode)
+    },
+    getMode: (): PermissionMode => this.modeChosen ?? this.modeConfirmed ?? 'default',
+  }
+
   constructor(options: RemoteEngineOptions) {
     this.sessionId = options.sessionId
     this.port = options.port
@@ -64,11 +109,19 @@ export class RemoteEngine {
 
   /**
    * Ensure a WebSocket connection to the daemon exists.
-   * Creates one lazily on the first process() call.
+   * Creates one lazily on the first process() or setMode() call.
+   *
+   * Concurrent callers **share** the in-flight attempt. Without that, the second caller
+   * sees `this.ws` set but not yet `OPEN`, treats it as a stale socket, nulls its handlers
+   * and closes it — so the first caller's promise can never settle (its `onopen` was
+   * detached) and the message it was about to send goes to a socket nobody is listening on.
    */
   private ensureConnected(): Promise<void> {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       return Promise.resolve()
+    }
+    if (this.connecting) {
+      return this.connecting
     }
 
     if (this.ws) {
@@ -87,7 +140,7 @@ export class RemoteEngine {
 
     const url = `ws://127.0.0.1:${this.port}/api/v1/sessions/${this.sessionId}/stream`
 
-    return new Promise<void>((resolve, reject) => {
+    const attempt = new Promise<void>((resolve, reject) => {
       const ws = new WebSocket(url)
       this.ws = ws
 
@@ -112,6 +165,15 @@ export class RemoteEngine {
         reject(new Error(`Failed to connect to daemon at 127.0.0.1:${this.port}`))
       }
     })
+
+    this.connecting = attempt
+    const clear = () => {
+      if (this.connecting === attempt) this.connecting = null
+    }
+    // Both slots handled on purpose: this promise is only ever awaited by callers that
+    // catch, but a rejection here would otherwise surface as unhandled.
+    attempt.then(clear, clear)
+    return attempt
   }
 
   // ── Prompt Processing (async generator) ──────────────────────────────────
@@ -144,6 +206,17 @@ export class RemoteEngine {
     this.chunkQueue = []
     this.resolveNext = null
     this.rejectNext = null
+
+    // Re-assert the mode this client's user picked, **before** the prompt — frames on one
+    // socket arrive in the order they were sent, so the daemon applies the gate first and
+    // this turn runs under the mode the user is looking at. Idempotent by design, and it
+    // heals the two ways the gate can drift behind the client's back (a daemon restart, or
+    // a worker evicted while idle and rebuilt from env).
+    //
+    // Skipped when nothing was ever picked here: the daemon owns the default (env config,
+    // an earlier client, an operator), and a bystander must not overwrite it by asserting
+    // the value it merely *displays*.
+    if (this.modeChosen) await this.sendMode(this.modeChosen)
 
     // Send the prompt
     const promptMsg: ClientPromptMessage = {
@@ -215,9 +288,10 @@ export class RemoteEngine {
 
   // ── Stub methods for TUI compatibility ───────────────────────────────────
   //
-  // In remote attach mode, the daemon manages providers, agents, permissions,
-  // and context. These stubs satisfy the TUI's engine interface without
-  // introducing daemon dependencies into the UI layer.
+  // In remote attach mode, the daemon manages providers, agents and context. These stubs
+  // satisfy the TUI's engine interface without introducing daemon dependencies into the
+  // UI layer. (Permissions are **not** in this list: they are forwarded over the attach
+  // protocol — see `getPermission` — because the footer is a display of the daemon's gate.)
   //
   // Slash commands may call any of these; we return safe defaults.
 
@@ -257,17 +331,31 @@ export class RemoteEngine {
     }
   }
 
-  /** Returns a stub permission object so slash commands don't crash. */
-  getPermission(): { setMode(_mode: PermissionMode): void; getMode(): PermissionMode } {
-    // Remote mode: permissions are managed by the daemon, and the attach protocol has
-    // no read-back — so `getMode` reports the last mode the user asked for (which is
-    // what the footer has always shown here), not a value the daemon never confirmed.
-    let requested: PermissionMode = 'default'
-    return {
-      setMode: (mode: PermissionMode) => {
-        requested = mode
-      },
-      getMode: () => requested,
+  /**
+   * The permission surface the footer reads and writes — wired to the daemon's gate,
+   * not a local mirror of it (`app.tsx` treats this line as **the mirror of execution**).
+   *
+   * Writing (`setMode`) sends `set_mode`; the daemon applies it to the session's live
+   * `PermissionSystem` and answers with the mode that actually took effect. Reading
+   * (`getMode`) answers optimistically until that answer arrives — see the field comments.
+   */
+  getPermission(): { setMode(mode: PermissionMode): void; getMode(): PermissionMode } {
+    return this.permissionFacade
+  }
+
+  /**
+   * Subscribe to mode corrections from the daemon (`mode` frames, and the `mode` field of
+   * a `session_state` snapshot). Returns an unsubscribe function.
+   *
+   * Needed because the confirmed value can arrive **asynchronously** — a keypress is not a
+   * render, so a footer that only ever read `getMode()` on keypress would keep displaying
+   * the pre-clamp value forever. Nothing local has this problem: a local engine's
+   * `getMode()` already reflects the clamp the moment `setMode` returns.
+   */
+  onPermissionModeChange(listener: (mode: PermissionMode) => void): () => void {
+    this.modeListeners.add(listener)
+    return () => {
+      this.modeListeners.delete(listener)
     }
   }
 
@@ -353,6 +441,13 @@ export class RemoteEngine {
       return
     }
 
+    // Session facts, not prompt stream: they carry the gate's current mode and must be
+    // absorbed even when nothing is consuming chunks (a keypress, not a turn).
+    if (msg.type === 'mode' || msg.type === 'session_state') {
+      this.absorbMode(msg.mode)
+      return
+    }
+
     const chunk = this.mapMessageToChunk(msg)
     if (!chunk) return
 
@@ -364,10 +459,52 @@ export class RemoteEngine {
     }
   }
 
+  // ── Permission plumbing ─────────────────────────────────────────────────
+
+  /** Optimistically take the mode, then tell the daemon (best effort). */
+  private requestMode(mode: PermissionMode): void {
+    this.modeChosen = mode
+    // Fire and forget: the correctness-critical send is the one `process()` makes before
+    // every prompt. This one only shortens how long a footer can sit on a clamped value
+    // (the daemon answers with `mode`, which usually lands before the next render).
+    void this.sendMode(mode)
+  }
+
+  /** Send `set_mode`. Silent when the daemon is unreachable or the socket is closing. */
+  private async sendMode(mode: PermissionMode): Promise<void> {
+    try {
+      await this.ensureConnected()
+      const msg: ClientSetModeMessage = { type: 'set_mode', sessionId: this.sessionId, mode }
+      this.ws?.send(JSON.stringify(msg))
+    } catch {
+      // No daemon: the mode stays local, exactly as it did before this existed. The next
+      // `process()` re-asserts it, so nothing is lost if the connect was merely slow.
+    }
+  }
+
+  /**
+   * Take the daemon's word for the effective mode and hand it to the footer.
+   *
+   * Validated against `ALL_MODES` rather than trusted: this frame crosses a process
+   * boundary and the two sides version independently (an older daemon need not send the
+   * field at all), and a bad value would otherwise sit in the footer as a mode no wheel
+   * slot can step away from.
+   */
+  private absorbMode(mode: unknown): void {
+    if (typeof mode !== 'string' || !ALL_MODES.includes(mode as PermissionMode)) return
+    const effective = mode as PermissionMode
+    this.modeConfirmed = effective
+    // If this client had asked for something, the answer replaces the request: the
+    // optimistic value may well have been clamped away, and it must not survive as the
+    // value the footer shows or the next prompt asserts.
+    if (this.modeChosen) this.modeChosen = effective
+    for (const listener of this.modeListeners) listener(effective)
+  }
+
   /**
    * Map a ServerMessage from the daemon to a StreamChunk.
-   * Returns null for message types that should be silently consumed
-   * (e.g., session_state which is only informative for attach).
+   * Returns null for message types that carry no prompt output. (`session_state` and
+   * `mode` never reach here — `onMessage` absorbs them as session facts.)
    */
   private mapMessageToChunk(msg: ServerMessage): StreamChunk | null {
     switch (msg.type) {
@@ -423,11 +560,6 @@ export class RemoteEngine {
       case 'error': {
         return { type: 'error', error: msg.message }
       }
-
-      // session_state is an informational message sent when a client
-      // first attaches. It is not part of the prompt stream.
-      case 'session_state':
-        return null
 
       default:
         return null
