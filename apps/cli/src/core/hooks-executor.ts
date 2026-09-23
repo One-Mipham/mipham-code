@@ -106,6 +106,36 @@ export function parseHookStdout(stdout: string | null | undefined, _ctx: HookCon
   return { allowed: true }
 }
 
+/**
+ * Why the hook subprocess failed to run to completion, or `null` if it did exit.
+ *
+ * `spawnSync` does **not** throw for a failed spawn or a timeout — it reports them
+ * on the result, and all three shapes arrive with **empty stderr**: `error.code`
+ * is `ETIMEDOUT` for the timeout, `ENOENT` when the command does not exist, and an
+ * externally killed child comes back as `status: null` + `signal` with no `error`
+ * at all. Empty stderr is what made them one string with a benign non-zero exit
+ * that printed nothing — `Hook warning (<cmd>): ` with the reason left blank.
+ *
+ * Named here rather than in the caller's `catch`, which cannot see any of them:
+ * it runs only when `spawnSync` itself throws.
+ */
+function spawnFailureCause(
+  result: { status?: number | null; signal?: string | null; error?: unknown },
+  timeoutSeconds: number,
+): string | null {
+  const err = result.error as { code?: string; message?: string } | undefined
+  if (err) {
+    if (err.code === 'ETIMEDOUT') return `timed out after ${timeoutSeconds}s`
+    return err.message
+      ? `${err.code ?? 'spawn failed'}: ${err.message}`
+      : (err.code ?? 'spawn failed')
+  }
+  if (result.signal && (result.status === null || result.status === undefined)) {
+    return `killed by ${result.signal}`
+  }
+  return null
+}
+
 async function executeCommand(cfg: HookConfig, ctx: HookContext): Promise<HookResult> {
   if (!cfg.command) return { allowed: true }
 
@@ -167,16 +197,25 @@ async function executeCommand(cfg: HookConfig, ctx: HookContext): Promise<HookRe
       }
     }
 
+    const failure = spawnFailureCause(result, cfg.timeout ?? 60)
+    if (failure) {
+      return {
+        allowed: true,
+        additionalContext: `Hook error (${cfg.command}): ${failure}`,
+      }
+    }
+
     // Other non-zero exit: don't block, log the error as context
     return {
       allowed: true,
       additionalContext: `Hook warning (${cfg.command}): ${stderr.trim()}`,
     }
   } catch (err) {
-    // spawnSync errors (e.g., command not found, timeout, signal)
+    // Only reached when `spawnSync` itself throws — masking-policy load, env
+    // filter, or an option it rejects outright. Its comment used to name timeouts
+    // and missing commands, neither of which can arrive here.
     const message = (err as { message?: string }).message || String(err)
 
-    // Timeout/signal: treat as non-blocking warning
     return {
       allowed: true,
       additionalContext: `Hook error (${cfg.command}): ${message}`,
