@@ -1,6 +1,7 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs'
+import { writeFileSync, mkdirSync, chmodSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { atomicWriteFileSync } from '../shared/atomic-write'
+import { readRegularFileSync } from '../shared/regular-file'
 import { saveProviderApiKey } from './loader'
 import { miphamHome } from '../core/paths.ts'
 
@@ -29,9 +30,11 @@ export interface KeysData {
 }
 
 function loadKeys(): KeysData {
-  if (!existsSync(KEYS_FILE)) return {}
   try {
-    const raw = readFileSync(KEYS_FILE, 'utf-8')
+    // 类型闸在读取之前（`~/.mipham/keys.json` 若是个 FIFO，`readFileSync` 会
+    // 一直等写者）—— 见 shared/regular-file.ts。
+    const raw = readRegularFileSync(KEYS_FILE)
+    if (raw === null) return {}
     const parsed: unknown = JSON.parse(raw)
     // Valid JSON is not necessarily a key map. `null` throws straight out of
     // `Object.entries` in `list()` — i.e. on the startup path, not in some corner

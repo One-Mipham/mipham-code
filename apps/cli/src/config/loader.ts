@@ -1,15 +1,8 @@
-import {
-  readFileSync,
-  existsSync,
-  copyFileSync,
-  mkdirSync,
-  readdirSync,
-  unlinkSync,
-  chmodSync,
-} from 'node:fs'
+import { existsSync, copyFileSync, mkdirSync, readdirSync, unlinkSync, chmodSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { atomicWriteFileSync } from '../shared/atomic-write'
+import { isRegularFile, readRegularFileSync } from '../shared/regular-file'
 import type {
   MiphamConfig,
   ProviderConfig,
@@ -41,7 +34,16 @@ const BACKUP_PREFIX = 'config.backup-'
 function safeParseYaml(path: string, label: string): Partial<MiphamConfig> | null {
   try {
     if (!existsSync(path)) return null
-    const raw = readFileSync(path, 'utf-8')
+    // `existsSync` 先过一遍只为「缺席不吭声」；真正决定读不读的是**文件类型**
+    // —— FIFO 上 `readFileSync` 会阻塞到有写者出现，那次挂死没有报错也没有
+    // 计时器救得回来（见 shared/regular-file.ts）。
+    const raw = readRegularFileSync(path)
+    if (raw === null) {
+      process.stderr.write(
+        `⚠ Mipham Code: ${label} (${path}) is not a readable regular file — ignoring it.\n`,
+      )
+      return null
+    }
     return parseYaml(raw) as Partial<MiphamConfig>
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -151,7 +153,8 @@ function mergeConfig(
  */
 function backupConfig(configPath: string): void {
   try {
-    if (!existsSync(configPath)) return
+    // 备份源同样要过类型闸：`copyFileSync` 打开 FIFO 读端一样会等到有写者为止。
+    if (!isRegularFile(configPath)) return
     mkdirSync(MIPHAM_HOME, { recursive: true, mode: 0o700 })
 
     const ts = new Date().toISOString().replace(/[:.]/g, '-')
@@ -190,6 +193,10 @@ export function tryRestoreFromBackup(configPath: string): boolean {
 
     if (files.length === 0) return false
 
+    // 目标已经在那儿而且不是普通文件（FIFO/socket/目录）时不还原：往 FIFO 写
+    // 会挡在「等读者」上，把「恢复」变成又一次挂死；目录则会 EISDIR。缺席才写。
+    if (existsSync(configPath) && !isRegularFile(configPath)) return false
+
     const latestBackup = join(MIPHAM_HOME, files[0]!)
     copyFileSync(latestBackup, configPath)
     process.stderr.write(`⚠ Mipham Code: restored config from backup (${files[0]})\n`)
@@ -220,8 +227,8 @@ function loadMcpJson(cwd: string): McpServerConfig[] {
 
   for (const path of searchPaths) {
     try {
-      if (!existsSync(path)) continue
-      const raw = readFileSync(path, 'utf-8')
+      const raw = readRegularFileSync(path)
+      if (raw === null) continue
       // Every McpServerConfig field is optional here (the name comes from the
       // key), so a field added to the type is accepted without touching this.
       const parsed = JSON.parse(raw) as {
@@ -304,8 +311,8 @@ export function loadSettingsJson(
 
   for (const { path, readHooks, isProject } of searchPaths) {
     try {
-      if (!existsSync(path)) continue
-      const raw = readFileSync(path, 'utf-8')
+      const raw = readRegularFileSync(path)
+      if (raw === null) continue
       const parsed = JSON.parse(raw) as {
         hooks?: Record<string, unknown>
         permissions?: { allow?: unknown; deny?: unknown }
@@ -376,10 +383,11 @@ export function settingsPathFor(scope: SettingsScope, cwd: string = process.cwd(
  * not something to clobber — the user's other settings live in the same file.
  */
 export function readSettingsDoc(path: string): Record<string, unknown> {
-  if (!existsSync(path)) return {}
+  const raw = readRegularFileSync(path)
+  if (raw === null) return {}
   let parsed: unknown
   try {
-    parsed = JSON.parse(readFileSync(path, 'utf-8'))
+    parsed = JSON.parse(raw)
   } catch {
     throw new Error(`${path} is not valid JSON. Fix or remove it, then retry.`)
   }
@@ -452,8 +460,10 @@ export function loadConfig(cwd: string = process.cwd()): MiphamConfig {
   const projectConfig = safeParseYaml(configPath, 'project config')
   if (projectConfig) {
     config = mergeConfig(config, projectConfig, false)
-  } else if (existsSync(configPath)) {
-    // File exists but failed to parse — try to restore from backup
+  } else if (isRegularFile(configPath)) {
+    // A real file is there but failed to parse — try to restore from backup.
+    // 非普通文件走不到这里：那不是「损坏的配置」，而是根本不该当配置读的东西
+    // （FIFO/socket/目录），「恢复」对它会变成往 FIFO 里写、又一次挂死。
     process.stderr.write(`⚠ Mipham Code: project config is corrupted, attempting recovery...\n`)
     if (!tryRestoreFromBackup(configPath)) {
       process.stderr.write(`⚠ Mipham Code: no backup available for project config. Skipping.\n`)
@@ -470,8 +480,9 @@ export function loadConfig(cwd: string = process.cwd()): MiphamConfig {
   const userConfig = safeParseYaml(userConfigPath, 'user config')
   if (userConfig) {
     config = mergeConfig(config, userConfig, true)
-  } else if (existsSync(userConfigPath)) {
-    // File exists but failed to parse — try to restore from backup
+  } else if (isRegularFile(userConfigPath)) {
+    // 用户的 config.yml 是真文件但解析不了 —— 才谈得上「恢复」。判据同上：
+    // 非普通文件不是损坏的配置。
     process.stderr.write(`⚠ Mipham Code: user config is corrupted, attempting recovery...\n`)
     if (!tryRestoreFromBackup(userConfigPath)) {
       process.stderr.write(`⚠ Mipham Code: no backup available for user config. Skipping.\n`)
@@ -545,8 +556,8 @@ export function loadInferenceHookConfig(): InferenceHookConfig {
   const paths = [userConfigPath]
   for (const path of paths) {
     try {
-      if (!existsSync(path)) continue
-      const raw = readFileSync(path, 'utf-8')
+      const raw = readRegularFileSync(path)
+      if (raw === null) continue
       const parsed = parseYaml(raw) as Record<string, unknown>
       const section = parsed.inference_hooks as Partial<InferenceHookConfig> | undefined
       if (section) {
@@ -587,8 +598,8 @@ function mergeCredentialMaskingFile(
   allowLoosening: boolean,
 ): CredentialMaskingConfig {
   try {
-    if (!existsSync(path)) return merged
-    const raw = readFileSync(path, 'utf-8')
+    const raw = readRegularFileSync(path)
+    if (raw === null) return merged
     const parsed = parseYaml(raw) as Record<string, unknown>
     const section = parsed.credential_masking as Partial<CredentialMaskingConfig> | undefined
     if (!section) return merged
@@ -664,8 +675,8 @@ export function loadBackgroundAgentConfig(cwd: string = process.cwd()): Backgrou
   const paths = [userConfigPath, configPath]
   for (const path of paths) {
     try {
-      if (!existsSync(path)) continue
-      const raw = readFileSync(path, 'utf-8')
+      const raw = readRegularFileSync(path)
+      if (raw === null) continue
       const parsed = parseYaml(raw) as Record<string, unknown>
       const section = parsed.background_agent as Partial<BackgroundAgentConfig> | undefined
       if (section) {
@@ -697,8 +708,8 @@ export function loadCrossSessionConfig(cwd: string = process.cwd()): CrossSessio
   const paths = [userConfigPath, configPath] // project wins (loaded last)
   for (const path of paths) {
     try {
-      if (!existsSync(path)) continue
-      const raw = readFileSync(path, 'utf-8')
+      const raw = readRegularFileSync(path)
+      if (raw === null) continue
       const parsed = parseYaml(raw) as Record<string, unknown>
       const section = parsed.cross_session as Partial<CrossSessionConfig> | undefined
       if (section) {
@@ -753,11 +764,11 @@ function decryptProviderApiKeys(providers: ProviderConfig[] | undefined): void {
 export function getProviderApiKey(providerId: string, cwd: string = process.cwd()): string | null {
   const userConfigPath = join(MIPHAM_HOME, 'config.yml')
   const projectConfigPath = join(cwd, MIPHAM_DIR, 'config.yml')
-  const configPath = existsSync(userConfigPath) ? userConfigPath : projectConfigPath
+  const configPath = isRegularFile(userConfigPath) ? userConfigPath : projectConfigPath
 
   try {
-    if (!existsSync(configPath)) return null
-    const raw = readFileSync(configPath, 'utf-8')
+    const raw = readRegularFileSync(configPath)
+    if (raw === null) return null
     const doc = (parseYaml(raw) as Record<string, unknown>) || {}
     const providers = (doc.providers as Array<Record<string, unknown>>) || []
     const p = providers.find((x) => x.id === providerId)
@@ -788,9 +799,9 @@ export function saveProviderApiKey(providerId: string, apiKey: string): boolean 
 
     // Read existing config (or start fresh)
     let doc: Record<string, unknown> = {}
-    if (existsSync(configPath)) {
-      const raw = readFileSync(configPath, 'utf-8')
-      doc = (parseYaml(raw) as Record<string, unknown>) || {}
+    const existing = readRegularFileSync(configPath)
+    if (existing !== null) {
+      doc = (parseYaml(existing) as Record<string, unknown>) || {}
     }
 
     // Find and update the provider in the providers array

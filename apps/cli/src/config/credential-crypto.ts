@@ -8,6 +8,7 @@ import {
   statSync,
 } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { isRegularFile } from '../shared/regular-file'
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
 
 /**
@@ -43,7 +44,9 @@ export function getCredentialKey(keyDir: string): Buffer {
   const keyPath = join(keyDir, CREDENTIAL_KEY_FILENAME)
   if (!existsSync(keyPath)) {
     const legacyPath = join(keyDir, LEGACY_KEY_FILENAME)
-    if (existsSync(legacyPath)) {
+    // 迁移的**源**要过类型闸：`copyFileSync` 打开 FIFO 读端会一直等到有写者
+    // （见 shared/regular-file.ts）。
+    if (isRegularFile(legacyPath)) {
       copyFileSync(legacyPath, keyPath)
       chmodSync(keyPath, 0o400)
     }
@@ -58,6 +61,15 @@ export function getCredentialKey(keyDir: string): Buffer {
  * would ever notice.
  */
 function readKeyFile(keyPath: string): Buffer {
+  // 类型闸先过：这里两次进入都在**启动链**上（配置里任何 `enc:v1:` 都要它解密），
+  // 而 `readFileSync` 读 FIFO/socket 会一直等到有写者为止 —— 挂住时用户看不到报错、
+  // 也没有计时器救得回来。明确失败，并把「去删掉那个东西」写进消息里。
+  if (!isRegularFile(keyPath)) {
+    throw new Error(
+      `${keyPath} is not a regular file — refusing to read the credential key from it ` +
+        `(remove or replace it with a regular file).`,
+    )
+  }
   if ((statSync(keyPath).mode & 0o777) !== 0o400) chmodSync(keyPath, 0o400)
   return readFileSync(keyPath)
 }
