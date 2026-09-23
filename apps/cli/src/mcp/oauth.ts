@@ -3,7 +3,7 @@ import { exec } from 'node:child_process'
 import { createServer, Server } from 'node:http'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { McpServerConfig } from '../shared/types'
-import { TokenStore } from './token-store'
+import { TokenStore, type TokenData } from './token-store'
 import { fetchWithRetry } from '../providers/fetch-utils'
 import { createT } from '../i18n-core/t'
 import enUS from '../i18n-core/locales/en-US.json'
@@ -21,6 +21,29 @@ interface TokenResponse {
   refreshToken?: string
   expiresAt: string
   scopes?: string[]
+}
+
+/**
+ * 这份凭证**绑给谁** —— 即它会流经哪几个端点、以哪个 client 身份取得。
+ *
+ * 为什么需要：`TokenStore` 只按**服务名**存（`<name>.enc`），而这个名来自
+ * `.mcp.json` —— 那是**从 cwd 读**的项目级配置。clone 一个仓库就等于让它给你的
+ * MCP 服务起名，于是「名字相同」推不出「签发方相同」：把某个常见名（如 `github`）
+ * 的 url / tokenUrl 指到别处，缓存里那份真凭证就会被送给新的主机 —— access token
+ * 被直接塞进 env 交给对面，refresh token 被 POST 给对面的令牌端点（后者更危险：
+ * 它能换出新的 access token）。
+ *
+ * 绑定的是**凭证会去的地方**，四者任一变化即视为另一份凭证：授权端点、令牌端点、
+ * client 身份、资源端点（access token 最终发给它）。
+ */
+export function credentialBinding(config: McpServerConfig): string {
+  const auth = config.auth
+  return JSON.stringify([
+    auth?.authorizationUrl ?? '',
+    auth?.tokenUrl ?? '',
+    auth?.clientId ?? '',
+    config.url ?? '',
+  ])
 }
 
 function base64url(buf: Buffer): string {
@@ -127,12 +150,28 @@ export class OAuthClient {
       scopes: data.scope?.split(' '),
     }
 
-    this.store.save(config.name, result)
+    this.store.save(config.name, { ...result, boundTo: credentialBinding(config) })
     return result
   }
 
-  async getValidAccessToken(serverName: string, config: McpServerConfig): Promise<string> {
+  /**
+   * 取回该服务名下的凭证 —— **仅当它确实是当前这份配置签发的**。
+   *
+   * 绑定值不符时**不删**：把配置改回去，这份凭证仍然有效，而删除是不可逆的副作用。
+   * 但也**不用**它 —— 换过端点之后，「同名」不再说明任何事。
+   *
+   * 旧版本存下的凭证没有 `boundTo`（`undefined`）⇒ 一律不匹配 ⇒ 走一次 PKCE 重新
+   * 授权。这是认下的代价：无法核实签发方的凭证，就是不能拿出去用，而多授权一次
+   * 的代价远小于把一份 refresh token 交给别人的端点。
+   */
+  private loadBoundToken(serverName: string, config: McpServerConfig): TokenData | null {
     const saved = this.store.load(serverName)
+    if (!saved) return null
+    return saved.boundTo === credentialBinding(config) ? saved : null
+  }
+
+  async getValidAccessToken(serverName: string, config: McpServerConfig): Promise<string> {
+    const saved = this.loadBoundToken(serverName, config)
     if (saved && new Date(saved.expiresAt).getTime() > Date.now() + 60000) {
       return saved.accessToken
     }
@@ -144,9 +183,11 @@ export class OAuthClient {
   }
 
   async refreshAccessToken(serverName: string, config: McpServerConfig): Promise<string> {
-    const saved = this.store.load(serverName)
+    const saved = this.loadBoundToken(serverName, config)
     if (!saved?.refreshToken) {
-      throw new Error(`No refresh token available for "${serverName}"`)
+      throw new Error(
+        `No refresh token available for "${serverName}" — none stored, or the stored one was issued for a different endpoint`,
+      )
     }
     const auth = config.auth!
     // A single failed refresh is often a transient network/server error, not a
@@ -179,6 +220,7 @@ export class OAuthClient {
       accessToken: data.access_token,
       refreshToken: data.refresh_token || saved.refreshToken,
       expiresAt: new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString(),
+      boundTo: credentialBinding(config),
     })
     return data.access_token
   }

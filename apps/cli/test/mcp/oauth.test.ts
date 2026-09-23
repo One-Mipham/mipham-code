@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
-import { OAuthClient } from '../../src/mcp/oauth'
+import { OAuthClient, credentialBinding } from '../../src/mcp/oauth'
 import { TokenStore } from '../../src/mcp/token-store'
+import type { McpServerConfig } from '../../src/shared/types'
 import { createServer, Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -103,12 +104,7 @@ describe('OAuthClient', () => {
 
   it('getValidAccessToken returns existing non-expired token', async () => {
     const store = new TokenStore(testDir)
-    store.save('cached-srv', {
-      accessToken: 'cached-token',
-      expiresAt: new Date(Date.now() + 3600000).toISOString(),
-    })
-    const client = new OAuthClient(store)
-    const token = await client.getValidAccessToken('cached-srv', {
+    const config: McpServerConfig = {
       name: 'cached-srv',
       command: 'echo',
       args: [],
@@ -118,19 +114,22 @@ describe('OAuthClient', () => {
         tokenUrl: '',
         clientId: '',
       },
+    }
+    // 写入时必须绑上签发方 —— 绑定值由被测代码同一个函数算出，测试不另抄一份，
+    // 否则两边可以各自漂移而测试照样绿。
+    store.save('cached-srv', {
+      accessToken: 'cached-token',
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      boundTo: credentialBinding(config),
     })
+    const client = new OAuthClient(store)
+    const token = await client.getValidAccessToken('cached-srv', config)
     expect(token).toBe('cached-token')
   })
 
   it('getValidAccessToken refreshes expired token', async () => {
     const store = new TokenStore(testDir)
-    store.save('expired-srv', {
-      accessToken: 'old-token',
-      refreshToken: 'refresh-me',
-      expiresAt: new Date(Date.now() - 3600000).toISOString(),
-    })
-    const client = new OAuthClient(store)
-    const token = await client.getValidAccessToken('expired-srv', {
+    const config: McpServerConfig = {
       name: 'expired-srv',
       command: 'echo',
       args: [],
@@ -140,7 +139,15 @@ describe('OAuthClient', () => {
         tokenUrl: `http://localhost:${authPort}/token`,
         clientId: '',
       },
+    }
+    store.save('expired-srv', {
+      accessToken: 'old-token',
+      refreshToken: 'refresh-me',
+      expiresAt: new Date(Date.now() - 3600000).toISOString(),
+      boundTo: credentialBinding(config),
     })
+    const client = new OAuthClient(store)
+    const token = await client.getValidAccessToken('expired-srv', config)
     expect(token).toBe('mock-access-token-123')
   }, 15000)
 
@@ -163,6 +170,7 @@ describe('OAuthClient', () => {
         accessToken: 'old-token',
         refreshToken: 'refresh-me',
         expiresAt: new Date(Date.now() - 3600000).toISOString(),
+        boundTo: credentialBinding(config),
       })
       const client = new OAuthClient(store)
 
@@ -201,6 +209,7 @@ describe('OAuthClient', () => {
         accessToken: 'old-token',
         refreshToken: 'refresh-me',
         expiresAt: new Date(Date.now() - 3600000).toISOString(),
+        boundTo: credentialBinding(config),
       })
       const client = new OAuthClient(store)
 
@@ -225,6 +234,130 @@ describe('OAuthClient', () => {
       } finally {
         pkceSpy.mockRestore()
         vi.unstubAllGlobals()
+      }
+    })
+  })
+
+  // 凭证只按服务名存，而服务名来自 `.mcp.json` —— 那是**从 cwd 读**的项目级配置，
+  // clone 一个仓库就等于让它给你的 MCP 服务起名。「同名」因而推不出「同一签发方」，
+  // 下面钉的就是这条推论：名字一样、端点不同 ⇒ 缓存里那份真凭证一个字节都不许出去。
+  describe('凭证绑定：同名服务不等于同一签发方', () => {
+    const mkConfig = (over: Partial<McpServerConfig> = {}): McpServerConfig => ({
+      name: 'gh',
+      url: 'https://mcp.example/rpc',
+      auth: {
+        type: 'oauth',
+        authorizationUrl: 'https://auth.example/authorize',
+        tokenUrl: 'https://auth.example/token',
+        clientId: 'client-1',
+      },
+      ...over,
+    })
+
+    const saveBound = (store: TokenStore, config: McpServerConfig, extra = {}) => {
+      store.save(config.name, {
+        accessToken: 'cached-token',
+        refreshToken: 'real-refresh-token',
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
+        boundTo: credentialBinding(config),
+        ...extra,
+      })
+    }
+
+    it('绑定值覆盖四个字段，任一变化即不同（同一份配置则恒等）', () => {
+      const base = credentialBinding(mkConfig())
+      expect(credentialBinding(mkConfig())).toBe(base)
+      const auth = mkConfig().auth!
+      for (const over of [
+        { url: 'https://evil.example/rpc' },
+        { auth: { ...auth, tokenUrl: 'https://evil.example/token' } },
+        { auth: { ...auth, authorizationUrl: 'https://evil.example/authorize' } },
+        { auth: { ...auth, clientId: 'client-2' } },
+      ] as Partial<McpServerConfig>[]) {
+        expect(credentialBinding(mkConfig(over))).not.toBe(base)
+      }
+    })
+
+    it('正控：签发方一致 ⇒ 用缓存凭证，不重新授权', async () => {
+      // 少了这条，下面「端点变了就不给」只能证明这个函数对什么都不给。
+      const store = new TokenStore(testDir)
+      const config = mkConfig()
+      saveBound(store, config)
+      const client = new OAuthClient(store)
+      const pkceSpy = vi
+        .spyOn(client, 'executePkceFlow')
+        .mockRejectedValue(new Error('不该走 PKCE'))
+      try {
+        expect(await client.getValidAccessToken('gh', config)).toBe('cached-token')
+        expect(pkceSpy).not.toHaveBeenCalled()
+      } finally {
+        pkceSpy.mockRestore()
+      }
+    })
+
+    it('资源端点被换掉 ⇒ 缓存凭证不给出（access token 不发往新主机）', async () => {
+      const store = new TokenStore(testDir)
+      const saved = mkConfig()
+      saveBound(store, saved)
+      const client = new OAuthClient(store)
+      const pkceSpy = vi.spyOn(client, 'executePkceFlow').mockResolvedValue({
+        accessToken: 'fresh-token',
+        refreshToken: 'fresh-refresh',
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      })
+      try {
+        const token = await client.getValidAccessToken(
+          'gh',
+          mkConfig({ url: 'https://evil.example/rpc' }),
+        )
+        expect(token).toBe('fresh-token')
+        expect(token).not.toBe('cached-token')
+        expect(pkceSpy).toHaveBeenCalledTimes(1)
+      } finally {
+        pkceSpy.mockRestore()
+      }
+    })
+
+    it('令牌端点被换掉 ⇒ 拒绝刷新，且**在外发之前**就拒绝', async () => {
+      const store = new TokenStore(testDir)
+      const saved = mkConfig()
+      saveBound(store, saved, { expiresAt: new Date(Date.now() - 3600000).toISOString() })
+      const client = new OAuthClient(store)
+      // 判据是「一次都没发出去」，所以两面都钉：报的是绑定错误（而不是网络错误），
+      // 且 fetch 零调用 —— 后者才是 refresh token 没外流的直接证据。
+      const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }))
+      vi.stubGlobal('fetch', fetchMock)
+      try {
+        await expect(
+          client.refreshAccessToken(
+            'gh',
+            mkConfig({ auth: { ...saved.auth!, tokenUrl: 'http://127.0.0.1:1/token' } }),
+          ),
+        ).rejects.toThrow(/different endpoint/)
+        expect(fetchMock).not.toHaveBeenCalled()
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+
+    it('旧版本写下的凭证（没有 boundTo）一律视为不可用', async () => {
+      // 这是认下的代价：无法核实签发方的凭证不能拿出去用 ⇒ 老用户多授权一次。
+      const store = new TokenStore(testDir)
+      store.save('gh', {
+        accessToken: 'legacy-token',
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      })
+      const client = new OAuthClient(store)
+      const pkceSpy = vi.spyOn(client, 'executePkceFlow').mockResolvedValue({
+        accessToken: 'fresh-token',
+        refreshToken: 'fresh-refresh',
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      })
+      try {
+        expect(await client.getValidAccessToken('gh', mkConfig())).toBe('fresh-token')
+        expect(pkceSpy).toHaveBeenCalledTimes(1)
+      } finally {
+        pkceSpy.mockRestore()
       }
     })
   })

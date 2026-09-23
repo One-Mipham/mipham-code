@@ -11,12 +11,18 @@ import { join, dirname } from 'node:path'
 import { encrypt, decrypt, getCredentialKey } from '../config/credential-crypto'
 import { miphamHome } from '../core/paths.ts'
 
-interface TokenData {
+export interface TokenData {
   accessToken: string
   refreshToken?: string
   expiresAt: string
   createdAt?: string
   scopes?: string[]
+  /**
+   * 这份凭证绑给哪个签发方（见 `credentialBinding`）。缺失 = 绑定未知，
+   * 调用方必须当作**不可用** —— 凭证只按服务名存，而服务名来自可从 cwd 读的
+   * 项目级配置，故「同名」推不出「同一签发方」。
+   */
+  boundTo?: string
 }
 
 export class TokenStore {
