@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.85.2] — 2026-09-23
+
+### Security
+
+- **路径型权限规则按字面拼法判定 —— 一个符号链接就能把它抹掉，deny 与 allow 两个方向都中**
+  `Read(**/.env)` 从前只看模型发来的那条路径拼法。`notes.txt` 是指向 `.env` 的符号链接时，
+  「读 notes.txt」就是「读 .env」，而规则看不到 ⇒ 一条 deny 被一个 `ln -s` 抹掉；Bash 的
+  `cat notes.txt` 走同一条文件访问分支，同样漏。**allow 方向是同一个洞的镜像，方向相反**：
+  一句 `"allow": ["Read(**/*.txt)"]` 会把一个指向 `.env` 的 `.txt` 链接一并**静默放行** ——
+  allow 即 bypass，终端里连弹窗都没有。判定现在按**落点**（`realpathSync`）再判一次，两侧都落在
+  安全的那一边：deny/ask 补上只会多命中（fail-closed），allow 补上只会少放行。
+- **MCP OAuth 凭证只按「服务名」复用** —— `TokenStore` 只按名字存（`<name>.enc`），而这个名来自
+  `.mcp.json`、那是**从 cwd 读**的项目级配置：clone 一个仓库就等于让它给你的 MCP 服务起名。于是
+  「名字相同」推不出「签发方相同」—— 把某个常见名的 url / tokenUrl 指到别处（或由克隆来的仓库
+  直接这么写），缓存里那份真凭证就被送去新的主机。凭证现在带**绑定值**，端点等任一要素变化即
+  视为新授权方、重新授权。
+- **隐藏字符剥离删过头 —— 写盘路径静默改写用户文件内容**（这是我们自己上一批埋的）
+  `DANGEROUS_UNICODE` 的零宽段写作闭区间 `\u{200B}-\u{200F}`，把区间内的 U+200C（ZWNJ）与
+  U+200D（ZWJ）一并吞掉。这两个是**承重**字符、不是藏字手段：ZWNJ 黏住波斯/阿拉伯语后缀
+  （实测一个含 ZWNJ 的 6 字符词形被剥成 5 字符），ZWJ 是把家庭 emoji 的三个码位黏成**一个**
+  字形的方式（剥掉会散成三段）。两者已移出剥离集合 —— 该集合的目的是「不让人用不可见字符藏
+  指令」，而这两个在**执行层没有可藏之处**（实测 `bash -c 'ec<ZWJ>ho hi'` ⇒ `command not found`）。
+
+### Fixed
+
+- **半截写赔上全部状态** —— 这一族的形状是「非原子写 + 读侧把读不动兜成空」：`writeFileSync`
+  写到一半被杀（SIGKILL / 断电 / `timeout` 到点）留下半截 JSON，而读侧一句
+  `catch { /* corrupt — start fresh */ }` 把它当成「文件损坏」直接清空 —— 一次崩溃赔上**全部**
+  规则 / 签名 / 统计 / 记忆，不是丢一条。25 个模块收口到原子写，读侧加**形状闸**（合法 JSON
+  不等于合法形状），并留两份**两向**守卫（裸写清单、FIFO 接线探针）拦住这一族再长回来。
+- **配置路径上是 FIFO 时启动挂死** —— `existsSync` 对 FIFO / socket / 设备节点 / 目录**一律为
+  真**，而 `readFileSync` 读一个没有写者的 FIFO 会**同步**阻塞到有写者出现：一条
+  `mkfifo ~/.mipham/config.yml` 就能让 CLI 启动永久挂住 —— 没有输出、没有报错，也没有任何东西
+  能给它计时（阻塞发生在同步调用里，定时器与 signal handler 都排不上队）。闸门改按**文件类型**判
+  （新增 `shared/regular-file.ts`；用跟随符号链接的 `statSync`，所以软链进 dotfiles 仓库的配置
+  照旧可用）。
+- **Ctrl+C 在对话框里误按一次就杀掉整个 CLI** —— 密钥提示 / 模型选择器开着时，Ctrl+C 的合理语义
+  是「停下手上这件事」，实际行为却是直接退出，输入框里的半句话与当前会话一起没。根因不在我们的
+  分支写得对不对，而在**它根本跑不到**：Ink 的 `exitOnCtrlC` 默认为 `true`，在按键**到达任何
+  handler 之前**就退进程。现在对话框自己接管这一格。
+- **hook 没能跑完时理由无处可归** —— `spawnSync` 对「起不来 / 跑不完」**不抛**，它把成因放在
+  `result` 上：超时是 `ETIMEDOUT`，命令不存在是 `ENOENT`，被外部信号杀死是 `status: null` +
+  `signal` 而**根本没有 error**。三者的 `stderr` 全是空的，于是都落进同一条分支、产出**逐字相同**
+  的空理由。三种形状现在各自可归因。**同族第二笔**：给它喂 stdin 的那次写入会与子进程退出**赛跑**，
+  输了带 `EPIPE`，而它排在退出码与信号**之前**被读走 ⇒ 把我们自己的写失败**顶替**了子进程真实说
+  的（`Hook warning: boom` 被改写成 `Hook error: … EPIPE`）。
+- **发给后台 agent 的消息从来没送到** —— 它被三处广告为可寻址：`agent` 工具的输出印着
+  `taskId="bg-…"`，`SendMessage` 的描述写着「a background task ID for same-process agents」，
+  路由器认这个前缀并返回 `success: true`。而全仓 `poll(` 只有一个调用点、收件人又只认
+  `[sessionId, 'main']` ⇒ **没有人读那个地址**。地址交接与每回合自排空两半都补上（缺一即失效）。
+- **子代理没有断环器** —— 引擎早有「连续被拒 3 次就把『换个做法』挂进拒信」的熔断，子代理那条
+  自写的循环对它**零引用**，而它只有 5 轮且没人可问 ⇒ 被拒的调用一轮轮重试，直到把整个运行耗光。
+  阈值收成公共常量，两个读者不能各漂。
+- **同一段对话发给两个 provider 是两个 payload** —— 引擎把上一轮 provider 的报错存成 `system`
+  条目（好让 resume 渲染 ⚠ 行），而 `openai-compat` **原样以 system 角色发出** ⇒ 把**来自
+  provider 的文本**提到了最高权限角色；`anthropic` 对 system 条目是跳过。system 条目现在只是
+  header（仅首位、且不与 `systemPrompt` 并存）。**同笔带出一处镜像缺陷**：汇总调用**正是**用
+  数组里的 system 条目发指令 ⇒ 走 OpenAI 兼容的 provider 读得到、`anthropic` 读不到（汇总退化成
+  「自己看着办」）⇒ 指令改走 `systemPrompt`。
+- **`Task output` / `Task stop` 只认本地 id 空间** —— 这两个 action 只查模块内的 `tasks` Map，
+  它的 id 是 `"1"`,`"2"`…；而后台 id 由 BackgroundAgentRegistry 另铸。于是 Agent 工具**广告出去
+  的那个 `bg-…` 调用只可能回 not found**。补上桥接（原来那条桥判的是 provider registry、又强转
+  一个本就声明在 `ToolContext` 上的字段、还写在早退之后），顺带删掉**从未有写入点**的
+  `Task.output` 与两个死读点 —— 那是个读一个永不被填的字段的**假入口**。
+
+测试 3,083 → 3,188（265 文件，0 失败）。
+
 ## [0.85.1] — 2026-09-23
 
 ### Fixed

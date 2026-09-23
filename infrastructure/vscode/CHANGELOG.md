@@ -3,6 +3,48 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.2 — 2026-09-23
+
+- Version sync with Mipham Code CLI 0.85.2
+- Security: path-scoped permission rules matched the literal path spelling, so a symlink whose
+  **name** matched an allow rule but whose **target** was a protected file (a `notes.txt`
+  pointing at `.env`) was silently permitted — and a `deny` rule was erased the same way.
+  Matching now also tests the resolved path. Both directions are fixed: this is one shape with
+  two mirrors, and the `deny` half landed separately from the `allow` half
+- Security: MCP OAuth credentials were cached by server **name** alone. That name comes from the
+  project-level `.mcp.json`, so pointing a familiar name at a different issuer silently handed
+  the previously issued token to the new host. Credentials now carry a binding; any of the
+  bound values changing means re-authorisation
+- Security: the invisible-character strip set was a closed range that swallowed ZWNJ and ZWJ.
+  Both are load-bearing rather than a hiding trick — ZWNJ holds Persian/Arabic word forms
+  together, ZWJ is how a family emoji stays one glyph — so writing a file silently rewrote its
+  content. Neither can hide anything at the execution layer
+- Fixed: `Ctrl+C` with a dialog open (key prompt, model picker) killed the whole CLI, taking the
+  half-typed input with it, instead of dismissing the dialog. The root cause was that our
+  handler never ran — Ink exits the process on Ctrl-C before any handler sees the key
+- Fixed: a config path that is a FIFO hung startup forever, with no output and no error. The
+  gate now tests the file **type**, not its existence (`existsSync` is true for a FIFO, a
+  socket, a device node and a directory alike, and reading a writer-less FIFO blocks
+  synchronously, where no timer or signal handler can run)
+- Fixed: state files were written non-atomically and the read side turned "cannot read" into
+  "empty", so one interrupted write cost **all** of the rules / signatures / statistics /
+  memory, not one entry. 25 modules now write atomically, the read side validates shape, and
+  two two-way guards keep the family from growing back
+- Fixed: a hook that timed out, a hook command that did not exist, and a hook killed by a signal
+  all reported the same empty reason. The three shapes are now distinguished, and a failed write
+  to a hook's stdin no longer replaces what the hook actually said
+- Fixed: messages sent to a background agent were never delivered. The address was advertised
+  (`taskId="bg-…"`), accepted by the router, and answered `success: true` — but nothing ever
+  drained the inbox
+- Fixed: a subagent had no circuit breaker, so a tool call the permission layer kept refusing
+  was retried round after round until the whole run was consumed
+- Fixed: a failed turn left the provider's error text as a `system` entry inside the message
+  array, and the OpenAI-compatible providers sent it as-is — promoting provider-supplied text
+  to the highest-privilege role. The summarisation instruction travelled the same way and so
+  reached only half the providers
+- Fixed: `Task output` / `Task stop` only knew the local task id space, so the `bg-…` id that
+  the `agent` tool advertises always answered "not found"
+
 ## 0.85.1 — 2026-09-23
 
 - Version sync with Mipham Code CLI 0.85.1
