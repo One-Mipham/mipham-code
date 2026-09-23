@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterAll } from 'vitest'
 import { SubAgent } from '../../src/agent/sub-agent'
 import { getMessageBus } from '../../src/agent/message-bus'
+import { getBackgroundAgentRegistry } from '../../src/agent/background-registry'
 import { AgentExperience } from '../../src/agent/agent-experience'
 import type { ProviderRegistry, ProviderInstance, ChatRequest } from '../../src/providers/registry'
 import type { Llm } from '../../src/providers/llm'
@@ -757,5 +758,89 @@ describe('AgentExperience', () => {
     exp.logSuccess('Something', 'Context')
     exp.reset()
     expect(exp.getExperience()).toBe('')
+  })
+})
+
+/**
+ * A background agent is *advertised* as addressable: the `agent` tool prints
+ * `taskId="bg-…"`, `SendMessage`'s description offers "a background task ID for
+ * same-process agents", and `MessageRouter` accepts it and answers
+ * `{ success: true, routedTo: 'bus' }`.
+ *
+ * What that success was worth: nothing read `bg-…`. The bus's only reader polled
+ * `[sessionId, 'main']`, so the message sat unread until the 1-hour prune —
+ * delivered according to the sender, never according to the agent. Same shape as
+ * the max-turns notice, which tells the model to "Use SendMessage to continue
+ * this sub-agent".
+ */
+describe('SubAgent — 后台 agent 的收件箱', () => {
+  it('a message sent while it works reaches its next turn', async () => {
+    // Snapshots, not references: the loop pushes into the live array, so a stored
+    // reference would show the later turn's message in the first turn's call too
+    // — the first assertion below would then fail for a reason of my own making.
+    const turnMessages: Array<Array<{ role: string; content: unknown }>> = []
+    let chatCalls = 0
+    let addressUsed: string | undefined
+
+    const provider: ProviderInstance = {
+      config: { id: 'mock', name: 'Mock', protocol: 'openai-compatible', apiKey: '', models: [] },
+      async *chat(req: ChatRequest): AsyncGenerator<StreamChunk> {
+        turnMessages.push([...req.messages] as Array<{ role: string; content: unknown }>)
+        chatCalls++
+        if (chatCalls === 1) {
+          // The parent sends mid-run, to the name it was given in the tool output.
+          const running = getBackgroundAgentRegistry().listRunning().at(-1)!
+          addressUsed = running.id
+          getMessageBus().post('main', running.id, 'steer', 'also check the tests')
+          // A tool call, so the loop takes a second turn rather than breaking.
+          yield {
+            type: 'tool_use',
+            toolUse: { type: 'tool_use', id: '1', name: 'Bash', input: {} },
+          }
+          yield { type: 'stop' }
+          return
+        }
+        yield { type: 'text', content: 'done' }
+        yield { type: 'stop' }
+      },
+      async listModels() {
+        return []
+      },
+      async healthCheck() {
+        return true
+      },
+    }
+
+    const registry = createMockRegistry(provider)
+    const noop: ToolDefinition = {
+      name: 'Bash',
+      description: 'noop',
+      category: 'exec',
+      permission: 'self',
+      parameters: { type: 'object', properties: {} },
+      execute: async () => ({ success: true, content: 'ok' }),
+    }
+    const sub = new SubAgent(registry, new Map([['Bash', noop]]))
+
+    const handle = await sub.execute('do the work', 'bg task', {
+      type: 'general',
+      runInBackground: true,
+      autoPatternAnalysis: false,
+    })
+    const id = /bg-[^\]]+/.exec(handle)?.[0] ?? ''
+    expect(id).toMatch(/^bg-/)
+    await new Promise<void>((resolve) =>
+      getBackgroundAgentRegistry().onComplete(id, () => resolve()),
+    )
+
+    // The address the sender used is the one the agent drains — not merely a
+    // message that happens to be in the bus.
+    expect(addressUsed).toBe(id)
+    expect(turnMessages.length).toBeGreaterThan(1)
+    expect(JSON.stringify(turnMessages[0])).not.toContain('also check the tests')
+    expect(JSON.stringify(turnMessages[1])).toContain('Message from @main: steer')
+
+    // And it is consumed, not re-injected on every later turn.
+    expect(getMessageBus().unreadCount(id)).toBe(0)
   })
 })

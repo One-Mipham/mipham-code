@@ -1,10 +1,10 @@
 import type { ProviderRegistry } from '../providers/registry'
 import type { Llm } from '../providers/llm'
-import type { ToolDefinition, ToolContext } from '../shared/index.ts'
+import type { Message, ToolDefinition, ToolContext } from '../shared/index.ts'
 import type { SubAgentType, SubAgentOptions, AgentDefinition } from './types'
 import { createAgentContext } from './agent-context'
 import { getBackgroundAgentRegistry } from './background-registry'
-import { getMessageBus } from './message-bus'
+import { formatInboundMessage, getMessageBus } from './message-bus'
 import type { HookEngine } from '../core/hooks'
 import { PermissionSystem } from '../core/permission'
 import { AgentExperience } from './agent-experience'
@@ -91,14 +91,14 @@ export class SubAgent {
     if (options.runInBackground) {
       const bgRegistry = getBackgroundAgentRegistry()
 
-      const taskId = bgRegistry.spawn(description, agentType, async (signal) => {
+      const taskId = bgRegistry.spawn(description, agentType, async (signal, agentId) => {
         // Run the synchronous execution inside the background executor, reporting
         // cumulative token usage back to the registry for live footer display.
         const opts: SubAgentOptions = {
           ...options,
           onTokenUsage: (total) => bgRegistry.updateTokenUsage(taskId, total),
         }
-        return this.runExecution(prompt, opts, signal)
+        return this.runExecution(prompt, opts, signal, agentId)
       })
 
       // Register completion callback for hook firing
@@ -210,10 +210,35 @@ export class SubAgent {
   /**
    * Internal execution method — shared by sync and background paths.
    */
+  /**
+   * Drain same-process messages addressed to *this* agent into its own turn,
+   * mirroring `Engine.drainInboundMessages` for the main session.
+   *
+   * Only the background path has an address to drain: `bg-…` is the recipient the
+   * message router publishes to, and it is minted by the registry — which is why
+   * `spawn` hands it to the executor. Until this ran, `SendMessage` to a running
+   * background agent returned `success: true, routedTo: 'bus'` and the message was
+   * read by nobody: the bus's only reader polled `[sessionId, 'main']`, so what
+   * the sender was told had been delivered sat there until the 1-hour prune.
+   * (The same hole the max-turns notice advertises away — "Use SendMessage to
+   * continue this sub-agent".)
+   */
+  private drainInboundMessages(agentId: string | undefined, messages: Message[]): number {
+    if (!agentId) return 0
+    const bus = getMessageBus()
+    const inbound = bus.poll(agentId)
+    for (const msg of inbound) {
+      messages.push({ role: 'user', content: formatInboundMessage(msg) })
+    }
+    if (inbound.length > 0) bus.markAllRead(agentId)
+    return inbound.length
+  }
+
   private async runExecution(
     prompt: string,
     options: SubAgentOptions,
     signal?: AbortSignal,
+    agentId?: string,
   ): Promise<string> {
     if (!this.registry.getActive()) {
       throw new Error('No active provider available for sub-agent execution')
@@ -390,6 +415,10 @@ export class SubAgent {
         if (signal?.aborted) {
           throw new DOMException('Aborted', 'AbortError')
         }
+
+        // Per turn, not once per run: a peer can write while this agent is mid
+        // task, and the point of the channel is to steer the work in progress.
+        this.drainInboundMessages(agentId, currentMessages)
 
         const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
         let turnText = ''

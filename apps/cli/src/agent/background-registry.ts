@@ -83,12 +83,16 @@ export class BackgroundAgentRegistry {
    *
    * @param description - Human-readable description
    * @param agentType - Sub-agent type (general, explore, plan, code-review)
-   * @param executor - Async function that performs the work
+   * @param executor - Async function that performs the work. Given the task's
+   *   abort signal **and its id**: the id is minted here, and it is the address
+   *   peers send to (`SendMessage` → `MessageRouter` → this `bg-…`), so an
+   *   executor that never learns it has no way to be reachable. Callers that do
+   *   not need it can keep declaring just the signal.
    */
   spawn(
     description: string,
     agentType: string,
-    executor: (signal: AbortSignal) => Promise<string>,
+    executor: (signal: AbortSignal, id: string) => Promise<string>,
     kind: BackgroundTaskKind = 'interactive',
   ): string {
     const id = `bg-${++this.idCounter}-${Date.now().toString(36)}`
@@ -132,7 +136,7 @@ export class BackgroundAgentRegistry {
     }
 
     // Execute in background — do NOT await
-    executor(task.abortController.signal)
+    executor(task.abortController.signal, id)
       .then((result) => {
         task.status = 'completed'
         task.completedAt = new Date()
