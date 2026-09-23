@@ -3,6 +3,7 @@ import { Box, Text, useInput } from 'ink'
 import TextInput from 'ink-text-input'
 import { execSync } from 'node:child_process'
 import { ErrorBoundary } from './error-boundary'
+import { useCtrlCConfirm } from './ctrl-c-confirm'
 import { formatThinking } from './thinking'
 import type { QueryEngine } from '../core/engine'
 import type { RemoteEngine } from '../daemon/remote-engine'
@@ -1136,22 +1137,55 @@ export function App({
     [engine, mkCtx, runTurn],
   )
 
-  useInput((_input, key) => {
+  /**
+   * 关掉「最上面那一层」—— 密钥提示框 / 选择器 / 正在跑的回合。关掉了返回 true。
+   *
+   * Esc 与 Ctrl+C 共用这一份：在用户心里这两个键是同一件事（「停」），分成两套
+   * 判断迟早会漂移。没有可关的东西 ⇒ false，由调用方决定下一步。
+   */
+  const dismissTopmost = (): boolean => {
+    if (apiKeyPrompt) {
+      setApiKeyPrompt(null)
+      setApiKeyInput('')
+      return true
+    }
+    if (pickerOpen) {
+      setPickerOpen(false)
+      return true
+    }
+    if (isLoading && abortRef.current) {
+      abortRef.current.abort()
+      return true
+    }
+    return false
+  }
+
+  // Ctrl+C 的「再按一次才退」，语义与计时器见 ui/ctrl-c-confirm.ts
+  const ctrlC = useCtrlCConfirm()
+
+  useInput((input, key) => {
+    // Ctrl+C：先关最上面那一层；没得关时**不退出**，只提示「再按一次」。
+    //
+    // 从前这里没有这个分支，而 Ink 自己的 Ctrl+C 处理（`exitOnCtrlC`，默认
+    // true）在按键**到达任何 handler 之前**就把进程退了 —— 于是对话框里一次
+    // 误按就把整个会话带走。`render()` 三处均已传 `exitOnCtrlC: false`，
+    // 否则这个分支永远不会被调用（见 src/index.tsx 的注释）。
+    if (key.ctrl && input === 'c') {
+      if (dismissTopmost()) {
+        // 这一按被「关掉最上面一层」消费掉了 —— 用户想的是「停」，不是「退」，
+        // 所以待确认窗口要一并撤掉，免得下一次误按直接退出。
+        ctrlC.reset()
+        return
+      }
+      if (ctrlC.isArmed()) {
+        process.exit(0)
+      }
+      ctrlC.arm()
+      return
+    }
     // Escape: close apiKeyPrompt → close picker → abort loading (does NOT exit app)
     if (key.escape) {
-      if (apiKeyPrompt) {
-        setApiKeyPrompt(null)
-        setApiKeyInput('')
-        return
-      }
-      if (pickerOpen) {
-        setPickerOpen(false)
-        return
-      }
-      if (isLoading && abortRef.current) {
-        abortRef.current.abort()
-        return
-      }
+      if (dismissTopmost()) return
       // Otherwise let InputBar handle Escape (clear draft)
       return
     }
@@ -1372,6 +1406,7 @@ export function App({
                   {' · '}
                   {t('ui.status.left_for_agents')}
                 </Text>
+                {ctrlC.armed && <Text color="yellow"> {t('ui.status.ctrl_c_again')}</Text>}
               </Box>
             </Box>
 

@@ -893,6 +893,7 @@
     },
     "status": {
       "esc_to_interrupt": "Esc 中断",
+      "ctrl_c_again": "再按一次 Ctrl+C 退出",
       "shift_tab_cycle": "Shift+Tab",
       "left_for_agents": "ctrl+g 管理代理",
       "mipham_modes": "Mipham独有",

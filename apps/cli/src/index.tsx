@@ -346,6 +346,10 @@ export async function runApp(options: RunOptions): Promise<void> {
           sessionId: options.remoteSession.sessionId,
         }),
       }),
+      // Ink 默认 exitOnCtrlC: true，它在**任何 handler 拿到按键之前**就退进程
+      // （App.js `input === '\x03'`，且 useInput 那条路还会跳过全部监听器）。
+      // 于是 Ctrl+C 的语义只能由我们自己定 —— 见 App 里的「再按一次才退」。
+      { exitOnCtrlC: false },
     )
     await waitUntilExit()
 
@@ -364,6 +368,7 @@ export async function runApp(options: RunOptions): Promise<void> {
         onAttach={() => {}}
         onExit={() => process.exit(0)}
       />,
+      { exitOnCtrlC: false },
     )
     await waitUntilExit()
     process.exit(0)
@@ -868,6 +873,7 @@ export async function runApp(options: RunOptions): Promise<void> {
         t,
       }),
     }),
+    { exitOnCtrlC: false },
   )
   await waitUntilExit()
   saveAndExit()

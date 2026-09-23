@@ -893,6 +893,7 @@
     },
     "status": {
       "esc_to_interrupt": "esc to interrupt",
+      "ctrl_c_again": "ctrl+c again to exit",
       "shift_tab_cycle": "shift+tab",
       "left_for_agents": "ctrl+g agents to manage",
       "mipham_modes": "Mipham",

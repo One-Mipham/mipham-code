@@ -13,6 +13,7 @@ import { Box, Text, useInput } from 'ink'
 import { AgentViewManager, type AgentSession, type SessionStatus } from './agent-view-manager'
 import { SessionRow } from './session-row'
 import { SessionPeek } from './session-peek'
+import { useCtrlCConfirm } from '../ui/ctrl-c-confirm'
 
 interface DashboardProps {
   manager: AgentViewManager
@@ -34,6 +35,9 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
   const [feedback, setFeedback] = useState<string | null>(null)
   // Bump to force flatList recompute after a session is removed (list membership change).
   const [version, setVersion] = useState(0)
+
+  // Ctrl+C 的「再按一次才退」，与主界面同源（见 ui/ctrl-c-confirm.ts）
+  const ctrlC = useCtrlCConfirm()
 
   // Flash a brief feedback message that auto-clears
   const showFeedback = useCallback((msg: string) => {
@@ -112,6 +116,24 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
   )
 
   useInput((input, key) => {
+    // Ctrl+C 不再一下就退出（Ink 的 `exitOnCtrlC` 已在 render 处关掉，见
+    // src/index.tsx）：第一次只提示，再按一次才走。面板里 Esc 已经是退出键，
+    // 所以这里只补「误按一次不带走整个面板」。
+    if (key.ctrl && input === 'c') {
+      if (peekingSessionId) {
+        setPeekingSessionId(null)
+        ctrlC.reset()
+        return
+      }
+      if (ctrlC.isArmed()) {
+        onExit()
+        return
+      }
+      ctrlC.arm()
+      showFeedback('Ctrl+C again to exit')
+      return
+    }
+
     if (key.escape) {
       if (peekingSessionId) {
         setPeekingSessionId(null)
