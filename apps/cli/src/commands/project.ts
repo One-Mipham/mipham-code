@@ -478,7 +478,7 @@ const setupCmd: CommandHandler = async (ctx, args) => {
   ${skills.length} loaded (${standardSkills} standard + ${miphamSkills} mipham)
 
   Permissions
-  Mode: ${ctx.config.permission}  ·  Tools: ${ctx.engine.getTools().size}
+  Mode: ${ctx.engine.getPermission().getMode()}  ·  Tools: ${ctx.engine.getTools().size}
 
 
   ── Setup Steps ──

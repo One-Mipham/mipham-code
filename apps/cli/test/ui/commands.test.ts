@@ -48,9 +48,14 @@ const mkCtx = (messages: unknown[] = []) =>
         getCheckpoints: () => [],
       }),
       getUsageTracker: () => ({ totalApiTokens: 0 }),
+      // The permission system the reports read their mode from. A stub that
+      // omits it only fails once a command reads it — "the method is missing"
+      // is luck, not a design.
+      getPermission: () => ({ getMode: () => 'default' as const }),
       setGoal: vi.fn(),
     },
-    config: { providers: {} },
+    // An array, as in a real context: `/status` and `/doctor` count providers.
+    config: { providers: [] },
     providerId: 'test',
     modelId: 'test-model',
     version: '0.0.0',
@@ -1011,4 +1016,55 @@ describe('/crsi stats 的 ε 段与作废条款', () => {
     expect(content).toContain('命中率: 2/6 (33%, Wilson 95% [10%, 70%])')
     expect(content).not.toContain('4/5')
   })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// 报告面读的是引擎所在的档，不是 `config.permission`
+// ═══════════════════════════════════════════════════════════════
+//
+// 与页脚 / 系统提示那次修（把「近似的替身」换成 live 权限系统）同一形状：配置文件
+// 只是几扇门里的一扇（Shift+Tab 转盘、组织级 `maxAllowedMode` 钳制、用户
+// `settings.json` 都会移动真正生效的那一档），所以打印配置值的报告面可以点名一个
+// **不是**正在拒绝调用的档。
+//
+// 夹具把两个值设成**不同**的档，判据才分得清谁到了输出里。
+describe('报告面读引擎所在的档（`config.permission` 只是其中一扇门）', () => {
+  const configSays = 'bypassPermissions'
+  const live = 'plan'
+
+  const ctxWithMode = () => {
+    const ctx = mkCtx([])
+    const raw = ctx as unknown as { engine: Record<string, unknown>; config: unknown }
+    raw.engine = {
+      ...raw.engine,
+      getContext: () => ({
+        getMessages: () => [],
+        getEstimatedTokens: () => 0,
+        getCheckpoints: () => [],
+        getMaxTokens: () => 200_000,
+      }),
+      getPermission: () => ({ getMode: () => live }),
+      getRegistry: () => undefined,
+    }
+    raw.config = { providers: [], permission: configSays }
+    return ctx
+  }
+
+  const cases: [string, RegExp][] = [
+    ['/status', /Permission:\s+plan\b/],
+    ['/doctor', /Permission\s+plan\b/],
+    ['/stats', /Permission:\s+plan\b/],
+  ]
+
+  for (const [name, line] of cases) {
+    it(`${name} 报的是引擎所在的档`, async () => {
+      const { content } = await getCommand(name)!(ctxWithMode(), [])
+
+      expect(content).toMatch(line)
+      // 负锚：配置里那一档一个字都不能出现 —— 只断「live 那一档在场」的话，
+      // 两个值都印出来的实现（例如「Current: plan (config: bypassPermissions)」）
+      // 仍是绿的。
+      expect(content).not.toContain(configSays)
+    })
+  }
 })

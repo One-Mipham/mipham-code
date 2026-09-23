@@ -44,7 +44,9 @@ describe('/permissions — rule persistence & mode help', () => {
         getContext: () => ({ getMessages: () => [] }),
         getTools: () => new Map(),
       },
-      config: { permission: 'default' },
+      // `providers` is an array in a real context; `/setup` with no step arg
+      // counts them, so a shapeless stub only fails once something reads it.
+      config: { permission: 'default', providers: [] },
       t: (k: string) => k,
     } as unknown as Parameters<typeof permissionsCmd>[0]
   }
@@ -166,5 +168,15 @@ describe('/permissions — rule persistence & mode help', () => {
     // so following it changed nothing.
     expect(content).not.toContain('file: ask')
     expect(content).not.toContain('/config permission')
+  })
+
+  it('/setup 的状态面板报的是引擎所在的档，不是配置文件里的值', async () => {
+    // Same divergence as `/setup 5` above, but this panel has one line labelled
+    // just "Mode:" — so the line has to name the mode that is refusing calls,
+    // not the one written in a file that is only one of the doors.
+    const { content } = await setupCmd(makeCtx(), [])
+
+    expect(content).toMatch(/Mode:\s+plan/)
+    expect(content).not.toMatch(/Mode:\s+default/)
   })
 })

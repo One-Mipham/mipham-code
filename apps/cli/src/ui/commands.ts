@@ -389,6 +389,16 @@ const contextCmd: CommandHandler = (ctx) => {
   }
 }
 
+/**
+ * The mode the gate is actually enforcing. `ctx.config.permission` is only one of
+ * the doors — the Shift+Tab wheel, an org `maxAllowedMode` clamp and the user's
+ * `settings.json` all move the live value — so a report that prints the config
+ * value can name a different mode than the one refusing the calls.
+ */
+function liveMode(ctx: CommandContext): string {
+  return ctx.engine.getPermission().getMode()
+}
+
 const statusCmd: CommandHandler = async (ctx) => {
   const t = resolveT(ctx)
   const c = ctx.engine.getContext()
@@ -411,7 +421,7 @@ const statusCmd: CommandHandler = async (ctx) => {
       ${t('commands.status.messages')}   ${c.getMessages().length}
       ${t('commands.status.tokens')}     ~${c.getEstimatedTokens().toLocaleString()} / ${c.getMaxTokens().toLocaleString()}
       ${t('commands.status.tools')}      ${tools.size} ${t('commands.status.loaded')}
-      ${t('commands.status.permission')} ${ctx.config.permission}
+      ${t('commands.status.permission')} ${liveMode(ctx)}
 
       ${t('commands.status.system_title')}
       ${t('commands.status.platform')}   ${process.platform} ${process.arch}
@@ -3211,7 +3221,7 @@ const doctorCmd: CommandHandler = async (ctx) => {
     '',
     t('commands.doctor.config_section'),
     `Provider     ${ctx.providerId} / ${ctx.modelId}`,
-    `Permission   ${ctx.config.permission}`,
+    `Permission   ${liveMode(ctx)}`,
     `Providers    ${ctx.config.providers.length} configured (${ctx.config.providers.filter((p) => p.status !== 'upcoming').length} active)`,
     '',
     t('commands.doctor.session_section'),
@@ -3727,7 +3737,7 @@ const statsCmd: CommandHandler = (ctx) => {
     t('commands.stats.tools', { count: String(tools.size) }),
     t('commands.stats.provider', { provider: ctx.providerId }),
     t('commands.stats.model', { model: ctx.modelId }),
-    t('commands.stats.permission', { permission: ctx.config.permission }),
+    t('commands.stats.permission', { permission: liveMode(ctx) }),
     '',
     t('commands.stats.usage', { pct: ((tokens / c.getMaxTokens()) * 100).toFixed(1) }),
   ]
