@@ -25,16 +25,28 @@
  *   applied to what tools *write to disk*, not only to what gets pattern-matched.
  *   Adding them here would silently rewrite file contents.
  *
+ * Deliberately **not** included — the two joiners, ZWNJ (U+200C) and ZWJ (U+200D),
+ * for exactly the reason above. This is why the zero-width part of the set is spelled
+ * `\u{200B}\u{200E}-\u{200F}` and *not* the closed range `\u{200B}-\u{200F}` it used to be:
+ * - both are load-bearing in *visible* text. ZWNJ attaches a Persian/Arabic suffix to a
+ *   Latin word or number (the plural of "PDF"), and ZWJ is what holds a family emoji
+ *   together (U+1F468 U+200D U+1F469 U+200D U+1F467) rather than three separate people;
+ * - they buy nothing on the permission path either, since no shell ignores them —
+ *   `bash -c 'ec<ZWJ>ho hi'` is `command not found` (same for ZWNJ and ZWSP). So removing
+ *   them from the set costs no matching protection; it only stops the write path from
+ *   rewriting what the user asked us to write.
+ *
  * The tag block (U+E0000–E007F) *is* included: it is invisible in itself, and the
  * only sequences that use it (subdivision flags, e.g. U+1F3F4 + a tag run) degrade
  * to the bare black flag — which renders the same.
  */
 const DANGEROUS_UNICODE =
-  /[\u{061C}\u{115F}-\u{1160}\u{180E}\u{200B}-\u{200F}\u{202A}-\u{202E}\u{2060}\u{2066}-\u{2069}\u{3164}\u{FEFF}\u{FFA0}\u{E0000}-\u{E007F}]/gu
+  /[\u{061C}\u{115F}-\u{1160}\u{180E}\u{200B}\u{200E}-\u{200F}\u{202A}-\u{202E}\u{2060}\u{2066}-\u{2069}\u{3164}\u{FEFF}\u{FFA0}\u{E0000}-\u{E007F}]/gu
 
 /**
  * Strip dangerous invisible Unicode characters from a string.
- * - Zero-width: U+200B (ZWSP), U+200C (ZWNJ), U+200D (ZWJ), U+200E/F (LTR/RTL marks)
+ * - Zero-width: U+200B (ZWSP), U+200E/F (LTR/RTL marks) — the joiners U+200C/U+200D are
+ *   deliberately kept, see `DANGEROUS_UNICODE`
  * - Bidi controls: U+202A-E, U+2066-9, U+061C (Arabic letter mark)
  * - Word joiner: U+2060
  * - BOM: U+FEFF
