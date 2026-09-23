@@ -148,6 +148,35 @@ function mergeConfig(
 }
 
 /**
+ * Drop `permission` from a **project-level** `config.yml` before it is merged,
+ * reporting it instead of applying it.
+ *
+ * `permission` is a ceiling, not a rule: it decides what the approval gate lets
+ * through without asking. Every other project-level key is a preference that a
+ * repository may reasonably commit; this one means "and do not ask me about the
+ * commands in here" — which is a decision about the operator, made by whoever
+ * wrote the repository. The same reasoning admits project-level `permissions.deny`
+ * (it narrows) and withholds `permissions.defaultMode` in `settings.json` (it
+ * widens) — the two files are the same door, so both are closed here.
+ *
+ * `mergeConfig` has no per-key allowlist, so this has to happen at the two points
+ * the project file enters. Reported rather than dropped silently: a repo whose
+ * setting stopped working should say so out loud, and silence is exactly what
+ * "your config was ignored" looks like from the outside.
+ */
+function stripProjectPermission(cfg: Partial<MiphamConfig>, path: string): Partial<MiphamConfig> {
+  if (cfg.permission === undefined) return cfg
+  const { permission, ...rest } = cfg
+  const shown = typeof permission === 'string' ? permission : JSON.stringify(permission)
+  process.stderr.write(
+    `⚠ Mipham Code: ignored permission: ${shown} from project config ${path}\n` +
+      `    (a repository must not choose the approval gate — set it in ~/.mipham/config.yml,\n` +
+      `    or pass --permission <mode> for this invocation)\n`,
+  )
+  return rest as Partial<MiphamConfig>
+}
+
+/**
  * Save a timestamped backup of config.yml to ~/.mipham/.
  * Keeps at most 5 backups; older ones are pruned.
  */
@@ -254,11 +283,21 @@ function loadMcpJson(cwd: string): McpServerConfig[] {
 
 /**
  * Parsed `settings.json` (Claude Code convention): hooks + permissions.
- * Hooks are additive across levels; permissions allow/deny are deduped unions.
+ * Hooks are additive across levels; permissions allow/deny are deduped unions —
+ * and `defaultMode` is the one member that is **not** merged, because it is a
+ * ceiling rather than a rule (see `loadSettingsJson`).
  */
 export interface SettingsJson {
   hooks: SettingsHooks
-  permissions: { allow: string[]; deny: string[] }
+  /**
+   * `defaultMode` is present only when the **user-level** file named one, and it
+   * is passed through **raw** (not validated here): the accepted spelling is
+   * `ALL_MODES`, and the single place that enforces it — plus the warning for a
+   * value that is not a mode — is `PermissionSystem.setDefaultLevel`. A second
+   * validator here would be a second value domain, and the two would drift the
+   * day a mode is added.
+   */
+  permissions: { allow: string[]; deny: string[]; defaultMode?: string }
   /**
    * Present (and `true`) only when the project-level file really did declare
    * hooks and they were withheld because the caller did not vouch for the
@@ -266,6 +305,13 @@ export interface SettingsJson {
    * so a caller announcing the skip cannot announce one that never happened.
    */
   projectHooksSkipped?: true
+  /**
+   * Same shape, for `permissions.defaultMode`: present only when the
+   * project-level file really declared a mode and it was **withheld**. Unlike
+   * `projectHooksSkipped` this is not conditioned on trust — the ceiling does not
+   * move for a file that arrives with the code, trusted workspace or not.
+   */
+  projectModeSkipped?: true
   /**
    * The subset of `hooks` that came from the project-level file — the entries
    * the workspace-trust gate governs. Absent unless the caller vouched for the
@@ -289,14 +335,35 @@ export interface SettingsJson {
  * established trust (or that only *display* the configured list) opt in
  * explicitly. The flag gates hooks only: `permissions` still merge from both
  * levels, since that question is answered by the mode ceiling, not by trust.
+ *
+ * **That last sentence is the reason `defaultMode` is the exception.** The
+ * ceiling only answers the trust question while repository-controlled files
+ * cannot move it; a repo that ships `.mipham/settings.json` with
+ * `permissions.defaultMode: "auto"` would otherwise hand itself the approval
+ * gate. So `defaultMode` is read from the **user-level file only**, and a
+ * project-level one is withheld and *reported* (`projectModeSkipped`) rather
+ * than dropped in silence — same treatment as a `plan`/`acceptEdits` value that
+ * used to be dropped entirely, except that the drop there fell back to the
+ * *wider* `default`. The upstream convention says the same thing in its own
+ * words: repo-level settings cannot grant `defaultMode`; adopt it in user
+ * settings instead.
+ *
+ * One consequence to keep in mind when reading a merged result: `permissions`
+ * is still provenance-free for allow/deny, so a caller cannot tell which of
+ * those two rules came from the repository. That is deliberate (above), and it
+ * is why the ceiling has to be the thing that repels the repo-controlled half.
  */
 export function loadSettingsJson(
   cwd: string = process.cwd(),
   options: { includeProjectHooks?: boolean } = {},
 ): SettingsJson {
   const hooks: SettingsHooks = {}
-  const permissions = { allow: [] as string[], deny: [] as string[] }
+  const permissions: { allow: string[]; deny: string[]; defaultMode?: string } = {
+    allow: [],
+    deny: [],
+  }
   let projectHooksSkipped = false
+  let projectModeSkipped = false
   // The project file's entries, kept out of the merge so provenance survives it.
   const projectHooks: SettingsHooks = {}
 
@@ -315,7 +382,7 @@ export function loadSettingsJson(
       if (raw === null) continue
       const parsed = JSON.parse(raw) as {
         hooks?: Record<string, unknown>
-        permissions?: { allow?: unknown; deny?: unknown }
+        permissions?: { allow?: unknown; deny?: unknown; defaultMode?: unknown }
       }
 
       if (!readHooks) {
@@ -343,6 +410,20 @@ export function loadSettingsJson(
       }
 
       if (parsed.permissions) {
+        // A mode counts as *declared* only when it is a non-empty string — the
+        // same test the hooks branch above uses, so a marker cannot outrun the
+        // fact it reports. What the string says is not checked here (see the
+        // `permissions` field doc): a typo must reach the applier, which is the
+        // one place that knows the accepted spellings and issues the warning.
+        const declaredMode =
+          typeof parsed.permissions.defaultMode === 'string' &&
+          parsed.permissions.defaultMode.trim() !== ''
+            ? parsed.permissions.defaultMode
+            : undefined
+        if (declaredMode !== undefined) {
+          if (isProject) projectModeSkipped = true
+          else permissions.defaultMode = declaredMode
+        }
         for (const key of ['allow', 'deny'] as const) {
           const list = parsed.permissions[key]
           if (!Array.isArray(list)) continue
@@ -362,6 +443,7 @@ export function loadSettingsJson(
   // gated on the strength of a file with nothing in it.
   const result: SettingsJson = { hooks, permissions }
   if (projectHooksSkipped) result.projectHooksSkipped = true
+  if (projectModeSkipped) result.projectModeSkipped = true
   if (Object.values(projectHooks).some((entries) => Array.isArray(entries) && entries.length > 0)) {
     result.projectHooks = projectHooks
   }
@@ -456,10 +538,20 @@ export function loadConfig(cwd: string = process.cwd()): MiphamConfig {
 
   let config = { ...DEFAULT_CONFIG }
 
+  // The project file enters `loadConfig` at **two** points (fresh parse, and the
+  // parse that follows a restore from backup). Both go through here, so the guard
+  // on `permission` cannot be present on one path and missing on the other — a
+  // corrupted config that recovers from a backup is still the same repository's
+  // file, and "corrupt it once, get the setting honored" would be a bypass of the
+  // one key that is refused.
+  const applyProjectConfig = (parsed: Partial<MiphamConfig>): void => {
+    config = mergeConfig(config, stripProjectPermission(parsed, configPath), false)
+  }
+
   // ── Load project-level config ──
   const projectConfig = safeParseYaml(configPath, 'project config')
   if (projectConfig) {
-    config = mergeConfig(config, projectConfig, false)
+    applyProjectConfig(projectConfig)
   } else if (isRegularFile(configPath)) {
     // A real file is there but failed to parse — try to restore from backup.
     // 非普通文件走不到这里：那不是「损坏的配置」，而是根本不该当配置读的东西
@@ -471,7 +563,7 @@ export function loadConfig(cwd: string = process.cwd()): MiphamConfig {
       // Retry parsing after restore
       const restored = safeParseYaml(configPath, 'restored project config')
       if (restored) {
-        config = mergeConfig(config, restored, false)
+        applyProjectConfig(restored)
       }
     }
   }

@@ -360,13 +360,20 @@ Press **Shift+Tab** to change the mode live; it cycles
 `bypassPermissions` is a legal mode but is deliberately **not** on the wheel —
 it is reached by naming it in config, where the user has said what they mean.
 
-To persist a mode for a project, in `.mipham/config.yml`:
+To persist a mode, name it in `~/.mipham/config.yml`:
 
 ```yaml
 permission: default
 ```
 
-Any mode name from the table above is accepted, including `bypassPermissions`.
+Or in `~/.mipham/settings.json` as `permissions.defaultMode` (the key Claude Code
+users already have). Any mode name from the table above is accepted in either,
+including `bypassPermissions`.
+
+A **project-level** `.mipham/config.yml` cannot set a mode — that file arrives with
+the code, so whoever wrote the repository would be choosing the approval gate. A
+mode found there is ignored and reported; the fix is to move the line to the user
+level, or to pass `--permission <mode>` for one invocation.
 
 Or via slash command:
 

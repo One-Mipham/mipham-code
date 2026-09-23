@@ -131,6 +131,69 @@ describe('loadSettingsJson', () => {
     expect(loadSettingsJson(CWD, { includeProjectHooks: true }).projectHooksSkipped).toBeUndefined()
   })
 
+  // `permissions.defaultMode` 是**天花板**，不是规则：allow/deny 只在档位允许的范围内
+  // 说话（上一条注释里的理由），而 defaultMode 决定那个范围本身。所以它与 allow/deny
+  // 必须分开对待 —— 项目级那份随代码到达，不能替操作者选闸门。
+  describe('permissions.defaultMode（天花板：只认用户级）', () => {
+    const writeProject = (permissions: unknown): void => {
+      writeFileSync(join(CWD, '.mipham', 'settings.json'), JSON.stringify({ permissions }))
+    }
+    const writeUser = (permissions: unknown): void => {
+      writeFileSync(join(MIPHAM_HOME, 'settings.json'), JSON.stringify({ permissions }))
+    }
+
+    it('用户级照收，且**原样**透传（值域不在这里判）', () => {
+      writeUser({ defaultMode: 'plan' })
+      expect(loadSettingsJson(CWD).permissions.defaultMode).toBe('plan')
+      // 一个不存在的模式同样原样上来：接受哪些拼写、以及不认识时怎么告警，只有一个
+      // 地方有权回答（`setDefaultLevel` 与它的 `MODE_LIST`）。在这里补一道校验 = 第二
+      // 份值域，加档那天两份会分叉 —— 而分叉点正好是「哪扇门接受它」。
+      writeUser({ defaultMode: 'yolo' })
+      expect(loadSettingsJson(CWD).permissions.defaultMode).toBe('yolo')
+    })
+
+    it('项目级**不**采纳，且照 allow/deny 的同一次解析报出「扣了」', () => {
+      writeProject({ defaultMode: 'bypassPermissions', allow: ['Read'] })
+      const r = loadSettingsJson(CWD)
+      expect(r.permissions.defaultMode).toBeUndefined()
+      expect(r.projectModeSkipped).toBe(true)
+      // 扣的是**一个键**，不是整份文件：allow/deny 依旧合并（那是规则，不是天花板）。
+      expect(r.permissions.allow).toEqual(['Read'])
+    })
+
+    it('信任了也一样不采纳 —— 这道闸门不看信任', () => {
+      // 判别点：`includeProjectHooks: true` 是**另一个问题**的答案（hooks 会跑命令，
+      // 问的是「这个目录你认不认」）。天花板问的是「谁在替操作者决定要不要审批」，
+      // 答案与信任无关 —— 仓库的主人可能正是被 clone 的那个人不知道的那位。
+      // 这一条与上一条只差一个参数，正是「只修一半」会漏掉的那一半。
+      writeProject({ defaultMode: 'auto' })
+      const r = loadSettingsJson(CWD, { includeProjectHooks: true })
+      expect(r.permissions.defaultMode).toBeUndefined()
+      expect(r.projectModeSkipped).toBe(true)
+    })
+
+    it('两份都写了：用户级的赢，且仍然报出项目那份被扣', () => {
+      writeProject({ defaultMode: 'auto' })
+      writeUser({ defaultMode: 'plan' })
+      const r = loadSettingsJson(CWD)
+      expect(r.permissions.defaultMode).toBe('plan')
+      expect(r.projectModeSkipped).toBe(true)
+    })
+
+    it('标记不能自己冒出来：没写模式的文件（含只写 allow 的）不留标记', () => {
+      writeProject({ allow: ['Read'] })
+      const r = loadSettingsJson(CWD)
+      expect(r.permissions.defaultMode).toBeUndefined()
+      expect(r.projectModeSkipped).toBeUndefined()
+      // 非字符串／空串同样不算「声明过」—— 标记与它报告的事实取自同一次解析，
+      // 与 `projectHooksSkipped` 同一条规矩。
+      writeProject({ defaultMode: 123 })
+      expect(loadSettingsJson(CWD).projectModeSkipped).toBeUndefined()
+      writeProject({ defaultMode: '   ' })
+      expect(loadSettingsJson(CWD).projectModeSkipped).toBeUndefined()
+    })
+  })
+
   // The merged `hooks` list is provenance-free: once project and user entries sit
   // in one bucket, no caller can tell which is which — and the two are governed
   // differently (project hooks are gated on workspace trust, user hooks are not).

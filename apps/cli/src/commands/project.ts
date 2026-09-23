@@ -240,8 +240,10 @@ Messages:   ${msgs.length} in context
 Tools:      ${ctx.engine.getTools().size} available
 
 Shift+Tab cycles: ${renderCycleLine()} (this session only).
-To persist a mode, set \`permission:\` in .mipham/config.yml — every mode below is
-accepted there.
+To persist a mode, name it in ~/.mipham/config.yml (\`permission:\`) or in
+~/.mipham/settings.json (\`permissions.defaultMode\`) — every mode below is accepted
+in either. A **project-level** file cannot set a mode: it arrives with the code, so
+whoever wrote the repository would be choosing the approval gate.
 
 Modes (least → most permissive):
 ${renderModeTable()}

@@ -114,7 +114,7 @@ describe('runApp 侧的两条路都真的施加了这个档', () => {
     // 走 setDefaultLevel 而不是自己往对象里塞字段（塞字段会绕过 org 级 restrictions
     // 与「不认识的拼法」告警 —— 同一个 flag 从此有两套语义）。
     expect(INDEX_SRC, 'flag 没有优先于 config').toMatch(
-      /const configuredMode = options\.permission \?\? config\.permission/,
+      /const configuredMode =\s*options\.permission \?\? settingsJson\.permissions\.defaultMode \?\? config\.permission/,
     )
     expect(INDEX_SRC).toMatch(/permission\.setDefaultLevel\(configuredMode as PermissionLevel\)/)
     expect(INDEX_SRC, '把 flag 的值直接塞进权限系统 ⇒ 绕过钳制与告警').not.toMatch(
@@ -126,6 +126,46 @@ describe('runApp 侧的两条路都真的施加了这个档', () => {
     // 远端那半边不能走 `setDefaultLevel` —— 它是**请求**，不是赋值：daemon 会钳制，
     // 答复走 `onPermissionModeChange` 回到页脚（`app.tsx` 的订阅，见 P7d）。
     expect(INDEX_SRC).toMatch(/if \(options\.permission\) engine\.getPermission\(\)\.setMode\(/)
+  })
+})
+
+describe('档位的来源次序（`??` 的顺序就是优先级）', () => {
+  // 次序不是风格问题：`??` 链上每往左一步，就意味着右边那个来源**在多一份文件存在时
+  // 完全失效**。所以这里钉的是「哪一档赢」，而不是「三档都读到了」。
+  const chain = INDEX_SRC.slice(INDEX_SRC.indexOf('const configuredMode'))
+
+  it('settings.json 与 config.yml 都排在同一行，且 settings 在左（更高）', () => {
+    // 这一条是本项**独有**的判断，值得写清理由：`config.yml` 的 `permission` 值
+    // 与首装向导写下的那一行（`wizard-config.ts` 的 `buildConfigYaml` 无条件写
+    // `permission: default`）**形状完全相同** ⇒ 无法区分「用户选过」「向导填的」。
+    // 若把 config 排在左，用户迁移过来的 `permissions.defaultMode` 会被一行没人选过的
+    // `default` 永久压住 —— 一扇写了却不可达的门，正是本审计在关的形状。
+    expect(chain.slice(0, 400)).toMatch(
+      /options\.permission \?\? settingsJson\.permissions\.defaultMode \?\? config\.permission/,
+    )
+    // 负锚：把 settings 挤到 config 右边（或整段删掉）都会在**同一条链**上留下
+    // `?? config.permission` 紧跟 options.permission 的形状。
+    expect(INDEX_SRC, 'settings.json 被挤到 config 之后 ⇒ 那一档永远赢不了').not.toMatch(
+      /options\.permission \?\? config\.permission/,
+    )
+  })
+
+  it('settings.json 是在**用**它之前读的（同一份对象，两处读者）', () => {
+    // 两处读同一个 `settingsJson`：权限档（此处）与 hooks 注册（更下面）。读两次会
+    // 多一次 IO、且两份可能不同 —— 更糟的是一个函数里相隔 250 行的两次读，改动时
+    // 只会改到其中一处。
+    const readAt = INDEX_SRC.indexOf('loadSettingsJson(process.cwd(), {')
+    const useAt = INDEX_SRC.indexOf('const configuredMode')
+    expect(readAt, '没有找到 settings.json 的读取点').toBeGreaterThan(-1)
+    expect(useAt).toBeGreaterThan(readAt)
+    expect(INDEX_SRC.match(/loadSettingsJson\(process\.cwd\(\)/g), '读了不止一次').toHaveLength(1)
+  })
+
+  it('项目级被扣下的那一档要**说出口**，不是静默丢掉', () => {
+    // 静默丢掉与「根本没读你的文件」在外部完全同形 —— 而这一条尤其值得说：用户能在
+    // 那个文件里看见自己写的键。
+    expect(INDEX_SRC).toMatch(/if \(settingsJson\.projectModeSkipped\)/)
+    expect(INDEX_SRC).toMatch(/settingsPathFor\('project', process\.cwd\(\)\)/)
   })
 })
 

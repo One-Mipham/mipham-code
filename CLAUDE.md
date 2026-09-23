@@ -45,7 +45,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：3,271 测试（3,269 passed + 2 skipped，0 失败）
+测试：3,284 测试（3,282 passed + 2 skipped，0 失败）
 
 ---
 
@@ -82,7 +82,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 271 个测试文件，3271 个测试
+│   │   ├── test/               # 271 个测试文件，3284 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -108,7 +108,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（3271 个测试）
+pnpm test         # vitest run（3284 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~9 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -249,7 +249,7 @@ ClientHello 时定死，**早于** nginx 的 SNI 回调；官方 wontfix 到 1.2
 
 - `engine.ts` — 对话引擎（消息管理、工具调用编排、SSE 流式输出、Rules 注入、后台任务通知）
 - `context.ts` — 上下文管理（系统提示、历史压缩）
-- `permission.ts` — 权限控制（**内部枚举 5 档**：default/acceptEdits/plan/auto/bypassPermissions；Shift+Tab 转盘只有 4 档（`default → acceptEdits → plan → auto`），`bypassPermissions` **合法但不在转盘上**（config / `MIPHAM_DAEMON_PERMISSION` / settings 指名可达）—— CC 也是这个结构，其描述表列它、转盘数组不列。**第 6 档 `dontAsk` 刻意不加**（我们与 CC 的 `default` 行为本就等于 CC 的 `dontAsk` —— 没有弹窗，`ask` 即硬拒）。`permissionRestrictions`（forbiddenModes/maxAllowedMode）org 级强制降级，请求被禁模式时 fail-closed）
+- `permission.ts` — 权限控制（**内部枚举 5 档**：default/acceptEdits/plan/auto/bypassPermissions；Shift+Tab 转盘只有 4 档（`default → acceptEdits → plan → auto`），`bypassPermissions` **合法但不在转盘上**（用户级 `config.yml` / 用户级 `settings.json` 的 `permissions.defaultMode` / `--permission` / `MIPHAM_DAEMON_PERMISSION` 指名可达；项目级那两个文件**不是门**）—— CC 也是这个结构，其描述表列它、转盘数组不列。**第 6 档 `dontAsk` 刻意不加**（我们与 CC 的 `default` 行为本就等于 CC 的 `dontAsk` —— 没有弹窗，`ask` 即硬拒）。`permissionRestrictions`（forbiddenModes/maxAllowedMode）org 级强制降级，请求被禁模式时 fail-closed）
 - `hooks.ts` — 生命周期钩子（13 种事件，含 SubagentStart/Stop/PostToolUseFailure）
 - `instructions.ts` — 指令加载链（集团/公司/用户层 + git 根→cwd 递归项目层；逐目录读 AGENTS.md / AGENTS.override.md / CLAUDE.md / MIPHAM.md 三格式，就近优先、读全部不丢弃）
 - `rules-loader.ts` — 路径作用域规则（.mipham/rules/\*.md → glob 匹配 → 自动注入）。**已于 2.37.3 接线**：`index.tsx` 启动时 `new RulesLoader(process.cwd())` + `engine.setRulesLoader()`（setter 自带 `load()`）；注入点在**两处**工具执行后 —— `process()` 首轮（`engine.ts:760`）与 `continueWithTools()` 多轮（引擎多轮循环末尾），只接前者会让规则迟一轮用户输入才生效。以下为接线前的原始诊断（保留备查）：`new RulesLoader` 全历史零出现，`engine.ts:339` 的 `setRulesLoader` 零调用点（自 e2be832「Sprint 5 — rules system」起只有定义没有接线），`engine.ts:24` 该 import 的符号仅用于类型位故转换时被丢弃 → 模块从不加载、守卫永远早退；knip 未报（只看到 import 边），系覆盖率实测发现。**daemon 侧已于 2.44.0 收口**（`daemon/engine-capabilities.ts` 的 `wireDaemonEngine` + 源码对等/行为两条守卫）；原文写的「constitution 一个都没接」是误报 —— `align:` 全仓库无人声明，宪法执行链一直是活的
@@ -307,16 +307,16 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | workflow        | 7       | 55       | runtime / loop / parallel / sandbox / journal / verify                                                                                                                      |
 | vajra           | 6       | 53       | context / events / service / compose / leaf（自建内核）                                                                                                                     |
 | shared          | 10      | 97       | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                              |
-| commands        | 8       | 71       | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers                                                                                         |
+| commands        | 8       | 74       | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers                                                                                         |
 | skills          | 5       | 35       | sanitizer / marketplace / fork-executor / skill-assets                                                                                                                      |
-| config          | 10      | 75       | credential-crypto / loader-encryption / defaults / settings-json / preferences                                                                                              |
+| config          | 10      | 85       | credential-crypto / loader-encryption / defaults / settings-json / preferences                                                                                              |
 | plugin          | 2       | 35       | claude-plugin / plugin-manager                                                                                                                                              |
 | artifacts       | 1       | 6        | manifest                                                                                                                                                                    |
 | agent-view      | 3       | 36       | agent-view-manager / dashboard-keys / session-view                                                                                                                          |
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integrity       | 12      | 84       | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 120      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **271** | **3271** | **0 失败** ✅（3269 passed + 2 skipped）                                                                                                                                    |
+| **合计**        | **271** | **3284** | **0 失败** ✅（3282 passed + 2 skipped）                                                                                                                                    |
 
 > **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 179 测试，自带
 > `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。

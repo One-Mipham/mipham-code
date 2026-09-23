@@ -10,6 +10,7 @@ import {
   loadCredentialMaskingConfig,
   loadCrossSessionConfig,
   loadSettingsJson,
+  settingsPathFor,
 } from './config/loader'
 import {
   registerActiveSession,
@@ -406,14 +407,41 @@ export async function runApp(options: RunOptions): Promise<void> {
   // inside; the system prompt's permission section reads its `getMode()` per request
   // (wired at `setPermissionContextSource` below), so it cannot drift from execution.
   const permission = new PermissionSystem('default')
-  // Sync with config (fix: UI shows "auto" but engine defaulted to bypass-legacy).
-  // `--permission <mode>` wins over `config.yml`: the flag is what the user typed for
-  // **this** invocation, the config is what they typed at some point in the past. Same
-  // seam for both, so the flag is subject to the same org-level clamp and the same
-  // unrecognized-value warning as the config value it replaces.
-  const configuredMode = options.permission ?? config.permission
+  // Read settings.json **here**, ahead of the mode, because it is one of the mode's
+  // sources (the hook registration further down consumes the same object — one read,
+  // two readers, so the two can never disagree about which file said what).
+  const projectHooksTrusted = getWorkspaceTrust().isTrusted(process.cwd())
+  const settingsJson = loadSettingsJson(process.cwd(), {
+    includeProjectHooks: projectHooksTrusted,
+  })
+  // Origin order, most specific first:
+  //   1. `--permission <mode>` — the operator's word **for this invocation**, typed
+  //      seconds ago. Nothing beats that.
+  //   2. user-level `settings.json` `permissions.defaultMode` — the adopted upstream
+  //      key. It outranks `config.yml` because a `config.yml` value **cannot be told
+  //      apart from the first-run wizard's**: the wizard writes `permission: default`
+  //      into that file, so ranking config first would let a line nobody chose
+  //      permanently shadow the key the user did write. (Both are the user's own
+  //      file; a project-level one never gets this far — see `loadSettingsJson`.)
+  //   3. `config.yml permission` — the native key, and the older of the two.
+  //   4. the built-in `default`.
+  // Every source lands on the **same** applier (`setDefaultLevel`), so there is one
+  // accepted value domain and one warning channel, whichever door the value came
+  // through. Org restrictions are applied just below, after all of them.
+  const configuredMode =
+    options.permission ?? settingsJson.permissions.defaultMode ?? config.permission
   if (configuredMode) {
     permission.setDefaultLevel(configuredMode as PermissionLevel)
+  }
+  // A withheld project-level mode is announced, for the same reason a withheld
+  // project-level hook is: from the outside, "ignored on purpose" and "never read
+  // your file" are the same silence — and this one is the user's own editing,
+  // made in a file they can still see the key in.
+  if (settingsJson.projectModeSkipped) {
+    process.stderr.write(
+      `⚠ Mipham Code: ignored permissions.defaultMode from ${settingsPathFor('project', process.cwd())}\n` +
+        `    (a repository must not choose the approval gate — set it in ${settingsPathFor('user', process.cwd())})\n`,
+    )
   }
   // Apply org-level permission restrictions (P0: bypassPermissions policy gap)
   if (config.permissionRestrictions) {
@@ -665,10 +693,7 @@ export async function runApp(options: RunOptions): Promise<void> {
   // already asked — and exited the process on "no". With no TTY it *cannot* ask, so
   // the answer is "no" and the hooks stay out rather than running unasked; that
   // skip is announced, since silence would look the same as having passed.
-  const projectHooksTrusted = getWorkspaceTrust().isTrusted(process.cwd())
-  const settingsJson = loadSettingsJson(process.cwd(), {
-    includeProjectHooks: projectHooksTrusted,
-  })
+  // `settingsJson` itself was read up top, next to the permission it also feeds.
   if (settingsJson.projectHooksSkipped) warnProjectHooksSkipped(process.cwd())
   for (const def of loadHookConfigs(settingsJson.hooks)) {
     hookEngine.register(def)

@@ -83,10 +83,31 @@ export const PERMISSION_MODE_HIERARCHY: PermissionMode[] = [
  * `forbiddenModes` / `maxAllowedMode` are applied to.
  *
  * Deliberately a separate array from `MODE_CYCLE`, and deliberately able to be a
- * **superset** of it: `bypassPermissions` is reachable through config /
- * `MIPHAM_DAEMON_PERMISSION` / settings without being something a user can
- * Shift+Tab into. Claude Code arranges it the same way — its descriptor table
- * lists `bypassPermissions` while its cycle array does not.
+ * **superset** of it: `bypassPermissions` is reachable by naming it at one of the
+ * doors listed below, without being something a user can Shift+Tab into. Claude
+ * Code arranges it the same way — its descriptor table lists
+ * `bypassPermissions` while its cycle array does not.
+ *
+ * **The doors, exhaustively** (this list is the point of the entry — a mode that
+ * is legal here and refused at some other door is a mode the user cannot reach
+ * and cannot get a reason for):
+ *
+ *   1. `~/.mipham/config.yml` → `permission: <mode>` (native key; may be the
+ *      first-run wizard's `default`, so it is ranked *below* 2)
+ *   2. `~/.mipham/settings.json` → `permissions.defaultMode` (the adopted
+ *      upstream key — user level **only**, see 5)
+ *   3. `mipham --permission <mode>` — this invocation's word, beats both files
+ *   4. `MIPHAM_DAEMON_PERMISSION` — the daemon's gate; the only door the daemon
+ *      reads at all (`resolveDaemonPermission`)
+ *   5. …and nothing else. Project-level `.mipham/config.yml` /
+ *      `.mipham/settings.json` are **not** doors: those files arrive with the
+ *      code, so whoever wrote the repository would be choosing the approval gate.
+ *      A mode declared there is withheld and reported, not applied.
+ *
+ * Every door lands on the same applier (`PermissionSystem.setDefaultLevel`), which
+ * is why this array is also the accepted *value* domain — a second validator would
+ * be a second domain, and the day a mode is added the two would disagree at one of
+ * the five doors.
  *
  * **The two arrays must not be collapsed back into one.** `getAllowedModes`
  * filters *this* array, never `MODE_CYCLE`. If it filtered the cycle, then the
@@ -115,9 +136,9 @@ export const ALL_MODES: PermissionMode[] = [
  * disturbing the ranking that `clampMode` walks.
  *
  * The two arrays **differ**, and that is the whole reason both exist:
- * `bypassPermissions` is a legal mode that no Shift+Tab reaches (asked for
- * through config / `MIPHAM_DAEMON_PERMISSION` / settings, where the user named
- * it explicitly), while `auto` is on the wheel. Collapsing them back into one
+ * `bypassPermissions` is a legal mode that no Shift+Tab reaches (asked for by
+ * name at one of the doors listed under `ALL_MODES`, where the user named it
+ * explicitly), while `auto` is on the wheel. Collapsing them back into one
  * would either drop a legal mode or advertise one the wheel cannot reach —
  * **do not "simplify" one back into the other.**
  *
