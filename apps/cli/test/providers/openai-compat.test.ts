@@ -117,6 +117,63 @@ describe('OpenAICompatProvider', () => {
     expect(messages[0]).toEqual({ role: 'system', content: 'You are helpful.' })
   })
 
+  // 引擎把「上一轮 provider 出错」存成数组里的 `system` 条目（好让 resume 渲染 ⚠ 行）。
+  // 它是一句 **UI 说明**，不是指令 —— 而 `system` 是最高权限的角色，且这句话里嵌着
+  // provider 给的原文。所以它不能原样发出去。
+  it('mid-array system 条目不以 system 角色发出（是 UI 行，不是指令）', async () => {
+    let capturedBody: Record<string, unknown> = {}
+    const fetchMock = vi.fn().mockImplementation(async (_url, opts) => {
+      capturedBody = JSON.parse(opts.body as string)
+      return makeSSEResponse(['data: [DONE]'])
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new OpenAICompatProvider(makeConfig())
+    await collectChunks(
+      provider.chat({
+        model: 'gpt-5',
+        messages: [
+          { role: 'user', content: 'first' },
+          { role: 'system', content: '⚠ Model error: boom' },
+          { role: 'assistant', content: 'retry' },
+        ],
+      }),
+    )
+
+    const messages = capturedBody.messages as Array<{ role: string; content: string }>
+    // 前半：它没被**当成指令**发出去（角色序列里没有 system）
+    expect(messages.map((m) => m.role)).toEqual(['user', 'assistant'])
+    // 后半：它的**正文也一并消失** —— 只改角色、内容仍随请求出去，仍等于把这段话
+    // 送进对话（只是换了名义）。两半在同一次请求上取反，各自承重。
+    expect(JSON.stringify(messages)).not.toContain('boom')
+  })
+
+  // 对照：`system` 条目并非一律被丢 —— 数组**开头**的那个仍是合法 header（引擎自己的
+  // 汇总调用曾用这个形状，且 OpenAI 兼容端点确实接受开头一条 system）。
+  it('没有 systemPrompt 时，开头的 system 条目仍然原样发出', async () => {
+    let capturedBody: Record<string, unknown> = {}
+    const fetchMock = vi.fn().mockImplementation(async (_url, opts) => {
+      capturedBody = JSON.parse(opts.body as string)
+      return makeSSEResponse(['data: [DONE]'])
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new OpenAICompatProvider(makeConfig())
+    await collectChunks(
+      provider.chat({
+        model: 'gpt-5',
+        messages: [
+          { role: 'system', content: 'You are terse.' },
+          { role: 'user', content: 'hi' },
+        ],
+      }),
+    )
+
+    const messages = capturedBody.messages as Array<{ role: string }>
+    expect(messages[0]).toEqual({ role: 'system', content: 'You are terse.' })
+    expect(messages).toHaveLength(2)
+  })
+
   // 原测试名 `should default max_tokens to 8192 when not specified` 断言的是**旧（错）行为**：
   // 它把「模型声明的 maxOutput 从不被使用」这个缺陷固化成了绿灯（`makeConfig()` 给 gpt-5
   // 声明了 maxOutput: 32_000，而发出的永远是 8192）。故拆成两条：一条把声明值换成正确行为，

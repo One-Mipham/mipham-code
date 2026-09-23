@@ -488,10 +488,15 @@ export class QueryEngine {
       try {
         for await (const chunk of this.llmChat({
           model: this.registry.getActiveModel(),
-          messages: [
-            { role: 'system', content: summaryPrompt },
-            { role: 'user', content: text },
-          ],
+          // The instruction goes in `systemPrompt`, **not** as a `system` message
+          // in the array. A system *entry* is a header, and the providers do not
+          // agree on one that arrives inside `messages`: anthropic drops every
+          // system entry (its protocol wants the top-level param, anthropic.ts),
+          // so the array form reached the OpenAI-compatible providers and no one
+          // else — the summarizer's instruction was missing for anthropic users
+          // while it worked here. `systemPrompt` is the one spelling both read.
+          systemPrompt: summaryPrompt,
+          messages: [{ role: 'user', content: text }],
           maxTokens: 2000,
         })) {
           if (chunk.type === 'text' && chunk.content) {

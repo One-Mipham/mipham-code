@@ -10,7 +10,7 @@ import {
 import { ContextManager } from '../../src/core/context'
 import { PermissionSystem } from '../../src/core/permission'
 import { HookEngine } from '../../src/core/hooks'
-import { ProviderRegistry } from '../../src/providers/registry'
+import { ProviderRegistry, type ChatRequest } from '../../src/providers/registry'
 import { Context } from '../../src/vajra'
 import type { Llm } from '../../src/providers/llm'
 import { mountLlm } from '../../src/providers/llm'
@@ -658,6 +658,38 @@ describe('QueryEngine', () => {
       }
 
       expect(replayChunks(log)).toEqual(['hello'])
+    })
+  })
+
+  describe('context summarizer — 指令必须走 systemPrompt', () => {
+    // 汇总指令曾以「数组里的 system 条目」这个形状发出。anthropic 侧会把 system 条目
+    // 一律丢掉（它的协议只认顶层 system 参数）⇒ **同一段代码，两个 provider 收到的东西
+    // 不同**：走 OpenAICompatProvider 的那些读得到指令，anthropic 读不到（汇总退化成
+    // 「给一段对话，自己看着办」）。systemPrompt 是两个 provider 都读的那一种拼法。
+    it('summarizer 请求带 systemPrompt，且数组里没有 system 条目', async () => {
+      const seen: ChatRequest[] = []
+      const context = mockContext()
+      const engine = new QueryEngine(mockProviderRegistry(), context, makeToolMap([]))
+      engine.setLlm({
+        chat: async function* (req) {
+          seen.push(req)
+          yield { type: 'text', content: 'S' }
+          yield { type: 'stop' }
+        },
+      })
+      engine.setupContextSummarizer()
+
+      // compact 只在 >30 条时动手，且保留末 20 条（context.ts:199-204）。
+      for (let i = 0; i < 31; i++) {
+        context.addMessage({ role: i % 2 === 0 ? 'user' : 'assistant', content: `msg${i}` })
+      }
+      await context.compact('test')
+
+      expect(seen).toHaveLength(1)
+      // 前半：指令在位（anthropic 侧也读得到的那一种拼法）
+      expect(seen[0]!.systemPrompt).toMatch(/conversation summarizer/)
+      // 后半：没有走「数组里的 system 条目」—— 那正是只有一半 provider 读得到的形状
+      expect(seen[0]!.messages.some((m) => m.role === 'system')).toBe(false)
     })
   })
 

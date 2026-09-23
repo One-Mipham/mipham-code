@@ -280,6 +280,17 @@ export class OpenAICompatProvider implements ProviderInstance {
       const msg = messages[i]!
       if (!msg) continue
 
+      // A `system` entry is a header, not a turn: it belongs in the first slot,
+      // and never alongside an already-emitted system prompt. A mid-array entry
+      // is a client-generated UI line — the engine stores a provider failure as
+      // `system` so a resumed session can render it as an ⚠ line — and passing it
+      // through as system role hands text that came *from a provider* the highest
+      // authority on the very next turn. anthropic.ts drops system entries
+      // outright (its protocol forbids them in the array at all); keeping the
+      // head is the part OpenAI-compatible endpoints genuinely accept.
+      const isHeader = msg.role === 'system' && i === 0 && result.length === 0
+      if (msg.role === 'system' && !isHeader) continue
+
       // ── String content ──
       if (typeof msg.content === 'string') {
         // Combine: assistant text + next assistant message with tool_use blocks
