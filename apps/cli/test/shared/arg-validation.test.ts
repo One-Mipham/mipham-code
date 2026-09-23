@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { detectUnknownArgument } from '../../src/shared/arg-validation'
+import {
+  detectUnknownArgument,
+  firstPositional,
+  parsePermissionFlag,
+} from '../../src/shared/arg-validation'
+import { ALL_MODES } from '../../src/core/permission-config'
 
 describe('detectUnknownArgument — unknown options', () => {
   it('flags a typo of --version as an unknown option', () => {
@@ -35,6 +40,7 @@ describe('detectUnknownArgument — unknown options', () => {
       '--dump-config',
       '--safe-mode',
       '--resume',
+      '--permission',
     ]) {
       expect(detectUnknownArgument([flag])).toBeNull()
     }
@@ -102,6 +108,96 @@ describe('detectUnknownArgument — unknown commands', () => {
     for (const cmd of ['update', 'daemon', 'attach', 'agent', 'workflow']) {
       expect(detectUnknownArgument([cmd])).toBeNull()
     }
+  })
+})
+
+describe('firstPositional — attach 的会话 id 也走这条判据', () => {
+  // `bin/mipham.ts` 的 attach 分支原先取 `args[1]`，一旦带值 flag 排在前头就会把 flag 的
+  // **值**当成会话 id（`mipham attach --permission plan` ⇒ 去找一个叫 `plan` 的会话）。
+  it('skips flag values, in either order', () => {
+    expect(firstPositional(['--permission', 'plan', 'sess-1'])).toBe('sess-1')
+    expect(firstPositional(['sess-1', '--permission', 'plan'])).toBe('sess-1')
+    expect(firstPositional(['--safe-mode', 'sess-1'])).toBe('sess-1')
+  })
+
+  it('returns null when there is no positional at all', () => {
+    expect(firstPositional(['--permission', 'plan'])).toBeNull()
+    expect(firstPositional([])).toBeNull()
+  })
+})
+
+describe('parsePermissionFlag — 取值域恰好就是 ALL_MODES', () => {
+  it('accepts every mode ALL_MODES accepts', () => {
+    for (const mode of ALL_MODES) {
+      expect(parsePermissionFlag(['--permission', mode])).toEqual({ kind: 'ok', mode })
+    }
+  })
+
+  it('returns absent when the flag is not there', () => {
+    expect(parsePermissionFlag([])).toEqual({ kind: 'absent' })
+    expect(parsePermissionFlag(['--safe-mode', 'foo'])).toEqual({ kind: 'absent' })
+  })
+
+  it('an unknown value is an error, never a fallback to `default`', () => {
+    // 这条是本模块存在的理由：`default` 比用户十有八九想说的那一档（`plan` /
+    // `acceptEdits`）**更宽**，回退就是一次静默放宽 —— 与 bin 的 `--resume` 拒绝
+    // 未知会话名形同。
+    const result = parsePermissionFlag(['--permission', 'nonsense'])
+    expect(result.kind).toBe('error')
+    expect(result).not.toEqual({ kind: 'ok', mode: 'default' })
+  })
+
+  it('the error message lists the valid modes, derived from ALL_MODES', () => {
+    const result = parsePermissionFlag(['--permission', 'nonsense'])
+    expect(result.kind).toBe('error')
+    const message = result.kind === 'error' ? result.message : ''
+    expect(message).toContain('nonsense')
+    expect(message).toContain(ALL_MODES.join(', '))
+  })
+
+  it('refuses the legacy spellings setDefaultLevel would have mapped', () => {
+    // `setDefaultLevel` 还认 `self`/`ask`/`bypass`。flag 不认：报错信息点名的就是它收的
+    // 那几种拼法，而 `bypass` 根本不在 daemon 的 `set_mode` 白名单里 —— 收下它，同一个
+    // flag 会本地可用、`mipham attach` 下被静默钳到别处。
+    for (const legacy of ['self', 'ask', 'bypass']) {
+      expect(parsePermissionFlag(['--permission', legacy]).kind).toBe('error')
+    }
+  })
+
+  it('is case-sensitive and matches whole tokens', () => {
+    for (const near of ['Plan', 'PLAN', 'plan-mode', 'auto ']) {
+      expect(parsePermissionFlag(['--permission', near]).kind).toBe('error')
+    }
+  })
+
+  it('a missing value is a usage error, not `ok` and not an unknown option', () => {
+    const result = parsePermissionFlag(['--permission'])
+    expect(result.kind).toBe('error')
+    expect(result.kind === 'error' ? result.message : '').toContain('Usage')
+  })
+
+  it('a flag-shaped value is refused instead of being eaten as a mode', () => {
+    // `mipham --permission --safe-mode`：把 `--safe-mode` 当成档名会报「未知模式
+    // --safe-mode」，读起来像那个 flag 不存在 —— 而真正的问题是 `--permission` 没拿到值。
+    const result = parsePermissionFlag(['--permission', '--safe-mode'])
+    expect(result.kind).toBe('error')
+    expect(result.kind === 'error' ? result.message : '').toContain('Usage')
+  })
+
+  it('the `=` form is refused here, not left to detectUnknownArgument', () => {
+    // attach 分支**从不**跑 detectUnknownArgument（它在未知参数扫描之前就返回了），
+    // 所以只靠那一处，`mipham attach <id> --permission=plan` 会是唯一的静默无操作路径。
+    const result = parsePermissionFlag(['--permission=plan'])
+    expect(result.kind).toBe('error')
+    expect(result.kind === 'error' ? result.message : '').toContain('--permission=plan')
+    expect(result).not.toEqual({ kind: 'ok', mode: 'plan' })
+  })
+
+  it('the first occurrence wins (documented, not incidental)', () => {
+    expect(parsePermissionFlag(['--permission', 'plan', '--permission', 'auto'])).toEqual({
+      kind: 'ok',
+      mode: 'plan',
+    })
   })
 })
 

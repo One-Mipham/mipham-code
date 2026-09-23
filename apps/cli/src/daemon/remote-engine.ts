@@ -70,10 +70,11 @@ export class RemoteEngine {
   // - `modeChosen` — the mode **this client's user** picked on this attach. Set by a
   //   keypress (so the footer advances immediately — `cyclePermissionMode` computes the
   //   next slot from `getMode()`'s read-back, and a `getMode` that only reported confirmed
-  //   values would freeze the wheel), then overwritten by the daemon's answer, because org
-  //   level `permissionRestrictions` silently rewrite a request and the daemon is the only
-  //   side that can see the clamp. A non-null value is a standing instruction and gets
-  //   re-asserted before every prompt.
+  //   values would freeze the wheel), then overwritten by the daemon's **answer**, because
+  //   org level `permissionRestrictions` silently rewrite a request and the daemon is the
+  //   only side that can see the clamp. A non-null value is a standing instruction and gets
+  //   re-asserted before every prompt. A connect snapshot is not an answer (see
+  //   `absorbMode`): it predates anything this client sent and must not retract it.
   // - `modeConfirmed` — what the daemon said is in effect, from a `mode` frame or an
   //   attach snapshot. **Display only, never asserted**: it is how a client that has not
   //   picked anything learns the session's mode, and re-sending it would let a bystander
@@ -444,7 +445,8 @@ export class RemoteEngine {
     // Session facts, not prompt stream: they carry the gate's current mode and must be
     // absorbed even when nothing is consuming chunks (a keypress, not a turn).
     if (msg.type === 'mode' || msg.type === 'session_state') {
-      this.absorbMode(msg.mode)
+      // A snapshot describes the gate as of connect — see `absorbMode`.
+      this.absorbMode(msg.mode, msg.type === 'session_state')
       return
     }
 
@@ -489,15 +491,30 @@ export class RemoteEngine {
    * boundary and the two sides version independently (an older daemon need not send the
    * field at all), and a bad value would otherwise sit in the footer as a mode no wheel
    * slot can step away from.
+   *
+   * `fromSnapshot` separates the two kinds of frame, and they are **not** interchangeable:
+   *
+   * - a `mode` frame is the daemon **answering** — either a `set_mode` this client (or
+   *   another) sent, or a live change. It is newer than anything we sent, so it replaces the
+   *   request; that is the channel a clamp travels back on;
+   * - `session_state` is sent the moment the socket attaches (`addClient` → `sendState`),
+   *   so it describes the gate as of connect — i.e. **before** a `set_mode` this client had
+   *   already sent could have been handled. Letting it retract the request would drop the
+   *   standing instruction, and the very next prompt is what would do the dropping: the
+   *   re-assert reads `modeChosen`, now holding the pre-request value, and helpfully pushes
+   *   it — so `--permission plan` (or a `Shift+Tab` made just before a reconnect) would be
+   *   silently **cancelled** rather than narrowed. It is not worth displaying either, since
+   *   it is already superseded by a request that is in flight; the answer is what the footer
+   *   needs, and the daemon always sends one for a `set_mode` it understood.
    */
-  private absorbMode(mode: unknown): void {
+  private absorbMode(mode: unknown, fromSnapshot = false): void {
     if (typeof mode !== 'string' || !ALL_MODES.includes(mode as PermissionMode)) return
     const effective = mode as PermissionMode
     this.modeConfirmed = effective
-    // If this client had asked for something, the answer replaces the request: the
-    // optimistic value may well have been clamped away, and it must not survive as the
-    // value the footer shows or the next prompt asserts.
-    if (this.modeChosen) this.modeChosen = effective
+    if (this.modeChosen) {
+      if (fromSnapshot) return
+      this.modeChosen = effective
+    }
     for (const listener of this.modeListeners) listener(effective)
   }
 

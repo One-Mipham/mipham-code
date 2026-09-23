@@ -437,6 +437,19 @@ async function runAttachCLI(): Promise<boolean> {
   const args = process.argv.slice(2)
   if (args[0] !== 'attach') return false
 
+  // `--permission <mode>` is the same flag here as on the interactive path, because it
+  // is the same gate — it just lives on the other side of the socket. The request goes
+  // out as `set_mode` when the TUI starts, and the daemon's answer is what the footer
+  // shows: it clamps, so `--permission bypassPermissions` under an org cap comes back
+  // narrower. Checked before the daemon is contacted: a misspelled mode is wrong whether
+  // or not a daemon happens to be running.
+  const { parsePermissionFlag, firstPositional } = await import('../src/shared/arg-validation')
+  const permissionFlag = parsePermissionFlag(args)
+  if (permissionFlag.kind === 'error') {
+    console.error(permissionFlag.message)
+    process.exit(1)
+  }
+
   const { getPort, getDaemonStatus } = await import('../src/daemon/index')
   const { join } = await import('node:path')
   const { readFileSync, existsSync } = await import('node:fs')
@@ -479,7 +492,10 @@ async function runAttachCLI(): Promise<boolean> {
   }
 
   const latestFlag = args.includes('--latest')
-  const sessionIdArg = args[1] && !args[1].startsWith('-') ? args[1] : undefined
+  // Skip flags **and the values of value-taking flags**: with `--permission plan <id>`
+  // the old `args[1]` read `--permission` (starts with `-`, so no id) and silently fell
+  // through to the session list — the flag would have looked accepted and done nothing.
+  const sessionIdArg = firstPositional(args.slice(1)) ?? undefined
 
   let targetSession: SessionInfo | null = null
 
@@ -534,6 +550,7 @@ async function runAttachCLI(): Promise<boolean> {
   const { runApp } = await import('../src/index')
   await runApp({
     version,
+    permission: permissionFlag.kind === 'ok' ? permissionFlag.mode : undefined,
     remoteSession: {
       sessionId: targetSession.id,
       port,
@@ -1198,6 +1215,10 @@ async function main() {
     process.argv.includes('-h') ||
     process.argv.slice(2).some((a) => a === 'help')
   ) {
+    // The mode list is **derived**, never typed out here — a help screen with its own copy
+    // is how it comes to advertise a mode the flag then refuses (see `arg-validation`:
+    // the list in the error message and the list in the help are the same array).
+    const { ALL_MODES } = await import('../src/core/permission-config')
     console.log(`Mipham Code — AI-powered coding terminal
 
 Usage:
@@ -1226,6 +1247,8 @@ Flags:
   --dump-config              Print the assembled profile tree
   --safe-mode                Skip custom agents, skills, hooks, plugins
   --resume <name>            Open a saved session (see /resume for names)
+  --permission <mode>        Start in this mode: ${ALL_MODES.join('|')}
+                             (also accepted by 'mipham attach'; the daemon may clamp it)
   --version, -v, -V          Print version
 
 Docs: https://mipham.ai/code
@@ -1348,9 +1371,26 @@ npm:  https://www.npmjs.com/package/@miphamai/cli`)
     }
   }
 
+  // Parse --permission <mode>: the session's starting mode. `runApp` has accepted
+  // `options.permission` all along — the system prompt and the engine both read the live
+  // permission system it is applied to — but **nothing ever passed it**, so the only ways
+  // to pick a mode were `config.yml`, Shift+Tab after startup, or the daemon's env var.
+  // Same shape as `--resume` above; same remedy, and the value is refused rather than
+  // silently replaced (see `parsePermissionFlag`).
+  const { parsePermissionFlag } = await import('../src/shared/arg-validation')
+  const permissionFlag = parsePermissionFlag(process.argv.slice(2))
+  if (permissionFlag.kind === 'error') {
+    console.error(permissionFlag.message)
+    process.exit(1)
+  }
+
   try {
     const { runApp } = await import('../src/index')
-    await runApp({ version: APP_VERSION, resume: resumeName })
+    await runApp({
+      version: APP_VERSION,
+      resume: resumeName,
+      permission: permissionFlag.kind === 'ok' ? permissionFlag.mode : undefined,
+    })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     if (msg.includes('react-devtools-core')) {

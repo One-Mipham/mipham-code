@@ -30,7 +30,7 @@ import { generateSessionName } from './core/session-name'
 import { ExperienceRuleEngine } from './core/rule-engine.js'
 import { SessionLog } from './core/session-log'
 import { SessionStore } from './core/session-store'
-import type { PermissionLevel, MiphamConfig, McpServerConfig } from './shared/types'
+import type { PermissionLevel, PermissionMode, MiphamConfig, McpServerConfig } from './shared/types'
 import { PermissionSystem } from './core/permission'
 import { LlmPermissionClassifier } from './core/permission-classifier'
 import { SkillsLoader } from './skills/loader'
@@ -78,7 +78,16 @@ interface RunOptions {
   model?: string
   provider?: string
   lang?: string
-  permission?: string
+  /**
+   * Starting permission mode, from `--permission <mode>`.
+   *
+   * Typed as a real mode rather than a string on purpose: the flag is validated against
+   * `ALL_MODES` before it gets here (`shared/arg-validation.ts`), and this field used to
+   * be a `string` no caller ever filled in — the "written but unreachable" shape
+   * `--resume` had. Under `mipham attach` the daemon is still the authority: this becomes
+   * a `set_mode` request and its answer is what the footer shows.
+   */
+  permission?: PermissionMode
   resume?: string
   version?: string
   /** When set, launch TUI in remote mode connected to a daemon session. */
@@ -326,6 +335,13 @@ export async function runApp(options: RunOptions): Promise<void> {
     const { RemoteEngine } = await import('./daemon/remote-engine')
     const engine = new RemoteEngine(options.remoteSession)
 
+    // `--permission <mode>` under `attach`: this is a request, not an assignment — the
+    // gate is the daemon's, and `setMode` sends `set_mode` and takes the daemon's answer
+    // back (it clamps, and the answer is what the footer shows). Set before the TUI
+    // renders so the first render already reflects the user's intent rather than
+    // `default`; the frame itself is re-asserted ahead of every prompt.
+    if (options.permission) engine.getPermission().setMode(options.permission)
+
     // Detect locale and create translation function (same as local path)
     const locale = detectLocale({ lang: options.lang })
     const t = createT(localeBundles[locale] || enUS, enUS)
@@ -390,9 +406,14 @@ export async function runApp(options: RunOptions): Promise<void> {
   // inside; the system prompt's permission section reads its `getMode()` per request
   // (wired at `setPermissionContextSource` below), so it cannot drift from execution.
   const permission = new PermissionSystem('default')
-  // Sync with config (fix: UI shows "auto" but engine defaulted to bypass-legacy)
-  if (config.permission) {
-    permission.setDefaultLevel(config.permission as PermissionLevel)
+  // Sync with config (fix: UI shows "auto" but engine defaulted to bypass-legacy).
+  // `--permission <mode>` wins over `config.yml`: the flag is what the user typed for
+  // **this** invocation, the config is what they typed at some point in the past. Same
+  // seam for both, so the flag is subject to the same org-level clamp and the same
+  // unrecognized-value warning as the config value it replaces.
+  const configuredMode = options.permission ?? config.permission
+  if (configuredMode) {
+    permission.setDefaultLevel(configuredMode as PermissionLevel)
   }
   // Apply org-level permission restrictions (P0: bypassPermissions policy gap)
   if (config.permissionRestrictions) {

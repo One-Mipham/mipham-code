@@ -179,6 +179,45 @@ describe('RemoteEngine — 权限档位', () => {
     engine.close()
   })
 
+  it('attach 快照不得**撤回**本客户端已发出的请求（它早于那条请求）', async () => {
+    // 时序是 daemon 定的：`addClient` 一挂上就 `sendState`，而 `--permission plan` 是在
+    // TUI 起来**之前**就记下的请求 —— 即快照描述的是「我们那条 set_mode 还没被处理」时的闸门。
+    // 若它覆盖 modeChosen，下一轮重钉会把刚拿到的旧值推回去：用户的 flag 被**静默取消**
+    // （不是被钳制）。这条与上一条的区别正是判据本身：快照**没有** mode 字段时没人会错，
+    // 只有在它带着一个旧档回来时，两种读法才分道扬镳。
+    const engine = makeEngine()
+    const seen: string[] = []
+    engine.onPermissionModeChange((mode) => seen.push(mode))
+    engine.getPermission().setMode('plan')
+    await tick()
+    const ws = FakeWebSocket.instances[0]!
+
+    ws.deliver({
+      type: 'session_state',
+      sessionId: 'sess-1',
+      messages: [],
+      provider: 'p',
+      model: 'm',
+      turnCount: 0,
+      mode: 'default',
+    })
+    expect(engine.getPermission().getMode()).toBe('plan') // 请求还在
+    expect(seen).toEqual([]) // 也不值得显示：它已被在途的请求取代
+
+    // 而 daemon 的**答复**（钳制后的）照样改写请求 —— 那是另一条通道
+    ws.deliver({ type: 'mode', sessionId: 'sess-1', mode: 'acceptEdits' })
+    expect(engine.getPermission().getMode()).toBe('acceptEdits')
+    expect(seen).toEqual(['acceptEdits'])
+
+    // 下一轮重钉的是答复后的值，不是快照里那个旧档
+    const { pending } = await startPrompt(engine, 'hi')
+    const frames = ws.frames()
+    expect(frames[frames.length - 2]).toMatchObject({ type: 'set_mode', mode: 'acceptEdits' })
+    ws.deliver(done())
+    await pending
+    engine.close()
+  })
+
   it('不认识的档位帧一概不采纳（跨进程边界，且两侧版本各自演进）', async () => {
     const engine = makeEngine()
     engine.getPermission().setMode('plan')
