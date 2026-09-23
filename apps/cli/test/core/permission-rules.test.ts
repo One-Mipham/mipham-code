@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { homedir, tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { mkdtempSync, symlinkSync, realpathSync, writeFileSync } from 'node:fs'
+import { basename, join } from 'node:path'
+import { mkdirSync, mkdtempSync, symlinkSync, realpathSync, writeFileSync } from 'node:fs'
 import {
   matchBashRule,
   wildcardMatch,
@@ -800,5 +800,100 @@ describe('路径型规则按「落点」判定（deny/ask 方向）', () => {
 
   it('反面对照：落点不存在（无 realpath）⇒ 只剩字面判据，仍不命中', () => {
     expect(matchBashRule('Read(**/.env)', 'Read', { file_path: join(dir, 'nope.txt') })).toBe(false)
+  })
+})
+
+// allow 方向的同一个洞（`segmentMode === 'all'` —— permission.ts 用
+// `rule.level === 'allow' ? 'all' : 'any'` 决定）。两个方向的账不一样：
+// deny 方向补上落点只会**多**命中，allow 方向补上落点是**收紧** —— 多一个
+// 「不匹配」就可能把「静默放行」换成「静默拒绝」。所以下面成对地钉：
+// 经链接落到授权**外**的不再放行，而授权内 / 无链接 / macOS `/tmp`→`/private/tmp`
+// / 尚不存在的叶子 —— **照旧放行**。
+describe('路径型 allow 规则同样按「落点」判定', () => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'mipham-rule-allow-')))
+  const secret = join(dir, '.env')
+  const link = join(dir, 'notes.txt') // → .env
+  const plain = join(dir, 'plain.txt')
+  writeFileSync(secret, 'SECRET=1')
+  writeFileSync(plain, 'nothing here')
+  symlinkSync(secret, link)
+
+  it('正对照：授权内、无链接 ⇒ 照旧放行', () => {
+    // 少了这条，下面「经链接不放行」也可能只是这个方向恒假。
+    expect(matchBashRule('Read(**/*.txt)', 'Read', { file_path: plain }, 'all')).toBe(true)
+  })
+
+  it('洞已堵：grant 了所有 .txt，不再顺带放行一个落到 .env 的 .txt 链接', () => {
+    // 改前这里是 true。
+    expect(matchBashRule('Read(**/*.txt)', 'Read', { file_path: link }, 'all')).toBe(false)
+  })
+
+  it('反面对照：被否决的是「落点在授权外」，不是「凡是链接就否决」', () => {
+    // 同一条链接、同一个落点，只把授权换成**覆盖落点**的那条 ⇒ 仍放行。
+    expect(matchBashRule(`Read(${dir}/*)`, 'Read', { file_path: link }, 'all')).toBe(true)
+  })
+
+  it('授权明确指向那个链接时，链接本身不被当成绕过 ⇒ 照旧放行', () => {
+    // pattern 命名的 `linkdir` 就是链接，落在它下面正是用户授权的东西。
+    const real2 = join(dir, 'real2')
+    mkdirSync(real2)
+    writeFileSync(join(real2, 'a.txt'), 'x')
+    symlinkSync(real2, join(dir, 'linkdir'))
+    expect(
+      matchBashRule(
+        `Read(${dir}/linkdir/**)`,
+        'Read',
+        { file_path: join(dir, 'linkdir/a.txt') },
+        'all',
+      ),
+    ).toBe(true)
+  })
+
+  it('deny 方向的新增保护：叶子尚不存在、祖先却是链接 ⇒ 仍算命中', () => {
+    // 从前 `realpathSync(整个路径)` 会抛（叶子没建），洞里漏过去；按**最长存在前缀**
+    // 解析后才看得见落点。
+    expect(
+      matchBashRule(`Read(${dir}/real2/secret.txt)`, 'Read', {
+        file_path: join(dir, 'linkdir/secret.txt'),
+      }),
+    ).toBe(true)
+  })
+})
+
+// macOS 上 `/tmp`、`/etc`、`/var` 都是链接。只把**路径**规范化、不把 **pattern**
+// 规范化，会让 `/tmp/**` 匹配不上自己的文件 —— 那是把「静默放行」换成「静默拒绝」。
+// 这一组同时覆盖「叶子还没建」（pattern 与路径都只有前缀存在）。
+describe('allow 方向：pattern 与路径按同一套规则规范化（macOS /tmp）', () => {
+  const tmp = mkdtempSync('/tmp/mipham-rule-tmp-')
+  const base = basename(tmp)
+
+  it('授权内、无链接 ⇒ 照旧放行', () => {
+    const f = join(tmp, 'x.txt')
+    writeFileSync(f, 'x')
+    expect(matchBashRule(`Write(/tmp/${base}/**)`, 'Write', { file_path: f }, 'all')).toBe(true)
+  })
+
+  it('叶子尚不存在（读取时还没有它）⇒ 照旧放行', () => {
+    expect(
+      matchBashRule(
+        `Write(/tmp/${base}/new.txt)`,
+        'Write',
+        {
+          file_path: `/tmp/${base}/new.txt`,
+        },
+        'all',
+      ),
+    ).toBe(true)
+  })
+
+  it('洞在这里同样堵上：/tmp 的授权不覆盖一个落到别处的链接', () => {
+    const secret = join(tmp, '.env')
+    const link = join(tmp, 'notes.txt')
+    writeFileSync(secret, 'SECRET=1')
+    symlinkSync(secret, link)
+    expect(matchBashRule(`Read(/tmp/${base}/**)`, 'Read', { file_path: link }, 'all')).toBe(true)
+    expect(matchBashRule(`Read(/tmp/${base}/*.txt)`, 'Read', { file_path: link }, 'all')).toBe(
+      false,
+    )
   })
 })

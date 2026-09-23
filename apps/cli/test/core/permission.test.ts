@@ -1,4 +1,7 @@
 import { beforeAll, describe, it, expect } from 'vitest'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import type {
   PermissionLevel,
   PermissionMode,
@@ -279,6 +282,33 @@ describe('PermissionSystem', () => {
     // Every segment matching still gets the grant — the rule is not dead.
     expect(ps.check(tool, { command: 'git status && git diff' })).toBe('bypass')
     expect(ps.needsApproval(tool, { command: 'git status && git diff' })).toBe(false)
+  })
+
+  it('an allow rule does not follow a symlink out of what it granted', () => {
+    // The allow-direction twin of the landing-path judgement in
+    // `matchPathRule`. A grant for every `.txt` file is a grant for the files
+    // that pattern names — not for whatever a `.txt` symlink points at. Deny
+    // only ever widens (a miss is a hole); allow is where a rule can leak.
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'mipham-allow-link-')))
+    writeFileSync(join(dir, '.env'), 'SECRET=1')
+    writeFileSync(join(dir, 'plain.txt'), 'nothing here')
+    symlinkSync(join(dir, '.env'), join(dir, 'notes.txt'))
+
+    const ps = new PermissionSystem()
+    ps.allow('Read(**/*.txt)')
+    // `'ask'` matters: with the default `'self'` the tool is already
+    // auto-approved, so a `bypass`/`ask` swap would change nothing.
+    const read = makeTool('Read', 'ask', 'file')
+
+    // The grant is real — an ordinary .txt file is auto-approved…
+    expect(ps.isBypassed(read, { file_path: join(dir, 'plain.txt') })).toBe(true)
+    expect(ps.needsApproval(read, { file_path: join(dir, 'plain.txt') })).toBe(false)
+
+    // …and it stops at the link: `notes.txt` **is** a read of `.env`.
+    // (Pre-fix these two measured `true` / `false` — the read went through
+    // unprompted, which is what the landing-path judgement removes.)
+    expect(ps.isBypassed(read, { file_path: join(dir, 'notes.txt') })).toBe(false)
+    expect(ps.needsApproval(read, { file_path: join(dir, 'notes.txt') })).toBe(true)
   })
 
   it('plan mode allows reads only', () => {

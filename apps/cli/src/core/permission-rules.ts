@@ -1,8 +1,8 @@
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join, normalize } from 'node:path'
 import { realpathSync } from 'node:fs'
 import type { PermissionRuleEntry } from '../shared/index.ts'
-import { matchPath } from './credential-masker/matcher'
+import { expandHome, matchPath } from './credential-masker/matcher'
 
 // ── Bash command analysis (Read/Write/Edit deny-rule extension) ──
 //
@@ -545,30 +545,91 @@ function scanReaderWriterCommands(
 const PARAMETERISED_TOOLS = new Set(['Bash', 'Read', 'Write', 'Edit', 'Grep', 'Glob'])
 
 /**
+ * The **landing** spelling of a path *or a pattern*: the realpath of its
+ * longest **existing** prefix, with everything after that prefix kept verbatim.
+ * Returns the input unchanged when nothing along it exists.
+ *
+ * A prefix walk rather than a bare `realpathSync`, for two reasons:
+ *
+ * - A rule may legitimately name a leaf that does not exist yet
+ *   (`Write(/tmp/new.txt)`) — `realpathSync` on it throws, so a leaf-only
+ *   resolve would decide that a path the tool is about to create has no
+ *   landing at all.
+ * - macOS resolves `/tmp` → `/private/tmp` (likewise `/etc`, `/var`), so a
+ *   pattern has to be resolved **the same way as the path** or `/tmp/**` stops
+ *   matching its own files. Resolving only one side is what turns a tightening
+ *   into a silent refusal.
+ *
+ * A prefix whose segments carry a glob metacharacter is not a path on disk
+ * (`/tmp/*` denotes "whatever is under /tmp"), so the walk steps over it: the
+ * glob-free prefix gets resolved and `*` / `**` / `?` survive verbatim.
+ */
+function resolveLanding(p: string): string {
+  const parts = expandHome(p).replace(/\\/g, '/').split('/')
+  for (let i = parts.length; i > 0; i--) {
+    const prefix = parts.slice(0, i).join('/')
+    if (!prefix || /[*?]/.test(prefix)) continue
+    try {
+      const real = realpathSync(prefix)
+      const rest = parts.slice(i).join('/')
+      return rest ? `${real}/${rest}` : real
+    } catch {
+      // Not on disk — try its parent.
+    }
+  }
+  return p
+}
+
+/**
+ * Where `p` would read if nothing along it were a symlink — the same string
+ * spelled without touching the disk. Used only to ask "did resolving this path
+ * change anything", never as a match candidate.
+ */
+function lexicallySpelled(p: string): string {
+  const expanded = expandHome(p).replace(/\\/g, '/')
+  if (isAbsolute(expanded) || /^[A-Za-z]:\//.test(expanded)) return normalize(expanded)
+  return normalize(join(process.cwd(), expanded))
+}
+
+/**
  * Match a path rule against the path an operation *lands* on, not just the one
  * it was spelled with. `notes.txt` symlinked to `.env` **is** a read of `.env`,
  * and the rule only ever sees the spelling the model sent.
  *
- * Only the **deny/ask** direction resolves (`segmentMode === 'any'`). For it a
- * miss is a hole, and the resolved form can only *add* matches, never remove
- * one — so this direction is strictly fail-closed and cannot un-protect
- * anything that is protected today.
+ * Deny/ask (`segmentMode === 'any'`): a miss is a hole, and the resolved form
+ * can only *add* matches — this direction is strictly fail-closed, and cannot
+ * un-protect anything protected today.
  *
- * The **allow** direction deliberately keeps matching the literal spelling, and
- * that is a known hole rather than an oversight: an allow rule that grants every
- * `.txt` file still grants a read of a `.txt` symlinked to `.env`. Closing it
- * means matching the landing path on this side too, which is only sound
- * **together with** canonicalising the *pattern* — otherwise an allow rule for
- * `/tmp/**` stops matching `/private/tmp/x` (macOS) and one for `/tmp/new.txt`
- * stops matching anything at all, since a leaf that does not exist yet has no
- * realpath while its pattern prefix does. Half of that change would trade a
- * silent grant for a silent refusal; it is its own piece of work.
+ * Allow (`'all'`) is the direction where a grant can leak, so the landing has to
+ * be inside the same grant: an allow rule granting every `.txt` file no longer
+ * auto-approves a `.txt` symlink that lands on `.env`. The extra judgement is
+ * gated on the path actually having been redirected — if resolving it changes
+ * nothing, there is no second spelling to disagree about and the decision is
+ * identical to the literal one. Patterns are resolved on the same axes as paths
+ * precisely so that gate does not misfire on `/tmp/**`, on a pattern naming a
+ * symlink on purpose, or on a leaf that does not exist yet.
  */
 function matchPathRule(path: string, pattern: string, segmentMode: 'any' | 'all'): boolean {
-  if (matchPath(path, pattern)) return true
-  if (segmentMode === 'all') return false
+  const literal = matchPath(path, pattern)
+  const landing = resolveLanding(path)
+  // The pattern canonicalised on the same axes as the path (`/tmp/**` →
+  // `/private/tmp/**`). `expandHome` first: `matchPath` expands the pattern but
+  // never the path, so a `~` pattern has to be absolute before it is resolved.
+  const canon = resolveLanding(expandHome(pattern))
+
+  if (segmentMode === 'all') {
+    if (!literal) return false
+    if (landing === lexicallySpelled(path)) return true
+    return matchPath(landing, canon)
+  }
+
+  if (literal) return true
+  if (matchPath(landing, canon)) return true
   try {
-    return matchPath(realpathSync(path), pattern)
+    // The pre-existing check, kept verbatim so this direction stays a
+    // mechanical superset of what it used to match (it differs only for a path
+    // whose own name contains a glob character).
+    return matchPath(realpathSync(path), expandHome(pattern))
   } catch {
     // Nothing on disk to resolve (ENOENT, EACCES, a path the model invented) —
     // there is no second spelling to try, and the literal already missed.
