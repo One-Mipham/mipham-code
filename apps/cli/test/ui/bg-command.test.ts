@@ -77,9 +77,12 @@ describe('/bg', () => {
     const executor = await runBg(mgr, ['summarize', 'the', 'repo'])
     const output = await executor(new AbortController().signal)
 
-    // The whole point: the prompt reaches a model-driven executor.
+    // The whole point: the prompt reaches a model-driven executor — and it
+    // carries the registry's abort signal down, which is the only thing that
+    // makes Ctrl+X in Agent View able to stop a running `/bg`.
     expect(h.execute).toHaveBeenCalledWith('summarize the repo', expect.any(String), {
       type: 'general',
+      signal: expect.any(AbortSignal),
     })
     expect(output).toBe('the suite is green\n')
 

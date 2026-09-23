@@ -8,12 +8,14 @@
  *   mipham agents          (from CLI)
  *   /agents                (from slash command within a running session)
  */
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useEffect, useMemo } from 'react'
 import { Box, Text, useInput } from 'ink'
+import TextInput from 'ink-text-input'
 import { AgentViewManager, type AgentSession, type SessionStatus } from './agent-view-manager'
 import { SessionRow } from './session-row'
 import { SessionPeek } from './session-peek'
 import { useCtrlCConfirm } from '../ui/ctrl-c-confirm'
+import { getBackgroundAgentRegistry } from '../agent/background-registry'
 
 interface DashboardProps {
   manager: AgentViewManager
@@ -33,8 +35,10 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
   const [peekingSessionId, setPeekingSessionId] = useState<string | null>(null)
   const [groupBy, setGroupBy] = useState<'status' | 'directory'>('status')
   const [feedback, setFeedback] = useState<string | null>(null)
-  // Bump to force flatList recompute after a session is removed (list membership change).
+  // Bump to force flatList recompute after the session set changes.
   const [version, setVersion] = useState(0)
+  // Non-null while the rename box is open; holds the row being renamed + the draft.
+  const [renaming, setRenaming] = useState<{ id: string; draft: string } | null>(null)
 
   // Ctrl+C 的「再按一次才退」，与主界面同源（见 ui/ctrl-c-confirm.ts）
   const ctrlC = useCtrlCConfirm()
@@ -44,6 +48,12 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
     setFeedback(msg)
     setTimeout(() => setFeedback(null), 1800)
   }, [])
+
+  // The mutations that matter happen outside this component: `/bg` and `/fork`
+  // resolve their executors long after the keystroke that spawned them, so a
+  // run that finishes while this panel is open used to leave the row — and the
+  // header counts — frozen at whatever they were when the panel mounted.
+  useEffect(() => manager.onChange(() => setVersion((v) => v + 1)), [manager])
 
   // Build a flat list of sessions in group order, with group headers
   const flatList = useMemo(() => {
@@ -115,7 +125,37 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
     [manager, onAttach],
   )
 
+  // Commit the open rename box. Empty title cancels — a session with no name is
+  // indistinguishable in the list, so the box refuses rather than writing ''.
+  const handleRenameSubmit = useCallback(
+    (value: string) => {
+      const id = renaming?.id
+      setRenaming(null)
+      if (!id) return
+      const title = value.trim()
+      if (!title) {
+        showFeedback('Rename cancelled — title cannot be empty')
+        return
+      }
+      manager.rename(id, title)
+      showFeedback(`Renamed to ${title}`)
+    },
+    [manager, renaming, showFeedback],
+  )
+
   useInput((input, key) => {
+    // While the rename box is open it owns the keyboard: the list keys below
+    // must not fire on the same keystroke that is being typed into the title
+    // (Ink delivers every key to every mounted useInput).
+    if (renaming) {
+      if (key.escape || (key.ctrl && input === 'c')) {
+        setRenaming(null)
+        ctrlC.reset()
+        showFeedback('Rename cancelled')
+      }
+      return
+    }
+
     // Ctrl+C 不再一下就退出（Ink 的 `exitOnCtrlC` 已在 render 处关掉，见
     // src/index.tsx）：第一次只提示，再按一次才走。面板里 Esc 已经是退出键，
     // 所以这里只补「误按一次不带走整个面板」。
@@ -150,7 +190,7 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
       return
     }
 
-    // Ctrl+R — rename selected session
+    // Ctrl+R — open the rename box on the selected session
     if (key.ctrl && input === 'r') {
       if (sessionsOnly.length === 0) {
         showFeedback('No sessions to rename')
@@ -158,13 +198,13 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
       }
       const current = sessionsOnly[selectedIndex]
       if (!current) return
-      const newTitle = `session-${Date.now().toString(36)}`
-      manager.rename(current.session.id, newTitle)
-      showFeedback(`Renamed to ${newTitle}`)
+      // Seeded with the current title: renaming is usually an edit, and a box
+      // that opens blank silently invites the user to retype a whole task name.
+      setRenaming({ id: current.session.id, draft: current.session.title })
       return
     }
 
-    // Ctrl+X — permanently remove the selected session
+    // Ctrl+X — stop the selected session's work (if any) and drop its row
     if (key.ctrl && input === 'x') {
       if (sessionsOnly.length === 0) {
         showFeedback('No sessions to remove')
@@ -172,11 +212,20 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
       }
       const current = sessionsOnly[selectedIndex]
       if (!current) return
-      manager.remove(current.session.id)
+      const session = current.session
+      // Discarding a row whose work is still running would throw away the only
+      // handle to it — the manager's own `kill()` flips a status label and
+      // stops nothing, and the running sub-agent checks the registry's abort
+      // signal. So: stop the task, then remove the row.
+      const stopped = session.taskId ? getBackgroundAgentRegistry().stop(session.taskId) : false
+      manager.remove(session.id)
       setPeekingSessionId(null)
       setSelectedIndex((prev) => Math.max(0, Math.min(prev, sessionsOnly.length - 2)))
-      setVersion((v) => v + 1)
-      showFeedback(`Removed ${current.session.title || current.session.id}`)
+      showFeedback(
+        stopped
+          ? `Stopped + removed ${session.title || session.id}`
+          : `Removed ${session.title || session.id}`,
+      )
       return
     }
 
@@ -220,11 +269,7 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
       }
       const current = sessionsOnly[selectedIndex]
       if (!current) return
-      if (peekingSessionId) {
-        handleAttach(current.session.id)
-      } else {
-        handleAttach(current.session.id)
-      }
+      handleAttach(current.session.id)
       return
     }
   })
@@ -233,7 +278,9 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
   const peekData = useMemo(() => {
     if (!peekingSessionId) return null
     return manager.peek(peekingSessionId) ?? null
-  }, [manager, peekingSessionId])
+    // `version` is a dependency so an open peek keeps up with a session that
+    // reports new messages while the viewer sits on it.
+  }, [manager, peekingSessionId, version])
 
   const totalSessions = sessionsOnly.length
   const counts = manager.countByStatus()
@@ -321,6 +368,27 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
       {/* Peek panel (shown below the list when peeking) */}
       {peekData && (
         <SessionPeek session={peekData.session} recentMessages={peekData.recentMessages} />
+      )}
+
+      {/* Rename box — opens on Ctrl+R, owns the keyboard until Enter/Esc */}
+      {renaming && (
+        <Box
+          flexDirection="column"
+          marginTop={1}
+          borderStyle="single"
+          borderColor="cyan"
+          padding={1}
+        >
+          <Text dimColor>Rename session — Enter to save · Esc to cancel</Text>
+          <Box>
+            <Text color="cyan">{'> '}</Text>
+            <TextInput
+              value={renaming.draft}
+              onChange={(draft) => setRenaming((cur) => (cur ? { ...cur, draft } : cur))}
+              onSubmit={handleRenameSubmit}
+            />
+          </Box>
+        </Box>
       )}
 
       {/* Feedback toast — flashes briefly on action */}

@@ -148,7 +148,10 @@ export class SubAgent {
 
     // ── Synchronous execution path ──
     try {
-      const result = await this.runExecution(prompt, options)
+      // A caller that spawned the registry task itself owns the only abort
+      // controller for it; without passing it down the run ignores every check
+      // inside `runExecution` and cannot be stopped from the dashboard.
+      const result = await this.runExecution(prompt, options, options.signal)
       if (this.hookEngine) {
         await this.hookEngine.executeSubagentStop(agentType, description, 'sub-agent', true, result)
       }

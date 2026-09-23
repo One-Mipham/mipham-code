@@ -56,6 +56,16 @@ export interface SubAgentOptions {
   /** Seed the sub-agent with a parent conversation prefix (e.g., fork inheritance). */
   inheritContext?: { messages: Message[] }
   /**
+   * Abort signal for a caller-owned execution.
+   *
+   * The `runInBackground` path mints its own controller inside `SubAgent`, so it
+   * needs nothing here. A caller that spawned the task in the registry itself
+   * (`/bg`, `/fork`) holds the only handle that can stop it — and if it does not
+   * hand that signal down, the signal is decoration: the registry's `stop()`
+   * aborts a controller nobody reads, and the agent runs to completion.
+   */
+  signal?: AbortSignal
+  /**
    * Who authored the prompt. `'script'` marks text computed by a workflow
    * script — which is not the user speaking, even though it arrives as the
    * sub-agent's opening user turn. Defaults to `'user'`.

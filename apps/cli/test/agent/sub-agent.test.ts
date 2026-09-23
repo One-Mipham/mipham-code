@@ -946,3 +946,52 @@ describe('SubAgent — 连续被拒的熔断', () => {
     expect(ran).toEqual(['Read'])
   })
 })
+
+// ═══════════════════════════════════════════
+// 外部 abort 信号（`/bg`、`/fork` 手里唯一能停掉自己那个任务的把手）
+// ═══════════════════════════════════════════
+
+describe('SubAgent 同步路径上的外部 abort 信号', () => {
+  /** 中途 abort 的 provider：第一块之后的检查点必然看到 aborted。 */
+  function abortingProvider(controller: AbortController): ProviderInstance {
+    return {
+      config: { id: 'mock', name: 'Mock', protocol: 'openai-compatible', apiKey: '', models: [] },
+      async *chat(_req: ChatRequest): AsyncGenerator<StreamChunk> {
+        controller.abort()
+        yield { type: 'text', content: 'started' }
+        yield { type: 'stop' }
+      },
+      async listModels() {
+        return []
+      },
+      async healthCheck() {
+        return true
+      },
+    }
+  }
+
+  it('把调用方的信号传下去 ⇒ 中途 abort 立刻中止', async () => {
+    const controller = new AbortController()
+    const sub = new SubAgent(createMockRegistry(abortingProvider(controller)), TOOLS)
+
+    await expect(
+      sub.execute('long job', 'long job', {
+        type: 'general',
+        autoPatternAnalysis: false,
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow(/abort/i)
+  })
+
+  it('（对照）不给信号时同样那次 abort 拦不住它 —— 上面那条红来自「传下去」这件事', async () => {
+    const controller = new AbortController()
+    const sub = new SubAgent(createMockRegistry(abortingProvider(controller)), TOOLS)
+
+    const result = await sub.execute('long job', 'long job', {
+      type: 'general',
+      autoPatternAnalysis: false,
+    })
+
+    expect(result).toContain('started')
+  })
+})

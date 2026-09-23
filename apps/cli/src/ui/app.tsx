@@ -46,6 +46,7 @@ function contextUsagePct(engine: QueryEngine | RemoteEngine): number | undefined
   return Math.round((ctx.getEstimatedTokens() / max) * 100)
 }
 import { AgentViewDashboard } from '../agent-view/dashboard'
+import { AgentSessionView } from '../agent-view/session-view'
 import type { AgentViewManager } from '../agent-view/agent-view-manager'
 import { WorkflowProgress } from './workflow-progress.js'
 import { GoalProgress } from './goal-progress.js'
@@ -318,6 +319,11 @@ export function App({
   }, [])
 
   const [agentViewOpen, setAgentViewOpen] = useState(false)
+  // Non-null when the dashboard's Enter ("attach") picked a session to read.
+  // It replaces the chat panel — the transcript on screen is the session's, not
+  // this conversation's, so leaving the input bar visible would invite typing
+  // into a buffer that goes somewhere else entirely.
+  const [attachedSessionId, setAttachedSessionId] = useState<string | null>(null)
   const [apiKeyPrompt, setApiKeyPrompt] = useState<{
     providerId: string
     modelId: string
@@ -1264,8 +1270,23 @@ export function App({
         {agentViewOpen && agentViewManager ? (
           <AgentViewDashboard
             manager={agentViewManager}
-            onAttach={() => {}}
+            // Enter used to be wired to a no-op here, so `attach` — the key the
+            // footer advertises — did nothing observable. It now hands the
+            // session to the read-only view below; Esc there comes back here.
+            onAttach={(session) => {
+              setAttachedSessionId(session.id)
+              setAgentViewOpen(false)
+            }}
             onExit={() => setAgentViewOpen(false)}
+          />
+        ) : attachedSessionId && agentViewManager ? (
+          <AgentSessionView
+            manager={agentViewManager}
+            sessionId={attachedSessionId}
+            onDetach={() => {
+              setAttachedSessionId(null)
+              setAgentViewOpen(true)
+            }}
           />
         ) : (
           <>

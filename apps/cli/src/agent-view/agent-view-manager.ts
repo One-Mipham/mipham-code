@@ -34,6 +34,16 @@ export interface AgentSession {
   branch?: string
   /** Created PR URL (if requested) */
   prUrl?: string
+  /**
+   * Id of the `BackgroundAgentRegistry` task actually doing the work, when this
+   * session was spawned by `/bg` or `/fork`.
+   *
+   * The two id spaces are minted separately (`agent-…` here, `bg-…` there), so
+   * without this the dashboard holds a row it cannot act on: its own `kill()`
+   * only flips the row's status and leaves the real task running with no handle
+   * left in the UI. This field is that handle.
+   */
+  taskId?: string
   /** Working directory the session was spawned from (used for directory grouping). */
   directory: string
 }
@@ -60,6 +70,35 @@ export class AgentViewManager {
   private sessions: Map<string, AgentSession> = new Map()
   private sessionOrder: string[] = []
   private idCounter = 0
+  private listeners: Set<() => void> = new Set()
+
+  /**
+   * Subscribe to any mutation of the session set. Returns an unsubscribe fn.
+   *
+   * The dashboard renders from this object, but the changes originate elsewhere
+   * (`/bg` and `/fork` mutate it from their executors, which resolve long after
+   * the keystroke that spawned them). Without a subscription the view is a
+   * snapshot painted once at mount: `setVersion` had exactly one caller
+   * (Ctrl+X), so a row that finished while the panel was open stayed `working`
+   * on screen forever.
+   */
+  onChange(listener: () => void): () => void {
+    this.listeners.add(listener)
+    return () => {
+      this.listeners.delete(listener)
+    }
+  }
+
+  /** One listener throwing must not stop the others, nor the mutation itself. */
+  private notify(): void {
+    for (const listener of this.listeners) {
+      try {
+        listener()
+      } catch {
+        // A broken view must never break the state transition that triggered it.
+      }
+    }
+  }
 
   /**
    * Create a new background agent session.
@@ -82,6 +121,7 @@ export class AgentViewManager {
 
     this.sessions.set(id, session)
     this.sessionOrder.push(id)
+    this.notify()
 
     return session
   }
@@ -171,6 +211,7 @@ export class AgentViewManager {
       session.startedAt = new Date()
     }
 
+    this.notify()
     return session
   }
 
@@ -189,6 +230,7 @@ export class AgentViewManager {
 
     session.status = 'failed'
     session.completedAt = new Date()
+    this.notify()
     return true
   }
 
@@ -208,6 +250,7 @@ export class AgentViewManager {
       session.completedAt = new Date()
     }
 
+    this.notify()
     return true
   }
 
@@ -219,6 +262,7 @@ export class AgentViewManager {
     if (!session) return false
 
     session.messages.push(message)
+    this.notify()
     return true
   }
 
@@ -247,6 +291,7 @@ export class AgentViewManager {
     const session = this.sessions.get(id)
     if (!session) return false
     session.title = newTitle
+    this.notify()
     return true
   }
 
@@ -257,6 +302,7 @@ export class AgentViewManager {
     if (!this.sessions.has(id)) return false
     this.sessions.delete(id)
     this.sessionOrder = this.sessionOrder.filter((oid) => oid !== id)
+    this.notify()
     return true
   }
 

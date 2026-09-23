@@ -198,4 +198,75 @@ describe('AgentViewManager', () => {
     expect(mgr.list()).toHaveLength(0)
     expect(mgr.groupByStatus().completed).toHaveLength(0)
   })
+
+  // ═══════════════════════════════════════════
+  // onChange —— 视图要跟着状态动，不能是挂载那一刻的快照
+  // ═══════════════════════════════════════════
+
+  it('should notify subscribers on every mutation', () => {
+    const mgr = makeManager()
+    const seen: string[] = []
+    const off = mgr.onChange(() => seen.push('changed'))
+
+    const session = mgr.create('A', 'Task A')
+    mgr.addMessage(session.id, { role: 'user', content: 'hi' })
+    mgr.updateStatus(session.id, 'working')
+    mgr.rename(session.id, 'Renamed')
+    mgr.attach(session.id)
+    mgr.kill(session.id)
+    mgr.remove(session.id)
+    off()
+
+    expect(seen).toHaveLength(7)
+  })
+
+  it('should stop notifying after unsubscribe', () => {
+    const mgr = makeManager()
+    let calls = 0
+    const off = mgr.onChange(() => calls++)
+
+    mgr.create('A', 'Task A')
+    expect(calls).toBe(1)
+
+    off()
+    mgr.create('B', 'Task B')
+    expect(calls).toBe(1)
+  })
+
+  it('should not notify when nothing changed', () => {
+    const mgr = makeManager()
+    const session = mgr.create('A', 'Task A')
+    mgr.updateStatus(session.id, 'completed')
+
+    let calls = 0
+    mgr.onChange(() => calls++)
+
+    // Already terminal → no kill; unknown id → no remove; no-op prune.
+    expect(mgr.kill(session.id)).toBe(false)
+    expect(mgr.remove('nope')).toBe(false)
+    expect(mgr.prune()).toBe(1) // this one does change something
+    expect(calls).toBe(1)
+  })
+
+  it('a throwing subscriber must not stop the others, nor the mutation', () => {
+    const mgr = makeManager()
+    const seen: string[] = []
+
+    mgr.onChange(() => {
+      throw new Error('broken view')
+    })
+    mgr.onChange(() => seen.push('second'))
+
+    const session = mgr.create('A', 'Task A')
+    expect(seen).toEqual(['second'])
+    // The state transition itself still happened.
+    expect(mgr.get(session.id)).toBeDefined()
+  })
+
+  it('should keep the background task id on the session (the only abort handle)', () => {
+    const mgr = makeManager()
+    const session = mgr.create('A', 'Task A')
+    session.taskId = 'bg-1-abc'
+    expect(mgr.get(session.id)!.taskId).toBe('bg-1-abc')
+  })
 })

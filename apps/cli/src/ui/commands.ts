@@ -5200,10 +5200,14 @@ Background agents appear in the Agent View dashboard (/agents).`,
   // wrote a dashboard entry and reported success — the prompt was never handed
   // to a model, and the row sat at `working` forever.
   const bgReg = (await import('../agent/background-registry')).getBackgroundAgentRegistry()
-  bgReg.spawn(
+  // Keep the registry's id on the row: it is the only handle that can stop the
+  // run. `AgentViewManager.kill()` flips a status label and nothing else, so a
+  // Ctrl+X that held no task id would discard the row and leave the agent
+  // running with no way to reach it again.
+  session.taskId = bgReg.spawn(
     prompt,
     'general',
-    async (_signal) => {
+    async (signal) => {
       const { SubAgent } = await import('../agent/sub-agent')
       const sa = new SubAgent(
         ctx.engine.getRegistry(),
@@ -5216,7 +5220,10 @@ Background agents appear in the Agent View dashboard (/agents).`,
       try {
         // The prompt came from the user typing `/bg …`, so it stays unframed —
         // unlike a workflow script's computed prompt.
-        const result = await sa.execute(prompt, 'bg: ' + prompt.slice(0, 60), { type: 'general' })
+        const result = await sa.execute(prompt, 'bg: ' + prompt.slice(0, 60), {
+          type: 'general',
+          signal,
+        })
         agentViewManager.addMessage(session.id, {
           role: 'assistant',
           content: result || '(no output)',
@@ -5329,10 +5336,10 @@ const forkCmd: CommandHandler = async (ctx, args) => {
   session.kind = 'forked'
 
   const bgReg = (await import('../agent/background-registry')).getBackgroundAgentRegistry()
-  bgReg.spawn(
+  session.taskId = bgReg.spawn(
     prompt,
     'general',
-    async (_signal) => {
+    async (signal) => {
       const { SubAgent } = await import('../agent/sub-agent')
       const sa = new SubAgent(
         ctx.engine.getRegistry(),
@@ -5343,32 +5350,54 @@ const forkCmd: CommandHandler = async (ctx, args) => {
         ctx.engine.getLlm(),
       )
       const parentContext = ctx.engine.getContext()
-      const result = await sa.execute(prompt, 'fork: ' + prompt.slice(0, 60), {
-        worktreePath: wtPath,
-        inheritContext: { messages: parentContext.getMessages() },
-      })
+      // The row has to come back from `working` on both outcomes: the fork
+      // executor used to return its summary to the registry and never touch the
+      // session, so a finished (or crashed) fork stayed `working` on the
+      // dashboard for the life of the process — the same lie `/bg` already
+      // closes on its own path.
       try {
-        const { execSync: ex } = await import('node:child_process')
-        ex(`git -C ${wtPath} add -A`, { stdio: 'ignore', timeout: 10_000 })
-        const st = ex(`git -C ${wtPath} status --porcelain`, { encoding: 'utf-8', timeout: 10_000 })
-        if (st.trim()) {
-          ex(`git -C ${wtPath} commit -m "feat: ${prompt.slice(0, 60)}\n\n${COAUTHOR_TRAILER}"`, {
-            stdio: 'ignore',
+        const result = await sa.execute(prompt, 'fork: ' + prompt.slice(0, 60), {
+          worktreePath: wtPath,
+          inheritContext: { messages: parentContext.getMessages() },
+          signal,
+        })
+        try {
+          const { execSync: ex } = await import('node:child_process')
+          ex(`git -C ${wtPath} add -A`, { stdio: 'ignore', timeout: 10_000 })
+          const st = ex(`git -C ${wtPath} status --porcelain`, {
+            encoding: 'utf-8',
             timeout: 10_000,
           })
-          ex(`git push origin ${branch}`, { stdio: 'ignore', timeout: 30_000 })
+          if (st.trim()) {
+            ex(`git -C ${wtPath} commit -m "feat: ${prompt.slice(0, 60)}\n\n${COAUTHOR_TRAILER}"`, {
+              stdio: 'ignore',
+              timeout: 10_000,
+            })
+            ex(`git push origin ${branch}`, { stdio: 'ignore', timeout: 30_000 })
+          }
+        } catch {
+          /* best-effort */
         }
-      } catch {
-        /* best-effort */
+        const summary = [
+          `## Fork done: ${prompt}`,
+          '',
+          `Branch: \`${branch}\``,
+          `Worktree: \`${wtPath}\``,
+          '',
+          result || '(no output)',
+        ].join('\n')
+        agentViewManager.addMessage(session.id, { role: 'assistant', content: summary })
+        agentViewManager.updateStatus(session.id, 'completed')
+        return summary
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        agentViewManager.addMessage(session.id, {
+          role: 'assistant',
+          content: `Fork failed: ${message}`,
+        })
+        agentViewManager.updateStatus(session.id, 'failed')
+        throw err
       }
-      return [
-        `## Fork done: ${prompt}`,
-        '',
-        `Branch: \`${branch}\``,
-        `Worktree: \`${wtPath}\``,
-        '',
-        result || '(no output)',
-      ].join('\n')
     },
     'forked',
   )
