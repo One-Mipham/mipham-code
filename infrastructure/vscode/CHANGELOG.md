@@ -3,6 +3,96 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.5 — 2026-09-25
+
+- Version sync with Mipham Code CLI 0.85.5
+- Fixed: a recursive `rm` whose target cannot be read from the command text is refused outright.
+  Four shapes: the target exists only in a command substitution (`rm -rf "$(pwd)"`); a variable
+  followed by a root-level directory name (`$VAR/usr` — an unset variable is dropped, not an
+  error, leaving `/usr`); a target anchored on the working-directory variables
+  (`$PWD`/`$OLDPWD`); and a command that is nothing but backslashes. The gate sits ahead of the
+  allow rules and of every mode's baseline — all of them read the same text, so auto never asks
+  the classifier. The exemption is the `MIPHAM_DISABLE_DANGEROUS_RM_PROMPT=1` environment
+  variable, not a tool parameter. The refusal says it covers the result, names the target, and
+  states that `/permissions` cannot lift it
+- Fixed: `Retry-After` from a server was trusted with no ceiling. `3600` pressed the CLI into an
+  hour-long sleep with nothing on screen to cancel it; `0` made retries back-to-back; an
+  unparseable value became `NaN`, which `setTimeout` reads as 0 — the same shape as the first,
+  but silent. It is now clamped to [1s, 60s], and unparseable values fall back to exponential
+  backoff
+- Fixed: a plugin's remote MCP servers were dropped without a word. The loader gate required
+  `command` while `command` and `url` are two mutually exclusive transports, so every server
+  declared with a `url` was discarded silently: the plugin looked installed and its tools simply
+  never appeared. The gate now accepts either transport and names the file and server it skips;
+  `plugin validate` reports declarations that would be dropped, `${user_config.*}` references
+  with no substitution step, and plaintext `http://` URLs (loopback exempt) as warnings that do
+  not block installation
+- Fixed: plugin hooks were anonymous. Inside the engine they were indistinguishable from the
+  hooks an operator writes in `settings.json`, with three consequences: failure text never said
+  whose hook had failed (a plugin's command is usually `sh`, `node` or a path, none of which
+  names anything); the health key was the event alone, so two hooks on one event shared a failure
+  count and a disable bit — a broken plugin hook failing five times would auto-disable a
+  neighbour that had never failed; and uninstall scanned by event, so removing plugin A removed
+  **every** hook on those events, the operator's included. Hooks now carry their source, failures
+  name it, health is keyed per hook, and uninstall removes only what that source declared. Hooks
+  with no source keep their exact previous wording and keys
+- Fixed: the `mcp_tool` hook was a stub. The type list carried it and the config carried
+  `mcpServer`/`mcpTool`, but the executor matched the case and returned `{ allowed: true }`: a
+  settings file saying you were being guarded guarded nothing. It now makes the call, passes the
+  event context as arguments, reads the answer by the same contract as command hooks, and waits
+  for the connection to settle (up to the handshake's own timeout) instead of reporting "not
+  connected" for "still connecting". `isError` is reported but never turned into a deny
+- Fixed: a truncated turn no longer passes as complete. If the stream never reached
+  `message_stop` — a proxy or gateway closing the connection cleanly looks byte-for-byte like a
+  normal finish — the truncation flag left through an exit that did not carry it, so "hit the
+  output ceiling" and "cut off mid-stream" both read as a clean finish. Streams now track whether
+  a terminal event was seen and warn before releasing the stop
+- Fixed: a replayed stream event no longer runs a tool twice. A `content_block_stop` re-sent by a
+  proxy emitted two `tool_use` blocks for one call, and the engine ran the tool twice — two
+  writes, two commits, twice everything that tool does. Blocks are now deduplicated by id;
+  different ids still emit once each
+- Fixed: the tool-turn cap was a per-loop budget rather than a per-conversation one. `MAX_TURNS`
+  was a function-local constant, and every Stop-hook block re-issued a fresh 100 turns, so a hook
+  that is never satisfied ("don't stop until the tests pass", with a model that cannot fix them)
+  made the turn never end. Remaining rounds are now threaded through, and a spent budget surfaces
+  a warning carrying the hook's own reason instead of silently ignoring it. The hook itself is not
+  weakened: a hook that blocks once still resumes one round, with no notice
+- Fixed: a working directory deleted mid-session. Startup had a gate for it; nothing caught the
+  directory disappearing while running, and "the runtime will complain" does not hold — Node
+  throws from the call site that touches it and names something else, while Bun (this project's
+  preferred runtime) does not throw at all and keeps returning the path cached at startup, handing
+  tools an ordinary-looking string for a directory that is gone. The filesystem is now the judge,
+  so both runtimes give the same answer: the tool does not run, and the result says the session's
+  working directory no longer exists and to restart from one that does
+- Fixed: resuming a session whose log ends on a tool call with no result. The provider rejects
+  such a history outright, so an unfinished call surfaced to the user as "the first thing I say
+  after resuming is a protocol error". A "result unknown" event is now appended — an event rather
+  than a message injected into the projection, which would break the invariant that everything
+  the model can see is logged — telling the model to go verify instead of assuming either way
+- Fixed: concurrent connections to the same MCP server by name are now merged. The two sources at
+  startup are concurrent and neither is awaited, and `connect()` treated only `connected` as
+  connected, so the second one started a second transport and the one it replaced — along with its
+  stdio child process — was never closed. Handshakes in flight now merge, and the name is released
+  in `finally` either way, so a failed connect can really reconnect
+- Fixed: a burst of keys no longer lands on the previous line. Keys arriving in one chunk are
+  dispatched one by one while React has not yet committed the first callback's state change, so
+  the second callback still reads the previous closure: "↓ then Enter" acted on the line above the
+  one the ↓ moved to. The cursor now keeps a synchronous mirror that every decision reads, so
+  changes within one burst also accumulate. Both levels of the model picker, the command picker
+  and the setup wizard are covered
+- Fixed: the command picker submitted twice on one Enter. Two listeners handled Return (the
+  component's own `useInput` and the text input's `onSubmit`), so `onSelect` ran twice — one key
+  press, the command ran twice. Enter is now handled in one place
+
+### Added
+
+- Startup now reports the **total** size of the instruction files. The loader reported what was
+  missing, never what was too much, and too much does not grow from one big file: the three
+  instruction layers, the per-directory rule files and the lessons block are each small and
+  together still crowd out the work. It counts what is actually sent (excluded sections excluded)
+  and says a word once the total crosses 40,000 characters — a threshold on the total only, since
+  a per-file threshold is exactly the shape this fixes
+
 ## 0.85.4 — 2026-09-24
 
 - Version sync with Mipham Code CLI 0.85.4
