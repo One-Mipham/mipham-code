@@ -118,6 +118,66 @@ export function deriveMessages(events: SessionEvent[]): Message[] {
 
 const LOG_DIR = miphamHome('sessions')
 
+/** 补上的那条结果的正文：说明事情本身，并给出下一步，而不是只报一个状态。 */
+function interruptedCallNotice(): string {
+  return (
+    `This tool call was in flight when the session ended, so its outcome is unknown — ` +
+    `the result was never recorded.\n` +
+    `Do not assume it succeeded or failed: check the actual state (read the files, ` +
+    `re-run the command) and re-issue the call if it did not take effect.`
+  )
+}
+
+/**
+ * 恢复会话时收尾：给日志里**没有结果**的调用补一条「结果未知」的 `tool/result`
+ * 事件，返回补了几条。
+ *
+ * 为什么非补不可：助手消息里挂着 `tool_calls` 而没有任何结果回应，OpenAI / DeepSeek
+ * 会整条请求拒收，Anthropic 还要求 `tool_result` 紧跟在那条 `tool_use` 之后。于是
+ * 「这次的调用没收尾」在用户那里表现成「恢复之后说的第一句话就报协议错」。
+ *
+ * 这个形状**是从盘上读来的，不是引擎写出来的**：`engine.ts` 先落调用消息、紧接着
+ * 落结果（同一同步块），而这批事件只在退出时整份刷盘 —— 跑到一半被杀根本留不下那条
+ * 调用。够得着的是**读侧**：`save()` 逐行追加，`open()` 把读不动的行静默丢掉（半截
+ * JSON 过不了 `JSON.parse`），于是写盘写到一半被打断时，末尾那条结果被丢、调用留在
+ * 盘上。修在恢复这一步，是因为读侧的入口只有这一个（`ContextManager.restoreLog`）。
+ *
+ * 为什么补成**事件**而不是往投影里塞一条消息：本仓库的不变量是「模型看得见的必须已
+ * 记录」（`assertModelVisible`），凭空出现的消息正好违反它；`messageToEvents` /
+ * `deriveMessages` 的字节级互逆也不能被动过。补事件两边都成立 —— 模型**看得见那次
+ * 调用**（它本来就在历史里），也知道**结果未知**，于是它先去查证，而不是当成没发生过、
+ * 也不是猜成功或失败。
+ *
+ * 幂等：已经有结果的 id 不会再补第二条。
+ */
+export function closeInterruptedToolCalls(log: SessionLog): number {
+  const events = log.events()
+  const answered = new Set<string>()
+  for (const e of events) {
+    if (e.type === 'tool/result') answered.add(e.id)
+    else if (e.type === 'user/message' && Array.isArray(e.message.content)) {
+      // 结果也可能整条嵌在 user/message 里（多块消息不拆事件），一样算「已回答」。
+      for (const b of e.message.content) {
+        if (b.type === 'tool_result') answered.add(b.tool_use_id)
+      }
+    }
+  }
+
+  const pending: string[] = []
+  for (const e of events) {
+    if (e.type === 'tool/call' && !answered.has(e.id)) pending.push(e.id)
+  }
+
+  const at = Date.now()
+  for (const id of pending) {
+    // 失败结果在投影里被读成 `error || content`（见 `deriveMessages`），两个字段同写；
+    // 这一段与 `deleted-cwd` 那次是同一个教训。
+    const content = interruptedCallNotice()
+    log.append({ type: 'tool/result', at, id, result: { success: false, content, error: content } })
+  }
+  return pending.length
+}
+
 /** 一次性告警：日志路径不是普通文件（写不进去），每个进程只说一句。 */
 let warnedNotAppendable = false
 

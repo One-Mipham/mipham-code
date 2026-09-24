@@ -595,6 +595,51 @@ describe('OpenAICompatProvider', () => {
     expect(provider.config).toBe(config)
   })
 
+  // 恢复一个**在工具调用中途**结束的会话时，历史里那条调用必须有结果回应：
+  // `tool_calls` 挂着而没有后面的 tool 消息，端点会整条拒收（400）。这条在**出网**
+  // 这一层量它 —— 投影里「有没有那条 tool_result」是上游的事，这里读的是真正发出去的
+  // 请求体，两半对不上就红。
+  it('a resumed interrupted call is answered in the request body — and unanswered without the repair', async () => {
+    const { SessionLog, closeInterruptedToolCalls, deriveMessages } =
+      await import('../../src/core/session-log')
+    const log = new SessionLog('interrupted')
+    log.append({ type: 'session/start', at: 1, sessionId: 's1' })
+    log.append({ type: 'user/message', at: 2, message: { role: 'user', content: 'run the thing' } })
+    log.append({ type: 'tool/call', at: 3, id: 'call_1', name: 'probe', input: {} })
+
+    const broken = deriveMessages(log.events())
+    closeInterruptedToolCalls(log)
+    const repaired = deriveMessages(log.events())
+
+    async function bodyFor(messages: typeof repaired): Promise<Record<string, unknown>[]> {
+      let captured: Record<string, unknown> = {}
+      globalThis.fetch = vi.fn().mockImplementation(async (_url, opts) => {
+        captured = JSON.parse((opts as { body: string }).body)
+        return makeSSEResponse(['data: [DONE]'])
+      }) as unknown as typeof fetch
+      await collectChunks(new OpenAICompatProvider(makeConfig()).chat({ model: 'gpt-5', messages }))
+      return captured.messages as Record<string, unknown>[]
+    }
+
+    const callIds = (body: Record<string, unknown>[]) =>
+      body.flatMap((m) => ((m.tool_calls as { id: string }[] | undefined) ?? []).map((c) => c.id))
+    const answeredIds = (body: Record<string, unknown>[]) =>
+      body.filter((m) => m.role === 'tool').map((m) => m.tool_call_id as string)
+
+    // The premise, measured at the boundary: as it comes off disk, the call is
+    // asked for and never answered — which is what the endpoint refuses.
+    const brokenBody = await bodyFor(broken)
+    expect(callIds(brokenBody)).toEqual(['call_1'])
+    expect(answeredIds(brokenBody)).toEqual([])
+
+    const repairedBody = await bodyFor(repaired)
+    expect(callIds(repairedBody)).toEqual(['call_1'])
+    expect(answeredIds(repairedBody)).toEqual(['call_1'])
+    // The result carries the reason, so the model knows to check rather than guess.
+    const toolMsg = repairedBody.find((m) => m.role === 'tool')!
+    expect(String(toolMsg.content)).toMatch(/unknown/i)
+  })
+
   it('should strip trailing slashes from baseUrl', async () => {
     let capturedUrl = ''
     const fetchMock = vi.fn().mockImplementation(async (url) => {

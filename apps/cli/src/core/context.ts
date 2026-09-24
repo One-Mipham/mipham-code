@@ -8,6 +8,7 @@ import {
   deriveMessages,
   assertModelVisible,
   isAssertModelVisibleDebug,
+  closeInterruptedToolCalls,
 } from './session-log'
 
 export type Summarizer = (messages: Message[], heading: string) => Promise<string>
@@ -85,6 +86,12 @@ export class ContextManager {
   /** 从已持久化的日志恢复：设 log 为源，messages 为投影（不重复写通）。 */
   restoreLog(log: SessionLog): void {
     this.log = log
+    // 盘上那份历史可能以一条**没有结果**的调用收尾（写盘写到一半被打断，末尾那行半截
+    // 结果被 `open()` 静默丢掉 —— 引擎自己的日志顺序到不了这个形状，见下面那个函数的
+    // 注释）。挂着 `tool_calls` 却没有结果回应的请求会被 provider 整条拒收，用户看到的
+    // 是「恢复之后第一句话就报协议错」。恢复的这一刻把它补**进日志**（不是补进投影，
+    // 否则「模型看得见的必须已记录」这条不变量当场破），见 `closeInterruptedToolCalls`。
+    closeInterruptedToolCalls(log)
     this.messages = deriveMessages(log.events())
     this.reEstimateTokens()
   }
