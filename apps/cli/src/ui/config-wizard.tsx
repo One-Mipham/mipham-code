@@ -11,6 +11,7 @@
 import React, { useState, useEffect } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useI18n } from '../i18n-context'
+import { useKeyState } from './use-key-state'
 import TextInput from 'ink-text-input'
 import { DEFAULT_PROVIDERS, OLLAMA_PRESET_MODELS } from '../shared/constants'
 import type { ModelInfo } from '../shared/types'
@@ -159,7 +160,9 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
   const [error, setError] = useState<string | null>(null)
 
   // List navigation cursor
-  const [cursor, setCursor] = useState(0)
+  // 光标走 `useKeyState`：一组按键可能在同一拍里到达（↓ 之后紧跟 Enter），确认时
+  // 必须读得到本次按键刚写下的那个索引，而不是上一张闭包里的。
+  const cursor = useKeyState(0)
 
   // Ollama
   const [ollamaModel, _setOllamaModel] = useState('')
@@ -174,7 +177,7 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
 
   // Reset cursor when step changes
   const goStep = (s: Step) => {
-    setCursor(0)
+    cursor.set(0)
     setOllamaCursor(0)
     setError(null)
     setStep(s)
@@ -265,10 +268,10 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
 
     // ── Mode selection ──
     if (step === 'mode') {
-      if (key.upArrow) setCursor((c) => (c === 0 ? 1 : 0))
-      if (key.downArrow) setCursor((c) => (c === 0 ? 1 : 0))
+      if (key.upArrow) cursor.set((c) => (c === 0 ? 1 : 0))
+      if (key.downArrow) cursor.set((c) => (c === 0 ? 1 : 0))
       if (key.return) {
-        if (cursor === 0) {
+        if (cursor.read() === 0) {
           // Cloud
           setMode('cloud')
           goStep('provider')
@@ -284,10 +287,10 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
 
     // ── Cloud provider selection ──
     if (step === 'provider') {
-      if (key.upArrow) setCursor((c) => (c > 0 ? c - 1 : providerList.length - 1))
-      if (key.downArrow) setCursor((c) => (c < providerList.length - 1 ? c + 1 : 0))
+      if (key.upArrow) cursor.set((c) => (c > 0 ? c - 1 : providerList.length - 1))
+      if (key.downArrow) cursor.set((c) => (c < providerList.length - 1 ? c + 1 : 0))
       if (key.return) {
-        const p = providerList[cursor]
+        const p = providerList[cursor.read()]
         if (p) {
           setProviderId(p.id)
           goStep('model')
@@ -299,10 +302,10 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
     // ── Cloud model selection ──
     if (step === 'model') {
       if (modelList.length === 0) return
-      if (key.upArrow) setCursor((c) => (c > 0 ? c - 1 : modelList.length - 1))
-      if (key.downArrow) setCursor((c) => (c < modelList.length - 1 ? c + 1 : 0))
+      if (key.upArrow) cursor.set((c) => (c > 0 ? c - 1 : modelList.length - 1))
+      if (key.downArrow) cursor.set((c) => (c < modelList.length - 1 ? c + 1 : 0))
       if (key.return) {
-        const m = modelList[cursor]
+        const m = modelList[cursor.read()]
         if (m) {
           setModelId(m.id)
           goStep('apikey')
@@ -381,8 +384,8 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
           </Box>
 
           <Box marginBottom={1}>
-            <Text color={cursor === 0 ? SELECTED_COLOR : undefined}>
-              {cursor === 0 ? '▶' : ' '} {t('ui.wizard.mode_cloud')}
+            <Text color={cursor.value === 0 ? SELECTED_COLOR : undefined}>
+              {cursor.value === 0 ? '▶' : ' '} {t('ui.wizard.mode_cloud')}
             </Text>
           </Box>
           <Text dimColor>
@@ -390,8 +393,8 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
           </Text>
 
           <Box marginTop={2} marginBottom={1}>
-            <Text color={cursor === 1 ? SELECTED_COLOR : undefined}>
-              {cursor === 1 ? '▶' : ' '} {t('ui.wizard.mode_local')}
+            <Text color={cursor.value === 1 ? SELECTED_COLOR : undefined}>
+              {cursor.value === 1 ? '▶' : ' '} {t('ui.wizard.mode_local')}
             </Text>
           </Box>
           <Text dimColor>{t('ui.wizard.mode_local_hint')}</Text>
@@ -410,8 +413,8 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
           </Box>
           {providerList.map((p, i) => (
             <Box key={p.id} marginBottom={1}>
-              <Text color={i === cursor ? SELECTED_COLOR : undefined}>
-                {i === cursor ? '▶' : '  '} {p.name}
+              <Text color={i === cursor.value ? SELECTED_COLOR : undefined}>
+                {i === cursor.value ? '▶' : '  '} {p.name}
               </Text>
               <Text dimColor>
                 {t('ui.wizard.provider_count', {
@@ -439,8 +442,8 @@ export function ConfigWizard({ onComplete, onSkip }: Props) {
           </Box>
           {modelList.map((m, i) => (
             <Box key={m.id} marginBottom={1}>
-              <Text color={i === cursor ? SELECTED_COLOR : undefined}>
-                {i === cursor ? '▶' : '  '} {m.name}
+              <Text color={i === cursor.value ? SELECTED_COLOR : undefined}>
+                {i === cursor.value ? '▶' : '  '} {m.name}
               </Text>
               <Text dimColor> ({m.id})</Text>
             </Box>

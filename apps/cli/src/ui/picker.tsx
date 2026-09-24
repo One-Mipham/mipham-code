@@ -1,7 +1,14 @@
 import React, { useState, useCallback } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useI18n } from '../i18n-context'
+import { useKeyState } from './use-key-state'
 import type { MiphamConfig, ProviderConfig } from '../shared/index.ts'
+
+/** 环绕取模 —— 列表两端互为首尾。 */
+const wrap = (i: number, len: number) => ((i % len) + len) % len
+
+/** 只列启用中的模型（与 `providerList` 的 `upcoming` 过滤同一条口径）。 */
+const activeModels = (p: ProviderConfig) => p.models.filter((m) => m.status === 'active')
 
 interface PickerProps {
   config: MiphamConfig
@@ -25,54 +32,58 @@ export function ModelPicker({
   const { t } = useI18n()
   // Get active providers only
   const providers = config.providers.filter((p) => p.status !== 'upcoming')
-  const activeModels = (p: ProviderConfig) => p.models.filter((m) => m.status === 'active')
 
   // State
   const [activePanel, setActivePanel] = useState<Panel>('provider')
-  const [providerIdx, setProviderIdx] = useState(() => {
+  // 光标走 `useKeyState`：一组按键可能在同一拍里到达（↓ 之后紧跟 Enter），判据必须
+  // 读得到本次按键刚写下的那个索引，而不是上一张闭包里的。
+  const providerIdx = useKeyState(() => {
     const idx = providers.findIndex((p) => p.id === currentProvider)
     return idx >= 0 ? idx : 0
   })
-  const [modelIdx, setModelIdx] = useState(0)
+  const modelIdx = useKeyState(0)
 
-  const selectedProvider = providers[providerIdx]
+  const selectedProvider = providers[providerIdx.value]
   const models = selectedProvider ? activeModels(selectedProvider) : []
 
   // Reset model index when provider changes
   const goToProvider = useCallback(
     (idx: number) => {
-      const wrapped = ((idx % providers.length) + providers.length) % providers.length
-      setProviderIdx(wrapped)
-      setModelIdx(0)
+      providerIdx.set(wrap(idx, providers.length))
+      modelIdx.set(0)
       setActivePanel('model') // auto-switch to model panel
     },
-    [providers.length],
+    [providers.length, providerIdx, modelIdx],
   )
 
-  const selectModel = useCallback(
-    (idx: number) => {
+  /** 相对移动 —— 按 `read()` 叠加，同一拍里的两次 ↓ 就是两步。 */
+  const stepModel = useCallback(
+    (delta: number) => {
       if (!selectedProvider) return
-      const wrapped = ((idx % models.length) + models.length) % models.length
-      setModelIdx(wrapped)
+      const len = models.length
+      if (len === 0) return
+      modelIdx.set((prev) => wrap(prev + delta, len))
     },
-    [selectedProvider, models.length],
+    [selectedProvider, models.length, modelIdx],
   )
 
   const confirmSelection = useCallback(() => {
-    if (!selectedProvider) return
-    const model = models[modelIdx]
+    // 按 `read()` 取当前光标，而不是渲染时那份闭包 —— 否则「↓ Enter」确认的是上一行。
+    const provider = providers[providerIdx.read()]
+    if (!provider) return
+    const model = activeModels(provider)[modelIdx.read()]
     if (model) {
       // Check API key before confirming switch
-      const apiKey = selectedProvider.apiKey
+      const apiKey = provider.apiKey
       if (!apiKey || apiKey.trim() === '' || /^\$\{[A-Z_]+\}$/.test(apiKey.trim())) {
-        if (selectedProvider.id !== 'ollama' && onNeedsApiKey) {
-          onNeedsApiKey(selectedProvider.id, model.id, selectedProvider.name)
+        if (provider.id !== 'ollama' && onNeedsApiKey) {
+          onNeedsApiKey(provider.id, model.id, provider.name)
           return
         }
       }
-      onSelect(selectedProvider.id, model.id)
+      onSelect(provider.id, model.id)
     }
-  }, [selectedProvider, models, modelIdx, onSelect, onNeedsApiKey])
+  }, [providers, providerIdx, modelIdx, onSelect, onNeedsApiKey])
 
   useInput((input, key) => {
     // Global keys
@@ -83,7 +94,7 @@ export function ModelPicker({
 
     if (key.return) {
       if (activePanel === 'provider') {
-        goToProvider(providerIdx) // switches to model panel
+        goToProvider(providerIdx.read()) // switches to model panel
       } else {
         confirmSelection()
       }
@@ -105,18 +116,18 @@ export function ModelPicker({
     // Up/Down navigation
     if (key.upArrow) {
       if (activePanel === 'provider') {
-        setProviderIdx((providerIdx - 1 + providers.length) % providers.length)
+        providerIdx.set((prev) => wrap(prev - 1, providers.length))
       } else {
-        selectModel(modelIdx - 1)
+        stepModel(-1)
       }
       return
     }
 
     if (key.downArrow) {
       if (activePanel === 'provider') {
-        setProviderIdx((providerIdx + 1) % providers.length)
+        providerIdx.set((prev) => wrap(prev + 1, providers.length))
       } else {
-        selectModel(modelIdx + 1)
+        stepModel(1)
       }
       return
     }
@@ -150,7 +161,7 @@ export function ModelPicker({
           </Text>
           {providers.map((p, i) => {
             const isCurrent = p.id === currentProvider
-            const isSelected = i === providerIdx
+            const isSelected = i === providerIdx.value
             const isUpcoming = p.status === 'upcoming'
             return (
               <Box key={p.id}>
@@ -185,7 +196,7 @@ export function ModelPicker({
           {models.length === 0 && <Text dimColor> {t('ui.picker.no_active_models')}</Text>}
           {models.map((m, i) => {
             const isCurrentModel = selectedProvider?.id === currentProvider && m.id === currentModel
-            const isSelected = i === modelIdx
+            const isSelected = i === modelIdx.value
             return (
               <Box key={m.id} flexDirection="column">
                 <Text

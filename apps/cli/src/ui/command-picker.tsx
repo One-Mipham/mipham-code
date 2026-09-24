@@ -4,6 +4,7 @@ import TextInput from 'ink-text-input'
 import { useI18n } from '../i18n-context'
 import { getCommandList } from './commands.js'
 import { commandToken, hasInlineArgs } from './command-token.js'
+import { useKeyState } from './use-key-state'
 
 interface CommandPickerProps {
   /** Text already typed (e.g. "/", "/age") — used as initial filter */
@@ -59,7 +60,9 @@ export function CommandPicker({
   const { t } = useI18n()
   const allCommands = useMemo(() => getCommandList(), [])
   const [filter, setFilter] = useState(initialFilter)
-  const [cursorIdx, setCursorIdx] = useState(0)
+  // 光标走 `useKeyState`：一组按键可能在同一拍里到达（↓ 之后紧跟 Enter），确认时
+  // 必须读得到本次按键刚写下的那个索引，而不是上一张闭包里的。
+  const cursorIdx = useKeyState(0)
 
   // Filter commands based on user input (match on the command-name token, not the
   // full line — so "/loop 60s echo hello" still matches "/loop").
@@ -73,16 +76,16 @@ export function CommandPicker({
 
   // Reset cursor when filter changes
   useEffect(() => {
-    setCursorIdx(0)
-  }, [filter])
+    cursorIdx.set(0)
+  }, [filter, cursorIdx])
 
   // Scroll window: keep cursor in the visible range
   const scrollStart = Math.max(
     0,
-    Math.min(cursorIdx - Math.floor(maxVisible / 2), filtered.length - maxVisible),
+    Math.min(cursorIdx.value - Math.floor(maxVisible / 2), filtered.length - maxVisible),
   )
   const visible = filtered.slice(scrollStart, scrollStart + maxVisible)
-  const _adjustedCursor = cursorIdx - scrollStart
+  const _adjustedCursor = cursorIdx.value - scrollStart
 
   // Wrap cursor safely
   const safeCursor = (i: number) =>
@@ -97,7 +100,7 @@ export function CommandPicker({
       onSelect(trimmed)
       return
     }
-    const selected = filtered[cursorIdx]
+    const selected = filtered[cursorIdx.read()]
     if (selected) onSelect(selected.name)
   }
 
@@ -113,12 +116,12 @@ export function CommandPicker({
     }
 
     if (key.upArrow) {
-      setCursorIdx((prev) => safeCursor(prev - 1))
+      cursorIdx.set((prev) => safeCursor(prev - 1))
       return
     }
 
     if (key.downArrow) {
-      setCursorIdx((prev) => safeCursor(prev + 1))
+      cursorIdx.set((prev) => safeCursor(prev + 1))
       return
     }
   })
@@ -143,7 +146,7 @@ export function CommandPicker({
         )}
         {visible.map((cmd, i) => {
           const globalIdx = i + scrollStart
-          const isCursor = globalIdx === cursorIdx
+          const isCursor = globalIdx === cursorIdx.value
           const query = commandToken(filter)
           const segments = highlightMatches(cmd.name, query)
           const padLen = Math.max(0, 20 - cmd.name.length)
