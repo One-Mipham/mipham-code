@@ -10,10 +10,14 @@ import type { HookConfig, HookContext, HookResult } from '../shared/index.ts'
  * - mcp_tool: Call an MCP tool (delegates to MCP client -- stub for now).
  * - code: No-op (handled inline by the handler function directly).
  */
-export async function executeHook(cfg: HookConfig, ctx: HookContext): Promise<HookResult> {
+export async function executeHook(
+  cfg: HookConfig,
+  ctx: HookContext,
+  source?: string,
+): Promise<HookResult> {
   switch (cfg.type) {
     case 'command':
-      return executeCommand(cfg, ctx)
+      return executeCommand(cfg, ctx, source)
     case 'http':
       return executeHttp(cfg, ctx)
     case 'mcp_tool':
@@ -155,7 +159,26 @@ function spawnFailureCause(
   return null
 }
 
-async function executeCommand(cfg: HookConfig, ctx: HookContext): Promise<HookResult> {
+/**
+ * The handle a failure message points the operator at: the command, and — when the
+ * hook came from a plugin rather than from the operator's own settings — who
+ * declared it.
+ *
+ * The command alone does not answer "which plugin do I look at". A plugin hook is
+ * typically `sh`, `node`, or a path under the plugin's root; none of those is a
+ * name the operator can search for. Two arguments rather than a pre-joined string
+ * because the parentheses and the `from` clause have to stay one decision: a
+ * caller that built half the label would be free to print `from "undefined"`.
+ */
+function failingLabel(command: string | undefined, source?: string): string {
+  return `(${command})${source ? ` from "${source}"` : ''}`
+}
+
+async function executeCommand(
+  cfg: HookConfig,
+  ctx: HookContext,
+  source?: string,
+): Promise<HookResult> {
   if (!cfg.command) return { allowed: true }
 
   try {
@@ -220,14 +243,14 @@ async function executeCommand(cfg: HookConfig, ctx: HookContext): Promise<HookRe
     if (failure) {
       return {
         allowed: true,
-        additionalContext: `Hook error (${cfg.command}): ${failure}`,
+        additionalContext: `Hook error ${failingLabel(cfg.command, source)}: ${failure}`,
       }
     }
 
     // Other non-zero exit: don't block, log the error as context
     return {
       allowed: true,
-      additionalContext: `Hook warning (${cfg.command}): ${stderr.trim()}`,
+      additionalContext: `Hook warning ${failingLabel(cfg.command, source)}: ${stderr.trim()}`,
     }
   } catch (err) {
     // Only reached when `spawnSync` itself throws — masking-policy load, env
@@ -237,7 +260,7 @@ async function executeCommand(cfg: HookConfig, ctx: HookContext): Promise<HookRe
 
     return {
       allowed: true,
-      additionalContext: `Hook error (${cfg.command}): ${message}`,
+      additionalContext: `Hook error ${failingLabel(cfg.command, source)}: ${message}`,
     }
   }
 }

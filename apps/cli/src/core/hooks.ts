@@ -70,6 +70,18 @@ export class HookEngine {
     )
   }
 
+  /**
+   * Remove every hook a given source declared, and nothing else.
+   *
+   * `unregister(event)` matches on the event alone, so a caller that wanted to undo
+   * its own registrations took down every hook on those events — the operator's own
+   * from settings, and other plugins'. Scoping by source is the only removal that
+   * answers the question the caller is actually asking.
+   */
+  unregisterSource(source: string): void {
+    this.hooks = this.hooks.filter((h) => h.source !== source)
+  }
+
   // ── Existing event executors ──
 
   async executePreToolUse(
@@ -217,9 +229,21 @@ export class HookEngine {
 
   // ── Health & Resilience ──
 
-  /** Get a hook health key for tracking. */
+  /**
+   * Get a hook health key for tracking.
+   *
+   * Health is per hook, and the key is what says which hook. It was the event (plus
+   * the tool name), which is a *class* of hooks rather than one of them: two hooks
+   * on the same event shared one failure counter and one disabled flag, so five
+   * failures from a plugin's broken hook could auto-disable an unrelated hook that
+   * had never failed. The source is what makes the key name one hook.
+   *
+   * A hook with no source keeps the string it has always had — `/hooks enable`
+   * takes these keys, and a key for a hook that has no plugin must not renumber.
+   */
   private healthKey(hook: HookDefinition): string {
-    return hook.toolName ? `${hook.event}:${hook.toolName}` : hook.event
+    const base = hook.toolName ? `${hook.event}:${hook.toolName}` : hook.event
+    return hook.source ? `${hook.source}:${base}` : base
   }
 
   /** Check if a hook should be skipped due to repeated failures. */

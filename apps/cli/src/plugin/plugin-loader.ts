@@ -50,7 +50,6 @@ export function loadPlugins(
     }
 
     const mcpServers: string[] = []
-    const hookEvents: HookEvent[] = []
 
     // ── Custom agents ──
     const agentsDir = join(plugin.path, 'agents')
@@ -141,10 +140,14 @@ export function loadPlugins(
               const event = (hookCfg as unknown as Record<string, unknown>).event as
                 HookEvent | undefined
               if (event) {
-                hookEvents.push(event)
                 hookEngine.register({
                   event,
-                  handler: async (ctx) => executeHook(hookCfg, ctx),
+                  // Whoever is running the session can no longer tell this hook from
+                  // one they wrote themselves: the failure it prints would name only
+                  // its command, its health would be tracked under the bare event
+                  // name, and the cleanup below would have nothing to scope to.
+                  source: plugin.name,
+                  handler: async (ctx) => executeHook(hookCfg, ctx, plugin.name),
                 })
               }
             }
@@ -168,13 +171,13 @@ export function loadPlugins(
           /* best effort */
         }
       }
-      // Unregister hooks
-      for (const event of hookEvents) {
-        try {
-          hookEngine.unregister(event)
-        } catch {
-          /* best effort */
-        }
+      // Unregister hooks — this plugin's, and only this plugin's. Keyed by event,
+      // this removed every hook on those events: the operator's own from settings
+      // and other plugins' alike, silently.
+      try {
+        hookEngine.unregisterSource(plugin.name)
+      } catch {
+        /* best effort */
       }
     })
   }

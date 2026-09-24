@@ -275,6 +275,14 @@ export interface HookConfig {
 export interface HookDefinition {
   event: HookEvent
   toolName?: string
+  /**
+   * Who declared this hook, when it was not the operator — a plugin name, today.
+   *
+   * The operator is no longer the only author of the hooks that fire, and without
+   * this the engine cannot tell them apart: a failure message names only a command,
+   * health is tracked per key, and removal has nothing to scope to.
+   */
+  source?: string
   handler: (context: HookContext) => Promise<HookResult>
 }
 
