@@ -1,4 +1,6 @@
 import { spawnSync } from 'node:child_process'
+import { McpClient } from '../mcp/client'
+import type { ToolCallResult } from '../mcp/types'
 import type { HookConfig, HookContext, HookResult } from '../shared/index.ts'
 
 /**
@@ -7,7 +9,7 @@ import type { HookConfig, HookContext, HookResult } from '../shared/index.ts'
  * Supported types:
  * - command: Execute a shell command. Exit code 0 = allow, 2 = block with stderr as reason.
  * - http: POST to a URL, response body becomes additionalContext.
- * - mcp_tool: Call an MCP tool (delegates to MCP client -- stub for now).
+ * - mcp_tool: Call the MCP tool the hook names; its answer is read as the hook's.
  * - code: No-op (handled inline by the handler function directly).
  */
 export async function executeHook(
@@ -305,8 +307,60 @@ async function executeHttp(cfg: HookConfig, ctx: HookContext): Promise<HookResul
   }
 }
 
-async function executeMcpTool(_cfg: HookConfig, _ctx: HookContext): Promise<HookResult> {
-  // Stub: MCP tool hook execution requires MCP client integration.
-  // For now, return allow to not block execution.
-  return { allowed: true }
+/**
+ * An `mcp_tool` hook: call the tool the hook names, and read its answer as the
+ * hook's own.
+ *
+ * The answer is read by the same contract a command hook's stdout follows — a
+ * structured decision decides, plain prose is context — so a tool that guards a
+ * tool call can block it the way a script would. An `isError` result is *not* a
+ * decision: it means the call did not speak, and an unreachable server reports
+ * the same way, so its message is reported rather than read as a verdict.
+ */
+async function executeMcpTool(cfg: HookConfig, ctx: HookContext): Promise<HookResult> {
+  if (!cfg.mcpServer || !cfg.mcpTool) return { allowed: true }
+
+  const client = McpClient.getInstance()
+
+  // Startup connects servers without blocking; this hook can arrive first.
+  if (!(await client.waitUntilReady(cfg.mcpServer))) {
+    return {
+      allowed: true,
+      additionalContext: `MCP hook (${cfg.mcpServer}/${cfg.mcpTool}): server "${cfg.mcpServer}" was still connecting — the tool was not called.`,
+    }
+  }
+
+  const result = await client.callTool(cfg.mcpServer, cfg.mcpTool, {
+    event: ctx.event,
+    toolName: ctx.toolName,
+    toolInput: ctx.toolInput,
+    sessionId: ctx.sessionId,
+  })
+  const body = mcpResultText(result)
+
+  if (result.isError) {
+    return {
+      allowed: true,
+      additionalContext: `MCP hook error (${cfg.mcpServer}/${cfg.mcpTool}): ${body.slice(0, 2000)}`,
+    }
+  }
+
+  const parsed = parseHookStdout(body, ctx)
+  const decided =
+    !parsed.allowed ||
+    parsed.additionalContext !== undefined ||
+    parsed.permissionDecision !== undefined ||
+    parsed.modifiedInput !== undefined
+
+  // Nothing in the hook contract matched, so the tool answered in prose: that
+  // answer is the context this hook contributes, not a silent no-op.
+  return decided ? parsed : { allowed: true, additionalContext: body.slice(0, 2000) || undefined }
+}
+
+/** The text an MCP tool call returned; non-text parts carry no message for a hook. */
+function mcpResultText(result: ToolCallResult): string {
+  return result.content
+    .map((part) => part.text ?? '')
+    .filter(Boolean)
+    .join('\n')
 }

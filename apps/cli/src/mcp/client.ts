@@ -26,6 +26,11 @@ const t = createT(bundles['en-US'] || (enUS as TranslationMap), enUS as Translat
 // than block on the per-request 60s timeout. Overridable via env for tests.
 const DEFAULT_CONNECT_TIMEOUT_MS = 15_000
 
+// How often a caller waiting on a handshake re-checks it. A handshake settles in
+// tens of milliseconds when it settles at all; this only bounds how long the wait
+// can overshoot the moment it actually did.
+const CONNECT_POLL_MS = 50
+
 function connectTimeoutMs(): number {
   const env = Number(process.env.MIPHAM_MCP_CONNECT_TIMEOUT_MS)
   return Number.isFinite(env) && env > 0 ? env : DEFAULT_CONNECT_TIMEOUT_MS
@@ -335,6 +340,31 @@ export class McpClient {
       ])
     } finally {
       if (timer) clearTimeout(timer)
+    }
+  }
+
+  /**
+   * Wait for a server that is still mid-handshake to settle.
+   *
+   * Startup connects servers without blocking, so a caller that fires alongside
+   * it — a hook, SessionStart work — can arrive while a server is *becoming*
+   * connected. Asked for a tool then, `callTool` answers "not connected", which
+   * is a statement about this moment rather than about the server.
+   *
+   * Bounded by the same timeout the handshake itself is, so a server that never
+   * settles fails the waiting caller instead of hanging it.
+   *
+   * @returns `false` only when the deadline passed with the server still
+   * connecting. A server this client knows nothing about is `true`: there is
+   * nothing to wait for, and `callTool` will say so.
+   */
+  async waitUntilReady(name: string, timeoutMs: number = connectTimeoutMs()): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs
+    for (;;) {
+      const conn = this.connections.get(name)
+      if (!conn || conn.status !== 'connecting') return true
+      if (Date.now() >= deadline) return false
+      await new Promise((resolve) => setTimeout(resolve, CONNECT_POLL_MS))
     }
   }
 
