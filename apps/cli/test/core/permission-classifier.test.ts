@@ -324,3 +324,50 @@ describe('LlmPermissionClassifier —— 引擎故障一律 fail-closed', () => 
     expect(classifier(llm).version).toBe(PROMPT_VERSION)
   })
 })
+
+// ── 4. The reply budget and the truncation signal ──
+
+/**
+ * Both cases below are the same defect seen from two ends: the classifier used
+ * to cap the outgoing request at 200 output tokens and then read the reply as if
+ * an empty one meant "the model said nothing", never as "the reply was cut off".
+ *
+ * Measured 2026-09-24 against the configured `deepseek-v4-pro`, three realistic
+ * calls, `maxTokens: 200`: ~880 characters of `reasoning_content` consumed the
+ * whole budget, `finish_reason` came back `length`, visible text was empty 3/3,
+ * and each call was reported to the user as an *unreadable* reply. The cap is
+ * shared with the model's thinking, so the harder the call, the more certain it
+ * was to starve — which is exactly backwards for a gate.
+ */
+describe('LlmPermissionClassifier —— 输出预算与截断信号', () => {
+  it('发出去的请求不带 maxTokens（上限与「思考」共享，够写裁决就不够想）', async () => {
+    const { llm, requests } = makeLlm([text('<block>no</block>')])
+    await classifier(llm).classify(req())
+    // 预算改由 provider 自己的默认值决定（`req.maxTokens || declaredMaxOutput || 8192`）。
+    // 若哪天有人把 200 加回来，这一条翻红。
+    expect(requests[0]!.maxTokens).toBeUndefined()
+  })
+
+  it('被上限截断且读不出来 ⇒ 理由点名「截断」，不是「读不出来」', async () => {
+    const { llm } = makeLlm([{ type: 'stop', truncated: true }])
+    const v = await classifier(llm).classify(req())
+    expect(v.allow).toBe(false)
+    expect(v.retryable).toBe(true)
+    expect(v.reason).toContain('cut off at the output token cap')
+    // 「读不出来」把人送去查畸形响应，而这里的原因是 token 天花板 —— 两件事。
+    expect(v.reason).not.toContain('unreadable')
+  })
+
+  it('同样读不出来、但没有截断标记 ⇒ 仍说「读不出来」（上一条不是恒真）', async () => {
+    const { llm } = makeLlm([{ type: 'stop' }])
+    const v = await classifier(llm).classify(req())
+    expect(v.reason).toContain('unreadable')
+    expect(v.reason).not.toContain('cut off')
+  })
+
+  it('截断标记不改语义：裁决本身读得出来就照裁决办', async () => {
+    // 否则「读到截断标记 ⇒ 一律拒」会把一条正常放行也翻成拒绝 —— 标记只该改措辞。
+    const { llm } = makeLlm([text('<block>no</block>'), { type: 'stop', truncated: true }])
+    expect(await classifier(llm).classify(req())).toEqual({ allow: true })
+  })
+})

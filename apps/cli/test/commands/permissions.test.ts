@@ -12,6 +12,7 @@ import { homedir } from 'node:os'
 import { PermissionSystem } from '../../src/core/permission'
 import { permissionsCmd, setupCmd } from '../../src/commands/project'
 import { ALL_MODES, MODE_CYCLE, PERMISSION_MODE_HIERARCHY } from '../../src/core/permission-config'
+import type { TranslationMap } from '../../src/i18n-core/types'
 import type { ToolDefinition } from '../../src/shared'
 
 const CWD = join(homedir(), 'proj')
@@ -178,5 +179,108 @@ describe('/permissions — rule persistence & mode help', () => {
 
     expect(content).toMatch(/Mode:\s+plan/)
     expect(content).not.toMatch(/Mode:\s+default/)
+  })
+})
+
+/**
+ * The command the denial message tells the user to run has to be a command the
+ * command accepts.
+ *
+ * Nine surfaces print a rule **quoted** — `tool_denied_mode` / `tool_denied_ask_rule`
+ * / `tool_denied_classifier` in both locales, this command's usage line, its two
+ * status-view examples, and the `config.yml` sample. A slash command's args arrive
+ * whitespace-split with the quotes still in them, so as long as the handler read
+ * `args[1]` verbatim, `/permissions allow "Git"` answered
+ * `Invalid rule ""Git"": not a single tool name.` — the remedy rejected its own
+ * spelling. Field report: a session stuck on `Tool "Bash" requires approval under
+ * "acceptEdits" mode … /permissions allow "Bash"`, where following the advice was
+ * the only thing that could not work.
+ */
+describe('/permissions — the spelling the CLI advertises', () => {
+  let perm: PermissionSystem
+
+  function makeCtx() {
+    return {
+      engine: {
+        getPermission: () => perm,
+        getContext: () => ({ getMessages: () => [] }),
+        getTools: () => new Map(),
+      },
+      config: { permission: 'default', providers: [] },
+      t: (k: string) => k,
+    } as unknown as Parameters<typeof permissionsCmd>[0]
+  }
+
+  const allowIn = () =>
+    JSON.parse(readFileSync(settingsPath, 'utf-8')).permissions.allow as string[]
+
+  beforeEach(() => {
+    rmSync(homedir(), { recursive: true, force: true })
+    mkdirSync(join(CWD, '.mipham'), { recursive: true })
+    vi.spyOn(process, 'cwd').mockReturnValue(CWD)
+    perm = new PermissionSystem('acceptEdits')
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    rmSync(homedir(), { recursive: true, force: true })
+  })
+
+  it('accepts the quoted rule the denial message prints', async () => {
+    const { content } = await permissionsCmd(makeCtx(), ['allow', '"Bash"'])
+    expect(content).not.toContain('Invalid rule')
+    expect(allowIn()).toEqual(['Bash'])
+  })
+
+  it('takes the command straight out of the denial message and runs it', async () => {
+    // Not a hand-copied spelling: the string the user is actually shown, parsed the
+    // way the slash-command dispatcher parses it (`split(/\s+/)`, quotes intact).
+    const { createT } = await import('../../src/i18n-core/t')
+    const enUS = (await import('../../src/i18n-core/locales/en-US.json')).default as TranslationMap
+    const t = createT(enUS, enUS)
+    const advice = t('errors.tool_denied_mode', { name: 'Git', mode: 'acceptEdits' })
+    const quoted = advice.match(/\/permissions allow (\S+)/)?.[1]
+    expect(quoted, `no quoted rule in: ${advice}`).toBeDefined()
+
+    const { content } = await permissionsCmd(makeCtx(), ['allow', quoted!])
+    expect(content).not.toContain('Invalid rule')
+    expect(allowIn()).toEqual(['Git'])
+  })
+
+  it('allows two rules given on one line, instead of silently dropping the second', async () => {
+    const { content } = await permissionsCmd(makeCtx(), ['allow', '"Git"', '"Bash"'])
+    expect(content).not.toContain('Invalid rule')
+    expect(allowIn()).toEqual(['Git', 'Bash'])
+  })
+
+  it('keeps a rule that carries a space in one piece', async () => {
+    // The narrower form the usage line advertises — `"Bash(npm test)"` — reaches the
+    // handler as two args; validation must see the one rule, not `Bash(npm`.
+    const { content } = await permissionsCmd(makeCtx(), ['allow', '"Bash(npm', 'test)"'])
+    expect(content).not.toContain('Invalid rule')
+    expect(allowIn()).toEqual(['Bash(npm test)'])
+  })
+
+  it('refuses an unbalanced quote without writing anything', async () => {
+    const { content } = await permissionsCmd(makeCtx(), ['allow', '"Git'])
+    expect(content).toContain('Unbalanced quote')
+    expect(existsSync(settingsPath)).toBe(false)
+  })
+
+  // ── The fix has to change the ruling, not just the text ──
+  it('lifts the real Git tool’s approval under acceptEdits', async () => {
+    const { gitTool } = await import('../../src/tools/exec/git')
+    const call = { command: 'status --short' }
+
+    // The premise, asserted so the test cannot pass vacuously: under `acceptEdits`
+    // the real tool *is* blocked, which is the state the user reported.
+    expect(await perm.resolveApproval(gitTool, call)).toMatchObject({ level: 'ask' })
+
+    await permissionsCmd(makeCtx(), ['allow', '"Git"'])
+
+    expect(await perm.resolveApproval(gitTool, call)).toMatchObject({
+      level: 'bypass',
+      source: 'static',
+    })
   })
 })

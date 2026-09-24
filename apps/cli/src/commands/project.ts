@@ -174,57 +174,108 @@ Run /setup for the full wizard, or /config to view current settings.`,
   }
 }
 
+/**
+ * Split the rule argument(s) out of the whitespace-split slash-command args.
+ *
+ * Every surface that advertises this command prints the rule **quoted** — the denial
+ * messages (`i18n-core/locales/{en-US,zh-CN}.json`), this command's usage line and its
+ * examples, and the `config.yml` sample — and the narrower form the message recommends
+ * (`Bash(npm test)`) carries a space. Args arrive split on whitespace with the quotes
+ * still in them, so the rule is re-joined and split on quotes here instead. Without
+ * this the command rejects the exact spelling it tells the user to type:
+ * `/permissions allow "Git"` → `Invalid rule ""Git"": not a single tool name.`
+ */
+function parseRuleArgs(args: string[]): { rules: string[]; unbalanced: boolean } {
+  const rules: string[] = []
+  let current = ''
+  let quote: string | null = null
+
+  for (const ch of args.join(' ')) {
+    if (quote) {
+      if (ch === quote) quote = null
+      else current += ch
+    } else if (ch === '"' || ch === "'") {
+      quote = ch
+    } else if (/\s/.test(ch)) {
+      if (current) rules.push(current)
+      current = ''
+    } else {
+      current += ch
+    }
+  }
+  if (current) rules.push(current)
+
+  return { rules, unbalanced: quote !== null }
+}
+
 const permissionsCmd: CommandHandler = async (ctx, args) => {
   const c = ctx.engine.getContext()
   const msgs = c.getMessages()
 
-  // ── Rule persistence: allow/deny/remove <rule> [--user] ──
-  const positional = args.filter((a) => !a.startsWith('--'))
+  // ── Rule persistence: allow/deny/remove <rule>... [--user] ──
+  // `--user` is matched exactly: a rule fragment may legitimately begin with `--`
+  // (`Bash(--version)`), and dropping it as "a flag" would corrupt the rule.
+  const rest = args.filter((a) => a !== '--user')
   const scope: 'project' | 'user' = args.includes('--user') ? 'user' : 'project'
-  const verb = positional[0]
-  const rule = positional[1]
+  const verb = rest[0]
 
   if (verb === 'allow' || verb === 'deny' || verb === 'remove') {
     const { validateRulePattern } = await import('../core/permission-rules')
     const { addSettingsRule, removeSettingsRule, settingsPathFor } =
       await import('../config/loader')
 
-    // A rule that can't match is worse than no rule: it reads as protection
-    // that isn't there. Validate before writing.
-    const invalid = validateRulePattern(rule ?? '')
+    const { rules, unbalanced } = parseRuleArgs(rest.slice(1))
     const usage =
-      `Usage: /permissions <allow|deny|remove> <rule> [--user]\n\n` +
-      `  rule   Tool pattern — "Bash" or "Bash(npm test)".\n` +
+      `Usage: /permissions <allow|deny|remove> <rule>... [--user]\n\n` +
+      `  rule   Tool pattern — "Bash" or "Bash(npm test)". Quote it if it has spaces.\n` +
       `  --user Write to ~/.mipham/settings.json instead of .mipham/settings.json.`
 
-    if (verb !== 'remove' && !rule) {
+    if (unbalanced) {
+      return { content: `Unbalanced quote in rule.\n\n${usage}` }
+    }
+    if (rules.length === 0) {
       return { content: `Missing rule.\n\n${usage}` }
     }
-    if (invalid && verb !== 'remove') {
-      return { content: `Invalid rule "${rule}": ${invalid}.\n\n${usage}` }
+    // A rule that can't match is worse than no rule: it reads as protection
+    // that isn't there. Validate every rule before writing any of them.
+    if (verb !== 'remove') {
+      for (const rule of rules) {
+        const invalid = validateRulePattern(rule)
+        if (invalid) {
+          return { content: `Invalid rule "${rule}": ${invalid}.\n\n${usage}` }
+        }
+      }
     }
 
     const perm = ctx.engine.getPermission()
 
     if (verb === 'remove') {
-      const removed = removeSettingsRule(rule!, scope)
-      if (!removed) {
-        return { content: `No rule "${rule}" in ${settingsPathFor(scope)}.` }
+      const parts: string[] = []
+      for (const rule of rules) {
+        const removed = removeSettingsRule(rule, scope)
+        if (!removed) {
+          parts.push(`No rule "${rule}" in ${settingsPathFor(scope)}.`)
+          continue
+        }
+        perm.removeRule(rule)
+        parts.push(`Removed from ${removed.path}\n\npermissions.${removed.key}:\n  ${rule}`)
       }
-      perm.removeRule(rule!)
-      return {
-        content: `Removed from ${removed.path}\n\npermissions.${removed.key}:\n  ${rule}`,
-      }
+      return { content: parts.join('\n\n') }
     }
 
-    const path = addSettingsRule(verb, rule!, scope)
-    if (verb === 'allow') perm.allow(rule!)
-    else perm.deny(rule!)
+    let path = ''
+    for (const rule of rules) {
+      path = addSettingsRule(verb, rule, scope)
+      if (verb === 'allow') perm.allow(rule)
+      else perm.deny(rule)
+    }
     return {
       content:
         `Added to ${path}\n\n` +
-        `permissions.${verb}:\n  ${rule}\n\n` +
-        `This rule persists across sessions and applies from now on.`,
+        `permissions.${verb}:\n${rules.map((r) => `  ${r}`).join('\n')}\n\n` +
+        (rules.length === 1
+          ? `This rule persists across sessions and applies from now on.`
+          : `These rules persist across sessions and apply from now on.`),
     }
   }
 

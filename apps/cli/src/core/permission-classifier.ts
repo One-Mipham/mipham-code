@@ -399,11 +399,21 @@ export class LlmPermissionClassifier implements PermissionClassifier {
 
     let text = ''
     let streamError: string | undefined
+    let truncated = false
     try {
       for await (const chunk of this.llm.chat({
         model: this.config.resolveModel(),
         messages: [{ role: 'user', content: prompt }],
-        maxTokens: 200,
+        // NO `maxTokens`. This cap is shared with the model's **thinking**, and the
+        // configured model may be a reasoning one: `reasoning_content` is billed
+        // against `max_tokens` but is not what the loop below accumulates, so a cap
+        // sized for the 17-character reply starves the reply itself. Measured
+        // 2026-09-24 against the configured `deepseek-v4-pro` on three realistic
+        // calls: ~880 chars of reasoning consumed the whole budget, `finish_reason`
+        // came back `length`, the visible answer was empty 3/3, and every one of
+        // those calls was held back as an unreadable reply — i.e. precisely the calls
+        // worth classifying are the ones that failed. The provider's own default
+        // (`req.maxTokens || declaredMaxOutput || 8192`) is the budget now.
         temperature: 0,
         signal: controller.signal,
       })) {
@@ -411,6 +421,10 @@ export class LlmPermissionClassifier implements PermissionClassifier {
         // An in-stream error would otherwise look exactly like an empty reply —
         // and an empty reply is what a *denial* looks like. Name it instead.
         else if (chunk.type === 'error') streamError = chunk.error ?? 'provider error'
+        // The provider sets this for `finish_reason: 'length'`. Reading it is the
+        // difference between "the reply was cut off at the cap" and "the reply was
+        // unreadable" — two very different things to hand a user.
+        else if (chunk.type === 'stop' && chunk.truncated) truncated = true
       }
     } catch (error) {
       return {
@@ -435,10 +449,14 @@ export class LlmPermissionClassifier implements PermissionClassifier {
       return { allow: false, rule: parsed.rule, reason: parsed.reason }
     }
     // Unreadable reply ⇒ held back, and said to be retryable — the model did not
-    // rule, so treating this as a policy refusal would be a lie.
+    // rule, so treating this as a policy refusal would be a lie. A reply the
+    // provider flagged as cut off gets named as such: "unreadable" sends the reader
+    // hunting for a malformed response when the cause was a token ceiling.
     return {
       allow: false,
-      reason: `classifier response unreadable: ${parsed.detail}`,
+      reason: truncated
+        ? `classifier reply was cut off at the output token cap before it ruled (${parsed.detail})`
+        : `classifier response unreadable: ${parsed.detail}`,
       retryable: true,
     }
   }
