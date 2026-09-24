@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.85.4] — 2026-09-24
+
+### Fixed
+
+- **`/permissions` 拒绝它自己叫你敲的那个拼写** —— denial 文案印 `/permissions allow "Bash"`，
+  照它敲 `allow "Git"` 却回 `Invalid rule ""Git"": not a single tool name.`：`positional[1]`
+  **原样**当规则用（引号跟着一起进了规则名），而所有印它的地方都印**带引号**的写法；
+  `allow "Git" "Bash"` 里第二条（`positional[2]`）**全程没人读** ⇒ 静默丢弃。现在 verb 之后的
+  规则按**引号**重切、逐条校验、逐条落盘。并配一条 **meta-test**：从真 denial 文案里正则抠出
+  那条该敲的命令再拿去执行 ⇒ 文案与命令一分叉即红。
+- **auto 分类器的输出上限与模型的「思考」共享** —— 请求写死 `maxTokens: 200`，而真模型实测
+  （`deepseek-v4-pro`，三次真调用）~880 字符 reasoning 就吃光预算 ⇒ `finish_reason=length`、
+  可见文本 **3/3 全空** ⇒ 三次全被判「读不出来」挡下 —— **越该裁决的调用越必然饿死**，方向正好
+  反了。且 `chunk.truncated` 从没被读 ⇒ 「被上限截断」与「答复不清」同形。现在去掉该上限（走
+  provider 默认），并读 truncated 在理由里如实点名。
+
+测试 3,288 → 3,298（271 文件，0 失败）。
+
 ## [0.85.3] — 2026-09-23
 
 ### Added

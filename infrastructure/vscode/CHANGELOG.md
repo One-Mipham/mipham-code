@@ -3,6 +3,25 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.4 — 2026-09-24
+
+- Version sync with Mipham Code CLI 0.85.4
+- Fixed: `/permissions` refused the very spelling it told you to type. The denial message prints
+  `/permissions allow "Bash"`, but typing `allow "Git"` returned
+  `Invalid rule ""Git"": not a single tool name.` — `positional[1]` was taken as the rule verbatim,
+  quotes and all, while every place that prints it prints the quoted form; and in
+  `allow "Git" "Bash"` the second rule was never read at all, so it was dropped silently. Every
+  rule after the verb is now re-split on quotes, validated, and persisted. A meta-test pulls the
+  exact command out of the real denial text and runs it, so the copy and the command cannot drift
+  apart
+- Fixed: the auto-mode classifier shared its output budget with the model's own thinking. The
+  request was pinned to `maxTokens: 200`, and a real model (`deepseek-v4-pro`, three live calls)
+  burned through it in ~880 characters of reasoning: `finish_reason=length`, visible text empty in
+  3 of 3 calls, all three then refused as "unreadable" — the calls that most needed a ruling were
+  the ones guaranteed to starve. `chunk.truncated` was never read either, so "cut off at the cap"
+  and "answered unintelligibly" looked identical. The cap is gone (the provider default applies
+  now), and truncated is read and named in the reason
+
 ## 0.85.3 — 2026-09-23
 
 - Version sync with Mipham Code CLI 0.85.3
