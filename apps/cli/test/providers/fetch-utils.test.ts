@@ -3,6 +3,8 @@ import {
   streamIdleTimeoutMs,
   STREAM_IDLE_TIMEOUT_BASE_MS,
   fetchWithRetry,
+  retryDelayMs,
+  RETRY_AFTER_MAX_MS,
 } from '../../src/providers/fetch-utils'
 
 describe('streamIdleTimeoutMs', () => {
@@ -26,6 +28,49 @@ describe('streamIdleTimeoutMs', () => {
         streamIdleTimeoutMs(levels[i - 1]!),
       )
     }
+  })
+})
+
+describe('retryDelayMs', () => {
+  it('falls back to exponential backoff when the header is absent', () => {
+    expect(retryDelayMs(null, 0, 1000)).toBe(1000)
+    expect(retryDelayMs(null, 1, 1000)).toBe(2000)
+    expect(retryDelayMs(null, 2, 1000)).toBe(4000)
+  })
+
+  it('caps a long Retry-After instead of sleeping for it', () => {
+    // A 5xx answering `Retry-After: 3600` used to sleep the CLI for a full hour.
+    expect(retryDelayMs('3600', 0, 1000)).toBe(RETRY_AFTER_MAX_MS)
+    expect(retryDelayMs('120', 0, 1000)).toBe(RETRY_AFTER_MAX_MS)
+    expect(RETRY_AFTER_MAX_MS).toBeLessThan(3600 * 1000)
+  })
+
+  it('honours a Retry-After inside the cap', () => {
+    expect(retryDelayMs('5', 0, 1000)).toBe(5000)
+  })
+
+  it('floors Retry-After: 0 so retries never go back to back', () => {
+    expect(retryDelayMs('0', 0, 1000)).toBeGreaterThan(0)
+    // A negative value is nonsense too — same floor.
+    expect(retryDelayMs('-5', 0, 1000)).toBeGreaterThan(0)
+  })
+
+  it('never turns an unparseable header into a zero or NaN sleep', () => {
+    // `NaN * 1000` reaches setTimeout as 0 — an unthrottled retry storm that
+    // looks exactly like "no delay configured".
+    for (const header of ['soon', 'NaN', '', ' ', 'Retry-After']) {
+      const d = retryDelayMs(header, 1, 1000)
+      expect(Number.isFinite(d)).toBe(true)
+      expect(d).toBeGreaterThan(0)
+    }
+  })
+
+  it('understands the HTTP-date form, clamped the same way', () => {
+    const past = new Date(Date.now() - 60_000).toUTCString()
+    expect(retryDelayMs(past, 0, 1000)).toBeGreaterThan(0)
+
+    const far = new Date(Date.now() + 3600_000).toUTCString()
+    expect(retryDelayMs(far, 0, 1000)).toBe(RETRY_AFTER_MAX_MS)
   })
 })
 

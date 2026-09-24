@@ -41,4 +41,33 @@ describe('permission denial hints name the resolving command', () => {
     const msg = t('errors.tool_denied_deny_rule', { name: 'Bash', pattern: 'Bash(rm:*)' })
     expect(msg).toContain('Bash(rm:*)')
   })
+
+  it.each(locales)('%s: a dangerous-rm denial points at no liftable rule', (_name, locale) => {
+    const t = createT(locale, en as TranslationMap)
+    const msg = t('errors.tool_denied_dangerous_rm', { name: 'Bash', target: '$(pwd)' })
+    // The refusal is structural, so there is no rule to add or remove: an allow
+    // rule is *already* outranked by the guard. Sending the model to /permissions
+    // here would be a hint that cannot work, which is the failure this file exists
+    // to catch. The only remedy is the command itself, or the operator's opt-out.
+    expect(msg).not.toContain('/permissions allow')
+    expect(msg).toContain('$(pwd)')
+    expect(msg).toContain('MIPHAM_DISABLE_DANGEROUS_RM_PROMPT=1')
+  })
+
+  const outcomeClause: Array<[string, TranslationMap, string]> = [
+    ['en-US', en as TranslationMap, 'outcome'],
+    ['zh-CN', zh as TranslationMap, '结果'],
+  ]
+
+  it.each(outcomeClause)(
+    '%s: a denial covers the outcome, not only the exact command',
+    (_name, locale, needle) => {
+      // Otherwise the model reads "this command was refused" and retries the same
+      // deletion spelled differently — the refusal has to be about what the call
+      // achieves, not about the string we happened to see.
+      const t = createT(locale, en as TranslationMap)
+      expect(t('errors.tool_denied_mode', { name: 'Bash', mode: 'auto' })).toContain(needle)
+      expect(t('errors.tool_denied_classifier', { name: 'Bash', reason: 'r' })).toContain(needle)
+    },
+  )
 })

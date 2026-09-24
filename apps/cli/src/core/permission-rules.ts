@@ -362,7 +362,7 @@ function extractSubstitutions(command: string): string[] {
  * REPORTTIME/REPORTMEMORY/DIRSTACKSIZE assignments immediately — and
  * `bash -c 'rm -rf /'`. Over-matching is the safe direction for a deny rule.
  */
-function flattenCommand(command: string, depth = 0): string[] {
+export function flattenCommand(command: string, depth = 0): string[] {
   const out: string[] = []
   for (const seg of splitShellSegments(command)) {
     out.push(seg)

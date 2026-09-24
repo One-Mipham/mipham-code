@@ -7,6 +7,8 @@ import type {
 } from '../shared/index.ts'
 import type { PermissionRuleEntry } from '../shared/index.ts'
 import { matchBashRule, compileRule } from './permission-rules'
+import { detectDangerousRm } from '../security/dangerous-rm'
+import type { DangerousRm } from '../security/dangerous-rm'
 import {
   loadPermissionConfig,
   nextMode,
@@ -123,6 +125,7 @@ export type PermissionDenialReason =
   | 'tool-default' // tool.permission === 'ask'
   | 'system-default' // no rule, no tool permission → fallback ask
   | 'classifier-deny' // `auto` mode's classifier ruled against the call
+  | 'dangerous-rm' // recursive rm whose target is not a path in the command text
 
 /**
  * Which denial reasons `auto` mode's classifier is allowed to rule on — an
@@ -138,6 +141,11 @@ export type PermissionDenialReason =
  * `legacy-rule` is absent for the same reason as the rules: it is an explicit
  * per-tool decision from `setRule()`. `classifier-deny` is absent because it is not
  * a *static* reason at all — `explainDenial()` never returns it.
+ *
+ * `dangerous-rm` is absent because a classifier cannot be *asked* the question this
+ * reason answers. Every other reason here is "the mode was not sure, let a second
+ * opinion decide"; this one is "the command does not say what it will delete", and
+ * a second opinion reading the same command is reading the same missing text.
  */
 const CLASSIFIABLE: ReadonlySet<PermissionDenialReason> = new Set<PermissionDenialReason>([
   'mode-baseline',
@@ -463,6 +471,21 @@ export class PermissionSystem {
       return 'ask' // absent tool → safest default
     }
 
+    // ── A recursive `rm` whose target is not a path written in the command ──
+    // First, and deliberately **uncached**. Every other branch below reasons about
+    // the command's text; this is the one case where the text does not name what
+    // gets deleted, so it has to sit ahead of the allow rules and ahead of every
+    // mode baseline (`auto`, `bypassPermissions`) rather than inside them.
+    //
+    // Not cached because its answer depends on the environment opt-out, and the
+    // cache is keyed on tool+input alone. Caching here would mean an opt-out set
+    // before launch could never be observed being *un*set — the decision would
+    // outlive the input that produced it. Re-running the string check on each Bash
+    // call is cheaper than a cache that can contradict its own inputs.
+    if (this.dangerousRm(tool, input)) {
+      return 'ask'
+    }
+
     // ── Cache lookup (P2): reuse decision for same tool+mode+input ──
     const cacheKey = this.cacheKey(tool, input)
     if (this.cacheMode === this.mode) {
@@ -551,7 +574,7 @@ export class PermissionSystem {
   explainDenial(
     tool: ToolDefinition,
     input: Record<string, unknown>,
-  ): { reason: PermissionDenialReason; rulePattern?: string } {
+  ): { reason: PermissionDenialReason; rulePattern?: string; target?: string } {
     for (const rule of this.denyRules) {
       if (this.ruleMatches(rule, tool, input)) {
         return { reason: 'deny-rule', rulePattern: rule.pattern }
@@ -561,6 +584,10 @@ export class PermissionSystem {
       if (this.ruleMatches(rule, tool, input)) {
         return { reason: 'ask-rule', rulePattern: rule.pattern }
       }
+    }
+    const dangerous = this.dangerousRm(tool, input)
+    if (dangerous) {
+      return { reason: 'dangerous-rm', target: dangerous.target }
     }
     if (this.legacyRules.has(tool.name)) {
       return { reason: 'legacy-rule' }
@@ -581,6 +608,28 @@ export class PermissionSystem {
    */
   private cacheKey(tool: ToolDefinition, input: Record<string, unknown>): string {
     return tool.name + '|' + JSON.stringify(input, Object.keys(input).sort())
+  }
+
+  /**
+   * A recursive `rm` whose target is not a path written in the command.
+   *
+   * Only the Bash tool: the question is about a *shell command line*, and a tool
+   * that merely happens to take a `command` parameter is not making a claim about
+   * what it will delete.
+   *
+   * The escape hatch is read from the **environment**, not from tool parameters.
+   * That is the difference between an operator switch and a model switch: a
+   * parameter the call can set is a guard the call can turn off, and
+   * `dangerouslyDisableSandbox` already shows how that ends. Read at call time
+   * rather than captured at construction so that a process which sets it before
+   * its first matching call gets the documented behaviour.
+   */
+  private dangerousRm(tool: ToolDefinition, input: Record<string, unknown>): DangerousRm | null {
+    if (tool.name !== 'Bash') return null
+    if (process.env.MIPHAM_DISABLE_DANGEROUS_RM_PROMPT === '1') return null
+    const command = input.command
+    if (typeof command !== 'string') return null
+    return detectDangerousRm(command)
   }
 
   /**

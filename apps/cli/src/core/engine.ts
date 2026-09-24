@@ -1494,13 +1494,15 @@ export class QueryEngine {
         : t('errors.tool_denied_classifier', { name, reason })
     }
 
-    const { reason, rulePattern } = this.permission.explainDenial(tool, params)
+    const { reason, rulePattern, target } = this.permission.explainDenial(tool, params)
     const mode = this.permission.getMode()
     switch (reason) {
       case 'deny-rule':
         return t('errors.tool_denied_deny_rule', { name, pattern: rulePattern ?? '?' })
       case 'ask-rule':
         return t('errors.tool_denied_ask_rule', { name, pattern: rulePattern ?? '?' })
+      case 'dangerous-rm':
+        return t('errors.tool_denied_dangerous_rm', { name, target: target ?? '?' })
       default:
         // mode-baseline / tool-default / legacy-rule / system-default — a mode
         // switch (or /permissions) resolves it.

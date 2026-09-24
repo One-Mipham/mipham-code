@@ -16,6 +16,58 @@ export interface FetchWithRetryOptions {
 
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504])
 
+/**
+ * Upper bound on a server-supplied `Retry-After`, in ms.
+ *
+ * The header is a *request*, not a contract: a 5xx answering `Retry-After: 3600`
+ * used to park the CLI in `sleep` for a full hour with nothing on screen. The
+ * user cannot cancel what they cannot see, so the wait is capped and the reason
+ * is left in the comment rather than the terminal.
+ */
+export const RETRY_AFTER_MAX_MS = 60_000
+
+/**
+ * Lower bound on a server-supplied `Retry-After`, in ms.
+ *
+ * `Retry-After: 0` is a real thing servers send, and honouring it literally
+ * means retrying the instant the previous attempt failed — a hammering loop
+ * dressed up as politeness. Any present-but-tiny value lands here instead.
+ */
+const RETRY_AFTER_MIN_MS = 1_000
+
+/**
+ * Delay before the next retry attempt.
+ *
+ * `Retry-After` is honoured when it is parseable, clamped to
+ * `[RETRY_AFTER_MIN_MS, RETRY_AFTER_MAX_MS]`, and **ignored in favour of
+ * exponential backoff when it is not** — an unparseable header must not become
+ * `sleep(NaN)`, which `setTimeout` reads as 0 (the same back-to-back retry as
+ * `Retry-After: 0`, but silent).
+ *
+ * Accepts both RFC 9110 forms: delta-seconds and an HTTP-date.
+ */
+export function retryDelayMs(
+  retryAfter: string | null,
+  attempt: number,
+  baseDelay: number,
+): number {
+  const backoff = baseDelay * Math.pow(2, attempt)
+  if (retryAfter === null) return backoff
+
+  const header = retryAfter.trim()
+  const seconds = parseInt(header, 10)
+  let requested: number
+  if (!Number.isNaN(seconds)) {
+    requested = seconds * 1000
+  } else {
+    const at = Date.parse(header)
+    if (Number.isNaN(at)) return backoff // unparseable → backoff, never a zero sleep
+    requested = at - Date.now()
+  }
+
+  return Math.min(Math.max(requested, RETRY_AFTER_MIN_MS), RETRY_AFTER_MAX_MS)
+}
+
 function isRetryableError(err: unknown): boolean {
   if (err instanceof DOMException && err.name === 'AbortError') return false
   return true
@@ -51,11 +103,7 @@ export async function fetchWithRetry(
 
       // 429 / 5xx → retry
       if (RETRYABLE_STATUSES.has(response.status) && attempt < maxRetries) {
-        const retryAfter = response.headers.get('Retry-After')
-        const delay = retryAfter
-          ? parseInt(retryAfter, 10) * 1000
-          : baseDelay * Math.pow(2, attempt)
-        await sleep(delay)
+        await sleep(retryDelayMs(response.headers.get('Retry-After'), attempt, baseDelay))
         continue
       }
 
