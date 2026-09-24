@@ -61,6 +61,18 @@ const bundles: Record<string, TranslationMap> = {
 const t = createT(bundles['en-US'] || (enUS as TranslationMap), enUS as TranslationMap)
 
 /**
+ * Tool-calling rounds one **turn** may spend, however it spends them. 20 was too
+ * low for real multi-step tasks — the model hit "max turns" and dropped pending
+ * tools mid-task. 100 stays bounded.
+ *
+ * A budget for the turn, not for one loop: a blocking Stop hook buys another round
+ * out of the same pool. The earlier shape re-granted a fresh 100 per loop
+ * invocation, so the cap bounded no turn at all — a hook that always asked for more
+ * kept the turn running until the process died.
+ */
+const MAX_TOOL_TURNS = 100
+
+/**
  * Drop inbound messages whose timestamp is older than the dialog-expiry TTL.
  * A stale message's approval dialog is no longer relevant, so it's discarded
  * before forwarding. Pure — unit-testable without touching the inbox.
@@ -789,14 +801,15 @@ export class QueryEngine {
       yield chunk
     }
 
-    // If tools were executed, recursively continue the conversation
+    // If tools were executed, recursively continue the conversation — with what
+    // is left of the turn's budget after the round just spent here.
     if (toolUses.length > 0) {
-      yield* this.continueWithTools(signal)
+      yield* this.continueWithTools(signal, MAX_TOOL_TURNS - 1)
       return
     }
 
     // Fire Stop hooks when AI finishes with no tool calls
-    yield* this.checkStopHook(signal)
+    yield* this.checkStopHook(signal, MAX_TOOL_TURNS - 1)
 
     // Final drain of task notifications
     for (const chunk of this.drainTaskNotifications()) {
@@ -883,17 +896,17 @@ export class QueryEngine {
     }
   }
 
-  private async *continueWithTools(signal?: AbortSignal): AsyncGenerator<StreamChunk> {
-    // Tool-calling round cap. 20 was too low for real multi-step tasks — the model
-    // hit "max turns" and dropped pending tools mid-task. 100 stays bounded.
-    const MAX_TURNS = 100
+  private async *continueWithTools(
+    signal?: AbortSignal,
+    roundsLeft: number = MAX_TOOL_TURNS,
+  ): AsyncGenerator<StreamChunk> {
     // Task-level stall guard: a turn that produces no text or tool result for
     // this long is considered stalled and stopped (prevents ~40-min idle spins).
     const TURN_TIMEOUT_MS = 15 * 60 * 1000
     let lastActivity = Date.now()
     const toolDefs = this.getToolDefinitions()
 
-    for (let turn = 0; turn < MAX_TURNS; turn++) {
+    for (let turn = 0; turn < roundsLeft; turn++) {
       if (Date.now() - lastActivity > TURN_TIMEOUT_MS) {
         yield {
           type: 'warning',
@@ -1008,11 +1021,11 @@ export class QueryEngine {
       }
 
       // Safety: when max turns reached with pending tools, ask model to summarize
-      if (turn === MAX_TURNS - 1 && toolUses.length > 0) {
+      if (turn === roundsLeft - 1 && toolUses.length > 0) {
         this.context.addMessage({
           role: 'user',
           content: t('errors.max_tool_turns_warning', {
-            max: String(MAX_TURNS),
+            max: String(MAX_TOOL_TURNS),
             pending: String(toolUses.length),
           }),
         })
@@ -1033,7 +1046,7 @@ export class QueryEngine {
         } catch {
           yield {
             type: 'error',
-            error: t('errors.max_tool_turns', { max: String(MAX_TURNS) }),
+            error: t('errors.max_tool_turns', { max: String(MAX_TOOL_TURNS) }),
           }
         }
         return
@@ -1041,7 +1054,7 @@ export class QueryEngine {
 
       // No more tool calls — fire Stop hook and potentially continue
       if (toolUses.length === 0) {
-        yield* this.checkStopHook(signal)
+        yield* this.checkStopHook(signal, roundsLeft - turn - 1)
         return
       }
 
@@ -1720,20 +1733,37 @@ export class QueryEngine {
   }
 
   /** Fire Stop hook. If blocked, feed the reason back to the AI and continue. */
-  private async *checkStopHook(signal?: AbortSignal): AsyncGenerator<StreamChunk> {
+  private async *checkStopHook(
+    signal?: AbortSignal,
+    roundsLeft: number = MAX_TOOL_TURNS,
+  ): AsyncGenerator<StreamChunk> {
     if (!this.hookEngine) return
 
     const stopResult = await this.hookEngine.executeStop(this.sessionId)
-    if (stopResult.decision === 'block') {
-      // Feed the block reason back to the AI and continue
-      this.context.injectContext(
-        'stop-hook',
-        t('system.context.stop_blocked', {
+    if (stopResult.decision !== 'block') return
+
+    // A block asks for more work, and more work means another round — which the
+    // turn may have none of left. Saying so is the point: a hook quietly ignored
+    // is worse than one told it has been overruled.
+    if (roundsLeft <= 0) {
+      yield {
+        type: 'warning',
+        content: t('errors.stop_hook_budget_spent', {
+          max: String(MAX_TOOL_TURNS),
           reason: stopResult.reason || 'Continue working.',
         }),
-      )
-      yield* this.continueWithTools(signal)
+      }
+      return
     }
+
+    // Feed the block reason back to the AI and continue
+    this.context.injectContext(
+      'stop-hook',
+      t('system.context.stop_blocked', {
+        reason: stopResult.reason || 'Continue working.',
+      }),
+    )
+    yield* this.continueWithTools(signal, roundsLeft)
   }
 }
 
