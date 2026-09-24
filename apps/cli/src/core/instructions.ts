@@ -156,12 +156,86 @@ export function buildPermissionBlock(mode: string): string {
   return `## Permission Context\n\n${description}\n\nWhen a tool is denied, do NOT retry it or any other approval-gated tool — Bash, WebSearch, network, and Workflow are all blocked in this mode.${escape} If the task genuinely needs a blocked tool, STOP retrying and ask the user to switch modes with Shift+Tab or add an allow rule (/permissions), then wait for the user's answer. Note that Shift+Tab's wheel does not reach bypassPermissions — that mode is set in config, so do not offer it as a keypress.`
 }
 
+/** Level label used in each prompt part's provenance comment. */
+const LEVEL_LABELS: Record<string, string> = {
+  group: 'Group Policy',
+  company: 'Company Policy',
+  project: 'Project Rules',
+  directory: 'Directory Rules',
+  user: 'User Preferences',
+}
+
+/**
+ * The text one loaded file contributes to the system prompt — `prompt-exclude`
+ * sections stripped, `privacy: private` files omitted (`null`).
+ *
+ * Single source for the prompt **and** the size report. A report that measured
+ * the file on disk instead would overcount exactly the files this repository
+ * writes (its own `prompt-exclude` hides tens of thousands of characters), and
+ * the two numbers would drift apart with nothing saying which one is sent.
+ */
+function instructionPartText(inst: InstructionFile): string | null {
+  if (inst.privacy === 'private') return null
+  const content = stripSections(
+    inst.content,
+    parsePromptExclude(inst.frontmatter['prompt-exclude']),
+  )
+  return `<!-- ${LEVEL_LABELS[inst.level] || inst.level} (${inst.path}) -->\n${content}`
+}
+
+/** One file's share of the instruction payload. */
+export interface InstructionSize {
+  path: string
+  chars: number
+}
+
+export interface InstructionSizeReport {
+  totalChars: number
+  /** Descending by size — the largest contributor first. */
+  files: InstructionSize[]
+}
+
+/**
+ * Characters of file-derived instruction text a session sends with **every**
+ * request, before the conversation starts. 40,000 is the budget this
+ * organisation already writes a single governance file against (the parent
+ * `CLAUDE.md`), so the notice fires when everything loaded together has grown
+ * past one such file.
+ */
+export const INSTRUCTION_BUDGET_CHARS = 40_000
+
+/**
+ * The startup notice, or `null` while the payload is within budget.
+ *
+ * The **total** is the point: no file has to be large for the instruction
+ * payload to crowd out the work, so a per-file check cannot see a dozen
+ * mid-sized rule files and a lessons block adding up. Naming the largest few
+ * is what makes the number actionable.
+ */
+export function formatInstructionSizeNotice(
+  report: InstructionSizeReport,
+  budget: number = INSTRUCTION_BUDGET_CHARS,
+): string | null {
+  if (report.totalChars <= budget) return null
+  const num = (n: number) => n.toLocaleString('en-US')
+  const shown = report.files.slice(0, 3).map((f) => `${f.path} — ${num(f.chars)}`)
+  if (report.files.length > shown.length) shown.push(`+${report.files.length - shown.length} more`)
+  return (
+    `⚠ Instruction files total ${num(report.totalChars)} characters (budget ${num(budget)}), ` +
+    `sent with every request.\n` +
+    `   Largest: ${shown.join(' · ')}\n` +
+    `   Trim them, or move doc-only sections under a \`prompt-exclude\` frontmatter key.`
+  )
+}
+
 export class InstructionsLoader {
   private instructions: InstructionFile[] = []
   private crsiLessonSummaries: CrsiLessonSummary[] = []
+  private lessonsPath: string | null = null
 
   loadAll(cwd: string): void {
     this.instructions = []
+    this.lessonsPath = null
     const root = gitRoot(cwd)
 
     // Tier 1: 集团/公司策略（锚定仓库根，从任意子目录启动都正确；不读 AGENTS.md）
@@ -198,23 +272,12 @@ export class InstructionsLoader {
     const parts: string[] = []
 
     for (const inst of this.instructions) {
-      // Honor `privacy: private` — such instructions are never sent to the model.
-      if (inst.privacy === 'private') continue
-
-      const levelLabel: Record<string, string> = {
-        group: 'Group Policy',
-        company: 'Company Policy',
-        project: 'Project Rules',
-        directory: 'Directory Rules',
-        user: 'User Preferences',
-      }
-      // Strip doc-only sections declared via `prompt-exclude` frontmatter
+      // `instructionPartText` honors `privacy: private` (never sent) and strips
+      // doc-only sections declared via `prompt-exclude` frontmatter
       // (changelog/roadmap/catalog are human-facing, not machine rules).
-      const content = stripSections(
-        inst.content,
-        parsePromptExclude(inst.frontmatter['prompt-exclude']),
-      )
-      parts.push(`<!-- ${levelLabel[inst.level] || inst.level} (${inst.path}) -->\n${content}`)
+      const text = instructionPartText(inst)
+      if (text === null) continue
+      parts.push(text)
     }
 
     // P2-2 的权限段**不在**这里 —— 见 `buildPermissionBlock` 与
@@ -371,8 +434,11 @@ Never omit it or present the work as purely human-authored.`)
 
   /** 读 crsi-lessons.md（按仓库根定位）提取教训精华。读不到则返回空。 */
   private loadCrsiLessons(root: string): CrsiLessonSummary[] {
+    const path = join(root, LESSONS_FILE)
     try {
-      const content = readFileSync(join(root, LESSONS_FILE), 'utf-8')
+      const content = readFileSync(path, 'utf-8')
+      // Remember where the recalled text came from — `sizeReport` names it.
+      this.lessonsPath = path
       return extractCrsiLessonSummaries(content)
     } catch {
       return []
@@ -390,6 +456,28 @@ Never omit it or present the work as purely human-authored.`)
 
   list(): InstructionFile[] {
     return [...this.instructions]
+  }
+
+  /**
+   * How much instruction text this loader puts in the system prompt, per file.
+   *
+   * Read through `instructionPartText` — the same projection `buildSystemPrompt`
+   * uses — so the report cannot describe something other than what is sent. The
+   * CRSI lessons block counts too: it is rendered from `crsi-lessons.md` and
+   * carried on every request like any other rule file.
+   */
+  sizeReport(): InstructionSizeReport {
+    const files: InstructionSize[] = []
+    for (const inst of this.instructions) {
+      const text = instructionPartText(inst)
+      if (text !== null) files.push({ path: inst.path, chars: text.length })
+    }
+    if (this.lessonsPath) {
+      const lessons = buildCrsiLessonsBlock(this.crsiLessonSummaries)
+      if (lessons) files.push({ path: this.lessonsPath, chars: lessons.length })
+    }
+    files.sort((a, b) => b.chars - a.chars)
+    return { totalChars: files.reduce((n, f) => n + f.chars, 0), files }
   }
 
   private tryLoad(path: string, level: InstructionFile['level']): void {

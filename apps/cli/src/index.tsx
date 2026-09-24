@@ -21,7 +21,7 @@ import {
   discoverSessions,
 } from './agent/cross-session/discovery'
 import { bootstrapProviders } from './providers/bootstrap'
-import { InstructionsLoader } from './core/instructions'
+import { InstructionsLoader, formatInstructionSizeNotice } from './core/instructions'
 import { loadSessionMemories, getMemoryManager } from './core/memory/memory-loader'
 import { ContextManager } from './core/context'
 import { PrefixCacheTracker } from './core/context-token'
@@ -472,6 +472,11 @@ export async function runApp(options: RunOptions): Promise<void> {
   // Load instructions
   const instructions = new InstructionsLoader()
   instructions.loadAll(process.cwd())
+
+  // 指令体积提示：**按总量**说话（单文件都不大也可能一起挤占上下文）。
+  // 计数读的是真正会被发出去的那份投影（见 `instructionPartText`），不是磁盘上的字节。
+  const sizeNotice = formatInstructionSizeNotice(instructions.sizeReport())
+  if (sizeNotice) console.log(`\n${sizeNotice}\n`)
 
   // 空目录提示：愣建文件夹时温和提醒走 mipham init，而非默默开始（寒暄克制——一句即可）
   const { isEmptyProject } = await import('./core/project-scaffold')
