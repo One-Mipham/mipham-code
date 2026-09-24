@@ -712,7 +712,7 @@ agents 真解析、provider 回退仍活着）。
       `:108` `version: '0.2.0'` → `'0.83.0'`（`config/defaults.ts:12` 取的就是 `PACKAGE_VERSION`）；
       `:111` `permission: auto` → `default`（`defaults.ts:15`），并就地标注「`auto` 现在是分类器档，
       **不是**旧义『让工具自行决定』」—— 这行本身就是 `fc5afd3a` 事故的输入，属安全相关而非单纯陈旧；
-      `:131` 「10 家 / 45+」→ **12 家 / 48 个模型**。
+      `:131` 「10 家 / 45+」→ **12 家 / 48**（**快照**：当时的模型条目数，此后随注册表演进）。
       **同批实测出 D2 原单未列的 6 处**：模型表**整行缺 ollama**；OpenAI 缺 `GPT-5.3 Codex`；
       MiphamAI 缺 `OM V5 Apex` 且 status 标 `Upcoming` 而真值是 `active`（`shared/types.ts` 的
       `status?: 'active' | 'upcoming'`）；Google 的 Context 写 `128K–2M` 实为 **1M**（三个模型全是

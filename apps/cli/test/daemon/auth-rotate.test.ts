@@ -7,7 +7,6 @@ import { createServer } from '../../src/daemon/server'
 import { DaemonDatabase } from '../../src/daemon/database'
 import { SessionManager } from '../../src/daemon/session-manager'
 import { AgentManager } from '../../src/daemon/agent-manager'
-import { MessageBus } from '../../src/daemon/message-bus'
 import { GoalManager } from '../../src/daemon/goal-manager'
 import { ScheduleManager } from '../../src/daemon/schedule-manager'
 import { WorkerPool } from '../../src/daemon/worker-pool'
@@ -51,7 +50,6 @@ describe('POST /api/v1/auth/rotate', () => {
       port: TEST_PORT,
       hostname: '127.0.0.1',
       agentManager: new AgentManager(db),
-      messageBus: new MessageBus(),
       goalManager: new GoalManager(db),
       scheduleManager: new ScheduleManager(db, pool),
       rateLimiter: new RateLimiter(1000, 60_000),
@@ -141,7 +139,6 @@ describe('file-level rotation (the CLI path) does not reach a running daemon', (
       port: CLI_PORT,
       hostname: '127.0.0.1',
       agentManager: new AgentManager(db),
-      messageBus: new MessageBus(),
       goalManager: new GoalManager(db),
       scheduleManager: new ScheduleManager(db, pool),
       rateLimiter: new RateLimiter(1000, 60_000),

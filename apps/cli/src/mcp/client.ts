@@ -48,6 +48,8 @@ interface ActiveConnection {
   status: ConnectionStatus
   tools: ToolDefinition[]
   serverInfo?: { name: string; version: string }
+  /** initialize 自带的 server 使用说明；见 `mcp/instructions.ts`。 */
+  instructions?: string
   error?: string
   /** Coalescing timer for `tools/list_changed` (see scheduleToolsRefresh). */
   toolsRefreshTimer?: ReturnType<typeof setTimeout>
@@ -289,6 +291,7 @@ export class McpClient {
 
         connection.status = 'connected'
         connection.serverInfo = initResult.serverInfo
+        connection.instructions = initResult.instructions
 
         // Wire tools-changed notification (coalesced — see scheduleToolsRefresh)
         protocol.on('tools-changed', () => {
@@ -386,6 +389,7 @@ export class McpClient {
       tools: conn.tools,
       error: conn.error,
       serverInfo: conn.serverInfo,
+      instructions: conn.instructions,
     }
   }
 
@@ -401,6 +405,7 @@ export class McpClient {
       tools: conn.tools,
       error: conn.error,
       serverInfo: conn.serverInfo,
+      instructions: conn.instructions,
     }))
   }
 

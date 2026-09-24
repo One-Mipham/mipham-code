@@ -45,6 +45,11 @@ export interface InitializeResult {
   protocolVersion: string
   capabilities: ServerCapabilities
   serverInfo: { name: string; version: string }
+  /**
+   * MCP 规范里 server 自带的「我该怎么被使用」。它没有工具描述那种可寄生之处，
+   * 不收就一个字节都到不了模型（见 `mcp/instructions.ts`）。
+   */
+  instructions?: string
 }
 
 export interface ServerCapabilities {
@@ -109,4 +114,6 @@ export interface ConnectionInfo {
   tools: ToolDefinition[]
   error?: string
   serverInfo?: { name: string; version: string }
+  /** 见 `InitializeResult.instructions`。 */
+  instructions?: string
 }

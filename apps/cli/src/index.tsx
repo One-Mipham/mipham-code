@@ -44,6 +44,7 @@ import { mountLlm, LLM_KEY } from './providers/llm'
 import { mountConstitution, createConstitution } from './core/constitution-seam'
 import { ConstitutionLoader } from './core/constitution-loader'
 import { McpClient } from './mcp/client'
+import { buildMcpInstructionsBlock } from './mcp/instructions'
 import { registerMcpServerTools, syncMcpToolsOnChange } from './mcp/registry'
 import { formatMcpConnectFailures, type McpConnectFailure } from './mcp/connect-failures'
 import { AgentRegistry } from './agent/agent-registry'
@@ -58,7 +59,7 @@ import { getWorkspaceTrust, warnProjectHooksSkipped } from './core/workspace-tru
 import { ARTIFACT_PORT, MIPHAM_DIR } from './shared/constants'
 import { artifactsRoot } from './artifacts/paths'
 import { AgentViewManager } from './agent-view/agent-view-manager'
-import { AgentViewDashboard } from './agent-view/dashboard'
+import { AgentsStandalone } from './agent-view/agents-standalone'
 import { createT } from './i18n-core/t'
 import { detectLocale } from './i18n-core/detect'
 import { I18nProvider } from './i18n-context'
@@ -380,11 +381,7 @@ export async function runApp(options: RunOptions): Promise<void> {
   if (args[0] === 'agents') {
     const agentViewManager = new AgentViewManager()
     const { waitUntilExit } = render(
-      <AgentViewDashboard
-        manager={agentViewManager}
-        onAttach={() => {}}
-        onExit={() => process.exit(0)}
-      />,
+      <AgentsStandalone manager={agentViewManager} onExit={() => process.exit(0)} />,
       { exitOnCtrlC: false },
     )
     await waitUntilExit()
@@ -554,6 +551,14 @@ export async function runApp(options: RunOptions): Promise<void> {
   // 变（Shift+Tab）：往窄切是自纠正的，**往宽切**则让模型拿着旧指令拒绝做它已被允许做的事。
   // 这里接的是 live `permission` —— 同一实例也交给引擎去执行，故下一次请求就与新档一致。
   context.setPermissionContextSource(() => instructions.buildPermissionBlock(permission.getMode()))
+
+  // MCP server 自带的 `instructions` 走同一条读时派生的路，理由比权限段更硬：server 是**启动后
+  // 异步连上**的（见下方 `connectMcpServers`），而提示在这一刻就建好了。组装时烘进去的话，
+  // 本次会话里后连上的 server 永远进不了提示 —— 用户只能重启。读 `/listConnections()` 是
+  // live 的，连上一个下一次请求就带上。
+  context.setMcpInstructionsSource(() =>
+    buildMcpInstructionsBlock(McpClient.getInstance().listConnections()),
+  )
 
   // Adaptive memory budget: scale with model's context window
   getMemoryManager().setContextWindow(modelContextWindow)

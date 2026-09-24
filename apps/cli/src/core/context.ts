@@ -45,6 +45,12 @@ export class ContextManager {
    * `index.tsx` 把它接到 live `PermissionSystem.getMode()` 上，于是切一次档，下一次请求就变。
    */
   private permissionContextSource: (() => string) | null = null
+  /**
+   * 系统提示里的 **MCP instructions 段**同样是读时派生的，理由比权限段更硬：
+   * MCP server 是**启动后异步连上**的，而提示在 `setSystemPrompt()` 那一刻就建好了。
+   * 组装时烘进去的话，本次会话里后连上的 server 永远进不了提示 —— 用户只能重启。
+   */
+  private mcpInstructionsSource: (() => string) | null = null
   private estimatedTokens = 0
   private checkpoints: Checkpoint[] = []
   private checkpointCounter = 0
@@ -138,14 +144,28 @@ export class ContextManager {
   }
 
   /**
-   * 存储的提示 + 读时派生的权限段。
+   * 接线点（`index.tsx`）：把已连 MCP server 自带的 `instructions` 接到提示上。
    *
-   * 段尾追加（而非插回原来的中段位置）是刻意的：只切档时**前缀保持不变**，
-   * 提供方的 prefix cache 仍能命中到权限段之前的部分。
+   * 传 `null` 撤销。空串（无 server / 都没写 instructions）不产生空段。
+   */
+  setMcpInstructionsSource(fn: (() => string) | null): void {
+    this.mcpInstructionsSource = fn
+  }
+
+  /**
+   * 存储的提示 + 读时派生的段（权限 / MCP instructions）。
+   *
+   * 段尾追加（而非插回原来的中段位置）是刻意的：只切档、只连一个新 server 时
+   * **前缀保持不变**，提供方的 prefix cache 仍能命中到这些段之前的部分。
    */
   private composedSystemPrompt(): string {
-    const block = this.permissionContextSource?.() ?? ''
-    return block ? `${this.systemPrompt}\n\n---\n\n${block}` : this.systemPrompt
+    const blocks = [
+      this.permissionContextSource?.() ?? '',
+      this.mcpInstructionsSource?.() ?? '',
+    ].filter((b) => b !== '')
+    return blocks.length > 0
+      ? [this.systemPrompt, ...blocks].join('\n\n---\n\n')
+      : this.systemPrompt
   }
 
   getSystemPrompt(): string {
@@ -167,6 +187,30 @@ export class ContextManager {
     }
 
     // Auto-trigger compression checks (fire-and-forget, don't await)
+    this.checkCompression()
+  }
+
+  /**
+   * 注入一段**模型可见的上下文**（规则块 / compact 前后的 hook 提示 / stop hook 交回的话 /
+   * 后台 agent 的来件）。
+   *
+   * 为什么不复用 addMessage：那会把注入记成 `user/message`，在日志里与**用户真说过的话**
+   * 完全同形 —— 事后翻 session log 分不出哪一句是用户敲的、哪一句是我们塞进去的。记成
+   * `context/inject`（带 `source`）就带得出来源；而 `deriveMessages` 仍把它还原成同一个
+   * user 消息，所以**投影逐字节不变**，「model-visible means logged」照样成立。
+   */
+  injectContext(source: string, text: string): void {
+    this.messages.push({ role: 'user', content: text })
+    this.estimatedTokens += this.estimateTokens(text)
+
+    if (this.log) {
+      this.log.append({ type: 'context/inject', at: Date.now(), source, text })
+    }
+
+    if (this.log && isAssertModelVisibleDebug()) {
+      assertModelVisible(this.log.events(), this.messages)
+    }
+
     this.checkCompression()
   }
 

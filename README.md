@@ -132,22 +132,22 @@ Or project-level `.mipham/config.yml` in your repository.
 
 ## Supported Models
 
-| Provider        | Models                                                        | Context    | Status |
-| --------------- | ------------------------------------------------------------- | ---------- | ------ |
-| Anthropic       | Claude Mythos 5, Fable 5, Opus 5/4.8, Sonnet 5/4.6, Haiku 4.5 | 200K–1M    | Active |
-| OpenAI          | GPT-6 Astra, GPT-5.5, GPT-5.4, GPT-5.4 Mini, GPT-5.3 Codex    | 400K–1.05M | Active |
-| Google Gemini   | Gemini 3.0 Pro, 3.0 Flash, 2.5 Pro                            | 1M         | Active |
-| DeepSeek        | V4 Pro, V4 Flash                                              | 1M         | Active |
-| 豆包 (字节跳动) | Seed 2.0 Pro/Code/Lite/Mini, Seed 1.6/Flash                   | 256K       | Active |
-| 腾讯混元        | Hy3 Preview, 2.0 Think/Instruct, TurboS, T1, A13B, Lite       | 32K–256K   | Active |
-| 通义千问        | Qwen Plus, Qwen Max                                           | 128K       | Active |
-| Kimi (月之暗面) | K3, Latest, Moonshot v1 8K/32K/128K                           | 8K–1M      | Active |
-| MiniMax (国内)  | M2.7, M2, Text 01                                             | 200K–1M    | Active |
-| MiniMax (国际)  | M2.7, M2, Text 01                                             | 200K–1M    | Active |
-| MiphamAI        | OM V5 Flash/Visual/Pro/Apex                                   | 16K–200K   | Active |
-| Ollama (本地)   | 本机已装模型（`ollama list` 动态发现）                        | —          | Active |
+| Provider        | Models                                                                | Context    | Status |
+| --------------- | --------------------------------------------------------------------- | ---------- | ------ |
+| Anthropic       | Claude Mythos 5, Fable 5/5.1, Opus 5/5.5/4.8, Sonnet 5/4.6, Haiku 4.5 | 200K–1M    | Active |
+| OpenAI          | GPT-6 Astra, GPT-5.5, GPT-5.4, GPT-5.4 Mini, GPT-5.3 Codex            | 400K–1.05M | Active |
+| Google Gemini   | Gemini 3.0 Pro, 3.0 Flash, 2.5 Pro                                    | 1M         | Active |
+| DeepSeek        | V4 Pro, V4 Flash                                                      | 1M         | Active |
+| 豆包 (字节跳动) | Seed 2.0 Pro/Code/Lite/Mini, Seed 1.6/Flash                           | 256K       | Active |
+| 腾讯混元        | Hy3 Preview, 2.0 Think/Instruct, TurboS, T1, A13B, Lite               | 32K–256K   | Active |
+| 通义千问        | Qwen Plus, Qwen Max                                                   | 128K       | Active |
+| Kimi (月之暗面) | K3, Latest, Moonshot v1 8K/32K/128K                                   | 8K–1M      | Active |
+| MiniMax (国内)  | M2.7, M2, Text 01                                                     | 200K–1M    | Active |
+| MiniMax (国际)  | M2.7, M2, Text 01                                                     | 200K–1M    | Active |
+| MiphamAI        | OM V5 Flash/Visual/Pro/Apex                                           | 16K–200K   | Active |
+| Ollama (本地)   | 本机已装模型（`ollama list` 动态发现）                                | —          | Active |
 
-**共 12 家提供商，48 个模型。** 设置 API Key 即可使用：
+**共 12 家提供商，50 个模型。** 设置 API Key 即可使用：
 
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."      # Anthropic Claude

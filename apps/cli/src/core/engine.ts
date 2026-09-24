@@ -296,7 +296,7 @@ export class QueryEngine {
     let injected = 0
     for (const recipient of recipients) {
       for (const msg of bus.poll(recipient)) {
-        this.context.addMessage({ role: 'user', content: formatInboundMessage(msg) })
+        this.context.injectContext(`agent:${msg.from}`, formatInboundMessage(msg))
         injected++
       }
       bus.markAllRead(recipient)
@@ -389,7 +389,7 @@ export class QueryEngine {
     const files = Array.from(this.touchedFiles)
     const block = this.rulesLoader.buildContextBlock(files)
     if (!block) return
-    this.context.addMessage({ role: 'user', content: block })
+    this.context.injectContext('rules', block)
     this.touchedFiles.clear()
   }
 
@@ -1685,10 +1685,10 @@ export class QueryEngine {
     if (this.hookEngine) {
       const preResult = await this.hookEngine.executePreCompact(this.sessionId)
       if (preResult.additionalContext) {
-        this.context.addMessage({
-          role: 'user',
-          content: `[Pre-compact context]: ${preResult.additionalContext}`,
-        })
+        this.context.injectContext(
+          'pre-compact',
+          `[Pre-compact context]: ${preResult.additionalContext}`,
+        )
       }
     }
 
@@ -1697,10 +1697,10 @@ export class QueryEngine {
     if (this.hookEngine) {
       const postResult = await this.hookEngine.executePostCompact(this.sessionId)
       if (postResult.additionalContext) {
-        this.context.addMessage({
-          role: 'user',
-          content: `[Post-compact context]: ${postResult.additionalContext}`,
-        })
+        this.context.injectContext(
+          'post-compact',
+          `[Post-compact context]: ${postResult.additionalContext}`,
+        )
       }
     }
   }
@@ -1712,12 +1712,12 @@ export class QueryEngine {
     const stopResult = await this.hookEngine.executeStop(this.sessionId)
     if (stopResult.decision === 'block') {
       // Feed the block reason back to the AI and continue
-      this.context.addMessage({
-        role: 'user',
-        content: t('system.context.stop_blocked', {
+      this.context.injectContext(
+        'stop-hook',
+        t('system.context.stop_blocked', {
           reason: stopResult.reason || 'Continue working.',
         }),
-      })
+      )
       yield* this.continueWithTools(signal)
     }
   }

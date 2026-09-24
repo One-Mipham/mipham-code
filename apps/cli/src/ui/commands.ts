@@ -4593,7 +4593,7 @@ const workflowsCmd: CommandHandler = async () => {
   } else {
     lines.push('')
     lines.push(`${found} workflow(s) found.`)
-    lines.push('Use /workflows <name> to run a specific workflow.')
+    lines.push('Use /workflow run <name> to run one.')
   }
 
   return { content: lines.join('\n') }

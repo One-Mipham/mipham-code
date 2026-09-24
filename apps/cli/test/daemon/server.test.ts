@@ -4,7 +4,6 @@ import { createServer } from '../../src/daemon/server'
 import { DaemonDatabase } from '../../src/daemon/database'
 import { SessionManager } from '../../src/daemon/session-manager'
 import { AgentManager } from '../../src/daemon/agent-manager'
-import { MessageBus } from '../../src/daemon/message-bus'
 import { GoalManager } from '../../src/daemon/goal-manager'
 import { ScheduleManager } from '../../src/daemon/schedule-manager'
 import { WorkerPool } from '../../src/daemon/worker-pool'
@@ -84,12 +83,14 @@ describe('Daemon HTTP Server', () => {
   let db: DaemonDatabase
   let sm: SessionManager
   let pool: WorkerPool
+  let agentManager: AgentManager
 
   beforeAll(async () => {
     cleanDb()
     db = new DaemonDatabase(TEST_DB)
     db.init()
     sm = new SessionManager(db)
+    agentManager = new AgentManager(db)
     pool = new WorkerPool(db)
     server = createServer({
       db,
@@ -99,8 +100,7 @@ describe('Daemon HTTP Server', () => {
       tokenPath: '/tmp/mipham-test.token',
       port: TEST_PORT,
       hostname: '127.0.0.1',
-      agentManager: new AgentManager(db),
-      messageBus: new MessageBus(),
+      agentManager,
       goalManager: new GoalManager(db),
       scheduleManager: new ScheduleManager(db, pool),
       rateLimiter: new RateLimiter(1000, 60_000),
@@ -335,5 +335,51 @@ describe('Daemon HTTP Server', () => {
       return res.status
     })
     expect(status).toBe(200)
+  })
+
+  /**
+   * `POST /api/v1/agents/:id/message` 曾经回 **202 + `{ok:true}`** ——
+   * 一张它兑现不了的收条。
+   *
+   * 它写进的是 `daemon/message-bus.ts` 这份**平行实现**，而全仓**没有任何地方 poll 它**：
+   * daemon 侧根本不存在 agent 执行循环（`AgentManager` 纯持久化，`src/daemon/*.ts` 里
+   * `SubAgent`/`spawn` 零命中），所以「把话交给 agent」这件事在进程内**无从发生**。
+   * 而真正在用的那条总线是 `src/agent/message-bus.ts`，它的投递方（子代理 / workflow）
+   * 用的是 `bg-…` 那套 id，与 `agent-<uuid8>` **不同一个 id 空间** ⇒ 就算改投那份也找不到人。
+   *
+   * 202 在这里是有害的：调用方据此认为话已送达，于是**不再重试、也不再报错**。
+   */
+  it('承认送不到：501 + 说清原因，而不是 202 的收条', async () => {
+    const session = sm.createSession('msg-target', process.cwd(), 'test', 'test')
+    const agent = agentManager.createAgent(session.id, 'general', 'a target agent')
+
+    const res = await fetchApi(`/api/v1/agents/${agent.id}/message`, {
+      method: 'POST',
+      body: JSON.stringify({ content: 'hello' }),
+    })
+
+    expect(res.status, '202 是「已受理」的意思，而这里没有任何东西会去受理').toBe(501)
+
+    const body = (await res.json()) as { ok: boolean; error?: string }
+    expect(body.ok).toBe(false)
+    // 光说「不支持」不够 —— 得让调用方知道该改用什么，否则它只会反复重试。
+    expect(body.error ?? '').toMatch(/session|prompt/i)
+  })
+
+  it('参数校验照旧：缺 content 仍是 400、agent 不存在仍是 404', async () => {
+    const session = sm.createSession('msg-target-2', process.cwd(), 'test', 'test')
+    const agent = agentManager.createAgent(session.id, 'general', 'another agent')
+
+    const noContent = await fetchApi(`/api/v1/agents/${agent.id}/message`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+    expect(noContent.status).toBe(400)
+
+    const missing = await fetchApi('/api/v1/agents/agent-nope/message', {
+      method: 'POST',
+      body: JSON.stringify({ content: 'hello' }),
+    })
+    expect(missing.status).toBe(404)
   })
 })

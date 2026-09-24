@@ -21,6 +21,7 @@ function httpEndpoint(state: { reachable: boolean }) {
         protocolVersion: '2024-11-05',
         capabilities: { tools: { listChanged: true } },
         serverInfo: { name: 'http-mock', version: '1.0.0' },
+        instructions: 'HTTP MOCK GUIDANCE',
       })
     }
     if (body.method === 'tools/list') {
@@ -285,6 +286,30 @@ describe('McpClient', () => {
         expect(conn!.status).toBe('connected')
         expect(conn!.serverInfo?.name).toBe('http-mock')
         expect(client.getTools('http-mock').map((t) => t.name)).toContain('search_graph')
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+  })
+
+  describe('server instructions', () => {
+    /**
+     * `listConnections()` 是**逐字段显式投影**，不是展开。漏一个字段就静默丢值 ——
+     * 而 `index.tsx` 的接线读的正是它（喂给 `buildMcpInstructionsBlock`）。
+     * 存下来却传不出去，与没接线只差一点内存占用。
+     */
+    it('initialize 自带的 instructions 存进连接，并经 listConnections() 透出', async () => {
+      vi.stubGlobal('fetch', httpEndpoint({ reachable: true }))
+      try {
+        const client = McpClient.getInstance()
+        await client.connect({ name: 'http-mock', url: 'http://localhost:8006/mcp' })
+
+        expect(client.getConnection('http-mock')?.instructions).toBe('HTTP MOCK GUIDANCE')
+
+        const projected = client.listConnections().find((c) => c.config.name === 'http-mock')
+        expect(projected?.instructions, 'listConnections 丢了它 ⇒ 接线读到的永远是 undefined').toBe(
+          'HTTP MOCK GUIDANCE',
+        )
       } finally {
         vi.unstubAllGlobals()
       }

@@ -13,7 +13,6 @@ import type { Server } from 'bun'
 import { DaemonDatabase } from './database'
 import { SessionManager } from './session-manager'
 import { AgentManager } from './agent-manager'
-import { MessageBus } from './message-bus'
 import { GoalManager } from './goal-manager'
 import { ScheduleManager } from './schedule-manager'
 import { createServer } from './server'
@@ -118,7 +117,7 @@ export function getPort(): number {
  * 1. Ensures ~/.mipham exists (mode 0o700)
  * 2. Loads or creates the auth token
  * 3. Initializes the SQLite database and runs JSONL migration on first start
- * 4. Creates a SessionManager, AgentManager, and MessageBus
+ * 4. Creates a SessionManager and AgentManager
  * 5. Starts the HTTP server on an available port
  * 6. Writes PID and port files to disk
  *
@@ -152,9 +151,8 @@ export async function startDaemon(): Promise<{ port: number; token: string }> {
   const pool = new WorkerPool(db)
   activePool = pool
 
-  // Create agent manager and message bus (Phase 3)
+  // Create agent manager (Phase 3)
   const agentManager = new AgentManager(db)
-  const messageBus = new MessageBus()
 
   // Create goal manager and schedule manager (Phase 4)
   const goalManager = new GoalManager(db)
@@ -236,7 +234,6 @@ export async function startDaemon(): Promise<{ port: number; token: string }> {
     port,
     hostname,
     agentManager,
-    messageBus,
     goalManager,
     scheduleManager,
     rateLimiter,

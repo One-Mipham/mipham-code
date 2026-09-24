@@ -3,7 +3,6 @@ import type { Server, ServerWebSocket } from 'bun'
 import type { DaemonDatabase } from './database'
 import type { SessionManager } from './session-manager'
 import type { AgentManager } from './agent-manager'
-import type { MessageBus } from './message-bus'
 import type { DaemonGoal, AgentKind } from './types'
 import type { GoalManager } from './goal-manager'
 import type { ScheduleManager } from './schedule-manager'
@@ -49,7 +48,6 @@ interface ServerConfig {
   port: number
   hostname: string
   agentManager: AgentManager
-  messageBus: MessageBus
   goalManager: GoalManager
   scheduleManager: ScheduleManager
   rateLimiter: RateLimiter
@@ -156,7 +154,6 @@ export function createServer(config: ServerConfig): Server<WsData> {
     port,
     hostname,
     agentManager,
-    messageBus,
     goalManager,
     scheduleManager,
     rateLimiter,
@@ -192,15 +189,8 @@ export function createServer(config: ServerConfig): Server<WsData> {
     }
   }
 
-  // ── Agent lifecycle → WebSocket broadcast + MessageBus registration ──
+  // ── Agent lifecycle → WebSocket broadcast ──
   agentManager.onLifecycleEvent((event) => {
-    // Register / unregister in the message bus for broadcastToSession routing
-    if (event.type === 'created') {
-      messageBus.registerAgent(event.agent.sessionId, event.agent.id)
-    } else if (event.type === 'completed' || event.type === 'failed') {
-      messageBus.unregisterAgent(event.agent.id)
-    }
-
     // Broadcast lifecycle events to all WebSocket clients in the agent's session
     broadcast(event.agent.sessionId, {
       type: 'agent_lifecycle',
@@ -670,8 +660,23 @@ export function createServer(config: ServerConfig): Server<WsData> {
           return json({ ok: false, error: 'Agent not found' }, { status: 404 })
         }
 
-        messageBus.send('user', agentId, content)
-        return json({ ok: true }, { status: 202 })
+        // 从前这里 `messageBus.send(...)` 后回 **202 + `{ok:true}`** —— 一张兑现不了的收条。
+        // daemon 侧**不存在 agent 执行循环**（`AgentManager` 纯持久化，`src/daemon/*.ts` 里
+        // `SubAgent`/`spawn` 零命中），所以进程内没有任何东西会去读这条消息；而真正在用的
+        // 那条总线（`src/agent/message-bus.ts`）由子代理 / workflow 用 `bg-…` 那套 id 投递，
+        // 与这里的 `agent-<uuid8>` **不同一个 id 空间**，改投它也找不到人。
+        // 202 在这里是有害的：调用方据此认为话已送达，于是不再重试、也不再报错。
+        // 报 501 并给出替代路径 —— 只说「不支持」会让调用方反复重试同一件事。
+        return json(
+          {
+            ok: false,
+            error:
+              'Agent messaging is not implemented on the daemon: this build has no agent ' +
+              'execution loop, so nothing would receive the message. Use ' +
+              'POST /api/v1/sessions/:id/prompt to send work to a session instead.',
+          },
+          { status: 501 },
+        )
       }
 
       // ── Goals (Phase 4 — service-backed) ────────────
@@ -806,7 +811,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
               {
                 method: 'POST',
                 path: '/api/v1/agents/:id/message',
-                description: 'Send message to an agent',
+                description: 'Not implemented — always 501; use POST /api/v1/sessions/:id/prompt',
               },
               { method: 'GET', path: '/api/v1/goals', description: 'List goals for a session' },
               { method: 'POST', path: '/api/v1/goals', description: 'Create a goal' },
