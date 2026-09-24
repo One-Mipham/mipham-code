@@ -84,6 +84,21 @@ describe('PluginManager', () => {
       expect(result.message).toContain('Invalid plugin name')
     })
 
+    it('surfaces validation warnings in the install result', () => {
+      // The install is where the operator is looking. A warning that stops here is
+      // one they never read, and the plugin installs looking perfectly healthy.
+      const source = createTempPlugin('warns-about-mcp')
+      const mcpDir = join(source, 'mcp-servers')
+      mkdirSync(mcpDir, { recursive: true })
+      writeFileSync(join(mcpDir, 'broken.json'), JSON.stringify({ name: 'broken' }), 'utf-8')
+
+      const result = manager.install(source)
+
+      expect(result.success).toBe(true)
+      expect(result.message).toContain('broken')
+      expect(result.message).toContain('neither command nor url')
+    })
+
     it('should reject a plugin without version', () => {
       const dir = join(TEST_HOME, 'source', 'no-version')
       mkdirSync(dir, { recursive: true })

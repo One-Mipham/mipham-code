@@ -64,8 +64,18 @@ function loadClaudeSkills(dir: string, skillsLoader: SkillsLoader): void {
   }
 }
 
-/** Map a Claude MCP server entry to a Mipham `McpServerConfig`. */
-function toMcpServerConfig(name: string, raw: Record<string, unknown>): McpServerConfig | null {
+/**
+ * Map a Claude MCP server entry to a Mipham `McpServerConfig`, or `null` if the
+ * entry carries no transport.
+ *
+ * Exported so `validatePlugin` can ask *this* function — rather than its own copy
+ * of the rule — whether an entry would survive the load. A second copy is a second
+ * answer, and the one that drifts is the one the operator reads.
+ */
+export function toMcpServerConfig(
+  name: string,
+  raw: Record<string, unknown>,
+): McpServerConfig | null {
   const command = typeof raw.command === 'string' ? raw.command : undefined
   const url = typeof raw.url === 'string' ? raw.url : undefined
   if (!command && !url) return null

@@ -7,7 +7,7 @@ import type { HookEngine } from '../core/hooks'
 import type { McpClient } from '../mcp/client'
 import { registerMcpServerTools } from '../mcp/registry'
 import { executeHook } from '../core/hooks-executor'
-import { detectPluginFormat } from './plugin-validator'
+import { detectPluginFormat, isLoadableMcpConfig } from './plugin-validator'
 import { loadClaudePlugin } from './claude-plugin'
 import type { McpServerConfig, ToolDefinition, HookConfig, HookEvent } from '../shared/types'
 
@@ -86,7 +86,11 @@ export function loadPlugins(
           try {
             const raw = readFileSync(join(mcpDir, entry), 'utf-8')
             const cfg = JSON.parse(raw) as McpServerConfig
-            if (cfg.name && cfg.command) {
+            // Both transports, not just the local one. Requiring `command` here used
+            // to drop every server declared by `url` — a remote server carries no
+            // command — and dropping it in silence, so the plugin looked installed
+            // and its tools simply never appeared.
+            if (isLoadableMcpConfig(cfg)) {
               mcpServers.push(cfg.name)
               mcpClient
                 .connect(cfg)
@@ -103,9 +107,20 @@ export function loadPlugins(
                     `[plugin] Failed to connect MCP "${cfg.name}" from "${plugin.name}": ${String(err)}\n`,
                   )
                 })
+            } else {
+              // Silent skips are the failure this branch exists to end: the operator
+              // sees a plugin that loaded and tools that are missing, with nothing
+              // connecting the two.
+              const declared =
+                typeof cfg.name === 'string' && cfg.name !== '' ? ` "MCP server ${cfg.name}"` : ''
+              process.stderr.write(
+                `[plugin] "${plugin.name}": mcp-servers/${entry}${declared} declares neither command nor url — skipped\n`,
+              )
             }
-          } catch {
-            // skip unparseable MCP config files
+          } catch (err) {
+            process.stderr.write(
+              `[plugin] "${plugin.name}": mcp-servers/${entry} could not be parsed — skipped: ${String(err)}\n`,
+            )
           }
         }
       } catch (err) {

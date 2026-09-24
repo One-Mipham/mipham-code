@@ -15,6 +15,18 @@ import { miphamHome } from '../core/paths.ts'
 
 const PLUGIN_DIR = miphamHome('plugins')
 
+/**
+ * Render validation warnings for the install result.
+ *
+ * A warning the install message drops is a warning nobody reads, and the whole
+ * point of reporting a declaration we would skip is that the operator finds out
+ * here — before wondering why the plugin's tools never appeared.
+ */
+function warningsBlock(warnings: string[]): string {
+  if (warnings.length === 0) return ''
+  return warnings.map((w) => `\n⚠ ${w}`).join('')
+}
+
 export interface InstalledPlugin {
   name: string
   version: string
@@ -68,7 +80,8 @@ export class PluginManager {
       success: true,
       message:
         `Plugin "${validation.manifest.name}" v${validation.manifest.version} installed` +
-        (similarWarning ? `\n⚠ ${similarWarning}` : ''),
+        (similarWarning ? `\n⚠ ${similarWarning}` : '') +
+        warningsBlock(validation.warnings),
     }
   }
 
@@ -169,7 +182,8 @@ export class PluginManager {
         success: true,
         message:
           `Plugin "${manifestName}" installed from npm` +
-          (similarWarning ? `\n⚠ ${similarWarning}` : ''),
+          (similarWarning ? `\n⚠ ${similarWarning}` : '') +
+          warningsBlock(validation.warnings),
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
