@@ -183,10 +183,15 @@ export function CommandPicker({
       {/* Filter input */}
       <Box>
         <Text color="cyan">/ </Text>
+        {/*
+            Enter 由本组件自己的 `useInput` 处理（那里才知道光标停在哪一行、要不要走
+            内联参数那条路）。**不要再给 TextInput 挂 `onSubmit`** —— 它会成为第二个
+            监听者，一次 Enter 变成两次提交，而 `onSelect` 的调用点接的是「提交这条
+            命令」：多出来的一遍就是命令跑两次。
+        */}
         <TextInput
           value={filter.startsWith('/') ? filter.slice(1) : filter}
           onChange={(val) => setFilter(`/${val}`)}
-          onSubmit={() => submitSelection()}
           placeholder={t('ui.command_picker.placeholder')}
         />
       </Box>

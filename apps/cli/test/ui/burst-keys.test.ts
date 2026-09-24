@@ -134,6 +134,37 @@ describe('命令选择器（/ 唤起的行列表）', () => {
     expect(onSelect).toHaveBeenCalledWith(all[1]!.name)
     expect(onSelect).not.toHaveBeenCalledWith(all[0]!.name)
   })
+
+  // ── 同族的另一半：一次 Enter 只能算一次提交 ──
+  //
+  // 光标指向对的那一行还不够 —— 上面那条用例对「一次 Enter 提交几遍」不敏感
+  // （`toHaveBeenCalledWith` 只看有没有一次对上），而这里两条都把次数钉死：
+  // 输入框自己的 `onSubmit` 与选择器自己的 `key.return` 是**两个**监听者，
+  // `onSelect` 的调用点接的是 `onSubmit(cmdName)`，多出来的一遍就是**命令跑两次**。
+  function renderPicker(onSelect = vi.fn()) {
+    const utils = render(
+      React.createElement(CommandPicker, { initialFilter: '/', onSelect, onClose: vi.fn() }),
+    )
+    return { onSelect, ...utils }
+  }
+
+  it('一次 Enter 只提交一次（不是输入框与选择器各提一次）', async () => {
+    const { onSelect, stdin } = renderPicker()
+
+    stdin.write(ENTER)
+    await settle()
+
+    expect(onSelect).toHaveBeenCalledTimes(1)
+  })
+
+  it('一组按键里也只提交一次', async () => {
+    const { onSelect, stdin } = renderPicker()
+
+    stdin.write(DOWN + ENTER)
+    await settle()
+
+    expect(onSelect).toHaveBeenCalledTimes(1)
+  })
 })
 
 // ═══════════════════════════════════════════
