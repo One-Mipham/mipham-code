@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { McpClient } from '../../src/mcp/client'
+import { StdioTransport } from '../../src/mcp/transport'
 
 /** Minimal HTTP MCP endpoint: answers initialize / tools/list, then can go away. */
 function httpEndpoint(state: { reachable: boolean }) {
@@ -417,6 +418,64 @@ describe('McpClient', () => {
         expect(client.getConnection('flaky')!.status).toBe('connected')
       } finally {
         vi.unstubAllGlobals()
+      }
+    })
+  })
+
+  describe('two sources naming the same server', () => {
+    // 启动时这两条来源是**并发**的：配置里的 server 在 `index.tsx` 一次
+    // `Promise.allSettled` 里连，插件的 `.mcp.json` 随后在 `loadPlugins` 里各连一次
+    // （同名不吃配置侧的去重 —— 那一步只去重配置内部）。同名撞上时，第二条看到的
+    // 是 `status: 'connecting'`，而 `connect()` 只把 `'connected'` 当「已连上」。
+    const server = {
+      name: 'mock',
+      command: 'bun',
+      args: ['run', 'test/mcp/mock-server.ts'],
+    }
+
+    it('starts one transport per name, and closes every transport it started', async () => {
+      const client = McpClient.getInstance()
+      const start = vi.spyOn(StdioTransport.prototype, 'start')
+      const close = vi.spyOn(StdioTransport.prototype, 'close')
+
+      await Promise.all([client.connect(server), client.connect(server)])
+      await client.closeAll()
+
+      expect(start).toHaveBeenCalledTimes(1)
+      // 起了几个就得关几个：只关掉 map 里那个，另一个连着它的子进程一起漏掉。
+      expect(close).toHaveBeenCalledTimes(start.mock.calls.length)
+      start.mockRestore()
+      close.mockRestore()
+    })
+
+    it('hands both callers the same connected server', async () => {
+      const client = McpClient.getInstance()
+
+      await Promise.all([client.connect(server), client.connect(server)])
+
+      expect(client.listConnections()).toHaveLength(1)
+      expect(client.getConnection('mock')!.status).toBe('connected')
+      expect(
+        client
+          .getTools('mock')
+          .map((t) => t.name)
+          .sort(),
+      ).toEqual(['add', 'echo'])
+    })
+
+    it('does not wedge the name when the shared attempt fails', async () => {
+      const client = McpClient.getInstance()
+      process.env.MIPHAM_MCP_CONNECT_TIMEOUT_MS = '300'
+      try {
+        const dead = { name: 'mock', command: 'sleep', args: ['30'] }
+        const both = await Promise.allSettled([client.connect(dead), client.connect(dead)])
+        expect(both.map((r) => r.status)).toEqual(['rejected', 'rejected'])
+
+        // 失败之后这个名字要能重连 —— 合并的那份不能把 entry 永远留在「连接中」。
+        await client.connect(server)
+        expect(client.getConnection('mock')!.status).toBe('connected')
+      } finally {
+        delete process.env.MIPHAM_MCP_CONNECT_TIMEOUT_MS
       }
     })
   })

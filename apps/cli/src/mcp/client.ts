@@ -79,6 +79,17 @@ interface ActiveConnection {
 export class McpClient {
   private static instance: McpClient | null = null
   private connections = new Map<string, ActiveConnection>()
+  /**
+   * 同名连接**正在握手中**的那一次。
+   *
+   * 两条来源在启动时是并发的：配置里的 server 在 `index.tsx` 一次 `Promise.allSettled`
+   * 里连（同一个同步块里那句没被 await），插件声明的 server 紧接着在 `loadPlugins` 里各
+   * 连一次（`.mcp.json` 走 `plugin-loader`、manifest 内联的 `mcpServers` 走 `claude-plugin`，
+   * 两处也都不 await）。撞上同一个名字时，第二条看到的是 `connecting`，于是**另起一条传输**
+   * 并把它塞回 map —— 而 `closeAll` 只遍历 `connections`，被换掉的那条没人关：stdio 的子
+   * 进程就此不被回收。名字就是身份（URL 怎么拼都不参与判重），所以同名就该是同一个连接。
+   */
+  private connecting = new Map<string, Promise<void>>()
   private _tokenStore: TokenStore | null = null
   private _oauthClient: OAuthClient | null = null
   private eventHandlers = new Map<string, Array<(...args: any[]) => void>>()
@@ -269,6 +280,21 @@ export class McpClient {
     const existing = this.connections.get(config.name)
     if (existing?.status === 'connected') return
 
+    // 名字正在握手中：合并到那一次，别另起一条传输。
+    const inflight = this.connecting.get(config.name)
+    if (inflight) return inflight
+
+    const attempt = this.connectOnce(config)
+    this.connecting.set(config.name, attempt)
+    try {
+      await attempt
+    } finally {
+      // 无论成败都要放开这个名字：失败后用户重连，得能真的重连。
+      this.connecting.delete(config.name)
+    }
+  }
+
+  private async connectOnce(config: McpServerConfig): Promise<void> {
     const transport: StdioTransport | HttpTransport = config.url
       ? new HttpTransport(undefined, config.request_timeout_ms)
       : new StdioTransport(config.request_timeout_ms)
