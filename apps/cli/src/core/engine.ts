@@ -43,6 +43,7 @@ import { buildRequest, sendInferenceCheck, isInferenceHookEnabled } from './infe
 import { getFileInboxTransport } from '../agent/cross-session/file-inbox'
 import { registerWakeupHandler } from '../tools/scheduling/schedule-wakeup'
 import { accumulateGraftSavings } from '../shared/graft-savings'
+import { deletedCwdSessionMessage, resolveExistingCwd } from '../shared/deleted-cwd'
 import {
   getMessageBus,
   formatInboundMessage,
@@ -1241,8 +1242,24 @@ export class QueryEngine {
     }
 
     try {
+      // Every tool is handed the session's working directory, and that directory
+      // can be deleted while the session runs. Nothing upstream notices: Node
+      // throws from whichever call site touches it first, Bun keeps handing back
+      // the path it cached at startup, and the tool then fails at its first
+      // syscall naming whatever it touched (`spawn /bin/sh ENOENT` blames the
+      // shell). Refuse here, where the reason is still known.
+      const cwd = resolveExistingCwd()
+      if (!cwd) {
+        // Both fields carry the message on purpose: a failed result is projected
+        // as `error || content` (the two tool-result loops and the context log all
+        // read it that way), so guidance parked in `content` alone would be
+        // dropped exactly when it is needed.
+        const reason = deletedCwdSessionMessage()
+        return { success: false, content: reason, error: reason }
+      }
+
       const result = await tool.execute(effectiveParams, {
-        cwd: process.cwd(),
+        cwd,
         sessionId: this.sessionId,
         provider: this.registry.getActive().config.id,
         model: this.registry.getActiveModel(),
