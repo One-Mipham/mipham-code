@@ -78,6 +78,15 @@ export class AnthropicProvider implements ProviderInstance {
     // off at the output ceiling rather than ended by the model.
     let truncated = false
 
+    // Whether this stream reached `message_stop`. A stream that runs out without
+    // one was cut — a proxy or gateway closing the connection cleanly looks
+    // exactly like a finished response otherwise.
+    let sawTerminalEvent = false
+
+    // Tool blocks already emitted. A replayed event is the same call, not a
+    // second one; emitting it twice makes the engine run the tool twice.
+    const emittedToolIds = new Set<string>()
+
     const messages = this.convertMessages(req.messages)
     this.markPrefixCacheBreakpoint(messages)
 
@@ -223,21 +232,27 @@ export class AnthropicProvider implements ProviderInstance {
               // 要在这里丢弃，就得把 `tool_use` 缓冲到 `message_stop` 再发 ——
               // 那是一次行为变更，不属本次范围。
               if (currentToolId && currentToolName && accumulatedToolInput) {
-                let parsedInput: Record<string, unknown> = {}
-                try {
-                  parsedInput = JSON.parse(accumulatedToolInput)
-                } catch {
-                  parsedInput = { _raw: accumulatedToolInput }
-                }
+                // A replayed block carries the id it was first sent with, so the
+                // id is what tells a second call apart from the same call twice.
+                if (!emittedToolIds.has(currentToolId)) {
+                  emittedToolIds.add(currentToolId)
 
-                yield {
-                  type: 'tool_use',
-                  toolUse: {
+                  let parsedInput: Record<string, unknown> = {}
+                  try {
+                    parsedInput = JSON.parse(accumulatedToolInput)
+                  } catch {
+                    parsedInput = { _raw: accumulatedToolInput }
+                  }
+
+                  yield {
                     type: 'tool_use',
-                    id: currentToolId,
-                    name: currentToolName,
-                    input: parsedInput,
-                  },
+                    toolUse: {
+                      type: 'tool_use',
+                      id: currentToolId,
+                      name: currentToolName,
+                      input: parsedInput,
+                    },
+                  }
                 }
 
                 // Reset accumulator
@@ -272,6 +287,7 @@ export class AnthropicProvider implements ProviderInstance {
             }
 
             case 'message_stop': {
+              sawTerminalEvent = true
               yield truncated ? { type: 'stop', truncated: true } : { type: 'stop' }
               return
             }
@@ -287,7 +303,12 @@ export class AnthropicProvider implements ProviderInstance {
       }
     }
 
-    yield { type: 'stop' }
+    // The stream ran out without `message_stop`. Whatever stopped it, the turn is
+    // incomplete — and this is the only place that knows, because a cleanly
+    // closed connection and a finished response are otherwise the same stream.
+    if (!sawTerminalEvent) truncated = true
+
+    yield truncated ? { type: 'stop', truncated: true } : { type: 'stop' }
   }
 
   async listModels(): Promise<ModelInfo[]> {

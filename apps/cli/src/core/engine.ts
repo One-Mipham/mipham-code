@@ -1373,9 +1373,21 @@ export class QueryEngine {
     this.llm = llm
   }
 
-  /** 统一 chat 出口：优先走注入的 Llm 缝，否则回退 registry。 */
+  /**
+   * 统一 chat 出口：优先走注入的 Llm 缝，否则回退 registry。
+   *
+   * 被截断的一轮在这里点名。`truncated` 只有 provider 能判（被上限截断、连接
+   * 被干净地关掉、正常写完，在字节流上是同一个形状），而这里是**每一处消费
+   * chat 流的地方都必经的唯一出口** —— 转发的循环有两个（`process` 与
+   * `continueWithTools`），各自补一次正是「两条渲染路径只接一条」的老毛病。
+   */
   private async *llmChat(req: ChatRequest): AsyncGenerator<StreamChunk> {
-    yield* (this.llm ?? this.registry).chat(req)
+    for await (const chunk of (this.llm ?? this.registry).chat(req)) {
+      if (chunk.type === 'stop' && chunk.truncated) {
+        yield { type: 'warning', content: t('errors.turn_truncated') }
+      }
+      yield chunk
+    }
   }
 
   /**
