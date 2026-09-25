@@ -1,4 +1,13 @@
-import { readFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  truncateSync,
+  writeFileSync,
+} from 'node:fs'
+import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
@@ -19,12 +28,15 @@ vi.mock('node:os', async (importOriginal) => {
 
 import {
   DAEMON_ENTRY,
+  MAX_LOG_BYTES,
   planDaemonSpawn,
+  rotateLogIfLarge,
   selfArgvPrefix,
   startDetachedDaemon,
   userArgs,
   waitForDaemonExit,
 } from '../../src/daemon/launch'
+import { miphamHome } from '../../src/core/paths.ts'
 
 // Measured on bun 1.3.14 — 这两条是 bun 真正产生的形状，不是我们希望它产生的。
 // 本文件原先给编译产物编了一个 ['/opt/mipham/dist/mipham', '__daemon']：bun 从不
@@ -318,6 +330,92 @@ describe('startDetachedDaemon 不谎报', () => {
 })
 
 const CLI_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
+
+// 本文件把 homedir mock 到了 tmpdir，而 launch.ts 的日志路径是 `miphamHome('daemon.log')`
+// —— 于是「日志已经很大」这一前提可以在**真文件系统**上摆出来，不必给 startDetachedDaemon
+// 新增 logPath / maxBytes 注入口。路径**从真函数派生**而不是手写 join：第一版手写时漏了
+// `.mipham` 一层，于是负对照里那句 `existsSync('.1') === false` 恒真（代码根本没看那个文件），
+// 是正例红掉才暴露的 —— 只有负例的空转，自己是不会响的。
+// 用例之间必须互相清干净：`.1` 若有上一例的残留，同一句话又会因为别的原因变绿。
+const LOG = () => miphamHome('daemon.log')
+
+function resetLogDir(): void {
+  rmSync(homedir(), { recursive: true, force: true })
+  mkdirSync(dirname(LOG()), { recursive: true })
+}
+
+/** 稀疏文件：逻辑大小是真的，磁盘占用与内存都是零（`truncateSync` 只写元数据）。 */
+function seedLog(path: string, size: number, marker = 'OLD\n'): void {
+  writeFileSync(path, marker)
+  truncateSync(path, size)
+}
+
+describe('rotateLogIfLarge', () => {
+  it('未达上限 ⇒ 内容一字不动（负对照）', () => {
+    resetLogDir()
+    const path = join(homedir(), 'scratch.log')
+    // marker 填满整个大小：`truncateSync` 补的是 NUL，末位差一字节会让精确比较永远不等。
+    seedLog(path, 10, '0123456789')
+    rotateLogIfLarge(path, 100)
+    expect(existsSync(`${path}.1`)).toBe(false)
+    expect(statSync(path).size).toBe(10)
+    expect(readFileSync(path, 'utf-8')).toBe('0123456789')
+  })
+
+  it('恰好等于上限 ⇒ 轮转（门是「达到」不是「超过」：钉住这个选择）', () => {
+    resetLogDir()
+    const path = join(homedir(), 'scratch.log')
+    seedLog(path, 100, '0123456789'.repeat(10))
+    rotateLogIfLarge(path, 100)
+    expect(statSync(`${path}.1`).size).toBe(100)
+    expect(existsSync(path)).toBe(false)
+  })
+
+  it('文件不存在 ⇒ 不抛也不创建（每个首次启动都走这条）', () => {
+    resetLogDir()
+    const path = join(homedir(), 'nope.log')
+    expect(() => rotateLogIfLarge(path, 1)).not.toThrow()
+    expect(existsSync(path)).toBe(false)
+    expect(existsSync(`${path}.1`)).toBe(false)
+  })
+})
+
+describe('startDetachedDaemon 起手就把日志框住', () => {
+  it('日志超上限 ⇒ 老一代留成 .1（内容逐字节还在），本次写的是新文件', async () => {
+    resetLogDir()
+    seedLog(LOG(), MAX_LOG_BYTES + 1)
+    let calls = 0
+    const result = await startDetachedDaemon({
+      deps: {
+        spawnFn: (() => fakeChild()) as never,
+        getStatus: () => (calls++ === 0 ? null : { pid: 3, port: 45671 }),
+        sleep: noSleep,
+      },
+    })
+    expect(result.ok).toBe(true)
+    // 老一代是**这次失败的证据**，所以是改名不是截断 —— 大小与首字节都要还在。
+    expect(statSync(`${LOG()}.1`).size).toBe(MAX_LOG_BYTES + 1)
+    expect(readFileSync(`${LOG()}.1`, 'utf-8').slice(0, 4)).toBe('OLD\n')
+    // 新日志是被 openSync 现建的：0 字节，且**没有** .2（只留一代是上限成立的前提）。
+    expect(statSync(LOG()).size).toBe(0)
+    expect(existsSync(`${LOG()}.2`)).toBe(false)
+  })
+
+  it('负对照：没超上限 ⇒ 不轮转也不截断（原文件按原样接着追加）', async () => {
+    resetLogDir()
+    seedLog(LOG(), MAX_LOG_BYTES - 1)
+    let calls = 0
+    await startDetachedDaemon({
+      deps: {
+        spawnFn: (() => fakeChild()) as never,
+        getStatus: () => (calls++ === 0 ? null : { pid: 3, port: 45671 }),
+        sleep: noSleep,
+      },
+    })
+    expect(existsSync(`${LOG()}.1`)).toBe(false)
+    expect(statSync(LOG()).size).toBe(MAX_LOG_BYTES - 1)
+  })
+})
 
 describe('waitForDaemonExit —— restart 等老 daemon 真的退', () => {
   it('status 变 null ⇒ true，一拿到就不再 poll', async () => {

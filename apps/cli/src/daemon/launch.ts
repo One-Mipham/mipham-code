@@ -12,7 +12,7 @@
  */
 
 import { spawn, type SpawnOptions } from 'node:child_process'
-import { closeSync, mkdirSync, openSync, readFileSync, statSync } from 'node:fs'
+import { closeSync, mkdirSync, openSync, readFileSync, renameSync, statSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { miphamHome } from '../core/paths.ts'
 
@@ -141,6 +141,13 @@ const READY_TIMEOUT_MS = 10_000
 const POLL_INTERVAL_MS = 100
 /** How long `restart` waits for the *old* daemon to go before refusing. */
 const OLD_DAEMON_EXIT_TIMEOUT_MS = 10_000
+/**
+ * Bound on the daemon log, enforced by `rotateLogIfLarge`. Two files at this size
+ * are invisible on any disk it will sit on, while the reader only ever wants a tail
+ * (`tailLog` takes the last 800 bytes) — so what the bound has to preserve is not
+ * volume but *the previous generation* of a start that keeps failing.
+ */
+export const MAX_LOG_BYTES = 5 * 1024 * 1024
 
 async function defaultGetStatus(): Promise<DaemonStatusLike | null> {
   const { getDaemonStatus } = await import('./index')
@@ -154,6 +161,45 @@ function tailLog(logPath: string, maxBytes = 800): string {
     return readFileSync(logPath, 'utf-8').slice(start).trim()
   } catch {
     return ''
+  }
+}
+
+/**
+ * Bound the log the daemon is about to append to.
+ *
+ * Called before the child is spawned, which is the only moment nothing holds it:
+ * `startDetachedDaemon` returns early when a daemon is already up, so by here its
+ * pid file was gone. (A daemon that died without unlinking the pid file could still
+ * hold the old inode — its lines then land in the renamed file, which loses nothing
+ * and corrupts nothing.)
+ *
+ * **Rename, not truncate.** Either bounds the file, and the reader only wants a tail
+ * — but the case this exists for is a start that keeps failing, and there the
+ * previous generation *is* the evidence. Keeping exactly one bounds the sink at two
+ * files; `renameSync` overwrites the target, so that is also the oldest generation's
+ * cleanup. There is never a `.2`.
+ *
+ * Failing to bound is never fatal: a daemon that refuses to start because its log
+ * could not be rotated trades a slow hazard for an immediate one. And an unreadable
+ * size means the append below is about to fail loudly anyway, so `return` is not a
+ * silent degradation of anything that was working.
+ */
+export function rotateLogIfLarge(logPath: string, maxBytes: number = MAX_LOG_BYTES): void {
+  let size: number
+  try {
+    size = statSync(logPath).size
+  } catch {
+    return // no log yet (every first start)
+  }
+  if (size < maxBytes) return
+  try {
+    renameSync(logPath, `${logPath}.1`)
+  } catch (err) {
+    // Printed rather than thrown, but never swallowed: a bound that switched itself
+    // off in silence is the defect class this whole file is about.
+    process.stderr.write(
+      `⚠️  daemon 日志轮转失败，本次仍按无上限追加: ${err instanceof Error ? err.message : String(err)}\n`,
+    )
   }
 }
 
@@ -177,6 +223,7 @@ export async function startDetachedDaemon(
 
   const plan = planDaemonSpawn()
   mkdirSync(dirname(plan.logPath), { recursive: true, mode: 0o700 })
+  rotateLogIfLarge(plan.logPath)
 
   let spawnError: Error | null = null
   let exitCode: number | null = null
