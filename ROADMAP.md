@@ -795,7 +795,9 @@ agents 真解析、provider 回退仍活着）。
       切 picker 一样丢；历史**不从会话日志回填**，↑ 只翻本次挂载以来敲过的条目。
       测试 3,051 → **3,056**（255 → 256 文件，0 失败）。
 
-- [ ] **D8** · `ui/input.tsx` 的 **ghost-text 自动补全**（`core/autocomplete.ts`）—— 已核实**接线是真的**，
+- [x] **D8** · `ui/input.tsx` 的 **ghost-text 自动补全**（`core/autocomplete.ts`）——
+      **三条缺口 ①②③ 已于 2026-09-25 全部收口（未发布）**；① 剩下的一条接口级边界另立 **D17**。
+      已核实**接线是真的**，
       不是本仓库反复栽的「有定义、无施加点」：`app.tsx:1206-1210` 真传 config、`registry.ts:122`
       的 `req.model || activeModelId` 让 `model: ''` 正确回退、过期结果经 `isStale()` 返回 null 后
       还有 `if (completion)` 兜底、`MiphamTextInput:242` 显式让位 Tab。**三条缺口**：
@@ -829,12 +831,32 @@ agents 真解析、provider 回退仍活着）。
       随之改成四处，并注明 `onChange` 那处内联版**故意不共用**（它要的是把 reqId 推成新的）。
       **这一处今天不可达**（有建议显示 ⇒ 上次请求已结束、定时器已烧掉），故 ③ **没有新测试** ——
       它消掉的是「接受后继续续写」一加上就会现形的洞，不是今天的 bug。
-      **① 仍未收口（代价），且两半要分开定：** (a) `AUTOCOMPLETE_MAX_CONTEXT` 限的是条数不是 token，
-      给每条 `content` 截断要先定一个数（截多少、按字符还是按 token）；(b) 「取消不掉」要真取消，
-      得有人**提前 break 消费循环**，而 `openai-compat.ts` 的读循环**没有 `finally { reader.cancel() }`**
-      （该文件唯一的 `finally` 管的是 idle 定时器）⇒ 提前 break 会留下未取消的 response body，
-      等于拿「白烧 token」换「泄漏连接」。故 (b) 的前置是**在 provider 侧补流清理**，而那是
-      engine / daemon / 子代理共用的路径，不顺手做 ⇒ 留待裁决。
+      **① 已于 2026-09-25 收口（两半都收，各留一条边界）：**
+      (a) **按字符、保留尾部**：新增 `AUTOCOMPLETE_MAX_CHARS_PER_MESSAGE = 2000`，超限的每条消息
+      只带尾部并加前导 `…`。落点选在 `buildAutocompleteRequest`（而**不是** `app.tsx` 那个 memo）：
+      `RecentMessage[]` 的**唯一**消费者就是它，上限属于「发出去的那份请求」、不属于「内存里留着的
+      那些消息」—— 放 memo 里等于每次 `messages` 变都白算一遍，还会把未来的消费者一并改掉。
+      **刻意不设第二个总预算常数**：每条封顶 × 条数封顶（`AUTOCOMPLETE_MAX_CONTEXT = 6`）总量已封死，
+      两个常数得不变量维护。**当前输入不截断** —— 它是被续写的那条本身，且 `extractCompletion`
+      的判据依赖它的完整值。
+      (b) 把 `isStale()` 从「整条流消费完之后」**挪进循环内**（每块判一次），stale 即 `break`。
+      **这半的前置正是上面那句**，而前置已完成（provider 侧补流清理，见本文件变更记录同批）：
+      `break` 触发 `.return()` ⇒ provider 的 `finally { await reader.cancel() }` ⇒ 连接当场释放。
+      **测试的可分辨点不在「有没有走进 `finally`」**（两种实现都会走到、也都返回 null，断言它等于
+      永真），而在**上游被消费了多少块** ⇒ 用会自计数的假 Llm。
+      **但这句判据的第一版是「被遮住的」—— 负控当场把它翻了出来，故此处记录的是订正后的形态**：
+      原来那条用例的 stale 是「第 2 次检查才为真」，而把判挪到循环外后**检查只发生一次** ⇒ 它从没
+      为真、实现干脆读完并**返回了文本**，红落在 `toBeNull` 上，**计数断言根本没被求值** ——
+      我写下的判据被一个更靠前的断言挡住了。补一条「一开始就 stale」（`() => true`）的用例：
+      两种实现**都**返回 null、**都**走 finally，唯一差别只剩消费了多少块 ⇒ 计数这才**承重**；
+      重跑同一条负控得 `expected 100 to be 1`。
+      **负控三次、逐条隔离成因**：删掉循环内那一判 ⇒ **2 红**（即上面那两条）；把 `tailOf` 退化成
+      恒等 ⇒ 恰好「超长消息只带尾部」一红；边界 `<=` 改 `<` ⇒ 恰好「恰好到上限的消息原样带过」一红
+      —— **两个方向各由一条不同的断言咬住**，即上限的两边都被钉住。三次还原都按 sha256 逐字核过。
+      **① 剩一条边界（未做，接口级）→ 已另立 D17**：`reader.cancel()` 释放的是**客户端**这条连接、
+      并停止继续收，它**不保证服务端停止生成**。今日的形状是：客户端不再为它付连接与读流；
+      服务端是否提前收工**未经测量**（`cancel()` 关掉的是客户端这侧的 body）。
+      ① 的**上行代价**已从「6 条可以是上万 token」降到「≤ 6 × 2000 字符」，条数不变。
 
 - [x] **D9** · `scripts/smoke-daemon.sh` 的三处遗留 —— **已收口（2026-09-25，未发布）**。
       原文三处**逐条核实成立**（① 就绪检查确为管道式；② 两个守卫分支在 CI 里零执行；
@@ -1062,6 +1084,27 @@ agents 真解析、provider 回退仍活着）。
       **建议落点**（未做）：并进 D15 那条「真值判据」一起想 —— 若给 `web.*` 建真值判据，数据源应当是**同一处**
       （计数由命令产出后落进 `package-info.json` 的新字段），两站与 CLI 共享它，而不是各自手抄。
 
+- [ ] **D17** · **（2026-09-25 从 D8① 拆出；拆的当口发现它比原判更重）`ChatRequest.signal` 有声明、有读者、有设置者 —— 唯独没有「送达者」**。
+      原判（写进 D8 的那句）是「接口级边界」，**实测不成立**：字段**早就有了**。`registry.ts:19` 声明 `signal?: AbortSignal`；
+      `fetch-utils.ts:99` 也**确实会消费它**（`init.signal ? anySignal([init.signal, controller.signal]) : controller.signal`）；
+      `self-critique.ts:169-175` **已经**在设它 —— `setTimeout(() => controller.abort(), this.config.timeoutMs)`
+      （默认 **2000 ms**，`:61`）配上 `signal: controller.signal`，而 `registry.chat:127` 用 `{ ...req, model: modelId }` 原样透传。
+      断点只在**最末一跳**：`openai-compat.ts:34` 与 `anthropic.ts:126` 的 `fetchWithRetry` init **里没有 `signal` 字段**
+      ⇒ `fetch-utils.ts:99` 读到的 `init.signal` 恒为 `undefined` ⇒ 那个 `AbortController` **一次都没接上过**，
+      而 `controller.abort()` 在无人监听的信号上是**空操作**。
+      **所以这不是「缺一个字段」，是一条活缺陷**：`critique()` 的文档承诺「null if skipped or **timed out**」、
+      `:205` 的 catch 也写着「Timeout or model error」，**而 2 秒预算从来没有生效过** —— 真兜底的是 provider 自己的
+      `streamIdleTimeoutMs`（还按 `effort` 放大）⇒ 一次卡住的 critique 会把 `engine.ts:1219` 的
+      `await selfCritique.critique(...)` 拖到几十秒，**远超它自己声明的 2 秒**。**与 D8① 同族**：有定义、有施加点，接不上。
+      **好消息**：`:205` 的 `catch { … return null }`（fail-open）**已经写对了** —— 信号真接上后，abort 会以 `AbortError`
+      从生成器里抛出、被这里接住、按注释所说放行工具 ⇒ **修法不碰任何错误处理**。
+      **修法**：两处 init 各加一行 `signal: req.signal`（传 `undefined` 是安全的，`fetch-utils` 的三元已处理）。
+      **代价**：只在**有人设过 signal** 时才改变行为，而今天全仓库**只有一个**这样的调用点（self-critique）⇒ 影响面就是它一个。
+      **判据（正因影响面只有一处，测试必须自己造第二个调用点）**：在 `test/providers/stream-cancel.test.ts` 已有的
+      **不关闭探针流**上挂一个 `AbortController`，abort 后断言**传输侧观察到断开** —— 不能断言 `chat()` 的返回值，
+      只看返回值「提前中断」与「正常读完」**同形**（D8① 同一条形状）。**负控**：删掉那行 `signal:` ⇒ 该测试红，
+      而既有套件**不会**红（可选字段丢它不报错）⇒ 这正是「加了那行」与「没加」在既有绿里同形的证据。
+
 ---
 
 ## 建议的推进顺序
@@ -1159,3 +1202,4 @@ agents 真解析、provider 回退仍活着）。
 | 2026-09-25 | **0.85.5 发布 —— 12 笔缺陷收口（同一形状在别处又长了一遍）**（2.94.5）。① 安全：**目标读不出文本的递归 `rm`** 一律拒绝（命令替换 / 变量+根级目录名 / `$PWD` 锚定 / 只有反斜杠），闸排在放行规则与各档基线**之前**（auto 下不问分类器 —— 它读的是同一份缺失的文本），豁免走环境变量；`Retry-After` 按 [1s,60s] 夹取、不可解析退回指数退避。② 插件面三处「声明了却不落地」：远端 MCP 被装载门静默丢弃、插件钩子匿名（失败不点名 / 两个钩子共用一个禁用位 / 卸载按事件连带删光）、`mcp_tool` 钩子是空壳。③ 流面：没走到 `message_stop` 的一轮不再装成写完、重放的块不再跑两次工具、轮次上限改成「一轮对话的预算」。④ 会话面：恢复时收尾没有结果的调用（补**事件**不补投影）、中途目录被删（判据交给文件系统 —— Bun 根本不抛）、同名 MCP 并发各自起传输。⑤ UI：一刷按键不再落在上一行、命令选择器一次 Enter 只提交一遍。⑥ 新增启动时**指令总量**提示。测试 3,298 → **3,426**（271 → 291 文件，0 失败）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | 2026-09-25 | **公开面数字审出一条陈旧主张 —— 产品页 `/code` 写「85 Slash Commands」，实测 137** —— 顺手挖出 i18n 的 vendored 复制对**根本没有守卫**。**判据取命令产出**：`bun -e "…getCommandNames()…"` ⇒ **137**（`ui/commands.ts:5890`），而 `web.features.slash_commands` 在**两份副本 × 两种语言**里都写 85 ⇒ 本仓库自己的产品页（`apps/web` → `mipham.ai/code`）宣传的命令数比真值**少 52**。**修的是拷贝不是站点**（按对象扫全文件）：`packages/shared/src/i18n/locales/{en-US,zh-CN}.json`（Web 真源，`apps/web` 只读 `web.*` ⇒ 那是唯一上屏的那份）+ `apps/cli/src/i18n-core/locales/{en-US,zh-CN}.json`（CLI 自包含副本），4 文件 8 行；`docs/slash-commands-audit.md:1` 的「85」是**带日期的快照**（检测日期 2026-07-26 / v0.7.8），按「历史不可改」**不动**。**顺带量出更大的一件事**：这两份副本**从来不在** `shared-vendor-parity.test.ts` 的族表里（该守卫只守 `shared/src/*` ↔ `cli/src/shared/*`），实测**已经分叉** —— 共有 586 键中 **8 个值不同**（`commands.stats.tokens` 在 shared 侧至今硬编码 `200,000`，CLI 早已改 `{max}` 以跟上 1M/500K 自适应窗口）、CLI 独有 **245** 键、shared 独有 **10** 键，且**两侧互不包含**（shared 独有的 6 个 `web.install_page.*` 正被安装页读着）⇒ 朝任一边整体同步都会打掉对方的东西。**边界**：那 8 个分歧键都不上屏（`apps/web` 只读 `web.*`），是**死副本陈旧**、不是活缺陷。**守卫缺口**：`packages/shared/**` 同样不在 `tool-reference-integrity.test.ts` 的 `SCAN_ROOTS`（`<cli>/src` + `<cli>/bin`）里 ⇒ **两套守卫都够不着它**；已立 **D15**。**最尖的一点**：即使把这一对加进族表、按「共有键值必须相等」比，**也抓不到本笔的 85** —— 两份当时写的是**同一个错值**，值相等的守卫只会全绿（它证的是两份一致、不是两份对）⇒ 要抓它得另有**真值判据**（页面数字 vs `getCommandNames()`），而 `web.*` 目前一条都没有。**诚实边界**：本笔只让仓库里的页面正确，**未部署** —— 线上 `mipham.ai/code` 仍显示 85，直到 `apps/web` 重新构建部署（部署需单独授权）。测试数不变（4 个碰 i18n 的文件 52/52 绿）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | 2026-09-25 | **provider 流清理 —— 消费方走人时，那条连接从来没有被放开**（未发布）。判据在代码里：两个 provider 的读循环**通篇没有 `reader.cancel()`**（各自唯一的 `finally` 只 `clearTimeout`），而消费方**确实会中途离开** —— `engine.ts:502` 在收到常规 `stop` 块时 `break`、`sub-agent.ts:455` 在 abort 时 `throw` 一个 `DOMException`。两者都会调生成器的 `.return()`，而 `.return()` **恰好**展开 `finally` ⇒ 修法是把**读循环连同它后面兜底的那个 `stop`** 一起包进 `try/finally`，**而不是**在读侧的三个出口逐个补：逐点补覆盖不了「消费方半途走人」，而那才是这条路日常发生的形态。落地 `await reader.cancel().catch(() => {})`，catch 是必须的（已 errored 的流上 `cancel()` 以 storedError 拒绝）、`await` 是为了让「取消完成」而不是「取消已请求」。**测试的探针流刻意不关闭**：`ReadableStreamCancel` 对**已关闭**的流是 spec 早退、根本不触源 ⇒ 用会关闭的探针，断言**修前修后都不可达**（既红不了也绿不了，是一句永真）。负控把 `await reader.cancel()...` 换成 `void 0`（最小变异、不牵动缩进）：**5 条 cancel 断言全红、2 条「流自己跑完」的对照全绿**，还原按 sha256 逐字核过、与变异前**完全一致**。测试 3,473 → **3,480**（296 → 297 文件，0 失败），CLAUDE.md 5 处**同一提交内**回填（头部计数行 / monorepo 树 / `pnpm test` 注释 / providers 行 8→9·122→129 / 合计行）—— 显式**只改数字、不加宽描述列**，`git diff --numstat` = 5/5，避免 prettier 按最宽行重排 23 行表（那正是过去越过 40k 的那一次）。**顺带一次假红，记在读数陷阱里**：`npx vitest run test/integrity/` 若从**仓库根**跑，`test/integrity/` 会被当成**路径子串过滤**、捡到根的默认配置（**无 `bun` 别名**）⇒ 3 个文件在 import 期就死，报「Test Files 3 failed」而「Tests 63 passed」—— 假的；在 `apps/cli` 下同一命令 **13 文件 / 93 测试全绿**。**已知未清**：`websites` 两份硬编码「137 命令 · 3473 测试」（`domestic/.../mipham-code/page.tsx:275`、`international/.../mipham-code/page.tsx:303`）仍停在旧数 —— 在另一个仓库、且与上线部署相邻，**立 D16，待授权**。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| 2026-09-25 | **D8 ① 收口 —— ghost-text 补全的两条缺口：上行没有上限、下行取消不掉**（未发布）。**(a) 取消**：`isStale()` 从循环**外**挪进循环**内**。`break` 不只是「不再读」—— 它触发生成器的 `.return()` ⇒ provider 的 `finally` ⇒ `reader.cancel()`（正是同批 provider 流清理新落地的那个 finally）。判在循环外等于**先把整条流读完再丢结果**，那正是「取消不掉」：用户每次 >400ms 的停顿都买一个**完整** completion。**(b) 上限**：原来只限**条数**（6 条），而一条 `content` 可以任意长（贴进来一个文件就是上万 token）⇒ 新增 `AUTOCOMPLETE_MAX_CHARS_PER_MESSAGE = 2000`，**留尾**（续写要看的是「刚说到哪儿」，故砍头）并加 `…` 标出被截断；**待续写的当前输入不截断**（它是被续写的那条本身，且 `extractCompletion` 的判据依赖它的完整值）。刻意只立**一个**常数、不设「每消息 + 全局」两个预算 —— 每条封顶 × 条数封顶已经封死总量，第二个常数没有施加点。**负控三次，逐条实测、隔离成因**：① `tailOf` 永不截断 ⇒ 1 红（「超长消息只带尾部」）；② 边界 `<=` 改 `<` ⇒ 1 红（「恰好到上限的消息原样带过」）—— **两个方向各被一条不同的断言咬住**，即上限的两边都被钉住，而不是只有一边；③ 把 `if (isStale()) break` 挪出循环 ⇒ 2 红。三次还原都按 **sha256 逐字核过**、与变异前一致。**一处自查纠正（本批最该记的一条）**：我给取消测试写的理由是「唯一能分辨两种实现的是**上游被消费了多少**」，**负控 ③ 当面证伪了这句** —— 该用例的 stale 是「第 2 次检查才为真」，而判挪出循环后**检查只发生一次**，于是它从没为真、实现干脆读完并**返回了文本**，红落在 `toBeNull` 上，**计数断言根本没被求值**（我写下的判据被一个更靠前的断言遮住了）。补一条「一开始就 stale」（`() => true`）的用例让计数真正**承重**：重跑负控 ③ 得 `expected 100 to be 1`。**测试 3,485 → 3,486**（core 1371 → **1372**；文件数不变 297，0 失败），CLAUDE.md 5 处**同一提交内**回填、**只改数字**⇒ `git diff --numstat` = **5/5**（字符 31,284，远在 40k 预算内）。**顺带一条读数陷阱**：`--reporter=basic` 在 vitest 5 **不存在** ⇒ reporter 模块加载失败、**vitest 根本没跑**、日志里连 `Tests N` 行都没有 —— 差一点把「没有输出」读成「没有失败」；判据是**跑完必须有 `Tests N` 行，没有就是不成立**。**D8① 剩下的一条接口级边界另立 D17**，而拆的当口就发现它比原判更重：`ChatRequest.signal` **有声明、有读者、有设置者，只缺送达者** ⇒ `self-critique` 那 2 秒超时**从未生效过**（见 D17）。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
