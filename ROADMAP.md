@@ -969,7 +969,7 @@ agents 真解析、provider 回退仍活着）。
       期望伤害面是「每个用户的下一次更新」。先把真实代价订正下来，供下一个会话按真价决策（本条目自身那句
       代价即一例「债务条目的主张不是事实」—— 判据是离线可测的，没有理由留着一句假价）。
       同一次复核里发现的活缺陷另立 **D14**（就在下方，已收口）。
-- [ ] **D13** · **（D11 同批发现）网站 `/code/docs` 页的示例配置仍是陈旧值** ——
+- [x] **D13** · **（D11 同批发现）网站 `/code/docs` 页的示例配置仍是陈旧值** ——
       `apps/web/src/app/code/docs/page.tsx` 里那份 `~/.mipham/config.yml` 样例写着 `version: "0.2.2"`
       与 `permission: auto`。后者与 D1 在根 `README.md` 修掉的那行**同形状**：`auto` 合法（在 `ALL_MODES` 里），
       但它是**分类器档**，不是旧义「让工具自行决定」—— 那一行本身就是一次事故的输入，故属**安全相关**
@@ -979,6 +979,22 @@ agents 真解析、provider 回退仍活着）。
       （D11 那两个调用方正是从这道缝里漏出去的）。同页其余内容**实测无误**：`/help`、`/model`、`/switch`、
       `/clear`、`/exit` 五个命令各 1 命中 `registry.set`，`--model` 示例本次已为真。
       **触发**：下次改网站文案时顺带，或 `version` 再跳一档时
+      **已收口（2026-09-25，未部署）** —— 四句主张逐条实测，**全中**：① `version: "0.2.2"` 陈旧
+      （当前 **0.85.5**）；② `permission: auto` 确在 `ALL_MODES` 内、但语义是**分类器档**
+      （`permission.ts` 的只读工具注释写明 `auto` 让只读工具过分类器）⇒ 比产品默认
+      `permission: 'default'`（`config/defaults.ts:15`）**更宽**，正是 D1 在 README 修掉的同形状；
+      ③ `claude-sonnet-4-6` 确为已注册模型（`shared/constants.ts:45`）；④ **无任何守卫扫
+      `apps/web/**`** —— `SCAN_ROOTS = [<cli>/src, <cli>/bin]`（`tool-reference-integrity.test.ts:54`），
+      故 `.tsx` 里的样例配置全在扫描面之外（该文件 `SCANNED_EXTENSIONS` 含 `.tsx`，但只作用于那两个
+      root —— D13 那句「不含任何 `.tsx`」**准确**）。
+      **修法不是把 `0.2.2` 改成 `0.85.5`** —— 硬编码就是它会烂的原因，而**同一页第 14 行**早已用
+      `${PACKAGE_NAME}` 派生。改 `version: "${PACKAGE_VERSION}"`（同页补 import），此后再跳版本
+      **不会**再烂；`permission: auto` → `permission: default`（对齐产品默认）。两处同页，
+      `PACKAGE_NAME` 的先例就是判据。
+      **诚实边界**：**未部署** —— 本笔只让**仓库里**的页面正确；线上 `/code/docs` 何时更新是另一步
+      （部署需单独授权；且 `version` 现由构建期常量派生 ⇒ 部署那一刻才定格）。
+      **另记（未处置，待裁定）**：D13 指出的那道缝是**真的** —— `apps/web/**` 不在任何守卫的扫描面内。
+      是否扩面是独立决定（把 `apps/web` 加进 `SCAN_ROOTS` 会引入新的假红面），不在本笔内自行决定。
 - [x] **D14** · **（D12 复核时发现的活缺陷）`resolveInstallPaths` 的 Windows 分支差一层** ——
       **已收口（2026-09-25，未发布）**。
       **缺陷**：npm 在 win32 下把全局包装进 `<prefix>/node_modules`（**没有 `lib` 这一层**），bin shim

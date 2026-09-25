@@ -1,6 +1,6 @@
 'use client'
 
-import { PACKAGE_NAME } from '@mipham/shared'
+import { PACKAGE_NAME, PACKAGE_VERSION } from '@mipham/shared'
 import { useI18n } from '@/i18n/context'
 
 export default function DocsPage() {
@@ -20,10 +20,10 @@ mipham --model claude-sonnet-4-6`}
           Create <code>~/.mipham/config.yml</code>:
         </p>
         <pre className="bg-gray-100 p-4 rounded-lg">
-          {`version: "0.2.2"
+          {`version: "${PACKAGE_VERSION}"
 defaultProvider: anthropic
 defaultModel: claude-sonnet-4-6
-permission: auto`}
+permission: default`}
         </pre>
 
         <h2>{t('web.docs.commands')}</h2>
