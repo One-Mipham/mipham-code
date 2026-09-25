@@ -58,8 +58,8 @@
         "desc": "通过统一接口连接 Claude、GPT、DeepSeek、Qwen、Kimi 等。使用 Ctrl+P 实时切换模型。"
       },
       "slash_commands": {
-        "title": "85 个 Slash 命令",
-        "desc": "完全对标 Claude Code：/commit、/pr、/simplify、/lint、/loop init、/browse-plugins — 全部 85 个命令，零学习成本。"
+        "title": "137 个 Slash 命令",
+        "desc": "完全对标 Claude Code：/commit、/pr、/simplify、/lint、/loop init、/browse-plugins — 全部 137 个命令，零学习成本。"
       },
       "plugins": {
         "title": "插件市场",
