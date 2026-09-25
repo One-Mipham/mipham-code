@@ -812,10 +812,30 @@ agents 真解析、provider 回退仍活着）。
       `app.tsx:1351-1353` 传 `llm` / `recentMessages` / `autocompleteEnabled`、`registry.ts:122`
       的 `req.model || activeModelId`、`input.tsx:250` 把 Tab 让回去、`autocomplete.ts:62` 仍是
       **流消费完之后**才判 `isStale()`。漂的只是**指针**（D7 把历史提到 `app.tsx` 时改过 `InputBar`
-      的 props，整段后移）：③ 的注释现在是 `:326-327`，那个绕开点在 `:414`（另外三处
-      `clearSuggestion()` 在 `:399` / `:443` / `:502`）。
-      **另**：`:541` 每次输入也直接 `setSuggestion(null)`，但那处随即 `++suggestionReqIdRef` 并重排
-      定时器 ⇒ 不缺环，**不算第四个绕开点**。
+      的 props，整段后移）：③ 的注释现在是 `:326-327`，那个绕开点当时在 `:414`（另外三处
+      `clearSuggestion()` 在 `:399` / `:443` / `:502`）—— **③ 已于 2026-09-25 收口，见下**。
+      **另**：`:546`（当时是 `:541`）每次输入也直接 `setSuggestion(null)`，但那处随即
+      `++suggestionReqIdRef` 并重排定时器 ⇒ 不缺环，**不算第四个绕开点**。
+
+      **2026-09-25 ②③ 收口（同一批）：**
+              ② 补接线层测试 `test/ui/input-autocomplete-wiring.test.ts`（此前 `test/ui/` 一条都没碰过
+              ghost text）—— 5 格：Tab 接受（核心）+ 防抖只发一次且发的是最后一次文本 + 陈旧结果不上屏，
+              外加两条对照（不按 Tab 时建议只上屏、不进正文；慢补全不被打断时确实能上屏）。
+              **观测点选在 `onSubmit` 而不是 `lastFrame()`**：建议渲染在与正文**同一个 row Box** 里
+              （`input.tsx:576`），屏幕上 `> hello world` 既可能是「正文已含建议」也可能是「正文 + 幽灵」，
+              字符串断言分不出这两件事，提交出去的值分得出。**负控实跑**：同时变异三处接线（Tab 只取正文 /
+              不加 `++reqId` / 不清定时器）⇒ **恰好对应的三格红、两格对照仍绿**；还原后 `sha256` 与变异前
+              逐字相符（`6815535c…`），三个锚点逐个回读确认在位。
+              ③ 接受路径改走 `clearSuggestion()`（原为手写 `setSuggestion(null)`），`:326` 的「三处共用」
+              随之改成四处，并注明 `onChange` 那处内联版**故意不共用**（它要的是把 reqId 推成新的）。
+              **这一处今天不可达**（有建议显示 ⇒ 上次请求已结束、定时器已烧掉），故 ③ **没有新测试** ——
+              它消掉的是「接受后继续续写」一加上就会现形的洞，不是今天的 bug。
+              **① 仍未收口（代价），且两半要分开定：** (a) `AUTOCOMPLETE_MAX_CONTEXT` 限的是条数不是 token，
+              给每条 `content` 截断要先定一个数（截多少、按字符还是按 token）；(b) 「取消不掉」要真取消，
+              得有人**提前 break 消费循环**，而 `openai-compat.ts` 的读循环**没有 `finally { reader.cancel() }`**
+              （该文件唯一的 `finally` 管的是 idle 定时器）⇒ 提前 break 会留下未取消的 response body，
+              等于拿「白烧 token」换「泄漏连接」。故 (b) 的前置是**在 provider 侧补流清理**，而那是
+              engine / daemon / 子代理共用的路径，不顺手做 ⇒ 留待裁决。
 
 - [ ] **D9** · `scripts/smoke-daemon.sh` 的三处遗留 —— ① **惯用法未统一**：删除闸已改成
       「捕获输出 → `case`」，就绪检查仍是 `daemon status | grep -q 'Daemon: running'`

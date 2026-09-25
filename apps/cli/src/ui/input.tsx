@@ -324,7 +324,12 @@ export function InputBar({
   const suggestionReqIdRef = useRef(0)
 
   // 统一清理：清 suggestion + 使在途/待发请求失效 + 取消防抖定时器。
-  // Escape / handleSubmit / 翻历史三处共用，避免各自手写漏掉某一环（rule of three）。
+  // Escape / handleSubmit / 翻历史 / **Tab 接受** 四处共用，避免各自手写漏掉某一环。
+  // Tab 那一处原先只手写 `setSuggestion(null)`（ROADMAP D8 缺口③）：今天**不可达**
+  // ——有建议显示就说明上次请求已结束、定时器早烧掉了——但「接受后继续续写」一加上，
+  // 那个漏掉的环立刻变成洞。走同一入口，洞就不存在了。
+  // （`onChange` 里另有一处内联的同样三步，**不共用**：那里要的是把 reqId 推成**新**的，
+  // 与这里的「作废」是两件事。）
   const clearSuggestion = () => {
     setSuggestion(null)
     suggestionReqIdRef.current++
@@ -411,7 +416,7 @@ export function InputBar({
       const next = valueRef.current + suggestion
       setValue(next)
       valueRef.current = next
-      setSuggestion(null)
+      clearSuggestion()
       return
     }
     // Ctrl+P → toggle model picker
