@@ -63,103 +63,51 @@ export class OpenAICompatProvider implements ProviderInstance {
     // (DeepSeek V4 / reasoning models) aren't mistaken for a stalled connection.
     const STREAM_READ_TIMEOUT_MS = streamIdleTimeoutMs(req.effort)
 
-    while (true) {
-      let readResult: Awaited<ReturnType<typeof reader.read>>
-      let idleTimer: ReturnType<typeof setTimeout> | undefined
-      try {
-        readResult = await Promise.race([
-          reader.read(),
-          new Promise<never>((_, reject) => {
-            idleTimer = setTimeout(
-              () =>
-                reject(
-                  new Error(
-                    `Stream read timeout — no data for ${Math.round(STREAM_READ_TIMEOUT_MS / 1000)}s`,
-                  ),
-                ),
-              STREAM_READ_TIMEOUT_MS,
-            )
-          }),
-        ])
-      } catch (err) {
-        yield { type: 'error', error: `Stream stalled: ${String(err)}` }
-        return
-      } finally {
-        if (idleTimer) clearTimeout(idleTimer)
-      }
-      const { done, value } = readResult
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      for (const line of lines) {
-        const trimmed = line.trim()
-        if (!trimmed || !trimmed.startsWith('data: ')) continue
-        const data = trimmed.slice(6)
-        if (data === '[DONE]') {
-          // Emit any pending tool calls before stopping
-          for (const [, tc] of pendingToolCalls) {
-            if (!tc.name) continue // drop malformed tool call (missing name)
-            yield {
-              type: 'tool_use',
-              toolUse: {
-                type: 'tool_use',
-                id: tc.id || `call_${Date.now()}`,
-                name: tc.name,
-                input: this.safeParseJson(tc.arguments),
-              },
-            }
-          }
-          yield { type: 'stop', reasoning_content: reasoningContent }
-          return
-        }
-
+    // The read loop and the fallback stop share one reader, and that reader owns
+    // the connection. `engine.ts` breaks out of this generator on the ordinary
+    // `stop` chunk, and a sub-agent throws mid-stream on abort — both call
+    // `.return()`, which unwinds through here. Without this, a turn that ends
+    // normally (or is abandoned) leaves the body unread and uncancelled, so the
+    // socket can't be reused. `cancel()` on an already-errored stream rejects, and
+    // on a closed one is a no-op — the catch covers the first.
+    try {
+      while (true) {
+        let readResult: Awaited<ReturnType<typeof reader.read>>
+        let idleTimer: ReturnType<typeof setTimeout> | undefined
         try {
-          const parsed = JSON.parse(data)
-          const choice = parsed.choices?.[0]
+          readResult = await Promise.race([
+            reader.read(),
+            new Promise<never>((_, reject) => {
+              idleTimer = setTimeout(
+                () =>
+                  reject(
+                    new Error(
+                      `Stream read timeout — no data for ${Math.round(STREAM_READ_TIMEOUT_MS / 1000)}s`,
+                    ),
+                  ),
+                STREAM_READ_TIMEOUT_MS,
+              )
+            }),
+          ])
+        } catch (err) {
+          yield { type: 'error', error: `Stream stalled: ${String(err)}` }
+          return
+        } finally {
+          if (idleTimer) clearTimeout(idleTimer)
+        }
+        const { done, value } = readResult
+        if (done) break
 
-          // Capture token usage when available (final chunk with stream_options.include_usage)
-          if (parsed.usage) {
-            yield {
-              type: 'usage',
-              inputTokens: parsed.usage.prompt_tokens,
-              outputTokens: parsed.usage.completion_tokens,
-            }
-          }
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
 
-          if (!choice) continue
-
-          const delta = choice.delta
-
-          if (delta?.tool_calls) {
-            for (const tc of delta.tool_calls) {
-              const idx = tc.index ?? 0
-              const pending = pendingToolCalls.get(idx) || {
-                id: '',
-                name: '',
-                arguments: '',
-              }
-
-              if (tc.id) pending.id = tc.id
-              if (tc.function?.name) pending.name = tc.function.name
-              if (tc.function?.arguments) pending.arguments += tc.function.arguments
-
-              pendingToolCalls.set(idx, pending)
-            }
-          }
-
-          if (delta?.content) {
-            yield { type: 'text', content: delta.content }
-          }
-
-          if (delta?.reasoning_content) {
-            reasoningContent += delta.reasoning_content
-          }
-
-          if (choice.finish_reason === 'tool_calls') {
-            // Emit fully accumulated tool calls
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed || !trimmed.startsWith('data: ')) continue
+          const data = trimmed.slice(6)
+          if (data === '[DONE]') {
+            // Emit any pending tool calls before stopping
             for (const [, tc] of pendingToolCalls) {
               if (!tc.name) continue // drop malformed tool call (missing name)
               yield {
@@ -172,27 +120,90 @@ export class OpenAICompatProvider implements ProviderInstance {
                 },
               }
             }
-            pendingToolCalls.clear()
-          }
-
-          if (choice.finish_reason === 'stop') {
             yield { type: 'stop', reasoning_content: reasoningContent }
+            return
           }
 
-          if (choice.finish_reason === 'length') {
-            // Truncated: the accumulated tool calls were cut off mid-arguments, so
-            // their JSON is incomplete. Drop them rather than dispatching a broken
-            // call, and clear the map so the `[DONE]` handler can't emit them either.
-            pendingToolCalls.clear()
-            yield { type: 'stop', reasoning_content: reasoningContent, truncated: true }
+          try {
+            const parsed = JSON.parse(data)
+            const choice = parsed.choices?.[0]
+
+            // Capture token usage when available (final chunk with stream_options.include_usage)
+            if (parsed.usage) {
+              yield {
+                type: 'usage',
+                inputTokens: parsed.usage.prompt_tokens,
+                outputTokens: parsed.usage.completion_tokens,
+              }
+            }
+
+            if (!choice) continue
+
+            const delta = choice.delta
+
+            if (delta?.tool_calls) {
+              for (const tc of delta.tool_calls) {
+                const idx = tc.index ?? 0
+                const pending = pendingToolCalls.get(idx) || {
+                  id: '',
+                  name: '',
+                  arguments: '',
+                }
+
+                if (tc.id) pending.id = tc.id
+                if (tc.function?.name) pending.name = tc.function.name
+                if (tc.function?.arguments) pending.arguments += tc.function.arguments
+
+                pendingToolCalls.set(idx, pending)
+              }
+            }
+
+            if (delta?.content) {
+              yield { type: 'text', content: delta.content }
+            }
+
+            if (delta?.reasoning_content) {
+              reasoningContent += delta.reasoning_content
+            }
+
+            if (choice.finish_reason === 'tool_calls') {
+              // Emit fully accumulated tool calls
+              for (const [, tc] of pendingToolCalls) {
+                if (!tc.name) continue // drop malformed tool call (missing name)
+                yield {
+                  type: 'tool_use',
+                  toolUse: {
+                    type: 'tool_use',
+                    id: tc.id || `call_${Date.now()}`,
+                    name: tc.name,
+                    input: this.safeParseJson(tc.arguments),
+                  },
+                }
+              }
+              pendingToolCalls.clear()
+            }
+
+            if (choice.finish_reason === 'stop') {
+              yield { type: 'stop', reasoning_content: reasoningContent }
+            }
+
+            if (choice.finish_reason === 'length') {
+              // Truncated: the accumulated tool calls were cut off mid-arguments, so
+              // their JSON is incomplete. Drop them rather than dispatching a broken
+              // call, and clear the map so the `[DONE]` handler can't emit them either.
+              pendingToolCalls.clear()
+              yield { type: 'stop', reasoning_content: reasoningContent, truncated: true }
+            }
+          } catch {
+            // skip unparseable chunks
           }
-        } catch {
-          // skip unparseable chunks
         }
       }
-    }
 
-    yield { type: 'stop', reasoning_content: reasoningContent }
+      yield { type: 'stop', reasoning_content: reasoningContent }
+    } finally {
+      await reader.cancel().catch(() => {})
+    }
   }
 
   async listModels(): Promise<ModelInfo[]> {

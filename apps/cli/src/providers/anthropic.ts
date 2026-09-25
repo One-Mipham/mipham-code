@@ -153,162 +153,173 @@ export class AnthropicProvider implements ProviderInstance {
     // passes aren't mistaken for a stalled connection.
     const STREAM_READ_TIMEOUT_MS = streamIdleTimeoutMs(req.effort)
 
-    while (true) {
-      let readResult: Awaited<ReturnType<typeof reader.read>>
-      let idleTimer: ReturnType<typeof setTimeout> | undefined
-      try {
-        readResult = await Promise.race([
-          reader.read(),
-          new Promise<never>((_, reject) => {
-            idleTimer = setTimeout(
-              () =>
-                reject(
-                  new Error(
-                    `Stream read timeout — no data for ${Math.round(STREAM_READ_TIMEOUT_MS / 1000)}s`,
-                  ),
-                ),
-              STREAM_READ_TIMEOUT_MS,
-            )
-          }),
-        ])
-      } catch (err) {
-        yield { type: 'error', error: `Stream stalled: ${String(err)}` }
-        return
-      } finally {
-        if (idleTimer) clearTimeout(idleTimer)
-      }
-      const { done, value } = readResult
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      for (const line of lines) {
-        const trimmed = line.trim()
-        if (!trimmed || !trimmed.startsWith('data: ')) continue
-        const data = trimmed.slice(6)
-
+    // The read loop and the trailing stop share one reader, and that reader owns
+    // the connection. `engine.ts` breaks out of this generator on the ordinary
+    // `stop` chunk, and a sub-agent throws mid-stream on abort — both call
+    // `.return()`, which unwinds through here. Without this, a turn that ends
+    // normally (or is abandoned) leaves the body unread and uncancelled, so the
+    // socket can't be reused. `cancel()` on an already-errored stream rejects, and
+    // on a closed one is a no-op — the catch covers the first.
+    try {
+      while (true) {
+        let readResult: Awaited<ReturnType<typeof reader.read>>
+        let idleTimer: ReturnType<typeof setTimeout> | undefined
         try {
-          const event = JSON.parse(data) as AnthropicSSEEvent
+          readResult = await Promise.race([
+            reader.read(),
+            new Promise<never>((_, reject) => {
+              idleTimer = setTimeout(
+                () =>
+                  reject(
+                    new Error(
+                      `Stream read timeout — no data for ${Math.round(STREAM_READ_TIMEOUT_MS / 1000)}s`,
+                    ),
+                  ),
+                STREAM_READ_TIMEOUT_MS,
+              )
+            }),
+          ])
+        } catch (err) {
+          yield { type: 'error', error: `Stream stalled: ${String(err)}` }
+          return
+        } finally {
+          if (idleTimer) clearTimeout(idleTimer)
+        }
+        const { done, value } = readResult
+        if (done) break
 
-          switch (event.type) {
-            case 'content_block_start': {
-              const cb = event.content_block
-              if (!cb) continue
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
 
-              if (cb.type === 'tool_use') {
-                currentToolName = cb.name || ''
-                currentToolId = cb.id || ''
-                accumulatedToolInput = ''
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed || !trimmed.startsWith('data: ')) continue
+          const data = trimmed.slice(6)
+
+          try {
+            const event = JSON.parse(data) as AnthropicSSEEvent
+
+            switch (event.type) {
+              case 'content_block_start': {
+                const cb = event.content_block
+                if (!cb) continue
+
+                if (cb.type === 'tool_use') {
+                  currentToolName = cb.name || ''
+                  currentToolId = cb.id || ''
+                  accumulatedToolInput = ''
+                }
+                break
               }
-              break
-            }
 
-            case 'content_block_delta': {
-              const delta = event.delta
-              if (!delta) continue
+              case 'content_block_delta': {
+                const delta = event.delta
+                if (!delta) continue
 
-              if (delta.type === 'text_delta' && delta.text) {
-                yield { type: 'text', content: delta.text }
+                if (delta.type === 'text_delta' && delta.text) {
+                  yield { type: 'text', content: delta.text }
+                }
+
+                if (delta.type === 'thinking_delta' && delta.text) {
+                  yield { type: 'thinking', thinking: delta.text }
+                }
+
+                if (delta.type === 'input_json_delta' && delta.partial_json) {
+                  accumulatedToolInput += delta.partial_json
+                }
+                break
               }
 
-              if (delta.type === 'thinking_delta' && delta.text) {
-                yield { type: 'thinking', thinking: delta.text }
-              }
+              case 'content_block_stop': {
+                // 此刻还无从得知本轮是否被截断 —— `stop_reason` 要到后面的
+                // `message_delta` 才到（见下方同名分支）。所以被截断的 `tool_use`
+                // 在这里已经发出去了；openai-compat 那条路上「截断即丢弃未完成的
+                // tool_call」的处置，这里结构上做不到（它的 finish_reason 与
+                // tool_calls 落在同一个响应体里）。**这是有意的不对称，不是漏做**：
+                // 要在这里丢弃，就得把 `tool_use` 缓冲到 `message_stop` 再发 ——
+                // 那是一次行为变更，不属本次范围。
+                if (currentToolId && currentToolName && accumulatedToolInput) {
+                  // A replayed block carries the id it was first sent with, so the
+                  // id is what tells a second call apart from the same call twice.
+                  if (!emittedToolIds.has(currentToolId)) {
+                    emittedToolIds.add(currentToolId)
 
-              if (delta.type === 'input_json_delta' && delta.partial_json) {
-                accumulatedToolInput += delta.partial_json
-              }
-              break
-            }
+                    let parsedInput: Record<string, unknown> = {}
+                    try {
+                      parsedInput = JSON.parse(accumulatedToolInput)
+                    } catch {
+                      parsedInput = { _raw: accumulatedToolInput }
+                    }
 
-            case 'content_block_stop': {
-              // 此刻还无从得知本轮是否被截断 —— `stop_reason` 要到后面的
-              // `message_delta` 才到（见下方同名分支）。所以被截断的 `tool_use`
-              // 在这里已经发出去了；openai-compat 那条路上「截断即丢弃未完成的
-              // tool_call」的处置，这里结构上做不到（它的 finish_reason 与
-              // tool_calls 落在同一个响应体里）。**这是有意的不对称，不是漏做**：
-              // 要在这里丢弃，就得把 `tool_use` 缓冲到 `message_stop` 再发 ——
-              // 那是一次行为变更，不属本次范围。
-              if (currentToolId && currentToolName && accumulatedToolInput) {
-                // A replayed block carries the id it was first sent with, so the
-                // id is what tells a second call apart from the same call twice.
-                if (!emittedToolIds.has(currentToolId)) {
-                  emittedToolIds.add(currentToolId)
-
-                  let parsedInput: Record<string, unknown> = {}
-                  try {
-                    parsedInput = JSON.parse(accumulatedToolInput)
-                  } catch {
-                    parsedInput = { _raw: accumulatedToolInput }
-                  }
-
-                  yield {
-                    type: 'tool_use',
-                    toolUse: {
+                    yield {
                       type: 'tool_use',
-                      id: currentToolId,
-                      name: currentToolName,
-                      input: parsedInput,
-                    },
+                      toolUse: {
+                        type: 'tool_use',
+                        id: currentToolId,
+                        name: currentToolName,
+                        input: parsedInput,
+                      },
+                    }
+                  }
+
+                  // Reset accumulator
+                  currentToolName = ''
+                  currentToolId = ''
+                  accumulatedToolInput = ''
+                }
+                break
+              }
+
+              case 'message_delta': {
+                // Capture token usage for accurate cost tracking
+                if (event.usage) {
+                  yield {
+                    type: 'usage',
+                    inputTokens: event.usage.input_tokens,
+                    outputTokens: event.usage.output_tokens,
                   }
                 }
-
-                // Reset accumulator
-                currentToolName = ''
-                currentToolId = ''
-                accumulatedToolInput = ''
-              }
-              break
-            }
-
-            case 'message_delta': {
-              // Capture token usage for accurate cost tracking
-              if (event.usage) {
-                yield {
-                  type: 'usage',
-                  inputTokens: event.usage.input_tokens,
-                  outputTokens: event.usage.output_tokens,
+                // Contains stop_reason; also handles late input_json_delta
+                if (event.delta?.type === 'input_json_delta' && event.delta.partial_json) {
+                  accumulatedToolInput += event.delta.partial_json
                 }
+                // `max_tokens` means the turn hit the output ceiling. Without this the
+                // truncation is indistinguishable from `end_turn`: both arrive here and
+                // the terminal stop below looks the same either way.
+                const stopReason = event.delta?.stop_reason
+                if (stopReason === 'max_tokens') {
+                  truncated = true
+                }
+                break
               }
-              // Contains stop_reason; also handles late input_json_delta
-              if (event.delta?.type === 'input_json_delta' && event.delta.partial_json) {
-                accumulatedToolInput += event.delta.partial_json
-              }
-              // `max_tokens` means the turn hit the output ceiling. Without this the
-              // truncation is indistinguishable from `end_turn`: both arrive here and
-              // the terminal stop below looks the same either way.
-              const stopReason = event.delta?.stop_reason
-              if (stopReason === 'max_tokens') {
-                truncated = true
-              }
-              break
-            }
 
-            case 'message_stop': {
-              sawTerminalEvent = true
-              yield truncated ? { type: 'stop', truncated: true } : { type: 'stop' }
-              return
-            }
+              case 'message_stop': {
+                sawTerminalEvent = true
+                yield truncated ? { type: 'stop', truncated: true } : { type: 'stop' }
+                return
+              }
 
-            case 'error': {
-              yield { type: 'error', error: event.error?.message || 'Unknown Anthropic error' }
-              return
+              case 'error': {
+                yield { type: 'error', error: event.error?.message || 'Unknown Anthropic error' }
+                return
+              }
             }
+          } catch {
+            // Skip unparseable SSE events
           }
-        } catch {
-          // Skip unparseable SSE events
         }
       }
+
+      // The stream ran out without `message_stop`. Whatever stopped it, the turn is
+      // incomplete — and this is the only place that knows, because a cleanly
+      // closed connection and a finished response are otherwise the same stream.
+      if (!sawTerminalEvent) truncated = true
+
+      yield truncated ? { type: 'stop', truncated: true } : { type: 'stop' }
+    } finally {
+      await reader.cancel().catch(() => {})
     }
-
-    // The stream ran out without `message_stop`. Whatever stopped it, the turn is
-    // incomplete — and this is the only place that knows, because a cleanly
-    // closed connection and a finished response are otherwise the same stream.
-    if (!sawTerminalEvent) truncated = true
-
-    yield truncated ? { type: 'stop', truncated: true } : { type: 'stop' }
   }
 
   async listModels(): Promise<ModelInfo[]> {
