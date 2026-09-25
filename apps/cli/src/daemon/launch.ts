@@ -217,9 +217,29 @@ export async function startDetachedDaemon(
       }
     }
   }
+  // The deadline is a prediction, not a fact. Probe once more before acting on
+  // it: a child that became ready inside the last poll interval is up, and
+  // reporting failure for it — then killing it — would be this module's own
+  // "success with no daemon behind it" defect wearing the opposite sign.
+  const late = await getStatus()
+  if (late) return { ok: true, pid: late.pid, port: late.port }
+
+  // Reclaim the child. Leaving it running makes a failed start a half-truth the
+  // caller cannot act on: `getStatus()` is a pid file plus `kill(pid, 0)`, so the
+  // next `daemon start` finds the abandoned process and reports *success* with
+  // its pid. SIGKILL, not SIGTERM: this process is by definition not ready, so
+  // there is no session to drain — and a child that has already ignored the
+  // deadline is exactly the one that may ignore a polite signal too.
+  const reclaimed = child.kill('SIGKILL')
   return {
     ok: false,
-    reason: `daemon did not become ready within ${opts.timeoutMs ?? READY_TIMEOUT_MS}ms (log: ${plan.logPath})`,
+    reason:
+      `daemon did not become ready within ${opts.timeoutMs ?? READY_TIMEOUT_MS}ms` +
+      // Claim the kill only when it happened: `kill()` also returns false for a
+      // child that exited on its own between the probe and here, and that is not
+      // something to report as "reclaimed".
+      (reclaimed ? '; the child it spawned was killed so no daemon is left running' : '') +
+      ` (log: ${plan.logPath})`,
   }
 }
 

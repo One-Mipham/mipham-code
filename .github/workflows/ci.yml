@@ -72,6 +72,12 @@ jobs:
         run: bash scripts/smoke-daemon.sh apps/cli
       - name: Compiled-binary daemon smoke test (bun off PATH)
         run: RUN_PATH=/usr/bin:/bin bash scripts/smoke-daemon.sh apps/cli
+      # 上面两条都走 happy path：脚本里那两个守卫分支（daemon 扛过 stop 时保留
+      # $WORK、以及 start 报成功而 status 否认）在 CI 里一次都不会被执行。用例
+      # 用 stub CLI 驱动**同一个脚本**（apps/cli/test/fixtures/），第一条是它的
+      # 正对照 —— 否则「红」分不清是脚本坏了还是守卫永不通过。
+      - name: Daemon smoke-test guard branches (negative cases)
+        run: bash scripts/smoke-daemon-guards.sh
 
   build-web:
     name: Build Web

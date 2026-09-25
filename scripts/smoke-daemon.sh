@@ -43,8 +43,9 @@ EXIT_WAIT_INTERVAL=0.2
 # can fail while the daemon lives on, and `|| true` is exactly what hides that.
 # So: stop (best effort) → ask status → only if it no longer says running is
 # $WORK deleted. When it does still say running, $WORK is *kept* and its path
-# printed, so a live orphan's state stays findable on disk instead of being
-# destroyed. The `exit` in that branch is load-bearing, not merely a status
+# — and the daemon's pid, read out of the status just captured — printed, so a
+# live orphan's state stays findable on disk instead of being destroyed, and the
+# process holding 127.0.0.1:45671 is named rather than merely located. The `exit` in that branch is load-bearing, not merely a status
 # choice: `rm -rf` sits *after* the `case`, so deleting the `exit` falls straight
 # through to it — same WARN text, $WORK gone while the daemon's pid is still
 # listening (measured; the exit *status* in that variant depends on how the trap
@@ -68,7 +69,11 @@ EXIT_WAIT_INTERVAL=0.2
 # 141 was measured on a synthetic slow producer. The real status does not
 # exercise it today — its four short lines are all in the pipe before `grep -q`
 # exits, so no write ever sees EPIPE (measured rc=0, repeatedly) — but that is a
-# timing property, and capturing the output does not depend on it.
+# timing property, and capturing the output does not depend on it. Both status
+# reads in this file capture now: the readiness check below used to pipe (the
+# plan that produced this script specified it that way, and it was the weaker of
+# the two — on that side the same misread is a false red rather than a deletion),
+# so the hazard class no longer appears here in either direction.
 #
 # Guarded on HOME_ISOLATED: before HOME is redirected, `daemon stop` and
 # `daemon status` would both read the *developer's* real ~/.mipham/daemon.pid.
@@ -84,7 +89,20 @@ cleanup() {
       esac
       tries=$((tries + 1))
       if [ "$tries" -ge "$EXIT_WAIT_TRIES" ]; then
-        echo "✗ WARN: daemon is still running — keeping $WORK so its state stays findable"
+        # The pid earns its place in the message: the *process* is what holds
+        # 127.0.0.1:45671, and every later run on this machine wants that port.
+        # Reading it out of the status we already captured spares the reader from
+        # having to know the pid file lives at $WORK/home/.mipham/daemon.pid —
+        # which is also why this escalates no further: SIGTERM was just ignored,
+        # and a hard kill of a process that may be mid-write is the destructive
+        # move this whole branch exists to avoid making.
+        pid="${status_out#*PID:}"
+        pid="${pid%%$'\n'*}"
+        pid="${pid//[[:space:]]/}"
+        case "$pid" in
+          '' | *[!0-9]*) pid='?' ;;
+        esac
+        echo "✗ WARN: daemon (PID ${pid}) is still running — keeping $WORK so its state stays findable"
         exit 1
       fi
       sleep "$EXIT_WAIT_INTERVAL"
@@ -116,10 +134,19 @@ echo "→ daemon start (compiled binary, PATH=$RUN_PATH)"
 run_cli daemon start
 
 echo "→ daemon status"
-if ! run_cli daemon status | grep -q 'Daemon: running'; then
-  echo "✗ FAIL: daemon start returned success but status is not running"
-  exit 1
-fi
+# Captured, same shape as the teardown probe — see the `grep -q` note above.
+# `2>&1`, unlike teardown's `2>/dev/null`: here a status that crashed is itself
+# the finding, and a crash trace cannot contain the match text (a mismatch still
+# falls to the FAIL arm). `|| true` keeps a non-zero status from aborting under
+# `set -e` before the sentence that names what happened is printed.
+status_out="$(run_cli daemon status 2>&1 || true)"
+case "$status_out" in
+  *'Daemon: running'*) ;;
+  *)
+    echo "✗ FAIL: daemon start returned success but status is not running"
+    exit 1
+    ;;
+esac
 
 echo "→ daemon stop"
 run_cli daemon stop

@@ -145,7 +145,15 @@ describe('planDaemonSpawn', () => {
 /** Minimal child-process double: records listeners, lets the test fire them. */
 function fakeChild() {
   const listeners = new Map<string, ((...args: unknown[]) => void)[]>()
+  const killed: string[] = []
   return {
+    // 记录信号而不是只记「被杀了」：`startDetachedDaemon` 在超时那一刻放弃的是
+    // 一个**没就绪**的进程，SIGKILL 与 SIGTERM 在这里是可分辨的两种语义。
+    killed,
+    kill(signal?: string) {
+      killed.push(signal ?? 'SIGTERM')
+      return true
+    },
     on(event: string, cb: (...args: unknown[]) => void) {
       const list = listeners.get(event) ?? []
       list.push(cb)
@@ -222,6 +230,37 @@ describe('startDetachedDaemon 不谎报', () => {
     })
     expect(result.ok).toBe(false)
     expect(result.reason).toMatch(/ready|超时|timeout/i)
+  })
+
+  it('超时放弃前再探一次：那一刻恰好就绪 ⇒ ok:true，且不杀', async () => {
+    // 截止时间是**预测**不是事实。最后一次探活若已就绪，就按就绪算 —— 否则
+    // 「恰好压在截止线上」的健康 daemon 会被下面的回收杀掉，而报告说它没起来。
+    const child = fakeChild()
+    let calls = 0
+    const result = await startDetachedDaemon({
+      timeoutMs: 0,
+      deps: {
+        spawnFn: (() => child) as never,
+        // 第一次是 spawn 前的探活（必须为 null，否则根本不 spawn），此后就绪。
+        getStatus: () => (calls++ === 0 ? null : { pid: 9, port: 45671 }),
+        sleep: noSleep,
+      },
+    })
+    expect(result).toEqual({ ok: true, pid: 9, port: 45671 })
+    expect(child.killed).toEqual([])
+  })
+
+  it('超时且确实没起来 ⇒ 回收它起的子进程（否则报告是谎的前半句）', async () => {
+    // 「启动失败」+ 一个仍在跑的 daemon 是同一个谎的两半：下一次 `daemon start`
+    // 会在 already-running 分支上把那个进程当成功报回来（`getStatus()` 只看 pid
+    // 文件 + kill(pid,0)）。
+    const child = fakeChild()
+    const result = await startDetachedDaemon({
+      timeoutMs: 0,
+      deps: { spawnFn: (() => child) as never, getStatus: () => null, sleep: noSleep },
+    })
+    expect(result.ok).toBe(false)
+    expect(child.killed).toEqual(['SIGKILL'])
   })
 
   it('已经在跑 ⇒ 直接 ok:true，不重复 spawn', async () => {
