@@ -26,7 +26,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { performUpdate, resolveInstallPaths } from '../../src/shared/update'
 
 /** launcher 与包内 bin 都指向它：一个只会打印版本号的真脚本（真跑，不打桩）。 */
@@ -71,6 +71,37 @@ function makeFakeInstall(
     chmodSync(launcher, 0o755)
   }
 
+  return {
+    root,
+    pkgDir,
+    launcher,
+    fromDir: join(pkgDir, 'src', 'shared'),
+    backupRoot: join(root, 'backups'),
+  }
+}
+
+/**
+ * 造一份和 **Windows 全局布局**同形的假安装：`<root>/node_modules/@miphamai/cli` + `<root>/mipham.cmd`。
+ *
+ * 与上面那份的差别只有两点，而这两点就是这个缺陷的全部：**没有 `lib` 这一层**、
+ * shim 落在 `prefix` **本身**而不是 `prefix/bin` —— 依据是 npm 自带源码（`lib/npm.js` 的
+ * `globalDir`；`bin-links/lib/bin-target.js` 的全局分支）。
+ *
+ * `mipham.cmd` 在这里是带 shebang 的普通文件（真 Windows 上是 cmd-shim 写的 shim）——
+ * 只为了让这一格在本机（darwin）也能**真跑**；被测对象是路径形状，不是 cmd 语义。
+ */
+function makeFakeWinInstall(root: string, version: string): Fake {
+  const pkgDir = join(root, 'node_modules', '@miphamai', 'cli')
+  mkdirSync(join(pkgDir, 'src', 'shared'), { recursive: true })
+  mkdirSync(join(pkgDir, 'bin'), { recursive: true })
+  writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({ name: '@miphamai/cli', version }))
+  const pkgBin = join(pkgDir, 'bin', 'mipham')
+  writeFileSync(pkgBin, launcherScript(version))
+  chmodSync(pkgBin, 0o755)
+  writeFileSync(join(root, 'npm.cmd'), '') // 对照物：与 Unix 的 <prefix>/bin/npm 对位
+  const launcher = join(root, 'mipham.cmd')
+  writeFileSync(launcher, launcherScript(version))
+  chmodSync(launcher, 0o755)
   return {
     root,
     pkgDir,
@@ -141,10 +172,13 @@ function launcherRuns(f: Fake): string | null {
 
 let tmp: string
 let f: Fake
+/** Windows 形状的那一份 —— 同一 tmp、同一版本，只有布局不同。 */
+let win: Fake
 
 beforeEach(() => {
   tmp = mkdtempSync(join(tmpdir(), 'mipham-update-'))
   f = makeFakeInstall(tmp, '0.83.0')
+  win = makeFakeWinInstall(join(tmp, 'win'), '0.83.0')
 })
 
 afterEach(() => {
@@ -170,6 +204,52 @@ describe('resolveInstallPaths —— 布局要推得出来，且推不出时不�
   it('package.json 不在（树是残的）⇒ 返回 null', () => {
     rmSync(join(f.pkgDir, 'package.json'), { force: true })
     expect(resolveInstallPaths(f.fromDir)).toBeNull()
+  })
+})
+
+describe('resolveInstallPaths —— Windows 那半（开发机与 CI 都跑不到的那一格）', () => {
+  it('Windows 形状用三层 `..`，launcher 在 <prefix>/mipham.cmd', () => {
+    const p = resolveInstallPaths(win.fromDir, 'win32')
+    expect(p).not.toBeNull()
+    expect(p!.prefix).toBe(win.root)
+    expect(p!.pkgDir).toBe(win.pkgDir)
+    expect(p!.launcher).toBe(win.launcher)
+  })
+
+  it('「多退一层」单独钉住：旧的 Unix 算术在 Windows 上落在 root 的父目录', () => {
+    // 这不是同义反复，它就是缺陷本身 —— 四层 `..` 与三层差的正是这一格，而 launcher 会随之
+    // 指向 <root 的父目录>/mipham.cmd（永远不存在 ⇒ 自证必红 ⇒ 每次更新把刚装好的新版回滚掉）。
+    expect(resolve(win.pkgDir, '..', '..', '..', '..')).toBe(resolve(win.root, '..'))
+    expect(resolveInstallPaths(win.fromDir, 'win32')!.prefix).not.toBe(resolve(win.root, '..'))
+  })
+
+  it('Windows 分支也要过对照物检查（旧代码在这条分支上跳过了它）', () => {
+    rmSync(join(win.root, 'npm.cmd'), { force: true })
+    expect(resolveInstallPaths(win.fromDir, 'win32')).toBeNull()
+  })
+
+  it('平台不会被形状蒙对：Unix 形状在 win32 下推不出', () => {
+    // 少了这条，`platform` 参数被无视也能全绿 —— 那恰好就是出事的那个假设（拿 Unix 布局去
+    // 算 Windows 的 prefix）。
+    expect(resolveInstallPaths(f.fromDir, 'win32')).toBeNull()
+  })
+
+  it('按该形状端到端：装好 ⇒ 自证过 ⇒ 不回滚', () => {
+    // 只钉 prefix 那两个字符串是不够的：launcher 名字若没跟着平台走，自证照样红、照样回滚。
+    // 判据必须三个一起看：ok + verified 才叫装上，rolledBack:false 才叫没白装。
+    const res = performUpdate('9.9.9', undefined, {
+      paths: resolveInstallPaths(win.fromDir, 'win32'),
+      backupRoot: win.backupRoot,
+      install: () => {
+        writeFileSync(
+          join(win.pkgDir, 'package.json'),
+          JSON.stringify({ name: '@miphamai/cli', version: '9.9.9' }),
+        )
+        writeFileSync(win.launcher, launcherScript('9.9.9'))
+        chmodSync(win.launcher, 0o755)
+      },
+    })
+    expect(res).toMatchObject({ ok: true, verified: true, rolledBack: false })
   })
 })
 

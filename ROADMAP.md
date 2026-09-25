@@ -948,6 +948,27 @@ agents 真解析、provider 回退仍活着）。
       装出来的 launcher 路径与全局前缀不同，需要额外改写（或只搬包目录、launcher 用
       `ln -sfn` 的原子换名）。**触发**：再次出现「更新后一个 CLI 都没有」的实例（含
       SIGKILL / 断电形态），或 D12 之外还想让更新可被 `pgrep` 之外的东西中断时
+      **2026-09-25 复核（未实施 —— 裁定：缓）**。三条保护主张逐条对上了代码：`snapshotInstall`
+      / `verifyInstalledVersion`（两道门：包内 `package.json` 版本 + launcher **实跑** `--version`）/
+      `restoreInstall` 的「快照—自证—回滚」链、npm 自成进程组的 `detached: true`、
+      `blockSigintDuringInstall()` 都在。**触发条件未出现**：全仓库没有任何「更新后一个 CLI 都没有」
+      的新实例记录。
+      **⚠️ 本条目那句代价被两次离线实测证伪**（原文：「`--prefix` 装出来的 launcher 路径与全局前缀不同，
+      需要额外改写」）：① 真装一份 tarball 到 `npm install -g --prefix <tmp>`，落下的 launcher 是
+      `bin/<name> -> ../lib/node_modules/<pkg>/bin/cli.js` —— **相对符号链接，与真 prefix 下逐字同形**
+      ⇒ 只搬包目录需要**零**改写；② 装出来的树是**自包含**的（7/7 声明依赖都在 `<pkgDir>/node_modules`，
+      共 86 项）⇒「只搬包目录」是完整动作，不是省略。**残余代价只剩换手序列本身**：staging prefix 必须是
+      `pkgDir` 的**兄弟**（同文件系统才保证 rename 原子）、两次 rename 之间有微秒级「目标名不存在」窗口、
+      `restoreInstall` 仍是外网。
+      **残余风险边界也被实测收窄**：`execSync` 在**直接子进程被杀**时**抛**（`status=null` /
+      `signal=SIGKILL`，plain 与 `detached: true` 皆然），正常退出则不抛 ⇒ 只要 CLI 进程活着，用**任何**
+      信号杀 npm（含 `-9`）都会走到 `performUpdate` 的 catch / 回滚。真正无解的只剩三种：断电 / 机器崩、
+      把 CLI 与 npm 一起杀、CLI 先死而 npm 随后失败。⚠️ **诚实边界**：实测的是 **`execSync` 的语义**
+      （用真 npm 跑一次更新再中途杀它**没做**）。
+      **裁定：缓做** —— 它不是活缺陷（触发未发生），且改动落在**曾经把用户搞砖的那条路径**上：一次做错的
+      期望伤害面是「每个用户的下一次更新」。先把真实代价订正下来，供下一个会话按真价决策（本条目自身那句
+      代价即一例「债务条目的主张不是事实」—— 判据是离线可测的，没有理由留着一句假价）。
+      同一次复核里发现的活缺陷另立 **D14**（就在下方，已收口）。
 - [ ] **D13** · **（D11 同批发现）网站 `/code/docs` 页的示例配置仍是陈旧值** ——
       `apps/web/src/app/code/docs/page.tsx` 里那份 `~/.mipham/config.yml` 样例写着 `version: "0.2.2"`
       与 `permission: auto`。后者与 D1 在根 `README.md` 修掉的那行**同形状**：`auto` 合法（在 `ALL_MODES` 里），
@@ -958,6 +979,32 @@ agents 真解析、provider 回退仍活着）。
       （D11 那两个调用方正是从这道缝里漏出去的）。同页其余内容**实测无误**：`/help`、`/model`、`/switch`、
       `/clear`、`/exit` 五个命令各 1 命中 `registry.set`，`--model` 示例本次已为真。
       **触发**：下次改网站文案时顺带，或 `version` 再跳一档时
+- [x] **D14** · **（D12 复核时发现的活缺陷）`resolveInstallPaths` 的 Windows 分支差一层** ——
+      **已收口（2026-09-25，未发布）**。
+      **缺陷**：npm 在 win32 下把全局包装进 `<prefix>/node_modules`（**没有 `lib` 这一层**），bin shim
+      落在 **`<prefix>` 本身**；而旧代码把 Unix 的**四层 `..`** 用在两个平台上 ⇒ Windows 下 prefix
+      多退一层，`launcher` 指向 `<prefix 的父目录>/mipham.cmd` —— 那个文件**永远不存在** ⇒
+      `verifyInstalledVersion` 的第二道门（**实跑 launcher**）**必失败** ⇒ **每一次 `mipham update` 都把
+      刚装好的新版回滚掉**：Windows 用户**永远升不上去，而且每次都被告诉「失败」**。同一处还**跳过了
+      对照物检查** —— 正是该分支自己的文档写着「绝不猜」的那一格（这条分支返回的是**算出来**的路径，
+      没有任何东西证明它是 node prefix）。
+      **依据（npm 自带源码，离线读）**：`lib/npm.js` 的 `globalDir`
+      （`process.platform !== 'win32' ? <prefix>/lib/node_modules : <prefix>/node_modules`）；
+      `bin-links/lib/bin-target.js` 的全局分支（`dirname(prefix)/bin` 对 **`prefix` 本身**）；
+      `@npmcli/config/lib/index.js` 的 `loadGlobalPrefix`。
+      **为什么它活到现在**：平台分支直接读 `process.platform`，**Windows 那半在开发机与 CI（都是 Unix）
+      上永远跑不到** —— 夹具也是 Unix 形状。**而 Windows 是出货目标不是假想**：`install.ps1` 装的是
+      `%LOCALAPPDATA%\mipham\bin\mipham.exe` 并加 PATH，`release.yml` 在 `windows-latest` 上构建
+      `bun-windows-x64`。
+      **修**：`resolveInstallPaths(fromDir?, platform = process.platform)` —— `platform` 只为**测试可注入**
+      （这正是让「跑不到的那半」在任何机器上都能**真跑**的落点）；win32 走三层 `..`、launcher 落
+      `<prefix>/mipham.cmd`，且两个分支都过对照物（Unix `<prefix>/bin/npm`、Windows `<prefix>/npm.cmd`）。
+      **测试**：`test/shared/update-safety.test.ts` 新增 Windows 形状夹具 + 5 条用例（含端到端
+      「装好 ⇒ 自证过 ⇒ 不回滚」，以及单独钉住「多退一层」那条算术）。**两条负控各咬中目标、还原均过
+      sha256 逐字校验**：把 Windows 分支改回四层 `..` 并撤掉对照物 ⇒ **恰好 5 条新用例红**、18 条旧用例
+      全绿（缺陷复现）；把 Unix 分支改成三层 ⇒ 9 条红**全是 Unix 形状**、5 条 Windows 用例仍绿。
+      **诚实边界**：**没有真 Windows 机器参与** —— 夹具里的 `mipham.cmd` 是带 shebang 的普通文件，
+      验的是**路径形状**，不是 cmd 语义。测试 3,468 → **3,473**（296 文件不变）。
 
 ---
 

@@ -166,27 +166,50 @@ function isValidSemver(v: string): boolean {
 export interface InstallPaths {
   /** node prefix，例如 ~/.nvm/versions/node/v24.14.0 */
   prefix: string
-  /** <prefix>/lib/node_modules/@miphamai/cli */
+  /** <prefix>/lib/node_modules/@miphamai/cli（Windows 下**没有** `lib` 这一层） */
   pkgDir: string
-  /** <prefix>/bin/mipham（Windows 下是 mipham.cmd） */
+  /** <prefix>/bin/mipham（Windows 下是 <prefix>/mipham.cmd） */
   launcher: string
 }
 
 /**
- * 推出全局安装路径。`fromDir` 只为测试可注入，默认本模块所在目录（<pkgDir>/src/shared）。
+ * 推出全局安装路径。`fromDir` 与 `platform` 只为测试可注入，后者默认 `process.platform`。
  *
  * 推不出时返回 **null**，绝不猜：`../../../..` 只是算术，它不能证明这个路径真的是一个
  * node prefix。对照物是 `<prefix>/bin/npm` —— 真 prefix 一定有，猜出来的路径不一定有。
+ *
+ * **两个平台差一层**（2026-09-25 修）。npm 把全局包装进 `<prefix>/lib/node_modules`
+ * （Unix）或 `<prefix>/node_modules`（**Windows 无 `lib`**）—— 见 npm 自带源码 `lib/npm.js`
+ * 的 `globalDir`（`process.platform !== 'win32' ? <prefix>/lib/node_modules : <prefix>/node_modules`）；
+ * bin 的落点也是同形状的一个分支（`bin-links/lib/bin-target.js`：全局装时
+ * `dirname(prefix)/bin` 对 **`prefix` 本身**）。旧代码把 Unix 的**四层 `..`** 用在两个平台上 ——
+ * 于是 Windows 下 prefix 多退一层，`launcher` 指向 `<prefix 的父目录>/mipham.cmd`：那个文件
+ * 永远不存在 ⇒ 自证必报「launcher 跑不起来」⇒ **每次 `mipham update` 都把刚装好的新版回滚掉**
+ * （Windows 上永远升不上去，而且每次都说失败）。**同一处还跳过了对照物检查** —— 正是本文档
+ * 说「绝不猜」的那一格：这条分支返回的是**算出来**的路径，没有任何东西证明它是 node prefix。
+ *
+ * 所以 `platform` 是**参数**而不是直接读 `process.platform`：这两个平台分支里，Windows 那半
+ * 在开发机与 CI（都是 Unix）上永远跑不到 —— 上面那个差一层的缺陷就是这么活下来的。可注入
+ * 之后它能在任何机器上被真跑（见 `test/shared/update-safety.test.ts` 的 Windows 形状夹具）。
  */
-export function resolveInstallPaths(fromDir?: string): InstallPaths | null {
+export function resolveInstallPaths(
+  fromDir?: string,
+  platform: NodeJS.Platform = process.platform,
+): InstallPaths | null {
   const base = fromDir ?? import.meta.dirname
   if (!base) return null
   const pkgDir = resolve(base, '..', '..')
   if (!existsSync(join(pkgDir, 'package.json'))) return null
-  const prefix = resolve(pkgDir, '..', '..', '..', '..')
-  if (process.platform === 'win32') {
+
+  if (platform === 'win32') {
+    // <prefix>/node_modules/@miphamai/cli ⇒ 三层；shim 直接落在 <prefix>（没有 bin/）
+    const prefix = resolve(pkgDir, '..', '..', '..')
+    if (!existsSync(join(prefix, 'npm.cmd'))) return null
     return { prefix, pkgDir, launcher: join(prefix, 'mipham.cmd') }
   }
+
+  // <prefix>/lib/node_modules/@miphamai/cli ⇒ 四层；launcher 在 <prefix>/bin
+  const prefix = resolve(pkgDir, '..', '..', '..', '..')
   if (!existsSync(join(prefix, 'bin', 'npm'))) return null
   return { prefix, pkgDir, launcher: join(prefix, 'bin', 'mipham') }
 }
