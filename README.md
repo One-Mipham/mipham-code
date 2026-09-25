@@ -73,6 +73,7 @@ mipham --version
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."   # 至少配一家 provider 的 key
 mipham                                  # 启动用的是 config.yml 里的 defaultProvider / defaultModel
+mipham --provider anthropic --model claude-sonnet-4-6   # 也可在启动时指定，覆盖 config.yml
 ```
 
 ```bash
@@ -81,9 +82,12 @@ mipham
 # 也可直接 /switch <provider> <model>，例如 /switch deepseek deepseek-v4-pro
 ```
 
-> `mipham` 本身**不解析** `--model` / `--provider`。入口只认这五个 flag：
-> `--version`（`-v`/`-V`）/ `--help`（`-h`）/ `--dump-config` / `--safe-mode` / `--resume`。
-> 选模型走上面的两条路，落盘位置与默认值见下节 **Configuration**。
+> 选 provider / model 有三条路，优先级从高到低：启动时的 `--provider`/`--model` → 会话中的
+> `Ctrl+P`·`/pick`·`/switch` → `config.yml` 的 `defaultProvider`/`defaultModel`（落盘默认值，
+> 见下节 **Configuration**）。两个 flag 的值**原样使用、不校验是否已注册** —— 与把同一个值写进
+> `config.yml` 时的行为一致；不认识的 id 由 provider 注册表在首次发消息时报错并点名。只给
+> `--model` 时沿用当前 provider（`--provider` 或 config 里的那家），CLI 不替它猜归属。
+> 其余入口 flag 见 `mipham --help`。
 
 ## Architecture
 

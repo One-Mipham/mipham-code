@@ -1249,6 +1249,8 @@ Flags:
   --resume <name>            Open a saved session (see /resume for names)
   --permission <mode>        Start in this mode: ${ALL_MODES.join('|')}
                              (also accepted by 'mipham attach'; the daemon may clamp it)
+  --provider <id>            Start on this provider (overrides config.yml)
+  --model <id>               Start on this model (overrides config.yml)
   --version, -v, -V          Print version
 
 Docs: https://mipham.ai/code
@@ -1384,12 +1386,38 @@ npm:  https://www.npmjs.com/package/@miphamai/cli`)
     process.exit(1)
   }
 
+  // Parse --provider <id> / --model <id>: the provider and model the session starts
+  // on. Same shape as `--resume`/`--permission` — `RunOptions` declared both fields all
+  // along, `index.tsx` already reads them *ahead of* the merged config, and **nothing
+  // ever passed them**. That third instance cost more than the first two: both shipped
+  // IDE integrations build this exact command from their settings
+  // (`infrastructure/vscode/extension.js` `buildFlags()`, `MiphamAction.kt`
+  // `buildCommand()`), so a user who set a provider there got
+  // `Unknown command: mipham deepseek` and no CLI at all. Their values are open — a
+  // provider may be user-defined — so the value is forwarded as typed and an unknown id
+  // is refused by the registry (`ProviderRegistry.getActive()` throws with the id named),
+  // exactly as the same value already was when it came from `config.yml`.
+  const flagValue = (name: string): string | undefined => {
+    const at = process.argv.indexOf(name)
+    if (at === -1) return undefined
+    const value = process.argv[at + 1]
+    if (!value || value.startsWith('-')) {
+      console.error(`Usage: mipham ${name} <id>`)
+      process.exit(1)
+    }
+    return value
+  }
+  const providerFlag = flagValue('--provider')
+  const modelFlag = flagValue('--model')
+
   try {
     const { runApp } = await import('../src/index')
     await runApp({
       version: APP_VERSION,
       resume: resumeName,
       permission: permissionFlag.kind === 'ok' ? permissionFlag.mode : undefined,
+      provider: providerFlag,
+      model: modelFlag,
     })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)

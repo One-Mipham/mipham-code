@@ -41,6 +41,8 @@ describe('detectUnknownArgument — unknown options', () => {
       '--safe-mode',
       '--resume',
       '--permission',
+      '--provider',
+      '--model',
     ]) {
       expect(detectUnknownArgument([flag])).toBeNull()
     }
@@ -79,6 +81,28 @@ describe('detectUnknownArgument — value-taking flags', () => {
     expect(result!.kind).toBe('option')
     expect(result!.arg).toBe('--resume=my-session')
     expect(result!.suggestions).toEqual([])
+  })
+
+  it('两个 IDE 插件拼出来的那条命令原样放行（这是实测到的形状）', () => {
+    // `infrastructure/vscode/extension.js` 的 buildFlags() 与 `MiphamAction.kt` 的
+    // buildCommand() 都拼 `mipham --provider <id> --model <id>`。修之前，这条命令的
+    // 回答是 `Unknown command: mipham deepseek`（rc=1，CLI 根本起不来）—— 怪的是
+    // provider 的**值**，只因为 `--provider` 当时不在 VALUE_FLAGS 里，值就落进了
+    // 位置参数。这条就是那次事故的回归位。
+    expect(detectUnknownArgument(['--provider', 'deepseek', '--model', 'deepseek-chat'])).toBeNull()
+    // 单给一个也要放行：插件只填了 provider（model 留空）是常态。
+    expect(detectUnknownArgument(['--provider', 'deepseek'])).toBeNull()
+    expect(detectUnknownArgument(['--model', 'deepseek-chat'])).toBeNull()
+  })
+
+  it('两个 flag 的顺序无关，且值后面的真·野命令仍会被抓', () => {
+    // 与上面 `--resume` 那条同一个判别力要求：实现若退化成「`-` 之后的都跳过」，
+    // 后半条会变绿 —— 而它必须红。
+    expect(detectUnknownArgument(['--model', 'x', '--provider', 'y'])).toBeNull()
+    const result = detectUnknownArgument(['--provider', 'deepseek', 'bogus'])
+    expect(result).not.toBeNull()
+    expect(result!.kind).toBe('command')
+    expect(result!.arg).toBe('bogus')
   })
 })
 

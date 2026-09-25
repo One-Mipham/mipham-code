@@ -47,6 +47,8 @@ const KNOWN_FLAGS = [
   '--safe-mode',
   '--resume',
   '--permission',
+  '--provider',
+  '--model',
 ]
 
 /**
@@ -60,8 +62,16 @@ const KNOWN_FLAGS = [
  * `--permission` is here for the same reason and for one more: `mipham attach <id>
  * --permission plan` reads the session id through `firstPositional`, and without this
  * entry it would have taken `plan` for a session id.
+ *
+ * `--provider`/`--model` are the same defect a third time, and here it was *measured*
+ * rather than reasoned about: both shipped IDE integrations build
+ * `mipham --provider <id> --model <id>` from their settings (`infrastructure/vscode/
+ * extension.js`, `MiphamAction.kt`), and that command was answered with
+ * `Unknown command: mipham deepseek` — the provider *value* blamed, the flag that was
+ * actually wrong never mentioned, exit 1, no CLI. Their values are open (a provider may
+ * be user-defined), so — unlike `--permission` — this module owns only their spelling.
  */
-const VALUE_FLAGS = ['--resume', '--permission']
+const VALUE_FLAGS = ['--resume', '--permission', '--provider', '--model']
 
 /**
  * The first token that would be read as a command, skipping flags and the values

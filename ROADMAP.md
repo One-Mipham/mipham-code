@@ -897,13 +897,42 @@ agents 真解析、provider 回退仍活着）。
       sha256 逐字校验。**同批自查抓到一条空转的负例**：`LOG()` 手写 join 漏了 `.mipham` 一层
       ⇒ 负例那句 `existsSync('.1') === false` **恒真**（代码压根没看那个文件），是**正例红掉才
       暴露的** —— 只有负例会一直绿；改为一律从 `miphamHome()` 派生。测试 3,451 → **3,456**。
-- [ ] **D11** · **（自 D1 转来）实现 `--model` / `--provider` 顶层 flag** —— 2026-09-22 裁定
-      「先改文档」，故当前状态是**文档与代码一致（都说没有）**，而不是功能可用。
-      要做的话：`bin/mipham.ts` 需在 `runApp()` 之前解析这两个参数并覆盖
-      `defaultProvider`/`defaultModel`（现入口只用 `process.argv.includes(...)` 逐个探，
-      **没有解析器**），且必须定清楚它与 `--dump-config` 的优先级、以及与项目级
-      `.mipham/config.yml` 的覆盖关系。**触发**：出现**非交互式**选型的真实需求时（CI / 脚本）——
-      人用场景已由 `Ctrl+P` / `/pick` / `/switch` 覆盖，故这不是缺口、是待需求
+- [x] **D11** · **（自 D1 转来）实现 `--model` / `--provider` 顶层 flag** —— **已收口（2026-09-25，未发布）**。
+      **触发条件成立，且是实测撞出来的**，比条目预期的强：不是「将来 CI / 脚本可能需要」，而是
+      **两个已发布调用方现在就在递** —— `infrastructure/vscode/extension.js` 的 `buildFlags()` 与
+      `infrastructure/jetbrains/src/main/kotlin/com/miphamai/plugin/MiphamAction.kt` 的 `buildCommand()`
+      都从插件设置里拼
+      `mipham --provider <id> --model <id>`；网站 `/code/docs` 页也把 `mipham --model claude-sonnet-4-6`
+      当示例印着（`apps/web/src/app/code/docs/page.tsx:15`）—— 在那之前它是**假主张**，本次由实现补上落点。
+      实测那条命令的回答是 `Unknown command: mipham deepseek`（rc=1，**CLI 根本起不来**）：怪的是 provider
+      的**值** —— `--provider` 不在 `VALUE_FLAGS` 里 ⇒ 值落进位置参数 ⇒ 撞上 `detectUnknownArgument` 的
+      未知命令分支，而那个分支跑在所有 flag 解析**之前**（所以只加解析、不补两张表，等于什么都没修）。
+      **条目三条主张逐条核实：两条成立、一条要订正。** ① 入口确实没有解析器、逐个探（`--version`/`--help`/
+      `--dump-config`/`--safe-mode` 走 `includes`）✓；② 要做的事、以及「必须先定清楚」的两问，问得对 ✓；
+      **③ 「文档与代码一致（都说没有）」只对根 `README.md` 成立** —— 它是按**一份**文档核的，而另外**两处
+      表面**（两个 IDE 插件、网站 docs 页）一直在说「有」。这不是措辞问题：D1 据此判定「功能从未存在，
+      故改文档抹掉」，而**真实用户路径上一直有人在递这两个参数**。教训与本仓库既有的
+      「广告的能力要有落点」同族，只是这次广告贴在**别人的仓库里**（插件 + 网站）。
+      **接线其实早就铺好了**：`RunOptions` 一路都有 `provider?`/`model?`，`index.tsx:453` 也早写着
+      `const defaultProvider = options.provider || config.defaultProvider` —— 这是同一形态的**第三次**
+      （继 `--resume`、`--permission`：「声明了却没有调用点」）。故修法三处：两张表各补两个名字、入口解析后
+      转发（与 `--resume` 共用同一条缺值判据）、帮助里印出来。
+      **两问的答案**：① 与 `--dump-config` **不相交** —— 后者先于 `runApp` 打印 vajra profile 树
+      （`vajra/compose/dump.ts` 只输出 `id\tkind\tconfig`，不含 provider/model）并 `exit(0)`；
+      ② 与 config 的覆盖关系**由既有 `||` 的次序定死：flag 赢** —— 这一行本次**没动**，动的只是「谁把值递进去」。
+      **值域裁定：不设闭集合校验**（与 `--permission` 有意不同）—— provider 可以是用户自定义的
+      （`config/loader.ts` 的 `mergeProviders` 会整只收下不认识的那条），静态白名单必然误拒合法输入；
+      值原样转发，不认识的 id 由 `ProviderRegistry.getActive()` 抛 `Provider "X" not registered` 点名，
+      与同一个值来自 `config.yml` 时**逐字一致**（一扇门一套语义）。`--model` 不隐含 provider（归属不由 CLI 猜）。
+      **测试**：`arg-validation` 补两条行为用例（含插件那条命令原样放行、错序、值后的野命令仍被抓）；
+      新建 `test/commands/provider-model-flags.test.ts`（**源码级** —— 成功路径会进 Ink，无 TTY 直接抛
+      raw mode，同 `--resume`/`--permission` 先例，文件头写明它证明不了什么）。**三条负控各咬中目标、
+      还原均过 sha256 逐字校验**：撤 `VALUE_FLAGS` ⇒ 3 红（含事故回归位）；倒 `||` ⇒ 1 红；撤转发 ⇒ 1 红。
+      另有真跑三格：无 TTY 的正对照（不带 flag 同样 raw mode ⇒ 那条命令确实进了 app）、缺值仍拒、
+      `--provder` 仍被拦（闸没被拆）。
+      **同批记下的两件事**：① 根 `README.md` 那段 flag 清单**早已漂了**（列 5 个，`--permission` 落地后
+      没跟，且无守卫扫它）⇒ 本次**改成不枚举**、指向 `mipham --help`，而不是刷新第二份清单；
+      ② 网站 `/code/docs` 的示例配置仍带着陈旧值 ⇒ 另立 **D13**。测试 3,456 → **3,468**。
 - [ ] **D12** · **`mipham update` 的安装本身仍不是原子换手** —— 2026-09-22 事故后的修法是
       「**装前快照 + 装后自证 + 失败回滚**」（见 `CLAUDE.md` 2.94.0）；**2.94.1 把另一半补上**
       （Ctrl-C）：回滚代码跑在 CLI 进程里，而终端 Ctrl-C 把 SIGINT 发给**整个前台进程组**
@@ -919,6 +948,16 @@ agents 真解析、provider 回退仍活着）。
       装出来的 launcher 路径与全局前缀不同，需要额外改写（或只搬包目录、launcher 用
       `ln -sfn` 的原子换名）。**触发**：再次出现「更新后一个 CLI 都没有」的实例（含
       SIGKILL / 断电形态），或 D12 之外还想让更新可被 `pgrep` 之外的东西中断时
+- [ ] **D13** · **（D11 同批发现）网站 `/code/docs` 页的示例配置仍是陈旧值** ——
+      `apps/web/src/app/code/docs/page.tsx` 里那份 `~/.mipham/config.yml` 样例写着 `version: "0.2.2"`
+      与 `permission: auto`。后者与 D1 在根 `README.md` 修掉的那行**同形状**：`auto` 合法（在 `ALL_MODES` 里），
+      但它是**分类器档**，不是旧义「让工具自行决定」—— 那一行本身就是一次事故的输入，故属**安全相关**
+      而非单纯陈旧。**为什么单独立项**：它在 `apps/web`，而 `tool-reference-integrity` 的扫描面是
+      根目录 `*.md`（除 `CHANGELOG.md`/`PRODUCT.md`）+ `apps/cli/README.md` + VS Code 的
+      `README.md`/`package.json` —— **不含**任何 `.tsx`，也不含 `infrastructure/jetbrains/`
+      （D11 那两个调用方正是从这道缝里漏出去的）。同页其余内容**实测无误**：`/help`、`/model`、`/switch`、
+      `/clear`、`/exit` 五个命令各 1 命中 `registry.set`，`--model` 示例本次已为真。
+      **触发**：下次改网站文案时顺带，或 `version` 再跳一档时
 
 ---
 
