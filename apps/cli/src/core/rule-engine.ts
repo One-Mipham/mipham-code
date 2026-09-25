@@ -18,6 +18,23 @@ export interface ToolRule {
   enabled: boolean
 }
 
+/**
+ * 一条**能真正生效**的规则必须自带 `match`/`fix` —— 而这两个是函数，落不了盘。
+ * 判据放在这里而不是内联，是为了让「载回来的规则必须是能用的规则」只有一处定义。
+ */
+function isUsableRule(candidate: unknown): candidate is ToolRule {
+  const r = candidate as Partial<ToolRule> | null
+  return (
+    !!r &&
+    typeof r === 'object' &&
+    typeof r.id === 'string' &&
+    r.id.length > 0 &&
+    typeof r.toolName === 'string' &&
+    typeof r.match === 'function' &&
+    typeof r.fix === 'function'
+  )
+}
+
 const BUILTIN_RULES: ToolRule[] = [
   {
     id: 'rule-timeout-bash-heavy',
@@ -168,9 +185,17 @@ export class ExperienceRuleEngine {
   load(): void {
     if (!existsSync(this.storePath)) return
     try {
-      const raw = JSON.parse(readFileSync(this.storePath, 'utf-8')) as ToolRule[]
+      const parsed: unknown = JSON.parse(readFileSync(this.storePath, 'utf-8'))
+      // 形状门 —— 这一格的门比别处严，因为**这个 store 载不动一条可用的规则**：
+      // `ToolRule.match`/`fix` 是函数，`JSON.stringify` 必然丢，所以 `persist()` 写出去的
+      // 形状里不可能带回来它们。旧读法把这种条目照收，`getActiveRules()` 再把它报成
+      // active（`/rules` 面板跟着说它是活的），而 `intercept()` 里 `rule.match` 不存在
+      // → 抛 → 被那个 `try/catch` 吞成**静默惰性**。列出来是活的、实际永不触发 ——
+      // 正是本仓库反复收的那种账。收不进就是收不进：不校验形状 = 报一份假的活跃清单。
+      if (!Array.isArray(parsed)) return
       const reservedIds = new Set([...BUILTIN_RULES, ...MANAGED_RULES].map((r) => r.id))
-      for (const rule of raw) {
+      for (const rule of parsed) {
+        if (!isUsableRule(rule)) continue
         // Reject if a builtin/managed rule with the same ID exists (source rules always win)
         if (reservedIds.has(rule.id)) continue
         this.rules.push(rule)

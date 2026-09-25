@@ -181,8 +181,22 @@ export class EffectivenessTracker {
   load(): void {
     if (!existsSync(this.storePath)) return
     try {
-      const raw = JSON.parse(readFileSync(this.storePath, 'utf-8'))
-      this.data = new Map(Object.entries(raw))
+      const parsed: unknown = JSON.parse(readFileSync(this.storePath, 'utf-8'))
+      // 形状门：要的是「**以规则 id 为键的对象**」。`Object.entries` 对数组会拿**下标**
+      // 当键（`{"0":"x"}` ⇒ 一条 ruleId 为 undefined 的记录），而 `new Map(...)` 照收，
+      // 于是 `allRules` 把非规则对象当规则报出去。
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        this.data = new Map()
+        return
+      }
+      const data = new Map<string, RuleEffectiveness>()
+      for (const [k, v] of Object.entries(parsed)) {
+        if (!v || typeof v !== 'object' || Array.isArray(v)) continue
+        const rec = v as { ruleId?: unknown }
+        if (typeof rec.ruleId !== 'string') continue
+        data.set(k, v as RuleEffectiveness)
+      }
+      this.data = data
     } catch {
       // Corrupt file — start fresh
       this.data = new Map()

@@ -546,9 +546,13 @@ export class MemoryManager {
     const path = join(this.memoryDir, LINKS_FILE)
     if (!existsSync(path)) return false
     try {
-      const raw = JSON.parse(readFileSync(path, 'utf-8'))
+      const raw: unknown = JSON.parse(readFileSync(path, 'utf-8'))
+      // 形状门：值必须是**字符串数组**。`new Set("bc")` 会**按字符**迭代 ⇒ 一条链接被
+      // 拆成 'b'、'c' 两条（而 `as string[]` 让 TS 一声不吭）。对象/数组本身也过了门才用。
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false
       for (const [k, v] of Object.entries(raw)) {
-        this.linkGraph.set(k, new Set(v as string[]))
+        if (!Array.isArray(v)) continue
+        this.linkGraph.set(k, new Set(v.filter((x): x is string => typeof x === 'string')))
       }
       return this.linkGraph.size > 0
     } catch {
@@ -587,12 +591,16 @@ export class MemoryManager {
     const path = join(this.memoryDir, RECALL_STATS_FILE)
     if (!existsSync(path)) return
     try {
-      const raw = JSON.parse(readFileSync(path, 'utf-8'))
+      const raw: unknown = JSON.parse(readFileSync(path, 'utf-8'))
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return
       for (const [k, v] of Object.entries(raw)) {
-        const rec = v as { recallCount?: number; lastRecalledAt?: string }
+        // 逐条门控（不是整表退回）：`catch` 在循环外，一个坏条目会把**后面所有**条目
+        // 一起带走 —— 一条脏记录赔上整份召回统计。
+        if (!v || typeof v !== 'object' || Array.isArray(v)) continue
+        const rec = v as { recallCount?: unknown; lastRecalledAt?: unknown }
         this.recallStats.set(k, {
-          recallCount: rec.recallCount ?? 0,
-          lastRecalledAt: rec.lastRecalledAt ?? '',
+          recallCount: typeof rec.recallCount === 'number' ? rec.recallCount : 0,
+          lastRecalledAt: typeof rec.lastRecalledAt === 'string' ? rec.lastRecalledAt : '',
         })
       }
     } catch {

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { MemoryManager } from '../../../src/core/memory/memory-manager'
-import { mkdirSync, rmSync } from 'node:fs'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
@@ -190,5 +190,39 @@ describe('MemoryManager', () => {
     const pairs = mm.listNearDuplicates()
     expect(pairs).toHaveLength(1)
     expect([pairs[0]!.a, pairs[0]!.b].sort()).toEqual(['note-a', 'note-b'])
+  })
+
+  // ── 读侧不验形：links.json ──
+  //
+  // 这一格的真身是 `new Set(v as string[])`：`v` 是字符串时，`as` 让 TS 一声不吭，
+  // 而 `new Set("bc")` **按字符**迭代 ⇒ 一条链接 `'bc'` 被拆成 `'b'`、`'c'` 两条。
+  // 良构那一格是**正向对照**：证明 links.json 确实被读了（没有它，畸形那格全绿可能
+  // 只是因为压根没读这个文件）。
+
+  it('links.json 的值是字符串时，不许按字符拆成多条链接', () => {
+    const mm = new MemoryManager(TEST_DIR)
+    mm.write('b', 'note b', { type: 'user', relevance: ['x'] })
+    mm.write('c', 'note c', { type: 'user', relevance: ['x'] })
+    mm.write('bc', 'note bc', { type: 'user', relevance: ['x'] })
+
+    // 先写记忆再毒化：`write()` 会回写 links.json，顺序反了毒化就被覆盖。
+    writeFileSync(join(TEST_DIR, 'links.json'), JSON.stringify({ hub: 'bc' }), 'utf-8')
+    mm.loadAll()
+
+    const linked = mm.getLinkedMemories('hub').map((e) => e.name)
+    expect(linked).not.toContain('b')
+    expect(linked).not.toContain('c')
+  })
+
+  it('links.json 的值是数组时照常生效（正向对照）', () => {
+    const mm = new MemoryManager(TEST_DIR)
+    mm.write('b', 'note b', { type: 'user', relevance: ['x'] })
+    mm.write('c', 'note c', { type: 'user', relevance: ['x'] })
+    mm.write('bc', 'note bc', { type: 'user', relevance: ['x'] })
+
+    writeFileSync(join(TEST_DIR, 'links.json'), JSON.stringify({ hub: ['bc'] }), 'utf-8')
+    mm.loadAll()
+
+    expect(mm.getLinkedMemories('hub').map((e) => e.name)).toEqual(['bc'])
   })
 })

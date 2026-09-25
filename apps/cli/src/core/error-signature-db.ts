@@ -87,8 +87,13 @@ export class ErrorSignatureDB {
     try {
       if (!existsSync(this.storePath)) return
       const raw = readFileSync(this.storePath, 'utf-8')
-      const arr: ErrorSignature[] = JSON.parse(raw)
-      for (const sig of arr) {
+      const parsed: unknown = JSON.parse(raw)
+      // 形状门：`["x"]` 是合法 JSON、`for…of` 也照收 —— `sig.id` 是 `undefined`，
+      // 于是库里躺着一个**没有 id 的成员**（后面 `get(id)` 永远找不到它，
+      // 而 `getStats()` 的分母把它算进去）。形状不验 = 垃圾静默入库。
+      if (!Array.isArray(parsed)) return
+      for (const sig of parsed) {
+        if (!sig || typeof sig !== 'object' || typeof sig.id !== 'string') continue
         this.signatures.set(sig.id, sig)
       }
     } catch {

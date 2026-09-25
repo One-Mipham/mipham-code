@@ -521,7 +521,11 @@ export class DreamEngine {
 
       let log: Array<{ timestamp: string; actions: DreamAction[] }> = []
       if (existsSync(this.dreamLog)) {
-        log = JSON.parse(readFileSync(this.dreamLog, 'utf-8'))
+        // 形状门：`{"a":1}` 是**合法 JSON**，不抛 —— 而 `log.unshift` 会抛，被下面的
+        // `catch` 吞掉 ⇒ 这一轮梦白做、且用户看不到任何提示。退成空表继续，
+        // 让这一轮活下来，别让它给一个坏文件陪葬。
+        const parsed: unknown = JSON.parse(readFileSync(this.dreamLog, 'utf-8'))
+        if (Array.isArray(parsed)) log = parsed
       }
       log.unshift({ timestamp, actions })
       // Keep last 10 dream cycles
@@ -536,7 +540,18 @@ export class DreamEngine {
   getDreamHistory(): Array<{ timestamp: string; actions: DreamAction[] }> {
     try {
       if (!existsSync(this.dreamLog)) return []
-      return JSON.parse(readFileSync(this.dreamLog, 'utf-8'))
+      const parsed: unknown = JSON.parse(readFileSync(this.dreamLog, 'utf-8'))
+      // 声明返回数组，就必须真的是数组：`{"a":1}` 合法且不抛，而调用方
+      // （`ui/commands.ts` 的 `/dream --status`）紧接着 `.length` / `.slice` /
+      // `entry.actions.length` ⇒ `try` 护不住调用点，TypeError 直接冒到 UI。
+      if (!Array.isArray(parsed)) return []
+      return parsed.filter(
+        (e): e is { timestamp: string; actions: DreamAction[] } =>
+          !!e &&
+          typeof e === 'object' &&
+          typeof e.timestamp === 'string' &&
+          Array.isArray(e.actions),
+      )
     } catch {
       return []
     }
