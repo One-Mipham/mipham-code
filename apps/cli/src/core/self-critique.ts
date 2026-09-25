@@ -3,8 +3,11 @@
  *
  * Inspired by Anthropic's RLAIF (Reinforcement Learning from AI Feedback):
  * instead of relying on human feedback loops, the AI critiques its own
- * tool calls before execution. A fast model (Flash / Qwen2.5-1.5B) performs
- * a lightweight safety & correctness check with <200ms latency.
+ * tool calls before execution. A fast model performs a lightweight safety &
+ * correctness check — but "lightweight" is about the *prompt*, not the clock:
+ * it is a full model round-trip, measured at a median ≈4s on the configured
+ * provider (see `DEFAULT_SELF_CRITIQUE_CONFIG.timeoutMs`), not the sub-200ms
+ * this comment used to claim.
  *
  * Architecture:
  *   Model generates tool call
@@ -58,7 +61,16 @@ export const DEFAULT_SELF_CRITIQUE_CONFIG: SelfCritiqueConfig = {
   enabled: false, // Opt-in by default — user enables via /crsi critique on
   threshold: 0.6,
   targetTools: ['Bash', 'Write', 'Edit', 'Agent'],
-  timeoutMs: 2000,
+  // Measured, not chosen: 30 real critiques against the configured provider
+  // (`findFastestModel` → `deepseek-v4-flash`; default model is the slower
+  // `-pro`) took min 1.85s / median 3.95s / max 17.9s, and **28 of 30 exceeded
+  // 2s** — the value this replaced. At 2s the budget would have skipped 93% of
+  // critiques, and since `critique()` fails *open* (null ⇒ the tool runs
+  // unreviewed) that failure is silent: `/crsi critique` would look enabled and
+  // do nothing. 15s keeps 90% (27/30) while still bounding a gated tool call to
+  // well under the provider's 90s stream-idle backstop. One model, one day —
+  // re-measure if the critique model changes.
+  timeoutMs: 15_000,
 }
 
 // ── Prompt Templates ──

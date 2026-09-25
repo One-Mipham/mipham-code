@@ -38,6 +38,10 @@ export class OpenAICompatProvider implements ProviderInstance {
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
+      // The caller's cancellation (e.g. `self-critique`'s 2s budget) has to reach
+      // the transport, or it is a no-op: `fetch-utils` only combines a caller
+      // signal when this field exists.
+      signal: req.signal,
     })
 
     if (!response.ok) {

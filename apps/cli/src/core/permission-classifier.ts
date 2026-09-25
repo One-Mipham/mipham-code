@@ -57,15 +57,27 @@ import type { PermissionMode } from '../shared/index.ts'
 export const PROMPT_VERSION = 'mipham-auto-classifier/1'
 
 /**
- * Milliseconds before a ruling is abandoned. Same bound as
- * `self-critique.ts:52`, which is the only measured precedent in this repo.
+ * Milliseconds before a ruling is abandoned.
+ *
+ * This used to be declared as "same bound as `self-critique.ts`" — that pairing
+ * is gone, and deliberately not restored in either direction. The two are both
+ * secondary model calls, but they fail in *opposite* directions: `self-critique`
+ * fails **open** (a timeout ⇒ `null` ⇒ the tool runs), so its budget is bounded
+ * by "how often do we want the critique to actually happen"; this one fails
+ * **closed**, so its budget is bounded by "how long may a legitimate call be
+ * refused for". A budget derived from the fail-open side would be a budget
+ * derived from the wrong question.
  *
  * A tighter bound was considered (it is on the gated path, so every ruled call
  * costs the user the full wait) and rejected: with a fail-closed default, a
  * timeout is indistinguishable from a denial to the user, so shrinking this
- * trades "slow" for "auto mode intermittently refuses legitimate work" — and
- * nobody has measured where the real latency distribution sits. Making it
- * configurable is the right fix when someone does.
+ * trades "slow" for "auto mode intermittently refuses legitimate work" — and the
+ * classifier's own latency distribution still has not been measured. (A sibling
+ * measurement does now exist — `self-critique`'s, median 3.95s over 30 real
+ * calls — and it is a reason to *distrust* this 2s, not a reading that may be
+ * substituted for one.) Making it configurable, or re-basing it, needs that
+ * measurement first; the prompts, the target model and the output shape all
+ * differ from the sibling.
  */
 export const DEFAULT_CLASSIFIER_TIMEOUT_MS = 2000
 

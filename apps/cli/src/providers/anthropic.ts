@@ -132,6 +132,9 @@ export class AnthropicProvider implements ProviderInstance {
         'anthropic-beta': 'prompt-caching-2024-07-31',
       },
       body: JSON.stringify(body),
+      // Same as `openai-compat`: without this the caller's signal never reaches
+      // the transport, and every per-call cancellation budget is decorative.
+      signal: req.signal,
     })
 
     if (!response.ok) {

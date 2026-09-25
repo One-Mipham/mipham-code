@@ -96,7 +96,13 @@ export async function fetchWithRetry(
       timedOut = true
       controller.abort()
     }, timeout)
-    const signal = init.signal ? anySignal([init.signal, controller.signal]) : controller.signal
+    // `AbortSignal.any` (node ≥22 / bun ≥1.2, both in `engines`) instead of a
+    // hand-rolled combiner: it keeps a *weak* reference to the source signals, so
+    // the combination stays live for the reader without pinning the caller's
+    // signal — which is what the hand-rolled version had to trade away.
+    const signal = init.signal
+      ? AbortSignal.any([init.signal, controller.signal])
+      : controller.signal
 
     try {
       const response = await fetch(url, { ...init, signal })
@@ -123,14 +129,11 @@ export async function fetchWithRetry(
       await sleep(baseDelay * Math.pow(2, attempt))
     } finally {
       clearTimeout(timer)
-      // Clean up combined signal if we created one
-      if (init.signal) {
-        try {
-          controller.abort()
-        } catch {
-          /* best effort */
-        }
-      }
+      // Nothing to release: the combination is natively managed. Do NOT abort
+      // anything here — `fetch` holds that signal and the caller reads the body
+      // *after* we return, so aborting it at this point errored every response at
+      // the headers (measured on Node: the next read throws AbortError; Bun
+      // happens to tolerate it, which is why a Bun-only run never showed this).
     }
   }
 
@@ -162,24 +165,4 @@ const EFFORT_TIMEOUT_MULTIPLIER: Record<string, number> = {
 export function streamIdleTimeoutMs(effort?: string): number {
   const multiplier = effort ? (EFFORT_TIMEOUT_MULTIPLIER[effort] ?? 1) : 1
   return STREAM_IDLE_TIMEOUT_BASE_MS * multiplier
-}
-
-/**
- * Combine multiple AbortSignals into one — any signal aborting
- * triggers the combined signal.
- */
-function anySignal(signals: AbortSignal[]): AbortSignal {
-  const controller = new AbortController()
-  const onAbort = () => {
-    controller.abort()
-    for (const s of signals) s.removeEventListener('abort', onAbort)
-  }
-  for (const s of signals) {
-    if (s.aborted) {
-      controller.abort()
-      return controller.signal
-    }
-    s.addEventListener('abort', onAbort)
-  }
-  return controller.signal
 }
