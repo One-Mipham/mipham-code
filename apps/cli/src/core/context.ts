@@ -137,7 +137,11 @@ export class ContextManager {
 
   setSystemPrompt(prompt: string): void {
     this.systemPrompt = prompt
-    this.estimatedTokens = this.estimateTokens(this.composedSystemPrompt())
+    // 估值必须**含 messages** —— 走 `reEstimateTokens()` 这一条唯一推导，别在这儿手写
+    // 第二份。`--resume` 路径（`index.tsx:584-585`）先 `restoreLog()` 算出含消息的完整
+    // 估值，紧接着调这里；只按系统提示重算会把它**覆盖成偏低值** ⇒ `needsCompaction()`
+    // 长期偏 false ⇒ 压缩迟触发（上下文越滚越大才动手）。
+    this.reEstimateTokens()
   }
 
   /**

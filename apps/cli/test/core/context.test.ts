@@ -438,6 +438,31 @@ describe('ContextManager log integration', () => {
     expect(deriveMessages(cm.getLog()!.events())).toHaveLength(2) // 未重复写通
   })
 
+  // `index.tsx:584-585` 就是**这个顺序**：先 `restoreLog`（含消息的完整估值），
+  // 后 `setSystemPrompt`。若后者只按系统提示重算，`--resume` 一进去估值就偏低 ⇒
+  // `needsCompaction()` 长期偏 false ⇒ 压缩迟触发（context 越滚越大才动手）。
+  it('restoreLog 之后 setSystemPrompt 不把含消息的估值覆盖成偏低值', () => {
+    const big = 'x'.repeat(4000)
+    const log = new SessionLog('resume-estimate-test')
+    log.append({ type: 'session/start', at: 1, sessionId: 'resume-estimate-test' })
+    log.append({ type: 'user/message', at: 1, message: { role: 'user', content: big } })
+
+    const cm = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
+    cm.restoreLog(log)
+    cm.setSystemPrompt('sys')
+
+    // 对照：同一句系统提示、**没有消息**。恢复出来的估值必须**大于**它 —— 多出来的
+    // 就是那条消息。改成「只算提示」的实现会让两个数相等，判据随之变红。
+    const bare = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
+    bare.setSystemPrompt('sys')
+    expect(cm.getEstimatedTokens()).toBeGreaterThan(bare.getEstimatedTokens())
+
+    // 再设一次同样的提示：估值不许变（幂等 —— 顺手挡住「每次设都叠一遍」那种错法）。
+    const first = cm.getEstimatedTokens()
+    cm.setSystemPrompt('sys')
+    expect(cm.getEstimatedTokens()).toBe(first)
+  })
+
   it('addMessage does not throw when invariant holds (debug on)', () => {
     setAssertModelVisibleDebug(true)
     const cm = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
