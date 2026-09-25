@@ -40,7 +40,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "knip": "knip --production --no-progress --no-exit-code",
-    "coverage": "vitest run --coverage",
+    "coverage": "vitest run --coverage --reporter=default --reporter=json --outputFile.json=coverage/vitest-report.json",
     "mutate": "stryker run"
   },
   "dependencies": {

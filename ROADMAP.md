@@ -1086,7 +1086,7 @@ agents 真解析、provider 回退仍活着）。
       **教训（与 [[claims-ahead-of-evidence]] 同族）**：「产品页 A 从文件 B 取数」这一步**我没有验**，
       是从仓内目录结构**推**出来的；**公开面必须实测落地 URL 与正文**，推出来的映射不算。
 
-- [ ] **D16** · **（2026-09-25 与 D15 同一次审数字时发现）两个官网的 `/mipham-code` 页各硬编码了一行测试数**。
+- [x] **D16** · **收口（2026-09-25，`mipham-code` 与 `websites` 两仓 + 父仓 gitlink 均已推送）—— 两个官网的 `/mipham-code` 页各硬编码了一行测试数；修法是**立真源**，不是把手改做得更勤**。
       `websites/domestic/apps/onemipham.com/src/app/mipham-code/page.tsx:275` 与
       `websites/international/apps/mipham.ai/src/app/mipham-code/page.tsx:303` 各有一行字面量
       「137 命令 · 3473 测试」/「137 commands · 3473 tests」。**137 是对的**（D15 已由命令核过），
@@ -1102,14 +1102,49 @@ agents 真解析、provider 回退仍活着）。
       那一步要单独授权；③ 与 D15 同病且更硬：**没有真源** —— 实测两站 `src/config/package-info.json` 与
       `packages/shared/package-info.json` 的**键集完全相同（各 16 个）且都不含任何计数字段**
       ⇒ 名字/版本有传播链，**计数连槽位都没有**，只能手抄、抄了还会再漂。
-      **建议落点**（未做）：并进 D15 那条「真值判据」一起想 —— 若给 `web.*` 建真值判据，数据源应当是**同一处**
-      （计数由命令产出后落进 `package-info.json` 的新字段），两站与 CLI 共享它，而不是各自手抄。
+      **落点（已做）**：并进 D15 那条「真值判据」一起想 —— 给 `package-info.json` **建四个槽位**
+      （`SLASH_COMMAND_COUNT` / `PROVIDER_COUNT` / `TOOL_COUNT` / `TEST_COUNT`），两站与 CLI 共享它，
+      而不是各自手抄。三处落盘副本：`packages/shared/package-info.json` +
+      `packages/shared/src/package-info.ts` + `apps/cli/src/shared/package-info.ts`（CLI 那份是**自包含副本**，
+      二进制不能 import 共享包；两份 .ts 正文逐字节相同，沿用既有的注释型对等约定）。
+      **四个数的真源**：前三个在**进程内**算（`getCommandNames()` / `DEFAULT_PROVIDERS` / `createToolRegistry()`），
+      第四个**没有进程内真源**，只能由一次真套件跑得到。产出那支笔是 `apps/cli/scripts/sync-counts.ts`
+      （`--test-report <vitest.json>` 连测试数一起写；`--check` 只比对不写、不一致则 exit 1）。
       **病史（2026-09-25 由命令量出，供裁定「手改 vs 立真源」用）**：`git log` 顺着这两条路径走，
       这个页脚数字**至少被手改过 7 次**（2262 → 2266 → 2388 → 2560 → 2891 → 2935 → 2962 → 3473），
       命令数同理（85 → 136 → 137）—— 每次的形态都是「发现漂了、手改回去」，而**每次手改本身都会再漂**。
       最近一次是 `076b962`「站点页脚测试数 2962 → 3473（与 CLAUDE.md 活数字对齐）」，真值今天已是 3,486
       ⇒ **手改版数字的期望寿命比两次发布之间的间隔还短**。这就是「值相等的守卫只证明两份一致、
       不证明两份对」（D15）在时间轴上的样子：没有真源 ⇒ 只能靠人记得去改。
+      **收口时复核**：本条中间那些「当下真值 3,486」是当时的读数；收口这一天的实测值是 **3,494**
+      （`npx vitest run --reporter=json` 读出 `numTotalTests = 3494`，本机 `298 passed (298)` /
+      `3492 passed | 2 skipped`）—— **`numTotalTests` 含 skipped，所以这个数跨平台一致**，
+      本机与 Linux 的差别只在 passed/skipped 的切分（`test/e2e/full-pipeline.test.ts` 本机跑、Linux 跳）。
+      这一条正是「活文档的数字必须由命令产出」的实例：连**本条自己**都漂了一次。
+      **三道机器判据（本轮落地）**：
+      ① `apps/cli/test/integrity/published-counts.test.ts` —— 三份落盘副本的四个计数与真源逐一对齐，
+      带 `comparisons === 9` 的**正对照**（防读取路径静默退化）；取不到值就**抛**，不返回 `undefined`
+      —— 否则「正则与文件脱节」会退化成两边都读不到、比对静默恒真。另含「CLAUDE.md 的三种写法与落盘值一致」。
+      ② 同一文件补上 **D15 点名的那个守卫缺口**：那对 i18n 副本
+      （`packages/shared/src/i18n/locales/{en-US,zh-CN}.json` ↔ `apps/cli/src/i18n-core/locales/*`）
+      **同时不在** `shared-vendor-parity` 的族表里、`packages/shared/**` **也不在**
+      `tool-reference-integrity` 的扫描根里 ⇒ 两套守卫都够不着，那 4 个文件曾同时写着 `85`（真值 137）而全绿。
+      判据**不能**是「两份副本值相等」（当时两份写的是**同一个错值**，值相等只会全绿），只能是**真值**。
+      ③ **CI 硬门禁**（Test job）：套件自报的 `numTotalTests` ≠ 落盘值即红。**与 ① 不是重复** ——
+      ① 守的是落盘值与 CLAUDE.md **一致**（两边一起漂它照样全绿），③ 守的才是**对不对**。
+      **为什么测试数要外部给报告**：全量套件几分钟，把 `sync-counts` 做成「每次都跑几分钟」等于没人会跑，
+      数字照样靠手改。**换来的代价如实记下**：改测试数的提交现在要回填**三处**（两份 .ts + json），比以前多一处。
+      **`websites` 侧（`7e499d5`）**：两页各 6 处替换，**16 个计数出现处归零** —— 页面上一个数字都不持有。
+      两站的 `src/config/package-info.json` 各补四个键（16 → 20），因为 deploy 脚本在子模块未初始化时
+      走 `warn` 回退到仓库里那份，不给就会印 `undefined`。
+      **判据取两个真构建**（不是推断）：国内站 `next build` exit 0 → 渲染出「12 家 AI 模型」/「137 条斜杠命令」/
+      「31 个工具」/ 页脚「137 命令 · 3494 测试」；国际站 → `12 AI Providers` / `137 Slash Commands` /
+      `137 commands · 3494 tests`；两页源码再扫硬编码计数**零命中**；两份 config 键数各 20。
+      两站生成 HTML 里各有 **1 处 `undefined`** —— 核过是 RSC flight 载荷的 `$undefined` 哨兵
+      （`"error":"$undefined"`），与本次改动无关。**这一条核了才算验完**：不核就分不清
+      「哨兵」与「缺键被渲染成 undefined」，而后者正是这次补四个键要防的那个失败。
+      **未做**：两站的**部署**（国内 `deploy-cn.sh`、国际 `vercel deploy --prod`）—— 都是显式命令，
+      各自单独授权。
 
 - [x] **D17** · **收口（2026-09-25，未发布）—— `ChatRequest.signal` 有声明、有读者、有设置者，唯独没有「送达者」；而把送达补上之后，发现还缺第二半**。
       **原判**（写进 D8 的那句）是「接口级边界」，**实测不成立**：字段**早就有了**。`registry.ts:19` 声明 `signal?: AbortSignal`；

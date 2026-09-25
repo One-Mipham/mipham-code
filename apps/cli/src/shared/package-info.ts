@@ -56,3 +56,38 @@ export const COMPANY_NAME_ZH = '北京华安麦逄科技有限公司' as const
 
 /** 公司简称 */
 export const COMPANY_SHORT = '华安麦逄科技' as const
+
+/**
+ * 计数类常量 —— 公开面（两个官网的产品页）与文档消费的那几个数。
+ *
+ * **不要手改。** 这四个数由 `apps/cli/scripts/sync-counts.ts` 从真源产出后回写：
+ * 命令 / 提供商 / 工具在**进程内算出**（`getCommandNames()` / `DEFAULT_PROVIDERS` /
+ * `createToolRegistry()`），测试数由**一次真套件跑**的自报总数产出。
+ *
+ * 为什么要有这几个槽位（2026-09-25）：两个官网的产品页把「137 命令 · 3473 测试」
+ * 当**字面量**写死，没有真源 ⇒ 只能靠人记得去改，同一处**至少手改过 7 次**
+ * （2262 → … → 3473），而每次手改本身还会再漂。站点侧的传播链其实一直存在 ——
+ * 两站的 deploy 脚本都 `cp` 本文件覆盖自己那份 `src/config/package-info.json`
+ * —— 缺的只是**槽位**。名字/版本有槽位所以不漂，计数连槽位都没有。
+ *
+ * 守卫：`apps/cli/test/integrity/published-counts.test.ts`（三个进程内计数与落盘值
+ * 逐一对齐）；测试总数另由 CI 的 Test job 与套件自报的总数比对（硬门禁）。
+ */
+
+/** Slash 命令总数（真源：`getCommandNames().length`，`apps/cli/src/ui/commands.ts`） */
+export const SLASH_COMMAND_COUNT = 137 as const
+
+/** 内置提供商总数（真源：`DEFAULT_PROVIDERS.length`，`apps/cli/src/shared/constants.ts`） */
+export const PROVIDER_COUNT = 12 as const
+
+/** 已注册工具总数（真源：`createToolRegistry().size`，`apps/cli/src/tools/index.ts`） */
+export const TOOL_COUNT = 31 as const
+
+/**
+ * 测试总数（真源：**一次真套件跑**的自报总数）。
+ *
+ * 取**总数**而不是 `passed`：本机（macOS）与 CI（Linux）的 passed/skipped 切分**不同**
+ * —— `test/e2e/full-pipeline.test.ts` 在 Linux 上整文件 skip、在 macOS 上跑 ——
+ * 但**总数相同**（两边都把被 skip 的算进去）。
+ */
+export const TEST_COUNT = 3494 as const
