@@ -13,6 +13,13 @@ import { MIPHAM_DIR } from '../shared/constants.ts'
 export interface AgentContextResult {
   context: ContextManager
   allowedTools: ToolDefinition[]
+  /**
+   * 组装好的系统提示（**含** agent memory）。
+   *
+   * 必须由这里交出去、而不是让调用方自己再拼一份：memory 的拼接规则只此一处，调用方
+   * 拿不到它就等于重新推导一遍（漏掉的那一遍正是缺陷本身 —— 请求里从来没有记忆）。
+   */
+  systemPrompt: string
 }
 
 /**
@@ -145,5 +152,5 @@ export function createAgentContext(
     allowedTools = allowedTools.filter((t) => !denySet.has(t.name))
   }
 
-  return { context, allowedTools }
+  return { context, allowedTools, systemPrompt }
 }

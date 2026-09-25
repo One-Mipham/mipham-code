@@ -339,23 +339,31 @@ export class SubAgent {
     }
 
     // Create isolated context with tool scoping, sized to the resolved model.
-    const resolvedDef: AgentDefinition = agentDef || {
-      name: agentType,
-      description: '',
-      systemPrompt,
-      model: options.modelOverride || 'inherit',
-      permissionMode: 'inherit',
-      background: false,
-      source: 'builtin',
-    }
+    // `systemPrompt` 是运行时**解析出来的那一份**（定义 > 调用方传入 > 内建类型），
+    // 定义自己没写时就落到解析结果上 —— 否则 `createAgentContext()` 拿到的是空串，
+    // 记忆会拼在一个空的基座上。
+    const resolvedDef: AgentDefinition = agentDef
+      ? { ...agentDef, systemPrompt: agentDef.systemPrompt || systemPrompt }
+      : {
+          name: agentType,
+          description: '',
+          systemPrompt,
+          model: options.modelOverride || 'inherit',
+          permissionMode: 'inherit',
+          background: false,
+          source: 'builtin',
+        }
     const contextWindow = this.registry.findModel(finalModel)?.contextWindow
-    const { context, allowedTools } = createAgentContext(
-      resolvedDef,
-      this.toolRegistry,
-      contextWindow,
-    )
+    // 这一份**已含 agent memory**，是发出去的那个提示的唯一来源。
+    const {
+      context,
+      allowedTools,
+      systemPrompt: composedSystemPrompt,
+    } = createAgentContext(resolvedDef, this.toolRegistry, contextWindow)
 
-    context.setSystemPrompt(systemPrompt)
+    // 别再 `context.setSystemPrompt(systemPrompt)`：`createAgentContext` 已经拿**含记忆**的
+    // 那一份设过上下文，这里用裸提示再设一遍只会把记忆从上下文里抹掉，而请求读的又不是
+    // 上下文 —— 两处各设一次的结果是「上下文里没有、请求里也没有」。
 
     // Seed inherited parent conversation (fork inheritance) as a byte-identical
     // prefix so the provider prompt cache is reused.
@@ -405,8 +413,8 @@ export class SubAgent {
     // 权限段随**唯一**带提示的那一轮走，而不是每轮派生。
     const permissionBlock = buildPermissionBlock(gate.getMode())
     let currentSystemPrompt = permissionBlock
-      ? `${systemPrompt}\n\n---\n\n${permissionBlock}`
-      : systemPrompt
+      ? `${composedSystemPrompt}\n\n---\n\n${permissionBlock}`
+      : composedSystemPrompt
     let totalTokens = 0
 
     // Context for the sub-agent's own tool calls. Built once per run: the caller's

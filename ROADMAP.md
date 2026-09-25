@@ -808,6 +808,14 @@ agents 真解析、provider 回退仍活着）。
       `clearSuggestion`」，Tab 接受路径 `:398-404` 是**第四处**、只 `setSuggestion(null)`
       （不 bump reqId、不清定时器）；当前不可达（有建议显示 ⇒ 上次请求已结束），
       但「接受后继续续写」一加就是洞。
+      **2026-09-25 复核（只更新位置，结论不变）**：上面「接线是真的」**再核一次仍成立** ——
+      `app.tsx:1351-1353` 传 `llm` / `recentMessages` / `autocompleteEnabled`、`registry.ts:122`
+      的 `req.model || activeModelId`、`input.tsx:250` 把 Tab 让回去、`autocomplete.ts:62` 仍是
+      **流消费完之后**才判 `isStale()`。漂的只是**指针**（D7 把历史提到 `app.tsx` 时改过 `InputBar`
+      的 props，整段后移）：③ 的注释现在是 `:326-327`，那个绕开点在 `:414`（另外三处
+      `clearSuggestion()` 在 `:399` / `:443` / `:502`）。
+      **另**：`:541` 每次输入也直接 `setSuggestion(null)`，但那处随即 `++suggestionReqIdRef` 并重排
+      定时器 ⇒ 不缺环，**不算第四个绕开点**。
 
 - [ ] **D9** · `scripts/smoke-daemon.sh` 的三处遗留 —— ① **惯用法未统一**：删除闸已改成
       「捕获输出 → `case`」，就绪检查仍是 `daemon status | grep -q 'Daemon: running'`
