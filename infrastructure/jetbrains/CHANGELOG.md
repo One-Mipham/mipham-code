@@ -4,6 +4,100 @@
 > (tag dates) and use the same wording as the VS Code extension's changelog — the plugin is a
 > thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.6 (2026-09-26)
+
+- Version sync with Mipham Code CLI 0.85.6
+- Fixed: `mipham update` now installs by atomic swap, so a half-written tree is gone by
+  construction. The old flow was snapshot → `npm install -g` rewriting in place → self-verify →
+  roll back, and `npm install -g` has no atomic handover: killed mid-way (timeout / Ctrl-C /
+  SIGKILL) it left "old tree deleted, new tree not written" — not a single `mipham` on the machine,
+  including the `mipham update` you would retry with. It now installs into a staging directory
+  **inside** `<prefix>` (same filesystem required; `os.tmpdir()` hits `EXDEV` on Linux tmpfs, which
+  would force a copy — exactly the interruptible state being removed) → runs both self-checks on
+  staging → two renames (old tree aside, new tree in) → verifies once more after the swap → cleans
+  up. The window shrinks from minute-scale to µs. Rollback goes exclusively through reverse rename
+  and the copy-based snapshot machinery is retired. Failure messages went from a `rolledBack`
+  boolean to four states (`untouched` / `restored` / `broken` / `unknown`) — in the most common
+  failure (staging will not install) the old tree was never touched, so the old wording "cannot
+  restore your previous installation" was a false statement about the user's machine
+- Fixed: on Windows every `mipham update` rolled back the version it had just installed. npm puts
+  the global package under `<prefix>/node_modules` on win32 (no `lib` layer) with the bin shim at
+  `<prefix>` itself, while the code applied Unix's four `..` levels on both platforms ⇒ the prefix
+  went one level too far and the launcher pointed at a file that never exists ⇒ the second
+  self-check (really running the launcher) had to fail ⇒ Windows users could never upgrade, and
+  were told "failed" every time. The same spot also skipped the check that its computed path really
+  is a node prefix. `platform` is now an injectable parameter, so both layout branches really run on
+  any machine — that half read `process.platform` directly and never ran on a dev machine or CI
+- Fixed: the caller's cancellation never reached the transport. `ChatRequest.signal` had a
+  declaration, a consumer and setters, but no deliverer: neither provider passed it into its `fetch`
+  init, so that `AbortController` was never connected once, and `abort()` on an unobserved signal is
+  a no-op — `critique()`'s documented "null if … timed out" never took effect (the real fallback was
+  the provider's own 90 s stream idle timeout). Delivering it cannot be that one line alone: the
+  retry helper's `finally` aborts the combined signal it had just handed to `fetch`, while the
+  caller reads the body after the function returns ⇒ every stream would be killed by itself at the
+  response headers. Now `AbortSignal.any`, which holds the source weakly, stays alive through the
+  body read, and needs no cleanup
+- Fixed: the connection was never released when the consumer walked away. Neither provider's
+  streaming read loop had any `reader.cancel()`, and consumers do leave mid-stream (the engine
+  breaks on a `stop` block; a sub-agent throws on abort). Patching each exit only covers the exits
+  the loop knows about, not "the consumer left mid-stream" — which is the ordinary shape of this
+  path, so the read loop and the fallback `stop` after it are wrapped in one `try/finally`
+- Fixed: ghost-text completion had no ceiling upstream and could not be cancelled downstream. The
+  staleness check sat outside the loop (it belongs inside, checked per chunk): outside means
+  draining the whole stream before discarding the result, so every pause over 400 ms bought a
+  complete completion. The ceiling was on count only (6 messages) while one message can be
+  arbitrarily long — paste a file in and six messages is tens of thousands of tokens; each message
+  is now truncated to 2,000 characters keeping the tail (a continuation cares about where it just
+  got to) and marked as truncated. Tab-to-accept is now covered at the wiring layer too: the pure
+  functions were pinned one by one, but nothing had ever touched the input bar itself, and green
+  pure functions do not prove Tab really merges the suggestion into the body
+- Fixed: after `--resume`, the context estimate was overwritten by the system prompt alone. Restore
+  first estimated "system prompt + all messages", then immediately recomputed from the system
+  prompt only, so the entire message part was overwritten — and `needsCompaction()` reads exactly
+  that field ⇒ after restoring a long session, compaction fired late and the context grew large
+  first. There should be one derivation of the estimate; the hand-written second algorithm is gone
+- Fixed: a sub-agent's declared `memory` never reached the model. It was composed into the
+  sub-agent's own context, but then the version without the memory was set again, and the request
+  reads that local variable — so `memory:` was declared in the definition and displayed in
+  `/agents` while not a word of it reached the model, in the context or in the request. The
+  composition rule now lives in exactly one place and the request reads the assembled copy
+- Fixed: five spots on the read side used `JSON.parse` results as their declared types. The write
+  side had been closed long ago; the read half had not, and the dangerous cell is "valid JSON,
+  wrong shape" — it does not throw, so `catch` cannot hold it and nothing else speaks up: dream
+  history (`{"a":1}` returned as an array, and the call site's `.length` raising a TypeError into
+  the UI), the error-signature DB (`["x"]` accepted verbatim, holding a member with no id that the
+  stats denominator still counts), the effectiveness ledger (indices read as keys), the memory link
+  graph (a string iterated per character, splitting one link into two), and recall stats (a `catch`
+  outside the loop, so one bad record cost every entry after it)
+- Fixed: the footer froze the graft status from the moment of startup. The `useState` initializer
+  runs once, and that file is written by someone else in the background: starting right when a
+  rebuild happened left `syncing…` on screen forever while disk already said `syncing: false`. It is
+  re-read on a tick now, and state changes only after verifying it really changed. The file's own
+  doc comment had written that freeze down as the design — the comment was covering for the defect
+- Fixed: `daemon.log` has a ceiling. The log only ever grew, and a daemon that repeatedly fails to
+  start would fill that disk. It rotates at startup (after mkdir, before open — the only moment with
+  no writer), by renaming rather than truncating: what this scenario needs to keep is the previous
+  generation, since for a daemon that keeps failing to start the last run's log is the whole clue.
+  One generation only, so the ceiling is a constant 2 × 5 MiB. The other unbounded append sink in
+  that directory (the permission audit ledger) is deliberately left alone — silently dropping lines
+  from an audit ledger is a policy decision; its value is the whole set, not the tail
+- Fixed: `daemon start` no longer abandons a child it started. A deadline is a prediction, not a
+  fact, so it re-probes once before giving up — a daemon that came ready right on the line should
+  not be killed — and when it really did not come up it now reaps its own child. Leaving that
+  process behind would make the next `daemon start` report it as a success on the already-running
+  branch
+
+### Added
+
+- Top-level `--provider` / `--model` flags. Both published IDE extensions assemble a launch
+  command of the form `mipham --provider <id> --model <id>` from their settings, and before this
+  the CLI answered `Unknown command` with rc=1: that value fell through to the positional
+  arguments and hit the unknown-command branch, which runs before any flag parsing. Values are
+  used verbatim, not validated against the registry — providers can be user-defined, so a static
+  allowlist would reject them wrongly; an unknown id is named by the registry on the first
+  message, exactly as when the same value comes from `config.yml`. This is the flag these two
+  extensions already need
+
 ## 0.85.5 (2026-09-25)
 
 - Version sync with Mipham Code CLI 0.85.5
