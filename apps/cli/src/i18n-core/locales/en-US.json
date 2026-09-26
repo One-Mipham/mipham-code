@@ -317,6 +317,8 @@
       "update_failed": "✗ Update failed: {reason}{rolledBack}\n  Try manually: {command}\n  Your config backup is at: {path}",
       "rolled_back": "\n  Your previous install was restored — mipham still works.",
       "no_rollback": "\n  ⚠ Your previous install could not be restored — reinstall it manually (see below).",
+      "install_untouched": "\n  Your previous install was not touched — mipham still works.",
+      "install_unknown": "\n  ⚠ Could not locate the global install path — unable to tell whether your install survived.",
       "unverified": "⚠ Installed, but could not verify the new version: {reason}"
     },
     "no_plan": {

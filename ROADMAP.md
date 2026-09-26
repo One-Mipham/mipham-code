@@ -955,7 +955,7 @@ agents 真解析、provider 回退仍活着）。
       **同批记下的两件事**：① 根 `README.md` 那段 flag 清单**早已漂了**（列 5 个，`--permission` 落地后
       没跟，且无守卫扫它）⇒ 本次**改成不枚举**、指向 `mipham --help`，而不是刷新第二份清单；
       ② 网站 `/code/docs` 的示例配置仍带着陈旧值 ⇒ 另立 **D13**。测试 3,456 → **3,468**。
-- [ ] **D12** · **`mipham update` 的安装本身仍不是原子换手** —— 2026-09-22 事故后的修法是
+- [x] **D12** · **`mipham update` 的安装本身仍不是原子换手** —— 2026-09-22 事故后的修法是
       「**装前快照 + 装后自证 + 失败回滚**」（见 `CLAUDE.md` 2.94.0）；**2.94.1 把另一半补上**
       （Ctrl-C）：回滚代码跑在 CLI 进程里，而终端 Ctrl-C 把 SIGINT 发给**整个前台进程组**
       ⇒ CLI 与 npm 一起死、catch 从不执行。现由两道守卫收口 —— `detached: true`（npm 自成
@@ -977,7 +977,9 @@ agents 真解析、provider 回退仍活着）。
       的新实例记录。
       **⚠️ 本条目那句代价被两次离线实测证伪**（原文：「`--prefix` 装出来的 launcher 路径与全局前缀不同，
       需要额外改写」）：① 真装一份 tarball 到 `npm install -g --prefix <tmp>`，落下的 launcher 是
-      `bin/<name> -> ../lib/node_modules/<pkg>/bin/cli.js` —— **相对符号链接，与真 prefix 下逐字同形**
+      `<prefix>/bin/mipham -> ../lib/node_modules/@miphamai/cli/bin/mipham` —— **相对符号链接，与真 prefix 下逐字同形**
+      （⚠️ 本条此处原写作 `…/bin/cli.js`，**名字记错了**；与 `apps/cli/package.json` 的
+      `bin: { "mipham": "bin/mipham" }` 对照即知。结论不受影响 —— 错的是名字，不是「相对符号链接」那个判据）
       ⇒ 只搬包目录需要**零**改写；② 装出来的树是**自包含**的（7/7 声明依赖都在 `<pkgDir>/node_modules`，
       共 86 项）⇒「只搬包目录」是完整动作，不是省略。**残余代价只剩换手序列本身**：staging prefix 必须是
       `pkgDir` 的**兄弟**（同文件系统才保证 rename 原子）、两次 rename 之间有微秒级「目标名不存在」窗口、
@@ -991,6 +993,41 @@ agents 真解析、provider 回退仍活着）。
       期望伤害面是「每个用户的下一次更新」。先把真实代价订正下来，供下一个会话按真价决策（本条目自身那句
       代价即一例「债务条目的主张不是事实」—— 判据是离线可测的，没有理由留着一句假价）。
       同一次复核里发现的活缺陷另立 **D14**（就在下方，已收口）。
+      **已收口（2026-09-26，未发布）** —— 落点 = **装在旁边 → 验过 → 两次 rename 换手**（裁定取
+      「退役拷贝式快照」：回滚一律走反向 rename）。真包目录在自证通过**之前一个字节都不动**，
+      于是「半截树」按构造不存在（除两次 rename 之间那个窗口）。`snapshotInstall` / `restoreInstall` /
+      `discardSnapshot` 三个函数连同 `~/.mipham/backups/cli-*` 那套机制**整体退休** —— 回滚不再是
+      复制（复制这一步自身会被中途打断），而是**再一次 rename**（旧树是「从原地挪开的那一份」，
+      不是备份）。
+      **launcher 零改写**：它是**相对符号链接**（包路径不变 ⇒ 换手后自动指向新树）；Windows 那半同理
+      （shim 按 `%~dp0` 解析）。落点：staging 放 `<prefix>/.mipham-staging-<stamp>`（**同文件系统的兄弟**，
+      `os.tmpdir()` 会 EXDEV）、旧树挪到 `<prefix>/.mipham-old-<stamp>`、每次运行先清上次残留
+      （`cleanStaleStaging`）。命令 `npm install -g --prefix "<staging>" …` 的路径**必须带引号**
+      （prefix 里可能有空格）。
+      **结局从 `rolledBack: boolean` 改成四态 `InstallState`**（`untouched|restored|broken|unknown`）：
+      staging 之后**最常见的失败是「旧树压根没被碰过」**，而两值布尔下它会落进 else —— 恰好是**最重的
+      那句**「原安装未能恢复」。拿最坏情况当兜底，等于把每条没想清楚的路径都报成灾难。两个调用点
+      （`bin/mipham.ts` / `ui/commands.ts`）同步改；新增 `install_untouched` / `install_unknown` 两条
+      locale 键（en/zh 各一份）+ 一条「四态键在两份 locale 里都在」的守卫（从 `commands.ts` 里**抠键**
+      再逐个查，抄一份清单就成了守没人渲染的副本）。**没有旧安装**时失败报 `broken` 而非 `untouched`
+      —— 后者会谎称 mipham 还能用。另加**换手后再自证一次**（廉价保险）：在 staging 里跑得过 ≠ 搬过来
+      也跑得过（树里若有安装期写死的绝对路径，搬完才指错）⇒ 不过就反向换手把旧树**原样**拿回来。
+      **测试** 3,501 → **3,506**（`test/shared/update-safety.test.ts` 23 → 28）；**六条负控各咬中目标、
+      还原均过 sha256 逐字校验**：就地安装 ⇒ 红 / staging 落到 `os.tmpdir()` ⇒ 红 / 无旧安装也报
+      `untouched` ⇒ 红 / 不清理残留 ⇒ 红 / 撤掉换手后自证 ⇒ 红 / zh-CN 少一条文案 ⇒ 红。测试自身也
+      修了两处**假绿**：① 旧 fixture 的 Windows launcher 是「自己打印版本号的独立文件」，那种 launcher
+      跨换手不会跟着变 ⇒ 「换手后自证」这一关在测试里**永远绿**，已改成按自身位置解析的真 shim；
+      ② 旧 fixture 让假 npm 直接重写真树（模拟「就地重写」），现在的假 npm 只写 `--prefix` 指的暂存目录。
+      **一条覆盖边界（不许拿「读过代码」冒充「有用例」）**：③ 那两次 rename 各自**失败**时的两个
+      `return` 分支（`untouched` / `restored` / `broken` 的如实上报）**只有代码、没有用例** ——
+      要走到它们得让 rename 失败，而要 install 成功就必须有一个真目录当 prefix，于是正常路径上
+      它们近乎不可达（只能靠人工造阻塞物，那种 fixture 的复杂度高于它守住的那两行上报）。
+      它们里面没有新逻辑，只有「老实说清用户手上是什么」。
+      **残余（如实记下）**：① 两次 rename 之间微秒级的「目标名不存在」窗口 —— 期间 `mipham` 敲不动，
+      真撞上就 `npm install -g @miphamai/cli` 重装（PATH 与包位置都没被改过）；② 将来若有人手上还留着
+      `~/.mipham/backups/cli-*`，它从此**无写入者也无读者**（本机实测：该目录里是 dotgit/dmg 手工备份，
+      `cli-*` **0 份** —— 上一轮记的「约 84 MB 遗留」是假的）；③ 被测的是 fixture 与 `execSync` 语义，
+      **真 npm 更新到一半被杀没做**（与上一轮同一条诚实边界）。
 - [x] **D13** · **（D11 同批发现）网站 `/code/docs` 页的示例配置仍是陈旧值** ——
       `apps/web/src/app/code/docs/page.tsx` 里那份 `~/.mipham/config.yml` 样例写着 `version: "0.2.2"`
       与 `permission: auto`。后者与 D1 在根 `README.md` 修掉的那行**同形状**：`auto` 合法（在 `ALL_MODES` 里），

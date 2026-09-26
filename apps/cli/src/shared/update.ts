@@ -12,12 +12,9 @@ import {
   copyFileSync,
   mkdirSync,
   chmodSync,
-  cpSync,
   rmSync,
+  renameSync,
   readdirSync,
-  lstatSync,
-  readlinkSync,
-  symlinkSync,
 } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { execSync, execFileSync } from 'node:child_process'
@@ -170,6 +167,50 @@ export interface InstallPaths {
   pkgDir: string
   /** <prefix>/bin/mipham（Windows 下是 <prefix>/mipham.cmd） */
   launcher: string
+  /**
+   * 这套布局是按哪个平台算出来的 —— **数据，不是环境**。
+   *
+   * 换手时要给 staging 也推一套布局，而那套**必须与本套同一套算术**：各自去读
+   * `process.platform` 的话，注入 Windows 形状的调用方会拿到 Unix 形状的 staging 目录，
+   * 而 D14 那个活缺陷正是「同一套平台知识存在两份、只修了一份」。把它带在结构里，
+   * 两者就不可能不一致。
+   */
+  platform: NodeJS.Platform
+}
+
+/**
+ * 由 node prefix 推出三个位置。**纯算术，不做任何校验** —— 校验在 `resolveInstallPaths`，
+ * 因为它的对照物（`<prefix>/bin/npm`）只有**真** node prefix 里才有；换手用的 staging prefix
+ * 是我们自己造的，里面当然没有 npm，拿同一把尺子去量它只会把它判成「不是 prefix」。
+ *
+ * **两个平台差一层**（2026-09-25 修）。npm 把全局包装进 `<prefix>/lib/node_modules`
+ * （Unix）或 `<prefix>/node_modules`（**Windows 无 `lib`**）—— 见 npm 自带源码 `lib/npm.js`
+ * 的 `globalDir`（`process.platform !== 'win32' ? <prefix>/lib/node_modules : <prefix>/node_modules`）；
+ * bin 的落点也是同形状的一个分支（`bin-links/lib/bin-target.js`：全局装时
+ * `dirname(prefix)/bin` 对 **`prefix` 本身**）。
+ *
+ * **这两个分支只写在这里一处。** 别处再抄一遍就是 D14 的重演：那次是 Unix 的四层 `..` 被
+ * 抄到了 Windows 分支上，于是 `launcher` 指向 `<prefix 的父目录>/mipham.cmd`（永远不存在）
+ * ⇒ 自证必红 ⇒ **每次 `mipham update` 都把刚装好的新版回滚掉**，而因为 Windows 那半在开发机
+ * 与 CI 上都跑不到，它活了很久。
+ */
+export function layoutFor(prefix: string, platform: NodeJS.Platform): InstallPaths {
+  if (platform === 'win32') {
+    // <prefix>/node_modules/@miphamai/cli；shim 直接落在 <prefix>（没有 bin/）
+    return {
+      prefix,
+      platform,
+      pkgDir: join(prefix, 'node_modules', ...PACKAGE.split('/')),
+      launcher: join(prefix, 'mipham.cmd'),
+    }
+  }
+  // <prefix>/lib/node_modules/@miphamai/cli；launcher 在 <prefix>/bin
+  return {
+    prefix,
+    platform,
+    pkgDir: join(prefix, 'lib', 'node_modules', ...PACKAGE.split('/')),
+    launcher: join(prefix, 'bin', 'mipham'),
+  }
 }
 
 /**
@@ -177,20 +218,9 @@ export interface InstallPaths {
  *
  * 推不出时返回 **null**，绝不猜：`../../../..` 只是算术，它不能证明这个路径真的是一个
  * node prefix。对照物是 `<prefix>/bin/npm` —— 真 prefix 一定有，猜出来的路径不一定有。
- *
- * **两个平台差一层**（2026-09-25 修）。npm 把全局包装进 `<prefix>/lib/node_modules`
- * （Unix）或 `<prefix>/node_modules`（**Windows 无 `lib`**）—— 见 npm 自带源码 `lib/npm.js`
- * 的 `globalDir`（`process.platform !== 'win32' ? <prefix>/lib/node_modules : <prefix>/node_modules`）；
- * bin 的落点也是同形状的一个分支（`bin-links/lib/bin-target.js`：全局装时
- * `dirname(prefix)/bin` 对 **`prefix` 本身**）。旧代码把 Unix 的**四层 `..`** 用在两个平台上 ——
- * 于是 Windows 下 prefix 多退一层，`launcher` 指向 `<prefix 的父目录>/mipham.cmd`：那个文件
- * 永远不存在 ⇒ 自证必报「launcher 跑不起来」⇒ **每次 `mipham update` 都把刚装好的新版回滚掉**
- * （Windows 上永远升不上去，而且每次都说失败）。**同一处还跳过了对照物检查** —— 正是本文档
- * 说「绝不猜」的那一格：这条分支返回的是**算出来**的路径，没有任何东西证明它是 node prefix。
- *
- * 所以 `platform` 是**参数**而不是直接读 `process.platform`：这两个平台分支里，Windows 那半
- * 在开发机与 CI（都是 Unix）上永远跑不到 —— 上面那个差一层的缺陷就是这么活下来的。可注入
- * 之后它能在任何机器上被真跑（见 `test/shared/update-safety.test.ts` 的 Windows 形状夹具）。
+ * （**这一步不能省**，而 Windows 分支过去恰好跳过了它：`platform` 是**参数**而不是直接读
+ * `process.platform`，正是为了让 Windows 那半也能在任何机器上被真跑，见
+ * `test/shared/update-safety.test.ts` 的 Windows 形状夹具。）
  */
 export function resolveInstallPaths(
   fromDir?: string,
@@ -201,31 +231,29 @@ export function resolveInstallPaths(
   const pkgDir = resolve(base, '..', '..')
   if (!existsSync(join(pkgDir, 'package.json'))) return null
 
-  if (platform === 'win32') {
-    // <prefix>/node_modules/@miphamai/cli ⇒ 三层；shim 直接落在 <prefix>（没有 bin/）
-    const prefix = resolve(pkgDir, '..', '..', '..')
-    if (!existsSync(join(prefix, 'npm.cmd'))) return null
-    return { prefix, pkgDir, launcher: join(prefix, 'mipham.cmd') }
-  }
+  // prefix 由 pkgDir 数 `..` 推出来：Unix 四层（多一层 `lib`）、Windows 三层。
+  const prefix =
+    platform === 'win32'
+      ? resolve(pkgDir, '..', '..', '..')
+      : resolve(pkgDir, '..', '..', '..', '..')
 
-  // <prefix>/lib/node_modules/@miphamai/cli ⇒ 四层；launcher 在 <prefix>/bin
-  const prefix = resolve(pkgDir, '..', '..', '..', '..')
-  if (!existsSync(join(prefix, 'bin', 'npm'))) return null
-  return { prefix, pkgDir, launcher: join(prefix, 'bin', 'mipham') }
+  // 对照物：真 node prefix 的 bin/ 里一定有 npm（Windows 是 npm.cmd）。少了这一格，
+  // 拿到的就是「算出来的路径」，没有任何东西证明它真的是一个 node prefix。
+  const marker = platform === 'win32' ? join(prefix, 'npm.cmd') : join(prefix, 'bin', 'npm')
+  if (!existsSync(marker)) return null
+
+  return layoutFor(prefix, platform)
 }
 
-/** 安装前的快照。npm 是就地重写，出事时没有第二份可选 —— 只有这个。 */
-interface InstallSnapshot {
-  dir: string
-  pkgCopy: string
-  launcherExisted: boolean
-  /** 符号链接的原样目标（相对路径也要原样存回） */
-  launcherTarget: string | null
-  /** 普通文件形态的 launcher 存到包副本**之外**，否则会被当成多出来的文件还原进 pkgDir */
-  launcherFile: string | null
-}
-
-const SNAPSHOT_PREFIX = 'cli-'
+/**
+ * 换手用的两个临时名，都落在 `<prefix>` 下。
+ *
+ * **必须在 `<prefix>` 里**：rename 只在**同一文件系统**内原子，而 staging prefix 若建在
+ * `os.tmpdir()` 之类的别处，跨设备 rename 直接抛 `EXDEV`（Linux 上 `/tmp` 常是 tmpfs）——
+ * 那时就只能退回「复制」，而复制本身又成了「可被打断的中间态」，等于把刚拆掉的问题请回来。
+ */
+const STAGING_PREFIX = '.mipham-staging-'
+const PARKED_PREFIX = '.mipham-old-'
 
 function readPkgVersion(pkgDir: string): string | undefined {
   try {
@@ -237,81 +265,58 @@ function readPkgVersion(pkgDir: string): string | undefined {
 }
 
 /**
- * 把当前安装整份存下来。返回 null 表示**存不下来** —— 那时不得回滚（没有可回的东西）。
- * 会先清掉上一次运行留下的 `cli-*` 残留：那是被中断的上一次，它备份的树早已不是任何人的安装。
+ * 删掉一棵临时树。**失败不抛** —— 收尾清理失败不该把一个已经成功的更新判成失败；
+ * 删不掉的残留会在下一次运行开头的 `cleanStaleStaging()` 里被收掉。
  */
-function snapshotInstall(
-  paths: InstallPaths,
-  label: string,
-  backupRoot: string,
-): InstallSnapshot | null {
+function rmIfPresent(target: string): void {
   try {
-    mkdirSync(backupRoot, { recursive: true, mode: 0o700 })
-    for (const entry of readdirSync(backupRoot)) {
-      if (entry.startsWith(SNAPSHOT_PREFIX))
-        rmSync(join(backupRoot, entry), { recursive: true, force: true })
-    }
-    const dir = join(
-      backupRoot,
-      `${SNAPSHOT_PREFIX}${label}-${new Date().toISOString().replace(/[:.]/g, '-')}`,
-    )
-    const pkgCopy = join(dir, 'pkg')
-    cpSync(paths.pkgDir, pkgCopy, { recursive: true })
-
-    let launcherExisted = false
-    let launcherTarget: string | null = null
-    let launcherFile: string | null = null
-    try {
-      launcherExisted = true
-      if (lstatSync(paths.launcher).isSymbolicLink()) {
-        launcherTarget = readlinkSync(paths.launcher)
-      } else {
-        launcherFile = join(dir, 'launcher')
-        copyFileSync(paths.launcher, launcherFile)
-      }
-    } catch {
-      launcherExisted = false // launcher 本来就不在，快照还原不了从未存在的东西
-    }
-    return { dir, pkgCopy, launcherExisted, launcherTarget, launcherFile }
+    rmSync(target, { recursive: true, force: true })
   } catch {
-    return null
+    // 见上：留着，下一次运行收
   }
 }
 
-/** 把快照放回去。返回是否放成功 —— 失败必须如实上报，不能让调用方以为用户还有 CLI。 */
-function restoreInstall(snap: InstallSnapshot, paths: InstallPaths): boolean {
+/**
+ * 清掉上一次被 SIGKILL / 断电留下的临时物。
+ *
+ * 它们**只可能是**我们自己的：真安装树从不会被删（只会被 rename），所以「一个 CLI 都没有」
+ * 的形态在磁盘上留下的就是这样一堆 `.mipham-*`。清它们不会碰到任何人的安装。
+ */
+function cleanStaleStaging(prefix: string): void {
+  let entries: string[]
   try {
-    rmSync(paths.pkgDir, { recursive: true, force: true })
-    cpSync(snap.pkgCopy, paths.pkgDir, { recursive: true })
-    if (snap.launcherExisted && !existsSync(paths.launcher)) {
-      if (snap.launcherTarget !== null) {
-        symlinkSync(snap.launcherTarget, paths.launcher)
-      } else if (snap.launcherFile !== null) {
-        copyFileSync(snap.launcherFile, paths.launcher)
-        chmodSync(paths.launcher, 0o755)
-      }
-    }
+    entries = readdirSync(prefix)
+  } catch {
+    return
+  }
+  for (const entry of entries) {
+    if (entry.startsWith(STAGING_PREFIX) || entry.startsWith(PARKED_PREFIX))
+      rmIfPresent(join(prefix, entry))
+  }
+}
+
+/**
+ * 同文件系统内的 rename —— 原子的那一步。返回是否成功，失败由调用方决定怎么报。
+ *
+ * 这是本模块唯一会改动真安装树的操作，而它**没有中间态**：目录要么在旧名、要么在新名，
+ * 不存在「写到一半」。这正是它能扛住 SIGKILL / 断电、而 `cpSync` 扛不住的原因。
+ */
+function tryRename(from: string, to: string): boolean {
+  try {
+    renameSync(from, to)
     return true
   } catch {
     return false
   }
 }
 
-function discardSnapshot(snap: InstallSnapshot | null): void {
-  if (!snap) return
-  try {
-    rmSync(snap.dir, { recursive: true, force: true })
-  } catch {
-    // 删不掉就留着；下一次运行开头的清理会收掉它
-  }
-}
-
-export interface InstallVerification {
-  ok: boolean
-  /** 包自报的版本 */
-  actual?: string
-  reason?: string
-}
+/**
+ * 自证结果。**失败必带 `reason`** —— 写成 `ok: boolean` + `reason?: string` 的话，调用方
+ * 拿到失败却读不到原因（`undefined` 一路飘到用户面前变成空句），而这四关每一关都能说清
+ * 自己是怎么判的。
+ */
+export type InstallVerification =
+  { ok: true; actual?: string } | { ok: false; actual?: string; reason: string }
 
 /**
  * 装完之后的**自证**。两关，缺一不可：
@@ -377,26 +382,63 @@ function blockSigintDuringInstall(): () => void {
 /** 执行 `npm install -g`。可注入 —— 测试永不联网。 */
 export type InstallRunner = (command: string, options: InstallOptions) => void
 
+/**
+ * 安装调用的选项。**只此一处** —— 默认 runner 原样转发它，所以测试断的选项与生产跑的
+ * 是同一个对象，不是一个长得像的副本（2.94.0 那次负控回来是绿的，正是这个形状的教训）。
+ */
+const INSTALL_OPTIONS: InstallOptions = { encoding: 'utf-8', stdio: 'inherit', detached: true }
+
+/** 失败原因的第一行 —— 完整栈打在终端上只会淹掉「为什么」。 */
+function failureDetail(err: unknown): string {
+  return err instanceof Error && err.message ? `（${err.message.split('\n')[0]}）` : ''
+}
+
 export interface UpdateDeps {
   install?: InstallRunner
   /** 覆盖路径解析；传 `null` 表示「推不出布局」。默认自动推断。 */
   paths?: InstallPaths | null
-  /** 快照根目录，默认 `~/.mipham/backups`。 */
-  backupRoot?: string
-}
-
-export interface UpdateResult {
-  ok: boolean
-  /** 只有跑过自证才算 true —— 「装完没验证」不许冒充成功 */
-  verified: boolean
-  /** 失败后旧安装是否被放了回去 */
-  rolledBack: boolean
-  version?: string
-  reason?: string
 }
 
 /**
- * 真正执行更新：先快照 → `npm install -g` → 自证 → 失败则回滚。
+ * 失败时**用户手上那棵树**的状态。它决定调用方印哪句话，所以必须如实 ——
+ * 「没动过」是好消息，把它印成「未能恢复」就是对用户谎报他机器的状态。
+ *
+ * 注意这**不是**「我们做了什么」的记账，而是「你现在有什么」的回答：
+ * 更新失败时用户只关心一件事 —— 我还能不能敲 `mipham`。
+ */
+export type InstallState =
+  /** 旧安装未被本次更新改动过（staging 阶段就失败了，换手从未开始）—— 最常见的一种 */
+  | 'untouched'
+  /** 换手走到一半失败，已用反向 rename 把旧安装放回原位 */
+  | 'restored'
+  /** 已确认手上没有可用的 CLI（换手失败且放不回去；或本来就没有旧安装） */
+  | 'broken'
+  /** 推不出布局 ⇒ 装去了哪里、旧树怎样，都判断不了。保守按最坏情况报 */
+  | 'unknown'
+
+export type UpdateResult =
+  | {
+      ok: true
+      /** 只有跑过自证才算 true —— 「装完没验证」不许冒充成功 */
+      verified: boolean
+      version: string
+      reason?: string
+    }
+  | {
+      ok: false
+      verified: false
+      installState: InstallState
+      reason: string
+      version?: string
+    }
+
+/**
+ * 真正执行更新：**装在旁边 → 验过 → 两次 rename 换手**。
+ *
+ * 与「就地重写 + 失败回滚」的分别不是速度而是**可中断性**：旧写法里 npm 直接重写真包目录，
+ * 于是在 `reify` 中途被任何不可捕获的终止（SIGKILL / 断电 / 容器被杀）打断，用户手上就是
+ * 一棵半截树 —— 回滚代码在 CLI 进程里，而 CLI 已经死了，没人回滚。现在真包目录在**验过之前
+ * 一个字节都不动**：除了换手那两次 rename 之间的微秒级窗口，任何时刻磁盘上都有一棵完整的树。
  *
  * 校验版本号后再进 shell（防命令注入）。
  *
@@ -410,7 +452,12 @@ export function performUpdate(
 ): UpdateResult {
   if (!isValidSemver(version)) {
     process.stderr.write(`⚠ Refusing to install invalid version: "${version}"\n`)
-    return { ok: false, verified: false, rolledBack: false, reason: `版本号非法：${version}` }
+    return {
+      ok: false,
+      verified: false,
+      installState: 'untouched',
+      reason: `版本号非法：${version}`,
+    }
   }
 
   // Sanitize registry — only allow known URLs to prevent command injection
@@ -418,73 +465,147 @@ export function performUpdate(
   const safeRegistry = registry && allowedRegistries.includes(registry) ? registry : undefined
 
   const registryFlag = safeRegistry ? ` --registry=${safeRegistry}` : ''
+  const spec = `${PACKAGE}@${version}${registryFlag}`
 
   const paths = deps.paths !== undefined ? deps.paths : resolveInstallPaths()
-  const backupRoot = deps.backupRoot ?? join(miphamHome(), 'backups')
   /** 生产用的 runner：把调用点给的选项原样交给 execSync（不另起一套）。 */
   const defaultInstall: InstallRunner = (command, options) => {
     execSync(command, options)
   }
   const install: InstallRunner = deps.install ?? defaultInstall
 
-  // 快照必须在安装**之前**：npm 就地重写全局包目录，安装一旦开始，旧树就没了。
-  let snap: InstallSnapshot | null = null
-  if (paths)
-    snap = snapshotInstall(paths, readPkgVersion(paths.pkgDir) ?? getCurrentVersion(), backupRoot)
-
-  // 安装期间两道守卫（缺一，被保下来的都只有一半）：
-  //   · 这里 —— CLI 自己不被 SIGINT 打死，好让下面的 catch/回滚有机会跑；
-  //   · 下面的 `detached: true` —— npm 自成进程组，终端的 SIGINT 到不了它。
-  //
-  // 守位只盖住「npm 在跑」这一段 —— 也就是**唯一会破坏磁盘**的那一段。两端各留一个
-  // 未覆盖的窄口，各自无害：① 它前面的快照（复制 6601 个文件）期间按 Ctrl-C ⇒ CLI 退出、
-  // npm 从未启动，旧树完好；② 它后面的自证（只读：读 package.json + 跑一次 launcher）
-  // 期间按 Ctrl-C ⇒ 不再自动回滚，但树是**完整的**，不是「一个 CLI 都没有」。
-  const unblockSigint = blockSigintDuringInstall()
-  try {
-    // 这里**故意不设 timeout**。任何一个能在正常安装途中开火的计时器，开火那一刻就是破坏
-    // 本身：npm 被 SIGTERM 时会留下半截树（旧包已删、新包没写完）⇒ 用户一个 CLI 都没有，
-    // 连 `mipham update` 本身也没了。本机实测这个包的下载要 11 分钟以上，而原来设在 10 分钟。
-    // 进度由 npm 自己印在用户终端上（stdio: 'inherit'），要中断交由用户决定。
-    //
-    // detached 只换进程组、不换等待语义 —— 实测 execSync 照样阻塞到 npm 退出（1.01s vs
-    // 未 detached 的 1.02s），所以自证仍在装完之后；stdio:'inherit' 下它的输出也照样
-    // 打在用户终端上（两条通道都实测可见）。
-    install(`npm install -g ${PACKAGE}@${version}${registryFlag}`, {
-      encoding: 'utf-8',
-      stdio: 'inherit',
-      detached: true,
-    })
-  } catch (err) {
-    const rolledBack = paths && snap ? restoreInstall(snap, paths) : false
-    discardSnapshot(snap)
-    const detail = err instanceof Error && err.message ? `（${err.message.split('\n')[0]}）` : ''
-    return { ok: false, verified: false, rolledBack, reason: `安装进程被中断${detail}` }
-  } finally {
-    unblockSigint()
-  }
-
   if (!paths) {
-    // 推不出布局 ⇒ 自证不了。如实返回「装了但没验证」，绝不印「✓ 已更新」。
-    discardSnapshot(snap)
+    // 推不出布局 ⇒ 连换手点在哪都不知道，做不了 staging。退回**旧行为**：就地装、不自证，
+    // 并如实说明。这里没有任何安全网，所以旧树的状态是「不知道」而不是「没动过」。
+    try {
+      install(`npm install -g ${spec}`, INSTALL_OPTIONS)
+    } catch (err) {
+      return {
+        ok: false,
+        verified: false,
+        installState: 'unknown',
+        reason: `安装进程被中断${failureDetail(err)}`,
+      }
+    }
     return {
       ok: true,
       verified: false,
-      rolledBack: false,
       version,
       reason: '无法定位全局安装路径，未能验证',
     }
   }
 
-  const check = verifyInstalledVersion(paths, version)
-  if (!check.ok) {
-    const rolledBack = snap ? restoreInstall(snap, paths) : false
-    discardSnapshot(snap)
-    return { ok: false, verified: false, rolledBack, version, reason: check.reason }
-  }
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const stagingPrefix = join(paths.prefix, `${STAGING_PREFIX}${stamp}`)
+  const parkedDir = join(paths.prefix, `${PARKED_PREFIX}${stamp}`)
+  // staging 的布局用 **paths 记下的那个平台**，不另读 process.platform —— 见 InstallPaths.platform。
+  const staging = layoutFor(stagingPrefix, paths.platform)
 
-  discardSnapshot(snap)
-  return { ok: true, verified: true, rolledBack: false, version }
+  /** 失败时该怎么形容用户手上那棵树：换手没开始 ⇒ 没动过；本来就没有 ⇒ 没得用。 */
+  const stateIfNotSwapped = (): InstallState => (existsSync(paths.pkgDir) ? 'untouched' : 'broken')
+
+  cleanStaleStaging(paths.prefix)
+
+  // 守位盖住**整段会改磁盘的窗口**：安装 → 自证 → 换手。换成 staging 之后 npm 那一段已经
+  // 打不坏东西了（真树在旁边看着），但换手那两次 rename 是，而它们也是「CLI 被杀就会留下
+  // 半截状态」的唯一去处。两端各留一个未覆盖的窄口，都只读：① 前面 `cleanStaleStaging()`
+  // 只删我们自己的临时物；② 后面收尾删旧树 —— 那时新树已经就位并验过，删不掉只是占地方。
+  const unblockSigint = blockSigintDuringInstall()
+  try {
+    // ① 装在旁边。真树此刻一个字节都没动 —— 这一步无论怎么被打断，用户手里都还是旧版。
+    //
+    // 这里**故意不设 timeout**。任何一个能在正常安装途中开火的计时器，开火那一刻就是破坏
+    // 本身。本机实测这个包的下载要 11 分钟以上，而原来设在 10 分钟。进度由 npm 自己印在
+    // 用户终端上（stdio: 'inherit'），要中断交由用户决定。
+    //
+    // detached 只换进程组、不换等待语义 —— 实测 execSync 照样阻塞到 npm 退出。它与
+    // `blockSigintDuringInstall()` 是一对：那条保住 CLI，这条保住 npm。
+    //
+    // 路径进 shell 必须带引号：prefix 里可能有空格（`/Users/John Doe/.nvm/…`），实测
+    // 双引号形式在 sh 与 cmd.exe 两侧都成立（真 npm + 带空格 prefix 已单独探过）。
+    try {
+      install(`npm install -g --prefix "${stagingPrefix}" ${spec}`, INSTALL_OPTIONS)
+    } catch (err) {
+      rmIfPresent(stagingPrefix)
+      return {
+        ok: false,
+        verified: false,
+        installState: stateIfNotSwapped(),
+        version,
+        reason: `安装进程被中断${failureDetail(err)}`,
+      }
+    }
+
+    // ② 先在 staging 上自证。不过 ⇒ 删掉暂存，真树连碰都没碰过 ⇒ **根本不需要回滚**。
+    const staged = verifyInstalledVersion(staging, version)
+    if (!staged.ok) {
+      rmIfPresent(stagingPrefix)
+      return {
+        ok: false,
+        verified: false,
+        installState: stateIfNotSwapped(),
+        version,
+        reason: staged.reason,
+      }
+    }
+
+    // ③ 换手：两次 rename（同文件系统 ⇒ 各有原子性）。**launcher 全程不碰** —— 它是指向
+    //    包目录的相对符号链接（Unix）或按 `%~dp0` 解析的 shim（Windows），包路径不变，
+    //    它就永远有效。这也正是「只要搬包目录」是完整动作、不需要任何改写的原因。
+    //
+    //    旧树不是「备份」而是**从原地挪开的那一份**：拿它回滚是再一次 rename，不是复制 ——
+    //    所以回滚这一步本身也不会被中途打断（复制会）。
+    const hadOldInstall = existsSync(paths.pkgDir)
+    if (hadOldInstall && !tryRename(paths.pkgDir, parkedDir)) {
+      rmIfPresent(stagingPrefix)
+      return {
+        ok: false,
+        verified: false,
+        installState: 'untouched',
+        version,
+        reason: '无法把旧安装暂时移到一边（rename 失败，权限？）',
+      }
+    }
+    if (!tryRename(staging.pkgDir, paths.pkgDir)) {
+      // 旧树确实被挪开过 ⇒ 这一格只能是 `restored`（放回去了）或 `broken`（放不回去），
+      // **不能**是 `untouched` —— 那个词的含义是「换手从未开始」。本来就没有旧树时也无所谓
+      // 还原，直接按最坏情况报。
+      const restored = hadOldInstall && tryRename(parkedDir, paths.pkgDir)
+      rmIfPresent(stagingPrefix)
+      return {
+        ok: false,
+        verified: false,
+        installState: restored ? 'restored' : 'broken',
+        version,
+        reason: '换手失败：新树没能就位',
+      }
+    }
+
+    // ④ 换手后再自证一次。廉价保险：在 staging 里跑得过不等于搬过来也跑得过 —— 树里若有
+    //    安装期写死的**绝对**路径，它就是搬完才指错的。失败 ⇒ 反向换手把旧树拿回来。
+    const swapped = verifyInstalledVersion(paths, version)
+    if (!swapped.ok) {
+      const badDir = `${parkedDir}-bad`
+      const restored =
+        tryRename(paths.pkgDir, badDir) && hadOldInstall && tryRename(parkedDir, paths.pkgDir)
+      rmIfPresent(badDir)
+      rmIfPresent(stagingPrefix)
+      return {
+        ok: false,
+        verified: false,
+        installState: restored ? 'restored' : 'broken',
+        version,
+        reason: swapped.reason,
+      }
+    }
+
+    // ⑤ 收尾：旧树与暂存外壳都不再需要。删不掉也不改变结论（新树已就位并验过）。
+    rmIfPresent(parkedDir)
+    rmIfPresent(stagingPrefix)
+    return { ok: true, verified: true, version }
+  } finally {
+    unblockSigint()
+  }
 }
 
 /**

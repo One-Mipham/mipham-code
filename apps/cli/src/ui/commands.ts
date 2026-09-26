@@ -11,7 +11,7 @@ import type { SkillsLoader } from '../skills/loader'
 import { loadSkillUsage } from '../skills/usage'
 import type { PluginManager } from '../plugin/plugin-manager'
 import type { Message } from '../shared/types.js'
-import type { UpdateStatus } from '../shared/update'
+import type { InstallState, UpdateStatus } from '../shared/update'
 import { McpClient } from '../mcp/client'
 import { unregisterMcpServerTools } from '../mcp/registry'
 import { buildCapabilityReport } from '../core/capability-inventory'
@@ -4438,6 +4438,21 @@ const memoryCmd: CommandHandler = async (ctx, args) => {
 // Upgrade
 // ═══════════════════════════════════════════════════════════════
 
+/**
+ * 失败后「我手里还有没有 CLI」这句话的四种说法。
+ *
+ * `Record<InstallState, …>` 而非内联三元：漏一个状态**编译期就红**。写成
+ * `result.rolledBack ? A : B` 时漏掉的那一格会静默落进 else，而 else 说的正是**最重的
+ * 那句**（「原安装未能恢复」）—— 拿「最坏情况」当兜底，就等于把每条没想清楚的路径都
+ * 报成灾难。
+ */
+const UPGRADE_FAILURE_NOTE: Record<InstallState, string> = {
+  untouched: 'commands.upgrade.install_untouched',
+  restored: 'commands.upgrade.rolled_back',
+  broken: 'commands.upgrade.no_rollback',
+  unknown: 'commands.upgrade.install_unknown',
+}
+
 const upgradeCmd: CommandHandler = async (ctx) => {
   const t = resolveT(ctx)
   const { checkForUpdates, backupConfig, performUpdate, restoreConfig, getConfigPath } =
@@ -4500,10 +4515,9 @@ const upgradeCmd: CommandHandler = async (ctx) => {
     lines.push(t('commands.upgrade.old_version_warning'))
   } else {
     lines.push('')
-    // 失败信息必须回答两件事：为什么，以及**我手里还有没有 CLI**。
-    const rollbackNote = t(
-      result.rolledBack ? 'commands.upgrade.rolled_back' : 'commands.upgrade.no_rollback',
-    )
+    // 失败信息必须回答两件事：为什么，以及**我手里还有没有 CLI**。四态各有各的说法 ——
+    // 尤其「旧树没被碰过」与「旧树没能恢复」是两件不同的事，合并成一句后者必定说谎。
+    const rollbackNote = t(UPGRADE_FAILURE_NOTE[result.installState])
     lines.push(
       t('commands.upgrade.update_failed', {
         reason: result.reason ?? '',

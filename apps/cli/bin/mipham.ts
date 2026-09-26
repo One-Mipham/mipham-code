@@ -293,13 +293,26 @@ async function runUpdate(): Promise<boolean> {
   if (!result.ok) {
     console.log()
     console.log(`✗ Update failed: ${result.reason ?? 'unknown error'}`)
-    if (result.rolledBack) {
-      console.log(
-        `  Your previous install (v${currentVersion}) has been restored — mipham still works.`,
-      )
-    } else {
-      console.log('  ⚠ The previous install could not be restored.')
-      console.log(`    Reinstall with: npm install -g ${PACKAGE}@${currentVersion}`)
+    // 这句必须只说**我们知道的**：staging 之后最常见的失败（装在旁边那步挂了）压根没碰过
+    // 旧树，此时沿用「未能恢复」就是在讲一件没发生的事。
+    switch (result.installState) {
+      case 'untouched':
+        console.log(
+          `  Your previous install (v${currentVersion}) was not touched — mipham still works.`,
+        )
+        break
+      case 'restored':
+        console.log(
+          `  Your previous install (v${currentVersion}) has been restored — mipham still works.`,
+        )
+        break
+      case 'unknown':
+        console.log('  ⚠ Could not locate the global install path — unable to tell.')
+        console.log(`    Check with: mipham --version`)
+        break
+      default:
+        console.log('  ⚠ The previous install could not be restored.')
+        console.log(`    Reinstall with: npm install -g ${PACKAGE}@${currentVersion}`)
     }
     if (backupPath && existsSync(backupPath)) {
       console.log(`  Your config backup is at: ${backupPath}`)

@@ -94,4 +94,4 @@ export const TOOL_COUNT = 31 as const
  * —— `test/e2e/full-pipeline.test.ts` 在 Linux 上整文件 skip、在 macOS 上跑 ——
  * 但**总数相同**（两边都把被 skip 的算进去）。
  */
-export const TEST_COUNT = 3501 as const
+export const TEST_COUNT = 3506 as const

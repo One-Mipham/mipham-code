@@ -317,6 +317,8 @@
       "update_failed": "✗ 更新失败: {reason}{rolledBack}\n  手动尝试: {command}\n  配置备份位于: {path}",
       "rolled_back": "\n  已恢复原安装 —— mipham 仍可使用。",
       "no_rollback": "\n  ⚠ 原安装未能恢复 —— 请按下方命令手动重装。",
+      "install_untouched": "\n  原安装未被改动 —— mipham 仍可使用。",
+      "install_unknown": "\n  ⚠ 无法定位全局安装路径 —— 无法判断原安装是否完好。",
       "unverified": "⚠ 已安装，但无法验证新版本: {reason}"
     },
     "no_plan": {
