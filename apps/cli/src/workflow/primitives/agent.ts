@@ -46,13 +46,6 @@ export async function workflowAgent(
   opts: WorkflowAgentOpts = {},
   llm?: Llm,
 ): Promise<unknown> {
-  // If provider override, switch temporarily
-  if (opts.provider) {
-    registry.switchProvider(opts.provider, opts.model)
-  } else if (opts.model) {
-    registry.switchProvider(registry.getActive().config.id, opts.model)
-  }
-
   const maxRetries = opts.maxRetries ?? 2
 
   // ── Worktree isolation setup ──
@@ -93,7 +86,26 @@ export async function workflowAgent(
   let lastResult = ''
   let lastErrors: string[] = []
 
+  /** Set only when we actually switched — and then it is the way back. */
+  let restore: (() => void) | undefined
+
   try {
+    // ── Provider override, scoped to this call ──
+    // 「临时」必须是真的。registry 的 active 是**会话级**的：`SubAgent` 在
+    // `runExecution` 里读 `registry.getActiveModel()`、`registry.chat` 按 active 路由，
+    // 引擎的页脚与 `/model` 面板读的也是它 —— 覆盖不还原，等于一个 workflow 里的一次
+    // `agent(…, { provider: 'x' })` 把整台机器的会话换到 x 上。
+    //
+    // 切在这里而不是函数开头：上面那段建 worktree 会抛（`git worktree add` 非 0 即
+    // throw），抛在切走之前就不该已经切走。
+    if (opts.provider || opts.model) {
+      const prevProviderId = registry.getActive().config.id
+      const prevModelId = registry.getActiveModel()
+      // `opts.provider` 缺席时只换模型 —— provider 保持这一次调用开始时的那一个。
+      registry.switchProvider(opts.provider ?? prevProviderId, opts.model)
+      restore = () => registry.switchProvider(prevProviderId, prevModelId)
+    }
+
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       const retryPrompt =
         attempt === 0
@@ -158,6 +170,10 @@ export async function workflowAgent(
 
     return result
   } finally {
+    // 还原排在 finally 的**第一件**：下面的 worktree 清理要 spawn git、还可能抛，
+    // 排在它之后就等于「清理顺利时才还原」—— 而那正是最不需要还原的场合。
+    restore?.()
+
     // ── Cleanup worktree ──
     if (worktreePath) {
       // Best-effort: auto-commit any changes
