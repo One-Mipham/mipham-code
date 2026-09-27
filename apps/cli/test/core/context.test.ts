@@ -610,4 +610,77 @@ describe('ContextManager log integration', () => {
     expect(cm.getMessages()).toHaveLength(20) // 纯截断保留最后 20 条
     expect(log.events().some((e) => e.type === 'compaction/rewrite')).toBe(true)
   })
+
+  // ═══════════════════════════════════════════
+  // 读时派生的段（权限 / MCP instructions）必须进估值
+  // ═══════════════════════════════════════════
+  //
+  // 系统提示里有两段是**读时派生**的：权限段接 `PermissionSystem.getMode()`，MCP 段接已连
+  // server 的 instructions。它们的施加点是 `index.tsx` 接上去的 live 闭包，**变点不在
+  // ContextManager 里** —— MCP server 是启动后异步连上（`index.tsx:686` 在任何一次
+  // `setSystemPrompt` 之后），权限档是 Shift+Tab 随时切。
+  //
+  // 所以「想清楚在哪几个变点重算一次」这条路走不通：调用方枚举不出变点全集，漏一个，
+  // 估值就长期偏低 ⇒ `needsCompaction()` 长期偏 false ⇒ 压缩迟触发（上下文滚到很大才动手）。
+  // 这组用例钉的是**派生**：读数跟着闭包的返回值走，而不是跟着「谁调了哪个 setter」走。
+  describe('读时派生的段计入估值', () => {
+    it('MCP instructions 段接上之后立刻计入估值（不需要任何一次重算调用）', () => {
+      const ctx = makeContext()
+      ctx.setSystemPrompt('sys')
+      const before = ctx.getEstimatedTokens()
+
+      ctx.setMcpInstructionsSource(() => 'M'.repeat(4000)) // 拉丁 4000 字符 → 1000 tokens
+
+      // 段本身 1000 tokens，外加拼接的 `\n\n---\n\n` 分隔符（7 字符 → 2 tokens）。
+      expect(ctx.getEstimatedTokens() - before).toBeGreaterThan(1000)
+      expect(ctx.getEstimatedTokens() - before).toBeLessThan(1010)
+    })
+
+    it('权限段同理（同一个缺陷的第二个成员）', () => {
+      const ctx = makeContext()
+      ctx.setSystemPrompt('sys')
+      const before = ctx.getEstimatedTokens()
+
+      ctx.setPermissionContextSource(() => 'P'.repeat(4000))
+
+      expect(ctx.getEstimatedTokens() - before).toBeGreaterThan(1000)
+    })
+
+    it('闭包换了返回值，下一次读数就跟着变（是派生，不是接上时算一次）', () => {
+      let block = ''
+      const ctx = makeContext()
+      ctx.setSystemPrompt('sys')
+      ctx.setMcpInstructionsSource(() => block)
+      const atEmpty = ctx.getEstimatedTokens()
+
+      block = 'M'.repeat(4000)
+      expect(ctx.getEstimatedTokens()).toBeGreaterThan(atEmpty)
+
+      // 反向：server 断了 / instructions 被清掉，也要跟着降回去 —— 只涨不跌同样是
+      // 「记了一份拷贝」，只不过拷贝的是最大值。
+      block = ''
+      expect(ctx.getEstimatedTokens()).toBe(atEmpty)
+    })
+
+    it('段真能把会话推过压缩线（这才是这个数存在的理由）', () => {
+      const ctx = makeContext(300, 0.9) // 阈值 270 tokens
+      ctx.setSystemPrompt('A'.repeat(100)) // 25 tokens
+      expect(ctx.needsCompaction()).toBe(false)
+
+      ctx.setMcpInstructionsSource(() => 'M'.repeat(4000)) // +1000 tokens
+
+      expect(ctx.needsCompaction()).toBe(true)
+    })
+
+    it('负控：源返回空串不产生空段，估值一个 token 都不变', () => {
+      const ctx = makeContext()
+      ctx.setSystemPrompt('sys')
+      const before = ctx.getEstimatedTokens()
+
+      ctx.setMcpInstructionsSource(() => '')
+      ctx.setPermissionContextSource(() => '')
+
+      expect(ctx.getEstimatedTokens()).toBe(before)
+    })
+  })
 })

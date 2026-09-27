@@ -30,7 +30,6 @@ export interface CompactionStats {
 interface Checkpoint {
   id: number
   messages: Message[]
-  estimatedTokens: number
   timestamp: Date
   label: string
 }
@@ -52,7 +51,22 @@ export class ContextManager {
    * 组装时烘进去的话，本次会话里后连上的 server 永远进不了提示 —— 用户只能重启。
    */
   private mcpInstructionsSource: (() => string) | null = null
-  private estimatedTokens = 0
+  /**
+   * **消息那部分**的估值，增量累加（提示那部分见 `promptTokens()`，读时派生）。
+   *
+   * 两份分开是因为它们的变化条件不同：消息只在本类里变（每次 push 顺手加一笔就够了），
+   * 而提示里的两段是**读时闭包**、变点不在这条类里（见上面两个 source 的注释）。
+   * 把两者混在一个累加器里，闭包那半就必然滞后 —— 这正是本类此前的缺陷。
+   */
+  private messageTokens = 0
+  /**
+   * `promptTokens()` 的记忆化。键**就是**那份拼好的提示本身，所以不存在失效问题：
+   * 「键没变而值该变」需要的恰恰是「输入没变而输出该变」，不可能发生。
+   *
+   * 记忆化只是别在每次 `addMessage` 里把同一份四万字符的系统提示重扫一遍
+   * （`checkCompression()` 会读估值，它在每条消息上都被调一次）。
+   */
+  private promptTokensCache: { text: string; tokens: number } | null = null
   private checkpoints: Checkpoint[] = []
   private checkpointCounter = 0
   private summarizer?: Summarizer
@@ -93,7 +107,7 @@ export class ContextManager {
     // 否则「模型看得见的必须已记录」这条不变量当场破），见 `closeInterruptedToolCalls`。
     closeInterruptedToolCalls(log)
     this.messages = deriveMessages(log.events())
-    this.reEstimateTokens()
+    this.recountMessageTokens()
   }
 
   /**
@@ -137,11 +151,13 @@ export class ContextManager {
 
   setSystemPrompt(prompt: string): void {
     this.systemPrompt = prompt
-    // 估值必须**含 messages** —— 走 `reEstimateTokens()` 这一条唯一推导，别在这儿手写
-    // 第二份。`--resume` 路径（`index.tsx:584-585`）先 `restoreLog()` 算出含消息的完整
-    // 估值，紧接着调这里；只按系统提示重算会把它**覆盖成偏低值** ⇒ `needsCompaction()`
-    // 长期偏 false ⇒ 压缩迟触发（上下文越滚越大才动手）。
-    this.reEstimateTokens()
+    // 这里**故意什么都不算**。提示那部分由 `promptTokens()` 读时派生，消息那部分由
+    // `messageTokens` 自己带着 —— 所以「设提示」这件事对估值**没有可出错的空间**。
+    //
+    // 从前这里要重算一次，且必须记得「重算要含消息」：`--resume` 路径
+    // （`index.tsx:584-585`）先 `restoreLog()` 得出含消息的估值、紧接着设提示，只按
+    // 提示重算就会把它覆盖成偏低值。那是个**要靠注释守住的契约**；现在它不可能被违反
+    // —— 没有任何一条路径能在这里把消息那半丢掉。
   }
 
   /**
@@ -185,7 +201,7 @@ export class ContextManager {
 
   addMessage(msg: Message): void {
     this.messages.push(msg)
-    this.estimatedTokens += this.estimateTokens(
+    this.messageTokens += this.estimateTokens(
       typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
     )
 
@@ -212,7 +228,7 @@ export class ContextManager {
    */
   injectContext(source: string, text: string): void {
     this.messages.push({ role: 'user', content: text })
-    this.estimatedTokens += this.estimateTokens(text)
+    this.messageTokens += this.estimateTokens(text)
 
     if (this.log) {
       this.log.append({ type: 'context/inject', at: Date.now(), source, text })
@@ -241,7 +257,7 @@ export class ContextManager {
       ],
     }
     this.messages.push(msg)
-    this.estimatedTokens += this.estimateTokens(JSON.stringify(msg.content))
+    this.messageTokens += this.estimateTokens(JSON.stringify(msg.content))
     if (this.log) this.log.append({ type: 'tool/result', at: Date.now(), id: toolUseId, result })
     this.checkCompression()
   }
@@ -262,7 +278,7 @@ export class ContextManager {
     if (this.log) {
       for (const m of messages) for (const e of messageToEvents(m, Date.now())) this.log.append(e)
     }
-    this.reEstimateTokens()
+    this.recountMessageTokens()
 
     if (this.log && isAssertModelVisibleDebug()) {
       assertModelVisible(this.log.events(), this.messages)
@@ -274,11 +290,11 @@ export class ContextManager {
   }
 
   needsCompaction(): boolean {
-    return this.estimatedTokens > this.config.maxTokens * this.config.compactionThreshold
+    return this.getEstimatedTokens() > this.config.maxTokens * this.config.compactionThreshold
   }
 
   async compact(heading: string): Promise<{ before: number; after: number }> {
-    const beforeTokens = this.estimatedTokens
+    const beforeTokens = this.getEstimatedTokens()
 
     if (this.messages.length <= 30) {
       return { before: beforeTokens, after: beforeTokens }
@@ -322,26 +338,27 @@ export class ContextManager {
       }
     }
 
-    // Re-estimate tokens
-    this.estimatedTokens = this.estimateTokens(this.composedSystemPrompt())
-    for (const msg of this.messages) {
-      this.estimatedTokens += this.estimateTokens(
-        typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
-      )
-    }
+    // Re-estimate the message half (the prompt half is derived on read).
+    this.recountMessageTokens()
 
-    return { before: beforeTokens, after: this.estimatedTokens }
+    return { before: beforeTokens, after: this.getEstimatedTokens() }
   }
 
+  /**
+   * 当前会话的估算 token 数 = **消息那半（累加）+ 提示那半（读时派生）**。
+   *
+   * 提示那半必须在读数这一刻才拼：`systemPrompt`、权限段、MCP instructions 段三者任一
+   * 变了都该反映出来，而其中两段的变点在调用方（见字段注释）—— 派生就没有变点要枚举。
+   */
   getEstimatedTokens(): number {
-    return this.estimatedTokens
+    return this.messageTokens + this.promptTokens()
   }
 
   clear(): void {
     this.messages = []
     this.checkpoints = []
     this.checkpointCounter = 0
-    this.estimatedTokens = this.estimateTokens(this.composedSystemPrompt())
+    this.messageTokens = 0
   }
 
   getMessageCount(): number {
@@ -356,13 +373,8 @@ export class ContextManager {
    */
   replaceMessages(messages: Message[]): void {
     this.messages = messages
-    // Re-estimate tokens
-    this.estimatedTokens = this.estimateTokens(this.composedSystemPrompt())
-    for (const msg of messages) {
-      this.estimatedTokens += this.estimateTokens(
-        typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
-      )
-    }
+    // Re-estimate the message half (the prompt half is derived on read).
+    this.recountMessageTokens()
   }
 
   // ── Checkpoint / Rewind ──
@@ -372,7 +384,6 @@ export class ContextManager {
     const checkpoint: Checkpoint = {
       id: this.checkpointCounter,
       messages: structuredClone(this.messages),
-      estimatedTokens: this.estimatedTokens,
       timestamp: new Date(),
       label,
     }
@@ -399,7 +410,9 @@ export class ContextManager {
     }
 
     this.messages = structuredClone(target.messages)
-    this.estimatedTokens = target.estimatedTokens
+    // 估值从**刚恢复出来的这份消息**重算，而不是从快照里存的一个数还原：存下来的数
+    // 是「同一件事的第二份拷贝」，它会与消息各自漂移，而消息本身就是唯一真源。
+    this.recountMessageTokens()
     // 回退改写的是**投影的整份内容**，所以它必须落成事件：日志是 `--resume` / `/resume`
     // 重建历史的唯一来源，不记这一次改写，被回退掉的那一轮会在下次恢复时原样回来。
     // 走与 `addMessage` 同一条写通路径（先入日志、再断言）—— 断言因此也从「前缀匹配」
@@ -463,7 +476,7 @@ export class ContextManager {
   private checkCompression(): void {
     if (this.compressionPending) return
 
-    const usage = this.estimatedTokens / this.config.maxTokens
+    const usage = this.getEstimatedTokens() / this.config.maxTokens
 
     // Adaptive microcompact threshold: 200K→0.70, 500K→0.80, 1M→0.85
     const microThreshold = this.config.contextWindow
@@ -509,17 +522,28 @@ export class ContextManager {
     } else {
       this.messages = compacted
     }
-    this.reEstimateTokens()
+    this.recountMessageTokens()
   }
 
-  /** Re-estimate tokens from system prompt + current messages. */
-  private reEstimateTokens(): void {
-    this.estimatedTokens = this.estimateTokens(this.composedSystemPrompt())
+  /** 从当前消息**重算消息那半**的估值（提示那半不在这里 —— 它是读时派生的）。 */
+  private recountMessageTokens(): void {
+    this.messageTokens = 0
     for (const msg of this.messages) {
-      this.estimatedTokens += this.estimateTokens(
+      this.messageTokens += this.estimateTokens(
         typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
       )
     }
+  }
+
+  /** 提示那半的估值 —— 每次读数现拼现算，见 `getEstimatedTokens()`。 */
+  private promptTokens(): number {
+    const text = this.composedSystemPrompt()
+    const cached = this.promptTokensCache
+    if (cached && cached.text === text) return cached.tokens
+
+    const tokens = this.estimateTokens(text)
+    this.promptTokensCache = { text, tokens }
+    return tokens
   }
 
   /**
