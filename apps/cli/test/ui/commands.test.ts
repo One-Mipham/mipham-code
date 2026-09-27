@@ -903,6 +903,60 @@ describe('B2 代价维的展示接线', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════
+// 事前声明风险（R）的展示接线 —— 它此前**零落点**
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * R 与 ε 同源（同一行 JSON、同一段提示词），但 ε 有④落点（进 `improvements.jsonl`）与
+ * ⑤读回（`predictionHitRate` 在 `/crsi stats` 显示），R 两环皆无 —— 它在 `commands.ts:1025`
+ * 与 `expectedEffect` **同一作用域**里被丢掉，连沙箱都到不了（`CrsiModification` 无 risk 字段）。
+ * 这一段钉的是**它唯一的落点**（prose 回执），不是它的措辞。
+ *
+ * 三条用例各钉一个方向：
+ *  ① 有 R ⇒ 打印，且**带「未验证」** —— 缺这三个字，这一行就成了「风险已被处理」的假象，
+ *     比不打印更坏（仓库存档：**按键有反应而世界不变 > 按键不存在**）。
+ *  ② 无 R ⇒ **整行不打**（不是打一行空的）—— 与代价维同一条承重判据。
+ *  ③ R 为空串 ⇒ 同样整行不打。这条不是臆想的边界：`parseProsePrediction` 收 R 的判据是
+ *     `typeof rec.risk === 'string'` ⇒ `""` 会被一路携带到渲染处。
+ *
+ * ②③ 的夹具**逐字段写出、不写 `risk` 键**（而不是 `risk: undefined`）—— 缺席与「有键但无值」
+ * 在这条断言上必须同形，故夹具也照缺席的形状给。
+ */
+describe('事前声明风险（R）的展示接线', () => {
+  it('prose 回执上打出风险行，且带「未验证」', async () => {
+    const result = await getCommand('/crsi propose')!(mkProseCtx(), ['--prose'])
+    expect(result.content).toContain(`📋 事前声明风险（未验证）: ${PROSE_PROPOSAL.risk}`)
+  })
+
+  it('R 缺席 → 整行不打（不是打一行空的）', async () => {
+    h.produceProseProposal.mockResolvedValue({
+      filePath: PROSE_PROPOSAL.filePath,
+      newContent: PROSE_PROPOSAL.newContent,
+      originalContent: PROSE_PROPOSAL.originalContent,
+      description: PROSE_PROPOSAL.description,
+      expectedEffect: PROSE_PROPOSAL.expectedEffect,
+    })
+    const result = await getCommand('/crsi propose')!(mkProseCtx(), ['--prose'])
+    expect(result.content).not.toContain('事前声明风险')
+  })
+
+  it('R 为空串 → 同样整行不打', async () => {
+    h.produceProseProposal.mockResolvedValue({ ...PROSE_PROPOSAL, risk: '' })
+    const result = await getCommand('/crsi propose')!(mkProseCtx(), ['--prose'])
+    expect(result.content).not.toContain('事前声明风险')
+  })
+
+  it('操作提示自成一行（不被粘在风险行尾部）', async () => {
+    // 本笔实测到的形状缺陷：`predictionLine` / `riskLine` 都**不以换行结尾**，而提示串此前是
+    // 直接拼接 ⇒ 末行曾是 `📋 事前声明风险（未验证）: 可能让 skill 变长/crsi modify --approve 合并`。
+    // 这条不是预防性的 —— 探针断言先于修复跑过一次、红在 `DIFF\n\n\n…` 上，故它钉的是**修好之前
+    // 真实存在的形状**。判据只认「提示前紧邻一个换行」，不认提示文案（文案改了不该红）。
+    const result = await getCommand('/crsi propose')!(mkProseCtx(), ['--prose'])
+    expect(result.content).toMatch(/\n\/crsi modify --approve/)
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
 // /crsi stats —— ε 命中率段与**作废条款**
 // ═══════════════════════════════════════════════════════════════
 

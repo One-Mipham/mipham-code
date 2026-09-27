@@ -1041,11 +1041,26 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
 
     appendProseProposal({ id, filePath: proposal.filePath, timestamp: new Date().toISOString() })
 
+    // 事前声明风险（R）：与 ε 同一段提示词产出（PROSE_GENERATE_PROMPT 第 365 行要求「这次改动
+    // 可能在哪方面变差」），但 ε 进账本并被 predictionHitRate 读回，R 此前**零落点** —— 它在
+    // commands.ts:1025 那个调用里与 expectedEffect 同一作用域、被丢掉，连沙箱都到不了
+    //（CrsiModification 无 risk 字段）。这里给它在**人类真正做决定的那一刻**一个落点：
+    // 回执上打印，紧挨着它描述的那份 diff。
+    // **只呈现、不判定** —— 判「风险有没有成真」需要语义裁判，违反 A1 铁律（同 fdfbb5e6 记下的
+    // 「证明更好」边界），故与 formatCostLine 同一纪律；且必须带「未验证」，否则这一行会让人以为
+    // 风险被处理过了 —— **按键有反应而世界不变，比按键不存在更坏**。
+    // 缺席（含空串）⇒ 整行不打，不是打一行空的。
+    const riskLine = proposal.risk ? `\n📋 事前声明风险（未验证）: ${proposal.risk}` : ''
+
     return {
       content:
         `✅ 已生成散文提议并跑过测试。审阅 diff：\n\n${result.diff}\n\n` +
         predictionLine +
-        '/crsi modify --approve 合并 | /crsi modify --reject 丢弃',
+        riskLine +
+        // 操作提示必须**自成一行**：`predictionLine` / `riskLine` 都不以换行结尾，此前提示串
+        // 直接拼接 ⇒ 被粘在最后一条内容尾部。本条由探针实测确认（回执尾部为 `DIFF\n\n\n…`），
+        // 而风险声明正是本笔新增的落点，粘上去会让它读起来像延续到了命令里，故一并在本笔钉住。
+        '\n/crsi modify --approve 合并 | /crsi modify --reject 丢弃',
     }
   }
 
