@@ -400,6 +400,18 @@ export class ContextManager {
 
     this.messages = structuredClone(target.messages)
     this.estimatedTokens = target.estimatedTokens
+    // 回退改写的是**投影的整份内容**，所以它必须落成事件：日志是 `--resume` / `/resume`
+    // 重建历史的唯一来源，不记这一次改写，被回退掉的那一轮会在下次恢复时原样回来。
+    // 走与 `addMessage` 同一条写通路径（先入日志、再断言）—— 断言因此也从「前缀匹配」
+    // 变成「逐条相等」，回退不再是断言的一个盲区。
+    // 传快照副本：`append` 只按引用入 buf，序列化推迟到 `save()`，共用同一个数组会让
+    // 之后对 `this.messages` 的原地修改回写进已入队的事件里。
+    if (this.log) {
+      this.log.append({ type: 'rewind', at: Date.now(), messages: structuredClone(this.messages) })
+      if (isAssertModelVisibleDebug()) {
+        assertModelVisible(this.log.events(), this.messages)
+      }
+    }
     return { restored: true, messageCount: this.messages.length, label: target.label }
   }
 

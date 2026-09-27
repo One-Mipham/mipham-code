@@ -1068,3 +1068,52 @@ describe('报告面读引擎所在的档（`config.permission` 只是其中一�
     })
   }
 })
+
+// ═══════════════════════════════════════════════════════════════
+// /rewind — 回退后屏幕必须重新装上回退到的那份历史
+//
+// `clearMessages` 单用是 `/clear` 的形状（屏幕上没有该留的东西）；回退不一样 ——
+// 留到那一点为止的历史仍然算数，只是屏幕上的旧了。只带 `clearMessages` 会在
+// `app.tsx` 里把消息列表清成空、且**没有任何回填路径**：模型看得见回退后的历史，
+// 用户看见一片空白，两边从此不同步。
+// ═══════════════════════════════════════════════════════════════
+
+describe('/rewind 前送恢复后的历史', () => {
+  type RewindResult = { content: string; clearMessages?: boolean; forwardedMessages?: unknown[] }
+
+  const ctxWithRestored = (restored: unknown[]) => {
+    const ctx = mkCtx()
+    ;(ctx as { engine: { getContext: () => unknown } }).engine.getContext = () => ({
+      getMessages: () => restored,
+      getEstimatedTokens: () => 0,
+      getCheckpoints: () => [{ id: 1 }],
+      restoreCheckpoint: () => ({ restored: true, messageCount: restored.length, label: 'cp' }),
+    })
+    return ctx
+  }
+
+  it('带上 forwardedMessages，且它就是恢复出来的那份历史', async () => {
+    const restored = [{ role: 'user', content: 'kept' }]
+    const res = (await getCommand('/rewind')!(ctxWithRestored(restored), [])) as RewindResult
+
+    expect(res.clearMessages).toBe(true)
+    expect(res.forwardedMessages).toEqual(restored)
+  })
+
+  it('负控：恢复出的历史为空时，不能凭空造出非空的前送', async () => {
+    const res = (await getCommand('/rewind')!(ctxWithRestored([]), [])) as RewindResult
+    expect(res.forwardedMessages).toEqual([])
+  })
+
+  it('没有检查点时不动消息列表（不返回 clearMessages）', async () => {
+    const ctx = mkCtx()
+    ;(ctx as { engine: { getContext: () => unknown } }).engine.getContext = () => ({
+      getMessages: () => [{ role: 'user', content: 'live' }],
+      getEstimatedTokens: () => 0,
+      getCheckpoints: () => [],
+    })
+    const res = (await getCommand('/rewind')!(ctx, [])) as RewindResult
+    expect(res.clearMessages).toBeUndefined()
+    expect(res.forwardedMessages).toBeUndefined()
+  })
+})

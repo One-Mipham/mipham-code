@@ -278,6 +278,30 @@ describe('compaction/rewrite stream position', () => {
   })
 })
 
+describe('rewind stream position', () => {
+  it('replaces the whole projection with the snapshot and continues appending', () => {
+    const events: SessionEvent[] = [
+      { type: 'user/message', at: 1, message: { role: 'user', content: 'm1' } },
+      { type: 'assistant/message', at: 2, message: { role: 'assistant', content: 'm2' } },
+      { type: 'rewind', at: 3, messages: [{ role: 'user', content: 'm1' }] },
+      { type: 'user/message', at: 4, message: { role: 'user', content: 'after' } },
+    ]
+    // 回退掉的那一轮（m2）必须**不在**投影里 —— 这正是它与追加型事件的区别
+    expect(deriveMessages(events)).toEqual([
+      { role: 'user', content: 'm1' },
+      { role: 'user', content: 'after' },
+    ])
+  })
+
+  it('does not alias the stored snapshot (mutating the derived array leaves the log intact)', () => {
+    const snapshot: Message[] = [{ role: 'user', content: 'x' }]
+    const events: SessionEvent[] = [{ type: 'rewind', at: 1, messages: snapshot }]
+    const derived = deriveMessages(events)
+    derived.push({ role: 'user', content: 'y' })
+    expect(snapshot).toEqual([{ role: 'user', content: 'x' }])
+  })
+})
+
 describe('tool/result carries full ToolResult', () => {
   it('messageToEvents treats an absent is_error as success (legacy messages)', () => {
     const m: Message = {
@@ -543,6 +567,38 @@ describe('open() 丢弃结构不合法的行', () => {
     writeLines(name, [
       '{"type":"user/message","at":1,"message":{"role":"user","content":"before"}}',
       '{"type":"compaction/rewrite","at":2,"messages":[{"role":"user","content":"snapshot"}]}',
+    ])
+    try {
+      const log = SessionLog.open(name)
+      expect(deriveMessages(log.events())).toEqual([{ role: 'user', content: 'snapshot' }])
+    } finally {
+      cleanup(name)
+    }
+  })
+
+  it('rewind 缺 messages 被丢弃 —— 投影不被抹成 undefined', () => {
+    const name = 'open-rewind-missing-messages'
+    writeLines(name, [
+      '{"type":"user/message","at":1,"message":{"role":"user","content":"before"}}',
+      '{"type":"rewind","at":2}',
+      '{"type":"user/message","at":3,"message":{"role":"user","content":"after"}}',
+    ])
+    try {
+      const log = SessionLog.open(name)
+      expect(deriveMessages(log.events())).toEqual([
+        { role: 'user', content: 'before' },
+        { role: 'user', content: 'after' },
+      ])
+    } finally {
+      cleanup(name)
+    }
+  })
+
+  it('合法的 rewind 整体替换投影（正控：上一条红不是因为 rewind 一律被丢）', () => {
+    const name = 'open-rewind-valid'
+    writeLines(name, [
+      '{"type":"user/message","at":1,"message":{"role":"user","content":"before"}}',
+      '{"type":"rewind","at":2,"messages":[{"role":"user","content":"snapshot"}]}',
     ])
     try {
       const log = SessionLog.open(name)

@@ -256,6 +256,28 @@ describe('ContextManager', () => {
     expect(msgs[0]!.content as string).toBe('msg1')
   })
 
+  it('回退落成日志事件 —— 从日志重投影不会让被回退的那一轮回来', () => {
+    const ctx = makeContext()
+    const log = new SessionLog('rewind-regression')
+    ctx.setLog(log)
+
+    ctx.addMessage(makeTextMessage('user', 'msg1'))
+    ctx.addMessage(makeTextMessage('assistant', 'reply1'))
+    ctx.saveCheckpoint('after-msg1')
+    ctx.addMessage(makeTextMessage('user', 'msg2'))
+    ctx.addMessage(makeTextMessage('assistant', 'reply2'))
+
+    ctx.restoreCheckpoint()
+
+    // 内存里的投影立刻是对的
+    expect(ctx.getMessages()).toHaveLength(2)
+
+    // 关键的另一半：`--resume` / `/resume` 是从日志**重投影**的。不落事件时这里会拿回
+    // 4 条 —— 用户回退了，下次恢复那一轮又原样回来（而且屏幕上还看不见它回来了）。
+    expect(log.events().some((e) => e.type === 'rewind')).toBe(true)
+    expect(deriveMessages(log.events())).toEqual(ctx.getMessages())
+  })
+
   it('should restore specific checkpoint by ID', () => {
     const ctx = makeContext()
     ctx.addMessage(makeTextMessage('user', 'msg1'))

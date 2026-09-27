@@ -2775,7 +2775,11 @@ const rewindCmd: CommandHandler = (ctx) => {
       count: String(result.messageCount),
       remaining: String(c.getCheckpoints().length),
     }),
+    // `clearMessages` 单用是 `/clear` 的形状（屏幕上**没有**该留的东西）；回退不一样 ——
+    // 留到那一点为止的历史仍然算数，只是屏幕上的那份旧了。不带 `forwardedMessages`
+    // 就会把消息列表清成空、再也不回填：模型看得见回退后的历史，用户看得见一片空白。
     clearMessages: true,
+    forwardedMessages: c.getMessages(),
   }
 }
 

@@ -23,6 +23,9 @@ export type SessionEvent =
   | { type: 'context/inject'; at: number; source: string; text: string }
   | { type: 'compaction/summary'; at: number; summary: string; replacedCount: number }
   | { type: 'compaction/rewrite'; at: number; messages: Message[] }
+  // 回退（`/rewind`）。投影语义与 `compaction/rewrite` 相同（整份快照替换），但**不是压缩**：
+  // 合用一个类型会让「这份日志里哪些轮被摘要过」的答案变成错的。
+  | { type: 'rewind'; at: number; messages: Message[] }
   | { type: 'checker/decision'; at: number; toolName: string; decision: CheckerDecision }
 
 export function messageToEvents(msg: Message, at = 0): SessionEvent[] {
@@ -109,6 +112,9 @@ export function deriveMessages(events: SessionEvent[]): Message[] {
       }
     } else if (e.type === 'compaction/rewrite') {
       // 快照替换：整个投影重建（微压缩/截断等结构性编辑的字节级复现）
+      out = structuredClone(e.messages)
+    } else if (e.type === 'rewind') {
+      // 回退同样是快照替换：整份投影重建为回退到的那一点
       out = structuredClone(e.messages)
     }
     // 'session/start' / 'checker/decision' → 无消息（决策仅记录证据，不进投影，保字节级可逆）
@@ -310,6 +316,9 @@ function isValidEvent(e: unknown): e is SessionEvent {
       return typeof ev.summary === 'string'
     case 'compaction/rewrite':
       // 快照替换：整份投影由它重建 ⇒ 元素形状与 message 事件同罪
+      return Array.isArray(ev.messages) && ev.messages.every(isValidMessage)
+    case 'rewind':
+      // 同上：回退也是整份投影替换，坏元素同样会让投影崩
       return Array.isArray(ev.messages) && ev.messages.every(isValidMessage)
     default:
       return true
