@@ -114,6 +114,40 @@ describe('模型选择器（Ctrl+P）', () => {
 
     expect(onSelect).toHaveBeenCalledWith('google', 'gemini-2.5-pro')
   })
+
+  // ── 面板切换也要在同一拍里读得到 ──
+  //
+  // 上面两条的前提都是「已经在 model 面板上」——它们先 `ENTER` 再 settle，面板切换
+  // 早就提交了。真正的一拍同时到达是 `Tab` + `↓` + `Enter`：Tab 写面板、↓ 决定**哪个
+  // 面板的**光标动、Enter 决定**走哪条确认路径**（provider 面板上是 `goToProvider`，
+  // model 面板上才是 `confirmSelection`）。面板若只从渲染闭包读，这三下会一起按
+  // **切换之前**那一拍算：↓ 去动 provider 光标、Enter 走 `goToProvider` ⇒ 一次都没选中。
+  //
+  // 判据仍是「世界变了什么」（`onSelect` 收到谁），不是光标画在哪。
+  it('「Tab ↓ Enter」一次写入：Tab 已经生效，↓ 动的是 model 光标、Enter 是确认', async () => {
+    const { onSelect, stdin } = renderPicker()
+
+    stdin.write('\t' + DOWN + ENTER) // 一次写入，中间不 settle
+    await settle()
+
+    expect(onSelect).toHaveBeenCalledWith('google', 'gemini-3.0-pro')
+  })
+
+  it('前提：一次写入「Tab ↓ Enter」确实派发三个事件（Tab 不在转义序列里也成立）', async () => {
+    const seen: string[] = []
+    function TabProbe(): React.ReactElement {
+      useInput((_input, key) => {
+        if (key.tab) seen.push('tab')
+        else if (key.downArrow) seen.push('down')
+        else if (key.return) seen.push('enter')
+      })
+      return React.createElement(Box, null, React.createElement(Text, null, 'probe'))
+    }
+    const { stdin } = render(React.createElement(TabProbe))
+    stdin.write('\t' + DOWN + ENTER)
+    await settle()
+    expect(seen).toEqual(['tab', 'down', 'enter'])
+  })
 })
 
 // ═══════════════════════════════════════════

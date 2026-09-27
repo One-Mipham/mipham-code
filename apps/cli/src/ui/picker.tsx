@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useCallback } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useI18n } from '../i18n-context'
 import { useKeyState } from './use-key-state'
@@ -34,7 +34,11 @@ export function ModelPicker({
   const providers = config.providers.filter((p) => p.status !== 'upcoming')
 
   // State
-  const [activePanel, setActivePanel] = useState<Panel>('provider')
+  // 面板选择同样走 `useKeyState` —— 它与两个光标是**同一次按键里一起判读**的。
+  // 反例是「Tab ↓ Enter」一次刷进来：Ink 把 Tab 之后那段也拆成两拍，于是 ↓ 与
+  // Enter 都还在按**切换之前**那一拍算 —— ↓ 去动 provider 光标，Enter 走
+  // `goToProvider`（provider 面板上那条路）⇒ 一次都没选中。
+  const activePanel = useKeyState<Panel>('provider')
   // 光标走 `useKeyState`：一组按键可能在同一拍里到达（↓ 之后紧跟 Enter），判据必须
   // 读得到本次按键刚写下的那个索引，而不是上一张闭包里的。
   const providerIdx = useKeyState(() => {
@@ -51,7 +55,7 @@ export function ModelPicker({
     (idx: number) => {
       providerIdx.set(wrap(idx, providers.length))
       modelIdx.set(0)
-      setActivePanel('model') // auto-switch to model panel
+      activePanel.set('model') // auto-switch to model panel
     },
     [providers.length, providerIdx, modelIdx],
   )
@@ -93,7 +97,7 @@ export function ModelPicker({
     }
 
     if (key.return) {
-      if (activePanel === 'provider') {
+      if (activePanel.read() === 'provider') {
         goToProvider(providerIdx.read()) // switches to model panel
       } else {
         confirmSelection()
@@ -102,20 +106,20 @@ export function ModelPicker({
     }
 
     // Tab or right arrow → switch to model panel
-    if (key.tab || (activePanel === 'provider' && input === 'l')) {
-      setActivePanel('model')
+    if (key.tab || (activePanel.read() === 'provider' && input === 'l')) {
+      activePanel.set('model')
       return
     }
 
     // Left arrow → switch to provider panel
-    if (key.leftArrow || (activePanel === 'model' && input === 'h')) {
-      setActivePanel('provider')
+    if (key.leftArrow || (activePanel.read() === 'model' && input === 'h')) {
+      activePanel.set('provider')
       return
     }
 
     // Up/Down navigation
     if (key.upArrow) {
-      if (activePanel === 'provider') {
+      if (activePanel.read() === 'provider') {
         providerIdx.set((prev) => wrap(prev - 1, providers.length))
       } else {
         stepModel(-1)
@@ -124,7 +128,7 @@ export function ModelPicker({
     }
 
     if (key.downArrow) {
-      if (activePanel === 'provider') {
+      if (activePanel.read() === 'provider') {
         providerIdx.set((prev) => wrap(prev + 1, providers.length))
       } else {
         stepModel(1)
@@ -153,11 +157,11 @@ export function ModelPicker({
           flexDirection="column"
           width={28}
           borderStyle="single"
-          borderColor={activePanel === 'provider' ? 'cyan' : 'gray'}
+          borderColor={activePanel.value === 'provider' ? 'cyan' : 'gray'}
           padding={1}
         >
           <Text bold underline dimColor>
-            {t('ui.picker.provider_label')} {activePanel === 'provider' ? '◀' : ''}
+            {t('ui.picker.provider_label')} {activePanel.value === 'provider' ? '◀' : ''}
           </Text>
           {providers.map((p, i) => {
             const isCurrent = p.id === currentProvider
@@ -186,11 +190,11 @@ export function ModelPicker({
           flexDirection="column"
           width={42}
           borderStyle="single"
-          borderColor={activePanel === 'model' ? 'cyan' : 'gray'}
+          borderColor={activePanel.value === 'model' ? 'cyan' : 'gray'}
           padding={1}
         >
           <Text bold underline dimColor>
-            {t('ui.picker.models_label')} {activePanel === 'model' ? '◀' : ''}
+            {t('ui.picker.models_label')} {activePanel.value === 'model' ? '◀' : ''}
             {selectedProvider ? ` — ${selectedProvider.name}` : ''}
           </Text>
           {models.length === 0 && <Text dimColor> {t('ui.picker.no_active_models')}</Text>}
@@ -221,7 +225,7 @@ export function ModelPicker({
       {/* Footer hint */}
       <Box marginTop={1}>
         <Text dimColor>
-          {activePanel === 'provider'
+          {activePanel.value === 'provider'
             ? t('ui.picker.select_provider_hint')
             : t('ui.picker.select_model_hint')}
         </Text>

@@ -31,6 +31,13 @@ const STATUS_HEADERS: Record<string, { label: string; color: string }> = {
 }
 
 export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps) {
+  // 这里**刻意**不迁 `useKeyState`（picker / config-wizard / command-picker 都迁了）。
+  // 那些地方的病是「一次刷进来的按键作用在上一拍的行上」，而 Ink 只在 chunk **以转义
+  // 序列打头**时才把它拆成多个事件 —— 所以能撞上的是方向键（`\x1b[B` + `\r` 拆成两拍）。
+  // 本面板的键全是普通字符（j / k / space / Enter / Ctrl+X / Ctrl+R / Ctrl+T），一起到达
+  // 时会**合并成一个**事件（实测 `'j\r'` → 单个 `input="j\r"`、`key.return` 为 false），
+  // 两个分支都不匹配 ⇒ 症状是「这一拍什么也没发生」，不是「作用在上一行」。
+  // 换句话说这一格没有可复现的故障，迁过去只会让测试**改前改后都绿**。
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [peekingSessionId, setPeekingSessionId] = useState<string | null>(null)
   const [groupBy, setGroupBy] = useState<'status' | 'directory'>('status')
