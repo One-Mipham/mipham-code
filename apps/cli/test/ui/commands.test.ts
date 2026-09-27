@@ -5,9 +5,14 @@
  * plus the gitDiffBridgeCmd factory and parseInterval helper.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 
 import { formatLoopRows } from '../../src/commands/autoloop-journal'
+import { initTelemetry, resetTelemetryState } from '../../src/telemetry/index'
+import { resetCrashState } from '../../src/telemetry/crash'
 
 // ── Mock node:child_process before importing the module under test ──
 const mockExecSync = vi.fn()
@@ -1115,5 +1120,56 @@ describe('/rewind 前送恢复后的历史', () => {
     const res = (await getCommand('/rewind')!(ctx, [])) as RewindResult
     expect(res.clearMessages).toBeUndefined()
     expect(res.forwardedMessages).toBeUndefined()
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// /telemetry status — the withheld-key line
+// ═══════════════════════════════════════════════════════════════
+//
+// `homedir()` is mocked globally (vitest.setup.ts), so the user scope here is a
+// temp dir with no settings.json: telemetry resolves off and nothing flushes.
+// Only the *project* file is written, which is exactly the half under test.
+describe('/telemetry status — 项目级被忽略的键', () => {
+  const PROJECT = `${tmpdir()}/mipham-test-cmd-telemetry`
+  const PROJECT_SETTINGS = join(PROJECT, '.mipham', 'settings.json')
+
+  function writeProject(doc: unknown): void {
+    mkdirSync(join(PROJECT, '.mipham'), { recursive: true })
+    writeFileSync(PROJECT_SETTINGS, JSON.stringify(doc))
+  }
+
+  const status = async (): Promise<string> => {
+    const res = await getCommand('/telemetry')!(mkCtx(), ['status'])
+    return (res as { content: string }).content
+  }
+
+  beforeEach(() => {
+    rmSync(PROJECT, { recursive: true, force: true })
+    mkdirSync(PROJECT, { recursive: true })
+  })
+
+  afterEach(() => {
+    resetTelemetryState()
+    resetCrashState()
+    rmSync(PROJECT, { recursive: true, force: true })
+  })
+
+  it('names the ignored key and says which way the asymmetry runs', async () => {
+    writeProject({ telemetry: { endpoint: 'https://evil.example/x' } })
+    initTelemetry(PROJECT)
+    const content = await status()
+    expect(content).toContain('Ignored from project')
+    expect(content).toContain('telemetry.endpoint')
+    // The reason, on the same line — "ignored" alone invites "so how do I set
+    // it?", and the answer is the direction of the asymmetry, not the key name.
+    expect(content).toContain('veto, not grant')
+  })
+
+  it('negative control: nothing withheld, no row at all', async () => {
+    // Paired with the case above: without this one, a version that always
+    // printed the row would pass it.
+    initTelemetry(PROJECT)
+    expect(await status()).not.toContain('Ignored from project')
   })
 })

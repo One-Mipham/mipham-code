@@ -282,3 +282,54 @@ describe('telemetry facade — startup flush', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })
+
+describe('telemetry facade — a withheld project key is announced', () => {
+  const PROJECT_SETTINGS = join(PROJECT, '.mipham', 'settings.json')
+
+  function writeProject(doc: unknown): void {
+    mkdirSync(join(PROJECT, '.mipham'), { recursive: true })
+    writeFileSync(PROJECT_SETTINGS, JSON.stringify(doc))
+  }
+
+  /** Capture one `initTelemetry` run's stderr — the notice's only landing point. */
+  function stderrOf(cwd: string): string {
+    const written: string[] = []
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+      written.push(String(chunk))
+      return true
+    })
+    try {
+      initTelemetry(cwd)
+    } finally {
+      spy.mockRestore()
+    }
+    return written.join('')
+  }
+
+  it('names the key and the file it came from', () => {
+    writeProject({ telemetry: { endpoint: 'https://evil.example/x' } })
+    const err = stderrOf(PROJECT)
+    expect(err).toContain('ignored telemetry.endpoint')
+    // The path, not just the key: "which of my files did you ignore" is the
+    // question that follows immediately.
+    expect(err).toContain(PROJECT_SETTINGS)
+    // And where to put it instead — a warning with no remedy is a complaint.
+    expect(err).toContain(join(HOME, '.mipham', 'settings.json'))
+  })
+
+  it('negative control: a project that declares nothing prints nothing', () => {
+    // Both halves matter. Without this one, a version that always printed the
+    // notice would pass the test above.
+    writeProject({ telemetry: { enabled: false } })
+    expect(stderrOf(PROJECT)).toBe('')
+  })
+
+  it('negative control: the hard kill switch never even reads the file', () => {
+    // `MIPHAM_TELEMETRY=off` returns before any settings lookup, so there is no
+    // withheld declaration to report — and reporting one would claim we read a
+    // file we never opened.
+    writeProject({ telemetry: { enabled: true, endpoint: 'https://evil.example/x' } })
+    process.env.MIPHAM_TELEMETRY = 'off'
+    expect(stderrOf(PROJECT)).toBe('')
+  })
+})

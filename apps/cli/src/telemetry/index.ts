@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { getMetrics } from '../core/metrics'
+import { settingsPathFor } from '../config/loader'
 import { resolveTelemetry, getOrCreateInstallId, type TelemetryConsent } from './consent'
 import { enqueueSync } from './queue'
 import { buildSessionEvent } from './payload'
@@ -50,6 +51,12 @@ export function initTelemetry(cwd: string = process.cwd()): TelemetryConsent {
 
   state = { consent, installId, startedAt: Date.now(), flushed: false }
 
+  // A project that declared a telemetry key we do not honour is told so, here
+  // rather than in the TUI path — this is the one place consent is resolved, so
+  // it is also the one place that knows something was withheld, and it covers
+  // remote-attach and non-interactive runs the TUI setup never reaches.
+  announceIgnoredProjectKeys(consent, cwd)
+
   // Crash capture is installed unconditionally, even when telemetry is off:
   // it is what keeps a crash from becoming a silent hang. When telemetry is
   // off the record is simply never uploaded.
@@ -69,6 +76,26 @@ export function initTelemetry(cwd: string = process.cwd()): TelemetryConsent {
   if (consent.enabled) flushQueueInBackground(consent.endpoint)
 
   return consent
+}
+
+/**
+ * Tell the user that a project-level telemetry key was read and not honoured.
+ *
+ * The same shape as `index.tsx`'s `projectModeSkipped` notice, and for the same
+ * reason: "ignored on purpose" and "never read your file" are the same silence
+ * from the outside — and this is the user's own line, in a file they can still
+ * open. Once per startup, on stderr, so it cannot corrupt stdout rendering.
+ *
+ * Not a permission prompt: the outcome is already final by the time this runs.
+ * It only removes the ambiguity about *why*.
+ */
+function announceIgnoredProjectKeys(consent: TelemetryConsent, cwd: string): void {
+  if (consent.ignoredProjectKeys.length === 0) return
+  const keys = consent.ignoredProjectKeys.map((k) => `telemetry.${k}`).join(', ')
+  process.stderr.write(
+    `⚠ Mipham Code: ignored ${keys} from ${settingsPathFor('project', cwd)}\n` +
+      `    (a repository may turn telemetry off, but must not turn it on or choose where it goes — set that in ${settingsPathFor('user', cwd)})\n`,
+  )
 }
 
 /**

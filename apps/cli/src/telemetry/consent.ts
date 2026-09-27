@@ -31,6 +31,15 @@ export interface TelemetrySettings {
 /** Why telemetry ended up on or off — surfaced by `/telemetry status`. */
 export type ConsentSource = 'env-off' | 'project-veto' | 'user-optin' | 'default-off'
 
+/**
+ * 项目级文件里**写了、但按设计不采纳**的键。
+ *
+ * 只有这两档词汇：`enabled: true`（项目不能授予同意）与非空 `endpoint`（项目不能选
+ * 目的地）。`installId` / `promptedAt` 不在内 —— 那两键由本工具写进**用户**文件，
+ * 出现在项目文件里是「键写错了」，报成「一档被拒绝」只会把人引偏。
+ */
+export type ProjectIgnoredKey = 'enabled' | 'endpoint'
+
 export interface TelemetryConsent {
   enabled: boolean
   endpoint: string
@@ -43,6 +52,28 @@ export interface TelemetryConsent {
    * user debugging an unexpected destination needs the second one.
    */
   endpointSource: EndpointSource | 'off'
+  /**
+   * 项目级文件里声明了、而**没有生效**的键（按 `enabled` → `endpoint` 固定序）。
+   *
+   * 为什么要有这个名单：「按设计不采纳」与「压根没读你的文件」从外面看是**同一片
+   * 沉默**，而这是用户自己写下的字，就在他还能看见的那个文件里。兄弟形状见
+   * `config/loader.ts` 的 `projectModeSkipped` —— 同一条理由，同一句公告。
+   *
+   * 为什么不干脆采纳：项目这一档只许**收紧**（`enabled: false` 是否决）。采纳
+   * `endpoint` 等于克隆一个仓库就把用户已 opt-in 的遥测改道到仓库指定的收集器，
+   * 与「项目不能授予同意」是同一件事的两种写法。
+   *
+   * 空串不算声明 —— 名单要说的是「你写了 X 而它不生效」，不是「这个键存在过」。
+   */
+  ignoredProjectKeys: ProjectIgnoredKey[]
+}
+
+/** 项目文件里声明了这两档词汇的那些键（顺序固定，与文件里的书写顺序无关）。 */
+function declaredProjectKeys(project: TelemetrySettings): ProjectIgnoredKey[] {
+  const keys: ProjectIgnoredKey[] = []
+  if (project.enabled === true) keys.push('enabled')
+  if (typeof project.endpoint === 'string' && project.endpoint !== '') keys.push('endpoint')
+  return keys
 }
 
 /**
@@ -93,6 +124,12 @@ export function readTelemetrySettings(
  * consenting on the user's behalf. Same shape as the existing
  * `permissionRestrictions` fail-closed downgrade.
  *
+ * **The withholding is reported, not silent.** A project that declared
+ * `enabled: true` or a destination gets those keys named back to it in
+ * `ignoredProjectKeys` — from the outside, "ignored on purpose" and "never read
+ * your file" are the same silence, and the user is the one who wrote those
+ * lines, in a file they can still see.
+ *
  * There is intentionally no env var that grants consent. Consent has to be a
  * persistent, deliberate act (the first-run prompt or `/telemetry on`) — env
  * vars are inherited by child processes and end up in CI logs, so they must not
@@ -102,21 +139,30 @@ export function resolveTelemetry(
   cwd: string = process.cwd(),
   env: NodeJS.ProcessEnv = process.env,
 ): TelemetryConsent {
+  // The kill switch is resolved first and reads no file at all — so there is no
+  // project-tier declaration to report here, not even an unread one.
   if (isHardDisabled(env)) {
-    return { enabled: false, endpoint: '', source: 'env-off', endpointSource: 'off' }
+    return {
+      enabled: false,
+      endpoint: '',
+      source: 'env-off',
+      endpointSource: 'off',
+      ignoredProjectKeys: [],
+    }
   }
 
   const user = readTelemetrySettings('user', cwd)
   const project = readTelemetrySettings('project', cwd)
   const { endpoint, source: endpointSource } = resolveEndpoint(user.endpoint, env)
+  const ignoredProjectKeys = declaredProjectKeys(project)
 
   if (project.enabled === false) {
-    return { enabled: false, endpoint, source: 'project-veto', endpointSource }
+    return { enabled: false, endpoint, source: 'project-veto', endpointSource, ignoredProjectKeys }
   }
   if (user.enabled === true) {
-    return { enabled: true, endpoint, source: 'user-optin', endpointSource }
+    return { enabled: true, endpoint, source: 'user-optin', endpointSource, ignoredProjectKeys }
   }
-  return { enabled: false, endpoint, source: 'default-off', endpointSource }
+  return { enabled: false, endpoint, source: 'default-off', endpointSource, ignoredProjectKeys }
 }
 
 function patchUserTelemetry(patch: TelemetrySettings, cwd: string): void {

@@ -62,6 +62,7 @@ describe('consent — hard kill switch', () => {
       endpoint: '',
       source: 'env-off',
       endpointSource: 'off',
+      ignoredProjectKeys: [],
     })
   })
 })
@@ -98,6 +99,40 @@ describe('consent — three tiers', () => {
     writeSettings(PROJECT_SETTINGS, { telemetry: { enabled: true } })
     expect(resolveTelemetry(PROJECT, NO_ENV).enabled).toBe(false)
     expect(resolveTelemetry(PROJECT, NO_ENV).source).toBe('default-off')
+  })
+
+  // 下面这组钉的是**同一件事的另一半**：上面那两条只证明了「不采纳」，没证明
+  // 「用户能知道」。从外面看，「按设计不采纳」与「压根没读你的文件」是同一片沉默
+  // —— 而这是用户自己写下的字，就在他还能看见的那个文件里。
+  it('does NOT let a project choose the destination, and names the key it ignored', () => {
+    // 与上一条同一个理由：改道同样是「仓库替用户决定」。克隆一个仓库，就把自己
+    // opt-in 的遥测送到仓库指定的收集器 —— 那是代授权的另一种写法。
+    writeSettings(PROJECT_SETTINGS, { telemetry: { endpoint: 'https://evil.example/x' } })
+    const consent = resolveTelemetry(PROJECT, NO_ENV)
+    expect(consent.endpoint).toBe(OFFICIAL_TELEMETRY_ENDPOINT)
+    expect(consent.endpointSource).toBe('default')
+    expect(consent.ignoredProjectKeys).toEqual(['endpoint'])
+  })
+
+  it('names a project opt-in as ignored too', () => {
+    writeSettings(PROJECT_SETTINGS, { telemetry: { enabled: true } })
+    expect(resolveTelemetry(PROJECT, NO_ENV).ignoredProjectKeys).toEqual(['enabled'])
+  })
+
+  it('负控：项目否决是**生效**的，不进忽略名单', () => {
+    writeSettings(PROJECT_SETTINGS, { telemetry: { enabled: false } })
+    const consent = resolveTelemetry(PROJECT, NO_ENV)
+    expect(consent.source).toBe('project-veto')
+    expect(consent.ignoredProjectKeys).toEqual([])
+  })
+
+  it('负控：没有项目文件（或没写这两个键）时名单为空', () => {
+    expect(resolveTelemetry(PROJECT, NO_ENV).ignoredProjectKeys).toEqual([])
+
+    // 边界：空串**没有声明任何东西**，不该被报成「忽略了一个键」—— 名单要说的
+    // 是「你写了 X 而它不生效」，不是「这个键存在过」。
+    writeSettings(PROJECT_SETTINGS, { telemetry: { endpoint: '' } })
+    expect(resolveTelemetry(PROJECT, NO_ENV).ignoredProjectKeys).toEqual([])
   })
 
   it('reads the endpoint from user settings, with the env var taking precedence', () => {

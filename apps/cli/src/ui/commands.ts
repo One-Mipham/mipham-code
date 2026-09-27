@@ -4005,6 +4005,14 @@ const telemetryCmd: CommandHandler = async (ctx, args) => {
     `| Source | \`${consent.endpointSource}\` |`,
     `| Install id | ${settings.installId ?? '_(not yet generated)_'} |`,
     `| Prompted | ${settings.promptedAt ?? '_(never)_'} |`,
+    // Only when there is something to say. An always-present "Ignored: _(none)_"
+    // row would be noise in the common case, and this table is read when
+    // something already looks wrong.
+    ...(consent.ignoredProjectKeys.length > 0
+      ? [
+          `| Ignored from project | ${consent.ignoredProjectKeys.map((k) => `\`telemetry.${k}\``).join(', ')} — a repository may veto, not grant |`,
+        ]
+      : []),
     '',
     'Full data dictionary: `docs/telemetry.md`',
   ]
