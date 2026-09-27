@@ -186,7 +186,6 @@
     },
     "task_list": {
       "title": "── Background Tasks ──",
-      "detected": "{count} task operations detected in this session.\n\nUse the Task tool (action \"create\" / \"update\" / \"list\") to manage structured task tracking.",
       "no_tasks": "No tasks tracked yet. Use the Task tool with action \"create\", \"update\", or \"list\" to manage structured tasks.",
       "reference": "Quick reference:",
       "legacy_hint": "Type /todos for the legacy task interface."

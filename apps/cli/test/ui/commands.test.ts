@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os'
 import { formatLoopRows } from '../../src/commands/autoloop-journal'
 import { initTelemetry, resetTelemetryState } from '../../src/telemetry/index'
 import { resetCrashState } from '../../src/telemetry/crash'
+import { getTasks, taskTool } from '../../src/tools/exec/task'
 
 // ── Mock node:child_process before importing the module under test ──
 const mockExecSync = vi.fn()
@@ -473,8 +474,12 @@ describe('/goal', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════
-// /tasks — 任务工具历史扫描（/todos 是转交 AI 的旧版入口，不扫历史）
+// /tasks — 面板对历史**无反应**（判据是登记表，见下方「显示登记表里的任务」）
 // ═══════════════════════════════════════════════════════════════
+//
+// 这一组此前测的是「历史扫描认得 Task 调用」。扫描已删（它把「历史里见过几次
+// 调用」当成「有没有任务」），而**「历史不改变输出」这条性质本身仍值得钉**：
+// 它是这个面板唯一正确的输入来源。断言从「有 Task 就不同」翻成「一律相同」。
 
 /** 造一条带 tool_use 块的助手消息。 */
 const toolUseMessage = (name: string) => ({
@@ -482,16 +487,15 @@ const toolUseMessage = (name: string) => ({
   content: [{ type: 'tool_use', id: 'tu_1', name, input: {} }],
 })
 
-describe('/tasks', () => {
-  it('识别历史里真实的 Task 工具调用', () => {
+describe('/tasks 对历史无反应', () => {
+  it('历史里有 Task 调用块 ⇒ 输出与没有历史时逐字相同', () => {
     const handler = getCommand('/tasks')!
     const withTask = handler(mkCtx([toolUseMessage('Task')]), []).content
     const withoutTask = handler(mkCtx([]), []).content
-    // 修复前过滤条件找的是一组不存在的工具名，故两种情况渲染结果相同（永远是「无任务」）
-    expect(withTask).not.toBe(withoutTask)
+    expect(withTask).toBe(withoutTask)
   })
 
-  it('其他工具的调用不算任务操作', () => {
+  it('其他工具的调用同样不改变输出', () => {
     const handler = getCommand('/tasks')!
     const withBash = handler(mkCtx([toolUseMessage('Bash')]), []).content
     const withoutTask = handler(mkCtx([]), []).content
@@ -1171,5 +1175,39 @@ describe('/telemetry status — 项目级被忽略的键', () => {
     // printed the row would pass it.
     initTelemetry(PROJECT)
     expect(await status()).not.toContain('Ignored from project')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// /tasks — 面板读登记表，不读历史计数
+// ═══════════════════════════════════════════════════════════════
+//
+// 命令自称 "Background tasks"（`registry.set` 上方那张描述表），标题写
+// 「── 后台任务 ──」，空态写「尚未跟踪任何任务」—— 全是**登记表**词汇。
+// 但它此前数的是历史里 `Task` 工具调用块的个数：两者可以不一致（压缩会
+// 把块丢掉而登记表还在），而「N 次任务操作」这句话本身也没回答「现在有
+// 哪些任务」。同名的真登记表 `getTasks()` 早就存在、且已被 `GoalProgress`
+// 消费 —— 这个面板是唯一没接上的读者。
+describe('/tasks —— 显示登记表里的任务', () => {
+  const runTasks = async (messages: unknown[] = []): Promise<string> =>
+    ((await getCommand('/tasks')!(mkCtx(messages), [])) as { content: string }).content
+
+  /** 每个用例自带清理：登记表是模块级状态，跨用例会互相看见。 */
+  afterEach(async () => {
+    for (const task of getTasks()) {
+      await taskTool.execute({ action: 'delete', taskId: task.id }, {} as never)
+    }
+  })
+
+  it('列出会话里真实存在的任务（含状态图标）', async () => {
+    await taskTool.execute({ action: 'create', subject: 'panel-subject-alpha' }, {} as never)
+
+    const content = await runTasks()
+    expect(content).toContain('panel-subject-alpha')
+    expect(content).toContain('📋')
+  })
+
+  it('负控：登记表为空时说「尚未跟踪任何任务」', async () => {
+    expect(await runTasks()).toContain('No tasks tracked yet')
   })
 })

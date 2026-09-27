@@ -186,7 +186,6 @@
     },
     "task_list": {
       "title": "── 后台任务 ──",
-      "detected": "在此会话中检测到 {count} 次任务操作。\n\n使用 Task 工具（action \"create\" / \"update\" / \"list\"）管理结构化任务跟踪。",
       "no_tasks": "尚未跟踪任何任务。使用 Task 工具的 action \"create\"、\"update\" 或 \"list\" 管理结构化任务。",
       "reference": "快速参考:",
       "legacy_hint": "输入 /todos 使用旧版任务界面。"

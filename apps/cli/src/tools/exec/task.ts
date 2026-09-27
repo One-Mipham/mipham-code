@@ -112,6 +112,78 @@ function getBlockingIds(task: Task): string[] {
   })
 }
 
+/**
+ * Render the session's task list: status-grouped, availability-sorted, blockers marked.
+ *
+ * **One renderer, two readers.** The `list` action answers the model, and the
+ * `/tasks` panel answers the human — both show the same session registry, so
+ * both go through here. A second renderer for the panel would be the "two
+ * paths, one wired" mistake this repo has already paid for once.
+ */
+export function formatTaskList(): string {
+  const all = getTasks()
+  if (all.length === 0) return '(no tasks)'
+
+  // Sort by availability: in_progress → pending(available) → pending(blocked) → completed
+  const sortOrder: Record<string, number> = {
+    in_progress: 0,
+    pending: 1,
+    completed: 2,
+    failed: 3,
+  }
+
+  const sorted = [...all].sort((a, b) => {
+    const orderA = sortOrder[a.status] ?? 3
+    const orderB = sortOrder[b.status] ?? 3
+    if (orderA !== orderB) return orderA - orderB
+    // Within same status: available before blocked
+    if (a.status === 'pending' && b.status === 'pending') {
+      const aBlocked = isBlocked(a)
+      const bBlocked = isBlocked(b)
+      if (aBlocked !== bBlocked) return aBlocked ? 1 : -1
+    }
+    return 0
+  })
+
+  const lines: string[] = []
+  const statusLabels: Record<string, { emoji: string; label: string }> = {
+    in_progress: { emoji: '🔄', label: 'In Progress' },
+    pending: { emoji: '📋', label: 'Pending' },
+    completed: { emoji: '✅', label: 'Completed' },
+    failed: { emoji: '❌', label: 'Failed' },
+  }
+
+  let currentStatus = ''
+  for (const t of sorted) {
+    const statusInfo = statusLabels[t.status]
+    if (!statusInfo) continue
+
+    if (statusInfo.label !== currentStatus) {
+      currentStatus = statusInfo.label
+      // Count tasks in this status group
+      const count = sorted.filter((s) => statusLabels[s.status]?.label === currentStatus).length
+      lines.push(`${statusInfo.emoji} ${currentStatus} (${count}):`)
+    }
+
+    const blocked = isBlocked(t)
+    const prefix = blocked && t.status === 'pending' ? '🚫 ' : '  '
+    const blockingNote = blocked ? ` 🚫 阻塞中 (等待: ${getBlockingIds(t).join(', ')})` : ''
+    lines.push(`${prefix}${formatTask(t)}${blockingNote}`)
+  }
+
+  // Summary footer
+  const available = all.filter((t) => t.status === 'pending' && !isBlocked(t)).length
+  const blockedCount = all.filter((t) => t.status === 'pending' && isBlocked(t)).length
+  if (blockedCount > 0) {
+    lines.push('')
+    lines.push(
+      `📊 ${available} available · ${blockedCount} blocked · ${all.filter((t) => t.status === 'completed').length} done`,
+    )
+  }
+
+  return lines.join('\n')
+}
+
 export const taskTool: ToolDefinition = {
   name: 'Task',
   description:
@@ -205,67 +277,7 @@ export const taskTool: ToolDefinition = {
 
     // ── LIST ──
     if (action === 'list') {
-      const all = Array.from(tasks.values()).filter((t) => t.status !== 'deleted')
-      if (all.length === 0) return { success: true, content: '(no tasks)' }
-
-      // Sort by availability: in_progress → pending(available) → pending(blocked) → completed
-      const sortOrder: Record<string, number> = {
-        in_progress: 0,
-        pending: 1,
-        completed: 2,
-        failed: 3,
-      }
-
-      const sorted = [...all].sort((a, b) => {
-        const orderA = sortOrder[a.status] ?? 3
-        const orderB = sortOrder[b.status] ?? 3
-        if (orderA !== orderB) return orderA - orderB
-        // Within same status: available before blocked
-        if (a.status === 'pending' && b.status === 'pending') {
-          const aBlocked = isBlocked(a)
-          const bBlocked = isBlocked(b)
-          if (aBlocked !== bBlocked) return aBlocked ? 1 : -1
-        }
-        return 0
-      })
-
-      const lines: string[] = []
-      const statusLabels: Record<string, { emoji: string; label: string }> = {
-        in_progress: { emoji: '🔄', label: 'In Progress' },
-        pending: { emoji: '📋', label: 'Pending' },
-        completed: { emoji: '✅', label: 'Completed' },
-        failed: { emoji: '❌', label: 'Failed' },
-      }
-
-      let currentStatus = ''
-      for (const t of sorted) {
-        const statusInfo = statusLabels[t.status]
-        if (!statusInfo) continue
-
-        if (statusInfo.label !== currentStatus) {
-          currentStatus = statusInfo.label
-          // Count tasks in this status group
-          const count = sorted.filter((s) => statusLabels[s.status]?.label === currentStatus).length
-          lines.push(`${statusInfo.emoji} ${currentStatus} (${count}):`)
-        }
-
-        const blocked = isBlocked(t)
-        const prefix = blocked && t.status === 'pending' ? '🚫 ' : '  '
-        const blockingNote = blocked ? ` 🚫 阻塞中 (等待: ${getBlockingIds(t).join(', ')})` : ''
-        lines.push(`${prefix}${formatTask(t)}${blockingNote}`)
-      }
-
-      // Summary footer
-      const available = all.filter((t) => t.status === 'pending' && !isBlocked(t)).length
-      const blockedCount = all.filter((t) => t.status === 'pending' && isBlocked(t)).length
-      if (blockedCount > 0) {
-        lines.push('')
-        lines.push(
-          `📊 ${available} available · ${blockedCount} blocked · ${all.filter((t) => t.status === 'completed').length} done`,
-        )
-      }
-
-      return { success: true, content: lines.join('\n') }
+      return { success: true, content: formatTaskList() }
     }
 
     // ── GET ──

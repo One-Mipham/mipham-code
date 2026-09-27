@@ -110,6 +110,7 @@ import { listActiveAutoloops, formatLoopRows } from '../commands/autoloop-journa
 import { execSync } from 'node:child_process'
 import { MIPHAM_DIR, OLLAMA_PRESET_MODELS } from '../shared/constants'
 import { renameActiveSession } from '../agent/cross-session/discovery'
+import { formatTaskList } from '../tools/exec/task'
 
 export interface CommandContext {
   engine: QueryEngine
@@ -2922,24 +2923,20 @@ const ultracodeCmd: CommandHandler = (ctx, args) => {
 
 const tasksCmd: CommandHandler = (ctx) => {
   const t = resolveT(ctx)
-  const c = ctx.engine.getContext()
-  const msgs = c.getMessages()
 
-  // Scan for task-related tool uses in message history.
-  // 任务工具只有一个 `Task`，动作走 action 参数 —— 过滤条件必须按真实工具名匹配，
-  // 否则计数恒为 0，「已检测到 N 次任务操作」这条分支永远不可达。
-  const toolUses = msgs.flatMap((m) => {
-    if (Array.isArray(m.content)) {
-      return m.content.filter((b) => b.type === 'tool_use' && b.name === 'Task')
-    }
-    return []
-  })
+  // 读**登记表**，不数历史。此前这个面板数的是历史里 `Task` 工具调用块的个数，
+  // 于是压缩掉历史之后（块没了、任务还在）它会说「尚未跟踪任何任务」，而没有任务
+  // 却有历史时又会说「检测到 N 次任务操作」。面板自称 "Background tasks"、标题写
+  // 「后台任务」、空态写「尚未跟踪任何任务」—— 全是登记表词汇，而登记表就在
+  // 一步之外（`getTasks()`，`GoalProgress` 早就接了）。
+  const taskList = formatTaskList()
+  const hasTasks = taskList !== '(no tasks)'
 
   return {
     content: stripIndent`
       ${t('commands.task_list.title')}
 
-      ${toolUses.length > 0 ? t('commands.task_list.detected', { count: String(toolUses.length) }) : t('commands.task_list.no_tasks')}
+      ${hasTasks ? taskList : t('commands.task_list.no_tasks')}
 
       ${t('commands.task_list.reference')}
         Task(action: "create")  — create a new task
