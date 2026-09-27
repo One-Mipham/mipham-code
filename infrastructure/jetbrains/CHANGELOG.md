@@ -4,6 +4,84 @@
 > (tag dates) and use the same wording as the VS Code extension's changelog — the plugin is a
 > thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.7 (2026-09-27)
+
+- Version sync with Mipham Code CLI 0.85.7
+- Fixed: `/rewind` was broken in both halves — the rewind never reached the log, and the screen went
+  blank afterwards. `/rewind` rewrites the **whole** projection, but it recorded no event and did
+  not redraw. On the log side, the log is the **only** source `--resume` / `/resume` rebuild history
+  from, so without an event the rewound turn came back on the next resume. The "model-visible means
+  logged" invariant is held by an assertion that does **prefix matching** — a rewind rewrites the
+  whole content, which lands outside that match, so the assertion never fired. A `rewind` event type
+  now exists with the same projection semantics as a compaction rewrite (whole-snapshot replacement)
+  but deliberately **not merged into the same type**: merging would make "which turns in this log
+  have been summarized" answer wrongly. On the command side, the command returned only
+  `clearMessages: true` — the shape of `/clear` — but a rewind is different: the history up to that
+  point still counts, only the copy on screen is stale. Without forwarding the messages the list was
+  emptied with **no path to refill it**: the model could see the rewound history while the user saw
+  nothing
+- Fixed: the two read-time-derived sections of the system prompt never entered the context estimate.
+  The context manager used an incremental accumulator, while two prompt sections are derived at read
+  time — the permission-mode section reads the permission system's current mode, the MCP section
+  reads the instructions of connected servers. Their application points are live closures wired up at
+  startup, so **the change points are not inside that class**: MCP servers connect asynchronously
+  after startup (after any prompt was set) and the permission mode toggles whenever the user cycles
+  it. Neither section ever entered the estimate, so a per-server block capped at 2000 characters did
+  not exist as far as this session was concerned. This was not "a missing recompute point" but a road
+  that **cannot work**: the caller cannot enumerate the full set of change points, and missing one
+  leaves the estimate permanently low ⇒ compression triggers late. It is now derived at read time —
+  messages stay accumulated, the prompt is assembled and counted at the moment it is read, and the
+  two are summed. Three same-root cleanups came with it: setting the prompt no longer recomputes (the
+  old contract "a recompute must include the messages" was held only by a comment); the estimate
+  stored in snapshots is gone and is recomputed from the just-restored messages (a stored number is a
+  second copy of the same fact and drifts from the messages independently); and `reEstimateTokens()`
+  was renamed to `recountMessageTokens()` — the old name promised more than it did
+- Fixed: the `/tasks` panel called itself "Background tasks" while never reading the task registry.
+  Its name, title and empty state are all **registry** vocabulary, but its predicate was always
+  history — counting task tool-call blocks in the messages. The two can disagree, and **both
+  directions are wrong**: after history compaction the tool blocks are gone while the tasks remain ⇒
+  the panel says "no tasks tracked yet" when tasks exist; with no tasks but history present it says
+  "N task operations detected". And "how many calls have I seen" never answered the question the
+  panel exists to answer — which tasks exist now. The real registry was one call away (the goal
+  progress panel already consumed it; `/tasks` was the only reader never wired up) ⇒ the list
+  renderer was extracted verbatim as `formatTaskList()` — one renderer, two readers. The i18n key
+  cleanup that followed from it went in the same change
+- Fixed: a workflow's provider override said "switch temporarily" and never restored anything. The
+  comment read "switch temporarily" while the code switched the provider and walked on — the
+  function had no restore point at all. The registry's active provider is **session-level**: the
+  sub-agent reads it while executing and routes through it when there is no override, and the engine
+  footer and the `/model` panel read it too ⇒ one agent call with a provider override inside a
+  workflow moved the whole machine's session there and never moved it back, when the override's scope
+  should have been that one call. The restore now sits as the **first** statement of the existing
+  `finally` (the worktree cleanup below it spawns git and can itself throw — putting it after would
+  mean "restore only when cleanup went well", which is exactly the case that least needs restoring),
+  and the switch itself moved to the **first** statement of the existing `try` (the worktree setup
+  above it can throw, and a throw before the switch should not find us already switched)
+- Fixed: ignored project-level telemetry keys are no longer silence. The project-level telemetry
+  block was only half-used: a veto took effect, while `enabled: true` and `endpoint` were read and
+  then dropped. **Dropping them is right** — honouring `endpoint` would mean that cloning a
+  repository reroutes a user's already opted-in telemetry to a collector that repository names, which
+  is the same thing as "a project cannot grant consent", written a second way. What was missing was
+  not adoption but **telling the user**: from the outside, "deliberately not adopted" and "your file
+  was never read" are the same silence — and this is text the user wrote, in a file they can still
+  open. A list of ignored keys now comes back with the consent result and is announced once on
+  stderr where it is resolved (the only place that knows something was blocked, which also covers
+  non-interactive paths); `/telemetry status` gained a line that appears **only when there is
+  content** — a permanent "(none)" row is noise. The hard-off early path returns an empty list and
+  **does not read the file**, because reporting a declaration that was never read is a false statement
+- Fixed: the model picker's panel switch was not read in the same tick as the cursors. Its active
+  panel came from a render closure, while the panel and the cursors are judged **together within one
+  keypress**: Tab decides which panel, the arrow keys decide which panel's cursor moves, and Enter
+  decides which confirmation path runs (on the provider panel it switches provider; only on the model
+  panel does it confirm a selection). Reading the panel from the closure alone made those three
+  resolve against the tick **before** the switch ⇒ the arrow key moved the provider cursor and Enter
+  took the provider path ⇒ **nothing was ever selected**. It now reads through the same key channel as
+  the two cursors. A sibling panel was deliberately **not** migrated, with the reasoning written into
+  the comment: its keys are all ordinary characters, and a single chunk carrying `j` and a carriage
+  return is measurably **one** event ⇒ the symptom is "nothing happened this tick" rather than "acted
+  on the previous row", so migrating without a reproducible failure would only make the test green
+  before and after
+
 ## 0.85.6 (2026-09-26)
 
 - Version sync with Mipham Code CLI 0.85.6
