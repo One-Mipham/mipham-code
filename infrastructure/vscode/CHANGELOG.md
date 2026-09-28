@@ -3,6 +3,68 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.8 — 2026-09-28
+
+- Version sync with Mipham Code CLI 0.85.8
+- Added: CRSI lessons are now tiered by severity, and the always-on block drops from 11,743 to
+  2,296 characters (−80.4%). Each lesson carries `- 严重度: critical|warning`: the 6 `critical` ones
+  stay resident, the 33 `warning` ones leave the always-on block and leave behind a one-line
+  pointer to the lessons file's **absolute path**, which the model reads on demand with its
+  existing Read/Grep — no new command, no new mechanism. A missing or out-of-set severity falls
+  back to `critical` (fail-open to resident): better to spend characters than to silently downgrade
+  a guard into "written but never read". The extractor now accumulates by `##` block and flushes at
+  the block boundary (`- 严重度:` sits after `- 建议:`, which the old "push on seeing 建议" logic
+  never read). `buildSystemPrompt` and `sizeReport` now share one `crsiLessonsText()` projection —
+  what the report describes has to be what gets sent.
+- Added: the `--prose` operator that rewrites skill prose now actually receives the lessons. The
+  root cause was **absence**: the main agent's system prompt carried the always-on lessons, while
+  the operator that rewrites skill prose — the prose the main agent then has to obey — got
+  `systemPrompt: ''` plus a single user message. `loadAlwaysOnLessonsBlock()` is the block's second
+  projection, same source but deliberately **without** the pointer (this operator is a tool-less
+  single `llm.chat` message, so a pointer is worth nothing to it). `lessonsBlock` is a **required**
+  5th parameter, turning "the caller forgot" from a silent behaviour change into a compile error.
+  `PROSE_GENERATE_PROMPT_VERSION` 1.1.0 → 1.2.0. Skill selection deliberately does **not** inject
+  (it only picks a path; lessons are noise there).
+- Added: `/crsi propose --prose` now prints the net change. It lands right next to the diff it
+  describes, present-not-judge (labelled "not judged"). Deliberately unlike the risk line beside
+  it, this one prints **always, including zero** — zero is the falsifiable "it did not grow"
+  reading, and printing only non-zero hides the baseline. The line-count definition is pinned
+  (newline count + 1 when the tail is non-empty without a trailing newline), otherwise the number
+  is not falsifiable. The prediction, risk, and net-change lines all end with a newline now —
+  without it the operation hint was glued onto the tail of the last content line.
+- Fixed: **no cursor on empty input — and empty input is the state you see most.** The white block
+  lived only in the `else` branch of the placeholder ternary, while `value.length === 0 &&
+placeholder` holds in real use (the placeholder is a localised hint or a loading verb, never an
+  empty string), so the initial state had no cursor at all. Both branches now draw it. The block
+  also moved from `inverse` to **explicit white** (`backgroundColor="white"` + black text): inverse
+  reads the terminal's _foreground_ colour, so a theme change makes it something else entirely,
+  whereas "an upright white rectangle" is a fixed shape requirement.
+- Fixed: CRSI's `risk` was carried through three layers with **zero readers.** `risk` and
+  `expectedEffect` (ε) come from the same line of JSON and the same prompt, but ε reaches the
+  ledger and is read back by `predictionHitRate` while `risk` lived only in memory —
+  `CrsiModification` has no such field, so it never even reached the sandbox. That is the same
+  external reading as "the field does not exist". It now lands where a human actually decides: the
+  `/crsi propose --prose` receipt, right next to the diff it describes, present-not-judge, and
+  always carrying "**unverified**" — otherwise the line would imply the risk had been handled
+  (a key that reacts while the world stays the same is worse than a key that does not exist). If
+  the risk is absent the whole line is omitted, rather than printed empty.
+- Fixed: the eval gate recorded "could not judge" as "judged it bad." `evaluate()` sat bare on an
+  `await`, so a throw escaped the function and the worktree created by `createWorktree` was never
+  reclaimed; the caller got an exception instead of a verdict, and a truncated report was treated
+  as regression. The instrument now proves itself first (`instrumentFailure`): an **empty contract
+  set is always a fault** — in that case the formula yields **exactly 100**
+  (`results.length > 0 ? … : 100`), so "couldn't judge" and "judged it perfect" are the same
+  external reading; only a count **below the declared floor** counts as shrinkage. The gate now
+  rolls back and says so explicitly ("Harness unavailable … **did not judge the change itself**").
+  The floor is declared by the battery's owner (`RewardFn.minContracts`) rather than imposed on
+  pluggable third-party reward sources — otherwise "it simply reports fewer" would be misread as an
+  instrument fault (the first draft of this check really did flag an existing 2-contract test
+  double as a fault, which is why it has to be split in two). And when the change passes the gate
+  but the anchor gate was not applied, that is now named: there are **five** success branches, and
+  hand-writing four of them missed the `--prose` one — so it is a shared renderer plus a
+  **range-property guard** (a `renderGateNote(` must appear between each call site and the next),
+  not a head-count.
+
 ## 0.85.7 — 2026-09-27
 
 - Version sync with Mipham Code CLI 0.85.7
