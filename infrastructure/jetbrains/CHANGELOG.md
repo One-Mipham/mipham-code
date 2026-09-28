@@ -4,6 +4,47 @@
 > (tag dates) and use the same wording as the VS Code extension's changelog — the plugin is a
 > thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.10 (2026-09-28)
+
+- Version sync with Mipham Code CLI 0.85.10
+- Added: a **recall trigger for lessons**, attached to the "a tool call just failed" event rather
+  than restated in the system prompt. Resident lessons go into the system prompt; the rest are
+  demoted to a one-line pointer ("N not resident, at `<path>`"). A pointer says _the thing is
+  there_; what was missing is _now is the moment to look_, and a moment can only attach to an
+  **event** — putting it in the system prompt merely restates the pointer, at a cost paid every
+  session. The two landing points first considered (after a context fold, on session resume) were
+  dropped for that reason: resume **re-runs** `setSystemPrompt()`, so both pointers there are
+  freshly generated. A failed tool call is the one moment the system prompt never spoke about and
+  that is bound to the current event — this failure may be covered by a lesson. The **shape is
+  forced by message pairing**: `injectContext` pushes a _user_ message, and inserting it between an
+  assistant `tool_use` and its paired user `tool_result` breaks the pairing, so it cannot be
+  injected inside tool execution; it is deferred until this round's tool results are all appended,
+  the same timing the rules injection uses, which is why both call sites (first round and the
+  multi-turn loop) are wired. The trigger reads the execution result's success bit rather than "did
+  it throw" — failure returns come in eight shapes and per-return instrumentation would miss some.
+  At most once per session. The wording is **non-directive**: it names, ranks and summarises no
+  lesson, and does not decide for the agent whether to read. It shares the pointer's emptiness
+  condition, so there is never a trigger without a pointer. Deliberately not wired into the daemon:
+  the daemon never sets a system prompt, so that path has neither a resident block nor a pointer.
+- Added: the **compiled binary reports its own usage** in CI. `bun build --compile` succeeding does
+  not mean the artifact runs — entry points that fail to resolve at bundle time, unregistered
+  subcommands and throws from top-level imports only surface on actual execution. The new step runs
+  `--help` (commander's registry itself) and `--version` (which must match `package.json`
+  verbatim — version drift makes the install script install something else, and no other step in
+  the pipeline looks at that number). The check captures into a variable before grepping, avoiding a
+  pipe: in `bin --help | grep -q`, grep exits on the first match, the writer takes SIGPIPE, and
+  `set -o pipefail` records that as a step failure — whether it triggers depends on whether the
+  output fills the pipe buffer, i.e. on luck.
+- Security: **CI action references are pinned to immutable commit SHAs**. The `vN` in
+  `uses: owner/action@vN` is a _movable_ ref — upstream, or anyone with write access to that repo,
+  can point it at a different commit and our next CI run executes different code, while the workflow
+  holds npm's OIDC publish right and the release-asset upload right. All **46** `uses:` references
+  (CI 28 + Release 18) are pinned to 40-hex SHAs with the `# vN` comment kept: Dependabot's
+  `github-actions` ecosystem understands this form and raises upgrade PRs from the comment, so the
+  comment is not decoration. New guard `workflow-pinning.test.ts` with a **positive control**
+  asserting "parsed count == raw `uses:` line count in source" — a regex that misses a spelling
+  would leave the missed lines absent from the "all compliant" list, making that assertion a lie.
+
 ## 0.85.9 (2026-09-28)
 
 - Version sync with Mipham Code CLI 0.85.9
