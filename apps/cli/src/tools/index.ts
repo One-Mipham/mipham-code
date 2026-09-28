@@ -21,7 +21,7 @@ import { memoryTool } from './agent/memory'
 import { workflowTool } from './agent/workflow'
 import { webFetchTool } from './network/web-fetch'
 import { webSearchTool } from './network/web-search'
-import { configTool } from './system/config'
+import { configToolService } from './system/config'
 import { mcpTool } from './system/mcp'
 import { toolSearchTool } from './system/tool-search'
 import { artifactTool } from './artifact/artifact'
@@ -77,7 +77,6 @@ export function createToolRegistry(
     webFetchTool,
     webSearchTool,
     // System tools
-    configTool,
     mcpTool,
     toolSearchTool,
     // Artifact tools
@@ -93,11 +92,14 @@ export function createToolRegistry(
   for (const tool of plainTools) {
     ctx.mount(toolService(withValidation(tool)))
   }
-  // 注入工具（credentials 依赖）：read + bash + grep + glob
+  // 注入工具（credentials 依赖）：read + bash + grep + glob + config
+  // Config 也在这条线上：它吐出来的正是 `config.yml` 本体，而那份文件里放着
+  // provider 的 apiKey、MCP server 的 env、inference hook 的 signing_secret。
   ctx.mount(readToolService)
   ctx.mount(bashToolService)
   ctx.mount(grepToolService)
   ctx.mount(globToolService)
+  ctx.mount(configToolService)
 
   return collectTools(ctx)
 }

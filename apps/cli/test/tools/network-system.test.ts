@@ -12,16 +12,27 @@ vi.mock('node:os', async (importOriginal) => {
   }
 })
 
-import { existsSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
 import { parse as parseYaml } from 'yaml'
 import type { ToolContext } from '../../src/shared'
 import { webFetchTool } from '../../src/tools/network/web-fetch'
 import { webSearchTool } from '../../src/tools/network/web-search'
-import { configTool } from '../../src/tools/system/config'
+import { createConfigTool } from '../../src/tools/system/config'
 import { mcpTool } from '../../src/tools/system/mcp'
 import { ENC_PREFIX, decryptApiKey, getCredentialKey } from '../../src/config/credential-crypto'
+import { CREDENTIAL_SENTINEL } from '../../src/core/credential-masker'
+
+const configTool = createConfigTool()
 
 // ── Test context ──
 
@@ -330,12 +341,13 @@ describe('Config tool execution', () => {
     expect(result.content).toContain('Mipham')
   })
 
-  it('returns null for non-existent key', async () => {
+  it('键不存在时返回失败，而不是一个看着像空对象的答案', async () => {
+    // 旧行为：`JSON.stringify(undefined)` 给出的**不是字符串**而是 `undefined` 本身
+    // （违反 `content: string`）—— 这一格原先断言的正是那个怪状。F1-1 把 `get` 的渲染
+    // 换成 YAML（好让擦洗看得见键名），同一情形会渲染成 `{}`，比原来更糟 ⇒ 显式报错。
     const result = await configTool.execute({ action: 'get', key: 'nonexistent' }, ctx)
-    expect(result.success).toBe(true)
-    // JSON.stringify(undefined) returns undefined (not valid JSON),
-    // but the tool stringifies the value via reduce — undefined values
-    // get JSON.stringified as well
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Key not found')
   })
 
   it('errors when key is missing for get', async () => {
@@ -431,16 +443,21 @@ describe('Config tool — provider apiKey 落盘即加密', () => {
     expect(doc.providers[0]!.baseUrl).toBe('https://x.test')
   })
 
-  it('`get` 回来的是落盘形态：这条路径不再把明文交回模型', async () => {
+  it('`get` 回来的既不是明文、也不是密文：这条路径不再把凭据交回模型', async () => {
     // 读工具被 `resolveSafe` 的 Check 1 挡在工作目录内，读不到 ~/.mipham —— 所以
-    // 「工具能不能拿到明文」这个问题，答案由这一格决定。
+    // 「工具能不能拿到凭据」这个问题，答案由这一格决定。
+    //
+    // F1-2 立这一格时的边界是「不给明文、给落盘形态」；F1-1 把边界又推了一格：
+    // 密文同样不交出去 —— 加密防的正是「这份文件被复制到别处」（`credential-crypto`
+    // 的 C5 裁定），而模型上下文与随后的每一轮请求就是「别处」。
     await configTool.execute(
       { action: 'set', key: 'providers.0.apiKey', value: 'sk-secret-123' },
       ctx,
     )
     const result = await configTool.execute({ action: 'get', key: 'providers.0.apiKey' }, ctx)
     expect(result.content).not.toContain('sk-secret-123')
-    expect(result.content).toContain(ENC_PREFIX)
+    expect(result.content).not.toContain(ENC_PREFIX)
+    expect(result.content).toContain(CREDENTIAL_SENTINEL)
   })
 
   it('返回消息不把刚写入的密钥回显出来', async () => {
@@ -492,5 +509,106 @@ describe('MCP tool execution', () => {
   it('requires server and tool parameters', async () => {
     const result = await mcpTool.execute({ server: 'unconfigured', tool: 'navigate' }, ctx)
     expect(result.success).toBe(false)
+  })
+})
+
+// 定向安全审计 ③ 的 F1-1。这条工具是 `~/.mipham/config.yml` 的**读**侧，而那份文件
+// 的用途之一就是放凭据：provider 的 apiKey（F1-2 之后盘上是 `enc:v1:` 密文）、MCP
+// server 的 env / headers、inference hook 的 signing_secret。原来 `list` 返回
+// `stringify(config)`、`get` 返回 `JSON.stringify(value)` —— 两份都是**原样**，于是
+// 「读一眼配置」等于把整份凭据仓库送进模型上下文（落进会话日志，且随之后每一轮请求
+// 发往提供商），而它此前是唯一一个把凭据仓库本体当输出吐出来、却不做任何擦洗的工具
+// —— Read / Bash / Grep / Glob 四条的**输出**都过 `maskOutput`。
+//
+// 形状与那四条一致：工厂 + `inject: ['credentials']` 的 Service，擦洗复用同一个
+// `maskOutput`（F1-2 的教训：不重写「什么算秘密」那份判断，它只有一处定义）。
+// 与它们唯一的一处不同是**默认值的方向**：无参构造时取默认掩码策略，而不是「没有
+// 就关掉」—— 这条工具的输出对象正是凭据仓库本身。
+//
+// 判据不是「值消失了」（那是把实现细节当标准），而是**机密不出现、非机密照常出现**：
+// 只断言「不含密钥」的话，返回空串也能过。
+describe('Config tool — 读路径不把凭据原样送出', () => {
+  const CONFIG_DIR = join(homedir(), '.mipham')
+  const configFile = join(CONFIG_DIR, 'config.yml')
+
+  // 四种形态各一条：密文（F1-2 之后盘上的形态）、明文 apiKey（F1-2 之前的写者留下的
+  // 那份）、下划线大写的 env 变量、以及名字里就写着 secret 的钩子密钥。
+  const CIPHER_API_KEY = 'enc:v1:AAAAdeadbeefAAAA'
+  const PLAIN_API_KEY = 'sk-live-FAKEFAKEFAKE1234'
+  const MCP_TOKEN = 'ghp_FAKEFAKEFAKEFAKE123456'
+  const HOOK_SECRET = 'shhh-fake-signing-secret'
+
+  const FIXTURE = [
+    'version: 0.85.8',
+    'defaultProvider: deepseek',
+    'theme: dark',
+    'providers:',
+    '  - id: deepseek',
+    `    apiKey: ${CIPHER_API_KEY}`,
+    '    model: deepseek-v4-pro',
+    '  - id: openai',
+    `    apiKey: ${PLAIN_API_KEY}`,
+    'inference_hooks:',
+    '  endpoint: https://hooks.example/v1',
+    `  signing_secret: ${HOOK_SECRET}`,
+    'skills:',
+    '  mcpServers:',
+    '    - name: gh',
+    '      env:',
+    `        GITHUB_TOKEN: ${MCP_TOKEN}`,
+    '',
+  ].join('\n')
+
+  function writeFixture(): void {
+    // 与同文件的 cleanConfig 同一条规矩：夹具写不出 tmpdir 就当场停下，
+    // 否则这里会把真的用户配置覆盖掉。
+    if (!CONFIG_DIR.startsWith(tmpdir())) {
+      throw new Error(`refusing to write ${CONFIG_DIR}: outside ${tmpdir()}`)
+    }
+    mkdirSync(CONFIG_DIR, { recursive: true })
+    writeFileSync(configFile, FIXTURE)
+  }
+
+  beforeEach(writeFixture)
+  afterEach(() => {
+    rmSync(CONFIG_DIR, { recursive: true, force: true })
+  })
+
+  it('list：机密一概不出现，非机密照常可读，且不碰盘上那份文件', async () => {
+    const result = await configTool.execute({ action: 'list' }, ctx)
+    expect(result.success).toBe(true)
+
+    for (const secret of [CIPHER_API_KEY, PLAIN_API_KEY, MCP_TOKEN, HOOK_SECRET]) {
+      expect(result.content).not.toContain(secret)
+    }
+    // 正控：机密是**被遮蔽**，不是整份输出被清空 —— 少了这一条，返回空串也能让上面四条过。
+    expect(result.content).toContain(CREDENTIAL_SENTINEL)
+    expect(result.content).toContain('deepseek')
+    expect(result.content).toContain('dark')
+    expect(readFileSync(configFile, 'utf-8')).toBe(FIXTURE)
+  })
+
+  it('get：取机密键 → 遮蔽；取非机密键 → 原样', async () => {
+    const secret = await configTool.execute({ action: 'get', key: 'providers.0.apiKey' }, ctx)
+    expect(secret.content).not.toContain(CIPHER_API_KEY)
+    expect(secret.content).toContain(CREDENTIAL_SENTINEL)
+
+    // 正控：非机密键必须逐字回得来。
+    const plain = await configTool.execute({ action: 'get', key: 'theme' }, ctx)
+    expect(plain.content).toContain('dark')
+    expect(plain.content).not.toContain(CREDENTIAL_SENTINEL)
+
+    // 值里带名字的那一支（MCP server 的 env 块）走同一条擦洗。
+    const block = await configTool.execute({ action: 'get', key: 'skills.mcpServers' }, ctx)
+    expect(block.content).not.toContain(MCP_TOKEN)
+
+    expect(readFileSync(configFile, 'utf-8')).toBe(FIXTURE)
+  })
+
+  it('无 credentialConfig 时方向是「遮」不是「放」', async () => {
+    const bare = createConfigTool()
+    const result = await bare.execute({ action: 'list' }, ctx)
+    expect(result.content).not.toContain(PLAIN_API_KEY)
+    expect(result.content).toContain(CREDENTIAL_SENTINEL)
   })
 })
