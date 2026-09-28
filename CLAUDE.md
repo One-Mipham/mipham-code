@@ -45,7 +45,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：3,624 测试（本机 3,622 passed + 2 skipped，0 失败；CI 数待本轮推送后回填）
+测试：3,625 测试（本机 3,623 passed + 2 skipped，0 失败；CI 数待本轮推送后回填）
 
 ---
 
@@ -82,7 +82,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 302 个测试文件，3624 个测试
+│   │   ├── test/               # 302 个测试文件，3625 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -108,7 +108,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（3624 个测试）
+pnpm test         # vitest run（3625 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~9 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -314,9 +314,9 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | artifacts       | 1       | 6        | manifest                                                                                                                                                                    |
 | agent-view      | 4       | 37       | agent-view-manager / dashboard-keys / session-view                                                                                                                          |
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
-| integrity       | 15      | 104      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
+| integrity       | 15      | 105      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **302** | **3624** | **0 失败** ✅（本机 3,622 passed + 2 skipped）                                                                                                                              |
+| **合计**        | **302** | **3625** | **0 失败** ✅（本机 3,623 passed + 2 skipped）                                                                                                                              |
 
 > **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 179 测试，自带
 > `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。
@@ -397,14 +397,17 @@ GitHub Actions 9 个 job 流水线：`typecheck → lint → format → build-cl
 > **变更记录不放在本文件里** → [`docs/claude-md-history.md`](docs/claude-md-history.md)：最近提交全表 +
 > v1.0.0 起全部修订。查「某次改动属于哪次提交 / 哪一版 / 当时为什么改」时读它。
 >
-> **为什么不留表（2.66.0 起的硬约定）**：本文件每次会话整份加载、有 40,000 字符预算，而这两张表
+> **为什么不留表（2.66.0 起的硬约定）**：本文件每次会话整份加载，且与本仓其余指令文件**共用**
+> 40,000 字符预算，而这两张表
 > **每次改动都必须增长** —— 只要表住在文件里，就必然反复「超限 → 压缩 → 又超限」。收紧窗口治不了本：
 > prettier 把 markdown 表的列宽设成**最宽那一行**、全表按它补齐，故新增一行的边际成本 ≈
 > **最宽行宽 × 行数**，不是该行自身的长度（实测：一行写成 1,023 字符 ⇒ 整表 3,432 → 9,383 字符）。
 > 两段合计曾占全文 **21.9%**（8,230 字符）。移出后本文件不再随每次改动增长；当前版本的要点写在
 > 文件头的 `最后更新` / `前一条` 两行（散文，1:1 成本、无 padding），旧的逐字落进 history.md 的
 > 「窗口行存档」。由 `apps/cli/test/integrity/tool-reference-integrity.test.ts` 机器强制：两段
-> **零数据行** + 指针在位 + **存档在位且两张全表都还在**，连同「CLAUDE.md ≤ 40,000 字符」的预算 ——
+> **零数据行** + 指针在位 + **存档在位且两张全表都还在**，连同**本仓指令载荷 ≤ 40,000 字符**的体积预算
+> （2026-09-28 换向：旧尺量的是单份 `CLAUDE.md` 在盘上的字符数，与启动告警量的**装载总额**互不相干
+> ⇒「守卫绿」与「告警响」可以并立；现量装载器自己那一份读数，且与告警用**同一个常量**）——
 > 40k 是当初触发拆分的红线（拆分 17 小时后曾二次越过：21,193 → 56,001）。
 
 ---
@@ -448,36 +451,12 @@ mipham-code 变更（包名/版本）
 
 ## 下一步计划
 
-**已完成（2026-08-16 post-CRSI 五条收官）**：
-
-1. ✅ **发布产物冒烟测试** — CI 构建后实跑二进制 + npm 包启动
-2. ✅ **Vajra-Hṛdaya 内核收口** — gap①-④ 绞杀收官 + 生产 mount 接线
-3. ✅ **CRSI 有效性度量** — EffectivenessTracker 闭环 + `/crsi stats` 面板增强
-4. ✅ **分发触达** — Windows PowerShell / macOS .app(DMG) / JetBrains 插件接入 release 管线
-5. ✅ **可观测性** — metrics 激活 + Daemon 结构化 JSON logger
-6. ✅ **Daemon 后台持久化** — 5 阶段完成（核心基础设施 → 会话持久化 → Agent 系统 → Goals+Schedules → 外部 API 安全），worker 继承 6 级权限系统
-
-**已完成（2026-08-17 CRSI 受约束自改进闭环六块）**：
-
-7. ✅ **自我认知** — `/crsi inventory` 能力自报告 + 系统提示「先查状态再答能力」规则
-8. ✅ **定界** — 沙箱只读边界（PROTECTED_PATHS：宪法/eval harness/改进机制不可自改）
-9. ✅ **闭环度量** — `exit` 兜底 flush（有效性评估真正生效）+ 测试隔离修复（`rule-engine.test.ts` 曾污染真实 `~/.mipham`）
-10. ✅ **沙箱入口** — `/crsi modify` 两阶段闸门（worktree → 全量测试 → diff → `--approve`/`--reject`）
-11. ✅ **producer** — `/crsi propose` 失败信号转教训文件（模板化，无 LLM）
-12. ✅ **eval harness** — `/crsi eval` 冻结 10 条 ground-truth 契约（规则/宪法/沙箱边界/红队）+ rewards 日志 + 防退化闸
-
-**已完成（2026-08-17 内核收尾 + 行为缺口表 C2 + MCP 深度集成）**：
-
-13. ✅ **内核后续收尾** — `defaultToolContext` 改名 `defaultVajraContext`；`replaceMessages` 保留为 session-log 不变量的测试缝（修正过时注释，`setSkillsLoader` 早已删除）；SubAgent 4 spawn 点已全部迁 `llm`
-14. ✅ **行为缺口表 C2（证明更好实演）** — `MANAGED_DANGEROUS_RE` 4→8（+ mkfs / dd→/dev/ / 关停主机 / crontab -r），固化 managed tool-params 规则，eval 分数翻转 75→100
-15. ✅ **MCP 深度集成** — OAuth 认证 + Tool Search 早已完成；本轮接上「动态工具更新」断链（`applyToolChanges` + `syncMcpToolsOnChange` → 中央注册表）
-
-**已完成（2026-08-18 待办收口）**：
-
-16. ✅ **VS Code 扩展发布** — 已上架 VS Code Marketplace（网页上传 VSIX，免 PAT）
-17. ✅ **JetBrains 插件发布** — 已过审上线（ai.mipham.code/33597），release 管线 env 判空自动发布
-18. ✅ **1M 上下文窗口** — 11+ 模型注册 `contextWindow: 1_000_000`；自适应阈值（200K/500K/1M）+ `MIPHAM_DISABLE_1M_CONTEXT` 开关
-19. ✅ **多语言国际化** — 10 个 `ui/*.tsx` 全接 `t()` + `commands.ts` 用 `createT`，65 键中英双语
+> **已完成的批次不放在本文件里** → [`docs/claude-md-history.md`](docs/claude-md-history.md)：2026-08-16 起
+> 四个「已完成」批次的**逐字原文**（19 条）。查「某个已收口的计划属于哪一批、当时做到哪」时读它。
+>
+> **为什么搬（2026-09-28）**：这一段与「最近提交 / 修订历史」是**同一物种** —— 每次收口都必然增长，
+> 而它对每一次会话的载荷毫无贡献（只有**回看**时才需要）。搬走的 19 条正文实测 1,767 字符
+> （`CLAUDE.md` 32,114 → 30,633）。留下的**待办**是活的，故留原位。
 
 **待办**：
 

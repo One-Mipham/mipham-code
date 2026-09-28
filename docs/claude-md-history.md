@@ -408,3 +408,47 @@
 | --- 2.94.6 头部「前一条」行（2.94.8 挤出头部窗口时移入）--- |
 > **前一条（2.94.6）**: 2026-09-26 — **0.85.6：23 笔（含 6 笔文档/杂务）—— ROADMAP D8–D17 全部收口** —— ① **更新面**：`mipham update` 的安装换成**原子换手**（装进 `<prefix>` 内 staging → 自证 → **两次 rename** → 换手后再验一次；回滚一律走**反向 rename**，拷贝式快照整套退役；失败文案 2 态 → **4 态**）；**Windows 下每次 update 都把刚装好的版本回滚掉**（win32 没有 `lib` 层、旧代码照抄 Unix 的四层 `..` ⇒ launcher 指向不存在的文件 ⇒ 自证必失败 —— 那半直接读 `process.platform`，在 Unix 上永远跑不到），平台改为可注入。② **provider 面**：调用方的**撤销从没到达传输层**（`signal` 有声明、有消费者、有设置者，唯独没有送达者 ⇒ `AbortController` **一次都没接上**；且只补送达会把每个流在响应头处掐死 ⇒ 改 `AbortSignal.any`）；消费方走人时**连接从未被放开**（读循环补 `finally { cancel() }`）。③ **CLI 面**：`--provider`/`--model` 顶层 flag 落地（两个**已发布** IDE 插件的启动命令此前被 `Unknown command` 拒掉）；ghost-text 补全上行无上限、下行取消不掉；`--resume` 后估值被单条系统提示覆盖；子代理声明的 `memory` 从没到过模型手里；页脚把启动那一拍的 graft 状态冻死；读侧不验形 5 处。④ **daemon 面**：`daemon.log` 起手轮转（只留一代）；smoke 两条守卫分支**首次真跑** + 超时回收子进程。⑤ **公开面**：页脚那个测试数被手改过**至少 7 次** ⇒ `package-info.json` 四个计数槽 + 三处副本 + **CI 硬门禁**；两份 i18n 副本各删掉对方的**死命名空间**（590/1427 = 41% 死 → **共有键 0**）。测试 3,426 → **3,506**（291 → 299 文件，0 失败）。
 ```
+
+---
+
+## 下一步计划（已完成归档）
+
+`CLAUDE.md` 的「下一步计划」段自此只留**待办**（那是活的）；2026-08-16 起四个「已完成」批次
+整体移入此处（2026-09-28）。移出的理由与「最近提交 / 修订历史」**逐字相同**：每次收口都必然增长，
+而对**每一次会话**的载荷毫无贡献 —— 只有回看时才需要它。搬走的 19 条正文实测 1,767 字符
+（`CLAUDE.md` 32,114 → 30,633）。
+
+以下**逐字**移入，只折掉原文的批次间空行，内容一字未改（含原文的编号 1–19）：
+
+```text
+**已完成（2026-08-16 post-CRSI 五条收官）**：
+
+1. ✅ **发布产物冒烟测试** — CI 构建后实跑二进制 + npm 包启动
+2. ✅ **Vajra-Hṛdaya 内核收口** — gap①-④ 绞杀收官 + 生产 mount 接线
+3. ✅ **CRSI 有效性度量** — EffectivenessTracker 闭环 + `/crsi stats` 面板增强
+4. ✅ **分发触达** — Windows PowerShell / macOS .app(DMG) / JetBrains 插件接入 release 管线
+5. ✅ **可观测性** — metrics 激活 + Daemon 结构化 JSON logger
+6. ✅ **Daemon 后台持久化** — 5 阶段完成（核心基础设施 → 会话持久化 → Agent 系统 → Goals+Schedules → 外部 API 安全），worker 继承 6 级权限系统
+
+**已完成（2026-08-17 CRSI 受约束自改进闭环六块）**：
+
+7. ✅ **自我认知** — `/crsi inventory` 能力自报告 + 系统提示「先查状态再答能力」规则
+8. ✅ **定界** — 沙箱只读边界（PROTECTED_PATHS：宪法/eval harness/改进机制不可自改）
+9. ✅ **闭环度量** — `exit` 兜底 flush（有效性评估真正生效）+ 测试隔离修复（`rule-engine.test.ts` 曾污染真实 `~/.mipham`）
+10. ✅ **沙箱入口** — `/crsi modify` 两阶段闸门（worktree → 全量测试 → diff → `--approve`/`--reject`）
+11. ✅ **producer** — `/crsi propose` 失败信号转教训文件（模板化，无 LLM）
+12. ✅ **eval harness** — `/crsi eval` 冻结 10 条 ground-truth 契约（规则/宪法/沙箱边界/红队）+ rewards 日志 + 防退化闸
+
+**已完成（2026-08-17 内核收尾 + 行为缺口表 C2 + MCP 深度集成）**：
+
+13. ✅ **内核后续收尾** — `defaultToolContext` 改名 `defaultVajraContext`；`replaceMessages` 保留为 session-log 不变量的测试缝（修正过时注释，`setSkillsLoader` 早已删除）；SubAgent 4 spawn 点已全部迁 `llm`
+14. ✅ **行为缺口表 C2（证明更好实演）** — `MANAGED_DANGEROUS_RE` 4→8（+ mkfs / dd→/dev/ / 关停主机 / crontab -r），固化 managed tool-params 规则，eval 分数翻转 75→100
+15. ✅ **MCP 深度集成** — OAuth 认证 + Tool Search 早已完成；本轮接上「动态工具更新」断链（`applyToolChanges` + `syncMcpToolsOnChange` → 中央注册表）
+
+**已完成（2026-08-18 待办收口）**：
+
+16. ✅ **VS Code 扩展发布** — 已上架 VS Code Marketplace（网页上传 VSIX，免 PAT）
+17. ✅ **JetBrains 插件发布** — 已过审上线（ai.mipham.code/33597），release 管线 env 判空自动发布
+18. ✅ **1M 上下文窗口** — 11+ 模型注册 `contextWindow: 1_000_000`；自适应阈值（200K/500K/1M）+ `MIPHAM_DISABLE_1M_CONTEXT` 开关
+19. ✅ **多语言国际化** — 10 个 `ui/*.tsx` 全接 `t()` + `commands.ts` 用 `createT`，65 键中英双语
+```

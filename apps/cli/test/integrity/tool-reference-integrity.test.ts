@@ -23,8 +23,9 @@
 
 import { describe, it, expect } from 'vitest'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, join, relative, sep } from 'node:path'
 
+import { INSTRUCTION_BUDGET_CHARS, InstructionsLoader, gitRoot } from '../../src/core/instructions'
 import { DEFAULT_PROVIDERS } from '../../src/shared/constants'
 import { createToolRegistry } from '../../src/tools/index'
 
@@ -465,11 +466,33 @@ describe('IDE 扩展环境变量契约', () => {
  * 刻意**不用** `prompt-exclude` / 按标题剥整段的办法来「减重」：按标题剥会把
  * `> 完整记录 → docs/claude-md-history.md` 那行指针一起剥掉，读者反而失去去路
  * （拆分提交 a278151 已记录此教训）。指针现在是那两段**唯一**的内容，更剥不得。
+ *
+ * **2026-09-28 尺子换向：从「单份文件 ≤40k」改成「本仓自己那一份载荷 ≤40k」。**
+ *
+ * 旧尺量的是 `CLAUDE.md` **这一份文件在磁盘上的字符数**（`readFileSync(...).length`），而启动告警
+ * （`formatInstructionSizeNotice`）量的是**装载器实际拼进系统提示的全部文本**。两把尺子互不相干，
+ * 于是**「守卫绿」与「告警响」可以同时成立** —— 实测就是如此（同一快照，2026-09-28）：
+ * `CLAUDE.md` 单份渲染 32,223、本仓载荷 39,129，两者都在 40,000 之内，而装载总额 58,572，
+ * 告警照响、守卫照绿。旧尺还漏得更多：它看不见 `MIPHAM.md`、看不见 CRSI 教训块、
+ * 也看不见每份文本前面的那段 `<!-- 级别 (路径) -->` 渲染前缀。
+ *
+ * 新尺量**装载器自己报的读数**（`sizeReport()`，与 `buildSystemPrompt` 同一投影），
+ * 只取本仓那一份，与**同一个常量** `INSTRUCTION_BUDGET_CHARS` 比。换向前后：
+ * 本仓载荷 39,129（余量 871）→ 37,648（余量 2,352，搬走「下一步计划」已完成批次所致）；
+ * 随后的文档订正（指针里的实测数字 + 上面这段换尺说明）又添 161 ⇒ 现读数 37,809（余量 2,191）。
+ *
+ * **诚实的边界**：换尺之后「守卫绿 + 告警响」仍可能并立 —— 告警的总额里有 19,443 字符来自
+ * **集团/公司层的 `CLAUDE.md`、`MIPHAM.md`**，那些文件不由本仓的提交改变（在 CI 的 checkout 里
+ * 干脆不存在），拿它们判本仓的红会得到「本机红、CI 绿」。故尺子的**归属**落在本仓自己那一份：
+ * 本仓再也不能把自己的载荷养过预算而这把尺子看不见。
  */
 describe('变更记录表的去向与文档体积', () => {
   const CLAUDE_MD = join(REPO_ROOT, 'CLAUDE.md')
-  /** CLAUDE.md 全文字符预算——当初触发拆分的那条红线。 */
-  const MAX_CHARS = 40_000
+  /**
+   * 体积预算 —— **与启动时的 `⚠ Instruction files total …` 告警是同一个常量**，
+   * 不是各写一份的 40,000。见下面那条测试的注释。
+   */
+  const MAX_CHARS = INSTRUCTION_BUDGET_CHARS
   /** 两张表的搬运目的地：正文指针必须指向它，它本身也必须真的还在。 */
   const ARCHIVE = 'docs/claude-md-history.md'
   const ARCHIVE_PATH = join(REPO_ROOT, ARCHIVE)
@@ -583,12 +606,68 @@ describe('变更记录表的去向与文档体积', () => {
     }
   })
 
-  it('CLAUDE.md 保持在体积预算内', () => {
-    const chars = readFileSync(CLAUDE_MD, 'utf-8').length
+  /**
+   * 「下一步计划」的**已完成批次** —— 2026-09-28 与两张表同样搬出（搬走 1,767 字符）。
+   *
+   * 它进不了 `SECTIONS`：那一段的存档断言按**表**判定（`tableRows(...) > 0`），而这里是编号
+   * 列表，一张表都没有 —— 混进去只会得到一条恒红的用例。故单列一条，判据换成**列表的形状**：
+   * `1. ✅ …` 这种行在正文里 0 条、在存档里 > 0 条（与表格那条同构）。留下的**待办**是活的，
+   * 所以只数 ✅ 行，不数整个列表。
+   */
+  it('「下一步计划」的已完成批次在存档里，正文只留待办与指针', () => {
+    const doneItems = (lines: string[]) => lines.filter((l) => /^\d+\.\s*✅/.test(l))
+    const planName = '下一步计划'
+
+    const body = section(readFileSync(CLAUDE_MD, 'utf-8'), planName)
+    expect(body, `CLAUDE.md 里没有标题「${planName}」——这段去哪了？`).not.toBeNull()
+    expect(
+      body?.join('\n'),
+      `「${planName}」段没有指向 ${ARCHIVE} 的链接——已完成批次移出后，指针是唯一的去路`,
+    ).toContain(`](${ARCHIVE})`)
+    expect(
+      body?.join('\n'),
+      `「${planName}」段里没有待办清单了——搬走的只是已完成批次，待办是活的、该留在原处`,
+    ).toContain('**待办**：')
+    expect(
+      doneItems(body!).length,
+      `「${planName}」段里还有 ${doneItems(body!).length} 条 \`N. ✅\` —— 已收口的批次全在 ${ARCHIVE}，` +
+        '正文只留待办与指针（它每收口一次就必然增长，而每次会话都要带上它）',
+    ).toBe(0)
+
+    const archived = section(readFileSync(ARCHIVE_PATH, 'utf-8'), '下一步计划（已完成归档）')
+    expect(
+      archived,
+      `${ARCHIVE} 里没有标题「下一步计划（已完成归档）」——已完成的批次没有别的容身处`,
+    ).not.toBeNull()
+    expect(
+      doneItems(archived!).length,
+      `${ARCHIVE} 的「下一步计划（已完成归档）」只剩 ${doneItems(archived!).length} 条——` +
+        'CLAUDE.md 已不再保留它们，删空即内容不可恢复',
+    ).toBeGreaterThan(0)
+  })
+
+  it('本仓的指令载荷保持在体积预算内——与启动告警同一把尺子', () => {
+    const root = gitRoot(REPO_ROOT)
+    const loader = new InstructionsLoader()
+    loader.loadAll(REPO_ROOT)
+    const report = loader.sizeReport()
+
+    // 只看本仓自己那一份：`loadAll` 还会读集团/公司层的 `CLAUDE.md`、`MIPHAM.md`
+    // 与用户层 `~/.mipham/USER.md`，那些文件不由本仓的提交改变。
+    const own = report.files.filter((f) => f.path.startsWith(root + sep))
+    expect(own.length, `git 根 ${root} 下一份指令文件都没被读进来——判据退化成空和`).toBeGreaterThan(
+      0,
+    )
+
+    const chars = own.reduce((n, f) => n + f.chars, 0)
+    const foreign = report.totalChars - chars
+    const breakdown = own.map((f) => `  ${f.chars}  ${relative(root, f.path)}`).join('\n')
+
     expect(
       chars,
-      `CLAUDE.md 已 ${chars} 字符，预算 ${MAX_CHARS}——` +
-        `新增解释性内容写进表外散文（表内一格会让全表各行补一次 pad）`,
+      `本仓指令载荷 ${chars} 字符，预算 ${MAX_CHARS}——每一条请求都要带上它。\n${breakdown}\n` +
+        `（本次装载总额 ${report.totalChars}，其中 ${foreign} 不属于本仓，故不在此尺之内。）\n` +
+        `新增解释性内容写进表外散文；整段只供回看的，搬到 docs/ 下的存档（表内一格会让全表各行补一次 pad）。`,
     ).toBeLessThanOrEqual(MAX_CHARS)
   })
 })
