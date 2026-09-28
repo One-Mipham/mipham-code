@@ -271,17 +271,23 @@ function MiphamTextInput({
     { isActive: focus },
   )
 
+  // 光标**两个分支都要画**。此前它只写在 placeholder 三元表达式的 else 里，而
+  // `value.length === 0 && placeholder` 在真实使用中永远成立（placeholder 是
+  // `t('ui.input.placeholder')` 或加载动词，从不是空串）⇒ 初始状态一个光标都没有，
+  // 而那正是最常看到的状态。
+  //
+  // 方块是**显式白色**（`backgroundColor` + 黑字），不是 `inverse`：反显取的是终端
+  // **前景色**，主题一换就变成别的颜色；而「白色直立长方形」是定死的形状要求。
+  // 落在字符上时即「白块挖空一个黑字」；落在末尾时 `value[cursor]` 是 undefined，
+  // 用空格补 —— 空格加背景色就是一整个实心方块。
   return (
     <Text>
-      {value.length === 0 && placeholder ? (
-        <Text dimColor>{placeholder}</Text>
-      ) : (
-        <>
-          {value.slice(0, cursor)}
-          <Text inverse>{value[cursor] ?? ' '}</Text>
-          {value.slice(cursor + 1)}
-        </>
-      )}
+      {value.slice(0, cursor)}
+      <Text backgroundColor="white" color="black">
+        {value[cursor] ?? ' '}
+      </Text>
+      {value.slice(cursor + 1)}
+      {value.length === 0 && placeholder ? <Text dimColor>{placeholder}</Text> : null}
     </Text>
   )
 }
