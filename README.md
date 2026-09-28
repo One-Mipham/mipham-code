@@ -122,7 +122,7 @@ pnpm monorepo
 Create `~/.mipham/config.yml`:
 
 ```yaml
-version: '0.83.0'
+version: '0.85.10'
 defaultProvider: anthropic
 defaultModel: claude-sonnet-4-6
 permission: default

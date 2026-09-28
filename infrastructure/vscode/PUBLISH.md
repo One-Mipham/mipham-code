@@ -49,7 +49,7 @@
 ```bash
 cd infrastructure/vscode
 npx vsce login miphamai        # 交互式粘贴 Azure DevOps PAT
-npx vsce publish --packagePath mipham-code-0.48.0.vsix
+npx vsce publish --packagePath mipham-code-<版本>.vsix
 ```
 
 PAT 生成：https://dev.azure.com/ → 头像 → Personal Access Tokens → scope 勾
