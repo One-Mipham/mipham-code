@@ -849,6 +849,19 @@ const crsiInventoryCmd: CommandHandler = async (ctx) => {
   return { content: buildCapabilityReport(ctx.engine) }
 }
 
+/**
+ * 奖励闸的可见附注，放在 ✅ 头行之后。
+ *
+ * 抽成一个渲染器是因为它有**四个读者**（`/crsi modify` + `/crsi propose` 的三条路径）；
+ * 逐处手拼迟早漏一个，而漏掉的那个就是「公布了字段、没有落点」—— 闸自称施加了、
+ * 实际没施加，从外面看不出区别，等于没说的话术。
+ *
+ * 无附注时返回空串，且**调用点保持逐字不变**（附注前不补空行，附注后自带一个）。
+ */
+function renderGateNote(result: { rewardNote?: string }): string {
+  return result.rewardNote ? `⚠️ 奖励闸附注：${result.rewardNote}\n` : ''
+}
+
 const crsiModifyCmd: CommandHandler = async (ctx, args) => {
   if (args[0] === '--approve') {
     if (shouldBlockApproval(getPendingVerdict() ?? 'inconclusive')) {
@@ -933,7 +946,9 @@ const crsiModifyCmd: CommandHandler = async (ctx, args) => {
 
   return {
     content:
-      `✅ 测试通过。审阅下方 diff：\n\n${result.diff}\n` +
+      `✅ 测试通过。审阅下方 diff：\n` +
+      renderGateNote(result) +
+      `\n${result.diff}\n` +
       improvementLine +
       '\n/crsi modify --approve  合并\n/crsi modify --reject   丢弃',
   }
@@ -1054,7 +1069,9 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
 
     return {
       content:
-        `✅ 已生成散文提议并跑过测试。审阅 diff：\n\n${result.diff}\n\n` +
+        `✅ 已生成散文提议并跑过测试。审阅 diff：\n` +
+        renderGateNote(result) +
+        `\n${result.diff}\n\n` +
         predictionLine +
         riskLine +
         // 操作提示必须**自成一行**：`predictionLine` / `riskLine` 都不以换行结尾，此前提示串
@@ -1094,7 +1111,9 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
 
     return {
       content:
-        `✅ 已生成受管理规则并跑过测试。审阅 diff：\n\n${result.diff}\n\n` +
+        `✅ 已生成受管理规则并跑过测试。审阅 diff：\n` +
+        renderGateNote(result) +
+        `\n${result.diff}\n\n` +
         '/crsi modify --approve 合并 | /crsi modify --reject 丢弃',
     }
   }
@@ -1126,7 +1145,9 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
 
     return {
       content:
-        `✅ 已生成合并教训并跑过测试。审阅 diff：\n\n${result.diff}\n\n` +
+        `✅ 已生成合并教训并跑过测试。审阅 diff：\n` +
+        renderGateNote(result) +
+        `\n${result.diff}\n\n` +
         '/crsi modify --approve 合并 | /crsi modify --reject 丢弃',
     }
   }
@@ -1154,7 +1175,9 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
 
   return {
     content:
-      `✅ 已生成教训并跑过测试。审阅 diff：\n\n${result.diff}\n\n` +
+      `✅ 已生成教训并跑过测试。审阅 diff：\n` +
+      renderGateNote(result) +
+      `\n${result.diff}\n\n` +
       '/crsi modify --approve 合并 | /crsi modify --reject 丢弃',
   }
 }

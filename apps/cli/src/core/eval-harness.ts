@@ -95,6 +95,44 @@ export function regressedAnchors(results: EvalResult[]): string[] {
   return results.filter((r) => r.role === 'anchor' && !r.passed).map((r) => r.id)
 }
 
+/**
+ * 机制哨兵契约电池的冻结下限 —— 量具「至少跑了这么多条」的证明。
+ *
+ * 为什么需要它：`runEval` 的分数是 `passed / results.length`，于是
+ * **空结果集 = 满分 100**。一次把整块契约注释掉的重构，会让量具
+ * 「测得更少」而分数不动 —— 在外部读数上与「全绿」同形。
+ * 下限把这层区分钉住：低于它 ⇒ 量具不可信，而不是候选变好了。
+ *
+ * 这个数字是**我方电池**的属性，所以由 {@link mechanismSentinel} 声明、
+ * 经 `RewardFn.minContracts` 传给判定侧 —— 不强加给可插拔的第三方奖励源。
+ */
+export const MIN_CONTRACT_COUNT = 40
+
+/**
+ * 量具自证：证明这次评估**真的发生了**，其分数才可被采信。返回 null = 可用。
+ *
+ * 只回答「量具有没有跑」；「跑出来是好是坏」由调用方比分数负责。
+ * 两者不可混：混了就会把量具故障说成候选缺陷。
+ *
+ * 两条判据的适用面不同：
+ * - **空契约集**（`results: []`）是普适的谎 —— 它自称逐契约判定却一条没交；
+ * - **低于 `minContracts`** 只对**声明了**下限的奖励源成立（`runEval` 的电池），
+ *   否则会把「一个只报 2 条契约的测试替身」误判成量具故障。
+ */
+export function instrumentFailure(
+  report: { results?: EvalResult[] },
+  minContracts?: number,
+): string | null {
+  const n = report.results?.length ?? 0
+  if (n === 0) {
+    return 'harness 返回空契约集（0 条）：它自称逐契约判定却一条没交，评分路径没跑（沿用 runEval 算式时该情形分数恰为满分 100）'
+  }
+  if (minContracts !== undefined && n < minContracts) {
+    return `harness 只跑了 ${n} 条契约，低于该奖励源声明的下限 ${minContracts}（量具缩水读作「全绿」）`
+  }
+  return null
+}
+
 // ── Rewards log (path A Phase 1: 奖励信号持久化) ──
 
 const SCORES_FILE = miphamHome('crsi', 'eval-scores.jsonl')

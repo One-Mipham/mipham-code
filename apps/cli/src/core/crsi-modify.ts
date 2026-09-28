@@ -15,8 +15,13 @@
 import { randomUUID } from 'node:crypto'
 import { CrsiSandbox, validateBlastRadius, validateMergeConvergence } from './crsi-sandbox'
 import type { CrsiModificationResult } from './crsi-sandbox'
-import { appendEvalScore, getLastEvalScore, regressedAnchors } from './eval-harness'
-import { mechanismSentinel, type RewardFn } from './reward-fn'
+import {
+  appendEvalScore,
+  getLastEvalScore,
+  instrumentFailure,
+  regressedAnchors,
+} from './eval-harness'
+import { mechanismSentinel, type RewardFn, type ScoreReport } from './reward-fn'
 
 export interface CrsiProposal {
   /** 人类可读的改动说明 */
@@ -134,9 +139,41 @@ export async function runCrsiModification(
   // Reward gate：奖励分数不得低于上次记录（防跨合并退化）。
   // 默认机制哨兵；可插拔——调用方传 opts.rewardFn 换用其他奖励源（如任务表现）。
   const rewardFn = opts?.rewardFn ?? mechanismSentinel()
-  const report = await rewardFn.evaluate()
+
+  // 三态，不是两态：判了它差 / 判了它好 / **没能判**。
+  // 「没能判」必须走自己的名字 —— 否则量具故障会被读成候选缺陷，把一次
+  // 基础设施事故说成「这次改动让它退化了」。
+  let report: ScoreReport
+  try {
+    report = await rewardFn.evaluate()
+  } catch (err) {
+    // 此前这个 await 裸在外面：抛错会穿出本函数，`createWorktree` 建的
+    // worktree 永不回收，调用方拿到的是异常而不是裁定。
+    sandbox.rollback()
+    applied.phase = 'failed'
+    applied.error = `Harness unavailable (${rewardFn.name}): ${
+      err instanceof Error ? err.message : String(err)
+    } —— 未判定改动本身`
+    return applied
+  }
+
+  // 量具先自证：分数只在「电池确实跑满了」时才可采信。
+  // 缺了它，`score` 的 `results.length > 0 ? … : 100` 会让**空结果集读作满分**。
+  if (report.results) {
+    const unusable = instrumentFailure(report, rewardFn.minContracts)
+    if (unusable) {
+      sandbox.rollback()
+      applied.phase = 'failed'
+      applied.error = `Harness unavailable (${rewardFn.name}): ${unusable} —— 未判定改动本身`
+      return applied
+    }
+  } else {
+    applied.rewardNote = `${rewardFn.name} 不提供逐契约结果 ⇒ anchor 闸未施加`
+  }
+
   // 细粒度防回退：anchor 契约（安全/机制不变量）任一翻转 PASS→FAIL 即拒，
   // 即使总分因新增契约而上升也被拦（比「总分不退化」更严格）。
+  // 注意：奖励源不报逐契约结果时这里恒为空 —— 该情形已由上面的 rewardNote 声明。
   const anchors = regressedAnchors(report.results ?? [])
   if (anchors.length > 0) {
     sandbox.rollback()

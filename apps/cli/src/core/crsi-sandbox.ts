@@ -54,6 +54,13 @@ export interface CrsiModificationResult {
   diff?: string
   /** Error message if something failed */
   error?: string
+  /**
+   * 奖励闸的附注：过闸，但闸本身**没有完整施加**时的可见声明。
+   *
+   * 目前唯一的来源是「rewardFn 不提供逐契约结果 ⇒ anchor 闸未施加」。
+   * 不静默跳过 —— 沉默与「anchor 全绿」在外部读数上同形。
+   */
+  rewardNote?: string
   /** Current phase of the sandbox pipeline */
   phase:
     'pending' | 'applied' | 'testing' | 'passed' | 'failed' | 'approved' | 'merged' | 'rolled-back'

@@ -95,32 +95,77 @@ export function buildLessonContent(
   return lines.join('\n')
 }
 
-/** 教训精华（标题 + 建议），用于运行时召回注入系统提示。 */
+/**
+ * 教训精华（标题 + 建议 + 严重度），用于运行时召回注入系统提示。
+ *
+ * 严重度决定**注入位置**，不只是标签：`critical` 常驻每一次请求，
+ * `warning` 移出常驻块、按需召回（见 {@link isAlwaysOnLesson}）。
+ * 这两个数是**当时的读数、不是不变量**（2026-09-28 实测：39 条全量 11,743 字符，
+ * 占 40k 指令预算 29.2%；分档后 6 条常驻）。教训加减后它们就作废，别当断言读。
+ */
 export interface CrsiLessonSummary {
   title: string
   suggestion: string
+  severity: 'critical' | 'warning'
 }
 
 /**
- * 从 crsi-lessons.md 提取每条教训的「精华」（标题 + 建议），跳过证据段落。
+ * 缺 `严重度` 或取值在闭集之外时的落档。
+ *
+ * 取 `critical`（fail-open 到**常驻**）：宁可多花字符，也不把一条守卫
+ * 静默降级成「按需」—— 那正是「只写不读」缺口的复发形态。
+ * 定义在**一处**：抽取器与 `flush()` 都读它，改一处即改全。
+ * 不导出 —— 它没有第二个读者，导出只会让「谁在用」这个问题多一个假答案。
+ */
+const DEFAULT_LESSON_SEVERITY: CrsiLessonSummary['severity'] = 'critical'
+
+/**
+ * 从 crsi-lessons.md 提取每条教训的「精华」（标题 + 建议 + 严重度），跳过证据段落。
  * 这是「只写不读」缺口 → 「写后召回」的读取侧。
+ *
+ * 按 `##` 块累积、块边界 flush —— 因为 `- 严重度:` 行写在 `- 建议:` **之后**，
+ * 「见到建议即 push」的写法读不到它。块级累积对行序不敏感。
+ *
+ * 缺 `严重度` 时的落档见 {@link DEFAULT_LESSON_SEVERITY}。
  */
 export function extractCrsiLessonSummaries(content: string): CrsiLessonSummary[] {
   const out: CrsiLessonSummary[] = []
   let title = ''
+  let suggestion = ''
+  let severity = DEFAULT_LESSON_SEVERITY
+
+  const flush = () => {
+    if (title && suggestion) out.push({ title, suggestion, severity })
+    title = ''
+    suggestion = ''
+    severity = DEFAULT_LESSON_SEVERITY
+  }
+
   for (const line of content.split('\n')) {
     const h = line.match(/^##\s+(.+?)\s*$/)
     if (h) {
+      flush()
       title = h[1]!.trim()
       continue
     }
     const s = line.match(/^-\s*建议[:：]\s*(.+)$/)
-    if (s && title) {
-      out.push({ title, suggestion: s[1]!.trim() })
-      title = ''
+    if (s) {
+      if (!suggestion) suggestion = s[1]!.trim() // 块内首条建议为准（与旧行为一致）
+      continue
+    }
+    const v = line.match(/^-\s*严重度[:：]\s*(.+?)\s*$/)
+    if (v) {
+      // 闭集外的取值一律落常驻档 —— 未知严重度不倒向「按需」。
+      severity = v[1] === 'warning' ? 'warning' : 'critical'
     }
   }
+  flush()
   return out
+}
+
+/** 是否常驻每一次请求。非 `warning` 的一切（含缺省）都常驻。 */
+export function isAlwaysOnLesson(summary: CrsiLessonSummary): boolean {
+  return summary.severity !== 'warning'
 }
 
 /** 把教训精华渲染为系统提示召回块。无教训时返回空串。 */
@@ -134,6 +179,22 @@ loop from past sessions. Apply them proactively — do not repeat these
 mistakes:
 
 ${items}`
+}
+
+/**
+ * 未常驻教训的指针行。没有未常驻的教训时返回空串。
+ *
+ * 指针是**召回触发点**：没有它，移出常驻块就等于把教训变成只写不读。
+ * 它不重复正文，只报条数与文件路径 —— 模型用已有的 Read/Grep 工具自取。
+ */
+export function buildCrsiLessonsPointer(
+  summaries: CrsiLessonSummary[],
+  lessonsPath: string,
+): string {
+  const onDemand = summaries.filter((s) => !isAlwaysOnLesson(s))
+  if (onDemand.length === 0) return ''
+  return `另有 ${onDemand.length} 条 warning 级教训未常驻。
+需要时读 ${lessonsPath}（含标题/建议/证据）。`
 }
 
 /** 产出教训文件变更候选。无合格信号时返回 null。 */

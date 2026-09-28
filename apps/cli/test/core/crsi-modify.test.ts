@@ -11,7 +11,7 @@ import {
   hasPending,
 } from '../../src/core/crsi-modify'
 import type { CrsiProposal } from '../../src/core/crsi-modify'
-import { appendEvalScore } from '../../src/core/eval-harness'
+import { appendEvalScore, runEval } from '../../src/core/eval-harness'
 
 // Isolate the sandbox report dir (matching crsi-sandbox.test.ts).
 vi.mock('node:os', async (importOriginal) => {
@@ -272,5 +272,141 @@ describe('CrsiProposal ε 字段（类型面）', () => {
     expect(full.risk).toBe('可能变慢')
     const merged: CrsiProposal = { ...bare, merge: true }
     expect(merged.merge).toBe(true)
+  })
+})
+
+// 判据自身可信：`evaluate()` 出事时**不得**被当成「候选变差了」。
+// 三态区分：判了它差 / 判了它好 / **没能判**。第三态此前不存在 ——
+// 抛错会穿出本函数（worktree 不回收），残缺报告会被当成退化。
+describe('量具不可用时不得记成「判它差」', () => {
+  const okTests = (sandbox: CrsiSandbox) =>
+    vi.spyOn(sandbox, 'runTests').mockReturnValue({
+      passed: true,
+      totalTests: 0,
+      failedTests: 0,
+      output: '',
+    })
+
+  const run = (sandbox: CrsiSandbox, evaluate: () => never | unknown, minContracts?: number) =>
+    runCrsiModification(
+      {
+        description: 'x',
+        filePath: WORKTREE_FILE,
+        newContent: '{}',
+        blastRadius: [WORKTREE_FILE],
+      },
+      sandbox,
+      {
+        rewardFn: {
+          name: 'broken',
+          description: 'test',
+          minContracts,
+          evaluate: evaluate as never,
+        },
+      },
+    )
+
+  it('evaluate 抛错 ⇒ 不抛出、回滚、明说 Harness unavailable（今天这条路径会穿出去且不回收 worktree）', async () => {
+    const sandbox = new CrsiSandbox()
+    okTests(sandbox)
+    const rollback = vi.spyOn(sandbox, 'rollback')
+
+    const result = await run(sandbox, () => {
+      throw new Error('sandbox 进程被 killed')
+    })
+
+    expect(result.phase).toBe('failed')
+    expect(result.error).toContain('Harness unavailable')
+    expect(result.error).toContain('sandbox 进程被 killed')
+    // 关键措辞：不得把量具故障说成候选缺陷。
+    expect(result.error).not.toContain('Reward regression')
+    expect(rollback).toHaveBeenCalled()
+    expect(hasPending()).toBe(false)
+  })
+
+  it('契约集为空 ⇒ Harness unavailable（该情形 score 恰为 100，会被当成满分放行）', async () => {
+    const sandbox = new CrsiSandbox()
+    okTests(sandbox)
+    const rollback = vi.spyOn(sandbox, 'rollback')
+
+    const result = await run(sandbox, () => ({
+      total: 0,
+      passed: 0,
+      score: 100,
+      failures: [],
+      results: [],
+    }))
+
+    expect(result.phase).toBe('failed')
+    expect(result.error).toContain('Harness unavailable')
+    expect(rollback).toHaveBeenCalled()
+    expect(hasPending()).toBe(false)
+  })
+
+  const tinyResults = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ id: `c${i}`, description: 'x', passed: true }))
+
+  it('声明的下限没跑满 ⇒ Harness unavailable（量具缩水读作「全绿」）', async () => {
+    const sandbox = new CrsiSandbox()
+    okTests(sandbox)
+    const n = 3
+    const result = await run(
+      sandbox,
+      () => ({ total: n, passed: n, score: 100, failures: [], results: tinyResults(n) }),
+      40,
+    )
+    expect(result.phase).toBe('failed')
+    expect(result.error).toContain('Harness unavailable')
+    expect(result.error).toContain('40')
+    expect(hasPending()).toBe(false)
+  })
+
+  it('未声明下限的奖励源报少量契约 ⇒ 不判量具故障（下限是电池主人的主张，不能强加给可插拔奖励源）', async () => {
+    const sandbox = new CrsiSandbox()
+    okTests(sandbox)
+    const n = 2
+    const result = await run(sandbox, () => ({
+      total: n,
+      passed: n,
+      score: 100,
+      failures: [],
+      results: tinyResults(n),
+    }))
+    // 少量契约**不是**量具故障 —— 只是这条奖励源本来就只有两条契约。
+    expect(result.phase).toBe('passed')
+    expect(result.rewardNote).toBeUndefined()
+  })
+
+  it('rewardFn 不提供逐契约结果 ⇒ 过，但明说 anchor 闸未施加（不静默跳过）', async () => {
+    const sandbox = new CrsiSandbox()
+    okTests(sandbox)
+    const result = await run(sandbox, () => ({
+      total: 10,
+      passed: 10,
+      score: 100,
+      failures: [],
+    }))
+    expect(result.phase).toBe('passed')
+    expect(result.rewardNote).toBeDefined()
+    expect(result.rewardNote).toContain('anchor')
+    expect(result.rewardNote).toContain('broken')
+  })
+
+  it('正对照：正常量具路径不产生 rewardNote', async () => {
+    const sandbox = new CrsiSandbox()
+    okTests(sandbox)
+    const result = await runCrsiModification(
+      { description: 'x', filePath: WORKTREE_FILE, newContent: '{}', blastRadius: [WORKTREE_FILE] },
+      sandbox,
+      {
+        rewardFn: {
+          name: 'healthy',
+          description: 'test',
+          evaluate: () => runEval(),
+        },
+      },
+    )
+    expect(result.phase).toBe('passed')
+    expect(result.rewardNote).toBeUndefined()
   })
 })

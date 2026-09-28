@@ -10,6 +10,8 @@ import {
   diffContractHistory,
   renderContractDiff,
   regressedAnchors,
+  instrumentFailure,
+  MIN_CONTRACT_COUNT,
 } from '../../src/core/eval-harness'
 
 // Isolate the rewards log from the real ~/.mipham.
@@ -255,5 +257,58 @@ describe('契约粒度账本', () => {
 
   it('renderContractDiff 无变化时返回空数组', () => {
     expect(renderContractDiff([])).toEqual([])
+  })
+})
+
+// 量具自证：`score` 只在「量具确实跑满了电池」时才可被采信。
+// 病根在这一行——`score: results.length > 0 ? ... : 100` ⇒ **空结果集 = 满分**，
+// 于是「没能判」与「判它满分」在外部读数上同形（OpenMLE 的 `metric-check` 同款缺口）。
+describe('instrumentFailure —— 没测 ≠ 全绿', () => {
+  it('正控：真量具按声明的下限自检通过，返回 null', () => {
+    const report = runEval()
+    expect(report.results!.length).toBeGreaterThanOrEqual(MIN_CONTRACT_COUNT)
+    expect(instrumentFailure(report, MIN_CONTRACT_COUNT)).toBeNull()
+  })
+
+  it('空契约集恒判为量具不可用 —— 与是否声明下限无关（该情形分数恰为满分 100）', () => {
+    const empty = { results: [] }
+    const declared = instrumentFailure(empty, MIN_CONTRACT_COUNT)
+    const undeclared = instrumentFailure(empty)
+    expect(declared).toContain('空契约集')
+    expect(undeclared).toContain('空契约集')
+    expect(declared).toContain('100')
+  })
+
+  it('声明了下限且条数不足 ⇒ 报出实际条数与下限', () => {
+    const n = MIN_CONTRACT_COUNT - 1
+    const results = Array.from({ length: n }, (_, i) => ({
+      id: `c${i}`,
+      description: 'x',
+      passed: true,
+    }))
+    const r = instrumentFailure({ results }, MIN_CONTRACT_COUNT)
+    expect(r).not.toBeNull()
+    expect(r).toContain(String(n))
+    expect(r).toContain(String(MIN_CONTRACT_COUNT))
+  })
+
+  it('未声明下限的奖励源报少量契约 ⇒ 不判量具故障（下限是我方电池的属性）', () => {
+    const results = Array.from({ length: 2 }, (_, i) => ({
+      id: `c${i}`,
+      description: 'x',
+      passed: true,
+    }))
+    expect(instrumentFailure({ results })).toBeNull()
+  })
+
+  it('恰好在声明下限上 ⇒ 可用（正对照：不是「一律报错」）', () => {
+    const results = Array.from({ length: MIN_CONTRACT_COUNT }, (_, i) => ({
+      id: `c${i}`,
+      description: 'x',
+      passed: true,
+    }))
+    expect(instrumentFailure({ results }, MIN_CONTRACT_COUNT)).toBeNull()
+    // 分数低不算「量具故障」——那是「判了它差」，由分数比较那一格负责。
+    expect(instrumentFailure({ results }, MIN_CONTRACT_COUNT)).toBeNull()
   })
 })

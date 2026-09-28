@@ -2,7 +2,7 @@
 // 统一「给一个 policy 打分」：机制哨兵（runEval）与任务表现（runTaskPerformance）
 // 都 conform 成 RewardFn，自改进环的 verify 阶段可对任意奖励源比分数、判退化。
 import type { Llm } from '../providers/llm'
-import { runEval, type EvalResult } from './eval-harness'
+import { runEval, MIN_CONTRACT_COUNT, type EvalResult } from './eval-harness'
 import { runTaskPerformance } from './task-performance'
 
 /** 奖励函数统一输出的「分数」形状——所有 RewardFn 的 evaluate 都产出它。 */
@@ -19,6 +19,14 @@ export interface ScoreReport {
 export interface RewardFn {
   name: string
   description: string
+  /**
+   * 该奖励源契约电池的**下限**：实际条数低于它即判「量具不可用」而非「判它差」。
+   *
+   * 只有**自己拥有电池**的奖励源才该声明它（机制哨兵声明 `MIN_CONTRACT_COUNT`）。
+   * 不声明的（如任务表现，或测试替身）只受「空契约集」这条普适判据约束 ——
+   * 拿我们的电池下限去卡第三方奖励源会把「它本来就报得少」误判成量具故障。
+   */
+  minContracts?: number
   evaluate(): Promise<ScoreReport> | ScoreReport
 }
 
@@ -27,6 +35,7 @@ export function mechanismSentinel(): RewardFn {
   return {
     name: 'mechanism-sentinel',
     description: '冻结契约评当前仓库机制代码（无 LLM）',
+    minContracts: MIN_CONTRACT_COUNT,
     evaluate: () => runEval(),
   }
 }
