@@ -428,19 +428,12 @@ export function createServer(config: ServerConfig): Server<WsData> {
       const method = req.method
       logger.info('request', { method, path })
 
-      // ── Feishu event callback（独立签名验证，不经过 daemon Bearer 鉴权）──
-      if (feishuAdapter && method === 'POST' && path === '/feishu/event') {
-        return await feishuAdapter.handleEvent(req)
-      }
-
-      // ── Origin gate ─────────────────────────────────
-      // Runs before the WebSocket upgrade below, which is what makes the
-      // upgrade path covered by it: browsers attach Origin to a WS handshake
-      // but never block the connection themselves.
-      const originError = originMiddleware(req)
-      if (originError) return originError
-
       // ── Rate limiting (skip health endpoint) ──────────
+      // Ahead of every route below, the Feishu callback included: a signed
+      // caller is an authenticated caller, not an unmetered one. This block
+      // used to sit *after* the callback's early return, which left that one
+      // path uncounted (F3-1) — the signature gates whether a request is
+      // processed, never how many arrive.
       if (path !== '/api/v1/health') {
         const ip = server.requestIP(req)?.address || 'unknown'
         const rl = rateLimiter.check(ip)
@@ -451,6 +444,25 @@ export function createServer(config: ServerConfig): Server<WsData> {
           )
         }
       }
+
+      // ── Feishu event callback（独立签名验证，不经过 daemon Bearer 鉴权）──
+      // Deliberately above the origin gate and below the rate limiter. Its gate
+      // is the lark signature — parseFeishuEnv is fail-closed on encryptKey,
+      // precisely because the SDK's signature check returns true when that key
+      // is empty — and its caller is a server, not a browser page. So the two
+      // middlewares split: metering applies (above), Origin does not.
+      // Keep this branch below the rate-limit block; hoisting it back up
+      // re-opens F3-1.
+      if (feishuAdapter && method === 'POST' && path === '/feishu/event') {
+        return await feishuAdapter.handleEvent(req)
+      }
+
+      // ── Origin gate ─────────────────────────────────
+      // Runs before the WebSocket upgrade below, which is what makes the
+      // upgrade path covered by it: browsers attach Origin to a WS handshake
+      // but never block the connection themselves.
+      const originError = originMiddleware(req)
+      if (originError) return originError
 
       // ── Auth check ──────────────────────────────────
       const authError = authMiddleware(req, activeToken, server.requestIP(req)?.address)

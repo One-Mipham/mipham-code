@@ -142,4 +142,48 @@ describe('createFeishuAdapter', () => {
     expect(res.status).toBe(200)
     expect(deps.processPrompt).toHaveBeenCalledTimes(1)
   })
+
+  it('超限 body → 413 且不投递（体在解析之前就被拒）', async () => {
+    const deps = makeDeps()
+    const a = createFeishuAdapter(config, deps)
+    const res = await a.handleEvent(requestWithBody({ pad: 'x'.repeat(300 * 1024) }))
+    expect(res.status).toBe(413)
+    expect(await res.json()).toEqual({ code: 1, msg: 'payload_too_large' })
+    expect(sdkInvokeMock).not.toHaveBeenCalled()
+    expect(deps.processPrompt).not.toHaveBeenCalled()
+  })
+
+  it('无 Content-Length（chunked）也照样封顶 —— 声明可以缺席，累计读数才是判据', async () => {
+    const deps = makeDeps()
+    const a = createFeishuAdapter(config, deps)
+    const chunk = new Uint8Array(64 * 1024)
+    let sent = 0
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent >= 8) return controller.close() // 8 × 64 KiB = 512 KiB
+        sent++
+        controller.enqueue(chunk)
+      },
+    })
+    const req = new Request('http://x', {
+      method: 'POST',
+      body: stream,
+      duplex: 'half',
+    } as RequestInit)
+    // 自证前件：这条用例只有在那道「廉价的第一道」确实缺席时才说明问题
+    expect(req.headers.get('content-length')).toBeNull()
+    const res = await a.handleEvent(req)
+    expect(res.status).toBe(413)
+    expect(deps.processPrompt).not.toHaveBeenCalled()
+  })
+
+  it('上限内的体照常投递（正对照：闸不是「什么都拒」）', async () => {
+    const deps = makeDeps()
+    const a = createFeishuAdapter(config, deps)
+    const res = await a.handleEvent(
+      requestWithBody({ ...textEventBody, pad: 'x'.repeat(64 * 1024) }),
+    )
+    expect(res.status).toBe(200)
+    expect(deps.processPrompt).toHaveBeenCalledTimes(1)
+  })
 })
