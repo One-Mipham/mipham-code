@@ -216,8 +216,15 @@ const permissionsCmd: CommandHandler = async (ctx, args) => {
   // `--user` is matched exactly: a rule fragment may legitimately begin with `--`
   // (`Bash(--version)`), and dropping it as "a flag" would corrupt the rule.
   const rest = args.filter((a) => a !== '--user')
-  const scope: 'project' | 'user' = args.includes('--user') ? 'user' : 'project'
+  const wantsUser = args.includes('--user')
   const verb = rest[0]
+  // `allow` ignores the flag and always writes **user** level: an allow rule
+  // widens the approval gate, so it must not land in a file that arrives with the
+  // repository — the loader withholds a project-level one (`stripProjectPermission`,
+  // `loadSettingsJson`), and a command still writing there would be a write path
+  // with no reader. `deny` only narrows, so a repository may carry it; `--user`
+  // keeps that one local instead. For `remove` this is just the first scope tried.
+  const scope: 'project' | 'user' = verb === 'allow' || wantsUser ? 'user' : 'project'
 
   if (verb === 'allow' || verb === 'deny' || verb === 'remove') {
     const { validateRulePattern } = await import('../core/permission-rules')
@@ -228,7 +235,10 @@ const permissionsCmd: CommandHandler = async (ctx, args) => {
     const usage =
       `Usage: /permissions <allow|deny|remove> <rule>... [--user]\n\n` +
       `  rule   Tool pattern — "Bash" or "Bash(npm test)". Quote it if it has spaces.\n` +
-      `  --user Write to ~/.mipham/settings.json instead of .mipham/settings.json.`
+      `  allow  Written to ~/.mipham/settings.json. An allow rule widens the approval\n` +
+      `         gate, so it must not arrive with the repository (\`--user\` is implied).\n` +
+      `  deny   Written to .mipham/settings.json unless --user is given — denying only\n` +
+      `         narrows, so a repository may carry it.`
 
     if (unbalanced) {
       return { content: `Unbalanced quote in rule.\n\n${usage}` }
@@ -251,10 +261,22 @@ const permissionsCmd: CommandHandler = async (ctx, args) => {
 
     if (verb === 'remove') {
       const parts: string[] = []
+      // Both scopes, named one first. `remove` does not know which list holds the
+      // rule (`allow` is always user level, `deny` defaults to project), so
+      // searching only the named scope would answer "No rule" for a rule that is
+      // live — the command's own remedy, silently not working.
+      const order: ['project' | 'user', 'project' | 'user'] =
+        scope === 'user' ? ['user', 'project'] : ['project', 'user']
       for (const rule of rules) {
-        const removed = removeSettingsRule(rule, scope)
+        let removed: { path: string; key: 'allow' | 'deny' } | null = null
+        for (const s of order) {
+          removed = removeSettingsRule(rule, s)
+          if (removed) break
+        }
         if (!removed) {
-          parts.push(`No rule "${rule}" in ${settingsPathFor(scope)}.`)
+          parts.push(
+            `No rule "${rule}" in ${settingsPathFor(order[0])} or ${settingsPathFor(order[1])}.`,
+          )
           continue
         }
         perm.removeRule(rule)
@@ -275,7 +297,12 @@ const permissionsCmd: CommandHandler = async (ctx, args) => {
         `permissions.${verb}:\n${rules.map((r) => `  ${r}`).join('\n')}\n\n` +
         (rules.length === 1
           ? `This rule persists across sessions and applies from now on.`
-          : `These rules persist across sessions and apply from now on.`),
+          : `These rules persist across sessions and apply from now on.`) +
+        (verb === 'allow'
+          ? `\n\nAllow rules are stored at user level: a rule that widens the approval gate\n` +
+            `must not arrive with the repository. Use \`/permissions deny\` for rules the\n` +
+            `repository itself should carry.`
+          : ''),
     }
   }
 
@@ -307,9 +334,14 @@ ${ruleLines('allow', settings.permissions.allow)}
 ${ruleLines('deny', settings.permissions.deny)}
 
 Persist a rule with:
-  /permissions allow "Bash(npm test)"     → .mipham/settings.json
-  /permissions deny  "Bash(rm *)" --user  → ~/.mipham/settings.json
+  /permissions allow "Bash(npm test)"     → ~/.mipham/settings.json
+  /permissions deny  "Bash(rm *)"         → .mipham/settings.json
   /permissions remove "Bash(npm test)"
+
+An allow rule widens the approval gate, so it is always user level — a project-level
+one would be a repository choosing its own gate (and is ignored if it ships one). A
+deny rule only narrows, so it may be committed with the repository; add --user to
+keep it local instead.
 
 Current directory permissions:
   CWD:      ${process.cwd()}

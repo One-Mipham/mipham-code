@@ -148,16 +148,22 @@ function mergeConfig(
 }
 
 /**
- * Drop `permission` from a **project-level** `config.yml` before it is merged,
- * reporting it instead of applying it.
+ * Drop the **widening** keys from a project-level `config.yml` before it is
+ * merged — `permission` and `permissionRules.allow` — reporting them instead of
+ * applying them.
  *
- * `permission` is a ceiling, not a rule: it decides what the approval gate lets
- * through without asking. Every other project-level key is a preference that a
- * repository may reasonably commit; this one means "and do not ask me about the
- * commands in here" — which is a decision about the operator, made by whoever
- * wrote the repository. The same reasoning admits project-level `permissions.deny`
- * (it narrows) and withholds `permissions.defaultMode` in `settings.json` (it
- * widens) — the two files are the same door, so both are closed here.
+ * Both answer the same question one level apart: `permission` picks the approval
+ * gate, and an allow rule is "and do not ask me about the commands in here"
+ * inside it. Either is a decision about the operator made by whoever wrote the
+ * repository, which is why neither may arrive with the code.
+ *
+ * They were not always treated alike: `permission` was refused while `allow` was
+ * merged as a mere "rule", on the reasoning that a rule only speaks within the
+ * range its ceiling allows. That reasoning needs a ceiling to hold, and the only
+ * thing that defines one is `maxAllowedMode` — which is opt-in, so by default
+ * there was no range and `allowRuleDecision` returned `bypass` outright. The
+ * criterion is the **direction**, not the key it is filed under: what narrows
+ * (`permissions.deny`) a repository may ship, what widens it may not.
  *
  * `mergeConfig` has no per-key allowlist, so this has to happen at the two points
  * the project file enters. Reported rather than dropped silently: a repo whose
@@ -165,15 +171,40 @@ function mergeConfig(
  * "your config was ignored" looks like from the outside.
  */
 function stripProjectPermission(cfg: Partial<MiphamConfig>, path: string): Partial<MiphamConfig> {
-  if (cfg.permission === undefined) return cfg
   const { permission, ...rest } = cfg
-  const shown = typeof permission === 'string' ? permission : JSON.stringify(permission)
-  process.stderr.write(
-    `⚠ Mipham Code: ignored permission: ${shown} from project config ${path}\n` +
-      `    (a repository must not choose the approval gate — set it in ~/.mipham/config.yml,\n` +
-      `    or pass --permission <mode> for this invocation)\n`,
-  )
-  return rest as Partial<MiphamConfig>
+
+  if (permission !== undefined) {
+    const shown = typeof permission === 'string' ? permission : JSON.stringify(permission)
+    process.stderr.write(
+      `⚠ Mipham Code: ignored permission: ${shown} from project config ${path}\n` +
+        `    (a repository must not choose the approval gate — set it in ~/.mipham/config.yml,\n` +
+        `    or pass --permission <mode> for this invocation)\n`,
+    )
+  }
+
+  // `permissionRules.allow` is the same decision under a second key: an allow
+  // rule answers "do not ask me about this command", which is only meaningful
+  // when something bounds how far it reaches — and the thing that would
+  // (`maxAllowedMode`) is opt-in, so in a stock config nothing does. `deny` is
+  // the opposite direction and stays: a repository may narrow its own gate.
+  const rules = rest.permissionRules
+  if (rules) {
+    const kept = { ...rules }
+    if (Array.isArray(kept.allow) && kept.allow.some((r) => typeof r === 'string')) {
+      process.stderr.write(
+        `⚠ Mipham Code: ignored permissionRules.allow from project config ${path}\n` +
+          `    (an allow rule widens the approval gate exactly as \`permission\` does — put it in\n` +
+          `    ~/.mipham/config.yml, or run /permissions allow <rule>)\n`,
+      )
+    }
+    delete kept.allow
+    // An emptied table is dropped rather than merged as `{}`: "this repository
+    // mentioned allow" must not change the shape of the user's own table.
+    if (Object.keys(kept).length > 0) rest.permissionRules = kept
+    else delete rest.permissionRules
+  }
+
+  return rest
 }
 
 /**
@@ -283,13 +314,19 @@ function loadMcpJson(cwd: string): McpServerConfig[] {
 
 /**
  * Parsed `settings.json` (Claude Code convention): hooks + permissions.
- * Hooks are additive across levels; permissions allow/deny are deduped unions —
- * and `defaultMode` is the one member that is **not** merged, because it is a
- * ceiling rather than a rule (see `loadSettingsJson`).
+ * Hooks are additive across levels, and so is `permissions.deny` (a deduped
+ * union — it *narrows*, and narrowing needs no gate). What does **not** merge
+ * from both levels is anything that *widens*: `defaultMode` and
+ * `permissions.allow` are read from the user-level file only. Both are bounded
+ * by the same ceiling, and that ceiling is opt-in (see `loadSettingsJson`).
  */
 export interface SettingsJson {
   hooks: SettingsHooks
   /**
+   * `allow` is the **user-level** file's list; a project-level one is withheld
+   * (`projectAllowSkipped`) because a rule that widens is the approval gate by
+   * another name. `deny` merges from both levels.
+   *
    * `defaultMode` is present only when the **user-level** file named one, and it
    * is passed through **raw** (not validated here): the accepted spelling is
    * `ALL_MODES`, and the single place that enforces it — plus the warning for a
@@ -313,6 +350,16 @@ export interface SettingsJson {
    */
   projectModeSkipped?: true
   /**
+   * Same shape again, for `permissions.allow`: present only when the
+   * project-level file really declared at least one rule and it was **withheld**.
+   * Like `projectModeSkipped` this is not conditioned on trust — a rule that
+   * widens is the same decision whoever the repository's author is.
+   *
+   * The two markers are independent and each reports only its own key: a file
+   * that declares `allow` but no mode sets this one and not the other.
+   */
+  projectAllowSkipped?: true
+  /**
    * The subset of `hooks` that came from the project-level file — the entries
    * the workspace-trust gate governs. Absent unless the caller vouched for the
    * workspace *and* that file really declared hooks.
@@ -333,25 +380,29 @@ export interface SettingsJson {
  * repository-controlled and its `hooks` are shell commands this process will
  * spawn — reading them is an act of trust, not a default. Callers that have
  * established trust (or that only *display* the configured list) opt in
- * explicitly. The flag gates hooks only: `permissions` still merge from both
- * levels, since that question is answered by the mode ceiling, not by trust.
+ * explicitly. The flag gates hooks only: `permissions.deny` still merges from
+ * both levels, because it *narrows* and narrowing needs no gate.
  *
- * **That last sentence is the reason `defaultMode` is the exception.** The
- * ceiling only answers the trust question while repository-controlled files
- * cannot move it; a repo that ships `.mipham/settings.json` with
- * `permissions.defaultMode: "auto"` would otherwise hand itself the approval
- * gate. So `defaultMode` is read from the **user-level file only**, and a
- * project-level one is withheld and *reported* (`projectModeSkipped`) rather
- * than dropped in silence — same treatment as a `plan`/`acceptEdits` value that
- * used to be dropped entirely, except that the drop there fell back to the
- * *wider* `default`. The upstream convention says the same thing in its own
- * words: repo-level settings cannot grant `defaultMode`; adopt it in user
- * settings instead.
+ * **This doc used to say the rest of `permissions` merges from both levels too,
+ * "since that question is answered by the mode ceiling, not by trust". That was
+ * wrong, and the wrong half was `allow`.** The ceiling answers the question only
+ * while it exists: `maxAllowedMode` is opt-in, and `allowRuleDecision` returns
+ * `bypass` outright when it is absent (the default) — so in a stock config there
+ * is nothing for a widening rule to be measured against, and a repo that ships
+ * `permissions.allow: ["Bash(*)"]` hands itself the approval gate exactly as it
+ * would with `defaultMode`. Both widening members are therefore read from the
+ * **user-level file only**, and each withheld project-level one is *reported*
+ * (`projectModeSkipped` / `projectAllowSkipped`) rather than dropped in silence
+ * — the same treatment as a `plan`/`acceptEdits` value that used to be dropped
+ * entirely, except that the drop there fell back to the *wider* `default`. The
+ * upstream convention says the same thing in its own words: repo-level settings
+ * cannot grant `defaultMode`; adopt it in user settings instead.
  *
- * One consequence to keep in mind when reading a merged result: `permissions`
- * is still provenance-free for allow/deny, so a caller cannot tell which of
- * those two rules came from the repository. That is deliberate (above), and it
- * is why the ceiling has to be the thing that repels the repo-controlled half.
+ * One consequence to keep in mind when reading a merged result: `permissions.deny`
+ * is provenance-free (project and user rules sit in one bucket), so a caller
+ * cannot tell which deny rule came from the repository. That is deliberate —
+ * the direction that needs provenance is the widening one, and that is the one
+ * this function keeps out.
  */
 export function loadSettingsJson(
   cwd: string = process.cwd(),
@@ -364,6 +415,7 @@ export function loadSettingsJson(
   }
   let projectHooksSkipped = false
   let projectModeSkipped = false
+  let projectAllowSkipped = false
   // The project file's entries, kept out of the merge so provenance survives it.
   const projectHooks: SettingsHooks = {}
 
@@ -436,8 +488,19 @@ export function loadSettingsJson(
         for (const key of ['allow', 'deny'] as const) {
           const list = parsed.permissions[key]
           if (!Array.isArray(list)) continue
-          for (const p of list) {
-            if (typeof p === 'string' && !permissions[key].includes(p)) permissions[key].push(p)
+          const strings = list.filter((p): p is string => typeof p === 'string')
+          // `deny` narrows, so a repository may ship it. `allow` widens — and the
+          // question "does it widen past what is permitted?" is **not** answered by
+          // the mode ceiling unless someone configured one: `allowRuleDecision`
+          // returns `bypass` outright when `maxAllowedMode` is absent, which is the
+          // default. A project-level allow rule is therefore a repository choosing
+          // the approval gate, and it is withheld here like `defaultMode`.
+          if (key === 'allow' && isProject) {
+            if (strings.length > 0) projectAllowSkipped = true
+            continue
+          }
+          for (const p of strings) {
+            if (!permissions[key].includes(p)) permissions[key].push(p)
           }
         }
       }
@@ -453,6 +516,7 @@ export function loadSettingsJson(
   const result: SettingsJson = { hooks, permissions }
   if (projectHooksSkipped) result.projectHooksSkipped = true
   if (projectModeSkipped) result.projectModeSkipped = true
+  if (projectAllowSkipped) result.projectAllowSkipped = true
   if (Object.values(projectHooks).some((entries) => Array.isArray(entries) && entries.length > 0)) {
     result.projectHooks = projectHooks
   }
@@ -520,6 +584,15 @@ export function writeSettingsDoc(path: string, doc: Record<string, unknown>): vo
  * Persist one rule into `permissions.<key>` of a scope's settings.json.
  * Idempotent: re-adding an existing rule leaves the file unchanged.
  * Returns the path written.
+ *
+ * ⚠️ `key: 'allow'` with the default `'project'` scope writes a file the loader
+ * **withholds** (`loadSettingsJson` — an allow rule widens the approval gate, so
+ * only the user level is read). That is a rule nobody reads, which from the
+ * outside looks exactly like a rule that works, so callers must pass `'user'`
+ * for `allow`; `/permissions allow` does. `deny` is the one that belongs at
+ * project level. This function keeps honoring what it is told rather than
+ * coercing the scope, so the refusal stays at the reader — one gate, not two
+ * that can drift.
  */
 export function addSettingsRule(
   key: 'allow' | 'deny',

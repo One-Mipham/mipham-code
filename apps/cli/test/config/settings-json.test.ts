@@ -88,16 +88,23 @@ describe('loadSettingsJson', () => {
     expect(r.hooks.PreToolUse![0]!.matcher).toBe('Edit')
   })
 
-  // Guard against over-gating: the same file also carries `permissions`, and
-  // that question is answered elsewhere (allow rules are capped by the mode
-  // ceiling — P2). Trust has no say in it.
-  it('still merges project permissions with the default gate closed', () => {
+  // Guard against over-gating: the same file also carries `permissions`, and the
+  // two directions inside it are **not** the same question.
+  //
+  // This test used to assert that `allow` merged across levels too, on the stated
+  // grounds that "allow rules are capped by the mode ceiling — P2". That premise
+  // is false: `maxAllowedMode` is opt-in and `allowRuleDecision` returns `bypass`
+  // when it is absent, so an uncapped allow rule *is* the approval gate rather
+  // than a rule inside it. `deny` still merges — it narrows. Full rule in the
+  // `permissions.allow` describe below.
+  it('still merges project deny with the default gate closed — and withholds allow', () => {
     writeFileSync(
       join(CWD, '.mipham', 'settings.json'),
       JSON.stringify({ permissions: { allow: ['Bash(git:*)'], deny: ['Bash(rm:*)'] } }),
     )
     const r = loadSettingsJson(CWD)
-    expect(r.permissions.allow).toEqual(['Bash(git:*)'])
+    expect(r.permissions.allow).toEqual([])
+    expect(r.projectAllowSkipped).toBe(true)
     expect(r.permissions.deny).toEqual(['Bash(rm:*)'])
   })
 
@@ -131,9 +138,14 @@ describe('loadSettingsJson', () => {
     expect(loadSettingsJson(CWD, { includeProjectHooks: true }).projectHooksSkipped).toBeUndefined()
   })
 
-  // `permissions.defaultMode` 是**天花板**，不是规则：allow/deny 只在档位允许的范围内
-  // 说话（上一条注释里的理由），而 defaultMode 决定那个范围本身。所以它与 allow/deny
-  // 必须分开对待 —— 项目级那份随代码到达，不能替操作者选闸门。
+  // `permissions.defaultMode` 是**天花板**，不是规则：它决定 allow/deny 说话的范围本身，
+  // 所以项目级那份随代码到达的不能替操作者选闸门。
+  //
+  // ⚠️ 本注释原写作「allow/deny 只在档位允许的范围内说话（上一条注释里的理由），故与
+  // defaultMode 必须分开对待」—— **那个前提是假的**。只有配置了 `maxAllowedMode` 才有
+  // 「档位允许的范围」，而它默认缺席；此时 `allowRuleDecision` 直接返回 `bypass`。于是
+  // 项目级 allow 规则在默认配置下等于免审批 —— 与 defaultMode 是同一件事的两种写法，
+  // 而它当初被当成了「规则」放行。合并规则见下面那个 describe。
   describe('permissions.defaultMode（天花板：只认用户级）', () => {
     const writeProject = (permissions: unknown): void => {
       writeFileSync(join(CWD, '.mipham', 'settings.json'), JSON.stringify({ permissions }))
@@ -157,8 +169,11 @@ describe('loadSettingsJson', () => {
       const r = loadSettingsJson(CWD)
       expect(r.permissions.defaultMode).toBeUndefined()
       expect(r.projectModeSkipped).toBe(true)
-      // 扣的是**一个键**，不是整份文件：allow/deny 依旧合并（那是规则，不是天花板）。
-      expect(r.permissions.allow).toEqual(['Read'])
+      // 扣的是**一个键**，不是整份文件：deny 依旧合并（它收窄）。而 allow 在这份文件里
+      // 同样被扣 —— 理由与 defaultMode 字面上相同（仓库不能替操作者选闸门），见下个
+      // describe。本格同时钉住「两个标记互相独立」：这份文件两个键都写了，两个都要报。
+      expect(r.permissions.allow).toEqual([])
+      expect(r.projectAllowSkipped).toBe(true)
     })
 
     it('信任了也一样不采纳 —— 这道闸门不看信任', () => {
@@ -185,6 +200,8 @@ describe('loadSettingsJson', () => {
       const r = loadSettingsJson(CWD)
       expect(r.permissions.defaultMode).toBeUndefined()
       expect(r.projectModeSkipped).toBeUndefined()
+      // 两个标记各报各的事实：这份文件声明了 allow 而没声明模式 ⇒ 只有 allow 那个响。
+      expect(r.projectAllowSkipped).toBe(true)
       // 非字符串／空串同样不算「声明过」—— 标记与它报告的事实取自同一次解析，
       // 与 `projectHooksSkipped` 同一条规矩。
       writeProject({ defaultMode: 123 })
@@ -210,6 +227,77 @@ describe('loadSettingsJson', () => {
       const r = loadSettingsJson(CWD)
       expect(r.permissions.defaultMode).toBeUndefined()
       expect(r.projectModeSkipped).toBe(true)
+    })
+  })
+
+  // `permissions.allow` 与 `defaultMode` 是**同一个方向**：放宽。而「放宽到哪算过分」这个
+  // 问题，只有配置了 `maxAllowedMode` 才有人回答 —— 默认无人回答，`allowRuleDecision` 在
+  // 那条路径上直接返回 `bypass`（`permission.ts`:795）。所以项目级 allow 规则在默认配置下
+  // 就是「免审批」，与 defaultMode 是同一件事的两种写法，必须同样只认用户级。
+  //
+  // 与它相对的是 `deny`：收窄方向，允许仓库自带 —— 判据是宽窄，不是「allow/deny 是规则
+  // 所以随便合并」（那正是本次修正的前提）。
+  describe('permissions.allow（放宽方向：只认用户级）', () => {
+    const writeProject = (permissions: unknown): void => {
+      writeFileSync(join(CWD, '.mipham', 'settings.json'), JSON.stringify({ permissions }))
+    }
+    const writeUser = (permissions: unknown): void => {
+      writeFileSync(join(MIPHAM_HOME, 'settings.json'), JSON.stringify({ permissions }))
+    }
+
+    it('项目级 allow **不**采纳，并报出被扣；同一份文件里的 deny 照常合并', () => {
+      writeProject({ allow: ['Bash(npm test)'], deny: ['Bash(rm:*)'] })
+      const r = loadSettingsJson(CWD)
+      // 扣的是**方向**，不是文件、也不是整个 permissions 表：同一份文件里的 deny 仍然到位。
+      expect(r.permissions.allow).toEqual([])
+      expect(r.permissions.deny).toEqual(['Bash(rm:*)'])
+      expect(r.projectAllowSkipped).toBe(true)
+    })
+
+    it('用户级 allow 照收，且不留标记（正对照：扣的是「项目级」，不是「allow」）', () => {
+      writeUser({ allow: ['Bash(npm test)'] })
+      const r = loadSettingsJson(CWD)
+      expect(r.permissions.allow).toEqual(['Bash(npm test)'])
+      // 没有这一格，上面那条「allow 为空」可能只是因为 allow 压根没被读。
+      expect(r.projectAllowSkipped).toBeUndefined()
+    })
+
+    it('两份都写了 allow：用户级的到位，项目那份被扣并报出', () => {
+      writeProject({ allow: ['Bash(rm -rf /)'] })
+      writeUser({ allow: ['Read(*)'] })
+      const r = loadSettingsJson(CWD)
+      expect(r.permissions.allow).toEqual(['Read(*)'])
+      expect(r.projectAllowSkipped).toBe(true)
+    })
+
+    it('信任了也一样扣 —— 与 defaultMode 同一条理由，这道闸门不看信任', () => {
+      writeProject({ allow: ['Bash(npm test)'] })
+      const r = loadSettingsJson(CWD, { includeProjectHooks: true })
+      expect(r.permissions.allow).toEqual([])
+      expect(r.projectAllowSkipped).toBe(true)
+    })
+
+    it('标记不能自己冒出来：`allow: []` / 非数组 / 全是非字符串都不算「声明过」', () => {
+      // 「声明过」的判据取自**同一次解析**里真会进入合并的那些条目，与
+      // `projectHooksSkipped`（`entries.length > 0`）和 `projectModeSkipped`（非空字符串）
+      // 同一规矩 —— 否则一个空数组就能让调用方喊出一次没发生的跳过。
+      writeProject({ allow: [] })
+      expect(loadSettingsJson(CWD).projectAllowSkipped).toBeUndefined()
+      writeProject({ allow: 'Bash(npm test)' })
+      expect(loadSettingsJson(CWD).projectAllowSkipped).toBeUndefined()
+      writeProject({ allow: [123, null, {}] })
+      expect(loadSettingsJson(CWD).projectAllowSkipped).toBeUndefined()
+      // 而混着一条真规则时，报道的是**真发生过的**这一次扣留。
+      writeProject({ allow: [123, 'Bash(npm test)'] })
+      expect(loadSettingsJson(CWD).projectAllowSkipped).toBe(true)
+    })
+
+    it('负控：home 的**子目录**里那份仍是项目级（判据是同一个目录，不是前缀）', () => {
+      writeProject({ allow: ['Bash(npm test)'] })
+      expect(loadSettingsJson(CWD).permissions.allow).toEqual([])
+      // 而从 home 本身启动时那份就是用户级 —— 不扣。
+      writeUser({ allow: ['Bash(npm test)'] })
+      expect(loadSettingsJson(homedir()).permissions.allow).toEqual(['Bash(npm test)'])
     })
   })
 
@@ -273,18 +361,26 @@ describe('loadSettingsJson', () => {
     })
   })
 
-  it('loads and dedupes permissions allow/deny across levels', () => {
+  it('dedupes deny across levels; allow comes from the user level alone', () => {
+    // 原名「loads and dedupes permissions allow/deny across levels」—— 对 allow 而言
+    // 「across levels」正是本次修掉的那件事，名字留在这里会把已修的行为说成还在。
     writeFileSync(
       join(CWD, '.mipham', 'settings.json'),
       JSON.stringify({ permissions: { allow: ['Bash(git:*)'], deny: ['Bash(rm:*)'] } }),
     )
     writeFileSync(
       join(MIPHAM_HOME, 'settings.json'),
-      JSON.stringify({ permissions: { allow: ['Bash(git:*)', 'Read(*)'], deny: ['Bash(rm:*)'] } }),
+      JSON.stringify({
+        permissions: { allow: ['Bash(git:*)', 'Bash(git:*)', 'Read(*)'], deny: ['Bash(rm:*)'] },
+      }),
     )
     const r = loadSettingsJson(CWD)
-    expect(r.permissions.allow).toEqual(['Bash(git:*)', 'Read(*)'])
+    // deny：两份都算，逐条去重（项目那份与用户那份是同一条，只留一条；用户文件内
+    // 自己重复的那条也去掉）。
     expect(r.permissions.deny).toEqual(['Bash(rm:*)'])
+    // allow：只有用户级那一份，文件内去重后原序保留。
+    expect(r.permissions.allow).toEqual(['Bash(git:*)', 'Read(*)'])
+    expect(r.projectAllowSkipped).toBe(true)
   })
 
   it('skips corrupt JSON files', () => {

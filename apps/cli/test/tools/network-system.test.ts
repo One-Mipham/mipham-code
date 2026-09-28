@@ -21,6 +21,7 @@ import { webFetchTool } from '../../src/tools/network/web-fetch'
 import { webSearchTool } from '../../src/tools/network/web-search'
 import { configTool } from '../../src/tools/system/config'
 import { mcpTool } from '../../src/tools/system/mcp'
+import { ENC_PREFIX, decryptApiKey, getCredentialKey } from '../../src/config/credential-crypto'
 
 // ── Test context ──
 
@@ -360,6 +361,97 @@ describe('Config tool execution', () => {
     await configTool.execute({ action: 'set', key: 'version', value: '2.0' }, ctx)
     const result = await configTool.execute({ action: 'get', key: 'version' }, ctx)
     expect(result.content).toContain('2.0')
+  })
+})
+
+// provider 的 apiKey 是凭据，而**读**侧早就把 `enc:v1:` 当成它的 at-rest 形态：
+// `loadConfig` → `decryptProviderApiKeys` 与 `getProviderApiKey` 都先看前缀再解密。
+// 写侧却有两条路 —— `saveProviderApiKey`（loader.ts，加密）与 Config 工具（不加密）
+// —— 而它们写的是**同一份文件**。于是「密钥在盘上是密文」这条保证，取决于用户当初
+// 从哪个写者进来；从 Config 工具进来的那份，密文保证**静默降级**为明文。
+//
+// 判据不是「值变了」（那是把实现细节当标准），而是**能按读路径读回来**：用同一个
+// key 解密后与原文逐字相等。只断言「有 enc:v1: 前缀」会把「加成了另一把 key」和
+// 「多套了一层」一起放过 —— 后者的表现是读回来仍是密文。
+describe('Config tool — provider apiKey 落盘即加密', () => {
+  const CONFIG_DIR = join(homedir(), '.mipham')
+  const configFile = join(CONFIG_DIR, 'config.yml')
+
+  function clean(): void {
+    if (!CONFIG_DIR.startsWith(tmpdir())) {
+      throw new Error(`refusing to clean ${CONFIG_DIR}: outside ${tmpdir()}`)
+    }
+    rmSync(CONFIG_DIR, { recursive: true, force: true })
+  }
+
+  const storedKey = (): string =>
+    (parseYaml(readFileSync(configFile, 'utf-8')) as { providers: Array<{ apiKey: string }> })
+      .providers[0]!.apiKey
+
+  beforeEach(clean)
+  afterEach(clean)
+
+  it('写入即加密，且能按读路径解回原文', async () => {
+    await configTool.execute(
+      { action: 'set', key: 'providers.0.apiKey', value: 'sk-secret-123' },
+      ctx,
+    )
+    const stored = storedKey()
+    expect(stored.startsWith(ENC_PREFIX)).toBe(true)
+    expect(stored).not.toContain('sk-secret-123') // 明文不在文件里
+    // 正控：读路径用的同一个 helper 解得回来 ⇒ 落盘的是「同一把 key 的密文」。
+    expect(decryptApiKey(stored, getCredentialKey(CONFIG_DIR))).toBe('sk-secret-123')
+  })
+
+  it('`${VAR}` 模板原样落盘 —— 不是秘密，加密会让 env 方案不再可读', async () => {
+    await configTool.execute(
+      { action: 'set', key: 'providers.0.apiKey', value: '${DEEPSEEK_API_KEY}' },
+      ctx,
+    )
+    expect(storedKey()).toBe('${DEEPSEEK_API_KEY}')
+  })
+
+  it('已经是 enc:v1: 的值不再加密第二层（解回来仍是原文，不是密文）', async () => {
+    // 幂等：`encryptApiKey` 自己不看前缀，所以这一格钉的是调用侧那道判断。
+    // 套两层不会报错，只会让读侧解出一段密文 —— 静默，且那条路径的报错信息
+    // 还会指向别处（`getProviderApiKey` 只在解密**抛错**时告警）。
+    const already = ENC_PREFIX + 'not-a-real-payload'
+    await configTool.execute({ action: 'set', key: 'providers.0.apiKey', value: already }, ctx)
+    expect(storedKey()).toBe(already)
+  })
+
+  it('同一份文件里的非 apiKey 路径原样落盘（加密由路径决定，不是「凡 set 必加密」）', async () => {
+    await configTool.execute(
+      { action: 'set', key: 'providers.0.baseUrl', value: 'https://x.test' },
+      ctx,
+    )
+    const doc = parseYaml(readFileSync(configFile, 'utf-8')) as {
+      providers: Array<Record<string, string>>
+    }
+    expect(doc.providers[0]!.baseUrl).toBe('https://x.test')
+  })
+
+  it('`get` 回来的是落盘形态：这条路径不再把明文交回模型', async () => {
+    // 读工具被 `resolveSafe` 的 Check 1 挡在工作目录内，读不到 ~/.mipham —— 所以
+    // 「工具能不能拿到明文」这个问题，答案由这一格决定。
+    await configTool.execute(
+      { action: 'set', key: 'providers.0.apiKey', value: 'sk-secret-123' },
+      ctx,
+    )
+    const result = await configTool.execute({ action: 'get', key: 'providers.0.apiKey' }, ctx)
+    expect(result.content).not.toContain('sk-secret-123')
+    expect(result.content).toContain(ENC_PREFIX)
+  })
+
+  it('返回消息不把刚写入的密钥回显出来', async () => {
+    const result = await configTool.execute(
+      { action: 'set', key: 'providers.0.apiKey', value: 'sk-secret-123' },
+      ctx,
+    )
+    expect(result.content).not.toContain('sk-secret-123')
+    // 但必须说清它落在哪种形态 —— 否则用户打开 config.yml 看到密文会以为写坏了。
+    expect(result.content).toContain('providers.0.apiKey')
+    expect(result.content).toContain('encrypted')
   })
 })
 

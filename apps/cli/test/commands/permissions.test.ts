@@ -17,6 +17,7 @@ import type { ToolDefinition } from '../../src/shared'
 
 const CWD = join(homedir(), 'proj')
 const settingsPath = join(CWD, '.mipham', 'settings.json')
+const userSettingsPath = join(homedir(), '.mipham', 'settings.json')
 
 const writeTool: ToolDefinition = {
   name: 'Write',
@@ -31,9 +32,12 @@ const writeTool: ToolDefinition = {
 
 /**
  * C4 (方案甲): `/permissions allow <rule>` is the explicit persistence point
- * for "always allow". These tests pin that it (a) lands in settings.json,
- * (b) takes effect in the live permission system, not just on next start, and
- * (c) refuses a rule that could never match.
+ * for "always allow". These tests pin that it (a) lands in the **user**
+ * `settings.json` — never the project one, because an allow rule widens the
+ * approval gate and a file that arrives with the repository must not do that
+ * (this is the command the denial message prints, so the remedy working is part
+ * of the contract), (b) takes effect in the live permission system, not just on
+ * next start, and (c) refuses a rule that could never match.
  */
 describe('/permissions — rule persistence & mode help', () => {
   let perm: PermissionSystem
@@ -65,9 +69,14 @@ describe('/permissions — rule persistence & mode help', () => {
     rmSync(homedir(), { recursive: true, force: true })
   })
 
-  it('writes an allow rule to settings.json', async () => {
-    await permissionsCmd(makeCtx(), ['allow', 'Write'])
-    expect(JSON.parse(readFileSync(settingsPath, 'utf-8')).permissions.allow).toEqual(['Write'])
+  it('writes an allow rule to the user settings.json, never the project one', async () => {
+    const { content } = await permissionsCmd(makeCtx(), ['allow', 'Write'])
+    expect(JSON.parse(readFileSync(userSettingsPath, 'utf-8')).permissions.allow).toEqual(['Write'])
+    // 落点本身就是本次修正的对象：从前这条命令写 `.mipham/settings.json`，而那份文件
+    // 随仓库到达的人可以写、克隆的人替操作者点了「免审批」。命令必须把新的落点说出来，
+    // 否则用户按旧习惯读「Added to …」会以为它进了仓库。
+    expect(content).toContain(userSettingsPath)
+    expect(existsSync(settingsPath)).toBe(false)
   })
 
   it('takes effect in the live session, not only after restart', async () => {
@@ -77,29 +86,53 @@ describe('/permissions — rule persistence & mode help', () => {
     expect(perm.check(writeTool, {})).toBe('bypass')
   })
 
+  it('`--user` on an allow rule is redundant, not a second destination', async () => {
+    // 这条命令把 `--user` 收下但落点不变 —— 与 deny 相对（deny 靠 `--user` 选层级）。
+    await permissionsCmd(makeCtx(), ['allow', 'Write', '--user'])
+    expect(JSON.parse(readFileSync(userSettingsPath, 'utf-8')).permissions.allow).toEqual(['Write'])
+    expect(existsSync(settingsPath)).toBe(false)
+  })
+
   it('writes a deny rule and blocks in the live session', async () => {
     await permissionsCmd(makeCtx(), ['deny', 'Write'])
     expect(JSON.parse(readFileSync(settingsPath, 'utf-8')).permissions.deny).toEqual(['Write'])
+    // 方向相反的一格：deny 收到**项目级**（它只收窄，仓库可以自带），allow 一律不收。
+    expect(existsSync(userSettingsPath)).toBe(false)
     expect(perm.check(writeTool, {})).toBe('ask')
   })
 
   it('rejects a malformed rule without writing anything', async () => {
     const result = await permissionsCmd(makeCtx(), ['allow', 'Write('])
     expect(result.content).toContain('Invalid rule')
+    // 校验先于写：两个落点都不该出现文件。只查项目那份会让「写用户级」的新路径
+    // 在坏规则上写出东西而没人发现。
     expect(existsSync(settingsPath)).toBe(false)
+    expect(existsSync(userSettingsPath)).toBe(false)
   })
 
   it('rejects an empty rule', async () => {
     const result = await permissionsCmd(makeCtx(), ['allow'])
     expect(result.content).toContain('Missing rule')
     expect(existsSync(settingsPath)).toBe(false)
+    expect(existsSync(userSettingsPath)).toBe(false)
   })
 
-  it('removes a persisted rule', async () => {
+  it('removes a persisted allow rule from the user file it actually went into', async () => {
     await permissionsCmd(makeCtx(), ['allow', 'Write'])
-    await permissionsCmd(makeCtx(), ['remove', 'Write'])
-    expect(JSON.parse(readFileSync(settingsPath, 'utf-8')).permissions.allow).toEqual([])
+    const { content } = await permissionsCmd(makeCtx(), ['remove', 'Write'])
+    // `remove` 不带 `--user` 也要找得到：allow 现在落在用户级，若 remove 只看项目级，
+    // 「加了却删不掉」就是本次修正新引入的静默失败。
+    expect(content).not.toContain('No rule')
+    expect(JSON.parse(readFileSync(userSettingsPath, 'utf-8')).permissions.allow).toEqual([])
     expect(perm.check(writeTool, {})).toBe('ask')
+    expect(existsSync(settingsPath)).toBe(false)
+  })
+
+  it('removes a project-level deny rule with the same command', async () => {
+    await permissionsCmd(makeCtx(), ['deny', 'Write'])
+    const { content } = await permissionsCmd(makeCtx(), ['remove', 'Write'])
+    expect(content).not.toContain('No rule')
+    expect(JSON.parse(readFileSync(settingsPath, 'utf-8')).permissions.deny).toEqual([])
   })
 
   it('reports when there is nothing to remove', async () => {
@@ -211,8 +244,10 @@ describe('/permissions — the spelling the CLI advertises', () => {
     } as unknown as Parameters<typeof permissionsCmd>[0]
   }
 
+  // allow 规则现在一律落在**用户级**那份 —— 这一组钉的是「用户照着拒绝消息里的
+  // 原话敲，命令必须收下并真的生效」，落点变了，但那一句契约没变。
   const allowIn = () =>
-    JSON.parse(readFileSync(settingsPath, 'utf-8')).permissions.allow as string[]
+    JSON.parse(readFileSync(userSettingsPath, 'utf-8')).permissions.allow as string[]
 
   beforeEach(() => {
     rmSync(homedir(), { recursive: true, force: true })
@@ -264,7 +299,7 @@ describe('/permissions — the spelling the CLI advertises', () => {
   it('refuses an unbalanced quote without writing anything', async () => {
     const { content } = await permissionsCmd(makeCtx(), ['allow', '"Git'])
     expect(content).toContain('Unbalanced quote')
-    expect(existsSync(settingsPath)).toBe(false)
+    expect(existsSync(userSettingsPath)).toBe(false)
   })
 
   // ── The fix has to change the ruling, not just the text ──

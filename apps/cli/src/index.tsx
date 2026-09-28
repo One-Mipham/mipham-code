@@ -451,6 +451,15 @@ export async function runApp(options: RunOptions): Promise<void> {
         `    (a repository must not choose the approval gate — set it in ${settingsPathFor('user', process.cwd())})\n`,
     )
   }
+  // Same reason, same file, one key over: an allow rule is the approval gate for
+  // the tools it names, and without a configured `maxAllowedMode` there is
+  // nothing bounding how far it reaches.
+  if (settingsJson.projectAllowSkipped) {
+    process.stderr.write(
+      `⚠ Mipham Code: ignored permissions.allow from ${settingsPathFor('project', process.cwd())}\n` +
+        `    (an allow rule widens the gate — move the rules to ${settingsPathFor('user', process.cwd())})\n`,
+    )
+  }
   // Apply org-level permission restrictions (P0: bypassPermissions policy gap)
   if (config.permissionRestrictions) {
     permission.setRestrictions(config.permissionRestrictions)

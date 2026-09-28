@@ -98,9 +98,10 @@ describe('loadConfig — object-valued keys merge across sources', () => {
   })
 })
 
-// `permission` 是唯一一个**项目级不生效**的键：它决定闸门，而项目文件随代码到达。
+// 项目级 config.yml 里**不生效**的两个键：`permission` 与 `permissionRules.allow`。
+// 两个都是**放宽**方向 —— 一个替你选闸门，一个从闸门里放行 —— 而项目文件随代码到达。
 // （settings.json 那边同一件事记在 `test/config/settings-json.test.ts` 的
-// `permissions.defaultMode` 一组里 —— 同一扇门的两个镜像。）
+// `permissions.defaultMode` 与 `permissions.allow` 两组里 —— 同一扇门的两个镜像。）
 describe('loadConfig — 项目级 config.yml 不选权限档', () => {
   beforeEach(() => {
     rmSync(homedir(), { recursive: true, force: true })
@@ -177,7 +178,94 @@ describe('loadConfig — 项目级 config.yml 不选权限档', () => {
   })
 })
 
-// 上面那组钉的是「项目级那份不生效」。这一组钉的是**它什么时候根本不是项目级**：
+// 上面那组钉的是「项目级那份不生效」。这一组钉同一扇门的**第二个镜像**：
+// `permissionRules.allow` 与 `permission` 是同一个方向（放宽），而 `permissionRules.deny`
+// 是反方向（收窄，可以随代码到达）。判据是**宽窄**，不是「它挂在哪个键下面」—— 把 allow
+// 当成「规则」而放行，正是本次修正的前提错误：只有配了 `maxAllowedMode` 才有「档位允许的
+// 范围」，而它默认缺席（`permission.ts` 的 `allowRuleDecision` 在那条路径上直接返回
+// `bypass`）。这条闸门与 `settings.json` 那边是同一件事的两个镜像。
+describe('loadConfig — 项目级 config.yml 不选 allow 规则', () => {
+  beforeEach(() => {
+    rmSync(homedir(), { recursive: true, force: true })
+    mkdirSync(MIPHAM_HOME, { recursive: true })
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+  })
+
+  afterEach(() => {
+    rmSync(homedir(), { recursive: true, force: true })
+    vi.restoreAllMocks()
+  })
+
+  const allStderr = (): string =>
+    vi
+      .mocked(process.stderr.write)
+      .mock.calls.map((c) => String(c[0]))
+      .join('')
+
+  it('项目级 allow 不采纳、并**说出口**；同一份文件里的 deny 照收', () => {
+    writeProjectConfig(
+      'permissionRules:\n  allow:\n    - "Bash(npm test)"\n  deny:\n    - "Read(**/.npmrc)"\n',
+    )
+    const config = loadConfig(CWD)
+    // 扣的是**方向**，不是整张表：同一份文件里的 deny 仍然到位。
+    expect(config.permissionRules?.allow).toBeUndefined()
+    expect(config.permissionRules?.deny).toEqual(['Read(**/.npmrc)'])
+    const said = allStderr()
+    expect(said).toContain('ignored permissionRules.allow')
+    expect(said).toContain(join(CWD, '.mipham', 'config.yml'))
+  })
+
+  it('用户级 allow 照收（正对照：扣的是「项目级」，不是「allow」）', () => {
+    writeUserConfig('permissionRules:\n  allow:\n    - "Bash(npm test)"\n')
+    expect(loadConfig(CWD).permissionRules?.allow).toEqual(['Bash(npm test)'])
+    // 没有这一格，上面那条「allow 为 undefined」可能只是因为 allow 压根没被读。
+    expect(allStderr()).not.toContain('ignored permissionRules')
+  })
+
+  it('两份都写了 allow：用户级的到位，项目那份被扣并报出', () => {
+    writeProjectConfig('permissionRules:\n  allow:\n    - "Bash(rm -rf /)"\n')
+    writeUserConfig('permissionRules:\n  allow:\n    - "Bash(npm test)"\n')
+    const config = loadConfig(CWD)
+    expect(config.permissionRules?.allow).toEqual(['Bash(npm test)'])
+    expect(allStderr()).toContain('ignored permissionRules.allow')
+  })
+
+  it('只写了 allow 的项目文件不会把用户级的整张表挤掉（剥完为空 ⇒ 不留空表）', () => {
+    // 若剥完留下 `permissionRules: {}` 再合并进去，深合并里它是空对象、看着无害 ——
+    // 但「项目文件只提及 allow」这件事不该改变用户自己那张表的形状，留下空表就会让
+    // `config.permissionRules` 对一个只提 allow 的仓库变成真值。
+    writeProjectConfig('permissionRules:\n  allow:\n    - "Bash(rm -rf /)"\n')
+    writeUserConfig(
+      'permissionRules:\n  allow:\n    - "Bash(npm test)"\n  deny:\n    - "Read(**/.env)"\n',
+    )
+    const config = loadConfig(CWD)
+    expect(config.permissionRules).toEqual({
+      allow: ['Bash(npm test)'],
+      deny: ['Read(**/.env)'],
+    })
+  })
+
+  it('标记不能自己冒出来：`allow: []` / 非数组都不算「声明过」', () => {
+    writeProjectConfig('permissionRules:\n  allow: []\n')
+    expect(allStderr()).not.toContain('ignored permissionRules')
+    writeProjectConfig('permissionRules:\n  allow: "Bash(npm test)"\n')
+    expect(allStderr()).not.toContain('ignored permissionRules')
+  })
+
+  it('负控：home 的**子目录**里那份照旧扣并告警', () => {
+    writeProjectConfig('permissionRules:\n  allow:\n    - "Bash(npm test)"\n')
+    expect(loadConfig(CWD).permissionRules?.allow).toBeUndefined()
+    expect(allStderr()).toContain('ignored permissionRules.allow')
+  })
+
+  it('而从 home 本身启动时那份是用户自己的 —— 不扣，也不告警', () => {
+    writeUserConfig('permissionRules:\n  allow:\n    - "Bash(npm test)"\n')
+    expect(loadConfig(homedir()).permissionRules?.allow).toEqual(['Bash(npm test)'])
+    expect(allStderr()).not.toContain('ignored permissionRules')
+  })
+})
+
+// 这一组钉的是**它什么时候根本不是项目级**：
 // 从 home 目录启动时 `join(cwd, '.mipham')` 与 `MIPHAM_HOME` 是同一个目录，那份
 // config.yml 就是用户自己的 —— 再按项目级剥离，等于把用户亲手写的档位拒绝掉。
 describe('loadConfig — 从 home 目录启动时没有「项目级」', () => {
