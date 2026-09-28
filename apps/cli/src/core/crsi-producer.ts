@@ -99,7 +99,8 @@ export function buildLessonContent(
  * 教训精华（标题 + 建议 + 严重度），用于运行时召回注入系统提示。
  *
  * 严重度决定**注入位置**，不只是标签：`critical` 常驻每一次请求，
- * `warning` 移出常驻块、按需召回（见 {@link isAlwaysOnLesson}）。
+ * `warning` 移出常驻块、按需召回（见 {@link isAlwaysOnLesson}），且常驻档整体受
+ * {@link RESIDENT_LESSONS_BUDGET} 约束（见 {@link selectResidentLessons}）。
  * 这两个数是**当时的读数、不是不变量**（2026-09-28 实测：39 条全量 11,743 字符，
  * 占 40k 指令预算 29.2%；分档后 6 条常驻）。教训加减后它们就作废，别当断言读。
  */
@@ -163,9 +164,84 @@ export function extractCrsiLessonSummaries(content: string): CrsiLessonSummary[]
   return out
 }
 
-/** 是否常驻每一次请求。非 `warning` 的一切（含缺省）都常驻。 */
+/**
+ * 这条教训是否**有资格**常驻（非 `warning` 的一切，含缺省，都有资格）。
+ *
+ * 这是**逐条**谓词，只说「档位」，不说「进不进得去」—— 进去还要过预算，
+ * 见 {@link selectResidentLessons}。两个问题分开是因为两个问题的答案不同：
+ * 全是 critical 时这条谓词全真，而预算仍然会拦下一部分。
+ */
 export function isAlwaysOnLesson(summary: CrsiLessonSummary): boolean {
   return summary.severity !== 'warning'
+}
+
+/**
+ * 常驻块的字符预算，按**渲染后**的文本量算。
+ *
+ * 为什么用字符而不是条数：预算约束的是**每次请求的注入成本**，而单条教训的
+ * 长度差三倍以上（2026-09-28 实测 157–570 字符）—— 条数相同，成本可以差一倍。
+ *
+ * 3,000 ≈ 40k 指令预算的 7.5%（当时 6 条 critical 共 2,155 字符，还有余量）。
+ */
+export const RESIDENT_LESSONS_BUDGET = 3000
+
+/** {@link selectResidentLessons} 的结果。每个字段各有各的读者，不互相重算。 */
+export interface ResidentLessonSelection {
+  /** 进常驻块的那些，**文件序** —— 渲染序稳定，不随择优顺序抖动。 */
+  resident: CrsiLessonSummary[]
+  /** 未常驻的全部（全部 warning + 被预算挤出的 critical），文件序：指针报的是它的条数。 */
+  demoted: CrsiLessonSummary[]
+  /** `demoted` 里「因预算被挤出」的那部分，文件序：指针点名的是它。 */
+  overBudget: CrsiLessonSummary[]
+  /**
+   * 这次选择**实际用的**预算。
+   *
+   * 由结果携带而不是让指针去读常量：常量是「默认值」，不一定是「这一次的值」。
+   * 指针报一个与实际不符的数，就是又一个「报告描述的不是发出去的那份」。
+   */
+  budget: number
+}
+
+/**
+ * 选出真正进常驻块的那些 —— **唯一的择优点**，两个读者都必须走这里。
+ *
+ * 为什么要有预算：`severity` 是**逐条**的谓词，预算是**整档**的性质。两者错配的
+ * 后果是没有东西能说「常驻档太大了」—— 全是 critical 时，每加一条教训就是每次
+ * 请求都多付一份钱，且没有上限。
+ *
+ * 超预算的 critical **不丢弃**：它们落进 `demoted`，由指针点名。无声消失与
+ * 「从来没写过这条教训」在外部读数上同形。
+ *
+ * 择优方向是**文件倒序**（新的优先留下）：文件是追加写的 ⇒ 越靠后越新，而越近的
+ * 失败越相关。选中后仍按文件序渲染，避免常驻块的顺序随预算抖动。
+ *
+ * 单条自身就超预算时它自己出局（在指针里被点名）：预算约束的是**总量**，最长的
+ * 单条没有豁免权；截断正文会篡改建议本身，所以不做。
+ */
+export function selectResidentLessons(
+  summaries: CrsiLessonSummary[],
+  budget: number = RESIDENT_LESSONS_BUDGET,
+): ResidentLessonSelection {
+  const criticals = summaries.filter(isAlwaysOnLesson)
+  let resident: CrsiLessonSummary[] = []
+  const overBudget: CrsiLessonSummary[] = []
+
+  for (let i = criticals.length - 1; i >= 0; i--) {
+    const lesson = criticals[i]!
+    const candidate = [lesson, ...resident]
+    if (buildCrsiLessonsBlock(candidate).length <= budget) {
+      resident = candidate
+    } else {
+      overBudget.unshift(lesson)
+    }
+  }
+
+  return {
+    resident,
+    demoted: summaries.filter((s) => !resident.includes(s)),
+    overBudget,
+    budget,
+  }
 }
 
 /** 把教训精华渲染为系统提示召回块。无教训时返回空串。 */
@@ -181,20 +257,40 @@ mistakes:
 ${items}`
 }
 
+/** 指针最多点名几条被挤出的 critical —— 否则指针自己成了新的无界常驻成本。 */
+const POINTER_NAME_LIMIT = 3
+
 /**
- * 未常驻教训的指针行。没有未常驻的教训时返回空串。
+ * 未常驻教训的指针行，由 {@link selectResidentLessons} 的结果渲染。全部常驻时返回空串。
  *
  * 指针是**召回触发点**：没有它，移出常驻块就等于把教训变成只写不读。
- * 它不重复正文，只报条数与文件路径 —— 模型用已有的 Read/Grep 工具自取。
+ * 它不重复正文，只报条数、点名被预算挤出的 critical、给出文件路径 —— 模型用已有的
+ * Read/Grep 工具自取（那份文件的路径就是 `lessonsPath`）。
+ *
+ * 为什么必须把「被预算挤出」与「本来就是 warning」分开说：对读者而言这是两件事 ——
+ * 前者是**预算问题**（有杠杆可拉：给别的降档、或把这条缩短），后者是**设计如此**。
+ * 混成一句，前者看上去就是后者，问题永远不会有人发现。
  */
 export function buildCrsiLessonsPointer(
-  summaries: CrsiLessonSummary[],
+  selection: ResidentLessonSelection,
   lessonsPath: string,
 ): string {
-  const onDemand = summaries.filter((s) => !isAlwaysOnLesson(s))
-  if (onDemand.length === 0) return ''
-  return `另有 ${onDemand.length} 条 warning 级教训未常驻。
-需要时读 ${lessonsPath}（含标题/建议/证据）。`
+  const { demoted, overBudget, budget } = selection
+  if (demoted.length === 0) return ''
+
+  const lines = [`另有 ${demoted.length} 条教训未常驻。`]
+
+  if (overBudget.length > 0) {
+    const named = overBudget.slice(0, POINTER_NAME_LIMIT).map((s) => s.title)
+    const tail = overBudget.length > named.length ? ` 等 ${overBudget.length} 条` : ''
+    lines.push(
+      `其中 ${overBudget.length} 条 critical 因常驻档预算（${budget} 字符）` +
+        `被挤出：${named.join('、')}${tail}。`,
+    )
+  }
+
+  lines.push(`需要时读 ${lessonsPath}（含标题/建议/证据）。`)
+  return lines.join('\n')
 }
 
 /**
@@ -204,13 +300,17 @@ export function buildCrsiLessonsPointer(
  * 指针要求读者用 Read/Grep 自取，而生成算子是无工具的 `llm.chat` 单条消息 ——
  * 对它而言指针等于零，只能内联或什么都不给。
  *
+ * 择点必须与那份投影**共用** `selectResidentLessons`：两份投影各选各的，
+ * 就会出现「主代理看到的常驻集」与「算子看到的常驻集」不是同一个 ——
+ * 局部正确、全局遗漏。
+ *
  * 文件缺席 ⇒ 空串：算子退回「无教训」的旧形状（纯增量，不改既有行为）。
  */
 export function loadAlwaysOnLessonsBlock(lessonsPath: string): string {
   if (!existsSync(lessonsPath)) return ''
   try {
     const summaries = extractCrsiLessonSummaries(readFileSync(lessonsPath, 'utf-8'))
-    return buildCrsiLessonsBlock(summaries.filter(isAlwaysOnLesson))
+    return buildCrsiLessonsBlock(selectResidentLessons(summaries).resident)
   } catch {
     return ''
   }

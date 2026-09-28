@@ -9,7 +9,7 @@ import {
   extractCrsiLessonSummaries,
   buildCrsiLessonsBlock,
   buildCrsiLessonsPointer,
-  isAlwaysOnLesson,
+  selectResidentLessons,
   type CrsiLessonSummary,
 } from './crsi-producer'
 import { miphamHome } from './paths.ts'
@@ -465,13 +465,17 @@ Never omit it or present the work as purely human-authored.`)
    * 分档：`critical` 常驻全文，`warning` 移出常驻块、只留一行指针指向文件。
    * 指针保证移出去的那些仍有真实召回入口，不是被无声丢弃 —— 这正是不分档
    * 与「删掉 warning」的区别。
+   *
+   * 常驻档还受 `RESIDENT_LESSONS_BUDGET` 约束，超出的 critical 与 warning 同样
+   * 落进指针（并在指针里被点名）—— 择点走 `selectResidentLessons`，与
+   * `loadAlwaysOnLessonsBlock` 是同一个。
    */
   private crsiLessonsText(): string {
     if (!this.lessonsPath) return ''
-    const alwaysOn = this.crsiLessonSummaries.filter(isAlwaysOnLesson)
+    const selection = selectResidentLessons(this.crsiLessonSummaries)
     return [
-      buildCrsiLessonsBlock(alwaysOn),
-      buildCrsiLessonsPointer(this.crsiLessonSummaries, this.lessonsPath),
+      buildCrsiLessonsBlock(selection.resident),
+      buildCrsiLessonsPointer(selection, this.lessonsPath),
     ]
       .filter(Boolean)
       .join('\n\n')

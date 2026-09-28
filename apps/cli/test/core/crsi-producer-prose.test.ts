@@ -10,7 +10,7 @@ import {
   produceProseProposal,
   collectSkillFiles,
   extractCrsiLessonSummaries,
-  isAlwaysOnLesson,
+  selectResidentLessons,
   loadAlwaysOnLessonsBlock,
   formatNetChange,
   type CrsiSignal,
@@ -217,19 +217,19 @@ describe('loadAlwaysOnLessonsBlock', () => {
   it('真教训文件 → 只含常驻条，warning 条在外，且**不带指针**', () => {
     const lessonsPath = join(import.meta.dirname, '..', '..', 'crsi-lessons.md')
     const all = extractCrsiLessonSummaries(readFileSync(lessonsPath, 'utf-8'))
-    const alwaysOn = all.filter(isAlwaysOnLesson)
-    const onDemand = all.filter((s) => !isAlwaysOnLesson(s))
+    // 与系统提示那一份共用同一个择点 —— 手搓 filter 的那份会与生产漂移而不自知。
+    const { resident, demoted } = selectResidentLessons(all)
 
     // 正对照：这份文件确实**两种都有**。缺了它，下面两轮断言在「解析全空」
     // 或「全都常驻」时会各自恒真 —— 探针的宇宙选错，红绿都不成证据。
-    expect(alwaysOn.length).toBeGreaterThan(0)
-    expect(onDemand.length).toBeGreaterThan(0)
+    expect(resident.length).toBeGreaterThan(0)
+    expect(demoted.length).toBeGreaterThan(0)
 
     const block = loadAlwaysOnLessonsBlock(lessonsPath)
     expect(block).not.toBe('')
     // 逐条，不抽样：渲染形状即 `**标题**`，故按渲染形状断言（标题子串可能偶然落在别条的正文里）
-    for (const s of alwaysOn) expect(block).toContain(`**${s.title}**`)
-    for (const s of onDemand) expect(block).not.toContain(`**${s.title}**`)
+    for (const s of resident) expect(block).toContain(`**${s.title}**`)
+    for (const s of demoted) expect(block).not.toContain(`**${s.title}**`)
     // 指针是给**有工具的读者**的（让它用 Read/Grep 自取）；算子是无工具的
     // `llm.chat` 单条消息 ⇒ 对它指针等于零，只能内联。块里出现指针文案即为这一半没做到。
     expect(block).not.toContain('未常驻')
