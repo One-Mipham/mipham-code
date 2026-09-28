@@ -89,6 +89,40 @@ describe('gitRoot', () => {
       rmSync(dir, { recursive: true, force: true })
     }
   })
+
+  // 非 git 目录是**正常路径** —— `gitRoot` 自己 catch 掉并回退 cwd。所以 git 那句
+  // `fatal: not a git repository` 不是要报的错，但它默认走继承的 stderr，会原样漏到
+  // 终端上：从 home 目录启动（`~` 不是仓库）就能看见那两行。
+  it('不把 git 的 stderr 漏到终端', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mipham-instr-'))
+    const leaked: string[] = []
+    const orig = process.stderr.write.bind(process.stderr)
+    process.stderr.write = ((chunk: unknown) => {
+      leaked.push(String(chunk))
+      return true
+    }) as typeof process.stderr.write
+    try {
+      gitRoot(dir)
+    } finally {
+      process.stderr.write = orig
+      rmSync(dir, { recursive: true, force: true })
+    }
+    expect(leaked.join('')).not.toContain('fatal')
+  })
+
+  // 正对照：上面那一格不能靠「本来就什么都读不到」变绿。修法是把 stdio 写成
+  // `['ignore','pipe','pipe']` —— 若照抄 `commands.ts` 里那种 stdout 不用的 `'ignore'`，
+  // stdout 不再是管道，`gitRoot` 会永远拿到空串、永远回退 cwd，**连在仓库里都失效**。
+  it('正对照：仓库内的子目录仍解析出仓库根（stdout 必须仍是管道）', () => {
+    const repo = realpathSync(mkdtempSync(join(tmpdir(), 'mipham-instr-repo-')))
+    try {
+      execSync('git init', { cwd: repo, stdio: 'ignore' })
+      mkdirSync(join(repo, 'sub'), { recursive: true })
+      expect(gitRoot(join(repo, 'sub'))).toBe(repo)
+    } finally {
+      rmSync(repo, { recursive: true, force: true })
+    }
+  })
 })
 
 describe('discoverDirectories', () => {

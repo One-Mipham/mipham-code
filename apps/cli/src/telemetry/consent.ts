@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto'
-import { readSettingsDoc, writeSettingsDoc, settingsPathFor } from '../config/loader'
+import {
+  readSettingsDoc,
+  writeSettingsDoc,
+  settingsPathFor,
+  projectFilePath,
+} from '../config/loader'
 import { resolveEndpoint, type EndpointSource } from './endpoint'
 import { miphamHome } from '../core/paths.ts'
 
@@ -134,6 +139,11 @@ export function readTelemetrySettings(
  * persistent, deliberate act (the first-run prompt or `/telemetry on`) — env
  * vars are inherited by child processes and end up in CI logs, so they must not
  * be a channel for consent-by-proxy.
+ *
+ * **There is no tier 3 at all when running from `~`.** There the project path and
+ * the user path name the same file, so applying tier 3 would withhold the user's
+ * *own* consent. That case skips the read rather than re-labelling it — see
+ * `projectFilePath`.
  */
 export function resolveTelemetry(
   cwd: string = process.cwd(),
@@ -152,7 +162,13 @@ export function resolveTelemetry(
   }
 
   const user = readTelemetrySettings('user', cwd)
-  const project = readTelemetrySettings('project', cwd)
+  // Absent — not "read and hollowed out" — when the project scope *is* the user
+  // scope, i.e. the CLI is running from the home directory itself (see
+  // `projectFilePath`). Reading it anyway would file the user's own opt-in as a
+  // repository declaration: withheld here, and then named back to them in the
+  // warning as the very file to go set it in.
+  const project =
+    projectFilePath('settings.json', cwd) === null ? {} : readTelemetrySettings('project', cwd)
   const { endpoint, source: endpointSource } = resolveEndpoint(user.endpoint, env)
   const ignoredProjectKeys = declaredProjectKeys(project)
 

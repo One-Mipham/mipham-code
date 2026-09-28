@@ -187,6 +187,45 @@ describe('consent — three tiers', () => {
   })
 })
 
+// `cwd === ~` 时 `join(cwd, '.mipham')` 与 `MIPHAM_HOME` 是**同一个目录**，于是「项目级」
+// 那份读的就是用户自己的文件。后果不止是一句多余告警：用户亲手写下的 opt-in 被归成
+// 「仓库替我授的权」而 fail-closed 丢弃，而告警**指名同一个文件**让他去那里设置。
+// 判别点是「两个路径是不是同一个目录」，不是「在不在 home 底下」—— 后者会把
+// `~/proj` 这类最常见的项目位置一起豁免掉（下面第二条钉住它）。
+describe('consent — 从 home 目录启动时没有「项目级」', () => {
+  beforeEach(reset)
+  afterAll(() => {
+    rmSync(HOME, { recursive: true, force: true })
+    rmSync(PROJECT, { recursive: true, force: true })
+  })
+
+  it('采纳用户写在 ~/.mipham/settings.json 的 opt-in，且不报它被忽略', () => {
+    writeSettings(USER_SETTINGS, { telemetry: { enabled: true } })
+    const consent = resolveTelemetry(HOME, NO_ENV)
+    expect(consent.enabled).toBe(true)
+    expect(consent.source).toBe('user-optin')
+    expect(consent.ignoredProjectKeys).toEqual([])
+  })
+
+  it('同样不再把用户自己的 endpoint 报成「仓库想选目的地」', () => {
+    writeSettings(USER_SETTINGS, {
+      telemetry: { enabled: true, endpoint: 'https://mine.example/x' },
+    })
+    const consent = resolveTelemetry(HOME, NO_ENV)
+    expect(consent.endpoint).toBe('https://mine.example/x')
+    expect(consent.endpointSource).toBe('user')
+    expect(consent.ignoredProjectKeys).toEqual([])
+  })
+
+  it('负控：home 的**子目录**里那份仍是项目级 —— 判据是同一个目录，不是前缀', () => {
+    writeSettings(PROJECT_SETTINGS, { telemetry: { enabled: true } })
+    const consent = resolveTelemetry(PROJECT, NO_ENV)
+    expect(consent.enabled).toBe(false)
+    expect(consent.source).toBe('default-off')
+    expect(consent.ignoredProjectKeys).toEqual(['enabled'])
+  })
+})
+
 describe('consent — writes preserve what we do not model', () => {
   beforeEach(reset)
   afterAll(() => {

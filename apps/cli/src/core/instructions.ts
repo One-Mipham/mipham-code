@@ -62,13 +62,21 @@ export function parsePromptExclude(value: unknown): string[] {
   return []
 }
 
-/** 定位仓库根（git rev-parse --show-toplevel），非 git 目录回退 cwd。 */
+/**
+ * 定位仓库根（git rev-parse --show-toplevel），非 git 目录回退 cwd。
+ *
+ * `stdio` 必须显式给：默认下子进程的 stderr 是**继承**的，于是「不是 git 仓库」这个
+ * **正常路径**会把 git 的 `fatal: not a git repository` 直接漏到终端上（从 `~` 启动
+ * 就能看见）。但 stdout 仍须是管道 —— 换成 `'ignore'`（`commands.ts` 里那种 stdout
+ * 不用的形状）会让这里永远拿到空串、永远回退 cwd，**连在仓库里都失效**。
+ */
 export function gitRoot(cwd: string): string {
   try {
     return execSync('git rev-parse --show-toplevel', {
       cwd,
       timeout: 5000,
       encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
     }).trim()
   } catch {
     return cwd

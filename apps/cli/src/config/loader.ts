@@ -1,5 +1,5 @@
 import { existsSync, copyFileSync, mkdirSync, readdirSync, unlinkSync, chmodSync } from 'node:fs'
-import { join, dirname } from 'node:path'
+import { join, dirname, resolve } from 'node:path'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { atomicWriteFileSync } from '../shared/atomic-write'
 import { isRegularFile, readRegularFileSync } from '../shared/regular-file'
@@ -367,12 +367,21 @@ export function loadSettingsJson(
   // The project file's entries, kept out of the merge so provenance survives it.
   const projectHooks: SettingsHooks = {}
 
+  // The project entry is **omitted**, not re-tagged, when it is the user's own file
+  // (running from `~` — see `projectFilePath`): the user entry below then reads it
+  // with `readHooks: true`, so its `defaultMode` applies and its hooks are trusted,
+  // instead of being withheld under a project label.
+  const projectSettingsPath = projectFilePath('settings.json', cwd)
   const searchPaths: Array<{ path: string; readHooks: boolean; isProject?: boolean }> = [
-    {
-      path: join(cwd, MIPHAM_DIR, 'settings.json'),
-      readHooks: options.includeProjectHooks ?? false,
-      isProject: true,
-    },
+    ...(projectSettingsPath
+      ? [
+          {
+            path: projectSettingsPath,
+            readHooks: options.includeProjectHooks ?? false,
+            isProject: true,
+          },
+        ]
+      : []),
     { path: join(MIPHAM_HOME, 'settings.json'), readHooks: true },
   ]
 
@@ -460,6 +469,29 @@ export function settingsPathFor(scope: SettingsScope, cwd: string = process.cwd(
 }
 
 /**
+ * Resolve a file under the **project** `.mipham` directory, or `null` when there
+ * is no project scope at this `cwd`.
+ *
+ * There is none when the CLI runs from the home directory itself: there
+ * `join(cwd, MIPHAM_DIR)` and `MIPHAM_HOME` are the *same directory*, so every
+ * "project" path names the user's own file.
+ *
+ * The guards that call this exist to stop **a repository** from granting
+ * telemetry, choosing the approval gate, or supplying hooks — and to report what
+ * they withheld. At `~/.mipham` there is no repository to stop: treating the file
+ * as project-level would withhold the user's own settings and then name that very
+ * file in the warning as the place to set them.
+ *
+ * The test is "same directory", **not** "under the home directory" — `~/proj` is
+ * an ordinary project and must keep every guard (`startsWith(homedir())` would
+ * exempt exactly the most common project location).
+ */
+export function projectFilePath(name: string, cwd: string = process.cwd()): string | null {
+  const dir = join(cwd, MIPHAM_DIR)
+  return resolve(dir) === resolve(MIPHAM_HOME) ? null : join(dir, name)
+}
+
+/**
  * Read a settings.json as a plain object, preserving any key we don't model
  * (hooks, and anything a future version adds). A malformed file is an error,
  * not something to clobber — the user's other settings live in the same file.
@@ -533,37 +565,43 @@ export function removeSettingsRule(
 }
 
 export function loadConfig(cwd: string = process.cwd()): MiphamConfig {
-  const configPath = join(cwd, MIPHAM_DIR, 'config.yml')
+  // `null` when cwd is the home directory, where the "project" config *is* the user
+  // config read further down (`MIPHAM_HOME` and `join(cwd, MIPHAM_DIR)` coincide) —
+  // see `projectFilePath`. Skipping the block is what lets the user's own
+  // `permission` come through the user door instead of being stripped at this one.
+  const configPath = projectFilePath('config.yml', cwd)
   const userConfigPath = join(MIPHAM_HOME, 'config.yml')
 
   let config = { ...DEFAULT_CONFIG }
 
-  // The project file enters `loadConfig` at **two** points (fresh parse, and the
-  // parse that follows a restore from backup). Both go through here, so the guard
-  // on `permission` cannot be present on one path and missing on the other — a
-  // corrupted config that recovers from a backup is still the same repository's
-  // file, and "corrupt it once, get the setting honored" would be a bypass of the
-  // one key that is refused.
-  const applyProjectConfig = (parsed: Partial<MiphamConfig>): void => {
-    config = mergeConfig(config, stripProjectPermission(parsed, configPath), false)
-  }
-
   // ── Load project-level config ──
-  const projectConfig = safeParseYaml(configPath, 'project config')
-  if (projectConfig) {
-    applyProjectConfig(projectConfig)
-  } else if (isRegularFile(configPath)) {
-    // A real file is there but failed to parse — try to restore from backup.
-    // 非普通文件走不到这里：那不是「损坏的配置」，而是根本不该当配置读的东西
-    // （FIFO/socket/目录），「恢复」对它会变成往 FIFO 里写、又一次挂死。
-    process.stderr.write(`⚠ Mipham Code: project config is corrupted, attempting recovery...\n`)
-    if (!tryRestoreFromBackup(configPath)) {
-      process.stderr.write(`⚠ Mipham Code: no backup available for project config. Skipping.\n`)
-    } else {
-      // Retry parsing after restore
-      const restored = safeParseYaml(configPath, 'restored project config')
-      if (restored) {
-        applyProjectConfig(restored)
+  if (configPath !== null) {
+    // The project file enters `loadConfig` at **two** points (fresh parse, and the
+    // parse that follows a restore from backup). Both go through here, so the guard
+    // on `permission` cannot be present on one path and missing on the other — a
+    // corrupted config that recovers from a backup is still the same repository's
+    // file, and "corrupt it once, get the setting honored" would be a bypass of the
+    // one key that is refused.
+    const applyProjectConfig = (parsed: Partial<MiphamConfig>): void => {
+      config = mergeConfig(config, stripProjectPermission(parsed, configPath), false)
+    }
+
+    const projectConfig = safeParseYaml(configPath, 'project config')
+    if (projectConfig) {
+      applyProjectConfig(projectConfig)
+    } else if (isRegularFile(configPath)) {
+      // A real file is there but failed to parse — try to restore from backup.
+      // 非普通文件走不到这里：那不是「损坏的配置」，而是根本不该当配置读的东西
+      // （FIFO/socket/目录），「恢复」对它会变成往 FIFO 里写、又一次挂死。
+      process.stderr.write(`⚠ Mipham Code: project config is corrupted, attempting recovery...\n`)
+      if (!tryRestoreFromBackup(configPath)) {
+        process.stderr.write(`⚠ Mipham Code: no backup available for project config. Skipping.\n`)
+      } else {
+        // Retry parsing after restore
+        const restored = safeParseYaml(configPath, 'restored project config')
+        if (restored) {
+          applyProjectConfig(restored)
+        }
       }
     }
   }

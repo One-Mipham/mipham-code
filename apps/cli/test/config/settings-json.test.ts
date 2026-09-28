@@ -192,6 +192,25 @@ describe('loadSettingsJson', () => {
       writeProject({ defaultMode: '   ' })
       expect(loadSettingsJson(CWD).projectModeSkipped).toBeUndefined()
     })
+
+    it('从 home 目录启动时那份文件**就是**用户级的 —— 不扣，也不留标记', () => {
+      // `cwd === ~` 时 `join(cwd, '.mipham')` 与 `MIPHAM_HOME` 是同一个目录：写在那里的
+      // 就是用户自己的文件。按项目级扣掉等于拒绝用户自己的设置，再在告警里指名**同一个
+      // 文件**让他去那里设置。
+      writeUser({ defaultMode: 'plan' })
+      const r = loadSettingsJson(homedir())
+      expect(r.permissions.defaultMode).toBe('plan')
+      expect(r.projectModeSkipped).toBeUndefined()
+    })
+
+    it('负控：home 的**子目录**里那份仍是项目级（判据是同一个目录，不是前缀）', () => {
+      // 写成 `cwd.startsWith(homedir())` 会连 `~/proj` 一起豁免 —— 而那正是最常见的
+      // 项目位置。`CWD` 就是 home 的子目录，这一格钉住判据的形状。
+      writeProject({ defaultMode: 'auto' })
+      const r = loadSettingsJson(CWD)
+      expect(r.permissions.defaultMode).toBeUndefined()
+      expect(r.projectModeSkipped).toBe(true)
+    })
   })
 
   // The merged `hooks` list is provenance-free: once project and user entries sit

@@ -276,9 +276,15 @@ export function App({
   const [inputHistory, setInputHistory] = useState<string[]>([])
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null)
   // Current git branch — read once at mount (not a git repo → null).
+  // `stdio` 显式给：默认下 git 的 stderr 是继承的，「不是仓库」这个正常路径会把
+  // `fatal:` 漏到终端上（与 `core/instructions.ts` 的 `gitRoot` 同一件事）。
+  // stdout 仍须是管道，否则读到的永远是空串 —— 分支名直接消失，且不报错。
   const [gitBranch] = useState<string | null>(() => {
     try {
-      const b = execSync('git branch --show-current', { encoding: 'utf-8' }).trim()
+      const b = execSync('git branch --show-current', {
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }).trim()
       return b || null
     } catch {
       return null

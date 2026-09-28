@@ -177,6 +177,42 @@ describe('loadConfig — 项目级 config.yml 不选权限档', () => {
   })
 })
 
+// 上面那组钉的是「项目级那份不生效」。这一组钉的是**它什么时候根本不是项目级**：
+// 从 home 目录启动时 `join(cwd, '.mipham')` 与 `MIPHAM_HOME` 是同一个目录，那份
+// config.yml 就是用户自己的 —— 再按项目级剥离，等于把用户亲手写的档位拒绝掉。
+describe('loadConfig — 从 home 目录启动时没有「项目级」', () => {
+  beforeEach(() => {
+    rmSync(homedir(), { recursive: true, force: true })
+    mkdirSync(MIPHAM_HOME, { recursive: true })
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+  })
+
+  afterEach(() => {
+    rmSync(homedir(), { recursive: true, force: true })
+    vi.restoreAllMocks()
+  })
+
+  const allStderr = (): string =>
+    vi
+      .mocked(process.stderr.write)
+      .mock.calls.map((c) => String(c[0]))
+      .join('')
+
+  it('用户自己的 ~/.mipham/config.yml 不再被当成仓库配置剥离', () => {
+    writeUserConfig('permission: bypassPermissions\n')
+    const config = loadConfig(homedir())
+    expect(config.permission).toBe('bypassPermissions')
+    expect(allStderr()).not.toContain('ignored permission')
+  })
+
+  it('负控：home 的**子目录**里那份照旧剥离并告警', () => {
+    writeProjectConfig('permission: bypassPermissions\n')
+    const config = loadConfig(CWD) // CWD = homedir()/proj —— 前缀相同，目录不同
+    expect(config.permission).toBe('default')
+    expect(allStderr()).toContain('ignored permission: bypassPermissions')
+  })
+})
+
 describe('loadConfig — .mcp.json keeps the full server shape', () => {
   beforeEach(() => {
     rmSync(homedir(), { recursive: true, force: true })
