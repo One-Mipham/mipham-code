@@ -310,6 +310,28 @@ export function clampMode(
   return allowed[0] ?? 'default'
 }
 
+/**
+ * 从**仓库带来的** `forbiddenModes` 里挑出会造成「放宽」的条目 —— 判据是 `clampMode` 的回落。
+ *
+ * `forbiddenModes` 名义上只收窄（禁掉一档），但它有一个出口：`clampMode` 从被请求的档
+ * **向下**找落点，若「该档及其以下」全被禁就走到了底，此时回落到 `allowed[0]` ——
+ * 而那是**更宽**的一档。禁掉层级最窄的那一档（`PERMISSION_MODE_HIERARCHY[0]`）正好
+ * 制造这个情形：请求 `plan` 会拿到 `default`／`acceptEdits`／`auto`。
+ *
+ * 为什么「保住最窄那一档」就够了：任何请求档 D 向下走，最窄档 ≤ D 且被允许，
+ * 所以永远找得到落点、永远进不了那条回落分支。这是**充分**条件；而且对当前两张表
+ * （`PERMISSION_MODE_HIERARCHY` × `ALL_MODES`）它也是**必要**的 —— 穷举 32 个子集 ×
+ * 5 个请求档共 160 格，会改宽的 27 格全部且仅仅落在含 `plan` 的那 16 个子集里。
+ * 机制由 `config/loader.ts` 的「仓库带来的限制不得改宽」区间不变量实测钉住。
+ *
+ * 收的是**原始条目**（可能是别名或大小写变体）：归一化只有一张表（`MODE_ALIASES`）且就在
+ * 本文件 —— 在这里复用 `normalizeModeName`，不另写判据。否则 `Plan` 会从闸门缝里滑过去，
+ * 随后被 `normalizeRestrictions` 归一成 `plan`，闸门就成了摆设。
+ */
+export function wideningForbiddenEntries(entries: readonly unknown[]): unknown[] {
+  return entries.filter((entry) => normalizeModeName(entry) === STRICTEST_MODE)
+}
+
 export function nextMode(
   current: PermissionMode,
   restrictions?: PermissionRestrictions,

@@ -11,6 +11,7 @@ import type {
   CredentialMaskingConfig,
   BackgroundAgentConfig,
   CrossSessionConfig,
+  PermissionRestrictions,
 } from '../shared/index.ts'
 import {
   DEFAULT_CONFIG,
@@ -21,6 +22,7 @@ import {
 } from './defaults'
 import { getCredentialKey, encryptApiKey, decryptApiKey, ENC_PREFIX } from './credential-crypto'
 import type { SettingsHooks } from '../core/hooks-config'
+import { wideningForbiddenEntries } from '../core/permission-config'
 import { miphamHome } from '../core/paths.ts'
 import { MIPHAM_DIR } from '../shared/constants.ts'
 
@@ -148,14 +150,15 @@ function mergeConfig(
 }
 
 /**
- * Drop the **widening** keys from a project-level `config.yml` before it is
- * merged — `permission` and `permissionRules.allow` — reporting them instead of
- * applying them.
+ * Drop the **widening** parts of a project-level `config.yml` before it is merged
+ * — `permission`, `permissionRules.allow`, and the one member of
+ * `permissionRestrictions` that widens — reporting them instead of applying them.
  *
- * Both answer the same question one level apart: `permission` picks the approval
- * gate, and an allow rule is "and do not ask me about the commands in here"
- * inside it. Either is a decision about the operator made by whoever wrote the
- * repository, which is why neither may arrive with the code.
+ * All three answer the same question one level apart: `permission` picks the
+ * approval gate, an allow rule is "and do not ask me about the commands in here"
+ * inside it, and a mode restriction is the boundary that rule is measured
+ * against. Each is a decision about the operator made by whoever wrote the
+ * repository, which is why none may arrive with the code.
  *
  * They were not always treated alike: `permission` was refused while `allow` was
  * merged as a mere "rule", on the reasoning that a rule only speaks within the
@@ -164,6 +167,11 @@ function mergeConfig(
  * there was no range and `allowRuleDecision` returned `bypass` outright. The
  * criterion is the **direction**, not the key it is filed under: what narrows
  * (`permissions.deny`) a repository may ship, what widens it may not.
+ *
+ * `permissionRestrictions` is where that criterion has to be applied per
+ * **member** rather than per key, because the key is the narrowing one by
+ * definition and still has one way to widen (`forbiddenModes` minus the strictest
+ * rung — see the branch at the end of this function).
  *
  * `mergeConfig` has no per-key allowlist, so this has to happen at the two points
  * the project file enters. Reported rather than dropped silently: a repo whose
@@ -204,7 +212,79 @@ function stripProjectPermission(cfg: Partial<MiphamConfig>, path: string): Parti
     else delete rest.permissionRules
   }
 
+  // `permissionRestrictions` is the third key of this family, and unlike the other
+  // two it is *nominally* the narrowing one (the key exists to cap the gate) — which
+  // is exactly why it went unguarded. It has one exit, though, and it is in
+  // `clampMode`: the walk goes **down** from the requested mode, and when the
+  // request and everything below it are forbidden there is nothing left to land on,
+  // so it falls back to `allowed[0]` — **wider** than what was asked for. Banning
+  // the strictest rung is what creates that case (`[default, acceptEdits, plan]` +
+  // a request for `plan` ⇒ `auto`, four rungs up), so the repository may keep every
+  // ban but that one. `maxAllowedMode` needs no such treatment: it only drops modes
+  // above a cap, and the same downward walk always finds the cap (measured over all
+  // 25 cap × request pairs — none widens).
+  //
+  // This is the F2-2 criterion ("what narrows a repository may ship, what widens it
+  // may not") applied one level down, at the *value* rather than the key: the key is
+  // kept, the widening member is refused. Measured, not asserted — the sweep in
+  // `test/config/loader-merge.test.ts` writes all 32 forbidden subsets (the empty one
+  // included) through this function and clamps all 5 requested modes against each.
+  const restrictions = rest.permissionRestrictions as Record<string, unknown> | undefined
+  if (restrictions && typeof restrictions === 'object' && !Array.isArray(restrictions)) {
+    const kept: Record<string, unknown> = {}
+    const refused: unknown[] = []
+
+    for (const [key, value] of Object.entries(restrictions)) {
+      if (key === 'forbiddenModes' && Array.isArray(value)) {
+        const widening = wideningForbiddenEntries(value)
+        if (widening.length > 0) refused.push(...widening)
+        const survivors = value.filter((entry) => !widening.includes(entry))
+        // Same "emptied means dropped" rule as `allow` above: a ban list that lost
+        // its only entry must not merge as `[]` and reshape the user's own table.
+        if (survivors.length > 0) kept.forbiddenModes = survivors
+        continue
+      }
+      // Everything else passes through untouched — including a malformed
+      // `forbiddenModes` (a string, an object). `normalizeRestrictions` is the one
+      // validator and the one warning channel for this key; a second partial
+      // validator here would drift from it the day a mode is added.
+      kept[key] = value
+    }
+
+    if (refused.length > 0) {
+      process.stderr.write(
+        `⚠ Mipham Code: ignored permissionRestrictions.forbiddenModes ${JSON.stringify(refused)} from project config ${path}\n` +
+          `    (forbidding the strictest mode leaves the fallback nothing below it to land on —\n` +
+          `    a request for that mode comes back *wider*; set it in ~/.mipham/config.yml if you mean it)\n`,
+      )
+    }
+
+    if (Object.keys(kept).length > 0) {
+      rest.permissionRestrictions = kept as PermissionRestrictions
+      // The applied half is reported too, and this one is not a courtesy: `permission`
+      // and `allow` announce themselves because they are *refused*. A cap or a ban
+      // that **does** take effect rewrites the operator's own mode control once, at
+      // startup, and nothing afterwards ever names it — the footer just shows a mode
+      // they did not choose. `deny` rules can merge silently because each one speaks
+      // at the moment it acts (a refusal in the transcript, naming the rule); a mode
+      // ceiling never does.
+      process.stderr.write(
+        `⚠ Mipham Code: permission modes pinned by project config ${path} (${describeRestrictions(kept)})\n` +
+          `    (a repository may narrow the gate; change or remove it in ~/.mipham/config.yml)\n`,
+      )
+    } else {
+      delete rest.permissionRestrictions
+    }
+  }
+
   return rest
+}
+
+/** One-line rendering of a restriction table for a warning — values as written. */
+function describeRestrictions(source: Record<string, unknown>): string {
+  return Object.entries(source)
+    .map(([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`)
+    .join(', ')
 }
 
 /**

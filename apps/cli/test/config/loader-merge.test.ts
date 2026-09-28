@@ -13,6 +13,7 @@ import { rmSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { loadConfig } from '../../src/config/loader'
+import { ALL_MODES, PERMISSION_MODE_HIERARCHY, clampMode } from '../../src/core/permission-config'
 
 const MIPHAM_HOME = join(homedir(), '.mipham')
 const CWD = join(homedir(), 'proj')
@@ -262,6 +263,210 @@ describe('loadConfig — 项目级 config.yml 不选 allow 规则', () => {
     writeUserConfig('permissionRules:\n  allow:\n    - "Bash(npm test)"\n')
     expect(loadConfig(homedir()).permissionRules?.allow).toEqual(['Bash(npm test)'])
     expect(allStderr()).not.toContain('ignored permissionRules')
+  })
+})
+
+// 这一组钉的是同一个家族的**第三个键**：`permissionRestrictions`。前两个是放宽方向，一眼
+// 看得出该拒；这一个**名义上就是收窄的**（它的存在意义就是给档位封顶），所以从来没被问过
+// —— 而它有一个出口：`clampMode` 从被请求的档**向下**找落点，若该档及其以下全被禁就走到底，
+// 回落到 `allowed[0]`，那是**更宽**的一档。禁掉最窄的 `plan` 正是制造这个情形的办法
+// （实测：`forbiddenModes: [default, acceptEdits, plan]` + 请求 `plan` ⇒ 落到 `auto`，宽 4 阶）。
+//
+// 处置沿用 F2-2 立的判据（收窄 → 收下；放宽 → 不收），但**落到值一级**：`maxAllowedMode`
+// 照收（穷举全部 25 个 cap × 请求档，从不改宽），`forbiddenModes` 只扣掉「最窄那一档」这个
+// 成员，其余照收。保住最窄那一档是**充分**的：任何请求档 D 向下走，最窄档 ≤ D 且被允许，
+// 故永远找得到落点、永远进不了回落分支。
+describe('loadConfig — 项目级 permissionRestrictions：收窄的收下，会改宽的那个成员扣下', () => {
+  beforeEach(() => {
+    rmSync(homedir(), { recursive: true, force: true })
+    mkdirSync(MIPHAM_HOME, { recursive: true })
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+  })
+
+  afterEach(() => {
+    rmSync(homedir(), { recursive: true, force: true })
+    vi.restoreAllMocks()
+  })
+
+  const allStderr = (): string =>
+    vi
+      .mocked(process.stderr.write)
+      .mock.calls.map((c) => String(c[0]))
+      .join('')
+
+  it('封顶照收，并且**说出口**（改写发生在一处，之后没有任何东西再提它）', () => {
+    writeProjectConfig('permissionRestrictions:\n  maxAllowedMode: plan\n')
+    const config = loadConfig(CWD)
+    expect(config.permissionRestrictions).toEqual({ maxAllowedMode: 'plan' })
+    const said = allStderr()
+    expect(said).toContain('permission modes pinned by project config')
+    expect(said).toContain(join(CWD, '.mipham', 'config.yml'))
+    expect(said).toContain('maxAllowedMode: plan')
+  })
+
+  it('扣的是**这一个成员**，不是整张表：禁宽档的条目照样收下', () => {
+    // 少了这条，一个「项目级 restrictions 一律不看」的实现也能让下面那条全绿。
+    writeProjectConfig('permissionRestrictions:\n  forbiddenModes: [plan, bypassPermissions]\n')
+    const config = loadConfig(CWD)
+    expect(config.permissionRestrictions).toEqual({ forbiddenModes: ['bypassPermissions'] })
+    expect(allStderr()).toContain('ignored permissionRestrictions.forbiddenModes ["plan"]')
+  })
+
+  it('别名与大小写同样认得（判据在这一格里最容易漏：归一化只有一张表）', () => {
+    // 若这里另写一份判据、只比字面量 `'plan'`，`Plan` 会滑过闸门，随后被
+    // `normalizeRestrictions` 归一成 `plan` —— 闸门就成了摆设。
+    for (const spelling of ['Plan', 'PLAN', ' plan ']) {
+      rmSync(join(CWD, '.mipham'), { recursive: true, force: true })
+      writeProjectConfig(`permissionRestrictions:\n  forbiddenModes: ["${spelling}"]\n`)
+      const config = loadConfig(CWD)
+      expect(config.permissionRestrictions).toBeUndefined()
+      expect(allStderr()).toContain('ignored permissionRestrictions.forbiddenModes')
+    }
+  })
+
+  it('只剩被扣的那一条 ⇒ 整键不留（不改变用户自己那张表的形状）', () => {
+    writeProjectConfig('permissionRestrictions:\n  forbiddenModes: [plan]\n')
+    writeUserConfig('permissionRestrictions:\n  forbiddenModes: [bypassPermissions]\n')
+    const config = loadConfig(CWD)
+    expect(config.permissionRestrictions).toEqual({ forbiddenModes: ['bypassPermissions'] })
+    expect(allStderr()).toContain('ignored permissionRestrictions.forbiddenModes')
+  })
+
+  it('写坏了的 forbiddenModes 原样交出去 —— 校验仍只有 normalizeRestrictions 一处', () => {
+    // 字符串不是数组：这里**不改写**它（改了就是本文件长出第二个部分校验器，
+    // 哪天加一档模式两边就会漂移）。它是 fail-closed 的：认不出 ⇒ 封顶到最严一档。
+    writeProjectConfig('permissionRestrictions:\n  forbiddenModes: "plan"\n')
+    const config = loadConfig(CWD)
+    expect(config.permissionRestrictions).toEqual({ forbiddenModes: 'plan' })
+    expect(allStderr()).not.toContain('ignored permissionRestrictions.forbiddenModes')
+  })
+
+  it('用户级那扇门照旧：扣的是**来源**，不是这个键', () => {
+    // 正对照。用户自己的文件里禁最窄一档仍是他的自由（组织策略可以由它封顶），
+    // 本笔只拦「随代码到达」的那一份 —— 别把这条读成「这个键被废掉了」。
+    writeUserConfig('permissionRestrictions:\n  forbiddenModes: [plan]\n')
+    expect(loadConfig(CWD).permissionRestrictions).toEqual({ forbiddenModes: ['plan'] })
+    expect(allStderr()).not.toContain('permission modes pinned')
+  })
+
+  it('没写就不吭声（播报不能自己冒出来）', () => {
+    writeProjectConfig('defaultModel: project-model\n')
+    loadConfig(CWD)
+    expect(allStderr()).not.toContain('permission modes pinned')
+    expect(allStderr()).not.toContain('permissionRestrictions')
+  })
+
+  it('区间不变量：仓库带来的 32 种 forbiddenModes 里，没有一种能把请求的档改宽', () => {
+    // 数人头救不了这个键 —— 它的问题是「某些输入的输出比输入更宽」，那是**区间性质**。
+    // 所以这里遍历全部 2^5 个子集 × 5 个请求档，逐格问「clamp 之后有没有比请求的更宽」，
+    // 且走的是**真 loadConfig 的产物**（不是把剥离规则在测试里重写一遍）。
+    const rank = (m: string): number => PERMISSION_MODE_HIERARCHY.indexOf(m as never)
+    let cells = 0
+    const widened: string[] = []
+
+    for (let mask = 0; mask < 1 << ALL_MODES.length; mask++) {
+      const raw = ALL_MODES.filter((_, i) => (mask >> i) & 1)
+      rmSync(join(CWD, '.mipham'), { recursive: true, force: true })
+      writeProjectConfig(`permissionRestrictions:\n  forbiddenModes: [${raw.join(', ')}]\n`)
+      const restrictions = loadConfig(CWD).permissionRestrictions
+      for (const desired of ALL_MODES) {
+        cells++
+        const got = clampMode(desired, restrictions)
+        if (rank(got) > rank(desired))
+          widened.push(`${JSON.stringify(raw)} 请求 ${desired} → ${got}`)
+      }
+    }
+
+    expect(widened).toEqual([])
+    // 自证前提：遍历真的跑满了（循环写坏/早退时上面那条会**恒真**）。
+    expect(cells).toBe(160) // 32 个子集（含空集）× 5 个请求档
+    // 正对照：把同一批输入**不经剥离**直接喂给 clampMode，确实有格子会改宽 —— 少了它，
+    // 上面那条不变量可能只是在描述一个恒等于空集的形状。
+    expect(
+      ALL_MODES.some((d) => rank(clampMode(d, { forbiddenModes: ['plan', 'default'] })) > rank(d)),
+    ).toBe(true)
+  })
+
+  it('两个来源叠在一起时也不会更宽 —— 闸在项目那扇门上，所以只有这一格看得见「相加」', () => {
+    // 上一格只喂**一个**来源。运行时真正的输入是合并后的那一份，而合并是逐子键的
+    // （数组替换、对象合并，user 在最后一层）⇒ 仓库的那一份永远**加不进**用户已有的表。
+    // 这一格把两者的**全部**组合走一遍。
+    //
+    // 两条路已经在别处量过，这里只把剩下的那条补上：
+    //   · 用户没写 forbiddenModes ⇒ 生效的就是仓库那份 ⇒ 上一格的 160 格；
+    //   · 用户写了 ⇒ 用户那份**替换**它（下面第一条用例钉住这个机制），仓库那份不参与。
+    // 于是唯一还没量的组合是「用户禁了某几档 **+** 仓库封顶」—— 封顶本身不改宽，但回落
+    // 分支此时是**活的**（用户禁了最窄档 ⇒ 请求它也走回落），所以必须实测而不是推演。
+    const rank = (m: string): number => PERMISSION_MODE_HIERARCHY.indexOf(m as never)
+    const yaml = (modes: string[]): string =>
+      modes.length > 0
+        ? `permissionRestrictions:\n  forbiddenModes: [${modes.join(', ')}]\n`
+        : 'showThinking: off\n'
+    let cells = 0
+    const widened: string[] = []
+
+    for (let mask = 0; mask < 1 << ALL_MODES.length; mask++) {
+      const banned = ALL_MODES.filter((_, i) => (mask >> i) & 1)
+      // 基线：**只**有用户那份文件时的落点
+      rmSync(join(CWD, '.mipham'), { recursive: true, force: true })
+      writeUserConfig(yaml(banned))
+      const userOnly = loadConfig(CWD).permissionRestrictions
+
+      for (let pmask = 0; pmask < 1 << ALL_MODES.length; pmask++) {
+        const projectBans = ALL_MODES.filter((_, i) => (pmask >> i) & 1)
+        rmSync(join(CWD, '.mipham'), { recursive: true, force: true })
+        writeProjectConfig(yaml(projectBans))
+        // 合并值由**真加载器**给出 —— 不在这里把合并语义重写一遍（那正是本仓库的老形状）。
+        const merged = loadConfig(CWD).permissionRestrictions
+        for (const desired of ALL_MODES) {
+          cells++
+          const withRepo = rank(clampMode(desired, merged))
+          const withoutRepo = rank(clampMode(desired, userOnly))
+          if (withRepo > withoutRepo)
+            widened.push(
+              `用户禁 ${JSON.stringify(banned)} + 仓库禁 ${JSON.stringify(projectBans)}：请求 ${desired} 第 ${withoutRepo} 阶 → 第 ${withRepo} 阶`,
+            )
+        }
+      }
+    }
+
+    expect(widened).toEqual([])
+    expect(cells).toBe(5120) // 32 个用户基线 × 32 个仓库禁止集 × 5 个请求档
+    // 正对照：同一格网格里，**不经剥离**的仓库侧确实能把用户的落点推宽。
+    expect(
+      ALL_MODES.some(
+        (d) => rank(clampMode(d, { forbiddenModes: ['plan'] })) > rank(clampMode(d, {})),
+      ),
+    ).toBe(true)
+  })
+
+  it('用户自己禁了最窄档时回落分支是活的 —— 但仓库的封顶推不动它', () => {
+    // 跨来源里唯一还需要点名的一格：用户禁 `plan` 之后，请求 `plan` 走的是
+    // `clampMode` 的**回落**（那条分支只在「请求档及其以下全被禁」时才可达）。
+    // 此时仓库再封顶，落点会不会被推宽？实测不会 —— 封顶只从上面砍，而回落取的是
+    // `ALL_MODES` 里第一个活着的档（`default`），与封顶无关。
+    writeUserConfig('permissionRestrictions:\n  forbiddenModes: [plan]\n')
+    expect(clampMode('plan', loadConfig(CWD).permissionRestrictions)).toBe('default')
+
+    writeProjectConfig('permissionRestrictions:\n  maxAllowedMode: plan\n')
+    expect(clampMode('plan', loadConfig(CWD).permissionRestrictions)).toBe('default')
+
+    // 顺带记下同一格上的**既有**兜底（不是本笔造成、也不由仓库侧触发）：用户禁 `plan`
+    // 再加上封顶 `plan` 会把 allowed 掏空（`[plan]` ∩ 禁 plan = 空），此时
+    // `clampMode` 落到最后那句 `allowed[0] ?? 'default'` ⇒ 又是 `default`，比封顶更宽。
+    // 掏空这一步只能由**用户自己**的禁令完成（仓库侧那份 `[plan]` 已被本笔扣下），
+    // 故它属于「用户自己把最窄档禁掉之后兜底去哪」的问题，留作残余。
+    expect(clampMode('plan', { forbiddenModes: ['plan'], maxAllowedMode: 'plan' })).toBe('default')
+  })
+
+  it('用户自己写了 forbiddenModes 时，仓库那一份进不来（数组替换、不是并集）', () => {
+    // 上一条不变量赖以成立的前提，单列一格钉住 —— 若哪天合并改成并集，
+    // 「仓库的表永远加不进用户已有的表」就不成立了，而上面那条会变得**无法证伪**。
+    writeProjectConfig('permissionRestrictions:\n  forbiddenModes: [bypassPermissions]\n')
+    writeUserConfig('permissionRestrictions:\n  forbiddenModes: [default]\n')
+    expect(loadConfig(CWD).permissionRestrictions).toEqual({ forbiddenModes: ['default'] })
+    // 且仓库那份仍照常被**通报**（被合并语义吃掉，不是被这道闸吃掉）
+    expect(allStderr()).toContain('permission modes pinned by project config')
   })
 })
 
