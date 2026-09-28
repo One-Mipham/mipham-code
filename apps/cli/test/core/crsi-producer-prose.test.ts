@@ -53,6 +53,48 @@ describe('selectTargetSkill', () => {
     const llm = textLlm('apps/cli/skills/standard/nonexistent.SKILL.md')
     expect(await selectTargetSkill(SIGNAL, llm, SKILL_FILES)).toBeNull()
   })
+
+  /**
+   * 选目标提示词的**结构**：作者写在行数组里的三个空行分隔符必须真的到达模型。
+   *
+   * 此前这里用 `.filter(Boolean)` 丢掉那行**条件性**的 `severity`，而它分不清
+   * 「条件空串」与「故意的段落分隔符」，把三段式一并吃掉 —— 实测提示词里 `\n\n` 一次都没有。
+   * 修法是改用兄弟函数（`buildGenerateProsePrompt`）的 `...(cond ? [x] : [])` 写法。
+   */
+  describe('提示词结构', () => {
+    function capturingLlm(seen: string[]): Llm {
+      return {
+        chat: async function* (req: Parameters<Llm['chat']>[0]) {
+          const last = req.messages.at(-1)
+          seen.push(typeof last?.content === 'string' ? last.content : '')
+          yield { type: 'text', content: SKILL_FILES[0]! }
+          yield { type: 'stop' }
+        },
+      }
+    }
+
+    it('三段之间的空行分隔符到达模型（说明 / 失败信号 / 候选文件）', async () => {
+      const seen: string[] = []
+      await selectTargetSkill(SIGNAL, capturingLlm(seen), SKILL_FILES)
+      expect(seen[0]).toContain('\n\n失败信号：')
+      expect(seen[0]).toContain('\n\n候选 skill 文件：\n- ')
+    })
+
+    it('负控：severity 缺席时不占行（原 `.filter(Boolean)` 的职责仍成立）', async () => {
+      const seen: string[] = []
+      const { severity: _drop, ...noSeverity } = SIGNAL
+      await selectTargetSkill(noSeverity, capturingLlm(seen), SKILL_FILES)
+      expect(seen[0]).not.toContain('severity')
+      // 分隔符仍在：缺席的那一行不该把结构一起带走（改前这两条断言里至少一条必红）
+      expect(seen[0]).toContain('\n\n失败信号：')
+    })
+
+    it('版本号随本笔前进（提示词是版本化资源，改了就必须动版本）', async () => {
+      const seen: string[] = []
+      await selectTargetSkill(SIGNAL, capturingLlm(seen), SKILL_FILES)
+      expect(seen[0]).toContain('producer-prose-select v1.1.0')
+    })
+  })
 })
 
 describe('parseProsePrediction', () => {

@@ -500,7 +500,7 @@ export function produceRuleProposal(
 // ── Producer 散文提议（块 1）：从失败信号生成「改 skill 散文」提议 ──
 // A1 边界首次实演：LLM 只作「生成」（候选），判定仍走确定性（guard 预筛 / 行为效果 / 人审）。
 
-const PROSE_SELECT_PROMPT_VERSION = '1.0.0'
+const PROSE_SELECT_PROMPT_VERSION = '1.1.0'
 
 function buildSelectSkillPrompt(signal: CrsiSignal, skillFiles: string[]): string {
   return [
@@ -509,15 +509,16 @@ function buildSelectSkillPrompt(signal: CrsiSignal, skillFiles: string[]): strin
     '失败信号：',
     `- category: ${signal.category}`,
     `- title: ${signal.title}`,
-    signal.severity ? `- severity: ${signal.severity}` : '',
+    // 缺席（空串）时不占行 —— 与 `buildGenerateProsePrompt` 同一个写法。
+    // **不能靠 `.filter(Boolean)` 做这件事**：它分不清「本该丢的条件空串」与「上面那几个
+    // 故意的段落分隔符」，于是把三段式结构一并吃掉（实测本函数的提示词里 `\n\n` 一次都没有）。
+    ...(signal.severity ? [`- severity: ${signal.severity}`] : []),
     `- suggestion: ${signal.suggestion}`,
     `- evidence: ${signal.evidence.join(' | ')}`,
     '',
     '候选 skill 文件：',
     ...skillFiles.map((f) => `- ${f}`),
-  ]
-    .filter(Boolean)
-    .join('\n')
+  ].join('\n')
 }
 
 async function collectLlmText(llm: Llm, prompt: string): Promise<string> {
