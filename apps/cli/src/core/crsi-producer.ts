@@ -347,6 +347,27 @@ export function buildCrsiLessonsPointer(
 }
 
 /**
+ * 事件型召回扳机的正文，由 {@link selectResidentLessons} 的结果渲染。无可召回时返回空串。
+ *
+ * 与 {@link buildCrsiLessonsPointer} **共用同一个判据**（`demoted.length === 0`）：
+ * 没有指针就没有扳机。指针说的是「东西在那儿」，扳机说的是「现在是看它的时机」——
+ * 后者只能挂在**事件**上（工具刚失败），挂在系统提示里就是在复述指针本身。
+ *
+ * 措辞是**非指令式**的：不点名、不排序、不读、不摘要任何一条教训，也不替代理决定
+ * 读不读。代理可以完全忽略它，代价只是这一条上下文。
+ */
+export function buildLessonRevisitNudge(
+  selection: ResidentLessonSelection,
+  lessonsPath: string,
+): string {
+  if (selection.demoted.length === 0) return ''
+  return (
+    `[可回顾] 上一步工具调用失败。若有教训覆盖同一情形，可自行决定是否读 ${lessonsPath}` +
+    `（含标题/建议/证据）；不作要求，也可以完全忽略。`
+  )
+}
+
+/**
  * 常驻档名册 —— `selectResidentLessons` 的**第三个读者**，也是**唯一给人看的**那一个。
  *
  * 前两个读者的输出都进了**模型**的上下文（系统提示、`--prose` 算子）。而常驻档的成本

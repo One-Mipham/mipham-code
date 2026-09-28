@@ -6,6 +6,7 @@ import {
   extractCrsiLessonSummaries,
   buildCrsiLessonsBlock,
   buildCrsiLessonsPointer,
+  buildLessonRevisitNudge,
   selectResidentLessons,
   loadAlwaysOnLessonsBlock,
   buildResidentLessonReport,
@@ -284,6 +285,66 @@ describe('buildCrsiLessonsPointer', () => {
     for (const s of sel.overBudget.slice(0, 3)) expect(pointer).toContain(s.title)
     expect(pointer).not.toContain(sel.overBudget[3]!.title) // 第 4 条只计数、不点名
     expect(pointer).toContain('等 4 条')
+  })
+})
+
+describe('buildLessonRevisitNudge', () => {
+  const mixed: CrsiLessonSummary[] = [
+    { title: 'c: 常驻', suggestion: '常驻建议。', severity: 'critical' },
+    { title: 'w1: 按需', suggestion: '按需建议一。', severity: 'warning' },
+    { title: 'w2: 按需', suggestion: '按需建议二。', severity: 'warning' },
+  ]
+  const PATH = '/repo/apps/cli/crsi-lessons.md'
+
+  it('有未常驻教训时给出路径 —— 否则扳机响了却无处可去', () => {
+    const nudge = buildLessonRevisitNudge(selectResidentLessons(mixed), PATH)
+    expect(nudge).toContain(PATH)
+    expect(nudge.length).toBeGreaterThan(0)
+  })
+
+  it('**非指令式**：不点名、不读、不摘要任何一条教训的标题', () => {
+    const nudge = buildLessonRevisitNudge(selectResidentLessons(mixed), PATH)
+    for (const s of mixed) expect(nudge).not.toContain(s.title)
+    // 正文也没被抄进来
+    for (const s of mixed) expect(nudge).not.toContain(s.suggestion)
+  })
+
+  it('全部常驻时返回空串（没有指针就没有扳机）', () => {
+    const onlyCritical = mixed.filter(isAlwaysOnLesson)
+    expect(selectResidentLessons(onlyCritical).demoted).toHaveLength(0) // 前提自证
+    expect(buildLessonRevisitNudge(selectResidentLessons(onlyCritical), PATH)).toBe('')
+  })
+
+  it('无教训时返回空串', () => {
+    expect(buildLessonRevisitNudge(selectResidentLessons([]), PATH)).toBe('')
+  })
+
+  it('与指针**同条件**：同一批输入下，指针非空 ⟺ 扳机非空（防两处漂移）', () => {
+    // 一声哨说「有 33 条未常驻」、另一声说「没有」，读者不知道信哪个。
+    const cases: CrsiLessonSummary[][] = [
+      mixed,
+      mixed.filter(isAlwaysOnLesson),
+      mixed.filter((s) => !isAlwaysOnLesson(s)),
+      [],
+    ]
+    for (const summaries of cases) {
+      const sel = selectResidentLessons(summaries)
+      const pointerEmpty = buildCrsiLessonsPointer(sel, PATH) === ''
+      const nudgeEmpty = buildLessonRevisitNudge(sel, PATH) === ''
+      expect(nudgeEmpty, `指针空=${pointerEmpty} 而扳机空=${nudgeEmpty}`).toBe(pointerEmpty)
+    }
+  })
+})
+
+describe('InstructionsLoader.crsiLessonNudgeText（真文件）', () => {
+  it('真文件里确实有未常驻教训（负控：否则本组整体空转报绿）', () => {
+    const loader = new InstructionsLoader()
+    loader.loadAll(process.cwd())
+    expect(loader.crsiLessonNudgeText().length).toBeGreaterThan(0)
+  })
+
+  it('未 loadAll 的装载器：空串，不指向任何文件', () => {
+    expect(new InstructionsLoader().crsiLessonNudgeText()).toBe('')
   })
 })
 

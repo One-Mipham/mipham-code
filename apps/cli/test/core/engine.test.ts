@@ -17,6 +17,7 @@ import { mountLlm } from '../../src/providers/llm'
 import { recordLlm, replayLlm } from '../../src/providers/llm-replay'
 import { SessionLog, replayChunks } from '../../src/core/session-log'
 import { RulesLoader } from '../../src/core/rules-loader'
+import { InstructionsLoader } from '../../src/core/instructions'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -425,6 +426,152 @@ describe('QueryEngine', () => {
       }
 
       expect(conversationText(context)).not.toContain('RULE-B')
+      rmSync(root, { recursive: true, force: true })
+    })
+  })
+
+  describe('CRSI recall nudge — setInstructions', () => {
+    /** Workspace holding `apps/cli/crsi-lessons.md` — where `loadAll` reads lessons from. */
+    function makeLessonsWorkspace(severity: 'warning' | 'critical'): string {
+      const root = realpathSync(mkdtempSync(join(tmpdir(), 'mipham-lessons-')))
+      mkdirSync(join(root, 'apps', 'cli'), { recursive: true })
+      writeFileSync(
+        join(root, 'apps', 'cli', 'crsi-lessons.md'),
+        `# CRSI Lessons\n\n## 教训标题\n\n- 建议: 建议正文。\n- 严重度: ${severity}\n`,
+      )
+      return root
+    }
+
+    function loaderFor(root: string): InstructionsLoader {
+      const loader = new InstructionsLoader()
+      loader.loadAll(root)
+      return loader
+    }
+
+    /** Provider emitting one `probe` call per round for `rounds` rounds, then a stop. */
+    function failingToolPerTurn(rounds: number) {
+      let turn = 0
+      return mockProviderRegistry(async function* () {
+        const n = turn++
+        if (n < rounds) {
+          yield {
+            type: 'tool_use',
+            toolUse: { type: 'tool_use', id: `c${n}`, name: 'probe', input: {} },
+          }
+        }
+        yield { type: 'stop' }
+      })
+    }
+
+    /** A tool that reports failure the way this repo's eight failure returns do. */
+    const failingProbe = () =>
+      mockTool('probe', async () => ({ success: false, content: '', error: 'probe failed' }))
+
+    const NUDGE = '[可回顾]'
+    const countOf = (haystack: string, needle: string): number => haystack.split(needle).length - 1
+
+    it('工具失败且存在未常驻教训时，注入扳机并给出文件路径', async () => {
+      const root = makeLessonsWorkspace('warning')
+      const context = mockContext()
+      const engine = new QueryEngine(failingToolPerTurn(1), context, makeToolMap([failingProbe()]))
+      engine.setInstructions(loaderFor(root))
+
+      for await (const _ of engine.process('go')) {
+        /* drain */
+      }
+
+      expect(conversationText(context)).toContain(NUDGE)
+      expect(conversationText(context)).toContain(join(root, 'apps', 'cli', 'crsi-lessons.md'))
+      rmSync(root, { recursive: true, force: true })
+    })
+
+    it('全部常驻（无未常驻教训）时不注入 —— 没有指针就没有扳机', async () => {
+      const root = makeLessonsWorkspace('critical')
+      const context = mockContext()
+      const engine = new QueryEngine(failingToolPerTurn(1), context, makeToolMap([failingProbe()]))
+      engine.setInstructions(loaderFor(root))
+
+      for await (const _ of engine.process('go')) {
+        /* drain */
+      }
+
+      expect(conversationText(context)).not.toContain(NUDGE)
+      rmSync(root, { recursive: true, force: true })
+    })
+
+    it('没接装载器时不注入 —— 证明这一行接线是承重的，不是装饰', async () => {
+      const context = mockContext()
+      const engine = new QueryEngine(failingToolPerTurn(1), context, makeToolMap([failingProbe()]))
+
+      for await (const _ of engine.process('go')) {
+        /* drain */
+      }
+
+      expect(conversationText(context)).not.toContain(NUDGE)
+    })
+
+    it('工具成功时不注入 —— 扳机挂在失败事件上', async () => {
+      const root = makeLessonsWorkspace('warning')
+      const context = mockContext()
+      const registry = mockProviderRegistry(async function* () {
+        yield {
+          type: 'tool_use',
+          toolUse: { type: 'tool_use', id: 'c0', name: 'probe', input: {} },
+        }
+        yield { type: 'stop' }
+      })
+      const engine = new QueryEngine(
+        registry,
+        context,
+        makeToolMap([mockTool('probe', async () => ({ success: true, content: 'ok' }))]),
+      )
+      engine.setInstructions(loaderFor(root))
+
+      for await (const _ of engine.process('go')) {
+        /* drain */
+      }
+
+      expect(conversationText(context)).not.toContain(NUDGE)
+      rmSync(root, { recursive: true, force: true })
+    })
+
+    it('多轮失败只注入一次 —— 失败循环里同一条命令重试十次不该是十次注入', async () => {
+      const root = makeLessonsWorkspace('warning')
+      const context = mockContext()
+      const engine = new QueryEngine(failingToolPerTurn(2), context, makeToolMap([failingProbe()]))
+      engine.setInstructions(loaderFor(root))
+
+      for await (const _ of engine.process('go')) {
+        /* drain */
+      }
+
+      // 前提自证：确实跑了两轮（否则「只注入一次」可能只是因为只失败了一轮）
+      expect(context.getMessages().length).toBeGreaterThan(0)
+      expect(countOf(conversationText(context), NUDGE)).toBe(1)
+      rmSync(root, { recursive: true, force: true })
+    })
+
+    it('第一轮成功、第二轮才失败 —— continueWithTools 那个调用点也接了', async () => {
+      // 与 `injectRules` 同形的「两条渲染路径只接一条」缺口：只接 `process()` 那一处，
+      // 本条会红而其余全绿。断言看着像同一个东西，钉的是**另一个**调用点。
+      const root = makeLessonsWorkspace('warning')
+      const context = mockContext()
+      let calls = 0
+      const flaky = mockTool('probe', async () => {
+        calls++
+        return calls === 1
+          ? { success: true, content: 'ok' }
+          : { success: false, content: '', error: 'boom' }
+      })
+      const engine = new QueryEngine(failingToolPerTurn(2), context, makeToolMap([flaky]))
+      engine.setInstructions(loaderFor(root))
+
+      for await (const _ of engine.process('go')) {
+        /* drain */
+      }
+
+      expect(calls).toBe(2) // 前提自证：第二轮确实跑了，且是它失败的
+      expect(conversationText(context)).toContain(NUDGE)
       rmSync(root, { recursive: true, force: true })
     })
   })

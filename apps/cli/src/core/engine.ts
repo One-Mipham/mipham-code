@@ -23,6 +23,7 @@ import type { AgentViewManager } from '../agent-view/agent-view-manager'
 import type { Skills } from '../skills/seam'
 import { getBackgroundAgentRegistry } from '../agent/background-registry'
 import { RulesLoader } from './rules-loader'
+import type { InstructionsLoader } from './instructions'
 import { ExperienceRuleEngine } from './rule-engine.js'
 import { PatternAnalyzer } from '../agent/pattern-analyzer.js'
 import { EffectivenessTracker } from '../agent/effectiveness-tracker.js'
@@ -359,8 +360,14 @@ export class QueryEngine {
 
   /** Rules loader for path-scoped rules injection. */
   private rulesLoader?: RulesLoader
+  /** Instruction loader — the source of the CRSI lessons *recall nudge* (see injectLessonNudge). */
+  private instructionsLoader?: InstructionsLoader
   /** Files touched in the current turn (for rules matching). */
   private touchedFiles: Set<string> = new Set()
+  /** A tool call failed since the last nudge check. */
+  private pendingToolFailure = false
+  /** The recall nudge is offered at most once per engine (session). */
+  private lessonNudgeOffered = false
   private usageTracker = new UsageTracker()
   /** Inference hook (DLP) configuration. */
   private inferenceHookConfig?: InferenceHookConfig
@@ -371,6 +378,17 @@ export class QueryEngine {
   setRulesLoader(loader: RulesLoader): void {
     this.rulesLoader = loader
     this.rulesLoader.load()
+  }
+
+  /**
+   * Register the instruction loader — the recall nudge's text source.
+   *
+   * daemon 侧有意不接：daemon **从不设置系统提示**（`setSystemPrompt` 在 `daemon/`
+   * 下零调用点），因此那条路径上既没有常驻块、也没有指针 —— 接上去只会让扳机指向
+   * 一个该会话从未被告知过的文件。见守卫的 `daemon:setInstructions` 豁免条目。
+   */
+  setInstructions(loader: InstructionsLoader): void {
+    this.instructionsLoader = loader
   }
 
   /** Register inference hook (DLP) configuration. */
@@ -404,6 +422,31 @@ export class QueryEngine {
     if (!block) return
     this.context.injectContext('rules', block)
     this.touchedFiles.clear()
+  }
+
+  /**
+   * Offer the CRSI lessons **recall nudge** after a failed tool call.
+   *
+   * 为什么落点是「工具失败」而不是更早设想的会话开始/压缩后：那两处指针都是**刚生成的**
+   * （`/resume` 会重跑 `setSystemPrompt()`），在那里再说一遍「你可以去读教训」只是在复述
+   * 指针本身，却要每次会话都付。工具失败是唯一一个「系统提示没说过、且与当前事件绑定」
+   * 的时机 —— 这次失败可能有一条教训正好覆盖它。
+   *
+   * 与 {@link injectRules} 同形（含**同一个调用时机约束**）：必须在本轮 tool_result 都
+   * 追加完**之后**才注入。`injectContext` 推的是一条 user 消息，插进 assistant 的
+   * `tool_use` 与配对的 user `tool_result` 之间会把消息配对打断。
+   *
+   * 每会话最多一次：失败循环里同一条命令重试十次就是十次注入。代价是首个失败若不具
+   * 代表性，这次机会就用掉了 —— 可接受，因为指针常驻、代理随时仍可去读。
+   */
+  private injectLessonNudge(): void {
+    if (!this.pendingToolFailure) return
+    this.pendingToolFailure = false
+    if (this.lessonNudgeOffered) return
+    const nudge = this.instructionsLoader?.crsiLessonNudgeText() ?? ''
+    if (!nudge) return
+    this.lessonNudgeOffered = true
+    this.context.injectContext('crsi-revisit', nudge)
   }
 
   /**
@@ -721,6 +764,9 @@ export class QueryEngine {
     for (const toolUse of toolUses) {
       const toolStart = Date.now()
       const result = await this.executeTool(toolUse.name, toolUse.input, signal)
+      // 判据取 `result.success`，不取「有没有抛」：失败返回有八种形状（未知工具、
+      // 权限拒绝、cwd 已删…），全都在这里汇成同一个 `success: false`。
+      if (!result.success) this.pendingToolFailure = true
       yield {
         type: 'tool_result',
         tool_use_id: toolUse.id,
@@ -796,6 +842,9 @@ export class QueryEngine {
 
     // Inject path-scoped rules for touched files
     this.injectRules()
+
+    // Offer the CRSI recall nudge if this round had a failed tool call.
+    this.injectLessonNudge()
 
     // Drain task notifications after tool execution
     for (const chunk of this.drainTaskNotifications()) {
@@ -1062,6 +1111,7 @@ export class QueryEngine {
       // Execute tools and feed results back to the model for the next turn
       for (const toolUse of toolUses) {
         const result = await this.executeTool(toolUse.name, toolUse.input, signal)
+        if (!result.success) this.pendingToolFailure = true
         lastActivity = Date.now()
         yield {
           type: 'tool_result',
@@ -1084,6 +1134,10 @@ export class QueryEngine {
       // Path-scoped rules for files touched in this round: process() injects for
       // the first tool round only, so the multi-turn rounds need their own call.
       this.injectRules()
+
+      // Same reason the rules injection is repeated here: the nudge must land after
+      // this round's tool results, and this loop owns those rounds.
+      this.injectLessonNudge()
     }
     // Max turns reached — safety limit, stop gracefully
   }

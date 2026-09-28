@@ -746,6 +746,12 @@ export async function runApp(options: RunOptions): Promise<void> {
   // matching file. Loaded once at startup; setRulesLoader performs the load.
   engine.setRulesLoader(new RulesLoader(process.cwd()))
 
+  // CRSI lessons recall nudge: the instruction loader is where the *pointer* to the
+  // non-resident lessons comes from, so the nudge reads its emptiness condition from
+  // the same selection rather than guessing at a path. Same loader instance that
+  // builds the system prompt above — no second copy of the lessons state.
+  engine.setInstructions(instructions)
+
   // Wire inference hooks (DLP) configuration
   const inferenceHookConfig = loadInferenceHookConfig()
   engine.setInferenceHookConfig(inferenceHookConfig)

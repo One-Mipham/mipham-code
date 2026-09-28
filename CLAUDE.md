@@ -45,7 +45,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：3,696 测试（CI 3,686 passed + 10 skipped / 本机 3,694 + 2，0 失败）
+测试：3,714 测试（CI 3,704 passed + 10 skipped / 本机 3,712 + 2，0 失败）
 
 ---
 
@@ -82,7 +82,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 304 个测试文件，3696 个测试
+│   │   ├── test/               # 305 个测试文件，3714 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -108,7 +108,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（3696 个测试）
+pnpm test         # vitest run（3714 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~9 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -296,7 +296,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 89      | 1460     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
+| core            | 89      | 1473     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
 | tools           | 25      | 400      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 37      | 252      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
 | ui              | 26      | 291      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
@@ -314,18 +314,21 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | artifacts       | 1       | 6        | manifest                                                                                                                                                                    |
 | agent-view      | 4       | 37       | agent-view-manager / dashboard-keys / session-view                                                                                                                          |
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
-| integrity       | 15      | 105      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
+| integrity       | 16      | 110      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **304** | **3696** | **0 失败** ✅（CI 3,686 passed + 10 skipped）                                                                                                                               |
+| **合计**        | **305** | **3714** | **0 失败** ✅（CI 3,704 passed + 10 skipped）                                                                                                                               |
 
 > **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 179 测试，自带
 > `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。
-> `integrity` 行的 15 个守卫文件含 **daemon 能力对等**（`daemon-capability-parity.test.ts`：14 个注入点
+> `integrity` 行的 16 个守卫文件含 **daemon 能力对等**（`daemon-capability-parity.test.ts`：14 个注入点
 > 全集 − 具名豁免表 = daemon 实接集，两向相等）与 **T4 未接线处置**（`unwired-disposition.test.ts`：
 > 删的必须不存在、留的必须仍零引用，陈旧豁免为红），外加 **状态写侧族守卫**（`state-write-integrity.test.ts`：
 > 裸写清单两向相等 —— 新成员不在清单里为红、清单陈旧也为红，且已收口模块必须仍见得到助手调用）
 > 与它的**读侧姊妹件** `read-side-shape.test.ts`（往真 store 写毒化负载、经真加载器读回；每个成员都配
-> 良构正向对照——没有它，畸形那半全绿可能只是因为探针压根没读到那个文件）。
+> 良构正向对照——没有它，畸形那半全绿可能只是因为探针压根没读到那个文件），外加 **工作流钉 SHA**
+> （`workflow-pinning.test.ts`：每条 `uses:` 必须钉 40 位 commit SHA 且带 `# vN` 注释 —— Dependabot
+> 与人都靠那个注释；配一条「解析条数 == 源码里 `uses:` 裸行数」的正对照，否则漏解析的那些在
+> 「全部合规」里根本不出现）。
 > **注意别把这类
 > 说明写进上表单元格** —— 该列宽由最宽一行决定，加长一行 prettier 会重排全表 23 行（本批实测
 > +2,662 字符，正是 `CLAUDE.md` 越过 40k 的那一次）。

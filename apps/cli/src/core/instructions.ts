@@ -9,6 +9,7 @@ import {
   extractCrsiLessonSummaries,
   buildCrsiLessonsBlock,
   buildCrsiLessonsPointer,
+  buildLessonRevisitNudge,
   selectResidentLessons,
   type CrsiLessonSummary,
 } from './crsi-producer'
@@ -479,6 +480,23 @@ Never omit it or present the work as purely human-authored.`)
     ]
       .filter(Boolean)
       .join('\n\n')
+  }
+
+  /**
+   * 事件型召回扳机 —— {@link crsiLessonsText} 的姊妹件，走**同一个择点**、同一份
+   * `lessonsPath`，因此不可能与系统提示里那条指针漂移（一处说「有 33 条未常驻」、
+   * 另一处说「没有」是最坏的形状：两声哨，读者不知道信哪个）。
+   *
+   * 与 `crsiLessonsText` 的分工：那份进**系统提示**，一次生成、随每次请求发出；
+   * 这份在**工具失败**那一刻注入，只在事件上说话。没有未常驻教训时返回空串 ——
+   * 与指针同一条件，故不会出现「扳机响了但没有指针」。
+   */
+  crsiLessonNudgeText(): string {
+    if (!this.lessonsPath) return ''
+    return buildLessonRevisitNudge(
+      selectResidentLessons(this.crsiLessonSummaries),
+      this.lessonsPath,
+    )
   }
 
   /**
