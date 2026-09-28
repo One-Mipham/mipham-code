@@ -54,11 +54,13 @@ describe('extractCrsiLessonSummaries', () => {
         title: 'security-rule: 命令替换 $() 的 blanket 拦截是误伤',
         suggestion: '安全规则只拦「具体危险内容」，不拦「合法语法本身」。',
         severity: 'warning',
+        severitySource: 'declared',
       },
       {
         title: 'simplicity: 未要求的功能是负债（违反简洁优先）',
         suggestion: '不添加未被真实用户要求的功能。',
         severity: 'critical',
+        severitySource: 'declared',
       },
     ])
   })
@@ -75,19 +77,71 @@ describe('extractCrsiLessonSummaries', () => {
   it('缺 严重度 时默认 critical —— fail-open 到常驻，不静默降级为按需', () => {
     const md = '## no-severity: 没写严重度\n\n- 建议: 照常召回。\n'
     expect(extractCrsiLessonSummaries(md)).toEqual([
-      { title: 'no-severity: 没写严重度', suggestion: '照常召回。', severity: 'critical' },
+      {
+        title: 'no-severity: 没写严重度',
+        suggestion: '照常召回。',
+        severity: 'critical',
+        severitySource: 'defaulted',
+      },
     ])
   })
 
   it('未知 严重度 取值也按 critical 处理（闭集外的值不倒向按需）', () => {
     const md = '## weird: 严重度写错\n\n- 建议: 照常召回。\n- 严重度: blocker\n'
-    expect(extractCrsiLessonSummaries(md)[0]!.severity).toBe('critical')
+    const s = extractCrsiLessonSummaries(md)[0]!
+    expect(s.severity).toBe('critical')
+    // 与「压根没写」落同一个**档**，但**来历**必须分得开 —— 这条档位没有任何人判过。
+    // 分不开的话，名册里读到的就是一个普通的 critical（这正是本字段存在的理由）。
+    expect(s.severitySource).toBe('defaulted')
   })
 
   it('严重度 行写在 建议 之前也能读到（块级累积，不依赖行序）', () => {
     const md = '## pre: 顺序颠倒\n\n- 严重度: warning\n- 建议: 仍在一条里。\n'
     expect(extractCrsiLessonSummaries(md)).toEqual([
-      { title: 'pre: 顺序颠倒', suggestion: '仍在一条里。', severity: 'warning' },
+      {
+        title: 'pre: 顺序颠倒',
+        suggestion: '仍在一条里。',
+        severity: 'warning',
+        severitySource: 'declared',
+      },
+    ])
+  })
+
+  it('档位来历：逐字写 = declared，缺席/闭集外 = defaulted', () => {
+    const md = [
+      '## a: 逐字 critical',
+      '',
+      '- 建议: x',
+      '- 严重度: critical',
+      '',
+      '## b: 逐字 warning',
+      '',
+      '- 建议: y',
+      '- 严重度: warning',
+      '',
+      '## c: 没写那一行',
+      '',
+      '- 建议: z',
+      '',
+      '## d: 闭集外取值',
+      '',
+      '- 建议: w',
+      '- 严重度: info',
+      '',
+    ].join('\n')
+    const out = extractCrsiLessonSummaries(md)
+    // 正对照：四条都要读到 —— 少读一条，下面那组映射就没覆盖到它那一类
+    expect(out.map((s) => s.title)).toEqual([
+      'a: 逐字 critical',
+      'b: 逐字 warning',
+      'c: 没写那一行',
+      'd: 闭集外取值',
+    ])
+    expect(out.map((s) => [s.severity, s.severitySource])).toEqual([
+      ['critical', 'declared'],
+      ['warning', 'declared'],
+      ['critical', 'defaulted'], // 缺席
+      ['critical', 'defaulted'], // info 不在闭集里
     ])
   })
 })
@@ -103,6 +157,7 @@ describe('buildCrsiLessonsBlock', () => {
         title: 'simplicity: 未要求的功能是负债',
         suggestion: '不添加未被要求的功能。',
         severity: 'critical',
+        severitySource: 'declared',
       },
     ]
     const block = buildCrsiLessonsBlock(summaries)
@@ -113,8 +168,18 @@ describe('buildCrsiLessonsBlock', () => {
 
   it('只渲染 critical —— warning 级不进常驻块', () => {
     const summaries: CrsiLessonSummary[] = [
-      { title: 'c: 常驻', suggestion: '常驻建议。', severity: 'critical' },
-      { title: 'w: 按需', suggestion: '按需建议。', severity: 'warning' },
+      {
+        title: 'c: 常驻',
+        suggestion: '常驻建议。',
+        severity: 'critical',
+        severitySource: 'declared',
+      },
+      {
+        title: 'w: 按需',
+        suggestion: '按需建议。',
+        severity: 'warning',
+        severitySource: 'declared',
+      },
     ]
     // 走**生产那条择点**，不手搓 filter —— 手搓的那份会与生产漂移而不自知。
     const block = buildCrsiLessonsBlock(selectResidentLessons(summaries).resident)
@@ -125,8 +190,14 @@ describe('buildCrsiLessonsBlock', () => {
 
 describe('isAlwaysOnLesson', () => {
   it('critical 常驻、warning 不常驻', () => {
-    expect(isAlwaysOnLesson({ title: 't', suggestion: 's', severity: 'critical' })).toBe(true)
-    expect(isAlwaysOnLesson({ title: 't', suggestion: 's', severity: 'warning' })).toBe(false)
+    const lit = (severity: 'critical' | 'warning'): CrsiLessonSummary => ({
+      title: 't',
+      suggestion: 's',
+      severity,
+      severitySource: 'declared',
+    })
+    expect(isAlwaysOnLesson(lit('critical'))).toBe(true)
+    expect(isAlwaysOnLesson(lit('warning'))).toBe(false)
   })
 })
 
@@ -135,6 +206,7 @@ const mkCritical = (i: number, len: number): CrsiLessonSummary => ({
   title: `c${i}: 第 ${i} 条`,
   suggestion: 'x'.repeat(len),
   severity: 'critical',
+  severitySource: 'declared',
 })
 
 /** 三条各 400 字符的 critical，共 1,200 —— 恰好够测「挤掉一条」。 */
@@ -202,7 +274,12 @@ describe('selectResidentLessons（常驻档预算）', () => {
   })
 
   it('warning 永不进常驻，与预算多大无关', () => {
-    const warn: CrsiLessonSummary = { title: 'w: 按需', suggestion: '按需。', severity: 'warning' }
+    const warn: CrsiLessonSummary = {
+      title: 'w: 按需',
+      suggestion: '按需。',
+      severity: 'warning',
+      severitySource: 'declared',
+    }
     const crit = mkCritical(1, 20)
     const sel = selectResidentLessons([warn, crit], 1_000_000)
     expect(sel.resident.map((s) => s.title)).toEqual([crit.title])
@@ -213,9 +290,24 @@ describe('selectResidentLessons（常驻档预算）', () => {
 
 describe('buildCrsiLessonsPointer', () => {
   const mixed: CrsiLessonSummary[] = [
-    { title: 'c: 常驻', suggestion: '常驻建议。', severity: 'critical' },
-    { title: 'w1: 按需', suggestion: '按需建议一。', severity: 'warning' },
-    { title: 'w2: 按需', suggestion: '按需建议二。', severity: 'warning' },
+    {
+      title: 'c: 常驻',
+      suggestion: '常驻建议。',
+      severity: 'critical',
+      severitySource: 'declared',
+    },
+    {
+      title: 'w1: 按需',
+      suggestion: '按需建议一。',
+      severity: 'warning',
+      severitySource: 'declared',
+    },
+    {
+      title: 'w2: 按需',
+      suggestion: '按需建议二。',
+      severity: 'warning',
+      severitySource: 'declared',
+    },
   ]
 
   it('报出未常驻条数与文件路径，使模型有真实召回入口', () => {
@@ -290,9 +382,24 @@ describe('buildCrsiLessonsPointer', () => {
 
 describe('buildLessonRevisitNudge', () => {
   const mixed: CrsiLessonSummary[] = [
-    { title: 'c: 常驻', suggestion: '常驻建议。', severity: 'critical' },
-    { title: 'w1: 按需', suggestion: '按需建议一。', severity: 'warning' },
-    { title: 'w2: 按需', suggestion: '按需建议二。', severity: 'warning' },
+    {
+      title: 'c: 常驻',
+      suggestion: '常驻建议。',
+      severity: 'critical',
+      severitySource: 'declared',
+    },
+    {
+      title: 'w1: 按需',
+      suggestion: '按需建议一。',
+      severity: 'warning',
+      severitySource: 'declared',
+    },
+    {
+      title: 'w2: 按需',
+      suggestion: '按需建议二。',
+      severity: 'warning',
+      severitySource: 'declared',
+    },
   ]
   const PATH = '/repo/apps/cli/crsi-lessons.md'
 
@@ -518,6 +625,16 @@ describe('buildResidentLessonReport（常驻档名册，唯一给人看的读者
     title,
     suggestion: 'y'.repeat(len),
     severity: 'warning',
+    severitySource: 'declared',
+  })
+  /**
+   * 档位**默认落档**的 critical（= 文件里没写 `- 严重度:`）—— 与 `mkCritical` 只差这一格。
+   * 用它而不是再写一份：两条 fixture 的**唯一**差别就是被观察的那一格，否则测试红了
+   * 也说不清是哪一格造成的。
+   */
+  const mkDefaulted = (i: number, len: number): CrsiLessonSummary => ({
+    ...mkCritical(i, len),
+    severitySource: 'defaulted',
   })
 
   /** 取报告里印出来的「合计 N」/「X **N** 条」。**取不到就抛** —— 否则比对会静默恒真。 */
@@ -530,6 +647,12 @@ describe('buildResidentLessonReport（常驻档名册，唯一给人看的读者
     const m = report.match(new RegExp(`^${label} \\*\\*(\\d+)\\*\\* 条`, 'm'))
     if (!m) throw new Error(`报告里没有行首的「${label} N 条」`)
     return Number(m[1])
+  }
+  /** 取「档位来历」行上的那两个数。**取不到就抛** —— 同上，静默恒真比红更坏。 */
+  const printedProvenance = (report: string): { declared: number; defaulted: number } => {
+    const m = report.match(/^档位来历：显式判定 \*\*(\d+)\*\* 条 · \*\*默认落档 (\d+)\*\* 条/m)
+    if (!m) throw new Error('报告里没有「档位来历」行（或它换了形状）')
+    return { declared: Number(m[1]), defaulted: Number(m[2]) }
   }
 
   it('报的常驻集 == 真正注入的那一份（走同一个择点，不是另算一份）', () => {
@@ -551,6 +674,42 @@ describe('buildResidentLessonReport（常驻档名册，唯一给人看的读者
     expect(printedTotal(report)).toBe(buildCrsiLessonsBlock(sel.resident).length)
     expect(printedCount(report, '常驻')).toBe(sel.resident.length)
     expect(printedCount(report, '未常驻')).toBe(sel.demoted.length)
+  })
+
+  it('档位来历：显式判定与默认落档分开报数，并逐条点名默认落档的那条', () => {
+    const sel = selectResidentLessons([mkCritical(1, 100), mkDefaulted(2, 100)])
+    expect(sel.resident).toHaveLength(2) // 正对照：两条都进了常驻，否则「各 1」是编的
+
+    const report = buildResidentLessonReport(sel, PATH)
+
+    // ① 分开报数 —— 数之和 == 常驻条数（不是另算一份口径）
+    expect(printedProvenance(report)).toEqual({ declared: 1, defaulted: 1 })
+    // ② 逐条**点名**：只报数不点名，读者仍要自己去文件里比对是哪一条
+    expect(report).toContain(`${mkDefaulted(2, 100).title}（档位默认落档）`)
+    // ③ 显式判定的那条**不带**这个标记 —— 反方向也要咬人，否则标记可以恒印
+    expect(report).not.toContain(`${mkCritical(1, 100).title}（档位默认落档）`)
+    // ④ 说清「没人判过」，而不只是「默认落档」这个内部术语
+    expect(report).toContain('没有任何人判定过')
+  })
+
+  it('全显式判定时不制造噪声：默认落档 0 条，且不印那句警告', () => {
+    const sel = selectResidentLessons([mkCritical(1, 100), mkCritical(2, 100)])
+    const report = buildResidentLessonReport(sel, PATH)
+    expect(printedProvenance(report)).toEqual({ declared: 2, defaulted: 0 })
+    expect(report).not.toContain('没有任何人判定过')
+    expect(report).not.toContain('（档位默认落档）')
+  })
+
+  it('真文件：名册报的常驻条数 == 择点选出的条数（不钉死数字）', () => {
+    const real = readFileSync(resolve(__dirname, '../../crsi-lessons.md'), 'utf-8')
+    const sel = selectResidentLessons(extractCrsiLessonSummaries(real))
+    expect(sel.resident.length).toBeGreaterThan(0) // 前提自证
+    const report = buildResidentLessonReport(sel, resolve(__dirname, '../../crsi-lessons.md'))
+    expect(printedCount(report, '常驻')).toBe(sel.resident.length)
+    expect(printedTotal(report)).toBe(buildCrsiLessonsBlock(sel.resident).length)
+    // 来历两个数之和 == 常驻条数：字段若在某条路径上丢了，这里当场对不上
+    const prov = printedProvenance(report)
+    expect(prov.declared + prov.defaulted).toBe(sel.resident.length)
   })
 
   it('报预算用的是 selection.budget（这一次的值），不是默认常量', () => {
@@ -625,13 +784,36 @@ describe('buildResidentLessonReport（常驻档名册，唯一给人看的读者
     expect(report).toContain('没有可召回的教训')
     expect(report).toContain(PATH)
   })
+})
 
-  it('真文件：名册报的常驻条数 == 择点选出的条数（不钉死数字）', () => {
-    const real = readFileSync(resolve(__dirname, '../../crsi-lessons.md'), 'utf-8')
-    const sel = selectResidentLessons(extractCrsiLessonSummaries(real))
-    expect(sel.resident.length).toBeGreaterThan(0) // 前提自证
-    const report = buildResidentLessonReport(sel, resolve(__dirname, '../../crsi-lessons.md'))
-    expect(printedCount(report, '常驻')).toBe(sel.resident.length)
-    expect(printedTotal(report)).toBe(buildCrsiLessonsBlock(sel.resident).length)
+/**
+ * `severitySource` **只**供人复核，不参与任何判定 —— 这是它在类型注释里许下的承诺，
+ * 故必须有一条测试把这句话钉住。判据是**输出逐字相等**：只翻转这一格，择点、常驻块、
+ * 指针三样都必须一字不差。少了它，日后有人「顺手」让来历影响排序或预算，没有任何东西会响。
+ */
+describe('档位来历（severitySource）不改判定行为', () => {
+  const PATH = '/repo/apps/cli/crsi-lessons.md'
+  const base: CrsiLessonSummary[] = [
+    mkCritical(1, 300),
+    mkCritical(2, 300),
+    { title: 'w: 按需', suggestion: '按需。', severity: 'warning', severitySource: 'declared' },
+  ]
+  const flipped: CrsiLessonSummary[] = base.map((s) => ({ ...s, severitySource: 'defaulted' }))
+
+  it('翻转来历后：择点、注入块、指针逐字不变', () => {
+    const a = selectResidentLessons(base)
+    const b = selectResidentLessons(flipped)
+    // 前提自证：两组确实只差这一格，且常驻集非空（否则「相等」是平凡真）
+    expect(flipped.map((s) => s.severitySource)).toEqual(['defaulted', 'defaulted', 'defaulted'])
+    expect(base.map((s) => s.severitySource)).toEqual(['declared', 'declared', 'declared'])
+    expect(a.resident.length).toBeGreaterThan(0)
+
+    const titles = (r: CrsiLessonSummary[]) => r.map((s) => s.title)
+    expect(titles(b.resident)).toEqual(titles(a.resident))
+    expect(titles(b.demoted)).toEqual(titles(a.demoted))
+    expect(titles(b.overBudget)).toEqual(titles(a.overBudget))
+    // 真正注入模型的那一份 —— 这句承诺的落点在这里，不在标题数组上
+    expect(buildCrsiLessonsBlock(b.resident)).toBe(buildCrsiLessonsBlock(a.resident))
+    expect(buildCrsiLessonsPointer(b, PATH)).toBe(buildCrsiLessonsPointer(a, PATH))
   })
 })

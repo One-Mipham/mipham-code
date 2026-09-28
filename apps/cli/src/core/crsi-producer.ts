@@ -115,7 +115,27 @@ export function buildLessonContent(
 }
 
 /**
- * 教训精华（标题 + 建议 + 严重度），用于运行时召回注入系统提示。
+ * 档位的**来历** —— 这一格回答的是「谁定的档」，不是「档是什么」。
+ *
+ * - `declared` —— 文件里逐字写了 `- 严重度: critical` 或 `- 严重度: warning`。
+ * - `defaulted` —— 没有那一行，或写了但取值在闭集之外（如 `info`、笔误）⇒
+ *   {@link normalizeLessonSeverity} fail-open 落 `critical`，于是这条进了常驻档。
+ *
+ * 为什么非记不可：`severity` 是**归一化之后**的读数，而归一化是 fail-open 的 ⇒
+ * 「有人判定它该每次请求都在场」与「压根没人写过档位」在 `severity` 上**同形**。
+ * 常驻档的成本是人付的、能动手的也只有人（改文件那一行），看不出这条是被判过的
+ * 还是漏写的，就无从复核 —— 这正是本仓库记过的「无声消失与从没写过同形」。
+ *
+ * 不改任何**判定**行为：`severity` 照旧 fail-open 落 `critical`，常驻/择点/预算一概不看
+ * 这一格。它只把不可见的默认**变成可复核的清单**（见 {@link buildResidentLessonReport}）。
+ *
+ * 一条不变量：`severity === 'warning'` ⇒ `severitySource === 'declared'`。
+ * 因为归一化只有**逐字** `warning` 才落 `warning`，其余一切落 `critical`。
+ */
+export type LessonSeveritySource = 'declared' | 'defaulted'
+
+/**
+ * 教训精华（标题 + 建议 + 严重度 + 档位来历），用于运行时召回注入系统提示。
  *
  * 严重度决定**注入位置**，不只是标签：`critical` 常驻每一次请求，
  * `warning` 移出常驻块、按需召回（见 {@link isAlwaysOnLesson}），且常驻档整体受
@@ -127,6 +147,12 @@ export interface CrsiLessonSummary {
   title: string
   suggestion: string
   severity: LessonSeverity
+  /**
+   * 必填而非可选 —— 同 `buildLessonContent` 的 `severity`：可选的话，下一个构造点忘了给
+   * 就等于「来历是默认落的」，而那个默认值恰好**说反了**（它说的是「有人判过」）。
+   * 忘了要给不出来的东西，必须是编译错误。
+   */
+  severitySource: LessonSeveritySource
 }
 
 /**
@@ -153,25 +179,50 @@ export function normalizeLessonSeverity(raw: string | undefined): LessonSeverity
 }
 
 /**
- * 从 crsi-lessons.md 提取每条教训的「精华」（标题 + 建议 + 严重度），跳过证据段落。
- * 这是「只写不读」缺口 → 「写后召回」的读取侧。
+ * 闭集成员的**运行时**面 —— `LessonSeverity` 是类型，运行时只存在这一份字面量。
+ *
+ * 定义在**一处**：{@link isDeclaredLessonSeverity} 读它，而它与
+ * {@link normalizeLessonSeverity} 必须对**同一个**闭集说话（一个问「折叠前在不在集里」、
+ * 一个做折叠）。两处各写一份字面量的话，哪天闭集加一档，会出现「归一是对的、来历却说
+ * 它不在闭集」这种自相矛盾的读数 —— 且没有任何东西会报。
+ */
+const LESSON_SEVERITY_SET: ReadonlySet<string> = new Set(['critical', 'warning'])
+
+/**
+ * 那一行是否**逐字**落在闭集内（= 档位有人判过）。缺席、空串与闭集外取值一律 false。
+ *
+ * 参数类型与 {@link normalizeLessonSeverity} 刻意**同形**（`string | undefined`）：
+ * 两者是同一个原始捕获的一对读者（一个折叠、一个问来历），签名不一致的话，调用点迟早
+ * 会把某个缺席的捕获只喂给其中一个。
+ */
+function isDeclaredLessonSeverity(raw: string | undefined): boolean {
+  return typeof raw === 'string' && LESSON_SEVERITY_SET.has(raw)
+}
+
+/**
+ * 从 crsi-lessons.md 提取每条教训的「精华」（标题 + 建议 + 严重度 + 档位来历），
+ * 跳过证据段落。这是「只写不读」缺口 → 「写后召回」的读取侧。
  *
  * 按 `##` 块累积、块边界 flush —— 因为 `- 严重度:` 行写在 `- 建议:` **之后**，
  * 「见到建议即 push」的写法读不到它。块级累积对行序不敏感。
  *
- * 缺 `严重度` 时的落档见 {@link DEFAULT_LESSON_SEVERITY}。
+ * 缺 `严重度` 时的落档见 {@link DEFAULT_LESSON_SEVERITY}；**它是怎么落的**记在
+ * `severitySource` 里（见 {@link LessonSeveritySource}）—— 归一化把「有人判过」与
+ * 「没人写过」折叠成了同一个 `critical`，本读取侧把这两者**重新分开**。
  */
 export function extractCrsiLessonSummaries(content: string): CrsiLessonSummary[] {
   const out: CrsiLessonSummary[] = []
   let title = ''
   let suggestion = ''
   let severity = DEFAULT_LESSON_SEVERITY
+  let severitySource: LessonSeveritySource = 'defaulted'
 
   const flush = () => {
-    if (title && suggestion) out.push({ title, suggestion, severity })
+    if (title && suggestion) out.push({ title, suggestion, severity, severitySource })
     title = ''
     suggestion = ''
     severity = DEFAULT_LESSON_SEVERITY
+    severitySource = 'defaulted'
   }
 
   for (const line of content.split('\n')) {
@@ -191,6 +242,8 @@ export function extractCrsiLessonSummaries(content: string): CrsiLessonSummary[]
       // 闭集外的取值一律落常驻档 —— 未知严重度不倒向「按需」。规则在 normalizeLessonSeverity
       // 一处；写入者同读它（正则已吃掉两侧空白，故传进去的是已经 trim 过的捕获）。
       severity = normalizeLessonSeverity(v[1])
+      // 来历与档位**同一处**算出：分开写迟早出现「档是折叠后的、来历说的还是原文」的错配。
+      severitySource = isDeclaredLessonSeverity(v[1]) ? 'declared' : 'defaulted'
     }
   }
   flush()
@@ -380,6 +433,12 @@ export function buildLessonRevisitNudge(
  * 报告不可能与真正注入的那一份漂移。逐条成本按**渲染后的文本量**算，且报出可验算的
  * 加法（表头 + 逐条 + 分隔 == 合计）—— 否则「逐条和 ≠ 合计」会被当成 bug 查一遍。
  *
+ * 另报**档位来历**（{@link LessonSeveritySource}）：成本答「这档涨得值不值」，来历答
+ * 「这一格是谁定的」。两个读者的输出都不需要它（模型不问档位怎么来的），只有人有这个
+ * 问题 —— 而「没人复核谁把一条教训标成 critical」正是因此才存在：归一化 fail-open，
+ * 「有人判过」与「没人写过」在 `severity` 上同形，名册里读到的就是一个普通的 critical。
+ * 故这里把两者分开列、逐条点名 —— 只报数不点名，读者仍要自己去文件里比对。
+ *
  * 只读：**不加写路径**。人的杠杆是改文件那一行；写入侧是生产者与 `/crsi propose`。
  */
 export function buildResidentLessonReport(
@@ -415,9 +474,24 @@ export function buildResidentLessonReport(
   )
 
   if (resident.length > 0) {
+    // 档位**来历**与成本分开报：成本答「这档涨得值不值」，来历答「这一格是谁定的」。
+    // 两者都要人动手才能改，但改动完全不同（前者缩短、后者补/改 `- 严重度:` 那一行）。
+    const defaulted = resident.filter((s) => s.severitySource === 'defaulted')
+    // 两个分支**同一个形状**（`**默认落档 N** 条`）：形状随取值变的话，读者与判据都得先
+    // 分辨自己看到的是哪一支 —— 而「0 条」与「这一支没打印」本来就会长得一样。
+    lines.push(
+      `档位来历：显式判定 **${resident.length - defaulted.length}** 条 · ` +
+        `**默认落档 ${defaulted.length}** 条` +
+        (defaulted.length > 0
+          ? ' —— 文件里没写 `- 严重度:`、或写了闭集外的取值，fail-open 落 critical ⇒ ' +
+            '**没有任何人判定过**它们该常驻'
+          : ''),
+    )
+
     lines.push('', '### 逐条成本（渲染后字符）', '')
     for (let i = 0; i < resident.length; i++) {
-      lines.push(`- ${num(itemChars[i]!)} 字符 — ${resident[i]!.title}`)
+      const mark = resident[i]!.severitySource === 'defaulted' ? '（档位默认落档）' : ''
+      lines.push(`- ${num(itemChars[i]!)} 字符 — ${resident[i]!.title}${mark}`)
     }
     // 加法自证：表头是每条共担的，逐条和必然大于合计 —— 与其让人去猜差额，
     // 不如把算式写出来，且当场验算（`block` 走的是真渲染器，不是我在这里的手算）。
@@ -1036,6 +1110,12 @@ export function removeLessonSections(content: string, headers: string[]): string
  *   3. **不停在「缺省 critical」** —— 那个缺省是给**人类新写**的条目兜底的；合并是**降维**，
  *      没有依据说产物比两个源更紧急。实测（真模块）：两条 warning 合并曾升进常驻档，
  *      常驻 6 条 2,155 字符 → 7 条 2,198，而这一切发生在**没有人决定过**的情况下。
+ *
+ * **已知边界（如实写，不假装覆盖）**：来历**不跨代传递**。产物由 `buildLessonContent`
+ * 逐字写 `- 严重度: <merged>`，于是它读回来的来历恒为 `declared` —— 哪怕两个源都是
+ * 默认落档。也就是说 crossover 会把「没人判过」**洗成**「有人判过」，名册看不出来。
+ * 修它要把来历写进文件（新字段），是改教训文件的格式，不在本格口径内 —— 故此处的
+ * 判据只对**人写进去的**条目成立。见 {@link LessonSeveritySource}。
  */
 export function deriveMergedSeverity(a: LessonSeverity, b: LessonSeverity): LessonSeverity {
   return a === 'critical' || b === 'critical' ? 'critical' : 'warning'
