@@ -197,6 +197,25 @@ export function buildCrsiLessonsPointer(
 需要时读 ${lessonsPath}（含标题/建议/证据）。`
 }
 
+/**
+ * 读教训文件、渲染**常驻**（critical）教训块，供生成算子内联。
+ *
+ * 与 `InstructionsLoader.crsiLessonsText()` 是**两份投影**，此处刻意**不带指针**：
+ * 指针要求读者用 Read/Grep 自取，而生成算子是无工具的 `llm.chat` 单条消息 ——
+ * 对它而言指针等于零，只能内联或什么都不给。
+ *
+ * 文件缺席 ⇒ 空串：算子退回「无教训」的旧形状（纯增量，不改既有行为）。
+ */
+export function loadAlwaysOnLessonsBlock(lessonsPath: string): string {
+  if (!existsSync(lessonsPath)) return ''
+  try {
+    const summaries = extractCrsiLessonSummaries(readFileSync(lessonsPath, 'utf-8'))
+    return buildCrsiLessonsBlock(summaries.filter(isAlwaysOnLesson))
+  } catch {
+    return ''
+  }
+}
+
 /** 产出教训文件变更候选。无合格信号时返回 null。 */
 export function produceCrsiProposal(
   insights: CrsiInsight[],
@@ -398,15 +417,19 @@ export async function selectTargetSkill(
   return extractFilePath(response, skillFiles)
 }
 
-const PROSE_GENERATE_PROMPT_VERSION = '1.1.0'
+const PROSE_GENERATE_PROMPT_VERSION = '1.2.0'
 
 function buildGenerateProsePrompt(
   signal: CrsiSignal,
   filePath: string,
   originalContent: string,
+  lessonsBlock: string,
 ): string {
   return [
     `你是 CRSI producer（producer-prose-generate v${PROSE_GENERATE_PROMPT_VERSION}）。基于失败信号，改进目标 skill 的内容。`,
+    // 常驻教训**内联**（不是指针）：算子是无工具的 `llm.chat` 单条消息，给它指针等于零。
+    // 缺席（空串）时不占行 —— 无教训的提示词与从前**逐字相同**（纯增量）。
+    ...(lessonsBlock ? ['', lessonsBlock] : []),
     '',
     '失败信号：',
     `- category: ${signal.category}`,
@@ -440,6 +463,30 @@ export interface ProsePrediction {
   expectedEffect?: number
   /** R：风险声明。缺席 = 未声明。 */
   risk?: string
+}
+
+/**
+ * 净变化（未判定）：正文字符数与行数的增减。
+ *
+ * 这是 `#20 simplicity: 未要求的功能是负债` **唯一可机械化的那一半** —— 判「这份改写
+ * 是不是加了没要求的功能」需要语义裁判（违反 A1 铁律），而「它长大了多少」是算得出来的事实。
+ * 故与 `formatCostLine` / 风险声明同一纪律：**只呈现、不判定**，标签必须带「未判定」，
+ * 否则这一行会被读成「已经审过了」。
+ *
+ * 注意它不是 diff stat：只报**净额**，不报增删行数。
+ * 行数定义 = 换行符数 + （末尾无换行且非空 ? 1 : 0）—— 定义写死，否则这个数不可证伪。
+ */
+export function formatNetChange(original: string, updated: string): string {
+  const signed = (n: number) => (n > 0 ? `+${n}` : String(n))
+  const chars = updated.length - original.length
+  const lines = countLines(updated) - countLines(original)
+  return `📐 净变化（未判定）: 字符 ${signed(chars)}，行 ${signed(lines)}`
+}
+
+function countLines(s: string): number {
+  if (s === '') return 0
+  const breaks = s.split('\n').length - 1
+  return s.endsWith('\n') ? breaks : breaks + 1
 }
 
 /**
@@ -490,8 +537,9 @@ export async function generateProseContent(
   llm: Llm,
   filePath: string,
   originalContent: string,
+  lessonsBlock: string,
 ): Promise<ProsePrediction | null> {
-  const prompt = buildGenerateProsePrompt(signal, filePath, originalContent)
+  const prompt = buildGenerateProsePrompt(signal, filePath, originalContent, lessonsBlock)
   const response = await collectLlmText(llm, prompt)
   if (!response) return null
   return parseProsePrediction(response)
@@ -513,6 +561,12 @@ export async function produceProseProposal(
   llm: Llm,
   skillFiles: string[],
   readSkill: (filePath: string) => string,
+  /**
+   * 常驻教训块（由 `loadAlwaysOnLessonsBlock` 渲染）。**故意必填**：漏传或传 `''`
+   * 会让「算子收到教训」这件事静默失效 —— 而它正是本函数存在的意义之一。
+   * 必填把「忘了」从静默行为变更变成编译错误。
+   */
+  lessonsBlock: string,
 ): Promise<ProseProposalResult | null> {
   const filePath = await selectTargetSkill(signal, llm, skillFiles)
   if (!filePath) return null
@@ -524,7 +578,7 @@ export async function produceProseProposal(
     return null
   }
 
-  const generated = await generateProseContent(signal, llm, filePath, originalContent)
+  const generated = await generateProseContent(signal, llm, filePath, originalContent, lessonsBlock)
   if (!generated || !generated.body) return null
 
   return {

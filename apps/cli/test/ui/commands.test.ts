@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
@@ -953,6 +953,72 @@ describe('事前声明风险（R）的展示接线', () => {
     // 真实存在的形状**。判据只认「提示前紧邻一个换行」，不认提示文案（文案改了不该红）。
     const result = await getCommand('/crsi propose')!(mkProseCtx(), ['--prose'])
     expect(result.content).toMatch(/\n\/crsi modify --approve/)
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// 净变化（#20 simplicity 可机械化的那一半）的展示接线
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * `#20 simplicity: 未要求的功能是负债` 唯一可机械化的那一半是**净变化**。回执上已有一个
+ * 「只呈现、不判定」的家族（ε 命中 / 代价行 / 风险声明），这里是同一纪律的第四个成员 ——
+ * 但它落在**人类批准 diff 的那一刻**，是**代码算出来的事实**，不靠提示词说服。
+ *
+ * 与 `riskLine` 有一处**刻意不同**：R 缺席 ⇒ 整行不打（它是一句声明，没声明就没有）；
+ * 而净变化**永远可算**（手上就是那两份文本）⇒ 恒打印，含为零的那一态 ——
+ * 「这份改写是等量的」本身就是批准时要看的信息。
+ *
+ * 判据取真身 `formatNetChange`（不 mock）：对纯函数做桩等于断言自己的桩。
+ */
+describe('净变化的展示接线', () => {
+  it('prose 回执上打出净变化行', async () => {
+    h.produceProseProposal.mockResolvedValue({
+      ...PROSE_PROPOSAL,
+      originalContent: 'a\nb\nc\n',
+      newContent: 'a\nb\nc\nd\ne\n',
+    })
+    const result = await getCommand('/crsi propose')!(mkProseCtx(), ['--prose'])
+    expect(result.content).toContain('📐 净变化（未判定）: 字符 +4，行 +2')
+  })
+
+  it('净变化为零也照打（与 riskLine 的「缺席就不打」刻意相反）', async () => {
+    // 默认夹具两侧同形 ⇒ 恰好是零态。零不是「没测到」，是「这份改写等量」。
+    const result = await getCommand('/crsi propose')!(mkProseCtx(), ['--prose'])
+    expect(result.content).toContain('📐 净变化（未判定）: 字符 0，行 0')
+  })
+
+  it('事实在前、声明在后：净变化落在风险行与操作提示之前', async () => {
+    const result = await getCommand('/crsi propose')!(mkProseCtx(), ['--prose'])
+    const net = result.content.indexOf('📐 净变化')
+    expect(net).toBeGreaterThan(-1) // 正对照：找不到时下面两条会各自恒真
+    expect(net).toBeLessThan(result.content.indexOf('📋 事前声明风险'))
+    expect(net).toBeLessThan(result.content.indexOf('/crsi modify --approve'))
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// 常驻教训的送达接线 —— 生成算子此前收到**零条**
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * 这一段与上面几段不同：它的证据只能是**静态的**。原因是硬的 —— `commands.test.ts` 里
+ * `produceProseProposal` 被 mock 掉了，所以「第 5 个实参是不是真的常驻块」在行为层看不见
+ * （传 `''` 与传真块在本文件里读数相同）。而 `''` 正是本仓库反复吃过的那个失效模式：
+ * 有定义、无施加点。故用**区间性质**钉住调用点（同 `crsi-gate-note.test.ts` 钉
+ * `renderGateNote` 的形状）：只断言「那个调用点之后的代码里出现了取常驻块的调用」，
+ * 不断言文案、不断言参数个数 —— 措辞改了不该红。
+ */
+describe('常驻教训的送达接线', () => {
+  it('生产调用点把常驻块传给了 produceProseProposal', () => {
+    const src = readFileSync(
+      join(import.meta.dirname, '..', '..', 'src', 'ui', 'commands.ts'),
+      'utf-8',
+    )
+    const segs = src.split('await produceProseProposal(')
+    // 正对照：切法错了、或调用点被删/改名，这里先红 —— 否则下面那条会静默全绿。
+    expect(segs.length - 1).toBe(1)
+    expect(segs[1]).toContain('loadAlwaysOnLessonsBlock(')
   })
 })
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { Llm } from '../../src/providers/llm'
@@ -9,6 +9,10 @@ import {
   generateProseContent,
   produceProseProposal,
   collectSkillFiles,
+  extractCrsiLessonSummaries,
+  isAlwaysOnLesson,
+  loadAlwaysOnLessonsBlock,
+  formatNetChange,
   type CrsiSignal,
 } from '../../src/core/crsi-producer'
 
@@ -112,6 +116,7 @@ describe('generateProseContent', () => {
       llm,
       'apps/cli/skills/standard/memory.SKILL.md',
       'old',
+      '',
     )
     expect(result!.body).toContain('name: memory')
     expect(result!.body).not.toContain('```')
@@ -119,7 +124,7 @@ describe('generateProseContent', () => {
 
   it('LLM 返回空响应 → null', async () => {
     const llm = textLlm('')
-    expect(await generateProseContent(SIGNAL, llm, 'f.md', 'old')).toBeNull()
+    expect(await generateProseContent(SIGNAL, llm, 'f.md', 'old', '')).toBeNull()
   })
 })
 
@@ -142,7 +147,7 @@ describe('produceProseProposal', () => {
       '---\nname: memory\ndescription: improved\n---\n\n# New body\n',
     )
     const readSkill = (p: string) => (p === SKILL_FILES[0] ? 'OLD-CONTENT' : '')
-    const result = await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill)
+    const result = await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill, '')
     expect(result).not.toBeNull()
     expect(result!.filePath).toBe(SKILL_FILES[0])
     expect(result!.originalContent).toBe('OLD-CONTENT')
@@ -157,7 +162,7 @@ describe('produceProseProposal', () => {
       '{"expectedDelta": 7, "risk": "可能与 memory 技能重叠"}\n---\nname: memory\ndescription: improved\n---\n\n# New body\n',
     )
     const readSkill = (p: string) => (p === SKILL_FILES[0] ? 'OLD-CONTENT' : '')
-    const result = await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill)
+    const result = await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill, '')
     expect(result).not.toBeNull()
     expect(result!.expectedEffect).toBe(7)
     expect(result!.risk).toBe('可能与 memory 技能重叠')
@@ -167,7 +172,7 @@ describe('produceProseProposal', () => {
 
   it('阶段 1 选不到 skill → null', async () => {
     const llm = twoStageLlm('bad-path.md', 'x')
-    expect(await produceProseProposal(SIGNAL, llm, SKILL_FILES, () => '')).toBeNull()
+    expect(await produceProseProposal(SIGNAL, llm, SKILL_FILES, () => '', '')).toBeNull()
   })
 
   it('读原文失败 → null', async () => {
@@ -175,7 +180,7 @@ describe('produceProseProposal', () => {
     const readSkill = () => {
       throw new Error('no file')
     }
-    expect(await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill)).toBeNull()
+    expect(await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill, '')).toBeNull()
   })
 })
 
@@ -198,5 +203,120 @@ describe('collectSkillFiles', () => {
 
   it('目录不存在 → 空数组', () => {
     expect(collectSkillFiles(join(tmpdir(), 'nonexistent-root-xyz'))).toEqual([])
+  })
+})
+
+// ── 教训送达生成算子（本笔前：算子收到**零条**教训） ──────────────────────────
+//
+// 病根是**缺席**：主代理的系统提示里有常驻教训，而真正**改写 skill 散文**的算子
+// （`--prose`）拿到的提示词里一条都没有 —— 它写出的散文随后就是主代理要遵守的规则。
+// 缺口本身是代码事实（`collectLlmText` 发 `systemPrompt: ''` + 单条 user 消息）；
+// **不声称**「已观测到因此产出的坏提案」—— 那条路径至今在本机零次留记录运行。
+
+describe('loadAlwaysOnLessonsBlock', () => {
+  it('真教训文件 → 只含常驻条，warning 条在外，且**不带指针**', () => {
+    const lessonsPath = join(import.meta.dirname, '..', '..', 'crsi-lessons.md')
+    const all = extractCrsiLessonSummaries(readFileSync(lessonsPath, 'utf-8'))
+    const alwaysOn = all.filter(isAlwaysOnLesson)
+    const onDemand = all.filter((s) => !isAlwaysOnLesson(s))
+
+    // 正对照：这份文件确实**两种都有**。缺了它，下面两轮断言在「解析全空」
+    // 或「全都常驻」时会各自恒真 —— 探针的宇宙选错，红绿都不成证据。
+    expect(alwaysOn.length).toBeGreaterThan(0)
+    expect(onDemand.length).toBeGreaterThan(0)
+
+    const block = loadAlwaysOnLessonsBlock(lessonsPath)
+    expect(block).not.toBe('')
+    // 逐条，不抽样：渲染形状即 `**标题**`，故按渲染形状断言（标题子串可能偶然落在别条的正文里）
+    for (const s of alwaysOn) expect(block).toContain(`**${s.title}**`)
+    for (const s of onDemand) expect(block).not.toContain(`**${s.title}**`)
+    // 指针是给**有工具的读者**的（让它用 Read/Grep 自取）；算子是无工具的
+    // `llm.chat` 单条消息 ⇒ 对它指针等于零，只能内联。块里出现指针文案即为这一半没做到。
+    expect(block).not.toContain('未常驻')
+  })
+
+  it('文件缺席 → 空串（算子退回「无教训」的旧形状）', () => {
+    expect(loadAlwaysOnLessonsBlock(join(tmpdir(), 'no-such-lessons-xyz.md'))).toBe('')
+  })
+})
+
+describe('生成提示词内联常驻教训', () => {
+  /**
+   * 记下每次调用真正发出去的那条 user 消息 —— 断言的是**发出去的**，不是我以为发了的。
+   *
+   * `content` 的类型是 `string | ContentBlock[]`：非字符串时**抛**而不是记空串 ——
+   * 记空串会让「探针取错了字段」与「提示词里真没有教训」在读数上同形（两侧都是空串，
+   * 断言恒真而整段是空的）。前提先自证，断言才有资格当证据。
+   */
+  function captureUserMessage(seen: string[], req: Parameters<Llm['chat']>[0]): void {
+    const c = req.messages[0]?.content
+    if (typeof c !== 'string') {
+      throw new Error(`探针前提不成立：首条 user 消息的 content 不是 string（${typeof c}）`)
+    }
+    seen.push(c)
+  }
+
+  function capturingLlm(seen: string[], text: string): Llm {
+    return {
+      chat: async function* (req: Parameters<Llm['chat']>[0]) {
+        captureUserMessage(seen, req)
+        yield { type: 'text', content: text }
+        yield { type: 'stop' }
+      },
+    }
+  }
+
+  const BLOCK =
+    '## CRSI Lessons (Self-Improvement Recall)\n\n1. **未要求的功能是负债**\n   只写解决问题所需的最小改动'
+
+  it('传入的教训块出现在生成提示词里', async () => {
+    const seen: string[] = []
+    await generateProseContent(SIGNAL, capturingLlm(seen, '# New body\n'), 'f.md', 'old', BLOCK)
+    expect(seen[0]).toContain('## CRSI Lessons')
+    expect(seen[0]).toContain('只写解决问题所需的最小改动')
+  })
+
+  it('无教训（空串）→ 提示词里没有教训段；版本号随本笔前进', async () => {
+    const seen: string[] = []
+    await generateProseContent(SIGNAL, capturingLlm(seen, '# New body\n'), 'f.md', 'old', '')
+    expect(seen[0]).not.toContain('CRSI Lessons')
+    // 提示词是版本化资源（CLAUDE.md §十）：改了提示词就必须动版本，否则「哪一版产出的」
+    // 在外部读数上不可分。
+    expect(seen[0]).toContain('producer-prose-generate v1.2.0')
+  })
+
+  it('produceProseProposal 把教训块一路带到生成阶段（不是只到选目标那一步）', async () => {
+    const seen: string[] = []
+    const llm = twoStageLlm(SKILL_FILES[0]!, '# New body\n')
+    // 两阶段共用同一个 llm：包一层，把两次调用都记下来
+    const wrapped: Llm = {
+      chat: (req) => {
+        captureUserMessage(seen, req)
+        return llm.chat(req)
+      },
+    }
+    await produceProseProposal(SIGNAL, wrapped, SKILL_FILES, () => 'OLD', BLOCK)
+    // 第二次调用才是生成阶段（第一次是选目标）
+    expect(seen).toHaveLength(2)
+    expect(seen[0]).not.toContain('CRSI Lessons') // 选目标只挑路径，教训在那里是噪声
+    expect(seen[1]).toContain('只写解决问题所需的最小改动')
+  })
+})
+
+describe('formatNetChange —— #20「未要求的功能是负债」可机械化的那一半', () => {
+  it('三态：增 / 减 / 零', () => {
+    expect(formatNetChange('a\nb\nc\n', 'a\nb\nc\nd\ne\n')).toBe(
+      '📐 净变化（未判定）: 字符 +4，行 +2',
+    )
+    expect(formatNetChange('a\nb\nc\n', 'a\n')).toBe('📐 净变化（未判定）: 字符 -4，行 -2')
+    expect(formatNetChange('a\n', 'b\n')).toBe('📐 净变化（未判定）: 字符 0，行 0')
+  })
+
+  it('行数定义：末尾无换行的非空串也算一行（否则「净行数」不可证伪）', () => {
+    expect(formatNetChange('a', 'a\nb')).toBe('📐 净变化（未判定）: 字符 +2，行 +1')
+  })
+
+  it('空串是零行', () => {
+    expect(formatNetChange('', 'ab')).toBe('📐 净变化（未判定）: 字符 +2，行 +1')
   })
 })

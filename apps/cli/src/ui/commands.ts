@@ -33,6 +33,8 @@ import {
   hasProposedProse,
   appendProseProposal,
   clearProseProposals,
+  loadAlwaysOnLessonsBlock,
+  formatNetChange,
   LESSONS_FILE,
   MANAGED_RULES_FILE,
 } from '../core/crsi-producer'
@@ -998,8 +1000,14 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
     const llm = ctx.engine.getLlm() ?? ctx.engine.getRegistry()
     const { readFileSync } = await import('node:fs')
     const { join } = await import('node:path')
-    const proposal = await produceProseProposal(signal, llm, skillFiles, (p) =>
-      readFileSync(join(root, p), 'utf-8'),
+    const proposal = await produceProseProposal(
+      signal,
+      llm,
+      skillFiles,
+      (p) => readFileSync(join(root, p), 'utf-8'),
+      // 常驻教训块**内联**（不带指针）：生成算子是无工具的 `llm.chat` 单条消息 ——
+      // 在此之前它拿到零条教训，而它写出的散文随后就是主代理要遵守的规则。
+      loadAlwaysOnLessonsBlock(join(root, LESSONS_FILE)),
     )
     if (!proposal) {
       return { content: '散文提议生成失败（LLM 未返回有效结果）。' }
@@ -1067,16 +1075,27 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
     // 缺席（含空串）⇒ 整行不打，不是打一行空的。
     const riskLine = proposal.risk ? `\n📋 事前声明风险（未验证）: ${proposal.risk}` : ''
 
+    // 净变化 —— 教训 #20「未要求的功能是负债」**可机械化的那一半**。
+    // 与已落地的那三条（ε 命中 / 代价 / 风险）同一纪律：**只呈现、不判定**。
+    // 判「这轮改写有没有塞进未要求的功能」需要语义裁判 ⇒ 违反 A1 铁律；
+    // 但「它长胖了多少」是手上两份文本就能算出的**事实**，不需要模型参与，故可以做。
+    // 与 riskLine **刻意不同**：R 缺席就不打行，净变化**永远可算**（恒打，含零）——
+    // 零也打，正是因为它才是「这次没长胖」的可证伪读数；只打非零等于让读者看不见基线。
+    // 前缀 `\n` 是为了自成一行：`predictionLine` 不以换行结尾（同下条注释记的那个坑）。
+    const netChangeLine = `\n${formatNetChange(proposal.originalContent, proposal.newContent)}`
+
     return {
       content:
         `✅ 已生成散文提议并跑过测试。审阅 diff：\n` +
         renderGateNote(result) +
         `\n${result.diff}\n\n` +
         predictionLine +
+        netChangeLine +
         riskLine +
-        // 操作提示必须**自成一行**：`predictionLine` / `riskLine` 都不以换行结尾，此前提示串
-        // 直接拼接 ⇒ 被粘在最后一条内容尾部。本条由探针实测确认（回执尾部为 `DIFF\n\n\n…`），
-        // 而风险声明正是本笔新增的落点，粘上去会让它读起来像延续到了命令里，故一并在本笔钉住。
+        // 操作提示必须**自成一行**：`predictionLine` / `netChangeLine` / `riskLine` 三条都自我
+        // 负责换行、彼此不粘连，而提示串自身不以 `\n` 打头 ⇒ 直接拼接就会被粘在最后一条内容
+        // 尾部。本条由探针实测确认（回执尾部为 `DIFF\n\n\n…`），而风险声明正是当年新增的落点，
+        // 粘上去会让它读起来像延续到了命令里，故一并钉住。
         '\n/crsi modify --approve 合并 | /crsi modify --reject 丢弃',
     }
   }
