@@ -109,7 +109,7 @@ pnpm monorepo
 | Command                      | Description                                                |
 | ---------------------------- | ---------------------------------------------------------- |
 | `Ctrl+P` or `/pick`          | **Interactive model picker** (two-level: provider → model) |
-| `/help`                      | Show all available commands (137)                          |
+| `/help`                      | Show all available commands (138)                          |
 | `/model`                     | Show current model                                         |
 | `/models`                    | List available models                                      |
 | `/providers`                 | List configured providers                                  |

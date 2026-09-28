@@ -34,6 +34,9 @@ import {
   appendProseProposal,
   clearProseProposals,
   loadAlwaysOnLessonsBlock,
+  buildResidentLessonReport,
+  extractCrsiLessonSummaries,
+  selectResidentLessons,
   formatNetChange,
   formatSeverityShift,
   LESSONS_FILE,
@@ -1313,6 +1316,45 @@ const crsiProseClearCmd: CommandHandler = () => {
     return { content: '散文提议 ledger 为空（无可清除记录）。' }
   }
   return { content: `已清空散文提议 ledger（移除 ${count} 条记录）。` }
+}
+
+/**
+ * `/crsi lessons` —— 常驻档名册（只读）。
+ *
+ * 这是 `selectResidentLessons` 唯一**给人看**的读者。另两个（系统提示、`--prose` 算子）
+ * 的输出都只进模型的上下文；而常驻档的成本是**人**在付（每条 critical 随每次请求发出），
+ * 能动手降档、缩短的也只有人。没有它，「这档涨得值不值」没有材料可查。
+ *
+ * 读的是**当前磁盘上的文件**（不是启动时那份快照）：刚改完 `- 严重度:` 就该看到新名册。
+ */
+const crsiLessonsCmd: CommandHandler = async () => {
+  // 目标文件按仓库根解析 —— 与 `/crsi propose` 同一口径（那里的 filePath 是仓库根相对）
+  let root = process.cwd()
+  try {
+    root = execSync('git rev-parse --show-toplevel', {
+      timeout: 5000,
+      encoding: 'utf-8',
+    }).trim()
+  } catch {
+    // 非 git 目录 → 回退 cwd
+  }
+
+  const { readFileSync, existsSync } = await import('node:fs')
+  const { join } = await import('node:path')
+  const lessonsPath = join(root, LESSONS_FILE)
+  if (!existsSync(lessonsPath)) {
+    return { content: `教训文件不存在：${lessonsPath}` }
+  }
+
+  let summaries
+  try {
+    summaries = extractCrsiLessonSummaries(readFileSync(lessonsPath, 'utf-8'))
+  } catch (e) {
+    return { content: `教训文件读取失败：${lessonsPath}\n${String(e)}` }
+  }
+
+  // 择点与两个已有读者同一个 ⇒ 名册报的就是这条会话真正会注入的那一份
+  return { content: buildResidentLessonReport(selectResidentLessons(summaries), lessonsPath) }
 }
 
 const crsiHealthCmd: CommandHandler = async (ctx) => {
@@ -5860,6 +5902,7 @@ registry.set('/crsi inventory', crsiInventoryCmd)
 registry.set('/crsi modify', crsiModifyCmd)
 registry.set('/crsi propose', crsiProposeCmd)
 registry.set('/crsi prose-clear', crsiProseClearCmd)
+registry.set('/crsi lessons', crsiLessonsCmd)
 registry.set('/crsi eval', crsiEvalCmd)
 registry.set('/crsi bench', crsiBenchCmd)
 registry.set('/crsi meta', crsiMetaCmd)

@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
 import { formatLoopRows } from '../../src/commands/autoloop-journal'
+import { extractCrsiLessonSummaries, selectResidentLessons } from '../../src/core/crsi-producer'
 import { initTelemetry, resetTelemetryState } from '../../src/telemetry/index'
 import { resetCrashState } from '../../src/telemetry/crash'
 import { getTasks, taskTool } from '../../src/tools/exec/task'
@@ -281,6 +282,62 @@ describe('slash command registry', () => {
     expect(byName['/simplify']).toBeTruthy()
     expect(byName['/verify']).toBeTruthy()
     expect(byName['/design']).toBeTruthy()
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// /crsi lessons —— 常驻档名册（selectResidentLessons 唯一给人看的读者）
+//
+// 这一族的病根是「有定义、无施加点」：函数写好了、没人调用。所以这里钉的是
+// **施加点本身** —— 注册了没有、跑起来读的是不是真账本、跑完有没有改到东西。
+// ═══════════════════════════════════════════════════════════════
+
+describe('/crsi lessons（常驻档名册）', () => {
+  const CLI_DIR = join(import.meta.dirname, '..', '..')
+  const REPO_ROOT = join(CLI_DIR, '..', '..')
+  const LESSONS = join(CLI_DIR, 'crsi-lessons.md')
+
+  // 本文件的 `execSync` 是 `vi.fn()`（默认返回 undefined）⇒ 处理器里的 git 分支会抛、
+  // 被 try/catch 吃掉、回退到 cwd ⇒ 找不到账本。要跑到**真文件**，必须让这个 mock 给出真根。
+  // 前提自证在下面第一条：mock 生效后报的路径确实是真账本。
+  beforeEach(() => {
+    mockExecSync.mockReturnValue(`${REPO_ROOT}\n`)
+  })
+
+  it('已注册 —— 「有定义、无施加点」正是这一族的复发形态', () => {
+    expect(getCommand('/crsi lessons')).toBeDefined()
+    expect(getCommandNames()).toContain('/crsi lessons')
+  })
+
+  it('mock 的前提成立：git 根 + LESSONS_FILE 拼出的就是那个真文件', () => {
+    // 没有这一条，下面几条可能在断言「一个不存在的路径被正确处理了」
+    expect(LESSONS).toBe(join(REPO_ROOT, 'apps', 'cli', 'crsi-lessons.md'))
+    expect(readFileSync(LESSONS, 'utf-8')).toContain('CRSI Lessons')
+  })
+
+  it('跑起来报的常驻集 == 择点选出的那一个（报告不与对象脱节）', async () => {
+    const result = await getCommand('/crsi lessons')!({} as never, [])
+    const sel = selectResidentLessons(extractCrsiLessonSummaries(readFileSync(LESSONS, 'utf-8')))
+    expect(sel.resident.length).toBeGreaterThan(0) // 正对照
+    expect(result.content).toContain(LESSONS)
+    expect(result.content).toContain(`常驻 **${sel.resident.length}** 条`)
+    for (const s of sel.resident) expect(result.content).toContain(s.title)
+  })
+
+  it('只读：跑完账本逐字节未变', async () => {
+    const before = readFileSync(LESSONS, 'utf-8')
+    // **正对照（不可省）**：没有它，这一格在夹具已被写坏时会**恒真** —— 「跑前跑后都是 x」
+    // 比一遍就绿，而它要检的正是「处理器有没有写」。实测过：一次偷写变异把它变成这样。
+    expect(before).toContain('CRSI Lessons')
+    expect(before).toContain('严重度')
+    await getCommand('/crsi lessons')!({} as never, [])
+    expect(readFileSync(LESSONS, 'utf-8')).toBe(before)
+  })
+
+  it('账本找不到时给一句话，不抛', async () => {
+    mockExecSync.mockReturnValue('/nonexistent-root\n')
+    const result = await getCommand('/crsi lessons')!({} as never, [])
+    expect(result.content).toContain('教训文件不存在')
   })
 })
 

@@ -8,6 +8,7 @@ import {
   buildCrsiLessonsPointer,
   selectResidentLessons,
   loadAlwaysOnLessonsBlock,
+  buildResidentLessonReport,
   isAlwaysOnLesson,
   RESIDENT_LESSONS_BUDGET,
   LESSONS_FILE,
@@ -439,5 +440,137 @@ describe('crsi-lessons.md 真文件完整性（不钉条数）', () => {
   it('负对照：伪造标题在真账本里报未命中', () => {
     const titles = new Set(extractCrsiLessonSummaries(real).map((s) => s.title))
     expect(titles.has('不存在的轴: 这条标题是伪造的')).toBe(false)
+  })
+})
+
+/**
+ * 常驻档名册 —— `selectResidentLessons` 的**第三个读者**，也是唯一给人看的那个。
+ *
+ * 前两个读者（系统提示 / `--prose` 算子）的输出都只进模型的上下文；而常驻档的成本是
+ * **人**在付（每条 critical 都随每次请求发出去），能动手降档、缩短的也只有人。所以
+ * 这组测试的重点不是「渲染得好看」，而是**它报的就是真正注入的那一份** —— 报告与对象
+ * 脱节，人就会照着一份错的材料去做降档决定（那比没有材料更坏）。
+ */
+describe('buildResidentLessonReport（常驻档名册，唯一给人看的读者）', () => {
+  const PATH = '/repo/apps/cli/crsi-lessons.md'
+  const mkWarning = (title: string, len: number): CrsiLessonSummary => ({
+    title,
+    suggestion: 'y'.repeat(len),
+    severity: 'warning',
+  })
+
+  /** 取报告里印出来的「合计 N」/「X **N** 条」。**取不到就抛** —— 否则比对会静默恒真。 */
+  const printedTotal = (report: string): number => {
+    const m = report.match(/^合计 ([\d,]+) =/m)
+    if (!m) throw new Error('报告里没有「合计 N =」这一行')
+    return Number(m[1]!.replace(/,/g, ''))
+  }
+  const printedCount = (report: string, label: string): number => {
+    const m = report.match(new RegExp(`^${label} \\*\\*(\\d+)\\*\\* 条`, 'm'))
+    if (!m) throw new Error(`报告里没有行首的「${label} N 条」`)
+    return Number(m[1])
+  }
+
+  it('报的常驻集 == 真正注入的那一份（走同一个择点，不是另算一份）', () => {
+    const sel = selectResidentLessons([
+      mkCritical(1, 400),
+      mkCritical(2, 400),
+      mkWarning('w: 按需的', 50),
+    ])
+    const report = buildResidentLessonReport(sel, PATH)
+
+    // 正对照：确实分了档，否则下面比的是「全都在」这种平凡情形
+    expect(sel.resident.length).toBeGreaterThan(0)
+    expect(sel.demoted.length).toBeGreaterThan(0)
+
+    for (const s of sel.resident) expect(report).toContain(s.title)
+    // 未常驻的那条**不进逐条清单** —— 它只该出现在计数里
+    expect(report).not.toContain('w: 按需的')
+    // 合计 == 真渲染器量出来的那个数（改这里若另算一份，长度对不上）
+    expect(printedTotal(report)).toBe(buildCrsiLessonsBlock(sel.resident).length)
+    expect(printedCount(report, '常驻')).toBe(sel.resident.length)
+    expect(printedCount(report, '未常驻')).toBe(sel.demoted.length)
+  })
+
+  it('报预算用的是 selection.budget（这一次的值），不是默认常量', () => {
+    const sel = selectResidentLessons([mkCritical(1, 100), mkCritical(2, 100)], 2500)
+    expect(sel.budget).toBe(2500) // 前提自证
+    const report = buildResidentLessonReport(sel, PATH)
+
+    expect(report).toContain('预算 2,500')
+    expect(report).not.toContain(`预算 ${RESIDENT_LESSONS_BUDGET.toLocaleString('en-US')}`)
+    const headroom = 2500 - buildCrsiLessonsBlock(sel.resident).length
+    expect(report).toContain(`余量 ${headroom.toLocaleString('en-US')}`)
+  })
+
+  it('加法自证：表头 + 逐条 + 分隔 == 渲染器实测，且当场验算', () => {
+    const sel = selectResidentLessons([mkCritical(1, 300), mkCritical(2, 300)])
+    const report = buildResidentLessonReport(sel, PATH)
+    // 逐条和必然大于合计（表头是共担的）—— 与其让人去猜差额，算式必须印出来并且对得上
+    expect(report).toContain('表头')
+    expect(report).toContain('分隔')
+    expect(report).toContain('相符')
+    expect(report).not.toContain('不符')
+  })
+
+  it('指针字符**单列**，并明说不含在预算内 —— 免得拿总额去对预算', () => {
+    const sel = selectResidentLessons([
+      mkCritical(1, 300),
+      mkCritical(2, 300),
+      mkWarning('w: 按需的', 20),
+    ])
+    const ptr = buildCrsiLessonsPointer(sel, PATH)
+    expect(ptr.length).toBeGreaterThan(0) // 正对照：否则下面断的是一个空指针
+    const report = buildResidentLessonReport(sel, PATH)
+    expect(report).toContain(`指针另有 ${ptr.length.toLocaleString('en-US')} 字符`)
+    expect(report).toContain('不含在预算内')
+  })
+
+  it('有 critical 被预算挤出时**点名**它们 —— 人要知道该动哪一条', () => {
+    const sel = selectResidentLessons(THREE, buildCrsiLessonsBlock(THREE).length - 1)
+    expect(sel.overBudget).toHaveLength(1) // 正对照
+    const report = buildResidentLessonReport(sel, PATH)
+    expect(report).toContain(sel.overBudget[0]!.title)
+    expect(report).toContain('因预算被挤出')
+  })
+
+  it('单条自身超预算：不崩、常驻 0 条、那条被点名', () => {
+    const huge = mkCritical(1, 5000)
+    const sel = selectResidentLessons([huge])
+    expect(sel.resident).toHaveLength(0) // 正对照：确实是「单条超预算」这一格
+    expect(sel.overBudget).toHaveLength(1)
+    const report = buildResidentLessonReport(sel, PATH)
+    expect(report).toContain(huge.title)
+    expect(printedCount(report, '常驻')).toBe(0)
+    expect(report).not.toMatch(/NaN|Infinity/)
+  })
+
+  it('预算为 0：不产生 NaN/Infinity 百分比', () => {
+    const sel = selectResidentLessons([mkCritical(1, 100)], 0)
+    const report = buildResidentLessonReport(sel, PATH)
+    expect(report).not.toMatch(/NaN|Infinity/)
+    expect(report).toContain('已用 —%')
+  })
+
+  it('全 warning（无 critical）：常驻 0 条，仍报出未常驻条数', () => {
+    const sel = selectResidentLessons([mkWarning('w1', 10), mkWarning('w2', 10)])
+    const report = buildResidentLessonReport(sel, PATH)
+    expect(printedCount(report, '常驻')).toBe(0)
+    expect(printedCount(report, '未常驻')).toBe(2)
+  })
+
+  it('空教训集：给一句话，不崩、不抛', () => {
+    const report = buildResidentLessonReport(selectResidentLessons([]), PATH)
+    expect(report).toContain('没有可召回的教训')
+    expect(report).toContain(PATH)
+  })
+
+  it('真文件：名册报的常驻条数 == 择点选出的条数（不钉死数字）', () => {
+    const real = readFileSync(resolve(__dirname, '../../crsi-lessons.md'), 'utf-8')
+    const sel = selectResidentLessons(extractCrsiLessonSummaries(real))
+    expect(sel.resident.length).toBeGreaterThan(0) // 前提自证
+    const report = buildResidentLessonReport(sel, resolve(__dirname, '../../crsi-lessons.md'))
+    expect(printedCount(report, '常驻')).toBe(sel.resident.length)
+    expect(printedTotal(report)).toBe(buildCrsiLessonsBlock(sel.resident).length)
   })
 })

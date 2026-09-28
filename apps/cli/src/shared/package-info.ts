@@ -75,7 +75,7 @@ export const COMPANY_SHORT = '华安麦逄科技' as const
  */
 
 /** Slash 命令总数（真源：`getCommandNames().length`，`apps/cli/src/ui/commands.ts`） */
-export const SLASH_COMMAND_COUNT = 137 as const
+export const SLASH_COMMAND_COUNT = 138 as const
 
 /** 内置提供商总数（真源：`DEFAULT_PROVIDERS.length`，`apps/cli/src/shared/constants.ts`） */
 export const PROVIDER_COUNT = 12 as const

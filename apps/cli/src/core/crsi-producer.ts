@@ -277,17 +277,37 @@ export function selectResidentLessons(
   }
 }
 
-/** 把教训精华渲染为系统提示召回块。无教训时返回空串。 */
-export function buildCrsiLessonsBlock(summaries: CrsiLessonSummary[]): string {
-  if (summaries.length === 0) return ''
-  const items = summaries.map((s, i) => `${i + 1}. **${s.title}**\n   ${s.suggestion}`).join('\n\n')
-  return `## CRSI Lessons (Self-Improvement Recall)
+/**
+ * 常驻块的表头（含与正文之间的那个空行），与 {@link buildCrsiLessonsBlock} **共用**。
+ *
+ * 抽出来是因为常驻档名册要报**逐条**成本，而「逐条和 ≠ 合计」的差额正是这块表头 ——
+ * 各写一份，两处迟早对不上，且对不上的时候没人知道该信哪个。
+ */
+const CRSI_LESSONS_HEADER = `## CRSI Lessons (Self-Improvement Recall)
 
 These are hard-won lessons consolidated by the CRSI self-improvement
 loop from past sessions. Apply them proactively — do not repeat these
 mistakes:
 
-${items}`
+`
+
+/**
+ * 一条教训在块里的**逐字**形状，与 {@link buildCrsiLessonsBlock} 共用。
+ *
+ * 序号参与渲染 ⇒ 同一个 `summary` 在不同位置长度不同；常驻档名册按文件序渲染，
+ * 与块里看到的序号一致。
+ */
+const renderLessonItem = (s: CrsiLessonSummary, i: number): string =>
+  `${i + 1}. **${s.title}**\n   ${s.suggestion}`
+
+/** 逐条之间的分隔符 —— `.join('\n\n')` 的那个 `\n\n`。名册的加法算式要用它的长度。 */
+const LESSON_ITEM_SEPARATOR = '\n\n'
+
+/** 把教训精华渲染为系统提示召回块。无教训时返回空串。 */
+export function buildCrsiLessonsBlock(summaries: CrsiLessonSummary[]): string {
+  if (summaries.length === 0) return ''
+  const items = summaries.map(renderLessonItem).join(LESSON_ITEM_SEPARATOR)
+  return `${CRSI_LESSONS_HEADER}${items}`
 }
 
 /** 指针最多点名几条被挤出的 critical —— 否则指针自己成了新的无界常驻成本。 */
@@ -323,6 +343,79 @@ export function buildCrsiLessonsPointer(
   }
 
   lines.push(`需要时读 ${lessonsPath}（含标题/建议/证据）。`)
+  return lines.join('\n')
+}
+
+/**
+ * 常驻档名册 —— `selectResidentLessons` 的**第三个读者**，也是**唯一给人看的**那一个。
+ *
+ * 前两个读者的输出都进了**模型**的上下文（系统提示、`--prose` 算子）。而常驻档的成本
+ * 是**人**在付：每一条 `critical` 都随每次请求发出去，永远。能动手的也只有人 —— 把某条
+ * 改成 `- 严重度: warning`、或把最长的那条缩短。在此之前，「这档涨得值不值」这件事
+ * **没有任何材料可查**：预算只是**上限**，不是**理由**；而启动期那条体积告警只在指令
+ * **总额**超 40k 时说话、且只点名最大的三个文件 —— 教训块那两千多字符排不进去，等于不报。
+ *
+ * 与两个既有读者的关系：**共用** {@link selectResidentLessons}（唯一的择优点）⇒
+ * 报告不可能与真正注入的那一份漂移。逐条成本按**渲染后的文本量**算，且报出可验算的
+ * 加法（表头 + 逐条 + 分隔 == 合计）—— 否则「逐条和 ≠ 合计」会被当成 bug 查一遍。
+ *
+ * 只读：**不加写路径**。人的杠杆是改文件那一行；写入侧是生产者与 `/crsi propose`。
+ */
+export function buildResidentLessonReport(
+  selection: ResidentLessonSelection,
+  lessonsPath: string,
+): string {
+  const { resident, demoted, overBudget, budget } = selection
+  const num = (n: number) => n.toLocaleString('en-US')
+
+  if (resident.length === 0 && demoted.length === 0) {
+    return `## CRSI 常驻教训（每次请求都注入）\n\n教训文件里没有可召回的教训：${lessonsPath}`
+  }
+
+  const itemChars = resident.map((s, i) => renderLessonItem(s, i).length)
+  const items = itemChars.reduce((a, b) => a + b, 0)
+  const seps = LESSON_ITEM_SEPARATOR.length * Math.max(0, resident.length - 1)
+  const header = resident.length > 0 ? CRSI_LESSONS_HEADER.length : 0
+  const total = header + items + seps
+  const block = buildCrsiLessonsBlock(resident).length
+  const headroom = budget - total
+  const used = budget > 0 ? ((total / budget) * 100).toFixed(1) : '—'
+
+  const lines: string[] = ['## CRSI 常驻教训（每次请求都注入）', '']
+  lines.push(
+    `常驻 **${resident.length}** 条 / ${num(total)} 字符 · 预算 ${num(budget)}` +
+      `（余量 ${num(headroom)}，已用 ${used}%）`,
+  )
+  lines.push(
+    `未常驻 **${demoted.length}** 条` +
+      (overBudget.length > 0
+        ? `（其中 **${overBudget.length}** 条因预算被挤出：${overBudget.map((s) => s.title).join('、')}）`
+        : '（无因预算被挤出的）'),
+  )
+
+  if (resident.length > 0) {
+    lines.push('', '### 逐条成本（渲染后字符）', '')
+    for (let i = 0; i < resident.length; i++) {
+      lines.push(`- ${num(itemChars[i]!)} 字符 — ${resident[i]!.title}`)
+    }
+    // 加法自证：表头是每条共担的，逐条和必然大于合计 —— 与其让人去猜差额，
+    // 不如把算式写出来，且当场验算（`block` 走的是真渲染器，不是我在这里的手算）。
+    lines.push(
+      '',
+      `合计 ${num(total)} = 表头 ${num(header)} + 逐条 ${num(items)} + 分隔 ${num(seps)}` +
+        `（${LESSON_ITEM_SEPARATOR.length} × ${Math.max(0, resident.length - 1)}）` +
+        ` — 与渲染器实测${block === total ? '相符' : `**不符（${num(block)}）**`}`,
+    )
+  }
+
+  lines.push(
+    '',
+    `指针另有 ${num(buildCrsiLessonsPointer(selection, lessonsPath).length)} 字符，**不含在预算内**` +
+      `（预算量的是常驻块本身）。`,
+    '',
+    `文件：${lessonsPath}`,
+    '把某条移出常驻档 = 把它的 `- 严重度:` 改成 `warning`。',
+  )
   return lines.join('\n')
 }
 
