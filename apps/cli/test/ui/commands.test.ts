@@ -1022,6 +1022,37 @@ describe('常驻教训的送达接线', () => {
   })
 })
 
+/**
+ * 档位迁移那一行的接线 —— 与上一条同样只能静态证，但**区间更紧**。
+ *
+ * 为什么不行为测试：`--crossover` 分支要先从磁盘读真 `crsi-lessons.md`，读不到就早退成
+ * 「教训文件为空，无可合并。」⇒ 拿真仓库文件当 fixture 会让本格随工作区状态变红
+ *（本仓库记过这个陷阱：`crsi-sandbox` 曾拿真 `README.md` 当 fixture，有未提交改动即恒红）。
+ * 而这一行要防的失效模式是**接线被删**（有定义、无施加点），静态区间足以钉住它；
+ * 行**内容**由 `formatSeverityShift` 的单测负责（5 条）。
+ *
+ * 区间取法：从调用点切到**下一个**回执尾提示为止 —— 两条路径用的是同一句尾提示，
+ * 故第一次出现即 crossover 回执的结尾。不这么切的话，`segs[1]` 会一直延伸到文件尾，
+ * 「后面的默认教训路径里也有这行」就能让本格静默通过。
+ */
+describe('档位迁移的送达接线', () => {
+  it('crossover 回执上打了档位行，且落在回执区间内', () => {
+    const src = readFileSync(
+      join(import.meta.dirname, '..', '..', 'src', 'ui', 'commands.ts'),
+      'utf-8',
+    )
+    const segs = src.split('await produceCrossoverProposal(')
+    // 正对照：调用点被删/改名 ⇒ 这里先红，否则下面那条会静默全绿。
+    expect(segs.length - 1).toBe(1)
+    const receipt = segs[1]!.split('/crsi modify --approve 合并')[0]!
+    expect(receipt).toContain('formatSeverityShift(')
+    // 三个实参都要来自本次提议（写死或传错档位即在此红）。
+    expect(receipt).toContain('proposal.severityA')
+    expect(receipt).toContain('proposal.severityB')
+    expect(receipt).toContain('proposal.mergedSeverity')
+  })
+})
+
 // ═══════════════════════════════════════════════════════════════
 // /crsi stats —— ε 命中率段与**作废条款**
 // ═══════════════════════════════════════════════════════════════

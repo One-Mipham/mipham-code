@@ -24,6 +24,16 @@ export const LESSONS_FILE = 'apps/cli/crsi-lessons.md'
 /** 组件归因（修复决策，非因果断言）：失败最可能被哪个记忆组件的局部干预修复。 */
 export type MemoryComponent = 'experiential' | 'working' | 'invocation' | 'checker'
 
+/**
+ * 教训档位的**闭集** —— 只有两档。
+ *
+ * 与 `CrsiSignal.severity`（自由字符串，来自 insight，可能是 `info`）不同：这是**落进教训文件**
+ * 之后的口径。两者之间的桥是 {@link normalizeLessonSeverity}，而它只有一个定义 —— 抽取器
+ * （读侧）与写入者（写侧）同读它。写入者若自写一份映射，「写进去的 warning」与「读出来的
+ * warning」就可能是两个判据（本仓库记过的「一个渲染器，两个读者」）。
+ */
+export type LessonSeverity = 'critical' | 'warning'
+
 /** 归一化的教训信号（insight 与 meta-rule 的公共面）。 */
 export interface CrsiSignal {
   category: string
@@ -76,10 +86,19 @@ export function selectCrsiSignal(
   return null
 }
 
-/** 模板化地把信号渲染成一段教训 markdown（不动 LLM）。 */
+/**
+ * 模板化地把信号渲染成一段教训 markdown（不动 LLM）。
+ *
+ * `severity` 是**必填参数**，且是档位的**唯一来源**（不再读 `signal.severity`）。
+ * 此前它读一个可选字段、缺了就**整行不打** —— 而那条缺席的后果不是「没有标签」，
+ * 是抽取器 fail-open 落 `critical`（常驻、每次请求都占字符）。于是「生产者忘了给档位」
+ * 这件事在外部读数上与「它本来就该常驻」**同形**，没有任何东西能报。
+ * 改成必填后，「忘了」是编译错误 —— 同 `produceProseProposal` 的 `lessonsBlock` 必填第 5 参。
+ */
 export function buildLessonContent(
   signal: CrsiSignal,
   timestamp: string,
+  severity: LessonSeverity,
   source = 'CRSI producer (autoApplicable)',
 ): string {
   const lines: string[] = [
@@ -87,8 +106,8 @@ export function buildLessonContent(
     '',
     `- 建议: ${signal.suggestion}`,
     `- 组件: ${signal.component ?? 'experiential'}`,
+    `- 严重度: ${severity}`,
   ]
-  if (signal.severity) lines.push(`- 严重度: ${signal.severity}`)
   lines.push(`- 生成时间: ${timestamp}`, `- 来源: ${source}`, '', '### 证据')
   for (const e of signal.evidence) lines.push(`- ${e}`)
   lines.push('')
@@ -107,7 +126,7 @@ export function buildLessonContent(
 export interface CrsiLessonSummary {
   title: string
   suggestion: string
-  severity: 'critical' | 'warning'
+  severity: LessonSeverity
 }
 
 /**
@@ -118,7 +137,20 @@ export interface CrsiLessonSummary {
  * 定义在**一处**：抽取器与 `flush()` 都读它，改一处即改全。
  * 不导出 —— 它没有第二个读者，导出只会让「谁在用」这个问题多一个假答案。
  */
-const DEFAULT_LESSON_SEVERITY: CrsiLessonSummary['severity'] = 'critical'
+const DEFAULT_LESSON_SEVERITY: LessonSeverity = 'critical'
+
+/**
+ * 把任意档位取归一化到闭集：只有**逐字**的 `warning` 是 `warning`，其余一切
+ * （含缺席、空串、闭集外取值）落 `critical`。
+ *
+ * 方向是刻意的：不倒向「按需」。宁可多花字符，也不把一条守卫静默降级成「按需读」——
+ * 那正是「只写不读」缺口的复发形态。副作用要认下：`info` 也会落 `critical`（它不在闭集里）。
+ *
+ * **定义在一处**：抽取器（读侧）与两个写入者（`produceCrsiProposal` / crossover）同读它。
+ */
+export function normalizeLessonSeverity(raw: string | undefined): LessonSeverity {
+  return raw === 'warning' ? 'warning' : 'critical'
+}
 
 /**
  * 从 crsi-lessons.md 提取每条教训的「精华」（标题 + 建议 + 严重度），跳过证据段落。
@@ -156,8 +188,9 @@ export function extractCrsiLessonSummaries(content: string): CrsiLessonSummary[]
     }
     const v = line.match(/^-\s*严重度[:：]\s*(.+?)\s*$/)
     if (v) {
-      // 闭集外的取值一律落常驻档 —— 未知严重度不倒向「按需」。
-      severity = v[1] === 'warning' ? 'warning' : 'critical'
+      // 闭集外的取值一律落常驻档 —— 未知严重度不倒向「按需」。规则在 normalizeLessonSeverity
+      // 一处；写入者同读它（正则已吃掉两侧空白，故传进去的是已经 trim 过的捕获）。
+      severity = normalizeLessonSeverity(v[1])
     }
   }
   flush()
@@ -335,7 +368,9 @@ export function produceCrsiProposal(
   // 幂等：同一信号的教训标题已在文件中，不再重复产出。
   if (currentLessons.includes(`## ${signal.category}: ${signal.title}`)) return null
 
-  const lesson = buildLessonContent(signal, timestamp)
+  // 档位显式取归一化后的值：`signal.severity` 来自 insight（可能是 `info` 或缺席），
+  // 它**不是**闭集口径。不给这个参数是编译错误 —— 这就是「忘了给档位」的落点。
+  const lesson = buildLessonContent(signal, timestamp, normalizeLessonSeverity(signal.severity))
   const newContent = currentLessons ? `${currentLessons.trimEnd()}\n\n${lesson}\n` : `${lesson}\n`
 
   return {
@@ -587,6 +622,28 @@ function countLines(s: string): number {
   if (s === '') return 0
   const breaks = s.split('\n').length - 1
   return s.endsWith('\n') ? breaks : breaks + 1
+}
+
+/**
+ * 档位迁移（**只呈现、不判定**）—— 与 `formatNetChange` / `formatCostLine` / 事前风险同一纪律。
+ *
+ * 报的是**实际写进去的**档位（第 3 参 `merged`），不是按 `deriveMergedSeverity` 应得的那个：
+ * 报告要报实际用的那个数，否则读数描述的是规则、不是这次渲染（同 `ResidentLessonSelection.budget`）。
+ *
+ * **恒打**（含无变化），同 `formatNetChange` 的理由：「这次没升档」正是那条可证伪的基线读数，
+ * 只打有变化的等于让读者看不见基线。两个源与产物都已知 ⇒ 语法上不存在「打不出来」的情况。
+ *
+ * `⬆` 的判据是**相对更宽的那个源**（合并把地板抬起来了吗）—— 因为那才是成本事件：
+ * 一条非常驻的教训经合并变成常驻的，占预算。收尾不带换行：回执自己加（否则会与前一行粘连）。
+ */
+export function formatSeverityShift(
+  a: LessonSeverity,
+  b: LessonSeverity,
+  merged: LessonSeverity,
+): string {
+  const floor: LessonSeverity = a === 'warning' || b === 'warning' ? 'warning' : 'critical'
+  const arrow = merged === 'critical' && floor === 'warning' ? '⬆' : '＝'
+  return `${arrow} 档位（按更严来源派生）: ${a} + ${b} → ${merged}`
 }
 
 /**
@@ -854,8 +911,27 @@ export function removeLessonSections(content: string, headers: string[]): string
 }
 
 /**
+ * 合并产物的档位：取两个源中**更严**的那个。
+ *
+ * 三条理由，每条都取自本仓库既有的决定而非新偏好：
+ *   1. **不问 LLM** —— 档位是「这条要不要每次请求都在场」的判定，属 A1 铁律的判定侧，
+ *      只能由确定性规则给（LLM 只生成）⇒ 不可伪造、不可幻觉。
+ *   2. **不取更宽** —— 那会把一个 critical 经合并洗成按需，正是抽取器注释里
+ *      「未知严重度不倒向『按需』」拒绝的方向。
+ *   3. **不停在「缺省 critical」** —— 那个缺省是给**人类新写**的条目兜底的；合并是**降维**，
+ *      没有依据说产物比两个源更紧急。实测（真模块）：两条 warning 合并曾升进常驻档，
+ *      常驻 6 条 2,155 字符 → 7 条 2,198，而这一切发生在**没有人决定过**的情况下。
+ */
+export function deriveMergedSeverity(a: LessonSeverity, b: LessonSeverity): LessonSeverity {
+  return a === 'critical' || b === 'critical' ? 'critical' : 'warning'
+}
+
+/**
  * Crossover：合并两条重叠教训 → 「删二增一」的教训文件变更候选。
  * LLM 只生成（选对 + 合并版），guard 校验所选教训真实存在（fail-closed 防幻觉）。
+ *
+ * 档位**不在 LLM 的契约里**（提示词只列举 category/title/suggestion/evidence），
+ * 由 `deriveMergedSeverity` 从两个源确定性派生 —— 见该函数的理由。
  */
 export async function produceCrossoverProposal(
   llm: Llm,
@@ -868,6 +944,10 @@ export async function produceCrossoverProposal(
   originalContent: string
   blastRadius: string[]
   merge: boolean
+  /** 两个源的档位（按 LLM 选定的顺序）与实际写进产物的档位，供回执呈现。 */
+  severityA: LessonSeverity
+  severityB: LessonSeverity
+  mergedSeverity: LessonSeverity
 } | null> {
   const response = await collectLlmText(llm, buildCrossoverPrompt(currentLessons))
   if (!response) return null
@@ -883,8 +963,22 @@ export async function produceCrossoverProposal(
   const lessonLines = currentLessons.split('\n').map((l) => l.trim())
   if (!lessonLines.includes(headerA) || !lessonLines.includes(headerB)) return null
 
+  // 档位走**读侧同一个抽取器**（不另写一个解析器）：`- 严重度:` 写在 `- 建议:` 之后，
+  // 且「有标题没建议」的段抽取器不产出 ⇒ 查不到即 fail-closed 落 critical（同上面第 3 条方向）。
+  const summaries = extractCrsiLessonSummaries(currentLessons)
+  const severityOf = (header: string): LessonSeverity =>
+    normalizeLessonSeverity(summaries.find((s) => `## ${s.title}` === header)?.severity)
+  const severityA = severityOf(headerA)
+  const severityB = severityOf(headerB)
+  const mergedSeverity = deriveMergedSeverity(severityA, severityB)
+
   const withoutTwo = removeLessonSections(currentLessons, [headerA, headerB])
-  const mergedSection = buildLessonContent(parsed.merged, timestamp, 'CRSI producer (crossover)')
+  const mergedSection = buildLessonContent(
+    parsed.merged,
+    timestamp,
+    mergedSeverity,
+    'CRSI producer (crossover)',
+  )
   const newContent = `${withoutTwo.trimEnd()}\n\n${mergedSection}\n`
 
   return {
@@ -894,5 +988,8 @@ export async function produceCrossoverProposal(
     originalContent: currentLessons,
     blastRadius: [LESSONS_FILE],
     merge: true,
+    severityA,
+    severityB,
+    mergedSeverity,
   }
 }

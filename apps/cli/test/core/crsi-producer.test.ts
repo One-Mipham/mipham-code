@@ -7,6 +7,7 @@ import {
   managedRuleId,
   hasDisableIntent,
   proseProposalId,
+  normalizeLessonSeverity,
   LESSONS_FILE,
   MANAGED_RULES_FILE,
   MANAGED_RULE_MARKER,
@@ -143,12 +144,59 @@ describe('buildLessonContent', () => {
         evidence: ['e1', 'e2'],
       },
       '2026-08-17T00:00:00Z',
+      'critical',
     )
     expect(content).toContain('## timeout: Bash 超时')
     expect(content).toContain('加 timeout')
-    expect(content).toContain('critical')
+    expect(content).toContain('- 严重度: critical')
     expect(content).toContain('- e1')
     expect(content).toContain('- e2')
+  })
+
+  // 档位**只**由这个参数决定。此前它读 `signal.severity`：可选 ⇒ 生产者忘了给就静默落
+  // 抽取器的 fail-open 档（critical = 常驻、每次请求都占字符），而「忘了」没有人看得见。
+  // 改成必填参数后，忘了是**编译错误**（同 `produceProseProposal` 的 lessonsBlock 必填第 5 参）。
+  // 判别力：把实现改回读 `signal.severity` ⇒ 本条变红（signal 里写的是 critical，参数是 warning）。
+  it('档位由参数决定 —— signal.severity 不再参与', () => {
+    const content = buildLessonContent(
+      {
+        category: 'research',
+        title: '读码优先',
+        severity: 'critical',
+        suggestion: '先读码',
+        evidence: [],
+      },
+      '2026-08-17T00:00:00Z',
+      'warning',
+    )
+    expect(content).toContain('- 严重度: warning')
+    expect(content).not.toContain('- 严重度: critical')
+  })
+
+  it('signal 完全不带 severity 也照常渲染出档位行', () => {
+    const content = buildLessonContent(
+      { category: 'c', title: 't', suggestion: 's', evidence: [] },
+      '2026-08-17T00:00:00Z',
+      'warning',
+    )
+    expect(content).toContain('- 严重度: warning')
+  })
+})
+
+describe('normalizeLessonSeverity', () => {
+  // 闭集只有两档，归一化规则**定义在一处**：抽取器与写入者同读它。
+  // 若写入者自写一份映射，就会出现「写进去的 warning」与「读出来的 warning」不是同一个判据。
+  it('warning 逐字保留，其余一律落 critical', () => {
+    expect(normalizeLessonSeverity('warning')).toBe('warning')
+    expect(normalizeLessonSeverity('critical')).toBe('critical')
+  })
+
+  it('闭集外与缺席一律落 critical（不倒向「按需」）', () => {
+    expect(normalizeLessonSeverity(undefined)).toBe('critical')
+    expect(normalizeLessonSeverity('')).toBe('critical')
+    expect(normalizeLessonSeverity('info')).toBe('critical')
+    expect(normalizeLessonSeverity('WARNING')).toBe('critical')
+    expect(normalizeLessonSeverity('warning ')).toBe('critical')
   })
 })
 

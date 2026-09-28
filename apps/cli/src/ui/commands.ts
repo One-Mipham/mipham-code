@@ -35,6 +35,7 @@ import {
   clearProseProposals,
   loadAlwaysOnLessonsBlock,
   formatNetChange,
+  formatSeverityShift,
   LESSONS_FILE,
   MANAGED_RULES_FILE,
 } from '../core/crsi-producer'
@@ -1162,10 +1163,15 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
       return { content: `❌ 合并失败（phase: ${result.phase}）。\n${result.error ?? ''}` }
     }
 
+    // 档位迁移：**只呈现、不判定**，与 ε 命中 / 代价 / 事前风险 / 净变化同一纪律
+    //（见 crsi-producer.ts 的 formatSeverityShift）。落点在**人类真正做决定的那一刻** ——
+    // 紧挨着它描述的那份 diff。恒打（含无变化）：「这次没把一条非常驻的教训变成常驻」
+    // 正是那条可证伪的基线读数，只打有变化的等于让读者看不见基线。
     return {
       content:
         `✅ 已生成合并教训并跑过测试。审阅 diff：\n` +
         renderGateNote(result) +
+        `${formatSeverityShift(proposal.severityA, proposal.severityB, proposal.mergedSeverity)}\n` +
         `\n${result.diff}\n\n` +
         '/crsi modify --approve 合并 | /crsi modify --reject 丢弃',
     }

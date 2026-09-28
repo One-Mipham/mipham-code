@@ -34,6 +34,7 @@ import {
   LESSONS_FILE,
   buildLessonContent,
   renderManagedRuleSource,
+  normalizeLessonSeverity,
 } from './crsi-producer'
 import type { CrsiSignal } from './crsi-producer'
 import { predictionHit } from './improvement-track'
@@ -455,10 +456,18 @@ export function runEval(): EvalReport {
     id: 'producer-component-tag',
     description: '组件归因：缺省 experiential、显式组件透传、非 experiential 不进 managed-rule',
     passed:
-      buildLessonContent(frozenSignal, 't', 'src').includes('- 组件: experiential') &&
-      buildLessonContent({ ...frozenSignal, component: 'checker' }, 't', 'src').includes(
-        '- 组件: checker',
-      ) &&
+      buildLessonContent(
+        frozenSignal,
+        't',
+        normalizeLessonSeverity(frozenSignal.severity),
+        'src',
+      ).includes('- 组件: experiential') &&
+      buildLessonContent(
+        { ...frozenSignal, component: 'checker' },
+        't',
+        normalizeLessonSeverity(frozenSignal.severity),
+        'src',
+      ).includes('- 组件: checker') &&
       renderManagedRuleSource({ ...frozenSignal, component: 'working' }) === null &&
       renderManagedRuleSource(frozenSignal) !== null,
   })
