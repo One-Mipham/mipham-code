@@ -4,6 +4,92 @@
 > (tag dates) and use the same wording as the VS Code extension's changelog — the plugin is a
 > thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.9 (2026-09-28)
+
+- Version sync with Mipham Code CLI 0.85.9
+- Added: `/crsi lessons` — a read-only roster of the always-on lessons, the first reader meant for a
+  human. Until now the resident set had **no human reader at all**: the only selection point
+  (`selectResidentLessons`) is called solely from places that hand the prompt to a model, so the
+  person who could actually change a lesson's `severity` had no material to decide with. The command
+  reports each lesson's real rendered cost and does an **addition self-check** (header + separators +
+  items == what the renderer actually produced, printing the difference when it doesn't add up). It
+  reads the selection's own output rather than re-deriving from raw summaries, so the report cannot
+  drift from what really gets injected, and it reads the budget off the selection rather than off the
+  constant, so it never prints a number that used to be right.
+- Security: repository-supplied `allow` rules no longer take effect. `permissions.allow` **widens**
+  the approval gate but was merged from the **project** level just like `deny`, in both
+  `.mipham/settings.json` and `.mipham/config.yml` — so cloning a repository was equivalent to
+  clicking "don't ask again" on the operator's behalf. The mode ceiling does not save you here:
+  `allowRuleDecision` returns `bypass` outright when `maxAllowedMode` is absent, and absent is the
+  default configuration. The criterion is now **direction, not key name**: both doors accept only
+  `deny`. Consequently `/permissions allow` now always writes the **user** level, and `remove` looks
+  in both.
+- Security: `Config set providers.<x>.apiKey` no longer writes plaintext. The read side already
+  treated `enc:v1:` as the at-rest form; the same file had two writers, only one of which encrypted.
+  The fix reuses the existing `encryptApiKey` rather than restating what counts as a secret, adds an
+  idempotence guard (double-encryption is silent), writes atomically with mode 0600, and never echoes
+  the key back.
+- Security: the `Config` tool no longer returns `config.yml` verbatim. That file holds credentials
+  (`apiKey`, MCP `env`/`headers`, the inference-hook `signing_secret`). The harm is not that the file
+  is read on disk but that this output **enters the model context and session log** and travels to the
+  provider on every subsequent request. Of five credential-adjacent tools it was the only one whose
+  output passed through no masking at all. The fix reuses `maskOutput` instead of writing a second
+  definition of "what counts as a secret".
+- Security: project-level `permissionRestrictions` only narrows now. `forbiddenModes` nominally only
+  forbids modes, but the fallback walks **downward** from the requested mode and, if that mode and
+  everything below it is forbidden, lands on `allowed[0]` — a **wider** mode. Forbidding the
+  narrowest mode, `plan`, produces exactly that: requesting `plan` silently yields `default`,
+  `acceptEdits` or `auto`. Measured over the full input space (32 forbidden subsets × 5 requested
+  modes = 160 cells), the 27 widening cells fall **entirely** inside the 16 subsets containing `plan`.
+  The widening entry is now withheld and reported.
+- Security: `/feishu/event` is rate-limited before all routes now, and its body is capped at 256 KiB
+  before parsing. Re-checking the finding showed one of its sub-claims was **false**: the route's gate
+  was always the Lark signature (unsigned and forged-signature events both get 400
+  `invalid_signature` and are never delivered), so it was a **control** bypass, not an **auth**
+  bypass. What held was **billing** (the callback returned before the origin gate and the rate limiter
+  — a signature answers "should this be processed", never "how many times may it arrive") and **unit
+  cost** (Bun's default request body limit is 128 MB, and the adapter used to `await request.json()`
+  directly).
+- Security: the daemon token read path gained a type gate and a mode repair. A FIFO with no writer
+  used to make the token loader hang **synchronously** (killed by the watchdog, no error output);
+  the same shape on the key path throws a named error within seconds. A non-regular file now throws a
+  **named error** and is never treated as "absent" — treating it as absent would rename it away and
+  mint a new token, locking out already-paired clients. The mode target is this module's own declared
+  `0o600`, and the repair is reported. The same commit folds `mipham attach`'s inlined third copy of
+  the read onto the single reader (3 readers → 1).
+- Fixed: when the process starts in `~`, the user's own configuration was stripped as if the
+  **repository** had declared it. `MIPHAM_HOME` is `join(homedir(), '.mipham')` while the
+  "project-level" path is `join(cwd, MIPHAM_DIR, X)`; when `cwd === ~` the two are byte-identical, so
+  every "read project level" guard was reading the user's own file — discarding settings the user wrote
+  by hand as if the repo had granted them, **and then naming that same file** in the warning. The fix
+  is a predicate whose criterion is "are these two paths the same directory", not "is it under home".
+- Fixed: the CRSI always-on lesson block now has a character budget, so `critical` can no longer grow
+  without bound. The shape is **a per-item predicate carrying a whole-tier property**: `severity` says
+  whether one lesson qualifies to stay resident, while the size of the block is a property of the tier
+  — so nothing could ever say "this tier is too big". The budget is 3,000 characters, allocated by
+  rendered character count (single lessons differ threefold in length), and lessons pushed out by the
+  budget are **not discarded**: they move into the pointer and are named there, because silently
+  vanishing and never having been written look identical from the outside.
+- Fixed: a `--crossover` merge no longer silently promotes `warning` lessons into the resident tier.
+  The merge contract never mentioned `severity`, so the model had no way to preserve it and the
+  builder fell back to the extractor's fail-open tier (unknown ⇒ `critical` ⇒ resident). Severity is
+  now derived deterministically from the two sources (the stricter one wins), and it became a
+  **required parameter**, turning "the caller forgot" from a silent behaviour change into a compile
+  error. The merge receipt reports the shift, presenting only — never judging — and always prints it,
+  including "no promotion", since that is the falsifiable baseline.
+- Fixed: the instruction-payload size guard now measures with the same ruler as the startup warning.
+  The old guard measured **one file's character count on disk** while the warning measured **all the
+  text the loader actually splices into the system prompt** — two unrelated rulers, so "guard green"
+  and "warning firing" could both be true. The new ruler reads the loader's own report and shares one
+  constant with the warning. It deliberately measures **only this repository's own share**: the total
+  includes org-level files that this repository's commits cannot change and that do not exist in a CI
+  checkout, so judging on the total would be red locally and green in CI.
+- Fixed: the three-part separator in the skill-selection prompt was being eaten by `.filter(Boolean)`.
+  Three sections were joined with intentional blank-line separators and the trailing `.filter(Boolean)`
+  could not tell those apart from a genuinely empty conditional line, so the prompt that actually
+  reached the model contained **no blank line at all**. A sibling function sixteen lines below used the
+  correct `...(cond ? [x] : [])` form. The prompt is a versioned resource, so its version was bumped.
+
 ## 0.85.8 (2026-09-28)
 
 - Version sync with Mipham Code CLI 0.85.8
