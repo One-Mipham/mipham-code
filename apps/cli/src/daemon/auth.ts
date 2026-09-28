@@ -1,7 +1,9 @@
 // apps/cli/src/daemon/auth.ts
 import { randomBytes, timingSafeEqual } from 'node:crypto'
-import { readFileSync, existsSync, mkdirSync } from 'node:fs'
+import { readFileSync, existsSync, mkdirSync, statSync, chmodSync } from 'node:fs'
 import { atomicWriteFileSync } from '../shared/atomic-write'
+import { isRegularFile } from '../shared/regular-file'
+import { logger } from './logger'
 import { dirname } from 'node:path'
 
 /**
@@ -12,12 +14,57 @@ export function generateToken(): string {
 }
 
 /**
+ * Read the token file: type gate first, then pull a drifted mode back.
+ *
+ * The type gate is not defensive form. `readFileSync` on a FIFO with no writer
+ * blocks **synchronously** until one appears — timers and signal handlers cannot
+ * queue behind it, so at daemon startup it looks like nothing happening at all
+ * (measured: the process is still inside the call when the watchdog kills it, and
+ * had printed no error). A FIFO on this path is a signal something is wrong, so
+ * name the path and refuse rather than wait forever.
+ *
+ * The repair targets the 0o600 this module itself declares (both writers pass
+ * `mode: 0o600`), not the credential key's 0o400 — a drifted 0644 token is
+ * readable by every local user, and the bearer token it holds buys full control
+ * of the daemon. The read path is the only place that ever notices, so the repair
+ * lives here; and it says so, because the widened mode may have been set on
+ * purpose by someone who deserves to know it was taken back.
+ *
+ * Exported so that every reader of this file goes through it: `mipham attach`
+ * used to inline its own `existsSync + readFileSync` copy, and that copy had
+ * neither half of this gate. Caller's precondition: the path exists.
+ */
+export function readTokenFile(tokenPath: string): string {
+  if (!isRegularFile(tokenPath)) {
+    throw new Error(
+      `${tokenPath} is not a regular file — refusing to read the daemon token from it ` +
+        `(remove or replace it with a regular file).`,
+    )
+  }
+  const mode = statSync(tokenPath).mode & 0o777
+  if (mode !== 0o600) {
+    chmodSync(tokenPath, 0o600)
+    logger.warn('daemon token file was not 0600 — tightened', {
+      path: tokenPath,
+      from: mode.toString(8),
+      to: '600',
+    })
+  }
+  return readFileSync(tokenPath, 'utf-8').trim()
+}
+
+/**
  * Load an existing token from disk, or create one if it doesn't exist.
  * The token file is created with 0o600 permissions.
+ *
+ * A path that exists but is not a regular file throws (see `readTokenFile`) —
+ * it is never treated as "absent", because writing over it would destroy
+ * whatever occupies the path and mint a token that locks out every client
+ * already paired with the running one.
  */
 export function loadOrCreateToken(tokenPath: string): string {
   if (existsSync(tokenPath)) {
-    return readFileSync(tokenPath, 'utf-8').trim()
+    return readTokenFile(tokenPath)
   }
 
   const token = generateToken()
@@ -63,7 +110,7 @@ export function rotateToken(tokenPath: string): string {
  */
 export function listTokens(tokenPath: string): string[] {
   if (!existsSync(tokenPath)) return []
-  const token = readFileSync(tokenPath, 'utf-8').trim()
+  const token = readTokenFile(tokenPath)
   return token ? [token] : []
 }
 

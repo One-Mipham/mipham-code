@@ -464,7 +464,9 @@ async function runAttachCLI(): Promise<boolean> {
   }
 
   const { getPort, getDaemonStatus } = await import('../src/daemon/index')
+  const { readTokenFile } = await import('../src/daemon/auth')
   const { join } = await import('node:path')
+  // `readFileSync` 后面读 package.json 取版本还要用 —— 去掉的只是 token 那一处内联读法。
   const { readFileSync, existsSync } = await import('node:fs')
   const { homedir } = await import('node:os')
 
@@ -477,10 +479,10 @@ async function runAttachCLI(): Promise<boolean> {
 
   const port = getPort()
   const tokenPath = join(homedir(), '.mipham', 'daemon.token')
-  let token = ''
-  if (existsSync(tokenPath)) {
-    token = readFileSync(tokenPath, 'utf-8').trim()
-  }
+  // 这个文件的读取只有 `auth.ts` 那一个读者 —— 曾经在这里内联过一份同样的
+  // `existsSync + readFileSync`，而内联版没有类型闸：token 路径上放个 FIFO，
+  // attach 会一声不响地挂住（同 `loadOrCreateToken` 修掉的那个形状）。
+  const token = existsSync(tokenPath) ? readTokenFile(tokenPath) : ''
 
   // Fetch active sessions from daemon
   interface SessionInfo {
