@@ -28,6 +28,34 @@ vi.mock('node:child_process', async (importOriginal) => ({
 // 打开的是不是同一个 URL。换成字符串常量断言，改个名字就绕过去了。
 // ============================================================
 
+/**
+ * `fetch` 走 undici 的**全局连接池**，而本文件每个用例都在**同一个端口**上重建服务端
+ * （`afterEach` 还会把已建立的连接 `socket.destroy()` 掉）。于是这些竞态都会把下一条
+ * 用例的请求终止在**连接阶段**：池里那条连接刚被对端关掉、或旧 listening handle 的
+ * backlog 还没散尽 —— 报 `UND_ERR_SOCKET`/`other side closed`，`bytesWritten` 有值而
+ * `bytesRead` 为 0。CI 实测过一次（本文件末条用例），本机 macOS 复现不出：
+ * **同一份代码，差别只在调度**。
+ *
+ * 只重试**连接阶段、且只重试一次**，并且只认两种「对端在回响应之前就关了」的码：
+ * `UND_ERR_SOCKET` 与 `ECONNRESET` —— **同一种失败会因对端怎么关而报成不同的码**
+ * （干净 FIN ⇒ undici 报 `other side closed`/`UND_ERR_SOCKET`；RST ⇒ `ECONNRESET`），
+ * 实测：本机造「accept 后立刻 destroy」得到的是后者，而 CI 那次日志里是前者。
+ * · 一拿到响应就绝不重试 —— 响应才是被测对象，重试它会掩盖真回归；
+ * · 失败的那条连接会被 undici 逐出池，故第二次必然是一条新连接；
+ * · 第二次仍失败就照常抛出 —— 「服务端真的没起来」不会因此被记成通过。
+ *
+ * 这是**器材**的修，不是因的修：竞态本身来自「一个端口重建多次服务端」这个夹具形状。
+ */
+async function fetchWithFreshConnection(url: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init)
+  } catch (err) {
+    const code = (err as { cause?: { code?: string } })?.cause?.code
+    if (code !== 'UND_ERR_SOCKET' && code !== 'ECONNRESET') throw err
+    return await fetch(url, init)
+  }
+}
+
 describe('Artifact 坐标一致', () => {
   let tmpDir: string | undefined
   let server: ArtifactServer | undefined
@@ -84,7 +112,7 @@ describe('Artifact 坐标一致', () => {
   it('工具回报的 URL 真能取到内容（原本必然 404）', async () => {
     const { url, content } = await writeArtifact()
 
-    const res = await fetch(url)
+    const res = await fetchWithFreshConnection(url)
     expect(res.status).toBe(200)
     expect(await res.text()).toBe(content)
   })
@@ -92,7 +120,7 @@ describe('Artifact 坐标一致', () => {
   it('Gallery（服务端读 manifest 渲染）也看得见同一份 artifact', async () => {
     const { port } = await writeArtifact()
 
-    const gallery = await fetch(`http://localhost:${port}/`)
+    const gallery = await fetchWithFreshConnection(`http://localhost:${port}/`)
     expect(gallery.status).toBe(200)
     expect(await gallery.text()).toContain('probe-artifact')
   })
@@ -139,7 +167,7 @@ describe('Artifact 坐标一致', () => {
   /** 取到第一段包含 `needle` 的 SSE 数据（单次 write 未必落在一个 chunk 里）。 */
   async function firstSseMatch(url: string, needle: string): Promise<string> {
     const ctrl = new AbortController()
-    const res = await fetch(url, { signal: ctrl.signal })
+    const res = await fetchWithFreshConnection(url, { signal: ctrl.signal })
     expect(res.status).toBe(200)
 
     const reader = res.body!.getReader()
@@ -171,7 +199,7 @@ describe('Artifact 坐标一致', () => {
   it('按名字订阅一个不存在的 artifact → 404，而不是一条挂着的空流', async () => {
     const { port } = await writeArtifact()
 
-    const res = await fetch(`http://localhost:${port}/no-such-artifact/sse`)
+    const res = await fetchWithFreshConnection(`http://localhost:${port}/no-such-artifact/sse`)
 
     expect(res.status).toBe(404)
     expect(await res.text()).toContain('No artifact named')
@@ -201,7 +229,7 @@ describe('Artifact 坐标一致', () => {
     // `/:name/sse` 是真正的 active 响应，而且 `handleNameSse` 不像 `/events` 那样登记
     // 进 `sseClients`，故 `stop()` 里那句 `res.end()` 也够不着它 —— 能切断它的只有
     // `socket.destroy()`。
-    const res = await fetch(`http://localhost:${port}/probe-artifact/sse`)
+    const res = await fetchWithFreshConnection(`http://localhost:${port}/probe-artifact/sse`)
     expect(res.status).toBe(200)
 
     const reader = res.body!.getReader()
