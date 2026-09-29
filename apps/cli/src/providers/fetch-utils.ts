@@ -14,7 +14,11 @@ export interface FetchWithRetryOptions {
   baseDelay?: number
 }
 
-const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504])
+// 529 is Anthropic's non-standard "overloaded" status: the request is rejected
+// *before* the stream starts, on exactly the same terms as a 503 — transient,
+// retryable, and already bounded by the `Retry-After` clamp below. Without it
+// here, a 529 answers `!response.ok` and the whole turn dies at the first byte.
+const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504, 529])
 
 /**
  * Upper bound on a server-supplied `Retry-After`, in ms.

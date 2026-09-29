@@ -121,4 +121,35 @@ describe('fetchWithRetry', () => {
     await expect(p).rejects.toThrow(/aborted/i)
     expect(fetchMock).toHaveBeenCalledTimes(1) // no retry on caller cancel
   })
+
+  it('retries the overloaded status (529) on the same terms as a 503', async () => {
+    // 529 是 Anthropic 的非标准 overload 信号，请求在流开始**之前**就被拒 ——
+    // 与 503 同性质：瞬时、可重试、并且已被 Retry-After 上限封顶。
+    // 它不在集合里时，这一响应走 `!response.ok`，整轮在第一个字节就死。
+    const fetchMock = vi.fn(async () => new Response('overloaded', { status: 529 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = await fetchWithRetry(
+      'https://example.com/api',
+      { method: 'POST' },
+      { maxRetries: 1, baseDelay: 1 },
+    )
+
+    expect(fetchMock).toHaveBeenCalledTimes(2) // initial + 1 retry
+    expect(res.status).toBe(529) // retries exhausted → the response is handed back
+  })
+
+  it('仍不重试 4xx —— 重试集合不是「只要出错就重试」', async () => {
+    const fetchMock = vi.fn(async () => new Response('bad request', { status: 400 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = await fetchWithRetry(
+      'https://example.com/api',
+      { method: 'POST' },
+      { maxRetries: 3, baseDelay: 1 },
+    )
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(res.status).toBe(400)
+  })
 })

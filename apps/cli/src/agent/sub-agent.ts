@@ -22,6 +22,27 @@ function getPatternAnalyzer(): PatternAnalyzer {
   return _patternAnalyzer
 }
 
+/** 每进程每条只念一次 —— 与 `core/permission-audit.ts` 的 `warnedOnce` 同形。 */
+const warnedAgentCaps = new Set<string>()
+
+/**
+ * 项目级 agent 想把自己抬到比父会话更宽、被 `resolveAgentMode` 顶回去时，把这件事念出来。
+ *
+ * **不静默**是本仓库的既有口径 —— `config/loader.ts` 的 `stripProjectPermission` 对项目级
+ * 权限是**拒绝并报告**，不是忽略；agent 定义这条路径此前既不拒绝也不报告。stderr 是本仓库
+ * 既有的告警通道（`core/permission-audit.ts` / `core/hooks.ts` / `core/workspace-trust.ts` 同形）。
+ *
+ * 判读与措辞在 `resolveAgentMode` 里，这里只补上它拿不到的那一半 —— agent 的名字。
+ */
+function reportAgentCapWarnings(gate: PermissionSystem, agentName?: string): void {
+  for (const warning of gate.getAgentCapWarnings()) {
+    const line = `⚠️  agent "${agentName ?? 'unknown'}": ${warning}\n`
+    if (warnedAgentCaps.has(line)) continue
+    warnedAgentCaps.add(line)
+    process.stderr.write(line)
+  }
+}
+
 const TYPE_SYSTEM_PROMPTS: Record<SubAgentType, string> = {
   general: 'You are a focused sub-agent. Complete the assigned task thoroughly and return results.',
   explore:
@@ -262,7 +283,9 @@ export class SubAgent {
         agentDef?.permissionMode && agentDef.permissionMode !== 'inherit'
           ? agentDef.permissionMode
           : 'inherit'
-      subPermission = this.permission.createSubAgentPermission(agentPermMode)
+      // `source` decides whether the cap applies: a repository-supplied definition may
+      // narrow the parent's gate but not widen it. See `resolveAgentMode`.
+      subPermission = this.permission.createSubAgentPermission(agentPermMode, agentDef?.source)
     }
 
     // Absence is not a licence to run everything. With no permission system handed in,
@@ -270,6 +293,9 @@ export class SubAgent {
     // `permission` field — instead of skipping the check entirely. `default` mode is
     // what the CLI itself runs under, so this is the same policy, not a stricter one.
     const gate = subPermission ?? new PermissionSystem('default')
+
+    // The cap is never silent: say which agent asked for what and what it got instead.
+    reportAgentCapWarnings(gate, agentDef?.name)
 
     // Resolve execution directory: worktree isolation or process cwd
     const execCwd = options.worktreePath || process.cwd()

@@ -413,11 +413,14 @@ describe('SubAgent', () => {
     // 「连续被拒」那一对护栏（放行清零 / 被拒计数）。少一个就会抛错，而抛错是
     // 运气不是设计 —— 所以这里补齐，不是靠调用点少调一次。
     // `getMode` 同理（系统提示里的权限段按它取，取到的是**子代理自己**的档）。
+    // `getAgentCapWarnings` 是「项目级 agent 想放宽被顶回去」那条记录 —— 派发处要读它，
+    // 这里给个空表：本用例的 `createSubAgentPermission` 没有顶回任何东西。
     const clamped = {
       resolveApproval: async () => ({ level: 'bypass', source: 'static' }),
       incrementBlockCounter: () => false,
       resetBlockCounter: () => {},
       getMode: () => 'acceptEdits' as const,
+      getAgentCapWarnings: () => [],
     } as unknown as PermissionSystem
     const parent = {
       needsApproval: () => true,

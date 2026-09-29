@@ -1419,3 +1419,30 @@ describe('/tasks —— 显示登记表里的任务', () => {
     expect(await runTasks()).toContain('No tasks tracked yet')
   })
 })
+
+// ═══════════════════════════════════════════════════════════════
+// tool-search 的「没有服务器」提示 —— 它指的必须是 /mcp 真有的子命令
+// ═══════════════════════════════════════════════════════════════
+
+describe('tool-search hint points at a subcommand that exists', () => {
+  it('每个 `/mcp <sub>` 都在 /mcp 自己的帮助里', async () => {
+    // 两处**独立**的读数必须一致：模型读到的提示（tools/system/tool-search.ts）
+    // 与 /mcp 真正分支的子命令。提示曾写成 `/mcp add <name> <url>` —— 一个从来没
+    // 存在过的子命令，照着敲只会落到状态页。
+    const { McpClient } = await import('../../src/mcp/client')
+    await McpClient.getInstance().closeAll()
+    McpClient.resetInstance()
+
+    const { toolSearchTool } = await import('../../src/tools/system/tool-search')
+    const hint = (await toolSearchTool.execute!({ query: '' }, {} as never)).content
+    const named = [...hint.matchAll(/\/mcp\s+([a-z-]+)/g)].map((m) => m[1]!)
+
+    // 前件：提示里确实点名了子命令 —— 否则下面的循环一次都不跑，恒绿。
+    expect(named.length).toBeGreaterThan(0)
+
+    const help = (await getCommand('/mcp')!(mkCtx(), [])).content
+    for (const sub of named) {
+      expect(help).toContain(`/mcp ${sub}`)
+    }
+  })
+})

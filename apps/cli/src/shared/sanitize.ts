@@ -255,3 +255,35 @@ export function sanitizeForDisplay(input: string): string {
   result = result.replace(/\f/g, '⟨FF⟩')
   return result
 }
+
+/**
+ * Neutralize text that is about to be **injected into the system prompt** inside a
+ * tag-delimited block (memory recall, session summaries).
+ *
+ * Two steps, both load-bearing:
+ *
+ * 1. `stripDangerousUnicode` — the same invisible set the command path applies.
+ *    Without it the text can carry an invisible character that hides part of a
+ *    delimiter from anything scanning the text, while the model still reads it.
+ * 2. Drop `<…>`-shaped runs. The injection point wraps the text in
+ *    `<system-reminder>…</system-reminder>`, so an entry whose own text contains
+ *    `</system-reminder>` closes that block early and everything after it reads as
+ *    ordinary prompt text instead of as recalled data. Stripping the brackets is
+ *    what makes the wrapper unforgeable: the text stays readable, it just stops
+ *    being able to *end* the block it was pasted into.
+ *
+ * Same move as `skills/sanitizer.ts` `sanitizeSkillDescription` (which strips
+ * `<[^>]*>` for this exact reason); this one additionally strips the invisible set,
+ * which the skill path does not. Both are lossy **on purpose** — an injected entry is
+ * prose for a model to read, not markup, so no legitimate entry loses meaning.
+ *
+ * The run is bounded at 200 characters so a stray `<` in prose cannot swallow the
+ * rest of the entry, and a letter must follow `<` (or `</`) immediately — so
+ * "a < b and c > d" survives while `</system-reminder>` does not. A forged delimiter
+ * with a space inside it (`</ system-reminder>`) is not a form this wrapper emits,
+ * and buying that case costs every piece of prose containing `< word >`.
+ */
+export function neutralizeInjectedMarkup(input: string): string {
+  if (!input) return input
+  return stripDangerousUnicode(input).replace(/<\/?[A-Za-z][^<>]{0,200}>/g, '')
+}

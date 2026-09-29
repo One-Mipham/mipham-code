@@ -72,6 +72,14 @@ export function convertMcpTool(serverName: string, mcpTool: McpToolDefinition): 
     async execute(params: Record<string, unknown>, _ctx: ToolContext): Promise<ToolResult> {
       const client = McpClient.getInstance()
 
+      // Startup connects servers without blocking, and a resumed session re-attaches
+      // them the same way — so a call can arrive while its server is still
+      // handshaking. Failing outright then is wrong twice over: the tool exists, and
+      // the only thing missing is patience. Same wait the `mcp_tool` hook already
+      // does (`core/hooks-executor.ts`), so both entry points treat a connecting
+      // server identically. A server that is *not* connecting returns immediately.
+      await client.waitUntilReady(serverName)
+
       const conn = client.getConnection(serverName)
       if (!conn || conn.status !== 'connected') {
         return {

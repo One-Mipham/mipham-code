@@ -674,7 +674,11 @@ describe('QueryEngine', () => {
       expect(chunks.some((c) => c.type === 'warning')).toBe(true)
       expect(chunks.some((c) => c.type === 'text' && c.content === 'fallback response')).toBe(true)
       expect(registry.getActive().config.id).toBe('good')
-      expect(calls).toEqual({ active: 1, fallback: 1 })
+      // `active: 2` — the failed provider is retried once *in place* before the
+      // cross-provider fallback is considered (a retry that flips the user's model
+      // is the more expensive move). `fallback: 1` — the fallback still runs exactly
+      // once, so the retry has not turned into a retry loop.
+      expect(calls).toEqual({ active: 2, fallback: 1 })
     })
 
     it('does not fall back when a genuinely foreign Llm seam owns the chat flow', async () => {
@@ -702,6 +706,48 @@ describe('QueryEngine', () => {
       expect(chunks.some((c) => c.type === 'warning')).toBe(false)
       expect(chunks.some((c) => c.type === 'error')).toBe(true)
       expect(registry.getActive().config.id).toBe('bad')
+    })
+
+    it('retries the same provider once before switching away from the model the user chose', async () => {
+      // 瞬时故障（overloaded / 连接重置）重发一次即可；换 provider 是更贵的一步 ——
+      // 它会翻转 registry 的活动 provider，连带把用户选的模型换掉。顺序因此是
+      // 「原地重试一次 → 再考虑跨 provider 回退」。
+      let attempts = 0
+      const registry = mockProviderRegistry(async function* () {
+        attempts++
+        if (attempts === 1) throw new Error('529 overloaded')
+        yield { type: 'text' as const, content: 'second try' }
+        yield { type: 'stop' as const }
+      })
+      const engine = new QueryEngine(registry, mockContext(), makeToolMap([]))
+
+      const chunks: StreamChunk[] = []
+      for await (const chunk of engine.process('hi')) {
+        chunks.push(chunk)
+      }
+
+      expect(attempts).toBe(2)
+      expect(chunks.some((c) => c.type === 'text' && c.content === 'second try')).toBe(true)
+      expect(chunks.some((c) => c.type === 'warning')).toBe(true)
+      expect(chunks.some((c) => c.type === 'error')).toBe(false)
+      // 没换过模型：重试成功就不该动用户的选择。
+      expect(registry.getActive().config.id).toBe('test')
+    })
+
+    it('the same-provider retry happens at most once', async () => {
+      // 上界断言。少了它，「重试」写成循环也照样让上面那条变绿。
+      let attempts = 0
+      const registry = mockProviderRegistry(async function* () {
+        attempts++
+        throw new Error('still down')
+      })
+      const engine = new QueryEngine(registry, mockContext(), makeToolMap([]))
+
+      for await (const _ of engine.process('hi')) {
+        /* drain */
+      }
+
+      expect(attempts).toBe(2)
     })
   })
 
@@ -874,7 +920,9 @@ describe('QueryEngine', () => {
 
   describe('process — error handling', () => {
     it('should add error message to context and stop', async () => {
+      let attempts = 0
       const registry = mockProviderRegistry(async function* () {
+        attempts++
         yield { type: 'error', error: 'API unavailable' }
       })
 
@@ -886,11 +934,37 @@ describe('QueryEngine', () => {
         chunks.push(chunk)
       }
 
-      expect(chunks).toHaveLength(1)
-      expect(chunks[0]?.type).toBe('error')
+      // One retry on the same provider, then a stop: the failure is announced once
+      // (warning), and only the *last* chunk is the error the caller acts on.
+      expect(attempts).toBe(2)
+      expect(chunks.at(-1)?.type).toBe('error')
       expect(context.getMessages()).toHaveLength(2) // user + error line
       // #23: client error must persist as a system line, not model (assistant) output
       expect(context.getMessages()[1]).toMatchObject({ role: 'system' })
+    })
+
+    it('names the unavailable model instead of re-emitting the raw upstream error', async () => {
+      // Single-provider registry: the active provider *is* the default, so there is
+      // nothing to fall back to. A bare `String(err)` there reads as "the model
+      // answered badly", when in fact this turn never reached a model at all.
+      const registry = mockProviderRegistry(async function* () {
+        throw new Error('ECONNREFUSED 127.0.0.1:443')
+      })
+      const engine = new QueryEngine(registry, mockContext(), makeToolMap([]))
+
+      const chunks: StreamChunk[] = []
+      for await (const chunk of engine.process('hi')) {
+        chunks.push(chunk)
+      }
+
+      const err = chunks.at(-1)
+      expect(err?.type).toBe('error')
+      expect(err).toMatchObject({ type: 'error' })
+      const message = (err as { error: string }).error
+      expect(message).toContain('test-model') // the model the user is on
+      expect(message).toContain('test') // its provider
+      expect(message).toContain('ECONNREFUSED 127.0.0.1:443') // underlying cause kept
+      expect(message).toContain('Ctrl+P') // and the next step, not just the failure
     })
   })
 
@@ -1398,6 +1472,105 @@ describe('QueryEngine', () => {
       }
 
       expect(receivedParams).toMatchObject({ path: '/tmp/x', safe: true })
+    })
+
+    it("carries the hook's additionalContext to the model instead of dropping it", async () => {
+      // `additionalContext` 是**每一个非阻断钩子**的说话方式（exit 1 的 stderr、
+      // spawn 失败、够不着的 mcp_tool 服务器都走它）。这条路径此前只读 `allowed` /
+      // `modifiedInput` ⇒ 全都生产出来再被丢掉。
+      const tool = mockTool('read')
+      const registry = mockProviderRegistry(async function* () {
+        yield {
+          type: 'tool_use',
+          toolUse: { type: 'tool_use', id: 'call_1', name: 'read', input: {} },
+        }
+        yield { type: 'stop' }
+      })
+
+      const hooks = new HookEngine()
+      hooks.register({
+        event: 'PreToolUse',
+        handler: async () => ({ allowed: true, additionalContext: 'lint ran clean, 0 warnings' }),
+      })
+
+      const engine = new QueryEngine(registry, mockContext(), makeToolMap([tool]))
+      engine.setHookEngine(hooks)
+
+      const chunks: StreamChunk[] = []
+      for await (const chunk of engine.process('read')) {
+        chunks.push(chunk)
+      }
+
+      const result = chunks.find((c) => c.type === 'tool_result')
+      expect(result?.content).toContain('lint ran clean, 0 warnings')
+    })
+
+    it('a hook that says `ask` refuses the call — and does not erase a warning written before it', async () => {
+      const tool = mockTool('bash')
+      const registry = mockProviderRegistry(async function* () {
+        yield {
+          type: 'tool_use',
+          toolUse: { type: 'tool_use', id: 'call_1', name: 'bash', input: { command: 'ls' } },
+        }
+        yield { type: 'stop' }
+      })
+
+      const hooks = new HookEngine()
+      hooks.register({
+        event: 'PreToolUse',
+        handler: async () => ({ allowed: true, permissionDecision: 'ask' }),
+      })
+
+      const engine = new QueryEngine(registry, mockContext(), makeToolMap([tool]))
+      engine.setHookEngine(hooks)
+
+      const chunks: StreamChunk[] = []
+      for await (const chunk of engine.process('ls')) {
+        chunks.push(chunk)
+      }
+
+      const result = chunks.find((c) => c.type === 'tool_result')
+      expect(result?.isError).toBe(true)
+      // 本 CLI 没有交互批准提示 ⇒ `ask` 是硬拒，且拒绝的理由必须说清「不是你的钩子坏了」。
+      expect(result?.content).toMatch(/approval|批准/)
+    })
+
+    it('`allow` is a no-op, not an approval — the other two decisions are what change behaviour', async () => {
+      // 正控：证明上一条不是「凡有 permissionDecision 就拦」。`allow` 来自仓库自带的
+      // 钩子时会是一条自我放行的路径（与项目级 agent 定义自授 bypassPermissions 同族），
+      // 故本引擎**不认它** —— 认的是方向，不是键名。
+      let executed = false
+      const tool: ToolDefinition = {
+        ...mockTool('read'),
+        execute: async () => {
+          executed = true
+          return { success: true, content: 'read done' }
+        },
+      }
+      const registry = mockProviderRegistry(async function* () {
+        yield {
+          type: 'tool_use',
+          toolUse: { type: 'tool_use', id: 'call_1', name: 'read', input: {} },
+        }
+        yield { type: 'stop' }
+      })
+
+      const hooks = new HookEngine()
+      hooks.register({
+        event: 'PreToolUse',
+        handler: async () => ({ allowed: true, permissionDecision: 'allow' }),
+      })
+
+      const engine = new QueryEngine(registry, mockContext(), makeToolMap([tool]))
+      engine.setHookEngine(hooks)
+
+      const chunks: StreamChunk[] = []
+      for await (const chunk of engine.process('read')) {
+        chunks.push(chunk)
+      }
+
+      expect(executed).toBe(true)
+      expect(chunks.find((c) => c.type === 'tool_result')?.isError).toBeFalsy()
     })
   })
 

@@ -269,7 +269,10 @@ describe('wireDaemonEngine — behaviour', () => {
     expect(chunks.some((c) => c.type === 'warning')).toBe(true)
     expect(chunks.some((c) => c.type === 'text' && c.content === 'fallback response')).toBe(true)
     expect(registry.getActive().config.id).toBe('good')
-    expect(calls).toEqual({ active: 1, fallback: 1 })
+    // `active: 2` = 失败的活动 provider 被原地重试了一次，之后才轮到跨 provider 回退；
+    // `fallback: 1` = 回退本身仍只跑一趟（重试没有变成重试循环）。daemon 路径走的是同一个
+    // `chatWithFallback`，故这条读数与 CLI 侧逐字相同 —— 它同时也是一致性断言。
+    expect(calls).toEqual({ active: 2, fallback: 1 })
   })
 
   it('D3: path-scoped rules load from the session cwd (absolute tool paths still match)', async () => {

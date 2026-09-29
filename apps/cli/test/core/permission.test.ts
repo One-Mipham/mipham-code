@@ -15,6 +15,7 @@ import {
   MODE_CYCLE,
   PERMISSION_MODE_HIERARCHY,
   clampMode,
+  narrowsWithin,
 } from '../../src/core/permission-config'
 
 // ── Helpers ──
@@ -980,6 +981,64 @@ describe('PermissionSystem', () => {
       for (let i = 0; i < MODE_CYCLE.length * 3; i++) {
         expect(MODE_CYCLE).toContain(ps.cycleMode())
       }
+    })
+  })
+
+  // ═══════════════════════════════════════════
+  // E2 — 仓库带来的 agent 定义不得放宽权限
+  // ═══════════════════════════════════════════
+
+  describe('项目级 agent 定义只能收窄，不得放宽', () => {
+    const sub = (parentMode: PermissionMode, requested: string, source?: string) =>
+      new PermissionSystem(parentMode).createSubAgentPermission(requested, source)
+
+    it('narrowsWithin：只放行能证明是子集的三类，其余 fail-closed', () => {
+      for (const m of ALL_MODES) expect(narrowsWithin(m, m)).toBe(true) // = inherit 的形状
+      for (const m of ALL_MODES) expect(narrowsWithin('plan', m)).toBe(true) // plan 严格最窄
+      for (const m of ALL_MODES) expect(narrowsWithin(m, 'bypassPermissions')).toBe(true) // 父不挡任何调用
+      // 层级表**判不出来**的那几对：`acceptEdits` 与 `default` 不可比，`auto` 的静态
+      // 基线什么都不批。用下标判会两个方向都错，故一律不放行。
+      expect(narrowsWithin('default', 'acceptEdits')).toBe(false)
+      expect(narrowsWithin('acceptEdits', 'default')).toBe(false)
+      expect(narrowsWithin('auto', 'acceptEdits')).toBe(false)
+    })
+
+    it('项目级声明 bypassPermissions + 父档 default ⇒ 顶回父档', () => {
+      expect(sub('default', 'bypassPermissions', 'project').getMode()).toBe('default')
+    })
+
+    it('正对照：同一份声明来自用户级 / 内置 / 不传 source ⇒ 照旧放行（防把 source 判反）', () => {
+      expect(sub('default', 'bypassPermissions', 'user').getMode()).toBe('bypassPermissions')
+      expect(sub('default', 'bypassPermissions', 'builtin').getMode()).toBe('bypassPermissions')
+      expect(sub('default', 'bypassPermissions').getMode()).toBe('bypassPermissions')
+    })
+
+    it('层级下标漏判的那两对也要挡住（这才是「用性质表而不是 indexOf」的理由）', () => {
+      // 父 acceptEdits + 声明 default：default 自动批 git/task/web-fetch，父会问 ⇒ 更宽
+      expect(sub('acceptEdits', 'default', 'project').getMode()).toBe('acceptEdits')
+      // 父 auto（无分类器）+ 声明 acceptEdits：auto 静态基线什么都不批 ⇒ acceptEdits 更宽
+      expect(sub('auto', 'acceptEdits', 'project').getMode()).toBe('auto')
+    })
+
+    it('档位名写错回落到 default 时同样受顶', () => {
+      // `modeMap` 是手写的且区分大小写 ⇒ `'Plan'` 认不出，`|| 'default'` 接住
+      expect(sub('acceptEdits', 'Plan', 'project').getMode()).toBe('acceptEdits')
+      expect(sub('plan', 'Plan', 'project').getMode()).toBe('plan')
+    })
+
+    it('收窄照旧放行：项目级把父档收紧到 plan 不被顶', () => {
+      expect(sub('bypassPermissions', 'plan', 'project').getMode()).toBe('plan')
+      expect(sub('auto', 'plan', 'project').getMode()).toBe('plan')
+    })
+
+    it('每次顶回都留一条记录，供派发处念出来（不静默）', () => {
+      const capped = sub('default', 'bypassPermissions', 'project')
+      expect(capped.getAgentCapWarnings()).toHaveLength(1)
+      expect(capped.getAgentCapWarnings()[0]).toContain('bypassPermissions')
+      // 对照：没被顶过的一律空表
+      expect(sub('default', 'plan', 'project').getAgentCapWarnings()).toEqual([])
+      // 对照：用户级放宽不产生记录（那条路本来就不该报）
+      expect(sub('default', 'bypassPermissions', 'user').getAgentCapWarnings()).toEqual([])
     })
   })
 

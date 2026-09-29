@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import {
   convertMcpTool,
   registerMcpServerTools,
@@ -164,6 +164,33 @@ describe('mcp/registry', () => {
       const result = await echoTool.execute({ message: 'hello' }, {} as any)
       expect(result.success).toBe(true)
       expect(result.content).toContain('Echo: hello')
+    })
+
+    it('waits out a server that is still handshaking instead of failing the call', async () => {
+      // 启动是非阻塞连接，恢复的会话也按同样方式重新挂载 ⇒ 一次调用完全可能在握手
+      // 还没完成时到达。那时直接失败错两次：工具是存在的，唯一缺的只是耐心。
+      // 这里让「等待」本身成为连接发生的那一步 —— 若不经过它，`getConnection` 拿到
+      // undefined，调用失败，本断言必红。
+      const client = McpClient.getInstance()
+      const spy = vi.spyOn(client, 'waitUntilReady').mockImplementation(async (name: string) => {
+        await client.connect({ name, command: 'bun', args: ['run', 'test/mcp/mock-server.ts'] })
+        return true
+      })
+      try {
+        const tool = convertMcpTool('mock', {
+          name: 'echo',
+          description: 'echo',
+          inputSchema: { type: 'object', properties: {} },
+        })
+
+        const result = await tool.execute({ message: 'hello' }, {} as never)
+
+        expect(spy).toHaveBeenCalledWith('mock')
+        expect(result.success).toBe(true)
+        expect(result.content).toContain('Echo: hello')
+      } finally {
+        spy.mockRestore()
+      }
     })
 
     it('skips registration on tool name collision', async () => {

@@ -311,6 +311,34 @@ export function clampMode(
 }
 
 /**
+ * 「`desired` **确定**不比 `ceiling` 宽」—— 仓库带来的 agent 定义能过的那道门。
+ *
+ * **刻意不用 `PERMISSION_MODE_HIERARCHY.indexOf` 判宽窄。** 层级表自己（本文件顶部）写明：
+ * 那几档**在现实中不是全序**，数组只承载「能测出来的那几条关系」—— `acceptEdits` 与
+ * `default` **不可比**（前者自动批 Write/Edit，后者自动批 git/task/web-fetch 这类
+ * `'self'` 工具），`auto` 的静态基线什么都不批、只因运行期分类器可能放行更多才被摆到
+ * `acceptEdits` 之上。拿下标当安全顶会**两个方向都错**：
+ *
+ * - **漏判**（危险的那一侧）：父 `acceptEdits` + 项目级声明 `default`（下标 1 < 2 ⇒ 放过），
+ *   或父 `auto`（无分类器）+ 声明 `acceptEdits`（下标 2 < 3 ⇒ 放过）—— 两者都让子代理
+ *   比派它的会话**更宽**，而那正是要挡的。
+ * - **误判**（安全但多挡）：父 `default` + 声明 `acceptEdits`。
+ *
+ * 故改用**性质表**：只放行能证明是子集的三类，其余一律 fail-closed。
+ *   - `plan` —— 层级表已证它「严格最窄」，是任何档的子集；
+ *   - 与父同档 —— 即 `inherit` 解析后的形状；
+ *   - 父为 `bypassPermissions` —— 它不挡任何调用 ⇒ 任何档都是它的子集。
+ * 表**故意**不完备：不可比的那几对既证不出是子集，就不放行。多拒绝落在安全侧，
+ * 而「子代理比派它的会话还宽」不是。
+ */
+export function narrowsWithin(desired: PermissionMode, ceiling: PermissionMode): boolean {
+  if (desired === ceiling) return true
+  if (desired === 'plan') return true
+  if (ceiling === 'bypassPermissions') return true
+  return false
+}
+
+/**
  * 从**仓库带来的** `forbiddenModes` 里挑出会造成「放宽」的条目 —— 判据是 `clampMode` 的回落。
  *
  * `forbiddenModes` 名义上只收窄（禁掉一档），但它有一个出口：`clampMode` 从被请求的档

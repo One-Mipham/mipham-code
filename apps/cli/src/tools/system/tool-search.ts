@@ -50,7 +50,7 @@ export const toolSearchTool: ToolDefinition = {
         content:
           '── MCP Tool Search ──\n\n' +
           'No MCP servers connected.\n\n' +
-          'Connect MCP servers in .mcp.json or via /mcp add <name> <url>.',
+          'Connect MCP servers in .mcp.json or via /mcp connect <server-name>.',
       }
     }
 

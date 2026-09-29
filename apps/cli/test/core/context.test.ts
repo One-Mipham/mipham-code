@@ -171,6 +171,71 @@ describe('ContextManager', () => {
   })
 
   // ═══════════════════════════════════════════
+  // Compaction — 二次压缩（触发尺与削减尺不是同一把）
+  // ═══════════════════════════════════════════
+
+  it('压完仍超预算时再压一趟，且压得更狠（keep 20 → 10）', async () => {
+    // 阈值 = 100 × 0.9 = 90；每条 20 字符 = 5 token
+    const ctx = makeContext(100, 0.9)
+    ctx.setSystemPrompt('sys')
+    for (let i = 0; i < 35; i++) ctx.addMessage(makeTextMessage('user', `msg ${i}`.padEnd(20, '.')))
+
+    expect(ctx.needsCompaction()).toBe(true)
+    await ctx.compact('summary')
+
+    const msgs = ctx.getMessages()
+    // 第一趟 35 → 20 后仍是 101 token > 90 ⇒ 第二趟 20 → 10
+    expect(msgs).toHaveLength(10)
+    expect(msgs[0]!.content as string).toMatch(/^msg 25/)
+    expect(msgs[9]!.content as string).toMatch(/^msg 34/)
+    expect(ctx.needsCompaction()).toBe(false)
+  })
+
+  it('一趟就够时不多跑第二趟 —— 复查不是「无条件再压一次」', async () => {
+    // 阈值 = 1000 × 0.9 = 900；35 条 × 5 token = 175，第一趟后远低于阈值
+    const ctx = makeContext(1000, 0.9)
+    ctx.setSystemPrompt('sys')
+    for (let i = 0; i < 35; i++) ctx.addMessage(makeTextMessage('user', `msg ${i}`.padEnd(20, '.')))
+
+    await ctx.compact('summary')
+
+    // 第二趟若无条件跑，这里会是 10
+    expect(ctx.getMessages()).toHaveLength(20)
+  })
+
+  it('两趟都压不动时停下（有界，不死循环）—— 单条超大消息削不掉是诚实的边界', async () => {
+    // 阈值 90；每条 40 字符 = 10 token
+    const ctx = makeContext(100, 0.9)
+    ctx.setSystemPrompt('sys')
+    for (let i = 0; i < 35; i++) ctx.addMessage(makeTextMessage('user', `msg ${i}`.padEnd(40, '.')))
+
+    await ctx.compact('summary') // 调度表只有两趟 ⇒ 必然返回
+
+    expect(ctx.getMessages()).toHaveLength(10)
+    // 仍是超预算 —— 条数已削到底，再往下要的是 tool_result 级截断（本轮不做）
+    expect(ctx.needsCompaction()).toBe(true)
+  })
+
+  it('超预算的短会话也会被压：≤30 条不再等于「什么都不做」', async () => {
+    // 这条钉的是**有意的行为变化**。旧实现对 ≤30 条直接 no-op，**即便它已超 token 预算** ——
+    // 而那种会话正是「判着要压、却压不动」这个缺口本身，不是它之外的例外。
+    const over = makeContext(100, 0.9) // 阈值 90；25 条 × 10 token = 250
+    over.setSystemPrompt('sys')
+    for (let i = 0; i < 25; i++)
+      over.addMessage(makeTextMessage('user', `msg ${i}`.padEnd(40, '.')))
+    await over.compact('summary')
+    expect(over.getMessages()).toHaveLength(10)
+
+    // 正对照：同样 25 条、预算充裕 ⇒ 一条都不动。
+    // 没有这一半，上面那半在「守卫被整个删掉」时也会绿。
+    const roomy = makeContext(200_000, 0.9)
+    roomy.setSystemPrompt('sys')
+    for (let i = 0; i < 25; i++) roomy.addMessage(makeTextMessage('user', 'msg'))
+    await roomy.compact('summary')
+    expect(roomy.getMessages()).toHaveLength(25)
+  })
+
+  // ═══════════════════════════════════════════
   // Clear
   // ═══════════════════════════════════════════
 

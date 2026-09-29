@@ -9,6 +9,7 @@ import {
 } from 'node:fs'
 import { join, extname, basename } from 'node:path'
 import { atomicWriteFileSync } from '../../shared/atomic-write'
+import { neutralizeInjectedMarkup } from '../../shared/sanitize.ts'
 import { similarities, findNearDuplicates } from './tfidf'
 
 export interface MemoryMetadata {
@@ -368,7 +369,14 @@ export class MemoryManager {
 
     let tokenBudget = 50 // opening tags
     for (const entry of relevant) {
-      const line = `- ${entry.name}: ${entry.content.slice(0, 200)}`
+      // Both halves are file contents, written by earlier sessions — worth
+      // neutralizing before they land inside the `<system-reminder>` wrapper below.
+      // Neutralize *before* the 200-char slice, so a tag straddling the boundary is
+      // removed whole instead of being truncated into an unterminated `<…` that the
+      // wrapper's own `>` could then complete.
+      const name = neutralizeInjectedMarkup(entry.name)
+      const content = neutralizeInjectedMarkup(entry.content).slice(0, 200)
+      const line = `- ${name}: ${content}`
       const lineTokens = Math.ceil(line.length / 4)
       if (tokenBudget + lineTokens > effectiveMaxTokens) break
       lines.push(line)

@@ -34,6 +34,30 @@ interface Checkpoint {
   label: string
 }
 
+/**
+ * 一次 `compact()` 的调度表 —— 「压完再判一次，仍超预算就再压、且压得更狠」。
+ *
+ * 存在的理由：**触发尺与削减尺不是同一把**。`needsCompaction()` 按 token 判，而一趟压缩
+ * 只按条数削，于是**一条超大消息（大文本 / 图片 / 长工具结果）可以同时穿过两把尺** ——
+ * 判着要压，压完却仍超预算，此后每一轮都带着超长请求打上游，直到用户手动 `/compact`
+ * 或上游报错。只压一趟且从不复查，就是那个缺口。
+ *
+ * - 第一趟 `{keep: 20, minLength: 30}` 与历史行为**逐字等价**（`minLength` 就是原来那条
+ *   `messages.length <= 30` 的 no-op）。
+ * - 第二趟的闸取 `keep` 本身而不是 `keep + 10`：第一趟之后只剩 20 条（截断回落）或 21 条
+ *   （有 summarizer 时多一条摘要），沿用 `keep + 10 = 20` 会让截断那条路命中 `20 <= 20`
+ *   而**永不跑第二趟**，整个改动自我抵消。此时唯一要问的是「还有没有可丢的」。
+ * - 表是常量、无 `while` ⇒ 有界，不可能死循环。
+ *
+ * `recountMessageTokens()` 随每趟一起跑（见 `compactOnce`）—— 它是第二趟那道「仍超预算吗」
+ * 的**闸所读的那个数**。放在循环外只算一次，闸读到的就是压缩前的旧值，永远为真 ⇒
+ * 第二趟变成无条件跑，「复查」就名存实亡。
+ */
+const COMPACTION_PASSES: ReadonlyArray<{ keep: number; minLength: number }> = [
+  { keep: 20, minLength: 30 },
+  { keep: 10, minLength: 10 },
+]
+
 export class ContextManager {
   private messages: Message[] = []
   private systemPrompt = ''
@@ -296,11 +320,25 @@ export class ContextManager {
   async compact(heading: string): Promise<{ before: number; after: number }> {
     const beforeTokens = this.getEstimatedTokens()
 
-    if (this.messages.length <= 30) {
-      return { before: beforeTokens, after: beforeTokens }
+    for (let i = 0; i < COMPACTION_PASSES.length; i++) {
+      const pass = COMPACTION_PASSES[i]!
+      // 第一趟无条件跑（手动 `/compact` 即使未超预算也必须动）；之后**只**在复查
+      // 仍超预算时继续 —— 这一句就是「压完再判一次」。
+      if (i > 0 && !this.needsCompaction()) break
+      if (this.messages.length <= pass.minLength) continue
+      await this.compactOnce(heading, pass.keep)
     }
 
-    const keep = 20
+    return { before: beforeTokens, after: this.getEstimatedTokens() }
+  }
+
+  /**
+   * 压缩一趟：把消息削到最近 `keep` 条。
+   *
+   * body（除 `keep` 外）逐行取自旧 `compact()`，两种分支原样保留：LLM 摘要（失败回落截断）
+   * 与纯截断。`recountMessageTokens()` 留在**这里**而不是调用方 —— 下一趟的闸要读它。
+   */
+  private async compactOnce(heading: string, keep: number): Promise<void> {
     const toDrop = this.messages.slice(0, -keep)
 
     if (this.summarizer && toDrop.length >= 4) {
@@ -340,8 +378,6 @@ export class ContextManager {
 
     // Re-estimate the message half (the prompt half is derived on read).
     this.recountMessageTokens()
-
-    return { before: beforeTokens, after: this.getEstimatedTokens() }
   }
 
   /**

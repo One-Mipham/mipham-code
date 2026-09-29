@@ -1196,8 +1196,36 @@ export class QueryEngine {
           error: preResult.reason || t('errors.tool_blocked', { name }),
         }
       }
+
+      // `permissionDecision` narrows only — never widens. `ask` stops the call here
+      // (this CLI has no interactive approval prompt; `ask` is a hard refusal, the
+      // same as the `default` mode's ask path). `allow` is deliberately **not**
+      // honoured: a hook can come from the repository's own settings, so letting it
+      // auto-approve is the same defect as a project-supplied agent definition that
+      // grants itself `bypassPermissions` — the criterion is the *direction*, not the
+      // key name. `defer` (and an absent decision) means "no override", which is
+      // exactly what happens when we do nothing.
+      if (preResult.permissionDecision === 'ask' || preResult.permissionDecision === 'deny') {
+        return {
+          success: false,
+          content: '',
+          error: preResult.reason || t('errors.tool_hook_ask', { name }),
+        }
+      }
+
       if (preResult.modifiedInput) {
         effectiveParams = { ...params, ...preResult.modifiedInput }
+      }
+
+      // A hook's `additionalContext` is how every non-blocking hook speaks — the
+      // exit-1 stderr, a spawn failure, an unreachable `mcp_tool` server (see
+      // `core/hooks-executor.ts`). This path used to read only `allowed` /
+      // `modifiedInput`, so all of it was produced and then dropped. `hookWarnings`
+      // is the channel that already reaches the model: it is prepended to the tool
+      // result below. A non-`[rule:…]` line is ignored by the effectiveness tracker
+      // further down, so pushing prose here is safe.
+      if (preResult.additionalContext) {
+        hookWarnings.push(preResult.additionalContext)
       }
     }
 
@@ -1209,7 +1237,11 @@ export class QueryEngine {
         effectiveParams = ruleResult.modified
       }
       if (ruleResult.warnings.length > 0) {
-        hookWarnings = ruleResult.warnings
+        // Append, do not replace: this array may already hold a PreToolUse hook's
+        // `additionalContext`. Every other writer below uses the spread form for the
+        // same reason — assignment here would silently drop whichever was written
+        // first ("two writers, one list").
+        hookWarnings = [...hookWarnings, ...ruleResult.warnings]
       }
     }
 
@@ -1478,9 +1510,12 @@ export class QueryEngine {
    * Stream a chat response with graceful provider fallback (v2.1.229 alignment).
    *
    * On a connection/availability failure from the active provider (thrown
-   * network error or an error chunk), switches to the configured default
-   * provider and retries once, yielding a `warning` chunk so the UI can tell
-   * the user the provider degraded. Abort errors propagate untouched.
+   * network error or an error chunk), retries that same provider once, then
+   * switches to the configured default provider and retries again, yielding a
+   * `warning` chunk at each step so the UI can tell the user what happened.
+   * When there is no fallback left, the error names the unavailable model and
+   * the next step instead of re-emitting the raw upstream message.
+   * Abort errors propagate untouched.
    */
   private async *chatWithFallback(
     messages: import('../shared/types').Message[],
@@ -1489,30 +1524,49 @@ export class QueryEngine {
     signal?: AbortSignal,
   ): AsyncGenerator<StreamChunk> {
     const activeId = this.registry.getActive().config.id
+    const activeModel = this.registry.getActiveModel()
     const defaultId = this.registry.getDefaultProviderId()
 
-    // ── Attempt 1: active provider ──
+    // ── Attempt 1 (+ one same-provider retry): active provider ──
+    //
+    // A failed turn is retried once on the *same* provider before the cross-provider
+    // fallback is considered: overloaded and transient errors are commonly answered
+    // by resending, whereas switching providers is the more expensive move — it flips
+    // the registry's active provider and, with it, the model the user chose. A
+    // foreign `Llm` seam owns the whole chat flow, so it is not retried here, for the
+    // same reason the fallback below is skipped for it.
+    //
+    // Chunks already yielded cannot be taken back, so a retry re-streams that turn.
+    // This is not a new property: the cross-provider fallback below already starts a
+    // fresh attempt after a failed one.
+    const ownsFlow = !(this.llm && this.llm !== this.registry)
     let failure: string | null = null
-    try {
-      for await (const chunk of this.llmChat({
-        model: this.registry.getActiveModel(),
-        messages,
-        systemPrompt,
-        tools: toolDefs,
-        signal,
-        effort: this.effort,
-      })) {
-        if (chunk.type === 'error') {
-          failure = chunk.error ?? 'Unknown error'
-          break
+    for (let attempt = 0; ; attempt++) {
+      failure = null
+      try {
+        for await (const chunk of this.llmChat({
+          model: activeModel,
+          messages,
+          systemPrompt,
+          tools: toolDefs,
+          signal,
+          effort: this.effort,
+        })) {
+          if (chunk.type === 'error') {
+            failure = chunk.error ?? 'Unknown error'
+            break
+          }
+          yield chunk
         }
-        yield chunk
+        if (failure === null) return
+      } catch (err) {
+        if (isAbortError(err)) throw err
+        failure = String(err)
       }
-      if (failure === null) return
-    } catch (err) {
-      if (isAbortError(err)) throw err
-      failure = String(err)
+      if (!ownsFlow || attempt >= 1) break
+      yield { type: 'warning', content: `${activeId} failed (${failure}) — retrying once` }
     }
+    const detail = failure ?? 'Unknown error'
 
     // ── Fallback: configured default provider, once ──
     // 若注入了**异己**的 Llm 缝，缝拥有整个 chat 流程——不回退（避免切 registry 状态 + 二次调用）。
@@ -1520,18 +1574,18 @@ export class QueryEngine {
     // `mountLlm(vajraContext, registry)` → `setLlm`），按「非空即缝」判定会让本分支
     // 在生产恒不可达，而测试里构造引擎时不注入缝 ⇒ 套件全绿也发现不了。
     if (this.llm && this.llm !== this.registry) {
-      yield { type: 'error', error: failure }
+      yield { type: 'error', error: detail }
       return
     }
     if (!defaultId || defaultId === activeId || !this.registry.get(defaultId)) {
-      yield { type: 'error', error: failure }
+      yield { type: 'error', error: this.modelUnavailableNotice(activeId, activeModel, detail) }
       return
     }
     const fallbackModel = this.registry
       .get(defaultId)!
       .config.models.find((m) => m.status === 'active')?.id
     if (!fallbackModel) {
-      yield { type: 'error', error: failure }
+      yield { type: 'error', error: this.modelUnavailableNotice(activeId, activeModel, detail) }
       return
     }
 
@@ -1556,6 +1610,16 @@ export class QueryEngine {
       if (isAbortError(err)) throw err
       yield { type: 'error', error: String(err) }
     }
+  }
+
+  /**
+   * 「模型不可用、且已无可回退的默认模型」时的说明。
+   *
+   * 裸的 `failure` 读起来像模型答错了，而实际上**这一轮请求根本没发出去**：把
+   * 这一层说破，并给出下一步（换模型 / 查密钥与网络），比把上游错误原样抛出来有用。
+   */
+  private modelUnavailableNotice(providerId: string, model: string, detail: string): string {
+    return t('errors.model_unavailable', { model, provider: providerId, error: detail })
   }
 
   getTools(): Map<string, ToolDefinition> {

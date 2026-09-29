@@ -13,6 +13,7 @@ import {
   loadPermissionConfig,
   nextMode,
   clampMode,
+  narrowsWithin,
   normalizeRestrictions,
   ALL_MODES,
 } from './permission-config'
@@ -184,6 +185,14 @@ export class PermissionSystem {
   private restrictionWarnings: string[] = []
   /** Unrecognized `permission:` value from the last `setDefaultLevel` — third of the warning family. */
   private levelWarnings: string[] = []
+  /**
+   * 仓库带来的 agent 定义请求了比父会话更宽的档、被顶回去的记录 —— 第四位。
+   *
+   * 与上面三位不同：那三位是**配置**有问题（写错了），读的是入口；这条是**输入合法、
+   * 但方向不允许**（项目级 agent 想把自己抬宽），产生在**派发那一刻**、读的是派发处
+   * （`agent/sub-agent.ts`，那里才有 agent 的名字）。故不进那两条入口的读法守卫。
+   */
+  private agentCapWarnings: string[] = []
   /** Legacy exact-name rules for backward compat (set via setRule with 'self' level). */
   private legacyRules = new Map<string, PermissionLevel>()
   /** Legacy default level from constructor when passed non-mode values like 'ask' or 'bypass'. */
@@ -339,9 +348,10 @@ export class PermissionSystem {
    *
    * Returns a new PermissionSystem instance — NOT shared with the parent.
    */
-  createSubAgentPermission(agentPermissionMode: string): PermissionSystem {
-    const resolvedMode = this.resolveAgentMode(agentPermissionMode)
+  createSubAgentPermission(agentPermissionMode: string, source?: string): PermissionSystem {
+    const { mode: resolvedMode, capWarning } = this.resolveAgentMode(agentPermissionMode, source)
     const subPerm = new PermissionSystem(resolvedMode)
+    if (capWarning) subPerm.agentCapWarnings.push(capWarning)
 
     // Propagate org restrictions to sub-agent
     if (this.restrictions) {
@@ -377,8 +387,16 @@ export class PermissionSystem {
    * Resolve an agent's permissionMode string to a clamped PermissionMode.
    * 'inherit' means "use the parent's current mode".
    * 'bypass' is treated as an alias for 'bypassPermissions'.
+   *
+   * `source` is the agent definition's provenance (`agent/types.ts`). Only
+   * `'project'` is capped — see the comment on the cap. Returns the warning
+   * (if any) rather than printing, so the one caller that knows the agent's
+   * *name* owns the message; the judgement stays here, in one place.
    */
-  private resolveAgentMode(agentMode: string): PermissionMode {
+  private resolveAgentMode(
+    agentMode: string,
+    source?: string,
+  ): { mode: PermissionMode; capWarning?: string } {
     // Normalize aliases
     const normalized = agentMode === 'bypass' ? 'bypassPermissions' : agentMode
 
@@ -395,8 +413,36 @@ export class PermissionSystem {
       inherit: this.mode,
     }
 
-    const desired: PermissionMode = modeMap[normalized] || 'default'
-    return clampMode(desired, this.restrictions)
+    let desired: PermissionMode = modeMap[normalized] || 'default'
+    let capWarning: string | undefined
+
+    // 仓库带来的东西可以**收窄**，不得**放宽** —— 与 `config/loader.ts` 的
+    // `stripProjectPermission`（项目级 config/settings 不是门）同一条判据，加上
+    // agent 定义这条当初没被那句话覆盖的路径。判据是**方向**、不是键名。
+    //
+    // 判在 `desired` 算完之后，是为了同时盖住上面那条 `|| 'default'` 回落：项目级把档位
+    // 名写错（拼错/大小写）会落到 `default`，若父档是 `plan`／`acceptEdits`，那同样是放宽。
+    //
+    // 边界（**有意**，不是遗漏）：只收 `source === 'project'`。插件安装的 agent 由
+    // `plugin-loader.ts` / `claude-plugin.ts` 记为 `'user'`，是用户自己装的东西，
+    // 不在「仓库带来的」这一侧。
+    if (source === 'project' && !narrowsWithin(desired, this.mode)) {
+      capWarning =
+        `requested permission mode "${desired}", which is wider than the parent session's ` +
+        `"${this.mode}" — capped to "${this.mode}" (agent definitions from the repository may ` +
+        `narrow the approval gate, not widen it)`
+      desired = this.mode
+    }
+
+    return { mode: clampMode(desired, this.restrictions), capWarning }
+  }
+
+  /**
+   * 被顶回去的「项目级 agent 想放宽」记录，一条一句。与 `getInvalidRestrictions()` 同形 ——
+   * 消费者在派发处（`agent/sub-agent.ts`），那里才有 agent 的名字和 stderr。
+   */
+  getAgentCapWarnings(): string[] {
+    return this.agentCapWarnings
   }
 
   // ── Rule management ──
