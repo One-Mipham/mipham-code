@@ -4,6 +4,56 @@
 > (tag dates) and use the same wording as the VS Code extension's changelog — the plugin is a
 > thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.11 (2026-09-29)
+
+- Version sync with Mipham Code CLI 0.85.11
+- Added: `/crsi lessons` now reports each resident lesson's **severity provenance**. `severity` is a
+  normalised reading — a missing `- 严重度:` line, an empty value, and a value outside the closed set
+  (e.g. `info`, or a typo) all fail open to `critical`, so "someone judged this should always be on"
+  and "nobody ever wrote a severity" are **the same value**. And `critical` is the always-resident
+  tier: every such lesson is sent with **every request**, forever. A new required field
+  `severitySource: 'declared' | 'defaulted'` is computed from the **same raw capture** as `severity`
+  (two readers sharing one capture — split them and you eventually get "the tier is the folded value
+  but the provenance still quotes the original"). It is required, not optional: as an optional field
+  the next construction site that forgets it gets a default that says **the opposite** (that someone
+  judged it), and a value you must produce but cannot must be a compile error. Provenance is for
+  human review only and takes part in no decision — pick, injection block and pointer are all pinned
+  by a flip test that rewrites every `severitySource` to `defaulted` and demands the three outputs
+  stay **byte-identical**. Known boundary, recorded rather than fixed: provenance **does not survive
+  a merge** — the merger writes `- 严重度: <merged>` verbatim, so a lesson merged from two `defaulted`
+  sources reads back as `declared`.
+- Fixed: eleven items, all one shape — **a capability was declared but its point of application was
+  missing or incomplete**. No model to fall back to now names the model and provider and offers the
+  next step (`Ctrl+P`) instead of echoing a raw error that reads like "the model answered wrongly"
+  when in fact **no model produced any output**. A failing active provider is **retried once in
+  place** before cross-provider fallback (bounded at exactly once); 529 (upstream overload) joins the
+  retry set alongside 503, while 4xx still is not retried. MCP tool calls now wait for a server that
+  is mid-handshake, the same wait the `mcp_tool` hook uses. A hook's `additionalContext` reaches
+  `hookWarnings` (its only channel to the model), and the line right after it no longer overwrites
+  the whole thing. `permissionDecision` refuses only on **ask/deny** — `allow` is deliberately
+  ignored, because a hook can come from repository-supplied settings and must not let itself through;
+  the criterion is **direction, not key name**. Project-level agent definitions can no longer widen
+  permissions **above** the parent tier, judged by a direction table rather than `indexOf`
+  (`acceptEdits` and `default` are not comparable, and `indexOf` would miss two cells). The compactor
+  **checks again after compacting** and runs a second, harsher pass if still over budget (bounded at
+  two passes; the first is byte-for-byte equivalent to the old code). Memory text injected into the
+  system prompt is neutralised first — invisible characters and `<…>`-shaped runs removed — so it
+  cannot close the `system-reminder` block it is wrapped in; **neutralise before truncating**, or a
+  tag spanning the cut becomes an unterminated shape that the outer `>` completes. `.mipham/rules/*.md`
+  is now rejected and reported **by shape**: its body is injected verbatim into the session and sent
+  to the model, so it is an **outbound** path and not merely a config directory, and the empty
+  `catch {}` in `readDir` was letting symlinks, directories and FIFOs through. Rejection is reported
+  to stderr, because **not loaded and not accepted are two different things** — otherwise "a rule in
+  this repo was never loaded" looks identical to "there are no rules here". The autoloop prompts no
+  longer ask the model to keep the CLI's own books: the old wording told it to call
+  `logAutoloopIteration(...)` (a module export, **not a tool** — the model cannot call it) and to
+  read and write `~/.mipham/autoloop/<id>.json` itself (which **overwrites** the iteration count,
+  token total and status the CLI maintains).
+- Fixed: three test fixtures now build by shape instead of depending on the repository layout — they
+  had treated "what the real repo looks like" as a premise, and the mutation-testing sandbox flattens
+  the repo into a copy of `apps/cli`, so that pipeline's dry run failed outright (the red was
+  measuring the fixture, not the code under test).
+
 ## 0.85.10 (2026-09-28)
 
 - Version sync with Mipham Code CLI 0.85.10
