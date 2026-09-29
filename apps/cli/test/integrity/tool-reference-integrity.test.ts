@@ -11,11 +11,13 @@
  *   4. `/todos` 的提示词、参考表与 locale 文案引用 `TaskCreate` / `TaskList` 等
  *      不存在的工具名（真实工具只有一个 `Task`，动作走 `action` 参数）
  *
- * 本文件用六段机器可校验的契约：前四段覆盖上述缺陷类，第五段守的是文档体积与
+ * 本文件用七段机器可校验的契约：前四段覆盖上述缺陷类，第五段守的是文档体积与
  * 两张变更记录表的**去向**（CLAUDE.md 拆分后 17 小时内又长回 56k，约定此前只存在于
  * 记忆里、未落到纸面也无人守；2026-09-19 起两表整体移出，正文只留指针），第六段守
  * **事实计数声明**（提供商 / 模型总数 —— 2026-09-22 补：它夹在被守着的工具总数与技能清单
- * 之间，一直没人守，实测已漂到「10 家提供商，45+ 模型」）。守卫的价值取决于**不误报**——
+ * 之间，一直没人守，实测已漂到「10 家提供商，45+ 模型」），第七段（2026-09-29 补）是第一段的
+ * **姊妹件**，专补第一段**只认大写开头**这个结构盲区（`graft` 与 `logAutoloopIteration`
+ * 两次都漏在它手里）。守卫的价值取决于**不误报**——
  * 实测（2026-09-15）扫描命中 6 个幻影名（分布在 10 处），误报 0；被排除的合法词
  * `GitHub` / `GitLab` / `ConfigChange` 见 ALLOWED_NON_TOOL_WORDS。误报的处理方式是
  * **加白名单并写明理由**，不是放宽规则、更不是删掉守卫。
@@ -195,6 +197,102 @@ describe('工具名引用完整性', () => {
         ? ''
         : `发现 ${hits.size} 个像工具名但不存在的引用：\n${report}\n\n` +
             '若确为误报，加入 ALLOWED_NON_TOOL_WORDS 并写明理由；若是真实引用，改成注册表中的真实工具名。',
+    ).toBe('')
+  })
+})
+
+/**
+ * ── 提示词里的可调用物引用完整性（2026-09-29 补） ──
+ *
+ * 上一段守的是「**长得像**工具名的幻影名」，判据是 `\b[A-Z][a-zA-Z0-9]{2,}\b`
+ * ⇒ **结构上**只认大写开头，看不见同族的另外两种缺陷。2026-09-29 一轮之内连撞两次，
+ * 两次都是它漏的：
+ *   1. `core/instructions.ts` 把 `graft` 并列进「Read, Grep, Glob, or graft tools」——
+ *      它**不是工具**，是仓库被 graft 索引后经 Bash 运行的 CLI（当天已改）；
+ *   2. `ui/commands.ts` 让模型调 `logAutoloopIteration("<id>", "<summary>")` ——
+ *      那是**模块导出不是工具**，模型根本没有调用它的通道（当天已改）。
+ * 两者都不是「像工具名」，而是**把不可调用的东西说成可调用的**，故另立两条臂。
+ *
+ * **为什么不干脆把上一段的正则放宽到小写**：小写不是判据。实测「任意小写 `name(`」
+ * 在干净树上命中 **442 个不同 token / 2,081 处** —— 本仓库把**整段 JS 程序**存在字符串里
+ * （`src/skills/bundled-skill-assets.ts` 内嵌 web-access 的 CDP 脚本、
+ * `src/core/task-performance-tasks.json` 内嵌带参考解的题面），而系统提示里列的
+ * `judge()` / `parallel()` / `pipeline()` / `phase()` / `log()` **都是真原语**
+ * （`src/workflow/runtime.ts:176-183` 逐个 `sealValue` 进 vm 沙箱）⇒ 宽正则的误报率近 100%。
+ * 守卫的价值取决于**不误报**（见上一段注释），故两条臂都取**紧**形状。
+ *
+ * 边界（如实记，别把绿读成覆盖）：两条臂的召回都**窄** ——
+ *   - C 臂只抓「教调用语法**且实参是占位符**」那一形态（`f("<x>")`）；裸 `f("x")` 的散文不报；
+ *   - L 臂只抓**以 `tools` 收尾**、且成员里已有 ≥2 个真工具名的枚举；
+ *     「Read、Grep 与 graft 这些工具」这种不在枚举里的写法不报。
+ * 不报的部分靠人看，不靠这两条臂；写成全称就是谎。
+ */
+const NON_TOOL_CALL_RE = /\b([a-z][a-zA-Z0-9_]*)\s*\([^()\n]{0,80}["'`]\s*<[a-zA-Z][^>]*>/g
+
+/** 枚举成员：排除 `or` / `and`，否则 `A, B, or C` 会把 `or` 吃成一个成员。 */
+const TOOL_ENUM_MEMBER = '(?!(?:or|and)\\b)[A-Za-z][A-Za-z0-9_]*'
+const TOOL_ENUM_RE = new RegExp(
+  `\\b(${TOOL_ENUM_MEMBER}(?:(?:\\s*(?:,|or|and)\\s*)+${TOOL_ENUM_MEMBER})*)\\s+tools?\\b`,
+  'g',
+)
+
+/** 在一段字符串字面量里跑两条臂，返回人可读的命中描述。 */
+function scanCallables(literal: string, registered: Set<string>): string[] {
+  const out: string[] = []
+  for (const m of literal.matchAll(NON_TOOL_CALL_RE)) {
+    out.push(`非工具调用语法: ${m[0]!.replace(/\s+/g, ' ')}`)
+  }
+  for (const m of literal.matchAll(TOOL_ENUM_RE)) {
+    const members = m[1]!
+      .split(/\s*(?:,|or|and)\s*/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+    const known = members.filter((x) => registered.has(x))
+    const unknown = members.filter((x) => !registered.has(x))
+    if (known.length < 2 || unknown.length === 0) continue
+    out.push(`枚举混进非工具: [${members.join(' | ')}] —— 非注册: ${unknown.join(', ')}`)
+  }
+  return out
+}
+
+describe('提示词里的可调用物引用完整性', () => {
+  const registered = new Set(createToolRegistry().keys())
+
+  /**
+   * 判据本身的前提 —— 两条臂必须对**当天修前的原文**各命中一次。
+   * 没有这条，任何一次正则笔误都会让下面那次扫描「全绿」，而它绿的原因是**什么都没扫到**。
+   * 两段原文逐字取自 `a35127eb^`（`src/core/instructions.ts` / `src/ui/commands.ts`），
+   * 只把原文里的模板插值换成了具体值（`${sessionId}` → `session-id`）。
+   */
+  it('两条臂对当天修前的原文各命中一次（判据本身的前提）', () => {
+    const e3 =
+      'something is missing — you MUST first read the actual code with the\n' +
+      'Read, Grep, Glob, or graft tools. Do not infer or assert from memory,\n' +
+      'naming conventions, or static tool lists.'
+    const g9 = 'Use the autoloop-journal module: logAutoloopIteration("session-id", "<summary>").'
+
+    expect(scanCallables(e3, registered)).toHaveLength(1)
+    expect(scanCallables(g9, registered)).toHaveLength(1)
+  })
+
+  it('提示词 / 参考表 / locale 文案里不把非工具说成可调用的', () => {
+    const hits: string[] = []
+    for (const file of walkFiles(SCAN_ROOTS)) {
+      const rel = file.slice(CLI_DIR.length + 1)
+      for (const literal of stringLiterals(readFileSync(file, 'utf-8'))) {
+        for (const hit of scanCallables(literal, registered)) hits.push(`  ${hit} ← ${rel}`)
+      }
+    }
+    const unique = [...new Set(hits)].sort()
+    const report = unique.join('\n')
+
+    expect(
+      report,
+      unique.length === 0
+        ? ''
+        : `发现 ${unique.length} 处「把非工具说成可调用」的引用：\n${report}\n\n` +
+            '若确为误报，在 scanCallables 旁加一条白名单并写明理由；若是真实引用，' +
+            '改成注册表中的真实工具名，或如实写出它的真实运行方式（如经 Bash 调的 CLI）。',
     ).toBe('')
   })
 })

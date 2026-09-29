@@ -42,10 +42,11 @@ describe('InstructionsLoader.buildSystemPrompt', () => {
   it('先读代码铁律把 graft 说成 CLI，而不是并列在自家工具里', () => {
     // `graft` 不在工具注册表里（`src/tools/` 零命中；它是仓库被 graft 索引后
     // 通过 Bash 调的 CLI，或用户自配的 MCP 工具）。把它写进「Read, Grep, Glob, or
-    // graft tools」会让模型去调一个不存在的工具名 —— 而那条**工具名幻影守卫看不见它**：
-    // `tool-reference-integrity` 的判据是 `<已注册工具名><大写开头>…`，`graft` 全小写、
-    // 既不撞前缀也不以大写开头（守卫的盲区是结构性的，不是漏配名单）。所以这条只能由
-    // 指向这句话本身的断言来钉。
+    // graft tools」会让模型去调一个不存在的工具名。
+    // 幽灵名守卫那位**大写开头**的臂至今看不见它（`graft` 全小写，既不撞前缀也不以
+    // 大写开头 —— 盲区是结构性的，不是漏配名单）；抓它的是 2026-09-29 补的**姊妹件**
+    // 「枚举混进非工具」臂（`tool-reference-integrity.test.ts`），那一臂正是拿这句话
+    // 当正对照钉住的。本断言留着，是因为它钉的是**这一句原文**，而那一臂钉的是**这一形状**。
     const prompt = new InstructionsLoader().buildSystemPrompt()
     expect(prompt).toContain('Read, Grep, or Glob tools')
     expect(prompt).toContain('a CLI you run through Bash')
