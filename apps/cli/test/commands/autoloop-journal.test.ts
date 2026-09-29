@@ -8,6 +8,7 @@ import {
   getAutoloopStatus,
   recordLoopTokens,
   recordLoopTurn,
+  NO_VISIBLE_OUTPUT,
 } from '../../src/commands/autoloop-journal.js'
 
 const SESSION_ID = 'test-autoloop-001'
@@ -114,5 +115,42 @@ describe('AutoloopJournal', () => {
     recordLoopTurn('s-max', 'x', 0)
     const after = readAutoloopJournal('s-max')!
     expect(after.iterations).toBe(100)
+  })
+})
+
+/**
+ * An iteration that produced no visible text must not look like an iteration
+ * that was never recorded.
+ *
+ * `app.tsx` hands `recordLoopTurn` the turn's `assistantContent`, which only
+ * accumulates `type === 'text'` chunks — a turn of tool calls, or of thinking
+ * only (hidden by default), arrives as `''`. Rendered as `#N: ` that row has
+ * the same shape as "nothing was written", which is the one thing `/loop
+ * status` must not conflate.
+ */
+describe('AutoloopJournal — iterations with no visible output', () => {
+  const cleanup = (id: string): void => completeAutoloopJournal(id, 'stopped')
+
+  it('renders an explicit row instead of a trailing blank', () => {
+    createAutoloopJournal('s-blank', 'monitor CI', 0)
+    recordLoopTurn('s-blank', '', 10)
+
+    const row = readAutoloopJournal('s-blank')!.logs[0]!
+    expect(row).toContain(NO_VISIBLE_OUTPUT)
+    // the user-visible landing point, not just the file
+    expect(getAutoloopStatus('s-blank')).toContain(NO_VISIBLE_OUTPUT)
+    cleanup('s-blank')
+  })
+
+  it('treats whitespace-only output as no output, and keeps real text verbatim', () => {
+    createAutoloopJournal('s-ws', 'monitor CI', 0)
+    logAutoloopIteration('s-ws', '   \n ')
+    logAutoloopIteration('s-ws', '  CI green  ')
+
+    const logs = readAutoloopJournal('s-ws')!.logs
+    expect(logs[0]).toContain(NO_VISIBLE_OUTPUT)
+    expect(logs[1]).toContain('CI green')
+    expect(logs[1]).not.toContain(NO_VISIBLE_OUTPUT)
+    cleanup('s-ws')
   })
 })

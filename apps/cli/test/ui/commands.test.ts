@@ -476,6 +476,26 @@ describe('/loop', () => {
     expect(result.forwardToAI).toBeDefined()
   })
 
+  it('both autonomous prompts ask for a visible line and name no uncallable export', async () => {
+    // The journal's per-iteration row is the assistant's **visible text**, so a
+    // loop that only calls tools logs iterations with nothing in them. And the
+    // prompts used to name `logAutoloopIteration(...)` — a module export inside
+    // this CLI, not a tool, so the model could never call it (the one sentence
+    // was both unfollowable and, being prose, unguarded).
+    const handler = getCommand('/loop')!
+    for (const args of [
+      ['auto', 'monitor CI'], // explicit /loop auto
+      ['xyz', 'monitor CI'], // auto-detected branch
+    ]) {
+      const { forwardToAI } = await handler(mkCtx(), args)
+      expect(forwardToAI).toContain('one line of plain text')
+      expect(forwardToAI).not.toContain('logAutoloopIteration')
+      // the CLI owns that file (iteration count, token totals, status)
+      expect(forwardToAI).not.toContain('reading/writing the journal')
+      expect(forwardToAI).toContain('Do not edit ~/.mipham/autoloop/')
+    }
+  })
+
   it('schedules via ScheduleWakeup for valid interval', async () => {
     const handler = getCommand('/loop')!
     const result = await handler(mkCtx(), ['5m', 'check deploy'])

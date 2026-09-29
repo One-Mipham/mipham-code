@@ -80,13 +80,28 @@ export function recordLoopTurn(sessionId: string, summary: string, delta: number
   }
 }
 
+/**
+ * The row written when an iteration produced **no visible text**.
+ *
+ * The summary is the assistant's visible output (`app.tsx` passes
+ * `assistantContent`, which only accumulates `type === 'text'` chunks), so a
+ * turn that emitted only tool calls — or only thinking, which `formatThinking`
+ * hides by default — arrives here as an empty string. Written as `#N: ` that
+ * row is indistinguishable from "we recorded nothing at all", which is exactly
+ * what `/loop status` must not conflate. So it is spelled out.
+ */
+export const NO_VISIBLE_OUTPUT = '(no visible output — tool calls or thinking only)'
+
 /** Log an iteration in the autonomous loop journal. */
 export function logAutoloopIteration(sessionId: string, summary: string): void {
   const journal = readAutoloopJournal(sessionId)
   if (!journal) return
   journal.iterations++
   journal.lastIteration = new Date().toISOString()
-  journal.logs.push(`[${journal.lastIteration}] #${journal.iterations}: ${summary.slice(0, 200)}`)
+  const text = summary.trim()
+  journal.logs.push(
+    `[${journal.lastIteration}] #${journal.iterations}: ${text ? text.slice(0, 200) : NO_VISIBLE_OUTPUT}`,
+  )
   // Keep last 50 log entries
   if (journal.logs.length > 50) journal.logs = journal.logs.slice(-50)
   atomicWriteFileSync(journalPath(sessionId), JSON.stringify(journal, null, 2), { mode: 0o644 })

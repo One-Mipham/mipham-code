@@ -401,11 +401,12 @@ say so explicitly instead of claiming it exists.`)
 Before answering ANY question about this codebase — whether a file,
 function, feature, or capability exists, how it works, or whether
 something is missing — you MUST first read the actual code with the
-Read, Grep, Glob, or graft tools. Do not infer or assert from memory,
-naming conventions, or static tool lists. If you have not read the code,
-say so and read it first, rather than answering hastily and retracting
-afterwards. This applies to every code question, not only research or
-borrow-analysis tasks.`)
+Read, Grep, or Glob tools. When the repository is graft-indexed you also
+have graft — a CLI you run through Bash, not one of your own tools. Do
+not infer or assert from memory, naming conventions, or static tool
+lists. If you have not read the code, say so and read it first, rather
+than answering hastily and retracting afterwards. This applies to every
+code question, not only research or borrow-analysis tasks.`)
 
     // CRSI code-review 合并门 — 合并 PR 前必须先 review，勿靠「碰巧触发」
     parts.push(`## Code-Review Merge Gate

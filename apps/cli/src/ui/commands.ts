@@ -3172,6 +3172,23 @@ const loopCmd: CommandHandler = async (ctx, args) => {
     return { content: lines.join('\n\n') }
   }
 
+  // Shared tail of both autonomous-loop prompts below. It carries two fixes:
+  //
+  //  - the journal's per-iteration row is the assistant's **visible text**
+  //    (`app.tsx` passes `assistantContent`, which only accumulates
+  //    `type === 'text'` chunks), so a loop that never emits text has a
+  //    progress log with nothing in it — the prompt now asks for one line;
+  //  - the prompts used to say `logAutoloopIteration("<id>", "<summary>")`, a
+  //    module export *inside* the CLI that is not a tool and so was never
+  //    callable, and to have the model write the journal file itself — which
+  //    would clobber the counters the CLI maintains there.
+  const journalNotice = (id: string): string =>
+    `\nEnd each iteration with one line of plain text saying where the loop stands.\n` +
+    `The journal records the text you emit: an iteration that emits none is logged as\n` +
+    `having no visible output, and /loop status shows that instead of progress.\n` +
+    `Do not edit ~/.mipham/autoloop/${id}.json yourself — the CLI writes it (iteration\n` +
+    `count, token totals, status) and a direct write would clobber that accounting.`
+
   // ── /loop auto <prompt> — autonomous self-paced loop ──
   if (sub === 'auto') {
     const prompt = args.slice(1).join(' ')
@@ -3202,9 +3219,8 @@ const loopCmd: CommandHandler = async (ctx, args) => {
       `   - delaySeconds: your best estimate of how long to wait (60-3600)\n` +
       `   - reason: one sentence explaining why\n` +
       `   - prompt: include this full autonomous loop ID: ${sessionId}\n` +
-      `3. When the task is COMPLETE, call ScheduleWakeup with stop:true\n\n` +
-      `After each iteration, log progress by reading/writing the journal at ~/.mipham/autoloop/${sessionId}.json.\n` +
-      `Use the autoloop-journal module: logAutoloopIteration("${sessionId}", "<summary>").`
+      `3. When the task is COMPLETE, call ScheduleWakeup with stop:true\n` +
+      journalNotice(sessionId)
 
     return {
       content:
@@ -3259,8 +3275,8 @@ const loopCmd: CommandHandler = async (ctx, args) => {
         `You are in an autonomous loop (auto-detected — no interval specified). Each iteration:\n` +
         `1. Make progress on the task above\n` +
         `2. When you need to wait, call ScheduleWakeup with your chosen delaySeconds and this loop ID: ${sessionId}\n` +
-        `3. When COMPLETE, call ScheduleWakeup with stop:true\n\n` +
-        `Log progress using logAutoloopIteration("${sessionId}", "<summary>").`
+        `3. When COMPLETE, call ScheduleWakeup with stop:true\n` +
+        journalNotice(sessionId)
 
       return {
         content:
