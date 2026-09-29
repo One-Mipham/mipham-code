@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
@@ -294,14 +294,37 @@ describe('slash command registry', () => {
 
 describe('/crsi lessons（常驻档名册）', () => {
   const CLI_DIR = join(import.meta.dirname, '..', '..')
-  const REPO_ROOT = join(CLI_DIR, '..', '..')
   const LESSONS = join(CLI_DIR, 'crsi-lessons.md')
+  /**
+   * 处理器拼的是 `join(git 根, LESSONS_FILE)`，而 `LESSONS_FILE` 是**仓库根相对**的
+   * `apps/cli/crsi-lessons.md`（`src/core/crsi-producer.ts:22`）。夹具要造的正是这个后缀。
+   */
+  const IN_ROOT = join('apps', 'cli', 'crsi-lessons.md')
+
+  let gitRoot: string | undefined
 
   // 本文件的 `execSync` 是 `vi.fn()`（默认返回 undefined）⇒ 处理器里的 git 分支会抛、
-  // 被 try/catch 吃掉、回退到 cwd ⇒ 找不到账本。要跑到**真文件**，必须让这个 mock 给出真根。
-  // 前提自证在下面第一条：mock 生效后报的路径确实是真账本。
+  // 被 try/catch 吃掉、回退到 cwd ⇒ 找不到账本。要跑到**真账本的内容**，就得让这个 mock
+  // 给出一个「拼得上」的根。
+  //
+  // 不喂真仓库根：`pnpm mutate` 的沙箱把仓库**压平**成 `apps/cli`（沙箱根 = apps/cli 的副本），
+  // 那种环境下**没有任何根**能让 `join(root, 'apps/cli/crsi-lessons.md')` 落到账本上 —— 上一级
+  // 是 `.stryker-tmp`、再上一级才是真 apps/cli。这正是干跑红在这两条上的原因（原来那条
+  // 「mock 的前提成立」断言的**主语是布局本身**，而布局正是被压平的那件事）。
+  //
+  // 故改为**现造一棵长度对的树**，把账本字节原样放进去：生产侧那句 join 在真仓库与沙箱里
+  // 读到同一份内容。副作用是**更安全**：账本在真仓库里那份不再落在「处理器万一会写」的
+  // 爆炸半径里 —— 处理器只认得夹具这棵树（下面「只读」一格钉的就是它）。
   beforeEach(() => {
-    mockExecSync.mockReturnValue(`${REPO_ROOT}\n`)
+    gitRoot = mkdtempSync(join(tmpdir(), 'mipham-crsi-root-'))
+    mkdirSync(join(gitRoot, 'apps', 'cli'), { recursive: true })
+    copyFileSync(LESSONS, join(gitRoot, IN_ROOT))
+    mockExecSync.mockReturnValue(`${gitRoot}\n`)
+  })
+
+  afterEach(() => {
+    if (gitRoot) rmSync(gitRoot, { recursive: true, force: true })
+    gitRoot = undefined
   })
 
   it('已注册 —— 「有定义、无施加点」正是这一族的复发形态', () => {
@@ -309,9 +332,11 @@ describe('/crsi lessons（常驻档名册）', () => {
     expect(getCommandNames()).toContain('/crsi lessons')
   })
 
-  it('mock 的前提成立：git 根 + LESSONS_FILE 拼出的就是那个真文件', () => {
-    // 没有这一条，下面几条可能在断言「一个不存在的路径被正确处理了」
-    expect(LESSONS).toBe(join(REPO_ROOT, 'apps', 'cli', 'crsi-lessons.md'))
+  it('夹具的前提成立：mock 的根 + 仓库根相对的账本路径，拼出的是**账本的字节**', () => {
+    // 没有这一条，下面几条可能在断言「一个不存在的路径被正确处理了」。
+    // 它同时钉住了 `LESSONS_FILE` 的**取值**：那个字面量在这里写第二遍（`IN_ROOT`），
+    // 于是常量被改成别的路径时，处理器去找的文件不在夹具里 ⇒ 下面几条立刻红。
+    expect(readFileSync(join(gitRoot!, IN_ROOT), 'utf-8')).toBe(readFileSync(LESSONS, 'utf-8'))
     expect(readFileSync(LESSONS, 'utf-8')).toContain('CRSI Lessons')
   })
 
@@ -319,19 +344,21 @@ describe('/crsi lessons（常驻档名册）', () => {
     const result = await getCommand('/crsi lessons')!({} as never, [])
     const sel = selectResidentLessons(extractCrsiLessonSummaries(readFileSync(LESSONS, 'utf-8')))
     expect(sel.resident.length).toBeGreaterThan(0) // 正对照
-    expect(result.content).toContain(LESSONS)
+    // 报的必须是它**真读的那一份**（夹具那棵树的路径），不是别处的同名文件。
+    expect(result.content).toContain(join(gitRoot!, IN_ROOT))
     expect(result.content).toContain(`常驻 **${sel.resident.length}** 条`)
     for (const s of sel.resident) expect(result.content).toContain(s.title)
   })
 
   it('只读：跑完账本逐字节未变', async () => {
-    const before = readFileSync(LESSONS, 'utf-8')
+    const seeded = join(gitRoot!, IN_ROOT)
+    const before = readFileSync(seeded, 'utf-8')
     // **正对照（不可省）**：没有它，这一格在夹具已被写坏时会**恒真** —— 「跑前跑后都是 x」
     // 比一遍就绿，而它要检的正是「处理器有没有写」。实测过：一次偷写变异把它变成这样。
     expect(before).toContain('CRSI Lessons')
     expect(before).toContain('严重度')
     await getCommand('/crsi lessons')!({} as never, [])
-    expect(readFileSync(LESSONS, 'utf-8')).toBe(before)
+    expect(readFileSync(seeded, 'utf-8')).toBe(before)
   })
 
   it('账本找不到时给一句话，不抛', async () => {

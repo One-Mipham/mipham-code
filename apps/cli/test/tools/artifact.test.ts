@@ -1,9 +1,7 @@
-import { describe, it, expect, afterEach, vi } from 'vitest'
+import { describe, it, expect, afterEach, vi, type MockInstance } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { connect } from 'node:net'
-import { once } from 'node:events'
 import { ArtifactServer } from '../../src/artifacts/server'
 import { artifactsRoot } from '../../src/artifacts/paths'
 import { artifactTool } from '../../src/tools/artifact/artifact'
@@ -33,15 +31,13 @@ vi.mock('node:child_process', async (importOriginal) => ({
 describe('Artifact 坐标一致', () => {
   let tmpDir: string | undefined
   let server: ArtifactServer | undefined
-  let prevCwd = ''
+  let cwdSpy: MockInstance | undefined
 
   afterEach(() => {
     server?.stop()
     server = undefined
-    if (prevCwd) {
-      process.chdir(prevCwd)
-      prevCwd = ''
-    }
+    cwdSpy?.mockRestore()
+    cwdSpy = undefined
     if (tmpDir) {
       rmSync(tmpDir, { recursive: true, force: true })
       tmpDir = undefined
@@ -53,9 +49,14 @@ describe('Artifact 坐标一致', () => {
     sessionId = 'test-session',
   ): Promise<{ url: string; port: number; content: string; sessionId: string }> {
     tmpDir = mkdtempSync(join(tmpdir(), 'mipham-artifact-'))
-    // 命令侧是从 process.cwd() 推导坐标的（会话的真实工作目录），故这里也要切过去。
-    prevCwd = process.cwd()
-    process.chdir(tmpDir)
+    // 命令侧是从 process.cwd() 推导坐标的（会话的真实工作目录），故这里也要让它读到 tmpDir。
+    //
+    // 不用 `process.chdir()`：那是进程级全局突变，而 Stryker 的 vitest-runner 把测试跑在
+    // worker 线程里（`pool: 'threads'` 在它源码里写死、无覆盖入口），线程里 chdir 直接抛
+    // "process.chdir() is not supported in workers" —— 后果不是这一个文件红，而是整个
+    // 变异测试的干跑失败。spy 只改 `process.cwd()` 的返回值，两种跑池下行为一致
+    // （同 test/commands/init-providers.test.ts 的既定做法）。
+    cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(tmpDir)
 
     server = new ArtifactServer(artifactsRoot(tmpDir), ARTIFACT_PORT)
     const port = await server.start()
@@ -188,13 +189,38 @@ describe('Artifact 坐标一致', () => {
   it('stop() 断开已建立的连接，而不是只停止接收新连接', async () => {
     const { port } = await writeArtifact()
 
-    const socket = connect(port, '127.0.0.1')
-    await once(socket, 'connect')
-    expect(socket.destroyed).toBe(false)
+    // 上游症状是「换了个测试仍在跟上一个 server 说话」：`server.close()` 只停止**接收**
+    // 新连接，已建立的那条继续被服务。
+    //
+    // 本格必须拿**进行中的**响应来测，两条反例（本轮逐一实测过）都不行：
+    //   · 裸 socket —— TCP 握手在 listen backlog 里就能完成，客户端 'connect' 早于
+    //     服务端 'connection'（实测此刻 `sockets=0`，服务端从未见过这条连接）。此时
+    //     `stop()` 关掉的只是 listening handle，backlog 里那条被内核 RST 掉，客户端
+    //     照样收到 'close' ⇒ 绿得毫无意义；
+    //   · 发过一个请求后闲置的 keep-alive —— `close()` 自己就会关掉它。
+    // `/:name/sse` 是真正的 active 响应，而且 `handleNameSse` 不像 `/events` 那样登记
+    // 进 `sseClients`，故 `stop()` 里那句 `res.end()` 也够不着它 —— 能切断它的只有
+    // `socket.destroy()`。
+    const res = await fetch(`http://localhost:${port}/probe-artifact/sse`)
+    expect(res.status).toBe(200)
+
+    const reader = res.body!.getReader()
+    // 前置：流真的推来了第一段内容（否则下面「断了」可能只是因为压根没接上）
+    const first = await reader.read()
+    expect(first.done).toBe(false)
+    expect(new TextDecoder().decode(first.value)).toContain('probe-artifact')
 
     server!.stop()
 
-    await once(socket, 'close')
-    expect(socket.destroyed).toBe(true)
+    // 该流每条内容只推一次（`handleNameSse` 仅在与上次不同时才写），所以此刻要么
+    // 被切断（done / 读失败），要么永远挂着 —— 后者即「仍在被服务」。
+    const outcome = await Promise.race([
+      reader.read().then(
+        (r) => (r.done ? 'ended' : 'still-streaming'),
+        () => 'errored',
+      ),
+      new Promise<string>((r) => setTimeout(() => r('still-open'), 2000)),
+    ])
+    expect(outcome).not.toBe('still-open')
   })
 })

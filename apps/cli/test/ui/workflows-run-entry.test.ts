@@ -10,7 +10,7 @@
  * 这条断言是行为级的（真建工作区、真调 handler），不是对源码文案的字符串比对。
  */
 
-import { describe, it, expect, afterEach, vi } from 'vitest'
+import { describe, it, expect, afterEach, vi, type MockInstance } from 'vitest'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -27,11 +27,12 @@ vi.mock('../../src/core/session-store', () => ({
 
 const { getCommand } = await import('../../src/ui/commands')
 
-const originalCwd = process.cwd()
 let workdir: string | null = null
+let cwdSpy: MockInstance | undefined
 
 afterEach(() => {
-  process.chdir(originalCwd)
+  cwdSpy?.mockRestore()
+  cwdSpy = undefined
   if (workdir) {
     rmSync(workdir, { recursive: true, force: true })
     workdir = null
@@ -47,7 +48,12 @@ function makeWorkspaceWithOneWorkflow(): void {
     join(dir, 'demo.js'),
     "export const meta = { name: 'demo', description: 'a demo workflow' }\n",
   )
-  process.chdir(workdir)
+  // `/workflows` 从 `process.cwd()` 推导脚本目录。不用 `process.chdir()`：Stryker 的
+  // vitest-runner 把测试跑在 worker 线程里（`pool: 'threads'` 在它源码里写死、无覆盖
+  // 入口），线程里 chdir 直接抛 "process.chdir() is not supported in workers" ——
+  // 后果不是这一个文件红，而是整个变异测试的干跑失败。spy 只改返回值，两种跑池下一致
+  // （同 test/commands/init-providers.test.ts 的既定做法）。
+  cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workdir)
 }
 
 describe('/workflows 列表输出的 run 指引', () => {
