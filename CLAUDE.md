@@ -110,7 +110,7 @@ pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
 pnpm test         # vitest run（3767 个测试）
 pnpm typecheck    # tsc --noEmit
-pnpm mutate       # stryker run（变异测试；~9 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
+pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
 # Telemetry（接收端）
 cd apps/telemetry
