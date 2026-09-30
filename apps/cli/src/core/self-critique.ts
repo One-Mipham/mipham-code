@@ -21,7 +21,7 @@
  * on every tool call — making it auditable on a per-action basis.
  */
 
-import type { ProviderRegistry } from '../providers/registry'
+import { pickFastestModel, type ProviderRegistry } from '../providers/registry'
 import type { Llm } from '../providers/llm'
 import { DEFAULT_CONSTITUTION } from './constitution-loader'
 
@@ -62,7 +62,7 @@ export const DEFAULT_SELF_CRITIQUE_CONFIG: SelfCritiqueConfig = {
   threshold: 0.6,
   targetTools: ['Bash', 'Write', 'Edit', 'Agent'],
   // Measured, not chosen: 30 real critiques against the configured provider
-  // (`findFastestModel` → `deepseek-v4-flash`; default model is the slower
+  // (`pickFastestModel` → `deepseek-v4-flash`; default model is the slower
   // `-pro`) took min 1.85s / median 3.95s / max 17.9s, and **28 of 30 exceeded
   // 2s** — the value this replaced. At 2s the budget would have skipped 93% of
   // critiques, and since `critique()` fails *open* (null ⇒ the tool runs
@@ -175,7 +175,7 @@ export class SelfCritique {
     )
 
     try {
-      const critiqueModel = this.config.model || this.findFastestModel(registry)
+      const critiqueModel = this.config.model || pickFastestModel(registry)
 
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs)
@@ -218,18 +218,6 @@ export class SelfCritique {
   }
 
   // ── Private ──
-
-  /** Find the fastest available model for low-latency critique. */
-  private findFastestModel(registry: ProviderRegistry): string {
-    // Prefer Flash models (Qwen2.5-1.5B or similar small models)
-    const models = registry.listModels?.() || []
-    const flashModel = models.find(
-      (m) => m.id.toLowerCase().includes('flash') || m.id.toLowerCase().includes('1.5b'),
-    )
-    if (flashModel) return flashModel.id
-    // Fall back to whatever's active
-    return registry.getActiveModel()
-  }
 
   /** Extract JSON object from model response (may have markdown fences). */
   private extractJson(text: string): Record<string, unknown> | null {

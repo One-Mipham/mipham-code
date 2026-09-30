@@ -21,6 +21,7 @@ import {
   discoverSessions,
 } from './agent/cross-session/discovery'
 import { bootstrapProviders } from './providers/bootstrap'
+import { resolveClassifierModel } from './providers/registry'
 import { InstructionsLoader, formatInstructionSizeNotice } from './core/instructions'
 import { loadSessionMemories, getMemoryManager } from './core/memory/memory-loader'
 import { ContextManager } from './core/context'
@@ -460,6 +461,15 @@ export async function runApp(options: RunOptions): Promise<void> {
         `    (an allow rule widens the gate — move the rules to ${settingsPathFor('user', process.cwd())})\n`,
     )
   }
+  // Same reason, one key group over: these two choose **how** the `auto` gate
+  // rules, and both directions of that choice widen it (a weaker judge, or enough
+  // time that a ruling no longer times out into a denial).
+  if (settingsJson.projectClassifierSkipped) {
+    process.stderr.write(
+      `⚠ Mipham Code: ignored permissions.classifierModel / classifierTimeoutMs from ${settingsPathFor('project', process.cwd())}\n` +
+        `    (a repository must not choose how the approval gate rules — set them in ${settingsPathFor('user', process.cwd())})\n`,
+    )
+  }
   // Apply org-level permission restrictions (P0: bypassPermissions policy gap)
   if (config.permissionRestrictions) {
     permission.setRestrictions(config.permissionRestrictions)
@@ -486,7 +496,11 @@ export async function runApp(options: RunOptions): Promise<void> {
   // here would freeze it at whatever was active at startup, so a user who switches to
   // a cheaper model would keep paying for the old one with nothing on screen to say so.
   permission.setClassifier(
-    new LlmPermissionClassifier(registry, { resolveModel: () => registry.getActiveModel() }),
+    new LlmPermissionClassifier(registry, {
+      resolveModel: () =>
+        resolveClassifierModel(settingsJson.permissions.classifierModel, registry),
+      timeoutMs: settingsJson.permissions.classifierTimeoutMs,
+    }),
   )
 
   // Load instructions

@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { ProviderConfig, StreamChunk } from '@mipham/shared'
-import { ProviderRegistry } from '../../src/providers/registry'
+import {
+  ProviderRegistry,
+  pickFastestModel,
+  resolveClassifierModel,
+} from '../../src/providers/registry'
 import type { ProviderInstance, ChatRequest } from '../../src/providers/registry'
 
 // ── Test fixtures ──
@@ -303,6 +307,59 @@ describe('ProviderRegistry', () => {
       expect(map.get('a')).toBe(true)
       expect(map.get('b')).toBe(false)
       expect(map.size).toBe(2)
+    })
+  })
+
+  // `permissions.classifierModel` 的三档语义。放在这里而不是分类器模块里：选模型要
+  // `listModels()`，而 `permission-classifier.ts` 刻意不 import 任何 provider 模块
+  // （它只认 `Llm` 接口）。provider 的选型归 provider 层。
+  describe('resolveClassifierModel / pickFastestModel', () => {
+    const model = (id: string): ProviderConfig['models'][number] => ({
+      id,
+      name: id,
+      providerId: 'test-provider',
+      contextWindow: 128_000,
+      maxOutput: 32_000,
+      vision: false,
+      status: 'active',
+    })
+
+    function withModels(ids: string[], active = ids[0]!): ProviderRegistry {
+      const config = makeConfig({ models: ids.map(model) })
+      const registry = new ProviderRegistry([config], config.id, active)
+      registry.register(config.id, makeMockProvider(config))
+      return registry
+    }
+
+    it("'fast' 选 Flash 类模型", () => {
+      const r = withModels(['deepseek-v4-pro', 'deepseek-v4-flash'], 'deepseek-v4-pro')
+      expect(pickFastestModel(r)).toBe('deepseek-v4-flash')
+      expect(resolveClassifierModel('fast', r)).toBe('deepseek-v4-flash')
+    })
+
+    it('没有 Flash 类模型时 fast 退回当前模型 —— 不编一个 id 出来', () => {
+      const r = withModels(['deepseek-v4-pro'], 'deepseek-v4-pro')
+      expect(resolveClassifierModel('fast', r)).toBe('deepseek-v4-pro')
+    })
+
+    it("缺席 / 'active' ⇒ 当前模型（默认语义：闸门用操作者选的模型，不自己挑）", () => {
+      const r = withModels(['deepseek-v4-pro', 'deepseek-v4-flash'], 'deepseek-v4-pro')
+      expect(resolveClassifierModel(undefined, r)).toBe('deepseek-v4-pro')
+      expect(resolveClassifierModel('active', r)).toBe('deepseek-v4-pro')
+    })
+
+    it('其余字符串按模型 id 原样使用 —— 存不存在只有 provider 说得出，这里不拦', () => {
+      const r = withModels(['deepseek-v4-pro'], 'deepseek-v4-pro')
+      expect(resolveClassifierModel('some-custom-model', r)).toBe('some-custom-model')
+    })
+
+    it("'active' 每次重读：会话中换模型，闸门跟着换", () => {
+      // 构造期捕获会让换模型后仍按老模型裁决 —— 与分类器那边「resolveModel 是 thunk
+      // 而不是 string」同一条理由（`permission-classifier.ts` 的 config 文档）。
+      const r = withModels(['a', 'b'], 'a')
+      expect(resolveClassifierModel('active', r)).toBe('a')
+      r.switchProvider('test-provider', 'b')
+      expect(resolveClassifierModel('active', r)).toBe('b')
     })
   })
 })

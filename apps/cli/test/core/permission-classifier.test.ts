@@ -4,6 +4,7 @@ import type { Llm } from '../../src/providers/llm'
 import type { StreamChunk } from '../../src/shared/index.ts'
 import {
   CLASSIFIER_RULES,
+  DEFAULT_CLASSIFIER_TIMEOUT_MS,
   DEFAULT_MAX_INPUT_CHARS,
   LlmPermissionClassifier,
   PROMPT_VERSION,
@@ -248,6 +249,25 @@ describe('LlmPermissionClassifier —— 引擎故障一律 fail-closed', () => 
     expect(v.reason).toContain('timed out after 20ms')
   })
 
+  it('**超时以 in-stream error chunk 到达时**（provider 的真实形态）仍须点名超时', async () => {
+    // openai-compat.ts:100 把 abort 转成 yield 出来的 error chunk，而不是抛。
+    // 上面那条用 reject 的假 provider 走的是 catch 分支；若实现只在 catch 里读
+    // `timedOut`，真路径上的「自己超时」就会被渲染成「流卡住」——把读者引去找网络。
+    const { llm } = makeLlm((r) =>
+      (async function* () {
+        await new Promise<void>((resolve) => {
+          r.signal?.addEventListener('abort', () => resolve(), { once: true })
+        })
+        yield { type: 'error', error: 'Stream stalled: AbortError: The operation was aborted.' }
+      })(),
+    )
+    const v = await classifier(llm, { timeoutMs: 20 }).classify(req())
+    expect(v.allow).toBe(false)
+    expect(v.retryable).toBe(true)
+    expect(v.reason).toContain('timed out after 20ms')
+    expect(v.reason).not.toContain('Stream stalled')
+  })
+
   it('流内 error chunk ⇒ 拒（否则与「空响应」同形，而空响应长得像拒绝）', async () => {
     const { llm } = makeLlm([{ type: 'error', error: 'rate limited' }])
     const v = await classifier(llm).classify(req())
@@ -369,5 +389,38 @@ describe('LlmPermissionClassifier —— 输出预算与截断信号', () => {
     // 否则「读到截断标记 ⇒ 一律拒」会把一条正常放行也翻成拒绝 —— 标记只该改措辞。
     const { llm } = makeLlm([text('<block>no</block>'), { type: 'stop', truncated: true }])
     expect(await classifier(llm).classify(req())).toEqual({ allow: true })
+  })
+})
+
+// ── 5. The ruling budget ──
+
+/**
+ * This one asserts a *constant*, which normally proves little. It earns its place
+ * because the value is the whole point of a measurement: the old 2000 was chosen
+ * before anyone had timed a ruling, and the comment above it said so.
+ *
+ * Measured 2026-09-30, 24 real rulings per model on the same request set:
+ *
+ * | model              | median |  p90  | max     | over 2s |
+ * | ------------------ | -----: | ----: | ------: | ------: |
+ * | `deepseek-v4-pro`  | 7,590  | 35,596| 120,006 |  23/24  |
+ * | `deepseek-v4-flash`| 1,276  |  3,739|  16,538 |   9/24  |
+ *
+ * 30s covers ~90% of the reasoning model while still cutting the >120s stalls.
+ * The fast model was **not** made the default despite being ~6x quicker at the
+ * median: on borderline calls it allowed 8/20 where the reasoning model allowed
+ * 2/20 — latency bought by leaking exactly the calls the gate exists for. It is
+ * reachable through `permissions.classifierModel: 'fast'`, opt-in and on the
+ * record. Re-measure before changing this number; one model, one day.
+ */
+describe('LlmPermissionClassifier —— 默认裁决预算', () => {
+  it('DEFAULT_CLASSIFIER_TIMEOUT_MS 是量出来的 30s', () => {
+    expect(DEFAULT_CLASSIFIER_TIMEOUT_MS).toBe(30_000)
+  })
+
+  it('不传 timeoutMs 时用的是这个默认值（常数真的接在构造上）', () => {
+    const { llm } = makeLlm([text('<block>no</block>')])
+    const c = new LlmPermissionClassifier(llm, { resolveModel: () => 'test-model' })
+    expect((c as unknown as { timeoutMs: number }).timeoutMs).toBe(DEFAULT_CLASSIFIER_TIMEOUT_MS)
   })
 })

@@ -4,9 +4,9 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.12
-> **最后更新**: 2026-09-30 — **0.85.12：十八处「能力已声明、施加点缺席或缺了一环」+ CRSI 沙箱的两条 `cwd` 逃逸（26 笔 = 7 `fix` + 1 `refactor` + 2 `test` + 15 `docs` + 1 `chore`，逐笔按 commit type 数出）** —— 主项是一笔含 18 处收口的 `fix(cli)`，公共形状 = 能力挂上了名字，施加点却缺席、或缺了让它生效的那一环（另三处是「同一问题隔壁已经解决、这里没有」）。真缺口六处：① 凭据遮蔽的密码组把 `@` 排除在外 —— `https://user:p@ss@host` 只遮到 `p`，尾部随 bash 输出 / grep 内容 / config 文本进模型上下文与会话记录；② 子代理调 Agent 也一律进后台（`?? true`）⇒ 只拿回占位串、子结果永不回到发起它的子代理；③ workflow 里未被 `await` 的那次拒绝落进**无条件安装**的 `unhandledRejection` ⇒ 整个 CLI `exit(1)`；④ 钩子用 `spawnSync` ⇒ 被它启动的进程只要还持有继承来的管道，事件循环整个冻住（本机探针实测 20,020ms），超时给的还是「timed out after 60s」这个**误诊** ⇒ 改异步 `spawn` + `detached` 进程组；⑤ `ToolContext` 逐字 16 个字段没有 `signal` ⇒ 取消在任何时刻都没有通往工具执行的通路（bash 落到进程组，且「退出码 0 也算失败」）；⑥ 跨 provider 回退绕过 `engine.switchProvider` ⇒ 唯一那处 `updateMaxTokens` 从不触发、压缩扳机由已不作数的旧窗口驱动（1M→128K 时要等到 ~950K）。半缺口十处（settings.json 读不出不再沉默、插件卸载走 `unregisterMcpServerTools`、`/mcp` 过 `sanitizeInlineField`、`isRetryableFailure` 区分决定性失败、`truncated` 计入 failures、`exit-plan` 兜底从死代码变实现、`MIPHAM_DISABLE_WEB_FETCH=1` 在注册时摘掉、artifact 不再重复 `List all:`、只解 `&nbsp;` 一个实体、原地重试接上类别判别）+ 自发现两处（web-fetch 的 UA 不再写死 0.24.0、选择器开着时 Escape 归它）。**CRSI 沙箱**两条（都只在 `cwd` 不是仓库根时发作，而全量 `pnpm mutate` 时正是）：`repoRoot` 必须等于它自己那棵工作树的根（fail-closed、有意**不**静默改判为外层仓库的根 —— 代价已认下：在仓库子目录里启动会被拒），且每条 git 命令把位置写进**命令字符串本身**（`git -C <root>` / `cd <root> &&`，收成唯一出口 `runIn()`）—— 因为对象字面量变异体会把 `cwd` 连同 options 一起抹掉。**如实记**：压缩器那道缓存经济闸接上了，但在生产分布下恒不触发（无可观测行为变更）。测试 3,839（309 文件；本机 3,837 passed + 2 skipped）。
-> **前一条（2.94.11）**: 2026-09-29 — **0.85.11：重试与等待的补齐 + 三处闸门的收窄 + 一条来历可见（11 fix + 1 feat，另附三处测试夹具）** —— 十一 fix 的公共形状 = **「能力已声明、施加点缺席或缺一环」**。① **无模型可回退时点名模型与 provider** 并给出下一步（`Ctrl+P`）—— 从前吐的是底层错误，而裸错误读起来像「模型答错了」，可这一轮**没有任何模型输出**；两个无回退出口都接上。② **原地重试一次**再轮到跨 provider 回退（上界恰一次；已流出的块收不回 ⇒ 会重发，与既有回退同性质），**529 纳入重试集合**（与 503 同性质，4xx 仍不重试）。③ **MCP 工具调用先等握手中的服务器** —— 与 `mcp_tool` 钩子走**同一条等待**，两个入口对「正在连接」的服务器同等待遇。④ 钩子的 `additionalContext` 接进 `hookWarnings`（它唯一能到模型的通道），**并修掉紧随其后那行赋值对它的整段覆盖** —— 只接前者，功能等于没接。⑤ `permissionDecision` 只在 **ask/deny** 时拒绝（无交互提示 ⇒ ask 即硬拒），**allow 有意不认** —— 钩子可以来自仓库自带设置，不能让它自我放行；判据是**方向不是键名**。⑥ **项目级 agent 不得把权限放宽到父档之上** —— 判定用方向表而非 `indexOf`（`acceptEdits` 与 `default` 不可比，`indexOf` 会漏拒两格）。⑦ **压缩器压完再判一次**，仍超预算则再压一趟且更狠（有界两趟，第一趟与旧码逐字等价）。⑧ **记忆文本注入前先中和**（抹掉不可见字符与 `<…>` 形状游程）使内容无法闭合它被裹进的 `system-reminder` 块，且**先中和再截断** —— 否则跨边界的标签会被截成无终止形状、由外层自己的 `>` 补齐。⑨ **`.mipham/rules/*.md` 按形状拒绝并报告** —— 它的正文**逐字**注入会话并送往模型，是**出站**路径而非只是配置目录，而`readDir` 里那个空 `catch {}` 放符号链接／目录／FIFO 一并渗入；`lstat` 而非 `stat`（链接报自己是链接），**未加载与未通过是两回事** ⇒ 按路径去重报 stderr。理由具名：**不解析后再判包含** —— 工程根恰是用户那份 gitignored 秘密（`.env`、`.mipham/keys`）的所在，`-> ../../.env` 能过包含闸而照样泄。边界如实记：非 TOCTOU 安全。⑩ **自动循环的提示词不再让模型去写 CLI 自己的账** —— 原提示词让模型调 `logAutoloopIteration(...)`（**模块导出不是工具**，无从调用）并自行读写`~/.mipham/autoloop/<id>.json`（会**覆盖** CLI 维护的迭代计数／token 合计／状态）；改为要求**每轮以一行纯文本说出进度**，并给「本轮没有可见输出」一个具名标记。⑪ **读码优先规则不再把 `graft` 说成自己的工具**（它是经 Bash 运行的 CLI，仓库里没有任何一处注册过它）。**feat**：`/crsi lessons` 报出每条常驻教训的**档位来历** —— `severity` 是归一化后的读数，「有人判过」与「没人写过」同形，而 `critical` 每一条都随**每一次请求**发出去；加**必填** `severitySource`（可选的话下一个构造点忘了给，取到的默认值恰好**说反了**）+ 名册分开报数并逐条点名；来历只供人复核、不参与任何判定（一条翻转测试钉住三处输出逐字不变）。**已知边界**：来历不跨代（合并产物逐字写回 `- 严重度:`，回读是 `declared`）。同批三处**测试夹具改按形状构造**（原先以「真仓库长什么样」为前提，而变异测试的沙箱把仓库压平 ⇒ 那条流水线的干跑直接失败，红在夹具上）。测试 3,761（306 文件；本机 3,759 + 2 skipped，CI 3,751 + 10 skipped，0 失败）。
+> **版本**: 2.94.13
+> **最后更新**: 2026-10-01 — **`auto` 档闸门的裁决预算与裁决模型成为可配置（本笔未发布）** —— 上一批留下的那半： 分类器自己的延迟第一次被量出来，`DEFAULT_CLASSIFIER_TIMEOUT_MS` **2,000 → 30,000**。24 条真实 `ask` 级调用 × 两档模型，同机同时刻，每次请求的 model 从线上**回读**而不是信标签：主动模型 median 7.6s / p90 35.6s / max 120.0s， **旧 2s 会弃掉 23/24**；fast 档 median 1.3s / p90 3.7s，仍弃 **9/24**。**旧值不是太紧，是量错了** —— 这道闸门 fail-closed， 超时与拒绝对用户同形，所以「太紧」不等于慢，而是 `auto` 间歇性地拒掉本该放行的工作。新增 `permissions.classifierModel` / `classifierTimeoutMs`，**默认仍是操作者自己的模型**：fast 档不是它 6× 中位数暗示的那种白捡 —— 20 条边界调用上它放行了主动模型拒绝的 8 条（反向 2 条），速度是拿漏换的。三档语义：缺席/`'active'` ⇒ 当前模型 （每次裁决重读），`'fast'` ⇒ Flash 类且找不到时退回当前模型（不编 id），其余按 id 原样用。两键都按**放宽方向**处理 （只认用户级；项目级扣下并报 `projectClassifierSkipped`）；值写了但用不了就在 loader 里丢掉并**出声** —— 那里没有下游 applier，静默忽略与没读你的文件同形。顺带把 `self-critique` 的私有 `findFastestModel` 并进共享的 `pickFastestModel` （两处副本会无声漂开）。**一道既有守卫必须跟着改**：`permission-status-parity` 断的是「模型在裁决时取、不冻成字符串」， 而那个活读取点下沉进了 `resolveClassifierModel` ⇒ 把那句 `getActiveModel()` **搬去新家**（接线须含 `resolveClassifierModel(`，且它的默认分支须含 `getActiveModel()`），不是删掉；负控实跑会红、还原后 sha256 逐字相符。 测试 3,839 → **3,855**（309 文件；本机 3,853 passed + 2 skipped）。
+> **前一条（2.94.12）**: 2026-09-30 — **0.85.12：十八处「能力已声明、施加点缺席或缺了一环」+ CRSI 沙箱的两条 `cwd` 逃逸（26 笔 = 7 `fix` + 1 `refactor` + 2 `test` + 15 `docs` + 1 `chore`，逐笔按 commit type 数出）** —— 主项是一笔含 18 处收口的 `fix(cli)`，公共形状 = 能力挂上了名字，施加点却缺席、或缺了让它生效的那一环（另三处是「同一问题隔壁已经解决、这里没有」）。真缺口六处：① 凭据遮蔽的密码组把 `@` 排除在外 —— `https://user:p@ss@host` 只遮到 `p`，尾部随 bash 输出 / grep 内容 / config 文本进模型上下文与会话记录；② 子代理调 Agent 也一律进后台（`?? true`）⇒ 只拿回占位串、子结果永不回到发起它的子代理；③ workflow 里未被 `await` 的那次拒绝落进**无条件安装**的 `unhandledRejection` ⇒ 整个 CLI `exit(1)`；④ 钩子用 `spawnSync` ⇒ 被它启动的进程只要还持有继承来的管道，事件循环整个冻住（本机探针实测 20,020ms），超时给的还是「timed out after 60s」这个**误诊** ⇒ 改异步 `spawn` + `detached` 进程组；⑤ `ToolContext` 逐字 16 个字段没有 `signal` ⇒ 取消在任何时刻都没有通往工具执行的通路（bash 落到进程组，且「退出码 0 也算失败」）；⑥ 跨 provider 回退绕过 `engine.switchProvider` ⇒ 唯一那处 `updateMaxTokens` 从不触发、压缩扳机由已不作数的旧窗口驱动（1M→128K 时要等到 ~950K）。半缺口十处（settings.json 读不出不再沉默、插件卸载走 `unregisterMcpServerTools`、`/mcp` 过 `sanitizeInlineField`、`isRetryableFailure` 区分决定性失败、`truncated` 计入 failures、`exit-plan` 兜底从死代码变实现、`MIPHAM_DISABLE_WEB_FETCH=1` 在注册时摘掉、artifact 不再重复 `List all:`、只解 `&nbsp;` 一个实体、原地重试接上类别判别）+ 自发现两处（web-fetch 的 UA 不再写死 0.24.0、选择器开着时 Escape 归它）。**CRSI 沙箱**两条（都只在 `cwd` 不是仓库根时发作，而全量 `pnpm mutate` 时正是）：`repoRoot` 必须等于它自己那棵工作树的根（fail-closed、有意**不**静默改判为外层仓库的根 —— 代价已认下：在仓库子目录里启动会被拒），且每条 git 命令把位置写进**命令字符串本身**（`git -C <root>` / `cd <root> &&`，收成唯一出口 `runIn()`）—— 因为对象字面量变异体会把 `cwd` 连同 options 一起抹掉。**如实记**：压缩器那道缓存经济闸接上了，但在生产分布下恒不触发（无可观测行为变更）。测试 3,839（309 文件；本机 3,837 passed + 2 skipped）。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -45,7 +45,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：3,839 测试（本机 3,837 passed + 2 skipped，309 文件；CI 3,829 passed + 10 skipped —— 同 3,839 总数，差异只在跳过数（本机 2 / CI 10），`gh run 36715734258`，headSha == `2e89fa9b`（本批 GPG tag 所在那一笔），0 失败）
+测试：3,855 测试（本机 3,853 passed + 2 skipped，309 文件，0 失败）
 
 ---
 
@@ -82,7 +82,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 309 个测试文件，3839 个测试
+│   │   ├── test/               # 309 个测试文件，3855 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -108,7 +108,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（3839 个测试）
+pnpm test         # vitest run（3855 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -294,29 +294,29 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 ## 测试
 
-| 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                               |
-| --------------- | ------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 89      | 1517     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                                        |
-| tools           | 26      | 419      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                                 |
-| daemon          | 37      | 252      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                                          |
-| ui              | 27      | 295      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                                        |
-| agent           | 13      | 132      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                             |
-| security        | 11      | 109      | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                                     |
-| providers       | 9       | 143      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                                          |
-| mcp             | 11      | 113      | client / transport / oauth / token-store / registry / instructions（含 2 skipped）                                                                                                     |
-| workflow        | 8       | 61       | runtime / loop / parallel / sandbox / journal / verify                                                                                                                                 |
-| vajra           | 6       | 53       | context / events / service / compose / leaf（自建内核）                                                                                                                                |
-| shared          | 11      | 130      | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                                         |
-| commands        | 9       | 95       | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers / provider-model-flags                                                                             |
-| skills          | 5       | 35       | sanitizer / marketplace / fork-executor / skill-assets                                                                                                                                 |
-| config          | 10      | 117      | credential-crypto / loader-encryption / defaults / settings-json / preferences                                                                                                         |
-| plugin          | 4       | 57       | claude-plugin / plugin-manager                                                                                                                                                         |
-| artifacts       | 1       | 6        | manifest                                                                                                                                                                               |
-| agent-view      | 4       | 37       | agent-view-manager / dashboard-keys / session-view                                                                                                                                     |
-| e2e             | 1       | 8        | full-pipeline                                                                                                                                                                          |
-| integrity       | 18      | 130      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写）            |
-| telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                            |
-| **合计**        | **309** | **3839** | **0 失败** ✅（本机 3,837 + 2 skipped，309 文件；CI 3,829 passed + 10 skipped —— 同 3,839 总数、不同跳过切分，`gh run 36715734258`，headSha == `2e89fa9b`（本批 GPG tag 所在那一笔）） |
+| 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
+| --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| core            | 89      | 1520     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
+| tools           | 26      | 419      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
+| daemon          | 37      | 252      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
+| ui              | 27      | 295      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
+| agent           | 13      | 132      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
+| security        | 11      | 109      | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
+| providers       | 9       | 148      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
+| mcp             | 11      | 113      | client / transport / oauth / token-store / registry / instructions（含 2 skipped）                                                                                          |
+| workflow        | 8       | 61       | runtime / loop / parallel / sandbox / journal / verify                                                                                                                      |
+| vajra           | 6       | 53       | context / events / service / compose / leaf（自建内核）                                                                                                                     |
+| shared          | 11      | 130      | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                              |
+| commands        | 9       | 95       | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers / provider-model-flags                                                                  |
+| skills          | 5       | 35       | sanitizer / marketplace / fork-executor / skill-assets                                                                                                                      |
+| config          | 10      | 125      | credential-crypto / loader-encryption / defaults / settings-json / preferences                                                                                              |
+| plugin          | 4       | 57       | claude-plugin / plugin-manager                                                                                                                                              |
+| artifacts       | 1       | 6        | manifest                                                                                                                                                                    |
+| agent-view      | 4       | 37       | agent-view-manager / dashboard-keys / session-view                                                                                                                          |
+| e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
+| integrity       | 18      | 130      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
+| telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
+| **合计**        | **309** | **3855** | **0 失败** ✅（本机 3,853 + 2 skipped，309 文件；CI 读数随本笔推送后单独回填）                                                                                              |
 
 > **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 179 测试，自带
 > `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。

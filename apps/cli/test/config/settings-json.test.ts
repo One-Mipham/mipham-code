@@ -557,3 +557,118 @@ describe('loadSettingsJson — 读不了的 settings.json 要说出来', () => {
     expect(stderr).toBe('')
   })
 })
+
+// `permissions.classifierModel` / `classifierTimeoutMs` 调的是 `auto` 档闸门**怎么裁**。
+// 两者都可能放宽：换一个更弱的模型（2026-09-30 实测：边界调用放行率 10% ⇒ 40%），或给
+// 更多时间让更多调用**裁得动**（裁不动即拒 —— 这道闸门是 fail-closed）。方向与
+// `defaultMode`/`allow` 相同 ⇒ 同样只认用户级。
+describe('permissions.classifierModel / classifierTimeoutMs（放宽方向：只认用户级）', () => {
+  const PROJECT_SETTINGS = join(CWD, '.mipham', 'settings.json')
+  const USER_SETTINGS = join(MIPHAM_HOME, 'settings.json')
+
+  beforeEach(() => {
+    rmSync(homedir(), { recursive: true, force: true })
+    mkdirSync(join(CWD, '.mipham'), { recursive: true })
+    mkdirSync(MIPHAM_HOME, { recursive: true })
+  })
+
+  afterEach(() => {
+    rmSync(homedir(), { recursive: true, force: true })
+  })
+
+  const writeProject = (permissions: unknown): void => {
+    writeFileSync(PROJECT_SETTINGS, JSON.stringify({ permissions }))
+  }
+  const writeUser = (permissions: unknown): void => {
+    writeFileSync(USER_SETTINGS, JSON.stringify({ permissions }))
+  }
+  function captureStderr(fn: () => void): string {
+    const chunks: string[] = []
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation(((c: unknown) => {
+      chunks.push(String(c))
+      return true
+    }) as typeof process.stderr.write)
+    try {
+      fn()
+    } finally {
+      spy.mockRestore()
+    }
+    return chunks.join('')
+  }
+
+  it('用户级照收，且不留标记（正对照：扣的是「项目级」，不是这两个键）', () => {
+    writeUser({ classifierModel: 'fast', classifierTimeoutMs: 30_000 })
+    const r = loadSettingsJson(CWD)
+    expect(r.permissions.classifierModel).toBe('fast')
+    expect(r.permissions.classifierTimeoutMs).toBe(30_000)
+    expect(r.projectClassifierSkipped).toBeUndefined()
+  })
+
+  it('项目级**不**采纳，并报出被扣；同一份文件里的 deny 照常合并', () => {
+    writeProject({ classifierModel: 'fast', classifierTimeoutMs: 60_000, deny: ['Bash(rm:*)'] })
+    const r = loadSettingsJson(CWD)
+    // 扣的是**方向**，不是整个 permissions 表：同一份文件里收窄的 deny 仍然到位。
+    expect(r.permissions.classifierModel).toBeUndefined()
+    expect(r.permissions.classifierTimeoutMs).toBeUndefined()
+    expect(r.permissions.deny).toEqual(['Bash(rm:*)'])
+    expect(r.projectClassifierSkipped).toBe(true)
+  })
+
+  it('信任了也一样扣 —— 与 defaultMode 同一条理由，这道闸门不看信任', () => {
+    writeProject({ classifierModel: 'fast' })
+    const r = loadSettingsJson(CWD, { includeProjectHooks: true })
+    expect(r.permissions.classifierModel).toBeUndefined()
+    expect(r.projectClassifierSkipped).toBe(true)
+  })
+
+  it('两份都写了：用户级的赢，且仍报出项目那份被扣', () => {
+    writeProject({ classifierModel: 'fast' })
+    writeUser({ classifierModel: 'active' })
+    const r = loadSettingsJson(CWD)
+    expect(r.permissions.classifierModel).toBe('active')
+    expect(r.projectClassifierSkipped).toBe(true)
+  })
+
+  it('标记不能自己冒出来：空串／非字符串／非正数都不算「声明过」', () => {
+    // 与 `projectModeSkipped`（非空字符串）同一条规矩：标记与它报告的事实取自同一次解析。
+    const bads: unknown[] = [
+      { classifierModel: '   ' },
+      { classifierModel: 123 },
+      { classifierTimeoutMs: '30s' },
+      { classifierTimeoutMs: -1 },
+      { classifierTimeoutMs: 0 },
+      { classifierTimeoutMs: Number.NaN },
+    ]
+    for (const bad of bads) {
+      writeProject(bad)
+      expect(loadSettingsJson(CWD).projectClassifierSkipped).toBeUndefined()
+    }
+  })
+
+  it('用户级写了个坏值 ⇒ 不采纳，**并出声**（静默忽略等于没写）', () => {
+    writeUser({ classifierTimeoutMs: '30s' })
+    let r: ReturnType<typeof loadSettingsJson> | undefined
+    const stderr = captureStderr(() => {
+      r = loadSettingsJson(CWD)
+    })
+    expect(r!.permissions.classifierTimeoutMs).toBeUndefined()
+    expect(stderr).toContain('classifierTimeoutMs')
+    expect(stderr).toContain(USER_SETTINGS)
+  })
+
+  it('反方向：值合法时不出声（否则上面那条可能只是「凡有 keys 就喊」）', () => {
+    writeUser({ classifierTimeoutMs: 30_000 })
+    const stderr = captureStderr(() => {
+      loadSettingsJson(CWD)
+    })
+    expect(stderr).toBe('')
+  })
+
+  it('负控：home 的**子目录**里那份仍是项目级（判据是同一个目录，不是前缀）', () => {
+    writeProject({ classifierModel: 'fast' })
+    expect(loadSettingsJson(CWD).permissions.classifierModel).toBeUndefined()
+    // 而从 home 本身启动时那份就是用户级 —— 照收。
+    writeUser({ classifierModel: 'fast' })
+    expect(loadSettingsJson(homedir()).permissions.classifierModel).toBe('fast')
+  })
+})

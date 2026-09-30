@@ -57,6 +57,7 @@ const SUB_AGENT = stripComments(read('src/agent/sub-agent.ts'))
 const INDEX_CODE = stripComments(INDEX)
 const SERVER = stripComments(read('src/daemon/server.ts'))
 const PROTOCOL = read('src/daemon/attach-protocol.ts')
+const REGISTRY = stripComments(read('src/providers/registry.ts'))
 
 /**
  * 取出 `case '<name>': { … }` 分支的正文（按花括号配平，不看缩进 —— 缩进锚会在
@@ -252,7 +253,20 @@ describe('`auto` 档分类器的接线（三个点，缺一处就是「实现了
     const ctor = /new LlmPermissionClassifier\(([\s\S]*?)\)\n/.exec(INDEX_CODE)
     expect(ctor, '没抓到构造参数，下面的断言会变成空话').not.toBeNull()
     expect(ctor![1], '模型参数不是个 thunk ⇒ 启动时就被冻住').toContain('=>')
-    expect(ctor![1]).toContain('getActiveModel()')
     expect(ctor![1], 'resolveModel 又被写成了字面量').not.toMatch(/resolveModel:\s*['"`]/)
+
+    // 「裁决时取」现在多了一层：接线经 `resolveClassifierModel`（`permissions.classifierModel`
+    // 的三档语义），而**它**才是回读 live 模型的那一处。只断上面那两句会漏掉这一层 ——
+    // 一个 `return 'deepseek-v4-pro'` 的 resolver 同样含 `=>`、同样不匹配字面量的形状，
+    // 却和把字符串写进接线一样冻住。所以那句 `getActiveModel()` 被搬到它的新家，而不是删掉。
+    expect(ctor![1], '接线没走 resolveClassifierModel ⇒ 下一句断的就不是真正的分支').toContain(
+      'resolveClassifierModel(',
+    )
+    const resolver = /export function resolveClassifierModel\([\s\S]*?\n\}/.exec(REGISTRY)
+    expect(resolver, 'registry.ts 里没有 resolveClassifierModel').not.toBeNull()
+    expect(
+      resolver![0],
+      'resolver 的默认分支没读 live 模型 ⇒ 用户切到便宜模型后闸门仍按老模型裁决',
+    ).toContain('getActiveModel()')
   })
 })

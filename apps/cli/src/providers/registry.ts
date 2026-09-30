@@ -2,6 +2,44 @@ import type { ProviderConfig, ModelInfo, Message, StreamChunk } from '../shared/
 import type { Llm } from './llm'
 import { getMetrics } from '../core/metrics'
 
+/**
+ * The model a secondary call should use when it wants speed rather than depth:
+ * the first active model whose id looks like a small one, else whatever is
+ * active. Exported so the permission classifier and `self-critique` pick the
+ * same model — two private copies of this heuristic would drift apart silently.
+ */
+export function pickFastestModel(registry: ProviderRegistry): string {
+  const models = registry.listModels?.() ?? []
+  const flash = models.find(
+    (m) => m.id.toLowerCase().includes('flash') || m.id.toLowerCase().includes('1.5b'),
+  )
+  return flash ? flash.id : registry.getActiveModel()
+}
+
+/**
+ * Resolve `permissions.classifierModel` to a model id.
+ *
+ * Three inputs, three meanings — and the default is the point:
+ *
+ *  - absent / `'active'` ⇒ the operator's own model. A gate that quietly
+ *    downgraded to a cheaper judge would make `auto` mean "judged by something
+ *    you did not pick", and the two models do not agree on borderline calls
+ *    (measured 2026-09-30: the fast one allowed 8/20 that the reasoning one
+ *    blocked, 2/20 the other way).
+ *  - `'fast'` ⇒ `pickFastestModel`, falling back to the active model rather
+ *    than inventing an id that may not exist.
+ *  - anything else ⇒ used verbatim. Whether it exists is the provider's to say;
+ *    a second registry here would be a second value domain that drifts.
+ */
+export function resolveClassifierModel(
+  choice: string | undefined,
+  registry: ProviderRegistry,
+): string {
+  if (choice === undefined || choice === '' || choice === 'active') return registry.getActiveModel()
+  if (choice === 'fast') return pickFastestModel(registry)
+  return choice
+}
+
 export interface ProviderInstance {
   config: ProviderConfig
   chat(req: ChatRequest): AsyncGenerator<StreamChunk>

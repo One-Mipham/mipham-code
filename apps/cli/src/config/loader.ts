@@ -414,7 +414,23 @@ export interface SettingsJson {
    * validator here would be a second value domain, and the two would drift the
    * day a mode is added.
    */
-  permissions: { allow: string[]; deny: string[]; defaultMode?: string }
+  permissions: {
+    allow: string[]
+    deny: string[]
+    defaultMode?: string
+    /**
+     * Which model rules in `auto` mode. Absent ⇒ the model the operator has
+     * active; `'active'` says the same thing out loud; `'fast'` picks the
+     * Flash-class model; any other string is a model id, passed through
+     * unvalidated (the provider is the only thing that can say what exists).
+     */
+    classifierModel?: string
+    /**
+     * Milliseconds a single ruling may take before it is abandoned. Absent ⇒
+     * `DEFAULT_CLASSIFIER_TIMEOUT_MS`.
+     */
+    classifierTimeoutMs?: number
+  }
   /**
    * Present (and `true`) only when the project-level file really did declare
    * hooks and they were withheld because the caller did not vouch for the
@@ -439,6 +455,14 @@ export interface SettingsJson {
    * that declares `allow` but no mode sets this one and not the other.
    */
   projectAllowSkipped?: true
+  /**
+   * Same shape, for `permissions.classifierModel` / `classifierTimeoutMs`: the
+   * two knobs on **how** the `auto` gate rules rather than on what it permits.
+   * Both can widen it — a weaker judge, or more time for a ruling that would
+   * otherwise time out into a denial — so both are withheld from a project file
+   * for the same reason `defaultMode` is, and the one marker covers both.
+   */
+  projectClassifierSkipped?: true
   /**
    * The subset of `hooks` that came from the project-level file — the entries
    * the workspace-trust gate governs. Absent unless the caller vouched for the
@@ -489,13 +513,20 @@ export function loadSettingsJson(
   options: { includeProjectHooks?: boolean } = {},
 ): SettingsJson {
   const hooks: SettingsHooks = {}
-  const permissions: { allow: string[]; deny: string[]; defaultMode?: string } = {
+  const permissions: {
+    allow: string[]
+    deny: string[]
+    defaultMode?: string
+    classifierModel?: string
+    classifierTimeoutMs?: number
+  } = {
     allow: [],
     deny: [],
   }
   let projectHooksSkipped = false
   let projectModeSkipped = false
   let projectAllowSkipped = false
+  let projectClassifierSkipped = false
   // The project file's entries, kept out of the merge so provenance survives it.
   const projectHooks: SettingsHooks = {}
 
@@ -537,7 +568,13 @@ export function loadSettingsJson(
       }
       const parsed = JSON.parse(raw) as {
         hooks?: Record<string, unknown>
-        permissions?: { allow?: unknown; deny?: unknown; defaultMode?: unknown }
+        permissions?: {
+          allow?: unknown
+          deny?: unknown
+          defaultMode?: unknown
+          classifierModel?: unknown
+          classifierTimeoutMs?: unknown
+        }
       }
 
       if (!readHooks) {
@@ -597,6 +634,43 @@ export function loadSettingsJson(
             if (!permissions[key].includes(p)) permissions[key].push(p)
           }
         }
+
+        // The two knobs on **how** the gate rules, rather than on what it lets
+        // through. Both can widen it — a weaker judge (measured 2026-09-30: the
+        // fast model allows 8/20 borderline calls the reasoning one blocks), or
+        // more time, since a ruling that does not finish in budget is a denial —
+        // so both are withheld from a project file like `defaultMode`.
+        //
+        // Unlike `defaultMode`, a value that cannot be used is dropped **here**
+        // and said so: there is no applier downstream that knows these spellings,
+        // and silently ignoring a knob the user wrote is indistinguishable from
+        // never reading their file.
+        const rawClassifierModel = parsed.permissions.classifierModel
+        if (rawClassifierModel !== undefined) {
+          if (typeof rawClassifierModel === 'string' && rawClassifierModel.trim() !== '') {
+            if (isProject) projectClassifierSkipped = true
+            else permissions.classifierModel = rawClassifierModel.trim()
+          } else {
+            process.stderr.write(
+              `⚠ Mipham Code: ignoring permissions.classifierModel from ${path} — expected a non-empty model id.\n`,
+            )
+          }
+        }
+        const rawClassifierTimeout = parsed.permissions.classifierTimeoutMs
+        if (rawClassifierTimeout !== undefined) {
+          if (
+            typeof rawClassifierTimeout === 'number' &&
+            Number.isFinite(rawClassifierTimeout) &&
+            rawClassifierTimeout > 0
+          ) {
+            if (isProject) projectClassifierSkipped = true
+            else permissions.classifierTimeoutMs = rawClassifierTimeout
+          } else {
+            process.stderr.write(
+              `⚠ Mipham Code: ignoring permissions.classifierTimeoutMs from ${path} — expected a positive number of milliseconds.\n`,
+            )
+          }
+        }
       }
     } catch (err: unknown) {
       // Malformed JSON is the other half of the same problem: the file exists and
@@ -617,6 +691,7 @@ export function loadSettingsJson(
   if (projectHooksSkipped) result.projectHooksSkipped = true
   if (projectModeSkipped) result.projectModeSkipped = true
   if (projectAllowSkipped) result.projectAllowSkipped = true
+  if (projectClassifierSkipped) result.projectClassifierSkipped = true
   if (Object.values(projectHooks).some((entries) => Array.isArray(entries) && entries.length > 0)) {
     result.projectHooks = projectHooks
   }

@@ -68,18 +68,30 @@ export const PROMPT_VERSION = 'mipham-auto-classifier/1'
  * refused for". A budget derived from the fail-open side would be a budget
  * derived from the wrong question.
  *
- * A tighter bound was considered (it is on the gated path, so every ruled call
- * costs the user the full wait) and rejected: with a fail-closed default, a
- * timeout is indistinguishable from a denial to the user, so shrinking this
- * trades "slow" for "auto mode intermittently refuses legitimate work" — and the
- * classifier's own latency distribution still has not been measured. (A sibling
- * measurement does now exist — `self-critique`'s, median 3.95s over 30 real
- * calls — and it is a reason to *distrust* this 2s, not a reading that may be
- * substituted for one.) Making it configurable, or re-basing it, needs that
- * measurement first; the prompts, the target model and the output shape all
- * differ from the sibling.
+ * 30s is measured, not picked: 24 realistic `ask`-worthy calls per pass, same
+ * machine and minute, each request's model read back off the wire rather than
+ * trusted from a label.
+ *
+ *   active (reasoning)  median 7.6s   p90 35.6s   max 120.0s   over the old 2s: 23/24
+ *   fast   (flash)      median 1.3s   p90  3.7s   max  16.5s   over the old 2s:  9/24
+ *
+ * So the old bound was wrong for **both** models — and since a timeout here is
+ * indistinguishable from a denial, "too tight" does not mean slow: every ruled
+ * call pays the full wait and the gate then says no to work it should have
+ * allowed.
+ *
+ * The fast model is not the free win its 6× median suggests: over the 20
+ * borderline calls sampled against both, it allowed 8 the reasoning model
+ * blocked (2 the other way). Speed there is bought with leak, so the default
+ * stays the operator's own model (`resolveClassifierModel`), and the number
+ * above is the active model's p90 with room for the tail it measured —
+ * `permissions.classifierTimeoutMs` exists for a user who has decided otherwise.
+ *
+ * A longer budget is not the lever it looks like either: both models answer
+ * clear-cut calls stably and coin-flip on borderline ones, so what is left here
+ * is judgement quality, not patience. Re-measure before re-basing this.
  */
-export const DEFAULT_CLASSIFIER_TIMEOUT_MS = 2000
+export const DEFAULT_CLASSIFIER_TIMEOUT_MS = 30_000
 
 /**
  * Per-value cap on serialized tool input. Truncation is a real boundary here,
@@ -452,7 +464,19 @@ export class LlmPermissionClassifier implements PermissionClassifier {
     }
 
     if (streamError) {
-      return { allow: false, reason: `classifier unavailable: ${streamError}`, retryable: true }
+      // The provider surfaces its abort as a *yielded* error chunk, not a throw
+      // (`providers/openai-compat.ts`), so a timeout we caused arrives here — and
+      // a naive read of `streamError` reports it as "Stream stalled", sending the
+      // reader hunting for a network problem. Our own budget expiring is the one
+      // cause we already know; name it. (`timedOut` is false for an external
+      // abort, so a user interrupt still reads as "unavailable", not "timed out".)
+      return {
+        allow: false,
+        reason: timedOut
+          ? `classifier timed out after ${this.timeoutMs}ms`
+          : `classifier unavailable: ${streamError}`,
+        retryable: true,
+      }
     }
 
     const parsed = parseClassifierResponse(text)
