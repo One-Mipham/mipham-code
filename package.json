@@ -28,6 +28,9 @@
       "js-yaml": "4.3.2",
       "postcss": "8.5.26",
       "nanoid": "3.3.18"
+    },
+    "patchedDependencies": {
+      "@stryker-mutator/vitest-runner@10.0.0": "patches/@stryker-mutator__vitest-runner@10.0.0.patch"
     }
   },
   "devDependencies": {
