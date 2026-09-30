@@ -52,6 +52,31 @@ vi.mock('node:os', async (importOriginal) => {
  *   · 静态段钉**形状**（对象字面量被抹掉也动不了的那一半）；
  *   · 行为段钉**形状真的管用**（`-C` 的参数序与引号对不对 —— 纯文本扫描看不出来）。
  *
+ * ## 第三巡（2026-09-30 再续）：第二半**整体**跑不了变异沙箱
+ *
+ * 两处、两因，同一趟干跑（DryRunExecutor）先后暴露 —— 前一处挡住后一处：
+ *
+ * 1. **静态段**量的是源码**文本**，而 `src/core/crsi-sandbox.ts` 正在 `stryker.config.json`
+ *    的 `mutate` 清单里 ⇒ Stryker 先**仪器化**它再跑测试：模板字面量里那个被变异的表达式
+ *    被重写成 `stryMutAct_<h>(…) ? … : (stryCov_<h>(…), …)` ⇒ `GIT_ROOTED` 那条串**在沙箱里
+ *    压根不存在**。故包进 `describe.skipIf(isInstrumented(SRC))`，旁边那条探测器自证
+ *    钉住「跳过」不会退化成无条件沉默。
+ * 2. **行为段**虽然不碰文本，却要用 `process.chdir()` 把 cwd 挪到诱饵仓库上 —— 而 Stryker
+ *    让测试跑在 **worker** 里，`chdir` 在那里直接抛 `not supported in workers`。故包进
+ *    `describe.skipIf(UNDER_STRYKER)`。
+ *
+ * 后果都不是「漏检」而是**整趟跑不起来**：干跑就红，一个变异体都不跑。而 **CI 不跑变异
+ * ⇒ CI 上永远红不了**，只有本地真跑一趟才看得见（2026-09-30 实测）。
+ *
+ * **变异跑里这条不变量由谁承担 —— 回读报告，不靠推**（`apps/cli/reports/mutation/mutation.json`，
+ * 2026-09-30 那趟全量 run）：`git -C` 那条模板的两个变异体（`crsi-sandbox.ts:307`）**均被
+ * Killed**，杀它们的是 `crsi-sandbox.test.ts` 与 `crsi-modify.test.ts`（两族夹具都已改成
+ * 自建临时仓库）—— **不是这里的静态段**（它在沙箱里是跳过的），也不是这里的正控。本文件在
+ * 同一趟里另有 **4 个**击杀，全落在构造闸 `assertSandboxRepoRoot`（`crsi-sandbox.ts:331/339/341`）
+ * 与正控（`:691`）上，与 `-C` 无关。
+ * **`cd <root> &&` 那条模板的变异体是 `NoCoverage`** —— 走它的调用点（`pnpm test`，
+ * `crsi-sandbox.ts:517`）没有用例覆盖；是边界，不是死代码。
+ *
  * 本文件自足（同 `tool-reference-integrity.test.ts` 的约定：守卫之间不抽公共模块）。
  */
 
@@ -211,42 +236,57 @@ function shapeProblems(src: string): string[] {
   return problems
 }
 
+/**
+ * 这份源码是否已被 Stryker **仪器化**过（见文件头「第三巡」）。
+ *
+ * 仪器化会重写表达式文本，于是「源码里有没有 `GIT_ROOTED` 这条串」在沙箱里**恒为假**
+ * —— 量的已经不是源码了。判据：源码里出现仪器化的两个族名。
+ */
+const isInstrumented = (src: string): boolean =>
+  src.includes('stryMutAct_') || src.includes('stryCov_')
+
+const SRC = readFileSync(SRC_PATH, 'utf-8')
+const INSTRUMENTED = isInstrumented(SRC)
+
+/** 一段写在**测试文件里**的样本 —— 不随沙箱变，故可当探测器的正对照。 */
+const PRISTINE_SAMPLE = `const rooted = ${GIT_ROOTED}\n`
+
+/**
+ * 本文件是否正跑在 Stryker 的沙箱里（判据：路径里有 `.stryker-tmp/`）。
+ *
+ * 行为段在沙箱里的失败**与仪器化无关**：Stryker 让测试跑在 **worker** 里，而
+ * `process.chdir()` 在 worker 线程直接抛 `not supported in workers`。
+ * 这是同一趟干跑暴露出来的**第二处**（第一处是形状段的仪器化）—— 前一处挡住后一处，
+ * 修掉前半才看得见它。
+ */
+const UNDER_STRYKER = /[\\/]\.stryker-tmp[\\/]/.test(import.meta.dirname)
+
 describe('CRSI 沙箱：目标仓库写在命令字符串里（变异体抹不掉）', () => {
-  const SRC = readFileSync(SRC_PATH, 'utf-8')
-
-  it('地形自证：源码在、且 execSync 确实存在（否则下面的断言全是空转）', () => {
-    expect(SRC.length).toBeGreaterThan(0)
-    expect(countExecSyncLines(SRC)).toBeGreaterThan(0)
-    // 前提没变才谈得上「唯一出口」：runIn 还在，且仍被调用。
-    expect(SRC).toContain('function runIn(')
-    expect(SRC.split('\n').filter((l) => l.includes('runIn(')).length).toBeGreaterThan(1)
+  it('探测器自证：它分得开源码与仪器化产物（否则下面的「跳过」是无条件沉默）', () => {
+    // 正对照：一段已知**未**仪器化的文本 ⇒ 必须判 false（它是真源码里那条串本身）。
+    expect(isInstrumented(PRISTINE_SAMPLE)).toBe(false)
+    // 负对照：仪器化产物的两个族名，各判一次。
+    expect(isInstrumented('stryCov_9fa48("1")')).toBe(true)
+    expect(isInstrumented('stryMutAct_9fa48("1")')).toBe(true)
   })
+})
 
-  it('形状：runIn 是唯一的 execSync 出口，且根在字符串里', () => {
-    expect(shapeProblems(SRC)).toEqual([])
-  })
-
-  it('反向对照：把 -C 撤掉 / 绕过 runIn 另开一处 execSync —— 判据都要报红', () => {
-    // 若不报红，上面那条「全部合规」就是个仪式（它没有能力失败）。
-    const demotedGit = SRC.replace(GIT_ROOTED, '`${cmd}`')
-    expect(demotedGit).not.toBe(SRC) // 前件成立：替换真的发生了
-    expect(shapeProblems(demotedGit)).toContain('runIn 未把 -C 写进 git 子命令的字符串里')
-
-    const demotedCd = SRC.replace(CD_ROOTED, '`${cmd}`')
-    expect(demotedCd).not.toBe(SRC)
-    expect(shapeProblems(demotedCd)).toContain('runIn 未把 cd 写进非 git 命令的字符串里')
-
-    // 绕过出口：另起一处直接 execSync（正是这次泄漏的写法）。
-    const bypassed = `${SRC}\nexport const _x = () => execSync('git status', { cwd: '/x' })\n`
-    expect(shapeProblems(bypassed)).toContain(
-      `execSync( 出现在 2 行；应当是 1 行（只有 runIn 里那一处）`,
-    )
-  })
-
-  it('行为：process.cwd() 是**另一棵真有 .git 的仓库**时，沙箱照样只动交给它的那棵', () => {
+/**
+ * 行为段：cwd 是**另一棵真有 .git 的仓库**，沙箱照样只动交给它的那棵。
+ *
+ * 变异沙箱里跳过（`process.chdir()` 在 worker 里不被支持）。那一趟里这条不变量**仍有击杀者，
+ * 但不在本文件**：`-C` 那条模板的两个变异体是被 `crsi-sandbox.test.ts` / `crsi-modify.test.ts`
+ * 杀掉的（各自的夹具都建在自建临时仓库上）—— 归属见文件头「第三巡」那条回读记录。
+ */
+describe.skipIf(UNDER_STRYKER)('CRSI 沙箱：cwd 在别处时也只动交给它的那棵', () => {
+  it('process.cwd() 是**另一棵真有 .git 的仓库**时，沙箱照样只动交给它的那棵', () => {
     // 为什么这半条不可省：静态段只证明「字符串长得对」，证明不了 `git -C '<path>'`
     // 的参数序与引号真的成立（写成 `-c`、或把 `-C` 放到子命令之后，文本判据都看不出来）。
     // 诱饵**带 .git**，比 Stryker 那个沙箱更强（那里连 .git 都没有）。
+    //
+    // 这条**只在变异沙箱之外**跑（见上）：抹掉 `-C` 的变异体会让工作树落到诱饵仓库上，
+    // 于是下面 `decoyBranches()` 当场红 —— 但**变异那趟不是靠本文件抓它**，而是靠
+    // `crsi-sandbox.test.ts` / `crsi-modify.test.ts` 的夹具（归属见文件头）。
     const decoy = realpathSync(mkdtempSync(join(tmpdir(), 'crsi-guard-decoy-')))
     git(['init', '-q'], decoy)
     git(['config', 'user.email', 'crsi-guard@test.invalid'], decoy)
@@ -274,5 +314,40 @@ describe('CRSI 沙箱：目标仓库写在命令字符串里（变异体抹不�
       rmSync(decoy, { recursive: true, force: true })
     }
     expect(branchSet()).toEqual(BASELINE_BRANCHES)
+  })
+})
+
+/**
+ * 形状段：量的是源码**文本**，故只在**未仪器化**时成立。
+ * 变异跑里它是**跳过**（不是「通过」）—— 那一趟由上面那条行为判据承担。
+ */
+describe.skipIf(INSTRUMENTED)('CRSI 沙箱：形状（仅对未仪器化的源码）', () => {
+  it('地形自证：源码在、且 execSync 确实存在（否则下面的断言全是空转）', () => {
+    expect(SRC.length).toBeGreaterThan(0)
+    expect(countExecSyncLines(SRC)).toBeGreaterThan(0)
+    // 前提没变才谈得上「唯一出口」：runIn 还在，且仍被调用。
+    expect(SRC).toContain('function runIn(')
+    expect(SRC.split('\n').filter((l) => l.includes('runIn(')).length).toBeGreaterThan(1)
+  })
+
+  it('形状：runIn 是唯一的 execSync 出口，且根在字符串里', () => {
+    expect(shapeProblems(SRC)).toEqual([])
+  })
+
+  it('反向对照：把 -C 撤掉 / 绕过 runIn 另开一处 execSync —— 判据都要报红', () => {
+    // 若不报红，上面那条「全部合规」就是个仪式（它没有能力失败）。
+    const demotedGit = SRC.replace(GIT_ROOTED, '`${cmd}`')
+    expect(demotedGit).not.toBe(SRC) // 前件成立：替换真的发生了
+    expect(shapeProblems(demotedGit)).toContain('runIn 未把 -C 写进 git 子命令的字符串里')
+
+    const demotedCd = SRC.replace(CD_ROOTED, '`${cmd}`')
+    expect(demotedCd).not.toBe(SRC)
+    expect(shapeProblems(demotedCd)).toContain('runIn 未把 cd 写进非 git 命令的字符串里')
+
+    // 绕过出口：另起一处直接 execSync（正是这次泄漏的写法）。
+    const bypassed = `${SRC}\nexport const _x = () => execSync('git status', { cwd: '/x' })\n`
+    expect(shapeProblems(bypassed)).toContain(
+      `execSync( 出现在 2 行；应当是 1 行（只有 runIn 里那一处）`,
+    )
   })
 })
