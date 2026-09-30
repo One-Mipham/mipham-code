@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { Message, ContentBlock } from '@mipham/shared'
 import { ContextManager } from '../../src/core/context'
+import { PrefixCacheTracker } from '../../src/core/context-token'
 import { SessionLog, deriveMessages, setAssertModelVisibleDebug } from '../../src/core/session-log'
 
 function makeContext(maxTokens = 200_000, compactionThreshold = 0.9) {
@@ -656,6 +657,55 @@ describe('ContextManager log integration', () => {
     const rewrite = log.events().find((e) => e.type === 'compaction/rewrite')
     expect(rewrite).toBeDefined()
     expect(deriveMessages(log.events())).toEqual(cm.getMessages())
+    expect(cm.getMessages()[0]).toEqual({
+      role: 'user',
+      content: [{ type: 'tool_result', tool_use_id: 't0', content: '[earlier result omitted]' }],
+    })
+  })
+
+  // ── `shouldMicrocompact` 的接线闸 ──
+  // 这一对是**正负对照**，且用的是**构造出来的缓存分布**（见下）；负控在接线之前**必红**
+  // —— 那时 `shouldMicrocompact` 全仓零调用点，microcompact 遇到「未缓存的旧 tool_result」就会压。
+  const seedPairs = (cm: ContextManager, n: number) => {
+    for (let i = 0; i < n; i++) {
+      cm.addToolResult(`t${i}`, { success: true, content: `result content ${i} with some length` })
+    }
+  }
+
+  it('缓存不划算时跳过 microcompact：本该被压的旧 tool_result 原样保留', async () => {
+    const cm = new ContextManager({ maxTokens: 60, compactionThreshold: 0.9 })
+    const log = new SessionLog('microcompact-gate-skip-test')
+    cm.setLog(log)
+    const tracker = new PrefixCacheTracker()
+    cm.setCacheTracker(tracker)
+
+    seedPairs(cm, 10)
+    // ⚠️ 这是**构造**的分布，不是 engine 那种（`markCached(messages.slice(0, -1))` ⇒ 只有最新一条未缓存）。
+    // 理由：在 engine 那种分布下，microcompact 的候选集（pairIndex < n-keepRecent）与未缓存集**不相交**，
+    // 它内部的逐条 `isInCache` 检查已经把活干完了 ⇒ 闸门与不闸门**同形**，那样的断言是仪式（实测：接线前
+    // 也绿）。要点亮这道闸，就得让「有可压的未缓存旧结果」与「缓存损失更大」同时成立：前 2 对未缓存、
+    // 后 8 对已缓存 ⇒ save = 0.5×2t < loss×1.5 = 1.5×8t。
+    tracker.markCached(cm.getMessages().slice(6))
+    await new Promise((resolve) => setTimeout(resolve, 0)) // flush 异步 microcompact
+
+    expect(cm.getMessages()[0]).toEqual({
+      role: 'user',
+      content: [
+        { type: 'tool_result', tool_use_id: 't0', content: 'result content 0 with some length' },
+      ],
+    })
+    expect(log.events().some((e) => e.type === 'compaction/rewrite')).toBe(false)
+  })
+
+  it('正对照：无缓存（NoopCacheTracker）时同一场景照压 —— 证明上一条断言的不是「反正都不动」', async () => {
+    const cm = new ContextManager({ maxTokens: 60, compactionThreshold: 0.9 })
+    const log = new SessionLog('microcompact-gate-proceed-test')
+    cm.setLog(log)
+    // 不调 setCacheTracker ⇒ 默认就是 NoopCacheTracker（全都不在缓存里）⇒ 闸门放行
+
+    seedPairs(cm, 10)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
     expect(cm.getMessages()[0]).toEqual({
       role: 'user',
       content: [{ type: 'tool_result', tool_use_id: 't0', content: '[earlier result omitted]' }],

@@ -1,6 +1,6 @@
 import type { Message, ToolResult } from '../shared/index.ts'
 import { snipMessages } from './context-snip'
-import { microcompact } from './context-microcompact'
+import { microcompact, shouldMicrocompact } from './context-microcompact'
 import { NoopCacheTracker, type CacheTracker, type CacheStatus } from './context-token'
 import {
   SessionLog,
@@ -514,12 +514,7 @@ export class ContextManager {
 
     const usage = this.getEstimatedTokens() / this.config.maxTokens
 
-    // Adaptive microcompact threshold: 200K→0.70, 500K→0.80, 1M→0.85
-    const microThreshold = this.config.contextWindow
-      ? Math.max(0.7, 1 - 150000 / this.config.contextWindow)
-      : 0.7
-
-    if (usage > microThreshold) {
+    if (usage > this.microcompactThreshold()) {
       this.compressionPending = true
       // Schedule microcompact asynchronously (fire-and-forget)
       void Promise.resolve().then(() => {
@@ -527,6 +522,11 @@ export class ContextManager {
         this.compressionPending = false
       })
     }
+  }
+
+  /** Adaptive microcompact threshold: 200K→0.70, 500K→0.80, 1M→0.85 */
+  private microcompactThreshold(): number {
+    return this.config.contextWindow ? Math.max(0.7, 1 - 150000 / this.config.contextWindow) : 0.7
   }
 
   /** Run snip + microcompact inline and update stats. */
@@ -538,11 +538,21 @@ export class ContextManager {
       this.compactionStats.snipMessagesRemoved += removed
     }
 
-    // Microcompact: compress tool_results not needed for recent context
+    // Microcompact: compress tool_results not needed for recent context.
+    // 先问 `shouldMicrocompact` —— 它比的是「省下的」与「因缓存失效赔掉的」：压掉一条消息会让
+    // 它**之后**的整段前缀缓存失效，赔的常常比省的多。不闸这一道的话，这次压在有缓存时纯属白跑
+    // （实测：带 PrefixCacheTracker 时 `microcompact` 的 tokensSaved 恒为 0 —— 它能碰的只有最新
+    // 那条，而那条被下面这个 keepRecent 护着）。**只闸这一步**：上面的 snip 是另一层（零成本裁剪
+    // 空 tool_result），与缓存经济无关，照跑。
     const keepRecent = 3
-    const { messages: compacted, tokensSaved } = microcompact(snipped, this.cacheTracker, {
-      keepRecent,
-    })
+    const worthCompacting = shouldMicrocompact(
+      snipped,
+      this.cacheTracker,
+      this.microcompactThreshold(),
+    )
+    const { messages: compacted, tokensSaved } = worthCompacting
+      ? microcompact(snipped, this.cacheTracker, { keepRecent })
+      : { messages: snipped, tokensSaved: 0 }
 
     if (tokensSaved > 0) {
       this.compactionStats.microcompactCount++
