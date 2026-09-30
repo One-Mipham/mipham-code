@@ -108,12 +108,10 @@ function compressToolResult(msg: Message): Message {
  *
  * Only compress when tokens saved > tokens lost from cache invalidation.
  * The multiplier of 1.5 provides a safety margin.
+ *
+ * 与「要不要压缩」的触发尺无关：那把尺在 `checkCompression`（本函数只在它之后被问）。
  */
-export function shouldMicrocompact(
-  messages: Message[],
-  cacheTracker: CacheTracker,
-  _threshold: number,
-): boolean {
+export function shouldMicrocompact(messages: Message[], cacheTracker: CacheTracker): boolean {
   let savingsTokens = 0
   let cacheLossTokens = 0
 

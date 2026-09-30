@@ -545,11 +545,7 @@ export class ContextManager {
     // 那条，而那条被下面这个 keepRecent 护着）。**只闸这一步**：上面的 snip 是另一层（零成本裁剪
     // 空 tool_result），与缓存经济无关，照跑。
     const keepRecent = 3
-    const worthCompacting = shouldMicrocompact(
-      snipped,
-      this.cacheTracker,
-      this.microcompactThreshold(),
-    )
+    const worthCompacting = shouldMicrocompact(snipped, this.cacheTracker)
     const { messages: compacted, tokensSaved } = worthCompacting
       ? microcompact(snipped, this.cacheTracker, { keepRecent })
       : { messages: snipped, tokensSaved: 0 }

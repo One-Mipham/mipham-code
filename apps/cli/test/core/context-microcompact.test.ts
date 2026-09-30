@@ -88,7 +88,7 @@ describe('microcompact', () => {
     const messages = makeMessages(20)
     const cache = new NoopCacheTracker()
     // With NoopCacheTracker (nothing in cache), savings should be positive
-    expect(shouldMicrocompact(messages, cache, 0.7)).toBe(true)
+    expect(shouldMicrocompact(messages, cache)).toBe(true)
   })
 })
 
