@@ -316,7 +316,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integrity       | 18      | 130      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **311** | **3879** | **0 失败** ✅（本机 3,877 + 2 skipped，311 文件；CI 读数随本笔推送后单独回填）                                                                                              |
+| **合计**        | **311** | **3879** | **0 失败** ✅（本机 3,877 + 2 skipped，311 文件；CI `gh run 36783396244` @ `56dba335` 9/9，Test 自报 3,869 passed + 10 skipped = 3,879，310 + 1 skipped 文件）              |
 
 > **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 179 测试，自带
 > `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。
