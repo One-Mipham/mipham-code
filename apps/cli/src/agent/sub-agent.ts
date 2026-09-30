@@ -458,6 +458,23 @@ export class SubAgent {
       model: finalModel,
       registry: this.registry,
       toolRegistry: this.toolRegistry,
+      // 交出去的是**上面那个 `subPermission`**，不是缺省时新建的 `gate`。两者在生产路径上
+      // 恒为同一个对象 —— `Engine` 的 `permission` 字段有默认值（`engine.ts` 的构造参数），
+      // `getPermission()` 的返回类型不含 `undefined`，而全仓五个 `new SubAgent(...)` 生产
+      // 构造点全部追溯到它（`agent.ts` / `workflow/runtime.ts` / `skill.ts` 各自的
+      // `ctx.permissionSystem`，以及 `ui/commands.ts` 的两处 `engine.getPermission()`）。
+      // 所以 `subPermission` 为 `undefined` 只在「没人递闸门」时出现，那时下层自建 `default`。
+      //
+      // **别把它改成 `gate`。** 喂进去一个真实的 `default` 闸门，会让下层的 agent 定义从
+      // 「`permissionMode` 被整段忽略」变成「被兑现」（`resolveAgentMode` 那一支整个挂在
+      // `if (this.permission)` 下），其中 `acceptEdits` / `bypassPermissions` 比 `default`
+      // **宽** —— 为消掉一处对象身份的不一致而放宽闸门，方向是反的。要收口就该往另一边走：
+      // 让「无父闸」时对**所有**来源都按合成的 `default` 顶回去（那样 `plan` 这类**收窄**的
+      // 声明才不会被丢掉），但为一条生产不可达的路径加参数不值当，故记在这里。
+      //
+      // 生产侧那条不变量 ——「交出去的就是替它自己裁决的那一个，不是父系统、也不是新建的
+      // default」—— 由 `test/agent/sub-agent.test.ts` 的
+      // "hands nested tools the clamped permission, never the parent permission" 钉住。
       permissionSystem: subPermission,
       ruleEngine: this.ruleEngine,
       llm: this.llm,

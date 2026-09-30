@@ -338,6 +338,19 @@ typecheck / eslint / prettier 全绿；`/crsi eval` 38 条冻结契约不退化�
 2. **喂给嵌套工具的 `permissionSystem: subPermission` 刻意不动** —— 子代理自己的闸修好了，但嵌套
    工具上下文里那个字段在「调用方没传权限系统」时仍是 `undefined`。属另一个决定（嵌套工具的语义
    与子代理自身的闸不是同一件事），此处只记录。
+   **2026-09-30 补两点**（回读代码所得，**未改行为**）：① **生产路径不可达** —— 上面 P6 已量过
+   各构造点全都会递进来一个权限系统，而它们统一追溯到 `Engine.permission`（构造参数带默认值、
+   `getPermission()` 的返回类型不含 `undefined`）⇒ `subPermission` 与子代理缺省时自建的那个闸门
+   在生产上恒为**同一个对象**，「两者不是同一个对象」只在测试直接构造时成立。② **别把它「统一」
+   成 `gate`**：那样下层 agent 定义里的 `permissionMode` 会从「被整段忽略」变成「被兑现」
+   （`resolveAgentMode` 那一支整个挂在 `if (this.permission)` 下），而 `acceptEdits` /
+   `bypassPermissions` 比 `default` **宽** —— 为消掉一处对象身份的不一致而放宽闸门，方向是反的。
+   真收口该往另一边走：无父闸时对**所有**来源都按合成的 `default` 顶回去，那样 `plan` 这类
+   **收窄**的声明才不会被丢掉（代价是给一条生产不可达的路径加参数，故仍未做）。
+   生产侧那条不变量 ——「交出去的**就是**替它自己裁决的那一个，不是父系统、也不是新建的
+   `default`」—— 由 `test/agent/sub-agent.test.ts` 的
+   "hands nested tools the clamped permission, never the parent permission" 钉住；本处的理由
+   已就地写进 `src/agent/sub-agent.ts` 的交接处，免得下一位读者顺手「修」成放宽。
 
 ### N1 落地状态（2026-09-19，一笔 `cd7a65c7`）
 
