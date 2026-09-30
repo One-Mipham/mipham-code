@@ -70,4 +70,29 @@ describe('permission denial hints name the resolving command', () => {
       expect(t('errors.tool_denied_classifier', { name: 'Bash', reason: 'r' })).toContain(needle)
     },
   )
+
+  it.each(locales)(
+    '%s: a world-writable-chmod denial points at no liftable rule',
+    (_name, locale) => {
+      const t = createT(locale, en as TranslationMap)
+      const msg = t('errors.tool_denied_world_writable_chmod', { name: 'Bash', target: '$DIR' })
+      // Same shape as dangerous-rm: the refusal is structural, so an allow rule is
+      // *already* outranked by the guard. Sending the model to /permissions here is
+      // a hint that cannot work — and the measured reason this reason exists at all
+      // is that the gate used to answer it by coin flip.
+      expect(msg).not.toContain('/permissions allow')
+      expect(msg).toContain('$DIR')
+      expect(msg).toContain('MIPHAM_DISABLE_CHMOD_PROMPT=1')
+    },
+  )
+
+  it.each(outcomeClause)(
+    '%s: a world-writable-chmod denial covers the outcome too',
+    (_name, locale, needle) => {
+      const t = createT(locale, en as TranslationMap)
+      expect(
+        t('errors.tool_denied_world_writable_chmod', { name: 'Bash', target: '$DIR' }),
+      ).toContain(needle)
+    },
+  )
 })

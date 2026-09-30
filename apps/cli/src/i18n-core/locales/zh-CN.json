@@ -938,6 +938,7 @@
     "tool_denied_mode": "工具 \"{name}\" 在 \"{mode}\" 模式下需要批准。按 Shift+Tab 切换权限模式，或不再询问：/permissions allow \"{name}\"（更窄的 \"{name}(arg)\" 亦可） 请把这次拒绝理解为对结果本身的禁止，而不只是这一条命令。",
     "tool_denied_classifier": "工具 \"{name}\" 在 auto 模式下被权限分类器拦下（{reason}）。这是策略裁决、不是故障 —— 切换模式不会改变它，把同一次调用原样重发也只会得到同一个裁决。请改变这次调用使其不再触犯该规则，或直接放行：/permissions allow \"{name}\" 请把这次拒绝理解为对结果本身的禁止，而不只是这一条命令。",
     "tool_denied_dangerous_rm": "工具 \"{name}\" 被拒绝：这是一条递归 rm，其目标并非命令里写出的路径（\"{target}\"）。该目标要到命令运行时才产生，所以任何放行规则与权限模式都无法界定它会删掉什么。请改为字面写出目录名 —— 用 `rm -rf node_modules` 而不是 `rm -rf \"$(pwd)\"` —— 并把这次拒绝理解为对结果本身的禁止，而不只是这一种写法。关闭此检查：MIPHAM_DISABLE_DANGEROUS_RM_PROMPT=1",
+    "tool_denied_world_writable_chmod": "工具 \"{name}\" 被拒绝：这是一条递归 chmod，它把「其他用户可写」授予了一个命令并未界定边界的目标（\"{target}\"）。一棵世界可写的树，加上一个要到运行时才产生的目标，正是权限被放宽到远超所求的由来；而任何放行规则与权限模式都无法界定这次授权会伸到哪里。请改为字面写出目录名 —— 用 `chmod -R 777 ./dist` 而不是 `chmod -R 777 $DIR` —— 并把这次拒绝理解为对结果本身的禁止，而不只是这一种写法。关闭此检查：MIPHAM_DISABLE_CHMOD_PROMPT=1",
     "tool_denied_classifier_unavailable": "工具 \"{name}\" 被暂缓：auto 模式的分类器不可达，或其回复无法解析（{reason}）。这**不是**策略裁决 —— 该调用从未被裁决，重试是恰当的。若持续发生，按 Shift+Tab 切换模式。",
     "tool_blocked": "工具 \"{name}\" 被钩子拦截",
     "tool_hook_ask": "工具 \"{name}\" 被钩子标为需要批准，而本环境没有交互批准 —— 已按拒绝处理。仓库带来的钩子只能收紧闸门、不能放行；若这是你自己的钩子，请让它直接拦截，或放宽它。",

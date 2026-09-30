@@ -1681,6 +1681,8 @@ export class QueryEngine {
         return t('errors.tool_denied_ask_rule', { name, pattern: rulePattern ?? '?' })
       case 'dangerous-rm':
         return t('errors.tool_denied_dangerous_rm', { name, target: target ?? '?' })
+      case 'world-writable-chmod':
+        return t('errors.tool_denied_world_writable_chmod', { name, target: target ?? '?' })
       default:
         // mode-baseline / tool-default / legacy-rule / system-default — a mode
         // switch (or /permissions) resolves it.

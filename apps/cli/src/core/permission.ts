@@ -9,6 +9,8 @@ import type { PermissionRuleEntry } from '../shared/index.ts'
 import { matchBashRule, compileRule } from './permission-rules'
 import { detectDangerousRm } from '../security/dangerous-rm'
 import type { DangerousRm } from '../security/dangerous-rm'
+import { detectWorldWritableChmod } from '../security/world-writable-chmod'
+import type { WorldWritableChmod } from '../security/world-writable-chmod'
 import {
   loadPermissionConfig,
   nextMode,
@@ -127,6 +129,7 @@ export type PermissionDenialReason =
   | 'system-default' // no rule, no tool permission → fallback ask
   | 'classifier-deny' // `auto` mode's classifier ruled against the call
   | 'dangerous-rm' // recursive rm whose target is not a path in the command text
+  | 'world-writable-chmod' // recursive chmod granting world-write to an unbounded target
 
 /**
  * Which denial reasons `auto` mode's classifier is allowed to rule on — an
@@ -147,6 +150,11 @@ export type PermissionDenialReason =
  * reason answers. Every other reason here is "the mode was not sure, let a second
  * opinion decide"; this one is "the command does not say what it will delete", and
  * a second opinion reading the same command is reading the same missing text.
+ *
+ * `world-writable-chmod` is absent for that same reason, and the measurement says
+ * so out loud: the gate was asked it anyway, and answered by coin flip (1/5 vs
+ * 4/5 across the two models, 2026-09-30). Both halves — is the grant world-write,
+ * is the target bounded — are in the text, so the ruling belongs to the text.
  */
 const CLASSIFIABLE: ReadonlySet<PermissionDenialReason> = new Set<PermissionDenialReason>([
   'mode-baseline',
@@ -532,6 +540,16 @@ export class PermissionSystem {
       return 'ask'
     }
 
+    // ── A recursive `chmod` granting world-write to an unbounded target ──
+    // Same placement and the same two reasons, so it is spelled once and read
+    // once: it sits ahead of the allow rules and every mode baseline (including
+    // `auto`, whose classifier was measured answering this one 1/5 versus 4/5),
+    // and it is also uncached because the escape hatch is read from the
+    // environment on each call.
+    if (this.worldWritableChmod(tool, input)) {
+      return 'ask'
+    }
+
     // ── Cache lookup (P2): reuse decision for same tool+mode+input ──
     const cacheKey = this.cacheKey(tool, input)
     if (this.cacheMode === this.mode) {
@@ -635,6 +653,10 @@ export class PermissionSystem {
     if (dangerous) {
       return { reason: 'dangerous-rm', target: dangerous.target }
     }
+    const worldWritable = this.worldWritableChmod(tool, input)
+    if (worldWritable) {
+      return { reason: 'world-writable-chmod', target: worldWritable.target }
+    }
     if (this.legacyRules.has(tool.name)) {
       return { reason: 'legacy-rule' }
     }
@@ -676,6 +698,29 @@ export class PermissionSystem {
     const command = input.command
     if (typeof command !== 'string') return null
     return detectDangerousRm(command)
+  }
+
+  /**
+   * A recursive `chmod` handing world-write to a target the command does not bound.
+   *
+   * Only the Bash tool, and the escape hatch is read from the **environment**
+   * rather than from tool parameters — both for the same reasons as `dangerousRm`
+   * above. A parameter the call can set is a guard the call can turn off, so the
+   * opt-out has to come from whoever started the process.
+   *
+   * The measured case for making this structural is in the module's own header:
+   * the gate was asked this question and answered it 1/5 versus 4/5 depending on
+   * which model happened to be active.
+   */
+  private worldWritableChmod(
+    tool: ToolDefinition,
+    input: Record<string, unknown>,
+  ): WorldWritableChmod | null {
+    if (tool.name !== 'Bash') return null
+    if (process.env.MIPHAM_DISABLE_CHMOD_PROMPT === '1') return null
+    const command = input.command
+    if (typeof command !== 'string') return null
+    return detectWorldWritableChmod(command)
   }
 
   /**
