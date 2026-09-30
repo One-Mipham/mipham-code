@@ -151,3 +151,101 @@ describe('变异测试的范围与配置有守卫', () => {
     expect(isPlainPath('src/core/{permission,crsi}-x.ts')).toBe(false)
   })
 })
+
+// ── 器材补丁：跑手 `@stryker-mutator/vitest-runner` 上的那个补丁 ─────────────────
+//
+// 上游用 `nameParts.join(' ')` 拼测试名，而 vitest 5 报上来的是 `套件 > 用例` 这种
+// 分层名 ⇒ 名字对不上，Stryker 判定「没有测试覆盖这个变异体」，于是**一个测试都不跑**。
+// 分数照常打印，量的却是器材（本仓旧的三套读数就是这么废掉的）。
+// 修法落在根 `package.json` 的 `pnpm.patchedDependencies` + `patches/*.patch`。
+//
+// 这条链最脆的一环：`pnpm` 只在**补丁文件没了**时 fail-closed，**声明被删**它一声不响
+// —— 删掉声明再 `pnpm install`，锁文件里的补丁记录一并消失、补丁不再应用，而症状是
+// 「分数变低」这个**看起来像结果的东西**。整个过程没有任何红灯：`--frozen-lockfile`
+// 那时也自洽（锁文件与清单都没了同一条）。所以下面钉住三段：声明、补丁文件、以及
+// `apps/cli` **实际解析到的那一份文件内容** —— 只有最后一段是终点，前两段是它的原因。
+
+const REPO_ROOT = join(CLI_DIR, '..', '..')
+const ROOT_MANIFEST = join(REPO_ROOT, 'package.json')
+const RUNNER_PKG = '@stryker-mutator/vitest-runner'
+
+interface PatchDiff {
+  /** 目标在包内的相对路径（`+++ b/<path>` 里那一段）。 */
+  file: string
+  /** 补丁要换掉的原行（`-`）与换上去的新行（`+`）。 */
+  removed: string[]
+  added: string[]
+}
+
+/**
+ * 从 unified diff 里取出「换了哪几行」。
+ *
+ * 判据**派生**自补丁文件本身，不另抄一份：补丁既是施加物、也是期望值的来源，改了补丁
+ * 守卫自动跟上（抄一份的话，改补丁而忘了改守卫，两处会一起骗人）。
+ * 空行不成判据 —— `toContain('')` 恒真，「探针缺席」与「探针通过」同形。
+ */
+function patchDiffs(src: string): PatchDiff[] {
+  const diffs: PatchDiff[] = []
+  for (const raw of src.split('\n')) {
+    if (raw.startsWith('+++ ')) {
+      diffs.push({ file: raw.slice('+++ b/'.length).trim(), removed: [], added: [] })
+      continue
+    }
+    const cur = diffs.at(-1)
+    if (!cur || raw.startsWith('--- ')) continue
+    if (raw.startsWith('-')) cur.removed.push(raw.slice(1))
+    else if (raw.startsWith('+')) cur.added.push(raw.slice(1))
+  }
+  return diffs.map((d) => ({
+    ...d,
+    removed: d.removed.filter((l) => l.trim() !== ''),
+    added: d.added.filter((l) => l.trim() !== ''),
+  }))
+}
+
+const PATCHES =
+  (
+    JSON.parse(readFileSync(ROOT_MANIFEST, 'utf-8')) as {
+      pnpm?: { patchedDependencies?: Record<string, string> }
+    }
+  ).pnpm?.patchedDependencies ?? {}
+const RUNNER_PATCH_KEY = Object.keys(PATCHES).find((k) => k.startsWith(`${RUNNER_PKG}@`))
+const RUNNER_PATCH = RUNNER_PATCH_KEY ? join(REPO_ROOT, PATCHES[RUNNER_PATCH_KEY]!) : undefined
+
+describe('变异跑手的补丁还生效（声明 → 补丁文件 → 真装上的那一份）', () => {
+  it('根 package.json 仍声明着这条补丁，且补丁文件在盘上', () => {
+    // 删掉声明这个动作本身没有任何反馈：下一次 `pnpm install` 会顺手把锁文件里的
+    // 补丁记录也抹掉，此后装的跑手就是**干净的上游版**。
+    expect(
+      RUNNER_PATCH_KEY,
+      `根 package.json 的 pnpm.patchedDependencies 里找不到 ${RUNNER_PKG} 的条目`,
+    ).toBeDefined()
+    expect(existsSync(RUNNER_PATCH!), `${RUNNER_PATCH!} 不存在`).toBe(true)
+  })
+
+  it('补丁文件自己提供了判据（每个目标都有可判的原行与新行）', () => {
+    // 空转守卫：解析出零条 diff、或判据行被滤空，下面那组内容断言会**零次通过**
+    // —— 那与「补丁生效」同形。
+    const diffs = patchDiffs(readFileSync(RUNNER_PATCH!, 'utf-8'))
+    expect(diffs.length).toBeGreaterThan(0)
+    for (const d of diffs) {
+      expect(d.removed.length, `${d.file} 没有可判的原行`).toBeGreaterThan(0)
+      expect(d.added.length, `${d.file} 没有可判的新行`).toBeGreaterThan(0)
+    }
+  })
+
+  it('apps/cli 解析到的那一份真的打了补丁', () => {
+    // 落到**文件内容**：这条链的终点是 Stryker 实际 require 的那份 js。
+    // 路径与运行时同源（`apps/cli/node_modules/...`，pnpm 的 `patch_hash` 变体）；
+    // 不去 glob `.pnpm/` —— 那里可能同时躺着**没打补丁的另一份**，glob 会看错对象。
+    const pkgDir = join(CLI_DIR, 'node_modules', RUNNER_PKG)
+    expect(existsSync(pkgDir), `${pkgDir} 不存在 —— 先跑 pnpm install`).toBe(true)
+    for (const d of patchDiffs(readFileSync(RUNNER_PATCH!, 'utf-8'))) {
+      const src = readFileSync(join(pkgDir, d.file), 'utf-8')
+      for (const line of d.removed) {
+        expect(src, `${d.file} 里仍有「${line.trim()}」—— 补丁没生效`).not.toContain(line)
+      }
+      for (const line of d.added) expect(src).toContain(line)
+    }
+  })
+})
