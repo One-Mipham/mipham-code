@@ -3,6 +3,84 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.12 — 2026-09-30
+
+- Version sync with Mipham Code CLI 0.85.12
+- Fixed: eighteen places where **a capability had a name but its point of application was missing,
+  or was missing the one link that makes it work**. Three of them are the same problem already
+  solved next door and not here. **Six real gaps**: the credential masker's password group excluded
+  `@` (`([^/\s@]+)`), so `https://user:p@ss@host` masked only as far as `p` and leaked the tail
+  `ss` — masking is on by default, at bash stdout/stderr, grep file contents and config text, so the
+  password suffix reached the model context and the session log; a **sub-agent** calling Agent was
+  sent to the background too (`?? true` in `resolveRunInBackground`), so it only got back the
+  placeholder `[background-task:bg-…]` and its child's result **never returned** to the sub-agent
+  that started it; a rejection **not awaited** inside a workflow took down the whole CLI
+  (`await workflowAgent(…)` had no try/catch, so it landed in the unconditionally installed
+  `unhandledRejection` ⇒ `exit(1)`) — now caught and journalled (an `error?` field) with a
+  no-error-listener guard added to `event-bus`; hooks used `spawnSync`, which freezes the event loop
+  for as long as a process they spawned holds an inherited pipe (20,020 ms measured with a local
+  probe) and then reports "timed out after 60s" — a **misdiagnosis**, since the hook had long since
+  exited — now async `spawn` + `detached` process group + `HOOK_PIPE_GRACE_MS`, killed by group;
+  `ToolContext` had sixteen fields and no `signal`, so a cancel had no path to tool execution at any
+  moment (bash now runs in its own process group, and "exit code 0 also counts as failure");
+  cross-provider fallback called the registry directly, bypassing `engine.switchProvider`, so the
+  one `context.updateMaxTokens` never fired and the compaction trigger ran off a **stale** window
+  (falling back from 1M to 128K compacted only around 950K). **Ten half-gaps**: an error object in
+  the stream is no longer silently swallowed; an unreadable or unparseable settings.json is no
+  longer silent (both branches write to stderr, `existsSync` telling "absent" from "present but
+  unreadable" — one malformed JSON no longer quietly zeroes configured permissions); plugin
+  uninstall now uses `unregisterMcpServerTools` (it used to delete keys built from the **raw**
+  server name while registration had gone through `sanitizeName`, so tools whose names needed
+  sanitising stayed behind — "no error" on uninstall, every such tool orphaned); `/mcp` output
+  passes server names, URLs and commands through `sanitizeInlineField` (C0/DEL and invisible
+  characters); in-place retry gained `isRetryableFailure` (decisive failures — `content_filter`,
+  401, 400 — are no longer resent; only **known** decisive error types count, and anything
+  unrecognised retries as before, because guessing "already decided" throws away a recoverable
+  turn); `truncated` counts against the score (a fully truncated batch used to score full marks
+  with `passed: 0`); `exit-plan`'s `planFile` fallback is implemented rather than dead code (most
+  recent `plan-*.md` by mtime); `MIPHAM_DISABLE_WEB_FETCH=1` removes WebFetch **at registration
+  time** (a `permissionRules.deny` is a different mechanism: the tool is still advertised to the
+  model and only refused on call, which burns a turn); artifact releases no longer duplicate the
+  `List all:` line; `&nbsp;` is no longer shown literally in the terminal, which has no
+  markdown/entities layer — **that one entity only**, deliberately not the code entities
+  (`&lt;`/`&amp;`/`&gt;`), which would corrupt the code the assistant is displaying. **Two
+  self-found**: web-fetch's User-Agent is no longer hard-coded to `Mipham-Code/0.24.0` (it uses
+  `PACKAGE_VERSION`), and while a picker is open Escape goes to the picker (Ink 7's `useInput` has
+  no stopPropagation, so the input bar and the command picker both responded to one Escape).
+- Fixed: the CRSI sandbox had two `cwd` escapes, both of which only fire when `cwd` is not the
+  repository root — and that is not the edge case: during a full `pnpm mutate` run `cwd` is a copy
+  directory Stryker deliberately gives **no `.git`** (`apps/cli/.stryker-tmp/sandbox-*`), so
+  `git worktree add` / `cherry-pick` / `branch -D` all silently climbed up to the **real repository
+  outside** (reproduced under control: one run hit the same sandbox three times and made zero
+  commits on `main`; leftover `crsi-sandbox-*` branches were the traces). Two fixes: the sandbox
+  now accepts only the root of **its own** worktree, fail-closed and naming the outer repository —
+  deliberately **not** "silently re-target to the outer root", which would be choosing a repository
+  on the user's behalf, with the cost accepted and stated (starting in a subdirectory of a
+  repository is refused, and the error says to run from the repository root); and every git command
+  now carries its location **in the command string itself** (`git -C <root>` / `cd <root> &&`)
+  behind a single `runIn()` exit — it used to rely on `cwd:` in an options object, and an
+  object-literal mutant replaces the whole options object with `{}`, taking `cwd` with it.
+- Changed: the compactor's second step is now wired to its own cache-economy gate —
+  `shouldMicrocompact` had **no production call site** since it landed, while `runMicrocompact()`
+  called `microcompact()` directly, so the "saved by dropping old tool_results vs lost to prefix
+  cache invalidation" judgement was decoration. Boundary recorded as measured: under the production
+  `PrefixCacheTracker` distribution the candidate set and the uncached set **do not intersect**
+  (`keepRecent: 3` shields exactly the one uncached message) ⇒ `tokensSaved` is always 0 and the
+  gate always closes ⇒ **no observable behaviour change in production**; this makes the rule live
+  and skips a run that was certain to do nothing. The unread third parameter of
+  `shouldMicrocompact` was removed — passing a real value for an ignored parameter is the **same
+  shape** as advertising a capability with no landing point; the design document only ever had two
+  parameters. Zero behaviour change. The mutation runner's test-name connector is pinned with
+  `pnpm patch` (`@stryker-mutator/vitest-runner`) — development tooling, not runtime; a new guard
+  pins the three links (declaration → patch file → the copy actually installed), because the
+  weakest link is **deleting the declaration**, at which point pnpm silently reverts to the
+  unpatched version.
+- Security: the build-time dependency `brace-expansion` override is raised to 1.1.21 / 5.0.12 (two
+  new high-severity advisories). Boundary recorded: it comes in only through
+  `@stryker-mutator/core`, and none of the CLI's seven runtime dependencies touches it ⇒ this
+  protects developer machines and CI and **gives users no protection at all**. It is listed so that
+  the supply-chain surface of each batch stays auditable, not as a claim of any user-facing change.
+
 ## 0.85.11 — 2026-09-29
 
 - Version sync with Mipham Code CLI 0.85.11

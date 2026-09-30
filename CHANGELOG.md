@@ -7,6 +7,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.85.12] — 2026-09-30
+
+### Fixed
+
+- **十八处「能力已声明、施加点缺席或缺了一环」** —— 本批主项。公共形状：能力已经挂上了名字，
+  施加点却缺席、或缺了让它生效的那一环。其中三条属于「同一个问题在隔壁已经解决、这里没有」。
+
+  **六个真缺口**：
+
+  - **凭据遮蔽的密码组把 `@` 排除在外**（`([^/\s@]+)`）—— `https://user:p@ss@host` 从前只遮到
+    `p`，尾部的 `ss` 漏出。遮蔽默认开启，挂点在 bash 的 stdout/stderr、grep 的文件内容与 config
+    文本 ⇒ 连接串的密码后缀会进模型上下文与会话记录。改成 `([^/\s]+)`。
+  - **子代理调 Agent 也一律被丢进后台**（`resolveRunInBackground` 的 `?? true`）—— 子代理只拿回
+    占位串 `[background-task:bg-…]`，子结果**永不回到发起它的子代理**。改成按「是不是子代理」
+    决定；顶层仍默认后台。
+  - **workflow 里未被 `await` 的那次拒绝会把整个 CLI 带走** —— `runtime.ts` 的
+    `await workflowAgent(…)` 没有 try/catch，拒绝落进**无条件安装**的 `unhandledRejection` ⇒
+    `exit(1)`。现在接住并记进 journal（新增 `error?` 字段）；`event-bus` 另补「无 error 监听者」
+    守卫。
+  - **钩子用 `spawnSync`** —— 只要被它启动的进程还持有继承来的管道，事件循环就整个冻住（本机
+    探针实测 20,020ms），且超时后给出的是「timed out after 60s」这个**误诊**（那时钩子早已
+    退出）。改为异步 `spawn` + `detached` 进程组 + `HOOK_PIPE_GRACE_MS`，超时按**组**杀。
+  - **`ToolContext` 没有 `signal`** —— 逐字 16 个字段，取消信号在任何时刻都没有通往工具执行的
+    通路。现加上 `signal`，bash 落到**进程组**，且「退出码 0 也算失败」。
+  - **跨 provider 回退直调 registry、绕过 `engine.switchProvider`** —— 唯一那处
+    `context.updateMaxTokens` 从不触发，压缩扳机由**已不作数的**旧窗口驱动（1M 回退到 128K 时
+    要等到约 950K 才压）。改走 `engine.switchProvider`。
+
+  **十个半缺口**：流中 `data:{"error"}` 不再被整条 `continue` 掉（上游报的错从前是一次静默收尾）；
+  settings.json 读不了、解析不了不再一片沉默（两处分支各写 stderr，用 `existsSync` 区分「缺席」
+  与「在但读不出」—— 一条畸形 JSON 不再把已配的权限静默清零）；插件卸载改用
+  `unregisterMcpServerTools`（从前按**原样**的服务器名拼 `mcp__<name>__<tool>` 删键，而注册侧
+  过的是 `sanitizeName` ⇒ 名字需要净化的那批工具卸载后仍在，删完「没报错」而工具全成孤儿）；
+  `/mcp` 的 server 名/URL/命令经 `sanitizeInlineField` 剥掉 C0/DEL 与不可见字符（含 ESC 的名字
+  会被终端当 CSI 解释）；原地重试加类别判别 `isRetryableFailure`（`content_filter`、401、400
+  这些决定性失败不再被重发；错误类型只认**已知的**那批决定性类型，不认识的一律照旧重试 ——
+  猜「已定局」会丢掉可恢复的一轮，而引擎侧据 `chunk.retryable === false` 同时跳过原地重试与跨
+  provider 回退）；`truncated` 不再被丢出计分（全截断的一批从前分数照满、`passed` 却是 0）；
+  `exit-plan` 的 `planFile` 兜底从死代码变成实现（最近一份 `plan-*.md`，按 mtime）；新增
+  `MIPHAM_DISABLE_WEB_FETCH=1`，在**注册时**把 WebFetch 摘掉（`permissionRules.deny` 机理不同：
+  工具仍被广告给模型，只在调用时被拒，要烧一轮对话）；artifact 每次发布不再重复 `List all:`
+  一行；`&nbsp;` 不再在终端字面显示（终端**没有** markdown/entities 层），**只解这一个实体** ——
+  代码实体（`&lt;`/`&amp;`/`&gt;`）有意不动，解开会把助手正在展示的代码本身改坏。
+
+  **两处自发现**：web-fetch 的 User-Agent 不再写死 `Mipham-Code/0.24.0`（改用
+  `PACKAGE_VERSION`）；选择器开着时 Escape 归它（Ink 7 的 `useInput` 没有 stopPropagation，
+  InputBar 与 CommandPicker 从前同时响应一次 Escape）。
+
+- **CRSI 沙箱的两条 `cwd` 逃逸** —— 两条都只在「`cwd` 不是仓库根」时发作，而那不是边缘情形：
+  全量 `pnpm mutate` 时 `cwd` 是 Stryker 有意**不带 `.git`** 的副本目录
+  （`apps/cli/.stryker-tmp/sandbox-*`）⇒ `git worktree add` / `cherry-pick` / `branch -D` 全部
+  静默上溯到**外面那棵真仓库**（已受控复现：同一 git shim 下一次全量 run 三度命中同一沙箱、
+  `main` 零提交；残留的 `crsi-sandbox-*` 分支就是痕迹）。**修法两条**：① `repoRoot` 必须等于
+  **它自己**那棵工作树的根，fail-closed 且点名外层仓库 —— 有意**不**做「静默改判为外层仓库的
+  根」，那等于替用户选仓库；代价已认下：在仓库子目录里启动会被拒，报错说明请在仓库根运行；
+  ② 每条 git 命令把「在哪儿」写进**命令字符串本身**（`git -C <root>` / `cd <root> &&`），收成
+  唯一出口 `runIn()` —— 从前它靠 options 对象里的 `cwd:`，而对象字面量变异体会把整个 options
+  换成 `{}`，`cwd` 随之消失。守卫 `test/integrity/crsi-sandbox-root.test.ts` 分两层：静态钉形状
+  （`execSync` 只允许出现在 `runIn` 一处）、行为钉形状真的管用（`process.cwd()` 指向另一棵
+  **真有 `.git`** 的诱饵仓库时，沙箱照样只动交给它的那棵）。
+
+### Changed
+
+- **压缩的第二步接上它自己的缓存经济闸** —— `shouldMicrocompact` 自落地起**零生产调用点**，而
+  `runMicrocompact()` 直接把 `microcompact()` 叫了，中间那道「压掉旧 tool_result 省下的」与
+  「因前缀缓存失效赔掉的」的判断一直是装饰。**如实记边界**：在生产那条 `PrefixCacheTracker`
+  分布下（engine 每轮只把前 n-1 条标为已缓存），`microcompact` 的候选集与未缓存集**不相交**、
+  `keepRecent: 3` 恰好护住那一条 ⇒ `tokensSaved` 恒为 0、闸门恒关 ⇒ **本笔在生产上无可观测
+  行为变更**，它把规则变成活的、并省掉一次注定白跑的工作。
+- **删掉 `shouldMicrocompact` 那个没人读的第三参** —— 给一个被忽略的形参传真值，与广告一个
+  没有落点的能力**同形**：签名承诺了一件函数不做的事。设计稿里它本来就只有两个参数。行为零变更。
+- **变异跑手的测试名连接符用 `pnpm patch` 固化**（`@stryker-mutator/vitest-runner`）—— 开发期
+  工具链，不影响运行期。新增守卫钉住「声明 → 补丁文件 → 真装上的那一份内容」三段：这条链最脆
+  的一环是**删掉声明**，那时 pnpm 一声不响地退回未打补丁的版本。
+
+### Security
+
+- **构建期依赖 `brace-expansion` 的覆盖版本抬到 1.1.21 / 5.0.12**（两条新高危 advisory）。
+  **如实记边界**：它只从 `@stryker-mutator/core` 进来，而 CLI 运行期的 7 项依赖没有一项碰到它
+  ⇒ 这一条保护的是开发机与 CI，**publish 出去对用户零保护**。列在这里只为让「哪一批动过供应链
+  表面」可查，不声称用户侧有任何变化。
+
 ## [0.85.11] — 2026-09-29
 
 ### Added
