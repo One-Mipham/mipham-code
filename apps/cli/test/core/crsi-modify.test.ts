@@ -1,7 +1,8 @@
-import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
+import { describe, it, expect, afterAll, afterEach, beforeAll, beforeEach, vi } from 'vitest'
 import { join } from 'node:path'
-import { rmSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
+import { execSync } from 'node:child_process'
 import { CrsiSandbox } from '../../src/core/crsi-sandbox'
 import { LESSONS_FILE } from '../../src/core/crsi-producer'
 import {
@@ -25,6 +26,38 @@ vi.mock('node:os', async (importOriginal) => {
 // Repo-root-relative path inside the worktree (worktree = full monorepo copy).
 const WORKTREE_FILE = 'apps/cli/README.md'
 
+/**
+ * 夹具是一棵**自建的临时仓库**（同 `crsi-sandbox.test.ts` 的理由）：
+ * `CrsiSandbox` 只接受「自己那棵工作树的根」，而进程 cwd 是 `apps/cli`（真仓库的子目录）
+ * ⇒ 拿 cwd 构造会被形状闸拒绝；更要紧的是，此前这些 `createWorktree()` 全都在**真仓库**
+ * 上建 worktree / 建分支，那是本文件不该有的副作用。
+ */
+function initSandboxRepo(): string {
+  // realpathSync：macOS 的 /var 是指向 /private/var 的链接，而 git 回的是物理路径。
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'crsi-modify-repo-')))
+  mkdirSync(join(root, 'apps', 'cli'), { recursive: true })
+  writeFileSync(join(root, WORKTREE_FILE), 'crsi-modify fixture body\n')
+  const git = (args: string) => execSync(`git ${args}`, { cwd: root, stdio: 'ignore' })
+  git('init -q')
+  git('config user.email crsi-modify@test.invalid')
+  git('config user.name crsi-modify-test')
+  // 关掉签名，否则继承本机的 commit.gpgsign 会去要钥匙。
+  git('config commit.gpgsign false')
+  git('add -A')
+  git('commit -q -m fixture')
+  return root
+}
+
+let sandboxRepo: string
+
+beforeAll(() => {
+  sandboxRepo = initSandboxRepo()
+})
+
+afterAll(() => {
+  rmSync(sandboxRepo, { recursive: true, force: true })
+})
+
 beforeEach(() => {
   // 清空 rewards 日志，避免跨运行残留的旧分数（如 gap 表上线前的 100）触发假退化。
   rmSync(join(homedir(), '.mipham', 'crsi', 'eval-scores.jsonl'), { force: true })
@@ -37,7 +70,7 @@ afterEach(() => {
 
 describe('runCrsiModification', () => {
   it('rejects protected paths without running tests', async () => {
-    const sandbox = new CrsiSandbox()
+    const sandbox = new CrsiSandbox(sandboxRepo)
     const result = await runCrsiModification(
       {
         description: 'blocked',
@@ -53,7 +86,7 @@ describe('runCrsiModification', () => {
   })
 
   it('tests pass → phase passed + diff + pending', async () => {
-    const sandbox = new CrsiSandbox()
+    const sandbox = new CrsiSandbox(sandboxRepo)
     vi.spyOn(sandbox, 'runTests').mockReturnValue({
       passed: true,
       totalTests: 0,
@@ -75,7 +108,7 @@ describe('runCrsiModification', () => {
   })
 
   it('tests fail → phase failed + auto-rollback (no pending)', async () => {
-    const sandbox = new CrsiSandbox()
+    const sandbox = new CrsiSandbox(sandboxRepo)
     vi.spyOn(sandbox, 'runTests').mockReturnValue({
       passed: false,
       totalTests: 1,
@@ -96,7 +129,7 @@ describe('runCrsiModification', () => {
   })
 
   it('rejects a proposal without declared blast radius (完整覆盖闸)', async () => {
-    const sandbox = new CrsiSandbox()
+    const sandbox = new CrsiSandbox(sandboxRepo)
     const result = await runCrsiModification(
       { description: 'no blast radius', filePath: WORKTREE_FILE, newContent: '{}' },
       sandbox,
@@ -107,7 +140,7 @@ describe('runCrsiModification', () => {
   })
 
   it('custom rewardFn low score → gate rolls back (regression)', async () => {
-    const sandbox = new CrsiSandbox()
+    const sandbox = new CrsiSandbox(sandboxRepo)
     vi.spyOn(sandbox, 'runTests').mockReturnValue({
       passed: true,
       totalTests: 0,
@@ -137,7 +170,7 @@ describe('runCrsiModification', () => {
   })
 
   it('custom rewardFn score >= last → passes (no regression)', async () => {
-    const sandbox = new CrsiSandbox()
+    const sandbox = new CrsiSandbox(sandboxRepo)
     vi.spyOn(sandbox, 'runTests').mockReturnValue({
       passed: true,
       totalTests: 0,
@@ -166,7 +199,7 @@ describe('runCrsiModification', () => {
   })
 
   it('anchor regression rejects even when aggregate score does not drop', async () => {
-    const sandbox = new CrsiSandbox()
+    const sandbox = new CrsiSandbox(sandboxRepo)
     vi.spyOn(sandbox, 'runTests').mockReturnValue({
       passed: true,
       totalTests: 0,
@@ -204,7 +237,7 @@ describe('runCrsiModification', () => {
   })
 
   it('合并型净增被 fail-closed 拒绝，且不创建 worktree（收敛闸）', async () => {
-    const sandbox = new CrsiSandbox(process.cwd())
+    const sandbox = new CrsiSandbox(sandboxRepo)
     const spy = vi.spyOn(sandbox, 'createWorktree')
     const result = await runCrsiModification(
       {
@@ -235,7 +268,7 @@ describe('pending registry', () => {
   })
 
   it('reject clears pending after a passed modification', async () => {
-    const sandbox = new CrsiSandbox()
+    const sandbox = new CrsiSandbox(sandboxRepo)
     vi.spyOn(sandbox, 'runTests').mockReturnValue({
       passed: true,
       totalTests: 0,
@@ -307,7 +340,7 @@ describe('量具不可用时不得记成「判它差」', () => {
     )
 
   it('evaluate 抛错 ⇒ 不抛出、回滚、明说 Harness unavailable（今天这条路径会穿出去且不回收 worktree）', async () => {
-    const sandbox = new CrsiSandbox()
+    const sandbox = new CrsiSandbox(sandboxRepo)
     okTests(sandbox)
     const rollback = vi.spyOn(sandbox, 'rollback')
 
@@ -325,7 +358,7 @@ describe('量具不可用时不得记成「判它差」', () => {
   })
 
   it('契约集为空 ⇒ Harness unavailable（该情形 score 恰为 100，会被当成满分放行）', async () => {
-    const sandbox = new CrsiSandbox()
+    const sandbox = new CrsiSandbox(sandboxRepo)
     okTests(sandbox)
     const rollback = vi.spyOn(sandbox, 'rollback')
 
@@ -347,7 +380,7 @@ describe('量具不可用时不得记成「判它差」', () => {
     Array.from({ length: n }, (_, i) => ({ id: `c${i}`, description: 'x', passed: true }))
 
   it('声明的下限没跑满 ⇒ Harness unavailable（量具缩水读作「全绿」）', async () => {
-    const sandbox = new CrsiSandbox()
+    const sandbox = new CrsiSandbox(sandboxRepo)
     okTests(sandbox)
     const n = 3
     const result = await run(
@@ -362,7 +395,7 @@ describe('量具不可用时不得记成「判它差」', () => {
   })
 
   it('未声明下限的奖励源报少量契约 ⇒ 不判量具故障（下限是电池主人的主张，不能强加给可插拔奖励源）', async () => {
-    const sandbox = new CrsiSandbox()
+    const sandbox = new CrsiSandbox(sandboxRepo)
     okTests(sandbox)
     const n = 2
     const result = await run(sandbox, () => ({
@@ -378,7 +411,7 @@ describe('量具不可用时不得记成「判它差」', () => {
   })
 
   it('rewardFn 不提供逐契约结果 ⇒ 过，但明说 anchor 闸未施加（不静默跳过）', async () => {
-    const sandbox = new CrsiSandbox()
+    const sandbox = new CrsiSandbox(sandboxRepo)
     okTests(sandbox)
     const result = await run(sandbox, () => ({
       total: 10,
@@ -393,7 +426,7 @@ describe('量具不可用时不得记成「判它差」', () => {
   })
 
   it('正对照：正常量具路径不产生 rewardNote', async () => {
-    const sandbox = new CrsiSandbox()
+    const sandbox = new CrsiSandbox(sandboxRepo)
     okTests(sandbox)
     const result = await runCrsiModification(
       { description: 'x', filePath: WORKTREE_FILE, newContent: '{}', blastRadius: [WORKTREE_FILE] },

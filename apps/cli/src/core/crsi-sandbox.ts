@@ -15,7 +15,15 @@
  */
 
 import { execSync } from 'node:child_process'
-import { mkdirSync, rmSync, existsSync, writeFileSync, readFileSync, readdirSync } from 'node:fs'
+import {
+  mkdirSync,
+  rmSync,
+  existsSync,
+  writeFileSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+} from 'node:fs'
 import { atomicWriteFileSync } from '../shared/atomic-write'
 import { join, resolve, sep, posix } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -269,6 +277,45 @@ export function validateMergeConvergence(proposal: {
   return `合并型提案必须收敛，但脚手架增长了：${rose.join('；')}。`
 }
 
+/**
+ * 沙箱根的形状闸：只接受**它自己那棵工作树的根**。
+ *
+ * 判据为什么是「等于自己的工作树根」，而不是「落在某个仓库里」：这两件事在 git 层
+ * **没有区别**。一个不带 `.git` 的副本目录（如 Stryker 的 `.stryker-tmp/sandbox-*`，
+ * 它有意不带 `.git`）与「用户在仓库子目录里启动 CLI」，对 `rev-parse` 是同一种输入 ——
+ * 都会静默上溯到**外面那棵真仓库**。于是 `repoRoot` 这个名字承诺的东西（「只动这棵树」）
+ * 在那种情形下是假的：`git worktree add` / `git cherry-pick` / `git branch -D` 全都落进
+ * 用户从没点名过的那棵仓库里，而类的注释写的却是「用户的工作树永不被触碰」。
+ * ⇒ fail-closed 拒绝，并**点名那棵外层仓库**（否则用户只知道被拒，不知道被谁拦的）。
+ *
+ * 有意**不**做「静默改判为外层仓库的根」：那正是上面那个缺陷，只是把它变得看不见。
+ * 代价已认下：在仓库子目录里跑 CRSI 会被拒，须到仓库根运行。
+ * 边界：非 TOCTOU 安全（构造后 repoRoot 那棵树被换掉，本闸不再复查）。
+ */
+export function assertSandboxRepoRoot(repoRoot: string): void {
+  let top: string
+  try {
+    top = execSync('git rev-parse --show-toplevel', {
+      cwd: repoRoot,
+      timeout: 10_000,
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+  } catch {
+    throw new Error(`CRSI 沙箱需要一个 git 仓库，但 ${repoRoot} 不在任何仓库内。请在仓库根运行。`)
+  }
+  // realpath 两侧都做：macOS 上 /var → /private/var，而 git 回的是物理路径。
+  if (realpathSync(top) !== realpathSync(repoRoot)) {
+    throw new Error(
+      `CRSI 沙箱的 repoRoot 必须是**它自己那棵仓库的根**：给定 ${repoRoot}，` +
+        `但它属于外层仓库 ${top}。` +
+        `（副本目录、构建产物目录、仓库子目录都会落到这里 —— 若放行，` +
+        `worktree add / cherry-pick 会写进那棵外层仓库，而那是用户没有点名的仓库。）` +
+        `请在仓库根运行。`,
+    )
+  }
+}
+
 // ── Sandbox ──
 
 export class CrsiSandbox {
@@ -280,6 +327,9 @@ export class CrsiSandbox {
 
   constructor(repoRoot: string = process.cwd()) {
     this.repoRoot = resolve(repoRoot)
+    // 先立形状闸，再建任何东西 —— 它必须在第一条 `cwd: this.repoRoot` 的 git 命令之前，
+    // 也必须早于 mkdirSync(REPORT_DIR)（拒绝时零副作用）。
+    assertSandboxRepoRoot(this.repoRoot)
     this.sessionReport = {
       sessionId: `crsi-session-${Date.now().toString(36)}`,
       modifications: [],

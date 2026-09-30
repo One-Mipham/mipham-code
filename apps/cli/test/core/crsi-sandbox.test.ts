@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest'
 import {
   CrsiSandbox,
   validateBlastRadius,
@@ -9,9 +9,18 @@ import {
   validateMergeConvergence,
 } from '../../src/core/crsi-sandbox'
 import { LESSONS_FILE, MANAGED_RULES_FILE } from '../../src/core/crsi-producer'
-import { existsSync, readFileSync } from 'node:fs'
+import {
+  existsSync,
+  readFileSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { join, resolve } from 'node:path'
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
+import { execSync } from 'node:child_process'
 
 // Isolate the sandbox report dir from the real ~/.mipham — finalize() persists
 // session reports to ~/.mipham/crsi-sandbox, which would accumulate real files.
@@ -23,12 +32,32 @@ vi.mock('node:os', async (importOriginal) => {
   }
 })
 
-// The worktree is a full monorepo copy. The test runs from apps/cli/,
-// but the worktree root is the repo root. So file paths are relative to
-// the repo root: apps/cli/README.md = worktree_root/apps/cli/README.md.
-// We read original content from CWD-relative paths: README.md = apps/cli/README.md.
+// 夹具是一棵**自建的临时仓库**，不是真仓库。两条理由：
+//   ① `CrsiSandbox` 只接受「自己那棵工作树的根」，而进程 cwd 是 `apps/cli`（真仓库的子目录）
+//      ⇒ 拿 cwd 构造会被形状闸拒绝（见 `assertSandboxRepoRoot`）。
+//   ② 更要紧的是**不再碰真仓库**：此前这棵树上的 `git worktree add` / `branch -D` 全都落进
+//      `mipham-code` 本体，而拿真 `apps/cli/README.md` 当 fixture 还有另一个旧账 ——
+//      工作区一有未提交改动，原始内容读的是工作树、比对的是 HEAD ⇒ 恒 3 红。
+// 路径仍是「仓库根相对」的同一套：`apps/cli/README.md` = <repo>/apps/cli/README.md。
 const WORKTREE_FILE = 'apps/cli/README.md'
-const CWD_FILE = 'README.md'
+const FIXTURE_BODY = 'crsi-sandbox fixture body\n'
+
+/** 建一棵只有 `apps/cli/README.md` 一个文件的临时 git 仓库，返回其根。 */
+function initSandboxRepo(): string {
+  // realpathSync：macOS 的 /var 是指向 /private/var 的链接，而 git 回的是物理路径。
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'crsi-sandbox-repo-')))
+  mkdirSync(join(root, 'apps', 'cli'), { recursive: true })
+  writeFileSync(join(root, WORKTREE_FILE), FIXTURE_BODY)
+  const git = (args: string) => execSync(`git ${args}`, { cwd: root, stdio: 'ignore' })
+  git('init -q')
+  git('config user.email crsi-sandbox@test.invalid')
+  git('config user.name crsi-sandbox-test')
+  // 关掉签名，否则继承本机的 commit.gpgsign 会去要钥匙。
+  git('config commit.gpgsign false')
+  git('add -A')
+  git('commit -q -m fixture')
+  return root
+}
 
 describe('validateBlastRadius (完整覆盖闸)', () => {
   it('rejects a missing blast radius', () => {
@@ -273,9 +302,21 @@ describe('validateMergeConvergence (合并型收敛闸)', () => {
 
 describe('CrsiSandbox', () => {
   let sandbox: CrsiSandbox
+  let sandboxRepo: string
+
+  /** 仓库里那份「非 worktree」的副本 —— 断言「没碰真文件」时读的就是它。 */
+  const repoFile = () => join(sandboxRepo, WORKTREE_FILE)
+
+  beforeAll(() => {
+    sandboxRepo = initSandboxRepo()
+  })
+
+  afterAll(() => {
+    rmSync(sandboxRepo, { recursive: true, force: true })
+  })
 
   beforeEach(() => {
-    sandbox = new CrsiSandbox()
+    sandbox = new CrsiSandbox(sandboxRepo)
   })
 
   afterEach(() => {
@@ -319,8 +360,8 @@ describe('CrsiSandbox', () => {
     it('should apply a modification in the worktree without touching the real file', () => {
       sandbox.createWorktree()
 
-      // Read the real package.json first
-      const originalContent = readFileSync(CWD_FILE, 'utf-8')
+      // 先在**真文件**（仓库里那份，非 worktree 副本）读一次原始内容
+      const originalContent = readFileSync(repoFile(), 'utf-8')
 
       const result = sandbox.applyModification({
         id: 'test-mod-2',
@@ -337,7 +378,7 @@ describe('CrsiSandbox', () => {
       expect(result.diff).toContain('crsi-test-modified')
 
       // Verify the real file is UNCHANGED
-      const realContent = readFileSync(CWD_FILE, 'utf-8')
+      const realContent = readFileSync(repoFile(), 'utf-8')
       expect(realContent).toBe(originalContent)
       expect(realContent).not.toContain('crsi-test-modified')
     })
@@ -362,7 +403,7 @@ describe('CrsiSandbox', () => {
     it('should accept empty original content (lenient mode)', () => {
       sandbox.createWorktree()
 
-      const realContent = readFileSync(CWD_FILE, 'utf-8')
+      const realContent = readFileSync(repoFile(), 'utf-8')
 
       const result = sandbox.applyModification({
         id: 'test-mod-4',
@@ -446,7 +487,7 @@ describe('CrsiSandbox', () => {
     it('should return a diff after modification', () => {
       sandbox.createWorktree()
 
-      const originalContent = readFileSync(CWD_FILE, 'utf-8')
+      const originalContent = readFileSync(repoFile(), 'utf-8')
 
       sandbox.applyModification({
         id: 'test-diff-mod',
@@ -512,7 +553,7 @@ describe('CrsiSandbox', () => {
   describe('session tracking', () => {
     it('should track modifications throughout the session', () => {
       sandbox.createWorktree()
-      const originalContent = readFileSync(CWD_FILE, 'utf-8')
+      const originalContent = readFileSync(repoFile(), 'utf-8')
 
       // Apply 3 modifications
       sandbox.applyModification({
