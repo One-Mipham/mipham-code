@@ -2,6 +2,7 @@ import React, { useMemo } from 'react'
 import { Box, Text } from 'ink'
 import { useI18n } from '../i18n-context'
 import type { ChatMessage } from './app'
+import { decodeDisplayEntities } from '../shared/sanitize'
 import { homedir } from 'node:os'
 
 interface ChatPanelProps {
@@ -93,7 +94,7 @@ const MessageRow = React.memo(
                 ⚠ {t('ui.system.role_label')}:
               </Text>
             ) : null}
-            <Text>{msg.content}</Text>
+            <Text>{msg.toolMeta ? msg.content : decodeDisplayEntities(msg.content)}</Text>
           </>
         )}
       </Box>

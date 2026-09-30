@@ -132,6 +132,14 @@ export interface StreamChunk {
    */
   isError?: boolean
   error?: string
+  /**
+   * `type: 'error'` only. `false` means the provider knows the failure is
+   * deterministic (a content filter, a malformed request, a bad key) and re-sending
+   * it will produce the same answer. The engine then skips both its in-place retry
+   * and the fallback provider, so a final error is shown once instead of three
+   * times. Absent means "unknown" and preserves the retry.
+   */
+  retryable?: boolean
   /** DeepSeek reasoning tokens accumulated during this stream. */
   reasoning_content?: string
   /** Anthropic thinking block content (DeepSeek Anthropic endpoint). */

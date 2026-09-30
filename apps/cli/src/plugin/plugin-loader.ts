@@ -5,7 +5,7 @@ import type { AgentRegistry } from '../agent/agent-registry'
 import type { SkillsLoader } from '../skills/loader'
 import type { HookEngine } from '../core/hooks'
 import type { McpClient } from '../mcp/client'
-import { registerMcpServerTools } from '../mcp/registry'
+import { registerMcpServerTools, unregisterMcpServerTools } from '../mcp/registry'
 import { executeHook } from '../core/hooks-executor'
 import { detectPluginFormat, isLoadableMcpConfig } from './plugin-validator'
 import { loadClaudePlugin } from './claude-plugin'
@@ -37,10 +37,12 @@ export function loadPlugins(
       pluginManager.onRemove(plugin.name, () => {
         for (const serverName of claudeMcpServers) {
           try {
-            const toolNames = mcpClient.disconnect(serverName)
-            for (const toolName of toolNames) {
-              toolsMap.delete(`mcp__${serverName}__${toolName}`)
-            }
+            mcpClient.disconnect(serverName)
+            // Register-time names go through `sanitizeName`; deleting by a raw
+            // `mcp__<serverName>__<toolName>` key silently missed every tool whose
+            // server name needed sanitizing, leaving orphans in the registry. The
+            // shared helper deletes by the same sanitized prefix registration used.
+            unregisterMcpServerTools(serverName, toolsMap)
           } catch {
             /* best effort */
           }
@@ -163,10 +165,9 @@ export function loadPlugins(
       // Disconnect MCP servers and unregister their tools
       for (const serverName of mcpServers) {
         try {
-          const toolNames = mcpClient.disconnect(serverName)
-          for (const toolName of toolNames) {
-            toolsMap.delete(`mcp__${serverName}__${toolName}`)
-          }
+          mcpClient.disconnect(serverName)
+          // Same sanitized-prefix deletion as the Claude-format branch above.
+          unregisterMcpServerTools(serverName, toolsMap)
         } catch {
           /* best effort */
         }

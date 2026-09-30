@@ -466,3 +466,94 @@ describe('settings rule persistence', () => {
     expect(readFileSync(projectSettings, 'utf-8')).toBe(before)
   })
 })
+
+// ============================================================
+// 读不动 / 读不了 的 settings.json 必须**出声**。
+//
+// `readRegularFileSync` 把「不存在」与「在、但读不出来」（EACCES、目录、FIFO）
+// 折成同一个 `null`。前者是常态（大多数路径本来就没有文件），后者不是：
+// 那个文件里写着 `permissions.deny`，读不到 = 这份 deny 整条不生效，而
+// **失败的方向是变松的**。安全相关的文件不允许悄悄 fail-open。
+//
+// 两半各测一条，且都以「这条警告**不该**在正常情形出现」作反方向对照 ——
+// 否则一个无条件写 stderr 的实现也能让上半段全绿。
+// ============================================================
+
+describe('loadSettingsJson — 读不了的 settings.json 要说出来', () => {
+  const USER_SETTINGS = join(MIPHAM_HOME, 'settings.json')
+
+  // 上面那个 `describe` 的 beforeEach/afterEach 只作用于它自己那一块，
+  // 兄弟块得自带一份 —— 否则目录都不存在，`writeFileSync` 直接 ENOENT。
+  beforeEach(() => {
+    rmSync(homedir(), { recursive: true, force: true })
+    mkdirSync(join(CWD, '.mipham'), { recursive: true })
+    mkdirSync(MIPHAM_HOME, { recursive: true })
+  })
+
+  afterEach(() => {
+    rmSync(homedir(), { recursive: true, force: true })
+  })
+
+  /** 抓住这一段里往 stderr 写的东西。 */
+  function captureStderr(fn: () => void): string {
+    const chunks: string[] = []
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation(((c: unknown) => {
+      chunks.push(String(c))
+      return true
+    }) as typeof process.stderr.write)
+    try {
+      fn()
+    } finally {
+      spy.mockRestore()
+    }
+    return chunks.join('')
+  }
+
+  it('文件在、JSON 坏了 ⇒ 报出路径与原因，且那份 deny **没有**生效', () => {
+    // 截断的 JSON：`deny` 已经写进去了，但整份文件读不出来。
+    writeFileSync(USER_SETTINGS, '{ "permissions": { "deny": ["Bash(rm -rf *)"] }')
+
+    let result: ReturnType<typeof loadSettingsJson> | undefined
+    const stderr = captureStderr(() => {
+      result = loadSettingsJson(CWD)
+    })
+
+    expect(stderr).toContain('failed to parse settings file')
+    expect(stderr).toContain(USER_SETTINGS)
+    // 说实话：文件被**整份忽略**了，不是「解析成功但没有 deny」。
+    expect(result!.permissions.deny).toEqual([])
+  })
+
+  it('反方向：JSON 正常时一声不出，且 deny 真的进来了', () => {
+    writeFileSync(USER_SETTINGS, JSON.stringify({ permissions: { deny: ['Bash(rm -rf *)'] } }))
+
+    let result: ReturnType<typeof loadSettingsJson> | undefined
+    const stderr = captureStderr(() => {
+      result = loadSettingsJson(CWD)
+    })
+
+    expect(stderr).toBe('')
+    expect(result!.permissions.deny).toEqual(['Bash(rm -rf *)'])
+  })
+
+  it('文件在、但不是普通文件（此处是目录）⇒ 报出路径，不当作「不存在」', () => {
+    mkdirSync(USER_SETTINGS, { recursive: true })
+
+    const stderr = captureStderr(() => {
+      loadSettingsJson(CWD)
+    })
+
+    expect(stderr).toContain('not a readable regular file')
+    expect(stderr).toContain(USER_SETTINGS)
+  })
+
+  it('反方向：文件**不在**时保持安静（那才是常态）', () => {
+    expect(() => readFileSync(USER_SETTINGS)).toThrow() // 前提：确实没这个文件
+
+    const stderr = captureStderr(() => {
+      loadSettingsJson(CWD)
+    })
+
+    expect(stderr).toBe('')
+  })
+})

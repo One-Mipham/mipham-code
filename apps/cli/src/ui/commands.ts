@@ -7,6 +7,7 @@
 import type { QueryEngine } from '../core/engine'
 import type { MiphamConfig } from '../shared/index.ts'
 import { formatContextWindow } from '../shared/format'
+import { sanitizeInlineField } from '../shared/sanitize'
 import type { SkillsLoader } from '../skills/loader'
 import { loadSkillUsage } from '../skills/usage'
 import type { PluginManager } from '../plugin/plugin-manager'
@@ -4948,7 +4949,7 @@ const mcpCmd: CommandHandler = async (ctx, args) => {
     const config = mcpServers.find((s) => s.name === name)
     if (!config) {
       return {
-        content: `Server "${name}" not found in config.\n\nConfigured: ${mcpServers.map((s) => s.name).join(', ') || '(none)'}`,
+        content: `Server "${sanitizeInlineField(name)}" not found in config.\n\nConfigured: ${mcpServers.map((s) => sanitizeInlineField(s.name)).join(', ') || '(none)'}`,
       }
     }
     if (config.auth?.type === 'oauth') {
@@ -4968,7 +4969,7 @@ const mcpCmd: CommandHandler = async (ctx, args) => {
       const headerKeys = config.headers ? Object.keys(config.headers) : []
       const headerLine = headerKeys.length > 0 ? `\nHeaders to send: ${headerKeys.join(', ')}` : ''
       return {
-        content: `── MCP Connect: ${name} ──\n\nConnecting via HTTP\nURL: ${config.url}${headerLine}\n\n⚠️ Verify the URL — any configured headers (e.g. Authorization) will be sent to this server.`,
+        content: `── MCP Connect: ${sanitizeInlineField(name)} ──\n\nConnecting via HTTP\nURL: ${sanitizeInlineField(config.url)}${headerLine}\n\n⚠️ Verify the URL — any configured headers (e.g. Authorization) will be sent to this server.`,
         forwardToAI: `Connect to MCP server "${name}" using McpClient.getInstance().connect(config), then register its tools. Report the result.`,
       }
     }
@@ -5058,15 +5059,15 @@ const mcpCmd: CommandHandler = async (ctx, args) => {
         : '⚪'
       const statusLabel = live ? live.status : 'not started'
       const oauthTag = s.auth?.type === 'oauth' ? ' [OAuth]' : ''
-      lines.push(`  ${statusIcon} ${s.name}${oauthTag}  [${statusLabel}]`)
+      lines.push(`  ${statusIcon} ${sanitizeInlineField(s.name)}${oauthTag}  [${statusLabel}]`)
       const transportInfo = s.url
-        ? `URL: ${s.url}`
-        : `Command: ${s.command ?? ''} ${(s.args ?? []).join(' ')}`
+        ? `URL: ${sanitizeInlineField(s.url)}`
+        : `Command: ${sanitizeInlineField(s.command ?? '')} ${(s.args ?? []).map(sanitizeInlineField).join(' ')}`
       lines.push(`     ${transportInfo}`)
       if (live?.tools && live.tools.length > 0) {
         lines.push(`     Tools: ${live.tools.length} registered`)
       }
-      if (live?.error) lines.push(`     Error: ${live.error}`)
+      if (live?.error) lines.push(`     Error: ${sanitizeInlineField(live.error)}`)
       lines.push('')
     }
   } else {

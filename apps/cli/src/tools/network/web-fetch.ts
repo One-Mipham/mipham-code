@@ -1,4 +1,5 @@
 import type { ToolDefinition } from '../../shared/index.ts'
+import { PACKAGE_VERSION } from '../../shared/package-info'
 import { validateUrl } from '../../security/url'
 
 // ── In-memory cache (15-min TTL per URL) ──
@@ -195,7 +196,7 @@ export const webFetchTool: ToolDefinition = {
       for (let hop = 0; hop <= 5; hop++) {
         response = await fetch(currentUrl, {
           headers: {
-            'User-Agent': 'Mipham-Code/0.24.0',
+            'User-Agent': `Mipham-Code/${PACKAGE_VERSION}`,
             Accept: 'text/html,application/xhtml+xml,*/*',
           },
           redirect: 'manual',

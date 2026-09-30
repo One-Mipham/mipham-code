@@ -19,7 +19,13 @@ const TOKEN_REDACTION_PATTERN =
  * out every non-secret endpoint too). The shape is the only reliable tell.
  * Redacts the password and keeps user + host, or the line stops being readable.
  */
-const URL_USERINFO_PATTERN = /([a-z][a-z0-9+.-]*:\/\/)([^/\s:@]+):([^/\s@]+)@/gi
+// The password group must NOT exclude `@`: a literal `@` inside a password is
+// illegal per URL syntax, yet `postgres://user:p@ss@host` is exactly how people
+// paste connection strings into a shell. Excluding `@` made the group stop at the
+// *first* `@`, redacting only `p` and leaving `ss@host` in the clear. Greedy
+// `[^/\s]+` runs to the last `@` on the line and backtracks, so the whole password
+// goes and the host survives.
+const URL_USERINFO_PATTERN = /([a-z][a-z0-9+.-]*:\/\/)([^/\s:@]+):([^/\s]+)@/gi
 
 /**
  * Scrub credential patterns from stdout/stderr output.

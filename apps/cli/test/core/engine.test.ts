@@ -749,6 +749,138 @@ describe('QueryEngine', () => {
 
       expect(attempts).toBe(2)
     })
+
+    /**
+     * `retryable: false` —— provider 认定这次失败是**确定性的**（内容过滤、畸形请求、
+     * 坏 key）：重发一次会拿到同一句话，换 provider 也不会改变答案。于是两条路都该省掉，
+     * 错误只报一次。
+     *
+     * 判据必须能分辨「省掉」与「压根没走这条路」：所以两侧都计数 —— 活动 provider **恰
+     * 一次**（原地重试没发生）、回退 provider **零次**（回退没被烧掉）。
+     */
+    describe('provider 声明的确定性失败（`retryable: false`）', () => {
+      /** 活动 provider 抛**错误块**（不是异常）——`retryable` 只挂在块上。 */
+      function errorChunkRegistry(
+        calls: { active: number; fallback: number },
+        retryable?: boolean,
+      ): ProviderRegistry {
+        const registry = new ProviderRegistry([], 'good', 'good-model')
+        registry.register('good', {
+          config: {
+            id: 'good',
+            name: 'Good',
+            protocol: 'openai-compatible' as const,
+            apiKey: 'k',
+            models: [
+              {
+                id: 'good-model',
+                name: 'Good Model',
+                providerId: 'good',
+                contextWindow: 1000,
+                maxOutput: 100,
+                vision: false,
+                status: 'active' as const,
+              },
+            ],
+          },
+          chat: async function* () {
+            calls.fallback++
+            yield { type: 'text' as const, content: 'fallback response' }
+            yield { type: 'stop' as const }
+          },
+          listModels: async () => [],
+          healthCheck: async () => true,
+        })
+        registry.register('bad', {
+          config: {
+            id: 'bad',
+            name: 'Bad',
+            protocol: 'openai-compatible' as const,
+            apiKey: 'k',
+            models: [],
+          },
+          chat: async function* () {
+            calls.active++
+            yield retryable === undefined
+              ? { type: 'error' as const, error: 'content filter rejected' }
+              : { type: 'error' as const, error: 'content filter rejected', retryable }
+          },
+          listModels: async () => [],
+          healthCheck: async () => true,
+        })
+        registry.switchProvider('bad', 'bad-model')
+        return registry
+      }
+
+      async function run(registry: ProviderRegistry, context: ContextManager) {
+        const engine = new QueryEngine(registry, context, makeToolMap([]))
+        const chunks: StreamChunk[] = []
+        for await (const chunk of engine.process('hi')) chunks.push(chunk)
+        return chunks
+      }
+
+      it('确定性失败：不发原地重试、不烧回退，错误只报一次', async () => {
+        const calls = { active: 0, fallback: 0 }
+        const registry = errorChunkRegistry(calls, false)
+
+        const chunks = await run(registry, mockContext())
+
+        expect(calls).toEqual({ active: 1, fallback: 0 })
+        expect(chunks.filter((c) => c.type === 'error')).toHaveLength(1)
+        expect(chunks.some((c) => c.type === 'warning')).toBe(false)
+        expect(chunks.some((c) => c.type === 'text' && c.content === 'fallback response')).toBe(
+          false,
+        )
+        // 没动用户选的模型：既然换 provider 也改不了答案，就不该翻转 registry 状态。
+        expect(registry.getActive().config.id).toBe('bad')
+      })
+
+      it('反方向：没声明（`undefined`）仍然原地重试一次 + 回退（老行为不变）', async () => {
+        const calls = { active: 0, fallback: 0 }
+        const registry = errorChunkRegistry(calls)
+
+        const chunks = await run(registry, mockContext())
+
+        expect(calls).toEqual({ active: 2, fallback: 1 })
+        expect(chunks.some((c) => c.type === 'text' && c.content === 'fallback response')).toBe(
+          true,
+        )
+      })
+
+      it('反方向：显式 `retryable: true` 与未声明同义', async () => {
+        const calls = { active: 0, fallback: 0 }
+        const registry = errorChunkRegistry(calls, true)
+
+        await run(registry, mockContext())
+
+        expect(calls).toEqual({ active: 2, fallback: 1 })
+      })
+    })
+
+    /**
+     * 跨 provider 回退之后，**压缩窗口必须跟着换成回退模型的**。
+     *
+     * 回退模型的窗口通常比原模型小（1M → 128K）。直调 `registry.switchProvider` 只换了
+     * 活动 provider，`context.updateMaxTokens` 从没被调用 ⇒ `getActiveModel()` 已经是回退
+     * 模型，而 `context` 仍按**旧窗口**武装压缩：要等到 `0.95×1M ≈ 950K` 才触发，而回退模型
+     * 128K 就撑爆 ⇒ 先吃硬报错。手动换档（Ctrl+P / `/switch`）走的是 `engine.switchProvider`，
+     * 那一格本来就是对的 —— 这条钉的是**自动回退**这条旁路。
+     */
+    it('跨 provider 回退后，压缩窗口跟着换成回退模型的', async () => {
+      const calls = { active: 0, fallback: 0 }
+      const registry = failingActiveRegistry(calls)
+      const context = mockContext() // 起始 100_000
+      expect(context.getMaxTokens()).toBe(100_000)
+
+      const engine = new QueryEngine(registry, context, makeToolMap([]))
+      for await (const _ of engine.process('hi')) {
+        /* drain */
+      }
+
+      // `good-model` 的 contextWindow 是 1000 —— 回退后窗口必须是它，不是 100_000。
+      expect(registry.getActive().config.id).toBe('good')
+      expect(context.getMaxTokens()).toBe(1000)
+    })
   })
 
   describe('process — basic conversation', () => {

@@ -16,6 +16,7 @@ vi.mock('node:os', async (importOriginal) => {
 })
 import type { ToolContext } from '../../src/shared'
 import { agentTool, resolveRunInBackground } from '../../src/tools/agent/agent'
+import { SubAgent } from '../../src/agent/sub-agent'
 import { skillTool } from '../../src/tools/agent/skill'
 import { planTool } from '../../src/tools/agent/plan'
 import { memoryTool } from '../../src/tools/agent/memory'
@@ -76,6 +77,40 @@ describe('resolveRunInBackground', () => {
     expect(resolveRunInBackground(false, { background: true })).toBe(false)
     expect(resolveRunInBackground(true, { background: false })).toBe(true)
   })
+
+  /**
+   * 一层之下的默认反了 —— `[background-task:<id>]` 是**句柄不是答案**：孩子的结果进后台
+   * 注册表与钩子/经验日志，**没有任何东西把它交回**给问它的那个 agent。于是「问一个孩子、
+   * 再拿它的回答往下做」在一层之下**根本不成立**：调用方拿到的是占位符。
+   * 把这一格默认成后台，就把它从「可选」变成「一个洞」。
+   *
+   * 但那是**默认**翻转，不是禁止：显式 `run_in_background: true` 两个方向都仍然算数 ——
+   * 那是**请求**，不是替调用方选的默认值。
+   */
+  it('嵌套调用缺省时落到同步（默认翻转，不是禁止后台）', () => {
+    expect(resolveRunInBackground(undefined, undefined, true)).toBe(false)
+  })
+
+  it('嵌套调用里显式 true 仍算数（请求优先于默认值）', () => {
+    expect(resolveRunInBackground(true, undefined, true)).toBe(true)
+  })
+
+  it('嵌套调用里显式 false 仍是 false', () => {
+    expect(resolveRunInBackground(false, undefined, true)).toBe(false)
+  })
+
+  /**
+   * 嵌套规则压在 frontmatter **之上**：一个「默认给自己装成后台」的 agent 定义，被另一个
+   * sub-agent 调用时不能把这个洞带下去 —— 否则同一份 frontmatter 在顶层无害、在一层之下
+   * 就把调用方的输入换成占位符。
+   */
+  it('嵌套调用压过 frontmatter 的 background: true', () => {
+    expect(resolveRunInBackground(undefined, { background: true }, true)).toBe(false)
+  })
+
+  it('嵌套调用压过 frontmatter 的 background: false（同向）', () => {
+    expect(resolveRunInBackground(undefined, { background: false }, true)).toBe(false)
+  })
 })
 
 describe('Agent tool execution', () => {
@@ -104,6 +139,43 @@ describe('Agent tool execution', () => {
     )
     expect(result.success).toBe(false)
     expect(result.error).toContain('Invalid subagent_type')
+  })
+
+  /**
+   * `resolveRunInBackground` 的嵌套规则单独测过，但那只是**尺子**：这里钉的是尺子**接上了**
+   * —— 同一个 `Agent` 工具、同一份参数，`ctx.isSubAgent` 一个为真一个为假，交给 `SubAgent`
+   * 的 `runInBackground` 必须跟着变。少了这一条，把第三个实参从调用点删掉（签名有默认值
+   * `false`，不会报错）时全绿。
+   */
+  it('把 ctx.isSubAgent 传进后台默认值的裁决（子代理默认同步、顶层默认后台）', async () => {
+    const seen: Array<Record<string, unknown>> = []
+    const spy = vi.spyOn(SubAgent.prototype, 'execute').mockImplementation((async (
+      _prompt: string,
+      _desc: string,
+      opts: Record<string, unknown>,
+    ) => {
+      seen.push(opts)
+      return 'done'
+    }) as never)
+
+    const ready = {
+      ...ctx,
+      registry: {} as never,
+      toolRegistry: new Map() as never,
+    }
+
+    try {
+      await agentTool.execute(
+        { description: 'child', prompt: 'go' },
+        { ...ready, isSubAgent: true },
+      )
+      await agentTool.execute({ description: 'child', prompt: 'go' }, ready)
+    } finally {
+      spy.mockRestore()
+    }
+
+    expect(seen[0]!.runInBackground).toBe(false)
+    expect(seen[1]!.runInBackground).toBe(true)
   })
 })
 

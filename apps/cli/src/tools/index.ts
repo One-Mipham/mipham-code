@@ -74,7 +74,13 @@ export function createToolRegistry(
     sendMessageTool,
     listAgentsTool,
     // Network tools
-    webFetchTool,
+    // `MIPHAM_DISABLE_WEB_FETCH=1` removes WebFetch from the registry entirely, so
+    // it is never advertised to the model. A `permissionRules.deny: ["WebFetch"]`
+    // reaches the same endpoint by a different mechanism — the tool is still listed
+    // in the schema and only rejected when called, which costs a wasted turn (and a
+    // perplexed model) before the refusal lands. An env kill-switch has to act at
+    // registration, not at call time.
+    ...(process.env.MIPHAM_DISABLE_WEB_FETCH === '1' ? [] : [webFetchTool]),
     webSearchTool,
     // System tools
     mcpTool,

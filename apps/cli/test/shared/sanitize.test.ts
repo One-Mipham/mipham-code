@@ -3,6 +3,8 @@ import {
   stripDangerousUnicode,
   sanitizeParams,
   neutralizeInjectedMarkup,
+  sanitizeInlineField,
+  decodeDisplayEntities,
 } from '../../src/shared/sanitize'
 
 /**
@@ -182,5 +184,80 @@ describe('neutralizeInjectedMarkup', () => {
 
   it('leaves an empty string alone', () => {
     expect(neutralizeInjectedMarkup('')).toBe('')
+  })
+})
+
+// ============================================================
+// `sanitizeInlineField` —— 把**不受信的单行值**放进终端输出前的净化。
+//
+// 落点：`/mcp` 把 server 名 / URL / 命令行原样内插进转录（`ui/commands.ts`）。
+// `stripDangerousUnicode` 管的是**不可见**字符，**不含 C0 控制符** —— 而 ESC
+// (U+001B) 正是其一：名字里带 `\x1b[2J` 时，终端把它读成清屏序列，而不是当成文字
+// 显示。DEL (U+007F) 同理。
+//
+// 与 `stripControlCharsForCheck` 的差别是**有意的**：那个保留 `\n`（多行 shell 命令
+// 需要），而这里的值在一行里，内嵌换行会**伪造一行**出来。
+// ============================================================
+
+describe('sanitizeInlineField', () => {
+  it('剥掉 ESC（`\\x1b[2J` 不许被终端当控制序列执行）', () => {
+    const out = sanitizeInlineField(`${cp(0x1b)}[2Jevil`)
+    expect(out).not.toContain(cp(0x1b))
+    // 剩下的 `[2J` 是**普通文字**，终端不会解释它 —— 这正是判据。
+    expect(out).toBe('[2Jevil')
+  })
+
+  it('剥掉 C0 控制符与 DEL，含换行/回车/制表（不许伪造新行）', () => {
+    expect(sanitizeInlineField('a\nb')).toBe('ab')
+    expect(sanitizeInlineField('a\rb')).toBe('ab')
+    expect(sanitizeInlineField('a\tb')).toBe('ab')
+    expect(sanitizeInlineField(`a${cp(0x7f)}b`)).toBe('ab')
+    expect(sanitizeInlineField(`a${cp(0x00)}b`)).toBe('ab')
+  })
+
+  it('也走一遍不可见字符的净化（两层都要）', () => {
+    expect(sanitizeInlineField(`srv${ZWSP}name`)).toBe('srvname')
+    expect(sanitizeInlineField(`srv${cp(0x202e)}name`)).toBe('srvname')
+  })
+
+  it('正常文字原样（含 CJK 与非 ASCII 标点）', () => {
+    for (const s of ['my-server', 'http://127.0.0.1:3000/sse', '服务器 A', 'a b c']) {
+      expect(sanitizeInlineField(s), s).toBe(s)
+    }
+  })
+
+  it('空串原样返回（不抛、不变成别的）', () => {
+    expect(sanitizeInlineField('')).toBe('')
+  })
+})
+
+// ============================================================
+// `decodeDisplayEntities` —— 终端**没有** markdown/entities 层（`chat.tsx` 是
+// `<Text>{content}</Text>`），所以助手用 `&nbsp;` 对齐的表格标签会**字面显示**。
+//
+// 只解这一个实体是**有意的**，不是漏做：`&lt;`/`&amp;`/`&gt;` 出现在助手**正在展示的
+// 代码**里，解开会把示例本身改坏。所以反方向的判据和正向一样重要。
+// ============================================================
+
+describe('decodeDisplayEntities', () => {
+  it('`&nbsp;` 解成空格（大小写都要）', () => {
+    expect(decodeDisplayEntities('a&nbsp;b')).toBe('a b')
+    expect(decodeDisplayEntities('a&NBSP;b')).toBe('a b')
+    expect(decodeDisplayEntities('a&Nbsp;b')).toBe('a b')
+  })
+
+  it('一条里出现多次也全解', () => {
+    expect(decodeDisplayEntities('&nbsp;&nbsp;x')).toBe('  x')
+  })
+
+  it('反方向：代码实体不许被解（那会把助手展示的代码改坏）', () => {
+    for (const s of ['a &lt; b', 'R&D &amp; Co', 'if (a &gt; b)', '&hellip;', '&#160;']) {
+      expect(decodeDisplayEntities(s), s).toBe(s)
+    }
+  })
+
+  it('没有 `&` 时原样返回（快路径不改字）', () => {
+    expect(decodeDisplayEntities('plain text 中文')).toBe('plain text 中文')
+    expect(decodeDisplayEntities('')).toBe('')
   })
 })

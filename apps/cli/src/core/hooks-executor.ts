@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { McpClient } from '../mcp/client'
 import type { ToolCallResult } from '../mcp/types'
 import type { HookConfig, HookContext, HookResult } from '../shared/index.ts'
@@ -115,9 +115,9 @@ export function parseHookStdout(stdout: string | null | undefined, _ctx: HookCon
 /**
  * Why the hook subprocess failed to run to completion, or `null` if it did exit.
  *
- * `spawnSync` does **not** throw for a failed spawn or a timeout — it reports them
- * on the result, and all three shapes arrive with **empty stderr**: `error.code`
- * is `ETIMEDOUT` for the timeout, `ENOENT` when the command does not exist, and an
+ * The spawn does **not** throw for a failed spawn or a timeout — it reports them on
+ * the result, and all three shapes arrive with **empty stderr**: `error.code` is
+ * `ETIMEDOUT` for the timeout, `ENOENT` when the command does not exist, and an
  * externally killed child comes back as `status: null` + `signal` with no `error`
  * at all. Empty stderr is what made them one string with a benign non-zero exit
  * that printed nothing — `Hook warning (<cmd>): ` with the reason left blank.
@@ -133,7 +133,7 @@ export function parseHookStdout(stdout: string | null | undefined, _ctx: HookCon
  * is exempt from the two decisions below, and speaks only when nothing else can.
  *
  * Named here rather than in the caller's `catch`, which cannot see any of them:
- * it runs only when `spawnSync` itself throws.
+ * it runs only when the spawn machinery itself throws.
  */
 function spawnFailureCause(
   result: { status?: number | null; signal?: string | null; error?: unknown },
@@ -176,6 +176,156 @@ function failingLabel(command: string | undefined, source?: string): string {
   return `(${command})${source ? ` from "${source}"` : ''}`
 }
 
+/** Grace given to a descendant still holding a stdio pipe after the hook itself exited. */
+const HOOK_PIPE_GRACE_MS = 1_000
+
+/** The `spawnSync`-shaped outcome `spawnFailureCause` and the caller already read. */
+interface HookProcessResult {
+  status: number | null
+  signal: string | null
+  stdout: string
+  stderr: string
+  error?: { code?: string; message?: string }
+}
+
+/**
+ * Run a hook command to completion, bounding **both** halves of the wait.
+ *
+ * `spawnSync` was the wrong tool here. It returns only when the child's stdout and
+ * stderr reach EOF — not when the child exits — so a hook that backgrounds anything
+ * (`daemon &`, a watcher, an ssh tunnel) leaves a descendant holding the pipe and
+ * the read never sees EOF. Because `spawnSync` blocks the thread, the whole event
+ * loop froze with it: the terminal stopped responding for the full 60s default, and
+ * the error that finally surfaced (`timed out after 60s`) was a misdiagnosis — the
+ * hook itself had already exited. Measured on this host with a grandchild holding
+ * the pipe: 60,0xx ms with the default timeout, and no return at all without one.
+ *
+ * The async version keeps the event loop live (Escape and Ctrl+C keep working) and
+ * gives a pipe-holding descendant the same grace-then-group-kill that the Bash tool
+ * already uses, so the wait is bounded by the hook, not by whatever it left behind.
+ * `detached` makes the child a process-group leader, which is what lets the group
+ * kill reach descendants rather than only the direct child.
+ */
+async function runHookCommand(
+  command: string,
+  args: string[],
+  opts: { input: string; cwd: string; env: NodeJS.ProcessEnv | undefined; timeoutMs: number },
+): Promise<HookProcessResult> {
+  return await new Promise<HookProcessResult>((resolve) => {
+    let stdout = ''
+    let stderr = ''
+    let status: number | null = null
+    let signal: string | null = null
+    let spawnError: { code?: string; message?: string } | undefined
+    let timedOut = false
+    let settled = false
+    // `finish()` 先于计时器存在（它读 `timer`），而计时器只能在 `spawn` 之后开 ——
+    // 顺序反过来就是「还没起进程就先超时」。所以这里必须是 `let`。
+    // eslint-disable-next-line prefer-const -- 唯一那次赋值在 `finish` 之后
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let graceTimer: ReturnType<typeof setTimeout> | undefined
+
+    const child = spawn(command, args, {
+      cwd: opts.cwd,
+      env: opts.env,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      detached: true,
+    })
+
+    const killGroup = () => {
+      if (child.pid === undefined) return
+      try {
+        process.kill(-child.pid, 'SIGKILL')
+      } catch {
+        try {
+          child.kill('SIGKILL')
+        } catch {
+          // Already gone.
+        }
+      }
+    }
+
+    const finish = () => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      clearTimeout(graceTimer)
+      // Keep the timeout distinguishable from an external kill: both arrive as
+      // `status: null`, and only this flag separates "the hook was too slow" from
+      // "something killed it" for the message the operator reads.
+      if (timedOut && !spawnError) {
+        spawnError = {
+          code: 'ETIMEDOUT',
+          message: `timed out after ${Math.round(opts.timeoutMs / 1000)}s`,
+        }
+      }
+      resolve({ status, signal, stdout, stderr, ...(spawnError ? { error: spawnError } : {}) })
+    }
+
+    timer = setTimeout(() => {
+      timedOut = true
+      killGroup()
+      // Resolve on the decision, not on a `close` the killed group may never
+      // produce: a descendant can outlive the SIGKILL's delivery and keep holding
+      // the pipe, and the old `spawnSync` had a hard bound here (a misdiagnosed
+      // one, but a bound). Without this, the pipe-holding case would wait forever
+      // instead of for the timeout.
+      finish()
+    }, opts.timeoutMs)
+
+    // The hook exited, but its stdio may still be held by a descendant it spawned.
+    // Give that descendant a short grace, then take the group down — otherwise the
+    // caller waits out the full timeout and blames the hook for a timeout it never had.
+    const startPipeGrace = () => {
+      graceTimer = setTimeout(killGroup, HOOK_PIPE_GRACE_MS)
+    }
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString()
+    })
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString()
+    })
+
+    child.on('error', (err: NodeJS.ErrnoException) => {
+      // A failed spawn (ENOENT, EACCES) never produces an exit or a close.
+      spawnError = { code: err.code, message: err.message }
+      finish()
+    })
+
+    child.on('exit', (code, sig) => {
+      status = code
+      signal = sig
+      startPipeGrace()
+    })
+
+    // `close` fires once stdio is closed *and* the child has exited — the exact
+    // event `spawnSync` was waiting on, minus the frozen thread.
+    child.on('close', (code, sig) => {
+      status = code
+      signal = sig
+      finish()
+    })
+
+    // The payload races the child's exit: a child that ignores stdin is gone before
+    // the write lands, and the EPIPE that results is a scheduler property, not a hook
+    // failure (see `spawnFailureCause`). Recorded as the result's `error` so the
+    // existing EPIPE exemption still applies.
+    child.stdin.on('error', (err: NodeJS.ErrnoException) => {
+      // Only EPIPE is recorded: any other failure here has already been reported by
+      // the `error` handler above with a more useful code.
+      if (err.code === 'EPIPE' && !spawnError) {
+        spawnError = { code: 'EPIPE', message: err.message }
+      }
+    })
+    try {
+      child.stdin.end(opts.input)
+    } catch {
+      // The stream surfaced it through the `error` handler.
+    }
+  })
+}
+
 async function executeCommand(
   cfg: HookConfig,
   ctx: HookContext,
@@ -186,8 +336,8 @@ async function executeCommand(
   try {
     const args = cfg.args ? cfg.args.map((a) => substituteVars(a, ctx)) : []
 
-    // A hook command is a child of this process, so a bare `spawnSync` would hand
-    // it the whole environment — every provider key and bot secret included. Bash
+    // A hook command is a child of this process, so inheriting the environment
+    // would hand it everything — every provider key and bot secret included. Bash
     // has been masking these since E1; hooks were the remaining door, so they use
     // the same policy. Resolved at **user level** — the same choice E1 made for
     // every spawn it could not scope to one session's project section
@@ -207,13 +357,10 @@ async function executeCommand(
     // hand, and is exactly right for the one-shot CLI.
     const cwd = ctx.cwd ?? process.cwd()
 
-    // Use spawnSync with array args — no shell, no command injection.
-    // Pass the Claude-protocol stdin JSON so scripts can read structured context.
+    // Array args — no shell, so no command injection. The Claude-protocol stdin JSON
+    // goes in so scripts can read structured context.
     const input = JSON.stringify(buildHookStdin(ctx, cwd))
-    const result = spawnSync(cfg.command, args, {
-      timeout: (cfg.timeout ?? 60) * 1000,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
+    const result = await runHookCommand(cfg.command, args, {
       input,
       // Both halves of "where is this hook": the directory it runs in, and the
       // `cwd` it reads off stdin. Fixing only one leaves the hook told it is
@@ -222,6 +369,7 @@ async function executeCommand(
       // `undefined` = inherit, which is what node does by default; passing it
       // explicitly keeps the two branches visible at one site.
       env,
+      timeoutMs: (cfg.timeout ?? 60) * 1000,
     })
 
     // Exit code 0 = success — parse the stdout JSON for structured decisions.
@@ -255,9 +403,10 @@ async function executeCommand(
       additionalContext: `Hook warning ${failingLabel(cfg.command, source)}: ${stderr.trim()}`,
     }
   } catch (err) {
-    // Only reached when `spawnSync` itself throws — masking-policy load, env
-    // filter, or an option it rejects outright. Its comment used to name timeouts
-    // and missing commands, neither of which can arrive here.
+    // Only reached when the setup around the spawn throws — masking-policy load,
+    // env filter, or an option `spawn` rejects synchronously. A failed exec or a
+    // timeout is *not* a throw here: both are reported on the result (see
+    // `spawnFailureCause`), which is why this comment used to name them wrongly.
     const message = (err as { message?: string }).message || String(err)
 
     return {

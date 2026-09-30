@@ -86,4 +86,30 @@ describe('WorkflowEventBus', () => {
     bus.startRun('second')
     expect(bus.getActiveRunId()).toBe('second')
   })
+
+  /**
+   * `error` 是**负载类型**，但它和 EventEmitter 的**崩溃通道**同名：Node 在无人订阅时让
+   * `emit('error', …)` 抛 `ERR_UNHANDLED_ERROR`。headless 那条路径（`/workflow` 跑完就退出、
+   * 没人挂进度视图）正好无人订阅 ⇒ 失败的 run 用 `Unhandled error. ({ type: 'error', … })`
+   * 盖住了它自己的诊断。
+   *
+   * 判据两头都要钉：**无人订阅时不抛**（否则这条路径又回到「报错报成 Node 的模板」），
+   * **有人订阅时照样送达**（否则这个事件类型就等于被删掉了）。
+   */
+  it('无人订阅时不抛 ERR_UNHANDLED_ERROR（error 是负载类型，不是崩溃通道）', () => {
+    const bus = getEventBus()
+    expect(bus.listenerCount('error')).toBe(0)
+    expect(() => bus.emitEvent({ type: 'error', message: 'boom' })).not.toThrow()
+  })
+
+  it('有人订阅时 error 事件照常送达', () => {
+    const bus = getEventBus()
+    const handler = vi.fn()
+    bus.on('error', handler)
+
+    bus.emitEvent({ type: 'error', agentId: 'a1', message: 'provider exploded' })
+
+    expect(handler).toHaveBeenCalledTimes(1)
+    expect(handler.mock.calls[0]![0].message).toBe('provider exploded')
+  })
 })

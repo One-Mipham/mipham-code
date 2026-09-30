@@ -1,7 +1,7 @@
 import { execSync } from 'node:child_process'
 import type { ProviderConfig, ModelInfo, Message, StreamChunk } from '../shared/index.ts'
 import type { ProviderInstance, ChatRequest } from './registry'
-import { fetchWithRetry, streamIdleTimeoutMs } from './fetch-utils'
+import { fetchWithRetry, streamIdleTimeoutMs, isRetryableFailure } from './fetch-utils'
 import { OLLAMA_PRESET_MODELS } from '../shared/constants'
 
 export class OpenAICompatProvider implements ProviderInstance {
@@ -46,7 +46,11 @@ export class OpenAICompatProvider implements ProviderInstance {
 
     if (!response.ok) {
       const errText = await response.text()
-      yield { type: 'error', error: `OpenAI API error ${response.status}: ${errText}` }
+      yield {
+        type: 'error',
+        error: `OpenAI API error ${response.status}: ${errText}`,
+        retryable: isRetryableFailure(response.status),
+      }
       return
     }
 
@@ -139,6 +143,24 @@ export class OpenAICompatProvider implements ProviderInstance {
                 inputTokens: parsed.usage.prompt_tokens,
                 outputTokens: parsed.usage.completion_tokens,
               }
+            }
+
+            // A mid-stream error arrives as `data: {"error": {...}}` — no `choices`.
+            // Previously it fell through `if (!choice) continue`, the loop ran to its
+            // end, and the trailing `yield { type: 'stop' }` below made the turn look
+            // like a clean finish: no error surfaced, so the engine neither retried
+            // nor fell back and the user got a silently empty answer. Surface it as
+            // an error chunk instead, which is also what feeds the "name the model and
+            // offer a way out" path.
+            if (parsed.error) {
+              const e = parsed.error as { message?: string; code?: string; type?: string }
+              const detail = e.message ?? JSON.stringify(parsed.error)
+              yield {
+                type: 'error',
+                error: `${this.config.id}: ${detail}`,
+                retryable: isRetryableFailure(undefined, e.type ?? e.code),
+              }
+              return
             }
 
             if (!choice) continue

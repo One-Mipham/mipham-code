@@ -265,6 +265,23 @@ describe('mcp/registry', () => {
       expect(toolsMap.has('mcp__srv-b__add')).toBe(true)
     })
 
+    it('按**注册时那个**（已净化的）名字删 —— 带空格/大写的服务器名也清得干净', async () => {
+      // 注册侧把服务器名过了 `sanitizeName`（大写→小写、非 `[a-z0-9-]`→`_`），
+      // 按**原始**拼法拼出 `mcp__My Server__echo` 去删，一个都命中不了 ——
+      // 那种写法删完 map 看着「没报错」，工具却全成了孤儿。
+      const raw = 'My Server'
+      await connectMockServer(raw)
+
+      const toolsMap = new Map<string, ToolDefinition>()
+      registerMcpServerTools(raw, toolsMap)
+
+      // 前提：注册**确实**净了名。前提不成立时下面那条测的就不是净化这条路。
+      expect([...toolsMap.keys()]).toEqual(['mcp__my_server__echo', 'mcp__my_server__add'])
+
+      unregisterMcpServerTools(raw, toolsMap)
+      expect(toolsMap.size).toBe(0)
+    })
+
     it('is a no-op for unknown server', () => {
       const toolsMap = new Map<string, ToolDefinition>()
       expect(() => unregisterMcpServerTools('unknown', toolsMap)).not.toThrow()

@@ -339,3 +339,54 @@ describe('runTaskPerformance 的代价维（B2）', () => {
     expect(r.durationMs!).toBeGreaterThanOrEqual(0)
   })
 })
+
+// ============================================================
+// 截断信号（`truncated`）要进打分，而不是被丢掉。
+//
+// 两个 provider 都在 stop chunk 上产这个字段（`anthropic.ts:306,330`、
+// `openai-compat.ts:221`），而 `collectGeneratedCode` 从前只收 `text` 块 ⇒
+// 信号**产出来、没落点**。后果不是「少个字段」，是**读数错**：被输出上限截断的
+// 生成按构造就是残的，把它的失败并进均值，让分数（以及由分数派生的
+// improved/regressed 判定）由**输出上限**决定，而不是由做得好不好决定。
+//
+// 判据两头：① 截断的**不参与**打分（且被计数点名）；② 没截断的**照旧**参与
+// —— 否则「分数永远 100」也能让第 ① 条过。
+// ============================================================
+
+/** 每次调用都产出垃圾代码；可切换是否在 stop chunk 上带 `truncated`。 */
+const brokenLlm = (truncated: boolean): Llm => ({
+  chat: async function* () {
+    yield { type: 'text', content: 'export function nope(): number { return 1 }' }
+    yield truncated ? { type: 'stop', truncated: true } : { type: 'stop' }
+  },
+})
+
+describe('runTaskPerformance：被输出上限截断的生成不进打分', () => {
+  it('全被截断 ⇒ 分数不该被这些失败拉低（分母为 0 时按 100），但计数点名', async () => {
+    const r = await runTaskPerformance(brokenLlm(true))
+    expect(r.total).toBeGreaterThan(0)
+    expect(r.passed).toBe(0) // 全都没通过 —— 只是「没通过」不再是评分依据
+    expect(r.truncated).toBe(r.total)
+    expect(r.score).toBe(100)
+    expect(r.results.every((x) => x.truncated === true)).toBe(true)
+  })
+
+  it('反方向：没截断的照旧参与打分（垃圾代码就是 0 分）', async () => {
+    const r = await runTaskPerformance(brokenLlm(false))
+    expect(r.truncated).toBe(0)
+    expect(r.passed).toBe(0)
+    expect(r.score).toBe(0)
+    expect(r.results.every((x) => x.truncated === undefined)).toBe(true)
+  })
+
+  it('单任务集上逐字边界：total=1 / truncated=1 / score=100', async () => {
+    const r = await runTaskPerformance(brokenLlm(true), {
+      skill: { name: 'safe-coding', text: '校验' },
+    })
+    expect(r.total).toBe(1)
+    expect(r.results[0]!.truncated).toBe(true)
+    expect(r.truncated).toBe(1)
+    expect(r.score).toBe(100)
+    expect(r.failures.length).toBe(1) // 仍然是「失败」——只是不进分母
+  })
+})

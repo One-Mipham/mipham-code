@@ -399,6 +399,11 @@ export function InputBar({
   useInput((input, key) => {
     // ── Escape: cancel loading → clear draft ──
     if (key.escape) {
+      // While the command picker is open, Escape belongs to it. Ink 7 runs every
+      // registered `useInput` listener for one keypress (no stopPropagation), so
+      // without this the picker closes AND this branch wipes the draft — the exact
+      // text the picker's `onClose` is written to preserve.
+      if (pickerActive) return
       // Escape while loading → abort
       if (isLoading) {
         onCancel?.()

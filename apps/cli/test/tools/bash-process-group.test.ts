@@ -187,3 +187,150 @@ describe('Bash tool — 进程组接线（替身）', () => {
     expect((result as { success: boolean }).success).toBe(true)
   }, 15_000)
 })
+
+// ============================================================
+// 取消（`ctx.signal`）要**落到进程组**上。
+//
+// 修前 signal 只喂到 `permission.resolveApproval` 与 LLM 流：`ToolContext` 里
+// 根本没有这个字段，命令收到的一切**永远不改变** ⇒ 一次长跑的 Bash 无法被取消，
+// Escape 结束了这一轮，而命令继续往用户磁盘上写。
+//
+// 两条判据分开钉：① 取消**必须**对组下手（否掉 `proc.kill()` 这种只收直接子进程的
+// 写法）；② 取消后的结果**不能是成功** —— 包括退出码恰好是 0 的那一格（SIGKILL 与
+// 自然退出赛跑），否则半截命令会被当成干净结果交回去。
+//
+// 这一格与「超时」共用组杀，但**成因不同**（谁先到），所以报出的文案必须能分开读。
+// ============================================================
+
+describe('Bash tool — 取消落到进程组（替身）', () => {
+  const ctx: ToolContext = {
+    cwd: '/tmp/test',
+    sessionId: 'test-session',
+    provider: 'test',
+    model: 'test-model',
+  } as ToolContext
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  /**
+   * 替身进程：`exited` 在**组杀到来时**才完成 —— 内核就是这么做的（整组死了，子进程
+   * 就退出了）。上一段 `mockProc` 把 `exited` 写成永不完成，那对超时/挂起两格是对的
+   * （它们只断言「组杀下手了」），但这两格要读**返回的结果**，所以这里必须会收尾。
+   */
+  function cancellableProc(pid: number, exitCode: number) {
+    let closeStdout: (() => void) | null = null
+    let resolveExited: (code: number) => void = () => {}
+    const stdout = new ReadableStream<Uint8Array>({
+      start(c) {
+        closeStdout = () => c.close()
+      },
+    })
+    const proc = {
+      pid,
+      stdout,
+      stderr: new ReadableStream<Uint8Array>({ start: (c) => c.close() }),
+      exited: new Promise<number>((resolve) => {
+        resolveExited = resolve
+      }),
+      kill: vi.fn(),
+    }
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation(((target: number) => {
+      if (target === -pid) {
+        closeStdout?.()
+        resolveExited(exitCode)
+      }
+      return true
+    }) as typeof process.kill)
+    vi.spyOn(Bun, 'spawn').mockReturnValue(proc as never)
+    return { proc, killSpy }
+  }
+
+  it('调用前就已取消 ⇒ 不必等命令自己结束，且对**组**下手', async () => {
+    const { proc, killSpy } = cancellableProc(6101, 137)
+    const ac = new AbortController()
+    ac.abort()
+
+    const result = await Promise.race([
+      createBashTool().execute(
+        { command: 'sleep 99', timeout: 600_000 },
+        { ...ctx, signal: ac.signal },
+      ),
+      sleep(3_000).then(() => 'HUNG' as const),
+    ])
+
+    expect(result).not.toBe('HUNG')
+    expect((result as { success: boolean }).success).toBe(false)
+    expect((result as { error: string }).error).toContain('cancelled')
+    // 判据取「有没有对**组**下手」：只收直接子进程（`proc.kill()`）时 -6101 一次不出现。
+    expect(killSpy.mock.calls.map((c) => c[0])).toContain(-6101)
+    expect(proc.pid).toBe(6101)
+  }, 10_000)
+
+  it('命令跑着的时候取消 ⇒ 组杀并如实报「取消」，不报「超时」', async () => {
+    const { killSpy } = cancellableProc(6202, 137)
+    const ac = new AbortController()
+    // 监听器是在 `await proc.exited` 之前、同一个同步段里挂上的，所以一个 30ms 的
+    // 定时器必然在挂上之后触发（不是靠运气抢跑）。
+    const t = setTimeout(() => ac.abort(), 30)
+
+    const result = await Promise.race([
+      createBashTool().execute(
+        { command: 'sleep 99', timeout: 600_000 },
+        { ...ctx, signal: ac.signal },
+      ),
+      sleep(3_000).then(() => 'HUNG' as const),
+    ])
+    clearTimeout(t)
+
+    expect(result).not.toBe('HUNG')
+    const r = result as { success: boolean; error: string }
+    expect(r.success).toBe(false)
+    expect(r.error).toContain('cancelled')
+    expect(r.error).not.toContain('timed out')
+    expect(killSpy.mock.calls.map((c) => c[0])).toContain(-6202)
+  }, 10_000)
+
+  it('取消后命令恰好退出 0 ⇒ 仍然报失败（半截命令不许当干净结果交回）', async () => {
+    cancellableProc(6303, 0)
+    const ac = new AbortController()
+    ac.abort()
+
+    const result = await createBashTool().execute(
+      { command: 'half-written', timeout: 600_000 },
+      { ...ctx, signal: ac.signal },
+    )
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('cancelled')
+  }, 10_000)
+
+  it('反方向：没有 signal 的调用不受影响（同一份替身，命令正常收尾）', async () => {
+    // 不取消、`exited` 自行完成 —— 命令的输出照旧算成功。少了这一条，「凡调用皆取消」
+    // 也能让上面三条全绿。
+    let resolveExited: (code: number) => void = () => {}
+    const stdout = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(new TextEncoder().encode('ok\n'))
+        c.close()
+      },
+    })
+    const proc = {
+      pid: 6404,
+      stdout,
+      stderr: new ReadableStream<Uint8Array>({ start: (c) => c.close() }),
+      exited: new Promise<number>((resolve) => {
+        resolveExited = resolve
+      }),
+      kill: vi.fn(),
+    }
+    vi.spyOn(Bun, 'spawn').mockReturnValue(proc as never)
+    resolveExited(0)
+
+    const result = await createBashTool().execute({ command: 'echo ok', timeout: 600_000 }, ctx)
+
+    expect(result.success).toBe(true)
+    expect(result.content).toContain('ok')
+  }, 10_000)
+})

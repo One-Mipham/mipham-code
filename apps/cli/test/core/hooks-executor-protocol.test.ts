@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { spawnSync } from 'node:child_process'
 import { executeHook } from '../../src/core/hooks-executor'
 import type { HookContext } from '../../src/shared/index.ts'
+import { makeFakeHookChild, type FakeHookOutcome } from '../helpers/fake-hook-child'
 
-vi.mock('node:child_process', () => ({ spawnSync: vi.fn() }))
+// A child, not a `spawnSync` result: the executor awaits a life-cycle, so a
+// result object would never reach the code under test.
+const { spawnMock } = vi.hoisted(() => ({ spawnMock: vi.fn() }))
 
-const spawnSyncMock = spawnSync as unknown as ReturnType<typeof vi.fn>
+vi.mock('node:child_process', () => ({ spawn: spawnMock }))
 
 const preCtx = {
   event: 'PreToolUse',
@@ -14,23 +16,29 @@ const preCtx = {
   sessionId: 's1',
 } as HookContext
 
-function lastSpawnOpts() {
-  return spawnSyncMock.mock.calls[0]![2] as { input: string; stdio: string[] }
+let outcome: FakeHookOutcome = { status: 0, stdout: '', stderr: '' }
+
+function lastSpawn() {
+  const call = spawnMock.mock.calls[0]!
+  return {
+    opts: call[2] as { stdio: string[]; detached?: boolean },
+    stdin: (spawnMock.mock.results[0]!.value as { written: string[] }).written[0]!,
+  }
 }
 
 beforeEach(() => {
-  spawnSyncMock.mockReset()
+  outcome = { status: 0, stdout: '', stderr: '' }
+  spawnMock.mockReset()
+  spawnMock.mockImplementation(() => makeFakeHookChild(outcome))
 })
 
 describe('executeHook command (Claude stdin/stdout protocol)', () => {
   it('passes the Claude-protocol stdin JSON to the script', async () => {
-    spawnSyncMock.mockReturnValue({ status: 0, stdout: '', stderr: '' })
-
     await executeHook({ type: 'command', command: 'hook.sh', args: [] }, preCtx)
 
-    const opts = lastSpawnOpts()
+    const { opts, stdin } = lastSpawn()
     expect(opts.stdio).toEqual(['pipe', 'pipe', 'pipe'])
-    const input = JSON.parse(opts.input) as Record<string, unknown>
+    const input = JSON.parse(stdin) as Record<string, unknown>
     expect(input.session_id).toBe('s1')
     expect(input.hook_event_name).toBe('PreToolUse')
     expect(input.tool_name).toBe('Bash')
@@ -38,7 +46,7 @@ describe('executeHook command (Claude stdin/stdout protocol)', () => {
   })
 
   it('parses a deny decision from stdout into allowed:false', async () => {
-    spawnSyncMock.mockReturnValue({
+    outcome = {
       status: 0,
       stdout: JSON.stringify({
         hookSpecificOutput: {
@@ -48,7 +56,7 @@ describe('executeHook command (Claude stdin/stdout protocol)', () => {
         },
       }),
       stderr: '',
-    })
+    }
 
     const r = await executeHook({ type: 'command', command: 'hook.sh', args: [] }, preCtx)
     expect(r.allowed).toBe(false)
@@ -56,7 +64,7 @@ describe('executeHook command (Claude stdin/stdout protocol)', () => {
   })
 
   it('parses an allow + updatedInput decision into modifiedInput', async () => {
-    spawnSyncMock.mockReturnValue({
+    outcome = {
       status: 0,
       stdout: JSON.stringify({
         hookSpecificOutput: {
@@ -66,7 +74,7 @@ describe('executeHook command (Claude stdin/stdout protocol)', () => {
         },
       }),
       stderr: '',
-    })
+    }
 
     const r = await executeHook({ type: 'command', command: 'hook.sh', args: [] }, preCtx)
     expect(r.allowed).toBe(true)
@@ -74,7 +82,7 @@ describe('executeHook command (Claude stdin/stdout protocol)', () => {
   })
 
   it('still blocks on exit code 2 with stderr as reason', async () => {
-    spawnSyncMock.mockReturnValue({ status: 2, stdout: '', stderr: 'destructive command' })
+    outcome = { status: 2, stdout: '', stderr: 'destructive command' }
 
     const r = await executeHook({ type: 'command', command: 'hook.sh', args: [] }, preCtx)
     expect(r.allowed).toBe(false)

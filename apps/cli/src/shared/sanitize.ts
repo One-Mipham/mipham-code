@@ -214,6 +214,39 @@ export function stripControlCharsForCheck(input: string): string {
 }
 
 /**
+ * Decode `&nbsp;` in assistant text for terminal display.
+ *
+ * The terminal has no markdown/entity layer, so a reply that uses `&nbsp;` to indent
+ * — row labels in a table, most often — shows the literal characters. Only this one
+ * entity is decoded, deliberately: `&lt;`/`&amp;`/`&gt;` appear in code the assistant
+ * is *showing*, where decoding would corrupt the sample, whereas a literal `&nbsp;`
+ * meant to be read as text is rare enough to accept. This is a narrow fix for the
+ * common case, not a general entity decoder.
+ */
+export function decodeDisplayEntities(input: string): string {
+  if (!input.includes('&')) return input
+  return input.replace(/&nbsp;/gi, ' ')
+}
+
+/**
+ * Make an untrusted **single-line** value safe to interpolate into terminal output.
+ *
+ * Config-sourced strings (an MCP server's name, URL, or command line) are rendered
+ * straight into the transcript. `stripDangerousUnicode` covers the invisible
+ * characters but **not** C0 controls, and ESC (U+001B) is one of those — a name
+ * carrying `\x1b[2J` is read by the terminal as a clear-screen sequence, not shown
+ * as text. DEL (U+007F) goes too.
+ *
+ * Newlines are stripped as well, unlike `stripControlCharsForCheck` (which keeps
+ * `\n` for multi-line shell commands): these values sit on one output line, so an
+ * embedded newline forges an extra row in the listing.
+ */
+export function sanitizeInlineField(input: string): string {
+  if (!input) return input
+  return stripDangerousUnicode(input).replace(/[\x00-\x1f\x7f]/g, '')
+}
+
+/**
  * Full command sanitization pipeline for permission checks.
  * Applies in order:
  * 1. Strip dangerous invisible Unicode (zero-width, bidi, BOM, etc.)

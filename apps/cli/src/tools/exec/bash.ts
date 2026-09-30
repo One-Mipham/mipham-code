@@ -439,8 +439,24 @@ export function createBashTool(credentialConfig?: CredentialMaskingConfig): Tool
           timedOut = true
           killProcessGroup(proc.pid)
         }, timeout)
+
+        // Cancellation. The turn's signal used to stop at the approval prompt and the
+        // model stream, so a long-running command had no way to be stopped: nothing
+        // it received ever changed. Abort has to reach the process group, or Escape
+        // kills the turn while the command keeps writing to the user's disk.
+        let aborted = false
+        const onAbort = () => {
+          aborted = true
+          killProcessGroup(proc.pid)
+        }
+        if (ctx.signal) {
+          if (ctx.signal.aborted) onAbort()
+          else ctx.signal.addEventListener('abort', onAbort, { once: true })
+        }
+
         const exitCode = await proc.exited
         clearTimeout(timer)
+        ctx.signal?.removeEventListener('abort', onAbort)
 
         // The shell is gone, so only a pipe-holding descendant can still be
         // holding these up. Released by the group kill, at most once.
@@ -493,10 +509,19 @@ export function createBashTool(credentialConfig?: CredentialMaskingConfig): Tool
           return {
             success: false,
             content: errorContent,
-            error: timedOut
-              ? `Command timed out after ${timeout}ms (killed): ${stderr.slice(0, 1_000)}`
-              : `Exit code ${exitCode}: ${stderr.slice(0, 1_000)}`,
+            error: aborted
+              ? `Command cancelled (SIGKILL to its process group)`
+              : timedOut
+                ? `Command timed out after ${timeout}ms (killed): ${stderr.slice(0, 1_000)}`
+                : `Exit code ${exitCode}: ${stderr.slice(0, 1_000)}`,
           }
+        }
+
+        // An aborted command may also exit 0 (SIGKILL raced the natural exit). Report
+        // the cancellation either way, so a half-finished command is never handed back
+        // as a clean success.
+        if (aborted) {
+          return { success: false, content: output.slice(0, 5_000), error: 'Command cancelled' }
         }
 
         let successContent = output.slice(0, 100_000) || '(no output)'

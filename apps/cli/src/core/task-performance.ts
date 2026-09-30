@@ -60,14 +60,26 @@ export interface TaskPerformanceResult {
   description: string
   passed: boolean
   detail?: string
+  /**
+   * The generation hit the output cap, so the code is incomplete by construction and
+   * a failing test cannot distinguish "did not solve it" from "was cut off". Kept on
+   * the result and excluded from `score` — mixing the two biases the readout low.
+   */
+  truncated?: boolean
 }
 
 export interface TaskPerformanceReport {
   total: number
   passed: number
+  /**
+   * Percent of **non-truncated** tasks that passed (100 when there are none). A
+   * truncated task is reported in `total`/`truncated` but never scored.
+   */
   score: number
   results: TaskPerformanceResult[]
   failures: string[]
+  /** Tasks whose generation was cut off at the output cap; counted, not scored. */
+  truncated: number
   /** B2 代价维：整轮（LLM 生成 + 冻结测试判定）的墙钟耗时。只记录，不参与任何判定。 */
   durationMs: number
 }
@@ -82,8 +94,9 @@ async function collectGeneratedCode(
   llm: Llm,
   prompt: string,
   systemPrompt?: string,
-): Promise<string> {
+): Promise<{ code: string; truncated: boolean }> {
   let text = ''
+  let truncated = false
   const req = {
     model: '', // falsy → registry 回退到 active model
     messages: [{ role: 'user' as const, content: prompt }],
@@ -92,8 +105,11 @@ async function collectGeneratedCode(
   }
   for await (const chunk of llm.chat(req)) {
     if (chunk.type === 'text' && chunk.content) text += chunk.content
+    // Both providers already emit `truncated` on the stop chunk; reading it here is
+    // what turns the signal into something the score can act on.
+    if (chunk.truncated) truncated = true
   }
-  return stripCodeFences(text)
+  return { code: stripCodeFences(text), truncated }
 }
 
 export async function runTaskPerformance(
@@ -105,13 +121,14 @@ export async function runTaskPerformance(
   const results: TaskPerformanceResult[] = []
   const startedAt = Date.now()
   for (const task of tasks) {
-    const code = await collectGeneratedCode(llm, task.prompt, opts?.skill?.text)
+    const { code, truncated } = await collectGeneratedCode(llm, task.prompt, opts?.skill?.text)
     if (!code) {
       results.push({
         id: task.id,
         description: task.prompt,
         passed: false,
         detail: 'LLM 未生成代码',
+        ...(truncated ? { truncated: true } : {}),
       })
       continue
     }
@@ -121,15 +138,26 @@ export async function runTaskPerformance(
       description: task.prompt,
       passed: verdict.passed,
       detail: verdict.detail,
+      ...(truncated ? { truncated: true } : {}),
     })
   }
   const passed = results.filter((r) => r.passed).length
+  // Score only what the model was actually given a chance to finish. A truncated
+  // generation is incomplete by construction; folding those failures into the mean
+  // makes the readout (and any improved/regressed verdict derived from it) depend on
+  // the output cap rather than on the work.
+  const scored = results.filter((r) => !r.truncated)
+  const truncated = results.length - scored.length
   return {
     total: results.length,
     passed,
-    score: results.length > 0 ? Math.round((passed / results.length) * 100) : 100,
+    score:
+      scored.length > 0
+        ? Math.round((scored.filter((r) => r.passed).length / scored.length) * 100)
+        : 100,
     results,
     failures: results.filter((r) => !r.passed).map((r) => r.id),
+    truncated,
     durationMs: Date.now() - startedAt,
   }
 }

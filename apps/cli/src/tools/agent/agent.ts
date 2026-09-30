@@ -7,14 +7,28 @@ const VALID_TYPES: SubAgentType[] = ['general', 'explore', 'plan', 'code-review'
 
 /**
  * Resolve whether a sub-agent should run in the background.
- * Precedence: explicit `run_in_background` param > agent frontmatter
- * `background` field > default (background, Claude Code 2.1.232 parity).
+ *
+ * Precedence: explicit `run_in_background` param > nested-call rule > agent
+ * frontmatter `background` field > default (background, Claude Code 2.1.232 parity).
+ *
+ * `nested` is true when the caller is itself a sub-agent. `[background-task:<id>]`
+ * is a *handle*, not an answer: the child's result goes to the background registry
+ * and the hook/experience logs, and nothing ever hands it back to the agent that
+ * asked. So one level down, the ordinary fan-out shape — "ask a child, then use its
+ * answer" — cannot work at all: the caller sees a placeholder where its input
+ * should be. A *default* of background turns that from an option into a hole, which
+ * is why the default flips here. An explicit `run_in_background: true` is still
+ * honoured, in both directions: that is a request, not a default chosen on the
+ * caller's behalf.
  */
 export function resolveRunInBackground(
   runInBackground: boolean | undefined,
   agentDef?: { background?: boolean },
+  nested = false,
 ): boolean {
-  return runInBackground ?? agentDef?.background ?? true
+  if (runInBackground !== undefined) return runInBackground
+  if (nested) return false
+  return agentDef?.background ?? true
 }
 
 export const agentTool: ToolDefinition = {
@@ -73,6 +87,7 @@ export const agentTool: ToolDefinition = {
     const runInBackground = resolveRunInBackground(
       params.run_in_background as boolean | undefined,
       agentDef,
+      ctx.isSubAgent === true,
     )
 
     try {

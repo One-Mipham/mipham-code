@@ -13,6 +13,14 @@ export interface JournalEntry {
   opts?: Record<string, unknown>
   result?: unknown
   message?: string
+  /**
+   * Why an `agent` entry has no `result`.
+   *
+   * Kept out of `result` on purpose: the resume cache is keyed on `result !==
+   * undefined`, so parking the message there would make a failed call replay as a
+   * successful cached answer.
+   */
+  error?: string
 }
 
 export interface JournalState {

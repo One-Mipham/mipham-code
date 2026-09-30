@@ -145,7 +145,6 @@ export const artifactTool: ToolDefinition = {
         galleryLine,
         '',
         `Open in browser: /artifact open ${name}`,
-        `List all:         /artifact list`,
       ]
         .filter(Boolean)
         .join('\n'),

@@ -108,7 +108,7 @@ export async function runWorkflow(
   const budget = createBudget(budgetTotal)
 
   // Wrap primitives with journal recording + cache support
-  const agent = async (prompt: string, opts?: Record<string, unknown>) => {
+  const runAgent = async (prompt: string, opts?: Record<string, unknown>) => {
     // Check cache first
     if (resultCache) {
       const key = agentCacheKey(prompt, opts || {})
@@ -125,16 +125,42 @@ export async function runWorkflow(
 
     bus.emitEvent({ type: 'agent:start', agentId, label: agentId, phase })
 
-    const result = await workflowAgent(
-      prompt,
-      registry,
-      toolRegistry,
-      {
-        ...(opts || {}),
-        permissionSystem: permission,
-      } as Record<string, unknown>,
-      llm,
-    )
+    let result: unknown
+    try {
+      result = await workflowAgent(
+        prompt,
+        registry,
+        toolRegistry,
+        {
+          ...(opts || {}),
+          permissionSystem: permission,
+        } as Record<string, unknown>,
+        llm,
+      )
+    } catch (err) {
+      // A failed call is still a call: it gets the same start/end pair and a journal
+      // entry, so the run reads as "this agent failed" rather than as a run that
+      // silently never mentioned it. The message goes in `error`, not `result` —
+      // the resume cache replays on `result !== undefined`.
+      const message = err instanceof Error ? err.message : String(err)
+      bus.emitEvent({
+        type: 'agent:end',
+        agentId,
+        label: agentId,
+        success: false,
+        durationMs: Date.now() - startTime,
+      })
+      bus.emitEvent({ type: 'error', agentId, message })
+      appendJournal(runId, {
+        type: 'agent',
+        prompt,
+        opts: opts as Record<string, unknown> | undefined,
+        error: message,
+      })
+      // Still rethrow: a script that awaits this call must see the rejection, and
+      // the catch below turns it into the run's own error message.
+      throw err
+    }
 
     const durationMs = Date.now() - startTime
     bus.emitEvent({ type: 'agent:end', agentId, label: agentId, success: true, durationMs })
@@ -146,6 +172,28 @@ export async function runWorkflow(
       result,
     })
     return result
+  }
+
+  /**
+   * The `agent` the sandbox script sees.
+   *
+   * Not `async`, because the promise it returns needs a handler attached before it
+   * leaves this function. A script that calls `agent(...)` **without awaiting it** —
+   * a fire-and-forget fan-out, or `agent('A'); await agent('B')` — leaves the
+   * rejection unhandled in the host realm, and the crash reporter is installed
+   * unconditionally, so `handleFatal` ends the process: one un-awaited call and the
+   * CLI exits with a message about unhandled rejections in a workflow script.
+   *
+   * Attaching the handler here marks the rejection handled **without swallowing it**:
+   * the promise returned to the script is the same one, so `await agent(...)` still
+   * throws into the script's own `try`. What changes is only the case where nobody is
+   * listening — that case now belongs to the run (journal + `error` event, both
+   * written by `runAgent`), not to the process.
+   */
+  const agent = (prompt: string, opts?: Record<string, unknown>) => {
+    const pending = runAgent(prompt, opts)
+    pending.catch(() => {})
+    return pending
   }
 
   const wrappedPhase = (title: string) => {

@@ -519,8 +519,22 @@ export function loadSettingsJson(
 
   for (const { path, readHooks, isProject } of searchPaths) {
     try {
+      // `readRegularFileSync` folds "absent" and "present but unreadable"
+      // (EACCES, a directory, a FIFO) into the same `null`. Absent is the ordinary
+      // case here — most of these paths simply do not exist — so it stays quiet.
+      // But a settings file that *is* there and could not be read drops its
+      // `permissions.deny` wholesale, and the direction of that failure is
+      // **looser**. A security-relevant file must not fail open in silence.
+      const present = existsSync(path)
       const raw = readRegularFileSync(path)
-      if (raw === null) continue
+      if (raw === null) {
+        if (present) {
+          process.stderr.write(
+            `⚠ Mipham Code: settings file (${path}) is not a readable regular file — ignoring it.\n`,
+          )
+        }
+        continue
+      }
       const parsed = JSON.parse(raw) as {
         hooks?: Record<string, unknown>
         permissions?: { allow?: unknown; deny?: unknown; defaultMode?: unknown }
@@ -584,8 +598,14 @@ export function loadSettingsJson(
           }
         }
       }
-    } catch {
-      // Silently skip malformed or missing settings.json files
+    } catch (err: unknown) {
+      // Malformed JSON is the other half of the same problem: the file exists and
+      // declares a `deny` list we cannot see. Say so, with the parse reason, the
+      // same way `safeParseYaml` does for `config.yml`.
+      const msg = err instanceof Error ? err.message : String(err)
+      process.stderr.write(
+        `⚠ Mipham Code: failed to parse settings file (${path}): ${msg} — ignoring it.\n`,
+      )
     }
   }
 

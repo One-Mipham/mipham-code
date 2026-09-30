@@ -135,6 +135,14 @@ export interface StreamChunk {
    */
   isError?: boolean
   error?: string
+  /**
+   * `type: 'error'` only. `false` means the provider knows the failure is
+   * deterministic (a content filter, a malformed request, a bad key) and re-sending
+   * it will produce the same answer. The engine then skips both its in-place retry
+   * and the fallback provider, so a final error is shown once instead of three
+   * times. Absent means "unknown" and preserves the retry.
+   */
+  retryable?: boolean
   /** DeepSeek reasoning tokens accumulated during this stream. */
   reasoning_content?: string
   /** Anthropic thinking block content (DeepSeek Anthropic endpoint). */
@@ -565,6 +573,28 @@ export interface ToolContext {
   llm?: import('../providers/llm').Llm
   /** Files read this session — used by Write tool to check read-before-write */
   readFiles?: Set<string>
+  /**
+   * Cancellation for the turn this tool call belongs to.
+   *
+   * Carried on the context, not on `execute`'s signature, so every tool can reach it
+   * without changing the `ToolDefinition.execute` contract. Before this field existed
+   * the signal stopped at `permission.resolveApproval` and the LLM stream: a long
+   * Bash command could not be cancelled at all, because nothing it received ever
+   * changed. Absent means "no cancellation in effect" — tools must treat that as
+   * "run to completion", not as "abort".
+   */
+  signal?: AbortSignal
+  /**
+   * True when this tool call is being executed *by a sub-agent*, not by the main
+   * loop.
+   *
+   * Set by `SubAgent.runExecution` on the context it hands its own tools, so a
+   * tool whose behaviour must differ one level down can see where it is instead of
+   * inferring it (`sessionId` is `'sub-agent'` there, but that is a display string,
+   * not a contract). The only reader today is the Agent tool: a nested call cannot
+   * consume a background handle, so its default flips to synchronous.
+   */
+  isSubAgent?: boolean
 }
 
 export interface ToolDefinition {

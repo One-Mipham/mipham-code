@@ -121,6 +121,49 @@ describe('默认输出擦洗：三种漏掉的形状', () => {
   })
 })
 
+// ============================================================
+// 口令里含**字面 `@`**。
+//
+// URL 语法不允许 userinfo 里出现裸 `@`，但 `postgres://user:p@ss@host` 恰恰就是
+// 连接串被粘进 shell 的样子 —— 语法错误正是它常见的来源。原 password 组是
+// `([^/\s@]+)`，把 `@` 一并排除 ⇒ 组在**第一个** `@` 就停，只遮掉 `p`，尾部
+// `ss@host` 整段留在明文里（而遮蔽默认开启，挂点在 bash stdout/stderr、grep 文件
+// 内容、config 文本上）。
+//
+// 判据两头：**整个口令都得走**（用「后缀还在不在」当断言，不是「哨兵出现了没」
+// —— 后者在只遮一个字符时同样成立），**主机名必须留下**（否则这条修法把可读性
+// 也一起擦掉，就退化成「凡 URL 一律不可读」）。
+// ============================================================
+
+describe('默认输出擦洗：口令里含字面 `@`', () => {
+  it('`postgres://user:p@ss@host` 的整个口令都擦掉，主机名留着', () => {
+    const result = outOf('DATABASE_URL=postgres://appuser:p@ss@db.internal/prod')
+    expect(result).not.toContain('p@ss')
+    expect(result).not.toContain('ss@') // 旧码只遮到第一个 `@` 前，`ss@db…` 会在这里露出
+    expect(result).toContain(CREDENTIAL_SENTINEL)
+    expect(result).toContain('db.internal')
+    expect(result).toContain('appuser')
+  })
+
+  it('逐字边界：遮完是 `user:哨兵@host`，不是 `user:哨兵@ss@host`', () => {
+    expect(outOf('postgres://u:p@ss@h.example/x')).toBe(
+      `postgres://u:${CREDENTIAL_SENTINEL}@h.example/x`,
+    )
+  })
+
+  it('反方向：口令里没有 `@` 的仍然只擦口令（改法不许吞主机名）', () => {
+    expect(outOf('postgres://u:plainpw@h.example/x')).toBe(
+      `postgres://u:${CREDENTIAL_SENTINEL}@h.example/x`,
+    )
+  })
+
+  it('反方向：`@` 只出现在主机部分的 URL 原样（那不是 userinfo）', () => {
+    for (const line of ['https://cdn.example/a@b.png', 'mailto:a@b.com']) {
+      expect(outOf(line), `${line} 不该被改`).toBe(line)
+    }
+  })
+})
+
 describe('默认输出擦洗：反方向 —— 普通输出不许被吃掉', () => {
   it('含 `path` / `patch` / `compat` 的普通输出原样（`pat` 不能当子串匹配）', () => {
     for (const line of [

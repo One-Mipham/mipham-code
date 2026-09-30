@@ -26,6 +26,7 @@ import { homedir, tmpdir } from 'node:os'
 import { parse as parseYaml } from 'yaml'
 import type { ToolContext } from '../../src/shared'
 import { webFetchTool } from '../../src/tools/network/web-fetch'
+import { PACKAGE_VERSION } from '../../src/shared/package-info'
 import { webSearchTool } from '../../src/tools/network/web-search'
 import { createConfigTool } from '../../src/tools/system/config'
 import { mcpTool } from '../../src/tools/system/mcp'
@@ -101,7 +102,9 @@ describe('WebFetch tool execution', () => {
     await webFetchTool.execute({ url: 'https://user-agent-test.example.com' }, ctx)
     const callArgs = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!
     expect(callArgs[0]).toBe('https://user-agent-test.example.com')
-    expect(callArgs[1]?.headers?.['User-Agent']).toContain('Mipham-Code')
+    // 版本号必须**取自包元数据**，不是字面量：字面量会随发版各漂各的，而
+    // `toContain('Mipham-Code')` 对「写死的旧版本」一样绿（它曾经就是写死的）。
+    expect(callArgs[1]?.headers?.['User-Agent']).toBe(`Mipham-Code/${PACKAGE_VERSION}`)
   })
 
   it('returns error for non-200 response', async () => {

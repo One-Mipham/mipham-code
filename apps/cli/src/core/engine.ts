@@ -1352,6 +1352,7 @@ export class QueryEngine {
         skillsLoader: this.skillsProvider,
         registry: this.registry,
         toolRegistry: this.tools,
+        signal,
         artifactServer: this.artifactServer,
         agentRegistry: this.agentRegistry,
         backgroundAgentRegistry: getBackgroundAgentRegistry(),
@@ -1541,6 +1542,10 @@ export class QueryEngine {
     // fresh attempt after a failed one.
     const ownsFlow = !(this.llm && this.llm !== this.registry)
     let failure: string | null = null
+    // A provider that marks the failure deterministic opts out of both retries. Only
+    // an explicit `false` counts: an absent flag means "unknown", which keeps the
+    // old try-again behaviour for every provider that says nothing.
+    let retryable = true
     for (let attempt = 0; ; attempt++) {
       failure = null
       try {
@@ -1554,6 +1559,7 @@ export class QueryEngine {
         })) {
           if (chunk.type === 'error') {
             failure = chunk.error ?? 'Unknown error'
+            if (chunk.retryable === false) retryable = false
             break
           }
           yield chunk
@@ -1563,10 +1569,17 @@ export class QueryEngine {
         if (isAbortError(err)) throw err
         failure = String(err)
       }
-      if (!ownsFlow || attempt >= 1) break
+      if (!retryable || !ownsFlow || attempt >= 1) break
       yield { type: 'warning', content: `${activeId} failed (${failure}) — retrying once` }
     }
     const detail = failure ?? 'Unknown error'
+
+    // Deterministic failure: re-sending it to another provider cannot change the
+    // answer, so surface it once rather than burning the fallback on it.
+    if (!retryable) {
+      yield { type: 'error', error: detail }
+      return
+    }
 
     // ── Fallback: configured default provider, once ──
     // 若注入了**异己**的 Llm 缝，缝拥有整个 chat 流程——不回退（避免切 registry 状态 + 二次调用）。
@@ -1589,7 +1602,12 @@ export class QueryEngine {
       return
     }
 
-    this.registry.switchProvider(defaultId, fallbackModel)
+    // Go through the engine's own switcher, not the registry directly: only it
+    // calls `context.updateMaxTokens`, and a fallback model routinely has a smaller
+    // window than the one we fell back from (1M → 128K). Switching the registry
+    // alone left compaction armed to the *old* model's window, so the summary would
+    // not trigger until ~950K — long past the point the fallback model overflows.
+    this.switchProvider(defaultId, fallbackModel)
     yield {
       type: 'warning',
       content: `${activeId} unreachable — degraded to ${defaultId} (${fallbackModel})`,

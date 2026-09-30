@@ -1,11 +1,11 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { loadPlugins } from '../../src/plugin/plugin-loader'
 import { HookEngine } from '../../src/core/hooks'
 import type { PluginManager } from '../../src/plugin/plugin-manager'
-import type { McpClient } from '../../src/mcp/client'
+import { McpClient } from '../../src/mcp/client'
 import type { McpServerConfig } from '../../src/shared/index'
 
 /**
@@ -189,5 +189,85 @@ describe('loadPlugins — MCP declarations reach the client', () => {
 
     expect(connected).toHaveLength(0)
     expect(stderr.join('\n')).toContain('broken')
+  })
+})
+
+// ============================================================
+// 卸载插件时，它带来的 MCP 工具必须**真的**从注册表里走掉。
+//
+// 注册走的是 `convertMcpTool` → `mcp__<sanitizeName(server)>__<tool>`：服务器名要
+// 先**小写化、非 `[a-z0-9-]` 换 `_`**。卸载时若按原始名拼 `mcp__My Server__echo` 去删，
+// 一个都命中不了 —— 而 `Map.delete` 删不到东西**也不报错**，于是插件卸载后它的工具
+// 继续挂在模型面前，调用时才炸。这一格钉的是「删用的是注册那一把尺」。
+//
+// ⚠️ `registerMcpServerTools` 取的是 `McpClient.getInstance()` 这个**单例**，不用
+// loader 手里那个 `mcpClient`（后者只走 `connect` / `disconnect`）—— 所以工具要从单例上
+// 造，别从传进 `loadPlugins` 的替身上造（那样 `getTools` 返回空，注册数是 0）。
+// ============================================================
+
+describe('loadPlugins — 卸载时按注册时的（已净化的）键把 MCP 工具撤掉', () => {
+  /** 声明了一个 MCP 服务器的插件目录；服务器名刻意带空格和大写。 */
+  const SERVER_RAW = 'My Server'
+
+  afterEach(async () => {
+    vi.restoreAllMocks()
+    await McpClient.getInstance().closeAll()
+    McpClient.resetInstance()
+  })
+
+  function withMcpPlugin(): {
+    toolsMap: Map<string, never>
+    remove: () => void
+  } {
+    const dir = makePluginDir({ name: SERVER_RAW, command: 'mcp-thing' })
+    const removals = new Map<string, () => void>()
+    const toolsMap = new Map<string, never>()
+    const mcpClient = {
+      connect: async () => {},
+      disconnect: () => ['echo', 'add'],
+    } as unknown as McpClient
+
+    vi.spyOn(McpClient.getInstance(), 'getTools').mockReturnValue([
+      { name: 'echo', description: 'e', inputSchema: { type: 'object', properties: {} } },
+      { name: 'add', description: 'a', inputSchema: { type: 'object', properties: {} } },
+    ] as never)
+
+    loadPlugins(
+      {
+        getEnabled: () => [{ name: 'mcp-plugin', path: dir, enabled: true }],
+        onRemove: (name: string, cb: () => void) => void removals.set(name, cb),
+      } as unknown as PluginManager,
+      {} as never,
+      {} as never,
+      { register: () => {}, unregister: () => {} } as never,
+      mcpClient,
+      toolsMap as never,
+    )
+
+    return { toolsMap, remove: () => removals.get('mcp-plugin')!() }
+  }
+
+  it('注册进来的是净化后的键，卸载后一个不剩', async () => {
+    const { toolsMap, remove } = withMcpPlugin()
+    // 前提：注册确实发生过，且**确实**净了名。少了这半，下面 `size === 0`
+    // 可能只是「压根没注册过」。
+    await Promise.resolve()
+    await Promise.resolve()
+    expect([...toolsMap.keys()].sort()).toEqual(['mcp__my_server__add', 'mcp__my_server__echo'])
+
+    remove()
+
+    expect(toolsMap.size).toBe(0)
+  })
+
+  it('反方向：别家服务器的工具不受牵连', async () => {
+    const { toolsMap, remove } = withMcpPlugin()
+    await Promise.resolve()
+    await Promise.resolve()
+    toolsMap.set('mcp__other__echo' as never, {} as never)
+
+    remove()
+
+    expect(toolsMap.has('mcp__other__echo' as never)).toBe(true)
   })
 })

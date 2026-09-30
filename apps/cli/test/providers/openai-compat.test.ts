@@ -457,6 +457,68 @@ describe('OpenAICompatProvider', () => {
     expect(chunks[0]!.error).toContain('No response body')
   })
 
+  // ── 流**中**的错误（HTTP 已经 200 之后的那个） ──
+  //
+  // 端点先回过 200 才开始流，之后出错只能以 `data: {"error": {...}}` 的形状到达 ——
+  // 没有 `choices`。原先它掉进 `if (!choice) continue`，循环走到末尾，下面那句
+  // `yield { type: 'stop' }` 把这一轮**收成正常结束**：既不报错、也不触发重试或回退，
+  // 用户拿到的是一条**静默的空回答**。
+  //
+  // 三条判据缺一不可：错误**浮出来**、**不再伪装成 stop**、`retryable` 跟着错误类型走。
+  it('流中的 `data: {"error"}` 浮成 error 块，不再伪装成正常收尾', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        makeSSEResponse([
+          'data: {"error":{"message":"upstream exploded","type":"server_error"}}',
+          'data: [DONE]',
+        ]),
+      )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new OpenAICompatProvider(makeConfig())
+    const chunks = await collectChunks(provider.chat({ model: 'gpt-5', messages: [] }))
+
+    expect(chunks.map((c) => c.type)).toEqual(['error'])
+    expect(chunks[0]!.error).toContain('upstream exploded')
+    // 认不出的/瞬时类型保持可重试 —— 静默丢掉它才是原缺陷。
+    expect(chunks[0]!.retryable).toBe(true)
+  })
+
+  it('流中的确定性错误（content filter）标 `retryable: false`', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        makeSSEResponse([
+          'data: {"error":{"message":"blocked","code":"content_filter"}}',
+          'data: [DONE]',
+        ]),
+      )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new OpenAICompatProvider(makeConfig())
+    const chunks = await collectChunks(provider.chat({ model: 'gpt-5', messages: [] }))
+
+    expect(chunks.map((c) => c.type)).toEqual(['error'])
+    expect(chunks[0]!.retryable).toBe(false)
+  })
+
+  it('非 OK 响应也带上 `retryable`（401 不重发、503 重发）', async () => {
+    for (const [status, expected] of [
+      [401, false],
+      [400, false],
+      [503, true],
+    ] as const) {
+      globalThis.fetch = vi
+        .fn()
+        .mockResolvedValue(new Response('nope', { status })) as unknown as typeof fetch
+      const provider = new OpenAICompatProvider(makeConfig())
+      const chunks = await collectChunks(provider.chat({ model: 'gpt-5', messages: [] }))
+      expect(chunks[0]!.type, `HTTP ${status}`).toBe('error')
+      expect(chunks[0]!.retryable, `HTTP ${status}`).toBe(expected)
+    }
+  })
+
   // ═══════════════════════════════════════════
   // API key resolution
   // ═══════════════════════════════════════════

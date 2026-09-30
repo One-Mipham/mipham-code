@@ -450,6 +450,24 @@ describe('SubAgent', () => {
     expect(sink.ctx?.readFiles?.has('/tmp/example.ts')).toBe(true)
   })
 
+  /**
+   * 生产侧的那一半：子代理交给自己工具的那个 context 必须自称**在一层之下**，否则
+   * `Agent` 工具的嵌套规则读到一个 undefined，默认又翻回后台 —— 而「问一个孩子、再拿它的
+   * 回答往下做」在后台句柄下根本不成立。
+   *
+   * 钉在**共享字面量**上（同步与后台两条路都从这里过），不是某一个分支。
+   */
+  it('hands nested tools a context that says it is one level down', async () => {
+    const sink: { ctx?: ToolContext } = {}
+    const tools = new Map([['Bash', makeCapturingTool(sink)]])
+    const registry = createMockRegistry(oneToolCallProvider())
+
+    const sub = new SubAgent(registry, tools)
+    await sub.execute('do it', 'delegated', {})
+
+    expect(sink.ctx?.isSubAgent).toBe(true)
+  })
+
   it('falls back to parent model when modelOverride specifies unknown model', async () => {
     let receivedModel = ''
     const provider = createMockProvider([{ type: 'text', content: 'ok' }, { type: 'stop' }])

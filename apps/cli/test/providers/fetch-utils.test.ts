@@ -5,6 +5,7 @@ import {
   fetchWithRetry,
   retryDelayMs,
   RETRY_AFTER_MAX_MS,
+  isRetryableFailure,
 } from '../../src/providers/fetch-utils'
 
 describe('streamIdleTimeoutMs', () => {
@@ -151,5 +152,57 @@ describe('fetchWithRetry', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(res.status).toBe(400)
+  })
+})
+
+// ============================================================
+// `isRetryableFailure` —— 「这次失败值不值得重发」的判据。
+//
+// 引擎对**任何** error 块原先一律原地重试一次、再跨 provider 回退：内容过滤、
+// 401、畸形请求同样被重发 ⇒ 用户为一个**第一次就是最终答案**的错误多等两轮，
+// 而且换 provider 也改不了那句话。
+//
+// 两个调用形状（HTTP 状态 / provider 的错误对象 `type`），判据方向不同：
+//   · 状态：与 `fetchWithRetry` 同一把尺（429 与 5xx 是瞬时的）；
+//   · 错误类型：只有**已知确定性**的那几个说不 —— 认不出的类型一律保持可重试，
+//     猜「最终」会丢掉一次本来能救回来的回合。
+// ============================================================
+
+describe('isRetryableFailure', () => {
+  it('状态：429 与 5xx 可重试（与 fetchWithRetry 同一把尺）', () => {
+    expect(isRetryableFailure(429)).toBe(true)
+    expect(isRetryableFailure(500)).toBe(true)
+    expect(isRetryableFailure(503)).toBe(true)
+    expect(isRetryableFailure(529)).toBe(true)
+  })
+
+  it('状态：4xx（除 429）不可重发 —— 重发只会拿到同一句话', () => {
+    for (const s of [400, 401, 403, 404, 413, 422]) {
+      expect(isRetryableFailure(s), `HTTP ${s}`).toBe(false)
+    }
+  })
+
+  it('错误类型：已知确定性的一律不重发', () => {
+    for (const t of [
+      'invalid_request_error',
+      'authentication_error',
+      'permission_error',
+      'not_found_error',
+      'request_too_large',
+      'content_filter',
+      'content_policy_violation',
+    ]) {
+      expect(isRetryableFailure(undefined, t), t).toBe(false)
+    }
+  })
+
+  it('错误类型：认不出的保持可重试（猜「最终」会丢一次能救回来的回合）', () => {
+    expect(isRetryableFailure(undefined, 'overloaded_error')).toBe(true)
+    expect(isRetryableFailure(undefined, 'server_error')).toBe(true)
+    expect(isRetryableFailure(undefined, 'some_future_type')).toBe(true)
+  })
+
+  it('两个都没给 ⇒ 保持可重试（未声明 = 未知，不是「最终」）', () => {
+    expect(isRetryableFailure(undefined)).toBe(true)
   })
 })

@@ -78,6 +78,35 @@ function isRetryableError(err: unknown): boolean {
 }
 
 /**
+ * Provider error types that are decided, not transient. A content filter or a
+ * malformed request answers the same way on every attempt, so re-sending it only
+ * makes the user wait for an error that was final the first time.
+ */
+const NON_RETRYABLE_ERROR_TYPES = new Set([
+  'invalid_request_error',
+  'authentication_error',
+  'permission_error',
+  'not_found_error',
+  'request_too_large',
+  'content_filter',
+  'content_policy_violation',
+])
+
+/**
+ * Should the engine re-send a turn the provider reported as failed?
+ *
+ * Two call shapes: an HTTP status, or a provider error object's `type`/`code`.
+ * Statuses follow the same rule as `fetchWithRetry` (429 and 5xx are transient).
+ * For an error type, only the *known* deterministic ones say no — an unrecognised
+ * type stays retryable, because guessing "final" would lose a recoverable turn.
+ */
+export function isRetryableFailure(status: number | undefined, errorType?: string): boolean {
+  if (status !== undefined) return RETRYABLE_STATUSES.has(status) || status >= 500
+  if (errorType === undefined) return true
+  return !NON_RETRYABLE_ERROR_TYPES.has(errorType)
+}
+
+/**
  * Fetch with optional timeout and retry with exponential backoff.
  *
  * Retries on: network errors, 5xx, 429, and the internal timeout firing

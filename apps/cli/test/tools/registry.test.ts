@@ -65,6 +65,42 @@ describe('createToolRegistry (seam)', () => {
 })
 
 // ============================================================
+// `MIPHAM_DISABLE_WEB_FETCH=1` —— 把 WebFetch 从注册表里**整个拿掉**。
+//
+// 等效果的 `permissionRules.deny: ["WebFetch"]` 存在，但**机理不同**：工具仍然被广告
+// 给模型（schema 里列着），只在**调用时**被拒 —— 要烧掉一轮对话（以及一个困惑的模型）
+// 才落到拒绝上。总开关必须在**注册时**生效。
+// ============================================================
+
+describe('MIPHAM_DISABLE_WEB_FETCH', () => {
+  const KEY = 'MIPHAM_DISABLE_WEB_FETCH'
+  const original = process.env[KEY]
+
+  afterEach(() => {
+    if (original === undefined) delete process.env[KEY]
+    else process.env[KEY] = original
+  })
+
+  it('=1 时 WebFetch 不进注册表（连广告都没有），总数随之少 1', () => {
+    process.env[KEY] = '1'
+    const registry = createToolRegistry()
+    expect(registry.has('WebFetch')).toBe(false)
+    expect(registry.size).toBe(30)
+    expect(registry.has('WebSearch')).toBe(true) // 只拿掉这一个
+  })
+
+  it('反方向：不设、或设成别的值，都保持 31 个', () => {
+    delete process.env[KEY]
+    expect(createToolRegistry().has('WebFetch')).toBe(true)
+    // 只有字面 `'1'` 算数 —— 与其它 env 开关同一把尺，没写「truthy 即可」。
+    process.env[KEY] = '0'
+    expect(createToolRegistry().has('WebFetch')).toBe(true)
+    process.env[KEY] = 'true'
+    expect(createToolRegistry().has('WebFetch')).toBe(true)
+  })
+})
+
+// ============================================================
 // 无参默认的凭据掩码 —— daemon 走的正是这条装配路径
 // （`src/daemon/server.ts` 的 `sharedTools = createToolRegistry()`）。
 //

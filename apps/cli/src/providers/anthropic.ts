@@ -6,7 +6,7 @@ import type {
   ContentBlock,
 } from '../shared/index.ts'
 import type { ProviderInstance, ChatRequest } from './registry'
-import { fetchWithRetry, streamIdleTimeoutMs } from './fetch-utils'
+import { fetchWithRetry, streamIdleTimeoutMs, isRetryableFailure } from './fetch-utils'
 
 interface AnthropicContentBlock {
   type: string
@@ -139,7 +139,11 @@ export class AnthropicProvider implements ProviderInstance {
 
     if (!response.ok) {
       const errText = await response.text()
-      yield { type: 'error', error: `Anthropic API error ${response.status}: ${errText}` }
+      yield {
+        type: 'error',
+        error: `Anthropic API error ${response.status}: ${errText}`,
+        retryable: isRetryableFailure(response.status),
+      }
       return
     }
 
@@ -304,7 +308,11 @@ export class AnthropicProvider implements ProviderInstance {
               }
 
               case 'error': {
-                yield { type: 'error', error: event.error?.message || 'Unknown Anthropic error' }
+                yield {
+                  type: 'error',
+                  error: event.error?.message || 'Unknown Anthropic error',
+                  retryable: isRetryableFailure(undefined, event.error?.type),
+                }
                 return
               }
             }
