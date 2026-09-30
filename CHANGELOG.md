@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.85.13] — 2026-10-01
+
+### Changed
+
+- **`auto` 档闸门的裁决预算从「拍的」改成「实测的」** —— `DEFAULT_CLASSIFIER_TIMEOUT_MS`
+  2,000 → **30,000**。24 条真实 `ask` 级调用 × 两档模型、同机同时刻，且每次请求的 model 从线上
+  **回读**而不是信标签：主动模型 median 7.6s / p90 35.6s / max 120.0s，**旧的 2s 会弃掉 23/24**；
+  fast 档 median 1.3s / p90 3.7s，仍弃 9/24。**旧值不是太紧，是量错了** —— 这道闸门 fail-closed，
+  超时与拒绝对用户同形，所以「太紧」不等于慢，而是 `auto` 间歇性地拒掉本该放行的工作。
+
+### Added
+
+- **`permissions.classifierModel` / `permissions.classifierTimeoutMs`** —— 裁决用哪个模型、给多少
+  预算，首次可由用户配置。三档语义：缺席或 `'active'` ⇒ 当前模型（每次裁决重读），`'fast'` ⇒
+  Flash 类且找不到时**退回当前模型**（不编 id），其余按 id 原样用。两键都按**放宽方向**处理，
+  故**只认用户级**；项目级会被扣下并报 `projectClassifierSkipped` —— 否则 clone 一个仓库就等于
+  让它替操作者放宽。值写了但用不了就在 loader 里丢掉并**出声**（静默忽略与没读你的文件同形）。
+  ⭐ fast 档不是白捡：20 条边界调用上它放行了主动模型拒绝的 8 条（反向 2 条），速度是拿漏换的。
+
+### Security
+
+- **递归 `chmod` 授予 world-write 给无界目标，从分类器挪进确定性规则** —— 判据结构性、文本可判，
+  不该交给会随刻摇摆的模型（主动模型 1/5 放行、fast 档 4/5，整组采样里摆动最大）。**授权**在
+  mode token（读的是运算符而非「出现过 `w`」—— `o-w` / `go-w` 不算授予），**界定**在目标
+  （`/tmp/shared` / `$DIR` / `~/x` / `"$(pwd)"` / `../x` 越出命令自己声明的界，`./dist` 界定它）。
+  新拒因 `world-writable-chmod` **不进 `CLASSIFIABLE`** ⇒ 判在静态侧、fail-closed，分类器一次都
+  不被咨询（与 `dangerous-rm` 同形）。`chmod -R 777 ./dist` 有意**留在分类器手里** —— 有界的相对
+  目标是常规操作，扩到这里等于为没量到的收益拒掉日常。范围之外多给一件操作者逃生口
+  `MIPHAM_DISABLE_CHMOD_PROMPT=1`（与 `MIPHAM_DISABLE_DANGEROUS_RM_PROMPT` 同形，调用时读环境）。
+  **如实记**：这道闸在静态层从前不存在 —— `bash` 自己的 `BLOCKED_PATTERNS` 只抓**绝对**目标
+  （实测 `$DIR` / `~` / `$(pwd)` / `./dist` 全数放行），`MANAGED_DANGEROUS_RE` 只**告警**且坐在
+  权限闸**之后**。
+- **`axios` 加固到 1.20.0** —— 新披露的 high 级 advisory，且落在**生产树**
+  （`@miphamai/cli > @larksuiteoapi/node-sdk > axios`）⇒ 发版才真的保护到用户，dev-only 的加固
+  对使用者零保护。
+
 ## [0.85.12] — 2026-09-30
 
 ### Fixed

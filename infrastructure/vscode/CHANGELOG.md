@@ -3,6 +3,42 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.13 — 2026-10-01
+
+- Version sync with Mipham Code CLI 0.85.13
+- Changed: the `auto`-mode gate's ruling budget is now **measured** rather than guessed —
+  `DEFAULT_CLASSIFIER_TIMEOUT_MS` 2,000 → **30,000**. Over 24 real `ask`-level calls × two model
+  tiers, same machine, same moment, with the model for each request **read back** from the wire
+  instead of trusted from a label: the active tier has a median of 7.6s / p90 35.6s / max 120.0s, so
+  **the old 2s would have discarded 23/24**; the fast tier is 1.3s / 3.7s and still discards 9/24.
+  **The old value wasn't too tight, it was measured wrong** — this gate is fail-closed, so a timeout
+  and a refusal look identical to the user, which means "too tight" isn't "slow": it is `auto`
+  intermittently refusing work it should have allowed.
+- Added: `permissions.classifierModel` / `permissions.classifierTimeoutMs` — which model rules and
+  how much budget it gets is configurable for the first time. Three-tier semantics: absent or
+  `'active'` ⇒ the current model (re-read on every ruling), `'fast'` ⇒ a Flash-class model falling
+  back to the current one when none is found (it never invents an id), anything else used as-is by
+  id. Both keys are treated as **widening** directions, so they are accepted at the **user level
+  only**; a project-level value is withheld and reported as `projectClassifierSkipped` — otherwise
+  cloning a repository would let it widen permissions on the operator's behalf.
+- Security: **recursive `chmod` granting world-write to an unbounded target** moved out of the
+  classifier into a deterministic rule. The criterion is structural and text-decidable, so it should
+  not sit with a model that swings from run to run (the active tier allowed 1/5, the fast tier 4/5 —
+  the widest spread in the whole sample). **Authorization** is read from the mode token (the operator
+  matters, not whether a `w` appears — `o-w` / `go-w` are not grants); **boundedness** is read from
+  the target (`/tmp/shared`, `$DIR`, `~/x`, `"$(pwd)"`, `../x` escape the bound the command itself
+  declared; `./dist` bounds it). The new refusal reason `world-writable-chmod` is **not** in
+  `CLASSIFIABLE`, so it is judged statically and fail-closed and the classifier is never consulted —
+  the same shape as `dangerous-rm`. `chmod -R 777 ./dist` is deliberately left with the classifier,
+  since a bounded relative target is routine work. An operator escape hatch
+  `MIPHAM_DISABLE_CHMOD_PROMPT=1` is provided. **Recorded honestly**: this gate did not previously
+  exist at the static layer — bash's own `BLOCKED_PATTERNS` catches only **absolute** targets
+  (`$DIR`, `~`, `$(pwd)`, `./dist` all passed in testing), and `MANAGED_DANGEROUS_RE` only **warns**
+  and sits **after** the permission gate.
+- Security: `axios` hardened to 1.20.0 — a newly disclosed high-severity advisory that lands in the
+  **production** tree (`@miphamai/cli > @larksuiteoapi/node-sdk > axios`), so shipping is what
+  actually protects users.
+
 ## 0.85.12 — 2026-09-30
 
 - Version sync with Mipham Code CLI 0.85.12
