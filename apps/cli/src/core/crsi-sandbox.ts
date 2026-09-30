@@ -14,7 +14,7 @@
  *   if fail → auto-discards worktree → logs failure for CRSI learning
  */
 
-import { execSync } from 'node:child_process'
+import { execSync, type StdioOptions } from 'node:child_process'
 import {
   mkdirSync,
   rmSync,
@@ -277,6 +277,42 @@ export function validateMergeConvergence(proposal: {
   return `合并型提案必须收敛，但脚手架增长了：${rose.join('；')}。`
 }
 
+/** POSIX 单引号包裹 —— 路径里的空格 / `$` / 反引号都不会被 shell 再解释。 */
+function shq(s: string): string {
+  return `'${s.split("'").join("'\\''")}'`
+}
+
+/**
+ * 在 `root` 下跑一条命令 —— 把「在哪儿」写进**命令字符串本身**，而不是 `options.cwd`。
+ *
+ * 为什么不能只靠 `cwd`：那个 options 是**对象字面量**，而变异测试的 `ObjectLiteral`
+ * 变异体正会把整个字面量换成 `{}` —— `cwd` 随之消失，子进程落回 `process.cwd()`。
+ * 全量 `pnpm mutate` 时 `process.cwd()` 是 Stryker 的 `.stryker-tmp/sandbox-*`，
+ * 一个**有意不带 `.git`** 的副本目录 ⇒ 里面任何 git 命令都上溯到外面那棵**真仓库**，
+ * `worktree add` / `cherry-pick` / `branch -D` 于是全写进用户没点名过的仓库
+ * （2026-09-30 受控复现；现存的 `crsi-sandbox-*` 残留分支就是那次的痕迹）。
+ *
+ * git 子命令用 `-C`（git 自己的「在哪儿」参数），其余用 `cd`：**两者都在字符串里**，
+ * 对象字面量怎么变都动不了它们。下面那个字面量被抹成 `{}` 只会丢掉超时与编码，
+ * 丢不掉「哪棵树」。**有意不再传 `cwd`** —— 留着它，下一个人会以为承重的是它。
+ *
+ * 守卫 `test/integrity/crsi-sandbox-command-root.test.ts` 静态钉住这个形状。
+ */
+function runIn(
+  root: string,
+  cmd: string,
+  opts: { timeoutMs?: number; quiet?: boolean } = {},
+): string {
+  const rooted = cmd.startsWith('git ')
+    ? `git -C ${shq(root)} ${cmd.slice(4)}`
+    : `cd ${shq(root)} && ${cmd}`
+  return execSync(rooted, {
+    timeout: opts.timeoutMs ?? 10_000,
+    encoding: 'utf-8',
+    ...(opts.quiet ? { stdio: ['ignore', 'pipe', 'ignore'] as StdioOptions } : {}),
+  })
+}
+
 /**
  * 沙箱根的形状闸：只接受**它自己那棵工作树的根**。
  *
@@ -295,12 +331,7 @@ export function validateMergeConvergence(proposal: {
 export function assertSandboxRepoRoot(repoRoot: string): void {
   let top: string
   try {
-    top = execSync('git rev-parse --show-toplevel', {
-      cwd: repoRoot,
-      timeout: 10_000,
-      encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim()
+    top = runIn(repoRoot, 'git rev-parse --show-toplevel', { quiet: true }).trim()
   } catch {
     throw new Error(`CRSI 沙箱需要一个 git 仓库，但 ${repoRoot} 不在任何仓库内。请在仓库根运行。`)
   }
@@ -327,7 +358,7 @@ export class CrsiSandbox {
 
   constructor(repoRoot: string = process.cwd()) {
     this.repoRoot = resolve(repoRoot)
-    // 先立形状闸，再建任何东西 —— 它必须在第一条 `cwd: this.repoRoot` 的 git 命令之前，
+    // 先立形状闸，再建任何东西 —— 它必须在第一条 `runIn(this.repoRoot, …)` 的 git 命令之前，
     // 也必须早于 mkdirSync(REPORT_DIR)（拒绝时零副作用）。
     assertSandboxRepoRoot(this.repoRoot)
     this.sessionReport = {
@@ -363,10 +394,8 @@ export class CrsiSandbox {
     }
 
     try {
-      execSync(`git worktree add -b "${branchName}" "${worktreeDir}" HEAD`, {
-        cwd: this.repoRoot,
-        timeout: 30_000,
-        encoding: 'utf-8',
+      runIn(this.repoRoot, `git worktree add -b "${branchName}" "${worktreeDir}" HEAD`, {
+        timeoutMs: 30_000,
       })
     } catch (err) {
       throw new Error(`Failed to create CRSI worktree: ${String(err)}`)
@@ -457,11 +486,7 @@ export class CrsiSandbox {
 
       // Generate diff
       try {
-        result.diff = execSync(`git diff -- "${normalizedFilePath}"`, {
-          cwd: this.worktreePath,
-          timeout: 10_000,
-          encoding: 'utf-8',
-        })
+        result.diff = runIn(this.worktreePath, `git diff -- "${normalizedFilePath}"`)
       } catch {
         // Diff generation is best-effort
       }
@@ -489,11 +514,7 @@ export class CrsiSandbox {
     const result: CrsiTestResult = { passed: false, totalTests: 0, failedTests: 0, output: '' }
 
     try {
-      const output = execSync('pnpm test 2>&1', {
-        cwd: this.worktreePath,
-        timeout: TEST_TIMEOUT_MS,
-        encoding: 'utf-8',
-      })
+      const output = runIn(this.worktreePath, 'pnpm test 2>&1', { timeoutMs: TEST_TIMEOUT_MS })
 
       result.output = output.slice(-5000) // Keep last 5000 chars
 
@@ -550,11 +571,7 @@ export class CrsiSandbox {
     if (!this.worktreePath) return ''
 
     try {
-      return execSync('git diff', {
-        cwd: this.worktreePath,
-        timeout: 10_000,
-        encoding: 'utf-8',
-      })
+      return runIn(this.worktreePath, 'git diff')
     } catch {
       return '(diff unavailable)'
     }
@@ -585,23 +602,16 @@ export class CrsiSandbox {
 
     try {
       // Commit in worktree
-      execSync('git add -A', { cwd: this.worktreePath, timeout: 10_000 })
-      execSync(
+      runIn(this.worktreePath, 'git add -A')
+      runIn(
+        this.worktreePath,
         `git commit -m "CRSI auto-modification: ${this.sessionReport.sessionId}" --allow-empty`,
-        { cwd: this.worktreePath, timeout: 10_000 },
       )
 
       // Cherry-pick to main repo
-      const commitHash = execSync('git rev-parse HEAD', {
-        cwd: this.worktreePath,
-        timeout: 10_000,
-        encoding: 'utf-8',
-      }).trim()
+      const commitHash = runIn(this.worktreePath, 'git rev-parse HEAD').trim()
 
-      execSync(`git cherry-pick "${commitHash}"`, {
-        cwd: this.repoRoot,
-        timeout: 30_000,
-      })
+      runIn(this.repoRoot, `git cherry-pick "${commitHash}"`, { timeoutMs: 30_000 })
 
       // Mark as merged
       for (const modResult of this.sessionReport.modifications) {
@@ -661,9 +671,8 @@ export class CrsiSandbox {
 
     try {
       // Remove worktree
-      execSync(`git worktree remove --force "${this.worktreePath}"`, {
-        cwd: this.repoRoot,
-        timeout: 15_000,
+      runIn(this.repoRoot, `git worktree remove --force "${this.worktreePath}"`, {
+        timeoutMs: 15_000,
       })
     } catch {
       // Best-effort: if worktree remove fails, try manual cleanup
@@ -671,7 +680,7 @@ export class CrsiSandbox {
         if (existsSync(this.worktreePath)) {
           rmSync(this.worktreePath, { recursive: true, force: true })
         }
-        execSync(`git worktree prune`, { cwd: this.repoRoot, timeout: 10_000 })
+        runIn(this.repoRoot, `git worktree prune`)
       } catch {
         // Give up — stale worktrees will be cleaned up on next createWorktree()
       }
@@ -679,10 +688,7 @@ export class CrsiSandbox {
 
     // Delete the branch
     try {
-      execSync(`git branch -D "${this.worktreeBranch}"`, {
-        cwd: this.repoRoot,
-        timeout: 10_000,
-      })
+      runIn(this.repoRoot, `git branch -D "${this.worktreeBranch}"`)
     } catch {
       // Branch may already be gone
     }
@@ -753,11 +759,7 @@ export class CrsiSandbox {
    */
   private cleanupStaleWorktrees(): void {
     try {
-      const listOutput = execSync('git worktree list --porcelain', {
-        cwd: this.repoRoot,
-        timeout: 10_000,
-        encoding: 'utf-8',
-      })
+      const listOutput = runIn(this.repoRoot, 'git worktree list --porcelain')
 
       const worktrees = this.parseWorktreeList(listOutput)
 
@@ -769,8 +771,8 @@ export class CrsiSandbox {
         if (!existsSync(wt.path)) {
           // Stale entry — prune it
           try {
-            execSync(`git worktree prune`, { cwd: this.repoRoot, timeout: 5_000 })
-            execSync(`git branch -D "${wt.branch}"`, { cwd: this.repoRoot, timeout: 5_000 })
+            runIn(this.repoRoot, `git worktree prune`, { timeoutMs: 5_000 })
+            runIn(this.repoRoot, `git branch -D "${wt.branch}"`, { timeoutMs: 5_000 })
           } catch {
             // Best-effort cleanup
           }

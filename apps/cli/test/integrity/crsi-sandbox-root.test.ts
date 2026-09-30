@@ -37,6 +37,21 @@ vi.mock('node:os', async (importOriginal) => {
  * 内层是「不带 `.git` 的副本目录」。为什么它值得单独立在这里 —— **CI 不跑变异，
  * 所以 CI 不会替你发现这件事**；这条链路上此前一个守卫都没有。
  *
+ * ## 第二半（2026-09-30 续）：命令自己带着根
+ *
+ * 上面这半条闸拦的是「拿副本目录当根来构造」。可真正漏的那次，沙箱是拿**合法根**
+ * 构造的 —— 漏在**变异体**上：`ObjectLiteral` 把 `execSync(cmd, { cwd, timeout, … })`
+ * 的整个字面量换成 `{}`，`cwd` 随之消失，子进程落回 `process.cwd()`（= 那个副本目录）
+ * ⇒ 每条 git 命令都上溯到外面那棵真仓库。**构造函数那道闸看不见这件事**，它校验的
+ * `repoRoot` 一直是合法的。
+ *
+ * 于是修法把「在哪儿」写进**命令字符串本身**（`git -C <root>` / `cd <root> &&`），
+ * 并收成唯一出口 `runIn()`。这条性质**没法用行为测试钉住** —— 不施加变异的话，
+ * `cwd:` 本来就是对的，行为测试改前改后都绿（本仓库为这种「改前改后都绿」付过学费：
+ * `ink-testing-library` 那格）。所以这里分两段：
+ *   · 静态段钉**形状**（对象字面量被抹掉也动不了的那一半）；
+ *   · 行为段钉**形状真的管用**（`-C` 的参数序与引号对不对 —— 纯文本扫描看不出来）。
+ *
  * 本文件自足（同 `tool-reference-integrity.test.ts` 的约定：守卫之间不抽公共模块）。
  */
 
@@ -71,9 +86,9 @@ const worktreeCount = () =>
   git(['worktree', 'list', '--porcelain'], OUTER)
     .split('\n')
     .filter((l) => l.startsWith('worktree ')).length
-/** 外层仓库的分支名集合。 */
-const branchSet = () =>
-  git(['for-each-ref', '--format=%(refname:short)', 'refs/heads'], OUTER)
+/** 某个仓库的分支名集合。 */
+const branchSet = (repo: string = OUTER) =>
+  git(['for-each-ref', '--format=%(refname:short)', 'refs/heads'], repo)
     .trim()
     .split('\n')
     .filter(Boolean)
@@ -165,5 +180,99 @@ describe('CRSI 沙箱根：只能是它自己那棵工作树的根', () => {
     expect(branchSet()).toEqual(BASELINE_BRANCHES)
     expect(head()).toBe(BASELINE_HEAD)
     expect(outerFileDigest()).toBe(BASELINE_FILE)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 第二半：命令自己带着根（见文件头）
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SRC_PATH = join(import.meta.dirname, '..', '..', 'src', 'core', 'crsi-sandbox.ts')
+
+/** 源码里 `execSync(` 的**裸行数** —— 正则漏解析的那些靠它现形（正对照的判据本身）。 */
+const countExecSyncLines = (src: string) =>
+  src.split('\n').filter((l) => l.includes('execSync(')).length
+
+/** runIn 里把根写进字符串的两条串。写成普通字符串：模板字面量会把 `${…}` 求值掉。 */
+const GIT_ROOTED = '`git -C ${shq(root)} ${cmd.slice(4)}`'
+const CD_ROOTED = '`cd ${shq(root)} && ${cmd}`'
+
+/**
+ * 形状判据 —— 收成纯函数，是为了能拿**故意改坏的文本**反过来喂它一把
+ * （只在真源码上断言的话，「这条判据会不会红」是没人验过的）。
+ */
+function shapeProblems(src: string): string[] {
+  const problems: string[] = []
+  const bare = countExecSyncLines(src)
+  if (bare === 0) problems.push(`源码里一处 execSync( 都没有 —— 下面的断言会全部空转`)
+  if (bare !== 1) problems.push(`execSync( 出现在 ${bare} 行；应当是 1 行（只有 runIn 里那一处）`)
+  if (!src.includes(GIT_ROOTED)) problems.push(`runIn 未把 -C 写进 git 子命令的字符串里`)
+  if (!src.includes(CD_ROOTED)) problems.push(`runIn 未把 cd 写进非 git 命令的字符串里`)
+  return problems
+}
+
+describe('CRSI 沙箱：目标仓库写在命令字符串里（变异体抹不掉）', () => {
+  const SRC = readFileSync(SRC_PATH, 'utf-8')
+
+  it('地形自证：源码在、且 execSync 确实存在（否则下面的断言全是空转）', () => {
+    expect(SRC.length).toBeGreaterThan(0)
+    expect(countExecSyncLines(SRC)).toBeGreaterThan(0)
+    // 前提没变才谈得上「唯一出口」：runIn 还在，且仍被调用。
+    expect(SRC).toContain('function runIn(')
+    expect(SRC.split('\n').filter((l) => l.includes('runIn(')).length).toBeGreaterThan(1)
+  })
+
+  it('形状：runIn 是唯一的 execSync 出口，且根在字符串里', () => {
+    expect(shapeProblems(SRC)).toEqual([])
+  })
+
+  it('反向对照：把 -C 撤掉 / 绕过 runIn 另开一处 execSync —— 判据都要报红', () => {
+    // 若不报红，上面那条「全部合规」就是个仪式（它没有能力失败）。
+    const demotedGit = SRC.replace(GIT_ROOTED, '`${cmd}`')
+    expect(demotedGit).not.toBe(SRC) // 前件成立：替换真的发生了
+    expect(shapeProblems(demotedGit)).toContain('runIn 未把 -C 写进 git 子命令的字符串里')
+
+    const demotedCd = SRC.replace(CD_ROOTED, '`${cmd}`')
+    expect(demotedCd).not.toBe(SRC)
+    expect(shapeProblems(demotedCd)).toContain('runIn 未把 cd 写进非 git 命令的字符串里')
+
+    // 绕过出口：另起一处直接 execSync（正是这次泄漏的写法）。
+    const bypassed = `${SRC}\nexport const _x = () => execSync('git status', { cwd: '/x' })\n`
+    expect(shapeProblems(bypassed)).toContain(
+      `execSync( 出现在 2 行；应当是 1 行（只有 runIn 里那一处）`,
+    )
+  })
+
+  it('行为：process.cwd() 是**另一棵真有 .git 的仓库**时，沙箱照样只动交给它的那棵', () => {
+    // 为什么这半条不可省：静态段只证明「字符串长得对」，证明不了 `git -C '<path>'`
+    // 的参数序与引号真的成立（写成 `-c`、或把 `-C` 放到子命令之后，文本判据都看不出来）。
+    // 诱饵**带 .git**，比 Stryker 那个沙箱更强（那里连 .git 都没有）。
+    const decoy = realpathSync(mkdtempSync(join(tmpdir(), 'crsi-guard-decoy-')))
+    git(['init', '-q'], decoy)
+    git(['config', 'user.email', 'crsi-guard@test.invalid'], decoy)
+    git(['config', 'user.name', 'crsi-guard-test'], decoy)
+    git(['config', 'commit.gpgsign', 'false'], decoy)
+    writeFileSync(join(decoy, 'decoy.txt'), 'decoy\n')
+    git(['add', '-A'], decoy)
+    git(['commit', '-q', '-m', 'decoy'], decoy)
+    const decoyBranches = () => branchSet(decoy)
+
+    const cwdBefore = process.cwd()
+    const decoyBefore = decoyBranches()
+    try {
+      process.chdir(decoy)
+      // 前件自证：chdir 真的生效了（否则这条测试测的还是 OUTER，白跑）。
+      expect(realpathSync(process.cwd())).toBe(decoy)
+
+      const sandbox = new CrsiSandbox(OUTER)
+      sandbox.createWorktree()
+      expect(worktreeCount()).toBe(2) // 交给它的那棵：长出了工作树
+      expect(decoyBranches()).toEqual(decoyBefore) // 诱饵：零痕迹
+      sandbox.removeWorktree()
+    } finally {
+      process.chdir(cwdBefore)
+      rmSync(decoy, { recursive: true, force: true })
+    }
+    expect(branchSet()).toEqual(BASELINE_BRANCHES)
   })
 })
