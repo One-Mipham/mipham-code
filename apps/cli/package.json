@@ -57,7 +57,7 @@
     "@stryker-mutator/core": "10.0.0",
     "@stryker-mutator/vitest-runner": "10.0.0",
     "@types/bun": "^1.4.2",
-    "@types/node": "^22.19.19",
+    "@types/node": "^22.20.4",
     "@types/react": "^19.3.0",
     "@vitest/coverage-v8": "^5.0.2",
     "ink-testing-library": "^4.0.0",
