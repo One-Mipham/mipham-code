@@ -44,7 +44,7 @@
     "mutate": "stryker run"
   },
   "dependencies": {
-    "@larksuiteoapi/node-sdk": "^1.73.0",
+    "@larksuiteoapi/node-sdk": "^1.74.0",
     "commander": "^13.1.0",
     "ink": "^7.1.1",
     "ink-text-input": "^6.0.0",
