@@ -61,6 +61,6 @@
     "@types/react": "^19.3.0",
     "@vitest/coverage-v8": "^5.0.0",
     "ink-testing-library": "^4.0.0",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.2"
   }
 }
