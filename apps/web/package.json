@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@mipham/shared": "workspace:*",
-    "next": "^15.5.24",
+    "next": "^15.5.26",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },
