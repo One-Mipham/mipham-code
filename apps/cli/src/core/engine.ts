@@ -657,6 +657,16 @@ export class QueryEngine {
       )) {
         yield chunk
 
+        if (chunk.restart) {
+          // A retried turn: everything the failed attempt accumulated is
+          // superseded. Drop it here or `toolUses` would carry both attempts'
+          // calls and each would execute (see `restart` in StreamChunk).
+          assistantContent = ''
+          reasoningContent = ''
+          thinkingContent = ''
+          toolUses.length = 0
+        }
+
         if (chunk.type === 'error') {
           // #23: client-generated errors are system lines, not model output —
           // store as `system` so resume renders an error line (⚠) rather than
@@ -998,15 +1008,23 @@ export class QueryEngine {
       const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
 
       try {
-        for await (const chunk of this.llmChat({
-          model: this.registry.getActiveModel(),
+        for await (const chunk of this.chatWithFallback(
           messages,
           systemPrompt,
-          tools: toolDefs.length > 0 ? toolDefs : undefined,
+          toolDefs.length > 0 ? toolDefs : undefined,
           signal,
-        })) {
+        )) {
           yield chunk
 
+          if (chunk.restart) {
+            // Tool continuation rounds get the same retry + fallback as the first
+            // call via `chatWithFallback`; a retry re-streams the round, so drop
+            // the failed attempt's accumulation or its tools execute twice.
+            assistantContent = ''
+            reasoningContent = ''
+            thinkingContent = ''
+            toolUses.length = 0
+          }
           if (chunk.type === 'error') return
           if (chunk.type === 'text' && chunk.content) {
             assistantContent += chunk.content
@@ -1083,13 +1101,12 @@ export class QueryEngine {
         try {
           const finalSystemPrompt = this.context.getSystemPrompt()
           const finalMessages = this.context.getMessages()
-          for await (const chunk of this.llmChat({
-            model: this.registry.getActiveModel(),
-            messages: finalMessages,
-            systemPrompt: finalSystemPrompt,
-            tools: undefined, // no tools — force text-only summary
+          for await (const chunk of this.chatWithFallback(
+            finalMessages,
+            finalSystemPrompt,
+            undefined, // no tools — force text-only summary
             signal,
-          })) {
+          )) {
             yield chunk
             if (chunk.type === 'error') return
           }
@@ -1497,11 +1514,22 @@ export class QueryEngine {
    * 被干净地关掉、正常写完，在字节流上是同一个形状），而这里是**每一处消费
    * chat 流的地方都必经的唯一出口** —— 转发的循环有两个（`process` 与
    * `continueWithTools`），各自补一次正是「两条渲染路径只接一条」的老毛病。
+   *
+   * 被拒绝的一轮同理：`refusal` 也只有 provider 能判（200 拒答与正常 `end_turn`
+   * 在下游是同一个终止 `stop`），而拒答可能**一个字都没有** —— 没有这里点名，
+   * 那一轮就是一块空白屏，用户连「被拒了」都看不出。
    */
   private async *llmChat(req: ChatRequest): AsyncGenerator<StreamChunk> {
     for await (const chunk of (this.llm ?? this.registry).chat(req)) {
       if (chunk.type === 'stop' && chunk.truncated) {
         yield { type: 'warning', content: t('errors.turn_truncated') }
+      }
+      if (chunk.type === 'stop' && chunk.refusal) {
+        const reason = chunk.refusal.explanation
+        yield {
+          type: 'warning',
+          content: reason ? t('errors.turn_refused_reason', { reason }) : t('errors.turn_refused'),
+        }
       }
       yield chunk
     }
@@ -1570,7 +1598,15 @@ export class QueryEngine {
         failure = String(err)
       }
       if (!retryable || !ownsFlow || attempt >= 1) break
-      yield { type: 'warning', content: `${activeId} failed (${failure}) — retrying once` }
+      // `restart: true` tells the consumer to drop what the failed attempt already
+      // yielded. Without it the retry's tool calls are *added* to the failed
+      // attempt's, and their ids are regenerated per attempt, so nothing
+      // downstream dedupes them and a side-effecting tool runs twice.
+      yield {
+        type: 'warning',
+        content: `${activeId} failed (${failure}) — retrying once`,
+        restart: true,
+      }
     }
     const detail = failure ?? 'Unknown error'
 
@@ -1607,10 +1643,20 @@ export class QueryEngine {
     // window than the one we fell back from (1M → 128K). Switching the registry
     // alone left compaction armed to the *old* model's window, so the summary would
     // not trigger until ~950K — long past the point the fallback model overflows.
+    const beforeWindow = this.effectiveWindow(activeModel)
     this.switchProvider(defaultId, fallbackModel)
+    // Say so when the switch shrank the window. The user picked a model for what
+    // it could hold; a fallback to a 200K model silently cuts how much of the
+    // conversation still fits (1M → 200K), and that is not obvious from the model
+    // name alone — the same fact the switch itself already acted on.
+    const afterWindow = this.effectiveWindow(fallbackModel)
+    const windowNote =
+      beforeWindow !== undefined && afterWindow !== undefined && afterWindow < beforeWindow
+        ? ` (context window ${this.fmtWindow(beforeWindow)} → ${this.fmtWindow(afterWindow)})`
+        : ''
     yield {
       type: 'warning',
-      content: `${activeId} unreachable — degraded to ${defaultId} (${fallbackModel})`,
+      content: `${activeId} unreachable — degraded to ${defaultId} (${fallbackModel})${windowNote}`,
     }
 
     try {
@@ -1860,6 +1906,25 @@ export class QueryEngine {
         this.context.updateMaxTokens(maxTokens, model.contextWindow)
       }
     }
+  }
+
+  /**
+   * The context window a model actually gets in this process: its nominal size,
+   * unless the 1M cap is disabled and it exceeds 200K — the same rule
+   * `switchProvider` applies, so the fallback notice reports the *effective*
+   * window, not the model sheet's.
+   */
+  private effectiveWindow(modelId: string): number | undefined {
+    const model = this.registry.findModel(modelId)
+    if (!model) return undefined
+    return process.env.MIPHAM_DISABLE_1M_CONTEXT === '1' && model.contextWindow > 200_000
+      ? 200_000
+      : model.contextWindow
+  }
+
+  /** `1000000` → `1M`, `128000` → `128K` — for the fallback context-window notice. */
+  private fmtWindow(n: number): string {
+    return n >= 1_000_000 ? `${Math.round(n / 100_000) / 10}M` : `${Math.round(n / 1000)}K`
   }
 
   /** Wrap context compaction with PreCompact/PostCompact hooks. */

@@ -702,6 +702,41 @@ describe('OpenAICompatProvider', () => {
     expect(String(toolMsg.content)).toMatch(/unknown/i)
   })
 
+  // 工具/MCP/插件违反契约返回对象或数字时，出网的 tool 消息 content 必须仍是文本：
+  // 透传会作为 JSON 值进请求体，而 tool 消息的 content 只收字符串。
+  it('非字符串 tool_result content 在请求体里被序列化成字符串', async () => {
+    let captured: Record<string, unknown> = {}
+    globalThis.fetch = vi.fn().mockImplementation(async (_url, opts) => {
+      captured = JSON.parse((opts as { body: string }).body)
+      return makeSSEResponse(['data: [DONE]'])
+    }) as unknown as typeof fetch
+
+    await collectChunks(
+      new OpenAICompatProvider(makeConfig()).chat({
+        model: 'gpt-5',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: 'call_1',
+                content: { files: 3 } as unknown as string,
+              },
+              { type: 'tool_result', tool_use_id: 'call_2', content: 42 as unknown as string },
+            ],
+          },
+        ],
+      }),
+    )
+
+    const toolMsgs = (captured.messages as Record<string, unknown>[]).filter(
+      (m) => m.role === 'tool',
+    )
+    // 从请求体 JSON 解析回来后仍须是**字符串**，不是对象/数字。
+    expect(toolMsgs.map((m) => m.content)).toEqual(['{"files":3}', '42'])
+  })
+
   it('should strip trailing slashes from baseUrl', async () => {
     let capturedUrl = ''
     const fetchMock = vi.fn().mockImplementation(async (url) => {

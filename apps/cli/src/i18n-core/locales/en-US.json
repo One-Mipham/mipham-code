@@ -964,6 +964,8 @@
     "max_tool_turns_warning": "You've reached the maximum of {max} tool-calling rounds. {pending} tool call(s) were not executed. Please summarize what you found so far and any next steps the user should take.",
     "turn_timeout": "Task produced no substantial output for {minutes} minutes and was stopped. Break the task into smaller steps or clarify the next step, then retry.",
     "turn_truncated": "The response was cut off mid-turn, not finished — the provider stopped at its output limit or the connection closed.",
+    "turn_refused": "The model declined this request and did not answer. This is not a failure — resending it to the same model will usually be declined again.",
+    "turn_refused_reason": "The model declined this request: {reason}",
     "stop_hook_budget_spent": "The Stop hook asked for more work (\"{reason}\"), but this turn has used all {max} of its tool-calling rounds — stopping here. Send another message to continue.",
     "mcp_not_connected": "Error: MCP server \"{server}\" not connected",
     "mcp_tool_error": "MCP tool error: {error}",

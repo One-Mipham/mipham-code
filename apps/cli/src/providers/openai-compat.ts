@@ -417,7 +417,9 @@ export class OpenAICompatProvider implements ProviderInstance {
           result.push({
             role: 'tool',
             tool_call_id: tr.tool_use_id,
-            content: tr.content,
+            // 非字符串 content 需成文本：tool 消息的 content 只收字符串，透传对象
+            // 会让它作为 JSON 值进请求体。空串保持空串（此处无占位回退）。
+            content: typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content),
           })
         }
         continue

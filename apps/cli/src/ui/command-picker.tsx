@@ -85,7 +85,6 @@ export function CommandPicker({
     Math.min(cursorIdx.value - Math.floor(maxVisible / 2), filtered.length - maxVisible),
   )
   const visible = filtered.slice(scrollStart, scrollStart + maxVisible)
-  const _adjustedCursor = cursorIdx.value - scrollStart
 
   // Wrap cursor safely
   const safeCursor = (i: number) =>

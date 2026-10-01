@@ -88,9 +88,23 @@ export class OAuthClient {
           res.end(
             `<html><body><h1>${t('system.oauth.authenticated')}</h1><p>${t('system.oauth.close_window')}</p></body></html>`,
           )
+          clearTimeout(timer)
           server.close()
           resolve(receivedCode)
         }
+      })
+      // A listen failure (`EADDRINUSE` — the port is taken, or a second flow
+      // raced this one) arrives as an `'error'` event. With no listener Node
+      // re-throws it as an uncaught exception and takes the whole process down:
+      // the flow cannot *fail cleanly* if the failure signal itself is fatal.
+      // Reject instead so the caller sees an error and the attempt ends here.
+      const timer = setTimeout(() => {
+        server.close()
+        reject(new Error(t('errors.oauth_timeout')))
+      }, 300_000)
+      server.on('error', (err) => {
+        clearTimeout(timer)
+        reject(err)
       })
       server.listen(port, '127.0.0.1', () => {
         const authUrl = new URL(auth.authorizationUrl)

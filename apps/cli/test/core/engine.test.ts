@@ -883,6 +883,50 @@ describe('QueryEngine', () => {
     })
   })
 
+  describe('llmChat — 被拒绝的一轮必须点名', () => {
+    // 拒答在下游与正常 `end_turn` 同形（同一个终止 stop），而它可能一个字都不给。
+    // 少了点名，那一轮就是一块空白屏 —— 用户连「被拒了」都看不出。
+    it('带原因的拒答：警告里带上提供商给的原因', async () => {
+      const registry = mockProviderRegistry(async function* () {
+        yield {
+          type: 'stop',
+          refusal: { category: 'cyber', explanation: 'blocked under the usage policy.' },
+        }
+      })
+      const engine = new QueryEngine(registry, mockContext(), makeToolMap([]))
+      const chunks: StreamChunk[] = []
+      for await (const c of engine.process('hi')) chunks.push(c)
+
+      const warning = chunks.find((c) => c.type === 'warning')
+      expect(warning?.content).toContain('blocked under the usage policy.')
+    })
+
+    it('拒答但没带原因：仍然点名', async () => {
+      // 落点不许吊在 explanation 上 —— 它缺席时空白屏的判断又退回起点。
+      const registry = mockProviderRegistry(async function* () {
+        yield { type: 'stop', refusal: {} }
+      })
+      const engine = new QueryEngine(registry, mockContext(), makeToolMap([]))
+      const chunks: StreamChunk[] = []
+      for await (const c of engine.process('hi')) chunks.push(c)
+
+      expect(chunks.some((c) => c.type === 'warning')).toBe(true)
+    })
+
+    it('反方向：正常结束不发这条警告', async () => {
+      // 少了这条，把警告无条件拼上去也照样绿。
+      const registry = mockProviderRegistry(async function* () {
+        yield { type: 'text', content: 'hello' }
+        yield { type: 'stop' }
+      })
+      const engine = new QueryEngine(registry, mockContext(), makeToolMap([]))
+      const chunks: StreamChunk[] = []
+      for await (const c of engine.process('hi')) chunks.push(c)
+
+      expect(chunks.some((c) => c.type === 'warning')).toBe(false)
+    })
+  })
+
   describe('process — basic conversation', () => {
     it('should yield text and stop chunks from provider', async () => {
       const registry = mockProviderRegistry(async function* () {
@@ -1047,6 +1091,85 @@ describe('QueryEngine', () => {
 
       expect(chunks.some((c) => c.type === 'text' && c.content === 'recorded-response')).toBe(true)
       expect(chunks.some((c) => c.type === 'text' && c.content === 'Hello!')).toBe(false)
+    })
+  })
+
+  describe('chatWithFallback — a retried turn must not run a tool twice', () => {
+    it('drops the failed attempt tool calls when the turn is retried', async () => {
+      let calls = 0
+      const registry = mockProviderRegistry(async function* () {
+        calls++
+        if (calls === 1) {
+          // Failed attempt: it already emitted a tool call before the stream
+          // broke. The retry re-streams the whole turn, so this call is dead —
+          // and its id (call_1) will never appear again.
+          yield {
+            type: 'tool_use',
+            toolUse: { type: 'tool_use', id: 'call_1', name: 'Bump', input: {} },
+          }
+          yield { type: 'error', error: 'stream stalled' }
+          return
+        }
+        if (calls === 2) {
+          yield {
+            type: 'tool_use',
+            toolUse: { type: 'tool_use', id: 'call_2', name: 'Bump', input: {} },
+          }
+          yield { type: 'stop' }
+          return
+        }
+        yield { type: 'text', content: 'done' }
+        yield { type: 'stop' }
+      })
+
+      let executed = 0
+      const bump = mockTool('Bump', async () => {
+        executed++
+        return { success: true, content: 'bumped' }
+      })
+      const engine = new QueryEngine(registry, mockContext(), makeToolMap([bump]))
+
+      const chunks: StreamChunk[] = []
+      for await (const c of engine.process('hi')) chunks.push(c)
+
+      // The retry happened and announced itself…
+      expect(chunks.some((c) => c.restart === true)).toBe(true)
+      // …and the failed attempt's call_1 did NOT execute.
+      const results = chunks.filter((c) => c.type === 'tool_result')
+      expect(results.map((r) => r.tool_use_id)).toEqual(['call_2'])
+      expect(executed).toBe(1)
+    })
+
+    it('retries continuation rounds too (they used to bypass chatWithFallback)', async () => {
+      let calls = 0
+      const registry = mockProviderRegistry(async function* () {
+        calls++
+        if (calls === 1) {
+          // First round: one tool call, clean stop → process runs it, then
+          // continues the turn.
+          yield {
+            type: 'tool_use',
+            toolUse: { type: 'tool_use', id: 'c1', name: 'Bump', input: {} },
+          }
+          yield { type: 'stop' }
+          return
+        }
+        if (calls === 2) {
+          // Continuation round, first attempt: fails retryably.
+          yield { type: 'error', error: 'stall' }
+          return
+        }
+        yield { type: 'text', content: 'recovered' }
+        yield { type: 'stop' }
+      })
+      const engine = new QueryEngine(registry, mockContext(), makeToolMap([mockTool('Bump')]))
+
+      const chunks: StreamChunk[] = []
+      for await (const c of engine.process('hi')) chunks.push(c)
+
+      // With a raw llmChat the continuation's error would surface directly and
+      // 'recovered' would never arrive.
+      expect(chunks.some((c) => c.type === 'text' && c.content === 'recovered')).toBe(true)
     })
   })
 

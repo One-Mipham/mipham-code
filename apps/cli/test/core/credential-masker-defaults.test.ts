@@ -188,3 +188,153 @@ describe('默认输出擦洗：反方向 —— 普通输出不许被吃掉', ()
     }
   })
 })
+
+// ============================================================
+// `Authorization: Bearer …`。
+//
+// 名字类 pattern 认的是 `apiKey` / `secret` / `token` / `…_pat` 这些**键名**，
+// 而 `authorization` 不是，`bearer` / `basic` 也不是 —— 于是整条头**一个字符都不匹配**，
+// 令牌原样进 stdout。curl 的 `-H`、日志、`git config --list` 都是这个形状。
+// ============================================================
+
+describe('默认输出擦洗：Authorization 头', () => {
+  // Tokens here are deliberately **not** JWTs and not `sk-`-shaped: both of those
+  // are caught by `SecurityGate.redactCredentialLeak` further down the same
+  // function, so a test written with one would stay green with this whole rule
+  // deleted — it would be measuring the *other* defence. These shapes are redacted
+  // by the header rule or by nothing at all.
+  const TOKEN = 'abc123def456ghi789jkl'
+
+  it('`Authorization: Bearer <token>` 的令牌擦掉，头名与方案留着', () => {
+    const result = outOf(`Authorization: Bearer ${TOKEN}`)
+    expect(result).not.toContain(TOKEN)
+    expect(result).toContain('Authorization')
+    expect(result).toContain('Bearer')
+    expect(result).toContain(CREDENTIAL_SENTINEL)
+  })
+
+  it('curl 形状 `-H "Authorization: Basic <b64>"` 也擦', () => {
+    const result = outOf('-H "Authorization: Basic dXNlcjpwYXNzd29yZA=="')
+    expect(result).not.toContain('dXNlcjpwYXNzd29yZA==')
+    expect(result).toContain('Basic')
+    expect(result).toContain(CREDENTIAL_SENTINEL)
+  })
+
+  it('`Proxy-Authorization` 同样算', () => {
+    const result = outOf('Proxy-Authorization: token abcdef1234567890')
+    expect(result).not.toContain('abcdef1234567890')
+    expect(result).toContain('Proxy-Authorization')
+  })
+
+  it('裸 `Bearer <token>`（没有头名）也擦', () => {
+    const result = outOf(`curl -H "Bearer ${TOKEN}" https://api.example/v1`)
+    expect(result).not.toContain(TOKEN)
+    expect(result).toContain(CREDENTIAL_SENTINEL)
+  })
+
+  it('反方向：`Bearer` / `Basic` 后面是**词**不是令牌 ⇒ 原样', () => {
+    for (const line of [
+      'Bearer authentication is required',
+      'Basic authentication over TLS',
+      'bearer tokens are rotated weekly',
+    ]) {
+      expect(outOf(line), `${line} 不该被改`).toBe(line)
+    }
+  })
+})
+
+// ============================================================
+// 键名里插**不可见字符**。
+//
+// `{"api​Key": "…"}` 人读出来就是 `apiKey`，正则却看不见 —— 名字类的
+// pattern 一个字都不匹配，值整段放行。这不是理论：零宽字符插进标识符是现成的
+// 规避手法，而遮蔽默认开启。
+//
+// 修法是**匹配前先剥掉**这些格式字符。ZWJ / ZWNJ 有意保留（emoji 序列与若干
+// 文字系统要靠它们），代价是拿这两个拼的键名仍能逃 —— 比剥掉整段正文可接受。
+// ============================================================
+
+describe('默认输出擦洗：键名里插不可见字符', () => {
+  const ZWSP = String.fromCharCode(0x200b)
+  const SOFT_HYPHEN = String.fromCharCode(0xad)
+
+  it('`api\\u200bKey` 仍被认作 apiKey', () => {
+    const result = outOf(`{"api${ZWSP}Key": "abc123"}`)
+    expect(result).not.toContain('abc123')
+    expect(result).toContain(CREDENTIAL_SENTINEL)
+  })
+
+  it('归一是实做的：返回值里不再有那个不可见字符', () => {
+    expect(outOf(`{"api${ZWSP}Key": "abc123"}`)).not.toContain(ZWSP)
+  })
+
+  it('软连字符（U+00AD）同样剥掉', () => {
+    const result = outOf(`password${SOFT_HYPHEN}=hunter2`)
+    expect(result).not.toContain('hunter2')
+    expect(result).toContain(CREDENTIAL_SENTINEL)
+  })
+})
+
+// ============================================================
+// 擦洗之后**仍是合法 JSON**。
+//
+// 原替换式是 `match.replace(/\s*["']?\s*[:=]\s*["']?\S+/, '=哨兵')` —— 它把
+// 分隔符换成 `=` 并**吞掉**值前面的那个引号：`{"apiKey": "sk-…"}` 回来变成
+// `{"apiKey=哨兵}`，引号不成对、JSON 解析直接失败。
+//
+// 要命的是**被擦的正是最可能被交给 `jq` 的那种输出** —— 擦洗把工具的出口
+// 打坏，等于擦完还得手工修。判据因此不能只断言「哨兵出现过」（旧码同样成立），
+// 必须断言**解析得开**、且解析出来的值就是哨兵。
+// ============================================================
+
+describe('默认输出擦洗：擦完仍是合法 JSON', () => {
+  it('`{"apiKey": "…"}` 擦完可被 JSON.parse，取值是哨兵', () => {
+    const result = outOf('{"apiKey": "sk-live-abcdef123456"}')
+    expect(() => JSON.parse(result)).not.toThrow()
+    expect(JSON.parse(result)).toEqual({ apiKey: CREDENTIAL_SENTINEL })
+  })
+
+  it('嵌套对象：只擦目标键，兄弟键与结构原样', () => {
+    const result = outOf('{"a": {"apiKey": "x1y2z3"}, "b": 1}')
+    expect(() => JSON.parse(result)).not.toThrow()
+    expect(JSON.parse(result)).toEqual({ a: { apiKey: CREDENTIAL_SENTINEL }, b: 1 })
+  })
+
+  it('单引号形状也是成对的引号', () => {
+    expect(outOf("'apiKey': 'abc123'")).toBe(`'apiKey': '${CREDENTIAL_SENTINEL}'`)
+  })
+
+  // 紧凑 JSON **没有空格**，于是 pattern 自带的 `\S+` 一路吃到行尾：第一对的匹配
+  // **包含**后面所有的对，`String.replace` 从整段之后接着扫 ⇒ 只擦掉第一对。
+  // 这不是假想形状 —— `/config` 打印的就是 `JSON.stringify(config)`，里面好几个
+  // `apiKey`。旧码把整个 `\S+` 换成哨兵，把尾巴**毁掉**因而看不出泄漏；一改成保留
+  // 形状，毁掉就变成了**泄漏**。判据因此必须落在「第二段也擦了吗」。
+  it('紧凑 JSON：每一段都擦，不是只擦第一段', () => {
+    const result = outOf('{"apiKey":"sk-a","token":"abc123"}')
+    expect(() => JSON.parse(result)).not.toThrow()
+    expect(JSON.parse(result)).toEqual({ apiKey: CREDENTIAL_SENTINEL, token: CREDENTIAL_SENTINEL })
+  })
+
+  it('`/config` 形状（多个 apiKey）：每个都擦，非秘密键原样', () => {
+    const result = outOf(
+      '{"providers":[{"id":"a","apiKey":"sk-one"},{"id":"b","apiKey":"sk-two"}]}',
+    )
+    expect(() => JSON.parse(result)).not.toThrow()
+    const parsed = JSON.parse(result)
+    expect(parsed.providers.map((p: { apiKey: string }) => p.apiKey)).toEqual([
+      CREDENTIAL_SENTINEL,
+      CREDENTIAL_SENTINEL,
+    ])
+    expect(parsed.providers.map((p: { id: string }) => p.id)).toEqual(['a', 'b'])
+  })
+
+  it('反方向：非 JSON 的 `KEY=value` 仍保持 `KEY=哨兵`（分隔符不被改写成 `:`）', () => {
+    expect(outOf('API_KEY=sk-abc123xyz')).toBe(`API_KEY=${CREDENTIAL_SENTINEL}`)
+    expect(outOf('api-key: abc123')).toBe(`api-key: ${CREDENTIAL_SENTINEL}`)
+  })
+
+  it('反方向：值里含空格时，引号也得成对（`\\S+` 会把匹配截在值中间）', () => {
+    const result = outOf('{"password": "a b"}')
+    expect(() => JSON.parse(result)).not.toThrow()
+  })
+})

@@ -159,6 +159,29 @@ export interface StreamChunk {
    * either way, and tool calls cut off mid-arguments are dropped silently.
    */
   truncated?: boolean
+  /**
+   * Set on the `warning` chunk a retried turn emits just before it re-streams
+   * (`chatWithFallback`). Everything the failed attempt already yielded is on
+   * screen and cannot be recalled, so a consumer that accumulates a turn's
+   * output — assistant text, tool calls — must **discard the previous attempt**
+   * when it sees this. Without it a retry re-executes the tool calls that
+   * attempt already emitted: their ids are regenerated per attempt, so nothing
+   * downstream de-duplicates them and a side-effecting tool runs twice.
+   */
+  restart?: boolean
+  /**
+   * The provider declined to answer — a terminal outcome, not a failure.
+   *
+   * Anthropic reports this as `stop_reason: 'refusal'` on a **successful**
+   * response (HTTP 200, not an error), sending `stop_details` alongside it on
+   * the same `message_delta`. A refusal may carry an **empty content array**,
+   * so without this the turn is a blank screen with nothing to explain it;
+   * `explanation` is the provider's own stated reason for the decline.
+   *
+   * Set **only on refusal** — absent on every normal stop, so the success path
+   * stays byte-identical (same shape as `truncated` above).
+   */
+  refusal?: { category?: string; explanation?: string }
 }
 
 // ── Config Types ──

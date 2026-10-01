@@ -34,6 +34,11 @@ interface AnthropicSSEEvent {
     thinking?: string
     partial_json?: string
     stop_reason?: string | null
+    /**
+     * Sits beside `stop_reason` on the `message_delta` event, and is the only
+     * explanation that exists when a refusal comes back with no content at all.
+     */
+    stop_details?: { category?: string; explanation?: string }
   }
   error?: { type: string; message: string }
   usage?: { input_tokens: number; output_tokens: number }
@@ -78,6 +83,12 @@ export class AnthropicProvider implements ProviderInstance {
     // off at the output ceiling rather than ended by the model.
     let truncated = false
 
+    // Set when the provider reports `stop_reason: 'refusal'`. A refusal is a
+    // **successful** response (HTTP 200) that declines to answer, and it may carry
+    // an empty content array — so without this the turn ends as a blank screen,
+    // because `end_turn` and `refusal` both arrive at the same terminal stop below.
+    let refusal: { category?: string; explanation?: string } | undefined
+
     // Whether this stream reached `message_stop`. A stream that runs out without
     // one was cut — a proxy or gateway closing the connection cleanly looks
     // exactly like a finished response otherwise.
@@ -86,6 +97,15 @@ export class AnthropicProvider implements ProviderInstance {
     // Tool blocks already emitted. A replayed event is the same call, not a
     // second one; emitting it twice makes the engine run the tool twice.
     const emittedToolIds = new Set<string>()
+
+    // Both terminal emissions go through here so the two flags can never drift
+    // apart on one path. Reads `truncated`/`refusal` at call time, so it is
+    // declared before either is set.
+    const terminalStop = (): StreamChunk => ({
+      type: 'stop',
+      ...(truncated ? { truncated: true } : {}),
+      ...(refusal ? { refusal } : {}),
+    })
 
     const messages = this.convertMessages(req.messages)
     this.markPrefixCacheBreakpoint(messages)
@@ -298,12 +318,22 @@ export class AnthropicProvider implements ProviderInstance {
                 if (stopReason === 'max_tokens') {
                   truncated = true
                 }
+                // A refusal is a successful response that declines to answer, and
+                // it can arrive with no content at all. Capture the provider's own
+                // reason here — it is the only one that will ever exist, and the
+                // stream is the only place it appears.
+                if (stopReason === 'refusal') {
+                  refusal = {}
+                  const details = event.delta?.stop_details
+                  if (details?.category !== undefined) refusal.category = details.category
+                  if (details?.explanation !== undefined) refusal.explanation = details.explanation
+                }
                 break
               }
 
               case 'message_stop': {
                 sawTerminalEvent = true
-                yield truncated ? { type: 'stop', truncated: true } : { type: 'stop' }
+                yield terminalStop()
                 return
               }
 
@@ -327,7 +357,7 @@ export class AnthropicProvider implements ProviderInstance {
       // closed connection and a finished response are otherwise the same stream.
       if (!sawTerminalEvent) truncated = true
 
-      yield truncated ? { type: 'stop', truncated: true } : { type: 'stop' }
+      yield terminalStop()
     } finally {
       await reader.cancel().catch(() => {})
     }
@@ -434,7 +464,12 @@ export class AnthropicProvider implements ProviderInstance {
                 tool_use_id: block.tool_use_id,
                 // 空 content 同样整条请求被拒（见 NO_TOOL_OUTPUT）。`||` 而非 `=== ''`：
                 // 投影层缺失该字段时这里是 `undefined`，空数组同理。
-                content: block.content || NO_TOOL_OUTPUT,
+                // 非字符串（工具/MCP/插件违约返回对象或数字）同样要先成文本 ——
+                // 直接透传会作为 JSON 值进请求体，而 API 只收字符串。
+                content:
+                  (typeof block.content === 'string'
+                    ? block.content
+                    : JSON.stringify(block.content)) || NO_TOOL_OUTPUT,
                 // 只在失败时下发 —— 成功请求体与改动前逐字节相同，不引入 prompt-cache 前缀抖动
                 ...(block.is_error === true ? { is_error: true } : {}),
               }

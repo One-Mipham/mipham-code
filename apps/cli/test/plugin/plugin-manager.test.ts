@@ -316,6 +316,21 @@ describe('installFromNpm 的安装命令', () => {
     expect(args).toContain('--ignore-scripts')
   })
 
+  it('把安装钉在显式 registry 上（传递依赖不由环境决定）', () => {
+    // 名字校验只管**顶层**包名；每个传递依赖都由 npm 从「用户的 config/env 指向
+    // 哪个 registry」解析。被劫持的 npm_config_registry（或作用域内的 .npmrc）于是
+    // 能送来会落到本机的代码。判据取 argv 里的那一对，而不是文案。
+    new PluginManager(npmPluginDir).installFromNpm('npm-plugin')
+    const args = childProcessMock.execFileSync.mock.calls[0]![1] as string[]
+    const i = args.indexOf('--registry')
+    expect(i).toBeGreaterThan(-1)
+    expect(args[i + 1]).toBe('https://registry.npmjs.org')
+    // 正控：加 registry 不许把既有那三面（不跑脚本 / 不写清单 / 装进 prefix）挤掉。
+    expect(args).toContain('--ignore-scripts')
+    expect(args).toContain('--no-save')
+    expect(args).toContain('--prefix')
+  })
+
   it('经 execFileSync 以 argv 数组调用，不经 shell 拼接', () => {
     new PluginManager(npmPluginDir).installFromNpm('npm-plugin')
     const [cmd, args] = childProcessMock.execFileSync.mock.calls[0]! as [string, string[]]

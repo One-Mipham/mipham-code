@@ -36,10 +36,17 @@ export const sendMessageTool: ToolDefinition = {
     // P1-1: Truncate long summaries instead of rejecting (max 200 chars)
     const truncatedSummary = summary.length > 200 ? summary.slice(0, 197) + '...' : summary
 
+    // Prefer the agent's own name when it has one (a sub-agent gets it from
+    // `SubAgent.runExecution`): `sessionId` is the literal 'sub-agent' for every
+    // sub-agent, so keying off it alone gave the parent an opaque sender — and one
+    // minted per message, so two messages from the same agent could not be grouped
+    // or replied to. Callers with no identity (the main session) keep the previous
+    // shape byte-for-byte.
     const from =
-      ctx.sessionId === 'sub-agent'
+      ctx.agentName ||
+      (ctx.sessionId === 'sub-agent'
         ? `sub-agent-${Date.now().toString(36)}`
-        : ctx.sessionId || 'main'
+        : ctx.sessionId || 'main')
 
     const router = getMessageRouter()
     const result = await router.route(from, to, truncatedSummary, message)

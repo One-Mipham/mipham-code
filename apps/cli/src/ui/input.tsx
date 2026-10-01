@@ -356,7 +356,16 @@ export function InputBar({
     if (!value.startsWith('/')) return []
     const filter = value.slice(1).toLowerCase()
     if (!filter) return allCommands.slice(0, 12) // show first 12 when just "/"
-    return allCommands.filter((c) => c.name.toLowerCase().includes(filter)).slice(0, 8)
+    // Match name OR description — the same rule the CommandPicker uses. A name-only
+    // filter hid commands a user was plainly looking for ("fork" should surface a
+    // command described as "fork the conversation"), so the two slash surfaces now
+    // agree on one semantic.
+    return allCommands
+      .filter(
+        (c) =>
+          c.name.toLowerCase().includes(filter) || c.description.toLowerCase().includes(filter),
+      )
+      .slice(0, 8)
   }, [value, allCommands])
 
   // ── @mention hints (cross-session recipients) ──

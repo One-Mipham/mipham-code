@@ -484,6 +484,13 @@ export class SubAgent {
       // synchronous (see `resolveRunInBackground`). Set on the shared literal so it
       // covers the synchronous *and* background runs — both go through here.
       isSubAgent: true,
+      // A name a peer can hold onto. `sessionId` is the literal 'sub-agent' for
+      // every sub-agent, so `SendMessage` had nothing stable to put on the
+      // envelope and minted `sub-agent-<ms>` afresh per message — two messages
+      // from one agent arrived under two senders. Same derivation as the footer
+      // (`ui/app.tsx`) and the experience logs below: the definition's name, else
+      // the type.
+      agentName: agentDef?.name || agentType,
     }
 
     try {
@@ -714,9 +721,16 @@ export class SubAgent {
 
     const result = chunks.join('')
     if (hitMaxTurns) {
+      // Only advertise the SendMessage route where a route exists. A background
+      // agent has an address (`bg-…`, minted by the registry and handed to the
+      // executor) and drains it every turn, so a peer can genuinely continue it.
+      // The synchronous path is called without one, and by the time this notice
+      // is built the run is over — there is no loop left to drain anything, so
+      // "Use SendMessage to continue this sub-agent" there points at nothing.
+      const canContinue = agentId ? ' Use SendMessage to continue this sub-agent.' : ''
       return (
         `[partial result — sub-agent reached its ${MAX_TOOL_TURNS}-turn limit; ` +
-        'task may be incomplete. Use SendMessage to continue this sub-agent.]\n\n' +
+        `task may be incomplete.${canContinue}]\n\n` +
         result
       )
     }

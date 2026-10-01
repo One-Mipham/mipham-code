@@ -704,6 +704,93 @@ describe('AnthropicProvider', () => {
     }
   })
 
+  // ═══════════════════════════════════════════
+  // chat — refusal (stop_reason: 'refusal')
+  //
+  // 拒答是**成功的**响应（HTTP 200），不是错误：它走的是同一条 `message_delta` →
+  // `message_stop` 的路，`end_turn` 与它在字节流上同形。而它可以**一个字都不给**
+  // （空 content 数组），所以没有这个标记，那一轮在下游就是一块空白屏。
+  // ═══════════════════════════════════════════
+
+  it('test_a_refusal_stop_reason_marks_the_stop_and_carries_the_reason', async () => {
+    // 会让这条失败的改动：message_delta 分支不读 stop_reason，或 message_stop
+    // 仍无条件发不带 refusal 的 stop。**注意这里没有任何 content_block_delta** ——
+    // 正是「拒答可能什么都不返回」这个形状。
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        makeSSEResponse([
+          'data: {"type":"message_delta","delta":{"stop_reason":"refusal","stop_details":{"category":"cyber","explanation":"blocked under the usage policy."}},"usage":{"output_tokens":0}}',
+          'data: {"type":"message_stop"}',
+        ]),
+      )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new AnthropicProvider(makeConfig())
+    const chunks = await collectChunks(
+      provider.chat({ model: 'claude-sonnet-4-6', messages: [{ role: 'user', content: 'hi' }] }),
+    )
+
+    // 屏幕上不会有任何正文 —— 这就是「空白屏」本身
+    expect(chunks.filter((c) => c.type === 'text')).toHaveLength(0)
+
+    const stop = chunks.find((c) => c.type === 'stop')
+    expect(stop?.refusal).toEqual({
+      category: 'cyber',
+      explanation: 'blocked under the usage policy.',
+    })
+    // 拒答**不是**截断：标成 truncated 等于对用户说一句假话。
+    expect('truncated' in (stop ?? {})).toBe(false)
+  })
+
+  it('test_a_refusal_without_stop_details_still_raises_the_flag', async () => {
+    // 落点不许吊在 `stop_details` 上：它是可选字段。它缺席时下游仍须知道
+    // 「这轮被拒了」，否则空白屏的判断又退回起点。
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        makeSSEResponse([
+          'data: {"type":"message_delta","delta":{"stop_reason":"refusal"},"usage":{"output_tokens":0}}',
+          'data: {"type":"message_stop"}',
+        ]),
+      )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new AnthropicProvider(makeConfig())
+    const chunks = await collectChunks(
+      provider.chat({ model: 'claude-sonnet-4-6', messages: [{ role: 'user', content: 'hi' }] }),
+    )
+
+    const stop = chunks.find((c) => c.type === 'stop')
+    expect(stop?.refusal).toBeDefined()
+  })
+
+  it('test_a_normal_stop_reason_does_not_carry_the_refusal_key', async () => {
+    // 反方向：`end_turn` / `tool_use` 不许被当成拒答 —— 恒设会让每一轮正常回复
+    // 都挂一条警告。（`toEqual` 忽略 `undefined` 属性，所以判据用 `in`。）
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        makeSSEResponse([
+          'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hi"}}',
+          'data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":3}}',
+          'data: {"type":"message_stop"}',
+        ]),
+      )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new AnthropicProvider(makeConfig())
+    const chunks = await collectChunks(
+      provider.chat({ model: 'claude-sonnet-4-6', messages: [{ role: 'user', content: 'hi' }] }),
+    )
+
+    const stops = chunks.filter((c) => c.type === 'stop')
+    expect(stops.length).toBeGreaterThan(0)
+    for (const stop of stops) {
+      expect('refusal' in stop).toBe(false)
+    }
+  })
+
   it('test_the_request_sends_the_models_declared_max_output', async () => {
     // 会让这条失败的改动：`max_tokens` 退回常量 4096（声明值无施加点）。
     let capturedBody: Record<string, unknown> = {}
@@ -884,6 +971,24 @@ describe('AnthropicProvider — 出网载荷里不留空块', () => {
       content: 'boom',
       is_error: true,
     })
+  })
+
+  it('非字符串 tool_result content 被序列化成文本，而非透传成 JSON 值（对象/数字）', async () => {
+    const out = await convertVia([
+      {
+        role: 'user',
+        content: [
+          // 工具/MCP/插件违反契约时来的是对象或数字 —— 类型上不该发生。
+          { type: 'tool_result', tool_use_id: 'a', content: { files: 3 } as unknown as string },
+          { type: 'tool_result', tool_use_id: 'b', content: 42 as unknown as string },
+        ],
+      },
+    ])
+
+    const blocks = out[0]!.content as Array<Record<string, unknown>>
+    // 从请求体 JSON 解析回来后仍须是**字符串**，不是对象/数字。
+    expect(blocks[0]!.content).toBe('{"files":3}')
+    expect(blocks[1]!.content).toBe('42')
   })
 
   it('块被滤空的消息整条不下发 —— 空 content 数组同样被 API 拒', async () => {

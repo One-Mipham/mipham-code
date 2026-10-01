@@ -131,9 +131,27 @@ export class PluginManager {
       // of its own to be loaded from here. `execFileSync` (argv array, no
       // shell) keeps the command line independent of packageName, so package
       // name validation is not the only thing standing between us and a shell.
+      //
+      // `--registry`: name validation constrains the *top-level* name only —
+      // every transitive dependency is resolved by npm from whatever registry
+      // the user's config/env points at, so a hijacked `npm_config_registry` (or
+      // an `.npmrc` in scope) gets to serve code that lands on this machine.
+      // Pinning to an explicit HTTPS registry takes the environment out of the
+      // resolver. The value is the npm default already declared in this repo's
+      // registry chain (`src/shared/update.ts`), not a new literal. The flag is
+      // honoured over npm config because command-line flags outrank it.
       execFileSync(
         'npm',
-        ['install', packageName, '--prefix', stagingDir, '--no-save', '--ignore-scripts'],
+        [
+          'install',
+          packageName,
+          '--prefix',
+          stagingDir,
+          '--no-save',
+          '--ignore-scripts',
+          '--registry',
+          'https://registry.npmjs.org',
+        ],
         {
           encoding: 'utf-8',
           stdio: 'pipe',

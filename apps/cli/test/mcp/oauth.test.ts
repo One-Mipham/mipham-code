@@ -3,6 +3,7 @@ import { OAuthClient, credentialBinding } from '../../src/mcp/oauth'
 import { TokenStore } from '../../src/mcp/token-store'
 import type { McpServerConfig } from '../../src/shared/types'
 import { createServer, Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { existsSync, rmSync } from 'node:fs'
@@ -51,6 +52,36 @@ describe('OAuthClient', () => {
     expect(codeVerifier.length).toBeGreaterThanOrEqual(43)
     expect(codeChallenge.length).toBe(43)
     expect(codeVerifier).not.toBe(codeChallenge)
+  })
+
+  // redirect 服务器绑定 `redirectPort || 19876`。端口被占（另一个流程在同一秒
+  // 起步，或那台机器上正好有别的东西在用）时 listen 走 `'error'` 事件；没有监听者
+  // 时 Node 会把它当**未捕获异常**抛出 —— 认证流程不是「失败」，而是**整进程倒下**。
+  // 本用例占住端口，判据是「以 EADDRINUSE 拒绝」，即流程能干净地失败。
+  it('端口被占用时干净地拒绝，而不是让未监听的 error 事件崩掉进程', async () => {
+    const blocker = createServer(() => {})
+    await new Promise<void>((resolve) => blocker.listen(0, '127.0.0.1', () => resolve()))
+    const port = (blocker.address() as AddressInfo).port
+    const client = new OAuthClient(new TokenStore(testDir))
+    const config: McpServerConfig = {
+      name: 'port-clash',
+      command: 'echo',
+      args: [],
+      auth: {
+        type: 'oauth',
+        authorizationUrl: 'http://localhost/authorize',
+        tokenUrl: 'http://localhost/token',
+        clientId: 'test-client-id',
+        redirectPort: port,
+      },
+    }
+    try {
+      await expect(client.executePkceFlow(config)).rejects.toThrow(
+        /EADDRINUSE|address already in use/,
+      )
+    } finally {
+      blocker.close()
+    }
   })
 
   // These integration tests require a real browser for the OAuth redirect.

@@ -1493,3 +1493,73 @@ describe('tool-search hint points at a subcommand that exists', () => {
     }
   })
 })
+
+// ═══════════════════════════════════════════════════════════════
+// /login —— 认得 config.yml 里的 key，不只是环境变量
+// ═══════════════════════════════════════════════════════════════
+//
+// 原先判据是 `!!process.env[envVar]`：一个通过 config.yml（含加密的 `enc:v1:`）
+// 配好、完全可用的 provider，在状态读数里被印成 ⬜（未登录）—— 一次**假阴性**。
+// 判据改成「环境变量 **或** config 里有 key」，且沿用 `/switch` 的 `isApiKeyMissing`
+// 谓词，保证「有行但 key 为空」仍是 ⬜。
+
+describe('/login 认得 config.yml 里的 provider key', () => {
+  const provider = (over: Record<string, unknown> = {}) => ({
+    id: 'deepseek',
+    name: 'DeepSeek',
+    protocol: 'openai',
+    models: [],
+    status: 'active',
+    apiKey: '',
+    ...over,
+  })
+
+  const runLogin = async (providers: unknown[]): Promise<string> => {
+    const ctx = mkCtx()
+    ;(ctx as unknown as { config: unknown }).config = { providers }
+    return (await getCommand('/login')!(ctx, [])).content
+  }
+
+  /** 每个用例自带环境隔离：DEEPSEEK_API_KEY 的现值在跑完原样还原。 */
+  const withEnvUnset = async (fn: () => Promise<void>): Promise<void> => {
+    const prev = process.env.DEEPSEEK_API_KEY
+    delete process.env.DEEPSEEK_API_KEY
+    try {
+      await fn()
+    } finally {
+      if (prev === undefined) delete process.env.DEEPSEEK_API_KEY
+      else process.env.DEEPSEEK_API_KEY = prev
+    }
+  }
+
+  it('config 里的字面 key ⇒ ✅（修复前这一格恒为 ⬜）', async () => {
+    await withEnvUnset(async () => {
+      const content = await runLogin([provider({ apiKey: 'sk-config-literal' })])
+      expect(content).toContain('✅')
+      expect(content).not.toContain('⬜')
+    })
+  })
+
+  it('加密存储（enc:v1:）也算已配置', async () => {
+    await withEnvUnset(async () => {
+      const content = await runLogin([provider({ apiKey: 'enc:v1:deadbeef' })])
+      expect(content).toContain('✅')
+    })
+  })
+
+  it('负控：有行但 key 为空 ⇒ 仍是 ⬜', async () => {
+    await withEnvUnset(async () => {
+      const content = await runLogin([provider({ apiKey: '' })])
+      expect(content).toContain('⬜')
+      expect(content).not.toContain('✅')
+    })
+  })
+
+  it('环境变量那条路仍然有效（config key 为空也报 ✅）', async () => {
+    await withEnvUnset(async () => {
+      process.env.DEEPSEEK_API_KEY = 'sk-from-env'
+      const content = await runLogin([provider({ apiKey: '' })])
+      expect(content).toContain('✅')
+    })
+  })
+})

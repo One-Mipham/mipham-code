@@ -4,9 +4,9 @@
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.15
-> **最后更新**: 2026-10-01 — **0.85.13 发布：把前两批（2.94.13 / 2.94.14）送出去，另含补上的 2.94.11 入档标记（本版 **9 笔** = 1 feat + 2 fix + 1 chore + 5 docs，逐笔按 commit type 数出 —— 首版写成「5 笔」，那是一处**没有命令产出过的读数**，此笔订正）** —— 前两批落在工作树上时都标着「本笔未发布」，这一版把它们发出。**发版判据先问「这批里有没有一项用户拿得到」**：有，且是**行为变更**那一类，故不攒 —— ① `d3ff59d4` 的 `auto` 档裁决预算 2s → **30s**（实测 24 条真实 `ask` 级调用 × 两档模型，每次请求的 model 从线上**回读**：主动模型 median 7.6s / max 120.0s ⇒ 旧值会弃掉 **23/24**；闸门 fail-closed ⇒「太紧」不是慢，是**间歇性拒掉本该放行的工作**）+ 两个**只认用户级**的新键 `permissions.classifierModel` / `classifierTimeoutMs`；② `00f89fb2` 把**递归 world-write `chmod` 的无界目标**挪进确定性规则（新拒因 `world-writable-chmod` **不进 `CLASSIFIABLE`** ⇒ 判在静态侧）；③ `56dba335` 把 `axios` 加固到 1.20.0 —— `pnpm why axios --prod` 复核确在**生产树**（`@miphamai/cli > @larksuiteoapi/node-sdk > axios`），dev-only 的加固对使用者零保护。测试 3,879（311 文件；本机 3,877 + 2 skipped）。
-> **前一条（2.94.14）**: 2026-10-01 — **递归 world-write `chmod` 的裁决从分类器挪进确定性规则（本笔未发布）** —— 上一批把分类器在真实 `ask` 级调用上的表现量了出来；这一批处理它量到的**最脆一格**：**递归 `chmod` 且授予 world-write 给一个命令自己没有界定的目标**（主动模型 1/5 放行、fast 档 4/5，整组采样里摆动最大；实测 2026-09-30）。判据**结构性、文本可判**，故不该交给会随刻摇摆的模型：**授权**在 mode token（读的是运算符而非「出现过 w」——`o-w` / `go-w` 不算授予），**界定**在目标（`/tmp/shared` / `$DIR` / `~/x` / `"$(pwd)"` / `../x` 越出命令声明的界，`./dist` 界定它）。新 `src/security/world-writable-chmod.ts` 过 `flattenCommand`（与 deny 规则同一套拼写归一，看得穿 `sudo` / `&&` / `;` / `bash -c`），新拒因 `world-writable-chmod` **不进 `CLASSIFIABLE`** ⇒ 判在静态侧、fail-closed，分类器一次都不被咨询（与 `dangerous-rm` 同形）。`chmod -R 777 ./dist` 有意**留在分类器手里** —— 有界的相对目标是常规操作，扩到这里等于为没量到的收益拒掉日常。**如实记**：这道闸在静态层从前不存在 —— `bash` 自己的 `BLOCKED_PATTERNS` 只抓**绝对**目标（实测 `$DIR` / `~` / `$(pwd)` / `./dist` 全数放行），`MANAGED_DANGEROUS_RE` 只**告警**且坐在权限闸**之后**。范围之外多给一件**操作者逃生口** `MIPHAM_DISABLE_CHMOD_PROMPT=1`（与 `MIPHAM_DISABLE_DANGEROUS_RM_PROMPT` 同形，调用时读环境）。测试 3,855 → **3,879**（311 文件；本机 3,877 passed + 2 skipped）。
+> **版本**: 2.94.16
+> **最后更新**: 2026-10-01 — **十六项一次全落：14 项改码 + 2 项经复核不动（本笔未发布）** —— **最重的一格是我方自发现**：`chatWithFallback` 把一次可重试失败**原地重发整轮**，而失败前已 `yield` 的 `tool_use` **收不回来** ⇒ 重试那轮与失败那轮的调用**叠在一起**（Anthropic 的 tool_use id 逐次生成，下游无从去重）⇒ **带副作用的工具跑两遍**。修法不是「别重试」，而是把「上一轮作废」**说给消费者听**：`StreamChunk.restart` 只在重试路径置位，`process` 与 `continueWithTools` **两个**累积点见到它就丢掉上一轮 —— 只接一处正是「两条渲染路径只接一条」的老毛病。同批把 `continueWithTools` 的两处模型调用**改走 `chatWithFallback`**（从前只有首个调用享受重试 + 跨 provider 回退，工具续轮只有传输层 3 次重试）。**脱敏三处**：`Authorization: Bearer <token>` 与裸 `Bearer`/`Basic` 形状**一字不遮**（既有模式只认键名与值形状）⇒ 两条 shape 规则；**零宽字符把键名劈成两半**（`"apiKey"` 人读作 `apiKey`、正则读作空）⇒ 匹配前剥格式字符，ZWJ/ZWNJ **有意保留**（emoji 与多种文字里承重）；`maskOutput` 的 `replace` **只擦第一段**（紧凑 JSON 无空格 ⇒ 第一对的匹配**包含**其后所有对）—— 而 `/config` 输出的正是 `JSON.stringify(config)` ⇒ 改**显式扫描**、从被擦的值之后续扫（**如实记**：这是我上轮把「毁掉尾巴」改成「保住形状」时自己引入的泄漏）。**其余**：拒答可见（`stop_reason:'refusal'` 是 **200** 的成功响应、可带空 content ⇒ `StreamChunk.refusal` + 引擎点名 + 中英两键）、回退提示补**上下文窗口下调**、出网边界 `String()` 强制、子代理交回的发送者从 `sub-agent-<ms>` 换成**它自己的名字**（`ToolContext.agentName`；时间戳逐条重算 ⇒ 同一代理两条消息从前归不了并）、**同步子代理不再被承诺一条送不到的回信通道**、`/login` 认 `config.yml` 的键、插件安装**钉 registry**、`/` 补全与命令选择器**统一口径**、`/fork` 的 worktree 改走 argv、MCP OAuth 补 `'error'` 监听。**复核不动**：⑭ worktree 移除不停后台进程 —— 实测 `git worktree remove` 对 cwd 被 `lsof` 占用的目录**退出码 0**；⑨ 的「同档回退」半 —— `ModelInfo` **无档位概念**。测试 3,879 → **3,922**（315 文件；本机 3,920 + 2 skipped）。
+> **前一条（2.94.15）**: 2026-10-01 — **0.85.13 发布：把前两批（2.94.13 / 2.94.14）送出去，另含补上的 2.94.11 入档标记（本版 **9 笔** = 1 feat + 2 fix + 1 chore + 5 docs，逐笔按 commit type 数出 —— 首版写成「5 笔」，那是一处**没有命令产出过的读数**，此笔订正）** —— 前两批落在工作树上时都标着「本笔未发布」，这一版把它们发出。**发版判据先问「这批里有没有一项用户拿得到」**：有，且是**行为变更**那一类，故不攒 —— ① `d3ff59d4` 的 `auto` 档裁决预算 2s → **30s**（实测 24 条真实 `ask` 级调用 × 两档模型，每次请求的 model 从线上**回读**：主动模型 median 7.6s / max 120.0s ⇒ 旧值会弃掉 **23/24**；闸门 fail-closed ⇒「太紧」不是慢，是**间歇性拒掉本该放行的工作**）+ 两个**只认用户级**的新键 `permissions.classifierModel` / `classifierTimeoutMs`；② `00f89fb2` 把**递归 world-write `chmod` 的无界目标**挪进确定性规则（新拒因 `world-writable-chmod` **不进 `CLASSIFIABLE`** ⇒ 判在静态侧）；③ `56dba335` 把 `axios` 加固到 1.20.0 —— `pnpm why axios --prod` 复核确在**生产树**（`@miphamai/cli > @larksuiteoapi/node-sdk > axios`），dev-only 的加固对使用者零保护。测试 3,879（311 文件；本机 3,877 + 2 skipped）。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -45,7 +45,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：3,879 测试（本机 3,877 passed + 2 skipped，311 文件，0 失败）
+测试：3,922 测试（本机 3,920 passed + 2 skipped，315 文件，0 失败）
 
 ---
 
@@ -82,7 +82,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 311 个测试文件，3879 个测试
+│   │   ├── test/               # 315 个测试文件，3922 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -108,7 +108,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（3879 个测试）
+pnpm test         # vitest run（3922 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -296,27 +296,27 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 90      | 1531     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
-| tools           | 26      | 419      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
+| core            | 90      | 1551     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
+| tools           | 27      | 423      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 37      | 252      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
-| ui              | 27      | 295      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
-| agent           | 13      | 132      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
+| ui              | 29      | 304      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
+| agent           | 14      | 135      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
 | security        | 12      | 122      | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
-| providers       | 9       | 148      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
-| mcp             | 11      | 113      | client / transport / oauth / token-store / registry / instructions（含 2 skipped）                                                                                          |
+| providers       | 9       | 153      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
+| mcp             | 11      | 114      | client / transport / oauth / token-store / registry / instructions（含 2 skipped）                                                                                          |
 | workflow        | 8       | 61       | runtime / loop / parallel / sandbox / journal / verify                                                                                                                      |
 | vajra           | 6       | 53       | context / events / service / compose / leaf（自建内核）                                                                                                                     |
 | shared          | 11      | 130      | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                              |
 | commands        | 9       | 95       | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers / provider-model-flags                                                                  |
 | skills          | 5       | 35       | sanitizer / marketplace / fork-executor / skill-assets                                                                                                                      |
 | config          | 10      | 125      | credential-crypto / loader-encryption / defaults / settings-json / preferences                                                                                              |
-| plugin          | 4       | 57       | claude-plugin / plugin-manager                                                                                                                                              |
+| plugin          | 4       | 58       | claude-plugin / plugin-manager                                                                                                                                              |
 | artifacts       | 1       | 6        | manifest                                                                                                                                                                    |
 | agent-view      | 4       | 37       | agent-view-manager / dashboard-keys / session-view                                                                                                                          |
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integrity       | 18      | 130      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **311** | **3879** | **0 失败** ✅（本机 3,877 + 2 skipped，311 文件；CI `gh run 36785599160` @ `8aea29ad` 9/9，Test 自报 3,869 passed + 10 skipped = 3,879，310 + 1 skipped 文件）              |
+| **合计**        | **315** | **3922** | **0 失败** ✅（本机 3,920 + 2 skipped，315 文件；CI 读数待本笔推送后回填）                                                                                                  |
 
 > **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 179 测试，自带
 > `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。

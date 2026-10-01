@@ -5117,7 +5117,13 @@ const loginCmd: CommandHandler = (ctx) => {
 
   for (const p of activeProviders) {
     const envVar = providerEnvMap[p.id] ?? `${p.id.toUpperCase()}_API_KEY`
-    const isSet = typeof process !== 'undefined' && !!process.env[envVar]
+    // An env var is only one of the two ways a provider gets a key: `ctx.config`
+    // already carries the merged (and, for `enc:v1:`, decrypted) `apiKey` from
+    // config.yml. An env-only check reports a fully configured provider as ⬜.
+    // Reuse `isApiKeyMissing` — the same predicate `/switch` uses — so the two
+    // readouts agree on what "has a key" means (and an empty row stays ⬜).
+    const configSet = !isApiKeyMissing(p.apiKey)
+    const isSet = (typeof process !== 'undefined' && !!process.env[envVar]) || configSet
     const icon = isSet ? '✅' : '⬜'
     lines.push(`  ${icon} ${p.id.padEnd(14)} $${envVar}${isSet ? ' (set)' : ''}`)
   }
@@ -5439,7 +5445,7 @@ const forkCmd: CommandHandler = async (ctx, args) => {
     }
   }
 
-  const { execSync } = await import('node:child_process')
+  const { execSync, execFileSync } = await import('node:child_process')
   const { join } = await import('node:path')
 
   try {
@@ -5463,15 +5469,21 @@ const forkCmd: CommandHandler = async (ctx, args) => {
   const wtPath = join(worktreeRoot(process.cwd()), name)
 
   try {
-    execSync(`git worktree add -b ${branch} ${wtPath} HEAD`, { stdio: 'ignore', timeout: 30_000 })
+    // argv array, no shell — `wtPath` is derived from the current directory and can
+    // contain a space or a metacharacter, which a shell string would split or misfire on.
+    // Same reason the add/remove/branch trio all go through execFileSync here.
+    execFileSync('git', ['worktree', 'add', '-b', branch, wtPath, 'HEAD'], {
+      stdio: 'ignore',
+      timeout: 30_000,
+    })
   } catch (err) {
     try {
-      execSync(`git worktree remove --force ${wtPath}`, { stdio: 'ignore' })
+      execFileSync('git', ['worktree', 'remove', '--force', wtPath], { stdio: 'ignore' })
     } catch {
       /* ok */
     }
     try {
-      execSync(`git branch -D ${branch}`, { stdio: 'ignore' })
+      execFileSync('git', ['branch', '-D', branch], { stdio: 'ignore' })
     } catch {
       /* ok */
     }
