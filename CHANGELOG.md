@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.85.14] — 2026-10-02
+
+### Fixed
+
+- **重试会重放整轮，带副作用的工具因此被执行两次** —— `chatWithFallback` 遇到可重试失败时原地重发
+  整个回合，而失败前已经流出的 `tool_use` 分块收不回来；两轮的调用于是叠在一起（工具调用 id 由
+  服务端逐次生成，下游无从去重），`rm` / 写文件 / POST 一类操作会跑两遍。修法不是取消重试，而是让
+  「上一轮作废」可被消费：新增 `StreamChunk.restart`，仅在重试路径置位，`process` 与
+  `continueWithTools` **两个**累积点见到它就丢弃上一轮 —— 只接一处会漏掉另一条渲染路径。
+- **工具续轮不再绕过重试与回退** —— `continueWithTools` 的两处模型调用改走 `chatWithFallback`。
+  此前一个用户回合里只有首个调用享受「同 provider 重试一次 + 跨 provider 回退」，工具续轮只有传输层
+  的三次重试。
+- **模型拒答现在是可见的** —— `stop_reason: 'refusal'` 是 HTTP 200 的成功响应，且可以带空内容，
+  从前表现为「模型什么都没说」。现在经 `StreamChunk.refusal` 上报、由引擎点名，并配中英两键提示。
+- **跨 provider 回退的提示补上上下文窗口下调** —— 此前只报 provider / model，窗口变化不报。
+- **出网边界强制 `String()`** —— 工具返回非字符串时不再原样下发。
+- **子代理交回/回复的消息改用代理自己的名字** —— 发送者此前是合成的 `sub-agent-<时间戳>`，且时间戳
+  逐条重算，同一个代理连发两条会显示成两个不同的发送者、无法归并续接。
+- **同步（前台）子代理不再被承诺一条送不到的回信通道。**
+- **`/login` 认得在 `config.yml` 里配好的 provider**，不再只看环境变量。
+- **插件安装钉住 registry。**
+- **`/` 补全与命令选择器统一过滤口径**（此前一处匹配名称+描述、一处只匹配名称）。
+- **`/fork` 创建 worktree 改走 argv**，不再走 shell 字符串拼接。
+- **MCP OAuth 补上 `'error'` 事件监听**（固定端口被占用时不再变成未处理的 `'error'`）。
+
+### Security
+
+- **`Authorization: Bearer <token>` 与裸 `Bearer` / `Basic` 形状现在会被遮蔽** —— 既有的遮蔽只认
+  键名（秘密词）与已知值形状（`ghp_` / `glpat-` / `sk-` / JWT / URL），任意不透明 token 会原样输出。
+- **零宽字符不再能规避键名遮蔽** —— 在 `"apiKey"` 里插入零宽空格，人读作 `apiKey` 而正则读到空。
+  现在匹配前剥离格式字符；ZWJ / ZWNJ 有意保留（emoji 与多种文字里承重）。
+- **`maskOutput` 不再破坏 JSON** —— 旧实现的替换只覆盖第一段匹配，紧凑 JSON（无空格）下第一对
+  的匹配会吞掉其后所有对，而 `/config` 输出的正是 `JSON.stringify(config)`。改为显式扫描、从被
+  遮蔽的值之后继续。
+
 ## [0.85.13] — 2026-10-01
 
 ### Changed

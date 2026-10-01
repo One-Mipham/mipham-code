@@ -3,6 +3,48 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.14 — 2026-10-02
+
+- Version sync with Mipham Code CLI 0.85.14
+- Fixed: **a retry could replay a whole turn, running side-effecting tools twice.** When
+  `chatWithFallback` hit a retryable failure it re-sent the entire turn in place, but `tool_use`
+  blocks already yielded could not be taken back, so the two turns' calls stacked up (tool-call ids
+  are generated per call server-side, so nothing downstream could dedupe them) — `rm`, file writes
+  and POSTs ran twice. The fix is not to stop retrying but to make "the previous turn is void"
+  consumable: a new `StreamChunk.restart`, set only on the retry path, which both accumulation
+  points (`process` and `continueWithTools`) honour by dropping the previous turn — wiring only one
+  of them is exactly how the other rendering path stays broken.
+- Fixed: tool continuation rounds no longer bypass retry/fallback — `continueWithTools`' two model
+  calls now go through `chatWithFallback`. Previously only the first call in a user turn enjoyed
+  "retry once within a provider + fall back across providers"; continuation rounds had only the
+  transport's three retries.
+- Fixed: a model refusal is now visible. `stop_reason: 'refusal'` is a 200 response that may carry
+  empty content, which used to look like the model saying nothing. It is now reported via
+  `StreamChunk.refusal`, named by the engine, and paired with a bilingual notice.
+- Fixed: the cross-provider fallback notice now mentions the context-window downgrade, not just the
+  provider/model.
+- Fixed: outbound tool results are coerced with `String()`.
+- Fixed: messages handed back by a sub-agent now use the agent's own name (the sender used to be a
+  synthesized `sub-agent-<timestamp>`, recomputed per message, so one agent's two messages appeared
+  as two different senders).
+- Fixed: a synchronous (foreground) sub-agent is no longer promised a reply channel it cannot receive.
+- Fixed: `/login` recognises providers configured in `config.yml`, not just environment variables.
+- Fixed: plugin installation pins the registry.
+- Fixed: `/` completion and the command picker use one filter rule (one matched name+description,
+  the other only name).
+- Fixed: `/fork` creates its worktree via argv instead of a shell string.
+- Fixed: MCP OAuth now listens for the `'error'` event.
+- Security: `Authorization: Bearer <token>` and bare `Bearer` / `Basic` shapes are now masked — the
+  previous rules only recognised key names and known value shapes, so an arbitrary opaque token
+  passed through verbatim.
+- Security: zero-width characters can no longer bypass key-name masking (`"apiKey"` with a
+  zero-width space reads as `apiKey` to a human and as nothing to a regex); format characters are
+  stripped before matching, with ZWJ/ZWNJ deliberately preserved.
+- Security: `maskOutput` no longer corrupts JSON — the old replacement covered only the first match,
+  and in compact JSON (no spaces) that first match swallowed every pair after it; `/config` prints
+  `JSON.stringify(config)`, which is exactly compact JSON. It now scans explicitly and resumes after
+  the masked value.
+
 ## 0.85.13 — 2026-10-01
 
 - Version sync with Mipham Code CLI 0.85.13
