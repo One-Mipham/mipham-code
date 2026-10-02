@@ -1,6 +1,6 @@
 # Mipham Code v0.85.14
 
-**Multi-model open-core intelligent coding terminal** — 12 AI providers, 138 commands, 31 tools, 28 skills + marketplace, self-update. AI-assisted code generation, security auditing, MCP protocol, and extensible skills — in a single CLI.
+**Multi-model open-core intelligent coding terminal** — 12 AI providers, 137 commands, 31 tools, 28 skills + marketplace, self-update. AI-assisted code generation, security auditing, MCP protocol, and extensible skills — in a single CLI.
 
 Built by [One Mipham Corporation](https://onemipham.com) (北京华安麦逄科技有限公司) | Brand: MiphamAI
 
@@ -16,7 +16,7 @@ Requirements: **Bun 1.2+** (recommended) or **Node.js 22+**
 ## Features
 
 - **12 AI Providers** — Anthropic Claude · OpenAI GPT · DeepSeek · Kimi (Moonshot) · Google Gemini · Doubao 豆包 · Tencent Hunyuan 混元 · Qwen 通义千问 · MiniMax（国内 / 国际）· Ollama（本地）· MiphamAI
-- **138 Slash Commands** — Interactive command picker (↑↓ Enter Esc), intuitive command interface, zero re-learning
+- **137 Slash Commands** — Interactive command picker (↑↓ Enter Esc), intuitive command interface, zero re-learning
 - **31 Built-in Tools** — File ops, shell execution, agent dispatch, MCP integration, web search
 - **28 Skills + Marketplace** — 22 standard + 6 Mipham-exclusive skills. `/browse-skills` `/install-skill` community marketplace
 - **Self-Update** — `mipham update` / `/upgrade` — one command to check, backup config, upgrade, restore. API keys preserved
@@ -59,7 +59,7 @@ mipham update
 | Category | Commands                                                                                                                                     |
 | -------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | Session  | `/help` `/version` `/clear` `/exit` `/quit` `/compact` `/context` `/status` `/cost` `/rename` `/goal` `/recap` `/export` `/doctor` `/resume` |
-| Model    | `/pick` `/model` `/models` `/provider` `/providers` `/switch` `/fast` `/effort` `/theme` `/upgrade`                                          |
+| Model    | `/pick` `/model` `/models` `/provider` `/providers` `/switch` `/effort` `/theme` `/upgrade`                                                  |
 | Skills   | `/skills` `/browse-skills` `/install-skill` `/remove-skill` `/reload-skills`                                                                 |
 | Tools    | `/tools` `/commands` `/mcp`                                                                                                                  |
 | Workflow | `/plan` `/no-plan` `/review` `/diff` `/todos` `/tasks` `/workflows` `/loop` `/agents`                                                        |

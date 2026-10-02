@@ -39,6 +39,12 @@ export function createDingtalkApi(
       const res = await fetchImpl(GATEWAY_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        // A gateway that accepts the connection and then goes quiet would leave
+        // this promise pending forever, so the reconnect that follows a failed
+        // register would never be scheduled — the channel would go silent with no
+        // error to show for it. The ticket expires in 90s, so 10s is already
+        // generous for a request whose only job is to hand one back.
+        signal: AbortSignal.timeout(10_000),
         body: JSON.stringify({
           clientId: config.clientId,
           clientSecret: config.clientSecret,

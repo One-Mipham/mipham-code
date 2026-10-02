@@ -337,7 +337,6 @@ export function App({
   } | null>(null)
   const [apiKeyInput, setApiKeyInput] = useState('')
   const [_sessionTitle, setSessionTitle] = useState('')
-  const [_fastMode, setFastMode] = useState(false)
   const [_effort, setEffort] = useState('high')
   const [focusMode, setFocusMode] = useState(false)
   const [_ultracodeMode, setUltracodeMode] = useState(false)
@@ -487,7 +486,6 @@ export function App({
       version: version || '0.0.0',
       sessionId: sessionId || '',
       setSessionTitle: (title: string) => setSessionTitle(title),
-      setFastMode: (on: boolean) => setFastMode(on),
       setEffort: (level: string) => {
         setEffort(level)
         setPreference('lastCodeReviewEffort', level)

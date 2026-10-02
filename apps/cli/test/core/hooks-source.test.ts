@@ -137,3 +137,37 @@ describe('removal is scoped to what asked for it', () => {
     expect(engine.getHookHealth().map((h) => h.key)).not.toContain('plugin-a:SessionStart')
   })
 })
+
+describe('a hook that cannot run counts as a failure', () => {
+  it('auto-disables a command hook whose script file is missing', async () => {
+    const engine = new HookEngine()
+    // The fixtures above fail by *throwing*. Real command hooks do not: the
+    // executor reports a missing binary, a spawn failure or a rejected option on
+    // the result and still returns `allowed: true`. Auto-disable was wired only
+    // to the throw, so it could never fire for the hooks that actually break.
+    engine.register({
+      event: 'PreToolUse',
+      toolName: 'Bash',
+      handler: (ctx) => executeHook({ type: 'command', command: 'mipham-no-such-binary-xyz' }, ctx),
+    })
+
+    for (let i = 0; i < 6; i++) await engine.executePreToolUse('Bash', {}, 's')
+
+    expect(engine.getHookHealth().some((h) => h.health.disabled)).toBe(true)
+  })
+
+  it('does not count a hook that ran and chose to allow', async () => {
+    // Positive control: a healthy hook must never accumulate failures, or the
+    // assertion above would pass on a counter that increments for everything.
+    const engine = new HookEngine()
+    engine.register({
+      event: 'PreToolUse',
+      toolName: 'Bash',
+      handler: async () => ({ allowed: true }),
+    })
+
+    for (let i = 0; i < 6; i++) await engine.executePreToolUse('Bash', {}, 's')
+
+    expect(engine.getHookHealth().some((h) => h.health.disabled)).toBe(false)
+  })
+})

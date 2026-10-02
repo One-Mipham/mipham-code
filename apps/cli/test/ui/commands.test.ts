@@ -67,7 +67,6 @@ const mkCtx = (messages: unknown[] = []) =>
     modelId: 'test-model',
     version: '0.0.0',
     setSessionTitle: vi.fn(),
-    setFastMode: vi.fn(),
     setEffort: vi.fn(),
     setFocusMode: vi.fn(),
     setGoal: vi.fn(),

@@ -513,7 +513,7 @@ Start a conversation and verify:
 | ------------------------- | -------------------------------------- | ------------------------------------------------ |
 | "Provider not registered" | Missing or invalid API key             | `env \| grep API_KEY`; check key format          |
 | "Model not found"         | Model ID mismatch or disabled provider | `/models` to list available; `/switch` to change |
-| Slow responses            | Large model, network, or context full  | `/fast on` or switch to Flash model; `/compact`  |
+| Slow responses            | Large model, network, or context full  | Switch to Flash model; `/compact`                |
 | Context full              | Too many messages in history           | `/compact` to compress; `/clear` to reset        |
 | Permission denied         | Tool blocked by permission mode        | `/permissions` to check; adjust mode             |
 | "Workspace not trusted"   | New directory, not yet trusted         | Accept startup prompt or run `/trust`            |

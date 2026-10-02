@@ -128,7 +128,6 @@ export interface CommandContext {
   sessionId: string
   // Callbacks for commands that mutate App state
   setSessionTitle: (title: string) => void
-  setFastMode: (on: boolean) => void
   setEffort: (level: string) => void
   setFocusMode: (on: boolean) => void
   setGoal: (text: string) => void
@@ -225,7 +224,6 @@ const helpCmd: CommandHandler = (ctx) => {
       /providers     List configured providers
       /switch <p> <m> Switch provider and model
       /config        View configuration
-      /fast [on|off] Toggle fast mode
       /effort <lvl>  Set reasoning effort (low|medium|high|xhigh|max)
       /theme [dark|light|auto] Set terminal theme
       /ollama-refresh Refresh Ollama model list at runtime
@@ -2953,22 +2951,6 @@ const diffCmd: CommandHandler = async (_ctx) => {
 // ═══════════════════════════════════════════════════════════════
 // Phase 1 — Model Control Commands
 // ═══════════════════════════════════════════════════════════════
-
-const fastCmd: CommandHandler = (ctx, args) => {
-  const t = resolveT(ctx)
-  const arg = args[0]?.toLowerCase()
-  if (arg === 'on') {
-    ctx.setFastMode(true)
-    return { content: t('commands.fast.on') }
-  } else if (arg === 'off') {
-    ctx.setFastMode(false)
-    return { content: t('commands.fast.off') }
-  } else if (arg) {
-    return { content: t('commands.fast.usage') }
-  } else {
-    return { content: t('commands.fast.unknown') }
-  }
-}
 
 const effortCmd: CommandHandler = (ctx, args) => {
   const t = resolveT(ctx)
@@ -5739,7 +5721,6 @@ const commandsListCmd: CommandHandler = () => {
     '/providers': 'Model & Provider',
     '/switch': 'Model & Provider',
     '/config': 'Model & Provider',
-    '/fast': 'Model & Provider',
     '/effort': 'Model & Provider',
     '/theme': 'Model & Provider',
     '/upgrade': 'Model & Provider',
@@ -5901,7 +5882,6 @@ registry.set('/ollama-refresh', ollamaRefreshCmd)
 registry.set('/provider', providerCmd)
 registry.set('/providers', providersCmd)
 registry.set('/config', configCmd)
-registry.set('/fast', fastCmd)
 registry.set('/effort', effortCmd)
 registry.set('/switch', switchCmd)
 
@@ -6135,7 +6115,6 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/providers': 'List configured providers',
   '/switch': 'Switch provider and model',
   '/config': 'View configuration',
-  '/fast': 'Toggle fast mode',
   '/effort': 'Set reasoning effort',
   '/theme': 'Set terminal theme',
   '/lang': 'Set display language (en-US, zh-CN)',

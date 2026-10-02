@@ -5,7 +5,7 @@ prompt-exclude:
   - Provider 层（12 家，按字母序）
   - 工具层（31 个工具）
   - Skills 系统（28 个内置技能）
-  - Slash 命令系统（138 个）
+  - Slash 命令系统（137 个）
   - 记忆系统
   - 遥测与崩溃上报（T1 CLI 侧 + T1b 接收端）
   - 核心引擎
@@ -21,9 +21,9 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.19
-> **最后更新**: 2026-10-02 — **`prompt-exclude` 补上守卫：条目名匹配不到标题时不再静默失效**（新 `test/integrity/prompt-exclude-integrity.test.ts`，2 用例）。`stripSections` 按标题**逐字相等**匹配（`excluded.includes(title)`），写错一个字既不抛错也不告警 —— 那一节照旧随**每一次请求**发出，而写排除的人以为省下了；启动告警也帮不上忙（那一节的字数本来就还在总额里，告警**看起来完全正常**）⇒「拼错」与「有意不排除」在屏幕上同形。判据**派生自实现**：`stripSections(body, [entry]) !== body` 当且仅当该条目真的匹配到标题（匹配上就必删那一行标题）—— 同一把尺子量，规则漂移时守卫跟着漂，不会出现「守卫按旧规则绿、实现一个都没删」。**负控在真文件上做**：把本仓 `prompt-exclude` 里的 `技术栈` 改成 `技术栈X` ⇒ 守卫转红；还原后 sha256 逐字相符。**诚实边界**（已写进测试文件）：覆盖面是本次装载的**每一份**指令文件 —— 除本仓那几份外还有父仓/集团层的 `CLAUDE.md`、`MIPHAM.md`，但**那条覆盖只在本地成立**：CI 的检出目录之上没有这些祖先层，门外那份（父仓 `CLAUDE.md`）的错字 CI 抓不到。同笔 `TEST_COUNT` 3,922 → **3,924**（316 文件），由 `sync-counts.ts --test-report` 写入三处落盘副本。CI **9/9**（`gh run 36959206660` @ `5c0b9c9f`；Test 自报 3,914 passed + 10 skipped = 3,924）。
-> **前一条（2.94.18）**: 2026-10-02 — **启动期「指令文件超预算」告警的两处收口**（`instructions.ts` + 本仓 `CLAUDE.md`）。① **告警不再截断到前三**：原实现取 `report.files.slice(0, 3)` 再把其余折成 `+${n} more`，而**折掉的正是读者要打开才能动手的那几份**，且只以计数出现的那份文件**无法与它贡献的字数对账**（外部无从证伪）；改为**逐条点名、从大到小**（`Largest first:`，字数按最宽一项右对齐）。② **本仓 `CLAUDE.md` 用 `prompt-exclude` 瘦身**：13 节移出每次请求的载荷 —— `终极愿景：CRSI` / `技术栈` / `Provider 层（12 家，按字母序）` / `工具层（31 个工具）` / `Skills 系统（28 个内置技能）` / `Slash 命令系统（138 个）` / `记忆系统` / `遥测与崩溃上报（T1 CLI 侧 + T1b 接收端）` / `核心引擎` / `Vajra-Hṛdaya 内核（自建服务内核）` / `Agent 系统` / `MIPHAM.md 人格系统` / `测试目录一览`；并把 `## 测试` 拆出 `### 测试目录一览`（排除）与 `### 测试注意事项`（保留）—— **`stripSections` 只按标题层级截断**，不拆则表后那几段一并被剥。**为什么排除而不是搬走留指针**：`tool-reference-integrity.test.ts` 与 `published-counts.test.ts` 按**内容**读本文件（技能清单、`| **合计** | … |` 行）⇒ 搬走即失去守卫覆盖，而排除后**内容仍在盘上**，守卫照读。**如实记**：本仓 `claude-md-audit.ts` 的启发式在这一版文件上只认出 **2** 节（`技术栈` / `Monorepo 结构`）—— 其余或不含六类 hint 关键词、或段内已有 `.md` 链接被 `DOC_POINTER` 抑制 ⇒ 另 11 节是**按同一原则人工判定**的，不是工具筛出来的。**读数**：装载总额 `57,551 → 36,020`（−21,531、−37%），余量 `−17,551 → 3,980`；本仓 `38,199 → 16,668`（本文件 `31,291 → 9,760`）；`formatInstructionSizeNotice` 返回 `null`。测试 **3,922**（315 文件；本笔改 1 条、总数不变）。
+> **版本**: 2.94.20
+> **最后更新**: 2026-10-02 — **本轮收口：四条独立缺陷 + 撤掉一条空壳命令**。① **`rm` 拒绝规则锚在 `$`** ⇒ 拒与不拒取决于目标是否在行尾：`rm -rf /*` 被拒，而**同一次删除**的 `rm -rf /* foo`、`rm -rf /*; echo hi`、`rm -rf /* > log`、`rm -rf * foo` 全部放行。锚点改为分隔符类 `(?=[\s;&|>]|$)`；同笔去掉把 `pattern.source` 回显进拒绝文案的内部泄漏。**边界**：危害只在 `auto`/`bypassPermissions` 或命中 allow 规则时可达（`default` 档 Bash 本就拒）。② **钩子自动禁用不可达**：执行器对「钩子跑不起来」（缺命令 / 派生失败 / 选项被拒）返回 `{allowed:true, hookError}` **而不抛**，引擎却只在 `catch` 里记失败 ⇒ 真坏掉的钩子被记成成功、报错每轮重新注入、`MAX_CONSECUTIVE_FAILURES` 永不触发。`HookResult` 新增 `hookError`（两份副本同改），引擎据此分流。**判据**：同一文件里两条既有测试对「坏钩子」的定义互相矛盾 —— 生产走的那条无人断言。③ **钉钉 Stream 注册加 10s 超时**：网关接了不回则重连永不排期，频道静默且无错可看。④ **撤除 `/fast`** —— 全仓唯一「有按键、无落点」的命令（处理器只改一个无人读的状态），连同四处广告（帮助文本 / 注册表 / 分类与描述表 / i18n×2 / README / 内置技能）一并撤除；命令总数 138 → **137**（`sync-counts.ts` 同步三处副本 + i18n 两份 + 三份 README/CLAUDE）。测试 3,924 → **3,942**（316 文件）。**未发版**。
+> **前一条（2.94.19）**: 2026-10-02 — **`prompt-exclude` 补上守卫：条目名匹配不到标题时不再静默失效**（新 `test/integrity/prompt-exclude-integrity.test.ts`，2 用例）。`stripSections` 按标题**逐字相等**匹配（`excluded.includes(title)`），写错一个字既不抛错也不告警 —— 那一节照旧随**每一次请求**发出，而写排除的人以为省下了；启动告警也帮不上忙（那一节的字数本来就还在总额里，告警**看起来完全正常**）⇒「拼错」与「有意不排除」在屏幕上同形。判据**派生自实现**：`stripSections(body, [entry]) !== body` 当且仅当该条目真的匹配到标题（匹配上就必删那一行标题）—— 同一把尺子量，规则漂移时守卫跟着漂，不会出现「守卫按旧规则绿、实现一个都没删」。**负控在真文件上做**：把本仓 `prompt-exclude` 里的 `技术栈` 改成 `技术栈X` ⇒ 守卫转红；还原后 sha256 逐字相符。**诚实边界**（已写进测试文件）：覆盖面是本次装载的**每一份**指令文件 —— 除本仓那几份外还有父仓/集团层的 `CLAUDE.md`、`MIPHAM.md`，但**那条覆盖只在本地成立**：CI 的检出目录之上没有这些祖先层，门外那份（父仓 `CLAUDE.md`）的错字 CI 抓不到。同笔 `TEST_COUNT` 3,922 → **3,924**（316 文件），由 `sync-counts.ts --test-report` 写入三处落盘副本。CI **9/9**（`gh run 36959206660` @ `5c0b9c9f`；Test 自报 3,914 passed + 10 skipped = 3,924）。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -62,7 +62,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：3,924 测试（本机 3,922 passed + 2 skipped，316 文件，0 失败）
+测试：3,942 测试（本机 3,940 passed + 2 skipped，316 文件，0 失败）
 
 ---
 
@@ -99,7 +99,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 316 个测试文件，3924 个测试
+│   │   ├── test/               # 316 个测试文件，3942 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -125,7 +125,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（3924 个测试）
+pnpm test         # vitest run（3942 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -195,7 +195,7 @@ pnpm format       # Prettier
 
 **「双轨运行时」已于 T4 删除**：`src/skills/{standard,mipham}/runtime.ts` 自 v0.1.0（`27609bf`）起生产零引用 —— `loader.ts` **从不加载它们**，是又一例「有定义、无施加点」。Skills 的实际生效路径只有 `loader.ts` 一条。
 
-### Slash 命令系统（138 个）
+### Slash 命令系统（137 个）
 
 按分类：Session & Identity / Workflow / Tools & Skills / Model & Provider / Project / Code Quality / History / GitHub / Environment / Account / Agents / Artifact / Other（总数随版本演进，以 `/help` 实际列出为准）。
 
@@ -315,8 +315,8 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 90      | 1551     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
-| tools           | 27      | 423      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
+| core            | 90      | 1553     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
+| tools           | 27      | 439      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 37      | 252      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
 | ui              | 29      | 304      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
 | agent           | 14      | 135      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
@@ -335,7 +335,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integrity       | 19      | 132      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **316** | **3924** | **0 失败** ✅（本机 3,922 + 2 skipped，316 文件；CI `gh run 36959206660` @ `5c0b9c9f` 9/9 —— Test 自报 3,914 passed + 10 skipped = 3,924，315 + 1 skipped 文件）            |
+| **合计**        | **316** | **3942** | **0 失败** ✅（本机 3,940 + 2 skipped，316 文件；CI `gh run 36959206660` @ `5c0b9c9f` 9/9 —— Test 自报 3,914 passed + 10 skipped = 3,924，315 + 1 skipped 文件）            |
 
 ### 测试注意事项
 

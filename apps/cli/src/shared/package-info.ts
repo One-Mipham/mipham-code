@@ -75,7 +75,7 @@ export const COMPANY_SHORT = '华安麦逄科技' as const
  */
 
 /** Slash 命令总数（真源：`getCommandNames().length`，`apps/cli/src/ui/commands.ts`） */
-export const SLASH_COMMAND_COUNT = 138 as const
+export const SLASH_COMMAND_COUNT = 137 as const
 
 /** 内置提供商总数（真源：`DEFAULT_PROVIDERS.length`，`apps/cli/src/shared/constants.ts`） */
 export const PROVIDER_COUNT = 12 as const
@@ -90,4 +90,4 @@ export const TOOL_COUNT = 31 as const
  * —— `test/e2e/full-pipeline.test.ts` 在 Linux 上整文件 skip、在 macOS 上跑 ——
  * 但**总数相同**（两边都把被 skip 的算进去）。
  */
-export const TEST_COUNT = 3924 as const
+export const TEST_COUNT = 3942 as const

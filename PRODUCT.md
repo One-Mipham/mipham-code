@@ -227,7 +227,7 @@ Every tool execution is gated by:
 | `/copy [N]` | Copy last response |
 | `/focus`    | Toggle focus view  |
 
-### 6.3 Model & Provider (9 commands)
+### 6.3 Model & Provider (8 commands)
 
 | Command           | Description           |
 | ----------------- | --------------------- |
@@ -238,7 +238,6 @@ Every tool execution is gated by:
 | `/providers`      | List providers        |
 | `/switch <p> <m>` | Switch provider/model |
 | `/config`         | View config           |
-| `/fast [on\|off]` | Toggle fast mode      |
 | `/effort <lvl>`   | Set reasoning effort  |
 
 ### 6.4 Tools & Skills (5 commands)

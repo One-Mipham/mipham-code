@@ -10,17 +10,23 @@ import { toolKey } from '../seam'
 import { withValidation } from '../validation'
 
 // ── Dangerous command patterns ──
+//
+// The `rm` patterns below end the operand with a separator class `(?=[\s;&|>]|$)`
+// rather than `$`. Anchoring to end-of-string made the refusal depend on the
+// target being the last thing on the line, so `rm -rf /*` was refused while
+// `rm -rf /* > log`, `rm -rf /* foo` and `rm -rf /*; echo x` — the same
+// deletion — were not.
 const BLOCKED_PATTERNS = [
   // Recursive root deletion without preserve-root safeguard
   /\brm\s+-rf\s+\/(\s|$)/,
-  /\brm\s+-rf\s+\/\*\s*$/,
+  /\brm\s+-rf\s+\/\*(?=[\s;&|>]|$)/,
   /\bsudo\s+rm\s+.*\//,
   // rm -rf on home directory or any absolute path (relative dirs like node_modules stay allowed)
   /\brm\s+-(?:rf|fr)\s+~(?:$|\s|\/)/,
   /\brm\s+-(?:rf|fr)\s+\/(?![\s*])/,
   // rm -rf on dangerous cwd globs
-  /\brm\s+-(?:rf|fr)\s+\*\s*$/,
-  /\brm\s+-(?:rf|fr)\s+\.\s*$/,
+  /\brm\s+-(?:rf|fr)\s+\*(?=[\s;&|>]|$)/,
+  /\brm\s+-(?:rf|fr)\s+\.(?=[\s;&|>]|$)/,
   // Filesystem manipulation
   /\bmkfs\./,
   /\bdd\s+if=/,
@@ -153,7 +159,7 @@ export function isBlocked(command: string): string | null {
   // Check dangerous patterns (on original, normalized, and sanitized)
   for (const pattern of BLOCKED_PATTERNS) {
     if (pattern.test(command) || pattern.test(normalized) || pattern.test(sanitized)) {
-      return `Command rejected by security policy. Pattern matched: ${pattern.source.slice(0, 40)}...`
+      return 'Command rejected by security policy.'
     }
   }
 

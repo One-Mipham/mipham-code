@@ -261,12 +261,6 @@
       "no_restore": "没有可恢复的检查点。",
       "confirmed": "✓ 已回退到检查点 \"{label}\"\n已恢复 {count} 条消息。\n\n剩余检查点: {remaining}\n再次使用 /rewind 继续回退，或继续对话。"
     },
-    "fast": {
-      "on": "✓ 快速模式已开启 — 回复将优先速度而非深度。",
-      "off": "✓ 快速模式已关闭 — 标准质量模式。",
-      "usage": "用法: /fast [on|off]\n切换快速模式以获取更快的回复。",
-      "unknown": "用法: /fast [on|off]\n\n快速模式优先速度而非深度。当前可作为配置开关使用。\n\n示例:\n  /fast on   — 启用快速模式\n  /fast off  — 禁用快速模式"
-    },
     "effort": {
       "usage": "用法: /effort <level>\n\n设置推理深度:\n  low      — 快速、简单任务\n  medium   — 质量与速度平衡\n  high     — 深入推理（默认）\n  xhigh    — 编码/Agent 最大深度\n  max      — 绝对上限，非常彻底\n\n当前模型: {model}\n推理深度需要兼容的提供商（Anthropic Opus 4.6+, Sonnet 4.6）。",
       "confirmed": "✓ 推理深度设置为 \"{level}\""

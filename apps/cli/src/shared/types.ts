@@ -354,6 +354,15 @@ export interface HookContext {
 export interface HookResult {
   allowed: boolean
   reason?: string
+  /**
+   * Set when the hook could not *run* (missing command, spawn failure, option
+   * rejected) — as opposed to running and choosing to allow, warn or block.
+   * The engine counts these toward auto-disable, which is why they have to be
+   * distinguishable from a plain `allowed: true`; a `command` hook that exits
+   * non-zero is left out on purpose, since some hooks use that to signal a
+   * policy decision rather than a broken installation.
+   */
+  hookError?: string
   modifiedInput?: Record<string, unknown>
   decision?: 'allow' | 'block'
   permissionDecision?: 'allow' | 'deny' | 'ask' | 'defer'

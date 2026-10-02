@@ -7,6 +7,7 @@ import {
   detectViolations,
   bashToolService,
   resolveWorktreeEscape,
+  isBlocked,
 } from '../../src/tools/exec/bash'
 
 const bashTool = createBashTool()
@@ -114,6 +115,53 @@ describe('bash command substitution (not blocked wholesale)', () => {
     expect(result.success).toBe(false)
     expect(result.error).toContain('rejected by security policy')
   })
+})
+
+// ============================================================
+// The operand ends at a separator, not at end-of-string.
+//
+// `rm -rf /*` was refused only while it was the last thing on the line: append a
+// redirect, a second operand or a `;` and the same deletion went through, because
+// the patterns anchored the operand with `$`.
+// ============================================================
+
+describe('rm operand separator', () => {
+  const blocked = [
+    'rm -rf /*',
+    'rm -rf /* foo',
+    'rm -rf /*; echo hi',
+    'rm -rf /* && echo hi',
+    'rm -rf /* > /tmp/log',
+    'rm -rf /*> /tmp/log',
+    'rm -rf /* 2>/dev/null',
+    'rm -rf * foo',
+    'rm -rf * > /tmp/log',
+    'rm -rf . > /tmp/log',
+  ]
+
+  for (const cmd of blocked) {
+    it(`blocks ${JSON.stringify(cmd)}`, () => {
+      expect(isBlocked(cmd)).not.toBeNull()
+    })
+  }
+
+  // Positive control. Without these, a guard that refused everything would pass
+  // the loop above — and the ordinary deletions below are what the patterns are
+  // written not to catch.
+  const allowed = [
+    'rm -rf node_modules',
+    'rm -rf ./build',
+    'rm -rf build/',
+    'rm -rf *.log',
+    'rm -rf .cache',
+    'rm -rf /*.bak',
+  ]
+
+  for (const cmd of allowed) {
+    it(`allows ${JSON.stringify(cmd)}`, () => {
+      expect(isBlocked(cmd)).toBeNull()
+    })
+  }
 })
 
 // ============================================================

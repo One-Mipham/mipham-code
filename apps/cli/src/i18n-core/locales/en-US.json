@@ -261,12 +261,6 @@
       "no_restore": "No checkpoint to restore.",
       "confirmed": "✓ Rewound to checkpoint \"{label}\"\nRestored {count} messages.\n\nRemaining checkpoints: {remaining}\nUse /rewind again to go back further, or continue chatting."
     },
-    "fast": {
-      "on": "✓ Fast mode ON — responses will prioritize speed over depth.",
-      "off": "✓ Fast mode OFF — standard quality mode.",
-      "usage": "Usage: /fast [on|off]\nToggle fast mode for faster responses.",
-      "unknown": "Usage: /fast [on|off]\n\nFast mode prioritizes speed over depth. Currently available as a configuration toggle.\n\nExample:\n  /fast on   — enable fast mode\n  /fast off  — disable fast mode"
-    },
     "effort": {
       "usage": "Usage: /effort <level>\n\nSet reasoning effort level:\n  low      — Fast, simple tasks\n  medium   — Balanced quality and speed\n  high     — Thorough reasoning (default)\n  xhigh    — Maximum depth for coding/agentic use\n  max      — Absolute ceiling, very thorough\n\nCurrent model: {model}\nEffort levels require compatible providers (Anthropic Opus 4.6+, Sonnet 4.6).",
       "confirmed": "✓ Reasoning effort set to \"{level}\""

@@ -393,6 +393,7 @@ async function executeCommand(
     if (failure) {
       return {
         allowed: true,
+        hookError: failure,
         additionalContext: `Hook error ${failingLabel(cfg.command, source)}: ${failure}`,
       }
     }
@@ -411,6 +412,7 @@ async function executeCommand(
 
     return {
       allowed: true,
+      hookError: message,
       additionalContext: `Hook error ${failingLabel(cfg.command, source)}: ${message}`,
     }
   }

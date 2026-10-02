@@ -365,8 +365,16 @@ export class HookEngine {
       try {
         const hookResult = await hook.handler(ctx)
 
-        // Record success
-        this.recordSuccess(key)
+        // Record health. A hook that could not run is a failure even though it
+        // returns `allowed: true` and does not throw — the executor reports a
+        // missing command, a spawn failure or a rejected option on the result
+        // rather than by throwing, so reading only the `catch` left those
+        // counted as successes and the auto-disable unreachable.
+        if (hookResult.hookError) {
+          this.recordFailure(key)
+        } else {
+          this.recordSuccess(key)
+        }
 
         // Block on first deny — stops further hook execution
         if (!hookResult.allowed) {
