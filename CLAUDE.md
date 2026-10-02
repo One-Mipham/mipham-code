@@ -21,9 +21,9 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.18
-> **最后更新**: 2026-10-02 — **启动期「指令文件超预算」告警的两处收口**（`instructions.ts` + 本仓 `CLAUDE.md`）。① **告警不再截断到前三**：原实现取 `report.files.slice(0, 3)` 再把其余折成 `+${n} more`，而**折掉的正是读者要打开才能动手的那几份**，且只以计数出现的那份文件**无法与它贡献的字数对账**（外部无从证伪）；改为**逐条点名、从大到小**（`Largest first:`，字数按最宽一项右对齐）。② **本仓 `CLAUDE.md` 用 `prompt-exclude` 瘦身**：13 节移出每次请求的载荷 —— `终极愿景：CRSI` / `技术栈` / `Provider 层（12 家，按字母序）` / `工具层（31 个工具）` / `Skills 系统（28 个内置技能）` / `Slash 命令系统（138 个）` / `记忆系统` / `遥测与崩溃上报（T1 CLI 侧 + T1b 接收端）` / `核心引擎` / `Vajra-Hṛdaya 内核（自建服务内核）` / `Agent 系统` / `MIPHAM.md 人格系统` / `测试目录一览`；并把 `## 测试` 拆出 `### 测试目录一览`（排除）与 `### 测试注意事项`（保留）—— **`stripSections` 只按标题层级截断**，不拆则表后那几段一并被剥。**为什么排除而不是搬走留指针**：`tool-reference-integrity.test.ts` 与 `published-counts.test.ts` 按**内容**读本文件（技能清单、`| **合计** | … |` 行）⇒ 搬走即失去守卫覆盖，而排除后**内容仍在盘上**，守卫照读。**如实记**：本仓 `claude-md-audit.ts` 的启发式在这一版文件上只认出 **2** 节（`技术栈` / `Monorepo 结构`）—— 其余或不含六类 hint 关键词、或段内已有 `.md` 链接被 `DOC_POINTER` 抑制 ⇒ 另 11 节是**按同一原则人工判定**的，不是工具筛出来的。**读数**：装载总额 `57,551 → 36,020`（−21,531、−37%），余量 `−17,551 → 3,980`；本仓 `38,199 → 16,668`（本文件 `31,291 → 9,760`）；`formatInstructionSizeNotice` 返回 `null`。测试 **3,922**（315 文件；本笔改 1 条、总数不变）。
-> **前一条（2.94.17）**: 2026-10-02 — **0.85.14 发布：把 2.94.16 那一批（十六项收口）送出去**（本版 **22 笔** = 1 `fix` + 5 `docs` + 16 `chore` —— 读数由 `git rev-list --count 'v0.85.13^{}..HEAD'` 产出、**含本笔自身**（写这个数的提交也在区间里）；16 笔 `chore` 里 14 笔是 Dependabot 依赖升级、1 笔是 `pnpm.overrides.postcss` 与锁文件对齐、1 笔是版本 bump，另 5 笔 `docs` 是 CHANGELOG / CI 读数回填 / ROADMAP 订正 / 本笔头部轮转）—— 该批落在工作树上时标着「本笔未发布」，这一版把它们发出。**发版判据先问「这批里有没有一项用户拿得到」**：有，且是**行为变更**那一类，故不攒 —— ① `4316f687` 是最重的一格，且是**我方自发现**：`chatWithFallback` 把一次可重试失败**原地重发整轮**，而失败前已 `yield` 的 `tool_use` **收不回来** ⇒ 重试那轮与失败那轮的调用**叠在一起**（id 逐次生成，下游无从去重）⇒ **带副作用的工具跑两遍**；修法不是「别重试」，而是把「上一轮作废」**说给消费者听**（新 `StreamChunk.restart`，`process` 与 `continueWithTools` **两个**累积点都丢上一轮 —— 只接一处正是「两条渲染路径只接一条」的老毛病）。② 同批三处**脱敏缺口**：`Authorization: Bearer <token>` 与裸 `Bearer`/`Basic` 一字不遮（既有规则只认键名与已知值形状）、零宽字符把键名劈成两半规避匹配、`maskOutput` 的 `replace` 打坏 JSON（`/config` 输出的正是 `JSON.stringify(config)`）。③ 其余 11 项：拒答可见、回退提示补**上下文窗口下调**、出网边界 `String()` 强制、子代理回信带自己的名字等。测试 **3,922**（315 文件，本版无测试改动）。
+> **版本**: 2.94.19
+> **最后更新**: 2026-10-02 — **`prompt-exclude` 补上守卫：条目名匹配不到标题时不再静默失效**（新 `test/integrity/prompt-exclude-integrity.test.ts`，2 用例）。`stripSections` 按标题**逐字相等**匹配（`excluded.includes(title)`），写错一个字既不抛错也不告警 —— 那一节照旧随**每一次请求**发出，而写排除的人以为省下了；启动告警也帮不上忙（那一节的字数本来就还在总额里，告警**看起来完全正常**）⇒「拼错」与「有意不排除」在屏幕上同形。判据**派生自实现**：`stripSections(body, [entry]) !== body` 当且仅当该条目真的匹配到标题（匹配上就必删那一行标题）—— 同一把尺子量，规则漂移时守卫跟着漂，不会出现「守卫按旧规则绿、实现一个都没删」。**负控在真文件上做**：把本仓 `prompt-exclude` 里的 `技术栈` 改成 `技术栈X` ⇒ 守卫转红；还原后 sha256 逐字相符。**诚实边界**（已写进测试文件）：覆盖面是本次装载的**每一份**指令文件 —— 除本仓那几份外还有父仓/集团层的 `CLAUDE.md`、`MIPHAM.md`，但**那条覆盖只在本地成立**：CI 的检出目录之上没有这些祖先层，门外那份（父仓 `CLAUDE.md`）的错字 CI 抓不到。同笔 `TEST_COUNT` 3,922 → **3,924**（316 文件），由 `sync-counts.ts --test-report` 写入三处落盘副本。
+> **前一条（2.94.18）**: 2026-10-02 — **启动期「指令文件超预算」告警的两处收口**（`instructions.ts` + 本仓 `CLAUDE.md`）。① **告警不再截断到前三**：原实现取 `report.files.slice(0, 3)` 再把其余折成 `+${n} more`，而**折掉的正是读者要打开才能动手的那几份**，且只以计数出现的那份文件**无法与它贡献的字数对账**（外部无从证伪）；改为**逐条点名、从大到小**（`Largest first:`，字数按最宽一项右对齐）。② **本仓 `CLAUDE.md` 用 `prompt-exclude` 瘦身**：13 节移出每次请求的载荷 —— `终极愿景：CRSI` / `技术栈` / `Provider 层（12 家，按字母序）` / `工具层（31 个工具）` / `Skills 系统（28 个内置技能）` / `Slash 命令系统（138 个）` / `记忆系统` / `遥测与崩溃上报（T1 CLI 侧 + T1b 接收端）` / `核心引擎` / `Vajra-Hṛdaya 内核（自建服务内核）` / `Agent 系统` / `MIPHAM.md 人格系统` / `测试目录一览`；并把 `## 测试` 拆出 `### 测试目录一览`（排除）与 `### 测试注意事项`（保留）—— **`stripSections` 只按标题层级截断**，不拆则表后那几段一并被剥。**为什么排除而不是搬走留指针**：`tool-reference-integrity.test.ts` 与 `published-counts.test.ts` 按**内容**读本文件（技能清单、`| **合计** | … |` 行）⇒ 搬走即失去守卫覆盖，而排除后**内容仍在盘上**，守卫照读。**如实记**：本仓 `claude-md-audit.ts` 的启发式在这一版文件上只认出 **2** 节（`技术栈` / `Monorepo 结构`）—— 其余或不含六类 hint 关键词、或段内已有 `.md` 链接被 `DOC_POINTER` 抑制 ⇒ 另 11 节是**按同一原则人工判定**的，不是工具筛出来的。**读数**：装载总额 `57,551 → 36,020`（−21,531、−37%），余量 `−17,551 → 3,980`；本仓 `38,199 → 16,668`（本文件 `31,291 → 9,760`）；`formatInstructionSizeNotice` 返回 `null`。测试 **3,922**（315 文件；本笔改 1 条、总数不变）。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -62,7 +62,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：3,922 测试（本机 3,920 passed + 2 skipped，315 文件，0 失败）
+测试：3,924 测试（本机 3,922 passed + 2 skipped，316 文件，0 失败）
 
 ---
 
@@ -99,7 +99,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 315 个测试文件，3922 个测试
+│   │   ├── test/               # 316 个测试文件，3924 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -125,7 +125,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（3922 个测试）
+pnpm test         # vitest run（3924 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -333,15 +333,15 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | artifacts       | 1       | 6        | manifest                                                                                                                                                                    |
 | agent-view      | 4       | 37       | agent-view-manager / dashboard-keys / session-view                                                                                                                          |
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
-| integrity       | 18      | 130      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
+| integrity       | 19      | 132      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **315** | **3922** | **0 失败** ✅（本机 3,920 + 2 skipped，315 文件；CI `gh run 36929177435` @ `2adac7a9` 9/9 —— Test 自报 3,912 passed + 10 skipped = 3,922，314 + 1 skipped 文件）            |
+| **合计**        | **316** | **3924** | **0 失败** ✅（本机 3,922 + 2 skipped，316 文件；CI `gh run 36929177435` @ `2adac7a9` 9/9 —— Test 自报 3,912 passed + 10 skipped = 3,922，314 + 1 skipped 文件）            |
 
 ### 测试注意事项
 
 > **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 179 测试，自带
 > `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。
-> `integrity` 行的 18 个守卫文件含 **daemon 能力对等**（`daemon-capability-parity.test.ts`：14 个注入点
+> `integrity` 行的 19 个守卫文件含 **daemon 能力对等**（`daemon-capability-parity.test.ts`：14 个注入点
 > 全集 − 具名豁免表 = daemon 实接集，两向相等）与 **T4 未接线处置**（`unwired-disposition.test.ts`：
 > 删的必须不存在、留的必须仍零引用，陈旧豁免为红），外加 **状态写侧族守卫**（`state-write-integrity.test.ts`：
 > 裸写清单两向相等 —— 新成员不在清单里为红、清单陈旧也为红，且已收口模块必须仍见得到助手调用）
