@@ -4,6 +4,33 @@
 > (tag dates) and use the same wording as the VS Code extension's changelog — the plugin is a
 > thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.15 (2026-10-02)
+
+- Version sync with Mipham Code CLI 0.85.15
+- Fixed: **the `rm` deny rule no longer requires the target to be the last thing on the line.** Three
+  rules were anchored at end-of-line, so `rm -rf /*` was refused while `rm -rf /* foo`,
+  `rm -rf /*; echo hi`, `rm -rf /* > log` and `rm -rf * foo` all passed — and those five spellings are
+  the same deletion. The anchor is now "followed by a separator, or end of line", and the refusal
+  message no longer echoes the internal regex. Boundary, stated honestly: the hazard was reachable
+  only in the `auto` / `bypassPermissions` modes, or when an allow rule matched — `default` already
+  refuses Bash.
+- Fixed: **a hook that cannot run is now actually auto-disabled.** The executor reported "missing
+  command / spawn failure / option rejected" as `{ allowed: true, hookError }` without throwing, while
+  the engine counted failures only in `catch` — so a genuinely broken hook was recorded as a success,
+  re-injected its error every turn, and `MAX_CONSECUTIVE_FAILURES` never fired: auto-disable was
+  unreachable code. `HookResult` gained `hookError`; a `command` hook exiting non-zero is deliberately
+  still not one (some hooks use the exit code to express a policy decision).
+- Fixed: DingTalk Stream registration now times out after 10 seconds — a gateway that accepted the
+  connection and then went quiet left the promise pending forever, so the reconnect was never
+  scheduled: a silent channel with no error to look at.
+- Fixed: the startup "instruction files over budget" notice lists every file instead of folding the
+  tail into `+N more` — the folded ones are exactly the files the reader has to open in order to act,
+  and a file that appears only as a count cannot be reconciled against its contribution to the size.
+- Removed: **`/fast`** — the only command in the repo with a keypress and no landing point, since its
+  handler set a `useState` that nothing ever read. Its advertisements went with it (help text,
+  registry, category and description tables, both i18n copies, the CLI README, the bundled setup
+  skill). Command count 138 → 137.
+
 ## 0.85.14 (2026-10-02)
 
 - Version sync with Mipham Code CLI 0.85.14
