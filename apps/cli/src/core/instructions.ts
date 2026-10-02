@@ -220,8 +220,16 @@ export const INSTRUCTION_BUDGET_CHARS = 40_000
  *
  * The **total** is the point: no file has to be large for the instruction
  * payload to crowd out the work, so a per-file check cannot see a dozen
- * mid-sized rule files and a lessons block adding up. Naming the largest few
+ * mid-sized rule files and a lessons block adding up. The per-file breakdown
  * is what makes the number actionable.
+ *
+ * **Every file is listed, largest first.** An earlier version named the top
+ * three and folded the rest into `+N more` — but the folded files are exactly
+ * the ones a reader has to open to act, and the truncation made the notice
+ * unfalsifiable from the outside (a file that appeared only as part of a count
+ * could not be checked against the number it contributed). The list is short
+ * by construction anyway: instruction discovery yields a handful of files, not
+ * hundreds.
  */
 export function formatInstructionSizeNotice(
   report: InstructionSizeReport,
@@ -229,12 +237,13 @@ export function formatInstructionSizeNotice(
 ): string | null {
   if (report.totalChars <= budget) return null
   const num = (n: number) => n.toLocaleString('en-US')
-  const shown = report.files.slice(0, 3).map((f) => `${f.path} — ${num(f.chars)}`)
-  if (report.files.length > shown.length) shown.push(`+${report.files.length - shown.length} more`)
+  const width = Math.max(...report.files.map((f) => num(f.chars).length))
+  const rows = report.files.map((f) => `   ${num(f.chars).padStart(width)}  ${f.path}`)
   return (
     `⚠ Instruction files total ${num(report.totalChars)} characters (budget ${num(budget)}), ` +
     `sent with every request.\n` +
-    `   Largest: ${shown.join(' · ')}\n` +
+    `   Largest first:\n` +
+    `${rows.join('\n')}\n` +
     `   Trim them, or move doc-only sections under a \`prompt-exclude\` frontmatter key.`
   )
 }

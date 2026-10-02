@@ -157,10 +157,10 @@ describe('formatInstructionSizeNotice', () => {
     expect(notice).toContain('prompt-exclude')
   })
 
-  it('summarizes the tail instead of listing every file', () => {
+  it('lists every file — the tail is not folded into a count', () => {
     const notice = formatInstructionSizeNotice(report([20_000, 20_000, 20_000, 20_000, 20_000]))
-    expect(notice).toContain('file-0.md')
-    expect(notice).not.toContain('file-4.md')
-    expect(notice).toContain('+2 more')
+    // 逐条点名，不按行数：`+2 more` 曾经藏起来的正是读者要打开才能动手的那几份。
+    expect(notice!.match(/file-\d\.md/g)).toHaveLength(5)
+    expect(notice).not.toContain('more')
   })
 })
