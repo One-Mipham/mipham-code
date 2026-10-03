@@ -28,6 +28,17 @@ Mipham Code follows the security requirements defined in One Mipham Corporation'
 - No copyleft/GPL dependencies permitted
 - Regular dependency vulnerability scanning
 
+#### Accepted advisories
+
+`pnpm audit --audit-level=high` runs in CI and is expected to be clean. An advisory is accepted only
+when it cannot be fixed by upgrading, and only as a **scoped exemption tracked by GHSA id** in the
+root `package.json` (`pnpm.auditConfig.ignoreGhsas`). Every other advisory — dev tree included —
+still fails the job.
+
+| GHSA                  | Package                                                               | Why accepted                                                                                                                                                                                                                                                                                                                                                                                                                         | Revisit trigger                                                                   |
+| --------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| `GHSA-vfj7-8cjw-p6xm` | `braces` — high, CWE-674, stack exhaustion via deeply nested patterns | **No patched version exists**: `braces@3.0.3` is still `latest`, and the advisory lists `first_patched_version: None`. It is reachable only from `apps/web`'s **devDependency** `tailwindcss` → `chokidar` / `fast-glob` / `micromatch`, where the glob patterns are our own build config rather than caller input. `pnpm --filter @miphamai/cli why braces` is empty: the CLI runtime tree that ships to users does not contain it. | Remove the entry as soon as any `braces` release outside `<= 3.0.3` is published. |
+
 ### AI Security
 
 - All AI features undergo prompt injection testing before release
