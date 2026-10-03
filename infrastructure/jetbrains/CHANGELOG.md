@@ -4,6 +4,63 @@
 > (tag dates) and use the same wording as the VS Code extension's changelog — the plugin is a
 > thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.16 (2026-10-03)
+
+- Version sync with Mipham Code CLI 0.85.16
+- Fixed: **dangerous-command detection is no longer `rm`-shaped only.** Quotes join the separator
+  class, so `rm -rf '/'` takes the same path as `rm -rf /` (the quoted form matched nothing before);
+  `rm -rf .`, `./` and `../` join the refusal set — they delete the working directory itself — while
+  `./build` and `../vendor` stay ordinary paths and still pass. The nested-interpreter rule was
+  rewritten to "any option string after the interpreter, with `-c` allowed inside a cluster"
+  (`bash -lc 'rm -rf /'` slipped through), and `ash` / `fish` / `csh` / `tcsh` were added.
+- Fixed: **control characters in tool arguments, tool output and model prose no longer reach the
+  terminal.** New `stripControlCharsForDisplay` keeps `\t` / `\n` and drops CR, ESC and the C1 range,
+  wired at the one place that turns any of the three into terminal output. `sanitizeInlineField` is
+  single-line by design and discards `\n` along with the rest, so it was never a substitute. Measured
+  against the render layer: it passes CR / BS / BEL / VT / FF / DEL / NUL through, and rewrites
+  `\x1b[8m` into `\x1b[28m` and emits it — "the renderer handles it" does not hold. The shape is
+  `printf 'safe.txt\rrm -rf /'`: one line on screen, another one executed.
+- Fixed: **an ordinary reply commits its assistant turn once.** The turn was hung on "received
+  `stop`", and an OpenAI-compatible reply sends `stop` twice (`finish_reason`, then the trailing
+  `[DONE]`) — so the same assistant message was appended twice and the model saw its own answer
+  doubled on the next turn. It is now committed once, after the stream ends.
+- Fixed: **a turn that spends its whole budget thinking is no longer accepted as an answer** (thinking
+  present, no text and no tool_use). It now takes the same same-provider retry as an error; the
+  cross-provider fallback warning carries `restart: true`, without which the attempts' `tool_use`
+  blocks stack up in context and side-effecting tools run twice.
+- Fixed: **a sub-agent keeps the turn it already produced when the stream fails mid-flight.** It used
+  to throw and fail the whole sub-agent, with `chunks` handed back only on a clean exit; partial
+  output is now kept and the stream stops (a shorter answer beats none). Empty output still counts as
+  a real failure.
+- Fixed: **a bad hook matcher no longer takes the whole group down.** A throwing `new RegExp` aborted
+  startup, or aborted wiring for every hook in that session; it now warns, and that hook runs on every
+  call (the documented fail-closed direction).
+- Fixed: **an MCP 401/403 no longer looks like an ordinary transport error.** The
+  `WWW-Authenticate` challenge is read and sets `needsAuth`, saying the credentials were rejected and
+  pointing at re-authentication; OAuth servers now actually inject `MCP_ACCESS_TOKEN` into the MCP
+  child process (that variable previously had zero readers).
+- Fixed: **`/mcp connect` and `/mcp reload` actually connect and disconnect.** Both used to hand the
+  AI "call this internal method that no tool exposes", so nothing was connected or closed and a status
+  line was printed instead.
+- Fixed: **a cross-session "delivered" no longer lies.** With the recipient's policy at `ask` (the
+  default) the message only lands in the inbox — unseen and refusable; the sender now reads
+  "Message Queued — not delivered" and the holder is named. `deny` already reported a refusal; `ask`
+  was the one dishonest cell.
+- Fixed: **a half-written trailing line in the session log is no longer discarded as corruption.**
+  Every line ends in `\n`, so a trailing segment without one can only be a line still being written;
+  it is now re-read a bounded number of times (5×20ms, with no spin on an empty file). A session saved
+  while being resumed used to lose a turn.
+- Fixed: **the `Agent` tool can be dispatched in manual mode.** Its `permission` changed from `'ask'`
+  to `'self'`. The dispatch gate duplicated the sub-agent's own gate — the child is built with the
+  caller's **same** permission system and re-runs the gate on every tool call — and this CLI has no
+  interactive approval prompt, which makes `ask` a hard refusal. The observable result was that
+  `default` (manual) mode could not dispatch a single agent: the advertised fan-out had no landing
+  point on the branch production runs. `Write` / `Edit` / `Bash` are still `ask`, with a regression
+  test pinning that cell so that "opening dispatch" and "opening the whole mode" cannot be confused.
+- Removed: the MCP registration line in the startup banner (`[mcp] N server(s), M tools registered`) —
+  with five configured servers it was a line of scrollback before first paint, and nothing in it was
+  something the user acts on. Failure lines are still printed.
+
 ## 0.85.15 (2026-10-02)
 
 - Version sync with Mipham Code CLI 0.85.15
