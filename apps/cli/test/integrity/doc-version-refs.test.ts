@@ -163,6 +163,10 @@ const FROZEN_FILES = new Map<string, string>([
   ['apps/cli/crsi-lessons.md', '教训清单，版本号出现在叙事里'],
   ['benchmarks/README.md', '基准跑的是当时那个二进制'],
   ['benchmarks/results/README.md', '同上'],
+  [
+    'SECURITY.md',
+    '安全政策：「Accepted advisories」里的版本号是第三方包受影响区间（点时刻快照），不随产品版本走',
+  ],
 ])
 
 describe('活文档的版本引用：逐格对上真源', () => {
