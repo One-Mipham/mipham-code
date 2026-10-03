@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { HttpTransport } from '../../src/mcp/http-transport'
+import { HttpTransport, McpHttpError, challengeNeedsAuth } from '../../src/mcp/http-transport'
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 
@@ -99,6 +99,24 @@ describe('HttpTransport', () => {
       expect(headersOf(calls[0]!)['Authorization']).toBe('Bearer secret')
     })
 
+    it('injects Authorization Bearer from env.MCP_ACCESS_TOKEN', async () => {
+      transport = new HttpTransport(fetchImpl)
+      await transport.start('http://localhost:8004/mcp', {}, { MCP_ACCESS_TOKEN: 'oauth-token' })
+      await transport.sendRequest('tools/list')
+      expect(headersOf(calls[0]!)['Authorization']).toBe('Bearer oauth-token')
+    })
+
+    it('prefers MCP_ACCESS_TOKEN over FORGE_API_KEY when both are present', async () => {
+      transport = new HttpTransport(fetchImpl)
+      await transport.start(
+        'http://localhost:8004/mcp',
+        {},
+        { MCP_ACCESS_TOKEN: 'oauth-token', FORGE_API_KEY: 'forge-key' },
+      )
+      await transport.sendRequest('tools/list')
+      expect(headersOf(calls[0]!)['Authorization']).toBe('Bearer oauth-token')
+    })
+
     it('prefers explicit headers over env-derived auth', async () => {
       transport = new HttpTransport(fetchImpl)
       await transport.start(
@@ -109,7 +127,6 @@ describe('HttpTransport', () => {
       await transport.sendRequest('tools/list')
       expect(headersOf(calls[0]!)['Authorization']).toBe('Bearer explicit')
     })
-
     it('rejects on JSON-RPC error', async () => {
       fetchImpl = async () =>
         jsonResponse({ jsonrpc: '2.0', id: 1, error: { code: -32601, message: 'Unknown method' } })
@@ -153,6 +170,72 @@ describe('HttpTransport', () => {
 
       await expect(transport.sendRequest('tools/list')).rejects.toThrow()
       expect(transport.isConnected()).toBe(true)
+    })
+  })
+
+  describe('WWW-Authenticate challenge', () => {
+    function challengeResponse(status: number, challenge: string): Response {
+      return new Response(JSON.stringify({ detail: 'denied' }), {
+        status,
+        headers: { 'content-type': 'application/json', 'www-authenticate': challenge },
+      })
+    }
+
+    it('carries the challenge into the error message', async () => {
+      fetchImpl = async () =>
+        challengeResponse(401, 'Bearer realm="mcp", resource_metadata="https://a/.well-known/x"')
+      transport = new HttpTransport(fetchImpl)
+      await transport.start('http://localhost:8004/mcp')
+      await expect(transport.sendRequest('tools/list')).rejects.toThrow(
+        /WWW-Authenticate: Bearer realm="mcp"/,
+      )
+    })
+
+    it('flags a 401 with a Bearer challenge as needing auth', async () => {
+      fetchImpl = async () => challengeResponse(401, 'Bearer realm="mcp"')
+      transport = new HttpTransport(fetchImpl)
+      await transport.start('http://localhost:8004/mcp')
+      const err = await transport.sendRequest('tools/list').catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(McpHttpError)
+      expect((err as McpHttpError).needsAuth).toBe(true)
+      expect((err as McpHttpError).status).toBe(401)
+    })
+
+    it('flags a 403 insufficient_scope challenge as needing auth', async () => {
+      fetchImpl = async () =>
+        challengeResponse(403, 'Bearer error="insufficient_scope", scope="files:write"')
+      transport = new HttpTransport(fetchImpl)
+      await transport.start('http://localhost:8004/mcp')
+      const err = await transport.sendRequest('tools/list').catch((e: unknown) => e)
+      expect((err as McpHttpError).needsAuth).toBe(true)
+    })
+
+    it('does NOT flag a 403 that merely forbids the tool', async () => {
+      // 403 with no scope code is "you may not", not "you did not identify
+      // yourself" — sending the user to re-authenticate would loop forever.
+      fetchImpl = async () => challengeResponse(403, 'Bearer realm="mcp"')
+      transport = new HttpTransport(fetchImpl)
+      await transport.start('http://localhost:8004/mcp')
+      const err = await transport.sendRequest('tools/list').catch((e: unknown) => e)
+      expect((err as McpHttpError).needsAuth).toBe(false)
+    })
+
+    it('does NOT flag a status with no challenge at all', async () => {
+      fetchImpl = async () => jsonResponse({ detail: 'gone' }, 404)
+      transport = new HttpTransport(fetchImpl)
+      await transport.start('http://localhost:8004/mcp')
+      const err = await transport.sendRequest('tools/list').catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(McpHttpError)
+      expect((err as McpHttpError).needsAuth).toBe(false)
+    })
+
+    it('challengeNeedsAuth: the 401/403 matrix', () => {
+      expect(challengeNeedsAuth(401, 'Bearer realm="a"')).toBe(true)
+      expect(challengeNeedsAuth(401, 'Basic realm="a"')).toBe(false)
+      expect(challengeNeedsAuth(401, '')).toBe(false)
+      expect(challengeNeedsAuth(403, 'Bearer error="insufficient_scope"')).toBe(true)
+      expect(challengeNeedsAuth(403, 'Bearer error="invalid_token"')).toBe(false)
+      expect(challengeNeedsAuth(500, 'Bearer realm="a"')).toBe(false)
     })
   })
 

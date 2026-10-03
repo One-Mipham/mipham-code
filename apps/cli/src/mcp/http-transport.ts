@@ -5,6 +5,41 @@ import { DEFAULT_REQUEST_TIMEOUT_MS, requestTimeoutError } from './transport'
 type FetchFn = (input: string, init?: RequestInit) => Promise<Response>
 
 /**
+ * A non-2xx HTTP answer from an MCP server.
+ *
+ * Carries `needsAuth` — the server said our credentials are missing or too
+ * narrow. Callers turn that into "re-authenticate", which a bare status code
+ * cannot express: `403` also means "this tool is forbidden to you", and telling
+ * the user to re-authenticate then sends them round a loop that cannot help.
+ * The signal is the `WWW-Authenticate` challenge the server attaches
+ * (RFC 6750/9728), which the transport used to discard.
+ */
+export class McpHttpError extends Error {
+  constructor(
+    readonly status: number,
+    detail: string,
+    readonly needsAuth: boolean,
+  ) {
+    super(`MCP HTTP error ${status}: ${detail}`)
+    this.name = 'McpHttpError'
+  }
+}
+
+/**
+ * Does this challenge say the token we sent was missing or insufficient?
+ *
+ * `insufficient_scope` is the RFC 6750 code for "authenticated, but not for
+ * this"; a bare `Bearer` on a 401 means no usable token at all. A 403 whose
+ * challenge carries neither is a flat refusal and gets no auth hint.
+ */
+export function challengeNeedsAuth(status: number, challenge: string): boolean {
+  if (!challenge) return false
+  if (status === 401) return /^bearer\b/i.test(challenge.trim())
+  if (status === 403) return /insufficient_scope/i.test(challenge)
+  return false
+}
+
+/**
  * Merge multiple SSE `data:` events into a single JSON-RPC result.
  *
  * A Streamable HTTP server may answer a tool call as an SSE stream of several
@@ -99,10 +134,14 @@ export class HttpTransport implements Transport {
     this.closed = false
 
     // Build base headers: explicit headers override, then auto-derive a
-    // Bearer token from FORGE_API_KEY (mirrors Forge's verify_api_key) so the
-    // secret stays in env rather than inline in config.
+    // Bearer token from the env so the secret stays out of the config file.
+    // MCP_ACCESS_TOKEN is what the OAuth flow produces (McpClient.connectOnce);
+    // FORGE_API_KEY mirrors Forge's verify_api_key for a static deployment.
+    // Before this, an OAuth-configured server got its token minted and dropped
+    // into env where nothing read it: the request went out unauthenticated.
+    const bearer = env?.MCP_ACCESS_TOKEN ?? env?.FORGE_API_KEY
     this.headers = {
-      ...(env?.FORGE_API_KEY ? { Authorization: `Bearer ${env.FORGE_API_KEY}` } : {}),
+      ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
       ...(headers ?? {}),
     }
   }
@@ -148,7 +187,12 @@ export class HttpTransport implements Transport {
         } catch {
           /* keep status-only detail */
         }
-        throw new Error(`MCP HTTP error ${response.status}: ${detail}`)
+        // The challenge is the server telling us *how* to authenticate. Keep it
+        // — dropping it leaves "403 {…}" as the only clue the user gets.
+        const challenge = response.headers.get('www-authenticate') ?? ''
+        const needsAuth = challengeNeedsAuth(response.status, challenge)
+        if (challenge) detail += ` (WWW-Authenticate: ${challenge})`
+        throw new McpHttpError(response.status, detail, needsAuth)
       }
 
       const contentType = response.headers.get('content-type') || ''

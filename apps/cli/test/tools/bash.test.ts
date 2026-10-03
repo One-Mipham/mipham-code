@@ -164,6 +164,58 @@ describe('rm operand separator', () => {
   }
 })
 
+// The separator class above fixed the boundary *after* the operand. The operand
+// itself was still matched literally, so `rm -rf /` was refused while `rm -rf '/'`
+// was not — the quote sat exactly where the pattern expected the path to start.
+// A quote is a shell delimiter, not part of the path, so it belongs to the
+// boundary class on both sides. The nested-interpreter rule had the same class of
+// miss: it knew `bash -c` but not `-lc`, `ash`, or `--norc -c`.
+describe('rm operand quoting and nested interpreters', () => {
+  const blocked = [
+    "rm -rf '/'",
+    'rm -rf "/*"',
+    "rm -rf '/*'",
+    'rm -rf "/"',
+    'rm -rf ~/Documents',
+    'rm -rf ./',
+    'rm -rf ../',
+    "bash -lc 'rm -rf /*'",
+    "ash -c 'rm -rf /*'",
+    "bash --norc -c 'rm -rf /*'",
+    "sh -e -c 'rm -rf /'",
+    "fish -c 'rm -rf /'",
+    "csh -c 'rm -rf /'",
+  ]
+
+  for (const cmd of blocked) {
+    it(`blocks ${JSON.stringify(cmd)}`, () => {
+      expect(isBlocked(cmd)).not.toBeNull()
+    })
+  }
+
+  // Positive control. `./build` and `../vendor` are the same relative-name shape
+  // as `./` and `../` and must stay allowed, and `bash --version` keeps the
+  // widened nested-interpreter rule from refusing an interpreter that is merely
+  // being asked its version.
+  const allowed = [
+    'rm -rf ./build',
+    'rm -rf ../vendor',
+    'rm -rf .cache',
+    'rm -rf node_modules',
+    'rm -rf build/',
+    'rm -rf *.log',
+    'rm -f a.txt',
+    'rm -rf ..foo',
+    'bash --version',
+  ]
+
+  for (const cmd of allowed) {
+    it(`allows ${JSON.stringify(cmd)}`, () => {
+      expect(isBlocked(cmd)).toBeNull()
+    })
+  }
+})
+
 // ============================================================
 // Git guardrail parity — dangerous git commands must be blocked when
 // invoked via Bash (the Git tool blocks these; Bash previously allowed a bypass)

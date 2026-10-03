@@ -17,6 +17,8 @@ vi.mock('node:os', async (importOriginal) => {
 import type { ToolContext } from '../../src/shared'
 import { agentTool, resolveRunInBackground } from '../../src/tools/agent/agent'
 import { SubAgent } from '../../src/agent/sub-agent'
+import { PermissionSystem } from '../../src/core/permission'
+import { writeTool } from '../../src/tools/file/write'
 import { skillTool } from '../../src/tools/agent/skill'
 import { planTool } from '../../src/tools/agent/plan'
 import { memoryTool } from '../../src/tools/agent/memory'
@@ -38,7 +40,7 @@ describe('Agent tool definition', () => {
   it('has correct metadata', () => {
     expect(agentTool.name).toBe('Agent')
     expect(agentTool.category).toBe('agent')
-    expect(agentTool.permission).toBe('ask')
+    expect(agentTool.permission).toBe('self')
   })
 
   it('requires description and prompt parameters', () => {
@@ -176,6 +178,72 @@ describe('Agent tool execution', () => {
 
     expect(seen[0]!.runInBackground).toBe(false)
     expect(seen[1]!.runInBackground).toBe(true)
+  })
+})
+
+// ============================================================
+// Agent 派发闸
+// ============================================================
+
+/**
+ * `permission` 字段只是一张标签；真正的闸在 `PermissionSystem` 的解析链上
+ * （`default` 档走到第 6 步 `tool.permission`）。所以这里问**真对象**、真档位，
+ * 而不是读那个字符串 —— 字段改成 `'self'` 却被解析链吃掉，读字段也照样绿。
+ */
+describe('Agent 派发闸（手动模式下可达）', () => {
+  it('default 模式下派发**不是** ask —— 手动模式也能 fan-out', () => {
+    const ps = new PermissionSystem('default')
+    expect(ps.check(agentTool, { description: 'x', prompt: 'y' })).not.toBe('ask')
+  })
+
+  /**
+   * 正对照：同一档位下 `Write` 仍是 `'ask'`。没有这一条，「只放开派发」与
+   * 「把整档放开」在屏幕上同形 —— 而这两件事的安全含义正好相反。
+   */
+  it('正对照：同一档位下 Write 仍是 ask —— 放开的是派发，不是整档', () => {
+    const ps = new PermissionSystem('default')
+    expect(ps.check(writeTool, { file_path: '/tmp/x' })).toBe('ask')
+  })
+
+  /**
+   * 上面第一条的前提是「派发闸与子代理自己的闸是**重复**的」：子代理仍用它自己那套
+   * 权限系统拦每一次工具调用（`sub-agent.ts` 的 `permission: subPermission`）。
+   * 这里把**构造实参**钉死 —— 从原型方法里读实例的私有字段 `permission`，就是
+   * `new SubAgent(..., ctx.permissionSystem, ...)` 的第三个实参本身。
+   * 它换成 `undefined` 或一个新建的 PermissionSystem 时这一条会红，而那正是
+   * 「派发闸不再是重复闸」的那一刻。
+   */
+  it('子代理拿到的就是父级那一个 permissionSystem —— 重复闸的另一半', async () => {
+    const parentPermission = new PermissionSystem('default')
+    const seen: Array<{ toolContext?: unknown; permission?: unknown }> = []
+    const spy = vi.spyOn(SubAgent.prototype, 'execute').mockImplementation(function (
+      this: SubAgent,
+      _prompt: string,
+      _desc: string,
+      opts: { toolContext?: unknown },
+    ) {
+      seen.push({
+        toolContext: opts.toolContext,
+        permission: (this as unknown as { permission?: unknown }).permission,
+      })
+      return Promise.resolve('done')
+    } as never)
+
+    try {
+      await agentTool.execute(
+        { description: 'child', prompt: 'go' },
+        {
+          ...ctx,
+          registry: {} as never,
+          toolRegistry: new Map() as never,
+          permissionSystem: parentPermission,
+        },
+      )
+    } finally {
+      spy.mockRestore()
+    }
+
+    expect(seen[0]!.permission).toBe(parentPermission)
   })
 })
 

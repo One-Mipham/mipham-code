@@ -1,6 +1,8 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { McpClient } from '../../src/mcp/client'
 import { StdioTransport } from '../../src/mcp/transport'
+import { TokenStore } from '../../src/mcp/token-store'
+import { credentialBinding } from '../../src/mcp/oauth'
 
 /** Minimal HTTP MCP endpoint: answers initialize / tools/list, then can go away. */
 function httpEndpoint(state: { reachable: boolean }) {
@@ -287,6 +289,111 @@ describe('McpClient', () => {
         expect(conn!.status).toBe('connected')
         expect(conn!.serverInfo?.name).toBe('http-mock')
         expect(client.getTools('http-mock').map((t) => t.name)).toContain('search_graph')
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+  })
+
+  describe('OAuth-configured servers', () => {
+    const OAUTH_CONFIG = {
+      name: 'oauth-mock',
+      url: 'http://localhost:8004/mcp',
+      auth: {
+        type: 'oauth' as const,
+        authorizationUrl: 'https://auth.example/authorize',
+        tokenUrl: 'https://auth.example/token',
+        clientId: 'client-1',
+      },
+    }
+
+    /** Seed the same store McpClient reads, bound to this exact config. */
+    function seedToken(config: typeof OAUTH_CONFIG, accessToken: string): void {
+      const store = new TokenStore()
+      store.delete(config.name)
+      store.save(config.name, {
+        accessToken,
+        expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+        boundTo: credentialBinding(config),
+      })
+    }
+
+    it('connect() sends the stored OAuth token as a Bearer header', async () => {
+      seedToken(OAUTH_CONFIG, 'seed-access-token')
+      const authHeaders: Array<string | null> = []
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (_url: string, init?: RequestInit) => {
+          const h = new Headers(init?.headers as Record<string, string>)
+          authHeaders.push(h.get('authorization'))
+          const body = JSON.parse(init!.body as string) as { id: number; method: string }
+          const base = { jsonrpc: '2.0', id: body.id }
+          const result =
+            body.method === 'initialize'
+              ? {
+                  protocolVersion: '2024-11-05',
+                  capabilities: { tools: {} },
+                  serverInfo: { name: 'oauth-mock', version: '1.0.0' },
+                }
+              : { tools: [] }
+          return new Response(JSON.stringify({ ...base, result }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          })
+        }),
+      )
+
+      try {
+        const client = McpClient.getInstance()
+        await client.connect(OAUTH_CONFIG)
+        expect(client.getConnection('oauth-mock')!.status).toBe('connected')
+        // The token used to be minted and dropped into env where nothing read it.
+        expect(authHeaders).toContain('Bearer seed-access-token')
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+
+    it('callTool() turns an insufficient-scope refusal into a re-authenticate message', async () => {
+      seedToken(OAUTH_CONFIG, 'seed-access-token')
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (_url: string, init?: RequestInit) => {
+          const body = JSON.parse(init!.body as string) as { id: number; method: string }
+          const base = { jsonrpc: '2.0', id: body.id }
+          if (body.method === 'tools/call') {
+            return new Response(JSON.stringify({ detail: 'scope' }), {
+              status: 403,
+              headers: {
+                'content-type': 'application/json',
+                'www-authenticate': 'Bearer error="insufficient_scope", scope="files:write"',
+              },
+            })
+          }
+          const result =
+            body.method === 'initialize'
+              ? {
+                  protocolVersion: '2024-11-05',
+                  capabilities: { tools: {} },
+                  serverInfo: { name: 'oauth-mock', version: '1.0.0' },
+                }
+              : { tools: [{ name: 'echo', description: 'Echo', inputSchema: {} }] }
+          return new Response(JSON.stringify({ ...base, result }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          })
+        }),
+      )
+
+      try {
+        const client = McpClient.getInstance()
+        await client.connect(OAUTH_CONFIG)
+        const result = await client.callTool('oauth-mock', 'echo', {})
+        expect(result.isError).toBe(true)
+        // Naming the server and the exact command is the whole point — a bare
+        // "403" leaves the user with nothing to do.
+        expect(result.content[0]!.text).toContain('oauth-mock')
+        expect(result.content[0]!.text).toContain('/mcp connect oauth-mock')
       } finally {
         vi.unstubAllGlobals()
       }

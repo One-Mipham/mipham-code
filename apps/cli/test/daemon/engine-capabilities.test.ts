@@ -275,6 +275,96 @@ describe('wireDaemonEngine — behaviour', () => {
     expect(calls).toEqual({ active: 2, fallback: 1 })
   })
 
+  it("D2b: the degraded-to warning restarts the turn — a failed attempt's tool call runs once, not twice", async () => {
+    const cwd = makeWorkspace()
+    let probeCalls = 0
+    const tools = makeToolMap([
+      {
+        name: 'ProbeTool',
+        description: 'counts its own invocations',
+        category: 'system',
+        permission: 'self',
+        parameters: {},
+        execute: async () => {
+          probeCalls++
+          return { success: true, content: 'probed' }
+        },
+      },
+    ])
+
+    const registry = new ProviderRegistry([], 'good', 'good-model')
+    let fallbackCalls = 0
+    registry.register('good', {
+      config: {
+        id: 'good',
+        name: 'Good',
+        protocol: 'openai-compatible' as const,
+        apiKey: 'k',
+        models: [
+          {
+            id: 'good-model',
+            name: 'Good Model',
+            providerId: 'good',
+            contextWindow: 1000,
+            maxOutput: 100,
+            vision: false,
+            status: 'active' as const,
+          },
+        ],
+      },
+      chat: async function* () {
+        fallbackCalls++
+        // The fallback names its own call (`f1`) — that is the one that must run.
+        if (fallbackCalls === 1) {
+          yield {
+            type: 'tool_use',
+            toolUse: { type: 'tool_use', id: 'f1', name: 'ProbeTool', input: {} },
+          }
+        }
+        yield { type: 'text', content: 'fallback done' }
+        yield { type: 'stop' }
+      },
+      listModels: async () => [],
+      healthCheck: async () => true,
+    })
+    let activeCalls = 0
+    registry.register('bad', {
+      config: {
+        id: 'bad',
+        name: 'Bad',
+        protocol: 'openai-compatible' as const,
+        apiKey: 'k',
+        models: [],
+      },
+      chat: async function* () {
+        activeCalls++
+        // Stream a tool call, *then* die. This is the shape that makes the missing
+        // `restart` observable: the failed attempt's `tool_use` is already in the
+        // consumer's accumulator by the time the fallback starts.
+        yield {
+          type: 'tool_use',
+          toolUse: { type: 'tool_use', id: 'a1', name: 'ProbeTool', input: {} },
+        }
+        throw new Error('ECONNRESET: socket hang up')
+      },
+      listModels: async () => [],
+      healthCheck: async () => true,
+    })
+    registry.switchProvider('bad', 'bad-model')
+
+    const engine = newEngine(registry, tools)
+    wireDaemonEngine(engine, { cwd, registry })
+    await drain(engine, 'hi')
+
+    // The active provider is tried twice (original + one same-provider retry), and
+    // each attempt discards its own `a1` via the retry warning's `restart`. The
+    // fallback's `f1` is the only call left — so 1. Drop `restart` from the
+    // degraded-to warning and this reads 2: the failed attempt's call survives
+    // alongside the fallback's, and a side-effecting tool runs twice.
+    expect(activeCalls).toBe(2)
+    expect(probeCalls).toBe(1)
+  })
+
   it('D3: path-scoped rules load from the session cwd (absolute tool paths still match)', async () => {
     const cwd = makeWorkspace()
     mkdirSync(join(cwd, '.mipham', 'rules'), { recursive: true })

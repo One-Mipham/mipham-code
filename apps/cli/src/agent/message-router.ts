@@ -9,6 +9,16 @@ export interface RouteResult {
   routedTo: 'bus' | 'inbox' | 'unknown'
   error?: string
   messageId?: string
+  /**
+   * Cross-session only: the recipient holds inbound messages for approval, so
+   * the file landing in its inbox is not the same as it being delivered.
+   * `success` stays true (the send did work) — this is what the *notice* has to
+   * distinguish, so the sender is not told a message was delivered that the
+   * recipient has not seen and may decline.
+   */
+  held?: boolean
+  /** Cross-session only: the resolved recipient's display name. */
+  targetName?: string
 }
 
 export interface SessionResolution {
@@ -123,7 +133,16 @@ export class MessageRouter {
         return { success: false, routedTo: 'inbox', error: 'Failed to write message to inbox.' }
       }
 
-      return { success: true, routedTo: 'inbox', messageId: msg.id }
+      return {
+        success: true,
+        routedTo: 'inbox',
+        messageId: msg.id,
+        // 'ask' is the default: the recipient's engine holds the message for a
+        // user decision before it is ever seen. Writing the file is still the
+        // right thing to do — it is the *notice* that must not say "delivered".
+        held: targetSession.crossSessionInbound === 'ask',
+        targetName: targetSession.name,
+      }
     } catch (err) {
       return { success: false, routedTo: 'inbox', error: String(err) }
     }

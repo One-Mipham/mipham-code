@@ -674,6 +674,69 @@ describe('SubAgent', () => {
   })
 
   // ═══════════════════════════════════════════
+  // 中途失败（超时 / socket 断）不是「整轮失败」
+  //
+  // 上游 2.1.288 的修法：非交互会话与子代理**从部分响应继续**，而不是把这一轮判死。
+  // 判据取自「失败发生在流的哪一段」：已经产出的文字是真的产出，`chunks` 只在干净退出时
+  // 才交回，所以在这里 throw 会把这一趟连同之前每一轮一起抹掉 —— 更短的答案胜过没有答案。
+  // ═══════════════════════════════════════════
+
+  describe('中途失败保留部分响应', () => {
+    it('先出文字、流随后报错 ⇒ 这一轮照常返回已产出的部分（不是整趟失败）', async () => {
+      const provider = createMockProvider([
+        { type: 'text', content: 'partial answer' },
+        { type: 'error', error: 'socket hang up' },
+      ])
+      const sub = new SubAgent(createMockRegistry(provider), TOOLS)
+
+      const result = await sub.execute('do work', 'task', { type: 'general' })
+
+      expect(result).toContain('partial answer')
+      // 关键：**没有**把整趟判死 —— 这正是修复前抛出的那一条。
+      expect(result).not.toContain('Sub-agent execution failed')
+    })
+
+    // 正向对照。没有这一条，「无论流怎么结束都吞掉错误」的实现同样能过上面那条 ——
+    // 而那会把一次真失败静默成空成功。一个字符都没产出时，没有「部分」可从。
+    it('整条流一个字符都没产出就报错 ⇒ 仍然作为真失败抛出', async () => {
+      const provider = createMockProvider([{ type: 'error', error: 'socket hang up' }])
+      const sub = new SubAgent(createMockRegistry(provider), TOOLS)
+
+      await expect(sub.execute('do work', 'task', { type: 'general' })).rejects.toThrow(
+        /Sub-agent execution failed/,
+      )
+    })
+
+    // 边界的第二条：这一轮死掉之前模型已经喊过工具，那些工具**不许执行** ——
+    // 它们属于一个从未完成的轮次，模型也从未看到它们的结果。判据取执行（探针），不取文案。
+    it('流死在工具轮中途 ⇒ 已到达的工具调用不执行', async () => {
+      const provider = createMockProvider([
+        { type: 'text', content: 'let me check' },
+        { type: 'tool_use', toolUse: { type: 'tool_use', id: '1', name: 'Bash', input: {} } },
+        { type: 'error', error: 'timeout' },
+      ])
+      const sink = { ran: false }
+      const bashTool: ToolDefinition = {
+        name: 'Bash',
+        description: 'bash',
+        category: 'exec',
+        permission: 'self',
+        parameters: {},
+        execute: async () => {
+          sink.ran = true
+          return { success: true, content: 'ran' }
+        },
+      }
+      const sub = new SubAgent(createMockRegistry(provider), new Map([['Bash', bashTool]]))
+
+      const result = await sub.execute('do work', 'task', { maxTurns: 3 })
+
+      expect(sink.ran).toBe(false)
+      expect(result).toContain('let me check')
+    })
+  })
+
+  // ═══════════════════════════════════════════
   // P6 — 没有权限系统 ≠ 不做检查
   // ═══════════════════════════════════════════
 

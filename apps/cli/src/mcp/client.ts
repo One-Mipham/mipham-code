@@ -7,7 +7,7 @@ import type {
   InitializeResult,
 } from './types'
 import { StdioTransport, type Transport } from './transport'
-import { HttpTransport } from './http-transport'
+import { HttpTransport, McpHttpError } from './http-transport'
 import { McpProtocol } from './protocol'
 import { OAuthClient } from './oauth'
 import { TokenStore } from './token-store'
@@ -34,6 +34,21 @@ const CONNECT_POLL_MS = 50
 function connectTimeoutMs(): number {
   const env = Number(process.env.MIPHAM_MCP_CONNECT_TIMEOUT_MS)
   return Number.isFinite(env) && env > 0 ? env : DEFAULT_CONNECT_TIMEOUT_MS
+}
+
+/**
+ * Render a connect failure for the user, adding the one hint a bare error
+ * cannot carry: that the fix is to authenticate.
+ *
+ * Without this a rejected handshake surfaced as `MCP HTTP error 401: {…}` — the
+ * user saw a credential problem and no way to act on it.
+ */
+function describeMcpError(err: unknown, serverName: string): string {
+  const base = err instanceof Error ? err.message : String(err)
+  if (err instanceof McpHttpError && err.needsAuth) {
+    return `${base} — the server rejected these credentials. Re-authenticate with: /mcp connect ${serverName}`
+  }
+  return base
 }
 
 // A server may emit `notifications/tools/list_changed` once per tool it adds, or
@@ -123,13 +138,19 @@ export class McpClient {
     for (const h of list) h(...args)
   }
 
-  /** Connect with OAuth PKCE flow — injects access token into env vars. */
-  async connectWithOAuth(config: McpServerConfig): Promise<void> {
+  /**
+   * Obtain the credentials a server's config calls for, as transport env.
+   *
+   * An OAuth-configured server is rejected by its own handshake without a live
+   * token, so this runs *before* the transport starts — and on every connect
+   * path, not just a forced one. The result is keyed `MCP_ACCESS_TOKEN`, which
+   * `HttpTransport` turns into a Bearer header and `StdioTransport` passes to
+   * the child process.
+   */
+  private async envWithAuth(config: McpServerConfig): Promise<Record<string, string> | undefined> {
+    if (config.auth?.type !== 'oauth') return config.env
     const accessToken = await this.oauthClient.getValidAccessToken(config.name, config)
-    return this.connect({
-      ...config,
-      env: { ...config.env, MCP_ACCESS_TOKEN: accessToken },
-    })
+    return { ...config.env, MCP_ACCESS_TOKEN: accessToken }
   }
 
   /**
@@ -275,6 +296,30 @@ export class McpClient {
     McpClient.instance = null
   }
 
+  /**
+   * Run the OAuth flow again and connect with the fresh token.
+   *
+   * `/mcp connect <name>` on a server that is already connected *is* this
+   * request: the only reason to ask again is that the current credentials no
+   * longer do (a tool call came back "insufficient scope"). Reusing the stored
+   * token — or letting `connect()` early-return on the live connection — would
+   * send the same refused token a second time.
+   */
+  async reauthenticate(config: McpServerConfig): Promise<void> {
+    this.oauthClient.forget(config.name)
+    const existing = this.connections.get(config.name)
+    if (existing) {
+      this.cancelToolsRefresh(existing)
+      try {
+        await existing.transport.close()
+      } catch {
+        /* best effort */
+      }
+      this.connections.delete(config.name)
+    }
+    await this.connect(config)
+  }
+
   async connect(config: McpServerConfig): Promise<void> {
     // Skip if already connected
     const existing = this.connections.get(config.name)
@@ -311,12 +356,16 @@ export class McpClient {
     this.connections.set(config.name, connection)
 
     try {
+      // Resolve credentials before the transport starts: the handshake itself
+      // is what an unauthenticated request gets rejected on.
+      const env = await this.envWithAuth(config)
+
       await this.withConnectTimeout(config.name, async () => {
         // Start the transport (transport-specific), then perform the handshake.
         if (transport instanceof HttpTransport) {
-          await transport.start(config.url ?? '', config.headers, config.env)
+          await transport.start(config.url ?? '', config.headers, env)
         } else {
-          await transport.start(config.command ?? '', config.args ?? [], config.env)
+          await transport.start(config.command ?? '', config.args ?? [], env)
         }
         const initResult: InitializeResult = await protocol.initialize()
 
@@ -336,7 +385,7 @@ export class McpClient {
       })
     } catch (err) {
       connection.status = 'error'
-      connection.error = String(err)
+      connection.error = describeMcpError(err, config.name)
       try {
         await transport.close()
       } catch {
@@ -495,6 +544,14 @@ export class McpClient {
       return await conn.protocol.callTool(toolName, params)
     } catch (err) {
       this.markIfTransportLost(serverName, conn)
+      // A scope refusal is actionable and nothing else is: the user has to go
+      // through the OAuth flow again, and only the server can say so.
+      if (err instanceof McpHttpError && err.needsAuth) {
+        return {
+          content: [{ type: 'text', text: t('errors.mcp_auth_required', { server: serverName }) }],
+          isError: true,
+        }
+      }
       return {
         content: [{ type: 'text', text: t('errors.mcp_tool_error', { error: String(err) }) }],
         isError: true,

@@ -20,6 +20,7 @@ import {
   registerActiveSession,
   unregisterSession,
 } from '../../../src/agent/cross-session/discovery'
+import { sendMessageTool } from '../../../src/tools/agent/send-message'
 import type { SessionInfo } from '../../../src/shared/types'
 
 function makeSession(id: string, name: string): SessionInfo {
@@ -176,5 +177,73 @@ describe('MessageRouter', () => {
 
     // Cleanup
     unregisterSession('deny-session-1')
+  })
+
+  it('marks a message as held when the recipient reviews inbound first', async () => {
+    // The default policy is 'ask': writing the file succeeds, but the recipient
+    // has not seen the message and may decline it.
+    registerActiveSession({
+      id: 'ask-session-1',
+      name: 'ask-target',
+      machine: 'test-host',
+      pid: 55558,
+      startedAt: new Date().toISOString(),
+      crossSessionInbound: 'ask',
+    })
+
+    const result = await router.route('test-sender', 'ask-session-1', 'Hello', 'Held?')
+    expect(result.success).toBe(true)
+    expect(result.routedTo).toBe('inbox')
+    expect(result.held).toBe(true)
+    expect(result.targetName).toBe('ask-target')
+
+    unregisterSession('ask-session-1')
+  })
+
+  it('does not mark a message held when the recipient accepts directly', async () => {
+    registerActiveSession({
+      id: 'allow-session-1',
+      name: 'allow-target',
+      machine: 'test-host',
+      pid: 55559,
+      startedAt: new Date().toISOString(),
+      crossSessionInbound: 'allow',
+    })
+
+    const result = await router.route('test-sender', 'allow-session-1', 'Hello', 'Direct?')
+    expect(result.success).toBe(true)
+    expect(result.held).toBe(false)
+
+    unregisterSession('allow-session-1')
+  })
+})
+
+/**
+ * The notice the *sender* reads. Writing to a holder's inbox is not delivery,
+ * and the sender acts on this text — "Sent" there means "expect a reply".
+ */
+describe('SendMessage — held notice', () => {
+  it('says the message is queued and names the session holding it', async () => {
+    registerActiveSession({
+      id: 'held-notice-1',
+      name: 'busy-reviewer',
+      machine: 'test-host',
+      pid: 55560,
+      startedAt: new Date().toISOString(),
+      crossSessionInbound: 'ask',
+    })
+
+    const res = await sendMessageTool.execute(
+      { to: 'held-notice-1', summary: 'ping', message: 'are you there?' },
+      { cwd: process.cwd(), sessionId: 'session-1', provider: 'mock', model: 'mock' } as never,
+    )
+
+    expect(res.success).toBe(true)
+    expect(res.content).toContain('Message Queued')
+    expect(res.content).not.toContain('Message Sent')
+    expect(res.content).toContain('busy-reviewer')
+    expect(res.content).toMatch(/not yet delivered|holds inbound/i)
+
+    unregisterSession('held-notice-1')
   })
 })

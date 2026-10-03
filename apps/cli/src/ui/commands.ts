@@ -14,7 +14,7 @@ import type { PluginManager } from '../plugin/plugin-manager'
 import type { Message } from '../shared/types.js'
 import type { InstallState, UpdateStatus } from '../shared/update'
 import { McpClient } from '../mcp/client'
-import { unregisterMcpServerTools } from '../mcp/registry'
+import { registerMcpServerTools, unregisterMcpServerTools } from '../mcp/registry'
 import { buildCapabilityReport } from '../core/capability-inventory'
 import { InstructionsLoader } from '../core/instructions'
 import { findDerivableSections, DERIVABLE_HINTS } from '../core/claude-md-audit'
@@ -70,7 +70,7 @@ import {
   shouldBlockApproval,
 } from '../core/improvement-track'
 import { NPM_UPDATE_COMMAND, PACKAGE_VERSION, COAUTHOR_TRAILER } from '../shared/index.ts'
-import { getPreference } from '../config/preferences'
+import { getPreference, setPreference } from '../config/preferences'
 import { loadCrossSessionConfig, tryRestoreFromBackup } from '../config/loader'
 import { getWorkspaceTrust } from '../core/workspace-trust'
 import { getMemoryManager } from '../core/memory/memory-loader'
@@ -3669,9 +3669,13 @@ function gitDiffBridgeCmd(opts: {
   noChangesKey: string
   runningKey: string
   errorKey: string
-  forwardToAI: string | (() => string)
+  /** Either a fixed prompt, or a builder that reads the command args. A builder
+   *  may return an `{ error }` envelope instead — used when the args are
+   *  unusable, so the command reports that rather than forwarding a prompt the
+   *  user's flag never reached. */
+  forwardToAI: string | ((args: string[]) => string | { error: string })
 }): CommandHandler {
-  return async (ctx) => {
+  return async (ctx, args) => {
     const t = resolveT(ctx)
     try {
       const { execSync } = await import('node:child_process')
@@ -3679,13 +3683,56 @@ function gitDiffBridgeCmd(opts: {
       if (!diff) {
         return { content: `─ ${opts.label} ─\n\n${t(opts.noChangesKey)}` }
       }
+      const forwarded =
+        typeof opts.forwardToAI === 'function' ? opts.forwardToAI(args) : opts.forwardToAI
+      if (typeof forwarded === 'object') {
+        return { content: `─ ${opts.label} ─\n\n${forwarded.error}` }
+      }
       return {
         content: `─ ${opts.label} ─\n\n${t(opts.runningKey)}\n\nChanged files:\n${diff}`,
-        forwardToAI: typeof opts.forwardToAI === 'function' ? opts.forwardToAI() : opts.forwardToAI,
+        forwardToAI: forwarded,
       }
     } catch {
       return { content: `─ ${opts.label} ─\n\n${t(opts.errorKey)}` }
     }
+  }
+}
+
+/**
+ * `/code-review --max-findings <n>|all|default` — how many findings to report.
+ *
+ * The choice is persisted like the effort level and reused by the next
+ * `/code-review` until `--max-findings default` restores the usual limit.
+ * `all` means "no cap"; a positive integer caps the count. An unusable value is
+ * reported back rather than ignored: silently dropping it would leave the user
+ * believing the cap took effect when it never left the command line.
+ */
+function resolveMaxFindings(
+  args: string[],
+): { ok: true; value: string } | { ok: false; error: string } {
+  let token: string | undefined
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!
+    if (a === '--max-findings') {
+      token = args[i + 1]
+      break
+    }
+    if (a.startsWith('--max-findings=')) {
+      token = a.slice('--max-findings='.length)
+      break
+    }
+  }
+  if (token === undefined) {
+    // No flag this time — reuse whatever was chosen last.
+    return { ok: true, value: getPreference('lastCodeReviewMaxFindings', 'default') }
+  }
+  if (token === 'all' || token === 'default' || /^[1-9]\d*$/.test(token)) {
+    setPreference('lastCodeReviewMaxFindings', token)
+    return { ok: true, value: token }
+  }
+  return {
+    ok: false,
+    error: `--max-findings expects a positive integer, "all", or "default" (got "${token}")`,
   }
 }
 
@@ -3694,8 +3741,17 @@ const codeReviewCmd = gitDiffBridgeCmd({
   noChangesKey: 'commands.code_review.no_changes',
   runningKey: 'commands.code_review.running',
   errorKey: 'commands.code_review.error',
-  forwardToAI: () =>
-    `use the code-review skill to review all uncommitted changes. Check all 7 dimensions: correctness, security, performance, code quality, architecture & design, testing, and language-specific issues. Use effort level: ${getPreference('lastCodeReviewEffort', 'high')}.`,
+  forwardToAI: (args) => {
+    const maxFindings = resolveMaxFindings(args)
+    if (!maxFindings.ok) return { error: maxFindings.error }
+    const cap =
+      maxFindings.value === 'all'
+        ? ' Report every finding, however many there are.'
+        : maxFindings.value === 'default'
+          ? ''
+          : ` Report at most ${maxFindings.value} findings, most severe first.`
+    return `use the code-review skill to review all uncommitted changes. Check all 7 dimensions: correctness, security, performance, code quality, architecture & design, testing, and language-specific issues. Use effort level: ${getPreference('lastCodeReviewEffort', 'high')}.${cap}`
+  },
 })
 
 const simplifyCmd = gitDiffBridgeCmd({
@@ -4934,30 +4990,52 @@ const mcpCmd: CommandHandler = async (ctx, args) => {
         content: `Server "${sanitizeInlineField(name)}" not found in config.\n\nConfigured: ${mcpServers.map((s) => sanitizeInlineField(s.name)).join(', ') || '(none)'}`,
       }
     }
-    if (config.auth?.type === 'oauth') {
+    const isOAuth = config.auth?.type === 'oauth'
+    const label = isOAuth ? `${name} (OAuth)` : name
+    try {
+      // Connect here rather than handing the AI a prompt to "call
+      // McpClient.getInstance().connect(config)". No tool exposes that call, so
+      // the prompt was unactionable and the command connected nothing — it just
+      // printed a status line. `/mcp reconnect` already awaits in the handler;
+      // this is the same shape.
+      //
+      // An already-connected OAuth server is the re-authenticate case: the only
+      // reason to ask again is that the current token was refused.
+      if (isOAuth && client.getConnection(name)?.status === 'connected') {
+        await client.reauthenticate(config)
+      } else {
+        await client.connect(config)
+      }
+      const registered = registerMcpServerTools(name, ctx.engine.getTools())
+      const lines = [`── MCP Connect: ${sanitizeInlineField(label)} ──`, '']
+      lines.push(
+        isOAuth
+          ? 'Authenticated via OAuth PKCE.'
+          : `Connected via ${config.url ? 'HTTP' : 'stdio'}.`,
+      )
+      lines.push(
+        registered > 0 ? `${registered} tool(s) registered.` : 'No tools reported by the server.',
+      )
+      if (config.url) {
+        const headerKeys = config.headers ? Object.keys(config.headers) : []
+        if (headerKeys.length > 0) {
+          lines.push('')
+          lines.push(
+            `⚠️ These headers were sent to ${sanitizeInlineField(config.url)}: ${headerKeys.join(', ')}`,
+          )
+        }
+      }
+      return { content: lines.join('\n') }
+    } catch (err) {
       return {
         content: [
-          `── MCP Connect: ${name} (OAuth) ──`,
+          `── MCP Connect: ${sanitizeInlineField(label)} ──`,
           '',
-          'Starting OAuth PKCE flow...',
-          `Authorization: ${config.auth.authorizationUrl}`,
-          `Scopes: ${config.auth.scopes?.join(', ') || '(default)'}`,
+          `Failed: ${sanitizeInlineField(String(err))}`,
+          '',
+          `Check the server with /mcp, or retry with backoff: /mcp reconnect ${sanitizeInlineField(name)}`,
         ].join('\n'),
-        forwardToAI: `Connect to MCP server "${name}" using OAuth. Call McpClient.getInstance().connectWithOAuth() with the server config, then register its tools. Report the result.`,
       }
-    }
-    const via = config.url ? 'HTTP' : 'stdio'
-    if (config.url) {
-      const headerKeys = config.headers ? Object.keys(config.headers) : []
-      const headerLine = headerKeys.length > 0 ? `\nHeaders to send: ${headerKeys.join(', ')}` : ''
-      return {
-        content: `── MCP Connect: ${sanitizeInlineField(name)} ──\n\nConnecting via HTTP\nURL: ${sanitizeInlineField(config.url)}${headerLine}\n\n⚠️ Verify the URL — any configured headers (e.g. Authorization) will be sent to this server.`,
-        forwardToAI: `Connect to MCP server "${name}" using McpClient.getInstance().connect(config), then register its tools. Report the result.`,
-      }
-    }
-    return {
-      content: `── MCP Connect: ${name} ──\n\nConnecting via ${via}...`,
-      forwardToAI: `Connect to MCP server "${name}" using McpClient.getInstance().connect(config), then register its tools. Report the result.`,
     }
   }
 
@@ -5012,11 +5090,37 @@ const mcpCmd: CommandHandler = async (ctx, args) => {
 
   // /mcp reload
   if (sub === 'reload') {
-    return {
-      content: '── MCP Reload ──\n\nDisconnecting all and reconnecting...',
-      forwardToAI:
-        'Disconnect all MCP servers via McpClient.getInstance().closeAll(), then reconnect all configured servers. Report each status.',
+    const mcpServers = ctx.config.skills?.mcpServers ?? []
+    // Same defect `/mcp connect` had: the forwarded prompt told the AI to call
+    // `McpClient.getInstance().closeAll()` — an internal method no tool exposes —
+    // so the command disconnected and reconnected nothing, it only printed a
+    // status line. Do the work in the handler, like `/mcp reconnect` already does.
+    await client.closeAll()
+    // `closeAll()` nulls the singleton, so the reference captured above is spent.
+    const fresh = McpClient.getInstance()
+
+    if (mcpServers.length === 0) {
+      return { content: '── MCP Reload ──\n\nNo MCP servers configured.' }
     }
+
+    const toolsMap = ctx.engine.getTools()
+    const lines: string[] = ['── MCP Reload ──', '']
+    for (const config of mcpServers) {
+      // Tools live in the engine registry, not in the connection: drop them before
+      // reconnecting so a server that no longer offers a tool does not leave a
+      // dead entry registered.
+      unregisterMcpServerTools(config.name, toolsMap)
+      try {
+        await fresh.connect(config)
+        const registered = registerMcpServerTools(config.name, toolsMap)
+        lines.push(`🟢 ${sanitizeInlineField(config.name)} — ${registered} tool(s) registered.`)
+      } catch (err) {
+        lines.push(
+          `🔴 ${sanitizeInlineField(config.name)} — Failed: ${sanitizeInlineField(String(err))}`,
+        )
+      }
+    }
+    return { content: lines.join('\n') }
   }
 
   // /mcp (default status)

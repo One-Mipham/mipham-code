@@ -11,6 +11,7 @@ vi.mock('node:os', async (importOriginal) => {
 })
 
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import {
@@ -603,6 +604,95 @@ describe('open() 丢弃结构不合法的行', () => {
     try {
       const log = SessionLog.open(name)
       expect(deriveMessages(log.events())).toEqual([{ role: 'user', content: 'snapshot' }])
+    } finally {
+      cleanup(name)
+    }
+  })
+})
+
+// ============================================================
+// 并发 append 的尾部半行。
+//
+// `save()` 每次 append `JSON.stringify(e) + '\n'`，所以文件末尾**没有换行**的那一段
+// 只可能是「还在写的一行」。原实现把它当损坏行 `catch` 掉 —— 一条已经写过的事件被
+// 静默丢掉，表现为「保存中的会话被 resume，历史少一轮」。修法是等一小会有界重试再读。
+//
+// 时序无法用同进程写入器构造：`open()` 是同步的，它睡在 `Atomics.wait` 里，同一条
+// 事件循环上的 `setTimeout` 根本不会触发。所以写入方必须是**另一个进程**。
+// ============================================================
+
+describe('open() 与并发写入的尾部半行', () => {
+  const SESSIONS_DIR = join(homedir(), '.mipham', 'sessions')
+  const complete = '{"type":"user/message","at":1,"message":{"role":"user","content":"hi"}}\n'
+  const head = '{"type":"assistant/message","at":2,"message":{"role":"assistant"'
+  const tail = ',"content":"ok"}}\n'
+
+  function paths(name: string): { path: string; tailFile: string } {
+    return {
+      path: join(SESSIONS_DIR, `${sanitizeSessionName(name)}.jsonl`),
+      tailFile: join(SESSIONS_DIR, `${sanitizeSessionName(name)}.tail.tmp`),
+    }
+  }
+
+  function cleanup(name: string): void {
+    const { path, tailFile } = paths(name)
+    if (existsSync(path)) rmSync(path)
+    if (existsSync(tailFile)) rmSync(tailFile)
+  }
+
+  it('写入方在重试窗口内补完最后一行 —— 该行不丢', () => {
+    const name = 'open-tail-completes'
+    cleanup(name)
+    mkdirSync(SESSIONS_DIR, { recursive: true })
+    const { path, tailFile } = paths(name)
+    // 盘上：一条完整行 + 半行（正写到一半）。
+    writeFileSync(path, complete + head, 'utf-8')
+    // 另一个进程在 ~20ms 后把半行补完（在 5×20ms = 100ms 窗口内）。
+    writeFileSync(tailFile, tail, 'utf-8')
+    const child = spawn(
+      'sh',
+      ['-c', `sleep 0.02; cat ${JSON.stringify(tailFile)} >> ${JSON.stringify(path)}`],
+      { stdio: 'ignore' },
+    )
+    try {
+      const log = SessionLog.open(name)
+      expect(deriveMessages(log.events())).toEqual([
+        { role: 'user', content: 'hi' },
+        { role: 'assistant', content: 'ok' },
+      ])
+    } finally {
+      child.kill()
+      cleanup(name)
+    }
+  })
+
+  it('半行始终没写完 —— 有界重试后放弃，半行不当作事件收下', () => {
+    const name = 'open-tail-never-completes'
+    cleanup(name)
+    mkdirSync(SESSIONS_DIR, { recursive: true })
+    const { path } = paths(name)
+    writeFileSync(path, complete + head, 'utf-8')
+    try {
+      // 会阻塞 ~100ms（重试窗口）后放弃：判据既要「不挂死」也要「半行不进历史」。
+      const log = SessionLog.open(name)
+      expect(deriveMessages(log.events())).toEqual([{ role: 'user', content: 'hi' }])
+    } finally {
+      cleanup(name)
+    }
+  })
+
+  it('空文件不空转重试窗口（正控：无半行可等）', () => {
+    const name = 'open-tail-empty'
+    cleanup(name)
+    mkdirSync(SESSIONS_DIR, { recursive: true })
+    const { path } = paths(name)
+    writeFileSync(path, '', 'utf-8')
+    try {
+      const t0 = Date.now()
+      const log = SessionLog.open(name)
+      expect(log.events()).toEqual([])
+      // 若误把空文件也当半行，会白等 5×20ms。
+      expect(Date.now() - t0).toBeLessThan(80)
     } finally {
       cleanup(name)
     }

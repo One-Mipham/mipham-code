@@ -21,9 +21,9 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.21
-> **最后更新**: 2026-10-02 — **0.85.15 发布：把攒着的两批（2.94.19 + 2.94.20）一次送出**（用户直令「现在发一版」，并同笔授权两站部署）。**发版判据先问「这批里有没有一项用户拿得到」**：有 —— 下列五项都是用户可观测的行为变更，故不攒。① **`rm` 拒绝规则锚在 `$`** ⇒ 拒与不拒取决于目标是否恰好是这一行的**最后一个东西**：`rm -rf /*` 拒，而**同一次删除**的 `rm -rf /* foo` / `rm -rf /*; echo hi` / `rm -rf /* > log` / `rm -rf * foo` **全放行**；锚点改分隔符类，同笔去掉把 `pattern.source` 回显进拒绝文案的内部泄漏。**边界**：危害只在 `auto`/`bypassPermissions` 档或命中 allow 规则时可达（`default` 档 Bash 本就拒）。② **钩子自动禁用不可达** —— 执行器对「钩子跑不起来」（缺命令 / 派生失败 / 选项被拒）返回 `{allowed:true, hookError}` **而不抛**，引擎却只在 `catch` 里记失败 ⇒ 真坏掉的钩子被记成成功、报错每轮重新注入、`MAX_CONSECUTIVE_FAILURES` 永不触发；`HookResult` 新增 `hookError`（两份副本同改），`command` 钩子**退出码非零**刻意不算。③ **钉钉 Stream 注册加 10s 超时**：网关接了不回则重连永不排期，频道静默且无错可看。④ **启动告警逐条点名**：`formatInstructionSizeNotice` 只取前三份、其余折成 `+N more`，而折掉的正是读者要打开才能动手的那几份。⑤ **撤除 `/fast`** —— 全仓唯一「有按键、无落点」的命令（处理器只改一个无人读的 `useState`），连同四处广告一并撤除，命令数 **138 → 137**。⑥ 同批还含 **`prompt-exclude` 守卫**（条目名匹配不到标题不再静默失效）与**本仓 `CLAUDE.md` 卸下 13 节**（装载总额 57,551 → **29,667**）。测试 **3,942**（316 文件）。CI **9/9**（`gh run 36964275167` @ `051fceb5`）。**发布读数**：GPG 签名 tag `v0.85.15`（→ `051fceb5`，`git tag -v` 报「完好的签名」）⇒ `release.yml` **9/9**（`gh run 36964509084`）；npm 真输出行 `+ @miphamai/cli@0.85.15`（04:27:36Z）、`dist-tags.latest` = **0.85.15**、注册表 `time['0.85.15']` = 04:30:44Z；GitHub Release `v0.85.15` **6 资产**（04:30:29Z，非 draft 非 prerelease）；JetBrains 取**真输出行** `JetBrains plugin published.`（04:29:52Z，**不是** 04:29:36Z 那行脚本回显）；本地 `.vsix` **64,556 B** / sha256 `daba90cd4502…`（包内 `package.json` version = 0.85.15）。**两站部署本轮已做并独立复核**（`onemipham.com` 与 `mipham.ai` 各 HTTP 200、**3×0.85.15 / 0×0.85.14**）。**未做**：VS Code Marketplace 上传（登录后网页操作）。
-> **前一条（2.94.20）**: 2026-10-02 — **本轮收口：四条独立缺陷 + 撤掉一条空壳命令**。① **`rm` 拒绝规则锚在 `$`** ⇒ 拒与不拒取决于目标是否在行尾：`rm -rf /*` 被拒，而**同一次删除**的 `rm -rf /* foo`、`rm -rf /*; echo hi`、`rm -rf /* > log`、`rm -rf * foo` 全部放行。锚点改为分隔符类 `(?=[\s;&|>]|$)`；同笔去掉把 `pattern.source` 回显进拒绝文案的内部泄漏。**边界**：危害只在 `auto`/`bypassPermissions` 或命中 allow 规则时可达（`default` 档 Bash 本就拒）。② **钩子自动禁用不可达**：执行器对「钩子跑不起来」（缺命令 / 派生失败 / 选项被拒）返回 `{allowed:true, hookError}` **而不抛**，引擎却只在 `catch` 里记失败 ⇒ 真坏掉的钩子被记成成功、报错每轮重新注入、`MAX_CONSECUTIVE_FAILURES` 永不触发。`HookResult` 新增 `hookError`（两份副本同改），引擎据此分流。**判据**：同一文件里两条既有测试对「坏钩子」的定义互相矛盾 —— 生产走的那条无人断言。③ **钉钉 Stream 注册加 10s 超时**：网关接了不回则重连永不排期，频道静默且无错可看。④ **撤除 `/fast`** —— 全仓唯一「有按键、无落点」的命令（处理器只改一个无人读的状态），连同四处广告（帮助文本 / 注册表 / 分类与描述表 / i18n×2 / README / 内置技能）一并撤除；命令总数 138 → **137**（`sync-counts.ts` 同步三处副本 + i18n 两份 + 三份 README/CLAUDE）。测试 3,924 → **3,942**（316 文件）。CI **9/9**（`gh run 36962735329` @ `c690f659`；Test 自报 3,932 passed + 10 skipped = 3,942，315 + 1 skipped 文件）。**未发版**。
+> **版本**: 2.94.22
+> **最后更新**: 2026-10-03 — **十二项收口，一次落齐**。公共形状仍是那两条老账：**「广告了能力，落点不在生产走到的分支上」** 与 **「同一份判断写在两处、只改一处」**。① **`rm` 之外的危险命令模式加固**（`bash.ts`）—— 引号进分隔符类：`rm -rf '/'` 与 `rm -rf /` 同路径，从前一字不拒；`rm -rf .` / `./` / `../` 删除工作目录、补进拒绝集（`./build`、`../vendor` 仍放行）；嵌套解释器规则改「解释器后任意选项串 + `-c` 可在簇里」（`bash -lc 'rm -rf /'` 从前漏过），并补 `ash`/`fish`/`csh`/`tcsh`。② **多行显示面的控制字符闸**（`sanitize.ts` 新 `stripControlCharsForDisplay` + `chat.tsx` `display()`）—— 工具参数/输出/模型散文是**唯一**变成终端输出的路径，而 `sanitizeInlineField` 是单行用、把 `\n` 一并丢掉；实测 ink 7.1.1 放行 CR / BS / BEL / VT / FF / DEL / NUL、且把 `\x1b[8m` 改写成 `\x1b[28m` 照发 ⇒「Ink 会处理」不能替代这道口。保留 `\t`/`\n`，CR/ESC/C1 全去（`printf 'safe.txt\rrm -rf /'` 那一形状）。③ **引擎：助手轮改在流结束后一次提交**（不再挂 `chunk.type === 'stop'`）—— OpenAI 兼容一次普通回复**发两次 `stop`**（`finish_reason` + 尾部 `[DONE]`，见 `openai-compat.ts`），逐次提交把同一条助手消息**加了两遍**，模型看见自己的答案翻倍；且重试轮不该已提交，否则 `chatWithFallback` 的仅推理重试会在上下文里留下那轮空答案。④ **仅推理无答案的轮**（有 thinking / 无 text 与 tool_use —— 推理模型把预算全花在想上）拿与错误**同一次**同 provider 重试，重试仍如此则接受；跨 provider 回退的告警补 `restart: true`，否则各次尝试的 `tool_use` 叠在一起 ⇒ 带副作用的工具**跑两遍**。⑤ **子代理中途流错误不再丢掉已产出的一轮** —— 从前 `throw` 让整个子代理失败（`chunks` 只在干净退出时交回）；有部分产出就保住它并停流（更短的答案胜过没有），一个字都没有才算真失败。⑥ **钩子 matcher 写错不再连累整组** —— `new RegExp` 在 `loadHookConfigs` 里抛会让**启动**或该会话的全部钩子接线中止；改为告警 + 该钩子对每次调用都跑（`matchesMatcher` 已文档化的 fail-closed 方向）。⑦ **MCP OAuth 三件套** —— `WWW-Authenticate` 挑战此前被 `HttpTransport` 丢掉、401/403 与普通传输错同形；现读出头、置 `needsAuth`，提示「凭据被拒，重新认证 `/mcp connect <name>`」；OAuth 服务器给 MCP 子进程注入 `MCP_ACCESS_TOKEN`（该变量此前**零读者**）。⑧ **`/mcp connect` 与 `/mcp reload` 真正做那件事** —— 两条都把「调用 `McpClient.getInstance().connect(config)` / `closeAll()`」这个**没有工具暴露的方法**交给 AI，命令什么也没连上/断开、只印一行状态（`reload` 与刚修的 `connect` 同形）。⑨ **跨会话「已送达」不再骗人** —— 收件方策略为 `ask`（默认）时消息写进收件箱但**未被看见、可被拒**，发件方现在读到「Message Queued — 未送达」并点名持有者（原有 `deny` 已报拒收，只有 `ask` 这一格不诚实）。⑩ **会话日志并发半行** —— `save()` 每行以 `\n` 收尾 ⇒ 末尾无换行的那段只可能是**还在写的一行**，原实现按损坏行静默丢弃（保存中的会话被 resume 时少一轮）；改为有界重读（5×20ms，空文件不空转）。⑪ **启动横幅去掉 MCP 注册行** —— `[mcp] N server(s), M tools registered` 在首帧前刷一行，而用户不会据此做任何事（用户直令）；**失败行保留**（那是错误不是噪音），并连它的两个只服务于该行的计数器一并删除。⑫ **`Agent` 工具 `permission: 'ask'` → `'self'`** —— 派发闸与子代理自己的闸**重复**（子代理用父级同一个 `permissionSystem` 构造，且对每一次工具调用再判一次），而 `ask` 在本 CLI 是**硬拒**（无交互批准弹窗）⇒ 手动模式下一个 agent 也派不出去，fan-out 这一被广告的能力**够不着落点**；改为与 `Git`/`Task`/`SendMessage` 同档，`Write`/`Edit`/`Bash` 仍 `ask`。测试 **3,942 → 4,019**（317 文件；本机 4,017 passed + 2 skipped）。
+> **前一条（2.94.21）**: 2026-10-02 — **0.85.15 发布：把攒着的两批（2.94.19 + 2.94.20）一次送出**（用户直令「现在发一版」，并同笔授权两站部署）。**发版判据先问「这批里有没有一项用户拿得到」**：有 —— 下列五项都是用户可观测的行为变更，故不攒。① **`rm` 拒绝规则锚在 `$`** ⇒ 拒与不拒取决于目标是否恰好是这一行的**最后一个东西**：`rm -rf /*` 拒，而**同一次删除**的 `rm -rf /* foo` / `rm -rf /*; echo hi` / `rm -rf /* > log` / `rm -rf * foo` **全放行**；锚点改分隔符类，同笔去掉把 `pattern.source` 回显进拒绝文案的内部泄漏。**边界**：危害只在 `auto`/`bypassPermissions` 档或命中 allow 规则时可达（`default` 档 Bash 本就拒）。② **钩子自动禁用不可达** —— 执行器对「钩子跑不起来」（缺命令 / 派生失败 / 选项被拒）返回 `{allowed:true, hookError}` **而不抛**，引擎却只在 `catch` 里记失败 ⇒ 真坏掉的钩子被记成成功、报错每轮重新注入、`MAX_CONSECUTIVE_FAILURES` 永不触发；`HookResult` 新增 `hookError`（两份副本同改），`command` 钩子**退出码非零**刻意不算。③ **钉钉 Stream 注册加 10s 超时**：网关接了不回则重连永不排期，频道静默且无错可看。④ **启动告警逐条点名**：`formatInstructionSizeNotice` 只取前三份、其余折成 `+N more`，而折掉的正是读者要打开才能动手的那几份。⑤ **撤除 `/fast`** —— 全仓唯一「有按键、无落点」的命令（处理器只改一个无人读的 `useState`），连同四处广告一并撤除，命令数 **138 → 137**。⑥ 同批还含 **`prompt-exclude` 守卫**（条目名匹配不到标题不再静默失效）与**本仓 `CLAUDE.md` 卸下 13 节**（装载总额 57,551 → **29,667**）。测试 **3,942**（316 文件）。CI **9/9**（`gh run 36964275167` @ `051fceb5`）。**发布读数**：GPG 签名 tag `v0.85.15`（→ `051fceb5`，`git tag -v` 报「完好的签名」）⇒ `release.yml` **9/9**（`gh run 36964509084`）；npm 真输出行 `+ @miphamai/cli@0.85.15`（04:27:36Z）、`dist-tags.latest` = **0.85.15**、注册表 `time['0.85.15']` = 04:30:44Z；GitHub Release `v0.85.15` **6 资产**（04:30:29Z，非 draft 非 prerelease）；JetBrains 取**真输出行** `JetBrains plugin published.`（04:29:52Z，**不是** 04:29:36Z 那行脚本回显）；本地 `.vsix` **64,556 B** / sha256 `daba90cd4502…`（包内 `package.json` version = 0.85.15）。**两站部署本轮已做并独立复核**（`onemipham.com` 与 `mipham.ai` 各 HTTP 200、**3×0.85.15 / 0×0.85.14**）。**未做**：VS Code Marketplace 上传（登录后网页操作）。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -62,7 +62,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：3,942 测试（本机 3,940 passed + 2 skipped，316 文件，0 失败）
+测试：4,019 测试（本机 4,017 passed + 2 skipped，317 文件，0 失败）
 
 ---
 
@@ -99,7 +99,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 316 个测试文件，3942 个测试
+│   │   ├── test/               # 317 个测试文件，4019 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -125,7 +125,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（3942 个测试）
+pnpm test         # vitest run（4019 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -315,17 +315,17 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 90      | 1553     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
-| tools           | 27      | 439      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
-| daemon          | 37      | 252      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
-| ui              | 29      | 304      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
-| agent           | 14      | 135      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
+| core            | 90      | 1561     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
+| tools           | 27      | 467      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
+| daemon          | 37      | 253      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
+| ui              | 30      | 322      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
+| agent           | 14      | 138      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
 | security        | 12      | 122      | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
 | providers       | 9       | 153      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
-| mcp             | 11      | 114      | client / transport / oauth / token-store / registry / instructions（含 2 skipped）                                                                                          |
+| mcp             | 11      | 125      | client / transport / oauth / token-store / registry / instructions（含 2 skipped）                                                                                          |
 | workflow        | 8       | 61       | runtime / loop / parallel / sandbox / journal / verify                                                                                                                      |
 | vajra           | 6       | 53       | context / events / service / compose / leaf（自建内核）                                                                                                                     |
-| shared          | 11      | 130      | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                              |
+| shared          | 11      | 138      | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                              |
 | commands        | 9       | 95       | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers / provider-model-flags                                                                  |
 | skills          | 5       | 35       | sanitizer / marketplace / fork-executor / skill-assets                                                                                                                      |
 | config          | 10      | 125      | credential-crypto / loader-encryption / defaults / settings-json / preferences                                                                                              |
@@ -335,7 +335,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integrity       | 19      | 132      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **316** | **3942** | **0 失败** ✅（本机 3,940 + 2 skipped，316 文件；CI `gh run 36962735329` @ `c690f659` 9/9 —— Test 自报 3,932 passed + 10 skipped = 3,942，315 + 1 skipped 文件）            |
+| **合计**        | **317** | **4019** | **0 失败** ✅（本机 4,017 + 2 skipped，317 文件；CI 待本批推送后回填）                                                                                                      |
 
 ### 测试注意事项
 

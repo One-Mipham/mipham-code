@@ -61,14 +61,31 @@ export const sendMessageTool: ToolDefinition = {
 
     const routedLabel = result.routedTo === 'bus' ? 'in-process' : 'cross-session'
 
+    const body =
+      `ID:      ${result.messageId}\n` +
+      `From:    ${from}\n` +
+      `To:      ${to}\n` +
+      `Summary: ${truncatedSummary.slice(0, 100)}`
+
+    // A cross-session message written to the inbox of a session that holds
+    // inbound messages has NOT been delivered — that session's user decides
+    // first, and may decline. Reporting "Sent" there tells the sender to expect
+    // a reply to a message that was never read. Name the session holding it.
+    if (result.routedTo === 'inbox' && result.held) {
+      const who = result.targetName ?? to
+      return {
+        success: true,
+        content:
+          `── Message Queued (${routedLabel}) ──\n\n` +
+          `Not yet delivered: "${who}" holds inbound messages for approval. ` +
+          `It will see this only if it accepts.\n\n` +
+          body,
+      }
+    }
+
     return {
       success: true,
-      content:
-        `── Message Sent (${routedLabel}) ──\n\n` +
-        `ID:      ${result.messageId}\n` +
-        `From:    ${from}\n` +
-        `To:      ${to}\n` +
-        `Summary: ${truncatedSummary.slice(0, 100)}`,
+      content: `── Message Sent (${routedLabel}) ──\n\n${body}`,
     }
   },
 }

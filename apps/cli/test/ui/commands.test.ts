@@ -20,6 +20,16 @@ import { getTasks, taskTool } from '../../src/tools/exec/task'
 const mockExecSync = vi.fn()
 vi.mock('node:child_process', () => ({ execSync: mockExecSync }))
 
+// ── In-memory preferences ──
+// `/code-review --max-findings` persists its choice through the preference store,
+// which is backed by the *real* ~/.mipham/preferences.json. Tests must not write
+// the user's live file, and must not inherit whatever they left there.
+const { mockPrefStore } = vi.hoisted(() => ({ mockPrefStore: new Map<string, string>() }))
+vi.mock('../../src/config/preferences', () => ({
+  getPreference: (k: string, d: string) => mockPrefStore.get(k) ?? d,
+  setPreference: (k: string, v: string) => void mockPrefStore.set(k, v),
+}))
+
 // ── Mock SessionStore to avoid real on-disk sessions leaking into tests ──
 vi.mock('../../src/core/session-store', () => ({
   SessionStore: {
@@ -174,24 +184,218 @@ describe('上下文用量显示跟随引擎的窗口与阈值', () => {
 // ═══════════════════════════════════════════════════════════════
 
 describe('/mcp connect disclosure', () => {
+  // Lazily imported for the same reason as the reconnect tests below: a static
+  // import is hoisted above the child_process mock.
+  const loadClient = async () => (await import('../../src/mcp/client')).McpClient
+
   it('shows URL and header keys (not values) for an HTTP server', async () => {
-    const ctx = mkCtx()
-    ;(ctx as { config: Record<string, unknown> }).config = {
-      skills: {
-        mcpServers: [
-          {
-            name: 'myserver',
-            url: 'https://evil.example.com/mcp',
-            headers: { Authorization: 'Bearer supersecret' },
-          },
-        ],
-      },
+    const client = (await loadClient()).getInstance()
+    const spy = vi.spyOn(client, 'connect').mockResolvedValue(undefined)
+    try {
+      const ctx = mkCtx()
+      ;(ctx as { config: Record<string, unknown> }).config = {
+        skills: {
+          mcpServers: [
+            {
+              name: 'myserver',
+              url: 'https://evil.example.com/mcp',
+              headers: { Authorization: 'Bearer supersecret' },
+            },
+          ],
+        },
+      }
+      const handler = getCommand('/mcp')!
+      const result = await handler(ctx, ['connect', 'myserver'])
+      expect(result.content).toContain('https://evil.example.com/mcp')
+      expect(result.content).toContain('Authorization')
+      expect(result.content).not.toContain('supersecret')
+    } finally {
+      spy.mockRestore()
     }
-    const handler = getCommand('/mcp')!
-    const result = await handler(ctx, ['connect', 'myserver'])
-    expect(result.content).toContain('https://evil.example.com/mcp')
-    expect(result.content).toContain('Authorization')
-    expect(result.content).not.toContain('supersecret')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// /mcp connect — does it actually connect?
+//
+// 它一度只印一行状态、再把一句「Call McpClient.getInstance().connect(config)」
+// 交给 AI —— 而没有任何工具暴露这个调用，所以命令什么也没连上。判据从「印了什么」
+// 换成「McpClient 上被调用的那个方法」。
+// ═══════════════════════════════════════════════════════════════
+
+describe('/mcp connect', () => {
+  const loadClient = async () => (await import('../../src/mcp/client')).McpClient
+
+  const ctxWithServer = (server: Record<string, unknown>) => {
+    const ctx = mkCtx()
+    ;(ctx as { config: Record<string, unknown> }).config = { skills: { mcpServers: [server] } }
+    return ctx
+  }
+
+  it('connects an HTTP server and reports it — without a forwarded prompt', async () => {
+    const client = (await loadClient()).getInstance()
+    const spy = vi.spyOn(client, 'connect').mockResolvedValue(undefined)
+    try {
+      const result = await getCommand('/mcp')!(
+        ctxWithServer({ name: 'myserver', url: 'https://example.com/mcp' }),
+        ['connect', 'myserver'],
+      )
+      expect(spy).toHaveBeenCalledTimes(1)
+      expect(result.content).toContain('Connected via HTTP')
+      // The old shape delegated to the model; there is nothing to delegate now.
+      expect(result.forwardToAI).toBeUndefined()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('reports a failed connect instead of throwing', async () => {
+    const client = (await loadClient()).getInstance()
+    const spy = vi.spyOn(client, 'connect').mockRejectedValue(new Error('ECONNREFUSED'))
+    try {
+      const result = await getCommand('/mcp')!(
+        ctxWithServer({ name: 'dead', url: 'https://example.com/mcp' }),
+        ['connect', 'dead'],
+      )
+      expect(result.content).toMatch(/ECONNREFUSED/)
+      expect(result.content).toContain('/mcp reconnect dead')
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('re-authenticates an already-connected OAuth server', async () => {
+    // The only reason to ask again is that the current token was refused, so
+    // `connect()` (which would early-return on the live connection) is wrong.
+    const client = (await loadClient()).getInstance()
+    const connectSpy = vi.spyOn(client, 'connect').mockResolvedValue(undefined)
+    const reauthSpy = vi.spyOn(client, 'reauthenticate').mockResolvedValue(undefined)
+    const connSpy = vi
+      .spyOn(client, 'getConnection')
+      .mockReturnValue({ status: 'connected' } as ReturnType<typeof client.getConnection>)
+    try {
+      const result = await getCommand('/mcp')!(
+        ctxWithServer({
+          name: 'oauthserver',
+          url: 'https://example.com/mcp',
+          auth: {
+            type: 'oauth',
+            authorizationUrl: 'https://auth.example/authorize',
+            tokenUrl: 'https://auth.example/token',
+            clientId: 'c',
+          },
+        }),
+        ['connect', 'oauthserver'],
+      )
+      expect(reauthSpy).toHaveBeenCalledTimes(1)
+      expect(connectSpy).not.toHaveBeenCalled()
+      expect(result.content).toContain('OAuth')
+    } finally {
+      connectSpy.mockRestore()
+      reauthSpy.mockRestore()
+      connSpy.mockRestore()
+    }
+  })
+
+  it('plain-connects an OAuth server that is not connected yet', async () => {
+    const client = (await loadClient()).getInstance()
+    const connectSpy = vi.spyOn(client, 'connect').mockResolvedValue(undefined)
+    const reauthSpy = vi.spyOn(client, 'reauthenticate').mockResolvedValue(undefined)
+    try {
+      await getCommand('/mcp')!(
+        ctxWithServer({
+          name: 'oauthserver',
+          url: 'https://example.com/mcp',
+          auth: {
+            type: 'oauth',
+            authorizationUrl: 'https://auth.example/authorize',
+            tokenUrl: 'https://auth.example/token',
+            clientId: 'c',
+          },
+        }),
+        ['connect', 'oauthserver'],
+      )
+      expect(connectSpy).toHaveBeenCalledTimes(1)
+      expect(reauthSpy).not.toHaveBeenCalled()
+    } finally {
+      connectSpy.mockRestore()
+      reauthSpy.mockRestore()
+    }
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// /mcp reload — the same "uncallable prompt" defect as /mcp connect.
+//
+// 它一度把「Disconnect all via McpClient.getInstance().closeAll(), then
+// reconnect」交给 AI —— 没有工具暴露这个方法，于是它谁也没断开、谁也没重连。
+// 判据同样从「印了什么」换成「McpClient 上被调用的方法」。
+// ═══════════════════════════════════════════════════════════════
+
+describe('/mcp reload', () => {
+  const loadClient = async () => (await import('../../src/mcp/client')).McpClient
+
+  const ctxWithServers = (servers: Record<string, unknown>[]) => {
+    const ctx = mkCtx()
+    ;(ctx as { config: Record<string, unknown> }).config = { skills: { mcpServers: servers } }
+    return ctx
+  }
+
+  it('closes all and reconnects every server — without a forwarded prompt', async () => {
+    const client = (await loadClient()).getInstance()
+    const closeSpy = vi.spyOn(client, 'closeAll').mockResolvedValue(undefined)
+    const connectSpy = vi.spyOn(client, 'connect').mockResolvedValue(undefined)
+    try {
+      const result = await getCommand('/mcp')!(
+        ctxWithServers([
+          { name: 'alpha', url: 'https://a.example/mcp' },
+          { name: 'beta', url: 'https://b.example/mcp' },
+        ]),
+        ['reload'],
+      )
+      expect(closeSpy).toHaveBeenCalledTimes(1)
+      expect(connectSpy).toHaveBeenCalledTimes(2)
+      expect(result.content).toContain('alpha')
+      expect(result.content).toContain('beta')
+      expect(result.forwardToAI).toBeUndefined()
+    } finally {
+      closeSpy.mockRestore()
+      connectSpy.mockRestore()
+    }
+  })
+
+  it('reports a failed server without dropping the others', async () => {
+    const client = (await loadClient()).getInstance()
+    const closeSpy = vi.spyOn(client, 'closeAll').mockResolvedValue(undefined)
+    const connectSpy = vi
+      .spyOn(client, 'connect')
+      .mockRejectedValueOnce(new Error('ECONNREFUSED'))
+      .mockResolvedValue(undefined)
+    try {
+      const result = await getCommand('/mcp')!(
+        ctxWithServers([
+          { name: 'dead', url: 'https://dead.example/mcp' },
+          { name: 'live', url: 'https://live.example/mcp' },
+        ]),
+        ['reload'],
+      )
+      expect(result.content).toMatch(/ECONNREFUSED/)
+      expect(result.content).toContain('live')
+    } finally {
+      closeSpy.mockRestore()
+      connectSpy.mockRestore()
+    }
+  })
+
+  it('says so when no servers are configured', async () => {
+    const client = (await loadClient()).getInstance()
+    const closeSpy = vi.spyOn(client, 'closeAll').mockResolvedValue(undefined)
+    try {
+      const result = await getCommand('/mcp')!(ctxWithServers([]), ['reload'])
+      expect(result.content).toContain('No MCP servers configured')
+    } finally {
+      closeSpy.mockRestore()
+    }
   })
 })
 
@@ -406,6 +610,61 @@ describe('git-diff bridge commands (/code-review, /simplify, /verify)', () => {
       })
     })
   }
+})
+
+// ═══════════════════════════════════════════════════════════════
+// /code-review --max-findings <n>|all|default
+// ═══════════════════════════════════════════════════════════════
+
+describe('/code-review --max-findings', () => {
+  const CHANGES = ' file.ts | 5 +++--\n 1 file changed, 3 insertions(+), 2 deletions(-)'
+
+  beforeEach(() => {
+    mockPrefStore.clear()
+    mockExecSync.mockReturnValue(CHANGES)
+  })
+
+  it('a positive integer caps the count in the forwarded prompt', async () => {
+    const result = await getCommand('/code-review')!(mkCtx(), ['--max-findings', '3'])
+    expect(result.forwardToAI).toContain('at most 3 findings')
+  })
+
+  it('the choice is reused by the next run (no flag needed)', async () => {
+    await getCommand('/code-review')!(mkCtx(), ['--max-findings', '7'])
+    const second = await getCommand('/code-review')!(mkCtx(), [])
+    expect(second.forwardToAI).toContain('at most 7 findings')
+  })
+
+  it('`all` drops the cap', async () => {
+    const result = await getCommand('/code-review')!(mkCtx(), ['--max-findings', 'all'])
+    expect(result.forwardToAI).toContain('every finding')
+  })
+
+  it('`default` restores the usual limit', async () => {
+    await getCommand('/code-review')!(mkCtx(), ['--max-findings', '2'])
+    const reset = await getCommand('/code-review')!(mkCtx(), ['--max-findings', 'default'])
+    expect(reset.forwardToAI).not.toContain('at most')
+    expect(reset.forwardToAI).not.toContain('every finding')
+    // …and it sticks: the next run carries no cap either.
+    const next = await getCommand('/code-review')!(mkCtx(), [])
+    expect(next.forwardToAI).not.toContain('at most')
+  })
+
+  it('accepts the --max-findings=N spelling', async () => {
+    const result = await getCommand('/code-review')!(mkCtx(), ['--max-findings=5'])
+    expect(result.forwardToAI).toContain('at most 5 findings')
+  })
+
+  // 判据：不可用的值要**报回来**，不许静默丢掉 —— 静默丢掉正是本例要修的形态
+  // （用户敲了 flag，却以为它生效了）。
+  it('an unusable value is reported and nothing is forwarded', async () => {
+    const result = await getCommand('/code-review')!(mkCtx(), ['--max-findings', '0'])
+    expect(result.forwardToAI).toBeUndefined()
+    expect(result.content).toContain('--max-findings')
+    // 也没有落进偏好 —— 一次坏输入不该把上一次的好选择顶掉。
+    const after = await getCommand('/code-review')!(mkCtx(), [])
+    expect(after.forwardToAI).not.toContain('at most')
+  })
 })
 
 // ═══════════════════════════════════════════════════════════════

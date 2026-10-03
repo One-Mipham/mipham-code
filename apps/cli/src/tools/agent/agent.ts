@@ -40,7 +40,16 @@ export const agentTool: ToolDefinition = {
     'retrievable via the Task tool (output action) or Agent View. ' +
     'Set run_in_background: false to run synchronously.',
   category: 'agent',
-  permission: 'ask',
+  // Dispatch is not a separately-gated act. The child is built with the caller's
+  // own `permissionSystem` (below: `new SubAgent(..., ctx.permissionSystem, ...)`)
+  // and re-runs the same gate on every tool call it makes (`sub-agent.ts`
+  // `permission: subPermission`), so `'ask'` here was a **duplicate** gate — and
+  // this CLI has no interactive approval prompt, which makes `ask` a hard refusal.
+  // The observable result was that `default` (manual) mode could not dispatch a
+  // single agent: the advertised fan-out had no landing point on the branch
+  // production runs. `'self'` matches `Git` / `Task` / `SendMessage`: the spawn is
+  // free, and the child still cannot do anything the caller could not.
+  permission: 'self',
   parameters: {
     type: 'object',
     properties: {

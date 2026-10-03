@@ -506,6 +506,7 @@ export class SubAgent {
 
         const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
         let turnText = ''
+        let streamError: string | null = null
 
         for await (const chunk of (this.llm ?? this.registry).chat({
           model: finalModel,
@@ -534,7 +535,14 @@ export class SubAgent {
             })
           }
           if (chunk.type === 'error') {
-            throw new Error(`Sub-agent execution failed (model ${finalModel}): ${chunk.error}`)
+            // A mid-stream failure (timeout, dropped socket) is not a failed run.
+            // What the model already produced is real output, and throwing here
+            // fails the *whole* sub-agent — every earlier turn with it, since
+            // `chunks` is only handed back on a clean exit. Keep the partial turn
+            // and stop streaming: a shorter answer beats none. Same call the
+            // engine makes when it keeps a turn alive through a failure.
+            streamError = chunk.error ?? 'Unknown error'
+            break
           }
           if (chunk.type === 'stop') {
             break
@@ -546,6 +554,17 @@ export class SubAgent {
         }
 
         chunks.push(turnText)
+
+        // Nothing came back at all, so there is no partial response to continue
+        // from — that is a genuine failure and is reported as one.
+        if (streamError && !turnText) {
+          throw new Error(`Sub-agent execution failed (model ${finalModel}): ${streamError}`)
+        }
+
+        // A partial response *is* the turn's output. Stop here rather than acting
+        // on tool calls that arrived before the stream died: they belong to a turn
+        // that never finished, and the model never saw their results.
+        if (streamError) break
 
         // No tools used — we're done
         if (toolUses.length === 0) break

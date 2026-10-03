@@ -963,6 +963,7 @@
     "stop_hook_budget_spent": "The Stop hook asked for more work (\"{reason}\"), but this turn has used all {max} of its tool-calling rounds — stopping here. Send another message to continue.",
     "mcp_not_connected": "Error: MCP server \"{server}\" not connected",
     "mcp_tool_error": "MCP tool error: {error}",
+    "mcp_auth_required": "MCP server \"{server}\" needs authorization for this tool (the server asked for more OAuth scope). Re-authenticate with: /mcp connect {server}",
     "mcp_no_connection": "No connection for \"{name}\""
   },
   "system": {

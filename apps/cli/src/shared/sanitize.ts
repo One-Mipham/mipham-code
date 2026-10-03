@@ -247,6 +247,35 @@ export function sanitizeInlineField(input: string): string {
 }
 
 /**
+ * Control-character stripping for **multi-line** display text — tool output, tool
+ * arguments, model prose.
+ *
+ * `sanitizeInlineField` covers one-line values, but it drops `\n` with everything
+ * else: right for a name in a listing, wrong for a command's output, which is
+ * legitimately multi-line. This is the same recipe minus that one character.
+ *
+ * `\t` and `\n` are exactly what stays. Neither can move the cursor backwards or
+ * begin an escape sequence. Everything else goes, ESC and DEL included, so a file
+ * name or a `printf` payload cannot reach the terminal as CR (overwrite the line —
+ * `printf 'safe.txt\rrm -rf /'` shows the second half), BEL, or a CSI/OSC
+ * introducer. C1 (U+0080–U+009F) goes with them: its 8-bit CSI is the same
+ * introducer in a different encoding.
+ *
+ * Ink is not a substitute for this. Measured on ink 7.1.1 (`renderToString`): it
+ * drops a bare CSI sequence like `\x1b[2J`, but passes CR, BS, BEL, VT, FF, DEL and
+ * NUL straight through — and it *parses* SGR, re-emitting `\x1b[8m` (conceal) as
+ * `\x1b[28m`. So the sequences that matter here survive it.
+ *
+ * The cost is real and accepted: colour escapes in tool output (`ls --color`) are
+ * dropped, so that text renders uncoloured rather than as invisible markup. Display
+ * integrity — that what is shown is what was produced — outranks it.
+ */
+export function stripControlCharsForDisplay(input: string): string {
+  if (!input) return input
+  return stripDangerousUnicode(input).replace(/[\x00-\x08\x0b-\x1f\x7f\x80-\x9f]/g, '')
+}
+
+/**
  * Full command sanitization pipeline for permission checks.
  * Applies in order:
  * 1. Strip dangerous invisible Unicode (zero-width, bidi, BOM, etc.)

@@ -17,16 +17,21 @@ import { withValidation } from '../validation'
 // `rm -rf /* > log`, `rm -rf /* foo` and `rm -rf /*; echo x` — the same
 // deletion — were not.
 const BLOCKED_PATTERNS = [
-  // Recursive root deletion without preserve-root safeguard
-  /\brm\s+-rf\s+\/(\s|$)/,
-  /\brm\s+-rf\s+\/\*(?=[\s;&|>]|$)/,
+  // Recursive root deletion without preserve-root safeguard.
+  // The operand may be quoted: `rm -rf '/'` reaches the same path as `rm -rf /`, so
+  // the quote belongs to the *delimiter* class, not to the path — `['"]?` opens the
+  // operand and the lookahead accepts the closing quote.
+  /\brm\s+-rf\s+['"]?\/(?=["'\s]|$)/,
+  /\brm\s+-rf\s+['"]?\/\*(?=["'\s;&|>]|$)/,
   /\bsudo\s+rm\s+.*\//,
   // rm -rf on home directory or any absolute path (relative dirs like node_modules stay allowed)
-  /\brm\s+-(?:rf|fr)\s+~(?:$|\s|\/)/,
-  /\brm\s+-(?:rf|fr)\s+\/(?![\s*])/,
+  /\brm\s+-(?:rf|fr)\s+['"]?~(?:["'\s\/]|$)/,
+  /\brm\s+-(?:rf|fr)\s+['"]?\/(?![\s*])/,
   // rm -rf on dangerous cwd globs
-  /\brm\s+-(?:rf|fr)\s+\*(?=[\s;&|>]|$)/,
-  /\brm\s+-(?:rf|fr)\s+\.(?=[\s;&|>]|$)/,
+  /\brm\s+-(?:rf|fr)\s+['"]?\*(?=["'\s;&|>]|$)/,
+  // `rm -rf .` and its path spellings `./` and `../` delete the working directory;
+  // `./build` and `../vendor` name an entry inside it and stay allowed.
+  /\brm\s+-(?:rf|fr)\s+['"]?\.\.?(?:\/)?(?=["'\s;&|>]|$)/,
   // Filesystem manipulation
   /\bmkfs\./,
   /\bdd\s+if=/,
@@ -68,8 +73,12 @@ const BLOCKED_PATTERNS = [
   />\s*\/(?:etc|usr|boot|sys|proc)\//,
   // P0 hardening — ANSI-C quoting bypass (e.g. $'\x72\x6d' = rm)
   /\$'\\x[0-9a-fA-F]{2}/,
-  // P0 hardening — nested interpreter invocation
-  /\b(?:bash|sh|zsh|dash|ksh)\s+-c\b/,
+  // P0 hardening — nested interpreter invocation.
+  // The interpreter word may be separated from `-c` by any run of options, and `-c`
+  // may sit inside a cluster (`-lc`, `-ec`) — `bash -lc 'rm -rf /'` runs the same
+  // command as `bash -c 'rm -rf /'`. `ash`, `fish`, `csh` and `tcsh` are added
+  // because the payload only has to be a POSIX-ish shell, not bash.
+  /\b(?:bash|sh|zsh|dash|ksh|ash|fish|csh|tcsh)\b(?:\s+-{1,2}[\w=.-]+)*\s+-[A-Za-z]*c[A-Za-z]*\b/,
   // P0 hardening — eval builtin (obfuscation vector)
   /\beval\s+/,
   // P0 hardening — exec redirect bypass (e.g. exec >/dev/sda)

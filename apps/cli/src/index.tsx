@@ -296,18 +296,10 @@ async function connectMcpServers(
   const mcp = McpClient.getInstance()
   // Wire runtime tool-list changes before connect so mid-connect updates land.
   syncMcpToolsOnChange(mcp, tools)
-  let registeredServers = 0
-  let registeredTools = 0
   const results = await Promise.allSettled(
     mcpServers.map(async (server) => {
       await mcp.connect(server)
-      const count = registerMcpServerTools(server.name, tools)
-      // Same `count > 0` test that used to gate the per-server line, so the total
-      // counts exactly the servers that would have spoken before.
-      if (count > 0) {
-        registeredServers++
-        registeredTools += count
-      }
+      registerMcpServerTools(server.name, tools)
     }),
   )
   const failures: McpConnectFailure[] = []
@@ -320,12 +312,9 @@ async function connectMcpServers(
       console.error(`[mcp] Failed to connect "${name}": ${reason}`)
     }
   }
-  // One line for the batch, not one per server: with five configured servers this
-  // was five lines of scrollback before the TUI ever drew. The quiet path is the
-  // one with nothing to report — each failure still speaks for itself, above.
-  if (registeredServers > 0) {
-    console.log(`[mcp] ${registeredServers} server(s), ${registeredTools} tools registered`)
-  }
+  // No success line before the TUI: with five configured servers this was a line
+  // of scrollback before first paint, and it told the user nothing they act on.
+  // Failures still speak for themselves, above.
   return failures
 }
 

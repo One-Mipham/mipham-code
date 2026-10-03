@@ -2,12 +2,25 @@ import React, { useMemo } from 'react'
 import { Box, Text } from 'ink'
 import { useI18n } from '../i18n-context'
 import type { ChatMessage } from './app'
-import { decodeDisplayEntities } from '../shared/sanitize'
+import { decodeDisplayEntities, stripControlCharsForDisplay } from '../shared/sanitize'
 import { homedir } from 'node:os'
 
 interface ChatPanelProps {
   messages: ChatMessage[]
   focusMode?: boolean
+}
+
+/**
+ * The single point where untrusted text becomes terminal output.
+ *
+ * Everything this component prints that did not come from a literal in the file —
+ * tool arguments, tool output, model prose — passes through here. Control
+ * characters in those strings are not visible content; they are terminal
+ * instructions (CR overwrites the row, ESC starts a sequence), so they are removed
+ * rather than shown. See `stripControlCharsForDisplay` for what is kept and why.
+ */
+function display(text: string): string {
+  return stripControlCharsForDisplay(text)
 }
 
 /** Format cwd for display: replace HOME with ~, truncate if too long */
@@ -66,17 +79,17 @@ const MessageRow = React.memo(
             {msg.toolMeta.name ? (
               <Text color={toolColor(msg.toolMeta.name)}>
                 {msg.toolMeta.collapsed ? '⏺' : '⏺ ▼'} {msg.toolMeta.name}
-                {msg.toolMeta.input ? ` (${msg.toolMeta.input.slice(0, 120)})` : ''}
+                {msg.toolMeta.input ? ` (${display(msg.toolMeta.input).slice(0, 120)})` : ''}
               </Text>
             ) : null}
             {/* Tool result line: ⎿  summary text */}
             {msg.toolMeta.output ? (
               <Text dimColor>
                 {'  ⎿  '}
-                {msg.toolMeta.output.slice(0, 300)}
+                {display(msg.toolMeta.output).slice(0, 300)}
               </Text>
             ) : msg.content && !msg.toolMeta.collapsed ? (
-              <Text dimColor>{msg.content}</Text>
+              <Text dimColor>{display(msg.content)}</Text>
             ) : null}
           </Box>
         ) : (
@@ -94,7 +107,7 @@ const MessageRow = React.memo(
                 ⚠ {t('ui.system.role_label')}:
               </Text>
             ) : null}
-            <Text>{msg.toolMeta ? msg.content : decodeDisplayEntities(msg.content)}</Text>
+            <Text>{display(decodeDisplayEntities(msg.content))}</Text>
           </>
         )}
       </Box>

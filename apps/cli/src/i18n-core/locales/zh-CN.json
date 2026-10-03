@@ -963,6 +963,7 @@
     "stop_hook_budget_spent": "Stop 钩子要求继续（{reason}），但本轮 {max} 轮工具调用已用尽 —— 就此停下。再发一条消息即可继续。",
     "mcp_not_connected": "错误：MCP 服务器 \"{server}\" 未连接",
     "mcp_tool_error": "MCP 工具错误：{error}",
+    "mcp_auth_required": "MCP 服务器 \"{server}\" 需要为该工具授权（服务器要求更多 OAuth 作用域）。请重新认证：/mcp connect {server}",
     "mcp_no_connection": "未找到 \"{name}\" 的连接"
   },
   "system": {

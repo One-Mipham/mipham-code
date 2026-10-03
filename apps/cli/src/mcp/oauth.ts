@@ -184,6 +184,15 @@ export class OAuthClient {
     return saved.boundTo === credentialBinding(config) ? saved : null
   }
 
+  /**
+   * Discard the stored credentials so the next token request runs the PKCE flow
+   * again. Called when the server has said the current token is not enough:
+   * keeping it would answer every retry with the same refused token.
+   */
+  forget(serverName: string): void {
+    this.store.delete(serverName)
+  }
+
   async getValidAccessToken(serverName: string, config: McpServerConfig): Promise<string> {
     const saved = this.loadBoundToken(serverName, config)
     if (saved && new Date(saved.expiresAt).getTime() > Date.now() + 60000) {

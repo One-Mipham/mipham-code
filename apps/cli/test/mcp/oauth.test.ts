@@ -392,4 +392,42 @@ describe('OAuthClient', () => {
       }
     })
   })
+
+  describe('forget', () => {
+    it('drops the stored token so the next request re-authorizes', async () => {
+      // 判据是「下一次不再拿旧 token 交差」。若 forget 只是不解引用，这里会
+      // 返回旧的 'stale-token' —— 服务器说它不够用时，重试等于再送一次同一个。
+      const store = new TokenStore(testDir)
+      const config: McpServerConfig = {
+        name: 'gh',
+        url: 'https://mcp.example/rpc',
+        auth: {
+          type: 'oauth',
+          authorizationUrl: 'https://auth.example/authorize',
+          tokenUrl: 'https://auth.example/token',
+          clientId: 'client-1',
+        },
+      }
+      store.save('gh', {
+        accessToken: 'stale-token',
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
+        boundTo: credentialBinding(config),
+      })
+      const client = new OAuthClient(store)
+      expect(await client.getValidAccessToken('gh', config)).toBe('stale-token')
+
+      client.forget('gh')
+
+      const pkceSpy = vi.spyOn(client, 'executePkceFlow').mockResolvedValue({
+        accessToken: 'renewed-token',
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      })
+      try {
+        expect(await client.getValidAccessToken('gh', config)).toBe('renewed-token')
+        expect(pkceSpy).toHaveBeenCalledTimes(1)
+      } finally {
+        pkceSpy.mockRestore()
+      }
+    })
+  })
 })

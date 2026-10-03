@@ -1173,6 +1173,97 @@ describe('QueryEngine', () => {
     })
   })
 
+  // ═══════════════════════════════════════════
+  // 只有思考、没有回答的一轮 —— 要重试，且那一轮不许进上下文
+  //
+  // 上游 2.1.288 的修法：thinking-only 的响应要重试。触发条件是推理模型把整个输出预算
+  // 花在思考上，最后只吐 reasoning、不吐 text / tool_use —— 用户面对的是一块空白屏。
+  // 它不是「请求失败」（流是干净结束的），但也不是答案。
+  // ═══════════════════════════════════════════
+
+  describe('chatWithFallback — 只有推理、没有回答的一轮要重试', () => {
+    it('先只出思考 ⇒ 重试；那一次空白不进上下文，只留真正的回答', async () => {
+      let calls = 0
+      const registry = mockProviderRegistry(async function* () {
+        calls++
+        if (calls === 1) {
+          yield { type: 'thinking' as const, thinking: 'let me think about this…' }
+          yield { type: 'stop' as const }
+          return
+        }
+        yield { type: 'text' as const, content: 'the answer' }
+        yield { type: 'stop' as const }
+      })
+      const ctx = mockContext()
+      const engine = new QueryEngine(registry, ctx, new Map<string, ToolDefinition>())
+
+      const chunks: StreamChunk[] = []
+      for await (const c of engine.process('hi')) chunks.push(c)
+
+      // 重试发生了并自报家门……
+      expect(chunks.some((c) => c.restart === true)).toBe(true)
+      // ……而上下文里只有回答那一条 —— 空白那一次没有被一并提交在旁边。
+      // （这正是把提交移出 `stop` 处理器的理由：否则这里会是两条。）
+      const assistants = ctx.getMessages().filter((m) => m.role === 'assistant')
+      expect(assistants).toHaveLength(1)
+      expect(JSON.stringify(assistants[0]!.content)).toContain('the answer')
+      expect(JSON.stringify(assistants[0]!.content)).not.toContain('let me think')
+    })
+
+    // 正向对照：重试还是只有推理 ⇒ 接受它，而不是崩成一次失败。
+    // 没有这条，「把空白轮重试到报错」的实现同样能过上面那条。
+    it('重试后仍只有推理 ⇒ 接受（更短的答案胜过没有答案），不报错', async () => {
+      const registry = mockProviderRegistry(async function* () {
+        yield { type: 'thinking' as const, thinking: 'hmm' }
+        yield { type: 'stop' as const }
+      })
+      const ctx = mockContext()
+      const engine = new QueryEngine(registry, ctx, new Map<string, ToolDefinition>())
+
+      const chunks: StreamChunk[] = []
+      for await (const c of engine.process('hi')) chunks.push(c)
+
+      expect(chunks.some((c) => c.type === 'error')).toBe(false)
+      expect(ctx.getMessages().filter((m) => m.role === 'assistant')).toHaveLength(1)
+    })
+
+    // 反向对照：正常的一轮**不**该被当成 thinking-only 重试。
+    // 判据取「chat 只跑了一次」—— 文案绿推不出次数对。
+    it('正常回答（有 text）不触发重试', async () => {
+      let calls = 0
+      const registry = mockProviderRegistry(async function* () {
+        calls++
+        yield { type: 'text' as const, content: 'hi' }
+        yield { type: 'stop' as const }
+      })
+      const engine = new QueryEngine(registry, mockContext(), new Map<string, ToolDefinition>())
+      for await (const _ of engine.process('hi')) {
+        /* drain */
+      }
+      expect(calls).toBe(1)
+    })
+  })
+
+  describe('process — 一轮里 `stop` 出现两次，但上下文只记一条', () => {
+    // 真实的 OpenAI 兼容流既发 `finish_reason: "stop"` 又发 `[DONE]`，provider 两条都
+    // 译成 `stop`（`openai-compat.ts`）。提交从前挂在每个 `stop` 上，于是同一条助手消息
+    // 被写进上下文两遍 —— 模型看到自己的答案叠了一次。提交改到流之后，本条钉住这一点。
+    it('finish_reason + [DONE] 两个 `stop` ⇒ 只提交一条助手消息', async () => {
+      const registry = mockProviderRegistry(async function* () {
+        yield { type: 'text' as const, content: 'answer' }
+        yield { type: 'stop' as const }
+        yield { type: 'stop' as const }
+      })
+      const ctx = mockContext()
+      const engine = new QueryEngine(registry, ctx, new Map<string, ToolDefinition>())
+      for await (const _ of engine.process('hi')) {
+        /* drain */
+      }
+
+      expect(ctx.getMessages().filter((m) => m.role === 'assistant')).toHaveLength(1)
+    })
+  })
+
   describe('process — error handling', () => {
     it('should add error message to context and stop', async () => {
       let attempts = 0

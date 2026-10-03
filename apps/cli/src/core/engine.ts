@@ -704,25 +704,34 @@ export class QueryEngine {
           turnApiInputTokens += chunk.inputTokens
           turnApiOutputTokens += chunk.outputTokens || 0
         }
+      }
 
-        if (chunk.type === 'stop') {
-          // Add assistant response to context
-          if (assistantContent || reasoningContent || thinkingContent) {
-            const contentBlocks: import('../shared/types').ContentBlock[] = []
-            if (thinkingContent) {
-              contentBlocks.push({ type: 'thinking', thinking: thinkingContent })
-            }
-            if (assistantContent) {
-              contentBlocks.push({ type: 'text', text: assistantContent })
-            }
-            const msg: import('../shared/types').Message = {
-              role: 'assistant',
-              content: thinkingContent ? contentBlocks : assistantContent || '',
-            }
-            if (reasoningContent) msg.reasoning_content = reasoningContent
-            this.context.addMessage(msg)
-          }
+      // Commit the assistant turn **once, after the stream** — not on each `stop`
+      // chunk. Two reasons, both real:
+      //  1. The commit used to hang off `chunk.type === 'stop'`, but an ordinary
+      //     OpenAI-compatible turn emits `stop` twice: once on
+      //     `finish_reason: "stop"` and again on the trailing `[DONE]`
+      //     (`openai-compat.ts`). Committing on each added the same assistant
+      //     message to context twice — the model then saw its own answer doubled.
+      //     `continueWithTools` already commits after its loop; this matches it.
+      //  2. A retried turn re-streams (`restart`), so an attempt that is about to
+      //     be discarded must not have committed anything yet — otherwise the
+      //     reasoning-only retry in `chatWithFallback` would leave the blank turn
+      //     in context beside the answer that replaced it.
+      if (assistantContent || reasoningContent || thinkingContent) {
+        const contentBlocks: import('../shared/types').ContentBlock[] = []
+        if (thinkingContent) {
+          contentBlocks.push({ type: 'thinking', thinking: thinkingContent })
         }
+        if (assistantContent) {
+          contentBlocks.push({ type: 'text', text: assistantContent })
+        }
+        const msg: import('../shared/types').Message = {
+          role: 'assistant',
+          content: thinkingContent ? contentBlocks : assistantContent || '',
+        }
+        if (reasoningContent) msg.reasoning_content = reasoningContent
+        this.context.addMessage(msg)
       }
     } catch (err) {
       if (isAbortError(err)) {
@@ -1576,6 +1585,16 @@ export class QueryEngine {
     let retryable = true
     for (let attempt = 0; ; attempt++) {
       failure = null
+      // A turn can also come back *empty of an answer*: the stream ends cleanly
+      // but carried only reasoning (`thinking` chunks / `reasoning_content`) and
+      // no `text` or `tool_use`. Reasoning models that spend their whole output
+      // budget thinking emit exactly this, and the user is left with a blank
+      // turn. It is not a failed request, but it is not an answer either, so it
+      // gets the same single same-provider retry an error does, and is accepted
+      // if the retry does it again (a shorter answer beats none).
+      let reasoningOnly = false
+      let sawThinking = false
+      let sawOutput = false
       try {
         for await (const chunk of this.llmChat({
           model: activeModel,
@@ -1590,9 +1609,23 @@ export class QueryEngine {
             if (chunk.retryable === false) retryable = false
             break
           }
+          if (chunk.type === 'thinking' && chunk.thinking) sawThinking = true
+          if (chunk.reasoning_content) sawThinking = true
+          if (
+            (chunk.type === 'text' && chunk.content) ||
+            (chunk.type === 'tool_use' && chunk.toolUse)
+          ) {
+            sawOutput = true
+          }
           yield chunk
         }
-        if (failure === null) return
+        if (failure === null) {
+          reasoningOnly = sawThinking && !sawOutput
+          // Accept the turn unless it is a reasoning-only attempt we have not yet
+          // retried. A foreign `Llm` seam owns the whole flow and is never
+          // second-guessed, so its reasoning-only turn is accepted as-is.
+          if (!reasoningOnly || !ownsFlow || attempt >= 1) return
+        }
       } catch (err) {
         if (isAbortError(err)) throw err
         failure = String(err)
@@ -1604,7 +1637,9 @@ export class QueryEngine {
       // downstream dedupes them and a side-effecting tool runs twice.
       yield {
         type: 'warning',
-        content: `${activeId} failed (${failure}) — retrying once`,
+        content: reasoningOnly
+          ? `${activeId} returned only reasoning and no answer — retrying once`
+          : `${activeId} failed (${failure}) — retrying once`,
         restart: true,
       }
     }
@@ -1657,6 +1692,12 @@ export class QueryEngine {
     yield {
       type: 'warning',
       content: `${activeId} unreachable — degraded to ${defaultId} (${fallbackModel})${windowNote}`,
+      // Same reason as the same-provider retry above: the fallback is a *new*
+      // attempt, and the consumer only drops the failed attempts' accumulated
+      // tool calls on `restart`. Without it the fallback's tool calls are added
+      // to the ones the failures already yielded, and a side-effecting tool runs
+      // once per attempt.
+      restart: true,
     }
 
     try {

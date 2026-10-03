@@ -4,6 +4,7 @@ import {
   sanitizeParams,
   neutralizeInjectedMarkup,
   sanitizeInlineField,
+  stripControlCharsForDisplay,
   decodeDisplayEntities,
 } from '../../src/shared/sanitize'
 
@@ -228,6 +229,68 @@ describe('sanitizeInlineField', () => {
 
   it('空串原样返回（不抛、不变成别的）', () => {
     expect(sanitizeInlineField('')).toBe('')
+  })
+})
+
+// ============================================================
+// `stripControlCharsForDisplay` —— **多行**展示文本（工具输出 / 工具参数 / 模型散文）
+// 进终端前的净化。落点：`ui/chat.tsx` 的 `display()`，那是这些字符串通往屏幕的
+// 唯一一道口。
+//
+// 与 `sanitizeInlineField` 的**唯一**差别就是这一条：保留 `\n` 与 `\t`。工具输出本来
+// 就是多行的，而 CR 也能覆盖整行 —— 两者必须分开对待，否则要么丢掉换行、要么放行 CR。
+//
+// Ink **不是**替代品（ink 7.1.1 实测）：它丢掉裸 CSI（`\x1b[2J`），但 CR / BS / BEL /
+// VT / FF / DEL / NUL 原样穿过，且它会**解析** SGR —— `\x1b[8m`（隐藏）被它改写成
+// `\x1b[28m` 照发。所以要挡的序列全都活着出来了。
+// ============================================================
+
+describe('stripControlCharsForDisplay', () => {
+  it('CR 走掉 —— `a\\rb` 不许在终端里覆盖成 `b`', () => {
+    const out = stripControlCharsForDisplay('safe.txt\rrm -rf /')
+    expect(out).not.toContain('\r')
+    expect(out).toBe('safe.txtrm -rf /')
+  })
+
+  it('ESC 走掉 —— 不许留下 CSI/OSC 引导符', () => {
+    for (const s of [
+      `${cp(0x1b)}[2Jevil`,
+      `${cp(0x1b)}[8mhidden${cp(0x1b)}[0m`,
+      `${cp(0x1b)}]52;c;x`,
+    ]) {
+      expect(stripControlCharsForDisplay(s), JSON.stringify(s)).not.toContain(cp(0x1b))
+    }
+  })
+
+  it('其余 C0 与 DEL、以及 C1 都走掉（BEL/BS/VT/FF/NUL/DEL/CSI-8bit）', () => {
+    for (const n of [0x00, 0x07, 0x08, 0x0b, 0x0c, 0x1b, 0x7f, 0x9b]) {
+      expect(stripControlCharsForDisplay(`a${cp(n)}b`), `U+${n.toString(16)}`).toBe('ab')
+    }
+  })
+
+  // 正向对照：这一对字符是**刻意**留下的，也正是本函数与 `sanitizeInlineField` 的分界。
+  // 没有这两条，「把一切都删掉」的实现同样能过上面全部用例。
+  it('保留换行 —— 工具输出本来是多行的', () => {
+    expect(stripControlCharsForDisplay('line1\nline2')).toBe('line1\nline2')
+  })
+
+  it('保留制表符 —— 它不能让光标倒退，也开不了转义序列', () => {
+    expect(stripControlCharsForDisplay('a\tb')).toBe('a\tb')
+  })
+
+  it('也走一遍不可见字符的净化（RTL override 能把文件名显示成反的）', () => {
+    expect(stripControlCharsForDisplay(`safe${cp(0x202e)}gnp.exe`)).toBe('safegnp.exe')
+    expect(stripControlCharsForDisplay(`srv${ZWSP}name`)).toBe('srvname')
+  })
+
+  it('正常多行文本原样（含 CJK 与制表对齐）', () => {
+    for (const s of ['ok\n', 'total\t2\n', '构建完成 ✓\n下一行', 'a b c']) {
+      expect(stripControlCharsForDisplay(s), JSON.stringify(s)).toBe(s)
+    }
+  })
+
+  it('空串原样返回', () => {
+    expect(stripControlCharsForDisplay('')).toBe('')
   })
 })
 

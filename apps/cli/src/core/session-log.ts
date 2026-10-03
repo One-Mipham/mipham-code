@@ -124,6 +124,22 @@ export function deriveMessages(events: SessionEvent[]): Message[] {
 
 const LOG_DIR = miphamHome('sessions')
 
+/**
+ * `open()` 读到「结尾没有换行」的一段，就是撞上了并发写入。
+ *
+ * 写入方（`save()`）逐行 append，每一行都以 `\n` 收尾 ⇒ 文件末尾那段没有换行的
+ * 字节**只可能是还没写完的一行**。按损坏行跳过它，等于把这一条**静默丢掉**，于是
+ * 同一个会话在它自己保存的同时被 resume，读回来的对话少一轮。等写入方写完再读一次
+ * 即可 —— 它只差一次 `write` 的距离。
+ */
+const OPEN_TAIL_RETRIES = 5
+const OPEN_TAIL_RETRY_MS = 20
+
+/** 同步睡眠：`open()` 是同步 API，`Atomics.wait` 是 Node 上不借子进程的唯一写法。 */
+function sleepSyncMs(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+}
+
 /** 补上的那条结果的正文：说明事情本身，并给出下一步，而不是只报一个状态。 */
 function interruptedCallNotice(): string {
   return (
@@ -242,8 +258,22 @@ export class SessionLog {
     const path = join(LOG_DIR, `${sanitizeSessionName(name)}.jsonl`)
     // 类型闸在读取之前：`SessionStore.load` 在快照读不出来时**回落到这里**，所以路径上
     // 是个 FIFO 时不能在这里换个函数继续等 —— 读不动就当空日志（见 shared/regular-file.ts）。
-    const raw = readRegularFileSync(path)
+    let raw = readRegularFileSync(path)
     if (raw === null) return log
+    // 并发 append：写入方每行都以 `\n` 收尾，所以「末尾无换行」= 那一行还在写。
+    // 直接把它当损坏行跳过，就是**静默丢一轮对话**（保存中的会话被 resume 时命中）。
+    // 等一小会再读，只在这一段上重试。
+    // `raw !== ''`：空文件末尾也没有换行，但它没有「半行」可等 —— 不空转一个重试窗口。
+    for (
+      let attempt = 0;
+      attempt < OPEN_TAIL_RETRIES && raw !== '' && !raw.endsWith('\n');
+      attempt++
+    ) {
+      sleepSyncMs(OPEN_TAIL_RETRY_MS)
+      const reread = readRegularFileSync(path)
+      if (reread === null) break
+      raw = reread
+    }
     for (const line of raw.split('\n')) {
       const trimmed = line.trim()
       if (!trimmed) continue
