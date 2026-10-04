@@ -3,6 +3,19 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.17 — 2026-10-04
+
+- Version sync with Mipham Code CLI 0.85.17
+- Fixed: **a tab no longer draws over the row below.** `stripControlCharsForDisplay` used to keep
+  `\t` as a safe character — but it is the one gate through which tool arguments, tool output and
+  model prose reach the terminal. The old test ("a tab cannot move the cursor backwards or open an
+  escape sequence") was the wrong one: Ink lays text out with `string-width`, which scores a tab as
+  **0 columns**, then writes the tab through to the frame, so the terminal advances it to the next
+  tab stop (up to +8 columns) and the row ends up wider than the width Ink budgeted — drawing over
+  the row below. Its danger is advancing _unknowingly_, not moving backwards. A tab now normalises
+  to a **single space** (normalise first, then strip C0/C1, the same move
+  `stripControlCharsForCheck` makes), so words do not merge.
+
 ## 0.85.16 — 2026-10-03
 
 - Version sync with Mipham Code CLI 0.85.16

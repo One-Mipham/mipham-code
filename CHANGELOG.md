@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.85.17] — 2026-10-04
+
+### Fixed
+
+- **制表符不再随工具输出画到下一行** —— `stripControlCharsForDisplay` 从前把 `\t` 当安全字符
+  保留，而它是工具参数、工具输出与模型散文进终端的**唯一**一道口。旧判据（「不能让光标倒退、
+  也开不了转义序列」）是错的：Ink 用 `string-width` 排版、把制表符记 **0 列**，`renderToString`
+  却把它**原样写进帧**，终端于是推进到下一个制表位（最多 +8 列）⇒ 该行比 Ink 预算的宽度更宽、
+  **画到下一行**。危险是**不可知地前进**，不是倒退。现在 `\t` 归一为**单空格**（先归一、再走
+  C0/C1 剥离，与 `stripControlCharsForCheck` 同一手法），词不粘连。
+
 ## [0.85.16] — 2026-10-03
 
 ### Fixed
