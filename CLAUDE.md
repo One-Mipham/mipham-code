@@ -21,9 +21,9 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.23
-> **最后更新**: 2026-10-03 — **0.85.16 发布：十二项收口一次送出**。发版判据先问「这批里有没有一项**用户**拿得到」——**有，且不止一项**（下列每条都是用户可观测的行为变更，故不攒）。① **危险命令模式加固** —— 引号进分隔符类（`rm -rf '/'` 与 `rm -rf /` 同判，前者从前一字不拒）；`rm -rf .` / `./` / `../` 补进拒绝集（删的是工作目录本身），`./build` / `../vendor` 仍放行；嵌套解释器改「解释器后任意选项串 + `-c` 可在簇里」（`bash -lc 'rm -rf /'` 从前漏过），补 `ash`/`fish`/`csh`/`tcsh`。② **工具参数 / 工具输出 / 模型散文里的控制字符不再直达终端**（新 `stripControlCharsForDisplay`，保留 `\t`/`\n`）—— 这是三者**唯一**变成终端输出的路径，而 `sanitizeInlineField` 是单行用、把 `\n` 一并丢掉。③ **助手轮改在流结束后一次提交** —— OpenAI 兼容一次普通回复**发两次 `stop`**（`finish_reason` + 尾部 `[DONE]`），逐次提交把同一条助手消息加了两遍。④ **仅推理无答案的轮**（有 thinking、无 text 与 tool_use）走与错误**同一次**同 provider 重试；跨 provider 回退告警补 `restart: true`，否则各次尝试的 `tool_use` 叠在一起 ⇒ 带副作用的工具跑两遍。⑤ **子代理中途流错误不再丢掉已产出的一轮**（有部分产出就保住它并停流）。⑥ **钩子 matcher 写错不再连累整组**（`new RegExp` 抛出会中止启动或该会话全部钩子接线；改为告警 + 该钩子对每次调用都跑）。⑦ **MCP OAuth 三件套** —— 读 `WWW-Authenticate` 挑战置 `needsAuth`（401/403 此前与普通传输错同形）、OAuth 服务器给 MCP 子进程注入 `MCP_ACCESS_TOKEN`（该变量此前**零读者**）。⑧ **`/mcp connect` 与 `/mcp reload` 真做那件事**（从前两条都把「调用一个没有工具暴露的内部方法」交给 AI，命令什么也没连上/断开、只印一行状态）。⑨ **跨会话「已送达」不再骗人** —— 收件方策略为 `ask`（默认）时消息只进收件箱、未被看见且可被拒，发件方现在读到「Message Queued — 未送达」并点名持有者。⑩ **会话日志尾部半行不再被当损坏行**（每行以 `\n` 收尾 ⇒ 末尾无换行那段只可能是**还在写的一行**；改为有界重读 5×20ms，空文件不空转）。⑪ **启动横幅去掉 MCP 注册行**（`[mcp] N server(s), M tools registered`；失败行保留）。⑫ **`Agent` 工具 `permission` `'ask'` → `'self'`** —— 派发闸与子代理**自己**的闸重复（子代理用父级同一个 `permissionSystem` 构造、且对每一次工具调用再判一次），而本 CLI 无交互批准弹窗、`ask` 即硬拒 ⇒ **手动模式下一个 agent 也派不出去**；`Write`/`Edit`/`Bash` 仍 `ask`（有回归测试钉住这一格）。**同笔 CI 闸**：`pnpm audit` 因 `braces` 的新 GHSA（**无补丁版本**，且只在 `apps/web` 构建链）转红 ⇒ 按 GHSA id 做**作用域内**豁免，理由与回访触发写在 `SECURITY.md`「Accepted advisories」。测试 **3,942 → 4,019**（317 文件；本机 4,017 passed + 2 skipped，0 失败）。**发布读数**（tag / npm / Release / JetBrains / 两站部署）由随后一笔回填。
-> **前一条（2.94.22）**: 2026-10-03 — **十二项收口，一次落齐**。公共形状仍是那两条老账：**「广告了能力，落点不在生产走到的分支上」** 与 **「同一份判断写在两处、只改一处」**。① **`rm` 之外的危险命令模式加固**（`bash.ts`）—— 引号进分隔符类：`rm -rf '/'` 与 `rm -rf /` 同路径，从前一字不拒；`rm -rf .` / `./` / `../` 删除工作目录、补进拒绝集（`./build`、`../vendor` 仍放行）；嵌套解释器规则改「解释器后任意选项串 + `-c` 可在簇里」（`bash -lc 'rm -rf /'` 从前漏过），并补 `ash`/`fish`/`csh`/`tcsh`。② **多行显示面的控制字符闸**（`sanitize.ts` 新 `stripControlCharsForDisplay` + `chat.tsx` `display()`）—— 工具参数/输出/模型散文是**唯一**变成终端输出的路径，而 `sanitizeInlineField` 是单行用、把 `\n` 一并丢掉；实测 ink 7.1.1 放行 CR / BS / BEL / VT / FF / DEL / NUL、且把 `\x1b[8m` 改写成 `\x1b[28m` 照发 ⇒「Ink 会处理」不能替代这道口。保留 `\t`/`\n`，CR/ESC/C1 全去（`printf 'safe.txt\rrm -rf /'` 那一形状）。③ **引擎：助手轮改在流结束后一次提交**（不再挂 `chunk.type === 'stop'`）—— OpenAI 兼容一次普通回复**发两次 `stop`**（`finish_reason` + 尾部 `[DONE]`，见 `openai-compat.ts`），逐次提交把同一条助手消息**加了两遍**，模型看见自己的答案翻倍；且重试轮不该已提交，否则 `chatWithFallback` 的仅推理重试会在上下文里留下那轮空答案。④ **仅推理无答案的轮**（有 thinking / 无 text 与 tool_use —— 推理模型把预算全花在想上）拿与错误**同一次**同 provider 重试，重试仍如此则接受；跨 provider 回退的告警补 `restart: true`，否则各次尝试的 `tool_use` 叠在一起 ⇒ 带副作用的工具**跑两遍**。⑤ **子代理中途流错误不再丢掉已产出的一轮** —— 从前 `throw` 让整个子代理失败（`chunks` 只在干净退出时交回）；有部分产出就保住它并停流（更短的答案胜过没有），一个字都没有才算真失败。⑥ **钩子 matcher 写错不再连累整组** —— `new RegExp` 在 `loadHookConfigs` 里抛会让**启动**或该会话的全部钩子接线中止；改为告警 + 该钩子对每次调用都跑（`matchesMatcher` 已文档化的 fail-closed 方向）。⑦ **MCP OAuth 三件套** —— `WWW-Authenticate` 挑战此前被 `HttpTransport` 丢掉、401/403 与普通传输错同形；现读出头、置 `needsAuth`，提示「凭据被拒，重新认证 `/mcp connect <name>`」；OAuth 服务器给 MCP 子进程注入 `MCP_ACCESS_TOKEN`（该变量此前**零读者**）。⑧ **`/mcp connect` 与 `/mcp reload` 真正做那件事** —— 两条都把「调用 `McpClient.getInstance().connect(config)` / `closeAll()`」这个**没有工具暴露的方法**交给 AI，命令什么也没连上/断开、只印一行状态（`reload` 与刚修的 `connect` 同形）。⑨ **跨会话「已送达」不再骗人** —— 收件方策略为 `ask`（默认）时消息写进收件箱但**未被看见、可被拒**，发件方现在读到「Message Queued — 未送达」并点名持有者（原有 `deny` 已报拒收，只有 `ask` 这一格不诚实）。⑩ **会话日志并发半行** —— `save()` 每行以 `\n` 收尾 ⇒ 末尾无换行的那段只可能是**还在写的一行**，原实现按损坏行静默丢弃（保存中的会话被 resume 时少一轮）；改为有界重读（5×20ms，空文件不空转）。⑪ **启动横幅去掉 MCP 注册行** —— `[mcp] N server(s), M tools registered` 在首帧前刷一行，而用户不会据此做任何事（用户直令）；**失败行保留**（那是错误不是噪音），并连它的两个只服务于该行的计数器一并删除。⑫ **`Agent` 工具 `permission: 'ask'` → `'self'`** —— 派发闸与子代理自己的闸**重复**（子代理用父级同一个 `permissionSystem` 构造，且对每一次工具调用再判一次），而 `ask` 在本 CLI 是**硬拒**（无交互批准弹窗）⇒ 手动模式下一个 agent 也派不出去，fan-out 这一被广告的能力**够不着落点**；改为与 `Git`/`Task`/`SendMessage` 同档，`Write`/`Edit`/`Bash` 仍 `ask`。测试 **3,942 → 4,019**（317 文件；本机 4,017 passed + 2 skipped）。
+> **版本**: 2.94.24
+> **最后更新**: 2026-10-04 — **制表符不再画到下一行（本笔未发布）**。上一批新建的 `stripControlCharsForDisplay` 把 **`\t` 当安全字符保留**了，而它是工具参数 / 工具输出 / 模型散文进终端的**唯一**一道口。当时给它的判据（「不能让光标倒退、也开不了转义序列」）**是错的**：Ink 用 `string-width` 把 tab 记 **0 列**，`renderToString` 却把它**原样写进帧**，终端推进到下一个制表位（最多 +8 列）⇒ 该行超出 Ink 预算的宽度、**画到下一行**。危险是**不可知地前进**，不是倒退。⇒ `\t` → 单空格（先归一、再走 C0/C1 剥离，与 `stripControlCharsForCheck` 同一手法），翻两条**钉旧行为**的测试（`test/shared/sanitize.test.ts`），并在**渲染路径**加正控（`test/ui/chat-control-chars.test.ts`：帧里零 `\t`、且有 `total 2`）。负控 = 回退 `sanitize.ts` 后**恰好 2 条红**、还原到 sha256 逐字相符。测试 **4,019 → 4,020**（317 文件；本机 4,018 passed + 2 skipped，0 失败）。
+> **前一条（2.94.23）**: 2026-10-03 — **0.85.16 发布：十二项收口一次送出**。发版判据先问「这批里有没有一项**用户**拿得到」——**有，且不止一项**（下列每条都是用户可观测的行为变更，故不攒）。① **危险命令模式加固** —— 引号进分隔符类（`rm -rf '/'` 与 `rm -rf /` 同判，前者从前一字不拒）；`rm -rf .` / `./` / `../` 补进拒绝集（删的是工作目录本身），`./build` / `../vendor` 仍放行；嵌套解释器改「解释器后任意选项串 + `-c` 可在簇里」（`bash -lc 'rm -rf /'` 从前漏过），补 `ash`/`fish`/`csh`/`tcsh`。② **工具参数 / 工具输出 / 模型散文里的控制字符不再直达终端**（新 `stripControlCharsForDisplay`，保留 `\t`/`\n`）—— 这是三者**唯一**变成终端输出的路径，而 `sanitizeInlineField` 是单行用、把 `\n` 一并丢掉。③ **助手轮改在流结束后一次提交** —— OpenAI 兼容一次普通回复**发两次 `stop`**（`finish_reason` + 尾部 `[DONE]`），逐次提交把同一条助手消息加了两遍。④ **仅推理无答案的轮**（有 thinking、无 text 与 tool_use）走与错误**同一次**同 provider 重试；跨 provider 回退告警补 `restart: true`，否则各次尝试的 `tool_use` 叠在一起 ⇒ 带副作用的工具跑两遍。⑤ **子代理中途流错误不再丢掉已产出的一轮**（有部分产出就保住它并停流）。⑥ **钩子 matcher 写错不再连累整组**（`new RegExp` 抛出会中止启动或该会话全部钩子接线；改为告警 + 该钩子对每次调用都跑）。⑦ **MCP OAuth 三件套** —— 读 `WWW-Authenticate` 挑战置 `needsAuth`（401/403 此前与普通传输错同形）、OAuth 服务器给 MCP 子进程注入 `MCP_ACCESS_TOKEN`（该变量此前**零读者**）。⑧ **`/mcp connect` 与 `/mcp reload` 真做那件事**（从前两条都把「调用一个没有工具暴露的内部方法」交给 AI，命令什么也没连上/断开、只印一行状态）。⑨ **跨会话「已送达」不再骗人** —— 收件方策略为 `ask`（默认）时消息只进收件箱、未被看见且可被拒，发件方现在读到「Message Queued — 未送达」并点名持有者。⑩ **会话日志尾部半行不再被当损坏行**（每行以 `\n` 收尾 ⇒ 末尾无换行那段只可能是**还在写的一行**；改为有界重读 5×20ms，空文件不空转）。⑪ **启动横幅去掉 MCP 注册行**（`[mcp] N server(s), M tools registered`；失败行保留）。⑫ **`Agent` 工具 `permission` `'ask'` → `'self'`** —— 派发闸与子代理**自己**的闸重复（子代理用父级同一个 `permissionSystem` 构造、且对每一次工具调用再判一次），而本 CLI 无交互批准弹窗、`ask` 即硬拒 ⇒ **手动模式下一个 agent 也派不出去**；`Write`/`Edit`/`Bash` 仍 `ask`（有回归测试钉住这一格）。**同笔 CI 闸**：`pnpm audit` 因 `braces` 的新 GHSA（**无补丁版本**，且只在 `apps/web` 构建链）转红 ⇒ 按 GHSA id 做**作用域内**豁免，理由与回访触发写在 `SECURITY.md`「Accepted advisories」。测试 **3,942 → 4,019**（317 文件；本机 4,017 passed + 2 skipped，0 失败）。**发布读数**（tag / npm / Release / JetBrains / 两站部署）由随后一笔回填。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -62,7 +62,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：4,019 测试（本机 4,017 passed + 2 skipped，317 文件，0 失败）
+测试：4,020 测试（本机 4,018 passed + 2 skipped，317 文件，0 失败）
 
 ---
 
@@ -99,7 +99,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 317 个测试文件，4019 个测试
+│   │   ├── test/               # 317 个测试文件，4020 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -125,7 +125,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（4019 个测试）
+pnpm test         # vitest run（4020 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -318,7 +318,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | core            | 90      | 1561     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
 | tools           | 27      | 467      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 37      | 253      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
-| ui              | 30      | 322      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
+| ui              | 30      | 323      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
 | agent           | 14      | 138      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
 | security        | 12      | 122      | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
 | providers       | 9       | 153      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
@@ -335,7 +335,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integrity       | 19      | 132      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **317** | **4019** | **0 失败** ✅（本机 4,017 + 2 skipped，317 文件；CI 待本批推送后回填）                                                                                                      |
+| **合计**        | **317** | **4020** | **0 失败** ✅（本机 4,018 + 2 skipped，317 文件；CI 待本批推送后回填）                                                                                                      |
 
 ### 测试注意事项
 

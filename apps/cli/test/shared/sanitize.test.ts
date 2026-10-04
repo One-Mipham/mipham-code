@@ -237,8 +237,9 @@ describe('sanitizeInlineField', () => {
 // 进终端前的净化。落点：`ui/chat.tsx` 的 `display()`，那是这些字符串通往屏幕的
 // 唯一一道口。
 //
-// 与 `sanitizeInlineField` 的**唯一**差别就是这一条：保留 `\n` 与 `\t`。工具输出本来
-// 就是多行的，而 CR 也能覆盖整行 —— 两者必须分开对待，否则要么丢掉换行、要么放行 CR。
+// 与 `sanitizeInlineField` 的**唯一**差别就是这一条：保留 `\n`。工具输出本来就是多行
+// 的，而 CR 也能覆盖整行 —— 两者必须分开对待，否则要么丢掉换行、要么放行 CR。
+// （`\t` 归一为空格，不保留 —— 见下面那条用例：它不是「能不能倒退」的问题。）
 //
 // Ink **不是**替代品（ink 7.1.1 实测）：它丢掉裸 CSI（`\x1b[2J`），但 CR / BS / BEL /
 // VT / FF / DEL / NUL 原样穿过，且它会**解析** SGR —— `\x1b[8m`（隐藏）被它改写成
@@ -268,14 +269,19 @@ describe('stripControlCharsForDisplay', () => {
     }
   })
 
-  // 正向对照：这一对字符是**刻意**留下的，也正是本函数与 `sanitizeInlineField` 的分界。
-  // 没有这两条，「把一切都删掉」的实现同样能过上面全部用例。
+  // 正向对照：`\n` 是**刻意**留下的，也正是本函数与 `sanitizeInlineField` 的分界。
+  // 没有它，「把一切都删掉」的实现同样能过上面全部用例。
   it('保留换行 —— 工具输出本来是多行的', () => {
     expect(stripControlCharsForDisplay('line1\nline2')).toBe('line1\nline2')
   })
 
-  it('保留制表符 —— 它不能让光标倒退，也开不了转义序列', () => {
-    expect(stripControlCharsForDisplay('a\tb')).toBe('a\tb')
+  // 与 `\n` 相反：`\t` **不**留下。Ink 按 `string-width` 排版，把 tab 记作 0 列，却把
+  // 它原样写进帧；终端遇到 tab 推进到下一个制表位（最多 +8 列）⇒ 该行超出预算、压到
+  // 下一行。判据不是「能不能让光标倒退」（它不能），而是「会不会不可知地前进」（它会）。
+  it('制表符归一为空格 —— 不许把它当 0 列却让终端推进到制表位', () => {
+    expect(stripControlCharsForDisplay('a\tb')).toBe('a b')
+    // 词不粘连：是「单空格」，不是「删掉」
+    expect(stripControlCharsForDisplay('total\t2')).toBe('total 2')
   })
 
   it('也走一遍不可见字符的净化（RTL override 能把文件名显示成反的）', () => {
@@ -283,8 +289,8 @@ describe('stripControlCharsForDisplay', () => {
     expect(stripControlCharsForDisplay(`srv${ZWSP}name`)).toBe('srvname')
   })
 
-  it('正常多行文本原样（含 CJK 与制表对齐）', () => {
-    for (const s of ['ok\n', 'total\t2\n', '构建完成 ✓\n下一行', 'a b c']) {
+  it('正常多行文本原样（含 CJK）', () => {
+    for (const s of ['ok\n', '构建完成 ✓\n下一行', 'a b c']) {
       expect(stripControlCharsForDisplay(s), JSON.stringify(s)).toBe(s)
     }
   })

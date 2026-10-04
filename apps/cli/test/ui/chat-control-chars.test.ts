@@ -62,6 +62,19 @@ describe('ChatPanel — 不受信文本不许把控制字符送进终端', () =>
     expect(frame).not.toContain(cp(0x7f))
   })
 
+  // 制表符与 CR/ESC 同族，但机制不同：Ink 不算它宽（`string-width` 记 0 列），却把它
+  // 原样写进帧，终端于是推进到下一个制表位、压到下一行。钉在**帧**上，才能证明它在
+  // 渲染路径上被中和，而不只是在纯函数里是对的。
+  it('工具输出里的制表符不落进帧（终端会把它推进到制表位）', () => {
+    const frame = frameOf({
+      role: 'system',
+      content: '',
+      toolMeta: { name: 'Bash', input: 'x', output: 'total\t2', collapsed: true },
+    })
+    expect(frame).not.toContain('\t')
+    expect(frame).toContain('total 2')
+  })
+
   // 正向对照。没有这两条，一个「把正文整个删掉」的实现在上面三条下同样全绿 ——
   // 而那正是把工具输出弄成空白的坏法。
   it('换行仍然分行（工具输出本来是多行的）', () => {

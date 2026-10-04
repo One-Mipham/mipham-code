@@ -254,8 +254,14 @@ export function sanitizeInlineField(input: string): string {
  * else: right for a name in a listing, wrong for a command's output, which is
  * legitimately multi-line. This is the same recipe minus that one character.
  *
- * `\t` and `\n` are exactly what stays. Neither can move the cursor backwards or
- * begin an escape sequence. Everything else goes, ESC and DEL included, so a file
+ * `\n` is what stays — a line break, whose width is measured line by line. `\t` does
+ * **not** stay: Ink lays text out with `string-width`, which scores a tab as **0
+ * columns**, then writes the tab through to the frame, while the terminal advances a
+ * tab to the next tab stop (up to +8 columns). The row ends up wider than the width
+ * Ink budgeted and draws over the row below. That a tab cannot move the cursor
+ * *backwards* or open an escape sequence is the wrong test — its danger is advancing
+ * *unknowingly*. So `\t` → a single space, the same move `stripControlCharsForCheck`
+ * makes, so words do not merge. Everything else goes, ESC and DEL included, so a file
  * name or a `printf` payload cannot reach the terminal as CR (overwrite the line —
  * `printf 'safe.txt\rrm -rf /'` shows the second half), BEL, or a CSI/OSC
  * introducer. C1 (U+0080–U+009F) goes with them: its 8-bit CSI is the same
@@ -272,7 +278,12 @@ export function sanitizeInlineField(input: string): string {
  */
 export function stripControlCharsForDisplay(input: string): string {
   if (!input) return input
-  return stripDangerousUnicode(input).replace(/[\x00-\x08\x0b-\x1f\x7f\x80-\x9f]/g, '')
+  return (
+    stripDangerousUnicode(input)
+      // `\t` first (→ space), so it cannot reach the terminal as a tab stop jump.
+      .replace(/\t/g, ' ')
+      .replace(/[\x00-\x08\x0b-\x1f\x7f\x80-\x9f]/g, '')
+  )
 }
 
 /**
