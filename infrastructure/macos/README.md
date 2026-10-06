@@ -19,7 +19,7 @@ Native macOS application for Mipham Code.
 
 ### Direct Download
 
-1. Download `mipham-code-0.85.17.dmg` from [mipham.ai/dl](https://mipham.ai/dl)
+1. Download `mipham-code-0.85.18.dmg` from [mipham.ai/dl](https://mipham.ai/dl)
 2. Open the DMG, drag "Mipham Code" to Applications
 3. Double-click to launch
 
