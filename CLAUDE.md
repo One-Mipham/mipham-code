@@ -21,9 +21,9 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.25
-> **最后更新**: 2026-10-04 — **0.85.17 发布：制表符不再画到下一行**。发版判据先问「这批里有没有一项**用户**拿得到」——**有**：`stripControlCharsForDisplay`（工具参数 / 工具输出 / 模型散文进终端的**唯一**一道口）此前把 `\t` 当安全字符保留，而 Ink 用 `string-width` 排版、把 tab 记 **0 列**，`renderToString` 却把它**原样写进帧**，终端于是推进到下一个制表位（最多 +8 列）⇒ 该行比 Ink 预算的宽度更宽、**画到下一行**。危险是**不可知地前进**，不是倒退。落点：`\t` → 单空格（先归一、再走 C0/C1 剥离，与 `stripControlCharsForCheck` 同一手法），翻两条**钉旧行为**的判据（`test/shared/sanitize.test.ts`）+ **渲染路径正控**（`test/ui/chat-control-chars.test.ts`：帧里零 `\t`、且有 `total 2`）—— 纯函数绿推不出净化器在渲染路径上。测试 **4,020**（317 文件，本机 4,018 passed + 2 skipped，0 失败）。**发布读数**（全取外部读数）：GPG `tag v0.85.17` → `d7b230d5`；主干 CI `37182360935` **9/9**、`release.yml` `37182561207` **9/9**；npm 真输出行 `+ @miphamai/cli@0.85.17`（job 自述「may take a few minutes」⇒ 首读仍是 0.85.16，**传播窗口不是失败读数**）⇒ `latest` = **0.85.17**；Release **6 资产**（非 draft 非 prerelease）；JetBrains **真输出行** `JetBrains plugin published.`（不是其上方那行脚本回显）；本机 `.vsix` **66,708 B** / sha256 `3a98aaa6…` / 包内 `version` = **0.85.17**（**待人工网页上传 Marketplace**）。**两站**：**国内站已部署并独立复核**（带 cache-bust 直取公开页 —— `/` HTTP 200 且 **2×0.85.17 / 0×0.85.16**、`/mipham-code` HTTP 200 且 **3×0.85.17 / 0×0.85.16**）；**国际站 mipham.ai 未部署** —— 部署授权只存在于上一轮压缩摘要，被自动模式分类器按「未授权」拦下，**未绕行**。
-> **前一条（2.94.24）**: 2026-10-04 — **制表符不再画到下一行（0.85.17 发布）**。上一批新建的 `stripControlCharsForDisplay` 把 **`\t` 当安全字符保留**了，而它是工具参数 / 工具输出 / 模型散文进终端的**唯一**一道口。当时给它的判据（「不能让光标倒退、也开不了转义序列」）**是错的**：Ink 用 `string-width` 把 tab 记 **0 列**，`renderToString` 却把它**原样写进帧**，终端推进到下一个制表位（最多 +8 列）⇒ 该行超出 Ink 预算的宽度、**画到下一行**。危险是**不可知地前进**，不是倒退。⇒ `\t` → 单空格（先归一、再走 C0/C1 剥离，与 `stripControlCharsForCheck` 同一手法），翻两条**钉旧行为**的测试（`test/shared/sanitize.test.ts`），并在**渲染路径**加正控（`test/ui/chat-control-chars.test.ts`：帧里零 `\t`、且有 `total 2`）。负控 = 回退 `sanitize.ts` 后**恰好 2 条红**、还原到 sha256 逐字相符。测试 **4,019 → 4,020**（317 文件；本机 4,018 passed + 2 skipped，0 失败）。
+> **版本**: 2.94.26
+> **最后更新**: 2026-10-06 — **本轮收口：15 条缺陷 + 8 条半缺口 + 4 条自发现，一次落齐（本笔未发布）**。公共形状仍是那两条老账。**①「判据锚在了错误的对象上」**：`WebFetch` 把「截断」当「整页」—— 超过上限的部分静默丢弃、且越界内容**无路可读**（⇒ `MAX_RETURN_CHARS` + 缓存 `complete` 位 + `offset` 续读 + 印 `characters X–Y of N`）；流空闲看门狗用**墙钟** `setTimeout`，机器睡过窗口后唤醒瞬间到期，把**还活着**的流判成 stalled 并杀掉该轮（⇒ `createAwakeTimer` 量 `performance.now()` 的**清醒时间**，不足预算则补足余额重挂、epoch 跨次保持）；`isVerificationCommand` 的拒字符集漏了 `*?[]`，而 `cat` 在白名单里 ⇒ `cat *secret*` 在 `acceptEdits` 下被自动放行（⇒ 补 `?[]`）。**②「有定义、缺施加点」**：`/loop` 动态唤醒只活在内存，进程/worker 重启即静默丢失（⇒ 落盘 `~/.mipham/wakeups/`（session id 经 sha256 防 `../` 逃逸）+ `resumeWakeups` 回报错过的唤醒 + UI 提示）；钩子/规则改写**生效参数**后不再重解析批准 ⇒ 改写可能把批准过的调用变成未批准的形状（⇒ 补第二道 `resolveApproval`，`ask` 即拒）；`/rewind` 只在回合**结束后**存检查点 ⇒ **开工中发的那条 prompt 不在表里**（⇒ 挪到 `pre-turn`，单点覆盖 TUI/`/loop`/goal/daemon）；子代理 artifact 身份写死字面量 `'sub-agent'` ⇒ 同项目所有会话的子代理共用一桶、同名 artifact 被误当上一版（⇒ `ToolContext.artifactSessionId`）。**③ 安全面七笔**：Bash `--opt=value` 的**值**进路径判据（`--include=*secret*` 不再逃过 Read deny）、未解析 shell glob fail-closed、项目/目录层指令文件是符号链接即拒载（`CLAUDE.md -> ~/.ssh/id_rsa`）、HTTP MCP 响应 **8 MiB** 上限、凭据默认模式与 URL userinfo 正则**量词有界**（ReDoS）、`anthropic.baseUrl` 真被读（网关用户的 key 从此不再静默送往 `api.anthropic.com`，且非默认主机不再收 `anthropic-beta`）、`Read` 对**将要返回的那个窗口**做 NUL 嗅探（稀疏文本文件仍可读）。测试 **4,020 → 4,076**（317 文件；本机 4,074 passed + 2 skipped，0 失败）。
+> **前一条（2.94.25）**: 2026-10-04 — **0.85.17 发布：制表符不再画到下一行**。发版判据先问「这批里有没有一项**用户**拿得到」——**有**：`stripControlCharsForDisplay`（工具参数 / 工具输出 / 模型散文进终端的**唯一**一道口）此前把 `\t` 当安全字符保留，而 Ink 用 `string-width` 排版、把 tab 记 **0 列**，`renderToString` 却把它**原样写进帧**，终端于是推进到下一个制表位（最多 +8 列）⇒ 该行比 Ink 预算的宽度更宽、**画到下一行**。危险是**不可知地前进**，不是倒退。落点：`\t` → 单空格（先归一、再走 C0/C1 剥离，与 `stripControlCharsForCheck` 同一手法），翻两条**钉旧行为**的判据（`test/shared/sanitize.test.ts`）+ **渲染路径正控**（`test/ui/chat-control-chars.test.ts`：帧里零 `\t`、且有 `total 2`）—— 纯函数绿推不出净化器在渲染路径上。测试 **4,020**（317 文件，本机 4,018 passed + 2 skipped，0 失败）。**发布读数**（全取外部读数）：GPG `tag v0.85.17` → `d7b230d5`；主干 CI `37182360935` **9/9**、`release.yml` `37182561207` **9/9**；npm 真输出行 `+ @miphamai/cli@0.85.17`（job 自述「may take a few minutes」⇒ 首读仍是 0.85.16，**传播窗口不是失败读数**）⇒ `latest` = **0.85.17**；Release **6 资产**（非 draft 非 prerelease）；JetBrains **真输出行** `JetBrains plugin published.`（不是其上方那行脚本回显）；本机 `.vsix` **66,708 B** / sha256 `3a98aaa6…` / 包内 `version` = **0.85.17**（**待人工网页上传 Marketplace**）。**两站**：**国内站已部署并独立复核**（带 cache-bust 直取公开页 —— `/` HTTP 200 且 **2×0.85.17 / 0×0.85.16**、`/mipham-code` HTTP 200 且 **3×0.85.17 / 0×0.85.16**）；**国际站 mipham.ai 未部署** —— 部署授权只存在于上一轮压缩摘要，被自动模式分类器按「未授权」拦下，**未绕行**。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -62,7 +62,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：4,020 测试（本机 4,018 passed + 2 skipped，317 文件，0 失败）
+测试：4,076 测试（本机 4,074 passed + 2 skipped，317 文件，0 失败）
 
 ---
 
@@ -99,7 +99,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 317 个测试文件，4020 个测试
+│   │   ├── test/               # 317 个测试文件，4076 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -125,7 +125,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（4020 个测试）
+pnpm test         # vitest run（4076 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -315,19 +315,19 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 90      | 1561     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
-| tools           | 27      | 467      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
+| core            | 90      | 1590     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
+| tools           | 27      | 480      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 37      | 253      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
 | ui              | 30      | 323      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
 | agent           | 14      | 138      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
 | security        | 12      | 122      | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
-| providers       | 9       | 153      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
+| providers       | 9       | 159      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
 | mcp             | 11      | 125      | client / transport / oauth / token-store / registry / instructions（含 2 skipped）                                                                                          |
 | workflow        | 8       | 61       | runtime / loop / parallel / sandbox / journal / verify                                                                                                                      |
 | vajra           | 6       | 53       | context / events / service / compose / leaf（自建内核）                                                                                                                     |
 | shared          | 11      | 138      | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                              |
 | commands        | 9       | 95       | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers / provider-model-flags                                                                  |
-| skills          | 5       | 35       | sanitizer / marketplace / fork-executor / skill-assets                                                                                                                      |
+| skills          | 5       | 43       | sanitizer / marketplace / fork-executor / skill-assets                                                                                                                      |
 | config          | 10      | 125      | credential-crypto / loader-encryption / defaults / settings-json / preferences                                                                                              |
 | plugin          | 4       | 58       | claude-plugin / plugin-manager                                                                                                                                              |
 | artifacts       | 1       | 6        | manifest                                                                                                                                                                    |
@@ -335,7 +335,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integrity       | 19      | 132      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **317** | **4020** | **0 失败** ✅（本机 4,018 + 2 skipped，317 文件；CI 待本批推送后回填）                                                                                                      |
+| **合计**        | **317** | **4076** | **0 失败** ✅（本机 4,074 + 2 skipped，317 文件；CI 待本批推送后回填）                                                                                                      |
 
 ### 测试注意事项
 
