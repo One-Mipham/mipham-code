@@ -639,6 +639,18 @@ export interface ToolContext {
    * the experience logs use. Absent for the main session.
    */
   agentName?: string
+  /**
+   * The bucket an artifact belongs in, when that is not `sessionId`.
+   *
+   * A sub-agent's `sessionId` is the literal `'sub-agent'` — `SendMessage` keys
+   * off that literal to address the parent, so it cannot be changed. Artifacts
+   * keyed off the same field therefore put **every** sub-agent in every session
+   * into one bucket, and `archiveVersion` then treats an unrelated agent's
+   * same-named artifact as "the previous version" of this one. Set by
+   * `SubAgent.runExecution` to the parent session plus the agent's name; absent
+   * everywhere else, where `sessionId` is already the right answer.
+   */
+  artifactSessionId?: string
 }
 
 export interface ToolDefinition {

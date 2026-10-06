@@ -6,7 +6,12 @@ import type {
   ContentBlock,
 } from '../shared/index.ts'
 import type { ProviderInstance, ChatRequest } from './registry'
-import { fetchWithRetry, streamIdleTimeoutMs, isRetryableFailure } from './fetch-utils'
+import {
+  fetchWithRetry,
+  streamIdleTimeoutMs,
+  isRetryableFailure,
+  createAwakeTimer,
+} from './fetch-utils'
 
 interface AnthropicContentBlock {
   type: string
@@ -66,10 +71,42 @@ function isEmptyTextBlock(block: Record<string, unknown>): boolean {
 }
 
 export class AnthropicProvider implements ProviderInstance {
-  private baseUrl = 'https://api.anthropic.com/v1'
   private anthropicVersion = '2023-06-01'
 
+  /**
+   * Honour a user-level `baseUrl` override the way `openai-compat` does.
+   *
+   * The config loader treats `baseUrl` as a **routing** field — it decides where
+   * the user's API key is sent, so only trusted (user-level) config may set it
+   * (see `config/loader.ts`). Hard-coding the endpoint here silently dropped that
+   * override: a user who pointed the provider at a proxy or gateway still had
+   * every request sent to `api.anthropic.com`. Read it, with the official
+   * endpoint as the fallback the default config (which sets no `baseUrl`) relies
+   * on. `baseURL` is accepted too — the same common typo `openai-compat` allows.
+   */
+  private get baseUrl(): string {
+    const raw = this.config.baseUrl ?? (this.config as { baseURL?: string }).baseURL
+    return raw?.replace(/\/+$/, '') || 'https://api.anthropic.com/v1'
+  }
+
   constructor(public config: ProviderConfig) {}
+
+  /**
+   * Are we talking to api.anthropic.com itself, or to a custom `baseUrl`?
+   *
+   * `anthropic-beta` is a header for Anthropic's own gateway. A custom base URL
+   * is by definition some other gateway — a proxy, a corporate relay, an
+   * Anthropic-compatible shim — and sending a beta flag that gateway does not
+   * implement is a way to turn a working setup into `400 Bad Request` the moment
+   * the endpoint changes, with nothing in the message pointing at the header.
+   */
+  private get isDefaultApiHost(): boolean {
+    try {
+      return new URL(this.baseUrl).host === 'api.anthropic.com'
+    } catch {
+      return false
+    }
+  }
 
   async *chat(req: ChatRequest): AsyncGenerator<StreamChunk> {
     const apiKey = this.resolveApiKey(this.config.apiKey)
@@ -149,7 +186,7 @@ export class AnthropicProvider implements ProviderInstance {
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
         'anthropic-version': this.anthropicVersion,
-        'anthropic-beta': 'prompt-caching-2024-07-31',
+        ...(this.isDefaultApiHost ? { 'anthropic-beta': 'prompt-caching-2024-07-31' } : {}),
       },
       body: JSON.stringify(body),
       // Same as `openai-compat`: without this the caller's signal never reaches
@@ -190,19 +227,17 @@ export class AnthropicProvider implements ProviderInstance {
     try {
       while (true) {
         let readResult: Awaited<ReturnType<typeof reader.read>>
-        let idleTimer: ReturnType<typeof setTimeout> | undefined
+        let cancelIdle: (() => void) | undefined
         try {
           readResult = await Promise.race([
             reader.read(),
             new Promise<never>((_, reject) => {
-              idleTimer = setTimeout(
-                () =>
-                  reject(
-                    new Error(
-                      `Stream read timeout — no data for ${Math.round(STREAM_READ_TIMEOUT_MS / 1000)}s`,
-                    ),
+              cancelIdle = createAwakeTimer(STREAM_READ_TIMEOUT_MS, () =>
+                reject(
+                  new Error(
+                    `Stream read timeout — no data for ${Math.round(STREAM_READ_TIMEOUT_MS / 1000)}s`,
                   ),
-                STREAM_READ_TIMEOUT_MS,
+                ),
               )
             }),
           ])
@@ -210,7 +245,7 @@ export class AnthropicProvider implements ProviderInstance {
           yield { type: 'error', error: `Stream stalled: ${String(err)}` }
           return
         } finally {
-          if (idleTimer) clearTimeout(idleTimer)
+          cancelIdle?.()
         }
         const { done, value } = readResult
         if (done) break

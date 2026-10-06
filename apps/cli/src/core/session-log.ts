@@ -14,6 +14,16 @@ export type SessionEvent =
       provider?: string
       model?: string
       cwd?: string
+      /**
+       * The permission mode this session started in.
+       *
+       * Not reconstructible from the transcript: the same tool call appears in
+       * the log whether it was auto-approved or approved by hand, so a resumed
+       * session could not tell which gate it was running under. Recorded here so
+       * `--resume` can put the mode back instead of silently dropping to the
+       * config default (plan mode in particular was lost on every resume).
+       */
+      permissionMode?: string
     }
   | { type: 'user/message'; at: number; message: Message }
   | { type: 'assistant/message'; at: number; message: Message }

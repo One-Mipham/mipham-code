@@ -1,7 +1,12 @@
 import { execSync } from 'node:child_process'
 import type { ProviderConfig, ModelInfo, Message, StreamChunk } from '../shared/index.ts'
 import type { ProviderInstance, ChatRequest } from './registry'
-import { fetchWithRetry, streamIdleTimeoutMs, isRetryableFailure } from './fetch-utils'
+import {
+  fetchWithRetry,
+  streamIdleTimeoutMs,
+  isRetryableFailure,
+  createAwakeTimer,
+} from './fetch-utils'
 import { OLLAMA_PRESET_MODELS } from '../shared/constants'
 
 export class OpenAICompatProvider implements ProviderInstance {
@@ -81,19 +86,17 @@ export class OpenAICompatProvider implements ProviderInstance {
     try {
       while (true) {
         let readResult: Awaited<ReturnType<typeof reader.read>>
-        let idleTimer: ReturnType<typeof setTimeout> | undefined
+        let cancelIdle: (() => void) | undefined
         try {
           readResult = await Promise.race([
             reader.read(),
             new Promise<never>((_, reject) => {
-              idleTimer = setTimeout(
-                () =>
-                  reject(
-                    new Error(
-                      `Stream read timeout — no data for ${Math.round(STREAM_READ_TIMEOUT_MS / 1000)}s`,
-                    ),
+              cancelIdle = createAwakeTimer(STREAM_READ_TIMEOUT_MS, () =>
+                reject(
+                  new Error(
+                    `Stream read timeout — no data for ${Math.round(STREAM_READ_TIMEOUT_MS / 1000)}s`,
                   ),
-                STREAM_READ_TIMEOUT_MS,
+                ),
               )
             }),
           ])
@@ -101,7 +104,7 @@ export class OpenAICompatProvider implements ProviderInstance {
           yield { type: 'error', error: `Stream stalled: ${String(err)}` }
           return
         } finally {
-          if (idleTimer) clearTimeout(idleTimer)
+          cancelIdle?.()
         }
         const { done, value } = readResult
         if (done) break

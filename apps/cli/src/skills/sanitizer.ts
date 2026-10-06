@@ -71,11 +71,19 @@ const SOURCE_TAGS: Record<string, string> = {
 /**
  * Sanitize a skill body (markdown instructions) for safe execution.
  *
- * Security measures:
- *   - `! command` patterns → escaped to `! command` (prevents AI from treating as shell command)
- *   - `@file` references → prefixed with safety note
- *   - Trailing backticks that could break markdown fences → escaped
- *   - Excessively long lines → truncated
+ * Three transformations, each of which also pushes a warning:
+ *   - a line starting with `!command` → `! command`. The inserted character is a
+ *     **plain space**, which is what breaks the exact `!`-prefixed shape a session
+ *     treats as a shell command. Deliberately *not* a zero-width space: U+200B is on
+ *     the dangerous-invisible strip list in `shared/sanitize.ts`, so a ZWSP written
+ *     here would be removed further down the pipe and the neutralization would undo
+ *     itself.
+ *   - `@file.ext` references → `@ file.ext` (a space after the `@` stops expansion)
+ *   - an odd number of ``` fences → a closing fence is appended
+ *
+ * Detection is **line-scoped**: `!` must open its line, and the lookahead must find a
+ * non-space on that same line — hence `[^\S\n]*` rather than `\s*`, which would reach
+ * across the newline and report the next line's first word as a command.
  */
 export function sanitizeSkillBody(body: string): SanitizeResult {
   const warnings: string[] = []
@@ -84,15 +92,15 @@ export function sanitizeSkillBody(body: string): SanitizeResult {
 
   // ── 1. Detect and warn about `!` shell command patterns ──
   // Pattern: line starting with `!` (Bash command marker in some AI contexts)
-  const bangCommandRegex = /^!\s*(\S+)/gm
+  const bangCommandRegex = /^![^\S\n]*(\S+)/gm
   let bangMatch: RegExpExecArray | null
   const bangCommands: string[] = []
   while ((bangMatch = bangCommandRegex.exec(text)) !== null) {
     bangCommands.push(bangMatch[1] || '')
   }
   if (bangCommands.length > 0) {
-    // Escape `!` → `! ` (zero-width space after bang to neutralize)
-    text = text.replace(/^!(?=\s*\S)/gm, '! ')
+    // Escape `!` → `! ` (a plain space — see the docblock for why not a zero-width one)
+    text = text.replace(/^!(?=[^\S\n]*\S)/gm, '! ')
     modified = true
     warnings.push(
       `Skill body contained ${bangCommands.length} shell-command-like patterns (${bangCommands.slice(0, 3).join(', ')}${bangCommands.length > 3 ? '...' : ''}). Escaped to prevent unintended command execution.`,

@@ -107,6 +107,51 @@ function parseSseResponse(
 }
 
 /**
+ * Upper bound on a single response body, in bytes.
+ *
+ * `response.text()` / `.json()` buffer whatever the server sends, so a buggy
+ * server (a runaway log line) or a hostile one (an 8 GB "result") would be
+ * pulled into memory in full before any comparison could run. The cap has to
+ * be part of the read, not a check after it.
+ */
+const MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+
+/** Read a response body, refusing anything past `maxBytes`. */
+async function readBodyCapped(
+  response: Response,
+  maxBytes: number = MAX_RESPONSE_BYTES,
+): Promise<string> {
+  // A declared Content-Length lets us refuse before reading a single byte.
+  const declared = Number(response.headers.get('content-length'))
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    throw new Error(`MCP response body declared ${declared} bytes (limit ${maxBytes})`)
+  }
+  // Header absent or lying — fall back to a streaming read with a running total.
+  if (!response.body) return await response.text()
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let text = ''
+  let total = 0
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (!value) continue
+      total += value.byteLength
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => {})
+        throw new Error(`MCP response body exceeded the ${maxBytes}-byte limit`)
+      }
+      text += decoder.decode(value, { stream: true })
+    }
+  } finally {
+    reader.releaseLock()
+  }
+  return text + decoder.decode()
+}
+
+/**
  * MCP Streamable HTTP transport — speaks JSON-RPC 2.0 to an HTTP endpoint
  * (e.g. Forge's `POST /mcp`), returning plain JSON or reassembled SSE streams.
  *
@@ -183,7 +228,7 @@ export class HttpTransport implements Transport {
       if (!response.ok) {
         let detail = `HTTP ${response.status}`
         try {
-          detail = JSON.stringify(await response.json())
+          detail = JSON.stringify(JSON.parse(await readBodyCapped(response)))
         } catch {
           /* keep status-only detail */
         }
@@ -197,10 +242,10 @@ export class HttpTransport implements Transport {
 
       const contentType = response.headers.get('content-type') || ''
       if (contentType.includes('text/event-stream')) {
-        return parseSseResponse(await response.text(), (n) => this.dispatchNotification(n))
+        return parseSseResponse(await readBodyCapped(response), (n) => this.dispatchNotification(n))
       }
 
-      const json = (await response.json()) as JsonRpcResponse
+      const json = JSON.parse(await readBodyCapped(response)) as JsonRpcResponse
       if (json.error) {
         throw new Error(`MCP error ${json.error.code}: ${json.error.message}`)
       }

@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync, lstatSync } from 'node:fs'
 import { join, resolve, relative, sep, isAbsolute } from 'node:path'
 import { execSync } from 'node:child_process'
 import { parse as parseYaml } from 'yaml'
@@ -546,6 +546,25 @@ Never omit it or present the work as purely human-authored.`)
 
   private tryLoad(path: string, level: InstructionFile['level']): void {
     if (!existsSync(path)) return
+
+    // A repo-controlled instruction file must be a regular file, not a symlink.
+    // A cloned repository can ship `CLAUDE.md -> ~/.ssh/id_rsa`: this loader runs
+    // with no permission gate at all, so following the link would put any local
+    // file into the system prompt without the model ever asking for it. `lstat`
+    // reports the link as itself, which is what makes the shape visible.
+    //
+    // Only the levels that live *inside* the checkout (`project`, `directory`)
+    // are gated. A symlinked `~/.mipham/USER.md` pointing at a dotfiles repo is
+    // the user's own arrangement, and the group/company tiers point at the
+    // surrounding monorepo the user cloned deliberately — refusing those would
+    // break real setups without closing anything a repo did not already control.
+    if (level === 'project' || level === 'directory') {
+      try {
+        if (lstatSync(path).isSymbolicLink()) return
+      } catch {
+        return
+      }
+    }
 
     try {
       const raw = readFileSync(path, 'utf-8')

@@ -62,7 +62,8 @@ import { useI18n } from '../i18n-context'
 import type { PermissionMode } from '../shared/index.ts'
 import { sanitizeForDisplay } from '../shared/sanitize.ts'
 import { recordLoopTurn, readAutoloopJournal } from '../commands/autoloop-journal.js'
-import { cancelAllSessionTimers } from '../tools/scheduling/schedule-wakeup.js'
+import { cancelAllSessionTimers, resumeWakeups } from '../tools/scheduling/schedule-wakeup.js'
+import type { LostWakeup } from '../tools/scheduling/schedule-wakeup.js'
 import { startCronPoller } from '../core/cron-poller'
 
 interface AppProps {
@@ -222,6 +223,25 @@ export function formatToolDetail(name: string, input: Record<string, unknown>): 
 function toolDisplayName(name: string): string {
   if (name === 'Write' || name === 'Edit') return 'Update'
   return name
+}
+
+/**
+ * The turn a `/loop` gets when its wakeup came due while no process was running.
+ *
+ * Said plainly, and with the decision handed back: the loop was left armed by the
+ * model, so only the model can say whether to re-time it or end it. Silence here is
+ * what made the loss invisible — the model would keep treating a dead timer as
+ * pending work.
+ */
+function missedWakeupNotice(lost: LostWakeup): string {
+  return (
+    `⏰ Your scheduled wakeup never fired: it was due at ${lost.firesAt} ` +
+    `(${lost.reason}), and Mipham Code was not running then — nothing ran on your behalf. ` +
+    `The prompt you had queued was:\n"${lost.prompt}"\n\n` +
+    `The delay you chose measured from when you chose it, so this is not the iteration you ` +
+    `asked for. Decide now: reschedule with ScheduleWakeup (a fresh delaySeconds), or end ` +
+    `the loop with ScheduleWakeup {stop: true}.`
+  )
 }
 
 export function App({
@@ -834,10 +854,11 @@ export function App({
           setActiveTool(null)
           setAgentTick((t) => t + 1)
         }
-        // Auto-save checkpoint after each AI response
-        if (assistantContent) {
-          engine.getContext().saveCheckpoint('post-turn')
-        }
+        // No checkpoint here. The automatic one is taken in `engine.process`, right
+        // after the prompt lands and before the reply does — so the newest
+        // checkpoint is the state `/rewind` is supposed to return to. Saving a
+        // second time at the end of the turn would put a snapshot *containing* that
+        // reply on top, and `/rewind` would restore what is already on screen.
         // Final sync of background agents after the turn completes
         syncBgAgents()
       }
@@ -900,6 +921,26 @@ export function App({
     qe.setOnWakeupEnqueued(() => setWakeupTick((t) => t + 1))
     return () => qe.setOnWakeupEnqueued(null)
   }, [engine])
+
+  // ── /loop wakeup restore after a restart ──
+  // The timer is in memory, so an exit (or an idle daemon worker being recycled at
+  // 30 min, against a wakeup that may be 3600s out) used to drop a pending wakeup
+  // without a word — the model went on believing a loop iteration was coming.
+  // A wakeup still in the future is re-armed from disk here; one that came due
+  // while we were gone is handed to the model as the loop turn it is, so IT decides
+  // whether to re-time or end it. Declared *after* the subscription above: the
+  // enqueue below only mutates the queue, and it is that subscription that turns
+  // the mutation into the state bump the idle-drain effect reacts to.
+  useEffect(() => {
+    if (!('hasPendingWakeup' in engine)) return
+    const qe = engine
+    // `?? ''` and not a guard: the ToolContext this app builds writes
+    // `sessionId: sessionId || ''`, so that is the key a wakeup from here was
+    // stored under — looking it up under anything else would miss our own file.
+    for (const lost of resumeWakeups({ sessionId: sessionId ?? '' })) {
+      qe.enqueueWakeup(missedWakeupNotice(lost), false)
+    }
+  }, [engine, sessionId])
 
   // When a wakeup is enqueued and the engine is idle, drain it now (the running turn's
   // end-drain handles the busy case). `wakeupTick === 0` skips the mount-time run.

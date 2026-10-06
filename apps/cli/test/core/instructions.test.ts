@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { join, resolve, basename } from 'node:path'
 import { tmpdir } from 'node:os'
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync, realpathSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, realpathSync, symlinkSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import {
   InstructionsLoader,
@@ -193,6 +193,87 @@ describe('InstructionsLoader.loadAll (AGENTS.md 多格式 + 递归)', () => {
       expect(appsAgents!.level).toBe('project')
     } finally {
       rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('项目层指令不许是符号链接', () => {
+  /**
+   * 一个 clone 能把 `CLAUDE.md -> ~/.ssh/id_rsa` 带进来，而**这条加载链没有任何权限门**
+   * —— 内容直接进系统提示，模型连问都不用问。所以被判的是**形状**（是不是普通文件），
+   * 不是链接**指向哪里**：指向仓库内也一样拒，规则简单且 fail-closed。
+   *
+   * 下面每条都配了一个正对照。少了它，「零命中」与「加载器压根没跑」在断言上同形 ——
+   * 而后者正是这个技能库里反复出现的假绿。
+   */
+  it('指向仓库外的软链不加载；同一目录里的普通文件照常加载', () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'mipham-instr-link-')))
+    const outside = realpathSync(mkdtempSync(join(tmpdir(), 'mipham-instr-secret-')))
+    try {
+      execSync('git init -q', { cwd: root })
+      const secret = join(outside, 'id_rsa')
+      writeFileSync(secret, 'PRIVATE-KEY-MATERIAL-abc123')
+      symlinkSync(secret, join(root, 'CLAUDE.md'))
+      writeFileSync(join(root, 'AGENTS.md'), '# AGENTS rules\n- real file')
+
+      const loader = new InstructionsLoader()
+      loader.loadAll(root)
+      const list = loader.list()
+
+      expect(
+        list.some((f) => f.path === join(root, 'CLAUDE.md')),
+        '软链的 CLAUDE.md 不该进指令清单',
+      ).toBe(false)
+      expect(loader.buildSystemPrompt(), '仓库外那个文件的内容一字都不该进系统提示').not.toContain(
+        'PRIVATE-KEY-MATERIAL-abc123',
+      )
+      // 正对照：同目录的普通文件必须仍在。否则上面两条对「加载器整个坏了」也成立。
+      expect(
+        list.some((f) => f.path === join(root, 'AGENTS.md')),
+        '普通文件必须照常加载 —— 否则这条测的是加载器坏了，不是软链被拦',
+      ).toBe(true)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+      rmSync(outside, { recursive: true, force: true })
+    }
+  })
+
+  it('指向仓库**内**的软链同样拒 —— 拦的是形状，不是目的地', () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'mipham-instr-linkin-')))
+    try {
+      execSync('git init -q', { cwd: root })
+      writeFileSync(join(root, 'REAL.md'), '# real rules\n- in-repo target')
+      symlinkSync(join(root, 'REAL.md'), join(root, 'CLAUDE.md'))
+
+      const loader = new InstructionsLoader()
+      loader.loadAll(root)
+      expect(loader.list().some((f) => f.path === join(root, 'CLAUDE.md'))).toBe(false)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('集团/公司层的软链**不**被拦 —— 拦的只是仓库自己塞得进来的那两层', () => {
+    // 这条钉的是**范围**，不是效果：把闸门扩到 `../CLAUDE.md`（公司层）会打断
+    // 「dotfiles 仓库里放一份共用的 CLAUDE.md 再链过来」这种完全正当的布置，
+    // 而那个位置本来就不由被 clone 的这个仓库控制。
+    const base = realpathSync(mkdtempSync(join(tmpdir(), 'mipham-instr-co-')))
+    const root = join(base, 'repo')
+    const outside = realpathSync(mkdtempSync(join(tmpdir(), 'mipham-instr-cotarget-')))
+    try {
+      writeFileSync(join(outside, 'shared.md'), '# company rules\n- COMPANY-LINK-CONTENT')
+      symlinkSync(join(outside, 'shared.md'), join(base, 'CLAUDE.md'))
+      mkdirSync(root)
+      execSync('git init -q', { cwd: root })
+
+      const loader = new InstructionsLoader()
+      loader.loadAll(root)
+      const company = loader.list().find((f) => f.level === 'company')
+      expect(company, '公司层软链应当照常加载').toBeDefined()
+      expect(loader.buildSystemPrompt()).toContain('COMPANY-LINK-CONTENT')
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+      rmSync(outside, { recursive: true, force: true })
     }
   })
 })

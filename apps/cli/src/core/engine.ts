@@ -608,6 +608,16 @@ export class QueryEngine {
     // Add user message to context
     this.context.addMessage({ role: 'user', content: userInput })
 
+    // ── Restore point for `/rewind` ──
+    // Taken **here** — the prompt is in history, none of the reply is. That is what
+    // makes `/rewind` ("Undo last AI turn") mean what it says: the prompt survives,
+    // the answer and its tool results go. A checkpoint taken at the *end* of a turn
+    // already contains that turn's reply, so restoring it is a no-op and nothing
+    // but an older turn is reachable. One site covers every entry point — the TUI,
+    // `/loop` turns, goal mode (`processWithGoal` delegates here) and daemon
+    // sessions — so no caller can be the one that forgot.
+    this.context.saveCheckpoint('pre-turn')
+
     // Check compaction before processing
     if (this.context.needsCompaction()) {
       await this.compactWithHooks('conversation summary')
@@ -971,12 +981,20 @@ export class QueryEngine {
   ): AsyncGenerator<StreamChunk> {
     // Task-level stall guard: a turn that produces no text or tool result for
     // this long is considered stalled and stopped (prevents ~40-min idle spins).
+    //
+    // The clock is `performance.now()` (monotonic, and it does not advance while
+    // the machine is suspended) rather than `Date.now()` (wall clock). A laptop
+    // that sleeps mid-turn jumps the wall clock forward by the whole nap, which
+    // reads as "no activity for 8 hours" and kills a turn that was never stalled
+    // — the failure shows up as a spurious timeout, exactly when the user
+    // returns to their desk.
     const TURN_TIMEOUT_MS = 15 * 60 * 1000
-    let lastActivity = Date.now()
+    const monotonicNow = (): number => performance.now()
+    let lastActivity = monotonicNow()
     const toolDefs = this.getToolDefinitions()
 
     for (let turn = 0; turn < roundsLeft; turn++) {
-      if (Date.now() - lastActivity > TURN_TIMEOUT_MS) {
+      if (monotonicNow() - lastActivity > TURN_TIMEOUT_MS) {
         yield {
           type: 'warning',
           content: t('errors.turn_timeout', {
@@ -1038,7 +1056,7 @@ export class QueryEngine {
           if (chunk.type === 'text' && chunk.content) {
             assistantContent += chunk.content
             this.context.recordChunk(chunk.content)
-            lastActivity = Date.now()
+            lastActivity = monotonicNow()
           }
 
           if (chunk.reasoning_content) {
@@ -1138,7 +1156,7 @@ export class QueryEngine {
       for (const toolUse of toolUses) {
         const result = await this.executeTool(toolUse.name, toolUse.input, signal)
         if (!result.success) this.pendingToolFailure = true
-        lastActivity = Date.now()
+        lastActivity = monotonicNow()
         yield {
           type: 'tool_result',
           tool_use_id: toolUse.id,
@@ -1349,6 +1367,27 @@ export class QueryEngine {
             ...hookWarnings,
             `🔍 Self-Critique: ${critiqueResult.reasoning}${critiqueResult.correction ? ` — Suggestion: ${critiqueResult.correction}` : ''}`,
           ]
+        }
+      }
+    }
+
+    // The gate at the top of this method ruled on `params`. Everything since —
+    // the PreToolUse hook's `modifiedInput`, the CRSI RuleEngine's `modified`, the
+    // SIS preflight `fix` — can rewrite the params the tool actually receives
+    // (`effectiveParams`), and the tool runs on those. A gate that ruled on input
+    // X must not stand as the gate for input Y: a repository-supplied hook could
+    // pass a benign call and swap in a destructive one *after* the check, and the
+    // substitution would never be re-judged. Whenever any stage changed the
+    // params, run the same approval resolution again on what will actually run.
+    // (This mirrors the correct order in `agent/sub-agent.ts`: hook → apply
+    // `modifiedInput` → resolve approval on the effective input.)
+    if (effectiveParams !== params) {
+      const recheck = await this.permission.resolveApproval(tool, effectiveParams, { signal })
+      if (recheck.level === 'ask') {
+        return {
+          success: false,
+          content: '',
+          error: this.buildDenialError(name, tool, effectiveParams, recheck),
         }
       }
     }

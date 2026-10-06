@@ -4,25 +4,37 @@ import { validateUrl } from '../../security/url'
 
 // ── In-memory cache (15-min TTL per URL) ──
 
+/** Most characters returned in one call. Past this the caller pages with `offset`. */
+const MAX_RETURN_CHARS = 100_000
+
 interface CacheEntry {
   content: string
   timestamp: number
+  /** Is `content` the whole page, or only its first `MAX_RETURN_CHARS`? */
+  complete: boolean
 }
 
 const CACHE_TTL = 15 * 60 * 1000 // 15 minutes
 const cache = new Map<string, CacheEntry>()
 
-function getCached(url: string): string | undefined {
+/**
+ * `complete` says whether `content` is the whole page or only its first
+ * `MAX_RETURN_CHARS`. A caller asking past the end of an incomplete entry has to
+ * re-fetch: answering from the cache would report "no more content" for a page
+ * that has plenty, which is the same wrong answer a silently truncated read gave.
+ */
+function getCached(url: string, needFrom: number): CacheEntry | undefined {
   const entry = cache.get(url)
   if (!entry) return undefined
   if (Date.now() - entry.timestamp > CACHE_TTL) {
     cache.delete(url)
     return undefined
   }
-  return entry.content
+  if (!entry.complete && needFrom >= entry.content.length) return undefined
+  return entry
 }
 
-function setCache(url: string, content: string): void {
+function setCache(url: string, content: string, complete: boolean): void {
   // Evict oldest entries if cache grows too large (max 200 URLs)
   if (cache.size >= 200) {
     const oldest = [...cache.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp)
@@ -30,7 +42,7 @@ function setCache(url: string, content: string): void {
       cache.delete(oldest[i]![0])
     }
   }
-  cache.set(url, { content, timestamp: Date.now() })
+  cache.set(url, { content, timestamp: Date.now(), complete })
 }
 
 // ── HTTP→HTTPS upgrade ──
@@ -142,6 +154,54 @@ function resolveUrl(href: string, baseUrl: string): string {
   }
 }
 
+// ── Result rendering ──
+
+/**
+ * Render the requested window of `full`, with the header and a notice saying how
+ * much of the page is *not* in this answer and which `offset` continues it.
+ *
+ * The notice is the point. A bare `... (truncated)` is indistinguishable from
+ * "this was the whole page", so the caller reports a partial read as a complete
+ * one; and without an `offset` to pass, everything past the first window was
+ * permanently unreachable rather than merely unread.
+ */
+function withOffsetNotice(
+  full: string,
+  offset: number,
+  prompt: string,
+  url: string,
+  complete: boolean,
+): string {
+  const header = prompt
+    ? `── WebFetch: ${url} ──\nPrompt: ${prompt}\n\n`
+    : `── WebFetch: ${url} ──\n\n`
+
+  if (offset >= full.length) {
+    return (
+      header +
+      `... (offset ${offset} is past the end: this page has ` +
+      `${complete ? full.length : `at least ${full.length}`} characters)`
+    )
+  }
+
+  const window = full.slice(offset, offset + MAX_RETURN_CHARS)
+  const end = offset + window.length
+
+  // Whole page, asked for from the start — nothing to qualify.
+  if (complete && offset === 0 && end === full.length) return header + window
+
+  const total = complete ? `${full.length}` : `at least ${full.length}`
+  const remaining = complete ? full.length - end : undefined
+  const notice =
+    remaining === undefined
+      ? `\n\n... (characters ${offset}–${end - 1} of ${total}; call again with offset=${end} for more)`
+      : remaining > 0
+        ? `\n\n... (characters ${offset}–${end - 1} of ${total}; ${remaining} unread — call again with offset=${end} for the next part)`
+        : `\n\n... (characters ${offset}–${end - 1} of ${total}; end of page)`
+
+  return header + window + notice
+}
+
 // ── Tool Definition ──
 
 export const webFetchTool: ToolDefinition = {
@@ -157,7 +217,12 @@ export const webFetchTool: ToolDefinition = {
       prompt: {
         type: 'string',
         description:
-          'What to extract from the page (e.g., "find the API docs for authentication"). The tool returns the full page; the prompt helps focus extraction.',
+          'What to extract from the page (e.g., "find the API docs for authentication"). The tool returns the page content — truncated past 100,000 characters, with the omitted count stated — and the prompt helps focus extraction.',
+      },
+      offset: {
+        type: 'integer',
+        description:
+          'Character offset to start reading from (default 0). A long page is returned 100,000 characters at a time; the truncation notice names the offset to pass next.',
       },
     },
     required: ['url'],
@@ -165,15 +230,17 @@ export const webFetchTool: ToolDefinition = {
   async execute(params, _ctx) {
     const rawUrl = params.url as string
     const prompt = (params.prompt as string) || ''
+    const offset = Math.max(0, Number(params.offset) || 0)
     const url = upgradeToHttps(rawUrl)
 
-    // Check cache
-    const cached = getCached(url)
+    // Check cache — an incomplete entry (first 100k only) cannot answer a
+    // request that starts past what it holds.
+    const cached = getCached(url, offset)
     if (cached) {
       return {
         success: true,
-        content: cached,
-        metadata: { cached: true, url },
+        content: withOffsetNotice(cached.content, offset, prompt, url, cached.complete),
+        metadata: { cached: true, url, offset },
       }
     }
 
@@ -259,20 +326,18 @@ export const webFetchTool: ToolDefinition = {
         content = await response.text()
       }
 
-      // Truncate to 100K characters
-      if (content.length > 100_000) {
-        content = content.slice(0, 100_000) + '\n\n... (truncated)'
+      // Cache the first window. The cache stays the size it always was (one
+      // `MAX_RETURN_CHARS` per URL) — `complete` is what lets a later `offset`
+      // tell "this is the whole page" apart from "this is the first slice of it",
+      // and re-fetch when it needs more.
+      const complete = content.length <= MAX_RETURN_CHARS
+      setCache(url, content.slice(0, MAX_RETURN_CHARS), complete)
+
+      return {
+        success: true,
+        content: withOffsetNotice(content, offset, prompt, url, complete),
+        metadata: { url, offset, totalSize: content.length },
       }
-
-      // Cache the result
-      setCache(url, content)
-
-      // Include prompt context if provided
-      const header = prompt
-        ? `── WebFetch: ${url} ──\nPrompt: ${prompt}\n\n`
-        : `── WebFetch: ${url} ──\n\n`
-
-      return { success: true, content: header + content, metadata: { url, size: content.length } }
     } catch (err) {
       const message =
         err instanceof Error && err.name === 'AbortError'

@@ -758,6 +758,57 @@ describe('两条匹配路径共用同一份归一化（防「只接一条」）'
   })
 })
 
+// ============================================================
+// 前导赋值的边界：谁算噪声、谁不算
+// ============================================================
+
+// `export`/`declare`/`readonly`/`typeset` 看着是 `FOO=bar` 的兄弟 —— 同样出现在命令
+// 前、同样带赋值 —— 语义却相反：一条裸赋值把这段环境交给**后面的命令**，而这四个是
+// bash 内建**命令本身**，其后的词全是它的参数。`export FOO=1 rm -rf x` 执行的是
+// `export`，`rm` 一次都不跑。
+//
+// 实测（本机 bash，以 victim 文件是否还在为判据）：`X=1 rm -f victim` 把 victim 删了；
+// `export`/`declare`/`readonly`/`typeset` 四种写法 victim 全在，只留下 "not a valid
+// identifier" 的报错。所以把这四个词补进 LEADING_SHELL_KEYWORDS 不是补漏、是造错：
+// 剥掉之后匹配器会声称一条**根本没跑**的命令在跑。
+//
+// 真正跑得起来的形态已经被别的机制覆盖 —— 把命令塞进它们的参数里求值只能靠命令替换，
+// 而 `export FOO=$(rm -rf x)` 经 extractSubstitutions 照样露出 `rm`（下面钉住）。
+describe('前导赋值的边界：裸赋值是噪声，`export`/`declare`/`readonly`/`typeset` 不是', () => {
+  const BUILTIN_PREFIXES = ['export', 'declare', 'readonly', 'typeset']
+
+  it.each(BUILTIN_PREFIXES)('%s 前缀不剥：`rm` 只是它的参数，一次都不跑', (kw) => {
+    const command = `${kw} FOO=1 rm -rf x`
+    expect(stripLeadingShellNoise(command)).toBe(command)
+    expect(matchBashRule('Bash(rm *)', 'Bash', { command })).toBe(false)
+  })
+
+  // Read 桥接那条路径共用同一份归一化，边界也共用：`export … cat secret` 的 base 是
+  // `export`，不是读命令，secret 不该被报成读目标。
+  it.each(BUILTIN_PREFIXES)('%s 前缀不剥：其后的 `cat` 也不被报成读操作', (kw) => {
+    const command = `${kw} FOO=1 cat secret`
+    expect(extractBashFileAccess(command).read).not.toContain('secret')
+    expect(matchBashRule('Read(secret)', 'Bash', { command })).toBe(false)
+  })
+
+  // 正对照：同一个位置换成裸赋值，`rm` 就真的跑了。少了它，上面那两条「不命中」
+  // 也可能只是因为匹配器整体坏掉了 —— 那就成了假绿。
+  it('裸赋值前缀照剥：`FOO=1 rm -rf x` 必须命中', () => {
+    expect(stripLeadingShellNoise('FOO=1 rm -rf x')).toBe('rm -rf x')
+    expect(matchBashRule('Bash(rm *)', 'Bash', { command: 'FOO=1 rm -rf x' })).toBe(true)
+    expect(extractBashFileAccess('FOO=1 cat secret').read).toContain('secret')
+  })
+
+  // 边界不制造新洞：真命令换个位置出现（子 shell 里、内建之后另起一段）照样命中。
+  it.each(BUILTIN_PREFIXES)('%s 前缀之后的独立命令段照样命中', (kw) => {
+    expect(matchBashRule('Bash(rm *)', 'Bash', { command: `( ${kw} FOO=1; rm -rf x )` })).toBe(true)
+  })
+
+  it.each(BUILTIN_PREFIXES)('%s 的参数里的命令替换照旧露出 `rm`', (kw) => {
+    expect(matchBashRule('Bash(rm *)', 'Bash', { command: `${kw} FOO=$(rm -rf x)` })).toBe(true)
+  })
+})
+
 // 规则判定的是操作**落在哪里**，不只是模型把它拼成什么样。`notes.txt` 是指向
 // `.env` 的符号链接时，「读 notes.txt」就是「读 .env」—— 而规则只看得到拼法。
 //

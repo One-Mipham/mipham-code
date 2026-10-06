@@ -193,6 +193,27 @@ export function createReadTool(credentialConfig?: CredentialMaskingConfig): Tool
           result = formatLines(lines, offset)
         }
 
+        // ── Binary sniff ──
+        // A NUL byte is the tell `file(1)` and git both use for "this is not
+        // text". Without this, a PNG/zip/object file is decoded as UTF-8 with
+        // replacement characters and handed to the model as garbled "text" it
+        // will then reason about — a silently wrong answer, not an error.
+        //
+        // The check is on the string actually being returned, not on the head of
+        // the file: a *sparse* text file (a log preallocated with `truncate`, a
+        // hole in the middle) is real text where it was written, and reading its
+        // opening lines is exactly what a caller asking for line 1–3 wants. Only
+        // the bytes that would reach the model have to be text.
+        if (result.includes('\0')) {
+          return {
+            success: false,
+            content: '',
+            error:
+              `Not a text file (the requested window contains NUL bytes): ${filePath}. ` +
+              `Use a shell tool (e.g. \`file\`, \`xxd\`) to inspect binary content.`,
+          }
+        }
+
         // ── Read tracking: mark file as read for Write tool safety ──
         ctx.readFiles?.add(filePath)
         return { success: true, content: result }

@@ -570,6 +570,7 @@ export async function runApp(options: RunOptions): Promise<void> {
     provider: defaultProvider,
     model: defaultModel,
     cwd: process.cwd(),
+    permissionMode: permission.getMode(),
   })
   context.setLog(sessionLog)
   // Cache-aware microcompaction: track the provider's prompt-cache prefix.
@@ -596,12 +597,32 @@ export async function runApp(options: RunOptions): Promise<void> {
     const events = log.events()
     if (events.length > 0) {
       const start = events.find((e) => e.type === 'session/start') as
-        { type: 'session/start'; cwd?: string } | undefined
+        { type: 'session/start'; cwd?: string; permissionMode?: string } | undefined
       if (start?.cwd && existsSync(start.cwd)) {
         try {
           process.chdir(start.cwd)
         } catch {
           // cwd 可能已不存在
+        }
+      }
+      // Put the permission mode back. It is part of what this session *was* —
+      // plan mode especially, which is lost on every resume otherwise. An
+      // explicit `--permission` on this invocation still wins: that is the
+      // operator's word, typed seconds ago, against a value written days ago.
+      // The restore is announced whenever it widens away from the configured
+      // default, because "the gate you were running under changed" is exactly
+      // the kind of difference that must not be silent (same reason a withheld
+      // project-level mode is announced above).
+      const resumedMode = start?.permissionMode
+      if (resumedMode && !options.permission) {
+        const before = permission.getMode()
+        permission.setDefaultLevel(resumedMode as PermissionLevel)
+        const after = permission.getMode()
+        if (after !== before) {
+          process.stderr.write(
+            `⚠ Mipham Code: resumed permission mode "${after}" from this session ` +
+              `(was "${before}"). Shift+Tab to change it.\n`,
+          )
         }
       }
       context.restoreLog(log)

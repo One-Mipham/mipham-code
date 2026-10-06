@@ -245,8 +245,19 @@ export class SkillsLoader implements Skills {
   }
 
   private nameFromPath(path: string): string {
-    const base = path.split('/').pop() || ''
-    return base.replace(/\.(SKILL|mipham-skill)\.md$/i, '')
+    const parts = path.split('/').filter(Boolean)
+    const base = parts.pop() ?? ''
+    // `foo.SKILL.md` / `foo.mipham-skill.md` — the file name carries the skill.
+    const stem = base.replace(/\.md$/i, '').replace(/\.(SKILL|mipham-skill)$/i, '')
+    if (stem && stem !== 'SKILL' && stem !== 'mipham-skill') return stem
+    // Directory layout (`skills/<name>/SKILL.md`, the Claude-plugin shape). Every
+    // one of these files is literally named `SKILL.md`, so the file name names
+    // nothing — they all collide on one key and the last loaded silently wins.
+    // The folder is the name. Skip the `skills` bucket itself so a flat
+    // `skills/SKILL.md` falls through to the plugin directory above it.
+    let dir = parts.pop()
+    while (dir === 'skills') dir = parts.pop()
+    return dir || base
   }
 }
 

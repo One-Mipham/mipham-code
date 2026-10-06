@@ -1408,3 +1408,47 @@ describe('PermissionSystem', () => {
     })
   })
 })
+
+// ═══════════════════════════════════════════
+// acceptEdits 下「验证类命令」自动放行的边界
+// ═══════════════════════════════════════════
+
+/**
+ * `acceptEdits` 会把**验证类命令**直接放行，好让「改 → 测 → 改」不被打断。
+ * 判据是「一条简单命令」——任何 shell 元字符都意味着它能把别的东西接在后面执行。
+ *
+ * 2026-10-06 之前，通配符（`*` `?` `[` `]`）**不在**这张拒收表里。危险不是理论的：
+ * `cat` 本身就在验证命令的白名单上，所以 `cat *secret*` 当时**自动放行**，而 shell
+ * 会把它展开成规则匹配器从没看见过的一组文件 —— 一条 `Read(.env)` 或密钥文件
+ * 的规则本意要护住的东西，被一条「只读」命令绕过去了。
+ * 放行判据里「我看见的这条命令」与「实际跑的那条命令」必须是同一件事。
+ */
+describe('acceptEdits 自动放行验证类命令的边界', () => {
+  const bash = (): ToolDefinition => makeTool('Bash', 'ask', 'exec')
+  const autoApproved = (command: string): boolean =>
+    new PermissionSystem('acceptEdits').needsApproval(bash(), { command })
+
+  it('正对照：白名单里的简单命令确实自动放行（否则下面的拒收可能只是「全都不放行」）', () => {
+    expect(autoApproved('pnpm test')).toBe(false)
+    expect(autoApproved('pnpm typecheck')).toBe(false)
+    expect(autoApproved('git status')).toBe(false)
+    // `cat` 在名单里 —— 这正是通配符必须一起拒的理由，下面几条才因此有分量。
+    expect(autoApproved('cat src/index.tsx')).toBe(false)
+  })
+
+  it.each([
+    ['cat *secret*', '展开后的文件名集合规则匹配器没见过'],
+    ['cat ?ecret.txt', '`?` 同样展开，且能把 `.env` 报成 `?env`'],
+    ['cat [s]ecret.txt', '字符类也是展开'],
+    ['ls *.key', '护住的密钥文件被通配符盖住'],
+  ])('通配符命令不自动放行：%s（%s）', (command) => {
+    expect(autoApproved(command)).toBe(true)
+  })
+
+  it('既有的元字符拒收没有被这次收窄弄丢（边界不做减法）', () => {
+    expect(autoApproved('cat x && rm -rf ~')).toBe(true)
+    expect(autoApproved('cat x | sh')).toBe(true)
+    expect(autoApproved('pnpm test; rm -rf x')).toBe(true)
+    expect(autoApproved('echo $(rm -rf x)')).toBe(true)
+  })
+})

@@ -491,6 +491,13 @@ export class SubAgent {
       // (`ui/app.tsx`) and the experience logs below: the definition's name, else
       // the type.
       agentName: agentDef?.name || agentType,
+      // Artifacts need a bucket of their own. `sessionId` is the shared literal
+      // 'sub-agent' (kept — `SendMessage` addresses the parent off it), so every
+      // sub-agent in every session would file artifacts in one directory and
+      // `archiveVersion` would treat another agent's same-named artifact as the
+      // "previous version" of this one. Parent session plus this agent's name
+      // keeps two agents apart without touching the messaging contract.
+      artifactSessionId: `${options.toolContext?.sessionId ?? 'main'}:sub:${agentDef?.name || agentType}`,
     }
 
     try {

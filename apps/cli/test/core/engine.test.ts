@@ -1009,6 +1009,60 @@ describe('QueryEngine', () => {
     })
   })
 
+  describe('process — /rewind 的自动恢复点', () => {
+    // 恢复点必须落在「prompt 已入历史、回复还没有」的那一点。曾有一版只在回合**结束**
+    // 后落检查点，它含着那一轮的回复 ⇒ 回退到它 = 回到屏幕上已经有的状态，`/rewind`
+    // （帮助里写着 "Undo last AI turn"）成了空操作，能到达的只有更早的回合。
+    it('一轮结束后回退：prompt 留下、回复撤掉', async () => {
+      const registry = mockProviderRegistry(async function* () {
+        yield { type: 'text', content: 'AI-REPLY' }
+        yield { type: 'stop' }
+      })
+      const context = mockContext()
+      const engine = new QueryEngine(registry, context, makeToolMap([]))
+
+      for await (const _ of engine.process('MY-PROMPT')) {
+        /* drain */
+      }
+      expect(conversationText(context)).toContain('AI-REPLY')
+
+      const result = context.restoreCheckpoint()
+
+      expect(result.restored).toBe(true)
+      expect(conversationText(context)).toContain('MY-PROMPT')
+      expect(conversationText(context)).not.toContain('AI-REPLY')
+    })
+
+    it('两轮之后回退只撤销最后一轮的回复，更早的历史整段留着', async () => {
+      let reply = 0
+      const registry = mockProviderRegistry(async function* () {
+        reply++
+        yield { type: 'text', content: `REPLY-${reply}` }
+        yield { type: 'stop' }
+      })
+      const context = mockContext()
+      const engine = new QueryEngine(registry, context, makeToolMap([]))
+
+      for await (const _ of engine.process('FIRST-PROMPT')) {
+        /* drain */
+      }
+      for await (const _ of engine.process('SECOND-PROMPT')) {
+        /* drain */
+      }
+      expect(conversationText(context)).toContain('REPLY-2')
+
+      context.restoreCheckpoint()
+
+      const text = conversationText(context)
+      // 更早的那一轮原样留着 —— 回退是撤销最后一轮，不是清空对话
+      expect(text).toContain('FIRST-PROMPT')
+      expect(text).toContain('REPLY-1')
+      // 最后一条 prompt 也在：它属于「用户说的话」，不属于「被撤销的回复」
+      expect(text).toContain('SECOND-PROMPT')
+      expect(text).not.toContain('REPLY-2')
+    })
+  })
+
   describe('process — session log chunk recording', () => {
     it('records assistant stream chunks on the primary process loop', async () => {
       const registry = mockProviderRegistry(async function* () {

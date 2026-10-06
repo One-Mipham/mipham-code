@@ -259,6 +259,47 @@ describe('SkillsLoader', () => {
     })
   })
 
+  describe('plugin layout (skills/<name>/SKILL.md)', () => {
+    it('names each skill after its folder, not the literal "SKILL.md"', () => {
+      const skillsDir = join(tmpDir, 'plugin', 'skills')
+      for (const name of ['alpha', 'beta']) {
+        mkdirSync(join(skillsDir, name), { recursive: true })
+        // Claude-plugin shape: every file is literally `SKILL.md` and the
+        // frontmatter `name:` is optional — so the folder is the only name there
+        // is. Without the fallback both land on one key and one silently wins.
+        writeFileSync(
+          join(skillsDir, name, 'SKILL.md'),
+          `---\ndescription: The ${name} skill\n---\n\nBody`,
+        )
+      }
+
+      const loader = new SkillsLoader()
+      loader.loadSkillFile(join(skillsDir, 'alpha', 'SKILL.md'))
+      loader.loadSkillFile(join(skillsDir, 'beta', 'SKILL.md'))
+
+      expect(
+        loader
+          .list()
+          .map((s) => s.name)
+          .sort(),
+      ).toEqual(['alpha', 'beta'])
+    })
+
+    it('still prefers an explicit frontmatter name', () => {
+      const dir = join(tmpDir, 'plugin', 'skills', 'renamed')
+      mkdirSync(dir, { recursive: true })
+      writeFileSync(
+        join(dir, 'SKILL.md'),
+        '---\nname: explicit-name\ndescription: Names itself\n---\n\nBody',
+      )
+
+      const loader = new SkillsLoader()
+      loader.loadSkillFile(join(dir, 'SKILL.md'))
+
+      expect(loader.has('explicit-name')).toBe(true)
+    })
+  })
+
   describe('get, list, listByType, has', () => {
     it('returns undefined for unknown skill', () => {
       const loader = new SkillsLoader()

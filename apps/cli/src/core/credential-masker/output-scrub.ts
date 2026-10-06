@@ -25,7 +25,14 @@ const TOKEN_REDACTION_PATTERN =
 // *first* `@`, redacting only `p` and leaving `ss@host` in the clear. Greedy
 // `[^/\s]+` runs to the last `@` on the line and backtracks, so the whole password
 // goes and the host survives.
-const URL_USERINFO_PATTERN = /([a-z][a-z0-9+.-]*:\/\/)([^/\s:@]+):([^/\s]+)@/gi
+//
+// The scheme's `*` is **bounded** (`{0,63}`), and that bound is load-bearing, not
+// cosmetic. An unbounded `[a-z0-9+.-]*` followed by a required `://` re-scans the
+// whole tail from every start position on a long run with no `://` (minified JS,
+// base64, a long token — none of which contain `://`), giving O(n²) behaviour:
+// measured ~2.5 s at 40 k chars, ×4 per doubling. No real scheme name approaches
+// 63 chars, so the bound costs nothing and makes the scan linear per position.
+const URL_USERINFO_PATTERN = /([a-z][a-z0-9+.-]{0,63}:\/\/)([^/\s:@]+):([^/\s]+)@/gi
 
 /**
  * Zero-width and formatting characters stripped before anything is matched.

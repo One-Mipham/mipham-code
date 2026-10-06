@@ -33,6 +33,41 @@ const BIN_SRC = readFileSync(join(CLI_ROOT, 'bin', 'mipham.ts'), 'utf-8')
 const INDEX_SRC = readFileSync(join(CLI_ROOT, 'src', 'index.tsx'), 'utf-8')
 const ARG_SRC = readFileSync(join(CLI_ROOT, 'src', 'shared', 'arg-validation.ts'), 'utf-8')
 
+/**
+ * 取「`if (X) { … }` 这个块本身」—— 从 `openAt` 数到配对的 `}`。
+ *
+ * 原本这里是 `INDEX_SRC.slice(at, at + 900)`：一个**写死的字符数**当作「这个块」的代理。
+ * 2026-10-06 那次给 resume 分支加权限模式恢复时，窗口内多出 600 余字符，
+ * `context.restoreLog(log)` 被推到偏移 1541 —— **断言红在一个与它无关的改动上**。
+ * 写死的窗口每被插进一段代码就失效一次，而且失效方式是「说这个块里没有它实际有的东西」，
+ * 与「真的没接上」长得一模一样。数括号则跟着块走，不会因为块长大而失真。
+ *
+ * 跳过字符串与注释，因为模板串（`"${after}"`）和注释里也有花括号。
+ * 判据是「能一眼看出它停在哪」，见调用处的哨兵断言。
+ */
+function extractBlock(src: string, openAt: number): string {
+  let depth = 0
+  let quote: string | null = null
+  let i = src.indexOf('{', openAt)
+  for (; i < src.length; i++) {
+    const c = src[i]
+    if (quote !== null) {
+      if (c === '\\') i++
+      else if (c === quote) quote = null
+      continue
+    }
+    if (c === '"' || c === "'" || c === '`') quote = c
+    else if (c === '/' && src[i + 1] === '/') i = src.indexOf('\n', i)
+    else if (c === '/' && src[i + 1] === '*') i = src.indexOf('*/', i) + 1
+    else if (c === '{') depth++
+    else if (c === '}') {
+      depth--
+      if (depth === 0) break
+    }
+  }
+  return src.slice(openAt, i + 1)
+}
+
 describe('mipham --resume 的进路是接通的', () => {
   it('bin 解析 argv 上的 --resume，并把名字交给 runApp', () => {
     // 三件事缺一不可：读 argv、拿到名字、传进去。只断言其中一条，
@@ -53,9 +88,12 @@ describe('mipham --resume 的进路是接通的', () => {
     // 链路末端：`--resume` 若不真的灌进上下文，就只是打印一行「已恢复」的装饰。
     const at = INDEX_SRC.indexOf('if (options.resume)')
     expect(at, 'RunOptions.resume 的分支不见了').toBeGreaterThan(-1)
-    const branch = INDEX_SRC.slice(at, at + 900)
+    const branch = extractBlock(INDEX_SRC, at)
     expect(branch).toContain('SessionStore.loadLog(options.resume)')
     expect(branch).toContain('context.restoreLog(log)')
+    // 提取器的哨兵：紧邻分支之后的语句**必须**落在外头。否则「数括号数过头、
+    // 一路吞到文件尾」会让上面两条 `toContain` 恒真 —— 那时它们不再证明任何事。
+    expect(branch).not.toContain('loadSessionMemories')
   })
 
   it('扫描判据本身有判别力（正对照）', () => {

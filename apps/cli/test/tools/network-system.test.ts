@@ -186,6 +186,99 @@ describe('WebFetch tool execution', () => {
 })
 
 // ============================================================
+// WebFetch 分页：超长页面的窗口、续读与缓存边界
+// ============================================================
+
+/**
+ * 长页面按 `offset` 分页返回。判据是**调用方能不能知道自己拿到的是半页、
+ * 以及怎么拿下一半** —— 一句光秃秃的 `... (truncated)` 与「这就是整页」在屏幕上
+ * 长得一样，于是半页被当成整页汇报，而第一屏之外的内容不是「还没读」，是**够不着**。
+ *
+ * 正文刻意用 `A`/`B`/`C` 三段填充，让「拿到的是哪一段」可以被直接断言，
+ * 而不是靠数长度。用 `text/plain` 免掉 markdown 转换对字节数的干扰。
+ */
+describe('WebFetch 分页：窗口与续读', () => {
+  const PAGE = 'A'.repeat(100_000) + 'B'.repeat(100_000) + 'C'.repeat(50_000) // 共 250,000
+
+  function stubPage(body: string): ReturnType<typeof vi.fn> {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve(body),
+      status: 200,
+      statusText: 'OK',
+      headers: new Map([['content-type', 'text/plain']]),
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+    return fetchMock
+  }
+
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('截断处说明还剩多少、以及下次该传哪个 offset', async () => {
+    stubPage(PAGE)
+    const result = await webFetchTool.execute({ url: 'https://paging-a.example.com' }, ctx)
+
+    expect(result.success).toBe(true)
+    expect(result.content).toContain('A') // 第一屏确实在
+    // 「至少 250000」而不是「250000」—— 服务端只把第一屏给了缓存，后面还有多少它不知道
+    expect(result.content).toContain('at least 250000')
+    expect(result.content).toContain('offset=100000')
+  })
+
+  it('带 offset 续读拿到的是**下一段**，而不是又从头上切一遍', async () => {
+    stubPage(PAGE)
+    const result = await webFetchTool.execute(
+      { url: 'https://paging-b.example.com', offset: 100_000 },
+      ctx,
+    )
+
+    expect(result.success).toBe(true)
+    expect(result.content).toContain('B')
+    expect(result.content).not.toContain('A') // 上一段不在这次回答里
+    expect(result.content).toContain('characters 100000–199999')
+  })
+
+  it('续读起点在缓存覆盖范围之外时**重新抓取**，不拿第一屏冒充整页', async () => {
+    // 缓存里每个 URL 只留第一屏（100k），`complete` 标记它是不是整页。
+    // 少了这道判断，offset=100000 会命中缓存并回答「没有更多内容」——
+    // 而页面还有 150k 没读，这正是「半页当整页」那个错误的另一种长相。
+    const fetchMock = stubPage(PAGE)
+    await webFetchTool.execute({ url: 'https://paging-c.example.com' }, ctx)
+    const afterFirst = fetchMock.mock.calls.length
+
+    const second = await webFetchTool.execute(
+      { url: 'https://paging-c.example.com', offset: 100_000 },
+      ctx,
+    )
+    expect(fetchMock.mock.calls.length, '缓存只到 100k，续读必须重新抓').toBe(afterFirst + 1)
+    expect(second.content).toContain('B')
+  })
+
+  it('正对照：第一屏本身照旧吃缓存 —— 「重新抓」是 `complete` 决定的，不是每次都抓', async () => {
+    const fetchMock = stubPage(PAGE)
+    await webFetchTool.execute({ url: 'https://paging-d.example.com' }, ctx)
+    const afterFirst = fetchMock.mock.calls.length
+
+    await webFetchTool.execute({ url: 'https://paging-d.example.com' }, ctx)
+    expect(fetchMock.mock.calls.length).toBe(afterFirst)
+  })
+
+  it('offset 超出页尾时说「到头了」，而不是给一个空回答', async () => {
+    stubPage(PAGE)
+    const result = await webFetchTool.execute(
+      { url: 'https://paging-e.example.com', offset: 999_999 },
+      ctx,
+    )
+
+    expect(result.success).toBe(true)
+    expect(result.content).toContain('past the end')
+    expect(result.content).toContain('at least 250000')
+  })
+})
+
+// ============================================================
 // WebSearch Tool
 // ============================================================
 

@@ -72,8 +72,13 @@ export const DEFAULT_CREDENTIAL_MASKING_CONFIG: CredentialMaskingConfig = {
     // 名字那一段：`_key` 出现在标识符**中间**也算（`AWS_ACCESS_KEY_ID=…`），但**不许吞掉
     // 词后面的字符** —— 否则 `"keys": […]`、`total tokens: 1234` 这类**不是秘密**的输出
     // 会被整段擦掉。中间那对引号可选，为的是 JSON 形状的 `"apiKey": "…"`。
+    //
+    // 环绕 `[_-]key` 的两段量词**有界**（`{0,64}`），且这个界是承重的，不是装饰。无界的
+    // `[A-Za-z0-9_.-]*` 后面跟着必须匹配的 `[_-]key` 时，在一段没有 `_` 的长串（`keykey…`、
+    // 一段长 token）上会在每个起点回溯扫过整条尾巴，退化成 O(n²)（实测 16k 字符 ~2.2s，
+    // 每翻倍 ×4）。真实标识符名字远到不了 64 字符，加界零代价，却让每个起点的扫描变成线性。
     patterns: [
-      '(?i)(api[_-]?key|[A-Za-z0-9_.-]*[_-]key[A-Za-z0-9_.-]*|secret|token|password|credential|[_-]pat)["\']?\\s*[:=]\\s*["\']?\\S+',
+      '(?i)(api[_-]?key|[A-Za-z0-9_.-]{0,64}[_-]key[A-Za-z0-9_.-]{0,64}|secret|token|password|credential|[_-]pat)["\']?\\s*[:=]\\s*["\']?\\S+',
     ],
   },
   env_filter: {

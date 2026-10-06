@@ -22,6 +22,8 @@ const MSGS = {
     start: 'Start',
     dismiss: 'Dismiss',
     terminalName: 'Mipham Code',
+    notFound:
+      'Mipham Code was not found on your PATH. Install it with "npm install -g @miphamai/cli", or set "mipham-code.bunPath" in settings.',
   },
   'zh-CN': {
     statusBar: 'Mipham Code',
@@ -31,11 +33,37 @@ const MSGS = {
     start: '启动',
     dismiss: '关闭',
     terminalName: 'Mipham Code',
+    notFound:
+      '未在 PATH 上找到 Mipham Code。请安装：npm install -g @miphamai/cli，或在设置中配置 "mipham-code.bunPath"。',
   },
 }
 
 function t(key) {
   return MSGS[LOCALE]?.[key] || MSGS['en-US'][key] || key
+}
+
+/**
+ * Is `name` an executable found on PATH?
+ *
+ * The extension host cannot see the terminal's shell environment, so "this
+ * command will resolve" can only be decided by looking on PATH itself. Without
+ * this check the extension opens a terminal running a command that does not
+ * exist: the shell prints "command not found", the user has to notice it and
+ * work out why, and nothing in the editor says the launch was the problem.
+ */
+function onPath(name) {
+  const fs = require('fs')
+  const path = require('path')
+  for (const dir of (process.env.PATH || '').split(path.delimiter)) {
+    if (!dir) continue
+    try {
+      fs.accessSync(path.join(dir, name), fs.constants.X_OK)
+      return true
+    } catch {
+      /* not in this directory */
+    }
+  }
+  return false
 }
 
 /** Active terminal tracking */
@@ -112,9 +140,22 @@ function openMiphamTerminal() {
     return miphamTerminal
   }
 
+  const fs = require('fs')
   const bunPath = detectBunPath()
   const miphamPath = findMiphamPath()
   const flags = buildFlags()
+
+  // Refuse to launch something that will not run. `findMiphamPath` falls back to
+  // the bare string 'mipham' when nothing was found on disk, and `detectBunPath`
+  // falls back to 'bun' the same way — both are bets that PATH will resolve them.
+  // Make the bet explicit so a miss is an error message instead of a terminal
+  // that opens, prints "command not found", and leaves the user guessing.
+  const runnable =
+    miphamPath === 'mipham' ? onPath('mipham') : fs.existsSync(bunPath) || onPath(bunPath)
+  if (!runnable) {
+    vscode.window.showErrorMessage(t('notFound'))
+    return undefined
+  }
 
   const terminalName = t('terminalName')
 

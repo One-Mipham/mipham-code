@@ -202,7 +202,19 @@ function stripQuotes(s: string): string {
 /** Shell 结构符号：分组与取反 —— 它们自身不是命令，紧跟其后的是。 */
 const LEADING_SHELL_PUNCT = new Set(['(', '{', '!'])
 
-/** Shell 关键字：其后才是真正的命令（`do rm -rf x` 执行的命令是 `rm`）。 */
+/**
+ * Shell 关键字：其后才是真正的命令（`do rm -rf x` 执行的命令是 `rm`）。
+ *
+ * **`export` / `declare` / `readonly` / `typeset` 刻意不在表里**，尽管它们同样出现在
+ * 命令前。区别在语义：一条裸赋值把这段环境交给**后面的命令**，而这四个是 bash 内建
+ * **命令本身**，其后的词全是它的参数 —— `export FOO=1 rm -rf x` 执行的是 `export`，
+ * `rm` 一次都不跑（本机实测，用 victim 文件作判据：`X=1 rm -f victim` 删掉了 victim；
+ * `export`/`declare`/`readonly`/`typeset` 四种写法 victim 全在，只有 "not a valid
+ * identifier" 的报错）。剥掉它们不会补上漏洞，只会让匹配器声称一条**没跑过**的命令
+ * 在跑。命令替换形态（`export FOO=$(rm -rf x)`）由 `extractSubstitutions` 覆盖，
+ * 与这四个词在不在表里无关。边界用例见 `test/core/permission-rules.test.ts`
+ * 「前导赋值的边界」。
+ */
 const LEADING_SHELL_KEYWORDS = new Set([
   'do',
   'then',
@@ -514,14 +526,34 @@ function scanReaderWriterCommands(
         // `sed -i` / `perl -i` read AND write their file args.
         const inPlace = args.some((a) => a === '-i' || a.startsWith('--in-place'))
         for (const arg of args) {
-          if (arg.startsWith('-')) continue
+          if (arg.startsWith('-')) {
+            // `--include=*secret*` / `--file=.env`: the option VALUE is a path the
+            // reader opens, but the `-` guard used to drop the whole token, so a
+            // Read() deny rule never saw it. Pull the value after the first `=`
+            // and treat it as a path candidate. (`--opt value` needs nothing here
+            // — the value is already a separate, non-`-` token handled below.)
+            const eq = arg.indexOf('=')
+            if (eq === -1) continue
+            const v = stripQuotes(arg.slice(eq + 1))
+            if (v === '' || v.startsWith('-')) continue
+            read.push(v)
+            if (inPlace) write.push(v)
+            continue
+          }
           const p = stripQuotes(arg)
           read.push(p)
           if (inPlace) write.push(p)
         }
       } else if (WRITER_COMMANDS.has(base)) {
         for (const arg of args) {
-          if (arg.startsWith('-')) continue
+          if (arg.startsWith('-')) {
+            const eq = arg.indexOf('=')
+            if (eq === -1) continue
+            const v = stripQuotes(arg.slice(eq + 1))
+            if (v === '' || v.startsWith('-')) continue
+            write.push(v)
+            continue
+          }
           write.push(stripQuotes(arg))
         }
       }
@@ -637,7 +669,14 @@ function matchPathRule(path: string, pattern: string, segmentMode: 'any' | 'all'
   }
 }
 
-// Match a tool(parameter) rule against an actual tool call.
+/**
+ * A reader/writer argument that still carries shell wildcards is **unresolved**:
+ * the shell expands it to a file set the extracted token does not name. Used to
+ * fail a deny/ask rule closed rather than let the anchored path match miss it.
+ */
+function hasGlobMeta(path: string): boolean {
+  return /[*?[\]]/.test(path)
+}
 //
 // Pattern formats:
 //   "Bash"              → matches any Bash call
@@ -684,6 +723,15 @@ export function matchBashRule(
     const cmd = String(toolInput.command || '')
     const access = extractBashFileAccess(cmd)
     const paths = baseTool === 'Read' ? access.read : access.write
+    // A shell glob in a reader/writer argument expands to an unknown file set —
+    // `cat *secret*` reads files the literal argument `*secret*` does not name —
+    // so the anchored path match below would miss a `Read(**/secret*)` deny
+    // entirely. Fail closed: under deny/ask (`'any'`) an unresolved glob counts
+    // as a match (refuse). Under allow (`'all'`) a glob path cannot satisfy a
+    // concrete grant anyway, so the grant direction already fails closed. This
+    // is deliberately blunt — one extra ask beats reading a file a deny rule was
+    // written to protect.
+    if (segmentMode !== 'all' && paths.some(hasGlobMeta)) return true
     return qualifies(paths, (p) => matchPathRule(p, subPattern!, segmentMode))
   }
 

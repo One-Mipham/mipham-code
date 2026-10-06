@@ -62,7 +62,11 @@ export const artifactTool: ToolDefinition = {
     // directory are one and the same; computing it here is what made the URL a
     // guaranteed 404 before.
     const baseDir = artifactsRoot(ctx.cwd)
-    const sessionDir = join(baseDir, ctx.sessionId)
+    // Not always `ctx.sessionId`: a sub-agent's session id is the literal
+    // `'sub-agent'`, shared by every sub-agent in every session (see
+    // `ToolContext.artifactSessionId`).
+    const sessionId = ctx.artifactSessionId ?? ctx.sessionId
+    const sessionDir = join(baseDir, sessionId)
     mkdirSync(sessionDir, { recursive: true })
 
     const ext = type === 'svg' ? '.svg' : '.html'
@@ -82,9 +86,7 @@ export const artifactTool: ToolDefinition = {
     const isUpdate = existsSync(filepath)
     if (isUpdate) {
       const manifest = readManifest(baseDir)
-      const existing = manifest.artifacts.find(
-        (a) => a.name === name && a.sessionId === ctx.sessionId,
-      )
+      const existing = manifest.artifacts.find((a) => a.name === name && a.sessionId === sessionId)
       if (existing) {
         archivedVersion = archiveVersion(baseDir, existing)
       }
@@ -94,13 +96,11 @@ export const artifactTool: ToolDefinition = {
     writeFileSync(filepath, content, 'utf-8')
 
     // Build URL and manifest entry
-    const url = port
-      ? `http://localhost:${port}/${ctx.sessionId}/${filename}`
-      : `file://${filepath}`
+    const url = port ? `http://localhost:${port}/${sessionId}/${filename}` : `file://${filepath}`
 
     // Preserve existing version count
     const manifestPre = readManifest(baseDir)
-    const prev = manifestPre.artifacts.find((a) => a.name === name && a.sessionId === ctx.sessionId)
+    const prev = manifestPre.artifacts.find((a) => a.name === name && a.sessionId === sessionId)
     const versionCount = prev?.versionCount || (isUpdate ? 1 : undefined)
 
     const { quarantined } = addToManifest(
@@ -112,7 +112,7 @@ export const artifactTool: ToolDefinition = {
         size,
         type: type as 'html' | 'svg',
         createdAt: new Date().toISOString(),
-        sessionId: ctx.sessionId,
+        sessionId,
         versions: prev?.versions,
         versionCount,
       },

@@ -6,6 +6,7 @@ import {
   retryDelayMs,
   RETRY_AFTER_MAX_MS,
   isRetryableFailure,
+  createAwakeTimer,
 } from '../../src/providers/fetch-utils'
 
 describe('streamIdleTimeoutMs', () => {
@@ -204,5 +205,119 @@ describe('isRetryableFailure', () => {
 
   it('两个都没给 ⇒ 保持可重试（未声明 = 未知，不是「最终」）', () => {
     expect(isRetryableFailure(undefined)).toBe(true)
+  })
+})
+
+/**
+ * `createAwakeTimer` —— 量的是**醒着的时间**，不是壁钟。
+ *
+ * 为什么值得单独测：笔记本合盖一小时，`setTimeout` 会在唤醒的**那一瞬**把所有到期
+ * 定时器一次烧掉，于是 90 秒的流空闲预算在用户掀开屏幕的瞬间被判定「早已超时」，
+ * 连接明明一秒钟都没真闲着，回合却被杀掉。所以「定时器到点」与「预算真的用完」
+ * 是两件事，这个函数存在的全部理由就是不让它们划等号。
+ *
+ * 测法：`setTimeout` 走假时钟（确定、不等待），`performance.now` 由这里手控 ——
+ * 「宿主机挂起」在代码里的长相，正是**壁钟前进而 `performance.now` 不动**。
+ */
+describe('createAwakeTimer', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.useRealTimers()
+  })
+
+  /** 手控的 `performance.now()`：`awake` 就是「这台机器醒着的时间」。 */
+  function withAwakeClock(): { at: () => number; advance: (ms: number) => void } {
+    let awake = 0
+    vi.spyOn(performance, 'now').mockImplementation(() => awake)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    return {
+      at: () => awake,
+      advance: (ms) => {
+        awake += ms
+      },
+    }
+  }
+
+  it('正对照：正常流逝下用完预算就触发（否则下面「不触发」可能只是它从不触发）', () => {
+    const clock = withAwakeClock()
+    const onExpire = vi.fn()
+    createAwakeTimer(1000, onExpire)
+
+    // 前半段：醒着的时间与壁钟同步前进
+    clock.advance(600)
+    vi.advanceTimersByTime(600)
+    expect(onExpire, '预算还没用完就不该触发').not.toHaveBeenCalled()
+
+    clock.advance(400)
+    vi.advanceTimersByTime(400)
+    expect(onExpire).toHaveBeenCalledTimes(1)
+  })
+
+  it('宿主机睡过去导致的提前到点不算超时：重新武装，不触发', () => {
+    const clock = withAwakeClock()
+    const onExpire = vi.fn()
+    createAwakeTimer(1000, onExpire)
+
+    // 合盖一小时：壁钟照跑，performance.now 不动 —— 定时器到点，但一秒都没真等
+    vi.advanceTimersByTime(1000)
+    expect(onExpire, '睡过去的那一跳不能被当成流卡住了').not.toHaveBeenCalled()
+
+    // 醒来后预算才真正走完
+    clock.advance(1000)
+    vi.advanceTimersByTime(1000)
+    expect(onExpire).toHaveBeenCalledTimes(1)
+  })
+
+  it('重复被睡眠打断也不丢预算：每次都补到剩下的那一份', () => {
+    const clock = withAwakeClock()
+    const onExpire = vi.fn()
+    createAwakeTimer(1000, onExpire)
+
+    for (let i = 0; i < 3; i++) {
+      vi.advanceTimersByTime(1000) // 又睡了：壁钟到点，醒着的时间没动
+      clock.advance(300) // 每次醒来后真的干了 300ms 的活
+    }
+    vi.advanceTimersByTime(1000)
+    expect(onExpire, '醒了 900ms，还差 100ms，不该触发').not.toHaveBeenCalled()
+
+    clock.advance(100)
+    vi.advanceTimersByTime(100)
+    expect(onExpire).toHaveBeenCalledTimes(1)
+  })
+
+  it('触发之后不再武装 —— 不会每隔一个预算就再响一次', () => {
+    const clock = withAwakeClock()
+    const onExpire = vi.fn()
+    createAwakeTimer(1000, onExpire)
+
+    clock.advance(1000)
+    vi.advanceTimersByTime(1000)
+    expect(onExpire).toHaveBeenCalledTimes(1)
+
+    clock.advance(10_000)
+    vi.advanceTimersByTime(10_000)
+    expect(onExpire, '回放器要的是一次超时，不是一串').toHaveBeenCalledTimes(1)
+  })
+
+  it('取消之后既不再触发，也不再重新武装', () => {
+    const clock = withAwakeClock()
+    const onExpire = vi.fn()
+    const cancel = createAwakeTimer(1000, onExpire)
+
+    cancel()
+    vi.advanceTimersByTime(1000) // 睡过去一跳：本来会走「重新武装」那条路
+    clock.advance(10_000)
+    vi.advanceTimersByTime(10_000)
+    expect(onExpire).not.toHaveBeenCalled()
+  })
+
+  it('对时精确到界：刚好用满预算就触发（`<` 不是 `<=`）', () => {
+    const clock = withAwakeClock()
+    const onExpire = vi.fn()
+    createAwakeTimer(1000, onExpire)
+
+    clock.advance(1000)
+    vi.advanceTimersByTime(1000)
+    expect(onExpire).toHaveBeenCalledTimes(1)
   })
 })

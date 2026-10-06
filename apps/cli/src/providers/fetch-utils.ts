@@ -125,10 +125,12 @@ export async function fetchWithRetry(
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const controller = new AbortController()
     let timedOut = false
-    const timer = setTimeout(() => {
+    // Awake-time, not wall-clock: a machine that slept through the window has
+    // not actually waited `timeout` ms for a first byte (see `createAwakeTimer`).
+    const cancelTimer = createAwakeTimer(timeout, () => {
       timedOut = true
       controller.abort()
-    }, timeout)
+    })
     // `AbortSignal.any` (node ≥22 / bun ≥1.2, both in `engines`) instead of a
     // hand-rolled combiner: it keeps a *weak* reference to the source signals, so
     // the combination stays live for the reader without pinning the caller's
@@ -161,7 +163,7 @@ export async function fetchWithRetry(
       }
       await sleep(baseDelay * Math.pow(2, attempt))
     } finally {
-      clearTimeout(timer)
+      cancelTimer()
       // Nothing to release: the combination is natively managed. Do NOT abort
       // anything here — `fetch` holds that signal and the caller reads the body
       // *after* we return, so aborting it at this point errored every response at
@@ -198,4 +200,47 @@ const EFFORT_TIMEOUT_MULTIPLIER: Record<string, number> = {
 export function streamIdleTimeoutMs(effort?: string): number {
   const multiplier = effort ? (EFFORT_TIMEOUT_MULTIPLIER[effort] ?? 1) : 1
   return STREAM_IDLE_TIMEOUT_BASE_MS * multiplier
+}
+
+/**
+ * A timeout that measures *awake* time, and so survives the machine sleeping.
+ *
+ * `setTimeout` runs on the wall clock. A laptop suspended for an hour fires every
+ * pending timer the instant it wakes, so a 90-second idle budget is reported the
+ * moment the user opens the lid — the stream is declared stalled and the turn is
+ * killed, even though the connection sat idle for zero seconds of real time.
+ *
+ * `performance.now()` is monotonic and does not advance while the host is
+ * suspended, so the difference it reports is time the machine was actually awake.
+ * When the timer fires with less than `budgetMs` of awake time behind it, the
+ * shortfall was a sleep: re-arm for the remainder instead of firing.
+ *
+ * Returns a cancel function.
+ */
+export function createAwakeTimer(budgetMs: number, onExpire: () => void): () => void {
+  // The epoch the budget is measured from. Kept across a re-arm so the next
+  // check compares against the total awake time, not just the last slice.
+  const start = performance.now()
+  let handle: ReturnType<typeof setTimeout> | undefined
+  let cancelled = false
+
+  const arm = (remainingMs: number): void => {
+    handle = setTimeout(() => {
+      if (cancelled) return
+      const elapsed = performance.now() - start
+      if (elapsed < budgetMs) {
+        // Woke from sleep: only part of the budget was really spent. Keep the
+        // epoch and re-arm for what is left.
+        arm(Math.max(0, budgetMs - elapsed))
+        return
+      }
+      onExpire()
+    }, remainingMs)
+  }
+  arm(budgetMs)
+
+  return () => {
+    cancelled = true
+    if (handle !== undefined) clearTimeout(handle)
+  }
 }

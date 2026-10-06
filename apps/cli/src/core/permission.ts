@@ -47,8 +47,12 @@ function isVerificationCommand(input: Record<string, unknown>): boolean {
   const cmd = (input.command as string) || ''
   // A verification command must be a single simple command — any shell
   // metacharacter (&&, ;, |, >, <, backtick, $) means it can chain a destructive
-  // action (e.g. `cat x && rm -rf ~`), so never auto-approve it.
-  if (/[;&|><`$]/.test(cmd)) return false
+  // action (e.g. `cat x && rm -rf ~`), so never auto-approve it. A shell
+  // wildcard (`*`, `?`, `[`, `]`) is refused for the same reason: the shell
+  // expands it to a file set the rule-matcher never saw, so `cat *secret*` is
+  // not `cat secret` — auto-approving it would read files a `Read(...)` rule
+  // means to protect.
+  if (/[;&|><`$*?\[\]]/.test(cmd)) return false
   // Patterns for verification-only commands (no side effects on codebase)
   const verifyPatterns = [
     /\bpnpm\s+test\b/, // test runner

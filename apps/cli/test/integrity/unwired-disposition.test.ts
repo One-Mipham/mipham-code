@@ -102,6 +102,21 @@ const KEPT_UNWIRED_METHODS: Array<{ file: string; symbol: string; why: string }>
     symbol: 'checkPromptInjection',
     why: '**有意不接**。它的输入面是**用户自己敲的字**，子串匹配必然误伤（用户贴一份提示注入报告、或问「ignore previous instructions 是什么意思」都会被拦）。本仓库对提示注入的防线是红队 + eval harness（`/crsi red-team`、`core/eval-harness.ts` 冻结契约），不是输入子串门。',
   },
+  // 同一类形状的第二组：**事件声明了、被注册了、被 `/hooks` 列出来了，但没有派发点**。
+  // 上面三条的成因是「有更强的替代防线」，这两条的成因是「emit 端还没写」——
+  // 后果比缺一个方法更坏一格：用户在 settings.json 里写的 hook 会被正常列出并计入
+  // `/hooks` 的计数（`commands.ts:4067`/`:4090` 遍历的是配置文件本身、没有事件白名单），
+  // 读起来是「已安装」，实际一次都不会跑。登记不接线是本轮的裁定（见 ROADMAP D18）。
+  {
+    file: 'src/core/hooks.ts',
+    symbol: 'executeConfigChange',
+    why: '`ConfigChange` 事件没有派发点：`runHooks("ConfigChange", …)` 的唯一入口是本方法，而它在 `src/` + `bin/` 里零引用。判据不是「文件没接」—— `hooks.ts` 接得好好的——而是**同类的 14 个 `execute*` 里 12 个有生产调用点、恰好这两个没有**（正对照：逐个数过）。事件本身是合法的：`shared/types.ts:288` 在 `HookEvent` 联合里、`hooks-config.ts:20` 在 `SettingsHooks` 里、`loadHookConfigs` 用 `Object.entries` 无白名单地把它变成 `HookDefinition` 注册进引擎 ⇒ settings.json 写一条 `hooks.ConfigChange` 会被 `/hooks` 列出并计数、却永不触发。**去路**：接线要选 emit 点（配置写入散在 `config/loader.ts`、`/config` 命令、首装向导三处），未定；在那之前它是一条真的但不急的欠账，记在此处免得被当成新发现重报一遍。',
+  },
+  {
+    file: 'src/core/hooks.ts',
+    symbol: 'executePreInference',
+    why: '同上形状（`types.ts:291` 声明、`hooks-config.ts:24` 接受、`/hooks` 列出、唯一派发点零生产引用），但**必须把限定条件一起说清**：`PreInference` 这个概念**已经接了，只是走的是另一条路** —— `config.yml` 的 `inference_hooks:` 段 → `loadInferenceHookConfig()`（`config/loader.ts:926`）→ `engine.setInferenceHookConfig()`（`index.tsx:781`）→ DLP 闸（`engine.ts:630` 与 `:1010`）。所以这不是「推理前检查缺了」，而是**settings.json 那套 hook 事件**没有派发点。**去路**：接它等于决定「settings.json 的任意命令 hook」与「把整段对话正文发往组织端点的 DLP 端点」如何共存 —— 两条独立的前置闸、其中一条是数据出境面，这个组合没定；daemon 侧同一问题已作为待决策项记在 `test/integrity/daemon-capability-parity.test.ts:212`。**deferred，不是 designed-out**。',
+  },
 ]
 
 /**

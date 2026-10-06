@@ -37,6 +37,24 @@ function connectTimeoutMs(): number {
 }
 
 /**
+ * Will retrying this connect failure change the answer?
+ *
+ * A 4xx is the server stating a verdict about *this request* — a rejected token,
+ * a path that does not exist, a malformed handshake. It says the same thing on
+ * attempt 10 as on attempt 1, so the ten-attempt backoff (~8 minutes) only
+ * delays telling the user what is wrong. 408 (request timeout) and 429 (rate
+ * limited) are the two 4xx that explicitly mean "try again", so they stay
+ * retryable along with everything that is not an HTTP verdict at all (connection
+ * refused, DNS, a 5xx).
+ */
+function isTransientConnectError(err: unknown): boolean {
+  if (err instanceof McpHttpError) {
+    return !(err.status >= 400 && err.status < 500) || err.status === 408 || err.status === 429
+  }
+  return true
+}
+
+/**
  * Render a connect failure for the user, adding the one hint a bare error
  * cannot carry: that the fix is to authenticate.
  *
@@ -279,7 +297,8 @@ export class McpClient {
         this.emit('reconnected', name)
         return
       } catch (err) {
-        if (attempt === maxAttempts) {
+        // Stop early on a definitive refusal — see `isTransientConnectError`.
+        if (!isTransientConnectError(err) || attempt === maxAttempts) {
           connection.status = 'error'
           connection.error = String(err)
           this.emit('disconnected', name, err)
