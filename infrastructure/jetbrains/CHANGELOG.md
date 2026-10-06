@@ -4,6 +4,42 @@
 > (tag dates) and use the same wording as the VS Code extension's changelog — the plugin is a
 > thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.18 (2026-10-06)
+
+- Version sync with Mipham Code CLI 0.85.18
+- Added: **long pages fetched with `web-fetch` can be paged through.** Content past the per-call
+  limit used to be dropped silently, and there was no way to read it. The result now ends with
+  `characters X–Y of N`, and a new `offset` argument continues from where the last call stopped.
+- Fixed: **a laptop waking from sleep no longer kills a stream that is still alive.** The stream
+  idle watchdog ran on the wall clock, so a machine suspended past the window fired every pending
+  timer the moment it woke and declared a healthy connection stalled. It now measures _awake_ time
+  via `performance.now()` and re-arms for the remainder, keeping its epoch across re-arms.
+- Fixed: **a `/loop` wakeup no longer vanishes when the process exits.** Wakeups lived only in
+  memory and were lost silently on restart. They are now written to `~/.mipham/wakeups/` (file name
+  derived from the session id via sha256); `resumeWakeups` reports the ones missed while the process
+  was down and hands them back to the model.
+- Fixed: **`/rewind` now covers the prompt that is in flight.** Checkpoints were only saved after a
+  turn ended, so the turn being worked on was not in the table. The save point moved to `pre-turn`,
+  shared by the TUI, `/loop`, goal and daemon paths.
+- Fixed: **a hook or rule that rewrites arguments re-runs the approval check.** A rewrite could turn
+  an approved call into an unapproved shape; a second `resolveApproval` pass now runs after the
+  rewrite and refuses on `ask`.
+- Fixed: **sub-agent artifacts no longer share one bucket with the main session.** The identity was
+  the literal `'sub-agent'`, so every sub-agent in a project wrote to the same key and a same-named
+  artifact was mistaken for the previous version. It is now `<session>:sub:<agent>`.
+- Fixed: **`anthropic.baseUrl` is actually honoured.** The config loader treats it as a _routing_
+  field, but the provider hard-coded the official host — a gateway user's key was sent silently to
+  `api.anthropic.com`. Non-default hosts also no longer receive `anthropic-beta`.
+- Security: the _value_ of a `--opt=value` argument is now part of the path check.
+- Security: a shell glob that cannot be resolved now fails closed.
+- Security: a project- or directory-level instruction file that is a symbolic link is refused.
+- Security: HTTP MCP responses are capped at 8 MiB.
+- Security: the credential-default-pattern and URL-userinfo regexes are now bounded (ReDoS).
+- Security: `Read` sniffs the window it is about to return for NUL bytes.
+- Known boundaries (deliberately unchanged): a content filter cutting a thinking stream off
+  mid-way (that error type is already in the non-retryable set); file names containing **newlines**;
+  progressive loading for very large session resumes.
+
 ## 0.85.17 (2026-10-04)
 
 - Version sync with Mipham Code CLI 0.85.17

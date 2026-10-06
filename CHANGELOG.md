@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.85.18] — 2026-10-06
+
+### Added
+
+- **`web-fetch` 的长页可以分页续读了** —— 超过单次上限的部分从前被**静默丢弃**，而且越界的内容
+  **无路可读**。现在结果尾部会印 `characters X–Y of N`，并新增 `offset` 参数从断点继续。
+
+### Fixed
+
+- **笔记本睡醒后不再误杀还活着的流** —— 流空闲看门狗原本跑在**墙钟**上，机器睡过窗口后一唤醒
+  就让所有挂起定时器同时到期，把连接完好的那一轮判成 stalled 并中止。现改用
+  `performance.now()` 量**清醒时间**：不足预算只补足余额重挂，epoch 跨次保持。
+- **`/loop` 的定时唤醒不再随进程退出静默消失** —— 唤醒此前只活在内存里，重启即丢、且无人知道。
+  现落盘 `~/.mipham/wakeups/`（文件名由 session id 经 sha256 派生，防 `../` 逃逸），启动时
+  `resumeWakeups` 报告进程不在时错过的那些，交回给模型决定。
+- **`/rewind` 现在覆盖开工中发出的那条 prompt** —— 检查点此前只在回合**结束后**存，正在进行的
+  那一轮因此不在可回退的表里。现挪到 `pre-turn`，TUI / `/loop` / goal / daemon 四条路径共用
+  同一个落点。
+- **钩子或规则改写参数后会重新过一遍批准** —— 改写可以把一个已批准的调用变成未批准的形状。
+  现在参数被改写后补第二道 `resolveApproval`，`ask` 即拒。
+- **子代理的 artifact 不再与主会话共用一桶** —— 身份从前写死字面量 `'sub-agent'`，同项目所有
+  会话的子代理都落在同一个键上，同名 artifact 会被误当成上一版。现按 `<会话>:sub:<代理名>`
+  取 `ToolContext.artifactSessionId`。
+- **`anthropic.baseUrl` 现在真的被读取** —— 配置层把它当**路由**字段，provider 却硬编码官方主机
+  ⇒ 走网关的用户，key 被静默发往 `api.anthropic.com`。现已生效；非官方主机也不再附加
+  `anthropic-beta`。
+
+### Security
+
+- `--opt=value` 的**取值**纳入路径判据 —— `--include=*secret*` 之类不会再绕过 Read 的 deny 规则。
+- 解析不出具体路径的 shell glob 转为 **fail-closed**。
+- 项目层 / 目录层指令文件若是**符号链接**即拒载 —— 挡住 `CLAUDE.md -> ~/.ssh/id_rsa` 这类读取外溢。
+- HTTP MCP 响应设 **8 MiB** 上限。
+- 凭据默认模式与 URL userinfo 正则改为**量词有界**（消除可被构造输入触发的回溯）。
+- `Read` 对**将要返回的那个窗口**做 NUL 嗅探 —— 稀疏文本文件仍可读，二进制窗口被拒。
+
+### Known boundaries
+
+- 内容过滤器**中途掐断**思考流的错误类型，已在**不可重试集**内，不再改动。
+- 含**换行**的文件名，显示层未做特殊处理。
+- 大会话 resume 的**渐进加载**未做。
+
 ## [0.85.17] — 2026-10-04
 
 ### Fixed
