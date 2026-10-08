@@ -8,6 +8,8 @@ import { homedir } from 'node:os'
 interface ChatPanelProps {
   messages: ChatMessage[]
   focusMode?: boolean
+  /** A turn is in flight — the moment the focus tip is worth offering. */
+  turnActive?: boolean
 }
 
 /**
@@ -119,7 +121,7 @@ const MessageRow = React.memo(
     prev.msg.toolMeta?.collapsed === next.msg.toolMeta?.collapsed,
 )
 
-export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
+export function ChatPanel({ messages, focusMode, turnActive }: ChatPanelProps) {
   const { t } = useI18n()
   // Memoize display message computation to avoid O(n) compact on every render.
   // During streaming, messages changes on every chunk; without memoization,
@@ -138,6 +140,18 @@ export function ChatPanel({ messages, focusMode }: ChatPanelProps) {
             🔍 {t('ui.chat.focus_hint')} — {countHidden(messages, displayMessages, t)} ·{' '}
             {t('ui.chat.toggle_focus_hint')} · {t('ui.chat.expand_hint')}
           </Text>
+        </Box>
+      )}
+      {/*
+        Offer focus while a turn is running — that is when the transcript grows
+        fastest and when someone is most likely to want it — rather than only
+        documenting it in the idle banner, where it is read before there is
+        anything to focus on. Shown only outside focus mode, and the text names
+        the way back so trying it cannot strand anyone.
+      */}
+      {turnActive && !focusMode && messages.length > 0 && (
+        <Box marginBottom={1}>
+          <Text dimColor>{t('ui.chat.try_focus_tip')}</Text>
         </Box>
       )}
       {messages.length === 0 && (

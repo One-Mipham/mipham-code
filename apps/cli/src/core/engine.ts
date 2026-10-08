@@ -23,6 +23,7 @@ import type { AgentViewManager } from '../agent-view/agent-view-manager'
 import type { Skills } from '../skills/seam'
 import { getBackgroundAgentRegistry } from '../agent/background-registry'
 import { RulesLoader } from './rules-loader'
+import { extractBashFileAccess } from './permission-rules'
 import type { InstructionsLoader } from './instructions'
 import { ExperienceRuleEngine } from './rule-engine.js'
 import { PatternAnalyzer } from '../agent/pattern-analyzer.js'
@@ -406,6 +407,19 @@ export class QueryEngine {
 
   /** Track files touched by tools for rules matching. */
   private trackTouchedFile(toolName: string, params: Record<string, unknown>): void {
+    if (toolName === 'Bash') {
+      // A single-file `cat`/`head`/`sed -n`/`grep` reads the same file the Read
+      // tool would, so the rules scoped to it have to see that path too. Reuses
+      // the extractor the permission layer already runs for Bash↔Read/Write rule
+      // bridging rather than a second, drifting spelling of "which paths did this
+      // command touch" — it already covers redirects, `$()`/backtick
+      // substitutions, `bash -c` payloads and `~`/`$HOME` expansion.
+      const command = params.command
+      if (typeof command !== 'string') return
+      const access = extractBashFileAccess(command)
+      for (const p of [...access.read, ...access.write]) this.touchedFiles.add(p)
+      return
+    }
     const fileTools = ['Read', 'Write', 'Edit', 'Glob', 'Grep']
     if (!fileTools.includes(toolName)) return
     const filePath = (params.file_path || params.path || params.file) as string | undefined
@@ -414,14 +428,32 @@ export class QueryEngine {
     }
   }
 
-  /** Inject matching rules as context after tool execution. */
+  /**
+   * Inject path-scoped context for the files touched this round: matching rules
+   * (`.mipham/rules/*.md`) and any nested instruction files (`CLAUDE.md` and
+   * friends) that were not part of the startup chain.
+   *
+   * Both halves ride the same trigger on purpose — a rule file and a nested
+   * `CLAUDE.md` are the same kind of thing (the loader labels the level
+   * "Directory Rules"), and a path that activates one almost always activates
+   * the other. They also share the call-timing constraint below.
+   *
+   * Must run **after** every `tool_result` of the round has been appended:
+   * `injectContext` pushes a user message, and landing it between an assistant
+   * `tool_use` and its paired user `tool_result` breaks the pairing.
+   */
   private injectRules(): void {
-    if (!this.rulesLoader || this.touchedFiles.size === 0) return
+    if (this.touchedFiles.size === 0) return
     const files = Array.from(this.touchedFiles)
-    const block = this.rulesLoader.buildContextBlock(files)
-    if (!block) return
-    this.context.injectContext('rules', block)
     this.touchedFiles.clear()
+
+    if (this.rulesLoader) {
+      const block = this.rulesLoader.buildContextBlock(files)
+      if (block) this.context.injectContext('rules', block)
+    }
+
+    const nested = this.instructionsLoader?.loadForPaths(files, process.cwd())
+    if (nested) this.context.injectContext('directory-rules', nested)
   }
 
   /**
@@ -458,6 +490,14 @@ export class QueryEngine {
     const bgRegistry = getBackgroundAgentRegistry()
     const tasks = bgRegistry.list()
     const chunks: StreamChunk[] = []
+
+    // Mirror every background task into Agent View — including the running ones,
+    // which the loop below deliberately skips. The panel previously carried only
+    // `/bg` and `/fork` rows, so a background sub-agent spawned by the Agent tool
+    // (the default) was invisible in it for its whole lifetime. Projecting from
+    // the registry rather than from each spawn site means every present and future
+    // producer is covered by one call.
+    this.agentViewManager?.syncBackgroundTasks(tasks)
 
     for (const task of tasks) {
       if (task.status === 'running') continue

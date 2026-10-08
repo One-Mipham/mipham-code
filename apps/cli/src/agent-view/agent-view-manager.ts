@@ -127,6 +127,56 @@ export class AgentViewManager {
   }
 
   /**
+   * Mirror background-agent tasks into the panel, and return how many rows were
+   * added.
+   *
+   * Rows created by `/bg` and `/fork` used to be the only ones that existed. The
+   * Agent tool — whose sub-agents are **background by default** — registers them
+   * with the background registry and nothing else, so the ordinary way to fan out
+   * work produced no panel rows at all: the pane stayed empty the whole time the
+   * agents ran, which a viewer cannot tell apart from "nothing was spawned".
+   *
+   * Keyed on the registry's task id. `/bg` and `/fork` already link their row
+   * through `session.taskId`, so those are matched and updated rather than
+   * duplicated; anything else is a task this panel has not seen.
+   *
+   * Status is a projection, not a source: the registry owns it, and a row whose
+   * status disagrees with the registry is corrected here on the next round.
+   */
+  syncBackgroundTasks(
+    tasks: ReadonlyArray<{ id: string; description: string; status: string }>,
+  ): number {
+    const byTaskId = new Map<string, AgentSession>()
+    for (const id of this.sessionOrder) {
+      const session = this.sessions.get(id)
+      if (session?.taskId) byTaskId.set(session.taskId, session)
+    }
+
+    let added = 0
+    for (const task of tasks) {
+      const status: SessionStatus =
+        task.status === 'running' ? 'working' : task.status === 'failed' ? 'failed' : 'completed'
+
+      const existing = byTaskId.get(task.id)
+      if (existing) {
+        if (existing.status !== status) this.updateStatus(existing.id, status)
+        continue
+      }
+
+      const session = this.create(task.description, task.description)
+      session.taskId = task.id
+      // Not `interactive`: nobody is steering this row, and the dashboard's
+      // grouping keys off the kind as well as the status.
+      session.kind = 'unattended'
+      this.updateStatus(session.id, status)
+      byTaskId.set(task.id, session)
+      added++
+    }
+
+    return added
+  }
+
+  /**
    * List all sessions in creation order (newest first).
    */
   list(): AgentSession[] {

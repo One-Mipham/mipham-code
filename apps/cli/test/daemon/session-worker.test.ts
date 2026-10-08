@@ -13,6 +13,58 @@ describe('SessionWorker', () => {
   })
 })
 
+// ============================================================
+// 处理中再来一条：报 busy
+//
+// 返回值原先只说明「没抛异常」，于是渠道层把 `ok` 读成「这轮是为你跑的」，
+// 转头去取上一轮的回复发出去 —— 用户收到的是**对另一条消息的回答**，而且
+// 屏幕上没有任何东西表明这件事发生过。`busy` 必须是一个被报出来的结果。
+// ============================================================
+
+describe('SessionWorker.processPrompt — 处理中再来一条', () => {
+  it('报 busy，且那条 prompt 根本不落库', async () => {
+    const permission = new PermissionSystem('default')
+    let release: () => void = () => {}
+    const gate = new Promise<void>((r) => {
+      release = r
+    })
+    const engine = {
+      async *process() {
+        await gate // 卡在第一轮里，`processing` 一直是 true
+        yield { type: 'text', content: 'r1' }
+        yield { type: 'stop' }
+      },
+      getLastAssistantContent: () => 'r1',
+      getContext: () => ({ getMessages: () => [] }),
+      getPermission: () => permission,
+    } as any
+
+    const db = makeDb()
+    const ws = makeWs()
+    const worker = new SessionWorker(engine, db as any, { ...SESSION })
+    worker.addClient(ws as any)
+
+    // 同步跑进去：`processing` 在第一个 await 之前就置了 true，所以下面这条一定撞上。
+    const first = worker.processPrompt('第一条')
+    const second = await worker.processPrompt('第二条')
+
+    expect(second).toEqual({ ok: false, reason: 'busy' })
+    expect(worker.isProcessing()).toBe(true)
+    // 说出来了，而不是静默丢弃 —— 渠道据此回一句「上一条还在处理」。
+    expect(ws.sent.some((m) => m.type === 'error')).toBe(true)
+
+    release()
+    expect(await first).toEqual({ ok: true })
+    expect(worker.isProcessing()).toBe(false)
+
+    // 正对照：第一条进了库，第二条一字都没有 —— 否则上面那条断言对
+    // 「入库整个坏了」也成立。（用户消息也是 JSON 包装后落库的。）
+    const persisted = db.savedMessages.map((m) => m.content)
+    expect(persisted.some((c) => c.includes('第一条'))).toBe(true)
+    expect(persisted.some((c) => c.includes('第二条'))).toBe(false)
+  })
+})
+
 // ── processPrompt：按真实 chunk 序列端到端驱动 ─────────────────────────────
 //
 // `engine.process()` 在一次调用里跑完整个回合（内部 `yield* continueWithTools()`），

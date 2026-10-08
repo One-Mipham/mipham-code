@@ -7,6 +7,7 @@ import {
   RETRY_AFTER_MAX_MS,
   isRetryableFailure,
   createAwakeTimer,
+  DEFAULT_RETRY_BASE_DELAY_MS,
 } from '../../src/providers/fetch-utils'
 
 describe('streamIdleTimeoutMs', () => {
@@ -153,6 +154,63 @@ describe('fetchWithRetry', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(res.status).toBe(400)
+  })
+})
+
+// ============================================================
+// `MIPHAM_OVERLOADED_RETRY_BASE_DELAY_MS` —— 退避基数的环境变量旋钮。
+//
+// 1 秒适合交互式回合，但对着一个已知过载的端点（自建网关、批处理）跑的人想要
+// 更长的间隔，而 SDK 那几条路径在内部自己调 `fetchWithRetry`，没法把 `baseDelay`
+// 传进来。这一格钉的是**接线**而非解析函数本身：环境变量真的决定那次 `sleep`
+// 的长度。只测解析函数的话，把 `resolveBaseDelayMs()` 从默认值里摘掉也能全绿。
+// ============================================================
+
+describe('fetchWithRetry base delay from the environment', () => {
+  const ENV = 'MIPHAM_OVERLOADED_RETRY_BASE_DELAY_MS'
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+    delete process.env[ENV]
+  })
+
+  it('环境变量决定重试间隔：到点前不重发，到点才重发', async () => {
+    // 只假造 setTimeout：`createAwakeTimer` 走 `performance.now()` 量清醒时间，
+    // 真表的 now 几乎不动 ⇒ 它只会一直补足余额重挂，不会在 60s 预算内误触发。
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    process.env[ENV] = '7000'
+    const fetchMock = vi.fn(async () => new Response('overloaded', { status: 529 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const p = fetchWithRetry('https://example.com/api', { method: 'POST' }, { maxRetries: 1 })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(fetchMock).toHaveBeenCalledTimes(1) // 第一次已发出，正在退避
+
+    // 差 1 ms 到环境变量给的 7000。内建的 1000 早该过点 —— 所以这一步就是判据：
+    // 摘掉默认值里的 `resolveBaseDelayMs()`，这里立刻变成 2 次调用。
+    await vi.advanceTimersByTimeAsync(6999)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(1)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    await p
+  })
+
+  it('畸形值退回内建 1 秒，而不是读成 NaN ⇒ sleep(0) 的贴地重发循环', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    process.env[ENV] = 'not-a-number'
+    const fetchMock = vi.fn(async () => new Response('overloaded', { status: 529 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const p = fetchWithRetry('https://example.com/api', { method: 'POST' }, { maxRetries: 1 })
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(DEFAULT_RETRY_BASE_DELAY_MS - 1)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(1)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    await p
   })
 })
 

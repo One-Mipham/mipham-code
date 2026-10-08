@@ -772,6 +772,7 @@
       "focus_hint": "Focus",
       "hidden": "hidden",
       "toggle_focus_hint": "/focus to toggle",
+      "try_focus_tip": "Long turn? Ctrl+F (or /focus) shows just the latest exchange — press it again to switch back.",
       "expand_hint": "Ctrl+O to expand",
       "showing_all": "showing all {count} messages",
       "tool_outputs_folded": "{hidden} tool outputs folded ({toolCount} total tool calls)"
@@ -929,8 +930,8 @@
   "errors": {
     "tool_denied_deny_rule": "Tool \"{name}\" blocked by a deny rule (\"{pattern}\"). Deny rules override permission mode — try a different approach, or drop the rule with: /permissions remove \"{pattern}\"",
     "tool_denied_ask_rule": "Tool \"{name}\" requires approval (ask rule: \"{pattern}\"). Approve when prompted, or stop being asked with: /permissions allow \"{pattern}\"",
-    "tool_denied_mode": "Tool \"{name}\" requires approval under \"{mode}\" mode. Press Shift+Tab to switch permission mode, or stop being asked with: /permissions allow \"{name}\" (or a narrower \"{name}(arg)\") Treat this denial as covering the outcome, not only this exact command.",
-    "tool_denied_classifier": "Tool \"{name}\" was blocked in auto mode by the permission classifier ({reason}). This is a policy decision, not a failure — switching modes will not change it, and repeating the identical call returns the same ruling. Change the call so it no longer trips the rule. Note that `/permissions allow \"{name}\"` skips the classifier for every later call to this tool, not just this one, so prefer making the call acceptable over allowing the tool. Treat this denial as covering the outcome, not only this exact command.",
+    "tool_denied_mode": "Tool \"{name}\" requires approval under \"{mode}\" mode. Press Shift+Tab to switch permission mode, or stop being asked with: /permissions allow \"{name}\" (or a narrower \"{name}(arg)\").",
+    "tool_denied_classifier": "Tool \"{name}\" was blocked in auto mode by the permission classifier ({reason}). This is a policy decision, not a failure — switching modes will not change it, and repeating the identical call returns the same ruling. Change the call so it no longer trips the rule. Note that `/permissions allow \"{name}\"` skips the classifier for every later call to this tool, not just this one, so prefer making the call acceptable over allowing the tool.",
     "tool_denied_dangerous_rm": "Tool \"{name}\" was refused: this is a recursive rm whose target is not a path written in the command (\"{target}\"). The target is produced when the command runs, so neither an allow rule nor the permission mode can bound what it deletes. Name the directory literally instead — `rm -rf node_modules` rather than `rm -rf \"$(pwd)\"` — and treat this refusal as covering the outcome, not only this exact spelling. To turn this check off: MIPHAM_DISABLE_DANGEROUS_RM_PROMPT=1",
     "tool_denied_world_writable_chmod": "Tool \"{name}\" was refused: this is a recursive chmod that grants world-write to a target the command does not bound (\"{target}\"). A world-writable tree plus a target produced at run time is how permissions end up loosened far past what was asked for, and neither an allow rule nor the permission mode can bound where the grant reaches. Name the directory literally instead — `chmod -R 777 ./dist` rather than `chmod -R 777 $DIR` — and treat this refusal as covering the outcome, not only this exact spelling. To turn this check off: MIPHAM_DISABLE_CHMOD_PROMPT=1",
     "tool_denied_classifier_unavailable": "Tool \"{name}\" was held back because the auto-mode classifier could not be reached or its answer could not be read ({reason}). This is NOT a policy decision — the call was never judged, and retrying is appropriate. If this keeps happening, switch modes with Shift+Tab.",
@@ -953,6 +954,7 @@
     "oauth_no_code": "No authorization code received",
     "oauth_timeout": "OAuth flow timed out (5 minutes)",
     "mcp_register_collision": "[mcp] Tool collision: \"{name}\" (from server \"{server}\") conflicts with existing tool. Skipping.",
+    "mcp_protocol_version_mismatch": "[mcp] Server negotiated protocol version \"{version}\", which this client does not implement (supported: {supported}). Continuing, but MCP messages may not behave as expected.",
     "mcp_register_failed": "[mcp] Failed to register tool \"{tool}\" from server \"{server}\": {error}",
     "max_tool_turns": "Max tool-calling turns ({max}) reached. Some tool calls were not executed.",
     "max_tool_turns_warning": "You've reached the maximum of {max} tool-calling rounds. {pending} tool call(s) were not executed. Please summarize what you found so far and any next steps the user should take.",

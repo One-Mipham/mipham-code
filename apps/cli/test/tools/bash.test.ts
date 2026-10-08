@@ -217,6 +217,61 @@ describe('rm operand quoting and nested interpreters', () => {
 })
 
 // ============================================================
+// 同一个家目录的其他写法。
+//
+// 上面那组只认字面量 `~`、`/`、`/.` —— 于是 `$HOME`（展开成同一棵树）、
+// Windows 的 `C:\Users\<名字>`（profile 目录，长名或 8.3 短名），以及 cmd.exe
+// 的 `%USERPROFILE%` 各自都是一个单词的绕行。挡的必须是**那个目录**，不是那个符号。
+// ============================================================
+
+describe('rm -rf 家目录的其他写法', () => {
+  const blocked = [
+    'rm -rf $HOME',
+    'rm -rf ${HOME}',
+    'rm -rf "$HOME"',
+    'rm -rf $HOME/',
+    'rm -rf ${HOME}/',
+    'sudo rm -rf ${HOME}',
+    'rm -rf C:/',
+    'rm -rf C:\\',
+    'rm -rf "C:/"',
+    'rm -rf C:/Users/guohua',
+    'rm -rf C:\\Users\\guohua\\',
+    'rm -rf c:/users/GUOHUA~1',
+    'rm -rf %USERPROFILE%',
+    'rm -rf %USERPROFILE%\\',
+    'rm -rf %HOMEDRIVE%%HOMEPATH%',
+    'rm -rf %USERPROFILE%/build',
+  ]
+
+  for (const cmd of blocked) {
+    it(`blocks ${JSON.stringify(cmd)}`, () => {
+      expect(isBlocked(cmd)).not.toBeNull()
+    })
+  }
+
+  // 正对照。没有这几条的话，一个「见 rm -rf 就拒」的守卫会让上面整个循环变绿，
+  // 而下面这些正是模式刻意不去碰的：驱动器上更深的普通目录、别的环境变量、
+  // 以及名字里带 `$HOME` 前缀但并不是它的变量。
+  const allowed = [
+    'rm -rf node_modules',
+    'rm -rf C:/Users/guohua/project/node_modules',
+    'rm -rf C:\\Users\\guohua\\project\\dist',
+    'rm -rf ./build',
+    'rm -rf %TEMP%',
+    'rm -rf $HOME_DIR_OUT',
+    'rm -rf ${WORKSPACE}/out',
+    'rm -rf ~foo',
+  ]
+
+  for (const cmd of allowed) {
+    it(`allows ${JSON.stringify(cmd)}`, () => {
+      expect(isBlocked(cmd)).toBeNull()
+    })
+  }
+})
+
+// ============================================================
 // Git guardrail parity — dangerous git commands must be blocked when
 // invoked via Bash (the Git tool blocks these; Bash previously allowed a bypass)
 // ============================================================

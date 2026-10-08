@@ -18,6 +18,8 @@ import { recordLlm, replayLlm } from '../../src/providers/llm-replay'
 import { SessionLog, replayChunks } from '../../src/core/session-log'
 import { RulesLoader } from '../../src/core/rules-loader'
 import { InstructionsLoader } from '../../src/core/instructions'
+import { AgentViewManager } from '../../src/agent-view/agent-view-manager'
+import { getBackgroundAgentRegistry } from '../../src/agent/background-registry'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -427,6 +429,144 @@ describe('QueryEngine', () => {
 
       expect(conversationText(context)).not.toContain('RULE-B')
       rmSync(root, { recursive: true, force: true })
+    })
+  })
+
+  /**
+   * 上面那组只走 `Read`。`cat`/`sed -n`/`grep` 读的是同一个文件，规则却一条都不
+   * 带上 —— 模型在 Bash 里看过的文件比在 Read 里多，而这扇门只认工具名。
+   * 判据是**路径**，不是产出它的那个工具。
+   */
+  describe('path-scoped context — Bash 读过的文件', () => {
+    /** Provider whose n-th chat call runs `commands[n]` through Bash, then stops. */
+    function bashPerTurn(commands: string[]) {
+      let turn = 0
+      return mockProviderRegistry(async function* () {
+        const n = turn++
+        const command = commands[n]
+        if (command) {
+          yield {
+            type: 'tool_use',
+            toolUse: { type: 'tool_use', id: `b${n}`, name: 'Bash', input: { command } },
+          }
+        }
+        yield { type: 'stop' }
+      })
+    }
+
+    it('`cat` 一个文件也算「看过它」—— 规则不再只认 Read', async () => {
+      const root = makeRulesWorkspace({ 'a.md': '---\npaths: "a.ts"\n---\nRULE-A\n' })
+      const context = mockContext()
+      const engine = new QueryEngine(
+        bashPerTurn(['cat src/a.ts']),
+        context,
+        makeToolMap([mockTool('Bash')]),
+      )
+      engine.setRulesLoader(new RulesLoader(root))
+
+      for await (const _ of engine.process('cat a')) {
+        /* drain */
+      }
+
+      expect(conversationText(context)).toContain('RULE-A')
+      rmSync(root, { recursive: true, force: true })
+    })
+
+    it('正对照：命令里没有那个路径时什么都不注入', async () => {
+      const root = makeRulesWorkspace({ 'a.md': '---\npaths: "a.ts"\n---\nRULE-A\n' })
+      const context = mockContext()
+      const engine = new QueryEngine(
+        bashPerTurn(['ls -la']),
+        context,
+        makeToolMap([mockTool('Bash')]),
+      )
+      engine.setRulesLoader(new RulesLoader(root))
+
+      for await (const _ of engine.process('ls')) {
+        /* drain */
+      }
+
+      expect(conversationText(context)).not.toContain('RULE-A')
+      rmSync(root, { recursive: true, force: true })
+    })
+  })
+
+  /**
+   * 同一个触发点的另一半：基线链只走 git 根 → cwd，比它更深的文件旁边那份
+   * `CLAUDE.md` 启动时一条也读不到。这里钉的是它**接上了** —— 尺子（
+   * `InstructionsLoader.loadForPaths`）已经单独测过，而只测尺子的话，把
+   * `engine.ts` 里那一行删掉照样全绿。
+   */
+  describe('path-scoped context — 基线链外的 CLAUDE.md', () => {
+    it('碰到 cwd 链外目录里的文件时，补上那里的 CLAUDE.md', async () => {
+      const root = realpathSync(mkdtempSync(join(tmpdir(), 'mipham-instr-engine-')))
+      try {
+        mkdirSync(join(root, 'services', 'billing'), { recursive: true })
+        writeFileSync(join(root, 'services', 'billing', 'CLAUDE.md'), '# billing\n- BILLING-RULE')
+        writeFileSync(join(root, 'services', 'billing', 'invoice.ts'), 'export const x = 1')
+
+        const loader = new InstructionsLoader()
+        loader.loadAll(root)
+        // 负控：基线链上没有 services/，所以它一个字都不在系统提示里。
+        expect(loader.buildSystemPrompt()).not.toContain('BILLING-RULE')
+
+        const file = join(root, 'services', 'billing', 'invoice.ts')
+        let turn = 0
+        const registry = mockProviderRegistry(async function* () {
+          if (turn++ === 0) {
+            yield {
+              type: 'tool_use',
+              toolUse: { type: 'tool_use', id: 'c0', name: 'Read', input: { file_path: file } },
+            }
+          }
+          yield { type: 'stop' }
+        })
+        const context = mockContext()
+        const engine = new QueryEngine(
+          registry,
+          context,
+          makeToolMap([readToolTouching(file, () => {})]),
+        )
+        engine.setInstructions(loader)
+
+        for await (const _ of engine.process('read invoice')) {
+          /* drain */
+        }
+
+        expect(conversationText(context)).toContain('BILLING-RULE')
+      } finally {
+        rmSync(root, { recursive: true, force: true })
+      }
+    })
+  })
+
+  /**
+   * 面板原先只有 `/bg` 与 `/fork` 两处建行，用 Agent 工具（默认后台）派出去的子
+   * 代理**整个生命周期都不在面板上**。这里钉的是投影接上了：从注册表读，所以
+   * 现在与将来的每个产出点都覆盖到，且**正在跑的**也要建行。
+   */
+  describe('drainTaskNotifications 把后台任务投影进 Agent View', () => {
+    it('正在跑的后台任务在面板上就有行（不是等跑完才出现）', () => {
+      const registry = getBackgroundAgentRegistry()
+      const taskId = registry.spawn(
+        'bg explore',
+        'explore',
+        async () => new Promise<string>(() => {}), // 永不 settle ⇒ 状态停在 running
+        'unattended',
+      )
+      try {
+        const engine = new QueryEngine(mockProviderRegistry(), mockContext(), makeToolMap([]))
+        const manager = new AgentViewManager()
+        engine.setAgentViewManager(manager)
+
+        engine.drainTaskNotifications()
+
+        const row = manager.list().find((s) => s.taskId === taskId)
+        expect(row, '正在跑的后台任务必须在面板上有行').toBeDefined()
+        expect(row!.status).toBe('working')
+      } finally {
+        registry.stop(taskId)
+      }
     })
   })
 

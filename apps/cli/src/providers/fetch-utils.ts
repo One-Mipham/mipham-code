@@ -106,6 +106,29 @@ export function isRetryableFailure(status: number | undefined, errorType?: strin
   return !NON_RETRYABLE_ERROR_TYPES.has(errorType)
 }
 
+/** Base backoff between retry attempts, in ms. */
+export const DEFAULT_RETRY_BASE_DELAY_MS = 1_000
+
+/**
+ * The default backoff, overridable from the environment.
+ *
+ * One second suits an interactive turn, but a caller pointed at a known-overloaded
+ * endpoint (a self-hosted gateway, a batch run) wants longer gaps between attempts
+ * — and cannot pass `baseDelay` through the SDK paths that build their own
+ * `fetchWithRetry` call. `MIPHAM_OVERLOADED_RETRY_BASE_DELAY_MS` is that knob.
+ *
+ * A malformed value (non-numeric, negative) is a typo, not an instruction: fall
+ * back to the built-in rather than let `sleep(NaN)` become a zero-delay retry
+ * loop. Read per call so a test can set it without re-importing the module.
+ */
+function resolveBaseDelayMs(): number {
+  const raw = process.env.MIPHAM_OVERLOADED_RETRY_BASE_DELAY_MS
+  if (raw === undefined || raw.trim() === '') return DEFAULT_RETRY_BASE_DELAY_MS
+  const ms = Number(raw)
+  if (!Number.isFinite(ms) || ms < 0) return DEFAULT_RETRY_BASE_DELAY_MS
+  return ms
+}
+
 /**
  * Fetch with optional timeout and retry with exponential backoff.
  *
@@ -118,7 +141,7 @@ export async function fetchWithRetry(
   init: RequestInit,
   options: FetchWithRetryOptions = {},
 ): Promise<Response> {
-  const { timeout = 60_000, maxRetries = 2, baseDelay = 1000 } = options
+  const { timeout = 60_000, maxRetries = 2, baseDelay = resolveBaseDelayMs() } = options
 
   let lastErr: unknown
 

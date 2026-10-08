@@ -5,6 +5,9 @@ import { getBackgroundAgentRegistry } from '../../agent/background-registry'
 
 const VALID_TYPES: SubAgentType[] = ['general', 'explore', 'plan', 'code-review']
 
+/** Same domain as the session-level `/effort` command (`ui/commands.ts`). */
+const VALID_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
+
 /**
  * Resolve whether a sub-agent should run in the background.
  *
@@ -64,6 +67,14 @@ export const agentTool: ToolDefinition = {
         description:
           'When false, execute synchronously and return the result directly. Default: true (background).',
       },
+      effort: {
+        type: 'string',
+        enum: ['low', 'medium', 'high', 'xhigh', 'max'],
+        description:
+          'Reasoning effort for this sub-agent, same levels as /effort. Higher levels get a longer ' +
+          'streaming idle budget so a long thinking pass is not mistaken for a stalled connection. ' +
+          'Omit to inherit the provider default.',
+      },
     },
     required: ['description', 'prompt'],
   },
@@ -77,6 +88,18 @@ export const agentTool: ToolDefinition = {
         success: false,
         content: '',
         error: `Invalid subagent_type "${agentType}". Valid types: ${VALID_TYPES.join(', ')}`,
+      }
+    }
+
+    // Reject rather than pass through: an unrecognized level silently lands on
+    // the 1× timeout, i.e. it behaves exactly like omitting the parameter while
+    // reading as though it took effect.
+    const effort = params.effort as string | undefined
+    if (effort !== undefined && !VALID_EFFORTS.includes(effort)) {
+      return {
+        success: false,
+        content: '',
+        error: `Invalid effort "${effort}". Valid levels: ${VALID_EFFORTS.join(', ')}`,
       }
     }
 
@@ -112,6 +135,7 @@ export const agentTool: ToolDefinition = {
         type: agentType,
         agentDef,
         runInBackground,
+        effort,
         // Hand the caller's services down: the sub-agent keeps running the same
         // skills/agents/artifacts, and only the fields it owns are overridden.
         toolContext: ctx,

@@ -128,3 +128,66 @@ describe('InputBar 历史与卸载 —— 接线层（D7 的真缺口）', () =>
     expect(lastFrame()).toContain('hello')
   })
 })
+
+/**
+ * Escape 清空草稿 —— 清得掉，也得**拿得回来**。
+ *
+ * Escape 的语义是「取消」，所以清空是对的；但那份草稿与已发送的消息、斜杠命令
+ * 都不同：它从未进过历史，清掉就是没了。于是 ↑ 的第一步必须先把草稿还回来，
+ * 而不是直接走进历史 —— 那会跳到一个更旧的条目，并且让这段文字再也没有回来的路。
+ */
+const ESC = '\u001B'
+
+describe('InputBar —— Escape 清空草稿，↑ 把它拿回来', () => {
+  it('↑ 恢复的是被清掉的草稿，不是历史里的旧条目', async () => {
+    const { stdin, lastFrame } = renderBar()
+    // 先让历史里**有**一条，否则「恢复草稿」与「翻到历史第一项」在屏幕上同形。
+    stdin.write('older entry')
+    await settle()
+    stdin.write(ENTER)
+    await settle()
+
+    stdin.write('draft in progress')
+    await settle()
+    expect(lastFrame()).toContain('draft in progress')
+
+    stdin.write(ESC)
+    await settle()
+    expect(lastFrame()).not.toContain('draft in progress')
+
+    stdin.write(UP)
+    await settle()
+    expect(lastFrame()).toContain('draft in progress')
+    expect(lastFrame()).not.toContain('older entry')
+  })
+
+  it('恢复是一次性的：再按一次 ↑ 才走进历史', async () => {
+    const { stdin, lastFrame } = renderBar()
+    stdin.write('older entry')
+    await settle()
+    stdin.write(ENTER)
+    await settle()
+    stdin.write('draft in progress')
+    await settle()
+    stdin.write(ESC)
+    await settle()
+
+    stdin.write(UP) // 拿回草稿
+    await settle()
+    stdin.write(UP) // 这一次才翻历史
+    await settle()
+    expect(lastFrame()).toContain('older entry')
+  })
+
+  it('正对照：没有草稿时第一次 ↑ 直接进历史', async () => {
+    const { stdin, lastFrame } = renderBar()
+    stdin.write('older entry')
+    await settle()
+    stdin.write(ENTER)
+    await settle()
+
+    stdin.write(UP)
+    await settle()
+    expect(lastFrame()).toContain('older entry')
+  })
+})

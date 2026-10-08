@@ -277,3 +277,115 @@ describe('项目层指令不许是符号链接', () => {
     }
   })
 })
+
+// ============================================================
+// `loadForPaths` —— 基线链只走一次（git 根 → cwd），比 cwd 更深的文件、
+// 或旁支目录里的文件，启动时一条规则都带不上，尽管它旁边那份 CLAUDE.md 正是
+// 管着它的那套规则。这里钉的是「看过哪里的文件，就补上那里的规则」，
+// 并且**按路径而不是按工具**——Bash 的 `cat`/`sed -n`/`grep` 与 Read 走同一条。
+// ============================================================
+
+describe('InstructionsLoader.loadForPaths（补上没在基线链里的目录规则）', () => {
+  function makeRepo(): string {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'mipham-instr-paths-')))
+    execSync('git init -q', { cwd: root })
+    mkdirSync(join(root, 'apps', 'cli'), { recursive: true })
+    mkdirSync(join(root, 'services', 'billing'), { recursive: true })
+    writeFileSync(join(root, 'CLAUDE.md'), '# root rules\n- ROOT-RULE')
+    writeFileSync(join(root, 'apps', 'cli', 'CLAUDE.md'), '# cli rules\n- CLI-RULE')
+    writeFileSync(join(root, 'services', 'CLAUDE.md'), '# services rules\n- SERVICES-RULE')
+    writeFileSync(join(root, 'services', 'billing', 'CLAUDE.md'), '# billing rules\n- BILLING-RULE')
+    writeFileSync(join(root, 'services', 'billing', 'invoice.ts'), 'export const x = 1')
+    return root
+  }
+
+  it('旁支目录：启动时一个字都没读，碰到它的文件时补上（且沿途每一层都补）', () => {
+    const root = makeRepo()
+    try {
+      const cwd = join(root, 'apps', 'cli')
+      const loader = new InstructionsLoader()
+      loader.loadAll(cwd)
+
+      // 负控：基线链是 git 根 → apps → apps/cli，`services/` 不在其上。
+      // 少了这一句，「补上」与「本来就在」在断言上同形。
+      expect(loader.buildSystemPrompt()).not.toContain('BILLING-RULE')
+      expect(loader.buildSystemPrompt()).not.toContain('SERVICES-RULE')
+
+      const block = loader.loadForPaths([join(root, 'services', 'billing', 'invoice.ts')], cwd)
+      expect(block).toContain('BILLING-RULE')
+      // 中途那一层也要带上 —— 只补文件所在的那一层是不够的，规则是从仓库根往下叠的。
+      expect(block).toContain('SERVICES-RULE')
+      // 已经加载过的层不重复注入（ROOT-RULE 在基线里已有）。
+      expect(block).not.toContain('ROOT-RULE')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('同一个目录再看一次就不再补（返回 null ⇒ 调用方整段不注入）', () => {
+    const root = makeRepo()
+    try {
+      const cwd = join(root, 'apps', 'cli')
+      const loader = new InstructionsLoader()
+      loader.loadAll(cwd)
+      const file = join(root, 'services', 'billing', 'invoice.ts')
+
+      expect(loader.loadForPaths([file], cwd)).toContain('BILLING-RULE')
+      // 第二轮：软性 null，不是空串 —— 空串会被注入成一个空壳段落。
+      expect(loader.loadForPaths([file], cwd)).toBeNull()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('仓库外的一律不带入 —— 判据是「在检出内」，不是「文件存在」', () => {
+    const root = makeRepo()
+    const outside = realpathSync(mkdtempSync(join(tmpdir(), 'mipham-instr-outside-')))
+    try {
+      writeFileSync(join(outside, 'CLAUDE.md'), '# not ours\n- OUTSIDE-RULE')
+      writeFileSync(join(outside, 'secret.ts'), 'x')
+      const cwd = join(root, 'apps', 'cli')
+      const loader = new InstructionsLoader()
+      loader.loadAll(cwd)
+
+      expect(loader.loadForPaths([join(outside, 'secret.ts')], cwd)).toBeNull()
+
+      // 正对照：同一批调用里换一个仓库内的路径，立刻就补上了 —— 否则上面那条
+      // 对「loadForPaths 整个是坏的」也成立。
+      expect(loader.loadForPaths([join(root, 'services', 'billing', 'invoice.ts')], cwd)).toContain(
+        'BILLING-RULE',
+      )
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+      rmSync(outside, { recursive: true, force: true })
+    }
+  })
+
+  it('给的是目录本身（Grep/Glob 的搜索根）时同样成立', () => {
+    const root = makeRepo()
+    try {
+      const cwd = join(root, 'apps', 'cli')
+      const loader = new InstructionsLoader()
+      loader.loadAll(cwd)
+
+      const block = loader.loadForPaths([join(root, 'services', 'billing')], cwd)
+      expect(block).toContain('BILLING-RULE')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('还不存在的路径（Write 新文件）按文件读 —— 补的是它所在目录那一层', () => {
+    const root = makeRepo()
+    try {
+      const cwd = join(root, 'apps', 'cli')
+      const loader = new InstructionsLoader()
+      loader.loadAll(cwd)
+
+      const block = loader.loadForPaths([join(root, 'services', 'billing', 'brand-new.ts')], cwd)
+      expect(block).toContain('BILLING-RULE')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+})

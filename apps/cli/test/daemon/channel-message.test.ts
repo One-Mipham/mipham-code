@@ -4,7 +4,7 @@ import { handleChannelMessage } from '../../src/daemon/channel-message.js'
 vi.spyOn(console, 'error').mockImplementation(() => {})
 
 function makeOpts(overrides: Partial<any> = {}) {
-  const processPrompt = vi.fn(async () => {})
+  const processPrompt = vi.fn(async () => ({ ok: true as const }))
   const worker = {
     processPrompt,
     getLastAssistantContent: () => '完成！',
@@ -54,6 +54,20 @@ describe('handleChannelMessage', () => {
     const o = makeOpts({ getOrCreateWorker: () => null })
     await handleChannelMessage(o)
     expect(o.sendText).toHaveBeenCalledWith('ou_1', '（会话初始化失败，请稍后重试）')
+  })
+
+  it('concurrent message → 回「处理中」，绝不回发上一轮内容', async () => {
+    // A second message that lands while a turn is in flight must not be answered
+    // with the previous turn's reply — that is answering a question the user did
+    // not ask. The worker reports `busy`; the channel has to say so.
+    const o = makeOpts()
+    ;(o.getOrCreateWorker() as any).processPrompt = vi.fn(async () => ({
+      ok: false,
+      reason: 'busy',
+    }))
+    await handleChannelMessage(o)
+    expect(o.sendText).toHaveBeenCalledWith('ou_1', '（上一条消息仍在处理中，请稍候再发）')
+    expect(o.sendText).not.toHaveBeenCalledWith('ou_1', '完成！')
   })
 
   it('回发失败 → 不 rethrow，prompt 只跑一次', async () => {

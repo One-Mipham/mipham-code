@@ -39,6 +39,19 @@ export const skillTool: ToolDefinition = {
         }
       }
 
+      // A skill marked `disable-model-invocation` is reserved for the user to run
+      // by hand. The broadcast filter (loader.buildSystemReminder) keeps it out of
+      // the ambient list, but that is not a gate: the model can still name it —
+      // from a compaction summary, a file, or its own memory — and land here. The
+      // reservation only holds if it is enforced at the point of use.
+      if (skill.disableModelInvocation) {
+        return {
+          success: false,
+          content: '',
+          error: `Skill "${skillName}" is reserved for user invocation (disable-model-invocation: true) and cannot be run through the Skill tool. Ask the user to run it.`,
+        }
+      }
+
       // Extract executable assets (scripts/references) if this skill bundles them.
       // No-op for every skill that has no entry in BUNDLED_SKILL_ASSETS.
       // A write failure (EACCES/ENOSPC) must not abort invocation: the skill body

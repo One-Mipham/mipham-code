@@ -51,6 +51,19 @@ export interface SessionStateSnapshot {
   permissionMode: PermissionMode
 }
 
+// ── Prompt-processing outcome ─────────────────────────────────────────────
+
+/**
+ * Result of a `processPrompt` call.
+ *
+ * `busy` is *reported*, not swallowed. A second message arriving mid-turn used to
+ * fall out of the concurrency guard — which only broadcasts to WS viewers — and
+ * then be answered by the caller with `getLastAssistantContent()`, i.e. the
+ * *previous* turn's reply. The user got an answer to a question they had not
+ * asked. Naming the refusal lets the channel say "still working" instead.
+ */
+export type ProcessPromptResult = { ok: true } | { ok: false; reason: 'busy' }
+
 // ── SessionWorker ─────────────────────────────────────────────────────────
 
 export class SessionWorker {
@@ -110,10 +123,10 @@ export class SessionWorker {
    *   7. On interrupt: save partial content, broadcast `done` with stop_reason
    *      'interrupted'
    */
-  async processPrompt(prompt: string): Promise<void> {
+  async processPrompt(prompt: string): Promise<ProcessPromptResult> {
     if (this.processing) {
       this.broadcast(this.errorMessage('A prompt is already being processed'))
-      return
+      return { ok: false, reason: 'busy' }
     }
 
     this.processing = true
@@ -215,6 +228,8 @@ export class SessionWorker {
 
     this.currentController = null
     this.processing = false
+
+    return { ok: true }
   }
 
   // ── Interrupt ──────────────────────────────────────────────────────────

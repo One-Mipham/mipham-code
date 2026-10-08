@@ -4,7 +4,7 @@ import { createTelegramAdapter } from '../../../src/daemon/telegram/adapter.js'
 vi.spyOn(console, 'error').mockImplementation(() => {})
 
 function makeDeps() {
-  const processPrompt = vi.fn(async () => {})
+  const processPrompt = vi.fn(async () => ({ ok: true as const }))
   return {
     processPrompt,
     sm: { getOrCreateByExternalUser: vi.fn(() => ({ id: 'sess-1' })) } as any,

@@ -11,6 +11,30 @@ export const MCP_INSTRUCTIONS_PER_SERVER_CAP = 2000
 
 const TRUNCATION_MARKER = '… [truncated]'
 
+/** True when every character is a plain ASCII code point (0x00–0x7F). */
+function isAsciiName(s: string): boolean {
+  for (let i = 0; i < s.length; i++) {
+    if (s.charCodeAt(i) > 0x7f) return false
+  }
+  return true
+}
+
+/**
+ * Order two names for the model-facing block: ASCII names first, then the rest.
+ *
+ * `localeCompare` is locale-*aware*, which is exactly wrong here: it threads an
+ * accented name (`Émile`) in among the ASCII ones and only relegates pure CJK to
+ * the end, so the same set of servers can order differently across machines. The
+ * reader is a model, not a human locale — the list wants a fixed shape. Within
+ * each group, compare by code unit, which is deterministic everywhere.
+ */
+export function compareNames(a: string, b: string): number {
+  const aAscii = isAsciiName(a)
+  const bAscii = isAsciiName(b)
+  if (aAscii !== bAscii) return aAscii ? -1 : 1
+  return a < b ? -1 : a > b ? 1 : 0
+}
+
 /**
  * 把已连接 MCP server 自带的 `instructions` 拼成一段**系统提示用**的文本。
  *
@@ -33,7 +57,7 @@ export function buildMcpInstructionsBlock(connections: ConnectionInfo[]): string
   const sections = connections
     .filter((c) => typeof c.instructions === 'string' && c.instructions.trim() !== '')
     .slice()
-    .sort((a, b) => a.config.name.localeCompare(b.config.name))
+    .sort((a, b) => compareNames(a.config.name, b.config.name))
     .map((c) => {
       const raw = c.instructions!.trim()
       const body =

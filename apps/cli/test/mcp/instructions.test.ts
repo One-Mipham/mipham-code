@@ -12,6 +12,7 @@ import { describe, it, expect } from 'vitest'
 
 import {
   buildMcpInstructionsBlock,
+  compareNames,
   MCP_INSTRUCTIONS_PER_SERVER_CAP,
 } from '../../src/mcp/instructions'
 import type { ConnectionInfo } from '../../src/mcp/types'
@@ -62,5 +63,39 @@ describe('buildMcpInstructionsBlock', () => {
 
   it('没有可说的就返回空串（调用方据此整段不注入）', () => {
     expect(buildMcpInstructionsBlock([])).toBe('')
+  })
+
+  it('ASCII 名整体排在非 ASCII 名之前 —— 与机器 locale 无关的固定形状', () => {
+    // `localeCompare` 是 locale-**感知**的，恰好用错：en-US 下 `Émile` 会按字母序
+    // 插进 ASCII 名之间（é < z），于是同一组 server 在不同机器上排出不同字节。
+    // 读者是模型、不是人类区域设置，这里要的是固定形状：先 ASCII，再其余，组内按码元。
+    expect(compareNames('alpha', 'zeta')).toBeLessThan(0)
+    expect(compareNames('zeta', 'Émile')).toBeLessThan(0) // localeCompare 在这会反过来
+    expect(compareNames('alpha', '阿尔法')).toBeLessThan(0)
+
+    // 整块排序也要看得到这条规则：非 ASCII 名落在最后，且两组各自有序。
+    const block = buildMcpInstructionsBlock([
+      conn('zeta', 'Z'),
+      conn('Émile', 'E'),
+      conn('alpha', 'A'),
+    ])
+    expect(block.indexOf('alpha')).toBeLessThan(block.indexOf('zeta'))
+    expect(block.indexOf('zeta')).toBeLessThan(block.indexOf('Émile'))
+  })
+
+  it('compareNames 自反/对称：相等为 0，且 a,b 互换取反', () => {
+    for (const [a, b] of [
+      ['alpha', 'alpha'],
+      ['alpha', 'beta'],
+      ['beta', 'alpha'],
+      ['Émile', 'zeta'],
+      ['zeta', 'Émile'],
+    ] as const) {
+      const ab = compareNames(a, b)
+      const ba = compareNames(b, a)
+      // 分开写 `0` 那一支：`expect(0).toBe(-0)` 会红（`toBe` 走 Object.is），
+      // 而这里要的正是「零的两侧都是零」。
+      expect(ab === 0 ? ba === 0 : ab === -ba).toBe(true)
+    }
   })
 })

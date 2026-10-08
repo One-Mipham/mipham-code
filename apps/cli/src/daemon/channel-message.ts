@@ -45,7 +45,14 @@ export async function handleChannelMessage(opts: ChannelMessageOptions): Promise
       await sendText(externalId, '（会话初始化失败，请稍后重试）')
       return
     }
-    await worker.processPrompt(text)
+    const outcome = await worker.processPrompt(text)
+    // A `busy` outcome means this turn never ran — the concurrency guard refused
+    // it. Reading `getLastAssistantContent()` here would replay the *previous*
+    // turn's reply as if it answered the message just sent, so say what happened.
+    if (!outcome.ok) {
+      await sendText(externalId, '（上一条消息仍在处理中，请稍候再发）')
+      return
+    }
     const result = worker.getLastAssistantContent()
     await sendText(externalId, result ? result.slice(0, maxLen) : '（无回复）')
   } catch (err) {

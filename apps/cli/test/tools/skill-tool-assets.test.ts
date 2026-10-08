@@ -44,3 +44,53 @@ describe('Skill tool — asset extraction trigger', () => {
     expect(result.content).toContain('web-access')
   })
 })
+
+// ============================================================
+// `disable-model-invocation` 必须在**使用点**上兑现。
+//
+// 环境列表那条过滤（`loader.buildSystemReminder`）只是广播，不是闸门：模型仍能
+// 从压缩摘要、某个文件、或它自己的记忆里拿到那个名字，然后落到这里。保留语义
+// 只有在调用点也拦一次时才成立 —— 否则用户以为「留给我手动跑」的那条随时会被
+// 模型自己跑掉。
+// ============================================================
+
+describe('Skill tool — disable-model-invocation', () => {
+  const fakeLoader = (skill: Record<string, unknown>) =>
+    ({
+      skillsLoader: {
+        get: () => skill,
+        list: () => [skill],
+      },
+    }) as never
+
+  it('模型调用被保留给用户的 skill ⇒ 拒绝，且说清是为什么', async () => {
+    const ctx = fakeLoader({
+      name: 'by-hand',
+      type: 'standard',
+      body: 'STEP ONE',
+      disableModelInvocation: true,
+    })
+
+    const result = await skillTool.execute(
+      { skill: 'by-hand' },
+      ctx as Parameters<typeof skillTool.execute>[1],
+    )
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('disable-model-invocation')
+    // 正文一个字节都不能漏出去 —— 拒绝得半途而废等于放行。
+    expect(result.content).not.toContain('STEP ONE')
+  })
+
+  it('正对照：同一个 skill 不设该标志时照常执行', async () => {
+    const ctx = fakeLoader({ name: 'by-hand', type: 'standard', body: 'STEP ONE' })
+
+    const result = await skillTool.execute(
+      { skill: 'by-hand' },
+      ctx as Parameters<typeof skillTool.execute>[1],
+    )
+
+    expect(result.success).toBe(true)
+    expect(result.content).toContain('STEP ONE')
+  })
+})

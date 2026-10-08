@@ -127,6 +127,50 @@ describe('SubAgent', () => {
     expect(result).not.toContain('from-registry')
   })
 
+  /**
+   * `effort` 唯一的作用是**缩放流式空闲超时**（`fetch-utils.streamIdleTimeoutMs`）。
+   * 少传这一格不会报错 —— 它只是安静地落回 1× 基数，即调用方要了 high 却拿到默认
+   * 预算，而且屏幕上没有任何东西能看出这件事。所以钉的是请求里的那个字段本身，
+   * 两条路径（注入的 llm 缝 / registry）都要看，因为只有 registry 那条会被漏掉。
+   */
+  it('把选项里的 effort 带进 provider 请求，两条路径都带', async () => {
+    const seen: Array<string | undefined> = []
+    const llm: Llm = {
+      async *chat(req: ChatRequest): AsyncGenerator<StreamChunk> {
+        seen.push(req.effort)
+        yield { type: 'text', content: 'ok' }
+        yield { type: 'stop' }
+      },
+    }
+    const byRegistry: Array<string | undefined> = []
+    const provider: ProviderInstance = {
+      config: { id: 'mock', name: 'Mock', protocol: 'openai-compatible', apiKey: '', models: [] },
+      async *chat(req: ChatRequest): AsyncGenerator<StreamChunk> {
+        byRegistry.push(req.effort)
+        yield { type: 'text', content: 'ok' }
+        yield { type: 'stop' }
+      },
+      async listModels() {
+        return []
+      },
+      async healthCheck() {
+        return true
+      },
+    }
+    const registry = createMockRegistry(provider)
+
+    await new SubAgent(registry, TOOLS, undefined, undefined, undefined, llm).execute('t', 'd', {
+      type: 'general',
+      effort: 'max',
+    })
+    await new SubAgent(registry, TOOLS).execute('t', 'd', { type: 'general' })
+    await new SubAgent(registry, TOOLS).execute('t', 'd', { type: 'general', effort: 'xhigh' })
+
+    expect(seen).toEqual(['max'])
+    // 正对照：没给 effort 时字段就是软的 undefined，不是被兜成 'high'。
+    expect(byRegistry).toEqual([undefined, 'xhigh'])
+  })
+
   it('frames a script-computed prompt so it cannot pass as the user own turn', async () => {
     // A workflow script that relays text — `agent('read X verbatim')` then
     // `agent('Follow these instructions exactly:\n' + body)` — used to hand the

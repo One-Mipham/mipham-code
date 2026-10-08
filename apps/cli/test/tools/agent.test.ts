@@ -182,6 +182,81 @@ describe('Agent tool execution', () => {
 })
 
 // ============================================================
+// Agent 工具的 reasoning effort
+//
+// 档位唯一的作用是**缩放流式空闲超时**（`providers/fetch-utils.ts` 的
+// `streamIdleTimeoutMs`：high 2×、xhigh 3×、max 4×）。认不出的档位与「没给」
+// 在那边是同一条路（1× 基数），所以不认识的取值绝不能静默通过 —— 那会让调用方
+// 以为生效了，实际拿着默认预算。这里钉两件事：参数到了子代理手上，以及畸形值在
+// 构造子代理之前就被拒。
+// ============================================================
+
+describe('Agent tool — effort 透传', () => {
+  const ready = () => ({ ...ctx, registry: {} as never, toolRegistry: new Map() as never })
+
+  it('声明的档位原样进 SubAgent 选项', async () => {
+    const seen: Array<Record<string, unknown>> = []
+    const spy = vi.spyOn(SubAgent.prototype, 'execute').mockImplementation((async (
+      _prompt: string,
+      _desc: string,
+      opts: Record<string, unknown>,
+    ) => {
+      seen.push(opts)
+      return 'done'
+    }) as never)
+
+    try {
+      for (const effort of ['low', 'medium', 'high', 'xhigh', 'max']) {
+        await agentTool.execute({ description: 'child', prompt: 'go', effort }, ready())
+      }
+      await agentTool.execute({ description: 'child', prompt: 'go' }, ready())
+    } finally {
+      spy.mockRestore()
+    }
+
+    expect(seen.map((o) => o.effort)).toEqual([
+      'low',
+      'medium',
+      'high',
+      'xhigh',
+      'max',
+      undefined, // 没给就是没给 —— 不是被默认成 'high'
+    ])
+  })
+
+  it('畸形档位在派发前被拒，且子代理根本没被构造', async () => {
+    const spy = vi.spyOn(SubAgent.prototype, 'execute')
+
+    let result: Awaited<ReturnType<typeof agentTool.execute>>
+    try {
+      result = await agentTool.execute(
+        { description: 'child', prompt: 'go', effort: 'ludicrous' },
+        ready(),
+      )
+    } finally {
+      spy.mockRestore()
+    }
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Invalid effort')
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('正对照：不带 effort 时同一个调用确实走得通', async () => {
+    // 没有这一条，「一律拒绝」也能让上一条变绿。
+    const spy = vi.spyOn(SubAgent.prototype, 'execute').mockResolvedValue('done' as never)
+    let ok: boolean
+    try {
+      const r = await agentTool.execute({ description: 'child', prompt: 'go' }, ready())
+      ok = r.success
+    } finally {
+      spy.mockRestore()
+    }
+    expect(ok).toBe(true)
+  })
+})
+
+// ============================================================
 // Agent 派发闸
 // ============================================================
 

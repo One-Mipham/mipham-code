@@ -43,6 +43,14 @@ export interface SubAgentOptions {
   systemPrompt?: string
   allowedTools?: string[]
   modelOverride?: string
+  /**
+   * Reasoning effort (`low|medium|high|xhigh|max`) for this run, matching the
+   * session-level level `/effort` sets. Threaded into the provider request as
+   * `ChatRequest.effort`, where it scales the streaming idle timeout — a
+   * sub-agent left at the default would inherit the base timeout regardless of
+   * the level the caller asked for.
+   */
+  effort?: string
   /** Maximum tool-calling turns (default: 5) to prevent infinite loops. */
   maxTurns?: number
   /** When true, execute in background and return immediately with a task ID. */

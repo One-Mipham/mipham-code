@@ -772,6 +772,7 @@
       "focus_hint": "聚焦",
       "hidden": "已折叠",
       "toggle_focus_hint": "/focus 切换",
+      "try_focus_tip": "这一轮较长？Ctrl+F（或 /focus）只显示最近一次往来 —— 再按一次即可切回。",
       "expand_hint": "Ctrl+O 展开",
       "showing_all": "显示全部 {count} 条消息",
       "tool_outputs_folded": "已折叠 {hidden} 个工具输出（共 {toolCount} 个工具调用）"
@@ -929,8 +930,8 @@
   "errors": {
     "tool_denied_deny_rule": "工具 \"{name}\" 被拒绝规则（\"{pattern}\"）阻止。拒绝规则优先于权限模式 — 请改用其他方式，或移除该规则：/permissions remove \"{pattern}\"",
     "tool_denied_ask_rule": "工具 \"{name}\" 需要批准（ask 规则：\"{pattern}\"）。请在提示时批准，或不再询问：/permissions allow \"{pattern}\"",
-    "tool_denied_mode": "工具 \"{name}\" 在 \"{mode}\" 模式下需要批准。按 Shift+Tab 切换权限模式，或不再询问：/permissions allow \"{name}\"（更窄的 \"{name}(arg)\" 亦可） 请把这次拒绝理解为对结果本身的禁止，而不只是这一条命令。",
-    "tool_denied_classifier": "工具 \"{name}\" 在 auto 模式下被权限分类器拦下（{reason}）。这是策略裁决、不是故障 —— 切换模式不会改变它，把同一次调用原样重发也只会得到同一个裁决。请改变这次调用使其不再触犯该规则。注意：`/permissions allow \"{name}\"` 会让此后对该工具的**每一次**调用都跳过分类器，而不只是这一次，故优先把这次调用改成可接受的，而不是放行整个工具。请把这次拒绝理解为对结果本身的禁止，而不只是这一条命令。",
+    "tool_denied_mode": "工具 \"{name}\" 在 \"{mode}\" 模式下需要批准。按 Shift+Tab 切换权限模式，或不再询问：/permissions allow \"{name}\"（更窄的 \"{name}(arg)\" 亦可）。",
+    "tool_denied_classifier": "工具 \"{name}\" 在 auto 模式下被权限分类器拦下（{reason}）。这是策略裁决、不是故障 —— 切换模式不会改变它，把同一次调用原样重发也只会得到同一个裁决。请改变这次调用使其不再触犯该规则。注意：`/permissions allow \"{name}\"` 会让此后对该工具的**每一次**调用都跳过分类器，而不只是这一次，故优先把这次调用改成可接受的，而不是放行整个工具。",
     "tool_denied_dangerous_rm": "工具 \"{name}\" 被拒绝：这是一条递归 rm，其目标并非命令里写出的路径（\"{target}\"）。该目标要到命令运行时才产生，所以任何放行规则与权限模式都无法界定它会删掉什么。请改为字面写出目录名 —— 用 `rm -rf node_modules` 而不是 `rm -rf \"$(pwd)\"` —— 并把这次拒绝理解为对结果本身的禁止，而不只是这一种写法。关闭此检查：MIPHAM_DISABLE_DANGEROUS_RM_PROMPT=1",
     "tool_denied_world_writable_chmod": "工具 \"{name}\" 被拒绝：这是一条递归 chmod，它把「其他用户可写」授予了一个命令并未界定边界的目标（\"{target}\"）。一棵世界可写的树，加上一个要到运行时才产生的目标，正是权限被放宽到远超所求的由来；而任何放行规则与权限模式都无法界定这次授权会伸到哪里。请改为字面写出目录名 —— 用 `chmod -R 777 ./dist` 而不是 `chmod -R 777 $DIR` —— 并把这次拒绝理解为对结果本身的禁止，而不只是这一种写法。关闭此检查：MIPHAM_DISABLE_CHMOD_PROMPT=1",
     "tool_denied_classifier_unavailable": "工具 \"{name}\" 被暂缓：auto 模式的分类器不可达，或其回复无法解析（{reason}）。这**不是**策略裁决 —— 该调用从未被裁决，重试是恰当的。若持续发生，按 Shift+Tab 切换模式。",
@@ -953,6 +954,7 @@
     "oauth_no_code": "未收到授权码",
     "oauth_timeout": "OAuth 流程超时（5 分钟）",
     "mcp_register_collision": "[mcp] 工具冲突：\"{name}\"（来自服务器 \"{server}\"）与已有工具冲突，跳过。",
+    "mcp_protocol_version_mismatch": "[mcp] 服务器协商出的协议版本为 \"{version}\"，本客户端未实现该版本（支持：{supported}）。将继续连接，但 MCP 消息可能不按预期工作。",
     "mcp_register_failed": "[mcp] 注册工具 \"{tool}\"（来自服务器 \"{server}\"）失败：{error}",
     "max_tool_turns": "超出最大工具调用轮次（{max}）。部分工具调用未执行。",
     "max_tool_turns_warning": "已达到最大 {max} 轮工具调用。{pending} 个工具调用未执行。请总结当前发现及后续步骤。",

@@ -32,6 +32,16 @@ const BLOCKED_PATTERNS = [
   // `rm -rf .` and its path spellings `./` and `../` delete the working directory;
   // `./build` and `../vendor` name an entry inside it and stay allowed.
   /\brm\s+-(?:rf|fr)\s+['"]?\.\.?(?:\/)?(?=["'\s;&|>]|$)/,
+  // The home directory under another name is still the home directory. `$HOME`
+  // expands to the same tree as `~`; on Windows `C:\Users\<name>` *is* the profile
+  // directory, long or in its 8.3 short form (`C:\Users\GUOHUA~1`). Guarding only
+  // the literal spellings above leaves each of these a one-word bypass.
+  /\brm\s+-(?:rf|fr)\s+['"]?\$\{?HOME\}?(?:["'\s/]|$)/,
+  /\brm\s+-(?:rf|fr)\s+['"]?[A-Za-z]:[\\/](?=["'\s;&|>]|$)/,
+  /\brm\s+-(?:rf|fr)\s+['"]?[A-Za-z]:[\\/]Users[\\/][^\\/\s"']+[\\/]?(?=["'\s;&|>]|$)/i,
+  // cmd.exe spells the same directories with percent signs; in scope whenever a
+  // command hands off to cmd (`cmd /c …`).
+  /\brm\s+-(?:rf|fr)\s+['"]?%(?:USERPROFILE|HOMEPATH|HOMEDRIVE)%/i,
   // Filesystem manipulation
   /\bmkfs\./,
   /\bdd\s+if=/,

@@ -521,6 +521,10 @@ export class SubAgent {
           systemPrompt: currentSystemPrompt,
           tools: toolDefs,
           maxTokens: 4096,
+          // Scales the provider's streaming idle timeout (fetch-utils
+          // `streamIdleTimeoutMs`). Omitted ⇒ 1× base, so a caller that asked for
+          // a high-effort sub-agent would otherwise get the default budget.
+          effort: options.effort,
         })) {
           // Check abort signal mid-stream
           if (signal?.aborted) {

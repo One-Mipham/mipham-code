@@ -1344,7 +1344,7 @@ export function App({
         ) : (
           <>
             {/* Chat panel */}
-            <ChatPanel messages={messages} focusMode={focusMode} />
+            <ChatPanel messages={messages} focusMode={focusMode} turnActive={isLoading} />
             {(() => {
               const indicator = formatThinking(
                 config.showThinking ?? 'off',

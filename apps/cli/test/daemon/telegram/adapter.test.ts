@@ -6,7 +6,7 @@ vi.spyOn(console, 'error').mockImplementation(() => {})
 const config = { botToken: '123:abc', allowedChatIds: ['111'] }
 
 function makeDeps() {
-  const processPrompt = vi.fn(async () => {})
+  const processPrompt = vi.fn(async () => ({ ok: true as const }))
   return {
     processPrompt,
     sm: {

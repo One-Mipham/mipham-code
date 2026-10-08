@@ -1,5 +1,5 @@
-import { readFileSync, existsSync, lstatSync } from 'node:fs'
-import { join, resolve, relative, sep, isAbsolute } from 'node:path'
+import { readFileSync, existsSync, lstatSync, statSync } from 'node:fs'
+import { join, resolve, relative, sep, isAbsolute, dirname } from 'node:path'
 import { execSync } from 'node:child_process'
 import { parse as parseYaml } from 'yaml'
 import type { InstructionFile } from '../shared/index.ts'
@@ -82,6 +82,12 @@ export function gitRoot(cwd: string): string {
   } catch {
     return cwd
   }
+}
+
+/** True when `p` is `root` itself or sits underneath it. */
+function isInside(root: string, p: string): boolean {
+  const rel = relative(root, p)
+  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
 }
 
 /** 从仓库根到 cwd 的目录链（含两端），就近（cwd）在最后。cwd 不在 root 下时退化为 [cwd]。 */
@@ -252,11 +258,14 @@ export class InstructionsLoader {
   private instructions: InstructionFile[] = []
   private crsiLessonSummaries: CrsiLessonSummary[] = []
   private lessonsPath: string | null = null
+  /** Checkout root resolved at `loadAll`, reused by `loadForPaths`. */
+  private root: string | null = null
 
   loadAll(cwd: string): void {
     this.instructions = []
     this.lessonsPath = null
     const root = gitRoot(cwd)
+    this.root = root
 
     // Tier 1: 集团/公司策略（锚定仓库根，从任意子目录启动都正确；不读 AGENTS.md）
     this.tryLoad(join(root, '..', '..', 'CLAUDE.md'), 'group') // Rismed_Ronxin_Capital
@@ -520,6 +529,73 @@ Never omit it or present the work as purely human-authored.`)
 
   list(): InstructionFile[] {
     return [...this.instructions]
+  }
+
+  /**
+   * Load the instruction files of the directories a path the model just looked at
+   * lives under, and return the text of whatever was **not** already loaded.
+   *
+   * The baseline chain is git-root → cwd, walked once at startup (`loadAll`). A
+   * file deeper than cwd (`src/parser/lex.ts`) or on a sibling branch therefore
+   * contributes nothing — even though the `CLAUDE.md` sitting next to it is
+   * precisely the rule set that governs it. Upstream reported the Bash half of
+   * this (`cat`/`head`/`sed -n`/`grep` on a single file skipped its rules); the
+   * Read tool had the same hole, so the gate here is the **path**, not the tool
+   * that produced it: "did the model see a file here".
+   *
+   * Only directories inside the checkout are considered. The tiers above it are
+   * anchored deliberately (`loadAll`), and walking the ancestors of, say,
+   * `/etc/hosts` would pull arbitrary local files into the prompt on the strength
+   * of a command — so an outside path contributes nothing by construction.
+   * Directories already visited cost one `existsSync` per candidate name.
+   *
+   * Returns `null` when nothing new was loaded, so callers can skip an empty
+   * injection. Text goes through `instructionPartText` — the same projection the
+   * system prompt uses — so `privacy: private` and `prompt-exclude` are honored
+   * here too, and the two cannot drift.
+   */
+  loadForPaths(paths: Iterable<string>, cwd: string): string | null {
+    // Reused rather than re-resolved: `gitRoot` spawns `git rev-parse`, and this
+    // runs on the tool-execution path once per round. The fallback keeps the
+    // method correct for a caller that never ran `loadAll`.
+    const root = this.root ?? resolve(gitRoot(cwd))
+    const loaded = new Set(this.instructions.map((f) => f.path))
+    const added: InstructionFile[] = []
+
+    for (const raw of paths) {
+      let dir = resolve(cwd, raw)
+      if (!isInside(root, dir)) continue
+      // A touched path is a directory when the tool searched one (Grep's root,
+      // Glob) and a file otherwise. A path that does not exist yet is treated as
+      // a file, which is the right reading for `Write` on a new path.
+      try {
+        if (!statSync(dir).isDirectory()) dir = dirname(dir)
+      } catch {
+        dir = dirname(dir)
+      }
+
+      for (;;) {
+        for (const name of INSTRUCTION_FILENAMES) {
+          const file = join(dir, name)
+          if (loaded.has(file)) continue
+          loaded.add(file)
+          this.tryLoad(file, 'directory')
+          const loadedFile = this.instructions[this.instructions.length - 1]
+          if (loadedFile?.path === file) added.push(loadedFile)
+        }
+        if (dir === root) break
+        const parent = dirname(dir)
+        if (parent === dir) break
+        dir = parent
+      }
+    }
+
+    const parts: string[] = []
+    for (const inst of added) {
+      const text = instructionPartText(inst)
+      if (text) parts.push(text)
+    }
+    return parts.length > 0 ? parts.join('\n\n---\n\n') : null
   }
 
   /**

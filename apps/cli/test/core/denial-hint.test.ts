@@ -60,14 +60,19 @@ describe('permission denial hints name the resolving command', () => {
   ]
 
   it.each(outcomeClause)(
-    '%s: a denial covers the outcome, not only the exact command',
+    '%s: a mode/classifier denial does not claim to cover the outcome',
     (_name, locale, needle) => {
-      // Otherwise the model reads "this command was refused" and retries the same
-      // deletion spelled differently — the refusal has to be about what the call
-      // achieves, not about the string we happened to see.
+      // A blanket "this denial covers the outcome, not just this command" told the
+      // model to treat one refusal in a mode as a refusal of the whole *class* of
+      // work — so it started declining adjacent calls the gate had never judged.
+      // The scope of a mode denial belongs in the reason text, not a slogan. Only
+      // the two structural guards below (rm/chmod) really are about the outcome,
+      // because no allow rule can bound what those calls achieve.
       const t = createT(locale, en as TranslationMap)
-      expect(t('errors.tool_denied_mode', { name: 'Bash', mode: 'auto' })).toContain(needle)
-      expect(t('errors.tool_denied_classifier', { name: 'Bash', reason: 'r' })).toContain(needle)
+      expect(t('errors.tool_denied_mode', { name: 'Bash', mode: 'auto' })).not.toContain(needle)
+      expect(t('errors.tool_denied_classifier', { name: 'Bash', reason: 'r' })).not.toContain(
+        needle,
+      )
     },
   )
 

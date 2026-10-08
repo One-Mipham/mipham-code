@@ -270,3 +270,61 @@ describe('AgentViewManager', () => {
     expect(mgr.get(session.id)!.taskId).toBe('bg-1-abc')
   })
 })
+
+// ═══════════════════════════════════════════
+// syncBackgroundTasks
+//
+// 面板原先只有 `/bg` 与 `/fork` 两处会建行，于是用 Agent 工具（默认后台）派出去的
+// 子代理**整个生命周期都不在面板上**。这里钉的是「用注册表投影」这条路：正在跑
+// 的那些也要建行（旧循环刻意跳过它们），而且按 taskId 幂等 —— 这个同步每轮都调，
+// 不幂等就会每轮长出新行。
+// ═══════════════════════════════════════════
+
+describe('AgentViewManager.syncBackgroundTasks', () => {
+  const task = (id: string, status: string, description = `task ${id}`) => ({
+    id,
+    description,
+    status,
+  })
+
+  it('running 的也建行，状态映射到 working（不是 completed）', () => {
+    const mgr = makeManager()
+    const added = mgr.syncBackgroundTasks([task('bg-1', 'running', 'Explore auth')])
+
+    expect(added).toBe(1)
+    const rows = mgr.list()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.status).toBe('working')
+    expect(rows[0]!.taskId).toBe('bg-1')
+    // 没人在旁边盯着这一行 —— 分组也按 kind 走，不是 interactive。
+    expect(rows[0]!.kind).toBe('unattended')
+  })
+
+  it('completed / failed 各归各的状态', () => {
+    const mgr = makeManager()
+    mgr.syncBackgroundTasks([task('bg-1', 'completed'), task('bg-2', 'failed')])
+
+    expect(mgr.get(mgr.list().find((s) => s.taskId === 'bg-1')!.id)!.status).toBe('completed')
+    expect(mgr.get(mgr.list().find((s) => s.taskId === 'bg-2')!.id)!.status).toBe('failed')
+  })
+
+  it('反复同步不重复建行，但状态跟着任务走', () => {
+    const mgr = makeManager()
+    expect(mgr.syncBackgroundTasks([task('bg-1', 'running')])).toBe(1)
+    // 同一批再来一次：不加行。
+    expect(mgr.syncBackgroundTasks([task('bg-1', 'running')])).toBe(0)
+    expect(mgr.list()).toHaveLength(1)
+
+    // 任务跑完了：行还在，状态更新 —— 这正是「看得见」与「看得见结果」的区别。
+    expect(mgr.syncBackgroundTasks([task('bg-1', 'completed')])).toBe(0)
+    expect(mgr.list()).toHaveLength(1)
+    expect(mgr.list()[0]!.status).toBe('completed')
+  })
+
+  it('没有 taskId 的会话（/bg 那种手建行）不会被当成后台任务的既有行', () => {
+    const mgr = makeManager()
+    mgr.create('Manual', 'Manual row')
+    expect(mgr.syncBackgroundTasks([task('bg-1', 'running')])).toBe(1)
+    expect(mgr.list()).toHaveLength(2)
+  })
+})

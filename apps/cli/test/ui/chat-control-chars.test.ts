@@ -17,6 +17,7 @@ import { render } from 'ink-testing-library'
 import { describe, expect, it } from 'vitest'
 import { ChatPanel } from '../../src/ui/chat'
 import type { ChatMessage } from '../../src/ui/app'
+import enUS from '../../src/i18n-core/locales/en-US.json'
 
 const cp = (...cps: number[]) => String.fromCodePoint(...cps)
 
@@ -90,5 +91,59 @@ describe('ChatPanel — 不受信文本不许把控制字符送进终端', () =>
   it('正常正文原样可见', () => {
     const frame = frameOf({ role: 'assistant', content: '构建完成' })
     expect(frame).toContain('构建完成')
+  })
+})
+
+/**
+ * 长回合里的 focus 提示 —— 出现时机与**出口**都要对。
+ *
+ * 这条提示只在「正有回合在跑」时出现：那是 transcript 长得最快、也最可能有人想
+ * 收起来的时刻；写进空闲横幅等于在还没有东西可聚焦之前先说一遍。同时它必须
+ * **说出回来的路**，否则试一下就把人卡在里面；focus 模式里也不再重复（那里
+ * 自己的横幅已经写着了）。
+ */
+// 测试里没有 i18n Provider，默认 context 是个**把 key 原样返回**的 no-op ——
+// 所以帧里能看到的是 key 本身。这仍然是判据：这个块渲染了，帧里就有它。
+const FOCUS_TIP = 'ui.chat.try_focus_tip'
+const FOCUS_TIP_EN = (enUS as { ui: { chat: { try_focus_tip: string } } }).ui.chat.try_focus_tip
+
+function chatFrame(props: {
+  turnActive?: boolean
+  focusMode?: boolean
+  messages?: ChatMessage[]
+}): string {
+  const { lastFrame, unmount } = render(
+    React.createElement(ChatPanel, {
+      messages: props.messages ?? [{ role: 'assistant', content: '答案是 42' }],
+      focusMode: props.focusMode ?? false,
+      ...(props.turnActive === undefined ? {} : { turnActive: props.turnActive }),
+    }),
+  )
+  const frame = lastFrame() ?? ''
+  unmount()
+  return frame
+}
+
+describe('ChatPanel — 回合进行中的 focus 提示', () => {
+  it('回合在跑时提示出现，且写明怎么切回来', () => {
+    const frame = chatFrame({ turnActive: true })
+    expect(frame).toContain(FOCUS_TIP)
+    // 文案本身要带出口 —— 否则「试一下」就把人卡在 focus 里，那是这条提示
+    // 存在的理由，不是装饰。
+    expect(FOCUS_TIP_EN).toMatch(/Ctrl\+F/)
+    expect(FOCUS_TIP_EN).toMatch(/switch back/i)
+  })
+
+  it('正对照：回合没在跑时不出现（它是时机提示，不是常驻文案）', () => {
+    expect(chatFrame({ turnActive: false })).not.toContain(FOCUS_TIP)
+    expect(chatFrame({})).not.toContain(FOCUS_TIP)
+  })
+
+  it('已经在 focus 模式里就不再重复（那儿的横幅已经说了怎么回来）', () => {
+    expect(chatFrame({ turnActive: true, focusMode: true })).not.toContain(FOCUS_TIP)
+  })
+
+  it('没有任何消息时不出现 —— 还没有东西可聚焦', () => {
+    expect(chatFrame({ turnActive: true, messages: [] })).not.toContain(FOCUS_TIP)
   })
 })

@@ -118,6 +118,7 @@ export async function workflowAgent(
       const textResult = await sub.execute(retryPrompt, opts.label || 'workflow-agent', {
         type: 'general',
         modelOverride: opts.model,
+        effort: opts.effort,
         allowedTools: undefined, // use all tools by default
         worktreePath,
         // The prompt is computed by the script, not typed by the user — say so,

@@ -650,6 +650,55 @@ describe('Grep tool definition', () => {
     const params = grepTool.parameters as { properties: Record<string, unknown> }
     expect(params.properties).toHaveProperty('include')
   })
+
+  it('声明 file_path 别名（Read/Write/Edit 都这么叫搜索根）', () => {
+    const params = grepTool.parameters as { properties: Record<string, unknown> }
+    expect(params.properties).toHaveProperty('file_path')
+  })
+})
+
+describe('Grep tool — file_path 别名真的落在搜索根上', () => {
+  beforeEach(() => {
+    mockRealSpawn()
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('file_path 决定搜索根，而不是被丢掉后静默退回 cwd', async () => {
+    // 别名不在 schema 里时，参数会被丢掉、搜索根退回 `ctx.cwd` —— 于是它安静地
+    // 回答了**另一棵树**的问题（`outside.txt` 就会出现），且不报任何错。
+    mkdirSync(join(tmpDir, 'sub'), { recursive: true })
+    writeFileSync(join(tmpDir, 'outside.txt'), 'NEEDLE_alias here')
+    writeFileSync(join(tmpDir, 'sub', 'inside.txt'), 'NEEDLE_alias too')
+
+    const scoped = await grepTool.execute(
+      { pattern: 'NEEDLE_alias', file_path: join(tmpDir, 'sub') },
+      ctx,
+    )
+    expect(scoped.success).toBe(true)
+    expect(scoped.content).toContain('inside.txt')
+    expect(scoped.content).not.toContain('outside.txt')
+
+    // 正对照：同一个 pattern 不加 file_path 时确实能看到 outside.txt —— 否则上一行
+    // 的 `not.toContain` 可能只是因为探针压根没匹配上任何东西。
+    const unscoped = await grepTool.execute({ pattern: 'NEEDLE_alias' }, ctx)
+    expect(unscoped.content).toContain('outside.txt')
+  })
+
+  it('path 优先于 file_path（两者都给时不产生第二个答案）', async () => {
+    mkdirSync(join(tmpDir, 'a'), { recursive: true })
+    mkdirSync(join(tmpDir, 'b'), { recursive: true })
+    writeFileSync(join(tmpDir, 'a', 'in-a.txt'), 'NEEDLE_which')
+    writeFileSync(join(tmpDir, 'b', 'in-b.txt'), 'NEEDLE_which')
+
+    const result = await grepTool.execute(
+      { pattern: 'NEEDLE_which', path: join(tmpDir, 'a'), file_path: join(tmpDir, 'b') },
+      ctx,
+    )
+    expect(result.content).toContain('in-a.txt')
+    expect(result.content).not.toContain('in-b.txt')
+  })
 })
 
 describe('Grep tool execution', () => {

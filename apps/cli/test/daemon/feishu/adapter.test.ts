@@ -44,7 +44,7 @@ const textEventBody = {
 }
 
 function makeDeps() {
-  const processPrompt = vi.fn(async () => {})
+  const processPrompt = vi.fn(async () => ({ ok: true as const }))
   return {
     processPrompt,
     sm: {

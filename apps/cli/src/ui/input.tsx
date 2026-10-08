@@ -323,6 +323,11 @@ export function InputBar({
   // 下面两个 ref 是**浏览游标**、不是历史本体，随卸载重置才是对的。
   const historyIndexRef = useRef(-1) // -1 = not browsing history
   const savedDraftRef = useRef('') // saved user draft before browsing history
+  // 被清空的草稿的**可恢复槽**：Escape 清空输入时落这里，下一次 Up（输入为空且未在
+  // 翻历史）把它放回去。仅靠 history 不够 —— 半途写了一半的行从没进过 history，
+  // 清掉就是没了。与 savedDraftRef 分开：那个槽的语义是「翻历史前的草稿」，会被
+  // Down 一路用掉，混用会让 Up 第一下就落到更早的历史条目上。
+  const clearedDraftRef = useRef('')
 
   // ── Ghost-text 自动补全 ──
   const [suggestion, setSuggestion] = useState<string | null>(null)
@@ -418,7 +423,9 @@ export function InputBar({
         onCancel?.()
         return
       }
-      // Idle → clear the draft (the intuitive "cancel")
+      // Idle → clear the draft (the intuitive "cancel"), keeping it recoverable:
+      // Up from the now-empty input restores it (see the arrow-key branch).
+      if (valueRef.current) clearedDraftRef.current = valueRef.current
       setValue('')
       valueRef.current = ''
       clearSuggestion()
@@ -468,6 +475,23 @@ export function InputBar({
       clearSuggestion()
       // Ignore if picker is active (command picker handles its own arrows)
       if (value.startsWith('/')) return
+
+      // A draft Escape cleared is still the user's text, and it is the *only*
+      // copy: unlike a sent message or a slash command it never entered history.
+      // Bring it back on the first Up from an empty input instead of walking into
+      // history, whose first step would land on an older entry and leave this
+      // text with nowhere to come back from.
+      if (
+        key.upArrow &&
+        historyIndexRef.current === -1 &&
+        valueRef.current === '' &&
+        clearedDraftRef.current
+      ) {
+        const restored = clearedDraftRef.current
+        clearedDraftRef.current = ''
+        setValue(restored)
+        return
+      }
 
       const result = navigateHistory(
         {

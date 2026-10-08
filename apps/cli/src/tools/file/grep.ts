@@ -94,19 +94,28 @@ export function createGrepTool(credentialConfig?: CredentialMaskingConfig): Tool
       properties: {
         pattern: { type: 'string', description: 'Regex pattern to search for' },
         path: { type: 'string', description: 'Directory or file to search in' },
+        file_path: {
+          type: 'string',
+          description:
+            'Alias for "path" — accepted so a caller that names the search root the way Read/Write/Edit do still lands where it meant to.',
+        },
         include: { type: 'string', description: 'File pattern to include (e.g., "*.ts")' },
       },
       required: ['pattern'],
     },
     async execute(params, ctx) {
       const pattern = params.pattern as string
-      const searchPath = resolveSafe(ctx.cwd, (params.path as string) || '.')
+      // `file_path` is the alias callers reach for (Read/Write/Edit all use it).
+      // Without it the value is dropped and the search silently falls back to `cwd`
+      // — answering a question about the wrong tree without saying so.
+      const explicitPath = (params.path as string) || (params.file_path as string) || undefined
+      const searchPath = resolveSafe(ctx.cwd, explicitPath || '.')
       const include = params.include as string | undefined
 
       // Scope guard: a top-level search root (home or filesystem root) scans an
       // enormous tree and stalls the find fallback for minutes. Fail fast and
       // ask for a project-scoped path instead of silently scanning everything.
-      if (!params.path && isTopLevelScope(searchPath)) {
+      if (!explicitPath && isTopLevelScope(searchPath)) {
         return {
           success: false,
           content: '',
