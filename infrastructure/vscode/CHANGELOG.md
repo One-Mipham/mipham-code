@@ -3,6 +3,54 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.19 — 2026-10-08
+
+- Version sync with Mipham Code CLI 0.85.19
+- Added: **the `Agent` tool actually receives `effort`.** Session-level effort existed all along
+  (the `/effort` command, the provider registry, the stream idle timeout all scale by it), but the
+  `effort?` declared in the workflow layer was **read by nobody** — passing it when dispatching a
+  sub-agent did nothing. It is now wired through four layers: tool → parameter definition →
+  sub-agent → workflow.
+- Added: **MCP `protocolVersion` is negotiated.** It was a single hard-coded value: whatever
+  version a server announced was never read, and nothing was read back. A supported-version table
+  plus `offerVersion()` now lets a server settle on a version both sides accept.
+- Added: **the 529 backoff base is configurable** via `MIPHAM_OVERLOADED_RETRY_BASE_DELAY_MS`;
+  previously it could only be hard-passed by the caller.
+- Fixed: **the `Skill` tool re-checks `disable-model-invocation`.** The switch only filtered skill
+  **broadcasting** (whether a skill shows up in the available list), while the tool fetches **by
+  name** — so sub-agents and compacted summaries fed back to the model could still obtain a
+  disabled skill. Retrieval now refuses.
+- Fixed: **reading files with Bash also loads path-scoped rules and nested `CLAUDE.md`.** The
+  source of "which files have I touched" was hard-coded to **five file tools**; `cat` / `sed` and
+  friends never contributed to path extraction, and the instruction chain only loaded once at
+  startup by cwd. It now reuses the existing Bash path parsing (no second spelling) and hooks both
+  halves up together.
+- Fixed: **an IM channel no longer sends the previous turn's reply to this message.** A second
+  message arriving during an active turn was early-returned, and the channel layer read "no
+  exception thrown" as "this turn ran for you" — so it sent back the answer to the **previous**
+  message, with nothing on screen indicating that had happened. The return value now drives a
+  "the previous one is still running" reply.
+- Fixed: **background sub-agents appear in the panel.** They were neither shown nor announced to
+  the viewer while running, and finished silently. They are now projected with the task
+  notifications.
+- Fixed: **`Grep` honours the `file_path` alias.** Passing it **fell back to `.` silently**: it
+  searched the wrong directory and reported no error.
+- Fixed: **other spellings of `rm -rf` on the home directory join the block list** — `$HOME`,
+  `${HOME}`, a volume root, `/Users/<name>` and `%USERPROFILE%` all slipped past before.
+- Fixed: **a draft cleared with Esc has a way back.** There was no way to recover it; `↑` now
+  restores the draft (once).
+- Fixed: **the MCP server section sorts non-ASCII last** — `localeCompare` used to place accented
+  names **between** ASCII ones.
+- Fixed: **the mid-turn focus tip states the way out** — the wording now names `Ctrl+F`; without
+  it, "try it" simply traps you there.
+- Fixed: **the `auto`-mode refusal message drops a reverted "override the result" clause**
+  (wording only).
+- Security: **`shell-quote` 1.10.0 → 1.12.0** — a newly disclosed **critical** command injection
+  (`quote()`), patched in ≥1.11.0. It sits in the **production tree**
+  (`@miphamai/cli > ink > react-devtools-core > shell-quote`), so a release is what actually
+  protects users.
+- Security: **`sharp` 0.35.4 → 0.35.5** — a librsvg-related **high**; a single patch bump.
+
 ## 0.85.18 — 2026-10-06
 
 - Version sync with Mipham Code CLI 0.85.18
