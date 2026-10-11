@@ -335,7 +335,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integrity       | 19      | 132      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **323** | **4247** | **0 失败** ✅（本机 4,245 + 2 skipped，323 文件；CI 待本批推送后回填）                                                                                                      |
+| **合计**        | **323** | **4247** | **0 失败** ✅（本机 4,245 + 2 skipped，323 文件；CI 9/9 `38139669926`）                                                                                                     |
 
 ### 测试注意事项
 
