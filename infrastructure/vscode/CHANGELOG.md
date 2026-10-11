@@ -3,6 +3,20 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.21 — 2026-10-11
+
+- Version sync with Mipham Code CLI 0.85.21
+- Hardened (**not** a fix): **the focus view's collapsed summary line now goes through the
+  single-line gate.** `summarizeToolGroup` composes a `↳ name` line out of the model's tool
+  names — the same untrusted source as the tool row, the footer and the input echo — and
+  interpolated them raw; it now uses `sanitizeInlineField` (the **single-line** port),
+  deliberately not the multi-line `display()`: that one keeps `\n` for text that is
+  legitimately multi-line, and a name occupies a row of its own, where a kept `\n` forges a
+  whole extra row. Honest boundary: that line has **no render path today** (`MessageRow` takes
+  the `toolMeta` branch, where `output` wins and `collapsed: true` blocks the `content`
+  fallback — three frame-level probes saw `↳` zero times), so this hardens the composed value
+  against a future renderer rather than fixing an observed leak.
+
 ## 0.85.20 — 2026-10-11
 
 - Version sync with Mipham Code CLI 0.85.20

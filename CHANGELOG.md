@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.85.21] — 2026-10-11
+
+### Security
+
+- **focus 视图的折叠摘要行也走单行净化口**（**加固，不是修复**）—— `summarizeToolGroup` 把模型的
+  工具名拼进合成的 `↳ name` 行，而名字来自 `tool_use`（与工具调用行、页脚、输入回显同一不受信
+  来源），此前是裸拼；现走 `sanitizeInlineField`（**单行**口），刻意**不用**同文件的 `display()`
+  —— 后者为合法的多行正文保留 `\n`，而名字独占一行，那保留的 `\n` 正好伪造出一整行。
+  **诚实边界**：该行在今天的渲染路径里读不到（`MessageRow` 走 `toolMeta` 支：`output` 非空即赢、
+  `collapsed: true` 又挡住 `content` 兜底），帧级探针三组里 `↳` 出现 0 次 ⇒ 本笔给合成值上闸，
+  让它在下一次渲染改动下也安全，**不是**修一个观测到的泄漏。
+
 ## [0.85.20] — 2026-10-11
 
 ### Fixed
