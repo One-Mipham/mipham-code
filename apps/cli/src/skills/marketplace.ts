@@ -64,20 +64,30 @@ export function isValidSkillName(name: string): boolean {
 }
 
 /**
- * Read the marketplace sources from disk. A missing or corrupt file falls back
- * to the default Anthropic sources.
+ * Read the marketplace sources from disk. A missing file falls back to the
+ * default Anthropic sources silently — that is the ordinary first run. A
+ * **present but unusable** file also falls back, but reports through `warn`
+ * when given: the fallback value is what the next write persists, so quietly
+ * swapping a user's sources for the defaults is a silent data loss.
  */
-export function readMarketplaces(readFile: (path: string) => string | null): MarketplaceSource[] {
+export function readMarketplaces(
+  readFile: (path: string) => string | null,
+  warn?: (message: string) => void,
+): MarketplaceSource[] {
   const raw = readFile(MARKETPLACES_PATH)
   if (raw === null) return [...DEFAULT_MARKETPLACES]
   try {
     const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return [...DEFAULT_MARKETPLACES]
+    if (!Array.isArray(parsed)) {
+      warn?.(`Marketplace file is not a list; using defaults (${MARKETPLACES_PATH})`)
+      return [...DEFAULT_MARKETPLACES]
+    }
     return parsed.filter(
       (s): s is MarketplaceSource =>
         !!s && typeof s === 'object' && typeof s.owner === 'string' && typeof s.repo === 'string',
     )
-  } catch {
+  } catch (err) {
+    warn?.(`Could not read marketplace file (${MARKETPLACES_PATH}): ${String(err)}`)
     return [...DEFAULT_MARKETPLACES]
   }
 }

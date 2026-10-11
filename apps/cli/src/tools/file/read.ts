@@ -20,6 +20,17 @@ const CHUNK_BYTES = 64 * 1024
  */
 const MAX_SCAN_BYTES = 50_000_000
 
+/**
+ * Scan budget when the caller passes `allow_large: true`.
+ *
+ * Reaching a line window near the end of a multi-GB log means scanning past the
+ * default 50 MB. That scan is real work, so it stays opt-in — but a caller who
+ * knows the file is huge and wants a window deep inside it can say so instead of
+ * being told to shell out. Still bounded (1 GB), so `allow_large` is "scan more",
+ * not "scan without limit".
+ */
+const MAX_SCAN_BYTES_LARGE = 1_000_000_000
+
 /** Render a line window the way the tool reports it: `   123\ttext`. */
 function formatLines(lines: string[], offset: number): string {
   return lines.map((l, i) => `${String(offset + i + 1).padStart(6, ' ')}\t${l}`).join('\n')
@@ -63,7 +74,12 @@ function windowFromString(content: string, offset: number, limit: number): strin
  * a character. Returns null when the window cannot be located within
  * `MAX_SCAN_BYTES`.
  */
-function windowFromFd(fd: number, offset: number, limit: number): string[] | null {
+function windowFromFd(
+  fd: number,
+  offset: number,
+  limit: number,
+  maxScanBytes: number = MAX_SCAN_BYTES,
+): string[] | null {
   if (limit <= 0) return []
 
   const buf = Buffer.allocUnsafe(CHUNK_BYTES)
@@ -73,7 +89,7 @@ function windowFromFd(fd: number, offset: number, limit: number): string[] | nul
   let windowEnd = -1
   let eof = false
 
-  while (windowEnd === -1 && scanned < MAX_SCAN_BYTES) {
+  while (windowEnd === -1 && scanned < maxScanBytes) {
     const n = readSync(fd, buf, 0, buf.length, scanned)
     if (n <= 0) {
       eof = true
@@ -128,6 +144,11 @@ export function createReadTool(credentialConfig?: CredentialMaskingConfig): Tool
         file_path: { type: 'string', description: 'Absolute path to the file to read' },
         offset: { type: 'integer', description: 'Line number to start reading from' },
         limit: { type: 'integer', description: 'Number of lines to read' },
+        allow_large: {
+          type: 'boolean',
+          description:
+            'Allow scanning past 50 MB to locate the requested window in a very large file (opt-in; default false).',
+        },
       },
       required: ['file_path'],
     },
@@ -179,15 +200,18 @@ export function createReadTool(credentialConfig?: CredentialMaskingConfig): Tool
         }
 
         if (result === null) {
-          const lines = windowFromFd(fd, offset, limit)
+          const allowLarge = params.allow_large === true
+          const scanBudget = allowLarge ? MAX_SCAN_BYTES_LARGE : MAX_SCAN_BYTES
+          const lines = windowFromFd(fd, offset, limit, scanBudget)
           if (lines === null) {
             return {
               success: false,
               content: '',
               error:
-                `File too large: scanned ${MAX_SCAN_BYTES / 1e6} MB without reaching the end of lines ` +
-                `${offset}–${offset + limit - 1}. Narrow the range (smaller offset or limit), or use a ` +
-                `shell tool to slice the file.`,
+                `File too large: scanned ${scanBudget / 1e6} MB without reaching the end of lines ` +
+                `${offset}–${offset + limit - 1}. Narrow the range (smaller offset or limit)` +
+                (allowLarge ? '' : ', pass allow_large: true to scan further') +
+                `, or use a shell tool to slice the file.`,
             }
           }
           result = formatLines(lines, offset)

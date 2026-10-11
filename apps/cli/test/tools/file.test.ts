@@ -560,6 +560,55 @@ describe('symlink escape protection', () => {
 })
 
 // ============================================================
+// Non-UTF-8 guard (Edit / Write)
+// ============================================================
+
+describe('非 UTF-8 文件不被静默毁掉', () => {
+  // Windows-1252 的 `café` —— 0x92 不是合法 UTF-8 字节。
+  const WIN1252 = Buffer.from([0x63, 0x61, 0x66, 0x92, 0x0a]) // "caf\x92\n"
+
+  it('Edit 拒绝编辑非 UTF-8 文件，且盘上字节逐字未动', async () => {
+    const p = join(tmpDir, 'latin1.txt')
+    writeFileSync(p, WIN1252)
+    const res = await editTool.execute({ file_path: p, old_string: 'caf', new_string: 'dog' }, ctx)
+    expect(res.success).toBe(false)
+    expect(res.error).toMatch(/not valid UTF-8/)
+    // 关键断言：原字节一个都没变（此前会被写成 U+FFFD 的 UTF-8 版）
+    expect(readFileSync(p).equals(WIN1252)).toBe(true)
+  })
+
+  it('（对照）Edit 对合法 UTF-8 文件照常工作 —— 拒绝不是无差别触发', async () => {
+    const p = join(tmpDir, 'utf8.txt')
+    const text = 'café ☕ 日本語\n' // 合法多字节 UTF-8
+    writeFileSync(p, text, 'utf-8')
+    const res = await editTool.execute({ file_path: p, old_string: '☕', new_string: '🍵' }, ctx)
+    expect(res.success).toBe(true)
+    expect(readFileSync(p, 'utf-8')).toBe('café 🍵 日本語\n')
+  })
+
+  it('Write 拒绝覆盖非 UTF-8 文件，且盘上字节逐字未动', async () => {
+    const p = join(tmpDir, 'latin1-w.txt')
+    writeFileSync(p, WIN1252)
+    ctx.readFiles = new Set()
+    await readTool.execute({ file_path: p }, ctx) // 满足 read-before-write（记录的是 canonpath）
+    const res = await writeTool.execute({ file_path: p, content: 'replaced' }, ctx)
+    expect(res.success).toBe(false)
+    expect(res.error).toMatch(/not valid UTF-8/)
+    expect(readFileSync(p).equals(WIN1252)).toBe(true)
+  })
+
+  it('（对照）Write 覆盖合法 UTF-8 文件照常工作', async () => {
+    const p = join(tmpDir, 'utf8-w.txt')
+    writeFileSync(p, 'old', 'utf-8')
+    ctx.readFiles = new Set()
+    await readTool.execute({ file_path: p }, ctx)
+    const res = await writeTool.execute({ file_path: p, content: 'new' }, ctx)
+    expect(res.success).toBe(true)
+    expect(readFileSync(p, 'utf-8')).toBe('new')
+  })
+})
+
+// ============================================================
 // Glob Tool
 // ============================================================
 
@@ -1019,5 +1068,37 @@ describe('runSearch 消费 stderr', () => {
     expect(timedOut).toBe(false)
     expect(stdout.trim()).toBe('out')
     expect(stderr.length).toBe(300_000)
+  })
+})
+
+describe('Read allow_large —— 超大文件深窗可选扫描', () => {
+  it('默认：窗口落在 50MB 扫描预算之外 ⇒ 拒读，且提示 allow_large', async () => {
+    // 60MB 全 0、无换行的稀疏文件：找第 0 行也要一路扫；默认预算 50MB 到不了 EOF。
+    const p = join(tmpDir, 'huge.bin')
+    writeFileSync(p, '')
+    truncateSync(p, 60_000_000)
+    const res = await readTool.execute({ file_path: p }, ctx)
+    expect(res.success).toBe(false)
+    expect(res.error).toMatch(/File too large/)
+    expect(res.error).toMatch(/allow_large/)
+  })
+
+  it('allow_large: true ⇒ 预算抬到 1GB，扫描越过 50MB 抵达文件尾（错误换成「非文本」）', async () => {
+    const p = join(tmpDir, 'huge2.bin')
+    writeFileSync(p, '')
+    truncateSync(p, 60_000_000)
+    const res = await readTool.execute({ file_path: p, allow_large: true }, ctx)
+    // 预算被抬起 ⇒ 不再报「File too large」，而是扫到 NUL 后的「非文本」判定
+    expect(res.success).toBe(false)
+    expect(res.error).toMatch(/Not a text file/)
+    expect(res.error).not.toMatch(/File too large/)
+  })
+
+  it('（对照）普通文件带 allow_large 照常读出内容 —— 开关不是无差别触发', async () => {
+    const p = join(tmpDir, 'normal.txt')
+    writeFileSync(p, 'line1\nline2\nline3\n', 'utf-8')
+    const res = await readTool.execute({ file_path: p, allow_large: true }, ctx)
+    expect(res.success).toBe(true)
+    expect(res.content).toContain('line2')
   })
 })

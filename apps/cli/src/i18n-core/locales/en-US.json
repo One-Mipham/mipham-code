@@ -173,7 +173,8 @@
     "copy": {
       "confirmed": "✓ Copied {count} assistant response(s) to clipboard.",
       "no_responses": "No assistant responses to copy.",
-      "usage": "Usage: /copy [N]\nN = number of recent assistant responses to copy (default: 1)"
+      "usage": "Usage: /copy [N]\nN = number of recent assistant responses to copy (default: 1)",
+      "pick_prompt": "Select a response to copy:"
     },
     "recap": {
       "title": "── Session Recap ──",
@@ -859,6 +860,13 @@
       "unknown": "Unknown rendering error",
       "recovery": "The terminal interface encountered a rendering issue. Auto-recovery in 5 seconds... Press Enter to attempt immediate recovery.",
       "preserved": "Your session data and conversation history are preserved."
+    },
+    "tool": {
+      "not_run": "Not run"
+    },
+    "copy_picker": {
+      "title": "/copy",
+      "nav_help": "(↑↓ to move, Enter to copy, Esc to cancel)"
     }
   },
   "tools": {

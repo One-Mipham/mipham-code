@@ -8,6 +8,7 @@ import {
   isRetryableFailure,
   createAwakeTimer,
   DEFAULT_RETRY_BASE_DELAY_MS,
+  DEFAULT_RETRY_MAX_DELAY_MS,
 } from '../../src/providers/fetch-utils'
 
 describe('streamIdleTimeoutMs', () => {
@@ -74,6 +75,42 @@ describe('retryDelayMs', () => {
 
     const far = new Date(Date.now() + 3600_000).toUTCString()
     expect(retryDelayMs(far, 0, 1000)).toBe(RETRY_AFTER_MAX_MS)
+  })
+
+  it('caps the exponential backoff at maxDelay (四参传入)', () => {
+    // 无上限时 baseDelay * 2^attempt 会一直涨；四参 maxDelay 把它封顶。
+    expect(retryDelayMs(null, 10, 1000, 30_000)).toBe(30_000)
+    // 未到顶就照常（cap 不是「无差别压平」）
+    expect(retryDelayMs(null, 1, 1000, 30_000)).toBe(2000)
+    // 顶本身可小到把 attempt=0 也压住
+    expect(retryDelayMs(null, 0, 1000, 500)).toBe(500)
+  })
+})
+
+// `MIPHAM_OVERLOADED_RETRY_MAX_DELAY_MS` —— 指数退避上限的环境变量旋钮。
+describe('retryDelayMs max-delay from the environment', () => {
+  const ENV = 'MIPHAM_OVERLOADED_RETRY_MAX_DELAY_MS'
+  afterEach(() => {
+    delete process.env[ENV]
+  })
+
+  it('未设时用内置上限', () => {
+    delete process.env[ENV]
+    expect(retryDelayMs(null, 20, 1000)).toBe(DEFAULT_RETRY_MAX_DELAY_MS)
+  })
+
+  it('设置后按它封顶', () => {
+    process.env[ENV] = '3000'
+    expect(retryDelayMs(null, 20, 1000)).toBe(3000)
+  })
+
+  it('畸形值回落内置（typo 不是指令，更不是 sleep(NaN)）', () => {
+    for (const bad of ['soon', '-1', '']) {
+      process.env[ENV] = bad
+      const d = retryDelayMs(null, 20, 1000)
+      expect(Number.isFinite(d)).toBe(true)
+      expect(d).toBe(DEFAULT_RETRY_MAX_DELAY_MS)
+    }
   })
 })
 

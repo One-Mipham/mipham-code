@@ -100,6 +100,29 @@ describe('Shift+Tab → onCyclePermission（接线层）', () => {
 
     expect(onCyclePermission).not.toHaveBeenCalled()
   })
+
+  // 下面两条钉住「带修饰键的 Shift+Tab 不该切档」。判据是**负对照**：
+  // Ink 的解析器把 Ctrl+Shift+Tab / Alt+Shift+Tab 都报成 `{tab:true, shift:true}`，
+  // 只在 `key.shift && key.tab` 上判据 ⇒ 这些 chords 会静默切档、劫持用户没按的组合。
+  it('（对照）Ctrl+Shift+Tab 不触发 —— ctrl 是排他的', async () => {
+    const onCyclePermission = vi.fn()
+    const { stdin } = renderBar(onCyclePermission)
+
+    stdin.write('\u001b[1;5Z') // Ctrl+Shift+Tab
+    await settle()
+
+    expect(onCyclePermission).not.toHaveBeenCalled()
+  })
+
+  it('（对照）Alt+Shift+Tab 不触发 —— meta 是排他的', async () => {
+    const onCyclePermission = vi.fn()
+    const { stdin } = renderBar(onCyclePermission)
+
+    stdin.write('\u001b[1;3Z') // Alt+Shift+Tab（Alt 在 Ink 里报为 meta）
+    await settle()
+
+    expect(onCyclePermission).not.toHaveBeenCalled()
+  })
 })
 
 // ═══════════════════════════════════════════

@@ -54,8 +54,9 @@ export function retryDelayMs(
   retryAfter: string | null,
   attempt: number,
   baseDelay: number,
+  maxDelay: number = resolveMaxDelayMs(),
 ): number {
-  const backoff = baseDelay * Math.pow(2, attempt)
+  const backoff = Math.min(baseDelay * Math.pow(2, attempt), maxDelay)
   if (retryAfter === null) return backoff
 
   const header = retryAfter.trim()
@@ -126,6 +127,27 @@ function resolveBaseDelayMs(): number {
   if (raw === undefined || raw.trim() === '') return DEFAULT_RETRY_BASE_DELAY_MS
   const ms = Number(raw)
   if (!Number.isFinite(ms) || ms < 0) return DEFAULT_RETRY_BASE_DELAY_MS
+  return ms
+}
+
+/** Default ceiling on the exponential backoff, in ms. */
+export const DEFAULT_RETRY_MAX_DELAY_MS = 60_000
+
+/**
+ * Upper bound on the exponential backoff, overridable from the environment.
+ *
+ * `baseDelay * 2^attempt` has no natural ceiling: a caller that raises
+ * `maxRetries` (or pairs a large `baseDelay` with several attempts) can park a
+ * turn for minutes with nothing on screen. `MIPHAM_OVERLOADED_RETRY_MAX_DELAY_MS`
+ * sets the cap; a malformed value (non-numeric, negative) is a typo, not an
+ * instruction, so it falls back to the built-in rather than let the cap become
+ * `sleep(NaN)`. Read per call so a test can set it without re-importing.
+ */
+function resolveMaxDelayMs(): number {
+  const raw = process.env.MIPHAM_OVERLOADED_RETRY_MAX_DELAY_MS
+  if (raw === undefined || raw.trim() === '') return DEFAULT_RETRY_MAX_DELAY_MS
+  const ms = Number(raw)
+  if (!Number.isFinite(ms) || ms < 0) return DEFAULT_RETRY_MAX_DELAY_MS
   return ms
 }
 

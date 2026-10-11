@@ -101,6 +101,16 @@ export interface ToolResult {
   success: boolean
   content: string
   error?: string
+  /**
+   * The call was **held back, not judged** — `auto` mode asked the classifier and
+   * got no usable answer, so nothing ran and asking again is appropriate (296-056).
+   *
+   * It is not a third failure state: `success` stays `false` and `error` still
+   * carries the text the model reads. This bit exists only so the *display* can
+   * tell "held back" from "ran and returned this", which are otherwise the same
+   * shape (both are `success: false` + an error string).
+   */
+  notRun?: boolean
 }
 
 // ── Task Notification Types ──
@@ -134,6 +144,12 @@ export interface StreamChunk {
    * either the output or the error text, and the two are indistinguishable.
    */
   isError?: boolean
+  /**
+   * `type: 'tool_result'` only. The call never ran because `auto` mode's
+   * classifier had no usable answer — held back, not judged (296-056). Distinct
+   * from the `retryable` field below, which describes a *provider* error.
+   */
+  notRun?: boolean
   error?: string
   /**
    * `type: 'error'` only. `false` means the provider knows the failure is

@@ -173,7 +173,8 @@
     "copy": {
       "confirmed": "✓ 已复制 {count} 条助手回复到剪贴板。",
       "no_responses": "没有可复制的助手回复。",
-      "usage": "用法: /copy [N]\nN = 要复制的最近助手回复数量（默认: 1）"
+      "usage": "用法: /copy [N]\nN = 要复制的最近助手回复数量（默认: 1）",
+      "pick_prompt": "选择要复制的回复："
     },
     "recap": {
       "title": "── 会话回顾 ──",
@@ -859,6 +860,13 @@
       "unknown": "未知渲染错误",
       "recovery": "终端界面遇到渲染问题，5 秒后自动恢复... 按 Enter 尝试立即恢复。",
       "preserved": "你的会话数据和对话历史已保留。"
+    },
+    "tool": {
+      "not_run": "未运行"
+    },
+    "copy_picker": {
+      "title": "/copy",
+      "nav_help": "（↑↓ 移动，回车复制，Esc 取消）"
     }
   },
   "tools": {

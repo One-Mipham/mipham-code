@@ -74,4 +74,17 @@ describe('输入光标（白色方块）', () => {
     expect(frame).toContain(BG_WHITE)
     expect(frame).not.toContain(INVERSE)
   })
+
+  it('295-055：光标压在整个字素簇上，不切开 NFD 重音', async () => {
+    // macOS 文件名是 NFD：`é` = `e` + U+0301。旧画法取 `value[cursor]` 只框住
+    // 半个字符，后半（重音）漏在白块外，屏幕上出现一个孤立的重音。
+    const { lastFrame, stdin } = render(createElement(InputBar, props))
+    await settle()
+    stdin.write('aé')
+    await settle()
+    stdin.write(LEFT)
+    await settle()
+    // 白块 + 黑字后面紧跟**两个**码元 —— 整个 `é` 都在块里。
+    expect(lastFrame() ?? '').toContain(`${BG_WHITE}${FG_BLACK}é`)
+  })
 })

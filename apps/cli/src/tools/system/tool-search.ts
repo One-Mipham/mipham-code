@@ -8,6 +8,7 @@
 
 import type { ToolDefinition } from '../../shared/index.ts'
 import { McpClient } from '../../mcp/client'
+import { capMcpText } from '../../mcp/instructions'
 
 export const toolSearchTool: ToolDefinition = {
   name: 'ToolSearch',
@@ -88,7 +89,7 @@ export const toolSearchTool: ToolDefinition = {
             matches.push({
               server: serverName,
               tool: tool.name,
-              description: (tool.description || '').slice(0, 120),
+              description: capMcpText(tool.description || ''),
             })
           }
         }

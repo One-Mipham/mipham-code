@@ -1703,6 +1703,63 @@ describe('QueryEngine', () => {
         expect(result?.content).toContain('Shift+Tab')
       })
 
+      /**
+       * 296-056：被**拿住**（分类器无可用的答案）与被**裁决**（策略拒绝）在
+       * 文字层早已分叉，但两者在 `tool_result` 里同形 —— 都是 `success:false` +
+       * 一段错误串 ⇒ 展示层分不出「从未运行」与「跑过并返回了这段」。`notRun`
+       * 就是这个形状位：它必须**只在**拿住时为真。
+       */
+      it('分类器无可用的答案被拿住 ⇒ notRun 为真（展示层据此说「未运行」）', async () => {
+        const permission = new PermissionSystem('auto')
+        permission.setClassifier({
+          version: 'test',
+          classify: async () => ({ allow: false, reason: 'unreachable', retryable: true }),
+        })
+        const engine = new QueryEngine(
+          oneBashCall(),
+          mockContext(),
+          makeToolMap([bashTool(() => {})]),
+          permission,
+        )
+
+        const result = await run(engine)
+        expect(result?.isError).toBe(true)
+        expect(result?.notRun).toBe(true)
+      })
+
+      it('反方向：策略拒绝是**裁决过的**，notRun 不得为真（否则两句判决又同形）', async () => {
+        const permission = new PermissionSystem('auto')
+        permission.setClassifier({
+          version: 'test',
+          classify: async () => ({ allow: false, reason: 'irreversible local destruction' }),
+        })
+        const engine = new QueryEngine(
+          oneBashCall(),
+          mockContext(),
+          makeToolMap([bashTool(() => {})]),
+          permission,
+        )
+
+        const result = await run(engine)
+        expect(result?.isError).toBe(true)
+        expect(result?.notRun).toBe(false)
+      })
+
+      it('反方向：跑成功的调用 notRun 不得为真', async () => {
+        const permission = new PermissionSystem('auto')
+        permission.setClassifier({ version: 'test', classify: async () => ({ allow: true }) })
+        const engine = new QueryEngine(
+          oneBashCall(),
+          mockContext(),
+          makeToolMap([bashTool(() => {})]),
+          permission,
+        )
+
+        const result = await run(engine)
+        expect(result?.isError).toBe(false)
+        expect(result?.notRun).toBe(false)
+      })
+
       it('静态已放行的调用绕过分类器（auto 档的只读豁免，一次都不问）', async () => {
         let ran = 0
         let asked = 0

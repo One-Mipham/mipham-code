@@ -21,6 +21,57 @@ export interface Transport {
 
 export const DEFAULT_REQUEST_TIMEOUT_MS = 60_000
 
+/**
+ * How long a stdio MCP server gets to exit on its own after its stdin is closed,
+ * before we kill it (296-048).
+ *
+ * Closing stdin **is** the protocol's shutdown signal — a well-behaved server
+ * sees EOF, flushes, and exits. Killing it in the same tick gives it no chance
+ * to do that; on Windows the kill also left the server's own children running.
+ */
+export const MCP_SHUTDOWN_GRACE_MS = 300
+
+/** Resolve when `proc` exits, or after `ms` — whichever comes first. */
+function waitForExit(proc: ChildProcess, ms: number): Promise<void> {
+  if (proc.exitCode !== null || proc.signalCode !== null) return Promise.resolve()
+  return new Promise((resolve) => {
+    const onExit = (): void => {
+      clearTimeout(timer)
+      resolve()
+    }
+    const timer = setTimeout(onExit, ms)
+    proc.once('exit', onExit)
+  })
+}
+
+/**
+ * Terminate the server **and its descendants** once the grace period expired.
+ *
+ * The tree half is Windows-only, and deliberately so: Windows gives us no
+ * process group to signal, so `taskkill /T` is the only way to reach the
+ * server's own children. On POSIX we do **not** spawn MCP servers detached, so
+ * the child shares our process group and has no group of its own —
+ * `process.kill(-pid)` would be ESRCH, and making it a group leader would let
+ * servers outlive the CLI, a worse bug than the one being fixed. There, the
+ * grace period above *is* the fix; killing the direct child is what we always did.
+ */
+function killProcessTree(proc: ChildProcess): void {
+  const pid = proc.pid
+  if (pid === undefined) return
+  if (process.platform === 'win32') {
+    try {
+      spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
+    } catch {
+      /* fall through to the direct kill */
+    }
+  }
+  try {
+    proc.kill()
+  } catch {
+    /* already gone */
+  }
+}
+
 /** Shared timeout error for both stdio and HTTP transports. */
 export function requestTimeoutError(method: string, ms: number): Error {
   return new Error(`MCP request timeout: ${method} (${ms}ms)`)
@@ -74,7 +125,11 @@ function buildProcEnv(extra?: Record<string, string>): Record<string, string> {
  * Uses Node.js child_process for portability across Bun and Node runtimes.
  */
 export class StdioTransport implements Transport {
-  constructor(private requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) {}
+  constructor(
+    private requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+    /** Seam for tests: how long `close()` waits for a self-exit before killing. */
+    private shutdownGraceMs = MCP_SHUTDOWN_GRACE_MS,
+  ) {}
   private proc: ChildProcess | null = null
   private msgId = 0
   private pending = new Map<
@@ -211,14 +266,20 @@ export class StdioTransport implements Transport {
     }
     this.pending.clear()
 
-    if (this.proc) {
-      try {
-        this.proc.stdin?.end()
-      } catch {
-        /* ignore */
-      }
-      this.proc.kill()
-      this.proc = null
+    const proc = this.proc
+    this.proc = null
+    if (!proc) return
+
+    // stdin EOF is the shutdown signal. Wait for the server to take it; only a
+    // server still running after the grace period gets killed (296-048).
+    try {
+      proc.stdin?.end()
+    } catch {
+      /* ignore */
+    }
+    await waitForExit(proc, this.shutdownGraceMs)
+    if (proc.exitCode === null && proc.signalCode === null) {
+      killProcessTree(proc)
     }
   }
 

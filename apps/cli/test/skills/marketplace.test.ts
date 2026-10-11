@@ -10,6 +10,7 @@ import {
   discoverSkills,
   findSkillInMarketplaces,
   DEFAULT_MARKETPLACES,
+  MARKETPLACES_PATH,
 } from '../../src/skills/marketplace'
 
 describe('parseSkillFrontmatter', () => {
@@ -88,6 +89,46 @@ describe('readMarketplaces', () => {
   it('parses a valid source list', () => {
     const raw = JSON.stringify([{ owner: 'mattpocock', repo: 'skills' }])
     expect(readMarketplaces(() => raw)).toEqual([{ owner: 'mattpocock', repo: 'skills' }])
+  })
+
+  // ── 295-004：回落可以，但不能是哑的（回落值会被下一次写落盘）──
+  it('文件坏掉时通过 warn 报出，而不是默默换成默认源', () => {
+    const warnings: string[] = []
+    expect(
+      readMarketplaces(
+        () => 'not json',
+        (m) => warnings.push(m),
+      ),
+    ).toEqual(DEFAULT_MARKETPLACES)
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toContain(MARKETPLACES_PATH)
+  })
+
+  it('形状不对（合法 JSON 但非数组）也报', () => {
+    const warnings: string[] = []
+    readMarketplaces(
+      () => '{"owner":"x"}',
+      (m) => warnings.push(m),
+    )
+    expect(warnings).toHaveLength(1)
+  })
+
+  it('（对照）文件缺失是常态，不报', () => {
+    const warnings: string[] = []
+    readMarketplaces(
+      () => null,
+      (m) => warnings.push(m),
+    )
+    expect(warnings).toEqual([])
+  })
+
+  it('（对照）合法列表不报', () => {
+    const warnings: string[] = []
+    readMarketplaces(
+      () => JSON.stringify([{ owner: 'a', repo: 'b' }]),
+      (m) => warnings.push(m),
+    )
+    expect(warnings).toEqual([])
   })
 })
 

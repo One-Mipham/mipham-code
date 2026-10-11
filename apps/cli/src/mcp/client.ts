@@ -126,6 +126,19 @@ export class McpClient {
   private _tokenStore: TokenStore | null = null
   private _oauthClient: OAuthClient | null = null
   private eventHandlers = new Map<string, Array<(...args: any[]) => void>>()
+  /**
+   * Reconnect a server on its own after an *unexpected* transport loss.
+   *
+   * Off by default so a unit test that fakes a dead transport does not also
+   * start a real reconnect loop; the CLI entry point turns it on. `reconnect()`
+   * already bounds the attempts and stops early on a definitive refusal, so this
+   * is only about *when* it is called — not how it behaves.
+   */
+  private autoReconnect = false
+  /** Servers with an auto-reconnect in flight — one at a time per name. */
+  private reconnecting = new Set<string>()
+  /** Set by `closeAll` so a teardown is never undone by an in-flight reconnect. */
+  private closing = false
 
   private get tokenStore(): TokenStore {
     if (!this._tokenStore) this._tokenStore = new TokenStore()
@@ -154,6 +167,11 @@ export class McpClient {
   private emit(event: string, ...args: any[]): void {
     const list = this.eventHandlers.get(event) || []
     for (const h of list) h(...args)
+  }
+
+  /** Turn automatic reconnect-after-loss on or off (see `autoReconnect`). */
+  setAutoReconnect(enabled: boolean): void {
+    this.autoReconnect = enabled
   }
 
   /**
@@ -282,6 +300,7 @@ export class McpClient {
     const maxAttempts = 10
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (this.closing) return
       try {
         try {
           await connection.transport.close()
@@ -308,6 +327,27 @@ export class McpClient {
         delay = Math.min(delay * 2, maxDelay)
       }
     }
+  }
+
+  /**
+   * Fire-and-forget auto-reconnect after an unexpected loss.
+   *
+   * The loss itself is detected synchronously inside a tool call, so the retry
+   * must not be awaited there — the caller wants its error back now, and a
+   * reconnect can take up to the full backoff. One attempt per server at a time;
+   * a rejection is already recorded on the connection and re-emitted as
+   * `disconnected`, so it is swallowed here rather than surfacing as an
+   * unhandled rejection.
+   */
+  private scheduleAutoReconnect(name: string): void {
+    if (!this.autoReconnect || this.closing) return
+    if (this.reconnecting.has(name)) return
+    this.reconnecting.add(name)
+    void this.reconnect(name)
+      .catch(() => {
+        /* reconnect() records the error and emits 'disconnected' */
+      })
+      .finally(() => this.reconnecting.delete(name))
   }
 
   /** Reset the singleton (useful for testing). */
@@ -484,6 +524,10 @@ export class McpClient {
   }
 
   async closeAll(): Promise<void> {
+    // Nothing we tear down here should be resurrected by an auto-reconnect that
+    // is mid-backoff — that reconnect holds the old config and would spawn a
+    // fresh subprocess after the client is gone.
+    this.closing = true
     const names = Array.from(this.connections.keys())
     for (const name of names) {
       const conn = this.connections.get(name)
@@ -593,5 +637,7 @@ export class McpClient {
     connection.status = 'error'
     connection.error = 'Connection lost — the transport is no longer connected'
     this.emit('disconnected', name, connection.error)
+    // The server is gone through no intent of ours — bring it back unaided.
+    this.scheduleAutoReconnect(name)
   }
 }

@@ -109,3 +109,45 @@ describe('workflowAgent — provider 覆盖的作用域', () => {
     expect(registry.getActiveModel()).toBe('alpha-model')
   })
 })
+
+// ═══════════════════════════════════════════
+// 296-003：MIPHAM_WORKFLOW_AGENT_MODEL —— 全局「所有 workflow agent 一个模型」
+// ═══════════════════════════════════════════
+describe('workflowAgent — 全局模型旋钮', () => {
+  const ENV = 'MIPHAM_WORKFLOW_AGENT_MODEL'
+
+  it('设了 env、脚本没点名 ⇒ 每个 workflow agent 都用它（provider 不动）', async () => {
+    process.env[ENV] = 'beta-model'
+    try {
+      const seen: Seen = []
+      const registry = makeRegistry(seen)
+      await workflowAgent('hi', registry, NO_TOOLS, {})
+      expect(seen).toEqual([{ providerId: 'alpha', model: 'beta-model' }])
+      // 会话级 active 回到原样（覆盖是这次调用的事）
+      expect(registry.getActive().config.id).toBe('alpha')
+      expect(registry.getActiveModel()).toBe('alpha-model')
+    } finally {
+      delete process.env[ENV]
+    }
+  })
+
+  it('（对照）脚本点名 ⇒ 逐次覆盖胜过全局', async () => {
+    process.env[ENV] = 'beta-model'
+    try {
+      const seen: Seen = []
+      const registry = makeRegistry(seen)
+      await workflowAgent('hi', registry, NO_TOOLS, { model: 'alpha-model' })
+      expect(seen).toEqual([{ providerId: 'alpha', model: 'alpha-model' }])
+    } finally {
+      delete process.env[ENV]
+    }
+  })
+
+  it('（对照）没设 env ⇒ 用会话模型，行为与改动前一致', async () => {
+    delete process.env[ENV]
+    const seen: Seen = []
+    const registry = makeRegistry(seen)
+    await workflowAgent('hi', registry, NO_TOOLS, {})
+    expect(seen).toEqual([{ providerId: 'alpha', model: 'alpha-model' }])
+  })
+})

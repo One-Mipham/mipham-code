@@ -279,6 +279,40 @@ describe('PluginManager — state.json 的形状与原子写', () => {
     expect(statSync(statePath).ino).not.toBe(before)
     expect(readdirSync(dir).filter((f) => f.includes('.tmp'))).toEqual([])
   })
+
+  // ── 295-004：文件「在但坏」必须报出来，不能默默换成空表 ──
+  describe('加载失败的可见性', () => {
+    it('文件在但解析不了 ⇒ getLoadWarning 非空（否则下一次 save 就把原记录抹了）', () => {
+      writeFileSync(join(dir, 'state.json'), 'not json {', 'utf-8')
+      expect(new PluginManager(dir).getLoadWarning()).not.toBeNull()
+    })
+
+    it('文件在但是合法 JSON、形状不对 ⇒ 也报（不只是 parse 失败那一种）', () => {
+      writeFileSync(join(dir, 'state.json'), '{"oops": true}', 'utf-8')
+      expect(new PluginManager(dir).getLoadWarning()).not.toBeNull()
+    })
+
+    it('（对照）文件根本不存在 ⇒ 不报 —— 首次运行是常态，不是故障', () => {
+      expect(new PluginManager(dir).getLoadWarning()).toBeNull()
+    })
+
+    it('（对照）文件存在且是合法数组 ⇒ 不报', () => {
+      writeFileSync(
+        join(dir, 'state.json'),
+        JSON.stringify([
+          {
+            name: 'ok',
+            version: '1.0.0',
+            path: '/tmp/ok',
+            enabled: true,
+            installedAt: new Date().toISOString(),
+          },
+        ]),
+        'utf-8',
+      )
+      expect(new PluginManager(dir).getLoadWarning()).toBeNull()
+    })
+  })
 })
 
 describe('installFromNpm 的安装命令', () => {

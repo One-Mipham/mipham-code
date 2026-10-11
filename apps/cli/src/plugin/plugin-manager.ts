@@ -40,12 +40,27 @@ export class PluginManager {
   private pluginDir: string
   private statePath: string
   private cleanupCallbacks = new Map<string, () => void>()
+  private loadWarning: string | null = null
 
   constructor(pluginDir?: string) {
     this.pluginDir = pluginDir ?? PLUGIN_DIR
     mkdirSync(this.pluginDir, { recursive: true })
     this.statePath = join(this.pluginDir, 'state.json')
     this.loadState()
+  }
+
+  /**
+   * Set when `state.json` was **present but unusable** (unreadable, or valid
+   * JSON of the wrong shape). Null when the file was simply absent — that is the
+   * ordinary first run, not something to warn about.
+   *
+   * The distinction is the whole point: `loadState` starts empty either way, and
+   * the *next* `saveState` persists that empty list — so a corrupt file used to
+   * become a silently wiped one. The caller (the CLI entry point) surfaces this
+   * so the operator learns before the records are gone for good.
+   */
+  getLoadWarning(): string | null {
+    return this.loadWarning
   }
 
   install(sourcePath: string): { success: boolean; message: string } {
@@ -318,17 +333,23 @@ export class PluginManager {
   }
 
   private loadState(): void {
-    try {
-      if (existsSync(this.statePath)) {
-        const parsed: unknown = JSON.parse(readFileSync(this.statePath, 'utf-8'))
-        // Parsing is not validating: `{}` / `null` / `"x"` are all valid JSON and
-        // all make the readers below throw (`.find`/`.filter`/`.map` on a
-        // non-array), so a file that is merely *shaped* wrong took down every
-        // plugin command instead of starting empty.
-        this.plugins = Array.isArray(parsed) ? (parsed as InstalledPlugin[]) : []
-      }
-    } catch {
+    if (!existsSync(this.statePath)) {
       this.plugins = []
+      return
+    }
+    try {
+      const parsed: unknown = JSON.parse(readFileSync(this.statePath, 'utf-8'))
+      // Parsing is not validating: `{}` / `null` / `"x"` are all valid JSON and
+      // all make the readers below throw (`.find`/`.filter`/`.map` on a
+      // non-array), so a file that is merely *shaped* wrong took down every
+      // plugin command instead of starting empty.
+      this.plugins = Array.isArray(parsed) ? (parsed as InstalledPlugin[]) : []
+      if (!Array.isArray(parsed)) {
+        this.loadWarning = `Plugin state file is not a list; starting empty (${this.statePath})`
+      }
+    } catch (err) {
+      this.plugins = []
+      this.loadWarning = `Could not read plugin state (${this.statePath}): ${String(err)}`
     }
   }
 

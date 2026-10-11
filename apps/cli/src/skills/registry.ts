@@ -208,7 +208,10 @@ async function installFromMarketplace(
   skillName: string,
   marketplaceConfig?: MiphamConfig['marketplace'],
 ): Promise<InstallResult> {
-  const sources = readMarketplaces((p) => (existsSync(p) ? readFileSync(p, 'utf-8') : null))
+  const sources = readMarketplaces(
+    (p) => (existsSync(p) ? readFileSync(p, 'utf-8') : null),
+    (m) => console.error(`⚠ ${m}`),
+  )
   const found = await findSkillInMarketplaces(skillName, sources, globalThis.fetch, downloadFile)
 
   if (!found) {

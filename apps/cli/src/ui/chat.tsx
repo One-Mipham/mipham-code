@@ -25,6 +25,32 @@ function display(text: string): string {
   return stripControlCharsForDisplay(text)
 }
 
+/**
+ * Render at most this many lines of a message body.
+ *
+ * Ink lays out the *whole* string on every render, and a streamed turn re-renders
+ * continuously — so a model answer of tens of thousands of lines (a dumped file,
+ * a runaway loop) makes every chunk reflow the entire body, at ~16 fps. The tail
+ * is dropped with a visible count rather than silently: the model may well have
+ * written something worth scrolling to, and a truncated view that says so lets
+ * the user ask for the rest instead of believing they saw all of it.
+ *
+ * Applied to every non-tool body (user pastes hit the same wall).
+ */
+const MAX_RENDERED_LINES = 50
+
+function capRenderedLines(text: string): string {
+  let newlines = 0
+  for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) === 10) newlines++
+  if (newlines < MAX_RENDERED_LINES) return text
+  const lines = text.split('\n')
+  const hidden = lines.length - MAX_RENDERED_LINES
+  return (
+    lines.slice(0, MAX_RENDERED_LINES).join('\n') +
+    `\n… ${hidden} more line${hidden === 1 ? '' : 's'}`
+  )
+}
+
 /** Format cwd for display: replace HOME with ~, truncate if too long */
 function displayCwd(): string {
   const cwd = process.cwd()
@@ -85,7 +111,16 @@ const MessageRow = React.memo(
               </Text>
             ) : null}
             {/* Tool result line: ⎿  summary text */}
-            {msg.toolMeta.output ? (
+            {msg.toolMeta.notRun ? (
+              // Held back by the auto-mode classifier: it never ran, so the text
+              // below is the *reason*, not output. Labelling it keeps a held-back
+              // call from reading as a tool that ran and returned this (296-056).
+              <Text dimColor>
+                {'  ⎿  '}
+                {t('ui.tool.not_run')}
+                {msg.toolMeta.output ? ` — ${display(msg.toolMeta.output).slice(0, 300)}` : ''}
+              </Text>
+            ) : msg.toolMeta.output ? (
               <Text dimColor>
                 {'  ⎿  '}
                 {display(msg.toolMeta.output).slice(0, 300)}
@@ -109,7 +144,7 @@ const MessageRow = React.memo(
                 ⚠ {t('ui.system.role_label')}:
               </Text>
             ) : null}
-            <Text>{display(decodeDisplayEntities(msg.content))}</Text>
+            <Text>{capRenderedLines(display(decodeDisplayEntities(msg.content)))}</Text>
           </>
         )}
       </Box>
@@ -217,6 +252,9 @@ function compactToolGroups(messages: ChatMessage[]): ChatMessage[] {
           toolMeta: {
             ...current.toolMeta!,
             output: msg.toolMeta.output,
+            // 结果行上的标记必须跟着合并走：合并把结果行的 toolMeta 并进工具调用行，
+            // 漏掉它，`notRun` 就停在**没人渲染的那一份**上（296-056）。
+            ...(msg.toolMeta.notRun ? { notRun: true } : {}),
           },
         }
       }

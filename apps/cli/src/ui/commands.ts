@@ -12,6 +12,7 @@ import type { SkillsLoader } from '../skills/loader'
 import { loadSkillUsage } from '../skills/usage'
 import type { PluginManager } from '../plugin/plugin-manager'
 import type { Message } from '../shared/types.js'
+import type { CopyPickerItem } from './copy-picker'
 import type { InstallState, UpdateStatus } from '../shared/update'
 import { McpClient } from '../mcp/client'
 import { registerMcpServerTools, unregisterMcpServerTools } from '../mcp/registry'
@@ -153,6 +154,8 @@ export interface CommandResult {
   clearMessages?: boolean
   /** Content to copy to clipboard (handled by caller) */
   copyContent?: string
+  /** If set, open the `/copy` picker with these candidates (handled by caller). */
+  openCopyPicker?: CopyPickerItem[]
   /** If set, route this message to the AI engine — bridges slash commands → skill/agent invocation.
    *  The app layer replaces the user input with this string and falls through to AI processing. */
   forwardToAI?: string
@@ -2624,7 +2627,10 @@ const marketplaceCmd: CommandHandler = async (_ctx, args) => {
   const { dirname } = await import('node:path')
 
   const readSources = () =>
-    readMarketplaces((p) => (existsSync(p) ? readFileSync(p, 'utf-8') : null))
+    readMarketplaces(
+      (p) => (existsSync(p) ? readFileSync(p, 'utf-8') : null),
+      (m) => console.error(`⚠ ${m}`),
+    )
 
   const sub = args[0]
   const ref = args[1]
@@ -2674,7 +2680,10 @@ const browseMarketplaceCmd: CommandHandler = async (_ctx) => {
   const { readMarketplaces, discoverSkills, downloadFile } = await import('../skills/marketplace')
   const { readFileSync, existsSync } = await import('node:fs')
 
-  const sources = readMarketplaces((p) => (existsSync(p) ? readFileSync(p, 'utf-8') : null))
+  const sources = readMarketplaces(
+    (p) => (existsSync(p) ? readFileSync(p, 'utf-8') : null),
+    (m) => console.error(`⚠ ${m}`),
+  )
   const lines = ['── Marketplace Skills ──', '']
   for (const source of sources) {
     lines.push(`  ${source.owner}/${source.repo}:`)
@@ -2900,23 +2909,38 @@ const copyCmd: CommandHandler = (ctx, args) => {
     return { content: t('commands.copy.no_responses') }
   }
 
-  // Determine which response to copy: last N or last 1
-  let n = 1
+  const textOf = (m: (typeof assistantMsgs)[number]) =>
+    typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
+
+  // `/copy N` — explicit count, unchanged: no picker, straight to the clipboard.
   if (args[0]) {
-    n = parseInt(args[0]!, 10)
+    const n = parseInt(args[0]!, 10)
     if (isNaN(n) || n < 1) {
       return { content: t('commands.copy.usage') }
     }
+    const toCopy = assistantMsgs.slice(-n)
+    return {
+      content: t('commands.copy.confirmed', { count: String(toCopy.length) }),
+      copyContent: toCopy.map(textOf).join('\n\n---\n\n'),
+    }
   }
 
-  const toCopy = assistantMsgs.slice(-n)
-  const text = toCopy
-    .map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))
-    .join('\n\n---\n\n')
+  // Bare `/copy` — one response has nothing to choose between, so copy it; a
+  // stock of them opens the picker instead of guessing at "the last one".
+  if (assistantMsgs.length === 1) {
+    return {
+      content: t('commands.copy.confirmed', { count: '1' }),
+      copyContent: textOf(assistantMsgs[0]!),
+    }
+  }
 
   return {
-    content: t('commands.copy.confirmed', { count: String(toCopy.length) }),
-    copyContent: text,
+    content: t('commands.copy.pick_prompt'),
+    openCopyPicker: assistantMsgs.map((m, i) => {
+      const body = textOf(m)
+      const firstLine = (body.split('\n', 1)[0] ?? '').slice(0, 60)
+      return { label: `#${assistantMsgs.length - i} · ${firstLine}`, text: body }
+    }),
   }
 }
 

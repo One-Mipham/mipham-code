@@ -569,12 +569,24 @@ export class ContextManager {
 
   /** 从当前消息**重算消息那半**的估值（提示那半不在这里 —— 它是读时派生的）。 */
   private recountMessageTokens(): void {
-    this.messageTokens = 0
-    for (const msg of this.messages) {
-      this.messageTokens += this.estimateTokens(
+    this.messageTokens = this.estimateTokensForMessages(this.messages)
+  }
+
+  /**
+   * 任意消息列表的 token 估值，用的就是 `recountMessageTokens` 那套逐条估计器 ——
+   * 纯函数、不碰实例状态。
+   *
+   * 存在的理由：`ContextManager` 之外的调用方（子代理循环的 `autoCompactWindow`
+   * 收缩）要**按 manager 自己会报的那个数**设闸，而不是另养一份会漂移的估计。
+   */
+  estimateTokensForMessages(messages: Message[]): number {
+    let total = 0
+    for (const msg of messages) {
+      total += this.estimateTokens(
         typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
       )
     }
+    return total
   }
 
   /** 提示那半的估值 —— 每次读数现拼现算，见 `getEstimatedTokens()`。 */

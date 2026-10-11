@@ -61,6 +61,32 @@ describe('ScheduleWakeup execution', () => {
     expect(result.content).toContain('Loop ended')
   })
 
+  /**
+   * 295-040 的「取消待唤醒须有提示」那一半（另一半「`←` 移到后台的 /loop」在本产品
+   * 无对象 —— 没有 `←`-to-background 这个动作，故本笔只能落在提示上）。
+   *
+   * 上面那条只断言 `Loop ended`，而**空会话**给出的正是
+   * `Loop ended. 0 pending wakeup(s) cancelled.` —— 一条什么都不报的提示照样全绿。
+   * 「须有提示」的意思是提示要**说得出取消了几条**；这里把读数两侧都钉住：
+   * 排过一条的会话说 1、没排过的说 0。单看一侧治不了常量 —— 写成常数 `0` 的
+   * 实现能过第一格、写成常数 `1` 的能过第二格，两格同时要过就只能是真数出来的。
+   *
+   * 一个会话同时只有一条待唤醒（`armTimer` 先 `cancelSessionTimers` 再挂，
+   * 注释写明「one active wakeup per session」），故排两次不会得到 2。
+   */
+  it('提示里的条数是真读数：排过 ⇒ 1，没排过 ⇒ 0', async () => {
+    const ctx2: ToolContext = { ...ctx, sessionId: 'test-295-040-count' }
+
+    const none = await scheduleWakeupTool.execute({ stop: true }, ctx2)
+    expect(none.success).toBe(true)
+    expect(none.content).toContain('0 pending wakeup(s) cancelled')
+
+    await scheduleWakeupTool.execute({ delaySeconds: 300, reason: 'a', prompt: 'x' }, ctx2)
+    const one = await scheduleWakeupTool.execute({ stop: true }, ctx2)
+    expect(one.success).toBe(true)
+    expect(one.content).toContain('1 pending wakeup(s) cancelled')
+  })
+
   it('rejects missing delaySeconds', async () => {
     const result = await scheduleWakeupTool.execute({ reason: 'test', prompt: 'check' }, ctx)
     expect(result.success).toBe(false)

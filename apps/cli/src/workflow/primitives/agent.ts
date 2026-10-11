@@ -7,6 +7,21 @@ import type { PermissionSystem } from '../../core/permission'
 import { worktreeRoot } from '../../core/paths.ts'
 import { validateJSONSchema, formatValidationErrors } from '../schema-validator'
 
+/**
+ * Effective model for a workflow agent.
+ *
+ * Precedence: an explicit per-call `model` (the script named one) wins; else the
+ * environment default `MIPHAM_WORKFLOW_AGENT_MODEL`; else none (the session model
+ * routing the registry already holds). Read *here* on purpose — the env is scoped
+ * to workflow agents only, so a SubAgent spawned by the engine or `/bg` is
+ * unaffected. Read per call so a test can set it without re-importing.
+ */
+export function resolveWorkflowAgentModel(model?: string): string | undefined {
+  if (model !== undefined) return model
+  const raw = process.env.MIPHAM_WORKFLOW_AGENT_MODEL
+  return raw && raw.trim() !== '' ? raw.trim() : undefined
+}
+
 export interface WorkflowAgentOpts {
   label?: string
   phase?: string
@@ -47,6 +62,11 @@ export async function workflowAgent(
   llm?: Llm,
 ): Promise<unknown> {
   const maxRetries = opts.maxRetries ?? 2
+  // The model actually applied this call — per-call `opts.model` else the
+  // `MIPHAM_WORKFLOW_AGENT_MODEL` default. Used both for the temporary provider
+  // switch below and for the sub-agent's own `modelOverride` (they must agree,
+  // or the switch would route one model while the sub-agent asked for another).
+  const effectiveModel = resolveWorkflowAgentModel(opts.model)
 
   // ── Worktree isolation setup ──
   let worktreePath: string | undefined
@@ -98,11 +118,11 @@ export async function workflowAgent(
     //
     // 切在这里而不是函数开头：上面那段建 worktree 会抛（`git worktree add` 非 0 即
     // throw），抛在切走之前就不该已经切走。
-    if (opts.provider || opts.model) {
+    if (opts.provider || effectiveModel) {
       const prevProviderId = registry.getActive().config.id
       const prevModelId = registry.getActiveModel()
       // `opts.provider` 缺席时只换模型 —— provider 保持这一次调用开始时的那一个。
-      registry.switchProvider(opts.provider ?? prevProviderId, opts.model)
+      registry.switchProvider(opts.provider ?? prevProviderId, effectiveModel)
       restore = () => registry.switchProvider(prevProviderId, prevModelId)
     }
 
@@ -117,7 +137,7 @@ export async function workflowAgent(
 
       const textResult = await sub.execute(retryPrompt, opts.label || 'workflow-agent', {
         type: 'general',
-        modelOverride: opts.model,
+        modelOverride: effectiveModel,
         effort: opts.effort,
         allowedTools: undefined, // use all tools by default
         worktreePath,

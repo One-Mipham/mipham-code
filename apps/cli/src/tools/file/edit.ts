@@ -1,7 +1,7 @@
 import { readFileSync, closeSync, constants } from 'node:fs'
 import type { ToolDefinition } from '../../shared/index.ts'
 import { resolveSafe } from '../../security/path'
-import { openNoFollow, writeFileNoFollow, isSymlinkLoop } from '../../security/fd'
+import { openNoFollow, writeFileNoFollow, isSymlinkLoop, isValidUtf8 } from '../../security/fd'
 
 /**
  * Characters considered part of an identifier in source code.
@@ -102,7 +102,18 @@ export const editTool: ToolDefinition = {
     }
     let content: string
     try {
-      content = readFileSync(rfd, 'utf-8')
+      const raw = readFileSync(rfd)
+      if (!isValidUtf8(raw)) {
+        return {
+          success: false,
+          content: '',
+          error:
+            `File is not valid UTF-8 (likely Windows-1252 / Shift-JIS / GBK / Latin-1): ${filePath}. ` +
+            'Editing it would decode invalid bytes to U+FFFD and overwrite the originals on save. ' +
+            'Convert the file to UTF-8 with an external tool first.',
+        }
+      }
+      content = raw.toString('utf-8')
     } finally {
       closeSync(rfd)
     }

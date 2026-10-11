@@ -108,26 +108,101 @@ export type EditAction =
   | { type: 'delete' }
   | { type: 'insert'; text: string }
 
+const graphemeSegmenter =
+  typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function'
+    ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+    : null
+
+/**
+ * Split a string into user-perceived characters (grapheme clusters), each with
+ * its start offset in UTF-16 code units.
+ *
+ * The cursor used to count code units, so on macOS filesystem names — stored NFD,
+ * where `é` is `e` + a combining accent — an arrow key could park the caret
+ * *inside* a character, and Backspace deleted half of one. `Intl.Segmenter` is the
+ * only thing that gets this right across emoji ZWJ sequences and combining marks;
+ * `Array.from` (code-point split) is the fallback when the runtime lacks it, and
+ * still beats splitting surrogates.
+ */
+function graphemes(value: string): Array<{ segment: string; index: number }> {
+  if (graphemeSegmenter) {
+    return Array.from(graphemeSegmenter.segment(value), (s) => ({
+      segment: s.segment,
+      index: s.index,
+    }))
+  }
+  const out: Array<{ segment: string; index: number }> = []
+  let index = 0
+  for (const segment of value) {
+    out.push({ segment, index })
+    index += segment.length
+  }
+  return out
+}
+
+/** Start offset of the grapheme immediately before `cursor` (0 at the beginning). */
+function prevGraphemeStart(value: string, cursor: number): number {
+  let start = 0
+  for (const { index } of graphemes(value)) {
+    if (index >= cursor) break
+    start = index
+  }
+  return start
+}
+
+/** End offset of the grapheme at or immediately after `cursor`. */
+function nextGraphemeEnd(value: string, cursor: number): number {
+  for (const { segment, index } of graphemes(value)) {
+    if (index + segment.length > cursor) return index + segment.length
+  }
+  return value.length
+}
+
+/**
+ * The grapheme starting exactly at `cursor`, or null when the cursor sits at the
+ * end (or, defensively, mid-cluster). Used to draw one whole character under the
+ * block cursor instead of a single code unit.
+ */
+export function graphemeAt(
+  value: string,
+  cursor: number,
+): { segment: string; start: number; end: number } | null {
+  for (const { segment, index } of graphemes(value)) {
+    if (index === cursor) return { segment, start: index, end: index + segment.length }
+    if (index > cursor) break
+  }
+  return null
+}
+
 /**
  * Pure cursor-editing transition. Returns a new state (or the same state when
- * the action is a no-op). Cursor is always clamped to [0, value.length].
+ * the action is a no-op). The cursor always lands on a grapheme boundary, so a
+ * step never splits a character the user sees as one.
  */
 export function applyEdit(state: EditState, action: EditAction): EditState {
   const { value, cursor } = state
   switch (action.type) {
-    case 'moveLeft':
-      return { value, cursor: Math.max(0, cursor - 1) }
-    case 'moveRight':
-      return { value, cursor: Math.min(value.length, cursor + 1) }
-    case 'backspace':
+    case 'moveLeft': {
+      const prev = prevGraphemeStart(value, cursor)
+      return prev === cursor ? state : { value, cursor: prev }
+    }
+    case 'moveRight': {
+      const next = nextGraphemeEnd(value, cursor)
+      return next === cursor ? state : { value, cursor: next }
+    }
+    case 'backspace': {
       if (cursor === 0) return state
+      const start = prevGraphemeStart(value, cursor)
       return {
-        value: value.slice(0, cursor - 1) + value.slice(cursor),
-        cursor: cursor - 1,
+        value: value.slice(0, start) + value.slice(cursor),
+        cursor: start,
       }
-    case 'delete':
+    }
+    case 'delete': {
       if (cursor >= value.length) return state
-      return { value: value.slice(0, cursor) + value.slice(cursor + 1), cursor }
+      const end = nextGraphemeEnd(value, cursor)
+      return { value: value.slice(0, cursor) + value.slice(end), cursor }
+    }
     case 'insert': {
       if (!action.text) return state
       return {
@@ -280,13 +355,17 @@ function MiphamTextInput({
   // **前景色**，主题一换就变成别的颜色；而「白色直立长方形」是定死的形状要求。
   // 落在字符上时即「白块挖空一个黑字」；落在末尾时 `value[cursor]` 是 undefined，
   // 用空格补 —— 空格加背景色就是一整个实心方块。
+  // The block covers one whole grapheme, not one code unit: `value[cursor]` on a
+  // surrogate pair (emoji) or an NFD accent is half a character, and rendering a
+  // lone surrogate puts a replacement glyph on screen.
+  const atCursor = graphemeAt(value, cursor)
   return (
     <Text>
       {value.slice(0, cursor)}
       <Text backgroundColor="white" color="black">
-        {value[cursor] ?? ' '}
+        {atCursor ? atCursor.segment : ' '}
       </Text>
-      {value.slice(cursor + 1)}
+      {atCursor ? value.slice(atCursor.end) : ''}
       {value.length === 0 && placeholder ? <Text dimColor>{placeholder}</Text> : null}
     </Text>
   )
@@ -433,13 +512,17 @@ export function InputBar({
     }
 
     // ── Global hotkeys ──
-    // Shift+Tab → cycle permission mode
-    if (key.shift && key.tab) {
+    // Shift+Tab → cycle permission mode.
+    // The modifiers are excluded deliberately: Ink's parser reports
+    // Ctrl+Shift+Tab (`\x1b[1;5Z`) and Alt+Shift+Tab (`\x1b[1;3Z`) as
+    // `{tab:true, shift:true, ctrl/meta:true}` — without these guards those
+    // combos would also cycle the mode, hijacking a chord the user did not ask for.
+    if (key.shift && key.tab && !key.ctrl && !key.meta) {
       onCyclePermission?.()
       return
     }
-    // Tab → 接受 ghost-text 建议
-    if (key.tab && !key.shift && suggestion) {
+    // Tab → 接受 ghost-text 建议（同样排除 ctrl/meta —— Ctrl+Tab / Alt+Tab 不是「接受」）
+    if (key.tab && !key.shift && !key.ctrl && !key.meta && suggestion) {
       const next = valueRef.current + suggestion
       setValue(next)
       valueRef.current = next

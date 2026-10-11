@@ -527,6 +527,63 @@ describe('McpClient', () => {
         vi.unstubAllGlobals()
       }
     })
+
+    // ── 295-018：意外掉线要能自己回来 ──
+    it('开了自动重连后，一次意外掉线会触发 reconnect（否则这条链路只有 /mcp reconnect 能走）', async () => {
+      const state = { reachable: true }
+      vi.stubGlobal('fetch', httpEndpoint(state))
+      try {
+        const client = McpClient.getInstance()
+        client.setAutoReconnect(true)
+        await client.connect({ name: 'flaky', url: 'http://localhost:8004/mcp' })
+
+        // 观察 reconnect 的**调用**而不是它的结果：真实重连要退避 1s 起、且这个 mock
+        // 已经不可达，等结果会让用例变慢且脆。
+        const reconnect = vi.spyOn(client, 'reconnect').mockResolvedValue(undefined)
+
+        state.reachable = false
+        await client.callTool('flaky', 'echo', { message: 'hi' })
+
+        expect(reconnect).toHaveBeenCalledWith('flaky')
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+
+    it('（对照）默认关着 —— 掉线不触发任何重连，行为与接线前逐字一致', async () => {
+      const state = { reachable: true }
+      vi.stubGlobal('fetch', httpEndpoint(state))
+      try {
+        const client = McpClient.getInstance()
+        await client.connect({ name: 'flaky', url: 'http://localhost:8004/mcp' })
+        const reconnect = vi.spyOn(client, 'reconnect').mockResolvedValue(undefined)
+
+        state.reachable = false
+        await client.callTool('flaky', 'echo', { message: 'hi' })
+
+        expect(reconnect).not.toHaveBeenCalled()
+        expect(client.getConnection('flaky')!.status).toBe('error')
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+
+    it('（对照）主动 disconnect 不算掉线 —— 不触发重连', async () => {
+      const state = { reachable: true }
+      vi.stubGlobal('fetch', httpEndpoint(state))
+      try {
+        const client = McpClient.getInstance()
+        client.setAutoReconnect(true)
+        await client.connect({ name: 'flaky', url: 'http://localhost:8004/mcp' })
+        const reconnect = vi.spyOn(client, 'reconnect').mockResolvedValue(undefined)
+
+        client.disconnect('flaky')
+
+        expect(reconnect).not.toHaveBeenCalled()
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
   })
 
   describe('two sources naming the same server', () => {

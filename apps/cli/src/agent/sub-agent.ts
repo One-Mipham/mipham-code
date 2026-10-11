@@ -3,6 +3,7 @@ import type { Llm } from '../providers/llm'
 import type { Message, ToolDefinition, ToolContext } from '../shared/index.ts'
 import type { SubAgentType, SubAgentOptions, AgentDefinition } from './types'
 import { createAgentContext } from './agent-context'
+import { shrinkAgentMessages } from './auto-compact'
 import { getBackgroundAgentRegistry } from './background-registry'
 import { formatInboundMessage, getMessageBus } from './message-bus'
 import type { HookEngine } from '../core/hooks'
@@ -380,12 +381,20 @@ export class SubAgent {
           source: 'builtin',
         }
     const contextWindow = this.registry.findModel(finalModel)?.contextWindow
+    // `autoCompactWindow` (frontmatter) lets an agent declare a **tighter** budget
+    // than its model's native window so it compacts sooner; it can never widen the
+    // real window, so take the min. Absent the field, nothing changes — the
+    // sub-agent context is sized exactly as before.
+    const declaredWindow = agentDef?.autoCompactWindow
+    const compactWindow = declaredWindow
+      ? Math.min(declaredWindow, contextWindow ?? declaredWindow)
+      : undefined
     // 这一份**已含 agent memory**，是发出去的那个提示的唯一来源。
     const {
       context,
       allowedTools,
       systemPrompt: composedSystemPrompt,
-    } = createAgentContext(resolvedDef, this.toolRegistry, contextWindow)
+    } = createAgentContext(resolvedDef, this.toolRegistry, compactWindow ?? contextWindow)
 
     // 别再 `context.setSystemPrompt(systemPrompt)`：`createAgentContext` 已经拿**含记忆**的
     // 那一份设过上下文，这里用裸提示再设一遍只会把记忆从上下文里抹掉，而请求读的又不是
@@ -505,6 +514,18 @@ export class SubAgent {
         // Check abort signal
         if (signal?.aborted) {
           throw new DOMException('Aborted', 'AbortError')
+        }
+
+        // Opt-in shrink for agents that declared `autoCompactWindow`. The engine
+        // compacts through `ContextManager`, but this loop keeps `currentMessages`
+        // locally and never calls it — so without this line the field would be
+        // decoration. Task-pinned: `shrinkAgentMessages` never drops `messages[0]`,
+        // because here that message *is* the task (no summarizer, no system prompt
+        // restating it). Gated on the estimate `context` itself would report.
+        if (compactWindow) {
+          currentMessages = shrinkAgentMessages(currentMessages, compactWindow, (m) =>
+            context.estimateTokensForMessages(m),
+          )
         }
 
         // Per turn, not once per run: a peer can write while this agent is mid

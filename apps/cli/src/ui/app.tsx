@@ -30,6 +30,7 @@ import {
 import { ChatPanel } from './chat'
 import { InputBar } from './input'
 import { ModelPicker } from './picker'
+import { CopyPicker, type CopyPickerItem } from './copy-picker'
 import { AgentFooter, type AgentEntry } from './agent-footer'
 import { GraftStatusLine } from './graft-status'
 import { checkForUpdatesAsync, type UpdateStatus } from '../shared/update'
@@ -86,6 +87,8 @@ export interface ToolMeta {
   collapsed: boolean
   /** Original tool name before Claude Code display renaming (e.g. Write→Update). */
   originalName?: string
+  /** Held back by the auto-mode classifier — rendered as a dim "Not run" row (296-056). */
+  notRun?: boolean
 }
 
 export interface ChatMessage {
@@ -220,6 +223,24 @@ export function formatToolDetail(name: string, input: Record<string, unknown>): 
 }
 
 /** Claude Code display name: maps Write/Edit → Update for parity. */
+/**
+ * Put text on the system clipboard. macOS/Windows only; Linux is left alone to
+ * avoid a hard dependency on xclip/wl-copy. Failures are swallowed — the content
+ * was still shown on screen, and a clipboard miss is not worth an error frame.
+ */
+async function writeClipboard(text: string): Promise<void> {
+  try {
+    const { execSync } = await import('node:child_process')
+    if (process.platform === 'darwin') {
+      execSync('pbcopy', { input: text })
+    } else if (process.platform === 'win32') {
+      execSync('clip', { input: text })
+    }
+  } catch {
+    /* content is still displayed */
+  }
+}
+
 function toolDisplayName(name: string): string {
   if (name === 'Write' || name === 'Edit') return 'Update'
   return name
@@ -290,6 +311,8 @@ export function App({
   const [providerId, setProviderId] = useState(initialProvider || config.defaultProvider)
   const [modelId, setModelId] = useState(initialModel || config.defaultModel)
   const [pickerOpen, setPickerOpen] = useState(false)
+  /** `/copy` with no argument — candidates for the interactive copy picker. */
+  const [copyPicker, setCopyPicker] = useState<{ items: CopyPickerItem[] } | null>(null)
   // ↑/↓ 翻历史用的已提交输入。**必须住在这里而不是 InputBar 里** —— InputBar 会被
   // 卸载（pickerOpen 三元 / apiKeyPrompt 早退 / Ctrl+G），组件内 state 随之清零，
   // 于是「开一次模型选择器，历史就没了」（ROADMAP D7）。
@@ -749,7 +772,27 @@ export function App({
             // Sync background agents (e.g. Agent tool may have spawned them)
             syncBgAgents()
             const output = chunk.content ? String(chunk.content).trim() : ''
-            if (output && output !== '(no matches)' && output.length > 20) {
+            if (chunk.notRun) {
+              // Held back by the classifier — it never ran. Row shape is owned by
+              // `chat.tsx` (`toolMeta.notRun`), which labels it "Not run" instead
+              // of letting it read as the tool's output (296-056). Shown even when
+              // the reason is short: the whole point is that this row exists.
+              setMessages((prev) => [
+                ...prev,
+                {
+                  role: 'system' as const,
+                  content: output,
+                  toolMeta: {
+                    name: '',
+                    input: '',
+                    output,
+                    collapsed: true,
+                    originalName: chunk.toolUse?.name,
+                    notRun: true,
+                  },
+                },
+              ])
+            } else if (output && output !== '(no matches)' && output.length > 20) {
               // Generate diff-style summary for file operations (Claude Code parity)
               let preview: string
               const isFileOp = chunk.toolUse?.name === 'Write' || chunk.toolUse?.name === 'Edit'
@@ -1114,18 +1157,10 @@ export function App({
             }
           }
           if (result.copyContent) {
-            // Copy to clipboard via pbcopy (macOS) or clip (Windows)
-            try {
-              const { execSync } = await import('node:child_process')
-              if (process.platform === 'darwin') {
-                execSync('pbcopy', { input: result.copyContent })
-              } else if (process.platform === 'win32') {
-                execSync('clip', { input: result.copyContent })
-              }
-              // Linux: xclip or wl-copy not attempted to avoid dependency issues
-            } catch {
-              // Silent fail — content is still displayed
-            }
+            await writeClipboard(result.copyContent)
+          }
+          if (result.openCopyPicker) {
+            setCopyPicker({ items: result.openCopyPicker })
           }
         }
 
@@ -1210,6 +1245,10 @@ export function App({
     }
     if (pickerOpen) {
       setPickerOpen(false)
+      return true
+    }
+    if (copyPicker) {
+      setCopyPicker(null)
       return true
     }
     if (isLoading && abortRef.current) {
@@ -1355,7 +1394,20 @@ export function App({
             })()}
 
             {/* Input with separator lines */}
-            {pickerOpen ? (
+            {copyPicker ? (
+              <CopyPicker
+                items={copyPicker.items}
+                onSelect={(item) => {
+                  void writeClipboard(item.text)
+                  setCopyPicker(null)
+                  setMessages((prev) => [
+                    ...prev,
+                    { role: 'system', content: t('commands.copy.confirmed', { count: '1' }) },
+                  ])
+                }}
+                onClose={() => setCopyPicker(null)}
+              />
+            ) : pickerOpen ? (
               <ModelPicker
                 config={config}
                 currentProvider={providerId}

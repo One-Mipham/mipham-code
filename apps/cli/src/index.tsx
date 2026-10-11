@@ -294,6 +294,10 @@ async function connectMcpServers(
 ): Promise<McpConnectFailure[]> {
   if (mcpServers.length === 0) return []
   const mcp = McpClient.getInstance()
+  // A server that dies mid-session should come back on its own; the retry is
+  // bounded and stops early on a definitive refusal. `MIPHAM_MCP_AUTO_RECONNECT=0`
+  // turns it off (e.g. for a scripted session that must not spawn processes).
+  mcp.setAutoReconnect(process.env.MIPHAM_MCP_AUTO_RECONNECT !== '0')
   // Wire runtime tool-list changes before connect so mid-connect updates land.
   syncMcpToolsOnChange(mcp, tools)
   const results = await Promise.allSettled(
@@ -519,6 +523,10 @@ export async function runApp(options: RunOptions): Promise<void> {
 
   // Initialize plugin manager
   const pluginManager = new PluginManager()
+  // A corrupt state file is loaded as an empty list so the CLI still starts — but
+  // the next save would persist that emptiness over the real records. Say so.
+  const pluginStateWarning = pluginManager.getLoadWarning()
+  if (pluginStateWarning) console.error(`⚠ ${pluginStateWarning}`)
 
   // Generate session name for tracking (used by /cd to persist cwd)
   const sessionName = generateSessionName(options.resume)

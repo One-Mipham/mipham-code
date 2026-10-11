@@ -5,6 +5,7 @@ import { getBackgroundAgentRegistry } from '../../src/agent/background-registry'
 import { AgentExperience } from '../../src/agent/agent-experience'
 import type { ProviderRegistry, ProviderInstance, ChatRequest } from '../../src/providers/registry'
 import type { Llm } from '../../src/providers/llm'
+import type { AgentDefinition } from '../../src/agent/types'
 import type { ToolDefinition, StreamChunk, Message, ToolContext } from '../../src/shared/index.ts'
 import { PermissionSystem } from '../../src/core/permission'
 import { rmSync } from 'node:fs'
@@ -1127,5 +1128,82 @@ describe('SubAgent 同步路径上的外部 abort 信号', () => {
     })
 
     expect(result).toContain('started')
+  })
+
+  // ═══════════════════════════════════════════
+  // 296-002：autoCompactWindow —— 显式声明才收缩，且任务永不被丢
+  // ═══════════════════════════════════════════
+  describe('autoCompactWindow', () => {
+    function loopProvider(captured: ChatRequest[]): ProviderInstance {
+      return {
+        config: { id: 'mock', name: 'Mock', protocol: 'openai-compatible', apiKey: '', models: [] },
+        async *chat(req: ChatRequest): AsyncGenerator<StreamChunk> {
+          captured.push(req)
+          // 每轮都发一个 tool_use，循环永不早退 ⇒ 上下文稳定增长
+          yield {
+            type: 'tool_use',
+            toolUse: { type: 'tool_use', id: String(captured.length), name: 'Bash', input: {} },
+          }
+          yield { type: 'stop' }
+        },
+        async listModels() {
+          return []
+        },
+        async healthCheck() {
+          return true
+        },
+      }
+    }
+    const fatTool: ToolDefinition = {
+      name: 'Bash',
+      description: 'bash',
+      category: 'exec',
+      permission: 'self',
+      parameters: {},
+      execute: async () => ({ success: true, content: 'x'.repeat(2000) }),
+    }
+    const baseDef = (extra: Partial<AgentDefinition>): AgentDefinition => ({
+      name: 'compacty',
+      description: '',
+      systemPrompt: 'sys',
+      model: 'inherit',
+      permissionMode: 'inherit',
+      source: 'builtin',
+      ...extra,
+    })
+
+    it('声明 autoCompactWindow ⇒ 上下文被收缩，且每一轮仍以任务开头', async () => {
+      const captured: ChatRequest[] = []
+      const sub = new SubAgent(
+        createMockRegistry(loopProvider(captured)),
+        new Map([['Bash', fatTool]]),
+      )
+      await sub.execute('THE TASK', 'label', {
+        agentDef: baseDef({ autoCompactWindow: 200 }),
+        maxTurns: 6,
+        autoPatternAnalysis: false,
+      })
+
+      expect(captured.length).toBe(6)
+      // 任务始终钉在 [0] —— 收缩从不丢它
+      for (const req of captured) expect(req.messages[0]!.content).toBe('THE TASK')
+      // 不收缩时末轮会是 16 条（1 + 5×3）；声明窗口后明显更短
+      expect(captured.at(-1)!.messages.length).toBeLessThan(10)
+    })
+
+    it('（对照）不声明 ⇒ 同样输入不收缩（形状与改动前逐条一致）', async () => {
+      const captured: ChatRequest[] = []
+      const sub = new SubAgent(
+        createMockRegistry(loopProvider(captured)),
+        new Map([['Bash', fatTool]]),
+      )
+      await sub.execute('THE TASK', 'label', {
+        agentDef: baseDef({}),
+        maxTurns: 6,
+        autoPatternAnalysis: false,
+      })
+
+      expect(captured.at(-1)!.messages.length).toBe(16)
+    })
   })
 })

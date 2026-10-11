@@ -1,15 +1,32 @@
 import type { ConnectionInfo } from './types'
 
 /**
- * 单个 server 的 instructions 上限。
+ * 一段「给模型看的 MCP 文本」的统一上限 —— 单 server 的 instructions、
+ * 单个工具的描述，都用它。
  *
- * 这是**不受我们控制**的第三方文本，且**每次请求都要重新付一遍前缀** ——
- * 一个啰嗦的 server 能靠一段自带说明把别人的预算吃光。截断而非拒绝：
- * 前半段通常正是「这个 server 该怎么用」那部分。
+ * 这是**不受我们控制**的第三方文本，且**每次请求都要重新付一遍前缀**：一个啰嗦的 server
+ * 能靠一段自带说明把别人的预算吃光。三个面此前各是各的数字（server instructions 2000 /
+ * up-front 工具定义**无上限** / tool-search 命中列表 120）—— 无上限那面最危险，120 那面则把
+ * 「该不该用这个工具」的依据砍到看不见。统一到一个数，让「一屏 MCP 文本有多长」只有一个答案。
  */
-export const MCP_INSTRUCTIONS_PER_SERVER_CAP = 2000
+export const MCP_TEXT_CAP = 4096
+
+/** 单个 server 的 instructions 上限（与 {@link MCP_TEXT_CAP} 同一个数）。 */
+export const MCP_INSTRUCTIONS_PER_SERVER_CAP = MCP_TEXT_CAP
 
 const TRUNCATION_MARKER = '… [truncated]'
+
+/**
+ * 截到 `cap` 个字符；被截时补一个可见标记。
+ *
+ * 截断而非拒绝（前半段通常正是「怎么用」那部分），但**必须让模型看见被截了** ——
+ * 一个悄悄变短的定义，模型会当成完整定义来信任。三处调用共用这一个口，免得各自的
+ * 截法（补不补标记、按不按字符）又漂开。
+ */
+export function capMcpText(text: string, cap: number = MCP_TEXT_CAP): string {
+  if (text.length <= cap) return text
+  return `${text.slice(0, cap)}\n${TRUNCATION_MARKER}`
+}
 
 /** True when every character is a plain ASCII code point (0x00–0x7F). */
 function isAsciiName(s: string): boolean {
@@ -60,10 +77,7 @@ export function buildMcpInstructionsBlock(connections: ConnectionInfo[]): string
     .sort((a, b) => compareNames(a.config.name, b.config.name))
     .map((c) => {
       const raw = c.instructions!.trim()
-      const body =
-        raw.length > MCP_INSTRUCTIONS_PER_SERVER_CAP
-          ? `${raw.slice(0, MCP_INSTRUCTIONS_PER_SERVER_CAP)}\n${TRUNCATION_MARKER}`
-          : raw
+      const body = capMcpText(raw, MCP_INSTRUCTIONS_PER_SERVER_CAP)
       return `### ${c.config.name}\n${body}`
     })
 

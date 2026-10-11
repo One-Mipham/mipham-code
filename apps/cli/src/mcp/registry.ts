@@ -9,6 +9,7 @@
 import type { ToolDefinition as McpToolDefinition, ToolCallResult } from './types'
 import type { ToolDefinition, ToolResult, ToolContext } from '../shared/types'
 import { McpClient } from './client'
+import { capMcpText } from './instructions'
 import { createT } from '../i18n-core/t'
 import enUS from '../i18n-core/locales/en-US.json'
 import zhCN from '../i18n-core/locales/zh-CN.json'
@@ -65,7 +66,7 @@ export function convertMcpTool(serverName: string, mcpTool: McpToolDefinition): 
 
   return {
     name: toolName,
-    description: `[MCP:${serverName}] ${mcpTool.description || mcpTool.name}`,
+    description: `[MCP:${serverName}] ${capMcpText(mcpTool.description || mcpTool.name)}`,
     category: 'system',
     permission: 'ask',
     parameters,

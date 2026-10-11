@@ -30,6 +30,24 @@ export function isSymlinkLoop(err: unknown): boolean {
 }
 
 /**
+ * True iff `buf` is well-formed UTF-8.
+ *
+ * Read-modify-write tools (Edit, Write) decode with 'utf-8' and re-encode the
+ * result. For a *valid* UTF-8 file that round-trips byte-for-byte, but a
+ * Windows-1252 / Shift-JIS / GBK / Latin-1 file decodes every invalid byte to
+ * U+FFFD and writing it back destroys the original bytes — with no error. This
+ * gate lets the caller refuse instead of corrupting silently.
+ */
+export function isValidUtf8(buf: Buffer): boolean {
+  try {
+    new TextDecoder('utf-8', { fatal: true }).decode(buf)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
  * Open a file O_WRONLY|O_NOFOLLOW, write `content`, and close. Used by Write
  * and Edit so a symlink swapped in after `resolveSafe` is rejected rather than
  * followed (writing through it would clobber an out-of-workspace target).

@@ -18,6 +18,14 @@ export interface AgentFrontmatter {
   skills?: string
   background?: boolean
   memory?: 'user' | 'project' | 'local' // agent memory scope
+  /**
+   * Opt-in context budget (tokens) for this agent's own conversation. When set,
+   * the sub-agent shrinks its context on the first turn it crosses this window
+   * (the same 0.85 ratio the main session uses) — so a long-running agent
+   * compacts on its own terms instead of growing until `maxTurns`. Never widens
+   * the model's real window: the effective value is `min(field, modelWindow)`.
+   */
+  autoCompactWindow?: number
 }
 
 export interface AgentDefinition {
@@ -35,6 +43,8 @@ export interface AgentDefinition {
   source: 'builtin' | 'project' | 'user'
   filePath?: string
   memory?: 'user' | 'project' | 'local' // agent memory scope
+  /** Opt-in per-agent context budget; see `AgentFrontmatter.autoCompactWindow`. */
+  autoCompactWindow?: number
 }
 
 export interface SubAgentOptions {

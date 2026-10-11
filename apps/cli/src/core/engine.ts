@@ -841,6 +841,7 @@ export class QueryEngine {
         tool_use_id: toolUse.id,
         content: result.success ? result.content : result.error || result.content,
         isError: !result.success,
+        notRun: result.notRun === true,
       }
 
       // Collect tool call record for CRSI auto-reflection
@@ -1204,6 +1205,7 @@ export class QueryEngine {
           // —— 直接发 `content` 会让模型收到一个**空** tool_result，错误文案整个丢失。
           content: result.success ? result.content : result.error || result.content,
           isError: !result.success,
+          notRun: result.notRun === true,
         }
 
         // DeepSeek V4 thinking mode requires reasoning_content on every assistant message
@@ -1263,6 +1265,10 @@ export class QueryEngine {
         success: false,
         content: '',
         error: baseError + moveOnHint,
+        // Held back, not judged: the auto-mode classifier had no usable answer.
+        // The display says "Not run" for these instead of showing a result line
+        // that reads as if the tool had run and returned that text (296-056).
+        notRun: decision.retryable === true,
       }
     }
     // P1-4: Tool allowed — reset block counter
@@ -1428,6 +1434,7 @@ export class QueryEngine {
           success: false,
           content: '',
           error: this.buildDenialError(name, tool, effectiveParams, recheck),
+          notRun: recheck.retryable === true,
         }
       }
     }

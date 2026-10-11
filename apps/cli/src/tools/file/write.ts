@@ -1,8 +1,8 @@
-import { mkdirSync, existsSync, constants } from 'node:fs'
+import { mkdirSync, existsSync, readFileSync, constants } from 'node:fs'
 import { dirname } from 'node:path'
 import type { ToolDefinition } from '../../shared/index.ts'
 import { resolveSafe } from '../../security/path'
-import { writeFileNoFollow, isSymlinkLoop } from '../../security/fd'
+import { writeFileNoFollow, isSymlinkLoop, isValidUtf8 } from '../../security/fd'
 
 export const writeTool: ToolDefinition = {
   name: 'Write',
@@ -39,6 +39,26 @@ export const writeTool: ToolDefinition = {
         success: false,
         content: '',
         error: `File "${filePath}" already exists but has not been read this session. Read the file first before overwriting it. This prevents accidental data loss.`,
+      }
+    }
+
+    // ── Non-UTF-8 guard: refuse to clobber a file we cannot represent ──
+    // A Windows-1252 / Shift-JIS / GBK file read into the model came back as
+    // U+FFFD garbage; writing UTF-8 content over it would erase the originals
+    // with no error. Same-source as the Edit guard (`isValidUtf8`).
+    if (fileExists) {
+      try {
+        if (!isValidUtf8(readFileSync(filePath))) {
+          return {
+            success: false,
+            content: '',
+            error:
+              `File "${filePath}" is not valid UTF-8 (likely Windows-1252 / Shift-JIS / GBK / Latin-1). ` +
+              'Overwriting it would destroy the original bytes. Convert it to UTF-8 or delete it first.',
+          }
+        }
+      } catch {
+        // Unreadable for another reason — let the write itself surface that.
       }
     }
 

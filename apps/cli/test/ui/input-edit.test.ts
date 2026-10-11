@@ -151,3 +151,65 @@ describe('navigateHistory', () => {
     })
   })
 })
+
+// ═══════════════════════════════════════════
+// 295-055：光标按「用户看得见的一个字」步进，而不是 UTF-16 码元
+// ═══════════════════════════════════════════
+describe('applyEdit — 字素簇步进', () => {
+  // macOS 文件名是 NFD：`é` 是 `e` + U+0301 组合重音，两个码元一个字符。
+  const NFD_E = 'é'
+  // 家庭 emoji：四个码点（含两个 ZWJ）作为一个字素簇。
+  const FAMILY = '\u{1F468}‍\u{1F469}‍\u{1F467}'
+  // 单独的星形（代理对）—— 两个码元。
+  const STAR = '\u{1F31F}'
+
+  it('moveLeft 跨过一个 NFD 重音（停在字素边界，不停进字素内部）', () => {
+    const value = `a${NFD_E}`
+    expect(applyEdit({ value, cursor: value.length }, { type: 'moveLeft' })).toEqual({
+      value,
+      cursor: 1, // 'a' 之后，即字素簇起点；不是 value.length - 1
+    })
+  })
+
+  it('backspace 一次删掉整个 NFD 字符（不是只删重音）', () => {
+    const value = `a${NFD_E}`
+    expect(applyEdit({ value, cursor: value.length }, { type: 'backspace' })).toEqual({
+      value: 'a',
+      cursor: 1,
+    })
+  })
+
+  it('delete 一次删掉整个 NFD 字符', () => {
+    const value = `a${NFD_E}b`
+    expect(applyEdit({ value, cursor: 1 }, { type: 'delete' })).toEqual({
+      value: 'ab',
+      cursor: 1,
+    })
+  })
+
+  it('moveLeft / moveRight 跨过代理对（emoji），不切断高低代理', () => {
+    const value = `a${STAR}`
+    const left = applyEdit({ value, cursor: value.length }, { type: 'moveLeft' })
+    expect(left).toEqual({ value, cursor: 1 })
+    expect(applyEdit(left, { type: 'moveRight' })).toEqual({ value, cursor: value.length })
+  })
+
+  it('backspace 一次删掉整个 ZWJ emoji 家族序列', () => {
+    const value = `a${FAMILY}`
+    expect(applyEdit({ value, cursor: value.length }, { type: 'backspace' })).toEqual({
+      value: 'a',
+      cursor: 1,
+    })
+  })
+
+  it('（对照）纯 ASCII 步进与码元一致 —— 改前改后同结果', () => {
+    expect(applyEdit({ value: 'abc', cursor: 3 }, { type: 'moveLeft' })).toEqual({
+      value: 'abc',
+      cursor: 2,
+    })
+    expect(applyEdit({ value: 'abc', cursor: 1 }, { type: 'backspace' })).toEqual({
+      value: 'bc',
+      cursor: 0,
+    })
+  })
+})

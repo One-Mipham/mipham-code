@@ -79,6 +79,8 @@ export class AgentRegistry {
             : undefined,
           background: typeof data.background === 'boolean' ? data.background : undefined,
           memory: data.memory as 'user' | 'project' | 'local' | undefined,
+          autoCompactWindow:
+            typeof data.autoCompactWindow === 'number' ? data.autoCompactWindow : undefined,
           source,
           filePath: fullPath,
         }
