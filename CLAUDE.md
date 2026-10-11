@@ -21,9 +21,9 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.33
-> **最后更新**: 2026-10-11 — **0.85.20 发布：把三处净化口收口（本轮三笔）送出去**。发版判据先问「这批里有没有一项**用户**拿得到」—— **有**，而且是**安全**面：模型写在工具名 / 输入回显 / 页脚工具行里的 ESC、BEL、C1 此前**直达终端**（`\x1b[2J` 清屏、`\r` 覆盖当前行），现三处一律走单行口 `sanitizeInlineField`。三笔：`6a6ea3e1`（16 项 = 3 真缺口 + 13 半·已处理）、`4a9c3c43`（页脚工具行 + 输入回显两处绕过 + 单行口补 C1）、`089fe4eb`（`ui/chat.tsx` 工具名裸渲染）。**发布读数**（全取外部探针）：tag `v0.85.20` → `e3336f55`（tag 对象 `31d16f7f…`，`git tag -v` = 完好的签名）；主干 CI `38121796345` **9/9** @ `e3336f55`；`release.yml` `38122064764` **9/9**（4 平台二进制 + npm + GitHub Release + JetBrains + macOS DMG）；npm 真输出行 `+ @miphamai/cli@0.85.20`（发布行 `07:40:58Z`，registry `time[0.85.20] = 07:43:06Z`、`latest` = **0.85.20**；直连 + cache-bust 读 —— 传播窗口不是失败读数）；GitHub Release **6 资产**、非 draft 非 prerelease；JetBrains 真输出行 `JetBrains plugin published.`；macOS DMG 2.2 MB ⚠️ **未签名**（CI 无 `APPLE_SIGNING_IDENTITY`，与历次同）。`.vsix` 本机 70,105 B / sha256 `df3c17b0…` ⇒ ✅ **已上传 Marketplace 并核验**（两条独立探针同读 `0.85.20`：页内同源 `extensionquery` API 给 `lastUpdated` = `2026-10-11T08:01:38Z`、`allVersions` = `["0.85.20"]`；公开页 `Version 0.85.20` / `Last updated 2026/10/11 16:01:38`（UTC+8）—— 同刻，且 API 是服务端读数、不是 CDN 缓存面）。✅ **两站已部署**（同日：国内站 `deploy-cn.sh` → 腾讯云、国际站 `vercel --prod` → mipham.ai；`websites` 一笔 `chore(sync)` 把两份 `package-info.json` 对齐真源并推送）。
-> **前一条（2.94.32）**: 2026-10-11 — **第三处净化口绕过收口（`ui/chat.tsx` 工具名）** —— 上一轮点名的两处落掉后，同一批自查里「记而未落」的最后一项：`ui/chat.tsx` 的工具行把 `msg.toolMeta.name` **裸内插**进 `<Text>`，而名字来自模型的 `tool_use`（`ui/app.tsx` 的 `toolDisplayName` 对未知工具**原样返回**，MCP 服务端给的名字同理）⇒ 模型写进名字的 ESC / BEL / C1 直达终端。修法走**单行**口 `sanitizeInlineField`，**不是**同文件的 `display()`：后者为多行正文留着 `\n`，而名字独占一行，一个 `\n` 就伪造出终端里的一整行 —— 两条判据分别钉住「控制符不进帧」与「选对了哪一个口」。同笔订正两处**已变假**的散文：`display()` 的注释原写着「本函数是通往终端的**唯一**一道口」（第三处在同一文件里，已收口），`test/ui/chat-control-chars.test.ts` 文件头的同一句话也一并撤掉。测试 **4,225 → 4,228**（**323 文件**；本机 4,226 passed + 2 skipped，0 失败）。判据钉在**帧**上，探针用 SGR 形状的 `\x1b[8m`（裸 CSI 会被 Ink 丢掉、那样的用例**恒绿**）；改源→见红（**2 red / 11 passed**，正好是那两条、正对照绿）→`cp` 还原→`shasum -a 256 -c` 逐字相符。**已随 0.85.20 发布**。**另记一笔未落**：`compactForFocus` 的 `summarizeToolGroup`（`chat.tsx`）把 `↳ ${n}` 拼进 `content`，focus 模式下经 `display()` 渲染 —— ESC 会被剥，但名字里的 `\n` 在那条路径上仍会分行，留作下轮。
+> **版本**: 2.94.34
+> **最后更新**: 2026-10-11 — **focus 模式那一行：先证伪，再收口**。上一条把 `summarizeToolGroup` 拼出的 `↳ ${n}` 记成「focus 模式下经 `display()` 渲染 ⇒ 名字里的 `\n` 仍会分行，留作下轮」—— 本轮证伪了它：**那个 `content` 今天的渲染路径根本不读**（`MessageRow` 走 `toolMeta` 支：`output` 非空即赢，`collapsed: true` 又挡住 `content` 兜底；名字也进不了 `output` —— `app.tsx` 的 `formatToolDetail` 只拿名字当 switch 判别子）。三组帧级探针（含 `output` 为空、只剩 `content` 兜底的那一档）里 `↳` 出现 **0 次** ⇒ 这**不是**一个观测到的漏洞，故本笔不叫「修复」。改动只到「把合成值上闸」：合成处走**单行**口 `sanitizeInlineField`（**不是** `display()` —— 后者为多行正文留着 `\n`），`summarizeToolGroup` 导出供测试。新增 3 条：一条**能失败**的（改前红）+ 两条正对照；其中「focus 帧」那条改前改后都绿 —— 那正是不承载本笔的证明，别当修复证据读。证伪（`sanitizeInlineField(n)` 换回裸拼 `n`）→ 全文件 **1 红 15 绿**，红的就是那条；`cp` 还原后 sha256 逐字相符（`c8c172cf…`）。测试 **4,228 → 4,231**（**323 文件**；本机 4,229 passed + 2 skipped，0 失败）。同笔订正 2.94.32 行末那句**已变假**的话，该行入档时附校注。**未发布、未部署。**
+> **前一条（2.94.33）**: 2026-10-11 — **0.85.20 发布：把三处净化口收口（本轮三笔）送出去**。发版判据先问「这批里有没有一项**用户**拿得到」—— **有**，而且是**安全**面：模型写在工具名 / 输入回显 / 页脚工具行里的 ESC、BEL、C1 此前**直达终端**（`\x1b[2J` 清屏、`\r` 覆盖当前行），现三处一律走单行口 `sanitizeInlineField`。三笔：`6a6ea3e1`（16 项 = 3 真缺口 + 13 半·已处理）、`4a9c3c43`（页脚工具行 + 输入回显两处绕过 + 单行口补 C1）、`089fe4eb`（`ui/chat.tsx` 工具名裸渲染）。**发布读数**（全取外部探针）：tag `v0.85.20` → `e3336f55`（tag 对象 `31d16f7f…`，`git tag -v` = 完好的签名）；主干 CI `38121796345` **9/9** @ `e3336f55`；`release.yml` `38122064764` **9/9**（4 平台二进制 + npm + GitHub Release + JetBrains + macOS DMG）；npm 真输出行 `+ @miphamai/cli@0.85.20`（发布行 `07:40:58Z`，registry `time[0.85.20] = 07:43:06Z`、`latest` = **0.85.20**；直连 + cache-bust 读 —— 传播窗口不是失败读数）；GitHub Release **6 资产**、非 draft 非 prerelease；JetBrains 真输出行 `JetBrains plugin published.`；macOS DMG 2.2 MB ⚠️ **未签名**（CI 无 `APPLE_SIGNING_IDENTITY`，与历次同）。`.vsix` 本机 70,105 B / sha256 `df3c17b0…` ⇒ ✅ **已上传 Marketplace 并核验**（两条独立探针同读 `0.85.20`：页内同源 `extensionquery` API 给 `lastUpdated` = `2026-10-11T08:01:38Z`、`allVersions` = `["0.85.20"]`；公开页 `Version 0.85.20` / `Last updated 2026/10/11 16:01:38`（UTC+8）—— 同刻，且 API 是服务端读数、不是 CDN 缓存面）。✅ **两站已部署**（同日：国内站 `deploy-cn.sh` → 腾讯云、国际站 `vercel --prod` → mipham.ai；`websites` 一笔 `chore(sync)` 把两份 `package-info.json` 对齐真源并推送）。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -62,7 +62,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：4,228 测试（本机 4,226 passed + 2 skipped，323 文件，0 失败）
+测试：4,231 测试（本机 4,229 passed + 2 skipped，323 文件，0 失败）
 
 ---
 
@@ -99,7 +99,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 323 个测试文件，4228 个测试
+│   │   ├── test/               # 323 个测试文件，4231 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -125,7 +125,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（4228 个测试）
+pnpm test         # vitest run（4231 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -318,7 +318,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | core            | 90      | 1602     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
 | tools           | 27      | 520      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 37      | 255      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
-| ui              | 34      | 366      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
+| ui              | 34      | 369      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
 | agent           | 15      | 149      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
 | security        | 12      | 122      | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
 | providers       | 9       | 165      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
@@ -335,7 +335,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integrity       | 19      | 132      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **323** | **4228** | **0 失败** ✅（本机 4,226 + 2 skipped，323 文件；CI 待本批推送后回填）                                                                                                      |
+| **合计**        | **323** | **4231** | **0 失败** ✅（本机 4,229 + 2 skipped，323 文件；CI 待本批推送后回填）                                                                                                      |
 
 ### 测试注意事项
 

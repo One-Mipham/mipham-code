@@ -30,6 +30,8 @@ interface ChatPanelProps {
  * through `sanitizeInlineField` (the same recipe minus `\n`), the way
  * `agent-footer.tsx` and `input.tsx` already do. The name below used to be
  * interpolated raw, on the theory that this function was the only way in; it is not.
+ * The same holds for the `↳ name1 ↳ name2` line `summarizeToolGroup` composes: one
+ * line, names straight off the model's `tool_use`, so the single-line gate.
  */
 function display(text: string): string {
   return stripControlCharsForDisplay(text)
@@ -318,11 +320,24 @@ function compactForFocus(messages: ChatMessage[]): ChatMessage[] {
   return result
 }
 
-/** Summarize a group of tool calls into a single compact message. */
-function summarizeToolGroup(tools: ChatMessage[]): ChatMessage {
+/**
+ * Summarize a group of tool calls into a single compact message.
+ *
+ * Exported for `test/ui/chat-control-chars.test.ts`, which pins the composition
+ * itself: names come from the model's `tool_use`, and this line is a **one-line**
+ * display string, so each name goes through the single-line gate rather than
+ * `display()` — the latter keeps `\n` for legitimately multi-line bodies, and a
+ * `\n` in a name forges a row here just as it did on the tool-call row.
+ *
+ * That line is not rendered by today's `MessageRow` (the `toolMeta` branch is
+ * taken, where `output` wins and `collapsed: true` blocks the `content`
+ * fallback) — so this is hardening the composed value, not fixing an observed
+ * leak. It keeps the string safe under whichever renderer reads it next.
+ */
+export function summarizeToolGroup(tools: ChatMessage[]): ChatMessage {
   const names = tools.map((t) => t.toolMeta!.name)
   const uniqueNames = [...new Set(names)]
-  const toolList = uniqueNames.map((n) => `↳ ${n}`).join('  ')
+  const toolList = uniqueNames.map((n) => `↳ ${sanitizeInlineField(n)}`).join('  ')
   return {
     role: 'system',
     content: `[▶ ${tools.length} tool${tools.length > 1 ? 's' : ''}]  ${toolList}`,

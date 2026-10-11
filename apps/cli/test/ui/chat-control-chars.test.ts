@@ -20,7 +20,7 @@
 import React from 'react'
 import { render } from 'ink-testing-library'
 import { describe, expect, it } from 'vitest'
-import { ChatPanel } from '../../src/ui/chat'
+import { ChatPanel, summarizeToolGroup } from '../../src/ui/chat'
 import type { ChatMessage } from '../../src/ui/app'
 import enUS from '../../src/i18n-core/locales/en-US.json'
 
@@ -191,5 +191,61 @@ describe('ChatPanel — 回合进行中的 focus 提示', () => {
 
   it('没有任何消息时不出现 —— 还没有东西可聚焦', () => {
     expect(chatFrame({ turnActive: true, messages: [] })).not.toContain(FOCUS_TIP)
+  })
+})
+
+/**
+ * focus 模式把连续的工具消息折成一行摘要，而那一行里拼着**模型的**工具名字
+ * （`tool_use`，MCP 服务端给的名字同理）—— 同一个不受信来源，第三条口。
+ *
+ * ⚠️ 诚实边界，别把下面第三条当成修复的证据：**今天的渲染路径根本不读那个
+ * `content`**。`MessageRow` 走 `toolMeta` 那一支，`output` 非空就赢，而
+ * `collapsed: true` 又挡住 `content` 兜底 —— 实测帧里连 `↳` 都不出现（空 output
+ * 的那一档也试过，同样不出现）。所以第三条是**给未来的渲染器**留的闸，改前改后
+ * 都绿；真正能失败、也因此真正承载这次改动的，是第一条。
+ */
+describe('summarizeToolGroup — 折叠摘要那一行是单行字段', () => {
+  const dirty = `Bash${cp(0x1b)}[8m_x${cp(0x07)}${cp(0x9b)}\nInjected`
+  const groupOf = (...names: string[]) =>
+    summarizeToolGroup(
+      names.map((name) => ({
+        role: 'system' as const,
+        content: 'x',
+        toolMeta: { name, input: 'x', output: 'ok', collapsed: true },
+      })),
+    )
+
+  it('名字里的换行与控制字符都不进摘要行（这条能失败：改前是红的）', () => {
+    const { content } = groupOf(dirty, 'Read\nB')
+    // 一行就是一行 —— `display()` 为多行正文留着 `\n`，这里一个都不许有。
+    expect(content.split('\n')).toHaveLength(1)
+    expect(content).not.toMatch(/[\x00-\x1f\x7f\x80-\x9f]/)
+    // 去掉的是控制符，不是内容。
+    expect(content).toContain('↳ Bash[8m_xInjected')
+  })
+
+  it('正对照：正常的名字照常拼进去（别把摘要整行删掉也当通过）', () => {
+    const { content } = groupOf('Bash', 'Read')
+    expect(content).toContain('[▶ 2 tools]')
+    expect(content).toContain('↳ Bash  ↳ Read')
+  })
+
+  it('focus 模式的帧里也没有控制字符、也伪造不出新行（守住未来的渲染器）', () => {
+    const frame = chatFrame({
+      focusMode: true,
+      messages: [
+        {
+          role: 'system',
+          content: 'x',
+          toolMeta: { name: dirty, input: 'x', output: 'ok', collapsed: true },
+        },
+      ],
+    })
+    expect(frame).not.toContain(cp(0x1b))
+    expect(frame).not.toContain(cp(0x07))
+    expect(frame).not.toContain(cp(0x9b))
+    expect(frame.split('\n').map((l) => l.trim())).not.toContain('Injected')
+    // 正对照：那一组确实渲染了（否则上面几条可能只是探针没读到东西）。
+    expect(frame).toContain('tools (1)')
   })
 })
