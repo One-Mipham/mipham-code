@@ -229,6 +229,13 @@ export class PermissionSystem {
    */
   private classifier: PermissionClassifier | undefined = undefined
 
+  /**
+   * Tool names the registry holds, for judging a plain-name rule's existence (see
+   * `setKnownTools`). Absent is a legal state: a system nobody told about the
+   * registry judges structure only, which is the behavior every caller had before.
+   */
+  private knownTools: ReadonlySet<string> | undefined = undefined
+
   // ── Org-level restrictions (P0 security) ──
   private restrictions: PermissionRestrictions | undefined = undefined
 
@@ -265,6 +272,35 @@ export class PermissionSystem {
   setClassifier(classifier: PermissionClassifier | undefined): void {
     this.classifier = classifier
     this.invalidateCache()
+  }
+
+  /**
+   * Hand in the tool names the registry actually holds, so a plain-name rule can be
+   * judged on **existence** and not just on structure. Plain names match by
+   * `pattern === tool.name` (case-sensitive), so `bash` / `bahs` load fine and match
+   * nothing — the same silent-dead-rule class as `Bash(ls) x`, and the one that
+   * reached a user's settings.json as `allow: ["bash", "bahs"]`.
+   *
+   * Must be called **before** the rules it should judge: the verdict is stamped onto
+   * each entry at compile time (`compileRule`), which is also what `getInvalidRules`
+   * reads back. `mcp__`-prefixed names are exempt inside `validateRulePattern`.
+   *
+   * Like `setClassifier`, this seam lives on the permission system rather than the
+   * engine — an engine-side setter would be a new engine capability the daemon would
+   * have to match (`test/integrity/daemon-capability-parity.test.ts`).
+   */
+  setKnownTools(names: Iterable<string>): void {
+    this.knownTools = new Set(names)
+    this.invalidateCache()
+  }
+
+  /**
+   * The set plain-name rules are validated against, or `undefined` when nobody
+   * handed one in. Public so the `/permissions` command judges a rule against
+   * **the same set this system will match it against** instead of a second copy.
+   */
+  getKnownTools(): ReadonlySet<string> | undefined {
+    return this.knownTools
   }
 
   /** Whether an `auto`-mode classifier is attached. For diagnostics, not decisions. */
@@ -370,6 +406,14 @@ export class PermissionSystem {
       subPerm.setRestrictions(this.restrictions)
     }
 
+    // The tool set travels too, and before the rules below: the deny rules are
+    // re-added through the same compile path, so without it a rule the parent had
+    // flagged would come back as "structurally valid" and its warning would vanish
+    // by travelling — a rule silently degrading one hop down.
+    if (this.knownTools) {
+      subPerm.setKnownTools(this.knownTools)
+    }
+
     // Propagate deny rules (org safety policies must always apply)
     for (const denyEntry of this.denyRules) {
       subPerm.deny(denyEntry.pattern)
@@ -460,17 +504,17 @@ export class PermissionSystem {
   // ── Rule management ──
 
   allow(rule: string): void {
-    this.allowRules.push(compileRule(rule, 'allow'))
+    this.allowRules.push(compileRule(rule, 'allow', this.knownTools))
     this.invalidateCache()
   }
 
   deny(rule: string): void {
-    this.denyRules.push(compileRule(rule, 'deny'))
+    this.denyRules.push(compileRule(rule, 'deny', this.knownTools))
     this.invalidateCache()
   }
 
   ask(rule: string): void {
-    this.askRules.push(compileRule(rule, 'ask'))
+    this.askRules.push(compileRule(rule, 'ask', this.knownTools))
     this.invalidateCache()
   }
 
@@ -501,10 +545,10 @@ export class PermissionSystem {
     this.askRules = []
 
     for (const rule of config.allow) {
-      this.allowRules.push(compileRule(rule, 'allow'))
+      this.allowRules.push(compileRule(rule, 'allow', this.knownTools))
     }
     for (const rule of config.deny) {
-      this.denyRules.push(compileRule(rule, 'deny'))
+      this.denyRules.push(compileRule(rule, 'deny', this.knownTools))
     }
 
     this.invalidateCache()
@@ -1049,7 +1093,11 @@ export class PermissionSystem {
     } else {
       const rule = toolNameOrRule
       if (rule.pattern) {
-        const entry = compileRule(rule.pattern, rule.level === 'bypass' ? 'allow' : 'ask')
+        const entry = compileRule(
+          rule.pattern,
+          rule.level === 'bypass' ? 'allow' : 'ask',
+          this.knownTools,
+        )
         if (rule.level === 'bypass') this.allowRules.push(entry)
         else this.askRules.push(entry)
       } else {

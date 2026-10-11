@@ -21,9 +21,9 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.35
-> **最后更新**: 2026-10-11 — **0.85.21 发布：把 focus 折叠摘要行的加固送出去（本批唯一实质提交）**。发版前先过判据「这批里有没有一项**用户**拿得到」—— 逐条走下来，**答案是「没有」**：本批 4 笔里 3 笔是上一版 0.85.20 的回填 / 清理笔（`ab1f83f7` / `e5ea425e` / `ab96d2aa`），唯一的运行期改动 `6643f529` 自己已经证明「合成的 `↳ name` 行今天的渲染路径读不到」（`MessageRow` 走 `toolMeta` 支、`collapsed: true` 挡住 `content` 兜底，三组帧级探针里 `↳` 出现 0 次）⇒ 它是**加固不是修复**。**发布是用户直令**（原话点名 bump / tag / npm publish / GitHub Release / 两站部署），故照发；而判据的不满足如实写进 CHANGELOG 三份与提交信息，不冒领一个从没存在过的修复。**发布读数**（全取外部探针）：tag `v0.85.21` → `945a3339`（tag 对象 `9fda9333…`，`git tag -v` = 完好的签名，RSA `62F77FC4…` / Guohua Zhang）；主干 ci.yml `38125693212` **9/9** @ `945a3339`；`release.yml` `38125877783` **9/9**（Test / 4 平台 Build / npm Publish / macOS DMG / JetBrains / GitHub Release）；npm 真输出行 `+ @miphamai/cli@0.85.21`（发布行 `08:46:40Z`，registry `time[0.85.21] = 08:48:47Z`、`time.modified = 08:48:48Z`、`latest` = **0.85.21**；直连 + cache-bust 读 ⇒ 不是读缓存）；GitHub Release **6 资产**、非 draft 非 prerelease；JetBrains 真输出行 `JetBrains plugin published.`；macOS DMG 2.2 MB ⚠️ **未签名**（CI 无 `APPLE_SIGNING_IDENTITY`，与历次同）。`.vsix` 本机 **70,406 B** / sha256 `89d5dff7…` / **包内** `version` = 0.85.21（核包内那份，不只看文件名）⇒ ✅ **已人工上传 Marketplace 并经双探针复核**（该步只能人工做、`release.yml` 不产出它）：页内同源 `extensionquery` API 与公开页 `More Info` **同读 0.85.21** —— `versions[0].version` = **0.85.21**、`versions[0].lastUpdated` = `2026-10-11T08:49:29.82Z`、`versions[0].flags` = **`validated`**、`publisher.publisherName` = **`miphamai`**（`displayName` = `One Mipham Corporation`）；页面 `Version 0.85.21` / `Last updated 2026/10/11 16:49:29`（UTC+8，与 API 同刻）。⚠️ 页面走 CDN ⇒ 须 cache-bust 重载；本机 `curl` 直连该 API 被墙 ⇒ 走 CDP 页内同源 `fetch`。✅ **两站已部署**（部署是独立授权，经用户点名校准后才执行）：国内站 `deploy-cn.sh` → 腾讯云（PM2 `onemipham` online、端口 3007 监听、omGPT API 与站点健康检查均 HTTP 200；`onemipham.com/mipham-code` cache-bust 读 **3×0.85.21 / 0×0.85.20**、`4231`×2）、国际站 `deploy.sh` → `vercel --prod`（`dpl_ES6dp3dFtDyaknYxVSFxG4i7q4Bb`、`target: production`、`READY`；`mipham.ai/mipham-code` 同读 **3×0.85.21 / 0×0.85.20**、`4231`×2）；`websites` 同笔 `fc2a237` → **`6894e28`**（`chore(sync): package-info 同步到 0.85.21（两站）`），两份 `src/config/package-info.json` 与真源 sha256 逐字相符（`614abd9f…`）。
-> **前一条（2.94.34）**: 2026-10-11 — **focus 模式那一行：先证伪，再收口**。上一条把 `summarizeToolGroup` 拼出的 `↳ ${n}` 记成「focus 模式下经 `display()` 渲染 ⇒ 名字里的 `\n` 仍会分行，留作下轮」—— 本轮证伪了它：**那个 `content` 今天的渲染路径根本不读**（`MessageRow` 走 `toolMeta` 支：`output` 非空即赢，`collapsed: true` 又挡住 `content` 兜底；名字也进不了 `output` —— `app.tsx` 的 `formatToolDetail` 只拿名字当 switch 判别子）。三组帧级探针（含 `output` 为空、只剩 `content` 兜底的那一档）里 `↳` 出现 **0 次** ⇒ 这**不是**一个观测到的漏洞，故本笔不叫「修复」。改动只到「把合成值上闸」：合成处走**单行**口 `sanitizeInlineField`（**不是** `display()` —— 后者为多行正文留着 `\n`），`summarizeToolGroup` 导出供测试。新增 3 条：一条**能失败**的（改前红）+ 两条正对照；其中「focus 帧」那条改前改后都绿 —— 那正是不承载本笔的证明，别当修复证据读。证伪（`sanitizeInlineField(n)` 换回裸拼 `n`）→ 全文件 **1 红 15 绿**，红的就是那条；`cp` 还原后 sha256 逐字相符（`c8c172cf…`）。测试 **4,228 → 4,231**（**323 文件**；本机 4,229 passed + 2 skipped，0 失败）。同笔订正 2.94.32 行末那句**已变假**的话，该行入档时附校注。✅ 已随 **0.85.21** 发布（两站 ✅ 已部署）。
+> **版本**: 2.94.36
+> **最后更新**: 2026-10-11 — **裸名权限规则：把「静默空防护」挡在写入侧**。根因是**一条大小写敏感的匹配规则，配了一条不查存在性的校验**：`allow "bash"` / `"bahs"` 在 `validateRulePattern` 的裸名分支里只过 `^\w+$`（父括号分支**早就**查了工具名），于是结构合法、能落盘、能加载，却**永远匹配不到任何工具**（匹配按 `pattern === tool.name`、大小写敏感）—— 不报错、不生效，正是既有警告通道专治的「静默死规则」，而它恰好从那条通道旁边绕了过去。修法：`validateRulePattern(pattern, knownTools?)` 第二参非空时对裸名查存在性（`mcp__` 前缀**豁免** —— MCP 工具**动态注册**，静态全集必然漏）；大小写错时**只在 `toLowerCase()` 相等**时给出唯一正确写法（`bash` → `Bash` —— 恒等改写，不可能指错工具），更远的（`bahs`）不猜。`PermissionSystem.setKnownTools/getKnownTools` 持有这一集合，在**四处**接线 —— `index.tsx`（工具注册后、规则加载前）、`/permissions` 命令、`createSubAgentPermission`、`buildDaemonPermission`（只接写入侧会留下「读得进、拦不住」）。新增 16 条测试（5 + 6 + 5）。测试 **4,231 → 4,247**（**323 文件**；本机 4,245 passed + 2 skipped，0 失败）；typecheck / eslint / prettier 全绿。本机 `~/.mipham/settings.json` 的两条死规则（`bash` / `bahs`）已清除，并把 `Bash` 加回 `allow`（备份在 `settings.json.bak-*`）。
+> **前一条（2.94.35）**: 2026-10-11 — **0.85.21 发布：把 focus 折叠摘要行的加固送出去（本批唯一实质提交）**。发版前先过判据「这批里有没有一项**用户**拿得到」—— 逐条走下来，**答案是「没有」**：本批 4 笔里 3 笔是上一版 0.85.20 的回填 / 清理笔（`ab1f83f7` / `e5ea425e` / `ab96d2aa`），唯一的运行期改动 `6643f529` 自己已经证明「合成的 `↳ name` 行今天的渲染路径读不到」（`MessageRow` 走 `toolMeta` 支、`collapsed: true` 挡住 `content` 兜底，三组帧级探针里 `↳` 出现 0 次）⇒ 它是**加固不是修复**。**发布是用户直令**（原话点名 bump / tag / npm publish / GitHub Release / 两站部署），故照发；而判据的不满足如实写进 CHANGELOG 三份与提交信息，不冒领一个从没存在过的修复。**发布读数**（全取外部探针）：tag `v0.85.21` → `945a3339`（tag 对象 `9fda9333…`，`git tag -v` = 完好的签名，RSA `62F77FC4…` / Guohua Zhang）；主干 ci.yml `38125693212` **9/9** @ `945a3339`；`release.yml` `38125877783` **9/9**（Test / 4 平台 Build / npm Publish / macOS DMG / JetBrains / GitHub Release）；npm 真输出行 `+ @miphamai/cli@0.85.21`（发布行 `08:46:40Z`，registry `time[0.85.21] = 08:48:47Z`、`time.modified = 08:48:48Z`、`latest` = **0.85.21**；直连 + cache-bust 读 ⇒ 不是读缓存）；GitHub Release **6 资产**、非 draft 非 prerelease；JetBrains 真输出行 `JetBrains plugin published.`；macOS DMG 2.2 MB ⚠️ **未签名**（CI 无 `APPLE_SIGNING_IDENTITY`，与历次同）。`.vsix` 本机 **70,406 B** / sha256 `89d5dff7…` / **包内** `version` = 0.85.21（核包内那份，不只看文件名）⇒ ✅ **已人工上传 Marketplace 并经双探针复核**（该步只能人工做、`release.yml` 不产出它）：页内同源 `extensionquery` API 与公开页 `More Info` **同读 0.85.21** —— `versions[0].version` = **0.85.21**、`versions[0].lastUpdated` = `2026-10-11T08:49:29.82Z`、`versions[0].flags` = **`validated`**、`publisher.publisherName` = **`miphamai`**（`displayName` = `One Mipham Corporation`）；页面 `Version 0.85.21` / `Last updated 2026/10/11 16:49:29`（UTC+8，与 API 同刻）。⚠️ 页面走 CDN ⇒ 须 cache-bust 重载；本机 `curl` 直连该 API 被墙 ⇒ 走 CDP 页内同源 `fetch`。✅ **两站已部署**（部署是独立授权，经用户点名校准后才执行）：国内站 `deploy-cn.sh` → 腾讯云（PM2 `onemipham` online、端口 3007 监听、omGPT API 与站点健康检查均 HTTP 200；`onemipham.com/mipham-code` cache-bust 读 **3×0.85.21 / 0×0.85.20**、`4231`×2）、国际站 `deploy.sh` → `vercel --prod`（`dpl_ES6dp3dFtDyaknYxVSFxG4i7q4Bb`、`target: production`、`READY`；`mipham.ai/mipham-code` 同读 **3×0.85.21 / 0×0.85.20**、`4231`×2）；`websites` 同笔 `fc2a237` → **`6894e28`**（`chore(sync): package-info 同步到 0.85.21（两站）`），两份 `src/config/package-info.json` 与真源 sha256 逐字相符（`614abd9f…`）。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -62,7 +62,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：4,231 测试（本机 4,229 passed + 2 skipped，323 文件，0 失败）
+测试：4,247 测试（本机 4,245 passed + 2 skipped，323 文件，0 失败）
 
 ---
 
@@ -99,7 +99,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 323 个测试文件，4231 个测试
+│   │   ├── test/               # 323 个测试文件，4247 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -125,7 +125,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（4231 个测试）
+pnpm test         # vitest run（4247 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -315,7 +315,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 90      | 1602     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
+| core            | 90      | 1613     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
 | tools           | 27      | 520      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 37      | 255      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
 | ui              | 34      | 369      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
@@ -326,7 +326,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | workflow        | 8       | 64       | runtime / loop / parallel / sandbox / journal / verify                                                                                                                      |
 | vajra           | 6       | 53       | context / events / service / compose / leaf（自建内核）                                                                                                                     |
 | shared          | 11      | 139      | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                              |
-| commands        | 9       | 95       | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers / provider-model-flags                                                                  |
+| commands        | 9       | 100      | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers / provider-model-flags                                                                  |
 | skills          | 5       | 47       | sanitizer / marketplace / fork-executor / skill-assets                                                                                                                      |
 | config          | 10      | 125      | credential-crypto / loader-encryption / defaults / settings-json / preferences                                                                                              |
 | plugin          | 4       | 62       | claude-plugin / plugin-manager                                                                                                                                              |
@@ -335,7 +335,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integrity       | 19      | 132      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **323** | **4231** | **0 失败** ✅（本机 4,229 + 2 skipped，323 文件；CI 待本批推送后回填）                                                                                                      |
+| **合计**        | **323** | **4247** | **0 失败** ✅（本机 4,245 + 2 skipped，323 文件；CI 待本批推送后回填）                                                                                                      |
 
 ### 测试注意事项
 

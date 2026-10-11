@@ -662,6 +662,72 @@ describe('PermissionSystem', () => {
       expect(joined).toContain('"Read(foo"')
       expect(joined).toContain('"Bash()"')
     })
+
+    // A plain name is matched by `pattern === tool.name` — case-sensitive. So a
+    // mis-cased or typo'd name is structurally fine, loads fine, and matches
+    // nothing: the same silent-dead-rule class as `Bash(ls) x`, and the one that
+    // actually reached a user's settings.json (`allow: ["bash", "bahs"]`).
+    it('reports a plain name that is not a real tool, once the tool set is known', () => {
+      const ps = new PermissionSystem()
+      ps.setKnownTools(['Bash', 'Read', 'Write', 'Edit', 'Grep', 'Glob', 'Git'])
+      ps.allow('bash')
+      ps.deny('bahs')
+      const joined = ps.getInvalidRules().join('\n')
+      expect(joined).toContain('"bash"')
+      expect(joined).toContain('"bahs"')
+      // The case fix is the whole remedy, so it has to be in the message.
+      expect(joined).toContain('Bash')
+    })
+
+    it('says nothing about a plain name when no tool set was handed in', () => {
+      // Backward-compatible: a PermissionSystem nobody told about the registry keeps
+      // the old structural-only ruling rather than inventing a verdict.
+      const ps = new PermissionSystem()
+      ps.allow('bash')
+      expect(ps.getInvalidRules()).toEqual([])
+    })
+
+    it('mcp__ names are exempt — they register after the rules are read', () => {
+      const ps = new PermissionSystem()
+      ps.setKnownTools(['Bash', 'Read'])
+      ps.allow('mcp__obsidian__create_note')
+      expect(ps.getInvalidRules()).toEqual([])
+    })
+
+    // The reported failure was not just a missing warning: the rule was live in
+    // the eyes of the writer and absent in the eyes of the matcher. Pin both halves
+    // so a fix that only warns (and leaves the write) cannot pass.
+    it('a mis-cased allow rule still refuses the call it was meant to permit', () => {
+      const ps = new PermissionSystem('plan')
+      const bash = makeTool('Bash', 'self', 'exec')
+      expect(ps.check(bash, {})).toBe('ask')
+      ps.setKnownTools(['Bash', 'Read', 'Write'])
+      ps.allow('bash')
+      expect(ps.getInvalidRules()).toHaveLength(1)
+      expect(ps.check(bash, {})).toBe('ask')
+    })
+
+    it('the correctly-cased name still lifts the gate', () => {
+      const ps = new PermissionSystem('plan')
+      const bash = makeTool('Bash', 'self', 'exec')
+      ps.setKnownTools(['Bash', 'Read', 'Write'])
+      ps.allow('Bash')
+      expect(ps.getInvalidRules()).toEqual([])
+      expect(ps.check(bash, {})).toBe('bypass')
+    })
+
+    it('a sub-agent inherits the tool set, so its inherited deny rules are judged too', () => {
+      // `createSubAgentPermission` re-adds the parent's deny rules through the same
+      // compile path. Without the set it would re-derive them as structurally valid
+      // and drop the warning the parent had raised — a rule silently degrading by
+      // travelling.
+      const ps = new PermissionSystem('default')
+      ps.setKnownTools(['Bash', 'Read'])
+      ps.deny('bahs')
+
+      const sub = ps.createSubAgentPermission('default')
+      expect(sub.getInvalidRules().join('\n')).toContain('"bahs"')
+    })
   })
 
   // A rule added mid-session must take effect for a tool+input pair that was

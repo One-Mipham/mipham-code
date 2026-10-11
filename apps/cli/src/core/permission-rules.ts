@@ -786,9 +786,21 @@ export function wildcardMatch(pattern: string, input: string): boolean {
  * 能否匹配任何东西 —— `Bash(zzz *)` 合法、装得上、只是不会命中，那是用户自己的
  * 选择，不是配置错误。
  *
+ * `knownTools` —— 注册表里实际存在的工具名集合（可选）。给了它，裸名分支才会判
+ * **存在性**：裸名的匹配是大小写敏感的 `pattern === tool.name`，所以 `bash` / `bahs`
+ * 与 `Bash(ls) x` 是同一类**静默空防护**（语法合法、装得上、永远不命中，而用户以为
+ * 配了保护）。不给它则只判结构（拿不到注册表的调用点不凭空给存在性判决）。
+ *
+ * **`mcp__` 前缀一律放行**：MCP 服务器是后台异步连接的（`connectMcpServers`），
+ * 规则加载那一刻它们的工具还没进注册表 —— 按当时的注册表判，会把每条 mcp 规则
+ * 都误报成「未知工具」。
+ *
  * Returns null when the pattern is valid, or a reason string when malformed.
  */
-export function validateRulePattern(pattern: string): string | null {
+export function validateRulePattern(
+  pattern: string,
+  knownTools?: ReadonlySet<string>,
+): string | null {
   if (!pattern.trim()) return 'rule pattern is empty'
 
   if (pattern.includes('(')) {
@@ -811,12 +823,26 @@ export function validateRulePattern(pattern: string): string | null {
 
   // No parenthesis → must be a plain tool name (matched via `pattern === tool.name`).
   if (!/^\w+$/.test(pattern)) return 'not a single tool name'
+  if (knownTools && !pattern.startsWith('mcp__')) {
+    if (knownTools.has(pattern)) return null
+    // 大小写错的名字有唯一的正确写法，把它带出来 —— 拒绝消息的价值就在于照抄能用。
+    // 只在**全名大小写相等**时给建议：那是个恒等改写，不可能指错工具。更远的东西
+    // （`bahs` → `Bash`）不猜，猜错会把用户引到另一个工具上。
+    const exact = [...knownTools].find((t) => t.toLowerCase() === pattern.toLowerCase())
+    return exact
+      ? `unknown tool "${pattern}" — tool names are case-sensitive; did you mean "${exact}"?`
+      : `unknown tool "${pattern}"`
+  }
   return null
 }
 
 /** Compile a rule pattern string into a PermissionRuleEntry. */
-export function compileRule(pattern: string, level: 'allow' | 'deny' | 'ask'): PermissionRuleEntry {
-  const invalid = validateRulePattern(pattern)
+export function compileRule(
+  pattern: string,
+  level: 'allow' | 'deny' | 'ask',
+  knownTools?: ReadonlySet<string>,
+): PermissionRuleEntry {
+  const invalid = validateRulePattern(pattern, knownTools)
   const regexStr =
     '^' +
     pattern

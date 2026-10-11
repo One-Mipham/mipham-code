@@ -248,16 +248,22 @@ const permissionsCmd: CommandHandler = async (ctx, args) => {
     }
     // A rule that can't match is worse than no rule: it reads as protection
     // that isn't there. Validate every rule before writing any of them.
+    //
+    // Judged against the permission system's own tool set (`getKnownTools`), not a
+    // second copy — that set is what plain-name rules are matched against, so the
+    // verdict here and the matching there cannot drift. It is `undefined` in a
+    // context nobody told about the registry, in which case the check is structural
+    // only, exactly as before.
+    const perm = ctx.engine.getPermission()
     if (verb !== 'remove') {
+      const knownTools = perm.getKnownTools()
       for (const rule of rules) {
-        const invalid = validateRulePattern(rule)
+        const invalid = validateRulePattern(rule, knownTools)
         if (invalid) {
           return { content: `Invalid rule "${rule}": ${invalid}.\n\n${usage}` }
         }
       }
     }
-
-    const perm = ctx.engine.getPermission()
 
     if (verb === 'remove') {
       const parts: string[] = []

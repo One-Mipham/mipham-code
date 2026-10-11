@@ -580,6 +580,46 @@ describe('validateRulePattern', () => {
   it('flags a non-word plain name', () => {
     expect(validateRulePattern('Bash x')).not.toBeNull()
   })
+
+  // ── 裸名的**工具名存在性**：匹配走 `pattern === tool.name`，大小写敏感 ──
+  //
+  // 参数化分支早就查工具名（PARAMETERISED_TOOLS，注释也写着「校验的是结构 + 工具名」），
+  // 裸名分支却只查 `^\w+$` —— 于是 `bash`（小写）与 `bahs`（拼错）结构合法、装得上、
+  // 永远不命中，与「配了保护」在用户眼里同形。现场那两条正是这么躺在
+  // `~/.mipham/settings.json` 里的：写了 allow、一条都没生效、一条错都不报。
+  const KNOWN = new Set(['Bash', 'Read', 'Write', 'Edit', 'Grep', 'Glob', 'Git'])
+
+  it('flags a plain name that is the wrong case, and names the right one', () => {
+    // 大小写错的名字有唯一的正确写法，所以理由里必须带出来 —— 只说「未知工具」等于
+    // 让用户自己去猜大小写，而拒绝消息的价值就在于照抄能work。
+    expect(validateRulePattern('bash', KNOWN)).toContain('Bash')
+    expect(validateRulePattern('git', KNOWN)).toContain('Git')
+  })
+
+  it('flags a plain name that matches no tool at all', () => {
+    const reason = validateRulePattern('bahs', KNOWN)
+    expect(reason).not.toBeNull()
+    expect(reason).toContain('bahs')
+    // 没有候选可选时不编一个「did you mean」——`bahs` 与 `Bash` 的编辑距离是 2，
+    // 猜错会把用户引到另一个工具上，比不给建议坏。
+    expect(reason).not.toContain('Bash')
+  })
+
+  it('accepts a correctly-cased tool name when the tool set is known', () => {
+    expect(validateRulePattern('Bash', KNOWN)).toBeNull()
+    expect(validateRulePattern('Git', KNOWN)).toBeNull()
+  })
+
+  it('accepts an mcp__ name — those tools register after the rules are read', () => {
+    // MCP 服务器是后台异步连的（`connectMcpServers`），规则加载那一刻它们的工具还不在
+    // 注册表里。按当时的注册表判存在性，会把每一条 mcp 规则都误报成「未知工具」。
+    expect(validateRulePattern('mcp__obsidian__create_note', KNOWN)).toBeNull()
+  })
+
+  it('does not rule on existence when no tool set was handed in', () => {
+    // 没拿到注册表的调用点维持旧有的「只判结构」结论，而不是凭空给一个存在性判决。
+    expect(validateRulePattern('bash')).toBeNull()
+  })
 })
 
 describe('compileRule', () => {

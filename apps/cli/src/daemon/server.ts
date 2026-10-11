@@ -111,9 +111,14 @@ function resolveDaemonPermission(): PermissionMode {
 export function buildDaemonPermission(
   restrictions?: PermissionRestrictions,
   rules?: { allow?: string[]; deny?: string[] },
+  tools?: Iterable<string>,
 ): PermissionSystem {
   const permission = new PermissionSystem(resolveDaemonPermission())
   if (restrictions) permission.setRestrictions(restrictions)
+  // Before the rules, like the CLI entry: the verdict is stamped at compile time.
+  // Without it a `permissionRules` typo in `config.yml` stays a silent dead rule in
+  // the daemon — the same failure, one wiring site over.
+  if (tools) permission.setKnownTools(tools)
   if (rules) {
     for (const rule of rules.allow ?? []) permission.allow(rule)
     for (const rule of rules.deny ?? []) permission.deny(rule)
@@ -269,6 +274,7 @@ export function createServer(config: ServerConfig): Server<WsData> {
     const permission = buildDaemonPermission(
       daemonConfig.permissionRestrictions,
       daemonConfig.permissionRules,
+      sharedTools.keys(),
     )
     // After `setRestrictions` (inside the builder) so this goes through the same clamp the
     // first engine did — see `sessionModes`. Absent entry ⇒ env mode, unchanged.

@@ -319,3 +319,98 @@ describe('/permissions — the spelling the CLI advertises', () => {
     })
   })
 })
+
+/**
+ * `/permissions allow "bash"` used to be accepted, written to settings.json, and
+ * never match anything: plain names are matched by `pattern === tool.name`, which
+ * is case-sensitive, and the only check was `^\w+$`. The user's file held exactly
+ * `allow: ["bash", "bahs"]` — two rules that read as protection and were not, with
+ * nothing anywhere saying so.
+ *
+ * The command is the natural place to catch it: it already refuses a rule that can
+ * never match (`Bash(ls) x`), and it is where the user is looking. The set it judges
+ * against is the live permission system's own (`getKnownTools`), so the verdict and
+ * the matching cannot drift apart.
+ */
+describe('/permissions — 裸名的工具名存在性', () => {
+  let perm: PermissionSystem
+
+  function makeCtx() {
+    return {
+      engine: {
+        getPermission: () => perm,
+        getContext: () => ({ getMessages: () => [] }),
+        // Deliberately NOT the source of the tool list: the command must judge
+        // against the same set the permission system matches against.
+        getTools: () => new Map(),
+      },
+      config: { permission: 'default', providers: [] },
+      t: (k: string) => k,
+    } as unknown as Parameters<typeof permissionsCmd>[0]
+  }
+
+  beforeEach(() => {
+    rmSync(homedir(), { recursive: true, force: true })
+    mkdirSync(join(CWD, '.mipham'), { recursive: true })
+    vi.spyOn(process, 'cwd').mockReturnValue(CWD)
+    perm = new PermissionSystem('acceptEdits')
+    perm.setKnownTools(['Bash', 'Read', 'Write', 'Edit', 'Grep', 'Glob', 'Git'])
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    rmSync(homedir(), { recursive: true, force: true })
+  })
+
+  it('refuses the mis-cased name, names the right one, and writes nothing', async () => {
+    const { content } = await permissionsCmd(makeCtx(), ['allow', '"bash"'])
+    expect(content).toContain('Invalid rule')
+    // The remedy is a one-character fix, so the message has to carry it.
+    expect(content).toContain('Bash')
+    // Refusing without writing is the contract ("a rule that can't match is worse
+    // than no rule") — and a rule *recorded* but not live is the reported bug.
+    expect(existsSync(userSettingsPath)).toBe(false)
+  })
+
+  it('refuses a name that matches no tool at all', async () => {
+    const { content } = await permissionsCmd(makeCtx(), ['allow', '"bahs"'])
+    expect(content).toContain('Invalid rule')
+    expect(existsSync(userSettingsPath)).toBe(false)
+  })
+
+  it('refuses the mis-cased name on deny too, not just allow', async () => {
+    // A dead **deny** rule is the worse direction: it reads as a protection that
+    // isn't there. Same validation, both verbs.
+    const { content } = await permissionsCmd(makeCtx(), ['deny', '"bash"'])
+    expect(content).toContain('Invalid rule')
+    expect(existsSync(settingsPath)).toBe(false)
+  })
+
+  it('accepts the correctly-cased name and it takes effect', async () => {
+    // The real registry tool, so the name under test is the name that exists.
+    const { createToolRegistry } = await import('../../src/tools')
+    const bash = createToolRegistry().get('Bash')!
+    const call = { command: 'status --short' }
+
+    // Premise asserted first, so the test cannot pass vacuously: under acceptEdits
+    // the real Bash *is* gated — the state the dead `bash` rule left the user in.
+    expect(await perm.resolveApproval(bash, call)).toMatchObject({ level: 'ask' })
+
+    const { content } = await permissionsCmd(makeCtx(), ['allow', '"Bash"'])
+    expect(content).not.toContain('Invalid rule')
+    expect(JSON.parse(readFileSync(userSettingsPath, 'utf-8')).permissions.allow).toEqual(['Bash'])
+
+    expect(await perm.resolveApproval(bash, call)).toMatchObject({
+      level: 'bypass',
+      source: 'static',
+    })
+  })
+
+  it('still accepts a name the registry only knows dynamically', async () => {
+    // MCP servers connect after startup, so their tools are absent from the set at
+    // the moment a rule is written. Judging them by it would refuse a rule that is
+    // about to work.
+    const { content } = await permissionsCmd(makeCtx(), ['allow', '"mcp__obsidian__create_note"'])
+    expect(content).not.toContain('Invalid rule')
+  })
+})

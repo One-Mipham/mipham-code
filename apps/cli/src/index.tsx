@@ -791,6 +791,13 @@ export async function runApp(options: RunOptions): Promise<void> {
   // `config.permission` / `permissionRestrictions` are applied up top, on the instance
   // handed to `new QueryEngine(...)` — the same one whose mode the system prompt reads.
 
+  // Hand the registry's tool names to the permission system **before** any rule is
+  // loaded, so a plain-name rule is judged on existence and not only on structure
+  // (`bash` / `bahs` are structurally fine and match nothing — see `setKnownTools`).
+  // `mcp__` names are exempt inside `validateRulePattern`: those servers are still
+  // connecting in the background at this point.
+  engine.getPermission().setKnownTools(tools.keys())
+
   // Apply user-defined permission rules (allow/deny) — wire the rule system into runtime
   if (config.permissionRules) {
     for (const rule of config.permissionRules.allow ?? []) engine.getPermission().allow(rule)
