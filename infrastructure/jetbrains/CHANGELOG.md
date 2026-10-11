@@ -4,6 +4,19 @@
 > (tag dates) and use the same wording as the VS Code extension's changelog — the plugin is a
 > thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.20 (2026-10-11)
+
+- Version sync with Mipham Code CLI 0.85.20
+- Fixed: **a tool name can no longer inject control characters into the terminal.** The tool
+  line interpolated `msg.toolMeta.name` straight into the frame, and the name comes from the
+  model's `tool_use` (unknown tool names are passed through verbatim; names an MCP server
+  supplies likewise) — so an ESC (U+001B), BEL (U+0007) or C1 control (U+0080–U+009F) written
+  into it reached the terminal as an instruction rather than as text: `\x1b[2J` clears the
+  screen, `\r` overwrites the row. It now goes through `sanitizeInlineField` (the **single-
+  line** port), deliberately not the multi-line `display()` used elsewhere in the same file:
+  that one keeps `\n` for text that is legitimately multi-line, and a name occupies a row of
+  its own, where a kept `\n` forges a whole extra row.
+
 ## 0.85.19 (2026-10-08)
 
 - Version sync with Mipham Code CLI 0.85.19
