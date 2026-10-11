@@ -3,6 +3,21 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.22 — 2026-10-11
+
+- Version sync with Mipham Code CLI 0.85.22
+- Fixed: **bare-name permission rules now validate that the tool name exists.** `allow "bash"`
+  (the correct spelling is `Bash`) previously passed only `^\w+$` in `validateRulePattern`'s
+  bare-name branch — the parenthesised branch already checked tool names — so it was
+  structurally valid, landed on disk, loaded, and **matched nothing** (matching is
+  `pattern === tool.name`, case-sensitive): no error, no effect — exactly the "silent dead rule"
+  the existing warning channel exists to catch, which this path slipped past. It is now checked
+  at write time: a wrong-case name gets the one correct spelling when `toLowerCase()` matches
+  (`bash` → `Bash`); an unknown name is rejected; `mcp__` is exempt (MCP tools register
+  dynamically, so a static set is always incomplete). Wired at the four write-side points:
+  startup (after tool registration, before rules load), the `/permissions` command, sub-agents,
+  and the daemon.
+
 ## 0.85.21 — 2026-10-11
 
 - Version sync with Mipham Code CLI 0.85.21
