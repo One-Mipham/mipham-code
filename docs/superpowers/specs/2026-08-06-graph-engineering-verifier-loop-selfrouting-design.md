@@ -110,16 +110,16 @@ interface JudgeResult {
 
 ### 测试要点
 
-| 测试                                                         | 验证 |
-| ------------------------------------------------------------ | ---- |
-| adversarial: 3 skeptics, 2 real → survives=true, score=0.67  |
-| adversarial: 3 skeptics, 1 real → survives=false, score=0.33 |
-| adversarial: 1 agent 失败 → 其余 2 票正常统计                |
-| perspective: 4 lenses, 3 pass → survives=true                |
-| consensus: 5 voters, 5 real → survives=true, score=1.0       |
-| judge: 3 attempts × 3 judges → 9 个评分，winner 正确         |
-| judge: synthesize=false → synthesis 字段为 undefined         |
-| verify schema 校验失败 → agent 自动重试（复用现有机制）      |
+| 测试                            | 验证                           |
+| ------------------------------- | ------------------------------ |
+| adversarial: 3 skeptics, 2 real | survives=true, score=0.67      |
+| adversarial: 3 skeptics, 1 real | survives=false, score=0.33     |
+| adversarial: 1 agent 失败       | 其余 2 票正常统计              |
+| perspective: 4 lenses, 3 pass   | survives=true                  |
+| consensus: 5 voters, 5 real     | survives=true, score=1.0       |
+| judge: 3 attempts × 3 judges    | 9 个评分，winner 正确          |
+| judge: synthesize=false         | synthesis 字段为 undefined     |
+| verify schema 校验失败          | agent 自动重试（复用现有机制） |
 
 ---
 
