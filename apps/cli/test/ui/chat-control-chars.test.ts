@@ -1,15 +1,20 @@
 /**
- * `chat.tsx` 的 `display()` —— 不受信文本变成终端输出的**唯一**一道口。
+ * `chat.tsx` 通往终端的两道口 —— 多行的 `display()` 与单行的 `sanitizeInlineField`。
  *
  * 为什么必须在这一层钉：`stripControlCharsForDisplay` 是纯函数，
  * `test/shared/sanitize.test.ts` 已经把它逐条钉住 —— 但「净化器是对的」推不出
- * 「净化器在渲染路径上」。`chat.tsx` 里 `display(...)` 只要绕过一个字段，那个字段的
- * 控制字符就直达终端，而纯函数测试**照样全绿**。这与 D7 记的形态同族：纯函数绿 /
- * 源码字符串绿，都不能推出功能可用。
+ * 「净化器在渲染路径上」。`chat.tsx` 里任何**绕过**净化器的字段，其控制字符都直达
+ * 终端，而纯函数测试**照样全绿**。这与 D7 记的形态同族：纯函数绿 / 源码字符串绿，
+ * 都不能推出功能可用。
+ *
+ * 「`display()` 是唯一一道口」曾写在本文件里，**是错的**：同一文件中工具**名**当初
+ * 就是裸内插的（名字来自模型的 `tool_use`，`app.tsx` 的 `toolDisplayName` 对未知工具
+ * 原样返回，MCP 服务端给的名字同理）。现已收口到**单行**口 `sanitizeInlineField` ——
+ * 不是 `display()`，因为后者为多行正文留着 `\n`，而名字独占一行，一个 `\n` 就伪造出新行。
  *
  * 判据取自 ink 自己。实测 ink 7.1.1：裸 CSI（`\x1b[2J`）它丢掉，但 CR / BS / BEL /
  * VT / FF / DEL / NUL 原样穿过，且它**解析** SGR —— `\x1b[8m`（隐藏）被改写成
- * `\x1b[28m` 照发。所以「Ink 会处理」不能替代这道口，下面第一条就是那个形状。
+ * `\x1b[28m` 照发。所以「Ink 会处理」不能替代这两道口，下面第一条就是那个形状。
  */
 
 import React from 'react'
@@ -61,6 +66,47 @@ describe('ChatPanel — 不受信文本不许把控制字符送进终端', () =>
     const frame = frameOf({ role: 'assistant', content: `done${cp(0x07)}${cp(0x7f)}` })
     expect(frame).not.toContain(cp(0x07))
     expect(frame).not.toContain(cp(0x7f))
+  })
+
+  // 工具**名**是同一文件里的第二道口，且名字同样来自模型写的字。
+  // 探针用 SGR 形状：裸 CSI 会被 Ink 丢掉、那种用例恒绿（见文件头）。
+  it('工具**名**里的 ESC / BEL / C1 不落进帧', () => {
+    const frame = frameOf({
+      role: 'system',
+      content: '',
+      toolMeta: {
+        name: `Bash${cp(0x1b)}[8m_x${cp(0x07)}${cp(0x9b)}`,
+        input: 'ls',
+        output: 'ok',
+        collapsed: true,
+      },
+    })
+    expect(frame).not.toContain(cp(0x1b))
+    expect(frame).not.toContain(cp(0x07))
+    expect(frame).not.toContain(cp(0x9b))
+    // 去掉的是控制符，不是内容。
+    expect(frame).toContain('Bash[8m_x')
+  })
+
+  // 名字走的是**单行**口而不是 `display()`。后者为多行正文留着 `\n`，而名字独占一行 ——
+  // 一个 `\n` 就伪造出终端里的一整行。这条同时钉住「选对了哪一个口」。
+  it('工具**名**里的换行不伪造出新的一行', () => {
+    const frame = frameOf({
+      role: 'system',
+      content: '',
+      toolMeta: { name: 'Bash\nInjected', input: 'ls', output: 'ok', collapsed: true },
+    })
+    expect(frame).toContain('BashInjected')
+    expect(frame.split('\n').map((l) => l.trim())).not.toContain('Injected')
+  })
+
+  it('正对照：正常的工具名照常显示', () => {
+    const frame = frameOf({
+      role: 'system',
+      content: '',
+      toolMeta: { name: 'Bash', input: 'ls', output: 'ok', collapsed: true },
+    })
+    expect(frame).toContain('Bash')
   })
 
   // 制表符与 CR/ESC 同族，但机制不同：Ink 不算它宽（`string-width` 记 0 列），却把它

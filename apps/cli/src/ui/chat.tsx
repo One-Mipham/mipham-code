@@ -2,7 +2,11 @@ import React, { useMemo } from 'react'
 import { Box, Text } from 'ink'
 import { useI18n } from '../i18n-context'
 import type { ChatMessage } from './app'
-import { decodeDisplayEntities, stripControlCharsForDisplay } from '../shared/sanitize'
+import {
+  decodeDisplayEntities,
+  sanitizeInlineField,
+  stripControlCharsForDisplay,
+} from '../shared/sanitize'
 import { homedir } from 'node:os'
 
 interface ChatPanelProps {
@@ -13,13 +17,19 @@ interface ChatPanelProps {
 }
 
 /**
- * The single point where untrusted text becomes terminal output.
+ * The port untrusted **multi-line** text takes to terminal output.
  *
- * Everything this component prints that did not come from a literal in the file —
- * tool arguments, tool output, model prose — passes through here. Control
- * characters in those strings are not visible content; they are terminal
- * instructions (CR overwrites the row, ESC starts a sequence), so they are removed
- * rather than shown. See `stripControlCharsForDisplay` for what is kept and why.
+ * Tool arguments, tool output and model prose pass through here; `\n` is kept
+ * because those are legitimately multi-line. Control characters in them are not
+ * visible content; they are terminal instructions (CR overwrites the row, ESC
+ * starts a sequence), so they are removed rather than shown. See
+ * `stripControlCharsForDisplay` for what is kept and why.
+ *
+ * **One-line fields do not come through here.** A tool *name* is rendered on a row
+ * of its own, where the `\n` this function keeps forges an extra row — so names go
+ * through `sanitizeInlineField` (the same recipe minus `\n`), the way
+ * `agent-footer.tsx` and `input.tsx` already do. The name below used to be
+ * interpolated raw, on the theory that this function was the only way in; it is not.
  */
 function display(text: string): string {
   return stripControlCharsForDisplay(text)
@@ -106,7 +116,7 @@ const MessageRow = React.memo(
             {/* Tool call line: ⏺ ToolName(detail) — Claude Code parity */}
             {msg.toolMeta.name ? (
               <Text color={toolColor(msg.toolMeta.name)}>
-                {msg.toolMeta.collapsed ? '⏺' : '⏺ ▼'} {msg.toolMeta.name}
+                {msg.toolMeta.collapsed ? '⏺' : '⏺ ▼'} {sanitizeInlineField(msg.toolMeta.name)}
                 {msg.toolMeta.input ? ` (${display(msg.toolMeta.input).slice(0, 120)})` : ''}
               </Text>
             ) : null}

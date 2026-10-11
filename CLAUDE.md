@@ -21,9 +21,9 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.31
-> **最后更新**: 2026-10-11 — **净化口两处绕过收口（上一轮自查发现、记而未落的那两项）** —— 通往终端的净化口此前有**三处**，只有 `ui/chat.tsx` 的 `display()` 那道接了活；另两处**裸渲染**模型写的字：① `ui/agent-footer.tsx` 的工具活动行（名称与详情由 `ui/app.tsx` 的 `formatToolDetail` 产出，而它只把 Bash 那一支递给 `sanitizeForDisplay`，后者**不剥** ESC / BEL / C1）与 agent 状态行的名称/描述；② `ui/input.tsx` 的输入回显（`normalizeInput` 只折叠 `\r\n\t`，从历史或粘贴带进的 ESC 一路穿过）及其 command / mention / ghost 三处建议。修法一律 `sanitizeInlineField`（单行口，与多行的 `display()` 只差 `\n` 一个字）；**同笔补上该函数自己的缺口** —— 它的剥除集原为 `[\x00-\x1f\x7f]`、**漏了 C1（U+0080–U+009F）**，而 C1 的 8-bit CSI 与 ESC 同一个引导符、多行那道口早已剥它 ⇒ 两处补 `\x80-\x9f`。测试 **4,217 → 4,225**（**323 文件**；本机 4,223 passed + 2 skipped，0 失败）。判据钉在**帧**上（`test/ui/footer-input-control-chars.test.ts`，探针用 SGR 形状的 `\x1b[8m` —— 裸 CSI 会被 Ink 丢掉、那样的用例**恒绿**），四处落点逐条证伪（改源→见红→`cp` 还原→`shasum -a 256 -c` 逐字相符）。**本笔未 bump、未发布、未部署**。**另记一笔未落**：`ui/chat.tsx:109` 的 `{msg.toolMeta.name}` 仍是裸渲染（第三个文件、不在本轮点名的两处内），留作下轮。
-> **前一条（2.94.30）**: 2026-10-11 — **考古第 25 轮（CC v2.1.295/296）：3 条真缺口 + 13 条半·已处理，一次全落**（上游 222 条 = 143+79）。**真缺口三条**：① **权限档按键判据过宽** —— `ui/input.tsx` 的 `if (key.shift && key.tab)` 未排除 ctrl/meta/alt，而 Ink 把 `\x1b[1;5Z`（Ctrl+Shift+Tab）解成 `{shift,ctrl}`、`\x1b[1;3Z`（Alt+Shift+Tab）解成 `{shift,meta}` ⇒ **这两个组合也跟着切权限档**；「Tab 接受 ghost 建议」那半同样只查 `key.tab`（⇒ 两处补 `!key.ctrl && !key.meta && !key.alt`）。② **Edit 静默毁非 UTF-8 文件** —— 读入/写回都是 `'utf-8'`、全无编码探测 ⇒ 编辑 Windows-1252/Shift-JIS/GBK/Latin-1 文件时每个非法字节解码成 U+FFFD、写回后**原字节永久丢失且不报错**（⇒ `security/fd.ts` 新增 `isValidUtf8`，`edit.ts` 读到非法字节即拒、`write.ts` **同源**拒覆写既有非 UTF-8 文件）。③ **子代理压缩窗口死绑模型** —— `AgentFrontmatter` 无 `autoCompactWindow`；**更深一层**：`createAgentContext` 收着 `compactionThreshold: 0.85`，而 `sub-agent.ts` **从不调用 `context.compact()`** ⇒ **该阈值一直是惰性的**（⇒ 加字段并四层透传 `min(声明, 模型窗口)`，新增 `agent/auto-compact.ts` 每轮按窗口收缩、**永不缩 `messages[0]`**（那正是任务），`context.ts` 开 `estimateTokensForMessages`）。**半·已处理 13**：`/copy` 无参数给出**交互选择器**（新 `ui/copy-picker.tsx`，↑↓/Enter/Esc，键位与 `ModelPicker` 同源、判据读 `useKeyState().read()` 而非渲染闭包）；MCP **stdio 关停宽限**（先关 stdin、`MCP_SHUTDOWN_GRACE_MS=300` 内等自退、过点才杀，Windows 走 `taskkill /T`，POSIX 有意不 detached）；MCP **自动重连**（`setAutoReconnect`，入口开、`MIPHAM_MCP_AUTO_RECONNECT=0` 关，`closeAll` 置 `closing` 挡重连）；MCP 文本**三轴统一 4096**（`capMcpText`：instructions 2000→4096、up-front 描述无上限→4096、tool-search 120→4096）；**529 退避封顶** `MIPHAM_OVERLOADED_RETRY_MAX_DELAY_MS`；**Read `allow_large`**（`MAX_SCAN_BYTES_LARGE`）；**workflow agent 全局模型** `MIPHAM_WORKFLOW_AGENT_MODEL`；**插件/市场状态文件解析失败不再静默回落**（`loadWarning` / `readMarketplaces(readFile, warn?)` 三处调用点打 ⚠ —— 否则下一步 save 把空表写回去）；**`auto` 档被扣下的调用渲染成 dim 的「未运行」行**（`ToolResult.notRun`/`StreamChunk.notRun` 从 `engine.ts` 四个产出点透到 `chat.tsx`，并在 `compactToolGroups` 的合并里**跟着走**，漏掉它就停在没人渲染的那一份上；**这只是显示位**，`success:false`+`error` 一个没改）；正文**渲染行数上限 50**（`chat.tsx` `capRenderedLines`，尾部印「… N more lines」而非静默截断）；光标改**字素簇步进**（`Intl.Segmenter`，此前是 UTF-16 码元索引、碰 NFD 重音文本会停进字素内部）；`/loop` 取消提示**报出真条数**（两侧钉住：排过 ⇒ 1、没排过 ⇒ 0）。**16 项逐条附测试并证伪**（改源→见红→`cp` 还原→`shasum -a 256 -c` 逐字相符）。测试 **4,141 → 4,217**（**322 文件**；本机 4,215 passed + 2 skipped，0 失败）。**本笔未 bump、未发布、未部署**（发布与部署是独立授权、一次只覆盖一次）。**另记一笔未落**：自查发现进终端的净化口**不止 `chat.tsx:25` 一处** —— `ui/agent-footer.tsx` 的工具活动行与 `ui/input.tsx` 的回显都**裸渲染**、绕过 `stripControlCharsForDisplay`（前者的来源 `formatToolDetail` 只对 Bash 走 `sanitizeForDisplay`，而它**不剥 ESC/BEL/C1**；后者连这个都不做）⇒ 模型写的命令/URL 里的 ESC 序列可直达这两处；**不在 16 项内、本批未改**，留作下轮。
+> **版本**: 2.94.32
+> **最后更新**: 2026-10-11 — **第三处净化口绕过收口（`ui/chat.tsx` 工具名）** —— 上一轮点名的两处落掉后，同一批自查里「记而未落」的最后一项：`ui/chat.tsx` 的工具行把 `msg.toolMeta.name` **裸内插**进 `<Text>`，而名字来自模型的 `tool_use`（`ui/app.tsx` 的 `toolDisplayName` 对未知工具**原样返回**，MCP 服务端给的名字同理）⇒ 模型写进名字的 ESC / BEL / C1 直达终端。修法走**单行**口 `sanitizeInlineField`，**不是**同文件的 `display()`：后者为多行正文留着 `\n`，而名字独占一行，一个 `\n` 就伪造出终端里的一整行 —— 两条判据分别钉住「控制符不进帧」与「选对了哪一个口」。同笔订正两处**已变假**的散文：`display()` 的注释原写着「本函数是通往终端的**唯一**一道口」（第三处在同一文件里，已收口），`test/ui/chat-control-chars.test.ts` 文件头的同一句话也一并撤掉。测试 **4,225 → 4,228**（**323 文件**；本机 4,226 passed + 2 skipped，0 失败）。判据钉在**帧**上，探针用 SGR 形状的 `\x1b[8m`（裸 CSI 会被 Ink 丢掉、那样的用例**恒绿**）；改源→见红（**2 red / 11 passed**，正好是那两条、正对照绿）→`cp` 还原→`shasum -a 256 -c` 逐字相符。**本笔未 bump、未发布、未部署**。**另记一笔未落**：`compactForFocus` 的 `summarizeToolGroup`（`chat.tsx`）把 `↳ ${n}` 拼进 `content`，focus 模式下经 `display()` 渲染 —— ESC 会被剥，但名字里的 `\n` 在那条路径上仍会分行，留作下轮。
+> **前一条（2.94.31）**: 2026-10-11 — **净化口两处绕过收口（上一轮自查发现、记而未落的那两项）** —— 通往终端的净化口此前有**三处**，只有 `ui/chat.tsx` 的 `display()` 那道接了活；另两处**裸渲染**模型写的字：① `ui/agent-footer.tsx` 的工具活动行（名称与详情由 `ui/app.tsx` 的 `formatToolDetail` 产出，而它只把 Bash 那一支递给 `sanitizeForDisplay`，后者**不剥** ESC / BEL / C1）与 agent 状态行的名称/描述；② `ui/input.tsx` 的输入回显（`normalizeInput` 只折叠 `\r\n\t`，从历史或粘贴带进的 ESC 一路穿过）及其 command / mention / ghost 三处建议。修法一律 `sanitizeInlineField`（单行口，与多行的 `display()` 只差 `\n` 一个字）；**同笔补上该函数自己的缺口** —— 它的剥除集原为 `[\x00-\x1f\x7f]`、**漏了 C1（U+0080–U+009F）**，而 C1 的 8-bit CSI 与 ESC 同一个引导符、多行那道口早已剥它 ⇒ 两处补 `\x80-\x9f`。测试 **4,217 → 4,225**（**323 文件**；本机 4,223 passed + 2 skipped，0 失败）。判据钉在**帧**上（`test/ui/footer-input-control-chars.test.ts`，探针用 SGR 形状的 `\x1b[8m` —— 裸 CSI 会被 Ink 丢掉、那样的用例**恒绿**），四处落点逐条证伪（改源→见红→`cp` 还原→`shasum -a 256 -c` 逐字相符）。**本笔未 bump、未发布、未部署**。**另记一笔未落**：`ui/chat.tsx:109` 的 `{msg.toolMeta.name}` 仍是裸渲染（第三个文件、不在本轮点名的两处内），留作下轮。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -62,7 +62,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：4,225 测试（本机 4,223 passed + 2 skipped，323 文件，0 失败）
+测试：4,228 测试（本机 4,226 passed + 2 skipped，323 文件，0 失败）
 
 ---
 
@@ -99,7 +99,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 323 个测试文件，4225 个测试
+│   │   ├── test/               # 323 个测试文件，4228 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -125,7 +125,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（4225 个测试）
+pnpm test         # vitest run（4228 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -318,7 +318,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | core            | 90      | 1602     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
 | tools           | 27      | 520      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 37      | 255      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
-| ui              | 34      | 363      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
+| ui              | 34      | 366      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
 | agent           | 15      | 149      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
 | security        | 12      | 122      | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
 | providers       | 9       | 165      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
@@ -335,7 +335,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integrity       | 19      | 132      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **323** | **4225** | **0 失败** ✅（本机 4,223 + 2 skipped，323 文件；CI 待本批推送后回填）                                                                                                      |
+| **合计**        | **323** | **4228** | **0 失败** ✅（本机 4,226 + 2 skipped，323 文件；CI 待本批推送后回填）                                                                                                      |
 
 ### 测试注意事项
 
