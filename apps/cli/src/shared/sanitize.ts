@@ -239,11 +239,15 @@ export function decodeDisplayEntities(input: string): string {
  *
  * Newlines are stripped as well, unlike `stripControlCharsForCheck` (which keeps
  * `\n` for multi-line shell commands): these values sit on one output line, so an
- * embedded newline forges an extra row in the listing.
+ * embedded newline forges an extra row in the listing. C1 (U+0080–U+009F) goes with
+ * them — its 8-bit CSI is the same introducer as ESC's, in a different encoding (see
+ * `stripControlCharsForDisplay`, which drops the same family); leaving it out here
+ * would mean the one-line port and the multi-line one disagree about it, and a
+ * one-line field is exactly where a `\u009b…` payload is cheapest to hide.
  */
 export function sanitizeInlineField(input: string): string {
   if (!input) return input
-  return stripDangerousUnicode(input).replace(/[\x00-\x1f\x7f]/g, '')
+  return stripDangerousUnicode(input).replace(/[\x00-\x1f\x7f\x80-\x9f]/g, '')
 }
 
 /**

@@ -1,6 +1,18 @@
 import React from 'react'
 import { Box, Text } from 'ink'
 import { useI18n } from '../i18n-context'
+import { sanitizeInlineField } from '../shared/sanitize'
+
+/**
+ * 页脚也是本文件通往终端的一道口 —— 且它内插的字全是**模型写出来的**：
+ * `activeTool` 的名称与详情来自工具调用参数（`ui/app.tsx` 的 `formatToolDetail`
+ * 只把 Bash 那支递给 `sanitizeForDisplay`，而那个函数**不剥** ESC / BEL / C1），
+ * agent 的名称与描述来自子代理定义。原样内插的话，模型在命令里写一个 `\x1b[2J`
+ * 就会被终端当清屏序列执行，而不是当文字显示。
+ *
+ * 三处内插一律过 `sanitizeInlineField`（单行口）。姊妹件是 `ui/chat.tsx` 的
+ * `display()` —— 那是**多行**口（工具输出要保换行），两者只差 `\n` 一个字。
+ */
 
 export interface AgentEntry {
   id: string
@@ -118,7 +130,8 @@ export function AgentFooter({ agents, tick, activeTool, agentProgress }: AgentFo
       {hasTool && (
         <Box>
           <Text color={toolIndicatorColor(activeTool!.name)}>
-            {'  '}[{activeTool!.name} {activeTool!.detail.slice(0, 60)}
+            {'  '}[{sanitizeInlineField(activeTool!.name)}{' '}
+            {sanitizeInlineField(activeTool!.detail).slice(0, 60)}
             {animatedDots(tick)}]
           </Text>
           <Box flexGrow={1} />
@@ -165,9 +178,9 @@ export function AgentFooter({ agents, tick, activeTool, agentProgress }: AgentFo
               {symbol}{' '}
             </Text>
             <Text bold color={isRunning ? 'cyan' : undefined} dimColor={!isRunning}>
-              {agent.name}
+              {sanitizeInlineField(agent.name)}
             </Text>
-            <Text dimColor> {desc}</Text>
+            <Text dimColor> {sanitizeInlineField(desc)}</Text>
             {/* Spacer pushes elapsed + tokens to the right edge */}
             <Box flexGrow={1} />
             <Text dimColor>

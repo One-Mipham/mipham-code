@@ -216,6 +216,17 @@ describe('sanitizeInlineField', () => {
     expect(sanitizeInlineField(`a${cp(0x00)}b`)).toBe('ab')
   })
 
+  // C1 与 C0 是同一族：U+009B 就是 8-bit 编码下的 CSI 引导符，与 ESC 的 `\x1b[` 等价。
+  // 单行口与多行口（`stripControlCharsForDisplay`）此前**只在这里不一致** —— 那正是
+  // 「两条渲染路径各写各的」的形状，故补齐并在此钉住，免得下次又漂回去。
+  it('剥掉 C1（U+0080–U+009F）—— 8-bit CSI 与 ESC 同族', () => {
+    expect(sanitizeInlineField(`a${cp(0x9b)}31mb`)).toBe('a31mb')
+    expect(sanitizeInlineField(`a${cp(0x80)}b`)).toBe('ab')
+    expect(sanitizeInlineField(`a${cp(0x9f)}b`)).toBe('ab')
+    // 边界：U+007F（DEL）与 U+00A0（NBSP）之间只有 C1 那一带要剥，A0 是正常字。
+    expect(sanitizeInlineField(`a${cp(0xa0)}b`)).toBe(`a${cp(0xa0)}b`)
+  })
+
   it('也走一遍不可见字符的净化（两层都要）', () => {
     expect(sanitizeInlineField(`srv${ZWSP}name`)).toBe('srvname')
     expect(sanitizeInlineField(`srv${cp(0x202e)}name`)).toBe('srvname')

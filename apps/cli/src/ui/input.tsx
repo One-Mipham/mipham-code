@@ -6,6 +6,7 @@ import { useI18n } from '../i18n-context'
 import { discoverSessions } from '../agent/cross-session/discovery'
 import { requestSuggestion, shouldAutocomplete, type RecentMessage } from '../core/autocomplete'
 import type { Llm } from '../providers/llm'
+import { sanitizeInlineField } from '../shared/sanitize'
 
 interface InputBarProps {
   onSubmit: (input: string) => void
@@ -359,13 +360,21 @@ function MiphamTextInput({
   // surrogate pair (emoji) or an NFD accent is half a character, and rendering a
   // lone surrogate puts a replacement glyph on screen.
   const atCursor = graphemeAt(value, cursor)
+  // 回显是通往终端的**一道口**（chat.tsx 的 `display()` 管的是转录，不是这里）：
+  // 从终端复制来的命令常带颜色转义（`\x1b[31m…`），而 value 除 `\r\n\t` 外不做净化
+  // （见 `normalizeInput`）—— 原样渲染时终端把它当控制序列执行，而不是当文字显示。
+  // 逐段过单行口，且**前缀与后缀分开净化**：方块的位置由净化后的前缀长度决定，
+  // 整串先净化再按原 cursor 切会把方块挪到别的字上。
+  const before = sanitizeInlineField(value.slice(0, cursor))
+  const atChar = atCursor ? sanitizeInlineField(atCursor.segment) : ''
+  const after = atCursor ? sanitizeInlineField(value.slice(atCursor.end)) : ''
   return (
     <Text>
-      {value.slice(0, cursor)}
+      {before}
       <Text backgroundColor="white" color="black">
-        {atCursor ? atCursor.segment : ' '}
+        {atChar || ' '}
       </Text>
-      {atCursor ? value.slice(atCursor.end) : ''}
+      {after}
       {value.length === 0 && placeholder ? <Text dimColor>{placeholder}</Text> : null}
     </Text>
   )
@@ -700,7 +709,7 @@ export function InputBar({
             isLoading ? `${verb}...` : completionVerb ? completionVerb : t('ui.input.placeholder')
           }
         />
-        {suggestion && <Text dimColor>{suggestion}</Text>}
+        {suggestion && <Text dimColor>{sanitizeInlineField(suggestion)}</Text>}
       </Box>
       {/* Slash command hints — shown when typing / (only when picker is NOT active) */}
       {slashHints.length > 0 && !pickerActive && (
@@ -708,7 +717,7 @@ export function InputBar({
           <Text dimColor>{t('ui.slash_hints.label')} </Text>
           {slashHints.map((cmd, _i) => (
             <Text key={cmd.name} color="cyan">
-              {cmd.name}
+              {sanitizeInlineField(cmd.name)}
             </Text>
           ))}
           <Text dimColor>
@@ -729,7 +738,7 @@ export function InputBar({
           <Text dimColor>{t('ui.mention_hints.label')} </Text>
           {mentionHints.map((name) => (
             <Text key={name} color="green">
-              {name}
+              {sanitizeInlineField(name)}
             </Text>
           ))}
         </Box>
