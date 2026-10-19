@@ -149,6 +149,10 @@ export function loadPlugins(
                   // its command, its health would be tracked under the bare event
                   // name, and the cleanup below would have nothing to scope to.
                   source: plugin.name,
+                  // Same reason as `loadHookConfigs`: the engine's own failure
+                  // paths read the definition, and an opted-open guard must stay
+                  // open when its handler throws or it is auto-disabled.
+                  failureMode: hookCfg.failureMode,
                   handler: async (ctx) => executeHook(hookCfg, ctx, plugin.name),
                 })
               }

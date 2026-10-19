@@ -33,6 +33,17 @@ const COOLDOWN_MS = 5 * 60 * 1000
  * Merge two permission decisions, keeping the more restrictive one.
  * Priority: deny > defer > ask > allow
  */
+/**
+ * Does a failure to run this hook block the call?
+ *
+ * Same rule as `hookFailureBlocks` in `hooks-executor.ts`, kept local so the
+ * engine's own failure paths — a handler that throws, a hook auto-disabled after
+ * repeated failures — do not import the executor module to ask.
+ */
+function guardFailureBlocks(hook: HookDefinition): boolean {
+  return hook.event === 'PreToolUse' && hook.failureMode !== 'open'
+}
+
 export function mergePermissionDecision(
   current: HookResult['permissionDecision'],
   incoming: NonNullable<HookResult['permissionDecision']>,
@@ -355,6 +366,20 @@ export class HookEngine {
 
       // ── Resilience: skip disabled hooks ──
       if (this.shouldSkip(key)) {
+        // A disabled guard is still a guard. Auto-disable exists so a broken
+        // hook stops being retried, not so it quietly stops guarding: skipping
+        // it for `PreToolUse` would turn five failures into a permanent allow
+        // for the rest of the cooldown — the same fail-open hole, delayed.
+        if (guardFailureBlocks(hook)) {
+          return {
+            allowed: false,
+            reason:
+              `Hook "${key}" is temporarily disabled after repeated failures; ` +
+              `a PreToolUse guard that cannot run blocks the call. ` +
+              `Fix the hook, re-enable it with /hooks enable "${key}", or set ` +
+              `"failureMode": "open" to allow instead.`,
+          }
+        }
         result.additionalContext = result.additionalContext
           ? result.additionalContext +
             `\n[Hook "${key}" skipped — temporarily disabled after repeated failures]`
@@ -414,10 +439,21 @@ export class HookEngine {
         if (hookResult.updatedOutput) {
           result.updatedOutput = hookResult.updatedOutput
         }
-      } catch {
+      } catch (err) {
         // Record failure — may trigger auto-disable
         this.recordFailure(key)
-        // Hook failures do not block execution
+        // A handler that throws is a hook that could not answer. For a guard
+        // that is not "allow" — see `guardFailureBlocks`.
+        if (guardFailureBlocks(hook)) {
+          const message = (err as { message?: string }).message || String(err)
+          return {
+            allowed: false,
+            reason:
+              `Hook "${key}" failed and the PreToolUse guard is fail-closed: ${message} ` +
+              `(set "failureMode": "open" on this hook to allow instead).`,
+          }
+        }
+        // Other events observe what already happened; the failure stays diagnostic.
       }
     }
 

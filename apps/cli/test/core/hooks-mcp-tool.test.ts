@@ -27,8 +27,8 @@ function hook(
   return { type: 'mcp_tool', mcpServer: 'guard', mcpTool: 'check', ...overrides }
 }
 
-function ctx(): HookContext {
-  return { event: 'PreToolUse', toolName: 'Bash', sessionId: 's' }
+function ctx(event: HookContext['event'] = 'PreToolUse'): HookContext {
+  return { event, toolName: 'Bash', sessionId: 's' }
 }
 
 /** Spies on the singleton so the hook's two MCP calls are observable in order. */
@@ -68,11 +68,21 @@ describe('an mcp_tool hook calls the tool it names', () => {
   it('calls nothing when the hook names no server, or no tool', async () => {
     const { client } = spyClient(text('ok'))
 
-    const noServer = await executeHook(hook({ mcpServer: undefined }), ctx())
-    const noTool = await executeHook(hook({ mcpTool: undefined }), ctx())
+    const noServer = await executeHook(hook({ mcpServer: undefined }), ctx('PostToolUse'))
+    const noTool = await executeHook(hook({ mcpTool: undefined }), ctx('PostToolUse'))
 
     expect([noServer.allowed, noTool.allowed]).toEqual([true, true])
     expect(client.callTool).not.toHaveBeenCalled()
+  })
+
+  it('blocks a PreToolUse guard that names no server or no tool', async () => {
+    spyClient(text('ok'))
+
+    const noServer = await executeHook(hook({ mcpServer: undefined }), ctx())
+    const noTool = await executeHook(hook({ mcpTool: undefined }), ctx())
+
+    // A guard with no callable hook cannot decide, and "no answer" is not "allow".
+    expect([noServer.allowed, noTool.allowed]).toEqual([false, false])
   })
 })
 
@@ -99,13 +109,25 @@ describe('the tool’s answer is the hook’s answer', () => {
     // "the server refused" is a decision; "the call did not happen" is not. The
     // client reports the second as an isError result with a message, and a hook
     // that read that message as a verdict would turn every unreachable server
-    // into a deny.
+    // into a deny. A non-guard event has nothing left to refuse, so it stays context.
+    spyClient(text('boom', true))
+
+    const result = await executeHook(hook(), ctx('PostToolUse'))
+
+    expect(result.allowed).toBe(true)
+    expect(result.additionalContext).toContain('guard/check')
+    expect(result.additionalContext).toContain('boom')
+  })
+
+  it('blocks a PreToolUse guard whose MCP call returned an error', async () => {
+    // Same isError shape, different policy: before the tool runs, an answer that
+    // did not arrive is an answer that did not arrive.
     spyClient(text('boom', true))
 
     const result = await executeHook(hook(), ctx())
 
-    expect(result.allowed).toBe(true)
-    expect(result.additionalContext).toContain('guard/check')
+    expect(result.allowed).toBe(false)
+    expect(result.reason).toContain('guard/check')
     expect(result.additionalContext).toContain('boom')
   })
 })
@@ -116,11 +138,21 @@ describe('a server that is still connecting', () => {
     // moment, and the wrong thing to tell the operator, whose server is on its way.
     const { client } = spyClient(text('ok'), false)
 
-    const result = await executeHook(hook(), ctx())
+    const result = await executeHook(hook(), ctx('PostToolUse'))
 
     expect(result.allowed).toBe(true)
     expect(result.additionalContext).toContain('guard')
     expect(result.additionalContext).toContain('still connecting')
+    expect(client.callTool).not.toHaveBeenCalled()
+  })
+
+  it('blocks a PreToolUse guard while its server is still connecting', async () => {
+    const { client } = spyClient(text('ok'), false)
+
+    const result = await executeHook(hook(), ctx())
+
+    expect(result.allowed).toBe(false)
+    expect(result.reason).toContain('still connecting')
     expect(client.callTool).not.toHaveBeenCalled()
   })
 })

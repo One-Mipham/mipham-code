@@ -53,7 +53,10 @@ describe('a failing hook names the source that declared it', () => {
 describe('health is tracked per hook, not per event', () => {
   it('does not let one source’s failures disable another source’s hook', async () => {
     const engine = new HookEngine()
-    engine.register(failHook('broken-plugin'))
+    // Opted open so a disabled guard does not short-circuit the chain before the
+    // healthy hook runs: this test is about *which key* the counter belongs to,
+    // not about the fail-closed skip path (pinned in hooks-fail-closed.test.ts).
+    engine.register({ ...failHook('broken-plugin'), failureMode: 'open' })
 
     // Past MAX_CONSECUTIVE_FAILURES (5), so the broken hook is auto-disabled. The
     // key was the event alone, so what actually got disabled was the *event*.

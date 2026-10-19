@@ -60,6 +60,10 @@ export function loadHookConfigs(configs: SettingsHooks): HookDefinition[] {
         definitions.push({
           event: eventName as HookEvent,
           toolName: entry.matcher || undefined,
+          // The engine's own failure paths (a handler that throws, a hook
+          // auto-disabled for repeated failures) see the definition, not the
+          // config, and an opted-open guard must stay open there too.
+          failureMode: hookCfg.failureMode,
           handler: async (ctx: HookContext) => {
             // Check matcher if tool-specific
             if (matcherRegex && ctx.toolName && !matcherRegex.test(ctx.toolName)) {

@@ -1,7 +1,46 @@
 import { spawn } from 'node:child_process'
 import { McpClient } from '../mcp/client'
 import type { ToolCallResult } from '../mcp/types'
-import type { HookConfig, HookContext, HookResult } from '../shared/index.ts'
+import type { HookConfig, HookContext, HookEvent, HookResult } from '../shared/index.ts'
+
+/**
+ * Does a failure to *run* this hook block the call?
+ *
+ * A `PreToolUse` hook is a guard: it exists to decide before the tool runs. If
+ * it cannot start, times out, or cannot hand back an answer, there is no
+ * decision — and treating that as "allow" turns a broken guard into a silent
+ * bypass. Every other event observes something that already happened, so there
+ * is nothing left to refuse and their failures stay context.
+ *
+ * `failureMode: 'open'` opts one hook back into the old fail-open behaviour.
+ */
+export function hookFailureBlocks(
+  event: HookEvent,
+  failureMode: 'open' | 'closed' | undefined,
+): boolean {
+  return event === 'PreToolUse' && failureMode !== 'open'
+}
+
+/**
+ * The result for a hook that could not run.
+ *
+ * Blocking and non-blocking results carry the same message in `reason` /
+ * `additionalContext`: a guard's block is read by the model, and a non-guard's
+ * context is shown as a warning, so neither may lose the diagnosis.
+ */
+function failureResult(cfg: HookConfig, ctx: HookContext, text: string, error: string): HookResult {
+  if (hookFailureBlocks(ctx.event, cfg.failureMode)) {
+    return {
+      allowed: false,
+      reason:
+        `${text} — the ${ctx.event} hook could not run, so the call was blocked ` +
+        `(set "failureMode": "open" on this hook to allow instead).`,
+      additionalContext: text,
+      hookError: error,
+    }
+  }
+  return { allowed: true, hookError: error, additionalContext: text }
+}
 
 /**
  * Execute a hook based on its type, returning a HookResult.
@@ -331,7 +370,16 @@ async function executeCommand(
   ctx: HookContext,
   source?: string,
 ): Promise<HookResult> {
-  if (!cfg.command) return { allowed: true }
+  if (!cfg.command) {
+    // A guard with no command cannot decide. For other events this stays a
+    // silent allow, as it always was.
+    return failureResult(
+      cfg,
+      ctx,
+      'Hook error: no command configured for this hook',
+      'no command configured',
+    )
+  }
 
   try {
     const args = cfg.args ? cfg.args.map((a) => substituteVars(a, ctx)) : []
@@ -391,11 +439,12 @@ async function executeCommand(
 
     const failure = spawnFailureCause(result, cfg.timeout ?? 60)
     if (failure) {
-      return {
-        allowed: true,
-        hookError: failure,
-        additionalContext: `Hook error ${failingLabel(cfg.command, source)}: ${failure}`,
-      }
+      return failureResult(
+        cfg,
+        ctx,
+        `Hook error ${failingLabel(cfg.command, source)}: ${failure}`,
+        failure,
+      )
     }
 
     // Other non-zero exit: don't block, log the error as context
@@ -410,16 +459,24 @@ async function executeCommand(
     // `spawnFailureCause`), which is why this comment used to name them wrongly.
     const message = (err as { message?: string }).message || String(err)
 
-    return {
-      allowed: true,
-      hookError: message,
-      additionalContext: `Hook error ${failingLabel(cfg.command, source)}: ${message}`,
-    }
+    return failureResult(
+      cfg,
+      ctx,
+      `Hook error ${failingLabel(cfg.command, source)}: ${message}`,
+      message,
+    )
   }
 }
 
 async function executeHttp(cfg: HookConfig, ctx: HookContext): Promise<HookResult> {
-  if (!cfg.url) return { allowed: true }
+  if (!cfg.url) {
+    return failureResult(
+      cfg,
+      ctx,
+      'Hook error: no url configured for this HTTP hook',
+      'no url configured',
+    )
+  }
 
   try {
     const response = await fetch(cfg.url, {
@@ -450,11 +507,9 @@ async function executeHttp(cfg: HookConfig, ctx: HookContext): Promise<HookResul
       additionalContext: body.slice(0, 2000) || undefined,
     }
   } catch (err) {
-    // HTTP hook failures should not block
-    return {
-      allowed: true,
-      additionalContext: `HTTP hook error (${cfg.url}): ${String(err)}`,
-    }
+    // An unreachable guard cannot decide; other events keep reporting it as context.
+    const message = `HTTP hook error (${cfg.url}): ${String(err)}`
+    return failureResult(cfg, ctx, message, String(err))
   }
 }
 
@@ -466,19 +521,30 @@ async function executeHttp(cfg: HookConfig, ctx: HookContext): Promise<HookResul
  * structured decision decides, plain prose is context — so a tool that guards a
  * tool call can block it the way a script would. An `isError` result is *not* a
  * decision: it means the call did not speak, and an unreachable server reports
- * the same way, so its message is reported rather than read as a verdict.
+ * the same way, so its message is reported rather than read as a verdict. On a
+ * `PreToolUse` guard, "not a verdict" still means "no answer" — and no answer
+ * blocks (see `hookFailureBlocks`).
  */
 async function executeMcpTool(cfg: HookConfig, ctx: HookContext): Promise<HookResult> {
-  if (!cfg.mcpServer || !cfg.mcpTool) return { allowed: true }
+  if (!cfg.mcpServer || !cfg.mcpTool) {
+    return failureResult(
+      cfg,
+      ctx,
+      'Hook error: no mcpServer/mcpTool configured for this MCP hook',
+      'no mcpServer/mcpTool configured',
+    )
+  }
 
   const client = McpClient.getInstance()
 
   // Startup connects servers without blocking; this hook can arrive first.
   if (!(await client.waitUntilReady(cfg.mcpServer))) {
-    return {
-      allowed: true,
-      additionalContext: `MCP hook (${cfg.mcpServer}/${cfg.mcpTool}): server "${cfg.mcpServer}" was still connecting — the tool was not called.`,
-    }
+    return failureResult(
+      cfg,
+      ctx,
+      `MCP hook (${cfg.mcpServer}/${cfg.mcpTool}): server "${cfg.mcpServer}" was still connecting — the tool was not called.`,
+      'server still connecting',
+    )
   }
 
   const result = await client.callTool(cfg.mcpServer, cfg.mcpTool, {
@@ -490,10 +556,12 @@ async function executeMcpTool(cfg: HookConfig, ctx: HookContext): Promise<HookRe
   const body = mcpResultText(result)
 
   if (result.isError) {
-    return {
-      allowed: true,
-      additionalContext: `MCP hook error (${cfg.mcpServer}/${cfg.mcpTool}): ${body.slice(0, 2000)}`,
-    }
+    return failureResult(
+      cfg,
+      ctx,
+      `MCP hook error (${cfg.mcpServer}/${cfg.mcpTool}): ${body.slice(0, 2000)}`,
+      body.slice(0, 2000) || 'MCP tool returned an error',
+    )
   }
 
   const parsed = parseHookStdout(body, ctx)

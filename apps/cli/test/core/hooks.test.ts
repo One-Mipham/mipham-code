@@ -294,7 +294,7 @@ describe('HookEngine', () => {
   // Hook failure tolerance
   // ═══════════════════════════════════════════
 
-  it('should tolerate hook handler throwing and continue', async () => {
+  it('blocks the call when a PreToolUse guard throws (fail closed)', async () => {
     const engine = new HookEngine()
     const badHandler = vi.fn().mockRejectedValue(new Error('boom'))
     const goodHandler = makePassHandler({ modifiedInput: { ok: true } })
@@ -304,15 +304,47 @@ describe('HookEngine', () => {
 
     const result = await engine.executePreToolUse('read', {}, 's1')
 
+    // A guard that could not answer has not allowed anything.
+    expect(result.allowed).toBe(false)
+    expect(result.reason).toContain('fail-closed')
+    expect(result.reason).toContain('boom')
+    // Blocking stops the chain, like a deny does.
+    expect(goodHandler).not.toHaveBeenCalled()
+  })
+
+  it('lets a PreToolUse guard opt back into fail-open with failureMode', async () => {
+    const engine = new HookEngine()
+    const badHandler = vi.fn().mockRejectedValue(new Error('boom'))
+    const goodHandler = makePassHandler({ modifiedInput: { ok: true } })
+
+    engine.register({ ...makeHook('PreToolUse', badHandler), failureMode: 'open' })
+    engine.register(makeHook('PreToolUse', goodHandler))
+
+    const result = await engine.executePreToolUse('read', {}, 's1')
+
     expect(result.allowed).toBe(true)
     expect(result.modifiedInput).toEqual({ ok: true })
   })
 
-  it('should return allowed:true when all hooks throw', async () => {
+  it('keeps a throwing non-guard hook non-blocking', async () => {
     const engine = new HookEngine()
-    engine.register(makeHook('PreToolUse', vi.fn().mockRejectedValue(new Error('boom'))))
+    const badHandler = vi.fn().mockRejectedValue(new Error('boom'))
+    const goodHandler = makePassHandler({ modifiedInput: { ok: true } })
 
-    const result = await engine.executePreToolUse('read', {}, 's1')
+    engine.register(makeHook('PostToolUse', badHandler))
+    engine.register(makeHook('PostToolUse', goodHandler))
+
+    const result = await engine.executePostToolUse('read', {}, makeResult(), 's1')
+
+    expect(result.allowed).toBe(true)
+    expect(result.modifiedInput).toEqual({ ok: true })
+  })
+
+  it('should return allowed:true when all non-guard hooks throw', async () => {
+    const engine = new HookEngine()
+    engine.register(makeHook('PostToolUse', vi.fn().mockRejectedValue(new Error('boom'))))
+
+    const result = await engine.executePostToolUse('read', {}, makeResult(), 's1')
 
     expect(result.allowed).toBe(true)
   })

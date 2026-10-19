@@ -320,6 +320,18 @@ export interface HookConfig {
   /** Command timeout in seconds (Claude Code default is 60). */
   timeout?: number
   continueOnBlock?: boolean
+  /**
+   * What a failure to *run* this hook means.
+   *
+   * Defaults to `'closed'` for `PreToolUse` and `'open'` for every other event.
+   * A guard exists to decide before the tool runs; if it cannot start, time out,
+   * or hand back an answer, there is no decision, and allowing the call turns a
+   * broken guard into a silent bypass. Other events observe something that
+   * already happened — there is nothing left to refuse — so their failures stay
+   * context. Set `'open'` on a `PreToolUse` hook to opt it back into the old
+   * behaviour.
+   */
+  failureMode?: 'open' | 'closed'
 }
 
 export interface HookDefinition {
@@ -333,6 +345,12 @@ export interface HookDefinition {
    * health is tracked per key, and removal has nothing to scope to.
    */
   source?: string
+  /**
+   * Failure policy for this hook — see `HookConfig.failureMode`. Defaults to
+   * `'closed'` on `PreToolUse`, where a handler that throws is a guard that
+   * could not answer.
+   */
+  failureMode?: 'open' | 'closed'
   handler: (context: HookContext) => Promise<HookResult>
 }
 
