@@ -33,6 +33,7 @@ import {
   rotateLogIfLarge,
   selfArgvPrefix,
   startDetachedDaemon,
+  terminateDaemonProcess,
   userArgs,
   waitForDaemonExit,
 } from '../../src/daemon/launch'
@@ -474,6 +475,53 @@ describe('waitForDaemonExit —— restart 等老 daemon 真的退', () => {
     })
     expect(gone).toBe(true)
     expect(slept).toEqual([])
+  })
+})
+
+describe('terminateDaemonProcess —— 「发过信号」不等于「已经停了」', () => {
+  const deps = (exits: boolean[]) => {
+    const kills: string[] = []
+    let i = 0
+    return {
+      kills,
+      deps: {
+        kill: (_pid: number, signal: NodeJS.Signals) => void kills.push(signal),
+        waitForExit: async () => exits[Math.min(i++, exits.length - 1)]!,
+      },
+    }
+  }
+
+  it('SIGTERM 后确认消失 ⇒ 不升级到 SIGKILL', async () => {
+    const d = deps([true])
+    await expect(terminateDaemonProcess(123, { deps: d.deps })).resolves.toBe(true)
+    expect(d.kills).toEqual(['SIGTERM'])
+  })
+
+  it('SIGTERM 没停住 ⇒ SIGKILL，再等一次', async () => {
+    const d = deps([false, true])
+    await expect(terminateDaemonProcess(123, { deps: d.deps })).resolves.toBe(true)
+    expect(d.kills).toEqual(['SIGTERM', 'SIGKILL'])
+  })
+
+  it('SIGKILL 后仍在 ⇒ 返回 false（调用方据此 exit 1）', async () => {
+    const d = deps([false, false])
+    await expect(terminateDaemonProcess(123, { deps: d.deps })).resolves.toBe(false)
+    expect(d.kills).toEqual(['SIGTERM', 'SIGKILL'])
+  })
+
+  it('进程已经不在（kill 抛错）⇒ 仍以「确实消失」为准', async () => {
+    const kills: string[] = []
+    const gone = await terminateDaemonProcess(123, {
+      deps: {
+        kill: (_pid, signal) => {
+          kills.push(signal)
+          throw new Error('ESRCH')
+        },
+        waitForExit: async () => true,
+      },
+    })
+    expect(gone).toBe(true)
+    expect(kills).toEqual(['SIGTERM'])
   })
 })
 

@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, openSync, readSync, closeSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import type { Message, ToolUseContent, ToolResultContent, ToolResult } from '../shared/types'
@@ -150,6 +150,32 @@ function sleepSyncMs(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
 }
 
+/**
+ * Does the log end on a complete line (or not exist yet)?
+ *
+ * Uses stat + a one-byte read instead of `readFileSync`: the repair gate runs
+ * on every save, and a session log can be large. Non-regular paths answer
+ * `true` here — `appendRegularFileSync` is the gate that refuses those, and
+ * opening a FIFO for repair would block.
+ */
+function endsWithNewline(path: string): boolean {
+  try {
+    const st = statSync(path)
+    if (!st.isFile() || st.size === 0) return true
+    const fd = openSync(path, 'r')
+    try {
+      const last = Buffer.alloc(1)
+      return readSync(fd, last, 0, 1, st.size - 1) === 1 && last[0] === 0x0a
+    } finally {
+      closeSync(fd)
+    }
+  } catch {
+    // Missing (append creates it) or unreadable (append will refuse) — either
+    // way there is no partial line to close.
+    return true
+  }
+}
+
 /** 补上的那条结果的正文：说明事情本身，并给出下一步，而不是只报一个状态。 */
 function interruptedCallNotice(): string {
   return (
@@ -244,6 +270,15 @@ export class SessionLog {
     // restrict to owner-only (dir 0700, file 0600).
     mkdirSync(LOG_DIR, { recursive: true, mode: 0o700 })
     const path = join(LOG_DIR, `${sanitizeSessionName(this.name)}.jsonl`)
+
+    // A writer killed mid-append can leave a partial line with no trailing
+    // newline. `open()` skips that line, but the next append would glue the new
+    // event onto it — corrupting both, and losing the first event after resume.
+    // Close the partial line before appending (it stays a skippable bad line).
+    if (this.buf.length > this.flushed && !endsWithNewline(path)) {
+      appendRegularFileSync(path, '\n', { mode: 0o600 })
+    }
+
     let wrote = 0
     for (const e of this.buf.slice(this.flushed)) {
       // FIFO/socket 路径上「写不进去」而不是**干等**（`appendFileSync` 会打开目标写）。

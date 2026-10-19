@@ -375,18 +375,23 @@ async function runDaemonCLI(): Promise<boolean> {
 
   if (subcmd === 'stop') {
     const { getDaemonStatus } = await import('../src/daemon/index')
+    const { terminateDaemonProcess } = await import('../src/daemon/launch')
     const status = getDaemonStatus()
     if (!status) {
       console.log('Daemon is not running.')
       process.exit(0)
     }
-    try {
-      process.kill(status.pid, 'SIGTERM')
+    const started = Date.now()
+    // SIGTERM → wait → SIGKILL → wait. "Stopped" is printed only when the
+    // process is confirmed gone; the old code printed it right after send().
+    if (await terminateDaemonProcess(status.pid)) {
       console.log(`Daemon stopped (PID: ${status.pid})`)
-    } catch {
-      console.log('Daemon is not running.')
+      process.exit(0)
     }
-    process.exit(0)
+    console.error(
+      `Failed to stop daemon (PID: ${status.pid}) after ${Date.now() - started}ms — it is still running.`,
+    )
+    process.exit(1)
   }
 
   if (subcmd === 'status') {
@@ -1214,6 +1219,15 @@ async function main() {
   const { PACKAGE_NAME, PACKAGE_VERSION } = await import('../src/shared/package-info')
   const APP_VERSION = PACKAGE_VERSION
 
+  // ── Safe mode ─────────────────────────────────────────────────────────────
+  // Set the env var before subcommand dispatch: `daemon start` re-execs this
+  // binary with an inherited environment, so parsing the flag after
+  // `runDaemonCLI()` would leave the daemon running with every customization
+  // loaded while the foreground CLI believed it had skipped them.
+  if (process.argv.includes('--safe-mode')) {
+    process.env.MIPHAM_SAFE_MODE = '1'
+  }
+
   // ── Version flag ──────────────────────────────────────────────────────────
   if (
     process.argv.includes('--version') ||
@@ -1354,12 +1368,6 @@ npm:  https://www.npmjs.com/package/@miphamai/cli`)
     }
     console.error(`Run 'mipham --help' for usage.`)
     process.exit(1)
-  }
-
-  // Parse --safe-mode flag: skip custom agents, skills, hooks, plugins
-  const safeModeFlag = process.argv.includes('--safe-mode')
-  if (safeModeFlag) {
-    process.env.MIPHAM_SAFE_MODE = '1'
   }
 
   // Parse --resume <name>: open a saved session instead of starting a new one.

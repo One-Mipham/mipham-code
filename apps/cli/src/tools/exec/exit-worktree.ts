@@ -128,6 +128,42 @@ export const exitWorktreeTool: ToolDefinition = {
         // Branch detection is best-effort
       }
 
+      // Unmerged-commit guard. `status --porcelain` above only sees the working
+      // tree: a clean worktree whose branch holds commits that exist nowhere
+      // else passes it, and `git worktree remove` succeeds too — then the
+      // `git branch -D` below silently destroys those commits. Ask git what the
+      // branch has that HEAD and every remote do not.
+      let branchSafeToDelete = true
+      if (!discardChanges && branchName && branchName !== 'HEAD') {
+        try {
+          const countProc = Bun.spawn(
+            ['git', 'rev-list', '--count', branchName, '--not', 'HEAD', '--remotes'],
+            { cwd, stdout: 'pipe', stderr: 'pipe' },
+          )
+          const countText = (await new Response(countProc.stdout).text()).trim()
+          const countExit = await countProc.exited
+          if (countExit !== 0) {
+            // Can't prove it is safe ⇒ keep the branch (never delete blind).
+            branchSafeToDelete = false
+          } else {
+            const unmerged = Number.parseInt(countText, 10)
+            if (Number.isFinite(unmerged) && unmerged > 0) {
+              return {
+                success: false,
+                content: '',
+                error:
+                  `Branch "${branchName}" has ${unmerged} commit(s) not on HEAD or any remote:\n\n` +
+                  `Removing the worktree would delete them (git branch -D).\n\n` +
+                  `Set discard_changes: true to force removal and discard these commits.\n` +
+                  `Or merge/push the branch first, then retry.`,
+              }
+            }
+          }
+        } catch {
+          branchSafeToDelete = false
+        }
+      }
+
       // Remove the worktree
       const removeArgs = discardChanges
         ? ['git', 'worktree', 'remove', '--force', worktreePath]
@@ -149,27 +185,32 @@ export const exitWorktreeTool: ToolDefinition = {
         }
       }
 
-      // Clean up the branch if we have its name
-      if (branchName && branchName !== 'HEAD') {
+      // Clean up the branch if we have its name and proved it is safe to delete
+      let branchDeleted = false
+      if (branchSafeToDelete && branchName && branchName !== 'HEAD') {
         try {
           const branchProc = Bun.spawn(['git', 'branch', '-D', branchName], {
             cwd,
             stdout: 'pipe',
             stderr: 'pipe',
           })
-          await branchProc.exited
+          branchDeleted = (await branchProc.exited) === 0
           // Best-effort — branch cleanup failure is not fatal
         } catch {
           // Ignore branch cleanup failures
         }
       }
 
+      const branchLine = branchName
+        ? `Branch:  ${branchName} (${branchDeleted ? 'deleted' : 'kept — could not prove it is safe to delete'})\n`
+        : ''
+
       return {
         success: true,
         content:
           `── Worktree Removed ──\n\n` +
           `Path:    ${worktreePath}\n` +
-          (branchName ? `Branch:  ${branchName} (deleted)\n` : '') +
+          branchLine +
           `\nThe worktree has been removed.`,
       }
     } catch (err) {

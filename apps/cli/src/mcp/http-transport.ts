@@ -277,8 +277,15 @@ export class HttpTransport implements Transport {
       ...(params ? { params } : {}),
     }
 
-    // Fire-and-forget: do not await the response.
-    void this.fetchImpl(this.url, {
+    // Fire-and-forget: do not await the response — but bound it. Without a
+    // signal the request inherits the platform fetch timeout (none, in Node),
+    // so a server that never answers pins a socket for the life of the process.
+    const url = this.url
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs)
+    // A best-effort notification must not keep the process alive on exit.
+    timer.unref?.()
+    void this.fetchImpl(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -287,9 +294,17 @@ export class HttpTransport implements Transport {
       },
       body: JSON.stringify(notification),
       redirect: 'manual',
-    }).catch(() => {
-      /* notifications are best-effort */
+      signal: controller.signal,
     })
+      .then((res) => {
+        // Nobody reads this body; release it so an undrained keep-alive
+        // response cannot hold the socket open either.
+        void res.body?.cancel().catch(() => {})
+      })
+      .catch(() => {
+        /* notifications are best-effort */
+      })
+      .finally(() => clearTimeout(timer))
   }
 
   onNotification(handler: NotificationHandler): void {

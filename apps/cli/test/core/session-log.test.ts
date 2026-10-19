@@ -10,7 +10,7 @@ vi.mock('node:os', async (importOriginal) => {
   }
 })
 
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
@@ -127,6 +127,29 @@ describe('SessionLog append-only', () => {
   it('open on missing file returns empty log', () => {
     const log = SessionLog.open('test-log-nonexistent-xyz')
     expect(log.events()).toEqual([])
+  })
+
+  it('closes a partial tail before appending, so the first post-crash event survives', () => {
+    mkdirSync(LOG_DIR, { recursive: true })
+    const path = join(LOG_DIR, `${name}.jsonl`)
+    // A writer killed mid-append leaves a line with no trailing newline.
+    writeFileSync(path, '{"type":"user/message","at":1,"message":{"role":"user","content":"lost')
+
+    const log = new SessionLog(name)
+    const afterCrash = {
+      type: 'user/message',
+      at: 2,
+      message: { role: 'user', content: 'after crash' },
+    } as const
+    log.append(afterCrash)
+    log.save()
+
+    // The partial line stays isolated (still corrupt, still skipped)…
+    const lines = readFileSync(path, 'utf-8').split('\n').filter(Boolean)
+    expect(lines).toHaveLength(2)
+    expect(lines[0]).toContain('lost')
+    // …and the new event is parseable instead of being glued onto it.
+    expect(SessionLog.open(name).events()).toContainEqual(afterCrash)
   })
 })
 

@@ -2,6 +2,7 @@
 import { readdirSync, readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { ContextManager } from '../core/context'
+import { mcpServerPrefix } from '../core/permission-rules'
 import type { ToolDefinition } from '../shared/index.ts'
 import type { AgentDefinition } from './types'
 import type { CrsiConfig } from '../shared/index.ts'
@@ -133,13 +134,25 @@ export function createAgentContext(
   let allowedTools = Array.from(toolRegistry.values())
 
   if (agentDef.tools) {
-    const allowSet = new Set(
-      agentDef.tools
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean),
+    const allowRules = agentDef.tools
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    // `mcp__server` / `mcp__server__*` mean "every tool on that server".
+    // Without expansion these exact-match nothing, so an agent that asks for a
+    // whole server silently receives no tools at all.
+    const serverPrefixes = allowRules
+      .map((r) => mcpServerPrefix(r))
+      .filter((p): p is string => p !== null)
+    const allowSet = new Set(allowRules.filter((r) => mcpServerPrefix(r) === null))
+    allowedTools = allowedTools.filter(
+      (t) => allowSet.has(t.name) || serverPrefixes.some((p) => t.name.startsWith(p)),
     )
-    allowedTools = allowedTools.filter((t) => allowSet.has(t.name))
+    if (allowedTools.length === 0) {
+      process.stderr.write(
+        `⚠️  Agent "${agentDef.name}": tools list (${allowRules.join(', ')}) matched no registered tool — the agent will run without tools.\n`,
+      )
+    }
   }
 
   if (agentDef.disallowedTools) {

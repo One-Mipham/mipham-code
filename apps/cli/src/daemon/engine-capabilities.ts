@@ -30,6 +30,7 @@ import { SkillsLoader } from '../skills/loader'
 import { RulesLoader } from '../core/rules-loader'
 import { HookEngine } from '../core/hooks'
 import { loadHookConfigs } from '../core/hooks-config'
+import { isSafeMode } from '../core/safe-mode'
 import { loadSettingsJson } from '../config/loader'
 import { getWorkspaceTrust, warnProjectHooksSkipped } from '../core/workspace-trust'
 import { AgentRegistry } from '../agent/agent-registry'
@@ -68,8 +69,10 @@ function skillsFor(cwd: string, paths?: string[]): SkillsLoader {
   // 内置 skill 从包内解析（`import.meta.dirname`），与 cwd 无关；用户 skill 在
   // `~/.mipham/skills`。三者里只有外部路径随 cwd 变。
   loader.loadBuiltinFromPackage()
-  loader.loadUserSkills()
-  if (paths && paths.length > 0) loader.loadExternal(paths)
+  if (!isSafeMode()) {
+    loader.loadUserSkills()
+    if (paths && paths.length > 0) loader.loadExternal(paths)
+  }
   skillsCache.set(cwd, loader)
   return loader
 }
@@ -91,6 +94,10 @@ function hooksFor(cwd: string, skills: SkillsLoader): HookEngine {
   // 会话 cwd 必须显式传：daemon 一个进程服务多个会话，`process.cwd()` 是它自己被
   // 启动时所在的目录，不属于任何会话 —— hooks 会在那里跑，并且**被告知**它在那里。
   const engine = new HookEngine(cwd)
+  if (isSafeMode()) {
+    hookCache.set(cwd, engine)
+    return engine
+  }
   for (const skill of skills.list()) {
     for (const hook of skill.hooks ?? []) engine.register(hook)
   }
@@ -110,8 +117,10 @@ function agentsFor(cwd: string): AgentRegistry {
   const cached = agentCache.get(cwd)
   if (cached) return cached
   const registry = new AgentRegistry()
-  registry.loadUserAgents()
-  registry.loadProjectAgents(cwd)
+  if (!isSafeMode()) {
+    registry.loadUserAgents()
+    registry.loadProjectAgents(cwd)
+  }
   agentCache.set(cwd, registry)
   return registry
 }

@@ -157,9 +157,12 @@ export function createReadTool(credentialConfig?: CredentialMaskingConfig): Tool
 
       // O_NOFOLLOW: fail closed if the path was swapped to a symlink after
       // resolveSafe (TOCTOU) — never follow it to read outside the workspace.
+      // O_NONBLOCK: opening a FIFO blocks until a writer appears, and no timer
+      // or signal handler can run inside a synchronous open — without this a
+      // `read` of a socket/FIFO would hang the CLI forever.
       let fd: number
       try {
-        fd = openNoFollow(filePath, constants.O_RDONLY)
+        fd = openNoFollow(filePath, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0))
       } catch (err) {
         if (isSymlinkLoop(err)) {
           return { success: false, content: '', error: `Path is a symbolic link: ${filePath}` }
@@ -171,8 +174,19 @@ export function createReadTool(credentialConfig?: CredentialMaskingConfig): Tool
       }
 
       try {
-        if (fstatSync(fd).isDirectory()) {
+        const stat = fstatSync(fd)
+        if (stat.isDirectory()) {
           return { success: false, content: '', error: `Path is a directory: ${filePath}` }
+        }
+        // FIFOs, sockets and device nodes are not files this tool can read a
+        // window out of; O_NONBLOCK got us past the open, so refuse here
+        // instead of blocking on the first read (or streaming /dev/zero).
+        if (!stat.isFile()) {
+          return {
+            success: false,
+            content: '',
+            error: `Path is not a regular file (FIFO, socket or device): ${filePath}`,
+          }
         }
 
         const offset = (params.offset as number) || 0

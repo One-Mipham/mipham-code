@@ -11,7 +11,7 @@ import {
 } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { spawn } from 'node:child_process'
+import { spawn, execFileSync } from 'node:child_process'
 import { Readable } from 'node:stream'
 import type { ToolContext, CredentialMaskingConfig } from '../../src/shared'
 import { Context } from '../../src/vajra'
@@ -1069,6 +1069,27 @@ describe('runSearch 消费 stderr', () => {
     expect(stdout.trim()).toBe('out')
     expect(stderr.length).toBe(300_000)
   })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// 非普通文件 —— 打开 FIFO 会**同步阻塞**，计时器/signal 都排不上队
+// ═══════════════════════════════════════════════════════════════
+
+describe('Read rejects non-regular files', () => {
+  it.skipIf(process.platform === 'win32')(
+    'a FIFO with no writer returns an error instead of hanging forever',
+    async () => {
+      const fifo = join(tmpDir, 'pipe')
+      execFileSync('mkfifo', [fifo])
+
+      // Negative control: without O_NONBLOCK this call never returns and the
+      // test times out — the assertion below also pins the message.
+      const res = await readTool.execute({ file_path: fifo }, ctx)
+
+      expect(res.success).toBe(false)
+      expect(res.error).toMatch(/not a regular file/i)
+    },
+  )
 })
 
 describe('Read allow_large —— 超大文件深窗可选扫描', () => {

@@ -157,3 +157,101 @@ describe('校验与执行同一个基数（都是 ctx.cwd）', () => {
     expect(result.success).toBe(true)
   })
 })
+
+// ═══════════════════════════════════════════════════════════════
+// 未合并提交闸 —— `status --porcelain` 只看工作树。
+// ═══════════════════════════════════════════════════════════════
+//
+// 干净但带着独有提交的工作树能通过旧检查；`git worktree remove` 也会成功，
+// 紧接着的 `git branch -D` 就把那些提交毁掉。下面用**按序**假 spawn 走完整链路。
+
+/** 每次 spawn 取下一个假进程；步骤用完后重复最后一步。 */
+function mockSpawnSequence(steps: Array<{ stdout?: string; exitCode?: number }>) {
+  let i = 0
+  return vi.spyOn(Bun, 'spawn').mockImplementation((() => {
+    const step = steps[Math.min(i++, steps.length - 1)]!
+    return mockProc(step.stdout ?? '', step.exitCode ?? 0)
+  }) as never)
+}
+
+const argvCalls = (spy: { mock: { calls: unknown[][] } }): string[][] =>
+  spy.mock.calls.map((c) => c[0] as string[])
+
+describe('ExitWorktree 未合并提交闸', () => {
+  const setup = () => {
+    const { root, wt } = makeProject()
+    const target = wt('w1')
+    mkdirSync(target)
+    return { root, target }
+  }
+
+  it('分支有 HEAD/远端都没有的提交 ⇒ 拒绝删除，且不执行 branch -D', async () => {
+    const { root, target } = setup()
+    const spawn = mockSpawnSequence([
+      { stdout: porcelain([target]) }, // worktree list
+      { stdout: '' }, // status --porcelain（干净）
+      { stdout: 'feat\n' }, // rev-parse --abbrev-ref
+      { stdout: '2\n' }, // rev-list --count
+    ])
+
+    const result = await exitWorktreeTool.execute({ path: target, action: 'remove' }, ctx(root))
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('2 commit(s)')
+    expect(argvCalls(spawn).some((argv) => argv.includes('branch'))).toBe(false)
+  })
+
+  it('discard_changes: true 跳过闸门并照旧删分支', async () => {
+    const { root, target } = setup()
+    const spawn = mockSpawnSequence([
+      { stdout: porcelain([target]) }, // worktree list
+      { stdout: 'feat\n' }, // rev-parse（已跳过 status）
+      { stdout: '' }, // worktree remove
+      { stdout: '' }, // branch -D
+    ])
+
+    const result = await exitWorktreeTool.execute(
+      { path: target, action: 'remove', discard_changes: true },
+      ctx(root),
+    )
+
+    expect(result.success).toBe(true)
+    expect(result.content).toContain('(deleted)')
+    expect(argvCalls(spawn).some((argv) => argv.includes('branch'))).toBe(true)
+  })
+
+  it('rev-list 查不动 ⇒ 工作树照删，但分支保留（不盲删）', async () => {
+    const { root, target } = setup()
+    const spawn = mockSpawnSequence([
+      { stdout: porcelain([target]) }, // worktree list
+      { stdout: '' }, // status
+      { stdout: 'feat\n' }, // rev-parse
+      { stdout: '', exitCode: 3 }, // rev-list 失败
+      { stdout: '' }, // worktree remove
+    ])
+
+    const result = await exitWorktreeTool.execute({ path: target, action: 'remove' }, ctx(root))
+
+    expect(result.success).toBe(true)
+    expect(result.content).toContain('kept')
+    expect(argvCalls(spawn).some((argv) => argv.includes('branch'))).toBe(false)
+  })
+
+  it('计数为 0 ⇒ 照旧删分支', async () => {
+    const { root, target } = setup()
+    const spawn = mockSpawnSequence([
+      { stdout: porcelain([target]) }, // worktree list
+      { stdout: '' }, // status
+      { stdout: 'feat\n' }, // rev-parse
+      { stdout: '0\n' }, // rev-list
+      { stdout: '' }, // worktree remove
+      { stdout: '' }, // branch -D
+    ])
+
+    const result = await exitWorktreeTool.execute({ path: target, action: 'remove' }, ctx(root))
+
+    expect(result.success).toBe(true)
+    expect(result.content).toContain('(deleted)')
+    expect(argvCalls(spawn).some((argv) => argv.includes('branch'))).toBe(true)
+  })
+})

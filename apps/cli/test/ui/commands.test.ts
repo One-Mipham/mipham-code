@@ -180,6 +180,36 @@ describe('上下文用量显示跟随引擎的窗口与阈值', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════
+// /usage 百分比 —— 分母异常/超窗时不得把命令打死
+// ═══════════════════════════════════════════════════════════════
+
+describe('/usage percentage guards', () => {
+  const usage = (maxTokens: number, tokens: number) =>
+    getCommand('/usage')!(mkCtxWithWindow(maxTokens, 0.9, tokens), [])
+
+  it('a zero window yields 0.0% instead of NaN', async () => {
+    const { content } = await usage(0, 1_000)
+    expect(content).toContain('0.0%')
+    expect(content).not.toContain('NaN')
+  })
+
+  it('an unknown (NaN) window yields 0.0% instead of throwing', async () => {
+    const { content } = await usage(Number.NaN, 1_000)
+    expect(content).toContain('0.0%')
+    expect(content).not.toContain('NaN')
+  })
+
+  it('over-100% clamps to 100.0% and exactly 20 filled cells', async () => {
+    const { content } = await usage(1_000_000, 2_000_000)
+    expect(content).toContain('100.0%')
+    expect(content).toContain('█'.repeat(20))
+    expect(content).not.toContain('█'.repeat(21))
+    // The old code asked for a negative repeat count here — RangeError.
+    expect(content).toBeTruthy()
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
 // /mcp connect — HTTP disclosure
 // ═══════════════════════════════════════════════════════════════
 

@@ -2460,7 +2460,14 @@ const usageCmd: CommandHandler = (ctx) => {
   const estTokens = c.getEstimatedTokens()
   const msgs = c.getMessages()
   const maxTokens = c.getMaxTokens()
-  const pct = ((estTokens / maxTokens) * 100).toFixed(1)
+  // Guard the ratio before formatting: an unknown/zero window makes it NaN or
+  // Infinity, and a NaN `pct` later reaches `'░'.repeat(20 - …)` as a negative
+  // or non-integer count — a RangeError that kills the whole `/usage` command.
+  const maxTokensShown = Number.isFinite(maxTokens) && maxTokens > 0 ? maxTokens : 0
+  const rawPct = maxTokensShown > 0 ? (estTokens / maxTokensShown) * 100 : 0
+  const pctNum = Number.isFinite(rawPct) ? Math.min(100, Math.max(0, rawPct)) : 0
+  const pct = pctNum.toFixed(1)
+  const filledCells = Math.min(20, Math.max(0, Math.ceil(pctNum / 5)))
 
   const tracker = ctx.engine.getUsageTracker()
   const summary = tracker.getSummary()
@@ -2501,12 +2508,12 @@ const usageCmd: CommandHandler = (ctx) => {
     content: stripIndent`
       ${t('commands.usage.title')}
       ${apiLine}
-      ${t('commands.usage.context_line', { est: estTokens.toLocaleString(), max: maxTokens.toLocaleString(), pct })}
+      ${t('commands.usage.context_line', { est: estTokens.toLocaleString(), max: maxTokensShown.toLocaleString(), pct })}
       ${t('commands.usage.messages_line', { count: String(msgs.length) })}
       ${t('commands.usage.provider_line', { provider: ctx.providerId })}
       ${t('commands.usage.model_line', { model: ctx.modelId })}
 
-      ${'█'.repeat(Math.ceil(Number(pct) / 5))}${'░'.repeat(20 - Math.ceil(Number(pct) / 5))} ${pct}%
+      ${'█'.repeat(filledCells)}${'░'.repeat(20 - filledCells)} ${pct}%
       ${toolSection}${loopSection}
 
       ${t('commands.usage.hint')}

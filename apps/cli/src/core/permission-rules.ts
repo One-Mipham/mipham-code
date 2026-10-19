@@ -821,6 +821,12 @@ export function validateRulePattern(
     return null
   }
 
+  // Whole-server MCP rules (`mcp__server`, `mcp__server__*`) are valid and are
+  // compiled as a prefix match — see `mcpServerPrefix`. Before this they either
+  // failed `^\w+$` (the wildcard form, warned as invalid) or compiled to an
+  // exact regex that could never equal `mcp__server__tool` (silent dead rule).
+  if (mcpServerPrefix(pattern)) return null
+
   // No parenthesis → must be a plain tool name (matched via `pattern === tool.name`).
   if (!/^\w+$/.test(pattern)) return 'not a single tool name'
   if (knownTools && !pattern.startsWith('mcp__')) {
@@ -836,16 +842,40 @@ export function validateRulePattern(
   return null
 }
 
-/** Compile a rule pattern string into a PermissionRuleEntry. */
+/**
+ * Recognize an **MCP whole-server** rule and return its tool-name prefix.
+ *
+ * `mcp__server` and `mcp__server__*` both mean "every tool on that server".
+ * Full tool names (`mcp__server__tool`) are not whole-server rules and return
+ * null — they stay exact matches. Server names are lowercased because
+ * `sanitizeName` (mcp/registry.ts) lowercases them when building tool names;
+ * without this, `mcp__MyServer` would compile to a rule that can never match.
+ */
+export function mcpServerPrefix(pattern: string): string | null {
+  const base = pattern.endsWith('__*') ? pattern.slice(0, -3) : pattern
+  if (!base.startsWith('mcp__')) return null
+  const server = base.slice('mcp__'.length)
+  // A second `__` means this is a full tool name, not a whole-server rule.
+  if (!server || server.includes('__')) return null
+  // Same charset `sanitizeName` leaves intact (it maps everything else to `_`).
+  if (!/^[A-Za-z0-9-]+$/.test(server)) return null
+  return `mcp__${server.toLowerCase()}__`
+}
+
+/**
+ * Compile a rule pattern string into a PermissionRuleEntry.
+ */
 export function compileRule(
   pattern: string,
   level: 'allow' | 'deny' | 'ask',
   knownTools?: ReadonlySet<string>,
 ): PermissionRuleEntry {
   const invalid = validateRulePattern(pattern, knownTools)
+  const serverPrefix = mcpServerPrefix(pattern)
+  const source = serverPrefix ? `${serverPrefix}*` : pattern
   const regexStr =
     '^' +
-    pattern
+    source
       .replace(/[.+^${}()|[\]\\*?]/g, '\\$&')
       .replace(/:/g, '[:\\s]')
       .replace(/\\\*/g, '.*')

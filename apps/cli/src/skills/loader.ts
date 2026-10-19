@@ -26,6 +26,24 @@ export function parseFrontmatter(raw: string): FrontmatterResult {
   }
 }
 
+/**
+ * Skill names are interpolated verbatim into the `<system-reminder>` block and
+ * used as the map key for the Skill tool. A name carrying control characters,
+ * bidirectional/format controls, line separators, exotic spaces or angle
+ * brackets can forge reminder lines or make the listing unreadable.
+ *
+ * Returns a short reason when the name is unusable, null when it is fine.
+ * Callers reject rather than strip: a name the author did not choose is worse
+ * than falling back to the path-derived name.
+ */
+export function invalidSkillNameReason(name: string): string | null {
+  if (!name.trim()) return 'empty name'
+  if (/[\p{Cc}\p{Cf}<>]/u.test(name)) return 'control, format or angle-bracket characters'
+  if (/[\p{Zl}\p{Zp}]/u.test(name)) return 'line/paragraph separators'
+  if (/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/u.test(name)) return 'non-ASCII spacing'
+  return null
+}
+
 export class SkillsLoader implements Skills {
   private skills = new Map<string, SkillDefinition>()
 
@@ -147,7 +165,33 @@ export class SkillsLoader implements Skills {
 
       const rawDescription = (data.description as string) || ''
       const rawBody = content.trim() || undefined
-      const skillName = (data.name as string) || this.nameFromPath(sourceName)
+
+      // Name gate (see `invalidSkillNameReason`). A declared name that fails is
+      // ignored in favour of the path-derived one; if that fails too the skill
+      // is skipped. Only a string counts — `name: 42` is a malformed declaration,
+      // not a name.
+      const declaredName = typeof data.name === 'string' ? data.name.trim() : ''
+      let skillName = ''
+      if (declaredName) {
+        const reason = invalidSkillNameReason(declaredName)
+        if (reason) {
+          process.stderr.write(
+            `⚠️  Skill at ${sourceName}: frontmatter name rejected (${reason}) — using the path-derived name.\n`,
+          )
+        } else {
+          skillName = declaredName
+        }
+      }
+      if (!skillName) {
+        skillName = this.nameFromPath(sourceName)
+        const reason = invalidSkillNameReason(skillName)
+        if (reason) {
+          process.stderr.write(
+            `⚠️  Skill at ${sourceName}: path-derived name rejected (${reason}) — skipped.\n`,
+          )
+          return
+        }
+      }
 
       // ── Safety: check for command/MCP shadowing ──
       const shadowCheck = checkSkillShadow(skillName, rawDescription)

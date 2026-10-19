@@ -51,6 +51,7 @@ import { formatMcpConnectFailures, type McpConnectFailure } from './mcp/connect-
 import { AgentRegistry } from './agent/agent-registry'
 import { HookEngine } from './core/hooks'
 import { loadHookConfigs } from './core/hooks-config'
+import { isSafeMode } from './core/safe-mode'
 import { ArtifactServer } from './artifacts/server'
 import { getMetrics } from './core/metrics'
 import { initTelemetry, enableTelemetryNow } from './telemetry/index'
@@ -513,12 +514,25 @@ export async function runApp(options: RunOptions): Promise<void> {
     )
   }
 
+  // `--safe-mode` (bin/mipham.ts sets MIPHAM_SAFE_MODE=1) skips everything
+  // supplied by the user, the project or plugins. Before this, the flag only
+  // set an env var that nothing read — the help text advertised a guard that
+  // did not exist.
+  const safeMode = isSafeMode()
+  if (safeMode) {
+    console.error(
+      '[mipham] safe mode: custom agents, skills, hooks and plugins are disabled (built-in skills remain).',
+    )
+  }
+
   // Load skills
   const skillsLoader = new SkillsLoader()
   skillsLoader.loadBuiltinFromPackage()
-  skillsLoader.loadUserSkills()
-  if (config.skills?.paths) {
-    skillsLoader.loadExternal(config.skills.paths)
+  if (!safeMode) {
+    skillsLoader.loadUserSkills()
+    if (config.skills?.paths) {
+      skillsLoader.loadExternal(config.skills.paths)
+    }
   }
 
   // Initialize plugin manager
@@ -741,10 +755,12 @@ export async function runApp(options: RunOptions): Promise<void> {
   // CLI 是一次性进程，会话 cwd 就是 `process.cwd()`；写出来是为了与 daemon 那处
   // （`daemon/engine-capabilities.ts` 传会话 cwd）成对照，别让哪边看起来像漏了。
   const hookEngine = new HookEngine(process.cwd())
-  for (const skill of skillsLoader.list()) {
-    if (skill.hooks) {
-      for (const hook of skill.hooks) {
-        hookEngine.register(hook)
+  if (!safeMode) {
+    for (const skill of skillsLoader.list()) {
+      if (skill.hooks) {
+        for (const hook of skill.hooks) {
+          hookEngine.register(hook)
+        }
       }
     }
   }
@@ -757,8 +773,10 @@ export async function runApp(options: RunOptions): Promise<void> {
   // skip is announced, since silence would look the same as having passed.
   // `settingsJson` itself was read up top, next to the permission it also feeds.
   if (settingsJson.projectHooksSkipped) warnProjectHooksSkipped(process.cwd())
-  for (const def of loadHookConfigs(settingsJson.hooks)) {
-    hookEngine.register(def)
+  if (!safeMode) {
+    for (const def of loadHookConfigs(settingsJson.hooks)) {
+      hookEngine.register(def)
+    }
   }
 
   // Start artifact server (lazy — first artifact creation triggers listening)
@@ -830,18 +848,22 @@ export async function runApp(options: RunOptions): Promise<void> {
 
   // Initialize agent registry and load plugin agents/skills/MCP/hooks
   const agentRegistry = new AgentRegistry()
-  agentRegistry.loadUserAgents()
-  agentRegistry.loadProjectAgents(process.cwd())
+  if (!safeMode) {
+    agentRegistry.loadUserAgents()
+    agentRegistry.loadProjectAgents(process.cwd())
+  }
   engine.setAgentRegistry(agentRegistry)
 
-  loadPlugins(
-    pluginManager,
-    agentRegistry,
-    skillsLoader,
-    hookEngine,
-    McpClient.getInstance(),
-    tools,
-  )
+  if (!safeMode) {
+    loadPlugins(
+      pluginManager,
+      agentRegistry,
+      skillsLoader,
+      hookEngine,
+      McpClient.getInstance(),
+      tools,
+    )
+  }
 
   engine.setupContextSummarizer()
 

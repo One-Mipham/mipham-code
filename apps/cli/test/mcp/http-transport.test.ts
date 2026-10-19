@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { HttpTransport, McpHttpError, challengeNeedsAuth } from '../../src/mcp/http-transport'
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
@@ -294,6 +294,45 @@ describe('HttpTransport', () => {
       transport.sendNotification('notifications/initialized')
       await new Promise((r) => setTimeout(r, 10))
       expect(calls).toHaveLength(1)
+    })
+
+    it('bounds the request with an abort signal', async () => {
+      transport = new HttpTransport(fetchImpl)
+      await transport.start('http://localhost:8004/mcp')
+      transport.sendNotification('notifications/initialized')
+      await new Promise((r) => setTimeout(r, 10))
+      expect(calls[0]!.init.signal).toBeInstanceOf(AbortSignal)
+    })
+
+    it('aborts a server that never answers, instead of pinning a socket', async () => {
+      let signal: AbortSignal | undefined
+      const hanging: FetchLike = (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          signal = init?.signal ?? undefined
+          signal?.addEventListener('abort', () =>
+            reject(new DOMException('The operation was aborted.', 'AbortError')),
+          )
+        })
+      transport = new HttpTransport(hanging, 20)
+      await transport.start('http://localhost:8004/mcp')
+
+      transport.sendNotification('notifications/initialized')
+      await new Promise((r) => setTimeout(r, 60))
+
+      expect(signal?.aborted).toBe(true)
+    })
+
+    it('cancels the response body it never reads', async () => {
+      const body = new ReadableStream<Uint8Array>({ start() {} })
+      const cancel = vi.spyOn(body, 'cancel')
+      fetchImpl = async () => new Response(body, { status: 202 })
+      transport = new HttpTransport(fetchImpl)
+      await transport.start('http://localhost:8004/mcp')
+
+      transport.sendNotification('notifications/initialized')
+      await new Promise((r) => setTimeout(r, 20))
+
+      expect(cancel).toHaveBeenCalled()
     })
   })
 })

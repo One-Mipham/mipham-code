@@ -323,6 +323,43 @@ export async function waitForDaemonExit(
 }
 
 /**
+ * Stop a daemon and confirm it is gone.
+ *
+ * SIGTERM, then wait; if the process is still there, SIGKILL and wait a short
+ * window more. Returns true only when `waitForExit` confirms the process
+ * disappeared — delivering a signal is a request, not a result.
+ */
+export async function terminateDaemonProcess(
+  pid: number,
+  opts: {
+    timeoutMs?: number
+    forceTimeoutMs?: number
+    deps?: {
+      kill?: (pid: number, signal: NodeJS.Signals) => void
+      waitForExit?: (opts?: { timeoutMs?: number }) => Promise<boolean>
+    }
+  } = {},
+): Promise<boolean> {
+  const kill = opts.deps?.kill ?? ((p: number, signal: NodeJS.Signals) => process.kill(p, signal))
+  const wait = opts.deps?.waitForExit ?? ((o?: { timeoutMs?: number }) => waitForDaemonExit(o))
+
+  const waitOpts = opts.timeoutMs === undefined ? undefined : { timeoutMs: opts.timeoutMs }
+  try {
+    kill(pid, 'SIGTERM')
+  } catch {
+    // Already gone between the status probe and the signal.
+  }
+  if (await wait(waitOpts)) return true
+
+  try {
+    kill(pid, 'SIGKILL')
+  } catch {
+    // Exited between the wait and the kill.
+  }
+  return wait({ timeoutMs: opts.forceTimeoutMs ?? 2_000 })
+}
+
+/**
  * The daemon process body, shared by the `__daemon` branch of the compiled
  * binary and by `bin/daemon.ts` (source mode). One implementation, two entry
  * points — a second copy is how "two render paths, only one wired" starts.
