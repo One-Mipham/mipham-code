@@ -34,7 +34,8 @@ export interface CronJob {
   sessionId?: string
 }
 
-function jobPath(id: string): string {
+/** Location of a job's JSON file. Also the base name its claim directory uses. */
+export function jobPath(id: string): string {
   return join(CRON_DIR, `${id}.json`)
 }
 

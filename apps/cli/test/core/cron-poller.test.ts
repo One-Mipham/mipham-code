@@ -8,7 +8,7 @@ vi.mock('node:os', async (importOriginal) => {
   }
 })
 
-import { rmSync, existsSync } from 'node:fs'
+import { rmSync, existsSync, mkdirSync, utimesSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import type { CronJob } from '../../src/tools/scheduling/cron'
@@ -135,5 +135,67 @@ describe('cron-poller — 目录归属', () => {
 
     expect(fired).toBe(1)
     expect(enqueue).toHaveBeenCalledWith('legacy-work')
+  })
+})
+
+// ============================================================
+// 同一个到期任务只许被触发一次。
+//
+// 存储是全局单店，同一目录里开两个 CLI 会话就有两个轮询器；每个都是
+// `readAllJobs → enqueue → writeJob`，中间没有任何互斥。两边都会在对方写回
+// 之前看到同一个到期任务 —— 任务跑两遍（重复的副作用、重复的 token）。
+//
+// 复现方式：在 `enqueue` 回调里同步再调一次 `checkCronJobs`。这恰好制造出
+// 真实竞态的那个状态 —— 第二个轮询者已经读完目录（看到旧的到期状态），
+// 而第一个还没写回。**这条测试在修复前必须是红的**。
+// ============================================================
+
+const cronDir = join(homedir(), '.mipham', 'cron')
+const lockPath = (id: string): string => join(cronDir, `${id}.json.lock`)
+
+describe('cron-poller — 同一任务只有一个轮询者能触发', () => {
+  it('两个轮询者都读到同一个到期任务时，只入队一次', () => {
+    writeJob(makeJob({ id: 'race', cwd: '/proj/lock-race', prompt: 'race-work', nextFire: past }))
+
+    const nested = vi.fn()
+    let entered = false
+    const enqueue = vi.fn(() => {
+      if (entered) return
+      entered = true
+      // 第二个轮询者读到的是写回之前的状态 —— 真实竞态的窗口。
+      checkCronJobs(nested, now, '/proj/lock-race')
+    })
+
+    const fired = checkCronJobs(enqueue, now, '/proj/lock-race')
+
+    expect(enqueue.mock.calls.length + nested.mock.calls.length).toBe(1)
+    expect(fired).toBe(1)
+  })
+
+  it('另一个轮询者正持有该任务的锁时，本次跳过', () => {
+    writeJob(makeJob({ id: 'busy', cwd: '/proj/lock-busy', prompt: 'busy-work', nextFire: past }))
+    mkdirSync(lockPath('busy'), { recursive: true })
+
+    const enqueue = vi.fn()
+    const fired = checkCronJobs(enqueue, now, '/proj/lock-busy')
+
+    expect(enqueue).not.toHaveBeenCalled()
+    expect(fired).toBe(0)
+    rmSync(lockPath('busy'), { recursive: true, force: true })
+  })
+
+  it('持锁者崩溃留下的过期锁会被接管（不能永久静默）', () => {
+    writeJob(
+      makeJob({ id: 'stale', cwd: '/proj/lock-stale', prompt: 'stale-work', nextFire: past }),
+    )
+    mkdirSync(lockPath('stale'), { recursive: true })
+    const old = new Date(Date.now() - 10 * 60_000)
+    utimesSync(lockPath('stale'), old, old)
+
+    const enqueue = vi.fn()
+    const fired = checkCronJobs(enqueue, now, '/proj/lock-stale')
+
+    expect(fired).toBe(1)
+    expect(enqueue).toHaveBeenCalledWith('stale-work')
   })
 })
