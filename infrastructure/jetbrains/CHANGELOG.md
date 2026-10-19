@@ -4,6 +4,17 @@
 > (tag dates) and use the same wording as the VS Code extension's changelog — the plugin is a
 > thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.23 (2026-10-19)
+
+- Version sync with Mipham Code CLI 0.85.23
+- Security: MCP tool schemas are sanitized before reaching the provider; skill names are validated
+  before entering the system-reminder block; `--safe-mode` now actually disables user/project
+  agents, skills, hooks and plugins; `PreToolUse` hook failures now fail closed (configurable per
+  hook with `failureMode: "open"`).
+- Fixed: models without a `contextWindow` no longer silently disable auto-compaction (falls back to
+  128K and warns); a due cron job is claimed by only one poller; `SessionEnd` hooks complete before
+  exit; daemon wakeups are routed per session; Read refuses FIFOs, sockets and device nodes.
+
 ## 0.85.22 (2026-10-11)
 
 - Version sync with Mipham Code CLI 0.85.22

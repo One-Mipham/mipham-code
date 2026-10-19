@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.85.23] — 2026-10-19
+
+### Security
+
+- **MCP 工具的 `inputSchema` 在进入 provider 前做顶层净化** —— schema 来自 MCP server（跨进程、不可信），
+  此前原样转发；一个畸形 schema 会让**每一轮**请求都被上游拒绝。现丢弃非对象的 `properties`、
+  `required` 只保留确实已声明的字符串项并去重，根不是对象时退化为空 `properties`。
+- **技能名写入 `<system-reminder>` 前做白名单校验** —— 控制/格式字符、行分隔符、NBSP、尖括号此前可
+  原样进入注入块；非法声明名回退到路径名，路径名也非法则跳过并告警。
+- **`--safe-mode` 现在真的生效** —— 此前只设置环境变量、全仓没有消费者；现在 CLI 与 daemon 引擎两侧
+  都跳过用户/项目 agents、skills、hooks、plugins（内置技能仍加载），并提前到子命令分发前解析。
+- **`PreToolUse` 钩子失败默认拒绝该次工具调用（fail-closed）** —— 命令缺失、spawn 失败、超时、setup
+  抛错、HTTP 不可达、MCP 未就绪或 `isError`、handler 抛错、连续失败被自动停用，此前都只记一条
+  `hookError` 并放行；现在按事件分流：`PreToolUse` 默认 closed，其余观察既成事实的事件保持 open。
+  单条钩子可用 `failureMode: "open"` 退回旧行为。
+
+### Fixed
+
+- **手写 model 缺 `contextWindow` 时自动压缩永不触发** —— YAML 的 `providers[].models` 原样进 registry，
+  缺该字段时 `maxTokens` 是 `undefined`，`needsCompaction()` 的比较落在 `NaN` 上恒 false，且无任何报错；
+  现在 `loadConfig` 出口统一回退 **128K** 并点名模型与 provider 告警。
+- **同一 cron 任务只由一个轮询者触发** —— 全局存储 + 同目录多个 CLI 各跑轮询器，`read → enqueue →
+write` 之间无互斥，同一个到期任务会跑两遍；现在按任务取排他锁、持锁后重读确认仍到期才发。
+- **`SessionEnd` 钩子真正跑完再退出** —— `process.exit()` 同步而钩子异步，旧路径同 tick 启动即退出，
+  `/exit`、`/quit`、二次 Ctrl+C 更是直接退出；新增统一退出路径，先 await 钩子（上限 1.5s）再落盘退出。
+- **daemon 的唤醒处理器按会话分发** —— 模块级单例会被最后构造的引擎覆盖，A 会话的 loop prompt 落进
+  B 会话；现按 sessionId 建 Map，`setSessionId` 迁移注册，关闭会话时注销并取消计时器。
+- **Read 拒绝 FIFO / socket / 设备节点**，避免打开它们时阻塞或读入无限流。
+- **子代理工具列表支持整服务器 MCP 前缀展开**；非空却零匹配时向 stderr 告警（空列表仍 fail-closed）。
+- **`/usage` 的零/NaN 窗口不再产出 NaN%**，百分比与进度格数各自钳制。
+- **MCP 通知带 AbortController + 超时**，并取消响应体读取。
+- **会话日志追加前给崩溃半行补换行**，否则下一条事件会被拼进同一行一起丢失。
+- **`daemon stop` 改为 SIGTERM → 等待 → SIGKILL → 等待**，确认退出才打印 stopped。
+- **MCP 整服务器权限规则 `mcp__server` 现在能命中** —— 此前结构合法却编译成精确匹配、永不命中；
+  `mcp__server__*` 也不再被误报非法，两者都规范化为前缀匹配。
+- **删除 worktree 分支前检查未合并提交** —— 非空或查询失败都保留分支。
+
 ## [0.85.22] — 2026-10-11
 
 ### Fixed
