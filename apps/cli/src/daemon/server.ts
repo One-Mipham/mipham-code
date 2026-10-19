@@ -38,6 +38,10 @@ import { createDingtalkApi } from './dingtalk/api.js'
 import type { DingtalkConfig } from './dingtalk/types.js'
 import { startHeartbeat } from './heartbeat'
 import { wireDaemonEngine } from './engine-capabilities'
+import {
+  cancelAllSessionTimers,
+  unregisterWakeupHandler,
+} from '../tools/scheduling/schedule-wakeup'
 
 interface ServerConfig {
   db: DaemonDatabase
@@ -559,8 +563,12 @@ export function createServer(config: ServerConfig): Server<WsData> {
         pool.stopWorker(sessionId).catch((err: unknown) => {
           logger.error('error stopping worker', { sessionId, error: err })
         })
-        // Remove engine from cache
+        // Remove engine from cache. A closed session must not keep receiving
+        // wakeups: drop the handler (it holds the engine) and any timer still
+        // armed for it, plus the persisted intent.
         engineCache.delete(sessionId)
+        unregisterWakeupHandler(sessionId)
+        cancelAllSessionTimers(sessionId)
         sm.closeSession(sessionId)
         return json({ ok: true })
       }

@@ -73,9 +73,10 @@ describe('QueryEngine — wakeup queue', () => {
 
   it('constructor registers a handler that enqueues the wakeup prompt when the timer fires', async () => {
     vi.useFakeTimers()
-    // Constructing the engine overwrites the module-level handler singleton to
-    // point at this engine's enqueueWakeup (one engine per test — by design).
+    // The handler is keyed by session, so the engine has to be on the same
+    // session the tool is called for — otherwise its wakeup reaches nobody.
     const engine = makeTestEngine()
+    engine.setSessionId('test-session')
 
     await scheduleWakeupTool.execute(
       { delaySeconds: 60, prompt: 'loop-prompt-timer', reason: 'test' },

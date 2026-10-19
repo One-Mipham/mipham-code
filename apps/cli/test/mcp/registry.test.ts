@@ -90,6 +90,74 @@ describe('mcp/registry', () => {
       expect(tool.parameters.required).toBeUndefined()
     })
 
+    // A server's `inputSchema` is declared, not validated: it crosses a process
+    // boundary and is sent to the provider with every turn. Dropping the bad
+    // parts here keeps one malformed tool from rejecting the whole request.
+    it('drops required names that are not declared properties', () => {
+      const tool = convertMcpTool('srv', {
+        name: 't',
+        inputSchema: {
+          type: 'object',
+          properties: { a: { type: 'string' } },
+          required: ['a', 'missing'],
+        },
+      })
+
+      expect(tool.parameters.required).toEqual(['a'])
+    })
+
+    it('drops a malformed required value instead of forwarding it', () => {
+      const tool = convertMcpTool('srv', {
+        name: 't',
+        inputSchema: {
+          type: 'object',
+          properties: { a: { type: 'string' } },
+          required: 'a',
+        } as unknown as McpToolDefinition['inputSchema'],
+      })
+
+      expect(tool.parameters.required).toBeUndefined()
+      expect(tool.parameters.properties).toEqual({ a: { type: 'string' } })
+    })
+
+    it('drops properties that are not object schemas', () => {
+      const tool = convertMcpTool('srv', {
+        name: 't',
+        inputSchema: {
+          type: 'object',
+          properties: { good: { type: 'string' }, bad: 'string' },
+          required: ['good'],
+        } as unknown as McpToolDefinition['inputSchema'],
+      })
+
+      expect(tool.parameters.properties).toEqual({ good: { type: 'string' } })
+      expect(tool.parameters.required).toEqual(['good'])
+    })
+
+    it('survives an inputSchema that is not an object at all', () => {
+      const tool = convertMcpTool('srv', {
+        name: 't',
+        inputSchema: null as unknown as McpToolDefinition['inputSchema'],
+      })
+
+      expect(tool.parameters.type).toBe('object')
+      expect(tool.parameters.properties).toEqual({})
+      expect(tool.parameters.required).toBeUndefined()
+    })
+
+    it('de-duplicates required names', () => {
+      const tool = convertMcpTool('srv', {
+        name: 't',
+        inputSchema: {
+          type: 'object',
+          properties: { a: { type: 'string' } },
+          required: ['a', 'a'],
+        },
+      })
+
+      expect(tool.parameters.required).toEqual(['a'])
+    })
+
     it('sets category to system', () => {
       const tool = convertMcpTool('srv', {
         name: 't',

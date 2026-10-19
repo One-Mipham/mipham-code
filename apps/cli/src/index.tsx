@@ -53,6 +53,12 @@ import { HookEngine } from './core/hooks'
 import { loadHookConfigs } from './core/hooks-config'
 import { isSafeMode } from './core/safe-mode'
 import { ArtifactServer } from './artifacts/server'
+import {
+  exitSession,
+  registerExitHandler,
+  withTimeout,
+  SESSION_END_HOOK_TIMEOUT_MS,
+} from './core/session-exit'
 import { getMetrics } from './core/metrics'
 import { initTelemetry, enableTelemetryNow } from './telemetry/index'
 import { wasPrompted, markPrompted, isInteractive, setTelemetryEnabled } from './telemetry/consent'
@@ -937,12 +943,17 @@ export async function runApp(options: RunOptions): Promise<void> {
     }
   }
 
-  const saveAndExit = () => {
-    saved = true
+  const shutdown = async (): Promise<void> => {
     clearInterval(heartbeatInterval)
     unregisterSession(sessionName)
-    // P2-1: Trigger SessionEnd hooks before cleanup (best-effort)
-    hookEngine.executeSessionEnd(sessionName).catch(() => {})
+    // SessionEnd hooks are asynchronous; process.exit() is not. Starting the
+    // hooks and exiting in the same tick meant they never ran — the await is
+    // the difference between "best effort" and "never". Bounded, because a
+    // hook waiting on an unreachable server must not hold the terminal open.
+    await withTimeout(
+      hookEngine.executeSessionEnd(sessionName).catch(() => undefined),
+      SESSION_END_HOOK_TIMEOUT_MS,
+    )
     artifactServer.stop()
     persistSession()
     // Finalize the session — write session summary + flush CRSI effectiveness
@@ -953,8 +964,15 @@ export async function runApp(options: RunOptions): Promise<void> {
     } catch {
       // ignore — CRSI closeout is non-critical
     }
+    saved = true
     getMetrics().activeSessions.dec()
-    process.exit(0)
+  }
+  // Every user-initiated exit (`/exit`, `/quit`, the second Ctrl+C, signals)
+  // goes through this one handler, so none of them can skip SessionEnd.
+  registerExitHandler(shutdown)
+
+  const saveAndExit = () => {
+    void exitSession(0)
   }
 
   process.on('SIGINT', saveAndExit)
@@ -963,9 +981,10 @@ export async function runApp(options: RunOptions): Promise<void> {
   // a handler the session log is silently dropped on those paths.
   process.on('SIGHUP', saveAndExit)
 
-  // Safety net: persist on exit for paths that bypass saveAndExit (e.g. /exit
-  // and /quit call process.exit(0) directly). saveAndExit already persists;
-  // guard on !saved to avoid double-writing.
+  // Safety net: persist on exit for paths that never reach `shutdown` — a
+  // daemon worker being killed, a crash, `process.exit()` called by code that
+  // does not know about this session. `shutdown` already persisted; guard on
+  // !saved to avoid double-writing.
   process.on('exit', () => {
     clearInterval(heartbeatInterval)
     unregisterSession(sessionName)

@@ -17,6 +17,7 @@ import { homedir } from 'node:os'
 import {
   scheduleWakeupTool,
   registerWakeupHandler,
+  unregisterWakeupHandler,
   resumeWakeups,
   readPersistedWakeups,
   cancelAllSessionTimers,
@@ -48,12 +49,14 @@ describe('ScheduleWakeup re-invocation', () => {
     vi.useRealTimers()
     cancelAllSessionTimers('sess-1')
     cancelAllSessionTimers('sess-2')
+    unregisterWakeupHandler('sess-1')
+    unregisterWakeupHandler('sess-2')
   })
 
   it('calls the registered wakeup handler when the timer fires', async () => {
     vi.useFakeTimers()
     const handler = vi.fn()
-    registerWakeupHandler(handler)
+    registerWakeupHandler('sess-1', handler)
 
     await scheduleWakeupTool.execute(
       { delaySeconds: 60, reason: 'poll CI', prompt: 'loop-1' },
@@ -68,7 +71,7 @@ describe('ScheduleWakeup re-invocation', () => {
   it('does not call handler after stop:true cancels the timer', async () => {
     vi.useFakeTimers()
     const handler = vi.fn()
-    registerWakeupHandler(handler)
+    registerWakeupHandler('sess-1', handler)
 
     await scheduleWakeupTool.execute(
       { delaySeconds: 60, reason: 'poll', prompt: 'loop-1' },
@@ -80,16 +83,87 @@ describe('ScheduleWakeup re-invocation', () => {
   })
 })
 
+describe('wakeup handlers are per session', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    cancelAllSessionTimers('sess-1')
+    cancelAllSessionTimers('sess-2')
+    unregisterWakeupHandler('sess-1')
+    unregisterWakeupHandler('sess-2')
+  })
+
+  // The daemon keeps one engine per session in one process. With a single shared
+  // handler slot, the engine built last received every session's wakeups.
+  it('delivers each session`s wakeup to its own handler', async () => {
+    vi.useFakeTimers()
+    const handlerA = vi.fn()
+    const handlerB = vi.fn()
+    registerWakeupHandler('sess-1', handlerA)
+    registerWakeupHandler('sess-2', handlerB)
+
+    await scheduleWakeupTool.execute(
+      { delaySeconds: 60, reason: 'a', prompt: 'loop-a' },
+      ctx('sess-1'),
+    )
+    await scheduleWakeupTool.execute(
+      { delaySeconds: 120, reason: 'b', prompt: 'loop-b' },
+      ctx('sess-2'),
+    )
+
+    vi.advanceTimersByTime(60_000)
+    expect(handlerA).toHaveBeenCalledWith('sess-1', 'loop-a', false)
+    expect(handlerB).not.toHaveBeenCalled()
+
+    vi.advanceTimersByTime(60_000)
+    expect(handlerB).toHaveBeenCalledWith('sess-2', 'loop-b', false)
+  })
+
+  it('a later registration for another session does not steal an armed wakeup', async () => {
+    vi.useFakeTimers()
+    const handlerA = vi.fn()
+    const handlerB = vi.fn()
+    registerWakeupHandler('sess-1', handlerA)
+
+    await scheduleWakeupTool.execute(
+      { delaySeconds: 60, reason: 'a', prompt: 'loop-a' },
+      ctx('sess-1'),
+    )
+    // A second engine starts in the same process after the timer was armed.
+    registerWakeupHandler('sess-2', handlerB)
+
+    vi.advanceTimersByTime(60_000)
+    expect(handlerA).toHaveBeenCalledWith('sess-1', 'loop-a', false)
+    expect(handlerB).not.toHaveBeenCalled()
+  })
+
+  it('does not fire after the session`s handler is unregistered', async () => {
+    vi.useFakeTimers()
+    const handler = vi.fn()
+    registerWakeupHandler('sess-1', handler)
+
+    await scheduleWakeupTool.execute(
+      { delaySeconds: 60, reason: 'a', prompt: 'loop-a' },
+      ctx('sess-1'),
+    )
+    unregisterWakeupHandler('sess-1')
+
+    vi.advanceTimersByTime(60_000)
+    expect(handler).not.toHaveBeenCalled()
+  })
+})
+
 describe('ScheduleWakeup — the pending wakeup survives the process', () => {
   afterEach(() => {
     vi.useRealTimers()
     cancelAllSessionTimers('sess-1')
     cancelAllSessionTimers('sess-2')
+    unregisterWakeupHandler('sess-1')
+    unregisterWakeupHandler('sess-2')
   })
 
   it('writes the pending wakeup to disk, and clears it once it fires', async () => {
     vi.useFakeTimers()
-    registerWakeupHandler(vi.fn())
+    registerWakeupHandler('sess-1', vi.fn())
 
     await scheduleWakeupTool.execute(
       { delaySeconds: 300, reason: 'poll CI', prompt: 'loop-1' },
@@ -106,7 +180,7 @@ describe('ScheduleWakeup — the pending wakeup survives the process', () => {
 
   it('stop:true clears the file too — an ended loop must not come back on restart', async () => {
     vi.useFakeTimers()
-    registerWakeupHandler(vi.fn())
+    registerWakeupHandler('sess-1', vi.fn())
 
     await scheduleWakeupTool.execute(
       { delaySeconds: 60, reason: 'poll', prompt: 'loop-1' },
@@ -121,7 +195,7 @@ describe('ScheduleWakeup — the pending wakeup survives the process', () => {
   it('a wakeup stored for another session is not this session`s business', async () => {
     vi.useFakeTimers()
     const handler = vi.fn()
-    registerWakeupHandler(handler)
+    registerWakeupHandler('sess-2', handler)
 
     await scheduleWakeupTool.execute(
       { delaySeconds: 600, reason: 'other', prompt: 'other-loop' },
@@ -141,12 +215,14 @@ describe('resumeWakeups — rebuilding a wakeup after a restart', () => {
     vi.useRealTimers()
     cancelAllSessionTimers('sess-1')
     cancelAllSessionTimers('sess-2')
+    unregisterWakeupHandler('sess-1')
+    unregisterWakeupHandler('sess-2')
   })
 
   it('re-arms a wakeup that is still in the future, for the time it has left', async () => {
     vi.useFakeTimers()
     const handler = vi.fn()
-    registerWakeupHandler(handler)
+    registerWakeupHandler('sess-1', handler)
 
     await scheduleWakeupTool.execute(
       { delaySeconds: 300, reason: 'poll CI', prompt: 'loop-1' },
@@ -174,7 +250,7 @@ describe('resumeWakeups — rebuilding a wakeup after a restart', () => {
   it('reports a wakeup that came due while we were down instead of firing it', async () => {
     vi.useFakeTimers()
     const handler = vi.fn()
-    registerWakeupHandler(handler)
+    registerWakeupHandler('sess-1', handler)
 
     writeBackTheFile({
       sessionId: 'sess-1',
@@ -197,7 +273,7 @@ describe('resumeWakeups — rebuilding a wakeup after a restart', () => {
 
   it('drops an unparseable firesAt rather than arming a timer for NaN', () => {
     vi.useFakeTimers()
-    registerWakeupHandler(vi.fn())
+    registerWakeupHandler('sess-1', vi.fn())
 
     writeBackTheFile({ sessionId: 'sess-1', prompt: 'loop-1', reason: 'x', firesAt: 'not-a-date' })
 

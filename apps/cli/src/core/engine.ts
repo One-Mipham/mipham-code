@@ -43,7 +43,7 @@ import { UsageTracker } from './usage-tracker'
 import { getMetrics } from './metrics'
 import { buildRequest, sendInferenceCheck, isInferenceHookEnabled } from './inference-hook'
 import { getFileInboxTransport } from '../agent/cross-session/file-inbox'
-import { registerWakeupHandler } from '../tools/scheduling/schedule-wakeup'
+import { registerWakeupHandler, unregisterWakeupHandler } from '../tools/scheduling/schedule-wakeup'
 import { accumulateGraftSavings } from '../shared/graft-savings'
 import { deletedCwdSessionMessage, resolveExistingCwd } from '../shared/deleted-cwd'
 import {
@@ -144,7 +144,20 @@ export class QueryEngine {
   ) {
     this.ruleEngine = ruleEngine
     // ScheduleWakeup 的 timer 到期后，把 loop prompt 交回本引擎 re-invoke。
-    registerWakeupHandler((_sessionId, prompt, noop) => this.enqueueWakeup(prompt, noop))
+    this.bindWakeupHandler()
+  }
+
+  /**
+   * Route this engine's session wakeups to itself.
+   *
+   * Keyed by session, not global: several engines live in the same daemon process
+   * (one per session), and a single shared slot meant the engine built last
+   * received every session's wakeups.
+   */
+  private bindWakeupHandler(): void {
+    registerWakeupHandler(this.sessionId, (_sessionId, prompt, noop) => {
+      this.enqueueWakeup(prompt, noop)
+    })
   }
 
   /** Enqueue a loop prompt for later re-invocation (keep-latest — drops older wakeups). */
@@ -224,7 +237,12 @@ export class QueryEngine {
 
   /** Set the session identifier (called from index.tsx at startup with the actual session name). */
   setSessionId(id: string): void {
+    if (id === this.sessionId) return
+    // The wakeup registry is keyed by session, so a rename has to move the entry:
+    // leaving the old one behind would hand this engine another session's wakeups.
+    unregisterWakeupHandler(this.sessionId)
     this.sessionId = id
+    this.bindWakeupHandler()
   }
 
   /** Get the current session identifier. */

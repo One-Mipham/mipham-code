@@ -48,6 +48,45 @@ function buildToolName(serverName: string, toolName: string): string {
   return prefix + sanitizeName(toolName).slice(0, maxToolLen)
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * Coerce a server-declared `inputSchema` into a shape every provider accepts.
+ *
+ * `inputSchema` comes from another process and is not validated against JSON
+ * Schema. Passing it through put the same malformed schema in front of the
+ * model on *every* turn, so one broken server could make the whole session
+ * unusable — not just the one tool. Only the top level is repaired: property
+ * schemas that are themselves objects are kept verbatim, so this narrows
+ * malformed input without rewriting a server's intent.
+ */
+export function sanitizeInputSchema(schema: unknown): {
+  properties: Record<string, unknown>
+  required?: string[]
+} {
+  const root = isPlainObject(schema) ? schema : {}
+  const rawProperties = isPlainObject(root.properties) ? root.properties : {}
+  const properties: Record<string, unknown> = {}
+  for (const [name, property] of Object.entries(rawProperties)) {
+    if (isPlainObject(property)) properties[name] = property
+  }
+
+  const required = Array.isArray(root.required)
+    ? [
+        ...new Set(
+          root.required.filter(
+            (name): name is string =>
+              typeof name === 'string' && Object.prototype.hasOwnProperty.call(properties, name),
+          ),
+        ),
+      ]
+    : []
+
+  return required.length > 0 ? { properties, required } : { properties }
+}
+
 /**
  * Convert an MCP server ToolDefinition into the main ToolDefinition format
  * that can be registered in the central tool registry.
@@ -55,13 +94,9 @@ function buildToolName(serverName: string, toolName: string): string {
 export function convertMcpTool(serverName: string, mcpTool: McpToolDefinition): ToolDefinition {
   const toolName = buildToolName(serverName, mcpTool.name)
 
-  // Build parameters schema — pass through MCP inputSchema as-is
   const parameters: Record<string, unknown> = {
     type: 'object',
-    properties: (mcpTool.inputSchema.properties as Record<string, unknown>) ?? {},
-  }
-  if (mcpTool.inputSchema.required) {
-    parameters.required = mcpTool.inputSchema.required
+    ...sanitizeInputSchema(mcpTool.inputSchema),
   }
 
   return {

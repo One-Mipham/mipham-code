@@ -23,13 +23,27 @@ const activeTimers = new Map<string, ReturnType<typeof setTimeout>>()
  */
 const WAKEUP_DIR = miphamHome('wakeups')
 
-let wakeupHandler: ((sessionId: string, prompt: string, noop?: boolean) => void) | null = null
+type WakeupHandler = (sessionId: string, prompt: string, noop?: boolean) => void
+
+/**
+ * Handlers keyed by session — **not** a single slot.
+ *
+ * The daemon keeps one engine per session in the same process, and every engine
+ * construction used to overwrite the previous handler. A wakeup armed for session
+ * A then fired into whichever engine was built last, handing the loop prompt to a
+ * different conversation. The key is the session the timer was armed for, so a
+ * wakeup can only reach its own engine.
+ */
+const wakeupHandlers = new Map<string, WakeupHandler>()
 
 /** 引擎在启动时注入——timer 到期后回调，把 loop prompt 交回引擎 re-invoke。 */
-export function registerWakeupHandler(
-  fn: (sessionId: string, prompt: string, noop?: boolean) => void,
-): void {
-  wakeupHandler = fn
+export function registerWakeupHandler(sessionId: string, fn: WakeupHandler): void {
+  wakeupHandlers.set(sessionId, fn)
+}
+
+/** Drop a session's handler. Call this when the engine that owns it goes away. */
+export function unregisterWakeupHandler(sessionId: string): void {
+  wakeupHandlers.delete(sessionId)
 }
 
 /** One session's pending wakeup, as written to disk. */
@@ -98,7 +112,7 @@ function armTimer(sessionId: string, prompt: string, noop: boolean, delayMs: num
   const timeoutId = setTimeout(() => {
     activeTimers.delete(timerKey)
     clearPersistedWakeup(sessionId)
-    wakeupHandler?.(sessionId, prompt, noop)
+    wakeupHandlers.get(sessionId)?.(sessionId, prompt, noop)
   }, delayMs)
   activeTimers.set(timerKey, timeoutId)
 }

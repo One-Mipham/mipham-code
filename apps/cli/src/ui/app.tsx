@@ -66,6 +66,7 @@ import { recordLoopTurn, readAutoloopJournal } from '../commands/autoloop-journa
 import { cancelAllSessionTimers, resumeWakeups } from '../tools/scheduling/schedule-wakeup.js'
 import type { LostWakeup } from '../tools/scheduling/schedule-wakeup.js'
 import { startCronPoller } from '../core/cron-poller'
+import { exitSession } from '../core/session-exit'
 
 interface AppProps {
   engine: QueryEngine | RemoteEngine
@@ -1075,7 +1076,7 @@ export function App({
             if (result.nextProvider) setProviderId(result.nextProvider)
             if (result.nextModel) setModelId(result.nextModel)
           }
-          if (result.exit) process.exit(0)
+          if (result.exit) void exitSession(0)
           return
         }
 
@@ -1087,7 +1088,7 @@ export function App({
 
         // /quit and /exit are special
         if (command === '/exit' || command === '/quit') {
-          process.exit(0)
+          void exitSession(0)
         }
 
         // /focus toggle
@@ -1125,13 +1126,13 @@ export function App({
           })
           if (result.needsApiKey) {
             // Don't process nextProvider/model when waiting for API key
-            if (result.exit) process.exit(0)
+            if (result.exit) void exitSession(0)
             return
           }
           if (result.clearMessages) setMessages([])
           if (result.nextProvider) setProviderId(result.nextProvider)
           if (result.nextModel) setModelId(result.nextModel)
-          if (result.exit) process.exit(0)
+          if (result.exit) void exitSession(0)
           if (result.clearMessages || (result.forwardedMessages?.length ?? 0) > 0) {
             // The conversation this session is looking at just changed (/clear,
             // /resume) — the read-before-write record belongs to the old one.
@@ -1276,7 +1277,7 @@ export function App({
         return
       }
       if (ctrlC.isArmed()) {
-        process.exit(0)
+        void exitSession(0)
       }
       ctrlC.arm()
       return

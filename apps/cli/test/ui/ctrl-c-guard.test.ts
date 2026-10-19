@@ -470,7 +470,9 @@ function ctrlCBranchOf(source: string): string | null {
 function ctrlCBranchIsSafe(branch: string): boolean {
   const dismiss = branch.indexOf('dismissTopmost()')
   const armed = branch.indexOf('isArmed()')
-  const exit = branch.indexOf('process.exit')
+  // The exit primitive is `exitSession()` (it runs SessionEnd first); accept the
+  // old `process.exit` too so the deliberately-unsafe fixtures still parse.
+  const exit = Math.max(branch.indexOf('process.exit'), branch.indexOf('exitSession('))
   const arm = branch.indexOf('.arm()')
   return (
     dismiss >= 0 &&
@@ -511,9 +513,20 @@ describe('src/ui/app.tsx 的 Ctrl+C 分支顺序', () => {
       ),
     ).toBe(false) // arm() 写在判断之前 ⇒ 同步置位后当场读到 true，一次就退
     expect(ctrlCBranchOf('const x = 1')).toBeNull()
+    // 新形式同样要能被认出顺序：exitSession 写在 dismiss 之前就判不安全。
+    expect(
+      ctrlCBranchIsSafe(
+        `if (key.ctrl && input === 'c') {\n  if (ctrlC.isArmed()) void exitSession(0)\n  if (dismissTopmost()) { return }\n  ctrlC.arm()\n}`,
+      ),
+    ).toBe(false)
+    expect(
+      ctrlCBranchIsSafe(
+        `if (key.ctrl && input === 'c') {\n  if (dismissTopmost()) { return }\n  if (ctrlC.isArmed()) void exitSession(0)\n  ctrlC.arm()\n}`,
+      ),
+    ).toBe(true)
   })
 
-  it('真分支：关最上面一层 → 判 isArmed → 才 process.exit', () => {
+  it('真分支：关最上面一层 → 判 isArmed → 才退进程', () => {
     const branch = ctrlCBranchOf(source)
     expect(branch).not.toBeNull()
     expect(ctrlCBranchIsSafe(branch!)).toBe(true)
