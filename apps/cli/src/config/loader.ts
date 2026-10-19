@@ -107,6 +107,44 @@ function mergeProviders(
   return merged
 }
 
+/** Context window assumed for a hand-written model that does not declare one. */
+const DEFAULT_CONTEXT_WINDOW = 128_000
+
+/**
+ * Ensure every configured model carries a usable `contextWindow`.
+ *
+ * `ModelInfo.contextWindow` is required in TypeScript but nothing checks the
+ * YAML at runtime, and a user-defined provider's `models` reach the registry
+ * exactly as written. A model that is found but lacks the field produces
+ * `undefined` at `index.tsx`'s `activeModel.contextWindow` — and that becomes
+ * `ContextManager.maxTokens`. `needsCompaction()` then compares tokens against
+ * `NaN` and is **permanently false**: auto-compaction never runs, and the first
+ * sign of trouble is the provider rejecting an oversized request.
+ *
+ * The fallback is the same 128K `index.tsx` uses for an unknown model. Warn
+ * once per model: the whole defect is that this was silent. A value that is
+ * present but not a positive finite number (0, negative, a quoted string) is
+ * equally unusable and gets the same treatment.
+ *
+ * Runs on the final provider list — not on an override as it is merged — so a
+ * custom provider added wholesale is covered by the same check.
+ */
+function normalizeModelContextWindows(providers: ProviderConfig[]): void {
+  for (const provider of providers) {
+    if (!provider || !Array.isArray(provider.models)) continue
+    for (const model of provider.models) {
+      if (!model || typeof model !== 'object') continue
+      const window = model.contextWindow
+      if (typeof window === 'number' && Number.isFinite(window) && window > 0) continue
+      model.contextWindow = DEFAULT_CONTEXT_WINDOW
+      process.stderr.write(
+        `⚠ Mipham Code: model "${model.id ?? '<unnamed>'}" (provider "${provider.id}") ` +
+          `has no usable contextWindow — assuming 128K.\n`,
+      )
+    }
+  }
+}
+
 /**
  * Merge `override` into `base`, recursing into plain objects so that a source
  * setting one branch of an object does not drop the other source's siblings
@@ -913,6 +951,9 @@ export function loadConfig(cwd: string = process.cwd()): MiphamConfig {
 
   // ── Decrypt API keys at rest (enc:v1:) back to plaintext ──
   decryptProviderApiKeys(config.providers)
+
+  // Last step, so it sees the final merged list from every source.
+  normalizeModelContextWindows(config.providers)
 
   return config
 }

@@ -21,9 +21,9 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.38
-> **最后更新**: 2026-10-19 — **调度与退出路径加固（B2/B6/B8/B9，均未发布）**。① **B2 MCP schema 顶层净化**（`mcp/registry.ts` `sanitizeInputSchema`）：`inputSchema` 原样透传，坏 schema 让整轮请求 400 —— 现只保留 plain-object 属性与确实存在于属性里的 `required`（去重），`convertMcpTool` 产出 `{type:'object', ...}`。② **B6 SessionEnd 钩子真正跑完**：`process.exit()` 同步、钩子异步，旧路径同 tick 起钩子即退出（`/exit`、`/quit`、二次 Ctrl+C 更是直接 `process.exit`）；新增 `core/session-exit.ts` 单出口 —— `exitSession` 跨并发调用只跑一次、`withTimeout` 以 `SESSION_END_HOOK_TIMEOUT_MS = 1_500` 封顶，`index.tsx` 与 `ui/app.tsx` 五处用户退出全部改道。③ **B8 唤醒处理器按会话分发**：daemon 一个进程托管多会话引擎，模块级单例被最后构造的引擎覆盖 ⇒ A 的 loop prompt 落进 B；改 `Map<sessionId, handler>`，`setSessionId` 迁移注册、会话关闭注销并取消定时器，剩余 daemon 消费者缺口与方案写入 `apps/cli/docs/adr/0001-daemon-scheduling-ownership.md`。④ **B9 cron 重复触发（先证伪后修）**：存储全局、同目录每个 CLI 各跑轮询器，`readAllJobs → enqueue → writeJob` 之间无互斥 ⇒ 同一个到期任务跑两遍；复现测试在 `enqueue` 里嵌套调第二个 `checkCronJobs`（改前入队 **2** 次，改后 **1** 次），现以 `mkdir` 排他目录按任务取锁、**持锁后重读文件**确认仍到期才发；崩溃遗留的锁 5 分钟后可被接管 —— 关闭的是并发轮询窗口，崩溃窗口仍是 at-least-once，注释里写明。测试 **4,247 → 4,338**（**328 文件**；本机 4,336 passed + 2 skipped，0 失败）；typecheck / eslint / prettier 全绿。**未发布（npm 仍 0.85.22），未部署。**
-> **前一条（2.94.37）**: 2026-10-11 — **0.85.22 发布：裸名权限规则改为写入侧校验工具名（「静默死规则」不再静默）**。本批 `git rev-list --count 'v0.85.21^{}..v0.85.22^{}'` = **7 笔**，其中 **4 笔是上一版 0.85.21 的回填 / 清理笔**（`eea7f42e` / `f74f332c` / `d6a755a8` / `1f7bc1d6`）⇒ **本版自身 3 笔**（1 `fix(permissions)` `c4bb5f17` + 1 `docs` CHANGELOG `d687d191` + 1 `chore` bump `9ed406c9`）。⭐ **发版判据这次「满足」**：`c4bb5f17` 是**用户看得见**的改动 —— `allow "bash"`（正确拼写 `Bash`）此前在 `validateRulePattern` 的裸名分支里只过 `^\w+$`，结构合法、能落盘、能加载，却**永远匹配不到任何工具**（匹配按 `pattern === tool.name`、大小写敏感）：不报错、不生效，正是既有警告通道专治的「静默死规则」，而它恰从那条通道旁边绕了过去。现改为**写入侧查存在性** —— 大小写错时**只在 `toLowerCase()` 相等**时给出唯一正确写法（`bash` → `Bash`；恒等改写、不可能指错工具），更远的（`bahs`）不猜；完全不认识的工具名直接拒绝；`mcp__` 前缀**豁免**（MCP 工具**动态注册**，静态全集必然漏）。接线在**四处**（启动（工具注册后、规则加载前） / `/permissions` 命令 / 子代理 / daemon）—— 只接一处会留下「读得进、拦不住」。测试 **4,247**（**323 文件**；本机 4,245 passed + 2 skipped，0 失败）。**发布读数**（全取外部探针）：GPG 签名 tag `v0.85.22` → `9ed406c9`（tag 对象 `d03de764…`，`git tag -v` = 完好的签名，RSA `62F77FC4…` / Guohua Zhang）；主干 ci.yml `38139669926` **9/9** @ `9ed406c9`；`release.yml` `38139864290` **9/9**（Test / 4 平台 Build / npm Publish / macOS DMG / JetBrains / GitHub Release）；npm 真输出行 `+ @miphamai/cli@0.85.22`（发布行 `2026-10-11T12:37:56Z`，registry `time[0.85.22] = 12:40:03.996Z`、`time.modified = 12:40:04.532Z`、`latest` = **0.85.22**；直连读 ⇒ 不是读缓存）；GitHub Release **6 资产**、非 draft 非 prerelease（`createdAt 12:35:19Z`）；JetBrains 真输出行 `JetBrains plugin published.`；macOS DMG **2,268,256 B** ⚠️ **未签名**（CI 无 `APPLE_SIGNING_IDENTITY`，与历次同）。`.vsix` 本机 **70,770 B** / sha256 `80ae072a…` / **包内** `version` = 0.85.22 ⇒ ✅ **已人工上传 Marketplace 并经双探针核验**（2026-10-11）：页内同源 `extensionquery` API 与公开页 `More Info` **同读 0.85.22** —— `versions[0].version` = **0.85.22**、`versions[0].lastUpdated` = `2026-10-11T12:46:21.49Z`、`versions[0].flags` = `validated`、`publisher.publisherName` = `miphamai`；页面 `Version 0.85.22` / `Last updated 2026/10/11 20:46:21`（UTC+8，与 API 同刻）；该端点 `versions[]` 回 **74** 条（较 0.85.21 那次 +1）。✅ **两站已部署**（用户直令「再发一版并部署两站」，一次只覆盖一次）：国内站 `deploy-cn.sh` → 腾讯云（PM2 `onemipham` online、端口 3007 监听）；国际站 `deploy.sh` → `vercel --prod`（`dpl_C2q6QaTiiBFbaHU7KTmq37APWzBr`、`target: production`、`READY`，别名 `mipham.ai`）；绕缓存复核两站各 **3×0.85.22 / 0×0.85.21**、`4247`×2。`websites` `5e0d94f` → **`be56492`**（`chore(sync): package-info 同步到 0.85.22（两站）`）。
+> **版本**: 2.94.39
+> **最后更新**: 2026-10-19 — **B10 手写 model 的上下文窗口不再静默失联（未发布）**。链路：YAML 的 `providers[].models` 原样进 registry（`config/loader.ts` 只合并、不校验），`index.tsx` 用 `findModel(defaultModel).contextWindow` 当 `maxTokens`，而 `ContextManager.needsCompaction()` 是 `estimated > maxTokens * threshold` —— 手写模型缺 `contextWindow` 时 `maxTokens` 是 `undefined`，比较落在 `NaN` 上**恒 false** ⇒ 自动压缩**永不触发**，且全程无任何报错，首个症状是上游拒收超大请求；`engine.switchProvider` 读同一字段，亦为 `undefined`。修法：`loadConfig` **出口**对最终合并后的全部 provider 统一归一 —— 缺失 / `0` / 负数 / 字符串 / 非有限值一律回退 **128K**（与未知模型的回退值一致），并逐个点名模型与 provider 告警。落点选**出口**而非 override 分支：整条新增的自定义 provider 与已知 provider 的 `models` 覆写必须走同一个检查（只接一处的陷阱）。先复现：新测试 **3 红 1 绿**（显式合法窗口那格本就该绿），修复后 **4/4**；其中一条按 `index.tsx` 的方式把载入值接进 `ContextManager`，500K 字符下 `needsCompaction()` 改前 `false`、改后 `true`。测试 **4,338 → 4,342**（**329 文件**；本机 4,340 passed + 2 skipped，0 失败）；typecheck / eslint / prettier 全绿。**未发布（npm 仍 0.85.22），未部署。**
+> **前一条（2.94.38）**: 2026-10-19 — **调度与退出路径加固（B2/B6/B8/B9，均未发布）**。① **B2 MCP schema 顶层净化**（`mcp/registry.ts` `sanitizeInputSchema`）：`inputSchema` 原样透传，坏 schema 让整轮请求 400 —— 现只保留 plain-object 属性与确实存在于属性里的 `required`（去重），`convertMcpTool` 产出 `{type:'object', ...}`。② **B6 SessionEnd 钩子真正跑完**：`process.exit()` 同步、钩子异步，旧路径同 tick 起钩子即退出（`/exit`、`/quit`、二次 Ctrl+C 更是直接 `process.exit`）；新增 `core/session-exit.ts` 单出口 —— `exitSession` 跨并发调用只跑一次、`withTimeout` 以 `SESSION_END_HOOK_TIMEOUT_MS = 1_500` 封顶，`index.tsx` 与 `ui/app.tsx` 五处用户退出全部改道。③ **B8 唤醒处理器按会话分发**：daemon 一个进程托管多会话引擎，模块级单例被最后构造的引擎覆盖 ⇒ A 的 loop prompt 落进 B；改 `Map<sessionId, handler>`，`setSessionId` 迁移注册、会话关闭注销并取消定时器，剩余 daemon 消费者缺口与方案写入 `apps/cli/docs/adr/0001-daemon-scheduling-ownership.md`。④ **B9 cron 重复触发（先证伪后修）**：存储全局、同目录每个 CLI 各跑轮询器，`readAllJobs → enqueue → writeJob` 之间无互斥 ⇒ 同一个到期任务跑两遍；复现测试在 `enqueue` 里嵌套调第二个 `checkCronJobs`（改前入队 **2** 次，改后 **1** 次），现以 `mkdir` 排他目录按任务取锁、**持锁后重读文件**确认仍到期才发；崩溃遗留的锁 5 分钟后可被接管 —— 关闭的是并发轮询窗口，崩溃窗口仍是 at-least-once，注释里写明。测试 **4,247 → 4,338**（**328 文件**；本机 4,336 passed + 2 skipped，0 失败）；typecheck / eslint / prettier 全绿。**未发布（npm 仍 0.85.22），未部署。**
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -62,7 +62,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：4,338 测试（本机 4,336 passed + 2 skipped，328 文件，0 失败）
+测试：4,342 测试（本机 4,340 passed + 2 skipped，329 文件，0 失败）
 
 ---
 
@@ -99,7 +99,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 328 个测试文件，4338 个测试
+│   │   ├── test/               # 329 个测试文件，4342 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -125,7 +125,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（4338 个测试）
+pnpm test         # vitest run（4342 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -328,14 +328,14 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | shared          | 11      | 139      | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                              |
 | commands        | 9       | 100      | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers / provider-model-flags                                                                  |
 | skills          | 6       | 60       | sanitizer / marketplace / fork-executor / skill-assets                                                                                                                      |
-| config          | 10      | 125      | credential-crypto / loader-encryption / defaults / settings-json / preferences                                                                                              |
+| config          | 11      | 129      | credential-crypto / loader-encryption / defaults / settings-json / preferences / model-context-window                                                                       |
 | plugin          | 4       | 62       | claude-plugin / plugin-manager                                                                                                                                              |
 | artifacts       | 1       | 6        | manifest                                                                                                                                                                    |
 | agent-view      | 4       | 41       | agent-view-manager / dashboard-keys / session-view                                                                                                                          |
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integrity       | 19      | 132      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **328** | **4338** | **0 失败** ✅（本机 4,336 + 2 skipped，328 文件）                                                                                                                           |
+| **合计**        | **329** | **4342** | **0 失败** ✅（本机 4,340 + 2 skipped，329 文件）                                                                                                                           |
 
 ### 测试注意事项
 
