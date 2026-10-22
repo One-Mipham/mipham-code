@@ -21,9 +21,9 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.40
-> **最后更新**: 2026-10-19 — **0.85.23 发布：手写 model 缺 `contextWindow` 不再静默失联（B10）+ CC 2.1.299–303 三批落地**（2.94.40；区间 **19 笔** = `git rev-list --count 'v0.85.22^{}..v0.85.23^{}'`，其中运行期修复 **5 笔** —— 十项借鉴 `766bd5ac`、PreToolUse 守卫 fail-closed `df2f8d1e`、B2/B6/B8 `af8bec46`、B9 cron 单轮询者 `efdbe10c`、B10 contextWindow `54d57e02`；另含 3 笔 0.85.22 发布回填、5 笔表格 / 教训文档、3 笔 merge、1 笔 test-count chore、1 笔 CHANGELOG、1 笔 bump）。**B10 链路**：`providers[].models` 原样进 registry，`index.tsx` 用 `contextWindow` 当 `maxTokens`，而 `needsCompaction()` 是 `estimated > maxTokens * threshold` —— 缺失时比较落在 `NaN` 上恒 false ⇒ 自动压缩**永不触发**且全程无报错；修法是在 `loadConfig` **出口**统一归一（缺失 / 0 / 负数 / 字符串 / 非有限值 → **128K**，逐模型点名告警），先复现 **3 红 1 绿**、修复后 **4/4**。**发布读数**（全取外部探针）：GPG 签名 tag `v0.85.23` → `905aba12`（tag 对象 `05eb8e9b…`，`git tag -v` = 完好的签名）；`release.yml` `39276048779` **9/9** @ `905aba12`；npm 真输出行 `+ @miphamai/cli@0.85.23`（15:16:39Z）、registry `time['0.85.23']` = **2026-10-19T15:20:48.728Z**、`dist-tags.latest` = **0.85.23**；GitHub Release `v0.85.23` **6 资产**、非 draft 非 prerelease（createdAt 15:12:54Z）；JetBrains 真输出行 `JetBrains plugin published.`（15:16:49Z）；macOS DMG **2,268,258 B** ⚠️ **未签名**（CI 无签名身份，与历次同）；本地 `.vsix` **71,037 B** / sha256 `c595bdc6…` / 包内 `version` = 0.85.23 ⇒ ✅ **已人工上传 Marketplace 并经双探针核验**：页内同源 `extensionquery` API 与公开页 `More Info` **同读 0.85.23**（`versions[0].version` = 0.85.23、`versions[0].lastUpdated` = `2026-10-19T15:25:07.577Z`、`versions[0].flags` = `validated`、`publisher.publisherName` = `miphamai`；页面 `Version 0.85.23` / `Last updated 2026/10/19 23:25:07`，UTC+8 与 API 同刻；`versions[]` 回 **75** 条，较 0.85.22 那次 +1）。✅ **两站已部署**（用户直令，一次只覆盖一次）：国内站 `deploy-cn.sh` → 腾讯云（PM2 `onemipham` online、端口 3007 监听，Commit `2649bbc`）；国际站 `vercel --prod`（`dpl_5mjz1MXHbgKmbdxL1Ed1iXYRgBwN`、`target: production`、`READY`，别名 `mipham.ai`）；绕缓存复核两站各 **3×0.85.23 / 0×0.85.22**、`4342`×2。`websites` `fc613ce` → **`2649bbc`**（`chore(sync): package-info 同步到 0.85.23（两站）`）。测试 **4,342**（329 文件；4,340 passed + 2 skipped）；typecheck / eslint / prettier 全绿。
-> **前一条（2.94.39）**: 2026-10-19 — **B10 手写 model 的上下文窗口不再静默失联（已随 0.85.23 发布）**。链路：YAML 的 `providers[].models` 原样进 registry（`config/loader.ts` 只合并、不校验），`index.tsx` 用 `findModel(defaultModel).contextWindow` 当 `maxTokens`，而 `ContextManager.needsCompaction()` 是 `estimated > maxTokens * threshold` —— 手写模型缺 `contextWindow` 时 `maxTokens` 是 `undefined`，比较落在 `NaN` 上**恒 false** ⇒ 自动压缩**永不触发**，且全程无任何报错，首个症状是上游拒收超大请求；`engine.switchProvider` 读同一字段，亦为 `undefined`。修法：`loadConfig` **出口**对最终合并后的全部 provider 统一归一 —— 缺失 / `0` / 负数 / 字符串 / 非有限值一律回退 **128K**（与未知模型的回退值一致），并逐个点名模型与 provider 告警。落点选**出口**而非 override 分支：整条新增的自定义 provider 与已知 provider 的 `models` 覆写必须走同一个检查（只接一处的陷阱）。先复现：新测试 **3 红 1 绿**（显式合法窗口那格本就该绿），修复后 **4/4**；其中一条按 `index.tsx` 的方式把载入值接进 `ContextManager`，500K 字符下 `needsCompaction()` 改前 `false`、改后 `true`。测试 **4,338 → 4,342**（**329 文件**；本机 4,340 passed + 2 skipped，0 失败）；typecheck / eslint / prettier 全绿。**✅ 已随 0.85.23 发布（两站已部署）** —— 原文「未发布（npm 仍 0.85.22），未部署」撰写时为真，发布后已变假。
+> **版本**: 2.94.41
+> **最后更新**: 2026-10-22 — **本轮审计落地 16 处缺陷修复 + 2 处半修复，另 3 条自查缺陷同批收口**（2.94.41）。**三条自查缺陷比审计条目更重**：① `tools/agent/workflow.ts` 的 engineStub 只有两个方法、`as` 断言骗过类型，而 `runWorkflow` 必读四个 ⇒ **模型每次调 Workflow 都在脚本第一行前抛错**，且此前没有任何测试执行过这个工具；② 技能 frontmatter 的 `hooks:` 是纯数据、`handler` 恒 undefined，原样注册后 `runHooks` 在 `hook.handler(ctx)` 抛 TypeError，PreToolUse 守卫 fail-closed ⇒ **整场会话每一次工具调用都被拒**（改为只收带 handler 的条目并逐条告警）；③ 子代理最后一轮被 `max_tokens` 截断时，截断标记无人读 ⇒ 半句话的结论被当成完整答案（现在前置 `[partial result …]`）。**16 处修复**：MCP 连接预算改按醒着的时间（睡眠不再烧预算，`waitUntilReady` 同步）、压缩末尾按**预算**兜底（条数闸够不着巨型工具结果）、`/skills` 与 `/reload-skills` 只印首行、openai-compat 补 `stream_options.include_usage`（此前所有 OpenAI 兼容 provider 的 token 读数**恒 0**）、WebFetch 4xx/5xx 改为正常结果、错误与配额文案（不可解析参数、429 别绕）、worktree 清不掉时留痕重试、ENOSPC 明说盘满、摘要标注压缩条数与省略字符、`verify()/judge()` 由运行时注入 agent ⇒ 走 journal 与 resume 缓存、`rm` 递归守卫改按行为判（`-r`/`-R`/`--recursive`/任意字母簇，含挂载点与 `C:\Users`）、compaction 全链收 signal、`--profile` 进已知 flag 并补用法、PreToolUse 守卫失败不再抢走后面钩子的显式 deny、`/loop` 唤醒按缓存窗口给延迟、`autoCompactWindow` 接受 `200k`/`1M` 并对越界告警。**半修复 2**：投给已结束 agent 的消息改为**明确拒绝**（本仓无子代理 resume）、不可解析参数不重试而如实标注。**刻意不落**：启动告警上横幅（需新开告警通道）、两处 UI 交互（未实测，登记 UNVERIFIED）。测试 **4,342 → 4,388**（**330 文件**；4,386 passed + 2 skipped，0 失败）；typecheck / eslint / prettier 全绿；`sync-counts` 已回填三处。**⏳ 本轮尚未发布。**
+> **前一条（2.94.40）**: 2026-10-19 — **0.85.23 发布：手写 model 缺 `contextWindow` 不再静默失联（B10）+ CC 2.1.299–303 三批落地**（2.94.40；区间 **19 笔** = `git rev-list --count 'v0.85.22^{}..v0.85.23^{}'`，其中运行期修复 **5 笔** —— 十项借鉴 `766bd5ac`、PreToolUse 守卫 fail-closed `df2f8d1e`、B2/B6/B8 `af8bec46`、B9 cron 单轮询者 `efdbe10c`、B10 contextWindow `54d57e02`；另含 3 笔 0.85.22 发布回填、5 笔表格 / 教训文档、3 笔 merge、1 笔 test-count chore、1 笔 CHANGELOG、1 笔 bump）。**B10 链路**：`providers[].models` 原样进 registry，`index.tsx` 用 `contextWindow` 当 `maxTokens`，而 `needsCompaction()` 是 `estimated > maxTokens * threshold` —— 缺失时比较落在 `NaN` 上恒 false ⇒ 自动压缩**永不触发**且全程无报错；修法是在 `loadConfig` **出口**统一归一（缺失 / 0 / 负数 / 字符串 / 非有限值 → **128K**，逐模型点名告警），先复现 **3 红 1 绿**、修复后 **4/4**。**发布读数**（全取外部探针）：GPG 签名 tag `v0.85.23` → `905aba12`（tag 对象 `05eb8e9b…`，`git tag -v` = 完好的签名）；`release.yml` `39276048779` **9/9** @ `905aba12`；npm 真输出行 `+ @miphamai/cli@0.85.23`（15:16:39Z）、registry `time['0.85.23']` = **2026-10-19T15:20:48.728Z**、`dist-tags.latest` = **0.85.23**；GitHub Release `v0.85.23` **6 资产**、非 draft 非 prerelease（createdAt 15:12:54Z）；JetBrains 真输出行 `JetBrains plugin published.`（15:16:49Z）；macOS DMG **2,268,258 B** ⚠️ **未签名**（CI 无签名身份，与历次同）；本地 `.vsix` **71,037 B** / sha256 `c595bdc6…` / 包内 `version` = 0.85.23 ⇒ ✅ **已人工上传 Marketplace 并经双探针核验**：页内同源 `extensionquery` API 与公开页 `More Info` **同读 0.85.23**（`versions[0].version` = 0.85.23、`versions[0].lastUpdated` = `2026-10-19T15:25:07.577Z`、`versions[0].flags` = `validated`、`publisher.publisherName` = `miphamai`；页面 `Version 0.85.23` / `Last updated 2026/10/19 23:25:07`，UTC+8 与 API 同刻；`versions[]` 回 **75** 条，较 0.85.22 那次 +1）。✅ **两站已部署**（用户直令，一次只覆盖一次）：国内站 `deploy-cn.sh` → 腾讯云（PM2 `onemipham` online、端口 3007 监听，Commit `2649bbc`）；国际站 `vercel --prod`（`dpl_5mjz1MXHbgKmbdxL1Ed1iXYRgBwN`、`target: production`、`READY`，别名 `mipham.ai`）；绕缓存复核两站各 **3×0.85.23 / 0×0.85.22**、`4342`×2。`websites` `fc613ce` → **`2649bbc`**（`chore(sync): package-info 同步到 0.85.23（两站）`）。测试 **4,342**（329 文件；4,340 passed + 2 skipped）；typecheck / eslint / prettier 全绿。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -62,7 +62,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：4,342 测试（本机 4,340 passed + 2 skipped，329 文件，0 失败）
+测试：4,388 测试（本机 4,386 passed + 2 skipped，330 文件，0 失败）
 
 ---
 
@@ -99,7 +99,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 329 个测试文件，4342 个测试
+│   │   ├── test/               # 330 个测试文件，4388 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -125,7 +125,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（4342 个测试）
+pnpm test         # vitest run（4388 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -315,19 +315,19 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 94      | 1663     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
-| tools           | 27      | 529      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
+| core            | 94      | 1668     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
+| tools           | 28      | 558      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 37      | 259      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
-| ui              | 34      | 372      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
-| agent           | 15      | 153      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
+| ui              | 34      | 373      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
+| agent           | 15      | 157      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
 | security        | 12      | 122      | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
-| providers       | 9       | 165      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
-| mcp             | 12      | 155      | client / transport / oauth / token-store / registry / instructions（含 2 skipped）                                                                                          |
-| workflow        | 8       | 64       | runtime / loop / parallel / sandbox / journal / verify                                                                                                                      |
+| providers       | 9       | 166      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
+| mcp             | 12      | 157      | client / transport / oauth / token-store / registry / instructions（含 2 skipped）                                                                                          |
+| workflow        | 8       | 65       | runtime / loop / parallel / sandbox / journal / verify                                                                                                                      |
 | vajra           | 6       | 53       | context / events / service / compose / leaf（自建内核）                                                                                                                     |
-| shared          | 11      | 139      | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                              |
+| shared          | 11      | 140      | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                              |
 | commands        | 9       | 100      | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers / provider-model-flags                                                                  |
-| skills          | 6       | 60       | sanitizer / marketplace / fork-executor / skill-assets                                                                                                                      |
+| skills          | 6       | 62       | sanitizer / marketplace / fork-executor / skill-assets                                                                                                                      |
 | config          | 11      | 129      | credential-crypto / loader-encryption / defaults / settings-json / preferences / model-context-window                                                                       |
 | plugin          | 4       | 62       | claude-plugin / plugin-manager                                                                                                                                              |
 | artifacts       | 1       | 6        | manifest                                                                                                                                                                    |
@@ -335,7 +335,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integrity       | 19      | 132      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **329** | **4342** | **0 失败** ✅（本机 4,340 + 2 skipped，329 文件）                                                                                                                           |
+| **合计**        | **330** | **4388** | **0 失败** ✅（本机 4,386 + 2 skipped，330 文件）                                                                                                                           |
 
 ### 测试注意事项
 
