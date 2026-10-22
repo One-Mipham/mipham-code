@@ -107,20 +107,25 @@ describe('WebFetch tool execution', () => {
     expect(callArgs[1]?.headers?.['User-Agent']).toBe(`Mipham-Code/${PACKAGE_VERSION}`)
   })
 
-  it('returns error for non-200 response', async () => {
+  it('returns a normal result for a non-2xx response — the status is information, not a tool failure', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 404,
       statusText: 'Not Found',
+      url: 'https://error-test.example.com/missing',
       headers: new Map([['content-type', 'text/html']]),
+      text: async () => '<p>gone</p>',
     }) as unknown as typeof fetch
 
     const result = await webFetchTool.execute(
       { url: 'https://error-test.example.com/missing' },
       ctx,
     )
-    expect(result.success).toBe(false)
-    expect(result.error).toContain('HTTP 404')
+    // `success: false` would become `is_error` in the tool_result — the model
+    // would read a 404 as "the fetch broke" instead of "the page is missing".
+    expect(result.success).toBe(true)
+    expect(result.content).toContain('HTTP 404')
+    expect(result.content).toContain('gone')
   })
 
   it('handles fetch errors gracefully', async () => {

@@ -214,6 +214,23 @@ describe('OpenAICompatProvider', () => {
     expect(capturedBody.max_tokens).toBe(8192)
   })
 
+  it('asks for the usage chunk, so token counts are measured rather than assumed', async () => {
+    // 会让这条失败的改动：去掉 `stream_options`。那时服务端从不发最后的 usage 块，
+    // `usage` 事件永不出现 ⇒ 子代理与页脚记的 token 数恒为 0 —— 读起来像「免费」，
+    // 而不是「没测」。
+    let capturedBody: Record<string, unknown> = {}
+    const fetchMock = vi.fn().mockImplementation(async (_url, opts) => {
+      capturedBody = JSON.parse(opts.body as string)
+      return makeSSEResponse(['data: [DONE]'])
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new OpenAICompatProvider(makeConfig())
+    await collectChunks(provider.chat({ model: 'gpt-5', messages: [] }))
+
+    expect(capturedBody.stream_options).toEqual({ include_usage: true })
+  })
+
   it('should include tools with function wrapper', async () => {
     let capturedBody: Record<string, unknown> = {}
     const fetchMock = vi.fn().mockImplementation(async (_url, opts) => {

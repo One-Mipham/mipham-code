@@ -193,6 +193,55 @@ describe('the engine’s own failure paths follow the same policy', () => {
   })
 })
 
+describe('a guard that could not run does not swallow later hooks', () => {
+  const throwing = (): HookDefinition => ({
+    event: 'PreToolUse',
+    handler: async () => {
+      throw new Error('handler exploded')
+    },
+  })
+
+  it('reports a later explicit deny instead of the earlier guard failure', async () => {
+    const engine = new HookEngine()
+    engine.register(throwing())
+    engine.register({
+      event: 'PreToolUse',
+      handler: async () => ({ allowed: false, reason: 'touching production config is refused' }),
+    })
+
+    const r = await engine.executePreToolUse('Bash', {}, 's')
+
+    // 断言的是**归因**，不只是「被拒」：模型读 reason 决定下一步 ——
+    // 「钩子炸了」让它去修钩子，「这条路径不许碰」才让它换做法。
+    expect(r.allowed).toBe(false)
+    expect(r.reason).toContain('touching production config is refused')
+    expect(r.reason).not.toContain('fail-closed')
+  })
+
+  it('still denies with the guard failure when every later hook allows (positive control)', async () => {
+    const engine = new HookEngine()
+    engine.register(throwing())
+    engine.register({ event: 'PreToolUse', handler: async () => ({ allowed: true }) })
+
+    const r = await engine.executePreToolUse('Bash', {}, 's')
+
+    expect(r.allowed).toBe(false)
+    expect(r.reason).toContain('fail-closed')
+    expect(r.reason).toContain('handler exploded')
+  })
+
+  it('keeps running the remaining hooks after a guard throws', async () => {
+    const engine = new HookEngine()
+    engine.register(throwing())
+    const later = vi.fn(async () => ({ allowed: true, additionalContext: 'saw the call' }))
+    engine.register({ event: 'PreToolUse', handler: later })
+
+    await engine.executePreToolUse('Bash', {}, 's')
+
+    expect(later).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('failureMode reaches the definition the engine reads', () => {
   it('carries the setting from settings.json through loadHookConfigs', () => {
     const defs = loadHookConfigs({

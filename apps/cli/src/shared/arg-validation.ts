@@ -44,6 +44,7 @@ const KNOWN_FLAGS = [
   '--help',
   '-h',
   '--dump-config',
+  '--profile',
   '--safe-mode',
   '--resume',
   '--permission',
@@ -71,7 +72,7 @@ const KNOWN_FLAGS = [
  * actually wrong never mentioned, exit 1, no CLI. Their values are open (a provider may
  * be user-defined), so — unlike `--permission` — this module owns only their spelling.
  */
-const VALUE_FLAGS = ['--resume', '--permission', '--provider', '--model']
+const VALUE_FLAGS = ['--resume', '--permission', '--provider', '--model', '--profile']
 
 /**
  * The first token that would be read as a command, skipping flags and the values

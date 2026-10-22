@@ -105,6 +105,27 @@ describe('/cost prompt-cache', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════
+// /skills —— 终端列表用人看的短描述，不是模型那份长指令
+// ═══════════════════════════════════════════════════════════════
+
+describe('/skills listing', () => {
+  it('collapses a multi-paragraph model-facing description to its first line', async () => {
+    const long = 'First line summary.\n\nSecond paragraph of model instructions.'
+    const skill = { name: 'demo', type: 'standard', description: long }
+    const ctx = mkCtx()
+    ;(ctx as { skillsLoader?: unknown }).skillsLoader = {
+      countByType: () => ({ standard: 1, mipham: 0, total: 1 }),
+      listByType: (type: string) => (type === 'standard' ? [skill] : []),
+    }
+    const handler = getCommand('/skills')!
+    const result = await handler(ctx, [])
+
+    expect(result.content).toContain('First line summary.')
+    expect(result.content).not.toContain('Second paragraph of model instructions.')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
 // 上下文用量显示 —— 分母必须来自引擎，不得硬编码
 // ═══════════════════════════════════════════════════════════════
 

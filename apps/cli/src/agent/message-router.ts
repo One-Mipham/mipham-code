@@ -1,4 +1,5 @@
 import { getMessageBus } from './message-bus'
+import { getBackgroundAgentRegistry } from './background-registry'
 import { getFileInboxTransport } from './cross-session/file-inbox'
 import { discoverSessions, createSessionInfo } from './cross-session/discovery'
 import type { AgentMessage } from './message-bus'
@@ -82,6 +83,35 @@ export class MessageRouter {
   async route(from: string, to: string, summary: string, message: string): Promise<RouteResult> {
     // Same-process routing: "main" or background task IDs
     if (to === 'main' || to.startsWith('bg-') || to.startsWith('sub-agent-')) {
+      // A message is only delivered if something is still reading the address.
+      // Background and sub-agent ids are drained from inside their own turn
+      // loop (`sub-agent.ts` `drainInboundMessages`), so once that loop has
+      // exited the queue entry is never looked at again — posting anyway and
+      // reporting success tells the caller to expect a reply from an agent that
+      // will never run. The registry is the liveness record; "main" has no id
+      // in it and is always drainable by the parent engine.
+      if (to !== 'main') {
+        const task = getBackgroundAgentRegistry().get(to)
+        if (!task) {
+          return {
+            success: false,
+            routedTo: 'bus',
+            error:
+              `No live agent "${to}" in this process. A background agent is only ` +
+              `addressable by its task ID while it is still running.`,
+          }
+        }
+        if (task.status !== 'running') {
+          return {
+            success: false,
+            routedTo: 'bus',
+            error:
+              `Agent "${to}" is ${task.status} and is no longer reading messages, ` +
+              `so this message would never be seen. Its final result is available ` +
+              `through the Task tool; start a new agent to continue the work.`,
+          }
+        }
+      }
       try {
         const bus = getMessageBus()
         const msgId = bus.post(from, to, summary, message)

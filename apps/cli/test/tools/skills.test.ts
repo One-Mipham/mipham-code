@@ -377,7 +377,11 @@ describe('SkillsLoader', () => {
       expect(skill!.version).toBe('2.5.0')
       expect(skill!.type).toBe('standard')
       expect(skill!.tools).toEqual([{ name: 'custom-tool', description: 'A tool' }])
-      expect(skill!.hooks).toEqual([{ type: 'pre-query', action: 'validate' }])
+      // YAML 里没有闭包 ⇒ frontmatter 的 `hooks:` 到这一步只是数据，`handler` 恒为
+      // undefined。原样收下并注册，`runHooks` 会在 `hook.handler(ctx)` 上抛 TypeError，
+      // 而 PreToolUse 守卫是 fail-closed —— 整场会话的**每一次**工具调用都会被拒。
+      // 所以这里钉的是「没有 handler 就不进 skill.hooks」，不是「字段没解析」。
+      expect(skill!.hooks).toBeUndefined()
       expect(skill!.prompts).toEqual({ analyze: 'Analyze this code: ${file}' })
     })
 

@@ -1274,6 +1274,7 @@ Usage:
 
 Flags:
   --dump-config              Print the assembled profile tree
+  --profile <name>           Profile for --dump-config (default: default)
   --safe-mode                Skip custom agents, skills, hooks, plugins
   --resume <name>            Open a saved session (see /resume for names)
   --permission <mode>        Start in this mode: ${ALL_MODES.join('|')}
@@ -1295,8 +1296,17 @@ npm:  https://www.npmjs.com/package/@miphamai/cli`)
     const { loadProfile, loadBundle, assemble, dumpConfig } = await import('../src/vajra/compose')
 
     const profileIdx = process.argv.indexOf('--profile')
-    const profileName =
-      profileIdx !== -1 && process.argv[profileIdx + 1] ? process.argv[profileIdx + 1]! : 'default'
+    if (profileIdx !== -1) {
+      const value = process.argv[profileIdx + 1]
+      // A bare `--profile` (or `--profile --safe-mode`) used to fall through to
+      // the `default` profile — the same silent substitution as a misspelled
+      // session name, on the one path where nothing else would catch it.
+      if (!value || value.startsWith('-')) {
+        console.error('Usage: mipham --dump-config --profile <name>')
+        process.exit(1)
+      }
+    }
+    const profileName = profileIdx !== -1 ? process.argv[profileIdx + 1]! : 'default'
     const dir = join(homedir(), '.mipham', 'profiles')
     const profilePath = join(dir, `${profileName}.yml`)
 
@@ -1309,6 +1319,15 @@ npm:  https://www.npmjs.com/package/@miphamai/cli`)
     const resolveBundle = (name: string) => loadBundle(join(dir, `${name}.yml`))
     console.log(dumpConfig(assemble(profile, resolveBundle)))
     process.exit(0)
+  }
+
+  // `--profile` only means something with `--dump-config`. Saying so beats
+  // launching the interactive CLI with a flag that silently does nothing.
+  if (process.argv.includes('--profile')) {
+    console.error(
+      '--profile <name> only applies to --dump-config:\n  mipham --dump-config --profile <name>',
+    )
+    process.exit(1)
   }
 
   // ── Update / upgrade ──────────────────────────────────────────────────────

@@ -158,8 +158,12 @@ export const webSearchTool: ToolDefinition = {
           return {
             success: false,
             content: '',
+            // 说清楚「绕不过去」：不写这一句，模型最常见的下一步是改用 WebFetch
+            // 或浏览器去同一个站点再问一遍 —— 那既不会恢复配额，又是另一份预算。
             error:
-              'Brave Search API rate limit reached (2,000/month on free tier). Try again later.',
+              'Brave Search API rate limit reached (2,000/month on free tier). ' +
+              'Do not route around it with WebFetch or a browser — the quota is spent ' +
+              'either way. Tell the user and wait for it to reset.',
           }
         }
         if (response.status === 401) {

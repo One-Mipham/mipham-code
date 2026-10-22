@@ -109,6 +109,46 @@ describe('Runtime', () => {
     expect(result.result).toEqual({ input: 'test', count: 42 })
   })
 
+  /**
+   * verify() 曾经拿到的是**裸原语**：它内部的每一次 agent 调用都不经过这次 run 的
+   * journal 与缓存 ⇒ 续跑时脚本里看得见的 agent() 全部命中，而 verify 的每个 skeptic
+   * 都**重新真跑一遍**（也没有 budget/journal 记录）。判据两条：第一跑的 journal 里
+   * 出现这些调用；同脚本续跑时 provider 一次都不被调用。
+   */
+  it('verify() inside a run is journaled and replayed from cache on resume', async () => {
+    let providerCalls = 0
+    const provider = createMockProvider([
+      { type: 'text', content: '{"real":true,"reason":"ok"}' },
+      { type: 'stop' },
+    ])
+    const baseChat = provider.chat.bind(provider)
+    provider.chat = async function* (req: ChatRequest) {
+      providerCalls++
+      yield* baseChat(req)
+    }
+    const engine = createMockEngine(provider)
+
+    const script = `
+      const verdict = await verify({ title: 'suspected bug' }, {
+        mode: 'adversarial',
+        skeptics: 2,
+        threshold: 1,
+        schema: { type: 'object' },
+      })
+      return verdict.votes.length
+    `
+
+    const first = await runWorkflow(script, engine, {}, null)
+    const agentEntries = loadJournal(first.runId).filter((e) => e.type === 'agent')
+    expect(agentEntries.length).toBeGreaterThanOrEqual(2)
+    expect(providerCalls).toBeGreaterThan(0)
+
+    const callsAfterFirst = providerCalls
+    const second = await runWorkflow(script, engine, {}, null, first.runId)
+    expect(second.cacheHits).toBeGreaterThanOrEqual(2)
+    expect(providerCalls).toBe(callsAfterFirst)
+  })
+
   it('captures errors from the workflow script', async () => {
     const provider = createMockProvider([{ type: 'text', content: 'ok' }, { type: 'stop' }])
     const engine = createMockEngine(provider)

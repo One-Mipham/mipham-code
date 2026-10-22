@@ -11,15 +11,33 @@
  * picks the winner, and optionally synthesizes a final result.
  */
 
-import { workflowAgent } from './agent'
 import { parallel } from './parallel'
-import type { WorkflowAgentOpts } from './agent'
 
-// Agent function signature matching the sandbox-injected pattern:
-// (prompt, opts?) → result. In production, the workflow runtime binds
-// ProviderRegistry + ToolRegistry into a function of this shape and
-// injects it via _mockAgent.
-type AgentFn = (prompt: string, opts?: WorkflowAgentOpts) => Promise<unknown>
+// Agent function signature matching the sandbox-injected `agent`:
+// (prompt, opts?) → result. The workflow runtime passes its own wrapped agent
+// in, so every verify()/judge() fan-out is journaled and replayable on resume.
+export type AgentFn = (prompt: string, opts?: Record<string, unknown>) => Promise<unknown>
+
+/**
+ * These primitives must run **inside** a workflow run.
+ *
+ * The run's `agent` is what makes an agent call journaled (so resume replays it
+ * instead of re-running) and what binds the provider registry, tools and
+ * permission system. Without it there is no sensible fallback: calling the raw
+ * `workflowAgent` here would need a registry positionally, so it would either
+ * crash or — worse — run unbudgeted and unjournaled, and every resumed run
+ * would re-run all of its skeptics.
+ */
+function resolveAgent(opts: { agent?: AgentFn; _mockAgent?: AgentFn }): AgentFn {
+  const fn = opts.agent ?? opts._mockAgent
+  if (!fn) {
+    throw new Error(
+      "verify()/judge() need the run's agent(): they are only callable inside a workflow run, " +
+        'where the runtime injects it.',
+    )
+  }
+  return fn
+}
 
 // ── Types ──
 
@@ -39,8 +57,10 @@ export interface VerifyOpts {
   voters?: number // consensus: default 3
   threshold?: number
   schema: Record<string, unknown>
-  /** Test-only: inject a mock agent function. When not provided, falls back to workflowAgent. */
-  _mockAgent?: (prompt: string, opts?: WorkflowAgentOpts) => Promise<unknown>
+  /** Injected by the workflow runtime: the run's wrapped `agent` (journal + resume cache). */
+  agent?: AgentFn
+  /** Test-only: inject a mock agent function. */
+  _mockAgent?: AgentFn
 }
 
 interface VerdictVote {
@@ -67,8 +87,10 @@ export interface JudgeOpts {
   judges?: number // default: 3
   synthesize?: boolean // default: true
   schema: Record<string, unknown>
+  /** Injected by the workflow runtime: the run's wrapped `agent` (journal + resume cache). */
+  agent?: AgentFn
   /** Test-only: inject a mock agent function. */
-  _mockAgent?: (prompt: string, opts?: WorkflowAgentOpts) => Promise<unknown>
+  _mockAgent?: AgentFn
 }
 
 // ── Helpers ──
@@ -82,10 +104,7 @@ function defaultThreshold(mode: VerifyMode, total: number): number {
 // ── verify() ──
 
 export async function verify(finding: unknown, opts: VerifyOpts): Promise<VerifyResult> {
-  // Prefer the test hook (_mockAgent), fall back to workflowAgent.
-  // In production sandbox usage, _mockAgent is set to the pre-bound agent
-  // function injected by the workflow runtime.
-  const agentFn: AgentFn = opts._mockAgent ?? (workflowAgent as unknown as AgentFn)
+  const agentFn = resolveAgent(opts)
   const mode = opts.mode
 
   const findingStr = JSON.stringify(finding, null, 2)
@@ -126,9 +145,7 @@ export async function verify(finding: unknown, opts: VerifyOpts): Promise<Verify
 
   // Fan out all agent calls concurrently
   const rawVotes = await parallel(
-    prompts.map(
-      (p) => () => agentFn(p.prompt, { schema: opts.schema as WorkflowAgentOpts['schema'] }),
-    ),
+    prompts.map((p) => () => agentFn(p.prompt, { schema: opts.schema })),
   )
 
   // Filter out failed agents (null) and build vote objects
@@ -160,8 +177,7 @@ export async function verify(finding: unknown, opts: VerifyOpts): Promise<Verify
 // ── judge() ──
 
 export async function judge(attempts: unknown[], opts: JudgeOpts): Promise<JudgeResult> {
-  // Prefer the test hook, fall back to workflowAgent.
-  const agentFn: AgentFn = opts._mockAgent ?? (workflowAgent as unknown as AgentFn)
+  const agentFn = resolveAgent(opts)
   const judgeCount = opts.judges ?? 3
   const schemaDesc = JSON.stringify(opts.schema)
 
@@ -198,7 +214,7 @@ export async function judge(attempts: unknown[], opts: JudgeOpts): Promise<Judge
           `You are judge #${sp.judgeIndex + 1}. Score this attempt against the criteria: ${opts.criteria.join(', ')}.\n\n` +
             `Attempt:\n${JSON.stringify(sp.attempt, null, 2)}\n\n` +
             `Return JSON matching this schema:\n${schemaDesc}`,
-          { schema: opts.schema as WorkflowAgentOpts['schema'] },
+          { schema: opts.schema },
         ),
     ),
   )

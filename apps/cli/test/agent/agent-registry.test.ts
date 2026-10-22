@@ -179,6 +179,55 @@ Body`,
     expect(registry.list()).toHaveLength(1)
   })
 
+  // `autoCompactWindow: 200k` 是**声明**，不是注释：人手写 "200k" 的频率比 200000 高，
+  // 而旧解析只吃 number，字符串被静默丢成 undefined —— 代理从不收缩，也没人被告知。
+  it('parses a suffixed autoCompactWindow (200k / 1M) instead of dropping it', () => {
+    writeAgent(
+      TEST_DIR,
+      'compact',
+      `---
+name: compact
+description: Has a window.
+autoCompactWindow: 200k
+---
+Body.`,
+    )
+    writeAgent(
+      TEST_DIR,
+      'big',
+      `---
+name: big
+description: Has a bigger window.
+autoCompactWindow: 1M
+---
+Body.`,
+    )
+
+    const registry = new AgentRegistry()
+    registry.loadDirectory(TEST_DIR, 'project')
+
+    expect(registry.get('compact')!.autoCompactWindow).toBe(200_000)
+    expect(registry.get('big')!.autoCompactWindow).toBe(1_000_000)
+  })
+
+  it('keeps a numeric autoCompactWindow unchanged (positive control)', () => {
+    writeAgent(
+      TEST_DIR,
+      'plain',
+      `---
+name: plain
+description: Numeric window.
+autoCompactWindow: 64000
+---
+Body.`,
+    )
+
+    const registry = new AgentRegistry()
+    registry.loadDirectory(TEST_DIR, 'project')
+
+    expect(registry.get('plain')!.autoCompactWindow).toBe(64_000)
+  })
+
   it('resolves builtin agents when no custom agent matches', () => {
     const registry = new AgentRegistry()
     const def = registry.resolve('explore')

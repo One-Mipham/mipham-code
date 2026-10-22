@@ -8,7 +8,7 @@ import type { QueryEngine } from '../core/engine'
 import type { MiphamConfig } from '../shared/index.ts'
 import { formatContextWindow } from '../shared/format'
 import { sanitizeInlineField } from '../shared/sanitize'
-import type { SkillsLoader } from '../skills/loader'
+import { truncateSkillDescription, type SkillsLoader } from '../skills/loader'
 import { loadSkillUsage } from '../skills/usage'
 import type { PluginManager } from '../plugin/plugin-manager'
 import type { Message } from '../shared/types.js'
@@ -677,10 +677,11 @@ const skillsCmd: CommandHandler = (ctx) => {
 
   const lines: string[] = [
     `── Standard Skills (${counts.standard}) ──`,
-    ...standard.map((s) => `  ${s.name.padEnd(28)} ${s.description}`),
+    // 描述是写给模型的（常是好几段指令），不是终端里的一行摘要。
+    ...standard.map((s) => `  ${s.name.padEnd(28)} ${truncateSkillDescription(s.description)}`),
     '',
     `── Mipham Exclusive (${counts.mipham}) ──`,
-    ...mipham.map((s) => `  ${s.name.padEnd(20)} ${s.description}`),
+    ...mipham.map((s) => `  ${s.name.padEnd(20)} ${truncateSkillDescription(s.description)}`),
     '',
     t('commands.skills.loaded', { count: String(counts.total) }),
   ]
@@ -2534,7 +2535,7 @@ const reloadSkillsCmd: CommandHandler = (ctx) => {
     }
     const skills = ctx.skillsLoader.list()
     return {
-      content: `${t('commands.reload_skills.confirmed', { count: String(skills.length) })}\n\n${skills.map((s) => `  ${s.name.padEnd(28)} ${s.type.padEnd(10)} ${s.description}`).join('\n')}`,
+      content: `${t('commands.reload_skills.confirmed', { count: String(skills.length) })}\n\n${skills.map((s) => `  ${s.name.padEnd(28)} ${s.type.padEnd(10)} ${truncateSkillDescription(s.description)}`).join('\n')}`,
     }
   } catch (err) {
     return { content: t('commands.reload_skills.failed', { error: String(err) }) }
@@ -3230,7 +3231,8 @@ const loopCmd: CommandHandler = async (ctx, args) => {
       `You are in an autonomous loop. Each iteration:\n` +
       `1. Make progress on the task above\n` +
       `2. When you need to wait (e.g., for a deploy, CI, external event), call ScheduleWakeup with:\n` +
-      `   - delaySeconds: your best estimate of how long to wait (60-3600)\n` +
+      `   - delaySeconds: your best estimate of how long to wait (60-3600; prefer ≤3300\n` +
+      `     so the wake-up stays inside the prompt-cache window)\n` +
       `   - reason: one sentence explaining why\n` +
       `   - prompt: include this full autonomous loop ID: ${sessionId}\n` +
       `3. When the task is COMPLETE, call ScheduleWakeup with stop:true\n` +

@@ -585,12 +585,16 @@ export class QueryEngine {
 
   /** Wire LLM-based conversation summarization into the context manager. */
   setupContextSummarizer(): void {
-    this.context.setSummarizer(async (messages, heading) => {
+    this.context.setSummarizer(async (messages, heading, signal) => {
       const text = messages
         .map((m) => {
           const role = m.role
           const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
-          return `[${role}]: ${content.slice(0, 2000)}`
+          // 2000 字符是摘要器读得到的上限，但不能是**静默**上限：被切掉的那半里
+          // 常是工具结果的结论部分，摘要据此写成「做了什么」而漏掉「结果如何」。
+          // 写明省略了多少，摘要器才知道这条不完整。
+          if (content.length <= 2000) return `[${role}]: ${content}`
+          return `[${role}]: ${content.slice(0, 2000)} … [${content.length - 2000} characters omitted]`
         })
         .join('\n')
 
@@ -612,6 +616,11 @@ export class QueryEngine {
           systemPrompt: summaryPrompt,
           messages: [{ role: 'user', content: text }],
           maxTokens: 2000,
+          // An interrupt has to reach *this* call too. Summarising a long
+          // conversation is a full model round trip; without the signal, Ctrl+C
+          // arrives at the compaction step and simply waits for it to finish
+          // before the turn can stop.
+          signal,
         })) {
           if (chunk.type === 'text' && chunk.content) {
             summary += chunk.content
@@ -678,7 +687,7 @@ export class QueryEngine {
 
     // Check compaction before processing
     if (this.context.needsCompaction()) {
-      await this.compactWithHooks('conversation summary')
+      await this.compactWithHooks('conversation summary', signal)
     }
 
     const systemPrompt = this.context.getSystemPrompt()
@@ -2073,7 +2082,7 @@ export class QueryEngine {
   }
 
   /** Wrap context compaction with PreCompact/PostCompact hooks. */
-  private async compactWithHooks(heading: string): Promise<void> {
+  private async compactWithHooks(heading: string, signal?: AbortSignal): Promise<void> {
     if (this.hookEngine) {
       const preResult = await this.hookEngine.executePreCompact(this.sessionId)
       if (preResult.additionalContext) {
@@ -2084,7 +2093,7 @@ export class QueryEngine {
       }
     }
 
-    await this.context.compact(heading)
+    await this.context.compact(heading, signal)
 
     if (this.hookEngine) {
       const postResult = await this.hookEngine.executePostCompact(this.sessionId)

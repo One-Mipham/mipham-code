@@ -361,6 +361,15 @@ export class HookEngine {
 
     const result: HookResult = { allowed: true }
 
+    // A guard that could not run denies — but the denial is *remembered* rather
+    // than returned on the spot. Returning early would end the loop, and every
+    // later hook is a hook the call never got to consult: an explicit deny
+    // written after the broken one would never be reached, so the model gets
+    // "hook broke" where the real answer is "this was refused, here is why".
+    // Keep going, keep the first guard failure, and let an explicit deny
+    // (which returns immediately at its own branch) outweigh it.
+    let guardDenial: HookResult | undefined
+
     for (const hook of matching) {
       const key = this.healthKey(hook)
 
@@ -371,7 +380,7 @@ export class HookEngine {
         // it for `PreToolUse` would turn five failures into a permanent allow
         // for the rest of the cooldown — the same fail-open hole, delayed.
         if (guardFailureBlocks(hook)) {
-          return {
+          guardDenial ??= {
             allowed: false,
             reason:
               `Hook "${key}" is temporarily disabled after repeated failures; ` +
@@ -379,6 +388,7 @@ export class HookEngine {
               `Fix the hook, re-enable it with /hooks enable "${key}", or set ` +
               `"failureMode": "open" to allow instead.`,
           }
+          continue
         }
         result.additionalContext = result.additionalContext
           ? result.additionalContext +
@@ -446,7 +456,7 @@ export class HookEngine {
         // that is not "allow" — see `guardFailureBlocks`.
         if (guardFailureBlocks(hook)) {
           const message = (err as { message?: string }).message || String(err)
-          return {
+          guardDenial ??= {
             allowed: false,
             reason:
               `Hook "${key}" failed and the PreToolUse guard is fail-closed: ${message} ` +
@@ -457,7 +467,7 @@ export class HookEngine {
       }
     }
 
-    return result
+    return guardDenial ?? result
   }
 
   listHooks(): HookDefinition[] {

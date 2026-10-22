@@ -310,8 +310,14 @@ export class AnthropicProvider implements ProviderInstance {
                     let parsedInput: Record<string, unknown> = {}
                     try {
                       parsedInput = JSON.parse(accumulatedToolInput)
-                    } catch {
-                      parsedInput = { _raw: accumulatedToolInput }
+                    } catch (err) {
+                      // Same tag as the OpenAI-compatible path: a bare fragment
+                      // reaches the validator as "missing required parameter",
+                      // which sends the model looking for the wrong mistake.
+                      parsedInput = {
+                        _parseError: `${err instanceof Error ? err.message : String(err)}; received ${accumulatedToolInput.length} characters`,
+                        _raw: accumulatedToolInput,
+                      }
                     }
 
                     yield {

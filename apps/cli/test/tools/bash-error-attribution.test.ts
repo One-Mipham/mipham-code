@@ -126,3 +126,47 @@ describe('负数 timeout 当场拒绝，不做成 1ms 的定时器', () => {
     expect(spawnSpy).not.toHaveBeenCalled()
   })
 })
+
+describe('磁盘满时不许把 ENOSPC 甩成一条路径', () => {
+  /** 假进程：stderr 上写 `text`，按 `exitCode` 退出。 */
+  const procWithStderr = (text: string, exitCode = 1) => ({
+    pid: FAKE_PID,
+    stdout: new ReadableStream<Uint8Array>({
+      start(c) {
+        c.close()
+      },
+    }),
+    stderr: new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(new TextEncoder().encode(text))
+        c.close()
+      },
+    }),
+    exited: Promise.resolve(exitCode),
+    kill: vi.fn(),
+  })
+
+  it('ENOSPC ⇒ 说磁盘满，并说明已写出的部分可能是半截', async () => {
+    vi.spyOn(Bun, 'spawn').mockImplementation((() =>
+      procWithStderr('cp: /tmp/out: No space left on device')) as never)
+
+    const result = await createBashTool().execute({ command: 'cp big /tmp/out' }, ctx('/tmp'))
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('disk is full')
+    expect(result.error).toContain('may be partial')
+    // 原始路径仍在：模型要靠它知道是哪个文件。
+    expect(result.error).toContain('/tmp/out')
+  })
+
+  it('正对照：普通非零退出不会被说成磁盘满', async () => {
+    vi.spyOn(Bun, 'spawn').mockImplementation((() =>
+      procWithStderr('cp: /tmp/out: Permission denied')) as never)
+
+    const result = await createBashTool().execute({ command: 'cp big /tmp/out' }, ctx('/tmp'))
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Exit code 1')
+    expect(result.error).not.toContain('disk is full')
+  })
+})

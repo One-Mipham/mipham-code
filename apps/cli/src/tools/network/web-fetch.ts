@@ -307,11 +307,19 @@ export const webFetchTool: ToolDefinition = {
       const contentType = response.headers.get('content-type') || ''
       const isHtml = contentType.includes('text/html') || contentType.includes('application/xhtml')
 
+      // A 4xx/5xx is a statement about the site, not a failure of the tool:
+      // hand the status and whatever body it returned to the model as a normal
+      // result, so it can re-aim the request instead of treating the fetch as
+      // broken. Deliberately not cached — a 404 today may be a 200 tomorrow.
       if (!response.ok) {
+        const body = await response.text().catch(() => '')
+        const text = isHtml ? htmlToMarkdown(body, response.url || url) : body
         return {
-          success: false,
-          content: '',
-          error: `HTTP ${response.status}: ${response.statusText}`,
+          success: true,
+          content:
+            `HTTP ${response.status}: ${response.statusText}` +
+            (text ? `\n\n${text.slice(0, MAX_RETURN_CHARS)}` : ''),
+          metadata: { url, status: response.status },
         }
       }
 

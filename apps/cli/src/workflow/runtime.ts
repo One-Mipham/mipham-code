@@ -223,8 +223,16 @@ export async function runWorkflow(
   sandboxCtx.agent = sealValue(agent)
   sandboxCtx.parallel = sealValue(parallel)
   sandboxCtx.pipeline = sealValue(pipeline)
-  sandboxCtx.verify = sealValue(verify)
-  sandboxCtx.judge = sealValue(judge)
+  // verify()/judge() fan out their own agent calls, so they need the run's agent
+  // too. Handing them the bare primitive would put those calls outside the
+  // journal and the resume cache: a resumed run would replay every agent() it
+  // can see and then silently re-run all of verify's skeptics and judge's scores.
+  sandboxCtx.verify = sealValue((finding: unknown, opts: Record<string, unknown> = {}) =>
+    verify(finding, { ...opts, agent } as Parameters<typeof verify>[1]),
+  )
+  sandboxCtx.judge = sealValue((attempts: unknown[], opts: Record<string, unknown> = {}) =>
+    judge(attempts, { ...opts, agent } as Parameters<typeof judge>[1]),
+  )
   sandboxCtx.loopUntilConvergence = sealValue(loopUntilConvergence)
   sandboxCtx.phase = sealValue(wrappedPhase)
   sandboxCtx.log = sealValue(log)

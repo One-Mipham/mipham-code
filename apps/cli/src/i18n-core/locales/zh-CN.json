@@ -952,6 +952,7 @@
     "tool_collision": "[mcp] 工具冲突：\"{name}\" 已注册，跳过。",
     "missing_param": "缺少必需参数：\"{param}\"",
     "invalid_params": "参数无效：{errors}",
+    "unparseable_args": "这次工具调用的参数不是合法 JSON（{detail}），没有执行任何操作。请带着完整的 JSON 重新发起调用 —— 不要从这段残片里猜参数。",
     "type_string": "\"{key}\" 必须是字符串",
     "type_number": "\"{key}\" 必须是数字",
     "type_boolean": "\"{key}\" 必须是布尔值",

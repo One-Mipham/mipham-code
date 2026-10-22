@@ -98,3 +98,41 @@ describe('SkillsLoader name gate', () => {
     expect(loader.get('declared-name')).toBeDefined()
   })
 })
+
+// YAML 里没有闭包：技能 frontmatter 的 `hooks:` 到这里只是数据，`handler` 恒为
+// undefined。原样注册的后果不是「钩子不生效」而是**每个工具调用都被拒** ——
+// `runHooks` 调 `undefined(ctx)` 抛 TypeError，PreToolUse 的 fail-closed 守卫把
+// 它读成「守卫答不出来」。
+describe('SkillsLoader hook gate', () => {
+  it('drops a frontmatter hook with no handler and says so', () => {
+    const dir = tmp()
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const p = join(dir, 'hooky.SKILL.md')
+    writeFileSync(
+      p,
+      '---\nname: hooky\ndescription: d\nhooks:\n  - event: PreToolUse\n    command: echo hi\n---\nbody\n',
+      'utf-8',
+    )
+
+    const loader = new SkillsLoader()
+    loader.loadExternal([dir])
+
+    // 技能本身仍在（它只有钩子那一项是坏的），但没有任何钩子被交出去。
+    expect(loader.list()).toHaveLength(1)
+    expect(loader.list()[0]!.hooks).toBeUndefined()
+    expect(stderr.mock.calls.map(String).join('')).toContain('has no handler')
+  })
+
+  it('leaves hooks undefined for a skill that declares none (positive control)', () => {
+    const dir = tmp()
+    const p = join(dir, 'named.SKILL.md')
+    writeFileSync(p, '---\nname: named\ndescription: d\n---\nbody\n', 'utf-8')
+
+    const loader = new SkillsLoader()
+    loader.loadExternal([dir])
+    const skill = loader.get('named')!
+    // 没有 hooks 的技能不该凭空多出一个空数组 —— 「无钩子」与「有数组但是空的」
+    // 在注册点读起来是同一件事，但前者不会让 `if (skill.hooks)` 进循环。
+    expect(skill.hooks).toBeUndefined()
+  })
+})

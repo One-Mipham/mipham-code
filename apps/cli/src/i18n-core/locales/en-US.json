@@ -952,6 +952,7 @@
     "tool_collision": "[mcp] Tool collision: \"{name}\" already registered. Skipping.",
     "missing_param": "Missing required parameter: \"{param}\"",
     "invalid_params": "Invalid parameters: {errors}",
+    "unparseable_args": "The arguments for this tool call were not valid JSON ({detail}). Nothing was executed. Re-issue the call with complete JSON — do not infer the parameters from the fragment.",
     "type_string": "\"{key}\" must be a string",
     "type_number": "\"{key}\" must be a number",
     "type_boolean": "\"{key}\" must be a boolean",

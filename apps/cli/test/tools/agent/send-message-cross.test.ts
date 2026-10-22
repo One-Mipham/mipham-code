@@ -21,6 +21,8 @@ import {
   unregisterSession,
 } from '../../../src/agent/cross-session/discovery'
 import { sendMessageTool } from '../../../src/tools/agent/send-message'
+import { getBackgroundAgentRegistry } from '../../../src/agent/background-registry'
+import { getMessageBus } from '../../../src/agent/message-bus'
 import type { SessionInfo } from '../../../src/shared/types'
 
 function makeSession(id: string, name: string): SessionInfo {
@@ -101,10 +103,45 @@ describe('MessageRouter', () => {
     expect(result.routedTo).toBe('bus')
   })
 
-  it('routes background task IDs to in-process bus', async () => {
-    const result = await router.route('test-sender', 'bg-1-abc123', 'Status', 'How is it going?')
-    expect(result.success).toBe(true)
-    expect(result.routedTo).toBe('bus')
+  // A background id is a live address only while its agent is running: the queue
+  // is drained from inside the agent's own turn loop, which `spawn` tears down
+  // when the work finishes. Posting to a finished task left the message unread
+  // forever while the caller was told it had been sent.
+  it('routes a running background task ID to the in-process bus', async () => {
+    const id = getBackgroundAgentRegistry().spawn(
+      'still working',
+      'general',
+      () => new Promise<string>(() => {}),
+    )
+
+    try {
+      const result = await router.route('test-sender', id, 'Status', 'How is it going?')
+
+      expect(result.success).toBe(true)
+      expect(result.routedTo).toBe('bus')
+    } finally {
+      getBackgroundAgentRegistry().stop(id)
+    }
+  })
+
+  it('refuses a background id that has already finished', async () => {
+    const id = getBackgroundAgentRegistry().spawn('done', 'general', async () => 'finished')
+    await new Promise((r) => setTimeout(r, 0))
+
+    const result = await router.route('test-sender', id, 'Follow-up', 'One more thing')
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('no longer reading')
+    // Nothing was queued: a message the recipient cannot read must not sit in
+    // the bus pretending to be pending work.
+    expect(getMessageBus().list(id)).toHaveLength(0)
+  })
+
+  it('refuses an id that never belonged to a live agent', async () => {
+    const result = await router.route('test-sender', 'bg-999-nope', 'Status', 'Hello?')
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('No live agent')
   })
 
   it('returns error for unknown session ID', async () => {

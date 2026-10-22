@@ -76,6 +76,17 @@ export function withValidation(tool: ToolDefinition): ToolDefinition {
   return {
     ...tool,
     async execute(params, ctx): Promise<ToolResult> {
+      // 参数不是合法 JSON 时，providers 交回的是 `{ _parseError, _raw }` 而不是
+      // `{}`。照常校验的话，模型会读到「缺少必需参数 url」—— 一个它明明写过的
+      // 参数，于是它去补参数，而不是去补那半个 JSON。先把这个事实说清楚。
+      if (typeof params._parseError === 'string') {
+        return {
+          success: false,
+          content: '',
+          error: t('errors.unparseable_args', { detail: params._parseError }),
+        }
+      }
+
       const cleanParams = sanitizeParams(params)
       const errors = validateParams(schema, cleanParams)
       if (errors.length > 0) {

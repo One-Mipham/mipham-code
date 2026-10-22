@@ -164,6 +164,61 @@ describe('rm operand separator', () => {
   }
 })
 
+// ============================================================
+// The recursive flag has more than one spelling.
+//
+// Every pattern below used to require `-rf` or `-fr` as one fused cluster, so
+// `rm -r /Volumes` — the same recursive deletion of a mount root, with the flag
+// spelled differently — ran unchecked. `-R` is the same flag again, and no shell
+// cares about flag order, so `-f -r` and `--recursive` are the same command.
+// ============================================================
+
+describe('rm recursive flag spellings', () => {
+  const blocked = [
+    'rm -r /Volumes',
+    'rm -R /media',
+    'rm -r -f /Volumes',
+    'rm -f -r /mnt/c',
+    'rm --recursive /mnt/c',
+    'rm -rf -v /Volumes',
+    'rm -r /Volumes; echo done',
+    "rm -r '/'",
+    'rm -r ~',
+    'rm -R ~/Documents',
+    'rm -r .',
+    'rm --recursive *',
+    'rm -r $HOME/models',
+    'rm -r C:/Users',
+    'rm -R %USERPROFILE%',
+  ]
+
+  for (const cmd of blocked) {
+    it(`blocks ${JSON.stringify(cmd)}`, () => {
+      expect(isBlocked(cmd)).not.toBeNull()
+    })
+  }
+
+  // The positive control that matters: widening the flag spelling must not turn
+  // every `rm` into a refusal. Relative targets name what they delete and stay
+  // allowed, and so does `rm -r`'s non-recursive neighbours.
+  const allowed = [
+    'rm -r node_modules',
+    'rm -R ./build',
+    'rm -f -r ./build',
+    'rm --recursive build/cache',
+    'rm -rf node_modules',
+    'rm -i file.txt',
+    'rm file.txt',
+    'rm -v file.txt',
+  ]
+
+  for (const cmd of allowed) {
+    it(`allows ${JSON.stringify(cmd)}`, () => {
+      expect(isBlocked(cmd)).toBeNull()
+    })
+  }
+})
+
 // The separator class above fixed the boundary *after* the operand. The operand
 // itself was still matched literally, so `rm -rf /` was refused while `rm -rf '/'`
 // was not — the quote sat exactly where the pattern expected the path to start.

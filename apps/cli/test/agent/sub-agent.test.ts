@@ -253,6 +253,34 @@ describe('SubAgent', () => {
     await expect(sub.execute('test', 'task', { type: 'general' })).rejects.toThrow('mock-model')
   })
 
+  // The provider reports `truncated` on the stop chunk when the model hit its
+  // output ceiling. The text it produced is a real answer that stops
+  // mid-thought, and nothing about it looks unfinished — so the only way the
+  // caller can tell "the agent concluded" from "the agent was cut off" is if
+  // this loop passes that fact through.
+  it('marks a result whose last turn was cut off by the output limit', async () => {
+    const provider = createMockProvider([
+      { type: 'text', content: 'The answer is' },
+      { type: 'stop', truncated: true },
+    ])
+    const registry = createMockRegistry(provider)
+
+    const result = await new SubAgent(registry, TOOLS).execute('test', 'task', { type: 'general' })
+
+    expect(result.startsWith('[partial result')).toBe(true)
+    expect(result).toContain('output limit')
+    expect(result).toContain('The answer is')
+  })
+
+  it('does not mark a normal finish (positive control)', async () => {
+    const provider = createMockProvider([{ type: 'text', content: 'Done.' }, { type: 'stop' }])
+    const registry = createMockRegistry(provider)
+
+    const result = await new SubAgent(registry, TOOLS).execute('test', 'task', { type: 'general' })
+
+    expect(result).toBe('Done.')
+  })
+
   it('uses agent definition system prompt when provided', async () => {
     let receivedSystemPrompt = ''
     const provider = createMockProvider([{ type: 'text', content: 'ok' }, { type: 'stop' }])

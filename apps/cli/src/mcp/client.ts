@@ -11,6 +11,7 @@ import { HttpTransport, McpHttpError } from './http-transport'
 import { McpProtocol } from './protocol'
 import { OAuthClient } from './oauth'
 import { TokenStore } from './token-store'
+import { createAwakeTimer } from '../providers/fetch-utils'
 import { createT } from '../i18n-core/t'
 import enUS from '../i18n-core/locales/en-US.json'
 import zhCN from '../i18n-core/locales/zh-CN.json'
@@ -454,10 +455,22 @@ export class McpClient {
     }
   }
 
-  /** Race the connect handshake against a timeout so a hung server fails fast. */
+  /**
+   * Race the connect handshake against a timeout so a hung server fails fast.
+   *
+   * The budget counts *awake* time (`createAwakeTimer`), not wall time: a laptop
+   * that sleeps mid-handshake would otherwise fire the whole budget the instant
+   * the lid opens, latch the connection as `error`, and — because a failed
+   * server registers no tools — never give `markIfTransportLost` a chance to
+   * reconnect. The server is fine; only the clock moved.
+   */
   private async withConnectTimeout<T>(name: string, fn: () => Promise<T>): Promise<T> {
     const timeoutMs = connectTimeoutMs()
-    let timer: ReturnType<typeof setTimeout> | null = null
+    // Held in an object, not a `let`: the timer is armed inside the Promise
+    // executor, and assignments made there are invisible to control-flow
+    // narrowing — TS keeps the variable typed `null` and the cleanup call below
+    // is a type error rather than code.
+    const timer: { cancel?: () => void } = {}
     // Swallow a late rejection: if the timeout wins, transport.close() in the
     // caller's catch makes fn()'s pending request reject after we've moved on.
     const work = fn()
@@ -466,14 +479,13 @@ export class McpClient {
       return await Promise.race([
         work,
         new Promise<never>((_, reject) => {
-          timer = setTimeout(
-            () => reject(new Error(`MCP connect timed out for "${name}" after ${timeoutMs}ms`)),
-            timeoutMs,
+          timer.cancel = createAwakeTimer(timeoutMs, () =>
+            reject(new Error(`MCP connect timed out for "${name}" after ${timeoutMs}ms`)),
           )
         }),
       ])
     } finally {
-      if (timer) clearTimeout(timer)
+      timer.cancel?.()
     }
   }
 
@@ -493,11 +505,13 @@ export class McpClient {
    * nothing to wait for, and `callTool` will say so.
    */
   async waitUntilReady(name: string, timeoutMs: number = connectTimeoutMs()): Promise<boolean> {
-    const deadline = Date.now() + timeoutMs
+    // Awake time, same as the handshake budget it mirrors: a sleep mid-wait must
+    // not spend the deadline the server never got to use.
+    const deadline = performance.now() + timeoutMs
     for (;;) {
       const conn = this.connections.get(name)
       if (!conn || conn.status !== 'connecting') return true
-      if (Date.now() >= deadline) return false
+      if (performance.now() >= deadline) return false
       await new Promise((resolve) => setTimeout(resolve, CONNECT_POLL_MS))
     }
   }

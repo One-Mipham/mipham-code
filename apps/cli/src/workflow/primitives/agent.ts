@@ -222,22 +222,51 @@ export async function workflowAgent(
         /* best-effort */
       }
 
-      // Remove worktree and branch
+      // Remove worktree and branch.
+      //
+      // Every step here used to be fire-and-forget: a `worktree remove` that
+      // failed left the registration behind, the `branch -D` then failed too
+      // ("used by worktree at …"), and the run reported clean either way. So
+      // check both exits and say what is left — an unchanged agent worktree
+      // that nobody removes is state the next run has to trip over.
+      const leftovers: string[] = []
       try {
         const rmProc = Bun.spawn(['git', 'worktree', 'remove', '--force', worktreePath], {
           stdout: 'pipe',
           stderr: 'pipe',
         })
-        await rmProc.exited
+        let removed = (await rmProc.exited) === 0
+        if (!removed) {
+          // A worktree whose directory is already gone leaves only a stale
+          // registration; prune clears it so the branch delete can proceed.
+          const pruneProc = Bun.spawn(['git', 'worktree', 'prune'], {
+            stdout: 'pipe',
+            stderr: 'pipe',
+          })
+          await pruneProc.exited
+          const retry = Bun.spawn(['git', 'worktree', 'remove', '--force', worktreePath], {
+            stdout: 'pipe',
+            stderr: 'pipe',
+          })
+          removed = (await retry.exited) === 0
+        }
+        if (!removed) leftovers.push(`worktree ${worktreePath}`)
+
         if (worktreeBranch) {
           const brProc = Bun.spawn(['git', 'branch', '-D', worktreeBranch], {
             stdout: 'pipe',
             stderr: 'pipe',
           })
-          await brProc.exited
+          if ((await brProc.exited) !== 0) leftovers.push(`branch ${worktreeBranch}`)
         }
-      } catch {
-        /* best-effort */
+      } catch (err) {
+        leftovers.push(`${worktreePath} (${err instanceof Error ? err.message : String(err)})`)
+      }
+      if (leftovers.length > 0) {
+        process.stderr.write(
+          `⚠️  workflow: could not clean up ${leftovers.join(' and ')} — ` +
+            `the run finished, but this state needs manual removal.\n`,
+        )
       }
     }
   }

@@ -227,7 +227,7 @@ export class SkillsLoader implements Skills {
         type,
         body,
         tools: data.tools as SkillDefinition['tools'],
-        hooks: data.hooks as SkillDefinition['hooks'],
+        hooks: parseSkillHooks(data.hooks, skillName),
         prompts: data.prompts as SkillDefinition['prompts'],
         // NEW: frontmatter fields for fork/auto-trigger support
         context: data.context as string | undefined,
@@ -305,10 +305,48 @@ export class SkillsLoader implements Skills {
   }
 }
 
+/**
+ * 只接受**真带 handler** 的技能钩子。
+ *
+ * YAML 里没有闭包，所以技能 frontmatter 写的 `hooks:` 到这一步只是数据，`handler`
+ * 恒为 `undefined`（`as` 断言把类型骗过去了）。原样注册的后果不是「钩子不生效」，
+ * 是**每一个工具调用都被拒**：`runHooks` 调 `undefined(ctx)` 抛 TypeError，而
+ * PreToolUse 的守卫是 fail-closed —— 引擎把它读成「守卫答不出来」，于是整场会话
+ * 的每一次工具调用都返回拒绝。插件路径交进来的钩子带真 handler，照常放行。
+ */
+function parseSkillHooks(raw: unknown, skillName: string): SkillDefinition['hooks'] {
+  if (!Array.isArray(raw)) return undefined
+
+  const accepted: SkillDefinition['hooks'] = []
+  for (const entry of raw) {
+    const handler = (entry as { handler?: unknown } | null)?.handler
+    if (typeof handler === 'function') {
+      accepted.push({
+        ...(entry as object),
+        source: skillName,
+      } as NonNullable<SkillDefinition['hooks']>[number])
+      continue
+    }
+    process.stderr.write(
+      `⚠️  Skill "${skillName}": a hook entry has no handler (frontmatter cannot carry ` +
+        `functions) — ignored. Declare the hook in settings.json instead.\n`,
+    )
+  }
+  return accepted.length > 0 ? accepted : undefined
+}
+
 const COMPACT_DESC_MAX_CHARS = 80
 
-/** Compact reminder: collapse a description to a single short line. */
-function truncateSkillDescription(desc: string): string {
+/**
+ * Collapse a description to a single short line.
+ *
+ * Used both by the compact system reminder and by the human-facing `/skills`
+ * listing: skill descriptions are written for the *model* and are often
+ * several paragraphs of instructions. Pasting that into a terminal listing
+ * turns three skills into a screenful; the first line + an ellipsis is the
+ * honest short form (there is no separate short-description field to read).
+ */
+export function truncateSkillDescription(desc: string): string {
   const firstLine = desc.split('\n')[0]?.trim() ?? ''
   return firstLine.length > COMPACT_DESC_MAX_CHARS
     ? firstLine.slice(0, COMPACT_DESC_MAX_CHARS) + '…'

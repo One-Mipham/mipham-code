@@ -16,32 +16,53 @@ import { withValidation } from '../validation'
 // target being the last thing on the line, so `rm -rf /*` was refused while
 // `rm -rf /* > log`, `rm -rf /* foo` and `rm -rf /*; echo x` — the same
 // deletion — were not.
+// Any spelling of the recursive flag: `-rf`, `-fr`, `-r`, `-R`, `--recursive`.
+// Another flag may sit on either side (`-f -r`, `-i -r -v`), because the shell
+// does not care about flag order or which letters share a cluster.
+//
+// Matching only `-rf`/`-fr` made the refusal a spelling test rather than a
+// behaviour test: `rm -r /Volumes` deletes exactly what `rm -rf /Volumes` does
+// and passed. Every guard below needs the same fragment, so it is written once.
+const RM_OTHER_FLAGS = String.raw`(?:-[A-Za-z]+|--[a-z][a-z-]*)`
+const RM_RECURSIVE = String.raw`(?:-[A-Za-z]*[rR][A-Za-z]*|--recursive)`
+const RM_LEAD = String.raw`\brm\s+(?:${RM_OTHER_FLAGS}\s+)*${RM_RECURSIVE}(?:\s+${RM_OTHER_FLAGS})*\s+`
+
+/** `rm` with the recursive flag in any spelling, followed by `target`. */
+function rmRecursiveOn(target: string, flags = ''): RegExp {
+  return new RegExp(RM_LEAD + target, flags)
+}
+
 const BLOCKED_PATTERNS = [
   // Recursive root deletion without preserve-root safeguard.
   // The operand may be quoted: `rm -rf '/'` reaches the same path as `rm -rf /`, so
   // the quote belongs to the *delimiter* class, not to the path — `['"]?` opens the
   // operand and the lookahead accepts the closing quote.
-  /\brm\s+-rf\s+['"]?\/(?=["'\s]|$)/,
-  /\brm\s+-rf\s+['"]?\/\*(?=["'\s;&|>]|$)/,
+  rmRecursiveOn(String.raw`['"]?\/(?=["'\s]|$)`),
+  rmRecursiveOn(String.raw`['"]?\/\*(?=["'\s;&|>]|$)`),
   /\bsudo\s+rm\s+.*\//,
   // rm -rf on home directory or any absolute path (relative dirs like node_modules stay allowed)
-  /\brm\s+-(?:rf|fr)\s+['"]?~(?:["'\s\/]|$)/,
-  /\brm\s+-(?:rf|fr)\s+['"]?\/(?![\s*])/,
+  rmRecursiveOn(String.raw`['"]?~(?:["'\s\/]|$)`),
+  rmRecursiveOn(String.raw`['"]?\/(?![\s*])`),
   // rm -rf on dangerous cwd globs
-  /\brm\s+-(?:rf|fr)\s+['"]?\*(?=["'\s;&|>]|$)/,
+  rmRecursiveOn(String.raw`['"]?\*(?=["'\s;&|>]|$)`),
   // `rm -rf .` and its path spellings `./` and `../` delete the working directory;
   // `./build` and `../vendor` name an entry inside it and stay allowed.
-  /\brm\s+-(?:rf|fr)\s+['"]?\.\.?(?:\/)?(?=["'\s;&|>]|$)/,
+  rmRecursiveOn(String.raw`['"]?\.\.?(?:\/)?(?=["'\s;&|>]|$)`),
   // The home directory under another name is still the home directory. `$HOME`
   // expands to the same tree as `~`; on Windows `C:\Users\<name>` *is* the profile
   // directory, long or in its 8.3 short form (`C:\Users\GUOHUA~1`). Guarding only
   // the literal spellings above leaves each of these a one-word bypass.
-  /\brm\s+-(?:rf|fr)\s+['"]?\$\{?HOME\}?(?:["'\s/]|$)/,
-  /\brm\s+-(?:rf|fr)\s+['"]?[A-Za-z]:[\\/](?=["'\s;&|>]|$)/,
-  /\brm\s+-(?:rf|fr)\s+['"]?[A-Za-z]:[\\/]Users[\\/][^\\/\s"']+[\\/]?(?=["'\s;&|>]|$)/i,
+  rmRecursiveOn(String.raw`['"]?\$\{?HOME\}?(?:["'\s/]|$)`),
+  rmRecursiveOn(String.raw`['"]?[A-Za-z]:[\\/](?=["'\s;&|>]|$)`),
+  // `C:\Users` itself is the parent of every profile on the drive — the drive's
+  // equivalent of `/home`, so the profile name is optional rather than required.
+  rmRecursiveOn(
+    String.raw`['"]?[A-Za-z]:[\\/]Users(?:[\\/](?:[^\\/\s"']+(?:[\\/])?)?)?(?=["'\s;&|>]|$)`,
+    'i',
+  ),
   // cmd.exe spells the same directories with percent signs; in scope whenever a
   // command hands off to cmd (`cmd /c …`).
-  /\brm\s+-(?:rf|fr)\s+['"]?%(?:USERPROFILE|HOMEPATH|HOMEDRIVE)%/i,
+  rmRecursiveOn(String.raw`['"]?%(?:USERPROFILE|HOMEPATH|HOMEDRIVE)%`, 'i'),
   // Filesystem manipulation
   /\bmkfs\./,
   /\bdd\s+if=/,
@@ -531,6 +552,10 @@ export function createBashTool(credentialConfig?: CredentialMaskingConfig): Tool
                 )
                 .join('\n')
           }
+          // A full disk is the one failure whose raw form (`ENOSPC … /some/path`)
+          // reads like a *path* problem, so the model starts checking permissions
+          // on a path that is fine. Say what happened instead.
+          const diskFull = /ENOSPC|No space left on device/i.test(stderr)
           return {
             success: false,
             content: errorContent,
@@ -538,7 +563,9 @@ export function createBashTool(credentialConfig?: CredentialMaskingConfig): Tool
               ? `Command cancelled (SIGKILL to its process group)`
               : timedOut
                 ? `Command timed out after ${timeout}ms (killed): ${stderr.slice(0, 1_000)}`
-                : `Exit code ${exitCode}: ${stderr.slice(0, 1_000)}`,
+                : diskFull
+                  ? `The disk is full (ENOSPC) — the command could not finish, and anything it had written may be partial: ${stderr.slice(0, 1_000)}`
+                  : `Exit code ${exitCode}: ${stderr.slice(0, 1_000)}`,
           }
         }
 

@@ -173,7 +173,7 @@ export function resumeWakeups(opts: { sessionId: string; now?: Date }): LostWake
 export const scheduleWakeupTool: ToolDefinition = {
   name: 'ScheduleWakeup',
   description:
-    'Schedule when to resume work in /loop dynamic mode — the user invoked /loop without an interval, asking you to self-pace iterations of a specific task. Do NOT schedule a short-interval wakeup to poll for background work you started — when harness-tracked work finishes, you are re-invoked automatically. The runtime clamps to [60, 3600].',
+    'Schedule when to resume work in /loop dynamic mode — the user invoked /loop without an interval, asking you to self-pace iterations of a specific task. Do NOT schedule a short-interval wakeup to poll for background work you started — when harness-tracked work finishes, you are re-invoked automatically. The runtime clamps to [60, 3600]. Pick the delay by cache window, not by round minutes: sleeping past 300s means the next turn re-reads the conversation uncached. Use 60–270s while actively watching something nothing else will notify you about, 1200–1800s for idle waits. Avoid exactly 300s (pays the cache miss without buying a long wait), and do NOT pick 3600 — that fires just after the 1-hour prompt cache expires, so the full re-read buys nothing; 3300 or less lands inside the window.',
   category: 'scheduling',
   permission: 'self',
   parameters: {
@@ -181,7 +181,8 @@ export const scheduleWakeupTool: ToolDefinition = {
     properties: {
       delaySeconds: {
         type: 'number',
-        description: 'Seconds from now to wake up. Clamped to [60, 3600] by the runtime.',
+        description:
+          'Seconds from now to wake up. Clamped to [60, 3600] by the runtime; prefer 3300 or less so the next turn stays inside the prompt-cache window.',
       },
       reason: {
         type: 'string',

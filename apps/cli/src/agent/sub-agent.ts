@@ -509,6 +509,11 @@ export class SubAgent {
       artifactSessionId: `${options.toolContext?.sessionId ?? 'main'}:sub:${agentDef?.name || agentType}`,
     }
 
+    // Whether the *last* turn ended because the model hit its output ceiling.
+    // Kept outside the loop because the answer the caller receives is the last
+    // turn's text, so that is the turn whose completeness matters.
+    let lastTurnTruncated = false
+
     try {
       for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
         // Check abort signal
@@ -535,6 +540,10 @@ export class SubAgent {
         const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
         let turnText = ''
         let streamError: string | null = null
+        // The provider says so on the stop chunk when the model ran out of output
+        // budget (`max_tokens`). The answer is real but cut off mid-thought, and
+        // nothing downstream could tell that from a finished one.
+        let turnTruncated = false
 
         for await (const chunk of (this.llm ?? this.registry).chat({
           model: finalModel,
@@ -577,6 +586,7 @@ export class SubAgent {
             break
           }
           if (chunk.type === 'stop') {
+            if (chunk.truncated) turnTruncated = true
             break
           }
           if (chunk.type === 'usage') {
@@ -586,6 +596,7 @@ export class SubAgent {
         }
 
         chunks.push(turnText)
+        lastTurnTruncated = turnTruncated
 
         // Nothing came back at all, so there is no partial response to continue
         // from — that is a genuine failure and is reported as one.
@@ -771,6 +782,12 @@ export class SubAgent {
     }
 
     const result = chunks.join('')
+    // Ran out of output budget rather than finished. Saying so is the whole
+    // point: the text looks like a complete answer, so a caller with no marker
+    // treats a half-sentence conclusion as the agent's verdict.
+    if (!hitMaxTurns && lastTurnTruncated) {
+      return `[partial result — sub-agent hit the model's output limit; answer may be cut off]\n\n${result}`
+    }
     if (hitMaxTurns) {
       // Only advertise the SendMessage route where a route exists. A background
       // agent has an address (`bg-…`, minted by the registry and handed to the

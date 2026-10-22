@@ -308,8 +308,11 @@ describe('HookEngine', () => {
     expect(result.allowed).toBe(false)
     expect(result.reason).toContain('fail-closed')
     expect(result.reason).toContain('boom')
-    // Blocking stops the chain, like a deny does.
-    expect(goodHandler).not.toHaveBeenCalled()
+    // 但它不再是**终止**点：拒绝被记住、循环继续，后面的钩子仍要问过
+    // （后面的显式 deny 的说法更值得报给模型，见 hooks-fail-closed 的同题用例）。
+    expect(goodHandler).toHaveBeenCalledTimes(1)
+    // 允许也不能翻案 —— 记住的拒绝仍然生效，且没把后面的 modifiedInput 带出去。
+    expect(result.modifiedInput).toBeUndefined()
   })
 
   it('lets a PreToolUse guard opt back into fail-open with failureMode', async () => {

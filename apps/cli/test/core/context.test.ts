@@ -204,17 +204,20 @@ describe('ContextManager', () => {
     expect(ctx.getMessages()).toHaveLength(20)
   })
 
-  it('两趟都压不动时停下（有界，不死循环）—— 单条超大消息削不掉是诚实的边界', async () => {
+  it('两趟按条数压完仍超预算 ⇒ 终端一趟按预算削到底（有界，不再恒超）', async () => {
     // 阈值 90；每条 40 字符 = 10 token
     const ctx = makeContext(100, 0.9)
     ctx.setSystemPrompt('sys')
     for (let i = 0; i < 35; i++) ctx.addMessage(makeTextMessage('user', `msg ${i}`.padEnd(40, '.')))
 
-    await ctx.compact('summary') // 调度表只有两趟 ⇒ 必然返回
+    await ctx.compact('summary') // 两趟 + 终端一趟 ⇒ 必然返回
 
-    expect(ctx.getMessages()).toHaveLength(10)
-    // 仍是超预算 —— 条数已削到底，再往下要的是 tool_result 级截断（本轮不做）
-    expect(ctx.needsCompaction()).toBe(true)
+    expect(ctx.getMessages().length).toBeLessThan(10)
+    // 这条是本轮改动的要害：从前这里断言的是 `true`（压完仍超，下一轮再压同一个
+    // 空操作，直到上游拒收）。终端一趟的存在就是为了让这句话变成 `false`。
+    expect(ctx.needsCompaction()).toBe(false)
+    // 丢掉的要留痕，且说清楚「没经摘要」—— 模型不该把没见过的东西当成没发生过。
+    expect(String(ctx.getMessages()[0]!.content)).toMatch(/^\[\d+ earlier messages? omitted/)
   })
 
   it('超预算的短会话也会被压：≤30 条不再等于「什么都不做」', async () => {
@@ -225,7 +228,8 @@ describe('ContextManager', () => {
     for (let i = 0; i < 25; i++)
       over.addMessage(makeTextMessage('user', `msg ${i}`.padEnd(40, '.')))
     await over.compact('summary')
-    expect(over.getMessages()).toHaveLength(10)
+    expect(over.getMessages().length).toBeLessThan(10)
+    expect(over.needsCompaction()).toBe(false)
 
     // 正对照：同样 25 条、预算充裕 ⇒ 一条都不动。
     // 没有这一半，上面那半在「守卫被整个删掉」时也会绿。
@@ -234,6 +238,38 @@ describe('ContextManager', () => {
     for (let i = 0; i < 25; i++) roomy.addMessage(makeTextMessage('user', 'msg'))
     await roomy.compact('summary')
     expect(roomy.getMessages()).toHaveLength(25)
+  })
+
+  it('消息很少但消息本身很大：按条数的闸一次都不放行，终端一趟按预算削', async () => {
+    // 阈值 9000；8 条消息里 4 条各 20000 字符（≈5000 token），合计 ≈20000 token。
+    // 两趟的 `minLength`（30 / 10）都够不着它 —— 这正是「判着要压、压完没动」的形状。
+    const ctx = makeContext(10_000, 0.9)
+    const big = 'x'.repeat(20_000)
+    ctx.addMessage(makeTextMessage('user', 'start'))
+    for (let i = 0; i < 4; i++) {
+      ctx.addMessage(makeTextMessage('assistant', `step ${i}`))
+      ctx.addMessage(makeTextMessage('user', big))
+    }
+    expect(ctx.getMessageCount()).toBeLessThanOrEqual(10) // 前提：条数闸确实够不着
+    expect(ctx.needsCompaction()).toBe(true)
+
+    await ctx.compact('summary')
+
+    expect(ctx.needsCompaction()).toBe(false)
+    expect(ctx.getMessageCount()).toBeLessThan(9)
+  })
+
+  it('单条消息自己就超预算：没有可丢的 ⇒ 截内容，且写明截了多少', async () => {
+    const ctx = makeContext(10_000, 0.9)
+    ctx.addMessage(makeTextMessage('user', 'y'.repeat(200_000)))
+    expect(ctx.needsCompaction()).toBe(true)
+
+    await ctx.compact('summary')
+
+    expect(ctx.needsCompaction()).toBe(false)
+    const only = ctx.getMessages()
+    expect(only).toHaveLength(1)
+    expect(String(only[0]!.content)).toContain('truncated to fit the context budget')
   })
 
   // ═══════════════════════════════════════════
@@ -582,10 +618,12 @@ describe('ContextManager log integration', () => {
     }
     await cm.compact('test')
     const derived = deriveMessages(log.events())
-    expect(derived[0]).toEqual({
-      role: 'user',
-      content: '[Earlier conversation summary]: summarized content',
-    })
+    // 摘要后面带着「多少条被并进来」—— 前缀本身是投影标记不能动，附加行在它之后。
+    expect(derived[0]!.role).toBe('user')
+    expect(
+      String(derived[0]!.content).startsWith('[Earlier conversation summary]: summarized'),
+    ).toBe(true)
+    expect(String(derived[0]!.content)).toContain('11 earlier messages condensed')
     expect(derived).toHaveLength(21) // 1 摘要 + 20 保留
   })
 

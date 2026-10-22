@@ -72,7 +72,7 @@ function countToolPairs(messages: Message[]): number {
   return count
 }
 
-function isToolResultUserMessage(msg: Message): boolean {
+export function isToolResultUserMessage(msg: Message): boolean {
   if (msg.role !== 'user') return false
   if (!Array.isArray(msg.content)) return false
   return msg.content.some(

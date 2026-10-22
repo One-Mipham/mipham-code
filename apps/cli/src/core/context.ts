@@ -1,7 +1,18 @@
-import type { Message, ToolResult } from '../shared/index.ts'
+import type {
+  ContentBlock,
+  Message,
+  TextContent,
+  ToolResult,
+  ToolResultContent,
+} from '../shared/index.ts'
 import { snipMessages } from './context-snip'
-import { microcompact, shouldMicrocompact } from './context-microcompact'
-import { NoopCacheTracker, type CacheTracker, type CacheStatus } from './context-token'
+import { microcompact, shouldMicrocompact, isToolResultUserMessage } from './context-microcompact'
+import {
+  estimateMessageTokens,
+  NoopCacheTracker,
+  type CacheTracker,
+  type CacheStatus,
+} from './context-token'
 import {
   SessionLog,
   messageToEvents,
@@ -11,7 +22,49 @@ import {
   closeInterruptedToolCalls,
 } from './session-log'
 
-export type Summarizer = (messages: Message[], heading: string) => Promise<string>
+export type Summarizer = (
+  messages: Message[],
+  heading: string,
+  signal?: AbortSignal,
+) => Promise<string>
+
+/**
+ * 削一段文本直到估计值落进预算：对半切、逐次复估 —— 与脚本文种无关的收敛法
+ * （`estimateMessageTokens` 对 CJK / emoji 的换算和拉丁文不同，按字符数硬算会切多或切少）。
+ * 够小就原样返回；削过则**说出削了多少**，悄悄截断会让模型把自己的半条证据当成全文。
+ */
+function shrinkText(text: string, maxTokens: number): string {
+  const estimate = (t: string): number => estimateMessageTokens({ role: 'user', content: t })
+  if (estimate(text) <= maxTokens) return text
+
+  let out = text
+  for (let guard = 0; guard < 32 && out.length > 0 && estimate(out) > maxTokens; guard++) {
+    out = out.slice(0, Math.floor(out.length / 2))
+  }
+  return `${out}\n… [truncated to fit the context budget; ${text.length - out.length} characters omitted]`
+}
+
+/** 把单条消息里可削的文本削进 `maxTokens`；结构（角色、块类型、`tool_use_id`）一律不动。 */
+function truncateToBudget(msg: Message, maxTokens: number): Message {
+  if (typeof msg.content === 'string') {
+    const text = shrinkText(msg.content, maxTokens)
+    return text === msg.content ? msg : { ...msg, content: text }
+  }
+  if (!Array.isArray(msg.content)) return msg
+
+  const blocks = msg.content.map((b): ContentBlock => {
+    if (!b || typeof b !== 'object') return b
+    const block = b as unknown as Record<string, unknown>
+    if (block.type === 'text' && typeof block.text === 'string') {
+      return { ...(b as TextContent), text: shrinkText(block.text, maxTokens) }
+    }
+    if (block.type === 'tool_result' && typeof block.content === 'string') {
+      return { ...(b as ToolResultContent), content: shrinkText(block.content, maxTokens) }
+    }
+    return b
+  })
+  return { ...msg, content: blocks }
+}
 
 interface ContextConfig {
   maxTokens: number
@@ -317,7 +370,7 @@ export class ContextManager {
     return this.getEstimatedTokens() > this.config.maxTokens * this.config.compactionThreshold
   }
 
-  async compact(heading: string): Promise<{ before: number; after: number }> {
+  async compact(heading: string, signal?: AbortSignal): Promise<{ before: number; after: number }> {
     const beforeTokens = this.getEstimatedTokens()
 
     for (let i = 0; i < COMPACTION_PASSES.length; i++) {
@@ -326,10 +379,100 @@ export class ContextManager {
       // 仍超预算时继续 —— 这一句就是「压完再判一次」。
       if (i > 0 && !this.needsCompaction()) break
       if (this.messages.length <= pass.minLength) continue
-      await this.compactOnce(heading, pass.keep)
+      await this.compactOnce(heading, pass.keep, signal)
     }
 
+    // 终端一趟：尺是**预算**，不是条数。
+    //
+    // 上面两趟都按条数削，而触发尺按 token —— 一段十来条消息、里头几个几十万字符的
+    // 工具结果 / 长文档的会话，两趟的 `minLength` 闸都会 `continue`，一次也不压。
+    // 于是 `needsCompaction()` 恒真、每轮都重试同一个空操作，直到上游拒收。
+    // 这里按预算从尾部往前留，留不下的**数清楚**再丢掉，并把这件事写进上下文。
+    if (this.needsCompaction()) this.enforceBudget()
+
     return { before: beforeTokens, after: this.getEstimatedTokens() }
+  }
+
+  /**
+   * 把消息列表削到预算之内，且**只**在按条数的两趟都够不着时才会走到这里。
+   *
+   * 两点都是判据本身：
+   * - **从尾部往前留**，因为最新的一轮才是模型接下来要接着做的；
+   * - 丢弃要留痕。`compactOnce` 的两条路都靠一句话交代「前面被压过」，而这里丢掉的
+   *   东西没经摘要器，模型若不被告知，会把自己没见过的早期决定当成从未发生过。
+   */
+  private enforceBudget(): void {
+    // 消息那半能用的额度 = 总预算 − 提示那半。提示段（系统提示、权限段、MCP
+    // instructions）不归这里管：它们本来就每轮重派生，而按整份总额度削消息的话，
+    // 一段很长的系统提示会让这里把好好的对话截碎，且**削完照样超**。
+    const target = Math.max(
+      1,
+      this.config.maxTokens * this.config.compactionThreshold - this.promptTokens(),
+    )
+    const est = (m: Message): number => this.estimateTokensForMessages([m])
+
+    let cut = this.messages.length
+    let used = 0
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      const t = est(this.messages[i]!)
+      // 最后一条无条件留下：全丢光就没有可回复的上下文了。
+      if (cut < this.messages.length && used + t > target) break
+      cut = i
+      used += t
+    }
+
+    // 幸存窗口不能以一条 `tool_result` 开头 —— 它的 `tool_use` 落在被丢的那半里，
+    // 上游会拒收「没有对应调用的结果」。往前多带一条，代价是多一点预算。
+    while (cut > 0 && isToolResultUserMessage(this.messages[cut]!)) {
+      cut--
+      used += est(this.messages[cut]!)
+    }
+
+    const dropped = this.messages.slice(0, cut)
+    let kept = this.messages.slice(cut)
+
+    // 一条消息自己就超预算（单条巨型结果 / 整篇文档）⇒ 没有可丢的，只能截内容。
+    // 每条分到的是它自己那份预算，不是整份额度 —— 否则几条各占三分之一的消息谁也
+    // 没超，削完还是超。
+    if (dropped.length === 0 && kept.length > 0) {
+      const perMessage = Math.max(1, Math.floor(target / kept.length))
+      kept = kept.map((m) => truncateToBudget(m, perMessage))
+    }
+
+    const omittedNotice = (n: number): Message => ({
+      role: 'user',
+      content:
+        `[${n} earlier message${n === 1 ? '' : 's'} omitted — the context budget ` +
+        `could not hold them. They were not summarized; ask before assuming what ` +
+        `they said.]`,
+    })
+
+    // 通知自己也占预算，所以头部再补削，直到**含通知**的整份落进预算。少了这一步，
+    // 「刚好削到线内」的会话会因多出这一条而重新超线 —— 下一轮再削一次，逐轮掉消息。
+    // 顺带保住配对：若补削后的第一条是 `tool_result`，它的调用已在被丢的那半里，
+    // 一起丢，别留一个没有调用的结果给上游。
+    while (kept.length > 1) {
+      const withNotice = [omittedNotice(dropped.length), ...kept]
+      if (this.estimateTokensForMessages(withNotice) <= target) break
+      dropped.push(kept[0]!)
+      kept = kept.slice(1)
+      while (kept.length > 1 && isToolResultUserMessage(kept[0]!)) {
+        dropped.push(kept[0]!)
+        kept = kept.slice(1)
+      }
+    }
+
+    const notice: Message | null = dropped.length > 0 ? omittedNotice(dropped.length) : null
+    const next = notice ? [notice, ...kept] : kept
+
+    if (this.log) {
+      this.log.append({ type: 'compaction/rewrite', at: Date.now(), messages: next })
+      this.messages = deriveMessages(this.log.events())
+    } else {
+      this.messages = next
+    }
+
+    this.recountMessageTokens()
   }
 
   /**
@@ -338,22 +481,36 @@ export class ContextManager {
    * body（除 `keep` 外）逐行取自旧 `compact()`，两种分支原样保留：LLM 摘要（失败回落截断）
    * 与纯截断。`recountMessageTokens()` 留在**这里**而不是调用方 —— 下一趟的闸要读它。
    */
-  private async compactOnce(heading: string, keep: number): Promise<void> {
+  private async compactOnce(heading: string, keep: number, signal?: AbortSignal): Promise<void> {
     const toDrop = this.messages.slice(0, -keep)
 
     if (this.summarizer && toDrop.length >= 4) {
       // LLM-based summarization of truncated messages
       try {
-        const summary = await this.summarizer(toDrop, heading)
+        const summary = await this.summarizer(toDrop, heading, signal)
+        // 摘要**替换**了这些东西，而不是它们被逐字保留：摘要器只读到每条前 2000 字符
+        // （见 `Engine.setupContextSummarizer`），写得再详细也回不到原文。把量说在
+        // 摘要后面，读的人才知道自己手里是一份缩写，不是完整历史 —— 前缀
+        // `[Earlier conversation summary]:` 是 `session-log` 的投影标记，不能改。
+        const annotated =
+          `${summary}\n\n(${toDrop.length} earlier message` +
+          `${toDrop.length === 1 ? '' : 's'} condensed into this summary.)`
         const summaryMsg: Message = {
           role: 'user',
-          content: `[Earlier conversation summary]: ${summary}`,
+          content: `[Earlier conversation summary]: ${annotated}`,
         }
         this.messages = [summaryMsg, ...this.messages.slice(-keep)]
         if (this.log) {
           const derivedCount = deriveMessages(this.log.events()).length
           const replacedCount = Math.max(0, derivedCount - keep)
-          this.log.append({ type: 'compaction/summary', at: Date.now(), summary, replacedCount })
+          // 记 `annotated` 而不是裸 `summary`：日志是消息投影的唯一真源，
+          // 两条路径拼出的字节必须一致（见 session-log 的 SUMMARY_PREFIX）。
+          this.log.append({
+            type: 'compaction/summary',
+            at: Date.now(),
+            summary: annotated,
+            replacedCount,
+          })
         }
       } catch {
         // Fall back to truncation on summarizer failure

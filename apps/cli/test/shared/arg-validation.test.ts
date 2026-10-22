@@ -38,6 +38,7 @@ describe('detectUnknownArgument — unknown options', () => {
       '--help',
       '-h',
       '--dump-config',
+      '--profile',
       '--safe-mode',
       '--resume',
       '--permission',
@@ -46,6 +47,13 @@ describe('detectUnknownArgument — unknown options', () => {
     ]) {
       expect(detectUnknownArgument([flag])).toBeNull()
     }
+  })
+
+  it('`--dump-config --profile <name>` is not read as a command', () => {
+    // `--profile` 只与 `--dump-config` 配对；`--help` 现在写着它、bin 也接受它，
+    // 所以它必须同时是「已知 flag」和「吃值 flag」—— 否则 profile 名会被当成命令。
+    expect(detectUnknownArgument(['--dump-config', '--profile', 'staging'])).toBeNull()
+    expect(detectUnknownArgument(['--profile', 'staging', '--dump-config'])).toBeNull()
   })
 })
 

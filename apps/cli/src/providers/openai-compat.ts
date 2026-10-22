@@ -33,6 +33,11 @@ export class OpenAICompatProvider implements ProviderInstance {
       stream: true,
       max_tokens: req.maxTokens || declaredMaxOutput || 8192,
       temperature: req.temperature,
+      // Without this the server never sends the final usage chunk, so callers
+      // that report token use (sub-agents, the metrics footer) record 0 for
+      // every OpenAI-compatible provider — a number that reads as "free" rather
+      // than "not measured".
+      stream_options: { include_usage: true },
       tools: req.tools?.map((t) => ({ type: 'function', function: t })),
     }
 
@@ -448,8 +453,15 @@ export class OpenAICompatProvider implements ProviderInstance {
     if (!raw) return {}
     try {
       return JSON.parse(raw)
-    } catch {
-      return { _raw: raw }
+    } catch (err) {
+      // Tag the failure instead of handing back a bare fragment: the tool's
+      // validator would then report "missing required parameter", and the model
+      // would spend its retry supplying a parameter it had already written
+      // rather than re-sending the JSON it truncated.
+      return {
+        _parseError: `${err instanceof Error ? err.message : String(err)}; received ${raw.length} characters`,
+        _raw: raw,
+      }
     }
   }
 

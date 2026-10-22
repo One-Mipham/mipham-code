@@ -93,11 +93,18 @@ export const workflowTool: ToolDefinition = {
       }
     }
 
-    // Build a minimal engine-like interface for runWorkflow
+    // Build a minimal engine-like interface for runWorkflow.
+    //
+    // `runWorkflow` reads four accessors, not two: without `getPermission` /
+    // `getLlm` this stub made every Workflow call throw `engine.getPermission is
+    // not a function` before the script even started. The cast hid it — the
+    // object was asserted to be a QueryEngine, and nothing exercised the call.
     const engineStub = {
       getRegistry: () => ctx.registry!,
       getTools: () => ctx.toolRegistry!,
-    } as QueryEngine
+      getPermission: () => ctx.permissionSystem,
+      getLlm: () => ctx.llm,
+    } as unknown as QueryEngine
 
     try {
       const { runId, result, cacheHits, cacheMisses } = await runWorkflow(

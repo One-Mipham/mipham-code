@@ -342,8 +342,12 @@ describe('AnthropicProvider', () => {
 
     const toolUses = chunks.filter((c) => c.type === 'tool_use')
     expect(toolUses).toHaveLength(1)
-    // Should fall back to _raw
-    expect(toolUses[0]!.toolUse!.input).toEqual({ _raw: 'not valid json' })
+    // 残片要带**说是解析失败**的标记，不能只是一段裸 `_raw`：后者会让参数校验
+    // 报「缺少必需参数」，模型于是去补一个它其实写过的参数。
+    expect(toolUses[0]!.toolUse!.input).toMatchObject({
+      _raw: 'not valid json',
+      _parseError: expect.stringContaining('received 14 characters'),
+    })
   })
 
   // ═══════════════════════════════════════════
