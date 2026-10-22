@@ -4,6 +4,15 @@
 > (tag dates) and use the same wording as the VS Code extension's changelog — the plugin is a
 > thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.24 (2026-10-22)
+
+- Version sync with Mipham Code CLI 0.85.24
+- Fixed: the Workflow tool threw before running any script (its engine adapter was missing four
+  accessors); skill frontmatter hooks could block every tool call in a session (fail-closed
+  PreToolUse); truncated sub-agent output is now marked as partial; OpenAI-compatible providers now
+  report real token usage; MCP handshake budgets count awake time; compaction enforces a token
+  budget at the tail; `rm -r` variants are caught by behavior; WebFetch returns 4xx/5xx as results.
+
 ## 0.85.23 (2026-10-19)
 
 - Version sync with Mipham Code CLI 0.85.23

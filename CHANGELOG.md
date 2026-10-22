@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.85.24] — 2026-10-22
+
+### Fixed
+
+- **Workflow 工具此前完全不可用** —— 交给运行时的引擎只暴露两个访问器、靠 `as` 断言骗过类型，
+  而 `runWorkflow` 必读四个（registry / tools / permission / llm）⇒ 模型每次调用都在脚本第一行前
+  抛错，且此前没有任何测试执行过该工具；补齐访问器并新增首个执行该工具的测试。
+- **技能 frontmatter 的 `hooks` 会让整场会话的工具调用全被拒** —— frontmatter 无法携带函数，
+  `handler` 恒 `undefined`，`runHooks` 在 `hook.handler(ctx)` 抛 TypeError，而 PreToolUse 守卫
+  fail-closed；现在只收带 handler 的条目，其余逐条告警到 stderr。
+- **子代理的截断输出不再被当成完整答案** —— 最后一轮命中 `max_tokens` 时结果前缀
+  `[partial result …]`。
+- **OpenAI 兼容 provider 的 token 读数不再恒为 0** —— 请求 `stream_options.include_usage`，
+  此前没有任何用量回传，读数只是占位值。
+- **MCP 握手预算按醒着的时间计** —— 合盖睡眠不再在掀盖的一瞬烧掉整个预算、把服务器判成超时；
+  `waitUntilReady` 用同一口径。
+- **上下文压缩在末尾按 token 预算兜底** —— 条数闸够不着巨型工具结果；摘要标注压缩条数与省略
+  字符数，单条超大消息按需收缩，被省略的尾部明确声明「未总结」，避免模型把空缺当已知。
+- **`rm` 递归守卫按行为判** —— `-r` / `-R` / `--recursive` 及任意字母簇都识别，含挂载点与
+  `C:\Users`。
+- **`PreToolUse` 守卫失败不再抢走后面钩子的显式 deny 理由。**
+- **WebFetch 的 4xx/5xx 改为正常结果**（状态码 + 正文），不再一律报工具错误；WebSearch 429
+  明说别用别的工具绕路；不可解析的工具参数带 `_parseError`，给出专用错误。
+- **workflow 的 worktree 清不掉时留痕并重试**；Bash 失败分支识别 ENOSPC 并提示可能有半截写入。
+- **`verify()` / `judge()` 走 journal 与 resume 缓存** —— 由运行时注入当前 run 的 agent。
+- **`--profile` 进入已知 flag**，补帮助行与缺值/错配用法错误。
+- **`autoCompactWindow` 接受 `200k` / `1M`**，越界或非数字逐条告警（原先静默丢弃）。
+- **投给已结束 agent 的消息明确拒绝**（本仓无子代理 resume），不再假装送达。
+
+### Changed
+
+- `/skills` 与 `/reload-skills` 只印描述首行；`/loop` 与 ScheduleWakeup 按缓存窗口给延迟
+  （避开 300s 与 3600s）。
+- compaction 全链接受 `AbortSignal`：摘要请求也能被中断。
+
 ## [0.85.23] — 2026-10-19
 
 ### Security
