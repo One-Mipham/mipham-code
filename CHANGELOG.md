@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.85.25] — 2026-10-26
+
+### Security
+
+- **前导赋值的值含空白或引号时，真实命令从权限闸门的匹配集合里消失** —— 归一化按空白切词，
+  `X="a b" rm -rf "$(pwd)"` 被切成两半，参数化 deny 规则、危险 `rm` 检测、世界可写 `chmod`
+  三道闸同时空转（`X=1` 却全部命中）；改为按 shell 引号规则扫描赋值（单/双引号、反引号、
+  `$( )`、`${ }`、反斜杠）。
+- **无空格重定向不被提取** —— `echo hi>denied.txt`、`cat</etc/hosts` 的路径此前不进匹配集合，
+  路径 deny 规则可绕过；同时排除进程替换 `<(...)` 与重定向操作符本身。
+- **隔离工作树可能检出被替换的历史** —— `git replace` 能让 `git worktree add` 检出别的内容，
+  而四条创建路径（`EnterWorktree`、workflow agent、`/fork`、CRSI 沙箱）都没带
+  `GIT_NO_REPLACE_OBJECTS`；统一走 `internalGitEnv()`。判据用真 git + 正对照（同一 HEAD：
+  不屏蔽 ⇒ 被替换的树，屏蔽 ⇒ 真内容）。
+- **artifact 服务器监听所有网卡** —— `listen(port)` 不带 host 时绑定全部接口，局域网内可读模型
+  刚写的产物；改为 `127.0.0.1`。
+- **隔离逃逸识别的同类绕过** —— `'cd' /etc`、`pushd`、`env -C /etc` 此前均不识别；改为引号感知
+  分词，并覆盖 `command`/`builtin`/`env -C`、`--`、裸 `cd`（→ `~`）、`~` 与 `$HOME` 展开。
+
+### Added
+
+- **`/approve`** —— `ExitPlanMode` 的工具结果一直告诉模型「用户可以说 approved 或敲 `/approve`」，
+  但该命令没有处理函数；现在只认 `plan` 档（其他档回答「没什么可批」，避免误敲变成提权），
+  并把切换结果读回页脚（组织级限制可能夹紧请求的档位）。
+
+### Fixed
+
+- **单份指令文件没有上限** —— 嵌套发现的 `CLAUDE.md` 整份进入每次请求，40k 预算只是事后告警；
+  现在单文件上限等于总预算，截断标记写在载荷里。
+- **预览与摘要按 UTF-16 码元切** —— 落点夹在代理对中间会留下半个 emoji，进入 JSONL 转录时整行
+  解析失败；收成码元安全的 `safeSlice`，接到两处预览与上下文摘要截断。
+- **同名技能静默后者胜** —— 加载时点名两个来源文件，不再只剩「改了没效果」的困惑。
+- **`haiku` / `sonnet` / `opus` 从不解析** —— 它们是档位不是 id，agent 定义写了只会在告警后回落到
+  父模型；现在在**活动 provider** 内按档位解析（精确 id 始终优先）。
+- **macOS 未装命令行工具时每次启动弹窗** —— 启动路径无条件 `git rev-parse` 会触发「安装开发者
+  工具」对话框；先探 `xcode-select -p` 并缓存结果。
+- **自跑的 git 不钉 locale** —— `/pr` 解析的英文 `HEAD branch:` 在本机中文 git 上会静默回落到
+  `main`；`LC_ALL=C`。
+- **偏克隆下创建隔离工作树无上限** —— 按需 fetch 可能挂住；两条创建路径都加 60s 上限并杀掉子进程。
+- **token 估值缺「密集 ASCII」档** —— base64 / hex / 压缩 JSON 一律按散文计价，低估 2–3 倍；
+  同时把截断分支的前件从 `dropped.length === 0` 改为量出来的「幸存者超没超」。
+- **插件状态读不出来时，下一次保存会覆盖真实列表** —— 改为把损坏的 `state.json` 改名隔离，
+  改名失败也在告警里说明。
+- **`/add-dir` 不再声称注册工作区目录** —— 那份允许列表从未被任何代码读过；现在说明真实的读/写
+  判定方式与用户级 `permissions.allow` 的写法。
+- **依赖**：`next` 升到 15.5.28（Image Optimization 的 SVG 未鉴权 RCE 与 Server Actions DoS），
+  根 overrides 钉 `zod@4: 4.6.6`（超大 constrained collections 内存耗尽，仅 dev 树）。
+
 ## [0.85.24] — 2026-10-22
 
 ### Fixed

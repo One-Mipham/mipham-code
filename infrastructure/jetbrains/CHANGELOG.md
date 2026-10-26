@@ -4,6 +4,21 @@
 > (tag dates) and use the same wording as the VS Code extension's changelog — the plugin is a
 > thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.25 (2026-10-26)
+
+- Version sync with Mipham Code CLI 0.85.25
+- Security: shell-command normalization now keeps commands whose leading assignments contain spaces
+  or quotes (parameterized deny rules, dangerous `rm` and world-writable `chmod` were all blind to
+  them); redirects without a space (`echo hi>f`) are extracted; isolated worktrees no longer check
+  out replaced history (`GIT_NO_REPLACE_OBJECTS` on all four creation paths); the artifact server
+  binds loopback only; worktree-escape detection handles quoted commands, `pushd` and `env -C`.
+- Added: `/approve` (plan mode → acceptEdits, with the mode read back from the permission layer).
+- Fixed: per-file ceiling for instruction files; surrogate-safe truncation in previews and context
+  summaries; duplicate skill names are reported; `haiku`/`sonnet`/`opus` resolve as tiers; no macOS
+  dialog when command-line tools are missing; git pinned to `LC_ALL=C`; 60s cap on worktree
+  creation; dense-ASCII token estimation; corrupt plugin state is quarantined instead of overwritten.
+- Dependency: `next` 15.5.28, `zod` 4.6.6 (advisory drift).
+
 ## 0.85.24 (2026-10-22)
 
 - Version sync with Mipham Code CLI 0.85.24
