@@ -156,6 +156,25 @@ describe('extractBashFileAccess', () => {
 
   it('extracts read paths from input redirects', () => {
     expect(extractBashFileAccess('cat < .git-credentials').read).toContain('.git-credentials')
+    // No whitespace around the operator — the old separator requirement missed it.
+    expect(extractBashFileAccess('cat<.git-credentials').read).toContain('.git-credentials')
+  })
+
+  it('does not report the redirect operator itself as a read path', () => {
+    expect(extractBashFileAccess('cat < .git-credentials').read).not.toContain('<')
+  })
+
+  it.each([
+    ['bare', 'echo x>.npmrc'],
+    ['after a subshell', '(echo x)>.npmrc'],
+    ['after a substitution', 'x=$(date)>.npmrc'],
+  ])('extracts write paths from a no-space redirect (%s)', (_label, command) => {
+    expect(extractBashFileAccess(command).write).toContain('.npmrc')
+  })
+
+  it('ignores process substitution as a redirect target', () => {
+    expect(extractBashFileAccess('cat <(cat .git-credentials)').write).not.toContain('<')
+    expect(extractBashFileAccess('cat <(cat .git-credentials)').read).toContain('.git-credentials')
   })
 
   it('extracts write paths from output redirects', () => {
@@ -252,6 +271,15 @@ describe('matchBashRule — Read/Write/Edit rules match Bash file access', () =>
   it('matches a Write/Edit(path) rule against an output redirect via Bash', () => {
     expect(matchBashRule('Edit(.npmrc)', 'Bash', { command: 'echo x > .npmrc' })).toBe(true)
     expect(matchBashRule('Write(.npmrc)', 'Bash', { command: 'echo x >> .npmrc' })).toBe(true)
+  })
+
+  it.each([
+    ['bare', 'echo x>.npmrc'],
+    ['after a subshell', '(echo x)>.npmrc'],
+    ['after a substitution', 'x=$(date)>.npmrc'],
+  ])('matches a Write/Edit(path) rule against a no-space redirect (%s)', (_label, command) => {
+    expect(matchBashRule('Edit(.npmrc)', 'Bash', { command })).toBe(true)
+    expect(matchBashRule('Write(.npmrc)', 'Bash', { command })).toBe(true)
   })
 
   it('matches an Edit(path) rule against an in-place editor via Bash', () => {
@@ -647,6 +675,10 @@ describe('基命令前的 shell 噪声 —— Bash 通配匹配', () => {
     ['前导赋值', 'FOO=bar rm -rf x'],
     ['IFS 赋值', 'IFS=x rm -rf x'],
     ['LD_PRELOAD 赋值', 'LD_PRELOAD=x rm -rf x'],
+    ['前导赋值：双引号值含空白', 'X="a b" rm -rf x'],
+    ['前导赋值：单引号值含空白', "X='a b' rm -rf x"],
+    ['前导赋值：转义空格', 'X=a\\ b rm -rf x'],
+    ['前导赋值：命令替换含空白', 'X=$(echo a b) rm -rf x'],
     ['取反', '! rm -rf x'],
     ['time 关键字', 'time -p rm -rf x'],
     ['for 循环体', 'for f in *; do rm -rf x; done'],
@@ -663,6 +695,10 @@ describe('基命令前的 shell 噪声 —— Read 桥接', () => {
     ['前导赋值', 'FOO=bar cat secret'],
     ['IFS 赋值', 'IFS=x cat secret'],
     ['LD_PRELOAD 赋值', 'LD_PRELOAD=x cat secret'],
+    ['前导赋值：双引号值含空白', 'X="a b" cat secret'],
+    ['前导赋值：单引号值含空白', "X='a b' cat secret"],
+    ['前导赋值：转义空格', 'X=a\\ b cat secret'],
+    ['前导赋值：命令替换含空白', 'X=$(echo a b) cat secret'],
     ['取反', '! cat secret'],
     ['time 关键字', 'time -p cat secret'],
   ])('%s：%s 命中 Read(secret)', (_label, cmd) => {
@@ -775,7 +811,18 @@ describe('两条匹配路径共用同一份归一化（防「只接一条」）'
   // 为什么单列这个 describe：两条路径各解析各的，正是这一族绕过得以存在的结构
   // 原因。给两条路径接了同一份归一化之后，这个守卫把该约束固化下来 —— 后来者
   // 只改一条，这里必红。
-  const NOISY = ['( cmd )', '{ cmd; }', '! cmd', 'FOO=bar cmd', 'IFS=x cmd', 'time -p cmd']
+  const NOISY = [
+    '( cmd )',
+    '{ cmd; }',
+    '! cmd',
+    'FOO=bar cmd',
+    'IFS=x cmd',
+    'X="a b" cmd',
+    "X='a b' cmd",
+    'X=a\\ b cmd',
+    'X=$(echo a b) cmd',
+    'time -p cmd',
+  ]
 
   it.each(NOISY)('噪声形态 %s：Bash 通配路径看得见', (tpl) => {
     const command = tpl.replace('cmd', 'rm -rf x')

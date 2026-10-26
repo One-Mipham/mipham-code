@@ -889,24 +889,30 @@ For help at any time: /help`,
   }
 }
 
+// `/add-dir` 从前会回「✓ Directory registered」并把 `.mipham/config.yml` 的
+// `workspace.extraDirs` 当兑现方式 —— 而那个键全仓**零读者**，命令本身也没有
+// 任何状态可供后续工具查询。一句话：广告的能力没有落点。
+//
+// 现在它只做两件真事：校验路径存在，并如实说明访问实际由什么决定。删掉命令是
+// 更省事的做法，但 `/add-dir` 是用户会去敲的名字 —— 让它给出**错的**答案，比留下
+// 一个说真话的入口更坏。
 const addDirCmd: CommandHandler = async (_ctx, args) => {
   const dir = args[0]
   if (!dir) {
     return {
       content: `Usage: /add-dir <path>
 
-Add a directory to Mipham Code's allowed workspace paths.
-This grants the AI permission to read/write files in that directory.
+Check a path and show how file access to it is actually decided.
+
+This build has NO workspace-directory allowlist: running /add-dir does not
+register anything and does not by itself change what the AI may read or write.
+See /add-dir <path> for the mechanism.
 
 Examples:
   /add-dir ~/projects/my-api
   /add-dir /usr/local/share/data
 
-Current allowed directories:
-  • ${process.cwd()}  (project root, always allowed)
-
-Note: For security, tools like bash already respect .mipham/config.yml
-permission boundaries. Adding directories here extends read/write access.`,
+Current directory: ${process.cwd()}`,
     }
   }
 
@@ -919,16 +925,27 @@ permission boundaries. Adding directories here extends read/write access.`,
   }
 
   return {
-    content: `✓ Directory registered: ${resolved}
+    content: `✓ Path exists: ${resolved}
 
-To persist across sessions, add to .mipham/config.yml:
-  workspace:
-    extraDirs:
-      - ${resolved}
+Nothing was registered — this build has no workspace-directory allowlist.
 
-The AI can now access files in this directory.
-Permission mode: Shift+Tab cycles ${renderCycleLine()} (this session);
-\`permission:\` in .mipham/config.yml persists one.`,
+How access is actually decided:
+  • Reads   — not limited by directory. What refuses a file is a deny rule
+              (\`Read(<path>)\`, which also covers Bash readers like cat/head).
+  • Writes  — gated by the permission mode (Shift+Tab cycles:
+              ${renderCycleLine()}).
+              In the default mode a Write/Edit resolves to \`ask\`, and this CLI
+              has no interactive approval prompt: \`ask\` is a hard refusal.
+
+To allow writes under this directory without changing the mode, add path
+allow rules to your USER settings (~/.mipham/settings.json). The project-level
+allow list is deliberately ignored, because a repository must not widen its
+own permissions:
+  {
+    "permissions": {
+      "allow": ["Write(${resolved}/**)","Edit(${resolved}/**)"]
+    }
+  }`,
   }
 }
 

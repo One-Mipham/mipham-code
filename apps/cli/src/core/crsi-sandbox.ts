@@ -25,6 +25,7 @@ import {
   realpathSync,
 } from 'node:fs'
 import { atomicWriteFileSync } from '../shared/atomic-write'
+import { internalGitEnv } from '../shared/git-env'
 import { join, resolve, sep, posix } from 'node:path'
 import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
@@ -296,7 +297,7 @@ function shq(s: string): string {
  * 对象字面量怎么变都动不了它们。下面那个字面量被抹成 `{}` 只会丢掉超时与编码，
  * 丢不掉「哪棵树」。**有意不再传 `cwd`** —— 留着它，下一个人会以为承重的是它。
  *
- * 守卫 `test/integrity/crsi-sandbox-command-root.test.ts` 静态钉住这个形状。
+ * 守卫 `test/integrity/crsi-sandbox-root.test.ts` 静态钉住这个形状。
  */
 function runIn(
   root: string,
@@ -309,6 +310,9 @@ function runIn(
   return execSync(rooted, {
     timeout: opts.timeoutMs ?? 10_000,
     encoding: 'utf-8',
+    // The sandbox derives its worktree from `HEAD`; a `refs/replace/*` entry
+    // would make that tree differ from the object graph the user actually has.
+    env: internalGitEnv(),
     ...(opts.quiet ? { stdio: ['ignore', 'pipe', 'ignore'] as StdioOptions } : {}),
   })
 }

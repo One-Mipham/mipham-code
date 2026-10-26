@@ -46,6 +46,8 @@ export function invalidSkillNameReason(name: string): string | null {
 
 export class SkillsLoader implements Skills {
   private skills = new Map<string, SkillDefinition>()
+  /** File each loaded skill came from — so a name collision can name both sides. */
+  private sources = new Map<string, string>()
 
   loadBuiltin(basePath: string): void {
     // Load standard skills (*.SKILL.md)
@@ -237,7 +239,19 @@ export class SkillsLoader implements Skills {
         requiresBins: data['requires-bins'] as string[] | undefined,
       }
 
+      // Two files declaring the same name is a silent last-one-wins race: the
+      // user edits the shadowed file, reloads, and sees no effect. Say which file
+      // won and which one it displaced. Re-loading the **same** path (what
+      // `/reload-skills` does, into this same loader) is not a collision.
+      const previousSource = this.sources.get(skill.name)
+      if (previousSource !== undefined && previousSource !== sourceName) {
+        process.stderr.write(
+          `⚠️  Skill "${skill.name}" from ${sourceName} replaces the one loaded from ` +
+            `${previousSource} — the later file wins; rename one of them.\n`,
+        )
+      }
       this.skills.set(skill.name, skill)
+      this.sources.set(skill.name, sourceName)
     } catch {
       // skip unparseable
     }

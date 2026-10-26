@@ -5,7 +5,7 @@ prompt-exclude:
   - Provider 层（12 家，按字母序）
   - 工具层（31 个工具）
   - Skills 系统（28 个内置技能）
-  - Slash 命令系统（137 个）
+  - Slash 命令系统（138 个）
   - 记忆系统
   - 遥测与崩溃上报（T1 CLI 侧 + T1b 接收端）
   - 核心引擎
@@ -21,9 +21,9 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.42
-> **最后更新**: 2026-10-23 — **0.85.24 发布：16 处审计缺陷修复 + 3 条自查缺陷同批收口**（2.94.42；区间 **6 笔** = `git rev-list --count 'v0.85.23^{}..v0.85.24^{}'`，含 0.85.23 之后 2 笔文档；本轮 4 笔 = 修复 / 计数回填 / 版本+CHANGELOG / 依赖加固）。**发布读数**（全取外部探针）：GPG 签名 tag `v0.85.24` → `a7f43aba`（`git tag -v` = 完好的签名）；`release.yml` `39809459331` **9/9**；npm 真输出行 `+ @miphamai/cli@0.85.24`（15:58:20Z）、registry `time['0.85.24']` = **2026-10-22T16:01:31.174Z**、`dist-tags.latest` = **0.85.24**；GitHub Release `v0.85.24` **6 资产**、非 draft 非 prerelease（createdAt 15:55:31Z）、DMG **2,268,257 B** ⚠️ **未签名**（CI 无签名身份，与历次同）；JetBrains 真输出行 `JetBrains plugin published.`（16:00:02Z）；本地 `.vsix` **71,250 B** / sha256 `01b81020…` / 包内 `version` = 0.85.24 ⇒ ✅ **已人工上传 Marketplace 并经双探针核验**：页内同源 `extensionquery` API `versions[0].version` = 0.85.24、`flags` = validated、`versions[]` = **76** 条、`lastUpdated` = `2026-10-22T16:02:02.737Z`；公开页 `Version 0.85.24` / `Last updated 2026/10/23`。**安全闸先红后绿**：首次 CI `39807511069` 红在 `security-audit` —— 线上 advisory 库新增 follow-redirects 1.16.0 与 vite 8.2.0–8.2.3 两条 high（本笔一行依赖未动，属 advisory 漂移）；两条均有补丁，升级 follow-redirects **1.16.1**、vite **8.2.4**（后者须同时进根 devDependencies —— 仅改 overrides 时 pnpm 仍把 vitest 的 peer 锁在 8.2.1），重跑 CI `39808927471` **9/9**。✅ **两站已部署**（用户直令，一次只覆盖一次）：国内 `deploy-cn.sh`（Commit `7ee6895`）、国际 `vercel --prod`（`dpl_E5wwnA5CRCcANtDdX5qYAKModjmy`、`target: production`、`READY`，别名 `mipham.ai`）；`websites` `7ee6895` → **`d123492`**（package-info 同步到 0.85.24，两站）；绕缓存复核两站 `/mipham-code` 各 **3×0.85.24 / 0×0.85.23**。测试 **4,388**（330 文件；4,386 passed + 2 skipped，0 失败）；typecheck / eslint / prettier 全绿。
-> **前一条（2.94.41）**: 2026-10-22 — **本轮审计落地 16 处缺陷修复 + 2 处半修复，另 3 条自查缺陷同批收口**（2.94.41）。**三条自查缺陷比审计条目更重**：① `tools/agent/workflow.ts` 的 engineStub 只有两个方法、`as` 断言骗过类型，而 `runWorkflow` 必读四个 ⇒ **模型每次调 Workflow 都在脚本第一行前抛错**，且此前没有任何测试执行过这个工具；② 技能 frontmatter 的 `hooks:` 是纯数据、`handler` 恒 undefined，原样注册后 `runHooks` 在 `hook.handler(ctx)` 抛 TypeError，PreToolUse 守卫 fail-closed ⇒ **整场会话每一次工具调用都被拒**（改为只收带 handler 的条目并逐条告警）；③ 子代理最后一轮被 `max_tokens` 截断时，截断标记无人读 ⇒ 半句话的结论被当成完整答案（现在前置 `[partial result …]`）。**16 处修复**：MCP 连接预算改按醒着的时间（睡眠不再烧预算，`waitUntilReady` 同步）、压缩末尾按**预算**兜底（条数闸够不着巨型工具结果）、`/skills` 与 `/reload-skills` 只印首行、openai-compat 补 `stream_options.include_usage`（此前所有 OpenAI 兼容 provider 的 token 读数**恒 0**）、WebFetch 4xx/5xx 改为正常结果、错误与配额文案（不可解析参数、429 别绕）、worktree 清不掉时留痕重试、ENOSPC 明说盘满、摘要标注压缩条数与省略字符、`verify()/judge()` 由运行时注入 agent ⇒ 走 journal 与 resume 缓存、`rm` 递归守卫改按行为判（`-r`/`-R`/`--recursive`/任意字母簇，含挂载点与 `C:\Users`）、compaction 全链收 signal、`--profile` 进已知 flag 并补用法、PreToolUse 守卫失败不再抢走后面钩子的显式 deny、`/loop` 唤醒按缓存窗口给延迟、`autoCompactWindow` 接受 `200k`/`1M` 并对越界告警。**半修复 2**：投给已结束 agent 的消息改为**明确拒绝**（本仓无子代理 resume）、不可解析参数不重试而如实标注。**刻意不落**：启动告警上横幅（需新开告警通道）、两处 UI 交互（未实测，登记 UNVERIFIED）。测试 **4,342 → 4,388**（**330 文件**；4,386 passed + 2 skipped，0 失败）；typecheck / eslint / prettier 全绿；`sync-counts` 已回填三处。**⏳ 本轮尚未发布。**
+> **版本**: 2.94.43
+> **最后更新**: 2026-10-26 — **十一处真缺口 + 两处半缺口 + 三处自发现同批收口（2.94.43，未发布）**。① **命令归一化按空白切词**：`X="a b" rm -rf "$(pwd)"` 的赋值被切成两半，真实命令从 `flattenCommand` 集合消失 ⇒ 参数化 deny、危险 `rm`、世界可写 `chmod` 三闸同时空转（`X=1` 却全命中）；改为按 shell 引号规则扫赋值（单/双引号、反引号、`$( )`、`${ }`、反斜杠）。② **无空格重定向**（`echo hi>denied.txt`、`cat</etc/hosts`）不被提取 ⇒ 路径 deny 可绕过；并排除进程替换 `<( )` 与操作符本身。③ **replace ref 能改写隔离工作树的检出内容** —— 四条创建路径（`EnterWorktree`、workflow agent、`/fork`、CRSI 沙箱）无一带 `GIT_NO_REPLACE_OBJECTS`，实测「不屏蔽 = 被替换的树 / 屏蔽 = 真 HEAD」后统一走 `internalGitEnv()`，测试用真 git + 正对照。④ **单份指令文件无上限**：嵌套 `CLAUDE.md` 整份进每次请求，40k 只是事后告警 ⇒ 单文件上限 = 总预算，截断标记写在载荷里。⑤ **预览与摘要按 UTF-16 码元切** ⇒ 半个 emoji 落进 JSONL 时整行解析失败（`jq` exit 5 实测）；收成 `safeSlice`，接到两处预览与 `summary.slice(0,8000)`。⑥ 同名的两个技能文件静默后者胜 ⇒ 加载时点名两个来源。⑦ `haiku/sonnet/opus` 是档位不是 id，agent 定义写了也解析不到 ⇒ 只在**活动 provider** 内按档位解析（精确 id 优先）。⑧ macOS 无 CLT 时启动即 `git rev-parse` ⇒ 每次启动弹「安装开发者工具」窗口；先探 `xcode-select -p`（缓存）。⑨ 自跑的 git 不钉 locale ⇒ `/pr` 的英文正则在本机中文 git 上静默回落 `main`；`LC_ALL=C`。⑩ 偏克隆下 `worktree add` 触发的按需 fetch 无上限 ⇒ 两条创建路径都加 60s 上限并杀子进程。⑪ 估值缺「密集 ASCII」档（base64/hex 一律按散文计价 ⇒ 低估 2–3 倍）；截断分支的前件是 `dropped.length === 0` ⇒「有历史 + 最后一条自身超预算」永不截、逐轮空转。**半缺口两处**：隔离逃逸识别按空白切词 ⇒ `'cd' /etc`、`pushd`、`env -C` 全绕过（改为引号感知 + `command`/`builtin`/`env -C`、`--`、裸 `cd` → `~`、`~`/`$HOME` 展开）；`state.json` 读不出来时只告警，下一次保存把真实插件列表覆盖成 `[]`（改为改名隔离，改名失败也如实说明）。**自发现三条**：artifact 服务器 `listen(port)` 绑**所有网卡**（改回环）；`ExitPlanMode` 告诉模型「`/approve` 可以」，而该命令根本没有处理函数（新增，且只认 plan 档）；`/add-dir` 声称注册工作区目录而那份允许列表从未被任何代码读过（改为如实说明真实开关）。测试 **4,388 → 4,477**（**335 文件**；4,475 passed + 2 skipped，0 失败）；typecheck / eslint / prettier 全绿；命令数 **137 → 138**（`/approve`）三处落盘副本 + 文档 + 两份 i18n 同批回填。**⏳ 本轮尚未发布。** 刻意未落：会话改名持久化、待投递消息的展开 UI、ENOSPC 卷名文案。
+> **前一条（2.94.42）**: 2026-10-23 — **0.85.24 发布：16 处审计缺陷修复 + 3 条自查缺陷同批收口**（2.94.42；区间 **6 笔** = `git rev-list --count 'v0.85.23^{}..v0.85.24^{}'`，含 0.85.23 之后 2 笔文档；本轮 4 笔 = 修复 / 计数回填 / 版本+CHANGELOG / 依赖加固）。**发布读数**（全取外部探针）：GPG 签名 tag `v0.85.24` → `a7f43aba`（`git tag -v` = 完好的签名）；`release.yml` `39809459331` **9/9**；npm 真输出行 `+ @miphamai/cli@0.85.24`（15:58:20Z）、registry `time['0.85.24']` = **2026-10-22T16:01:31.174Z**、`dist-tags.latest` = **0.85.24**；GitHub Release `v0.85.24` **6 资产**、非 draft 非 prerelease（createdAt 15:55:31Z）、DMG **2,268,257 B** ⚠️ **未签名**（CI 无签名身份，与历次同）；JetBrains 真输出行 `JetBrains plugin published.`（16:00:02Z）；本地 `.vsix` **71,250 B** / sha256 `01b81020…` / 包内 `version` = 0.85.24 ⇒ ✅ **已人工上传 Marketplace 并经双探针核验**：页内同源 `extensionquery` API `versions[0].version` = 0.85.24、`flags` = validated、`versions[]` = **76** 条、`lastUpdated` = `2026-10-22T16:02:02.737Z`；公开页 `Version 0.85.24` / `Last updated 2026/10/23`。**安全闸先红后绿**：首次 CI `39807511069` 红在 `security-audit` —— 线上 advisory 库新增 follow-redirects 1.16.0 与 vite 8.2.0–8.2.3 两条 high（本笔一行依赖未动，属 advisory 漂移）；两条均有补丁，升级 follow-redirects **1.16.1**、vite **8.2.4**（后者须同时进根 devDependencies —— 仅改 overrides 时 pnpm 仍把 vitest 的 peer 锁在 8.2.1），重跑 CI `39808927471` **9/9**。✅ **两站已部署**（用户直令，一次只覆盖一次）：国内 `deploy-cn.sh`（Commit `7ee6895`）、国际 `vercel --prod`（`dpl_E5wwnA5CRCcANtDdX5qYAKModjmy`、`target: production`、`READY`，别名 `mipham.ai`）；`websites` `7ee6895` → **`d123492`**（package-info 同步到 0.85.24，两站）；绕缓存复核两站 `/mipham-code` 各 **3×0.85.24 / 0×0.85.23**。测试 **4,388**（330 文件；4,386 passed + 2 skipped，0 失败）；typecheck / eslint / prettier 全绿。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -62,7 +62,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：4,388 测试（本机 4,386 passed + 2 skipped，330 文件，0 失败）
+测试：4,477 测试（本机 4,475 passed + 2 skipped，335 文件，0 失败）
 
 ---
 
@@ -99,7 +99,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 330 个测试文件，4388 个测试
+│   │   ├── test/               # 335 个测试文件，4477 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -125,7 +125,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（4388 个测试）
+pnpm test         # vitest run（4477 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -195,7 +195,7 @@ pnpm format       # Prettier
 
 **「双轨运行时」已于 T4 删除**：`src/skills/{standard,mipham}/runtime.ts` 自 v0.1.0（`27609bf`）起生产零引用 —— `loader.ts` **从不加载它们**，是又一例「有定义、无施加点」。Skills 的实际生效路径只有 `loader.ts` 一条。
 
-### Slash 命令系统（137 个）
+### Slash 命令系统（138 个）
 
 按分类：Session & Identity / Workflow / Tools & Skills / Model & Provider / Project / Code Quality / History / GitHub / Environment / Account / Agents / Artifact / Other（总数随版本演进，以 `/help` 实际列出为准）。
 
@@ -315,27 +315,27 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 94      | 1668     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
-| tools           | 28      | 558      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
+| core            | 95      | 1705     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
+| tools           | 29      | 578      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 37      | 259      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
-| ui              | 34      | 373      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
+| ui              | 34      | 376      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
 | agent           | 15      | 157      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
-| security        | 12      | 122      | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
-| providers       | 9       | 166      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
+| security        | 12      | 126      | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
+| providers       | 9       | 171      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
 | mcp             | 12      | 157      | client / transport / oauth / token-store / registry / instructions（含 2 skipped）                                                                                          |
 | workflow        | 8       | 65       | runtime / loop / parallel / sandbox / journal / verify                                                                                                                      |
 | vajra           | 6       | 53       | context / events / service / compose / leaf（自建内核）                                                                                                                     |
-| shared          | 11      | 140      | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                              |
-| commands        | 9       | 100      | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers / provider-model-flags                                                                  |
-| skills          | 6       | 62       | sanitizer / marketplace / fork-executor / skill-assets                                                                                                                      |
+| shared          | 12      | 148      | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                              |
+| commands        | 11      | 108      | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers / provider-model-flags                                                                  |
+| skills          | 6       | 64       | sanitizer / marketplace / fork-executor / skill-assets                                                                                                                      |
 | config          | 11      | 129      | credential-crypto / loader-encryption / defaults / settings-json / preferences / model-context-window                                                                       |
-| plugin          | 4       | 62       | claude-plugin / plugin-manager                                                                                                                                              |
+| plugin          | 4       | 64       | claude-plugin / plugin-manager                                                                                                                                              |
 | artifacts       | 1       | 6        | manifest                                                                                                                                                                    |
 | agent-view      | 4       | 41       | agent-view-manager / dashboard-keys / session-view                                                                                                                          |
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integrity       | 19      | 132      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **330** | **4388** | **0 失败** ✅（本机 4,386 + 2 skipped，330 文件）                                                                                                                           |
+| **合计**        | **335** | **4477** | **0 失败** ✅（本机 4,475 + 2 skipped，335 文件）                                                                                                                           |
 
 ### 测试注意事项
 

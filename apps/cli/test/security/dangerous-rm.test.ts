@@ -55,6 +55,20 @@ describe('detectDangerousRm — fires', () => {
       expect(detectDangerousRm(cmd), cmd).not.toBeNull()
     }
   })
+
+  it('sees through a leading assignment whose value contains whitespace or quotes', () => {
+    // A whitespace tokenizer splits `X="a b"` at the space inside the quotes and
+    // leaves `b" rm -rf …` as the "command" — the real command then never reaches
+    // this gate. Each spelling below must still be read as a bare `rm -rf`.
+    for (const cmd of [
+      'X="a b" rm -rf "$(pwd)"',
+      'X=\'a b\' rm -rf "$(pwd)"',
+      'X=a\\ b rm -rf "$(pwd)"',
+      'X=$(echo a b) rm -rf "$(pwd)"',
+    ]) {
+      expect(detectDangerousRm(cmd), cmd).not.toBeNull()
+    }
+  })
 })
 
 describe('detectDangerousRm — stays quiet', () => {
@@ -66,6 +80,16 @@ describe('detectDangerousRm — stays quiet', () => {
       'rm -rf /tmp/scratch-dir',
       'rm -rf a b c',
       'rm -rf "my dir"',
+    ]) {
+      expect(detectDangerousRm(cmd), cmd).toBeNull()
+    }
+  })
+
+  it('stays quiet on a quoted assignment in front of an ordinary target', () => {
+    for (const cmd of [
+      'X="a b" rm -rf node_modules',
+      "X='a b' rm -rf ./build",
+      'X=$(echo a b) rm -rf dist',
     ]) {
       expect(detectDangerousRm(cmd), cmd).toBeNull()
     }

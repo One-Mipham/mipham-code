@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import type { ProviderConfig, StreamChunk } from '@mipham/shared'
+import type { ModelInfo, ProviderConfig, StreamChunk } from '@mipham/shared'
 import {
   ProviderRegistry,
   pickFastestModel,
@@ -361,5 +361,72 @@ describe('ProviderRegistry', () => {
       r.switchProvider('test-provider', 'b')
       expect(resolveClassifierModel('active', r)).toBe('b')
     })
+  })
+})
+
+/**
+ * `AgentDefinition.model` and `--model` spell tiers as `haiku`/`sonnet`/`opus`;
+ * only exact ids were ever resolved, so those spellings fell through to the
+ * "model not found → fall back to the parent model" warning. Tier resolution is
+ * scoped to the **active** provider (the resolved id is handed straight back to
+ * that provider's `chat()`), and within a tier the newest listed model wins.
+ */
+describe('findModel — tier aliases', () => {
+  function model(id: string, status: ModelInfo['status'] = 'active'): ModelInfo {
+    return {
+      id,
+      name: id,
+      providerId: 'p',
+      contextWindow: 100_000,
+      maxOutput: 8_000,
+      vision: false,
+      status,
+    }
+  }
+
+  function registryWith(models: ModelInfo[], id = 'p'): ProviderRegistry {
+    const config = makeConfig({ id, models })
+    const registry = new ProviderRegistry([config], id, models[0]!.id)
+    registry.register(id, makeMockProvider(config))
+    return registry
+  }
+
+  it('resolves a tier to the newest listed active model', () => {
+    const r = registryWith([
+      model('claude-haiku-4-5'),
+      model('claude-sonnet-4-6'),
+      model('claude-sonnet-5'),
+      model('claude-opus-5'),
+    ])
+    expect(r.findModel('sonnet')?.id).toBe('claude-sonnet-5')
+    expect(r.findModel('opus')?.id).toBe('claude-opus-5')
+    expect(r.findModel('haiku')?.id).toBe('claude-haiku-4-5')
+  })
+
+  it('an exact id always wins over tier interpretation', () => {
+    const r = registryWith([model('sonnet'), model('claude-sonnet-5')])
+    expect(r.findModel('sonnet')?.id).toBe('sonnet')
+  })
+
+  it('skips deprecated models inside the tier', () => {
+    const r = registryWith([model('claude-opus-5'), model('claude-opus-6', 'deprecated')])
+    expect(r.findModel('opus')?.id).toBe('claude-opus-5')
+  })
+
+  it('does not borrow another provider’s model (the id is sent to the active one)', () => {
+    const mine = makeConfig({ id: 'mine', models: [model('gpt-5.5')] })
+    const other = makeConfig({ id: 'other', models: [model('claude-opus-5')] })
+    const r = new ProviderRegistry([mine, other], 'mine', 'gpt-5.5')
+    r.register('mine', makeMockProvider(mine))
+    r.register('other', makeMockProvider(other))
+    expect(r.findModel('opus')).toBeUndefined()
+
+    // Positive control: the same model is found once that provider is active.
+    r.switchProvider('other', 'claude-opus-5')
+    expect(r.findModel('opus')?.id).toBe('claude-opus-5')
+  })
+
+  it('still returns undefined for an unknown non-tier id', () => {
+    expect(registryWith([model('claude-opus-5')]).findModel('nope')).toBeUndefined()
   })
 })

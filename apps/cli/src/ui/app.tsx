@@ -61,7 +61,7 @@ import {
 } from './commands'
 import { useI18n } from '../i18n-context'
 import type { PermissionMode } from '../shared/index.ts'
-import { sanitizeForDisplay } from '../shared/sanitize.ts'
+import { safeSlice, sanitizeForDisplay } from '../shared/sanitize.ts'
 import { recordLoopTurn, readAutoloopJournal } from '../commands/autoloop-journal.js'
 import { cancelAllSessionTimers, resumeWakeups } from '../tools/scheduling/schedule-wakeup.js'
 import type { LostWakeup } from '../tools/scheduling/schedule-wakeup.js'
@@ -188,10 +188,7 @@ export function cyclePermissionMode(
 /** 预览截断按 UTF-16 码元计数，落点若正好夹在一个代理对中间，切完就留下
  *  **半个** emoji（终端渲染成 U+FFFD）。落点是高代理时后退一个码元即可。 */
 export function truncateForDisplay(text: string, max: number): string {
-  if (text.length <= max) return text
-  const last = text.charCodeAt(max - 1)
-  const end = last >= 0xd800 && last <= 0xdbff ? max - 1 : max
-  return text.slice(0, end)
+  return safeSlice(text, max)
 }
 
 /** Format a tool's input parameters into a compact one-line detail string.
@@ -539,11 +536,29 @@ export function App({
       setGoal: (text: string) => setGoalText(text),
       setUltracodeMode: (on: boolean) => setUltracodeMode(on),
       setUpdateStatus: (s: UpdateStatus) => setUpdateStatus(s),
+      // Same read-back as Shift+Tab: `setMode` may clamp the request (org
+      // `maxAllowedMode` / `forbiddenModes`), so the footer and the gate must
+      // both read the mode that took effect, not the one we asked for.
+      setPermissionMode: (mode: PermissionMode) => {
+        const permission = engine.getPermission() as PermissionSource
+        permission.setMode(mode)
+        setPermissionMode(permission.getMode())
+      },
       skillsLoader,
       pluginManager,
       t,
     }),
-    [engine, config, providerId, modelId, skillsLoader, pluginManager, sessionId, t],
+    [
+      engine,
+      config,
+      providerId,
+      modelId,
+      skillsLoader,
+      pluginManager,
+      sessionId,
+      t,
+      setPermissionMode,
+    ],
   )
 
   const handleApiKeySubmit = useCallback(
@@ -806,7 +821,7 @@ export function App({
                 const lineCount = newContent.split('\n').length
                 preview = `Updated ${filePath} · ${lineCount} lines`
               } else {
-                const firstLine = output.split('\n')[0]!.slice(0, 200)
+                const firstLine = safeSlice(output.split('\n')[0]!, 200)
                 preview = firstLine.length < output.length ? `${firstLine}...` : firstLine
               }
               setMessages((prev) => [

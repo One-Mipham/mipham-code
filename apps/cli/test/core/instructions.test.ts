@@ -9,6 +9,8 @@ import {
   parsePromptExclude,
   gitRoot,
   discoverDirectories,
+  capInstructionContent,
+  INSTRUCTION_FILE_MAX_CHARS,
 } from '../../src/core/instructions'
 
 describe('InstructionsLoader.buildSystemPrompt', () => {
@@ -135,6 +137,78 @@ describe('gitRoot', () => {
       expect(gitRoot(join(repo, 'sub'))).toBe(repo)
     } finally {
       rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  // macOS 的 `/usr/bin/git` 是 CLT 的 shim：工具链没装时**任何一次调用**都会弹
+  // 「Install Command Line Developer Tools」GUI 对话框。探测结果为不可用时必须**不 spawn**。
+  // 正对照在上面：同一棵树、同一路径，只要允许 spawn 就解析出仓库根；这里传 `false`
+  // 后连仓库里的子目录都退回 cwd —— 说明那句 `git rev-parse` 真的没有发出去。
+  it('探测到 git 不可用时就不 spawn（仓库内也退回 cwd）', () => {
+    const repo = realpathSync(mkdtempSync(join(tmpdir(), 'mipham-instr-repo-')))
+    try {
+      execSync('git init', { cwd: repo, stdio: 'ignore' })
+      mkdirSync(join(repo, 'sub'), { recursive: true })
+      expect(gitRoot(join(repo, 'sub'), false)).toBe(resolve(join(repo, 'sub')))
+    } finally {
+      rmSync(repo, { recursive: true, force: true })
+    }
+  })
+})
+
+// ============================================================
+// 单个指令文件的上限。
+//
+// 这条缺陷的形状是「有定义、没上限」：预算 40k 只做成**通知**，而嵌套
+// `CLAUDE.md` 无论多大都整份进提示（启动层进系统提示、读文件触发的进消息）。
+// 判据两半：头部保留（不是砍掉整个文件）+ 载荷里**说出来**被截了（沉默的截断
+// 会让模型照着半套规则执行，而用户看不出任何异常）。
+// ============================================================
+describe('capInstructionContent', () => {
+  const CAP = INSTRUCTION_FILE_MAX_CHARS
+
+  it('上限内的文件原样返回（没有多出标记）', () => {
+    const text = 'x'.repeat(CAP)
+    const out = capInstructionContent(text, '/repo/CLAUDE.md')
+    expect(out).toBe(text)
+    expect(out).not.toContain('[truncated]')
+  })
+
+  it('超限文件保留开头、并在载荷里点名截断', () => {
+    const text = 'HEAD-RULE\n' + 'x'.repeat(CAP + 500) + '\nTAIL-APPENDIX'
+    const out = capInstructionContent(text, '/repo/CLAUDE.md')
+    expect(out.startsWith('HEAD-RULE\n')).toBe(true)
+    expect(out).not.toContain('TAIL-APPENDIX')
+    expect(out).toContain('[truncated] /repo/CLAUDE.md')
+    expect(out).toContain(`${text.length.toLocaleString('en-US')} characters`)
+  })
+
+  it('截断点落在代理对中间时不留半个字符（交给 safeSlice）', () => {
+    // 前面全 ASCII，让第 CAP 个码元正好是 emoji 的高位代理。
+    const text = 'a'.repeat(CAP - 1) + '😀' + 'tail'
+    const out = capInstructionContent(text, '/repo/CLAUDE.md')
+    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(out)).toBe(false)
+    expect(/[\uDC00-\uDFFF](?<![\uD800-\uDBFF])/.test(out)).toBe(false)
+    expect(out).toContain('[truncated]')
+  })
+
+  it('加载链真的用上了它（不是只导出了个函数）', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mipham-instr-cap-'))
+    try {
+      writeFileSync(join(dir, 'CLAUDE.md'), 'HEAD-RULE\n' + 'x'.repeat(CAP + 100))
+      const loader = new InstructionsLoader()
+      loader.loadAll(dir)
+      const file = loader.list().find((f) => f.path === join(dir, 'CLAUDE.md'))
+      expect(file).toBeDefined()
+      expect(file!.content).toContain('[truncated]')
+      // sizeReport 读的是同一份投影 ⇒ 报出来的长度也就是实际发出去的长度。
+      const report = loader.sizeReport()
+      const entry = report.files.find((f) => f.path === join(dir, 'CLAUDE.md'))
+      expect(entry).toBeDefined()
+      expect(entry!.chars).toBeGreaterThan(CAP)
+      expect(entry!.chars).toBeLessThan(CAP + 1_000)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
     }
   })
 })

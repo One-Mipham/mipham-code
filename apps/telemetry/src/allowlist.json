@@ -5,6 +5,7 @@
     "command_calls": [
       "/add-dir",
       "/agents",
+      "/approve",
       "/artifact",
       "/audit",
       "/batch",

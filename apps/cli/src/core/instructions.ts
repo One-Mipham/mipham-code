@@ -14,6 +14,7 @@ import {
   type CrsiLessonSummary,
 } from './crsi-producer'
 import { miphamHome } from './paths.ts'
+import { safeSlice } from '../shared/sanitize'
 
 export interface FrontmatterResult {
   data: Record<string, unknown>
@@ -71,7 +72,8 @@ export function parsePromptExclude(value: unknown): string[] {
  * 就能看见）。但 stdout 仍须是管道 —— 换成 `'ignore'`（`commands.ts` 里那种 stdout
  * 不用的形状）会让这里永远拿到空串、永远回退 cwd，**连在仓库里都失效**。
  */
-export function gitRoot(cwd: string): string {
+export function gitRoot(cwd: string, available: boolean = gitAvailable()): string {
+  if (!available) return cwd
   try {
     return execSync('git rev-parse --show-toplevel', {
       cwd,
@@ -82,6 +84,34 @@ export function gitRoot(cwd: string): string {
   } catch {
     return cwd
   }
+}
+
+let gitAvailableCache: boolean | undefined
+
+/**
+ * macOS 上 `/usr/bin/git` 是个 **shim**：Command Line Tools 没装时，任何一次调用
+ * 都会弹「Install Command Line Developer Tools」的 **GUI 对话框** —— `stdio: 'ignore'`
+ * 挡得住 stderr 文本，挡不住这个窗口。本函数每次启动都会被调用（`loadAll`），
+ * 所以先花一次 `xcode-select -p`（系统自带、无 CLT 时只退非零、不弹窗）探一下。
+ *
+ * 探测结果缓存：进程生命周期内工具链不会装上，每个 cwd 各探一次纯属浪费。
+ * 非 darwin 平台原样 `true` —— 那些平台的 git 不会弹窗。
+ */
+function gitAvailable(): boolean {
+  if (process.platform !== 'darwin') return true
+  if (gitAvailableCache !== undefined) return gitAvailableCache
+  try {
+    execSync('/usr/bin/xcode-select -p', {
+      timeout: 2000,
+      encoding: 'utf-8',
+      stdio: ['ignore', 'ignore', 'ignore'],
+    })
+    gitAvailableCache = true
+  } catch {
+    // 交互式 shell 里的 `/usr/bin/git` 在这种状态下会弹窗 —— 不要碰它。
+    gitAvailableCache = false
+  }
+  return gitAvailableCache
 }
 
 /** True when `p` is `root` itself or sits underneath it. */
@@ -220,6 +250,43 @@ export interface InstructionSizeReport {
  * past one such file.
  */
 export const INSTRUCTION_BUDGET_CHARS = 40_000
+
+/**
+ * Hard ceiling on a single instruction file's contribution.
+ *
+ * The budget above is a **report**: it says the payload has grown past a
+ * governance file's size, and the user decides what to trim. A nested
+ * `CLAUDE.md` discovered mid-session had no ceiling at all — a generated or
+ * concatenated file went into the prompt whole, on every request, and the only
+ * signal was a notice arriving after the fact. The two failure modes differ:
+ * a startup-tier file lands in the **system prompt** (never compressed, so it
+ * can make `needsCompaction()` true turn after turn), a nested file arrives as
+ * a **message** (compressible, but injected whole at that moment).
+ *
+ * Equal to the total budget on purpose: no single file may be worth the whole
+ * instruction allowance. The head is kept because instruction files put their
+ * rules first and their appendices last.
+ */
+export const INSTRUCTION_FILE_MAX_CHARS = INSTRUCTION_BUDGET_CHARS
+
+/**
+ * Keep the head of an oversized instruction file, and say so **in the payload**.
+ *
+ * A silent cut is the worse option: the model would follow a partial rule set
+ * without knowing anything was missing, and the user would see the usual budget
+ * notice (or nothing, if the rest of the payload is small). The marker costs a
+ * line and makes the truncation visible to both readers.
+ */
+export function capInstructionContent(content: string, path: string): string {
+  if (content.length <= INSTRUCTION_FILE_MAX_CHARS) return content
+  const num = (n: number) => n.toLocaleString('en-US')
+  return (
+    safeSlice(content, INSTRUCTION_FILE_MAX_CHARS) +
+    `\n\n⚠ [truncated] ${path} is ${num(content.length)} characters; only the first ` +
+    `${num(INSTRUCTION_FILE_MAX_CHARS)} were loaded. Trim the file, or move doc-only ` +
+    'sections under a `prompt-exclude` frontmatter key.'
+  )
+}
 
 /**
  * The startup notice, or `null` while the payload is within budget.
@@ -650,7 +717,7 @@ Never omit it or present the work as purely human-authored.`)
         level,
         privacy: (data.privacy as InstructionFile['privacy']) || 'project',
         language: (data.language as string) || 'en-US',
-        content,
+        content: capInstructionContent(content, path),
         frontmatter: data,
       })
     } catch {

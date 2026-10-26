@@ -5,7 +5,11 @@ import type { Llm } from '../../providers/llm'
 import type { ToolDefinition } from '../../shared/index.ts'
 import type { PermissionSystem } from '../../core/permission'
 import { worktreeRoot } from '../../core/paths.ts'
+import { internalGitEnv } from '../../shared/git-env'
 import { validateJSONSchema, formatValidationErrors } from '../schema-validator'
+
+/** Upper bound for `git worktree add` — a hung fetch must not hang the run. */
+const WORKTREE_ADD_TIMEOUT_MS = 60_000
 
 /**
  * Effective model for a workflow agent.
@@ -80,8 +84,20 @@ export async function workflowAgent(
     const proc = Bun.spawn(['git', 'worktree', 'add', '-b', worktreeBranch, worktreePath, 'HEAD'], {
       stdout: 'pipe',
       stderr: 'pipe',
+      env: internalGitEnv(),
     })
-    const exitCode = await proc.exited
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const exitCode = await Promise.race([
+      proc.exited,
+      new Promise<number>((resolve) => {
+        timer = setTimeout(() => resolve(-1), WORKTREE_ADD_TIMEOUT_MS)
+      }),
+    ])
+    clearTimeout(timer)
+    if (exitCode === -1) {
+      proc.kill()
+      throw new Error(`Worktree creation timed out after ${WORKTREE_ADD_TIMEOUT_MS / 1000}s`)
+    }
     if (exitCode !== 0) {
       const stderr = await new Response(proc.stderr).text()
       throw new Error(`Worktree creation failed: ${stderr.slice(0, 500)}`)

@@ -1,5 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdirSync, writeFileSync, rmSync, readdirSync, existsSync, statSync } from 'node:fs'
+import {
+  mkdirSync,
+  writeFileSync,
+  rmSync,
+  readdirSync,
+  existsSync,
+  statSync,
+  readFileSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { PluginManager } from '../../src/plugin/plugin-manager'
@@ -294,6 +302,23 @@ describe('PluginManager — state.json 的形状与原子写', () => {
 
     it('（对照）文件根本不存在 ⇒ 不报 —— 首次运行是常态，不是故障', () => {
       expect(new PluginManager(dir).getLoadWarning()).toBeNull()
+    })
+
+    // 只报一句不够：下一次 saveState 会把 [] 写回同一个路径，原记录就真的没了。
+    // 坏文件必须先被挪走（保留字节供手工恢复），警告里给出落点。
+    it.each([
+      ['解析不了', 'not json {'],
+      ['形状不对', '{"oops": true}'],
+    ])('%s ⇒ 坏文件被挪到 .corrupt-* 备份，且警告指名它', (_label, bad) => {
+      const statePath = join(dir, 'state.json')
+      writeFileSync(statePath, bad, 'utf-8')
+      const manager = new PluginManager(dir)
+
+      expect(existsSync(statePath)).toBe(false)
+      const backups = readdirSync(dir).filter((f) => f.startsWith('state.json.corrupt-'))
+      expect(backups).toHaveLength(1)
+      expect(readFileSync(join(dir, backups[0]!), 'utf-8')).toBe(bad)
+      expect(manager.getLoadWarning()).toContain(backups[0]!)
     })
 
     it('（对照）文件存在且是合法数组 ⇒ 不报', () => {

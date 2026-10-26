@@ -588,6 +588,43 @@ describe('worktree 逃逸判定', () => {
     expect(escape('cd "/etc"')).toBe('/etc')
   })
 
+  // ── 命令词的其它拼法 ──
+  //
+  // 上一版用 `\bcd\s+` 匹配原文，这几种都看不见：引号命令词仍是 bash 的 `cd`
+  // 内建，`pushd`/`env -C` 也真的换目录。判据取**命令真的换到哪儿**，不是拼写。
+
+  it.each([
+    "'cd' /etc",
+    '"cd" /etc',
+    '\\cd /etc',
+    'command cd /etc',
+    'builtin cd /etc',
+    'pushd /etc',
+    'env -C /etc pwd',
+    'env --chdir=/etc pwd',
+    'env A=1 -C /etc bash -c true',
+  ])('命令词拼法 %s 也被检查', (cmd) => {
+    expect(escape(cmd)).toBe('/etc')
+  })
+
+  it('cd 的选项不吃掉真正的目标', () => {
+    expect(escape('cd -- /etc')).toBe('/etc')
+    expect(escape('cd -P /etc')).toBe('/etc')
+  })
+
+  it('裸 cd 回 home（工作树之外）被拦', () => {
+    // `cd` 无参数不是「什么都不做」——它回到 HOME，而 HOME 在工作树之外。
+    // 报出来的目标是 `~`，命令里的原样字符串。
+    expect(escape('cd')).toBe('~')
+    expect(escape('cd && ls')).toBe('~')
+  })
+
+  it('~ 与 $HOME 按 shell 的展开判定，而不是当成工作树下的字面目录', () => {
+    expect(escape('cd ~')).toBe('~')
+    expect(escape('cd $HOME')).toBe('$HOME')
+    expect(escape('cd "${HOME}/x"')).toBe('${HOME}/x')
+  })
+
   // ── 区内：不误伤 ──
 
   it('区内子目录放行', () => {

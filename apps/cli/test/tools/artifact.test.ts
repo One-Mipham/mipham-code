@@ -117,6 +117,15 @@ describe('Artifact 坐标一致', () => {
     expect(await res.text()).toBe(content)
   })
 
+  it('只监听回环地址（artifact 不该对局域网开放）', async () => {
+    await writeArtifact()
+    // `listen(port)` 不带 host 时绑 **所有** 接口 —— 局域网里任何人都能读到模型刚写的东西。
+    const addr = (
+      server as unknown as { server: { address(): { address: string } } }
+    ).server.address()
+    expect(addr.address).toBe('127.0.0.1')
+  })
+
   it('Gallery（服务端读 manifest 渲染）也看得见同一份 artifact', async () => {
     const { port } = await writeArtifact()
 

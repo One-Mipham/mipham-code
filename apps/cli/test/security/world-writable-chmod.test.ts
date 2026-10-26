@@ -92,6 +92,18 @@ describe('detectWorldWritableChmod — fires', () => {
     }
   })
 
+  it('sees through a leading assignment whose value contains whitespace or quotes', () => {
+    // Whitespace-splitting `X="a b"` at the space inside the quotes leaves the
+    // command word hidden behind a fragment. The grant below must still be read.
+    for (const cmd of [
+      'X="a b" chmod -R 777 "$DIR"',
+      'X=\'a b\' chmod -R 777 "$DIR"',
+      'X=$(echo a b) chmod -R 777 /tmp/shared',
+    ]) {
+      expect(detectWorldWritableChmod(cmd), cmd).not.toBeNull()
+    }
+  })
+
   it('flags the unbounded target even when a bounded one is named first', () => {
     const hit = detectWorldWritableChmod('chmod -R 777 ./dist /tmp/shared')
     expect(hit).not.toBeNull()
@@ -100,6 +112,12 @@ describe('detectWorldWritableChmod — fires', () => {
 })
 
 describe('detectWorldWritableChmod — stays quiet', () => {
+  it('stays quiet on a quoted assignment in front of a bounded target', () => {
+    for (const cmd of ['X="a b" chmod -R 777 ./dist', "X='a b' chmod 755 ./bin"]) {
+      expect(detectWorldWritableChmod(cmd), cmd).toBeNull()
+    }
+  })
+
   it('ignores a target that names where the write lands', () => {
     for (const cmd of [
       'chmod -R 777 ./dist',

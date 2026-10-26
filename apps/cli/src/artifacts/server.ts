@@ -124,7 +124,11 @@ export class ArtifactServer {
         socket.on('close', () => this.sockets.delete(socket))
       })
       srv.on('error', reject)
-      srv.listen(port, () => {
+      // Loopback only. Without a host argument `listen()` binds **every**
+      // interface, so any artifact — including whatever the model just wrote —
+      // would be readable by the whole LAN. The URLs we hand out are
+      // `http://localhost:…`, which resolves here either way.
+      srv.listen(port, '127.0.0.1', () => {
         this.server = srv
         resolve()
       })

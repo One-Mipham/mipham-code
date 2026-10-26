@@ -8,11 +8,19 @@ import type { CommandHandler } from '../ui/commands.js'
 
 export { commitCmd, pushCmd, prCmd, issueCmd }
 
-/** Run a git command asynchronously — avoids blocking the TUI event loop. */
+/**
+ * Run a git command asynchronously — avoids blocking the TUI event loop.
+ *
+ * `LC_ALL=C` is load-bearing for the callers that parse output: `git remote show
+ * origin` prints `HEAD branch:` / `HEAD 分支：` depending on the locale, and the
+ * English regex then quietly falls back to `main` on a machine whose git speaks
+ * Chinese. Forcing the C locale makes the text we match against fixed.
+ */
 async function git(args: string[], timeoutMs = 5000): Promise<string> {
   const proc = Bun.spawn(['git', ...args], {
     stdout: 'pipe',
     stderr: 'pipe',
+    env: { ...process.env, LC_ALL: 'C', LANG: 'C' },
   })
   const exitCode = await Promise.race([
     proc.exited,

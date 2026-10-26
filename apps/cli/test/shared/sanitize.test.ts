@@ -6,6 +6,7 @@ import {
   sanitizeInlineField,
   stripControlCharsForDisplay,
   decodeDisplayEntities,
+  safeSlice,
 } from '../../src/shared/sanitize'
 
 /**
@@ -339,5 +340,39 @@ describe('decodeDisplayEntities', () => {
   it('没有 `&` 时原样返回（快路径不改字）', () => {
     expect(decodeDisplayEntities('plain text 中文')).toBe('plain text 中文')
     expect(decodeDisplayEntities('')).toBe('')
+  })
+})
+
+describe('safeSlice', () => {
+  // U+1F600 = D83D DE00 in UTF-16: a pair whose halves must never be split.
+  const EMOJI = cp(0x1f600)
+  const LONE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/
+
+  it('cuts exactly at the limit when the limit does not split a pair', () => {
+    expect(safeSlice('abcdef', 3)).toBe('abc')
+    expect(safeSlice(`ab${EMOJI}cd`, 4)).toBe(`ab${EMOJI}`)
+  })
+
+  it('backs off one unit when the limit falls inside a pair', () => {
+    expect(safeSlice(`ab${EMOJI}cd`, 3)).toBe('ab')
+    expect(safeSlice(EMOJI, 1)).toBe('')
+  })
+
+  it('leaves a string that already fits untouched (same object, no copy)', () => {
+    const s = `ok ${EMOJI}`
+    expect(safeSlice(s, s.length)).toBe(s)
+    expect(safeSlice(s, s.length + 10)).toBe(s)
+    expect(safeSlice(s, 0)).toBe('')
+  })
+
+  it('never leaves a lone surrogate where the summary cap would have', () => {
+    // The compaction summary is capped at 8,000 code units and serialized into a
+    // JSONL transcript; a cut inside this emoji makes strict parsers reject the
+    // whole line. Plain `.slice` reproduces the lone half — the control here.
+    const text = 'a'.repeat(7999) + EMOJI + 'tail'
+    expect(text.slice(0, 8000)).toMatch(LONE)
+    const cut = safeSlice(text, 8000)
+    expect(cut).not.toMatch(LONE)
+    expect(cut.length).toBe(7999)
   })
 })

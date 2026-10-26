@@ -887,6 +887,52 @@ describe('/goal', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════
+// /add-dir — 不广告一个没有落点的能力
+//
+// 旧文案回「✓ Directory registered」并指向 `workspace.extraDirs`，而那个键
+// 全仓零读者、命令也不留任何状态 ⇒ 用户被告知「现在可以访问了」，实际什么都没变。
+// 判据：文案里**不能**再出现「已注册」，必须说出访问实际由 deny 规则与权限模式决定。
+// ═══════════════════════════════════════════════════════════════
+
+describe('/add-dir', () => {
+  let dir = ''
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'mipham-add-dir-'))
+  })
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('不声称「已注册」，并说明 reads/writes 各由什么决定', async () => {
+    const handler = getCommand('/add-dir')!
+    const result = await (handler(mkCtx(), [dir]) as unknown as Promise<{ content: string }>)
+    expect(result.content).not.toContain('Directory registered')
+    expect(result.content).not.toContain('extraDirs')
+    expect(result.content).toContain('no workspace-directory allowlist')
+    expect(result.content).toContain('deny rule')
+    // allow 规则片段必须真的带上这个目录（否则指引无处可抄）。
+    expect(result.content).toContain(`Write(${dir}/**)`)
+    expect(result.content).toContain(`Edit(${dir}/**)`)
+  })
+
+  it('路径不存在时如实报错（校验这一半是真的）', async () => {
+    const handler = getCommand('/add-dir')!
+    const result = await (handler(mkCtx(), [join(dir, 'missing')]) as unknown as Promise<{
+      content: string
+    }>)
+    expect(result.content).toContain('Directory not found')
+  })
+
+  it('无参数时给出用法，且不承诺注册', async () => {
+    const handler = getCommand('/add-dir')!
+    const result = await (handler(mkCtx(), []) as unknown as Promise<{ content: string }>)
+    expect(result.content).toContain('Usage: /add-dir')
+    expect(result.content).toContain('NO workspace-directory allowlist')
+    expect(result.content).not.toContain('Directory registered')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
 // /tasks — 面板对历史**无反应**（判据是登记表，见下方「显示登记表里的任务」）
 // ═══════════════════════════════════════════════════════════════
 //

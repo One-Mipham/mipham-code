@@ -4,6 +4,7 @@ import { useI18n } from '../i18n-context'
 import type { ChatMessage } from './app'
 import {
   decodeDisplayEntities,
+  safeSlice,
   sanitizeInlineField,
   stripControlCharsForDisplay,
 } from '../shared/sanitize'
@@ -130,12 +131,12 @@ const MessageRow = React.memo(
               <Text dimColor>
                 {'  ⎿  '}
                 {t('ui.tool.not_run')}
-                {msg.toolMeta.output ? ` — ${display(msg.toolMeta.output).slice(0, 300)}` : ''}
+                {msg.toolMeta.output ? ` — ${safeSlice(display(msg.toolMeta.output), 300)}` : ''}
               </Text>
             ) : msg.toolMeta.output ? (
               <Text dimColor>
                 {'  ⎿  '}
-                {display(msg.toolMeta.output).slice(0, 300)}
+                {safeSlice(display(msg.toolMeta.output), 300)}
               </Text>
             ) : msg.content && !msg.toolMeta.collapsed ? (
               <Text dimColor>{display(msg.content)}</Text>

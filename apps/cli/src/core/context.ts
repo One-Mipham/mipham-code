@@ -5,10 +5,12 @@ import type {
   ToolResult,
   ToolResultContent,
 } from '../shared/index.ts'
+import { safeSlice } from '../shared/sanitize'
 import { snipMessages } from './context-snip'
 import { microcompact, shouldMicrocompact, isToolResultUserMessage } from './context-microcompact'
 import {
   estimateMessageTokens,
+  estimateStringTokens,
   NoopCacheTracker,
   type CacheTracker,
   type CacheStatus,
@@ -39,7 +41,7 @@ function shrinkText(text: string, maxTokens: number): string {
 
   let out = text
   for (let guard = 0; guard < 32 && out.length > 0 && estimate(out) > maxTokens; guard++) {
-    out = out.slice(0, Math.floor(out.length / 2))
+    out = safeSlice(out, Math.floor(out.length / 2))
   }
   return `${out}\n… [truncated to fit the context budget; ${text.length - out.length} characters omitted]`
 }
@@ -431,14 +433,6 @@ export class ContextManager {
     const dropped = this.messages.slice(0, cut)
     let kept = this.messages.slice(cut)
 
-    // 一条消息自己就超预算（单条巨型结果 / 整篇文档）⇒ 没有可丢的，只能截内容。
-    // 每条分到的是它自己那份预算，不是整份额度 —— 否则几条各占三分之一的消息谁也
-    // 没超，削完还是超。
-    if (dropped.length === 0 && kept.length > 0) {
-      const perMessage = Math.max(1, Math.floor(target / kept.length))
-      kept = kept.map((m) => truncateToBudget(m, perMessage))
-    }
-
     const omittedNotice = (n: number): Message => ({
       role: 'user',
       content:
@@ -446,6 +440,21 @@ export class ContextManager {
         `could not hold them. They were not summarized; ask before assuming what ` +
         `they said.]`,
     })
+
+    // 幸存的那半自己就超预算（单条巨型结果 / 整篇文档）⇒ 没有可再丢的，只能截内容。
+    //
+    // 判据必须是**量出来的**「这份超没超」，不能是 `dropped.length === 0`：
+    // 只要有**一条**前面的消息被丢掉，那个条件就为假，而超额的恰恰可以是最后那条
+    // （丢弃循环对最后一条无条件保留）—— 于是「削完还超」，下一轮再进这里做同一个
+    // 空操作。通知自己也要占预算，所以按去掉通知后的额度分。
+    // 每条分到的是它自己那份，不是整份额度 —— 否则几条各占三分之一的消息谁也没超，
+    // 削完还是超。
+    const noticeTokens = dropped.length > 0 ? est(omittedNotice(dropped.length)) : 0
+    const bodyTarget = Math.max(1, target - noticeTokens)
+    if (kept.length > 0 && this.estimateTokensForMessages(kept) > bodyTarget) {
+      const perMessage = Math.max(1, Math.floor(bodyTarget / kept.length))
+      kept = kept.map((m) => truncateToBudget(m, perMessage))
+    }
 
     // 通知自己也占预算，所以头部再补削，直到**含通知**的整份落进预算。少了这一步，
     // 「刚好削到线内」的会话会因多出这一条而重新超线 —— 下一轮再削一次，逐轮掉消息。
@@ -760,40 +769,11 @@ export class ContextManager {
   /**
    * Estimate token count for a text string.
    *
-   * Uses a character-class-aware heuristic:
-   *   - CJK / emoji: ~1.5 chars per token
-   *   - Other scripts (Latin, Cyrillic, Arabic): ~4 chars per token
-   *   - Whitespace-heavy (code): ~3 chars per token
-   *
-   * This is ~30-40% more accurate than flat 4 chars/token for mixed-language text.
+   * Delegates to `estimateStringTokens` — the same function the message counter
+   * uses. Two copies of the formula are two chances for the budget and the
+   * compaction trigger to disagree about the same text.
    */
   private estimateTokens(text: string): number {
-    if (!text) return 0
-
-    let cjk = 0
-    let latin = 0
-
-    for (const ch of text) {
-      const cp = ch.codePointAt(0)!
-      // CJK Unified Ideographs, Hangul, Kana, CJK Extensions, fullwidth forms
-      if (
-        (cp >= 0x4e00 && cp <= 0x9fff) || // CJK Unified
-        (cp >= 0x3400 && cp <= 0x4dbf) || // CJK Ext-A
-        (cp >= 0x20000 && cp <= 0x2a6df) || // CJK Ext-B
-        (cp >= 0xac00 && cp <= 0xd7af) || // Hangul
-        (cp >= 0x3040 && cp <= 0x30ff) || // Hiragana + Katakana
-        (cp >= 0xff01 && cp <= 0xff60) || // Fullwidth
-        (cp >= 0x1f300 && cp <= 0x1f9ff) // Emoji / pictographs
-      ) {
-        cjk++
-      } else if (cp > 0x7f) {
-        latin++
-      } else {
-        latin++
-      }
-    }
-
-    // CJK: ~1.5 chars/token, Latin/other: ~4 chars/token
-    return Math.max(1, Math.ceil(cjk / 1.5 + latin / 4))
+    return estimateStringTokens(text)
   }
 }

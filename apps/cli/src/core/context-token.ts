@@ -123,11 +123,52 @@ function extractMessageText(msg: Message): string {
   return ''
 }
 
-function estimateStringTokens(text: string): number {
+/**
+ * A run of at least this many non-space ASCII characters, with at least
+ * `DENSE_DISTINCT` distinct characters in it, is treated as encoded or
+ * unbroken payload (base64, hex, minified JSON, a single-line SVG) — text a
+ * BPE tokenizer splits at roughly 1.5–3 characters per token rather than the
+ * ~4 that prose and code average.
+ *
+ * Both halves matter:
+ *  - the length threshold keeps ordinary identifiers (`some_long_function_name`)
+ *    in the prose bucket;
+ *  - the distinct-character threshold keeps `'A'.repeat(400)` there too — a
+ *    filler run of one repeated character merges into very few tokens, and
+ *    charging it as dense would overestimate by an order of magnitude.
+ *
+ * The divisor (`dense / 2`) is a deliberately conservative lower bound, not a
+ * measurement: this repository has no tokenizer, and the direction that matters
+ * is under-estimation (a request that is longer than the budget claimed). Being
+ * wrong the other way only compacts a little early.
+ */
+const DENSE_RUN_MIN = 40
+const DENSE_DISTINCT = 8
+
+/**
+ * Estimate the token count for a text string.
+ *
+ * Character-class heuristic:
+ *   - CJK / emoji: ~1.5 chars per token
+ *   - dense ASCII runs (see above): ~2 chars per token
+ *   - everything else (Latin, Cyrillic, Arabic, whitespace, short code): ~4
+ */
+export function estimateStringTokens(text: string): number {
   if (!text) return 0
 
   let cjk = 0
   let latin = 0
+  let dense = 0
+  let runLength = 0
+  const runChars = new Set<string>()
+  const flushRun = (): void => {
+    if (runLength >= DENSE_RUN_MIN && runChars.size >= DENSE_DISTINCT) {
+      dense += runLength
+      latin -= runLength
+    }
+    runLength = 0
+    runChars.clear()
+  }
 
   for (const ch of text) {
     const cp = ch.codePointAt(0)!
@@ -141,12 +182,23 @@ function estimateStringTokens(text: string): number {
       (cp >= 0xff01 && cp <= 0xff60) || // Fullwidth
       (cp >= 0x1f300 && cp <= 0x1f9ff) // Emoji / pictographs
     ) {
+      flushRun()
       cjk++
+    } else if (cp > 0x7f) {
+      flushRun()
+      latin++
     } else {
       latin++
+      // Whitespace ends a run but still counts as loose text, exactly as before.
+      if (cp === 0x20 || cp === 0x09 || cp === 0x0a || cp === 0x0d || cp === 0x0b || cp === 0x0c) {
+        flushRun()
+      } else {
+        runLength++
+        if (runChars.size < DENSE_DISTINCT) runChars.add(ch)
+      }
     }
   }
+  flushRun()
 
-  // CJK: ~1.5 chars/token, Latin/other: ~4 chars/token
-  return Math.max(1, Math.ceil(cjk / 1.5 + latin / 4))
+  return Math.max(1, Math.ceil(cjk / 1.5 + latin / 4 + dense / 2))
 }

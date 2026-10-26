@@ -345,11 +345,32 @@ export class PluginManager {
       // plugin command instead of starting empty.
       this.plugins = Array.isArray(parsed) ? (parsed as InstalledPlugin[]) : []
       if (!Array.isArray(parsed)) {
-        this.loadWarning = `Plugin state file is not a list; starting empty (${this.statePath})`
+        this.quarantineState('Plugin state file is not a list;')
       }
     } catch (err) {
       this.plugins = []
-      this.loadWarning = `Could not read plugin state (${this.statePath}): ${String(err)}`
+      this.quarantineState(`Could not read plugin state (${this.statePath}): ${String(err)}.`)
+    }
+  }
+
+  /**
+   * Move an unusable `state.json` aside before continuing with an empty list.
+   *
+   * Warning alone is not enough: the next `saveState` persists `[]` over the
+   * same path, so a file we could not read becomes a file whose records are
+   * gone. Renaming keeps the bytes for hand recovery — and if the rename fails
+   * the warning says so, because that is exactly the case where the next save
+   * destroys the only copy.
+   */
+  private quarantineState(reason: string): void {
+    const backup = `${this.statePath}.corrupt-${Date.now()}`
+    try {
+      renameSync(this.statePath, backup)
+      this.loadWarning = `${reason} Moved to ${backup}; starting with an empty plugin list.`
+    } catch (err) {
+      this.loadWarning =
+        `${reason} Could not move it aside (${String(err)}); starting with an empty ` +
+        `plugin list — the next change overwrites ${this.statePath}.`
     }
   }
 

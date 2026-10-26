@@ -5,6 +5,7 @@ import { sanitizeCommand } from '../../shared/sanitize.ts'
 import { DANGEROUS_GIT_PATTERNS } from './git.ts'
 import { isUncOrDevicePath, isWithin } from '../../security/path.ts'
 import { findWorktreeMarker } from '../../core/paths.ts'
+import { splitShellSegments, expandKnownPathVars } from '../../core/permission-rules'
 import type { Service } from '../../vajra'
 import { toolKey } from '../seam'
 import { withValidation } from '../validation'
@@ -376,14 +377,175 @@ export function resolveWorktreeEscape(
   worktreeRoot: string,
   command: string,
 ): string | null {
-  const cdRe = /\bcd\s+(?:"([^"]+)"|'([^']+)'|([^\s;|&]+))/g
-  for (const m of command.matchAll(cdRe)) {
-    const target = m[1] ?? m[2] ?? m[3]
-    if (!target) continue
-    const resolved = resolve(cwd, target)
-    if (!isWithin(resolved, cwd) && !isWithin(resolved, worktreeRoot)) return target
+  for (const segment of splitShellSegments(command)) {
+    for (const target of changeDirectoryTargets(shellWords(segment))) {
+      // `resolve` does not expand `~` or `$HOME`: `cd ~` would otherwise be
+      // resolved as a directory literally named `~` under the worktree, i.e.
+      // "inside", while the shell lands in the home directory.
+      const resolved = resolve(cwd, expandKnownPathVars(target))
+      if (!isWithin(resolved, cwd) && !isWithin(resolved, worktreeRoot)) return target
+    }
   }
   return null
+}
+
+/** Shell structure that can precede the command word without being one. */
+const LEADING_SHELL_PUNCT = new Set(['(', '{', '!', ')', '}'])
+/** Keywords after which the *next* word is the command (`if cd /x; then`). */
+const LEADING_SHELL_KEYWORDS = new Set([
+  'if',
+  'then',
+  'else',
+  'elif',
+  'while',
+  'until',
+  'do',
+  'for',
+  'time',
+  'coproc',
+])
+/** Wrappers that run a command of their own; the wrapped words are re-scanned. */
+const WRAPPERS = new Set(['command', 'builtin'])
+const LEADING_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
+const CD_COMMANDS = new Set(['cd', 'pushd'])
+
+/**
+ * Quote-aware word split of one simple command, with the quotes removed.
+ *
+ * The previous implementation matched `\bcd\s+` against the raw text. A quoted
+ * **command word** (`'cd' /etc`, `"cd" /etc`, `\cd /etc`) is still the `cd`
+ * builtin to bash, but there is no word boundary followed by whitespace in
+ * that spelling, so the guard never saw it. Reconstructing the words first also
+ * lets `pushd` and `env -C` be recognized as what they are.
+ *
+ * Over-splitting is the safe direction here: a word that is not really a
+ * command word simply fails to match `cd`.
+ */
+function shellWords(segment: string): string[] {
+  const words: string[] = []
+  let cur = ''
+  let started = false
+  let quote: '"' | "'" | null = null
+  for (let i = 0; i < segment.length; i++) {
+    const ch = segment[i]!
+    if (quote === "'") {
+      if (ch === "'") quote = null
+      else cur += ch
+      continue
+    }
+    if (quote === '"') {
+      if (ch === '"') quote = null
+      else if (ch === '\\' && i + 1 < segment.length) cur += segment[++i]
+      else cur += ch
+      continue
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch
+      started = true
+    } else if (ch === '\\' && i + 1 < segment.length) {
+      cur += segment[++i]
+      started = true
+    } else if (/\s/.test(ch)) {
+      if (started) {
+        words.push(cur)
+        cur = ''
+        started = false
+      }
+    } else {
+      cur += ch
+      started = true
+    }
+  }
+  if (started) words.push(cur)
+  return words
+}
+
+/**
+ * Every directory this simple command changes the shell's cwd to.
+ *
+ * A bare `cd` goes to `$HOME`, which is outside any worktree — it is reported
+ * as the home directory rather than skipped. Re-scanning wrapped words is what
+ * catches `env A=1 -C /etc cd /tmp`: both directories are candidates, and
+ * either one leaving the worktree is enough to refuse the command.
+ */
+function changeDirectoryTargets(words: string[], depth = 0): string[] {
+  if (depth > 4) return []
+  const out: string[] = []
+  let i = 0
+  const skipNoise = (): void => {
+    for (;;) {
+      while (i < words.length && LEADING_ASSIGNMENT.test(words[i]!)) i++
+      const word = words[i]
+      if (word === undefined) return
+      if (LEADING_SHELL_PUNCT.has(word)) {
+        i++
+        continue
+      }
+      if (LEADING_SHELL_KEYWORDS.has(word)) {
+        i++
+        // A keyword's own flags (`time -p rm …`) are not the command word.
+        while (i < words.length && /^-[A-Za-z]+$/.test(words[i]!)) i++
+        continue
+      }
+      return
+    }
+  }
+
+  skipNoise()
+  const cmd = words[i]
+  if (cmd === undefined) return out
+
+  if (WRAPPERS.has(cmd)) {
+    return changeDirectoryTargets(words.slice(i + 1), depth + 1)
+  }
+
+  if (cmd === 'env') {
+    i++
+    while (i < words.length) {
+      const w = words[i]!
+      if (w === '-C' || w === '--chdir') {
+        const dir = words[i + 1]
+        if (dir !== undefined) out.push(dir)
+        i += 2
+        continue
+      }
+      if (w.startsWith('--chdir=')) {
+        out.push(w.slice('--chdir='.length))
+        i++
+        continue
+      }
+      if (w === '-u' || w === '--unset') {
+        i += 2 // takes an argument
+        continue
+      }
+      if (LEADING_ASSIGNMENT.test(w)) {
+        i++ // `env A=1 -C /etc cmd` — assignments may sit among the options
+        continue
+      }
+      if (w === '-S' || w === '--split-string' || w === '--') break
+      if (w.startsWith('-')) {
+        i++
+        continue
+      }
+      break
+    }
+    return out.concat(changeDirectoryTargets(words.slice(i), depth + 1))
+  }
+
+  if (!CD_COMMANDS.has(cmd)) return out
+
+  let j = i + 1
+  while (j < words.length && /^-[A-Za-z]+$/.test(words[j]!)) j++
+  if (words[j] === '--') j++
+  const target = words[j]
+  if (target === undefined) {
+    // `cd` / `pushd` alone: `cd` goes home. (`pushd` with no argument swaps the
+    // directory stack, which cannot leave the shell it is already in.)
+    if (cmd === 'cd') out.push('~')
+  } else {
+    out.push(target)
+  }
+  return out
 }
 
 export function createBashTool(credentialConfig?: CredentialMaskingConfig): ToolDefinition {

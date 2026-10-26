@@ -46,6 +46,7 @@ import { getFileInboxTransport } from '../agent/cross-session/file-inbox'
 import { registerWakeupHandler, unregisterWakeupHandler } from '../tools/scheduling/schedule-wakeup'
 import { accumulateGraftSavings } from '../shared/graft-savings'
 import { deletedCwdSessionMessage, resolveExistingCwd } from '../shared/deleted-cwd'
+import { safeSlice } from '../shared/sanitize'
 import {
   getMessageBus,
   formatInboundMessage,
@@ -632,7 +633,10 @@ export class QueryEngine {
         // Return a minimal summary on failure
       }
 
-      return summary.slice(0, 8000) || t('system.context.omitted')
+      // Surrogate-safe: this string lands in the JSONL transcript, where a lone
+      // half-pair makes the serializer emit an invalid escape and strict parsers
+      // reject the entire line.
+      return safeSlice(summary, 8000) || t('system.context.omitted')
     })
   }
 

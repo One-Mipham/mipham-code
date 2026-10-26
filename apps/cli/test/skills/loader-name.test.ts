@@ -136,3 +136,43 @@ describe('SkillsLoader hook gate', () => {
     expect(skill.hooks).toBeUndefined()
   })
 })
+
+// 两个文件声明同一个名字时，后加载的**静默**覆盖前一个：用户改的是被遮住的那份，
+// reload 后看不到任何变化。守卫要同时给出「谁赢了」和「它顶掉了谁」；
+// 而同一条路径重新加载（`/reload-skills` 对同一个 loader 再跑一遍）不是冲突。
+describe('SkillsLoader name collision', () => {
+  it('warns with both paths when a later file replaces an earlier one', () => {
+    const a = tmp()
+    const b = tmp()
+    const first = join(a, 'dup.SKILL.md')
+    const second = join(b, 'dup.SKILL.md')
+    writeFileSync(first, '---\nname: dup\ndescription: from a\n---\nbody a\n', 'utf-8')
+    writeFileSync(second, '---\nname: dup\ndescription: from b\n---\nbody b\n', 'utf-8')
+
+    const loader = new SkillsLoader()
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    loader.loadExternal([a, b])
+
+    const logged = stderr.mock.calls.map(String).join('')
+    expect(logged).toContain(first)
+    expect(logged).toContain(second)
+    expect(loader.get('dup')?.description).toBe('from b')
+  })
+
+  it('does not warn when the same file is loaded twice (reload path)', () => {
+    const dir = tmp()
+    writeFileSync(
+      join(dir, 'once.SKILL.md'),
+      '---\nname: once\ndescription: d\n---\nbody\n',
+      'utf-8',
+    )
+
+    const loader = new SkillsLoader()
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    loader.loadExternal([dir])
+    loader.loadExternal([dir])
+
+    expect(stderr.mock.calls.map(String).join('')).not.toContain('replaces the one loaded from')
+    expect(loader.list()).toHaveLength(1)
+  })
+})

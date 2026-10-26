@@ -8,10 +8,11 @@ import type { QueryEngine } from '../core/engine'
 import type { MiphamConfig } from '../shared/index.ts'
 import { formatContextWindow } from '../shared/format'
 import { sanitizeInlineField } from '../shared/sanitize'
+import { internalGitEnv } from '../shared/git-env'
 import { truncateSkillDescription, type SkillsLoader } from '../skills/loader'
 import { loadSkillUsage } from '../skills/usage'
 import type { PluginManager } from '../plugin/plugin-manager'
-import type { Message } from '../shared/types.js'
+import type { Message, PermissionMode } from '../shared/types.js'
 import type { CopyPickerItem } from './copy-picker'
 import type { InstallState, UpdateStatus } from '../shared/update'
 import { McpClient } from '../mcp/client'
@@ -134,6 +135,10 @@ export interface CommandContext {
   setGoal: (text: string) => void
   setUltracodeMode: (on: boolean) => void
   setUpdateStatus: (s: UpdateStatus) => void
+  /** Request a permission-mode change and let the App read back the mode that
+   *  actually took effect (org limits can clamp it). Absent on surfaces that
+   *  cannot switch modes (e.g. a remote attach stub). */
+  setPermissionMode?: (mode: PermissionMode) => void
   skillsLoader?: SkillsLoader
   pluginManager?: PluginManager
   /** i18n translate function — populated from React tree via useI18n().
@@ -281,7 +286,7 @@ const helpCmd: CommandHandler = (ctx) => {
       /setup         Guided project setup wizard
       /recommend     Analyze project + recommend setup
       /permissions   Show or persist permission rules
-      /add-dir <dir> Add workspace directory
+      /add-dir <dir> Check a path + how access is decided
       /security      Security review checklist
       /audit         Same as /security
 
@@ -406,6 +411,48 @@ const contextCmd: CommandHandler = (ctx) => {
  */
 function liveMode(ctx: CommandContext): string {
   return ctx.engine.getPermission().getMode()
+}
+
+/**
+ * `ExitPlanMode` tells the model, in its tool result, that the user can approve
+ * by saying "approved" **or `/approve`**. Before this handler existed that second
+ * half was advice with no landing point: `/approve` fell through to the
+ * unknown-command path, nothing switched modes, and the next turn began in the
+ * same limited mode the model had just been told would lift.
+ *
+ * Only `plan` is approvable. Every other mode either has no plan pending, or is
+ * already wider than what approval grants — silently widening those would make a
+ * stray `/approve` a permission escalation.
+ */
+const approveCmd: CommandHandler = async (ctx) => {
+  const mode = liveMode(ctx)
+  if (mode !== 'plan') {
+    return {
+      content:
+        `Nothing to approve — not in plan mode (current mode: ${mode}).\n` +
+        'Approval only switches a plan under review to acceptEdits.',
+    }
+  }
+  if (!ctx.setPermissionMode) {
+    return {
+      content:
+        'This surface cannot switch permission modes. Use Shift+Tab to cycle to acceptEdits.',
+    }
+  }
+  ctx.setPermissionMode('acceptEdits')
+  const now = liveMode(ctx)
+  if (now !== 'acceptEdits') {
+    return {
+      content:
+        `Plan approved, but the organisation's permission limit kept the mode at ${now} ` +
+        '(not acceptEdits) — edits will still be refused.',
+    }
+  }
+  return {
+    content:
+      '✓ Plan approved — switched to acceptEdits. File writes and edits are applied without ' +
+      'prompting; commands still follow the usual rules. Shift+Tab to narrow it again.',
+  }
 }
 
 const statusCmd: CommandHandler = async (ctx) => {
@@ -4318,10 +4365,13 @@ const prCommentsCmd: CommandHandler = async () => {
       encoding: 'utf-8',
       timeout: 3000,
     }).trim()
+    // The pipeline greps the English header, so git must not localize it:
+    // a Chinese git prints `HEAD 分支：` and this silently lands on `main`.
     const mainBranch =
       execSync('git remote show origin 2>/dev/null | grep "HEAD branch" | cut -d: -f2', {
         encoding: 'utf-8',
         timeout: 3000,
+        env: { ...process.env, LC_ALL: 'C', LANG: 'C' },
       }).trim() || 'main'
 
     // Get diff stats vs main
@@ -5594,6 +5644,7 @@ const forkCmd: CommandHandler = async (ctx, args) => {
     execFileSync('git', ['worktree', 'add', '-b', branch, wtPath, 'HEAD'], {
       stdio: 'ignore',
       timeout: 30_000,
+      env: internalGitEnv(),
     })
   } catch (err) {
     try {
@@ -6097,6 +6148,7 @@ registry.set('/init', initCmd)
 registry.set('/setup', setupCmd)
 registry.set('/recommend', recommendCmd)
 registry.set('/permissions', permissionsCmd)
+registry.set('/approve', approveCmd)
 registry.set('/add-dir', addDirCmd)
 registry.set('/security', securityCmd)
 registry.set('/audit', securityCmd)

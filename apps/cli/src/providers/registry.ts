@@ -8,6 +8,9 @@ import { getMetrics } from '../core/metrics'
  * active. Exported so the permission classifier and `self-critique` pick the
  * same model — two private copies of this heuristic would drift apart silently.
  */
+/** Tier shorthands an agent definition may use instead of a concrete model id. */
+const MODEL_TIER_ALIASES = new Set(['haiku', 'sonnet', 'opus'])
+
 export function pickFastestModel(registry: ProviderRegistry): string {
   const models = registry.listModels?.() ?? []
   const flash = models.find(
@@ -120,12 +123,31 @@ export class ProviderRegistry implements Llm {
     return provider.config.models.filter((m) => m.status === 'active')
   }
 
+  /**
+   * `haiku` / `sonnet` / `opus` are **tiers, not ids** — agent definitions
+   * (`AgentDefinition.model`) and `--model` spell them that way to mean "the
+   * current model of this tier". An exact id always wins, so a provider that
+   * really ships a model with that name is unaffected. Otherwise the tier is
+   * resolved against the **active provider only**: returning another provider's
+   * model would pair an id with a provider that cannot serve it, since the
+   * caller passes the resolved id back to the active provider's `chat()`.
+   *
+   * Within the tier the **last listed** active model wins — provider configs
+   * enumerate a family in ascending version order (`…-sonnet-4-6` before
+   * `…-sonnet-5`).
+   */
   findModel(modelId: string): ModelInfo | undefined {
     for (const provider of this.providers.values()) {
       const model = provider.config.models.find((m) => m.id === modelId)
       if (model) return model
     }
-    return undefined
+    if (!MODEL_TIER_ALIASES.has(modelId)) return undefined
+    const active = this.providers.get(this.activeProviderId)
+    if (!active) return undefined
+    const tier = active.config.models.filter(
+      (m) => m.status === 'active' && m.id.toLowerCase().includes(`-${modelId}-`),
+    )
+    return tier.at(-1)
   }
 
   /**

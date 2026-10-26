@@ -519,6 +519,18 @@ describe('C1 — worktree isolation covers both roots', () => {
     expect(result.error).toContain('Worktree isolation')
   })
 
+  // 命令词不是裸 `cd` 的三种等价写法。纯函数在 `bash.test.ts` 里逐条钉，
+  // 这两条钉的是**守卫确实接上了**（前者绿而守卫没接时这里红）。
+  it.each(["'cd' /etc && ls", 'pushd /etc && ls', 'env -C /etc pwd'])(
+    'blocks a cd-equivalent spelling: %s',
+    async (command) => {
+      mockSpawn()
+      const result = await bashTool.execute({ command }, at(NEW_WT))
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('Worktree isolation')
+    },
+  )
+
   it('leaves cwd outside any worktree unconstrained', async () => {
     mockSpawn()
     const result = await bashTool.execute({ command: 'cd /etc && ls' }, at('/proj/src'))

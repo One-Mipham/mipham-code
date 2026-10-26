@@ -291,6 +291,27 @@ export function stripControlCharsForDisplay(input: string): string {
 }
 
 /**
+ * `String.prototype.slice` counted in UTF-16 code units, made **surrogate-safe**.
+ *
+ * A cut that lands between the two halves of a surrogate pair leaves a lone
+ * surrogate behind. When that string is serialized into a JSONL transcript,
+ * `JSON.stringify` emits it as a bare `\uD83D` escape and strict parsers reject
+ * the **whole line** (`jq`: "Invalid \uXXXX\uXXXX surrogate pair escape"). In a
+ * terminal it renders as U+FFFD.
+ *
+ * Back off one code unit when the last kept unit is a high surrogate, so the cut
+ * never splits a pair. A lone surrogate that was already in the input is left
+ * alone — this only removes *newly created* ones.
+ */
+export function safeSlice(text: string, max: number): string {
+  if (!Number.isFinite(max) || max >= text.length) return text
+  if (max <= 0) return ''
+  const last = text.charCodeAt(max - 1)
+  const end = last >= 0xd800 && last <= 0xdbff ? max - 1 : max
+  return text.slice(0, end)
+}
+
+/**
  * Full command sanitization pipeline for permission checks.
  * Applies in order:
  * 1. Strip dangerous invisible Unicode (zero-width, bidi, BOM, etc.)

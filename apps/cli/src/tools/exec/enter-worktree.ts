@@ -1,5 +1,9 @@
 import type { ToolDefinition } from '../../shared/index.ts'
+import { internalGitEnv } from '../../shared/git-env'
 import { listsWorktree, worktreeRoot } from '../../core/paths.ts'
+
+/** Upper bound for `git worktree add` — a hung fetch must not hang the tool. */
+const WORKTREE_ADD_TIMEOUT_MS = 60_000
 
 export const enterWorktreeTool: ToolDefinition = {
   name: 'EnterWorktree',
@@ -78,6 +82,7 @@ export const enterWorktreeTool: ToolDefinition = {
         cwd,
         stdout: 'pipe',
         stderr: 'pipe',
+        env: internalGitEnv(),
       })
       const gitCheckExit = await gitCheck.exited
       if (gitCheckExit !== 0) {
@@ -93,6 +98,7 @@ export const enterWorktreeTool: ToolDefinition = {
         cwd,
         stdout: 'pipe',
         stderr: 'pipe',
+        env: internalGitEnv(),
       })
       const existingWorktrees = await new Response(checkProc.stdout).text()
       if (listsWorktree(existingWorktrees, worktreePath)) {
@@ -116,6 +122,7 @@ export const enterWorktreeTool: ToolDefinition = {
             cwd,
             stdout: 'pipe',
             stderr: 'pipe',
+            env: internalGitEnv(),
           })
           const branch = (await new Response(branchProc.stdout).text()).trim()
           resolvedBaseRef = branch || 'HEAD'
@@ -134,10 +141,27 @@ export const enterWorktreeTool: ToolDefinition = {
       // nonsense, which is what a bad base ref should do.
       const proc = Bun.spawn(
         ['git', 'worktree', 'add', '-b', branchName, worktreePath, '--', resolvedBaseRef],
-        { cwd, stdout: 'pipe', stderr: 'pipe' },
+        { cwd, stdout: 'pipe', stderr: 'pipe', env: internalGitEnv() },
       )
       const _stdout = await new Response(proc.stdout).text()
-      const exitCode = await proc.exited
+      // A worktree that cannot be created (a promisor remote that is gone, a
+      // lock from a crashed run) otherwise hangs this tool with no answer at all.
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const exitCode = await Promise.race([
+        proc.exited,
+        new Promise<number>((resolve) => {
+          timer = setTimeout(() => resolve(-1), WORKTREE_ADD_TIMEOUT_MS)
+        }),
+      ])
+      clearTimeout(timer)
+      if (exitCode === -1) {
+        proc.kill()
+        return {
+          success: false,
+          content: '',
+          error: `git worktree add did not finish within ${WORKTREE_ADD_TIMEOUT_MS / 1000}s.`,
+        }
+      }
 
       if (exitCode !== 0) {
         const stderr = await new Response(proc.stderr).text()

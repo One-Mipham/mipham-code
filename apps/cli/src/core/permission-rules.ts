@@ -247,38 +247,145 @@ const LEADING_ASSIGNMENT_RE = /^[A-Za-z_][A-Za-z0-9_]*=/
  * 不剥尾随符号（`rm -rf x )` 里的 `)`）：`wildcardMatch` 的 `*` 已经吃掉它。
  */
 export function stripLeadingShellNoise(segment: string): string {
-  let tokens = segment.trim().split(/\s+/).filter(Boolean)
+  const n = segment.length
+  let i = 0
   let stripped = false
-  let skipFlags = false
+  const skipSpace = (): void => {
+    while (i < n && /\s/.test(segment[i]!)) i++
+  }
+
+  /**
+   * Consume one `NAME=value`, returning the index just past the value.
+   *
+   * Splitting on whitespace was the bug: `X="a b" rm …` became the tokens
+   * `['X="a', 'b"', 'rm', …]`, so stripping the first "assignment" left
+   * `b" rm …` — and the real command vanished from every gate that reads this
+   * normalized form (parameterized deny rules, dangerous `rm`, world-writable
+   * `chmod`). Values therefore have to be scanned with shell quoting rules,
+   * not tokenized by spaces.
+   */
+  const consumeAssignment = (start: number): number | null => {
+    const m = LEADING_ASSIGNMENT_RE.exec(segment.slice(start))
+    if (!m) return null
+    let j = start + m[0].length
+    while (j < n) {
+      const c = segment[j]!
+      if (/\s/.test(c)) break
+      if (c === '\\') {
+        j += 2
+        continue
+      }
+      if (c === "'") {
+        j++
+        while (j < n && segment[j] !== "'") j++
+        if (j < n) j++
+        continue
+      }
+      if (c === '"') {
+        j++
+        while (j < n) {
+          if (segment[j] === '\\') {
+            j += 2
+            continue
+          }
+          if (segment[j] === '"') {
+            j++
+            break
+          }
+          j++
+        }
+        continue
+      }
+      if (c === '`') {
+        j++
+        while (j < n && segment[j] !== '`') {
+          if (segment[j] === '\\') j++
+          j++
+        }
+        if (j < n) j++
+        continue
+      }
+      if (c === '$' && segment[j + 1] === '(') {
+        j += 2
+        let depth = 1
+        while (j < n && depth > 0) {
+          if (segment[j] === '(') depth++
+          else if (segment[j] === ')') depth--
+          j++
+        }
+        continue
+      }
+      if (c === '$' && segment[j + 1] === '{') {
+        j += 2
+        while (j < n && segment[j] !== '}') j++
+        if (j < n) j++
+        continue
+      }
+      if (c === '(') {
+        // Array assignment (`arr=(a b) cmd`): the whole parenthesized list is
+        // the value, spaces included.
+        let depth = 0
+        while (j < n) {
+          if (segment[j] === '(') depth++
+          else if (segment[j] === ')') {
+            depth--
+            if (depth === 0) {
+              j++
+              break
+            }
+          }
+          j++
+        }
+        continue
+      }
+      j++
+    }
+    return j
+  }
+
   for (;;) {
-    const head = tokens[0]
-    if (!head) break
-    if (skipFlags && /^--?[A-Za-z]/.test(head)) {
-      tokens = tokens.slice(1)
+    skipSpace()
+    if (i >= n) break
+    const c = segment[i]!
+
+    // Grouping / negation punctuation. Consume runs (`(!` / `((`).
+    if (LEADING_SHELL_PUNCT.has(c)) {
+      i++
       stripped = true
       continue
     }
-    skipFlags = false
-    const bare = head.replace(/^[({!]+/, '') // `(!` 这类连写
-    if (bare !== head) {
-      tokens = bare ? [bare, ...tokens.slice(1)] : tokens.slice(1)
+
+    const word = /^[A-Za-z_][A-Za-z0-9_]*/.exec(segment.slice(i))?.[0]
+    if (word) {
+      const after = i + word.length
+      const atBoundary = after === n || /\s/.test(segment[after]!)
+      if (LEADING_SHELL_KEYWORDS.has(word) && atBoundary) {
+        i = after
+        stripped = true
+        // `time -p rm …` — the keyword's own bare flags are not the command.
+        for (;;) {
+          skipSpace()
+          if (i < n && segment[i] === '-' && /[A-Za-z]/.test(segment[i + 1] ?? '')) {
+            while (i < n && !/\s/.test(segment[i]!)) i++
+            continue
+          }
+          break
+        }
+        continue
+      }
+    }
+
+    const assignmentEnd = consumeAssignment(i)
+    if (assignmentEnd !== null) {
+      i = assignmentEnd
       stripped = true
       continue
     }
-    if (LEADING_SHELL_PUNCT.has(head) || LEADING_ASSIGNMENT_RE.test(head)) {
-      tokens = tokens.slice(1)
-      stripped = true
-      continue
-    }
-    if (LEADING_SHELL_KEYWORDS.has(head)) {
-      tokens = tokens.slice(1)
-      stripped = true
-      skipFlags = true // `time -p rm …` —— 关键字自己的裸 flag 不是命令
-      continue
-    }
+
     break
   }
-  return stripped ? tokens.join(' ') : segment
+
+  return stripped ? segment.slice(i).trim() : segment
 }
 
 function uniq(items: string[]): string[] {
@@ -325,14 +432,19 @@ export function extractBashFileAccess(command: string): BashFileAccess {
   const read: string[] = []
   const write: string[] = []
 
-  // 1. Redirect targets. Handles `> file` and `>file`, optional fd prefix
-  //    (`2>`, `&>`). Heredocs (`<<`) and fd-dup targets (`2>&1`) are skipped —
-  //    their "target" is a delimiter or file descriptor, not a path.
-  const redirectRe = /(?:^|[\s;|&])([0-9]*&?)?(>>|<<|<|>)\s*([^\s;|&<>]+)/g
+  // 1. Redirect targets. Handles `> file`, `>file`, and the same operators
+  //    right after a substitution/subshell (`(echo x)>file`, `x=$(date)>file`).
+  //    Requiring a separator before the operator (the old shape) missed every
+  //    no-space form, so `Edit(path)`/`Write(path)` deny rules were bypassable
+  //    with `echo hi>path`. Heredocs (`<<`) and fd-dup targets (`2>&1`) are
+  //    skipped — their "target" is a delimiter or file descriptor, not a path.
+  const redirectRe = /([0-9]*&?)?(>>|<<|<|>)\s*([^\s;|&<>]+)/g
   let m: RegExpExecArray | null
   while ((m = redirectRe.exec(command)) !== null) {
     const op = m[2]!
     if (op === '<<') continue // heredoc delimiter
+    // Process substitution `<(...)` / `>(...)` is not a redirect to a file.
+    if (m[3]!.startsWith('(')) continue
     const target = stripQuotes(m[3]!)
     if (op === '<') read.push(target)
     else write.push(target)
@@ -526,6 +638,10 @@ function scanReaderWriterCommands(
         // `sed -i` / `perl -i` read AND write their file args.
         const inPlace = args.some((a) => a === '-i' || a.startsWith('--in-place'))
         for (const arg of args) {
+          // Redirection operators are syntax, not paths: `cat < /etc/hosts`
+          // already contributed `/etc/hosts` in the redirect pass. Keeping the
+          // bare `<` here made it look like a read target of its own.
+          if (/^[0-9]*[<>]{1,2}&?[0-9-]*$/.test(arg)) continue
           if (arg.startsWith('-')) {
             // `--include=*secret*` / `--file=.env`: the option VALUE is a path the
             // reader opens, but the `-` guard used to drop the whole token, so a

@@ -79,14 +79,16 @@ describe('ContextManager', () => {
       { type: 'text', text: 'describe this image' },
       { type: 'image_url', image_url: { url: 'https://example.com/img.png' } },
     ]
-    // Actual JSON.stringify output length → ceil(len/4)
+    // 这份 JSON 里有一段 ≥40 字符、无空白的串（URL 与 JSON 标点连成一片），
+    // 按密集文本计价 ⇒ 比「一律 4 字符/token」更贵、比最密的 2 字符/token 便宜。
+    // 精确值由 context-token.test.ts 逐档钉；这里只钉「块内容确实被计入、且方向正确」。
     const jsonLen = JSON.stringify(blocks).length
-    const expected = Math.ceil(jsonLen / 4)
     ctx.addMessage(makeBlockMessage('user', blocks))
 
     const tokens = ctx.getEstimatedTokens()
     expect(tokens).toBeGreaterThan(0)
-    expect(tokens).toBe(expected)
+    expect(tokens).toBeGreaterThanOrEqual(Math.ceil(jsonLen / 4))
+    expect(tokens).toBeLessThanOrEqual(Math.ceil(jsonLen / 2))
   })
 
   // ═══════════════════════════════════════════
@@ -270,6 +272,20 @@ describe('ContextManager', () => {
     const only = ctx.getMessages()
     expect(only).toHaveLength(1)
     expect(String(only[0]!.content)).toContain('truncated to fit the context budget')
+  })
+
+  it('最后一条自己就超预算、前面还有可丢的 ⇒ 仍然要截那条，不能「削完还超」', async () => {
+    // 丢弃循环对**最后一条无条件保留**，所以超额的那条完全可能活下来；此时
+    // `dropped.length` 已经 > 0。旧判据拿它当「有没有东西可丢」，于是跳过了截断，
+    // 加上通知后仍然超预算 —— 下一轮再进同一趟，做同一个空操作。
+    const ctx = makeContext(10_000, 0.9)
+    ctx.addMessage(makeTextMessage('user', 'start'))
+    ctx.addMessage(makeTextMessage('user', 'z'.repeat(200_000)))
+    expect(ctx.needsCompaction()).toBe(true)
+
+    await ctx.compact('summary')
+
+    expect(ctx.needsCompaction()).toBe(false)
   })
 
   // ═══════════════════════════════════════════
