@@ -13,6 +13,7 @@
     "src/core/permission-audit.ts",
     "src/core/permission-classifier.ts",
     "src/core/permission-config.ts",
+    "src/core/permission-rule-ack.ts",
     "src/core/permission-rules.ts",
     "src/core/permission.ts"
   ],

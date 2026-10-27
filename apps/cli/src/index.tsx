@@ -28,6 +28,8 @@ import { ContextManager } from './core/context'
 import { PrefixCacheTracker } from './core/context-token'
 import { QueryEngine } from './core/engine'
 import { RulesLoader } from './core/rules-loader'
+import { setActiveTaskSession } from './tools/exec/task'
+import { unacknowledgedRuleWarnings } from './core/permission-rule-ack'
 import { generateSessionName } from './core/session-name'
 import { ExperienceRuleEngine } from './core/rule-engine.js'
 import { SessionLog } from './core/session-log'
@@ -320,7 +322,12 @@ async function connectMcpServers(
       const name = mcpServers[i]!.name
       const reason = String(result.reason)
       failures.push({ name, reason })
-      console.error(`[mcp] Failed to connect "${name}": ${reason}`)
+      // Say the retry out loud when there is one: the client is already trying
+      // again in the background, and a bare "failed" reads as a final verdict.
+      const retrying = mcp.isRetrying(name)
+        ? ' — retrying in the background; /mcp shows the current state'
+        : ''
+      console.error(`[mcp] Failed to connect "${name}": ${reason}${retrying}`)
     }
   }
   // No success line before the TUI: with five configured servers this was a line
@@ -590,6 +597,10 @@ export async function runApp(options: RunOptions): Promise<void> {
     compactionThreshold: 0.9,
     contextWindow: adaptiveThresholds ? modelContextWindow : undefined,
   })
+  // Load this session's task list up front. The Task tool would load it on first
+  // touch anyway, but the goal panel renders from it before then — and on a
+  // resumed session the whole point is that the plan comes back on screen.
+  setActiveTaskSession(sessionName)
   const sessionLog = new SessionLog(sessionName)
   sessionLog.append({
     type: 'session/start',
@@ -619,6 +630,23 @@ export async function runApp(options: RunOptions): Promise<void> {
 
   // Adaptive memory budget: scale with model's context window
   getMemoryManager().setContextWindow(modelContextWindow)
+
+  /**
+   * 把系统提示装进上下文，并且留下重建方式。
+   *
+   * 提示里的指令文件（`CLAUDE.md` / `AGENTS.md` / `USER.md`）是启动那一刻读的，
+   * 会话中被改过就只有重启才生效。压缩之后引擎会让提示重建一次，重建器在拼装前
+   * 先回读磁盘；**只换指令那一段**，`extra` 原样保留 —— 那是启动时拼进来的会话级
+   * 上下文（技能提醒、记忆召回、上一会话摘要、首跑提示），再生成一遍等于把它们
+   * 重复塞进每个请求。
+   */
+  const applySystemPrompt = (base: string, extra: string): void => {
+    context.setSystemPrompt(base + extra)
+    context.setSystemPromptRebuilder(() => {
+      instructions.refresh()
+      return instructions.buildSystemPrompt() + extra
+    })
+  }
 
   if (options.resume) {
     const log = SessionStore.loadLog(options.resume)
@@ -654,7 +682,7 @@ export async function runApp(options: RunOptions): Promise<void> {
         }
       }
       context.restoreLog(log)
-      context.setSystemPrompt(instructions.buildSystemPrompt())
+      applySystemPrompt(instructions.buildSystemPrompt(), '')
     }
   }
 
@@ -730,7 +758,7 @@ export async function runApp(options: RunOptions): Promise<void> {
       prompt = `${prompt}\n\n<system-reminder name="missing-mipham-md">\n${partialReminder}\n</system-reminder>`
     }
 
-    context.setSystemPrompt(prompt)
+    applySystemPrompt(basePrompt, prompt.slice(basePrompt.length))
   }
 
   // Initialize credential masking pipeline (strategies: Full, Extract, JWT)
@@ -834,7 +862,9 @@ export async function runApp(options: RunOptions): Promise<void> {
 
   // Surface malformed permission rules as warnings instead of silently letting
   // them never match (e.g. a deny rule typed `Bash(ls) x` would fail closed).
-  for (const msg of engine.getPermission().getInvalidRules()) {
+  // 同一句警告每个用户只报一次：settings 文件不修，它每次启动都一样，重复到第七
+  // 次就不再是提醒 —— 而新出现的那条坏规则会混在旧噪音里没人看见。
+  for (const msg of unacknowledgedRuleWarnings(engine.getPermission().getInvalidRules())) {
     process.stderr.write(`⚠ Mipham Code: ${msg}\n`)
   }
 
