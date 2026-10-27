@@ -59,7 +59,8 @@ export class OpenAICompatProvider implements ProviderInstance {
       yield {
         type: 'error',
         error: `OpenAI API error ${response.status}: ${errText}`,
-        retryable: isRetryableFailure(response.status),
+        // 网关可能替上游把 `x-should-retry` 带回来；给了就压过状态规则。
+        retryable: isRetryableFailure(response.status, undefined, response.headers),
       }
       return
     }

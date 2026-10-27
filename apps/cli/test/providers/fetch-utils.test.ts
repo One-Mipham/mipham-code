@@ -303,6 +303,83 @@ describe('isRetryableFailure', () => {
   })
 })
 
+// ============================================================
+// `x-should-retry` —— 服务端自己给的「别再发了」。
+//
+// 只看状态码的话，一个 503 一律可重试：阶梯爬满、退避封顶，用户在屏幕前等一个
+// 服务端早已判定「不会有下一次」的错误。反过来 400 上一个 `true` 也一样被忽略。
+// 两半都要测：只测 `false` 的话，把「读头」写成「永远不重试」也能全绿。
+// ============================================================
+
+function retryHeaders(value: string): Headers {
+  return new Headers({ 'x-should-retry': value })
+}
+
+describe('x-should-retry', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('fetchWithRetry：503 + x-should-retry: false ⇒ 一次都不重发', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response('overloaded', { status: 503, headers: { 'x-should-retry': 'false' } }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = await fetchWithRetry(
+      'https://example.com/api',
+      { method: 'POST' },
+      { maxRetries: 3, baseDelay: 1 },
+    )
+
+    expect(fetchMock).toHaveBeenCalledTimes(1) // 原本会发 4 次
+    expect(res.status).toBe(503) // 响应原样交回，交给引擎与用户
+  })
+
+  it('fetchWithRetry：400 + x-should-retry: true ⇒ 按服务端说的重发', async () => {
+    // 正对照：少了它，「读头」实现成「见到就 return」也能让上一条绿。
+    const fetchMock = vi.fn(
+      async () => new Response('busy', { status: 400, headers: { 'x-should-retry': 'true' } }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = await fetchWithRetry(
+      'https://example.com/api',
+      { method: 'POST' },
+      { maxRetries: 2, baseDelay: 1 },
+    )
+
+    expect(fetchMock).toHaveBeenCalledTimes(3) // 1 + maxRetries
+    expect(res.status).toBe(400)
+  })
+
+  it('fetchWithRetry：没有这个头 ⇒ 状态规则照旧（503 仍重发）', async () => {
+    const fetchMock = vi.fn(async () => new Response('overloaded', { status: 503 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchWithRetry(
+      'https://example.com/api',
+      { method: 'POST' },
+      { maxRetries: 1, baseDelay: 1 },
+    )
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('isRetryableFailure：头压过状态码，两个方向都算', () => {
+    expect(isRetryableFailure(503, undefined, retryHeaders('false'))).toBe(false)
+    expect(isRetryableFailure(429, undefined, retryHeaders('false'))).toBe(false)
+    expect(isRetryableFailure(400, undefined, retryHeaders('true'))).toBe(true)
+  })
+
+  it('isRetryableFailure：头缺失或读不懂 ⇒ 回到状态规则', () => {
+    expect(isRetryableFailure(503, undefined, new Headers())).toBe(true)
+    expect(isRetryableFailure(400, undefined, new Headers())).toBe(false)
+    expect(isRetryableFailure(503, undefined, retryHeaders('maybe'))).toBe(true)
+  })
+})
+
 /**
  * `createAwakeTimer` —— 量的是**醒着的时间**，不是壁钟。
  *

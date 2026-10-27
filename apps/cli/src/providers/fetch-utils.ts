@@ -94,14 +94,41 @@ const NON_RETRYABLE_ERROR_TYPES = new Set([
 ])
 
 /**
+ * The provider's own verdict on whether this response may be re-sent, if it gave one.
+ *
+ * Anthropic answers some 429/5xx responses with `x-should-retry: false` — it is
+ * saying the failure will repeat (an exhausted quota, not a burst). A status-only
+ * rule sends it again anyway, and a turn sitting on a retry ladder that cannot
+ * succeed looks exactly like a slow response. `true` is honoured the same way, in
+ * the opposite direction: the server knows things the status code does not.
+ *
+ * Absent or unrecognised ⇒ `undefined`, i.e. no opinion: status rules decide, so a
+ * provider (or a test double) that never sends the header behaves as before.
+ */
+export function parseShouldRetry(headers: Headers): boolean | undefined {
+  const raw = headers.get('x-should-retry')?.trim().toLowerCase()
+  if (raw === 'true') return true
+  if (raw === 'false') return false
+  return undefined
+}
+
+/**
  * Should the engine re-send a turn the provider reported as failed?
  *
- * Two call shapes: an HTTP status, or a provider error object's `type`/`code`.
+ * Three call shapes: an HTTP status (optionally with the response headers, so the
+ * server's `x-should-retry` verdict wins over the status rule), or a provider
+ * error object's `type`/`code`.
  * Statuses follow the same rule as `fetchWithRetry` (429 and 5xx are transient).
  * For an error type, only the *known* deterministic ones say no — an unrecognised
  * type stays retryable, because guessing "final" would lose a recoverable turn.
  */
-export function isRetryableFailure(status: number | undefined, errorType?: string): boolean {
+export function isRetryableFailure(
+  status: number | undefined,
+  errorType?: string,
+  headers?: Headers,
+): boolean {
+  const verdict = headers ? parseShouldRetry(headers) : undefined
+  if (verdict !== undefined) return verdict
   if (status !== undefined) return RETRYABLE_STATUSES.has(status) || status >= 500
   if (errorType === undefined) return true
   return !NON_RETRYABLE_ERROR_TYPES.has(errorType)
@@ -187,10 +214,17 @@ export async function fetchWithRetry(
     try {
       const response = await fetch(url, { ...init, signal })
 
-      // 429 / 5xx → retry
-      if (RETRYABLE_STATUSES.has(response.status) && attempt < maxRetries) {
-        await sleep(retryDelayMs(response.headers.get('Retry-After'), attempt, baseDelay))
-        continue
+      // 429 / 5xx → retry, unless the server itself said which way to go.
+      // `x-should-retry: false` on a 503 means "this will fail again"; re-sending
+      // it only holds the turn. Only error statuses are eligible either way — a
+      // 200 carrying `true` is not a failure to re-issue.
+      if (!response.ok) {
+        const verdict = parseShouldRetry(response.headers)
+        const retryable = verdict ?? RETRYABLE_STATUSES.has(response.status)
+        if (retryable && attempt < maxRetries) {
+          await sleep(retryDelayMs(response.headers.get('Retry-After'), attempt, baseDelay))
+          continue
+        }
       }
 
       return response

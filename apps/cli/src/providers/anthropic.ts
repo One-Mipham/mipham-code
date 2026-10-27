@@ -199,7 +199,9 @@ export class AnthropicProvider implements ProviderInstance {
       yield {
         type: 'error',
         error: `Anthropic API error ${response.status}: ${errText}`,
-        retryable: isRetryableFailure(response.status),
+        // 服务端给了 `x-should-retry` 就以它为准：429/5xx 上是「这件事不会有
+        // 下一次」，而只看状态会把这一轮挂在一架不可能成功的重试梯子上。
+        retryable: isRetryableFailure(response.status, undefined, response.headers),
       }
       return
     }
