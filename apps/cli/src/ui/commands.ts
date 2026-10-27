@@ -119,7 +119,7 @@ import { listActiveAutoloops, formatLoopRows } from '../commands/autoloop-journa
 import { execSync } from 'node:child_process'
 import { MIPHAM_DIR, OLLAMA_PRESET_MODELS } from '../shared/constants'
 import { renameActiveSession } from '../agent/cross-session/discovery'
-import { formatTaskList } from '../tools/exec/task'
+import { clearTasks, formatTaskList } from '../tools/exec/task'
 
 export interface CommandContext {
   engine: QueryEngine
@@ -340,6 +340,10 @@ const versionCmd: CommandHandler = (ctx) => {
 
 const clearCmd: CommandHandler = (ctx) => {
   ctx.engine.getContext().clear()
+  // The task list outlives the process now, so "start over" has to say so
+  // explicitly — otherwise the old plan comes back on resume and the panel keeps
+  // showing tasks from a conversation the user just discarded.
+  clearTasks(ctx.sessionId)
   const t = resolveT(ctx)
   return { content: t('commands.clear.confirmed'), clearMessages: true }
 }
@@ -3096,7 +3100,7 @@ const tasksCmd: CommandHandler = (ctx) => {
   // 却有历史时又会说「检测到 N 次任务操作」。面板自称 "Background tasks"、标题写
   // 「后台任务」、空态写「尚未跟踪任何任务」—— 全是登记表词汇，而登记表就在
   // 一步之外（`getTasks()`，`GoalProgress` 早就接了）。
-  const taskList = formatTaskList()
+  const taskList = formatTaskList(ctx.sessionId)
   const hasTasks = taskList !== '(no tasks)'
 
   return {

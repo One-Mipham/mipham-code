@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest'
+import { beforeEach, describe, it, expect } from 'vitest'
 import { summarizeTasks, formatTokens } from '../../src/ui/goal-progress.js'
-import { getTasks, taskTool } from '../../src/tools/exec/task.js'
+import { clearTasks, getTasks, taskTool } from '../../src/tools/exec/task.js'
 import type { Task } from '../../src/tools/exec/task.js'
 
 function makeTask(id: string, status: Task['status']): Task {
@@ -61,17 +61,25 @@ describe('formatTokens', () => {
 })
 
 describe('getTasks', () => {
+  // Lists are persisted per session now, so a leftover from a previous run would
+  // be counted here — this file owns its own session and starts it empty.
+  const SID = 'goal-progress-test-session'
+  const ctx = (): never => ({ sessionId: SID }) as never
+  beforeEach(() => clearTasks(SID))
+
   it('returns only non-deleted tasks', async () => {
-    await taskTool.execute({ action: 'create', subject: 'keep' }, {} as never)
-    await taskTool.execute({ action: 'create', subject: 'drop' }, {} as never)
+    await taskTool.execute({ action: 'create', subject: 'keep' }, ctx())
+    await taskTool.execute({ action: 'create', subject: 'drop' }, ctx())
 
-    const drop = getTasks().find((t) => t.subject === 'drop')
+    const drop = getTasks(SID).find((t) => t.subject === 'drop')
     expect(drop).toBeDefined()
-    expect(getTasks().filter((t) => t.subject === 'keep' || t.subject === 'drop')).toHaveLength(2)
+    expect(getTasks(SID).filter((t) => t.subject === 'keep' || t.subject === 'drop')).toHaveLength(
+      2,
+    )
 
-    await taskTool.execute({ action: 'delete', taskId: drop!.id }, {} as never)
+    await taskTool.execute({ action: 'delete', taskId: drop!.id }, ctx())
 
-    expect(getTasks().filter((t) => t.subject === 'drop')).toHaveLength(0)
-    expect(getTasks().filter((t) => t.subject === 'keep')).toHaveLength(1)
+    expect(getTasks(SID).filter((t) => t.subject === 'drop')).toHaveLength(0)
+    expect(getTasks(SID).filter((t) => t.subject === 'keep')).toHaveLength(1)
   })
 })

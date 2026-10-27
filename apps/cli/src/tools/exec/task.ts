@@ -1,6 +1,11 @@
+import { createHash } from 'node:crypto'
+import { existsSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs'
+import { dirname } from 'node:path'
 import type { ToolDefinition } from '../../shared/index.ts'
 import type { BackgroundAgentRegistry, BackgroundTask } from '../../agent/background-registry'
 import { hasSupportedEvidenceSince } from '../../core/working-memory'
+import { atomicWriteFileSync } from '../../shared/atomic-write'
+import { miphamHome } from '../../core/paths'
 
 export interface Task {
   id: string
@@ -19,12 +24,108 @@ export interface Task {
   outputError?: string
 }
 
-const tasks = new Map<string, Task>()
+/**
+ * Task lists are **per session and on disk**.
+ *
+ * The list used to be one process-global Map with nothing behind it. That made a
+ * resumed conversation (`--resume` / `--continue` / `/resume`) start with no tasks
+ * at all — the work plan the user just watched being made simply vanished — while a
+ * `/clear` kept the *old* list alive in the same process. Both are the same defect
+ * seen from two sides: the store's lifetime was "this process", not "this session".
+ *
+ * Keyed by session id and cached per process (the daemon runs several sessions at
+ * once — a single global "current" map would leak one session's tasks into another).
+ * Readers without a session id (the TUI's goal panel, the memory tool) use the
+ * last session the tool touched, which **is** the session on screen.
+ */
+const stores = new Map<string, Map<string, Task>>()
+let activeSessionId = ''
 let taskCounter = 0
 
-/** Read accessor for the session task store — returns all non-deleted tasks. */
-export function getTasks(): Task[] {
-  return Array.from(tasks.values()).filter((t) => t.status !== 'deleted')
+function storePath(sessionId: string): string {
+  // Hashed: the id is operator input (`--resume <id>`), and a `../` must not walk
+  // out of the tasks directory.
+  const name = createHash('sha256').update(sessionId).digest('hex').slice(0, 32)
+  return miphamHome('tasks', `${name}.json`)
+}
+
+/** The session's map, loading it from disk the first time it is asked for. */
+function storeFor(sessionId: string): Map<string, Task> {
+  activeSessionId = sessionId
+  const cached = stores.get(sessionId)
+  if (cached) return cached
+
+  const map = new Map<string, Task>()
+  const path = storePath(sessionId)
+  if (existsSync(path)) {
+    try {
+      const parsed = JSON.parse(readFileSync(path, 'utf-8')) as { tasks?: Task[] }
+      for (const t of parsed.tasks ?? []) {
+        if (!t || typeof t.id !== 'string') continue
+        // Dependency walks index these fields unconditionally.
+        map.set(t.id, { ...t, blocks: t.blocks ?? [], blockedBy: t.blockedBy ?? [] })
+        const n = Number(t.id)
+        if (Number.isFinite(n)) taskCounter = Math.max(taskCounter, n)
+      }
+    } catch {
+      // An unreadable store reads as empty — a corrupt file must not make the
+      // tool throw on a session that otherwise works.
+    }
+  }
+  stores.set(sessionId, map)
+  return map
+}
+
+/** Persist the session's map. A failed write must not fail the tool call. */
+function saveStore(sessionId: string): void {
+  const map = stores.get(sessionId)
+  if (!map) return
+  try {
+    const path = storePath(sessionId)
+    mkdirSync(dirname(path), { recursive: true })
+    atomicWriteFileSync(path, `${JSON.stringify({ tasks: [...map.values()] }, null, 2)}\n`, {
+      mode: 0o600,
+    })
+  } catch {
+    /* the in-memory list is still correct for this process */
+  }
+}
+
+/** Make `sessionId` the one that session-less readers see, loading its tasks. */
+export function setActiveTaskSession(sessionId: string): void {
+  if (!sessionId) return
+  storeFor(sessionId)
+}
+
+/** The map a reader means: the named session's, or the one on screen. */
+function resolveStore(sessionId?: string): Map<string, Task> {
+  if (sessionId !== undefined) return storeFor(sessionId)
+  return stores.get(activeSessionId) ?? new Map()
+}
+
+/**
+ * Read accessor for a session's task store — returns all non-deleted tasks.
+ * Without an id: the session the Task tool last touched.
+ */
+export function getTasks(sessionId?: string): Task[] {
+  return Array.from(resolveStore(sessionId).values()).filter((t) => t.status !== 'deleted')
+}
+
+/**
+ * Drop a session's task list — the store and the file behind it.
+ *
+ * `/clear` means "start this conversation over"; leaving the old plan in place is
+ * how a fresh context came back showing tasks nobody had asked for in it.
+ */
+export function clearTasks(sessionId: string): void {
+  if (!sessionId) return
+  stores.delete(sessionId)
+  try {
+    const path = storePath(sessionId)
+    if (existsSync(path)) unlinkSync(path)
+  } catch {
+    /* a file we cannot remove is still not in this process's list */
+  }
 }
 
 function formatTask(t: Task): string {
@@ -95,8 +196,15 @@ function stopBackgroundTask(
   }
 }
 
-/** Check if a task is blocked — has unresolved dependencies. */
-function isBlocked(task: Task): boolean {
+/**
+ * Check if a task is blocked — has unresolved dependencies.
+ *
+ * The map is passed in rather than read from a module global: dependencies only
+ * mean anything **within one session's list**, and resolving them against
+ * whichever session happened to be active would let one session's ids answer
+ * for another's.
+ */
+function isBlocked(task: Task, tasks: Map<string, Task>): boolean {
   if (task.blockedBy.length === 0) return false
   return task.blockedBy.some((depId) => {
     const dep = tasks.get(depId)
@@ -105,7 +213,7 @@ function isBlocked(task: Task): boolean {
 }
 
 /** Get the list of blocking task IDs (unresolved dependencies). */
-function getBlockingIds(task: Task): string[] {
+function getBlockingIds(task: Task, tasks: Map<string, Task>): string[] {
   return task.blockedBy.filter((depId) => {
     const dep = tasks.get(depId)
     return dep && dep.status !== 'completed' && dep.status !== 'deleted'
@@ -120,8 +228,9 @@ function getBlockingIds(task: Task): string[] {
  * both go through here. A second renderer for the panel would be the "two
  * paths, one wired" mistake this repo has already paid for once.
  */
-export function formatTaskList(): string {
-  const all = getTasks()
+export function formatTaskList(sessionId?: string): string {
+  const map = resolveStore(sessionId)
+  const all = Array.from(map.values()).filter((t) => t.status !== 'deleted')
   if (all.length === 0) return '(no tasks)'
 
   // Sort by availability: in_progress → pending(available) → pending(blocked) → completed
@@ -138,8 +247,8 @@ export function formatTaskList(): string {
     if (orderA !== orderB) return orderA - orderB
     // Within same status: available before blocked
     if (a.status === 'pending' && b.status === 'pending') {
-      const aBlocked = isBlocked(a)
-      const bBlocked = isBlocked(b)
+      const aBlocked = isBlocked(a, map)
+      const bBlocked = isBlocked(b, map)
       if (aBlocked !== bBlocked) return aBlocked ? 1 : -1
     }
     return 0
@@ -165,15 +274,15 @@ export function formatTaskList(): string {
       lines.push(`${statusInfo.emoji} ${currentStatus} (${count}):`)
     }
 
-    const blocked = isBlocked(t)
+    const blocked = isBlocked(t, map)
     const prefix = blocked && t.status === 'pending' ? '🚫 ' : '  '
-    const blockingNote = blocked ? ` 🚫 阻塞中 (等待: ${getBlockingIds(t).join(', ')})` : ''
+    const blockingNote = blocked ? ` 🚫 阻塞中 (等待: ${getBlockingIds(t, map).join(', ')})` : ''
     lines.push(`${prefix}${formatTask(t)}${blockingNote}`)
   }
 
   // Summary footer
-  const available = all.filter((t) => t.status === 'pending' && !isBlocked(t)).length
-  const blockedCount = all.filter((t) => t.status === 'pending' && isBlocked(t)).length
+  const available = all.filter((t) => t.status === 'pending' && !isBlocked(t, map)).length
+  const blockedCount = all.filter((t) => t.status === 'pending' && isBlocked(t, map)).length
   if (blockedCount > 0) {
     lines.push('')
     lines.push(
@@ -238,6 +347,15 @@ export const taskTool: ToolDefinition = {
 
   async execute(params, _ctx) {
     const action = params.action as string
+    // The list this call works on. A sub-agent reports to its parent's list —
+    // `sessionId` is the literal 'sub-agent' one level down, so keying off it
+    // alone would put every nested task, from every session, in one bucket that
+    // no session panel reads.
+    // `|| … || 'default'` rather than `??`: a context assembled without a
+    // session id (tests, embedders) must still get a working list, and hashing
+    // `undefined` would throw instead.
+    const sid = _ctx.parentSessionId || _ctx.sessionId || 'default'
+    const tasks = storeFor(sid)
 
     // ── CREATE ──
     if (action === 'create') {
@@ -269,15 +387,16 @@ export const taskTool: ToolDefinition = {
       }
 
       tasks.set(id, task)
-      const blockedNote = isBlocked(task)
-        ? ` (blocked — waiting on: ${getBlockingIds(task).join(', ')})`
+      saveStore(sid)
+      const blockedNote = isBlocked(task, tasks)
+        ? ` (blocked — waiting on: ${getBlockingIds(task, tasks).join(', ')})`
         : ''
       return { success: true, content: `Task #${id} created: ${subject}${blockedNote}` }
     }
 
     // ── LIST ──
     if (action === 'list') {
-      return { success: true, content: formatTaskList() }
+      return { success: true, content: formatTaskList(sid) }
     }
 
     // ── GET ──
@@ -299,7 +418,7 @@ export const taskTool: ToolDefinition = {
       if (task.owner) lines.push(`Owner: ${task.owner}`)
       if (task.blocks.length) lines.push(`Blocks: ${task.blocks.join(', ')}`)
       if (task.blockedBy.length) {
-        const blocking = getBlockingIds(task)
+        const blocking = getBlockingIds(task, tasks)
         if (blocking.length > 0) {
           lines.push(
             `Blocked by: ${task.blockedBy.join(', ')} (active blockers: ${blocking.join(', ')})`,
@@ -359,8 +478,9 @@ export const taskTool: ToolDefinition = {
         }
       }
 
-      const blockedNote = isBlocked(task)
-        ? ` (blocked — waiting on: ${getBlockingIds(task).join(', ')})`
+      saveStore(sid)
+      const blockedNote = isBlocked(task, tasks)
+        ? ` (blocked — waiting on: ${getBlockingIds(task, tasks).join(', ')})`
         : ''
       const unverifiedNote =
         task.status === 'completed' && task.completionEvidence === 'unverified'
@@ -379,6 +499,7 @@ export const taskTool: ToolDefinition = {
       const task = tasks.get(taskId)
       if (!task) return { success: false, content: '', error: `Task #${taskId} not found` }
       task.status = 'deleted'
+      saveStore(sid)
       return { success: true, content: `Task #${taskId} deleted.` }
     }
 
@@ -447,6 +568,7 @@ export const taskTool: ToolDefinition = {
       if (task.status === 'pending') {
         // Cancel a pending task
         task.status = 'deleted'
+        saveStore(sid)
         return { success: true, content: `Task #${taskId} cancelled (was pending).` }
       }
 
@@ -455,6 +577,7 @@ export const taskTool: ToolDefinition = {
       // the registry owns.
       task.status = 'failed'
       task.outputError = 'Task stopped by user.'
+      saveStore(sid)
 
       return { success: true, content: `Task #${taskId} stopped.` }
     }

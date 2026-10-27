@@ -14,7 +14,7 @@ import { formatLoopRows } from '../../src/commands/autoloop-journal'
 import { extractCrsiLessonSummaries, selectResidentLessons } from '../../src/core/crsi-producer'
 import { initTelemetry, resetTelemetryState } from '../../src/telemetry/index'
 import { resetCrashState } from '../../src/telemetry/crash'
-import { getTasks, taskTool } from '../../src/tools/exec/task'
+import { clearTasks, getTasks, taskTool } from '../../src/tools/exec/task'
 
 // ── Mock node:child_process before importing the module under test ──
 const mockExecSync = vi.fn()
@@ -63,6 +63,7 @@ const mkCtx = (messages: unknown[] = []) =>
         getMessages: () => messages,
         getEstimatedTokens: () => 0,
         getCheckpoints: () => [],
+        clear: vi.fn(),
       }),
       getUsageTracker: () => ({ totalApiTokens: 0 }),
       // The permission system the reports read their mode from. A stub that
@@ -73,6 +74,9 @@ const mkCtx = (messages: unknown[] = []) =>
     },
     // An array, as in a real context: `/status` and `/doctor` count providers.
     config: { providers: [] },
+    // Task lists (and `/clear`) are keyed by session — a stub without one only
+    // works by accident.
+    sessionId: 'commands-test-session',
     providerId: 'test',
     modelId: 'test-model',
     version: '0.0.0',
@@ -1802,15 +1806,12 @@ describe('/tasks —— 显示登记表里的任务', () => {
   const runTasks = async (messages: unknown[] = []): Promise<string> =>
     ((await getCommand('/tasks')!(mkCtx(messages), [])) as { content: string }).content
 
-  /** 每个用例自带清理：登记表是模块级状态，跨用例会互相看见。 */
-  afterEach(async () => {
-    for (const task of getTasks()) {
-      await taskTool.execute({ action: 'delete', taskId: task.id }, {} as never)
-    }
-  })
+  /** 每个用例自带清理：清单按会话**落盘**，跨用例、跨运行都会互相看见。 */
+  const taskCtx = (): never => ({ sessionId: 'commands-test-session' }) as never
+  beforeEach(() => clearTasks('commands-test-session'))
 
   it('列出会话里真实存在的任务（含状态图标）', async () => {
-    await taskTool.execute({ action: 'create', subject: 'panel-subject-alpha' }, {} as never)
+    await taskTool.execute({ action: 'create', subject: 'panel-subject-alpha' }, taskCtx())
 
     const content = await runTasks()
     expect(content).toContain('panel-subject-alpha')
@@ -1819,6 +1820,28 @@ describe('/tasks —— 显示登记表里的任务', () => {
 
   it('负控：登记表为空时说「尚未跟踪任何任务」', async () => {
     expect(await runTasks()).toContain('No tasks tracked yet')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// /clear —— 清单现在活得比进程久，所以「重新开始」必须把它一起清掉
+// ═══════════════════════════════════════════════════════════════
+describe('/clear —— 任务清单跟着会话一起清空', () => {
+  beforeEach(() => clearTasks('commands-test-session'))
+
+  it('清空之后 /tasks 面板回到空态', async () => {
+    const ctx = mkCtx()
+    await taskTool.execute({ action: 'create', subject: 'gone-after-clear' }, {
+      sessionId: 'commands-test-session',
+    } as never)
+    const before = (await getCommand('/tasks')!(ctx, [])) as { content: string }
+    expect(before.content).toContain('gone-after-clear')
+
+    await getCommand('/clear')!(ctx, [])
+
+    expect(getTasks('commands-test-session')).toEqual([])
+    const after = (await getCommand('/tasks')!(ctx, [])) as { content: string }
+    expect(after.content).toContain('No tasks tracked yet')
   })
 })
 

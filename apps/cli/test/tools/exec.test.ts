@@ -375,11 +375,15 @@ describe('Task tool execution', () => {
       ctx,
     )
     expect(r1.success).toBe(true)
-    expect(r1.content).toContain('Task #1 created')
+    // 不从 #1 起：清单落盘且跨运行保留（见 test/tools/task-store.test.ts），
+    // 认死 "#1" 的断言只在「这一趟恰好是第一次」时成立。
+    const firstId = Number(r1.content.match(/#(\d+)/)?.[1])
+    expect(Number.isFinite(firstId)).toBe(true)
+    expect(r1.content).toContain('First task')
 
     const r2 = await taskTool.execute({ action: 'create', subject: 'Second task' }, ctx)
     expect(r2.success).toBe(true)
-    expect(r2.content).toContain('Task #2 created')
+    expect(r2.content).toContain(`Task #${firstId + 1} created`)
   })
 
   it('uses default subject for untitled tasks', async () => {
