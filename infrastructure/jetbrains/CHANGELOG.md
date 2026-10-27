@@ -4,6 +4,23 @@
 > (tag dates) and use the same wording as the VS Code extension's changelog — the plugin is a
 > thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.26 (2026-10-27)
+
+- Version sync with Mipham Code CLI 0.85.26
+- Added: task lists persist per session (`~/.mipham/tasks/`) and come back on `--resume`;
+  `/clear` empties them. MCP tool calls are cancellable.
+- Fixed: an MCP server that is slow to start at launch now keeps retrying in the background
+  (its tools appear once it connects) instead of being pinned as failed for the session;
+  context overflow compacts and retries instead of burning the provider retry budget;
+  sub-agents re-read the tool table each turn; the system prompt is rebuilt after compaction
+  (with instruction files re-read from disk); `web-fetch` / `web-search` timeouts now cover
+  the response body; cron schedules start a worker instead of silently never firing; a turn
+  cut off by a daemon disconnect is reported as unfinished rather than as a normal stop;
+  the twelve "daemon unreachable" messages say what to do next; malformed permission rules
+  are reported once per distinct rule; `x-should-retry` overrides status-code retry rules in
+  both directions; `/code-review` puts the effort level first; truncation notes name the
+  network layer.
+
 ## 0.85.25 (2026-10-26)
 
 - Version sync with Mipham Code CLI 0.85.25
