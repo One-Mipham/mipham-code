@@ -130,7 +130,27 @@ export function createAgentContext(
 
   context.setSystemPrompt(systemPrompt)
 
-  // Scope tools
+  return { context, allowedTools: selectAgentTools(agentDef, toolRegistry), systemPrompt }
+}
+
+/**
+ * The tools an agent definition is allowed to use, read from the **current**
+ * registry.
+ *
+ * Exported because the answer is not a one-time fact: MCP servers connect in the
+ * background, so a sub-agent that started early would otherwise be pinned to the
+ * tool table of the moment it started, and a server that finished connecting a
+ * second later could never be used by it — even though calling the tool would
+ * have worked (`sub-agent.ts` resolves each call against the live registry).
+ *
+ * `warnOnEmpty` is for the repeat callers: the warning is worth printing once
+ * per run, not once per turn.
+ */
+export function selectAgentTools(
+  agentDef: AgentDefinition,
+  toolRegistry: Map<string, ToolDefinition>,
+  warnOnEmpty = true,
+): ToolDefinition[] {
   let allowedTools = Array.from(toolRegistry.values())
 
   if (agentDef.tools) {
@@ -148,7 +168,7 @@ export function createAgentContext(
     allowedTools = allowedTools.filter(
       (t) => allowSet.has(t.name) || serverPrefixes.some((p) => t.name.startsWith(p)),
     )
-    if (allowedTools.length === 0) {
+    if (allowedTools.length === 0 && warnOnEmpty) {
       process.stderr.write(
         `⚠️  Agent "${agentDef.name}": tools list (${allowRules.join(', ')}) matched no registered tool — the agent will run without tools.\n`,
       )
@@ -165,5 +185,5 @@ export function createAgentContext(
     allowedTools = allowedTools.filter((t) => !denySet.has(t.name))
   }
 
-  return { context, allowedTools, systemPrompt }
+  return allowedTools
 }

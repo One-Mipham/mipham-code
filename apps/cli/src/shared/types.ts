@@ -662,6 +662,15 @@ export interface ToolContext {
    */
   isSubAgent?: boolean
   /**
+   * The session a sub-agent is running on behalf of.
+   *
+   * `sessionId` is the literal `'sub-agent'` one level down, so anything keyed by
+   * it would put every nested call — from every session — into one bucket. Set by
+   * `SubAgent.runExecution` from the caller's context; absent for the main
+   * session, where `sessionId` is already the answer.
+   */
+  parentSessionId?: string
+  /**
    * The agent's own name, when this call is being executed by a sub-agent.
    *
    * `isSubAgent` says *that* we are one level down; this says *which* agent, so a

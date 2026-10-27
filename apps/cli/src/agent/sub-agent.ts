@@ -2,7 +2,7 @@ import type { ProviderRegistry } from '../providers/registry'
 import type { Llm } from '../providers/llm'
 import type { Message, ToolDefinition, ToolContext } from '../shared/index.ts'
 import type { SubAgentType, SubAgentOptions, AgentDefinition } from './types'
-import { createAgentContext } from './agent-context'
+import { createAgentContext, selectAgentTools } from './agent-context'
 import { shrinkAgentMessages } from './auto-compact'
 import { getBackgroundAgentRegistry } from './background-registry'
 import { formatInboundMessage, getMessageBus } from './message-bus'
@@ -390,11 +390,11 @@ export class SubAgent {
       ? Math.min(declaredWindow, contextWindow ?? declaredWindow)
       : undefined
     // 这一份**已含 agent memory**，是发出去的那个提示的唯一来源。
-    const {
-      context,
-      allowedTools,
-      systemPrompt: composedSystemPrompt,
-    } = createAgentContext(resolvedDef, this.toolRegistry, compactWindow ?? contextWindow)
+    const { context, systemPrompt: composedSystemPrompt } = createAgentContext(
+      resolvedDef,
+      this.toolRegistry,
+      compactWindow ?? contextWindow,
+    )
 
     // 别再 `context.setSystemPrompt(systemPrompt)`：`createAgentContext` 已经拿**含记忆**的
     // 那一份设过上下文，这里用裸提示再设一遍只会把记忆从上下文里抹掉，而请求读的又不是
@@ -417,15 +417,10 @@ export class SubAgent {
     context.addMessage({ role: 'user', content: opening })
 
     const messages = context.getMessages()
-    const toolDefs =
-      allowedTools.length > 0
-        ? allowedTools.map((t) => ({
-            name: t.name,
-            description: t.description,
-            parameters: t.parameters,
-            input_schema: t.parameters,
-          }))
-        : undefined
+    // 广告出去的工具表**每轮**从 registry 现算（见下面 `tools: toolDefs` 前那一段），
+    // 不在这里采一次：MCP server 是启动后在后台连的，这一刻的快照会让晚一秒连上的
+    // 工具永远进不了这个子代理 —— 而调用本身其实是通的（每轮按 `tu.name` 读的是
+    // **当前** registry）。声明与执行必须读同一个事实。
 
     const chunks: string[] = []
     const MAX_TOOL_TURNS = options.maxTurns || 5
@@ -493,6 +488,10 @@ export class SubAgent {
       // synchronous (see `resolveRunInBackground`). Set on the shared literal so it
       // covers the synchronous *and* background runs — both go through here.
       isSubAgent: true,
+      // Tools that keep per-session state (the Task list) must file it under the
+      // session this work belongs to, not under the literal 'sub-agent' — that
+      // one bucket is shared by every nested call from every session.
+      parentSessionId: options.toolContext?.sessionId,
       // A name a peer can hold onto. `sessionId` is the literal 'sub-agent' for
       // every sub-agent, so `SendMessage` had nothing stable to put on the
       // envelope and minted `sub-agent-<ms>` afresh per message — two messages
@@ -544,6 +543,21 @@ export class SubAgent {
         // budget (`max_tokens`). The answer is real but cut off mid-thought, and
         // nothing downstream could tell that from a finished one.
         let turnTruncated = false
+
+        // Per turn: an MCP server that finished connecting while this turn was
+        // running must be usable in the next one. Reading the registry here (and
+        // the same registry below when resolving `tu.name`) keeps the advertised
+        // list and the executable set from drifting apart.
+        const allowedNow = selectAgentTools(resolvedDef, this.toolRegistry, false)
+        const toolDefs =
+          allowedNow.length > 0
+            ? allowedNow.map((t) => ({
+                name: t.name,
+                description: t.description,
+                parameters: t.parameters,
+                input_schema: t.parameters,
+              }))
+            : undefined
 
         for await (const chunk of (this.llm ?? this.registry).chat({
           model: finalModel,

@@ -363,6 +363,47 @@ describe('SubAgent', () => {
     expect(receivedTools![0]!.name).toBe('Read')
   })
 
+  it('advertises a tool that registered after the run began（晚连上的 MCP server）', async () => {
+    // MCP server 是启动后在后台连的。子代理若只在开跑那一刻采一次工具表，晚一秒
+    // 连上的 server 的工具就永远进不了它的声明 —— 而按名字执行本来就是通的。
+    // 这里第一轮里把工具塞进 registry，看第二轮有没有广告出去。
+    const advertised: string[][] = []
+    const lateTool: ToolDefinition = {
+      name: 'mcp__late__ping',
+      description: 'late server tool',
+      category: 'system',
+      permission: 'self',
+      parameters: { type: 'object', properties: {} },
+      execute: async () => ({ success: true, content: 'pong' }),
+    }
+    const tools = new Map<string, ToolDefinition>()
+
+    const provider = createMockProvider([{ type: 'text', content: 'ok' }, { type: 'stop' }])
+    const originalChat = provider.chat
+    provider.chat = async function* (req) {
+      advertised.push((req.tools ?? []).map((t) => String(t.name)))
+      if (advertised.length === 1) {
+        // server 在第一轮进行中连上了
+        tools.set(lateTool.name, lateTool)
+        yield {
+          type: 'tool_use',
+          toolUse: { type: 'tool_use', id: 'c1', name: lateTool.name, input: {} },
+        }
+        yield { type: 'stop' }
+        return
+      }
+      yield* originalChat.call(provider, req)
+    }
+
+    const sub = new SubAgent(createMockRegistry(provider), tools)
+    const result = await sub.execute('test', 'test task', { type: 'general' })
+
+    // 前提：第一轮确实没广告它（否则第二轮那条对「一开始就在」也成立）
+    expect(advertised[0]).not.toContain(lateTool.name)
+    expect(advertised[1]).toContain(lateTool.name)
+    expect(result).toBe('ok')
+  })
+
   it('does not return simulate-style template text', async () => {
     const provider = createMockProvider([
       { type: 'text', content: 'Real AI response.' },
