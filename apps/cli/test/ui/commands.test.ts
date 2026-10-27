@@ -723,6 +723,43 @@ describe('/code-review --max-findings', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════
+// /code-review — 档位
+//
+// 三件事各自会单独失效：档位被读出来（而不是写死 high）、它排在提示词最前（模型
+// 先按它定深度，而不是先铺开再追认）、以及 max 有一句「只有用户点名才用」的上限
+// （仓里存的是上一轮挑的，不是用户这一轮要的）。
+// ═══════════════════════════════════════════════════════════════
+
+describe('/code-review effort', () => {
+  beforeEach(() => {
+    mockPrefStore.clear()
+    mockExecSync.mockReturnValue(
+      ' file.ts | 5 +++--\n 1 file changed, 3 insertions(+), 2 deletions(-)',
+    )
+  })
+
+  it('默认 high，且档位语句在提示词最前面', async () => {
+    const result = await getCommand('/code-review')!(mkCtx(), [])
+    expect(result.forwardToAI).toContain('Use effort level: high')
+    expect(result.forwardToAI!.trimStart().startsWith('Use effort level: high')).toBe(true)
+  })
+
+  it('跟着偏好走，不是写死的 high', async () => {
+    mockPrefStore.set('lastCodeReviewEffort', 'low')
+    const result = await getCommand('/code-review')!(mkCtx(), [])
+    expect(result.forwardToAI).toContain('Use effort level: low')
+    expect(result.forwardToAI).not.toContain('Use effort level: high')
+  })
+
+  it('max 仍然照传，但带一句「只有用户点名才用」', async () => {
+    mockPrefStore.set('lastCodeReviewEffort', 'max')
+    const result = await getCommand('/code-review')!(mkCtx(), [])
+    expect(result.forwardToAI).toContain('Use effort level: max')
+    expect(result.forwardToAI).toContain('never pick max on your own')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
 // /design — no git dependency, always forwards
 // ═══════════════════════════════════════════════════════════════
 

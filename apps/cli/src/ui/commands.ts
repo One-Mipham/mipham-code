@@ -3834,7 +3834,11 @@ const codeReviewCmd = gitDiffBridgeCmd({
         : maxFindings.value === 'default'
           ? ''
           : ` Report at most ${maxFindings.value} findings, most severe first.`
-    return `use the code-review skill to review all uncommitted changes. Check all 7 dimensions: correctness, security, performance, code quality, architecture & design, testing, and language-specific issues. Use effort level: ${getPreference('lastCodeReviewEffort', 'high')}.${cap}`
+    // 档位放在**最前**：它是这一轮的工作量，后面那句「查哪七个维度」是它的宾语。
+    // 写成句末时模型容易先按默认深度铺开、再拿档位去追认。`max` 另有一句上限：
+    // 仓里存的可能是上一轮自己挑的，而不是用户这一轮要的 —— 只有**用户点名**才用。
+    const effort = getPreference('lastCodeReviewEffort', 'high')
+    return `Use effort level: ${effort} — settle this before you start; never pick max on your own, only when the user asked for it. Then use the code-review skill to review all uncommitted changes. Check all 7 dimensions: correctness, security, performance, code quality, architecture & design, testing, and language-specific issues.${cap}`
   },
 })
 
