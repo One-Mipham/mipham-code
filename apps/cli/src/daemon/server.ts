@@ -325,6 +325,12 @@ export function createServer(config: ServerConfig): Server<WsData> {
     }
   }
 
+  // Scheduled prompts must not depend on someone having opened the session: the
+  // scheduler fires into whatever worker exists, and workers only exist after an
+  // inbound prompt or `set_mode`. Handing it the same factory the WS handlers use
+  // makes a due schedule able to bring its own worker up.
+  scheduleManager.setWorkerSpawner((sessionId) => getOrCreateWorker(sessionId))
+
   // ── Feishu remote-control adapter（独立签名验证，复用同一 worker 池）──
   const feishuAdapter = feishu
     ? createFeishuAdapter(feishu.config, {
