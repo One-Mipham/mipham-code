@@ -250,10 +250,12 @@ export const webFetchTool: ToolDefinition = {
       return { success: false, content: '', error: validationError }
     }
 
+    // The timer spans the body read, not just the headers: a server that sends
+    // headers and then stalls mid-body would otherwise hang the tool forever —
+    // the abort signal is only consulted while `fetch` itself is running.
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 30_000) // 30s timeout
     try {
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), 30_000) // 30s timeout
-
       // Manual redirect handling: follow same-host redirects one hop at a time,
       // validating the target BEFORE each request (closes the SSRF-via-redirect gap).
       let currentUrl = url
@@ -280,7 +282,6 @@ export const webFetchTool: ToolDefinition = {
         // SSRF defense: validate the redirect target BEFORE following
         const redirectError = await validateUrl(nextUrl)
         if (redirectError) {
-          clearTimeout(timer)
           return {
             success: false,
             content: '',
@@ -290,7 +291,6 @@ export const webFetchTool: ToolDefinition = {
 
         // Cross-host redirects are returned to the caller (tool contract)
         if (new URL(nextUrl).hostname !== originalHost) {
-          clearTimeout(timer)
           return {
             success: true,
             content: `Redirected to: ${nextUrl}\n\nFetch from this URL directly to retrieve content.`,
@@ -300,8 +300,6 @@ export const webFetchTool: ToolDefinition = {
 
         currentUrl = nextUrl
       }
-
-      clearTimeout(timer)
 
       // Determine content type; only convert HTML to markdown
       const contentType = response.headers.get('content-type') || ''
@@ -352,6 +350,8 @@ export const webFetchTool: ToolDefinition = {
           ? 'Request timed out (30s)'
           : `Fetch failed: ${String(err)}. If direct network is blocked, retry via the web-access skill (CDP through the user's logged-in Chrome).`
       return { success: false, content: '', error: message }
+    } finally {
+      clearTimeout(timer)
     }
   },
 }

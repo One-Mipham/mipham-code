@@ -188,6 +188,58 @@ describe('WebFetch tool execution', () => {
     const callArgs = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!
     expect(callArgs[0]).toBe('https://http-upgrade-test.example.com')
   })
+
+  it('times out a body that stalls after the headers arrive', async () => {
+    // 服务器回了 200 头、然后把 body 挂住 —— 从外面看「请求已经结束了」。
+    // 旧的实现读完 headers 就 clearTimeout，于是读 body 这一段没有任何上限，
+    // 工具会一直挂着。这里让挂住的 body 只响应 abort：超时若没覆盖到它，
+    // 下面的 await 永远不返回，用例以超时变红。
+    const realSetTimeout = globalThis.setTimeout
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const realFetch = globalThis.fetch
+    try {
+      const fetchMock = vi.fn(async (_url, init) => {
+        const signal = (init as RequestInit | undefined)?.signal as AbortSignal
+        return {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: new Map([['content-type', 'text/html']]),
+          text: () =>
+            new Promise<string>((_resolve, reject) => {
+              signal.addEventListener('abort', () =>
+                reject(new DOMException('Aborted', 'AbortError')),
+              )
+            }),
+        }
+      })
+      globalThis.fetch = fetchMock as unknown as typeof fetch
+
+      const resultPromise = webFetchTool.execute({ url: 'https://stall-body.example.com/' }, ctx)
+      // validateUrl 走真 DNS —— 它要一次真实的事件循环轮转才回得来，而 `toFake` 只
+      // 冻结了定时器。用**没被冻结的**那个 setTimeout 等它跑完：前提不成立时下面的
+      // 断言会先红，而不是让用例以超时收场。
+      for (let i = 0; i < 200 && fetchMock.mock.calls.length === 0; i++) {
+        await new Promise((r) => realSetTimeout(r, 5))
+      }
+      expect(fetchMock.mock.calls.length, 'fetch 没被调到，后面测的就不是读 body 那一段').toBe(1)
+
+      let settled = false
+      void resultPromise.then(() => {
+        settled = true
+      })
+      for (let i = 0; i < 40 && !settled; i++) {
+        await vi.advanceTimersByTimeAsync(5_000)
+      }
+
+      const result = await resultPromise
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('timed out')
+    } finally {
+      globalThis.fetch = realFetch
+      vi.useRealTimers()
+    }
+  })
 })
 
 // ============================================================
@@ -331,6 +383,49 @@ describe('WebSearch tool execution', () => {
   it('passes query correctly to response', async () => {
     const result = await webSearchTool.execute({ query: 'TypeScript decorators' }, ctx)
     expect(result.content).toContain('TypeScript decorators')
+  })
+
+  it('times out a response body that stalls after the headers arrive', async () => {
+    // 与 WebFetch 同一个洞：API 回了 200 头就不再吐 body。超时的 timer 若不覆盖
+    // 读 body 那一段，这里会永久挂住（旧实现先 clearTimeout 再 `response.json()`）。
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const realFetch = globalThis.fetch
+    const prevKey = process.env.BRAVE_API_KEY
+    process.env.BRAVE_API_KEY = 'test-key'
+    try {
+      globalThis.fetch = vi.fn(async (_url, init) => {
+        const signal = (init as RequestInit | undefined)?.signal as AbortSignal
+        return {
+          ok: true,
+          status: 200,
+          headers: new Map([['content-type', 'application/json']]),
+          json: () =>
+            new Promise((_resolve, reject) => {
+              signal.addEventListener('abort', () =>
+                reject(new DOMException('Aborted', 'AbortError')),
+              )
+            }),
+        }
+      }) as unknown as typeof fetch
+
+      const resultPromise = webSearchTool.execute({ query: 'stalled body' }, ctx)
+      let settled = false
+      void resultPromise.then(() => {
+        settled = true
+      })
+      for (let i = 0; i < 40 && !settled; i++) {
+        await vi.advanceTimersByTimeAsync(1_000)
+      }
+
+      const result = await resultPromise
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('timed out')
+    } finally {
+      globalThis.fetch = realFetch
+      if (prevKey === undefined) delete process.env.BRAVE_API_KEY
+      else process.env.BRAVE_API_KEY = prevKey
+      vi.useRealTimers()
+    }
   })
 })
 

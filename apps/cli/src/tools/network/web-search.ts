@@ -132,13 +132,14 @@ export const webSearchTool: ToolDefinition = {
       }
     }
 
+    // The timer spans the body read too: headers followed by a stalled body is
+    // the same hang as a request that never answers.
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 15_000) // 15s timeout
     try {
       const url = new URL(BRAVE_API)
       url.searchParams.set('q', query)
       url.searchParams.set('count', String(MAX_RESULTS))
-
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), 15_000) // 15s timeout
 
       const response = await fetch(url.toString(), {
         headers: {
@@ -148,8 +149,6 @@ export const webSearchTool: ToolDefinition = {
         },
         signal: controller.signal,
       })
-
-      clearTimeout(timer)
 
       if (!response.ok) {
         const body = await response.text().catch(() => '')
@@ -207,6 +206,8 @@ export const webSearchTool: ToolDefinition = {
           ? 'Search timed out (15s). Try a more specific query.'
           : `Search failed: ${String(err)}. If direct network is blocked, retry via the web-access skill (CDP through the user's logged-in Chrome).`
       return { success: false, content: '', error: message }
+    } finally {
+      clearTimeout(timer)
     }
   },
 }
