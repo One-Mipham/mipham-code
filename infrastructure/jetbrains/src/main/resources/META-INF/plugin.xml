@@ -5,7 +5,7 @@
 
     <description><![CDATA[
         Multi-model AI coding terminal for JetBrains IDEs.
-        Open-source, 7 providers, 30 tools, background agents, plan mode.
+        Open-source, 12 providers, 31 tools, background agents, plan mode.
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>

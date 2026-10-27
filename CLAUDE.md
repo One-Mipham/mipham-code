@@ -21,9 +21,10 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.44
-> **最后更新**: 2026-10-26 — **0.85.25 发布：十一处真缺口 + 两处半缺口 + 三处自发现同批收口**（2.94.44；区间 **5 笔** = `git rev-list --count 'v0.85.24^{}..v0.85.25^{}'`，含 0.85.24 之后 **2 笔文档**；本轮 3 笔 = 修复 `1efaf7c1` / 依赖加固 `5d877c5e` / 版本+CHANGELOG `1589bd43`）。**发布读数**（全取外部探针）：GPG 签名 tag `v0.85.25` → **`1589bd43`**（`git tag -v` = 完好的签名）；push CI `40329686195` **9/9**、`release.yml` `40330088119` **9/9**；npm 真输出行 `+ @miphamai/cli@0.85.25`（13:25:16Z）、registry `time['0.85.25']` = **2026-10-26T13:29:27.700Z**、`dist-tags.latest` = **0.85.25** —— ⚠️ 成功行到 registry 可读 **≈4 分钟**（13:28 首探 version 端点仍 404、packument `modified` 停在 10-22），判据是 registry 自己的 `time` 而不是「重试同一个探针」；GitHub Release `v0.85.25` **6 资产**、非 draft 非 prerelease（createdAt 13:22:33Z）、DMG **2,268,250 B** ⚠️ 未签名（CI 无签名身份，与历次同）；JetBrains 真输出行 `JetBrains plugin published.`（13:27:05Z）；本地 `.vsix` **71,717 B** / sha256 `9d3484bd…` / 包内 `version` = 0.85.25 ⇒ ✅ **已人工上传 Marketplace 并经双探针核验**（2026-10-26）：页内同源 `extensionquery` API（`flags` 63）`versions[0].version` = **0.85.25**、`flags` = validated、`lastUpdated` = 2026-10-26T13:40:30.48Z、`versions[]` = **77** 条；公开页 `More Info` 同读 `Version 0.85.25`。代码内容与 `前一条` 同一批，本轮只增两处依赖加固：`next` ^15.5.28 + 根 overrides `zod@4: 4.6.6` —— 后者是首笔 CI 红在 `security-audit` 的订正（`git diff 22602b8e..1efaf7c1 -- package.json pnpm-lock.yaml` **为空** ⇒ advisory 漂移，有补丁就升）。测试 **4,477**（335 文件）。✅ **两站已部署**（用户当场授权，一次只覆盖一次）：国内 `deploy-cn.sh`（PM2 重启、端口 3007、网站与 omGPT API 均 200）、国际 `deploy.sh` → `vercel --prod`（`dpl_2mT4agC1XyHE12ghXU6VDMfAQaDg` / READY）；cache-bust 复核两站 `/mipham-code` 各 **3×0.85.25 / 0×0.85.24**、`4477`×1，`onemipham.com/` 首页 2×0.85.25；`websites` `b279f18` → **`1a0ceeb`**（package-info 三份 sha256 `cbaf6e0f…` 逐字相同）。
-> **前一条（2.94.43）**: 2026-10-26 — **十一处真缺口 + 两处半缺口 + 三处自发现同批收口（2.94.43，未发布）**。① **命令归一化按空白切词**：`X="a b" rm -rf "$(pwd)"` 的赋值被切成两半，真实命令从 `flattenCommand` 集合消失 ⇒ 参数化 deny、危险 `rm`、世界可写 `chmod` 三闸同时空转（`X=1` 却全命中）；改为按 shell 引号规则扫赋值（单/双引号、反引号、`$( )`、`${ }`、反斜杠）。② **无空格重定向**（`echo hi>denied.txt`、`cat</etc/hosts`）不被提取 ⇒ 路径 deny 可绕过；并排除进程替换 `<( )` 与操作符本身。③ **replace ref 能改写隔离工作树的检出内容** —— 四条创建路径（`EnterWorktree`、workflow agent、`/fork`、CRSI 沙箱）无一带 `GIT_NO_REPLACE_OBJECTS`，实测「不屏蔽 = 被替换的树 / 屏蔽 = 真 HEAD」后统一走 `internalGitEnv()`，测试用真 git + 正对照。④ **单份指令文件无上限**：嵌套 `CLAUDE.md` 整份进每次请求，40k 只是事后告警 ⇒ 单文件上限 = 总预算，截断标记写在载荷里。⑤ **预览与摘要按 UTF-16 码元切** ⇒ 半个 emoji 落进 JSONL 时整行解析失败（`jq` exit 5 实测）；收成 `safeSlice`，接到两处预览与 `summary.slice(0,8000)`。⑥ 同名的两个技能文件静默后者胜 ⇒ 加载时点名两个来源。⑦ `haiku/sonnet/opus` 是档位不是 id，agent 定义写了也解析不到 ⇒ 只在**活动 provider** 内按档位解析（精确 id 优先）。⑧ macOS 无 CLT 时启动即 `git rev-parse` ⇒ 每次启动弹「安装开发者工具」窗口；先探 `xcode-select -p`（缓存）。⑨ 自跑的 git 不钉 locale ⇒ `/pr` 的英文正则在本机中文 git 上静默回落 `main`；`LC_ALL=C`。⑩ 偏克隆下 `worktree add` 触发的按需 fetch 无上限 ⇒ 两条创建路径都加 60s 上限并杀子进程。⑪ 估值缺「密集 ASCII」档（base64/hex 一律按散文计价 ⇒ 低估 2–3 倍）；截断分支的前件是 `dropped.length === 0` ⇒「有历史 + 最后一条自身超预算」永不截、逐轮空转。**半缺口两处**：隔离逃逸识别按空白切词 ⇒ `'cd' /etc`、`pushd`、`env -C` 全绕过（改为引号感知 + `command`/`builtin`/`env -C`、`--`、裸 `cd` → `~`、`~`/`$HOME` 展开）；`state.json` 读不出来时只告警，下一次保存把真实插件列表覆盖成 `[]`（改为改名隔离，改名失败也如实说明）。**自发现三条**：artifact 服务器 `listen(port)` 绑**所有网卡**（改回环）；`ExitPlanMode` 告诉模型「`/approve` 可以」，而该命令根本没有处理函数（新增，且只认 plan 档）；`/add-dir` 声称注册工作区目录而那份允许列表从未被任何代码读过（改为如实说明真实开关）。测试 **4,388 → 4,477**（**335 文件**；4,475 passed + 2 skipped，0 失败）；typecheck / eslint / prettier 全绿；命令数 **137 → 138**（`/approve`）三处落盘副本 + 文档 + 两份 i18n 同批回填。**⏳ 本轮尚未发布。** 刻意未落：会话改名持久化、待投递消息的展开 UI、ENOSPC 卷名文案。（校注：该行撰写时的「未发布」此后为假 —— 本批已随 **0.85.25** 发布。）
+> **版本**: 2.94.45
+> **最后更新**: 2026-10-27 — **十五处缺口同批收口（7 处真缺口 + 8 处半缺口）+ 两条自发现**（2.94.45）。落地清单：MCP 调用可取消（`ToolContext.signal` 贯通 registry / transport / client）、超窗错误改为「压缩后重问」且排在「同 provider 重试额度」**之上**（`isContextOverflowError`）、子代理每轮重读工具清单（晚连上的 MCP 服务器能进得来）、压缩后重建系统提示（走与首次组装**同一条**重建路径）、`web-fetch` / `web-search` 超时覆盖响应体读取、cron 调度给无活 worker 的会话拉起 worker、daemon 不可达的 12 处调用统一后果说明 + `stop` 后指引、Task 清单按会话落盘并随 resume 恢复（`~/.mipham/tasks/<sha256(session)[:32]>.json`，0600 + 原子写；`/clear` 一并清空；子代理经 `ToolContext.parentSessionId` 归档）、`x-should-retry` 头**双向**覆盖状态码判据、daemon 断连时把在途回合判成「有后果的失败」而非挂起、空摘要再问一次才写占位、截断提示点名 VPN / 防火墙、畸形权限规则按文本确认后不再反复刷、`/code-review` 沿用记住的 effort（默认 high，只有用户开口才 max）、VS Code 遥测关闭时把 `MIPHAM_TELEMETRY=off` 传给终端。**两处本轮新增负控**（Task 落盘 / 超窗压缩）各自先红后绿、还原后 sha256 与变异前逐字相符。**自发现两条**：① **启动时连不上的 MCP 服务器此前是一次性判决** —— 握手超时（用户实报 `notebooklm` 15000ms 超时）把连接锁成 `error`、工具一个都不注册，而**中途掉线**却有 10 次退避自动重连；同一种失败两套待遇，且晚起来 5 秒就等于整个会话没有这个服务器。改为：可重试的启动失败同样排入后台重连（`isTransientConnectError` 之外不重试，4xx 凭据问题照旧早停），重连成功把新发现的工具推给注册表（启动路径的 `registerMcpServerTools` 在那条路上永远走不到），启动横幅那一行同时如实说明「正在后台重试」。② JetBrains `plugin.xml` 描述行里那两个计数（供应商 / 工具）仍是旧值，与真源 **12 / 31** 不符，同批订正。测试 **4,477 → 4,533**（335 → **340 文件**；4,531 passed + 2 skipped，0 失败），命令数 **138** 不变，`TEST_COUNT` 三份副本同批回填。**⏳ 本轮未发布、未部署。**
+
+> **前一条（2.94.44）**: 2026-10-26 — **0.85.25 发布：十一处真缺口 + 两处半缺口 + 三处自发现同批收口**（2.94.44；区间 **5 笔** = `git rev-list --count 'v0.85.24^{}..v0.85.25^{}'`，含 0.85.24 之后 **2 笔文档**；本轮 3 笔 = 修复 `1efaf7c1` / 依赖加固 `5d877c5e` / 版本+CHANGELOG `1589bd43`）。**发布读数**（全取外部探针）：GPG 签名 tag `v0.85.25` → **`1589bd43`**（`git tag -v` = 完好的签名）；push CI `40329686195` **9/9**、`release.yml` `40330088119` **9/9**；npm 真输出行 `+ @miphamai/cli@0.85.25`（13:25:16Z）、registry `time['0.85.25']` = **2026-10-26T13:29:27.700Z**、`dist-tags.latest` = **0.85.25** —— ⚠️ 成功行到 registry 可读 **≈4 分钟**（13:28 首探 version 端点仍 404、packument `modified` 停在 10-22），判据是 registry 自己的 `time` 而不是「重试同一个探针」；GitHub Release `v0.85.25` **6 资产**、非 draft 非 prerelease（createdAt 13:22:33Z）、DMG **2,268,250 B** ⚠️ 未签名（CI 无签名身份，与历次同）；JetBrains 真输出行 `JetBrains plugin published.`（13:27:05Z）；本地 `.vsix` **71,717 B** / sha256 `9d3484bd…` / 包内 `version` = 0.85.25 ⇒ ✅ **已人工上传 Marketplace 并经双探针核验**（2026-10-26）：页内同源 `extensionquery` API（`flags` 63）`versions[0].version` = **0.85.25**、`flags` = validated、`lastUpdated` = 2026-10-26T13:40:30.48Z、`versions[]` = **77** 条；公开页 `More Info` 同读 `Version 0.85.25`。代码内容与 `前一条` 同一批，本轮只增两处依赖加固：`next` ^15.5.28 + 根 overrides `zod@4: 4.6.6` —— 后者是首笔 CI 红在 `security-audit` 的订正（`git diff 22602b8e..1efaf7c1 -- package.json pnpm-lock.yaml` **为空** ⇒ advisory 漂移，有补丁就升）。测试 **4,477**（335 文件）。✅ **两站已部署**（用户当场授权，一次只覆盖一次）：国内 `deploy-cn.sh`（PM2 重启、端口 3007、网站与 omGPT API 均 200）、国际 `deploy.sh` → `vercel --prod`（`dpl_2mT4agC1XyHE12ghXU6VDMfAQaDg` / READY）；cache-bust 复核两站 `/mipham-code` 各 **3×0.85.25 / 0×0.85.24**、`4477`×1，`onemipham.com/` 首页 2×0.85.25；`websites` `b279f18` → **`1a0ceeb`**（package-info 三份 sha256 `cbaf6e0f…` 逐字相同）。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -62,7 +63,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：4,477 测试（本机 4,475 passed + 2 skipped，335 文件，0 失败）
+测试：4,533 测试（本机 4,531 passed + 2 skipped，340 文件，0 失败）
 
 ---
 
@@ -99,7 +100,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 335 个测试文件，4477 个测试
+│   │   ├── test/               # 340 个测试文件，4533 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -125,7 +126,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（4477 个测试）
+pnpm test         # vitest run（4533 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -315,14 +316,14 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 95      | 1705     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
-| tools           | 29      | 578      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
-| daemon          | 37      | 259      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
-| ui              | 34      | 376      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
-| agent           | 15      | 157      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
+| core            | 97      | 1726     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
+| tools           | 30      | 587      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
+| daemon          | 38      | 265      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
+| ui              | 34      | 380      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
+| agent           | 15      | 158      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
 | security        | 12      | 126      | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
-| providers       | 9       | 171      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
-| mcp             | 12      | 157      | client / transport / oauth / token-store / registry / instructions（含 2 skipped）                                                                                          |
+| providers       | 9       | 176      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
+| mcp             | 12      | 164      | client / transport / oauth / token-store / registry / instructions（含 2 skipped）                                                                                          |
 | workflow        | 8       | 65       | runtime / loop / parallel / sandbox / journal / verify                                                                                                                      |
 | vajra           | 6       | 53       | context / events / service / compose / leaf（自建内核）                                                                                                                     |
 | shared          | 12      | 148      | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                              |
@@ -333,9 +334,10 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | artifacts       | 1       | 6        | manifest                                                                                                                                                                    |
 | agent-view      | 4       | 41       | agent-view-manager / dashboard-keys / session-view                                                                                                                          |
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
+| integration     | 1       | 3        | 跨仓接线：`vscode-extension-telemetry`（VS Code 遥测关闭 ⇒ 终端拿到 `MIPHAM_TELEMETRY=off`）                                                                                |
 | integrity       | 19      | 132      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **335** | **4477** | **0 失败** ✅（本机 4,475 + 2 skipped，335 文件）                                                                                                                           |
+| **合计**        | **340** | **4533** | **0 失败** ✅（本机 4,531 + 2 skipped，340 文件）                                                                                                                           |
 
 ### 测试注意事项
 
