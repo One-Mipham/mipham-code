@@ -129,6 +129,28 @@ function buildFlags() {
 }
 
 /**
+ * Environment overrides for the terminal we start.
+ *
+ * VS Code's telemetry setting is the user's answer to "may this editor send
+ * usage data". A terminal started from here is a *different process* and
+ * inherits none of that decision — so a user who turned IDE telemetry off would
+ * still get ours. The setting has to travel with the launch, and `MIPHAM_TELEMETRY=off`
+ * is the CLI's hard override (it wins over the opt-in in settings), which is the
+ * right strength for this boundary.
+ *
+ * `env.isTelemetryEnabled` is the merged answer — the user's setting *and* any
+ * organisation policy — so reading it is safer than reading a setting ourselves.
+ * A host that does not expose it (older builds, test doubles) says nothing,
+ * leaving the CLI's own consent rules in charge.
+ */
+function terminalEnv() {
+  if (vscode.env && vscode.env.isTelemetryEnabled === false) {
+    return { MIPHAM_TELEMETRY: 'off' }
+  }
+  return undefined
+}
+
+/**
  * Create or reveal a Mipham Code terminal.
  */
 function openMiphamTerminal() {
@@ -158,6 +180,7 @@ function openMiphamTerminal() {
   }
 
   const terminalName = t('terminalName')
+  const env = terminalEnv()
 
   // Create the terminal
   if (miphamPath === 'mipham') {
@@ -165,6 +188,7 @@ function openMiphamTerminal() {
     miphamTerminal = vscode.window.createTerminal({
       name: terminalName,
       cwd: workspaceRoot,
+      env,
     })
     miphamTerminal.sendText([miphamPath, ...flags].join(' '))
   } else {
@@ -172,6 +196,7 @@ function openMiphamTerminal() {
     miphamTerminal = vscode.window.createTerminal({
       name: terminalName,
       cwd: workspaceRoot,
+      env,
     })
     miphamTerminal.sendText([bunPath, miphamPath, ...flags].filter(Boolean).join(' '))
   }
