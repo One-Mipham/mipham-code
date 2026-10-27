@@ -239,3 +239,46 @@ describe('RemoteEngine — 权限档位', () => {
     engine.close()
   })
 })
+
+// ═══════════════════════════════════════════════════════════════
+// 会话进程没了 —— 这一轮还在等
+//
+// 修复前 `ws.onclose` 只回一个裸 `stop`：一次**中断**在屏幕上与一次**正常写完**
+// 完全同形，用户拿到半截回答、没有任何提示，也不知道下一步该做什么。
+// 判据分两半：等待中掉线必须报错（且带下一步动作）；已经结束的一轮掉线不许
+// 冒出假错误 —— 少了后一半，「连接一关就报错」也能让前一半全绿。
+// ═══════════════════════════════════════════════════════════════
+
+describe('RemoteEngine — 会话进程没了', () => {
+  it('等流时连接断开 ⇒ 报错并给出下一步，不伪装成正常结束', async () => {
+    const engine = makeEngine()
+    const { pending } = await startPrompt(engine, 'hi')
+    const ws = FakeWebSocket.instances[0]!
+
+    // 服务端进程退出：WS 关闭，且这一轮还在等
+    ws.onclose?.()
+
+    const chunk = await pending
+    expect(chunk.value).toMatchObject({ type: 'error' })
+    expect(chunk.value.error).toContain('did not finish')
+    expect(chunk.value.error).toContain('mipham daemon start')
+    expect(chunk.value.error).toContain('mipham attach sess-1')
+    engine.close()
+  })
+
+  it('这一轮已经结束后才断开 ⇒ 不追加一条假错误', async () => {
+    const engine = makeEngine()
+    const { gen, pending } = await startPrompt(engine, 'hi')
+    const ws = FakeWebSocket.instances[0]!
+
+    ws.deliver(done())
+    const afterDone = await pending
+    expect(afterDone.value).toMatchObject({ type: 'stop' })
+
+    ws.onclose?.() // 空闲时掉线：这一轮早就结束了
+
+    const next = await gen.next()
+    expect(next.done).toBe(true)
+    engine.close()
+  })
+})

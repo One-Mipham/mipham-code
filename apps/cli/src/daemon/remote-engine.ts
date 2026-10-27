@@ -155,11 +155,17 @@ export class RemoteEngine {
 
       ws.onclose = () => {
         // Only signal to the generator if there is an active wait.
-        if (this.resolveNext) {
-          const doneChunk: StreamChunk = { type: 'stop' }
-          this.resolveNext(doneChunk)
-          this.resolveNext = null
-        }
+        if (!this.resolveNext) return
+        // 还在等流而连接没了 = 会话进程退出（daemon 停了/被杀），这一轮**没有写完**。
+        // 回一个裸 `stop` 会让它在屏幕上与一次正常结束完全同形：用户拿到半截回答，
+        // 既不知道被中断，也不知道下一步能做什么。报错并点名恢复动作。
+        this.resolveNext({
+          type: 'error',
+          error:
+            'The daemon stopped — the process running this session has exited, and this turn did not finish. ' +
+            `Start it again with "mipham daemon start", then reattach with "mipham attach ${this.sessionId}".`,
+        })
+        this.resolveNext = null
       }
 
       ws.onerror = () => {

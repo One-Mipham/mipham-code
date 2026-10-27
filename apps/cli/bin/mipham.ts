@@ -346,6 +346,22 @@ async function runUpdate(): Promise<boolean> {
   process.exit(0)
 }
 
+/**
+ * One shape for "the daemon is not answering".
+ *
+ * Twelve call sites used to print the raw fetch error and exit. The error says
+ * what failed and nothing about what to do, and it is the same situation every
+ * time — so it gets one message: whether it is still running, and how to bring
+ * it back. (The config lives at a fixed `~/.mipham/daemon.pid`, i.e. there is
+ * exactly one daemon per user, so there is nothing to disambiguate between.)
+ */
+function reportDaemonUnreachable(port: number, err: unknown): never {
+  console.error(`Failed to connect to daemon at port ${port}: ${String(err)}`)
+  console.error('Check whether it is still running: mipham daemon status')
+  console.error('Start it again: mipham daemon start')
+  process.exit(1)
+}
+
 // ── Daemon lifecycle commands ──────────────────────────────────────────────────
 
 async function runDaemonCLI(): Promise<boolean> {
@@ -386,6 +402,12 @@ async function runDaemonCLI(): Promise<boolean> {
     // process is confirmed gone; the old code printed it right after send().
     if (await terminateDaemonProcess(status.pid)) {
       console.log(`Daemon stopped (PID: ${status.pid})`)
+      // 说清楚这一刀的后果：在这个 daemon 里跑着的后台会话（含 attach 中的那些）
+      // 一起结束了。历史仍在库里 —— 重启 daemon 后重新 attach 即可接着用。
+      // 不写「会重启」：没有任何东西会替你重启它。
+      console.log(
+        'Background sessions running in it have ended. Start it again with "mipham daemon start".',
+      )
       process.exit(0)
     }
     console.error(
@@ -507,8 +529,7 @@ async function runAttachCLI(): Promise<boolean> {
       sessions = data.data.sessions.filter((s) => s.status === 'active' || s.status === 'idle')
     }
   } catch (err) {
-    console.error(`Failed to connect to daemon at port ${port}: ${String(err)}`)
-    process.exit(1)
+    reportDaemonUnreachable(port, err)
   }
 
   const latestFlag = args.includes('--latest')
@@ -630,8 +651,7 @@ async function runAgentCLI(): Promise<boolean> {
         }
       }
     } catch (err) {
-      console.error(`Failed to connect to daemon at port ${port}: ${String(err)}`)
-      process.exit(1)
+      reportDaemonUnreachable(port, err)
     }
     process.exit(0)
   }
@@ -685,8 +705,7 @@ async function runAgentCLI(): Promise<boolean> {
       }
       console.log(`Message sent to agent ${agentId}`)
     } catch (err) {
-      console.error(`Failed to connect to daemon at port ${port}: ${String(err)}`)
-      process.exit(1)
+      reportDaemonUnreachable(port, err)
     }
     process.exit(0)
   }
@@ -708,8 +727,7 @@ async function runAgentCLI(): Promise<boolean> {
       }
       console.log(`Agent ${agentId} stopped.`)
     } catch (err) {
-      console.error(`Failed to connect to daemon at port ${port}: ${String(err)}`)
-      process.exit(1)
+      reportDaemonUnreachable(port, err)
     }
     process.exit(0)
   }
@@ -760,8 +778,7 @@ async function runAgentCLI(): Promise<boolean> {
     if (a.branch) console.log(`  Branch:      ${a.branch}`)
     if (a.prUrl) console.log(`  PR:          ${a.prUrl}`)
   } catch (err) {
-    console.error(`Failed to connect to daemon at port ${port}: ${String(err)}`)
-    process.exit(1)
+    reportDaemonUnreachable(port, err)
   }
   process.exit(0)
 }
@@ -827,8 +844,7 @@ async function runGoalCLI(): Promise<boolean> {
         }
       }
     } catch (err) {
-      console.error(`Failed to connect to daemon at port ${port}: ${String(err)}`)
-      process.exit(1)
+      reportDaemonUnreachable(port, err)
     }
     process.exit(0)
   }
@@ -866,8 +882,7 @@ async function runGoalCLI(): Promise<boolean> {
       }
       console.log(`Goal #${data.data!.id} created.`)
     } catch (err) {
-      console.error(`Failed to connect to daemon at port ${port}: ${String(err)}`)
-      process.exit(1)
+      reportDaemonUnreachable(port, err)
     }
     process.exit(0)
   }
@@ -893,8 +908,7 @@ async function runGoalCLI(): Promise<boolean> {
       }
       console.log(`Goal #${goalId} marked as done.`)
     } catch (err) {
-      console.error(`Failed to connect to daemon at port ${port}: ${String(err)}`)
-      process.exit(1)
+      reportDaemonUnreachable(port, err)
     }
     process.exit(0)
   }
@@ -920,8 +934,7 @@ async function runGoalCLI(): Promise<boolean> {
       }
       console.log(`Goal #${goalId} paused.`)
     } catch (err) {
-      console.error(`Failed to connect to daemon at port ${port}: ${String(err)}`)
-      process.exit(1)
+      reportDaemonUnreachable(port, err)
     }
     process.exit(0)
   }
@@ -995,8 +1008,7 @@ async function runScheduleCLI(): Promise<boolean> {
         }
       }
     } catch (err) {
-      console.error(`Failed to connect to daemon at port ${port}: ${String(err)}`)
-      process.exit(1)
+      reportDaemonUnreachable(port, err)
     }
     process.exit(0)
   }
@@ -1028,8 +1040,7 @@ async function runScheduleCLI(): Promise<boolean> {
       }
       console.log(`Schedule #${data.data!.id} created (cron: ${cronExpr}).`)
     } catch (err) {
-      console.error(`Failed to connect to daemon at port ${port}: ${String(err)}`)
-      process.exit(1)
+      reportDaemonUnreachable(port, err)
     }
     process.exit(0)
   }
@@ -1051,8 +1062,7 @@ async function runScheduleCLI(): Promise<boolean> {
       }
       console.log(`Schedule #${scheduleId} removed.`)
     } catch (err) {
-      console.error(`Failed to connect to daemon at port ${port}: ${String(err)}`)
-      process.exit(1)
+      reportDaemonUnreachable(port, err)
     }
     process.exit(0)
   }
