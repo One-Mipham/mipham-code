@@ -1254,6 +1254,61 @@ describe('QueryEngine', () => {
       // 后半：没有走「数组里的 system 条目」—— 那正是只有一半 provider 读得到的形状
       expect(seen[0]!.messages.some((m) => m.role === 'system')).toBe(false)
     })
+
+    it('回复里没有摘要 ⇒ 再问一次，拿到真摘要才替换对话', async () => {
+      // 「这一趟没写摘要」与「这段历史被压缩成一句话」之间隔着不可逆：占位符一旦
+      // 落进上下文，原文就只剩日志里那几行。模型空手而归通常只是没把话放进正文
+      // （只回了工具调用 / 停止块），值得再问一次。
+      const seen: ChatRequest[] = []
+      const context = mockContext()
+      const engine = new QueryEngine(mockProviderRegistry(), context, makeToolMap([]))
+      engine.setLlm({
+        chat: async function* (req) {
+          seen.push(req)
+          if (seen.length === 1) {
+            // 只有停止块：回复里一个字都没有
+            yield { type: 'stop' }
+            return
+          }
+          yield { type: 'text', content: 'SECOND-TRY summary' }
+          yield { type: 'stop' }
+        },
+      })
+      engine.setupContextSummarizer()
+
+      for (let i = 0; i < 31; i++) {
+        context.addMessage({ role: i % 2 === 0 ? 'user' : 'assistant', content: `msg${i}` })
+      }
+      await context.compact('test')
+
+      expect(seen).toHaveLength(2)
+      // 第二问把要求说得更死 —— 同一个提示重发一遍只会得到同一个空回复
+      expect(seen[1]!.systemPrompt).toMatch(/only the summary text/)
+      expect(JSON.stringify(context.getMessages()[0]!.content)).toContain('SECOND-TRY')
+    })
+
+    it('两问都空 ⇒ 落到占位符，且只问两次（不会一直问下去）', async () => {
+      const seen: ChatRequest[] = []
+      const context = mockContext()
+      const engine = new QueryEngine(mockProviderRegistry(), context, makeToolMap([]))
+      engine.setLlm({
+        chat: async function* (req) {
+          seen.push(req)
+          yield { type: 'stop' }
+        },
+      })
+      engine.setupContextSummarizer()
+
+      for (let i = 0; i < 31; i++) {
+        context.addMessage({ role: i % 2 === 0 ? 'user' : 'assistant', content: `msg${i}` })
+      }
+      await context.compact('test')
+
+      expect(seen).toHaveLength(2)
+      expect(JSON.stringify(context.getMessages()[0]!.content)).toContain(
+        'Prior conversation context omitted.',
+      )
+    })
   })
 
   describe('process — ctx.llm provider-swap (llm-replay)', () => {
@@ -2193,6 +2248,30 @@ describe('QueryEngine', () => {
 
       // After compaction + new messages, should be ≤ 22 (20 kept + user + assistant)
       expect(context.getMessageCount()).toBeLessThanOrEqual(22)
+    })
+
+    it('压缩后重建系统提示 —— 会话中改过的指令文件才进得去', async () => {
+      // 提示是启动那一刻的快照；压缩只会换掉对话。不重建的话，用户会话中改过的
+      // CLAUDE.md 要到下次启动才生效，而「刚压缩完」正是他以为规则已经重新加载的时刻。
+      const registry = mockProviderRegistry(async function* () {
+        yield { type: 'text', content: 'ok' }
+        yield { type: 'stop' }
+      })
+
+      const context = new ContextManager({ maxTokens: 500, compactionThreshold: 0.5 })
+      context.setSystemPrompt('OLD RULES')
+      context.setSystemPromptRebuilder(() => 'NEW RULES')
+      for (let i = 0; i < 35; i++) {
+        context.addMessage({ role: 'user', content: `msg ${i}`.repeat(100) })
+      }
+
+      const engine = new QueryEngine(registry, context, makeToolMap([]))
+      for await (const _ of engine.process('hi')) {
+        /* drain */
+      }
+
+      expect(context.getSystemPrompt()).toContain('NEW RULES')
+      expect(context.getSystemPrompt()).not.toContain('OLD RULES')
     })
   })
 

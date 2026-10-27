@@ -853,3 +853,26 @@ describe('ContextManager log integration', () => {
     })
   })
 })
+
+// ── refreshSystemPrompt（压缩后重建提示）──
+
+describe('ContextManager.refreshSystemPrompt', () => {
+  it('用登记的重建器重建提示 —— 会话中改过的规则才进得去', () => {
+    const ctx = makeContext()
+    ctx.setSystemPrompt('OLD RULES')
+    ctx.setSystemPromptRebuilder(() => 'NEW RULES')
+
+    expect(ctx.refreshSystemPrompt()).toBe(true)
+    expect(ctx.getSystemPrompt()).toBe('NEW RULES')
+  })
+
+  it('没有登记重建器时是空操作 —— 不凭空造一份提示出来', () => {
+    // daemon 等路径从不设置系统提示。这里若要「顺手建一个」，那些请求的形状
+    // 就变了；返回 false 是让调用方能区分「刷新过」与「没人接手」。
+    const ctx = makeContext()
+    ctx.setSystemPrompt('ORIGINAL')
+
+    expect(ctx.refreshSystemPrompt()).toBe(false)
+    expect(ctx.getSystemPrompt()).toBe('ORIGINAL')
+  })
+})

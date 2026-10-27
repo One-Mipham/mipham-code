@@ -131,6 +131,15 @@ export class ContextManager {
    */
   private mcpInstructionsSource: (() => string) | null = null
   /**
+   * 重建整个系统提示的方式，由 `index.tsx` 在装提示的同时登记。
+   *
+   * 提示是启动那一刻的快照，而其中最大的那一段 —— 指令文件（`CLAUDE.md` /
+   * `AGENTS.md` / `USER.md`）—— 在会话中会被改。压缩之后由引擎调一次
+   * `refreshSystemPrompt()`，让规则按磁盘现状生效。**重建方式必须与首次组装
+   * 同一条路径**，否则刷新会悄悄丢掉启动时拼进去的那些段（技能提醒、记忆召回…）。
+   */
+  private systemPromptRebuilder: (() => string) | null = null
+  /**
    * **消息那部分**的估值，增量累加（提示那部分见 `promptTokens()`，读时派生）。
    *
    * 两份分开是因为它们的变化条件不同：消息只在本类里变（每次 push 顺手加一笔就够了），
@@ -256,6 +265,29 @@ export class ContextManager {
    */
   setMcpInstructionsSource(fn: (() => string) | null): void {
     this.mcpInstructionsSource = fn
+  }
+
+  /**
+   * 接线点（`index.tsx`）：重建系统提示的方式。
+   *
+   * 传 `null` 撤销。**不接**时 `refreshSystemPrompt()` 是空操作 —— daemon 等路径
+   * 从不设置系统提示，凭空造一份出来会改变它们每个请求的形状。
+   */
+  setSystemPromptRebuilder(fn: (() => string) | null): void {
+    this.systemPromptRebuilder = fn
+  }
+
+  /**
+   * 用登记好的重建器重刷系统提示。返回是否真的重刷了。
+   *
+   * 调用点是压缩之后（`Engine.compactWithHooks`）：对话刚被换成摘要，而指令文件
+   * 那一段还是启动那一刻的拷贝。重建器在里面先回读磁盘（`InstructionsLoader.refresh`），
+   * 所以这里拿到的是当前磁盘上的规则。
+   */
+  refreshSystemPrompt(): boolean {
+    if (!this.systemPromptRebuilder) return false
+    this.systemPrompt = this.systemPromptRebuilder()
+    return true
   }
 
   /**

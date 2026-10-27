@@ -463,3 +463,82 @@ describe('InstructionsLoader.loadForPaths（补上没在基线链里的目录规
     }
   })
 })
+
+// ── refresh（会话中改过的规则要能被重读）──
+
+describe('InstructionsLoader.refresh', () => {
+  /** 一个 git 仓库里的 `CLAUDE.md`，内容可改。 */
+  function makeRepoWithClaude(body: string): string {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'mipham-instr-refresh-')))
+    execSync('git init -q', { cwd: root })
+    writeFileSync(join(root, 'CLAUDE.md'), body)
+    return root
+  }
+
+  it('文件改过 ⇒ 重读到新内容，并回报是哪一份改了', () => {
+    const root = makeRepoWithClaude('# OLD RULE')
+    try {
+      const loader = new InstructionsLoader()
+      loader.loadAll(root)
+      expect(loader.buildSystemPrompt()).toContain('OLD RULE')
+
+      writeFileSync(join(root, 'CLAUDE.md'), '# NEW RULE')
+
+      const changed = loader.refresh()
+      expect(changed).toEqual([join(root, 'CLAUDE.md')])
+      expect(loader.buildSystemPrompt()).toContain('NEW RULE')
+      expect(loader.buildSystemPrompt()).not.toContain('OLD RULE')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('文件没动 ⇒ 零改动（不是「每次都算改了」）', () => {
+    // 没有这条，上面那条对「refresh 无条件回报所有路径」也成立 —— 那样每个压缩
+    // 都会平白重建一次提示，而它的可见后果是零。
+    const root = makeRepoWithClaude('# SAME RULE')
+    try {
+      const loader = new InstructionsLoader()
+      loader.loadAll(root)
+
+      expect(loader.refresh()).toEqual([])
+      expect(loader.buildSystemPrompt()).toContain('SAME RULE')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('文件被删掉 ⇒ 保留最后一次读到的文本，不静默丢规则', () => {
+    const root = makeRepoWithClaude('# RULE THAT STICKS')
+    try {
+      const loader = new InstructionsLoader()
+      loader.loadAll(root)
+
+      rmSync(join(root, 'CLAUDE.md'))
+
+      expect(loader.refresh()).toEqual([])
+      expect(loader.buildSystemPrompt()).toContain('RULE THAT STICKS')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('会话中被换成软链 ⇒ 不跟（与首次读取同一道闸）', () => {
+    const root = makeRepoWithClaude('# ORIGINAL')
+    const outside = realpathSync(mkdtempSync(join(tmpdir(), 'mipham-instr-refresh-secret-')))
+    try {
+      const loader = new InstructionsLoader()
+      loader.loadAll(root)
+
+      writeFileSync(join(outside, 'id_rsa'), 'PRIVATE-KEY-MATERIAL')
+      rmSync(join(root, 'CLAUDE.md'))
+      symlinkSync(join(outside, 'id_rsa'), join(root, 'CLAUDE.md'))
+
+      expect(loader.refresh()).toEqual([])
+      expect(loader.buildSystemPrompt()).not.toContain('PRIVATE-KEY-MATERIAL')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+      rmSync(outside, { recursive: true, force: true })
+    }
+  })
+})

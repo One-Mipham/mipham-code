@@ -70,6 +70,20 @@ describe('a turn the provider cut short', () => {
     expect(chunks.indexOf(notice[0]!)).toBeLessThan(chunks.length - 1)
   })
 
+  it('says where to look first when the connection is the suspect', async () => {
+    // 断流的原因一半在本地网络栈之外。只说「断了」把排查工作原样丢回给用户；
+    // 代理/网关是第一顺位（它们会干净地关掉连接，看起来和输出上限一模一样），
+    // VPN 与防火墙是第二顺位。
+    const engine = engineWith(async function* () {
+      yield { type: 'text' as const, content: 'partial' }
+      yield { type: 'stop' as const, truncated: true }
+    })
+
+    const notice = warnings(await collect(engine.process('explain')))
+    expect(notice[0]!.content).toMatch(/proxy|gateway/i)
+    expect(notice[0]!.content).toMatch(/VPN|firewall/i)
+  })
+
   it('is announced once even when a plain stop follows it', async () => {
     // OpenAI-compatible providers emit the truncated stop at `finish_reason: length`
     // and a second, bare stop at `[DONE]`. Only the first knows the turn was cut.

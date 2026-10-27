@@ -603,8 +603,8 @@ export class QueryEngine {
       const summaryPrompt = `You are a conversation summarizer. Create a concise summary (1-3 paragraphs) of this conversation excerpt. Focus on: key topics discussed, decisions made, code changes mentioned, and open questions. Heading: ${heading}`
 
       // Collect full summary text from streaming response
-      let summary = ''
-      try {
+      const requestSummary = async (prompt: string): Promise<string> => {
+        let out = ''
         for await (const chunk of this.llmChat({
           model: this.registry.getActiveModel(),
           // The instruction goes in `systemPrompt`, **not** as a `system` message
@@ -614,7 +614,7 @@ export class QueryEngine {
           // so the array form reached the OpenAI-compatible providers and no one
           // else — the summarizer's instruction was missing for anthropic users
           // while it worked here. `systemPrompt` is the one spelling both read.
-          systemPrompt: summaryPrompt,
+          systemPrompt: prompt,
           messages: [{ role: 'user', content: text }],
           maxTokens: 2000,
           // An interrupt has to reach *this* call too. Summarising a long
@@ -624,13 +624,34 @@ export class QueryEngine {
           signal,
         })) {
           if (chunk.type === 'text' && chunk.content) {
-            summary += chunk.content
+            out += chunk.content
           }
           if (chunk.type === 'stop') break
           if (chunk.type === 'error') break
         }
+        return out
+      }
+
+      let summary = ''
+      try {
+        summary = await requestSummary(summaryPrompt)
       } catch {
-        // Return a minimal summary on failure
+        // A round trip that failed outright is not retried into: the same
+        // provider will fail the same way. Falls through to the placeholder.
+      }
+
+      // 回复里没有摘要（这一趟只回了工具调用 / 空文本）时**再问一次**，而不是
+      // 立刻把整段历史换成一个「已省略」占位符：那一步是不可逆的，而模型这一次
+      // 什么都没写通常只是没把话放在正文里。第二次把要求说得更死（只要摘要正文），
+      // 因为同一个提示重发一遍只会得到同一个空回复。
+      if (!summary.trim() && !signal?.aborted) {
+        try {
+          summary = await requestSummary(
+            `${summaryPrompt}\n\nReturn only the summary text itself — no tool calls, no preamble.`,
+          )
+        } catch {
+          // Still nothing usable: the placeholder below is honest about it.
+        }
       }
 
       // Surrogate-safe: this string lands in the JSONL transcript, where a lone
@@ -1696,6 +1717,11 @@ export class QueryEngine {
     // fresh attempt after a failed one.
     const ownsFlow = !(this.llm && this.llm !== this.registry)
     let failure: string | null = null
+    // Re-bound after a mid-turn compaction: the request that follows must be the
+    // *new* conversation, not the oversized one the provider just rejected.
+    let msgs = messages
+    let sysPrompt = systemPrompt
+    let compactedForOverflow = false
     // A provider that marks the failure deterministic opts out of both retries. Only
     // an explicit `false` counts: an absent flag means "unknown", which keeps the
     // old try-again behaviour for every provider that says nothing.
@@ -1715,8 +1741,8 @@ export class QueryEngine {
       try {
         for await (const chunk of this.llmChat({
           model: activeModel,
-          messages,
-          systemPrompt,
+          messages: msgs,
+          systemPrompt: sysPrompt,
           tools: toolDefs,
           signal,
           effort: this.effort,
@@ -1746,6 +1772,35 @@ export class QueryEngine {
       } catch (err) {
         if (isAbortError(err)) throw err
         failure = String(err)
+      }
+      // A request the provider rejected as *too large* is the one failure that is
+      // worth a different retry: re-sending it is guaranteed to fail the same way
+      // (the prompt did not get smaller), while compacting changes the thing that
+      // was rejected. It therefore sits **above** the retry budget below — that
+      // budget is for flaky transports, and spending it on an oversized prompt is
+      // how a turn used to end with the raw upstream error.
+      if (
+        !compactedForOverflow &&
+        ownsFlow &&
+        !signal?.aborted &&
+        isContextOverflowError(failure)
+      ) {
+        compactedForOverflow = true
+        yield {
+          type: 'warning',
+          content: `${activeId} rejected the request as too large — compacting the conversation and retrying`,
+          restart: true,
+        }
+        try {
+          await this.compactWithHooks('context overflow', signal)
+          msgs = this.context.getMessages()
+          sysPrompt = this.context.getSystemPrompt()
+        } catch (err) {
+          if (isAbortError(err)) throw err
+          // Compaction itself failed: fall through to the ordinary retry/fallback
+          // path so the turn still ends with an explanation rather than nothing.
+        }
+        continue
       }
       if (!retryable || !ownsFlow || attempt >= 1) break
       // `restart: true` tells the consumer to drop what the failed attempt already
@@ -1820,8 +1875,8 @@ export class QueryEngine {
     try {
       for await (const chunk of this.llmChat({
         model: fallbackModel,
-        messages,
-        systemPrompt,
+        messages: msgs,
+        systemPrompt: sysPrompt,
         tools: toolDefs,
         signal,
         effort: this.effort,
@@ -2099,6 +2154,12 @@ export class QueryEngine {
 
     await this.context.compact(heading, signal)
 
+    // 规则那一段是启动那一刻的拷贝。会话中被改过的 `CLAUDE.md` / `AGENTS.md` /
+    // `USER.md` 若不重读，压缩换掉的只是对话，规则还是旧的 —— 而压缩正是「对话刚
+    // 被替换」的那一刻，用户会以为模型拿到了新规则。重建器里先回读磁盘再重建；
+    // 没登记重建器时（daemon）是空操作。
+    this.context.refreshSystemPrompt()
+
     if (this.hookEngine) {
       const postResult = await this.hookEngine.executePostCompact(this.sessionId)
       if (postResult.additionalContext) {
@@ -2143,6 +2204,22 @@ export class QueryEngine {
     )
     yield* this.continueWithTools(signal, roundsLeft)
   }
+}
+
+/**
+ * Does this failure say "the request itself does not fit"?
+ *
+ * Kept narrow on purpose: a false positive costs one wasted compaction (the turn
+ * retries either way), while a false negative ends the turn with a raw upstream
+ * error the user cannot act on. All of these phrasings are ones the providers
+ * actually send — the last is the one a 1M-context model returns while the
+ * account has not enabled the charge.
+ */
+export function isContextOverflowError(message: string | null | undefined): boolean {
+  if (!message) return false
+  return /context[_ ]length|context window|prompt is too long|too many tokens|maximum context length|exceeds? the (?:model'?s )?(?:maximum )?context|usage credits required for 1m context/i.test(
+    message,
+  )
 }
 
 function isAbortError(err: unknown): boolean {

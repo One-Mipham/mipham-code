@@ -687,27 +687,72 @@ Never omit it or present the work as purely human-authored.`)
     return { totalChars: files.reduce((n, f) => n + f.chars, 0), files }
   }
 
+  /**
+   * A repo-controlled instruction file must be a regular file, not a symlink.
+   * A cloned repository can ship `CLAUDE.md -> ~/.ssh/id_rsa`: this loader runs
+   * with no permission gate at all, so following the link would put any local
+   * file into the system prompt without the model ever asking for it. `lstat`
+   * reports the link as itself, which is what makes the shape visible.
+   *
+   * Only the levels that live *inside* the checkout (`project`, `directory`)
+   * are gated. A symlinked `~/.mipham/USER.md` pointing at a dotfiles repo is
+   * the user's own arrangement, and the group/company tiers point at the
+   * surrounding monorepo the user cloned deliberately — refusing those would
+   * break real setups without closing anything a repo did not already control.
+   *
+   * An unreadable `lstat` counts as unsafe: the shape could not be established.
+   */
+  private isUnsafePath(path: string, level: InstructionFile['level']): boolean {
+    if (level !== 'project' && level !== 'directory') return false
+    try {
+      return lstatSync(path).isSymbolicLink()
+    } catch {
+      return true
+    }
+  }
+
+  /**
+   * Re-read every instruction file already in the prompt, and report the paths
+   * whose text actually changed.
+   *
+   * The chain is read once, at `loadAll`. An edit made during the session — the
+   * user tightening their `CLAUDE.md`, a skill rewriting `AGENTS.md` — therefore
+   * never reached the model. `ContextManager.refreshSystemPrompt()` calls this
+   * after compaction, which is the moment the conversation those rules govern
+   * has just been replaced anyway.
+   *
+   * Deliberately does **not** discover new files: which directories to walk is
+   * `loadAll`'s decision, and re-walking here would make the prompt depend on
+   * what happens to exist at compaction time. A file that disappeared keeps its
+   * last-known text rather than silently dropping a rule mid-session, and one
+   * that became a symlink keeps it too (same gate as the first read).
+   */
+  refresh(): string[] {
+    const changed: string[] = []
+    for (const inst of this.instructions) {
+      if (this.isUnsafePath(inst.path, inst.level)) continue
+      if (!existsSync(inst.path)) continue
+      try {
+        const { data, content } = parseFrontmatter(readFileSync(inst.path, 'utf-8'))
+        const next = capInstructionContent(content, inst.path)
+        if (next !== inst.content) {
+          inst.content = next
+          changed.push(inst.path)
+        }
+        inst.privacy = (data.privacy as InstructionFile['privacy']) || 'project'
+        inst.language = (data.language as string) || 'en-US'
+        inst.frontmatter = data
+      } catch {
+        // Unreadable right now: keep the text the session has been running on.
+      }
+    }
+    return changed
+  }
+
   private tryLoad(path: string, level: InstructionFile['level']): void {
     if (!existsSync(path)) return
 
-    // A repo-controlled instruction file must be a regular file, not a symlink.
-    // A cloned repository can ship `CLAUDE.md -> ~/.ssh/id_rsa`: this loader runs
-    // with no permission gate at all, so following the link would put any local
-    // file into the system prompt without the model ever asking for it. `lstat`
-    // reports the link as itself, which is what makes the shape visible.
-    //
-    // Only the levels that live *inside* the checkout (`project`, `directory`)
-    // are gated. A symlinked `~/.mipham/USER.md` pointing at a dotfiles repo is
-    // the user's own arrangement, and the group/company tiers point at the
-    // surrounding monorepo the user cloned deliberately — refusing those would
-    // break real setups without closing anything a repo did not already control.
-    if (level === 'project' || level === 'directory') {
-      try {
-        if (lstatSync(path).isSymbolicLink()) return
-      } catch {
-        return
-      }
-    }
+    if (this.isUnsafePath(path, level)) return
 
     try {
       const raw = readFileSync(path, 'utf-8')
