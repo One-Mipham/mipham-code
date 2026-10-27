@@ -191,9 +191,16 @@ export class HttpTransport implements Transport {
     }
   }
 
-  async sendRequest(method: string, params?: Record<string, unknown>): Promise<unknown> {
+  async sendRequest(
+    method: string,
+    params?: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<unknown> {
     if (!this.url || this.closed) {
       throw new Error('Transport not connected')
+    }
+    if (signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError')
     }
 
     const id = ++this.msgId
@@ -205,6 +212,12 @@ export class HttpTransport implements Transport {
     }
 
     const controller = new AbortController()
+    // The turn's cancellation and the per-request timeout share one controller,
+    // because `fetch` takes one signal. The caller's abort must not be read as
+    // "the endpoint never answered": that branch below marks the transport
+    // closed, which would turn an interrupt into a dead MCP server.
+    const onAbort = (): void => controller.abort()
+    signal?.addEventListener('abort', onAbort, { once: true })
     const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs)
 
     // Did an HTTP response come back at all? A rejected fetch or a timeout means
@@ -251,6 +264,11 @@ export class HttpTransport implements Transport {
       }
       return json.result
     } catch (err) {
+      if (signal?.aborted) {
+        // The caller cancelled. The server is fine — aborting the fetch says
+        // nothing about it — so the transport stays connected.
+        throw new DOMException('Aborted', 'AbortError')
+      }
       if (controller.signal.aborted) {
         // The endpoint never answered. Every later request would hang the same
         // way, so the transport reports itself disconnected — the same state a
@@ -265,6 +283,7 @@ export class HttpTransport implements Transport {
       throw err
     } finally {
       clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
     }
   }
 

@@ -105,7 +105,7 @@ export function convertMcpTool(serverName: string, mcpTool: McpToolDefinition): 
     category: 'system',
     permission: 'ask',
     parameters,
-    async execute(params: Record<string, unknown>, _ctx: ToolContext): Promise<ToolResult> {
+    async execute(params: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
       const client = McpClient.getInstance()
 
       // Startup connects servers without blocking, and a resumed session re-attaches
@@ -114,7 +114,7 @@ export function convertMcpTool(serverName: string, mcpTool: McpToolDefinition): 
       // the only thing missing is patience. Same wait the `mcp_tool` hook already
       // does (`core/hooks-executor.ts`), so both entry points treat a connecting
       // server identically. A server that is *not* connecting returns immediately.
-      await client.waitUntilReady(serverName)
+      await client.waitUntilReady(serverName, undefined, ctx.signal)
 
       const conn = client.getConnection(serverName)
       if (!conn || conn.status !== 'connected') {
@@ -125,7 +125,12 @@ export function convertMcpTool(serverName: string, mcpTool: McpToolDefinition): 
         }
       }
 
-      const result: ToolCallResult = await client.callTool(serverName, mcpTool.name, params)
+      const result: ToolCallResult = await client.callTool(
+        serverName,
+        mcpTool.name,
+        params,
+        ctx.signal,
+      )
 
       const text = result.content
         .map((c) => {

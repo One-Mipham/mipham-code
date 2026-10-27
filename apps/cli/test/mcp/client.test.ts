@@ -584,6 +584,70 @@ describe('McpClient', () => {
         vi.unstubAllGlobals()
       }
     })
+
+    // ── 启动失败不是判决书：一个「还没起来」的服务器要能自己回来 ──
+    it('启动时连不上（可重试的失败）⇒ 排入后台重连，而不是整个会话都没有这个服务器', async () => {
+      // 用户看到的是启动横幅上的一行 `MCP connect timed out … after 15000ms`。
+      // 在此之前那行就是结论：status 锁成 error、工具一个都不注册，服务器 5 秒后
+      // 起来了也没有任何东西会再去问它一次 —— 与「中途掉线自动重连」是两套待遇。
+      const state = { reachable: false }
+      vi.stubGlobal('fetch', httpEndpoint(state))
+      try {
+        const client = McpClient.getInstance()
+        client.setAutoReconnect(true)
+        const reconnect = vi.spyOn(client, 'reconnect').mockResolvedValue(undefined)
+
+        await expect(
+          client.connect({ name: 'slow', url: 'http://localhost:8005/mcp' }),
+        ).rejects.toThrow()
+
+        expect(reconnect).toHaveBeenCalledWith('slow')
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+
+    it('（对照）关掉自动重连时，启动失败仍然是一次性的（退出码 / 脚本化场景不能被后台进程拖住）', async () => {
+      const state = { reachable: false }
+      vi.stubGlobal('fetch', httpEndpoint(state))
+      try {
+        const client = McpClient.getInstance()
+        const reconnect = vi.spyOn(client, 'reconnect').mockResolvedValue(undefined)
+
+        await expect(
+          client.connect({ name: 'slow', url: 'http://localhost:8005/mcp' }),
+        ).rejects.toThrow()
+
+        expect(reconnect).not.toHaveBeenCalled()
+        expect(client.getConnection('slow')!.status).toBe('error')
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+
+    it('重连成功会把新连上的工具推给注册表（启动就失败过的服务器否则永远没有工具）', async () => {
+      // 启动路径是 connect() 成功后由调用方 `registerMcpServerTools` 登记的；
+      // 一个只在重连里才连上的服务器永远走不到那一步 ⇒ 不推这一下，连接是绿的、
+      // 工具表里却一个都没有。
+      const state = { reachable: true }
+      vi.stubGlobal('fetch', httpEndpoint(state))
+      try {
+        const client = McpClient.getInstance()
+        await client.connect({ name: 'late', url: 'http://localhost:8006/mcp' })
+
+        const seen: Array<{ added: string[] }> = []
+        client.on('tools-changed', (name: string, added: Array<{ name: string }> | undefined) => {
+          if (name === 'late') seen.push({ added: (added ?? []).map((t) => t.name) })
+        })
+
+        await client.reconnect('late')
+
+        expect(seen).toHaveLength(1)
+        expect(seen[0]!.added).toContain('echo')
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
   })
 
   describe('two sources naming the same server', () => {

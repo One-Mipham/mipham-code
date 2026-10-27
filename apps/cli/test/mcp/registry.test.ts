@@ -253,9 +253,39 @@ describe('mcp/registry', () => {
 
         const result = await tool.execute({ message: 'hello' }, {} as never)
 
-        expect(spy).toHaveBeenCalledWith('mock')
+        // 第三个参数是本次轮次的取消信号 —— 这个用例的 ctx 没有 signal。
+        expect(spy).toHaveBeenCalledWith('mock', undefined, undefined)
         expect(result.success).toBe(true)
         expect(result.content).toContain('Echo: hello')
+      } finally {
+        spy.mockRestore()
+      }
+    })
+
+    it('forwards the turn signal to the MCP call', async () => {
+      await connectMockServer('test-srv')
+      const client = McpClient.getInstance()
+      const spy = vi.spyOn(client, 'callTool').mockResolvedValue({ content: [] })
+
+      try {
+        const toolsMap = new Map<string, ToolDefinition>()
+        registerMcpServerTools('test-srv', toolsMap)
+        const tool = toolsMap.get('mcp__test-srv__echo')!
+        const controller = new AbortController()
+
+        const result = await tool.execute(
+          { message: 'x' },
+          {
+            cwd: process.cwd(),
+            sessionId: 's',
+            provider: 'p',
+            model: 'm',
+            signal: controller.signal,
+          },
+        )
+
+        expect(spy).toHaveBeenCalledWith('test-srv', 'echo', { message: 'x' }, controller.signal)
+        expect(result.success).toBe(true)
       } finally {
         spy.mockRestore()
       }

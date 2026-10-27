@@ -12,7 +12,11 @@ export type NotificationHandler = (notification: JsonRpcNotification) => void
  * interface — callers invoke the concrete `start(...)` before use.
  */
 export interface Transport {
-  sendRequest(method: string, params?: Record<string, unknown>): Promise<unknown>
+  sendRequest(
+    method: string,
+    params?: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<unknown>
   sendNotification(method: string, params?: Record<string, unknown>): void
   onNotification(handler: NotificationHandler): void
   close(): Promise<void>
@@ -214,9 +218,16 @@ export class StdioTransport implements Transport {
     })
   }
 
-  async sendRequest(method: string, params?: Record<string, unknown>): Promise<unknown> {
+  async sendRequest(
+    method: string,
+    params?: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<unknown> {
     if (!this.proc || this.closed) {
       throw new Error('Transport not connected')
+    }
+    if (signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError')
     }
 
     const id = ++this.msgId
@@ -228,12 +239,38 @@ export class StdioTransport implements Transport {
     }
 
     return new Promise((resolve, reject) => {
+      // Cancellation has to reach the request itself: the caller's turn-level
+      // signal used to stop at the tool boundary, so a server that never
+      // answered held the turn until the 60s request timeout. Clearing the
+      // timer and deleting the pending entry keeps that timer from firing a
+      // second rejection on an already-settled promise.
+      const onAbort = (): void => {
+        const entry = this.pending.get(id)
+        if (!entry) return
+        this.pending.delete(id)
+        clearTimeout(entry.timer)
+        reject(new DOMException('Aborted', 'AbortError'))
+      }
+      signal?.addEventListener('abort', onAbort, { once: true })
+      const cleanup = (): void => signal?.removeEventListener('abort', onAbort)
+
       const timer = setTimeout(() => {
         this.pending.delete(id)
+        cleanup()
         reject(requestTimeoutError(method, this.requestTimeoutMs))
       }, this.requestTimeoutMs)
 
-      this.pending.set(id, { resolve, reject, timer })
+      this.pending.set(id, {
+        resolve: (v) => {
+          cleanup()
+          resolve(v)
+        },
+        reject: (e) => {
+          cleanup()
+          reject(e)
+        },
+        timer,
+      })
 
       // Write to stdin
       this.proc!.stdin!.write(JSON.stringify(request) + '\n')

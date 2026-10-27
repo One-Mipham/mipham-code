@@ -53,6 +53,31 @@ describe('StdioTransport', () => {
       await expect(transport.sendRequest('tools/call', {})).rejects.toThrow(/request timeout/)
       expect(Date.now() - started).toBeLessThan(1000)
     })
+
+    it('aborts a hung request when the caller signal fires', async () => {
+      // A turn-level interrupt has to reach the request, not wait out the 60s
+      // default: a server that never answered is exactly the case the entry
+      // described. 60s here makes the timeout path unreachable inside the test.
+      transport = new StdioTransport(60_000)
+      await transport.start('sleep', ['30'])
+
+      const controller = new AbortController()
+      const promise = transport.sendRequest('never/responds', undefined, controller.signal)
+      const assertion = expect(promise).rejects.toThrow(/aborted/i)
+      controller.abort()
+      await assertion
+    })
+
+    it('rejects before writing when the signal is already aborted', async () => {
+      transport = new StdioTransport()
+      await transport.start('cat', [])
+
+      const controller = new AbortController()
+      controller.abort()
+      await expect(
+        transport.sendRequest('tools/list', undefined, controller.signal),
+      ).rejects.toThrow(/aborted/i)
+    })
   })
 
   describe('request/response with mock server', () => {

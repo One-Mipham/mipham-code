@@ -314,6 +314,14 @@ export class McpClient {
         this.connections.delete(name)
 
         await this.connect(config)
+        // The startup path registers tools right after a successful `connect()`;
+        // a server that only came up on a retry never goes through it, so the
+        // registry would answer "no such tool" for a server that is green in
+        // `/mcp`. Push the list this connection just discovered. `applyToolChanges`
+        // overwrites by name, so on a mid-session reconnect (tools already known)
+        // this is a no-op.
+        const fresh = this.connections.get(name)
+        if (fresh) this.emit('tools-changed', name, fresh.tools, [])
         this.emit('reconnected', name)
         return
       } catch (err) {
@@ -393,10 +401,31 @@ export class McpClient {
     this.connecting.set(config.name, attempt)
     try {
       await attempt
+    } catch (err) {
+      // A handshake that never finished is not a verdict. The server that timed
+      // out at 15 s is often ready a few seconds later (a cold `npx` download, a
+      // Python server still importing), and a refused socket means "not up yet"
+      // just as often as "gone". Mid-session losses already come back unaided;
+      // a startup failure used to latch 'error' for the rest of the session, so
+      // the tools never appeared at all. A definitive refusal (4xx auth) is not
+      // retried — see `isTransientConnectError`.
+      if (isTransientConnectError(err) && this.autoReconnect && !this.closing) {
+        this.scheduleAutoReconnect(config.name)
+      }
+      throw err
     } finally {
       // 无论成败都要放开这个名字：失败后用户重连，得能真的重连。
       this.connecting.delete(config.name)
     }
+  }
+
+  /**
+   * Whether a server that just failed to connect is being retried in the
+   * background. The startup reporter uses this to say so: a bare "failed" line
+   * is a verdict the client is about to contradict.
+   */
+  isRetrying(name: string): boolean {
+    return this.reconnecting.has(name)
   }
 
   private async connectOnce(config: McpServerConfig): Promise<void> {
@@ -504,11 +533,16 @@ export class McpClient {
    * connecting. A server this client knows nothing about is `true`: there is
    * nothing to wait for, and `callTool` will say so.
    */
-  async waitUntilReady(name: string, timeoutMs: number = connectTimeoutMs()): Promise<boolean> {
+  async waitUntilReady(
+    name: string,
+    timeoutMs: number = connectTimeoutMs(),
+    signal?: AbortSignal,
+  ): Promise<boolean> {
     // Awake time, same as the handshake budget it mirrors: a sleep mid-wait must
     // not spend the deadline the server never got to use.
     const deadline = performance.now() + timeoutMs
     for (;;) {
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
       const conn = this.connections.get(name)
       if (!conn || conn.status !== 'connecting') return true
       if (performance.now() >= deadline) return false
@@ -608,6 +642,7 @@ export class McpClient {
     serverName: string,
     toolName: string,
     params?: Record<string, unknown>,
+    signal?: AbortSignal,
   ): Promise<ToolCallResult> {
     const conn = this.connections.get(serverName)
     if (!conn || conn.status !== 'connected') {
@@ -618,7 +653,7 @@ export class McpClient {
     }
 
     try {
-      return await conn.protocol.callTool(toolName, params)
+      return await conn.protocol.callTool(toolName, params, signal)
     } catch (err) {
       this.markIfTransportLost(serverName, conn)
       // A scope refusal is actionable and nothing else is: the user has to go

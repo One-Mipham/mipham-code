@@ -64,6 +64,27 @@ describe('HttpTransport', () => {
       expect(headersOf(calls[0]!)['Content-Type']).toContain('application/json')
     })
 
+    it('aborts an in-flight request on the caller signal without closing the transport', async () => {
+      // The endpoint is healthy but has not answered yet. Cancelling the turn
+      // must reject this request and leave the transport usable: treating the
+      // abort as "endpoint never answered" would mark a live server dead.
+      fetchImpl = (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          const signal = init?.signal as AbortSignal | undefined
+          signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+        })
+      transport = new HttpTransport(fetchImpl)
+      await transport.start('http://localhost:8004/mcp')
+
+      const controller = new AbortController()
+      const promise = transport.sendRequest('tools/call', {}, controller.signal)
+      const assertion = expect(promise).rejects.toThrow(/aborted/i)
+      controller.abort()
+      await assertion
+
+      expect(transport.isConnected()).toBe(true)
+    })
+
     it('returns the result of a single SSE event', async () => {
       fetchImpl = async () =>
         sseResponse(['data: {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"echo"}]}}\n\n'])

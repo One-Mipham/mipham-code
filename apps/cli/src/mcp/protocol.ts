@@ -135,11 +135,19 @@ export class McpProtocol {
     return result.tools || []
   }
 
-  async callTool(name: string, args?: Record<string, unknown>): Promise<ToolCallResult> {
-    const result = (await this.transport.sendRequest('tools/call', {
-      name,
-      arguments: args || {},
-    })) as ToolCallResult
+  async callTool(
+    name: string,
+    args?: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<ToolCallResult> {
+    const result = (await this.transport.sendRequest(
+      'tools/call',
+      {
+        name,
+        arguments: args || {},
+      },
+      signal,
+    )) as ToolCallResult
     return result
   }
 
