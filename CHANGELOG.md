@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.85.28] — 2026-10-29
 
+### Changed
+
+- **默认模型改为 `deepseek-v4-flash`** —— 首次启动不再落到别的默认档位。
+- **启动路径不再改写终端设置** —— 此前启动时会 `stty` 关掉 Ctrl+S / Ctrl+T / Ctrl+R 的特殊字符
+  并在退出时还原；这段每次启动两次外部进程，且还原只在 `process.on('exit')` 上，被 SIGKILL
+  时会留下改过的终端。现整段移除，启动更快，终端状态不再由本程序接管。
+- **每轮指令载荷更小** —— 指令文件头部那段 `> **项目** / > **版本** / > **最后更新**` 元信息
+  blockquote 不再注入（模型的身份与版本另有出处），由 frontmatter 新键 `prompt-exclude-header`
+  控制；`prompt-exclude` 仍是标题精确匹配，两者互不替代。
+
 ### Fixed
 
 - **挂住的模型请求不再能无限等下去** —— 两道守卫都在量错的东西。① 流空闲超时按「有没有字节」
