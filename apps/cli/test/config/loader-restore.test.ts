@@ -48,6 +48,6 @@ describe('loadConfig — restore config.yml from backup when missing', () => {
 
     // No config.yml, no backup → defaults (deepseek), not the backup values
     expect(config.defaultProvider).toBe('deepseek')
-    expect(config.defaultModel).toBe('deepseek-v4-pro')
+    expect(config.defaultModel).toBe('deepseek-v4-flash')
   })
 })
