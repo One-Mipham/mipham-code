@@ -415,6 +415,7 @@
 - 2026-07 入侵的缓解件（`wp2shell-batch-guard.php`，716 B，防御件非后门）写在服务器上后，被 YunJing 安全扫描扫进隔离归档 `QuaraV2/` —— **从未部署到线上，也无人知晓它该在跑**，同一入口因此敞开到 2026-09-14 才被复核发现并重新封堵
 - 同一目录另有 `mipham-security.php`、`disable-google-fonts.php` 两份，同样是服务器独占状态；2026-09-14 三份一并收进 `websites` 仓库新建的 `server/` 目录（镜像线上绝对路径），PR One-Mipham/websites#8
 - 后续对账（2026-10）：仓库里那三个 mu-plugin 实为 `mipham-rest-batch-guard.php`（v1.0.0，首次部署 2026-09-14）、`mipham-security.php`、`disable-google-fonts.php` —— 上一条记的 `wp2shell-batch-guard.php` 这个名字在仓库中不存在；`wp2shell` 实为攻击者 UA（`mipham-rest-batch-guard.php` 文件头 docblock 明写「UA 为 `wp2shell` 的攻击者」），被误写进了文件名。
+- 订正（2026-10-29）：上条「UA 被误写进文件名」的解释与两份 2026-07-20 的当时记录冲突 —— 入侵复盘把 `mu-plugins/wp2shell-batch-guard.php` 列在**恶意文件**里并注为「持久化后门」，vault 的会话记录也把它写在清理第 2 步「删除 `wp2shell-batch-guard.php` + `hostinger-auto-updates.php`」。更可能的读法是：这个文件名是攻击者后门的**真实名字**（伪装成 guard 的持久化件），716 B 更可能是那份后门的读数，与本仓 `mipham-rest-batch-guard.php`（**2,925 B**，2026-09-14 才写）不是同一件东西 ⇒ 上一条「防御件非后门」「从未部署到线上」两句存疑。定案口径：原打算核对 `/root/forensics/malware-20260720/` 与 `QuaraV2/` 归档里的原件 —— 2026-10-29 复核：该目录在服务器上**已不存在**，根分区按名搜索只剩本仓这份 guard，本机亦无副本 ⇒ 原件不可得，本条只能停在两份 2026-07-20 记录与 2026-09-14 教训的证据冲突上（PR One-Mipham/websites#8 正文那句「七月那份等价缓解件」是同源转述，不作独立佐证）。
 - **`scp` 只覆盖不删除** —— 仓库缺一个文件时投递不会报错，所以两侧对账必须比对 sha256，不能靠「投过了」判断；判断是否被覆盖同理不能比大小（同名同大小不同字节已实际发生过，见 `correctness`）
 - 目录看起来像代码，最容易被误当「提交即生效」—— 该目录 README 已把「push ≠ 部署」写成显式警告
 
