@@ -13,6 +13,13 @@ prompt-exclude:
   - Agent 系统
   - MIPHAM.md 人格系统
   - 测试目录一览
+  - 部署与分发
+  - 页面路由（Web）
+  - 最近提交
+  - 🏗️ 邻居项目（跨项目操作必读）
+  - 下一步计划
+  - 修订历史
+prompt-exclude-header: true
 ---
 
 # CLAUDE.md

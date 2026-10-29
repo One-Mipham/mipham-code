@@ -57,6 +57,26 @@ export function stripSections(content: string, excluded: string[]): string {
   return out.join('\n')
 }
 
+/**
+ * Strip the leading metadata blockquote — the `> **项目** / > **版本** / > **最后更新** …`
+ * header that precedes the first `##` section. These lines are document metadata for
+ * human readers (the model's identity and version come from MIPHAM.md and the
+ * provenance comment). Gated by the `prompt-exclude-header` frontmatter key — not by
+ * `prompt-exclude`, whose entries are title-exact and whose integrity guard rejects any
+ * entry that matches no heading.
+ */
+export function stripLeadingBlockquote(content: string): string {
+  const lines = content.split('\n')
+  const out: string[] = []
+  let seenSection = false
+  for (const line of lines) {
+    if (!seenSection && /^##\s/.test(line)) seenSection = true
+    if (!seenSection && /^>\s/.test(line)) continue
+    out.push(line)
+  }
+  return out.join('\n')
+}
+
 /** Normalize a `prompt-exclude` frontmatter value (YAML list or single string). */
 export function parsePromptExclude(value: unknown): string[] {
   if (Array.isArray(value)) return value.map((v) => String(v))
@@ -223,10 +243,10 @@ const LEVEL_LABELS: Record<string, string> = {
  */
 function instructionPartText(inst: InstructionFile): string | null {
   if (inst.privacy === 'private') return null
-  const content = stripSections(
-    inst.content,
-    parsePromptExclude(inst.frontmatter['prompt-exclude']),
-  )
+  let content = stripSections(inst.content, parsePromptExclude(inst.frontmatter['prompt-exclude']))
+  if (inst.frontmatter['prompt-exclude-header']) {
+    content = stripLeadingBlockquote(content)
+  }
   return `<!-- ${LEVEL_LABELS[inst.level] || inst.level} (${inst.path}) -->\n${content}`
 }
 

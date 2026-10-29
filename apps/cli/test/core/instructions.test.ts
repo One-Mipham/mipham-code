@@ -6,6 +6,7 @@ import { execSync } from 'node:child_process'
 import {
   InstructionsLoader,
   stripSections,
+  stripLeadingBlockquote,
   parsePromptExclude,
   gitRoot,
   discoverDirectories,
@@ -85,6 +86,31 @@ describe('stripSections (prompt-exclude)', () => {
   it('returns the document unchanged when excluded is empty', () => {
     const doc = '## A\n- x\n## B\n- y'
     expect(stripSections(doc, [])).toBe(doc)
+  })
+})
+
+describe('stripLeadingBlockquote (prompt-exclude-header)', () => {
+  it('strips leading metadata blockquote but keeps the first ## section', () => {
+    const doc = `# CLAUDE.md
+> **项目**: Mipham Code
+> **版本**: 2.94.50
+## 项目概述
+- real rule`
+    const out = stripLeadingBlockquote(doc)
+    expect(out).toContain('# CLAUDE.md')
+    expect(out).toContain('## 项目概述')
+    expect(out).toContain('real rule')
+    expect(out).not.toContain('**项目**')
+    expect(out).not.toContain('**版本**')
+  })
+
+  it('leaves blockquotes inside ## sections alone', () => {
+    const doc = `## 关键约束
+> **安全拒绝**: 拒绝编写恶意代码
+- keep`
+    const out = stripLeadingBlockquote(doc)
+    expect(out).toContain('**安全拒绝**')
+    expect(out).toContain('keep')
   })
 })
 
