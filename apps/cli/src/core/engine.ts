@@ -5,6 +5,8 @@ import type {
   InferenceHookConfig,
   CrsiConfig,
   CrossSessionConfig,
+  Message,
+  ContentBlock,
 } from '../shared/index.ts'
 import { ProviderRegistry } from '../providers/registry'
 import type { ChatRequest } from '../providers/registry'
@@ -25,6 +27,7 @@ import { getBackgroundAgentRegistry } from '../agent/background-registry'
 import { RulesLoader } from './rules-loader'
 import { extractBashFileAccess } from './permission-rules'
 import { noteToolOutcome, reviewLedger } from './merge-gate'
+import { unprovenCountClaims } from './number-provenance'
 import type { InstructionsLoader } from './instructions'
 import { ExperienceRuleEngine } from './rule-engine.js'
 import { PatternAnalyzer } from '../agent/pattern-analyzer.js'
@@ -387,6 +390,10 @@ export class QueryEngine {
   private touchedFiles: Set<string> = new Set()
   /** A tool call failed since the last nudge check. */
   private pendingToolFailure = false
+  /** 本轮用户输入 —— 数字出处判定里它是合法的出处之一。 */
+  private currentTurnInput = ''
+  /** 数字出处质疑每轮至多一次。 */
+  private numberNudgeSent = false
   /** The recall nudge is offered at most once per engine (session). */
   private lessonNudgeOffered = false
   private usageTracker = new UsageTracker()
@@ -700,6 +707,9 @@ export class QueryEngine {
 
     // Add user message to context
     this.context.addMessage({ role: 'user', content: userInput })
+    // 数字出处判定的本轮基准：用户这句话本身是合法出处，一次质疑也只给一回。
+    this.currentTurnInput = userInput
+    this.numberNudgeSent = false
 
     // ── Restore point for `/rewind` ──
     // Taken **here** — the prompt is in history, none of the reply is. That is what
@@ -2181,10 +2191,8 @@ export class QueryEngine {
     signal?: AbortSignal,
     roundsLeft: number = MAX_TOOL_TURNS,
   ): AsyncGenerator<StreamChunk> {
-    if (!this.hookEngine) return
-
-    const stopResult = await this.hookEngine.executeStop(this.sessionId)
-    if (stopResult.decision !== 'block') return
+    const block = await this.stopBlock()
+    if (!block) return
 
     // A block asks for more work, and more work means another round — which the
     // turn may have none of left. Saying so is the point: a hook quietly ignored
@@ -2194,21 +2202,93 @@ export class QueryEngine {
         type: 'warning',
         content: t('errors.stop_hook_budget_spent', {
           max: String(MAX_TOOL_TURNS),
-          reason: stopResult.reason || 'Continue working.',
+          reason: block.reason,
         }),
       }
       return
     }
 
     // Feed the block reason back to the AI and continue
-    this.context.injectContext(
-      'stop-hook',
-      t('system.context.stop_blocked', {
-        reason: stopResult.reason || 'Continue working.',
-      }),
-    )
+    this.context.injectContext(block.source, block.text)
     yield* this.continueWithTools(signal, roundsLeft)
   }
+
+  /**
+   * 什么构成了「这一轮还结束不了」。
+   *
+   * 两条来源，同一个后果：用户配置的 Stop 钩子（它先说话，先到先得），以及内置的
+   * 数字出处判定。后者不需要钩子引擎 —— 它是产品行为，不是可配置项。
+   */
+  private async stopBlock(): Promise<{ source: string; text: string; reason: string } | null> {
+    if (this.hookEngine) {
+      const stopResult = await this.hookEngine.executeStop(this.sessionId)
+      if (stopResult.decision === 'block') {
+        const reason = stopResult.reason || 'Continue working.'
+        return {
+          source: 'stop-hook',
+          text: t('system.context.stop_blocked', { reason }),
+          reason,
+        }
+      }
+    }
+
+    const claims = this.unprovenNumbers()
+    if (!claims) return null
+    // 提示语给模型，`reason` 只留数字本身 —— 预算用完时那条告警是给**人**看的，
+    // 把整段问话塞进 warning 只会让人读一屏。
+    return {
+      source: 'number-provenance',
+      text: t('system.context.numbers_unproven', { claims }),
+      reason: claims,
+    }
+  }
+
+  /**
+   * 「这个数是你量出来的，还是你推出来的？」
+   *
+   * 判据只收窄到**带计数单位的数量**（见 `number-provenance.ts`），出处只认本轮
+   * 工具结果与用户这句话 —— 模型自己前一轮写下的话不算，那正是「先猜一个、再当
+   * 事实复述」的形状。每轮至多问一次：问过还不改口就作罢，否则一次质疑会变成
+   * 一台永动机。
+   */
+  private unprovenNumbers(): string | null {
+    if (this.numberNudgeSent) return null
+    const messages = this.context.getMessages()
+
+    let reply = ''
+    for (let i = messages.length - 1; i >= 0 && !reply; i--) {
+      const message = messages[i]!
+      if (message.role === 'assistant') reply = flatText(message.content)
+    }
+    if (!reply) return null
+
+    const evidence = [
+      this.currentTurnInput,
+      ...messages.map((m) => (Array.isArray(m.content) ? toolResultText(m.content) : '')),
+    ].join('\n')
+
+    const claims = unprovenCountClaims(reply, evidence)
+    if (claims.length === 0) return null
+    this.numberNudgeSent = true
+    return claims.map((c) => `\`${c.context}\``).join(' / ')
+  }
+}
+
+/** 一条消息里的可见文本（不含 tool_use 入参与 thinking）。 */
+function flatText(content: Message['content']): string {
+  if (typeof content === 'string') return content
+  return content
+    .filter((b) => b.type === 'text')
+    .map((b) => (b.type === 'text' ? b.text : ''))
+    .join('\n')
+}
+
+/** 一条消息里的工具结果正文 —— 数字的唯一合法出处。 */
+function toolResultText(content: ContentBlock[]): string {
+  return content
+    .filter((b) => b.type === 'tool_result')
+    .map((b) => (b.type === 'tool_result' ? b.content : ''))
+    .join('\n')
 }
 
 /**

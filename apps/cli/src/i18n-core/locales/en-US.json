@@ -996,7 +996,8 @@
     "context": {
       "omitted": "Prior conversation context omitted.",
       "summary_heading": "[Earlier conversation summary — {heading}]",
-      "stop_blocked": "[The Stop hook blocked completion]: {reason}"
+      "stop_blocked": "[The Stop hook blocked completion]: {reason}",
+      "numbers_unproven": "[Numbers with no source this turn]: {claims}. You reported these counts, but no tool output in this session — and not the user's own words — carries them. Either run the command that produces each one, or say plainly that it is an estimate. Do not restate a guessed number as a measurement."
     },
     "goal": {
       "verified": "✅ Goal verification passed: {script}",

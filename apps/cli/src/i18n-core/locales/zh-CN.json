@@ -996,7 +996,8 @@
     "context": {
       "omitted": "之前的对话上下文已省略。",
       "summary_heading": "[之前的对话摘要 — {heading}]",
-      "stop_blocked": "[Stop 钩子阻止完成]：{reason}"
+      "stop_blocked": "[Stop 钩子阻止完成]：{reason}",
+      "numbers_unproven": "[本轮没有出处的数字]：{claims}。这些是你汇报的数量，但本次会话的任何工具输出里都没有它们，用户这句话里也没有。要么去跑产它的那一条命令，要么明说这是估算 —— 不要把猜出来的数当量出来的数说出去。"
     },
     "goal": {
       "verified": "✅ 目标验证通过：{script}",

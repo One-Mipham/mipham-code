@@ -21,10 +21,10 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.48
-> **最后更新**: 2026-10-29 — **`/memory doctor`：把「盘上有、系统看不见」的记忆库分歧变成一条读得出的报告**（2.94.48，**未发布**）。`loadAll` 原先 `parseMemoryFile` 返回 `null` 就跳过、读文件抛错也静默 `catch` —— 这类文件会永远躺在 `~/.mipham/memory/` 里却永远召不回来，且与「本来就没有这条记忆」**同形**。新增 `core/memory/memory-audit.ts` 的 `auditMemoryDir(dir)`（**只读**），报四类：`invisible`（无 frontmatter / 无 name / 读不了）、`duplicate-name`（两文件同名，Map 按 name 存 ⇒ 其一不可达）、`broken-link`（`[[x]]` 指向不存在的记忆）、`index-drift`（`MEMORY.md` 与真实条目**两向**对不上）。**判据与被判对象共用一条路径**：解析从私有方法提为模块级 `readMemoryFile()`（`loadAll` 改走它），链接提取提为 `extractWikilinks()`（含 10 条硬上限）—— 各写一份规则就会「体检说没事、加载却读不进来」。命令 `/memory doctor`（与 gc / consolidate / dedup 并列），i18n 两语言 7 键。测试 **4,560 → 4,572**（341 → **343 文件**；4,570 passed + 2 skipped，0 失败），新增 12 条（audit 9 + 命令 3）；负控两处（关掉断链判据 ⇒ **恰 1 红**；把 `doctor` 写成 `doctr` ⇒ 2 红，第三例只断言「文件未被改动」、**不承载可达性**）。**顺带发现**：`tool-reference-integrity` 的字符串扫描器被前文某构造带偏，把 commands.ts 里 6,432 字符的**代码**当一个字面量在扫 —— 本笔只因新类型名落进那片区域才暴露（**未修**）。
+> **版本**: 2.94.49
+> **最后更新**: 2026-10-29 — **数字要有出处：把「凡写进受跟踪文件的数字，先指认产它的那条命令」变成 Stop 时的一次机械追问**（2.94.49，**未发布**）。新 `core/number-provenance.ts` 的 `unprovenCountClaims(reply, evidence)` 只判一种主张 —— **带计数单位的数量**（`4,572 测试` / `343 files` / `800 字符`；≥3 位数字或带千分位，代码块与行内代码不算，`第 N 行` 是位置不是数量）。出处只认**本次会话的工具结果 + 用户这句话** —— 模型自己前一轮写下的话**不算**，那正是「先猜一个、再当事实复述」的形状（`claims-ahead-of-evidence` / `summary-numbers-need-re-derivation` 两课同根）。落点在 `engine.checkStopHook` 里新拆出的 `stopBlock()`：用户 Stop 钩子先说话（先到先得），其后是内置判定；命中就注入 `[本轮没有出处的数字]` 并 `continueWithTools` 再走一轮，**每轮至多一次**（`numberNudgeSent`，`process()` 开头复位）⇒ 问过不改口就作罢，不会变成永动机。**边界如实记**：它拦不住「推出来的数恰好撞上工具输出里的某个数」，也拦不住不写单位的断言 —— 这是判据的边界，不是遗漏。测试 4,572 → **4,585**（343 → **345 文件**；本机 4,583 passed + 2 skipped，0 失败），`TEST_COUNT` 三份副本同批回填。**未发布、未部署。**
 
-> **前一条（2.94.47）**: 2026-10-29 — **合并门从散文变成钩子：`gh pr merge` 之前，review 必须在这个会话里真跑过**（2.94.47，**未发布**）。`instructions.ts` 的「Code-Review Merge Gate」自 CRSI 起只是一段散文 —— 真有会话开了自己的 PR 又自己 squash 合并，因为全文没有任何施加点。新增 `core/merge-gate.ts`：`PreToolUse` / `Bash` 内置守卫（`failureMode: 'closed'`，守卫跑不起来就不放行），`isPrMergeCommand()` 复用 `tools/exec/bash.ts` 的引号感知分词 `shellWords`（本笔只为它加 `export`），并剥掉包装命令（`sudo` / `env` / `command` …）、前导赋值与`gh` 全局旗标 —— `git commit -m "gh pr merge 55"`、`echo "gh pr merge"`、`gh pr merge --help` 都不算合并；`ReviewLedger` 按 session 记 **24 小时**，只有**成功执行**的 `code-review` / `self-review` / `security-review` 才记一笔（技能不存在或跑失败什么都不记），写入点落在**两条工具漏斗**（`engine.executeTool` 主漏斗 + 旁路 `agent/sub-agent.ts`，后者按 `ToolContext.parentSessionId` 记到父会话），注册点落在**两条启动路径**（`index.tsx` 与 daemon `hooksFor()`；daemon 侧由已有的**精确**钩子清单断言 D4/D4b 证明，清单里多了 `PreToolUse:Bash`）；已跑过 review 的会话不受影响，运营豁免是启动时 `MIPHAM_SKIP_MERGE_GATE=1`，safe mode 下与其他内置钩子一同不注册。测试 **4,533 → 4,560**（340 → **341 文件**；4,558 passed + 2 skipped，0 失败）—— 新增 27 条（merge-gate 24 + 引擎接线 2 + 子代理 1）；引擎接线走负控（注释掉记录点 ⇒ **恰好 1 红**、失败那半仍绿，还原后 `engine.ts` sha256 逐字相符）。typecheck / eslint / prettier 全绿，`TEST_COUNT` 三份副本同批回填。
+> **前一条（2.94.48）**: 2026-10-29 — **`/memory doctor`：把「盘上有、系统看不见」的记忆库分歧变成一条读得出的报告**（2.94.48，**未发布**）。`loadAll` 原先 `parseMemoryFile` 返回 `null` 就跳过、读文件抛错也静默 `catch` —— 这类文件会永远躺在 `~/.mipham/memory/` 里却永远召不回来，且与「本来就没有这条记忆」**同形**。新增 `core/memory/memory-audit.ts` 的 `auditMemoryDir(dir)`（**只读**），报四类：`invisible`（无 frontmatter / 无 name / 读不了）、`duplicate-name`（两文件同名，Map 按 name 存 ⇒ 其一不可达）、`broken-link`（`[[x]]` 指向不存在的记忆）、`index-drift`（`MEMORY.md` 与真实条目**两向**对不上）。**判据与被判对象共用一条路径**：解析从私有方法提为模块级 `readMemoryFile()`（`loadAll` 改走它），链接提取提为 `extractWikilinks()`（含 10 条硬上限）—— 各写一份规则就会「体检说没事、加载却读不进来」。命令 `/memory doctor`（与 gc / consolidate / dedup 并列），i18n 两语言 7 键。测试 **4,560 → 4,572**（341 → **343 文件**；4,570 passed + 2 skipped，0 失败），新增 12 条（audit 9 + 命令 3）；负控两处（关掉断链判据 ⇒ **恰 1 红**；把 `doctor` 写成 `doctr` ⇒ 2 红，第三例只断言「文件未被改动」、**不承载可达性**）。**顺带发现**：`tool-reference-integrity` 的字符串扫描器被前文某构造带偏，把 commands.ts 里 6,432 字符的**代码**当一个字面量在扫 —— 本笔只因新类型名落进那片区域才暴露（**未修**）。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -63,7 +63,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：4,572 测试（本机 4,570 passed + 2 skipped，343 文件，0 失败）
+测试：4,585 测试（本机 4,583 passed + 2 skipped，345 文件，0 失败）
 
 ---
 
@@ -100,7 +100,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 343 个测试文件，4572 个测试
+│   │   ├── test/               # 345 个测试文件，4585 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -126,7 +126,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（4572 个测试）
+pnpm test         # vitest run（4585 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -316,7 +316,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 99      | 1761     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
+| core            | 101     | 1774     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
 | tools           | 30      | 587      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 38      | 265      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
 | ui              | 35      | 383      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
@@ -337,7 +337,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | integration     | 1       | 3        | 跨仓接线：`vscode-extension-telemetry`（VS Code 遥测关闭 ⇒ 终端拿到 `MIPHAM_TELEMETRY=off`）                                                                                |
 | integrity       | 19      | 132      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **343** | **4572** | **0 失败** ✅（本机 4,570 + 2 skipped，343 文件）                                                                                                                           |
+| **合计**        | **345** | **4585** | **0 失败** ✅（本机 4,583 + 2 skipped，345 文件）                                                                                                                           |
 
 ### 测试注意事项
 
