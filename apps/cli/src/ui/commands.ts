@@ -76,6 +76,7 @@ import { getPreference, setPreference } from '../config/preferences'
 import { loadCrossSessionConfig, tryRestoreFromBackup } from '../config/loader'
 import { getWorkspaceTrust } from '../core/workspace-trust'
 import { getMemoryManager } from '../core/memory/memory-loader'
+import { auditMemoryDir } from '../core/memory/memory-audit'
 import {
   resolveTelemetry,
   readTelemetrySettings,
@@ -4641,6 +4642,37 @@ const memoryCmd: CommandHandler = async (ctx, args) => {
       lines.push('')
       lines.push(t('commands.memories.dedup_footer'))
     }
+    return { content: lines.join('\n') }
+  }
+
+  // /memory doctor — 只读体检：找出「盘上有、系统看不见」的分歧，不动任何文件
+  if (args[0]?.toLowerCase() === 'doctor') {
+    const issues = auditMemoryDir(memoryDir)
+    const lines: string[] = [t('commands.memories.doctor_title'), '']
+
+    if (issues.length === 0) {
+      const count = existsSync(memoryDir)
+        ? readdirSync(memoryDir).filter((f) => f.endsWith('.md') && f !== 'MEMORY.md').length
+        : 0
+      lines.push(t('commands.memories.doctor_clean', { count: String(count) }))
+      return { content: lines.join('\n') }
+    }
+
+    const order = ['invisible', 'duplicate-name', 'broken-link', 'index-drift'] as const
+    const headers: Record<(typeof order)[number], string> = {
+      invisible: 'commands.memories.doctor_invisible',
+      'duplicate-name': 'commands.memories.doctor_duplicate',
+      'broken-link': 'commands.memories.doctor_broken_link',
+      'index-drift': 'commands.memories.doctor_index',
+    }
+    for (const kind of order) {
+      const group = issues.filter((i) => i.kind === kind)
+      if (group.length === 0) continue
+      lines.push(t(headers[kind], { count: String(group.length) }))
+      lines.push(...group.map((i) => `  • ${i.subject} — ${i.detail}`))
+      lines.push('')
+    }
+    lines.push(t('commands.memories.doctor_footer'))
     return { content: lines.join('\n') }
   }
 

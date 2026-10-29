@@ -39,6 +39,78 @@ const CONSOLIDATE_THRESHOLD = 0.5
 /** 写时去重的 TF-IDF 余弦阈值（> 此值视为近重复，合并而非新增）。高于合并阈值，只拦近重复。 */
 const DEDUP_THRESHOLD = 0.65
 
+/**
+ * 读出 `[[wikilink]]` 目标（硬上限 10 条）。
+ *
+ * 模块级而非 MemoryManager 私有方法：`/memory doctor` 必须用**同一把尺子**
+ * 才能报出「系统真会当作链接的东西」。
+ */
+export function extractWikilinks(content: string): string[] {
+  const re = /\[\[([^\]]+)\]\]/g
+  const links: string[] = []
+  let match: RegExpExecArray | null
+  while ((match = re.exec(content)) !== null) {
+    if (links.length >= 10) break // hard cap
+    links.push(match[1]!)
+  }
+  return links
+}
+
+/**
+ * 一个记忆文件被读出来的结果。
+ *
+ * `entry === null` 时 `problem` 说明**为什么**——这正是 `loadAll` 从前的
+ * `catch {}` 与 `return null` 吞掉的那部分：文件还在盘上，召回却永远见不到它。
+ */
+export type MemoryFileProblem = 'no-frontmatter' | 'no-name' | 'unreadable'
+
+export interface MemoryFileRead {
+  filePath: string
+  entry: MemoryEntry | null
+  problem: MemoryFileProblem | null
+}
+
+/**
+ * 读一个记忆文件。**加载与体检共用这一条路径**——各写一份解析规则，就会
+ * 出现「体检说没事、加载却读不进来」的分歧，而医生报告的可信度全靠它。
+ */
+export function readMemoryFile(filePath: string): MemoryFileRead {
+  try {
+    const raw = readFileSync(filePath, 'utf-8')
+    const match = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/)
+    if (!match) return { filePath, entry: null, problem: 'no-frontmatter' }
+
+    const frontmatter = match[1] || ''
+    const content = (match[2] || '').trim()
+
+    // Parse simple YAML-like frontmatter
+    const nameMatch = frontmatter.match(/name:\s*(\S+)/)
+    const descMatch = frontmatter.match(/description:\s*(.+)/)
+    const typeMatch = frontmatter.match(/type:\s*(\S+)/)
+    const relevanceMatch = frontmatter.match(/relevance:\s*\[(.+)\]/)
+
+    if (!nameMatch) return { filePath, entry: null, problem: 'no-name' }
+
+    return {
+      filePath,
+      problem: null,
+      entry: {
+        name: nameMatch[1]!,
+        description: descMatch?.[1]?.trim() || '',
+        metadata: {
+          type: (typeMatch?.[1] as MemoryMetadata['type']) || 'reference',
+          relevance: relevanceMatch?.[1]?.split(',').map((s) => s.trim()) || [],
+        },
+        content,
+        filePath,
+        updatedAt: statSync(filePath).mtime,
+      },
+    }
+  } catch {
+    return { filePath, entry: null, problem: 'unreadable' }
+  }
+}
+
 /** 确定性 hash（无 Date.now / Math.random，同输入同输出 → 幂等 lesson 名）。 */
 function stableHash(s: string): string {
   let h = 0
@@ -93,16 +165,8 @@ export class MemoryManager {
 
     for (const entry of entries) {
       if (entry === INDEX_FILE || entry === LINKS_FILE || extname(entry) !== '.md') continue
-      const filePath = join(this.memoryDir, entry)
-      try {
-        const raw = readFileSync(filePath, 'utf-8')
-        const parsed = this.parseMemoryFile(raw, filePath)
-        if (parsed) {
-          this.memories.set(parsed.name, parsed)
-        }
-      } catch {
-        // skip unparseable
-      }
+      const { entry: parsed } = readMemoryFile(join(this.memoryDir, entry))
+      if (parsed) this.memories.set(parsed.name, parsed)
     }
 
     // Try cached link graph first, fall back to rebuild
@@ -480,23 +544,12 @@ export class MemoryManager {
     atomicWriteFileSync(join(this.memoryDir, INDEX_FILE), lines.join('\n') + '\n', { mode: 0o644 })
   }
 
-  private extractWikilinks(content: string): string[] {
-    const re = /\[\[([^\]]+)\]\]/g
-    const links: string[] = []
-    let match: RegExpExecArray | null
-    while ((match = re.exec(content)) !== null) {
-      if (links.length >= 10) break // hard cap
-      links.push(match[1]!)
-    }
-    return links
-  }
-
   private updateWikilinks(name: string, content: string): void {
     // Clear stale outbound links for this memory
     this.linkGraph.delete(name)
 
     // Extract outbound wikilinks from content
-    const links = this.extractWikilinks(content)
+    const links = extractWikilinks(content)
     if (links.length > 0) {
       this.linkGraph.set(name, new Set(links))
     }
@@ -504,7 +557,7 @@ export class MemoryManager {
     // Update reverse links: other memories that link to this one
     for (const [otherName, otherEntry] of this.memories) {
       if (otherName === name) continue
-      const otherLinks = this.extractWikilinks(otherEntry.content)
+      const otherLinks = extractWikilinks(otherEntry.content)
       if (otherLinks.includes(name)) {
         const otherSet = this.linkGraph.get(otherName) || new Set()
         otherSet.add(name)
@@ -518,14 +571,14 @@ export class MemoryManager {
   private rebuildLinkGraph(): void {
     this.linkGraph.clear()
     for (const [name, entry] of this.memories) {
-      const links = this.extractWikilinks(entry.content)
+      const links = extractWikilinks(entry.content)
       if (links.length > 0) {
         this.linkGraph.set(name, new Set(links))
       }
     }
     // Compute reverse links: other memories that link to each memory
     for (const [name, entry] of this.memories) {
-      const linked = this.extractWikilinks(entry.content)
+      const linked = extractWikilinks(entry.content)
       for (const target of linked) {
         if (target === name) continue
         const targetSet = this.linkGraph.get(target)
@@ -613,34 +666,6 @@ export class MemoryManager {
       }
     } catch {
       // corrupt file — ignore
-    }
-  }
-
-  private parseMemoryFile(raw: string, filePath: string): MemoryEntry | null {
-    const match = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/)
-    if (!match) return null
-
-    const frontmatter = match[1] || ''
-    const content = (match[2] || '').trim()
-
-    // Parse simple YAML-like frontmatter
-    const nameMatch = frontmatter.match(/name:\s*(\S+)/)
-    const descMatch = frontmatter.match(/description:\s*(.+)/)
-    const typeMatch = frontmatter.match(/type:\s*(\S+)/)
-    const relevanceMatch = frontmatter.match(/relevance:\s*\[(.+)\]/)
-
-    if (!nameMatch) return null
-
-    return {
-      name: nameMatch[1]!,
-      description: descMatch?.[1]?.trim() || '',
-      metadata: {
-        type: (typeMatch?.[1] as MemoryMetadata['type']) || 'reference',
-        relevance: relevanceMatch?.[1]?.split(',').map((s) => s.trim()) || [],
-      },
-      content,
-      filePath,
-      updatedAt: statSync(filePath).mtime,
     }
   }
 

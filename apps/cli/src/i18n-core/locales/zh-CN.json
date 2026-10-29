@@ -297,7 +297,14 @@
       "consolidate_result": "合并完成：删除 {removed} 条 auto-*，写入 {merged} 条 lesson-*。",
       "dedup_title": "─ 记忆近重复 ─",
       "dedup_none": "未发现近重复记忆。",
-      "dedup_footer": "以上为 TF-IDF 余弦超过阈值的近重复对。合并需手动——auto-* 走 /memory consolidate 聚簇，或直接编辑文件。"
+      "dedup_footer": "以上为 TF-IDF 余弦超过阈值的近重复对。合并需手动——auto-* 走 /memory consolidate 聚簇，或直接编辑文件。",
+      "doctor_title": "─ 记忆体检 ─",
+      "doctor_clean": "记忆库一致：{count} 条记忆，索引同步，无断链。",
+      "doctor_invisible": "召回看不见（{count}）—— 加载器会跳过这些文件：",
+      "doctor_duplicate": "重名（{count}）—— 每个同名只有一份够得着：",
+      "doctor_broken_link": "断掉的 wikilink（{count}）：",
+      "doctor_index": "索引漂移（{count}）—— MEMORY.md 与记忆库对不上：",
+      "doctor_footer": "只读报告。上面这些需手改或删除文件；其余走 /memory gc、/memory consolidate、/memory dedup。"
     },
     "upgrade": {
       "uptodate": "── 升级 Mipham Code ──\n\n当前版本: v{current}\n最新版本:          v{latest}\n\n✓ 已是最新版本。\n\n手动检查: https://www.npmjs.com/package/@miphamai/cli",
