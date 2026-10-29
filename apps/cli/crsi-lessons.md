@@ -30,6 +30,7 @@
 - 用户实测「打不出字 / 回车不了 / 冻住」——根因是 Esc 误触 vim 普通/搜索模式
 - 修复：整个删除 vim 模式（7 文件 −521 行），输入框回归单一 `>` 提示符
 - 6 权限模式里的 auto/dontAsk 两档（2026-08-25 复盘）：为「对标 Claude Code 之外再加特色」而加，非真实需求；`auto` 与 legacy config 字段 `auto` 同名不同义，映射错 → 用户启动即落入「全自动执行」静默改文件。修复：收敛回 Claude Code 的 4 档（default/acceptEdits/plan/bypassPermissions）
+- 后续对账（2026-10）：`dontAsk` 确已删除，但 `auto` 后来被重新加回为一等模式——`permission-config.ts` 明说「auto sits between acceptEdits and bypassPermissions — the same rung Claude Code puts it on」。当前实为 **5 档**（`default | acceptEdits | plan | auto | bypassPermissions`，见 `shared/types.ts` 的 `PermissionMode`），非本教训所记的「4 档」——该句已陈旧。
 
 ## doc-drift: help 文案必须与实现一致
 
@@ -457,6 +458,7 @@
 - 2026-09-18 `mipham-code` 处理 CLAUDE.md 逼近 40k 告警时发现：守卫 `apps/cli/test/integrity/tool-reference-integrity.test.ts` 的 `MAX_ROWS = 5` 只约束**行数**，而两表收窄前的体积主项是 prettier 表头 + 分隔行的**对齐空白 —— 正比于最长那一行**。这两行合计 **3,147 字符 = 全文 8%**，真散文只有 237。行数守卫对这两行**零作用**
 - 反直觉点正是本条的动机：**行一变长，对齐空白要跟着长两遍**（表头 + 分隔行各补一次）⇒ 只数行数会得出「早就合规了」的错误安心；压散文也只省得下几百字符
 - 负控（本条判据自己跑了）：把 `MAX_ROWS` 临时压到 2 ⇒ 红（「『最近提交』有 3 行，上限 2」）；恢复 3 ⇒ 45/45 绿。**守卫咬得住是测出来的，不是推出来的**
+- 后续对账（2026-10）：本守卫现已从「行数」改量「字符」——`MAX_ROWS = 5` 已不在文件中，取而代之的是 `MAX_CHARS = INSTRUCTION_BUDGET_CHARS`（`tool-reference-integrity.test.ts`，40k 字符预算，与启动告警共用同一常量），且两张表已整体移出 CLAUDE.md。即本教训自身已被应用：守卫改量了「体积主项真正所在的维度」。`MAX_ROWS` 消失 = 教训落地，而非失守。
 
 ## deferral-expiry: 推迟的决定必须同时记下「它在等的条件」
 
