@@ -414,6 +414,7 @@
 
 - 2026-07 入侵的缓解件（`wp2shell-batch-guard.php`，716 B，防御件非后门）写在服务器上后，被 YunJing 安全扫描扫进隔离归档 `QuaraV2/` —— **从未部署到线上，也无人知晓它该在跑**，同一入口因此敞开到 2026-09-14 才被复核发现并重新封堵
 - 同一目录另有 `mipham-security.php`、`disable-google-fonts.php` 两份，同样是服务器独占状态；2026-09-14 三份一并收进 `websites` 仓库新建的 `server/` 目录（镜像线上绝对路径），PR One-Mipham/websites#8
+- 后续对账（2026-10）：仓库里那三个 mu-plugin 实为 `mipham-rest-batch-guard.php`（v1.0.0，首次部署 2026-09-14）、`mipham-security.php`、`disable-google-fonts.php` —— 上一条记的 `wp2shell-batch-guard.php` 这个名字在仓库中不存在；`wp2shell` 实为攻击者 UA（`mipham-rest-batch-guard.php` 文件头 docblock 明写「UA 为 `wp2shell` 的攻击者」），被误写进了文件名。
 - **`scp` 只覆盖不删除** —— 仓库缺一个文件时投递不会报错，所以两侧对账必须比对 sha256，不能靠「投过了」判断；判断是否被覆盖同理不能比大小（同名同大小不同字节已实际发生过，见 `correctness`）
 - 目录看起来像代码，最容易被误当「提交即生效」—— 该目录 README 已把「push ≠ 部署」写成显式警告
 
