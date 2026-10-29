@@ -1193,38 +1193,6 @@ async function main() {
     throw err
   }
 
-  // ── Disable terminal special characters ──────────────────────────────────
-  // Terminal intercepts Ctrl+S (XOFF), Ctrl+T (SIGINFO/status), Ctrl+R (rprnt)
-  // before the app sees them. Disable these so Agent Dashboard shortcuts work.
-  // IMPORTANT: stty needs the real terminal on stdin — 'ignore' won't work.
-  const { execSync } = await import('node:child_process')
-  let savedStty = ''
-  try {
-    savedStty = execSync('stty -g', {
-      encoding: 'utf-8',
-      stdio: ['inherit', 'pipe', 'ignore'],
-    }).trim()
-    execSync('stty -ixon stop undef start undef status undef rprnt undef', {
-      stdio: ['inherit', 'ignore', 'ignore'],
-    })
-  } catch {
-    // Non-POSIX platform (Windows) — no special chars to disable
-  }
-  // Restore original terminal settings on exit
-  const restoreTerminal = () => {
-    if (!savedStty) return
-    try {
-      execSync(`stty ${savedStty}`, {
-        stdio: ['inherit', 'ignore', 'ignore'],
-      })
-    } catch {
-      /* ignore */
-    }
-  }
-  process.on('exit', restoreTerminal)
-  process.on('SIGINT', restoreTerminal)
-  process.on('SIGTERM', restoreTerminal)
-
   // ── Version: build-time constant (bundled into the compiled binary) ──
   const { PACKAGE_NAME, PACKAGE_VERSION } = await import('../src/shared/package-info')
   const APP_VERSION = PACKAGE_VERSION
