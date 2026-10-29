@@ -4,6 +4,26 @@
 > (tag dates) and use the same wording as the VS Code extension's changelog — the plugin is a
 > thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.28 (2026-10-29)
+
+- Version sync with Mipham Code CLI 0.85.28
+- Fixed: a model request that hangs no longer waits forever. The stream idle guard now measures
+  progress rather than bytes, so SSE keep-alive comments and the API's own `ping` events no longer
+  keep a silent answer alive; and the 15-minute turn limit now interrupts a request that is still
+  in flight, not just one that had already returned.
+
+## 0.85.27 (2026-10-29)
+
+- Version sync with Mipham Code CLI 0.85.27
+- Added: `/memory doctor` — a read-only health check for the memory store that names files
+  the loader silently skips (no frontmatter, no name), duplicate names, broken `[[links]]`
+  and drift between `MEMORY.md` and the real entries.
+- Added: a Stop-time check on reported counts. If a reply states a count (three or more
+  digits, or thousands-separated) that no tool output in the session supports, the agent is
+  asked once to run the command that produces it or to say plainly that it is an estimate.
+- Added: `gh pr merge` now requires a code review that actually ran in this session; the
+  guard is a built-in hook, so it holds whether or not the user configured hooks.
+
 ## 0.85.26 (2026-10-27)
 
 - Version sync with Mipham Code CLI 0.85.26

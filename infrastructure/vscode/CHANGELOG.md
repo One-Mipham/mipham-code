@@ -3,6 +3,14 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.28 (2026-10-29)
+
+- Version sync with Mipham Code CLI 0.85.28
+- Fixed: a model request that hangs no longer waits forever. The stream idle guard now measures
+  progress rather than bytes, so SSE keep-alive comments and the API's own `ping` events no longer
+  keep a silent answer alive; and the 15-minute turn limit now interrupts a request that is still
+  in flight, not just one that had already returned.
+
 ## 0.85.27 (2026-10-29)
 
 - Version sync with Mipham Code CLI 0.85.27
