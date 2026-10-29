@@ -219,6 +219,14 @@ export class AnthropicProvider implements ProviderInstance {
     // passes aren't mistaken for a stalled connection.
     const STREAM_READ_TIMEOUT_MS = streamIdleTimeoutMs(req.effort)
 
+    // The budget restarts on *progress*, not on any byte. It used to be armed
+    // fresh for every `reader.read()`, and this API sends a `ping` event every
+    // ~30s on a long request — so the guard could never fire at all while the
+    // answer was still silent. Anything the answer can use advances the clock;
+    // `ping` is the API saying "still here", which is exactly the thing that
+    // must not count as progress.
+    let lastProgress = performance.now()
+
     // The read loop and the trailing stop share one reader, and that reader owns
     // the connection. `engine.ts` breaks out of this generator on the ordinary
     // `stop` chunk, and a sub-agent throws mid-stream on abort — both call
@@ -230,14 +238,16 @@ export class AnthropicProvider implements ProviderInstance {
       while (true) {
         let readResult: Awaited<ReturnType<typeof reader.read>>
         let cancelIdle: (() => void) | undefined
+        // What is left of the budget since the last frame the answer could use.
+        const remaining = Math.max(0, lastProgress + STREAM_READ_TIMEOUT_MS - performance.now())
         try {
           readResult = await Promise.race([
             reader.read(),
             new Promise<never>((_, reject) => {
-              cancelIdle = createAwakeTimer(STREAM_READ_TIMEOUT_MS, () =>
+              cancelIdle = createAwakeTimer(remaining, () =>
                 reject(
                   new Error(
-                    `Stream read timeout — no data for ${Math.round(STREAM_READ_TIMEOUT_MS / 1000)}s`,
+                    `Stream read timeout — no progress for ${Math.round(STREAM_READ_TIMEOUT_MS / 1000)}s`,
                   ),
                 ),
               )
@@ -263,6 +273,11 @@ export class AnthropicProvider implements ProviderInstance {
 
           try {
             const event = JSON.parse(data) as AnthropicSSEEvent
+
+            // Progress = an event whose payload the answer can use. `ping` carries
+            // nothing and arrives on a fixed schedule, so counting it would make
+            // the budget unreachable by construction.
+            if (event.type !== 'ping') lastProgress = performance.now()
 
             switch (event.type) {
               case 'content_block_start': {

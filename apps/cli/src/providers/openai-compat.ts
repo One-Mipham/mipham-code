@@ -82,6 +82,12 @@ export class OpenAICompatProvider implements ProviderInstance {
     // (DeepSeek V4 / reasoning models) aren't mistaken for a stalled connection.
     const STREAM_READ_TIMEOUT_MS = streamIdleTimeoutMs(req.effort)
 
+    // The budget restarts on *progress*, not on any byte. It used to be armed
+    // fresh for every `reader.read()`, so a gateway that keeps the socket warm
+    // with SSE comment frames (`: keep-alive`) while the answer never starts fed
+    // the guard forever — no timeout, no error, the turn waits with no bound.
+    let lastProgress = performance.now()
+
     // The read loop and the fallback stop share one reader, and that reader owns
     // the connection. `engine.ts` breaks out of this generator on the ordinary
     // `stop` chunk, and a sub-agent throws mid-stream on abort — both call
@@ -93,14 +99,16 @@ export class OpenAICompatProvider implements ProviderInstance {
       while (true) {
         let readResult: Awaited<ReturnType<typeof reader.read>>
         let cancelIdle: (() => void) | undefined
+        // What is left of the budget since the last frame the answer could use.
+        const remaining = Math.max(0, lastProgress + STREAM_READ_TIMEOUT_MS - performance.now())
         try {
           readResult = await Promise.race([
             reader.read(),
             new Promise<never>((_, reject) => {
-              cancelIdle = createAwakeTimer(STREAM_READ_TIMEOUT_MS, () =>
+              cancelIdle = createAwakeTimer(remaining, () =>
                 reject(
                   new Error(
-                    `Stream read timeout — no data for ${Math.round(STREAM_READ_TIMEOUT_MS / 1000)}s`,
+                    `Stream read timeout — no progress for ${Math.round(STREAM_READ_TIMEOUT_MS / 1000)}s`,
                   ),
                 ),
               )
@@ -172,6 +180,10 @@ export class OpenAICompatProvider implements ProviderInstance {
               return
             }
 
+            // Progress = a frame the answer can use: `choices` carries text /
+            // tool-call deltas / finish_reason, and `usage` only arrives from a
+            // server that is answering. Everything else is liveness, not progress.
+            if (choice || parsed.usage) lastProgress = performance.now()
             if (!choice) continue
 
             const delta = choice.delta

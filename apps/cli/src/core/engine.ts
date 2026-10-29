@@ -9,6 +9,7 @@ import type {
   ContentBlock,
 } from '../shared/index.ts'
 import { ProviderRegistry } from '../providers/registry'
+import { createAwakeTimer } from '../providers/fetch-utils'
 import type { ChatRequest } from '../providers/registry'
 import type { Llm } from '../providers/llm'
 import { ContextManager } from './context'
@@ -79,6 +80,23 @@ const t = createT(bundles['en-US'] || (enUS as TranslationMap), enUS as Translat
  * kept the turn running until the process died.
  */
 const MAX_TOOL_TURNS = 100
+
+/**
+ * How long a turn may go without producing anything it can act on (a text
+ * delta, a tool call, a tool result) before it is declared stalled.
+ *
+ * Measured against `performance.now()`, which is monotonic and does *not*
+ * advance while the machine is suspended: a laptop that sleeps mid-turn would
+ * otherwise wake up to "no activity for 8 hours" and kill a turn that was never
+ * stalled.
+ */
+const TURN_TIMEOUT_MS = 15 * 60 * 1000
+
+/** The turn's stall clock: when it last moved, and whether it ran out. */
+interface TurnBudget {
+  last: number
+  hit: boolean
+}
 
 /**
  * Drop inbound messages whose timestamp is older than the dialog-expiry TTL.
@@ -760,13 +778,17 @@ export class QueryEngine {
     const turnStart = Date.now()
     const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
 
-    // Stream model response
+    // Stream model response — under the same turn budget the continuation rounds
+    // use, so the *first* request of a turn cannot outlive it either.
+    const budget: TurnBudget = { last: performance.now(), hit: false }
     try {
-      for await (const chunk of this.chatWithFallback(
-        messages,
-        systemPrompt,
-        toolDefs.length > 0 ? toolDefs : undefined,
-        signal,
+      for await (const chunk of this.streamUnderTurnBudget(budget, signal, (innerSignal) =>
+        this.chatWithFallback(
+          messages,
+          systemPrompt,
+          toolDefs.length > 0 ? toolDefs : undefined,
+          innerSignal,
+        ),
       )) {
         yield chunk
 
@@ -870,6 +892,11 @@ export class QueryEngine {
       yield { type: 'error', error: String(err) }
       return
     }
+
+    // The round was cut short by the turn budget. The partial answer is already
+    // committed above; the warning and `stop` are already on the wire, so nothing
+    // may follow them — least of all a tool call from an interrupted round.
+    if (budget.hit) return
 
     // Record the provider's cached prefix (all messages except the newest)
     // for cache-aware microcompaction.
@@ -1079,6 +1106,77 @@ export class QueryEngine {
     }
   }
 
+  /**
+   * Stream one model round under the turn's stall budget — and *interrupt* it
+   * when the budget runs out.
+   *
+   * The budget used to be a plain `if` at the top of the round loop, so it could
+   * only ever fire *between* rounds. A request that never returns — no error, no
+   * read timeout, nothing — therefore had nothing above it, and the turn waited
+   * forever with the user looking at a spinner. Nothing below this layer bounds
+   * it either: the provider's read timeout measures socket silence, and a
+   * gateway that keeps the socket warm defeats it.
+   *
+   * A stalled round is not a failure: it is the same `stop` the user's own
+   * Ctrl+C produces, preceded by a warning that says which wait ran out. So the
+   * caller keeps its existing abort handling untouched.
+   */
+  private async *streamUnderTurnBudget(
+    budget: TurnBudget,
+    signal: AbortSignal | undefined,
+    run: (signal?: AbortSignal) => AsyncGenerator<StreamChunk>,
+  ): AsyncGenerator<StreamChunk> {
+    const expired = new AbortController()
+    let cancelTimer: (() => void) | undefined
+    const arm = (): void => {
+      cancelTimer?.()
+      const remainingMs = Math.max(0, budget.last + TURN_TIMEOUT_MS - performance.now())
+      cancelTimer = createAwakeTimer(remainingMs, () => {
+        budget.hit = true
+        // Abort rather than merely stop reading: the request is what has to be
+        // let go of, or every stalled round leaves a socket behind.
+        expired.abort()
+      })
+    }
+    const effectiveSignal = signal ? AbortSignal.any([signal, expired.signal]) : expired.signal
+
+    const stalled: StreamChunk[] = [
+      {
+        type: 'warning',
+        content: t('errors.turn_timeout', {
+          minutes: String(Math.round(TURN_TIMEOUT_MS / 60000)),
+        }),
+      },
+      { type: 'stop' },
+    ]
+
+    arm()
+    try {
+      for await (const chunk of run(effectiveSignal)) {
+        // The same set the round loops call "activity": something the turn can
+        // act on. A stream that is merely alive never produces one of these.
+        if (chunk.type === 'text' || chunk.type === 'thinking' || chunk.type === 'tool_use') {
+          budget.last = performance.now()
+          arm()
+        }
+        yield chunk
+      }
+    } catch (err) {
+      // A real failure still wins: only the abort *this* timer caused is turned
+      // into a stall, or a provider error that happens to land at the deadline
+      // would be reported as "took too long".
+      if (!budget.hit || !isAbortError(err)) throw err
+      for (const chunk of stalled) yield chunk
+      return
+    } finally {
+      cancelTimer?.()
+    }
+
+    // The request ended at the same moment the budget did. The warning still
+    // belongs on screen — otherwise the turn looks like it finished normally.
+    if (budget.hit) for (const chunk of stalled) yield chunk
+  }
+
   private async *continueWithTools(
     signal?: AbortSignal,
     roundsLeft: number = MAX_TOOL_TURNS,
@@ -1086,19 +1184,15 @@ export class QueryEngine {
     // Task-level stall guard: a turn that produces no text or tool result for
     // this long is considered stalled and stopped (prevents ~40-min idle spins).
     //
-    // The clock is `performance.now()` (monotonic, and it does not advance while
-    // the machine is suspended) rather than `Date.now()` (wall clock). A laptop
-    // that sleeps mid-turn jumps the wall clock forward by the whole nap, which
-    // reads as "no activity for 8 hours" and kills a turn that was never stalled
-    // — the failure shows up as a spurious timeout, exactly when the user
-    // returns to their desk.
-    const TURN_TIMEOUT_MS = 15 * 60 * 1000
-    const monotonicNow = (): number => performance.now()
-    let lastActivity = monotonicNow()
+    // Two places enforce it, because they see different moments: this check
+    // covers the gap *between* rounds, and `streamUnderTurnBudget` covers a round
+    // that is still in flight. Keeping only this one is what let a hung request
+    // wait without any bound at all.
+    const budget: TurnBudget = { last: performance.now(), hit: false }
     const toolDefs = this.getToolDefinitions()
 
     for (let turn = 0; turn < roundsLeft; turn++) {
-      if (monotonicNow() - lastActivity > TURN_TIMEOUT_MS) {
+      if (performance.now() - budget.last > TURN_TIMEOUT_MS) {
         yield {
           type: 'warning',
           content: t('errors.turn_timeout', {
@@ -1139,11 +1233,13 @@ export class QueryEngine {
       const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
 
       try {
-        for await (const chunk of this.chatWithFallback(
-          messages,
-          systemPrompt,
-          toolDefs.length > 0 ? toolDefs : undefined,
-          signal,
+        for await (const chunk of this.streamUnderTurnBudget(budget, signal, (innerSignal) =>
+          this.chatWithFallback(
+            messages,
+            systemPrompt,
+            toolDefs.length > 0 ? toolDefs : undefined,
+            innerSignal,
+          ),
         )) {
           yield chunk
 
@@ -1160,7 +1256,7 @@ export class QueryEngine {
           if (chunk.type === 'text' && chunk.content) {
             assistantContent += chunk.content
             this.context.recordChunk(chunk.content)
-            lastActivity = monotonicNow()
+            budget.last = performance.now()
           }
 
           if (chunk.reasoning_content) {
@@ -1219,6 +1315,10 @@ export class QueryEngine {
         this.context.addMessage(msg)
       }
 
+      // The round was cut short by the turn budget: the partial answer is
+      // committed above, and the warning + `stop` already ended the turn.
+      if (budget.hit) return
+
       // Safety: when max turns reached with pending tools, ask model to summarize
       if (turn === roundsLeft - 1 && toolUses.length > 0) {
         this.context.addMessage({
@@ -1260,7 +1360,7 @@ export class QueryEngine {
       for (const toolUse of toolUses) {
         const result = await this.executeTool(toolUse.name, toolUse.input, signal)
         if (!result.success) this.pendingToolFailure = true
-        lastActivity = monotonicNow()
+        budget.last = performance.now()
         yield {
           type: 'tool_result',
           tool_use_id: toolUse.id,
