@@ -29,6 +29,7 @@ import type { ProviderRegistry } from '../providers/registry'
 import { SkillsLoader } from '../skills/loader'
 import { RulesLoader } from '../core/rules-loader'
 import { HookEngine } from '../core/hooks'
+import { registerBuiltinHooks } from '../core/merge-gate'
 import { loadHookConfigs } from '../core/hooks-config'
 import { isSafeMode } from '../core/safe-mode'
 import { loadSettingsJson } from '../config/loader'
@@ -101,6 +102,7 @@ function hooksFor(cwd: string, skills: SkillsLoader): HookEngine {
   for (const skill of skills.list()) {
     for (const hook of skill.hooks ?? []) engine.register(hook)
   }
+  registerBuiltinHooks(engine)
   // 项目级 hooks 是仓库可控的代码执行面，且 daemon 这条路径**从不**经过交互式信任
   // 询问 —— 而 `isCwdAllowed` 只要求会话 cwd 在 daemon 根目录之内（`workspace-guard.ts:27`
   // `isWithin(cwd, daemonRoot) || isTrusted(cwd)`）⇒ 在未信任的克隆里启动的 daemon，

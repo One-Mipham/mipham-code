@@ -421,7 +421,7 @@ const CD_COMMANDS = new Set(['cd', 'pushd'])
  * Over-splitting is the safe direction here: a word that is not really a
  * command word simply fails to match `cd`.
  */
-function shellWords(segment: string): string[] {
+export function shellWords(segment: string): string[] {
   const words: string[] = []
   let cur = ''
   let started = false

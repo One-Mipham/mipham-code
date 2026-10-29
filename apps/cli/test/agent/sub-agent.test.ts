@@ -8,6 +8,7 @@ import type { Llm } from '../../src/providers/llm'
 import type { AgentDefinition } from '../../src/agent/types'
 import type { ToolDefinition, StreamChunk, Message, ToolContext } from '../../src/shared/index.ts'
 import { PermissionSystem } from '../../src/core/permission'
+import { reviewLedger } from '../../src/core/merge-gate'
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -512,6 +513,37 @@ describe('SubAgent', () => {
     expect(sink.ctx?.registry).toBe(registry)
     expect(sink.ctx?.toolRegistry).toBe(tools)
     expect(sink.ctx?.sessionId).toBe('sub-agent')
+  })
+
+  it('credits a review run inside the sub-agent to the parent session', async () => {
+    const skillTool: ToolDefinition = {
+      name: 'Skill',
+      description: 'review',
+      category: 'agent',
+      permission: 'self',
+      parameters: { type: 'object', properties: {} },
+      execute: async () => ({ success: true, content: 'reviewed' }),
+    }
+    const tools = new Map([['Skill', skillTool]])
+    const provider = createMockProvider([
+      {
+        type: 'tool_use',
+        toolUse: { type: 'tool_use', id: '1', name: 'Skill', input: { skill: 'code-review' } },
+      },
+      { type: 'text', content: '' },
+      { type: 'stop' },
+      { type: 'text', content: 'done' },
+      { type: 'stop' },
+    ])
+
+    const sub = new SubAgent(createMockRegistry(provider), tools)
+    await sub.execute('review it', 'reviewer', {
+      toolContext: { sessionId: 'parent-review-session' },
+    })
+
+    // The merge gate lives on the parent session; a review delegated to a
+    // sub-agent still has to count there, or the gate blocks a reviewed merge.
+    expect(reviewLedger.hasReviewed('parent-review-session')).toBe(true)
   })
 
   it('hands nested tools the clamped permission, never the parent permission', async () => {

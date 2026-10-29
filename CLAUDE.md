@@ -21,10 +21,10 @@ prompt-exclude:
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.46
-> **最后更新**: 2026-10-28 — **0.85.26 发布 + 两站部署：十五处缺口（7 处真缺口 + 8 处半缺口）+ 两条自发现同批送出**（2.94.46；区间 **16 笔** = `git rev-list --count 'v0.85.25^{}..v0.85.26^{}'`，含 0.85.25 之后 **3 笔文档**；本版自身 **13 笔** = 8 `fix` + 3 `feat` + 1 `docs` + 1 `chore`）。**发布读数**（全取外部探针）：GPG 签名 tag `v0.85.26` → **`248941fd`**（`git tag -v` = 完好的签名）；push CI `40535701990` **9/9**、`release.yml` `40536191918` **9/9**；npm 真输出行 `+ @miphamai/cli@0.85.26`（15:59:53Z）、registry `time['0.85.26']` = **2026-10-27T16:02:01.344Z**、`dist-tags.latest` = **0.85.26** —— 成功行到 registry 可读 **≈2 分钟**，判据取 registry 自己的 `time`；GitHub Release `v0.85.26` **6 资产**、非 draft 非 prerelease（createdAt 15:57:14Z）、DMG **2,268,261 B** ⚠️ 未签名（CI 无签名身份，与历次同）；JetBrains 真输出行 `JetBrains plugin published.`（16:01:27Z）；本地 `.vsix` **72,545 B** / sha256 `ae7778eb…` / 包内 `version` = 0.85.26 ⇒ ✅ **已人工上传 Marketplace 并经双探针核验**（2026-10-28 00:17:46 CST）：页内同源 `extensionquery`（`flags` 63）`versions[0].version` = **0.85.26**、`flags` = `validated`、`lastUpdated` = **2026-10-27T16:17:46.423Z**、`versions[]` = **78** 条（0.85.25 时为 77 ⇒ 恰增一条）；公开页 `More Info` 同读 `Version 0.85.26` / `Last updated 2026/10/28 00:17:46`（UTC+8，同刻）。⚠️ 上传后约 **8 分钟** API 仍只回 0.85.25（公开页 `Last updated` 已跳到上传时刻而 `Version` 未变 = 校验窗口，**与「没上传」不同形**）⇒ 判据是重探到版本号本身翻过去，不是「等一会儿」。✅ **两站已部署**（用户当场授权，一次只覆盖一次）：国内 `deploy-cn.sh` 全链（PM2 `onemipham` 重启 id **121** online、`端口 3007 监听中`、`网站 HTTP 200`、`omGPT API — HTTP 200`）；国际 `deploy.sh` → `vercel --prod`（`dpl_DQVXy9Q7tsCvdw6cBzeq3Qd3654S` / `readyState: READY` / `target: production` / `▲ Aliased https://mipham.ai`）。独立复核（cache-bust 取公开页）：两站 `/mipham-code` 均 200、各 **3×0.85.26 / 0×0.85.25**、`4533`×2；`onemipham.com/` 首页 200 **2×0.85.26**。`websites` `1a0ceeb` → **`9f19ced`**（`chore(sync): package-info 同步到 0.85.26（两站）`；真源与两站副本三份 sha256 `fc1669a7…` 逐字相同，diff 恰为 `PACKAGE_VERSION` / `TEST_COUNT` 两槽）。
+> **版本**: 2.94.47
+> **最后更新**: 2026-10-29 — **合并门从散文变成钩子：`gh pr merge` 之前，review 必须在这个会话里真跑过**（2.94.47，**未发布**）。`instructions.ts` 的「Code-Review Merge Gate」自 CRSI 起只是一段散文 —— 真有会话开了自己的 PR 又自己 squash 合并，因为全文没有任何施加点。新增 `core/merge-gate.ts`：`PreToolUse` / `Bash` 内置守卫（`failureMode: 'closed'`，守卫跑不起来就不放行），`isPrMergeCommand()` 复用 `tools/exec/bash.ts` 的引号感知分词 `shellWords`（本笔只为它加 `export`），并剥掉包装命令（`sudo` / `env` / `command` …）、前导赋值与`gh` 全局旗标 —— `git commit -m "gh pr merge 55"`、`echo "gh pr merge"`、`gh pr merge --help` 都不算合并；`ReviewLedger` 按 session 记 **24 小时**，只有**成功执行**的 `code-review` / `self-review` / `security-review` 才记一笔（技能不存在或跑失败什么都不记），写入点落在**两条工具漏斗**（`engine.executeTool` 主漏斗 + 旁路 `agent/sub-agent.ts`，后者按 `ToolContext.parentSessionId` 记到父会话），注册点落在**两条启动路径**（`index.tsx` 与 daemon `hooksFor()`；daemon 侧由已有的**精确**钩子清单断言 D4/D4b 证明，清单里多了 `PreToolUse:Bash`）；已跑过 review 的会话不受影响，运营豁免是启动时 `MIPHAM_SKIP_MERGE_GATE=1`，safe mode 下与其他内置钩子一同不注册。测试 **4,533 → 4,560**（340 → **341 文件**；4,558 passed + 2 skipped，0 失败）—— 新增 27 条（merge-gate 24 + 引擎接线 2 + 子代理 1）；引擎接线走负控（注释掉记录点 ⇒ **恰好 1 红**、失败那半仍绿，还原后 `engine.ts` sha256 逐字相符）。typecheck / eslint / prettier 全绿，`TEST_COUNT` 三份副本同批回填。
 
-> **前一条（2.94.45）**: 2026-10-27 — **十五处缺口同批收口（7 处真缺口 + 8 处半缺口）+ 两条自发现**（2.94.45）。落地清单：MCP 调用可取消（`ToolContext.signal` 贯通 registry / transport / client）、超窗错误改为「压缩后重问」且排在「同 provider 重试额度」**之上**（`isContextOverflowError`）、子代理每轮重读工具清单（晚连上的 MCP 服务器能进得来）、压缩后重建系统提示（走与首次组装**同一条**重建路径）、`web-fetch` / `web-search` 超时覆盖响应体读取、cron 调度给无活 worker 的会话拉起 worker、daemon 不可达的 12 处调用统一后果说明 + `stop` 后指引、Task 清单按会话落盘并随 resume 恢复（`~/.mipham/tasks/<sha256(session)[:32]>.json`，0600 + 原子写；`/clear` 一并清空；子代理经 `ToolContext.parentSessionId` 归档）、`x-should-retry` 头**双向**覆盖状态码判据、daemon 断连时把在途回合判成「有后果的失败」而非挂起、空摘要再问一次才写占位、截断提示点名 VPN / 防火墙、畸形权限规则按文本确认后不再反复刷、`/code-review` 沿用记住的 effort（默认 high，只有用户开口才 max）、VS Code 遥测关闭时把 `MIPHAM_TELEMETRY=off` 传给终端。**两处本轮新增负控**（Task 落盘 / 超窗压缩）各自先红后绿、还原后 sha256 与变异前逐字相符。**自发现两条**：① **启动时连不上的 MCP 服务器此前是一次性判决** —— 握手超时（用户实报 `notebooklm` 15000ms 超时）把连接锁成 `error`、工具一个都不注册，而**中途掉线**却有 10 次退避自动重连；同一种失败两套待遇，且晚起来 5 秒就等于整个会话没有这个服务器。改为：可重试的启动失败同样排入后台重连（`isTransientConnectError` 之外不重试，4xx 凭据问题照旧早停），重连成功把新发现的工具推给注册表（启动路径的 `registerMcpServerTools` 在那条路上永远走不到），启动横幅那一行同时如实说明「正在后台重试」。② JetBrains `plugin.xml` 描述行里那两个计数（供应商 / 工具）仍是旧值，与真源 **12 / 31** 不符，同批订正。测试 **4,477 → 4,533**（335 → **340 文件**；4,531 passed + 2 skipped，0 失败），命令数 **138** 不变，`TEST_COUNT` 三份副本同批回填。**✅ 已随 0.85.26 发布并部署两站**（2026-10-28）。
+> **前一条（2.94.46）**: 2026-10-28 — **0.85.26 发布 + 两站部署：十五处缺口（7 处真缺口 + 8 处半缺口）+ 两条自发现同批送出**（2.94.46；区间 **16 笔** = `git rev-list --count 'v0.85.25^{}..v0.85.26^{}'`，含 0.85.25 之后 **3 笔文档**；本版自身 **13 笔** = 8 `fix` + 3 `feat` + 1 `docs` + 1 `chore`）。**发布读数**（全取外部探针）：GPG 签名 tag `v0.85.26` → **`248941fd`**（`git tag -v` = 完好的签名）；push CI `40535701990` **9/9**、`release.yml` `40536191918` **9/9**；npm 真输出行 `+ @miphamai/cli@0.85.26`（15:59:53Z）、registry `time['0.85.26']` = **2026-10-27T16:02:01.344Z**、`dist-tags.latest` = **0.85.26** —— 成功行到 registry 可读 **≈2 分钟**，判据取 registry 自己的 `time`；GitHub Release `v0.85.26` **6 资产**、非 draft 非 prerelease（createdAt 15:57:14Z）、DMG **2,268,261 B** ⚠️ 未签名（CI 无签名身份，与历次同）；JetBrains 真输出行 `JetBrains plugin published.`（16:01:27Z）；本地 `.vsix` **72,545 B** / sha256 `ae7778eb…` / 包内 `version` = 0.85.26 ⇒ ✅ **已人工上传 Marketplace 并经双探针核验**（2026-10-28 00:17:46 CST）：页内同源 `extensionquery`（`flags` 63）`versions[0].version` = **0.85.26**、`flags` = `validated`、`lastUpdated` = **2026-10-27T16:17:46.423Z**、`versions[]` = **78** 条（0.85.25 时为 77 ⇒ 恰增一条）；公开页 `More Info` 同读 `Version 0.85.26` / `Last updated 2026/10/28 00:17:46`（UTC+8，同刻）。⚠️ 上传后约 **8 分钟** API 仍只回 0.85.25（公开页 `Last updated` 已跳到上传时刻而 `Version` 未变 = 校验窗口，**与「没上传」不同形**）⇒ 判据是重探到版本号本身翻过去，不是「等一会儿」。✅ **两站已部署**（用户当场授权，一次只覆盖一次）：国内 `deploy-cn.sh` 全链（PM2 `onemipham` 重启 id **121** online、`端口 3007 监听中`、`网站 HTTP 200`、`omGPT API — HTTP 200`）；国际 `deploy.sh` → `vercel --prod`（`dpl_DQVXy9Q7tsCvdw6cBzeq3Qd3654S` / `readyState: READY` / `target: production` / `▲ Aliased https://mipham.ai`）。独立复核（cache-bust 取公开页）：两站 `/mipham-code` 均 200、各 **3×0.85.26 / 0×0.85.25**、`4533`×2；`onemipham.com/` 首页 200 **2×0.85.26**。`websites` `1a0ceeb` → **`9f19ced`**（`chore(sync): package-info 同步到 0.85.26（两站）`；真源与两站副本三份 sha256 `fc1669a7…` 逐字相同，diff 恰为 `PACKAGE_VERSION` / `TEST_COUNT` 两槽）。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -63,7 +63,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：4,533 测试（本机 4,531 passed + 2 skipped，340 文件，0 失败）
+测试：4,560 测试（本机 4,558 passed + 2 skipped，341 文件，0 失败）
 
 ---
 
@@ -100,7 +100,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 340 个测试文件，4533 个测试
+│   │   ├── test/               # 341 个测试文件，4560 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -126,7 +126,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（4533 个测试）
+pnpm test         # vitest run（4560 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -316,11 +316,11 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 97      | 1726     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
+| core            | 98      | 1752     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
 | tools           | 30      | 587      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 38      | 265      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
 | ui              | 34      | 380      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
-| agent           | 15      | 158      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
+| agent           | 15      | 159      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
 | security        | 12      | 126      | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
 | providers       | 9       | 176      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
 | mcp             | 12      | 164      | client / transport / oauth / token-store / registry / instructions（含 2 skipped）                                                                                          |
@@ -337,7 +337,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | integration     | 1       | 3        | 跨仓接线：`vscode-extension-telemetry`（VS Code 遥测关闭 ⇒ 终端拿到 `MIPHAM_TELEMETRY=off`）                                                                                |
 | integrity       | 19      | 132      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **340** | **4533** | **0 失败** ✅（本机 4,531 + 2 skipped，340 文件）                                                                                                                           |
+| **合计**        | **341** | **4560** | **0 失败** ✅（本机 4,558 + 2 skipped，341 文件）                                                                                                                           |
 
 ### 测试注意事项
 

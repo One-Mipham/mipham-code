@@ -24,6 +24,7 @@ import type { Skills } from '../skills/seam'
 import { getBackgroundAgentRegistry } from '../agent/background-registry'
 import { RulesLoader } from './rules-loader'
 import { extractBashFileAccess } from './permission-rules'
+import { noteToolOutcome, reviewLedger } from './merge-gate'
 import type { InstructionsLoader } from './instructions'
 import { ExperienceRuleEngine } from './rule-engine.js'
 import { PatternAnalyzer } from '../agent/pattern-analyzer.js'
@@ -1528,6 +1529,10 @@ export class QueryEngine {
 
       // Track touched files for rules matching
       this.trackTouchedFile(name, effectiveParams)
+
+      // Merge gate: only a review that actually ran (and succeeded) may later
+      // permit a merge. Recorded on the one funnel every tool call passes.
+      noteToolOutcome(reviewLedger, this.sessionId, name, effectiveParams, result.success)
 
       // Prepend CRSI warnings to result content
       if (hookWarnings.length > 0 && result.success) {

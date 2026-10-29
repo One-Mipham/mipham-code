@@ -8,6 +8,7 @@ import { getBackgroundAgentRegistry } from './background-registry'
 import { formatInboundMessage, getMessageBus } from './message-bus'
 import type { HookEngine } from '../core/hooks'
 import { PermissionSystem } from '../core/permission'
+import { noteToolOutcome, reviewLedger } from '../core/merge-gate'
 import { buildPermissionBlock } from '../core/instructions'
 import { AgentExperience } from './agent-experience'
 import { PatternAnalyzer } from './pattern-analyzer.js'
@@ -720,6 +721,18 @@ export class SubAgent {
 
           try {
             const result = await tool.execute(effectiveInput, toolContext)
+
+            // Merge gate: a review delegated here still counts for the session
+            // that will merge. This loop bypasses `Engine.executeTool`, so the
+            // engine's own recording never sees this call — the same two-path
+            // shape as tool telemetry, and both paths have to carry it.
+            noteToolOutcome(
+              reviewLedger,
+              toolContext.parentSessionId ?? 'sub-agent',
+              tu.name,
+              effectiveInput,
+              result.success,
+            )
 
             // ── P0-5: Run PostToolUse hooks ──
             let displayResult = result

@@ -52,6 +52,7 @@ import { registerMcpServerTools, syncMcpToolsOnChange } from './mcp/registry'
 import { formatMcpConnectFailures, type McpConnectFailure } from './mcp/connect-failures'
 import { AgentRegistry } from './agent/agent-registry'
 import { HookEngine } from './core/hooks'
+import { registerBuiltinHooks } from './core/merge-gate'
 import { loadHookConfigs } from './core/hooks-config'
 import { isSafeMode } from './core/safe-mode'
 import { ArtifactServer } from './artifacts/server'
@@ -797,6 +798,7 @@ export async function runApp(options: RunOptions): Promise<void> {
         }
       }
     }
+    registerBuiltinHooks(hookEngine)
   }
 
   // Register settings.json hooks (Claude Code convention — additive across levels).

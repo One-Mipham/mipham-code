@@ -420,7 +420,11 @@ describe('wireDaemonEngine — behaviour', () => {
     // 到痕迹），但它做不到：`recordSuccess` 是 get-then-update
     // （`hooks.ts:225-233`，`const h = this.health.get(key); if (h) {...}`），
     // **从不新建**条目 —— 只有 `recordFailure` 会。健康表因此证明不了「跑过」。
+    // `PreToolUse:Bash` is the built-in merge gate. It is here on purpose: the
+    // daemon must carry the same guards as the interactive CLI, and listing it
+    // is what proves that path is wired rather than assumed.
     expect(hooks!.listHooks().map((h) => `${h.event}:${h.toolName ?? '*'}`)).toEqual([
+      'PreToolUse:Bash',
       'PreToolUse:DaemonCapsProbeTool',
     ])
 
@@ -471,7 +475,7 @@ describe('wireDaemonEngine — behaviour', () => {
         .listHooks()
         .map((h) => `${h.event}:${h.toolName ?? '*'}`)
 
-      expect(registered).toEqual(['PreToolUse:TrustedUserProbe'])
+      expect(registered).toEqual(['PreToolUse:Bash', 'PreToolUse:TrustedUserProbe'])
       expect(registered).not.toContain('PreToolUse:UntrustedProjectProbe')
 
       // The skip is not silent — a gate that fails quietly is indistinguishable

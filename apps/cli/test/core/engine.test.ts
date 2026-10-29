@@ -17,6 +17,7 @@ import { mountLlm } from '../../src/providers/llm'
 import { recordLlm, replayLlm } from '../../src/providers/llm-replay'
 import { SessionLog, replayChunks } from '../../src/core/session-log'
 import { RulesLoader } from '../../src/core/rules-loader'
+import { reviewLedger } from '../../src/core/merge-gate'
 import { InstructionsLoader } from '../../src/core/instructions'
 import { AgentViewManager } from '../../src/agent-view/agent-view-manager'
 import { getBackgroundAgentRegistry } from '../../src/agent/background-registry'
@@ -353,6 +354,51 @@ describe('QueryEngine', () => {
       }
 
       expect(capturedSkills).toBe(fakeSkills)
+    })
+  })
+
+  describe('merge gate — review evidence', () => {
+    /** Provider whose first chat call emits a Skill invocation, then stops. */
+    function skillPerTurn(skill: string) {
+      let turn = 0
+      return mockProviderRegistry(async function* () {
+        const n = turn++
+        if (n === 0) {
+          yield {
+            type: 'tool_use',
+            toolUse: { type: 'tool_use', id: 'c0', name: 'Skill', input: { skill } },
+          }
+        }
+        yield { type: 'stop' }
+      })
+    }
+
+    function engineWithSkill(skill: string, success: boolean, sessionId: string) {
+      const engine = new QueryEngine(
+        skillPerTurn(skill),
+        mockContext(),
+        makeToolMap([
+          mockTool('Skill', async () => ({ success, content: success ? 'reviewed' : '' })),
+        ]),
+      )
+      engine.setSessionId(sessionId)
+      return engine
+    }
+
+    it('records a successful review skill run against the session', async () => {
+      const engine = engineWithSkill('code-review', true, 'merge-gate-reviewed')
+      for await (const _ of engine.process('review this')) {
+        /* drain */
+      }
+      expect(reviewLedger.hasReviewed('merge-gate-reviewed')).toBe(true)
+    })
+
+    it('does not record a failed skill run', async () => {
+      const engine = engineWithSkill('code-review', false, 'merge-gate-failed')
+      for await (const _ of engine.process('review this')) {
+        /* drain */
+      }
+      expect(reviewLedger.hasReviewed('merge-gate-failed')).toBe(false)
     })
   })
 

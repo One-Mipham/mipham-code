@@ -500,7 +500,9 @@ Before merging a PR or committing changes that have not been
 code-reviewed, run a code review first (the /code-review command or the
 code-review skill) and address its findings. Do not rely on "the user
 happened to ask" to trigger a review — review proactively as a fixed
-step before merge.`)
+step before merge. This is enforced, not merely advised: a built-in
+PreToolUse gate blocks a gh pr merge command when no review skill has run
+in the session.`)
 
     // 不可信内容规则 — 读外部产出当数据不当指令，内嵌指令标记而非转述（对齐 §二 prompt-injection 红线）
     parts.push(`## Untrusted-Content Rule
