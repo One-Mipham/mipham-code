@@ -59,7 +59,7 @@
     "@types/bun": "^1.4.4",
     "@types/node": "^22.20.4",
     "@types/react": "^19.3.0",
-    "@vitest/coverage-v8": "^5.0.2",
+    "@vitest/coverage-v8": "^5.0.5",
     "ink-testing-library": "^4.0.0",
     "vitest": "^5.0.5"
   }
