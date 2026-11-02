@@ -957,6 +957,7 @@
     "model_error": "Error: {error}",
     "model_unavailable": "Model \"{model}\" (provider {provider}) is unavailable, and no default fallback model is configured — this turn produced no model output. Switch models with Ctrl+P, or check that provider's key and network, then retry. Underlying error: {error}",
     "tool_collision": "[mcp] Tool collision: \"{name}\" already registered. Skipping.",
+    "model_window_unknown": "⚠ Model \"{model}\" is not in the registry, so the context window could not be resized — compaction keeps using {window} tokens (the previous model's limit). If the new model is smaller, requests will start failing before compaction runs; switch to a known model or add this one to your provider config.",
     "missing_param": "Missing required parameter: \"{param}\"",
     "invalid_params": "Invalid parameters: {errors}",
     "unparseable_args": "The arguments for this tool call were not valid JSON ({detail}). Nothing was executed. Re-issue the call with complete JSON — do not infer the parameters from the fragment.",

@@ -130,6 +130,44 @@ describe('/skills listing', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════
+// /switch —— 引擎说窗口没跟着换，就别只印「✓ 已切换」
+// ═══════════════════════════════════════════════════════════════
+
+describe('/switch warning pass-through', () => {
+  const switchCtx = (warning: string | undefined) => {
+    const ctx = mkCtx()
+    const e = ctx as unknown as {
+      config: { providers: unknown[] }
+      engine: { switchProvider: (p: string, m: string) => string | undefined }
+    }
+    e.config.providers = [{ id: 'p1', name: 'P1', apiKey: 'sk-live-abc', models: [] }]
+    e.engine.switchProvider = vi.fn(() => warning)
+    return e
+  }
+
+  it('appends the engine warning when the model is unknown', async () => {
+    const e = switchCtx('⚠ context window unchanged (100,000 tokens)')
+    const result = await getCommand('/switch')!(
+      e as unknown as Parameters<NonNullable<ReturnType<typeof getCommand>>>[0],
+      ['p1', 'mystery-model'],
+    )
+    expect(e.engine.switchProvider).toHaveBeenCalledWith('p1', 'mystery-model')
+    expect(result.content).toContain('Switched to p1/mystery-model')
+    expect(result.content).toContain('context window unchanged')
+  })
+
+  it('stays a plain confirmation when the engine has nothing to warn about', async () => {
+    const e = switchCtx(undefined)
+    const result = await getCommand('/switch')!(
+      e as unknown as Parameters<NonNullable<ReturnType<typeof getCommand>>>[0],
+      ['p1', 'known-model'],
+    )
+    expect(result.content).toContain('Switched to p1/known-model')
+    expect(result.content).not.toContain('⚠')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
 // 上下文用量显示 —— 分母必须来自引擎，不得硬编码
 // ═══════════════════════════════════════════════════════════════
 

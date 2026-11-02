@@ -957,6 +957,7 @@
     "model_error": "错误：{error}",
     "model_unavailable": "模型 \"{model}\"（提供商 {provider}）当前不可用，且没有可回退的默认模型 —— 本轮没有拿到任何模型输出。用 Ctrl+P 换一个模型，或检查该提供商的密钥与网络后重试。底层错误：{error}",
     "tool_collision": "[mcp] 工具冲突：\"{name}\" 已注册，跳过。",
+    "model_window_unknown": "⚠ 模型 \"{model}\" 不在注册表中，上下文窗口无法重设 —— 压缩仍按 {window} tokens（上一个模型的限额）判断。新模型若更小，请求会在压缩触发前就开始失败；请切到已知模型，或把该模型加进提供商配置。",
     "missing_param": "缺少必需参数：\"{param}\"",
     "invalid_params": "参数无效：{errors}",
     "unparseable_args": "这次工具调用的参数不是合法 JSON（{detail}），没有执行任何操作。请带着完整的 JSON 重新发起调用 —— 不要从这段残片里猜参数。",

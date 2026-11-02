@@ -660,9 +660,11 @@ const switchCmd: CommandHandler = (ctx, args) => {
     }
   }
 
-  ctx.engine.switchProvider(newProvider, newModel)
+  const warning = ctx.engine.switchProvider(newProvider, newModel)
   return {
-    content: t('commands.switch.confirmed', { provider: newProvider, model: newModel }),
+    content:
+      t('commands.switch.confirmed', { provider: newProvider, model: newModel }) +
+      (warning ? `\n${warning}` : ''),
     nextProvider: newProvider,
     nextModel: newModel,
   }

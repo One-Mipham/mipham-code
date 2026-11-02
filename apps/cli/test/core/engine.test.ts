@@ -316,6 +316,22 @@ describe('QueryEngine', () => {
       expect(context.getMaxTokens()).toBe(1_000_000)
       // …and the adaptive compaction threshold recomputes to 1 - 50K/1M = 0.95
       expect(context.getCompactionThreshold()).toBe(0.95)
+      // A known model is a complete switch — nothing to warn about.
+      expect(engine.switchProvider('one-m', 'model-1m')).toBeUndefined()
+    })
+
+    it('warns when the new model is unknown — the old window stays in force', () => {
+      const registry = mockProviderRegistry()
+      const context = mockContext() // 100_000-token window
+      const engine = new QueryEngine(registry, context, makeToolMap([]))
+
+      const warning = engine.switchProvider('test', 'mystery-model')
+
+      // 前置断言：窗口确实没动 —— 警告说的就是这件事
+      expect(context.getMaxTokens()).toBe(100_000)
+      expect(warning).toBeDefined()
+      expect(warning).toContain('mystery-model')
+      expect(warning).toContain('100,000')
     })
   })
 
@@ -2014,11 +2030,14 @@ describe('QueryEngine', () => {
   describe('resetFileTracking', () => {
     it('clears the read-before-write record the tools receive', async () => {
       let seen: Set<string> | undefined
+      let seenComplete: Set<string> | undefined
       const probe: ToolDefinition = {
         ...mockTool('probe'),
         execute: async (_params, ctx) => {
           seen = ctx.readFiles
+          seenComplete = ctx.readFilesComplete
           ctx.readFiles?.add('/tmp/already-read.txt') // stands in for the Read tool
+          ctx.readFilesComplete?.add('/tmp/already-read.txt')
           return { success: true, content: 'ok' }
         },
       }
@@ -2041,6 +2060,9 @@ describe('QueryEngine', () => {
       // never read.
       engine.resetFileTracking()
       expect(seen?.size).toBe(0)
+      // The completeness subset is what authorises a whole-file overwrite; if it
+      // survived the reset, the next conversation could replace the file outright.
+      expect(seenComplete?.size).toBe(0)
     })
   })
 
@@ -2294,6 +2316,49 @@ describe('QueryEngine', () => {
 
       // After compaction + new messages, should be ≤ 22 (20 kept + user + assistant)
       expect(context.getMessageCount()).toBeLessThanOrEqual(22)
+    })
+
+    it('caps PreCompact / PostCompact additionalContext instead of pasting it whole', async () => {
+      // Compaction exists to make the prompt smaller. A hook that prints a whole
+      // file (or a grep dump) would paste it straight back in — and the injected
+      // text rides on every request after this point.
+      const registry = mockProviderRegistry(async function* () {
+        yield { type: 'text', content: 'ok' }
+        yield { type: 'stop' }
+      })
+      const context = new ContextManager({ maxTokens: 500, compactionThreshold: 0.5 })
+      for (let i = 0; i < 35; i++) {
+        context.addMessage({ role: 'user', content: `msg ${i}`.repeat(100) })
+      }
+
+      const hooks = new HookEngine()
+      hooks.register({
+        event: 'PreCompact',
+        handler: async () => ({ allowed: true, additionalContext: 'P'.repeat(50_000) }),
+      })
+      hooks.register({
+        event: 'PostCompact',
+        handler: async () => ({ allowed: true, additionalContext: 'Q'.repeat(50_000) }),
+      })
+
+      const engine = new QueryEngine(registry, context, makeToolMap([]))
+      engine.setHookEngine(hooks)
+
+      for await (const _ of engine.process('hi')) {
+        /* drain */
+      }
+
+      const texts = context
+        .getMessages()
+        .map((m) => (typeof m.content === 'string' ? m.content : ''))
+      for (const marker of ['[Pre-compact context]:', '[Post-compact context]:']) {
+        const hit = texts.find((t) => t.startsWith(marker))
+        // 前置断言：没注入就谈不上截断，下面的长度断言会假绿
+        expect(hit, `${marker} 未被注入`).toBeDefined()
+        expect(hit!.length).toBeLessThan(11_000)
+        expect(hit!.length).toBeLessThan(50_000)
+        expect(hit!).toContain('truncated')
+      }
     })
 
     it('压缩后重建系统提示 —— 会话中改过的指令文件才进得去', async () => {

@@ -92,6 +92,17 @@ const MAX_TOOL_TURNS = 100
  */
 const TURN_TIMEOUT_MS = 15 * 60 * 1000
 
+/**
+ * How much of a hook's `additionalContext` may be injected into the prompt.
+ *
+ * A hook is a shell script this CLI did not write; it can print a whole file or
+ * an unbounded grep result. Compaction is the one moment the prompt is supposed
+ * to get *smaller* — letting a hook paste megabytes back in defeats it and can
+ * push the very next request past the model's window. Truncation is visible in
+ * the injected text so the model (and the user) can tell it happened.
+ */
+const MAX_HOOK_CONTEXT_CHARS = 10_000
+
 /** The turn's stall clock: when it last moved, and whether it ran out. */
 interface TurnBudget {
   last: number
@@ -132,6 +143,8 @@ export class QueryEngine {
   private _selfCritique?: SelfCritique
   /** Files read this session — tracks what the Read tool has loaded */
   private readFiles = new Set<string>()
+  /** Subset of `readFiles` whose reads covered the whole file (no window) */
+  private readFilesComplete = new Set<string>()
   private goal?: string
   private maxGoalLoops = 20
   private lastAssistantContent?: string
@@ -256,6 +269,7 @@ export class QueryEngine {
    */
   resetFileTracking(): void {
     this.readFiles.clear()
+    this.readFilesComplete.clear()
   }
 
   /** Set the session identifier (called from index.tsx at startup with the actual session name). */
@@ -1635,6 +1649,7 @@ export class QueryEngine {
         ruleEngine: this.ruleEngine,
         llm: this.llm,
         readFiles: this.readFiles,
+        readFilesComplete: this.readFilesComplete,
       })
 
       // Track touched files for rules matching
@@ -2222,18 +2237,30 @@ export class QueryEngine {
     }
   }
 
-  switchProvider(providerId: string, modelId?: string): void {
+  /**
+   * Switch the active provider/model.
+   *
+   * Returns a warning when the model id is not in the registry: the context
+   * window cannot be resized, so compaction keeps the *previous* model's limit.
+   * Saying "✓ Switched" and nothing else made that silent — the user reads
+   * success, then the next request is refused by a model whose window is
+   * smaller than the size we are still willing to send.
+   */
+  switchProvider(providerId: string, modelId?: string): string | undefined {
     this.registry.switchProvider(providerId, modelId)
     // Update context manager's max tokens to match the new model's context window
-    if (modelId) {
-      const model = this.registry.findModel(modelId)
-      if (model) {
-        const DISABLE_1M = process.env.MIPHAM_DISABLE_1M_CONTEXT === '1'
-        const maxTokens =
-          DISABLE_1M && model.contextWindow > 200_000 ? 200_000 : model.contextWindow
-        this.context.updateMaxTokens(maxTokens, model.contextWindow)
-      }
+    if (!modelId) return undefined
+    const model = this.registry.findModel(modelId)
+    if (!model) {
+      return t('errors.model_window_unknown', {
+        model: modelId,
+        window: this.context.getMaxTokens().toLocaleString('en-US'),
+      })
     }
+    const DISABLE_1M = process.env.MIPHAM_DISABLE_1M_CONTEXT === '1'
+    const maxTokens = DISABLE_1M && model.contextWindow > 200_000 ? 200_000 : model.contextWindow
+    this.context.updateMaxTokens(maxTokens, model.contextWindow)
+    return undefined
   }
 
   /**
@@ -2255,6 +2282,16 @@ export class QueryEngine {
     return n >= 1_000_000 ? `${Math.round(n / 100_000) / 10}M` : `${Math.round(n / 1000)}K`
   }
 
+  /** Bound a hook's `additionalContext` — see `MAX_HOOK_CONTEXT_CHARS`. */
+  private capHookContext(text: string): string {
+    if (text.length <= MAX_HOOK_CONTEXT_CHARS) return text
+    return (
+      `${text.slice(0, MAX_HOOK_CONTEXT_CHARS)}\n` +
+      `[…truncated: hook additionalContext was ${text.length.toLocaleString('en-US')} characters, ` +
+      `only the first ${MAX_HOOK_CONTEXT_CHARS.toLocaleString('en-US')} were kept]`
+    )
+  }
+
   /** Wrap context compaction with PreCompact/PostCompact hooks. */
   private async compactWithHooks(heading: string, signal?: AbortSignal): Promise<void> {
     if (this.hookEngine) {
@@ -2262,7 +2299,7 @@ export class QueryEngine {
       if (preResult.additionalContext) {
         this.context.injectContext(
           'pre-compact',
-          `[Pre-compact context]: ${preResult.additionalContext}`,
+          `[Pre-compact context]: ${this.capHookContext(preResult.additionalContext)}`,
         )
       }
     }
@@ -2280,7 +2317,7 @@ export class QueryEngine {
       if (postResult.additionalContext) {
         this.context.injectContext(
           'post-compact',
-          `[Post-compact context]: ${postResult.additionalContext}`,
+          `[Post-compact context]: ${this.capHookContext(postResult.additionalContext)}`,
         )
       }
     }
