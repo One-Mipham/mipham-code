@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { EventEmitter } from 'node:events'
 import { executeHook } from '../../src/core/hooks-executor'
 import type { HookContext } from '../../src/shared/index.ts'
 import { makeFakeHookChild, type FakeHookOutcome } from '../helpers/fake-hook-child'
@@ -79,6 +80,31 @@ describe('executeHook command (Claude stdin/stdout protocol)', () => {
     const r = await executeHook({ type: 'command', command: 'hook.sh', args: [] }, preCtx)
     expect(r.allowed).toBe(true)
     expect(r.modifiedInput).toEqual({ command: 'npm run lint' })
+  })
+
+  it('floors "timeout": 0 so a working hook is not killed before it can run', async () => {
+    // A child that reports success 50ms in: later than a 0ms kill timer, earlier
+    // than the 1s floor. Without the floor the hook is torn down first and the
+    // operator is told "timed out after 0s" about a hook that worked fine.
+    spawnMock.mockImplementation(() => {
+      const child = new EventEmitter() as any
+      child.pid = 4343
+      child.stdout = new EventEmitter()
+      child.stderr = new EventEmitter()
+      child.stdin = Object.assign(new EventEmitter(), { end: () => {} })
+      child.kill = () => {}
+      setTimeout(() => {
+        child.emit('exit', 0, null)
+        child.emit('close', 0, null)
+      }, 50)
+      return child
+    })
+
+    const r = await executeHook(
+      { type: 'command', command: 'hook.sh', args: [], timeout: 0 },
+      preCtx,
+    )
+    expect(r.allowed).toBe(true)
   })
 
   it('still blocks on exit code 2 with stderr as reason', async () => {

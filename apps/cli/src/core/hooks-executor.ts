@@ -218,6 +218,24 @@ function failingLabel(command: string | undefined, source?: string): string {
 /** Grace given to a descendant still holding a stdio pipe after the hook itself exited. */
 const HOOK_PIPE_GRACE_MS = 1_000
 
+/**
+ * Shortest timeout a hook may be given, in seconds.
+ *
+ * `"timeout": 0` is a plausible thing to write meaning "no limit" or "as long as
+ * it needs", but it arms the kill timer with a zero delay: the hook is torn down
+ * before the shell has even exec'd its command, and the operator is told
+ * `timed out after 0s` — a hook that never ran, reported as a slow one. One
+ * second is the smallest value that can still let a real command finish.
+ */
+const MIN_HOOK_TIMEOUT_SECONDS = 1
+
+/** Effective timeout in seconds — configured value floored, defaulting to 60. */
+function hookTimeoutSeconds(cfg: HookConfig): number {
+  const configured = cfg.timeout
+  if (typeof configured !== 'number' || !Number.isFinite(configured)) return 60
+  return Math.max(MIN_HOOK_TIMEOUT_SECONDS, configured)
+}
+
 /** The `spawnSync`-shaped outcome `spawnFailureCause` and the caller already read. */
 interface HookProcessResult {
   status: number | null
@@ -417,7 +435,7 @@ async function executeCommand(
       // `undefined` = inherit, which is what node does by default; passing it
       // explicitly keeps the two branches visible at one site.
       env,
-      timeoutMs: (cfg.timeout ?? 60) * 1000,
+      timeoutMs: hookTimeoutSeconds(cfg) * 1000,
     })
 
     // Exit code 0 = success — parse the stdout JSON for structured decisions.
@@ -437,7 +455,7 @@ async function executeCommand(
       }
     }
 
-    const failure = spawnFailureCause(result, cfg.timeout ?? 60)
+    const failure = spawnFailureCause(result, hookTimeoutSeconds(cfg))
     if (failure) {
       return failureResult(
         cfg,
