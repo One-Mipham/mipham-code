@@ -3,6 +3,28 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.29 (2026-11-02)
+
+- Version sync with Mipham Code CLI 0.85.29
+- Fixed: reading part of a file no longer licenses overwriting all of it. Write now requires
+  a read that covered the whole file (no offset/limit, not a credential-masked view); a partial
+  read is refused with a pointer to Edit or a full Read.
+- Fixed: grep can no longer hang after its timeout. The child is sent SIGTERM, then SIGKILL two
+  seconds later, and the pipe gets two more seconds to drain; past that the read is abandoned
+  and reported as timed out rather than waited on forever.
+- Fixed: process groups still running when the CLI exits are killed. Detached process groups
+  made group-kill work but also detached the commands from this process's job, so `sleep 999`
+  outlived a closed terminal.
+- Fixed: web-fetch names TLS/certificate failures instead of reporting them as generic network
+  failures, and says plainly that retrying a mirror will not help and certificate verification
+  must not be disabled.
+- Fixed: the error-response body read now has a 5-second cap.
+- Fixed: a hook configured with `timeout: 0` is no longer killed before it can run (1s floor).
+- Changed: hook-injected `additionalContext` is capped at 10,000 characters, with a visible note
+  saying how much was dropped.
+- Changed: `/switch` to an unknown model now warns that the context window could not be resized
+  instead of silently keeping the previous model's limit.
+
 ## 0.85.28 (2026-10-29)
 
 - Version sync with Mipham Code CLI 0.85.28
