@@ -42,6 +42,25 @@ export const writeTool: ToolDefinition = {
       }
     }
 
+    // ── Whole-file check: a window is not the file ──
+    // `offset`/`limit` exist so a huge file can be inspected a slice at a time.
+    // Treating that slice as "the file has been read" lets the next Write erase
+    // every line outside it without a trace — the model rewrites a file it only
+    // half-saw. Only a read that covered the whole file grants overwrite;
+    // anything less must go through Edit, which is anchored on content the model
+    // actually has.
+    const completelyRead = ctx.readFilesComplete?.has(filePath) ?? false
+    if (fileExists && wasRead && !completelyRead) {
+      return {
+        success: false,
+        content: '',
+        error:
+          `File "${filePath}" was only partially read (an offset/limit window). ` +
+          'Overwriting it would discard the rest of the file. Use Edit for targeted ' +
+          'changes, or Read the whole file first (no offset/limit).',
+      }
+    }
+
     // ── Non-UTF-8 guard: refuse to clobber a file we cannot represent ──
     // A Windows-1252 / Shift-JIS / GBK file read into the model came back as
     // U+FFFD garbage; writing UTF-8 content over it would erase the originals
@@ -83,8 +102,10 @@ export const writeTool: ToolDefinition = {
       throw err
     }
 
-    // Track as read since we just wrote it (future writes allowed)
+    // Track as read since we just wrote it (future writes allowed). The model
+    // authored every byte of the new content, so this is a whole-file read too.
     ctx.readFiles?.add(filePath)
+    ctx.readFilesComplete?.add(filePath)
 
     const lines = content.split('\n').length
     const action = fileExists ? 'Updated' : 'Wrote'

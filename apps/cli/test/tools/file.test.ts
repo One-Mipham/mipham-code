@@ -63,7 +63,7 @@ function mockRealSpawn() {
       get exitCode() {
         return child.exitCode
       },
-      kill: () => child.kill(),
+      kill: (signal?: number | NodeJS.Signals) => child.kill(signal), // forward SIGKILL escalation
     }
     return proc as any
   })
@@ -324,9 +324,76 @@ describe('Write tool execution', () => {
     const dest = join(tmpDir, 'existing.txt')
     writeFileSync(dest, 'original')
     ctx.readFiles = new Set()
+    ctx.readFilesComplete = new Set()
     await readTool.execute({ file_path: dest }, ctx) // read-first populates readFiles (canonical path)
     await writeTool.execute({ file_path: dest, content: 'updated' }, ctx)
     expect(readFileSync(dest, 'utf-8')).toBe('updated')
+  })
+
+  it('refuses to overwrite a file that was only partially read', async () => {
+    const dest = join(tmpDir, 'partial.txt')
+    writeFileSync(dest, 'line1\nline2\nline3\nline4\n')
+    ctx.readFiles = new Set()
+    ctx.readFilesComplete = new Set()
+    await readTool.execute({ file_path: dest, offset: 0, limit: 2 }, ctx)
+    // The read itself succeeded and the file is "read" for Edit purposes…
+    // (records live under the canonicalised path, so count rather than compare)
+    expect(ctx.readFiles?.size).toBe(1)
+    expect(ctx.readFilesComplete?.size).toBe(0)
+    // …but overwriting would erase lines 3–4, which the model never saw.
+    const result = await writeTool.execute({ file_path: dest, content: 'rewritten' }, ctx)
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/partially read/)
+    expect(result.error).toMatch(/Edit/)
+    expect(readFileSync(dest, 'utf-8')).toBe('line1\nline2\nline3\nline4\n')
+  })
+
+  it('refuses to overwrite a file read from a non-zero offset', async () => {
+    const dest = join(tmpDir, 'offset.txt')
+    writeFileSync(dest, 'a\nb\nc\n')
+    ctx.readFiles = new Set()
+    ctx.readFilesComplete = new Set()
+    await readTool.execute({ file_path: dest, offset: 2, limit: 100 }, ctx)
+    const result = await writeTool.execute({ file_path: dest, content: 'rewritten' }, ctx)
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/partially read/)
+    expect(readFileSync(dest, 'utf-8')).toBe('a\nb\nc\n')
+  })
+
+  it('allows overwrite when the file is exactly `limit` lines (boundary probe)', async () => {
+    const dest = join(tmpDir, 'exact-limit.txt')
+    const text = Array.from({ length: 5 }, (_, i) => `l${i}`).join('\n') + '\n'
+    writeFileSync(dest, text)
+    ctx.readFiles = new Set()
+    ctx.readFilesComplete = new Set()
+    await readTool.execute({ file_path: dest, limit: 5 }, ctx) // window ends on the final newline
+    expect(ctx.readFilesComplete?.size).toBe(1)
+    const result = await writeTool.execute({ file_path: dest, content: 'ok' }, ctx)
+    expect(result.success).toBe(true)
+    expect(readFileSync(dest, 'utf-8')).toBe('ok')
+  })
+
+  it('allows overwrite when the file has exactly `limit` lines and no trailing newline', async () => {
+    const dest = join(tmpDir, 'exact-limit-nonl.txt')
+    writeFileSync(dest, 'l0\nl1\nl2')
+    ctx.readFiles = new Set()
+    ctx.readFilesComplete = new Set()
+    await readTool.execute({ file_path: dest, limit: 3 }, ctx)
+    expect(ctx.readFilesComplete?.size).toBe(1)
+    const result = await writeTool.execute({ file_path: dest, content: 'ok' }, ctx)
+    expect(result.success).toBe(true)
+  })
+
+  it('allows a second Write in the same session (we authored the whole file)', async () => {
+    const dest = join(tmpDir, 'twice.txt')
+    writeFileSync(dest, 'original')
+    ctx.readFiles = new Set()
+    ctx.readFilesComplete = new Set()
+    await readTool.execute({ file_path: dest }, ctx)
+    expect((await writeTool.execute({ file_path: dest, content: 'v1' }, ctx)).success).toBe(true)
+    expect(ctx.readFilesComplete?.size).toBe(1)
+    expect((await writeTool.execute({ file_path: dest, content: 'v2' }, ctx)).success).toBe(true)
+    expect(readFileSync(dest, 'utf-8')).toBe('v2')
   })
 
   it('blocks overwriting an unread existing file (fail-closed)', async () => {
@@ -590,6 +657,7 @@ describe('非 UTF-8 文件不被静默毁掉', () => {
     const p = join(tmpDir, 'latin1-w.txt')
     writeFileSync(p, WIN1252)
     ctx.readFiles = new Set()
+    ctx.readFilesComplete = new Set()
     await readTool.execute({ file_path: p }, ctx) // 满足 read-before-write（记录的是 canonpath）
     const res = await writeTool.execute({ file_path: p, content: 'replaced' }, ctx)
     expect(res.success).toBe(false)
@@ -601,6 +669,7 @@ describe('非 UTF-8 文件不被静默毁掉', () => {
     const p = join(tmpDir, 'utf8-w.txt')
     writeFileSync(p, 'old', 'utf-8')
     ctx.readFiles = new Set()
+    ctx.readFilesComplete = new Set()
     await readTool.execute({ file_path: p }, ctx)
     const res = await writeTool.execute({ file_path: p, content: 'new' }, ctx)
     expect(res.success).toBe(true)
@@ -948,6 +1017,50 @@ describe('Grep tool timeout (stall guard)', () => {
     // Returned promptly (~100ms), not after the full 5s sleep.
     expect(Date.now() - t0).toBeLessThan(4000)
   })
+
+  it('escalates to SIGKILL when the child ignores SIGTERM', async () => {
+    // `trap "" TERM` makes SIGTERM a no-op; `exec` keeps it a single process so
+    // the inherited "ignore TERM" disposition survives (ignored dispositions do).
+    // Without escalation the tool would sit here for the full 30s sleep even
+    // though its own timer already said 100ms.
+    const t0 = Date.now()
+    const { timedOut, stdout } = await runSearch(
+      ['bash', '-c', 'trap "" TERM; echo started; exec sleep 30'],
+      tmpDir,
+      100,
+    )
+    expect(timedOut).toBe(true)
+    // Output came back from a real drain, not from the give-up path (which
+    // returns empty pipes) — that is what separates SIGKILL from abandonment.
+    expect(stdout).toContain('started')
+    expect(Date.now() - t0).toBeLessThan(6000) // KILL_GRACE (2s) + slack
+  })
+
+  it('gives up when the process dies but the pipes never close', async () => {
+    // SIGKILL ends the child, but an inherited write end (a grandchild) keeps
+    // the pipes open and `new Response(stream).text()` has no timeout. The
+    // tool must report the timeout instead of waiting on fds nobody owns.
+    vi.spyOn(Bun, 'spawn').mockImplementation(
+      () =>
+        ({
+          stdout: new Response('partial').body,
+          stderr: new Response('').body,
+          exited: new Promise<number>(() => {}), // never resolves
+          exitCode: null,
+          kill: () => true,
+        }) as any,
+    )
+    vi.useFakeTimers()
+    try {
+      const pending = runSearch(['rg', 'needle'], tmpDir, 100)
+      await vi.advanceTimersByTimeAsync(5_000)
+      const result = await pending
+      expect(result.timedOut).toBe(true)
+      expect(result.exitCode).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  }, 10_000)
 })
 
 // ============================================================

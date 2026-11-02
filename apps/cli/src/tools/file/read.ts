@@ -73,14 +73,20 @@ function windowFromString(content: string, offset: number, limit: number): strin
  * and the decoded range starts and ends on a newline — so neither pass can split
  * a character. Returns null when the window cannot be located within
  * `MAX_SCAN_BYTES`.
+ *
+ * `complete` answers a different question from the one the window answers: did
+ * this read cover the **whole file**? A 2,000-line window of a 50,000-line file
+ * is a correct answer to "show me the start" and a dangerous basis for
+ * "overwrite it" — the model would rewrite what it never saw. The Write tool
+ * reads this flag (see `ToolContext.readFilesComplete`).
  */
 function windowFromFd(
   fd: number,
   offset: number,
   limit: number,
   maxScanBytes: number = MAX_SCAN_BYTES,
-): string[] | null {
-  if (limit <= 0) return []
+): { lines: string[]; complete: boolean } | null {
+  if (limit <= 0) return { lines: [], complete: false }
 
   const buf = Buffer.allocUnsafe(CHUNK_BYTES)
   let scanned = 0 // bytes consumed by the scan
@@ -113,13 +119,28 @@ function windowFromFd(
     scanned += n
   }
 
+  // `complete` = this window is the whole file: it starts at line 0 and nothing
+  // follows its last line. The window ended on a terminating newline, which is
+  // also what a file whose final byte is that newline looks like — one probe
+  // byte past it tells the two apart. A read error here means "unknown", and
+  // unknown must not grant overwrite permission.
+  let complete: boolean
   if (windowEnd === -1) {
     // Either the file ended (the window is everything that is left) or the scan
     // budget ran out before the window's last line was reached.
     if (!eof) return null
     windowEnd = scanned
+    complete = offset <= 0
+  } else {
+    let hasMore = true
+    try {
+      hasMore = readSync(fd, Buffer.allocUnsafe(1), 0, 1, windowEnd + 1) > 0
+    } catch {
+      hasMore = true
+    }
+    complete = offset <= 0 && !hasMore
   }
-  if (windowStart === -1) return [] // `offset` is past the end of the file
+  if (windowStart === -1) return { lines: [], complete: false } // `offset` is past the end of the file
 
   const out = Buffer.allocUnsafe(windowEnd - windowStart)
   let got = 0
@@ -128,7 +149,7 @@ function windowFromFd(
     if (n <= 0) break
     got += n
   }
-  return out.toString('utf-8', 0, got).split('\n')
+  return { lines: out.toString('utf-8', 0, got).split('\n'), complete }
 }
 
 export function createReadTool(credentialConfig?: CredentialMaskingConfig): ToolDefinition {
@@ -199,6 +220,11 @@ export function createReadTool(credentialConfig?: CredentialMaskingConfig): Tool
         // *first* is what used to make `offset`/`limit` useless on large files —
         // the size check ran before the window was ever applied.
         let result: string | null = null
+        // Did this read see the whole file? Only then may the Write tool replace
+        // the file outright; a window is an excerpt, not a basis for overwriting.
+        // Credential-masked content is never "whole": what was returned to the
+        // model is a sentinel or a redaction of the real bytes.
+        let complete = false
         if (credentialConfig) {
           const { matchCredentialFile, maskContent, CREDENTIAL_SENTINEL } =
             await import('../../core/credential-masker')
@@ -216,8 +242,8 @@ export function createReadTool(credentialConfig?: CredentialMaskingConfig): Tool
         if (result === null) {
           const allowLarge = params.allow_large === true
           const scanBudget = allowLarge ? MAX_SCAN_BYTES_LARGE : MAX_SCAN_BYTES
-          const lines = windowFromFd(fd, offset, limit, scanBudget)
-          if (lines === null) {
+          const window = windowFromFd(fd, offset, limit, scanBudget)
+          if (window === null) {
             return {
               success: false,
               content: '',
@@ -228,7 +254,8 @@ export function createReadTool(credentialConfig?: CredentialMaskingConfig): Tool
                 `, or use a shell tool to slice the file.`,
             }
           }
-          result = formatLines(lines, offset)
+          result = formatLines(window.lines, offset)
+          complete = window.complete
         }
 
         // ── Binary sniff ──
@@ -254,6 +281,7 @@ export function createReadTool(credentialConfig?: CredentialMaskingConfig): Tool
 
         // ── Read tracking: mark file as read for Write tool safety ──
         ctx.readFiles?.add(filePath)
+        if (complete) ctx.readFilesComplete?.add(filePath)
         return { success: true, content: result }
       } finally {
         closeSync(fd)

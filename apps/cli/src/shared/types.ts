@@ -640,6 +640,14 @@ export interface ToolContext {
   /** Files read this session — used by Write tool to check read-before-write */
   readFiles?: Set<string>
   /**
+   * The subset of `readFiles` whose reads covered the **whole file** (no
+   * offset/limit, and not a credential-masked view). Write requires membership
+   * to overwrite an existing file: a partial read is context for Edit, not a
+   * licence to replace the file with the slice the model happened to see.
+   * Absent means "no completeness tracking" and is treated as not complete.
+   */
+  readFilesComplete?: Set<string>
+  /**
    * Cancellation for the turn this tool call belongs to.
    *
    * Carried on the context, not on `execute`'s signature, so every tool can reach it

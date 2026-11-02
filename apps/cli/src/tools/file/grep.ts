@@ -11,6 +11,19 @@ import { maskSearchOutput } from '../../core/credential-masker'
  *  not hang the session for minutes. Matches the Bash tool's 120s ceiling. */
 const GREP_TIMEOUT_MS = 120_000
 
+/** How long `runSearch` waits after SIGTERM before escalating to SIGKILL. */
+const KILL_GRACE_MS = 2_000
+
+/**
+ * How long the pipes may stay open after the escalate-to-SIGKILL deadline before
+ * the search is abandoned outright.
+ *
+ * SIGKILL ends the child, but a *grandchild* that inherited the write end keeps
+ * EOF from ever arriving, and `new Response(pipe).text()` has no timeout of its
+ * own. Without this bound the tool's own "timed out" report would itself hang.
+ */
+const PIPE_DRAIN_GRACE_MS = 2_000
+
 /** Run a search command with a kill-timer; report whether the timeout fired. */
 export async function runSearch(
   cmd: string[],
@@ -19,20 +32,41 @@ export async function runSearch(
 ): Promise<{ stdout: string; stderr: string; timedOut: boolean; exitCode: number | null }> {
   const proc = Bun.spawn(cmd, { cwd, stdout: 'pipe', stderr: 'pipe' })
   let timedOut = false
-  const timer = setTimeout(() => {
-    timedOut = true
-    proc.kill()
-  }, timeoutMs)
+  const timers: ReturnType<typeof setTimeout>[] = []
+  timers.push(
+    setTimeout(() => {
+      timedOut = true
+      // SIGTERM first: rg releases its walker and flushes what it has. A process
+      // that ignores it (or is stuck in uninterruptible I/O) would otherwise keep
+      // the pipes open forever — the timeout would never reach the caller.
+      proc.kill()
+      timers.push(setTimeout(() => proc.kill(9), KILL_GRACE_MS))
+    }, timeoutMs),
+  )
   // 两条管道必须**并发**读。先读满 stdout 再读 stderr 会在子进程写满
   // stderr（~64 KB 管道缓冲）时死锁：它阻塞在 write 上不退出，stdout 也就
   // 永远读不到 EOF —— 只能等超时兜底，而超时会把「慢」和「错」说成同一件事。
-  const [stdout, stderr] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-  ])
-  await proc.exited
-  clearTimeout(timer)
-  return { stdout, stderr, timedOut, exitCode: proc.exitCode }
+  const finished = (async () => {
+    const [stdout, stderr] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ])
+    await proc.exited
+    return { stdout, stderr, exitCode: proc.exitCode }
+  })()
+
+  const abandoned = new Promise<null>((resolve) => {
+    timers.push(setTimeout(() => resolve(null), timeoutMs + KILL_GRACE_MS + PIPE_DRAIN_GRACE_MS))
+  })
+
+  const result = await Promise.race([finished, abandoned])
+  for (const t of timers) clearTimeout(t)
+  if (result === null) {
+    // Nothing readable came back and the process would not die. Report it as the
+    // timeout it is instead of waiting on fds nobody owns anymore.
+    return { stdout: '', stderr: '', timedOut: true, exitCode: null }
+  }
+  return { ...result, timedOut }
 }
 
 /** grep 输出上限：超过则显式截断并附标记（不能静默丢内容——模型会误以为看全了）。 */

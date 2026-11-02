@@ -484,6 +484,7 @@ export class SubAgent {
       ruleEngine: this.ruleEngine,
       llm: this.llm,
       readFiles: new Set<string>(),
+      readFilesComplete: new Set<string>(),
       // Every tool call from here on is one level down, and a few tools must know
       // it: `Agent` cannot consume a background handle, so its default flips to
       // synchronous (see `resolveRunInBackground`). Set on the shared literal so it

@@ -594,6 +594,12 @@ describe('SubAgent', () => {
     expect(sink.ctx?.readFiles).toBeInstanceOf(Set)
     sink.ctx?.readFiles?.add('/tmp/example.ts')
     expect(sink.ctx?.readFiles?.has('/tmp/example.ts')).toBe(true)
+    // …and the completeness subset: without it a sub-agent could read a file in
+    // full and still be refused every overwrite, because Write checks the
+    // subset, not the plain set.
+    expect(sink.ctx?.readFilesComplete).toBeInstanceOf(Set)
+    sink.ctx?.readFilesComplete?.add('/tmp/example.ts')
+    expect(sink.ctx?.readFilesComplete?.has('/tmp/example.ts')).toBe(true)
   })
 
   /**
