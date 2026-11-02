@@ -25,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **错误响应体读取有 5 秒上限** —— 非 2xx 时服务端把正文挂在半路，此前这一读没有
   任何超时（超时与重试都只覆盖「拿不到响应」那一侧）。
 - **钩子的 `timeout: 0` 不再拆掉正常工作的钩子** —— 超时现在有 1 秒下限。
+- **依赖链上的 `follow-redirects` 升到 1.16.2** —— 飞书 SDK 经 axios 拉进来的 1.16.1
+  落在 `GHSA-mrwp-f3q8-3g9p` 的受影响区间（跨 realm 的 `sensitiveHeaders` 会被丢弃，
+  自定义凭据可能跟随重定向）。锁文件只改这一条，安全审计闸门恢复通过。
 
 ### Changed
 
