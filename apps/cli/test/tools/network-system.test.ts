@@ -139,6 +139,23 @@ describe('WebFetch tool execution', () => {
     expect(result.error).toContain('web-access')
   })
 
+  it('names a TLS/certificate failure instead of reporting a generic network error', async () => {
+    // Bun/undici bury the real reason in `cause`; the top-level message alone
+    // ("Unable to connect") reads the same as "site is down".
+    const wrapped = Object.assign(new Error('Unable to connect'), {
+      cause: new Error('SSL certificate is invalid'),
+    })
+    globalThis.fetch = vi.fn().mockRejectedValue(wrapped) as unknown as typeof fetch
+
+    const result = await webFetchTool.execute({ url: 'https://tls-fail.example.com' }, ctx)
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('TLS/certificate')
+    expect(result.error).toContain('SSL certificate is invalid')
+    // 不能引导模型去关校验
+    expect(result.error).not.toMatch(/disable (tls|ssl)? ?verification/i)
+    expect(result.error).toContain('must not be disabled')
+  })
+
   it('truncates long responses to 100K chars', async () => {
     const longText = '<p>' + 'x'.repeat(200_000) + '</p>'
     globalThis.fetch = vi.fn().mockResolvedValue({

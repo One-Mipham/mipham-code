@@ -1,7 +1,12 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { spawn as nodeSpawn } from 'node:child_process'
 import type { ToolContext } from '../../src/shared'
-import { createBashTool, killProcessGroup } from '../../src/tools/exec/bash'
+import {
+  createBashTool,
+  killProcessGroup,
+  killLiveProcessGroups,
+  liveProcessGroupCount,
+} from '../../src/tools/exec/bash'
 
 // ============================================================
 // Bash 工具的**进程组**收尾 —— 两条失败模式，都没有任何现有覆盖。
@@ -332,5 +337,82 @@ describe('Bash tool — 取消落到进程组（替身）', () => {
 
     expect(result.success).toBe(true)
     expect(result.content).toContain('ok')
+  }, 10_000)
+})
+
+// ============================================================
+// 退出时收掉仍在跑的进程组。
+//
+// `detached: true` 让组杀生效，同时也让命令**不再属于本进程的作业**：CLI 一退出，
+// 什么都没送到它那儿。用户按 Ctrl+C 关掉终端之后，一秒前起的 `sleep 999` 还在跑。
+// 收尾必须挂在 `process.on('exit')` 上 —— 那是唯一还能同步执行的时刻。
+// ============================================================
+
+describe('Bash tool — 退出时收掉仍在跑的进程组（替身）', () => {
+  const ctx: ToolContext = {
+    cwd: '/tmp/test',
+    sessionId: 'test-session',
+    provider: 'test',
+    model: 'test-model',
+  } as ToolContext
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('registers an exit handler and kills groups that are still running when it fires', async () => {
+    let closeStdout: (() => void) | null = null
+    const stdout = new ReadableStream<Uint8Array>({
+      start(c) {
+        closeStdout = () => c.close()
+      },
+    })
+    const pid = 7707
+    const proc = {
+      pid,
+      stdout,
+      stderr: new ReadableStream<Uint8Array>({ start: (c) => c.close() }),
+      exited: new Promise<number>(() => {}), // 命令永不自行结束
+      kill: vi.fn(),
+    }
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation(((target: number) => {
+      if (target === -pid) closeStdout?.()
+      return true
+    }) as typeof process.kill)
+    vi.spyOn(Bun, 'spawn').mockReturnValue(proc as never)
+
+    // 先清掉先前各格留下的替身 pid —— 此刻 process.kill 已被替身接管，
+    // 不会误伤真实进程
+    killLiveProcessGroups()
+
+    void createBashTool().execute({ command: 'sleep 99', timeout: 600_000 }, ctx)
+    await sleep(50) // 越过 spawn 与登记
+
+    // 前置断言：组确实被登记了，否则「退出时会收」无从谈起
+    expect(liveProcessGroupCount()).toBe(1)
+    expect(process.listeners('exit')).toContain(killLiveProcessGroups)
+
+    killLiveProcessGroups()
+    expect(killSpy.mock.calls.map((c) => c[0])).toContain(-pid)
+    expect(liveProcessGroupCount()).toBe(0)
+  }, 10_000)
+
+  it('drops the group once the command itself has exited', async () => {
+    // 反方向：正常收尾的命令不该被一直记着 —— 否则每次退出都会对一堆
+    // 早已回收的 pid 发信号（pid 会被复用，撞上别人的进程）。
+    vi.spyOn(process, 'kill').mockReturnValue(true)
+    vi.spyOn(Bun, 'spawn').mockReturnValue({
+      pid: 7708,
+      stdout: new Response('ok\n').body,
+      stderr: new Response('').body,
+      exited: Promise.resolve(0),
+      kill: vi.fn(),
+    } as never)
+    killLiveProcessGroups()
+
+    const result = await createBashTool().execute({ command: 'echo ok' }, ctx)
+
+    expect(result.success).toBe(true)
+    expect(liveProcessGroupCount()).toBe(0)
   }, 10_000)
 })

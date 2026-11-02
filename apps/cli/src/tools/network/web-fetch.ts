@@ -202,6 +202,41 @@ function withOffsetNotice(
   return header + window + notice
 }
 
+/**
+ * Flatten an error and its `cause` chain into one line.
+ *
+ * Bun/undici wrap the actual failure in `cause`; the top-level message is often
+ * only "Unable to connect", which says nothing about *why*.
+ */
+function errorChain(err: unknown, depth = 0): string {
+  if (!(err instanceof Error)) return String(err)
+  const head = `${err.name}: ${err.message}`
+  const cause = (err as { cause?: unknown }).cause
+  if (!cause || depth >= 3) return head
+  return `${head} ← ${errorChain(cause, depth + 1)}`
+}
+
+/**
+ * Turn a thrown fetch error into a diagnosis the reader can act on.
+ *
+ * A TLS failure (expired, self-signed, wrong host, or a proxy intercepting the
+ * connection) otherwise reads exactly like "the site is down" — and the model
+ * responds by trying mirrors that are just as unreachable. Naming the class is
+ * the difference between fixing the cause and guessing.
+ */
+export function describeFetchFailure(err: unknown): string {
+  const text = errorChain(err)
+  if (/certificate|CERT_|ERR_TLS|\bSSL\b|\bTLS\b|self[- ]signed|unable to verify/i.test(text)) {
+    return (
+      `TLS/certificate failure: ${text}. The server's certificate could not be verified ` +
+      '(expired, self-signed, wrong host, or replaced by a proxy on the network path). ' +
+      'Retrying a mirror will not help and certificate verification must not be disabled — ' +
+      'the user needs to trust the proxy CA or use a reachable source.'
+    )
+  }
+  return `Fetch failed: ${text}. If direct network is blocked, retry via the web-access skill (CDP through the user's logged-in Chrome).`
+}
+
 // ── Tool Definition ──
 
 export const webFetchTool: ToolDefinition = {
@@ -348,7 +383,7 @@ export const webFetchTool: ToolDefinition = {
       const message =
         err instanceof Error && err.name === 'AbortError'
           ? 'Request timed out (30s)'
-          : `Fetch failed: ${String(err)}. If direct network is blocked, retry via the web-access skill (CDP through the user's logged-in Chrome).`
+          : describeFetchFailure(err)
       return { success: false, content: '', error: message }
     } finally {
       clearTimeout(timer)

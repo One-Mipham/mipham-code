@@ -631,6 +631,9 @@ export function createBashTool(credentialConfig?: CredentialMaskingConfig): Tool
           // the wrong group and fails (or, worse, hits the parent's).
           detached: true,
         })
+        // Tracked until it exits: `detached` also means the group is not taken
+        // down when this process goes away (see `liveProcessGroups`).
+        trackProcessGroup(proc.pid)
 
         // Start reading at once — a child that fills the pipe buffer blocks on
         // write and would then never exit — but do **not** await here: if a
@@ -663,6 +666,7 @@ export function createBashTool(credentialConfig?: CredentialMaskingConfig): Tool
         }
 
         const exitCode = await proc.exited
+        liveProcessGroups.delete(proc.pid)
         clearTimeout(timer)
         ctx.signal?.removeEventListener('abort', onAbort)
 
@@ -765,6 +769,41 @@ export function createBashTool(credentialConfig?: CredentialMaskingConfig): Tool
 
 /** Grace given to a descendant still holding the output pipe after the shell itself has exited. */
 const PIPE_GRACE_MS = 1_000
+
+/**
+ * Process groups this tool spawned that have not exited yet.
+ *
+ * `detached: true` is what makes the group kill work — and it is also what lets
+ * the command outlive the CLI: the group is no longer in our process group, so
+ * nothing is delivered to it when the parent goes away. A long `build` or
+ * `npm test` started a second before Ctrl+C keeps writing to the user's disk
+ * with no CLI attached, and the next run finds a locked directory it cannot
+ * explain. Killing these on `exit` is the only cleanup that can still run there
+ * (the handler must be synchronous, and `killProcessGroup` is).
+ */
+const liveProcessGroups = new Set<number>()
+
+/** Kill every still-running group. Registered once against `process.on('exit')`. */
+export function killLiveProcessGroups(): void {
+  for (const pid of liveProcessGroups) killProcessGroup(pid)
+  liveProcessGroups.clear()
+}
+
+/** How many groups are currently tracked (test observability). */
+export function liveProcessGroupCount(): number {
+  return liveProcessGroups.size
+}
+
+let exitHookInstalled = false
+
+/** Start tracking a freshly spawned group; installs the exit handler on first use. */
+function trackProcessGroup(pid: number | undefined): void {
+  if (pid === undefined || pid <= 0) return
+  liveProcessGroups.add(pid)
+  if (exitHookInstalled) return
+  exitHookInstalled = true
+  process.on('exit', killLiveProcessGroups)
+}
 
 /**
  * Kill a whole process group. `proc.kill()` reaches only the direct child, so a
