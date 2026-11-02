@@ -6,6 +6,7 @@ import {
   streamIdleTimeoutMs,
   isRetryableFailure,
   createAwakeTimer,
+  readErrorBody,
 } from './fetch-utils'
 import { OLLAMA_PRESET_MODELS } from '../shared/constants'
 
@@ -55,7 +56,7 @@ export class OpenAICompatProvider implements ProviderInstance {
     })
 
     if (!response.ok) {
-      const errText = await response.text()
+      const errText = await readErrorBody(response)
       yield {
         type: 'error',
         error: `OpenAI API error ${response.status}: ${errText}`,

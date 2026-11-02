@@ -9,6 +9,7 @@ import {
   createAwakeTimer,
   DEFAULT_RETRY_BASE_DELAY_MS,
   DEFAULT_RETRY_MAX_DELAY_MS,
+  readErrorBody,
 } from '../../src/providers/fetch-utils'
 
 describe('streamIdleTimeoutMs', () => {
@@ -491,5 +492,42 @@ describe('createAwakeTimer', () => {
     clock.advance(1000)
     vi.advanceTimersByTime(1000)
     expect(onExpire).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// readErrorBody —— 错误响应体要能解释状态码，但不能把这一轮挂死
+// ═══════════════════════════════════════════════════════════════
+
+describe('readErrorBody', () => {
+  const asResponse = (text: () => Promise<string>) => ({ text }) as unknown as Response
+
+  it('returns the body verbatim when it is small', async () => {
+    const r = asResponse(() => Promise.resolve('{"error":"bad request"}'))
+    expect(await readErrorBody(r)).toBe('{"error":"bad request"}')
+  })
+
+  it('truncates a huge body instead of pulling it all into the error message', async () => {
+    const r = asResponse(() => Promise.resolve('x'.repeat(50_000)))
+    const body = await readErrorBody(r, 100)
+    expect(body.length).toBeLessThan(200)
+    expect(body.endsWith('… (truncated)')).toBe(true)
+  })
+
+  it('gives up at the deadline when the body never finishes', async () => {
+    vi.useFakeTimers()
+    try {
+      const r = asResponse(() => new Promise<string>(() => {})) // never resolves
+      const pending = readErrorBody(r, 2_000, 5_000)
+      await vi.advanceTimersByTimeAsync(5_000)
+      expect(await pending).toBe('')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('swallows a body read that rejects', async () => {
+    const r = asResponse(() => Promise.reject(new Error('ECONNRESET')))
+    expect(await readErrorBody(r)).toBe('')
   })
 })

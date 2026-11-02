@@ -11,6 +11,7 @@ import {
   streamIdleTimeoutMs,
   isRetryableFailure,
   createAwakeTimer,
+  readErrorBody,
 } from './fetch-utils'
 
 interface AnthropicContentBlock {
@@ -195,7 +196,7 @@ export class AnthropicProvider implements ProviderInstance {
     })
 
     if (!response.ok) {
-      const errText = await response.text()
+      const errText = await readErrorBody(response)
       yield {
         type: 'error',
         error: `Anthropic API error ${response.status}: ${errText}`,

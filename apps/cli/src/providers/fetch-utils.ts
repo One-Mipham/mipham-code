@@ -259,6 +259,37 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+/**
+ * Read a provider's error body, bounded in **both** size and time.
+ *
+ * `await response.text()` on an error path has neither. A gateway that accepts
+ * the connection and then streams forever (or a CDN's HTML error page for a
+ * multi-MB trace) parks the turn *before* the status code is ever shown — the
+ * one thing the caller needed. The body only exists to explain the status, so a
+ * truncated prefix is enough; past the deadline an empty string still leaves the
+ * status line to report.
+ */
+export async function readErrorBody(
+  response: Response,
+  maxChars = 2_000,
+  timeoutMs = 5_000,
+): Promise<string> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    // `.catch` first so a body that fails *after* the race is lost does not
+    // surface as an unhandled rejection.
+    const text = await Promise.race([
+      response.text().catch(() => ''),
+      new Promise<string>((resolve) => {
+        timer = setTimeout(() => resolve(''), timeoutMs)
+      }),
+    ])
+    return text.length > maxChars ? `${text.slice(0, maxChars)}… (truncated)` : text
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 // ── Streaming idle-timeout (stall guard) with effort multiplier ──────────
 //
 // Reasoning models think silently for long stretches. The idle timeout between
