@@ -4,6 +4,26 @@
 > (tag dates) and use the same wording as the VS Code extension's changelog — the plugin is a
 > thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.30 (2026-11-02)
+
+- Version sync with Mipham Code CLI 0.85.30
+- Fixed: the Bash tool no longer inherits the parent shell's startup switches. `SHELLOPTS`,
+  `BASHOPTS` and `BASH_ENV` are consumed by bash before it reads the command, so a parent shell
+  that exported `errexit` made user scripts stop at the first failing command. All three are now
+  removed from the child environment.
+- Fixed: a tool call that never ran is no longer drawn as one that did. Only the classifier path
+  set the "not run" bit; policy denials, hook denials, re-check denials and unknown tools were
+  still rendered as ordinary output rows and read as executed inside a collapsed group.
+- Fixed: Agent View selection follows the session, not the row number. The list regroups by
+  status, so a finishing agent shifted the rows and Enter / Ctrl+X acted on a different agent
+  than the one on screen. Selection is now keyed by session id.
+- Fixed: pressing Esc in the agent dashboard no longer aborts the running turn. Every mounted
+  input listener sees the same keypress, so the main view also ran its "dismiss topmost" path,
+  whose last step aborts the active turn. Esc is now handed to the panel that owns it.
+- Fixed: session titles come from the text you actually typed. Forwarding slash commands (e.g.
+  `/tdd`) replace the input with an instruction body for the model, and auto-naming used that —
+  so `/resume` listed internal instructions instead of your own words.
+
 ## 0.85.29 (2026-11-02)
 
 - Version sync with Mipham Code CLI 0.85.29
