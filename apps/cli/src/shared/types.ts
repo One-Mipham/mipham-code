@@ -102,13 +102,14 @@ export interface ToolResult {
   content: string
   error?: string
   /**
-   * The call was **held back, not judged** — `auto` mode asked the classifier and
-   * got no usable answer, so nothing ran and asking again is appropriate (296-056).
+   * The call **never ran** — refused before execution by the permission gate, a
+   * PreToolUse hook, or `auto` mode's classifier, or the tool was not found.
    *
    * It is not a third failure state: `success` stays `false` and `error` still
    * carries the text the model reads. This bit exists only so the *display* can
-   * tell "held back" from "ran and returned this", which are otherwise the same
-   * shape (both are `success: false` + an error string).
+   * tell "did not run" from "ran and returned this", which are otherwise the same
+   * shape (both are `success: false` + an error string). A collapsed tool group
+   * that renders every failure as a result line reads as if the command ran.
    */
   notRun?: boolean
 }
@@ -145,9 +146,9 @@ export interface StreamChunk {
    */
   isError?: boolean
   /**
-   * `type: 'tool_result'` only. The call never ran because `auto` mode's
-   * classifier had no usable answer — held back, not judged (296-056). Distinct
-   * from the `retryable` field below, which describes a *provider* error.
+   * `type: 'tool_result'` only. The call never ran — refused by the permission
+   * gate, a PreToolUse hook, or `auto` mode's classifier. Distinct from the
+   * `retryable` field below, which describes a *provider* error.
    */
   notRun?: boolean
   error?: string

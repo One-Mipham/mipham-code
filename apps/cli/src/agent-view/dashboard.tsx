@@ -38,7 +38,10 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
   // 时会**合并成一个**事件（实测 `'j\r'` → 单个 `input="j\r"`、`key.return` 为 false），
   // 两个分支都不匹配 ⇒ 症状是「这一拍什么也没发生」，不是「作用在上一行」。
   // 换句话说这一格没有可复现的故障，迁过去只会让测试**改前改后都绿**。
-  const [selectedIndex, setSelectedIndex] = useState(0)
+  // 选中的是**会话 id**，不是一个位置。列表每次变化都按状态重新分组（一个 agent 跑完
+  // 就从 Working 挪到 Done），位置会在两次按键之间指向别的行 —— Enter / Ctrl+X 于是
+  // 作用在用户没看着的那个 agent 身上（314-050）。位置由 id 现算。
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [peekingSessionId, setPeekingSessionId] = useState<string | null>(null)
   const [groupBy, setGroupBy] = useState<'status' | 'directory'>('status')
   const [feedback, setFeedback] = useState<string | null>(null)
@@ -120,6 +123,21 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
         session: AgentSession
       }>,
     [flatList],
+  )
+
+  // 位置**现算**：选中 id 不在列表里（还没选 / 被移除了）时回落到第一行。
+  const selectedIndex = useMemo(() => {
+    const i = sessionsOnly.findIndex((s) => s.session.id === selectedId)
+    return i >= 0 ? i : 0
+  }, [sessionsOnly, selectedId])
+
+  /** 选中第 i 行 —— 记 id，不记位置。 */
+  const selectAt = useCallback(
+    (i: number) => {
+      const next = sessionsOnly[i]
+      if (next) setSelectedId(next.session.id)
+    },
+    [sessionsOnly],
   )
 
   const handleAttach = useCallback(
@@ -225,9 +243,16 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
       // stops nothing, and the running sub-agent checks the registry's abort
       // signal. So: stop the task, then remove the row.
       const stopped = session.taskId ? getBackgroundAgentRegistry().stop(session.taskId) : false
+      // 光标交给**顶上来那一行**（没有就交给上一行），按 id 记 —— 位置在下一次
+      // 重新分组时会被别的 agent 占掉。
+      const removingIdx = selectedIndex
+      const nextId =
+        sessionsOnly[removingIdx + 1]?.session.id ??
+        sessionsOnly[removingIdx - 1]?.session.id ??
+        null
       manager.remove(session.id)
       setPeekingSessionId(null)
-      setSelectedIndex((prev) => Math.max(0, Math.min(prev, sessionsOnly.length - 2)))
+      setSelectedId(nextId)
       showFeedback(
         stopped
           ? `Stopped + removed ${session.title || session.id}`
@@ -241,7 +266,7 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
         showFeedback('No sessions to navigate — spawn a background agent first')
         return
       }
-      setSelectedIndex((prev) => Math.min(prev + 1, sessionsOnly.length - 1))
+      selectAt(Math.min(selectedIndex + 1, sessionsOnly.length - 1))
       setPeekingSessionId(null)
       return
     }
@@ -251,7 +276,7 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
         showFeedback('No sessions to navigate — spawn a background agent first')
         return
       }
-      setSelectedIndex((prev) => Math.max(prev - 1, 0))
+      selectAt(Math.max(selectedIndex - 1, 0))
       setPeekingSessionId(null)
       return
     }
@@ -358,14 +383,12 @@ export function AgentViewDashboard({ manager, onAttach, onExit }: DashboardProps
               )
             }
 
-            // Map this session's position in sessionsOnly to selectedIndex
-            const sessionIdx = sessionsOnly.findIndex((s) => s.session.id === item.session.id)
-
             return (
               <SessionRow
                 key={item.session.id}
                 session={item.session}
-                isSelected={sessionIdx === selectedIndex}
+                // 按 id 比对：下面这行按位置取到的就是当前选中的那一位
+                isSelected={item.session.id === sessionsOnly[selectedIndex]?.session.id}
               />
             )
           })}

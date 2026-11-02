@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
+import { spawnSync } from 'node:child_process'
 import type { ToolContext } from '../../src/shared'
 import { Context } from '../../src/vajra'
 import { collectTools } from '../../src/tools/seam'
@@ -657,5 +658,80 @@ describe('worktree 逃逸判定', () => {
     // 注意：不能用 startsWith(cwd) 当判据 —— 那会把 w1-evil 判成「在 cwd 里」，
     // 只是因为 root 那个析取项兜住了，这个错误才没显形。
     expect(escape('cd /proj/.mipham/worktrees/w1-evil')).toBeNull()
+  })
+})
+
+// ============================================================
+// 子进程环境 —— 父 shell 的**启动开关**不随命令下发
+// ============================================================
+//
+// bash 在跑命令**之前**就读这几个变量：`SHELLOPTS`（set -o 选项）、`BASHOPTS`
+// （shopt 选项）、`BASH_ENV`（先 source 的文件）。父进程一旦导出它们，用户敲的
+// 每条命令都被悄悄改写 —— 导出 `errexit` 时 `echo a; false; echo b` 只印 `a`
+// 并以 1 退出，读起来像「命令少做了事」。
+//
+// 判据分两层：① 机制层看真正交给 `Bun.spawn` 的 env（其余变量必须还在，否则
+// 断言可能只是「env 整个空掉」）；② 行为层用真 bash 复现症状。
+
+describe('子进程环境（启动开关）', () => {
+  const STARTUP_VARS = ['SHELLOPTS', 'BASHOPTS', 'BASH_ENV'] as const
+  const MARKER = 'MIPHAM_SPAWN_ENV_TEST_MARKER'
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    for (const key of STARTUP_VARS) delete process.env[key]
+    delete process.env[MARKER]
+  })
+
+  it('三个启动变量被摘掉，其余变量原样传入（正对照）', async () => {
+    process.env.SHELLOPTS = 'braceexpand:errexit'
+    process.env.BASHOPTS = 'globstar'
+    process.env.BASH_ENV = '/tmp/does-not-exist.sh'
+    process.env[MARKER] = 'kept'
+
+    const spawn = vi.spyOn(Bun, 'spawn').mockReturnValue({
+      stdout: new ReadableStream({
+        start(c: ReadableStreamDefaultController) {
+          c.close()
+        },
+      }),
+      stderr: new ReadableStream({
+        start(c: ReadableStreamDefaultController) {
+          c.close()
+        },
+      }),
+      exited: Promise.resolve(0),
+      kill: vi.fn(),
+    } as any)
+
+    await bashTool.execute({ command: 'echo hi', description: 'test' }, ctx)
+
+    const opts = spawn.mock.calls[0]?.[1] as
+      { env?: Record<string, string | undefined> } | undefined
+    expect(opts?.env).toBeDefined()
+    for (const key of STARTUP_VARS) expect(opts?.env).not.toHaveProperty(key)
+    // 正对照：证明上面三条不是「整个 env 都没了」
+    expect(opts?.env?.[MARKER]).toBe('kept')
+  })
+
+  /**
+   * 前提自证：本仓的 vitest 把 `Bun.spawn` 全局换成「未 mock 就抛」的桩
+   * （`vitest.setup.ts:37`），所以症状无法经工具本身跑真进程，改由 `spawnSync`
+   * 起真 bash 证明这两类变量**确实**会改写命令 —— 没有这一条，上面那条断言就只是在
+   * 验「我们删了某个键」，说不出为什么要删。
+   */
+  it('前提：导出的 SHELLOPTS 让 bash 停在第一条失败语句，摘掉即恢复', () => {
+    const env = { PATH: process.env.PATH ?? '/usr/bin:/bin' }
+    const run = (extra: Record<string, string>) =>
+      spawnSync('bash', ['-c', 'echo first; false; echo second'], {
+        env: { ...env, ...extra },
+        encoding: 'utf-8',
+      })
+
+    const withOpts = run({ SHELLOPTS: 'braceexpand:errexit' })
+    const without = run({})
+    expect(withOpts.stdout.startsWith('first')).toBe(true) // 正对照：bash 真的跑了
+    expect(withOpts.stdout).not.toContain('second') // 症状
+    expect(without.stdout).toContain('second') // 摘掉即恢复
   })
 })

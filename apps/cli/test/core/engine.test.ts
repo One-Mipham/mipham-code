@@ -1675,6 +1675,8 @@ describe('QueryEngine', () => {
 
       const result = chunks.find((c) => c.type === 'tool_result')
       expect(result?.content).toContain('Unknown tool')
+      // 没有这个工具 ⇒ 同样从未执行（一个断了线的 MCP 工具走的正是这条路）。
+      expect(result?.notRun).toBe(true)
     })
 
     it('should block tool when permission is ask', async () => {
@@ -1844,7 +1846,12 @@ describe('QueryEngine', () => {
         expect(result?.notRun).toBe(true)
       })
 
-      it('反方向：策略拒绝是**裁决过的**，notRun 不得为真（否则两句判决又同形）', async () => {
+      /**
+       * 314-031：`notRun` 的判据是「**跑没跑**」，不是「谁拦的」。策略拒绝也没跑，
+       * 那段文字同样是**理由**而不是输出；不标就成了折叠组里一行看起来跑过的结果。
+       * 两句话的分野仍在文案里（策略拒绝不说「可以重试」、指向也不同）。
+       */
+      it('策略拒绝同样没跑 ⇒ notRun 为真（文案仍与「被拿住」分得开）', async () => {
         const permission = new PermissionSystem('auto')
         permission.setClassifier({
           version: 'test',
@@ -1859,7 +1866,26 @@ describe('QueryEngine', () => {
 
         const result = await run(engine)
         expect(result?.isError).toBe(true)
-        expect(result?.notRun).toBe(false)
+        expect(result?.notRun).toBe(true)
+        // 正对照：反对「标了就算」—— 两种拒绝在文字层仍不得合流。
+        expect(result?.content).not.toContain('NOT a policy decision')
+      })
+
+      it('PreToolUse 钩子拦下 ⇒ notRun 为真（钩子拒绝同样从未执行）', async () => {
+        const permission = new PermissionSystem('default')
+        const engine = new QueryEngine(
+          oneBashCall(),
+          mockContext(),
+          makeToolMap([bashTool(() => {})]),
+          permission,
+        )
+        const hooks = new HookEngine()
+        hooks.register({ event: 'PreToolUse', handler: async () => ({ allowed: false }) })
+        engine.setHookEngine(hooks)
+
+        const result = await run(engine)
+        expect(result?.isError).toBe(true)
+        expect(result?.notRun).toBe(true)
       })
 
       it('反方向：跑成功的调用 notRun 不得为真', async () => {
@@ -2253,6 +2279,8 @@ describe('QueryEngine', () => {
       expect(result?.isError).toBe(true)
       // 本 CLI 没有交互批准提示 ⇒ `ask` 是硬拒，且拒绝的理由必须说清「不是你的钩子坏了」。
       expect(result?.content).toMatch(/approval|批准/)
+      // 钩子挡住 ⇒ 从未执行；展示层据此说「未运行」而不是把它画成结果行（314-031）。
+      expect(result?.notRun).toBe(true)
     })
 
     it('`allow` is a no-op, not an approval — the other two decisions are what change behaviour', async () => {

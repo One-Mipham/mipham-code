@@ -170,6 +170,34 @@ describe('Enter 把手上的会话交出去（attach）', () => {
     expect(onAttach).not.toHaveBeenCalled()
     expect(lastFrame()).toContain('No sessions to attach')
   })
+
+  /**
+   * 314-050：列表按状态分组，**每个 agent 的状态都可能随时变**（跑完 / 要输入）。
+   * 选择记的是位置的话，按键落在「现在这一拍的第 N 行」上 —— 而那一行可能已经
+   * 换成了另一个 agent。判据取**交出去的是谁**，不是屏幕上的高亮。
+   */
+  it('选中的 agent 换组之后，Enter 仍交给它 —— 不是顶到那个位置上的另一个', async () => {
+    const ids: string[] = []
+    const { stdin, manager, onAttach } = renderDashboard((m) => {
+      ids.push(m.create('A', 'Task A').id)
+      ids.push(m.create('B', 'Task B').id)
+      ids.push(m.create('C', 'Task C').id)
+      for (const id of ids) m.updateStatus(id, 'working')
+    })
+
+    stdin.write('j') // 选中 B（working 组第二行）
+    await settle()
+
+    // A 跑完 ⇒ 挪到 Done 组，位置 1 上现在是 A。按位置传就交给 A 了。
+    manager.updateStatus(ids[0]!, 'completed')
+    await settle()
+
+    stdin.write(ENTER)
+    await settle()
+
+    expect(onAttach).toHaveBeenCalledTimes(1)
+    expect((onAttach.mock.calls[0]![0] as { id: string }).id).toBe(ids[1])
+  })
 })
 
 // ═══════════════════════════════════════════

@@ -1024,6 +1024,11 @@ export function App({
     async (input: string) => {
       if (!input.trim()) return
 
+      // 用户真正敲的那串。转发型斜杠命令会把 `input` 换成给模型的指令正文
+      // （`input = forwardToAI`），而会话名取自**用户**的话 —— 否则第一条命令就能
+      // 把会话命名成一段内部指令（314-025）。
+      const typedInput = input
+
       // ── @mention: direct cross-session message — only when the name resolves
       // to a live session; otherwise fall through to normal AI processing so a
       // leading `@word` (e.g. "@bob please review") isn't hijacked as a send. ──
@@ -1219,7 +1224,7 @@ export function App({
       ) {
         const currentName = discoverSessions().find((s) => s.id === sessionId)?.name
         if (isDefaultSessionName(currentName, process.cwd())) {
-          const title = deriveSessionTitle(input)
+          const title = deriveSessionTitle(typedInput)
           if (title && sessionId) renameActiveSession(sessionId, title)
         }
       }
@@ -1299,6 +1304,10 @@ export function App({
     }
     // Escape: close apiKeyPrompt → close picker → abort loading (does NOT exit app)
     if (key.escape) {
+      // 面板开着时 Esc 归面板（关看板 / 从会话视图退回）。Ink 把同一个按键派发给
+      // **所有**挂载的 `useInput`，所以这里若再跑一遍 `dismissTopmost()`，关面板的
+      // 那一下会顺带 abort 正在跑的主回合 —— 用户想关的是面板，不是停掉对话（314-056）。
+      if (agentViewOpen || attachedSessionId) return
       if (dismissTopmost()) return
       // Otherwise let InputBar handle Escape (clear draft)
       return

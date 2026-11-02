@@ -614,10 +614,23 @@ export function createBashTool(credentialConfig?: CredentialMaskingConfig): Tool
 
       try {
         // ── Credential masking: filter sensitive env vars ──
-        let spawnEnv: Record<string, string | undefined> | undefined
+        let spawnEnv: Record<string, string | undefined> = {
+          ...(process.env as Record<string, string | undefined>),
+        }
+        // bash reads these *before* it runs the command, so an exported one
+        // silently reconfigures every command we start:
+        //   SHELLOPTS — `set -o` options. Exported `errexit` stops a whole
+        //     script at its first failing statement (`a; false; b` printed only
+        //     `a`, exit 1), which reads as "the command did less than asked".
+        //   BASHOPTS — the `shopt` equivalents (`nullglob`, `globstar`, …).
+        //   BASH_ENV — a file non-interactive bash sources first: arbitrary
+        //     code from the parent process ahead of the user's command.
+        // The parent's shell is not the model's shell; the tool's contract is
+        // that the command runs as written.
+        for (const key of ['SHELLOPTS', 'BASHOPTS', 'BASH_ENV']) delete spawnEnv[key]
         if (credentialConfig?.enabled && credentialConfig.env_filter.enabled) {
           const { filterEnv } = await import('../../core/credential-masker')
-          spawnEnv = filterEnv(process.env as Record<string, string | undefined>, credentialConfig)
+          spawnEnv = filterEnv(spawnEnv, credentialConfig)
         }
 
         const proc = Bun.spawn(['bash', '-c', command], {

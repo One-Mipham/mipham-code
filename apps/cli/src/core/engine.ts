@@ -1418,7 +1418,7 @@ export class QueryEngine {
       const hint = isMcpTool
         ? `\nMCP tool "${name}" is no longer available. The MCP server may have been removed or disconnected. Use tool-search to discover available tools.`
         : `\nTool "${name}" is not registered. Available tools may have changed — check the tool list.`
-      return { success: false, content: '', error: `Unknown tool: ${name}${hint}` }
+      return { success: false, content: '', error: `Unknown tool: ${name}${hint}`, notRun: true }
     }
 
     // Security: check permission before executing.
@@ -1442,10 +1442,11 @@ export class QueryEngine {
         success: false,
         content: '',
         error: baseError + moveOnHint,
-        // Held back, not judged: the auto-mode classifier had no usable answer.
-        // The display says "Not run" for these instead of showing a result line
-        // that reads as if the tool had run and returned that text (296-056).
-        notRun: decision.retryable === true,
+        // It did not run. Whatever refused it — a deny rule, the mode, or the
+        // auto-mode classifier with no usable answer — the text below is a
+        // *reason*, not output, and a collapsed tool group otherwise renders it
+        // as a result line (296-056, 314-031).
+        notRun: true,
       }
     }
     // P1-4: Tool allowed — reset block counter
@@ -1461,6 +1462,7 @@ export class QueryEngine {
           success: false,
           content: '',
           error: preResult.reason || t('errors.tool_blocked', { name }),
+          notRun: true,
         }
       }
 
@@ -1477,6 +1479,7 @@ export class QueryEngine {
           success: false,
           content: '',
           error: preResult.reason || t('errors.tool_hook_ask', { name }),
+          notRun: true,
         }
       }
 
@@ -1611,7 +1614,7 @@ export class QueryEngine {
           success: false,
           content: '',
           error: this.buildDenialError(name, tool, effectiveParams, recheck),
-          notRun: recheck.retryable === true,
+          notRun: true,
         }
       }
     }
