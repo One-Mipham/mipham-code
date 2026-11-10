@@ -127,15 +127,23 @@ export class OAuthClient {
           /* fire-and-forget */
         })
       })
-      setTimeout(() => {
-        server.close()
-        reject(new Error(t('errors.oauth_timeout')))
-      }, 300_000)
+      // Only one timeout exists, and it is the `timer` above so the callback can
+      // clear it. A second, uncancelled 5-minute timer used to be armed here: it
+      // kept the event loop alive long after a successful flow and fired
+      // `reject` on an already-settled promise.
     })
 
     const tokenResponse = await fetch(auth.tokenUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      // A redirect here is not a hop to retry on — it re-POSTs the
+      // authorization code and PKCE verifier to whatever host the redirect
+      // names. Refuse it instead of following.
+      redirect: 'error',
+      // The callback has already returned, so a server that accepts the
+      // connection and then says nothing would leave this promise (and the
+      // interactive flow) pending forever.
+      signal: AbortSignal.timeout(60_000),
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         code,
@@ -221,6 +229,9 @@ export class OAuthClient {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        // Same rule as the code exchange: a 307/308 would carry the refresh
+        // token to the redirect target. Fail closed rather than leak it.
+        redirect: 'error',
         body: new URLSearchParams({
           grant_type: 'refresh_token',
           refresh_token: saved.refreshToken,

@@ -105,7 +105,7 @@ const SENSITIVE_ENV_PATTERNS = [
  * Build a sanitised environment for MCP subprocesses.
  * Strips sensitive vars; allows explicit overrides via `extra`.
  */
-function buildProcEnv(extra?: Record<string, string>): Record<string, string> {
+export function buildProcEnv(extra?: Record<string, string>): Record<string, string> {
   const sanitized: Record<string, string> = {}
 
   for (const [key, value] of Object.entries(process.env as Record<string, string>)) {
@@ -114,9 +114,17 @@ function buildProcEnv(extra?: Record<string, string>): Record<string, string> {
     sanitized[key] = value
   }
 
-  // Explicit overrides take precedence (for intentionally shared secrets)
+  // Explicit overrides take precedence (for intentionally shared secrets).
+  //
+  // An empty override means "not set", not "set to empty": passing
+  // `AWS_BEARER_TOKEN_BEDROCK=""` makes the SDK skip the machine's own
+  // credential chain and fail auth, while an unset variable lets it fall back.
+  // `Object.assign` used to copy the empty string verbatim.
   if (extra) {
-    Object.assign(sanitized, extra)
+    for (const [key, value] of Object.entries(extra)) {
+      if (value === '') delete sanitized[key]
+      else sanitized[key] = value
+    }
   }
 
   return sanitized

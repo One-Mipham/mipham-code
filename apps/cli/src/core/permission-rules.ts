@@ -1,6 +1,6 @@
 import { homedir } from 'node:os'
 import { isAbsolute, join, normalize } from 'node:path'
-import { realpathSync } from 'node:fs'
+import { realpathSync, statSync } from 'node:fs'
 import type { PermissionRuleEntry } from '../shared/index.ts'
 import { expandHome, matchPath } from './credential-masker/matcher'
 
@@ -392,6 +392,22 @@ function uniq(items: string[]): string[] {
   return [...new Set(items)]
 }
 
+/**
+ * Remove quotes that wrap a single, metacharacter-free token.
+ *
+ * `rm "-rf" /tmp` and `git "push" origin` run the same commands as their
+ * unquoted spellings; the quotes only reached the matcher. Tokens that contain
+ * whitespace or shell syntax are left alone — de-quoting those would rewrite
+ * token boundaries and could turn one segment into a different command.
+ */
+function dequoteSimpleTokens(segment: string): string {
+  // The three quote characters are written as \x27 / \x22 / \x60 on purpose:
+  // the tool-reference integrity guard's literal lexer has no regex-literal
+  // support, and a raw one here opens a string it never closes — the rest of
+  // the file is then scanned as one literal (this file was the first to trip it).
+  return segment.replace(/([\x27\x22])([^\x27\x22\x60;&|<>()\s]*?)\1/g, '$2')
+}
+
 /** File paths a Bash command reads or writes. */
 export interface BashFileAccess {
   read: string[]
@@ -432,26 +448,15 @@ export function extractBashFileAccess(command: string): BashFileAccess {
   const read: string[] = []
   const write: string[] = []
 
-  // 1. Redirect targets. Handles `> file`, `>file`, and the same operators
-  //    right after a substitution/subshell (`(echo x)>file`, `x=$(date)>file`).
-  //    Requiring a separator before the operator (the old shape) missed every
-  //    no-space form, so `Edit(path)`/`Write(path)` deny rules were bypassable
-  //    with `echo hi>path`. Heredocs (`<<`) and fd-dup targets (`2>&1`) are
-  //    skipped — their "target" is a delimiter or file descriptor, not a path.
-  const redirectRe = /([0-9]*&?)?(>>|<<|<|>)\s*([^\s;|&<>]+)/g
-  let m: RegExpExecArray | null
-  while ((m = redirectRe.exec(command)) !== null) {
-    const op = m[2]!
-    if (op === '<<') continue // heredoc delimiter
-    // Process substitution `<(...)` / `>(...)` is not a redirect to a file.
-    if (m[3]!.startsWith('(')) continue
-    const target = stripQuotes(m[3]!)
-    if (op === '<') read.push(target)
-    else write.push(target)
-  }
-
-  // 2. Reader/writer command arguments (non-flag args are candidate paths),
-  //    recursing into `$(...)` / backtick substitutions.
+  // Redirect targets and reader/writer arguments are collected in **one** pass,
+  // because both have to resolve relative paths against the folder the shell is
+  // in at that point in the command line. Splitting them into two passes is how
+  // `cd /etc && cat passwd` and `cd /etc && echo x > passwd` would disagree
+  // about where `passwd` is (321-005). Redirect notes from the dedicated pass
+  // still apply: `> file`, `>file`, and the same operators right after a
+  // substitution/subshell (`(echo x)>file`, `x=$(date)>file`) all count;
+  // heredocs (`<<`) and fd-dup targets (`2>&1`) are skipped — their "target" is
+  // a delimiter or file descriptor, not a path.
   scanReaderWriterCommands(command, read, write)
 
   // 展开放在出口这一处，而不是每个 push 点 —— 重定向与读/写命令、以及它们的
@@ -479,6 +484,25 @@ function extractSubstitutions(command: string): string[] {
 }
 
 /**
+ * Index just past one `VAR=value` assignment in an `env` token list, following
+ * shell quoting so a value containing spaces is consumed whole.
+ */
+function skipEnvAssignment(tokens: string[], start: number): number {
+  let quote: string | null = null
+  for (let i = start; i < tokens.length; i++) {
+    for (const ch of tokens[i]!) {
+      if (quote) {
+        if (ch === quote) quote = null
+      } else if (ch === '"' || ch === "'") {
+        quote = ch
+      }
+    }
+    if (quote === null) return i + 1
+  }
+  return tokens.length
+}
+
+/**
  * Flatten a command into every matchable sub-command: its shell segments plus
  * the commands nested inside `$(...)`/backtick substitutions and shell `-c`
  * payloads (recursively, bounded by MAX_COMMAND_DEPTH). So a `Bash(rm *)` deny
@@ -490,6 +514,11 @@ export function flattenCommand(command: string, depth = 0): string[] {
   const out: string[] = []
   for (const seg of splitShellSegments(command)) {
     out.push(seg)
+    // The shell removes quotes before running the command, so `rm "-rf" /tmp`
+    // *is* `rm -rf /tmp` — but the rule text is written without quotes, so the
+    // quoted spelling used to slip past `Bash(rm -rf *)`.
+    const unquoted = dequoteSimpleTokens(seg)
+    if (unquoted !== seg) out.push(unquoted)
     const stripped = stripPrefixCommand(seg)
     if (stripped !== seg) out.push(stripped)
     // 剥掉前导噪声后的形态也要参与匹配：`IFS=x rm -rf x` / `( rm -rf x )` /
@@ -501,12 +530,19 @@ export function flattenCommand(command: string, depth = 0): string[] {
     for (const inner of extractSubstitutions(seg)) {
       out.push(...flattenCommand(inner, depth + 1))
     }
+    // Wrapper prefixes (`env`, `sudo`, `timeout`, …) are not the command being
+    // run. Without their removal `env X="a b" rm -rf /` matched no `rm …`
+    // rule at all, because the matcher never saw past the assignment.
+    const { base, args, payload } = effectiveCommand(seg.split(/\s+/).filter(Boolean))
+    if (base) {
+      const unwrapped = [base, ...args].join(' ')
+      if (unwrapped !== seg) out.push(unwrapped)
+    }
     // A shell `-c` payload is a command line in its own right, so `Bash(rm *)`
     // must also match `bash -c 'rm -rf /'`. Past the depth bound recursion stops
     // outright rather than pushing the raw payload: the raw text
     // (`bash -c 'rm -rf /'`) matches no `rm …` pattern anyway, and stopping
     // keeps the boundary predictable.
-    const { payload } = effectiveCommand(seg.split(/\s+/).filter(Boolean))
     if (payload && depth < MAX_COMMAND_DEPTH) out.push(...flattenCommand(payload, depth + 1))
   }
   return out
@@ -538,7 +574,11 @@ function effectiveCommand(tokens: string[]): {
       if (PREFIX_VALUE_OPTIONS.has(opt) && i < tokens.length) i++ // skip the flag's value
     }
     if (name === 'env') {
-      while (i < tokens.length && tokens[i]!.includes('=')) i++ // `VAR=value` assignments
+      // `VAR=value` assignments. A quoted value spans several whitespace-split
+      // tokens (`X="a b"` → `X="a` + `b"`), so skipping one token per `=` left
+      // the base command as `b"` and every gate reading this normalized form
+      // missed the real command afterwards (319-080).
+      while (i < tokens.length && tokens[i]!.includes('=')) i = skipEnvAssignment(tokens, i)
     }
     // `timeout` 的位置参数是 duration，**不是**必然存在：`timeout 5 cmd` 有，
     // `timeout --preserve-status cmd` 没有。无条件 `i++` 会把后者真正的命令
@@ -617,17 +657,82 @@ function stripPrefixCommand(command: string): string {
 }
 
 /**
+ * Whether a writer command's destination names a directory — in which case the
+ * file actually written is `dest/basename(src)`, not the directory itself.
+ */
+function isDirectoryTarget(path: string): boolean {
+  // A trailing slash (or `.`/`..`) is taken at its word: `cp` treats it as a
+  // directory even when nothing is there yet. Otherwise ask the disk.
+  if (path.endsWith('/') || path === '.' || path === '..') return true
+  try {
+    return statSync(expandHome(path)).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The folder a `cd` segment moves the shell into, or `undefined` when the
+ * segment is not a `cd`. `null` means the destination cannot be known
+ * (`cd -`), and later relative paths stay as written.
+ */
+function cdDestination(segment: string): string | null | undefined {
+  const tokens = stripLeadingShellNoise(segment).split(/\s+/).filter(Boolean)
+  if (tokens.length === 0) return undefined
+  const { base, args } = effectiveCommand(tokens)
+  if (base !== 'cd') return undefined
+  const target = args[0]
+  if (target === '-') return null
+  if (!target || target === '~' || target.startsWith('~/')) return expandHome(target ?? '~')
+  return stripQuotes(target)
+}
+
+/**
  * Detect reader/writer commands at the front of each shell segment and recurse
  * into command substitutions and shell `-c` payloads, so both
  * `echo $(cat .git-credentials)` and `bash -c 'cat .git-credentials'` are caught.
+ *
+ * `cwd` is the folder a relative path in this segment resolves against: the
+ * shell evaluates a command line left to right, so a `cd` in an earlier segment
+ * moves everything after it. Without that, `cd /etc && cat passwd` looked like a
+ * read of `./passwd`, and a `Read(/etc/passwd)` deny rule never saw it
+ * (321-005). A `cd` inside a substitution or `-c` payload is scoped to that
+ * recursion — the shell runs it in a subshell / child process — which is why
+ * the tracker is passed down by value.
  */
 function scanReaderWriterCommands(
   command: string,
   read: string[],
   write: string[],
   depth = 0,
+  cwd: string | null = null,
 ): void {
+  const resolve = (p: string): string =>
+    cwd && !isAbsolute(p) && !p.startsWith('~') ? join(cwd, p) : p
+
   for (const seg of splitShellSegments(command)) {
+    const dest = cdDestination(seg)
+    if (dest !== undefined) {
+      cwd = dest === null ? null : isAbsolute(dest) ? dest : cwd ? join(cwd, dest) : dest
+      continue
+    }
+    // Redirect targets. Handles `> file`, `>file`, and the same operators right
+    // after a substitution/subshell (`(echo x)>file`, `x=$(date)>file`).
+    // Requiring a separator before the operator (the old shape) missed every
+    // no-space form, so `Edit(path)`/`Write(path)` deny rules were bypassable
+    // with `echo hi>path`. Heredocs (`<<`) and fd-dup targets (`2>&1`) are
+    // skipped — their "target" is a delimiter or file descriptor, not a path.
+    const redirectRe = /([0-9]*&?)?(>>|<<|<|>)\s*([^\s;|&<>]+)/g
+    let m: RegExpExecArray | null
+    while ((m = redirectRe.exec(seg)) !== null) {
+      const op = m[2]!
+      if (op === '<<') continue // heredoc delimiter
+      // Process substitution `<(...)` / `>(...)` is not a redirect to a file.
+      if (m[3]!.startsWith('(')) continue
+      const target = resolve(stripQuotes(m[3]!))
+      if (op === '<') read.push(target)
+      else write.push(target)
+    }
     // 先剥前导噪声再 tokenize：`IFS=x cat secret` / `! cat secret` /
     // `time -p cat secret` 读的是同一个文件，Read() 规则必须看得见 `cat`。
     // 与 flattenCommand 共用 stripLeadingShellNoise —— 两条路径一份归一化。
@@ -650,37 +755,58 @@ function scanReaderWriterCommands(
             // — the value is already a separate, non-`-` token handled below.)
             const eq = arg.indexOf('=')
             if (eq === -1) continue
-            const v = stripQuotes(arg.slice(eq + 1))
-            if (v === '' || v.startsWith('-')) continue
+            const raw = stripQuotes(arg.slice(eq + 1))
+            if (raw === '' || raw.startsWith('-')) continue
+            const v = resolve(raw)
             read.push(v)
             if (inPlace) write.push(v)
             continue
           }
-          const p = stripQuotes(arg)
+          const p = resolve(stripQuotes(arg))
           read.push(p)
           if (inPlace) write.push(p)
         }
       } else if (WRITER_COMMANDS.has(base)) {
+        const paths: string[] = []
         for (const arg of args) {
           if (arg.startsWith('-')) {
             const eq = arg.indexOf('=')
             if (eq === -1) continue
-            const v = stripQuotes(arg.slice(eq + 1))
-            if (v === '' || v.startsWith('-')) continue
-            write.push(v)
+            const raw = stripQuotes(arg.slice(eq + 1))
+            if (raw === '' || raw.startsWith('-')) continue
+            paths.push(resolve(raw))
             continue
           }
-          write.push(stripQuotes(arg))
+          paths.push(resolve(stripQuotes(arg)))
+        }
+        write.push(...paths)
+        // `cp x /etc/` writes `/etc/x`, not `/etc/` — recording only the
+        // directory let a `Write(/etc/*)` deny rule (and the protected-file
+        // prompt) miss the file that was actually created. The destination is
+        // the `-t` option value when given, otherwise the last positional path
+        // (321-006).
+        if (base === 'cp' || base === 'mv') {
+          const tIdx = args.findIndex((a) => a === '-t' || a === '--target-directory')
+          const tRaw = tIdx !== -1 ? stripQuotes(args[tIdx + 1] ?? '') : ''
+          const dest =
+            tIdx !== -1 ? (tRaw === '' ? undefined : resolve(tRaw)) : paths[paths.length - 1]
+          if (dest && isDirectoryTarget(dest)) {
+            for (const src of paths) {
+              if (src === dest) continue
+              const name = src.replace(/\/+$/, '').split('/').pop()
+              if (name && name !== '.' && name !== '..') write.push(join(dest, name))
+            }
+          }
         }
       }
       // Re-parse a shell `-c` payload: `bash -c 'cat secret'` reads `secret`
       // just as directly as `cat secret` does.
       if (payload && depth < MAX_COMMAND_DEPTH) {
-        scanReaderWriterCommands(payload, read, write, depth + 1)
+        scanReaderWriterCommands(payload, read, write, depth + 1, cwd)
       }
     }
     for (const inner of extractSubstitutions(seg)) {
-      scanReaderWriterCommands(inner, read, write, depth + 1)
+      scanReaderWriterCommands(inner, read, write, depth + 1, cwd)
     }
   }
 }

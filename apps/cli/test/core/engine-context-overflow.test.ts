@@ -124,6 +124,8 @@ describe('isContextOverflowError', () => {
       'This model maximum context length is 128000 tokens',
       'Usage credits required for 1M context',
       'The request exceeds the model context window',
+      // Bedrock 的原话（317-033）：不含 "context" 也不含 "prompt"。
+      'Input is too long.',
     ]) {
       expect(isContextOverflowError(msg), msg).toBe(true)
     }

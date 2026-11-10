@@ -91,7 +91,8 @@
     },
     "rename": {
       "usage": "用法: /rename <session-name>\n示例: /rename 修复 Bug 的会话",
-      "confirmed": "✓ 会话重命名为 \"{name}\""
+      "confirmed": "✓ 会话重命名为 \"{name}\"",
+      "unsaved": "⚠ 本次会话已改名为 \"{name}\"，但没能写入会话登记表 —— 这个名字可能不会保留。"
     },
     "plan": {
       "entered": "已进入计划模式。",
@@ -205,6 +206,7 @@
       "delete_usage": "用法: /resume delete <session-name>\n\n删除已保存的会话。使用 /resume 列出所有会话。",
       "delete_confirmed": "✓ 会话 \"{name}\" 已删除。",
       "delete_not_found": "✗ 未找到会话 \"{name}\"。使用 /resume 列出所有会话。",
+      "delete_current": "✗ \"{name}\" 是你当前所在的会话 —— 退出时它会被重新写回，所以在这里删掉不会生效。请先退出，再删除。",
       "empty_footer": "会话在 Mipham Code 退出时自动保存到 ~/.mipham/sessions/。\n开始对话 — 它将自动保存。",
       "total_footer": "总计: {count} 个会话 • 位置: ~/.mipham/sessions/",
       "resume_hint": "查看会话详情:   /resume <name>",

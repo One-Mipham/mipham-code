@@ -151,8 +151,17 @@ async function checkWorkspaceTrust(): Promise<void> {
   try {
     const answer = await question('Trust this workspace? [Y/N]: ')
     if (answer === 'y' || answer === 'yes') {
-      trust.trust(cwd)
-      process.stderr.write(`✓ Workspace trusted: ${cwd}\n\n`)
+      if (trust.trust(cwd)) {
+        process.stderr.write(`✓ Workspace trusted: ${cwd}\n\n`)
+      } else {
+        // The in-memory list now covers this run, but the write failed — so the
+        // next run will ask again. Saying "trusted" alone would be a claim the
+        // disk never received (318-009).
+        process.stderr.write(
+          `⚠ Workspace trusted for this run only: ${cwd}\n` +
+            `  The trust store could not be written, so this directory will not be remembered.\n\n`,
+        )
+      }
     } else {
       process.stderr.write('✗ Workspace not trusted. Exiting.\n')
       rl.close()

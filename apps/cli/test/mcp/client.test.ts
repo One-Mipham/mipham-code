@@ -293,6 +293,84 @@ describe('McpClient', () => {
         vi.unstubAllGlobals()
       }
     })
+
+    // `connected` 是对「服务器 + 它的工具列表」的断言。握手一完就置位的话，
+    // 并发的第二个 connect() 会在 tools/list 还在飞的时候提前返回，调用者
+    // 于是按空的工具列表完成注册，而列表落地后又没有任何东西再通知它。
+    it('并发的第二个 connect 不会在 tools/list 返回之前提前完成', async () => {
+      let releaseTools: (() => void) | undefined
+      const toolsGate = new Promise<void>((resolve) => {
+        releaseTools = resolve
+      })
+      const mockFetch = vi.fn(async (_input: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body ?? '{}')) as { id: number; method: string }
+        const base = { jsonrpc: '2.0', id: body.id }
+        if (body.method === 'initialize') {
+          return new Response(
+            JSON.stringify({
+              ...base,
+              result: {
+                protocolVersion: '2024-11-05',
+                capabilities: { tools: {} },
+                serverInfo: { name: 'racy', version: '1.0.0' },
+              },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          )
+        }
+        if (body.method === 'tools/list') {
+          await toolsGate
+          return new Response(
+            JSON.stringify({
+              ...base,
+              result: { tools: [{ name: 'late_tool', description: 'L', inputSchema: {} }] },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          )
+        }
+        return new Response('', { status: 202 })
+      })
+      vi.stubGlobal('fetch', mockFetch)
+
+      try {
+        const client = McpClient.getInstance()
+        const config = { name: 'racy', url: 'http://localhost:8004/mcp' }
+        const first = client.connect(config)
+
+        // 等到第一次 connect 真的进了 tools/list（判据是请求已发出且还没回来）。
+        const deadline = Date.now() + 2000
+        while (
+          Date.now() < deadline &&
+          !mockFetch.mock.calls.some(
+            (c) =>
+              (
+                JSON.parse(String((c[1] as RequestInit | undefined)?.body ?? '{}')) as {
+                  method?: string
+                }
+              ).method === 'tools/list',
+          )
+        ) {
+          await new Promise((r) => setTimeout(r, 10))
+        }
+
+        let secondSettled = false
+        const second = client.connect(config).then(() => {
+          secondSettled = true
+        })
+        // 给「提前返回」足够的机会发生 —— 旧行为在这里就完成了。
+        await new Promise((r) => setTimeout(r, 50))
+        const settledBeforeTools = secondSettled
+
+        releaseTools!()
+        await Promise.all([first, second])
+
+        expect(settledBeforeTools, '第二个 connect 在工具列表回来之前就完成了').toBe(false)
+        expect(client.getTools('racy').map((t) => t.name)).toContain('late_tool')
+        expect(client.getConnection('racy')!.status).toBe('connected')
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
   })
 
   describe('OAuth-configured servers', () => {

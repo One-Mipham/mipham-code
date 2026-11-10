@@ -458,7 +458,6 @@ export class McpClient {
         }
         const initResult: InitializeResult = await protocol.initialize()
 
-        connection.status = 'connected'
         connection.serverInfo = initResult.serverInfo
         connection.instructions = initResult.instructions
 
@@ -471,6 +470,13 @@ export class McpClient {
         if (initResult.capabilities.tools) {
           connection.tools = await protocol.listTools()
         }
+
+        // `connected` is a claim about the server *and* its tool list. Setting
+        // it right after the handshake made `connect()` (and `reconnect()`)
+        // early-return while `tools/list` was still in flight, so a concurrent
+        // caller registered zero tools and nothing re-emitted when the list
+        // landed. The `connecting` promise covers this window instead.
+        connection.status = 'connected'
       })
     } catch (err) {
       connection.status = 'error'

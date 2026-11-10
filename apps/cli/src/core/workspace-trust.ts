@@ -87,8 +87,15 @@ export class WorkspaceTrust {
     }
   }
 
-  /** Persist the trust store to disk. */
-  private save(): void {
+  /**
+   * Persist the trust store to disk.
+   *
+   * Returns whether the write happened. The caller prints "✓ Workspace
+   * trusted", so a swallowed failure here made the UI claim a fact the disk
+   * never received — on a read-only or full shared home the next run asked
+   * again with no explanation (318-009).
+   */
+  private save(): boolean {
     try {
       if (!existsSync(MIPHAM_HOME)) {
         mkdirSync(MIPHAM_HOME, { recursive: true })
@@ -102,8 +109,10 @@ export class WorkspaceTrust {
       atomicWriteFileSync(TRUST_STORE_PATH, JSON.stringify(this.store, null, 2) + '\n', {
         mode: 0o600,
       })
+      return true
     } catch {
-      // Best-effort: don't crash if we can't save
+      // Don't crash if we can't save — but do report it.
+      return false
     }
   }
 
@@ -129,18 +138,23 @@ export class WorkspaceTrust {
     return false
   }
 
-  /** Add a directory to the trust store. */
-  trust(dir: string): void {
+  /**
+   * Add a directory to the trust store.
+   *
+   * Returns false only when the new entry could not be written to disk; a
+   * directory that is already trusted is `true` — it was persisted earlier.
+   */
+  trust(dir: string): boolean {
     const resolved = realPath(dir)
     // Don't add duplicates
-    if (this.store.directories.includes(resolved)) return
+    if (this.store.directories.includes(resolved)) return true
     // Don't add subdirectories of already-trusted paths
-    if (this.isTrusted(resolved)) return
+    if (this.isTrusted(resolved)) return true
 
     this.store.directories.push(resolved)
     // Sort for readability
     this.store.directories.sort()
-    this.save()
+    return this.save()
   }
 
   /** Remove a directory from the trust store (and any subdirectories). */

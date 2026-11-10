@@ -31,7 +31,7 @@ const COOLDOWN_MS = 5 * 60 * 1000
 
 /**
  * Merge two permission decisions, keeping the more restrictive one.
- * Priority: deny > defer > ask > allow
+ * Priority: deny > ask > defer > allow
  */
 /**
  * Does a failure to run this hook block the call?
@@ -48,7 +48,10 @@ export function mergePermissionDecision(
   current: HookResult['permissionDecision'],
   incoming: NonNullable<HookResult['permissionDecision']>,
 ): HookResult['permissionDecision'] {
-  const priority: Record<string, number> = { deny: 3, defer: 2, ask: 1, allow: 0 }
+  // deny > ask > defer > allow. `ask` must outrank `defer`: the engine treats
+  // `defer` as "no override" (it runs the normal permission flow), so letting
+  // defer win would discard a sibling hook's explicit ask and let the call run.
+  const priority: Record<string, number> = { deny: 3, ask: 2, defer: 1, allow: 0 }
   const currScore = current ? (priority[current] ?? 0) : -1
   const incScore = priority[incoming] ?? 0
   return incScore > currScore ? incoming : current
@@ -416,12 +419,19 @@ export class HookEngine {
           return { ...hookResult }
         }
 
-        // Merge permission decisions (deny > defer > ask > allow)
+        // Merge permission decisions (deny > ask > defer > allow). The reason
+        // travels with the decision that wins: the engine prints it when `ask`
+        // stops the call, and dropping it here meant the user got the generic
+        // "hook asked" text no matter what the hook explained.
         if (hookResult.permissionDecision) {
-          result.permissionDecision = mergePermissionDecision(
+          const merged = mergePermissionDecision(
             result.permissionDecision,
             hookResult.permissionDecision,
           )
+          if (merged !== result.permissionDecision && hookResult.reason) {
+            result.reason = hookResult.reason
+          }
+          result.permissionDecision = merged
         }
 
         // Stop hook: block decision takes precedence

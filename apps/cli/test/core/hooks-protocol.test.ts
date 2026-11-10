@@ -91,6 +91,18 @@ describe('parseHookStdout', () => {
     expect(r.permissionDecision).toBe('ask')
   })
 
+  it('permissionDecision ask 的理由要带上 —— 引擎拦下调用时打印的就是它', () => {
+    const stdout = JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'ask',
+        permissionDecisionReason: 'touches production',
+      },
+    })
+    const r = parseHookStdout(stdout, preCtx)
+    expect(r.reason).toBe('touches production')
+  })
+
   it('additionalContext is carried through', () => {
     const stdout = JSON.stringify({
       hookSpecificOutput: {

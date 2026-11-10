@@ -2394,7 +2394,14 @@ const renameCmd: CommandHandler = (ctx, args) => {
   // Persist to the cross-session registry so `@name` can address this session.
   // Returns the (possibly uniquified) final name — surface that to the user.
   const finalName = renameActiveSession(ctx.sessionId, name.trim())
-  return { content: t('commands.rename.confirmed', { name: finalName ?? name.trim() }) }
+  // The in-memory title changed either way, so this run shows the new name.
+  // But when the registry write did not happen, the name will not survive the
+  // session — reporting plain success left the user believing it would
+  // (319-089).
+  if (finalName === null) {
+    return { content: t('commands.rename.unsaved', { name: name.trim() }) }
+  }
+  return { content: t('commands.rename.confirmed', { name: finalName }) }
 }
 
 const goalCmd: CommandHandler = (ctx, args) => {
@@ -4494,6 +4501,14 @@ const resumeDeleteCmd: CommandHandler = async (ctx, args) => {
   const name = args.join(' ').trim()
   if (!name) {
     return { content: t('commands.resume.delete_usage') }
+  }
+
+  // Deleting the session you are in does not stick: the exit auto-save writes
+  // the transcript back with its last prompt, so the name reappears. Refusing
+  // here is the honest answer — the deletion would look done and be undone
+  // (318-021).
+  if (name === ctx.sessionId) {
+    return { content: t('commands.resume.delete_current', { name }) }
   }
 
   const { SessionStore } = await import('../core/session-store')

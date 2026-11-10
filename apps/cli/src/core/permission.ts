@@ -53,44 +53,52 @@ function isVerificationCommand(input: Record<string, unknown>): boolean {
   // not `cat secret` — auto-approving it would read files a `Read(...)` rule
   // means to protect.
   if (/[;&|><`$*?\[\]]/.test(cmd)) return false
-  // Patterns for verification-only commands (no side effects on codebase)
+  // `timeout 30 cat f` runs `cat f`; a plain duration wrapper is not part of
+  // the command. Without this the whitelist read the wrapper as the command
+  // name and every wrapped read-only call fell through to `ask` — which in
+  // this CLI means refused, not prompted (319-056). Flags are not stripped:
+  // only the plain `timeout DURATION` spelling the entry names.
+  const trimmed = cmd.trim()
+  const unwrapped = trimmed.replace(/^timeout\s+\d+(?:\.\d+)?[smhd]?\s+/, '')
+  const target = unwrapped !== trimmed ? unwrapped : trimmed
+  // Patterns for verification-only commands (no side effects on codebase).
+  //
+  // Every pattern is anchored at the start. An unanchored `\bcat\b` matches
+  // wherever the word appears — `sed -i 's/cat/dog/' f` and `rm -rf cat.txt`
+  // both contain it, so acceptEdits auto-approved *writes* on the strength of a
+  // filename. The whitelist is a statement about the command being run, so it
+  // has to read the command's first word, not any word in its arguments.
   const verifyPatterns = [
-    /\bpnpm\s+test\b/, // test runner
-    /\bpnpm\s+t\b/, // shorthand test
-    /\bpnpm\s+typecheck\b/, // type checking
-    /\bpnpm\s+lint\b/, // linting
-    /\bpnpm\s+format:check\b/, // format check
-    /\bnpm\s+test\b/, // npm test
-    /\bnpm\s+run\s+test\b/, // npm run test
-    /\bvitest\b/, // vitest runner
-    /\bjest\b/, // jest runner
-    /\btsc\s+(?!init)/, // TypeScript compiler (not tsc init)
-    /\btsc\s+--noEmit\b/, // type check only
-    /\beslint\b/, // eslint
-    /\bprettier\s+--check\b/, // prettier check
-    /\bpytest\b/, // python test runner
-    /\bruff\s+check\b/, // python linter
-    /\bcargo\s+test\b/, // rust test
-    /\bcargo\s+check\b/, // rust check
-    /\bgo\s+test\b/, // go test
-    /\bgo\s+vet\b/, // go vet
-    /\bmake\s+test\b/, // make test
-    /\bgit\s+status\b/, // git status (read-only)
-    /\bgit\s+diff\b/, // git diff (read-only)
-    /\bgit\s+log\b/, // git log (read-only)
-    /\bgit\s+branch\b/, // git branch (read-only)
-    /\bls\b/, // list files
-    /\bcat\b/, // read file
-    /\bhead\b/, // read file start
-    /\btail\b/, // read file end
-    /\bwhich\b/, // find binary
-    /\becho\b/, // print text
-    /\bnode\s+-v\b/, // node version
-    /\bpython\s+--version\b/, // python version
-    /\bwhoami\b/, // current user
-    /\bpwd\b/, // current directory
+    /^pnpm\s+(?:test|t|typecheck|lint|format:check)\b/, // test/lint/typecheck
+    /^npm\s+(?:test|run\s+test)\b/, // npm test
+    /^vitest\b/, // vitest runner
+    /^jest\b/, // jest runner
+    /^tsc\s+(?!init)/, // TypeScript compiler (not tsc init)
+    /^eslint\b/, // eslint
+    /^prettier\s+--check\b/, // prettier check
+    /^pytest\b/, // python test runner
+    /^ruff\s+check\b/, // python linter
+    /^cargo\s+(?:test|check)\b/, // rust test/check
+    /^go\s+(?:test|vet)\b/, // go test/vet
+    /^make\s+test\b/, // make test
+    /^git\s+status\b/, // git status (read-only)
+    /^git\s+diff\b/, // git diff (read-only)
+    /^git\s+log\b/, // git log (read-only)
+    // `git branch -d/-D/-m/-f` deletes or rewrites branches; only the listing
+    // spellings are read-only. `git branch` with no flag lists.
+    /^git\s+branch(?:\s+(?:--list|-a|-r|-v|--verbose|--show-current))*\s*$/,
+    /^ls\b/, // list files
+    /^cat\b/, // read file
+    /^head\b/, // read file start
+    /^tail\b/, // read file end
+    /^which\b/, // find binary
+    /^echo\b/, // print text
+    /^node\s+-v\b/, // node version
+    /^python\s+--version\b/, // python version
+    /^whoami\b/, // current user
+    /^pwd\b/, // current directory
   ]
-  return verifyPatterns.some((p) => p.test(cmd))
+  return verifyPatterns.some((p) => p.test(target))
 }
 
 /**

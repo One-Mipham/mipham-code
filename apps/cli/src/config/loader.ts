@@ -46,6 +46,12 @@ function safeParseYaml(path: string, label: string): Partial<MiphamConfig> | nul
       )
       return null
     }
+    // An empty document (0 bytes, or whitespace) parses to `null` — the same
+    // value a broken file yields. Reading it as corruption sent the loader down
+    // the backup-restore path and warned on every start, even though "empty" is
+    // exactly what `: > config.yml` leaves behind. Absent and empty mean the
+    // same thing here: nothing to apply, nothing to recover (318-044).
+    if (raw.trim() === '') return {}
     return parseYaml(raw) as Partial<MiphamConfig>
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)

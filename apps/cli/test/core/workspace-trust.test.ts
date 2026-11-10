@@ -77,12 +77,29 @@ describe('WorkspaceTrust', () => {
     // 拿原始路径断言会红在一个与形状校验无关的原因上。
     const dir = realpathSync(mkdtempSync(join(tmpdir(), 'trust-ok-')))
     const t = new WorkspaceTrust()
-    t.trust(dir)
+    expect(t.trust(dir)).toBe(true)
     resetWorkspaceTrust()
     expect(new WorkspaceTrust().listTrusted()).toEqual([dir])
     try {
       rmSync(dir, { recursive: true, force: true })
     } catch {}
+  })
+
+  it('写不进信任表时 trust() 返回 false —— 界面据此不再说「已记住」（318-009）', () => {
+    // 盘上写不进去，内存里的这次信任仍然成立；说谎的是「已信任」那行字。
+    const miphamDir = join(homedir(), '.mipham')
+    rmSync(miphamDir, { recursive: true, force: true })
+    writeFileSync(miphamDir, 'not a directory', 'utf-8')
+    try {
+      const dir = realpathSync(mkdtempSync(join(tmpdir(), 'trust-fail-')))
+      const t = new WorkspaceTrust()
+      expect(t.trust(dir)).toBe(false)
+      // 本次运行仍然生效 —— 只失败在持久化这一半。
+      expect(t.isTrusted(dir)).toBe(true)
+      rmSync(dir, { recursive: true, force: true })
+    } finally {
+      rmSync(miphamDir, { force: true })
+    }
   })
 
   it('写入是原子的（换 inode），且不留临时文件', () => {

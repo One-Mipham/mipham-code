@@ -113,6 +113,15 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
         vision: true,
         status: 'active',
       },
+      {
+        id: 'claude-fable-5-2',
+        name: 'Claude Fable 5.2',
+        providerId: 'anthropic',
+        contextWindow: 1_000_000,
+        maxOutput: 128_000,
+        vision: true,
+        status: 'active',
+      },
     ],
   },
   {

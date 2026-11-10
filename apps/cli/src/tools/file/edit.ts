@@ -89,6 +89,19 @@ export const editTool: ToolDefinition = {
         error: `String too large. Max: 5 MB per string.`,
       }
     }
+    // An empty `old_string` finds a match at every position. With replace_all it
+    // spliced the new text in at every character boundary and reported success —
+    // a corrupted file that looked like a completed edit. There is no
+    // replacement an empty needle expresses: creation is Write, insertion is
+    // anchored on surrounding text.
+    if (oldStr.length === 0) {
+      return {
+        success: false,
+        content: '',
+        error:
+          'old_string must not be empty. Use Write to create a file, or include the surrounding text to insert at a specific place.',
+      }
+    }
 
     // O_NOFOLLOW: fail closed on a symlink swapped in after resolveSafe (TOCTOU).
     let rfd: number

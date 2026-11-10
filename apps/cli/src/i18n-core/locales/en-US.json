@@ -91,7 +91,8 @@
     },
     "rename": {
       "usage": "Usage: /rename <session-name>\nExample: /rename Bug Fix Session",
-      "confirmed": "✓ Session renamed to \"{name}\""
+      "confirmed": "✓ Session renamed to \"{name}\"",
+      "unsaved": "⚠ Session title set to \"{name}\" for this run, but it could not be saved to the session registry — the name may not last."
     },
     "plan": {
       "entered": "Entered plan mode.",
@@ -205,6 +206,7 @@
       "delete_usage": "Usage: /resume delete <session-name>\n\nDelete a saved session. Use /resume to list all sessions.",
       "delete_confirmed": "✓ Session \"{name}\" deleted.",
       "delete_not_found": "✗ Session \"{name}\" not found. Use /resume to list all sessions.",
+      "delete_current": "✗ Session \"{name}\" is the one you are in — it would be written again when this session exits, so deleting it here would not stick. Exit first, then delete it.",
       "empty_footer": "Sessions are auto-saved to ~/.mipham/sessions/ when Mipham Code exits.\nStart a conversation — it will be saved automatically.",
       "total_footer": "Total: {count} session(s) • Location: ~/.mipham/sessions/",
       "resume_hint": "Session details:        /resume <name>",

@@ -2,7 +2,55 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { StdioTransport, MCP_SHUTDOWN_GRACE_MS } from '../../src/mcp/transport'
+import { StdioTransport, MCP_SHUTDOWN_GRACE_MS, buildProcEnv } from '../../src/mcp/transport'
+
+// 子进程环境的构造有它自己的用例：它决定 MCP 服务器看得见什么，而
+// 「显式覆盖传了空串」与「变量根本没设」在子进程里是**两种不同状态**
+// （SDK 的凭证链只看后者能回退）。这些用例不 spawn，直接看构造出来的对象。
+describe('buildProcEnv', () => {
+  const SENSITIVE = 'MIPHAM_TEST_FAKE_API_KEY'
+  const PLAIN = 'MIPHAM_TEST_FAKE_PLAIN'
+
+  function withEnv(key: string, value: string | undefined, fn: () => void): void {
+    const had = Object.prototype.hasOwnProperty.call(process.env, key)
+    const prev = process.env[key]
+    try {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+      fn()
+    } finally {
+      if (had) process.env[key] = prev
+      else delete process.env[key]
+    }
+  }
+
+  it('父进程的敏感变量默认被摘掉', () => {
+    withEnv(SENSITIVE, 'parent-secret', () => {
+      expect(buildProcEnv()).not.toHaveProperty(SENSITIVE)
+    })
+  })
+
+  it('显式覆盖可以把值交给信任的服务器', () => {
+    withEnv(SENSITIVE, 'parent-secret', () => {
+      expect(buildProcEnv({ [SENSITIVE]: 'explicit' })[SENSITIVE]).toBe('explicit')
+    })
+  })
+
+  it('空串覆盖 = 取消设置，而不是设成空串', () => {
+    withEnv(PLAIN, 'inherited', () => {
+      const env = buildProcEnv({ [PLAIN]: '' })
+      expect(env).not.toHaveProperty(PLAIN)
+      expect(env[PLAIN]).toBeUndefined()
+    })
+  })
+
+  it('空串覆盖不会凭空造出一个空变量', () => {
+    withEnv(PLAIN, undefined, () => {
+      const env = buildProcEnv({ [PLAIN]: '' })
+      expect(Object.prototype.hasOwnProperty.call(env, PLAIN)).toBe(false)
+    })
+  })
+})
 
 describe('StdioTransport', () => {
   let transport: StdioTransport

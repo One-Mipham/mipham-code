@@ -40,6 +40,16 @@ vi.mock('../../src/core/session-store', () => ({
   },
 }))
 
+// ── `/rename` persists through the cross-session registry; drive its outcome ──
+const { mockRename } = vi.hoisted(() => ({ mockRename: vi.fn() }))
+vi.mock('../../src/agent/cross-session/discovery', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/agent/cross-session/discovery')>()
+  return { ...actual, renameActiveSession: mockRename }
+})
+
+// The `/resume delete` tests drive (and observe) the mocked store directly.
+import { SessionStore } from '../../src/core/session-store'
+
 // Dynamic import so the mock takes effect
 const commandsModule = await import('../../src/ui/commands')
 
@@ -2014,5 +2024,60 @@ describe('/login 认得 config.yml 里的 provider key', () => {
       const content = await runLogin([provider({ apiKey: '' })])
       expect(content).toContain('✅')
     })
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// /resume delete — 删掉自己不会生效，就别假装删掉了（318-021）
+// ═══════════════════════════════════════════════════════════════
+
+describe('/resume delete — the running session cannot be deleted', () => {
+  it('refuses to delete the session it is in, and deletes nothing', async () => {
+    const del = vi.mocked(SessionStore.delete)
+    del.mockClear()
+    const ctx = mkCtx()
+    const result = await getCommand('/resume delete')!(ctx, ['commands-test-session'])
+
+    expect(result.content).toContain('written again')
+    expect(del).not.toHaveBeenCalled()
+  })
+
+  it('deletes another session exactly as before', async () => {
+    const del = vi.mocked(SessionStore.delete)
+    del.mockClear()
+    del.mockReturnValueOnce(true)
+    const result = await getCommand('/resume delete')!(mkCtx(), ['other-session'])
+
+    expect(del).toHaveBeenCalledWith('other-session')
+    expect(result.content).toContain('deleted')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// /rename — 没写进登记表时不说「成功」（319-089）
+// ═══════════════════════════════════════════════════════════════
+
+describe('/rename — persistence outcome is reported honestly', () => {
+  it('saved: reports the final (possibly uniquified) name as success', async () => {
+    mockRename.mockReturnValueOnce('Bug Fix-2')
+    const ctx = mkCtx() as unknown as { setSessionTitle: ReturnType<typeof vi.fn> }
+    const result = await getCommand('/rename')!(ctx, ['Bug', 'Fix'])
+
+    expect(ctx.setSessionTitle).toHaveBeenCalledWith('Bug Fix')
+    expect(result.content).toContain('Bug Fix-2')
+    expect(result.content).toContain('✓')
+    expect(result.content).not.toContain('may not last')
+  })
+
+  it('not saved: warns that the name may not last instead of claiming success', async () => {
+    mockRename.mockReturnValueOnce(null)
+    const ctx = mkCtx() as unknown as { setSessionTitle: ReturnType<typeof vi.fn> }
+    const result = await getCommand('/rename')!(ctx, ['Bug', 'Fix'])
+
+    // The title still changed for this run — that part is true.
+    expect(ctx.setSessionTitle).toHaveBeenCalledWith('Bug Fix')
+    expect(result.content).toContain('may not last')
+    // The false half is the one removed: no success mark.
+    expect(result.content).not.toContain('✓')
   })
 })

@@ -210,6 +210,22 @@ describe('matchBashRule — Bash rules match compound-command segments', () => {
   })
 })
 
+describe('matchBashRule — 引号与前缀不改变被执行的命令', () => {
+  it('引号包住的参数仍命中原样的 deny 规则（319-033）', () => {
+    expect(matchBashRule('Bash(rm -rf *)', 'Bash', { command: 'rm "-rf" /tmp' })).toBe(true)
+    expect(matchBashRule('Bash(git push *)', 'Bash', { command: 'git "push" origin' })).toBe(true)
+  })
+
+  it('带空格的引号参数不被拆开重写 —— 不能凭「听起来像」就命中', () => {
+    expect(matchBashRule('Bash(rm -rf *)', 'Bash', { command: 'rm "-r -f" /tmp' })).toBe(false)
+  })
+
+  it('env 的带空格引号赋值之后仍看得见真实命令（319-080）', () => {
+    expect(matchBashRule('Bash(rm *)', 'Bash', { command: 'env X="a b" rm -rf /tmp/x' })).toBe(true)
+    expect(matchBashRule('Bash(rm *)', 'Bash', { command: 'env X="a b" echo safe' })).toBe(false)
+  })
+})
+
 describe('matchBashRule — Bash rules recurse into command substitutions', () => {
   it('matches a $() substitution buried in a variable assignment', () => {
     expect(matchBashRule('Bash(rm *)', 'Bash', { command: 'REPORTTIME=$(rm -rf ~)' })).toBe(true)
@@ -364,6 +380,76 @@ describe('extractBashFileAccess — prefix wrapper commands', () => {
     expect(extractBashFileAccess("sudo bash -c 'cat .git-credentials'").read).toContain(
       '.git-credentials',
     )
+  })
+})
+
+describe('extractBashFileAccess — cp/mv 写的是目录里的那个文件（321-006）', () => {
+  it('目录目的地：写的是 `目录/源文件名`，不只是目录本身', () => {
+    expect(extractBashFileAccess('cp notes.txt /etc/').write).toContain('/etc/notes.txt')
+    expect(extractBashFileAccess('mv passwd /etc/').write).toContain('/etc/passwd')
+  })
+
+  it('`-t/--target-directory` 指定的目录同样算', () => {
+    expect(extractBashFileAccess('cp -t /etc notes.txt').write).toContain('/etc/notes.txt')
+    expect(extractBashFileAccess('mv --target-directory /etc passwd').write).toContain(
+      '/etc/passwd',
+    )
+  })
+
+  it('mv 一个目录进另一个目录：写的是里面的同名子目录', () => {
+    expect(extractBashFileAccess('mv src /tmp/dest/').write).toContain('/tmp/dest/src')
+  })
+
+  it('目的地不是目录时不多写一条 —— `cp a b` 写的就是 b', () => {
+    const access = extractBashFileAccess('cp a b')
+    expect(access.write).toContain('b')
+    expect(access.write).not.toContain('b/a')
+  })
+
+  it('deny 规则经由目录目的地命中真正被写的文件', () => {
+    expect(matchBashRule('Write(/etc/passwd)', 'Bash', { command: 'cp passwd /etc/' })).toBe(true)
+  })
+})
+
+describe('extractBashFileAccess — cd 之后的相对路径按新目录解析（321-005）', () => {
+  it('reader：`cd /etc && cat passwd` 读的是 /etc/passwd，不是 ./passwd', () => {
+    const access = extractBashFileAccess('cd /etc && cat passwd')
+    expect(access.read).toContain('/etc/passwd')
+    expect(access.read).not.toContain('passwd')
+  })
+
+  it('redirect：`cd /etc && echo x > shadow` 写的是 /etc/shadow', () => {
+    expect(extractBashFileAccess('cd /etc && echo x > shadow').write).toContain('/etc/shadow')
+  })
+
+  it('writer 的目录目的地同样按新目录解析', () => {
+    expect(extractBashFileAccess('cd /tmp && cp a b/').write).toContain('/tmp/b/a')
+  })
+
+  it('连续 cd 累积：`cd /tmp && cd sub && cat f` 读的是 /tmp/sub/f', () => {
+    expect(extractBashFileAccess('cd /tmp && cd sub && cat f').read).toContain('/tmp/sub/f')
+  })
+
+  it('绝对路径与 ~ 开头的路径不受 cd 影响', () => {
+    expect(extractBashFileAccess('cd /etc && cat /var/log/x').read).toContain('/var/log/x')
+    // `~` expands at the exit of extraction, so compare the ending and make
+    // sure the path was not glued onto the cd target.
+    const read = extractBashFileAccess('cd /etc && cat ~/.git-credentials').read
+    expect(read.some((p) => p.endsWith('/.git-credentials'))).toBe(true)
+    expect(read.some((p) => p.startsWith('/etc/'))).toBe(false)
+  })
+
+  it('`cd -` 的去向不可知时保持相对路径原样（不猜）', () => {
+    expect(extractBashFileAccess('cd - && cat f').read).toContain('f')
+  })
+
+  it('deny 规则看得见 cd 之后真正读写的文件', () => {
+    expect(matchBashRule('Read(/etc/passwd)', 'Bash', { command: 'cd /etc && cat passwd' })).toBe(
+      true,
+    )
+    expect(
+      matchBashRule('Write(/etc/shadow)', 'Bash', { command: 'cd /etc && echo x > shadow' }),
+    ).toBe(true)
   })
 })
 

@@ -567,6 +567,53 @@ describe('HookEngine', () => {
   // Session cwd
   // ═══════════════════════════════════════════
 
+  // 两条工具调用前闸的决定合并。`ask` 必须压过 `defer` —— 引擎对 `defer` 的
+  // 解读是「不覆盖」，若它胜出，同胞钩子明写的 ask 就被丢弃、调用照常放行。
+  // 理由也要跟着胜出的那条走：引擎在 ask 拦下调用时打印的正是 `reason`。
+  describe('permission decision merge', () => {
+    it('ask 胜过 defer（defer 是「不覆盖」，不能吞掉显式 ask）', async () => {
+      const engine = new HookEngine()
+      engine.register(makeHook('PreToolUse', makePassHandler({ permissionDecision: 'defer' })))
+      engine.register(
+        makeHook(
+          'PreToolUse',
+          makePassHandler({ permissionDecision: 'ask', reason: 'needs review' }),
+        ),
+      )
+
+      const result = await engine.executePreToolUse('bash', {}, 's1')
+      expect(result.permissionDecision).toBe('ask')
+      expect(result.reason).toBe('needs review')
+    })
+
+    it('后一个无理由的 defer 不清掉先一个 ask 的理由', async () => {
+      const engine = new HookEngine()
+      engine.register(
+        makeHook(
+          'PreToolUse',
+          makePassHandler({ permissionDecision: 'ask', reason: 'needs review' }),
+        ),
+      )
+      engine.register(makeHook('PreToolUse', makePassHandler({ permissionDecision: 'defer' })))
+
+      const result = await engine.executePreToolUse('bash', {}, 's1')
+      expect(result.permissionDecision).toBe('ask')
+      expect(result.reason).toBe('needs review')
+    })
+
+    it('deny 仍然压过 ask', async () => {
+      const engine = new HookEngine()
+      engine.register(
+        makeHook('PreToolUse', makePassHandler({ permissionDecision: 'ask', reason: 'review' })),
+      )
+      engine.register(makeHook('PreToolUse', makeDenyHandler('never')))
+
+      const result = await engine.executePreToolUse('bash', {}, 's1')
+      expect(result.allowed).toBe(false)
+      expect(result.reason).toBe('never')
+    })
+  })
+
   describe('session cwd', () => {
     it('stamps the engine cwd onto every hook context', async () => {
       const engine = new HookEngine('/sessions/probe')

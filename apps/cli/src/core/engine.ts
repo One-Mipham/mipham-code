@@ -2442,7 +2442,7 @@ function toolResultText(content: ContentBlock[]): string {
  */
 export function isContextOverflowError(message: string | null | undefined): boolean {
   if (!message) return false
-  return /context[_ ]length|context window|prompt is too long|too many tokens|maximum context length|exceeds? the (?:model'?s )?(?:maximum )?context|usage credits required for 1m context/i.test(
+  return /context[_ ]length|context window|prompt is too long|input is too long|too many tokens|maximum context length|exceeds? the (?:model'?s )?(?:maximum )?context|usage credits required for 1m context/i.test(
     message,
   )
 }

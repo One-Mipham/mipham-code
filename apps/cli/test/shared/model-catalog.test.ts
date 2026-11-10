@@ -15,12 +15,13 @@ import { describe, it, expect } from 'vitest'
 import { DEFAULT_PROVIDERS } from '../../src/shared/constants'
 
 describe('Anthropic 模型目录', () => {
-  it('提供最新的 Claude 型号（Opus 5.5 / Fable 5.1）', () => {
+  it('提供最新的 Claude 型号（Opus 5.5 / Fable 5.1 / Fable 5.2）', () => {
     const anthropic = DEFAULT_PROVIDERS.find((p) => p.id === 'anthropic')
     expect(anthropic).toBeDefined()
 
     const ids = anthropic!.models.map((m) => m.id)
     expect(ids).toContain('claude-opus-5-5')
     expect(ids).toContain('claude-fable-5-1')
+    expect(ids).toContain('claude-fable-5-2')
   })
 })

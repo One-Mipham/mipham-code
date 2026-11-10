@@ -128,7 +128,9 @@ export function parseHookStdout(stdout: string | null | undefined, _ctx: HookCon
       }
     }
     if (decision === 'ask') {
-      return { allowed: true, permissionDecision: 'ask', additionalContext }
+      // The engine stops the call on `ask` and prints `reason`, so the hook's
+      // `permissionDecisionReason` is the only place its explanation can land.
+      return { allowed: true, permissionDecision: 'ask', reason, additionalContext }
     }
     if (decision === 'defer') {
       return { allowed: true, permissionDecision: 'defer', additionalContext }

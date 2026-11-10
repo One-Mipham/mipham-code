@@ -2,11 +2,56 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import { OAuthClient, credentialBinding } from '../../src/mcp/oauth'
 import { TokenStore } from '../../src/mcp/token-store'
 import type { McpServerConfig } from '../../src/shared/types'
-import { createServer, Server } from 'node:http'
+import { createServer, Server, get } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { existsSync, rmSync } from 'node:fs'
+
+// 认证流程靠 `open <url>` 把浏览器叫起来。这里替掉它、只把命令记下来，
+// 测试自己拿 authUrl 里的 state / redirect_uri 驱动回调 —— 于是整条
+// 「回调 → 换令牌」链路可在无浏览器的情况下确定性跑完。
+const execCapture = vi.hoisted(() => ({ command: undefined as string | undefined }))
+vi.mock('node:child_process', () => ({
+  exec: (
+    command: string,
+    callback?: (err: Error | null, stdout: string, stderr: string) => void,
+  ) => {
+    execCapture.command = command
+    callback?.(null, '', '')
+  },
+}))
+
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = createServer()
+    probe.once('error', reject)
+    probe.listen(0, '127.0.0.1', () => {
+      const port = (probe.address() as AddressInfo).port
+      probe.close(() => resolve(port))
+    })
+  })
+}
+
+function httpGet(url: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    get(url, (res) => {
+      res.resume()
+      res.on('end', () => resolve())
+      res.on('error', reject)
+    }).on('error', reject)
+  })
+}
+
+async function waitFor<T>(probe: () => T | undefined, ms = 2000): Promise<T> {
+  const deadline = Date.now() + ms
+  while (Date.now() < deadline) {
+    const value = probe()
+    if (value !== undefined) return value
+    await new Promise((r) => setTimeout(r, 10))
+  }
+  throw new Error('waitFor: timed out')
+}
 
 describe('OAuthClient', () => {
   let mockAuthServer: Server
@@ -133,6 +178,61 @@ describe('OAuthClient', () => {
     expect(saved!.accessToken).toBe('mock-access-token-123')
   }, 15000)
 
+  it('code exchange：不跟随重定向、带超时，验证码只 POST 给令牌端点', async () => {
+    const client = new OAuthClient(new TokenStore(testDir))
+    const port = await freePort()
+    const config: McpServerConfig = {
+      name: 'pkce-exchange',
+      command: 'echo',
+      args: [],
+      auth: {
+        type: 'oauth',
+        authorizationUrl: 'http://localhost/authorize',
+        tokenUrl: 'http://localhost/token',
+        clientId: 'test-client-id',
+        redirectPort: port,
+      },
+    }
+
+    const fetchMock = vi.fn(async (_input: string, _init?: RequestInit) => {
+      return new Response(
+        JSON.stringify({ access_token: 'exchanged', refresh_token: 'r1', expires_in: 3600 }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    execCapture.command = undefined
+
+    try {
+      const flowPromise = client.executePkceFlow(config)
+
+      const command = await waitFor(() => execCapture.command)
+      const authUrl = new URL(command.match(/"(https?:\/\/[^"]+)"/)![1]!)
+      const state = authUrl.searchParams.get('state')
+      const redirectUri = authUrl.searchParams.get('redirect_uri')
+      expect(state).toBeTruthy()
+      expect(redirectUri).toBeTruthy()
+
+      await httpGet(`${redirectUri}?code=auth-code-1&state=${state}`)
+      const tokens = await flowPromise
+      expect(tokens.accessToken).toBe('exchanged')
+
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      const [url, init] = fetchMock.mock.calls[0]!
+      expect(url).toBe('http://localhost/token')
+      // 307/308 会把授权码与 PKCE verifier 重投给重定向目标 —— 必须失败，不许跟随。
+      expect((init as RequestInit).redirect).toBe('error')
+      expect((init as RequestInit).signal).toBeInstanceOf(AbortSignal)
+      const body = String((init as RequestInit).body)
+      expect(body).toContain('grant_type=authorization_code')
+      expect(body).toContain('code=auth-code-1')
+      expect(body).toMatch(/code_verifier=[^&]+/)
+    } finally {
+      vi.unstubAllGlobals()
+      execCapture.command = undefined
+    }
+  }, 15000)
+
   it('getValidAccessToken returns existing non-expired token', async () => {
     const store = new TokenStore(testDir)
     const config: McpServerConfig = {
@@ -183,6 +283,50 @@ describe('OAuthClient', () => {
   }, 15000)
 
   describe('refreshAccessToken retry', () => {
+    // 307/308 保留方法与请求体 —— 跟随它等于把 refresh token 重投给重定向目标。
+    // 判据是「那个目标一次都没有被访问」，而不是「返回了错误」：错误可能来自
+    // 别处，只有未命中才证明凭据没外流。
+    it('刷新令牌遇到 307 不跟随（refresh token 不外流）', async () => {
+      let redirectedHit = false
+      let port = 0
+      const server = createServer((req, res) => {
+        if (req.url === '/token') {
+          res.writeHead(307, { Location: `http://127.0.0.1:${port}/elsewhere` })
+          res.end()
+          return
+        }
+        redirectedHit = true
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ access_token: 'leaked', expires_in: 3600 }))
+      })
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+      port = (server.address() as AddressInfo).port
+      try {
+        const redirectConfig = {
+          name: 'redir-srv',
+          command: 'echo',
+          args: [] as string[],
+          auth: {
+            type: 'oauth' as const,
+            authorizationUrl: '',
+            tokenUrl: `http://127.0.0.1:${port}/token`,
+            clientId: '',
+          },
+        }
+        const store = new TokenStore(testDir)
+        store.save('redir-srv', {
+          accessToken: 'old-token',
+          refreshToken: 'refresh-me',
+          expiresAt: new Date(Date.now() - 3600000).toISOString(),
+          boundTo: credentialBinding(redirectConfig),
+        })
+        const client = new OAuthClient(store)
+        await expect(client.refreshAccessToken('redir-srv', redirectConfig)).rejects.toThrow()
+        expect(redirectedHit, 'refresh token 被 307 带到了重定向目标').toBe(false)
+      } finally {
+        server.close()
+      }
+    })
     const config = {
       name: 'retry-srv',
       command: 'echo',

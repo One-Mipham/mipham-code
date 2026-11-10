@@ -333,6 +333,73 @@ describe('PermissionSystem', () => {
     expect(ps.needsApproval(gitTool, { command: 'rm -rf /' })).toBe(true)
   })
 
+  // ── acceptEdits: the verification whitelist reads the command's head ──
+  describe('acceptEdits — 白名单读的是命令的开头，不是参数里的某个词', () => {
+    const bash = makeTool('Bash', 'self', 'exec')
+
+    it('仍然自动放行真正的验证命令', () => {
+      const ps = new PermissionSystem('acceptEdits')
+      for (const command of [
+        'pnpm test',
+        'pnpm t',
+        'pnpm typecheck',
+        'pnpm lint',
+        'pnpm format:check',
+        'npm run test',
+        'vitest run',
+        'git status',
+        'git diff',
+        'git branch',
+        'git branch --show-current',
+        'cat README.md',
+      ]) {
+        expect(ps.needsApproval(bash, { command }), command).toBe(false)
+      }
+    })
+
+    it('参数里出现同一个词不再等于命令本身（319-078 / 319-112）', () => {
+      const ps = new PermissionSystem('acceptEdits')
+      for (const command of [
+        // `cat` 只出现在 sed 的替换表达式里 —— 这是一条会写盘的命令。
+        "sed -i 's/cat/dog/' notes.md",
+        // `cat` / `tail` 是文件名的一部分。
+        'rm -rf cat.txt',
+        'rm tail.log',
+        // `git branch` 会改分支；只有列出的那几种拼法是只读的。
+        'git branch -D main',
+        'git branch -m main2',
+      ]) {
+        expect(ps.needsApproval(bash, { command }), command).toBe(true)
+      }
+    })
+
+    it('纯时长包裹的 timeout 不再把只读命令挡在门外（319-056）', () => {
+      const ps = new PermissionSystem('acceptEdits')
+      for (const command of [
+        'timeout 30 cat README.md',
+        'timeout 30 pnpm test',
+        'timeout 1.5s git status',
+        // 前导空白同样要能剥掉 —— 白名单比对的一直是 trim 过的命令。
+        '  timeout 30 ls  ',
+      ]) {
+        expect(ps.needsApproval(bash, { command }), command).toBe(false)
+      }
+    })
+
+    it('包裹之后的命令仍然按它自己的开头裁决（319-056 的反向）', () => {
+      const ps = new PermissionSystem('acceptEdits')
+      for (const command of [
+        // 剥壳之后是 rm，不是 cat —— 文件名里的 cat 救不了它。
+        'timeout 30 rm -rf cat.txt',
+        'timeout 30 git branch -D main',
+        // 带 flag 的 timeout 不是条目说的那种拼法，不剥；原样裁决 ⇒ 不放行。
+        'timeout --signal=KILL 30 cat README.md',
+      ]) {
+        expect(ps.needsApproval(bash, { command }), command).toBe(true)
+      }
+    })
+  })
+
   // ── P1: SendMessage goes through the permission classifier ──
   it('routes SendMessage through permission classifier in default mode', () => {
     const ps = new PermissionSystem('default')

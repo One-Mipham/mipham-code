@@ -478,6 +478,18 @@ describe('Edit tool execution', () => {
     expect(updated).toBe('hi\nhi\nworld')
   })
 
+  it('rejects an empty old_string — 整份文件会在每个字符处被插入（321-011）', async () => {
+    const before = readFileSync(testFile(), 'utf-8')
+    const result = await editTool.execute(
+      { file_path: testFile(), old_string: '', new_string: 'X', replace_all: true },
+      ctx,
+    )
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('must not be empty')
+    // 判据是磁盘上的字节没变 —— 只断言返回值会让「报错但仍写了」这种半修也全绿。
+    expect(readFileSync(testFile(), 'utf-8')).toBe(before)
+  })
+
   it('errors when old_string not found', async () => {
     const result = await editTool.execute(
       { file_path: testFile(), old_string: 'nonexistent', new_string: 'x' },
