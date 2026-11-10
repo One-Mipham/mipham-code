@@ -4,6 +4,28 @@
 > (tag dates) and use the same wording as the VS Code extension's changelog — the plugin is a
 > thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.31 (2026-11-10)
+
+- Version sync with Mipham Code CLI 0.85.31
+- Fixed: permission whitelist entries are anchored at the command's head. `sed -i 's/cat/dog/' f`,
+  `rm -rf cat.txt` and `git branch -D main` were auto-approved in acceptEdits because a keyword
+  appeared among the arguments; only the command being run decides now.
+- Fixed: quoted arguments are dequoted before rule matching (`--file="a b"`, `VAR="a b" cmd`).
+- Fixed: `cp x /etc/` records `/etc/x`, not just `/etc/`, so a rule protecting that file sees it.
+- Fixed: relative paths after a `cd` resolve against the new directory (`cd /etc && cat passwd`).
+- Fixed: a read-only command wrapped in a plain `timeout DURATION` is no longer refused; other
+  flag spellings are left alone.
+- Fixed: an empty `old_string` is rejected outright.
+- Changed: an empty MCP environment-variable override now unsets it instead of setting an empty
+  string; OAuth token exchange refuses redirects and times out after 60s; an MCP connection is
+  only marked connected after `tools/list` succeeds; a hook's `ask` decision outranks `defer` and
+  its reason is carried through.
+- Changed: model catalog adds Fable 5.2 (12 providers, 51 models).
+- Fixed: `/rename` says the name may not last when the registry write fails; `/resume delete`
+  refuses the running session; workspace trust says "this run only" when the store cannot be
+  written; an empty `config.yml` is treated as missing; Bedrock's `Input is too long.` counts as
+  context overflow.
+
 ## 0.85.30 (2026-11-02)
 
 - Version sync with Mipham Code CLI 0.85.30
