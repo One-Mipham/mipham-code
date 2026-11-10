@@ -58,6 +58,14 @@
 同时 API 侧 `versions[]` 82 → **83 条**、`flags` = `validated`、`lastUpdated` =
 `2026-11-10T01:42:43.173Z` —— 两个探针读的是同一个时刻。
 
+0.85.32 实测（2026-11-10）：13:17:21Z 上传 ⇒ 形态②（`Version` 仍 0.85.31、`Last updated`
+已是 13:17:21）；**7.3 分钟时（13:24:39Z）仍是形态②**，用一条全新请求独立复核同样如此
+（排除「轮询连接钉在旧 CDN 节点」这一种假象）；13:24:44Z 转形态③（`Version` 0.85.32、
+`Last updated` 13:24:44），同时 API 侧 `versions[]` 83 → **84 条**、`flags` = `validated`、
+`lastUpdated` = `2026-11-10T13:24:44.597Z` —— 两个探针读的是同一个时刻。**校验窗口 ≈7.4 分钟**
+（落到上表 3–8 的上界）。⚠️ 形态② 期间**只有公开页**的 `LastUpdatedDateString` 会跳到上传时刻，
+API 的 `versions[0].lastUpdated` 仍指上一版 —— **别拿 API 那个字段判形态②**，两个字段名像、含义不同。
+
 ```bash
 # A. 公开页（必须 cache-bust，CDN 会给旧读数）
 curl -4 -sS -H 'Cache-Control: no-cache' \
