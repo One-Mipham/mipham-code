@@ -39,10 +39,44 @@
 > 它带 `--disable-sync`、无书签无 cookie）—— 会永远被弹回登录页。
 > **换真 Chrome 打开再判断「页面在不在」。**
 
-> ⚠️ **上传后立刻查公开 API 很可能仍报旧版本 —— 那是验证/传播窗口，不是失败。**
-> Marketplace 的公开 Gallery API **读不出「验证中」这个状态**，唯一判据是**登录态**
-> publisher 页上的版本状态徽章。2026-09-19 实测：0.81.9 上传后公开 API 仍报 0.81.8
-> （前一天的版本）。**别把「读到旧版本」读成「没传上去」。**
+### 上架核验：三个形态（都不需要登录态）
+
+> ⚠️ **上传后立刻查公开 API 很可能仍报旧版本 —— 那是校验窗口，不是失败。**
+> 2026-09-19 实测：0.81.9 上传后公开 API 仍报 0.81.8（前一天的版本）。
+> **别把「读到旧版本」读成「没传上去」。**
+
+判据是**两个字段一起读**，只看版本号会把「校验中」误读成「没传上去」：
+
+| 形态     | 公开页 `"Version"` | 公开页 `LastUpdatedDateString` | 含义                                  |
+| -------- | ------------------ | ------------------------------ | ------------------------------------- |
+| ① 未上传 | 旧版本             | **旧时刻**                     | 这一版没到 Marketplace                |
+| ② 校验中 | 旧版本             | **新时刻**                     | 上传已收到，正在校验（实测 3–8 分钟） |
+| ③ 已发布 | **新版本**         | 新时刻                         | 可安装                                |
+
+0.85.31 实测（2026-11-10）：01:37:59Z 上传 ⇒ 形态②（`Version` 仍 0.85.30、`Last updated`
+已是 01:37:59）；01:42:43Z 转形态③（`Version` 0.85.31、`Last updated` 01:42:43），
+同时 API 侧 `versions[]` 82 → **83 条**、`flags` = `validated`、`lastUpdated` =
+`2026-11-10T01:42:43.173Z` —— 两个探针读的是同一个时刻。
+
+```bash
+# A. 公开页（必须 cache-bust，CDN 会给旧读数）
+curl -4 -sS -H 'Cache-Control: no-cache' \
+  "https://marketplace.visualstudio.com/items?itemName=miphamai.mipham-code&cb=$(date +%s%N)" \
+  | grep -o '"Version":"[^"]*"\|LastUpdatedDateString":"[^"]*"' | head -2
+
+# B. 页内同源 extensionquery —— flags 必须带 63（含 0x200）
+#    flags 含 0x200 时 versions[] 只回「已通过校验」的版本 ⇒ 校验期间它停在旧版是正常的，
+#    别据此判定上传失败；上传成功的旁证是 versions[] 的条数在转 ③ 时恰好 +1。
+curl -4 -sS -X POST \
+  "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery?cb=$(date +%s)" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json;api-version=7.2-preview.1' \
+  -d '{"filters":[{"criteria":[{"filterType":7,"value":"miphamai.mipham-code"}],"pageNumber":1,"pageSize":1,"sortBy":0,"sortOrder":0}],"assetTypes":[],"flags":63}'
+```
+
+> ⚠️ **通道会变**：曾出现 `curl` 走 IPv6 被 reset（HTTP 000）而页面本身 200 —— 加 `-4` 即通；
+> 也有过直连被墙、只能走浏览器 CDP 的时段。**先用无关站点验通道，再判目标**。
+> 登录态 publisher 页上的版本徽章能看到「验证中 / 已通过」字样，仍是最权威的读数，
+> 但**它不再是唯一判据**。
 
 ## 发布步骤（备选：命令行 vsce，需要 PAT）
 
