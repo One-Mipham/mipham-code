@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'node:child_process'
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
 import type { JsonRpcRequest, JsonRpcResponse, JsonRpcNotification } from './types'
 
 export type NotificationHandler = (notification: JsonRpcNotification) => void
@@ -51,13 +51,17 @@ function waitForExit(proc: ChildProcess, ms: number): Promise<void> {
 /**
  * Terminate the server **and its descendants** once the grace period expired.
  *
- * The tree half is Windows-only, and deliberately so: Windows gives us no
- * process group to signal, so `taskkill /T` is the only way to reach the
- * server's own children. On POSIX we do **not** spawn MCP servers detached, so
- * the child shares our process group and has no group of its own —
- * `process.kill(-pid)` would be ESRCH, and making it a group leader would let
- * servers outlive the CLI, a worse bug than the one being fixed. There, the
- * grace period above *is* the fix; killing the direct child is what we always did.
+ * Windows has no process group to signal, so `taskkill /T` is the only way to
+ * reach the server's own children. On POSIX we do **not** spawn MCP servers
+ * detached — the child shares our process group, so `process.kill(-pid)` is
+ * ESRCH — and making it a group leader would let servers outlive the CLI, a
+ * worse bug than the one being fixed. So the descendants are enumerated from
+ * `ps` instead and signalled one by one.
+ *
+ * Killing only the direct child was wrong for the shape that matters:
+ * `npx -y some-mcp` spawns a **wrapper**, and the server that answers JSON-RPC
+ * is its child. Killing the wrapper re-parents that child to init and it keeps
+ * running — observed as accumulating `ppid=1` `node …/_npx/…/xxx-mcp` processes.
  */
 function killProcessTree(proc: ChildProcess): void {
   const pid = proc.pid
@@ -68,12 +72,55 @@ function killProcessTree(proc: ChildProcess): void {
     } catch {
       /* fall through to the direct kill */
     }
+  } else {
+    // Deepest first, while the parent links that identified them still exist:
+    // once the wrapper dies its children are re-parented and unfindable.
+    for (const descendant of descendantPids(pid).reverse()) {
+      try {
+        process.kill(descendant)
+      } catch {
+        /* already gone */
+      }
+    }
   }
   try {
     proc.kill()
   } catch {
     /* already gone */
   }
+}
+
+/** Every descendant of `root`, parents before children. */
+function descendantPids(root: number): number[] {
+  let listing: string
+  try {
+    listing = execFileSync('ps', ['-A', '-o', 'pid=,ppid='], {
+      encoding: 'utf-8',
+      timeout: 2000,
+    })
+  } catch {
+    return [] // No `ps`, or it timed out: fall back to the direct kill.
+  }
+
+  const byParent = new Map<number, number[]>()
+  for (const line of listing.split('\n')) {
+    const [pidText, ppidText] = line.trim().split(/\s+/)
+    const pid = Number(pidText)
+    const ppid = Number(ppidText)
+    if (!Number.isInteger(pid) || !Number.isInteger(ppid)) continue
+    const siblings = byParent.get(ppid)
+    if (siblings) siblings.push(pid)
+    else byParent.set(ppid, [pid])
+  }
+
+  const descendants: number[] = []
+  const queue = [...(byParent.get(root) ?? [])]
+  while (queue.length > 0) {
+    const next = queue.shift()!
+    descendants.push(next)
+    queue.push(...(byParent.get(next) ?? []))
+  }
+  return descendants
 }
 
 /** Shared timeout error for both stdio and HTTP transports. */

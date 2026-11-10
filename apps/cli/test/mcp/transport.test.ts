@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { StdioTransport, MCP_SHUTDOWN_GRACE_MS, buildProcEnv } from '../../src/mcp/transport'
@@ -310,6 +310,59 @@ describe('StdioTransport', () => {
         }
         expect(isAlive(pid), `pid ${pid} 在 close() 之后仍在运行 —— 关停没有杀它`).toBe(false)
       } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    })
+
+    /**
+     * `npx -y some-mcp` 的形状：我们 spawn 的进程是个**包装器**，真正应答
+     * JSON-RPC 的是它的孩子。只杀直接子进程 ⇒ 包装器死了，服务器被 init 收养
+     * 继续跑（实测在 `~/.npm/_npx/…` 下攒了多个 ppid=1 的 `node …/xxx-mcp`）。
+     */
+    it('包装器下的孙进程（真正应答的服务器）也要被杀掉', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'mipham-mcp-wrapper-'))
+      const pidFile = join(dir, 'grandchild-pid')
+      let grandchild = 0
+      try {
+        // 落盘自己的 pid 后再也不退的「服务器」。
+        const gcScript = join(dir, 'grandchild.js')
+        writeFileSync(
+          gcScript,
+          `require('fs').writeFileSync(process.env.MCP_PID_FILE, String(process.pid));${IGNORE_EOF}`,
+        )
+        // 包装器：起孙进程后自己也不退 —— 被杀时孙进程不会跟着走。
+        const wrapperScript = join(dir, 'wrapper.js')
+        writeFileSync(
+          wrapperScript,
+          `const { spawn } = require('child_process')
+           spawn('bun', [${JSON.stringify(gcScript)}], { stdio: 'inherit' })
+           process.stdin.resume(); setInterval(() => {}, 1000)`,
+        )
+
+        transport = new StdioTransport()
+        await transport.start('bun', [wrapperScript], { MCP_PID_FILE: pidFile })
+        grandchild = Number(await waitForFile(pidFile))
+        expect(Number.isInteger(grandchild), `pidfile 内容不是 pid：${grandchild}`).toBe(true)
+
+        await transport.close()
+
+        const deadline = Date.now() + 2000
+        while (Date.now() < deadline && isAlive(grandchild)) {
+          await new Promise((r) => setTimeout(r, 20))
+        }
+        expect(
+          isAlive(grandchild),
+          `孙进程 ${grandchild} 在 close() 之后仍在运行 —— 关停只杀到了包装器`,
+        ).toBe(false)
+      } finally {
+        // 断言为红时别把孙进程留在机器上。
+        if (grandchild) {
+          try {
+            process.kill(grandchild)
+          } catch {
+            /* 已经退了 */
+          }
+        }
         rmSync(dir, { recursive: true, force: true })
       }
     })
