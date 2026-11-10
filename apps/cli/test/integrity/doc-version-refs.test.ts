@@ -90,7 +90,10 @@ const LIVE_FILES: Array<[string, string[]]> = [
   ['apps/cli/README.md', [VERSION, '1.0.0']],
   ['infrastructure/jetbrains/README.md', [VERSION]],
   ['infrastructure/macos/README.md', [VERSION]],
-  ['infrastructure/vscode/PUBLISH.md', ['0.81.8', '0.81.7', '0.81.9', '0.81.8', '0.81.9']],
+  [
+    'infrastructure/vscode/PUBLISH.md',
+    ['0.81.8', '0.81.7', '0.81.9', '0.81.8', '0.85.31', '0.85.30', '0.85.31', '0.81.9'],
+  ],
 ]
 
 /**
