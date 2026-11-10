@@ -3,6 +3,20 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.32 (2026-11-10)
+
+- Version sync with Mipham Code CLI 0.85.32
+- Fixed: shutting down an MCP server now also ends the process that actually answers. With
+  `npx -y <pkg>` we spawn a wrapper and the real server is its child; only the wrapper was
+  killed, so the child was re-parented to init and kept running after the session was gone.
+  Descendants are now enumerated and signalled deepest-first before the wrapper dies; if `ps`
+  is unavailable it falls back to the old behaviour rather than killing nothing.
+- Fixed: servers started through a package manager get 45s to finish the handshake. The
+  dependency download happens inside the child, so a cold cache (~30s here) blew the 15s budget
+  and a working server was judged hung — the reconnect then raced the half-finished install.
+  `npx` / `bunx` / `npm` / `pnpm` / `yarn` now get 45s, everything else keeps 15s, and
+  `MIPHAM_MCP_CONNECT_TIMEOUT_MS` still wins.
+
 ## 0.85.31 (2026-11-10)
 
 - Version sync with Mipham Code CLI 0.85.31
