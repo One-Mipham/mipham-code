@@ -11,6 +11,7 @@ import { HttpTransport, McpHttpError } from './http-transport'
 import { McpProtocol } from './protocol'
 import { OAuthClient } from './oauth'
 import { TokenStore } from './token-store'
+import { basename } from 'node:path'
 import { createAwakeTimer } from '../providers/fetch-utils'
 import { createT } from '../i18n-core/t'
 import enUS from '../i18n-core/locales/en-US.json'
@@ -25,16 +26,46 @@ const t = createT(bundles['en-US'] || (enUS as TranslationMap), enUS as Translat
 
 // Connect-handshake timeout: a hung MCP server should fail startup fast rather
 // than block on the per-request 60s timeout. Overridable via env for tests.
-const DEFAULT_CONNECT_TIMEOUT_MS = 15_000
+export const DEFAULT_CONNECT_TIMEOUT_MS = 15_000
+
+/**
+ * Budget for a server launched through a package manager (`npx -y <pkg>`, …).
+ *
+ * `spawn('npx')` returns immediately — the dependency download happens inside
+ * the child, so the whole cost lands on `initialize()` waiting for a reply. A
+ * cold cache measured 29.9 s here (2× the default), and the server is *working*,
+ * not hung: failing at 15 s throws that work away and then races a second
+ * install against the first.
+ *
+ * Kept under `DEFAULT_REQUEST_TIMEOUT_MS` (60 s) on purpose: past it the
+ * handshake dies on the request timer instead, which only changes the error
+ * message, not the patience.
+ */
+export const PACKAGE_MANAGER_CONNECT_TIMEOUT_MS = 45_000
+
+/** Commands whose startup includes package resolution, so the budget is theirs. */
+const PACKAGE_MANAGER_COMMANDS = new Set(['npx', 'bunx', 'npm', 'pnpm', 'yarn'])
+
+function isPackageManagerCommand(command: string | undefined): boolean {
+  if (!command) return false
+  // Windows resolves these as `npx.cmd`; the shape of the wait is the same.
+  const base = basename(command)
+    .replace(/\.(cmd|exe|ps1)$/i, '')
+    .toLowerCase()
+  return PACKAGE_MANAGER_COMMANDS.has(base)
+}
 
 // How often a caller waiting on a handshake re-checks it. A handshake settles in
 // tens of milliseconds when it settles at all; this only bounds how long the wait
 // can overshoot the moment it actually did.
 const CONNECT_POLL_MS = 50
 
-function connectTimeoutMs(): number {
+export function connectTimeoutMs(command?: string): number {
   const env = Number(process.env.MIPHAM_MCP_CONNECT_TIMEOUT_MS)
-  return Number.isFinite(env) && env > 0 ? env : DEFAULT_CONNECT_TIMEOUT_MS
+  if (Number.isFinite(env) && env > 0) return env
+  return isPackageManagerCommand(command)
+    ? PACKAGE_MANAGER_CONNECT_TIMEOUT_MS
+    : DEFAULT_CONNECT_TIMEOUT_MS
 }
 
 /**
@@ -449,7 +480,7 @@ export class McpClient {
       // is what an unauthenticated request gets rejected on.
       const env = await this.envWithAuth(config)
 
-      await this.withConnectTimeout(config.name, async () => {
+      await this.withConnectTimeout(config.name, config.command, async () => {
         // Start the transport (transport-specific), then perform the handshake.
         if (transport instanceof HttpTransport) {
           await transport.start(config.url ?? '', config.headers, env)
@@ -499,8 +530,12 @@ export class McpClient {
    * server registers no tools — never give `markIfTransportLost` a chance to
    * reconnect. The server is fine; only the clock moved.
    */
-  private async withConnectTimeout<T>(name: string, fn: () => Promise<T>): Promise<T> {
-    const timeoutMs = connectTimeoutMs()
+  private async withConnectTimeout<T>(
+    name: string,
+    command: string | undefined,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    const timeoutMs = connectTimeoutMs(command)
     // Held in an object, not a `let`: the timer is armed inside the Promise
     // executor, and assignments made there are invisible to control-flow
     // narrowing — TS keeps the variable typed `null` and the cleanup call below

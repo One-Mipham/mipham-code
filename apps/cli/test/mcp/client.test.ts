@@ -1,6 +1,11 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { McpClient } from '../../src/mcp/client'
-import { StdioTransport } from '../../src/mcp/transport'
+import {
+  McpClient,
+  connectTimeoutMs,
+  DEFAULT_CONNECT_TIMEOUT_MS,
+  PACKAGE_MANAGER_CONNECT_TIMEOUT_MS,
+} from '../../src/mcp/client'
+import { StdioTransport, DEFAULT_REQUEST_TIMEOUT_MS } from '../../src/mcp/transport'
 import { TokenStore } from '../../src/mcp/token-store'
 import { credentialBinding } from '../../src/mcp/oauth'
 
@@ -117,6 +122,33 @@ describe('McpClient', () => {
       } finally {
         delete process.env.MIPHAM_MCP_CONNECT_TIMEOUT_MS
       }
+    })
+
+    it('包装器命令拿放宽的预算，其余仍是默认值', () => {
+      // 判据看的是**命令名**，不是参数：冷缓存时 npm 的下载发生在子进程里，
+      // 时间全耗在 `initialize()` 等回包上 —— 默认 15s 只够暖缓存。
+      for (const wrapper of ['npx', '/usr/local/bin/npx', 'npx.cmd', 'npm', 'bunx']) {
+        expect(connectTimeoutMs(wrapper), wrapper).toBe(PACKAGE_MANAGER_CONNECT_TIMEOUT_MS)
+      }
+      for (const plain of ['python3', '/usr/bin/graft', undefined]) {
+        expect(connectTimeoutMs(plain), String(plain)).toBe(DEFAULT_CONNECT_TIMEOUT_MS)
+      }
+    })
+
+    it('环境变量仍然压过两者', () => {
+      process.env.MIPHAM_MCP_CONNECT_TIMEOUT_MS = '1234'
+      try {
+        expect(connectTimeoutMs('npx')).toBe(1234)
+        expect(connectTimeoutMs('python3')).toBe(1234)
+      } finally {
+        delete process.env.MIPHAM_MCP_CONNECT_TIMEOUT_MS
+      }
+    })
+
+    it('放宽后的预算必须留在 initialize 的请求超时之内', () => {
+      // 越过它，握手会先被 sendRequest 的 60s 时限打断 —— 换的是错误文案，
+      // 不是「更宽容」。这条把「为什么是 45 不是 120」钉在代码里。
+      expect(PACKAGE_MANAGER_CONNECT_TIMEOUT_MS).toBeLessThan(DEFAULT_REQUEST_TIMEOUT_MS)
     })
   })
 

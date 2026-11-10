@@ -28,9 +28,9 @@ prompt-exclude-header: true
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.55
-> **最后更新**: 2026-11-10 — **MCP 关停补杀后代进程：npx 包装器下的服务器不再变孤儿**（2.94.55）。`killProcessTree` 在 POSIX 上只杀直接子进程（原注释明写「killing the direct child is what we always did」），而 `npx -y <pkg>` 的形状是「我们 spawn 的是包装器、真正应答 JSON-RPC 的是它的孩子」—— 包装器一死，孩子被 init 收养继续跑（本机实测攒了两个 `ppid=1` 的 `node …/_npx/…/genable-mcp`，而 ELAPSED 显示它们比 live 会话早 3–5 分钟，正是历次超时留下的）。修法 = 先按 `ps -A -o pid=,ppid=` 枚举后代、**由深到浅**逐个发信号，**再**杀直接子进程；枚举必须在杀之前，父链一断就再也找不到它们。`ps` 起不来时退化为原来的直接 kill（fail-open 回旧行为，不 fail-closed 到完全不杀）。负控：新用例改前红（`孙进程 46983 在 close() 之后仍在运行`）、改后绿；`test/mcp` 171 → 172，全套件 4,658 → 4,659。**同批补 CI 的红**：HEAD `64d4f11b` 给 `infrastructure/vscode/PUBLISH.md` 加了三个点时刻令牌（`0.85.31` / `0.85.30` / `0.85.31`）却没同步 `doc-version-refs.test.ts` 的 `LIVE_FILES`，main 的 Test job 因此红（run `42739799484`，其余 8 个 job 全绿）；按守卫自己的说明把它们冻进表里 —— 与 0.81.x 那批实测记录同一物种（「当初滞后一个版本」的点时刻陈述），不随版本号走。
-> **前一条（2.94.54）**: 2026-11-10 — **第 31 档考古：对标 2.1.317–336 —— 435 条逐条裁决，落地 20 项**（2.94.54）。上游实际只有 4 版（**317 / 318 / 319 / 321**；`2.1.320` 不存在，`322–336` 未发布），语料 435 条（317:87 / 318:84 / 319:146 / 321:118）。**安全/协议 7 项**：MCP 空环境变量覆盖读作「取消设置」而不是「设成空串」（317-037，`buildProcEnv`）；OAuth 令牌端点 3xx 一律拒绝跟随、换取令牌带 60s 超时（321-003 / 321-053，`mcp/oauth.ts`）；钩子 `ask` 压过 `defer`、且 `ask` 的理由沿调用链传下去（321-025 / 321-024）；`connected` 只在 `tools/list` 成功后才置位（321-049，并发连接不再提前完成而零工具）；Fable 5.2 入目录（321-001）。**权限匹配 8 项**：acceptEdits 白名单按**命令开头**锚定 —— `sed -i 's/cat/dog/'`、`rm -rf cat.txt`、`git branch -D main` 不再因参数里出现 `cat`/`branch` 被放行（319-078 / 319-112）；引号包的 flag 与 `VAR="a b"` 赋值先去除引号再匹配（319-033 / 319-080）；`cp`/`mv` 的目录目的地展开为「目录里的那个文件」（321-006）；`cd` 之后的相对路径按新目录解析（321-005）；空 `old_string` 直接拒绝（321-011）；纯时长包裹的 `timeout 30 cat f` 先剥壳再进白名单 —— 从前 `timeout` 被读成命令名，只读命令一律落到 `ask`（即拒绝）（319-056）。**诚实面 5 项**：Bedrock 的 `Input is too long.` 归入上下文溢出（317-033）；空 `config.yml` 不再被读成损坏（318-044）；`/rename` 写不进登记表时明说「本次有效、可能不保留」（319-089）；`/resume delete` 拒绝删除当前会话（318-021）；工作区信任写不进盘时不再宣称「✓ Workspace trusted」，改说「本次有效、不会记住」（318-009，`trust()` 返回写入是否发生）。测试 **4,620 → 4,658**（349 文件不变；4,656 passed + 2 skipped，0 失败），`TEST_COUNT` 三份副本 + 活文档三处写法 + 测试目录表（core 1782→1806 / tools 599→600 / ui 389→393 / mcp 164→171 / config 129→131）同批回填；`README` 模型数 50 → **51**。**一处工具的坑如实记**：`dequoteSimpleTokens` 的正则含裸引号/反引号，会让 `tool-reference-integrity` 的字面量扫描器开出永不闭合的字符串并把余下全文读成一段 —— 现改用 `\x27\x22\x60` 转义（行为不变）；扫描器本身的正则字面量盲区未修。**负控 20 条覆盖全部 20 项落地**（第 1 批 7 / 第 2 批 5 / 收尾 3 / 补 5），各自先红后绿、还原后 sha256 逐字相符。考古档案：`~/.mipham/cc-archaeology/317-336/`（entries 435 / verdicts-all 逐条证据 / landed 20）。 **✅ 0.85.31 已发布**（2026-11-10）：GPG 签名 tag `v0.85.31` → **`fdd19c38`**（`git tag -v` = 完好的签名，密钥 `62F77FC4…`）；主干 `ci.yml` `42735645991` **9/9**、`release.yml` `42735704140` **9/9**；npm `dist-tags.latest` = **0.85.31**、registry `time` = **2026-11-10T01:31:32.314Z**；GitHub Release **6 资产**（非 draft 非 prerelease，01:29:55Z）、DMG 2,268,265 B ⚠️ 未签名（`APPLE_SIGNING_IDENTITY` 未设）；JetBrains 真输出行 `JetBrains plugin published.`（01:29:21Z）；本地 `.vsix` **74,559 B** / sha256 `528483ca…` ⇒ ✅ **已人工上传并经双探针核验**（2026-11-10）：页内同源 `extensionquery`（`flags` 63）`versions[0].version` = **0.85.31**、`flags` = `validated`、`lastUpdated` = **2026-11-10T01:42:43.173Z**、`versions[]` = **83** 条（0.85.30 时 82 ⇒ 恰增一条）；公开页同读 `"Version":"0.85.31"`、`PublisherName` = `miphamai`、`LastUpdatedDateString` = `Tue, 10 Nov 2026 01:42:43 GMT`（与 API 同刻）。**✅ 两站已部署**（2026-11-10，用户直令、一次只覆盖一次）：国内 `deploy-cn.sh` 全链（PM2 id **130** `omgpt-api` / **131** `onemipham` 均 online、`端口 3007 监听中`、`网站 HTTP 200`、`omGPT API — HTTP 200`）；国际 `deploy.sh` → `vercel --prod`（`dpl_5Uz6nz8wtvWmAYtzKbGuZPKU9Y1W`、`target: production`、`READY`）。独立复核（cache-bust）：两站 `/mipham-code` 均 200、各 **3×0.85.31 / 0×0.85.30**、**2×4658 / 0×4655**；`websites` `7cfb323` → **`536f283`**（package-info 同步到 0.85.31）。
+> **版本**: 2.94.56
+> **最后更新**: 2026-11-10 — **npx 类服务器的握手预算单独放宽到 45s**（2.94.56）。上一笔把「超时后 npx 孙进程变孤儿」修掉了，**根因还在**：`spawn()` 立刻返回，npm 的下载发生在子进程里，整个成本落在等 `initialize()` 回包上，而默认预算 15s 只够暖缓存（空缓存实测 ~29.9s ⇒ 必然超时、必然走重连）。新增 `connectTimeoutMs(command)`：按**命令名**判形状（`npx` / `bunx` / `npm` / `pnpm` / `yarn`，剥掉 Windows 的 `.cmd|.exe|.ps1` 与绝对路径前缀）给 45s，其余仍 15s；`MIPHAM_MCP_CONNECT_TIMEOUT_MS` 照旧压过两者。**45 不是随手取的**：`initialize()` 走 `sendRequest` 的 60s 请求超时，越过它握手会先被那条时限打断 —— 换的是错误文案不是耐心，这条不变量有自己的用例钉着。正/负对照：包装器命令与普通命令各一组，环境变量再各一组；`test/mcp` 172 → 175，全套件 4,659 → 4,662。**如实记两处既有 flake**：满并发下 `test/e2e/full-pipeline.test.ts`（真打 deepseek）与 `test/shared/update-safety.test.ts`（5s 墙钟）各红过一次，单跑均绿，与本笔无关。
+> **前一条（2.94.55）**: 2026-11-10 — **MCP 关停补杀后代进程：npx 包装器下的服务器不再变孤儿**（2.94.55）。`killProcessTree` 在 POSIX 上只杀直接子进程（原注释明写「killing the direct child is what we always did」），而 `npx -y <pkg>` 的形状是「我们 spawn 的是包装器、真正应答 JSON-RPC 的是它的孩子」—— 包装器一死，孩子被 init 收养继续跑（本机实测攒了两个 `ppid=1` 的 `node …/_npx/…/genable-mcp`，而 ELAPSED 显示它们比 live 会话早 3–5 分钟，正是历次超时留下的）。修法 = 先按 `ps -A -o pid=,ppid=` 枚举后代、**由深到浅**逐个发信号，**再**杀直接子进程；枚举必须在杀之前，父链一断就再也找不到它们。`ps` 起不来时退化为原来的直接 kill（fail-open 回旧行为，不 fail-closed 到完全不杀）。负控：新用例改前红（`孙进程 46983 在 close() 之后仍在运行`）、改后绿；`test/mcp` 171 → 172，全套件 4,658 → 4,659。**同批补 CI 的红**：HEAD `64d4f11b` 给 `infrastructure/vscode/PUBLISH.md` 加了三个点时刻令牌（`0.85.31` / `0.85.30` / `0.85.31`）却没同步 `doc-version-refs.test.ts` 的 `LIVE_FILES`，main 的 Test job 因此红（run `42739799484`，其余 8 个 job 全绿）；按守卫自己的说明把它们冻进表里 —— 与 0.81.x 那批实测记录同一物种（「当初滞后一个版本」的点时刻陈述），不随版本号走。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -69,7 +69,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：4,659 测试（本机 4,657 passed + 2 skipped，349 文件，0 失败）
+测试：4,662 测试（本机 4,660 passed + 2 skipped，349 文件，0 失败）
 
 ---
 
@@ -106,7 +106,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 349 个测试文件，4659 个测试
+│   │   ├── test/               # 349 个测试文件，4662 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -132,7 +132,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（4659 个测试）
+pnpm test         # vitest run（4662 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -329,7 +329,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | agent           | 15      | 159      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
 | security        | 12      | 126      | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
 | providers       | 10      | 184      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
-| mcp             | 12      | 172      | client / transport / oauth / token-store / registry / instructions（含 2 skipped）                                                                                          |
+| mcp             | 12      | 175      | client / transport / oauth / token-store / registry / instructions（含 2 skipped）                                                                                          |
 | workflow        | 8       | 65       | runtime / loop / parallel / sandbox / journal / verify                                                                                                                      |
 | vajra           | 6       | 53       | context / events / service / compose / leaf（自建内核）                                                                                                                     |
 | shared          | 12      | 148      | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                              |
@@ -343,7 +343,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | integration     | 1       | 3        | 跨仓接线：`vscode-extension-telemetry`（VS Code 遥测关闭 ⇒ 终端拿到 `MIPHAM_TELEMETRY=off`）                                                                                |
 | integrity       | 19      | 132      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **349** | **4659** | **0 失败** ✅（本机 4,657 + 2 skipped，349 文件）                                                                                                                           |
+| **合计**        | **349** | **4662** | **0 失败** ✅（本机 4,660 + 2 skipped，349 文件）                                                                                                                           |
 
 ### 测试注意事项
 
