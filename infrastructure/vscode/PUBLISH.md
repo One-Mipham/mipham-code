@@ -66,6 +66,12 @@
 （落到上表 3–8 的上界）。⚠️ 形态② 期间**只有公开页**的 `LastUpdatedDateString` 会跳到上传时刻，
 API 的 `versions[0].lastUpdated` 仍指上一版 —— **别拿 API 那个字段判形态②**，两个字段名像、含义不同。
 
+0.85.33 实测（2026-11-13）：13:50:05Z 上传 ⇒ 形态②（`Version` 仍 0.85.32、`Last updated`
+已是 13:50:05；此形态在 13:55–13:56 复核三次，API 侧 `versions[]` 始终停在 84 条、`lastUpdated`
+仍指 0.85.32 的 `2026-11-10T13:24:44.597Z` —— 再次印证「形态② 别看 API 那个字段」）；13:56:53Z 转形态③
+（`Version` 0.85.33、`Last updated` 13:56:53），同时 API 侧 `versions[]` 84 → **85 条**、`flags` = `validated`、
+`lastUpdated` = `2026-11-13T13:56:53.757Z` —— 两个探针读的是同一个时刻。**校验窗口 ≈6.8 分钟**（3–8 的中段）。
+
 ```bash
 # A. 公开页（必须 cache-bust，CDN 会给旧读数）
 curl -4 -sS -H 'Cache-Control: no-cache' \
