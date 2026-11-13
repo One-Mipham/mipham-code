@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { DEFAULT_CREDENTIAL_MASKING_CONFIG } from '../../src/config/defaults'
-import { filterEnv } from '../../src/core/credential-masker/env-filter'
+import { filterEnv, stripEnv } from '../../src/core/credential-masker/env-filter'
 import { maskOutput } from '../../src/core/credential-masker/output-scrub'
 import { CREDENTIAL_SENTINEL } from '../../src/core/credential-masker'
 
@@ -372,4 +372,49 @@ describe('默认输出擦洗：量词有界，长输入不许退化成 O(n²)', 
       2000,
     )
   }, 20_000)
+})
+
+// ============================================================
+// `stripEnv` 与 `filterEnv` 判的是**同一批名字**，处置不同：用户的 shell 保留
+// 变量名、只把值换成哨兵（让命令能察觉「被过滤了」）；而**本程序自己的**子进程
+// （git / ripgrep）是把名字整个摘掉 —— 它们从不需要用户的凭据，而一个格式正确的
+// 假值到了 credential helper 手里，与「没有这个变量」并不是同一件事。
+// ============================================================
+describe('stripEnv：本程序自己的子进程不带凭据（摘掉名字，不是换成哨兵）', () => {
+  const env = {
+    PATH: '/usr/bin',
+    HOME: '/home/u',
+    ANTHROPIC_API_KEY: 'sk-ant-plaintext',
+    OPENAI_API_KEY: 'sk-openai-plaintext',
+    GITHUB_TOKEN: 'ghp_plaintext',
+    MIPHAM_GIT_ENV_PROBE: 'kept',
+  }
+
+  it('秘密变量整个消失 —— 不是留下一个哨兵值', () => {
+    const out = stripEnv(env, DEFAULT_CREDENTIAL_MASKING_CONFIG)
+    expect('ANTHROPIC_API_KEY' in out).toBe(false)
+    expect('OPENAI_API_KEY' in out).toBe(false)
+    expect('GITHUB_TOKEN' in out).toBe(false)
+    // 反方向：哨兵实现会让这一条红（名字还在，值是 CREDENTIAL_SENTINEL）。
+    expect(Object.values(out)).not.toContain(CREDENTIAL_SENTINEL)
+  })
+
+  it('正对照：git/rg 自己活命要的变量原样保留', () => {
+    const out = stripEnv(env, DEFAULT_CREDENTIAL_MASKING_CONFIG)
+    expect(out.PATH).toBe('/usr/bin')
+    expect(out.HOME).toBe('/home/u')
+    expect(out.MIPHAM_GIT_ENV_PROBE).toBe('kept')
+  })
+
+  it('与 filterEnv 同一把尺子：filterEnv 判为敏感的名字，stripEnv 一定摘掉', () => {
+    // 两处分叉各写一套 pattern，日后改一处就会让「用户 shell 里被掩掉、我们的
+    // 子进程里却还在」这种最坏组合悄悄出现。这一条把它们钉在一起。
+    const names = ['AWS_ACCESS_KEY_ID', 'GH_PAT', 'MYSQL_PWD', 'SSH_AUTH_SOCK', 'MONKEY']
+    for (const name of names) {
+      const masked =
+        filterEnv(envWith([name]), DEFAULT_CREDENTIAL_MASKING_CONFIG)[name] === CREDENTIAL_SENTINEL
+      const stripped = !(name in stripEnv(envWith([name]), DEFAULT_CREDENTIAL_MASKING_CONFIG))
+      expect(stripped, `${name}: filterEnv=${masked} stripEnv=${stripped}`).toBe(masked)
+    }
+  })
 })

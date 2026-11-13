@@ -1585,3 +1585,20 @@ describe('acceptEdits 自动放行验证类命令的边界', () => {
     expect(autoApproved('echo $(rm -rf x)')).toBe(true)
   })
 })
+
+describe('getRuleWarnings —— 装得上但意思不对的 allow 规则', () => {
+  it('Bash(PORT=* …) 进警告；deny 方向不进（那里匹配更宽是安全方向）', () => {
+    const p = new PermissionSystem('default')
+    p.allow('Bash(PORT=* npm run dev)')
+    p.deny('Bash(PORT=* npm run dev)')
+    const warnings = p.getRuleWarnings()
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toContain('PORT')
+  })
+
+  it('正对照：具体值的 allow 规则没有警告', () => {
+    const p = new PermissionSystem('default')
+    p.allow('Bash(PORT=3000 npm run dev)')
+    expect(p.getRuleWarnings()).toEqual([])
+  })
+})

@@ -40,6 +40,19 @@ export async function browserSnapshot(): Promise<string> {
 }
 
 export async function browserClick(uid: string): Promise<string> {
+  // `uid` goes inside a CSS attribute selector. A quote — or an escape that
+  // decodes to one — closes the string early and hands the rest of the value to
+  // Playwright's selector parser as new CSS, which is a model-supplied value
+  // reaching a different layer than the page node it names. Every uid we emit is
+  // alphanumeric, so anything else is a respelling error: say what shape is
+  // expected rather than trying to escape it.
+  if (!/^[A-Za-z0-9_-]+$/.test(uid)) {
+    throw new Error(
+      `Invalid element uid ${JSON.stringify(uid)}: expected a plain element id ` +
+        '([A-Za-z0-9_-]), not a JSON string or an escaped selector. ' +
+        'Take the uid from browser_snapshot and pass it unquoted.',
+    )
+  }
   const page = (await getPage()) as {
     locator: (s: string) => { click: () => Promise<void> }
   }

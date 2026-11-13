@@ -8,7 +8,7 @@ import {
   renameSync,
 } from 'node:fs'
 import { join } from 'node:path'
-import { execFileSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { validatePlugin } from './plugin-validator'
 import { atomicWriteFileSync } from '../shared/atomic-write'
 import { miphamHome } from '../core/paths.ts'
@@ -143,7 +143,7 @@ export class PluginManager {
       // preinstall/install/postinstall hooks as the current user — arbitrary
       // code execution from any npm package, reachable via `/install-plugin`.
       // A plugin only needs to *be* files on disk; it never needs a build step
-      // of its own to be loaded from here. `execFileSync` (argv array, no
+      // of its own to be loaded from here. `spawnSync` (argv array, no
       // shell) keeps the command line independent of packageName, so package
       // name validation is not the only thing standing between us and a shell.
       //
@@ -155,7 +155,12 @@ export class PluginManager {
       // resolver. The value is the npm default already declared in this repo's
       // registry chain (`src/shared/update.ts`), not a new literal. The flag is
       // honoured over npm config because command-line flags outrank it.
-      execFileSync(
+      // `spawnSync`, not `execFileSync`: the latter returns stdout only, so
+      // whatever npm wrote to stderr on a *successful* install (deprecation
+      // notices, funding warnings — the messages that explain what the user got)
+      // was discarded. Non-zero exit keeps the old failure shape: the stderr is
+      // the error message.
+      const npm = spawnSync(
         'npm',
         [
           'install',
@@ -173,6 +178,12 @@ export class PluginManager {
           timeout: 60_000,
         },
       )
+      if (npm.error) throw npm.error
+      if (npm.status !== 0) {
+        const detail = (npm.stderr || npm.stdout || '').trim()
+        throw new Error(detail || `npm exited with status ${npm.status}`)
+      }
+      const npmNote = (npm.stderr || '').trim()
 
       // npm installs the package into <stagingDir>/node_modules/<packageName>/ —
       // validate there, then flatten it to the plugin dir root so its layout
@@ -215,6 +226,7 @@ export class PluginManager {
         success: true,
         message:
           `Plugin "${manifestName}" installed from npm` +
+          (npmNote ? `\n${npmNote}` : '') +
           (similarWarning ? `\n⚠ ${similarWarning}` : '') +
           warningsBlock(validation.warnings),
       }

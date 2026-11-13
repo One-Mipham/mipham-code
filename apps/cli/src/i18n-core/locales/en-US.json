@@ -871,6 +871,7 @@
       "preserved": "Your session data and conversation history are preserved."
     },
     "tool": {
+      "no_result_recorded": "No result recorded",
       "not_run": "Not run"
     },
     "copy_picker": {

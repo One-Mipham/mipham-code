@@ -18,6 +18,7 @@ import {
   readdirSync,
   realpathSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { join } from 'node:path'
@@ -127,7 +128,48 @@ describe('WorkspaceTrust', () => {
 
     trust.trust(dir)
     expect(trust.isTrusted(dir)).toBe(true)
-    expect(trust.listTrusted()).toContain(dir)
+    // 存的是**规范路径**：信任门控的 settings/hooks 是按 realpath 读的。
+    // 这条断言原为 `toContain(dir)`，而 dir 的词法拼写与 realpath 不同
+    // （macOS 的 /var → /private/var）—— 断言旧行为正是那条错位的一半。
+    expect(trust.listTrusted()).toContain(realpathSync(dir))
+  })
+
+  it('a workspace reached through a symlink is trusted under both spellings', () => {
+    const target = mkdtempSync(join(tmpdir(), 'link-target-'))
+    const link = join(tmpdir(), `link-alias-${process.pid}`)
+    try {
+      rmSync(link, { force: true })
+      symlinkSync(target, link)
+
+      trust.trust(link)
+      // Positive control: the alias itself is trusted…
+      expect(trust.isTrusted(link)).toBe(true)
+      // …and so is the folder it actually resolves to — that is the path the
+      // project settings and hooks are read through.
+      expect(trust.isTrusted(target)).toBe(true)
+      expect(trust.isTrusted(realpathSync(target))).toBe(true)
+    } finally {
+      rmSync(link, { force: true })
+      rmSync(target, { recursive: true, force: true })
+    }
+  })
+
+  it('a trust entry written before canonicalisation still matches (no re-trust migration)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'legacy-trust-'))
+    try {
+      // A store written by an older version: the *lexical* spelling.
+      mkdirSync(join(homedir(), '.mipham'), { recursive: true })
+      writeFileSync(
+        TRUST_STORE_PATH,
+        JSON.stringify({ version: 1, directories: [dir], updatedAt: new Date().toISOString() }),
+        'utf-8',
+      )
+      const t = new WorkspaceTrust()
+      expect(t.isTrusted(dir)).toBe(true)
+      expect(t.isTrusted(realpathSync(dir))).toBe(true)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   it('untrusts a directory', () => {

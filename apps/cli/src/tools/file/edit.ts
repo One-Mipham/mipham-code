@@ -1,4 +1,4 @@
-import { readFileSync, closeSync, constants } from 'node:fs'
+import { readFileSync, closeSync, constants, fstatSync } from 'node:fs'
 import type { ToolDefinition } from '../../shared/index.ts'
 import { resolveSafe } from '../../security/path'
 import { openNoFollow, writeFileNoFollow, isSymlinkLoop, isValidUtf8 } from '../../security/fd'
@@ -104,9 +104,11 @@ export const editTool: ToolDefinition = {
     }
 
     // O_NOFOLLOW: fail closed on a symlink swapped in after resolveSafe (TOCTOU).
+    // O_NONBLOCK: opening a FIFO blocks until a writer appears, and no timer or
+    // signal handler can run inside a synchronous open — same gate as Read.
     let rfd: number
     try {
-      rfd = openNoFollow(filePath, constants.O_RDONLY)
+      rfd = openNoFollow(filePath, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0))
     } catch (err) {
       if (isSymlinkLoop(err)) {
         return { success: false, content: '', error: `Path is a symbolic link: ${filePath}` }
@@ -115,6 +117,16 @@ export const editTool: ToolDefinition = {
     }
     let content: string
     try {
+      // O_NONBLOCK only got us past the *open*. It does not bound the read:
+      // `/dev/zero` yields bytes forever (OOM) and a FIFO yields whatever a
+      // writer chooses to send. Refuse on file type, not on size.
+      if (!fstatSync(rfd).isFile()) {
+        return {
+          success: false,
+          content: '',
+          error: `Path is not a regular file (FIFO, socket or device): ${filePath}`,
+        }
+      }
       const raw = readFileSync(rfd)
       if (!isValidUtf8(raw)) {
         return {
@@ -181,7 +193,11 @@ export const editTool: ToolDefinition = {
     // O_NOFOLLOW: reject a symlink swapped in after the read (TOCTOU) instead of
     // writing through it to an out-of-workspace target.
     try {
-      writeFileNoFollow(filePath, result, constants.O_WRONLY | constants.O_TRUNC)
+      writeFileNoFollow(
+        filePath,
+        result,
+        constants.O_WRONLY | constants.O_TRUNC | (constants.O_NONBLOCK ?? 0),
+      )
     } catch (err) {
       if (isSymlinkLoop(err)) {
         return { success: false, content: '', error: `Path is a symbolic link: ${filePath}` }

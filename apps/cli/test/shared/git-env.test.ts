@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { internalGitEnv } from '../../src/shared/git-env'
+import { internalGitEnv, internalProcessEnv } from '../../src/shared/git-env'
 
 describe('internalGitEnv', () => {
   const original = process.env.GIT_NO_REPLACE_OBJECTS
@@ -27,6 +27,24 @@ describe('internalGitEnv', () => {
     const env = internalGitEnv()
     env.GIT_NO_REPLACE_OBJECTS = 'tampered'
     expect(process.env.GIT_NO_REPLACE_OBJECTS).toBe(original)
+  })
+
+  it('不把 provider 凭据交给 git 子进程（credential helper / hook 也读不到）', () => {
+    const saved = process.env.ANTHROPIC_API_KEY
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-plaintext'
+    try {
+      // 前件：变量真的在 process.env 里 —— 否则下面两条断言在「本来就没有」
+      // 的世界上也会绿，而那是另一个对象。
+      expect(process.env.ANTHROPIC_API_KEY).toBe('sk-ant-plaintext')
+      expect('ANTHROPIC_API_KEY' in internalGitEnv()).toBe(false)
+      expect('ANTHROPIC_API_KEY' in internalProcessEnv()).toBe(false)
+      // 正对照：git 自己要用的变量一个不少。
+      expect(internalGitEnv().PATH).toBe(process.env.PATH)
+      expect(internalGitEnv().GIT_NO_REPLACE_OBJECTS).toBe('1')
+    } finally {
+      if (saved === undefined) delete process.env.ANTHROPIC_API_KEY
+      else process.env.ANTHROPIC_API_KEY = saved
+    }
   })
 
   it('调用方本来就把变量设成别的值时以调用方的为准？（不：本函数是内部 git 的固定口径）', () => {

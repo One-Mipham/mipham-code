@@ -3,6 +3,7 @@ import { dirname } from 'node:path'
 import type { ToolDefinition } from '../../shared/index.ts'
 import { resolveSafe } from '../../security/path'
 import { writeFileNoFollow, isSymlinkLoop, isValidUtf8 } from '../../security/fd'
+import { isRegularFile } from '../../shared/regular-file'
 
 export const writeTool: ToolDefinition = {
   name: 'Write',
@@ -33,6 +34,20 @@ export const writeTool: ToolDefinition = {
 
     // ── Read-before-write safety check ──
     const fileExists = existsSync(filePath)
+
+    // `existsSync` is true for a FIFO, socket, device node or directory, and
+    // none of those is a file this tool can overwrite: reading one to probe for
+    // non-UTF-8 bytes blocks forever on a writer-less FIFO (no timer can fire
+    // inside a synchronous read) and streams `/dev/zero` until memory runs out.
+    // Report the type — "not read this session" would be the wrong reason.
+    if (fileExists && !isRegularFile(filePath)) {
+      return {
+        success: false,
+        content: '',
+        error: `Path is not a regular file (FIFO, socket or device): ${filePath}`,
+      }
+    }
+
     const wasRead = ctx.readFiles?.has(filePath) ?? false // fail closed: no tracking = not read
     if (fileExists && !wasRead) {
       return {
@@ -89,7 +104,9 @@ export const writeTool: ToolDefinition = {
       writeFileNoFollow(
         filePath,
         content,
-        constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC,
+        // O_NONBLOCK: a FIFO swapped in after the type check would otherwise
+        // block this open until a reader appears — fail with ENXIO instead.
+        constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | (constants.O_NONBLOCK ?? 0),
       )
     } catch (err) {
       if (isSymlinkLoop(err)) {

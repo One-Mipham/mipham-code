@@ -90,6 +90,13 @@ export interface ToolMeta {
   originalName?: string
   /** Held back by the auto-mode classifier — rendered as a dim "Not run" row (296-056). */
   notRun?: boolean
+  /**
+   * The call finished without producing output (stopped, or a tool that returns
+   * nothing). Rendered as "No result recorded" — without it the collapsed group
+   * keeps the call row and says nothing about how it ended, which reads as a
+   * call still running.
+   */
+  noResult?: boolean
 }
 
 export interface ChatMessage {
@@ -183,6 +190,31 @@ export function cyclePermissionMode(
   const next = idx === -1 ? MODE_CYCLE[0]! : MODE_CYCLE[(idx + 1) % MODE_CYCLE.length]!
   permission.setMode(next)
   return permission.getMode()
+}
+
+/**
+ * A retried turn (`chunk.restart`) supersedes the attempt before it.
+ *
+ * The engine drops that attempt's accumulated text and tool calls — but the
+ * engine's accumulator is not the screen. The bubble the attempt opened stays
+ * in the message list, and the retry's text appends to it, so the user reads a
+ * reply the model never finished as the beginning of the answer that replaced
+ * it. Same class as a stale line left by any retry: what was discarded is still
+ * on display.
+ *
+ * `bubble` is the assistant message *object* this attempt pushed, or `null` if
+ * it never got to text (a failure during reasoning has nothing to remove).
+ * Identity, not position: tool-result rows can sit after the bubble within the
+ * same turn, and a previous answer with identical text must not be the one that
+ * disappears.
+ */
+export function dropSupersededAttempt<T extends { role: string }>(
+  messages: T[],
+  bubble: T | null,
+): T[] {
+  if (!bubble || bubble.role !== 'assistant') return messages
+  const idx = messages.indexOf(bubble)
+  return idx === -1 ? messages : messages.filter((_, i) => i !== idx)
 }
 
 /** 预览截断按 UTF-16 码元计数，落点若正好夹在一个代理对中间，切完就留下
@@ -664,8 +696,36 @@ export function App({
         }
       }
 
+      // The assistant message object the current attempt pushed, so a retry can
+      // remove exactly that one (see `dropSupersededAttempt`). Cleared whenever
+      // `isNewTurn` flips, because the next text run opens a fresh bubble.
+      let turnBubble: ChatMessage | null = null
+
       try {
         for await (const chunk of engine.process(input, ctrl.signal)) {
+          if (chunk.restart) {
+            // A retried turn: the engine drops what the failed attempt
+            // accumulated, and the screen has to drop its bubble too — otherwise
+            // the retry's answer is appended to a reply the model never
+            // finished and the user reads the two as one.
+            const superseded = turnBubble
+            turnBubble = null
+            assistantContent = ''
+            turnContent = ''
+            isNewTurn = true
+            thinkingRef.current = ''
+            if (thinkingTimerRef.current) {
+              clearTimeout(thinkingTimerRef.current)
+              thinkingTimerRef.current = null
+            }
+            setThinkingText('')
+            if (streamBufferRef.current.timer) {
+              clearTimeout(streamBufferRef.current.timer)
+            }
+            streamBufferRef.current = { turnContent: '', isFirst: false, timer: null }
+            setMessages((prev) => dropSupersededAttempt(prev, superseded))
+          }
+
           // Reasoning content (DeepSeek V4 thinking mode) — surface as a live
           // "thinking" indicator so long reasoning passes don't look like a stall.
           if (chunk.reasoning_content) {
@@ -709,10 +769,13 @@ export function App({
               turnContent = chunk.content
               isNewTurn = false
               streamBufferRef.current = { turnContent: chunk.content, isFirst: false, timer: null }
-              setMessages((prev) => [
-                ...prev,
-                { role: 'assistant' as const, content: chunk.content || '' },
-              ])
+              // Keep the object: a retry removes *this* message, by identity.
+              const bubble: ChatMessage = {
+                role: 'assistant' as const,
+                content: chunk.content || '',
+              }
+              turnBubble = bubble
+              setMessages((prev) => [...prev, bubble])
             } else {
               turnContent += chunk.content
               streamBufferRef.current.turnContent = turnContent
@@ -778,6 +841,8 @@ export function App({
             flushStreamBuffer()
             // Mark that next text chunk starts a new turn
             isNewTurn = true
+            // The run that bubble held is finished; the next text opens a new one.
+            turnBubble = null
           }
 
           if (chunk.type === 'tool_result') {
@@ -835,6 +900,27 @@ export function App({
                     output: preview,
                     collapsed: true,
                     originalName: chunk.toolUse?.name,
+                  },
+                },
+              ])
+            } else {
+              // No output at all — a stopped call, or a tool that returns
+              // nothing. The call row above stays, and without this row nothing
+              // says how it ended, so a finished call reads as one still
+              // running. The input is already on the call line; this row only
+              // has to record the ending.
+              setMessages((prev) => [
+                ...prev,
+                {
+                  role: 'system' as const,
+                  content: '',
+                  toolMeta: {
+                    name: '',
+                    input: '',
+                    output: '',
+                    collapsed: true,
+                    originalName: chunk.toolUse?.name,
+                    noResult: true,
                   },
                 },
               ])

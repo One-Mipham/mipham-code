@@ -249,3 +249,54 @@ describe('summarizeToolGroup — 折叠摘要那一行是单行字段', () => {
     expect(frame).toContain('tools (1)')
   })
 })
+
+/**
+ * 323-079 —— 没有输出的工具调用必须在折叠视图里**说出结局**。
+ *
+ * 此前空结果的 tool_result 不追加任何行：调用行留着，结果行不出现，于是一个
+ * 已经结束的调用（被停止、或工具本就无输出）与一个还在跑的调用在屏幕上同形。
+ */
+describe('ChatPanel — 无输出的调用要有「未记录结果」行（323-079）', () => {
+  it('noResult 的合并行进帧，显示结局而不是空', () => {
+    const frame = chatFrame({
+      focusMode: false,
+      messages: [
+        {
+          role: 'system',
+          content: 'Bash(ls)',
+          toolMeta: { name: 'Bash', input: 'ls', collapsed: true },
+        },
+        {
+          role: 'system',
+          content: '',
+          toolMeta: { name: '', input: '', output: '', collapsed: true, noResult: true },
+        },
+      ],
+    })
+    // 这个夹具没有挂 I18nProvider（useI18n 的兜底是 key 原样），帧里出现 key
+    // 正好证明**这个分支**被走到了。
+    expect(frame).toContain('ui.tool.no_result_recorded')
+    // 正对照：调用行仍在（合并没有把它吃掉，也没有渲染成两条调用）。
+    expect(frame).toContain('Bash')
+  })
+
+  it('正对照：同一条帧里带输出时不出现该行', () => {
+    const frame = chatFrame({
+      focusMode: false,
+      messages: [
+        {
+          role: 'system',
+          content: 'Bash(ls)',
+          toolMeta: { name: 'Bash', input: 'ls', collapsed: true },
+        },
+        {
+          role: 'system',
+          content: '',
+          toolMeta: { name: '', input: '', output: 'file.txt', collapsed: true },
+        },
+      ],
+    })
+    expect(frame).toContain('file.txt')
+    expect(frame).not.toContain('ui.tool.no_result_recorded')
+  })
+})

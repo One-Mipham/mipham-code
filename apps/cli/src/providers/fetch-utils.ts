@@ -73,8 +73,44 @@ export function retryDelayMs(
   return Math.min(Math.max(requested, RETRY_AFTER_MIN_MS), RETRY_AFTER_MAX_MS)
 }
 
+/**
+ * TLS failures a retry cannot fix.
+ *
+ * A certificate that has expired, or names another host, fails identically on
+ * every attempt — re-sending only delays the explanation the first handshake
+ * already gave. Matched on the `code` of the thrown error *and its `cause`
+ * chain*: Node's undici throws a bare `TypeError: fetch failed` and hides the
+ * OpenSSL verdict one level down, so a check that only looked at the top-level
+ * error would classify every certificate failure as transient.
+ */
+const NON_RETRYABLE_TLS_CODES = new Set([
+  'DEPTH_ZERO_SELF_SIGNED_CERT',
+  'SELF_SIGNED_CERT_IN_CHAIN',
+  'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+  'UNABLE_TO_GET_ISSUER_CERT',
+  'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+  'ERR_TLS_CERT_ALTNAME_INVALID',
+])
+
+/** The certificate verdict anywhere in `err`'s cause chain, if there is one. */
+function tlsCertCode(err: unknown): string | undefined {
+  let cur: unknown = err
+  for (let depth = 0; cur && depth < 4; depth++) {
+    const code = (cur as { code?: unknown }).code
+    if (
+      typeof code === 'string' &&
+      (code.startsWith('CERT_') || NON_RETRYABLE_TLS_CODES.has(code))
+    ) {
+      return code
+    }
+    cur = (cur as { cause?: unknown }).cause
+  }
+  return undefined
+}
+
 function isRetryableError(err: unknown): boolean {
   if (err instanceof DOMException && err.name === 'AbortError') return false
+  if (tlsCertCode(err) !== undefined) return false
   return true
 }
 
@@ -236,6 +272,19 @@ export async function fetchWithRetry(
         if (timedOut) {
           throw new Error(
             `API Error: No response from API (timed out after ${Math.round(timeout / 1000)}s)`,
+          )
+        }
+        const certCode = tlsCertCode(err)
+        if (certCode) {
+          let host = url
+          try {
+            host = new URL(url).host
+          } catch {
+            /* keep the raw URL in the message */
+          }
+          throw new Error(
+            `API Error: TLS certificate rejected (${certCode}) for ${host}. ` +
+              'The certificate is what it is — check the endpoint or the provider base URL.',
           )
         }
         throw err

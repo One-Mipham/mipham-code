@@ -54,6 +54,33 @@ describe('McpProtocol', () => {
       expect(echo!.inputSchema.type).toBe('object')
       expect(echo!.inputSchema.required).toContain('message')
     })
+
+    it('drops null / nameless entries instead of throwing downstream', async () => {
+      // A host can hand the server a malformed list. Downstream code indexes
+      // `.name` on every entry, and the throw lands in a background async that
+      // our crash handler turns into process exit — one bad server, whole CLI.
+      const fake = {
+        sendRequest: async () => ({
+          tools: [
+            null,
+            { name: '', inputSchema: { type: 'object' } },
+            { inputSchema: { type: 'object' } },
+            { name: 'ok', inputSchema: { type: 'object' } },
+          ],
+        }),
+      } as unknown as Transport
+      const p = new McpProtocol(fake)
+      const tools = await p.listTools()
+      expect(tools).toHaveLength(1)
+      expect(tools[0]!.name).toBe('ok')
+    })
+
+    it('treats a missing tools array as an empty list', async () => {
+      const fake = {
+        sendRequest: async () => ({}),
+      } as unknown as Transport
+      expect(await new McpProtocol(fake).listTools()).toEqual([])
+    })
   })
 
   describe('callTool', () => {

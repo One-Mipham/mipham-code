@@ -131,8 +131,22 @@ export class McpProtocol {
   }
 
   async listTools(): Promise<ToolDefinition[]> {
-    const result = (await this.transport.sendRequest('tools/list')) as { tools: ToolDefinition[] }
-    return result.tools || []
+    const result = (await this.transport.sendRequest('tools/list')) as {
+      tools?: ToolDefinition[]
+    }
+    // A server (or the host embedding it) may put a `null` or a nameless entry
+    // in `tools`. That shape used to reach `connection.tools.map(t => t.name)`,
+    // throw a TypeError from a background async, and — with our crash handler
+    // installed — take the whole CLI down over one malformed server. Drop
+    // entries that cannot be addressed instead of trusting the payload.
+    const tools = Array.isArray(result?.tools) ? result.tools : []
+    return tools.filter(
+      (tool): tool is ToolDefinition =>
+        !!tool &&
+        typeof tool === 'object' &&
+        typeof (tool as { name?: unknown }).name === 'string' &&
+        (tool as { name: string }).name.length > 0,
+    )
   }
 
   async callTool(

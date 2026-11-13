@@ -11,6 +11,7 @@ import {
   extractBashFileAccess,
   expandKnownPathVars,
   stripLeadingShellNoise,
+  variableWildcardWarning,
 } from '../../src/core/permission-rules'
 
 describe('wildcardMatch', () => {
@@ -317,6 +318,31 @@ describe('matchBashRule — Read/Write/Edit rules match Bash file access', () =>
   })
 })
 
+describe('matchBashRule — a Read deny/ask rule also covers Write and Edit on the same path', () => {
+  it('matches Write/Edit against a Read(path) rule', () => {
+    // A `Read` rule protects the path, not one tool: overwriting the file was
+    // a way around a deny rule written to keep readers out of it.
+    expect(
+      matchBashRule('Read(.git-credentials)', 'Write', { file_path: '.git-credentials' }),
+    ).toBe(true)
+    expect(matchBashRule('Read(.git-credentials)', 'Edit', { file_path: '.git-credentials' })).toBe(
+      true,
+    )
+  })
+
+  it('does not match an unrelated path', () => {
+    expect(matchBashRule('Read(.git-credentials)', 'Write', { file_path: '.npmrc' })).toBe(false)
+  })
+
+  it('does not widen an allow rule — segmentMode all stays out', () => {
+    // allow Read(X) must not grant Write to X: bridging both directions would
+    // be a privilege expansion the rule's author never asked for.
+    expect(
+      matchBashRule('Read(.git-credentials)', 'Write', { file_path: '.git-credentials' }, 'all'),
+    ).toBe(false)
+  })
+})
+
 describe('matchBashRule — prefix wrapper commands do not bypass Read/Write/Edit rules', () => {
   it('matches a reader command wrapped by sudo/env/timeout/nohup/command/eval/nice/xargs', () => {
     for (const cmd of [
@@ -362,6 +388,46 @@ describe('matchBashRule — prefix wrapper commands do not bypass Read/Write/Edi
     expect(
       matchBashRule('Read(.git-credentials)', 'Bash', { command: 'echo cat .git-credentials' }),
     ).toBe(false)
+  })
+
+  it('boolean wrapper flags do not swallow the command (sudo -n / -E / -s)', () => {
+    // These spellings are value-taking for *other* wrappers (`-n` = nice
+    // --adjustment, `-E` = xargs --eof, `-s` = timeout --signal), so the shared
+    // table ate the real command and a `Bash(rm:*)` deny never saw `rm`.
+    for (const cmd of [
+      'sudo -n rm -rf /tmp/x',
+      'sudo -E rm -rf /tmp/x',
+      'sudo -s rm -rf /tmp/x',
+      'doas -n rm -rf /tmp/x',
+    ]) {
+      expect(matchBashRule('Bash(rm:*)', 'Bash', { command: cmd }), cmd).toBe(true)
+    }
+    // Positive control: a genuinely value-taking flag still consumes its value.
+    expect(matchBashRule('Bash(rm:*)', 'Bash', { command: 'sudo -u root rm -rf /tmp/x' })).toBe(
+      true,
+    )
+    expect(matchBashRule('Bash(rm:*)', 'Bash', { command: 'nice -n 5 rm -rf /tmp/x' })).toBe(true)
+  })
+})
+
+describe('matchBashRule — attached-wildcard allow rules stop at the word boundary', () => {
+  it('Bash(ls*) grants ls but not lsof', () => {
+    // `^ls.*$` also matched `lsof -i -P` — an allow rule handed over every
+    // command that merely starts with the same letters.
+    expect(matchBashRule('Bash(ls*)', 'Bash', { command: 'ls -la' }, 'all')).toBe(true)
+    expect(matchBashRule('Bash(ls*)', 'Bash', { command: 'ls' }, 'all')).toBe(true)
+    expect(matchBashRule('Bash(ls*)', 'Bash', { command: 'lsof -i -P' }, 'all')).toBe(false)
+  })
+
+  it('deny/ask keeps the wide reading — there, matching more is the safe direction', () => {
+    expect(matchBashRule('Bash(ls*)', 'Bash', { command: 'lsof -i -P' }, 'any')).toBe(true)
+  })
+
+  it('patterns without an attached wildcard on the first word are unchanged', () => {
+    expect(
+      matchBashRule('Bash(npm run test:*)', 'Bash', { command: 'npm run test:unit' }, 'all'),
+    ).toBe(true)
+    expect(matchBashRule('Bash(git status)', 'Bash', { command: 'git status' }, 'all')).toBe(true)
   })
 })
 
@@ -1119,5 +1185,19 @@ describe('allow 方向：pattern 与路径按同一套规则规范化（macOS /t
     expect(matchBashRule(`Read(/tmp/${base}/*.txt)`, 'Read', { file_path: link }, 'all')).toBe(
       false,
     )
+  })
+})
+
+describe('variableWildcardWarning —— 变量值里的 * 是「每个值」而不是「那一个」', () => {
+  it('Bash(PORT=* …) 的 allow 规则给出警告', () => {
+    const w = variableWildcardWarning('Bash(PORT=* npm run dev)')
+    expect(w).toBeTruthy()
+    expect(w).toContain('PORT')
+  })
+
+  it('正对照：具体值 / 非 Bash / 普通通配都不警告', () => {
+    expect(variableWildcardWarning('Bash(PORT=3000 npm run dev)')).toBeUndefined()
+    expect(variableWildcardWarning('Read(**/.ssh/id_rsa)')).toBeUndefined()
+    expect(variableWildcardWarning('Bash(ls*)')).toBeUndefined()
   })
 })

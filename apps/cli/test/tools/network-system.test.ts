@@ -72,6 +72,43 @@ describe('WebFetch tool execution', () => {
     vi.restoreAllMocks()
   })
 
+  it('refuses at call time when the kill switch is on — no network, even if the tool object is held', async () => {
+    // The registry drops this tool at startup, but a policy that turns it on
+    // later must still be honoured: the guard is a recheck, not a substitute.
+    const fetchMock = vi.fn()
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+    const prev = process.env.MIPHAM_DISABLE_WEB_FETCH
+    process.env.MIPHAM_DISABLE_WEB_FETCH = '1'
+    try {
+      const result = await webFetchTool.execute({ url: 'https://blocked.example.com' }, ctx)
+      expect(result.success).toBe(false)
+      expect(result.error).toMatch(/MIPHAM_DISABLE_WEB_FETCH/)
+      expect(fetchMock).not.toHaveBeenCalled()
+    } finally {
+      if (prev === undefined) delete process.env.MIPHAM_DISABLE_WEB_FETCH
+      else process.env.MIPHAM_DISABLE_WEB_FETCH = prev
+    }
+  })
+
+  it('正对照：开关不在时同一个工具照常取网（上面那条不是恒真）', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'text/html' }),
+      text: () => Promise.resolve('<html><body><p>ok</p></body></html>'),
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+    const prev = process.env.MIPHAM_DISABLE_WEB_FETCH
+    delete process.env.MIPHAM_DISABLE_WEB_FETCH
+    try {
+      const result = await webFetchTool.execute({ url: 'https://switch-off.example.com' }, ctx)
+      expect(result.success).toBe(true)
+      expect(fetchMock).toHaveBeenCalled()
+    } finally {
+      if (prev !== undefined) process.env.MIPHAM_DISABLE_WEB_FETCH = prev
+    }
+  })
+
   it('fetches URL and converts HTML to markdown', async () => {
     const mockHtml = '<html><body><h1>Hello</h1><p>World</p></body></html>'
     globalThis.fetch = vi.fn().mockResolvedValue({

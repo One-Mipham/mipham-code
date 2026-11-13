@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, mkdirSync } from 'node:fs'
+import { readFileSync, existsSync, mkdirSync, realpathSync } from 'node:fs'
 import { join, dirname, resolve } from 'node:path'
 import { atomicWriteFileSync } from '../shared/atomic-write'
 import { miphamHome } from './paths.ts'
@@ -16,15 +16,37 @@ export interface TrustedWorkspaces {
 /**
  * Resolves a directory to its real absolute path, following symlinks.
  * Falls back to the resolved path if realpath fails.
+ *
+ * This used to be `resolve()` under a comment claiming it followed symlinks —
+ * so trust was checked against the **lexical** spelling while the settings and
+ * hooks it gates are read through the **canonical** one. A workspace reached
+ * through a symlink (`~/work -> /Volumes/proj`, or macOS's `/tmp -> /private/tmp`)
+ * was therefore trusted under one path and read under another.
+ *
+ * A directory that does not exist yet has no realpath; `resolve` keeps
+ * `trust()` usable before the folder is created.
  */
 function realPath(dir: string): string {
   try {
-    // Use resolve to normalize, but don't require the directory to exist yet
-    const resolved = resolve(dir)
-    return resolved
+    return realpathSync.native(dir)
   } catch {
     return resolve(dir)
   }
+}
+
+/**
+ * Both spellings of a directory: what the caller typed (normalised) and what
+ * the filesystem calls it.
+ *
+ * Trust entries written before canonicalisation, and paths passed through a
+ * symlink, each match only one of the two. Checking both keeps an existing
+ * store valid and cannot widen what is trusted — every candidate must itself
+ * be inside a trusted directory.
+ */
+function spellings(dir: string): string[] {
+  const literal = resolve(dir)
+  const real = realPath(dir)
+  return literal === real ? [literal] : [literal, real]
 }
 
 /**
@@ -121,17 +143,24 @@ export class WorkspaceTrust {
    * A directory is trusted if it or any ancestor is in the trust list.
    */
   isTrusted(dir: string): boolean {
-    const resolved = realPath(dir)
-    const resolvedLower = resolved.toLowerCase()
+    const candidates = spellings(dir)
 
     for (const trusted of this.store.directories) {
-      const trustedLower = trusted.toLowerCase()
-      // Exact match
-      if (resolvedLower === trustedLower) return true
-      // Ancestor match: trusted dir is a parent of the target. Trust does not
-      // cross a nested git-repository boundary (vendored/submodule isolation).
-      if (resolvedLower.startsWith(trustedLower + '/') && !hasGitBoundary(resolved, trusted)) {
-        return true
+      for (const trustedPath of spellings(trusted)) {
+        const trustedLower = trustedPath.toLowerCase()
+        for (const candidate of candidates) {
+          const candidateLower = candidate.toLowerCase()
+          // Exact match
+          if (candidateLower === trustedLower) return true
+          // Ancestor match: trusted dir is a parent of the target. Trust does not
+          // cross a nested git-repository boundary (vendored/submodule isolation).
+          if (
+            candidateLower.startsWith(trustedLower + '/') &&
+            !hasGitBoundary(candidate, trustedPath)
+          ) {
+            return true
+          }
+        }
       }
     }
 
@@ -140,6 +169,10 @@ export class WorkspaceTrust {
 
   /**
    * Add a directory to the trust store.
+   *
+   * The canonical path is what gets stored: the settings and hooks trust gates
+   * are read through the realpath, so recording a symlink's lexical spelling
+   * made the two disagree. `isTrusted` still matches older lexical entries.
    *
    * Returns false only when the new entry could not be written to disk; a
    * directory that is already trusted is `true` — it was persisted earlier.
@@ -159,13 +192,13 @@ export class WorkspaceTrust {
 
   /** Remove a directory from the trust store (and any subdirectories). */
   untrust(dir: string): void {
-    const resolved = realPath(dir)
-    const resolvedLower = resolved.toLowerCase()
+    const targets = spellings(dir).map((p) => p.toLowerCase())
 
     this.store.directories = this.store.directories.filter((d) => {
       const lower = d.toLowerCase()
-      // Remove exact match and all subdirectories
-      return lower !== resolvedLower && !lower.startsWith(resolvedLower + '/')
+      // Remove exact match and all subdirectories, in whichever spelling the
+      // entry was recorded.
+      return !targets.some((target) => lower === target || lower.startsWith(target + '/'))
     })
     this.save()
   }

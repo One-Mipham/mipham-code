@@ -312,6 +312,23 @@ export function safeSlice(text: string, max: number): string {
 }
 
 /**
+ * Replace lone UTF-16 surrogates with U+FFFD, leaving valid pairs untouched.
+ *
+ * `JSON.stringify` emits a lone surrogate as a bare `\uD83D` escape (well-formed
+ * stringify does not repair it — it only guarantees *deterministic* output). That
+ * escape is what strict JSON parsers reject, so one broken half of an emoji
+ * picked up from a tool call would be re-sent with every later request and fail
+ * the whole turn. A surrogate that already lost its partner cannot be recovered;
+ * the replacement character at least serializes.
+ */
+export function toWellFormed(text: string): string {
+  return text.replace(
+    /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,
+    '�',
+  )
+}
+
+/**
  * Full command sanitization pipeline for permission checks.
  * Applies in order:
  * 1. Strip dangerous invisible Unicode (zero-width, bidi, BOM, etc.)

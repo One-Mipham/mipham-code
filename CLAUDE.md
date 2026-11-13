@@ -28,9 +28,9 @@ prompt-exclude-header: true
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.57
+> **版本**: 2.94.58
+> **最后更新**: 2026-11-13 — **第 32 档考古：对标 2.1.322–323 —— 295 条逐条裁决，落地 16 处（17 条目）**（2.94.58）。上游 324–331 **不存在**，最后一版是 2.1.323（npm `latest`，2026-11-12T20:29:28Z），语料 295 条 = `322-001` + `323-001…323-294`；230 条无此面、38 条已处理、1 条未验（终端帧级组合字符，非交互不可判定）。落地集中在四种形状：① **闸门只在一半路径上生效** —— `Read(/etc/passwd)` 这类路径规则的跨工具桥接只在 `toolName==='Bash'` 时做，同一条规则对 `Write`/`Edit` 照放行（`323-060`）；allow 规则**变量值**里的 `*`（`Bash(PORT=* npm run dev)`）被当通配符，静默授予任意值 —— 新增 `variableWildcardWarning` + `PermissionSystem.getRuleWarnings()`，与 invalid-rules 共用启动期告警通道（`323-010`）；Bash 规则的前缀通配按变量/附着两半收紧（`323-055`）、包装器选项表不再把 `-n` 当作 `nice` 的选项吞掉（`323-058`）。② **同一状态两种拼写** —— 工作区信任按**语法**路径判，而它把守的设置与 hooks 按**真实**路径读（`realPath` 的注释写着 follow symlinks，实现只有 `resolve()`），`~/work -> /Volumes/proj` 这类符号链接下两面永不相交；改 `realpathSync.native`，`isTrusted`/`untrust` 同时匹配两种拼写，旧词法条目仍有效（`323-066`）。引擎在 `restart` 时已清空累加器（两处），UI 消费循环却没有 `chunk.restart` 分支 —— 失败尝试的气泡留在屏幕上、重试的正文接在它后面；新增 `dropSupersededAttempt` 按**对象身份**摘除，并清 thinking/stream buffer（`323-251`）。③ **失败与成功同形** —— 结束却没有输出的工具调用在折叠视图里与「还在跑」无法区分，新增「No result recorded」行并接进合并路径（`323-079`）；npm install 成功但写了 stderr 时回「成功」而不给任何警告（`323-081`/`323-226`，同一修复两个 id）；`tools/list` 里一条 `null` 或无名条目会让整台服务器的工具表注册失败（`323-092`）；TLS/证书错误被当瞬时错误重试（`323-109`）；ToolSearch 用内置工具短名搜索得到「无匹配」，而它就在手边（`323-197`）。④ **边界直接交给下一层** —— Edit/Write 在 FIFO/设备上会无限等（`O_NONBLOCK` + `isFile`/`isRegularFile` 类型拒绝，`323-022`）；本程序自己的 git/rg 子进程继承**全部** provider 凭据（`stripEnv` 摘名字，模型 shell 仍走 `filterEnv` 的哨兵 —— 一个「敏感」定义、两种处置，`323-206`）；`browser_click` 把模型给的 uid 原样插进 CSS 选择器（`323-235`）；孤立 UTF-16 代理项被 `\uD83D` 原样重发（`toWellFormed`，`323-099`）；`MIPHAM_DISABLE_WEB_FETCH` 只在启动注册时读（execute 入口重读，`323-102`）。**刻意未落两条**：`/logout` 不删 MCP OAuth 令牌（删凭据、无逆路径，留给用户决定）、项目级 `.mcp.json` 未随 trust gate（加闸会让非 TTY 自动化在没有 `--trust` 通道时静默失去 MCP）。测试 4,662 → **4,706**（351 文件，0 失败）。
 > **最后更新**: 2026-11-10 — **✅ 0.85.32 已发布：MCP 关停补杀后代 + npx 握手预算 45s**（2.94.57）。本批两笔都是用户拿得到的：① `killProcessTree` 在 POSIX 上先按 `ps -A -o pid=,ppid=` **枚举后代、由深到浅**发信号，再杀直接子进程 —— `npx -y <pkg>` 下我们 spawn 的是包装器、真正应答 JSON-RPC 的是它的孩子，包装器一死孩子被 init 收养继续跑（本机实测攒下两个 `ppid=1` 的 `genable-mcp`）；枚举必须在杀之前，父链一断就再也找不到它们，`ps` 起不来时退化为原来的直接 kill（fail-open 回旧行为）。② `connectTimeoutMs(command)` 给经包管理器启动的服务器 **45s**：`spawn()` 立刻返回、npm 的下载发生在子进程里，成本全落在等 `initialize()` 上，而 15s 只够暖缓存（空缓存实测 ~29.9s ⇒ 必超时必重连）；`npx` / `bunx` / `npm` / `pnpm` / `yarn`（剥掉 `.cmd|.exe|.ps1` 与绝对路径前缀）走 45s，其余仍 15s，`MIPHAM_MCP_CONNECT_TIMEOUT_MS` 照旧压过两者。**45 有上界理由**：`initialize()` 走 `sendRequest` 的 60s 请求超时，越过它握手会先被那条时限打断 —— 换的是错误文案不是耐心，该不变量有自己的用例钉着。`test/mcp` 172 → 175，全套件 4,659 → 4,662（349 文件不变）。**如实记两处既有 flake**：满并发下 `test/e2e/full-pipeline.test.ts`（真打 deepseek）与 `test/shared/update-safety.test.ts`（5s 墙钟）各红过一次，单跑均绿，与本笔无关。**✅ 0.85.32 已发布**（2026-11-10）：GPG 签名 tag `v0.85.32` → **`9699b8f3`**（`git tag -v` = 完好的签名，密钥 `62F77FC4…`）；`ci.yml` `42748494378` **9/9**、`release.yml` `42748812175` **9/9**；npm `dist-tags.latest` = **0.85.32**、registry `time['0.85.32']` = **2026-11-10T03:25:04.013Z**（真输出行 `+ @miphamai/cli@0.85.32`，03:22:25Z）；GitHub Release **6 资产**（非 draft 非 prerelease，03:20:00Z）、DMG 2,268,256 B ⚠️ 未签名（`APPLE_SIGNING_IDENTITY` 未设）；JetBrains 真输出行 `JetBrains plugin published.`（03:24:13Z，同前缀更早的几行是 Actions 脚本回显）；本地 `.vsix` **76,036 B** / sha256 `eced1870…` ⇒ ✅ **已人工上传并双探针核验**（2026-11-10）：上传后 **13:17:21Z** 首读即形态②（`Version` 仍 0.85.31、`Last updated` 已跳到 13:17:21 GMT）⇒ 已收到、校验中；**13:24:44Z** 翻页 —— 页内同源 `extensionquery`（`flags` 63）`versions[0].version` = **0.85.32**、`flags` = `validated`、`lastUpdated` = **2026-11-10T13:24:44.597Z**、`versions[]` 83 → **84**（恰增一条）；公开页 cache-bust 同读 `"Version":"0.85.32"`、`LastUpdatedDateString` = `Tue, 10 Nov 2026 13:24:44 GMT`（与 API 同刻）、`PublisherName` = `miphamai`。**校验窗口 ≈7.4 分钟**（13:17:21 → 13:24:44）。发布读数同步记入 `ROADMAP.md` 台账行。
-> **前一条（2.94.56）**: 2026-11-10 — **npx 类服务器的握手预算单独放宽到 45s**（2.94.56）。上一笔把「超时后 npx 孙进程变孤儿」修掉了，**根因还在**：`spawn()` 立刻返回，npm 的下载发生在子进程里，整个成本落在等 `initialize()` 回包上，而默认预算 15s 只够暖缓存（空缓存实测 ~29.9s ⇒ 必然超时、必然走重连）。新增 `connectTimeoutMs(command)`：按**命令名**判形状（`npx` / `bunx` / `npm` / `pnpm` / `yarn`，剥掉 Windows 的 `.cmd|.exe|.ps1` 与绝对路径前缀）给 45s，其余仍 15s；`MIPHAM_MCP_CONNECT_TIMEOUT_MS` 照旧压过两者。**45 不是随手取的**：`initialize()` 走 `sendRequest` 的 60s 请求超时，越过它握手会先被那条时限打断 —— 换的是错误文案不是耐心，这条不变量有自己的用例钉着。正/负对照：包装器命令与普通命令各一组，环境变量再各一组；`test/mcp` 172 → 175，全套件 4,659 → 4,662。**如实记两处既有 flake**：满并发下 `test/e2e/full-pipeline.test.ts`（真打 deepseek）与 `test/shared/update-safety.test.ts`（5s 墙钟）各红过一次，单跑均绿，与本笔无关。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -69,7 +69,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：4,662 测试（本机 4,660 passed + 2 skipped，349 文件，0 失败）
+测试：4,706 测试（本机 4,704 passed + 2 skipped，351 文件，0 失败）
 
 ---
 
@@ -106,7 +106,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 349 个测试文件，4662 个测试
+│   │   ├── test/               # 351 个测试文件，4706 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -132,7 +132,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（4662 个测试）
+pnpm test         # vitest run（4706 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -322,28 +322,28 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 102     | 1806     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
-| tools           | 30      | 600      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
+| core            | 102     | 1822     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
+| tools           | 31      | 611      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 38      | 265      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
-| ui              | 37      | 393      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
+| ui              | 38      | 401      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
 | agent           | 15      | 159      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
 | security        | 12      | 126      | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
-| providers       | 10      | 184      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
-| mcp             | 12      | 175      | client / transport / oauth / token-store / registry / instructions（含 2 skipped）                                                                                          |
+| providers       | 10      | 189      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
+| mcp             | 12      | 177      | client / transport / oauth / token-store / registry / instructions（含 2 skipped）                                                                                          |
 | workflow        | 8       | 65       | runtime / loop / parallel / sandbox / journal / verify                                                                                                                      |
 | vajra           | 6       | 53       | context / events / service / compose / leaf（自建内核）                                                                                                                     |
-| shared          | 12      | 148      | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                              |
+| shared          | 12      | 149      | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                              |
 | commands        | 11      | 108      | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers / provider-model-flags                                                                  |
 | skills          | 6       | 64       | sanitizer / marketplace / fork-executor / skill-assets                                                                                                                      |
 | config          | 11      | 131      | credential-crypto / loader-encryption / defaults / settings-json / preferences / model-context-window                                                                       |
-| plugin          | 4       | 64       | claude-plugin / plugin-manager                                                                                                                                              |
+| plugin          | 4       | 65       | claude-plugin / plugin-manager                                                                                                                                              |
 | artifacts       | 1       | 6        | manifest                                                                                                                                                                    |
 | agent-view      | 4       | 42       | agent-view-manager / dashboard-keys / session-view                                                                                                                          |
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integration     | 1       | 3        | 跨仓接线：`vscode-extension-telemetry`（VS Code 遥测关闭 ⇒ 终端拿到 `MIPHAM_TELEMETRY=off`）                                                                                |
 | integrity       | 19      | 132      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **349** | **4662** | **0 失败** ✅（本机 4,660 + 2 skipped，349 文件）                                                                                                                           |
+| **合计**        | **351** | **4706** | **0 失败** ✅（本机 4,704 + 2 skipped，351 文件）                                                                                                                           |
 
 ### 测试注意事项
 

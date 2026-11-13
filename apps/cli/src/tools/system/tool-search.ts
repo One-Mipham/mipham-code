@@ -10,6 +10,25 @@ import type { ToolDefinition } from '../../shared/index.ts'
 import { McpClient } from '../../mcp/client'
 import { capMcpText } from '../../mcp/instructions'
 
+/**
+ * Names a search query may be a *typo'd spelling of a built-in* tool, in which
+ * case the right answer is "that one is already on your desk, just call it" —
+ * not "no tools matching". `WebSearch`, `web_search` and `web search` are the
+ * same tool to a model reaching for it by name.
+ */
+export function builtInToolMatches(
+  query: string,
+  registry: Map<string, ToolDefinition> | undefined,
+): string[] {
+  const q = normalizeToolName(query)
+  if (!registry || q.length < 2) return []
+  return [...registry.keys()].filter((name) => normalizeToolName(name).includes(q))
+}
+
+function normalizeToolName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
 export const toolSearchTool: ToolDefinition = {
   name: 'ToolSearch',
   description:
@@ -37,7 +56,7 @@ export const toolSearchTool: ToolDefinition = {
     },
     required: [],
   },
-  async execute(params, _ctx) {
+  async execute(params, ctx) {
     const query = ((params.query as string) || '').toLowerCase()
     const serverFilter = (params.server as string) || ''
     const limit = (params.limit as number) || 20
@@ -99,12 +118,25 @@ export const toolSearchTool: ToolDefinition = {
     }
 
     if (matches.length === 0) {
+      // A zero-hit answer is the wrong answer when the name the caller searched
+      // for is a *built-in* tool: nothing is missing, it was never an MCP tool.
+      // Saying only "no match" sends the model looking for a server to install
+      // for a tool it could have called.
+      const alreadyAvailable = builtInToolMatches(query, ctx.toolRegistry)
+      const hint =
+        alreadyAvailable.length > 0
+          ? `\n\n"${query}" matches a built-in tool that is already available — ` +
+            `call ${alreadyAvailable.map((n) => `\`${n}\``).join(', ')} directly; ` +
+            `ToolSearch only covers MCP servers.`
+          : ''
       return {
         success: true,
         content:
           `── MCP Tool Search ──\n\n` +
-          `No tools matching "${query}" across ${servers.length} server(s).\n\n` +
-          `Try a different query, or omit the query to list all tools.`,
+          `No tools matching "${query}" across ${servers.length} server(s).${hint}\n\n` +
+          (alreadyAvailable.length > 0
+            ? `Try a different query for MCP tools, or omit the query to list all MCP tools.`
+            : `Try a different query, or omit the query to list all tools.`),
       }
     }
 

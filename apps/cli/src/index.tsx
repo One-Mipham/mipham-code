@@ -879,6 +879,12 @@ export async function runApp(options: RunOptions): Promise<void> {
     process.stderr.write(`⚠ Mipham Code: ${msg}\n`)
   }
 
+  // Valid-but-doesn't-mean-what-it-says: a `*` in a variable's value in an
+  // allow rule (`Bash(PORT=* npm run dev)`) grants every value.
+  for (const msg of engine.getPermission().getRuleWarnings()) {
+    process.stderr.write(`⚠ Mipham Code: ${msg}\n`)
+  }
+
   // Same warning channel for malformed restrictions (P1) — a typo'd
   // `forbiddenModes`/`maxAllowedMode` used to leave the policy silently inert.
   for (const msg of engine.getPermission().getInvalidRestrictions()) {

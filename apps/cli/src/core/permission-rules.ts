@@ -144,6 +144,39 @@ const PREFIX_VALUE_OPTIONS = new Set([
 ])
 
 /**
+ * Flags that collide with a value-taking option spelling but are booleans for
+ * this wrapper. The shared table made `sudo -n rm -rf /tmp/x` consume `rm` as
+ * `-n`'s value, so the base command came out as `-rf` and a `Bash(rm:*)` deny
+ * never saw the command at all. `sudo -E` (xargs' `--eof`) and `sudo -s`
+ * (timeout's `--signal`) fail the same way. A boolean flag never takes the next
+ * token; without this, the real command is one token further along than the
+ * matcher looks.
+ */
+const WRAPPER_BOOLEAN_OPTIONS: Record<string, ReadonlySet<string>> = {
+  sudo: new Set([
+    '-n',
+    '--non-interactive',
+    '-E',
+    '--preserve-env',
+    '-H',
+    '--set-home',
+    '-A',
+    '--askpass',
+    '-b',
+    '--background',
+    '-S',
+    '--stdin',
+    '-s',
+    '--shell',
+    '-i',
+    '--login',
+    '-K',
+    '--remove-timestamp',
+  ]),
+  doas: new Set(['-n', '--non-interactive', '-s', '--shell']),
+}
+
+/**
  * Shell interpreters whose `-c` argument is itself a complete command line.
  *
  * Deliberately NOT added to PREFIX_COMMANDS: that table shares
@@ -571,7 +604,16 @@ function effectiveCommand(tokens: string[]): {
     while (i < tokens.length && tokens[i]!.startsWith('-')) {
       const opt = tokens[i]!
       i++
-      if (PREFIX_VALUE_OPTIONS.has(opt) && i < tokens.length) i++ // skip the flag's value
+      // A flag that is a boolean for *this* wrapper never consumes the next
+      // token, even though another wrapper's table calls the same spelling
+      // value-taking (see WRAPPER_BOOLEAN_OPTIONS).
+      if (
+        PREFIX_VALUE_OPTIONS.has(opt) &&
+        !WRAPPER_BOOLEAN_OPTIONS[name]?.has(opt) &&
+        i < tokens.length
+      ) {
+        i++ // skip the flag's value
+      }
     }
     if (name === 'env') {
       // `VAR=value` assignments. A quoted value spans several whitespace-split
@@ -977,6 +1019,19 @@ export function matchBashRule(
     return qualifies(paths, (p) => matchPathRule(p, subPattern!, segmentMode))
   }
 
+  // A `Read` deny/ask rule protects the *path*, not one tool: Write and Edit
+  // touch the same file the rule was written to keep off-limits, so routing
+  // around it by overwriting the file left `Read(secrets/**)` enforceable only
+  // against readers. Only the deny/ask direction bridges — an `allow` bridge
+  // would be a privilege expansion (`Read(X)` never granted Write to X).
+  if (
+    segmentMode !== 'all' &&
+    baseTool === 'Read' &&
+    (toolName === 'Write' || toolName === 'Edit')
+  ) {
+    return matchPathRule(String(toolInput.file_path || ''), subPattern!, segmentMode)
+  }
+
   if (toolName !== baseTool!) return false
 
   // For Bash: match against the command string (any segment of a compound
@@ -984,7 +1039,25 @@ export function matchBashRule(
   // `$(...)`/backtick substitution, so `Bash(rm *)` catches `x=$(rm -rf ~)`).
   if (baseTool === 'Bash') {
     const cmd = String(toolInput.command || '')
-    return qualifies(flattenCommand(cmd), (seg) => wildcardMatch(subPattern!, seg))
+    // An allow rule whose first word ends in an attached wildcard (`ls*`) is a
+    // grant bounded by that word — but `^ls.*$` also matched `lsof -i -P`, so
+    // the rule handed over every command that merely starts with the same
+    // letters. Under deny/ask the wide reading stays: there, matching more is
+    // the safe direction.
+    const anchored = segmentMode === 'all' ? /^([\w./-]+)\*/.exec(subPattern!) : null
+    const firstWord = anchored?.[1]
+    return qualifies(flattenCommand(cmd), (seg) => {
+      if (firstWord) {
+        // The wildcard has to start at a word boundary in the command: `ls`
+        // exactly, or `ls` followed by whitespace/`:` — not the `ls` inside
+        // `lsof`.
+        const boundary = new RegExp(
+          '^' + firstWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:$|[:\\s])',
+        )
+        if (!boundary.test(seg)) return false
+      }
+      return wildcardMatch(subPattern!, seg)
+    })
   }
 
   // For Write/Edit/Read: match against the file_path with path-glob semantics.
@@ -1102,6 +1175,27 @@ export function mcpServerPrefix(pattern: string): string | null {
   // Same charset `sanitizeName` leaves intact (it maps everything else to `_`).
   if (!/^[A-Za-z0-9-]+$/.test(server)) return null
   return `mcp__${server.toLowerCase()}__`
+}
+
+/**
+ * A Bash **allow** rule that puts a `*` inside a variable's *value*
+ * (`Bash(PORT=* npm run dev)`) is a grant nobody means: the `*` is a wildcard
+ * over the whole assignment, so the rule matches **every** value. Returns the
+ * warning text, or `undefined`.
+ *
+ * Deny/ask rules are deliberately not warned — there, a wider match is the safe
+ * direction. This is a warning and not a rejection: the pattern is structurally
+ * valid and the author may genuinely want the wildcard.
+ */
+export function variableWildcardWarning(pattern: string): string | undefined {
+  const shape = pattern.match(/^Bash\((.+)\)$/)
+  if (!shape) return undefined
+  const hit = /(?:^|\s)([A-Za-z_][A-Za-z0-9_]*)=[^\s]*\*/.exec(shape[1]!)
+  if (!hit) return undefined
+  return (
+    `allow rule "${pattern}" puts a * in the value of ${hit[1]}: ` +
+    `it matches every value, not one — write the concrete value if that is what you mean`
+  )
 }
 
 /**

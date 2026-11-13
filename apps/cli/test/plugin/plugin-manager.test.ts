@@ -12,11 +12,11 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { PluginManager } from '../../src/plugin/plugin-manager'
 
-const childProcessMock = vi.hoisted(() => ({ execFileSync: vi.fn() }))
+const childProcessMock = vi.hoisted(() => ({ spawnSync: vi.fn() }))
 
 vi.mock('node:child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:child_process')>()
-  return { ...actual, execFileSync: childProcessMock.execFileSync }
+  return { ...actual, spawnSync: childProcessMock.spawnSync }
 })
 
 const TEST_HOME = join(tmpdir(), 'mipham-plugin-test-' + Date.now())
@@ -349,10 +349,10 @@ describe('installFromNpm 的安装命令', () => {
       'npm-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
     )
     mkdirSync(npmPluginDir, { recursive: true })
-    childProcessMock.execFileSync.mockReset()
+    childProcessMock.spawnSync.mockReset()
     // 让被装的包在 npm 装完之后真的「存在」：按 --prefix 造出
     // node_modules/<pkg>/plugin.json，装完的校验步骤才能走通。
-    childProcessMock.execFileSync.mockImplementation((_cmd: string, args: string[]) => {
+    childProcessMock.spawnSync.mockImplementation((_cmd: string, args: string[]) => {
       const prefix = args[args.indexOf('--prefix') + 1]!
       const pkgDir = join(prefix, 'node_modules', args[1]!)
       mkdirSync(pkgDir, { recursive: true })
@@ -361,7 +361,7 @@ describe('installFromNpm 的安装命令', () => {
         JSON.stringify({ name: 'npm-plugin', version: '2.0.0' }),
         'utf-8',
       )
-      return ''
+      return { status: 0, stdout: '', stderr: '', error: undefined }
     })
   })
 
@@ -371,7 +371,7 @@ describe('installFromNpm 的安装命令', () => {
 
   it('不给被装包执行 postinstall 的机会（--ignore-scripts）', () => {
     new PluginManager(npmPluginDir).installFromNpm('npm-plugin')
-    const args = childProcessMock.execFileSync.mock.calls[0]![1] as string[]
+    const args = childProcessMock.spawnSync.mock.calls[0]![1] as string[]
     expect(args).toContain('--ignore-scripts')
   })
 
@@ -380,7 +380,7 @@ describe('installFromNpm 的安装命令', () => {
     // 哪个 registry」解析。被劫持的 npm_config_registry（或作用域内的 .npmrc）于是
     // 能送来会落到本机的代码。判据取 argv 里的那一对，而不是文案。
     new PluginManager(npmPluginDir).installFromNpm('npm-plugin')
-    const args = childProcessMock.execFileSync.mock.calls[0]![1] as string[]
+    const args = childProcessMock.spawnSync.mock.calls[0]![1] as string[]
     const i = args.indexOf('--registry')
     expect(i).toBeGreaterThan(-1)
     expect(args[i + 1]).toBe('https://registry.npmjs.org')
@@ -390,13 +390,38 @@ describe('installFromNpm 的安装命令', () => {
     expect(args).toContain('--prefix')
   })
 
-  it('经 execFileSync 以 argv 数组调用，不经 shell 拼接', () => {
+  it('经 spawnSync 以 argv 数组调用，不经 shell 拼接', () => {
     new PluginManager(npmPluginDir).installFromNpm('npm-plugin')
-    const [cmd, args] = childProcessMock.execFileSync.mock.calls[0]! as [string, string[]]
+    const [cmd, args] = childProcessMock.spawnSync.mock.calls[0]! as [string, string[]]
     expect(cmd).toBe('npm')
     expect(Array.isArray(args)).toBe(true)
     expect(args).toContain('--no-save')
     expect(args).toContain('--prefix')
+  })
+
+  it('成功时把 npm 写到 stderr 的说明并进结果，而不是丢掉', () => {
+    // stderr 不是「失败」的同义词：成功安装时 npm 也会在 stderr 上写
+    // deprecation / funding 一类说明。旧实现用 execFileSync 只取 stdout，
+    // 这些字在成功路径上被静默丢弃。
+    childProcessMock.spawnSync.mockImplementationOnce((_cmd: string, args: string[]) => {
+      const prefix = args[args.indexOf('--prefix') + 1]!
+      const pkgDir = join(prefix, 'node_modules', args[1]!)
+      mkdirSync(pkgDir, { recursive: true })
+      writeFileSync(
+        join(pkgDir, 'plugin.json'),
+        JSON.stringify({ name: 'npm-plugin', version: '2.0.0' }),
+        'utf-8',
+      )
+      return {
+        status: 0,
+        stdout: '',
+        stderr: 'npm notice: this plugin ships no skills yet',
+        error: undefined,
+      }
+    })
+    const result = new PluginManager(npmPluginDir).installFromNpm('npm-plugin')
+    expect(result.success).toBe(true)
+    expect(result.message).toContain('ships no skills yet')
   })
 
   it('仍然把包装进插件目录并登记（修复未破坏安装流程）', () => {
@@ -408,6 +433,6 @@ describe('installFromNpm 的安装命令', () => {
   it('拒绝非法包名时根本不调用 npm', () => {
     const result = new PluginManager(npmPluginDir).installFromNpm('evil; rm -rf /')
     expect(result.success).toBe(false)
-    expect(childProcessMock.execFileSync).not.toHaveBeenCalled()
+    expect(childProcessMock.spawnSync).not.toHaveBeenCalled()
   })
 })

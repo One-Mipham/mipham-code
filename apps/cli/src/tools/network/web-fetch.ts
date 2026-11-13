@@ -263,6 +263,18 @@ export const webFetchTool: ToolDefinition = {
     required: ['url'],
   },
   async execute(params, _ctx) {
+    // Rechecked at call time, not only when the registry was built: the
+    // registration filter drops this tool when the switch is on at startup, but
+    // a policy that turns it on later (or any caller holding the tool directly)
+    // must not still reach the network. Same variable, same `'1'` — this can
+    // only refuse a call the registry would have refused, never widen it.
+    if (process.env.MIPHAM_DISABLE_WEB_FETCH === '1') {
+      return {
+        success: false,
+        content: '',
+        error: 'WebFetch is disabled (MIPHAM_DISABLE_WEB_FETCH=1).',
+      }
+    }
     const rawUrl = params.url as string
     const prompt = (params.prompt as string) || ''
     const offset = Math.max(0, Number(params.offset) || 0)

@@ -48,25 +48,31 @@ afterEach(() => {
 
 /** Mock Bun.spawn to actually run the command (grep tests need real rg/grep output). */
 function mockRealSpawn() {
-  vi.spyOn(Bun, 'spawn').mockImplementation((cmd: string[], opts?: { cwd?: string }) => {
-    const child = spawn(cmd[0]!, cmd.slice(1), {
-      cwd: opts?.cwd,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-    const exited = new Promise<number>((resolve) => {
-      child.on('close', (code) => resolve(code ?? 0))
-    })
-    const proc = {
-      stdout: Readable.toWeb(child.stdout!) as unknown as ReadableStream,
-      stderr: Readable.toWeb(child.stderr!) as unknown as ReadableStream,
-      exited,
-      get exitCode() {
-        return child.exitCode
-      },
-      kill: (signal?: number | NodeJS.Signals) => child.kill(signal), // forward SIGKILL escalation
-    }
-    return proc as any
-  })
+  // Forward `env` too: a mock that drops an option the real call site passes
+  // runs the child in the parent's environment, so a test of "we do not hand
+  // down credentials" would be asserting on the mock's behaviour instead.
+  vi.spyOn(Bun, 'spawn').mockImplementation(
+    (cmd: string[], opts?: { cwd?: string; env?: Record<string, string | undefined> }) => {
+      const child = spawn(cmd[0]!, cmd.slice(1), {
+        cwd: opts?.cwd,
+        env: opts?.env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+      const exited = new Promise<number>((resolve) => {
+        child.on('close', (code) => resolve(code ?? 0))
+      })
+      const proc = {
+        stdout: Readable.toWeb(child.stdout!) as unknown as ReadableStream,
+        stderr: Readable.toWeb(child.stderr!) as unknown as ReadableStream,
+        exited,
+        get exitCode() {
+          return child.exitCode
+        },
+        kill: (signal?: number | NodeJS.Signals) => child.kill(signal), // forward SIGKILL escalation
+      }
+      return proc as any
+    },
+  )
 }
 
 // ============================================================
@@ -1194,6 +1200,31 @@ describe('runSearch 消费 stderr', () => {
     expect(stdout.trim()).toBe('out')
     expect(stderr.length).toBe(300_000)
   })
+
+  it('子进程环境里没有 provider 凭据，但该有的变量都在', async () => {
+    const saved = process.env.ANTHROPIC_API_KEY
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-plaintext'
+    try {
+      const { stdout } = await runSearch(
+        [
+          process.execPath,
+          '-e',
+          'console.log(JSON.stringify({ key: process.env.ANTHROPIC_API_KEY ?? "UNSET", path: Boolean(process.env.PATH) }))',
+        ],
+        tmpDir,
+        10_000,
+      )
+      const seen = JSON.parse(stdout.trim())
+      // 前件：父进程确实有这把钥匙 —— 否则「没传下去」在本来就没有的世界里也成立。
+      expect(process.env.ANTHROPIC_API_KEY).toBe('sk-ant-plaintext')
+      expect(seen.key).toBe('UNSET')
+      // 正对照：过滤不是把所有东西都扔掉（rg 自己要靠 PATH 才起得来）。
+      expect(seen.path).toBe(true)
+    } finally {
+      if (saved === undefined) delete process.env.ANTHROPIC_API_KEY
+      else process.env.ANTHROPIC_API_KEY = saved
+    }
+  })
 })
 
 // ═══════════════════════════════════════════════════════════════
@@ -1212,6 +1243,37 @@ describe('Read rejects non-regular files', () => {
       const res = await readTool.execute({ file_path: fifo }, ctx)
 
       expect(res.success).toBe(false)
+      expect(res.error).toMatch(/not a regular file/i)
+    },
+  )
+})
+
+describe('Edit and Write reject non-regular files', () => {
+  it.skipIf(process.platform === 'win32')(
+    'Edit refuses a FIFO instead of blocking on open or reading it',
+    async () => {
+      const fifo = join(tmpDir, 'edit-pipe')
+      execFileSync('mkfifo', [fifo])
+
+      // Negative control: with a blocking O_RDONLY open this call never returns
+      // (the suite times out); the message also pins *why* it refused.
+      const res = await editTool.execute({ file_path: fifo, old_string: 'a', new_string: 'b' }, ctx)
+
+      expect(res.success).toBe(false)
+      expect(res.error).toMatch(/not a regular file/i)
+    },
+  )
+
+  it.skipIf(process.platform === 'win32')(
+    'Write refuses a FIFO instead of blocking on the UTF-8 probe read',
+    async () => {
+      const fifo = join(tmpDir, 'write-pipe')
+      execFileSync('mkfifo', [fifo])
+
+      const res = await writeTool.execute({ file_path: fifo, content: 'x' }, ctx)
+
+      expect(res.success).toBe(false)
+      // Not the read-before-write message: the refusal must name the file type.
       expect(res.error).toMatch(/not a regular file/i)
     },
   )

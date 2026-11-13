@@ -133,6 +133,14 @@ const MessageRow = React.memo(
                 {t('ui.tool.not_run')}
                 {msg.toolMeta.output ? ` — ${safeSlice(display(msg.toolMeta.output), 300)}` : ''}
               </Text>
+            ) : msg.toolMeta.noResult ? (
+              // The call ended without output. Saying so is the point: an empty
+              // result line is indistinguishable from a call that is still
+              // running (323-079).
+              <Text dimColor>
+                {'  ⎿  '}
+                {t('ui.tool.no_result_recorded')}
+              </Text>
             ) : msg.toolMeta.output ? (
               <Text dimColor>
                 {'  ⎿  '}
@@ -256,8 +264,10 @@ function compactToolGroups(messages: ChatMessage[]): ChatMessage[] {
       continue
     }
 
-    // Tool result (no name, has output) → merge output into current tool
-    if (msg.toolMeta && !msg.toolMeta.name && msg.toolMeta.output) {
+    // Tool result (no name, has output or records its ending) → merge into
+    // the current tool. `noResult` rows carry no output, so a merge condition
+    // that only looked at `output` left them as separate nameless rows.
+    if (msg.toolMeta && !msg.toolMeta.name && (msg.toolMeta.output || msg.toolMeta.noResult)) {
       if (current) {
         current = {
           ...current,
@@ -268,6 +278,7 @@ function compactToolGroups(messages: ChatMessage[]): ChatMessage[] {
             // 结果行上的标记必须跟着合并走：合并把结果行的 toolMeta 并进工具调用行，
             // 漏掉它，`notRun` 就停在**没人渲染的那一份**上（296-056）。
             ...(msg.toolMeta.notRun ? { notRun: true } : {}),
+            ...(msg.toolMeta.noResult ? { noResult: true } : {}),
           },
         }
       }
@@ -281,7 +292,7 @@ function compactToolGroups(messages: ChatMessage[]): ChatMessage[] {
       current = null
     }
     // Skip orphan tool-result messages without a preceding tool_use
-    if (msg.toolMeta && !msg.toolMeta.name && msg.toolMeta.output) {
+    if (msg.toolMeta && !msg.toolMeta.name && (msg.toolMeta.output || msg.toolMeta.noResult)) {
       continue
     }
     result.push(msg)

@@ -193,6 +193,46 @@ describe('fetchWithRetry', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(res.status).toBe(400)
   })
+
+  it('证书错误不重试，并说清楚要修什么', async () => {
+    // 名字约束/过期证书每次握手都同样失败 —— 爬完退避梯子只是把同一个结论
+    // 晚几分钟说出来。密钥藏在 `cause` 里（undici 顶层只有 `fetch failed`）。
+    const fetchMock = vi.fn(async () => {
+      throw new TypeError('fetch failed', {
+        cause: Object.assign(new Error('certificate'), {
+          code: 'ERR_TLS_CERT_ALTNAME_INVALID',
+        }),
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const p = fetchWithRetry(
+      'https://wrong-host.example.com/api',
+      { method: 'POST' },
+      { maxRetries: 3, baseDelay: 1 },
+    )
+    await expect(p).rejects.toThrow(/ERR_TLS_CERT_ALTNAME_INVALID/)
+    await expect(p).rejects.toThrow(/wrong-host\.example\.com/)
+    expect(fetchMock).toHaveBeenCalledTimes(1) // 不重试
+  })
+
+  it('正对照：普通网络错误仍然重试（上面那条不是「什么都立刻失败」）', async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new TypeError('fetch failed', {
+        cause: Object.assign(new Error('connect'), { code: 'ECONNRESET' }),
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      fetchWithRetry(
+        'https://example.com/api',
+        { method: 'POST' },
+        { maxRetries: 1, baseDelay: 1 },
+      ),
+    ).rejects.toThrow()
+    expect(fetchMock).toHaveBeenCalledTimes(2) // initial + 1 retry
+  })
 })
 
 // ============================================================

@@ -6,7 +6,7 @@ import type {
   PermissionRestrictions,
 } from '../shared/index.ts'
 import type { PermissionRuleEntry } from '../shared/index.ts'
-import { matchBashRule, compileRule } from './permission-rules'
+import { matchBashRule, compileRule, variableWildcardWarning } from './permission-rules'
 import { detectDangerousRm } from '../security/dangerous-rm'
 import type { DangerousRm } from '../security/dangerous-rm'
 import { detectWorldWritableChmod } from '../security/world-writable-chmod'
@@ -1116,6 +1116,19 @@ export class PermissionSystem {
       }
     }
     this.invalidateCache()
+  }
+
+  /**
+   * Allow rules that load but cannot mean what they say — currently only a `*`
+   * in a variable's *value* (`Bash(PORT=* npm run dev)`), which grants every
+   * value instead of the one written. Derived on read rather than stored: the
+   * rule arrays are replaced wholesale by `loadConfig`, and a stored copy would
+   * go stale there. Callers print these at start-up, like `getInvalidRules()`.
+   */
+  getRuleWarnings(): string[] {
+    return this.allowRules
+      .map((entry) => variableWildcardWarning(entry.pattern))
+      .filter((w): w is string => Boolean(w))
   }
 
   /**

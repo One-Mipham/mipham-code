@@ -871,6 +871,7 @@
       "preserved": "你的会话数据和对话历史已保留。"
     },
     "tool": {
+      "no_result_recorded": "未记录结果",
       "not_run": "未运行"
     },
     "copy_picker": {

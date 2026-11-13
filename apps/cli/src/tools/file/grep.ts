@@ -6,6 +6,7 @@ import type { Service } from '../../vajra'
 import { toolKey } from '../seam'
 import { withValidation } from '../validation'
 import { maskSearchOutput } from '../../core/credential-masker'
+import { internalProcessEnv } from '../../shared/git-env'
 
 /** Grep stall guard: a search over a huge tree (or a pathological regex) must
  *  not hang the session for minutes. Matches the Bash tool's 120s ceiling. */
@@ -30,7 +31,10 @@ export async function runSearch(
   cwd: string,
   timeoutMs: number,
 ): Promise<{ stdout: string; stderr: string; timedOut: boolean; exitCode: number | null }> {
-  const proc = Bun.spawn(cmd, { cwd, stdout: 'pipe', stderr: 'pipe' })
+  // Same reasoning as `internalGitEnv`: this search is ours, not the user's
+  // shell — ripgrep never needs an API key, and handing one down only makes it
+  // reachable from a config file or a `--pre` child of the search.
+  const proc = Bun.spawn(cmd, { cwd, stdout: 'pipe', stderr: 'pipe', env: internalProcessEnv() })
   let timedOut = false
   const timers: ReturnType<typeof setTimeout>[] = []
   timers.push(

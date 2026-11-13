@@ -9,6 +9,32 @@ import {
   readErrorBody,
 } from './fetch-utils'
 import { OLLAMA_PRESET_MODELS } from '../shared/constants'
+import { toWellFormed } from '../shared/sanitize'
+
+/**
+ * `JSON.stringify` a tool call's input with lone surrogates made well-formed.
+ *
+ * Tool arguments are re-sent with every later request, so one broken half of an
+ * emoji in a parameter name fails every turn after it — strict JSON parsers
+ * reject the bare `\uD800` escape `JSON.stringify` produces for it. Repaired at
+ * the point of serialization rather than at ingest: the value still reaches the
+ * tool as the model wrote it, and the transcript on disk keeps what happened.
+ */
+export function serializeToolArguments(input: unknown): string {
+  const walk = (value: unknown): unknown => {
+    if (typeof value === 'string') return toWellFormed(value)
+    if (Array.isArray(value)) return value.map(walk)
+    if (value && typeof value === 'object') {
+      const out: Record<string, unknown> = {}
+      for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+        out[toWellFormed(key)] = walk(v)
+      }
+      return out
+    }
+    return value
+  }
+  return JSON.stringify(walk(input))
+}
 
 export class OpenAICompatProvider implements ProviderInstance {
   constructor(public config: ProviderConfig) {}
@@ -371,7 +397,7 @@ export class OpenAICompatProvider implements ProviderInstance {
               type: 'function',
               function: {
                 name: tu.name,
-                arguments: JSON.stringify(tu.input),
+                arguments: serializeToolArguments(tu.input),
               },
             })),
             // DeepSeek V4 thinking mode: every assistant message needs reasoning_content
@@ -413,7 +439,7 @@ export class OpenAICompatProvider implements ProviderInstance {
             type: 'function',
             function: {
               name: tu.name,
-              arguments: JSON.stringify(tu.input),
+              arguments: serializeToolArguments(tu.input),
             },
           })),
           // DeepSeek V4 thinking mode: every assistant message needs reasoning_content

@@ -200,3 +200,24 @@ describe('ComputerUse tool execution', () => {
     })
   })
 })
+
+// ============================================================
+// browserClick 的 uid 校验（323-235）
+//
+// uid 被拼进 CSS 属性选择器：引号或转义会提前闭合选择器，把模型给的值交给
+// Playwright 的选择器解析器，而不是页面节点。校验发生在 getPage() 之前 ——
+// 非法的 uid 连 playwright 都不会 import。
+// ============================================================
+
+describe('browserClick uid 校验', () => {
+  it('拒绝带引号 / JSON 文本的 uid，并说明正确形状', async () => {
+    const { browserClick } = await import('../../../src/tools/computer/browser')
+    await expect(browserClick('a"] | *')).rejects.toThrow(/Invalid element uid/)
+    await expect(browserClick('"a1"')).rejects.toThrow(/Invalid element uid/)
+  })
+
+  it('正对照：合法 uid 通过校验（错误出在 playwright 未安装，而不是 uid）', async () => {
+    const { browserClick } = await import('../../../src/tools/computer/browser')
+    await expect(browserClick('a1_b-2')).rejects.not.toThrow(/Invalid element uid/)
+  })
+})

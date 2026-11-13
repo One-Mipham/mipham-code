@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { ProviderConfig, StreamChunk } from '@mipham/shared'
-import { OpenAICompatProvider } from '../../src/providers/openai-compat'
+import { OpenAICompatProvider, serializeToolArguments } from '../../src/providers/openai-compat'
 
 // ── Helpers ──
 
@@ -766,5 +766,34 @@ describe('OpenAICompatProvider', () => {
     await collectChunks(provider.chat({ model: 'gpt-5', messages: [] }))
 
     expect(capturedUrl).toBe('https://api.test.com/v1/chat/completions')
+  })
+})
+
+// ============================================================
+// `serializeToolArguments` —— 工具参数重发前的 well-formed 化。
+//
+// 工具调用参数会随之后**每一次**请求重发：参数名里半个 emoji（孤立代理项）
+// 会让 JSON.stringify 产出裸 `\uD800` 转义，严格的 JSON 解析器整轮拒收 ——
+// 一次坏输入之后每一轮都失败。
+// ============================================================
+
+describe('serializeToolArguments', () => {
+  it('replaces a lone surrogate in a parameter name, so the JSON stays parseable', () => {
+    const brokenKey = 'emo' + String.fromCharCode(0xd83d) // high surrogate, no partner
+    const json = serializeToolArguments({ [brokenKey]: 'x' })
+    expect(json).not.toMatch(/\\ud83d/i)
+    const roundTripped = JSON.parse(json) as Record<string, unknown>
+    expect(roundTripped['emo�']).toBe('x')
+  })
+
+  it('replaces a lone surrogate in a value, recursively', () => {
+    const broken = String.fromCharCode(0xdc00) // lone low surrogate
+    const json = serializeToolArguments({ list: ['a' + broken] })
+    expect(json).not.toMatch(/\\udc00/i)
+    expect(JSON.parse(json)).toEqual({ list: ['a�'] })
+  })
+
+  it('正对照：成对代理项（真 emoji）原样保留', () => {
+    expect(JSON.parse(serializeToolArguments({ k: '😀' }))).toEqual({ k: '😀' })
   })
 })
