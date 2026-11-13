@@ -71,6 +71,14 @@ export const DEFAULT_CONSTITUTION: MiphamConstitution = {
 
 // ── Loader ──
 
+/** `"Write,Edit,Bash"` → `["Write","Edit","Bash"]`; surrounding spaces dropped. */
+function splitScope(scope: string): string[] {
+  return scope
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+}
+
 export class ConstitutionLoader {
   private path: string
   private cached: MiphamConstitution | null = null
@@ -123,6 +131,12 @@ export class ConstitutionLoader {
     return constitution.principles.filter((p) => {
       if (p.scope === 'all-tools') return true
       if (p.tools && p.tools.includes(toolName)) return true
+      // `scope` is also used as a comma-separated tool list — the vocabulary
+      // spells `no-credential-leak` as `"Write,Edit,Bash"` and gives it no
+      // `tools` array. Reading only `tools` made exactly that entry inert: a
+      // rule whose whole purpose is to block a leaked key never ran for any
+      // tool, while its neighbours (which declare both keys) ran fine.
+      if (p.scope && splitScope(p.scope).includes(toolName)) return true
       return false
     })
   }

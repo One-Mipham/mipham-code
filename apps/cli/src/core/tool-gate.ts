@@ -42,6 +42,22 @@ export type ToolGateOutcome =
   | { ok: true; params: Record<string, unknown>; warnings: string[] }
 
 /**
+ * The text a principle's `audit_pattern` is matched against.
+ *
+ * Not `JSON.stringify(params)`. Patterns are written against source text —
+ * `apiKey = "sk-…"` — while JSON spells that value `apiKey = \"sk-…\"`, so the
+ * quote class `['"]` never met the escaped quote and **the most idiomatic
+ * spelling was the one that could not match**. Rendering each parameter as
+ * `name=value` (strings verbatim) removes the escaping question entirely and
+ * also lets the key carry the signal (`{ apiKey: '…' }` → `apiKey=…`).
+ */
+export function toolAuditSurface(params: Record<string, unknown>): string {
+  return Object.entries(params)
+    .map(([key, value]) => `${key}=${typeof value === 'string' ? value : JSON.stringify(value)}`)
+    .join('\n')
+}
+
+/**
  * Run every pre-execution gate for one tool call, in the engine's order:
  * PreToolUse hook → CRSI rules → SIS preflight → constitution → self-critique.
  *
@@ -153,8 +169,7 @@ export async function runPreToolGate(
         if (principle.audit_pattern) {
           try {
             const regex = new RegExp(principle.audit_pattern, 'i')
-            const paramsStr = JSON.stringify(effectiveParams)
-            if (regex.test(paramsStr)) {
+            if (regex.test(toolAuditSurface(effectiveParams))) {
               return {
                 ok: false,
                 content: `🚫 Constitution violation blocked: **${principle.id}** — ${principle.text}`,

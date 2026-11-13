@@ -6,6 +6,7 @@ import type { ToolDefinition, StreamChunk } from '../../src/shared/index.ts'
 import type { HookEngine } from '../../src/core/hooks'
 import type { ConstitutionLoader } from '../../src/core/constitution-loader'
 import type { InferenceHookConfig } from '../../src/shared/index.ts'
+import alignmentVocabulary from '../../src/core/alignment-vocabulary.json'
 
 /**
  * 子代理的工具循环是一条**独立的推理路径**。它曾经只跑过权限闸门：
@@ -101,17 +102,11 @@ const ONE_WRITE: StreamChunk[] = [
 const DONE: StreamChunk[] = [{ type: 'text', content: 'done' }, { type: 'stop' }]
 
 function constitution(): ConstitutionLoader {
+  // 用出厂的那一条，不手抄正则——手抄件与原件一致、却与真实参数不一致，
+  // 正是这条规则「一次都没响过」还能带着一片绿测试的原因。
   return {
-    getPrinciplesForTool: () => [
-      {
-        id: 'no-credential-leak',
-        text: 'no keys in files',
-        enforce: 'block',
-        // 与 `src/core/alignment-vocabulary.json` 逐字相同
-        audit_pattern:
-          '(apiKey|api_key|password|secret|token|credential)\\s*[=:]\\s*[\'"][^\'"]{8,}',
-      },
-    ],
+    getPrinciplesForTool: () =>
+      alignmentVocabulary.principles.filter((p) => p.id === 'no-credential-leak'),
   } as unknown as ConstitutionLoader
 }
 

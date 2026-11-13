@@ -28,9 +28,9 @@ prompt-exclude-header: true
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.59
-> **最后更新**: 2026-11-13 — **子代理不再跑在更弱的闸门下 + git 子进程的凭据契约 + `/changelog` 的 shell 注入（2.94.60）** —— 五处 P0，三种形状：① **闸门只在一半路径上生效** —— 子代理有自己的工具循环，却只跑过权限闸门：PreToolUse / PostToolUse / SubagentStart 在**五个生产构造点**（`/bg`、`/fork`、`Skill`、`Agent`、workflow）都被递 `undefined`，CRSI 规则、SIS 预检、宪法、自检一次都没到过 —— 同一个 `Write` 在主循环被宪法挡下、下一层原样执行；PreInference DLP 是**第二条推理路径**，组织的外发检查此前只覆盖主循环。修法两半：**链只定义一次**（新 `core/tool-gate.ts` 的 `runPreToolGate`，engine 与 sub-agent 共用同一份），**引擎把闸门与 DLP 配置打包成 `SubAgentServices`** 随 `ToolContext.subAgentServices` 下传（workflow 的引擎桩同接），五个构造点无一处可再漂回「有定义、无施加点」；DLP 判定 deny 时在 provider 之前抛出。② **同一条契约只对一半工具成立** —— `Git` 把**整份** `process.env` 交给子进程并原样回吐输出，而 Bash / Read / Grep 的同一契约是哨兵替换 + 输出打码 ⇒ git 的 `pre-commit` 钩子、`filter.*` 驱动与凭据助手都是**仓库提供的代码**，`git show HEAD:.env` 也照读不误；现与 Bash 逐字同源（`filterEnv` / `maskOutput`，`gitToolService` 走 `inject:['credentials']`）。③ **仓库可控数据进了 shell** —— `/changelog` 把 tag 名拼进 `execSync` 字符串，clone 一个含 `v1$(…)` 的仓库、跑一次该命令即执行；改 `execFileSync` + argv，`| head -8` 一并移进 JS。另同批收口**子代理闸门警告产出即丢**（engine 有、这条路径没有）。测试 4,706 → **4,724**（354 文件，0 失败），`tsc --noEmit` 0、根 `pnpm lint` 绿。
-> **前一条（2.94.59）**: 2026-11-13 — **0.85.33：十六处边界与告警修复（2.94.58 批次送出）** —— 十六处落在四种形状：**闸门只在一半路径上生效**（路径权限规则的跨工具桥接只在 Bash 上、变量值里的 `*` 静默授予任意值、Bash 前缀通配与包装器选项表各修一半）；**同一状态两种拼写**（工作区信任按字面路径判而设置按真实路径读、引擎重试清了累加器而界面没摘气泡）；**失败与成功同形**（无输出的调用与仍在跑的同形、成功安装丢弃 stderr 警告、一条坏 `tools/list` 条目毁掉整张工具表、证书错误被当瞬时错误重试、内置工具被说成不存在）；**边界直接交给下一层**（FIFO/设备上无限等、自己的 git/rg 子进程带 provider 凭据、模型给的 uid 直拼 CSS 选择器、孤立代理项原样重发、抓取开关只在启动读）。套件 4,662 → **4,706**（351 文件，0 失败），`tsc --noEmit` 0、根 `pnpm lint` 绿。 **发布读数**：GPG 签名 tag `v0.85.33` → **`daf9ca3c`**（`git tag -v` 报「完好的签名」，密钥 `62F77FC4…`）；`ci.yml` `43431610609` **9/9**、`release.yml` `43432005459` **9/9**；npm `dist-tags.latest` = **0.85.33**、registry `time['0.85.33']` = **2026-11-13T13:23:05.924Z**（真输出行 `+ @miphamai/cli@0.85.33`，13:16:55Z）；GitHub Release **6 资产**（非 draft 非 pre，13:18:50Z）、DMG 2,268,271 B ⚠️ 未签名（`APPLE_SIGNING_IDENTITY` 未设）；JetBrains 真输出行 `JetBrains plugin published.`（13:18:12Z，同前缀更早的行是脚本回显）；本地 `.vsix` **77,373 B** / sha256 `15f8f3a5…`、包内 version 0.85.33、publisher `miphamai` ⇒ ✅ **已上架 Marketplace**（13:50:05Z 上传即形态②、**13:56:53Z 翻页**；`versions[]` 84 → **85**、`flags` = `validated`、`lastUpdated` = `2026-11-13T13:56:53.757Z`；公开页 cache-bust 同读 `"Version":"0.85.33"`、`LastUpdatedDateString` = `Fri, 13 Nov 2026 13:56:53 GMT`；校验窗口 ≈6.8 分钟）。**两站已部署**（用户授权、一次只覆盖一次）：`websites` → **`a84ee6f`**（`chore(sync): package-info 同步到 0.85.33（两站）`；两份 `package-info.json` 与源 sha256 `ad6eff7f…` 逐字相同）；国内站 `deploy-cn.sh` 全链（PM2 id **137** online、端口 3007、`网站 HTTP 200`，`Commit: a84ee6f`）；国际站 `deploy.sh` → `vercel --prod`（**`dpl_7jo4GydUQ1e23qLJ6r8vy7Gwvg1s`** / Ready / production / `HTTP 200 — 部署成功`）。独立复核（cache-bust 取公开页）：`onemipham.com/mipham-code` 与 `mipham.ai/mipham-code` 各 **200**、各 **3×0.85.33 / 0×0.85.32**、`4706`×2；`onemipham.com/` 首页 200、**2×0.85.33**。
+> **版本**: 2.94.60
+> **最后更新**: 2026-11-13 — **宪法条款真正落到工具调用上：一条被广告为「阻断凭据泄漏」的规则从未对任何工具生效（2.94.61）** —— 三种形状叠在同一条上：① **选择器读错了键** —— `no-credential-leak` 的能力面写在 `scope: "Write,Edit,Bash"`（逗号串），而 `getPrinciplesForTool` 只认 `scope === 'all-tools'` 与 `tools[]`，于是这条**没被任何工具选中**的条款既不红也不告警，它的邻居（两个键都写了）一直好好的；② **判据锚在错误的对象上** —— 参数以 `JSON.stringify` 送进正则，而正则按**源码写法**写（`['\"]`），JSON 里双引号是 `\"` ⇒ 最惯用的 `apiKey = "sk-…"` 恰恰唯一命不中（单引号反倒命中 —— 这正是它藏了这么久的机制）；③ **只认一种拼写** —— 正则要求引号，而 Bash 的 `API_KEY=…`、YAML 的 `apiKey: …` 都不用引号。修法：`getPrinciplesForTool` 补上逗号面（`splitScope`）；新增 `toolAuditSurface(params)` 以 `name=value` 逐字段渲染（字符串原样、键也参与匹配）换掉 `JSON.stringify`；`audit_pattern` 增加无引号分支 `(?=[\w-]*\d)[\w-]{16,}` —— 要求 16+ 字且含数字，故 `PASSWORD=correcthorsebattery9` 拦得住，而 `password = getPassword()` / `token = process.env.TOKEN` / `credential: SOME_CONSTANT_NAME_ABC` 不误伤（三条对照在用例里钉着）。测试 4,724 → **4,739**（354 → **355 文件**，0 失败）：新增 `test/core/constitution-loader.test.ts` 5 条（逗号面三工具进 / `Read` 出 / hook 相位面不误进），`toolAuditSurface` 3 条，四种拼法各拦 + 三条误伤对照；负控 —— 三处分别回退，对应 4 条用例转红，还原后 sha256 逐字相符。`tsc --noEmit` 0、根 `pnpm lint` 绿、`format:check` 绿。**另记一条查出但未修**：`~/.mipham/ai-guardrails.yml` 的读写对不上 —— 文件头写着「改这个文件即可自定义」，但 `parseYaml` 在 `trim()` 之后才判 `startsWith('  ')`，逐字段那一支永远进不去 ⇒ `validate()` 必失败、`load()` 恒回默认并覆写；实测把 `never-fabricate` 的正文改成标记后重载，正文变回默认、盘上标记也没了。
+> **前一条（2.94.60）**: 2026-11-13 — **子代理不再跑在更弱的闸门下 + git 子进程的凭据契约 + `/changelog` 的 shell 注入（2.94.60）** —— 五处 P0，三种形状：① **闸门只在一半路径上生效** —— 子代理有自己的工具循环，却只跑过权限闸门：PreToolUse / PostToolUse / SubagentStart 在**五个生产构造点**（`/bg`、`/fork`、`Skill`、`Agent`、workflow）都被递 `undefined`，CRSI 规则、SIS 预检、宪法、自检一次都没到过 —— 同一个 `Write` 在主循环被宪法挡下、下一层原样执行；PreInference DLP 是**第二条推理路径**，组织的外发检查此前只覆盖主循环。修法两半：**链只定义一次**（新 `core/tool-gate.ts` 的 `runPreToolGate`，engine 与 sub-agent 共用同一份），**引擎把闸门与 DLP 配置打包成 `SubAgentServices`** 随 `ToolContext.subAgentServices` 下传（workflow 的引擎桩同接），五个构造点无一处可再漂回「有定义、无施加点」；DLP 判定 deny 时在 provider 之前抛出。② **同一条契约只对一半工具成立** —— `Git` 把**整份** `process.env` 交给子进程并原样回吐输出，而 Bash / Read / Grep 的同一契约是哨兵替换 + 输出打码 ⇒ git 的 `pre-commit` 钩子、`filter.*` 驱动与凭据助手都是**仓库提供的代码**，`git show HEAD:.env` 也照读不误；现与 Bash 逐字同源（`filterEnv` / `maskOutput`，`gitToolService` 走 `inject:['credentials']`）。③ **仓库可控数据进了 shell** —— `/changelog` 把 tag 名拼进 `execSync` 字符串，clone 一个含 `v1$(…)` 的仓库、跑一次该命令即执行；改 `execFileSync` + argv，`| head -8` 一并移进 JS。另同批收口**子代理闸门警告产出即丢**（engine 有、这条路径没有）。测试 4,706 → **4,724**（354 文件，0 失败），`tsc --noEmit` 0、根 `pnpm lint` 绿。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -69,7 +69,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：4,724 测试（本机 4,722 passed + 2 skipped，354 文件，0 失败）
+测试：4,739 测试（本机 4,737 passed + 2 skipped，355 文件，0 失败）
 
 ---
 
@@ -106,7 +106,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 354 个测试文件，4724 个测试
+│   │   ├── test/               # 355 个测试文件，4739 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -132,7 +132,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（4724 个测试）
+pnpm test         # vitest run（4739 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -322,7 +322,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 103     | 1831     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
+| core            | 104     | 1846     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
 | tools           | 31      | 613      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 38      | 265      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
 | ui              | 39      | 403      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
@@ -343,7 +343,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | integration     | 1       | 3        | 跨仓接线：`vscode-extension-telemetry`（VS Code 遥测关闭 ⇒ 终端拿到 `MIPHAM_TELEMETRY=off`）                                                                                |
 | integrity       | 19      | 132      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **354** | **4724** | **0 失败** ✅（本机 4,722 + 2 skipped，354 文件）                                                                                                                           |
+| **合计**        | **355** | **4739** | **0 失败** ✅（本机 4,737 + 2 skipped，355 文件）                                                                                                                           |
 
 ### 测试注意事项
 

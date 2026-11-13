@@ -35,9 +35,9 @@
       "text": "禁止在代码、日志、配置文件、提交信息、对话输出中写入或泄露凭据、API 密钥、令牌。",
       "enforce": "block",
       "facet": "vajra",
-      "audit_pattern": "(apiKey|api_key|password|secret|token|credential)\\s*[=:]\\s*['\"][^'\"]{8,}",
+      "audit_pattern": "(apiKey|api_key|password|secret|token|credential)\\s*[=:]\\s*(?:['\"][^'\"\\n]{8,}|(?=[\\w-]*\\d)[\\w-]{16,})",
       "scope": "Write,Edit,Bash",
-      "rationale": "Rismed Ronxin Capital 合规要求：硬编码凭据违反安全底线。"
+      "rationale": "Rismed Ronxin Capital 合规要求：硬编码凭据违反安全底线。无引号分支要求 16+ 字且至少含一位数字——`PASSWORD=correcthorsebattery9` 会被拦，而 `password = getPassword()`、`token = process.env.TOKEN`、`credential: SOME_CONSTANT_NAME_ABC` 不会（少了数字或长度不足），从而把误伤挡在惯用写法之外。"
     },
     {
       "id": "minimal-change",
