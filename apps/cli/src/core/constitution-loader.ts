@@ -79,6 +79,29 @@ function splitScope(scope: string): string[] {
     .filter(Boolean)
 }
 
+/**
+ * 写侧：一律用 JSON 字符串。JSON 的双引号标量是合法 YAML，`"` 与 `\` 都被转义 ——
+ * 从前 `audit_pattern` 是原样塞进双引号里的，而它自己含 `['"]` 与 `\s`：标量提前闭合，
+ * 整份文件不是合法 YAML（自家那枚逐行解析器读得回，任何 YAML 工具读不了）。
+ */
+function quoteYaml(value: string): string {
+  return JSON.stringify(value)
+}
+
+/** 读侧：双引号值按 JSON 解（写侧就是 JSON.stringify），单引号去壳，其余原样。 */
+function parseScalar(raw: string): string {
+  const value = raw.trim()
+  if (value.startsWith('"')) {
+    try {
+      const decoded: unknown = JSON.parse(value)
+      if (typeof decoded === 'string') return decoded
+    } catch {
+      // 手写的引号坏掉了 —— 退回去壳，与从前一致
+    }
+  }
+  return value.replace(/^['"]|['"]$/g, '')
+}
+
 export class ConstitutionLoader {
   private path: string
   private cached: MiphamConstitution | null = null
@@ -211,9 +234,10 @@ export class ConstitutionLoader {
         const kv = trimmed.match(/^(\w[\w_]*):\s*(.*)$/)
         if (kv) {
           const key = kv[1]!
-          const val = kv[2]!.trim().replace(/^['"]|['"]$/g, '')
+          const val = parseScalar(kv[2]!)
           if (key === 'version') result.version = val
           else if (key === 'last_modified') result.last_modified = val
+          else if (key === 'preamble') result.preamble = val
           if (key === 'principles') inPrinciples = true
         }
         continue
@@ -233,7 +257,7 @@ export class ConstitutionLoader {
         const kv = trimmed.substring(2).match(/^(\w[\w_]*):\s*(.*)$/)
         if (kv) {
           const key = kv[1]!
-          const val = kv[2]!.trim().replace(/^['"]|['"]$/g, '')
+          const val = parseScalar(kv[2]!)
           this.setPrincipleField(currentPrinciple, key, val)
         }
         continue
@@ -244,7 +268,7 @@ export class ConstitutionLoader {
         const kv = trimmed.match(/^(\w[\w_]*):\s*(.*)$/)
         if (kv) {
           const key = kv[1]!
-          const val = kv[2]!.trim().replace(/^['"]|['"]$/g, '')
+          const val = parseScalar(kv[2]!)
           this.setPrincipleField(currentPrinciple, key, val)
         }
       }
@@ -313,20 +337,23 @@ export class ConstitutionLoader {
       '# Edit this file to customize principles. Delete it to restore defaults.',
       '# Changes take effect after /constitution reload or session restart.',
       '',
-      `version: "${constitution.version}"`,
-      `last_modified: "${constitution.last_modified}"`,
+      `version: ${quoteYaml(constitution.version)}`,
+      `last_modified: ${quoteYaml(constitution.last_modified)}`,
+      // 序言从前只活在内存里的 DEFAULT_CONSTITUTION 上 —— 落到盘上的文件没有它，
+      // 于是「读回来的那份」和「内置那份」不是同一份宪法。
+      ...(constitution.preamble ? [`preamble: ${quoteYaml(constitution.preamble)}`] : []),
       '',
       'principles:',
     ]
 
     for (const p of constitution.principles) {
-      lines.push(`  - id: "${p.id}"`)
-      lines.push(`    text: "${p.text}"`)
-      lines.push(`    enforce: ${p.enforce}`)
-      if (p.facet) lines.push(`    facet: ${p.facet}`)
-      if (p.audit_pattern) lines.push(`    audit_pattern: "${p.audit_pattern}"`)
-      if (p.scope) lines.push(`    scope: "${p.scope}"`)
-      if (p.hook) lines.push(`    hook: ${p.hook}`)
+      lines.push(`  - id: ${quoteYaml(p.id)}`)
+      lines.push(`    text: ${quoteYaml(p.text)}`)
+      lines.push(`    enforce: ${quoteYaml(p.enforce)}`)
+      if (p.facet) lines.push(`    facet: ${quoteYaml(p.facet)}`)
+      if (p.audit_pattern) lines.push(`    audit_pattern: ${quoteYaml(p.audit_pattern)}`)
+      if (p.scope) lines.push(`    scope: ${quoteYaml(p.scope)}`)
+      if (p.hook) lines.push(`    hook: ${quoteYaml(p.hook)}`)
       if (p.tools) lines.push(`    tools: [${p.tools.join(', ')}]`)
       if (p.rationale) lines.push(`    rationale: "${p.rationale}"`)
     }

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { parse as parseYaml } from 'yaml'
 import { ConstitutionLoader, DEFAULT_CONSTITUTION } from '../../src/core/constitution-loader'
 
 /**
@@ -76,6 +77,60 @@ describe('ConstitutionLoader 的写盘 → 读回', () => {
     // 深比较在那种情况下照样全绿 —— 这条才是「真的解析了」的判据。
     expect(back.principles).not.toBe(DEFAULT_CONSTITUTION.principles)
     expect(back.principles).toEqual(DEFAULT_CONSTITUTION.principles)
+  })
+
+  it('写出的文件是合法 YAML —— 用真 YAML 解析器读，不是自家那枚逐行器', () => {
+    const path = fresh()
+    new ConstitutionLoader(path).load()
+
+    const doc = parseYaml(readFileSync(path, 'utf8')) as {
+      version: string
+      preamble: string
+      principles: Array<Record<string, unknown>>
+    }
+
+    // 从前 `audit_pattern` 直接塞进双引号标量，而它自己含 `['"]` ⇒ 标量提前闭合，
+    // 整份文件不是合法 YAML（自家逐行解析器读得回，任何 YAML 工具读不了）。
+    expect(doc.version).toBe(DEFAULT_CONSTITUTION.version)
+    expect(doc.principles).toHaveLength(DEFAULT_CONSTITUTION.principles.length)
+    expect(doc.principles).toEqual(
+      JSON.parse(JSON.stringify(DEFAULT_CONSTITUTION.principles)) as unknown[],
+    )
+  })
+
+  it('序言（愿力）也落盘，读回来一字不差', () => {
+    const path = fresh()
+    new ConstitutionLoader(path).load()
+    const back = new ConstitutionLoader(path).load()
+
+    expect(back.preamble).toBe(DEFAULT_CONSTITUTION.preamble)
+  })
+
+  it('旧版本写下的文件仍然读得回来 —— 不因为换了引号写法就作废', () => {
+    const path = fresh()
+    // 2.94.63 及以前写出来的样子：`audit_pattern` 原样塞在双引号里（文件本身不是
+    // 合法 YAML，但自家逐行解析器读得回）。已装用户盘上躺着的就是这种。
+    writeFileSync(
+      path,
+      [
+        'version: "1.0.0"',
+        'last_modified: "2026-08-16"',
+        'principles:',
+        '  - id: "no-credential-leak"',
+        '    text: "no leaking"',
+        '    enforce: block',
+        '    audit_pattern: "(apiKey|token)\\s*[=:]\\s*(?:[\'"][^\'"\\n]{8,})"',
+        '    scope: "Write,Edit,Bash"',
+        '',
+      ].join('\n'),
+    )
+
+    const loaded = new ConstitutionLoader(path).load()
+
+    expect(loaded.principles[0]?.id).toBe('no-credential-leak')
+    expect(loaded.principles[0]?.audit_pattern).toBe(
+      '(apiKey|token)\\s*[=:]\\s*(?:[\'"][^\'"\\n]{8,})',
+    )
   })
 
   it('用户手写的条目会生效，且文件不被改写', () => {
