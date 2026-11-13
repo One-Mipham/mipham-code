@@ -3,6 +3,49 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.33 (2026-11-13)
+
+- Version sync with Mipham Code CLI 0.85.33
+- Fixed: path permission rules now reach every tool, not just Bash. `Read(/etc/passwd)` was
+  translated into a command-shaped check only when the tool was Bash; `Write` / `Edit` took
+  another path, so the same rule could not see the file they were about to write. All three
+  now share one bridge.
+- Fixed: a `*` inside a variable _value_ (`Bash(PORT=* npm run dev)`) was treated as a wildcard
+  and silently granted any value. It now warns at startup through the same channel as invalid
+  rules, naming the rule.
+- Fixed: Bash prefix wildcards are tightened across the variable-assignment and attached-argument
+  halves, and `-n` in `nice -n 5 <command>` is no longer swallowed as an option of `nice` — the
+  wrapped command stays visible to the rule.
+- Fixed: workspace trust is decided on the real path. Under `~/work -> /Volumes/proj` the trust
+  check used the literal spelling while the settings and hooks it guards are read through the
+  resolved one, so the two faces never met. Symlinks are now resolved, `isTrusted` / `untrust`
+  match both spellings, and existing literal entries keep working.
+- Fixed: a retried turn no longer leaves the abandoned attempt on screen. The engine clears its
+  accumulators on restart, but the session view had no matching branch, so the failed reply
+  stayed on screen and the real answer was appended after it. The superseded bubble is now
+  removed by object identity, along with the stream and thinking buffers.
+- Fixed: a tool call that ended without output no longer looks like one still running — the
+  collapsed view shows `No result recorded`.
+- Fixed: a successful install that wrote to stderr now surfaces those warnings instead of
+  discarding them.
+- Fixed: one bad `tools/list` entry no longer takes down a whole server's tool table; entries
+  that are not an array or have no usable name are filtered and the rest register normally.
+- Fixed: TLS / certificate errors fail immediately with an actionable message instead of being
+  retried as transient failures.
+- Fixed: ToolSearch now says "this is a built-in tool and already available — call it directly"
+  when the query names one, instead of reporting no match and sending the model looking for an
+  MCP server to supply a tool it already had.
+- Fixed: Edit / Write on FIFOs and device files no longer wait forever — opened non-blocking and
+  rejected unless the target is a regular file.
+- Fixed: our own git / rg children no longer inherit provider credentials; only the model's
+  shell was being masked before.
+- Fixed: `browser_click` validates the uid against a character set instead of interpolating it
+  into a CSS selector as-is.
+- Fixed: lone UTF-16 surrogates are replaced with U+FFFD before serialization instead of being
+  re-sent as raw bytes.
+- Fixed: `MIPHAM_DISABLE_WEB_FETCH` is re-read on every fetch, not only when the tool is
+  registered at startup.
+
 ## 0.85.32 (2026-11-10)
 
 - Version sync with Mipham Code CLI 0.85.32
