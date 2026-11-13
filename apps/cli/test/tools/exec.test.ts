@@ -184,6 +184,36 @@ describe('Git tool execution', () => {
     expect(capturedCmd).toEqual(['git', 'commit', '-m', 'add feature x'])
   })
 
+  it('hands the child a credential-filtered environment', async () => {
+    // Git is `permission: 'self'` — no approval prompt. Its children are
+    // repository-supplied code (hooks, filters, credential helpers), so handing
+    // them the process environment is handing them every provider key.
+    const saved = process.env.ANTHROPIC_API_KEY
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-real-secret-do-not-pass'
+    try {
+      let spawnEnv: Record<string, string | undefined> | undefined
+      vi.spyOn(Bun, 'spawn').mockImplementation((_cmd: any, opts: any) => {
+        spawnEnv = opts?.env
+        return createMockProc() as any
+      })
+      await gitTool.execute({ command: 'status' }, ctx)
+      expect(spawnEnv, 'Bun.spawn 没收到 env —— 子进程继承了完整 process.env').toBeDefined()
+      expect(spawnEnv!.ANTHROPIC_API_KEY).not.toBe('sk-ant-real-secret-do-not-pass')
+    } finally {
+      if (saved === undefined) delete process.env.ANTHROPIC_API_KEY
+      else process.env.ANTHROPIC_API_KEY = saved
+    }
+  })
+
+  it('scrubs credentials out of git output', async () => {
+    // `git show HEAD:.env` returns a secret verbatim, while Read masks the same
+    // file. The tool that produces the bytes has to apply the same contract.
+    mockGitSpawn('API_KEY = sk-live-abcdef123456\n')
+    const result = await gitTool.execute({ command: 'show HEAD:.env' }, ctx)
+    expect(result.success).toBe(true)
+    expect(result.content).not.toContain('sk-live-abcdef123456')
+  })
+
   it('returns error for failed git commands', async () => {
     mockGitSpawn('', 'fatal: not a git repository', 128)
     const result = await gitTool.execute({ command: 'log' }, ctx)

@@ -104,6 +104,7 @@ export const workflowTool: ToolDefinition = {
       getTools: () => ctx.toolRegistry!,
       getPermission: () => ctx.permissionSystem,
       getLlm: () => ctx.llm,
+      getSubAgentServices: () => ctx.subAgentServices,
     } as unknown as QueryEngine
 
     try {

@@ -49,6 +49,7 @@ function createMockEngine(provider: ProviderInstance): QueryEngine {
     getTools: () => toolRegistry,
     getPermission: () => new PermissionSystem('self'),
     getLlm: () => undefined,
+    getSubAgentServices: () => undefined,
   } as unknown as QueryEngine
 }
 
@@ -233,6 +234,7 @@ describe('workflow sandbox escape prevention', () => {
       getTools: () => new Map<string, ToolDefinition>(),
       getPermission: () => new PermissionSystem('self'),
       getLlm: () => undefined,
+      getSubAgentServices: () => undefined,
     } as unknown as QueryEngine
   }
 

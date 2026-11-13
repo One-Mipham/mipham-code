@@ -637,6 +637,14 @@ export interface ToolContext {
   backgroundAgentRegistry?: import('../agent/background-registry').BackgroundAgentRegistry
   permissionSystem?: import('../core/permission').PermissionSystem
   ruleEngine?: import('../core/rule-engine').ExperienceRuleEngine
+  /**
+   * Everything a sub-agent must run the same gates as the main loop.
+   *
+   * Populated by `Engine.executeTool`; absent when a tool context is built by
+   * hand (tests, daemon stubs). Absent must never mean "run without gates" —
+   * `SubAgent` falls back to its own hook engine for the legacy paths.
+   */
+  subAgentServices?: import('../agent/services').SubAgentServices
   llm?: import('../providers/llm').Llm
   /** Files read this session — used by Write tool to check read-before-write */
   readFiles?: Set<string>

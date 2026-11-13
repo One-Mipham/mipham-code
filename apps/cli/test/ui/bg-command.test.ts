@@ -45,6 +45,8 @@ function mkCtx(mgr: AgentViewManager): CommandContext {
       getTools: () => new Map(),
       getPermission: () => ({}),
       getLlm: () => undefined,
+      // 手搭的引擎桩：闸门与 DLP 随 services 下传，这里没有引擎可给。
+      getSubAgentServices: () => undefined,
     },
     providerId: 'test-provider',
     modelId: 'test-model',

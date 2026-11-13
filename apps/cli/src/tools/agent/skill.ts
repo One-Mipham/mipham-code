@@ -94,6 +94,7 @@ export const skillTool: ToolDefinition = {
             ctx.toolRegistry || new Map(),
             ctx.permissionSystem,
             ctx.llm,
+            ctx.subAgentServices,
           )
           // Return to AI as internal context
           recordSkillUsage(skillName)

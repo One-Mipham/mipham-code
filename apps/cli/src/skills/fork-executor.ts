@@ -4,6 +4,7 @@ import type { Llm } from '../providers/llm'
 import type { ToolDefinition, SkillDefinition } from '../shared/index.ts'
 import type { AgentDefinition } from '../agent/types'
 import type { PermissionSystem } from '../core/permission'
+import type { SubAgentServices } from '../agent/services'
 import { sanitizeSkillDescription } from './sanitizer.js'
 
 /**
@@ -22,6 +23,7 @@ export async function executeForkedSkill(
   toolRegistry: Map<string, ToolDefinition>,
   permissionSystem?: PermissionSystem,
   llm?: Llm,
+  services?: SubAgentServices,
 ): Promise<string> {
   const agentDef: AgentDefinition = {
     name: `skill:${skill.name}`,
@@ -34,7 +36,15 @@ export async function executeForkedSkill(
     source: 'builtin',
   }
 
-  const sub = new SubAgent(registry, toolRegistry, permissionSystem, undefined, undefined, llm)
+  const sub = new SubAgent(
+    registry,
+    toolRegistry,
+    permissionSystem,
+    undefined,
+    undefined,
+    llm,
+    services,
+  )
   const prompt = args
     ? `Execute the "${skill.name}" skill with arguments: ${args}`
     : `Execute the "${skill.name}" skill.`

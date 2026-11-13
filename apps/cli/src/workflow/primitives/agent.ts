@@ -4,6 +4,7 @@ import type { ProviderRegistry } from '../../providers/registry'
 import type { Llm } from '../../providers/llm'
 import type { ToolDefinition } from '../../shared/index.ts'
 import type { PermissionSystem } from '../../core/permission'
+import type { SubAgentServices } from '../../agent/services'
 import { worktreeRoot } from '../../core/paths.ts'
 import { internalGitEnv } from '../../shared/git-env'
 import { validateJSONSchema, formatValidationErrors } from '../schema-validator'
@@ -37,6 +38,8 @@ export interface WorkflowAgentOpts {
   maxRetries?: number
   /** Permission system for sub-agent tool execution (optional). */
   permissionSystem?: PermissionSystem
+  /** Hooks, gates and DLP handed down by the engine running the workflow. */
+  services?: SubAgentServices
   /** Run the agent in an isolated git worktree (optional). */
   isolation?: 'worktree'
 }
@@ -115,7 +118,15 @@ export async function workflowAgent(
       `Return ONLY the JSON object, no other text. Do not wrap in markdown code fences.`
   }
 
-  const sub = new SubAgent(registry, toolRegistry, opts.permissionSystem, undefined, undefined, llm)
+  const sub = new SubAgent(
+    registry,
+    toolRegistry,
+    opts.permissionSystem,
+    undefined,
+    undefined,
+    llm,
+    opts.services,
+  )
 
   // ── Execute with optional schema validation + retry ──
   let result: unknown = ''

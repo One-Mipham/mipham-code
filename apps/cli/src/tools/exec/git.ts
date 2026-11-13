@@ -1,7 +1,11 @@
 import { resolve } from 'node:path'
-import type { ToolDefinition } from '../../shared/index.ts'
+import type { CredentialMaskingConfig, ToolDefinition } from '../../shared/index.ts'
+import { DEFAULT_CREDENTIAL_MASKING_CONFIG } from '../../config/defaults'
 import { findWorktreeMarker } from '../../core/paths.ts'
 import { isWithin } from '../../security/path.ts'
+import type { Service } from '../../vajra'
+import { toolKey } from '../seam'
+import { withValidation } from '../validation'
 
 /** Generous enough for a clone or fetch, short enough to bound a hung git. */
 const GIT_TIMEOUT_MS = 120_000
@@ -201,91 +205,131 @@ export function splitCommand(command: string): string[] {
   return tokens
 }
 
-export const gitTool: ToolDefinition = {
-  name: 'Git',
-  description: 'Execute git commands. Dangerous operations (force push, hard reset) are blocked.',
-  category: 'exec',
-  permission: 'self',
-  parameters: {
-    type: 'object',
-    properties: {
-      command: {
-        type: 'string',
-        description: 'Git subcommand + args (e.g., "status", "log --oneline")',
+export function createGitTool(
+  credentialConfig: CredentialMaskingConfig = DEFAULT_CREDENTIAL_MASKING_CONFIG,
+): ToolDefinition {
+  return {
+    name: 'Git',
+    description: 'Execute git commands. Dangerous operations (force push, hard reset) are blocked.',
+    category: 'exec',
+    permission: 'self',
+    parameters: {
+      type: 'object',
+      properties: {
+        command: {
+          type: 'string',
+          description: 'Git subcommand + args (e.g., "status", "log --oneline")',
+        },
       },
+      required: ['command'],
     },
-    required: ['command'],
-  },
-  async execute(params, ctx) {
-    const command = params.command as string
+    async execute(params, ctx) {
+      const command = params.command as string
 
-    // P0-4: Regex-based word-boundary pattern matching
-    for (const { pattern, description } of DANGEROUS_GIT_PATTERNS) {
-      if (pattern.test(command)) {
-        return {
-          success: false,
-          content: '',
-          error: `Dangerous git command blocked: "${description}". Run manually if intended.`,
-        }
-      }
-    }
-
-    // P0-4: Worktree isolation — block commands referencing outside paths
-    const worktreeErr = isOutsideWorktree(command, ctx.cwd)
-    if (worktreeErr) {
-      return {
-        success: false,
-        content: '',
-        error: `Worktree isolation: ${worktreeErr}. Blocked for safety.`,
-      }
-    }
-
-    // Git runs without an approval prompt (`permission: 'self'`), so an option
-    // that names a program to execute is a code-execution path Bash would have
-    // had to ask for. Checked on argv, which is what git is handed below.
-    const argv = splitCommand(command)
-    const execArg = findProgramExecutingArg(argv)
-    if (execArg) {
-      return {
-        success: false,
-        content: '',
-        error: `Dangerous git option blocked: "${execArg}" makes git run an arbitrary program. Run manually if intended.`,
-      }
-    }
-
-    try {
-      const proc = Bun.spawn(['git', ...argv], {
-        cwd: ctx.cwd,
-        stdout: 'pipe',
-        stderr: 'pipe',
-      })
-
-      // Bounded like Bash: a git command that blocks on a pager, a credential
-      // prompt, or an unreachable remote would otherwise hang the turn forever.
-      const timer = setTimeout(() => proc.kill(), GIT_TIMEOUT_MS)
-      const output = await new Response(proc.stdout).text()
-      const exitCode = await proc.exited
-      clearTimeout(timer)
-
-      if (exitCode !== 0) {
-        const stderr = await new Response(proc.stderr).text()
-        return {
-          success: false,
-          content: '',
-          error: `Git error (exit ${exitCode}): ${stderr.slice(0, 1000)}`,
+      // P0-4: Regex-based word-boundary pattern matching
+      for (const { pattern, description } of DANGEROUS_GIT_PATTERNS) {
+        if (pattern.test(command)) {
+          return {
+            success: false,
+            content: '',
+            error: `Dangerous git command blocked: "${description}". Run manually if intended.`,
+          }
         }
       }
 
-      return {
-        success: true,
-        content: output.slice(0, 50_000) || '(no output)',
+      // P0-4: Worktree isolation — block commands referencing outside paths
+      const worktreeErr = isOutsideWorktree(command, ctx.cwd)
+      if (worktreeErr) {
+        return {
+          success: false,
+          content: '',
+          error: `Worktree isolation: ${worktreeErr}. Blocked for safety.`,
+        }
       }
-    } catch (err) {
-      return {
-        success: false,
-        content: '',
-        error: `Git execution failed: ${String(err)}`,
+
+      // Git runs without an approval prompt (`permission: 'self'`), so an option
+      // that names a program to execute is a code-execution path Bash would have
+      // had to ask for. Checked on argv, which is what git is handed below.
+      const argv = splitCommand(command)
+      const execArg = findProgramExecutingArg(argv)
+      if (execArg) {
+        return {
+          success: false,
+          content: '',
+          error: `Dangerous git option blocked: "${execArg}" makes git run an arbitrary program. Run manually if intended.`,
+        }
       }
-    }
+
+      try {
+        // The environment a git child gets is the same contract Bash's children
+        // get: sensitive variables are replaced by the sentinel, never handed
+        // over in the clear. This is not a cosmetic difference — `pre-commit`
+        // hooks, `filter.*` drivers and credential helpers are repository-
+        // supplied code, and the model can run any of them by asking for
+        // `git checkout` / `git commit` in a cloned repository.
+        let spawnEnv: Record<string, string | undefined> = process.env as Record<
+          string,
+          string | undefined
+        >
+        if (credentialConfig.enabled && credentialConfig.env_filter.enabled) {
+          const { filterEnv } = await import('../../core/credential-masker')
+          spawnEnv = filterEnv(spawnEnv, credentialConfig)
+        }
+
+        const proc = Bun.spawn(['git', ...argv], {
+          cwd: ctx.cwd,
+          stdout: 'pipe',
+          stderr: 'pipe',
+          env: spawnEnv,
+        })
+
+        // Bounded like Bash: a git command that blocks on a pager, a credential
+        // prompt, or an unreachable remote would otherwise hang the turn forever.
+        const timer = setTimeout(() => proc.kill(), GIT_TIMEOUT_MS)
+        const output = await new Response(proc.stdout).text()
+        const exitCode = await proc.exited
+        clearTimeout(timer)
+
+        // Output scrubbing, for the same reason `Read`/`Grep`/`Bash` scrub:
+        // `git show HEAD:.env` returns a secret verbatim, and a masked read of
+        // the same file would not. One contract, every path.
+        const scrub = async (text: string): Promise<string> =>
+          credentialConfig.enabled && credentialConfig.output_scrubbing.enabled
+            ? (await import('../../core/credential-masker')).maskOutput(text, credentialConfig)
+            : text
+
+        if (exitCode !== 0) {
+          const stderr = await new Response(proc.stderr).text()
+          return {
+            success: false,
+            content: '',
+            error: `Git error (exit ${exitCode}): ${(await scrub(stderr)).slice(0, 1000)}`,
+          }
+        }
+
+        return {
+          success: true,
+          content: (await scrub(output)).slice(0, 50_000) || '(no output)',
+        }
+      } catch (err) {
+        return {
+          success: false,
+          content: '',
+          error: `Git execution failed: ${String(err)}`,
+        }
+      }
+    },
+  }
+}
+
+/** Registry entry with credential masking, handed in the same way as Bash's. */
+export const gitToolService: Service = {
+  inject: ['credentials'],
+  apply(ctx) {
+    const credentialConfig = ctx.get<CredentialMaskingConfig>('credentials')
+    ctx.provide(toolKey('Git'), withValidation(createGitTool(credentialConfig)))
   },
 }
+
+/** Unwrapped tool for callers that build a registry by hand (tests). */
+export const gitTool: ToolDefinition = createGitTool()

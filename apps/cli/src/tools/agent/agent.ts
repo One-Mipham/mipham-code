@@ -130,6 +130,9 @@ export const agentTool: ToolDefinition = {
         undefined,
         ctx.ruleEngine,
         ctx.llm,
+        // Hooks, gates and DLP travel with the context the engine built. Without
+        // this the child ran the same tools under a strictly weaker gate set.
+        ctx.subAgentServices,
       )
       const result = await sub.execute(prompt, description, {
         type: agentType,

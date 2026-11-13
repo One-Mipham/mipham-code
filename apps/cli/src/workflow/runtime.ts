@@ -134,6 +134,7 @@ export async function runWorkflow(
         {
           ...(opts || {}),
           permissionSystem: permission,
+          services: engine.getSubAgentServices(),
         } as Record<string, unknown>,
         llm,
       )

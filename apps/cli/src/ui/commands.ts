@@ -2245,8 +2245,16 @@ const changelogCmd: CommandHandler = async (ctx) => {
   const lines: string[] = [t('commands.changelog.title'), '']
 
   try {
-    const { execSync } = await import('node:child_process')
-    const tags = execSync('git tag --sort=-creatordate', { encoding: 'utf-8', timeout: 5000 })
+    // A tag name is repository-controlled data, not a word we chose: a cloned
+    // repository can contain `v1$(rm -rf …)`, and a shell string would run it.
+    // `execFileSync` passes argv without a shell, so nothing in a tag is ever
+    // interpreted. The log window is sliced here for the same reason — a
+    // `| head -8` inside the command string is a second shell.
+    const { execFileSync } = await import('node:child_process')
+    const tags = execFileSync('git', ['tag', '--sort=-creatordate'], {
+      encoding: 'utf-8',
+      timeout: 5000,
+    })
       .trim()
       .split('\n')
       .filter(Boolean)
@@ -2264,13 +2272,14 @@ const changelogCmd: CommandHandler = async (ctx) => {
       const nextTag = tags[i + 1]
       try {
         const range = nextTag ? `${nextTag}..${tag}` : tag
-        const log = execSync(
-          `git log --oneline --no-merges ${range} --format="%s" 2>/dev/null | head -8`,
-          { encoding: 'utf-8', timeout: 5000 },
-        )
+        const log = execFileSync('git', ['log', '--oneline', '--no-merges', '--format=%s', range], {
+          encoding: 'utf-8',
+          timeout: 5000,
+        })
           .trim()
           .split('\n')
           .filter(Boolean)
+          .slice(0, 8)
 
         const isCurrent = tag === `v${ctx.version}`
         lines.push(`### ${tag}${isCurrent ? t('commands.changelog.current_marker') : ''}`, '')
@@ -5603,6 +5612,7 @@ Background agents appear in the Agent View dashboard (/agents).`,
         undefined,
         undefined,
         ctx.engine.getLlm(),
+        ctx.engine.getSubAgentServices(),
       )
       try {
         // The prompt came from the user typing `/bg …`, so it stays unframed —
@@ -5742,6 +5752,7 @@ const forkCmd: CommandHandler = async (ctx, args) => {
         undefined,
         undefined,
         ctx.engine.getLlm(),
+        ctx.engine.getSubAgentServices(),
       )
       const parentContext = ctx.engine.getContext()
       // The row has to come back from `working` on both outcomes: the fork

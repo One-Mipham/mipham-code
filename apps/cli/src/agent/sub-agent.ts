@@ -15,6 +15,9 @@ import { PatternAnalyzer } from './pattern-analyzer.js'
 import { getWorkspaceTrust } from '../core/workspace-trust'
 import { recordToolCall } from '../telemetry/index'
 import type { ExperienceRuleEngine } from '../core/rule-engine.js'
+import { runPreToolGate } from '../core/tool-gate'
+import { buildRequest, sendInferenceCheck, isInferenceHookEnabled } from '../core/inference-hook'
+import type { SubAgentServices } from './services'
 
 // Singleton instances (created lazily)
 let _patternAnalyzer: PatternAnalyzer | undefined
@@ -89,7 +92,24 @@ export class SubAgent {
     private hookEngine?: HookEngine,
     private ruleEngine?: ExperienceRuleEngine,
     private llm?: Llm,
+    /**
+     * What the engine handed down so this loop runs the same gates as
+     * `Engine.executeTool`: hooks, CRSI rules, SIS preflight, the constitution,
+     * and the PreInference DLP checkpoint. Absent means "no engine in reach"
+     * (tests, a hand-built runtime) — the fallback is the positional
+     * `hookEngine`, which is all this loop used to have.
+     */
+    private services?: SubAgentServices,
   ) {}
+
+  /**
+   * The hook engine to use. `services` wins when present — it comes straight
+   * from the engine, and the positional `hookEngine` is only ever populated by
+   * callers that predate it.
+   */
+  private get hooks(): HookEngine | undefined {
+    return this.services?.gate.hookEngine ?? this.hookEngine
+  }
 
   /**
    * Execute a sub-agent task.
@@ -107,8 +127,8 @@ export class SubAgent {
     const agentType = options.type || 'general'
 
     // ── Fire SubagentStart hook ──
-    if (this.hookEngine) {
-      await this.hookEngine.executeSubagentStart(agentType, description, 'sub-agent')
+    if (this.hooks) {
+      await this.hooks.executeSubagentStart(agentType, description, 'sub-agent')
     }
 
     // ── Background execution path ──
@@ -127,8 +147,8 @@ export class SubAgent {
 
       // Register completion callback for hook firing
       bgRegistry.onComplete(taskId, (task) => {
-        if (this.hookEngine) {
-          void this.hookEngine.executeSubagentStop(
+        if (this.hooks) {
+          void this.hooks.executeSubagentStop(
             agentType,
             description,
             taskId,
@@ -176,8 +196,8 @@ export class SubAgent {
       // controller for it; without passing it down the run ignores every check
       // inside `runExecution` and cannot be stopped from the dashboard.
       const result = await this.runExecution(prompt, options, options.signal)
-      if (this.hookEngine) {
-        await this.hookEngine.executeSubagentStop(agentType, description, 'sub-agent', true, result)
+      if (this.hooks) {
+        await this.hooks.executeSubagentStop(agentType, description, 'sub-agent', true, result)
       }
       this.logSuccessExperience(agentType, description, result, options.agentDef)
 
@@ -201,8 +221,8 @@ export class SubAgent {
 
       return result
     } catch (err) {
-      if (this.hookEngine) {
-        await this.hookEngine.executeSubagentStop(
+      if (this.hooks) {
+        await this.hooks.executeSubagentStop(
           agentType,
           description,
           'sub-agent',
@@ -561,6 +581,35 @@ export class SubAgent {
               }))
             : undefined
 
+        // ── PreInference DLP checkpoint ──
+        //
+        // The same check the engine runs before each request. This loop is a
+        // second inference path, and until now it reached the provider without
+        // passing the organization's egress hook at all: the main loop's
+        // requests were inspected, every sub-agent request was not.
+        if (this.services && isInferenceHookEnabled(this.services.inferenceHook)) {
+          const hookConfig = this.services.inferenceHook!
+          let providerId = ''
+          try {
+            providerId = this.registry.getActive().config.id
+          } catch {
+            // A hand-built registry in tests may not implement `getActive`.
+            // An empty provider name is worse than the real one, but it does
+            // not skip the check — the messages still go to the hook.
+          }
+          const request = buildRequest(
+            currentMessages,
+            'sub-agent',
+            providerId,
+            finalModel,
+            hookConfig.organization_id,
+          )
+          const verdict = await sendInferenceCheck(hookConfig, request)
+          if (!verdict.allowed) {
+            throw new Error(verdict.reason || 'Blocked by the pre-inference DLP check.')
+          }
+        }
+
         for await (const chunk of (this.llm ?? this.registry).chat({
           model: finalModel,
           messages: currentMessages,
@@ -660,14 +709,32 @@ export class SubAgent {
             continue
           }
 
-          // ── P0-5: Run PreToolUse hooks (before permission check) ──
+          // ── Pre-execution gates (before the permission check) ──
+          //
+          // Same chain `Engine.executeTool` runs, from the same definition
+          // (`core/tool-gate.ts`): PreToolUse hook → CRSI rules → SIS preflight →
+          // constitution → self-critique. This loop used to run only the hook
+          // (and only when a hook engine had been passed in, which no production
+          // call site did), so a `Write` the main loop refused for leaking a
+          // credential executed verbatim one level down.
           let effectiveInput = tu.input
-          if (this.hookEngine) {
-            const preResult = await this.hookEngine.executePreToolUse(
-              tu.name,
-              tu.input,
-              'sub-agent',
-            )
+          let gateWarnings: string[] = []
+          if (this.services) {
+            const outcome = await runPreToolGate(tu.name, tu.input, this.services.gate, 'sub-agent')
+            if (!outcome.ok) {
+              currentMessages.push({
+                role: 'user' as const,
+                content: `Tool "${tu.name}" blocked: ${outcome.error}`,
+              })
+              continue
+            }
+            effectiveInput = outcome.params
+            gateWarnings = outcome.warnings
+          } else if (this.hooks) {
+            // Legacy path: a caller that built a SubAgent by hand with only a
+            // hook engine still gets its PreToolUse hook. The other four gates
+            // need dependencies this path cannot reach.
+            const preResult = await this.hooks.executePreToolUse(tu.name, tu.input, 'sub-agent')
             if (!preResult.allowed) {
               const denialMsg = preResult.reason
                 ? `Tool "${tu.name}" blocked by PreToolUse hook: ${preResult.reason}`
@@ -737,8 +804,8 @@ export class SubAgent {
 
             // ── P0-5: Run PostToolUse hooks ──
             let displayResult = result
-            if (this.hookEngine) {
-              const postResult = await this.hookEngine.executePostToolUse(
+            if (this.hooks) {
+              const postResult = await this.hooks.executePostToolUse(
                 tu.name,
                 effectiveInput,
                 result,
@@ -763,6 +830,17 @@ export class SubAgent {
                 { type: 'tool_use' as const, id: tu.id, name: tu.name, input: effectiveInput },
               ],
             })
+            // A gate's warning (hook `additionalContext`, a CRSI rule, an SIS
+            // `fix`) is how the model learns the call went through under a
+            // caution. The engine prepends them to a successful result; without
+            // the same line here the warnings were produced and dropped.
+            if (gateWarnings.length > 0 && displayResult.success) {
+              displayResult = {
+                ...displayResult,
+                content: gateWarnings.join('\n') + '\n' + (displayResult.content || ''),
+              }
+            }
+
             currentMessages.push({
               role: 'user' as const,
               content: [
@@ -778,8 +856,8 @@ export class SubAgent {
             })
           } catch (err) {
             // ── P0-5: Run PostToolUseFailure hooks ──
-            if (this.hookEngine) {
-              this.hookEngine
+            if (this.hooks) {
+              this.hooks
                 .executePostToolUseFailure(tu.name, effectiveInput, String(err), 'sub-agent')
                 .catch(() => {
                   // Hook failures never block execution

@@ -47,6 +47,8 @@ import { SelfCritique } from './self-critique.js'
 import { UsageTracker } from './usage-tracker'
 import { getMetrics } from './metrics'
 import { buildRequest, sendInferenceCheck, isInferenceHookEnabled } from './inference-hook'
+import { runPreToolGate, type ToolGateDeps } from './tool-gate'
+import type { SubAgentServices } from '../agent/services'
 import { getFileInboxTransport } from '../agent/cross-session/file-inbox'
 import { registerWakeupHandler, unregisterWakeupHandler } from '../tools/scheduling/schedule-wakeup'
 import { accumulateGraftSavings } from '../shared/graft-savings'
@@ -1452,150 +1454,22 @@ export class QueryEngine {
     // P1-4: Tool allowed — reset block counter
     this.permission.resetBlockCounter()
 
-    // Run PreToolUse hooks
-    let effectiveParams = params
-    let hookWarnings: string[] = []
-    if (this.hookEngine) {
-      const preResult = await this.hookEngine.executePreToolUse(name, params, this.sessionId)
-      if (!preResult.allowed) {
-        return {
-          success: false,
-          content: '',
-          error: preResult.reason || t('errors.tool_blocked', { name }),
-          notRun: true,
-        }
-      }
-
-      // `permissionDecision` narrows only — never widens. `ask` stops the call here
-      // (this CLI has no interactive approval prompt; `ask` is a hard refusal, the
-      // same as the `default` mode's ask path). `allow` is deliberately **not**
-      // honoured: a hook can come from the repository's own settings, so letting it
-      // auto-approve is the same defect as a project-supplied agent definition that
-      // grants itself `bypassPermissions` — the criterion is the *direction*, not the
-      // key name. `defer` (and an absent decision) means "no override", which is
-      // exactly what happens when we do nothing.
-      if (preResult.permissionDecision === 'ask' || preResult.permissionDecision === 'deny') {
-        return {
-          success: false,
-          content: '',
-          error: preResult.reason || t('errors.tool_hook_ask', { name }),
-          notRun: true,
-        }
-      }
-
-      if (preResult.modifiedInput) {
-        effectiveParams = { ...params, ...preResult.modifiedInput }
-      }
-
-      // A hook's `additionalContext` is how every non-blocking hook speaks — the
-      // exit-1 stderr, a spawn failure, an unreachable `mcp_tool` server (see
-      // `core/hooks-executor.ts`). This path used to read only `allowed` /
-      // `modifiedInput`, so all of it was produced and then dropped. `hookWarnings`
-      // is the channel that already reaches the model: it is prepended to the tool
-      // result below. A non-`[rule:…]` line is ignored by the effectiveness tracker
-      // further down, so pushing prose here is safe.
-      if (preResult.additionalContext) {
-        hookWarnings.push(preResult.additionalContext)
-      }
-    }
-
-    // CRSI RuleEngine intercept — gated by crsi.preToolHook feature flag
-    if (this.crsiConfig?.preToolHook !== false && this.ruleEngine) {
-      const ruleResult = this.ruleEngine.intercept(name, effectiveParams)
-      if (Object.keys(ruleResult.modified).length > 0) {
-        getMetrics().crsiRuleApplications.inc()
-        effectiveParams = ruleResult.modified
-      }
-      if (ruleResult.warnings.length > 0) {
-        // Append, do not replace: this array may already hold a PreToolUse hook's
-        // `additionalContext`. Every other writer below uses the spread form for the
-        // same reason — assignment here would silently drop whichever was written
-        // first ("two writers, one list").
-        hookWarnings = [...hookWarnings, ...ruleResult.warnings]
-      }
-    }
-
-    // ── SIS PreFlightChecker — known error pattern interception ──
-    const preflight = this.getPreFlightChecker().check(name, effectiveParams)
-    if (preflight.action === 'block') {
-      getMetrics().sisInterceptions.inc()
+    // Run every pre-execution gate. The chain is defined once, in
+    // `core/tool-gate.ts`, because it used to live only in this loop: a `Write`
+    // carrying an `apiKey = "sk-…"` was blocked here and executed verbatim by
+    // `SubAgent`, which runs its own tool loop (`sub-agent.ts`). Two copies of a
+    // gate drift; one definition called from both loops cannot.
+    const gateOutcome = await runPreToolGate(name, params, this.getToolGateDeps(), this.sessionId)
+    if (!gateOutcome.ok) {
       return {
         success: false,
-        content: preflight.warning || 'SIS 免疫系统拦截了此操作',
-        error: preflight.warning,
+        content: gateOutcome.content,
+        error: gateOutcome.error,
+        ...(gateOutcome.notRun ? { notRun: true } : {}),
       }
     }
-    if (preflight.action === 'fix' && preflight.modifiedParams) {
-      getMetrics().sisInterceptions.inc()
-      effectiveParams = preflight.modifiedParams
-      if (preflight.warning) {
-        hookWarnings = [...hookWarnings, preflight.warning]
-      }
-    }
-    if (preflight.action === 'warn' && preflight.warning) {
-      hookWarnings = [...hookWarnings, preflight.warning]
-    }
-
-    // ── Mipham Constitution — constitutional principle enforcement ──
-    // Checks the tool + params against the machine-readable constitution.
-    // Block-level violations (enforce: block) halt execution immediately.
-    // Warn-level violations (enforce: warn) are appended to hookWarnings.
-    const constitution = this.getConstitutionLoader()
-    const principles = constitution.getPrinciplesForTool(name)
-    for (const principle of principles) {
-      if (principle.enforce === 'block') {
-        // Audit: check if the tool params or command match a violation pattern
-        if (principle.audit_pattern) {
-          try {
-            const regex = new RegExp(principle.audit_pattern, 'i')
-            const paramsStr = JSON.stringify(effectiveParams)
-            if (regex.test(paramsStr)) {
-              return {
-                success: false,
-                content: `🚫 Constitution violation blocked: **${principle.id}** — ${principle.text}`,
-                error: `Constitutional principle "${principle.id}" blocked this operation.`,
-              }
-            }
-          } catch {
-            // Invalid regex — skip this principle
-          }
-        }
-      }
-      if (principle.enforce === 'warn') {
-        hookWarnings = [...hookWarnings, `⚖️ Constitution: ${principle.id} — ${principle.text}`]
-      }
-    }
-
-    // ── Self-Critique Hook — RLAIF-style tool-call safety verification ──
-    // Uses a fast model (Flash) to critique the tool call before execution.
-    // Safe + correct + necessary check with <200ms target latency.
-    // Fail-open: if the critique times out or errors, the tool still executes.
-    const selfCritique = this.getSelfCritique()
-    if (selfCritique.getConfig().enabled) {
-      const critiqueResult = await selfCritique.critique(
-        name,
-        effectiveParams,
-        this.registry,
-        this.llm,
-      )
-      if (critiqueResult) {
-        if (critiqueResult.score < selfCritique.getConfig().threshold) {
-          // Score too low — block with explanation
-          if (!critiqueResult.safe) {
-            return {
-              success: false,
-              content: `🔍 Self-Critique blocked: ${critiqueResult.reasoning}`,
-              error: `Self-Critique safety check failed (score: ${(critiqueResult.score * 100).toFixed(0)}%). ${critiqueResult.correction || ''}`,
-            }
-          }
-          // Score low but safe — warn but allow
-          hookWarnings = [
-            ...hookWarnings,
-            `🔍 Self-Critique: ${critiqueResult.reasoning}${critiqueResult.correction ? ` — Suggestion: ${critiqueResult.correction}` : ''}`,
-          ]
-        }
-      }
-    }
+    const effectiveParams = gateOutcome.params
+    const hookWarnings = gateOutcome.warnings
 
     // The gate at the top of this method ruled on `params`. Everything since —
     // the PreToolUse hook's `modifiedInput`, the CRSI RuleEngine's `modified`, the
@@ -1650,6 +1524,7 @@ export class QueryEngine {
         backgroundAgentRegistry: getBackgroundAgentRegistry(),
         permissionSystem: this.permission,
         ruleEngine: this.ruleEngine,
+        subAgentServices: this.getSubAgentServices(),
         llm: this.llm,
         readFiles: this.readFiles,
         readFilesComplete: this.readFilesComplete,
@@ -2139,6 +2014,39 @@ export class QueryEngine {
       this._errorSignatureDB = new ErrorSignatureDB()
     }
     return this._errorSignatureDB
+  }
+
+  /**
+   * The pre-execution chain's dependencies, as a value.
+   *
+   * Built on every tool call rather than cached: `hookEngine` is assigned after
+   * construction (`setHooks`), and the three lazy singletons must stay lazy.
+   */
+  getToolGateDeps(): ToolGateDeps {
+    return {
+      hookEngine: this.hookEngine,
+      ruleEngine: this.ruleEngine,
+      preflight: () => this.getPreFlightChecker(),
+      constitution: () => this.getConstitutionLoader(),
+      selfCritique: () => this.getSelfCritique(),
+      crsiPreToolHook: this.crsiConfig?.preToolHook !== false,
+      registry: this.registry,
+      llm: this.llm,
+    }
+  }
+
+  /**
+   * What a sub-agent needs to run the same gates as this loop.
+   *
+   * One producer (`Engine`) and one consumer (`SubAgent`). Before this existed,
+   * all five production `new SubAgent(...)` sites passed `undefined` for the
+   * hook engine and none of them reached the constitution / SIS / CRSI chain.
+   */
+  getSubAgentServices(): SubAgentServices {
+    return {
+      gate: this.getToolGateDeps(),
+      inferenceHook: this.inferenceHookConfig,
+    }
   }
 
   /**

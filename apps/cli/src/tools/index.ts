@@ -8,7 +8,7 @@ import { editTool } from './file/edit'
 import { globToolService } from './file/glob'
 import { grepToolService } from './file/grep'
 import { bashToolService } from './exec/bash'
-import { gitTool } from './exec/git'
+import { gitToolService } from './exec/git'
 import { taskTool } from './exec/task'
 import { enterWorktreeTool } from './exec/enter-worktree'
 import { exitWorktreeTool } from './exec/exit-worktree'
@@ -58,7 +58,6 @@ export function createToolRegistry(
     writeTool,
     editTool,
     // Exec tools
-    gitTool,
     taskTool,
     enterWorktreeTool,
     exitWorktreeTool,
@@ -103,6 +102,7 @@ export function createToolRegistry(
   // provider 的 apiKey、MCP server 的 env、inference hook 的 signing_secret。
   ctx.mount(readToolService)
   ctx.mount(bashToolService)
+  ctx.mount(gitToolService)
   ctx.mount(grepToolService)
   ctx.mount(globToolService)
   ctx.mount(configToolService)
