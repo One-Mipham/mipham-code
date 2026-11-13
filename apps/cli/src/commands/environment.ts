@@ -193,24 +193,27 @@ const terminalSetupCmd: CommandHandler = async () => {
   mkdirSync(miphamDir, { recursive: true })
 
   const shellScript = join(miphamDir, 'shell-setup.sh')
+  // 这个文件从前写三样东西，一样都不生效 —— 其中一样还有害：
+  //   • `export MIPHAM_HOME=…` —— `miphamHome()` 只用 `homedir()`，从不读这个变量；
+  //   • `export MIPHAM_PROVIDER=$(grep …)` —— 全仓库零读者；
+  //   • `alias mipham='cd $(pwd) && npm install -g … > /dev/null 2>&1; mipham'` ——
+  //     `cd $(pwd)` 是空操作，剩下那半是**每次敲 `mipham` 都静默重装一遍全局包**，
+  //     而 `npm install -g` 没有原子换手：中途被打断就一个 CLI 都不剩，且错误全被丢掉。
+  // CLI 自己读 `~/.mipham/config.yml`，shell 这边没有什么需要导出的；写清楚这件事，
+  // 比塞进三条看着像配置、实则不改任何行为的行更有用。重跑本命令会把旧文件覆盖掉。
   const shellContent = [
     '#!/bin/bash',
     '# Mipham Code — Shell Integration',
     '# Source this file in your shell profile:',
     '#   source ~/.mipham/shell-setup.sh',
     '',
-    `export MIPHAM_HOME="${home}/.mipham"`,
+    '# Mipham Code needs no environment variables: the home directory, the default',
+    '# provider and the API keys are all read from ~/.mipham/config.yml by the CLI',
+    '# itself. The only thing a shell profile may need is PATH to `mipham`, which',
+    '# the installer already sets up.',
     '',
-    '# Alias: launch Mipham Code in current directory',
-    `alias mipham='cd $(pwd) && ${NPM_INSTALL_COMMAND} > /dev/null 2>&1; mipham'`,
-    '',
-    '# Or use the local development version:',
-    '# alias mipham="bun run /path/to/mipham-code/apps/cli/bin/mipham"',
-    '',
-    '# Auto-detect provider from config',
-    'if [ -f ~/.mipham/config.yml ]; then',
-    '  export MIPHAM_PROVIDER=$(grep "defaultProvider:" ~/.mipham/config.yml | awk "{print \$2}")',
-    'fi',
+    '# Local development build, side by side with the installed one:',
+    '# alias mipham-dev="bun run /path/to/mipham-code/apps/cli/bin/mipham"',
   ].join('\n')
   atomicWriteFileSync(shellScript, shellContent + '\n', { mode: 0o644 })
   lines.push(`  ✅ Generated: ${shellScript}`)

@@ -647,6 +647,20 @@ const switchCmd: CommandHandler = (ctx, args) => {
     return { content: t('commands.switch.usage') }
   }
 
+  // 远程 attach 模式：`switchProvider` 在 RemoteEngine 上是 no-op。从前这里照样
+  // 回「✓ Switched」并把 nextProvider/nextModel 交给页脚 —— 页脚换了、daemon 还跑
+  // 着原来的模型，一次没发生的切换与一次成功的切换长得一模一样。
+  //
+  // 放在 provider/API key 检查**之前**：attach 时本地这份配置不是判据 ——
+  // 「这个 provider 没配 key」在这里既不真（key 在 daemon 那边）也不是用户能修的东西。
+  if (ctx.engine.isRemote) {
+    return {
+      content:
+        `Cannot switch to ${newProvider}/${newModel}: this session is attached to a daemon, ` +
+        'and the model is chosen on the daemon side. Change it there, or start a local session.',
+    }
+  }
+
   const provider = ctx.config.providers.find((p) => p.id === newProvider)
   if (!provider) {
     return { content: t('commands.switch.unknown_provider', { provider: newProvider }) }
@@ -4112,6 +4126,57 @@ const cdCmd: CommandHandler = async (ctx, args) => {
   try {
     process.chdir(resolved)
 
+    // `/cd` 只搬了 cwd，而**按目录装载的闸门**分两半：
+    //   • 能在这里重放的 —— `.mipham/rules/*.md` 与 settings.json 的 permission 规则；
+    //   • 启动时一次性装载、搬不动的 —— config.yml 的 permissionRules、hooks、
+    //     指令文件（CLAUDE.md 链）。它们仍然属于**原来的**目录。
+    // 后半段必须说出口：否则用户以为自己已经在新项目的策略下，而实际生效的
+    // 是上一个仓库的那一套。重放前半段是纯收紧/纯重放，不会放宽任何东西。
+    const notes: string[] = []
+    try {
+      const { loadSettingsJson } = await import('../config/loader')
+      const { RulesLoader } = await import('../core/rules-loader')
+      // attach 模式下 `getPermission()` 是个只有 `setMode`/`getMode` 的门面
+      // （闸门在 daemon 那边），在本地重放规则既改不动任何东西，也会在
+      // `listRules`/`allow` 上抛 —— 与其把这句内部报错印给用户，不如说清楚归属。
+      if (ctx.engine.isRemote) {
+        notes.push(
+          'This session is attached to a daemon: permission rules and project rules ' +
+            'belong to the daemon, so nothing was reloaded here.',
+        )
+      } else {
+        const perm = ctx.engine.getPermission()
+        const settings = loadSettingsJson(resolved)
+        // `allow`/`deny` 是**追加**语义（`PermissionSystem.allow` 直接 push），
+        // 而用户级 allow 规则启动时已经施加过一遍 —— 不查重的话，每 `/cd` 一次
+        // 规则数组就长一截，`applied` 也会把「重放」报成「新施加」。
+        const live = perm.listRules()
+        let applied = 0
+        for (const rule of settings.permissions.allow) {
+          if (live.has(rule)) continue
+          perm.allow(rule)
+          live.set(rule, 'bypass')
+          applied++
+        }
+        for (const rule of settings.permissions.deny) {
+          if (live.has(rule)) continue
+          perm.deny(rule)
+          live.set(rule, 'ask')
+          applied++
+        }
+        if (applied > 0)
+          notes.push(`Applied ${applied} settings.json permission rule(s) from this directory.`)
+        ctx.engine.setRulesLoader(new RulesLoader(resolved))
+        notes.push('Project rules now read from this directory.')
+      }
+    } catch (err) {
+      notes.push(`Could not reload this directory's policy: ${(err as Error).message}`)
+    }
+    notes.push(
+      'Loaded at startup and still belonging to the original directory until restart: ' +
+        'config.yml permissionRules, hooks, and instruction files (CLAUDE.md chain).',
+    )
+
     try {
       const { SessionStore } = await import('../core/session-store')
       const saved = SessionStore.load(ctx.sessionId)
@@ -4135,7 +4200,7 @@ const cdCmd: CommandHandler = async (ctx, args) => {
       /* session persistence is best-effort */
     }
 
-    return { content: t('commands.cd.content', { path: resolved }) }
+    return { content: [t('commands.cd.content', { path: resolved }), '', ...notes].join('\n') }
   } catch (err) {
     return { content: t('commands.cd.failed', { error: (err as Error).message }) }
   }
@@ -5766,28 +5831,61 @@ const forkCmd: CommandHandler = async (ctx, args) => {
           inheritContext: { messages: parentContext.getMessages() },
           signal,
         })
+        // Same contract as the `worktree add` above: argv, no shell. This block
+        // was the half that still built shell strings — and it interpolated both
+        // `wtPath` (derived from the cwd) and `prompt` (the user's text), so a
+        // directory or a task containing `"`, `$(…)` or `;` ran as commands.
+        //
+        // It also swallowed every failure (`/* best-effort */`) and still
+        // reported "Fork done" with a branch name, so a commit that never
+        // happened and a push that was rejected looked exactly like success.
+        let publish: string
         try {
-          const { execSync: ex } = await import('node:child_process')
-          ex(`git -C ${wtPath} add -A`, { stdio: 'ignore', timeout: 10_000 })
-          const st = ex(`git -C ${wtPath} status --porcelain`, {
+          execFileSync('git', ['add', '-A'], {
+            cwd: wtPath,
+            stdio: 'ignore',
+            timeout: 10_000,
+            env: internalGitEnv(),
+          })
+          const st = execFileSync('git', ['status', '--porcelain'], {
+            cwd: wtPath,
             encoding: 'utf-8',
             timeout: 10_000,
+            env: internalGitEnv(),
           })
-          if (st.trim()) {
-            ex(`git -C ${wtPath} commit -m "feat: ${prompt.slice(0, 60)}\n\n${COAUTHOR_TRAILER}"`, {
-              stdio: 'ignore',
-              timeout: 10_000,
-            })
-            ex(`git push origin ${branch}`, { stdio: 'ignore', timeout: 30_000 })
+          if (!st.trim()) {
+            publish = 'No changes to commit.'
+          } else {
+            execFileSync(
+              'git',
+              ['commit', '-m', `feat: ${prompt.slice(0, 60)}\n\n${COAUTHOR_TRAILER}`],
+              { cwd: wtPath, stdio: 'ignore', timeout: 10_000, env: internalGitEnv() },
+            )
+            try {
+              execFileSync('git', ['push', 'origin', branch], {
+                cwd: wtPath,
+                stdio: 'ignore',
+                timeout: 30_000,
+                env: internalGitEnv(),
+              })
+              publish = `Committed and pushed \`${branch}\` to origin.`
+            } catch (pushErr) {
+              publish =
+                `Committed locally, but the **push failed** (${pushErr instanceof Error ? pushErr.message : String(pushErr)}). ` +
+                `The commit is on \`${branch}\` in \`${wtPath}\` — push it yourself when the remote is reachable.`
+            }
           }
-        } catch {
-          /* best-effort */
+        } catch (err) {
+          publish =
+            `**Auto-commit failed** (${err instanceof Error ? err.message : String(err)}). ` +
+            `Changes are uncommitted in \`${wtPath}\`.`
         }
         const summary = [
           `## Fork done: ${prompt}`,
           '',
           `Branch: \`${branch}\``,
           `Worktree: \`${wtPath}\``,
+          publish,
           '',
           result || '(no output)',
         ].join('\n')

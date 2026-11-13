@@ -26,6 +26,15 @@ export const enterPlanModeTool: ToolDefinition = {
   async execute(params, ctx) {
     const description = (params.description as string) || 'Implementation Plan'
 
+    // 这个工具的正文一直在说「Plan mode is READ-ONLY：其他工具都要确认」，
+    // 可它从前**只写了一个 markdown 模板**，从未动过权限模式 —— 于是工具返回
+    // 「已进入计划模式」，闸门还停在进这一轮之前的档位（比如 acceptEdits：
+    // 写文件不问）。广告的能力没有落点，模型据此以为自己在只读档里。
+    const before = ctx.permissionSystem?.getMode()
+    ctx.permissionSystem?.setMode('plan')
+    const live = ctx.permissionSystem?.getMode() ?? before
+    const switched = live === 'plan'
+
     // Create plan file
     const planDir = join(ctx.cwd, MIPHAM_DIR, 'plans')
     mkdirSync(planDir, { recursive: true })
@@ -69,16 +78,25 @@ export const enterPlanModeTool: ToolDefinition = {
 
     writeFileSync(filepath, content, 'utf-8')
 
+    const modeLine = switched
+      ? 'Plan mode is READ-ONLY:'
+      : `⚠️  Plan mode was NOT applied — the live permission mode is "${live ?? 'unknown'}"` +
+        ' (organisation policy may forbid "plan"). Treat every write as refused until' +
+        ' the user moves the mode, and say so rather than assuming read-only.'
+
+    const readOnlyLines = switched
+      ? ['  ✅ Read, Grep, Glob — auto-approved', '  ⚠️  All other tools — require confirmation']
+      : []
+
     return {
       success: true,
       content: [
-        '── Plan Mode Activated ──',
+        switched ? '── Plan Mode Activated ──' : '── Plan File Created (mode unchanged) ──',
         '',
         `Plan file: ${filepath}`,
         '',
-        'Plan mode is READ-ONLY:',
-        '  ✅ Read, Grep, Glob — auto-approved',
-        '  ⚠️  All other tools — require confirmation',
+        modeLine,
+        ...readOnlyLines,
         '',
         'Design your approach, explore the codebase, then:',
         '  • Use ExitPlanMode to submit your plan for user review',

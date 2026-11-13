@@ -45,6 +45,9 @@ export interface RemoteEngineOptions {
  * consumes from the local engine.
  */
 export class RemoteEngine {
+  /** Attach mode: provider/model are the daemon's choice, not this process's. */
+  readonly isRemote = true
+
   private sessionId: string
   private port: number
   private token: string

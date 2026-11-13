@@ -196,8 +196,24 @@ describe('listSkillPaths', () => {
     )
   })
 
-  it('returns empty on API failure', async () => {
-    const fetchFn = vi.fn().mockResolvedValue({ ok: false, json: () => Promise.resolve(null) })
+  it('API 失败时抛错，不返回空数组 —— 「没搜到」与「没搜成」必须分开', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue({ ok: false, status: 403, json: () => Promise.resolve(null) })
+    await expect(listSkillPaths({ owner: 'a', repo: 'b' }, fetchFn)).rejects.toThrow(
+      /GitHub API 403 for a\/b/,
+    )
+  })
+
+  it('网络异常同样抛出（不被吞成「这个仓库没有技能」）', async () => {
+    const fetchFn = vi.fn().mockRejectedValue(new Error('getaddrinfo ENOTFOUND'))
+    await expect(listSkillPaths({ owner: 'a', repo: 'b' }, fetchFn)).rejects.toThrow(/ENOTFOUND/)
+  })
+
+  it('真的没有 SKILL.md 时仍然返回空数组', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(okResponse({ tree: [{ path: 'README.md', type: 'blob' }] }))
     expect(await listSkillPaths({ owner: 'a', repo: 'b' }, fetchFn)).toEqual([])
   })
 })
@@ -246,5 +262,34 @@ describe('findSkillInMarketplaces', () => {
     expect(
       await findSkillInMarketplaces('nope', [{ owner: 'a', repo: 'b' }], fetchFn, download),
     ).toBeNull()
+  })
+
+  it('某个源搜不成、而技能又没在能搜的源里找到 ⇒ 抛错，不报「不存在」', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue({ ok: false, status: 503, json: () => Promise.resolve(null) })
+    const download = vi.fn().mockResolvedValue('')
+    await expect(
+      findSkillInMarketplaces('eli5', [{ owner: 'a', repo: 'b' }], fetchFn, download),
+    ).rejects.toThrow(/could not search 1 of 1 marketplace source\(s\).*a\/b: GitHub API 503/)
+  })
+
+  it('前面的源失败、后面的源有这个技能 ⇒ 仍然返回它（找得到就是找得到）', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 500, json: () => Promise.resolve(null) })
+      .mockResolvedValueOnce(okResponse({ tree: [{ path: 'eli5/SKILL.md', type: 'blob' }] }))
+    const download = vi.fn().mockResolvedValue('---\nname: eli5\ndescription: Explain\n---\nbody')
+    const found = await findSkillInMarketplaces(
+      'eli5',
+      [
+        { owner: 'a', repo: 'b' },
+        { owner: 'anthropics', repo: 'skills' },
+      ],
+      fetchFn,
+      download,
+    )
+    expect(found?.name).toBe('eli5')
+    expect(found?.source).toEqual({ owner: 'anthropics', repo: 'skills' })
   })
 })

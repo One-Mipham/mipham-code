@@ -74,12 +74,20 @@ export const exitPlanModeTool: ToolDefinition = {
         ? `⚠️  Plan file not readable (${planFile}): ${readError}`
         : '⚠️  No plan file found — present the plan from your own context.'
 
+    // 这一行曾经写「✓ Exiting plan mode.」，可这套工具链从不动权限模式：
+    // 进入时没进、退出时也没退。现在 EnterPlanMode 真的会切到 plan，
+    // 于是「已退出」更是一句假话 —— 档位要等用户批准（`/approve` 或 Shift+Tab）
+    // 才会变。说清楚当前档位，别让模型以为自己已经能在写模式下动手。
+    const mode = ctx.permissionSystem?.getMode()
+
     return {
       success: true,
       content: [
         '── Plan Ready for Review ──',
         '',
-        '✓ Exiting plan mode.',
+        mode === 'plan'
+          ? 'Plan mode: still active (read-only). The switch to acceptEdits happens on approval.'
+          : `Permission mode right now: ${mode ?? 'unknown'}.`,
         planStatus,
         planFile ? `Plan file: ${planFile}` : '',
         '',

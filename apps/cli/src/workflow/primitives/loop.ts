@@ -58,6 +58,14 @@ export async function loopUntilConvergence<T>(
     // FAN OUT: all finders run in parallel
     const raw = await parallel(opts.finders.map((f) => () => f()))
 
+    // A round in which **every** finder failed is not "nothing new was found"
+    // — it is "nothing was searched for". Counting it as dry let two crashed
+    // finders report `converged: true` with an empty confirmed list. A partial
+    // failure is still tolerated (the survivors carry the round).
+    if (raw.length > 0 && raw.every((r) => r === null)) {
+      throw new Error(`loopUntilConvergence(): every finder failed in round ${rounds}`)
+    }
+
     // EDGE LOGIC: flatMap + dedup (pure JS, zero tokens)
     const items: T[] = []
     for (const result of raw) {
@@ -84,6 +92,12 @@ export async function loopUntilConvergence<T>(
     // VERIFY: optional quality gate
     if (opts.verify) {
       const judged = await parallel(fresh.map((item) => () => opts.verify!(item)))
+      // Same rule one level down: `parallel` turns a throwing verify into null,
+      // so "every verify call failed" would otherwise be read as "every finding
+      // was refuted" and the loop would converge on nothing.
+      if (judged.every((j) => j === null)) {
+        throw new Error(`loopUntilConvergence(): every verify call failed in round ${rounds}`)
+      }
       for (const j of judged) {
         if (j && j.survives) {
           confirmed.push(j.finding as T)

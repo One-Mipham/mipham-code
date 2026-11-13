@@ -126,6 +126,17 @@ export function filterExpiredMessages(
 }
 
 export class QueryEngine {
+  /**
+   * `false` for the local engine; `true` for the attach-mode `RemoteEngine`.
+   *
+   * Commands that would otherwise *pretend* to change something the daemon owns
+   * (`/switch`, the model picker) read this: in attach mode `switchProvider` is a
+   * no-op, so the old code reported "✓ Switched" and moved the footer while the
+   * daemon kept running the previous model — a change that never happened looking
+   * exactly like one that did.
+   */
+  readonly isRemote = false
+
   private hookEngine?: HookEngine
   private artifactServer?: ArtifactServer
   private agentRegistry?: AgentRegistry

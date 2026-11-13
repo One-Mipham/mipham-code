@@ -1191,16 +1191,50 @@ const securityCmd: CommandHandler = async () => {
 
   // 2. Check for hardcoded secrets (quick grep for common patterns)
   // ⚠ Security: results are redacted — only file:line locations are shown, never values
-  try {
-    const { execSync } = await import('node:child_process')
-    const secretPatterns = execSync(
-      `grep -rIn --include="*.ts" --include="*.js" --include="*.yml" --include="*.yaml" --include="*.json" -E "(API_KEY|SECRET|PASSWORD|TOKEN)\\s*=\\s*['\\\"][^$]" ${cwd} 2>/dev/null | grep -v node_modules | grep -v '.git/' | head -5 || echo ""`,
-      { encoding: 'utf-8', timeout: 5000 },
-    ).trim()
-    if (secretPatterns) {
+  // 「grep 没找到」与「grep 没跑起来」必须分开。原来的判据是一条 shell 管道，
+  // 末尾的 `|| echo ""` 把**任何**非零退出都变成空输出，外层 catch 又把异常说成
+  // 「No hardcoded secrets detected (quick scan)」—— 没装 grep、正则写错、扫到一半
+  // 超时，全都渲染成 ✅ 干净。argv 化之后退出码是精确的：1 = 无匹配（干净），
+  // 2+ = 出错（没查），没有退出码 = 根本没跑起来（超时/被杀）。后两者进 findings。
+  {
+    const { execFileSync } = await import('node:child_process')
+    let raw = ''
+    let scanError: string | null = null
+    try {
+      raw = execFileSync(
+        'grep',
+        [
+          '-rIn',
+          '--include=*.ts',
+          '--include=*.js',
+          '--include=*.yml',
+          '--include=*.yaml',
+          '--include=*.json',
+          '-E',
+          `(API_KEY|SECRET|PASSWORD|TOKEN)\\s*=\\s*['"][^$]`,
+          cwd,
+        ],
+        { encoding: 'utf-8', timeout: 5000, maxBuffer: 4 * 1024 * 1024 },
+      )
+    } catch (err) {
+      const status = (err as { status?: number | null }).status
+      // 1 是 grep 的正常「无匹配」语义，不是错误。
+      if (status !== 1) {
+        scanError = err instanceof Error ? err.message.split('\n')[0]! : String(err)
+      }
+    }
+    const hits = raw
+      .split('\n')
+      .filter((l) => l.length > 0 && !l.includes('node_modules') && !/\/\.git\//.test(l))
+      .slice(0, 5)
+
+    if (scanError) {
+      findings.push(
+        `⚠ Could not scan for hardcoded secrets (${scanError}) — this is **not** a clean result`,
+      )
+    } else if (hits.length > 0) {
       // Redact the actual values — only show file:line locations
-      const redacted = secretPatterns
-        .split('\n')
+      const redacted = hits
         .map((l) => {
           const colonIdx = l.indexOf(':')
           const secondColon = l.indexOf(':', colonIdx + 1)
@@ -1216,9 +1250,6 @@ const securityCmd: CommandHandler = async () => {
     } else {
       ok.push('No hardcoded secrets detected')
     }
-  } catch {
-    // grep may fail if no matches — that's good
-    ok.push('No hardcoded secrets detected (quick scan)')
   }
 
   // 3. Check for TLS in dependencies

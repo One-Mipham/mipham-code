@@ -1524,6 +1524,21 @@ export function App({
                 currentProvider={providerId}
                 currentModel={modelId}
                 onSelect={(newProvider, newModel) => {
+                  // 远程 attach：`switchProvider` 是 no-op，而页脚状态是本地的 ——
+                  // 照旧改会得到「页脚说 A、daemon 跑 B」。宁可不改，也要说清楚。
+                  if (engine.isRemote) {
+                    setPickerOpen(false)
+                    setMessages((prev) => [
+                      ...prev,
+                      {
+                        role: 'system',
+                        content:
+                          `Model is chosen by the daemon in an attached session — ` +
+                          `${newProvider}/${newModel} was not applied.`,
+                      },
+                    ])
+                    return
+                  }
                   engine.switchProvider(newProvider, newModel)
                   setProviderId(newProvider)
                   setModelId(newModel)

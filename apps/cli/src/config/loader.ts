@@ -401,7 +401,7 @@ export function tryRestoreFromBackup(configPath: string): boolean {
  * Scans both project-level (.mipham/mcp.json) and user-level (~/.mipham/mcp.json).
  * Config.yml entries take precedence over .mcp.json entries with the same name.
  */
-function loadMcpJson(cwd: string): McpServerConfig[] {
+function loadMcpJson(cwd: string, warn?: (message: string) => void): McpServerConfig[] {
   const servers: McpServerConfig[] = []
   const searchPaths = [
     join(cwd, MIPHAM_DIR, 'mcp.json'),
@@ -410,26 +410,46 @@ function loadMcpJson(cwd: string): McpServerConfig[] {
   ]
 
   for (const path of searchPaths) {
+    let raw: string | null
     try {
-      const raw = readRegularFileSync(path)
-      if (raw === null) continue
-      // Every McpServerConfig field is optional here (the name comes from the
-      // key), so a field added to the type is accepted without touching this.
-      const parsed = JSON.parse(raw) as {
-        mcpServers?: Record<string, Partial<McpServerConfig>>
-      }
+      raw = readRegularFileSync(path)
+    } catch (err) {
+      warn?.(`could not read ${path}: ${String(err)}`)
+      continue
+    }
+    if (raw === null) continue
 
-      if (parsed.mcpServers) {
-        for (const [name, cfg] of Object.entries(parsed.mcpServers)) {
-          // Avoid duplicates by name
-          if (servers.some((s) => s.name === name)) continue
-          // Spread the whole entry rather than re-listing fields: hand-rebuilding
-          // the object silently dropped request_timeout_ms and auth.
-          servers.push({ ...cfg, name, args: cfg.args || [] })
-        }
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(raw)
+    } catch (err) {
+      // A malformed file used to be skipped in silence, so every server it
+      // declared simply did not exist: the user saw "no such server" with no
+      // hint that the file they had just written was never read.
+      warn?.(
+        `${path} is not valid JSON and was skipped: ${err instanceof Error ? err.message : String(err)}`,
+      )
+      continue
+    }
+
+    const mcpServers = (parsed as { mcpServers?: unknown } | null)?.mcpServers
+    if (mcpServers === undefined) continue
+    if (!mcpServers || typeof mcpServers !== 'object' || Array.isArray(mcpServers)) {
+      warn?.(`${path}: "mcpServers" must be an object — skipped`)
+      continue
+    }
+
+    for (const [name, cfg] of Object.entries(mcpServers as Record<string, unknown>)) {
+      // Avoid duplicates by name
+      if (servers.some((s) => s.name === name)) continue
+      if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) {
+        warn?.(`${path}: server "${name}" is not an object — skipped`)
+        continue
       }
-    } catch {
-      // Silently skip malformed or missing .mcp.json files
+      // Spread the whole entry rather than re-listing fields: hand-rebuilding
+      // the object silently dropped request_timeout_ms and auth.
+      const entry = cfg as Partial<McpServerConfig>
+      servers.push({ ...entry, name, args: entry.args || [] })
     }
   }
 
@@ -934,7 +954,9 @@ export function loadConfig(cwd: string = process.cwd()): MiphamConfig {
   }
 
   // ── Load .mcp.json servers (project + user level) ──
-  const mcpJsonServers = loadMcpJson(cwd)
+  // 与其他加载期告警同一出口（`index.tsx` 也用 process.stderr.write 报被忽略的配置）；
+  // console.error 在测试里会被 vitest 接管，读不到。
+  const mcpJsonServers = loadMcpJson(cwd, (m) => process.stderr.write(`⚠ Mipham Code: ${m}\n`))
   if (mcpJsonServers.length > 0) {
     const existingServers = config.skills?.mcpServers ?? []
     // Merge: config.yml servers take precedence by name
@@ -1187,24 +1209,32 @@ function decryptProviderApiKeys(providers: ProviderConfig[] | undefined): void {
  * decrypted. Used by `/keys view` to show the plaintext key on request.
  */
 export function getProviderApiKey(providerId: string, cwd: string = process.cwd()): string | null {
-  const userConfigPath = join(MIPHAM_HOME, 'config.yml')
-  const projectConfigPath = join(cwd, MIPHAM_DIR, 'config.yml')
-  const configPath = isRegularFile(userConfigPath) ? userConfigPath : projectConfigPath
+  // 两个文件都看，用户级在前（与 `loadConfig` 的合并顺序一致：项目先、用户后，
+  // 于是用户级覆盖项目级）。
+  //
+  // 从前这里是 `isRegularFile(user) ? user : project` —— **只读第一个存在的文件**。
+  // 用户级 config.yml 一旦存在（几乎总是存在），项目级里配的那把 key 就永远读不到：
+  // `/keys view` 说「没有这个 key」，而引擎侧（`loadConfig` 两级合并）正在用它。
+  // 同一个状态，两个读者两种答案。
+  const paths = [join(MIPHAM_HOME, 'config.yml'), join(cwd, MIPHAM_DIR, 'config.yml')]
 
-  try {
-    const raw = readRegularFileSync(configPath)
-    if (raw === null) return null
-    const doc = (parseYaml(raw) as Record<string, unknown>) || {}
-    const providers = (doc.providers as Array<Record<string, unknown>>) || []
-    const p = providers.find((x) => x.id === providerId)
-    if (!p || typeof p.apiKey !== 'string') return null
-    if (!p.apiKey.startsWith(ENC_PREFIX)) return p.apiKey
-    return decryptApiKey(p.apiKey, getCredentialKey(MIPHAM_HOME))
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
-    process.stderr.write(`⚠ Mipham Code: failed to read API key for "${providerId}": ${msg}\n`)
-    return null
+  for (const configPath of paths) {
+    try {
+      const raw = readRegularFileSync(configPath)
+      if (raw === null) continue
+      const doc = (parseYaml(raw) as Record<string, unknown>) || {}
+      const providers = (doc.providers as Array<Record<string, unknown>>) || []
+      const p = providers.find((x) => x.id === providerId)
+      if (!p || typeof p.apiKey !== 'string') continue
+      if (!p.apiKey.startsWith(ENC_PREFIX)) return p.apiKey
+      // 解不开会抛 —— 落到 catch 报一句，再试下一份文件。
+      return decryptApiKey(p.apiKey, getCredentialKey(MIPHAM_HOME))
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      process.stderr.write(`⚠ Mipham Code: failed to read API key for "${providerId}": ${msg}\n`)
+    }
   }
+  return null
 }
 
 /**

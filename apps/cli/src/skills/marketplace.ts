@@ -120,28 +120,38 @@ export interface DiscoveredSkill {
 
 /** Minimal fetch shape (ok/json/text) so discovery is testable without real network. */
 export interface FetchLike {
-  (url: string): Promise<{ ok: boolean; json: () => Promise<unknown>; text: () => Promise<string> }>
+  (url: string): Promise<{
+    ok: boolean
+    status?: number
+    json: () => Promise<unknown>
+    text: () => Promise<string>
+  }>
 }
 
 /**
  * List every `SKILL.md` blob path in a repository via the GitHub trees API.
- * Returns [] on any failure (network, rate-limit, non-2xx).
+ *
+ * **Throws** when the listing could not be obtained (network error, rate limit,
+ * non-2xx, malformed JSON). Returning `[]` for those — as this did — made "the
+ * repo has no skills" and "we never reached GitHub" the same value, so an
+ * offline machine or a rate-limited API surfaced to the user as
+ * `Skill "x" not found`. An empty array now means exactly one thing: the tree
+ * answered, and it contains no `SKILL.md`.
  */
 export async function listSkillPaths(
   source: MarketplaceSource,
   fetchFn: FetchLike,
 ): Promise<string[]> {
   const url = `https://api.github.com/repos/${source.owner}/${source.repo}/git/trees/HEAD?recursive=1`
-  try {
-    const res = await fetchFn(url)
-    if (!res.ok) return []
-    const data = (await res.json()) as { tree?: Array<{ path?: string; type?: string }> }
-    return (data.tree ?? [])
-      .filter((e) => e.type === 'blob' && e.path?.endsWith('SKILL.md'))
-      .map((e) => e.path!)
-  } catch {
-    return []
+  const res = await fetchFn(url)
+  if (!res.ok) {
+    const status = typeof res.status === 'number' ? ` ${res.status}` : ''
+    throw new Error(`GitHub API${status} for ${source.owner}/${source.repo}`)
   }
+  const data = (await res.json()) as { tree?: Array<{ path?: string; type?: string }> }
+  return (data.tree ?? [])
+    .filter((e) => e.type === 'blob' && e.path?.endsWith('SKILL.md'))
+    .map((e) => e.path!)
 }
 
 /**
@@ -178,7 +188,12 @@ export interface FoundSkill {
 
 /**
  * Search every marketplace source for a skill by name (first match wins, in
- * source order). Returns null when no source exposes it.
+ * source order).
+ *
+ * Returns null **only** when every source answered and none exposes the skill.
+ * If some source could not be searched and the skill was not found in the ones
+ * that did answer, this throws — otherwise a network failure reads as
+ * "not found", which sends the user looking for a skill that may well exist.
  */
 export async function findSkillInMarketplaces(
   skillName: string,
@@ -186,8 +201,17 @@ export async function findSkillInMarketplaces(
   fetchFn: FetchLike,
   download: (url: string) => Promise<string>,
 ): Promise<FoundSkill | null> {
+  const failures: string[] = []
   for (const source of sources) {
-    const skills = await discoverSkills(source, fetchFn, download)
+    let skills: DiscoveredSkill[]
+    try {
+      skills = await discoverSkills(source, fetchFn, download)
+    } catch (err) {
+      failures.push(
+        `${source.owner}/${source.repo}: ${err instanceof Error ? err.message : String(err)}`,
+      )
+      continue
+    }
     const found = skills.find((s) => s.name === skillName)
     if (found) {
       return {
@@ -198,6 +222,13 @@ export async function findSkillInMarketplaces(
         rawUrl: `https://raw.githubusercontent.com/${source.owner}/${source.repo}/HEAD/${found.path}`,
       }
     }
+  }
+  if (failures.length > 0) {
+    throw new Error(
+      `could not search ${failures.length} of ${sources.length} marketplace source(s) ` +
+        `(${failures.join('; ')}); "${skillName}" was not found in the sources that answered, ` +
+        `but it may exist in the ones that did not`,
+    )
   }
   return null
 }

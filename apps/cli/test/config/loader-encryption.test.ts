@@ -30,6 +30,7 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(MIPHAM_HOME, { recursive: true, force: true })
+  rmSync(FAKE_CWD, { recursive: true, force: true })
 })
 
 describe('config.yml API key encryption', () => {
@@ -65,6 +66,32 @@ describe('config.yml API key encryption', () => {
 
   it('getProviderApiKey returns null for an unknown provider', () => {
     expect(getProviderApiKey('nonexistent')).toBeNull()
+  })
+
+  // 从前这里是 `isRegularFile(user) ? user : project`：**只读第一个存在的文件**。
+  // 用户级 config.yml 一旦存在（几乎总是存在），项目级里那把 key 永远读不到 ——
+  // `/keys view` 说「没有」，而引擎侧 `loadConfig`（两级合并）正在用它。
+  it('项目级 config.yml 里的 key 也读得到（用户级存在、但没有这个 provider）', () => {
+    rmSync(FAKE_CWD, { recursive: true, force: true })
+    mkdirSync(join(FAKE_CWD, '.mipham'), { recursive: true })
+    writeFileSync(
+      join(FAKE_CWD, '.mipham', 'config.yml'),
+      'version: 1\nproviders:\n  - id: qwen\n    apiKey: sk-project-only\n',
+      'utf-8',
+    )
+    expect(getProviderApiKey('qwen', FAKE_CWD)).toBe('sk-project-only')
+  })
+
+  it('两边都配了同一个 provider ⇒ 用户级胜（与 loadConfig 的合并顺序一致）', () => {
+    saveProviderApiKey('deepseek', 'sk-user-wins')
+    rmSync(FAKE_CWD, { recursive: true, force: true })
+    mkdirSync(join(FAKE_CWD, '.mipham'), { recursive: true })
+    writeFileSync(
+      join(FAKE_CWD, '.mipham', 'config.yml'),
+      'version: 1\nproviders:\n  - id: deepseek\n    apiKey: sk-project-loses\n',
+      'utf-8',
+    )
+    expect(getProviderApiKey('deepseek', FAKE_CWD)).toBe('sk-user-wins')
   })
 })
 

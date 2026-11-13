@@ -212,7 +212,18 @@ async function installFromMarketplace(
     (p) => (existsSync(p) ? readFileSync(p, 'utf-8') : null),
     (m) => console.error(`⚠ ${m}`),
   )
-  const found = await findSkillInMarketplaces(skillName, sources, globalThis.fetch, downloadFile)
+  let found: Awaited<ReturnType<typeof findSkillInMarketplaces>>
+  try {
+    found = await findSkillInMarketplaces(skillName, sources, globalThis.fetch, downloadFile)
+  } catch (err) {
+    // 查不成 ≠ 不存在。把「没能搜索」渲染成 `Skill "x" not found` 会让用户
+    // 去一个根本可能有的技能上白找 —— 网络断、限流、GitHub 500 都走这条。
+    return {
+      success: false,
+      name: skillName,
+      message: `Could not search the marketplaces for "${skillName}": ${err instanceof Error ? err.message : String(err)}`,
+    }
+  }
 
   if (!found) {
     return {

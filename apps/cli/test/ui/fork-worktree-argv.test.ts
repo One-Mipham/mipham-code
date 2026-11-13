@@ -16,7 +16,20 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 const h = vi.hoisted(() => ({
   execSync: vi.fn(),
   execFileSync: vi.fn(),
-  spawn: vi.fn(() => 'bg-1'),
+  spawn: vi.fn((_task: string, _kind: string, executor: (s: AbortSignal) => Promise<string>) => {
+    h.executor = executor
+    return 'bg-1'
+  }),
+  executor: null as null | ((s: AbortSignal) => Promise<string>),
+}))
+
+// 后台执行器里的子代理会真去调模型 —— 这一段只测「提交/推送」，换掉那一条支路。
+vi.mock('../../src/agent/sub-agent', () => ({
+  SubAgent: class {
+    async execute() {
+      return 'work done'
+    }
+  },
 }))
 
 // 展开真模块再覆盖两个同步执行器 —— commands.ts 的其它 import 仍要能拿到 spawn 等。
@@ -54,11 +67,47 @@ function mkForkCtx() {
     updateStatus: vi.fn(),
   }
   return {
-    engine: { getAgentViewManager: () => agentViewManager },
+    engine: {
+      getAgentViewManager: () => agentViewManager,
+      // 后台执行体会把父会话的消息带进子代理 —— 空历史即可。
+      getContext: () => ({ getMessages: () => [] }),
+      // SubAgent 已被 mock，它拿到的这几个依赖不参与本组断言。
+      getRegistry: () => undefined,
+      getTools: () => [],
+      getPermission: () => undefined,
+      getLlm: () => undefined,
+      getSubAgentServices: () => undefined,
+    },
     config: { providers: [] },
     providerId: 'test',
     modelId: 'test-model',
+    __agentViewManager: agentViewManager,
   } as unknown as Parameters<typeof handler>[0]
+}
+
+/**
+ * 让 `git status --porcelain` 返回指定内容，并可选地让 commit / push 失败。
+ * 其余 git 子命令（worktree add、add -A）成功返回。
+ */
+function stubGit(
+  statusOut: string,
+  opts: { commitFails?: boolean; pushFails?: boolean } = {},
+): void {
+  h.execFileSync.mockImplementation((...callArgs: unknown[]) => {
+    const argv = callArgs[1] as string[]
+    if (argv[0] === 'status') return statusOut
+    if (argv[0] === 'commit' && opts.commitFails) throw new Error('commit boom')
+    if (argv[0] === 'push' && opts.pushFails) throw new Error('remote rejected')
+    return undefined
+  })
+}
+
+/** 跑一次 /fork，返回后台执行体的最终摘要。 */
+async function runFork(task: string[]): Promise<string> {
+  h.executor = null
+  await handler(mkForkCtx(), task)
+  expect(h.executor, 'spawn 没有拿到后台执行体').not.toBeNull()
+  return h.executor!(new AbortController().signal)
 }
 
 /** 从 execFileSync 的调用里挑出 argv 以 `head` 打头的那一次。 */
@@ -114,5 +163,65 @@ describe('/fork 建 worktree 走 argv，不经 shell', () => {
         (c[0].includes('worktree remove') || c[0].includes('branch -D')),
     )
     expect(shellCleanup, 'cleanup 仍在用 shell 插值').toBeUndefined()
+  })
+})
+
+/**
+ * 跑完之后那一段（add / status / commit / push）同样不许经过 shell ——
+ * 它当时插值的是 **wtPath**（由 cwd 派生）和 **prompt**（用户敲的字），
+ * 比 worktree add 那一段更危险；而且它把所有失败都吞进 `catch {}`，
+ * 摘要一律写「Fork done」，于是「没提交」和「推失败」与成功长得一模一样。
+ */
+describe('/fork 完成后的提交/推送：argv + 如实报告', () => {
+  it('提交与推送走 execFileSync(argv)，cwd 是 worktree，且没有任何 shell 字符串含任务文本/路径', async () => {
+    stubGit(' M src/x.ts\n')
+    const task = ['Add', 'validation', '$(touch /tmp/pwned)']
+    const summary = await runFork(task)
+
+    const commit = callWithHead('commit', '-m')
+    expect(commit, 'commit 没有走 execFileSync(argv)').toBeDefined()
+    expect((commit![2] as Record<string, unknown>).cwd).toBeTruthy()
+
+    const push = callWithHead('push', 'origin')
+    expect(push, 'push 没有走 execFileSync(argv)').toBeDefined()
+    expect(push![1]).toEqual(['push', 'origin', expect.stringMatching(/^worktree\//)])
+
+    // 负锚：没有任何一次 shell 调用收到过拼好的 commit / push 字符串，
+    // 也没有任何 shell 字符串含用户文本或 worktree 路径。
+    const shellCommitPush = h.execSync.mock.calls.find(
+      (c) => typeof c[0] === 'string' && (c[0].includes('git commit') || c[0].includes('git push')),
+    )
+    expect(shellCommitPush, '提交/推送仍在用 shell 插值').toBeUndefined()
+    const shellWithTask = h.execSync.mock.calls.find(
+      (c) => typeof c[0] === 'string' && c[0].includes('touch /tmp/pwned'),
+    )
+    expect(shellWithTask, '用户任务文本进了 shell').toBeUndefined()
+
+    expect(summary).toContain('Committed and pushed')
+  })
+
+  it('工作树干净 ⇒ 明说「没有改动」，而不是含糊地报完成', async () => {
+    stubGit('')
+    const summary = await runFork(['noop'])
+    expect(summary).toContain('No changes to commit.')
+    expect(summary).not.toContain('Committed and pushed')
+    expect(callWithHead('commit', '-m'), '干净的工作树不该提交').toBeUndefined()
+  })
+
+  it('推送被拒 ⇒ 摘要如实说失败，并指出提交还留在本地', async () => {
+    stubGit(' M a.ts\n', { pushFails: true })
+    const summary = await runFork(['push', 'will', 'fail'])
+    expect(summary).toContain('**push failed**')
+    expect(summary).toContain('Committed locally')
+    expect(summary).toContain('push it yourself')
+    expect(summary).not.toContain('Committed and pushed')
+  })
+
+  it('提交本身失败 ⇒ 摘要如实说自动提交失败', async () => {
+    stubGit(' M a.ts\n', { commitFails: true })
+    const summary = await runFork(['commit', 'will', 'fail'])
+    expect(summary).toContain('**Auto-commit failed**')
+    expect(summary).toContain('Changes are uncommitted')
+    expect(summary).not.toContain('Committed and pushed')
   })
 })

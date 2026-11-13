@@ -287,3 +287,82 @@ describe('judge()', () => {
     expect(result.winner).toEqual(attempts[0]) // plan-a: 8+7=15 vs plan-b: 5+6=11
   })
 })
+
+/**
+ * A fan-out in which every call failed is not a verdict. `defaultThreshold`
+ * returns 0 for "no votes" — which is right for "all must agree" and for a
+ * majority of zero — so `0 >= 0` used to report `survives: true` for adversarial
+ * and consensus while `score` said 0. The caller could not tell a confirmed
+ * finding from one that nothing ever looked at.
+ */
+describe('verify() — every voter failed', () => {
+  const SCHEMA = {
+    type: 'object',
+    properties: { real: { type: 'boolean' }, reason: { type: 'string' } },
+    required: ['real', 'reason'],
+  }
+
+  it.each(['adversarial', 'perspective', 'consensus'] as const)(
+    'adversarial/perspective/consensus all-failed ⇒ not survives (%s)',
+    async (mode) => {
+      const { verify } = await import('../../src/workflow/primitives/verify')
+      const mockAgent = vi.fn().mockRejectedValue(new Error('agent down'))
+
+      const result = await verify(
+        { title: 'unverified' },
+        { mode, skeptics: 3, voters: 3, schema: SCHEMA, _mockAgent: mockAgent },
+      )
+
+      expect(result.votes).toHaveLength(0)
+      expect(result.score).toBe(0)
+      expect(result.survives, 'nothing confirmed it, so it is not confirmed').toBe(false)
+    },
+  )
+})
+
+describe('judge() — every judge failed', () => {
+  const SCHEMA = {
+    type: 'object',
+    properties: {
+      scores: { type: 'object', properties: { quality: { type: 'number' } } },
+      notes: { type: 'string' },
+    },
+  }
+
+  it('throws instead of naming attempt 0 the winner', async () => {
+    const { judge } = await import('../../src/workflow/primitives/verify')
+    const mockAgent = vi.fn().mockRejectedValue(new Error('agent down'))
+
+    await expect(
+      judge([{ name: 'a' }, { name: 'b' }], {
+        criteria: ['quality'],
+        judges: 2,
+        synthesize: false,
+        schema: SCHEMA,
+        _mockAgent: mockAgent,
+      }),
+    ).rejects.toThrow(/every judge call failed/)
+  })
+
+  it('（对照）one surviving judge is enough to produce a winner', async () => {
+    const { judge } = await import('../../src/workflow/primitives/verify')
+    const attempts = [{ name: 'a' }, { name: 'b' }]
+    const mockAgent = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('judge 1 down'))
+      .mockResolvedValueOnce({ scores: { quality: 2 }, notes: '' })
+      .mockRejectedValueOnce(new Error('judge 2 down'))
+      .mockResolvedValueOnce({ scores: { quality: 9 }, notes: '' })
+
+    const result = await judge(attempts, {
+      criteria: ['quality'],
+      judges: 2,
+      synthesize: false,
+      schema: SCHEMA,
+      _mockAgent: mockAgent,
+    })
+
+    expect(result.scores).toHaveLength(2)
+    expect(result.winner).toEqual(attempts[1])
+  })
+})

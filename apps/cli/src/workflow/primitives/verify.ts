@@ -164,7 +164,12 @@ export async function verify(finding: unknown, opts: VerifyOpts): Promise<Verify
 
   const threshold = opts.threshold ?? defaultThreshold(mode, votes.length)
   const realCount = votes.filter((v) => v.real).length
-  const survives = realCount >= threshold
+  // A fan-out in which every voter failed is not a verdict. `defaultThreshold`
+  // returns 0 when there are no votes — correct for "all must agree" and for a
+  // majority of zero — so `0 >= 0` reported **survives: true** for adversarial
+  // and consensus while `score` said 0. Nothing confirmed the finding, so it is
+  // not confirmed.
+  const survives = votes.length > 0 && realCount >= threshold
 
   return {
     finding,
@@ -239,6 +244,13 @@ export async function judge(attempts: unknown[], opts: JudgeOpts): Promise<Judge
         notes: String(obj.notes ?? ''),
       })
     }
+  }
+
+  // No judge produced a score ⇒ there is no winner. Falling through left
+  // `winnerIndex` at its initial 0 and handed back `attempts[0]` as "the
+  // winner" — a fabricated verdict for a round in which every judge failed.
+  if (scores.length === 0 && scorePrompts.length > 0) {
+    throw new Error('judge(): every judge call failed — no attempt could be scored')
   }
 
   // Compute winner: highest average total across judges

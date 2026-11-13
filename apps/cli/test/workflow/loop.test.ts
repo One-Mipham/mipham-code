@@ -160,3 +160,67 @@ describe('loopUntilConvergence()', () => {
     expect(result.totalSeen).toBe(2) // both were seen
   })
 })
+
+/**
+ * "Nothing new was found" and "nothing was searched for" are different facts.
+ * `parallel` turns every rejection into null, so a round of crashed finders
+ * looked like an empty round — two of those and the loop reported
+ * `converged: true` with nothing confirmed.
+ */
+describe('loopUntilConvergence() — every call failed', () => {
+  it('throws when every finder failed in a round', async () => {
+    const { loopUntilConvergence } = await import('../../src/workflow/primitives/loop')
+    const finder = vi.fn(async () => {
+      throw new Error('finder crashed')
+    })
+
+    await expect(
+      loopUntilConvergence({
+        finders: [finder, finder],
+        keyFn: (item: { id: string }) => item.id,
+        dryRounds: 2,
+        maxRounds: 10,
+      }),
+    ).rejects.toThrow(/every finder failed in round 1/)
+  })
+
+  it('throws when every verify call failed', async () => {
+    const { loopUntilConvergence } = await import('../../src/workflow/primitives/loop')
+    const finder = vi.fn(async () => ({ items: [{ id: 'a' }] }))
+    const verify = vi.fn(async () => {
+      throw new Error('verify crashed')
+    })
+
+    await expect(
+      loopUntilConvergence({
+        finders: [finder],
+        keyFn: (item: { id: string }) => item.id,
+        verify,
+        dryRounds: 2,
+        maxRounds: 10,
+      }),
+    ).rejects.toThrow(/every verify call failed in round 1/)
+  })
+
+  it('（对照）one surviving finder is still a normal round', async () => {
+    const { loopUntilConvergence } = await import('../../src/workflow/primitives/loop')
+    let round = 0
+    const good = vi.fn(async () => {
+      round++
+      return { items: round === 1 ? [{ id: 'a' }] : [] }
+    })
+    const bad = vi.fn(async () => {
+      throw new Error('finder crashed')
+    })
+
+    const result = await loopUntilConvergence({
+      finders: [good, bad],
+      keyFn: (item: { id: string }) => item.id,
+      dryRounds: 2,
+      maxRounds: 10,
+    })
+
+    expect(result.confirmed).toHaveLength(1)
+    expect(result.converged).toBe(true)
+  })
+})

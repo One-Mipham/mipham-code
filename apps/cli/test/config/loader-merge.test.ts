@@ -516,11 +516,19 @@ describe('loadConfig — .mcp.json keeps the full server shape', () => {
     rmSync(homedir(), { recursive: true, force: true })
     mkdirSync(MIPHAM_HOME, { recursive: true })
     mkdirSync(CWD, { recursive: true })
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
   })
 
   afterEach(() => {
     rmSync(homedir(), { recursive: true, force: true })
+    vi.restoreAllMocks()
   })
+
+  const allStderr = (): string =>
+    vi
+      .mocked(process.stderr.write)
+      .mock.calls.map((c) => String(c[0]))
+      .join('')
 
   it('carries request_timeout_ms and auth through from .mcp.json', () => {
     writeFileSync(
@@ -549,5 +557,25 @@ describe('loadConfig — .mcp.json keeps the full server shape', () => {
     expect(server?.request_timeout_ms).toBe(12345)
     expect(server?.auth?.clientId).toBe('mipham-cli')
     expect(server?.auth?.scopes).toEqual(['mcp'])
+  })
+
+  it('坏的 .mcp.json 不再被静默跳过 —— 告警里指名那个文件', () => {
+    writeFileSync(join(CWD, '.mcp.json'), '{ "mcpServers": { oops', 'utf-8')
+    const config = loadConfig(CWD)
+    expect(config.skills?.mcpServers ?? []).toEqual([])
+    expect(allStderr()).toContain('.mcp.json is not valid JSON and was skipped')
+  })
+
+  it('"mcpServers" 不是对象 ⇒ 告警并跳过，而不是按字符下标造出一堆服务器', () => {
+    writeFileSync(join(CWD, '.mcp.json'), JSON.stringify({ mcpServers: 'abc' }), 'utf-8')
+    const config = loadConfig(CWD)
+    expect(config.skills?.mcpServers ?? []).toEqual([])
+    expect(allStderr()).toContain('"mcpServers" must be an object')
+  })
+
+  it('缺文件仍然安静（首次运行不是错误）', () => {
+    const config = loadConfig(CWD)
+    expect(config.skills?.mcpServers ?? []).toEqual([])
+    expect(allStderr()).not.toContain('.mcp.json')
   })
 })
