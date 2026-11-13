@@ -89,26 +89,41 @@ export class ConstitutionLoader {
 
   /**
    * Load the constitution from disk.
-   * Falls back to the built-in DEFAULT_CONSTITUTION if no file exists.
+   * Falls back to the built-in DEFAULT_CONSTITUTION when the file is missing
+   * (and writes it out) or when an existing file cannot be read or validated
+   * (and leaves it untouched).
    */
   load(): MiphamConstitution {
     if (this.cached) return this.cached
 
-    try {
-      if (existsSync(this.path)) {
-        const raw = readFileSync(this.path, 'utf-8')
-        const parsed = this.parseYaml(raw)
+    // 文件在、但读不通或不合 schema：本次会话用内置默认原则，**但不动那个文件**。
+    // 覆盖它等于把用户手改的内容静默丢掉，而这个文件头正写着「改这里即可自定义」。
+    const fileExists = existsSync(this.path)
+    if (fileExists) {
+      try {
+        const parsed = this.parseYaml(readFileSync(this.path, 'utf-8'))
         if (this.validate(parsed)) {
           this.cached = parsed
           return parsed
         }
+        process.stderr.write(
+          `⚠ Mipham Code: ${this.path} does not match the guardrails schema ` +
+            '(every principle needs id, text and enforce) — using the built-in defaults this session\n' +
+            '    (the file was left as-is: fix it, or delete it to have it regenerated)\n',
+        )
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err)
+        process.stderr.write(
+          `⚠ Mipham Code: could not read ${this.path} (${reason}) — ` +
+            'using the built-in defaults this session\n',
+        )
       }
-    } catch {
-      // Fall through to default
     }
 
-    // Write the default constitution to disk for visibility
     this.cached = DEFAULT_CONSTITUTION
+    if (fileExists) return this.cached
+
+    // Only a missing file gets the default written out.
     try {
       const dir = miphamHome()
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
@@ -186,8 +201,13 @@ export class ConstitutionLoader {
       const trimmed = line.trim()
       if (!trimmed || trimmed.startsWith('#')) continue
 
-      // Top-level keys
-      if (!trimmed.startsWith('-') && !trimmed.startsWith('  ')) {
+      // 缩进只能从**原始行**读：`trimmed` 已经把缩进剥掉了，任何
+      // `trimmed.startsWith('  ')` 都是恒假 —— 从前就是这样，每个缩进字段
+      // 都掉进「顶层键」分支被丢掉，parse 出来的 principle 只剩 id。
+      const indented = line.startsWith(' ') || line.startsWith('\t')
+
+      // Top-level keys (no indentation, not a list item)
+      if (!indented && !trimmed.startsWith('-')) {
         const kv = trimmed.match(/^(\w[\w_]*):\s*(.*)$/)
         if (kv) {
           const key = kv[1]!
@@ -220,8 +240,8 @@ export class ConstitutionLoader {
       }
 
       // Indented fields of current principle
-      if (inPrinciples && trimmed.startsWith('  ') && currentPrinciple) {
-        const kv = trimmed.match(/^\s{2}(\w[\w_]*):\s*(.*)$/)
+      if (inPrinciples && indented && currentPrinciple) {
+        const kv = trimmed.match(/^(\w[\w_]*):\s*(.*)$/)
         if (kv) {
           const key = kv[1]!
           const val = kv[2]!.trim().replace(/^['"]|['"]$/g, '')

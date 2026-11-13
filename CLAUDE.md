@@ -28,9 +28,9 @@ prompt-exclude-header: true
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.62
-> **最后更新**: 2026-11-13 — **批次 2：把「没做成」逐处说出口（2.94.62）** —— 十一处，四种形状。① **失败被算成成功**：`workflow` 的 `judge()` 在**每一次**判分调用都失败时 `scores.length === 0`、`verify()` 因此 `survives = votes.length > 0 && …` 为假，而 `judge()` 自己什么都不抛 ⇒ 一次没判成的评审与一次「判了、没过」的评审同形；`loopUntilConvergence()` 把所有 finder 返回 `null` 当成「没有发现」⇒ 直接收敛。现各自抛出并点名「every … failed」。`/security` 的秘密扫描是 `grep` 管道，退出码 **1（无匹配）与其余非 0（扫描根本没跑成）同形** ⇒ 现在只有 1 算干净，其余印「**not** a clean result」并带上原因。marketplace 的 `!res.ok` 与 `data.tree ?? []` 同形 ⇒「这个源搜不到」与「这个源没答上来」同形；现在逐源收集失败，全部源都失败才抛，有一个源答「有」仍返回它。`/fork` 收尾的提交/推送改 argv（`execFileSync`），并把三态分开说（干净 / 已提交未推送 / 未提交）。② **约定只写在实现的一半里**：`.mcp.json` 解析失败、`mcpServers` 不是对象、单条目不是对象，此前一律静默跳过 —— 用户只看得到「服务器没连上」；现逐条走 `process.stderr.write`。`getProviderApiKey` 只读用户级 `config.yml`，而 `loadConfig` 是两级合并、**用户级胜** ⇒ 项目级单独配的 key 被当成「没配」；改成按同一顺序读两份。③ **广告的能力没有落点**：`/terminal-setup` 写进 `~/.mipham/shell-setup.sh` 的三样东西无一生效 —— `MIPHAM_HOME` / `MIPHAM_PROVIDER` 全仓库零读者（`miphamHome()` 只用 `homedir()`），那个 `alias mipham` 是 `cd $(pwd)` 加**每次启动静默 `npm install -g`**（错误全丢，而 `npm install -g` 没有原子换手）；文件改成只说清「shell 这边不需要导出任何东西」，重跑即覆盖，已装过的用户也能被修好。④ **同一状态两种拼写**：`EnterPlanMode` 从不调用 `setMode('plan')` 却宣告「Plan mode activated」（组织限制把请求压回 `default` 时也一样），`ExitPlanMode` 印「✓ Exiting plan mode」⇒ 现在切换后**回读** `getMode()`，没切成时说「was NOT applied」并给出实际档位；attach 模式下 `/switch` 与 Ctrl+P 都报「✓ Switched」而 `RemoteEngine.switchProvider` 是 no-op（页脚换、daemon 没换）⇒ 以新增的 `isRemote` 为唯一判据直接拒绝，且 `/switch` 的这道检查排在 provider / API-key 之前（attach 时本地那份配置不是判据）；`/cd` 只搬 `process.cwd()`，新目录的 settings.json 规则与 `.mipham/rules` 留在原处 ⇒ 现当场重放并换 `RulesLoader`，同时明说 config.yml `permissionRules` / hooks / 指令文件仍属原目录、attach 模式下策略归 daemon；重放按 `listRules()` 去重（`allow`/`deny` 是**追加**语义，不去重则每 `/cd` 一次数组就长一截）。测试 4,739 → **4,785**（355 → **360 文件**，0 失败）：新增 5 个测试文件，逐条负控只红对应用例、还原后 `shasum -c` 逐字相符。**查明但未改**：`needsApproval` / `isBypassed` 是 `check()` 的薄包装、生产路径走 `resolveApproval`（公共 API 的潜在分叉，无用户可见缺陷）；「权限规则住三个家」经复核已由 `stripProjectPermission` + `loadSettingsJson` + 每个启动一次告警覆盖，本笔不动。
-> **前一条（2.94.61）**: 2026-11-13 — **宪法条款真正落到工具调用上：一条被广告为「阻断凭据泄漏」的规则从未对任何工具生效（2.94.61）** —— 三种形状叠在同一条上：① **选择器读错了键** —— `no-credential-leak` 的能力面写在 `scope: "Write,Edit,Bash"`（逗号串），而 `getPrinciplesForTool` 只认 `scope === 'all-tools'` 与 `tools[]`，于是这条**没被任何工具选中**的条款既不红也不告警，它的邻居（两个键都写了）一直好好的；② **判据锚在错误的对象上** —— 参数以 `JSON.stringify` 送进正则，而正则按**源码写法**写（`['\"]`），JSON 里双引号是 `\"` ⇒ 最惯用的 `apiKey = "sk-…"` 恰恰唯一命不中（单引号反倒命中 —— 这正是它藏了这么久的机制）；③ **只认一种拼写** —— 正则要求引号，而 Bash 的 `API_KEY=…`、YAML 的 `apiKey: …` 都不用引号。修法：`getPrinciplesForTool` 补上逗号面（`splitScope`）；新增 `toolAuditSurface(params)` 以 `name=value` 逐字段渲染（字符串原样、键也参与匹配）换掉 `JSON.stringify`；`audit_pattern` 增加无引号分支 `(?=[\w-]*\d)[\w-]{16,}` —— 要求 16+ 字且含数字，故 `PASSWORD=correcthorsebattery9` 拦得住，而 `password = getPassword()` / `token = process.env.TOKEN` / `credential: SOME_CONSTANT_NAME_ABC` 不误伤（三条对照在用例里钉着）。测试 4,724 → **4,739**（354 → **355 文件**，0 失败）：新增 `test/core/constitution-loader.test.ts` 5 条（逗号面三工具进 / `Read` 出 / hook 相位面不误进），`toolAuditSurface` 3 条，四种拼法各拦 + 三条误伤对照；负控 —— 三处分别回退，对应 4 条用例转红，还原后 sha256 逐字相符。`tsc --noEmit` 0、根 `pnpm lint` 绿、`format:check` 绿。**另记一条查出但未修**：`~/.mipham/ai-guardrails.yml` 的读写对不上 —— 文件头写着「改这个文件即可自定义」，但 `parseYaml` 在 `trim()` 之后才判 `startsWith('  ')`，逐字段那一支永远进不去 ⇒ `validate()` 必失败、`load()` 恒回默认并覆写；实测把 `never-fabricate` 的正文改成标记后重载，正文变回默认、盘上标记也没了。
+> **版本**: 2.94.63
+> **最后更新**: 2026-11-13 — **`~/.mipham/ai-guardrails.yml` 的读写对不上：文件头写着「改这里即可自定义」，而用户一改就被默认值盖掉（2.94.63）** —— 两层叠在同一条上。① **判据锚在 trim 过的行上**：`parseYaml` 先 `trim()` 再问 `startsWith('  ')` —— trim 之后那个条件**恒为假**，于是每个缩进字段（`text` / `enforce` / `scope` / `tools` / `hook`）都掉进「顶层键」分支被丢掉，parse 出来的 principle 只剩 `id` ⇒ `validate()` 必失败。② **失败被算成成功，还顺手毁掉证据**：`load()` 在解析失败时落回 `DEFAULT_CONSTITUTION` 并**把默认值写回那个文件** —— 用户手改的内容静默消失，屏幕上也没有一个字的输出。修法：缩进改从**原始行**读（`line.startsWith(' ')`），字段分支拿 `trimmed` 匹配键；`load()` 只在**文件不存在**时写默认值，已有文件读不通或不合 schema 时**保留原文**并在 stderr 告警一次（走 `process.stderr.write` —— Vitest 会吃掉 `console.error`）。测试 4,785 → **4,788**（360 文件不变）：3 条新用例 —— 写盘→读回深比较，外加 `expect(back.principles).not.toBe(DEFAULT_CONSTITUTION.principles)` 的同 identity 判据（落回默认值时深比较恒绿，先前那条用例正是这样假绿的；这条才是「真解析了」的凭据）、用户手写条目生效且文件逐字未改、不合格文件保留原文并告警。负控两向：NC1 把缩进判据退回 `trimmed.startsWith('  ')` ⇒ 红 2 条（round-trip + 手写条目）；NC2 删掉 `if (fileExists) return` ⇒ 只红 1 条（不合格那条）；还原后 `shasum -a 256 -c` 逐字相符。**查明但未修**：`serializeToYaml` 把含 `"` 的 `audit_pattern`（`['"]`）原样塞进双引号标量 ⇒ 写出的文件不是合法 YAML（这枚逐行解析器读得回，任何 YAML 工具读不了）。
+> **前一条（2.94.62）**: 2026-11-13 — **批次 2：把「没做成」逐处说出口（2.94.62）** —— 十一处，四种形状。① **失败被算成成功**：`workflow` 的 `judge()` 在**每一次**判分调用都失败时 `scores.length === 0`、`verify()` 因此 `survives = votes.length > 0 && …` 为假，而 `judge()` 自己什么都不抛 ⇒ 一次没判成的评审与一次「判了、没过」的评审同形；`loopUntilConvergence()` 把所有 finder 返回 `null` 当成「没有发现」⇒ 直接收敛。现各自抛出并点名「every … failed」。`/security` 的秘密扫描是 `grep` 管道，退出码 **1（无匹配）与其余非 0（扫描根本没跑成）同形** ⇒ 现在只有 1 算干净，其余印「**not** a clean result」并带上原因。marketplace 的 `!res.ok` 与 `data.tree ?? []` 同形 ⇒「这个源搜不到」与「这个源没答上来」同形；现在逐源收集失败，全部源都失败才抛，有一个源答「有」仍返回它。`/fork` 收尾的提交/推送改 argv（`execFileSync`），并把三态分开说（干净 / 已提交未推送 / 未提交）。② **约定只写在实现的一半里**：`.mcp.json` 解析失败、`mcpServers` 不是对象、单条目不是对象，此前一律静默跳过 —— 用户只看得到「服务器没连上」；现逐条走 `process.stderr.write`。`getProviderApiKey` 只读用户级 `config.yml`，而 `loadConfig` 是两级合并、**用户级胜** ⇒ 项目级单独配的 key 被当成「没配」；改成按同一顺序读两份。③ **广告的能力没有落点**：`/terminal-setup` 写进 `~/.mipham/shell-setup.sh` 的三样东西无一生效 —— `MIPHAM_HOME` / `MIPHAM_PROVIDER` 全仓库零读者（`miphamHome()` 只用 `homedir()`），那个 `alias mipham` 是 `cd $(pwd)` 加**每次启动静默 `npm install -g`**（错误全丢，而 `npm install -g` 没有原子换手）；文件改成只说清「shell 这边不需要导出任何东西」，重跑即覆盖，已装过的用户也能被修好。④ **同一状态两种拼写**：`EnterPlanMode` 从不调用 `setMode('plan')` 却宣告「Plan mode activated」（组织限制把请求压回 `default` 时也一样），`ExitPlanMode` 印「✓ Exiting plan mode」⇒ 现在切换后**回读** `getMode()`，没切成时说「was NOT applied」并给出实际档位；attach 模式下 `/switch` 与 Ctrl+P 都报「✓ Switched」而 `RemoteEngine.switchProvider` 是 no-op（页脚换、daemon 没换）⇒ 以新增的 `isRemote` 为唯一判据直接拒绝，且 `/switch` 的这道检查排在 provider / API-key 之前（attach 时本地那份配置不是判据）；`/cd` 只搬 `process.cwd()`，新目录的 settings.json 规则与 `.mipham/rules` 留在原处 ⇒ 现当场重放并换 `RulesLoader`，同时明说 config.yml `permissionRules` / hooks / 指令文件仍属原目录、attach 模式下策略归 daemon；重放按 `listRules()` 去重（`allow`/`deny` 是**追加**语义，不去重则每 `/cd` 一次数组就长一截）。测试 4,739 → **4,785**（355 → **360 文件**，0 失败）：新增 5 个测试文件，逐条负控只红对应用例、还原后 `shasum -c` 逐字相符。**查明但未改**：`needsApproval` / `isBypassed` 是 `check()` 的薄包装、生产路径走 `resolveApproval`（公共 API 的潜在分叉，无用户可见缺陷）；「权限规则住三个家」经复核已由 `stripProjectPermission` + `loadSettingsJson` + 每个启动一次告警覆盖，本笔不动。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -69,7 +69,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：4,785 测试（本机 4,783 passed + 2 skipped，360 文件，0 失败）
+测试：4,788 测试（360 文件；确定性用例 4,778 passed + 2 skipped 全绿，e2e 8 条打真 API 的用例受本机联网抖动偶红）
 
 ---
 
@@ -106,7 +106,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 360 个测试文件，4785 个测试
+│   │   ├── test/               # 360 个测试文件，4788 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -132,7 +132,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（4785 个测试）
+pnpm test         # vitest run（4788 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -343,7 +343,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | integration     | 1       | 3        | 跨仓接线：`vscode-extension-telemetry`（VS Code 遥测关闭 ⇒ 终端拿到 `MIPHAM_TELEMETRY=off`）                                                                                |
 | integrity       | 19      | 132      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **360** | **4785** | **0 失败** ✅（本机 4,783 + 2 skipped，360 文件）                                                                                                                           |
+| **合计**        | **360** | **4788** | **0 失败** ✅（本机确定性 4,778 + 2 skipped；e2e 活 API 用例联网抖动）                                                                                                      |
 
 ### 测试注意事项
 
