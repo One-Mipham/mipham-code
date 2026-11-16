@@ -171,6 +171,16 @@ export class McpClient {
   private reconnecting = new Set<string>()
   /** Set by `closeAll` so a teardown is never undone by an in-flight reconnect. */
   private closing = false
+  /**
+   * Per-server teardown, same guarantee as `closing` but for one name.
+   *
+   * `disconnect()` deletes the connection, but a reconnect loop already asleep
+   * in its backoff holds the old config and would call `connect()` again on the
+   * next tick — the server comes back after the user (or a plugin reload)
+   * removed it. An explicit `connect()` clears the mark, so `/mcp connect` and
+   * a fresh plugin load still work.
+   */
+  private tornDown = new Set<string>()
 
   private get tokenStore(): TokenStore {
     if (!this._tokenStore) this._tokenStore = new TokenStore()
@@ -332,7 +342,7 @@ export class McpClient {
     const maxAttempts = 10
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      if (this.closing) return
+      if (this.closing || this.tornDown.has(name)) return
       try {
         try {
           await connection.transport.close()
@@ -380,7 +390,7 @@ export class McpClient {
    * unhandled rejection.
    */
   private scheduleAutoReconnect(name: string): void {
-    if (!this.autoReconnect || this.closing) return
+    if (!this.autoReconnect || this.closing || this.tornDown.has(name)) return
     if (this.reconnecting.has(name)) return
     this.reconnecting.add(name)
     void this.reconnect(name)
@@ -420,6 +430,12 @@ export class McpClient {
   }
 
   async connect(config: McpServerConfig): Promise<void> {
+    // An explicit attempt — startup, `/mcp connect`, a plugin load — is what
+    // makes a previously torn-down name eligible again. The reconnect loop's
+    // own checks happen per attempt, before this call, so clearing here does
+    // not undo a teardown that lands mid-backoff.
+    this.tornDown.delete(config.name)
+
     // Skip if already connected
     const existing = this.connections.get(config.name)
     if (existing?.status === 'connected') return
@@ -596,6 +612,10 @@ export class McpClient {
    * so the caller can unregister them from the central tool registry.
    */
   disconnect(name: string): string[] {
+    // Marked before the lookup: a server between reconnect attempts has no
+    // entry in `connections`, and that is exactly the state in which an
+    // unmarked teardown gets undone by the sleeping loop.
+    this.tornDown.add(name)
     const conn = this.connections.get(name)
     if (!conn) return []
 
