@@ -4,6 +4,27 @@
 > (tag dates) and use the same wording as the VS Code extension's changelog — the plugin is a
 > thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.34 (2026-11-16)
+
+- Version sync with Mipham Code CLI 0.85.34
+- Fixed: relative path permission rules now cover access through Bash too. `Read(./.env)`
+  matched an absolute `Read` but not the same file read via `cat .env`, where the extracted
+  path is relative. Deny/ask rules resolve relative paths against the session directory now;
+  the allow direction is unchanged.
+- Fixed: allow rules no longer run a different program through an embedded command.
+  `Bash(find:*)` no longer covers `find -exec rm`, `Bash(git:*)` no longer covers
+  `--upload-pack=` / `-c core.pager=`, and `Bash(awk:*)` no longer covers `system()`.
+- Fixed: sessions no longer lose their most recent turns when the process exits without a
+  clean shutdown. Session log events are appended as they happen instead of at exit only.
+- Fixed: a removed MCP server is no longer brought back by an in-flight reconnect that was
+  sleeping in its backoff window. Only an explicit connect makes it eligible again.
+- Fixed: a sub-agent answer cut off by the output limit is asked for once more, more
+  concisely; the partial marker remains only if the retry is cut off too.
+- Fixed: the plugin install receipt now says that plugins can run code with access to your
+  files and shell.
+- Fixed: control characters and line breaks in the working folder name no longer reach the
+  terminal frame in the user message header.
+
 ## 0.85.33 (2026-11-13)
 
 - Version sync with Mipham Code CLI 0.85.33
