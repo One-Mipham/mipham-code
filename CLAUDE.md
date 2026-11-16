@@ -28,9 +28,9 @@ prompt-exclude-header: true
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.64
-> **最后更新**: 2026-11-13 — **`serializeToYaml` 写出的那份 YAML 自己不是合法 YAML（2.94.64）** —— `audit_pattern` 原样塞进双引号标量，而它自己就含 `['"]` 与 `\s`：标量提前闭合、转义序列非法。这枚文件正是广告为「改这里即可自定义」的那份，用任何 YAML 工具打开都报错；只有我们家那枚逐行解析器读得回，所以 2.94.63 的写盘→读回用例全绿。修法：写侧一律 `JSON.stringify`（JSON 的双引号标量就是合法 YAML，`"` 与 `\` 都被转义），读侧新增 `parseScalar` —— 双引号值走 `JSON.parse`、失败退回去壳，故 2.94.63 及更早写下的旧文件仍然读得回来。同笔补上 `preamble`（愿力序言）：它从前只活在内存里的 `DEFAULT_CONSTITUTION` 上，盘上那份根本没有它，「读回来的宪法」与「内置的宪法」不是同一份。测试 4,788 → **4,791**（360 文件不变）：真 YAML 解析器（`yaml@2.9.1`，运行时依赖）判合法性、序言 round-trip、旧格式文件兼容。负控两向：NC1 把 `quoteYaml` 退回 `"${value}"` ⇒ 只红「合法 YAML」1 条；NC2 删 `preamble:` 那行 ⇒ 只红序言 1 条；还原后 `shasum -a 256 -c` 逐字相符。
-> **前一条（2.94.63）**: 2026-11-13 — **`~/.mipham/ai-guardrails.yml` 的读写对不上：文件头写着「改这里即可自定义」，而用户一改就被默认值盖掉（2.94.63）** —— 两层叠在同一条上。① **判据锚在 trim 过的行上**：`parseYaml` 先 `trim()` 再问 `startsWith('  ')` —— trim 之后那个条件**恒为假**，于是每个缩进字段（`text` / `enforce` / `scope` / `tools` / `hook`）都掉进「顶层键」分支被丢掉，parse 出来的 principle 只剩 `id` ⇒ `validate()` 必失败。② **失败被算成成功，还顺手毁掉证据**：`load()` 在解析失败时落回 `DEFAULT_CONSTITUTION` 并**把默认值写回那个文件** —— 用户手改的内容静默消失，屏幕上也没有一个字的输出。修法：缩进改从**原始行**读（`line.startsWith(' ')`），字段分支拿 `trimmed` 匹配键；`load()` 只在**文件不存在**时写默认值，已有文件读不通或不合 schema 时**保留原文**并在 stderr 告警一次（走 `process.stderr.write` —— Vitest 会吃掉 `console.error`）。测试 4,785 → **4,788**（360 文件不变）：3 条新用例 —— 写盘→读回深比较，外加 `expect(back.principles).not.toBe(DEFAULT_CONSTITUTION.principles)` 的同 identity 判据（落回默认值时深比较恒绿，先前那条用例正是这样假绿的；这条才是「真解析了」的凭据）、用户手写条目生效且文件逐字未改、不合格文件保留原文并告警。负控两向：NC1 把缩进判据退回 `trimmed.startsWith('  ')` ⇒ 红 2 条（round-trip + 手写条目）；NC2 删掉 `if (fileExists) return` ⇒ 只红 1 条（不合格那条）；还原后 `shasum -a 256 -c` 逐字相符。**查明但未修**：`serializeToYaml` 把含 `"` 的 `audit_pattern`（`['"]`）原样塞进双引号标量 ⇒ 写出的文件不是合法 YAML（这枚逐行解析器读得回，任何 YAML 工具读不了）。
+> **版本**: 2.94.65
+> **最后更新**: 2026-11-16 — **权限判据与耐用性的四处对不上（2.94.65）** —— ① **相对路径规则对一半路径从不生效**：`Read(./.env)` 命中绝对路径的 `Read`，却命不中同一文件经 Bash 的读取（`cat .env` 提取出的是相对路径），而两个方向都是「该拦的没拦」；`matchPathRule` 为 deny/ask 方向补一条锚在会话目录的路径拼写（allow 方向不动，那是授权的方向）。② **allow 规则只认外层词**：`Bash(find:*)` 放行 `find -exec rm`、`Bash(git:*)` 放行 `--upload-pack=` 与 `-c core.pager=`、`Bash(awk:*)` 放行 `system()` —— 规则命名的程序与实际跑的程序不是同一个；allow 方向现在拒绝这几类内嵌命令（名单是下限不是上限，deny/ask 的宽读不变）。③ **会话日志只在退出时落盘**：SIGKILL / 崩溃 / 关终端都不走那个退出分支，resume 时最近一两轮直接消失；`SessionLog.append` 改为即落盘（`save()` 只写增量），旧快照迁移相应改为先 `unlink` 再 append。④ **拆掉的 MCP 服务器被后台重连拉回**：`disconnect` 删掉连接后，正在退避睡眠的重连循环仍持有旧配置、下一轮照样 `connect()` ⇒ 插件卸载后 `/mcp` 又列出它；新增 `tornDown` 标记，只有显式 `connect()` 才清除。另三处：子代理被输出上限截断时再要一次「更简短地重答」（仍截断才保留 partial 标记）；插件安装回执明说插件可在本机跑代码、可访问文件与 shell；用户消息头的工作目录名先净化（换行/ESC 不再进终端帧）。测试 4,791 → **4,807**（360 → **361 文件**；4,805 passed + 2 skipped），16 条新用例都先红后绿；落盘改造后 6 个测试文件补 homedir 隔离，实测真实 `~/.mipham/sessions` 文件数 42 → 42 不变。
+> **前一条（2.94.64）**: 2026-11-13 — **`serializeToYaml` 写出的那份 YAML 自己不是合法 YAML（2.94.64）** —— `audit_pattern` 原样塞进双引号标量，而它自己就含 `['"]` 与 `\s`：标量提前闭合、转义序列非法。这枚文件正是广告为「改这里即可自定义」的那份，用任何 YAML 工具打开都报错；只有我们家那枚逐行解析器读得回，所以 2.94.63 的写盘→读回用例全绿。修法：写侧一律 `JSON.stringify`（JSON 的双引号标量就是合法 YAML，`"` 与 `\` 都被转义），读侧新增 `parseScalar` —— 双引号值走 `JSON.parse`、失败退回去壳，故 2.94.63 及更早写下的旧文件仍然读得回来。同笔补上 `preamble`（愿力序言）：它从前只活在内存里的 `DEFAULT_CONSTITUTION` 上，盘上那份根本没有它，「读回来的宪法」与「内置的宪法」不是同一份。测试 4,788 → **4,791**（360 文件不变）：真 YAML 解析器（`yaml@2.9.1`，运行时依赖）判合法性、序言 round-trip、旧格式文件兼容。负控两向：NC1 把 `quoteYaml` 退回 `"${value}"` ⇒ 只红「合法 YAML」1 条；NC2 删 `preamble:` 那行 ⇒ 只红序言 1 条；还原后 `shasum -a 256 -c` 逐字相符。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -69,7 +69,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：4,791 测试（本机 4,789 passed + 2 skipped，360 文件，0 失败）
+测试：4,807 测试（本机 4,805 passed + 2 skipped，361 文件，0 失败）
 
 ---
 
@@ -106,7 +106,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 360 个测试文件，4791 个测试
+│   │   ├── test/               # 361 个测试文件，4807 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -132,7 +132,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（4791 个测试）
+pnpm test         # vitest run（4807 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -322,28 +322,28 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 104     | 1846     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
+| core            | 104     | 1856     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
 | tools           | 32      | 617      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 38      | 265      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
-| ui              | 41      | 418      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
-| agent           | 16      | 164      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
+| ui              | 41      | 419      | commands / input / config-wizard / loop / skill-doctor / ctrl-c                                                                                                             |
+| agent           | 16      | 166      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
 | security        | 12      | 126      | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
 | providers       | 10      | 189      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
-| mcp             | 12      | 177      | client / transport / oauth / token-store / registry / instructions（含 2 skipped）                                                                                          |
+| mcp             | 12      | 179      | client / transport / oauth / token-store / registry / instructions（含 2 skipped）                                                                                          |
 | workflow        | 8       | 73       | runtime / loop / parallel / sandbox / journal / verify                                                                                                                      |
 | vajra           | 6       | 53       | context / events / service / compose / leaf（自建内核）                                                                                                                     |
 | shared          | 12      | 149      | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                              |
 | commands        | 13      | 118      | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers / provider-model-flags                                                                  |
 | skills          | 6       | 68       | sanitizer / marketplace / fork-executor / skill-assets                                                                                                                      |
 | config          | 11      | 136      | credential-crypto / loader-encryption / defaults / settings-json / preferences / model-context-window                                                                       |
-| plugin          | 4       | 65       | claude-plugin / plugin-manager                                                                                                                                              |
+| plugin          | 4       | 66       | claude-plugin / plugin-manager                                                                                                                                              |
 | artifacts       | 1       | 6        | manifest                                                                                                                                                                    |
 | agent-view      | 4       | 42       | agent-view-manager / dashboard-keys / session-view                                                                                                                          |
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integration     | 1       | 3        | 跨仓接线：`vscode-extension-telemetry`（VS Code 遥测关闭 ⇒ 终端拿到 `MIPHAM_TELEMETRY=off`）                                                                                |
 | integrity       | 19      | 132      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **360** | **4791** | **0 失败** ✅（本机 4,789 + 2 skipped，360 文件）                                                                                                                           |
+| **合计**        | **361** | **4807** | **0 失败** ✅（本机 4,805 + 2 skipped，361 文件）                                                                                                                           |
 
 ### 测试注意事项
 
