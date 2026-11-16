@@ -1188,6 +1188,98 @@ describe('allow 方向：pattern 与路径按同一套规则规范化（macOS /t
   })
 })
 
+describe('matchPathRule —— 相对路径规则按会话目录解析（325-064）', () => {
+  const cwd = process.cwd()
+
+  it('`Read(./.env)` 守住当前项目根下的 .env', () => {
+    expect(matchBashRule('Read(./.env)', 'Read', { file_path: join(cwd, '.env') }, 'any')).toBe(
+      true,
+    )
+  })
+
+  it('`Read(./src/**)` 守住当前项目的子路径', () => {
+    expect(
+      matchBashRule('Read(./src/**)', 'Read', { file_path: join(cwd, 'src/a.ts') }, 'any'),
+    ).toBe(true)
+  })
+
+  it('Bash 桥接：`cat .env` 也命中相对规则', () => {
+    expect(matchBashRule('Read(./.env)', 'Bash', { command: 'cat .env' }, 'any')).toBe(true)
+    expect(
+      matchBashRule('Read(./secrets/api.key)', 'Bash', { command: 'cat ./secrets/api.key' }, 'any'),
+    ).toBe(true)
+  })
+
+  it('正对照：无关文件不命中相对规则', () => {
+    expect(
+      matchBashRule('Read(./.env)', 'Read', { file_path: join(cwd, 'notes.txt') }, 'any'),
+    ).toBe(false)
+    expect(
+      matchBashRule('Read(./secrets/**)', 'Read', { file_path: join(cwd, 'src/a.ts') }, 'any'),
+    ).toBe(false)
+  })
+
+  it('basename 规则的既有语义不变：无分隔符仍按文件名到处命中', () => {
+    expect(matchBashRule('Read(.env)', 'Read', { file_path: '/elsewhere/.env' }, 'any')).toBe(true)
+  })
+})
+
+describe('matchBashRule —— allow 规则不能借内嵌命令跑别的程序（325-069/070）', () => {
+  it('正对照：规则命名的程序照常放行', () => {
+    expect(
+      matchBashRule('Bash(find:*)', 'Bash', { command: 'find . -name "*.ts" -print' }, 'all'),
+    ).toBe(true)
+    expect(matchBashRule('Bash(git:*)', 'Bash', { command: 'git log --oneline' }, 'all')).toBe(true)
+    expect(matchBashRule('Bash(awk:*)', 'Bash', { command: "awk '{print $1}' file" }, 'all')).toBe(
+      true,
+    )
+  })
+
+  it('find -exec 不得被 Bash(find:*) 放行', () => {
+    expect(
+      matchBashRule('Bash(find:*)', 'Bash', { command: 'find . -name x -exec rm -rf {} +' }, 'all'),
+    ).toBe(false)
+    expect(
+      matchBashRule(
+        'Bash(find:*)',
+        'Bash',
+        { command: 'find . -name x -execdir rm -rf {} \\;' },
+        'all',
+      ),
+    ).toBe(false)
+  })
+
+  it('git 的「跑一个程序」选项不得被 Bash(git:*) 放行', () => {
+    expect(
+      matchBashRule(
+        'Bash(git:*)',
+        'Bash',
+        { command: 'git fetch --upload-pack="rm -rf /tmp/x" origin' },
+        'all',
+      ),
+    ).toBe(false)
+    expect(
+      matchBashRule(
+        'Bash(git:*)',
+        'Bash',
+        { command: 'git -c core.pager="rm -rf /tmp/x" log' },
+        'all',
+      ),
+    ).toBe(false)
+  })
+
+  it('awk 的 system() 不得被 Bash(awk:*) 放行', () => {
+    expect(
+      matchBashRule(
+        'Bash(awk:*)',
+        'Bash',
+        { command: 'awk "BEGIN{system(\\"rm -rf /tmp/x\\")}"' },
+        'all',
+      ),
+    ).toBe(false)
+  })
+})
+
 describe('variableWildcardWarning —— 变量值里的 * 是「每个值」而不是「那一个」', () => {
   it('Bash(PORT=* …) 的 allow 规则给出警告', () => {
     const w = variableWildcardWarning('Bash(PORT=* npm run dev)')

@@ -926,8 +926,20 @@ function lexicallySpelled(p: string): string {
  * symlink on purpose, or on a leaf that does not exist yet.
  */
 function matchPathRule(path: string, pattern: string, segmentMode: 'any' | 'all'): boolean {
-  const literal = matchPath(path, pattern)
-  const landing = resolveLanding(path)
+  // The pattern side already gets a second, anchored spelling from
+  // `resolveLanding` below; the **path** side did not. A relative path reaches
+  // here from two places: a tool call the model spelled relatively, and — the
+  // case that was silently open — a Bash argument extracted by
+  // `extractBashFileAccess` (`cat .env` yields `.env`). A deny rule written as
+  // `Read(./.env)` therefore matched an absolute `Read` but missed the same
+  // file read through the shell. Under deny/ask an extra spelling can only
+  // *add* matches, so this direction stays fail-closed; the allow direction is
+  // deliberately left alone (a grant is the direction where a second spelling
+  // widens what runs).
+  const pathSpellings =
+    segmentMode === 'any' && !isAbsolutePath(path) ? [path, lexicallySpelled(path)] : [path]
+
+  const literal = pathSpellings.some((p) => matchPath(p, pattern))
   // The pattern canonicalised on the same axes as the path (`/tmp/**` →
   // `/private/tmp/**`). `expandHome` first: `matchPath` expands the pattern but
   // never the path, so a `~` pattern has to be absolute before it is resolved.
@@ -935,22 +947,30 @@ function matchPathRule(path: string, pattern: string, segmentMode: 'any' | 'all'
 
   if (segmentMode === 'all') {
     if (!literal) return false
+    const landing = resolveLanding(path)
     if (landing === lexicallySpelled(path)) return true
     return matchPath(landing, canon)
   }
 
   if (literal) return true
-  if (matchPath(landing, canon)) return true
-  try {
-    // The pre-existing check, kept verbatim so this direction stays a
-    // mechanical superset of what it used to match (it differs only for a path
-    // whose own name contains a glob character).
-    return matchPath(realpathSync(path), expandHome(pattern))
-  } catch {
-    // Nothing on disk to resolve (ENOENT, EACCES, a path the model invented) —
-    // there is no second spelling to try, and the literal already missed.
-    return false
+  for (const p of pathSpellings) {
+    if (matchPath(resolveLanding(p), canon)) return true
+    try {
+      // The pre-existing check, kept verbatim so this direction stays a
+      // mechanical superset of what it used to match (it differs only for a path
+      // whose own name contains a glob character).
+      if (matchPath(realpathSync(p), expandHome(pattern))) return true
+    } catch {
+      // Nothing on disk to resolve (ENOENT, EACCES, a path the model invented) —
+      // there is no second spelling to try, and the literal already missed.
+    }
   }
+  return false
+}
+
+/** Absolute in either spelling the tools accept (POSIX `/…` or Windows `C:\…`). */
+function isAbsolutePath(p: string): boolean {
+  return isAbsolute(p) || /^[A-Za-z]:[\\/]/.test(p)
 }
 
 /**
@@ -1056,6 +1076,13 @@ export function matchBashRule(
         )
         if (!boundary.test(seg)) return false
       }
+      // An allow rule names a program; these options make that program run a
+      // **different** one (`find -exec rm`, `git --upload-pack=…`,
+      // `awk system(…)`). Matching the outer word alone would hand over the
+      // inner command too, so the segment is not covered by the grant. This
+      // list is a floor, not a ceiling — every entry is a construct that
+      // executes a command the rule did not name.
+      if (segmentMode === 'all' && embedsForeignCommand(seg)) return false
       return wildcardMatch(subPattern!, seg)
     })
   }
@@ -1076,6 +1103,34 @@ export function matchBashRule(
   }
 
   return false
+}
+
+/**
+ * A command segment that runs a program other than the one an allow rule named.
+ *
+ * `Bash(find:*)` is a grant for `find`, not for whatever `-exec` names;
+ * `Bash(git:*)` is not a grant for `--upload-pack`'s payload. The inner command
+ * is never a separate shell segment, so the per-segment allow test sees only
+ * the outer word and passes it. Under deny/ask the wide reading stays — that
+ * direction is about not missing a match.
+ *
+ * Deliberately a short list of *demonstrated* forms rather than every
+ * exec-capable flag in Unix; widening it is safe (the failure mode is one extra
+ * prompt), but an entry that misfires on an ordinary argument would make allow
+ * rules unusable, so each pattern requires the option spelling, not a bare
+ * word.
+ */
+function embedsForeignCommand(segment: string): boolean {
+  return (
+    // find(1): -exec / -execdir / -ok / -okdir take a command.
+    /\s-(?:exec|execdir|ok|okdir)(?:\s|$)/.test(segment) ||
+    // git(1) / tar(1): options that name a program to run.
+    /--(?:upload-pack|receive-pack|exec-path|to-command|checkpoint-action)(?:=|\s)/.test(segment) ||
+    // git(1) `-c core.pager=…`-style config that ends in an executed command.
+    /\bcore\.(?:pager|sshcommand|editor)\s*=/i.test(segment) ||
+    // awk(1): system() runs a shell command.
+    /\bsystem\s*\(/.test(segment)
+  )
 }
 
 export function wildcardMatch(pattern: string, input: string): boolean {
