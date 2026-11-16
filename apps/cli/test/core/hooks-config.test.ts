@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { loadHookConfigs } from '../../src/core/hooks-config'
 
 describe('loadHookConfigs', () => {
@@ -84,5 +84,33 @@ describe('loadHookConfigs', () => {
       sessionId: 's',
     })
     expect(result.hookError).toBeDefined()
+  })
+
+  // `settings.json` 接受这两个事件，但生产代码里**没有任何派发点**（ROADMAP D18：
+  // `HookEngine.executeConfigChange` / `executePreInference` 在 `src/` + `bin/` 里零引用）。
+  // 注册进去的后果不是「静默不生效」那么轻：`/hooks` 遍历的是配置文件本身，于是用户看到
+  // 自己那条 hook 被列出来、计入 `hooks.found N`，读起来是「已安装」，实际一次都不会跑。
+  // 装载层只做了一半；另一半在 `ui/commands.ts` 的 `/hooks` —— 它读的是配置文件本身、
+  // 不读注册表，故必须用同一个集合给这些条目打标记并排除计数。这里先钉住「不注册 + 说出口」。
+  it('does not register events with no dispatch point, and says why', () => {
+    const write = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+    try {
+      const defs = loadHookConfigs({
+        ConfigChange: [{ matcher: '', hooks: [{ type: 'command' as const, command: 'audit.sh' }] }],
+        PreInference: [{ matcher: '', hooks: [{ type: 'command' as const, command: 'dlp.sh' }] }],
+        Stop: [
+          { matcher: '', hooks: [{ type: 'command' as const, command: 'require-tests-pass.sh' }] },
+        ],
+      })
+
+      // 只有可派发的那个被注册 —— 另外两个既不在返回里，也不会被 `/hooks` 数进去。
+      expect(defs.map((d) => d.event)).toEqual(['Stop'])
+
+      const warnings = write.mock.calls.map((c) => String(c[0])).join('')
+      expect(warnings).toContain('ConfigChange')
+      expect(warnings).toContain('PreInference')
+    } finally {
+      write.mockRestore()
+    }
   })
 })

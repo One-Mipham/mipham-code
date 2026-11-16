@@ -481,6 +481,7 @@
       "source_user": "用户级",
       "source_project": "项目级",
       "gated": "⚠️  工作区未受信任，不会运行",
+      "undispatched": "⚠️  本版本没有派发点，不会运行",
       "found": "找到 {count} 个钩子。",
       "error": "── 钩子 ──\n\n无法读取钩子目录。"
     },

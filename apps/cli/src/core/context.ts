@@ -176,9 +176,24 @@ export class ContextManager {
 
   private log?: SessionLog
 
+  /**
+   * 这份日志是不是**完整历史**（默认是；CLI 的 `--resume` 语义依赖它为真）。
+   *
+   * `false` 只有一个场景：daemon 的会话日志是**审计增量** —— 历史的真源在 SQLite，
+   * 日志只记本进程窗口内发生的事。此时「model-visible means logged」这条不变量
+   * **按构造不成立**（回灌的旧消息从来没进过日志），故运行时断言必须跟着关掉，
+   * 否则它会在每次 `addMessage` 上抛一条「有消息没被记录」的错，而那不是缺陷。
+   *
+   * 关掉的是**断言**，不是写通：新事件照常落盘。两者不要混为一谈 ——
+   * 断言的价值是「能发现漏记」，而在一个从不记录历史投影的日志上，
+   * 它对每一行历史都会报警，于是报警这件事本身失效。
+   */
+  private logAuthoritative = true
+
   /** 附加一个 append-only 会话日志；addMessage/seedMessages 将写通镜像到日志。 */
-  setLog(log?: SessionLog): void {
+  setLog(log?: SessionLog, opts?: { authoritative?: boolean }): void {
     this.log = log
+    this.logAuthoritative = opts?.authoritative ?? true
   }
 
   getLog(): SessionLog | undefined {
@@ -188,6 +203,8 @@ export class ContextManager {
   /** 从已持久化的日志恢复：设 log 为源，messages 为投影（不重复写通）。 */
   restoreLog(log: SessionLog): void {
     this.log = log
+    // 恢复出来的这份**就是完整历史**（`messages` 正是由它派生的），故断言重新生效。
+    this.logAuthoritative = true
     // 盘上那份历史可能以一条**没有结果**的调用收尾（写盘写到一半被打断，末尾那行半截
     // 结果被 `open()` 静默丢掉 —— 引擎自己的日志顺序到不了这个形状，见下面那个函数的
     // 注释）。挂着 `tool_calls` 却没有结果回应的请求会被 provider 整条拒收，用户看到的
@@ -320,7 +337,7 @@ export class ContextManager {
       for (const e of messageToEvents(msg, Date.now())) this.log.append(e)
     }
 
-    if (this.log && isAssertModelVisibleDebug()) {
+    if (this.log && this.logAuthoritative && isAssertModelVisibleDebug()) {
       assertModelVisible(this.log.events(), this.messages)
     }
 
@@ -345,7 +362,7 @@ export class ContextManager {
       this.log.append({ type: 'context/inject', at: Date.now(), source, text })
     }
 
-    if (this.log && isAssertModelVisibleDebug()) {
+    if (this.log && this.logAuthoritative && isAssertModelVisibleDebug()) {
       assertModelVisible(this.log.events(), this.messages)
     }
 
@@ -391,7 +408,7 @@ export class ContextManager {
     }
     this.recountMessageTokens()
 
-    if (this.log && isAssertModelVisibleDebug()) {
+    if (this.log && this.logAuthoritative && isAssertModelVisibleDebug()) {
       assertModelVisible(this.log.events(), this.messages)
     }
   }
@@ -655,7 +672,7 @@ export class ContextManager {
     // 之后对 `this.messages` 的原地修改回写进已入队的事件里。
     if (this.log) {
       this.log.append({ type: 'rewind', at: Date.now(), messages: structuredClone(this.messages) })
-      if (isAssertModelVisibleDebug()) {
+      if (this.logAuthoritative && isAssertModelVisibleDebug()) {
         assertModelVisible(this.log.events(), this.messages)
       }
     }

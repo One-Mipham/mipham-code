@@ -721,9 +721,50 @@ A 段给 `StreamChunk.isError` 选「恒设」的理由在这里**不成立**：
   （`index.tsx:586-592`）一模一样，**不是 T5 引入**；但本项让这条路径**远程可达**（渠道调用者
   驱动的会话同样过 skills + hooks 装配），故登记。它也是覆盖率里那条唯一未覆盖的语句
   （`engine-capabilities.ts`：语句 97.36%、分支/函数/行 100%）。
-- **有意排除、另立条目**：**daemon 至今没有任何系统提示** —— MIPHAM.md / CLAUDE.md / 记忆 /
-  skills reminder 一条都到不了 headless 会话。这是最大的洞，但 T5 原文没点名，且装配内联在
-  `index.tsx:485-557`，需要先抽出来复用。**记在这里，不静默漏。**
+- ✅ **已收口（2026-11-16）：daemon 现在有系统提示了。** 原文写「daemon 至今没有任何系统提示
+  —— MIPHAM.md / CLAUDE.md / 记忆 / skills reminder 一条都到不了 headless 会话。这是最大的洞」——
+  这一句当时是真的，现在不成立了，故**改写而不是留着**（一份说反话的活文档比没有文档更坏）。
+  **落点**：`daemon/engine-capabilities.ts` 新增 `loadInstructionsFor()` + 系统提示装配，
+  与 CLI 同源同序（`index.tsx:524` + `:605-771`），只少三样**会话脚手架** —— 首跑引导 /
+  密钥到期提醒 / 上一会话摘要（它们属于一次性的终端会话，而 daemon 一个进程服务多个会话）。
+  **指令装载器每会话新建、不记忆化**：按 cwd 共享会让「会话期间改过的 CLAUDE.md」对后来新建的
+  会话永远不可见 —— 与 D7 钉死的 `RulesLoader` 同一条理由。
+  **权限段读时派生**（`setPermissionContextSource` 接 live `getMode()`），因为 daemon 的档位会经
+  `set_mode` 在会话中途变，烘成拷贝会让模型拿着旧指令拒绝做它已被允许的事。
+  **覆盖到的路径**：飞书 / Telegram / 企微 / 钉钉渠道会话、`attach` 远端会话、基准 harness 会话。
+  **判据（红绿都实跑）**：`test/daemon/engine-capabilities.test.ts` 新增 **D19**（提示里含
+  MIPHAM.md / CLAUDE.md 标记与 skills 提醒，并带 `promptBefore === ''` 的**正对照**证明"空"确实
+  是接线前的真实状态）与 **D20**（切一次档、提示跟着变，钉住"不是组装时的拷贝"）。
+  负控两处**各自只红对应那一条**：抽掉 `setSystemPrompt` ⇒ 只 D19 红；把权限段烘成 `'default'`
+  常量 ⇒ 只 D20 红；还原后 sha256 逐字相符。编号从 **D19** 起：D8–D11 已被 0.85.6 那批占用。对等守卫的 `daemon:setInstructions` 豁免**已删除**
+  —— 接线了，豁免到期的机制按设计自动生效。
+- **原文（现状描述，已过期，逐字保留供核对）**：**daemon 会话至今没有会话日志**
+  （`ContextManager` 的全部写路径都被 `if (this.log)` 守着，而 `setLog` 全仓只有
+  `index.tsx:624` 一处调用）。T7 企业版的审计日志地基就在这里，故不能静默漏。
+  **已证伪一个原先担心的雷**：`compaction/rewrite` 是**快照替换**
+  （`session-log.ts:123-125`），所以给 daemon 的 context 挂 log **不会**截断 DB 回灌的历史。
+- ✅ **已收口（2026-11-16，裁定取 A：DB 为真源 + JSONL 只记本进程增量）**：daemon 会话现在写
+  审计日志，落在 **`~/.mipham/daemon-sessions/`**（与 CLI 的 `sessions/` **分开**是设计的一部分
+  —— 落进 `sessions/`，`SessionStore.list()` 会把它当成可恢复会话列出来，而它的历史不全 ⇒
+  又一个「看起来能恢复、恢复出来缺半截」的假广告；分目录后 `--resume` **结构上**够不到它）。
+  **落点**：`engine-capabilities.ts` 新增 `daemonSessionLogDir()` + `attachDaemonSessionLog()`，
+  `server.ts` 在 **DB 回灌之后**、紧跟 `wireDaemonEngine` 调用。
+  **两条不可颠倒/不可省的约束**：① 必须晚于回灌 —— 镜像历史会在引擎重建时**重复追加**
+  （`WorkerPool` 会驱逐空闲 worker），且把审计增量伪装成完整历史；② `authoritative: false` ——
+  「model-visible means logged」断言（`assertModelVisible` 是**子序列匹配**）只对完整日志成立，
+  残缺日志会对每一行旧历史报警，**调试断言开着时会把整个 daemon 会话炸掉**。为此
+  `ContextManager` 新增 `logAuthoritative`（默认 `true` ⇒ CLI 语义零变化），四处断言随之门控；
+  **关掉的是断言，写通照常**。`SessionLog` 同时支持独立目录（构造第二参，默认仍是 `sessions/`）。
+  **判据（红绿都实跑）**：`D21` —— 真落了文件（`session/start` + 本轮正文）、**没有**镜像
+  DB 已有的历史、且**不在** `sessions/` 里；`D22` —— 断言开着跑 daemon 任务不抛。
+  负控两处**各自只红对应那一条**：把目录改回 `sessions/` ⇒ 只 D21 红；把 `logAuthoritative`
+  恒置 `true` ⇒ 只 D22 红；还原后 sha256 逐字相符。
+  ⚠️ **诚实边界（不假装覆盖）**：「必须晚于回灌」这条是**调用点顺序**，单元测试观测不到
+  （`attachDaemonSessionLog` 本身从不读 `getMessages()`，所以它没做错什么）；它靠
+  `server.ts` 那处的注释与这条条目承载，**没有机器判据**。要机器判据得让
+  `test/daemon/server.test.ts` 开端口跑真回灌 —— 本批不做（精准修改）。
+  另如实记：日志里 `compaction/summary` 的 `replacedCount` 按**日志窗口**算，不是整段对话
+  （旧历史从没进过这份日志），读审计文件时要带这个限定。
 - **核实结论（原文「未核」项）**：凭据解密失败**不会**让 `config.skills` 半填 ——
   `decryptProviderApiKeys` 只碰 `providers`，且在 `skills` 装配完毕之后才跑。
 
@@ -1413,8 +1454,10 @@ agents 真解析、provider 回退仍活着）。
       把两句混成一句会造出一个更强因此更假的主张。
       **接它的去路**：要决定「settings.json 的任意命令 hook」与「把整段对话正文发往组织端点的 DLP 端点」
       如何共存（两条独立的前置闸，其中一条是数据出境面）；该组合未定。daemon 侧同一问题已作为
-      **deferred 非 designed-out** 记在 `test/integrity/daemon-capability-parity.test.ts:212`
-      （`daemon:setInferenceHookConfig`）。
+      **deferred 非 designed-out** 记在 `test/integrity/daemon-capability-parity.test.ts` 的
+      `daemon:setInferenceHookConfig` 条目里。**此处刻意不写行号** —— 豁免表每增删一条，其后
+      所有行号都会漂（本批删除 `daemon:setInstructions` 豁免时，原记的 `:212` 就当场变成了别的
+      条目）；条目名是稳定的，行号不是。
       **落点**：两条登记进 `test/integrity/unwired-disposition.test.ts` 的 `KEPT_UNWIRED_METHODS`，
       由既有的两向断言强制（符号必须存在 **且** 生产零引用；被接上即红 ⇒ 豁免自动到期）。
       **负控两次、逐条隔离、还原按 sha256 逐字核过**：① 往 `engine.ts` 追加一条**带词边界**的引用
@@ -1428,6 +1471,23 @@ agents 真解析、provider 回退仍活着）。
       那是**假红、不是回归**：先看是不是只出现在注释里，再决定撤不撤豁免；要更严就得改成解析调用表达式，
       本轮不做（精准修改）。
       **本轮只登记、不接线** —— 去路未定之前接上去等于替将来的人做一个他没参与的决策。
+      ✅ **假广告那半已收口（2026-11-16）**：接线没动（去路仍未定），但「被告知的东西与发生的
+      事分叉」这一半堵上了，落点**两处、共用一个集合**：① `hooks-config.ts` 的
+      `UNDISPATCHED_EVENTS` 让 `loadHookConfigs()` 在装载时跳过这两个事件并在 stderr 点名；
+      ② `ui/commands.ts` 的 `/hooks` 读的是**配置文件本身**、不读注册表，所以它必须单独按同一
+      集合处理 —— 条目**仍然列出**（藏起来只是换一种静默），但带「本版本没有派发点，不会运行」
+      标记，且**不计入** `hooks.found N`。**单靠 ① 不够**：那会把「列出来」与「会跑」留在分叉
+      状态，而分叉正是本条目开头描述的那个缺陷（首版就是这么写的，已订正）。
+      触发该修的直接理由：用户写一条 `hooks.ConfigChange` 会被正常列出、计入 `hooks.found N`，
+      读起来是「已安装」，实际一次都不会跑。
+      **判据**：`test/core/hooks-config.test.ts` 新增 1 条（只有可派发的 `Stop` 被注册；两个未派发
+      事件的**名字进 stderr**）；`test/ui/hooks-command.test.ts` 新增 1 条（未派发条目带标记、
+      不计入 `found`）；负控把 `UNDISPATCHED_EVENTS.has(eventName)` 换成 `false` ⇒ 两处各红
+      对应断言，还原后 sha256 逐字相符。
+      ⚠️ **这次踩到了本条目自己写下的那条反向边界**：我第一版把两个方法名逐字写进 `hooks-config.ts`
+      的注释里 ⇒ `unwired-disposition.test.ts` **当场打红**（`referencesOutside` 匹配文本出现而非
+      调用点）。**那不是回归，是假红**，按上面那段写的处置：改写注释、**不点名**，并在该注释里
+      留下「刻意不写方法名」的理由与指回本条目的指针 —— **守卫一行都没放宽**。
 
 ---
 

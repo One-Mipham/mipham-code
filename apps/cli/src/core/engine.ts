@@ -456,9 +456,9 @@ export class QueryEngine {
   /**
    * Register the instruction loader — the recall nudge's text source.
    *
-   * daemon 侧有意不接：daemon **从不设置系统提示**（`setSystemPrompt` 在 `daemon/`
-   * 下零调用点），因此那条路径上既没有常驻块、也没有指针 —— 接上去只会让扳机指向
-   * 一个该会话从未被告知过的文件。见守卫的 `daemon:setInstructions` 豁免条目。
+   * 两个入口都接（`index.tsx:848` / `daemon/engine-capabilities.ts`）：扳机只有在会话
+   * **已经被告知过**那份文件时才有意义，而 daemon 现在也会组装系统提示 —— 指针与常驻块
+   * 出自同一个 loader 实例，不存在「两边选了不同的文件」这种分叉。
    */
   setInstructions(loader: InstructionsLoader): void {
     this.instructionsLoader = loader

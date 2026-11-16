@@ -37,7 +37,7 @@ import { createDingtalkAdapter } from './dingtalk/adapter.js'
 import { createDingtalkApi } from './dingtalk/api.js'
 import type { DingtalkConfig } from './dingtalk/types.js'
 import { startHeartbeat } from './heartbeat'
-import { wireDaemonEngine } from './engine-capabilities'
+import { wireDaemonEngine, attachDaemonSessionLog } from './engine-capabilities'
 import {
   cancelAllSessionTimers,
   unregisterWakeupHandler,
@@ -293,6 +293,18 @@ export function createServer(config: ServerConfig): Server<WsData> {
       cwd,
       registry: sharedRegistry,
       skillsPaths: daemonConfig.skills?.paths,
+      skillsReminder: daemonConfig.skills?.reminder,
+    })
+
+    // 审计日志必须在上面那次 DB 回灌**之后**挂 —— 它只记本进程窗口内发生的事，
+    // 镜像历史会在引擎重建时重复追加（WorkerPool 会驱逐空闲 worker）。
+    // 见 `attachDaemonSessionLog` 的三条约束。
+    attachDaemonSessionLog(engine, {
+      sessionId,
+      cwd,
+      provider,
+      model,
+      permissionMode: permission.getMode(),
     })
     engineCache.set(sessionId, engine)
     return engine

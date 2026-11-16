@@ -18,7 +18,7 @@ export function getMemoryManager(): MemoryManagerType {
  * Load relevant memories for the current session and inject as
  * a system-reminder block. Called at SessionStart.
  */
-export function loadSessionMemories(context: string): string {
+export function loadSessionMemories(context: string, maxTokens?: number): string {
   const mm = getMemoryManager()
-  return mm.buildSystemReminder(context)
+  return mm.buildSystemReminder(context, maxTokens)
 }

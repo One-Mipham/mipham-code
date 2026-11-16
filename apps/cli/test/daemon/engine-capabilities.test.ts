@@ -26,10 +26,23 @@ vi.mock('node:os', async (importOriginal) => {
   }
 })
 
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { wireDaemonEngine } from '../../src/daemon/engine-capabilities'
+import {
+  attachDaemonSessionLog,
+  daemonSessionLogDir,
+  wireDaemonEngine,
+} from '../../src/daemon/engine-capabilities'
+import { setAssertModelVisibleDebug } from '../../src/core/session-log'
 import { getWorkspaceTrust, resetWorkspaceTrust } from '../../src/core/workspace-trust'
 import { QueryEngine } from '../../src/core/engine'
 import { ContextManager } from '../../src/core/context'
@@ -616,5 +629,136 @@ describe('wireDaemonEngine — behaviour', () => {
     const earlyText = conversationText(early)
     expect(earlyText).toContain('[Rule: first]')
     expect(earlyText).not.toContain('[Rule: second]')
+  })
+
+  // ── 系统提示（此前 daemon 一条都没有）────────────────────────────────
+  //
+  // 这条路径喂着经渠道（飞书 / Telegram / 企微 / 钉钉）、`attach` 远端与会话基准
+  // 驱动的会话。缺的**不是**「提示朴素一点」：集团 MIPHAM.md §〇 的身份声明是
+  // 强制性条款，而它在无头路径上从来没到过模型手里。
+  //
+  // 起点断言（`promptBefore === ''`）是这条用例的正对照：它证明「空」确实是接线前
+  // 的真实状态，而不是我用一个恰好也成立的 `toContain` 骗过自己。
+  it('D19: the system prompt carries the session’s instruction files and skills reminder', () => {
+    const cwd = makeWorkspace()
+    writeFileSync(join(cwd, 'MIPHAM.md'), '# 身份\n\nDAEMON-IDENTITY-MARKER\n')
+    writeFileSync(join(cwd, 'CLAUDE.md'), '# 规则\n\nDAEMON-PROJECT-RULE-MARKER\n')
+    const skillsPaths = [writeProbeSkill(cwd)]
+
+    const registry = scriptedRegistry([
+      async function* () {
+        yield { type: 'stop' }
+      },
+    ])
+    const engine = newEngine(registry)
+    const promptBefore = engine.getContext().getSystemPrompt()
+
+    wireDaemonEngine(engine, { cwd, registry, skillsPaths })
+
+    const prompt = engine.getContext().getSystemPrompt()
+    expect(promptBefore).toBe('')
+    expect(prompt).toContain('DAEMON-IDENTITY-MARKER')
+    expect(prompt).toContain('DAEMON-PROJECT-RULE-MARKER')
+    // 第三个块：skills 提醒。少了它，daemon 的 `Skill` 工具就成了模型不知道存在的东西。
+    expect(prompt).toContain('- probe: daemon wiring probe')
+    // `buildSystemPrompt()` 结尾没有换行，而提醒块以 `<system-reminder>` 开头 ——
+    // 直接相加会把标签粘在最后一句末尾（CLI 侧用 `\n\n` 连接）。钉住连接符。
+    expect(prompt).toContain('\n\n<system-reminder>')
+  })
+
+  // 权限段**读时派生**，不是组装时烘进提示的一份拷贝。daemon 的档位会经 `set_mode`
+  // 在会话中途变：烘进去的那份会让模型拿着旧指令去拒绝**它已被允许**做的事
+  // （往宽切尤其致命）—— 这条用「切一次档、提示跟着变」把它钉住。
+  it('D20: the permission block follows the live mode, not a copy taken at wiring time', () => {
+    const cwd = makeWorkspace()
+    const registry = scriptedRegistry([
+      async function* () {
+        yield { type: 'stop' }
+      },
+    ])
+    const engine = newEngine(registry)
+    wireDaemonEngine(engine, { cwd, registry })
+
+    const context = engine.getContext()
+    expect(context.getSystemPrompt()).toContain('You are in **default** mode.')
+
+    engine.getPermission().setMode('plan')
+    expect(context.getSystemPrompt()).toContain('You are in **plan** mode.')
+    expect(context.getSystemPrompt()).not.toContain('You are in **default** mode.')
+  })
+
+  // ── 会话日志（daemon 此前一条 JSONL 都不写）──────────────────────────
+  //
+  // 这条路径是 T7 企业版「审计日志导出」的地基。设计的要点不是「写一个文件」，而是
+  // **写的是哪一份**：daemon 的历史真源是 SQLite，日志只记本进程窗口内发生的事。
+  it('D21: writes an audit log, without mirroring the history the DB already holds', async () => {
+    const cwd = makeWorkspace()
+    const sessionId = '11111111-2222-3333-4444-555555555555'
+    const registry = scriptedRegistry([
+      async function* () {
+        yield { type: 'text', content: 'ACK' }
+        yield { type: 'stop' }
+      },
+    ])
+    const engine = newEngine(registry)
+    // 模拟 server.ts 的 DB 回灌：这条历史在**挂日志之前**就已经在 messages 里了。
+    engine.getContext().addMessage({ role: 'user', content: 'DB-HISTORY-MARKER' })
+
+    attachDaemonSessionLog(engine, {
+      sessionId,
+      cwd,
+      provider: 'test',
+      model: 'test-model',
+      permissionMode: 'default',
+    })
+    await drain(engine, 'AUDIT-TURN-MARKER')
+
+    const file = join(daemonSessionLogDir(), `daemon-${sessionId}.jsonl`)
+    expect(existsSync(file)).toBe(true)
+    const raw = readFileSync(file, 'utf-8')
+    expect(raw).toContain('session/start')
+    expect(raw).toContain('AUDIT-TURN-MARKER')
+    // 镜像历史有两个后果：引擎重建时重复追加（WorkerPool 会驱逐空闲 worker），
+    // 以及把审计增量伪装成完整历史。
+    expect(raw).not.toContain('DB-HISTORY-MARKER')
+    // 关键的一条：它**不在** CLI 的 sessions 目录里 ⇒ `--resume` 结构上够不到它。
+    // 否则用户会看到一个"能恢复、恢复出来缺半截"的会话。
+    expect(existsSync(join(homedir(), '.mipham', 'sessions', `daemon-${sessionId}.jsonl`))).toBe(
+      false,
+    )
+  })
+
+  // 「model-visible means logged」这条不变量只对**完整**日志成立。残缺日志会对每一行旧
+  // 历史报警 —— 调试断言开着时，那会把整个 daemon 会话炸掉。故它必须跟着 `authoritative`
+  // 一起关掉；**关掉的是断言，写通照常**（上一条 D10 就是写通的证据）。
+  it('D22: the runtime log assertion does not fire on the daemon’s partial log', async () => {
+    const cwd = makeWorkspace()
+    const sessionId = '99999999-8888-7777-6666-555555555555'
+    const registry = scriptedRegistry([
+      async function* () {
+        yield { type: 'text', content: 'ACK' }
+        yield { type: 'stop' }
+      },
+    ])
+    const engine = newEngine(registry)
+    engine.getContext().addMessage({ role: 'user', content: 'PRE-EXISTING-HISTORY' })
+    attachDaemonSessionLog(engine, {
+      sessionId,
+      cwd,
+      provider: 'test',
+      model: 'test-model',
+      permissionMode: 'default',
+    })
+
+    setAssertModelVisibleDebug(true)
+    try {
+      // 不抛就是这条用例的全部内容：dev 下开着断言跑 daemon 任务不该死。
+      await drain(engine, 'hello')
+    } finally {
+      // 模块级开关，漏撤会把后面所有测试的语义都改掉。
+      setAssertModelVisibleDebug(false)
+    }
+
+    expect(conversationText(engine)).toContain('PRE-EXISTING-HISTORY')
   })
 })

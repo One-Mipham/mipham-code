@@ -481,6 +481,7 @@
       "source_user": "user",
       "source_project": "project",
       "gated": "⚠️  workspace not trusted — will not run",
+      "undispatched": "⚠️  no dispatch point in this version — will not run",
       "found": "{count} hook(s) found.",
       "error": "── Hooks ──\n\nCould not read hooks directory."
     },

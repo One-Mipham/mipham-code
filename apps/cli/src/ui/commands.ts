@@ -19,6 +19,7 @@ import { McpClient } from '../mcp/client'
 import { registerMcpServerTools, unregisterMcpServerTools } from '../mcp/registry'
 import { buildCapabilityReport } from '../core/capability-inventory'
 import { InstructionsLoader } from '../core/instructions'
+import { UNDISPATCHED_EVENTS } from '../core/hooks-config'
 import { findDerivableSections, DERIVABLE_HINTS } from '../core/claude-md-audit'
 import { miphamHome, workflowScriptDir, workflowScriptDirs, worktreeRoot } from '../core/paths.ts'
 import { fixDoctor, fixConfig, fixCache, selectRepoClaudeFiles } from '../core/fix'
@@ -4257,13 +4258,23 @@ const hooksCmd: CommandHandler = async (ctx) => {
 
   let count = 0
   for (const [eventName, bucket] of byEvent) {
+    // These events have no dispatch point, so `loadHookConfigs` drops them. This
+    // listing reads the *config files*, not the engine's registry, so it has to
+    // apply the same verdict here — otherwise the entry looks installed and the
+    // count says it will run. Rendered, not hidden: the marker is the honest
+    // version of "we saw your hook and it will not fire". Excluded from `count`
+    // because `found N` must mean "these will run".
+    const undispatchable = UNDISPATCHED_EVENTS.has(eventName)
     for (const { entry, project } of bucket) {
       for (const hook of entry.hooks) {
-        count++
+        if (!undispatchable) count++
         const matcher = entry.matcher || '*'
         const cmd = hook.type === 'command' && hook.command ? hook.command : hook.type
         const source = t(project ? 'commands.hooks.source_project' : 'commands.hooks.source_user')
-        const suffix = project && gated ? `  ${t('commands.hooks.gated')}` : ''
+        const markers: string[] = []
+        if (project && gated) markers.push(t('commands.hooks.gated'))
+        if (undispatchable) markers.push(t('commands.hooks.undispatched'))
+        const suffix = markers.map((marker) => `  ${marker}`).join('')
         lines.push(`  [${source}] ${eventName} [${matcher}] → ${cmd}${suffix}`)
       }
     }

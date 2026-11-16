@@ -201,17 +201,6 @@ const EXEMPT: Record<string, Exemption> = {
       '唯一消费者是 TUI 的 slash 命令；daemon 自己的客户端桩 getAgentViewManager() 直接返回 undefined，接上也无人读',
     anchor: { file: 'src/daemon/remote-engine.ts', contains: 'getAgentViewManager(): undefined' },
   },
-  'daemon:setInstructions': {
-    reason:
-      '指令装载器是 CRSI「召回扳机」的文本来源，而扳机的前提是会话里**已经有一条指针**；daemon 从不设置系统提示（setSystemPrompt 在 daemon/ 下零调用点），那条路径上既无常驻块也无指针，接上只会让扳机指向一个该会话从未被告知过的文件',
-    anchor: {
-      file: 'src/index.tsx',
-      // 提示词现在经 `applySystemPrompt` 装配（启动时给一次、压缩后由重建器再给
-      // 一次），锚点落在**重建器**那一行：它才是「指令文件进系统提示」这件事在
-      // 本仓仍然成立的地方。
-      contains: 'return instructions.buildSystemPrompt() + extra',
-    },
-  },
   'daemon:setInferenceHookConfig': {
     reason:
       '待决策的数据出境面（deferred，非 designed-out）：PreInference DLP 会把整段对话正文发往组织端点，而 daemon 会话可被 feishu/telegram/wecom/dingtalk 的第三方调用者开启。要接应先定「daemon 会话是否允许出站」',

@@ -253,7 +253,15 @@ export class SessionLog {
   private buf: SessionEvent[] = []
   private flushed = 0
 
-  constructor(private name: string) {}
+  /**
+   * @param dir 落盘目录，**默认 `~/.mipham/sessions`**（CLI 的历史真源）。
+   *   daemon 传自己的目录：它的日志是**审计增量**而不是可恢复历史（真源是 SQLite），
+   *   落进 `sessions/` 会被 `--resume` 当成一个"历史不全"的会话列出来。
+   */
+  constructor(
+    private name: string,
+    private dir: string = LOG_DIR,
+  ) {}
 
   /**
    * Append one event — in memory *and* on disk.
@@ -279,8 +287,8 @@ export class SessionLog {
   save(): void {
     // Session logs contain full conversation + tool results (possibly credentials):
     // restrict to owner-only (dir 0700, file 0600).
-    mkdirSync(LOG_DIR, { recursive: true, mode: 0o700 })
-    const path = join(LOG_DIR, `${sanitizeSessionName(this.name)}.jsonl`)
+    mkdirSync(this.dir, { recursive: true, mode: 0o700 })
+    const path = join(this.dir, `${sanitizeSessionName(this.name)}.jsonl`)
 
     // A writer killed mid-append can leave a partial line with no trailing
     // newline. `open()` skips that line, but the next append would glue the new
@@ -309,9 +317,9 @@ export class SessionLog {
   }
 
   /** 从既有 JSONL 打开，逐行解析为事件（已落盘事件标记为已 flush）。 */
-  static open(name: string): SessionLog {
-    const log = new SessionLog(name)
-    const path = join(LOG_DIR, `${sanitizeSessionName(name)}.jsonl`)
+  static open(name: string, dir: string = LOG_DIR): SessionLog {
+    const log = new SessionLog(name, dir)
+    const path = join(dir, `${sanitizeSessionName(name)}.jsonl`)
     // 类型闸在读取之前：`SessionStore.load` 在快照读不出来时**回落到这里**，所以路径上
     // 是个 FIFO 时不能在这里换个函数继续等 —— 读不动就当空日志（见 shared/regular-file.ts）。
     let raw = readRegularFileSync(path)

@@ -106,3 +106,31 @@ describe('/hooks — project hooks are marked when the gate is shut', () => {
     expect(out).not.toContain('will not run')
   })
 })
+
+describe('/hooks — events with no dispatch point are marked, not counted', () => {
+  beforeEach(() => {
+    trusted = true
+    projectHooks = {}
+    userHooks = {
+      ConfigChange: [{ matcher: '', hooks: [{ type: 'command', command: 'audit.sh' }] }],
+      PreToolUse: [{ matcher: 'Edit', hooks: [{ type: 'command', command: 'u.sh' }] }],
+    }
+  })
+
+  it('renders the undispatchable entry with the reason and leaves it out of the count', async () => {
+    const out = await renderHooks()
+
+    // Shown, not hidden: the reader sees the hook they wrote and why it will not fire.
+    const dead = lineFor(out, 'audit.sh')
+    expect(dead).toContain('no dispatch point in this version')
+    expect(dead).toContain('will not run')
+
+    // `found N` must mean "these will run" — the dead one is not in the count.
+    expect(out).toContain('1 hook(s) found')
+  })
+
+  it('leaves dispatchable entries unmarked', async () => {
+    const out = await renderHooks()
+    expect(lineFor(out, 'u.sh')).not.toContain('no dispatch point')
+  })
+})
