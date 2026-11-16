@@ -273,6 +273,72 @@ describe('SubAgent', () => {
     expect(result).toContain('The answer is')
   })
 
+  it('last turn cut off: asks once for the whole answer, more briefly (325-085)', async () => {
+    const seen: ChatRequest[] = []
+    let call = 0
+    const llm: Llm = {
+      async *chat(req: ChatRequest): AsyncGenerator<StreamChunk> {
+        seen.push(req)
+        call++
+        if (call === 1) {
+          yield { type: 'text', content: 'The answer is' }
+          yield { type: 'stop', truncated: true }
+        } else {
+          yield { type: 'text', content: 'Done: the full answer.' }
+          yield { type: 'stop' }
+        }
+      },
+    }
+    const registry = createMockRegistry(createMockProvider([{ type: 'stop' }]))
+
+    const result = await new SubAgent(
+      registry,
+      TOOLS,
+      undefined,
+      undefined,
+      undefined,
+      llm,
+    ).execute('test', 'task', { type: 'general' })
+
+    expect(seen).toHaveLength(2)
+    // The cut-off text is handed back as the assistant's own turn, and the
+    // retry names the reason — otherwise the second request is a bare repeat.
+    const retryMessages = seen[1]!.messages
+    expect(
+      retryMessages.some(
+        (m) => m.role === 'assistant' && String(m.content).includes('The answer is'),
+      ),
+    ).toBe(true)
+    expect(
+      retryMessages.some(
+        (m) => m.role === 'user' && /cut off|output limit/i.test(String(m.content)),
+      ),
+    ).toBe(true)
+    expect(result).toBe('Done: the full answer.')
+  })
+
+  it('retry is cut off too: still marked partial, with the retry text (positive control)', async () => {
+    const llm: Llm = {
+      async *chat(): AsyncGenerator<StreamChunk> {
+        yield { type: 'text', content: 'partial ' }
+        yield { type: 'stop', truncated: true }
+      },
+    }
+    const registry = createMockRegistry(createMockProvider([{ type: 'stop' }]))
+
+    const result = await new SubAgent(
+      registry,
+      TOOLS,
+      undefined,
+      undefined,
+      undefined,
+      llm,
+    ).execute('test', 'task', { type: 'general' })
+
+    expect(result.startsWith('[partial result')).toBe(true)
+    expect(result).toContain('output limit')
+  })
+
   it('does not mark a normal finish (positive control)', async () => {
     const provider = createMockProvider([{ type: 'text', content: 'Done.' }, { type: 'stop' }])
     const registry = createMockRegistry(provider)

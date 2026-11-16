@@ -534,6 +534,8 @@ export class SubAgent {
     // Kept outside the loop because the answer the caller receives is the last
     // turn's text, so that is the turn whose completeness matters.
     let lastTurnTruncated = false
+    /** One extra request per run, only after a final answer hit the ceiling. */
+    let truncationRetryUsed = false
 
     try {
       for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
@@ -674,8 +676,36 @@ export class SubAgent {
         // that never finished, and the model never saw their results.
         if (streamError) break
 
-        // No tools used — we're done
-        if (toolUses.length === 0) break
+        // No tools used — we're done, unless the answer was cut off.
+        //
+        // A truncated turn looks finished: real text, a normal stop. Returning
+        // it means the caller gets a half-sentence as the verdict. One more
+        // request, telling the model exactly what happened, usually gets the
+        // whole answer back in fewer tokens than the first attempt spent. Only
+        // once: a model that hits the ceiling again has nothing better to give,
+        // and the marker below still says the result is partial. The partial
+        // text is handed back as the assistant's own turn so the retry can
+        // condense it rather than start from nothing.
+        if (toolUses.length === 0) {
+          if (turnTruncated && !truncationRetryUsed) {
+            truncationRetryUsed = true
+            // The retry replaces this text; keeping both would concatenate a
+            // half answer with the full one.
+            chunks.pop()
+            currentMessages = [
+              ...currentMessages,
+              { role: 'assistant' as const, content: turnText },
+              {
+                role: 'user' as const,
+                content:
+                  'Your previous answer was cut off by the output limit. ' +
+                  'Return the complete answer again, more concisely.',
+              },
+            ]
+            continue
+          }
+          break
+        }
 
         // Execute tools and build follow-up messages
         currentMessages = [
