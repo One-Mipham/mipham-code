@@ -16,6 +16,18 @@ import { miphamHome } from '../core/paths.ts'
 const PLUGIN_DIR = miphamHome('plugins')
 
 /**
+ * Shown with every successful install.
+ *
+ * A plugin is not a passive configuration file: its hooks, MCP servers and
+ * skills run as this user, with the same file and shell access. The install
+ * receipt is the last moment before that becomes true, and it is the only
+ * place the operator is guaranteed to look — a warning in documentation is
+ * read by people who already know.
+ */
+const PLUGIN_TRUST_NOTE =
+  'Plugins can run code on this computer, with access to your files and shell — install only from sources you trust.'
+
+/**
  * Render validation warnings for the install result.
  *
  * A warning the install message drops is a warning nobody reads, and the whole
@@ -95,6 +107,7 @@ export class PluginManager {
       success: true,
       message:
         `Plugin "${validation.manifest.name}" v${validation.manifest.version} installed` +
+        `\n${PLUGIN_TRUST_NOTE}` +
         (similarWarning ? `\n⚠ ${similarWarning}` : '') +
         warningsBlock(validation.warnings),
     }
@@ -226,6 +239,7 @@ export class PluginManager {
         success: true,
         message:
           `Plugin "${manifestName}" installed from npm` +
+          `\n${PLUGIN_TRUST_NOTE}` +
           (npmNote ? `\n${npmNote}` : '') +
           (similarWarning ? `\n⚠ ${similarWarning}` : '') +
           warningsBlock(validation.warnings),

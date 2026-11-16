@@ -75,6 +75,15 @@ describe('PluginManager', () => {
       expect(p.path).toContain('test-plugin')
     })
 
+    it('回执说明插件可在本机跑代码（325-089）', () => {
+      const source = createTempPlugin('runs-code')
+      const result = manager.install(source)
+
+      expect(result.success).toBe(true)
+      expect(result.message).toMatch(/run code/i)
+      expect(result.message).toMatch(/files|shell/i)
+    })
+
     it('should reject installing a plugin that is already installed', () => {
       const source = createTempPlugin('test-plugin')
       manager.install(source)
