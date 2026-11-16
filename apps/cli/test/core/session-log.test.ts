@@ -113,6 +113,17 @@ describe('SessionLog append-only', () => {
     expect(reopened.events()).toEqual(log.events())
   })
 
+  it('append 即落盘：非正常退出不丢最近回合（325-009）', () => {
+    const log = new SessionLog(name)
+    log.append({ type: 'session/start', at: 1, sessionId: name })
+    log.append({ type: 'user/message', at: 2, message: { role: 'user', content: 'survive' } })
+
+    // No `save()` call: the durability boundary is the append itself, because
+    // the exit-time save never runs when the process is killed.
+    const raw = readFileSync(join(LOG_DIR, `${name}.jsonl`), 'utf-8')
+    expect(raw).toContain('survive')
+  })
+
   it('save is idempotent — double save does not duplicate events', () => {
     const log = new SessionLog(name)
     log.append({ type: 'user/message', at: 1, message: { role: 'user', content: 'hi' } })

@@ -1,8 +1,18 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import type { Message, ContentBlock } from '@mipham/shared'
 import { ContextManager } from '../../src/core/context'
 import { PrefixCacheTracker } from '../../src/core/context-token'
 import { SessionLog, deriveMessages, setAssertModelVisibleDebug } from '../../src/core/session-log'
+
+// 会话日志在 `append` 时即落盘（325-009），所以这些用例必须把 home 隔离到临时目录，
+// 否则测试会往开发者真实的 `~/.mipham/sessions/` 里追加会话。
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>()
+  return {
+    ...actual,
+    homedir: () => `${actual.tmpdir()}/mipham-test-session-context`,
+  }
+})
 
 function makeContext(maxTokens = 200_000, compactionThreshold = 0.9) {
   return new ContextManager({ maxTokens, compactionThreshold })

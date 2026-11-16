@@ -255,8 +255,19 @@ export class SessionLog {
 
   constructor(private name: string) {}
 
+  /**
+   * Append one event — in memory *and* on disk.
+   *
+   * Persisting here rather than only at exit is the difference between "the
+   * last turn survived" and "it survived if the process happened to shut down
+   * cleanly". `save()` writes only the events added since the last call, so
+   * this is one line per event; the alternative — a save at exit — never runs
+   * under SIGKILL, a crash, or a closed terminal, and the resumed session then
+   * ends one or more turns early.
+   */
   append(event: SessionEvent): void {
     this.buf.push(event)
+    this.save()
   }
 
   /** 不可变快照（浅拷贝，事件本身视为不可变）。 */

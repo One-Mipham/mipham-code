@@ -15,10 +15,20 @@
  * 第 2 条才是要害：只改事件名而投影漂了，就是把一个信息问题换成一个正确性问题。
  */
 
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 
 import { ContextManager } from '../../src/core/context'
 import { SessionLog, deriveMessages, setAssertModelVisibleDebug } from '../../src/core/session-log'
+
+// 会话日志在 `append` 时即落盘（325-009），所以这些用例必须把 home 隔离到临时目录，
+// 否则测试会往开发者真实的 `~/.mipham/sessions/` 里追加会话。
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>()
+  return {
+    ...actual,
+    homedir: () => `${actual.tmpdir()}/mipham-test-session-context-inject`,
+  }
+})
 
 afterEach(() => {
   // 运行时断言门控是模块级全局 —— 关掉，别渗到别的测试文件的行为里

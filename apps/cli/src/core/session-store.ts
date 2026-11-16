@@ -147,7 +147,10 @@ export class SessionStore {
       if (raw === null) return SessionLog.open(name)
       const old = asStoredSnapshot(JSON.parse(raw))
       if (old) {
-        // 旧格式快照 → 迁移为事件日志（重写文件，避免后续 append 混格式）
+        // 旧格式快照 → 迁移为事件日志（重写文件，避免后续 append 混格式）。
+        // 旧文件必须在 append **之前**删掉：append 现在自己就落盘（325-009），
+        // 先 append 再 unlink 会把刚写好的事件日志一并删掉。
+        unlinkSync(path)
         const log = new SessionLog(name)
         log.append({
           type: 'session/start',
@@ -158,8 +161,6 @@ export class SessionStore {
           cwd: old.metadata.cwd,
         })
         for (const m of old.messages) for (const e of messageToEvents(m)) log.append(e)
-        unlinkSync(path)
-        log.save()
         return log
       }
     } catch {
