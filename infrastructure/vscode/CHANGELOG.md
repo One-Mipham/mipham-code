@@ -3,6 +3,21 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.35 (2026-11-16)
+
+- Version sync with Mipham Code CLI 0.85.35
+- Added: daemon / headless sessions now get a system prompt (instruction files, CRSI
+  lessons, memories, skills reminder; the permission block follows the live mode), so
+  sessions driven by chat channels, `mipham attach`, or benchmark harnesses no longer run
+  without the project's rules.
+- Added: daemon sessions now write an audit log under `~/.mipham/daemon-sessions/`,
+  separate from the CLI's resumable sessions (the database remains the source of truth).
+- Fixed: `/hooks` no longer presents hook events that have no dispatch point
+  (`ConfigChange` / `PreInference`) as installed; they are listed with a "will not run"
+  marker and excluded from the count.
+- Fixed: the daemon system prompt no longer glues the `<system-reminder>` block onto the
+  last sentence.
+
 ## 0.85.34 (2026-11-16)
 
 - Version sync with Mipham Code CLI 0.85.34
