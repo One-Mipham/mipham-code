@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.85.35] — 2026-11-16
+
+### Added
+
+- **daemon / headless 会话现在有系统提示** —— 在此之前，经飞书 / Telegram / 企业微信 / 钉钉、
+  `mipham attach` 远端以及基准 harness 驱动的会话，拿不到 MIPHAM.md 的身份段、CLAUDE.md 的
+  项目规则、记忆与 skills 提醒中的任何一条。现在与交互式 CLI 同源装配（只少首跑引导 /
+  密钥到期提醒 / 上一会话摘要三样会话脚手架），权限段读时派生，切档即生效。
+- **daemon 会话现在写审计日志** —— 落在 `~/.mipham/daemon-sessions/`，与 CLI 的
+  `~/.mipham/sessions/` 分开：daemon 的历史真源是 SQLite，日志只记本进程窗口内的增量，
+  不会被 `--resume` 当成一个「能恢复、恢复出来缺半截」的会话列出来。
+
+### Fixed
+
+- **`/hooks` 不再把没有派发点的事件说成「会跑」** —— `ConfigChange` / `PreInference` 两个
+  事件在 `settings.json` 里能写、也会被 `/hooks` 列出来，但代码里没有派发点。现在装载层
+  不注册并在 stderr 点名；`/hooks` 仍列出条目，但明确标注「本版本没有派发点，不会运行」，
+  且不再计入 `found N`。
+- **daemon 提示块的连接符** —— 指令段与 skills / 记忆提醒之间补上空行，`<system-reminder>`
+  不再粘在上一句末尾；压缩后的重建走同一个连接方式。
+
 ## [0.85.34] — 2026-11-16
 
 ### Fixed
