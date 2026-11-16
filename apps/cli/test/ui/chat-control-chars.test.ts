@@ -20,6 +20,9 @@
 import React from 'react'
 import { render } from 'ink-testing-library'
 import { describe, expect, it } from 'vitest'
+import { mkdirSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { ChatPanel, summarizeToolGroup } from '../../src/ui/chat'
 import type { ChatMessage } from '../../src/ui/app'
 import enUS from '../../src/i18n-core/locales/en-US.json'
@@ -298,5 +301,22 @@ describe('ChatPanel — 无输出的调用要有「未记录结果」行（323-0
     })
     expect(frame).toContain('file.txt')
     expect(frame).not.toContain('ui.tool.no_result_recorded')
+  })
+
+  it('工作目录名里的换行/ESC 不进终端帧（325-017）', () => {
+    const dir = join(tmpdir(), `mipham-cwd-${Date.now()}-a\nb${cp(0x1b)}[8m`)
+    mkdirSync(dir, { recursive: true })
+    const prev = process.cwd()
+    process.chdir(dir)
+    try {
+      const frame = frameOf({ role: 'user', content: 'hi' })
+      // The header is `▸ <cwd>:`. A newline in the folder name must not become
+      // a line break of its own, and a raw ESC must not reach the frame.
+      expect(frame).not.toContain('\x1b[8m')
+      expect(frame.split('\n').filter((l) => l.includes('▸')).length).toBe(1)
+    } finally {
+      process.chdir(prev)
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

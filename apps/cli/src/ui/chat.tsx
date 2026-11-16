@@ -68,10 +68,13 @@ function capRenderedLines(text: string): string {
 function displayCwd(): string {
   const cwd = process.cwd()
   const home = homedir()
-  if (home && cwd.startsWith(home)) {
-    return '~' + cwd.slice(home.length)
-  }
-  return cwd
+  const shown = home && cwd.startsWith(home) ? '~' + cwd.slice(home.length) : cwd
+  // A folder name can contain a newline or an escape sequence (they are just
+  // bytes on every filesystem this runs on). The header is one line and is
+  // written to the terminal verbatim, so the same inline strip the tool name
+  // gets applies here — otherwise the "header" can split into lines or carry a
+  // raw SGR the user cannot see.
+  return sanitizeInlineField(shown)
 }
 
 /** Map tool names to dot colors — Claude Code parity */
