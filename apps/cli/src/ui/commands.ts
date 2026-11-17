@@ -4280,7 +4280,7 @@ const cdCmd: CommandHandler = async (ctx, args) => {
   }
 }
 
-const hooksCmd: CommandHandler = async (ctx) => {
+const hooksListCmd: CommandHandler = async (ctx) => {
   const t = resolveT(ctx)
   const { loadSettingsJson } = await import('../config/loader')
   const cwd = process.cwd()
@@ -5151,7 +5151,7 @@ const workflowRunCmd = async (name: string): Promise<CommandResult> => {
   }
 }
 
-const workflowAutoCmd: CommandHandler = async (_ctx, args) => {
+const workflowTaskCmd: CommandHandler = async (_ctx, args) => {
   const task = args.join(' ').trim()
 
   if (!task) {
@@ -6178,6 +6178,7 @@ const commandsListCmd: CommandHandler = () => {
     '/plugin-enable': 'Plugins',
     '/plugin-disable': 'Plugins',
     '/commands': 'Tools & Skills',
+    '/crsi': 'Tools & Skills',
     '/crsi rules': 'Tools & Skills',
     '/crsi disable': 'Tools & Skills',
     '/crsi analyze': 'Tools & Skills',
@@ -6194,6 +6195,7 @@ const commandsListCmd: CommandHandler = () => {
     '/crsi interpret': 'Tools & Skills',
     '/crsi critique': 'Tools & Skills',
     '/crsi red-team': 'Tools & Skills',
+    '/sis': 'Tools & Skills',
     '/sis errors': 'Tools & Skills',
     '/sis stats': 'Tools & Skills',
     '/sis clear': 'Tools & Skills',
@@ -6280,6 +6282,54 @@ const commandsListCmd: CommandHandler = () => {
 
 const registry = new Map<string, CommandHandler>()
 
+/**
+ * Parents that read `args[0]` themselves instead of routing through
+ * `subcommandRouter`. Their multi-word entries (`/keys rotate`, `/resume last`)
+ * are aliases, so the reachability guard exempts them from the router marker.
+ */
+export const SELF_ROUTING_PARENTS: ReadonlySet<string> = new Set(['/keys', '/resume'])
+
+/** Handlers built by `subcommandRouter` — the reachability guard's marker. */
+const subcommandRouters = new WeakSet<CommandHandler>()
+
+/** True when `handler` was produced by `subcommandRouter`. */
+export function isSubcommandRouter(handler: CommandHandler | undefined): boolean {
+  return handler !== undefined && subcommandRouters.has(handler)
+}
+
+/**
+ * A handler whose job is to hand `args[0]` to the multi-word command registered
+ * under `parent` (`/crsi rules`, `/sis stats`, `/hooks health`).
+ *
+ * `parseSlashCommand` keeps only `parts[0]`, so a multi-word key without a parent
+ * is unreachable — the input renders nothing at all. When nothing resolves, the
+ * router falls back to `fallback` if one is given (bare `/hooks` lists hooks,
+ * bare `/workflow <task>` still forwards a task), otherwise it prints the
+ * subcommand list instead of staying silent.
+ */
+function subcommandRouter(parent: string, fallback?: CommandHandler): CommandHandler {
+  const handler: CommandHandler = async (ctx, args) => {
+    const sub = args[0]?.toLowerCase()
+    const routed = sub ? registry.get(`${parent} ${sub}`) : undefined
+    if (routed) return routed(ctx, args.slice(1))
+    if (fallback) return fallback(ctx, args)
+
+    const subs = getCommandNames()
+      .filter((name) => name.startsWith(`${parent} `))
+      .map((name) => name.slice(parent.length + 1))
+    return {
+      content: [
+        `Usage: ${parent} <subcommand> [...args]`,
+        '',
+        'Subcommands:',
+        ...subs.map((name) => `  ${name}`),
+      ].join('\n'),
+    }
+  }
+  subcommandRouters.add(handler)
+  return handler
+}
+
 // Session
 registry.set('/help', helpCmd)
 const pickCmd: CommandHandler = (ctx) => ({
@@ -6339,6 +6389,7 @@ registry.set('/remove-plugin', removePluginCmd)
 registry.set('/plugin-enable', pluginEnableCmd)
 registry.set('/plugin-disable', pluginDisableCmd)
 registry.set('/commands', commandsListCmd)
+registry.set('/crsi', subcommandRouter('/crsi'))
 registry.set('/crsi rules', crsiRulesCmd)
 registry.set('/crsi disable', crsiDisableCmd)
 registry.set('/crsi analyze', crsiAnalyzeCmd)
@@ -6356,6 +6407,7 @@ registry.set('/crsi meta', crsiMetaCmd)
 registry.set('/crsi interpret', crsiInterpretCmd)
 registry.set('/crsi critique', crsiCritiqueCmd)
 registry.set('/crsi red-team', crsiRedTeamCmd)
+registry.set('/sis', subcommandRouter('/sis'))
 registry.set('/sis errors', sisErrorsCmd)
 registry.set('/sis stats', sisStatsCmd)
 registry.set('/sis clear', sisClearCmd)
@@ -6373,7 +6425,7 @@ registry.set('/tasks', tasksCmd)
 registry.set('/diff', diffCmd)
 registry.set('/loop', loopCmd)
 registry.set('/no-plan', noPlanCmd)
-registry.set('/workflow', workflowAutoCmd)
+registry.set('/workflow', subcommandRouter('/workflow', workflowTaskCmd))
 registry.set('/workflows', workflowsCmd)
 registry.set('/workflow view', workflowViewCmd)
 registry.set('/workflow watch', workflowWatchCmd)
@@ -6450,7 +6502,7 @@ registry.set('/files', filesCmd)
 registry.set('/stats', statsCmd)
 registry.set('/summary', summaryCmd)
 registry.set('/cd', cdCmd)
-registry.set('/hooks', hooksCmd)
+registry.set('/hooks', subcommandRouter('/hooks', hooksListCmd))
 registry.set('/hooks health', hooksHealthCmd)
 registry.set('/hooks enable', hooksEnableCmd)
 registry.set('/telemetry', telemetryCmd)
@@ -6462,6 +6514,15 @@ registry.set('/batch', batchCmd)
 
 export function getCommand(name: string): CommandHandler | undefined {
   return registry.get(name)
+}
+
+/**
+ * What the UI shows when dispatch resolves nothing. Before this, an unknown
+ * slash command rendered **nothing** — the input was cleared and no message was
+ * pushed, which is indistinguishable from the CLI being broken.
+ */
+export function unknownCommandMessage(command: string): string {
+  return `Unknown command: ${command}\n\nType /help to see available commands, or /commands for the full list.`
 }
 
 export function getCommandNames(): string[] {
@@ -6572,6 +6633,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/remove-plugin': 'Remove an installed plugin',
   '/plugin-enable': 'Enable a disabled plugin',
   '/plugin-disable': 'Disable an enabled plugin',
+  '/crsi': 'CRSI subcommands — run /crsi for the list',
   '/crsi rules': 'List all active CRSI rules with their status',
   '/crsi disable': 'Disable a CRSI rule by ID',
   '/crsi analyze': 'Manually trigger CRSI pattern analysis across all agents',
@@ -6589,6 +6651,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/crsi interpret': 'Tool-call behavior dashboard — error patterns, usage, health',
   '/crsi critique': 'Enable/disable RLAIF self-critique on tool calls',
   '/crsi red-team': 'Run adversarial self-test — verify SIS blocks known attacks',
+  '/sis': 'SIS subcommands — run /sis for the list',
   '/sis errors': 'List all active SIS immune memory signatures',
   '/sis stats': 'Show SIS self-immune system aggregate statistics',
   '/sis clear': 'Retire an immune memory signature by ID',

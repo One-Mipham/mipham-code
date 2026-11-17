@@ -56,6 +56,7 @@ import {
   getCommand,
   looksLikeSlashCommand,
   parseSlashCommand,
+  unknownCommandMessage,
   handleSwitch,
   type CommandContext,
 } from './commands'
@@ -1217,6 +1218,16 @@ export function App({
         let forwardToAI: string | undefined
 
         const handler = getCommand(command)
+        if (!handler) {
+          // An unrecognised command used to fall through to `return` without
+          // pushing a message — the input vanished and nothing explained it.
+          setMessages((prev) => [
+            ...prev,
+            { role: 'user', content: input },
+            { role: 'system', content: unknownCommandMessage(command) },
+          ])
+          return
+        }
         if (handler) {
           const result = await handler(mkCtx(), args)
           forwardToAI = result.forwardToAI
