@@ -102,6 +102,15 @@ const defaultT = createT(enUS as unknown as TranslationMap, zhCN as unknown as T
 function resolveT(ctx: CommandContext): (key: string, params?: Record<string, string>) => string {
   return ctx.t && typeof ctx.t === 'function' ? ctx.t : defaultT
 }
+
+/**
+ * A remote attach session's state lives on the daemon. Commands that would
+ * report success after touching only a local no-op are refused here — the
+ * alternative is a confirmation for something that did not happen.
+ */
+function attachedRefusal(action: string, detail: string): string {
+  return `Cannot ${action}: this session is attached to a daemon. ${detail}`
+}
 import {
   initCmd,
   setupCmd,
@@ -341,6 +350,14 @@ const versionCmd: CommandHandler = (ctx) => {
 }
 
 const clearCmd: CommandHandler = (ctx) => {
+  if (ctx.engine.isRemote) {
+    return {
+      content: attachedRefusal(
+        'clear this conversation',
+        'The conversation lives on the daemon; clearing the local view would leave it untouched.',
+      ),
+    }
+  }
   ctx.engine.getContext().clear()
   // The task list outlives the process now, so "start over" has to say so
   // explicitly — otherwise the old plan comes back on resume and the panel keeps
@@ -357,6 +374,14 @@ const exitCmd: CommandHandler = () => ({ content: '', exit: true })
 // ═══════════════════════════════════════════════════════════════
 
 const compactCmd: CommandHandler = async (ctx) => {
+  if (ctx.engine.isRemote) {
+    return {
+      content: attachedRefusal(
+        'compact here',
+        'The conversation and its context live on the daemon, not in this terminal.',
+      ),
+    }
+  }
   const t = resolveT(ctx)
   const context = ctx.engine.getContext()
   const msgsBefore = context.getMessageCount()
@@ -388,6 +413,14 @@ const compactCmd: CommandHandler = async (ctx) => {
 }
 
 const contextCmd: CommandHandler = (ctx) => {
+  if (ctx.engine.isRemote) {
+    return {
+      content: attachedRefusal(
+        'show context usage here',
+        'The context window is held by the daemon session.',
+      ),
+    }
+  }
   const t = resolveT(ctx)
   const c = ctx.engine.getContext()
   const tokens = c.getEstimatedTokens()
@@ -2429,6 +2462,14 @@ const renameCmd: CommandHandler = (ctx, args) => {
 }
 
 const goalCmd: CommandHandler = (ctx, args) => {
+  if (ctx.engine.isRemote) {
+    return {
+      content: attachedRefusal(
+        'use /goal here',
+        'Goals are owned by the daemon session; setting one here would report success without taking effect.',
+      ),
+    }
+  }
   const t = resolveT(ctx)
   const input = args.join(' ')
 
@@ -3070,6 +3111,14 @@ const diffCmd: CommandHandler = async (_ctx) => {
 // ═══════════════════════════════════════════════════════════════
 
 const effortCmd: CommandHandler = (ctx, args) => {
+  if (ctx.engine.isRemote) {
+    return {
+      content: attachedRefusal(
+        'change effort here',
+        "The daemon chooses the attached session's reasoning effort.",
+      ),
+    }
+  }
   const t = resolveT(ctx)
   const VALID_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max']
   const level = args[0]?.toLowerCase()

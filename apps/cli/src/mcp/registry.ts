@@ -52,6 +52,30 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+function hasProperties(node: Record<string, unknown>): boolean {
+  return isPlainObject(node.properties) && Object.keys(node.properties).length > 0
+}
+
+/**
+ * A server may put the union at the root (`anyOf`/`oneOf`). Reading only
+ * `root.properties` made that tool reach the model with **no parameters at
+ * all** — callable, but every argument invisible. Follow the first branch that
+ * declares properties (nested unions included); keep the root when it declares
+ * properties itself, so a schema that has both is not rewritten.
+ */
+function schemaWithProperties(schema: unknown, depth = 0): Record<string, unknown> {
+  const node = isPlainObject(schema) ? schema : {}
+  if (hasProperties(node) || depth >= 8) return node
+  const branches = (
+    Array.isArray(node.anyOf) ? node.anyOf : Array.isArray(node.oneOf) ? node.oneOf : []
+  ).filter(isPlainObject)
+  for (const branch of branches) {
+    const resolved = schemaWithProperties(branch, depth + 1)
+    if (hasProperties(resolved)) return resolved
+  }
+  return branches[0] ?? node
+}
+
 /**
  * Coerce a server-declared `inputSchema` into a shape every provider accepts.
  *
@@ -61,12 +85,16 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * unusable — not just the one tool. Only the top level is repaired: property
  * schemas that are themselves objects are kept verbatim, so this narrows
  * malformed input without rewriting a server's intent.
+ *
+ * A root-level `anyOf`/`oneOf` is not malformed, but it is a shape no provider
+ * accepts as tool parameters — the first branch that declares properties is
+ * surfaced instead of dropping the tool's whole argument surface.
  */
 export function sanitizeInputSchema(schema: unknown): {
   properties: Record<string, unknown>
   required?: string[]
 } {
-  const root = isPlainObject(schema) ? schema : {}
+  const root = schemaWithProperties(schema)
   const rawProperties = isPlainObject(root.properties) ? root.properties : {}
   const properties: Record<string, unknown> = {}
   for (const [name, property] of Object.entries(rawProperties)) {

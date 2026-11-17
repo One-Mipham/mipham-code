@@ -106,6 +106,85 @@ function isOutsideWorktree(command: string, cwd: string): string | null {
  */
 const PROGRAM_EXECUTING_OPTIONS = ['--upload-pack', '--receive-pack', '--exec-path']
 
+/**
+ * `git filter-branch` options whose value is a shell command. `--subdirectory-filter`
+ * is deliberately absent: it names a directory, not a program.
+ */
+const FILTER_BRANCH_EXEC_OPTIONS = new Set([
+  '--setup',
+  '--env-filter',
+  '--tree-filter',
+  '--index-filter',
+  '--parent-filter',
+  '--msg-filter',
+  '--commit-filter',
+  '--tag-name-filter',
+])
+
+/** Options that consume the next argv token and take no value of interest here. */
+const GLOBAL_OPTIONS_WITH_VALUE = new Set([
+  '-c',
+  '--config',
+  '-C',
+  '--git-dir',
+  '--work-tree',
+  '--namespace',
+])
+
+/** Index of the git subcommand, skipping global options and their values. */
+function subcommandIndex(argv: string[]): number {
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]!
+    if (GLOBAL_OPTIONS_WITH_VALUE.has(arg)) {
+      i++
+      continue
+    }
+    if (arg.startsWith('-')) continue
+    return i
+  }
+  return -1
+}
+
+/**
+ * Subcommands whose *own* argument is a program for git to run:
+ * `bisect run <cmd>`, `submodule foreach <cmd>`, `rebase --exec <cmd>`,
+ * and `filter-branch`'s `--*-filter <cmd>` options. Like the option list above,
+ * these are code execution reached without the approval prompt Bash would have
+ * shown. `maintenance register` only takes a config file; `scalar` is not a git
+ * subcommand, so neither is listed.
+ */
+function findProgramExecutingSubcommand(argv: string[]): string | null {
+  const at = subcommandIndex(argv)
+  if (at === -1) return null
+  const sub = argv[at]!
+  const next = argv[at + 1]
+
+  if (sub === 'bisect' && next === 'run') {
+    return `bisect run ${argv[at + 2] ?? ''}`.trim()
+  }
+
+  if ((sub === 'submodule' || sub === 'submodule--helper') && next === 'foreach') {
+    return `${sub} foreach ${argv[at + 2] ?? ''}`.trim()
+  }
+
+  if (sub === 'rebase') {
+    for (const arg of argv.slice(at + 1)) {
+      // `-x` and `--exec` run a command; short flags may be combined (`-ix`).
+      if (arg === '--exec' || /^-[a-zA-Z]*x[a-zA-Z]*$/.test(arg)) return `rebase ${arg}`
+      if (arg.startsWith('--exec=')) return arg
+    }
+  }
+
+  if (sub === 'filter-branch') {
+    for (const arg of argv.slice(at + 1)) {
+      const name = arg.includes('=') ? arg.slice(0, arg.indexOf('=')) : arg
+      if (FILTER_BRANCH_EXEC_OPTIONS.has(name)) return `filter-branch ${arg}`
+    }
+  }
+
+  return null
+}
+
 /** Config keys whose value git runs as a program. */
 const PROGRAM_EXECUTING_CONFIG_KEY =
   /^(?:core\.(?:sshCommand|pager|askpass|editor)|alias\.|credential\.helper)/i
@@ -120,6 +199,9 @@ const PROGRAM_EXECUTING_CONFIG_KEY =
  * is what git actually gets, so it has no such gap.
  */
 export function findProgramExecutingArg(argv: string[]): string | null {
+  const subcommand = findProgramExecutingSubcommand(argv)
+  if (subcommand !== null) return subcommand
+
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!
 

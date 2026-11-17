@@ -340,6 +340,96 @@ describe('Git tool: program-executing options', () => {
 })
 
 // ============================================================
+// Git subcommands that execute a program
+// ============================================================
+//
+// The option list above names programs *around* a subcommand. These name one
+// *inside* it: `git bisect run <cmd>`, `git submodule foreach <cmd>`,
+// `git filter-branch --tree-filter <cmd>`, `git rebase --exec <cmd>`. Git runs
+// without an approval prompt, so each is code execution Bash would have asked
+// for. `git maintenance register` is not on this list — it only takes a config
+// file, and `git scalar` is not a git subcommand at all.
+
+describe('findProgramExecutingArg: subcommands that run a program', () => {
+  it('flags bisect run, submodule foreach and rebase exec', () => {
+    expect(findProgramExecutingArg(['bisect', 'run', '/tmp/x.sh'])).toContain('bisect run')
+    expect(findProgramExecutingArg(['submodule', 'foreach', 'rm -rf build'])).toContain(
+      'submodule foreach',
+    )
+    expect(findProgramExecutingArg(['submodule--helper', 'foreach', 'rm -rf build'])).toContain(
+      'submodule',
+    )
+    expect(findProgramExecutingArg(['rebase', '--exec', '/tmp/x.sh', 'main'])).toContain(
+      'rebase --exec',
+    )
+    expect(findProgramExecutingArg(['rebase', '-x', '/tmp/x.sh', 'main'])).toContain('rebase')
+    // Short flags combine: `-ix <cmd>` is `-i -x <cmd>`.
+    expect(findProgramExecutingArg(['rebase', '-ix', '/tmp/x.sh', 'main'])).toContain('rebase')
+  })
+
+  it('flags every filter-branch filter that runs a command', () => {
+    for (const opt of [
+      '--setup',
+      '--env-filter',
+      '--tree-filter',
+      '--index-filter',
+      '--parent-filter',
+      '--msg-filter',
+      '--commit-filter',
+      '--tag-name-filter',
+    ]) {
+      expect(
+        findProgramExecutingArg(['filter-branch', opt, '/tmp/x.sh']),
+        `expected ${opt} to be flagged`,
+      ).toContain('filter-branch')
+    }
+  })
+
+  it('leaves the non-executing forms alone', () => {
+    expect(findProgramExecutingArg(['bisect', 'start'])).toBeNull()
+    expect(findProgramExecutingArg(['bisect', 'reset', 'HEAD'])).toBeNull()
+    expect(findProgramExecutingArg(['submodule', 'status'])).toBeNull()
+    expect(findProgramExecutingArg(['rebase', '--onto', 'main', 'old', 'topic'])).toBeNull()
+    // `--subdirectory-filter` names a directory, not a command.
+    expect(findProgramExecutingArg(['filter-branch', '--subdirectory-filter', 'dir'])).toBeNull()
+    // An ordinary subcommand whose name merely starts with a flagged one.
+    expect(findProgramExecutingArg(['rebase--helper', 'x'])).toBeNull()
+  })
+})
+
+describe('Git tool: subcommands that run a program', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('blocks them before spawning git', async () => {
+    const spawn = vi.spyOn(Bun, 'spawn')
+    const blocked = [
+      'bisect run /tmp/x.sh',
+      'submodule foreach rm -rf build',
+      'filter-branch --tree-filter /tmp/x.sh HEAD~3..HEAD',
+      'rebase --exec /tmp/x.sh main',
+    ]
+    for (const cmd of blocked) {
+      const result = await gitTool.execute({ command: cmd }, ctx)
+      expect(result.success, `expected "${cmd}" to be blocked`).toBe(false)
+      expect(result.error).toContain('makes git run an arbitrary program')
+    }
+    expect(spawn).not.toHaveBeenCalled()
+  })
+
+  it('still runs the harmless forms of the same subcommands', async () => {
+    vi.spyOn(Bun, 'spawn').mockImplementation(
+      () => createMockProc('ok') as unknown as ReturnType<typeof Bun.spawn>,
+    )
+    for (const cmd of ['bisect start', 'submodule status', 'rebase --abort']) {
+      const result = await gitTool.execute({ command: cmd }, ctx)
+      expect(result.success, `expected "${cmd}" to run`).toBe(true)
+    }
+  })
+})
+
+// ============================================================
 // splitCommand — shell-quoting-aware argv tokenizer
 // ============================================================
 

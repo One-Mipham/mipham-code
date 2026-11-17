@@ -90,6 +90,66 @@ describe('mcp/registry', () => {
       expect(tool.parameters.required).toBeUndefined()
     })
 
+    // A server may declare the union at the root. `sanitizeInputSchema` only
+    // read `root.properties`, so the tool reached the model with **no
+    // parameters at all** — callable, but its arguments were invisible. Keep
+    // the first branch (what the server listed first) rather than dropping
+    // every branch.
+    it('surfaces the first branch of a root anyOf', () => {
+      const tool = convertMcpTool('srv', {
+        name: 't',
+        inputSchema: {
+          anyOf: [
+            { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] },
+            { type: 'object', properties: { url: { type: 'string' } } },
+          ],
+        } as unknown as McpToolDefinition['inputSchema'],
+      })
+
+      expect(tool.parameters.properties).toEqual({ path: { type: 'string' } })
+      expect(tool.parameters.required).toEqual(['path'])
+    })
+
+    it('surfaces the first branch of a root oneOf', () => {
+      const tool = convertMcpTool('srv', {
+        name: 't',
+        inputSchema: {
+          oneOf: [{ type: 'object', properties: { c: { type: 'string' } } }],
+        } as unknown as McpToolDefinition['inputSchema'],
+      })
+
+      expect(tool.parameters.properties).toEqual({ c: { type: 'string' } })
+    })
+
+    it('follows a nested union to the first branch that declares properties', () => {
+      const tool = convertMcpTool('srv', {
+        name: 't',
+        inputSchema: {
+          anyOf: [
+            { type: 'object' },
+            { anyOf: [{ type: 'object', properties: { deep: { type: 'number' } } }] },
+          ],
+        } as unknown as McpToolDefinition['inputSchema'],
+      })
+
+      expect(tool.parameters.properties).toEqual({ deep: { type: 'number' } })
+    })
+
+    // The counterweight: a fix that simply read every union's first branch
+    // must not disturb a schema that has properties at the root.
+    it('keeps root properties when both root properties and a union are present', () => {
+      const tool = convertMcpTool('srv', {
+        name: 't',
+        inputSchema: {
+          type: 'object',
+          properties: { root: { type: 'string' } },
+          anyOf: [{ type: 'object', properties: { branch: { type: 'string' } } }],
+        } as unknown as McpToolDefinition['inputSchema'],
+      })
+
+      expect(tool.parameters.properties).toEqual({ root: { type: 'string' } })
+    })
+
     // A server's `inputSchema` is declared, not validated: it crosses a process
     // boundary and is sent to the provider with every turn. Dropping the bad
     // parts here keeps one malformed tool from rejecting the whole request.
