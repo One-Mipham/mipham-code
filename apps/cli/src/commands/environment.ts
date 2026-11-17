@@ -5,7 +5,7 @@
  * Handlers for: /release-notes, /ide, /terminal-setup
  */
 import type { CommandHandler } from '../ui/commands.js'
-import { NPM_INSTALL_COMMAND } from '../shared/index.ts'
+import { NPM_INSTALL_COMMAND, PACKAGE_VERSION } from '../shared/index.ts'
 import { miphamHome } from '../core/paths.ts'
 
 export { releaseNotesCmd, ideCmd, terminalSetupCmd }
@@ -25,32 +25,13 @@ export { releaseNotesCmd, ideCmd, terminalSetupCmd }
 const releaseNotesCmd: CommandHandler = () => ({
   content: `── Release Notes ──
 
-v0.1.2 (2026-06-09) — Current
-  • 48 slash commands (up from 20)
-  • /setup guided project initialization wizard
-  • Checkpoint/rewind mechanism
-  • Focus mode (last exchange view)
-  • 3-level MIPHAM.md architecture
-  • /doctor system diagnostics
-  • /export conversation to file
-  • /review and /pr-comments code review workflows
-  • /memory management
-  • /upgrade instructions
-  • Clipboard support (macOS/Windows)
+Current: Mipham Code v${PACKAGE_VERSION}
 
-v0.1.1 (2026-06-02)
-  • Inline shared module for standalone builds
-  • Bin path fix for npm compatibility
+This build does not embed the full changelog. See:
+  • /changelog                       recent release tags in this clone
+  • https://mipham.ai/code/releases  full release notes
 
-v0.1.0 (2026-06-01)
-  • Initial release
-  • Multi-model support (7 providers)
-  • 16 built-in tools
-  • 11 skills (9 standard + 2 mipham)
-  • Ctrl+P interactive model picker
-  • SSE streaming support
-
-Full changelog: https://mipham.ai/code/releases`,
+Install / upgrade: ${NPM_INSTALL_COMMAND}`,
 })
 
 // ═══════════════════════════════════════════════════════════════
@@ -80,23 +61,46 @@ const ideCmd: CommandHandler = async (_ctx) => {
     // Use default
   }
 
+  // Write helpers that MERGE instead of clobbering. These are the user's editor
+  // settings: overwriting the file to add one profile destroys every other key
+  // (and `keybindings.json` is commonly JSONC, so an unparseable file must be
+  // left alone rather than replaced).
+  const { readRegularFileSync } = await import('../shared/regular-file')
+  const readJson = (path: string): unknown => {
+    const raw = readRegularFileSync(path)
+    if (raw === null) return undefined
+    try {
+      return JSON.parse(raw)
+    } catch {
+      return undefined // JSONC / hand-edited — refuse to rewrite
+    }
+  }
+  const isObject = (v: unknown): v is Record<string, unknown> =>
+    v !== null && typeof v === 'object' && !Array.isArray(v)
+
   // ── settings.json: terminal profile ──
   const settingsPath = join(vscodeDir, 'settings.json')
-  const settings = {
-    'terminal.integrated.profiles.osx': {
-      mipham: {
-        path: bunPath,
-        args: ['run', 'mipham'],
-        cwd: '${workspaceFolder}',
-      },
-    },
+  const existingSettings = readJson(settingsPath)
+  const settings: Record<string, unknown> = isObject(existingSettings) ? existingSettings : {}
+  const profiles = isObject(settings['terminal.integrated.profiles.osx'])
+    ? (settings['terminal.integrated.profiles.osx'] as Record<string, unknown>)
+    : {}
+  profiles.mipham = {
+    path: bunPath,
+    args: ['run', 'mipham'],
+    cwd: '${workspaceFolder}',
   }
+  settings['terminal.integrated.profiles.osx'] = profiles
   atomicWriteFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', { mode: 0o644 })
   files.push('.vscode/settings.json')
 
   // ── keybindings.json: Cmd+Esc launch ──
   const keybindingsPath = join(vscodeDir, 'keybindings.json')
-  const keybindings = [
+  const existingKeybindings = readJson(keybindingsPath)
+  const keybindings: Record<string, unknown>[] = Array.isArray(existingKeybindings)
+    ? (existingKeybindings as Record<string, unknown>[])
+    : []
+  const wanted = [
     {
       key: 'cmd+escape',
       command: 'workbench.action.terminal.focus',
@@ -107,14 +111,25 @@ const ideCmd: CommandHandler = async (_ctx) => {
       command: 'workbench.action.terminal.new',
     },
   ]
+  for (const entry of wanted) {
+    if (!keybindings.some((k) => k.key === entry.key && k.command === entry.command)) {
+      keybindings.push(entry)
+    }
+  }
   atomicWriteFileSync(keybindingsPath, JSON.stringify(keybindings, null, 2) + '\n', { mode: 0o644 })
   files.push('.vscode/keybindings.json')
 
   // ── extensions.json: recommended ──
   const extensionsPath = join(vscodeDir, 'extensions.json')
-  const extensions = {
-    recommendations: ['miphamai.mipham-code'],
+  const existingExtensions = readJson(extensionsPath)
+  const extensions: Record<string, unknown> = isObject(existingExtensions) ? existingExtensions : {}
+  const recommendations = Array.isArray(extensions.recommendations)
+    ? (extensions.recommendations as unknown[])
+    : []
+  if (!recommendations.includes('miphamai.mipham-code')) {
+    recommendations.push('miphamai.mipham-code')
   }
+  extensions.recommendations = recommendations
   atomicWriteFileSync(extensionsPath, JSON.stringify(extensions, null, 2) + '\n', { mode: 0o644 })
   files.push('.vscode/extensions.json')
 

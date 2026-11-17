@@ -572,7 +572,9 @@ export class MetaRuleEngine {
 
     const autoApplicable = metaRules.filter((m) => m.autoApplicable)
     if (autoApplicable.length > 0) {
-      recommendations.push(`${autoApplicable.length} 个元规则可自动应用，执行 /crsi meta --apply`)
+      recommendations.push(
+        `${autoApplicable.length} 个元规则可自动应用；当前版本不自动落盘，请人工复核后固化`,
+      )
     }
 
     if (recommendations.length === 0) {

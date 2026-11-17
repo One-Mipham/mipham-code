@@ -125,6 +125,17 @@ export function filterExpiredMessages(
   return messages.filter((m) => now - new Date(m.timestamp).getTime() <= maxAgeMs)
 }
 
+const ULTRACODE_INSTRUCTION = `## Ultracode mode is ON
+
+For every substantive task, prefer the Workflow tool: fan out independent work to
+parallel agents where it helps, then synthesize. Keep one-shot trivia direct.
+This instruction persists for the session until /ultracode off.`
+
+/** Append the mode instruction to a system prompt (pure, so it is testable). */
+export function applyUltracodeMode(prompt: string, on: boolean): string {
+  return on ? `${prompt}\n\n${ULTRACODE_INSTRUCTION}` : prompt
+}
+
 export class QueryEngine {
   /**
    * `false` for the local engine; `true` for the attach-mode `RemoteEngine`.
@@ -163,6 +174,13 @@ export class QueryEngine {
   private lastAssistantContent?: string
   /** Reasoning effort (low|medium|high|xhigh|max) — scales the provider idle timeout. */
   private effort: string = 'high'
+
+  /**
+   * Ultracode mode is a **persistent instruction**, not a one-turn prompt.
+   * `/ultracode on` used to set a React state nobody read, and its effect ended
+   * with the current turn's injected prompt.
+   */
+  private ultracode = false
   /** Custom verification shell script path for goal checking. */
   private goalVerifyScript?: string
   /** Custom verification skill name for goal checking. */
@@ -269,6 +287,15 @@ export class QueryEngine {
   /** Set the reasoning effort (low|medium|high|xhigh|max). */
   setEffort(level: string): void {
     this.effort = level
+  }
+
+  /** Toggle ultracode mode; the instruction is re-applied to every request. */
+  setUltracodeMode(on: boolean): void {
+    this.ultracode = on
+  }
+
+  getUltracodeMode(): boolean {
+    return this.ultracode
   }
 
   /**
@@ -771,7 +798,7 @@ export class QueryEngine {
       await this.compactWithHooks('conversation summary', signal)
     }
 
-    const systemPrompt = this.context.getSystemPrompt()
+    const systemPrompt = applyUltracodeMode(this.context.getSystemPrompt(), this.ultracode)
     const messages = this.context.getMessages()
     const toolDefs = this.getToolDefinitions()
 
@@ -1229,7 +1256,7 @@ export class QueryEngine {
         yield { type: 'stop' }
         return
       }
-      const systemPrompt = this.context.getSystemPrompt()
+      const systemPrompt = applyUltracodeMode(this.context.getSystemPrompt(), this.ultracode)
       const messages = this.context.getMessages()
 
       // ── PreInference DLP checkpoint (every tool-calling turn) ──

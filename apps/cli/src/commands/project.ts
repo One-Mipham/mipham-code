@@ -806,10 +806,9 @@ Built-in skills (${counts.total} total):
   Mipham (${counts.mipham}):    ${miphamNames.join(', ')}
 
 Community skills:
-  Coming soon — the Mipham Code skills marketplace will let you
-  browse and install community-contributed skills.
+  Browse and install with /browse-skills and /install-skill.
 
-  For now, add custom skills manually:
+  Or add custom skills manually:
   1. Create a .SKILL.md file in .mipham/skills/
   2. Use /reload-skills to load it
 
@@ -845,12 +844,7 @@ To persist one for a project, .mipham/config.yml:
     allow: ["Bash(npm test)"]     # or: /permissions allow "Bash(npm test)"
     deny:  ["Bash(rm *)"]
 
-Available tools (${ctx.engine.getTools().size}):
-  File:  read, write, edit, glob, grep
-  Exec:  bash, git, task
-  Agent: agent, memory, plan, skill
-  Net:   web-fetch, web-search
-  Sys:   config, mcp
+Available tools (${ctx.engine.getTools().size}) — run /tools for the full list.
 
 Next: /setup 6 for shell integration`,
   }
@@ -869,8 +863,8 @@ Add Mipham Code to your shell:
   alias mipham='mipham'
 
 IDE Integration:
-  VS Code     — coming soon (extension marketplace)
-  JetBrains   — coming soon (plugin)
+  VS Code     — extension published (search "Mipham Code" in the marketplace)
+  JetBrains   — plugin published (search "Mipham Code")
   Terminal    — run \`mipham\` in any terminal
 
 Quick launch:
@@ -1252,19 +1246,18 @@ const securityCmd: CommandHandler = async () => {
     }
   }
 
-  // 3. Check for TLS in dependencies
-  if (existsSync(join(cwd, 'package.json'))) {
-    ok.push('package.json present — dependencies manageable')
-  }
+  // Note: there is deliberately no "TLS in dependencies" step. The old check was
+  // `existsSync(package.json)` — it reported a security pass for the presence of
+  // a file, not for TLS. A scan that cannot answer the question must not claim it.
 
-  // 4. Check for license
+  // 3. Check for license
   if (existsSync(join(cwd, 'LICENSE'))) {
     ok.push('LICENSE file present')
   } else {
     findings.push('No LICENSE file — add Apache 2.0 or appropriate license')
   }
 
-  // 5. CI/CD
+  // 4. CI/CD
   if (existsSync(join(cwd, '.github', 'workflows'))) {
     ok.push('CI/CD workflows configured')
   } else {

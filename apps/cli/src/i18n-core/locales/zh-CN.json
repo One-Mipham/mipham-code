@@ -265,8 +265,8 @@
       "confirmed": "✓ 已回退到检查点 \"{label}\"\n已恢复 {count} 条消息。\n\n剩余检查点: {remaining}\n再次使用 /rewind 继续回退，或继续对话。"
     },
     "effort": {
-      "usage": "用法: /effort <level>\n\n设置推理深度:\n  low      — 快速、简单任务\n  medium   — 质量与速度平衡\n  high     — 深入推理（默认）\n  xhigh    — 编码/Agent 最大深度\n  max      — 绝对上限，非常彻底\n\n当前模型: {model}\n推理深度需要兼容的提供商（Anthropic Opus 4.6+, Sonnet 4.6）。",
-      "confirmed": "✓ 推理深度设置为 \"{level}\""
+      "usage": "用法: /effort <level>\n\n设置流式空闲预算 —— 流静默多久后被判定为断流。它不改变模型的推理深度：\n  low      — 90 秒空闲预算\n  medium   — 90 秒\n  high     — 180 秒\n  xhigh    — 270 秒\n  max      — 360 秒\n\n当前模型: {model}",
+      "confirmed": "✓ 流式空闲预算已设为 \"{level}\"（仅超时；推理深度由提供商/模型决定）"
     },
     "focus": {
       "on": "✓ 聚焦模式已开启 — 仅显示最近一次交流。\n之前的消息已隐藏但保留。\n再次输入 /focus 退出聚焦模式并显示所有消息。"

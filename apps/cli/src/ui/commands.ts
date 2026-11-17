@@ -248,7 +248,7 @@ const helpCmd: CommandHandler = (ctx) => {
       /providers     List configured providers
       /switch <p> <m> Switch provider and model
       /config        View configuration
-      /effort <lvl>  Set reasoning effort (low|medium|high|xhigh|max)
+      /effort <lvl>  Set the stream stall budget (low|medium|high|xhigh|max)
       /ollama-refresh Refresh Ollama model list at runtime
 
       ── Tools & Skills ──────────────────
@@ -340,7 +340,7 @@ const versionCmd: CommandHandler = (ctx) => {
     content: stripIndent`
       Mipham Code v${ctx.version}
 
-      Runtime:  Bun ${typeof Bun !== 'undefined' ? Bun.version : '(Node.js)'}
+      Runtime:  ${typeof Bun !== 'undefined' ? `Bun ${Bun.version}` : `Node.js ${process.version}`}
       Platform: ${process.platform} ${process.arch}
       Node:     ${process.version}
       CWD:      ${process.cwd()}
@@ -585,7 +585,7 @@ const modelsCmd: CommandHandler = (ctx) => {
   }
 }
 
-const ollamaRefreshCmd: CommandHandler = (ctx) => {
+const ollamaRefreshCmd: CommandHandler = async (ctx) => {
   const t = resolveT(ctx)
   const ollamaProvider = ctx.config.providers.find((p) => p.id === 'ollama')
   if (!ollamaProvider) {
@@ -620,24 +620,60 @@ const ollamaRefreshCmd: CommandHandler = (ctx) => {
       }
     }
 
-    // 3. Update the in-memory provider model list
-    ollamaProvider.models = refreshed.map((m) => ({
-      id: m.id,
-      name: m.id,
-      providerId: 'ollama',
-      contextWindow: 128_000,
-      maxOutput: 32_000,
-      vision: false,
-      status: 'active' as const,
-    }))
+    // 3. Ask Ollama for each model's real context length. A hardcoded 128k made
+    //    an 8k model look like 128k to /context and the compaction threshold.
+    const base = (ollamaProvider.baseUrl || 'http://localhost:11434').replace(/\/$/, '')
+    let assumed = 0
+    const models = await Promise.all(
+      refreshed.map(async (m) => {
+        let contextWindow = 0
+        try {
+          const res = await fetch(`${base}/api/show`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ name: m.id }),
+            signal: AbortSignal.timeout(1500),
+          })
+          if (res.ok) {
+            const info = (await res.json()) as { model_info?: Record<string, unknown> }
+            const key = Object.keys(info.model_info ?? {}).find((k) =>
+              k.endsWith('.context_length'),
+            )
+            const value = key ? Number(info.model_info![key]) : NaN
+            if (Number.isFinite(value) && value > 0) contextWindow = value
+          }
+        } catch {
+          // Ollama unreachable / old version — the note below records the assumption.
+        }
+        if (!contextWindow) {
+          contextWindow = 128_000
+          assumed++
+        }
+        return {
+          id: m.id,
+          name: m.id,
+          providerId: 'ollama',
+          contextWindow,
+          maxOutput: Math.min(32_000, contextWindow),
+          vision: false,
+          status: 'active' as const,
+        }
+      }),
+    )
+    ollamaProvider.models = models
 
     const after = refreshed.length
     const added = after - before
+    const note =
+      assumed > 0
+        ? `\n\n⚠ ${assumed} model(s): context window assumed 128k (Ollama /api/show did not answer).`
+        : ''
     return {
-      content: t('commands.ollama_refresh.done', {
-        total: String(after),
-        added: added > 0 ? `+${added}` : String(added),
-      }),
+      content:
+        t('commands.ollama_refresh.done', {
+          total: String(after),
+          added: added > 0 ? `+${added}` : String(added),
+        }) + note,
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -730,7 +766,7 @@ const configCmd: CommandHandler = (ctx) => {
     `version:          ${c.version}`,
     `defaultProvider:  ${c.defaultProvider}`,
     `defaultModel:     ${c.defaultModel}`,
-    `permission:       ${c.permission}`,
+    `permission:       ${c.permission} (configured) — live: ${liveMode(ctx)}`,
     `showThinking:     ${c.showThinking ?? 'off'}`,
     `showSchedulingNotices: ${c.showSchedulingNotices ?? false}`,
     `showCommandPicker: ${c.showCommandPicker ?? false}`,
@@ -751,21 +787,18 @@ const configCmd: CommandHandler = (ctx) => {
 const toolsCmd: CommandHandler = (ctx) => {
   const t = resolveT(ctx)
   const tools = ctx.engine.getTools()
-  const categories: Record<string, string[]> = {
-    file: [],
-    exec: [],
-    agent: [],
-    network: [],
-    system: [],
-  }
+  // Group by whatever categories the registry actually declares. A fixed key
+  // list silently dropped every tool whose category was added later (artifact,
+  // scheduling), while the header still printed `tools.size`.
+  const categories = new Map<string, string[]>()
   for (const [name, tool] of tools) {
-    categories[tool.category]?.push(
-      `  ${name.padEnd(14)} ${tool.permission.padEnd(8)} ${tool.description}`,
-    )
+    const items = categories.get(tool.category) ?? []
+    items.push(`  ${name.padEnd(14)} ${tool.permission.padEnd(8)} ${tool.description}`)
+    categories.set(tool.category, items)
   }
-  const sections = Object.entries(categories)
-    .filter(([, v]) => v!.length > 0)
-    .map(([cat, items]) => `── ${cat.toUpperCase()} ──\n${items!.join('\n')}`)
+  const sections = [...categories.entries()].map(
+    ([cat, items]) => `── ${cat.toUpperCase()} ──\n${items.join('\n')}`,
+  )
 
   return {
     content: `${t('commands.tools.title', { count: String(tools.size) })}\n\n${sections.join('\n\n')}`,
@@ -913,6 +946,7 @@ const crsiStatsCmd: CommandHandler = async (ctx) => {
   lines.push(`Builtin: ${rules.filter((r) => r.source === 'builtin').length}`)
   lines.push(`Auto-generated: ${rules.filter((r) => r.source === 'pattern-analyzer').length}`)
   lines.push(`Manual: ${rules.filter((r) => r.source === 'manual').length}`)
+  lines.push(`Managed: ${rules.filter((r) => r.source === 'managed').length}`)
 
   const effs = tracker?.allRules ?? []
   if (effs.length > 0) {
@@ -1502,10 +1536,13 @@ const crsiHealthCmd: CommandHandler = async (ctx) => {
     const builtin = rules.filter((r) => r.source === 'builtin').length
     const auto = rules.filter((r) => r.source === 'pattern-analyzer').length
     const manual = rules.filter((r) => r.source === 'manual').length
+    const managed = rules.filter((r) => r.source === 'managed').length
 
     lines.push(`| 指标 | 值 |`)
     lines.push(`|------|----|`)
-    lines.push(`| 活跃规则 | ${rules.length} (内置 ${builtin} · 自动 ${auto} · 手动 ${manual}) |`)
+    lines.push(
+      `| 活跃规则 | ${rules.length} (内置 ${builtin} · 自动 ${auto} · 手动 ${manual} · 受管 ${managed}) |`,
+    )
 
     if (tracker) {
       let interceptions = 0
@@ -1643,7 +1680,7 @@ const crsiMetaCmd: CommandHandler = async (ctx) => {
       lines.push(`- \`${mr.id}\`: ${mr.recommendation}`)
     }
     lines.push('')
-    lines.push('使用 `/crsi meta --apply` 自动应用高置信度元规则。')
+    lines.push('元规则只是建议：当前版本不自动应用，请人工复核后固化。')
   }
 
   return { content: lines.join('\n') }
@@ -2583,9 +2620,10 @@ const recapCmd: CommandHandler = (ctx) => {
   const tokens = c.getEstimatedTokens()
   const checkpointCount = c.getCheckpoints().length
 
+  // The label says "recent": take the tail, not the first lines of the session.
   const topics = msgs
     .filter((m) => m.role === 'user' && typeof m.content === 'string')
-    .slice(0, 5)
+    .slice(-5)
     .map((m) => {
       const text = typeof m.content === 'string' ? m.content : ''
       return text.length > 80 ? text.slice(0, 80) + '...' : text
@@ -3119,23 +3157,66 @@ const copyCmd: CommandHandler = (ctx, args) => {
   }
 }
 
+/**
+ * Tracked changes **including staged ones**, plus untracked files.
+ *
+ * `git diff --stat` compares the worktree to the index, so `git add` made every
+ * change invisible — `/review`, `/code-review`, `/simplify`, `/verify` and
+ * `/diff` all reported "no changes" on a fully staged tree. `HEAD` as the base
+ * folds index and worktree into one view; untracked files need `ls-files`
+ * because no `git diff` sees them.
+ */
+async function readGitChangeSummary(): Promise<{ stat: string; untracked: string[] }> {
+  const { execSync } = await import('node:child_process')
+  let stat = ''
+  try {
+    stat = execSync('git diff --stat HEAD', { encoding: 'utf-8', timeout: 5000 }).trim()
+  } catch {
+    // No HEAD yet (fresh repository) — fall back to the index/worktree diff.
+    stat = execSync('git diff --stat', { encoding: 'utf-8', timeout: 5000 }).trim()
+  }
+  let untracked: string[] = []
+  try {
+    untracked = execSync('git ls-files --others --exclude-standard', {
+      encoding: 'utf-8',
+      timeout: 5000,
+    })
+      .split('\n')
+      .filter(Boolean)
+  } catch {
+    // Not a repository / git unavailable — the stat call above already decided
+    // whether there is anything to report.
+  }
+  return { stat, untracked }
+}
+
 const diffCmd: CommandHandler = async (_ctx) => {
   const t = resolveT(_ctx)
   try {
     const { execSync } = await import('node:child_process')
-    const output = execSync('git diff --stat', { encoding: 'utf-8', timeout: 5000 })
-    if (!output.trim()) {
+    const { stat, untracked } = await readGitChangeSummary()
+    if (!stat && untracked.length === 0) {
       return { content: t('commands.diff.clean') }
     }
-    // Get full diff but limit to reasonable size
-    const fullDiff = execSync('git diff --no-color', { encoding: 'utf-8', timeout: 5000 })
+    // Full diff (staged + unstaged) limited to a readable size; untracked files
+    // have no diff to print, so they are listed.
+    let fullDiff = ''
+    try {
+      fullDiff = execSync('git diff --no-color HEAD', { encoding: 'utf-8', timeout: 5000 })
+    } catch {
+      fullDiff = execSync('git diff --no-color', { encoding: 'utf-8', timeout: 5000 })
+    }
     const MAX_LINES = 60
     const lines = fullDiff.split('\n')
-    const truncated =
+    let truncated =
       lines.length > MAX_LINES
         ? lines.slice(0, MAX_LINES).join('\n') +
           `\n\n... (${lines.length - MAX_LINES} more lines. Use git diff to see full output.)`
         : fullDiff
+    if (truncated.trim()) truncated += '\n\n'
+    if (untracked.length > 0) {
+      truncated += `Untracked files:\n${untracked.map((f) => `  ${f}`).join('\n')}`
+    }
 
     return {
       content: `${t('commands.diff.title')}\n\n${truncated}`,
@@ -3183,6 +3264,14 @@ const focusCmd: CommandHandler = (ctx) => {
 // ═══════════════════════════════════════════════════════════════
 
 const ultracodeCmd: CommandHandler = (ctx, args) => {
+  if (ctx.engine.isRemote) {
+    return {
+      content: attachedRefusal(
+        'toggle ultracode here',
+        'The daemon owns the attached session and its system prompt.',
+      ),
+    }
+  }
   const t = resolveT(ctx)
   const arg = args[0]?.toLowerCase()
   if (arg === 'on') {
@@ -3902,9 +3991,8 @@ function gitDiffBridgeCmd(opts: {
   return async (ctx, args) => {
     const t = resolveT(ctx)
     try {
-      const { execSync } = await import('node:child_process')
-      const diff = execSync('git diff --stat', { encoding: 'utf-8', timeout: 5000 }).trim()
-      if (!diff) {
+      const { stat, untracked } = await readGitChangeSummary()
+      if (!stat && untracked.length === 0) {
         return { content: `─ ${opts.label} ─\n\n${t(opts.noChangesKey)}` }
       }
       const forwarded =
@@ -3912,8 +4000,12 @@ function gitDiffBridgeCmd(opts: {
       if (typeof forwarded === 'object') {
         return { content: `─ ${opts.label} ─\n\n${forwarded.error}` }
       }
+      const untrackedBlock =
+        untracked.length > 0
+          ? `\n\nUntracked files:\n${untracked.map((f) => `  ${f}`).join('\n')}`
+          : ''
       return {
-        content: `─ ${opts.label} ─\n\n${t(opts.runningKey)}\n\nChanged files:\n${diff}`,
+        content: `─ ${opts.label} ─\n\n${t(opts.runningKey)}\n\nChanged files:\n${stat}${untrackedBlock}`,
         forwardToAI: forwarded,
       }
     } catch {
@@ -4190,9 +4282,10 @@ const summaryCmd: CommandHandler = (ctx) => {
     return { content: t('commands.summary.no_conversation') }
   }
 
+  // "recent topics" means the latest five user messages, not the earliest.
   const userMsgs = msgs
     .filter((m) => m.role === 'user' && typeof m.content === 'string')
-    .slice(0, 5)
+    .slice(-5)
     .map((m) => {
       const text = typeof m.content === 'string' ? m.content : ''
       return text.length > 100 ? text.slice(0, 100) + '...' : text
@@ -6152,9 +6245,20 @@ const artifactListCmd: CommandHandler = async (ctx, _args) => {
 }
 
 const artifactServerCmd: CommandHandler = async (_ctx, _args) => {
-  const url = 'http://localhost:9876'
+  // The server picks a free port and records it in the manifest; 9876 is only
+  // the first candidate. Reporting the constant would name a port nothing
+  // listens on whenever it was taken.
+  const { readManifest } = await import('../artifacts/manifest')
+  const { artifactsRoot } = await import('../artifacts/paths')
+  const { port } = readManifest(artifactsRoot(process.cwd()))
+  if (!port) {
+    return {
+      content:
+        '── Artifact Server ──\n\n  Not running. The server starts when an artifact is created or opened.',
+    }
+  }
   return {
-    content: `── Artifact Server ──\n\n  URL:  ${url}\n  Port: 9876\n\nArtifacts are served locally. No external network access.`,
+    content: `── Artifact Server ──\n\n  URL:  http://localhost:${port}\n  Port: ${port}\n\nArtifacts are served locally. No external network access.`,
   }
 }
 
@@ -6184,6 +6288,7 @@ const commandsListCmd: CommandHandler = () => {
     History: [],
     'Model & Provider': [],
     'Tools & Skills': [],
+    'Code Quality': [],
     Plugins: [],
     Workflow: [],
     Project: [],
@@ -6687,7 +6792,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/providers': 'List configured providers',
   '/switch': 'Switch provider and model',
   '/config': 'View configuration',
-  '/effort': 'Set reasoning effort',
+  '/effort': 'Set the stream stall budget (does not change reasoning depth)',
   '/lang': 'Set display language (en-US, zh-CN)',
   '/tools': 'List available tools',
   '/skills': 'List loaded skills',

@@ -567,7 +567,14 @@ export function App({
       },
       setFocusMode: (on: boolean) => setFocusMode(on),
       setGoal: (text: string) => setGoalText(text),
-      setUltracodeMode: (on: boolean) => setUltracodeMode(on),
+      setUltracodeMode: (on: boolean) => {
+        setUltracodeMode(on)
+        // The mode must reach the engine: the React state is display-only, and
+        // the previous wiring left the instruction alive for exactly one turn.
+        // Attached sessions have no local engine to configure (the command
+        // refuses there); the guard keeps that a runtime no-op, not a crash.
+        if ('setUltracodeMode' in engine) engine.setUltracodeMode(on)
+      },
       setUpdateStatus: (s: UpdateStatus) => setUpdateStatus(s),
       // Same read-back as Shift+Tab: `setMode` may clamp the request (org
       // `maxAllowedMode` / `forbiddenModes`), so the footer and the gate must

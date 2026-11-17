@@ -265,8 +265,8 @@
       "confirmed": "✓ Rewound to checkpoint \"{label}\"\nRestored {count} messages.\n\nRemaining checkpoints: {remaining}\nUse /rewind again to go back further, or continue chatting."
     },
     "effort": {
-      "usage": "Usage: /effort <level>\n\nSet reasoning effort level:\n  low      — Fast, simple tasks\n  medium   — Balanced quality and speed\n  high     — Thorough reasoning (default)\n  xhigh    — Maximum depth for coding/agentic use\n  max      — Absolute ceiling, very thorough\n\nCurrent model: {model}\nEffort levels require compatible providers (Anthropic Opus 4.6+, Sonnet 4.6).",
-      "confirmed": "✓ Reasoning effort set to \"{level}\""
+      "usage": "Usage: /effort <level>\n\nSets the streaming stall budget — how long a silent stream may run before it is\ntreated as dead. It does NOT change how hard the model reasons:\n  low      — 90s idle budget\n  medium   — 90s\n  high     — 180s\n  xhigh    — 270s\n  max      — 360s\n\nCurrent model: {model}",
+      "confirmed": "✓ Stream stall budget set to \"{level}\" (timeout only — reasoning depth comes from the provider/model)"
     },
     "focus": {
       "on": "✓ Focus mode ON — showing only the most recent exchange.\nPrevious messages are hidden but preserved.\nType /focus again to exit focus mode and show all messages."

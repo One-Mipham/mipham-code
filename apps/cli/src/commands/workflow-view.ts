@@ -64,8 +64,8 @@ export const workflowWatchCmd: CommandHandler = async (_ctx, _args) => {
     content: [
       '── Workflow Watch Mode ──',
       '',
-      'Workflow progress is displayed automatically when a workflow is running.',
-      'No active workflow detected.',
+      'Progress streams automatically while a workflow runs — there is no separate',
+      'watch session to attach to, and this command does not poll for one.',
       '',
       'Use /workflow list to see past runs.',
       'Use /workflow view <id> to replay a completed run.',

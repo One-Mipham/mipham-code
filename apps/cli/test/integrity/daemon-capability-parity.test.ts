@@ -206,6 +206,11 @@ const EXEMPT: Record<string, Exemption> = {
       '待决策的数据出境面（deferred，非 designed-out）：PreInference DLP 会把整段对话正文发往组织端点，而 daemon 会话可被 feishu/telegram/wecom/dingtalk 的第三方调用者开启。要接应先定「daemon 会话是否允许出站」',
     anchor: { file: 'src/index.tsx', contains: 'loadInferenceHookConfig()' },
   },
+  'daemon:setUltracodeMode': {
+    reason:
+      'ultracode 是 TUI 会话级开关：attach 会话里 `/ultracode` 明确拒绝，聊天频道也不派发 slash 命令 —— daemon 侧没有能切它的入口；要接得先有 attach 协议里的 mode 帧',
+    anchor: { file: 'src/ui/commands.ts', contains: 'toggle ultracode here' },
+  },
   'daemon:setCrossSessionConfig': {
     reason:
       '接上用户那份更宽松的入站策略会在一个没有审批 UI 的入口扩大跨会话接受面：引擎默认 crossSessionInbound 是 ask 且 fail-closed，daemon 现在跑的正是这个默认值',
