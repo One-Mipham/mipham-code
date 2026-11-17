@@ -1,5 +1,6 @@
 import type { CommandHandler } from '../ui/commands.js'
 import { listRuns, loadJournal } from '../workflow/journal.js'
+import { getEventBus } from '../workflow/event-bus.js'
 
 export const workflowViewCmd: CommandHandler = async (_ctx, args) => {
   const runId = args[0]
@@ -57,15 +58,32 @@ export const workflowViewCmd: CommandHandler = async (_ctx, args) => {
 }
 
 export const workflowWatchCmd: CommandHandler = async (_ctx, _args) => {
-  // /workflow watch — monitor the currently active workflow
-  // This is a hint: the actual rendering is handled by WorkflowProgress component
-  // which auto-detects active workflows. This command just confirms watch mode.
+  // The event bus is the only place that knows whether a run is live in this
+  // process. Reading it makes the answer a fact instead of a fixed sentence.
+  const active = getEventBus().getActiveRunId()
+  const runs = listRuns().sort()
+
+  if (active) {
+    return {
+      content: [
+        '── Workflow Watch ──',
+        '',
+        `Active run: ${active}`,
+        'Progress streams automatically in the workflow panel.',
+        '',
+        `Replay so far: /workflow view ${active}`,
+      ].join('\n'),
+    }
+  }
+
   return {
     content: [
-      '── Workflow Watch Mode ──',
+      '── Workflow Watch ──',
       '',
-      'Progress streams automatically while a workflow runs — there is no separate',
-      'watch session to attach to, and this command does not poll for one.',
+      'No workflow is running in this process.',
+      runs.length > 0
+        ? `Recorded runs: ${runs.length} (latest: ${runs[runs.length - 1]})`
+        : 'No recorded runs yet.',
       '',
       'Use /workflow list to see past runs.',
       'Use /workflow view <id> to replay a completed run.',

@@ -566,6 +566,7 @@ export function App({
         engine.setEffort(level)
       },
       setFocusMode: (on: boolean) => setFocusMode(on),
+      getFocusMode: () => focusMode,
       setGoal: (text: string) => setGoalText(text),
       setUltracodeMode: (on: boolean) => {
         setUltracodeMode(on)
@@ -600,6 +601,9 @@ export function App({
       t,
       locale,
       setPermissionMode,
+      // `/focus` reads the live value through `getFocusMode`; without the dep
+      // the memoised ctx would keep returning the state it was born with.
+      focusMode,
     ],
   )
 
@@ -1164,9 +1168,9 @@ export function App({
         const { command, args } = parseSlashCommand(input)
 
         // Counted here rather than at the registry lookup below: /switch, /pick,
-        // /model-picker, /exit, /quit and /focus are special-cased and return
-        // before ever reaching it, so counting there would silently under-report
-        // six of the most-used commands.
+        // /model-picker, /exit and /quit are special-cased and return before
+        // ever reaching it, so counting there would silently under-report five
+        // of the most-used commands.
         //
         // `commandLabelFor` collapses unrecognised names into `/unknown` — see it
         // for why an unbounded `command_name` is not a cosmetic problem.
@@ -1205,23 +1209,6 @@ export function App({
         // /quit and /exit are special
         if (command === '/exit' || command === '/quit') {
           void exitSession(0)
-        }
-
-        // /focus toggle
-        if (command === '/focus') {
-          const nextFocus = !focusMode
-          setFocusMode(nextFocus)
-          setMessages((prev) => [
-            ...prev,
-            { role: 'user', content: input },
-            {
-              role: 'system',
-              content: nextFocus
-                ? '✓ Focus mode ON — showing only the most recent exchange. Type /focus again to show all.'
-                : '✓ Focus mode OFF — showing all messages.',
-            },
-          ])
-          return
         }
 
         let forwardToAI: string | undefined

@@ -147,10 +147,12 @@ describe('/setup stale claims', () => {
 })
 
 describe('/workflow watch', () => {
-  it('does not claim to have detected (or not detected) a workflow it never checked', async () => {
+  it('reports the state it actually read, not a canned sentence', async () => {
     const result = await getCommand('/workflow watch')!({} as never, [])
     expect(result.content).not.toContain('No active workflow detected')
-    expect(result.content).toContain('automatically')
+    // Either it names a live run (bus has one) or it says none is running in
+    // this process — both are readings, not guesses.
+    expect(result.content).toMatch(/Active run:|No workflow is running in this process/)
   })
 })
 

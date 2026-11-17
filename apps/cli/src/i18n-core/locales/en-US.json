@@ -269,7 +269,8 @@
       "confirmed": "✓ Stream stall budget set to \"{level}\" (timeout only — reasoning depth comes from the provider/model)"
     },
     "focus": {
-      "on": "✓ Focus mode ON — showing only the most recent exchange.\nPrevious messages are hidden but preserved.\nType /focus again to exit focus mode and show all messages."
+      "on": "✓ Focus mode ON — showing only the most recent exchange.\nPrevious messages are hidden but preserved.\nType /focus again to exit focus mode and show all messages.",
+      "off": "✓ Focus mode OFF — showing all messages."
     },
     "ultracode": {
       "on": "✓ Ultracode mode ON — multi-agent workflow orchestration enabled.\n\nThe AI will use Workflow tool to fan out, verify, and synthesize for all substantive tasks.",
@@ -279,7 +280,7 @@
     "branch": {
       "no_conversation": "No conversation to branch. Start a conversation first.",
       "title": "── Branch Created ──",
-      "details": "Name:       \"{name}\"\nCheckpoint:  #{checkpoint}\nMessages:    {messages} saved\n\nCurrent conversation continues from this point.\nTo return to this branch point later, use:\n  /rewind\n\nNote: Full session branching (separate concurrent sessions) requires session persistence, coming in a future release. For now, this saves a named checkpoint you can rewind to."
+      "details": "Name:       \"{name}\"\nCheckpoint:  #{checkpoint}\nMessages:    {messages} saved\n\nCurrent conversation continues from this point.\nTo return to this branch point later, use:\n  /rewind\n\nNote: this saves a named checkpoint you can rewind to. It does not create a separate concurrent session — Mipham Code has no such mode today."
     },
     "memories": {
       "title": "─ Memory ─",

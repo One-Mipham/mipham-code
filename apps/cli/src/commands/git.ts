@@ -34,6 +34,15 @@ async function git(args: string[], timeoutMs = 5000): Promise<string> {
   return exitCode === 0 ? stdout.trim() : ''
 }
 
+/** Diffs can be arbitrarily large; the prompt carries a bounded prefix. */
+const MAX_PROMPT_DIFF = 12_000
+
+function promptWithDiff(intro: string, diff: string): string {
+  const body =
+    diff.length > MAX_PROMPT_DIFF ? `${diff.slice(0, MAX_PROMPT_DIFF)}\n… (truncated)` : diff
+  return `${intro}\n\n${body}`
+}
+
 const commitCmd: CommandHandler = async () => {
   try {
     const diff = await git(['diff', '--cached', '--stat'])
@@ -50,11 +59,13 @@ const commitCmd: CommandHandler = async () => {
             .join('\n') +
           '\n\n'
       }
-      msg +=
-        'Run: git add <files> to stage changes first.\nOr type: "commit these changes" for AI assistance.'
+      msg += 'Run: git add <files> to stage changes first.'
       return { content: msg }
     }
 
+    // The command says "generate a commit message", so it must actually
+    // generate one. It used to print instructions to type a sentence in chat.
+    const full = await git(['diff', '--cached'], 8000)
     return {
       content: [
         '── Git Commit ──',
@@ -62,11 +73,13 @@ const commitCmd: CommandHandler = async () => {
         'Staged changes:',
         diff,
         '',
-        'To generate a commit message, type: "write a commit message for these changes"',
-        'To commit: git commit -m "your message"',
-        '',
-        'Tip: Use Conventional Commits format (feat:, fix:, chore:, docs:)',
+        'Drafting a Conventional Commits message from these changes.',
+        'To commit: git commit -m "<the message>"',
       ].join('\n'),
+      forwardToAI: promptWithDiff(
+        'Write a Conventional Commits message for the staged diff below. Output only the commit message (subject ≤72 chars, then a blank line and a body if useful). Do not run git.',
+        full,
+      ),
     }
   } catch {
     return { content: '── Git Commit ──\n\nCould not run git. Are you in a git repository?' }
@@ -90,7 +103,10 @@ const pushCmd: CommandHandler = async () => {
           ? `Ready to push ${ahead} commit(s). Run: git push origin ${branch}`
           : 'Nothing to push (up to date).',
         '',
-        'Or type: "push my changes" for AI assistance.',
+        // Pushing is an outward-facing action and slash commands bypass the
+        // permission layer, so this command only reports. Saying that out loud
+        // is the difference between a status view and a fake "push".
+        'This command only reports; it never pushes.',
       ].join('\n'),
     }
   } catch {
@@ -112,6 +128,10 @@ const prCmd: CommandHandler = async () => {
       (await git(['log', '--oneline', `origin/${mainBranch}..HEAD`], 5000)) ||
       (await git(['log', '--oneline', `${mainBranch}..HEAD`], 5000))
 
+    const fullDiff =
+      (await git(['diff', `origin/${mainBranch}...HEAD`], 8000)) ||
+      (await git(['diff', `${mainBranch}...HEAD`], 8000))
+
     return {
       content: [
         '── Create Pull Request ──',
@@ -127,28 +147,45 @@ const prCmd: CommandHandler = async () => {
         '',
         diff ? `Changes:\n${diff}` : '',
         '',
-        'To create PR: type "create a pull request" for AI assistance.',
-        'Or use: gh pr create --base ' + mainBranch + ' --head ' + branch,
+        'Drafting a PR title and body from these commits.',
+        'To open it: gh pr create --base ' + mainBranch + ' --head ' + branch,
       ].join('\n'),
+      forwardToAI: promptWithDiff(
+        `Draft a pull request title and body for the branch "${branch}" targeting "${mainBranch}". Commits:\n${commits || '(none)'}\n\nOutput only the title and body. Do not run gh or create the PR.`,
+        fullDiff,
+      ),
     }
   } catch {
     return { content: '── Create Pull Request ──\n\nCould not determine PR context.' }
   }
 }
 
-const issueCmd: CommandHandler = async () => {
+const issueCmd: CommandHandler = async (_ctx, args) => {
+  const description = args.join(' ').trim()
+  if (!description) {
+    return {
+      content: [
+        '── GitHub Issues ──',
+        '',
+        'Describe the issue after the command:',
+        '  /issue <what went wrong and what you expected>',
+        '',
+        'Quick commands:',
+        '  gh issue create --title "..." --body "..."',
+        '  gh issue list',
+      ].join('\n'),
+    }
+  }
+
   return {
     content: [
       '── GitHub Issues ──',
       '',
-      'To file an issue, type: "create a GitHub issue for [description]"',
+      'Drafting an issue from your description.',
       '',
-      'Quick commands:',
-      '  gh issue create --title "..." --body "..."',
-      '  gh issue list',
-      '',
-      'Use /github-ops skill for advanced GitHub automation.',
+      'To file it: gh issue create --title "..." --body "..."',
     ].join('\n'),
+    forwardToAI: `Draft a GitHub issue title and body for: ${description}\n\nOutput only the title and body. Do not run gh or create the issue.`,
   }
 }
 

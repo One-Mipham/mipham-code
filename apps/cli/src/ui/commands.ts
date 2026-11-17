@@ -146,6 +146,8 @@ export interface CommandContext {
   setSessionTitle: (title: string) => void
   setEffort: (level: string) => void
   setFocusMode: (on: boolean) => void
+  /** Current focus-view state — `/focus` toggles from this, not from `true`. */
+  getFocusMode?: () => boolean
   setGoal: (text: string) => void
   setUltracodeMode: (on: boolean) => void
   setUpdateStatus: (s: UpdateStatus) => void
@@ -274,7 +276,7 @@ const helpCmd: CommandHandler = (ctx) => {
       /todos [list|create] Task management
       /tasks         Background tasks
       /review        Code review workflow
-      /pr-comments   PR review summary
+      /pr-comments   PR comments via gh + branch summary
       /diff          Show git diff
       /workflows     List workflow scripts
       /loop <int> <p>  Run prompt on interval
@@ -287,10 +289,10 @@ const helpCmd: CommandHandler = (ctx) => {
       /schedule      View scheduled tasks
 
       ── Git & GitHub ─────────────────────
-      /commit        Review staged changes + commit
-      /push          Push current branch
-      /pr            Create a pull request
-      /issue         File a GitHub issue
+      /commit        Draft a commit message from staged changes
+      /push          Show push status and the command to run
+      /pr            Draft a pull request title and body
+      /issue         Draft a GitHub issue from your description
 
       ── Code Quality ─────────────────────
       /simplify      Review for reuse, quality, simplification
@@ -1531,8 +1533,15 @@ const crsiHealthCmd: CommandHandler = async (ctx) => {
 
   // ── CRSI Section ──
   lines.push('### 🧠 CRSI 学习子系统', '')
+  // Hoisted for the composite score below — the score must be built from the
+  // same readings the table shows, not re-derived from object presence.
+  let activeRuleCount = 0
+  let interceptions = 0
+  let successes = 0
+  let hasTracker = false
   if (engine) {
     const rules = engine.getActiveRules()
+    activeRuleCount = rules.length
     const builtin = rules.filter((r) => r.source === 'builtin').length
     const auto = rules.filter((r) => r.source === 'pattern-analyzer').length
     const manual = rules.filter((r) => r.source === 'manual').length
@@ -1545,8 +1554,7 @@ const crsiHealthCmd: CommandHandler = async (ctx) => {
     )
 
     if (tracker) {
-      let interceptions = 0
-      let successes = 0
+      hasTracker = true
       for (const r of rules) {
         const eff = tracker.getEffectiveness(r.id)
         if (eff) {
@@ -1591,9 +1599,47 @@ const crsiHealthCmd: CommandHandler = async (ctx) => {
   }
 
   // ── Overall Health Score ──
+  //
+  // Scored from **evidence**, not presence. The previous reading was
+  // `engine ? 50 : 0` — a freshly constructed rule engine that had learned
+  // nothing scored full marks, which made "A — 优秀" reachable by doing no
+  // work at all. Each half is 25 points for having data + 25 for its quality
+  // signal, and the basis is printed so the number can be audited.
   lines.push('', '### 📊 综合健康评分', '')
-  const crsiScore = engine ? 50 : 0
-  const sisScore = db ? (db.getStats().avgSuccessRate >= 0.8 ? 50 : 25) : 0
+
+  const crsiBasis: string[] = []
+  let crsiScore = 0
+  if (activeRuleCount > 0) {
+    crsiScore += 25
+    crsiBasis.push(`活跃规则 ${activeRuleCount} 条 +25`)
+  } else {
+    crsiBasis.push('无活跃规则 +0')
+  }
+  if (interceptions > 0) {
+    const pts = Math.round((successes / interceptions) * 25)
+    crsiScore += pts
+    crsiBasis.push(`拦截成功 ${successes}/${interceptions} +${pts}`)
+  } else {
+    crsiBasis.push(hasTracker ? '尚无拦截记录 +0' : '无 EffectivenessTracker +0')
+  }
+
+  const sisBasis: string[] = []
+  let sisScore = 0
+  if (db) {
+    const stats = db.getStats()
+    if (stats.total > 0) {
+      sisScore += 25
+      sisBasis.push(`免疫记忆 ${stats.total} 条 +25`)
+      const pts = Math.round(stats.avgSuccessRate * 25)
+      sisScore += pts
+      sisBasis.push(`平均成功率 ${Math.round(stats.avgSuccessRate * 100)}% +${pts}`)
+    } else {
+      sisBasis.push('免疫记忆为空 +0', '无成功率数据 +0')
+    }
+  } else {
+    sisBasis.push('SIS 未初始化 +0')
+  }
+
   const totalScore = crsiScore + sisScore
 
   const grade =
@@ -1610,6 +1656,8 @@ const crsiHealthCmd: CommandHandler = async (ctx) => {
   lines.push(`| CRSI 学习 | ${engine ? '✅ 在线' : '❌ 离线'} | ${crsiScore}/50 |`)
   lines.push(`| SIS 免疫 | ${db ? '✅ 在线' : '❌ 离线'} | ${sisScore}/50 |`)
   lines.push(`| **综合** | **${grade}** | **${totalScore}/100** |`)
+  lines.push('')
+  lines.push(`计分依据：CRSI ${crsiBasis.join(' · ')}；SIS ${sisBasis.join(' · ')}`)
 
   return { content: lines.join('\n') }
 }
@@ -3255,8 +3303,13 @@ const effortCmd: CommandHandler = (ctx, args) => {
 
 const focusCmd: CommandHandler = (ctx) => {
   const t = resolveT(ctx)
-  ctx.setFocusMode(true)
-  return { content: t('commands.focus.on') }
+  // Toggle from the live state. It used to set `true` unconditionally while
+  // app.tsx intercepted the command — the handler was unreachable, so the bug
+  // was invisible; once the interception is gone it would have made /focus
+  // impossible to turn off.
+  const next = !(ctx.getFocusMode?.() ?? false)
+  ctx.setFocusMode(next)
+  return { content: t(next ? 'commands.focus.on' : 'commands.focus.off') }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -4661,6 +4714,12 @@ const reviewCmd = codeReviewCmd
 // PR Comments
 // ═══════════════════════════════════════════════════════════════
 
+function snippetForReview(body: string | undefined): string {
+  const oneLine = (body ?? '').replace(/\s+/g, ' ').trim()
+  if (!oneLine) return '(empty)'
+  return oneLine.length > 200 ? `${oneLine.slice(0, 200)}…` : oneLine
+}
+
 const prCommentsCmd: CommandHandler = async () => {
   try {
     const { execSync } = await import('node:child_process')
@@ -4710,9 +4769,52 @@ const prCommentsCmd: CommandHandler = async () => {
       lines.push('')
     }
 
-    lines.push(
-      'To generate PR description: type "write a PR description for these changes" in chat.',
-    )
+    // The command is called `/pr-comments`, so it must read the PR's comments.
+    // `gh pr view` is read-only; when it cannot answer (no PR for this branch,
+    // gh missing, not authenticated) say which — the branch summary above is
+    // not a substitute and silently showing only it is the fake reading.
+    lines.push('PR comments:')
+    try {
+      const raw = execSync('gh pr view --json number,title,url,reviews,comments', {
+        encoding: 'utf-8',
+        timeout: 8000,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, LC_ALL: 'C', LANG: 'C' },
+      }).trim()
+      const pr = JSON.parse(raw) as {
+        number?: number
+        title?: string
+        url?: string
+        reviews?: { author?: { login?: string }; state?: string; body?: string }[]
+        comments?: { author?: { login?: string }; body?: string }[]
+      }
+      const reviews = pr.reviews ?? []
+      const comments = pr.comments ?? []
+      lines.push(`  PR #${pr.number ?? '?'}: ${pr.title ?? ''}`.trimEnd())
+      if (pr.url) lines.push(`  ${pr.url}`)
+      for (const r of reviews.slice(-10)) {
+        lines.push(`  @${r.author?.login ?? '?'} (${r.state ?? '?'}): ${snippetForReview(r.body)}`)
+      }
+      for (const c of comments.slice(-10)) {
+        lines.push(`  @${c.author?.login ?? '?'}: ${snippetForReview(c.body)}`)
+      }
+      if (reviews.length === 0 && comments.length === 0) {
+        lines.push('  No reviews or comments on this PR yet.')
+      }
+      lines.push('')
+    } catch (err) {
+      const e = err as { status?: number; stderr?: string; message?: string }
+      const reason =
+        e.status === 127
+          ? 'gh CLI not found'
+          : (e.stderr ?? '').trim().split('\n')[0] ||
+            (e.message ?? 'unknown error').split('\n')[0] ||
+            'unknown error'
+      lines.push(`  unavailable — ${reason.slice(0, 160)}`)
+      lines.push('  Only the local branch summary above is available.')
+      lines.push('')
+    }
+
     lines.push('To review PR: type "review this PR" or use /review.')
 
     return { content: lines.join('\n') }
@@ -6714,7 +6816,9 @@ export function getCommandNames(): string[] {
  * at all — the other five are, so listing them here is belt-and-braces rather
  * than a claim that they are missing.
  */
-const PRE_REGISTRY_COMMANDS = ['/switch', '/pick', '/model-picker', '/exit', '/quit', '/focus']
+// `/focus` is NOT here: it lives in the registry and toggles through
+// `getFocusMode` — the app-side duplicate was removed so there is one handler.
+const PRE_REGISTRY_COMMANDS = ['/switch', '/pick', '/model-picker', '/exit', '/quit']
 
 /**
  * The bucket an unrecognised command name is recorded under.
@@ -6838,7 +6942,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/todos': 'Task management (list/create tasks)',
   '/tasks': 'Background tasks',
   '/review': 'Review code for bugs, security, performance (alias for /code-review)',
-  '/pr-comments': 'PR review summary',
+  '/pr-comments': 'PR comments via gh + local branch summary',
   '/diff': 'Show git diff',
   '/workflows': 'List workflow scripts',
   '/workflow view': 'View workflow run details or list runs',
@@ -6872,10 +6976,10 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/fork': 'Fork task into isolated worktree',
   '/artifact': 'Manage artifacts',
   '/schedule': 'View scheduled tasks and cron jobs',
-  '/commit': 'Generate commit message and review staged changes',
-  '/push': 'Push the current branch',
-  '/pr': 'Create a pull request',
-  '/issue': 'File a GitHub issue',
+  '/commit': 'Draft a commit message from staged changes',
+  '/push': 'Show push status and the command to run',
+  '/pr': 'Draft a pull request title and body',
+  '/issue': 'Draft a GitHub issue from your description',
   '/code-review': 'Review code for bugs, security, performance (7 dimensions)',
   '/simplify': 'Cleanup-only review: reuse, simplification, efficiency, abstraction',
   '/verify': 'Runtime verification — observe actual execution, not tests',
