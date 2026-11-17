@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { homedir } from 'node:os'
-import { rmSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
+import { rmSync, writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 vi.mock('node:os', async (importOriginal) => {
@@ -13,6 +13,7 @@ import {
   classifyDelta,
   buildImprovementReport,
   formatCostLine,
+  formatNullModelLine,
   wilsonInterval,
   improvementRate,
   improvementSignalStrong,
@@ -338,3 +339,92 @@ function mkRecord(verdict: ImprovementRecord['verdict']): ImprovementRecord {
     verdict,
   }
 }
+
+describe('空模型闸：空程序能过的题，不能算作模型的改进', () => {
+  const base = { skillName: 'safe-coding', baselineScores: [0, 0, 0], postScores: [100, 100, 100] }
+
+  it('claimed improved + 空模型有通过 → 降级为 inconclusive，并留读数', () => {
+    const r = buildImprovementReport({ ...base, nullModelPassed: 1, nullModelTotal: 1 }, [
+      'apps/cli/skills/standard/safe-coding.SKILL.md',
+    ])
+    expect(r.verdict).toBe('inconclusive')
+    expect(r.nullModelPassed).toBe(1)
+    expect(r.nullModelTotal).toBe(1)
+    expect(r.nullModelGate).toBe('failed')
+  })
+
+  it('空模型 0 通过 → improved 保留，闸记为 passed', () => {
+    const r = buildImprovementReport({ ...base, nullModelPassed: 0, nullModelTotal: 1 }, [
+      'apps/cli/skills/standard/safe-coding.SKILL.md',
+    ])
+    expect(r.verdict).toBe('improved')
+    expect(r.nullModelGate).toBe('passed')
+  })
+
+  it('regressed 不被空模型闸洗白 —— 闸只拦「假赢」，不改写真输', () => {
+    const r = buildImprovementReport(
+      {
+        skillName: 's',
+        baselineScores: [100, 100, 100],
+        postScores: [0, 0, 0],
+        nullModelPassed: 1,
+        nullModelTotal: 1,
+      },
+      ['f.md'],
+    )
+    expect(r.verdict).toBe('regressed')
+    expect(r.nullModelGate).toBe('failed')
+  })
+
+  it('样本未带空模型读数 → 报告里三个键都不出现（旧记录兼容）', () => {
+    const r = buildImprovementReport(base, ['f.md'])
+    expect('nullModelPassed' in r).toBe(false)
+    expect('nullModelTotal' in r).toBe(false)
+    expect('nullModelGate' in r).toBe(false)
+  })
+})
+
+describe('formatNullModelLine', () => {
+  it('闸失败时点明「空程序也能过」的题数', () => {
+    const r = buildImprovementReport(
+      {
+        skillName: 'safe-coding',
+        baselineScores: [0, 0, 0],
+        postScores: [100, 100, 100],
+        nullModelPassed: 2,
+        nullModelTotal: 3,
+      },
+      ['f.md'],
+    )
+    const line = formatNullModelLine(r)
+    expect(line).toContain('空模型')
+    expect(line).toContain('2/3')
+  })
+
+  it('闸通过时不出声（不占一行）', () => {
+    const r = buildImprovementReport(
+      {
+        skillName: 'safe-coding',
+        baselineScores: [0, 0, 0],
+        postScores: [100, 100, 100],
+        nullModelPassed: 0,
+        nullModelTotal: 1,
+      },
+      ['f.md'],
+    )
+    expect(formatNullModelLine(r)).toBeNull()
+  })
+})
+
+describe('命令面：两条渲染路径都接了空模型闸', () => {
+  it('commands.ts 至少两处调用（手工路径 + prose 路径）', () => {
+    // 只接一条就是本仓库记过的「局部正确全局遗漏」：另一条路径照旧把降级判定
+    // 当普通结果展示，用户看不到它为什么变 inconclusive。
+    const src = readFileSync(
+      join(import.meta.dirname, '..', '..', 'src', 'ui', 'commands.ts'),
+      'utf8',
+    )
+    const hits = src.match(/formatNullModelLine\(report\)/g) ?? []
+    expect(hits.length).toBeGreaterThanOrEqual(2)
+  })
+})

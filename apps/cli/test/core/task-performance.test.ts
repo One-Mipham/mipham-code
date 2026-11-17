@@ -8,6 +8,8 @@ import {
   runTaskPerformance,
   measureSkillDelta,
   measureSkillDeltaRepeated,
+  countEmptySolutionPasses,
+  runNullModelCheck,
 } from '../../src/core/task-performance'
 
 describe('loadPerformanceTasks', () => {
@@ -388,5 +390,74 @@ describe('runTaskPerformance：被输出上限截断的生成不进打分', () =
     expect(r.truncated).toBe(1)
     expect(r.score).toBe(100)
     expect(r.failures.length).toBe(1) // 仍然是「失败」——只是不进分母
+  })
+})
+
+// ============================================================
+// 空模型闸（null-model ablation）
+//
+// 自改进最容易被「指标赢了、目标没动」骗过去：一个**什么都不产出**的空程序
+// 若能通过冻结测试，那这道题测的就不是模型能力。判据必须能双向：合成一个
+// 真空题（断言恒真）要判它通过，真题目要判它失败。
+// ============================================================
+
+describe('countEmptySolutionPasses', () => {
+  it('真空题（空程序也过）与真题（空程序不过）能分开', () => {
+    const vacuous = {
+      id: 'vacuous',
+      category: 'test-driven' as const,
+      prompt: 'always true',
+      testCode:
+        "import { test, expect } from 'bun:test'\ntest('always', () => { expect(1).toBe(1) })",
+    }
+    const real = {
+      id: 'real',
+      category: 'test-driven' as const,
+      prompt: 'add',
+      testCode:
+        "import { test, expect } from 'bun:test'\nimport { add } from './solution'\ntest('add', () => { expect(add(1, 2)).toBe(3) })",
+    }
+
+    const result = countEmptySolutionPasses([vacuous, real])
+
+    expect(result.total).toBe(2)
+    expect(result.passed).toBe(1)
+    expect(result.failures).toEqual(['vacuous'])
+  })
+})
+
+describe('runNullModelCheck', () => {
+  it('内置 safe-coding 题集不是真空题：空程序 0 通过', () => {
+    const result = runNullModelCheck('safe-coding')
+    expect(result.total).toBeGreaterThan(0)
+    expect(result.passed).toBe(0)
+  })
+
+  it('没有绑定任务的 skill → total 0（闸是空转，不是通过）', () => {
+    const result = runNullModelCheck('no-such-skill')
+    expect(result).toEqual({ total: 0, passed: 0, failures: [] })
+  })
+})
+
+describe('measureSkillDeltaRepeated — 空模型读数', () => {
+  it('样本带上空模型闸的分子/分母', async () => {
+    const llm: Llm = {
+      async *chat() {
+        yield { type: 'stop' as const }
+      },
+    }
+    const sample = await measureSkillDeltaRepeated(
+      llm,
+      {
+        filePath: 'apps/cli/skills/standard/safe-coding.SKILL.md',
+        originalContent: '---\nname: safe-coding\n---\nold',
+        newContent: '---\nname: safe-coding\n---\nnew',
+      },
+      { k: 1 },
+    )
+
+    expect(sample).not.toBeNull()
+    expect(sample?.nullModelTotal).toBe(1)
+    expect(sample?.nullModelPassed).toBe(0)
   })
 })

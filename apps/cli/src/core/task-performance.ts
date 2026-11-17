@@ -68,6 +68,35 @@ export interface TaskPerformanceResult {
   truncated?: boolean
 }
 
+/** 空模型闸的读数：`passed` = 空程序也能通过的题数。 */
+export interface NullModelCheck {
+  total: number
+  passed: number
+  /** 空程序也通过的题 id —— 它们正是这道闸抓到的「不是模型题」的题。 */
+  failures: string[]
+}
+
+/**
+ * 空模型消融：对每道题只用**空程序**跑冻结测试。
+ *
+ * 来源是自改进研究的 null-model control：把模型换成空 stub 重跑，分数仍涨就说明
+ * 「改进」不是模型带来的。在我们的架构里模型不产出 ⇒ 空程序；能通过，就说明这道
+ * 题测的是测试自身的空转（例如恒真断言），不是模型能力。
+ */
+export function countEmptySolutionPasses(tasks: PerformanceTask[]): NullModelCheck {
+  const failures: string[] = []
+  for (const task of tasks) {
+    if (judgeGeneratedCode(task.testCode, '').passed) failures.push(task.id)
+  }
+  return { total: tasks.length, passed: failures.length, failures }
+}
+
+/** 按 skill 名取任务集再跑空模型闸；未绑定任何任务的 skill → total 0（空转，不是通过）。 */
+export function runNullModelCheck(skill?: string): NullModelCheck {
+  const tasks = loadPerformanceTasks().filter((t) => (t.skill ?? undefined) === skill)
+  return countEmptySolutionPasses(tasks)
+}
+
 export interface TaskPerformanceReport {
   total: number
   passed: number
@@ -243,6 +272,13 @@ export interface SkillDeltaSample {
   baselineScores: number[]
   postScores: number[]
   /**
+   * 空模型闸：把**空程序**喂给同一组冻结测试，通过的题数。
+   * 通过 > 0 ⇒ 这些题空程序也能过，测的不是模型能力 ⇒ 改进判定不可归因。
+   * 缺席 = 旧记录 / 未测（与 nullModelTotal 同生同灭）。
+   */
+  nullModelPassed?: number
+  nullModelTotal?: number
+  /**
    * B2 代价维：与分数数组**逐项对齐**的耗时（第 i 项就是产出第 i 个分数的那次采样）。
    * 缺席 = 该样本未记代价（旧记录 / 旧调用点），读侧须按「缺席」处理、不得当成 0。
    * 只记录，不参与改进判定 —— 样本量 k=3 时再加一个维度只会让统计问题更糟。
@@ -283,11 +319,16 @@ export async function measureSkillDeltaRepeated(
     postDurations.push(r.durationMs)
   }
 
+  // 空模型闸在最后一次采样后算一次：与模型无关，重复跑只是重复同一组测试。
+  const nullCheck = runNullModelCheck(resolved.skillName)
+
   return {
     skillName: resolved.skillName,
     baselineScores,
     postScores,
     baselineDurations,
     postDurations,
+    nullModelPassed: nullCheck.passed,
+    nullModelTotal: nullCheck.total,
   }
 }

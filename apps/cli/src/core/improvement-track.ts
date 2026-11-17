@@ -32,6 +32,14 @@ export interface ImprovementReport {
    */
   baselineDurations?: number[]
   postDurations?: number[]
+  /**
+   * 空模型闸（null-model ablation）：空程序也能通过的题数 / 总题数。
+   * 两个字段同生同灭；缺席 = 旧记录或未测。
+   */
+  nullModelPassed?: number
+  nullModelTotal?: number
+  /** 闸的结论：failed = 有题空程序也能过 ⇒ `improved` 不可归因。 */
+  nullModelGate?: 'passed' | 'failed'
 }
 
 export interface ImprovementRecord extends ImprovementReport {
@@ -70,7 +78,20 @@ export function buildImprovementReport(
   const deltaMean = mean(sample.postScores) - mean(sample.baselineScores)
   const noise = stdDev(sample.baselineScores)
   const minEffect = computeMinEffect(noise)
-  const verdict = classifyDelta(deltaMean, minEffect)
+  const rawVerdict = classifyDelta(deltaMean, minEffect)
+
+  // 空模型闸：只拦「假赢」。空程序能通过的题不测模型，故 improved 不可归因；
+  // regressed 照旧 —— 它说的是「变差了」，与题是不是真空题无关。
+  const nullModelMeasured =
+    sample.nullModelPassed !== undefined && sample.nullModelTotal !== undefined
+  const nullModelGate = nullModelMeasured
+    ? sample.nullModelPassed! > 0
+      ? ('failed' as const)
+      : ('passed' as const)
+    : undefined
+  const verdict =
+    nullModelGate === 'failed' && rawVerdict === 'improved' ? 'inconclusive' : rawVerdict
+
   return {
     skillName: sample.skillName,
     changeSet,
@@ -94,7 +115,22 @@ export function buildImprovementReport(
     ...(sample.baselineDurations !== undefined && sample.postDurations !== undefined
       ? { baselineDurations: sample.baselineDurations, postDurations: sample.postDurations }
       : {}),
+    // 三个键同生同灭：只写一半会让「测过且通过」与「没测」在记录里同形。
+    ...(nullModelMeasured
+      ? {
+          nullModelPassed: sample.nullModelPassed!,
+          nullModelTotal: sample.nullModelTotal!,
+          nullModelGate,
+        }
+      : {}),
   }
+}
+
+/** 空模型闸失败时给出一行可见读数；闸通过则不出声（不占显示行）。 */
+export function formatNullModelLine(report: ImprovementReport): string | null {
+  if (report.nullModelGate !== 'failed' || report.nullModelPassed === undefined) return null
+  const total = report.nullModelTotal ?? 0
+  return `🕳️ 空模型闸: 空程序已通过 ${report.nullModelPassed}/${total} 题 —— 这些题测的不是模型，改进判定已降级`
 }
 
 /** Wilson score 区间（z 默认 1.96 = 95%）。n=0 → {0,0}。 */
