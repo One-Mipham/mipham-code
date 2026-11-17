@@ -73,6 +73,7 @@ import { AgentViewManager } from './agent-view/agent-view-manager'
 import { AgentsStandalone } from './agent-view/agents-standalone'
 import { createT } from './i18n-core/t'
 import { detectLocale } from './i18n-core/detect'
+import { readLocalePreference } from './i18n-core/preference'
 import { I18nProvider } from './i18n-context'
 import { ConfigWizard } from './ui/config-wizard'
 import enUS from './i18n-core/locales/en-US.json' with { type: 'json' }
@@ -374,7 +375,7 @@ export async function runApp(options: RunOptions): Promise<void> {
     if (options.permission) engine.getPermission().setMode(options.permission)
 
     // Detect locale and create translation function (same as local path)
-    const locale = detectLocale({ lang: options.lang })
+    const locale = detectLocale({ lang: options.lang, settingsLocale: readLocalePreference() })
     const t = createT(localeBundles[locale] || enUS, enUS)
 
     // Set terminal window title
@@ -493,7 +494,7 @@ export async function runApp(options: RunOptions): Promise<void> {
   }
 
   // Detect locale and create translation function
-  const locale = detectLocale({ lang: options.lang })
+  const locale = detectLocale({ lang: options.lang, settingsLocale: readLocalePreference() })
   const t = createT(localeBundles[locale] || enUS, enUS)
 
   // Bootstrap providers

@@ -144,6 +144,19 @@ describe('ExperienceRuleEngine', () => {
     expect(result2.warnings.length).toBe(1)
   })
 
+  it('setRuleEnabled reports whether the id exists', () => {
+    const engine = new ExperienceRuleEngine(TEST_DIR)
+    expect(engine.setRuleEnabled('rule-timeout-bash-heavy', false)).toBe(true)
+    expect(engine.setRuleEnabled('no-such-rule', false)).toBe(false)
+    engine.setRuleEnabled('rule-timeout-bash-heavy', true)
+  })
+
+  it('getRule exposes the rule (and its source) for callers that explain persistence', () => {
+    const engine = new ExperienceRuleEngine(TEST_DIR)
+    expect(engine.getRule('rule-timeout-bash-heavy')?.source).toBe('builtin')
+    expect(engine.getRule('no-such-rule')).toBeUndefined()
+  })
+
   it('convertFromExperienceRules converts ExperienceRule[] to ToolRule[]', () => {
     const engine = new ExperienceRuleEngine(TEST_DIR)
     const expRules = [

@@ -14,24 +14,35 @@ export const keysCmd: CommandHandler = async (_ctx, args) => {
         content: 'Usage: /keys rotate <provider>\n\nExample: /keys rotate deepseek',
       }
     }
-    // Interactive: prompt user to provide new key via follow-up chat message
-    return {
-      content: [
-        '── Key Rotation ──',
-        '',
-        `Provider: ${provider}`,
-        '',
-        'To complete rotation, the new API key must be provided.',
-        'Type your new key in chat and the AI will handle rotation securely.',
-        '',
-        'The old key will be backed up to ~/.mipham/keys/<provider>.backup (chmod 600).',
-      ].join('\n'),
-      forwardToAI: `The user wants to rotate the API key for provider "${provider}". Ask them to provide the new key value, then:
-1. Call KeyManager.rotate("${provider}", newKey) with the provided key
-2. The new key should be stored in ~/.mipham/config.json (or appropriate config)
-3. Confirm rotation count and backup location
-4. Remind them the old key is backed up at ~/.mipham/keys/${provider}.backup`,
+
+    // The key is read from the environment, never from chat: a key typed into
+    // the prompt becomes part of the conversation transcript and the model
+    // context. Per-provider variable first, generic one as the fallback.
+    const envName = `MIPHAM_ROTATE_KEY_${provider.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}`
+    const newKey = process.env[envName] ?? process.env.MIPHAM_ROTATE_KEY
+    if (!newKey) {
+      return {
+        content: [
+          '── Key Rotation ──',
+          '',
+          `Provider: ${provider}`,
+          '',
+          'No key supplied.',
+          `Set ${envName} (or MIPHAM_ROTATE_KEY) and rerun:`,
+          '',
+          `  ${envName}=... /keys rotate ${provider}`,
+          '',
+          'The key is read from the environment so it never enters the conversation transcript.',
+          'The old rotation metadata is backed up to ~/.mipham/keys/<provider>.backup (chmod 600).',
+        ].join('\n'),
+      }
     }
+
+    const result = manager.rotate(provider, newKey)
+    if (!result.success) {
+      return { content: `── Key Rotation ──\n\n✗ ${result.message}` }
+    }
+    return { content: `── Key Rotation ──\n\n✅ ${result.message}` }
   }
 
   // /keys audit

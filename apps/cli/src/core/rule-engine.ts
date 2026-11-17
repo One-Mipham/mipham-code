@@ -165,12 +165,18 @@ export class ExperienceRuleEngine {
     return this.rules.filter((r) => r.enabled)
   }
 
-  setRuleEnabled(id: string, enabled: boolean): void {
+  /** Returns false when no rule has that id — callers must not report success. */
+  setRuleEnabled(id: string, enabled: boolean): boolean {
     const rule = this.rules.find((r) => r.id === id)
-    if (rule) {
-      rule.enabled = enabled
-      this.persist()
-    }
+    if (!rule) return false
+    rule.enabled = enabled
+    this.persist()
+    return true
+  }
+
+  /** Find a rule by id (used to tell the user whether a toggle will persist). */
+  getRule(id: string): ToolRule | undefined {
+    return this.rules.find((r) => r.id === id)
   }
 
   /** Persist runtime rules to disk. Builtin 与 managed 规则永不落盘（源码即真相）。 */

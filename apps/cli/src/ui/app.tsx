@@ -308,7 +308,7 @@ export function App({
   sessionId,
   agentViewManager,
 }: AppProps) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const PERMISSION_LABELS = useMemo<Record<PermissionMode, string>>(
     () => ({
       default: t('ui.permission.manual'),
@@ -580,6 +580,7 @@ export function App({
       skillsLoader,
       pluginManager,
       t,
+      locale,
     }),
     [
       engine,
@@ -590,6 +591,7 @@ export function App({
       pluginManager,
       sessionId,
       t,
+      locale,
       setPermissionMode,
     ],
   )

@@ -1,23 +1,35 @@
 import type { Locale } from './types'
 import { execSync } from 'node:child_process'
 
-export function detectLocale(opts?: { lang?: string; cwd?: string }): Locale {
+export function detectLocale(opts?: {
+  lang?: string
+  /** The user's persisted `/lang` choice (read by the caller; see preference.ts). */
+  settingsLocale?: string | null
+  cwd?: string
+}): Locale {
   // 1. CLI --lang flag
   if (opts?.lang) {
     const normalized = normalizeLocale(opts.lang)
     if (normalized) return normalized as Locale
   }
 
-  // 2. LANG / LC_ALL env vars
+  // 2. Explicit user preference — beats the environment, or LANG=zh_CN would
+  //    silently override someone who chose en-US.
+  if (opts?.settingsLocale) {
+    const normalized = normalizeLocale(opts.settingsLocale)
+    if (normalized) return normalized as Locale
+  }
+
+  // 3. LANG / LC_ALL env vars
   const langEnv = process.env.LC_ALL || process.env.LANG || ''
   const envLocale = parseLangEnv(langEnv)
   if (envLocale) return envLocale
 
-  // 3. OS detection
+  // 4. OS detection
   const osLocale = detectOSLocale()
   if (osLocale) return osLocale
 
-  // 4. Fallback
+  // 5. Fallback
   return 'en-US'
 }
 

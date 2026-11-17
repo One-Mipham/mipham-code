@@ -5,7 +5,7 @@ prompt-exclude:
   - Provider 层（12 家，按字母序）
   - 工具层（31 个工具）
   - Skills 系统（28 个内置技能）
-  - Slash 命令系统（140 个）
+  - Slash 命令系统（139 个）
   - 记忆系统
   - 遥测与崩溃上报（T1 CLI 侧 + T1b 接收端）
   - 核心引擎
@@ -28,9 +28,9 @@ prompt-exclude-header: true
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.67
-> **最后更新**: 2026-11-17 — **25 条多词命令此前没有入口、未知命令零输出（2.94.67）** —— `parseSlashCommand` 只取 `parts[0]`，而 registry 里 29 个多词键只有 5 个父命令会分流：`/crsi`（17 条）与 `/sis`（4 条）**没有父 handler**，输入后屏幕零反馈；`/hooks health|enable` 落到 `/hooks` 列表；`/workflow view|watch` 被当任务描述转发给 AI 去「生成工作流」。测试全绿是因为测试直接 `getCommand('/crsi eval')` —— 测的是注册表，不是用户走的那条路。修法：新增 `subcommandRouter(parent, fallback?)`（按 `args[0]` 查 `${parent} ${sub}`，无子命令时打印子命令表；`/hooks` 与 `/workflow` 传 fallback 保留原行为），注册 `/crsi` `/sis` 两个父命令，`/hooks` `/workflow` 改由 router 承接；`isSubcommandRouter` 供守卫标记，`SELF_ROUTING_PARENTS`（`/keys` `/resume`，父命令自己读 args[0]）显式豁免。**守卫**：新增 `test/ui/command-reachability.test.ts` —— 对每个多词键断言父命令存在、父命令是 router、router 能解析到该键，并带负控（普通 handler 不被标记）；9 条测试先红后绿（红时点名的正是那 21 条无父命令）。② **未知命令不再静默**：dispatch 未命中时打印 `Unknown command: /xxx` + 指向 `/help`，而不是 push 空。命令总数 138 → **140**（新增两个父命令，`/commands` 列表与遥测 allowlist 同步重生成）。测试 4,853 → **4,862**（363 文件）。
-> **前一条（2.94.66）**: 2026-11-16 — **无头会话补上系统提示与审计日志（2.94.66）** —— ① **daemon 此前一条系统提示都没有**：经飞书 / Telegram / 企微 / 钉钉、`attach` 远端与基准 harness 驱动的会话，MIPHAM.md 身份段、CLAUDE.md 项目规则、记忆与 skills 提醒一条都到不了模型。现在与 CLI 同源装配（只少首跑引导 / 密钥到期提醒 / 上一会话摘要三样会话脚手架），权限段读时派生（`set_mode` 切档即生效），压缩后重建只换指令段；D19/D20 两条断言各带正对照。② **daemon 会话此前一条 JSONL 都不写**：新 `attachDaemonSessionLog()` 把审计日志落在 `~/.mipham/daemon-sessions/`（与 CLI 的 `sessions/` 分开，`--resume` 结构上够不到），DB 为真源、日志只记本进程增量，`authoritative:false` 只关「model-visible means logged」断言、写通照常。③ **`/hooks` 不再把无派发点的事件说成「会跑」**：`ConfigChange` / `PreInference` 装载层不注册 + stderr 点名，命令层仍列出但打「本版本没有派发点」标记并排除出 `found N` —— 两层共用一个集合。同批修掉提示段连接符（`<system-reminder>` 不再粘在上一句末尾）与记忆预算（真的给 5000）。测试 4,807 → **4,814**（361 文件；4,812 passed + 2 skipped），两条新断言各做负控、只红对应那一条。⇒ ✅ **已随 `0.85.35` 发布**（GPG tag `v0.85.35` → `ed9f7586`，`release.yml` `43857447221` **9/9**；npm `latest` = **0.85.35**、`time` = 2026-11-16T11:30:26.770Z，Release 6 资产），两站已部署并逐站复核 **3×0.85.35 / 0×0.85.34、4814×2**。
+> **版本**: 2.94.68
+> **最后更新**: 2026-11-17 — **五处假成功收口：/no-plan 真退档、/lang 真持久化、/loop 真挂到会话上、/crsi 未知 id 不再假成功、/keys rotate 给出可执行路径；/theme 撤除（2.94.68）** —— ① **/no-plan** 只打印「已退出」，权限模式一步没动（EnterPlanMode 确实 setMode('plan')）⇒ 现在按 liveMode 判断：不在 plan 就明说没变；在 plan 就 setPermissionMode('default') 并**读回**生效档位，org 限权压住时如实报告；文案从「plan discarded」改为「未被执行、计划文件保留」。② **/lang** 打印「已设置」但从不落盘、无参恒报 en-US ⇒ 现在写 `~/.mipham/settings.json` 的 `locale`（保留其它键），`detectLocale` 新增 `settingsLocale` 并在 `--lang` 之后、`LANG` 之前读取（否则显式选择会被 shell 环境盖掉）；报告的是 `ctx.locale` 实际值。③ **/loop 固定间隔** 把定时器挂到写死的 `'loop-session'`，而引擎按真实 session id 注册回调 ⇒ 到期静默丢弃、却先报 "Wakeup scheduled"；改用 `ctx.sessionId`，并在调度前拒绝 60–3600 之外的值（帮助里的 `10s` 示例同步改掉），prompt 补一句让模型每轮重新武装。④ **/crsi disable|restore** 对未知 id 静默 no-op 却回 "has been disabled" ⇒ `setRuleEnabled` 返回是否找到；未知 id 报 not found；builtin/managed 规则标注「不落盘、重启恢复」。⑤ **/keys rotate** 让 AI 调一个没有任何工具暴露的 `KeyManager.rotate` ⇒ 改为从 `MIPHAM_ROTATE_KEY_<PROVIDER>` / `MIPHAM_ROTATE_KEY` 读密钥并直接落盘（密钥不进对话记录）。⑥ **/theme 撤除** —— 全仓无任何 reader，打印 "✓ Theme set" 却什么都不写；连同帮助/分类/描述/README 一并移除（先例：/fast）。命令总数 140 → **139**，遥测 allowlist 重生成。测试 4,862 → **4,889**（365 文件）。
+> **前一条（2.94.67）**: 2026-11-17 — **25 条多词命令此前没有入口、未知命令零输出（2.94.67）** —— `parseSlashCommand` 只取 `parts[0]`，而 registry 里 29 个多词键只有 5 个父命令会分流：`/crsi`（17 条）与 `/sis`（4 条）**没有父 handler**，输入后屏幕零反馈；`/hooks health|enable` 落到 `/hooks` 列表；`/workflow view|watch` 被当任务描述转发给 AI 去「生成工作流」。测试全绿是因为测试直接 `getCommand('/crsi eval')` —— 测的是注册表，不是用户走的那条路。修法：新增 `subcommandRouter(parent, fallback?)`（按 `args[0]` 查 `${parent} ${sub}`，无子命令时打印子命令表；`/hooks` 与 `/workflow` 传 fallback 保留原行为），注册 `/crsi` `/sis` 两个父命令，`/hooks` `/workflow` 改由 router 承接；`isSubcommandRouter` 供守卫标记，`SELF_ROUTING_PARENTS`（`/keys` `/resume`，父命令自己读 args[0]）显式豁免。**守卫**：新增 `test/ui/command-reachability.test.ts` —— 对每个多词键断言父命令存在、父命令是 router、router 能解析到该键，并带负控（普通 handler 不被标记）；9 条测试先红后绿（红时点名的正是那 21 条无父命令）。② **未知命令不再静默**：dispatch 未命中时打印 `Unknown command: /xxx` + 指向 `/help`，而不是 push 空。命令总数 138 → **140**（新增两个父命令，`/commands` 列表与遥测 allowlist 同步重生成）。测试 4,853 → **4,862**（363 文件）。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -69,7 +69,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）；空模型闸（空程序也能通过的题不计入改进，`improved` 降级为 `inconclusive`）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：4,862 测试（4,860 passed + 2 skipped，363 文件，0 失败）
+测试：4,889 测试（4,887 passed + 2 skipped，365 文件，0 失败）
 
 ---
 
@@ -106,7 +106,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 363 个测试文件，4862 个测试
+│   │   ├── test/               # 365 个测试文件，4889 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -132,7 +132,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（4862 个测试）
+pnpm test         # vitest run（4889 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -202,7 +202,7 @@ pnpm format       # Prettier
 
 **「双轨运行时」已于 T4 删除**：`src/skills/{standard,mipham}/runtime.ts` 自 v0.1.0（`27609bf`）起生产零引用 —— `loader.ts` **从不加载它们**，是又一例「有定义、无施加点」。Skills 的实际生效路径只有 `loader.ts` 一条。
 
-### Slash 命令系统（140 个）
+### Slash 命令系统（139 个）
 
 按分类：Session & Identity / Workflow / Tools & Skills / Model & Provider / Project / Code Quality / History / GitHub / Environment / Account / Agents / Artifact / Other（总数随版本演进，以 `/help` 实际列出为准）。
 
@@ -322,10 +322,10 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 104     | 1874     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
+| core            | 105     | 1883     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
 | tools           | 32      | 622      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 38      | 276      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
-| ui              | 43      | 442      | commands / input / config-wizard / loop / skill-doctor / ctrl-c / command-reachability                                                                                      |
+| ui              | 44      | 460      | commands / input / config-wizard / loop / skill-doctor / ctrl-c / command-reachability                                                                                      |
 | agent           | 16      | 166      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
 | security        | 12      | 126      | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
 | providers       | 10      | 189      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
@@ -343,7 +343,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | integration     | 1       | 3        | 跨仓接线：`vscode-extension-telemetry`（VS Code 遥测关闭 ⇒ 终端拿到 `MIPHAM_TELEMETRY=off`）                                                                                |
 | integrity       | 19      | 132      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **363** | **4862** | **0 失败** ✅（4,860 + 2 skipped，363 文件）                                                                                                                                |
+| **合计**        | **365** | **4889** | **0 失败** ✅（4,887 + 2 skipped，365 文件）                                                                                                                                |
 
 ### 测试注意事项
 

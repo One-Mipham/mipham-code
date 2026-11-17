@@ -2,44 +2,13 @@
  * Mipham Code — Environment Slash Commands
  *
  * Extracted from ui/commands.ts (2026-08-06).
- * Handlers for: /theme, /release-notes, /ide, /terminal-setup
+ * Handlers for: /release-notes, /ide, /terminal-setup
  */
 import type { CommandHandler } from '../ui/commands.js'
 import { NPM_INSTALL_COMMAND } from '../shared/index.ts'
 import { miphamHome } from '../core/paths.ts'
 
-export { themeCmd, releaseNotesCmd, ideCmd, terminalSetupCmd }
-
-const themeCmd: CommandHandler = (_ctx, args) => {
-  const theme = args[0]?.toLowerCase()
-  const validThemes = ['dark', 'light', 'auto'] as const
-
-  if (!theme || !validThemes.includes(theme as (typeof validThemes)[number])) {
-    return {
-      content: `── Theme ──
-
-Terminal color themes (set in .mipham/config.yml):
-
-  theme: dark    — dark background (default, recommended for terminals)
-  theme: light   — light background
-  theme: auto    — follow system preference
-
-Usage: /theme dark | light | auto
-
-Current: auto (follows terminal)`,
-    }
-  }
-
-  return {
-    content: `✓ Theme set to "${theme}".
-
-Add to ~/.mipham/config.yml to persist:
-  theme: ${theme}
-
-Terminal themes affect syntax highlighting and UI accents.
-Full theme customization is available in the Web UI at https://mipham.ai/code/dashboard`,
-  }
-}
+export { releaseNotesCmd, ideCmd, terminalSetupCmd }
 
 // ═══════════════════════════════════════════════════════════════
 // Add-Dir — add a directory to workspace permissions

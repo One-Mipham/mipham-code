@@ -325,7 +325,7 @@
       "unverified": "⚠ 已安装，但无法验证新版本: {reason}"
     },
     "no_plan": {
-      "confirmed": "✓ 计划模式已退出。你的计划已丢弃。\n\n继续正常对话，或输入 /plan 开始新计划。"
+      "confirmed": "✓ 计划模式已退出。计划未被执行（计划文件仍保留供参考）。\n\n继续正常对话，或输入 /plan 开始新计划。"
     },
     "mcp": {
       "usage_connect": "用法: /mcp connect <server-name>",

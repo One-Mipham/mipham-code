@@ -90,7 +90,9 @@ import { getTelemetryConsent, enableTelemetryNow } from '../telemetry/index'
 import { NO_ENDPOINT } from '../telemetry/endpoint'
 import { stripIndent } from './strip-indent.js'
 import { createT } from '../i18n-core/t'
-import type { TranslationMap } from '../i18n-core/types'
+import type { Locale, TranslationMap } from '../i18n-core/types'
+import { SUPPORTED_LOCALES } from '../i18n-core/types'
+import { saveLocalePreference } from '../i18n-core/preference'
 import enUS from '../i18n-core/locales/en-US.json' with { type: 'json' }
 import zhCN from '../i18n-core/locales/zh-CN.json' with { type: 'json' }
 
@@ -122,7 +124,7 @@ import {
   promptAuditCmd,
   trustCmd,
 } from '../commands/project.js'
-import { themeCmd, releaseNotesCmd, ideCmd, terminalSetupCmd } from '../commands/environment.js'
+import { releaseNotesCmd, ideCmd, terminalSetupCmd } from '../commands/environment.js'
 import { commitCmd, pushCmd, prCmd, issueCmd } from '../commands/git.js'
 import { suggestDirectories } from '../commands/cd-suggest.js'
 import { keysCmd } from '../commands/keys'
@@ -156,6 +158,8 @@ export interface CommandContext {
   /** i18n translate function — populated from React tree via useI18n().
    *  Falls back to module-level defaultT (en-US) in tests / bootstrap. */
   t: (key: string, params?: Record<string, string>) => string
+  /** Locale the UI is currently mounted with (`/lang` reports this, not a guess). */
+  locale?: Locale
 }
 
 export interface CommandResult {
@@ -245,7 +249,6 @@ const helpCmd: CommandHandler = (ctx) => {
       /switch <p> <m> Switch provider and model
       /config        View configuration
       /effort <lvl>  Set reasoning effort (low|medium|high|xhigh|max)
-      /theme [dark|light|auto] Set terminal theme
       /ollama-refresh Refresh Ollama model list at runtime
 
       ── Tools & Skills ──────────────────
@@ -823,9 +826,17 @@ const crsiDisableCmd: CommandHandler = (ctx, args) => {
   if (!ruleId) {
     return { content: 'Usage: /crsi disable <rule-id>' }
   }
-  engine.setRuleEnabled(ruleId, false)
+  const source = engine.getRule(ruleId)?.source
+  if (!engine.setRuleEnabled(ruleId, false)) {
+    return { content: `Rule \`${ruleId}\` not found. Use \`/crsi rules\` to see rule ids.` }
+  }
+  // Builtin/managed rules are source-of-truth and never written to the store.
+  const note =
+    source === 'builtin' || source === 'managed'
+      ? '\n\nThis is a builtin/managed rule: the change is not persisted and reverts on restart.'
+      : ''
   return {
-    content: `Rule \`${ruleId}\` has been disabled. Use \`/crsi restore ${ruleId}\` to re-enable.`,
+    content: `Rule \`${ruleId}\` has been disabled. Use \`/crsi restore ${ruleId}\` to re-enable.${note}`,
   }
 }
 
@@ -871,8 +882,15 @@ const crsiRestoreCmd: CommandHandler = (ctx, args) => {
   if (!ruleId) {
     return { content: 'Usage: /crsi restore <rule-id>' }
   }
-  engine.setRuleEnabled(ruleId, true)
-  return { content: `Rule \`${ruleId}\` has been re-enabled.` }
+  const source = engine.getRule(ruleId)?.source
+  if (!engine.setRuleEnabled(ruleId, true)) {
+    return { content: `Rule \`${ruleId}\` not found. Use \`/crsi rules\` to see rule ids.` }
+  }
+  const note =
+    source === 'builtin' || source === 'managed'
+      ? '\n\nThis is a builtin/managed rule: the change is not persisted and reverts on restart.'
+      : ''
+  return { content: `Rule \`${ruleId}\` has been re-enabled.${note}` }
 }
 
 /** Render a tiny ASCII sparkline from a series of 0-1 values (success rates). */
@@ -3416,8 +3434,8 @@ const loopCmd: CommandHandler = async (ctx, args) => {
            or: /loop status                   Show autonomous loop progress
            or: /loop init [path]              Scaffold project vault structure
 
-        Fixed interval formats:
-          10s   — 10 seconds
+        Fixed interval formats (60s minimum, 1h maximum):
+          60s   — 1 minute
           5m    — 5 minutes
           1h    — 1 hour
 
@@ -3462,16 +3480,34 @@ const loopCmd: CommandHandler = async (ctx, args) => {
       }
     }
     return {
-      content: `── Invalid Interval ──\n\n"${interval}" is not a recognised interval.\n\nUse formats like: 10s, 5m, 1h, 30min, 2hr\nOr use /loop auto <prompt> for autonomous mode.`,
+      content: `── Invalid Interval ──\n\n"${interval}" is not a recognised interval.\n\nUse formats like: 60s, 5m, 1h, 30min\nOr use /loop auto <prompt> for autonomous mode.`,
+    }
+  }
+
+  // The scheduler accepts 60–3600s. Reject here so the user gets the range
+  // instead of "Loop failed: delaySeconds must be in [60, 3600]".
+  if (seconds < 60 || seconds > 3600) {
+    return {
+      content:
+        `── Interval Out of Range ──\n\n"${interval}" is ${seconds}s; the scheduler accepts ` +
+        '60–3600 seconds (1 minute to 1 hour).\n\nUse 60s, 5m, or 1h.',
     }
   }
 
   // Fixed-interval loop — directly invoke ScheduleWakeup
   try {
     const { scheduleWakeupTool } = await import('../tools/scheduling/schedule-wakeup.js')
+    // The interval loop must re-arm itself after each fire; nothing in the
+    // scheduler repeats a fixed interval on its own.
+    const scheduledPrompt =
+      `${prompt}\n\n[Repeating every ${seconds}s — after handling this prompt, call ` +
+      `ScheduleWakeup again with delaySeconds: ${seconds} and this same prompt to keep the ` +
+      `loop going. Stop when the task is complete.]`
     const result = await scheduleWakeupTool.execute(
-      { delaySeconds: seconds, reason: `Loop: ${prompt.slice(0, 40)}`, prompt },
-      { cwd: process.cwd(), sessionId: 'loop-session', provider: '', model: '' },
+      { delaySeconds: seconds, reason: `Loop: ${prompt.slice(0, 40)}`, prompt: scheduledPrompt },
+      // Session-keyed, same as the engine's handler: a hardcoded id fires into
+      // nobody and the loop silently never runs.
+      { cwd: process.cwd(), sessionId: ctx.sessionId, provider: '', model: '' },
     )
     if (!result.success) {
       return { content: `Loop failed: ${result.error || 'unknown error'}` }
@@ -5004,11 +5040,26 @@ const upgradeCmd: CommandHandler = async (ctx) => {
 
 const langCmd: CommandHandler = (ctx, args) => {
   const t = resolveT(ctx)
-  const requested = args[0]
-  if (!requested || !['en-US', 'zh-CN'].includes(requested)) {
-    return { content: t('commands.lang.current', { locale: 'en-US' }) }
+  const requested = args[0]?.toLowerCase().replace('_', '-')
+  const current = ctx.locale ?? 'en-US'
+
+  if (!requested) {
+    return { content: t('commands.lang.current', { locale: current }) }
   }
-  return { content: t('commands.lang.set', { locale: requested }) }
+
+  const locale = SUPPORTED_LOCALES.find((l) => l.toLowerCase() === requested) as Locale | undefined
+  if (!locale) {
+    return {
+      content: `${t('commands.lang.current', { locale: current })}\n\nUsage: /lang ${SUPPORTED_LOCALES.join(' | ')}`,
+    }
+  }
+
+  // Persisted for the next start; this session keeps the locale it was mounted
+  // with (the provider is created once, before any command runs).
+  if (!saveLocalePreference(locale)) {
+    return { content: `Failed to save the locale preference to ~/.mipham/settings.json.` }
+  }
+  return { content: t('commands.lang.set', { locale }) }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -5017,6 +5068,29 @@ const langCmd: CommandHandler = (ctx, args) => {
 
 const noPlanCmd: CommandHandler = (ctx) => {
   const t = resolveT(ctx)
+  const mode = liveMode(ctx)
+  if (mode !== 'plan') {
+    return {
+      content:
+        `Not in plan mode (current mode: ${mode}). Nothing changed.\n\n` +
+        'Use /plan to start a plan, or Shift+Tab to cycle modes.',
+    }
+  }
+  if (!ctx.setPermissionMode) {
+    return {
+      content: 'This surface cannot switch permission modes. Use Shift+Tab to leave plan mode.',
+    }
+  }
+  ctx.setPermissionMode('default')
+  const now = liveMode(ctx)
+  // The org limit can clamp the request (same read-back as /approve).
+  if (now === 'plan') {
+    return {
+      content:
+        "Plan mode exit requested, but the organisation's permission limit kept the mode at plan. " +
+        'Use Shift+Tab or contact your administrator.',
+    }
+  }
   return { content: t('commands.no_plan.confirmed') }
 }
 
@@ -6160,7 +6234,6 @@ const commandsListCmd: CommandHandler = () => {
     '/switch': 'Model & Provider',
     '/config': 'Model & Provider',
     '/effort': 'Model & Provider',
-    '/theme': 'Model & Provider',
     '/upgrade': 'Model & Provider',
     '/tools': 'Tools & Skills',
     '/skills': 'Tools & Skills',
@@ -6458,7 +6531,6 @@ registry.set('/trust', trustCmd)
 registry.set('/prompt-audit', promptAuditCmd)
 
 // Environment
-registry.set('/theme', themeCmd)
 registry.set('/lang', langCmd)
 registry.set('/ide', ideCmd)
 registry.set('/terminal-setup', terminalSetupCmd)
@@ -6616,7 +6688,6 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/switch': 'Switch provider and model',
   '/config': 'View configuration',
   '/effort': 'Set reasoning effort',
-  '/theme': 'Set terminal theme',
   '/lang': 'Set display language (en-US, zh-CN)',
   '/tools': 'List available tools',
   '/skills': 'List loaded skills',

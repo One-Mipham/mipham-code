@@ -325,7 +325,7 @@
       "unverified": "⚠ Installed, but could not verify the new version: {reason}"
     },
     "no_plan": {
-      "confirmed": "✓ Plan mode exited. Your plan has been discarded.\n\nContinue chatting as normal, or type /plan to start a new plan."
+      "confirmed": "✓ Plan mode exited. Your plan was not applied (the plan file is kept for reference).\n\nContinue chatting as normal, or type /plan to start a new plan."
     },
     "mcp": {
       "usage_connect": "Usage: /mcp connect <server-name>",

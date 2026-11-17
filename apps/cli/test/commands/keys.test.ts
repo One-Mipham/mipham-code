@@ -48,12 +48,13 @@ describe('Keys Commands', () => {
     expect(result.content).toContain('Usage: /keys rotate <provider>')
   })
 
-  it('/keys rotate with provider shows interactive prompt', async () => {
+  it('/keys rotate with provider names the env var instead of asking for the key in chat', async () => {
     const result = await keysCmd({} as any, ['rotate', 'deepseek'])
     expect(result.content).toContain('Key Rotation')
     expect(result.content).toContain('deepseek')
-    expect(result.forwardToAI).toBeDefined()
-    expect(result.forwardToAI).toContain('deepseek')
+    expect(result.content).toContain('MIPHAM_ROTATE_KEY_DEEPSEEK')
+    // The key must never be typed into the conversation transcript.
+    expect(result.forwardToAI).toBeUndefined()
   })
 
   it('/keys audit shows clean when no expired keys', async () => {
