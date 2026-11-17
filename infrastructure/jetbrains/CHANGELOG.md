@@ -4,6 +4,20 @@
 > (tag dates) and use the same wording as the VS Code extension's changelog — the plugin is a
 > thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.36 (2026-11-17)
+
+- Version sync with Mipham Code CLI 0.85.36
+- Fixed: `/review`, `/code-review`, `/simplify`, `/verify` and `/diff` no longer report
+  "no changes" after `git add`; they compare against `HEAD` and list untracked files.
+- Fixed: `/focus` can be turned off again; `/crsi health` scores measured evidence and
+  prints its basis; `/pr-comments` reads real PR comments through `gh`.
+- Fixed: `/ide` merges editor settings instead of overwriting; `/version` names the real
+  runtime; `/summary` and `/recap` list the newest messages.
+- Changed: `/commit`, `/pr` and `/issue` draft their content with the model; `/push`
+  only reports.
+- Added: `/ollama-refresh` uses each model's real context length; `/ultracode` persists
+  across turns; `/workflow watch` reads the live run id.
+
 ## 0.85.34 (2026-11-16)
 
 - Version sync with Mipham Code CLI 0.85.34

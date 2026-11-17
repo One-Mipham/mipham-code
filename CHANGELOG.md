@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.85.36] — 2026-11-17
+
+### Fixed
+
+- **`/review` `/code-review` `/simplify` `/verify` `/diff` 看不见已暂存的改动** —— 五个
+  命令都以 `git diff --stat`（工作区 vs 索引）取变更，`git add` 之后一律回答「无改动」。
+  现在以 `HEAD` 为基（索引 + 工作区），并列出未跟踪文件。
+- **`/focus` 只能开不能关** —— 命令的注册表 handler 恒设 `true`，而 app 层另有一份
+  拦截分支，真正生效的是后者；现改为按实时状态取反，两处实现收敛为一条。
+- **`/crsi health` 的分数不来自任何读数** —— 综合分此前是「规则引擎存在即 50 分」，
+  一个什么都没学到的空引擎也能拿 A。现在按证据计分（每半 25 分有数据 + 25 分质量
+  信号），并打印「计分依据」可逐项复核。
+- **`/pr-comments` 从未读过 PR 评论** —— 名为 PR 评论，实际只打印本地分支摘要。现在读
+  `gh pr view --json reviews,comments`（只读）；取不到时说明原因（gh 未安装 / 无 PR /
+  其他），不再拿分支摘要冒充。
+- **`/security` 把「有 package.json」当作安全通过** —— 该步骤已删除，不再输出与检查
+  无关的「✔」。
+- **`/ide` 覆写用户的编辑器配置** —— 此前直接覆盖 `.vscode/settings.json` 与
+  `keybindings.json`；现在合并写入，JSONC 解析失败则不动原文件。
+- **`/summary` `/recap` 标着「recent」却列最早的 5 条** —— 改取末尾；同时修掉
+  `stripIndent` 按首行缩进切字的问题（拼接进来的行会被切掉开头字符）。
+- **`/artifact server` 的端口是写死的 9876** —— 改读 manifest 里记录的真实端口。
+- **`/version` 把运行时印成「Bun (Node.js)」** —— 按实际运行时输出。
+
+### Changed
+
+- **列表与计数改为按注册表渲染** —— `/commands` 补上 `Code Quality` 桶（此前 7 条被
+  静默丢弃）、`/tools` 按注册表分桶（artifact / scheduling 不再缺席）、`/crsi stats`
+  与 `/crsi health` 计入 managed 规则、`/config` 同时报告配置值与生效档位。
+- **`/release-notes` 印当前版本** —— 不再输出写死的 v0.1.2 历史。
+- **`/setup` 撤掉已经过期的「coming soon」** —— marketplace 与 IDE 集成均已发布；
+  工具数量改为动态读取。
+- **`/effort` 的说明改为它真正改变的东西** —— stream stall budget，而不是「推理深度」。
+- **`/branch` 不再承诺「未来版本」** —— 直说只保存可回退的命名检查点，不创建独立的
+  并发会话。
+- **`/crsi meta` 撤掉没有实现的 `--apply` 建议**。
+- **`/commit` `/pr` `/issue` 现在真的起草内容** —— 分别把 staged diff、commits + diff、
+  用户描述交给模型生成提交信息 / PR 标题正文 / issue，并明确不执行 git 或 gh。
+- **`/push` 明确只报告** —— 推送是外发动作且不经权限层，命令不执行也不转发，文案写明
+  never pushes。
+
+### Added
+
+- **`/ultracode` 的模式现在会持续** —— 此前只影响开启它的那一轮 prompt；现在作为引擎级
+  标志逐请求注入（attach 会话下明确拒绝）。
+- **`/ollama-refresh` 读取模型真实上下文长度** —— 查 `/api/show` 的 `context_length`，
+  不再把每个模型写死 128k；查不到时明说「assumed 128k」。
+- **`/workflow watch` 读真实状态** —— 能回答「本进程是否有运行中的工作流、活动 run id
+  是哪个」，不再输出同一句话。
+
 ## [0.85.35] — 2026-11-16
 
 ### Added

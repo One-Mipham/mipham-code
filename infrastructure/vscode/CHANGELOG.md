@@ -3,6 +3,24 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.36 (2026-11-17)
+
+- Version sync with Mipham Code CLI 0.85.36
+- Fixed: `/review`, `/code-review`, `/simplify`, `/verify` and `/diff` no longer report
+  "no changes" after `git add`; they compare against `HEAD` and list untracked files.
+- Fixed: `/focus` can be turned off again (the registry handler always set it to true).
+- Fixed: `/crsi health` scores what it measured, not whether an engine object exists,
+  and prints the basis for the score.
+- Fixed: `/pr-comments` reads real PR reviews/comments through `gh` (read-only) and says
+  why when it cannot.
+- Fixed: `/ide` merges the editor settings instead of overwriting them; `/security` no
+  longer counts a package.json as a security pass; `/version` names the real runtime.
+- Fixed: `/summary` and `/recap` list the newest messages, not the oldest.
+- Changed: `/commit`, `/pr` and `/issue` now draft their content with the model;
+  `/push` only reports and says so.
+- Added: `/ollama-refresh` uses each model's real context length; `/ultracode` persists
+  across turns; `/workflow watch` reads the live run id.
+
 ## 0.85.35 (2026-11-16)
 
 - Version sync with Mipham Code CLI 0.85.35
