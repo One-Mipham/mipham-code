@@ -34,6 +34,7 @@ import type {
   ServerDoneMessage,
   ServerErrorMessage,
   ServerSessionStateMessage,
+  ServerStatsMessage,
 } from './attach-protocol'
 
 // ── Session State Snapshot ────────────────────────────────────────────────
@@ -89,6 +90,7 @@ export class SessionWorker {
   addClient(ws: ServerWebSocket<unknown>): void {
     this.clients.add(ws)
     this.sendState(ws)
+    this.sendStats(ws)
   }
 
   /** Remove a WebSocket client from this session's broadcast set. */
@@ -225,6 +227,9 @@ export class SessionWorker {
       stopReason,
     }
     this.broadcast(doneMsg)
+    // 一轮之后读数变了（消息、token、checkpoint）。命令在客户端本地跑，
+    // 它们读到的是**最近一帧**；不补这一帧，用户在下一轮前看到的永远是 attach 时的旧数。
+    this.broadcastStats()
 
     this.currentController = null
     this.processing = false
@@ -467,6 +472,51 @@ export class SessionWorker {
     } catch {
       this.clients.delete(ws)
     }
+  }
+
+  /**
+   * Read the engine's context numbers for a stats frame. Every reader is optional
+   * and guarded: the frame is advisory, and one engine (or one older checkout of
+   * the context) missing a reader must not take the whole turn down with it.
+   */
+  private buildStats(): Omit<ServerStatsMessage, 'type' | 'sessionId'> {
+    const ctx = this.engine.getContext()
+    const read = (fn: (() => number | undefined) | undefined): number => {
+      if (typeof fn !== 'function') return 0
+      try {
+        const value = fn()
+        return typeof value === 'number' && Number.isFinite(value) ? value : 0
+      } catch {
+        return 0
+      }
+    }
+    return {
+      estimatedTokens: read(() => ctx.getEstimatedTokens?.()),
+      maxTokens: read(() => ctx.getMaxTokens?.()),
+      compactionThreshold: read(() => ctx.getCompactionThreshold?.()),
+      messageCount: read(() => ctx.getMessages?.().length),
+      checkpointCount: read(() => ctx.getCheckpoints?.().length),
+      cachedTokens: read(() => ctx.getCacheStatus?.().cachedTokens),
+    }
+  }
+
+  /** Send the current stats to one client (used right after its snapshot). */
+  private sendStats(ws: ServerWebSocket<unknown>): void {
+    const msg: ServerStatsMessage = {
+      type: 'stats',
+      sessionId: this.session.id,
+      ...this.buildStats(),
+    }
+    try {
+      ws.send(JSON.stringify(msg))
+    } catch {
+      this.clients.delete(ws)
+    }
+  }
+
+  /** Broadcast the current stats to every attached client. */
+  private broadcastStats(): void {
+    this.broadcast({ type: 'stats', sessionId: this.session.id, ...this.buildStats() })
   }
 
   /** Build an error ServerMessage for the current session. */

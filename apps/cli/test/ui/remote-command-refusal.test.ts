@@ -139,3 +139,59 @@ describe('本地模式：同样这几条命令照旧生效（防止守卫过宽�
     expect(res.content).toContain('✓')
   })
 })
+
+describe('远程 attach：只读状态命令读 daemon 的 stats', () => {
+  function mkStatsCtx() {
+    return mkRemoteCtx({
+      engine: {
+        isRemote: true,
+        getContext: () => ({
+          getMessages: () => [],
+          getEstimatedTokens: () => 1234,
+          getMessageCount: () => 42,
+          getMaxTokens: () => 200_000,
+          getCompactionThreshold: () => 190_000,
+          getCheckpoints: () => [],
+          getCacheStatus: () => ({
+            totalMessages: 42,
+            cachedMessages: 0,
+            cachedTokens: 800,
+            uncachedTokens: 434,
+          }),
+        }),
+        getTools: () => new Map(),
+        getRegistry: () => ({
+          getProvider: () => undefined,
+          getProviders: () => [],
+          healthMap: async () => new Map<string, boolean>(),
+        }),
+        getPermission: () => ({ getMode: () => 'default' as const }),
+        // 故意不实现 getSummary：`/usage` 必须拒绝，而不是调它崩掉。
+        getUsageTracker: () => ({}),
+      },
+    })
+  }
+
+  it('/status 报 daemon 的条数与窗口，而不是 0', async () => {
+    const res = (await (getCommand('/status')! as Cmd)(mkStatsCtx(), [])) as { content: string }
+    expect(res.content).toContain('42')
+    expect(res.content).toContain('200,000')
+    expect(res.content).toContain('1,234')
+  })
+
+  it('/doctor 在没有窗口读数时不打印 NaN', async () => {
+    const res = (await (getCommand('/doctor')! as Cmd)(mkStatsCtx(), [])) as { content: string }
+    expect(res.content).toContain('Messages     42')
+    expect(res.content).not.toContain('NaN')
+  })
+
+  it('/usage 仍拒绝：按工具用量只在 daemon 里', async () => {
+    const res = (await (getCommand('/usage')! as Cmd)(mkStatsCtx(), [])) as { content: string }
+    expect(res.content).toContain('attached to a daemon')
+  })
+
+  it('/rewind 拒绝：checkpoint 在 daemon 里恢复', async () => {
+    const res = (await (getCommand('/rewind')! as Cmd)(mkStatsCtx(), [])) as { content: string }
+    expect(res.content).toContain('attached to a daemon')
+  })
+})

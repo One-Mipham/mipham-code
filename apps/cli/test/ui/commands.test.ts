@@ -71,7 +71,9 @@ const mkCtx = (messages: unknown[] = []) =>
       getTools: () => new Map(),
       getContext: () => ({
         getMessages: () => messages,
+        getMessageCount: () => messages.length,
         getEstimatedTokens: () => 0,
+        getMaxTokens: () => 200_000,
         getCheckpoints: () => [],
         clear: vi.fn(),
       }),
@@ -201,6 +203,7 @@ const mkCtxWithWindow = (maxTokens: number, threshold: number, tokens: number) =
   }
   e.engine.getContext = () => ({
     getMessages: () => [],
+    getMessageCount: () => 0,
     getEstimatedTokens: () => tokens,
     getCheckpoints: () => [],
     getSystemPrompt: () => '',
@@ -1747,6 +1750,7 @@ describe('报告面读引擎所在的档（`config.permission` 只是其中一�
       ...raw.engine,
       getContext: () => ({
         getMessages: () => [],
+        getMessageCount: () => 0,
         getEstimatedTokens: () => 0,
         getCheckpoints: () => [],
         getMaxTokens: () => 200_000,

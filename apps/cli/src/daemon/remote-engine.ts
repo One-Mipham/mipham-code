@@ -22,9 +22,28 @@ import type {
   ClientInterruptMessage,
   ClientSetModeMessage,
   ServerMessage,
+  ServerStatsMessage,
 } from './attach-protocol'
 import { ALL_MODES } from '../core/permission-config'
 import type { PermissionMode, StreamChunk } from '../shared/types'
+
+/**
+ * Flatten a message's content (string, or the provider block array) into the
+ * plain text local commands display. Unknown shapes become '' rather than
+ * `[object Object]`.
+ */
+function contentToText(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (!Array.isArray(value)) return ''
+  return value
+    .map((block) =>
+      typeof block === 'object' && block !== null && typeof (block as any).text === 'string'
+        ? ((block as any).text as string)
+        : '',
+    )
+    .filter((text) => text !== '')
+    .join(' ')
+}
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
@@ -88,6 +107,25 @@ export class RemoteEngine {
 
   /** Viewers of the confirmed mode (the TUI footer). See `onPermissionModeChange`. */
   private readonly modeListeners = new Set<(mode: PermissionMode) => void>()
+
+  // ── Session readings (the numbers live on the daemon) ────────────────────
+  //
+  // `getContext()` below is the local stand-in slash commands read. Its numbers
+  // come from the daemon's `stats` frames — attach sends one immediately, and
+  // one follows every completed turn. Fields are merged individually: the two
+  // sides version independently, so a missing or malformed field must leave the
+  // previous value (or zero) in place rather than poison the display with NaN.
+  private stats: {
+    estimatedTokens: number
+    maxTokens: number
+    compactionThreshold: number
+    messageCount: number
+    checkpointCount: number
+    cachedTokens: number
+  } | null = null
+
+  /** Messages from the last `session_state` snapshot, parsed for local commands. */
+  private snapshotMessages: Array<{ role: string; content: string }> = []
 
   /**
    * One stable object — **not** a fresh closure per `getPermission()` call.
@@ -322,12 +360,27 @@ export class RemoteEngine {
   /** No-op: agents run on the daemon. */
   setAgentRegistry(_reg: unknown): void {}
 
-  /** Returns a stub context object so slash commands and auto-save don't crash. */
+  /**
+   * Returns the context stand-in slash commands read. Reads are backed by the
+   * daemon's `stats` frames and the last `session_state` snapshot; writes stay
+   * no-ops because the conversation lives on the daemon (commands that would
+   * mutate it are refused in `commands.ts`, not faked here).
+   */
   getContext(): {
     saveCheckpoint(_label: string): void
     clear(): void
     getMessages(): Array<{ role: string; content: string }>
     getEstimatedTokens(): number
+    getMessageCount(): number
+    getMaxTokens(): number
+    getCompactionThreshold(): number
+    getCheckpoints(): unknown[]
+    getCacheStatus(): {
+      totalMessages: number
+      cachedMessages: number
+      cachedTokens: number
+      uncachedTokens: number
+    }
   } {
     return {
       saveCheckpoint: (_label: string) => {
@@ -336,8 +389,25 @@ export class RemoteEngine {
       clear: () => {
         // Remote mode: session history lives on the daemon
       },
-      getMessages: () => [],
-      getEstimatedTokens: () => 0,
+      getMessages: () => [...this.snapshotMessages],
+      getEstimatedTokens: () => this.stats?.estimatedTokens ?? 0,
+      // Exact when the daemon has reported; the snapshot is only the last 100.
+      getMessageCount: () => this.stats?.messageCount ?? this.snapshotMessages.length,
+      getMaxTokens: () => this.stats?.maxTokens ?? 0,
+      getCompactionThreshold: () => this.stats?.compactionThreshold ?? 0,
+      // Callers only read `.length`; the entries themselves have no reader here.
+      getCheckpoints: () =>
+        Array.from({ length: Math.max(0, this.stats?.checkpointCount ?? 0) }, () => undefined),
+      getCacheStatus: () => {
+        const estimated = this.stats?.estimatedTokens ?? 0
+        const cached = this.stats?.cachedTokens ?? 0
+        return {
+          totalMessages: this.stats?.messageCount ?? this.snapshotMessages.length,
+          cachedMessages: 0,
+          cachedTokens: cached,
+          uncachedTokens: Math.max(0, estimated - cached),
+        }
+      },
     }
   }
 
@@ -408,10 +478,17 @@ export class RemoteEngine {
   }
 
   /** Returns a stub registry so slash commands don't crash. */
-  getRegistry(): { getProvider(_id: string): unknown; getProviders(): unknown[] } {
+  getRegistry(): {
+    getProvider(_id: string): unknown
+    getProviders(): unknown[]
+    healthMap(): Promise<Map<string, boolean>>
+  } {
     return {
       getProvider: (_id: string) => undefined,
       getProviders: () => [],
+      // `/status` awaits this. A registry stub without it crashes the command — the
+      // same shape as the missing context readers this file now backs with stats.
+      healthMap: async () => new Map<string, boolean>(),
     }
   }
 
@@ -451,9 +528,17 @@ export class RemoteEngine {
       return
     }
 
+    // Session readings, not prompt stream: local commands read them, and they must be
+    // absorbed even when nothing is consuming chunks.
+    if (msg.type === 'stats') {
+      this.absorbStats(msg)
+      return
+    }
+
     // Session facts, not prompt stream: they carry the gate's current mode and must be
     // absorbed even when nothing is consuming chunks (a keypress, not a turn).
     if (msg.type === 'mode' || msg.type === 'session_state') {
+      if (msg.type === 'session_state') this.absorbSnapshotMessages(msg.messages)
       // A snapshot describes the gate as of connect — see `absorbMode`.
       this.absorbMode(msg.mode, msg.type === 'session_state')
       return
@@ -516,6 +601,78 @@ export class RemoteEngine {
    *   it is already superseded by a request that is in flight; the answer is what the footer
    *   needs, and the daemon always sends one for a `set_mode` it understood.
    */
+  /**
+   * Merge one `stats` frame into the local readings.
+   *
+   * Per-field merge, not replace: a field the daemon did not send (older daemon,
+   * or one that omits a reader) keeps its previous value, and a malformed one is
+   * ignored. The alternative is a single `null` turning the footer into `NaN`.
+   */
+  private absorbStats(msg: ServerStatsMessage): void {
+    const num = (value: unknown): number | undefined =>
+      typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined
+    const patch = {
+      estimatedTokens: num(msg.estimatedTokens),
+      maxTokens: num(msg.maxTokens),
+      compactionThreshold: num(msg.compactionThreshold),
+      messageCount: num(msg.messageCount),
+      checkpointCount: num(msg.checkpointCount),
+      cachedTokens: num(msg.cachedTokens),
+    }
+    const current = this.stats ?? {
+      estimatedTokens: 0,
+      maxTokens: 0,
+      compactionThreshold: 0,
+      messageCount: 0,
+      checkpointCount: 0,
+      cachedTokens: 0,
+    }
+    this.stats = {
+      estimatedTokens: patch.estimatedTokens ?? current.estimatedTokens,
+      maxTokens: patch.maxTokens ?? current.maxTokens,
+      compactionThreshold: patch.compactionThreshold ?? current.compactionThreshold,
+      messageCount: patch.messageCount ?? current.messageCount,
+      checkpointCount: patch.checkpointCount ?? current.checkpointCount,
+      cachedTokens: patch.cachedTokens ?? current.cachedTokens,
+    }
+  }
+
+  /**
+   * Parse the snapshot's `MessageRecord[]` into the `{role, content}` shape local
+   * commands read. `content` is JSON-serialized on the daemon side; a record whose
+   * payload is not JSON is kept as plain text (a malformed record must not drop the
+   * whole snapshot).
+   */
+  private absorbSnapshotMessages(records: unknown): void {
+    if (!Array.isArray(records)) return
+    const parsed: Array<{ role: string; content: string }> = []
+    for (const record of records) {
+      if (typeof record !== 'object' || record === null) continue
+      const rec = record as Record<string, unknown>
+      let payload: unknown = rec.content
+      if (typeof payload === 'string') {
+        try {
+          payload = JSON.parse(payload)
+        } catch {
+          // Not JSON — treat the string itself as the content below.
+        }
+      }
+      const payloadRecord =
+        typeof payload === 'object' && payload !== null
+          ? (payload as Record<string, unknown>)
+          : null
+      const role =
+        typeof payloadRecord?.role === 'string'
+          ? payloadRecord.role
+          : typeof rec.role === 'string'
+            ? rec.role
+            : ''
+      if (role === '') continue
+      parsed.push({ role, content: contentToText(payloadRecord?.content ?? rec.content) })
+    }
+    this.snapshotMessages = parsed
+  }
+
   private absorbMode(mode: unknown, fromSnapshot = false): void {
     if (typeof mode !== 'string' || !ALL_MODES.includes(mode as PermissionMode)) return
     const effective = mode as PermissionMode

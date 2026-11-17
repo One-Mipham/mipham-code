@@ -78,6 +78,101 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+describe('RemoteEngine — daemon 统计帧', () => {
+  it('stats 帧成为 context 的读数，而不是一排 0', async () => {
+    const engine = makeEngine()
+    engine.getPermission().setMode('plan')
+    await tick()
+    const ws = FakeWebSocket.instances[0]!
+
+    ws.deliver({
+      type: 'stats',
+      sessionId: 'sess-1',
+      estimatedTokens: 1234,
+      maxTokens: 200_000,
+      compactionThreshold: 190_000,
+      messageCount: 42,
+      checkpointCount: 3,
+      cachedTokens: 800,
+    })
+
+    const c = engine.getContext()
+    expect(c.getEstimatedTokens()).toBe(1234)
+    expect(c.getMaxTokens()).toBe(200_000)
+    expect(c.getMessageCount()).toBe(42)
+    expect(c.getCompactionThreshold()).toBe(190_000)
+    expect(c.getCheckpoints()).toHaveLength(3)
+    expect(c.getCacheStatus().cachedTokens).toBe(800)
+    engine.close()
+  })
+
+  it('session_state 的消息可读：一条 JSON 记录还原成 role/content', async () => {
+    const engine = makeEngine()
+    engine.getPermission().setMode('plan')
+    await tick()
+    FakeWebSocket.instances[0]!.deliver({
+      type: 'session_state',
+      sessionId: 'sess-1',
+      provider: 'deepseek',
+      model: 'deepseek-v4-pro',
+      turnCount: 1,
+      mode: 'default',
+      messages: [
+        {
+          id: 1,
+          sessionId: 'sess-1',
+          role: 'user',
+          content: JSON.stringify({ role: 'user', content: '你好' }),
+          createdAt: '',
+        },
+        {
+          id: 2,
+          sessionId: 'sess-1',
+          role: 'assistant',
+          content: JSON.stringify({ role: 'assistant', content: [{ type: 'text', text: '在' }] }),
+          createdAt: '',
+        },
+      ],
+    })
+
+    expect(engine.getContext().getMessages()).toEqual([
+      { role: 'user', content: '你好' },
+      { role: 'assistant', content: '在' },
+    ])
+    engine.close()
+  })
+
+  it('字段形状不对时原样忽略（daemon 与客户端各版本独立）', async () => {
+    const engine = makeEngine()
+    engine.getPermission().setMode('plan')
+    await tick()
+    const ws = FakeWebSocket.instances[0]!
+
+    ws.deliver({
+      type: 'stats',
+      sessionId: 'sess-1',
+      estimatedTokens: 'lots',
+      maxTokens: null,
+      messageCount: -1,
+    })
+
+    const c = engine.getContext()
+    expect(c.getEstimatedTokens()).toBe(0)
+    expect(c.getMaxTokens()).toBe(0)
+    expect(c.getMessageCount()).toBe(0)
+    engine.close()
+  })
+})
+
+describe('RemoteEngine — registry 桩', () => {
+  it('带 healthMap：`/status` 会 await 它，缺了就整条命令崩', async () => {
+    const engine = makeEngine()
+    const health = await engine.getRegistry().healthMap()
+    expect(health).toBeInstanceOf(Map)
+    engine.close()
+  })
+})
+
 describe('RemoteEngine — 权限档位', () => {
   it('门面是**同一个对象**：每次现造一个闭包 = 按键之间什么都记不住', () => {
     const engine = makeEngine()

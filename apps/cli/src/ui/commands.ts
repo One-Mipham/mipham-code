@@ -513,7 +513,7 @@ const statusCmd: CommandHandler = async (ctx) => {
       ${t('commands.status.session_title')}
       ${t('commands.status.provider')}   ${ctx.providerId}
       ${t('commands.status.model')}      ${ctx.modelId}
-      ${t('commands.status.messages')}   ${c.getMessages().length}
+      ${t('commands.status.messages')}   ${c.getMessageCount()}
       ${t('commands.status.tokens')}     ~${c.getEstimatedTokens().toLocaleString()} / ${c.getMaxTokens().toLocaleString()}
       ${t('commands.status.tools')}      ${tools.size} ${t('commands.status.loaded')}
       ${t('commands.status.permission')} ${liveMode(ctx)}
@@ -2582,6 +2582,14 @@ const recapCmd: CommandHandler = (ctx) => {
 }
 
 const usageCmd: CommandHandler = (ctx) => {
+  if (ctx.engine.isRemote) {
+    return {
+      content: attachedRefusal(
+        'show per-tool usage here',
+        'Tool-level token accounting lives in the daemon session.',
+      ),
+    }
+  }
   const t = resolveT(ctx)
   const c = ctx.engine.getContext()
   const estTokens = c.getEstimatedTokens()
@@ -3004,6 +3012,14 @@ const pluginDisableCmd: CommandHandler = (ctx, args) => {
 // ═══════════════════════════════════════════════════════════════
 
 const rewindCmd: CommandHandler = (ctx) => {
+  if (ctx.engine.isRemote) {
+    return {
+      content: attachedRefusal(
+        'rewind here',
+        'Checkpoints are restored in the daemon session, not in this terminal.',
+      ),
+    }
+  }
   const t = resolveT(ctx)
   const c = ctx.engine.getContext()
   const checkpoints = c.getCheckpoints()
@@ -3500,13 +3516,11 @@ const doctorCmd: CommandHandler = async (ctx) => {
   ]
 
   const c = ctx.engine.getContext()
-  const msgs = c.getMessages()
   const tokens = c.getEstimatedTokens()
   const maxTokens = c.getMaxTokens()
-  lines.push(`Messages     ${msgs.length}`)
-  lines.push(
-    `Tokens       ~${tokens.toLocaleString()} / ${maxTokens.toLocaleString()} (${((tokens / maxTokens) * 100).toFixed(1)}%)`,
-  )
+  const pct = maxTokens > 0 ? `${((tokens / maxTokens) * 100).toFixed(1)}%` : '—'
+  lines.push(`Messages     ${c.getMessageCount()}`)
+  lines.push(`Tokens       ~${tokens.toLocaleString()} / ${maxTokens.toLocaleString()} (${pct})`)
   lines.push(`Checkpoints  ${c.getCheckpoints().length}`)
 
   // Git info
@@ -4047,6 +4061,7 @@ const statsCmd: CommandHandler = (ctx) => {
   const c = ctx.engine.getContext()
   const msgs = c.getMessages()
   const tokens = c.getEstimatedTokens()
+  const maxTokens = c.getMaxTokens()
   const tools = ctx.engine.getTools()
 
   const userMsgs = msgs.filter((m) => m.role === 'user').length
@@ -4064,14 +4079,16 @@ const statsCmd: CommandHandler = (ctx) => {
     }),
     t('commands.stats.tokens', {
       tokens: tokens.toLocaleString(),
-      max: c.getMaxTokens().toLocaleString(),
+      max: maxTokens.toLocaleString(),
     }),
     t('commands.stats.tools', { count: String(tools.size) }),
     t('commands.stats.provider', { provider: ctx.providerId }),
     t('commands.stats.model', { model: ctx.modelId }),
     t('commands.stats.permission', { permission: liveMode(ctx) }),
     '',
-    t('commands.stats.usage', { pct: ((tokens / c.getMaxTokens()) * 100).toFixed(1) }),
+    t('commands.stats.usage', {
+      pct: maxTokens > 0 ? ((tokens / maxTokens) * 100).toFixed(1) : '—',
+    }),
   ]
 
   // ── CRSI & SIS extensions ──

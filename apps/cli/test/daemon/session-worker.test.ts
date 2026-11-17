@@ -308,3 +308,82 @@ describe('SessionWorker — 权限档位', () => {
     expect(second.sent[0]).toMatchObject({ type: 'session_state', mode: 'plan' })
   })
 })
+
+// ============================================================
+// 统计帧：attach 的客户端靠它拿到 token / 窗口 / checkpoint 数
+//
+// 从前 `RemoteEngine.getContext()` 是个只有四个方法的桩，`/status`、`/cost`、
+// `/doctor` 一旦读到 `getMaxTokens` 就 TypeError。数字在 daemon 手里，所以由
+// daemon 主动送：attach 时一帧，每轮结束后再一帧。
+// ============================================================
+
+describe('SessionWorker — 统计帧', () => {
+  function statsEngine() {
+    return {
+      getPermission: () => new PermissionSystem('default'),
+      getLastAssistantContent: () => undefined,
+      getContext: () => ({
+        getMessages: () => [
+          { role: 'user', content: 'hi' },
+          { role: 'assistant', content: 'yo' },
+        ],
+        getEstimatedTokens: () => 500,
+        getMaxTokens: () => 100_000,
+        getCompactionThreshold: () => 95_000,
+        getCheckpoints: () => [{ id: 1 }],
+        getCacheStatus: () => ({
+          totalMessages: 2,
+          cachedMessages: 1,
+          cachedTokens: 200,
+          uncachedTokens: 300,
+        }),
+      }),
+    } as any
+  }
+
+  it('attach 时在 session_state 之后发一帧 stats', () => {
+    const worker = new SessionWorker(statsEngine(), makeDb() as any, { ...SESSION })
+    const ws = makeWs()
+    worker.addClient(ws as any)
+
+    expect(ws.sent.map((m) => m.type)).toEqual(['session_state', 'stats'])
+    expect(ws.sent[1]).toMatchObject({
+      type: 'stats',
+      estimatedTokens: 500,
+      maxTokens: 100_000,
+      compactionThreshold: 95_000,
+      messageCount: 2,
+      checkpointCount: 1,
+      cachedTokens: 200,
+    })
+  })
+
+  it('每轮结束后再广播一帧：命令读到的不是 attach 那一刻的旧数', async () => {
+    const worker = new SessionWorker(statsEngine(), makeDb() as any, { ...SESSION })
+    const ws = makeWs()
+    worker.addClient(ws as any)
+
+    await worker.processPrompt('hi')
+
+    const stats = ws.sent.filter((m) => m.type === 'stats')
+    expect(stats).toHaveLength(2)
+  })
+
+  it('引擎没有这些读数时发 0，而不是让整轮崩掉', () => {
+    const engine = {
+      getPermission: () => new PermissionSystem('default'),
+      getContext: () => ({ getMessages: () => [] }),
+    } as any
+    const worker = new SessionWorker(engine, makeDb() as any, { ...SESSION })
+    const ws = makeWs()
+    worker.addClient(ws as any)
+
+    expect(ws.sent[1]).toMatchObject({
+      type: 'stats',
+      estimatedTokens: 0,
+      maxTokens: 0,
+      messageCount: 0,
+      checkpointCount: 0,
+    })
+  })
+})

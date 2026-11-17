@@ -88,6 +88,30 @@ export interface ServerModeMessage {
   sessionId: string
   mode: PermissionMode
 }
+/**
+ * 会话读数（daemon → 客户端）。`attach` 的本地 `getContext()` 是个薄桩，
+ * `/status`、`/cost`、`/doctor` 这类只读命令要用到的 token / 窗口 / checkpoint
+ * 数都在 daemon 手里 —— 由这一帧送过来，客户端据此作答，而不是显示一排 0。
+ *
+ * 每个字段都按「daemon 可能没送」处理：两端版本独立，缺字段或类型不对时客户端
+ * 保持原值（不拿 NaN 去渲染）。
+ */
+export interface ServerStatsMessage {
+  type: 'stats'
+  sessionId: string
+  /** 引擎上下文当前的估算 token 数。 */
+  estimatedTokens: number
+  /** 模型上下文窗口。 */
+  maxTokens: number
+  /** 触发压缩的阈值（token）。 */
+  compactionThreshold: number
+  /** 引擎上下文里的消息数。 */
+  messageCount: number
+  /** 本会话已保存的 checkpoint 数。 */
+  checkpointCount: number
+  /** 当前由 provider prompt cache 提供的 token 数。 */
+  cachedTokens: number
+}
 
 export type ServerMessage =
   | ServerTextMessage
@@ -99,3 +123,4 @@ export type ServerMessage =
   | ServerErrorMessage
   | ServerSessionStateMessage
   | ServerModeMessage
+  | ServerStatsMessage
