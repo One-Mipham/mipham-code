@@ -34,7 +34,7 @@ export const reportFindingsTool: ToolDefinition = {
             },
             summary: {
               type: 'string',
-              description: 'One-sentence statement of the defect.',
+              description: 'Statement of the defect.',
             },
             short_summary: {
               type: 'string',
@@ -50,6 +50,14 @@ export const reportFindingsTool: ToolDefinition = {
               maxLength: 40,
               description:
                 'Short kebab-case slug: correctness, security, performance, simplification, test-coverage, etc.',
+            },
+            severity: {
+              type: 'string',
+              enum: ['important', 'pre_existing', 'nit'],
+              description:
+                'Set when the review instructions ask for it. important: a bug the change adds ' +
+                'or makes worse; pre_existing: a bug that was there before the change; nit: a ' +
+                'minor issue.',
             },
             verdict: {
               type: 'string',
@@ -104,6 +112,12 @@ export const reportFindingsTool: ToolDefinition = {
       if (f.outcome && !['fixed', 'skipped', 'no_change_needed'].includes(f.outcome as string)) {
         errors.push(`findings[${i}]: "outcome" must be fixed, skipped, or no_change_needed`)
       }
+      if (
+        f.severity !== undefined &&
+        !['important', 'pre_existing', 'nit'].includes(f.severity as string)
+      ) {
+        errors.push(`findings[${i}]: "severity" must be important, pre_existing, or nit`)
+      }
     }
 
     if (errors.length > 0) {
@@ -154,9 +168,13 @@ export const reportFindingsTool: ToolDefinition = {
       lines.push(`${icon} ${category} (${items.length}):`)
       for (const f of items) {
         const verdict = f.verdict ? ` [${f.verdict}]` : ''
+        // The severity is what tells a reader whether the change made this worse
+        // or merely inherited it; accepting it without showing it would make the
+        // field an inert attribute (nothing downstream reads it).
+        const severity = f.severity ? ` [severity: ${f.severity}]` : ''
         const outcome = f.outcome ? ` → ${f.outcome}` : ''
         const lineRef = f.line ? `:${f.line}` : ''
-        lines.push(`  • ${f.file}${lineRef}${verdict}${outcome}`)
+        lines.push(`  • ${f.file}${lineRef}${verdict}${severity}${outcome}`)
         lines.push(`    ${f.summary}`)
         if (f.failure_scenario) {
           const scenario =

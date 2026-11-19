@@ -28,9 +28,9 @@ prompt-exclude-header: true
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.71
-> **最后更新**: 2026-11-19 — **CC 2.1.326/327 对标：540 条逐条过，8 个修复单元（2.94.71）** —— ① **auto 档的 allow 规则短路了它唯一的安全检查**：规则排在模式基线之前，`allow: ["Bash(*)"]`、`$HOME`/路径拼法、`npx`·`pnpm dlx` 这类**包运行器**会一次放行所有匹配命令而不经分类器；auto 下这几类规则不再构成授予（其他档位照旧，具体程序的规则照旧）。② **worktree 只隔离了目录、没隔离 refs**：子代理在 worktree 里跑 `git update-ref refs/heads/main` / `branch -f` / `checkout -B` 能挪动主检出的分支；子代理在 worktree 内被拒，主会话（那是用户自己的检出）不受影响。③ **命令 handler 抛错 = 会话退出**：`/permissions` 写不进 settings.json 时拒绝逃逸成未处理拒绝、被崩溃钩子当致命；新增 `runCommandHandler` 把 throw 变成该命令的答复。④ **深嵌套 settings.json 读得进、写不回**：`JSON.parse` 接受 20 万层而 `JSON.stringify` 在同一值上抛 RangeError ⇒ 读取时截断到 64 层并告警；解析失败在 Node 下补 line/column。⑤ **WebFetch 的 URL 长度无上界** ⇒ 超过 2,000 字符在解析/DNS/权限提示前拒绝。⑥ **MCP 根 anyOf/oneOf 只把第一支的参数给模型** ⇒ 合并所有分支（required 取交集）。⑦ **会话中新写的技能不可见** ⇒ Skill 工具未命中时重扫一次目录。⑧ **hook exit 127 被当成普通非零退出** ⇒ 走 fail-closed 并写明「它的检查可能没跑」。测试 4,928 → **4,963**（371 文件）。
-> **前一条（2.94.70）**: 2026-11-17 — **剩余 P1/P2 收口：五条命令有了落点，四条不再自称做了没做的事（2.94.70）** —— ① **/focus** 的注册表 handler 恒设 true，而 app 层另有一份拦截 ⇒ 同一命令两份实现；现改为按 `getFocusMode()` 取反、i18n 补 off，并删掉 app 侧重复分支与 `/focus` 的 PRE_REGISTRY 豁免。② **/branch** 文案还承诺「未来版本提供完整会话分支」—— 改为直说只保存检查点、不创建独立并发会话（en/zh 同改）。③ **/crsi health** 综合分是 `engine ? 50 : 0`（对象在即满分，不干活也能拿 A）⇒ 按证据计分：每半 25 分有数据 + 25 分质量信号，并打印「计分依据」可复核。④ **/pr-comments** 名为 PR 评论却只打本地分支摘要 ⇒ 读 `gh pr view --json reviews,comments`（只读），取不到时说明原因（gh 未安装 / 无 PR / 未登录），不再拿分支摘要冒充。⑤ **/commit /pr /issue** 只打印「请在对话里说…」⇒ 改为 `forwardToAI` 真的起草（提交信息 / PR 标题正文 / issue），并明确不执行 git/gh；**/push** 是外发动作且不经权限层，故只报告并写明 never pushes。⑥ **/workflow watch** 读 `getEventBus().getActiveRunId()` 与已记录 run，能答「本进程没有运行中的工作流 / 活动 run 是哪一个」。测试 4,914 → **4,928**（370 文件）。
+> **版本**: 2.94.72
+> **最后更新**: 2026-11-19 — **CC 2.1.328 档：它只是 npm `next` 预发布，语料取自类型面 diff（2.94.72）** —— 2.1.328 于 2026-11-18T23:09Z 发布到 `next` 通道，**`latest` 仍是 2.1.327**，GitHub 无 `v2.1.328` tag、CHANGELOG 无该节（与 2.1.324 同形的「npm-only」）。可核对的一手差异只剩包内 `sdk-tools.d.ts`：**唯一实质变化是 `ReportFindings` 的 finding 新增可选 `severity: important | pre_existing | nit`**（important = 本次改动引入或加重；pre_existing = 改动前就有；nit = 次要），并把 `summary` 描述从「One-sentence statement of the defect」改成「Statement of the defect」。已落：schema 增该字段、校验拒绝未知档位、报告行渲染 `[severity: …]`（只收不显示等于一个没人读的属性）；无 severity 时输出不变。测试 4,963 → **4,969**（372 文件）。
+> **前一条（2.94.71）**: 2026-11-19 — **CC 2.1.326/327 对标：540 条逐条过，8 个修复单元（2.94.71）** —— ① **auto 档的 allow 规则短路了它唯一的安全检查**：规则排在模式基线之前，`allow: ["Bash(*)"]`、`$HOME`/路径拼法、`npx`·`pnpm dlx` 这类**包运行器**会一次放行所有匹配命令而不经分类器；auto 下这几类规则不再构成授予（其他档位照旧，具体程序的规则照旧）。② **worktree 只隔离了目录、没隔离 refs**：子代理在 worktree 里跑 `git update-ref refs/heads/main` / `branch -f` / `checkout -B` 能挪动主检出的分支；子代理在 worktree 内被拒，主会话（那是用户自己的检出）不受影响。③ **命令 handler 抛错 = 会话退出**：`/permissions` 写不进 settings.json 时拒绝逃逸成未处理拒绝、被崩溃钩子当致命；新增 `runCommandHandler` 把 throw 变成该命令的答复。④ **深嵌套 settings.json 读得进、写不回**：`JSON.parse` 接受 20 万层而 `JSON.stringify` 在同一值上抛 RangeError ⇒ 读取时截断到 64 层并告警；解析失败在 Node 下补 line/column。⑤ **WebFetch 的 URL 长度无上界** ⇒ 超过 2,000 字符在解析/DNS/权限提示前拒绝。⑥ **MCP 根 anyOf/oneOf 只把第一支的参数给模型** ⇒ 合并所有分支（required 取交集）。⑦ **会话中新写的技能不可见** ⇒ Skill 工具未命中时重扫一次目录。⑧ **hook exit 127 被当成普通非零退出** ⇒ 走 fail-closed 并写明「它的检查可能没跑」。测试 4,928 → **4,963**（371 文件）。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -69,7 +69,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）；空模型闸（空程序也能通过的题不计入改进，`improved` 降级为 `inconclusive`）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：4,963 测试（4,961 passed + 2 skipped，371 文件，0 失败）
+测试：4,969 测试（4,967 passed + 2 skipped，372 文件，0 失败）
 
 ---
 
@@ -106,7 +106,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 371 个测试文件，4963 个测试
+│   │   ├── test/               # 372 个测试文件，4969 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -132,7 +132,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（4963 个测试）
+pnpm test         # vitest run（4969 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -323,7 +323,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | core            | 105     | 1893     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
-| tools           | 32      | 638      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
+| tools           | 33      | 644      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 38      | 276      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
 | ui              | 50      | 503      | commands / input / config-wizard / loop / skill-doctor / ctrl-c / command-reachability                                                                                      |
 | agent           | 16      | 166      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
@@ -343,7 +343,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | integration     | 1       | 3        | 跨仓接线：`vscode-extension-telemetry`（VS Code 遥测关闭 ⇒ 终端拿到 `MIPHAM_TELEMETRY=off`）                                                                                |
 | integrity       | 19      | 132      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **371** | **4963** | **0 失败** ✅（4,961 + 2 skipped，371 文件）                                                                                                                                |
+| **合计**        | **372** | **4969** | **0 失败** ✅（4,967 + 2 skipped，372 文件）                                                                                                                                |
 
 ### 测试注意事项
 
