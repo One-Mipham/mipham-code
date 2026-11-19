@@ -457,6 +457,21 @@ async function executeCommand(
       }
     }
 
+    // Exit 127 is the shell's "command not found": the hook never started, so it
+    // never decided anything. Told apart from a normal non-zero exit (which *is*
+    // an answer) and routed through the same fail-closed path as a spawn
+    // failure — otherwise a missing interpreter is printed as a warning and a
+    // guard that never ran reads exactly like a guard that said yes.
+    if (result.status === 127) {
+      return failureResult(
+        cfg,
+        ctx,
+        `Hook error ${failingLabel(cfg.command, source)}: exit 127 — the hook's command or ` +
+          `interpreter was not found, so its check may not have run`,
+        'exit 127: command or interpreter not found',
+      )
+    }
+
     const failure = spawnFailureCause(result, hookTimeoutSeconds(cfg))
     if (failure) {
       return failureResult(

@@ -459,6 +459,42 @@ describe('settings rule persistence', () => {
     expect(read().permissions.deny).toEqual([])
   })
 
+  it('深嵌套的值被截断到 64 层并告警，而不是让写回抛 RangeError', () => {
+    // JSON.parse 接受深嵌套；JSON.stringify 在同一个值上抛 RangeError（实测
+    // 200k 层）。读 → 改 → 写这条链因此曾在一个「解析完全成功」的文件上崩掉。
+    const DEPTH = 200_000
+    writeFileSync(projectSettings, '{"a":'.repeat(DEPTH) + '1' + '}'.repeat(DEPTH))
+    const warnings: string[] = []
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+      warnings.push(String(chunk))
+      return true
+    })
+    try {
+      expect(() => addSettingsRule('allow', 'Read', 'project', CWD)).not.toThrow()
+    } finally {
+      spy.mockRestore()
+    }
+    const doc = read()
+    expect(doc.permissions.allow).toEqual(['Read'])
+    expect(warnings.join('')).toContain('nested deeper than 64 levels')
+  })
+
+  it('正对照：64 层以内的值原样保留', () => {
+    let nested: Record<string, unknown> = { keep: true }
+    for (let i = 0; i < 60; i++) nested = { a: nested }
+    writeFileSync(projectSettings, JSON.stringify({ deep: nested }))
+    addSettingsRule('allow', 'Read', 'project', CWD)
+    const doc = read()
+    let cursor: any = doc.deep
+    let depth = 0
+    while (cursor && cursor.a) {
+      cursor = cursor.a
+      depth++
+    }
+    expect(cursor).toEqual({ keep: true })
+    expect(depth).toBe(60)
+  })
+
   it('returns null and leaves the file alone when the rule is absent', () => {
     addSettingsRule('allow', 'Read', 'project', CWD)
     const before = readFileSync(projectSettings, 'utf-8')

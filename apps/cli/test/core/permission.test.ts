@@ -1393,6 +1393,70 @@ describe('PermissionSystem', () => {
   })
 
   // ═══════════════════════════════════════════
+  // auto 档 —— 无界 allow 规则不得短路安全分类器
+  // ═══════════════════════════════════════════
+
+  describe('auto 档 —— 无界 allow 规则不再短路分类器', () => {
+    const bash = (): ToolDefinition => makeTool('Bash', 'ask', 'exec')
+    const input = { command: 'pnpm dlx some-package' }
+
+    it('Bash(*) 在 auto 档不构成放行：走静态基线 → ask，再交给分类器', async () => {
+      const ps = new PermissionSystem('auto')
+      ps.allow('Bash(*)')
+
+      expect(ps.check(bash(), input)).toBe('ask')
+
+      const asked: string[] = []
+      ps.setClassifier({
+        version: 'test',
+        classify: async (req) => {
+          asked.push(req.reason)
+          return { allow: true }
+        },
+      })
+      expect(await ps.resolveApproval(bash(), input)).toMatchObject({
+        level: 'bypass',
+        source: 'classifier',
+      })
+      expect(asked).toEqual(['mode-baseline'])
+    })
+
+    it('具体程序的 allow 规则照旧放行（对照，防把整类 allow 一起废掉）', () => {
+      const ps = new PermissionSystem('auto')
+      ps.allow('Bash(pnpm test:*)')
+      expect(ps.check(bash(), { command: 'pnpm test -- --coverage' })).toBe('bypass')
+    })
+
+    it('同一条 Bash(*) 在 default 档仍然放行（规则不是被删除，只是 auto 不信它）', () => {
+      const ps = new PermissionSystem('default')
+      ps.allow('Bash(*)')
+      expect(ps.check(bash(), input)).toBe('bypass')
+    })
+
+    it('包运行器（npx / pnpm dlx / uvx）与路径、变量拼法都在无界名单里', () => {
+      for (const rule of [
+        'Bash(*)',
+        'Bash($HOME/bin/tool)',
+        'Bash(/usr/bin/npx:*)',
+        'Bash(./scripts/deploy.sh:*)',
+        'Bash(npx:*)',
+        'Bash(pnpm dlx *)',
+        'Bash(uvx *)',
+      ]) {
+        const ps = new PermissionSystem('auto')
+        ps.allow(rule)
+        expect(ps.check(bash(), input), rule).toBe('ask')
+      }
+    })
+
+    it('deny/ask 方向的宽读不变：无界规则在 deny 里仍然命中', () => {
+      const ps = new PermissionSystem('bypassPermissions')
+      ps.deny('Bash(*)')
+      expect(ps.check(bash(), input)).toBe('ask')
+    })
+  })
+
+  // ═══════════════════════════════════════════
   // P1 — 写错的 permissionRestrictions 必须告警并 fail-closed
   // ═══════════════════════════════════════════
 

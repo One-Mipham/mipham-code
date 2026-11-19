@@ -199,6 +199,31 @@ export type CommandHandler = (
   args: string[],
 ) => CommandResult | Promise<CommandResult>
 
+export type CommandOutcome = { ok: true; result: CommandResult } | { ok: false; message: string }
+
+/**
+ * Run a command handler, turning a throw into a value.
+ *
+ * Handlers reach the filesystem (`/permissions` writes settings.json, `/export`
+ * writes a file, `/resume` reads session files), so they can fail for reasons
+ * the user can act on — EACCES, ENOSPC, a read-only home. Before this wrapper the
+ * rejection escaped the submit callback: the process-wide crash handler saw an
+ * unhandled rejection and exited, so "the settings file could not be written"
+ * looked like "the command killed the CLI". A failure is that command's answer,
+ * and the session stays up.
+ */
+export async function runCommandHandler(
+  handler: CommandHandler,
+  ctx: CommandContext,
+  args: string[],
+): Promise<CommandOutcome> {
+  try {
+    return { ok: true, result: await handler(ctx, args) }
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : String(err) }
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Session & Identity
 // ═══════════════════════════════════════════════════════════════

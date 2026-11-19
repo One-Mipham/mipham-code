@@ -56,24 +56,42 @@ function hasProperties(node: Record<string, unknown>): boolean {
   return isPlainObject(node.properties) && Object.keys(node.properties).length > 0
 }
 
+interface ArgumentSurface {
+  properties: Record<string, unknown>
+  required?: string[]
+}
+
+function surfaceOf(node: Record<string, unknown>): ArgumentSurface {
+  const required = Array.isArray(node.required)
+    ? node.required.filter((name): name is string => typeof name === 'string')
+    : undefined
+  return {
+    properties: isPlainObject(node.properties) ? node.properties : {},
+    ...(required && required.length > 0 ? { required } : {}),
+  }
+}
+
 /**
+ * Every argument surface a schema offers.
+ *
  * A server may put the union at the root (`anyOf`/`oneOf`). Reading only
  * `root.properties` made that tool reach the model with **no parameters at
- * all** — callable, but every argument invisible. Follow the first branch that
- * declares properties (nested unions included); keep the root when it declares
- * properties itself, so a schema that has both is not rewritten.
+ * all** — callable, but every argument invisible. Following only the *first*
+ * branch fixed that and introduced the next defect one step in: a branch that
+ * takes an id as a number and another that takes it as a string are two
+ * spellings of one argument, and showing only the first taught the model that
+ * the second was invalid. Every branch is surfaced; nested unions included.
+ * The root wins when it declares properties itself, so a schema that has both
+ * is not rewritten.
  */
-function schemaWithProperties(schema: unknown, depth = 0): Record<string, unknown> {
+function collectSurfaces(schema: unknown, depth = 0): ArgumentSurface[] {
   const node = isPlainObject(schema) ? schema : {}
-  if (hasProperties(node) || depth >= 8) return node
+  if (hasProperties(node)) return [surfaceOf(node)]
+  if (depth >= 8) return []
   const branches = (
     Array.isArray(node.anyOf) ? node.anyOf : Array.isArray(node.oneOf) ? node.oneOf : []
   ).filter(isPlainObject)
-  for (const branch of branches) {
-    const resolved = schemaWithProperties(branch, depth + 1)
-    if (hasProperties(resolved)) return resolved
-  }
-  return branches[0] ?? node
+  return branches.flatMap((branch) => collectSurfaces(branch, depth + 1))
 }
 
 /**
@@ -94,23 +112,29 @@ export function sanitizeInputSchema(schema: unknown): {
   properties: Record<string, unknown>
   required?: string[]
 } {
-  const root = schemaWithProperties(schema)
-  const rawProperties = isPlainObject(root.properties) ? root.properties : {}
+  const surfaces = collectSurfaces(schema)
   const properties: Record<string, unknown> = {}
-  for (const [name, property] of Object.entries(rawProperties)) {
-    if (isPlainObject(property)) properties[name] = property
+  for (const surface of surfaces) {
+    for (const [name, property] of Object.entries(surface.properties)) {
+      // First spelling wins on a name collision; the later branch is another
+      // way to say the same argument, not a second argument.
+      if (isPlainObject(property) && !Object.prototype.hasOwnProperty.call(properties, name)) {
+        properties[name] = property
+      }
+    }
   }
 
-  const required = Array.isArray(root.required)
-    ? [
-        ...new Set(
-          root.required.filter(
-            (name): name is string =>
-              typeof name === 'string' && Object.prototype.hasOwnProperty.call(properties, name),
-          ),
-        ),
-      ]
-    : []
+  // A name is required only when **every** surface that mentions requirements
+  // requires it. One branch needing `id` and another not is not a reason to
+  // demand `id` for a call the second branch accepts.
+  let required = surfaces[0]?.required ? [...surfaces[0].required] : []
+  for (const surface of surfaces.slice(1)) {
+    const set = new Set(surface.required ?? [])
+    required = required.filter((name) => set.has(name))
+  }
+  required = [...new Set(required)].filter((name) =>
+    Object.prototype.hasOwnProperty.call(properties, name),
+  )
 
   return required.length > 0 ? { properties, required } : { properties }
 }

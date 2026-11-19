@@ -6,7 +6,12 @@ import type {
   PermissionRestrictions,
 } from '../shared/index.ts'
 import type { PermissionRuleEntry } from '../shared/index.ts'
-import { matchBashRule, compileRule, variableWildcardWarning } from './permission-rules'
+import {
+  matchBashRule,
+  compileRule,
+  variableWildcardWarning,
+  isUnboundedBashAllowRule,
+} from './permission-rules'
 import { detectDangerousRm } from '../security/dangerous-rm'
 import type { DangerousRm } from '../security/dangerous-rm'
 import { detectWorldWritableChmod } from '../security/world-writable-chmod'
@@ -637,11 +642,18 @@ export class PermissionSystem {
 
     // 3. Check allow rules — but an org ceiling still applies (see allowRuleDecision)
     for (const rule of this.allowRules) {
-      if (this.ruleMatches(rule, tool, input)) {
-        const result = this.allowRuleDecision(tool, input)
-        this.checkCache.set(cacheKey, result)
-        return result
+      if (!this.ruleMatches(rule, tool, input)) continue
+      // In `auto`, a rule that names no program does not stand in for the safety
+      // classifier. An allow rule sits *ahead* of the mode baseline, so
+      // `allow: ["Bash(*)"]` would otherwise make the one mode that examines
+      // commands examine none of them — the rule would be a universal bypass of
+      // the mode's entire check. The rule still grants in every other mode.
+      if (this.mode === 'auto' && tool.name === 'Bash' && isUnboundedBashAllowRule(rule.pattern)) {
+        continue
       }
+      const result = this.allowRuleDecision(tool, input)
+      this.checkCache.set(cacheKey, result)
+      return result
     }
 
     // 4. Legacy exact-name rules (backward compat)

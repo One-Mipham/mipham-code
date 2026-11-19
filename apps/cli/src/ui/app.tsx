@@ -58,6 +58,7 @@ import {
   parseSlashCommand,
   unknownCommandMessage,
   handleSwitch,
+  runCommandHandler,
   type CommandContext,
 } from './commands'
 import { useI18n } from '../i18n-context'
@@ -1225,7 +1226,19 @@ export function App({
           return
         }
         if (handler) {
-          const result = await handler(mkCtx(), args)
+          // A handler that throws is not a crash of the session — see
+          // `runCommandHandler`: the failure is reported as that command's
+          // answer and the session continues.
+          const outcome = await runCommandHandler(handler, mkCtx(), args)
+          if (!outcome.ok) {
+            setMessages((prev) => [
+              ...prev,
+              { role: 'user', content: input },
+              { role: 'system', content: `❌ ${command} failed: ${outcome.message}` },
+            ])
+            return
+          }
+          const result = outcome.result
           forwardToAI = result.forwardToAI
           // Handle API key prompt from command result
           if (result.needsApiKey) {

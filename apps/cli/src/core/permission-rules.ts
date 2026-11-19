@@ -1253,6 +1253,66 @@ export function variableWildcardWarning(pattern: string): string | undefined {
   )
 }
 
+/** Runners for which *every* invocation fetches and runs a package (`uvx`, `npx`…). */
+const ALWAYS_PACKAGE_RUNNERS = new Set(['npx', 'bunx', 'uvx'])
+
+/** Runners that only do so through a named subcommand (`pnpm dlx`, `pipx run`…). */
+const PACKAGE_RUNNERS = new Set(['pnpm', 'yarn', 'npm', 'bun', 'pipx', ...ALWAYS_PACKAGE_RUNNERS])
+
+/** Their subcommands that run a package the rule did not name. */
+const RUNNER_EXEC_SUBS = new Set(['dlx', 'exec', 'x'])
+
+/** `pipx run <package>` — `run` is pipx's own spelling, not `npm run`'s script. */
+const PIPX_EXEC_SUBS = new Set(['run'])
+
+/**
+ * Does this **Bash allow** rule grant more than "the program it names"?
+ *
+ * `auto` mode hands everything it is unsure about to the safety classifier — but
+ * an allow rule short-circuits *ahead* of that classifier, so a rule that names
+ * no program at all (`Bash(*)`), names a **path or variable** instead of a
+ * program (`Bash($HOME/bin/…)`, `Bash(/usr/bin/npm:*)`), or names a **package
+ * runner** whose subcommand fetches and runs arbitrary code (`Bash(pnpm dlx *)`)
+ * would silently disable the mode's one safety check for every command it
+ * matches. The rule is still honored in every other mode; only `auto` declines
+ * to read it as a grant, so its commands go to the classifier.
+ *
+ * Deliberately narrow: a rule that names a concrete program (`Bash(npm test:*)`)
+ * keeps granting. The named shapes are ones where the *program* is not decided
+ * by the rule.
+ */
+export function isUnboundedBashAllowRule(pattern: string): boolean {
+  const shape = /^Bash\((.+)\)$/.exec(pattern)
+  if (!shape) return false
+  const sub = shape[1]!.trim()
+  if (sub === '' || sub === '*') return true
+
+  // A drive-letter path carries a colon of its own; judging the drive before the
+  // `:`-as-separator split keeps `Bash(C:\tools\x.exe:*)` a path, not a program
+  // called `C`.
+  if (/^[A-Za-z]:[\\/]/.test(sub)) return true
+
+  const words = sub.split(/[:\s]+/).filter(Boolean)
+  const first = words[0] ?? ''
+  if (first === '' || first === '*') return true
+
+  // A variable or a path decides *where* a program lives (or which value is
+  // used), not which program runs — and a shell wildcard inside it can make the
+  // outer match accept a command the author never looked at.
+  if (/^[$~]/.test(first)) return true
+  if (/^\.{0,2}[\\/]/.test(first)) return true
+  if (/^[A-Za-z]:[\\/]/.test(first)) return true
+
+  const program = first.toLowerCase()
+  if (ALWAYS_PACKAGE_RUNNERS.has(program)) return true
+  if (!PACKAGE_RUNNERS.has(program)) return false
+  const second = words[1]?.toLowerCase()
+  // `Bash(npx:*)` names the runner and nothing else; `Bash(pnpm dlx *)` names the
+  // one subcommand whose entire job is "fetch this package and run it".
+  if (second === undefined) return true
+  return program === 'pipx' ? PIPX_EXEC_SUBS.has(second) : RUNNER_EXEC_SUBS.has(second)
+}
+
 /**
  * Compile a rule pattern string into a PermissionRuleEntry.
  */

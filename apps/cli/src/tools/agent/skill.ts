@@ -26,7 +26,15 @@ export const skillTool: ToolDefinition = {
     // Try to load the skill via SkillsLoader if available
     const loader = ctx.skillsLoader
     if (loader) {
-      const skill = loader.get(skillName)
+      let skill = loader.get(skillName)
+      if (!skill && loader.reload) {
+        // A skill written during this session was not in the loader's snapshot:
+        // before answering "not found", re-scan the directories it already
+        // knows. A genuinely wrong name costs one directory walk; a new file
+        // stops being indistinguishable from a typo.
+        loader.reload()
+        skill = loader.get(skillName)
+      }
       if (!skill) {
         const available = loader
           .list()

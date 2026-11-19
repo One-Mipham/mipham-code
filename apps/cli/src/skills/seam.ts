@@ -7,6 +7,13 @@ export interface Skills {
   list(): SkillDefinition[]
   has(name: string): boolean
   buildSystemReminder(maxTokens?: number): string
+  /**
+   * Re-scan the directories this loader already knows about. Optional: the Skill
+   * tool calls it once when a name is not found, so a skill written during the
+   * session is found without restarting (`/reload-skills` still exists for a
+   * deliberate full reload). A provider with no on-disk sources simply omits it.
+   */
+  reload?(): number
 }
 
 /** 缝键：ctx.skills。 */

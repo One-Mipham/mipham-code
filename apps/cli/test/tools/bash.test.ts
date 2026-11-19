@@ -9,6 +9,7 @@ import {
   bashToolService,
   resolveWorktreeEscape,
   isBlocked,
+  detectSharedRefRewrite,
 } from '../../src/tools/exec/bash'
 
 const bashTool = createBashTool()
@@ -733,5 +734,80 @@ describe('子进程环境（启动开关）', () => {
     expect(withOpts.stdout.startsWith('first')).toBe(true) // 正对照：bash 真的跑了
     expect(withOpts.stdout).not.toContain('second') // 症状
     expect(without.stdout).toContain('second') // 摘掉即恢复
+  })
+})
+
+// ============================================================
+// worktree 共享 ref 守卫（子代理不得改写主检出的分支）
+// ============================================================
+
+describe('worktree 共享 ref 守卫', () => {
+  it.each([
+    'git update-ref refs/heads/main HEAD',
+    'git symbolic-ref HEAD refs/heads/main',
+    'git branch -f main HEAD',
+    'git branch -M main',
+    'git branch -D feature',
+    'git checkout -B main',
+    'git switch -C main',
+    'git worktree remove ../w2',
+    'git tag -f v1',
+    'git tag -d v1',
+  ])('识别共享 ref 改写：%s', (cmd) => {
+    expect(detectSharedRefRewrite(cmd)).not.toBeNull()
+  })
+
+  it('正对照：普通 git 与无关命令不被识别', () => {
+    for (const cmd of [
+      'git status',
+      'git log --oneline -5',
+      'git checkout -b feature/x',
+      'git switch -c feature/x',
+      'git branch --list',
+      'git commit -m "fix"',
+      'npm run build',
+      'echo update-ref',
+    ]) {
+      expect(detectSharedRefRewrite(cmd), cmd).toBeNull()
+    }
+  })
+
+  const wtCtx = (isSubAgent: boolean): ToolContext => ({
+    cwd: '/proj/.mipham/worktrees/w1',
+    sessionId: isSubAgent ? 'sub-agent' : 'main',
+    provider: 'test',
+    model: 'test-model',
+    isSubAgent,
+  })
+
+  it('子代理在 worktree 里被拒（真实 execute 路径）', async () => {
+    mockSafeSpawn()
+    const result = await bashTool.execute(
+      { command: 'git update-ref refs/heads/main HEAD' },
+      wtCtx(true),
+    )
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Worktree isolation')
+    expect(result.error).toContain('shared with the main checkout')
+  })
+
+  it('主会话在 worktree 里不受影响（对照：那是用户自己的检出）', async () => {
+    mockSafeSpawn()
+    const result = await bashTool.execute(
+      { command: 'git update-ref refs/heads/main HEAD' },
+      wtCtx(false),
+    )
+    expect(result.success).toBe(true)
+    expect(vi.mocked(Bun.spawn)).toHaveBeenCalled()
+  })
+
+  it('子代理在普通目录里不受影响（对照：守卫绑的是 worktree 隔离）', async () => {
+    mockSafeSpawn()
+    const result = await bashTool.execute(
+      { command: 'git update-ref refs/heads/main HEAD' },
+      { ...wtCtx(true), cwd: '/tmp/test' },
+    )
+    expect(result.success).toBe(true)
+    expect(vi.mocked(Bun.spawn)).toHaveBeenCalled()
   })
 })

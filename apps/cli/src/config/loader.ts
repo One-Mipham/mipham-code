@@ -613,6 +613,9 @@ export function loadSettingsJson(
   ]
 
   for (const { path, readHooks, isProject } of searchPaths) {
+    // Kept outside the `try` so the parse-failure message can name the line and
+    // column, not just V8/Bun's byte offset.
+    let rawForError = ''
     try {
       // `readRegularFileSync` folds "absent" and "present but unreadable"
       // (EACCES, a directory, a FIFO) into the same `null`. Absent is the ordinary
@@ -622,6 +625,7 @@ export function loadSettingsJson(
       // **looser**. A security-relevant file must not fail open in silence.
       const present = existsSync(path)
       const raw = readRegularFileSync(path)
+      rawForError = raw ?? ''
       if (raw === null) {
         if (present) {
           process.stderr.write(
@@ -740,7 +744,7 @@ export function loadSettingsJson(
       // Malformed JSON is the other half of the same problem: the file exists and
       // declares a `deny` list we cannot see. Say so, with the parse reason, the
       // same way `safeParseYaml` does for `config.yml`.
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = jsonErrorDetail(rawForError, err)
       process.stderr.write(
         `⚠ Mipham Code: failed to parse settings file (${path}): ${msg} — ignoring it.\n`,
       )
@@ -795,6 +799,70 @@ export function projectFilePath(name: string, cwd: string = process.cwd()): stri
 }
 
 /**
+ * Values nested deeper than this are dropped when a settings file is read.
+ *
+ * Not a style preference: `JSON.parse` accepts a value nested hundreds of
+ * thousands of levels, and `JSON.stringify` on the *same* value throws
+ * `RangeError: Maximum call stack size exceeded`. The write path
+ * (`readSettingsDoc` → mutate → `writeSettingsDoc`) therefore used to crash on a
+ * file that had parsed fine — a document we cannot rewrite, reported as an
+ * unhandled rejection. Nothing we read lives past a few levels, so the cap costs
+ * no real setting and keeps the file rewritable.
+ */
+const MAX_SETTINGS_DEPTH = 64
+
+const DROPPED = Symbol('dropped')
+
+/** Drop values deeper than `MAX_SETTINGS_DEPTH`, counting what went. */
+function capSettingsDepth(value: unknown): { value: unknown; dropped: number } {
+  let dropped = 0
+  const walk = (v: unknown, depth: number): unknown => {
+    if (depth > MAX_SETTINGS_DEPTH) {
+      dropped++
+      return DROPPED
+    }
+    if (Array.isArray(v)) {
+      const out: unknown[] = []
+      for (const item of v) {
+        const next = walk(item, depth + 1)
+        // JSON has no `undefined`, so a hole can only mean "dropped": leaving it
+        // in would serialize as `null` — a different value than the one removed.
+        if (next !== DROPPED) out.push(next)
+      }
+      return out
+    }
+    if (v && typeof v === 'object') {
+      const out: Record<string, unknown> = {}
+      for (const [key, item] of Object.entries(v)) {
+        const next = walk(item, depth + 1)
+        if (next !== DROPPED) out[key] = next
+      }
+      return out
+    }
+    return v
+  }
+  return { value: walk(value, 0), dropped }
+}
+
+/**
+ * `JSON.parse`'s message plus a line/column, derived from the byte offset it
+ * reports. Node 22 reports an offset (`… at position 14`), which locates the
+ * break in a multi-hundred-line settings file; Bun's message carries no offset
+ * at all, so there the runtime's own text is returned unchanged. The addition is
+ * therefore per-runtime, and deliberately says nothing it cannot compute.
+ */
+function jsonErrorDetail(raw: string, err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err)
+  const at = /position (\d+)/.exec(message)
+  if (!at) return message
+  const pos = Math.min(Number(at[1]), raw.length)
+  const before = raw.slice(0, pos)
+  const line = before.split('\n').length
+  const column = pos - before.lastIndexOf('\n')
+  return `${message} (line ${line}, column ${column})`
+}
+
+/**
  * Read a settings.json as a plain object, preserving any key we don't model
  * (hooks, and anything a future version adds). A malformed file is an error,
  * not something to clobber — the user's other settings live in the same file.
@@ -805,13 +873,22 @@ export function readSettingsDoc(path: string): Record<string, unknown> {
   let parsed: unknown
   try {
     parsed = JSON.parse(raw)
-  } catch {
-    throw new Error(`${path} is not valid JSON. Fix or remove it, then retry.`)
+  } catch (err) {
+    throw new Error(
+      `${path} is not valid JSON — ${jsonErrorDetail(raw, err)}. Fix or remove it, then retry.`,
+    )
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error(`${path} does not contain a JSON object. Fix or remove it, then retry.`)
   }
-  return parsed as Record<string, unknown>
+  const capped = capSettingsDepth(parsed)
+  if (capped.dropped > 0) {
+    process.stderr.write(
+      `⚠ Mipham Code: ${path}: dropped ${capped.dropped} value(s) nested deeper than ` +
+        `${MAX_SETTINGS_DEPTH} levels.\n`,
+    )
+  }
+  return capped.value as Record<string, unknown>
 }
 
 export function writeSettingsDoc(path: string, doc: Record<string, unknown>): void {

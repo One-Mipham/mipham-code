@@ -176,3 +176,37 @@ describe('SkillsLoader name collision', () => {
     expect(loader.list()).toHaveLength(1)
   })
 })
+
+describe('SkillsLoader.reload —— 会话中新写的技能不必重启', () => {
+  it('扫描目录后新落盘的文件，在 reload 时被读到', () => {
+    const dir = tmp()
+    const loader = new SkillsLoader()
+    loader.loadExternal([dir])
+    expect(loader.get('late')).toBeUndefined()
+
+    writeFileSync(
+      join(dir, 'late.SKILL.md'),
+      '---\nname: late\ndescription: written mid-session\n---\nbody\n',
+      'utf-8',
+    )
+
+    expect(loader.reload()).toBe(1)
+    expect(loader.get('late')?.description).toBe('written mid-session')
+  })
+
+  it('正对照：reload 不改变已加载条目，也不虚构条目', () => {
+    const dir = tmp()
+    writeFileSync(
+      join(dir, 'early.SKILL.md'),
+      '---\nname: early\ndescription: first\n---\nbody\n',
+      'utf-8',
+    )
+    const loader = new SkillsLoader()
+    loader.loadExternal([dir])
+    const before = loader.list().map((s) => s.name)
+
+    expect(loader.reload()).toBe(1)
+    expect(loader.list().map((s) => s.name)).toEqual(before)
+    expect(loader.get('never-written')).toBeUndefined()
+  })
+})

@@ -208,6 +208,49 @@ export function isBlocked(command: string): string | null {
 }
 
 /**
+ * Git commands that rewrite refs a worktree **shares with the main checkout**.
+ *
+ * A worktree is not a sandbox for `.git`: every worktree of one repository reads
+ * and writes the same `refs/` (and the same `packed-refs`). A subagent isolated
+ * in a worktree can therefore move `main` — delete it, force it, point it at a
+ * different commit — and the main checkout follows, without a single file in the
+ * worktree changing. The `cd` escape guard does not see this: the command runs
+ * inside the worktree and reaches out through git's own directories.
+ *
+ * Only judged for **subagents inside a worktree**: the main session in a
+ * worktree is the user's own checkout and keeps every command it had. This list
+ * is a floor of demonstrated forms; widening it costs one blocked command.
+ */
+const SHARED_REF_REWRITES: Array<{ pattern: RegExp; description: string }> = [
+  { pattern: /\bupdate-ref\b/, description: 'update-ref (writes a ref directly)' },
+  { pattern: /\bsymbolic-ref\b/, description: 'symbolic-ref (repoints a ref)' },
+  {
+    pattern: /\bbranch\s+.*(?:-f\b|--force\b|-m\b|-M\b|--move\b|-d\b|-D\b|--delete\b)/,
+    description: 'branch -f/-m/-d (force-move, rename or delete a branch)',
+  },
+  { pattern: /\bcheckout\b[^;&|]*\s-B\b/, description: 'checkout -B (reset a branch)' },
+  { pattern: /\bswitch\b[^;&|]*\s-C\b/, description: 'switch -C (reset a branch)' },
+  {
+    pattern: /\bworktree\s+(?:remove|prune)\b/,
+    description: 'worktree remove/prune (removes a sibling checkout)',
+  },
+  {
+    pattern: /\btag\s+.*(?:-f\b|--force\b|-d\b|--delete\b)/,
+    description: 'tag -f/-d (force-move or delete a tag)',
+  },
+]
+
+/** First shared-ref rewrite in `command`, or `null`. */
+export function detectSharedRefRewrite(command: string): { description: string } | null {
+  // Same gate the dangerous-git scan uses: the command must actually invoke git.
+  if (!/(?:^|[\s;&|(])(?:sudo\s+)?git\s+/.test(command)) return null
+  for (const { pattern, description } of SHARED_REF_REWRITES) {
+    if (pattern.test(command)) return { description }
+  }
+  return null
+}
+
+/**
  * Detect sandbox violations from stderr output.
  * Parses common OS-level error patterns indicating denied access.
  */
@@ -602,6 +645,22 @@ export function createBashTool(credentialConfig?: CredentialMaskingConfig): Tool
             error:
               `Worktree isolation: cannot cd outside worktree directory. ` +
               `Attempted: ${escapeTarget}. Use tools within the worktree only.`,
+          }
+        }
+        // Worktrees share `refs/` with the main checkout, so "stay inside the
+        // directory" is not enough: `git update-ref refs/heads/main …` moves a
+        // branch the main checkout is standing on. A subagent gets no vote on
+        // shared refs; the main session in a worktree keeps its own commands.
+        if (ctx.isSubAgent) {
+          const rewrite = detectSharedRefRewrite(command)
+          if (rewrite) {
+            return {
+              success: false,
+              content: '',
+              error:
+                `Worktree isolation: "${rewrite.description}" rewrites a ref shared with the ` +
+                `main checkout. Ask the main session to run it if that is what you intend.`,
+            }
           }
         }
       }

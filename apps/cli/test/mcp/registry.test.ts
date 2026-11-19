@@ -92,10 +92,11 @@ describe('mcp/registry', () => {
 
     // A server may declare the union at the root. `sanitizeInputSchema` only
     // read `root.properties`, so the tool reached the model with **no
-    // parameters at all** — callable, but its arguments were invisible. Keep
-    // the first branch (what the server listed first) rather than dropping
-    // every branch.
-    it('surfaces the first branch of a root anyOf', () => {
+    // parameters at all** — callable, but its arguments were invisible. Every
+    // branch is surfaced: following only the first one fixed the invisible
+    // arguments and taught the model that a spelling the second branch accepts
+    // (the same id as a number rather than a string) was invalid.
+    it('surfaces every branch of a root anyOf', () => {
       const tool = convertMcpTool('srv', {
         name: 't',
         inputSchema: {
@@ -106,8 +107,37 @@ describe('mcp/registry', () => {
         } as unknown as McpToolDefinition['inputSchema'],
       })
 
-      expect(tool.parameters.properties).toEqual({ path: { type: 'string' } })
-      expect(tool.parameters.required).toEqual(['path'])
+      expect(tool.parameters.properties).toEqual({
+        path: { type: 'string' },
+        url: { type: 'string' },
+      })
+      // Only one branch needs `path`; demanding it would reject a call the
+      // other branch accepts.
+      expect(tool.parameters.required).toBeUndefined()
+    })
+
+    it('keeps a name required only when every branch requires it', () => {
+      const tool = convertMcpTool('srv', {
+        name: 't',
+        inputSchema: {
+          anyOf: [
+            {
+              type: 'object',
+              properties: { id: { type: 'string' }, a: { type: 'string' } },
+              required: ['id', 'a'],
+            },
+            { type: 'object', properties: { id: { type: 'number' } }, required: ['id'] },
+          ],
+        } as unknown as McpToolDefinition['inputSchema'],
+      })
+
+      // First spelling wins on the shared name; `id` is the only name both
+      // branches require.
+      expect(tool.parameters.properties).toEqual({
+        id: { type: 'string' },
+        a: { type: 'string' },
+      })
+      expect(tool.parameters.required).toEqual(['id'])
     })
 
     it('surfaces the first branch of a root oneOf', () => {

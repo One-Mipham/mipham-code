@@ -48,6 +48,8 @@ export class SkillsLoader implements Skills {
   private skills = new Map<string, SkillDefinition>()
   /** File each loaded skill came from — so a name collision can name both sides. */
   private sources = new Map<string, string>()
+  /** Paths this loader has scanned, with the type they were loaded as — what `reload()` re-reads. */
+  private scannedDirs = new Map<string, 'standard' | 'mipham'>()
 
   loadBuiltin(basePath: string): void {
     // Load standard skills (*.SKILL.md)
@@ -97,9 +99,36 @@ export class SkillsLoader implements Skills {
           this.loadDirectory(p, 'standard')
         } else if (stat.isFile()) {
           this.tryLoad(p, 'standard')
+          this.scannedDirs.set(p, 'standard')
         }
       }
     }
+  }
+
+  /**
+   * Re-scan every directory/file this loader already read, and return the total
+   * skill count.
+   *
+   * The Skill tool calls this once on a miss: a skill written **during** the
+   * session (by the model itself, or by a command it ran) was invisible until a
+   * restart or `/reload-skills`, and "not found" was the same answer whether the
+   * name was wrong or the file was new. Rescanning only on a miss keeps the
+   * happy path unchanged.
+   */
+  reload(): number {
+    for (const [p, type] of this.scannedDirs) {
+      try {
+        if (!existsSync(p)) continue
+        if (statSync(p).isDirectory()) {
+          this.loadDirectory(p, type)
+        } else {
+          this.tryLoad(p, type)
+        }
+      } catch {
+        // A path that became unreadable is not a reload failure for the rest.
+      }
+    }
+    return this.skills.size
   }
 
   /** Load a single skill file by path (used by Claude plugins: `skills/<name>/SKILL.md`). */
@@ -137,6 +166,7 @@ export class SkillsLoader implements Skills {
   }
 
   private loadDirectory(dir: string, type: 'standard' | 'mipham'): void {
+    this.scannedDirs.set(dir, type)
     try {
       const entries = readdirSync(dir)
       for (const entry of entries) {

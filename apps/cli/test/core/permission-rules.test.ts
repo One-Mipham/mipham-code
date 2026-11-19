@@ -12,6 +12,7 @@ import {
   expandKnownPathVars,
   stripLeadingShellNoise,
   variableWildcardWarning,
+  isUnboundedBashAllowRule,
 } from '../../src/core/permission-rules'
 
 describe('wildcardMatch', () => {
@@ -1291,5 +1292,45 @@ describe('variableWildcardWarning —— 变量值里的 * 是「每个值」而
     expect(variableWildcardWarning('Bash(PORT=3000 npm run dev)')).toBeUndefined()
     expect(variableWildcardWarning('Read(**/.ssh/id_rsa)')).toBeUndefined()
     expect(variableWildcardWarning('Bash(ls*)')).toBeUndefined()
+  })
+})
+
+describe('isUnboundedBashAllowRule —— 规则名的是「程序」，还是别的什么', () => {
+  it('无界形态：裸通配 / 变量 / 路径 / 包运行器', () => {
+    for (const rule of [
+      'Bash(*)',
+      'Bash(:*)',
+      'Bash($HOME/bin/x)',
+      'Bash(~/bin/x:*)',
+      'Bash(/usr/bin/npm:*)',
+      'Bash(./scripts/build.sh:*)',
+      'Bash(../tools/x:*)',
+      'Bash(.\\scripts\\build.ps1:*)',
+      'Bash(C:\\tools\\x.exe:*)',
+      'Bash(npx:*)',
+      'Bash(bunx something)',
+      'Bash(pnpm dlx *)',
+      'Bash(pnpm exec *)',
+      'Bash(yarn dlx *)',
+      'Bash(npm exec *)',
+      'Bash(uvx ruff)',
+      'Bash(pipx run black)',
+    ]) {
+      expect(isUnboundedBashAllowRule(rule), rule).toBe(true)
+    }
+  })
+
+  it('有界形态：点名了具体程序（含普通包脚本）', () => {
+    for (const rule of [
+      'Bash(git:*)',
+      'Bash(npm test:*)',
+      'Bash(npm run:*)',
+      'Bash(pnpm test:*)',
+      'Bash(ls*)',
+      'Write(/etc/*)',
+      'Read(./.env)',
+    ]) {
+      expect(isUnboundedBashAllowRule(rule), rule).toBe(false)
+    }
   })
 })

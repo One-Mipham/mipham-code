@@ -90,6 +90,30 @@ describe('WebFetch tool execution', () => {
     }
   })
 
+  it('超过 2000 字符的 URL 在解析、DNS 与权限提示之前就被拒（不联网）', async () => {
+    const fetchMock = vi.fn()
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+    const monstrous = 'https://example.com/?q=' + 'a'.repeat(2500)
+    const result = await webFetchTool.execute({ url: monstrous }, ctx)
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('2,000-character limit')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('正对照：2000 字符以内照常取网（边界不是恒拒）', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'text/plain' }),
+      text: () => Promise.resolve('ok'),
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+    const longButLegal = 'https://example.com/?q=' + 'a'.repeat(1500)
+    const result = await webFetchTool.execute({ url: longButLegal }, ctx)
+    expect(result.success).toBe(true)
+    expect(fetchMock).toHaveBeenCalled()
+  })
+
   it('正对照：开关不在时同一个工具照常取网（上面那条不是恒真）', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

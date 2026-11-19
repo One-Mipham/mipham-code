@@ -7,6 +7,13 @@ import { validateUrl } from '../../security/url'
 /** Most characters returned in one call. Past this the caller pages with `offset`. */
 const MAX_RETURN_CHARS = 100_000
 
+/**
+ * Longest URL accepted. 2,000 is the anchor RFC 7230 gives for "longer than any
+ * real address"; a URL past it is a payload, not a page, and refusing it before
+ * the permission prompt keeps a pathological string out of every layer below.
+ */
+const MAX_URL_CHARS = 2_000
+
 interface CacheEntry {
   content: string
   timestamp: number
@@ -278,6 +285,19 @@ export const webFetchTool: ToolDefinition = {
     const rawUrl = params.url as string
     const prompt = (params.prompt as string) || ''
     const offset = Math.max(0, Number(params.offset) || 0)
+    // Refuse before any parsing, DNS lookup or permission prompt: past this
+    // length the URL is not a page address anyone can read (the length itself
+    // has been used to make URL parsers backtrack for minutes).
+    if (rawUrl.length > MAX_URL_CHARS) {
+      return {
+        success: false,
+        content: '',
+        error:
+          `URL is ${rawUrl.length.toLocaleString('en-US')} characters — longer than the ` +
+          `${MAX_URL_CHARS.toLocaleString('en-US')}-character limit. Truncate it to the address ` +
+          `the page actually needs (query strings can be dropped and re-added after fetching).`,
+      }
+    }
     const url = upgradeToHttps(rawUrl)
 
     // Check cache — an incomplete entry (first 100k only) cannot answer a

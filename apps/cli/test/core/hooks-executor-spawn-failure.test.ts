@@ -187,3 +187,37 @@ function assertWriteLosesTheRace(input: string): void {
   // 并且退出码确实与这个 error 并存 —— 判据就是靠这一点把 EPIPE 排除在外的。
   expect(probe.status).toBe(3)
 }
+
+describe('executeHook (command) — exit 127 是「没跑起来」而不是一个答复', () => {
+  it('非守卫事件：报出 127 与「这次检查可能没跑」，作为上下文而非静默', async () => {
+    const r = await executeHook(
+      { type: 'command', command: '/bin/sh', args: ['-c', 'definitely-not-a-command-xyz'] },
+      ctx,
+    )
+
+    expect(r.allowed).toBe(true)
+    expect(r.hookError).toContain('127')
+    expect(r.additionalContext).toContain('may not have run')
+  })
+
+  it('PreToolUse 守卫：同一形态走 fail-closed（默认），并点名原因', async () => {
+    const r = await executeHook(
+      { type: 'command', command: '/bin/sh', args: ['-c', 'definitely-not-a-command-xyz'] },
+      { ...ctx, event: 'PreToolUse' } as HookContext,
+    )
+
+    expect(r.allowed).toBe(false)
+    expect(r.reason).toContain('exit 127')
+    expect(r.reason).toContain('failureMode')
+  })
+
+  it('正对照：普通非零退出（3）仍按「钩子说了不行」之外的普通告警处理', async () => {
+    const r = await executeHook(
+      { type: 'command', command: '/bin/sh', args: ['-c', 'exit 3'] },
+      ctx,
+    )
+
+    expect(r.allowed).toBe(true)
+    expect(r.hookError).toBeUndefined()
+  })
+})
