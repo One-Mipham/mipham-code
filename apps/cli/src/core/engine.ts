@@ -854,6 +854,12 @@ export class QueryEngine {
           reasoningContent = ''
           thinkingContent = ''
           toolUses.length = 0
+          // Usage is part of "everything": a provider reports tokens as the
+          // stream runs, so the attempt that failed had already added its
+          // share before `restart` arrived. Keeping it charges the retried
+          // reply twice in `/usage` and in every per-tool attribution.
+          turnApiInputTokens = 0
+          turnApiOutputTokens = 0
         }
 
         if (chunk.type === 'error') {

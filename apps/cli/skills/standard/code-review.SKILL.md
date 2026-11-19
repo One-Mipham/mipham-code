@@ -8,6 +8,23 @@ version: 2.0.0
 
 Analyzes code changes for bugs, security risks, performance issues, and code quality. Generates structured review reports.
 
+## Scope (what `/code-review` reports)
+
+`/code-review` reports **two things only**: defects (correctness, security) and
+CLAUDE.md violations. Reuse, simplification, efficiency, architecture and
+test-coverage cleanups belong to `/simplify` (`self-review` skill) — reporting
+them here dilutes the one question the review is answering.
+
+Every finding carries exactly one **attribution severity**:
+
+- `important` — this change introduced or worsened it
+- `pre_existing` — it was already there before this change
+- `nit` — minor
+
+Attribution is not risk ranking: the reader first needs to know whether they
+broke it this time. End the summary with one suggested fix. When there is
+nothing to report, say exactly: `Code review found no issues.`
+
 ## Review Dimensions
 
 ### 1. Correctness (Bug Detection)

@@ -722,6 +722,31 @@ describe('git-diff bridge commands (/code-review, /simplify, /verify)', () => {
 // /code-review --max-findings <n>|all|default
 // ═══════════════════════════════════════════════════════════════
 
+describe('/code-review scope and severity', () => {
+  const CHANGES = ' file.ts | 5 +++--\n 1 file changed, 3 insertions(+), 2 deletions(-)'
+
+  it('reports bugs and CLAUDE.md violations only, and hands cleanups to /simplify', async () => {
+    mockExecSync.mockReturnValue(CHANGES)
+    const result = await getCommand('/code-review')!(mkCtx(), [])
+    const prompt = result.forwardToAI ?? ''
+
+    expect(prompt).toContain('bugs and CLAUDE.md violations only')
+    expect(prompt).toContain('/simplify')
+    expect(prompt).not.toContain('Check all 7 dimensions')
+  })
+
+  it('asks for attribution severity on every finding and the clean-review line', async () => {
+    mockExecSync.mockReturnValue(CHANGES)
+    const result = await getCommand('/code-review')!(mkCtx(), [])
+    const prompt = result.forwardToAI ?? ''
+
+    expect(prompt).toContain('important (this change introduced or worsened it)')
+    expect(prompt).toContain('pre_existing (it was already there before this change)')
+    expect(prompt).toContain('nit (minor)')
+    expect(prompt).toContain('Code review found no issues.')
+  })
+})
+
 describe('/code-review --max-findings', () => {
   const CHANGES = ' file.ts | 5 +++--\n 1 file changed, 3 insertions(+), 2 deletions(-)'
 

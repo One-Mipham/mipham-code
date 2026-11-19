@@ -140,6 +140,29 @@ describe('mcp/registry', () => {
       expect(tool.parameters.required).toEqual(['id'])
     })
 
+    // `allOf` is conjunction: every branch applies at once. Ignoring the
+    // keyword left the tool callable with no parameters at all — the same
+    // invisible-arguments failure a root `anyOf` used to have.
+    it('merges every branch of a root allOf', () => {
+      const tool = convertMcpTool('srv', {
+        name: 't',
+        inputSchema: {
+          allOf: [
+            { type: 'object', properties: { a: { type: 'string' } }, required: ['a'] },
+            { type: 'object', properties: { b: { type: 'number' } }, required: ['b'] },
+          ],
+        } as unknown as McpToolDefinition['inputSchema'],
+      })
+
+      expect(tool.parameters.properties).toEqual({
+        a: { type: 'string' },
+        b: { type: 'number' },
+      })
+      // Conjunctive: a name any conjunct requires is required. This is the
+      // opposite of `anyOf`, where only the intersection is mandatory.
+      expect(tool.parameters.required).toEqual(['a', 'b'])
+    })
+
     it('surfaces the first branch of a root oneOf', () => {
       const tool = convertMcpTool('srv', {
         name: 't',

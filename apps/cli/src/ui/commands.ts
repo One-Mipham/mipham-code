@@ -4148,7 +4148,17 @@ const codeReviewCmd = gitDiffBridgeCmd({
     // 写成句末时模型容易先按默认深度铺开、再拿档位去追认。`max` 另有一句上限：
     // 仓里存的可能是上一轮自己挑的，而不是用户这一轮要的 —— 只有**用户点名**才用。
     const effort = getPreference('lastCodeReviewEffort', 'high')
-    return `Use effort level: ${effort} — settle this before you start; never pick max on your own, only when the user asked for it. Then use the code-review skill to review all uncommitted changes. Check all 7 dimensions: correctness, security, performance, code quality, architecture & design, testing, and language-specific issues.${cap}`
+    // 范围与 `/simplify` 分开：整理（复用/简化/效率）有自己的命令，混进评审会让
+    // 「这次改动有没有 bug」这个唯一的问题被风格建议稀释。严重度三档是**归属**，
+    // 不是风险等级 —— 读的人先要判断的是「这是我这次弄坏的，还是本来就有的」。
+    return (
+      `Use effort level: ${effort} — settle this before you start; never pick max on your own, only when the user asked for it. ` +
+      `Then use the code-review skill to review all uncommitted changes for bugs and CLAUDE.md violations only. ` +
+      `Do not report reuse, simplification, efficiency, architecture or test-coverage cleanups — /simplify owns those. ` +
+      `Mark each finding with exactly one severity: important (this change introduced or worsened it), ` +
+      `pre_existing (it was already there before this change), or nit (minor). ` +
+      `End the summary with one suggested fix. If there is nothing to report, write exactly: "Code review found no issues."${cap}`
+    )
   },
 })
 

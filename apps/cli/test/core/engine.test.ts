@@ -1416,6 +1416,33 @@ describe('QueryEngine', () => {
   })
 
   describe('chatWithFallback — a retried turn must not run a tool twice', () => {
+    // Usage arrives while the stream runs, so the attempt that fails has
+    // already reported its tokens before `restart` says "discard that one".
+    // Keeping them charges the retried reply twice — in `/usage` and in the
+    // per-tool attribution both.
+    it('counts a retried reply once, not once per attempt', async () => {
+      let calls = 0
+      const registry = mockProviderRegistry(async function* () {
+        calls++
+        if (calls === 1) {
+          yield { type: 'usage', inputTokens: 100, outputTokens: 50 }
+          yield { type: 'error', error: 'stream stalled' }
+          return
+        }
+        yield { type: 'usage', inputTokens: 120, outputTokens: 60 }
+        yield { type: 'text', content: 'done' }
+        yield { type: 'stop' }
+      })
+      const engine = new QueryEngine(registry, mockContext(), makeToolMap([]))
+
+      const chunks: StreamChunk[] = []
+      for await (const c of engine.process('hi')) chunks.push(c)
+
+      expect(chunks.some((c) => c.restart === true)).toBe(true)
+      // 120 + 60 — the failed attempt's 150 is superseded, not added.
+      expect(engine.getUsageTracker().totalApiTokens).toBe(180)
+    })
+
     it('drops the failed attempt tool calls when the turn is retried', async () => {
       let calls = 0
       const registry = mockProviderRegistry(async function* () {

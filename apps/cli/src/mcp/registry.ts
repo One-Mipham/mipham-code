@@ -88,10 +88,42 @@ function collectSurfaces(schema: unknown, depth = 0): ArgumentSurface[] {
   const node = isPlainObject(schema) ? schema : {}
   if (hasProperties(node)) return [surfaceOf(node)]
   if (depth >= 8) return []
+  if (Array.isArray(node.allOf)) {
+    const merged = mergeAllOf(node.allOf, depth)
+    if (merged) return [merged]
+  }
   const branches = (
     Array.isArray(node.anyOf) ? node.anyOf : Array.isArray(node.oneOf) ? node.oneOf : []
   ).filter(isPlainObject)
   return branches.flatMap((branch) => collectSurfaces(branch, depth + 1))
+}
+
+/**
+ * `allOf` is conjunction, not a menu: every branch applies at once.
+ *
+ * Merging it into a single surface is what makes `required` come out right —
+ * a name is mandatory when *any* conjunct requires it, which is the opposite
+ * of the `anyOf` rule (mandatory only when every branch does). Ignoring the
+ * keyword (the state before this) left the tool callable with **no parameters
+ * at all**, the same failure a root-level `anyOf` used to have.
+ */
+function mergeAllOf(branches: unknown[], depth: number): ArgumentSurface | null {
+  const properties: Record<string, unknown> = {}
+  const required = new Set<string>()
+  let merged = false
+  for (const branch of branches.filter(isPlainObject)) {
+    for (const surface of collectSurfaces(branch, depth + 1)) {
+      merged = true
+      for (const [name, property] of Object.entries(surface.properties)) {
+        if (isPlainObject(property) && !Object.prototype.hasOwnProperty.call(properties, name)) {
+          properties[name] = property
+        }
+      }
+      for (const name of surface.required ?? []) required.add(name)
+    }
+  }
+  if (!merged) return null
+  return required.size > 0 ? { properties, required: [...required] } : { properties }
 }
 
 /**
