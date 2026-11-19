@@ -47,6 +47,7 @@ import {
   MANAGED_RULES_FILE,
 } from '../core/crsi-producer'
 import { prefilterProposal } from '../core/proposal-guard'
+import { integrateProposals, formatIntegrationSummary } from '../core/proposal-integration'
 import {
   runEval,
   appendEvalScore,
@@ -1097,6 +1098,57 @@ function renderGateNote(result: { rewardNote?: string; regretNote?: string }): s
   return lines.length > 0 ? lines.join('\n') + '\n' : ''
 }
 
+/**
+ * 单提案与整合提案共用的「过闸后测量」段。
+ *
+ * 抽出来**只**为了不复制这段（它与闸本身无关）：手工路径与 ELITE 整合路径
+ * 对同一个 `filePath/newContent` 做完全相同的测量与渲染。prose 路径**不**并进来 ——
+ * 它有 ε 预测与自己的渲染形状，合并只会让两条语义不同的路互相污染。
+ */
+async function measureModification(
+  ctx: Parameters<CommandHandler>[0],
+  params: { description: string; filePath: string; originalContent: string; newContent: string },
+): Promise<string> {
+  const llm = ctx.engine.getLlm() ?? ctx.engine.getRegistry()
+  let improvementLine = ''
+  try {
+    const sample = await measureSkillDeltaRepeated(llm, params)
+    if (sample) {
+      const report = buildImprovementReport(sample, [params.filePath], undefined, {
+        // 手工路径没有失败信号，问题键就取「这次想修什么」的规范化描述：
+        // 同一句话被反复修时，它们才聚得起来。
+        problemKey: normalizeProblemKey(params.description),
+        rationale: params.description,
+      })
+      setPendingVerdict(report.verdict)
+      appendImprovement({ ...report, id: randomUUID(), timestamp: new Date().toISOString() })
+      const rate = improvementRate(readImprovements())
+      const label =
+        report.verdict === 'improved'
+          ? 'improved ✅'
+          : report.verdict === 'regressed'
+            ? 'regressed ⚠️'
+            : 'inconclusive'
+      const sign = report.deltaMean >= 0 ? '+' : ''
+      // B2 代价维：只展示、不进判定（`formatCostLine` 缺席时返回 null ⇒ 整行不打）。
+      const costLine = formatCostLine(report)
+      // 空模型闸：只在闸失败时出声；它解释了 verdict 为什么被降级。
+      const nullLine = formatNullModelLine(report)
+      const taxLine = formatRsiTaxLine(report)
+      improvementLine =
+        `\n📊 改进判定: ${label} (delta ${sign}${report.deltaMean.toFixed(1)}, 噪声 ${report.noise.toFixed(1)}, 阈值 ${report.minEffect.toFixed(1)})` +
+        `\n   改进率: ${rate.improved}/${rate.total} (${(rate.rate * 100).toFixed(0)}%, Wilson 95% [${(rate.lo * 100).toFixed(0)}%, ${(rate.hi * 100).toFixed(0)}%])` +
+        (costLine ? `\n${costLine}` : '') +
+        (taxLine ? `\n${taxLine}` : '') +
+        (nullLine ? `\n${nullLine}` : '') +
+        (report.verdict === 'regressed' ? '\n   ⚠️ 任务表现倒退：--approve 将被拒绝。' : '')
+    }
+  } catch {
+    // 测量失败（LLM 不可用等）不阻断 modify 流程——改进信号是可选的。
+  }
+  return improvementLine
+}
+
 const crsiModifyCmd: CommandHandler = async (ctx, args) => {
   if (args[0] === '--approve') {
     if (shouldBlockApproval(getPendingVerdict() ?? 'inconclusive')) {
@@ -1111,10 +1163,97 @@ const crsiModifyCmd: CommandHandler = async (ctx, args) => {
     setPendingVerdict(null)
     return { content: r.success ? `✅ ${r.message}` : `⚠️ ${r.message}` }
   }
+  if (args[0] === '--integrate') {
+    // ELITE（2611.21056）：多提案 → 兼容子集 → 一个后代。
+    // 每个提案是一个文件，内容是该提案下的**完整目标文件**；以当前目标为共同父本做 3-way merge。
+    const dropConflicts = args[1] === '--drop-conflicts'
+    const rest = args.slice(dropConflicts ? 2 : 1)
+    if (rest.length < 4) {
+      return {
+        content:
+          'Usage: /crsi modify --integrate [--drop-conflicts] <description> <filePath> <proposal1> <proposal2> [...]\n' +
+          '- 每个 proposalN 是一个文件，内容为该提案下的完整目标文件\n' +
+          '- 冲突默认拒绝；--drop-conflicts 只整合兼容子集（不静默丢弃机制）',
+      }
+    }
+    if (hasPending()) {
+      return { content: '⚠️ 已有待批准的修改。先 /crsi modify --approve 或 --reject。' }
+    }
+
+    const description = rest[0]!
+    const filePath = rest[1]!
+    const { readFileSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const resolvePath = (p: string) => (p.startsWith('/') ? p : join(process.cwd(), p))
+
+    let originalContent: string
+    try {
+      originalContent = readFileSync(resolvePath(filePath), 'utf-8')
+    } catch {
+      return { content: `❌ 整合需要可读的父本：${filePath}` }
+    }
+    const proposals: Array<{ name: string; content: string }> = []
+    for (const p of rest.slice(2)) {
+      try {
+        proposals.push({ name: p, content: readFileSync(resolvePath(p), 'utf-8') })
+      } catch {
+        return { content: `❌ 读不到提案文件：${p}` }
+      }
+    }
+
+    const integration = integrateProposals(originalContent, proposals)
+    if (integration.error) {
+      return { content: `❌ 整合失败：${integration.error}` }
+    }
+    const summary = formatIntegrationSummary(integration)
+    const conflictList = integration.conflicts.map((c) => c.name).join(', ')
+    if (integration.conflicts.length > 0 && !dropConflicts) {
+      return {
+        content:
+          `⚠️ 整合冲突：${conflictList}\n${summary}\n` +
+          '冲突意味着两个提案改了同一段。默认不丢弃任何机制——\n' +
+          '用 --drop-conflicts 只整合兼容子集，或先把提案收敛成一个。',
+      }
+    }
+    if (!integration.content || integration.content === originalContent) {
+      return { content: `⚠️ 没有可整合的改动。\n${summary}` }
+    }
+
+    const result = await runCrsiModification({
+      description,
+      filePath,
+      newContent: integration.content,
+      originalContent,
+      blastRadius: [filePath],
+    })
+    if (!result.applied || result.phase === 'failed') {
+      return {
+        content: `❌ 整合未通过（phase: ${result.phase}）。\n${result.error ?? ''}`,
+      }
+    }
+
+    const improvementLine = await measureModification(ctx, {
+      description,
+      filePath,
+      originalContent,
+      newContent: integration.content,
+    })
+    const conflictNote = integration.conflicts.length > 0 ? ` · 丢弃冲突 ${conflictList}` : ''
+    return {
+      content:
+        `✅ 测试通过。🧩 整合：${summary}${conflictNote}\n` +
+        renderGateNote(result) +
+        `\n${result.diff}\n` +
+        improvementLine +
+        '\n/crsi modify --approve  合并\n/crsi modify --reject   丢弃',
+    }
+  }
+
   if (args.length < 3) {
     return {
       content:
         'Usage: /crsi modify <description> <filePath> <newContent>\n' +
+        '       /crsi modify --integrate [--drop-conflicts] <description> <filePath> <proposal1> <proposal2> [...]\n' +
         '- description 单 token（不含空格）\n' +
         '- newContent 用 \\n 表示换行\n' +
         '测试通过后：/crsi modify --approve 合并，/crsi modify --reject 丢弃',
@@ -1151,43 +1290,12 @@ const crsiModifyCmd: CommandHandler = async (ctx, args) => {
   }
 
   // 测量在 runCrsiModification 成功后进行（避免 failed proposal 白跑 6 次 LLM 调用）。
-  const llm = ctx.engine.getLlm() ?? ctx.engine.getRegistry()
-  let improvementLine = ''
-  try {
-    const sample = await measureSkillDeltaRepeated(llm, { filePath, originalContent, newContent })
-    if (sample) {
-      const report = buildImprovementReport(sample, [filePath], undefined, {
-        // 手工路径没有失败信号，问题键就取「这次想修什么」的规范化描述：
-        // 同一句话被反复修时，它们才聚得起来。
-        problemKey: normalizeProblemKey(description),
-        rationale: description,
-      })
-      setPendingVerdict(report.verdict)
-      appendImprovement({ ...report, id: randomUUID(), timestamp: new Date().toISOString() })
-      const rate = improvementRate(readImprovements())
-      const label =
-        report.verdict === 'improved'
-          ? 'improved ✅'
-          : report.verdict === 'regressed'
-            ? 'regressed ⚠️'
-            : 'inconclusive'
-      const sign = report.deltaMean >= 0 ? '+' : ''
-      // B2 代价维：只展示、不进判定（`formatCostLine` 缺席时返回 null ⇒ 整行不打）。
-      const costLine = formatCostLine(report)
-      // 空模型闸：只在闸失败时出声；它解释了 verdict 为什么被降级。
-      const nullLine = formatNullModelLine(report)
-      const taxLine = formatRsiTaxLine(report)
-      improvementLine =
-        `\n📊 改进判定: ${label} (delta ${sign}${report.deltaMean.toFixed(1)}, 噪声 ${report.noise.toFixed(1)}, 阈值 ${report.minEffect.toFixed(1)})` +
-        `\n   改进率: ${rate.improved}/${rate.total} (${(rate.rate * 100).toFixed(0)}%, Wilson 95% [${(rate.lo * 100).toFixed(0)}%, ${(rate.hi * 100).toFixed(0)}%])` +
-        (costLine ? `\n${costLine}` : '') +
-        (taxLine ? `\n${taxLine}` : '') +
-        (nullLine ? `\n${nullLine}` : '') +
-        (report.verdict === 'regressed' ? '\n   ⚠️ 任务表现倒退：--approve 将被拒绝。' : '')
-    }
-  } catch {
-    // 测量失败（LLM 不可用等）不阻断 modify 流程——改进信号是可选的。
-  }
+  const improvementLine = await measureModification(ctx, {
+    description,
+    filePath,
+    originalContent,
+    newContent,
+  })
 
   return {
     content:

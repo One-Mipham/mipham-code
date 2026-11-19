@@ -48,6 +48,11 @@ const ALLOWED: Record<string, { count: number; reason: string }> = {
   },
   'core/crsi-sandbox.ts': { count: 1, reason: 'A 自修改提案写进 worktree（由 diff/测试判定）' },
   'core/project-scaffold.ts': { count: 1, reason: 'A 项目脚手架写入用户目录' },
+  'core/proposal-integration.ts': {
+    count: 4,
+    reason:
+      'A 整合算子的临时文件（mkdtemp 隔离目录，`finally` 里整目录删除；不是读回来当状态的文件）',
+  },
   'core/task-performance.ts': { count: 2, reason: 'A 评测夹具：临时目录里生成解与测试' },
   'plugin/plugin-manager.ts': { count: 2, reason: 'A 插件安装到用户目录' },
   'security/fd.ts': { count: 1, reason: 'C 写已打开的 fd（no-follow 打开），不是路径' },

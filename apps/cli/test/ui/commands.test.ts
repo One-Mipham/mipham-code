@@ -18,7 +18,13 @@ import { clearTasks, getTasks, taskTool } from '../../src/tools/exec/task'
 
 // ── Mock node:child_process before importing the module under test ──
 const mockExecSync = vi.fn()
-vi.mock('node:child_process', () => ({ execSync: mockExecSync }))
+// 只替换 execSync；其余导出（整合算子要用的 `execFileSync`）保留真身 ——
+// 「整模块返回一个对象」会让被测代码在别的导出上拿到 undefined，
+// 而那种失败会以「功能没生效」的形状出现，不是「mock 太窄」。
+vi.mock('node:child_process', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:child_process')>()),
+  execSync: mockExecSync,
+}))
 
 // ── In-memory preferences ──
 // `/code-review --max-findings` persists its choice through the preference store,
@@ -1626,6 +1632,95 @@ describe('档位迁移的送达接线', () => {
     expect(receipt).toContain('proposal.severityA')
     expect(receipt).toContain('proposal.severityB')
     expect(receipt).toContain('proposal.mergedSeverity')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// /crsi modify --integrate —— ELITE 多提案整合（2611.21056）
+// ═══════════════════════════════════════════════════════════════
+
+describe('/crsi modify --integrate（ELITE 多提案整合）', () => {
+  let dir: string
+  const write = (name: string, content: string) => {
+    const p = join(dir, name)
+    writeFileSync(p, content)
+    return p
+  }
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'crsi-integrate-cmd-'))
+    h.runCrsiModification.mockClear()
+  })
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('互补提案 ⇒ 合并后的内容进入沙箱，回执显示整合摘要', async () => {
+    const target = write('target.md', 'a\nb\nc\n')
+    const p1 = write('p1.md', 'A\nb\nc\n')
+    const p2 = write('p2.md', 'a\nb\nc\nd\n')
+
+    const handler = getCommand('/crsi modify')!
+    const { content } = await handler(mkProseCtx(), ['--integrate', 'merge-desc', target, p1, p2])
+
+    expect(h.runCrsiModification).toHaveBeenCalledTimes(1)
+    const call = h.runCrsiModification.mock.calls[0]![0] as {
+      filePath: string
+      newContent: string
+    }
+    expect(call.filePath).toBe(target)
+    expect(call.newContent).toBe('A\nb\nc\nd\n')
+    expect(content).toContain('🧩 整合：兼容 2')
+    expect(content).toContain('DIFF')
+  })
+
+  it('冲突且未加 --drop-conflicts ⇒ 拒绝，沙箱一次都不跑', async () => {
+    const target = write('target.md', 'a\nb\nc\n')
+    const p1 = write('p1.md', 'A\nb\nc\n')
+    const p2 = write('p2.md', 'B\nb\nc\n')
+
+    const handler = getCommand('/crsi modify')!
+    const { content } = await handler(mkProseCtx(), ['--integrate', 'merge-desc', target, p1, p2])
+
+    expect(h.runCrsiModification).not.toHaveBeenCalled()
+    expect(content).toContain('整合冲突')
+    expect(content).toContain('默认不丢弃任何机制')
+  })
+
+  it('--drop-conflicts ⇒ 只整合兼容子集，回执点名被丢弃的提案', async () => {
+    const target = write('target.md', 'a\nb\nc\n')
+    const p1 = write('p1.md', 'A\nb\nc\n')
+    const p2 = write('p2.md', 'B\nb\nc\n')
+
+    const handler = getCommand('/crsi modify')!
+    const { content } = await handler(mkProseCtx(), [
+      '--integrate',
+      '--drop-conflicts',
+      'merge-desc',
+      target,
+      p1,
+      p2,
+    ])
+
+    expect(h.runCrsiModification).toHaveBeenCalledTimes(1)
+    const call = h.runCrsiModification.mock.calls[0]![0] as { newContent: string }
+    expect(call.newContent).toBe('A\nb\nc\n')
+    expect(content).toContain('丢弃冲突')
+  })
+
+  it('读不到提案文件 ⇒ 报错，不猜内容', async () => {
+    const target = write('target.md', 'a\nb\nc\n')
+
+    const handler = getCommand('/crsi modify')!
+    const { content } = await handler(mkProseCtx(), [
+      '--integrate',
+      'merge-desc',
+      target,
+      join(dir, 'missing-1.md'),
+      join(dir, 'missing-2.md'),
+    ])
+
+    expect(h.runCrsiModification).not.toHaveBeenCalled()
+    expect(content).toContain('读不到提案文件')
   })
 })
 
