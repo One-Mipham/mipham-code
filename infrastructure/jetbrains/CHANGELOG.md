@@ -4,6 +4,24 @@
 > (tag dates) and use the same wording as the VS Code extension's changelog — the plugin is a
 > thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.37 (2026-11-19)
+
+- Version sync with Mipham Code CLI 0.85.37
+- Added: review findings can carry `severity` (`important` / `pre_existing` / `nit`) and the
+  report shows it.
+- Security: allow rules that name no program (`Bash(*)`, variable/path spellings, package
+  runners such as `npx` / `pnpm dlx` / `uvx`) no longer skip the `auto` mode classifier.
+- Security: subagents isolated in a worktree can no longer rewrite refs shared with the
+  main checkout (`update-ref`, `branch -f/-m/-d`, `checkout -B`, `switch -C`, `tag -f/-d`).
+- Fixed: a command handler that throws (for example a settings file that cannot be written)
+  is reported as that command's error; the session keeps running.
+- Fixed: deeply nested `settings.json` values are dropped past 64 levels with a warning, and
+  parse failures name the line and column on Node.
+- Fixed: WebFetch refuses URLs longer than 2,000 characters before parsing or prompting.
+- Fixed: MCP tools with a root `anyOf`/`oneOf` expose every branch's arguments.
+- Fixed: a skill written during the session is found without a restart.
+- Fixed: a hook exiting 127 is treated as "did not run" (fail-closed for PreToolUse).
+
 ## 0.85.36 (2026-11-17)
 
 - Version sync with Mipham Code CLI 0.85.36

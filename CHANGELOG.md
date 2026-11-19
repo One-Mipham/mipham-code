@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.85.37] — 2026-11-19
+
+### Added
+
+- **`ReportFindings` 支持 `severity`** —— finding 可标注 `important`（本次改动引入或加重）、
+  `pre_existing`（改动前就有）或 `nit`（次要），报告中逐条显示；未知取值会被拒绝。
+
+### Security
+
+- **`auto` 模式的 allow 规则不再绕开它唯一的安全检查** —— `Bash(*)`、`$VAR`/路径拼法，以及
+  `npx`、`pnpm dlx`、`uvx` 这类包运行器的 allow 规则，在 `auto` 下不再直接放行；命令照旧交给
+  分类器判断。其他档位与点名具体程序的规则不受影响。
+- **worktree 内的子代理不得改写共享 refs** —— `git update-ref`、`symbolic-ref`、
+  `branch -f|-m|-d`、`checkout -B`、`switch -C`、`worktree remove|prune`、`tag -f|-d`
+  会移动主检出所在分支，现在在隔离 worktree 中的子代理里被拒绝。
+
+### Fixed
+
+- **命令执行出错不再结束会话** —— `/permissions` 写设置失败等异常此前会以未处理拒绝退出
+  CLI；现在作为该命令的错误信息显示，会话继续。
+- **深嵌套的 `settings.json` 读得进、写不回** —— 超过 64 层的值在读取时被丢弃并告警，避免
+  一次写回抛出栈溢出；JSON 解析失败在 Node 下附带行号与列号。
+- **WebFetch 的 URL 长度上限** —— 超过 2,000 字符的 URL 在解析、DNS 与权限确认之前拒绝。
+- **MCP 工具的参数不再只剩第一个分支** —— 根级 `anyOf`/`oneOf` 合并所有分支的参数
+  （同名取首个声明），`required` 取各分支的交集。
+- **会话中新写的技能立即可见** —— Skill 未命中时先重扫技能目录，不再需要重启或 `/reload-skills`。
+- **hook 退出码 127 不再被当成普通失败** —— 视为钩子未运行（`PreToolUse` 默认拒绝），
+  并说明它的检查可能没有执行。
+
 ## [0.85.36] — 2026-11-17
 
 ### Fixed
