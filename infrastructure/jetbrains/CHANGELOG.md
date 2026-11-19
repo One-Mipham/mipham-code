@@ -4,6 +4,14 @@
 > (tag dates) and use the same wording as the VS Code extension's changelog — the plugin is a
 > thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.38 (2026-11-19)
+
+- Version sync with Mipham Code CLI 0.85.38
+- Changed: the built-in research agent scans the local repo and sibling projects for prior
+  work before external search (a glob hit is not a read), and pairs any numeric /
+  "unconditional" / "record" / "first" claim with the theorem's stated assumptions in the
+  full text, not the abstract.
+
 ## 0.85.37 (2026-11-19)
 
 - Version sync with Mipham Code CLI 0.85.37
