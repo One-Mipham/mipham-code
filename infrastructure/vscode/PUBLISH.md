@@ -90,6 +90,12 @@ API 的 `versions[0].lastUpdated` 仍指上一版 —— **别拿 API 那个字�
 `PublisherName` = `miphamai`），同时 API 侧 `versions[]` 89 → **90 条**、`flags` = `validated`、
 `lastUpdated` = `2026-11-19T04:47:34.603Z` —— 两个探针读的是同一时刻。**校验窗口 ≈8.3 分钟**（略高于 3–8 的上界）。
 
+0.85.39 实测（2026-11-19）：本次**未观察到形态②** —— 首次探针即形态③（公开页 `Version` 0.85.39、
+`Last updated` 10:27:25；API 侧 `versions[]` 90 → **91 条**、`versions[0].flags` = `validated`、
+`lastUpdated` = `2026-11-19T10:27:25.93Z`、`PublisherName` = `miphamai`），两个探针读的是同一时刻。
+上传时刻未被本方探针捕获 ⇒ **本次不记校验窗口**（形态② 是概率不是必然 —— 上传后首读即 `validated`
+的先例已有，别把「没等到翻页」读成「上传失败」）。
+
 ```bash
 # A. 公开页（必须 cache-bust，CDN 会给旧读数）
 curl -4 -sS -H 'Cache-Control: no-cache' \
