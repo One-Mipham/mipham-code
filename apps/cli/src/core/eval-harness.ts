@@ -266,6 +266,112 @@ export function diffContractHistory(
 }
 
 /**
+ * 方向性 regret（GUARD，2611.23476）：把一次评估拆成「本次新弄坏的」与
+ * 「本来就有的缺口」，而不是揉成一个总分。
+ *
+ * 为什么需要它：标量分数把「新破坏」与「仍未解决」混在一起 —— 一个修好 1 条、
+ * 弄坏 1 条的改动与什么都没做的改动同分。GUARD 的判据是**收益必须超过回归**，
+ * 故两侧必须分开计数。抖动契约（历史里 true/false 都出现过）不计入任何一侧：
+ * 拿一次抖动的翻转当「新破坏」会误拦，当「新修复」会假放。
+ */
+export interface DirectionalRegret {
+  /** 上次 PASS、本次 FAIL —— 本次改动新弄坏的（不含抖动）。 */
+  newlyBroken: string[]
+  /** 上次 FAIL、本次仍 FAIL —— 本来就有的缺口，不是本次的账。 */
+  stillFailing: string[]
+  /** 上次 FAIL、本次 PASS。 */
+  newlyFixed: string[]
+  /** 近几次 true/false 都出现过 —— 抖动，不计入任何一侧。 */
+  flaky: string[]
+  /** 历史里没出现过（新增契约）。 */
+  newContracts: string[]
+  /** 历史有、本次没有（契约被移出）。 */
+  gone: string[]
+  /** newlyBroken 中 role==='anchor' 的子集（硬闸）。 */
+  anchorBroken: string[]
+}
+
+export function directionalRegret(
+  current: ContractResultRecord[],
+  history: ContractSnapshot[],
+): DirectionalRegret {
+  const delta: DirectionalRegret = {
+    newlyBroken: [],
+    stillFailing: [],
+    newlyFixed: [],
+    flaky: [],
+    newContracts: [],
+    gone: [],
+    anchorBroken: [],
+  }
+  const seen = new Set<string>()
+  for (const c of current) {
+    seen.add(c.id)
+    const past = history.filter((h) => c.id in h).map((h) => h[c.id] === true)
+    if (past.length === 0) {
+      delta.newContracts.push(c.id)
+      continue
+    }
+    if (past.includes(true) && past.includes(false)) {
+      delta.flaky.push(c.id)
+      continue
+    }
+    const wasPassing = past[0] === true
+    if (wasPassing && !c.passed) {
+      delta.newlyBroken.push(c.id)
+      if (c.role === 'anchor') delta.anchorBroken.push(c.id)
+    } else if (!wasPassing && c.passed) {
+      delta.newlyFixed.push(c.id)
+    } else if (!c.passed) {
+      delta.stillFailing.push(c.id)
+    }
+  }
+  for (const h of history) {
+    for (const id of Object.keys(h)) {
+      if (seen.has(id)) continue
+      seen.add(id)
+      delta.gone.push(id)
+    }
+  }
+  return delta
+}
+
+export interface SoftHurtVerdict {
+  pass: boolean
+  reason?: string
+}
+
+/**
+ * Soft-HURT 门：**收益必须超过回归**才算通过。
+ *
+ * - anchor 新破坏 ⇒ 直接拒（安全/机制不变量没有「以多换少」的余地）；
+ * - 新增破坏 ≥ 新增修复 ⇒ 拒。等号也拒：修好一条、弄坏一条**不是**改进，
+ *   只是把工作挪了个位置；标量分数在这一格恰好同分，所以它看不见。
+ *
+ * `stillFailing` 不进判据 —— 它本来就是失败，不是这次改动造成的。
+ */
+export function softHurtGate(delta: DirectionalRegret): SoftHurtVerdict {
+  if (delta.anchorBroken.length > 0) {
+    return { pass: false, reason: `anchor 契约回退: ${delta.anchorBroken.join(', ')}` }
+  }
+  if (delta.newlyBroken.length > 0 && delta.newlyBroken.length >= delta.newlyFixed.length) {
+    return {
+      pass: false,
+      reason:
+        `新破坏 ${delta.newlyBroken.length} 条 ≥ 新修复 ${delta.newlyFixed.length} 条` +
+        `（收益未超过回归：${delta.newlyBroken.join(', ')}）`,
+    }
+  }
+  return { pass: true }
+}
+
+/** 方向性 regret 的一行读数（只描述，不判定）。 */
+export function formatRegretNote(delta: DirectionalRegret): string {
+  const flaky = delta.flaky.length > 0 ? ` · 抖动 ${delta.flaky.length}（不计）` : ''
+  return `新破坏 ${delta.newlyBroken.length} · 新修复 ${delta.newlyFixed.length} · 仍未解决 ${delta.stillFailing.length}${flaky}`
+}
+
+/**
  * 把 diffContractHistory 的结果渲染成展示行。纯函数——不做 I/O、不读时钟。
  * 返回空数组表示「无变化」，调用方据此决定是否打印标题。
  */

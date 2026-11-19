@@ -70,6 +70,11 @@ export interface CrsiModificationResult {
    * 不静默跳过 —— 沉默与「anchor 全绿」在外部读数上同形。
    */
   rewardNote?: string
+  /**
+   * 方向性 regret 的可见读数（GUARD 闸）：新破坏 / 新修复 / 仍未解决。
+   * 过闸但两侧有数时必须出现 —— 否则「这次改动弄坏了什么」只有一个看不见的内部值。
+   */
+  regretNote?: string
   /** Current phase of the sandbox pipeline */
   phase:
     'pending' | 'applied' | 'testing' | 'passed' | 'failed' | 'approved' | 'merged' | 'rolled-back'

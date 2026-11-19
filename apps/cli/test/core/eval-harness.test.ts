@@ -9,6 +9,9 @@ import {
   getContractHistory,
   diffContractHistory,
   renderContractDiff,
+  directionalRegret,
+  softHurtGate,
+  formatRegretNote,
   regressedAnchors,
   instrumentFailure,
   MIN_CONTRACT_COUNT,
@@ -230,6 +233,110 @@ describe('契约粒度账本', () => {
     expect(
       diffContractHistory([{ id: 'a', passed: false, role: 'anchor' as const }], [{ a: true }]),
     ).toEqual([{ id: 'a', delta: 'regressed', role: 'anchor' }])
+  })
+
+  // ── GUARD 方向性 regret（2611.23476） ──
+  // 标量分数把「这次新弄坏的」与「本来就有的缺口」混成一个数；这里两册分开记。
+  it('directionalRegret：新破坏 / 仍未解决 / 新修复 / 抖动 各自归位', () => {
+    const current = [
+      { id: 'broke', passed: false },
+      { id: 'still', passed: false },
+      { id: 'fixed', passed: true },
+      { id: 'flip', passed: true },
+      { id: 'fresh', passed: false },
+    ]
+    const d = directionalRegret(current, [
+      { broke: true, still: false, fixed: false, flip: true },
+      { flip: false },
+    ])
+    expect(d.newlyBroken).toEqual(['broke'])
+    expect(d.stillFailing).toEqual(['still'])
+    expect(d.newlyFixed).toEqual(['fixed'])
+    expect(d.flaky).toEqual(['flip'])
+    expect(d.newContracts).toEqual(['fresh'])
+    expect(d.gone).toEqual([])
+  })
+
+  it('directionalRegret：anchor 新破坏单列（硬闸子集）', () => {
+    const d = directionalRegret(
+      [
+        { id: 'a', passed: false, role: 'anchor' as const },
+        { id: 'b', passed: false },
+      ],
+      [{ a: true, b: true }],
+    )
+    expect(d.newlyBroken).toEqual(['a', 'b'])
+    expect(d.anchorBroken).toEqual(['a'])
+  })
+
+  it('softHurtGate：修好 1 条、弄坏 1 条 ⇒ 拒（标量分数在这一格同分）', () => {
+    const gate = softHurtGate({
+      newlyBroken: ['b'],
+      stillFailing: [],
+      newlyFixed: ['a'],
+      flaky: [],
+      newContracts: [],
+      gone: [],
+      anchorBroken: [],
+    })
+    expect(gate.pass).toBe(false)
+    expect(gate.reason).toContain('收益未超过回归')
+  })
+
+  it('softHurtGate：修好 2 条、弄坏 1 条 ⇒ 放行（收益超过回归）', () => {
+    expect(
+      softHurtGate({
+        newlyBroken: ['b'],
+        stillFailing: ['x'],
+        newlyFixed: ['a', 'c'],
+        flaky: [],
+        newContracts: [],
+        gone: [],
+        anchorBroken: [],
+      }).pass,
+    ).toBe(true)
+  })
+
+  it('softHurtGate：anchor 新破坏 ⇒ 直接拒（没有以多换少的余地）', () => {
+    const gate = softHurtGate({
+      newlyBroken: ['a'],
+      stillFailing: [],
+      newlyFixed: ['x', 'y', 'z'],
+      flaky: [],
+      newContracts: [],
+      gone: [],
+      anchorBroken: ['a'],
+    })
+    expect(gate.pass).toBe(false)
+    expect(gate.reason).toContain('anchor 契约回退')
+  })
+
+  it('softHurtGate：什么都没变（两侧零）⇒ 放行', () => {
+    expect(
+      softHurtGate({
+        newlyBroken: [],
+        stillFailing: ['x'],
+        newlyFixed: [],
+        flaky: [],
+        newContracts: [],
+        gone: [],
+        anchorBroken: [],
+      }).pass,
+    ).toBe(true)
+  })
+
+  it('formatRegretNote：只描述三册；抖动为 0 时不占字', () => {
+    expect(
+      formatRegretNote({
+        newlyBroken: ['b'],
+        stillFailing: ['x', 'y'],
+        newlyFixed: ['a'],
+        flaky: [],
+        newContracts: [],
+        gone: [],
+        anchorBroken: [],
+      }),
+    ).toBe('新破坏 1 · 新修复 1 · 仍未解决 2')
   })
 
   it('renderContractDiff 五种 delta 各自的文案', () => {

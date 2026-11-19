@@ -198,6 +198,123 @@ describe('runCrsiModification', () => {
     expect(hasPending()).toBe(true)
   })
 
+  // ── GUARD 方向性非回归门（2611.23476） ──
+  // 有逐契约历史且契约集合未变时，判定看「收益是否超过回归」而不是标量分数。
+  const passTests = (sandbox: CrsiSandbox) =>
+    vi.spyOn(sandbox, 'runTests').mockReturnValue({
+      passed: true,
+      totalTests: 0,
+      failedTests: 0,
+      output: '',
+    })
+
+  const runWith = (sandbox: CrsiSandbox, name: string, results: Array<Record<string, unknown>>) =>
+    runCrsiModification(
+      {
+        description: 'gate',
+        filePath: WORKTREE_FILE,
+        newContent: '{}',
+        blastRadius: [WORKTREE_FILE],
+      },
+      sandbox,
+      {
+        rewardFn: {
+          name,
+          description: 'test',
+          evaluate: () => ({
+            total: results.length,
+            passed: results.filter((r) => r.passed === true).length,
+            score: Math.round(
+              (results.filter((r) => r.passed === true).length / results.length) * 100,
+            ),
+            failures: [],
+            results: results as never,
+          }),
+        },
+      },
+    )
+
+  it('方向性闸：修好 1 条、弄坏 1 条 ⇒ 拒（标量分数同分，旧闸会放行）', async () => {
+    const sandbox = new CrsiSandbox(sandboxRepo)
+    passTests(sandbox)
+    appendEvalScore('dir-equal', {
+      score: 50,
+      passed: 1,
+      total: 2,
+      results: [
+        { id: 'a', description: 'a', passed: false },
+        { id: 'b', description: 'b', passed: true },
+      ],
+    })
+    const result = await runWith(sandbox, 'dir-equal', [
+      { id: 'a', description: 'a', passed: true },
+      { id: 'b', description: 'b', passed: false },
+    ])
+    expect(result.phase).toBe('failed')
+    expect(result.error).toContain('Directional regret gate')
+    expect(result.error).toContain('收益未超过回归')
+  })
+
+  it('方向性闸：修好 2 条、弄坏 1 条 ⇒ 放行，并显示两侧读数', async () => {
+    const sandbox = new CrsiSandbox(sandboxRepo)
+    passTests(sandbox)
+    appendEvalScore('dir-gain', {
+      score: 33,
+      passed: 1,
+      total: 3,
+      results: [
+        { id: 'a', description: 'a', passed: false },
+        { id: 'b', description: 'b', passed: true },
+        { id: 'c', description: 'c', passed: false },
+      ],
+    })
+    const result = await runWith(sandbox, 'dir-gain', [
+      { id: 'a', description: 'a', passed: true },
+      { id: 'b', description: 'b', passed: false },
+      { id: 'c', description: 'c', passed: true },
+    ])
+    expect(result.phase).toBe('passed')
+    expect(result.regretNote).toBe('新破坏 1 · 新修复 2 · 仍未解决 0')
+  })
+
+  it('方向性闸：契约集合变了 ⇒ 退回标量分数闸（分母不可比）', async () => {
+    const sandbox = new CrsiSandbox(sandboxRepo)
+    passTests(sandbox)
+    appendEvalScore('dir-set', {
+      score: 100,
+      passed: 1,
+      total: 1,
+      results: [{ id: 'a', description: 'a', passed: true }],
+    })
+    const result = await runWith(sandbox, 'dir-set', [
+      { id: 'a', description: 'a', passed: true },
+      { id: 'new', description: 'new', passed: false },
+    ])
+    expect(result.phase).toBe('failed')
+    expect(result.error).toContain('Reward regression')
+    expect(result.error).not.toContain('Directional regret')
+  })
+
+  it('方向性闸：只有新修复、零新破坏 ⇒ 放行且不误报回归', async () => {
+    const sandbox = new CrsiSandbox(sandboxRepo)
+    passTests(sandbox)
+    appendEvalScore('dir-fix', {
+      score: 50,
+      passed: 1,
+      total: 2,
+      results: [
+        { id: 'a', description: 'a', passed: false },
+        { id: 'b', description: 'b', passed: true },
+      ],
+    })
+    const result = await runWith(sandbox, 'dir-fix', [
+      { id: 'a', description: 'a', passed: true },
+      { id: 'b', description: 'b', passed: true },
+    ])
+    expect(result.phase).toBe('passed')
+    expect(result.regretNote).toBe('新破坏 0 · 新修复 1 · 仍未解决 0')
+  })
+
   it('anchor regression rejects even when aggregate score does not drop', async () => {
     const sandbox = new CrsiSandbox(sandboxRepo)
     vi.spyOn(sandbox, 'runTests').mockReturnValue({

@@ -86,6 +86,37 @@ describe('rewardNote 的落点', () => {
     expect(content.indexOf('奖励闸附注')).toBeLessThan(content.indexOf('DIFF'))
   })
 
+  it('方向性 regret 读数也落在回执里（GUARD 闸的可见面）', async () => {
+    vi.mocked(runCrsiModification).mockResolvedValue({
+      phase: 'passed',
+      applied: true,
+      diff: 'DIFF',
+      regretNote: '新破坏 1 · 新修复 2 · 仍未解决 0',
+    } as never)
+
+    const cmd = getCommand('/crsi modify')!
+    const { content } = await cmd(mkCtx(), ['改动说明', 'a.ts', 'x'])
+
+    expect(content).toContain('🪞 方向性 regret：新破坏 1 · 新修复 2 · 仍未解决 0')
+    expect(content.indexOf('方向性 regret')).toBeLessThan(content.indexOf('DIFF'))
+  })
+
+  it('两种附注可以同时出现（闸没全施加 + 方向性读数不是互斥的）', async () => {
+    vi.mocked(runCrsiModification).mockResolvedValue({
+      phase: 'passed',
+      applied: true,
+      diff: 'DIFF',
+      rewardNote: NOTE,
+      regretNote: '新破坏 0 · 新修复 1 · 仍未解决 0',
+    } as never)
+
+    const cmd = getCommand('/crsi modify')!
+    const { content } = await cmd(mkCtx(), ['改动说明', 'a.ts', 'x'])
+
+    expect(content).toContain(`奖励闸附注：${NOTE}`)
+    expect(content).toContain('🪞 方向性 regret：')
+  })
+
   it('闸失败时走既有失败文案，不打附注（附注只描述「过闸」这一态）', async () => {
     vi.mocked(runCrsiModification).mockResolvedValue({
       phase: 'failed',

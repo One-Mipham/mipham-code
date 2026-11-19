@@ -1090,8 +1090,11 @@ const crsiInventoryCmd: CommandHandler = async (ctx) => {
  *
  * 无附注时返回空串，且**调用点保持逐字不变**（附注前不补空行，附注后自带一个）。
  */
-function renderGateNote(result: { rewardNote?: string }): string {
-  return result.rewardNote ? `⚠️ 奖励闸附注：${result.rewardNote}\n` : ''
+function renderGateNote(result: { rewardNote?: string; regretNote?: string }): string {
+  const lines: string[] = []
+  if (result.rewardNote) lines.push(`⚠️ 奖励闸附注：${result.rewardNote}`)
+  if (result.regretNote) lines.push(`🪞 方向性 regret：${result.regretNote}`)
+  return lines.length > 0 ? lines.join('\n') + '\n' : ''
 }
 
 const crsiModifyCmd: CommandHandler = async (ctx, args) => {

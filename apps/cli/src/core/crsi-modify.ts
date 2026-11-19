@@ -17,8 +17,12 @@ import { CrsiSandbox, validateBlastRadius, validateMergeConvergence } from './cr
 import type { CrsiModificationResult } from './crsi-sandbox'
 import {
   appendEvalScore,
+  getContractHistory,
   getLastEvalScore,
   instrumentFailure,
+  directionalRegret,
+  softHurtGate,
+  formatRegretNote,
   regressedAnchors,
 } from './eval-harness'
 import { mechanismSentinel, type RewardFn, type ScoreReport } from './reward-fn'
@@ -181,12 +185,43 @@ export async function runCrsiModification(
     applied.error = `Anchor regression: ${anchors.join(', ')}`
     return applied
   }
-  const last = getLastEvalScore(rewardFn.name)
-  if (last !== null && report.score < last) {
-    sandbox.rollback()
-    applied.phase = 'failed'
-    applied.error = `Reward regression (${rewardFn.name}): score ${report.score} < last ${last}`
-    return applied
+  // 第二道闸（GUARD，2611.23476）：有逐契约历史时看**方向性 regret** ——
+  // 收益必须超过回归；没有历史（首跑）或契约集合变了（新增/移除）时方向性比较
+  // 不成立，退回标量分数闸（分母变了，分数不可比）。
+  const history = getContractHistory(rewardFn.name, 1)
+  const comparable =
+    report.results !== undefined && history.length > 0
+      ? directionalRegret(report.results, history)
+      : null
+  const setChanged =
+    comparable !== null && (comparable.newContracts.length > 0 || comparable.gone.length > 0)
+
+  if (comparable && !setChanged) {
+    const gate = softHurtGate(comparable)
+    if (!gate.pass) {
+      sandbox.rollback()
+      applied.phase = 'failed'
+      applied.error = `Directional regret gate (${rewardFn.name}): ${gate.reason}`
+      return applied
+    }
+    // 过闸也要让人看见两侧的数：修好 3 条、弄坏 1 条是**放行**，但读者有权知道
+    // 那 1 条是什么这次弄坏的。两侧全零（或只有抖动）不占一行。
+    if (
+      comparable.newlyBroken.length +
+        comparable.newlyFixed.length +
+        comparable.stillFailing.length >
+      0
+    ) {
+      applied.regretNote = formatRegretNote(comparable)
+    }
+  } else {
+    const last = getLastEvalScore(rewardFn.name)
+    if (last !== null && report.score < last) {
+      sandbox.rollback()
+      applied.phase = 'failed'
+      applied.error = `Reward regression (${rewardFn.name}): score ${report.score} < last ${last}`
+      return applied
+    }
   }
   appendEvalScore(rewardFn.name, report)
 
