@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.85.39] — 2026-11-19
+
+### Added
+
+- **CRSI 多提案整合（ELITE）** —— `/crsi modify --integrate [--drop-conflicts] <desc> <target> <p1> <p2>…`
+  以目标文件为共同父本做 3-way merge：能干净合并的提案收进同一个后代，字节相同的只留一份，
+  改同一段的单列为冲突。冲突默认拒绝，`--drop-conflicts` 才允许只整合兼容子集。
+  整合结果仍走完整沙箱闸、方向性非回归门与任务表现测量。
+- **改进台账的问题记忆（SIM）** —— 每条改进记录新增 `problemKey` / `rationale`，按复发问题
+  分组；`/crsi stats` 输出分组视图。
+- **验证成本可见（RSI Tax）** —— 测量链累计 provider 报告的 token，逐采样记录前/后用量；
+  `/crsi modify` 回执与 `/crsi stats` 显示验证成本合计，并给出不消耗 token 的确定性 eval 基线。
+
+### Changed
+
+- **`/crsi modify` 的第二道闸改为方向性 regret** —— 评估被拆成「本次新破坏 / 仍未解决 /
+  新修复」，抖动契约不计入任何一侧；收益必须超过回归（修好一条、弄坏一条即拒绝）。
+  anchor 契约回退仍直接拒绝；契约集合发生新增或移除时退回分数闸。
+- **`/code-review` 收窄为缺陷与 CLAUDE.md 违规** —— 每条 finding 标注 `important` /
+  `pre_existing` / `nit`，末尾给一句修复建议；没有发现时固定输出「Code review found no issues.」。
+  复用、简化、效率类整理交给 `/simplify`。
+
+### Fixed
+
+- **重试的回复 token 计两遍** —— 流式失败后重试的回合，失败那次与重试那次都被记入用量；
+  现在 `restart` 会一并清零该回合的用量计数。
+- **MCP 工具声明根级 `allOf` 时参数全部不可见** —— 现在合并所有分支，`required` 取并集
+  （合取语义；`anyOf` 仍取交集）。
+
 ## [0.85.38] — 2026-11-19
 
 ### Changed

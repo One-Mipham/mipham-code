@@ -3,6 +3,21 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.39 (2026-11-19)
+
+- Version sync with Mipham Code CLI 0.85.39
+- Added: `/crsi modify --integrate` merges several proposals against a common parent (3-way):
+  clean merges become one descendant, identical ones are kept once, edits to the same lines are
+  reported as conflicts (refused unless `--drop-conflicts`).
+- Added: improvement records carry `problemKey` / `rationale` and `/crsi stats` groups by recurring
+  problem (SIM); measurement token cost is recorded and shown (RSI Tax).
+- Changed: the second gate of `/crsi modify` is directional regret — newly broken vs still failing
+  vs newly fixed; gains must outweigh regressions, anchor contracts still hard-fail.
+- Changed: `/code-review` reports defects and CLAUDE.md violations only, each finding marked
+  `important` / `pre_existing` / `nit`; clean reviews say "Code review found no issues."
+- Fixed: a retried reply no longer counts its token usage twice.
+- Fixed: MCP tools with a root-level `allOf` no longer lose their whole argument surface.
+
 ## 0.85.38 (2026-11-19)
 
 - Version sync with Mipham Code CLI 0.85.38
