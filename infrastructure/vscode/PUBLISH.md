@@ -78,6 +78,12 @@ API 的 `versions[0].lastUpdated` 仍指上一版 —— **别拿 API 那个字�
 `PublisherName` = `miphamai`），同时 API 侧 `versions[]` 87 → **88 条**、`flags` = `validated`、
 `lastUpdated` = `2026-11-17T12:03:56.073Z` —— 两个探针读的是同一时刻。**校验窗口 ≈5.8 分钟**（3–8 的中段）。
 
+0.85.37 实测（2026-11-19）：01:22:05Z 上传 ⇒ 形态②（`Version` 仍 0.85.36、`Last updated`
+已是 01:22:05；API 侧 `versions[]` 停在 88 条、`versions[0].lastUpdated` 仍指 0.85.36 的
+`2026-11-17T12:03:56.073Z`）；01:25:43Z 转形态③（`Version` 0.85.37、`Last updated` 01:25:43、
+`PublisherName` = `miphamai`），同时 API 侧 `versions[]` 88 → **89 条**、`flags` = `validated`、
+`lastUpdated` = `2026-11-19T01:25:43.003Z` —— 两个探针读的是同一时刻。**校验窗口 ≈3.6 分钟**（3–8 的下段）。
+
 ```bash
 # A. 公开页（必须 cache-bust，CDN 会给旧读数）
 curl -4 -sS -H 'Cache-Control: no-cache' \
