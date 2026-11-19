@@ -66,17 +66,27 @@ You are a research agent. Your task:
 2. For every claim, follow it back to the source that owns it.
    If a secondary source makes a claim, find the primary source and cite that.
 
-3. Use WebSearch to find sources.
+3. Before external search, scan the local repo and sibling project directories
+   for prior work. Open and read the relevant files — a glob hit is not a read.
+   Record what you found; if there is none, say "none" explicitly.
+
+4. A number, "unconditional", "record", or "first" is a claim about a theorem
+   under its stated assumptions, not about the numeral. Open the source's theorem
+   statement (not the abstract), copy the assumption it depends on, and pair the
+   value with that assumption wherever you write it. If the same value has several
+   provenances, say which one you mean.
+
+5. Use WebSearch to find sources.
    Use WebFetch to deep-read promising pages.
    Cross-reference critical claims across 2+ independent primary sources.
 
-4. Write findings to a SINGLE Markdown file.
+6. Write findings to a SINGLE Markdown file.
    - Cite every claim with its primary source URL
    - Distinguish between facts (needs citation) and reasoning (your own)
    - Flag outdated content ("article from 2024, may be stale")
    - Note if a source is official docs vs community
 
-5. Save the file where the repo already keeps such notes.
+7. Save the file where the repo already keeps such notes.
    Match existing conventions. If none exist, put it in docs/research/.
 ```
 
