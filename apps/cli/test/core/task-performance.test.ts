@@ -93,6 +93,33 @@ describe('runTaskPerformance', () => {
   })
 })
 
+describe('RSI Tax：测量 token 的捕获', () => {
+  const code =
+    'export function quicksort(arr: number[]): number[] { return [...arr].sort((a, b) => a - b) }'
+
+  it('provider 报 usage → 整个 run 的 token 求和', async () => {
+    const mockLlm: Llm = {
+      chat: async function* () {
+        yield { type: 'usage', inputTokens: 10, outputTokens: 5 }
+        yield { type: 'text', content: code }
+        yield { type: 'stop' }
+      },
+    }
+    const report = await runTaskPerformance(mockLlm)
+    expect(report.tokensUsed).toBe(report.total * 15)
+  })
+
+  it('provider 没报 usage → 键缺席，不是 0（0 会被读成免费）', async () => {
+    const mockLlm: Llm = {
+      chat: async function* () {
+        yield { type: 'text', content: code }
+      },
+    }
+    const report = await runTaskPerformance(mockLlm)
+    expect('tokensUsed' in report).toBe(false)
+  })
+})
+
 describe('runTaskPerformance skill 过滤与注入', () => {
   it('无 skill 只跑通用任务（5 个）', async () => {
     const mockLlm: Llm = {
@@ -224,6 +251,31 @@ describe('measureSkillDelta', () => {
 })
 
 describe('measureSkillDeltaRepeated', () => {
+  it('k 次采样全部报 usage → 前/后 token 数组逐项对齐', async () => {
+    const mockLlm: Llm = {
+      chat: async function* () {
+        yield { type: 'usage', inputTokens: 100, outputTokens: 20 }
+        yield {
+          type: 'text',
+          content:
+            'export function parsePositiveNumber(input: string): number { return Number(input) }',
+        }
+      },
+    }
+    const s = await measureSkillDeltaRepeated(
+      mockLlm,
+      {
+        filePath: 'apps/cli/skills/standard/safe-coding.SKILL.md',
+        originalContent: '---\nname: safe-coding\ndescription: x\n---\nweak',
+        newContent: '---\nname: safe-coding\ndescription: x\n---\nstrong',
+      },
+      { k: 1 },
+    )
+    expect(s).not.toBeNull()
+    expect(s!.baselineTokens).toEqual([120])
+    expect(s!.postTokens).toEqual([120])
+  })
+
   it('非 skill 文件 → null', async () => {
     const mockLlm: Llm = {
       chat: async function* () {

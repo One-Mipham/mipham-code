@@ -40,6 +40,20 @@ export interface ImprovementReport {
   nullModelTotal?: number
   /** 闸的结论：failed = 有题空程序也能过 ⇒ `improved` 不可归因。 */
   nullModelGate?: 'passed' | 'failed'
+  /**
+   * SIM（Self-Improvement Memory）：这条编辑针对的**复发问题**分组键。
+   * 同一 harness 问题被反复修时，记录才能按问题聚在一起，而不是按时间摊平。
+   * 缺席 = 旧记录 / 该调用点没有失败信号。
+   */
+  problemKey?: string
+  /** SIM：为什么做这次编辑（人可读的一句）。缺席语义同 problemKey。 */
+  rationale?: string
+  /**
+   * RSI Tax：与分数数组逐项对齐的前/后测量 token。**只记录，不进任何门禁**
+   * （与耗时维同一条纪律）。两个数组同生同灭；缺席 = 未测，不是免费。
+   */
+  baselineTokens?: number[]
+  postTokens?: number[]
 }
 
 export interface ImprovementRecord extends ImprovementReport {
@@ -70,10 +84,16 @@ function stdDev(xs: number[]): number {
   return Math.sqrt(variance)
 }
 
+export interface ImprovementContext {
+  problemKey?: string
+  rationale?: string
+}
+
 export function buildImprovementReport(
   sample: SkillDeltaSample,
   changeSet: string[],
   predicted?: number,
+  context?: ImprovementContext,
 ): ImprovementReport {
   const deltaMean = mean(sample.postScores) - mean(sample.baselineScores)
   const noise = stdDev(sample.baselineScores)
@@ -123,7 +143,78 @@ export function buildImprovementReport(
           nullModelGate,
         }
       : {}),
+    // SIM 两键各自独立：有理由而没有分组键（或反过来）都是有意义的状态，
+    // 强行绑定只会让调用方为了写一个而编另一个。
+    ...(context?.problemKey ? { problemKey: context.problemKey } : {}),
+    ...(context?.rationale ? { rationale: context.rationale } : {}),
+    // RSI Tax 与耗时维同一纪律：两条同生同灭，缺席即未测。
+    ...(sample.baselineTokens !== undefined && sample.postTokens !== undefined
+      ? { baselineTokens: sample.baselineTokens, postTokens: sample.postTokens }
+      : {}),
   }
+}
+
+/** 问题分组键的规范化：去空白/大小写差异，截断到 120 字符（防止把整段散文当键）。 */
+export function normalizeProblemKey(text: string): string {
+  return text.trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 120)
+}
+
+export interface ProblemGroup {
+  key: string
+  total: number
+  improved: number
+  meanDelta: number
+}
+
+/**
+ * 按 `problemKey` 聚合台账（SIM 的读侧）。没有分组键的旧记录不进入任何组，
+ * 它们仍在总台账里 —— 分组是视图，不是过滤器。
+ */
+export function groupImprovementsByProblem(records: ImprovementRecord[]): ProblemGroup[] {
+  const groups = new Map<string, ImprovementRecord[]>()
+  for (const r of records) {
+    if (!r.problemKey) continue
+    const bucket = groups.get(r.problemKey) ?? []
+    bucket.push(r)
+    groups.set(r.problemKey, bucket)
+  }
+  return [...groups.entries()]
+    .map(([key, rs]) => ({
+      key,
+      total: rs.length,
+      improved: rs.filter((r) => r.verdict === 'improved').length,
+      meanDelta: mean(rs.map((r) => r.deltaMean)),
+    }))
+    .sort((a, b) => b.total - a.total || a.key.localeCompare(b.key))
+}
+
+/** RSI Tax 的台账汇总：只统计带 token 量的记录。 */
+export function measurementTaxSummary(records: ImprovementRecord[]): {
+  records: number
+  totalTokens: number
+  meanTokens: number
+} {
+  const measured = records.filter(
+    (r) => r.baselineTokens !== undefined && r.postTokens !== undefined,
+  )
+  const totalTokens = measured.reduce(
+    (sum, r) => sum + [...r.baselineTokens!, ...r.postTokens!].reduce((a, b) => a + b, 0),
+    0,
+  )
+  return {
+    records: measured.length,
+    totalTokens,
+    meanTokens: measured.length > 0 ? Math.round(totalTokens / measured.length) : 0,
+  }
+}
+
+/** RSI Tax 的只读展示；缺席 → null（调用方整行不打印）。 */
+export function formatRsiTaxLine(report: ImprovementReport): string | null {
+  const { baselineTokens: before_, postTokens: after_ } = report
+  if (before_ === undefined || after_ === undefined) return null
+  const before = before_.reduce((a, b) => a + b, 0)
+  const after = after_.reduce((a, b) => a + b, 0)
+  return `💸 验证 token（RSI Tax）: 前 ${before.toLocaleString()} → 后 ${after.toLocaleString()}（合计 ${(before + after).toLocaleString()}）`
 }
 
 /** 空模型闸失败时给出一行可见读数；闸通过则不出声（不占显示行）。 */

@@ -1755,6 +1755,59 @@ describe('/crsi stats 的 ε 段与作废条款', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════
+// /crsi stats —— SIM 分组与 RSI Tax 段
+// ═══════════════════════════════════════════════════════════════
+
+describe('/crsi stats 的 SIM 分组与 RSI Tax 段', () => {
+  beforeEach(() => {
+    h.readImprovements.mockReturnValue([])
+  })
+
+  // 两段都必须先报「没有」，而且措辞要区分「未分组/未测」与「没有问题/免费」——
+  // 旧记录没有这两个字段，把沉默读成健康正是这类只读视图最容易犯的错。
+  it('无分组键、无 token ⇒ 两段都写明「缺失」而不是「健康」', async () => {
+    const content = await runCrsiStats()
+    expect(content).toContain('### 改进台账按问题分组（SIM）')
+    expect(content).toContain('暂无带问题键的记录')
+    expect(content).toContain('### 验证成本（RSI Tax）')
+    expect(content).toContain('暂无带 token 量的记录')
+  })
+
+  it('有分组键与 token ⇒ 按问题聚合并给出合计', async () => {
+    const rec = (
+      problemKey: string,
+      verdict: 'improved' | 'inconclusive',
+      deltaMean: number,
+      tokens?: [number, number],
+    ): unknown => ({
+      id: `r-${problemKey}-${deltaMean}`,
+      timestamp: '2026-01-01T00:00:00.000Z',
+      skillName: 's',
+      changeSet: [],
+      causal: true,
+      baselineScores: [],
+      postScores: [],
+      deltaMean,
+      noise: 0,
+      minEffect: 20,
+      verdict,
+      problemKey,
+      ...(tokens ? { baselineTokens: [tokens[0]], postTokens: [tokens[1]] } : {}),
+    })
+    h.readImprovements.mockReturnValue([
+      rec('tool timeout', 'improved', 30, [100, 50]),
+      rec('tool timeout', 'inconclusive', 5, [10, 10]),
+      rec('mcp schema', 'improved', 40),
+    ])
+
+    const content = await runCrsiStats()
+    expect(content).toContain('- tool timeout: 1/2 improved（均值 delta +17.5）')
+    expect(content).toContain('- mcp schema: 1/1 improved（均值 delta +40.0）')
+    expect(content).toContain('2 条记录 · 合计 170 tokens · 均值 85/条')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
 // 报告面读的是引擎所在的档，不是 `config.permission`
 // ═══════════════════════════════════════════════════════════════
 //

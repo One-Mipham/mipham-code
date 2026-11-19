@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { homedir } from 'node:os'
 import { rmSync, writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 
 vi.mock('node:os', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:os')>()
@@ -14,6 +15,10 @@ import {
   buildImprovementReport,
   formatCostLine,
   formatNullModelLine,
+  formatRsiTaxLine,
+  normalizeProblemKey,
+  groupImprovementsByProblem,
+  measurementTaxSummary,
   wilsonInterval,
   improvementRate,
   improvementSignalStrong,
@@ -413,6 +418,108 @@ describe('formatNullModelLine', () => {
       ['f.md'],
     )
     expect(formatNullModelLine(r)).toBeNull()
+  })
+})
+
+describe('SIM：问题分组与理由（只记录，不进判定）', () => {
+  const base = { skillName: 'safe-coding', baselineScores: [50, 50], postScores: [70, 70] }
+
+  it('context 两键原样进报告；判定不受影响', () => {
+    const plain = buildImprovementReport(base, ['f.md'])
+    const tagged = buildImprovementReport(base, ['f.md'], undefined, {
+      problemKey: normalizeProblemKey('  Tool  Timeout  '),
+      rationale: 'tool timeout 反复出现',
+    })
+    expect(tagged.problemKey).toBe('tool timeout')
+    expect(tagged.rationale).toBe('tool timeout 反复出现')
+    expect(tagged.verdict).toBe(plain.verdict)
+    expect(tagged.deltaMean).toBe(plain.deltaMean)
+  })
+
+  it('缺席 → 键不出现（旧记录形态不变）', () => {
+    const r = buildImprovementReport(base, ['f.md'])
+    expect('problemKey' in r).toBe(false)
+    expect('rationale' in r).toBe(false)
+  })
+
+  it('两键各自独立：只有理由也能写', () => {
+    const r = buildImprovementReport(base, ['f.md'], undefined, { rationale: 'why' })
+    expect(r.rationale).toBe('why')
+    expect('problemKey' in r).toBe(false)
+  })
+
+  it('按问题聚合：无键记录不进组，但仍留在总台账', () => {
+    const rec = (
+      problemKey: string | undefined,
+      verdict: 'improved' | 'regressed' | 'inconclusive',
+      deltaMean: number,
+    ): ImprovementRecord => ({
+      id: randomUUID(),
+      timestamp: new Date().toISOString(),
+      skillName: 's',
+      changeSet: ['f.md'],
+      causal: true,
+      baselineScores: [0],
+      postScores: [deltaMean],
+      deltaMean,
+      noise: 0,
+      minEffect: 20,
+      verdict,
+      ...(problemKey ? { problemKey } : {}),
+    })
+    const records = [
+      rec('a', 'improved', 30),
+      rec('a', 'regressed', -25),
+      rec('b', 'improved', 40),
+      rec(undefined, 'improved', 50),
+    ]
+    const groups = groupImprovementsByProblem(records)
+    expect(groups.map((g) => [g.key, g.total, g.improved])).toEqual([
+      ['a', 2, 1],
+      ['b', 1, 1],
+    ])
+    expect(groups[0]!.meanDelta).toBe(2.5)
+  })
+})
+
+describe('RSI Tax：测量 token（只记录，不进闸）', () => {
+  const base = { skillName: 's', baselineScores: [50, 50], postScores: [70, 70] }
+
+  it('两个数组同生同灭地进报告', () => {
+    const r = buildImprovementReport(
+      { ...base, baselineTokens: [100, 120], postTokens: [200, 240] },
+      ['f.md'],
+    )
+    expect(r.baselineTokens).toEqual([100, 120])
+    expect(r.postTokens).toEqual([200, 240])
+    expect(formatRsiTaxLine(r)).toBe('💸 验证 token（RSI Tax）: 前 220 → 后 440（合计 660）')
+  })
+
+  it('缺席 → 键不出现、展示行 null（不打 0 或 NaN）', () => {
+    const r = buildImprovementReport(base, ['f.md'])
+    expect('baselineTokens' in r).toBe(false)
+    expect(formatRsiTaxLine(r)).toBeNull()
+  })
+
+  it('汇总只统计带 token 的记录，均值四舍五入', () => {
+    const mk = (b?: number[], p?: number[]): ImprovementRecord => ({
+      id: randomUUID(),
+      timestamp: new Date().toISOString(),
+      skillName: 's',
+      changeSet: ['f.md'],
+      causal: true,
+      baselineScores: [0],
+      postScores: [0],
+      deltaMean: 0,
+      noise: 0,
+      minEffect: 20,
+      verdict: 'inconclusive',
+      ...(b && p ? { baselineTokens: b, postTokens: p } : {}),
+    })
+    const s = measurementTaxSummary([mk([100], [50]), mk([10], [10]), mk()])
+    expect(s.records).toBe(2)
+    expect(s.totalTokens).toBe(170)
+    expect(s.meanTokens).toBe(85)
   })
 })
 

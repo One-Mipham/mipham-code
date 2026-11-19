@@ -28,9 +28,9 @@ prompt-exclude-header: true
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.73
-> **最后更新**: 2026-11-19 — **CC 2.1.328 正式档重做：144 条逐条过，3 个修复单元（2.94.73）** —— `latest` 已越过 2.1.327（tag/release `v2.1.328`，2026-11-19T01:14Z），首次拿到 144 条发布说明。逐条裁决后落 3 项：① **一次重试的回答 token 计两遍** —— `restart` 只清了文本与 `tool_use`，没清 `turnApi*`，而 usage 是流中**先于**失败报出的 ⇒ 失败那次与重试那次都记进 `/usage` 与逐工具归属；在 `restart` 分支一并清零（测试断言 120+60，不是 +150）。② **MCP 根 `allOf` 让参数全隐形** —— `collectSurfaces` 只认 `anyOf`/`oneOf`，根 `allOf` 返回空面 ⇒ 工具可调但零参数；`allOf` 是**合取**，properties 合并、required 取**并集**（与 `anyOf` 的交集相反）。③ **`/code-review` 收窄为 bug + CLAUDE.md 违规**，每项标 `important`/`pre_existing`/`nit`，末尾给一句修复建议，零发现时固定输出 `Code review found no issues.`；清理类交 `/simplify`。其余 140 条按**对照**（6 条）/ **半**（5 条）/ **未验**（14 条）/ **无此面**（115 条）归档（逐条表在 `~/.mipham/cc-archaeology/328-changelog/verdicts-144.tsv`）。测试 4,969 → **4,973**（372 文件）。
-> **前一条（2.94.72）**: 2026-11-19 — **CC 2.1.328 类型面预发布档（2.94.72，已被上一条取代）** —— 当日 `latest` 仍是 2.1.327、GitHub 无 tag、CHANGELOG 无该节，语料只剩包内 `sdk-tools.d.ts` 的 12 行 diff：`ReportFindings` 的 finding 新增可选 `severity: important | pre_existing | nit`，`summary` 去掉「One-sentence」。已落 schema 字段、未知档位拒绝、报告行渲染 `[severity: …]`。测试 4,963 → **4,969**（372 文件）。
+> **版本**: 2.94.74
+> **最后更新**: 2026-11-19 — **RSI 前两项落地：SIM 问题记忆 + RSI Tax 成本计量（2.94.74）** —— ① **SIM**：改进台账增 `problemKey`/`rationale` 两键（各自独立、缺席不写），手工路径按规范化描述分组、prose 路径按「失败类别: 标题」分组；`/crsi stats` 增「按问题分组」视图 —— 分组是视图不是过滤器，无键旧记录仍在总台账。② **RSI Tax**：测量链从 provider 的 usage 流累计 token（`tokensUsed`，**没报 ≠ 报 0**），逐采样对齐进 `baselineTokens`/`postTokens`，两条渲染路径都打「💸 验证 token」行，`/crsi stats` 增成本合计与 **0-token 确定性 eval 基线**（问题不同，仅作成本对照）。两维都只记录、不进任何裁决（A1 不破）。测试 4,973 → **4,985**（372 文件）。
+> **前一条（2.94.73）**: 2026-11-19 — **CC 2.1.328 正式档重做：144 条逐条过，3 个修复单元（2.94.73）** —— `latest` 越过 2.1.327 后拿到 144 条发布说明：① 重试的回答 token 计两遍（`restart` 未清 `turnApi*`，usage 流中先报）；② MCP 根 `allOf` 让参数全隐形（合取，required 取并集）；③ `/code-review` 收窄为 bug + CLAUDE.md 违规、标 `important`/`pre_existing`/`nit`、零发现固定文案。其余 140 条：对照 6 / 半 5 / 未验 14 / 无此面 115。测试 4,969 → **4,973**（372 文件）。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -66,10 +66,10 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **完整覆盖闸** `/crsi modify` 入口 — `crsi-sandbox.ts` `validateBlastRadius`：自修改 proposal 必须声明非空 `blastRadius`（触及的**全部**代码路径），否则 fail-closed 拒绝（今日「两条渲染路径只接一条 = 局部正确全局遗漏」教训固化）
 - **producer** `/crsi propose` — `core/crsi-producer.ts` 把失败信号转成四类候选：默认教训文件 `crsi-lessons.md`（模板化无 LLM）、`--rule` 固化受管理规则 `crsi-managed-rules.ts`（确定性行为，source='managed'）、`--prose` 两阶段 LLM 改 skill 散文（A1 边界首演：LLM 只生成不判定）、`--crossover` LLM 选两条重叠教训合并（精确行匹配 guard 防幻觉，删二增一）；三信号路径同信号幂等
 - **eval harness** `/crsi eval` — `core/eval-harness.ts` 冻结 40 条 ground-truth 契约（规则/宪法/沙箱边界/完整覆盖闸/语义边界/红队/producer/行为缺口/行为任务）+ rewards 日志 `~/.mipham/crsi/eval-scores.jsonl`，`runCrsiModification` 以「分数不退化」为第二道闸。8 行为缺口（rm -rf/管道投毒/git reset --hard/chmod 777/mkfs/dd→/dev//关停主机/crontab -r）已由固化 managed tool-params 规则覆盖 → 全翻转 PASS → 满分 100 =「证明更好」
-- **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）；空模型闸（空程序也能通过的题不计入改进，`improved` 降级为 `inconclusive`）
+- **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）；空模型闸（空程序也能通过的题不计入改进，`improved` 降级为 `inconclusive`）；SIM（`problemKey`/`rationale` 按复发问题分组，`/crsi stats` 出视图）+ RSI Tax（逐采样 token 成本，`/crsi stats` 给合计与 0-token eval 基线；只记录不进裁决）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：4,973 测试（4,971 passed + 2 skipped，372 文件，0 失败）
+测试：4,985 测试（4,983 passed + 2 skipped，372 文件，0 失败）
 
 ---
 
@@ -106,7 +106,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 372 个测试文件，4973 个测试
+│   │   ├── test/               # 372 个测试文件，4985 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -132,7 +132,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（4973 个测试）
+pnpm test         # vitest run（4985 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -322,10 +322,10 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 105     | 1894     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
+| core            | 105     | 1904     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
 | tools           | 33      | 644      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 38      | 276      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
-| ui              | 50      | 505      | commands / input / config-wizard / loop / skill-doctor / ctrl-c / command-reachability                                                                                      |
+| ui              | 50      | 507      | commands / input / config-wizard / loop / skill-doctor / ctrl-c / command-reachability                                                                                      |
 | agent           | 16      | 166      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
 | security        | 12      | 126      | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
 | providers       | 10      | 189      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
@@ -343,7 +343,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | integration     | 1       | 3        | 跨仓接线：`vscode-extension-telemetry`（VS Code 遥测关闭 ⇒ 终端拿到 `MIPHAM_TELEMETRY=off`）                                                                                |
 | integrity       | 19      | 132      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **372** | **4973** | **0 失败** ✅（4,971 + 2 skipped，372 文件）                                                                                                                                |
+| **合计**        | **372** | **4985** | **0 失败** ✅（4,983 + 2 skipped，372 文件）                                                                                                                                |
 
 ### 测试注意事项
 

@@ -111,6 +111,12 @@ export interface TaskPerformanceReport {
   truncated: number
   /** B2 代价维：整轮（LLM 生成 + 冻结测试判定）的墙钟耗时。只记录，不参与任何判定。 */
   durationMs: number
+  /**
+   * RSI Tax：本轮测量烧掉的 token（provider 报的 usage 之和）。
+   * 缺席 = provider 一次 usage 都没报（与「报了 0」区分）—— 缺席按「未测」处理，
+   * 不得当成免费。只记录，不参与任何判定。
+   */
+  tokensUsed?: number
 }
 
 /** 剥掉 LLM 可能包裹的 markdown 代码块（```ts ... ```），拿到裸代码。 */
@@ -123,9 +129,11 @@ async function collectGeneratedCode(
   llm: Llm,
   prompt: string,
   systemPrompt?: string,
-): Promise<{ code: string; truncated: boolean }> {
+): Promise<{ code: string; truncated: boolean; tokens: number; usageReported: boolean }> {
   let text = ''
   let truncated = false
+  let tokens = 0
+  let usageReported = false
   const req = {
     model: '', // falsy → registry 回退到 active model
     messages: [{ role: 'user' as const, content: prompt }],
@@ -134,11 +142,17 @@ async function collectGeneratedCode(
   }
   for await (const chunk of llm.chat(req)) {
     if (chunk.type === 'text' && chunk.content) text += chunk.content
+    // 验证成本（RSI Tax）：provider 在流中报的 usage 就是这次测量烧掉的 token。
+    // `usageReported` 与数值分开：报 0 和「没报」不是同一件事，0 会被读成免费。
+    if (chunk.type === 'usage') {
+      usageReported = true
+      tokens += (chunk.inputTokens ?? 0) + (chunk.outputTokens ?? 0)
+    }
     // Both providers already emit `truncated` on the stop chunk; reading it here is
     // what turns the signal into something the score can act on.
     if (chunk.truncated) truncated = true
   }
-  return { code: stripCodeFences(text), truncated }
+  return { code: stripCodeFences(text), truncated, tokens, usageReported }
 }
 
 export async function runTaskPerformance(
@@ -149,8 +163,16 @@ export async function runTaskPerformance(
   const tasks = loadPerformanceTasks().filter((t) => (t.skill ?? undefined) === wanted)
   const results: TaskPerformanceResult[] = []
   const startedAt = Date.now()
+  let tokensUsed = 0
+  let anyUsageReported = false
   for (const task of tasks) {
-    const { code, truncated } = await collectGeneratedCode(llm, task.prompt, opts?.skill?.text)
+    const { code, truncated, tokens, usageReported } = await collectGeneratedCode(
+      llm,
+      task.prompt,
+      opts?.skill?.text,
+    )
+    tokensUsed += tokens
+    anyUsageReported = anyUsageReported || usageReported
     if (!code) {
       results.push({
         id: task.id,
@@ -188,6 +210,7 @@ export async function runTaskPerformance(
     failures: results.filter((r) => !r.passed).map((r) => r.id),
     truncated,
     durationMs: Date.now() - startedAt,
+    ...(anyUsageReported ? { tokensUsed } : {}),
   }
 }
 
@@ -285,6 +308,13 @@ export interface SkillDeltaSample {
    */
   baselineDurations?: number[]
   postDurations?: number[]
+  /**
+   * RSI Tax：与分数数组逐项对齐的 token 用量（第 i 项 = 产出第 i 个分数那次测量的消耗）。
+   * **两个数组同生同灭**；且只有 k 次采样**全部**报了 usage 才出现 —— 少数几次没报时
+   * 补齐 0 会把「没测」写成「免费」，宁可整维缺席。
+   */
+  baselineTokens?: number[]
+  postTokens?: number[]
 }
 
 /**
@@ -304,12 +334,15 @@ export async function measureSkillDeltaRepeated(
   const postScores: number[] = []
   const baselineDurations: number[] = []
   const postDurations: number[] = []
+  const baselineTokens: number[] = []
+  const postTokens: number[] = []
   for (let i = 0; i < k; i++) {
     const r = await runTaskPerformance(llm, {
       skill: { name: resolved.skillName, text: resolved.baselineText },
     })
     baselineScores.push(r.score)
     baselineDurations.push(r.durationMs)
+    if (r.tokensUsed !== undefined) baselineTokens.push(r.tokensUsed)
   }
   for (let i = 0; i < k; i++) {
     const r = await runTaskPerformance(llm, {
@@ -317,6 +350,7 @@ export async function measureSkillDeltaRepeated(
     })
     postScores.push(r.score)
     postDurations.push(r.durationMs)
+    if (r.tokensUsed !== undefined) postTokens.push(r.tokensUsed)
   }
 
   // 空模型闸在最后一次采样后算一次：与模型无关，重复跑只是重复同一组测试。
@@ -328,6 +362,10 @@ export async function measureSkillDeltaRepeated(
     postScores,
     baselineDurations,
     postDurations,
+    // 完整 k 次才写：少数几次没报 usage 时补 0 等于把「没测」写成「免费」。
+    ...(baselineTokens.length === k && postTokens.length === k
+      ? { baselineTokens, postTokens }
+      : {}),
     nullModelPassed: nullCheck.passed,
     nullModelTotal: nullCheck.total,
   }

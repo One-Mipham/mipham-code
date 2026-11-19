@@ -51,6 +51,7 @@ import {
   runEval,
   appendEvalScore,
   getContractHistory,
+  getLastEvalScore,
   diffContractHistory,
   renderContractDiff,
 } from '../core/eval-harness'
@@ -65,6 +66,10 @@ import {
   buildImprovementReport,
   formatCostLine,
   formatNullModelLine,
+  formatRsiTaxLine,
+  normalizeProblemKey,
+  groupImprovementsByProblem,
+  measurementTaxSummary,
   appendImprovement,
   readImprovements,
   improvementRate,
@@ -1033,6 +1038,42 @@ const crsiStatsCmd: CommandHandler = async (ctx) => {
     )
   }
 
+  // ── SIM：按问题分组（只读视图；分组不是过滤器，无键的旧记录仍在总台账里） ──
+  const groups = groupImprovementsByProblem(records)
+  lines.push('')
+  lines.push('### 改进台账按问题分组（SIM）')
+  if (groups.length === 0) {
+    lines.push('暂无带问题键的记录（旧记录没有 problemKey —— 读作「未分组」，不是「没有问题」）。')
+  } else {
+    for (const g of groups.slice(0, 10)) {
+      const sign = g.meanDelta >= 0 ? '+' : ''
+      lines.push(
+        `- ${g.key}: ${g.improved}/${g.total} improved（均值 delta ${sign}${g.meanDelta.toFixed(1)}）`,
+      )
+    }
+    if (groups.length > 10) lines.push(`… 另有 ${groups.length - 10} 组未列出`)
+  }
+
+  // ── RSI Tax：验证成本（只记录、只展示，不进任何判定） ──
+  const tax = measurementTaxSummary(records)
+  lines.push('')
+  lines.push('### 验证成本（RSI Tax）')
+  if (tax.records === 0) {
+    lines.push('暂无带 token 量的记录（provider 未报 usage，或旧记录早于本维）。')
+  } else {
+    lines.push(
+      `${tax.records} 条记录 · 合计 ${tax.totalTokens.toLocaleString()} tokens · 均值 ${tax.meanTokens.toLocaleString()}/条`,
+    )
+    // 0-token 基线：确定性 eval 不调 LLM，是同一批机制契约的免费读数。
+    // 两个数回答的不是同一问题，故只做成本对照，不合并成一个「值不值」。
+    const evalScore = getLastEvalScore('mechanism-sentinel')
+    if (evalScore !== null) {
+      lines.push(
+        `0-token 基线: 确定性 eval 最近一次 ${evalScore}/100（不消耗 token；与上面的测量不是同一问题，仅作成本对照）`,
+      )
+    }
+  }
+
   return { content: lines.join('\n') }
 }
 
@@ -1112,7 +1153,12 @@ const crsiModifyCmd: CommandHandler = async (ctx, args) => {
   try {
     const sample = await measureSkillDeltaRepeated(llm, { filePath, originalContent, newContent })
     if (sample) {
-      const report = buildImprovementReport(sample, [filePath])
+      const report = buildImprovementReport(sample, [filePath], undefined, {
+        // 手工路径没有失败信号，问题键就取「这次想修什么」的规范化描述：
+        // 同一句话被反复修时，它们才聚得起来。
+        problemKey: normalizeProblemKey(description),
+        rationale: description,
+      })
       setPendingVerdict(report.verdict)
       appendImprovement({ ...report, id: randomUUID(), timestamp: new Date().toISOString() })
       const rate = improvementRate(readImprovements())
@@ -1127,10 +1173,12 @@ const crsiModifyCmd: CommandHandler = async (ctx, args) => {
       const costLine = formatCostLine(report)
       // 空模型闸：只在闸失败时出声；它解释了 verdict 为什么被降级。
       const nullLine = formatNullModelLine(report)
+      const taxLine = formatRsiTaxLine(report)
       improvementLine =
         `\n📊 改进判定: ${label} (delta ${sign}${report.deltaMean.toFixed(1)}, 噪声 ${report.noise.toFixed(1)}, 阈值 ${report.minEffect.toFixed(1)})` +
         `\n   改进率: ${rate.improved}/${rate.total} (${(rate.rate * 100).toFixed(0)}%, Wilson 95% [${(rate.lo * 100).toFixed(0)}%, ${(rate.hi * 100).toFixed(0)}%])` +
         (costLine ? `\n${costLine}` : '') +
+        (taxLine ? `\n${taxLine}` : '') +
         (nullLine ? `\n${nullLine}` : '') +
         (report.verdict === 'regressed' ? '\n   ⚠️ 任务表现倒退：--approve 将被拒绝。' : '')
     }
@@ -1237,7 +1285,17 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
         newContent: proposal.newContent,
       })
       if (sample) {
-        const report = buildImprovementReport(sample, [proposal.filePath], proposal.expectedEffect)
+        const report = buildImprovementReport(
+          sample,
+          [proposal.filePath],
+          proposal.expectedEffect,
+          {
+            // prose 路径有失败信号：分组键取「类别 + 标题」，同一类失败
+            // 反复出现时才能看出这个环到底在修同一件事还是到处救火。
+            problemKey: normalizeProblemKey(`${signal.category}: ${signal.title}`),
+            rationale: proposal.description,
+          },
+        )
         setPendingVerdict(report.verdict)
         appendImprovement({ ...report, id: randomUUID(), timestamp: new Date().toISOString() })
         if (report.predictionHit !== undefined) {
@@ -1249,6 +1307,9 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
         // 「局部正确全局遗漏」）。ε 行可以有、代价行可以没有，故各自独立追加。
         const costLine = formatCostLine(report)
         if (costLine) predictionLine += `\n${costLine}`
+        // RSI Tax 同理：两条渲染路径都接（只接一条 = 局部正确全局遗漏）。
+        const taxLine = formatRsiTaxLine(report)
+        if (taxLine) predictionLine += `\n${taxLine}`
         // 空模型闸同理：两条渲染路径都接。
         const nullLine = formatNullModelLine(report)
         if (nullLine) predictionLine += `\n${nullLine}`
