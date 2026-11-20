@@ -25,7 +25,14 @@ import { miphamHome, workflowScriptDir, workflowScriptDirs, worktreeRoot } from 
 import { fixDoctor, fixConfig, fixCache, selectRepoClaudeFiles } from '../core/fix'
 import { fixCodeTarget } from '../core/fix-code'
 import { homedir } from 'node:os'
-import { runCrsiModification, approvePending, rejectPending, hasPending } from '../core/crsi-modify'
+import {
+  runCrsiModification,
+  approvePending,
+  rejectPending,
+  hasPending,
+  setPendingProbation,
+} from '../core/crsi-modify'
+import { settleProbation, formatProbationLines, PROBATION_WINDOW } from '../core/probation'
 import {
   produceCrsiProposal,
   produceRuleProposal,
@@ -61,6 +68,7 @@ import {
   runTaskPerformance,
   measureSkillDeltaRepeated,
   stripCodeFences,
+  loadPerformanceTasks,
 } from '../core/task-performance'
 import { measureCapture } from '../core/capture-measure'
 import { randomUUID } from 'node:crypto'
@@ -1076,6 +1084,9 @@ const crsiStatsCmd: CommandHandler = async (ctx) => {
     }
   }
 
+  // ── 试用期：未结窗口也打出来（「开了没读数」与「从未开窗」不同形） ──
+  lines.push(...formatProbationLines())
+
   return { content: lines.join('\n') }
 }
 
@@ -1112,9 +1123,19 @@ async function measureModification(
 ): Promise<string> {
   const llm = ctx.engine.getLlm() ?? ctx.engine.getRegistry()
   let improvementLine = ''
+  // 先清空：非 skill 文件 / 没量到样本 / 抛错，都不该留下上一轮的基线。
+  setPendingProbation(null)
   try {
     const sample = await measureSkillDeltaRepeated(llm, params)
     if (sample) {
+      // 试用期基线 = 合并后的那一臂（postScores）。窗口问的是「合并后会不会回落」，
+      // 不是「这次改动涨了多少」。没有测量就不开窗（不让旧基线挂到新合并上）。
+      setPendingProbation({
+        filePath: params.filePath,
+        skillName: sample.skillName,
+        baselineScores: sample.postScores,
+        poolSize: loadPerformanceTasks().filter((t) => t.skill === sample.skillName).length,
+      })
       const report = buildImprovementReport(sample, [params.filePath], undefined, {
         // 手工路径没有失败信号，问题键就取「这次想修什么」的规范化描述：
         // 同一句话被反复修时，它们才聚得起来。
@@ -1146,6 +1167,7 @@ async function measureModification(
     }
   } catch {
     // 测量失败（LLM 不可用等）不阻断 modify 流程——改进信号是可选的。
+    setPendingProbation(null)
   }
   return improvementLine
 }
@@ -1157,7 +1179,11 @@ const crsiModifyCmd: CommandHandler = async (ctx, args) => {
     }
     const r = approvePending()
     setPendingVerdict(null)
-    return { content: r.success ? `✅ ${r.message}` : `⚠️ ${r.message}` }
+    if (!r.success) return { content: `⚠️ ${r.message}` }
+    const probationNote = r.probationOpened
+      ? '\n🧪 已开启试用期：后续 3 次同口径重测（同 skill、gate 池、k≥3）后出裁定；退化只提示回退，不自动执行。'
+      : ''
+    return { content: `✅ ${r.message}${probationNote}` }
   }
   if (args[0] === '--reject') {
     const r = rejectPending()
@@ -1698,6 +1724,18 @@ const crsiBenchCmd: CommandHandler = async (ctx, args) => {
       '',
       tokens === undefined ? 'RSI Tax: 未测（有运行没报 usage）' : `RSI Tax: ${tokens} tokens`,
     )
+    // 只有 k≥3 才算一次合格重测；k=1 的冒烟永不进观察窗（设计 §4.4）。
+    if (k >= 3) {
+      const rec = settleProbation(skill.name, average(m.on))
+      if (rec) {
+        lines.push(
+          '',
+          rec.verdict
+            ? `试用期: ${rec.checks.length}/${PROBATION_WINDOW} → ${rec.verdict}`
+            : `试用期: ${rec.checks.length}/${PROBATION_WINDOW} —— 观察中`,
+        )
+      }
+    }
     return { content: lines.join('\n') }
   }
 

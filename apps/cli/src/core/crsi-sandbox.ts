@@ -592,7 +592,7 @@ export class CrsiSandbox {
    * ONLY call this after human approval and successful test run.
    * Cherry-picks the changes from the worktree branch to the current branch.
    */
-  merge(): { success: boolean; message: string } {
+  merge(): { success: boolean; message: string; commitHash?: string } {
     if (!this.worktreePath || !this.worktreeBranch) {
       return { success: false, message: 'No worktree to merge from.' }
     }
@@ -635,6 +635,7 @@ export class CrsiSandbox {
       return {
         success: true,
         message: `Successfully merged ${this.sessionReport.summary.merged} modification(s).`,
+        commitHash,
       }
     } catch (err) {
       return { success: false, message: `Merge failed: ${String(err)}` }
