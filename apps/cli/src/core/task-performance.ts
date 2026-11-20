@@ -16,6 +16,14 @@ export interface PerformanceTask {
   prompt: string
   testCode: string
   skill?: string // 绑定被测 skill 的名字（= skill frontmatter name）
+  /**
+   * 手写参考解。**必须**能通过本任务自己的 `testCode` —— 由
+   * `test/integrity/task-battery.test.ts` 逐题机械验证。
+   *
+   * 它是捕获率的上界（分母 `100 − off`）：参考解若不满分，说明是题或答案坏了，
+   * 而不是被测 skill 不好。
+   */
+  oracleCode: string
 }
 
 export function loadPerformanceTasks(): PerformanceTask[] {

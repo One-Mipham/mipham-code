@@ -12,6 +12,14 @@ import {
   runNullModelCheck,
 } from '../../src/core/task-performance'
 
+/** 按请求里的 prompt 返回该题的手写参考解 —— 让「答对全部题」与电池大小解耦。 */
+function oracleForRequest(req: ChatRequest): string {
+  const prompt = String(req.messages[0]?.content ?? '')
+  return loadPerformanceTasks().find((t) => t.prompt === prompt)?.oracleCode ?? ''
+}
+
+const SAFE_COUNT = loadPerformanceTasks().filter((t) => t.skill === 'safe-coding').length
+
 describe('loadPerformanceTasks', () => {
   it('加载至少 1 个字段完整的任务', () => {
     const tasks = loadPerformanceTasks()
@@ -138,19 +146,15 @@ describe('runTaskPerformance skill 过滤与注入', () => {
 
   it('指定 skill 只跑绑定该 skill 的任务', async () => {
     const mockLlm: Llm = {
-      chat: async function* () {
-        yield {
-          type: 'text',
-          content:
-            'export function parsePositiveNumber(input: string): number { return Number(input) }',
-        }
+      chat: async function* (req) {
+        yield { type: 'text', content: oracleForRequest(req) }
       },
     }
     const report = await runTaskPerformance(mockLlm, {
       skill: { name: 'safe-coding', text: '校验输入' },
     })
-    expect(report.total).toBe(1)
-    expect(report.results[0]?.id).toBe('perf-safe-parse-positive')
+    expect(report.total).toBe(SAFE_COUNT)
+    expect(report.results.every((r) => r.id.startsWith('perf-safe-'))).toBe(true)
   })
 
   it('有 skill 时把 skill 正文作为 systemPrompt 注入', async () => {
@@ -253,13 +257,9 @@ describe('measureSkillDelta', () => {
 describe('measureSkillDeltaRepeated', () => {
   it('k 次采样全部报 usage → 前/后 token 数组逐项对齐', async () => {
     const mockLlm: Llm = {
-      chat: async function* () {
+      chat: async function* (req) {
         yield { type: 'usage', inputTokens: 100, outputTokens: 20 }
-        yield {
-          type: 'text',
-          content:
-            'export function parsePositiveNumber(input: string): number { return Number(input) }',
-        }
+        yield { type: 'text', content: oracleForRequest(req) }
       },
     }
     const s = await measureSkillDeltaRepeated(
@@ -272,8 +272,8 @@ describe('measureSkillDeltaRepeated', () => {
       { k: 1 },
     )
     expect(s).not.toBeNull()
-    expect(s!.baselineTokens).toEqual([120])
-    expect(s!.postTokens).toEqual([120])
+    expect(s!.baselineTokens).toEqual([SAFE_COUNT * 120])
+    expect(s!.postTokens).toEqual([SAFE_COUNT * 120])
   })
 
   it('非 skill 文件 → null', async () => {
@@ -308,11 +308,7 @@ describe('measureSkillDeltaRepeated', () => {
       chat: async function* (req) {
         const sp = (req.systemPrompt ?? '') as string
         if (sp.includes('校验')) {
-          yield {
-            type: 'text',
-            content:
-              'export function parsePositiveNumber(input: string): number { if (input == null || input === "" || isNaN(Number(input))) throw new RangeError("invalid input"); return Number(input) }',
-          }
+          yield { type: 'text', content: oracleForRequest(req) }
         } else {
           yield {
             type: 'text',
@@ -433,15 +429,15 @@ describe('runTaskPerformance：被输出上限截断的生成不进打分', () =
     expect(r.results.every((x) => x.truncated === undefined)).toBe(true)
   })
 
-  it('单任务集上逐字边界：total=1 / truncated=1 / score=100', async () => {
+  it('单个 skill 题集上逐字边界：全被截断 ⇒ 分母为 0、计数点名', async () => {
     const r = await runTaskPerformance(brokenLlm(true), {
       skill: { name: 'safe-coding', text: '校验' },
     })
-    expect(r.total).toBe(1)
-    expect(r.results[0]!.truncated).toBe(true)
-    expect(r.truncated).toBe(1)
+    expect(r.total).toBe(SAFE_COUNT)
+    expect(r.results.every((x) => x.truncated === true)).toBe(true)
+    expect(r.truncated).toBe(SAFE_COUNT)
     expect(r.score).toBe(100)
-    expect(r.failures.length).toBe(1) // 仍然是「失败」——只是不进分母
+    expect(r.failures.length).toBe(SAFE_COUNT) // 仍然是「失败」——只是不进分母
   })
 })
 
@@ -461,6 +457,7 @@ describe('countEmptySolutionPasses', () => {
       prompt: 'always true',
       testCode:
         "import { test, expect } from 'bun:test'\ntest('always', () => { expect(1).toBe(1) })",
+      oracleCode: '',
     }
     const real = {
       id: 'real',
@@ -468,6 +465,7 @@ describe('countEmptySolutionPasses', () => {
       prompt: 'add',
       testCode:
         "import { test, expect } from 'bun:test'\nimport { add } from './solution'\ntest('add', () => { expect(add(1, 2)).toBe(3) })",
+      oracleCode: 'export function add(a: number, b: number): number { return a + b }',
     }
 
     const result = countEmptySolutionPasses([vacuous, real])
@@ -509,7 +507,7 @@ describe('measureSkillDeltaRepeated — 空模型读数', () => {
     )
 
     expect(sample).not.toBeNull()
-    expect(sample?.nullModelTotal).toBe(1)
+    expect(sample?.nullModelTotal).toBe(SAFE_COUNT)
     expect(sample?.nullModelPassed).toBe(0)
   })
 })
