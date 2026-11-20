@@ -4,6 +4,19 @@
 > (tag dates) and use the same wording as the VS Code extension's changelog — the plugin is a
 > thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.40 (2026-11-20)
+
+- Version sync with Mipham Code CLI 0.85.40
+- Added: `MIPHAM_DEBUG_INPUT=1` records, once per second, how many keys reached the app and how
+  many render commits happened (`~/.mipham/input-debug.log`), so a "frozen" window can be split
+  into "input never arrived" and "input arrived but did not render". Counts and key categories
+  only — never the text; the log is truncated at 2 MB; no I/O when the variable is unset.
+- Fixed: the web-access CDP proxy reports "Chrome has not authorized remote debugging" (port
+  reachable, `/json/version` returns 404) instead of a generic connection failure, and `/health`
+  plus `check-deps` carry that verdict with the last real error.
+- Fixed: the web search tool no longer advertises Tavily / SerpAPI channels that do not exist;
+  without an API key it points at web-access and warns against scraping search result pages.
+
 ## 0.85.39 (2026-11-19)
 
 - Version sync with Mipham Code CLI 0.85.39
