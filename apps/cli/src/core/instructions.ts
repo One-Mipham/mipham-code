@@ -343,7 +343,6 @@ export function formatInstructionSizeNotice(
 
 export class InstructionsLoader {
   private instructions: InstructionFile[] = []
-  private crsiLessonSummaries: CrsiLessonSummary[] = []
   private lessonsPath: string | null = null
   /** Checkout root resolved at `loadAll`, reused by `loadForPaths`. */
   private root: string | null = null
@@ -371,8 +370,8 @@ export class InstructionsLoader {
     // Tier 3: 用户层 ~/.mipham/USER.md
     this.tryLoad(miphamHome('USER.md'), 'user')
 
-    // CRSI 教训召回：读 crsi-lessons.md 提取精华，注入系统提示（只写不读 → 写后召回）
-    this.crsiLessonSummaries = this.loadCrsiLessons(root)
+    // CRSI 教训召回：在这里只**确定来源路径**；内容每次投影时重读（见 currentLessonSummaries）。
+    this.loadCrsiLessons(root)
   }
 
   /**
@@ -561,6 +560,9 @@ Never omit it or present the work as purely human-authored.`)
       this.lessonsPath = path
       return extractCrsiLessonSummaries(content)
     } catch {
+      // 文件被删：指针必须同时清空。否则「删了教训」与「从来没有过」在 sizeReport
+      // 里同形 —— 报告会继续点名一个不存在来源。
+      this.lessonsPath = null
       return []
     }
   }
@@ -579,9 +581,21 @@ Never omit it or present the work as purely human-authored.`)
    * 落进指针（并在指针里被点名）—— 择点走 `selectResidentLessons`，与
    * `loadAlwaysOnLessonsBlock` 是同一个。
    */
+  /**
+   * 教训摘要的**唯一读取点**：每次都从盘上重读。
+   *
+   * 从前只在 `loadAll` 读一次并缓存 ⇒ 会话中途删掉一条教训，系统提示里那条会一直留着
+   * （与 Agnes Harness 报告 Limitations 第 3 条同型的「删了没有墓碑」）。一个文件的
+   * 读取成本远低于「给模型看到已经不存在的规则」。
+   */
+  private currentLessonSummaries(): CrsiLessonSummary[] {
+    return this.root ? this.loadCrsiLessons(this.root) : []
+  }
+
   private crsiLessonsText(): string {
-    if (!this.lessonsPath) return ''
-    const selection = selectResidentLessons(this.crsiLessonSummaries)
+    const summaries = this.currentLessonSummaries()
+    if (!this.lessonsPath || summaries.length === 0) return ''
+    const selection = selectResidentLessons(summaries)
     return [
       buildCrsiLessonsBlock(selection.resident),
       buildCrsiLessonsPointer(selection, this.lessonsPath),
@@ -600,11 +614,9 @@ Never omit it or present the work as purely human-authored.`)
    * 与指针同一条件，故不会出现「扳机响了但没有指针」。
    */
   crsiLessonNudgeText(): string {
-    if (!this.lessonsPath) return ''
-    return buildLessonRevisitNudge(
-      selectResidentLessons(this.crsiLessonSummaries),
-      this.lessonsPath,
-    )
+    const summaries = this.currentLessonSummaries()
+    if (!this.lessonsPath || summaries.length === 0) return ''
+    return buildLessonRevisitNudge(selectResidentLessons(summaries), this.lessonsPath)
   }
 
   /**
