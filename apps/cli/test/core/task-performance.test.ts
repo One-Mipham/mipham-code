@@ -19,6 +19,7 @@ function oracleForRequest(req: ChatRequest): string {
 }
 
 const SAFE_COUNT = loadPerformanceTasks().filter((t) => t.skill === 'safe-coding').length
+const UNTAGGED_COUNT = loadPerformanceTasks().filter((t) => t.skill === undefined).length
 
 describe('loadPerformanceTasks', () => {
   it('加载至少 1 个字段完整的任务', () => {
@@ -129,7 +130,7 @@ describe('RSI Tax：测量 token 的捕获', () => {
 })
 
 describe('runTaskPerformance skill 过滤与注入', () => {
-  it('无 skill 只跑通用任务（5 个）', async () => {
+  it('无 skill 只跑无标签的 gate 题', async () => {
     const mockLlm: Llm = {
       chat: async function* () {
         yield {
@@ -140,7 +141,7 @@ describe('runTaskPerformance skill 过滤与注入', () => {
       },
     }
     const report = await runTaskPerformance(mockLlm)
-    expect(report.total).toBe(5)
+    expect(report.total).toBe(UNTAGGED_COUNT)
     expect(report.results.some((r) => r.id === 'perf-safe-parse-positive')).toBe(false)
   })
 

@@ -8,7 +8,7 @@ import { loadPerformanceTasks, judgeGeneratedCode } from '../../src/core/task-pe
  * ⇒ 上界不是 100，`(on−off)/(100−off)` 悄悄变成一个错的数。
  */
 describe('任务电池完整性', () => {
-  const tasks = loadPerformanceTasks() // Task 3 起改为 { pool: 'all' }
+  const tasks = loadPerformanceTasks({ pool: 'all' })
 
   it('共 15 题，id 唯一', () => {
     expect(tasks).toHaveLength(15)
@@ -30,6 +30,25 @@ describe('任务电池完整性', () => {
       expect(t.oracleCode.length, t.id).toBeGreaterThan(0)
       const verdict = judgeGeneratedCode(t.testCode, t.oracleCode)
       expect(verdict.passed, `${t.id}: ${verdict.detail ?? ''}`).toBe(true)
+    }
+  })
+})
+
+describe('sealed 池与选择路径隔离', () => {
+  it('缺省只返回 gate 池；sealed 不在其中', () => {
+    const gate = loadPerformanceTasks()
+    const sealed = loadPerformanceTasks({ pool: 'sealed' })
+    expect(sealed.length).toBeGreaterThanOrEqual(1)
+    const gateIds = new Set(gate.map((t) => t.id))
+    expect(sealed.some((t) => gateIds.has(t.id))).toBe(false)
+  })
+
+  it('每组 4 gate + 1 sealed', () => {
+    for (const group of [undefined, 'safe-coding', 'tdd']) {
+      const gate = loadPerformanceTasks().filter((t) => t.skill === group)
+      const sealed = loadPerformanceTasks({ pool: 'sealed' }).filter((t) => t.skill === group)
+      expect(gate, String(group)).toHaveLength(4)
+      expect(sealed, String(group)).toHaveLength(1)
     }
   })
 })

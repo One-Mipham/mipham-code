@@ -10,6 +10,12 @@ import { parseFrontmatter } from '../skills/loader'
 
 export type PerformanceTaskCategory = 'test-driven' | 'bug-fix'
 
+/**
+ * 任务分池。`gate` = 参与候选选择与改进判定；`sealed` = **只在读数值时出现**，
+ * 永不进入任何裁定（见设计文档 §4.3）。
+ */
+export type TaskPool = 'gate' | 'sealed'
+
 export interface PerformanceTask {
   id: string
   category: PerformanceTaskCategory
@@ -24,10 +30,19 @@ export interface PerformanceTask {
    * 而不是被测 skill 不好。
    */
   oracleCode: string
+  /** 分池，缺省 `'gate'`。 */
+  split?: TaskPool
 }
 
-export function loadPerformanceTasks(): PerformanceTask[] {
-  return tasksFile.tasks as PerformanceTask[]
+/**
+ * 取任务集。**缺省 `'gate'`** —— 所有选择/改进路径因此天然看不到 sealed，
+ * 不需要逐处修改调用点；`'all'` 只给守卫与测试用。
+ */
+export function loadPerformanceTasks(opts?: { pool?: TaskPool | 'all' }): PerformanceTask[] {
+  const all = tasksFile.tasks as PerformanceTask[]
+  const pool = opts?.pool ?? 'gate'
+  if (pool === 'all') return all
+  return all.filter((t) => (t.split ?? 'gate') === pool)
 }
 
 export interface JudgeResult {
