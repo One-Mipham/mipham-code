@@ -8,7 +8,8 @@ const armSplitLlm: Llm = {
   chat: async function* (req) {
     const prompt = String(req.messages[0]?.content ?? '')
     if (req.systemPrompt) {
-      const oracle = loadPerformanceTasks().find((t) => t.prompt === prompt)?.oracleCode ?? ''
+      const oracle =
+        loadPerformanceTasks({ pool: 'all' }).find((t) => t.prompt === prompt)?.oracleCode ?? ''
       yield { type: 'text', content: oracle }
     } else {
       yield { type: 'text', content: 'export const nothing = 1' }
@@ -39,5 +40,26 @@ describe('measureCapture', () => {
       k: 1,
     })
     expect(res.capture.rate).toBeCloseTo(1, 6)
+  })
+
+  it('正对照：同一臂喂给两侧 ⇒ controlRate 必须为 0', async () => {
+    const res = await measureCapture(armSplitLlm, {
+      skillName: 'safe-coding',
+      skillText: '校验输入',
+      k: 1,
+    })
+    expect(res.controlRate).toBe(0)
+  })
+
+  it('sealed 与 gate 并排给出（缺省 gate 之外的唯一读数）', async () => {
+    const res = await measureCapture(armSplitLlm, {
+      skillName: 'safe-coding',
+      skillText: '校验输入',
+      k: 1,
+    })
+    expect(res.sealed).not.toBeUndefined()
+    expect(res.sealed.capture.tasksTotal).toBe(1)
+    expect(res.sealed.capture.rate).toBeCloseTo(1, 6)
+    expect(res.sealed.oraclePassed).toBe(true)
   })
 })

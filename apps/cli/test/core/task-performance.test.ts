@@ -492,9 +492,11 @@ describe('runNullModelCheck', () => {
 
 describe('measureSkillDeltaRepeated — 空模型读数', () => {
   it('样本带上空模型闸的分子/分母', async () => {
+    // 必须交**可判**的代码（哪怕全错）：一言不发的模型是「没测到」，
+    // `measureSkillDeltaRepeated` 对不可测的轮次返回 null，样本根本不存在。
     const llm: Llm = {
       async *chat() {
-        yield { type: 'stop' as const }
+        yield { type: 'text' as const, content: 'export function nope(): number { return 1 }' }
       },
     }
     const sample = await measureSkillDeltaRepeated(

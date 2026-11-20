@@ -1181,7 +1181,7 @@ const crsiModifyCmd: CommandHandler = async (ctx, args) => {
     setPendingVerdict(null)
     if (!r.success) return { content: `⚠️ ${r.message}` }
     const probationNote = r.probationOpened
-      ? '\n🧪 已开启试用期：后续 3 次同口径重测（同 skill、gate 池、k≥3）后出裁定；退化只提示回退，不自动执行。'
+      ? `\n🧪 已开启试用期：后续 ${PROBATION_WINDOW} 次同口径重测（同 skill、gate 池、k≥3）后出裁定；退化只提示回退，不自动执行。`
       : ''
     return { content: `✅ ${r.message}${probationNote}` }
   }
@@ -1720,12 +1720,47 @@ const crsiBenchCmd: CommandHandler = async (ctx, args) => {
     }
     if (c.noHeadroom.length > 0) lines.push('', `无 headroom: ${c.noHeadroom.join(', ')}`)
     if (c.dropped.length > 0) lines.push('', `配对剔除: ${c.dropped.join(', ')}`)
+
+    // 正对照（零成本）：同一臂喂两侧必须**恰好**得 0。不为 0 ⇒ 臂接反 / 池映射错，
+    // 分子分母再漂亮也是另一个对象的读数。为 null ⇒ on 臂全程无 headroom，本轮没验证到。
+    const controlBroken = m.controlRate !== null && m.controlRate !== 0
+    if (m.controlRate === null) {
+      lines.push('', '正对照: 不可得（off 臂全程无 headroom，本轮本来也没有率）')
+    } else if (controlBroken) {
+      lines.push(
+        '',
+        `❌ 正对照 = **${(m.controlRate * 100).toFixed(1)}%**（应恰为 0）⇒ 分子/分母/臂映射至少有一处接错了，**本轮读数不可信**。`,
+      )
+    }
+
+    // sealed 旁证：只说过拟合，不进任何裁定（设计 §4.3）。
+    const sc = m.sealed.capture
+    if (!m.sealed.oraclePassed) {
+      lines.push('', 'sealed 旁证: 参考解未过自己的冻结测试 ⇒ 不可读')
+    } else if (sc.rate === null) {
+      lines.push('', `sealed 旁证: 无率（${sc.tasksTotal} 题里没有一道有 headroom）`)
+    } else {
+      lines.push(
+        '',
+        `sealed 旁证: **${(sc.rate * 100).toFixed(1)}%**（${sc.tasksUsed}/${sc.tasksTotal} 题；只作过拟合旁证，不进裁定）`,
+      )
+    }
+
+    const unmeasurable = all.filter((r) => !r.measurable).length
+    if (unmeasurable > 0) {
+      lines.push('', `⚠️ ${unmeasurable} 次运行不可测（仪器故障或截断）⇒ 本轮不是一次合格重测`)
+    }
     lines.push(
       '',
       tokens === undefined ? 'RSI Tax: 未测（有运行没报 usage）' : `RSI Tax: ${tokens} tokens`,
     )
+
     // 只有 k≥3 才算一次合格重测；k=1 的冒烟永不进观察窗（设计 §4.4）。
-    if (k >= 3) {
+    // 且必须**三项前提同时成立**：参考解可信 · 正对照为 0 · 每轮都可测。否则这一轮
+    // 读数是真的、但描述的不是被测 skill —— 拿它推进观察窗，等于往窗口里掺沙子。
+    const canSettle =
+      k >= 3 && m.oraclePassed && !controlBroken && unmeasurable === 0 && c.rate !== null
+    if (canSettle) {
       const rec = settleProbation(skill.name, average(m.on))
       if (rec) {
         lines.push(
@@ -1735,6 +1770,8 @@ const crsiBenchCmd: CommandHandler = async (ctx, args) => {
             : `试用期: ${rec.checks.length}/${PROBATION_WINDOW} —— 观察中`,
         )
       }
+    } else if (k >= 3) {
+      lines.push('', '试用期: 本轮未推进（观察窗只收前提成立的整轮）')
     }
     return { content: lines.join('\n') }
   }
@@ -1745,7 +1782,13 @@ const crsiBenchCmd: CommandHandler = async (ctx, args) => {
     '## 🎯 CRSI 任务表现基准' + (skill ? `（skill: ${skill.name}）` : ''),
     '',
   ]
-  lines.push(`得分: **${report.score}/100** (${report.passed}/${report.total})`, '')
+  // `measurable === false` 时 score 的 100 是「无题可评分」的占位，不是满分。
+  lines.push(
+    report.measurable
+      ? `得分: **${report.score}/100** (${report.passed}/${report.total})`
+      : `得分: **未测得**（0 道题可评分；${report.total} 题全是仪器故障或截断）`,
+    '',
+  )
   lines.push('| 任务 | 结果 |')
   lines.push('|------|------|')
   for (const r of report.results) {

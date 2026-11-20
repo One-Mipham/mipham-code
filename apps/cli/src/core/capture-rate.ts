@@ -122,9 +122,8 @@ export function computeCapture(
     let num = 0
     let den = 0
     for (let j = 0; j < pairs.length; j++) {
+      // `pairs` 在进入重采样前已剔掉 no-headroom / 缺样本的题，抽到的每一题都可计。
       const pick = pairs[Math.floor(random() * pairs.length)]!
-      // 每次重采样内**重新判定 headroom**：off=100 的那题被抽到时不计。
-      if (100 - pick.off <= 0) continue
       num += pick.on - pick.off
       den += 100 - pick.off
     }

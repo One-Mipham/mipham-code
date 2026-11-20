@@ -31,6 +31,11 @@ export interface ProbationRecord {
   poolSize: number
   /** 窗口未满时**缺席**（与 `inconclusive` 不同形）。 */
   verdict?: ImprovementVerdict
+  /**
+   * 这次合并没有任何随机仪器可用（例如改了 `core/*.ts`）。
+   * 登记它是为了**说出来** —— 静默跳过会让「没有仪器」和「没有合并」同形。
+   */
+  noInstrument?: true
   timestamp: string
 }
 
@@ -92,6 +97,26 @@ export function openProbation(
 }
 
 /**
+ * 登记一次「没有随机仪器」的合并。它没有基线、永远不会结算 —— 存在的唯一目的
+ * 是让 `/crsi stats` 说得出这句话，而不是让这次合并从台账里消失。
+ */
+export function recordNoInstrument(rec: { filePath: string; commitHash: string }): void {
+  const records = readProbations()
+  records.push({
+    id: randomUUID(),
+    filePath: rec.filePath,
+    skillName: rec.filePath,
+    commitHash: rec.commitHash,
+    baselineScores: [],
+    checks: [],
+    poolSize: 0,
+    noInstrument: true,
+    timestamp: new Date().toISOString(),
+  })
+  writeProbations(records)
+}
+
+/**
  * 给最近一条未结的该 skill 记录追加一次读数。窗口满 N 次时写 verdict。
  * 没有未结窗口 ⇒ `null`（不是抛错：调用方可能对任何 bench 结果都调一次）。
  */
@@ -100,7 +125,7 @@ export function settleProbation(skillName: string, score: number): ProbationReco
   let idx = -1
   for (let i = records.length - 1; i >= 0; i--) {
     const r = records[i]!
-    if (r.skillName === skillName && r.verdict === undefined) {
+    if (!r.noInstrument && r.skillName === skillName && r.verdict === undefined) {
       idx = i
       break
     }
@@ -125,6 +150,10 @@ export function formatProbationLines(): string[] {
   if (records.length === 0) return []
   const lines = ['', '### 试用期（probation）', '']
   for (const r of records) {
+    if (r.noInstrument) {
+      lines.push(`- ${r.filePath}: no stochastic instrument for this merge`)
+      continue
+    }
     const base = mean(r.baselineScores).toFixed(1)
     if (r.verdict === undefined) {
       lines.push(

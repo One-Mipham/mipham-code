@@ -43,6 +43,12 @@ describe('sealed 池与选择路径隔离', () => {
     expect(sealed.some((t) => gateIds.has(t.id))).toBe(false)
   })
 
+  it('每题显式声明 split（缺省即隐式，不做猜测）', () => {
+    for (const t of loadPerformanceTasks({ pool: 'all' })) {
+      expect(t.split === 'gate' || t.split === 'sealed', t.id).toBe(true)
+    }
+  })
+
   it('每组 4 gate + 1 sealed', () => {
     for (const group of [undefined, 'safe-coding', 'tdd']) {
       const gate = loadPerformanceTasks().filter((t) => t.skill === group)

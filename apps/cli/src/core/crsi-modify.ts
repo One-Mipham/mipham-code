@@ -26,7 +26,7 @@ import {
   regressedAnchors,
 } from './eval-harness'
 import { mechanismSentinel, type RewardFn, type ScoreReport } from './reward-fn'
-import { openProbation } from './probation'
+import { openProbation, recordNoInstrument } from './probation'
 
 export interface CrsiProposal {
   /** 人类可读的改动说明 */
@@ -80,6 +80,9 @@ export interface PendingProbation {
 }
 
 let pendingProbation: PendingProbation | null = null
+
+/** 待合并改动的目标文件 —— `approvePending` 用它登记「没有随机仪器」的那句话。 */
+let pendingFilePath: string | null = null
 
 /** 设置/清空待合并的试用期基线（清空用 `null`）。 */
 export function setPendingProbation(probation: PendingProbation | null): void {
@@ -136,6 +139,7 @@ export async function runCrsiModification(
 
   // 新的修改使上一次的测量失效 —— 不让旧基线挂到新合并上。
   pendingProbation = null
+  pendingFilePath = proposal.filePath
   sandbox.createWorktree()
 
   const applied = sandbox.applyModification({
@@ -271,13 +275,21 @@ export function approvePending(): {
   }
   const sandbox = pendingSandbox
   const probation = pendingProbation
+  const filePath = pendingFilePath
   pendingSandbox = null
   pendingProbation = null
+  pendingFilePath = null
   const merged = sandbox.merge()
   sandbox.finalize()
-  if (merged.success && probation && merged.commitHash) {
-    openProbation({ ...probation, commitHash: merged.commitHash })
-    return { ...merged, probationOpened: true }
+  if (merged.success && merged.commitHash) {
+    if (probation) {
+      openProbation({ ...probation, commitHash: merged.commitHash })
+      return { ...merged, probationOpened: true }
+    }
+    // 没有随机仪器也要**说出来**：静默跳过会让这次合并在 stats 里完全消失。
+    if (filePath) {
+      recordNoInstrument({ filePath, commitHash: merged.commitHash })
+    }
   }
   return merged
 }
@@ -290,5 +302,6 @@ export function rejectPending(): { success: boolean; message: string } {
   const sandbox = pendingSandbox
   pendingSandbox = null
   pendingProbation = null
+  pendingFilePath = null
   return sandbox.rollback()
 }

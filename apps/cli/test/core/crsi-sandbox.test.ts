@@ -615,3 +615,47 @@ describe('PROTECTED_ROLES (语义保护清单)', () => {
     expect(isProtectedPath('apps/cli/crsi-lessons.md')).toBe(false)
   })
 })
+
+describe('merge() 的回退目标', () => {
+  it('返回的 commitHash 是主分支上的提交', () => {
+    const root = initSandboxRepo()
+    const sandbox = new CrsiSandbox(root)
+    try {
+      sandbox.createWorktree()
+      // 让主分支在 worktree 之后前进一笔 —— 否则 cherry-pick 会产出与原提交
+      // **字节相同**的提交（父提交、树、消息都一致 ⇒ 同一个 SHA），两种实现无法分辨。
+      writeFileSync(join(root, 'apps/cli/UNRELATED.md'), 'moves main forward\n')
+      execSync('git add -A && git commit -q -m unrelated', { cwd: root, stdio: 'ignore' })
+      const applied = sandbox.applyModification({
+        id: 'merge-sha',
+        description: 'x',
+        filePath: WORKTREE_FILE,
+        newContent: `${FIXTURE_BODY}more\n`,
+        originalContent: FIXTURE_BODY,
+        timestamp: new Date().toISOString(),
+      })
+      expect(applied.applied).toBe(true)
+      // 跳过跑测试：本用例只问 merge 返回的是哪个提交。
+      ;(
+        sandbox as unknown as { sessionReport: { modifications: { phase: string }[] } }
+      ).sessionReport.modifications.forEach((m) => {
+        m.phase = 'passed'
+      })
+
+      const merged = sandbox.merge()
+      expect(merged.success).toBe(true)
+      expect(merged.commitHash).toBeTruthy()
+      // cherry-pick 会在主分支上造一个新提交；工作树里那个提交**不是** HEAD 的祖先。
+      // `git revert <hash>` 的前提是后者 —— 这条断言正是两者的分辨点。
+      expect(() =>
+        execSync(`git merge-base --is-ancestor ${merged.commitHash} HEAD`, {
+          cwd: root,
+          stdio: 'ignore',
+        }),
+      ).not.toThrow()
+    } finally {
+      sandbox.finalize()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+})

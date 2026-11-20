@@ -45,7 +45,15 @@ export function taskPerformanceRewardFn(llm: Llm): RewardFn {
   return {
     name: 'task-performance',
     description: 'LLM 生成 + 冻结测试评 skill/通用任务',
-    evaluate: () => runTaskPerformance(llm),
+    // 没测到 ⇒ 抛错，让 `runCrsiModification` 走它已有的「量具不可用」分支。
+    // 返回 score=100 会让奖励闸把一次上游故障读成满分。
+    evaluate: async () => {
+      const report = await runTaskPerformance(llm)
+      if (!report.measurable) {
+        throw new Error('task-performance 未测到任何可评分样本（仪器/上游故障）')
+      }
+      return report
+    },
   }
 }
 

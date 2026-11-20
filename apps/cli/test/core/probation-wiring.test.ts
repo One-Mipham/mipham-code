@@ -94,6 +94,23 @@ describe('approve 后开试用期', () => {
     expect(formatProbationLines().join('\n')).toContain('inconclusive')
   })
 
+  it('没有测量的合并 ⇒ 登记 noInstrument，stats 明说没有仪器', async () => {
+    await runCrsiModification(
+      {
+        description: 'edit core',
+        filePath: 'apps/cli/src/core/thing.ts',
+        newContent: 'x',
+        originalContent: 'y',
+        blastRadius: ['apps/cli/src/core/thing.ts'],
+      },
+      fakeSandbox(),
+      { rewardFn: stubReward },
+    )
+    approvePending()
+    const lines = formatProbationLines().join('\n')
+    expect(lines).toContain('no stochastic instrument for this merge')
+  })
+
   it('reject 不留下试用期', async () => {
     await runCrsiModification(
       {

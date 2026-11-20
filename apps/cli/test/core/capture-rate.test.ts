@@ -91,8 +91,8 @@ describe('computeCapture', () => {
     expect(r.rate).toBeCloseTo(40 / 80, 6)
   })
 
-  it('配对剔除不得抬高率：掉掉一题与从未有过它，读数相同', () => {
-    const withDropped = computeCapture({
+  it('no-headroom 剔除不改率：满分题与从未有过它，读数相同', () => {
+    const withNoHeadroom = computeCapture({
       off: [
         { taskId: 'a', value: 100 },
         { taskId: 'b', value: 20 },
@@ -108,6 +108,29 @@ describe('computeCapture', () => {
       on: [{ taskId: 'b', value: 60 }],
       total: 2,
     })
+    expect(withNoHeadroom.rate).toBeCloseTo(withoutIt.rate!, 6)
+    expect(withNoHeadroom.noHeadroom).toEqual(['a'])
+    expect(withNoHeadroom.dropped).toEqual([])
+  })
+
+  it('配对剔除不改率：null 的那题与从未有过它，读数相同', () => {
+    const withDropped = computeCapture({
+      off: [
+        { taskId: 'a', value: 20 },
+        { taskId: 'b', value: null },
+      ],
+      on: [
+        { taskId: 'a', value: 60 },
+        { taskId: 'b', value: 90 },
+      ],
+      total: 2,
+    })
+    const withoutIt = computeCapture({
+      off: [{ taskId: 'a', value: 20 }],
+      on: [{ taskId: 'a', value: 60 }],
+      total: 2,
+    })
+    expect(withDropped.dropped).toEqual(['b'])
     expect(withDropped.rate).toBeCloseTo(withoutIt.rate!, 6)
   })
 

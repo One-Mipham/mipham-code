@@ -142,6 +142,14 @@ export interface TaskPerformanceReport {
   truncated: number
   /** 仪器/上游故障（零文本且零 usage）；只计数，不进分数。 */
   uncertain: number
+  /**
+   * 这一轮**到底测到没有**：至少有一道题进了分母。
+   *
+   * `false` 时 `score` 的 100 是「无题可评分」的占位，**不是满分**。任何把它当分数
+   * 用的地方（展示、改进判定、奖励闸）都必须先看这个字段 —— 否则一次 provider
+   * 抽风会读成「满分」，进而产出假的 improved / 假的 regressed。
+   */
+  measurable: boolean
   /** B2 代价维：整轮（LLM 生成 + 冻结测试判定）的墙钟耗时。只记录，不参与任何判定。 */
   durationMs: number
   /**
@@ -250,7 +258,8 @@ export async function runTaskPerformance(
   // the output cap rather than on the work.
   const scored = results.filter((r) => !r.truncated && !r.uncertain)
   const truncated = results.filter((r) => r.truncated).length
-  const uncertain = results.filter((r) => r.uncertain).length
+  // 与 truncated 互斥计数：一条结果可以同时带两个标记，原始计数相加会超过 total。
+  const uncertain = results.filter((r) => r.uncertain && !r.truncated).length
   return {
     total: results.length,
     passed,
@@ -262,6 +271,7 @@ export async function runTaskPerformance(
     failures: results.filter((r) => !r.passed).map((r) => r.id),
     truncated,
     uncertain,
+    measurable: scored.length > 0,
     durationMs: Date.now() - startedAt,
     ...(anyUsageReported ? { tokensUsed } : {}),
   }
@@ -335,6 +345,9 @@ export async function measureSkillDelta(
     skill: { name: resolved.skillName, text: resolved.postText },
   })
 
+  // 任一侧没测到 ⇒ 没有可比的 delta（不是 0，也不是「持平」）。
+  if (!baseline.measurable || !post.measurable) return null
+
   return {
     skillName: resolved.skillName,
     baseline,
@@ -393,6 +406,9 @@ export async function measureSkillDeltaRepeated(
     const r = await runTaskPerformance(llm, {
       skill: { name: resolved.skillName, text: resolved.baselineText },
     })
+    // 没测到的一轮不许折成 100 塞进样本：那会把「上游挂了」变成「基线满分」，
+    // 进而产出假的 regressed（拦掉一次合法合并）或假的 improved。
+    if (!r.measurable) return null
     baselineScores.push(r.score)
     baselineDurations.push(r.durationMs)
     if (r.tokensUsed !== undefined) baselineTokens.push(r.tokensUsed)
@@ -401,6 +417,7 @@ export async function measureSkillDeltaRepeated(
     const r = await runTaskPerformance(llm, {
       skill: { name: resolved.skillName, text: resolved.postText },
     })
+    if (!r.measurable) return null
     postScores.push(r.score)
     postDurations.push(r.durationMs)
     if (r.tokensUsed !== undefined) postTokens.push(r.tokensUsed)

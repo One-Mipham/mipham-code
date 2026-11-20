@@ -618,9 +618,14 @@ export class CrsiSandbox {
       )
 
       // Cherry-pick to main repo
-      const commitHash = runIn(this.worktreePath, 'git rev-parse HEAD').trim()
+      const worktreeCommit = runIn(this.worktreePath, 'git rev-parse HEAD').trim()
 
-      runIn(this.repoRoot, `git cherry-pick "${commitHash}"`, { timeoutMs: 30_000 })
+      runIn(this.repoRoot, `git cherry-pick "${worktreeCommit}"`, { timeoutMs: 30_000 })
+
+      // 回退目标必须是**主分支上那个新提交**：cherry-pick 造的是另一个 SHA，
+      // 而工作树随后会被 finalize() 删掉、其分支被 -D —— 工作树那个提交可能变成
+      // 不可达对象。`git revert <worktree> ` 会解析不到。
+      const commitHash = runIn(this.repoRoot, 'git rev-parse HEAD').trim()
 
       // Mark as merged
       for (const modResult of this.sessionReport.modifications) {

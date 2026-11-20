@@ -6,28 +6,32 @@
       "category": "test-driven",
       "prompt": "实现并导出 quicksort 函数：export function quicksort(arr: number[]): number[]。只输出 TypeScript 代码，不要解释、不要 markdown 代码块。",
       "testCode": "import { test, expect } from 'bun:test'\nimport { quicksort } from './solution'\n\ntest('sorts numbers', () => {\n  expect(quicksort([3, 1, 4, 1, 5, 9, 2, 6])).toEqual([1, 1, 2, 3, 4, 5, 6, 9])\n  expect(quicksort([])).toEqual([])\n  expect(quicksort([7])).toEqual([7])\n})\n",
-      "oracleCode": "export function quicksort(arr: number[]): number[] {\n  return [...arr].sort((a, b) => a - b)\n}\n"
+      "oracleCode": "export function quicksort(arr: number[]): number[] {\n  return [...arr].sort((a, b) => a - b)\n}\n",
+      "split": "gate"
     },
     {
       "id": "perf-impl-fibonacci",
       "category": "test-driven",
       "prompt": "实现并导出 fibonacci 函数：export function fibonacci(n: number): number。返回第 n 项（fibonacci(0)=0, fibonacci(1)=1）。只输出 TypeScript 代码，不要解释、不要 markdown 代码块。",
       "testCode": "import { test, expect } from 'bun:test'\nimport { fibonacci } from './solution'\n\ntest('computes fibonacci', () => {\n  expect(fibonacci(0)).toBe(0)\n  expect(fibonacci(1)).toBe(1)\n  expect(fibonacci(10)).toBe(55)\n  expect(fibonacci(20)).toBe(6765)\n})\n",
-      "oracleCode": "export function fibonacci(n: number): number {\n  if (n < 2) return n\n  let a = 0, b = 1\n  for (let i = 2; i <= n; i++) {\n    const next = a + b\n    a = b\n    b = next\n  }\n  return b\n}\n"
+      "oracleCode": "export function fibonacci(n: number): number {\n  if (n < 2) return n\n  let a = 0, b = 1\n  for (let i = 2; i <= n; i++) {\n    const next = a + b\n    a = b\n    b = next\n  }\n  return b\n}\n",
+      "split": "gate"
     },
     {
       "id": "perf-impl-binary-search",
       "category": "test-driven",
       "prompt": "实现并导出 binarySearch 函数：export function binarySearch(arr: number[], target: number): number。返回 target 的下标，不存在返回 -1。假设 arr 已升序。只输出 TypeScript 代码，不要解释、不要 markdown 代码块。",
       "testCode": "import { test, expect } from 'bun:test'\nimport { binarySearch } from './solution'\n\ntest('finds target', () => {\n  expect(binarySearch([1, 2, 3, 4, 5], 3)).toBe(2)\n  expect(binarySearch([1, 2, 3, 4, 5], 1)).toBe(0)\n  expect(binarySearch([1, 2, 3, 4, 5], 99)).toBe(-1)\n})\n",
-      "oracleCode": "export function binarySearch(arr: number[], target: number): number {\n  let lo = 0, hi = arr.length - 1\n  while (lo <= hi) {\n    const mid = (lo + hi) >> 1\n    if (arr[mid] === target) return mid\n    if (arr[mid] < target) lo = mid + 1\n    else hi = mid - 1\n  }\n  return -1\n}\n"
+      "oracleCode": "export function binarySearch(arr: number[], target: number): number {\n  let lo = 0, hi = arr.length - 1\n  while (lo <= hi) {\n    const mid = (lo + hi) >> 1\n    if (arr[mid] === target) return mid\n    if (arr[mid] < target) lo = mid + 1\n    else hi = mid - 1\n  }\n  return -1\n}\n",
+      "split": "gate"
     },
     {
       "id": "perf-impl-reverse-string",
       "category": "test-driven",
       "prompt": "实现并导出 reverseString 函数：export function reverseString(s: string): string。只输出 TypeScript 代码，不要解释、不要 markdown 代码块。",
       "testCode": "import { test, expect } from 'bun:test'\nimport { reverseString } from './solution'\n\ntest('reverses', () => {\n  expect(reverseString('hello')).toBe('olleh')\n  expect(reverseString('')).toBe('')\n  expect(reverseString('a')).toBe('a')\n})\n",
-      "oracleCode": "export function reverseString(s: string): string {\n  return s.split('').reverse().join('')\n}\n"
+      "oracleCode": "export function reverseString(s: string): string {\n  return s.split('').reverse().join('')\n}\n",
+      "split": "gate"
     },
     {
       "id": "perf-impl-max",
@@ -43,7 +47,8 @@
       "prompt": "实现并导出 parsePositiveNumber 函数：export function parsePositiveNumber(input: string): number。非法输入（null、空串、非数字、非正数）必须抛 RangeError。只输出 TypeScript 代码，不要解释、不要 markdown 代码块。",
       "testCode": "import { test, expect } from 'bun:test'\nimport { parsePositiveNumber } from './solution'\n\ntest('rejects invalid input', () => {\n  expect(() => parsePositiveNumber(null as any)).toThrow(RangeError)\n  expect(() => parsePositiveNumber('')).toThrow(RangeError)\n  expect(() => parsePositiveNumber('abc')).toThrow(RangeError)\n})\ntest('parses valid', () => {\n  expect(parsePositiveNumber('42')).toBe(42)\n})\n",
       "oracleCode": "export function parsePositiveNumber(input: string): number {\n  const text = String(input).trim()\n  if (!/^\\d+(\\.\\d+)?$/.test(text)) throw new RangeError('not a positive number')\n  const n = Number(text)\n  if (!Number.isFinite(n) || n <= 0) throw new RangeError('not a positive number')\n  return n\n}\n",
-      "skill": "safe-coding"
+      "skill": "safe-coding",
+      "split": "gate"
     },
     {
       "id": "perf-safe-parse-int",
@@ -51,7 +56,8 @@
       "prompt": "实现并导出 parseStrictInt 函数：export function parseStrictInt(s: string): number | null。只接受十进制整数字面量（允许首尾空白与负号），其余一律返回 null。只输出 TypeScript 代码，不要解释、不要 markdown 代码块。",
       "testCode": "import { test, expect } from 'bun:test'\nimport { parseStrictInt } from './solution'\n\ntest('parses integers', () => {\n  expect(parseStrictInt('42')).toBe(42)\n  expect(parseStrictInt(' -7 ')).toBe(-7)\n})\ntest('rejects non-integers', () => {\n  expect(parseStrictInt('4.2')).toBe(null)\n  expect(parseStrictInt('')).toBe(null)\n  expect(parseStrictInt('1e3')).toBe(null)\n})\n",
       "oracleCode": "export function parseStrictInt(s: string): number | null {\n  const text = String(s).trim()\n  if (!/^-?\\d+$/.test(text)) return null\n  const n = Number(text)\n  return Number.isSafeInteger(n) ? n : null\n}\n",
-      "skill": "safe-coding"
+      "skill": "safe-coding",
+      "split": "gate"
     },
     {
       "id": "perf-safe-clamp",
@@ -59,7 +65,8 @@
       "prompt": "实现并导出 clamp 函数：export function clamp(n: number, min: number, max: number): number。把 n 限制在 [min, max]；若 min > max 必须抛 RangeError。只输出 TypeScript 代码，不要解释、不要 markdown 代码块。",
       "testCode": "import { test, expect } from 'bun:test'\nimport { clamp } from './solution'\n\ntest('clamps into range', () => {\n  expect(clamp(5, 0, 10)).toBe(5)\n  expect(clamp(-3, 0, 10)).toBe(0)\n  expect(clamp(99, 0, 10)).toBe(10)\n})\ntest('rejects inverted bounds', () => {\n  expect(() => clamp(1, 10, 0)).toThrow(RangeError)\n})\n",
       "oracleCode": "export function clamp(n: number, min: number, max: number): number {\n  if (min > max) throw new RangeError('min > max')\n  return Math.min(Math.max(n, min), max)\n}\n",
-      "skill": "safe-coding"
+      "skill": "safe-coding",
+      "split": "gate"
     },
     {
       "id": "perf-safe-divide",
@@ -76,7 +83,8 @@
       "prompt": "实现并导出 parseBool 函数：export function parseBool(s: string): boolean | null。接受 true/1/yes/on 与 false/0/no/off（大小写不敏感、允许首尾空白），其余返回 null。只输出 TypeScript 代码，不要解释、不要 markdown 代码块。",
       "testCode": "import { test, expect } from 'bun:test'\nimport { parseBool } from './solution'\n\ntest('parses truthy spellings', () => {\n  expect(parseBool('true')).toBe(true)\n  expect(parseBool(' YES ')).toBe(true)\n  expect(parseBool('on')).toBe(true)\n  expect(parseBool('1')).toBe(true)\n})\ntest('parses falsy spellings', () => {\n  expect(parseBool('false')).toBe(false)\n  expect(parseBool('Off')).toBe(false)\n  expect(parseBool('0')).toBe(false)\n})\ntest('rejects unknown', () => {\n  expect(parseBool('maybe')).toBe(null)\n  expect(parseBool('')).toBe(null)\n})\n",
       "oracleCode": "export function parseBool(s: string): boolean | null {\n  const text = String(s).trim().toLowerCase()\n  if (['true', '1', 'yes', 'on'].includes(text)) return true\n  if (['false', '0', 'no', 'off'].includes(text)) return false\n  return null\n}\n",
-      "skill": "safe-coding"
+      "skill": "safe-coding",
+      "split": "gate"
     },
     {
       "id": "perf-tdd-stack",
@@ -84,7 +92,8 @@
       "prompt": "实现并导出 createStack 函数：export function createStack<T>()。返回对象需提供 push(v)、pop()、peek()、size()；空栈 pop/peek 返回 null。只输出 TypeScript 代码，不要解释、不要 markdown 代码块。",
       "testCode": "import { test, expect } from 'bun:test'\nimport { createStack } from './solution'\n\ntest('behaves LIFO', () => {\n  const s = createStack<number>()\n  s.push(1)\n  s.push(2)\n  expect(s.size()).toBe(2)\n  expect(s.peek()).toBe(2)\n  expect(s.pop()).toBe(2)\n  expect(s.pop()).toBe(1)\n  expect(s.pop()).toBe(null)\n})\n",
       "oracleCode": "export function createStack<T>() {\n  const items: T[] = []\n  return {\n    push(v: T): void {\n      items.push(v)\n    },\n    pop(): T | null {\n      return items.length > 0 ? items.pop()! : null\n    },\n    peek(): T | null {\n      return items.length > 0 ? items[items.length - 1]! : null\n    },\n    size(): number {\n      return items.length\n    },\n  }\n}\n",
-      "skill": "tdd"
+      "skill": "tdd",
+      "split": "gate"
     },
     {
       "id": "perf-tdd-queue",
@@ -92,7 +101,8 @@
       "prompt": "实现并导出 createQueue 函数：export function createQueue<T>()。返回对象需提供 enqueue(v)、dequeue()、size()；空队列 dequeue 返回 null。只输出 TypeScript 代码，不要解释、不要 markdown 代码块。",
       "testCode": "import { test, expect } from 'bun:test'\nimport { createQueue } from './solution'\n\ntest('behaves FIFO', () => {\n  const q = createQueue<string>()\n  q.enqueue('a')\n  q.enqueue('b')\n  expect(q.size()).toBe(2)\n  expect(q.dequeue()).toBe('a')\n  expect(q.dequeue()).toBe('b')\n  expect(q.dequeue()).toBe(null)\n  expect(q.size()).toBe(0)\n})\n",
       "oracleCode": "export function createQueue<T>() {\n  const items: T[] = []\n  return {\n    enqueue(v: T): void {\n      items.push(v)\n    },\n    dequeue(): T | null {\n      return items.length > 0 ? items.shift()! : null\n    },\n    size(): number {\n      return items.length\n    },\n  }\n}\n",
-      "skill": "tdd"
+      "skill": "tdd",
+      "split": "gate"
     },
     {
       "id": "perf-tdd-lru",
@@ -109,7 +119,8 @@
       "prompt": "实现并导出 range 函数：export function range(start: number, end: number, step?: number): number[]。step 缺省为 1，step 为 0 必须抛 RangeError。只输出 TypeScript 代码，不要解释、不要 markdown 代码块。",
       "testCode": "import { test, expect } from 'bun:test'\nimport { range } from './solution'\n\ntest('builds ranges', () => {\n  expect(range(0, 5)).toEqual([0, 1, 2, 3, 4])\n  expect(range(5, 0, -1)).toEqual([5, 4, 3, 2, 1])\n  expect(range(0, 5, 2)).toEqual([0, 2, 4])\n  expect(range(0, 0)).toEqual([])\n})\ntest('rejects zero step', () => {\n  expect(() => range(0, 5, 0)).toThrow(RangeError)\n})\n",
       "oracleCode": "export function range(start: number, end: number, step = 1): number[] {\n  if (step === 0) throw new RangeError('step must not be 0')\n  const out: number[] = []\n  if (step > 0) {\n    for (let i = start; i < end; i += step) out.push(i)\n  } else {\n    for (let i = start; i > end; i += step) out.push(i)\n  }\n  return out\n}\n",
-      "skill": "tdd"
+      "skill": "tdd",
+      "split": "gate"
     },
     {
       "id": "perf-tdd-chunk",
@@ -117,7 +128,8 @@
       "prompt": "实现并导出 chunk 函数：export function chunk<T>(arr: T[], size: number): T[][]。size 必须是正整数，否则抛 RangeError；最后一块可以不足 size。只输出 TypeScript 代码，不要解释、不要 markdown 代码块。",
       "testCode": "import { test, expect } from 'bun:test'\nimport { chunk } from './solution'\n\ntest('splits into chunks', () => {\n  expect(chunk([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]])\n  expect(chunk([], 2)).toEqual([])\n  expect(chunk([1], 5)).toEqual([[1]])\n})\ntest('rejects bad size', () => {\n  expect(() => chunk([1], 0)).toThrow(RangeError)\n  expect(() => chunk([1], 1.5)).toThrow(RangeError)\n})\n",
       "oracleCode": "export function chunk<T>(arr: T[], size: number): T[][] {\n  if (!Number.isInteger(size) || size <= 0) throw new RangeError('size must be a positive integer')\n  const out: T[][] = []\n  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))\n  return out\n}\n",
-      "skill": "tdd"
+      "skill": "tdd",
+      "split": "gate"
     }
   ]
 }
