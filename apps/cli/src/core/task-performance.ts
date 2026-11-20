@@ -66,6 +66,14 @@ export interface TaskPerformanceResult {
    * the result and excluded from `score` — mixing the two biases the readout low.
    */
   truncated?: boolean
+  /**
+   * 没测到，而不是没答对：零文本且 provider 连 usage 都没报。
+   *
+   * 与 `truncated` 同族但**不同名** —— 前者是「仪器/上游故障」，后者是「输出被截断」。
+   * 两者都不进 `score`，但必须分开计数：合成一个数字会让「上游挂了」与「上限太短」
+   * 在读数上同形（见 docs/superpowers/specs/2026-11-20-crsi-eval-governance-design.md §4.6）。
+   */
+  uncertain?: boolean
 }
 
 /** 空模型闸的读数：`passed` = 空程序也能通过的题数。 */
@@ -109,6 +117,8 @@ export interface TaskPerformanceReport {
   failures: string[]
   /** Tasks whose generation was cut off at the output cap; counted, not scored. */
   truncated: number
+  /** 仪器/上游故障（零文本且零 usage）；只计数，不进分数。 */
+  uncertain: number
   /** B2 代价维：整轮（LLM 生成 + 冻结测试判定）的墙钟耗时。只记录，不参与任何判定。 */
   durationMs: number
   /**
@@ -174,12 +184,15 @@ export async function runTaskPerformance(
     tokensUsed += tokens
     anyUsageReported = anyUsageReported || usageReported
     if (!code) {
+      // 仪器故障与答错必须不同形：provider 连 usage 都没报 ⇒ 这次**没测到**，
+      // 不能记成「模型答错」（一次上游抽风会让基线凭空掉分）。
       results.push({
         id: task.id,
         description: task.prompt,
         passed: false,
-        detail: 'LLM 未生成代码',
+        detail: usageReported ? 'LLM 未生成代码' : '未测得结果：无文本且无 usage（仪器/上游故障）',
         ...(truncated ? { truncated: true } : {}),
+        ...(usageReported ? {} : { uncertain: true }),
       })
       continue
     }
@@ -197,8 +210,9 @@ export async function runTaskPerformance(
   // generation is incomplete by construction; folding those failures into the mean
   // makes the readout (and any improved/regressed verdict derived from it) depend on
   // the output cap rather than on the work.
-  const scored = results.filter((r) => !r.truncated)
-  const truncated = results.length - scored.length
+  const scored = results.filter((r) => !r.truncated && !r.uncertain)
+  const truncated = results.filter((r) => r.truncated).length
+  const uncertain = results.filter((r) => r.uncertain).length
   return {
     total: results.length,
     passed,
@@ -209,6 +223,7 @@ export async function runTaskPerformance(
     results,
     failures: results.filter((r) => !r.passed).map((r) => r.id),
     truncated,
+    uncertain,
     durationMs: Date.now() - startedAt,
     ...(anyUsageReported ? { tokensUsed } : {}),
   }
