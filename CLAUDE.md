@@ -28,10 +28,9 @@ prompt-exclude-header: true
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.77
-> **最后更新**: 2026-11-20 — **0.85.40 发布：输入诊断 + CDP 报错分型（2.94.77）** —— ① `MIPHAM_DEBUG_INPUT=1`（`ui/input-debug.ts`）把「冻结」切成两类：按键没送达（一个 key 都没有）与送达了没渲染（keys 涨、renders 不动），按秒汇总写 `~/.mipham/input-debug.log`，只记计数与按键类别、2 MB 截断、关闭时零 I/O；② `web-access` 的 CDP 代理把「端口通但 `/json/version` 404」识别为 Chrome 未授权远程调试，`/health` 与 `check-deps` 带上判断与最近错误，且不再重复拉起第二个代理；③ 删掉 Web 搜索工具说明里并不存在的 Tavily / SerpAPI 通道，改为指向 web-access 并注明不要抓结果页。测试 5,008 → **5,018**（375 文件）。
-> **前一条（2.94.76）**: 2026-11-19 — **ELITE 多提案整合落地（2.94.76）** —— `/crsi modify --integrate [--drop-conflicts] <desc> <target> <p1> <p2>…`：以目标文件为共同父本，用 `git merge-file` 做 3-way merge，把**兼容子集**收成一个后代（`core/proposal-integration.ts`）。互补 = 干净合并；字节相同/未改动 = 冗余只留一份；改同一段 = 冲突，**默认拒**（不静默丢弃机制），`--drop-conflicts` 是显式选择。整合结果仍走完整沙箱闸 + 方向性 regret + 测量；`measureModification` 抽出供手工/整合共用。测试 4,998 → **5,008**（373 文件）。
-> **前一条（2.94.75）**: 2026-11-19 — **GUARD 非回归门（2.94.75）** —— `/crsi modify` 第二道闸从标量分数升级为方向性 regret：新破坏 / 仍未解决 / 新修复 / 抖动分册，收益必须超过回归（修 1 坏 1 拒）；anchor 直拒；契约集合变动退回标量闸；过闸显示两侧读数。测试 4,985 → **4,998**（372 文件）。
+> **版本**: 2.94.78
+> **最后更新**: 2026-11-20 — **0.85.41 发布：CRSI 评估治理三件（2.94.78）** —— ① `/crsi bench --capture` 出**捕获率** `Σ(on−off)/Σ(100−off)`（headroom 与配对剔除、题级重采样区间；无题可计 ⇒ `null` 而非 0），参考解臂零 LLM 本地判上界；② 任务电池扩到 **15 题**分 `gate`(12)/`sealed`(3)，sealed 只作过拟合旁证（`--capture` 并排 + `--sealed` 独立读面），**永不进裁定**；③ 合并后开 **3 次观察窗**（噪声自适应地板 `max(stdDev, 2×(100/poolSize))`），`regressed` 只**打印** `git revert <sha>` 不执行，无随机仪器则登记 `noInstrument`。评审收口把「不可测」与「答错」分开：量具故障的 `score: 100` 不再冒充满分，作废轮次不再推进观察窗。测试 5,018 → **5,064**（383 文件）。
+> **前一条（2.94.77）**: 2026-11-20 — **0.85.40 发布：输入诊断 + CDP 报错分型（2.94.77）** —— ① `MIPHAM_DEBUG_INPUT=1`（`ui/input-debug.ts`）把「冻结」切成两类：按键没送达（一个 key 都没有）与送达了没渲染（keys 涨、renders 不动），按秒汇总写 `~/.mipham/input-debug.log`，只记计数与按键类别、2 MB 截断、关闭时零 I/O；② `web-access` 的 CDP 代理把「端口通但 `/json/version` 404」识别为 Chrome 未授权远程调试，`/health` 与 `check-deps` 带上判断与最近错误，且不再重复拉起第二个代理；③ 删掉 Web 搜索工具说明里并不存在的 Tavily / SerpAPI 通道，改为指向 web-access 并注明不要抓结果页。测试 5,008 → **5,018**（375 文件）。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
