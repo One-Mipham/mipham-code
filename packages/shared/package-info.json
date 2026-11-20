@@ -1,6 +1,6 @@
 {
   "PACKAGE_NAME": "@miphamai/cli",
-  "PACKAGE_VERSION": "0.85.39",
+  "PACKAGE_VERSION": "0.85.40",
   "NPM_INSTALL_COMMAND": "npm install -g @miphamai/cli",
   "NPM_UPDATE_COMMAND": "npm update -g @miphamai/cli",
   "NPM_URL": "https://www.npmjs.com/package/@miphamai/cli",
@@ -18,5 +18,5 @@
   "SLASH_COMMAND_COUNT": 139,
   "PROVIDER_COUNT": 12,
   "TOOL_COUNT": 31,
-  "TEST_COUNT": 5008
+  "TEST_COUNT": 5018
 }

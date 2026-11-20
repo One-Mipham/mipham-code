@@ -13,7 +13,7 @@
 export const PACKAGE_NAME = '@miphamai/cli' as const
 
 /** 当前发布版本 */
-export const PACKAGE_VERSION = '0.85.39' as const
+export const PACKAGE_VERSION = '0.85.40' as const
 
 /** npm install 全局安装命令 */
 export const NPM_INSTALL_COMMAND = `npm install -g ${PACKAGE_NAME}` as const
@@ -94,4 +94,4 @@ export const TOOL_COUNT = 31 as const
  * —— `test/e2e/full-pipeline.test.ts` 在 Linux 上整文件 skip、在 macOS 上跑 ——
  * 但**总数相同**（两边都把被 skip 的算进去）。
  */
-export const TEST_COUNT = 5008 as const
+export const TEST_COUNT = 5018 as const
