@@ -2,7 +2,7 @@
 
 > **日期**：2026-11-20
 > **主题**：给 CRSI 的「验证」补上界、留出集与上线后可追回
-> **状态**：**已实现**（2026-11-20，分支 `feat/crsi-eval-governance`）
+> **状态**：**已发布** —— 0.85.41（2026-11-20）；实现提交 `c0e14b16` 已合并 `main`，分支 `feat/crsi-eval-governance` 已删除
 > **实现时的四处偏离**（均由调用顺序或接口约束逼出，详见 `docs/superpowers/plans/2026-11-20-crsi-eval-governance.md` 同批台账）：
 > ① 试用期基线由 `measureModification` 事后经 `setPendingProbation` 交给 `crsi-modify`
 > （真实顺序是沙箱先建、测量后跑）；② `ProbationRecord` 多一个 `poolSize`（地板需要题池大小）；
