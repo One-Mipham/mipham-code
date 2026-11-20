@@ -21,8 +21,10 @@ vi.mock('../../src/core/probation', async (importOriginal) => ({
 }))
 
 const measure = vi.fn()
+const measureSealedOnly = vi.fn()
 vi.mock('../../src/core/capture-measure', () => ({
   measureCapture: (...a: unknown[]) => measure(...a),
+  measureSealed: (...a: unknown[]) => measureSealedOnly(...a),
 }))
 
 const { getCommand } = (await import('../../src/ui/commands')) as unknown as {
@@ -79,6 +81,7 @@ function measurement(over: Record<string, unknown> = {}) {
 beforeEach(() => {
   settle.mockReset()
   measure.mockReset()
+  measureSealedOnly.mockReset()
 })
 
 const bench = () => getCommand('/crsi bench')!
@@ -127,5 +130,29 @@ describe('捕获率何时有裁定资格', () => {
     await bench()(mkCtx(), ['--capture', '--skill', 'safe-coding'])
 
     expect(settle).not.toHaveBeenCalled()
+  })
+})
+
+describe('/crsi bench --sealed 是独立读面（设计 §4.3）', () => {
+  it('只跑 sealed 臂、只报读数，**永不**推进观察窗', async () => {
+    measureSealedOnly.mockResolvedValue({
+      off: [runStub(0)],
+      on: [runStub(100)],
+      capture: captureStub(1),
+      oraclePassed: true,
+    })
+    const { content } = await bench()(mkCtx(), ['--sealed', '--skill', 'safe-coding'])
+
+    expect(content).toContain('sealed')
+    expect(content).toContain('100.0%')
+    expect(content).toContain('不进裁定')
+    expect(measure).not.toHaveBeenCalled() // 没跑 gate 臂
+    expect(settle).not.toHaveBeenCalled()
+  })
+
+  it('没有 --skill ⇒ 拒绝（sealed 是「某份 skill」的留出集）', async () => {
+    const { content } = await bench()(mkCtx(), ['--sealed'])
+    expect(content).toContain('--skill')
+    expect(measureSealedOnly).not.toHaveBeenCalled()
   })
 })

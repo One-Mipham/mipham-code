@@ -70,7 +70,7 @@ import {
   stripCodeFences,
   loadPerformanceTasks,
 } from '../core/task-performance'
-import { measureCapture } from '../core/capture-measure'
+import { measureCapture, measureSealed } from '../core/capture-measure'
 import { randomUUID } from 'node:crypto'
 import {
   buildImprovementReport,
@@ -1678,6 +1678,43 @@ const crsiBenchCmd: CommandHandler = async (ctx, args) => {
       return { content: `❌ 未找到 skill: ${skillName}` }
     }
     skill = { name: skillName, text: body }
+  }
+
+  if (args.includes('--sealed')) {
+    if (!skill) {
+      return {
+        content: '❌ `--sealed` 需要 `--skill <name>`：sealed 是「某份 skill」的留出集。',
+      }
+    }
+    const kIdx = args.indexOf('--k')
+    // 缺省 1：sealed 出的是旁证数，不是裁定数，没必要一上手就烧 k 轮。
+    const k = kIdx >= 0 ? Math.max(1, Number(args[kIdx + 1]) || 1) : 1
+    const s = await measureSealed(llm, { skillName: skill.name, skillText: skill.text, k })
+    const avg = s.off.length > 0 ? s.off.reduce((a, r) => a + r.score, 0) / s.off.length : 0
+    const avgOn = s.on.length > 0 ? s.on.reduce((a, r) => a + r.score, 0) / s.on.length : 0
+    const lines = [
+      `## 🧪 sealed 留出集（skill: ${skill.name}, k=${k}）`,
+      '',
+      `off 均分: **${avg.toFixed(1)}/100** · on 均分: **${avgOn.toFixed(1)}/100**`,
+    ]
+    if (!s.oraclePassed) {
+      lines.push('', '❌ 参考解未过自己的冻结测试 ⇒ 该读数不可信（先修题或参考解）。')
+    } else if (s.capture.rate === null) {
+      lines.push(
+        '',
+        `没有率：${s.capture.tasksTotal} 题里没有一道有 headroom（off 已满分）—— 这不是 0。`,
+      )
+    } else {
+      lines.push(
+        '',
+        `rate = ${s.capture.numerator.toFixed(1)}/${s.capture.denominator.toFixed(1)} over ${s.capture.tasksUsed} of ${s.capture.tasksTotal} tasks ⇒ **${(s.capture.rate * 100).toFixed(1)}%**`,
+      )
+    }
+    lines.push(
+      '',
+      'sealed 不进裁定：不加分、不开试用期 —— 它只答「gate 上的捕获率是不是过拟合」（进裁定 = 把留出集当考场）。',
+    )
+    return { content: lines.join('\n') }
   }
 
   if (args.includes('--capture')) {
@@ -7262,7 +7299,8 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
     '固化 CRSI 失败信号（默认教训 / --rule 受管理规则 / --prose 改 skill 散文），沙箱 + 人批准门控',
   '/crsi prose-clear': '清空散文提议去重 ledger（~/.mipham/crsi/prose-proposals.jsonl）',
   '/crsi eval': 'Run the ground-truth CRSI eval harness and record the score',
-  '/crsi bench': 'Run the LLM task-performance benchmark and report the score',
+  '/crsi bench':
+    'Run the LLM task-performance benchmark（--capture 出捕获率，--sealed 出留出集旁证，均需 --skill）',
   '/crsi meta': 'RSI Level 3 meta-rule analysis — rules that improve the rules',
   '/crsi interpret': 'Tool-call behavior dashboard — error patterns, usage, health',
   '/crsi critique': 'Enable/disable RLAIF self-critique on tool calls',

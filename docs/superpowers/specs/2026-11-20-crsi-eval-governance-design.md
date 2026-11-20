@@ -3,10 +3,13 @@
 > **日期**：2026-11-20
 > **主题**：给 CRSI 的「验证」补上界、留出集与上线后可追回
 > **状态**：**已实现**（2026-11-20，分支 `feat/crsi-eval-governance`）
-> **实现时的三处偏离**（均由调用顺序或接口约束逼出，详见 `docs/superpowers/plans/2026-11-20-crsi-eval-governance.md` 同批台账）：
+> **实现时的四处偏离**（均由调用顺序或接口约束逼出，详见 `docs/superpowers/plans/2026-11-20-crsi-eval-governance.md` 同批台账）：
 > ① 试用期基线由 `measureModification` 事后经 `setPendingProbation` 交给 `crsi-modify`
 > （真实顺序是沙箱先建、测量后跑）；② `ProbationRecord` 多一个 `poolSize`（地板需要题池大小）；
-> ③ 观察窗只由 `/crsi bench --capture` 的 on 臂、`k≥3` 时结算 —— 普通 bench 是 `k=1`，永不进窗。
+> ③ 观察窗只由 `/crsi bench --capture` 的 on 臂、`k≥3` 时结算 —— 普通 bench 是 `k=1`，永不进窗；
+> ④ `--sealed` 缺省 `k=1`（§4.3 未写 k）：它出的是旁证数不是裁定数，没必要一上手就烧 k 轮。
+> 另：正对照由 **off 臂**计算（§4.4 未写取哪一臂）—— off 的 headroom 正是真率分母，
+> 故真率非 `null` 时对照必然可算。
 > **外部参照**：Agnes Harness（`AgnesAI-Labs/agnes-harness`）的 `tools/rsi-eval` 三臂对照与
 > `Agnes-Harness-Technical-Report-Nov-2026` 的 governed RSI —— **只借形状，不借实现**（它是
 > Python/密封仿真，我们是 TypeScript/真实仓库）

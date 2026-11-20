@@ -115,3 +115,28 @@ export async function measureCapture(
     sealed: { capture: sealed.capture, oraclePassed: sealedOraclePassed },
   }
 }
+
+export interface SealedMeasurement {
+  off: TaskPerformanceReport[]
+  on: TaskPerformanceReport[]
+  capture: CaptureResult
+  /** 参考解是否全过自己的冻结测试。false ⇒ 读数不可信。 */
+  oraclePassed: boolean
+}
+
+/**
+ * 只跑 sealed 池的独立读面（`/crsi bench --sealed`，设计 §4.3）。
+ *
+ * 它比 `--capture` 便宜（不跑 gate 臂），答的是同一个问题的一半：这份 skill 在
+ * **没参与调参**的题上还吃得到多少。缺省 k=1 —— 它出的不是裁定数，是旁证数。
+ */
+export async function measureSealed(
+  llm: Llm,
+  opts: { skillName: string; skillText: string; k?: number; timeoutMs?: number },
+): Promise<SealedMeasurement> {
+  const k = opts.k ?? 1
+  const tasks = loadPerformanceTasks({ pool: 'sealed' }).filter((t) => t.skill === opts.skillName)
+  const arms = await runArms(llm, tasks, opts.skillText, k, opts.timeoutMs)
+  const oraclePassed = tasks.every((t) => judgeGeneratedCode(t.testCode, t.oracleCode).passed)
+  return { off: arms.off, on: arms.on, capture: arms.capture, oraclePassed }
+}

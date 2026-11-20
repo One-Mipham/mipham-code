@@ -70,7 +70,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）；空模型闸（空程序也能通过的题不计入改进，`improved` 降级为 `inconclusive`）；SIM（`problemKey`/`rationale` 按复发问题分组，`/crsi stats` 出视图）+ RSI Tax（逐采样 token 成本，`/crsi stats` 给合计与 0-token eval 基线；只记录不进裁决）
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：5,061 测试（5,058 passed + 1 既存红 + 2 skipped，383 文件）
+测试：5,064 测试（5,061 passed + 1 既存红 + 2 skipped，383 文件）
 
 ---
 
@@ -107,7 +107,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 383 个测试文件，5061 个测试
+│   │   ├── test/               # 383 个测试文件，5064 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -133,7 +133,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（5061 个测试）
+pnpm test         # vitest run（5064 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -323,10 +323,10 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 112     | 1953     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
+| core            | 112     | 1954     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
 | tools           | 33      | 644      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 38      | 276      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
-| ui              | 53      | 528      | commands / input / config-wizard / loop / skill-doctor / ctrl-c / command-reachability                                                                                      |
+| ui              | 53      | 530      | commands / input / config-wizard / loop / skill-doctor / ctrl-c / command-reachability                                                                                      |
 | agent           | 16      | 166      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
 | security        | 12      | 126      | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
 | providers       | 10      | 189      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
@@ -344,7 +344,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | integration     | 1       | 3        | 跨仓接线：`vscode-extension-telemetry`（VS Code 遥测关闭 ⇒ 终端拿到 `MIPHAM_TELEMETRY=off`）                                                                                |
 | integrity       | 20      | 138      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **383** | **5061** | **1 既存红** ⚠️（5,058 passed + 2 skipped，383 文件）                                                                                                                       |
+| **合计**        | **383** | **5064** | **1 既存红** ⚠️（5,061 passed + 2 skipped，383 文件）                                                                                                                       |
 
 ### 测试注意事项
 
