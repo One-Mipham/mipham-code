@@ -101,6 +101,8 @@ API 侧 `versions[]` 91 → **92 条**、`versions[0].flags` = `validated`、
 `lastUpdated` = `2026-11-20T04:37:03.1Z`、`PublisherName` = `miphamai`），两个探针读的是同一时刻。
 公开页的 `Last updated` 本次读在另一个节点上（纯文本为空），时刻以 API 的 `lastUpdated` 为准。
 
+0.85.41 实测（2026-11-20）：上传后首次探针（20:33:27 +0800）仍是形态① —— API `versions[]` 92 条、首位停在上一版、`lastUpdated` 仍指上一版的 `2026-11-20T04:37:03.1Z`；20:36:39 读到形态③（`versions[]` 92 → **93 条**、`versions[0].flags` = `validated`、`lastUpdated` = `2026-11-20T12:36:12.12Z`、`PublisherName` = `miphamai`；公开页 `Version` 0.85.41、`LastUpdatedDateString` = `Fri, 20 Nov 2026 12:36:12 GMT` —— 两个探针读的是同一时刻）。**本次未观察到形态②**：校验窗口内只轮询了 API、没有同时打公开页 ⇒「公开页先翻、API 后翻」这一段**未被验证**，别把「没看到」写成「不存在」；上传时刻未被本方探针捕获。
+
 ```bash
 # A. 公开页（必须 cache-bust，CDN 会给旧读数）
 curl -4 -sS -H 'Cache-Control: no-cache' \
