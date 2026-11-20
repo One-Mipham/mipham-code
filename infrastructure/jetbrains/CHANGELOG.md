@@ -4,6 +4,34 @@
 > (tag dates) and use the same wording as the VS Code extension's changelog — the plugin is a
 > thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.41 (2026-11-20)
+
+- Version sync with Mipham Code CLI 0.85.41
+- Added: `/crsi bench --capture --skill <name>` reports the capture rate — how much of the
+  perfect-score ceiling a skill text actually reaches: off (not injected) and on (injected) arms
+  run the same tasks, rate = sum(on − off) / sum(100 − off). Tasks already perfect when off have
+  no headroom and are excluded; a task missing a usable sample on either arm is dropped as a
+  pair; the interval comes from resampling over tasks. With no countable task it says "no rate"
+  rather than reporting 0 or 100.
+- Added: sealed holdout — the task battery grows to 15 tasks in two pools (gate 12 / sealed 3).
+  `--capture` prints sealed next to gate; `/crsi bench --sealed` reads it alone. Sealed never
+  enters any verdict; its only job is to show whether the gate capture rate is overfitting.
+- Added: post-merge probation — a skill merge that had a task-performance measurement opens a
+  three-retest observation window (same skill, same gate pool, k≥3). When the window fills, a
+  noise-adaptive floor yields improved / regressed / inconclusive, and `/crsi stats` shows the
+  verdict plus a suggested `git revert` command. The command is only printed, never executed.
+  A merge with no stochastic instrument (e.g. editing `core/*.ts`) is reported as such instead
+  of disappearing.
+- Fixed: instrument failures were read as a perfect score — a run with neither text nor usage
+  (upstream fault / truncation) used to count as zero in the denominator, so an all-failed batch
+  displayed 100/100. Such runs are no longer scored; when nothing is measurable the bench says
+  so, and the task-performance reward source refuses to judge on it.
+- Fixed: a voided capture round no longer advances the probation window. When the reference
+  solutions do not pass their own frozen tests, the control rate is not zero, or an arm is
+  unmeasurable, that round describes something other than the skill under test.
+- Fixed: editing `crsi-lessons.md` takes effect on the next request instead of after a restart —
+  the lesson projection is re-read from disk each time.
+
 ## 0.85.40 (2026-11-20)
 
 - Version sync with Mipham Code CLI 0.85.40
