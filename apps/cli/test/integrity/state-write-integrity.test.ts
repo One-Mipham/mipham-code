@@ -102,6 +102,7 @@ const SWEPT: Array<{ file: string; helper: 'atomicWriteFileSync' | 'appendRegula
   { file: 'tools/agent/workflow.ts', helper: 'atomicWriteFileSync' },
   { file: 'tools/scheduling/cron.ts', helper: 'atomicWriteFileSync' },
   { file: 'ui/commands.ts', helper: 'atomicWriteFileSync' },
+  { file: 'ui/input-debug.ts', helper: 'appendRegularFileSync' },
   { file: 'workflow/journal.ts', helper: 'appendRegularFileSync' },
 ]
 

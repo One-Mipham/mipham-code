@@ -29,6 +29,7 @@ import {
 } from '../agent/cross-session/discovery'
 import { ChatPanel } from './chat'
 import { InputBar } from './input'
+import { recordKeyEvent, recordRenderCommit } from './input-debug'
 import { ModelPicker } from './picker'
 import { CopyPicker, type CopyPickerItem } from './copy-picker'
 import { AgentFooter, type AgentEntry } from './agent-footer'
@@ -1388,7 +1389,14 @@ export function App({
   // Ctrl+C 的「再按一次才退」，语义与计时器见 ui/ctrl-c-confirm.ts
   const ctrlC = useCtrlCConfirm()
 
+  // 诊断（`MIPHAM_DEBUG_INPUT=1`）：冻结时区分「输入没送达」与「送达但没渲染」。
+  // 默认关闭时只是一次缓存布尔判断，见 ui/input-debug.ts。
+  useEffect(() => {
+    recordRenderCommit()
+  })
+
   useInput((input, key) => {
+    recordKeyEvent(input, key)
     // Ctrl+C：先关最上面那一层；没得关时**不退出**，只提示「再按一次」。
     //
     // 从前这里没有这个分支，而 Ink 自己的 Ctrl+C 处理（`exitOnCtrlC`，默认
