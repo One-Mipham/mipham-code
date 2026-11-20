@@ -69,10 +69,6 @@ const KEPT_UNWIRED: Array<{ path: string; why: string }> = [
     path: 'src/providers/llm-replay.ts',
     why: 'provider-swap 的测试基础设施（record/replay），是 test/core/engine.test.ts 证明 ctx.llm 可换的唯一支撑 —— 它是测试夹具，不是死代码',
   },
-  {
-    path: 'src/core/capture-rate.ts',
-    why: '**临时**：捕获率纯模块，本批 Task 5 接进 /crsi bench --capture 后本行必须删除（被接上 ⇒ 陈旧豁免为红）',
-  },
 ]
 
 /**

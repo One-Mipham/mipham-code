@@ -62,6 +62,7 @@ import {
   measureSkillDeltaRepeated,
   stripCodeFences,
 } from '../core/task-performance'
+import { measureCapture } from '../core/capture-measure'
 import { randomUUID } from 'node:crypto'
 import {
   buildImprovementReport,
@@ -1651,6 +1652,53 @@ const crsiBenchCmd: CommandHandler = async (ctx, args) => {
       return { content: `❌ 未找到 skill: ${skillName}` }
     }
     skill = { name: skillName, text: body }
+  }
+
+  if (args.includes('--capture')) {
+    if (!skill) {
+      return {
+        content:
+          '❌ `--capture` 需要 `--skill <name>`：捕获率是「某份 skill 文本吃到了多少上界」。',
+      }
+    }
+    const kIdx = args.indexOf('--k')
+    const k = kIdx >= 0 ? Math.max(1, Number(args[kIdx + 1]) || 3) : 3
+    const m = await measureCapture(llm, { skillName: skill.name, skillText: skill.text, k })
+    const c = m.capture
+    const average = (runs: typeof m.off) =>
+      runs.length > 0 ? runs.reduce((a, r) => a + r.score, 0) / runs.length : 0
+    const all = [...m.off, ...m.on]
+    const tokens = all.every((r) => r.tokensUsed !== undefined)
+      ? all.reduce((a, r) => a + (r.tokensUsed ?? 0), 0)
+      : undefined
+    const lines = [
+      `## 🎯 捕获率（skill: ${skill.name}, k=${k}）`,
+      '',
+      `off 均分: **${average(m.off).toFixed(1)}/100** · on 均分: **${average(m.on).toFixed(1)}/100**`,
+    ]
+    if (!m.oraclePassed) {
+      lines.push('', '❌ 参考解未全过自己的冻结测试 ⇒ 上界不可信，**本轮作废**。先修题或参考解。')
+    } else if (c.rate === null) {
+      lines.push(
+        '',
+        `没有率：${c.tasksTotal} 题里没有一道有 headroom（off 已满分）—— 这不是 0，也不是通过。`,
+      )
+    } else {
+      const ci = c.ci
+        ? `; 95% CI ${(c.ci.lo * 100).toFixed(1)}%–${(c.ci.hi * 100).toFixed(1)}%`
+        : '; 区间不可得'
+      lines.push(
+        '',
+        `rate = ${c.numerator.toFixed(1)}/${c.denominator.toFixed(1)} over ${c.tasksUsed} of ${c.tasksTotal} tasks${ci} ⇒ **${(c.rate * 100).toFixed(1)}%**`,
+      )
+    }
+    if (c.noHeadroom.length > 0) lines.push('', `无 headroom: ${c.noHeadroom.join(', ')}`)
+    if (c.dropped.length > 0) lines.push('', `配对剔除: ${c.dropped.join(', ')}`)
+    lines.push(
+      '',
+      tokens === undefined ? 'RSI Tax: 未测（有运行没报 usage）' : `RSI Tax: ${tokens} tokens`,
+    )
+    return { content: lines.join('\n') }
   }
 
   const report = await runTaskPerformance(llm, skill ? { skill } : undefined)

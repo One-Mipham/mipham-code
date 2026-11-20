@@ -188,12 +188,27 @@ async function collectGeneratedCode(
   return { code: stripCodeFences(text), truncated, tokens, usageReported }
 }
 
+export interface TaskPerformanceOptions {
+  /**
+   * 跑哪些题。**选择**与**注入**是两件事：捕获率需要「同一批题、注入 / 不注入」，
+   * 而旧签名用同一个 `skill` 参数同时决定两者，`off` 臂因此表达不出来。
+   */
+  tasks?: PerformanceTask[]
+  /** 注入的 systemPrompt。缺席 = 不注入（`off` 臂）。 */
+  skillText?: string
+  /** 旧参数：既选题又注入。保留为薄包装，既有调用点零改动。 */
+  skill?: { name: string; text: string }
+  timeoutMs?: number
+}
+
 export async function runTaskPerformance(
   llm: Llm,
-  opts?: { timeoutMs?: number; skill?: { name: string; text: string } },
+  opts?: TaskPerformanceOptions,
 ): Promise<TaskPerformanceReport> {
   const wanted = opts?.skill?.name
-  const tasks = loadPerformanceTasks().filter((t) => (t.skill ?? undefined) === wanted)
+  const tasks =
+    opts?.tasks ?? loadPerformanceTasks().filter((t) => (t.skill ?? undefined) === wanted)
+  const systemPrompt = opts?.skillText ?? opts?.skill?.text
   const results: TaskPerformanceResult[] = []
   const startedAt = Date.now()
   let tokensUsed = 0
@@ -202,7 +217,7 @@ export async function runTaskPerformance(
     const { code, truncated, tokens, usageReported } = await collectGeneratedCode(
       llm,
       task.prompt,
-      opts?.skill?.text,
+      systemPrompt,
     )
     tokensUsed += tokens
     anyUsageReported = anyUsageReported || usageReported
