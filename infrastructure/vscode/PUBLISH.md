@@ -96,6 +96,11 @@ API 的 `versions[0].lastUpdated` 仍指上一版 —— **别拿 API 那个字�
 上传时刻未被本方探针捕获 ⇒ **本次不记校验窗口**（形态② 是概率不是必然 —— 上传后首读即 `validated`
 的先例已有，别把「没等到翻页」读成「上传失败」）。
 
+0.85.40 实测（2026-11-20）：本次同样**未观察到形态②** —— 首次探针即形态③（公开页 `Version` 0.85.40；
+API 侧 `versions[]` 91 → **92 条**、`versions[0].flags` = `validated`、
+`lastUpdated` = `2026-11-20T04:37:03.1Z`、`PublisherName` = `miphamai`），两个探针读的是同一时刻。
+公开页的 `Last updated` 本次读在另一个节点上（纯文本为空），时刻以 API 的 `lastUpdated` 为准。
+
 ```bash
 # A. 公开页（必须 cache-bust，CDN 会给旧读数）
 curl -4 -sS -H 'Cache-Control: no-cache' \
