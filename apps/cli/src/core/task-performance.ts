@@ -10,16 +10,39 @@ import { parseFrontmatter } from '../skills/loader'
 
 export type PerformanceTaskCategory = 'test-driven' | 'bug-fix'
 
+/**
+ * 任务分池。`gate` = 参与候选选择与改进判定；`sealed` = **只在读数值时出现**，
+ * 永不进入任何裁定（见设计文档 §4.3）。
+ */
+export type TaskPool = 'gate' | 'sealed'
+
 export interface PerformanceTask {
   id: string
   category: PerformanceTaskCategory
   prompt: string
   testCode: string
   skill?: string // 绑定被测 skill 的名字（= skill frontmatter name）
+  /**
+   * 手写参考解。**必须**能通过本任务自己的 `testCode` —— 由
+   * `test/integrity/task-battery.test.ts` 逐题机械验证。
+   *
+   * 它是捕获率的上界（分母 `100 − off`）：参考解若不满分，说明是题或答案坏了，
+   * 而不是被测 skill 不好。
+   */
+  oracleCode: string
+  /** 分池，缺省 `'gate'`。 */
+  split?: TaskPool
 }
 
-export function loadPerformanceTasks(): PerformanceTask[] {
-  return tasksFile.tasks as PerformanceTask[]
+/**
+ * 取任务集。**缺省 `'gate'`** —— 所有选择/改进路径因此天然看不到 sealed，
+ * 不需要逐处修改调用点；`'all'` 只给守卫与测试用。
+ */
+export function loadPerformanceTasks(opts?: { pool?: TaskPool | 'all' }): PerformanceTask[] {
+  const all = tasksFile.tasks as PerformanceTask[]
+  const pool = opts?.pool ?? 'gate'
+  if (pool === 'all') return all
+  return all.filter((t) => (t.split ?? 'gate') === pool)
 }
 
 export interface JudgeResult {
@@ -66,6 +89,14 @@ export interface TaskPerformanceResult {
    * the result and excluded from `score` — mixing the two biases the readout low.
    */
   truncated?: boolean
+  /**
+   * 没测到，而不是没答对：零文本且 provider 连 usage 都没报。
+   *
+   * 与 `truncated` 同族但**不同名** —— 前者是「仪器/上游故障」，后者是「输出被截断」。
+   * 两者都不进 `score`，但必须分开计数：合成一个数字会让「上游挂了」与「上限太短」
+   * 在读数上同形（见 docs/superpowers/specs/2026-11-20-crsi-eval-governance-design.md §4.6）。
+   */
+  uncertain?: boolean
 }
 
 /** 空模型闸的读数：`passed` = 空程序也能通过的题数。 */
@@ -109,6 +140,16 @@ export interface TaskPerformanceReport {
   failures: string[]
   /** Tasks whose generation was cut off at the output cap; counted, not scored. */
   truncated: number
+  /** 仪器/上游故障（零文本且零 usage）；只计数，不进分数。 */
+  uncertain: number
+  /**
+   * 这一轮**到底测到没有**：至少有一道题进了分母。
+   *
+   * `false` 时 `score` 的 100 是「无题可评分」的占位，**不是满分**。任何把它当分数
+   * 用的地方（展示、改进判定、奖励闸）都必须先看这个字段 —— 否则一次 provider
+   * 抽风会读成「满分」，进而产出假的 improved / 假的 regressed。
+   */
+  measurable: boolean
   /** B2 代价维：整轮（LLM 生成 + 冻结测试判定）的墙钟耗时。只记录，不参与任何判定。 */
   durationMs: number
   /**
@@ -155,12 +196,27 @@ async function collectGeneratedCode(
   return { code: stripCodeFences(text), truncated, tokens, usageReported }
 }
 
+export interface TaskPerformanceOptions {
+  /**
+   * 跑哪些题。**选择**与**注入**是两件事：捕获率需要「同一批题、注入 / 不注入」，
+   * 而旧签名用同一个 `skill` 参数同时决定两者，`off` 臂因此表达不出来。
+   */
+  tasks?: PerformanceTask[]
+  /** 注入的 systemPrompt。缺席 = 不注入（`off` 臂）。 */
+  skillText?: string
+  /** 旧参数：既选题又注入。保留为薄包装，既有调用点零改动。 */
+  skill?: { name: string; text: string }
+  timeoutMs?: number
+}
+
 export async function runTaskPerformance(
   llm: Llm,
-  opts?: { timeoutMs?: number; skill?: { name: string; text: string } },
+  opts?: TaskPerformanceOptions,
 ): Promise<TaskPerformanceReport> {
   const wanted = opts?.skill?.name
-  const tasks = loadPerformanceTasks().filter((t) => (t.skill ?? undefined) === wanted)
+  const tasks =
+    opts?.tasks ?? loadPerformanceTasks().filter((t) => (t.skill ?? undefined) === wanted)
+  const systemPrompt = opts?.skillText ?? opts?.skill?.text
   const results: TaskPerformanceResult[] = []
   const startedAt = Date.now()
   let tokensUsed = 0
@@ -169,17 +225,20 @@ export async function runTaskPerformance(
     const { code, truncated, tokens, usageReported } = await collectGeneratedCode(
       llm,
       task.prompt,
-      opts?.skill?.text,
+      systemPrompt,
     )
     tokensUsed += tokens
     anyUsageReported = anyUsageReported || usageReported
     if (!code) {
+      // 仪器故障与答错必须不同形：provider 连 usage 都没报 ⇒ 这次**没测到**，
+      // 不能记成「模型答错」（一次上游抽风会让基线凭空掉分）。
       results.push({
         id: task.id,
         description: task.prompt,
         passed: false,
-        detail: 'LLM 未生成代码',
+        detail: usageReported ? 'LLM 未生成代码' : '未测得结果：无文本且无 usage（仪器/上游故障）',
         ...(truncated ? { truncated: true } : {}),
+        ...(usageReported ? {} : { uncertain: true }),
       })
       continue
     }
@@ -197,8 +256,10 @@ export async function runTaskPerformance(
   // generation is incomplete by construction; folding those failures into the mean
   // makes the readout (and any improved/regressed verdict derived from it) depend on
   // the output cap rather than on the work.
-  const scored = results.filter((r) => !r.truncated)
-  const truncated = results.length - scored.length
+  const scored = results.filter((r) => !r.truncated && !r.uncertain)
+  const truncated = results.filter((r) => r.truncated).length
+  // 与 truncated 互斥计数：一条结果可以同时带两个标记，原始计数相加会超过 total。
+  const uncertain = results.filter((r) => r.uncertain && !r.truncated).length
   return {
     total: results.length,
     passed,
@@ -209,6 +270,8 @@ export async function runTaskPerformance(
     results,
     failures: results.filter((r) => !r.passed).map((r) => r.id),
     truncated,
+    uncertain,
+    measurable: scored.length > 0,
     durationMs: Date.now() - startedAt,
     ...(anyUsageReported ? { tokensUsed } : {}),
   }
@@ -282,6 +345,9 @@ export async function measureSkillDelta(
     skill: { name: resolved.skillName, text: resolved.postText },
   })
 
+  // 任一侧没测到 ⇒ 没有可比的 delta（不是 0，也不是「持平」）。
+  if (!baseline.measurable || !post.measurable) return null
+
   return {
     skillName: resolved.skillName,
     baseline,
@@ -340,6 +406,9 @@ export async function measureSkillDeltaRepeated(
     const r = await runTaskPerformance(llm, {
       skill: { name: resolved.skillName, text: resolved.baselineText },
     })
+    // 没测到的一轮不许折成 100 塞进样本：那会把「上游挂了」变成「基线满分」，
+    // 进而产出假的 regressed（拦掉一次合法合并）或假的 improved。
+    if (!r.measurable) return null
     baselineScores.push(r.score)
     baselineDurations.push(r.durationMs)
     if (r.tokensUsed !== undefined) baselineTokens.push(r.tokensUsed)
@@ -348,6 +417,7 @@ export async function measureSkillDeltaRepeated(
     const r = await runTaskPerformance(llm, {
       skill: { name: resolved.skillName, text: resolved.postText },
     })
+    if (!r.measurable) return null
     postScores.push(r.score)
     postDurations.push(r.durationMs)
     if (r.tokensUsed !== undefined) postTokens.push(r.tokensUsed)

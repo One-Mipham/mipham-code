@@ -25,7 +25,14 @@ import { miphamHome, workflowScriptDir, workflowScriptDirs, worktreeRoot } from 
 import { fixDoctor, fixConfig, fixCache, selectRepoClaudeFiles } from '../core/fix'
 import { fixCodeTarget } from '../core/fix-code'
 import { homedir } from 'node:os'
-import { runCrsiModification, approvePending, rejectPending, hasPending } from '../core/crsi-modify'
+import {
+  runCrsiModification,
+  approvePending,
+  rejectPending,
+  hasPending,
+  setPendingProbation,
+} from '../core/crsi-modify'
+import { settleProbation, formatProbationLines, PROBATION_WINDOW } from '../core/probation'
 import {
   produceCrsiProposal,
   produceRuleProposal,
@@ -61,7 +68,9 @@ import {
   runTaskPerformance,
   measureSkillDeltaRepeated,
   stripCodeFences,
+  loadPerformanceTasks,
 } from '../core/task-performance'
+import { measureCapture, measureSealed } from '../core/capture-measure'
 import { randomUUID } from 'node:crypto'
 import {
   buildImprovementReport,
@@ -1075,6 +1084,9 @@ const crsiStatsCmd: CommandHandler = async (ctx) => {
     }
   }
 
+  // ── 试用期：未结窗口也打出来（「开了没读数」与「从未开窗」不同形） ──
+  lines.push(...formatProbationLines())
+
   return { content: lines.join('\n') }
 }
 
@@ -1111,9 +1123,19 @@ async function measureModification(
 ): Promise<string> {
   const llm = ctx.engine.getLlm() ?? ctx.engine.getRegistry()
   let improvementLine = ''
+  // 先清空：非 skill 文件 / 没量到样本 / 抛错，都不该留下上一轮的基线。
+  setPendingProbation(null)
   try {
     const sample = await measureSkillDeltaRepeated(llm, params)
     if (sample) {
+      // 试用期基线 = 合并后的那一臂（postScores）。窗口问的是「合并后会不会回落」，
+      // 不是「这次改动涨了多少」。没有测量就不开窗（不让旧基线挂到新合并上）。
+      setPendingProbation({
+        filePath: params.filePath,
+        skillName: sample.skillName,
+        baselineScores: sample.postScores,
+        poolSize: loadPerformanceTasks().filter((t) => t.skill === sample.skillName).length,
+      })
       const report = buildImprovementReport(sample, [params.filePath], undefined, {
         // 手工路径没有失败信号，问题键就取「这次想修什么」的规范化描述：
         // 同一句话被反复修时，它们才聚得起来。
@@ -1145,6 +1167,7 @@ async function measureModification(
     }
   } catch {
     // 测量失败（LLM 不可用等）不阻断 modify 流程——改进信号是可选的。
+    setPendingProbation(null)
   }
   return improvementLine
 }
@@ -1156,7 +1179,11 @@ const crsiModifyCmd: CommandHandler = async (ctx, args) => {
     }
     const r = approvePending()
     setPendingVerdict(null)
-    return { content: r.success ? `✅ ${r.message}` : `⚠️ ${r.message}` }
+    if (!r.success) return { content: `⚠️ ${r.message}` }
+    const probationNote = r.probationOpened
+      ? `\n🧪 已开启试用期：后续 ${PROBATION_WINDOW} 次同口径重测（同 skill、gate 池、k≥3）后出裁定；退化只提示回退，不自动执行。`
+      : ''
+    return { content: `✅ ${r.message}${probationNote}` }
   }
   if (args[0] === '--reject') {
     const r = rejectPending()
@@ -1653,13 +1680,152 @@ const crsiBenchCmd: CommandHandler = async (ctx, args) => {
     skill = { name: skillName, text: body }
   }
 
+  if (args.includes('--sealed')) {
+    if (!skill) {
+      return {
+        content: '❌ `--sealed` 需要 `--skill <name>`：sealed 是「某份 skill」的留出集。',
+      }
+    }
+    const kIdx = args.indexOf('--k')
+    // 缺省 1：sealed 出的是旁证数，不是裁定数，没必要一上手就烧 k 轮。
+    const k = kIdx >= 0 ? Math.max(1, Number(args[kIdx + 1]) || 1) : 1
+    const s = await measureSealed(llm, { skillName: skill.name, skillText: skill.text, k })
+    const avg = s.off.length > 0 ? s.off.reduce((a, r) => a + r.score, 0) / s.off.length : 0
+    const avgOn = s.on.length > 0 ? s.on.reduce((a, r) => a + r.score, 0) / s.on.length : 0
+    const lines = [
+      `## 🧪 sealed 留出集（skill: ${skill.name}, k=${k}）`,
+      '',
+      `off 均分: **${avg.toFixed(1)}/100** · on 均分: **${avgOn.toFixed(1)}/100**`,
+    ]
+    if (!s.oraclePassed) {
+      lines.push('', '❌ 参考解未过自己的冻结测试 ⇒ 该读数不可信（先修题或参考解）。')
+    } else if (s.capture.rate === null) {
+      lines.push(
+        '',
+        `没有率：${s.capture.tasksTotal} 题里没有一道有 headroom（off 已满分）—— 这不是 0。`,
+      )
+    } else {
+      lines.push(
+        '',
+        `rate = ${s.capture.numerator.toFixed(1)}/${s.capture.denominator.toFixed(1)} over ${s.capture.tasksUsed} of ${s.capture.tasksTotal} tasks ⇒ **${(s.capture.rate * 100).toFixed(1)}%**`,
+      )
+    }
+    lines.push(
+      '',
+      'sealed 不进裁定：不加分、不开试用期 —— 它只答「gate 上的捕获率是不是过拟合」（进裁定 = 把留出集当考场）。',
+    )
+    return { content: lines.join('\n') }
+  }
+
+  if (args.includes('--capture')) {
+    if (!skill) {
+      return {
+        content:
+          '❌ `--capture` 需要 `--skill <name>`：捕获率是「某份 skill 文本吃到了多少上界」。',
+      }
+    }
+    const kIdx = args.indexOf('--k')
+    const k = kIdx >= 0 ? Math.max(1, Number(args[kIdx + 1]) || 3) : 3
+    const m = await measureCapture(llm, { skillName: skill.name, skillText: skill.text, k })
+    const c = m.capture
+    const average = (runs: typeof m.off) =>
+      runs.length > 0 ? runs.reduce((a, r) => a + r.score, 0) / runs.length : 0
+    const all = [...m.off, ...m.on]
+    const tokens = all.every((r) => r.tokensUsed !== undefined)
+      ? all.reduce((a, r) => a + (r.tokensUsed ?? 0), 0)
+      : undefined
+    const lines = [
+      `## 🎯 捕获率（skill: ${skill.name}, k=${k}）`,
+      '',
+      `off 均分: **${average(m.off).toFixed(1)}/100** · on 均分: **${average(m.on).toFixed(1)}/100**`,
+    ]
+    if (!m.oraclePassed) {
+      lines.push('', '❌ 参考解未全过自己的冻结测试 ⇒ 上界不可信，**本轮作废**。先修题或参考解。')
+    } else if (c.rate === null) {
+      lines.push(
+        '',
+        `没有率：${c.tasksTotal} 题里没有一道有 headroom（off 已满分）—— 这不是 0，也不是通过。`,
+      )
+    } else {
+      const ci = c.ci
+        ? `; 95% CI ${(c.ci.lo * 100).toFixed(1)}%–${(c.ci.hi * 100).toFixed(1)}%`
+        : '; 区间不可得'
+      lines.push(
+        '',
+        `rate = ${c.numerator.toFixed(1)}/${c.denominator.toFixed(1)} over ${c.tasksUsed} of ${c.tasksTotal} tasks${ci} ⇒ **${(c.rate * 100).toFixed(1)}%**`,
+      )
+    }
+    if (c.noHeadroom.length > 0) lines.push('', `无 headroom: ${c.noHeadroom.join(', ')}`)
+    if (c.dropped.length > 0) lines.push('', `配对剔除: ${c.dropped.join(', ')}`)
+
+    // 正对照（零成本）：同一臂喂两侧必须**恰好**得 0。不为 0 ⇒ 臂接反 / 池映射错，
+    // 分子分母再漂亮也是另一个对象的读数。为 null ⇒ on 臂全程无 headroom，本轮没验证到。
+    const controlBroken = m.controlRate !== null && m.controlRate !== 0
+    if (m.controlRate === null) {
+      lines.push('', '正对照: 不可得（off 臂全程无 headroom，本轮本来也没有率）')
+    } else if (controlBroken) {
+      lines.push(
+        '',
+        `❌ 正对照 = **${(m.controlRate * 100).toFixed(1)}%**（应恰为 0）⇒ 分子/分母/臂映射至少有一处接错了，**本轮读数不可信**。`,
+      )
+    }
+
+    // sealed 旁证：只说过拟合，不进任何裁定（设计 §4.3）。
+    const sc = m.sealed.capture
+    if (!m.sealed.oraclePassed) {
+      lines.push('', 'sealed 旁证: 参考解未过自己的冻结测试 ⇒ 不可读')
+    } else if (sc.rate === null) {
+      lines.push('', `sealed 旁证: 无率（${sc.tasksTotal} 题里没有一道有 headroom）`)
+    } else {
+      lines.push(
+        '',
+        `sealed 旁证: **${(sc.rate * 100).toFixed(1)}%**（${sc.tasksUsed}/${sc.tasksTotal} 题；只作过拟合旁证，不进裁定）`,
+      )
+    }
+
+    const unmeasurable = all.filter((r) => !r.measurable).length
+    if (unmeasurable > 0) {
+      lines.push('', `⚠️ ${unmeasurable} 次运行不可测（仪器故障或截断）⇒ 本轮不是一次合格重测`)
+    }
+    lines.push(
+      '',
+      tokens === undefined ? 'RSI Tax: 未测（有运行没报 usage）' : `RSI Tax: ${tokens} tokens`,
+    )
+
+    // 只有 k≥3 才算一次合格重测；k=1 的冒烟永不进观察窗（设计 §4.4）。
+    // 且必须**三项前提同时成立**：参考解可信 · 正对照为 0 · 每轮都可测。否则这一轮
+    // 读数是真的、但描述的不是被测 skill —— 拿它推进观察窗，等于往窗口里掺沙子。
+    const canSettle =
+      k >= 3 && m.oraclePassed && !controlBroken && unmeasurable === 0 && c.rate !== null
+    if (canSettle) {
+      const rec = settleProbation(skill.name, average(m.on))
+      if (rec) {
+        lines.push(
+          '',
+          rec.verdict
+            ? `试用期: ${rec.checks.length}/${PROBATION_WINDOW} → ${rec.verdict}`
+            : `试用期: ${rec.checks.length}/${PROBATION_WINDOW} —— 观察中`,
+        )
+      }
+    } else if (k >= 3) {
+      lines.push('', '试用期: 本轮未推进（观察窗只收前提成立的整轮）')
+    }
+    return { content: lines.join('\n') }
+  }
+
   const report = await runTaskPerformance(llm, skill ? { skill } : undefined)
 
   const lines: string[] = [
     '## 🎯 CRSI 任务表现基准' + (skill ? `（skill: ${skill.name}）` : ''),
     '',
   ]
-  lines.push(`得分: **${report.score}/100** (${report.passed}/${report.total})`, '')
+  // `measurable === false` 时 score 的 100 是「无题可评分」的占位，不是满分。
+  lines.push(
+    report.measurable
+      ? `得分: **${report.score}/100** (${report.passed}/${report.total})`
+      : `得分: **未测得**（0 道题可评分；${report.total} 题全是仪器故障或截断）`,
+    '',
+  )
   lines.push('| 任务 | 结果 |')
   lines.push('|------|------|')
   for (const r of report.results) {
@@ -7133,7 +7299,8 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
     '固化 CRSI 失败信号（默认教训 / --rule 受管理规则 / --prose 改 skill 散文），沙箱 + 人批准门控',
   '/crsi prose-clear': '清空散文提议去重 ledger（~/.mipham/crsi/prose-proposals.jsonl）',
   '/crsi eval': 'Run the ground-truth CRSI eval harness and record the score',
-  '/crsi bench': 'Run the LLM task-performance benchmark and report the score',
+  '/crsi bench':
+    'Run the LLM task-performance benchmark（--capture 出捕获率，--sealed 出留出集旁证，均需 --skill）',
   '/crsi meta': 'RSI Level 3 meta-rule analysis — rules that improve the rules',
   '/crsi interpret': 'Tool-call behavior dashboard — error patterns, usage, health',
   '/crsi critique': 'Enable/disable RLAIF self-critique on tool calls',

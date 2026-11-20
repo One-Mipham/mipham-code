@@ -23,6 +23,7 @@ vi.mock('../../src/core/crsi-modify', () => ({
   approvePending: vi.fn(() => ({ success: true, message: '' })),
   rejectPending: vi.fn(() => ({ success: true, message: '' })),
   hasPending: vi.fn(() => false),
+  setPendingProbation: vi.fn(),
 }))
 
 // 测量是可选的第二步；本文件只关心闸那一段，故让它恒空（不跑 LLM、不写账本）。

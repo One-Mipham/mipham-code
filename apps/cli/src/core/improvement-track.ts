@@ -63,8 +63,13 @@ export interface ImprovementRecord extends ImprovementReport {
 
 // ── 纯函数 ──
 
-export function computeMinEffect(noise: number): number {
-  return Math.max(MIN_EFFECT_FLOOR, NOISE_K * noise)
+/**
+ * 噪声自适应最小效应量。`floor` 缺省为 `MIN_EFFECT_FLOOR` —— 既有调用点不变。
+ * 试用期传自己的地板（两题步长），因为 4 题池上单题翻转只有 25 分，按 20 分地板判
+ * 退化会让「一次恰好翻转」触发回退提示。
+ */
+export function computeMinEffect(noise: number, floor: number = MIN_EFFECT_FLOOR): number {
+  return Math.max(floor, NOISE_K * noise)
 }
 
 export function classifyDelta(deltaMean: number, minEffect: number): ImprovementVerdict {
