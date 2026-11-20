@@ -1,6 +1,8 @@
 # ✦ Mipham Code
 
 > **Multi-model open-core intelligent coding terminal**
+
+[![Mipham Code on StartupScores](https://startupscores.com/badge/mipham-code.svg?style=shield&v=combo&theme=dark)](https://startupscores.com/open-source/mipham-code)
 >
 > MiphamAI | One Mipham Corporation | [mipham.ai](https://mipham.ai/code)
 
