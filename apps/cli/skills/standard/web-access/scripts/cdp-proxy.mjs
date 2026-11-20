@@ -13,6 +13,11 @@ import crypto from 'node:crypto'
 
 const PORT = parseInt(process.env.CDP_PROXY_PORT || '3456')
 let ws = null
+// 诊断用：Chrome 连不上时，/health 与 /targets 都要能说出原因，
+// 否则调用方只能看到 `connected: null` + `{"error":"连接失败"}`，
+// 很容易把「Chrome 远程调试未授权」误判成「localhost 不通」。
+let lastConnectError = null
+let lastSeenChromePort = null
 let cmdId = 0
 const pending = new Map() // id -> {resolve, timer}
 const sessions = new Map() // targetId -> sessionId
@@ -196,6 +201,7 @@ async function connect() {
     chromePort = discovered.port
     chromeWsPath = discovered.wsPath
   }
+  lastSeenChromePort = chromePort
 
   const wsUrl = getWebSocketUrl(chromePort, chromeWsPath)
   if (!wsUrl) throw new Error('无法获取 Chrome WebSocket URL')
@@ -206,6 +212,7 @@ async function connect() {
     const onOpen = () => {
       cleanup()
       connectingPromise = null
+      lastConnectError = null
       console.log(`[CDP Proxy] 已连接 Chrome (端口 ${chromePort})`)
       resolve()
     }
@@ -215,12 +222,18 @@ async function connect() {
       ws = null
       chromePort = null
       chromeWsPath = null
-      const msg = e.message || e.error?.message || '连接失败'
+      // 原生 WebSocket 的 error 事件常常没有 message（Chrome 未授权时握手被拒），
+      // 落到「连接失败」四个字上等于什么都没说。
+      const msg = e.message || e.error?.message || 'Chrome 拒绝了调试连接（远程调试尚未授权）'
+      lastConnectError = msg
       console.error('[CDP Proxy] 连接错误:', msg, '（端口缓存已清除，下次将重新发现）')
       reject(new Error(msg))
     }
     const onClose = () => {
       console.log('[CDP Proxy] 连接断开')
+      // 握手失败时 onError 先给出可行动的原因，onClose 紧随其后把状态清空。
+      // 不要用「连接已断开」盖掉那句话 —— 它才是调用方能据以行动的东西。
+      if (!lastConnectError) lastConnectError = 'Chrome 连接已断开'
       ws = null
       chromePort = null // 重置端口缓存，下次连接重新发现
       chromeWsPath = null
@@ -414,16 +427,19 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Content-Type', 'application/json; charset=utf-8')
 
   try {
-    // /health 不需要连接 Chrome
+    // /health 不需要连接 Chrome，但**必须如实报告没连上**：
+    // 一个在坏掉时说 ok 的健康检查，只会把调用方推向错误的根因。
     if (pathname === '/health') {
-      const connected = ws && (ws.readyState === WS.OPEN || ws.readyState === 1)
+      const connected = !!(ws && (ws.readyState === WS.OPEN || ws.readyState === 1))
       res.end(
         JSON.stringify({
-          status: 'ok',
+          status: connected ? 'ok' : 'disconnected',
           connected,
+          lastError: connected ? null : lastConnectError,
+          chromePort,
+          lastSeenChromePort,
           sessions: sessions.size,
           managedTabs: managedTabs.size,
-          chromePort,
         }),
       )
       return
@@ -437,7 +453,22 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
-    await connect()
+    try {
+      await connect()
+    } catch (e) {
+      // 调用方拿到的是「连不上」时唯一能据以行动的东西：原因 + 下一步。
+      res.statusCode = 500
+      res.end(
+        JSON.stringify({
+          error: `Chrome 未连接：${lastConnectError || e.message || '未知原因'}`,
+          hint: lastSeenChromePort
+            ? `调试端口 ${lastSeenChromePort} 是开着的，但 Chrome 没有允许远程调试。请在 Chrome 打开 chrome://inspect/#remote-debugging 勾选 Allow remote debugging（或点弹窗的「允许」）后重试。`
+            : '未发现 Chrome 调试端口。请确认 Chrome 正在运行，并在 chrome://inspect/#remote-debugging 勾选 Allow remote debugging。',
+          chromePort: lastSeenChromePort,
+        }),
+      )
+      return
+    }
 
     // GET /targets - 列出所有页面
     if (pathname === '/targets') {
@@ -779,7 +810,9 @@ async function main() {
           .get(`http://127.0.0.1:${PORT}/health`, { timeout: 2000 }, (res) => {
             let d = ''
             res.on('data', (c) => (d += c))
-            res.on('end', () => resolve(d.includes('"ok"')))
+            // 只要回的是本 proxy 的 JSON 就算同一实例 —— status 可能是
+            // 'ok' 或 'disconnected'，后者照样说明端口上是 proxy 而不是别人。
+            res.on('end', () => resolve(d.includes('"status"')))
           })
           .on('error', () => resolve(false))
       })

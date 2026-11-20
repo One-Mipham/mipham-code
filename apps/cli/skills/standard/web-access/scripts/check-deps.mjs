@@ -73,6 +73,24 @@ function activePortFiles() {
   }
 }
 
+/**
+ * Chrome 的调试 HTTP 端点在「允许远程调试」之前会回 404/403。
+ * 所以 TCP 端口通 ≠ 可调试：只探端口会打印 `chrome: ok`，而代理永远连不上。
+ */
+async function probeChromeHttp(port, timeoutMs = 2000) {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/json/version`, {
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    const body = await res.text()
+    if (!res.ok) return { ok: false, status: res.status }
+    JSON.parse(body) // 必须是真的 Chrome 调试端点，不是同端口上的别的东西
+    return { ok: true, status: res.status }
+  } catch {
+    return { ok: false, status: 0 }
+  }
+}
+
 async function detectChromePort() {
   // 优先从 DevToolsActivePort 文件读取
   for (const filePath of activePortFiles()) {
@@ -133,6 +151,18 @@ function startProxyDetached() {
   fs.closeSync(logFd)
 }
 
+async function proxyHealth() {
+  try {
+    const res = await fetch(`http://127.0.0.1:${PROXY_PORT}/health`, {
+      signal: AbortSignal.timeout(2000),
+    })
+    if (!res.ok) return null
+    return await res.json()
+  } catch {
+    return null
+  }
+}
+
 async function ensureProxy() {
   const targetsUrl = `http://127.0.0.1:${PROXY_PORT}/targets`
 
@@ -143,7 +173,15 @@ async function ensureProxy() {
     return true
   }
 
-  // 未运行或未连接，启动并等待
+  // proxy 活着但 Chrome 没连上：再拉起一个实例只会撞端口，
+  // 真正该做的是把原因说清楚（多半是远程调试还没授权）。
+  const health = await proxyHealth()
+  if (health) {
+    console.log(`proxy: running, but Chrome is not connected — ${health.lastError || '原因未知'}`)
+    return false
+  }
+
+  // 未运行，启动并等待
   console.log('proxy: connecting...')
   startProxyDetached()
 
@@ -162,7 +200,12 @@ async function ensureProxy() {
     await new Promise((r) => setTimeout(r, 1000))
   }
 
-  console.log('❌ 连接超时，请检查 Chrome 调试设置')
+  const healthAfter = await proxyHealth()
+  console.log(
+    healthAfter
+      ? `❌ Chrome 未连接：${healthAfter.lastError || '原因未知'}`
+      : '❌ CDP Proxy 未能启动，请检查日志',
+  )
   console.log(`  日志：${path.join(os.tmpdir(), 'cdp-proxy.log')}`)
   return false
 }
@@ -176,6 +219,16 @@ async function main() {
   if (!chromePort) {
     console.log(
       'chrome: not connected — 请确保 Chrome 已打开，然后访问 chrome://inspect/#remote-debugging 并勾选 Allow remote debugging',
+    )
+    process.exit(1)
+  }
+  // TCP 开着不代表能调试：Chrome 136+ 在「允许远程调试」前会让 /json/* 回 404/403。
+  const probe = await probeChromeHttp(chromePort)
+  if (!probe.ok) {
+    console.log(
+      `chrome: not authorized (port ${chromePort}${probe.status ? `, HTTP ${probe.status}` : '，无响应'})` +
+        ' — 远程调试尚未允许。请在 Chrome 打开 chrome://inspect/#remote-debugging 勾选 ' +
+        'Allow remote debugging（或点弹窗的「允许」），然后重试。',
     )
     process.exit(1)
   }

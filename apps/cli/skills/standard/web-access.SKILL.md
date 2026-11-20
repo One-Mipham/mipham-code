@@ -26,6 +26,9 @@ node ~/.mipham/skills/web-access/scripts/check-deps.mjs
 
 > Mipham Code 环境：`node` 不可用时可用 `bun` 替代（Bun 原生支持 WebSocket 与 node: 内建）。未通过时引导用户：Chrome 地址栏打开 `chrome://inspect/#remote-debugging`，勾选 "Allow remote debugging for this browser instance"。
 
+> **判读输出**：`chrome: ok` = 调试端点已授权；`chrome: not authorized` = 端口开着但 Chrome 没允许远程调试（去 `chrome://inspect/#remote-debugging` 勾 Allow，或点弹窗「允许」）；`proxy: running, but Chrome is not connected` = 代理活着、Chrome 没授权。
+> **不要**把以上任何一种读成「Bash 没有网络」：`curl -s http://127.0.0.1:3456/health` 能回 200 就证明 localhost 是通的，真正原因在 `lastError` 字段里。
+
 **必须向用户展示**：部分站点对浏览器自动化检测严格，存在账号封禁风险。已内置防护但无法完全避免，Agent 继续操作即视为接受。
 
 ## 工具选择
@@ -39,6 +42,8 @@ node ~/.mipham/skills/web-access/scripts/check-deps.mjs
 | 需要登录态、交互、自由导航                    | 浏览器 CDP  |
 
 浏览器 CDP 不要求 URL 已知；WebSearch/WebFetch/curl 均不处理登录态。
+
+> 搜索引擎结果页（Google / Bing / DuckDuckGo / Brave / Mojeek）对 WebFetch/curl 普遍回 403/429 或验证码。需要搜索时**在 Chrome 里打开引擎页**再用 `/eval` 提取结果，不要用 WebFetch 抓结果页。
 
 ## 浏览器 CDP 模式
 

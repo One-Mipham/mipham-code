@@ -123,11 +123,8 @@ export const webSearchTool: ToolDefinition = {
           '',
           '3. Restart Mipham Code and try again.',
           '',
-          'Alternatives (add API key for any):',
-          '   TAVILY_API_KEY   — https://tavily.com',
-          '   SERPAPI_API_KEY  — https://serpapi.com',
-          '',
           'No API key? Use the web-access skill (CDP through your logged-in Chrome) for live web search.',
+          'Do not scrape search-engine result pages with WebFetch/curl — they answer 403/429 or a captcha.',
         ].join('\n'),
       }
     }

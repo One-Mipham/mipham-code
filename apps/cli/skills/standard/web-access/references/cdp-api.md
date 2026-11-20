@@ -12,15 +12,18 @@
 
 ### GET /health
 
-健康检查，返回连接状态。
+健康检查。`status` 为 `ok` **仅当已连上 Chrome**；未连接时为 `disconnected`，`lastError` 说明原因（多半是 Chrome 远程调试未授权）。`connected` 是布尔值。
 
 ```bash
 curl -s http://localhost:3456/health
+# {"status":"ok","connected":true,"lastError":null,"chromePort":9222,"lastSeenChromePort":9222,...}
 ```
 
 ### GET /targets
 
 列出所有已打开的页面 tab。返回数组，每项含 `targetId`、`title`、`url`。
+
+连不上 Chrome 时返回 HTTP 500，body 含 `error`（原因）与 `hint`（下一步）。**不要**把这种情况读成「localhost 不通」：能收到这个 500 就说明代理可达。
 
 ```bash
 curl -s http://localhost:3456/targets

@@ -46,6 +46,17 @@ Question involves...
 
 ---
 
+### No API key? Do not scrape search engines
+
+If `WebSearch` answers "not configured", **do not** fetch search-engine result pages with
+`WebFetch` or `curl`. Google / Bing / DuckDuckGo / Brave / Mojeek all answer automated
+requests with 403, 429 or a captcha — five calls later you have nothing.
+
+Go straight to the `web-access` skill: open the search engine **in Chrome** (logged-in
+profile, real fingerprint), then read the result list with `/eval`.
+
+---
+
 ## Phase 1: Construct the Query
 
 ### Rules (apply in order)
@@ -170,7 +181,5 @@ If search returns "not configured":
 2. Set: `export BRAVE_API_KEY="BSA..."`
 3. Restart Mipham Code
 
-Alternatives (additional API keys supported):
-
-- `TAVILY_API_KEY` — https://tavily.com
-- `SERPAPI_API_KEY` — https://serpapi.com
+Only `BRAVE_API_KEY` is read. There is no Tavily / SerpAPI path in this build — setting
+those variables has no effect.
