@@ -3,6 +3,35 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.42 (2026-11-22)
+
+- Version sync with Mipham Code CLI 0.85.42
+- Added: a `fork` sub-agent type — `subagent_type: "fork"` hands the child a snapshot of the parent
+  conversation so it continues with the full context instead of only a task description. A session
+  with no messages yet is refused rather than silently downgraded to a plain sub-agent.
+- Fixed: `Read` counted one line too many when a file ends with a newline (most text files do), and
+  reported 1 line for an empty file. Both the direct and the masked read paths are fixed; blank
+  lines inside the file are still preserved.
+- Fixed: `Grep` misdiagnosed a rejected search pattern as a permission problem. When `rg` exits 2
+  with no output, a pattern containing a raw newline and a genuinely unreadable path looked the
+  same, so the former always said "likely permission denied". The reason `rg` gives is now quoted
+  first; the old hint is used only when it says nothing.
+- Fixed: retries and model fallback were spent after compaction still came back as too large.
+  That request cannot succeed, so it now says so directly — start a new session or remove large
+  attachments — instead of burning the retry budget.
+- Fixed: MCP OAuth callback used `localhost`, which strict servers reject. The listener and
+  `redirect_uri` now both use `127.0.0.1`: `localhost` may resolve to `::1` first, while strict
+  implementations compare the registered value literally.
+- Fixed: preview truncation could cut an emoji in half. Tool arguments and agent footer details
+  now slice on code points instead of splitting a surrogate pair.
+- Security: GitLab token masking covers seven more families (`glptt` / `glagent` / `glimt` /
+  `glsoat` / `glcbt` / `glft` / `glffct`) and masks routable tokens whole, so a secret after
+  `glpat-` no longer leaks its tail.
+- Security: the cross-session inbox directory is `0700` and message files are `0600`.
+- Security: bundling built-in skills no longer embeds a runtime credential — after using the
+  browser proxy, `.cdp-token` appears in the skill directory; packaging and the freshness check
+  now both skip it.
+
 ## 0.85.41 (2026-11-20)
 
 - Version sync with Mipham Code CLI 0.85.41
