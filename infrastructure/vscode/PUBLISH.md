@@ -105,6 +105,10 @@ API 侧 `versions[]` 91 → **92 条**、`versions[0].flags` = `validated`、
 
 0.85.42 实测（2026-11-22）：上传后**首读即形态③**，本次未观察到形态①/② —— API 侧 `versions[]` 93 → **94 条**、`versions[0].version` = `0.85.42`、`versions[0].flags` = `validated`、`lastUpdated` = `2026-11-22T06:52:10.107Z`、`PublisherName` = `miphamai`、`publisher.flags` = `verified`；`.vsix` **82,439 B** / sha256 `7c829416…` / 包内 version 0.85.42。**不记校验窗口**（窗口是概率不是必然）。
 
+0.85.43 实测（2026-11-22）：`10:37Z` 上传；首读仍是 0.85.42（校验窗口），复读 `versions[]` 94 → **95 条**、`versions[0].version` = `0.85.43`、`flags` = `validated`、`lastUpdated` = `2026-11-22T10:42:49.34Z`；`.vsix` **83,586 B** / sha256 `18cf5064…` / 包内 0.85.43。
+
+0.85.44 实测（2026-11-22）：`.vsix` **84,548 B** / sha256 `a1c5ec4b…` / 9 文件 / 包内 `0.85.44`（20:20 +0800 打包，用户随后网页上传，上传时刻未被探针捕获）。`12:36:27Z` 首读：API `versions[]` **95 条**、首位仍是 `0.85.43`（`lastUpdated 10:42:49.34Z`）、`0.85.44` 未出现 —— **API 侧形态②**（公开页未读，故「公开页先翻」仍未验证）。`12:38:17Z` 转形态③：`versions[]` 95 → **96 条**、`versions[0].version` = `0.85.44`、`flags` = `validated`、`lastUpdated` = `2026-11-22T12:38:17.073Z`、`PublisherName` = `miphamai`。上传时刻未知 ⇒ **不记窗口时长**。
+
 ```bash
 # A. 公开页（必须 cache-bust，CDN 会给旧读数）
 curl -4 -sS -H 'Cache-Control: no-cache' \
