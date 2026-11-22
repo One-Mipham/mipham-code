@@ -399,6 +399,11 @@ export interface HookResult {
   permissionDecision?: 'allow' | 'deny' | 'ask' | 'defer'
   additionalContext?: string
   updatedOutput?: string
+  /**
+   * Warning text the hook wants the **user** to see (Claude Code's root-level
+   * `systemMessage`), as opposed to `additionalContext`, which is model input.
+   */
+  systemMessage?: string
 }
 
 // ── Instruction Types ──

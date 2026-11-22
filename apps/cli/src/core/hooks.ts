@@ -455,6 +455,14 @@ export class HookEngine {
             : hookResult.additionalContext
         }
 
+        // `systemMessage` is addressed to the user, so collect it too instead of
+        // letting the last hook's warning win.
+        if (hookResult.systemMessage) {
+          result.systemMessage = result.systemMessage
+            ? result.systemMessage + '\n' + hookResult.systemMessage
+            : hookResult.systemMessage
+        }
+
         // PostToolUse: replace output if provided
         if (hookResult.updatedOutput) {
           result.updatedOutput = hookResult.updatedOutput

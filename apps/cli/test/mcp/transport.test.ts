@@ -368,3 +368,35 @@ describe('StdioTransport', () => {
     })
   })
 })
+
+describe('StdioTransport.closeSync (exit path)', () => {
+  it('kills a running server synchronously', async () => {
+    const transport = new StdioTransport()
+    await transport.start('sleep', ['30'])
+    const pid = (transport as unknown as { proc: { pid?: number } }).proc.pid!
+
+    transport.closeSync()
+
+    expect(transport.isConnected()).toBe(false)
+    // Poll: SIGTERM delivery is asynchronous even though the call is not.
+    await new Promise<void>((resolve, reject) => {
+      const startedAt = Date.now()
+      const tick = (): void => {
+        try {
+          process.kill(pid, 0)
+          if (Date.now() - startedAt > 2_000) reject(new Error('server survived closeSync'))
+          else setTimeout(tick, 25)
+        } catch {
+          resolve()
+        }
+      }
+      tick()
+    })
+  })
+
+  it('negative control: closeSync on a never-started transport is a no-op', () => {
+    const transport = new StdioTransport()
+    expect(() => transport.closeSync()).not.toThrow()
+    expect(transport.isConnected()).toBe(false)
+  })
+})

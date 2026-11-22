@@ -401,6 +401,10 @@ export function InputBar({
   const [value, setValue] = useState('')
   // Ref mirror of value — used by useInput to read latest without stale closure.
   const valueRef = useRef(value)
+  // Ref mirror of `pickerActive` for the same reason, and one more: the key
+  // handler is declared before the picker state below, so it must not read that
+  // variable directly.
+  const pickerActiveRef = useRef(false)
   const [verb, setVerb] = useState(() => t(pick(LOADING_KEYS)))
   const [completionVerb, setCompletionVerb] = useState<string | null>(null)
   const prevLoading = useRef(isLoading)
@@ -565,8 +569,11 @@ export function InputBar({
       // History navigation changes value via setValue (no onChange) — clear any
       // ghost suggestion so a stale one isn't Tab-accepted onto a recalled entry.
       clearSuggestion()
-      // Ignore if picker is active (command picker handles its own arrows)
-      if (value.startsWith('/')) return
+      // Ignore only if the picker is actually active (the command picker handles
+      // its own arrows). The old test was `value.startsWith('/')`, so after
+      // recalling a slash command from history — picker off by default — the
+      // Up/Down keys dead-ended and the rest of the history was unreachable.
+      if (pickerActiveRef.current) return
 
       // A draft Escape cleared is still the user's text, and it is the *only*
       // copy: unlike a sent message or a slash command it never entered history.
@@ -622,6 +629,11 @@ export function InputBar({
   useEffect(() => {
     valueRef.current = value
   }, [value])
+
+  // Same for the picker: effects run before the next key event reads the ref.
+  useEffect(() => {
+    pickerActiveRef.current = pickerActive
+  }, [pickerActive])
 
   const handleSubmit = (val: string) => {
     // Use the latest value from the ref; `val` is the value passed by MiphamTextInput.

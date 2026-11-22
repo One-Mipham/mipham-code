@@ -39,8 +39,14 @@ function sanitizeName(name: string): string {
 /**
  * Build a namespaced MCP tool name.
  * Format: mcp__<sanitizedServerName>__<sanitizedToolName>
+ *
+ * Exported because every surface that *names* an MCP tool must use this
+ * spelling: the registered name is what the model has to call, and a display
+ * path that builds its own (`tool-search`) handed back names that did not
+ * exist for any server or tool with an uppercase or non-alphanumeric
+ * character in its name.
  */
-function buildToolName(serverName: string, toolName: string): string {
+export function buildToolName(serverName: string, toolName: string): string {
   const base = `${MCP_TOOL_PREFIX}${sanitizeName(serverName)}__${sanitizeName(toolName)}`
   if (base.length <= MAX_NAME_LENGTH) return base
   const prefix = `${MCP_TOOL_PREFIX}${sanitizeName(serverName)}__`

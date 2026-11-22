@@ -604,9 +604,60 @@ const costCmd: CommandHandler = (ctx) => {
 // Model & Provider
 // ═══════════════════════════════════════════════════════════════
 
-const modelCmd: CommandHandler = (ctx) => {
+const modelCmd: CommandHandler = (ctx, args) => {
   const t = resolveT(ctx)
-  return { content: t('commands.model.current', { model: ctx.modelId, provider: ctx.providerId }) }
+  const requested = args[0]?.trim()
+  // `/model <name>` used to drop its argument on the floor and print the
+  // current model — a request that was refused and a request that was never
+  // made looked the same. Validate first, then switch.
+  if (!requested) {
+    return {
+      content: t('commands.model.current', { model: ctx.modelId, provider: ctx.providerId }),
+    }
+  }
+  if (ctx.engine.isRemote) {
+    return {
+      content:
+        `Cannot switch to ${requested}: this session is attached to a daemon, ` +
+        'and the model is chosen on the daemon side. Change it there, or start a local session.',
+    }
+  }
+  const matches = ctx.config.providers
+    .filter((p) => p.status !== 'upcoming')
+    .flatMap((p) =>
+      p.models.filter((m) => m.status === 'active').map((m) => ({ provider: p, model: m })),
+    )
+    .filter(({ model }) => model.id.toLowerCase() === requested.toLowerCase())
+  if (matches.length === 0) {
+    return { content: t('commands.model.unknown', { model: requested }) }
+  }
+  if (matches.length > 1) {
+    return {
+      content: t('commands.model.ambiguous', {
+        model: requested,
+        providers: matches.map(({ provider }) => provider.id).join(', '),
+      }),
+    }
+  }
+  const { provider, model } = matches[0]!
+  if (isApiKeyMissing(provider.apiKey)) {
+    return {
+      content: t('commands.switch.needs_api_key', { provider: provider.name }),
+      needsApiKey: {
+        providerId: provider.id,
+        modelId: model.id,
+        providerName: provider.name,
+      },
+    }
+  }
+  const warning = ctx.engine.switchProvider(provider.id, model.id)
+  return {
+    content:
+      t('commands.switch.confirmed', { provider: provider.id, model: model.id }) +
+      (warning ? `\n${warning}` : ''),
+    nextProvider: provider.id,
+    nextModel: model.id,
+  }
 }
 
 const modelsCmd: CommandHandler = (ctx) => {
@@ -4847,8 +4898,15 @@ const hooksListCmd: CommandHandler = async (ctx) => {
   // Two calls, one per source: the merged list cannot say which entry came from
   // which file, and the two are not governed alike — only the project file's
   // entries are gated on workspace trust.
-  const userHooks = loadSettingsJson(cwd).hooks
-  const projectHooks = loadSettingsJson(cwd, { includeProjectHooks: true }).projectHooks ?? {}
+  const userSettings = loadSettingsJson(cwd)
+  const projectSettings = loadSettingsJson(cwd, { includeProjectHooks: true })
+  const userHooks = userSettings.hooks
+  const projectHooks = projectSettings.projectHooks ?? {}
+  // Listing a hook is not the claim that it runs. `disableAllHooks` stops the
+  // wiring at both entry points, and this display reads the files, so it has to
+  // carry the same verdict — otherwise every entry looks installed and
+  // `found N` counts hooks that will never fire.
+  const hooksDisabled = projectSettings.disableAllHooks === true
 
   // Listing them is not the same claim as their running. Project hooks are
   // gated, and this command renders them even when the gate is shut — so the
@@ -4895,13 +4953,14 @@ const hooksListCmd: CommandHandler = async (ctx) => {
     const undispatchable = UNDISPATCHED_EVENTS.has(eventName)
     for (const { entry, project } of bucket) {
       for (const hook of entry.hooks) {
-        if (!undispatchable) count++
+        if (!undispatchable && !hooksDisabled) count++
         const matcher = entry.matcher || '*'
         const cmd = hook.type === 'command' && hook.command ? hook.command : hook.type
         const source = t(project ? 'commands.hooks.source_project' : 'commands.hooks.source_user')
         const markers: string[] = []
         if (project && gated) markers.push(t('commands.hooks.gated'))
         if (undispatchable) markers.push(t('commands.hooks.undispatched'))
+        if (hooksDisabled) markers.push(t('commands.hooks.disabled_all'))
         const suffix = markers.map((marker) => `  ${marker}`).join('')
         lines.push(`  [${source}] ${eventName} [${matcher}] → ${cmd}${suffix}`)
       }

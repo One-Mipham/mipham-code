@@ -924,7 +924,9 @@ Current directory: ${process.cwd()}`,
 Nothing was registered — this build has no workspace-directory allowlist.
 
 How access is actually decided:
-  • Reads   — not limited by directory. What refuses a file is a deny rule
+  • Reads   — must resolve inside the session directory. Read/Grep/Glob/Edit/
+              Write all go through the same workspace check, so a path outside
+              it is rejected. Inside it, a deny rule can still refuse a file
               (\`Read(<path>)\`, which also covers Bash readers like cat/head).
   • Writes  — gated by the permission mode (Shift+Tab cycles:
               ${renderCycleLine()}).

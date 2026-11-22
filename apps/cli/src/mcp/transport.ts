@@ -348,6 +348,21 @@ export class StdioTransport implements Transport {
     this.notificationHandlers.push(handler)
   }
 
+  /**
+   * Synchronous teardown for `process.on('exit')`, where nothing can be
+   * awaited and no grace period can run. Kills the process tree now: a server
+   * that does not read stdin EOF otherwise outlives the CLI (the shape Claude
+   * Code fixed twice: 1.0.21.003 and 1.0.36).
+   */
+  closeSync(): void {
+    this.closed = true
+    const proc = this.proc
+    this.proc = null
+    if (proc && proc.exitCode === null && proc.signalCode === null) {
+      killProcessTree(proc)
+    }
+  }
+
   async close(): Promise<void> {
     this.closed = true
 

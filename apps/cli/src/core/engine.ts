@@ -762,6 +762,11 @@ export class QueryEngine {
     // Fire UserPromptSubmit hooks before processing
     if (this.hookEngine) {
       const submitResult = await this.hookEngine.executeUserPromptSubmit(userInput, this.sessionId)
+      // `systemMessage` is the hook's channel to the operator — show it here
+      // rather than folding it into model context.
+      if (submitResult.systemMessage) {
+        yield { type: 'warning', content: submitResult.systemMessage }
+      }
       if (submitResult.additionalContext) {
         this.context.addMessage({
           role: 'user',
@@ -1241,6 +1246,15 @@ export class QueryEngine {
     signal?: AbortSignal,
     roundsLeft: number = MAX_TOOL_TURNS,
   ): AsyncGenerator<StreamChunk> {
+    // No rounds left: the turn ends here. `Stop` means "the agent finished
+    // responding", and a turn whose tool-round budget ran out finished too. It
+    // used to return silently, so a hook was never told — and a hook asking for
+    // more work gets the budget-spent notice instead of being ignored.
+    if (roundsLeft <= 0) {
+      yield* this.checkStopHook(signal, 0)
+      return
+    }
+
     // Task-level stall guard: a turn that produces no text or tool result for
     // this long is considered stalled and stopped (prevents ~40-min idle spins).
     //
@@ -1407,6 +1421,9 @@ export class QueryEngine {
             error: t('errors.max_tool_turns', { max: String(MAX_TOOL_TURNS) }),
           }
         }
+        // The forced summary *is* the final answer for this turn, so Stop fires
+        // here too. With no rounds left, a blocking hook can only be told so.
+        yield* this.checkStopHook(signal, 0)
         return
       }
 
@@ -2301,7 +2318,8 @@ export class QueryEngine {
     signal?: AbortSignal,
     roundsLeft: number = MAX_TOOL_TURNS,
   ): AsyncGenerator<StreamChunk> {
-    const block = await this.stopBlock()
+    const { block, systemMessage } = await this.stopCheck()
+    if (systemMessage) yield { type: 'warning', content: systemMessage }
     if (!block) return
 
     // A block asks for more work, and more work means another round — which the
@@ -2329,27 +2347,38 @@ export class QueryEngine {
    * 两条来源，同一个后果：用户配置的 Stop 钩子（它先说话，先到先得），以及内置的
    * 数字出处判定。后者不需要钩子引擎 —— 它是产品行为，不是可配置项。
    */
-  private async stopBlock(): Promise<{ source: string; text: string; reason: string } | null> {
+  private async stopCheck(): Promise<{
+    block: { source: string; text: string; reason: string } | null
+    systemMessage?: string
+  }> {
+    let systemMessage: string | undefined
     if (this.hookEngine) {
       const stopResult = await this.hookEngine.executeStop(this.sessionId)
+      systemMessage = stopResult.systemMessage
       if (stopResult.decision === 'block') {
         const reason = stopResult.reason || 'Continue working.'
         return {
-          source: 'stop-hook',
-          text: t('system.context.stop_blocked', { reason }),
-          reason,
+          block: {
+            source: 'stop-hook',
+            text: t('system.context.stop_blocked', { reason }),
+            reason,
+          },
+          systemMessage,
         }
       }
     }
 
     const claims = this.unprovenNumbers()
-    if (!claims) return null
+    if (!claims) return { block: null, systemMessage }
     // 提示语给模型，`reason` 只留数字本身 —— 预算用完时那条告警是给**人**看的，
     // 把整段问话塞进 warning 只会让人读一屏。
     return {
-      source: 'number-provenance',
-      text: t('system.context.numbers_unproven', { claims }),
-      reason: claims,
+      block: {
+        source: 'number-provenance',
+        text: t('system.context.numbers_unproven', { claims }),
+        reason: claims,
+      },
+      systemMessage,
     }
   }
 

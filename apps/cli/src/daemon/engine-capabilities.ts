@@ -117,7 +117,11 @@ function hooksFor(cwd: string, skills: SkillsLoader): HookEngine {
   const projectHooksTrusted = getWorkspaceTrust().isTrusted(cwd)
   const settings = loadSettingsJson(cwd, { includeProjectHooks: projectHooksTrusted })
   if (settings.projectHooksSkipped) warnProjectHooksSkipped(cwd)
-  for (const def of loadHookConfigs(settings.hooks)) engine.register(def)
+  // Same setting, same meaning on the daemon path — a session started by the
+  // daemon must not run hooks the CLI would have skipped.
+  if (!settings.disableAllHooks) {
+    for (const def of loadHookConfigs(settings.hooks)) engine.register(def)
+  }
   hookCache.set(cwd, engine)
   return engine
 }

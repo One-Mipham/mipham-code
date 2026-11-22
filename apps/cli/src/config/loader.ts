@@ -467,6 +467,13 @@ function loadMcpJson(cwd: string, warn?: (message: string) => void): McpServerCo
 export interface SettingsJson {
   hooks: SettingsHooks
   /**
+   * `disableAllHooks: true` — the Claude Code setting name, honoured for the
+   * hooks this file can configure (settings.json's own list). Omitted unless
+   * true, so the absent/`false` distinction stays visible. Built-in product
+   * hooks are not user-configured and are disabled only by `--safe-mode`.
+   */
+  disableAllHooks?: true
+  /**
    * `allow` is the **user-level** file's list; a project-level one is withheld
    * (`projectAllowSkipped`) because a rule that widens is the approval gate by
    * another name. `deny` merges from both levels.
@@ -591,6 +598,7 @@ export function loadSettingsJson(
   let projectModeSkipped = false
   let projectAllowSkipped = false
   let projectClassifierSkipped = false
+  let disableAllHooks = false
   // The project file's entries, kept out of the merge so provenance survives it.
   const projectHooks: SettingsHooks = {}
 
@@ -636,12 +644,26 @@ export function loadSettingsJson(
       }
       const parsed = JSON.parse(raw) as {
         hooks?: Record<string, unknown>
+        disableAllHooks?: unknown
         permissions?: {
           allow?: unknown
           deny?: unknown
           defaultMode?: unknown
           classifierModel?: unknown
           classifierTimeoutMs?: unknown
+        }
+      }
+
+      if (parsed.disableAllHooks !== undefined) {
+        if (parsed.disableAllHooks === true) {
+          // Additive across levels and narrowing in every direction: whichever
+          // file said it, fewer shell commands run. A project file therefore may
+          // say it too — unlike `allow`, this is not a widening.
+          disableAllHooks = true
+        } else if (parsed.disableAllHooks !== false) {
+          process.stderr.write(
+            `⚠ Mipham Code: ignoring disableAllHooks from ${path} — expected true or false.\n`,
+          )
         }
       }
 
@@ -686,8 +708,22 @@ export function loadSettingsJson(
         }
         for (const key of ['allow', 'deny'] as const) {
           const list = parsed.permissions[key]
-          if (!Array.isArray(list)) continue
+          if (list === undefined) continue
+          // A hand-written `"deny": "Read(**/.env)"` (the YAML habit) used to be
+          // dropped here without a word. For `deny` that is fail-open: the user
+          // wrote a rule, believes it is in force, and nothing is. Say it.
+          if (!Array.isArray(list)) {
+            process.stderr.write(
+              `⚠ Mipham Code: ignoring permissions.${key} from ${path} — expected an array of rule strings, got ${typeof list}.\n`,
+            )
+            continue
+          }
           const strings = list.filter((p): p is string => typeof p === 'string')
+          if (strings.length !== list.length) {
+            process.stderr.write(
+              `⚠ Mipham Code: ignoring ${list.length - strings.length} non-string entry(s) in permissions.${key} from ${path}.\n`,
+            )
+          }
           // `deny` narrows, so a repository may ship it. `allow` widens — and the
           // question "does it widen past what is permitted?" is **not** answered by
           // the mode ceiling unless someone configured one: `allowRuleDecision`
@@ -756,6 +792,7 @@ export function loadSettingsJson(
   // "nothing to report" — an empty marker would let a caller tag user hooks as
   // gated on the strength of a file with nothing in it.
   const result: SettingsJson = { hooks, permissions }
+  if (disableAllHooks) result.disableAllHooks = true
   if (projectHooksSkipped) result.projectHooksSkipped = true
   if (projectModeSkipped) result.projectModeSkipped = true
   if (projectAllowSkipped) result.projectAllowSkipped = true

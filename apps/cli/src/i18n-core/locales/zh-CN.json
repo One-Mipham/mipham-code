@@ -122,7 +122,9 @@
       "footer": "Token 计数为近似值（字符数/4）。\n实际 API 用量取决于提供商和模型。"
     },
     "model": {
-      "current": "当前模型: {model}\n提供商: {provider}\n\n使用 /switch <provider> <model> 切换。"
+      "current": "当前模型: {model}\n提供商: {provider}\n\n使用 /model <model> 或 /switch <provider> <model> 切换。",
+      "unknown": "未知模型: {model}。用 /models 查看可用模型。",
+      "ambiguous": "模型 \"{model}\" 在多个提供商下都有（{providers}）。请用 /switch <provider> {model}。"
     },
     "models": {
       "title": "可用模型（{count} 个活跃）:",
@@ -483,6 +485,7 @@
       "source_project": "项目级",
       "gated": "⚠️  工作区未受信任，不会运行",
       "undispatched": "⚠️  本版本没有派发点，不会运行",
+      "disabled_all": "⚠️  已设 disableAllHooks，不会运行",
       "found": "找到 {count} 个钩子。",
       "error": "── 钩子 ──\n\n无法读取钩子目录。"
     },

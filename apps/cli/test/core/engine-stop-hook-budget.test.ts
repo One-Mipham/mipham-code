@@ -99,3 +99,100 @@ describe('a Stop hook that keeps asking for more', () => {
     expect(chunks.filter((c) => c.type === 'warning')).toHaveLength(0)
   })
 })
+
+// A hook's `systemMessage` is addressed to the operator, not the model. It was
+// parsed nowhere; these pin the two events that have a live user channel.
+describe('hook systemMessage reaches the operator', () => {
+  function engineWithHook(
+    event: 'Stop' | 'UserPromptSubmit',
+    result: { allowed: boolean; systemMessage?: string; reason?: string },
+  ): QueryEngine {
+    const hooks = new HookEngine()
+    hooks.register({ event, handler: async () => result })
+    const engine = new QueryEngine(
+      registryCounting({ chats: 0 }),
+      new ContextManager({ maxTokens: 100_000, compactionThreshold: 0.9 }),
+      new Map(),
+    )
+    engine.setHookEngine(hooks)
+    return engine
+  }
+
+  it('UserPromptSubmit systemMessage is yielded as a warning', async () => {
+    const chunks = await collect(
+      engineWithHook('UserPromptSubmit', {
+        allowed: true,
+        systemMessage: 'context loaded',
+      }).process('go'),
+    )
+    expect(chunks.some((c) => c.type === 'warning' && c.content === 'context loaded')).toBe(true)
+  })
+
+  it('Stop systemMessage is yielded even when the hook allows stopping', async () => {
+    const chunks = await collect(
+      engineWithHook('Stop', { allowed: true, systemMessage: 'remember to commit' }).process('go'),
+    )
+    expect(chunks.some((c) => c.type === 'warning' && c.content === 'remember to commit')).toBe(
+      true,
+    )
+  })
+
+  it('negative control: a hook without systemMessage yields no such warning', async () => {
+    const chunks = await collect(
+      engineWithHook('UserPromptSubmit', { allowed: true }).process('go'),
+    )
+    expect(chunks.filter((c) => c.type === 'warning')).toHaveLength(0)
+  })
+})
+
+describe('Stop fires when the tool-round budget is already spent', () => {
+  it('entering the loop with zero rounds still runs the Stop hook', async () => {
+    const hooks = new HookEngine()
+    hooks.register({
+      event: 'Stop',
+      handler: async () => ({ allowed: true, systemMessage: 'budget path reached' }),
+    })
+    const engine = new QueryEngine(
+      registryCounting({ chats: 0 }),
+      new ContextManager({ maxTokens: 100_000, compactionThreshold: 0.9 }),
+      new Map(),
+    )
+    engine.setHookEngine(hooks)
+
+    // This is the terminal branch a 100-round tool loop used to return from in
+    // silence — the hook was never told the turn had ended.
+    const chunks = await collect(
+      (
+        engine as unknown as {
+          continueWithTools: (s?: AbortSignal, r?: number) => AsyncGenerator<StreamChunk>
+        }
+      ).continueWithTools(undefined, 0),
+    )
+    expect(chunks.some((c) => c.type === 'warning' && c.content === 'budget path reached')).toBe(
+      true,
+    )
+  })
+
+  it('a blocking hook there is told the budget is spent instead of being ignored', async () => {
+    const hooks = new HookEngine()
+    hooks.register({
+      event: 'Stop',
+      handler: async () => ({ allowed: false, reason: 'keep going' }),
+    })
+    const engine = new QueryEngine(
+      registryCounting({ chats: 0 }),
+      new ContextManager({ maxTokens: 100_000, compactionThreshold: 0.9 }),
+      new Map(),
+    )
+    engine.setHookEngine(hooks)
+
+    const chunks = await collect(
+      (
+        engine as unknown as {
+          continueWithTools: (s?: AbortSignal, r?: number) => AsyncGenerator<StreamChunk>
+        }
+      ).continueWithTools(undefined, 0),
+    )
+    expect(chunks.some((c) => c.type === 'warning' && c.content?.includes('keep going'))).toBe(true)
+  })
+})

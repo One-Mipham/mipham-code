@@ -22,7 +22,11 @@ let outcome: FakeHookOutcome = { status: 0, stdout: '', stderr: '' }
 function lastSpawn() {
   const call = spawnMock.mock.calls[0]!
   return {
-    opts: call[2] as { stdio: string[]; detached?: boolean },
+    opts: call[2] as {
+      stdio: string[]
+      detached?: boolean
+      env?: Record<string, string | undefined>
+    },
     stdin: (spawnMock.mock.results[0]!.value as { written: string[] }).written[0]!,
   }
 }
@@ -44,6 +48,35 @@ describe('executeHook command (Claude stdin/stdout protocol)', () => {
     expect(input.hook_event_name).toBe('PreToolUse')
     expect(input.tool_name).toBe('Bash')
     expect(input.tool_input).toEqual({ command: 'npm test' })
+  })
+
+  it('exposes the session directory as CLAUDE_PROJECT_DIR', async () => {
+    const ctxWithCwd = { ...preCtx, cwd: '/proj/worktree' } as HookContext
+    await executeHook({ type: 'command', command: 'hook.sh', args: [] }, ctxWithCwd)
+
+    const { opts } = lastSpawn()
+    expect(opts.env?.CLAUDE_PROJECT_DIR).toBe('/proj/worktree')
+  })
+
+  it('does not leak CLAUDE_PROJECT_DIR into this process', async () => {
+    const before = process.env.CLAUDE_PROJECT_DIR
+    await executeHook({ type: 'command', command: 'hook.sh', args: [] }, {
+      ...preCtx,
+      cwd: '/proj/worktree',
+    } as HookContext)
+    expect(process.env.CLAUDE_PROJECT_DIR).toBe(before)
+  })
+
+  it('parses a root-level systemMessage meant for the user', async () => {
+    outcome = {
+      status: 0,
+      stdout: JSON.stringify({ systemMessage: 'Heads up: hooks are in a degraded mode' }),
+      stderr: '',
+    }
+
+    const r = await executeHook({ type: 'command', command: 'hook.sh', args: [] }, preCtx)
+    expect(r.allowed).toBe(true)
+    expect(r.systemMessage).toBe('Heads up: hooks are in a degraded mode')
   })
 
   it('parses a deny decision from stdout into allowed:false', async () => {

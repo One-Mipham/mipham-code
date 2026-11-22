@@ -818,3 +818,35 @@ describe('McpClient', () => {
     })
   })
 })
+
+describe('McpClient.shutdownSync (exit path)', () => {
+  it('calls every transport’s synchronous close and clears the singleton', () => {
+    const client = McpClient.getInstance()
+    const closeSync = vi.fn()
+    const connections = (
+      client as unknown as {
+        connections: Map<string, unknown>
+      }
+    ).connections
+    connections.set('srv', {
+      transport: { closeSync },
+      tools: [],
+      config: { name: 'srv' },
+      status: 'connected',
+    })
+
+    McpClient.shutdownSync()
+
+    expect(closeSync).toHaveBeenCalledTimes(1)
+    expect(connections.size).toBe(0)
+  })
+
+  it('negative control: no client yet ⇒ no throw, no client is created', () => {
+    const client = McpClient.getInstance()
+    ;(client as unknown as { connections: Map<string, unknown> }).connections.clear()
+    // Reach into the private static only to model "never connected".
+    ;(McpClient as unknown as { instance: unknown }).instance = null
+    expect(() => McpClient.shutdownSync()).not.toThrow()
+    expect((McpClient as unknown as { instance: unknown }).instance).toBeNull()
+  })
+})

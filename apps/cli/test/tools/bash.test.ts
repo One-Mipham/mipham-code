@@ -75,6 +75,53 @@ describe('bash security hardening', () => {
 })
 
 // ============================================================
+// `eval` / `source` are blocked when *invoked*, not when quoted.
+//
+// The patterns used to be `\beval\s+` / `\bsource\s+` over the whole line, so
+// an ordinary command that merely mentioned the word in an argument was
+// refused (`git commit -m "source config cleanup"`). Both directions matter:
+// the positive control below keeps the guard from being weakened into nothing.
+// ============================================================
+
+describe('bash security policy — command word, not substring', () => {
+  const allowed = [
+    'git commit -m "source config cleanup"',
+    'git log --grep="source of truth"',
+    'rg -n "source code"',
+    'echo "eval results"',
+    "rg 'eval|source'",
+    'echo "a; source b"',
+    'ls -la',
+  ]
+
+  for (const cmd of allowed) {
+    it(`allows ${JSON.stringify(cmd)}`, () => {
+      expect(isBlocked(cmd)).toBeNull()
+    })
+  }
+
+  const blocked = [
+    'eval $(echo rm -rf /)',
+    'source /etc/malicious.sh',
+    '. /etc/malicious.sh',
+    'echo ok && source /etc/malicious.sh',
+    'echo ok; eval "rm -rf /"',
+    'if true; then source /tmp/x; fi',
+    'FOO=1 eval rm -rf /',
+    'command eval rm -rf /',
+    'echo "$(eval echo hi)"',
+    'echo `source /tmp/x`',
+    'echo $(if true; then eval echo hi; fi)',
+  ]
+
+  for (const cmd of blocked) {
+    it(`blocks ${JSON.stringify(cmd)}`, () => {
+      expect(isBlocked(cmd)).not.toBeNull()
+    })
+  }
+})
+
+// ============================================================
 // Command substitution — legitimate $( … ) / `…` must be allowed
 // (dangerous content inside them is caught by the specific patterns below)
 // ============================================================
@@ -532,6 +579,57 @@ describe('bash tool — sandbox violation on exit 0', () => {
     const result = await bashTool.execute({ command: 'git status', description: 'test' }, ctx)
     expect(result.success).toBe(true)
     expect(result.content).not.toContain('Sandbox Violations')
+    expect(result.content).not.toContain('── stderr ──')
+  })
+
+  it('returns stderr alongside stdout on a successful command', async () => {
+    const proc = {
+      stdout: new ReadableStream({
+        start(c: ReadableStreamDefaultController) {
+          c.enqueue(new TextEncoder().encode('out\n'))
+          c.close()
+        },
+      }),
+      stderr: new ReadableStream({
+        start(c: ReadableStreamDefaultController) {
+          c.enqueue(new TextEncoder().encode('warning: deprecated option\n'))
+          c.close()
+        },
+      }),
+      exited: Promise.resolve(0),
+      kill: vi.fn(),
+    }
+    vi.spyOn(Bun, 'spawn').mockReturnValue(proc as any)
+
+    const result = await bashTool.execute({ command: 'tool --old', description: 'test' }, ctx)
+    expect(result.success).toBe(true)
+    expect(result.content).toContain('out')
+    expect(result.content).toContain('── stderr ──')
+    expect(result.content).toContain('warning: deprecated option')
+  })
+
+  it('does not report "(no output)" when only stderr was written', async () => {
+    const proc = {
+      stdout: new ReadableStream({
+        start(c: ReadableStreamDefaultController) {
+          c.close()
+        },
+      }),
+      stderr: new ReadableStream({
+        start(c: ReadableStreamDefaultController) {
+          c.enqueue(new TextEncoder().encode('wrote 3 files\n'))
+          c.close()
+        },
+      }),
+      exited: Promise.resolve(0),
+      kill: vi.fn(),
+    }
+    vi.spyOn(Bun, 'spawn').mockReturnValue(proc as any)
+
+    const result = await bashTool.execute({ command: 'mover', description: 'test' }, ctx)
+    expect(result.success).toBe(true)
+    expect(result.content).toContain('wrote 3 files')
+    expect(result.content).not.toBe('(no output)')
   })
 })
 

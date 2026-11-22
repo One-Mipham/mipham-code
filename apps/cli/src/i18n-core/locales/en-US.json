@@ -122,7 +122,9 @@
       "footer": "Token counting is approximate (chars/4).\nActual API usage depends on provider and model."
     },
     "model": {
-      "current": "Current model: {model}\nProvider: {provider}\n\nUse /switch <provider> <model> to change."
+      "current": "Current model: {model}\nProvider: {provider}\n\nUse /model <model> or /switch <provider> <model> to change.",
+      "unknown": "Unknown model: {model}. Use /models to list the available models.",
+      "ambiguous": "Model \"{model}\" is available from more than one provider ({providers}). Use /switch <provider> {model}."
     },
     "models": {
       "title": "Available models ({count} active):",
@@ -483,6 +485,7 @@
       "source_project": "project",
       "gated": "⚠️  workspace not trusted — will not run",
       "undispatched": "⚠️  no dispatch point in this version — will not run",
+      "disabled_all": "⚠️  disableAllHooks is set — will not run",
       "found": "{count} hook(s) found.",
       "error": "── Hooks ──\n\nCould not read hooks directory."
     },

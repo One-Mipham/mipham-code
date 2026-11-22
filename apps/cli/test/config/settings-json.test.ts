@@ -708,3 +708,119 @@ describe('permissions.classifierModel / classifierTimeoutMs（放宽方向：只
     expect(loadSettingsJson(homedir()).permissions.classifierModel).toBe('fast')
   })
 })
+
+// `permissions.allow` / `permissions.deny` 写成非数组（手写 JSON 时最像 YAML 的那种
+// 错法：`"deny": "Read(**/.env)"`）曾被**静默丢弃**。permissions.json 的文档说
+// 「未知键忽略」，但这不是未知键 —— 它是一条用户以为已经生效的规则。deny 的方向是
+// 收窄，丢掉它就是 fail-open：没有规则在跑，而用户以为有。
+describe('permissions.allow / deny 的类型错误会出声', () => {
+  const USER_SETTINGS = join(MIPHAM_HOME, 'settings.json')
+
+  beforeEach(() => {
+    rmSync(homedir(), { recursive: true, force: true })
+    mkdirSync(join(CWD, '.mipham'), { recursive: true })
+    mkdirSync(MIPHAM_HOME, { recursive: true })
+  })
+
+  afterEach(() => {
+    rmSync(homedir(), { recursive: true, force: true })
+  })
+
+  function captureStderr(fn: () => void): string {
+    const chunks: string[] = []
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation(((c: unknown) => {
+      chunks.push(String(c))
+      return true
+    }) as typeof process.stderr.write)
+    try {
+      fn()
+    } finally {
+      spy.mockRestore()
+    }
+    return chunks.join('')
+  }
+
+  it('字符串 deny 不生效，但要说出为什么', () => {
+    writeFileSync(USER_SETTINGS, JSON.stringify({ permissions: { deny: 'Read(**/.env)' } }))
+    const stderr = captureStderr(() => {
+      loadSettingsJson(CWD)
+    })
+    expect(stderr).toContain('permissions.deny')
+    expect(stderr).toContain('expected an array')
+  })
+
+  it('数组里的非字符串条目被点名，字符串条目照常生效', () => {
+    writeFileSync(USER_SETTINGS, JSON.stringify({ permissions: { deny: ['Bash(rm:*)', 42] } }))
+    const r: ReturnType<typeof loadSettingsJson> = {
+      hooks: {},
+      permissions: { allow: [], deny: [] },
+    }
+    const stderr = captureStderr(() => {
+      Object.assign(r, loadSettingsJson(CWD))
+    })
+    expect(r.permissions.deny).toEqual(['Bash(rm:*)'])
+    expect(stderr).toContain('non-string')
+  })
+
+  it('反方向：类型正确时不出声（否则上面两条可能只是「凡有 deny 就喊」）', () => {
+    writeFileSync(USER_SETTINGS, JSON.stringify({ permissions: { deny: ['Bash(rm:*)'] } }))
+    const stderr = captureStderr(() => {
+      loadSettingsJson(CWD)
+    })
+    expect(stderr).toBe('')
+  })
+})
+
+// `disableAllHooks` is the Claude Code setting name. A migrated settings file
+// that sets it must actually stop hook commands — the failure direction of
+// ignoring it is "arbitrary shell commands keep running after the operator said
+// off". Only `true` counts; a typo'd value is called out rather than guessed.
+describe('disableAllHooks', () => {
+  const USER_SETTINGS = join(MIPHAM_HOME, 'settings.json')
+
+  beforeEach(() => {
+    rmSync(homedir(), { recursive: true, force: true })
+    mkdirSync(join(CWD, '.mipham'), { recursive: true })
+    mkdirSync(MIPHAM_HOME, { recursive: true })
+  })
+
+  afterEach(() => {
+    rmSync(homedir(), { recursive: true, force: true })
+  })
+
+  function captureStderr(fn: () => void): string {
+    const chunks: string[] = []
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation(((c: unknown) => {
+      chunks.push(String(c))
+      return true
+    }) as typeof process.stderr.write)
+    try {
+      fn()
+    } finally {
+      spy.mockRestore()
+    }
+    return chunks.join('')
+  }
+
+  it('true is carried; the default stays absent (false ≠ absent)', () => {
+    writeFileSync(USER_SETTINGS, JSON.stringify({ disableAllHooks: true }))
+    expect(loadSettingsJson(CWD).disableAllHooks).toBe(true)
+
+    writeFileSync(USER_SETTINGS, JSON.stringify({}))
+    expect(loadSettingsJson(CWD).disableAllHooks).toBeUndefined()
+  })
+
+  it('a project file may say it too — this only ever narrows', () => {
+    writeFileSync(join(CWD, '.mipham', 'settings.json'), JSON.stringify({ disableAllHooks: true }))
+    expect(loadSettingsJson(CWD).disableAllHooks).toBe(true)
+  })
+
+  it('a non-boolean value is ignored and said out loud', () => {
+    writeFileSync(USER_SETTINGS, JSON.stringify({ disableAllHooks: 'true' }))
+    const stderr = captureStderr(() => {
+      loadSettingsJson(CWD)
+    })
+    expect(stderr).toContain('disableAllHooks')
+    expect(stderr).toContain('expected true or false')
+  })
+})

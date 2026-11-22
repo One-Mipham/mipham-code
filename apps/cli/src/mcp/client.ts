@@ -651,6 +651,33 @@ export class McpClient {
     McpClient.instance = null
   }
 
+  /**
+   * Last-resort teardown for the `exit` event, where awaiting is impossible.
+   *
+   * `closeAll()` gives each server the stdin-EOF grace period; this one kills
+   * the process trees immediately. Without it, a server that ignores EOF
+   * survives the CLI — and the process group is not ours to rely on, since MCP
+   * children are deliberately not spawned detached.
+   */
+  closeAllSync(): void {
+    this.closing = true
+    for (const [name, conn] of this.connections) {
+      try {
+        const transport = conn.transport as { closeSync?: () => void }
+        transport.closeSync?.()
+      } catch {
+        /* best effort */
+      }
+      this.connections.delete(name)
+    }
+    McpClient.instance = null
+  }
+
+  /** No-op when no client was ever created — the exit path must not create one. */
+  static shutdownSync(): void {
+    McpClient.instance?.closeAllSync()
+  }
+
   getConnection(name: string): ConnectionInfo | undefined {
     const conn = this.connections.get(name)
     if (!conn) return undefined

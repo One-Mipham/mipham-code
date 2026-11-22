@@ -1033,6 +1033,10 @@ describe('/add-dir', () => {
     expect(result.content).not.toContain('extraDirs')
     expect(result.content).toContain('no workspace-directory allowlist')
     expect(result.content).toContain('deny rule')
+    // Reads are NOT "not limited by directory" — every file tool goes through
+    // resolveSafe, which rejects paths outside the session directory.
+    expect(result.content).toContain('must resolve inside the session directory')
+    expect(result.content).not.toContain('not limited by directory')
     // allow 规则片段必须真的带上这个目录（否则指引无处可抄）。
     expect(result.content).toContain(`Write(${dir}/**)`)
     expect(result.content).toContain(`Edit(${dir}/**)`)
@@ -2256,5 +2260,73 @@ describe('/rename — persistence outcome is reported honestly', () => {
     expect(result.content).toContain('may not last')
     // The false half is the one removed: no success mark.
     expect(result.content).not.toContain('✓')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// `/model <name>` —— 参数从前被静默忽略：请求「换到 X」与「看一眼」同形
+// ═══════════════════════════════════════════════════════════════
+
+describe('/model <name>', () => {
+  const modelCtx = () => {
+    const ctx = mkCtx()
+    const e = ctx as unknown as {
+      config: { providers: unknown[] }
+      engine: {
+        switchProvider: (p: string, m?: string) => string | undefined
+        isRemote?: boolean
+      }
+    }
+    e.config.providers = [
+      {
+        id: 'deepseek',
+        name: 'DeepSeek',
+        apiKey: 'sk-live-abc',
+        status: 'active',
+        models: [{ id: 'deepseek-chat', status: 'active' }],
+      },
+      {
+        id: 'openai',
+        name: 'OpenAI',
+        apiKey: 'sk-live-def',
+        status: 'active',
+        models: [{ id: 'gpt-5', status: 'active' }],
+      },
+    ]
+    e.engine.isRemote = false
+    e.engine.switchProvider = vi.fn(() => undefined)
+    return e
+  }
+
+  it('known model: switches, and says which provider it chose', async () => {
+    const ctx = modelCtx()
+    const result = await getCommand('/model')!(
+      ctx as unknown as Parameters<NonNullable<ReturnType<typeof getCommand>>>[0],
+      ['gpt-5'],
+    )
+    expect(ctx.engine.switchProvider).toHaveBeenCalledWith('openai', 'gpt-5')
+    expect(result.content).toContain('gpt-5')
+    expect((result as { nextModel?: string }).nextModel).toBe('gpt-5')
+  })
+
+  it('unknown model: refuses and points at /models — no switch happens', async () => {
+    const ctx = modelCtx()
+    const result = await getCommand('/model')!(
+      ctx as unknown as Parameters<NonNullable<ReturnType<typeof getCommand>>>[0],
+      ['gpt-9000'],
+    )
+    expect(ctx.engine.switchProvider).not.toHaveBeenCalled()
+    expect(result.content).toContain('gpt-9000')
+    expect(result.content).toContain('/models')
+  })
+
+  it('negative control: no argument still prints the current model', async () => {
+    const ctx = modelCtx()
+    const result = await getCommand('/model')!(
+      ctx as unknown as Parameters<NonNullable<ReturnType<typeof getCommand>>>[0],
+      [],
+    )
+    expect(ctx.engine.switchProvider).not.toHaveBeenCalled()
+    expect(result.content).toContain((ctx as unknown as { modelId: string }).modelId)
   })
 })

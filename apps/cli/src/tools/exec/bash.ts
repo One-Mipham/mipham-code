@@ -111,12 +111,11 @@ const BLOCKED_PATTERNS = [
   // command as `bash -c 'rm -rf /'`. `ash`, `fish`, `csh` and `tcsh` are added
   // because the payload only has to be a POSIX-ish shell, not bash.
   /\b(?:bash|sh|zsh|dash|ksh|ash|fish|csh|tcsh)\b(?:\s+-{1,2}[\w=.-]+)*\s+-[A-Za-z]*c[A-Za-z]*\b/,
-  // P0 hardening — eval builtin (obfuscation vector)
-  /\beval\s+/,
   // P0 hardening — exec redirect bypass (e.g. exec >/dev/sda)
   /\bexec\s+\d*>/,
-  // P0 hardening — source/dot builtin (script sourcing)
-  /\bsource\s+/,
+  // `eval` / `source` are handled by `commandWords()` below, not as substring
+  // patterns: the word appearing in an argument is not the builtin running
+  // (`git commit -m "source config cleanup"`).
   // P0 hardening — base64 decode + pipe
   /\bbase64\s+(?:-d|--decode)\b/,
 ]
@@ -163,19 +162,18 @@ export function isBlocked(command: string): string | null {
   // P0-1: Also sanitize for permission check (strips invisible chars, normalizes homoglyphs)
   const sanitized = sanitizeCommand(command)
 
-  // Check exact blocked commands (on normalized + sanitized)
-  const firstWord = normalized.trim().split(/\s+/)[0]
-  if (firstWord && BLOCKED_COMMANDS.includes(firstWord)) {
-    return `Command "${firstWord}" rejected by security policy.`
-  }
-  // Also check sanitized first word (catches fullwidth command names after normalization)
-  const sanitizedFirstWord = sanitized.trim().split(/\s+/)[0]
-  if (
-    sanitizedFirstWord &&
-    sanitizedFirstWord !== firstWord &&
-    BLOCKED_COMMANDS.includes(sanitizedFirstWord)
-  ) {
-    return `Command "${sanitizedFirstWord}" rejected by security policy.`
+  // Check every simple command's base word, not a substring of the line: the
+  // word may be a quoted argument (`git commit -m "source config cleanup"`),
+  // and a compound command may hide it after a separator (`ok && source x`).
+  // Command substitutions are scanned too (`echo "$(eval …)"`).
+  for (const word of [
+    ...commandWords(command),
+    ...commandWords(normalized),
+    ...commandWords(sanitized),
+  ]) {
+    if (BLOCKED_COMMANDS.includes(word)) {
+      return `Command "${word}" rejected by security policy.`
+    }
   }
 
   // Detect dangerous git operations invoked via Bash — anywhere in the command,
@@ -504,6 +502,174 @@ export function shellWords(segment: string): string[] {
 }
 
 /**
+ * Split a command into simple commands on **unquoted** separators.
+ *
+ * Deliberately different from `splitShellSegments` (permission-rules), which
+ * splits regardless of quoting: over-matching is the safe direction for a
+ * *deny* rule, but here it is the bug — `rg 'eval|source'` is one command with
+ * a quoted argument, not two commands.
+ */
+function splitUnquotedSegments(command: string): string[] {
+  const segments: string[] = []
+  let cur = ''
+  let quote: '"' | "'" | null = null
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i]!
+    if (quote === "'") {
+      cur += ch
+      if (ch === "'") quote = null
+      continue
+    }
+    if (quote === '"') {
+      cur += ch
+      if (ch === '\\' && i + 1 < command.length) cur += command[++i]
+      else if (ch === '"') quote = null
+      continue
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch
+      cur += ch
+      continue
+    }
+    if (ch === '\\' && i + 1 < command.length) {
+      cur += ch + command[++i]
+      continue
+    }
+    if (
+      ch === ';' ||
+      ch === '\n' ||
+      ch === '\r' ||
+      ch === '|' ||
+      ch === '&' ||
+      ch === '(' ||
+      ch === ')'
+    ) {
+      segments.push(cur)
+      cur = ''
+      if ((ch === '&' || ch === '|') && command[i + 1] === ch) i++
+      continue
+    }
+    cur += ch
+  }
+  segments.push(cur)
+  return segments.map((s) => s.trim()).filter((s) => s.length > 0)
+}
+
+/**
+ * Bodies of command substitutions — `$(…)`, `` `…` ``, `<(…)` and `>(…)`.
+ *
+ * They run commands too, and they can sit inside double quotes:
+ * `echo "$(eval …)"` executes `eval` even though the outer command word is
+ * `echo`. Single-quoted text is skipped because it is literal there.
+ * Nested groups are left to the caller's recursion.
+ */
+function substitutionBodies(command: string): string[] {
+  const bodies: string[] = []
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i]!
+    if (ch === '\\') {
+      i++
+      continue
+    }
+    if (ch === "'") {
+      const end = command.indexOf("'", i + 1)
+      if (end === -1) break
+      i = end
+      continue
+    }
+    const isDollarParen = ch === '$' && command[i + 1] === '('
+    const isProcSub = (ch === '<' || ch === '>') && command[i + 1] === '('
+    if (ch === '`') {
+      const end = command.indexOf('`', i + 1)
+      if (end === -1) break
+      bodies.push(command.slice(i + 1, end))
+      i = end
+      continue
+    }
+    if (!isDollarParen && !isProcSub) continue
+    let depth = 1
+    let j = i + 2
+    let quote: '"' | "'" | null = null
+    for (; j < command.length; j++) {
+      const c = command[j]!
+      if (c === '\\') {
+        j++
+        continue
+      }
+      if (quote === "'") {
+        if (c === "'") quote = null
+        continue
+      }
+      if (quote === '"') {
+        if (c === '"') quote = null
+        continue
+      }
+      if (c === "'" || c === '"') {
+        quote = c
+        continue
+      }
+      if (c === '(') depth++
+      else if (c === ')') {
+        depth--
+        if (depth === 0) break
+      }
+    }
+    if (j < command.length) {
+      bodies.push(command.slice(i + 2, j))
+      i = j
+    }
+  }
+  return bodies
+}
+
+/**
+ * The base command word of every simple command in `command`, including
+ * commands run inside substitutions (recursively, depth-limited).
+ *
+ * This is what tells a *mention* from an *invocation*: `git commit -m "source
+ * config cleanup"` has the command word `git`; `echo ok && source /etc/x` has
+ * `echo` and `source`. Prior to this, `eval` / `source` were matched anywhere
+ * in the string and refused ordinary commands that merely quoted the words
+ * (CC 1.0.73: "reduced false security warnings").
+ */
+export function commandWords(command: string, depth = 0): string[] {
+  const words: string[] = []
+  for (const segment of splitUnquotedSegments(command)) {
+    const tokens = shellWords(segment)
+    let i = 0
+    for (;;) {
+      while (i < tokens.length && LEADING_ASSIGNMENT.test(tokens[i]!)) i++
+      const word = tokens[i]
+      if (word === undefined) break
+      if (LEADING_SHELL_PUNCT.has(word)) {
+        i++
+        continue
+      }
+      if (LEADING_SHELL_KEYWORDS.has(word)) {
+        i++
+        // A keyword's own flags (`time -p eval …`) are not the command word.
+        while (i < tokens.length && /^-[A-Za-z]+$/.test(tokens[i]!)) i++
+        continue
+      }
+      if (WRAPPERS.has(word)) {
+        i++
+        continue
+      }
+      break
+    }
+    if (tokens[i] !== undefined) words.push(tokens[i]!)
+  }
+  // A substitution can nest (`$( … $( … ) … )`); three levels is enough to
+  // reach any spelling a guard needs to see, and bounds the recursion.
+  if (depth < 3) {
+    for (const body of substitutionBodies(command)) {
+      words.push(...commandWords(body, depth + 1))
+    }
+  }
+  return words
+}
+
+/**
  * Every directory this simple command changes the shell's cwd to.
  *
  * A bare `cd` goes to `$HOME`, which is outside any worktree — it is reported
@@ -764,14 +930,15 @@ export function createBashTool(credentialConfig?: CredentialMaskingConfig): Tool
         // ── Sandbox violation detection ──
         const violations = detectViolations(rawStderr)
 
+        // Mask stderr once, for both outcomes. It used to be masked only on the
+        // failure path, so a credential echoed to stderr by a command that then
+        // exited 0 would reach the model unmasked.
+        const stderr =
+          credentialConfig?.enabled && credentialConfig.output_scrubbing.enabled
+            ? (await import('../../core/credential-masker')).maskOutput(rawStderr, credentialConfig)
+            : rawStderr
+
         if (exitCode !== 0) {
-          const stderr =
-            credentialConfig?.enabled && credentialConfig.output_scrubbing.enabled
-              ? (await import('../../core/credential-masker')).maskOutput(
-                  rawStderr,
-                  credentialConfig,
-                )
-              : rawStderr
           let errorContent = output.slice(0, 5_000)
           if (violations.length > 0) {
             errorContent += '\n\n── Sandbox Violations ──\n' + violations.join('\n')
@@ -814,7 +981,19 @@ export function createBashTool(credentialConfig?: CredentialMaskingConfig): Tool
           return { success: false, content: output.slice(0, 5_000), error: 'Command cancelled' }
         }
 
-        let successContent = output.slice(0, 100_000) || '(no output)'
+        let successContent = output.slice(0, 100_000)
+        // Exit 0 does not mean stderr was noise: `git clone` progress, package
+        // manager peer warnings and deprecation notices all land there, and the
+        // tool advertises "Returns stdout and stderr". Dropping it left the
+        // model reading a clean success where the warning it needed sat one
+        // stream over (CC 1.0.77 stderr handling).
+        const stderrText =
+          stderr.length > 5_000 ? stderr.slice(0, 5_000) + '\n[stderr truncated]' : stderr
+        if (stderrText.trim().length > 0) {
+          successContent +=
+            (successContent.length > 0 ? '\n\n' : '') + '── stderr ──\n' + stderrText
+        }
+        if (successContent.length === 0) successContent = '(no output)'
         if (violations.length > 0) {
           successContent += '\n\n── Sandbox Violations ──\n' + violations.join('\n')
         }

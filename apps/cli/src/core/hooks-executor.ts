@@ -99,7 +99,25 @@ export function buildHookStdin(ctx: HookContext, cwd: string): Record<string, un
  * (permissionDecision / updatedInput / additionalContext) plus the legacy
  * root-level `decision` and `continue` fields. Non-JSON or empty stdout = allow.
  */
-export function parseHookStdout(stdout: string | null | undefined, _ctx: HookContext): HookResult {
+export function parseHookStdout(stdout: string | null | undefined, ctx: HookContext): HookResult {
+  const result = parseHookStdoutFields(stdout, ctx)
+  if (!stdout) return result
+  // Root-level `systemMessage` is common to every event in the Claude hook
+  // contract — it is the one output meant for the *user*, not the model. It sat
+  // unread here: a hook could warn the operator and the message went nowhere.
+  try {
+    const parsed = JSON.parse(stdout) as Record<string, unknown>
+    const message = parsed.systemMessage
+    if (typeof message === 'string' && message.trim() !== '') {
+      return { ...result, systemMessage: message }
+    }
+  } catch {
+    // Non-JSON stdout already parsed as "allow"; there is nothing to attach.
+  }
+  return result
+}
+
+function parseHookStdoutFields(stdout: string | null | undefined, _ctx: HookContext): HookResult {
   if (!stdout) return { allowed: true }
 
   let parsed: Record<string, unknown>
@@ -414,16 +432,22 @@ async function executeCommand(
     const { loadUserCredentialMaskingConfig } = await import('../config/loader')
     const { filterEnv } = await import('./credential-masker')
     const masking = loadUserCredentialMaskingConfig()
-    const env =
-      masking.enabled && masking.env_filter.enabled
-        ? filterEnv(process.env as Record<string, string | undefined>, masking)
-        : undefined
 
     // Which workspace the hook is *for* is the session's business, not this
     // process's — the daemon runs many sessions and its own cwd belongs to none of
     // them. `HookEngine` stamps `ctx.cwd`; the fallback covers a context built by
     // hand, and is exactly right for the one-shot CLI.
     const cwd = ctx.cwd ?? process.cwd()
+
+    // A copy, not `undefined`: the CC hook contract exposes the project
+    // directory as `$CLAUDE_PROJECT_DIR`, and migrated scripts read it. With
+    // `undefined` the child inherited `process.env` and the variable expanded to
+    // empty. Copying also keeps the injected value out of this process's env.
+    const env =
+      masking.enabled && masking.env_filter.enabled
+        ? filterEnv(process.env as Record<string, string | undefined>, masking)
+        : ({ ...process.env } as Record<string, string | undefined>)
+    env.CLAUDE_PROJECT_DIR = cwd
 
     // Array args — no shell, so no command injection. The Claude-protocol stdin JSON
     // goes in so scripts can read structured context.

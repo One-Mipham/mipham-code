@@ -819,7 +819,10 @@ export async function runApp(options: RunOptions): Promise<void> {
   // skip is announced, since silence would look the same as having passed.
   // `settingsJson` itself was read up top, next to the permission it also feeds.
   if (settingsJson.projectHooksSkipped) warnProjectHooksSkipped(process.cwd())
-  if (!safeMode) {
+  // `disableAllHooks` is the Claude Code setting name; honour it at the same
+  // wiring point as `--safe-mode` so a migrated settings file cannot keep
+  // spawning hook commands the operator believes are off.
+  if (!safeMode && !settingsJson.disableAllHooks) {
     for (const def of loadHookConfigs(settingsJson.hooks)) {
       hookEngine.register(def)
     }
@@ -963,9 +966,16 @@ export async function runApp(options: RunOptions): Promise<void> {
   }
 
   // P2-1: Trigger SessionStart hooks after full initialization
-  hookEngine.executeSessionStart(sessionName).catch(() => {
-    // Hook failures never block session startup
-  })
+  hookEngine
+    .executeSessionStart(sessionName)
+    .then((result) => {
+      // No live stream exists yet at startup, so a user-facing `systemMessage`
+      // goes to stderr — the same channel the hook's other startup warnings use.
+      if (result.systemMessage) process.stderr.write(`⚠ ${result.systemMessage}\n`)
+    })
+    .catch(() => {
+      // Hook failures never block session startup
+    })
 
   // Auto-save session on exit
   let saved = false
@@ -998,11 +1008,18 @@ export async function runApp(options: RunOptions): Promise<void> {
     // hooks and exiting in the same tick meant they never ran — the await is
     // the difference between "best effort" and "never". Bounded, because a
     // hook waiting on an unreachable server must not hold the terminal open.
-    await withTimeout(
+    const endResult = await withTimeout(
       hookEngine.executeSessionEnd(sessionName).catch(() => undefined),
       SESSION_END_HOOK_TIMEOUT_MS,
     )
+    // The Ink tree is being torn down; stderr is the only channel left that the
+    // operator will still see.
+    if (endResult?.systemMessage) process.stderr.write(`⚠ ${endResult.systemMessage}\n`)
     artifactServer.stop()
+    // MCP servers are our children. `closeAll()` waits for stdin EOF, which is
+    // the right thing during `/mcp reload`; at exit there is no time to wait,
+    // and a server that ignores EOF would outlive the CLI.
+    McpClient.shutdownSync()
     persistSession()
     // Finalize the session — write session summary + flush CRSI effectiveness
     // (evaluate rules and apply auto-degrade/disable). Best-effort: the
@@ -1036,6 +1053,9 @@ export async function runApp(options: RunOptions): Promise<void> {
   process.on('exit', () => {
     clearInterval(heartbeatInterval)
     unregisterSession(sessionName)
+    // The last synchronous word on MCP children — `shutdown` covers the normal
+    // paths; this covers `process.exit()` called from code that never saw it.
+    McpClient.shutdownSync()
     // Finalize the session on non-interactive exit paths
     // (daemon worker / crash / kill) that bypass saveAndExit.
     if (!saved) {

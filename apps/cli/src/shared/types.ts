@@ -403,6 +403,15 @@ export interface HookResult {
   permissionDecision?: 'allow' | 'deny' | 'ask' | 'defer'
   additionalContext?: string
   updatedOutput?: string
+  /**
+   * Warning text the hook wants the **user** to see (Claude Code's root-level
+   * `systemMessage`). Distinct from `additionalContext`, which goes into the
+   * model's prompt. Only events with a live user channel surface it:
+   * UserPromptSubmit and Stop yield a warning chunk; SessionStart/SessionEnd
+   * write it to stderr before/at exit. A hook that emits it on an event with
+   * no such channel is not silently reinterpreted as model context.
+   */
+  systemMessage?: string
 }
 
 // ── Instruction Types ──

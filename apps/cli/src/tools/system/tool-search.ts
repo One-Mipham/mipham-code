@@ -8,6 +8,7 @@
 
 import type { ToolDefinition } from '../../shared/index.ts'
 import { McpClient } from '../../mcp/client'
+import { buildToolName } from '../../mcp/registry'
 import { capMcpText } from '../../mcp/instructions'
 
 /**
@@ -162,7 +163,7 @@ export const toolSearchTool: ToolDefinition = {
       lines.push(`  ${server} (${tools.length}):`)
       for (const t of tools) {
         const desc = t.description ? ` — ${t.description}` : ''
-        lines.push(`    mcp__${server.replace(/[^a-z0-9-]/g, '_')}__${t.tool}${desc}`)
+        lines.push(`    ${buildToolName(server, t.tool)}${desc}`)
       }
       lines.push('')
     }

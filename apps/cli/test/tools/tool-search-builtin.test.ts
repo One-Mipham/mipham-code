@@ -10,6 +10,7 @@
 
 import { describe, expect, it, vi, afterEach } from 'vitest'
 import { McpClient } from '../../src/mcp/client'
+import { buildToolName } from '../../src/mcp/registry'
 import { toolSearchTool, builtInToolMatches } from '../../src/tools/system/tool-search'
 import type { ToolDefinition, ToolContext } from '../../src/shared/index.ts'
 
@@ -79,5 +80,31 @@ describe('ToolSearch 零命中且查到内置工具', () => {
 
     expect(res.success).toBe(true)
     expect(res.content).not.toContain('already available')
+  })
+})
+
+describe('ToolSearch 展示的 MCP 工具名与注册名同一拼法', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('服务器名/工具名含大写时给出可调用的名字', async () => {
+    const client = McpClient.getInstance()
+    vi.spyOn(client, 'getConnectedServers').mockReturnValue(['MyServer'])
+    vi.spyOn(client, 'getTools').mockReturnValue([
+      {
+        name: 'GetFile',
+        description: 'reads a file',
+        inputSchema: { type: 'object', properties: {} },
+      } as never,
+    ])
+
+    const res = await toolSearchTool.execute!({ query: '' }, ctxWith(registry()))
+
+    // The name printed here is the one the model will call. It has to equal the
+    // name `convertMcpTool` registers, not a second spelling of the same parts.
+    expect(res.content).toContain(buildToolName('MyServer', 'GetFile'))
+    expect(res.content).toContain('mcp__myserver__getfile')
+    expect(res.content).not.toContain('mcp__MyServer__GetFile')
   })
 })

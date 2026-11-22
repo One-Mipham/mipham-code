@@ -44,6 +44,9 @@ function Harness({
         isLoading: false,
         history,
         onHistoryAppend: (v: string) => setHistory((prev) => [...prev, v]),
+        // app.tsx passes `config.showCommandPicker ?? false`; the default prop is
+        // `true` only for direct embeds. Keep the harness at App's value.
+        showCommandPicker: false,
       })
 }
 
@@ -189,5 +192,36 @@ describe('InputBar —— Escape 清空草稿，↑ 把它拿回来', () => {
     stdin.write(UP)
     await settle()
     expect(lastFrame()).toContain('older entry')
+  })
+})
+
+/**
+ * 历史里的斜杠命令不是死路。
+ *
+ * 守卫从前判 `value.startsWith('/')`（注释写的是「picker 激活时忽略」），而 picker
+ * 默认关闭 ⇒ 一旦 ↑ 调回 `/help`，之后的 ↑/↓ 全被这条守卫吞掉，更近的历史条目再也
+ * 回不去。判据应是「picker 是否真的开着」，不是「当前文本长什么样」。
+ */
+describe('InputBar 历史导航 —— 斜杠命令不再死路', () => {
+  it('↑ 调回 /help 后，↓ 仍能回到更近的一条', async () => {
+    const { stdin, lastFrame } = renderBar()
+    stdin.write('/help')
+    await settle()
+    stdin.write(ENTER)
+    await settle()
+    stdin.write('hi')
+    await settle()
+    stdin.write(ENTER)
+    await settle()
+
+    stdin.write(UP) // → hi
+    await settle()
+    stdin.write(UP) // → /help
+    await settle()
+    expect(lastFrame()).toContain('/help')
+
+    stdin.write(DOWN) // → back to hi
+    await settle()
+    expect(lastFrame()).toContain('hi')
   })
 })
