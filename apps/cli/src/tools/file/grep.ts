@@ -169,7 +169,11 @@ export function createGrepTool(credentialConfig?: CredentialMaskingConfig): Tool
       if (include) rgArgs.push('--glob', include)
       rgArgs.push(searchPath)
       try {
-        const { stdout, timedOut, exitCode } = await runSearch(rgArgs, ctx.cwd, GREP_TIMEOUT_MS)
+        const { stdout, stderr, timedOut, exitCode } = await runSearch(
+          rgArgs,
+          ctx.cwd,
+          GREP_TIMEOUT_MS,
+        )
         if (timedOut) {
           return {
             success: false,
@@ -198,6 +202,19 @@ export function createGrepTool(credentialConfig?: CredentialMaskingConfig): Tool
             content:
               truncateGrepOutput(maskSearchOutput(stdout, credentialConfig, 'heading')) +
               '\n\n(rg exited 2 — some paths unreadable; narrow scope for complete results)',
+          }
+        }
+        // The server's own reason, not a guess. A rejected pattern (a literal
+        // line break without multiline mode, an unbalanced bracket) is exit 2
+        // with empty stdout exactly like a permission error is — and telling
+        // the caller "likely permission denied" sends it to narrow a path when
+        // what it has to fix is the pattern.
+        const reason = stderr.trim()
+        if (reason) {
+          return {
+            success: false,
+            content: '',
+            error: `rg rejected the search: ${reason.slice(0, 500)}`,
           }
         }
         return {

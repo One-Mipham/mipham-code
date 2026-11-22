@@ -50,6 +50,9 @@ function windowFromString(content: string, offset: number, limit: number): strin
   let lineNo = 0
   let start = 0
   while (out.length < limit) {
+    // Nothing follows a terminating newline: `"a\nb\n"` has two lines, not
+    // three. An empty string has no lines at all.
+    if (start >= content.length) break
     const nl = content.indexOf('\n', start)
     const end = nl === -1 ? content.length : nl
     if (lineNo >= offset) out.push(content.slice(start, end))
@@ -149,7 +152,16 @@ function windowFromFd(
     if (n <= 0) break
     got += n
   }
-  return { lines: out.toString('utf-8', 0, got).split('\n'), complete }
+  // A file that ends with a newline has no line after it. `split('\n')` on
+  // `"a\nb\n"` yields `['a','b','']`, and formatting that trailing element
+  // printed an extra empty numbered line — the caller asked for the file, not
+  // for a line the file does not contain. Only the single element produced by
+  // the *final* newline is dropped; blank lines inside the file stay.
+  if (got === 0) return { lines: [], complete }
+  const text = out.toString('utf-8', 0, got)
+  const lines = text.split('\n')
+  if (out[got - 1] === 0x0a) lines.pop()
+  return { lines, complete }
 }
 
 export function createReadTool(credentialConfig?: CredentialMaskingConfig): ToolDefinition {

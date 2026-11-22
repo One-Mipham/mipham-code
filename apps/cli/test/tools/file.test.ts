@@ -255,7 +255,11 @@ describe('Read tool — 大文件与行窗口', () => {
       const sentinelTool = createReadTool(config([{ path: realPath, mode: 'full' }]))
 
       for (const [offset, limit] of cases) {
-        const expected = expectWindow(f.text.split('\n').slice(offset, offset + limit), offset)
+        // A file that ends with a newline has no line after it (the tool no
+        // longer reports one); an empty file has no lines at all.
+        const logical = f.text === '' ? [] : f.text.split('\n')
+        if (f.text.endsWith('\n')) logical.pop()
+        const expected = expectWindow(logical.slice(offset, offset + limit), offset)
         const plain = await readTool.execute({ file_path: p, offset, limit }, ctx)
         const masked = await maskedTool.execute({ file_path: p, offset, limit }, ctx)
         const sentinel = await sentinelTool.execute({ file_path: p, offset, limit }, ctx)
@@ -963,6 +967,28 @@ describe('Grep rg exit 2 (error) does not fall back to find', () => {
     const result = await grepTool.execute({ pattern: 'needle', path: tmpDir }, ctx)
     expect(result.success).toBe(false)
     expect(result.error).toContain('rg error (exit 2)')
+  })
+
+  it('rg 说明原因（图案被拒）时引它，而不是猜权限', async () => {
+    // A literal line break without multiline mode: rg exits 2 with empty
+    // stdout, exactly like a permission error. Guessing sends the caller to
+    // narrow a path when the pattern is what must change.
+    vi.spyOn(Bun, 'spawn').mockImplementation((cmd: string[]) => {
+      if (cmd[0] === 'rg') {
+        return fakeProc(
+          '',
+          'regex parse error: the literal "\\n" is not allowed. Use the flag -U',
+          2,
+        )
+      }
+      throw new Error(`unexpected spawn of ${cmd[0]} — find fallback must not run`)
+    })
+
+    const result = await grepTool.execute({ pattern: 'one\ntwo', path: tmpDir }, ctx)
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('rejected the search')
+    expect(result.error).toContain('not allowed')
+    expect(result.error).not.toContain('permission denied')
   })
 })
 
