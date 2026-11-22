@@ -420,7 +420,7 @@
 
 ## merge-absorption: 判「是否已并入主干」必须比树，不能数提交——squash 对提交级信号不可见
 
-- 建议: 核对一条分支的工作是否已进主干时，判据的**粒度必须与合并操作的粒度对齐**。squash 合并把 N 个提交压成 1 个，于是两类提交级信号会**假报「未合并」**：① `git log main..branch` 列出全部 N 个「独有」提交——单个提交不再是 main 的祖先；② `git cherry main branch` 全报 `+`——patch-id 逐个对不上。两者对 squash 都是盲的。唯一可靠的判据是**比树**：`git diff --name-status branch main` 无 `D`/`A` 项、且 `M` 项方向全部朝主干，才说明分支内容 ⊆ 主干。与 `signal-discrimination` 的分工：那条讲信号在**同一状态下**不区分成败（失败态也命中同样的串）；本条讲信号**测量对象错了**——ancestry 与 patch-id 度量的是提交，而问题问的是内容，粒度不匹配，信号本身是准的。与 `correctness`（判断是否完成须查 size/hash）的分工：那条管单个产物的完整性，本条管分支的并入状态。
+- 建议: 核对一条分支的工作是否已进主干时，判据的**粒度必须与合并操作的粒度对齐**。squash 合并把 N 个提交压成 1 个，于是两类提交级信号会**假报「未合并」**：① `git log main..branch` 列出全部 N 个「独有」提交——单个提交不再是 main 的祖先；② `git cherry main branch` 全报 `+`——patch-id 逐个对不上。两者对 squash 都是盲的。唯一可靠的判据是**比树**：`git diff --name-status branch main` 无 `D`/`A` 项、且 `M` 项方向全部朝主干，才说明分支内容 ⊆ 主干。**写侧同理**：登记提交 SHA 的工件（`.git-blame-ignore-revs`、文档里的 commit 引用、suppression 清单）必须在合并后回填 —— rebase/squash 都会重写 SHA，旧值静默失效（2026-11-22 PR #39 rebase 落地后 `25e8791`→`d5f002a`，ignore-revs 指向的对象只待在被删分支上）。与 `signal-discrimination` 的分工：那条讲信号在**同一状态下**不区分成败（失败态也命中同样的串）；本条讲信号**测量对象错了**——ancestry 与 patch-id 度量的是提交，而问题问的是内容，粒度不匹配，信号本身是准的。与 `correctness`（判断是否完成须查 size/hash）的分工：那条管单个产物的完整性，本条管分支的并入状态。
 - 严重度: warning
 - 生成时间: 2026-09-14
 - 来源: gitlink 收口会话（human + Claude Code，手动沉淀）
