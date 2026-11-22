@@ -3,6 +3,38 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.44 (2026-11-22)
+
+- Version sync with Mipham Code CLI 0.85.44
+- Fixed: `Glob` ignored `.gitignore`, so `**/*` returned `node_modules` and build output as if it
+  were source. Inside a git work tree the tool now uses the repository's own rules (nested
+  `.gitignore` files and negations included); outside a repository the previous behaviour stands.
+- Fixed: a reply cut off at the model's output limit was only announced with proxy/VPN advice.
+  Providers now distinguish the output ceiling from a dropped connection, and an output-limit cut
+  is continued automatically once; connection cuts are not retried.
+- Fixed: `/rename` and `/resume <name>` were two namespaces — after renaming, `/resume <new>` found
+  nothing while the old name still resolved. The session log, index entry and summary now move with
+  the name, and a name collision is reported instead of overwriting.
+- Fixed: a PreToolUse hook's `updatedInput` was dropped on an `ask` decision. The call is still
+  refused (no interactive approval here), but the refusal now says a rewrite was proposed and
+  discarded.
+- Fixed: permission allow rules failed on prefixed or equivalent spellings (`NODE_ENV=x npm run
+build`, `sudo`, backslash continuations, `git -C /path log`). Matching is now per command segment
+  (variants of one segment OR together, segments still AND), with the foreign-command guard reading
+  the raw segment.
+- Fixed: a bare deny rule naming a tool did not remove that tool from the model's tool table;
+  input-scoped rules (e.g. `Bash(rm:*)`) still do not hide the tool itself.
+- Fixed: MCP results carrying only `structuredContent` were read as `(empty result)`.
+- Fixed: project-level `.mipham/skills/` was never scanned (startup, `/reload-skills`, daemon), and
+  agent frontmatter `skills:` were parsed but never applied; the built-in `explore` agent now gets
+  the read-only tool list its description promises.
+- Fixed: slash commands were ordered by declaration (Enter on `/memory` could run `/dream`);
+  `/settings` was missing; `/plan` only forwarded a prompt; the model picker ignored the right
+  arrow; input drafts were lost when the input bar unmounted; background-task completion notices
+  had no render path.
+- Fixed: `--model haiku`-style tier aliases were not resolved to real model ids; `Grep` inherited
+  the user's `RIPGREP_CONFIG_PATH`; the VS Code status bar did not show provider/model.
+
 ## 0.85.43 (2026-11-22)
 
 - Version sync with Mipham Code CLI 0.85.43
