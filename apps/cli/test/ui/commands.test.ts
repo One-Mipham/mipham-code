@@ -43,6 +43,7 @@ vi.mock('../../src/core/session-store', () => ({
     load: vi.fn(() => null),
     list: vi.fn(() => []),
     delete: vi.fn(() => false),
+    renameEntry: vi.fn(() => true),
   },
 }))
 
@@ -2248,6 +2249,29 @@ describe('/rename — persistence outcome is reported honestly', () => {
     expect(result.content).toContain('Bug Fix-2')
     expect(result.content).toContain('✓')
     expect(result.content).not.toContain('may not last')
+  })
+
+  it('renames the saved transcript too, so /resume <new> resolves', async () => {
+    mockRename.mockReturnValueOnce('Bug Fix-2')
+    const log = { getName: () => 'old-name', rename: vi.fn(() => 'renamed' as const) }
+    const ctx = mkCtx() as unknown as { engine: { getContext: () => unknown } }
+    ctx.engine.getContext = () => ({ getLog: () => log })
+    const result = await getCommand('/rename')!(ctx, ['Bug', 'Fix'])
+
+    // The registry name and the transcript name are the same namespace now.
+    expect(log.rename).toHaveBeenCalledWith('Bug Fix-2')
+    expect(result.content).toContain('✓')
+  })
+
+  it('transcript conflict: reports where the transcript actually stayed', async () => {
+    mockRename.mockReturnValueOnce('taken')
+    const log = { getName: () => 'current-name', rename: vi.fn(() => 'conflict' as const) }
+    const ctx = mkCtx() as unknown as { engine: { getContext: () => unknown } }
+    ctx.engine.getContext = () => ({ getLog: () => log })
+    const result = await getCommand('/rename')!(ctx, ['taken'])
+
+    expect(result.content).toContain('current-name')
+    expect(result.content).not.toContain('✓')
   })
 
   it('not saved: warns that the name may not last instead of claiming success', async () => {

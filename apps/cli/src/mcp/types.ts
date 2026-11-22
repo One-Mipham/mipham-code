@@ -83,6 +83,12 @@ export interface ToolCallContent {
 
 export interface ToolCallResult {
   content: ToolCallContent[]
+  /**
+   * MCP 2025-06 `structuredContent`: a machine-readable payload some servers
+   * return *instead of* (or alongside) text blocks. Ignoring it made such a
+   * server look like it answered nothing at all.
+   */
+  structuredContent?: unknown
   isError?: boolean
 }
 

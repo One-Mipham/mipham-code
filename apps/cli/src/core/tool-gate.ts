@@ -95,10 +95,16 @@ export async function runPreToolGate(
     // key name. `defer` (and an absent decision) means "no override", which is
     // exactly what happens when we do nothing.
     if (preResult.permissionDecision === 'ask' || preResult.permissionDecision === 'deny') {
+      // A hook that also supplied `updatedInput` proposed a rewrite; there is no
+      // approval path to carry it through, so we refuse — but say the rewrite
+      // existed. Silently discarding it is the failure mode this note removes.
+      const rewriteNote = preResult.modifiedInput
+        ? ` ${t('errors.tool_hook_ask_rewrite', { name })}`
+        : ''
       return {
         ok: false,
         content: '',
-        error: preResult.reason || t('errors.tool_hook_ask', { name }),
+        error: (preResult.reason || t('errors.tool_hook_ask', { name })) + rewriteNote,
         notRun: true,
       }
     }

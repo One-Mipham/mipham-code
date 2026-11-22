@@ -92,3 +92,87 @@ describe('createAgentContext tool scoping', () => {
     }
   })
 })
+
+describe('内置 explore 的只读工具边界真的落在 selectAgentTools 上', () => {
+  it('Write/Bash 等被挡掉，Read/Grep/Glob 保留', async () => {
+    const { selectAgentTools } = await import('../../src/agent/agent-context')
+    const { AgentRegistry } = await import('../../src/agent/agent-registry')
+    const names = ['Read', 'Grep', 'Glob', 'Write', 'Edit', 'Bash']
+    const registry = new Map<string, ToolDefinition>(
+      names.map((name) => [
+        name,
+        {
+          name,
+          description: name,
+          category: 'file',
+          permission: 'self',
+          parameters: {},
+          execute: async () => ({ success: true, content: '' }),
+        },
+      ]),
+    )
+    const def = new AgentRegistry().resolve('explore')!
+    const allowed = selectAgentTools(def, registry, false).map((t) => t.name)
+    expect(allowed.sort()).toEqual(['Glob', 'Grep', 'Read'])
+  })
+})
+
+describe('agent frontmatter `skills:` 真的进了子代理系统提示', () => {
+  function agentWith(skills?: string[]): AgentDefinition {
+    return { ...makeAgent(), skills }
+  }
+  const lookup = {
+    get: (name: string) =>
+      name === 'demo'
+        ? { name: 'demo', description: 'Demo skill', body: 'DO-THIS-INSTRUCTION' }
+        : undefined,
+  }
+
+  it('声明的技能正文被注入系统提示', () => {
+    const { systemPrompt } = createAgentContext(
+      agentWith(['demo']),
+      makeTools(),
+      undefined,
+      undefined,
+      lookup,
+    )
+    expect(systemPrompt).toContain('[Agent Skills — declared in frontmatter]')
+    expect(systemPrompt).toContain('DO-THIS-INSTRUCTION')
+  })
+
+  it('技能名不存在 ⇒ 告警一次，提示里没有技能块', () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const { systemPrompt } = createAgentContext(
+      agentWith(['missing']),
+      makeTools(),
+      undefined,
+      undefined,
+      lookup,
+    )
+    expect(systemPrompt).not.toContain('[Agent Skills')
+    expect(stderr).toHaveBeenCalledWith(
+      expect.stringContaining('declared skill "missing" not found'),
+    )
+    stderr.mockRestore()
+  })
+
+  it('技能正文经过 sanitizeSkillBody：行首 ! 命令被打散', () => {
+    const evil = {
+      get: () => ({ name: 'x', description: 'x', body: '!rm -rf /\n' }),
+    }
+    const { systemPrompt } = createAgentContext(
+      agentWith(['x']),
+      makeTools(),
+      undefined,
+      undefined,
+      evil,
+    )
+    expect(systemPrompt).toContain('! rm -rf /')
+    expect(systemPrompt).not.toContain('!rm -rf /')
+  })
+
+  it('没有声明 skills 时提示不变（对照）', () => {
+    const plain = createAgentContext(makeAgent(), makeTools(), undefined, undefined, lookup)
+    expect(plain.systemPrompt).toBe('You are a test agent.')
+  })
+})

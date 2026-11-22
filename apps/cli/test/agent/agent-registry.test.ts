@@ -235,4 +235,11 @@ Body.`,
     expect(def!.name).toBe('explore')
     expect(def!.source).toBe('builtin')
   })
+
+  it('builtin explore 带只读工具清单（描述说 Read-only，授权也必须是）', () => {
+    const registry = new AgentRegistry()
+    expect(registry.resolve('explore')!.tools).toBe('Read,Grep,Glob')
+    // 对照：其他内建代理不加这份清单 —— 否则这条断言可能只是读到了默认值。
+    expect(registry.resolve('general')!.tools).toBeUndefined()
+  })
 })

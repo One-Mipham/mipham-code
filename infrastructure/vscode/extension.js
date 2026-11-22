@@ -227,7 +227,10 @@ function updateStatusBar() {
   const config = vscode.workspace.getConfiguration('mipham-code')
   const provider = config.get('provider', '') || 'default'
   const model = config.get('model', '') || 'auto'
-  statusBarItem.text = `$(terminal) ${t('statusBar')}`
+  // The provider/model were read and then thrown away — the docstring above has
+  // promised "current provider/model info" since the first version. Show them.
+  statusBarItem.text = `$(terminal) ${t('statusBar')} · ${provider}/${model}`
+  statusBarItem.tooltip = `${t('tooltip')} — ${provider}/${model}`
   statusBarItem.show()
 }
 

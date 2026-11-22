@@ -2881,11 +2881,30 @@ const changelogCmd: CommandHandler = async (ctx) => {
 // Workflow
 // ═══════════════════════════════════════════════════════════════
 
-const planCmd: CommandHandler = (_ctx, args) => {
-  const t = resolveT(_ctx)
+const planCmd: CommandHandler = (ctx, args) => {
+  const t = resolveT(ctx)
   const description = args.join(' ') || undefined
+
+  // The shortcut's job is to put the session in plan mode **now**. It used to
+  // only forward a prompt asking the model to call EnterPlanMode, so the mode
+  // changed only if the model cooperated — a shortcut with no landing point.
+  // Read the mode back: the organisation's ceiling can clamp the request.
+  let modeNote = ''
+  if (liveMode(ctx) !== 'plan') {
+    if (!ctx.setPermissionMode) {
+      modeNote = 'This surface cannot switch permission modes — use Shift+Tab.\n\n'
+    } else {
+      ctx.setPermissionMode('plan')
+      const now = liveMode(ctx)
+      modeNote =
+        now === 'plan'
+          ? '✓ Plan mode on — edits stay refused until you /approve or /no-plan.\n\n'
+          : `Plan mode was requested, but the organisation's permission limit kept the mode at ${now}.\n\n`
+    }
+  }
+
   return {
-    content: t('commands.plan.content'),
+    content: modeNote + t('commands.plan.content'),
     forwardToAI: description
       ? `Use EnterPlanMode with description: "${description}". Then explore, design, and use ExitPlanMode when ready for approval.`
       : 'Use EnterPlanMode to enter plan mode. Explore the codebase, design an approach, then use ExitPlanMode to submit for approval.',
@@ -2965,7 +2984,7 @@ const todosCmd: CommandHandler = (_ctx, args) => {
 // Phase 1 — New Session Commands
 // ═══════════════════════════════════════════════════════════════
 
-const renameCmd: CommandHandler = (ctx, args) => {
+const renameCmd: CommandHandler = async (ctx, args) => {
   const t = resolveT(ctx)
   const name = args.join(' ')
   if (!name.trim()) {
@@ -2981,6 +3000,24 @@ const renameCmd: CommandHandler = (ctx, args) => {
   // (319-089).
   if (finalName === null) {
     return { content: t('commands.rename.unsaved', { name: name.trim() }) }
+  }
+  // The saved transcript has its own name — `<name>.jsonl` — and `/resume`
+  // resolves *that* namespace. Renaming only the registry/title left the two
+  // namespaces split: `/rename Bug Fix` succeeded, yet `/resume Bug Fix`
+  // found nothing while `/resume <old>` still did (v2.0.64-004).
+  const log = ctx.engine.getContext().getLog?.()
+  if (log) {
+    const oldName = log.getName()
+    const status = log.rename(finalName)
+    if (status === 'renamed') {
+      const { SessionStore } = await import('../core/session-store')
+      SessionStore.renameEntry(oldName, finalName)
+    } else if (status === 'conflict') {
+      // The title/registry name changed, but the transcript already belongs to
+      // another saved session under that name. Say so instead of claiming a
+      // rename the user cannot resume.
+      return { content: t('commands.rename.log_conflict', { name: finalName, old: oldName }) }
+    }
   }
   return { content: t('commands.rename.confirmed', { name: finalName }) }
 }
@@ -3189,6 +3226,9 @@ const reloadSkillsCmd: CommandHandler = (ctx) => {
   try {
     const config = ctx.config
     ctx.skillsLoader.loadBuiltin(process.cwd())
+    // The project scope is not covered by `loadBuiltin` (that reads
+    // `<cwd>/skills/{standard,mipham}` — the repo's own dev layout).
+    ctx.skillsLoader.loadProjectSkills(process.cwd())
     if (config.skills?.paths) {
       ctx.skillsLoader.loadExternal(config.skills.paths)
     }
@@ -6872,6 +6912,7 @@ const commandsListCmd: CommandHandler = () => {
     '/providers': 'Model & Provider',
     '/switch': 'Model & Provider',
     '/config': 'Model & Provider',
+    '/settings': 'Model & Provider',
     '/effort': 'Model & Provider',
     '/upgrade': 'Model & Provider',
     '/tools': 'Tools & Skills',
@@ -7082,6 +7123,7 @@ registry.set('/ollama-refresh', ollamaRefreshCmd)
 registry.set('/provider', providerCmd)
 registry.set('/providers', providersCmd)
 registry.set('/config', configCmd)
+registry.set('/settings', configCmd) // CC-compatible alias
 registry.set('/effort', effortCmd)
 registry.set('/switch', switchCmd)
 
@@ -7328,6 +7370,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/providers': 'List configured providers',
   '/switch': 'Switch provider and model',
   '/config': 'View configuration',
+  '/settings': 'View configuration (alias of /config)',
   '/effort': 'Set the stream stall budget (does not change reasoning depth)',
   '/lang': 'Set display language (en-US, zh-CN)',
   '/tools': 'List available tools',
@@ -7434,6 +7477,38 @@ export function getCommandList(): CommandEntry[] {
     name,
     description: COMMAND_DESCRIPTIONS[name] ?? '',
   }))
+}
+
+/**
+ * Match and **rank** slash commands for a query.
+ *
+ * Both slash surfaces used to filter with `includes()` and take the first
+ * entry of an alphabetically sorted list, so a description match could outrank
+ * the command the user was typing: `/memory` (description match on `/dream`'s
+ * "Background memory consolidation") selected `/dream`, and Enter ran it.
+ *
+ * Order: exact name > name prefix > name substring > description-only. Within
+ * a rank the alphabetical order is kept, so the result stays predictable.
+ * Description matches are still included (a user looking for "fork" should see
+ * a command *described* as forking); they simply no longer outrank names.
+ */
+export function rankCommandMatches<T extends CommandEntry>(commands: T[], query: string): T[] {
+  const q = query.trim().toLowerCase()
+  if (!q) return commands
+  const scored: Array<{ cmd: T; rank: number }> = []
+  for (const cmd of commands) {
+    const name = cmd.name.toLowerCase()
+    const bare = name.startsWith('/') ? name.slice(1) : name
+    let rank: number
+    if (bare === q) rank = 0
+    else if (bare.startsWith(q)) rank = 1
+    else if (bare.includes(q)) rank = 2
+    else if (cmd.description.toLowerCase().includes(q)) rank = 3
+    else continue
+    scored.push({ cmd, rank })
+  }
+  scored.sort((a, b) => a.rank - b.rank || a.cmd.name.localeCompare(b.cmd.name))
+  return scored.map((s) => s.cmd)
 }
 
 export function looksLikeSlashCommand(input: string): boolean {

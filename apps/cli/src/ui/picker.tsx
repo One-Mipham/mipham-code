@@ -106,7 +106,7 @@ export function ModelPicker({
     }
 
     // Tab or right arrow → switch to model panel
-    if (key.tab || (activePanel.read() === 'provider' && input === 'l')) {
+    if (key.tab || key.rightArrow || (activePanel.read() === 'provider' && input === 'l')) {
       activePanel.set('model')
       return
     }

@@ -2615,3 +2615,37 @@ describe('SelfCritique — critique chat seam', () => {
     expect(result?.safe).toBe(true)
   })
 })
+
+describe('QueryEngine — deny 点名的工具不进模型工具表', () => {
+  function tdef(name: string): ToolDefinition {
+    return {
+      name,
+      description: `${name} tool`,
+      category: 'file',
+      permission: 'self',
+      parameters: { type: 'object', properties: {} },
+      execute: async () => ({ success: true, content: '' }),
+    }
+  }
+
+  it('裸 deny 规则隐藏该工具；带输入段的规则只拦调用、工具仍可见', async () => {
+    const seen: ChatRequest[] = []
+    const tools = makeToolMap([tdef('Read'), tdef('Bash'), tdef('mcp__srv__write')])
+    const permission = new PermissionSystem('default')
+    permission.deny('Bash') // bare name → every call denied → hide
+    permission.deny('mcp__srv__*') // server wildcard → hide that server's tools
+    permission.deny('Read(**/.ssh/*)') // input-scoped → Read itself stays usable
+
+    const engine = new QueryEngine(mockProviderRegistry(), mockContext(), tools, permission)
+    engine.setLlm({
+      chat: async function* (req) {
+        seen.push(req)
+        yield { type: 'stop' }
+      },
+    })
+    for await (const _ of engine.process('hi')) void _
+
+    const names = (seen[0]!.tools as Array<{ name: string }>).map((t) => t.name)
+    expect(names).toEqual(['Read'])
+  })
+})

@@ -11,7 +11,7 @@ import {
 } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { spawn, execFileSync } from 'node:child_process'
+import { spawn, execFileSync, spawnSync } from 'node:child_process'
 import { Readable } from 'node:stream'
 import type { ToolContext, CredentialMaskingConfig } from '../../src/shared'
 import { Context } from '../../src/vajra'
@@ -761,6 +761,37 @@ describe('Glob tool execution', () => {
     expect(result.content).toContain('(truncated')
   })
 
+  it('excludes .gitignore-matched files inside a git repository', async () => {
+    // Bun.Glob 不读 .gitignore —— 从前 `**/*` 会把 node_modules、构建产物一并
+    // 交给模型，看起来像源代码。判据必须两边都看：忽略的**不在**、非忽略的**在**
+    // （只断言前半句，过滤器写坏成「全丢」也会绿）。
+    spawnSync('git', ['init', '-q', '.'], { cwd: tmpDir })
+    writeFileSync(join(tmpDir, '.gitignore'), 'ignored.txt\nbuild/\n')
+    // Under a subdirectory on purpose: the Bun mock's `**/*` matcher requires at
+    // least one path segment, so root-level files would be invisible to the probe
+    // for a reason unrelated to .gitignore.
+    mkdirSync(join(tmpDir, 'src'))
+    writeFileSync(join(tmpDir, 'src', 'kept.txt'), '')
+    writeFileSync(join(tmpDir, 'src', 'ignored.txt'), '')
+    mkdirSync(join(tmpDir, 'src', 'build'))
+    writeFileSync(join(tmpDir, 'src', 'build', 'out.txt'), '')
+
+    const result = await globTool.execute({ pattern: '**/*.txt', path: tmpDir }, ctx)
+    expect(result.success).toBe(true)
+    expect(result.content).toContain('kept.txt')
+    expect(result.content).not.toContain('ignored.txt')
+    expect(result.content).not.toContain('out.txt')
+  })
+
+  it('keeps every match outside a git repository (no repository, no rules)', async () => {
+    // 正对照：同一个被忽略的名字放在非仓库目录里必须出现。否则上一用例的
+    // `not.toContain` 无法区分「gitignore 生效」与「过滤器一律丢弃」。
+    writeFileSync(join(tmpDir, 'ignored.txt'), '')
+    const result = await globTool.execute({ pattern: '*.txt', path: tmpDir }, ctx)
+    expect(result.success).toBe(true)
+    expect(result.content).toContain('ignored.txt')
+  })
+
   it('does not claim truncation when every match fits', async () => {
     // 反方向：小结果集不得出现标记 —— 一条永远为真的提示等于没有提示。
     writeFileSync(join(tmpDir, 'only.txt'), '')
@@ -1334,5 +1365,33 @@ describe('Read allow_large —— 超大文件深窗可选扫描', () => {
     const res = await readTool.execute({ file_path: p, allow_large: true }, ctx)
     expect(res.success).toBe(true)
     expect(res.content).toContain('line2')
+  })
+})
+
+describe('Grep — 用户全局 ripgrep 配置不得改变搜索结果', () => {
+  beforeEach(() => {
+    mockRealSpawn()
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+    delete process.env.RIPGREP_CONFIG_PATH
+  })
+
+  it('RIPGREP_CONFIG_PATH 指向一个排除全部文件的配置时，搜索仍返回仓库内容', async () => {
+    writeFileSync(join(tmpDir, 'needle.txt'), 'NEEDLE_rgconf\n', 'utf-8')
+    const cfgDir = mkdtempSync(join(tmpdir(), 'mipham-rgconf-'))
+    const cfg = join(cfgDir, 'ripgreprc')
+    writeFileSync(cfg, '--glob=!*\n', 'utf-8')
+    const previous = process.env.RIPGREP_CONFIG_PATH
+    process.env.RIPGREP_CONFIG_PATH = cfg
+    try {
+      const result = await grepTool.execute({ pattern: 'NEEDLE_rgconf' }, ctx)
+      expect(result.success).toBe(true)
+      expect(result.content).toContain('needle.txt')
+    } finally {
+      if (previous === undefined) delete process.env.RIPGREP_CONFIG_PATH
+      else process.env.RIPGREP_CONFIG_PATH = previous
+      rmSync(cfgDir, { recursive: true, force: true })
+    }
   })
 })

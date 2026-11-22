@@ -100,6 +100,26 @@ describe('runPreToolGate', () => {
     expect(outcome.ok).toBe(false)
   })
 
+  it('says a proposed rewrite was discarded when the hook asked instead of allowing', async () => {
+    // The refusal stands (ask = hard refusal). The point is honesty: the hook
+    // proposed different input, and the user/model is told it did not run,
+    // rather than the rewrite disappearing without a trace.
+    const outcome = await runPreToolGate(
+      'Bash',
+      { command: 'rm -rf /' },
+      deps({
+        hookEngine: fakeHookEngine({
+          allowed: true,
+          permissionDecision: 'ask',
+          modifiedInput: { command: 'rm -rf ./build' },
+        }),
+      }),
+      's1',
+    )
+    expect(outcome.ok).toBe(false)
+    if (!outcome.ok) expect(outcome.error).toMatch(/rewritten input/i)
+  })
+
   it("keeps a hook's additionalContext as a warning on an allowed call", async () => {
     const outcome = await runPreToolGate(
       'Bash',

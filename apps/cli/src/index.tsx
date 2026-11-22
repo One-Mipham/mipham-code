@@ -554,6 +554,8 @@ export async function runApp(options: RunOptions): Promise<void> {
   skillsLoader.loadBuiltinFromPackage()
   if (!safeMode) {
     skillsLoader.loadUserSkills()
+    // The documented project scope (`.mipham/skills/`) — see `loadProjectSkills`.
+    skillsLoader.loadProjectSkills(process.cwd())
     if (config.skills?.paths) {
       skillsLoader.loadExternal(config.skills.paths)
     }
@@ -987,7 +989,10 @@ export async function runApp(options: RunOptions): Promise<void> {
     if (context.getMessageCount() === 0) return
     const log = context.getLog()
     if (log) {
-      SessionStore.saveLog(sessionName, log, {
+      // `/rename` moves the transcript file; the index entry must follow the
+      // log's *current* name, not the one this process started with — otherwise
+      // the row points at a file that was just renamed away.
+      SessionStore.saveLog(log.getName(), log, {
         provider: defaultProvider,
         model: defaultModel,
         cwd: process.cwd(),

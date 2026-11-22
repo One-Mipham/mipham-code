@@ -10,6 +10,7 @@ import { AgentExperience } from './agent-experience'
 import { ExperienceRuleExtractor } from './experience-rules.js'
 import { miphamHome } from '../core/paths.ts'
 import { MIPHAM_DIR } from '../shared/constants.ts'
+import { sanitizeSkillBody } from '../skills/sanitizer'
 
 export interface AgentContextResult {
   context: ContextManager
@@ -104,11 +105,55 @@ function loadAgentMemory(
  * Agent memory: if agentDef.memory is set, loads memory files from the
  * appropriate scope and injects them into the system prompt.
  */
+/** The slice of `SkillsLoader` this module needs (kept structural so the agent
+ *  layer does not import the skills loader just for a type). */
+export interface DeclaredSkillLookup {
+  get(name: string): { name: string; description: string; body?: string } | undefined
+}
+
+/**
+ * Render the skills an agent declared in its frontmatter into its system prompt.
+ *
+ * `skills:` was parsed into `AgentDefinition` but read by nobody, so an agent
+ * that declared skills ran without their instructions — the field was
+ * advertised and never applied. Unknown names are reported once (to stderr,
+ * like the loader's other warnings) rather than silently dropped: a typo and a
+ * missing file are the same thing to the agent, and both mean the same thing
+ * to the user.
+ */
+function loadDeclaredSkills(
+  agentName: string,
+  names: string[],
+  lookup: DeclaredSkillLookup | undefined,
+): string {
+  if (!lookup) {
+    process.stderr.write(
+      `⚠️  Agent "${agentName}": declares skills (${names.join(', ')}) but no skills loader is available — skipped.\n`,
+    )
+    return ''
+  }
+  const blocks: string[] = []
+  for (const name of names) {
+    const skill = lookup.get(name)
+    if (!skill) {
+      process.stderr.write(
+        `⚠️  Agent "${agentName}": declared skill "${name}" not found — skipped.\n`,
+      )
+      continue
+    }
+    const body = skill.body ? sanitizeSkillBody(skill.body).text : ''
+    blocks.push([`## ${skill.name}`, skill.description, body].filter(Boolean).join('\n'))
+  }
+  if (blocks.length === 0) return ''
+  return ['[Agent Skills — declared in frontmatter]', ...blocks].join('\n\n')
+}
+
 export function createAgentContext(
   agentDef: AgentDefinition,
   toolRegistry: Map<string, ToolDefinition>,
   contextWindow?: number,
   crsiConfig?: Partial<CrsiConfig>,
+  skills?: DeclaredSkillLookup,
 ): AgentContextResult {
   // Create isolated context, sized to the resolved model's window when known.
   // Passing contextWindow (not just maxTokens) enables adaptive thresholds.
@@ -126,6 +171,10 @@ export function createAgentContext(
     if (memory) {
       systemPrompt = `${systemPrompt}\n\n---\n\n${memory}`
     }
+  }
+  if (agentDef.skills?.length) {
+    const declared = loadDeclaredSkills(agentDef.name, agentDef.skills, skills)
+    if (declared) systemPrompt = `${systemPrompt}\n\n---\n\n${declared}`
   }
 
   context.setSystemPrompt(systemPrompt)

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { Box, Text, useInput } from 'ink'
-import { getCommandList } from './commands.js'
+import { getCommandList, rankCommandMatches } from './commands.js'
 import { CommandPicker } from './command-picker.js'
 import { useI18n } from '../i18n-context'
 import { discoverSessions } from '../agent/cross-session/discovery'
@@ -41,6 +41,14 @@ interface InputBarProps {
   autocompleteEnabled?: boolean
   /** 默认 400ms；app.tsx 传 config.autocomplete?.debounceMs ?? 400。 */
   autocompleteDebounceMs?: number
+  /**
+   * 草稿文本（由调用方持有）。本组件会被调用方卸载（模型选择器 / API-key 提示 /
+   * Ctrl+G 面板），草稿若只活在这里会随卸载消失；调用方持有后，重新挂载时从
+   * 这里取回。
+   */
+  draft?: string
+  /** 每次草稿变化同步给调用方。 */
+  onDraftChange?: (value: string) => void
 }
 
 // ── Loading verb keys (i18n) ──
@@ -396,9 +404,19 @@ export function InputBar({
   recentMessages,
   autocompleteEnabled = true,
   autocompleteDebounceMs = 400,
+  draft,
+  onDraftChange,
 }: InputBarProps) {
   const { t } = useI18n()
-  const [value, setValue] = useState('')
+  // The draft is seeded from the caller's copy and mirrored back on every change.
+  // `app.tsx` unmounts this component when the model picker / API-key prompt /
+  // agent view opens; history was hoisted above for exactly that reason, and the
+  // typed text was not — opening the picker mid-prompt silently ate it.
+  const [value, setLocalValue] = useState(draft ?? '')
+  const setValue = (next: string): void => {
+    setLocalValue(next)
+    onDraftChange?.(next)
+  }
   // Ref mirror of value — used by useInput to read latest without stale closure.
   const valueRef = useRef(value)
   // Ref mirror of `pickerActive` for the same reason, and one more: the key
@@ -457,12 +475,7 @@ export function InputBar({
     // filter hid commands a user was plainly looking for ("fork" should surface a
     // command described as "fork the conversation"), so the two slash surfaces now
     // agree on one semantic.
-    return allCommands
-      .filter(
-        (c) =>
-          c.name.toLowerCase().includes(filter) || c.description.toLowerCase().includes(filter),
-      )
-      .slice(0, 8)
+    return rankCommandMatches(allCommands, filter).slice(0, 8)
   }, [value, allCommands])
 
   // ── @mention hints (cross-session recipients) ──

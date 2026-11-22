@@ -176,6 +176,15 @@ export interface StreamChunk {
    */
   truncated?: boolean
   /**
+   * Why the turn was cut, when the provider can tell.
+   *
+   * `'max_tokens'` means the model hit its output ceiling — there is more to say
+   * and asking it to continue is meaningful. `'connection'` (or absent) means the
+   * stream died; continuing would re-ask the model to write the same fragment
+   * again, so the engine must not auto-continue on it.
+   */
+  truncationCause?: 'max_tokens' | 'connection'
+  /**
    * Set on the `warning` chunk a retried turn emits just before it re-streams
    * (`chatWithFallback`). Everything the failed attempt already yielded is on
    * screen and cannot be recalled, so a consumer that accumulates a turn's

@@ -390,6 +390,7 @@ describe('OpenAICompatProvider', () => {
 
     const truncatedStops = chunks.filter((c) => c.type === 'stop' && c.truncated === true)
     expect(truncatedStops).toHaveLength(1)
+    expect(truncatedStops[0]!.truncationCause).toBe('max_tokens')
   })
 
   it('test_a_normal_stop_does_not_carry_the_truncated_key', async () => {

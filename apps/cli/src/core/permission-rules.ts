@@ -544,41 +544,174 @@ function skipEnvAssignment(tokens: string[], start: number): number {
  * `bash -c 'rm -rf /'`. Over-matching is the safe direction for a deny rule.
  */
 export function flattenCommand(command: string, depth = 0): string[] {
-  const out: string[] = []
-  for (const seg of splitShellSegments(command)) {
-    out.push(seg)
+  return flattenCommandGroups(command, depth).flatMap((group) => group.variants)
+}
+
+/** One shell segment plus every normalized reading of it. */
+export interface CommandSegmentGroup {
+  /** The segment as written — guards about what the command *really* runs judge this. */
+  raw: string
+  /** Readings of the same segment; a rule matching **any** of them matches the segment. */
+  variants: string[]
+}
+
+/**
+ * Like `flattenCommand`, but keeps each command segment's normalizations
+ * together.
+ *
+ * Why the grouping matters for an **allow** rule: a rule is a grant, and a
+ * compound command must satisfy it in every segment. The normalizations of one
+ * segment are alternative readings of the *same* command, so the grant needs
+ * only one of them to match — flattening everything into one list made the raw
+ * spelling mandatory too, and `NODE_ENV=production npm run build` stopped
+ * matching `Bash(npm:*)` (nor did `sudo npm run build`).
+ *
+ * The raw spelling is still what the foreign-command guard reads (see
+ * `matchBashRule`): stripping `--exec-path=…` must not let the normalized form
+ * pass a grant the raw form was refused.
+ */
+export function flattenCommandGroups(command: string, depth = 0): CommandSegmentGroup[] {
+  const groups: CommandSegmentGroup[] = []
+  for (const seg of splitShellSegments(joinLineContinuations(command))) {
+    const variants: string[] = [seg]
     // The shell removes quotes before running the command, so `rm "-rf" /tmp`
     // *is* `rm -rf /tmp` — but the rule text is written without quotes, so the
     // quoted spelling used to slip past `Bash(rm -rf *)`.
-    const unquoted = dequoteSimpleTokens(seg)
-    if (unquoted !== seg) out.push(unquoted)
-    const stripped = stripPrefixCommand(seg)
-    if (stripped !== seg) out.push(stripped)
+    const push = (v: string) => {
+      if (v !== seg && !variants.includes(v)) variants.push(v)
+    }
+    push(dequoteSimpleTokens(seg))
+    push(stripPrefixCommand(seg))
     // 剥掉前导噪声后的形态也要参与匹配：`IFS=x rm -rf x` / `( rm -rf x )` /
     // `for …; do rm -rf x; done` 执行的仍是 `rm`，规则必须看得见它。同一个函数
     // 也被 scanReaderWriterCommands 用（Read/Write/Edit 桥接那条路径）—— 两条
     // 路径共用一份归一化，只接一条就是只修一半。
-    const denoised = stripLeadingShellNoise(seg)
-    if (denoised !== seg) out.push(denoised)
-    for (const inner of extractSubstitutions(seg)) {
-      out.push(...flattenCommand(inner, depth + 1))
-    }
+    push(stripLeadingShellNoise(seg))
     // Wrapper prefixes (`env`, `sudo`, `timeout`, …) are not the command being
     // run. Without their removal `env X="a b" rm -rf /` matched no `rm …`
     // rule at all, because the matcher never saw past the assignment.
     const { base, args, payload } = effectiveCommand(seg.split(/\s+/).filter(Boolean))
-    if (base) {
-      const unwrapped = [base, ...args].join(' ')
-      if (unwrapped !== seg) out.push(unwrapped)
+    if (base) push([base, ...args].join(' '))
+    // Global options before a subcommand (`git -C /path log`). The allow rule
+    // `Bash(git log:*)` names the subcommand, and the option only decides where
+    // it runs — not which program does. Guarded variants are judged on `raw`.
+    const subcommand = stripGlobalOptions(seg)
+    if (subcommand) push(subcommand)
+
+    groups.push({ raw: seg, variants })
+
+    for (const inner of extractSubstitutions(seg)) {
+      groups.push(...flattenCommandGroups(inner, depth + 1))
     }
     // A shell `-c` payload is a command line in its own right, so `Bash(rm *)`
     // must also match `bash -c 'rm -rf /'`. Past the depth bound recursion stops
     // outright rather than pushing the raw payload: the raw text
     // (`bash -c 'rm -rf /'`) matches no `rm …` pattern anyway, and stopping
     // keeps the boundary predictable.
-    if (payload && depth < MAX_COMMAND_DEPTH) out.push(...flattenCommand(payload, depth + 1))
+    if (payload && depth < MAX_COMMAND_DEPTH)
+      groups.push(...flattenCommandGroups(payload, depth + 1))
+  }
+  return groups
+}
+
+/**
+ * Remove backslash-newline continuations before splitting a command into
+ * segments.
+ *
+ * `splitShellSegments` splits on `\n`, but a shell removes `\` + newline
+ * *before* parsing, so `npm install \⏎left-pad` is one command. Splitting first
+ * produced two segments — the first (`npm install \`) matched no allow rule and
+ * the whole command fell back to "ask". Inside single quotes the backslash is
+ * literal, so the pair stays.
+ */
+export function joinLineContinuations(command: string): string {
+  let out = ''
+  let quote: "'" | '"' | null = null
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i]!
+    if (ch === '\\' && quote !== "'") {
+      if (command[i + 1] === '\n') {
+        i += 1
+        continue
+      }
+      if (command[i + 1] === '\r' && command[i + 2] === '\n') {
+        i += 2
+        continue
+      }
+      // Any other escaped character: keep both, and do not let the escaped
+      // character toggle quote state (`\"` is a literal quote).
+      out += ch
+      if (i + 1 < command.length) {
+        out += command[i + 1]
+        i += 1
+      }
+      continue
+    }
+    if (ch === "'" && quote !== '"') {
+      quote = quote === "'" ? null : "'"
+    } else if (ch === '"' && quote !== "'") {
+      quote = quote === '"' ? null : '"'
+    }
+    out += ch
   }
   return out
+}
+
+/** git global options that consume the next token. */
+const GIT_GLOBAL_WITH_ARG = new Set([
+  '-C',
+  '-c',
+  '--git-dir',
+  '--work-tree',
+  '--namespace',
+  '--exec-path',
+  '--config-env',
+  '--super-prefix',
+])
+/** git global options that stand alone. */
+const GIT_GLOBAL_FLAGS = new Set([
+  '-p',
+  '--paginate',
+  '-P',
+  '--no-pager',
+  '--bare',
+  '--no-replace-objects',
+  '--literal-pathspecs',
+  '--no-optional-locks',
+  '--no-advice',
+  '--no-lazy-fetch',
+])
+
+/**
+ * Normalize a known command by dropping global options that precede its
+ * subcommand (`git -C /path log` → `git log`).
+ *
+ * Only commands whose global-option grammar is known are normalized — a generic
+ * "skip everything that starts with -" would drop flags that *are* the command's
+ * behaviour. Returns null when there is nothing to strip.
+ */
+export function stripGlobalOptions(segment: string): string | null {
+  const tokens = segment.trim().split(/\s+/)
+  if (tokens[0] !== 'git') return null
+  let i = 1
+  while (i < tokens.length) {
+    const token = tokens[i]!
+    if (GIT_GLOBAL_FLAGS.has(token)) {
+      i += 1
+      continue
+    }
+    if (GIT_GLOBAL_WITH_ARG.has(token)) {
+      i += 2
+      continue
+    }
+    if ([...GIT_GLOBAL_WITH_ARG].some((opt) => token.startsWith(`${opt}=`))) {
+      i += 1
+      continue
+    }
+    break
+  }
+  if (i === 1 || i >= tokens.length) return null
+  return ['git', ...tokens.slice(i)].join(' ')
 }
 
 /**
@@ -1016,7 +1149,7 @@ export function matchBashRule(
   // The `length > 0` guard is load-bearing: `[].every()` is `true`, so a
   // command with no matchable segment (or no extracted file access) would
   // otherwise satisfy **any** allow rule — a fail-open of its own.
-  const qualifies = (items: string[], match: (s: string) => boolean): boolean =>
+  const qualifies = <T>(items: T[], match: (item: T) => boolean): boolean =>
     segmentMode === 'all' ? items.length > 0 && items.every(match) : items.some(match)
 
   // A Read/Write/Edit rule must also refuse a Bash command that touches the
@@ -1066,24 +1199,30 @@ export function matchBashRule(
     // the safe direction.
     const anchored = segmentMode === 'all' ? /^([\w./-]+)\*/.exec(subPattern!) : null
     const firstWord = anchored?.[1]
-    return qualifies(flattenCommand(cmd), (seg) => {
-      if (firstWord) {
-        // The wildcard has to start at a word boundary in the command: `ls`
-        // exactly, or `ls` followed by whitespace/`:` — not the `ls` inside
-        // `lsof`.
-        const boundary = new RegExp(
-          '^' + firstWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:$|[:\\s])',
-        )
-        if (!boundary.test(seg)) return false
-      }
+    // The wildcard has to start at a word boundary in the command: `ls`
+    // exactly, or `ls` followed by whitespace/`:` — not the `ls` inside
+    // `lsof`.
+    const boundary = firstWord
+      ? new RegExp('^' + firstWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:$|[:\\s])')
+      : null
+    return qualifies(flattenCommandGroups(cmd), (group) => {
       // An allow rule names a program; these options make that program run a
       // **different** one (`find -exec rm`, `git --upload-pack=…`,
       // `awk system(…)`). Matching the outer word alone would hand over the
       // inner command too, so the segment is not covered by the grant. This
       // list is a floor, not a ceiling — every entry is a construct that
       // executes a command the rule did not name.
-      if (segmentMode === 'all' && embedsForeignCommand(seg)) return false
-      return wildcardMatch(subPattern!, seg)
+      //
+      // Judged on the segment **as written**: the normalized variants exist to
+      // let benign prefixes match, and letting them carry a stripped
+      // `--exec-path=…` past this guard would turn the fix into a bypass.
+      if (segmentMode === 'all' && embedsForeignCommand(group.raw)) return false
+      // The variants are alternative readings of *this* command — any one of
+      // them matching is enough. (Across segments the caller still applies
+      // 'all' / 'any'; this is the within-segment OR.)
+      return group.variants.some(
+        (seg) => (!boundary || boundary.test(seg)) && wildcardMatch(subPattern!, seg),
+      )
     })
   }
 

@@ -1,4 +1,4 @@
-import { mkdirSync, readdirSync, unlinkSync, existsSync, statSync } from 'node:fs'
+import { mkdirSync, readdirSync, unlinkSync, existsSync, statSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import type { Message } from '../shared/types'
@@ -331,6 +331,38 @@ export class SessionStore {
       index.push(entry)
     }
     atomicWriteFileSync(INDEX_FILE, JSON.stringify(index, null, 2), { mode: 0o600 })
+  }
+
+  /**
+   * Move a session's **index entry** (and its saved summary) to a new name.
+   *
+   * `/rename` renames the transcript file via `SessionLog.rename`; the index is a
+   * separate store, and leaving the old row behind makes `/resume last` point at
+   * a file that no longer exists. Returns false when there is no old entry or the
+   * new name is already taken — in both cases *nothing* is changed, so a caller
+   * that reports failure is telling the truth.
+   */
+  static renameEntry(oldName: string, newName: string): boolean {
+    ensureDir()
+    const index = SessionStore.loadIndexRaw()
+    const entry = index.find((e) => e.name === oldName)
+    if (!entry) return false
+    if (index.some((e) => e.name === newName)) return false
+    entry.name = newName
+    atomicWriteFileSync(INDEX_FILE, JSON.stringify(index, null, 2), { mode: 0o600 })
+
+    // The summary file is named after the session, so it has to follow too —
+    // otherwise the renamed session silently loses the recap the user generated.
+    const oldSummary = join(SUMMARIES_DIR, `${sanitizeSessionName(oldName)}.md`)
+    const newSummary = join(SUMMARIES_DIR, `${sanitizeSessionName(newName)}.md`)
+    if (oldSummary !== newSummary && existsSync(oldSummary) && !existsSync(newSummary)) {
+      try {
+        renameSync(oldSummary, newSummary)
+      } catch {
+        // Summary is a cache; a failed move must not fail the rename.
+      }
+    }
+    return true
   }
 
   /**

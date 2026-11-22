@@ -332,6 +332,36 @@ export class SkillsLoader implements Skills {
     this.loadExternal([userSkillsPath])
   }
 
+  /**
+   * Load skills from `<base>/.mipham/skills/` — the project scope.
+   *
+   * This path is what the product tells users to use: `/project` ("Create a
+   * .SKILL.md file in .mipham/skills/"), the Skill tool's not-found message, and
+   * `loop-scaffold` (which creates `.mipham/skills/<domain>/`). Until now nothing
+   * scanned it, so a skill written exactly where the instructions said was never
+   * loaded and `/reload-skills` reported an unchanged count.
+   *
+   * One level of subdirectories is scanned on purpose: the scaffold's layout is
+   * `<domain>/<name>.SKILL.md`, and the Claude-plugin shape is
+   * `<name>/SKILL.md`. Symlinked directories are skipped — following them can
+   * loop, and the flat `loadDirectory` deliberately does not recurse for the
+   * same reason.
+   */
+  loadProjectSkills(basePath: string = process.cwd()): void {
+    const projectDir = join(basePath, '.mipham', 'skills')
+    if (!existsSync(projectDir)) return
+    this.loadDirectory(projectDir, 'standard')
+    try {
+      for (const entry of readdirSync(projectDir, { withFileTypes: true })) {
+        if (entry.isDirectory() && !entry.isSymbolicLink()) {
+          this.loadDirectory(join(projectDir, entry.name), 'standard')
+        }
+      }
+    } catch {
+      // Unreadable directory: the flat scan above already ran.
+    }
+  }
+
   private nameFromPath(path: string): string {
     const parts = path.split('/').filter(Boolean)
     const base = parts.pop() ?? ''

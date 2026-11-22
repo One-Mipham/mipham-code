@@ -92,7 +92,8 @@
     "rename": {
       "usage": "用法: /rename <session-name>\n示例: /rename 修复 Bug 的会话",
       "confirmed": "✓ 会话重命名为 \"{name}\"",
-      "unsaved": "⚠ 本次会话已改名为 \"{name}\"，但没能写入会话登记表 —— 这个名字可能不会保留。"
+      "unsaved": "⚠ 本次会话已改名为 \"{name}\"，但没能写入会话登记表 —— 这个名字可能不会保留。",
+      "log_conflict": "⚠ 标题已改为 \"{name}\"，但已存在同名会话存档 —— 对话记录仍保存在 \"{old}\" 下（可用 /resume {old} 找回）。"
     },
     "plan": {
       "entered": "已进入计划模式。",
@@ -960,6 +961,7 @@
     "tool_denied_classifier_unavailable": "工具 \"{name}\" 被暂缓：auto 模式的分类器不可达，或其回复无法解析（{reason}）。这**不是**策略裁决 —— 该调用从未被裁决，重试是恰当的。若持续发生，按 Shift+Tab 切换模式。",
     "tool_blocked": "工具 \"{name}\" 被钩子拦截",
     "tool_hook_ask": "工具 \"{name}\" 被钩子标为需要批准，而本环境没有交互批准 —— 已按拒绝处理。仓库带来的钩子只能收紧闸门、不能放行；若这是你自己的钩子，请让它直接拦截，或放宽它。",
+    "tool_hook_ask_rewrite": "该钩子同时为 \"{name}\" 提出了改写后的输入；因为本次是拒绝、没有批准通道可以承接它，改写已丢弃。",
     "user_input_blocked": "用户输入被钩子拦截。",
     "dlp_blocked": "请求被 DLP 策略阻止。",
     "model_error": "错误：{error}",
@@ -985,6 +987,9 @@
     "max_tool_turns_warning": "已达到最大 {max} 轮工具调用。{pending} 个工具调用未执行。请总结当前发现及后续步骤。",
     "turn_timeout": "任务已超过 {minutes} 分钟无实质产出，已自动停止。建议拆分任务或明确下一步后重新发起。",
     "turn_truncated": "回复写到一半就断了，不是正常写完 —— 提供商到了输出上限，或连接被关闭。如果是经代理或公司网关访问提供商，先查那一层；否则检查 VPN 与防火墙规则。",
+    "turn_continuing": "回复到达模型输出上限 —— 正在自动续写。",
+    "turn_truncated_limit": "回复到达模型输出上限，已被截断；本轮不再继续续写。",
+    "continuation_prompt": "你上一条回复在输出上限处被截断了。请从断掉的地方原样接着写 —— 不要重复已经写过的内容。",
     "turn_refused": "模型拒绝了这次请求，没有作答。这不是故障：重发给同一个模型通常还是会被拒。",
     "turn_refused_reason": "模型拒绝了这次请求：{reason}",
     "stop_hook_budget_spent": "Stop 钩子要求继续（{reason}），但本轮 {max} 轮工具调用已用尽 —— 就此停下。再发一条消息即可继续。",

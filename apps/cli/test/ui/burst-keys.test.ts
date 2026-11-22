@@ -24,6 +24,7 @@ import { getActiveModels } from '../../src/config/wizard-config'
 import type { MiphamConfig, ProviderConfig } from '../../src/shared/types'
 
 const DOWN = '\x1b[B'
+const RIGHT = '\x1b[C'
 const ENTER = '\r'
 
 /** ink-testing-library 无 act 包装，交还事件循环让 setState / effect 落定。 */
@@ -131,6 +132,16 @@ describe('模型选择器（Ctrl+P）', () => {
     await settle()
 
     expect(onSelect).toHaveBeenCalledWith('google', 'gemini-3.0-pro')
+  })
+
+  it('provider 面板上右箭头切到 model 面板（注释承诺的路真的接上了）', async () => {
+    const { onSelect, stdin } = renderPicker()
+
+    stdin.write(RIGHT + ENTER)
+    await settle()
+
+    // 右箭头若被忽略，Enter 只会走 `goToProvider`，一次都不会选中。
+    expect(onSelect).toHaveBeenCalledWith('google', 'gemini-3.0-flash')
   })
 
   it('前提：一次写入「Tab ↓ Enter」确实派发三个事件（Tab 不在转义序列里也成立）', async () => {

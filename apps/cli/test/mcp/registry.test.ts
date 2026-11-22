@@ -568,3 +568,52 @@ describe('syncMcpToolsOnChange', () => {
 function makeMcpTool(name: string, description = 'desc'): McpToolDefinition {
   return { name, description, inputSchema: { type: 'object', properties: {} } }
 }
+
+describe('MCP structuredContent', () => {
+  afterEach(async () => {
+    await McpClient.getInstance().closeAll()
+    McpClient.resetInstance()
+  })
+
+  async function connectMockServer(name: string): Promise<void> {
+    await McpClient.getInstance().connect({
+      name,
+      command: 'bun',
+      args: ['run', 'test/mcp/mock-server.ts'],
+    })
+  }
+
+  it('只回结构化载荷的服务器不再被读成 (empty result)', async () => {
+    await connectMockServer('struct-srv')
+    const client = McpClient.getInstance()
+    const spy = vi
+      .spyOn(client, 'callTool')
+      .mockResolvedValue({ content: [], structuredContent: { ok: true, count: 2 } })
+    try {
+      const toolsMap = new Map<string, ToolDefinition>()
+      registerMcpServerTools('struct-srv', toolsMap)
+      const tool = toolsMap.get('mcp__struct-srv__echo')!
+      const result = await tool.execute({ message: 'x' }, {} as any)
+      expect(result.content).toContain('"ok": true')
+      expect(result.content).toContain('"count": 2')
+      expect(result.content).not.toBe('(empty result)')
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('（对照）真的什么都没有时仍然明说 (empty result)', async () => {
+    await connectMockServer('struct-srv2')
+    const client = McpClient.getInstance()
+    const spy = vi.spyOn(client, 'callTool').mockResolvedValue({ content: [] })
+    try {
+      const toolsMap = new Map<string, ToolDefinition>()
+      registerMcpServerTools('struct-srv2', toolsMap)
+      const tool = toolsMap.get('mcp__struct-srv2__echo')!
+      const result = await tool.execute({ message: 'x' }, {} as any)
+      expect(result.content).toBe('(empty result)')
+    } finally {
+      spy.mockRestore()
+    }
+  })
+})

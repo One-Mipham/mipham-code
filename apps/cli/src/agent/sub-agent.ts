@@ -416,6 +416,11 @@ export class SubAgent {
       resolvedDef,
       this.toolRegistry,
       compactWindow ?? contextWindow,
+      undefined,
+      // `skills:` in agent frontmatter is applied here — the loader is already
+      // inherited through `options.toolContext` (it is how the Skill tool works
+      // one level down), so the declared skills resolve against the same set.
+      options.toolContext?.skillsLoader,
     )
 
     // 别再 `context.setSystemPrompt(systemPrompt)`：`createAgentContext` 已经拿**含记忆**的

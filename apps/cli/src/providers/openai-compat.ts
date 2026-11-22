@@ -266,7 +266,12 @@ export class OpenAICompatProvider implements ProviderInstance {
               // their JSON is incomplete. Drop them rather than dispatching a broken
               // call, and clear the map so the `[DONE]` handler can't emit them either.
               pendingToolCalls.clear()
-              yield { type: 'stop', reasoning_content: reasoningContent, truncated: true }
+              yield {
+                type: 'stop',
+                reasoning_content: reasoningContent,
+                truncated: true,
+                truncationCause: 'max_tokens',
+              }
             }
           } catch {
             // skip unparseable chunks

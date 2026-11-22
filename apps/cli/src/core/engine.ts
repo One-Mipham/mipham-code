@@ -832,6 +832,9 @@ export class QueryEngine {
     let assistantContent = ''
     let reasoningContent = ''
     let thinkingContent = ''
+    // 本轮为什么被截断。`'max_tokens'` 可续写，`'connection'`/未知不可 —— 见
+    // `continueMaxTokensTurn`。
+    let truncationCause: 'max_tokens' | 'connection' | undefined
     let turnApiInputTokens = 0
     let turnApiOutputTokens = 0
     const turnStart = Date.now()
@@ -859,6 +862,7 @@ export class QueryEngine {
           reasoningContent = ''
           thinkingContent = ''
           toolUses.length = 0
+          truncationCause = undefined
           // Usage is part of "everything": a provider reports tokens as the
           // stream runs, so the attempt that failed had already added its
           // share before `restart` arrived. Keeping it charges the retried
@@ -903,6 +907,25 @@ export class QueryEngine {
           // Accumulate API-reported token counts for this turn
           turnApiInputTokens += chunk.inputTokens
           turnApiOutputTokens += chunk.outputTokens || 0
+        }
+
+        if (chunk.type === 'stop' && chunk.truncated) {
+          // Absent cause = the provider cannot tell; treat it as a connection cut.
+          truncationCause = chunk.truncationCause ?? 'connection'
+        }
+      }
+
+      // Output-limit cut: ask once for the rest, then commit the joined text.
+      // Only when nothing else already ended the round — a cut with tool calls
+      // pending has a half-formed call, and a hit budget has its own notice.
+      if (truncationCause === 'max_tokens' && !budget.hit && !signal?.aborted) {
+        if (toolUses.length === 0 && assistantContent) {
+          yield { type: 'warning', content: t('errors.turn_continuing') }
+          const acc = { text: assistantContent, reasoning: reasoningContent }
+          yield* this.continueMaxTokensTurn(messages, systemPrompt, acc, budget, signal)
+          assistantContent = acc.text
+        } else {
+          yield { type: 'warning', content: t('errors.turn_truncated_limit') }
         }
       }
 
@@ -1304,6 +1327,7 @@ export class QueryEngine {
       let assistantContent = ''
       let reasoningContent = ''
       let thinkingContent = ''
+      let truncationCause: 'max_tokens' | 'connection' | undefined
       const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
 
       try {
@@ -1325,6 +1349,7 @@ export class QueryEngine {
             reasoningContent = ''
             thinkingContent = ''
             toolUses.length = 0
+            truncationCause = undefined
           }
           if (chunk.type === 'error') return
           if (chunk.type === 'text' && chunk.content) {
@@ -1347,6 +1372,10 @@ export class QueryEngine {
               name: chunk.toolUse.name,
               input: chunk.toolUse.input,
             })
+          }
+
+          if (chunk.type === 'stop' && chunk.truncated) {
+            truncationCause = chunk.truncationCause ?? 'connection'
           }
         }
       } catch (err) {
@@ -1371,6 +1400,18 @@ export class QueryEngine {
         }
         yield { type: 'error', error: String(err) }
         return
+      }
+
+      // Output-limit cut — same bounded continuation as the first round.
+      if (truncationCause === 'max_tokens' && !budget.hit && !signal?.aborted) {
+        if (toolUses.length === 0 && assistantContent) {
+          yield { type: 'warning', content: t('errors.turn_continuing') }
+          const acc = { text: assistantContent, reasoning: reasoningContent }
+          yield* this.continueMaxTokensTurn(messages, systemPrompt, acc, budget, signal)
+          assistantContent = acc.text
+        } else {
+          yield { type: 'warning', content: t('errors.turn_truncated_limit') }
+        }
       }
 
       if (assistantContent || reasoningContent || thinkingContent) {
@@ -1692,12 +1733,18 @@ export class QueryEngine {
   }
 
   private getToolDefinitions(): Record<string, unknown>[] {
-    return Array.from(this.tools.values()).map((t) => ({
-      name: t.name,
-      description: t.description,
-      parameters: t.parameters,
-      input_schema: t.parameters, // Anthropic-style naming
-    }))
+    // A tool named by a bare deny rule can never run, so it must not be offered:
+    // the model sees a tool it can call, calls it, and the gate refuses — every
+    // time. Input-scoped rules (`Bash(rm:*)`) are NOT filtered here; they deny
+    // some invocations, and the tool itself is still usable.
+    return Array.from(this.tools.values())
+      .filter((t) => !this.permission.isToolNameDenied(t.name))
+      .map((t) => ({
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+        input_schema: t.parameters, // Anthropic-style naming
+      }))
   }
 
   getContext(): ContextManager {
@@ -1740,7 +1787,11 @@ export class QueryEngine {
    */
   private async *llmChat(req: ChatRequest): AsyncGenerator<StreamChunk> {
     for await (const chunk of (this.llm ?? this.registry).chat(req)) {
-      if (chunk.type === 'stop' && chunk.truncated) {
+      if (chunk.type === 'stop' && chunk.truncated && chunk.truncationCause !== 'max_tokens') {
+        // An output-limit cut is handled by the caller: it may continue the turn
+        // (`continueMaxTokensTurn`), and then "check your proxy/VPN" would be
+        // both alarming and wrong. Connection cuts have no recovery — this is
+        // the only place that says so.
         yield { type: 'warning', content: t('errors.turn_truncated') }
       }
       if (chunk.type === 'stop' && chunk.refusal) {
@@ -1752,6 +1803,65 @@ export class QueryEngine {
       }
       yield chunk
     }
+  }
+
+  /**
+   * 有界续写：一轮因**输出上限**（`max_tokens`）被切断后，追问一次「接着写」。
+   *
+   * 只续一次，且只由调用方在「没有工具调用、没有撞上回合预算、未被中断」时调用。
+   * 连接中断**不**续：那里没有「接着写」可言，重发只会让模型把同一段残句重写一遍。
+   *
+   * 续写的正文并进**同一个** assistant 消息（`acc.text`），而不是再提交一条 ——
+   * 否则历史里会出现两条连续的 assistant 消息，渲染成两个气泡，而用户看到的
+   * 明明是一段话。
+   */
+  private async *continueMaxTokensTurn(
+    messages: import('../shared/types').Message[],
+    systemPrompt: string,
+    acc: { text: string; reasoning: string },
+    budget: TurnBudget,
+    signal?: AbortSignal,
+  ): AsyncGenerator<StreamChunk> {
+    const continuation: import('../shared/types').Message[] = [
+      ...messages,
+      { role: 'assistant', content: acc.text },
+      { role: 'user', content: t('errors.continuation_prompt') },
+    ]
+    let added = ''
+    let cutAgain = false
+    try {
+      for await (const chunk of this.streamUnderTurnBudget(budget, signal, (innerSignal) =>
+        // No tools on a continuation: this request asks the model to *finish the
+        // sentence*, and a tool call produced here would have no execution path
+        // (the round's tool loop has already ended) — it would render as a call
+        // that silently never runs.
+        this.chatWithFallback(continuation, systemPrompt, undefined, innerSignal),
+      )) {
+        yield chunk
+        // A retried continuation re-streams: drop what the failed attempt added.
+        if (chunk.restart) {
+          added = ''
+          continue
+        }
+        if (chunk.type === 'error') return
+        if (chunk.type === 'text' && chunk.content) {
+          added += chunk.content
+          this.context.recordChunk(chunk.content)
+        }
+        if (chunk.type === 'stop' && chunk.truncated && chunk.truncationCause === 'max_tokens') {
+          cutAgain = true
+        }
+      }
+    } catch (err) {
+      acc.text += added
+      if (isAbortError(err)) return
+      yield { type: 'error', error: String(err) }
+      return
+    }
+    acc.text += added
+    // Bounded: a second ceiling hit ends the turn. Say it plainly — the user is
+    // looking at text that stops mid-sentence.
+    if (cutAgain) yield { type: 'warning', content: t('errors.turn_truncated_limit') }
   }
 
   /**

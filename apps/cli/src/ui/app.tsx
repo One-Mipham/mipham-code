@@ -108,6 +108,40 @@ export interface ChatMessage {
   toolMeta?: ToolMeta
 }
 
+/**
+ * Compose the transcript line for a background-task notification.
+ *
+ * `chat.tsx` renders `toolMeta.output` *before* `msg.content`, so a completed
+ * task that carried the raw output preview made its own composed line
+ * (`◼ <desc> · finished`) unreachable — the user saw a truncated raw-output row
+ * and no completion statement. Running/failed tasks keep the preview (that is
+ * the live signal); a completed one reports cleanly.
+ */
+export function taskNotificationMessage(tn: {
+  status: 'started' | 'completed' | 'failed'
+  description: string
+  content?: string
+  error?: string
+}): ChatMessage {
+  const isDone = tn.status === 'completed'
+  const symbol = isDone ? '◼' : '✳'
+  const preview = tn.content
+    ? tn.content.slice(0, 120) + (tn.content.length > 120 ? '...' : '')
+    : tn.error
+      ? `Error: ${tn.error.slice(0, 120)}`
+      : '(no output)'
+  return {
+    role: 'system',
+    content: `${symbol} ${tn.description}${isDone ? ` · finished` : ''}`,
+    toolMeta: {
+      name: isDone ? '' : 'task',
+      input: tn.description || '',
+      ...(isDone ? {} : { output: preview }),
+      collapsed: false,
+    },
+  }
+}
+
 interface AgentProgress {
   name: string
   description: string
@@ -350,6 +384,9 @@ export function App({
   // 卸载（pickerOpen 三元 / apiKeyPrompt 早退 / Ctrl+G），组件内 state 随之清零，
   // 于是「开一次模型选择器，历史就没了」（ROADMAP D7）。
   const [inputHistory, setInputHistory] = useState<string[]>([])
+  // The draft lives here for the same reason history does (see the note above):
+  // InputBar is unmounted by the picker / API-key prompt / agent view.
+  const [inputDraft, setInputDraft] = useState('')
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null)
   // Current git branch — read once at mount (not a git repo → null).
   // `stdio` 显式给：默认下 git 的 stderr 是继承的，「不是仓库」这个正常路径会把
@@ -973,27 +1010,8 @@ export function App({
           }
 
           if (chunk.type === 'task_notification' && chunk.taskNotification) {
-            const tn = chunk.taskNotification
-            const isDone = tn.status === 'completed'
-            const symbol = isDone ? '◼' : '✳'
-            const preview = tn.content
-              ? tn.content.slice(0, 120) + (tn.content.length > 120 ? '...' : '')
-              : tn.error
-                ? `Error: ${tn.error.slice(0, 120)}`
-                : '(no output)'
-            setMessages((prev) => [
-              ...prev,
-              {
-                role: 'system',
-                content: `${symbol} ${tn.description}${isDone ? ` · finished` : ''}`,
-                toolMeta: {
-                  name: isDone ? '' : 'task',
-                  input: tn.description || '',
-                  output: preview,
-                  collapsed: isDone,
-                },
-              },
-            ])
+            const notification = chunk.taskNotification
+            setMessages((prev) => [...prev, taskNotificationMessage(notification)])
             // Sync agent footer — mark completed background agents
             syncBgAgents()
           }
@@ -1599,6 +1617,8 @@ export function App({
                   isLoading={isLoading}
                   history={inputHistory}
                   onHistoryAppend={(v) => setInputHistory((prev) => [...prev, v])}
+                  draft={inputDraft}
+                  onDraftChange={setInputDraft}
                   llm={autocompleteLlm}
                   recentMessages={recentMessages}
                   autocompleteEnabled={

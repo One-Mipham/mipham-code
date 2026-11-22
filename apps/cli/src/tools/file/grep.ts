@@ -34,7 +34,15 @@ export async function runSearch(
   // Same reasoning as `internalGitEnv`: this search is ours, not the user's
   // shell — ripgrep never needs an API key, and handing one down only makes it
   // reachable from a config file or a `--pre` child of the search.
-  const proc = Bun.spawn(cmd, { cwd, stdout: 'pipe', stderr: 'pipe', env: internalProcessEnv() })
+  //
+  // `RIPGREP_CONFIG_PATH` is the user's *global* ripgrep configuration: it can
+  // inject `--glob` / `--type` / `--ignore-file` flags that silently change or
+  // empty every search this tool performs. The args here are fixed, so the
+  // config file is the only other input — a search must answer for the
+  // repository being searched, not for a file the user forgot about.
+  const env = internalProcessEnv()
+  delete env.RIPGREP_CONFIG_PATH
+  const proc = Bun.spawn(cmd, { cwd, stdout: 'pipe', stderr: 'pipe', env })
   let timedOut = false
   const timers: ReturnType<typeof setTimeout>[] = []
   timers.push(

@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react'
 import { Box, Text, useInput } from 'ink'
 import TextInput from 'ink-text-input'
 import { useI18n } from '../i18n-context'
-import { getCommandList } from './commands.js'
+import { getCommandList, rankCommandMatches } from './commands.js'
 import { commandToken, hasInlineArgs } from './command-token.js'
 import { useKeyState } from './use-key-state'
 
@@ -68,10 +68,7 @@ export function CommandPicker({
   // full line — so "/loop 60s echo hello" still matches "/loop").
   const filtered = useMemo(() => {
     const q = commandToken(filter)
-    if (!q) return allCommands
-    return allCommands.filter(
-      (cmd) => cmd.name.toLowerCase().includes(q) || cmd.description.toLowerCase().includes(q),
-    )
+    return rankCommandMatches(allCommands, q)
   }, [filter, allCommands])
 
   // Reset cursor when filter changes

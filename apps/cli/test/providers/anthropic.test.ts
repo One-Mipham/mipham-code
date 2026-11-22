@@ -679,6 +679,7 @@ describe('AnthropicProvider', () => {
 
     const truncatedStops = chunks.filter((c) => c.type === 'stop' && c.truncated === true)
     expect(truncatedStops).toHaveLength(1)
+    expect(truncatedStops[0]!.truncationCause).toBe('max_tokens')
   })
 
   it('test_a_normal_stop_reason_does_not_carry_the_truncated_key', async () => {
@@ -705,6 +706,7 @@ describe('AnthropicProvider', () => {
     expect(stops.length).toBeGreaterThan(0)
     for (const stop of stops) {
       expect('truncated' in stop).toBe(false)
+      expect('truncationCause' in stop).toBe(false)
     }
   })
 

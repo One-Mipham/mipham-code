@@ -148,7 +148,17 @@ function parseHookStdoutFields(stdout: string | null | undefined, _ctx: HookCont
     if (decision === 'ask') {
       // The engine stops the call on `ask` and prints `reason`, so the hook's
       // `permissionDecisionReason` is the only place its explanation can land.
-      return { allowed: true, permissionDecision: 'ask', reason, additionalContext }
+      // `updatedInput` travels too even though this CLI treats `ask` as a hard
+      // refusal: the gate reports that a rewrite was *proposed and discarded*,
+      // which is information the operator can act on. Dropping it here made the
+      // hook's rewrite invisible rather than unexecutable.
+      return {
+        allowed: true,
+        permissionDecision: 'ask',
+        reason,
+        additionalContext,
+        modifiedInput: updatedInput,
+      }
     }
     if (decision === 'defer') {
       return { allowed: true, permissionDecision: 'defer', additionalContext }

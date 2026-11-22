@@ -222,7 +222,7 @@ export function convertMcpTool(serverName: string, mcpTool: McpToolDefinition): 
         ctx.signal,
       )
 
-      const text = result.content
+      const text = (result.content ?? [])
         .map((c) => {
           if (c.type === 'text' && c.text) return c.text
           if (c.type === 'image') return `[Image: ${c.mimeType || 'unknown'}]`
@@ -230,10 +230,18 @@ export function convertMcpTool(serverName: string, mcpTool: McpToolDefinition): 
         })
         .join('\n')
 
+      // A server may answer only in `structuredContent` (MCP 2025-06). Dropping
+      // it turned a real payload into "(empty result)" — indistinguishable from
+      // a tool that genuinely returned nothing.
+      const structured =
+        text === '' && result.structuredContent !== undefined
+          ? JSON.stringify(result.structuredContent, null, 2)
+          : ''
+
       return {
         success: !result.isError,
-        content: text || '(empty result)',
-        error: result.isError ? text : undefined,
+        content: text || structured || '(empty result)',
+        error: result.isError ? text || structured : undefined,
       }
     },
   }

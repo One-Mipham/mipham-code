@@ -79,6 +79,10 @@ function skillsFor(cwd: string, paths?: string[]): SkillsLoader {
   loader.loadBuiltinFromPackage()
   if (!isSafeMode()) {
     loader.loadUserSkills()
+    // Project scope follows the workspace (`<cwd>/.mipham/skills`), same as the
+    // CLI — the two entry points must load the same set or a skill works in one
+    // and silently not in the other.
+    loader.loadProjectSkills(cwd)
     if (paths && paths.length > 0) loader.loadExternal(paths)
   }
   skillsCache.set(cwd, loader)

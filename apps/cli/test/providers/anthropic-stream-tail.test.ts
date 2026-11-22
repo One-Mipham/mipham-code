@@ -70,6 +70,8 @@ describe('a stream that ends without its terminal event', () => {
     const chunks = await run([TEXT_DELTA])
 
     expect(stopOf(chunks).truncated).toBe(true)
+    // A dead stream is not a ceiling hit: the engine must not try to continue it.
+    expect(stopOf(chunks).truncationCause).toBe('connection')
   })
 
   it('is not cleared by a trailing usage-only frame', async () => {
@@ -114,6 +116,8 @@ describe('a stream that ends without its terminal event', () => {
     ])
 
     expect(stopOf(chunks).truncated).toBe(true)
+    // The cause survives a later usage-only frame — it is latched with `truncated`.
+    expect(stopOf(chunks).truncationCause).toBe('max_tokens')
   })
 })
 

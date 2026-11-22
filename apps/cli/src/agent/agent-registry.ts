@@ -170,6 +170,12 @@ export class AgentRegistry {
         name: builtinType,
         description: BUILTIN_DESCRIPTIONS[builtinType],
         systemPrompt: BUILTIN_SYSTEM_PROMPTS[builtinType],
+        // `explore` is advertised as a "Read-only search agent". Without an
+        // explicit list `selectAgentTools` hands it the whole registry, and an
+        // exploration run can Write/Edit — which is how the "unwanted .md
+        // investigation files" this builtin exists to avoid get created. The
+        // description and the grant must name the same set.
+        ...(builtinType === 'explore' ? { tools: 'Read,Grep,Glob' } : {}),
         model: 'inherit',
         permissionMode: 'inherit',
         source: 'builtin',

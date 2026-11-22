@@ -305,6 +305,64 @@ describe('SessionStore', () => {
     })
   })
 
+  // `/rename` 与 `/resume <name>` 必须是同一个命名空间：改名要搬文件，且搬完
+  // 后续 append 仍落在新文件上（只搬文件而不改字段 = 旧名字的空文件在现场长回来）。
+  describe('rename — /rename and /resume share one namespace', () => {
+    it('moves the transcript and appends to the new path afterwards', () => {
+      const log = new SessionLog('test-rename-old')
+      log.append({ type: 'session/start', at: 1, sessionId: 'test-rename-old' })
+      log.append({ type: 'user/message', at: 1, message: { role: 'user', content: 'hi' } })
+
+      expect(log.rename('test-rename-new')).toBe('renamed')
+      expect(log.getName()).toBe('test-rename-new')
+      log.append({
+        type: 'assistant/message',
+        at: 2,
+        message: { role: 'assistant', content: 'yo' },
+      })
+
+      // Old name is gone; the new one has all three events (no split history).
+      expect(SessionStore.loadLog('test-rename-old').events()).toHaveLength(0)
+      const reloaded = SessionStore.loadLog('test-rename-new')
+      expect(reloaded.events()).toHaveLength(3)
+      // `/resume <new>` is the path the user was told about.
+      expect(SessionStore.load('test-rename-new')?.messages).toHaveLength(2)
+    })
+
+    it('refuses to overwrite an existing session (conflict changes nothing)', () => {
+      const a = new SessionLog('test-rename-a')
+      a.append({ type: 'session/start', at: 1, sessionId: 'test-rename-a' })
+      const b = new SessionLog('test-rename-b')
+      b.append({ type: 'session/start', at: 1, sessionId: 'test-rename-b' })
+
+      expect(a.rename('test-rename-b')).toBe('conflict')
+      expect(a.getName()).toBe('test-rename-a')
+      expect(SessionStore.loadLog('test-rename-a').events()).toHaveLength(1)
+      expect(SessionStore.loadLog('test-rename-b').events()).toHaveLength(1)
+    })
+
+    it('moves the index entry and summary along with the transcript', () => {
+      const log = new SessionLog('test-rename-idx')
+      log.append({ type: 'session/start', at: 1, sessionId: 'test-rename-idx' })
+      log.append({ type: 'user/message', at: 1, message: { role: 'user', content: 'hi' } })
+      SessionStore.saveLog('test-rename-idx', log)
+      SessionStore.saveSummary('test-rename-idx', 'a recap', ['tag'])
+
+      log.rename('test-rename-idx2')
+      expect(SessionStore.renameEntry('test-rename-idx', 'test-rename-idx2')).toBe(true)
+
+      const index = JSON.parse(readFileSync(INDEX_FILE, 'utf-8')) as Array<{
+        name: string
+        summary?: string
+      }>
+      expect(index.some((e) => e.name === 'test-rename-idx')).toBe(false)
+      const moved = index.find((e) => e.name === 'test-rename-idx2')
+      expect(moved?.summary).toBe('a recap')
+      expect(existsSync(join(SUMMARIES_DIR, 'test-rename-idx2.md'))).toBe(true)
+      expect(existsSync(join(SUMMARIES_DIR, 'test-rename-idx.md'))).toBe(false)
+    })
+  })
+
   describe('list dual-format', () => {
     it('lists both new-format and old-format sessions', () => {
       const log = new SessionLog('test-list-new')

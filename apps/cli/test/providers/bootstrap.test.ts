@@ -177,3 +177,37 @@ describe('bootstrapProviders', () => {
     expect(instance!.config.apiKey).toBe('${TEST_KEY}')
   })
 })
+
+describe('bootstrapProviders — 档位别名', () => {
+  it('--model haiku 解析成实际模型 id，而不是把 "haiku" 原样发给 provider', () => {
+    const config = makeAnthropicConfig({
+      models: [
+        {
+          id: 'claude-haiku-4-5-20251001',
+          name: 'Haiku 4.5',
+          providerId: 'test-anthropic',
+          contextWindow: 200_000,
+          maxOutput: 64_000,
+          vision: true,
+          status: 'active',
+        },
+        {
+          id: 'claude-sonnet-5',
+          name: 'Sonnet 5',
+          providerId: 'test-anthropic',
+          contextWindow: 1_000_000,
+          maxOutput: 128_000,
+          vision: true,
+          status: 'active',
+        },
+      ],
+    })
+    const registry = bootstrapProviders([config], 'test-anthropic', 'haiku')
+    expect(registry.getActiveModel()).toBe('claude-haiku-4-5-20251001')
+  })
+
+  it('具体 id 原样保留（对照：别名解析不吞掉正常模型名）', () => {
+    const registry = bootstrapProviders([makeAnthropicConfig()], 'test-anthropic', 'claude-sonnet')
+    expect(registry.getActiveModel()).toBe('claude-sonnet')
+  })
+})

@@ -115,6 +115,29 @@ describe('executeHook command (Claude stdin/stdout protocol)', () => {
     expect(r.modifiedInput).toEqual({ command: 'npm run lint' })
   })
 
+  it('carries updatedInput out of an ask decision (so the gate can report it)', async () => {
+    // `ask` is a hard refusal in this CLI, so the rewrite cannot run — but it
+    // must not vanish at parse time: the gate's refusal message says a rewrite
+    // was proposed and discarded, and it can only do that if the field survives.
+    outcome = {
+      status: 0,
+      stdout: JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          permissionDecision: 'ask',
+          permissionDecisionReason: 'please confirm',
+          updatedInput: { command: 'rm -rf ./build' },
+        },
+      }),
+      stderr: '',
+    }
+
+    const r = await executeHook({ type: 'command', command: 'hook.sh', args: [] }, preCtx)
+    expect(r.permissionDecision).toBe('ask')
+    expect(r.reason).toBe('please confirm')
+    expect(r.modifiedInput).toEqual({ command: 'rm -rf ./build' })
+  })
+
   it('floors "timeout": 0 so a working hook is not killed before it can run', async () => {
     // A child that reports success 50ms in: later than a 0ms kill timer, earlier
     // than the 1s floor. Without the floor the hook is torn down first and the

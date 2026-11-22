@@ -92,7 +92,8 @@
     "rename": {
       "usage": "Usage: /rename <session-name>\nExample: /rename Bug Fix Session",
       "confirmed": "✓ Session renamed to \"{name}\"",
-      "unsaved": "⚠ Session title set to \"{name}\" for this run, but it could not be saved to the session registry — the name may not last."
+      "unsaved": "⚠ Session title set to \"{name}\" for this run, but it could not be saved to the session registry — the name may not last.",
+      "log_conflict": "⚠ Title set to \"{name}\", but a saved session already uses that name — the transcript stays under \"{old}\" (/resume {old})."
     },
     "plan": {
       "entered": "Entered plan mode.",
@@ -960,6 +961,7 @@
     "tool_denied_classifier_unavailable": "Tool \"{name}\" was held back because the auto-mode classifier could not be reached or its answer could not be read ({reason}). This is NOT a policy decision — the call was never judged, and retrying is appropriate. If this keeps happening, switch modes with Shift+Tab.",
     "tool_blocked": "Tool \"{name}\" blocked by hook",
     "tool_hook_ask": "Tool \"{name}\" was marked by a hook as needing approval, and this environment has no interactive prompt — so it is refused. A repository-supplied hook may narrow the gate but not approve a call; if this hook is your own, make it block outright or relax it.",
+    "tool_hook_ask_rewrite": "The hook also proposed a rewritten input for \"{name}\"; it was discarded, because a refusal has no approval path to carry it through.",
     "user_input_blocked": "User input blocked by hook.",
     "dlp_blocked": "Request blocked by DLP policy.",
     "model_error": "Error: {error}",
@@ -985,6 +987,9 @@
     "max_tool_turns_warning": "You've reached the maximum of {max} tool-calling rounds. {pending} tool call(s) were not executed. Please summarize what you found so far and any next steps the user should take.",
     "turn_timeout": "Task produced no substantial output for {minutes} minutes and was stopped. Break the task into smaller steps or clarify the next step, then retry.",
     "turn_truncated": "The response was cut off mid-turn, not finished — the provider stopped at its output limit or the connection closed. If you reach the provider through a proxy or a corporate gateway, check that first; otherwise check your VPN and firewall rules.",
+    "turn_continuing": "The reply hit the model's output limit — continuing automatically.",
+    "turn_truncated_limit": "The reply hit the model's output limit and was cut off; this turn will not be continued further.",
+    "continuation_prompt": "Your previous reply was cut off at the output limit. Continue exactly where it stopped — do not repeat anything already written.",
     "turn_refused": "The model declined this request and did not answer. This is not a failure — resending it to the same model will usually be declined again.",
     "turn_refused_reason": "The model declined this request: {reason}",
     "stop_hook_budget_spent": "The Stop hook asked for more work (\"{reason}\"), but this turn has used all {max} of its tool-calling rounds — stopping here. Send another message to continue.",

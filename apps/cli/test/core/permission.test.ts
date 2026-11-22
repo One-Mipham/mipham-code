@@ -1666,3 +1666,52 @@ describe('getRuleWarnings —— 装得上但意思不对的 allow 规则', () =
     expect(p.getRuleWarnings()).toEqual([])
   })
 })
+
+describe('Bash 规则的归一化：同一段命令的多种读法（CC 2.0.10-006 / 2.0.14-002 / 2.1.0-053 / 2.1.0-054）', () => {
+  const bash = () => makeTool('Bash', 'ask', 'exec')
+
+  it('前导环境变量不再让 allow 规则失效', () => {
+    const ps = new PermissionSystem()
+    ps.allow('Bash(npm:*)')
+    expect(ps.check(bash(), { command: 'NODE_ENV=production npm run build' })).toBe('bypass')
+    // 对照：越权的另一半仍然要问
+    expect(ps.check(bash(), { command: 'rm -rf ./src' })).toBe('ask')
+  })
+
+  it('包装器前缀（sudo）同样不吞掉授权', () => {
+    const ps = new PermissionSystem()
+    ps.allow('Bash(npm:*)')
+    expect(ps.check(bash(), { command: 'sudo npm run build' })).toBe('bypass')
+  })
+
+  it('归一化不得让第二段搭便车：env 前缀 + 复合命令仍然要问', () => {
+    const ps = new PermissionSystem()
+    ps.allow('Bash(npm:*)')
+    expect(ps.check(bash(), { command: 'NODE_ENV=x npm run build && rm -rf ./src' })).toBe('ask')
+  })
+
+  it('git 全局选项后的子命令能命中规则', () => {
+    const ps = new PermissionSystem()
+    ps.allow('Bash(git log:*)')
+    expect(ps.check(bash(), { command: 'git -C /path log --oneline' })).toBe('bypass')
+    expect(ps.check(bash(), { command: 'git -C /path push' })).toBe('ask')
+  })
+
+  it('剥选项不得冲掉「内嵌别的程序」护栏（git --exec-path）', () => {
+    const ps = new PermissionSystem()
+    ps.allow('Bash(git:*)')
+    expect(ps.check(bash(), { command: 'git --exec-path=/evil log' })).toBe('ask')
+  })
+
+  it('反斜杠续行按一条命令处理（allow 方向）', () => {
+    const ps = new PermissionSystem()
+    ps.allow('Bash(npm install:*)')
+    expect(ps.check(bash(), { command: 'npm install \\\nleft-pad' })).toBe('bypass')
+  })
+
+  it('反斜杠续行按一条命令处理（deny 方向）', () => {
+    const ps = new PermissionSystem()
+    ps.deny('Bash(rm *)')
+    expect(ps.check(bash(), { command: 'rm \\\n-rf /tmp/x' })).toBe('ask')
+  })
+})

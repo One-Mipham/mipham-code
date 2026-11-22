@@ -121,6 +121,12 @@ export class AnthropicProvider implements ProviderInstance {
     // off at the output ceiling rather than ended by the model.
     let truncated = false
 
+    // Why it was cut. `'max_tokens'` is recoverable (ask the model to continue);
+    // a stream that ends without `message_stop` is not (re-asking re-writes the
+    // fragment). Same terminal stop either way — this is the only distinction the
+    // provider can supply, so it has to travel with the chunk.
+    let truncationCause: 'max_tokens' | 'connection' | undefined
+
     // Set when the provider reports `stop_reason: 'refusal'`. A refusal is a
     // **successful** response (HTTP 200) that declines to answer, and it may carry
     // an empty content array — so without this the turn ends as a blank screen,
@@ -142,6 +148,7 @@ export class AnthropicProvider implements ProviderInstance {
     const terminalStop = (): StreamChunk => ({
       type: 'stop',
       ...(truncated ? { truncated: true } : {}),
+      ...(truncationCause ? { truncationCause } : {}),
       ...(refusal ? { refusal } : {}),
     })
 
@@ -376,6 +383,7 @@ export class AnthropicProvider implements ProviderInstance {
                 const stopReason = event.delta?.stop_reason
                 if (stopReason === 'max_tokens') {
                   truncated = true
+                  truncationCause = 'max_tokens'
                 }
                 // A refusal is a successful response that declines to answer, and
                 // it can arrive with no content at all. Capture the provider's own
@@ -414,7 +422,12 @@ export class AnthropicProvider implements ProviderInstance {
       // The stream ran out without `message_stop`. Whatever stopped it, the turn is
       // incomplete — and this is the only place that knows, because a cleanly
       // closed connection and a finished response are otherwise the same stream.
-      if (!sawTerminalEvent) truncated = true
+      if (!sawTerminalEvent) {
+        truncated = true
+        // A `max_tokens` stop seen earlier is the real cause; only an otherwise
+        // ordinary stream that just dies is a connection cut.
+        truncationCause ??= 'connection'
+      }
 
       yield terminalStop()
     } finally {

@@ -1,4 +1,4 @@
-import { mkdirSync, openSync, readSync, closeSync, statSync } from 'node:fs'
+import { mkdirSync, openSync, readSync, closeSync, statSync, existsSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import type { Message, ToolUseContent, ToolResultContent, ToolResult } from '../shared/types'
@@ -276,6 +276,44 @@ export class SessionLog {
   append(event: SessionEvent): void {
     this.buf.push(event)
     this.save()
+  }
+
+  /** 当前会话名（`/rename` 之后是**新**名字 —— 落盘路径按它推导）。 */
+  getName(): string {
+    return this.name
+  }
+
+  /**
+   * 把会话日志改名 —— 让 `/rename` 与 `/resume <name>` 落在**同一个命名空间**。
+   *
+   * 从前 `/rename` 只改内存标题与跨会话登记表，`<旧名>.jsonl` 原封不动：用户
+   * `/rename Bug Fix` 之后 `/resume Bug Fix` 找不到任何东西，而 `/resume <旧名>`
+   * 又读得到 —— 两个名字指向同一段对话，却只有一个是活的。
+   *
+   * 必须改 `this.name` 而不是只搬文件：`save()` 每次都按名字重算路径，文件搬走了
+   * 而字段没变，下一次 `append` 会**新建一个旧名字的空文件**，历史当场分叉。
+   *
+   * 返回 `'conflict'` 时什么都没动（目标名已有别的会话），调用方必须如实说出来：
+   * 静默覆盖别人的会话，或静默假称已改名，都是把「失败」渲染成「成功」。
+   */
+  rename(newName: string): 'renamed' | 'unchanged' | 'conflict' {
+    if (newName === this.name) return 'unchanged'
+    const oldPath = join(this.dir, `${sanitizeSessionName(this.name)}.jsonl`)
+    const newPath = join(this.dir, `${sanitizeSessionName(newName)}.jsonl`)
+    // 两个不同名字可能消毒到同一个文件名（`a/b` 与 `a_b`）：此时文件已经是
+    // 目标路径，不需要也不能 rename。
+    if (oldPath !== newPath) {
+      if (existsSync(newPath)) return 'conflict'
+      if (existsSync(oldPath)) {
+        try {
+          renameSync(oldPath, newPath)
+        } catch {
+          return 'conflict'
+        }
+      }
+    }
+    this.name = newName
+    return 'renamed'
   }
 
   /** 不可变快照（浅拷贝，事件本身视为不可变）。 */

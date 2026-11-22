@@ -514,6 +514,26 @@ export class PermissionSystem {
     return this.agentCapWarnings
   }
 
+  /**
+   * Does a deny rule name this tool **outright**?
+   *
+   * A rule with an input pattern (`Bash(rm:*)`, a path-scoped `Read`) denies
+   * *some* invocations, not the tool — those stay visible. A bare name, or a
+   * server wildcard (`mcp__srv__*`), denies every call; a tool the model can
+   * never run is not worth offering, and naming it in the request only invites
+   * calls that are guaranteed to fail.
+   *
+   * Read by `QueryEngine.getToolDefinitions()` to keep denied tools out of the
+   * model-facing list (the rule itself still decides at call time — this is a
+   * visibility filter, not a second gate).
+   */
+  isToolNameDenied(toolName: string): boolean {
+    return this.denyRules.some(
+      (rule) =>
+        !rule.pattern.includes('(') && (rule.pattern === toolName || rule.compiled.test(toolName)),
+    )
+  }
+
   // ── Rule management ──
 
   allow(rule: string): void {
