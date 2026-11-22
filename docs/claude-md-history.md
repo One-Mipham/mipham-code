@@ -591,4 +591,6 @@
 > **前一条（2.94.74）**: 2026-11-19 — **RSI 前两项落地：SIM 问题记忆 + RSI Tax 成本计量（2.94.74）** —— SIM：台账增 `problemKey`/`rationale`，`/crsi stats` 按问题分组；RSI Tax：测量链累计 provider usage token（没报 ≠ 报 0），`baselineTokens`/`postTokens` 逐采样对齐，两条渲染路径打「💸 验证 token」，stats 给合计与 0-token eval 基线。两维只记录、不进裁决。测试 4,973 → **4,985**（372 文件）。
 | --- 2.94.77 头部「前一条」行（2.94.79 挤出头部窗口时移入）--- |
 > **前一条（2.94.77）**: 2026-11-20 — **0.85.40 发布：输入诊断 + CDP 报错分型（2.94.77）** —— ① `MIPHAM_DEBUG_INPUT=1`（`ui/input-debug.ts`）把「冻结」切成两类：按键没送达（一个 key 都没有）与送达了没渲染（keys 涨、renders 不动），按秒汇总写 `~/.mipham/input-debug.log`，只记计数与按键类别、2 MB 截断、关闭时零 I/O；② `web-access` 的 CDP 代理把「端口通但 `/json/version` 404」识别为 Chrome 未授权远程调试，`/health` 与 `check-deps` 带上判断与最近错误，且不再重复拉起第二个代理；③ 删掉 Web 搜索工具说明里并不存在的 Tavily / SerpAPI 通道，改为指向 web-access 并注明不要抓结果页。测试 5,008 → **5,018**（375 文件）。
+| --- 2.94.78 头部「前一条」行（2.94.80 挤出头部窗口时移入）--- |
+> **前一条（2.94.78）**: 2026-11-20 — **0.85.41 发布：CRSI 评估治理三件（2.94.78）** —— ① `/crsi bench --capture` 出**捕获率** `Σ(on−off)/Σ(100−off)`（headroom 与配对剔除、题级重采样区间；无题可计 ⇒ `null` 而非 0），参考解臂零 LLM 本地判上界；② 任务电池扩到 **15 题**分 `gate`(12)/`sealed`(3)，sealed 只作过拟合旁证（`--capture` 并排 + `--sealed` 独立读面），**永不进裁定**；③ 合并后开 **3 次观察窗**（噪声自适应地板 `max(stdDev, 2×(100/poolSize))`），`regressed` 只**打印** `git revert <sha>` 不执行，无随机仪器则登记 `noInstrument`。评审收口把「不可测」与「答错」分开：量具故障的 `score: 100` 不再冒充满分，作废轮次不再推进观察窗。测试 5,018 → **5,064**（383 文件）。
 ```

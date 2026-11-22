@@ -28,9 +28,9 @@ prompt-exclude-header: true
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.79
-> **最后更新**: 2026-11-22 — **历史考古：CC 2.1.227–232 收尾（2.94.79）** —— 五版 **105 条**逐条裁决（227:5 / 228:18 / 229:32 / 231:1 / 232:49；2.1.230 不存在）。落 6 个修复单元 + 1 个自发现：① MCP OAuth 的回调监听与 `redirect_uri` 统一为 `127.0.0.1`（`localhost` 可能先解析到 `::1`，严格授权服务器又逐字比对注册值）；② GitLab 令牌遮蔽补齐 7 个家族（`glptt`/`glagent`/`glimt`/`glsoat`/`glcbt`/`glft`/`glffct`）并整段遮蔽 routable `glpat-`/`gldt-`（`.` 后的秘密不再漏出）；③ 预览截断改用 `safeSlice`（工具参数 120、页脚 detail 60 / 描述 80）——落在代理对中间会印出半个 emoji；④ 压缩后仍超窗 ⇒ 一句「重发无用、请新开会话」收手，不再花重试与回退额度；⑤ 跨会话 inbox 目录 `0700` / 消息文件 `0600`；⑥ `Agent` 新增 `subagent_type: "fork"`，父会话副本经 `inheritContext` 交给子代理（无会话时拒绝，而不是静默按 general 跑）。自发现：`generate-bundled-skills.ts` 会把 web-access 的运行时 `.cdp-token` 当资产嵌入（用过代理后重生成即把活凭证写进受跟踪源文件）⇒ 生成器与新鲜度测试同时跳过它。测试 5,064 → **5,075**（384 文件）。
-> **前一条（2.94.78）**: 2026-11-20 — **0.85.41 发布：CRSI 评估治理三件（2.94.78）** —— ① `/crsi bench --capture` 出**捕获率** `Σ(on−off)/Σ(100−off)`（headroom 与配对剔除、题级重采样区间；无题可计 ⇒ `null` 而非 0），参考解臂零 LLM 本地判上界；② 任务电池扩到 **15 题**分 `gate`(12)/`sealed`(3)，sealed 只作过拟合旁证（`--capture` 并排 + `--sealed` 独立读面），**永不进裁定**；③ 合并后开 **3 次观察窗**（噪声自适应地板 `max(stdDev, 2×(100/poolSize))`），`regressed` 只**打印** `git revert <sha>` 不执行，无随机仪器则登记 `noInstrument`。评审收口把「不可测」与「答错」分开：量具故障的 `score: 100` 不再冒充满分，作废轮次不再推进观察窗。测试 5,018 → **5,064**（383 文件）。
+> **版本**: 2.94.80
+> **最后更新**: 2026-11-22 — **CC 2.1.326–333 对标：新增 329–330（2.94.80）** —— `latest`/`next` = **2.1.330**，**331–333 未发布**；326–328 已有第 34/35 档。新增语料 **272 条**（329:130 + 330:142），裁决 `verdicts-all.tsv` 272/272（无此面 219 / 未验 24 / 半 19 / 已处理 8 / 真缺口·已落地 2）。落 2 个修复单元：① **Read 多报一行** —— 两条窗口路径（fd 与掩码后的字符串）都把结尾换行后的空段当一行，`a\nb\n` 报 3 行、空文件报 1 行；现在结尾换行不多出、文件内部空行保留；② **Grep 把被拒图案误诊成权限问题** —— `rg` exit 2 且 stdout 为空时（裸换行图案与权限错误同形）此前一律说「likely permission denied」；现在先引用 stderr 的真实原因（`rg rejected the search: …`），stderr 为空才退回原提示。两条各做负控（还原后 sha256 逐字相符）。测试 5,075 → **5,079**（385 文件）。
+> **前一条（2.94.79）**: 2026-11-22 — **历史考古：CC 2.1.227–232 收尾（2.94.79）** —— 五版 **105 条**逐条裁决（227:5 / 228:18 / 229:32 / 231:1 / 232:49；2.1.230 不存在）。落 6 个修复单元 + 1 个自发现：① MCP OAuth 的回调监听与 `redirect_uri` 统一为 `127.0.0.1`（`localhost` 可能先解析到 `::1`，严格授权服务器又逐字比对注册值）；② GitLab 令牌遮蔽补齐 7 个家族（`glptt`/`glagent`/`glimt`/`glsoat`/`glcbt`/`glft`/`glffct`）并整段遮蔽 routable `glpat-`/`gldt-`（`.` 后的秘密不再漏出）；③ 预览截断改用 `safeSlice`（工具参数 120、页脚 detail 60 / 描述 80）——落在代理对中间会印出半个 emoji；④ 压缩后仍超窗 ⇒ 一句「重发无用、请新开会话」收手，不再花重试与回退额度；⑤ 跨会话 inbox 目录 `0700` / 消息文件 `0600`；⑥ `Agent` 新增 `subagent_type: "fork"`，父会话副本经 `inheritContext` 交给子代理（无会话时拒绝，而不是静默按 general 跑）。自发现：`generate-bundled-skills.ts` 会把 web-access 的运行时 `.cdp-token` 当资产嵌入（用过代理后重生成即把活凭证写进受跟踪源文件）⇒ 生成器与新鲜度测试同时跳过它。测试 5,064 → **5,075**（384 文件）。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -71,7 +71,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **试用期（probation）** — `core/probation.ts`：有任务表现测量的 skill 合并后开 3 次观察窗（同 skill、gate 池、k≥3），噪声自适应地板 `max(stdDev, 2×(100/poolSize))` 出 verdict；`regressed` **只打印** `git revert <sha>`，不执行；无随机仪器的合并登记 `noInstrument`，`/crsi stats` 明说「没有可用仪器」而不是静默跳过；结算前置 = 参考解可信 ∧ 正对照为 0 ∧ 每轮可测 ∧ 有率
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|bench [--capture|--sealed --skill <name>]|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：5,075 测试（5,073 passed + 2 skipped，384 文件）
+测试：5,079 测试（5,077 passed + 2 skipped，385 文件）
 
 ---
 
@@ -108,7 +108,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 384 个测试文件，5075 个测试
+│   │   ├── test/               # 385 个测试文件，5079 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -134,7 +134,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（5075 个测试）
+pnpm test         # vitest run（5079 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -345,7 +345,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | integration     | 1       | 3        | 跨仓接线：`vscode-extension-telemetry`（VS Code 遥测关闭 ⇒ 终端拿到 `MIPHAM_TELEMETRY=off`）                                                                                |
 | integrity       | 20      | 138      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **384** | **5075** | 0 失败（5,073 passed + 2 skipped，384 文件）                                                                                                                                |
+| **合计**        | **385** | **5079** | 0 失败（5,077 passed + 2 skipped，385 文件）                                                                                                                                |
 
 ### 测试注意事项
 
