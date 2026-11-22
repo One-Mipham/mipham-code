@@ -65,6 +65,19 @@ describe('ChatPanel — 不受信文本不许把控制字符送进终端', () =>
     expect(frame).not.toContain(cp(0x1b))
   })
 
+  // CC 2.1.232：预览截断落在 emoji 中间时会印出半个代理对（乱码）。
+  // 工具参数预览的 120 字符截断也必须按码点收口。
+  it('工具参数预览在 emoji 中间截断时不留半个代理对', () => {
+    const input = 'x'.repeat(119) + '\u{1F600}' + 'tail'
+    const frame = frameOf({
+      role: 'system',
+      content: '',
+      toolMeta: { name: 'Bash', input, output: 'ok', collapsed: true },
+    })
+    expect(frame).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/)
+    expect(frame).not.toMatch(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/)
+  })
+
   it('普通消息正文里的 BEL / DEL 不落进帧', () => {
     const frame = frameOf({ role: 'assistant', content: `done${cp(0x07)}${cp(0x7f)}` })
     expect(frame).not.toContain(cp(0x07))

@@ -64,6 +64,31 @@ describe('AgentFooter — 页脚里的模型文本不许把控制字符送进终
     expect(frame).toContain('mcp[8m_tool')
   })
 
+  // CC 2.1.232：长描述在 emoji 中间被截断时会留下半个代理对，终端渲染成乱码。
+  // 判据是帧里**不出现孤代理**，而不是「截断长度对了」—— 纯函数长度断言看不见渲染。
+  it('描述在第 80 个码元处是 emoji 时不留半个代理对', () => {
+    const description = 'a'.repeat(79) + '\u{1F600}' + 'tail'
+    const frame = footerFrame({
+      agents: [
+        { id: 'a1', name: 'agent', description, startTime: T0, tokensUsed: 0, status: 'running' },
+      ],
+      tick: 0,
+    })
+    expect(frame).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/)
+    expect(frame).not.toMatch(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/)
+  })
+
+  it('工具 detail 在第 60 个码元处是 emoji 时不留半个代理对', () => {
+    const detail = 'b'.repeat(59) + '\u{1F600}' + 'tail'
+    const frame = footerFrame({
+      agents: [],
+      tick: 0,
+      activeTool: { name: 'Bash', detail, startTime: T0 },
+    })
+    expect(frame).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/)
+    expect(frame).not.toMatch(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/)
+  })
+
   it('agent 状态行的名称与描述走同一道口（同文件、同源）', () => {
     const frame = footerFrame({
       agents: [

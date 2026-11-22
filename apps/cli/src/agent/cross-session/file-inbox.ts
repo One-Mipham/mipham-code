@@ -35,7 +35,10 @@ export class FileInboxTransport implements CrossSessionTransport {
   private initialized = false
 
   private ensureDir(dir: string): void {
-    mkdirSync(dir, { recursive: true })
+    // Owner-only. The inbox carries other sessions' message bodies; the default
+    // 0755 directory makes them readable by every local account on a machine
+    // whose home directory is world-traversable.
+    mkdirSync(dir, { recursive: true, mode: 0o700 })
   }
 
   /** Ensure the inbox root directory exists (call on first use). */
@@ -69,7 +72,7 @@ export class FileInboxTransport implements CrossSessionTransport {
 
       // Atomic write: temp file then rename
       const tmpPath = filePath + '.tmp'
-      atomicWriteFileSync(tmpPath, JSON.stringify(envelope, null, 2), { mode: 0o644 })
+      atomicWriteFileSync(tmpPath, JSON.stringify(envelope, null, 2), { mode: 0o600 })
       renameSync(tmpPath, filePath)
 
       return true

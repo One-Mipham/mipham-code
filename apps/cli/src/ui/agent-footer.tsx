@@ -1,7 +1,7 @@
 import React from 'react'
 import { Box, Text } from 'ink'
 import { useI18n } from '../i18n-context'
-import { sanitizeInlineField } from '../shared/sanitize'
+import { safeSlice, sanitizeInlineField } from '../shared/sanitize'
 
 /**
  * 页脚也是本文件通往终端的一道口 —— 且它内插的字全是**模型写出来的**：
@@ -131,7 +131,7 @@ export function AgentFooter({ agents, tick, activeTool, agentProgress }: AgentFo
         <Box>
           <Text color={toolIndicatorColor(activeTool!.name)}>
             {'  '}[{sanitizeInlineField(activeTool!.name)}{' '}
-            {sanitizeInlineField(activeTool!.detail).slice(0, 60)}
+            {safeSlice(sanitizeInlineField(activeTool!.detail), 60)}
             {animatedDots(tick)}]
           </Text>
           <Box flexGrow={1} />
@@ -167,9 +167,13 @@ export function AgentFooter({ agents, tick, activeTool, agentProgress }: AgentFo
         const symbol = isRunning ? '◯' : '◼'
         const symbolColor = isRunning ? 'cyan' : undefined
 
-        // Truncate description to keep lines readable
+        // Truncate description to keep lines readable. `safeSlice` refuses to end
+        // on the high half of a surrogate pair — a plain `slice(0, 80)` there
+        // printed a lone surrogate (a garbled glyph) for any emoji on the edge.
         const desc =
-          agent.description.length > 80 ? agent.description.slice(0, 80) + '...' : agent.description
+          agent.description.length > 80
+            ? safeSlice(agent.description, 80) + '...'
+            : agent.description
 
         return (
           <Box key={agent.id}>

@@ -16,6 +16,17 @@ const bundles: Record<string, TranslationMap> = {
 }
 const t = createT(bundles['en-US'] || (enUS as TranslationMap), enUS as TranslationMap)
 
+/**
+ * The one spelling used for both the loopback listener and its redirect URI.
+ *
+ * `localhost` is resolved by the *browser*, and on many systems that resolves
+ * to `::1` first while this server listens on IPv4 only — the browser then
+ * fails to reach the callback. Strict authorization servers also compare the
+ * redirect URI against the client registration byte-for-byte, and `127.0.0.1`
+ * is the spelling registrations use. Both sides therefore name the same host.
+ */
+const OAUTH_CALLBACK_HOST = '127.0.0.1'
+
 interface TokenResponse {
   accessToken: string
   refreshToken?: string
@@ -68,7 +79,7 @@ export class OAuthClient {
 
     const code = await new Promise<string>((resolve, reject) => {
       const server: Server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
-        const url = new URL(req.url || '/', `http://localhost:${port}`)
+        const url = new URL(req.url || '/', `http://${OAUTH_CALLBACK_HOST}:${port}`)
         if (url.pathname === '/callback') {
           const receivedCode = url.searchParams.get('code')
           const receivedState = url.searchParams.get('state')
@@ -112,7 +123,7 @@ export class OAuthClient {
         authUrl.searchParams.set('client_id', auth.clientId)
         authUrl.searchParams.set('code_challenge', codeChallenge)
         authUrl.searchParams.set('code_challenge_method', 'S256')
-        authUrl.searchParams.set('redirect_uri', `http://localhost:${port}/callback`)
+        authUrl.searchParams.set('redirect_uri', `http://${OAUTH_CALLBACK_HOST}:${port}/callback`)
         authUrl.searchParams.set('state', state)
         if (auth.scopes?.length) {
           authUrl.searchParams.set('scope', auth.scopes.join(' '))
@@ -148,7 +159,7 @@ export class OAuthClient {
         grant_type: 'authorization_code',
         code,
         code_verifier: codeVerifier,
-        redirect_uri: `http://localhost:${port}/callback`,
+        redirect_uri: `http://${OAUTH_CALLBACK_HOST}:${port}/callback`,
         client_id: auth.clientId,
       }).toString(),
     })

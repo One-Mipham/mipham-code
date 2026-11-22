@@ -3,7 +3,7 @@ import { SubAgent } from '../../agent/sub-agent'
 import type { SubAgentType } from '../../agent/types'
 import { getBackgroundAgentRegistry } from '../../agent/background-registry'
 
-const VALID_TYPES: SubAgentType[] = ['general', 'explore', 'plan', 'code-review']
+const VALID_TYPES: SubAgentType[] = ['general', 'explore', 'plan', 'code-review', 'fork']
 
 /** Same domain as the session-level `/effort` command (`ui/commands.ts`). */
 const VALID_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
@@ -38,7 +38,8 @@ export const agentTool: ToolDefinition = {
   name: 'Agent',
   description:
     'Launch a sub-agent to handle complex, multi-step tasks independently. ' +
-    'Available types: general (default), explore (code search), plan (design), code-review. ' +
+    'Available types: general (default), explore (code search), plan (design), code-review, ' +
+    'fork (inherits this conversation). ' +
     'Runs in the background by default — returns a task ID immediately; results are ' +
     'retrievable via the Task tool (output action) or Agent View. ' +
     'Set run_in_background: false to run synchronously.',
@@ -60,7 +61,8 @@ export const agentTool: ToolDefinition = {
       prompt: { type: 'string', description: 'The task for the agent to perform' },
       subagent_type: {
         type: 'string',
-        description: 'Type: general (default), explore (code search), plan (design), code-review',
+        description:
+          'Type: general (default), explore (code search), plan (design), code-review, fork (inherits this conversation)',
       },
       run_in_background: {
         type: 'boolean',
@@ -116,6 +118,20 @@ export const agentTool: ToolDefinition = {
 
     // Resolve agent definition from registry (custom > builtin)
     const agentDef = ctx.agentRegistry?.resolve(agentType)
+
+    // `fork` inherits the live conversation. It needs one to inherit: with no
+    // parent messages it would behave exactly like `general` while the caller
+    // reads the type as proof that context was carried over, so refuse instead.
+    const inheritedMessages = agentType === 'fork' ? ctx.parentMessages?.slice() : undefined
+    if (agentType === 'fork' && (!inheritedMessages || inheritedMessages.length === 0)) {
+      return {
+        success: false,
+        content: '',
+        error:
+          'fork requires an existing conversation to inherit; this session has no messages yet.',
+      }
+    }
+
     const runInBackground = resolveRunInBackground(
       params.run_in_background as boolean | undefined,
       agentDef,
@@ -139,6 +155,9 @@ export const agentTool: ToolDefinition = {
         agentDef,
         runInBackground,
         effort,
+        // Byte-identical parent prefix (see SubAgent's `inheritContext`), so the
+        // fork starts from the conversation rather than from the prompt alone.
+        ...(inheritedMessages ? { inheritContext: { messages: inheritedMessages } } : {}),
         // Hand the caller's services down: the sub-agent keeps running the same
         // skills/agents/artifacts, and only the fields it owns are overridden.
         toolContext: ctx,

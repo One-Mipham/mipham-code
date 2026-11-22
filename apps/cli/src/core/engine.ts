@@ -1572,6 +1572,9 @@ export class QueryEngine {
         llm: this.llm,
         readFiles: this.readFiles,
         readFilesComplete: this.readFilesComplete,
+        // A copy: the sub-agent seeds its own context from this prefix while the
+        // parent turn keeps appending to its list.
+        parentMessages: this.context.getMessages().slice(),
       })
 
       // Track touched files for rules matching
@@ -1853,6 +1856,21 @@ export class QueryEngine {
           // path so the turn still ends with an explanation rather than nothing.
         }
         continue
+      }
+      // Compaction has already run and the request is *still* too large.
+      // Re-sending it — here or to a fallback provider — cannot change the
+      // answer: the messages themselves are the oversized part and there is
+      // nothing left to strip. Say why once instead of spending the retry and
+      // fallback budget on a request that is guaranteed to fail the same way.
+      if (compactedForOverflow && ownsFlow && isContextOverflowError(failure)) {
+        yield {
+          type: 'error',
+          error:
+            `${activeId} rejected the request as too large even after compacting — ` +
+            `the conversation itself exceeds the request size limit, so retrying cannot help. ` +
+            `Start a new session (/clear) or remove large attachments.`,
+        }
+        return
       }
       if (!retryable || !ownsFlow || attempt >= 1) break
       // `restart: true` tells the consumer to drop what the failed attempt already

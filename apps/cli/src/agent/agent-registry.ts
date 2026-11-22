@@ -72,6 +72,7 @@ const BUILTIN_SYSTEM_PROMPTS: Record<SubAgentType, string> = {
   plan: 'You are a planning sub-agent. Design implementation approaches. Return a step-by-step plan with files to modify.',
   'code-review':
     'You are a code review sub-agent. Find bugs, security issues, and code quality problems. Return findings by severity.',
+  fork: 'You are a forked sub-agent. You inherit the conversation so far; continue it rather than restating it.',
 }
 
 const BUILTIN_DESCRIPTIONS: Record<SubAgentType, string> = {
@@ -79,6 +80,7 @@ const BUILTIN_DESCRIPTIONS: Record<SubAgentType, string> = {
   explore: 'Read-only search agent for broad fan-out searches across files.',
   plan: 'Software architect agent for designing implementation plans.',
   'code-review': 'Code review agent for finding bugs and quality issues.',
+  fork: 'Sub-agent that inherits the current conversation and continues from it.',
 }
 
 export class AgentRegistry {

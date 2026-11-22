@@ -212,6 +212,10 @@ describe('OAuthClient', () => {
       const redirectUri = authUrl.searchParams.get('redirect_uri')
       expect(state).toBeTruthy()
       expect(redirectUri).toBeTruthy()
+      // 监听器绑的是 127.0.0.1；redirect URI 必须是同一个拼法。`localhost`
+      // 会被浏览器解析到 ::1（很多系统优先 IPv6），严格授权服务器又按注册值
+      // 逐字比对 —— 两种情况下只有 127.0.0.1 能让回调真实到达。
+      expect(redirectUri).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/callback$/)
 
       await httpGet(`${redirectUri}?code=auth-code-1&state=${state}`)
       const tokens = await flowPromise

@@ -123,7 +123,7 @@ const MessageRow = React.memo(
             {msg.toolMeta.name ? (
               <Text color={toolColor(msg.toolMeta.name)}>
                 {msg.toolMeta.collapsed ? '⏺' : '⏺ ▼'} {sanitizeInlineField(msg.toolMeta.name)}
-                {msg.toolMeta.input ? ` (${display(msg.toolMeta.input).slice(0, 120)})` : ''}
+                {msg.toolMeta.input ? ` (${safeSlice(display(msg.toolMeta.input), 120)})` : ''}
               </Text>
             ) : null}
             {/* Tool result line: ⎿  summary text */}

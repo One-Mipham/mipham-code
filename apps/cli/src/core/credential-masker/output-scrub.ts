@@ -6,10 +6,19 @@ import { SecurityGate } from '../../security/gate'
  * Well-known secret token prefixes. These are high-signal formats that must
  * never leak into output, independent of the configured patterns.
  * - GitHub: ghp_ (personal access), gho_ (OAuth), ghs_ (server), ghu_/ghr_ (user/server-to-server), github_pat_ (fine-grained)
- * - GitLab: glpat- (personal access), gldt- (deploy), glrt- (runner), gloas- (OAuth app)
+ * - GitLab: glpat- (personal access), gldt- (deploy), glrt- (runner), gloas- (OAuth app),
+ *   glptt- (pipeline trigger), glagent- (agent), glimt- (incoming mail),
+ *   glsoat- (SCIM OAuth), glcbt- (CI build), glft- (feed), glffct- (feature flags)
+ *
+ * GitLab "routable" tokens carry a `.` between a short routing segment and the
+ * secret (e.g. `glpat-abcde.0123456789abcdef`). A body class without `.` stops
+ * at the first segment, redacting the routing prefix and leaving the secret in
+ * the clear — the dot-separated tail is part of the credential, not punctuation.
+ * Each dot segment must be at least five characters, so a sentence-ending period
+ * after a token is not swallowed.
  */
 const TOKEN_REDACTION_PATTERN =
-  /\b(?:ghp_|gho_|ghs_|ghu_|ghr_|github_pat_|glpat-|gldt-|glrt-|gloas-)[A-Za-z0-9_-]{8,}/g
+  /\b(?:ghp_|gho_|ghs_|ghu_|ghr_|github_pat_|glpat-|gldt-|glrt-|gloas-|glptt-|glagent-|glimt-|glsoat-|glcbt-|glft-|glffct-)[A-Za-z0-9_-]{5,}(?:\.[A-Za-z0-9_-]{5,})*/g
 
 /**
  * Credentials embedded in a URL's userinfo — `scheme://user:password@host`.

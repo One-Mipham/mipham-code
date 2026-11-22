@@ -49,7 +49,11 @@ function collectAssets(dir: string): BundledSkillAsset[] {
   const out: BundledSkillAsset[] = []
   const walk = (d: string, rel: string): void => {
     for (const name of readdirSync(d).sort()) {
-      if (name === '.gitkeep' || name === '.git') continue
+      // `.cdp-token` is runtime state written by the web-access proxy, not a
+      // shipped asset. Embedding it would copy a live credential into a tracked
+      // source file (and into the npm package) the first time someone regenerates
+      // after using web-access. It is gitignored for the same reason.
+      if (name === '.gitkeep' || name === '.git' || name === '.cdp-token') continue
       const full = join(d, name)
       const relPath = rel ? `${rel}/${name}` : name
       const st = statSync(full)

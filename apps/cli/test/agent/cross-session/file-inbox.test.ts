@@ -10,7 +10,7 @@ vi.mock('node:os', async (importOriginal) => {
   }
 })
 
-import { rmSync, existsSync, mkdirSync, symlinkSync } from 'node:fs'
+import { rmSync, existsSync, mkdirSync, symlinkSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
 import { FileInboxTransport } from '../../../src/agent/cross-session/file-inbox'
@@ -67,6 +67,25 @@ describe('FileInboxTransport', () => {
     })
     expect(result).toBe(true)
     expect(existsSync(TEST_INBOX)).toBe(true)
+  })
+
+  it('inbox 目录与消息文件只对属主可访问', async () => {
+    await transport.send(fromSession, 'test-session-cross', {
+      id: 'msg-mode',
+      from: 'sender-123',
+      to: 'test-session-cross',
+      summary: 'private',
+      message: 'session-only body',
+      timestamp: new Date(),
+      read: false,
+      type: 'message',
+    })
+
+    // 0755/0644 会让同一台机器上的其他本地账户读到别的会话的消息正文。
+    expect(statSync(TEST_INBOX).mode & 0o777).toBe(0o700)
+    const file = readdirSync(TEST_INBOX).find((f) => f.endsWith('.json'))
+    expect(file).toBeTruthy()
+    expect(statSync(join(TEST_INBOX, file!)).mode & 0o777).toBe(0o600)
   })
 
   it('polls messages from inbox', async () => {

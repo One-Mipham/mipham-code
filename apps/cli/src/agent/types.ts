@@ -2,7 +2,7 @@
 
 import type { Message, ToolContext } from '../shared/index.ts'
 
-export type SubAgentType = 'general' | 'explore' | 'plan' | 'code-review'
+export type SubAgentType = 'general' | 'explore' | 'plan' | 'code-review' | 'fork'
 
 export interface AgentFrontmatter {
   name: string

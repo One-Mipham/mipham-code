@@ -114,6 +114,27 @@ describe('请求超窗 ⇒ 压缩后重问', () => {
     expect(requests).toHaveLength(2)
     expect(chunks.some((c) => c.type === 'error')).toBe(true)
   })
+
+  it('压缩后仍超窗 ⇒ 明说重发无用，不花重试/回退额度', async () => {
+    const requests: ChatRequest[] = []
+    // 注意这里**没有** `retryable: false`：默认值是可重试。一个只在
+    // `!retryable` 分支收手的实现会因此再发第三次（或切回退 provider）。
+    const registry = registryWith(async function* (req) {
+      requests.push(req)
+      yield { type: 'error', error: 'prompt is too long: 250000 tokens > 200000 maximum' }
+    })
+    const context = longContext()
+    const engine = new QueryEngine(registry, context, new Map())
+
+    const chunks = await collect(engine, 'next question')
+
+    expect(requests).toHaveLength(2)
+    const error = chunks.find((c) => c.type === 'error')
+    expect(error?.error).toMatch(/even after compacting/i)
+    expect(error?.error).toMatch(/retrying cannot help/i)
+    // 刚刚已经压缩过；再建议 `/compact` 是让用户做一件已经失败过的事。
+    expect(error?.error).not.toMatch(/\/compact/)
+  })
 })
 
 describe('isContextOverflowError', () => {

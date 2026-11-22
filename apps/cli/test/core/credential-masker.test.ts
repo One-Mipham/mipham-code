@@ -168,6 +168,34 @@ describe('maskOutput', () => {
     expect(result).toContain(CREDENTIAL_SENTINEL)
   })
 
+  it('should redact every GitLab token family, not only the four original ones', () => {
+    const config = makeConfig()
+    for (const prefix of ['glptt', 'glagent', 'glimt', 'glsoat', 'glcbt', 'glft', 'glffct']) {
+      const token = `${prefix}-0123456789abcdef`
+      const result = maskOutput(`token=${token}`, config)
+      expect(result, prefix).not.toContain('0123456789abcdef')
+      expect(result, prefix).toContain(CREDENTIAL_SENTINEL)
+    }
+  })
+
+  it('redacts a routable GitLab token in full, including the dot-separated secret', () => {
+    const config = makeConfig()
+    // Routable tokens are `<prefix><routing>.<secret>`; a character class
+    // without `.` stops at the routing segment and leaves the secret in clear.
+    const output = 'glpat-abcde.0123456789abcdefghij'
+    const result = maskOutput(output, config)
+    expect(result).not.toContain('0123456789abcdefghij')
+    expect(result).not.toContain('abcde')
+    expect(result).toContain(CREDENTIAL_SENTINEL)
+  })
+
+  it('does not swallow a sentence-ending period after a legacy token', () => {
+    const config = makeConfig()
+    const result = maskOutput('using glpat-abcdefghijklmnopqrstuvwxyz.', config)
+    expect(result).toContain(CREDENTIAL_SENTINEL)
+    expect(result.endsWith('.')).toBe(true)
+  })
+
   it('should redact fine-grained github_pat_ token', () => {
     const config = makeConfig()
     const output = 'token leaked: github_pat_11ABCDEFG0abcdefg_1234567890abcdefghijklmnopqrstuvwxyz'

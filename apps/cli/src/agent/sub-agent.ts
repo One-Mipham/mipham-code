@@ -55,6 +55,7 @@ const TYPE_SYSTEM_PROMPTS: Record<SubAgentType, string> = {
   plan: 'You are a planning sub-agent. Design implementation approaches. Return a step-by-step plan with files to modify.',
   'code-review':
     'You are a code review sub-agent. Find bugs, security issues, and code quality problems. Return findings by severity.',
+  fork: 'You are a forked sub-agent. You inherit the conversation so far; continue it rather than restating it.',
 }
 
 /**

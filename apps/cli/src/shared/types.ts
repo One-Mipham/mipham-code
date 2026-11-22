@@ -657,6 +657,16 @@ export interface ToolContext {
    */
   readFilesComplete?: Set<string>
   /**
+   * The live conversation this tool call belongs to.
+   *
+   * Set by `Engine.executeTool` on the context it hands every tool. The Agent
+   * tool's `fork` subagent type seeds its own context with this prefix so it can
+   * act on the conversation without being told about it again. Absent when a
+   * context is built by hand (tests, daemon stubs) — `fork` then refuses rather
+   * than silently behaving like `general`.
+   */
+  parentMessages?: Message[]
+  /**
    * Cancellation for the turn this tool call belongs to.
    *
    * Carried on the context, not on `execute`'s signature, so every tool can reach it

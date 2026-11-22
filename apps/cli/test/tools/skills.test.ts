@@ -427,8 +427,10 @@ describe('bundled-skill-assets snapshot freshness', () => {
     const expected: Array<{ path: string; content: string; mode?: number }> = []
     const walk = (dir: string, rel: string) => {
       // Mirror the generator's traversal: code-unit .sort() on string names, one statSync.
+      // `.cdp-token` is runtime state (gitignored) — the generator skips it so a
+      // live proxy credential can never be baked into the bundled snapshot.
       for (const name of readdirSync(dir).sort()) {
-        if (name === '.gitkeep') continue
+        if (name === '.gitkeep' || name === '.cdp-token') continue
         const full = join(dir, name)
         const relPath = rel ? `${rel}/${name}` : name
         const st = statSync(full)
