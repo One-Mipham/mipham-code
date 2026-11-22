@@ -589,4 +589,6 @@
 > **前一条（2.94.73）**: 2026-11-19 — **CC 2.1.328 正式档重做：144 条逐条过，3 个修复单元（2.94.73）** —— `latest` 越过 2.1.327 后拿到 144 条发布说明：① 重试的回答 token 计两遍（`restart` 未清 `turnApi*`，usage 流中先报）；② MCP 根 `allOf` 让参数全隐形（合取，required 取并集）；③ `/code-review` 收窄为 bug + CLAUDE.md 违规、标 `important`/`pre_existing`/`nit`、零发现固定文案。其余 140 条：对照 6 / 半 5 / 未验 14 / 无此面 115。测试 4,969 → **4,973**（372 文件）。
 | --- 2.94.74 头部「前一条」行（2.94.76 挤出头部窗口时移入）--- |
 > **前一条（2.94.74）**: 2026-11-19 — **RSI 前两项落地：SIM 问题记忆 + RSI Tax 成本计量（2.94.74）** —— SIM：台账增 `problemKey`/`rationale`，`/crsi stats` 按问题分组；RSI Tax：测量链累计 provider usage token（没报 ≠ 报 0），`baselineTokens`/`postTokens` 逐采样对齐，两条渲染路径打「💸 验证 token」，stats 给合计与 0-token eval 基线。两维只记录、不进裁决。测试 4,973 → **4,985**（372 文件）。
+| --- 2.94.77 头部「前一条」行（2.94.79 挤出头部窗口时移入）--- |
+> **前一条（2.94.77）**: 2026-11-20 — **0.85.40 发布：输入诊断 + CDP 报错分型（2.94.77）** —— ① `MIPHAM_DEBUG_INPUT=1`（`ui/input-debug.ts`）把「冻结」切成两类：按键没送达（一个 key 都没有）与送达了没渲染（keys 涨、renders 不动），按秒汇总写 `~/.mipham/input-debug.log`，只记计数与按键类别、2 MB 截断、关闭时零 I/O；② `web-access` 的 CDP 代理把「端口通但 `/json/version` 404」识别为 Chrome 未授权远程调试，`/health` 与 `check-deps` 带上判断与最近错误，且不再重复拉起第二个代理；③ 删掉 Web 搜索工具说明里并不存在的 Tavily / SerpAPI 通道，改为指向 web-access 并注明不要抓结果页。测试 5,008 → **5,018**（375 文件）。
 ```
