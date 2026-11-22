@@ -4,6 +4,42 @@
 > (tag dates) and use the same wording as the VS Code extension's changelog — the plugin is a
 > thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.43 (2026-11-22)
+
+- Version sync with Mipham Code CLI 0.85.43
+- Fixed: `Bash` rejected `eval` / `source` on a substring match — benign commands such as
+  `git commit -m "source config cleanup"` or `rg 'eval|source'` were refused. The check now looks at
+  the command position only (quoted text and arguments no longer trip it) and recurses into
+  `$(…)`, backtick and `<(…)` command substitutions.
+- Fixed: `Bash` dropped stderr on success, although the tool has always advertised returning both
+  streams. Output like `printf err >&2` now comes back with the successful result (masked for
+  credentials and truncated when long).
+- Fixed: `ToolSearch` displayed names that could not be called — capitalized server or tool names
+  were concatenated verbatim. It now uses the same normalized join as registration.
+- Fixed: a hook's root-level `systemMessage` was never parsed and had no display path. It is now
+  shown as a warning for UserPromptSubmit / Stop and written to stderr for SessionStart / SessionEnd.
+- Fixed: hook child processes did not receive `$CLAUDE_PROJECT_DIR`, so hooks migrated from other
+  tools expanded it to an empty string. It is now injected with the session directory (a copy of
+  the environment; the parent process is untouched).
+- Fixed: `disableAllHooks` was silently ignored, so hooks still ran after the user turned them off.
+  Both the CLI and the daemon honor it now, and `/hooks` marks the hooks as not running and excludes
+  them from the enabled count.
+- Fixed: the `Stop` hook did not fire on two terminal paths — when the tool-round budget was spent,
+  and after the forced summary on the last round. It fires in both now; a blocking hook is told the
+  budget is spent.
+- Fixed: MCP child processes outlived the CLI — a stdio server that does not read stdin EOF stayed
+  alive. The exit path now tears down the whole process tree synchronously.
+- Fixed: `/model <name>` silently ignored its argument. It now resolves the model by id across
+  providers and switches to it; an unknown model points to `/models`, an ambiguous one to `/switch`,
+  and a missing API key is named.
+- Fixed: history navigation became a dead end after a slash command — ↑/↓ stopped working after
+  recalling `/help`. The history keys now yield only to a picker that is actually open.
+- Fixed: `/add-dir` described the opposite of its behavior. It claimed "Reads — not limited by
+  directory" while the file tools still stop at the session directory; the text now says so.
+- Security: a permissions array with the wrong type was silently dropped — `"deny": "Read(**/.env)"`
+  written as a string instead of an array was discarded, which is fail-open. The file and field are
+  now named with the expected type, and non-string entries inside an array are named too.
+
 ## 0.85.42 (2026-11-22)
 
 - Version sync with Mipham Code CLI 0.85.42

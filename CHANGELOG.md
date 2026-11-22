@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.85.43] — 2026-11-22
+
+### Fixed
+
+- **`Bash` 把 `eval` / `source` 按子串拒绝** —— `git commit -m "source config cleanup"`、
+  `rg 'eval|source'` 这类良性命令此前直接被拒。现在只在**命令位置**判定（引号内、参数里的
+  字样不再误杀），并递归检查 `$(…)`、反引号与 `<(…)` 里的命令替换。
+- **`Bash` 成功时丢掉 stderr** —— 工具描述一直宣称返回 stdout 与 stderr，实际只在失败时回传
+  后者。`printf err >&2` 这类输出现在随成功结果一并返回（同样做凭据遮蔽，超长截断）。
+- **`ToolSearch` 展示的名字不可调用** —— 大写服务器名 / 工具名此前按原样拼接，展示出来的
+  名字和注册名对不上。现在复用与注册一致的规范化拼接。
+- **钩子的 `systemMessage` 无处显示** —— 根级字段此前从不解析。现在 UserPromptSubmit / Stop
+  以警告显示，SessionStart / SessionEnd 写 stderr。
+- **钩子子进程拿不到 `$CLAUDE_PROJECT_DIR`** —— 从其他工具迁来的钩子展开为空。现在注入会话
+  目录（副本环境变量，不污染本进程）。
+- **`disableAllHooks` 被静默忽略** —— 用户以为关了，钩子照跑。现在 CLI 与 daemon 都遵守它，
+  `/hooks` 会标注「不会运行」并从启用计数中排除。
+- **`Stop` 钩子在两处终止路径上不触发** —— 工具轮预算耗尽、以及最后一轮强制摘要之后，
+  钩子此前收不到「回合已结束」。现在两处都会触发；阻断式钩子会被告知预算已用尽。
+- **`MCP` 子进程在退出后残留** —— 不读 stdin EOF 的 stdio 服务器会活过 CLI。退出路径现在
+  同步结束整个进程子树。
+- **`/model <name>` 静默忽略参数** —— 现在按 id 跨 provider 解析并切换；未知模型指向 `/models`，
+  歧义提示用 `/switch`，缺 API key 时如实说明。
+- **斜杠命令之后历史导航变死路** —— 上调 `/help` 后 ↑/↓ 不再工作。历史键现在只让位给
+  真正打开的选择器。
+- **`/add-dir` 的说明与行为相反** —— 原文称「Reads — not limited by directory」，而文件工具
+  仍以会话目录为界。文案已改为如实说明。
+
+### Security
+
+- **`settings.json` 权限数组类型错误曾静默丢弃规则** —— `"deny": "Read(**/.env)"`（写成字符串
+  而非数组）此前被直接丢掉，等于 **fail-open**。现在会点名文件与字段并提示期望的类型；
+  数组内混入非字符串条目也会点名。
+
 ## [0.85.42] — 2026-11-22
 
 ### Added
