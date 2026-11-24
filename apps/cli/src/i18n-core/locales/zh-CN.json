@@ -513,7 +513,12 @@
       "skills_unavailable": "  （技能信息不可用）",
       "audit_section": "── CLAUDE.md 审计 ──",
       "audit_clean": "  ✓ 未发现可从代码推断的冗余章节",
-      "audit_found": "将上述章节加入 `prompt-exclude` frontmatter，可停止发送给模型、节省 token。"
+      "audit_found": "将上述章节加入 `prompt-exclude` frontmatter，可停止发送给模型、节省 token。",
+      "api_section": "── API ──",
+      "api_target": "  {provider}（{model}）",
+      "api_not_tested": "  ⚪ 未测试 — {reason}",
+      "api_reachable": "  🟢 可连接 — {detail}",
+      "api_unreachable": "  🔴 不可连接 — {detail}"
     },
     "skillDoctor": {
       "title": "── 技能体检 ──",

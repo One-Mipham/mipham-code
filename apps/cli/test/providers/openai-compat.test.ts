@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { ProviderConfig, StreamChunk } from '@mipham/shared'
 import { OpenAICompatProvider, serializeToolArguments } from '../../src/providers/openai-compat'
+import { UNNAMED_TOOL_CALL } from '../../src/shared/constants'
 
 // 会话日志在 `append` 时即落盘（325-009），所以这些用例必须把 home 隔离到临时目录，
 // 否则测试会往开发者真实的 `~/.mipham/sessions/` 里追加会话。
@@ -349,7 +350,7 @@ describe('OpenAICompatProvider', () => {
     expect(toolUses[0]!.toolUse!.name).toBe('read')
   })
 
-  it('drops a tool call missing a name', async () => {
+  it('keeps a tool call missing a name under a synthetic name instead of dropping it', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValue(
@@ -363,8 +364,14 @@ describe('OpenAICompatProvider', () => {
     const provider = new OpenAICompatProvider(makeConfig())
     const chunks = await collectChunks(provider.chat({ model: 'gpt-5', messages: [] }))
 
+    // The call still reaches the engine. Dropping it here made the turn end as a
+    // silent short answer; the synthetic name routes it to the unknown-tool path,
+    // which returns an error result the model can act on.
     const toolUses = chunks.filter((c) => c.type === 'tool_use')
-    expect(toolUses).toHaveLength(0)
+    expect(toolUses).toHaveLength(1)
+    expect(toolUses[0]!.toolUse!.name).toBe(UNNAMED_TOOL_CALL)
+    expect(toolUses[0]!.toolUse!.id).toBe('call_1')
+    expect(toolUses[0]!.toolUse!.input).toEqual({ x: 1 })
   })
 
   // ═══════════════════════════════════════════
@@ -657,6 +664,43 @@ describe('OpenAICompatProvider', () => {
     const healthy = await provider.healthCheck()
 
     expect(healthy).toBe(false)
+  })
+
+  it('probeConnectivity reports an HTTP answer as reachable, authentication aside', async () => {
+    // A 401 from a live endpoint is "reachable but refused", not "unreachable".
+    // /doctor must be able to tell those apart; the boolean healthCheck cannot.
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 401 }))
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new OpenAICompatProvider(makeConfig())
+    const probe = await provider.probeConnectivity()
+
+    expect(probe.tested).toBe(true)
+    expect(probe.ok).toBe(true)
+    expect(probe.detail).toContain('HTTP 401')
+  })
+
+  it('probeConnectivity reports a network failure with its reason', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'))
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new OpenAICompatProvider(makeConfig())
+    const probe = await provider.probeConnectivity()
+
+    expect(probe.tested).toBe(true)
+    expect(probe.ok).toBe(false)
+    expect(probe.detail).toContain('ECONNREFUSED')
+  })
+
+  it('probeConnectivity says why it did not test when no key is configured', async () => {
+    const fetchMock = vi.fn()
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new OpenAICompatProvider(makeConfig({ apiKey: '' }))
+    const probe = await provider.probeConnectivity()
+
+    expect(probe).toEqual({ tested: false, ok: false, detail: 'no API key configured' })
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('should resolve env-var templates in baseUrl (${MIPHAM_BASE_URL})', async () => {

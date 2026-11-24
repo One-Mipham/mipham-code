@@ -90,6 +90,25 @@ function killProcessTree(proc: ChildProcess): void {
   }
 }
 
+/**
+ * The request id a response line answers, if any.
+ *
+ * Our requests carry **numeric** ids, but a server is free to stringify them on
+ * the way back (`"id": "7"`). That response used to match nothing, so the
+ * request stayed pending until the full request timeout — a malformed reply
+ * that reads as a slow server. Numeric-string ids are the one spelling we can
+ * map back safely; anything else (a non-numeric string, `null`, an object) names
+ * a request we never sent and must not settle someone else's promise.
+ */
+function matchResponseId(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isInteger(value)) return value
+  if (typeof value === 'string' && /^\d+$/.test(value)) {
+    const id = Number(value)
+    return Number.isSafeInteger(id) ? id : null
+  }
+  return null
+}
+
 /** Every descendant of `root`, parents before children. */
 function descendantPids(root: number): number[] {
   let listing: string
@@ -232,12 +251,13 @@ export class StdioTransport implements Transport {
             const msg = JSON.parse(trimmed)
 
             // Check if it's a response (has id and result/error)
-            if (typeof msg.id === 'number' && ('result' in msg || 'error' in msg)) {
-              const response = msg as JsonRpcResponse
-              const entry = this.pending.get(response.id)
+            const responseId = matchResponseId(msg.id)
+            if (responseId !== null && ('result' in msg || 'error' in msg)) {
+              const entry = this.pending.get(responseId)
               if (entry) {
                 clearTimeout(entry.timer)
-                this.pending.delete(response.id)
+                this.pending.delete(responseId)
+                const response = msg as JsonRpcResponse
                 if (response.error) {
                   entry.reject(
                     new Error(`MCP error ${response.error.code}: ${response.error.message}`),

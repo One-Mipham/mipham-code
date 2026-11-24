@@ -513,7 +513,12 @@
       "skills_unavailable": "  (skills info unavailable)",
       "audit_section": "── CLAUDE.md Audit ──",
       "audit_clean": "  ✓ no code-derivable sections found",
-      "audit_found": "Add the sections above to the `prompt-exclude` frontmatter to stop sending them to the model."
+      "audit_found": "Add the sections above to the `prompt-exclude` frontmatter to stop sending them to the model.",
+      "api_section": "── API ──",
+      "api_target": "  {provider} ({model})",
+      "api_not_tested": "  ⚪ not tested — {reason}",
+      "api_reachable": "  🟢 reachable — {detail}",
+      "api_unreachable": "  🔴 unreachable — {detail}"
     },
     "skillDoctor": {
       "title": "── Skill Doctor ──",

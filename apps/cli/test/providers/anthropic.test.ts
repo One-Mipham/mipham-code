@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { Message, ProviderConfig, StreamChunk } from '@mipham/shared'
 import { AnthropicProvider } from '../../src/providers/anthropic'
+import { UNNAMED_TOOL_CALL } from '../../src/shared/constants'
 
 // ── Helpers ──
 
@@ -348,6 +349,28 @@ describe('AnthropicProvider', () => {
       _raw: 'not valid json',
       _parseError: expect.stringContaining('received 14 characters'),
     })
+  })
+
+  it('surfaces a tool_use block that carries no name', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        makeSSEResponse([
+          'data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"t1"}}',
+          'data: {"type":"content_block_stop","index":0}',
+          'data: {"type":"message_stop"}',
+        ]),
+      )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new AnthropicProvider(makeConfig())
+    const chunks = await collectChunks(provider.chat({ model: 'claude-sonnet-4-6', messages: [] }))
+
+    const toolUses = chunks.filter((c) => c.type === 'tool_use')
+    expect(toolUses).toHaveLength(1)
+    expect(toolUses[0]!.toolUse!.name).toBe(UNNAMED_TOOL_CALL)
+    expect(toolUses[0]!.toolUse!.id).toBe('t1')
+    expect(toolUses[0]!.toolUse!.input).toEqual({})
   })
 
   // ═══════════════════════════════════════════
@@ -869,6 +892,45 @@ describe('AnthropicProvider', () => {
     const provider = new AnthropicProvider(makeConfig({ apiKey: '${EMPTY_KEY}' }))
     const healthy = await provider.healthCheck()
     expect(healthy).toBe(false)
+  })
+
+  it('probeConnectivity distinguishes a live endpoint from a correct key', async () => {
+    // healthCheck above never touches the network. The probe must — and a 401
+    // still proves the endpoint answered, which is the fact /doctor reports.
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 401 }))
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new AnthropicProvider(makeConfig({ apiKey: 'sk-ant-valid-key' }))
+    const probe = await provider.probeConnectivity()
+
+    expect(probe.tested).toBe(true)
+    expect(probe.ok).toBe(true)
+    expect(probe.detail).toContain('HTTP 401')
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/models'),
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'x-api-key': 'sk-ant-valid-key' }),
+      }),
+    )
+  })
+
+  it('probeConnectivity reports the network error when nothing answers', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error('getaddrinfo ENOTFOUND'))
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new AnthropicProvider(makeConfig({ apiKey: 'sk-ant-valid-key' }))
+    const probe = await provider.probeConnectivity()
+
+    expect(probe.tested).toBe(true)
+    expect(probe.ok).toBe(false)
+    expect(probe.detail).toContain('ENOTFOUND')
+  })
+
+  it('probeConnectivity says why it did not test when the key is unresolved', async () => {
+    process.env.EMPTY_KEY = ''
+    const provider = new AnthropicProvider(makeConfig({ apiKey: '${EMPTY_KEY}' }))
+    const probe = await provider.probeConnectivity()
+    expect(probe).toEqual({ tested: false, ok: false, detail: 'no API key configured' })
   })
 
   // ═══════════════════════════════════════════

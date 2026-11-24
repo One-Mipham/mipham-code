@@ -312,6 +312,23 @@ export function safeSlice(text: string, max: number): string {
 }
 
 /**
+ * `safeSlice` for **display only** — appends `…` when it actually cut something.
+ *
+ * A bare `safeSlice` at a render site leaves a long tool result looking like the
+ * whole output: the reader has no way to tell "the tool said this" from "the
+ * tool said more and we stopped". Never use this where the string is stored or
+ * sent (session JSONL, tool arguments, prompts) — the ellipsis would become part
+ * of the data. `safeSlice` remains the right call there.
+ */
+export function safeSliceWithEllipsis(text: string, max: number): string {
+  const clipped = safeSlice(text, max)
+  // `max <= 0` means "show nothing", not "show an ellipsis" — and an empty input
+  // cannot have been cut.
+  if (max <= 0 || clipped === text) return clipped
+  return `${clipped}…`
+}
+
+/**
  * Replace lone UTF-16 surrogates with U+FFFD, leaving valid pairs untouched.
  *
  * `JSON.stringify` emits a lone surrogate as a bare `\uD83D` escape (well-formed

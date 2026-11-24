@@ -310,6 +310,43 @@ describe('ProviderRegistry', () => {
     })
   })
 
+  describe('probeConnectivity', () => {
+    it('uses a provider’s detailed probe when it has one', async () => {
+      const config = makeConfig()
+      const registry = new ProviderRegistry([config], config.id, 'test-model-1')
+      const provider = makeMockProvider(config)
+      provider.probeConnectivity = vi
+        .fn()
+        .mockResolvedValue({ tested: true, ok: true, detail: 'HTTP 401 from https://x/models' })
+      registry.register(config.id, provider)
+
+      await expect(registry.probeConnectivity(config.id)).resolves.toEqual({
+        tested: true,
+        ok: true,
+        detail: 'HTTP 401 from https://x/models',
+      })
+    })
+
+    it('falls back to the boolean check and says the detail is missing', async () => {
+      const config = makeConfig()
+      const registry = new ProviderRegistry([config], config.id, 'test-model-1')
+      const provider = makeMockProvider(config)
+      provider.healthCheck = vi.fn().mockResolvedValue(true)
+      registry.register(config.id, provider)
+
+      await expect(registry.probeConnectivity(config.id)).resolves.toEqual({
+        tested: false,
+        ok: true,
+        detail: 'this provider has no detailed probe',
+      })
+    })
+
+    it('returns undefined for an unregistered provider, not a fake failure', async () => {
+      const registry = new ProviderRegistry([makeConfig()], 'x', 'm1')
+      expect(await registry.probeConnectivity('missing')).toBeUndefined()
+    })
+  })
+
   // `permissions.classifierModel` 的三档语义。放在这里而不是分类器模块里：选模型要
   // `listModels()`，而 `permission-classifier.ts` 刻意不 import 任何 provider 模块
   // （它只认 `Llm` 接口）。provider 的选型归 provider 层。

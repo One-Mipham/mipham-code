@@ -5,7 +5,8 @@ import type {
   StreamChunk,
   ContentBlock,
 } from '../shared/index.ts'
-import type { ProviderInstance, ChatRequest } from './registry'
+import type { ProviderInstance, ChatRequest, ConnectivityProbe } from './registry'
+import { UNNAMED_TOOL_CALL } from '../shared/constants'
 import {
   fetchWithRetry,
   streamIdleTimeoutMs,
@@ -326,7 +327,12 @@ export class AnthropicProvider implements ProviderInstance {
                 // tool_calls 落在同一个响应体里）。**这是有意的不对称，不是漏做**：
                 // 要在这里丢弃，就得把 `tool_use` 缓冲到 `message_stop` 再发 ——
                 // 那是一次行为变更，不属本次范围。
-                if (currentToolId && currentToolName && accumulatedToolInput) {
+                // A named call needs accumulated input (the old shape). A *nameless*
+                // block is malformed on its own, so it is emitted regardless of
+                // whether any input arrived: dropping it left the turn as a silent
+                // short answer with nothing for the model to correct (331-038).
+                const nameless = !!currentToolId && !currentToolName
+                if ((currentToolId && currentToolName && accumulatedToolInput) || nameless) {
                   // A replayed block carries the id it was first sent with, so the
                   // id is what tells a second call apart from the same call twice.
                   if (!emittedToolIds.has(currentToolId)) {
@@ -334,7 +340,7 @@ export class AnthropicProvider implements ProviderInstance {
 
                     let parsedInput: Record<string, unknown> = {}
                     try {
-                      parsedInput = JSON.parse(accumulatedToolInput)
+                      parsedInput = accumulatedToolInput ? JSON.parse(accumulatedToolInput) : {}
                     } catch (err) {
                       // Same tag as the OpenAI-compatible path: a bare fragment
                       // reaches the validator as "missing required parameter",
@@ -350,7 +356,7 @@ export class AnthropicProvider implements ProviderInstance {
                       toolUse: {
                         type: 'tool_use',
                         id: currentToolId,
-                        name: currentToolName,
+                        name: currentToolName || UNNAMED_TOOL_CALL,
                         input: parsedInput,
                       },
                     }
@@ -444,6 +450,44 @@ export class AnthropicProvider implements ProviderInstance {
     // Use a lightweight check — verify API key format exists
     const apiKey = this.resolveApiKey(this.config.apiKey)
     return apiKey.length > 0 && apiKey.startsWith('sk-ant-')
+  }
+
+  /**
+   * Detailed reachability for `/doctor` (331-003).
+   *
+   * `healthCheck` above only inspects the key's shape — it never touches the
+   * network, so the "reachable" it backs is really "configured". This probe
+   * asks the API: any HTTP answer (200, 401, 404) proves the endpoint is there,
+   * and the status tells the user which problem they have.
+   */
+  async probeConnectivity(): Promise<ConnectivityProbe> {
+    const apiKey = this.resolveApiKey(this.config.apiKey)
+    if (!apiKey) return { tested: false, ok: false, detail: 'no API key configured' }
+    const url = `${this.baseUrl}/models`
+    try {
+      const res = await fetchWithRetry(
+        url,
+        {
+          headers: {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+          },
+        },
+        { timeout: 5000, maxRetries: 0 },
+      )
+      try {
+        await res.body?.cancel()
+      } catch {
+        /* body already gone */
+      }
+      return { tested: true, ok: true, detail: `HTTP ${res.status} from ${url}` }
+    } catch (err) {
+      return {
+        tested: true,
+        ok: false,
+        detail: `${err instanceof Error ? err.message : String(err)} (${url})`,
+      }
+    }
   }
 
   /**

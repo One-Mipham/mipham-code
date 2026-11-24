@@ -2354,3 +2354,59 @@ describe('/model <name>', () => {
     expect(result.content).toContain((ctx as unknown as { modelId: string }).modelId)
   })
 })
+
+// ═══════════════════════════════════════════════════════════════
+// /doctor — API connectivity (331-003)
+//
+// The section must distinguish three states, not collapse them into a red dot:
+// reachable (any HTTP answer), unreachable (a real error), and *not tested*
+// (with the reason). "Not tested" that renders as "unreachable" is the same
+// failure-as-success shape the logger's `checked:false` was added for.
+// ═══════════════════════════════════════════════════════════════
+
+describe('/doctor API connectivity', () => {
+  const ctxWithProbe = (probe: unknown) => {
+    const ctx = mkCtx()
+    const raw = ctx as unknown as {
+      engine: { getRegistry: () => unknown }
+      config: { providers: unknown[] }
+    }
+    raw.config.providers = [
+      { id: 'test', name: 'Test', protocol: 'openai-compatible', apiKey: 'k', models: [] },
+    ]
+    raw.engine.getRegistry = () => ({ probeConnectivity: async () => probe })
+    return ctx
+  }
+
+  it('prints the HTTP status when the endpoint answered', async () => {
+    const res = await getCommand('/doctor')!(
+      ctxWithProbe({ tested: true, ok: true, detail: 'HTTP 401 from https://api.test/v1/models' }),
+      [],
+    )
+    expect(res.content).toContain('reachable')
+    expect(res.content).toContain('HTTP 401')
+  })
+
+  it('prints the error when nothing answered', async () => {
+    const res = await getCommand('/doctor')!(
+      ctxWithProbe({
+        tested: true,
+        ok: false,
+        detail: 'ECONNREFUSED (https://api.test/v1/models)',
+      }),
+      [],
+    )
+    expect(res.content).toContain('unreachable')
+    expect(res.content).toContain('ECONNREFUSED')
+  })
+
+  it('says why it did not test instead of calling that unreachable', async () => {
+    const res = await getCommand('/doctor')!(
+      ctxWithProbe({ tested: false, ok: false, detail: 'no API key configured' }),
+      [],
+    )
+    expect(res.content).toContain('not tested')
+    expect(res.content).toContain('no API key configured')
+    expect(res.content).not.toContain('unreachable')
+  })
+})

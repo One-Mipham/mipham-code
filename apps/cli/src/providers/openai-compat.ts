@@ -1,6 +1,6 @@
 import { execSync } from 'node:child_process'
 import type { ProviderConfig, ModelInfo, Message, StreamChunk } from '../shared/index.ts'
-import type { ProviderInstance, ChatRequest } from './registry'
+import type { ProviderInstance, ChatRequest, ConnectivityProbe } from './registry'
 import {
   fetchWithRetry,
   streamIdleTimeoutMs,
@@ -8,7 +8,7 @@ import {
   createAwakeTimer,
   readErrorBody,
 } from './fetch-utils'
-import { OLLAMA_PRESET_MODELS } from '../shared/constants'
+import { OLLAMA_PRESET_MODELS, UNNAMED_TOOL_CALL } from '../shared/constants'
 import { toWellFormed } from '../shared/sanitize'
 
 /**
@@ -160,14 +160,17 @@ export class OpenAICompatProvider implements ProviderInstance {
           const data = trimmed.slice(6)
           if (data === '[DONE]') {
             // Emit any pending tool calls before stopping
-            for (const [, tc] of pendingToolCalls) {
-              if (!tc.name) continue // drop malformed tool call (missing name)
+            for (const [idx, tc] of pendingToolCalls) {
+              // A nameless call is still a call the model wrote. Dropping it made
+              // the turn end as a short answer with no explanation; the synthetic
+              // name reaches the engine's unknown-tool path, which returns an
+              // error result the model can act on (331-038).
               yield {
                 type: 'tool_use',
                 toolUse: {
                   type: 'tool_use',
-                  id: tc.id || `call_${Date.now()}`,
-                  name: tc.name,
+                  id: tc.id || `call_${Date.now()}_${idx}`,
+                  name: tc.name || UNNAMED_TOOL_CALL,
                   input: this.safeParseJson(tc.arguments),
                 },
               }
@@ -242,14 +245,15 @@ export class OpenAICompatProvider implements ProviderInstance {
 
             if (choice.finish_reason === 'tool_calls') {
               // Emit fully accumulated tool calls
-              for (const [, tc] of pendingToolCalls) {
-                if (!tc.name) continue // drop malformed tool call (missing name)
+              for (const [idx, tc] of pendingToolCalls) {
+                // Same treatment as the `[DONE]` path above: a nameless call gets
+                // the synthetic name instead of being dropped on the floor.
                 yield {
                   type: 'tool_use',
                   toolUse: {
                     type: 'tool_use',
-                    id: tc.id || `call_${Date.now()}`,
-                    name: tc.name,
+                    id: tc.id || `call_${Date.now()}_${idx}`,
+                    name: tc.name || UNNAMED_TOOL_CALL,
                     input: this.safeParseJson(tc.arguments),
                   },
                 }
@@ -340,16 +344,9 @@ export class OpenAICompatProvider implements ProviderInstance {
 
   async healthCheck(): Promise<boolean> {
     try {
-      const rawBase = (this.config as any).baseUrl || (this.config as any).baseURL
-      const baseUrl =
-        this.resolveEnvTemplate(
-          rawBase?.replace(/\/+$/, '') || '',
-          'OpenAI-compatible provider: baseUrl',
-        ) || 'https://api.openai.com/v1'
-      const apiKey = this.resolveApiKey(this.config.apiKey)
-      // 5s timeout so a down endpoint doesn't hang health checks (v2.1.229 alignment)
+      const { url, apiKey } = this.modelsEndpoint()
       const res = await fetchWithRetry(
-        `${baseUrl}/models`,
+        url,
         { headers: { Authorization: `Bearer ${apiKey}` } },
         { timeout: 5000, maxRetries: 0 },
       )
@@ -357,6 +354,48 @@ export class OpenAICompatProvider implements ProviderInstance {
     } catch {
       return false
     }
+  }
+
+  /**
+   * Detailed reachability for `/doctor`. Unlike `healthCheck`, any HTTP answer
+   * counts as reachable: a 401 from a live endpoint means "the endpoint is
+   * here and refused this key", which is a different problem from "nothing
+   * answered".
+   */
+  async probeConnectivity(): Promise<ConnectivityProbe> {
+    const { url, apiKey } = this.modelsEndpoint()
+    if (!apiKey) return { tested: false, ok: false, detail: 'no API key configured' }
+    try {
+      // 5s timeout so a down endpoint doesn't hang the doctor screen.
+      const res = await fetchWithRetry(
+        url,
+        { headers: { Authorization: `Bearer ${apiKey}` } },
+        { timeout: 5000, maxRetries: 0 },
+      )
+      try {
+        await res.body?.cancel()
+      } catch {
+        /* body already gone */
+      }
+      return { tested: true, ok: true, detail: `HTTP ${res.status} from ${url}` }
+    } catch (err) {
+      return {
+        tested: true,
+        ok: false,
+        detail: `${err instanceof Error ? err.message : String(err)} (${url})`,
+      }
+    }
+  }
+
+  /** `/models` on the configured base — the one endpoint both checks share. */
+  private modelsEndpoint(): { url: string; apiKey: string } {
+    const rawBase = (this.config as any).baseUrl || (this.config as any).baseURL
+    const baseUrl =
+      this.resolveEnvTemplate(
+        rawBase?.replace(/\/+$/, '') || '',
+        'OpenAI-compatible provider: baseUrl',
+      ) || 'https://api.openai.com/v1'
+    return { url: `${baseUrl}/models`, apiKey: this.resolveApiKey(this.config.apiKey) }
   }
 
   private convertMessages(messages: Message[], systemPrompt?: string): Record<string, unknown>[] {

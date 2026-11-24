@@ -7,6 +7,7 @@ import {
   stripControlCharsForDisplay,
   decodeDisplayEntities,
   safeSlice,
+  safeSliceWithEllipsis,
 } from '../../src/shared/sanitize'
 
 /**
@@ -374,5 +375,24 @@ describe('safeSlice', () => {
     const cut = safeSlice(text, 8000)
     expect(cut).not.toMatch(LONE)
     expect(cut.length).toBe(7999)
+  })
+})
+
+describe('safeSliceWithEllipsis', () => {
+  const EMOJI = cp(0x1f600)
+
+  it('marks a cut with an ellipsis so a clipped result cannot pass for the whole one', () => {
+    expect(safeSliceWithEllipsis('abcdef', 3)).toBe('abc…')
+    expect(safeSliceWithEllipsis(`ab${EMOJI}cd`, 3)).toBe('ab…')
+  })
+
+  it('leaves a string that fits untouched — no ellipsis on an uncut value', () => {
+    expect(safeSliceWithEllipsis('abcdef', 6)).toBe('abcdef')
+    expect(safeSliceWithEllipsis('abcdef', 99)).toBe('abcdef')
+  })
+
+  it('returns nothing (not an ellipsis) when the budget is zero or negative', () => {
+    expect(safeSliceWithEllipsis('abcdef', 0)).toBe('')
+    expect(safeSliceWithEllipsis('abcdef', -1)).toBe('')
   })
 })

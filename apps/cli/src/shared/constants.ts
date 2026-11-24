@@ -1,6 +1,17 @@
 import type { ProviderConfig, ModelInfo } from './types'
 import miphamModelsSnapshot from './mipham-models.json' with { type: 'json' }
 
+/**
+ * Synthetic tool name for a provider response that carried a tool call with no
+ * name (a custom endpoint, or a malformed stream).
+ *
+ * Dropping such a call silently left the turn looking like a short answer: the
+ * model wrote a call, nothing dispatched, and the user got no explanation. Give
+ * it a name so the ordinary "Unknown tool" path hands the model an error result
+ * it can correct on the next round — the turn continues instead of vanishing.
+ */
+export const UNNAMED_TOOL_CALL = '(tool call without a name)'
+
 // Build MiphamAI provider from synced model definitions.
 // Source of truth: Engine GET /v1/mipham-models → packages/shared/src/mipham-models.json
 // Run `bun run scripts/sync-mipham-models.ts` to update from Engine.

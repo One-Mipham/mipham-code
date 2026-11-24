@@ -213,6 +213,44 @@ describe('StdioTransport', () => {
     })
   })
 
+  /**
+   * 331-009 — 服务器把请求 id 字符串化（`"id": "7"`）是同一种「畸形回复」：
+   * 有回复，但按旧口径匹配不上 ⇒ 请求要等满整个超时才报错，读起来像服务器慢。
+   * 正控证明字符串数字能settle；负控证明**不是**「任何字符串都收」（否则一个
+   * 无关的 `"id": "abc"` 会提前结算别人的 promise）。
+   */
+  describe('响应 id 的字符串数字拼写', () => {
+    const ECHO_ID_AS = (value: string) => `
+      process.stdin.setEncoding('utf8'); let buf = '';
+      process.stdin.on('data', (d) => {
+        buf += d;
+        const lines = buf.split('\\n');
+        buf = lines.pop();
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const req = JSON.parse(line);
+          const id = ${value};
+          process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result: { ok: true } }) + '\\n');
+        }
+      });
+      process.stdin.resume();
+    `
+
+    it('结算把 id 写成字符串数字的回复', async () => {
+      transport = new StdioTransport(3000)
+      await transport.start(process.execPath, ['-e', ECHO_ID_AS('String(req.id)')])
+      await expect(transport.sendRequest('tools/list')).resolves.toEqual({ ok: true })
+      await transport.close()
+    })
+
+    it('不会拿非数字字符串 id 去结算任何人（否则先超时）', async () => {
+      transport = new StdioTransport(300)
+      await transport.start(process.execPath, ['-e', ECHO_ID_AS('"not-a-number"')])
+      await expect(transport.sendRequest('tools/list')).rejects.toThrow(/request timeout/)
+      await transport.close()
+    })
+  })
+
   describe('error handling', () => {
     it('throws on request to closed transport', async () => {
       transport = new StdioTransport()

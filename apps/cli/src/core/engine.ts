@@ -9,6 +9,7 @@ import type {
   ContentBlock,
 } from '../shared/index.ts'
 import { ProviderRegistry } from '../providers/registry'
+import { UNNAMED_TOOL_CALL } from '../shared/constants'
 import { createAwakeTimer } from '../providers/fetch-utils'
 import type { ChatRequest } from '../providers/registry'
 import type { Llm } from '../providers/llm'
@@ -1517,6 +1518,20 @@ export class QueryEngine {
     getMetrics().toolCalls.inc({ tool_name: name })
     const tool = this.tools.get(name)
     if (!tool) {
+      // A provider that sends a tool call with no name is not a tool lookup
+      // failure the model can guess its way out of. Say what happened; the
+      // result goes back as a normal tool_result, so the turn continues and the
+      // model can re-issue the call (331-038).
+      if (name === UNNAMED_TOOL_CALL) {
+        return {
+          success: false,
+          content: '',
+          error:
+            'The provider returned a tool call with no name, so the call was not dispatched. ' +
+            'Re-issue the call with a tool name and its arguments.',
+          notRun: true,
+        }
+      }
       // P2-4: Provide a more helpful error for unavailable tools
       const isMcpTool = name.startsWith('mcp__')
       const hint = isMcpTool

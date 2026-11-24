@@ -4,7 +4,7 @@ import { useI18n } from '../i18n-context'
 import type { ChatMessage } from './app'
 import {
   decodeDisplayEntities,
-  safeSlice,
+  safeSliceWithEllipsis,
   sanitizeInlineField,
   stripControlCharsForDisplay,
 } from '../shared/sanitize'
@@ -123,7 +123,9 @@ const MessageRow = React.memo(
             {msg.toolMeta.name ? (
               <Text color={toolColor(msg.toolMeta.name)}>
                 {msg.toolMeta.collapsed ? '⏺' : '⏺ ▼'} {sanitizeInlineField(msg.toolMeta.name)}
-                {msg.toolMeta.input ? ` (${safeSlice(display(msg.toolMeta.input), 120)})` : ''}
+                {msg.toolMeta.input
+                  ? ` (${safeSliceWithEllipsis(display(msg.toolMeta.input), 120)})`
+                  : ''}
               </Text>
             ) : null}
             {/* Tool result line: ⎿  summary text */}
@@ -134,7 +136,9 @@ const MessageRow = React.memo(
               <Text dimColor>
                 {'  ⎿  '}
                 {t('ui.tool.not_run')}
-                {msg.toolMeta.output ? ` — ${safeSlice(display(msg.toolMeta.output), 300)}` : ''}
+                {msg.toolMeta.output
+                  ? ` — ${safeSliceWithEllipsis(display(msg.toolMeta.output), 300)}`
+                  : ''}
               </Text>
             ) : msg.toolMeta.noResult ? (
               // The call ended without output. Saying so is the point: an empty
@@ -147,7 +151,7 @@ const MessageRow = React.memo(
             ) : msg.toolMeta.output ? (
               <Text dimColor>
                 {'  ⎿  '}
-                {safeSlice(display(msg.toolMeta.output), 300)}
+                {safeSliceWithEllipsis(display(msg.toolMeta.output), 300)}
               </Text>
             ) : msg.content && !msg.toolMeta.collapsed ? (
               <Text dimColor>{display(msg.content)}</Text>

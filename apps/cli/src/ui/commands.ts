@@ -140,7 +140,7 @@ import {
   trustCmd,
 } from '../commands/project.js'
 import { releaseNotesCmd, ideCmd, terminalSetupCmd } from '../commands/environment.js'
-import { commitCmd, pushCmd, prCmd, issueCmd } from '../commands/git.js'
+import { commitCmd, pushCmd, prCmd, issueCmd, shipCmd } from '../commands/git.js'
 import { suggestDirectories } from '../commands/cd-suggest.js'
 import { keysCmd } from '../commands/keys'
 import { workflowViewCmd, workflowWatchCmd } from '../commands/workflow-view.js'
@@ -4150,9 +4150,47 @@ const doctorCmd: CommandHandler = async (ctx) => {
     `Provider     ${ctx.providerId} / ${ctx.modelId}`,
     `Permission   ${liveMode(ctx)}`,
     `Providers    ${ctx.config.providers.length} configured (${ctx.config.providers.filter((p) => p.status !== 'upcoming').length} active)`,
-    '',
-    t('commands.doctor.session_section'),
   ]
+
+  // ── API connectivity (331-003) ──
+  // A boolean status line cannot tell "the endpoint answered 401" from "nothing
+  // answered". Ask the provider for the detail, and name the three non-answers
+  // (no registry, upcoming provider, untested probe) instead of rendering them
+  // as a red dot.
+  lines.push('')
+  lines.push(t('commands.doctor.api_section'))
+  const registry = ctx.engine.getRegistry?.()
+  const activeConfig = ctx.config.providers.find((p) => p.id === ctx.providerId)
+  lines.push(t('commands.doctor.api_target', { provider: ctx.providerId, model: ctx.modelId }))
+  if (!registry) {
+    lines.push(
+      t('commands.doctor.api_not_tested', { reason: 'no provider registry in this session' }),
+    )
+  } else if (typeof registry.probeConnectivity !== 'function') {
+    // A daemon proxy exposes a narrower registry; say the probe is unavailable
+    // rather than calling a method that is not there.
+    lines.push(
+      t('commands.doctor.api_not_tested', { reason: 'this registry has no connectivity probe' }),
+    )
+  } else if (!activeConfig || activeConfig.status === 'upcoming') {
+    lines.push(
+      t('commands.doctor.api_not_tested', { reason: 'the active provider is not configured' }),
+    )
+  } else {
+    const probe = await registry.probeConnectivity(ctx.providerId)
+    if (!probe) {
+      lines.push(t('commands.doctor.api_not_tested', { reason: 'provider not registered' }))
+    } else if (!probe.tested) {
+      lines.push(t('commands.doctor.api_not_tested', { reason: probe.detail }))
+    } else if (probe.ok) {
+      lines.push(t('commands.doctor.api_reachable', { detail: probe.detail }))
+    } else {
+      lines.push(t('commands.doctor.api_unreachable', { detail: probe.detail }))
+    }
+  }
+
+  lines.push('')
+  lines.push(t('commands.doctor.session_section'))
 
   const c = ctx.engine.getContext()
   const tokens = c.getEstimatedTokens()
@@ -6994,6 +7032,7 @@ const commandsListCmd: CommandHandler = () => {
     '/commit': 'Workflow',
     '/push': 'Workflow',
     '/pr': 'Workflow',
+    '/ship': 'Workflow',
     '/issue': 'Workflow',
     '/code-review': 'Code Quality',
     '/simplify': 'Code Quality',
@@ -7241,6 +7280,7 @@ registry.set('/schedule', scheduleCmd)
 registry.set('/commit', commitCmd)
 registry.set('/push', pushCmd)
 registry.set('/pr', prCmd)
+registry.set('/ship', shipCmd)
 registry.set('/issue', issueCmd)
 
 // Code Quality (Claude Code parity)
@@ -7455,6 +7495,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/commit': 'Draft a commit message from staged changes',
   '/push': 'Show push status and the command to run',
   '/pr': 'Draft a pull request title and body',
+  '/ship': 'Commit, push, open a PR, review and fix it — never merges',
   '/issue': 'Draft a GitHub issue from your description',
   '/code-review': 'Review code for bugs, security, performance (7 dimensions)',
   '/simplify': 'Cleanup-only review: reuse, simplification, efficiency, abstraction',

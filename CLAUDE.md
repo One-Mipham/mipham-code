@@ -5,7 +5,7 @@ prompt-exclude:
   - Provider 层（12 家，按字母序）
   - 工具层（31 个工具）
   - Skills 系统（28 个内置技能）
-  - Slash 命令系统（140 个）
+  - Slash 命令系统（141 个）
   - 记忆系统
   - 遥测与崩溃上报（T1 CLI 侧 + T1b 接收端）
   - 核心引擎
@@ -28,9 +28,9 @@ prompt-exclude-header: true
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.86
-> **最后更新**: 2026-11-22 — **发布 0.85.44：21 单元上线 + 两站部署（2.94.86）** —— tag **`v0.85.44`** → `84ac4869`（GPG）；主干 CI `45021060070` **9/9**、`6758d6ba` CI `45021833502` **9/9**；release `45021101168` **9/9**（GitHub Release 6 资产、非 draft）；JetBrains 真输出行 `JetBrains plugin published.` @ `12:16:59Z`。`.vsix` **84,548 B** / sha256 `a1c5ec4b…` / 包内 `0.85.44`（用户网页上传）；Marketplace `0.85.44` **`validated`**、`versions[]` **95 → 96**、`lastUpdated 12:38:17.073Z`（`12:36:27Z` 首读仍是 95 条 = 校验窗口）。**npm 落库经过**：发布日志 `+ @miphamai/cli@0.85.44` @ `12:14:53Z`，但 `12:39Z` 时 `dist-tags.latest` 仍 `0.85.43`、`0.85.44` tarball 404（npm status 无故障）；`12:46Z` 重跑 npm job ⇒ **E409 `Cannot publish over previously staged version "0.85.44"`** ——**属主页面订正（`13:01Z`，用户登录后经 CDP 读）**：包页 Versions 里该行徽标是 **`Validating`**（横幅：_Automated review hasn't finished… unavailable until review completes_），**Staged Packages 页为空** ⇒ 这是 **npm 自动审查未完成**，不是 staged publishing（那要 `npm stage publish` + 维护者 2FA 批准、需 npm CLI 11.15.0+），**没有可点的批准按钮**；`13:04Z` 复读仍 `latest` = 0.85.43、版本端点与 tarball 404、`time.modified` 冻结在 `10:42:01.772Z` —— 只能等或走 npm support，**别再重跑 npm job**（E409 必重复，且把 release 整体 conclusion 变 `failure`）—— **网站已是 0.85.44，`npm install -g` 仍拿到 0.85.43**（当时的实测记录：不写成已发布）—— **结局：`13:10:10.883Z` 审查完成并落库**（`time['0.85.44']`）：`latest` = 0.85.44、版本端点与 tarball **200**（**3,228,746 B**）、`versions` 216 → **217**；`13:04:57Z` 仍 404、`13:15:44Z` 已 200 ⇒ 审查耗时 **≈55 分钟**。两站重新部署并复核：国内 `deploy-cn.sh` HTTP 200（`e06c97a`）、国际 Vercel READY；公开页各 **3×0.85.44 / 0×0.85.43、2×5171**。测试 **5,171**（390 文件），命令 140。
-> **前一条（2.94.85）**: 2026-11-22 — **第 39 档收尾：剩余 4 项落地（2.94.85）** —— ① **`/rename` 与 `/resume <name>` 同命名空间**：改名时会话日志文件随之搬迁、索引条目与摘要随行，后续 append 落新文件；目标名已被占用时如实报告「旧的还在原处」（`SessionLog.rename` / `SessionStore.renameEntry`）。② **Glob 尊重 `.gitignore`**：`git check-ignore --stdin -z` 分批过滤，过滤在取满 500 之前（截断标记描述真实结果集）；非仓库 / 无 git 时 fail-open。③ **`max_tokens` 截断有界续写**：`StreamChunk.truncationCause` 区分 `max_tokens` 与连接中断，只对前者续**一次**（续写请求不带工具，正文并入同一条 assistant 消息）；连接中断仍只报「查代理/VPN」。`truncationCause` 已同步 `packages/shared` 与 CLI 副本。④ **PreToolUse `ask` 携带 `updatedInput`**：仍按硬拒处理，但拒绝文案说明「钩子提出了改写、已丢弃」。测试 **5,159 → 5,171**（390 文件），0 失败；命令 140。
+> **版本**: 2.94.87
+> **最后更新**: 2026-11-24 — **历史考古：CC 2.1.330–331 + Claude Ship beta（2.94.87）** —— 上游 `latest`/`next` = **2.1.331**（2026-11-23T18:36:26Z），`stable` 2.1.325；**2.1.332 未发布**（CHANGELOG 无该节、`versions[]` 尾部止于 331）；330 沿用第 37 档（142 条未变），新增语料 **2.1.331 = 135 条**（非 VSCode 57 / VSCode 78），归档 `~/.mipham/cc-archaeology/331-ship/`。裁决 **135/135**（无此面 121 / 已处理 9 / 真缺口·已落地 3 / 半·未落 1 / 未验 1）。**落 4 个修复单元 + 1 个产品对标**：① `/doctor` 增 API 连通性段（HTTP 状态或「为何没测」；`probeConnectivity` 为可选接口，Anthropic 的 `healthCheck` 从此不再冒充「可达」）；② 工具参数/输出的显示截断补 `…`（`safeSliceWithEllipsis`，只用于显示，不碰落盘数据）；③ 无名工具调用不再被静默丢弃（两个 provider 都给它合成名，走 unknown-tool 错误结果让模型自我纠正）；④ stdio MCP 接受字符串数字响应 id（畸形回复不再等满 60s）；⑤ **Claude Ship beta 借鉴 `/ship`**：提交→推送→开 PR→审查→修 CI/冲突→报 PR 与 `git revert`，**永不 merge/approve/force-push**。测试 **5,171 → 5,195（391 文件）**，0 失败；命令 **140 → 141**。Claude Ship 的审批策略文件（smarter CODEOWNERS）**刻意未落**：需组织级策略与人工签核，CLI 无落点。
+> **前一条（2.94.86）**: 2026-11-22 — **发布 0.85.44：21 单元上线 + 两站部署（2.94.86）** —— tag **`v0.85.44`** → `84ac4869`（GPG）；主干 CI `45021060070` **9/9**、`6758d6ba` CI `45021833502` **9/9**；release `45021101168` **9/9**（GitHub Release 6 资产、非 draft）；JetBrains 真输出行 `JetBrains plugin published.` @ `12:16:59Z`。`.vsix` **84,548 B** / sha256 `a1c5ec4b…` / 包内 `0.85.44`（用户网页上传）；Marketplace `0.85.44` **`validated`**、`versions[]` **95 → 96**、`lastUpdated 12:38:17.073Z`（`12:36:27Z` 首读仍是 95 条 = 校验窗口）。**npm 落库经过**：发布日志 `+ @miphamai/cli@0.85.44` @ `12:14:53Z`，但 `12:39Z` 时 `dist-tags.latest` 仍 `0.85.43`、`0.85.44` tarball 404（npm status 无故障）；`12:46Z` 重跑 npm job ⇒ **E409 `Cannot publish over previously staged version "0.85.44"`** ——**属主页面订正（`13:01Z`，用户登录后经 CDP 读）**：包页 Versions 里该行徽标是 **`Validating`**（横幅：_Automated review hasn't finished… unavailable until review completes_），**Staged Packages 页为空** ⇒ 这是 **npm 自动审查未完成**，不是 staged publishing（那要 `npm stage publish` + 维护者 2FA 批准、需 npm CLI 11.15.0+），**没有可点的批准按钮**；`13:04Z` 复读仍 `latest` = 0.85.43、版本端点与 tarball 404、`time.modified` 冻结在 `10:42:01.772Z` —— 只能等或走 npm support，**别再重跑 npm job**（E409 必重复，且把 release 整体 conclusion 变 `failure`）—— **网站已是 0.85.44，`npm install -g` 仍拿到 0.85.43**（当时的实测记录：不写成已发布）—— **结局：`13:10:10.883Z` 审查完成并落库**（`time['0.85.44']`）：`latest` = 0.85.44、版本端点与 tarball **200**（**3,228,746 B**）、`versions` 216 → **217**；`13:04:57Z` 仍 404、`13:15:44Z` 已 200 ⇒ 审查耗时 **≈55 分钟**。两站重新部署并复核：国内 `deploy-cn.sh` HTTP 200（`e06c97a`）、国际 Vercel READY；公开页各 **3×0.85.44 / 0×0.85.43、2×5171**。测试 **5,171**（390 文件），命令 140。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -71,7 +71,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **试用期（probation）** — `core/probation.ts`：有任务表现测量的 skill 合并后开 3 次观察窗（同 skill、gate 池、k≥3），噪声自适应地板 `max(stdDev, 2×(100/poolSize))` 出 verdict；`regressed` **只打印** `git revert <sha>`，不执行；无随机仪器的合并登记 `noInstrument`，`/crsi stats` 明说「没有可用仪器」而不是静默跳过；结算前置 = 参考解可信 ∧ 正对照为 0 ∧ 每轮可测 ∧ 有率
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|bench [--capture|--sealed --skill <name>]|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：5,171 测试（5,169 passed + 2 skipped，390 文件）
+测试：5,195 测试（5,193 passed + 2 skipped，391 文件）
 
 ---
 
@@ -108,7 +108,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 390 个测试文件，5171 个测试
+│   │   ├── test/               # 391 个测试文件，5195 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -134,7 +134,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（5171 个测试）
+pnpm test         # vitest run（5195 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -204,7 +204,7 @@ pnpm format       # Prettier
 
 **「双轨运行时」已于 T4 删除**：`src/skills/{standard,mipham}/runtime.ts` 自 v0.1.0（`27609bf`）起生产零引用 —— `loader.ts` **从不加载它们**，是又一例「有定义、无施加点」。Skills 的实际生效路径只有 `loader.ts` 一条。
 
-### Slash 命令系统（140 个）
+### Slash 命令系统（141 个）
 
 按分类：Session & Identity / Workflow / Tools & Skills / Model & Provider / Project / Code Quality / History / GitHub / Environment / Account / Agents / Artifact / Other（总数随版本演进，以 `/help` 实际列出为准）。
 
@@ -327,15 +327,15 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | core            | 112     | 1982     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
 | tools           | 35      | 675      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 38      | 276      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
-| ui              | 56      | 550      | commands / input / config-wizard / loop / skill-doctor / ctrl-c / command-reachability                                                                                      |
+| ui              | 56      | 553      | commands / input / config-wizard / loop / skill-doctor / ctrl-c / command-reachability                                                                                      |
 | agent           | 16      | 173      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
 | security        | 12      | 126      | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
-| providers       | 10      | 191      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
-| mcp             | 13      | 191      | client / transport / oauth / token-store / registry / instructions（含 2 skipped）                                                                                          |
+| providers       | 10      | 201      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
+| mcp             | 13      | 193      | client / transport / oauth / token-store / registry / instructions（含 2 skipped）                                                                                          |
 | workflow        | 8       | 73       | runtime / loop / parallel / sandbox / journal / verify                                                                                                                      |
 | vajra           | 6       | 53       | context / events / service / compose / leaf（自建内核）                                                                                                                     |
-| shared          | 12      | 149      | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                              |
-| commands        | 14      | 121      | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers / provider-model-flags                                                                  |
+| shared          | 12      | 152      | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                              |
+| commands        | 15      | 127      | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers / provider-model-flags                                                                  |
 | skills          | 7       | 74       | sanitizer / marketplace / fork-executor / skill-assets                                                                                                                      |
 | config          | 11      | 144      | credential-crypto / loader-encryption / defaults / settings-json / preferences / model-context-window                                                                       |
 | plugin          | 4       | 66       | claude-plugin / plugin-manager                                                                                                                                              |
@@ -345,7 +345,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | integration     | 1       | 3        | 跨仓接线：`vscode-extension-telemetry`（VS Code 遥测关闭 ⇒ 终端拿到 `MIPHAM_TELEMETRY=off`）                                                                                |
 | integrity       | 20      | 138      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **390** | **5171** | 0 失败（5,169 passed + 2 skipped，390 文件）                                                                                                                                |
+| **合计**        | **391** | **5195** | 0 失败（5,193 passed + 2 skipped，391 文件）                                                                                                                                |
 
 ### 测试注意事项
 

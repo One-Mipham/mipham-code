@@ -43,11 +43,27 @@ export function resolveClassifierModel(
   return choice
 }
 
+/**
+ * Detail behind a reachability check, for `/doctor` (331-003).
+ *
+ * `healthCheck` answers a boolean the status line consumes; it cannot say *what*
+ * happened. This shape can: `tested: false` means the check was skipped and
+ * `detail` is the reason (no key, no endpoint), never a silent "unreachable".
+ */
+export interface ConnectivityProbe {
+  tested: boolean
+  /** Reachability, not authentication: any HTTP response means the endpoint answered. */
+  ok: boolean
+  detail: string
+}
+
 export interface ProviderInstance {
   config: ProviderConfig
   chat(req: ChatRequest): AsyncGenerator<StreamChunk>
   listModels(): Promise<ModelInfo[]>
   healthCheck(): Promise<boolean>
+  /** Optional detailed probe; `healthCheck` remains the only required contract. */
+  probeConnectivity?(): Promise<ConnectivityProbe>
 }
 
 export interface ChatRequest {
@@ -162,6 +178,31 @@ export class ProviderRegistry implements Llm {
     } catch {
       return false
     }
+  }
+
+  /**
+   * Detailed reachability for `/doctor`. Falls back to the boolean health check
+   * when a provider has no probe, and says so — "reachable" with no detail is
+   * still information; "unreachable" invented from a missing method is not.
+   */
+  async probeConnectivity(id: string): Promise<ConnectivityProbe | undefined> {
+    const provider = this.providers.get(id)
+    if (!provider) return undefined
+    if (provider.probeConnectivity) {
+      try {
+        return await provider.probeConnectivity()
+      } catch (err) {
+        return {
+          tested: true,
+          ok: false,
+          detail: err instanceof Error ? err.message : String(err),
+        }
+      }
+    }
+    const ok = await this.healthStatus(id)
+    return ok === undefined
+      ? undefined
+      : { tested: false, ok, detail: 'this provider has no detailed probe' }
   }
 
   /**
