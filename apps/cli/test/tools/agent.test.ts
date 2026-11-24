@@ -504,3 +504,17 @@ describe('Memory tool execution', () => {
     expect(result.content).toContain('updated')
   })
 })
+
+// CC 2.1.181-019: a sub-agent's tool set includes `Agent`, so the model can
+// nest. The chain must be bounded at the same depth background agents use.
+describe('Agent nesting depth', () => {
+  it('refuses to spawn past MAX_AGENT_DEPTH', async () => {
+    const { MAX_AGENT_DEPTH } = await import('../../src/tools/agent/agent')
+    const result = await agentTool.execute(
+      { description: 'nested', prompt: 'do work', subagent_type: 'general' },
+      { ...ctx, agentDepth: MAX_AGENT_DEPTH },
+    )
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('nesting limit')
+  })
+})

@@ -108,3 +108,28 @@ describe('ToolSearch 展示的 MCP 工具名与注册名同一拼法', () => {
     expect(res.content).not.toContain('mcp__MyServer__GetFile')
   })
 })
+
+// CC 2.1.113-031: a caller often pastes the fully qualified name it saw in a
+// listing (`mcp__server__tool`). Matching that whole string against the bare
+// tool name found nothing, and description matching buried the named tool.
+describe('ToolSearch: pasted MCP names', () => {
+  it('splits mcp__server__tool and ranks the exact tool first', async () => {
+    const client = McpClient.getInstance()
+    vi.spyOn(client, 'getConnectedServers').mockReturnValue(['srv'])
+    vi.spyOn(client, 'getTools').mockReturnValue([
+      { name: 'echo', description: 'echo tool', inputSchema: { type: 'object' } },
+      { name: 'echo_related', description: 'a sibling', inputSchema: { type: 'object' } },
+      { name: 'other', description: 'mentions echo in prose', inputSchema: { type: 'object' } },
+    ] as never)
+
+    const result = await toolSearchTool.execute({ query: 'mcp__srv__echo' }, ctxWith(registry()))
+
+    expect(result.success).toBe(true)
+    const exact = result.content.indexOf('mcp__srv__echo ')
+    const sibling = result.content.indexOf('mcp__srv__echo_related')
+    const proseOnly = result.content.indexOf('mcp__srv__other')
+    expect(exact).toBeGreaterThan(-1)
+    expect(exact).toBeLessThan(sibling)
+    expect(sibling).toBeLessThan(proseOnly)
+  })
+})

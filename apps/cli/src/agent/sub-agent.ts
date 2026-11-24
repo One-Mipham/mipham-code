@@ -516,6 +516,9 @@ export class SubAgent {
       // synchronous (see `resolveRunInBackground`). Set on the shared literal so it
       // covers the synchronous *and* background runs — both go through here.
       isSubAgent: true,
+      // One level deeper than the caller. The Agent tool refuses past
+      // MAX_AGENT_DEPTH; without the increment every nested call reads as 0.
+      agentDepth: (options.toolContext?.agentDepth ?? 0) + 1,
       // Tools that keep per-session state (the Task list) must file it under the
       // session this work belongs to, not under the literal 'sub-agent' — that
       // one bucket is shared by every nested call from every session.
@@ -870,11 +873,16 @@ export class SubAgent {
             // `fix`) is how the model learns the call went through under a
             // caution. The engine prepends them to a successful result; without
             // the same line here the warnings were produced and dropped.
-            if (gateWarnings.length > 0 && displayResult.success) {
-              displayResult = {
-                ...displayResult,
-                content: gateWarnings.join('\n') + '\n' + (displayResult.content || ''),
-              }
+            // On failure the warning goes into `error` — the field a failed
+            // result is actually projected from (same fix as the main engine,
+            // CC 2.1.110-027).
+            if (gateWarnings.length > 0) {
+              const warning = gateWarnings.join('\n')
+              displayResult = displayResult.success
+                ? { ...displayResult, content: warning + '\n' + (displayResult.content || '') }
+                : displayResult.error
+                  ? { ...displayResult, error: warning + '\n' + displayResult.error }
+                  : { ...displayResult, content: warning + '\n' + (displayResult.content || '') }
             }
 
             currentMessages.push({

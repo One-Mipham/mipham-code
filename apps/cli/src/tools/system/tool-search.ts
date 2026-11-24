@@ -58,8 +58,15 @@ export const toolSearchTool: ToolDefinition = {
     required: [],
   },
   async execute(params, ctx) {
-    const query = ((params.query as string) || '').toLowerCase()
-    const serverFilter = (params.server as string) || ''
+    const rawQuery = ((params.query as string) || '').toLowerCase()
+    // A caller often pastes the *fully qualified* name it saw in a tool listing
+    // (`mcp__server__tool`). Matching that whole string against the bare tool
+    // name found nothing, and the fallback description matcher surfaced
+    // unrelated siblings — the tool that was named did not appear at all
+    // (CC 2.1.113-031). Split it back into server + tool name.
+    const qualified = /^mcp__(.+?)__(.+)$/.exec(rawQuery)
+    const query = qualified ? qualified[2]!.replace(/\*+$/, '') : rawQuery
+    const serverFilter = (params.server as string) || (qualified ? qualified[1]! : '')
     const limit = (params.limit as number) || 20
 
     const client = McpClient.getInstance()
@@ -95,6 +102,8 @@ export const toolSearchTool: ToolDefinition = {
       server: string
       tool: string
       description: string
+      /** Exact name > name prefix > name substring > description only. */
+      score: number
     }
 
     const matches: Match[] = []
@@ -103,13 +112,24 @@ export const toolSearchTool: ToolDefinition = {
       try {
         const tools = client.getTools(serverName)
         for (const tool of tools) {
-          const nameMatch = !query || tool.name.toLowerCase().includes(query)
-          const descMatch = !query || (tool.description || '').toLowerCase().includes(query)
-          if (nameMatch || descMatch) {
+          const name = tool.name.toLowerCase()
+          const score = !query
+            ? 1
+            : name === query
+              ? 4
+              : name.startsWith(query)
+                ? 3
+                : name.includes(query)
+                  ? 2
+                  : (tool.description || '').toLowerCase().includes(query)
+                    ? 1
+                    : 0
+          if (score > 0) {
             matches.push({
               server: serverName,
               tool: tool.name,
               description: capMcpText(tool.description || ''),
+              score,
             })
           }
         }
@@ -117,6 +137,10 @@ export const toolSearchTool: ToolDefinition = {
         // Server disconnected mid-search — skip
       }
     }
+
+    // The name the caller typed must come first; description-only siblings are
+    // the noise that buried it.
+    matches.sort((a, b) => b.score - a.score || a.tool.localeCompare(b.tool))
 
     if (matches.length === 0) {
       // A zero-hit answer is the wrong answer when the name the caller searched

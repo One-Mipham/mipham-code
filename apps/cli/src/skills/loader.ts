@@ -20,10 +20,49 @@ export function parseFrontmatter(raw: string): FrontmatterResult {
   if (!match) {
     return { data: {}, content: src }
   }
-  return {
-    data: parseYaml(match[1] || '') as Record<string, unknown>,
-    content: match[2] || '',
+  // A plain scalar containing ": " (`description: Fix: a bug`) is invalid YAML:
+  // the parser sees a second mapping colon. Strict parsing threw, the per-file
+  // catch swallowed it, and the skill disappeared with no message. Frontmatter
+  // is hand-written, so recover the top-level scalar keys line by line instead
+  // of losing the whole file.
+  let data: Record<string, unknown>
+  try {
+    const parsed = parseYaml(match[1] || '')
+    data =
+      parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {}
+  } catch {
+    data = parseLooseFrontmatter(match[1] || '')
   }
+  return { data, content: match[2] || '' }
+}
+
+/**
+ * Last-resort reader for frontmatter that strict YAML rejects.
+ *
+ * Only top-level `key: scalar` pairs are recovered — nested maps and block
+ * lists are lost. That is already better than dropping the skill, and it is
+ * limited to files that would otherwise fail entirely.
+ */
+function parseLooseFrontmatter(text: string): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const line of text.split('\n')) {
+    const m = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/)
+    if (!m) continue
+    let value = m[2]!.trim()
+    if (!value) continue
+    // Block scalars / flow collections are not recoverable this way.
+    if (/^[|>[{&*!]/.test(value)) continue
+    if (
+      (value.startsWith('"') && value.endsWith('"') && value.length >= 2) ||
+      (value.startsWith("'") && value.endsWith("'") && value.length >= 2)
+    ) {
+      value = value.slice(1, -1)
+    }
+    out[m[1]!] = value
+  }
+  return out
 }
 
 /**
@@ -195,7 +234,30 @@ export class SkillsLoader implements Skills {
     try {
       const { data, content } = parseFrontmatter(raw)
 
-      const rawDescription = (data.description as string) || ''
+      // `description: [a, b]` (a YAML list) is a legal frontmatter value but not
+      // a string. Casting it and letting `sanitizeSkillDescription` call
+      // `.replace` on it threw inside the per-file try/catch, which swallowed the
+      // error — the skill vanished with no message. Only a string counts; say so
+      // instead of dropping it silently.
+      // `description: 3000` is a bare number; coerce it rather than dropping what
+      // the author wrote (CC 2.1.47-028). A list/object cannot be a description.
+      const descriptionValue = data.description
+      const rawDescription =
+        typeof descriptionValue === 'string'
+          ? descriptionValue
+          : typeof descriptionValue === 'number' || typeof descriptionValue === 'boolean'
+            ? String(descriptionValue)
+            : ''
+      if (
+        descriptionValue !== undefined &&
+        typeof descriptionValue !== 'string' &&
+        typeof descriptionValue !== 'number' &&
+        typeof descriptionValue !== 'boolean'
+      ) {
+        process.stderr.write(
+          `⚠️  Skill at ${sourceName}: frontmatter description is not a string — ignored.\n`,
+        )
+      }
       const rawBody = content.trim() || undefined
 
       // Name gate (see `invalidSkillNameReason`). A declared name that fails is
@@ -282,8 +344,14 @@ export class SkillsLoader implements Skills {
       }
       this.skills.set(skill.name, skill)
       this.sources.set(skill.name, sourceName)
-    } catch {
-      // skip unparseable
+    } catch (err) {
+      // Never drop a skill silently: to the user a skill that vanished and a
+      // skill that was never installed look identical, and the frontmatter is
+      // hand-written (CC 2.1.69-068 / 2.1.47-028).
+      const detail = err instanceof Error ? err.message : String(err)
+      process.stderr.write(
+        `⚠️  Skill at ${sourceName}: could not be loaded — skipped (${detail.split('\n')[0]})\n`,
+      )
     }
   }
 

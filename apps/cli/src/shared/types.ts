@@ -707,6 +707,15 @@ export interface ToolContext {
    */
   isSubAgent?: boolean
   /**
+   * How many `Agent` calls deep this tool context is (main loop = 0 / absent).
+   *
+   * A sub-agent's tool set includes `Agent`, so nesting is reachable from the
+   * model. The Agent tool refuses past `MAX_AGENT_DEPTH`; this field is what it
+   * counts. Incremented by `SubAgent.runExecution` when it builds its children's
+   * context, so a foreground chain is bounded exactly like a background one.
+   */
+  agentDepth?: number
+  /**
    * The session a sub-agent is running on behalf of.
    *
    * `sessionId` is the literal `'sub-agent'` one level down, so anything keyed by

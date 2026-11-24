@@ -176,3 +176,33 @@ describe('agent frontmatter `skills:` 真的进了子代理系统提示', () => 
     expect(plain.systemPrompt).toBe('You are a test agent.')
   })
 })
+
+// CC 2.1.178-021: server-level specs in `disallowedTools` must expand, or an
+// agent told to avoid a server keeps every tool on it.
+describe('disallowedTools server expansion', () => {
+  it('mcp__server and mcp__* deny the matching tools', async () => {
+    const { selectAgentTools } = await import('../../src/agent/agent-context')
+    const tool = (name: string): ToolDefinition => ({
+      name,
+      description: '',
+      category: 'file',
+      permission: 'self',
+      parameters: {},
+      execute: async () => ({ success: true, content: '' }),
+    })
+    const tools = new Map([
+      ['mcp__srv__a', tool('mcp__srv__a')],
+      ['mcp__srv__b', tool('mcp__srv__b')],
+      ['mcp__other__c', tool('mcp__other__c')],
+      ['Read', tool('Read')],
+    ])
+    const serverDeny = { ...makeAgent(), disallowedTools: 'mcp__srv' }
+    expect(
+      selectAgentTools(serverDeny as AgentDefinition, tools, false).map((t) => t.name),
+    ).toEqual(['mcp__other__c', 'Read'])
+    const allMcp = { ...makeAgent(), disallowedTools: 'mcp__*' }
+    expect(selectAgentTools(allMcp as AgentDefinition, tools, false).map((t) => t.name)).toEqual([
+      'Read',
+    ])
+  })
+})

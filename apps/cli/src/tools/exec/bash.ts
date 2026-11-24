@@ -757,6 +757,64 @@ function changeDirectoryTargets(words: string[], depth = 0): string[] {
   return out
 }
 
+/** Commands whose exit code 1 means "answered, found nothing" — not failure. */
+const NO_MATCH_READERS = new Set(['grep', 'egrep', 'fgrep', 'rg', 'ag', 'ack'])
+/** Commands whose exit code 1 means "the files differ" — not failure. */
+const NO_DIFF_COMMANDS = new Set(['diff', 'cmp'])
+
+/**
+ * Resolve the base command of the first shell segment, skipping leading
+ * assignments, wrappers and their options.
+ */
+function firstCommandWords(command: string): string[] {
+  const seg = splitShellSegments(command).find((s) => s.trim().length > 0)
+  if (!seg) return []
+  const words = seg.trim().split(/\s+/)
+  let i = 0
+  while (
+    i < words.length &&
+    (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i]!) ||
+      ['sudo', 'doas', 'env', 'command', 'exec', 'time', 'nice', 'nohup'].includes(words[i]!))
+  ) {
+    i += 1
+  }
+  while (i < words.length && words[i]!.startsWith('-')) i += 1
+  return words.slice(i)
+}
+
+/**
+ * Does exit code 1 from this command mean "no matches / no differences"?
+ *
+ * `grep` answered the question and found nothing; `git diff` found no change.
+ * Reporting those as command failures made the model retry a search that had
+ * already succeeded, and taught it to read exit 1 as breakage. The detection is
+ * deliberately narrow: the command must be a known reader/differ, the exit code
+ * exactly 1, and stderr empty (a real error — unreadable file, bad regex — also
+ * exits non-zero but writes a diagnostic).
+ *
+ * Returns the note to attach, or null when this is an ordinary failure.
+ */
+export function noMatchExitNote(command: string, exitCode: number, stderr: string): string | null {
+  if (exitCode !== 1 || stderr.trim() !== '') return null
+  const words = firstCommandWords(command)
+  const base = (words[0] || '').split('/').pop()
+  if (!base) return null
+  if (NO_MATCH_READERS.has(base)) return 'no matches found'
+  if (NO_DIFF_COMMANDS.has(base)) return 'no differences found'
+  if (base === 'git') {
+    let j = 1
+    while (j < words.length && words[j]!.startsWith('-')) {
+      const opt = words[j]!
+      j += 1
+      if (['-C', '-c', '--git-dir', '--work-tree'].includes(opt) && j < words.length) j += 1
+    }
+    const sub = (words[j] || '').split('/').pop()
+    if (sub === 'grep') return 'no matches found'
+    if (sub === 'diff') return 'no differences found'
+  }
+  return null
+}
+
 export function createBashTool(credentialConfig?: CredentialMaskingConfig): ToolDefinition {
   return {
     name: 'Bash',
@@ -938,7 +996,11 @@ export function createBashTool(credentialConfig?: CredentialMaskingConfig): Tool
             ? (await import('../../core/credential-masker')).maskOutput(rawStderr, credentialConfig)
             : rawStderr
 
-        if (exitCode !== 0) {
+        // `grep`/`git diff` exit 1 when they answered and found nothing. That is
+        // a result, not a failure (CC 2.1.144-012).
+        const noMatchNote = aborted || timedOut ? null : noMatchExitNote(command, exitCode, stderr)
+
+        if (exitCode !== 0 && !noMatchNote) {
           let errorContent = output.slice(0, 5_000)
           if (violations.length > 0) {
             errorContent += '\n\n── Sandbox Violations ──\n' + violations.join('\n')
@@ -994,6 +1056,9 @@ export function createBashTool(credentialConfig?: CredentialMaskingConfig): Tool
             (successContent.length > 0 ? '\n\n' : '') + '── stderr ──\n' + stderrText
         }
         if (successContent.length === 0) successContent = '(no output)'
+        if (noMatchNote) {
+          successContent += `\n\n[exit code 1: ${noMatchNote} — not a failure]`
+        }
         if (violations.length > 0) {
           successContent += '\n\n── Sandbox Violations ──\n' + violations.join('\n')
         }

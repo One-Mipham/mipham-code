@@ -1,4 +1,4 @@
-import { exec } from 'node:child_process'
+import { exec, execFileSync } from 'node:child_process'
 
 export interface GitPr {
   number: number
@@ -37,6 +37,22 @@ export function prColor(pr: GitPr): PrColor {
   if (pr.reviewDecision === 'APPROVED') return 'green'
   if (pr.reviewDecision === 'CHANGES_REQUESTED') return 'yellow'
   return 'white'
+}
+
+/** The current branch of `cwd`, or null when it is not a git repo / detached HEAD.
+ *  Read on demand rather than once at mount: `/cd` changes the directory, and a
+ *  cached branch then describes the previous repository (CC 2.1.176-012). */
+export function readGitBranch(cwd: string = process.cwd()): string | null {
+  try {
+    const branch = execFileSync('git', ['branch', '--show-current'], {
+      cwd,
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim()
+    return branch || null
+  } catch {
+    return null
+  }
 }
 
 /** Detect the PR whose head is `branch`. gh unavailable / no PR / non-zero exit → null.

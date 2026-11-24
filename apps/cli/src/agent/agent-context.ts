@@ -207,13 +207,14 @@ export function selectAgentTools(
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean)
-    // `mcp__server` / `mcp__server__*` mean "every tool on that server".
-    // Without expansion these exact-match nothing, so an agent that asks for a
-    // whole server silently receives no tools at all.
-    const serverPrefixes = allowRules
-      .map((r) => mcpServerPrefix(r))
-      .filter((p): p is string => p !== null)
-    const allowSet = new Set(allowRules.filter((r) => mcpServerPrefix(r) === null))
+    // `mcp__server` / `mcp__server__*` mean "every tool on that server", and
+    // `mcp__*` means every MCP tool. Without expansion these exact-match
+    // nothing, so an agent that asks for a whole server silently receives no
+    // tools at all.
+    const serverPrefix = (r: string): string | null =>
+      r === 'mcp__*' ? 'mcp__' : mcpServerPrefix(r)
+    const serverPrefixes = allowRules.map(serverPrefix).filter((p): p is string => p !== null)
+    const allowSet = new Set(allowRules.filter((r) => serverPrefix(r) === null))
     allowedTools = allowedTools.filter(
       (t) => allowSet.has(t.name) || serverPrefixes.some((p) => t.name.startsWith(p)),
     )
@@ -225,13 +226,19 @@ export function selectAgentTools(
   }
 
   if (agentDef.disallowedTools) {
-    const denySet = new Set(
-      agentDef.disallowedTools
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean),
+    // The deny side needs the same server expansion as the allow side. With
+    // exact matching, `disallowedTools: mcp__server` denied nothing — the agent
+    // kept every tool on the server it was told to avoid (CC 2.1.178-021).
+    const denyRules = agentDef.disallowedTools
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    const denyPrefix = (r: string): string | null => (r === 'mcp__*' ? 'mcp__' : mcpServerPrefix(r))
+    const denySet = new Set(denyRules.filter((r) => denyPrefix(r) === null))
+    const denyPrefixes = denyRules.map(denyPrefix).filter((p): p is string => p !== null)
+    allowedTools = allowedTools.filter(
+      (t) => !denySet.has(t.name) && !denyPrefixes.some((p) => t.name.startsWith(p)),
     )
-    allowedTools = allowedTools.filter((t) => !denySet.has(t.name))
   }
 
   return allowedTools

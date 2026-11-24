@@ -165,6 +165,10 @@ const SENSITIVE_ENV_PATTERNS = [
   /^GCLOUD_/, // GCP credentials
   /^AZURE_/, // Azure credentials
   /^DOCKER_/, // DOCKER_TOKEN, DOCKER_PASSWORD
+  // OTLP endpoint headers carry an ingestion token, and the endpoint itself is
+  // the operator's telemetry destination. A subprocess inheriting `OTEL_*`
+  // exports its own spans to it (CC 2.1.128-006).
+  /^OTEL_/,
 ]
 
 /**

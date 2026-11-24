@@ -1395,3 +1395,30 @@ describe('Grep — 用户全局 ripgrep 配置不得改变搜索结果', () => {
     }
   })
 })
+
+describe('CC 2.1.86-002: Jujutsu / Sapling metadata is not searched', () => {
+  it('Glob skips .jj and .sl trees', async () => {
+    mkdirSync(join(tmpDir, '.jj', 'repo', 'store'), { recursive: true })
+    mkdirSync(join(tmpDir, '.sl'), { recursive: true })
+    writeFileSync(join(tmpDir, '.jj', 'repo', 'store', 'hidden.ts'), 'x')
+    writeFileSync(join(tmpDir, '.sl', 'hidden.ts'), 'x')
+    mkdirSync(join(tmpDir, 'src'), { recursive: true })
+    writeFileSync(join(tmpDir, 'src', 'visible.ts'), 'x')
+
+    const result = await globTool.execute({ pattern: '**/*.ts', path: tmpDir }, ctx)
+    expect(result.content).toContain('visible.ts')
+    expect(result.content).not.toContain('.jj')
+    expect(result.content).not.toContain('.sl')
+  })
+
+  it('Grep passes ripgrep exclusions for .jj and .sl', async () => {
+    mockRealSpawn()
+    mkdirSync(join(tmpDir, '.jj', 'repo', 'store'), { recursive: true })
+    writeFileSync(join(tmpDir, '.jj', 'repo', 'store', 'hidden.txt'), 'needle')
+    writeFileSync(join(tmpDir, 'visible.txt'), 'needle')
+
+    const result = await grepTool.execute({ pattern: 'needle', path: tmpDir }, ctx)
+    expect(result.content).toContain('visible.txt')
+    expect(result.content).not.toContain('.jj')
+  })
+})

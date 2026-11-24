@@ -28,6 +28,16 @@ const GLOB_IGNORE_BATCH = 500
  * Filtering is a convenience; silently returning *nothing* because git could
  * not answer would be indistinguishable from "no matches".
  */
+/**
+ * Jujutsu (`.jj`) and Sapling (`.sl`) keep repository metadata in those
+ * directories — the equivalent of `.git`. ripgrep and `Bun.Glob` only know the
+ * older VCS names, so without this a search descends into a second copy of the
+ * worktree (CC 2.1.86-002).
+ */
+export function isVcsMetadataPath(path: string): boolean {
+  return path.split(/[\\/]/).some((segment) => segment === '.jj' || segment === '.sl')
+}
+
 export function filterGitIgnored(paths: string[], cwd: string): string[] {
   if (paths.length === 0) return paths
   const ignored = new Set<string>()
@@ -71,7 +81,8 @@ export function createGlobTool(credentialConfig?: CredentialMaskingConfig): Tool
       // 却仍报「截断到 500」；反过来先过滤再数，截断标记描述的才是真实结果集。
       const keep = (batch: string[]) => {
         if (batch.length === 0) return
-        for (const p of filterGitIgnored(batch, basePath)) results.push(p)
+        const visible = batch.filter((p) => !isVcsMetadataPath(p))
+        for (const p of filterGitIgnored(visible, basePath)) results.push(p)
       }
       for await (const file of glob.scan({ cwd: basePath, absolute: true })) {
         pending.push(file)

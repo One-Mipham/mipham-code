@@ -3,7 +3,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ToolContext } from '../../src/shared'
-import { createBashTool } from '../../src/tools/exec/bash'
+import { createBashTool, noMatchExitNote } from '../../src/tools/exec/bash'
 
 // ============================================================
 // Bash 工具报给模型的**失败原因**。两条都是「归因指向了错的根因」——
@@ -168,5 +168,28 @@ describe('磁盘满时不许把 ENOSPC 甩成一条路径', () => {
     expect(result.success).toBe(false)
     expect(result.error).toContain('Exit code 1')
     expect(result.error).not.toContain('disk is full')
+  })
+})
+
+// CC 2.1.144-012: `egrep`/`fgrep`/`git grep`/`git diff` exit 1 when they
+// answered and found nothing. Reporting that as a command failure taught the
+// model to retry a search that had already succeeded.
+describe('exit code 1 that means "answered, found nothing" (noMatchExitNote)', () => {
+  it('recognises readers and differs', () => {
+    expect(noMatchExitNote('grep foo src/', 1, '')).toBe('no matches found')
+    expect(noMatchExitNote('egrep foo src/', 1, '')).toBe('no matches found')
+    expect(noMatchExitNote('git grep foo', 1, '')).toBe('no matches found')
+    expect(noMatchExitNote('git diff --quiet HEAD', 1, '')).toBe('no differences found')
+    expect(noMatchExitNote('diff a b', 1, '')).toBe('no differences found')
+    // Wrappers and git global options must not hide the real command.
+    expect(noMatchExitNote('sudo grep foo src/', 1, '')).toBe('no matches found')
+    expect(noMatchExitNote('git -C /repo grep foo', 1, '')).toBe('no matches found')
+  })
+
+  it('negative controls: other exit codes, commands and a non-empty stderr stay failures', () => {
+    expect(noMatchExitNote('grep foo src/', 2, '')).toBeNull()
+    expect(noMatchExitNote('grep foo src/', 1, 'grep: src/: No such file')).toBeNull()
+    expect(noMatchExitNote('make', 1, '')).toBeNull()
+    expect(noMatchExitNote('git status', 1, '')).toBeNull()
   })
 })

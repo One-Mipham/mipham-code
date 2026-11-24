@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { createToolRegistry } from '../../src/tools/index'
+import { withValidation } from '../../src/tools/validation'
+import type { ToolDefinition } from '../../src/shared'
 
 const ctx = { cwd: process.cwd(), sessionId: 'test', provider: '', model: '' }
 
@@ -55,5 +57,53 @@ describe('tool parameter validation (withValidation)', () => {
 
     expect(result.success).toBe(false)
     expect(result.error).toBeTruthy()
+  })
+})
+
+/**
+ * CC 2.1.72-044 / 2.1.140-011: models sometimes spell a scalar as a string —
+ * `"true"` for a boolean, `" 5 "` or `"+5"` for `offset`/`limit`. Rejecting
+ * those cost a turn re-typing a value that had already been supplied, so the
+ * unambiguous spellings are coerced before validation. Everything else must
+ * still be refused (the coercion is not a loosened type check).
+ */
+describe('scalar coercion before validation', () => {
+  const echo = withValidation({
+    name: 'Echo',
+    description: 'echo params',
+    parameters: {
+      type: 'object',
+      properties: {
+        flag: { type: 'boolean' },
+        n: { type: 'integer' },
+        ratio: { type: 'number' },
+      },
+      required: [],
+    },
+    execute: async (params: Record<string, unknown>) => ({
+      success: true,
+      content: JSON.stringify(params),
+    }),
+  } as unknown as ToolDefinition)
+
+  it('coerces "true"/"false" and padded or plus-prefixed numbers', async () => {
+    const result = await echo.execute({ flag: 'true', n: ' +5 ', ratio: '0.5' }, ctx)
+    expect(result.success).toBe(true)
+    expect(JSON.parse(result.content)).toEqual({ flag: true, n: 5, ratio: 0.5 })
+  })
+
+  it('positive control: native JSON scalars pass through unchanged', async () => {
+    const result = await echo.execute({ flag: false, n: 5, ratio: 0.5 }, ctx)
+    expect(result.success).toBe(true)
+    expect(JSON.parse(result.content)).toEqual({ flag: false, n: 5, ratio: 0.5 })
+  })
+
+  it('still refuses values that are not the declared type', async () => {
+    const coercedBoolean = await echo.execute({ flag: 'yes' }, ctx)
+    expect(coercedBoolean.success).toBe(false)
+    expect(coercedBoolean.error).toBeTruthy()
+
+    const coercedInteger = await echo.execute({ n: '5.5' }, ctx)
+    expect(coercedInteger.success).toBe(false)
   })
 })

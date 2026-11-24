@@ -202,7 +202,7 @@ export const CLASSIFIER_RULES: ClassifierRule[] = [
   {
     tier: 'soft',
     name: 'Irreversible Local Destruction',
-    text: 'deleting or overwriting work that cannot be recovered: `rm -rf`, `git reset --hard`, `git clean -f`, `git checkout .`, truncating a file, dropping a table or bucket. Uncommitted work counts as at risk.',
+    text: 'deleting or overwriting work that cannot be recovered: `rm -rf`, `git reset --hard`, `git clean -f`, `git checkout .`, `git stash drop`, `git commit --amend` (on a commit this session did not make), `terraform destroy` / `pulumi destroy` / `cdk destroy` (unless the user named that stack), truncating a file, dropping a table or bucket. Uncommitted work counts as at risk.',
   },
   {
     tier: 'soft',

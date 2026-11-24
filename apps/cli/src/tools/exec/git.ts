@@ -382,6 +382,17 @@ export function createGitTool(
 
         if (exitCode !== 0) {
           const stderr = await new Response(proc.stderr).text()
+          // `git diff` exits 1 when the trees differ and `git grep` exits 1 when
+          // nothing matched. Both answered the question; neither is a failure
+          // (CC 2.1.144-012). A real error also exits non-zero but writes a
+          // diagnostic to stderr, so that half stays on the error path.
+          const sub = argv[subcommandIndex(argv)]
+          if (exitCode === 1 && stderr.trim() === '' && (sub === 'diff' || sub === 'grep')) {
+            return {
+              success: true,
+              content: (await scrub(output)).slice(0, 50_000) || '(no output)',
+            }
+          }
           return {
             success: false,
             content: '',

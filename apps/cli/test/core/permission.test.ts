@@ -802,7 +802,10 @@ describe('PermissionSystem', () => {
   // silently does nothing until restart.
   describe('rule mutation invalidates the decision cache', () => {
     it('allow() affects an already-checked tool', () => {
-      const ps = new PermissionSystem('plan')
+      // `default`, not `plan`: since CC 2.1.136-008 an allow rule may not widen
+      // plan mode into a file write, so `plan` would pin the *no*-change answer
+      // and this cache test could no longer tell a stale hit from a fresh one.
+      const ps = new PermissionSystem('default')
       const tool = makeTool('Write', 'ask', 'file')
       expect(ps.check(tool, {})).toBe('ask')
       ps.allow('Write')
@@ -1713,5 +1716,15 @@ describe('Bash 规则的归一化：同一段命令的多种读法（CC 2.0.10-0
     const ps = new PermissionSystem()
     ps.deny('Bash(rm *)')
     expect(ps.check(bash(), { command: 'rm \\\n-rf /tmp/x' })).toBe('ask')
+  })
+})
+
+describe('CC 2.1.136-008: plan mode is not widened by an allow rule', () => {
+  it('an Edit(...) allow rule does not let plan mode write', () => {
+    const ps = new PermissionSystem('plan')
+    ps.allow('Edit(src/**)')
+    expect(ps.check(makeTool('Edit', 'ask', 'file'), { file_path: 'src/a.ts' })).toBe('ask')
+    // Control: reads remain free in plan mode.
+    expect(ps.check(makeTool('Read', 'ask', 'file'), { file_path: 'src/a.ts' })).toBe('bypass')
   })
 })

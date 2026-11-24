@@ -114,3 +114,21 @@ describe('loadHookConfigs', () => {
     }
   })
 })
+
+// CC 2.1.122-017: one group without a `hooks` array used to throw and take the
+// entire hook wiring down with it.
+describe('malformed hook groups', () => {
+  it('skips a group with no hooks array and still loads the rest', () => {
+    const warn = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const defs = loadHookConfigs({
+      PreToolUse: [
+        { matcher: 'Bash' } as never,
+        null as never,
+        { matcher: 'Edit', hooks: [{ type: 'command' as const, command: 'true' }] },
+      ],
+    })
+    expect(defs).toHaveLength(1)
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('has no "hooks" array'))
+    warn.mockRestore()
+  })
+})

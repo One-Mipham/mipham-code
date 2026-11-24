@@ -29,6 +29,9 @@ const t = createT(bundles['en-US'] || (enUS as TranslationMap), enUS as Translat
  */
 export const MCP_SUPPORTED_VERSIONS: readonly string[] = ['2024-11-05']
 
+/** Upper bound on paged list reads, so a server that always returns a cursor cannot loop forever. */
+const MAX_LIST_PAGES = 100
+
 /**
  * The revision to offer in `initialize`.
  *
@@ -130,16 +133,39 @@ export class McpProtocol {
     return result
   }
 
-  async listTools(): Promise<ToolDefinition[]> {
-    const result = (await this.transport.sendRequest('tools/list')) as {
-      tools?: ToolDefinition[]
+  /**
+   * Read every page of a paged MCP list method.
+   *
+   * Servers cap a page (commonly 100 entries) and return `nextCursor` for the
+   * rest. Sending a single request and dropping the cursor silently hid every
+   * tool past page 1 — the server looked healthy and half its tools did not
+   * exist (CC 2.1.144-019). The page cap only bounds a server that keeps
+   * answering with a fresh cursor; it does not change normal pagination.
+   */
+  private async listAllPages<T>(method: string, key: string): Promise<T[]> {
+    const out: T[] = []
+    let cursor: string | undefined
+    for (let page = 0; page < MAX_LIST_PAGES; page++) {
+      const result = (await this.transport.sendRequest(
+        method,
+        cursor ? { cursor } : undefined,
+      )) as Record<string, unknown> | null
+      const items = result?.[key]
+      if (Array.isArray(items)) out.push(...(items as T[]))
+      const next = result?.nextCursor
+      if (typeof next !== 'string' || next === '' || next === cursor) break
+      cursor = next
     }
+    return out
+  }
+
+  async listTools(): Promise<ToolDefinition[]> {
+    const tools = await this.listAllPages<ToolDefinition>('tools/list', 'tools')
     // A server (or the host embedding it) may put a `null` or a nameless entry
     // in `tools`. That shape used to reach `connection.tools.map(t => t.name)`,
     // throw a TypeError from a background async, and — with our crash handler
     // installed — take the whole CLI down over one malformed server. Drop
     // entries that cannot be addressed instead of trusting the payload.
-    const tools = Array.isArray(result?.tools) ? result.tools : []
     return tools.filter(
       (tool): tool is ToolDefinition =>
         !!tool &&
@@ -169,10 +195,7 @@ export class McpProtocol {
     if (!this.serverCapabilities.resources) {
       return []
     }
-    const result = (await this.transport.sendRequest('resources/list')) as {
-      resources: ResourceDefinition[]
-    }
-    return result.resources || []
+    return this.listAllPages<ResourceDefinition>('resources/list', 'resources')
   }
 
   async readResource(uri: string): Promise<ResourceReadResult> {

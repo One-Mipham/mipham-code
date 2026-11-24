@@ -415,6 +415,45 @@ describe('OAuthClient', () => {
         vi.unstubAllGlobals()
       }
     })
+
+    it('treats a 200 {"error":"invalid_grant"} as a dead refresh token (CC 2.1.74-007)', async () => {
+      // Some providers answer a revoked refresh token with HTTP 200 and an error
+      // body. `response.ok` alone saved that object as a token; every later call
+      // failed until the user cleared credentials by hand.
+      const store = new TokenStore(testDir)
+      store.save('slack-srv', {
+        accessToken: 'old-token',
+        refreshToken: 'dead-refresh',
+        expiresAt: new Date(Date.now() - 3600000).toISOString(),
+        boundTo: credentialBinding(config),
+      })
+      const client = new OAuthClient(store)
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          async () =>
+            new Response(JSON.stringify({ error: 'invalid_grant' }), {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            }),
+        ),
+      )
+      const pkceSpy = vi.spyOn(client, 'executePkceFlow').mockResolvedValue({
+        accessToken: 'pkce-token',
+        refreshToken: 'pkce-refresh',
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      })
+
+      try {
+        const token = await client.refreshAccessToken('slack-srv', config)
+        expect(token).toBe('pkce-token')
+        expect(pkceSpy).toHaveBeenCalledTimes(1)
+        expect(store.load('slack-srv')).toBeNull()
+      } finally {
+        pkceSpy.mockRestore()
+        vi.unstubAllGlobals()
+      }
+    })
   })
 
   // 凭证只按服务名存，而服务名来自 `.mcp.json` —— 那是**从 cwd 读**的项目级配置，

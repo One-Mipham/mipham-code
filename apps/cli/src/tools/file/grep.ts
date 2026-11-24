@@ -173,7 +173,23 @@ export function createGrepTool(credentialConfig?: CredentialMaskingConfig): Tool
       }
 
       // 1. ripgrep (fast path)
-      const rgArgs = ['rg', '-n', '--heading', '--color=never', '-M', '500', pattern]
+      // `.jj`/`.sl` are Jujutsu/Sapling metadata; ripgrep only ignores `.git`,
+      // `.hg`, `.svn` and `.bzr` by default, so a search would descend into the
+      // other VCS's copy of the worktree (CC 2.1.86-002). First, so an explicit
+      // `include` can still name them.
+      const rgArgs = [
+        'rg',
+        '-n',
+        '--heading',
+        '--color=never',
+        '-M',
+        '500',
+        '--glob',
+        '!.jj',
+        '--glob',
+        '!.sl',
+        pattern,
+      ]
       if (include) rgArgs.push('--glob', include)
       rgArgs.push(searchPath)
       try {

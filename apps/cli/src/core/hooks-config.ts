@@ -67,6 +67,15 @@ export function loadHookConfigs(configs: SettingsHooks): HookDefinition[] {
     }
 
     for (const entry of entries) {
+      // A group with no `hooks` array used to throw at `for … of entry.hooks`
+      // and take *every* hook with it — one malformed group disabled the entire
+      // wiring (CC 2.1.122-017). Skip that group, keep the rest.
+      if (!entry || typeof entry !== 'object' || !Array.isArray(entry.hooks)) {
+        process.stderr.write(
+          `⚠️  Hook group on ${eventName} has no "hooks" array — skipped; other hooks still load.\n`,
+        )
+        continue
+      }
       // A matcher is only a *filter*, so a malformed one must not take the whole
       // hook set down with it. `new RegExp` throws here, and both callers register
       // the result in a plain `for…of` (`index.tsx:742`,

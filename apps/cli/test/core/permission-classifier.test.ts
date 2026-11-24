@@ -424,3 +424,21 @@ describe('LlmPermissionClassifier —— 默认裁决预算', () => {
     expect((c as unknown as { timeoutMs: number }).timeoutMs).toBe(DEFAULT_CLASSIFIER_TIMEOUT_MS)
   })
 })
+
+// CC 2.1.183-001: the destructive-git examples the classifier is told about.
+describe('destructive git examples in the classifier rule', () => {
+  it('names stash drop, commit --amend and terraform/pulumi/cdk destroy', async () => {
+    const { CLASSIFIER_RULES } = await import('../../src/core/permission-classifier')
+    const rule = CLASSIFIER_RULES.find((r) => r.name === 'Irreversible Local Destruction')
+    expect(rule).toBeDefined()
+    for (const token of [
+      'git stash drop',
+      'git commit --amend',
+      'terraform destroy',
+      'pulumi destroy',
+      'cdk destroy',
+    ]) {
+      expect(rule!.text).toContain(token)
+    }
+  })
+})

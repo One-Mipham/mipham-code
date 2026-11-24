@@ -432,6 +432,49 @@ describe('matchBashRule — attached-wildcard allow rules stop at the word bound
   })
 })
 
+describe('matchBashRule — `:*` includes the no-argument form; a heredoc body is data', () => {
+  // `tool:*)` names a program and any arguments — including none. Requiring a
+  // separator after the last word made `Bash(ls:*)` refuse a bare `ls`.
+  it('Bash(ls:*) grants bare `ls` but still not `lsof`', () => {
+    expect(matchBashRule('Bash(ls:*)', 'Bash', { command: 'ls' }, 'all')).toBe(true)
+    expect(matchBashRule('Bash(ls:*)', 'Bash', { command: 'ls -la' }, 'all')).toBe(true)
+    expect(matchBashRule('Bash(ls:*)', 'Bash', { command: 'lsof -i' }, 'all')).toBe(false)
+  })
+
+  // A heredoc body is consumed by the command that declared it, not executed.
+  // Splitting it into its own line-segment made `Bash(cat:*)` refuse the form.
+  it('keeps a heredoc body attached (<< and <<- with a tab-stripped terminator)', () => {
+    expect(matchBashRule('Bash(cat:*)', 'Bash', { command: 'cat <<EOF\nhello\nEOF' }, 'all')).toBe(
+      true,
+    )
+    expect(
+      matchBashRule('Bash(cat:*)', 'Bash', { command: 'cat <<-\tEOF\n\thello\n\tEOF' }, 'all'),
+    ).toBe(true)
+  })
+
+  it('a heredoc fed to a shell keeps its body as commands', () => {
+    // `bash <<EOF … EOF` runs the body. Folding it into the parent would hide it
+    // from a deny rule — this half must keep the old line split.
+    expect(
+      matchBashRule('Bash(bash:*)', 'Bash', { command: 'bash <<EOF\nrm -rf /\nEOF' }, 'all'),
+    ).toBe(false)
+  })
+
+  it('command substitution inside a heredoc body is still a command', () => {
+    expect(
+      matchBashRule('Bash(cat:*)', 'Bash', { command: 'cat <<EOF\n$(rm -rf /)\nEOF' }, 'all'),
+    ).toBe(false)
+  })
+
+  it('a command after the terminator is its own segment', () => {
+    // A line that only *starts* with the terminator does not end the heredoc
+    // (bash keeps it in the body), so the `&&` case is the one that runs.
+    expect(
+      matchBashRule('Bash(cat:*)', 'Bash', { command: 'cat <<EOF && rm -rf /\nbody\nEOF' }, 'all'),
+    ).toBe(false)
+  })
+})
+
 describe('extractBashFileAccess — prefix wrapper commands', () => {
   it('extracts the file from a wrapped reader command', () => {
     expect(extractBashFileAccess('sudo cat .git-credentials').read).toContain('.git-credentials')
@@ -1332,5 +1375,30 @@ describe('isUnboundedBashAllowRule —— 规则名的是「程序」，还是�
     ]) {
       expect(isUnboundedBashAllowRule(rule), rule).toBe(false)
     }
+  })
+})
+
+describe('CC 2.1.113-015 / -016 / 2.1.73-003: exec wrappers, find -delete, no regex backtracking', () => {
+  it('deny rules see through watch / setsid / ionice', () => {
+    for (const cmd of ['watch rm -rf x', 'setsid rm -rf x', 'ionice -c3 rm -rf x']) {
+      expect(matchBashRule('Bash(rm:*)', 'Bash', { command: cmd }, 'any'), cmd).toBe(true)
+    }
+  })
+
+  it('Bash(find:*) does not grant find -delete, but still grants a plain find', () => {
+    expect(
+      matchBashRule('Bash(find:*)', 'Bash', { command: 'find . -name "*.log" -delete' }, 'all'),
+    ).toBe(false)
+    expect(matchBashRule('Bash(find:*)', 'Bash', { command: 'find . -name "*.log"' }, 'all')).toBe(
+      true,
+    )
+  })
+
+  it('wildcard matching is not exponential on nested stars', () => {
+    // The old regex (`.*` per star) backtracked exponentially: 200 'a's held a
+    // permission prompt at 100 % CPU for minutes. If this regresses, the test
+    // times out rather than failing an assertion.
+    expect(wildcardMatch('git:*a*a*a*a*a*b', `git ${'a'.repeat(200)}`)).toBe(false)
+    expect(wildcardMatch('git:*a*a*a*a*a*b', `git ${'a'.repeat(50)}b`)).toBe(true)
   })
 })

@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { Box, Text, useInput } from 'ink'
 import TextInput from 'ink-text-input'
-import { execSync } from 'node:child_process'
 import { ErrorBoundary } from './error-boundary'
 import { useCtrlCConfirm } from './ctrl-c-confirm'
 import { formatThinking } from './thinking'
@@ -11,7 +10,7 @@ import type { MiphamConfig } from '../shared/index.ts'
 import type { Llm } from '../providers/llm'
 import { AUTOCOMPLETE_MAX_CONTEXT, type RecentMessage } from '../core/autocomplete'
 import { MODE_CYCLE } from '../core/permission-config'
-import { resolveGitPr, prColor, type GitPr } from '../core/git-pr'
+import { readGitBranch, resolveGitPr, prColor, type GitPr } from '../core/git-pr'
 import type { SkillsLoader } from '../skills/loader'
 import type { PluginManager } from '../plugin/plugin-manager'
 import { setPreference } from '../config/preferences'
@@ -388,21 +387,10 @@ export function App({
   // InputBar is unmounted by the picker / API-key prompt / agent view.
   const [inputDraft, setInputDraft] = useState('')
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null)
-  // Current git branch — read once at mount (not a git repo → null).
-  // `stdio` 显式给：默认下 git 的 stderr 是继承的，「不是仓库」这个正常路径会把
-  // `fatal:` 漏到终端上（与 `core/instructions.ts` 的 `gitRoot` 同一件事）。
-  // stdout 仍须是管道，否则读到的永远是空串 —— 分支名直接消失，且不报错。
-  const [gitBranch] = useState<string | null>(() => {
-    try {
-      const b = execSync('git branch --show-current', {
-        encoding: 'utf-8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-      }).trim()
-      return b || null
-    } catch {
-      return null
-    }
-  })
+  // Current git branch. Read on demand rather than frozen at mount: `/cd`
+  // moves the session into another repository and the footer used to keep
+  // naming the previous one's branch (CC 2.1.176-012).
+  const [gitBranch, setGitBranch] = useState<string | null>(() => readGitBranch())
   // Current branch's PR (head = branch) — async detect; gh unavailable / no PR → null.
   const [gitPr, setGitPr] = useState<GitPr | null>(null)
   useEffect(() => {
@@ -599,6 +587,7 @@ export function App({
       version: version || '0.0.0',
       sessionId: sessionId || '',
       setSessionTitle: (title: string) => setSessionTitle(title),
+      setGitBranch: (branch: string | null) => setGitBranch(branch),
       setEffort: (level: string) => {
         setEffort(level)
         setPreference('lastCodeReviewEffort', level)

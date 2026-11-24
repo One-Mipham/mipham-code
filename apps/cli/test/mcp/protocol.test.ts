@@ -81,6 +81,44 @@ describe('McpProtocol', () => {
       } as unknown as Transport
       expect(await new McpProtocol(fake).listTools()).toEqual([])
     })
+
+    it('follows nextCursor so tools past page 1 are not lost', async () => {
+      // Servers cap a page (commonly 100) and return the rest behind a cursor.
+      // A single request used to silently hide every tool after page 1 — the
+      // server looked healthy and half its tools did not exist (CC 2.1.144-019).
+      const pages: Record<string, unknown> = {
+        '': { tools: [{ name: 'a', inputSchema: { type: 'object' } }], nextCursor: 'p2' },
+        p2: { tools: [{ name: 'b', inputSchema: { type: 'object' } }], nextCursor: 'p3' },
+        p3: { tools: [{ name: 'c', inputSchema: { type: 'object' } }] },
+      }
+      const sent: Array<Record<string, unknown> | undefined> = []
+      const fake = {
+        sendRequest: async (_method: string, params?: Record<string, unknown>) => {
+          sent.push(params)
+          return pages[(params?.cursor as string) || '']
+        },
+      } as unknown as Transport
+
+      const tools = await new McpProtocol(fake).listTools()
+      expect(tools.map((t) => t.name)).toEqual(['a', 'b', 'c'])
+      expect(sent).toEqual([undefined, { cursor: 'p2' }, { cursor: 'p3' }])
+    })
+
+    it('stops when a server repeats the same cursor instead of looping forever', async () => {
+      let calls = 0
+      const fake = {
+        sendRequest: async () => {
+          calls += 1
+          return {
+            tools: [{ name: `t${calls}`, inputSchema: { type: 'object' } }],
+            nextCursor: 'same',
+          }
+        },
+      } as unknown as Transport
+
+      const tools = await new McpProtocol(fake).listTools()
+      expect(tools).toHaveLength(2)
+    })
   })
 
   describe('callTool', () => {

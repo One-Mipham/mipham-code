@@ -80,7 +80,10 @@ describe('/permissions — rule persistence & mode help', () => {
   })
 
   it('takes effect in the live session, not only after restart', async () => {
-    // plan mode denies writes by baseline.
+    // `default`, not the suite's `plan`: since CC 2.1.136-008 an allow rule may
+    // not widen plan mode into a file write, so plan would pin the *no*-change
+    // answer and the live-vs-restart half could not be observed.
+    perm = new PermissionSystem('default')
     expect(perm.check(writeTool, {})).toBe('ask')
     await permissionsCmd(makeCtx(), ['allow', 'Write'])
     expect(perm.check(writeTool, {})).toBe('bypass')

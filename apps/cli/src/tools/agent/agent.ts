@@ -24,6 +24,9 @@ const VALID_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
  * honoured, in both directions: that is a request, not a default chosen on the
  * caller's behalf.
  */
+/** Deepest nesting of `Agent` calls (CC parity: 5). */
+export const MAX_AGENT_DEPTH = 5
+
 export function resolveRunInBackground(
   runInBackground: boolean | undefined,
   agentDef?: { background?: boolean },
@@ -84,6 +87,21 @@ export const agentTool: ToolDefinition = {
     const description = params.description as string
     const prompt = params.prompt as string
     const agentType = (params.subagent_type as SubAgentType) || 'general'
+
+    // A sub-agent's tool set includes `Agent`, so a model can nest calls. Without
+    // a depth bound one run could spawn children that spawn children until the
+    // token budget or the process dies (CC 2.1.181-019). Background sub-agents
+    // already had a limit; this applies the same one to foreground runs.
+    const depth = ctx.agentDepth ?? 0
+    if (depth >= MAX_AGENT_DEPTH) {
+      return {
+        success: false,
+        content: '',
+        error:
+          `Sub-agent nesting limit reached (${MAX_AGENT_DEPTH} levels). ` +
+          "Finish this level's work directly instead of spawning another agent.",
+      }
+    }
 
     if (!VALID_TYPES.includes(agentType)) {
       return {

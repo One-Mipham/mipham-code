@@ -107,6 +107,12 @@ const PREFIX_COMMANDS = new Set([
   'xargs',
   'eval',
   'stdbuf',
+  // Schedulers/session leaders: they run the command that follows. Without
+  // these, `watch rm -rf x` / `setsid rm -rf x` / `ionice -c3 rm -rf x` ran
+  // past a deny rule that named `rm` (CC 2.1.113-015).
+  'watch',
+  'setsid',
+  'ionice',
 ])
 
 /** `timeout` 的 duration 形态：`5` / `0.5` / `30s` / `2m` / `1h` / `1d`。 */
@@ -572,7 +578,7 @@ export interface CommandSegmentGroup {
  */
 export function flattenCommandGroups(command: string, depth = 0): CommandSegmentGroup[] {
   const groups: CommandSegmentGroup[] = []
-  for (const seg of splitShellSegments(joinLineContinuations(command))) {
+  for (const seg of splitSegmentsForMatching(joinLineContinuations(command))) {
     const variants: string[] = [seg]
     // The shell removes quotes before running the command, so `rm "-rf" /tmp`
     // *is* `rm -rf /tmp` — but the rule text is written without quotes, so the
@@ -655,6 +661,135 @@ export function joinLineContinuations(command: string): string {
     out += ch
   }
   return out
+}
+
+/** Commands whose heredoc body is itself shell code, not data. */
+const SHELL_INTERPRETERS = new Set([
+  'bash',
+  'sh',
+  'zsh',
+  'ksh',
+  'dash',
+  'fish',
+  'eval',
+  'source',
+  '.',
+])
+
+/**
+ * Heredoc delimiters declared on one line (`cat <<EOF`, `cat <<-'EOF'`).
+ *
+ * Scanned with quote state rather than a bare regex: `echo "a << b"` mentions a
+ * heredoc without opening one, and a regex would take `b` for the delimiter.
+ */
+function heredocSpecs(line: string): Array<{ delim: string; stripTabs: boolean }> {
+  const specs: Array<{ delim: string; stripTabs: boolean }> = []
+  let quote: "'" | '"' | null = null
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]!
+    if (quote) {
+      if (ch === '\\' && quote === '"') i += 1
+      else if (ch === quote) quote = null
+      continue
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch
+      continue
+    }
+    if (ch === '\\') {
+      i += 1
+      continue
+    }
+    // `<<<` is a here-string, not a heredoc.
+    if (ch !== '<' || line[i + 1] !== '<' || line[i + 2] === '<') continue
+    let j = i + 2
+    let stripTabs = false
+    if (line[j] === '-') {
+      stripTabs = true
+      j += 1
+    }
+    while (line[j] === ' ' || line[j] === '\t') j += 1
+    let delimQuote: string | null = null
+    if (line[j] === "'" || line[j] === '"') {
+      delimQuote = line[j]!
+      j += 1
+    }
+    const start = j
+    while (j < line.length) {
+      const c = line[j]!
+      if (delimQuote) {
+        if (c === delimQuote) break
+        j += 1
+      } else if (/[A-Za-z0-9_]/.test(c)) j += 1
+      else break
+    }
+    const delim = line.slice(start, j)
+    if (delim) {
+      specs.push({ delim, stripTabs })
+      i = j
+    }
+  }
+  return specs
+}
+
+/**
+ * Split a command for **permission matching**, keeping a heredoc body attached
+ * to the command that reads it.
+ *
+ * `splitShellSegments` splits on every newline, so `cat <<EOF\nhello\nEOF`
+ * became three segments and an allow rule `Bash(cat:*)` required `hello` to
+ * match it too — the rule that names the command never matched its most common
+ * form (same class as the no-argument case in `wildcardMatch`). The body of a
+ * heredoc is data the command consumes, not another command.
+ *
+ * The exception is a heredoc that feeds a shell interpreter (`bash <<EOF …`):
+ * that body *is* shell code, and folding it into the parent segment would hide
+ * `rm -rf /` from a deny rule. Those keep the plain line split, i.e. today's
+ * conservative behaviour.
+ */
+export function splitSegmentsForMatching(command: string): string[] {
+  const lines = command.split(/\r?\n/)
+  // A heredoc that feeds a shell interpreter keeps the plain split for the
+  // whole command: its body is executable and must stay visible to deny rules.
+  const feedsShell = (line: string): boolean => {
+    if (heredocSpecs(line).length === 0) return false
+    const base = (effectiveCommand(line.split(/\s+/).filter(Boolean)).base || '').split('/').pop()
+    return !!base && SHELL_INTERPRETERS.has(base)
+  }
+  if (lines.some(feedsShell)) return splitShellSegments(command)
+
+  const out: string[] = []
+  // Heredoc-declaring segments still waiting for their body lines. The body
+  // belongs to the segment that declared it — `cat <<EOF && rm -rf /` runs `rm`
+  // *after* cat, so that half must stay its own segment.
+  const pending: Array<{ lines: string[]; delims: Array<{ delim: string; stripTabs: boolean }> }> =
+    []
+  for (const line of lines) {
+    if (pending.length > 0) {
+      const head = pending[0]!
+      head.lines.push(line)
+      const spec = head.delims[0]!
+      const candidate = spec.stripTabs ? line.replace(/^\t+/, '') : line
+      if (candidate === spec.delim) {
+        head.delims.shift()
+        if (head.delims.length === 0) {
+          out.push(head.lines.join('\n').trim())
+          pending.shift()
+        }
+      }
+      continue
+    }
+    for (const part of line.split(/&&|\|\||;|\||&/)) {
+      const seg = part.trim()
+      if (!seg) continue
+      const specs = heredocSpecs(seg)
+      if (specs.length > 0) pending.push({ lines: [seg], delims: specs })
+      else out.push(seg)
+    }
+  }
+  // An unterminated heredoc still has to be judged: keep what was read.
+  for (const p of pending) out.push(p.lines.join('\n').trim())
+  return out.filter((s) => s.length > 0)
 }
 
 /** git global options that consume the next token. */
@@ -1261,8 +1396,10 @@ export function matchBashRule(
  */
 function embedsForeignCommand(segment: string): boolean {
   return (
-    // find(1): -exec / -execdir / -ok / -okdir take a command.
-    /\s-(?:exec|execdir|ok|okdir)(?:\s|$)/.test(segment) ||
+    // find(1): -exec / -execdir / -ok / -okdir take a command; -delete removes
+    // files outright. `Bash(find:*)` granted `find . -name '*.log' -delete` —
+    // a deletion the rule never named (CC 2.1.113-016).
+    /\s-(?:exec|execdir|ok|okdir|delete)(?:\s|$)/.test(segment) ||
     // git(1) / tar(1): options that name a program to run.
     /--(?:upload-pack|receive-pack|exec-path|to-command|checkpoint-action)(?:=|\s)/.test(segment) ||
     // git(1) `-c core.pager=…`-style config that ends in an executed command.
@@ -1272,16 +1409,57 @@ function embedsForeignCommand(segment: string): boolean {
   )
 }
 
+/**
+ * Match one rule pattern against a command, **without a regex**.
+ *
+ * The pattern used to be compiled to a regex with every `*` becoming `.*`.
+ * Nested wildcards (`git:*a*a*a*a*a*b`) then backtracked exponentially: a
+ * 200-character argument held the permission prompt at 100 % CPU for minutes —
+ * a freeze reachable from the command line the rule was supposed to guard
+ * (CC 2.1.73-003). This is the classic two-pointer wildcard match: `*` may
+ * match any run (newlines included), `?` exactly one character, and `:` one
+ * colon or whitespace. It is O(pattern × input) with no backtracking tree.
+ *
+ * A trailing `:*` also matches the **no-argument** form: `Bash(ls:*)` grants
+ * `ls` itself, not only `ls -la`.
+ */
 export function wildcardMatch(pattern: string, input: string): boolean {
-  const regexStr =
-    '^' +
-    pattern
-      .replace(/[.+^${}()|[\]\\*?]/g, '\\$&') // escape regex specials (incl. * and ?)
-      .replace(/:/g, '[:\\s]') // : → match colon or whitespace
-      .replace(/\\\*/g, '.*') // * → .*
-      .replace(/\\\?/g, '.') + // ? → .
-    '$'
-  return new RegExp(regexStr).test(input)
+  const chars = Array.from(pattern)
+  const subject = Array.from(input)
+  let p = 0
+  let s = 0
+  let star = -1
+  let mark = 0
+  while (s < subject.length) {
+    if (p < chars.length && chars[p] === '*') {
+      star = p
+      mark = s
+      p += 1
+      continue
+    }
+    if (p < chars.length && tokenMatches(chars[p]!, subject[s]!)) {
+      p += 1
+      s += 1
+      continue
+    }
+    if (star !== -1) {
+      // Extend the last `*` by one and retry from just after it.
+      p = star + 1
+      mark += 1
+      s = mark
+      continue
+    }
+    return false
+  }
+  // `foo:*` also matches a bare `foo`: a separator at the very end is optional.
+  while (p < chars.length && (chars[p] === '*' || chars[p] === ':')) p += 1
+  return p === chars.length
+}
+
+function tokenMatches(patternChar: string, inputChar: string): boolean {
+  if (patternChar === '?') return true
+  if (patternChar === ':') return inputChar === ':' || /\s/.test(inputChar)
+  return patternChar === inputChar
 }
 
 /**

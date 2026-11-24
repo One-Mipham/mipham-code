@@ -1657,9 +1657,20 @@ export class QueryEngine {
       // permit a merge. Recorded on the one funnel every tool call passes.
       noteToolOutcome(reviewLedger, this.sessionId, name, effectiveParams, result.success)
 
-      // Prepend CRSI warnings to result content
-      if (hookWarnings.length > 0 && result.success) {
-        result.content = hookWarnings.join('\n') + '\n' + (result.content || '')
+      // Prepend PreToolUse `additionalContext` to the result — on failure too.
+      // It used to ride only on success, so a hook that warned "this command is
+      // about to fail because X" lost its warning at exactly the moment the
+      // command failed (CC 2.1.110-027). A failed result is projected as
+      // `error || content`, so the warning goes where it is actually read.
+      if (hookWarnings.length > 0) {
+        const warning = hookWarnings.join('\n')
+        if (result.success) {
+          result.content = warning + '\n' + (result.content || '')
+        } else if (result.error) {
+          result.error = warning + '\n' + result.error
+        } else {
+          result.content = warning + '\n' + (result.content || '')
+        }
       }
 
       // Run PostToolUse hooks

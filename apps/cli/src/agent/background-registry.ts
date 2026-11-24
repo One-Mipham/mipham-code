@@ -95,6 +95,11 @@ export class BackgroundAgentRegistry {
     executor: (signal: AbortSignal, id: string) => Promise<string>,
     kind: BackgroundTaskKind = 'interactive',
   ): string {
+    // Completed tasks keep their full result string forever unless something
+    // calls `prune()`, and nothing did — a long session with many subagents
+    // grew without bound (CC 2.1.50-016 / -023 / -008). Each spawn is a
+    // natural, bounded moment to drop finished tasks older than the TTL.
+    this.prune()
     const id = `bg-${++this.idCounter}-${Date.now().toString(36)}`
     const now = new Date()
 

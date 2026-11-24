@@ -2288,6 +2288,43 @@ describe('QueryEngine', () => {
       expect(result?.content).toContain('lint ran clean, 0 warnings')
     })
 
+    it('keeps the PreToolUse warning when the tool then fails', async () => {
+      // The warning used to ride only on success, so a hook that warned "this
+      // will fail because X" lost its warning exactly when the command failed
+      // (CC 2.1.110-027). A failed result is projected from `error`, so that is
+      // where the warning has to land.
+      const tool = mockTool('read', async () => ({
+        success: false,
+        content: '',
+        error: 'ENOENT: no such file',
+      }))
+      const registry = mockProviderRegistry(async function* () {
+        yield {
+          type: 'tool_use',
+          toolUse: { type: 'tool_use', id: 'call_1', name: 'read', input: {} },
+        }
+        yield { type: 'stop' }
+      })
+
+      const hooks = new HookEngine()
+      hooks.register({
+        event: 'PreToolUse',
+        handler: async () => ({ allowed: true, additionalContext: 'path was just deleted' }),
+      })
+
+      const engine = new QueryEngine(registry, mockContext(), makeToolMap([tool]))
+      engine.setHookEngine(hooks)
+
+      const chunks: StreamChunk[] = []
+      for await (const chunk of engine.process('read')) {
+        chunks.push(chunk)
+      }
+
+      const result = chunks.find((c) => c.type === 'tool_result')
+      expect(result?.content).toContain('path was just deleted')
+      expect(result?.content).toContain('ENOENT')
+    })
+
     it('a hook that says `ask` refuses the call — and does not erase a warning written before it', async () => {
       const tool = mockTool('bash')
       const registry = mockProviderRegistry(async function* () {

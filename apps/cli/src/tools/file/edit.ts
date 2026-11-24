@@ -120,11 +120,24 @@ export const editTool: ToolDefinition = {
       // O_NONBLOCK only got us past the *open*. It does not bound the read:
       // `/dev/zero` yields bytes forever (OOM) and a FIFO yields whatever a
       // writer chooses to send. Refuse on file type, not on size.
-      if (!fstatSync(rfd).isFile()) {
+      const stat = fstatSync(rfd)
+      if (!stat.isFile()) {
         return {
           success: false,
           content: '',
           error: `Path is not a regular file (FIFO, socket or device): ${filePath}`,
+        }
+      }
+      // Bound the read *before* it happens. The 10 MB check below runs on
+      // `content.length` — by then the whole file is already in memory, so a
+      // multi-GB file OOMs the process before the guard can speak. 4 is the
+      // UTF-8 bytes-per-code-unit ceiling, so `size > 4 × MAX` guarantees the
+      // post-read character check would have refused it anyway.
+      if (stat.size > MAX_FILE_SIZE * 4) {
+        return {
+          success: false,
+          content: '',
+          error: `File too large (${(stat.size / 1e6).toFixed(1)} MB). Max: 10 MB.`,
         }
       }
       const raw = readFileSync(rfd)

@@ -256,10 +256,27 @@ export class OAuthClient {
       const fresh = await this.executePkceFlow(config)
       return fresh.accessToken
     }
-    const data = (await response.json()) as {
-      access_token: string
+    let data: {
+      access_token?: unknown
       refresh_token?: string
       expires_in?: number
+      error?: unknown
+    }
+    try {
+      data = (await response.json()) as typeof data
+    } catch {
+      // A non-JSON body on a 2xx is not a token either.
+      data = {}
+    }
+    // Some providers (Slack is the documented one) answer a dead refresh token
+    // with HTTP 200 and `{"error":"invalid_grant"}`. Checking `response.ok`
+    // alone saved that object as a token, and every later call failed until the
+    // user cleared credentials by hand (CC 2.1.74-007). A refresh is only
+    // successful if it actually returned an access token.
+    if (typeof data.access_token !== 'string' || data.access_token === '') {
+      this.store.delete(serverName)
+      const fresh = await this.executePkceFlow(config)
+      return fresh.accessToken
     }
     this.store.save(serverName, {
       accessToken: data.access_token,

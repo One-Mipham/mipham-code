@@ -663,6 +663,13 @@ export class PermissionSystem {
     // 3. Check allow rules — but an org ceiling still applies (see allowRuleDecision)
     for (const rule of this.allowRules) {
       if (!this.ruleMatches(rule, tool, input)) continue
+      // A file *write* is the one thing plan mode exists to forbid: with
+      // `Edit(src/**)` allowed, plan mode wrote files — the rule sat ahead of
+      // the mode baseline and the mode never got a say (CC 2.1.136-008).
+      // Scoped to file-mutating tools so an allow rule still grants exactly
+      // what it did in every other category (the pinned tests for `allow('Bash')`
+      // and bare-name validity rely on that).
+      if (this.mode === 'plan' && tool.category === 'file' && !isReadOnlyTool(tool)) continue
       // In `auto`, a rule that names no program does not stand in for the safety
       // classifier. An allow rule sits *ahead* of the mode baseline, so
       // `allow: ["Bash(*)"]` would otherwise make the one mode that examines

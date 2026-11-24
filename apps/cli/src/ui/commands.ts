@@ -159,6 +159,8 @@ export interface CommandContext {
   sessionId: string
   // Callbacks for commands that mutate App state
   setSessionTitle: (title: string) => void
+  /** Refresh the footer's git branch after the session moves directory (`/cd`). */
+  setGitBranch?: (branch: string | null) => void
   setEffort: (level: string) => void
   setFocusMode: (on: boolean) => void
   /** Current focus-view state — `/focus` toggles from this, not from `true`. */
@@ -4883,6 +4885,10 @@ const cdCmd: CommandHandler = async (ctx, args) => {
 
   try {
     process.chdir(resolved)
+    // The branch badge describes the session's directory, not the one it was
+    // opened in; refresh it or `/cd` leaves the previous repository's branch
+    // on screen (CC 2.1.176-012).
+    ctx.setGitBranch?.((await import('../core/git-pr')).readGitBranch())
 
     // `/cd` 只搬了 cwd，而**按目录装载的闸门**分两半：
     //   • 能在这里重放的 —— `.mipham/rules/*.md` 与 settings.json 的 permission 规则；
@@ -5445,7 +5451,16 @@ const resumeCmd: CommandHandler = async (ctx, args) => {
     }
   }
 
-  const sessions = SessionStore.list()
+  // The running session is on disk too (events are appended as they happen), so
+  // listing every file offered the conversation the user is already in — and
+  // resuming it is a no-op that looks like a broken restore (CC 2.1.73-008).
+  // The live name comes from the log, which `/rename` updates.
+  const { sanitizeSessionName } = await import('../core/session-log')
+  const currentName = ctx.engine.getContext().getLog?.()?.getName() ?? ctx.sessionId
+  const sessions = SessionStore.list().filter(
+    (s) =>
+      s.name !== currentName && sanitizeSessionName(s.name) !== sanitizeSessionName(currentName),
+  )
 
   if (sessions.length === 0) {
     return {

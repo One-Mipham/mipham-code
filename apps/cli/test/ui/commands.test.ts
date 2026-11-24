@@ -2410,3 +2410,39 @@ describe('/doctor API connectivity', () => {
     expect(res.content).not.toContain('unreachable')
   })
 })
+
+// CC 2.1.73-008 / 2.1.176-012: the live session is not offered back to itself,
+// and the branch badge follows `/cd` instead of describing the old directory.
+describe('/resume and /cd session-directory state', () => {
+  it('/resume does not list the running session', async () => {
+    vi.mocked(SessionStore.list).mockReturnValue([
+      {
+        name: 'commands-test-session',
+        messageCount: 3,
+        updatedAt: new Date().toISOString(),
+      } as never,
+      {
+        name: 'an-older-session',
+        messageCount: 7,
+        updatedAt: new Date().toISOString(),
+      } as never,
+    ])
+    const result = await getCommand('/resume')!(mkCtx(), [])
+    expect(result.content).toContain('an-older-session')
+    expect(result.content).not.toContain('commands-test-session')
+  })
+
+  it('/cd asks the footer to refresh its git branch', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mipham-cd-'))
+    const before = process.cwd()
+    const ctx = mkCtx() as ReturnType<typeof mkCtx> & { setGitBranch?: ReturnType<typeof vi.fn> }
+    ctx.setGitBranch = vi.fn()
+    try {
+      await getCommand('/cd')!(ctx as never, [dir])
+      expect(ctx.setGitBranch).toHaveBeenCalledTimes(1)
+    } finally {
+      process.chdir(before)
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
