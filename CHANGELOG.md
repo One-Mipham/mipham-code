@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.85.47] — 2026-11-24
+
+### Added
+
+- **启动窗口显示版本号** —— 欢迎横幅的标题现在带上当前版本（`Mipham Code v0.85.47`），
+  与 `Claude Code v2.1.331` 的写法对齐。
+- **启动时同时给出待升级版本** —— 后台查到新版时，横幅里直接显示 `✔ Update available · vX`；
+  已经装好等待重启则显示 `Update installed · Restart to apply`。横幅可见期间页脚不再重复同一条提示。
+
 ## [0.85.46] — 2026-11-24
 
 ### Fixed

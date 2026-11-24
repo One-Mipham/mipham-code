@@ -3,6 +3,15 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.47 (2026-11-24)
+
+- Version sync with Mipham Code CLI 0.85.47
+- Added: the startup banner title now carries the current version (`Mipham Code v0.85.47`), matching
+  the `Claude Code v2.1.331` presentation.
+- Added: when a newer release is available the banner shows `✔ Update available · vX` (or
+  `Update installed · Restart to apply` after installing); the footer notice is suppressed while the
+  banner is visible so the same line is not shown twice.
+
 ## 0.85.46 (2026-11-24)
 
 - Version sync with Mipham Code CLI 0.85.46
