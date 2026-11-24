@@ -28,9 +28,9 @@ prompt-exclude-header: true
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.88
-> **最后更新**: 2026-11-24 — **发布 0.85.45：第 40 档（CC 2.1.331 + Claude Ship beta）上线 + 两站部署（2.94.88）** —— tag **`v0.85.45`** → `0302a509`（GPG）；主干 CI `45344152055` **9/9**、bump `45344582350` **9/9**；release `45345019039` **9/9**（GitHub Release 6 资产、非 draft）；JetBrains 真输出 `JetBrains plugin published.` @ `07:06:50Z`；`.vsix` **85,188 B** / sha256 `53736df6…` / 包内 `0.85.45`（用户网页上传，校验窗口 **≤6 分 47 秒**：`07:29:52Z` 形态② → `07:36:50Z` 形态③，`versions[]` 96 → **97**、`0.85.45` `validated`、`lastUpdated 2026-11-24T07:36:39.953Z`）。**npm**：发布日志 `+ @miphamai/cli@0.85.45` @ `07:05:11Z`，`07:09:19.913Z` 落库（窗口 **≈4 分 9 秒**，远快于 0.85.44 的 ≈55 分钟）：`latest` = 0.85.45、版本端点与 tarball **200**（**3,234,074 B**）、`versions` 217 → **218**。两站重部署并复核：国内 `deploy-cn.sh` HTTP 200（`21e0c97`）、国际 Vercel READY（`dpl_CQontiBWb7pLHEobsNHfoPTcD4M7`）；公开页各 **3×0.85.45 / 0×0.85.44、2×5195**。测试 **5,195**（391 文件），命令 141。
-> **前一条（2.94.87）**: 2026-11-24 — **历史考古：CC 2.1.330–331 + Claude Ship beta（2.94.87）** —— 上游 `latest`/`next` = **2.1.331**（2026-11-23T18:36:26Z），`stable` 2.1.325；**2.1.332 未发布**（CHANGELOG 无该节、`versions[]` 尾部止于 331）；330 沿用第 37 档（142 条未变），新增语料 **2.1.331 = 135 条**（非 VSCode 57 / VSCode 78），归档 `~/.mipham/cc-archaeology/331-ship/`。裁决 **135/135**（无此面 121 / 已处理 9 / 真缺口·已落地 3 / 半·未落 1 / 未验 1）。**落 4 个修复单元 + 1 个产品对标**：① `/doctor` 增 API 连通性段（HTTP 状态或「为何没测」；`probeConnectivity` 为可选接口，Anthropic 的 `healthCheck` 从此不再冒充「可达」）；② 工具参数/输出的显示截断补 `…`（`safeSliceWithEllipsis`，只用于显示，不碰落盘数据）；③ 无名工具调用不再被静默丢弃（两个 provider 都给它合成名，走 unknown-tool 错误结果让模型自我纠正）；④ stdio MCP 接受字符串数字响应 id（畸形回复不再等满 60s）；⑤ **Claude Ship beta 借鉴 `/ship`**：提交→推送→开 PR→审查→修 CI/冲突→报 PR 与 `git revert`，**永不 merge/approve/force-push**。测试 **5,171 → 5,195（391 文件）**，0 失败；命令 **140 → 141**。Claude Ship 的审批策略文件（smarter CODEOWNERS）**刻意未落**：需组织级策略与人工签核，CLI 无落点。
+> **版本**: 2.94.89
+> **最后更新**: 2026-11-24 — **历史考古：CC 2.1.0–2.1.187（第 41 档，2.94.89）** —— 语料 **147 节 / 2,922 条**（2.1.0 的 109 条已由第 39 档处置；本档新增 **2,813 条**；npm 无 2.1.188/2.1.189，15 个版本无 CHANGELOG 节），归档 `~/.mipham/cc-archaeology/2.1.0-2.1.189/`。12 域逐条裁决 **2,813/2,813**（无此面 1,814 / 已处理 431 / 真缺口 296 / 半 171 / 未验 60 / 缺陷 41）。落 **23 个修复单元（31 条目 / 33 处文件改动，逐条见归档 `landed.tsv`）**：权限（`:*` 含无参形态、heredoc 正文并入命令段、`watch`/`setsid`/`ionice` 包装器、`find -delete`、plan 档不被 allow 规则放宽、通配匹配改线性免 ReDoS）；工具（Edit 读前按 fstat 限大、标量参数强制转换、`grep`/`git diff` 退出码 1 不算失败、`.jj`/`.sl` 元数据不搜）；MCP（`tools/list` 与 `resources/list` 分页、OAuth 200+error 视为失效、`OTEL_*` 不下传子进程）；技能 frontmatter（非字符串 description 不再静默丢技能、含 `:` 标量走宽松回退）；Agent（前台子代理 5 层深度上限、`disallowedTools` 支持 `mcp__server`/`mcp__*`、后台任务完成按 TTL 清理）；会话/界面（`/resume` 不列当前会话、`/cd` 后刷新分支）；钩子（畸形 group 不再拖垮全部接线、PreToolUse 警告在失败时仍送达）。测试 **5,195 → 5,228（391 → 392 文件）**，0 失败；命令 141。
+> **前一条（2.94.88）**: 2026-11-24 — **发布 0.85.45：第 40 档（CC 2.1.331 + Claude Ship beta）上线 + 两站部署（2.94.88）** —— tag **`v0.85.45`** → `0302a509`（GPG）；主干 CI `45344152055` **9/9**、bump `45344582350` **9/9**；release `45345019039` **9/9**（GitHub Release 6 资产、非 draft）；JetBrains 真输出 `JetBrains plugin published.` @ `07:06:50Z`；`.vsix` **85,188 B** / sha256 `53736df6…` / 包内 `0.85.45`（用户网页上传，校验窗口 **≤6 分 47 秒**：`07:29:52Z` 形态② → `07:36:50Z` 形态③，`versions[]` 96 → **97**、`0.85.45` `validated`、`lastUpdated 2026-11-24T07:36:39.953Z`）。**npm**：发布日志 `+ @miphamai/cli@0.85.45` @ `07:05:11Z`，`07:09:19.913Z` 落库（窗口 **≈4 分 9 秒**，远快于 0.85.44 的 ≈55 分钟）：`latest` = 0.85.45、版本端点与 tarball **200**（**3,234,074 B**）、`versions` 217 → **218**。两站重部署并复核：国内 `deploy-cn.sh` HTTP 200（`21e0c97`）、国际 Vercel READY（`dpl_CQontiBWb7pLHEobsNHfoPTcD4M7`）；公开页各 **3×0.85.45 / 0×0.85.44、2×5195**。测试 **5,195**（391 文件），命令 141。
 > **维护人**: One Mipham Corporation 技术委员会
 
 ---
@@ -71,7 +71,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **试用期（probation）** — `core/probation.ts`：有任务表现测量的 skill 合并后开 3 次观察窗（同 skill、gate 池、k≥3），噪声自适应地板 `max(stdDev, 2×(100/poolSize))` 出 verdict；`regressed` **只打印** `git revert <sha>`，不执行；无随机仪器的合并登记 `noInstrument`，`/crsi stats` 明说「没有可用仪器」而不是静默跳过；结算前置 = 参考解可信 ∧ 正对照为 0 ∧ 每轮可测 ∧ 有率
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|bench [--capture|--sealed --skill <name>]|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：5,195 测试（5,193 passed + 2 skipped，391 文件）
+测试：5,228 测试（5,226 passed + 2 skipped，392 文件）
 
 ---
 
@@ -108,7 +108,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 391 个测试文件，5195 个测试
+│   │   ├── test/               # 392 个测试文件，5228 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -134,7 +134,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（5195 个测试）
+pnpm test         # vitest run（5228 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -345,7 +345,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | integration     | 1       | 3        | 跨仓接线：`vscode-extension-telemetry`（VS Code 遥测关闭 ⇒ 终端拿到 `MIPHAM_TELEMETRY=off`）                                                                                |
 | integrity       | 20      | 138      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **391** | **5195** | 0 失败（5,193 passed + 2 skipped，391 文件）                                                                                                                                |
+| **合计**        | **392** | **5228** | 0 失败（5,226 passed + 2 skipped，392 文件）                                                                                                                                |
 
 ### 测试注意事项
 
