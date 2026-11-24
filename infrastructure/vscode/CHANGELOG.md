@@ -3,6 +3,43 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.46 (2026-11-24)
+
+- Version sync with Mipham Code CLI 0.85.46
+- Fixed: permission rules missed `watch` / `setsid` / `ionice` wrappers and `find … -delete`, and a
+  heredoc body was split into its own command segment (so `Bash(cat:*)` did not match
+  `cat <<EOF …`). Heredocs that feed a shell interpreter are still split line by line so their
+  commands stay visible to deny rules.
+- Fixed: an allow rule for a file-writing tool could widen plan mode. File writes are no longer
+  exempted in plan mode; read-only tools are unchanged.
+- Fixed: wildcard rules were compiled into a backtracking regex, so `Bash(git:*a*a*a*a*b)` could
+  pin a CPU for minutes. Matching is now linear; `Bash(ls:*)` also matches a bare `ls`.
+- Fixed: `"true"` for a boolean and `" 5 "` / `"+5"` for a number were rejected outright. Only
+  spellings with a single possible reading are coerced.
+- Fixed: Edit read the whole file before checking its size. The size check now happens first.
+- Fixed: a no-match exit code 1 from `grep` / `egrep` / `git grep` / `git diff` was reported as a
+  failure. It is now a normal result with an explanation; non-empty stderr still means failure.
+- Fixed: `Glob` / `Grep` ranked `.jj` / `.sl` metadata as source files.
+- Fixed: MCP `tools/list` and `resources/list` ignored `nextCursor`, so everything past page one
+  silently did not exist. Paging is followed now (100-page cap, a repeated cursor stops the loop).
+- Fixed: an OAuth refresh accepted a 200 response with no token and saved the error body as the
+  token. A non-empty `access_token` is now required, otherwise the token is dropped and the flow
+  restarts.
+- Fixed: `OTEL_*` variables leaked into MCP subprocesses. They are stripped there; the Bash tool and
+  hooks keep them (they are the user's own environment).
+- Fixed: a non-string `description` in a skill file made the skill disappear silently, and a
+  `": "` inside a description broke strict YAML parsing. Numbers/booleans are coerced, other types
+  keep the skill with a warning, and a loose parse rescues plain scalars.
+- Fixed: foreground sub-agents had no nesting limit (now 5), `disallowedTools` did not expand
+  `mcp__server` / `mcp__server__*` / `mcp__*`, and completed background tasks were never pruned.
+- Fixed: `/resume` listed the current session, `/cd` left a stale branch in the footer, a malformed
+  hook group aborted all hook registration, and a PreToolUse warning was dropped exactly when the
+  tool failed.
+- Fixed: the irreversible-operation classifier now covers `git stash drop`, `git commit --amend` and
+  `terraform` / `pulumi` / `cdk destroy`.
+- Fixed: ToolSearch found nothing for a pasted `mcp__server__tool` name. The query is split into a
+  server filter and the bare tool name, and results are ranked by match precision.
+
 ## 0.85.45 (2026-11-24)
 
 - Version sync with Mipham Code CLI 0.85.45
