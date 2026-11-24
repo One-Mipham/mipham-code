@@ -9,12 +9,17 @@ import {
   stripControlCharsForDisplay,
 } from '../shared/sanitize'
 import { homedir } from 'node:os'
+import type { UpdateStatus } from '../shared/update'
 
 interface ChatPanelProps {
   messages: ChatMessage[]
   focusMode?: boolean
   /** A turn is in flight — the moment the focus tip is worth offering. */
   turnActive?: boolean
+  /** Current CLI version, shown in the startup banner title ("Mipham Code v0.85.46"). */
+  version?: string
+  /** Startup update check result, surfaced in the banner so the opening window shows the pending version too. */
+  updateStatus?: UpdateStatus | null
 }
 
 /**
@@ -184,7 +189,13 @@ const MessageRow = React.memo(
     prev.msg.toolMeta?.collapsed === next.msg.toolMeta?.collapsed,
 )
 
-export function ChatPanel({ messages, focusMode, turnActive }: ChatPanelProps) {
+export function ChatPanel({
+  messages,
+  focusMode,
+  turnActive,
+  version,
+  updateStatus,
+}: ChatPanelProps) {
   const { t } = useI18n()
   // Memoize display message computation to avoid O(n) compact on every render.
   // During streaming, messages changes on every chunk; without memoization,
@@ -222,10 +233,20 @@ export function ChatPanel({ messages, focusMode, turnActive }: ChatPanelProps) {
           <Box marginBottom={1}>
             <Text color="cyan" bold>
               {t('ui.banner.title')}
+              {version ? ` v${version}` : ''}
             </Text>
             <Text dimColor> — {t('ui.banner.subtitle')}</Text>
           </Box>
           <Text dimColor>{t('ui.banner.tagline')}</Text>
+          {updateStatus && (
+            <Box marginTop={1}>
+              <Text color="green">
+                {updateStatus.state === 'installed'
+                  ? `✔ ${t('ui.status.update_installed_restart')}`
+                  : `✔ ${t('ui.status.update_available', { version: updateStatus.latest })}`}
+              </Text>
+            </Box>
+          )}
           <Box marginTop={1}>
             <Text dimColor>{t('ui.banner.start_message')}</Text>
           </Box>

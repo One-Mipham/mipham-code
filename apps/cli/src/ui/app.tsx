@@ -1442,7 +1442,7 @@ export function App({
     return (
       <Box flexDirection="column" padding={1} height="100%">
         {/* Chat panel — show existing messages */}
-        <ChatPanel messages={messages} focusMode={false} />
+        <ChatPanel messages={messages} focusMode={false} version={version} />
 
         {/* API Key input prompt */}
         <Box flexDirection="column" marginTop={1}>
@@ -1529,7 +1529,13 @@ export function App({
         ) : (
           <>
             {/* Chat panel */}
-            <ChatPanel messages={messages} focusMode={focusMode} turnActive={isLoading} />
+            <ChatPanel
+              messages={messages}
+              focusMode={focusMode}
+              turnActive={isLoading}
+              version={version}
+              updateStatus={updateStatus}
+            />
             {(() => {
               const indicator = formatThinking(
                 config.showThinking ?? 'off',
@@ -1670,8 +1676,9 @@ export function App({
             {/* graft status line — mirrors graft's own "◤ graft · …" bar */}
             <GraftStatusLine cwd={process.cwd()} ctxPct={contextUsagePct(engine)} />
 
-            {/* Update notification — green, right-aligned, mirrors Claude Code's "Update installed · Restart to apply" */}
-            {updateStatus && (
+            {/* Update notification — green, right-aligned, mirrors Claude Code's "Update installed · Restart to apply".
+                While the startup banner is showing it already carries this line, so the footer copy is suppressed to avoid a duplicate. */}
+            {updateStatus && messages.length > 0 && (
               <Box marginTop={1} flexDirection="row" justifyContent="flex-end" width="100%">
                 <Text color="green">
                   {updateStatus.state === 'installed'
