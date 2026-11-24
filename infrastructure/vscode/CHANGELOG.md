@@ -3,6 +3,21 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.45 (2026-11-24)
+
+- Version sync with Mipham Code CLI 0.85.45
+- Added `/ship`: commit, push, open a PR, review the diff and fix failing checks or conflicts. It
+  never merges, approves or force-pushes, and reports a `git revert <sha>` after every push.
+- Fixed: `/doctor` could not tell "reachable" from "configured" — the Anthropic health check only
+  inspected the key's shape. A new API section reports the HTTP status or the network error, and
+  says why the check was skipped when it was.
+- Fixed: tool arguments and results were cut without an ellipsis, so a truncated result read like
+  the whole output. Display-only truncation now marks the cut; stored transcripts are unchanged.
+- Fixed: a tool call with no name was dropped silently, leaving the turn as a short answer. It is
+  now dispatched as an unknown tool, so the model gets an error result and can retry.
+- Fixed: an MCP server that echoed a numeric id as a string left the request pending until its
+  60-second timeout.
+
 ## 0.85.44 (2026-11-22)
 
 - Version sync with Mipham Code CLI 0.85.44
