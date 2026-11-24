@@ -634,3 +634,8 @@
 | --- 2.94.89 头部「前一条」行（2.94.91 挤出头部窗口时移入）--- |
 > **前一条（2.94.89）**: 2026-11-24 — **历史考古：CC 2.1.0–2.1.187（第 41 档，2.94.89）** —— 语料 **147 节 / 2,922 条**（2.1.0 的 109 条已由第 39 档处置；本档新增 **2,813 条**；npm 无 2.1.188/2.1.189，15 个版本无 CHANGELOG 节），归档 `~/.mipham/cc-archaeology/2.1.0-2.1.189/`。12 域逐条裁决 **2,813/2,813**（无此面 1,814 / 已处理 431 / 真缺口 296 / 半 171 / 未验 60 / 缺陷 41）。落 **23 个修复单元（31 条目 / 33 处文件改动，逐条见归档 `landed.tsv`）**：权限（`:*` 含无参形态、heredoc 正文并入命令段、`watch`/`setsid`/`ionice` 包装器、`find -delete`、plan 档不被 allow 规则放宽、通配匹配改线性免 ReDoS）；工具（Edit 读前按 fstat 限大、标量参数强制转换、`grep`/`git diff` 退出码 1 不算失败、`.jj`/`.sl` 元数据不搜）；MCP（`tools/list` 与 `resources/list` 分页、OAuth 200+error 视为失效、`OTEL_*` 不下传子进程）；技能 frontmatter（非字符串 description 不再静默丢技能、含 `:` 标量走宽松回退）；Agent（前台子代理 5 层深度上限、`disallowedTools` 支持 `mcp__server`/`mcp__*`、后台任务完成按 TTL 清理）；会话/界面（`/resume` 不列当前会话、`/cd` 后刷新分支）；钩子（畸形 group 不再拖垮全部接线、PreToolUse 警告在失败时仍送达）。测试 **5,195 → 5,228（391 → 392 文件）**，0 失败；命令 141。
 ```
+
+```text
+| --- 2.94.90 头部「前一条」行（2.94.92 挤出头部窗口时移入）--- |
+> **前一条（2.94.90）**: 2026-11-24 — **发布 0.85.46：第 41 档 23 个修复单元上线 + 两站部署（2.94.90）** —— tag **`v0.85.46`** → `5f13df5d`（GPG，GitHub `verified: true`）；主干 CI `45357823414` **9/9**；release `45358267638` **9/9**（GitHub Release **6 资产**、非 draft）；JetBrains 真输出 `JetBrains plugin published.` @ `08:44:44Z`；`.vsix` **86,400 B** / sha256 `5ee37694…` / 包内 `0.85.46`（上传 Marketplace 见 2.94.91）。**npm**：发布日志 `+ @miphamai/cli@0.85.46` @ `08:43:16Z` → `08:47:25.373Z` 落库（窗口 **≈4 分 9 秒**）：`latest` = 0.85.46、tarball **200**（**3,241,913 B**）、`versions` 218 → **219**。两站部署并复核：国内 `deploy-cn.sh` 全链、`网站 HTTP 200`、PM2 `onemipham` 重启（`3f05e0d`）；国际 Vercel READY（`dpl_5SZkGZ9rCuVpCLWHEX58VUVK3u1C`、`▲ Aliased https://mipham.ai`）；`/mipham-code` 各 **3×0.85.46 / 0×0.85.45、2×5228**。
+```
