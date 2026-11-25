@@ -367,6 +367,15 @@ export async function measureSkillDelta(
   }
 }
 
+/** 逐题两臂计数：pass/seen 分开记 —— 「没量到」不能混进分母。 */
+export interface TaskEvidence {
+  id: string
+  basePass: number
+  baseSeen: number
+  postPass: number
+  postSeen: number
+}
+
 export interface SkillDeltaSample {
   skillName: string
   baselineScores: number[]
@@ -392,6 +401,11 @@ export interface SkillDeltaSample {
    */
   baselineTokens?: number[]
   postTokens?: number[]
+  /**
+   * P4+：逐题两臂计数（区间计算的原料）。只含**真的量到**的采样 ——
+   * uncertain / truncated 既不进 pass 也不进 seen。缺席 = 旧样本。
+   */
+  taskEvidence?: TaskEvidence[]
   /**
    * P4 逐题修复集：基线**测到过且全败**、改动后**测到过且至少过一次**的题 id。
    *
@@ -465,6 +479,13 @@ export async function measureSkillDeltaRepeated(
   const fixedTasks = [...perTask.entries()]
     .filter(([, s]) => s.baseSeen > 0 && s.postSeen > 0 && s.basePass === 0 && s.postPass > 0)
     .map(([id]) => id)
+  const taskEvidence: TaskEvidence[] = [...perTask.entries()].map(([id, s]) => ({
+    id,
+    basePass: s.basePass,
+    baseSeen: s.baseSeen,
+    postPass: s.postPass,
+    postSeen: s.postSeen,
+  }))
 
   // 空模型闸在最后一次采样后算一次：与模型无关，重复跑只是重复同一组测试。
   const nullCheck = runNullModelCheck(resolved.skillName)
@@ -482,5 +503,6 @@ export async function measureSkillDeltaRepeated(
     nullModelPassed: nullCheck.passed,
     nullModelTotal: nullCheck.total,
     fixedTasks,
+    taskEvidence,
   }
 }

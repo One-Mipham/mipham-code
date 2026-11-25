@@ -63,6 +63,11 @@ export interface ImprovementReport {
    */
   fixedTasks?: string[]
   /**
+   * P4+：`fixedTasks` 中两臂 Wilson 95% 区间**不相交**的题 —— 区间支持「真的变了」的那部分。
+   * k 小时通常为空（k=3 连 0/3→3/3 都相交），这是读数不是故障。缺席 = 没有逐题计数。
+   */
+  fixedSeparated?: string[]
+  /**
    * P4：预测了却没修好的题（= `predictedFixes` − `fixedTasks`）。
    * **两者缺一即缺席** —— 没有预测就没有「漏判」，只有实测也不构成漏判。
    */
@@ -184,6 +189,20 @@ export function buildImprovementReport(
     // 只有**两者都在**时才谈得上「漏判」。空数组是合法读数（预测了「一题都不修好」）。
     ...(context?.expectedFixes !== undefined ? { predictedFixes: context.expectedFixes } : {}),
     ...(sample.fixedTasks !== undefined ? { fixedTasks: sample.fixedTasks } : {}),
+    // P4+：区间分离 = 两臂的 Wilson 区间不重叠。用 Wilson 而不是自助重采样，因为在
+    // k=3 这种小样本上自助会**退化**（0/3 与 3/3 各自重采样只会抽到同一个值 ⇒ 区间
+    // 塌成 [1,1]，把「三发三中」误报成「确定」）。Wilson 在 n=3 就给得出宽区间。
+    ...(sample.fixedTasks !== undefined && sample.taskEvidence !== undefined
+      ? {
+          fixedSeparated: sample.fixedTasks.filter((id) => {
+            const e = sample.taskEvidence!.find((x) => x.id === id)
+            if (!e) return false
+            const base = wilsonInterval(e.basePass, e.baseSeen)
+            const post = wilsonInterval(e.postPass, e.postSeen)
+            return post.lo > base.hi
+          }),
+        }
+      : {}),
     ...(context?.expectedFixes !== undefined && sample.fixedTasks !== undefined
       ? {
           missedFixes: context.expectedFixes.filter((id) => !sample.fixedTasks!.includes(id)),
@@ -343,9 +362,11 @@ function formatAttempt(r: ImprovementRecord, setting?: SimSetting): string {
       missed.length > 0
         ? `（漏 ${missed.slice(0, 2).join('、')}${missed.length > 2 ? ` 等 ${missed.length} 题` : ''}）`
         : ''
-    parts.push(`预测修好 ${r.predictedFixes.length} 题 → 实际 ${hit} 题${tail}`)
+    const sep = r.fixedSeparated ? `（区间分离 ${r.fixedSeparated.length} 题）` : ''
+    parts.push(`预测修好 ${r.predictedFixes.length} 题 → 实际 ${hit} 题${sep}${tail}`)
   } else if (r.fixedTasks !== undefined) {
-    parts.push(`修好 ${r.fixedTasks.length} 题`)
+    const sep = r.fixedSeparated ? `（区间分离 ${r.fixedSeparated.length} 题）` : ''
+    parts.push(`修好 ${r.fixedTasks.length} 题${sep}`)
   }
   // 被降权的尝试**自报原因**：静默重排会让读者以为历史次序就是时间次序。
   const tier = simTier(r, setting)

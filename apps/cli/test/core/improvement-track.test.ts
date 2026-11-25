@@ -1010,3 +1010,105 @@ describe('P4 任务级预测：预测修好哪些题 / 实际修好哪些 / 漏�
     expect(line).not.toContain('perf-a')
   })
 })
+
+describe('P4+ 区间：fixed 不是点断言，给两臂 Wilson 区间', () => {
+  const ev = (
+    id: string,
+    basePass: number,
+    baseSeen: number,
+    postPass: number,
+    postSeen: number,
+  ) => ({ id, basePass, baseSeen, postPass, postSeen })
+  const sample = (evidence: ReturnType<typeof ev>[], fixedTasks: string[]) => ({
+    skillName: 's',
+    baselineScores: [0],
+    postScores: [100],
+    fixedTasks,
+    taskEvidence: evidence,
+  })
+
+  it('k=3 全翻转（0/3 → 3/3）**不**算区间分离 —— 区间仍然相交', () => {
+    // Wilson：0/3 上界 ≈ 0.561，3/3 下界 ≈ 0.439 ⇒ 相交。这正是「k 小时不能下结论」的读数。
+    const r = buildImprovementReport(sample([ev('perf-a', 0, 3, 3, 3)], ['perf-a']), ['f.md'])
+    expect(r.fixedTasks).toEqual(['perf-a']) // 方向性仍算修好
+    expect(r.fixedSeparated).toEqual([]) // 但区间不支持「分得开」
+  })
+
+  it('k=8 全翻转才算分离（0/8 上界 ≈ 0.487 < 8/8 下界 ≈ 0.513）', () => {
+    const r = buildImprovementReport(sample([ev('perf-a', 0, 8, 8, 8)], ['perf-a']), ['f.md'])
+    expect(r.fixedSeparated).toEqual(['perf-a'])
+  })
+
+  it('没有逐题计数 ⇒ 整键缺席（旧样本算不出区间，不是「零题分离」）', () => {
+    const r = buildImprovementReport(
+      { skillName: 's', baselineScores: [0], postScores: [100], fixedTasks: ['perf-a'] },
+      ['f.md'],
+    )
+    expect('fixedSeparated' in r).toBe(false)
+  })
+
+  it('渲染：配了预测时带上区间分离数', () => {
+    const rec: ImprovementRecord = {
+      id: 'r-1',
+      timestamp: '2026-11-20T00:00:00Z',
+      skillName: 's',
+      changeSet: ['f.md'],
+      causal: true,
+      baselineScores: [0],
+      postScores: [10],
+      deltaMean: 10,
+      noise: 0,
+      minEffect: 20,
+      verdict: 'improved',
+      problemKey: 'k',
+      predictedFixes: ['perf-a'],
+      fixedTasks: ['perf-a'],
+      missedFixes: [],
+      fixedSeparated: [],
+    }
+    const line = renderProblemHistory([rec], 'k').split('\n')[1]!
+    expect(line).toContain('预测修好 1 题 → 实际 1 题（区间分离 0 题）')
+  })
+
+  it('渲染：没有预测时同样报区间分离数', () => {
+    const rec: ImprovementRecord = {
+      id: 'r-2',
+      timestamp: '2026-11-20T00:00:00Z',
+      skillName: 's',
+      changeSet: ['f.md'],
+      causal: true,
+      baselineScores: [0],
+      postScores: [10],
+      deltaMean: 10,
+      noise: 0,
+      minEffect: 20,
+      verdict: 'improved',
+      problemKey: 'k',
+      fixedTasks: ['perf-a', 'perf-b'],
+      fixedSeparated: ['perf-a'],
+    }
+    const line = renderProblemHistory([rec], 'k').split('\n')[1]!
+    expect(line).toContain('修好 2 题（区间分离 1 题）')
+  })
+
+  it('渲染：旧记录没有区间字段 ⇒ 不出现「区间分离」', () => {
+    const rec: ImprovementRecord = {
+      id: 'r-3',
+      timestamp: '2026-11-20T00:00:00Z',
+      skillName: 's',
+      changeSet: ['f.md'],
+      causal: true,
+      baselineScores: [0],
+      postScores: [10],
+      deltaMean: 10,
+      noise: 0,
+      minEffect: 20,
+      verdict: 'improved',
+      problemKey: 'k',
+      fixedTasks: ['perf-a'],
+    }
+    const line = renderProblemHistory([rec], 'k').split('\n')[1]!
+    expect(line).toContain('修好 1 题')
+    expect(line).not.toContain('区间分离')
+  })
+})

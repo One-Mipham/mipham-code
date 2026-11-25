@@ -625,3 +625,62 @@ describe('measureSkillDeltaRepeated — 逐题修复集', () => {
     expect(s!.fixedTasks).toEqual([])
   })
 })
+
+describe('measureSkillDeltaRepeated — 逐题计数（供区间计算）', () => {
+  const body = (text: string) => `---\nname: safe-coding\ndescription: x\n---\n${text}`
+  const safeTasks = loadPerformanceTasks().filter((t) => t.skill === 'safe-coding')
+
+  it('两臂各记 pass/seen，逐题带出（区间要用的原料）', async () => {
+    const solved = safeTasks[0]!.id
+    const never = safeTasks[1]!.id
+    const llm: Llm = {
+      chat: async function* (req) {
+        const prompt = String(req.messages[0]?.content ?? '')
+        const task = loadPerformanceTasks().find((t) => t.prompt === prompt)!
+        const system = (req as { systemPrompt?: string }).systemPrompt ?? ''
+        const pass = task.id === solved || system.includes('POST')
+        yield { type: 'usage', inputTokens: 1, outputTokens: 1 }
+        yield { type: 'text', content: pass ? (task.oracleCode ?? '') : '' }
+      },
+    }
+    const s = await measureSkillDeltaRepeated(llm, {
+      filePath: 'apps/cli/skills/standard/safe-coding.SKILL.md',
+      originalContent: body('BASE'),
+      newContent: body('POST'),
+    })
+    expect(s!.taskEvidence).toEqual(
+      expect.arrayContaining([
+        { id: solved, basePass: 3, baseSeen: 3, postPass: 3, postSeen: 3 },
+        // 基线从未通过、改动后全过 —— 正是 fixed 的典型情形
+        { id: never, basePass: 0, baseSeen: 3, postPass: 3, postSeen: 3 },
+      ]),
+    )
+  })
+
+  it('仪器故障的采样不进计数（既不算 pass 也不算 seen）', async () => {
+    const flaky = safeTasks[0]!.id
+    let calls = 0
+    const llm: Llm = {
+      chat: async function* (req) {
+        const prompt = String(req.messages[0]?.content ?? '')
+        const task = loadPerformanceTasks().find((t) => t.prompt === prompt)!
+        const system = (req as { systemPrompt?: string }).systemPrompt ?? ''
+        calls++
+        if (!system.includes('POST') && task.id === flaky && calls <= 1) {
+          yield { type: 'text', content: '' } // 零文本零 usage ⇒ uncertain
+          return
+        }
+        yield { type: 'usage', inputTokens: 1, outputTokens: 1 }
+        yield { type: 'text', content: task.oracleCode ?? '' }
+      },
+    }
+    const s = await measureSkillDeltaRepeated(llm, {
+      filePath: 'apps/cli/skills/standard/safe-coding.SKILL.md',
+      originalContent: body('BASE'),
+      newContent: body('POST'),
+    })
+    const ev = s!.taskEvidence!.find((e) => e.id === flaky)!
+    expect(ev.baseSeen).toBe(2) // 3 轮里 1 轮是仪器故障，不计入
+    expect(ev.postSeen).toBe(3)
+  })
+})
