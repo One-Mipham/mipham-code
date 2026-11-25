@@ -1516,18 +1516,28 @@ const SIM_RECORD = {
 }
 
 describe('SIM 读侧接线', () => {
-  it('prose 路径：SIM 块作为第 6 个实参传给生成算子', async () => {
+  /**
+   * 第 6 个实参是**延迟渲染器**，不是块：目标 skill 要等阶段 1（选目标）之后才知道，
+   * 而规则 8 的 skill 轴要拿它当比较基准 ⇒ 调用它才得到块。
+   */
+  const simProvider = () => {
+    const arg = h.produceProseProposal.mock.calls[0]![5]
+    expect(typeof arg).toBe('function')
+    return arg as (filePath: string, originalContent: string) => string
+  }
+
+  it('prose 路径：生成算子拿到 SIM 渲染器，调用后得到块', async () => {
     h.readImprovements.mockReturnValue([SIM_RECORD])
     await getCommand('/crsi propose')!(mkProseCtx(), ['--prose'])
-    const args = h.produceProseProposal.mock.calls[0]!
-    expect(String(args[5])).toContain('## SIM（Self-Improvement Memory）')
-    expect(String(args[5])).toContain('实测 -12.0')
+    const block = simProvider()(PROSE_FILE, PROSE_PROPOSAL.originalContent)
+    expect(block).toContain('## SIM（Self-Improvement Memory）')
+    expect(block).toContain('实测 -12.0')
   })
 
-  it('prose 路径：台账为空 ⇒ 传空串（提示词逐字不变）', async () => {
+  it('prose 路径：台账为空 ⇒ 渲染器返回空串（提示词逐字不变）', async () => {
     h.readImprovements.mockReturnValue([])
     await getCommand('/crsi propose')!(mkProseCtx(), ['--prose'])
-    expect(h.produceProseProposal.mock.calls[0]![5]).toBe('')
+    expect(simProvider()(PROSE_FILE, PROSE_PROPOSAL.originalContent)).toBe('')
   })
 
   it('批准闸：/crsi modify 打出同一问题上的历史尝试', async () => {
@@ -1630,12 +1640,40 @@ describe('规则 8 读侧接线', () => {
     expect(content).not.toContain('异设置')
   })
 
+  /** prose 的第 6 个实参是延迟渲染器：用「选中的目标」调它才得到块。 */
+  const renderFor = (filePath: string, originalContent: string) =>
+    (h.produceProseProposal.mock.calls[0]![5] as (f: string, c: string) => string)(
+      filePath,
+      originalContent,
+    )
+
   it('prose：当前模型进入 SIM 块的设置基准', async () => {
     h.readImprovements.mockReturnValue([recAt('other-model')])
     await getCommand('/crsi propose')!(withRegistry(), ['--prose'])
-    const simBlock = String(h.produceProseProposal.mock.calls[0]![5])
+    const simBlock = renderFor(PROSE_FILE, PROSE_PROPOSAL.originalContent)
     expect(simBlock).toContain('⚠️ 异设置：模型')
     expect(simBlock).toContain('同设置优先')
+  })
+
+  /**
+   * `PROSE_FILE` 的路径形状（`…/skills/research/SKILL.md`）**不满足** `isSkillFile`
+   * 的判据（要求以 `.SKILL.md` 结尾），所以它解不出 skill 名 —— 这里用真实形状的路径。
+   * 记下来：拿 PROSE_FILE 测 skill 轴会得到一个恒为 undefined 的读数。
+   */
+  const SKILL_PATH = 'apps/cli/skills/standard/research.SKILL.md'
+  const SKILL_BODY = '---\nname: research\n---\n\n旧正文\n'
+
+  it('prose：skill 轴在选完目标之后才用上（历史电池不同 ⇒ 标注）', async () => {
+    // 台账里这条是别的 skill 上量的 ⇒ 对当前目标（research）只是「邻设置」证据。
+    h.readImprovements.mockReturnValue([{ ...SIM_RECORD, skillName: 'other-skill' }])
+    await getCommand('/crsi propose')!(withRegistry(), ['--prose'])
+    expect(renderFor(SKILL_PATH, SKILL_BODY)).toContain('⚠️ 异设置：skill')
+  })
+
+  it('prose：同一 skill 不标注（常见情形应当无声）', async () => {
+    h.readImprovements.mockReturnValue([{ ...SIM_RECORD, skillName: 'research' }])
+    await getCommand('/crsi propose')!(withRegistry(), ['--prose'])
+    expect(renderFor(SKILL_PATH, SKILL_BODY)).not.toContain('异设置')
   })
 })
 

@@ -785,6 +785,12 @@ function stripMarkdownFence(text: string): string {
 }
 
 /** prose 提议的解析产物：正文 + 可选的事前预登记（ε 与风险声明）。 */
+/**
+ * SIM 块的延迟渲染器：目标文件 + 它的旧内容 → 块文本。
+ * 延迟的理由见 {@link produceProseProposal} 的同名参数。
+ */
+export type SimBlockProvider = (filePath: string, originalContent: string) => string
+
 export interface ProsePrediction {
   body: string
   /** ε：事前写下的预期提升点数。缺席 = 模型没预测（含显式写 null）。 */
@@ -922,8 +928,13 @@ export async function produceProseProposal(
    * 必填把「忘了」从静默行为变更变成编译错误。
    */
   lessonsBlock: string,
-  /** SIM 尝试史。**故意必填** —— 同 {@link generateProseContent}。 */
-  simBlock: string,
+  /**
+   * SIM 块的**延迟渲染器**。为什么是函数而不是字符串：规则 8 的 skill 轴要拿目标 skill
+   * 当比较基准，而目标在阶段 1（`selectTargetSkill`）之后才存在 —— 在调用方提前渲染，
+   * 就等于把一个「还不知道自己在给谁看」的块固化进 API。**故意必填**，同
+   * {@link generateProseContent}：漏传是编译错，不是静默降级。
+   */
+  simBlockFor: SimBlockProvider,
 ): Promise<ProseProposalResult | null> {
   const filePath = await selectTargetSkill(signal, llm, skillFiles)
   if (!filePath) return null
@@ -941,7 +952,7 @@ export async function produceProseProposal(
     filePath,
     originalContent,
     lessonsBlock,
-    simBlock,
+    simBlockFor(filePath, originalContent),
   )
   if (!generated || !generated.body) return null
 

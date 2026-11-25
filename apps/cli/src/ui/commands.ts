@@ -1475,9 +1475,13 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
       loadAlwaysOnLessonsBlock(join(root, LESSONS_FILE)),
       // SIM 读侧：把台账里的实测结果与预测命中一并交给生成算子。此前它只拿到教训散文
       // （= 只有根因的弱条件）。空台账渲染成空串 ⇒ 提示词逐字不变。
-      // 规则 8：目标 skill 由 `selectTargetSkill` 稍后才定，此刻只知道模型 —— 只传这一轴；
-      // 未知轴不参与比较（缺席 ≠ 不匹配）。
-      renderSimBlock(readImprovements(), undefined, { model: measurementModel(ctx) }),
+      // 规则 8：块**延迟到选完目标之后**才渲染 —— 那时才拿得到目标 skill，两个轴
+      // （skill + model）都齐；提前渲染就只能比模型一个轴。
+      (filePath, originalContent) =>
+        renderSimBlock(readImprovements(), undefined, {
+          model: measurementModel(ctx),
+          skill: resolveSkillName(filePath, originalContent),
+        }),
     )
     if (!proposal) {
       return { content: '散文提议生成失败（LLM 未返回有效结果）。' }

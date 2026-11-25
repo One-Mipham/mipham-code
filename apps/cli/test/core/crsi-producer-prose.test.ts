@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -190,7 +190,7 @@ describe('produceProseProposal', () => {
       '---\nname: memory\ndescription: improved\n---\n\n# New body\n',
     )
     const readSkill = (p: string) => (p === SKILL_FILES[0] ? 'OLD-CONTENT' : '')
-    const result = await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill, '', '')
+    const result = await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill, '', () => '')
     expect(result).not.toBeNull()
     expect(result!.filePath).toBe(SKILL_FILES[0])
     expect(result!.originalContent).toBe('OLD-CONTENT')
@@ -205,7 +205,7 @@ describe('produceProseProposal', () => {
       '{"expectedDelta": 7, "risk": "可能与 memory 技能重叠"}\n---\nname: memory\ndescription: improved\n---\n\n# New body\n',
     )
     const readSkill = (p: string) => (p === SKILL_FILES[0] ? 'OLD-CONTENT' : '')
-    const result = await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill, '', '')
+    const result = await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill, '', () => '')
     expect(result).not.toBeNull()
     expect(result!.expectedEffect).toBe(7)
     expect(result!.risk).toBe('可能与 memory 技能重叠')
@@ -215,7 +215,16 @@ describe('produceProseProposal', () => {
 
   it('阶段 1 选不到 skill → null', async () => {
     const llm = twoStageLlm('bad-path.md', 'x')
-    expect(await produceProseProposal(SIGNAL, llm, SKILL_FILES, () => '', '', '')).toBeNull()
+    expect(
+      await produceProseProposal(
+        SIGNAL,
+        llm,
+        SKILL_FILES,
+        () => '',
+        '',
+        () => '',
+      ),
+    ).toBeNull()
   })
 
   it('读原文失败 → null', async () => {
@@ -223,7 +232,7 @@ describe('produceProseProposal', () => {
     const readSkill = () => {
       throw new Error('no file')
     }
-    expect(await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill, '', '')).toBeNull()
+    expect(await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill, '', () => '')).toBeNull()
   })
 })
 
@@ -356,7 +365,8 @@ describe('生成提示词内联常驻教训', () => {
     expect(seen[0]).not.toContain('Self-Improvement Memory')
   })
 
-  it('produceProseProposal 把 SIM 块一路带到生成阶段（不是只到选目标那一步）', async () => {
+  it('SIM 块在**选完目标之后**才取：provider 拿到的是选中的文件与其旧内容', async () => {
+    // skill 轴（规则 8）要靠目标 skill 才能比较，而目标在阶段 1 才定 ⇒ 块必须晚于选目标。
     const seen: string[] = []
     const llm = twoStageLlm(SKILL_FILES[0]!, '# New body\n')
     const wrapped: Llm = {
@@ -365,10 +375,21 @@ describe('生成提示词内联常驻教训', () => {
         return llm.chat(req)
       },
     }
-    await produceProseProposal(SIGNAL, wrapped, SKILL_FILES, () => 'OLD', '', SIM_BLOCK)
-    expect(seen).toHaveLength(2)
-    expect(seen[0]).not.toContain('Self-Improvement Memory') // 选目标不需要尝试史
-    expect(seen[1]).toContain('Self-Improvement Memory')
+    const provider = vi.fn((_filePath: string, _original: string) => SIM_BLOCK)
+    await produceProseProposal(SIGNAL, wrapped, SKILL_FILES, () => 'OLD', '', provider)
+
+    expect(seen).toHaveLength(2) // 前提自证：确实是两阶段
+    expect(seen[0]).not.toContain('Self-Improvement Memory') // 选目标阶段还没有 SIM
+    expect(seen[1]).toContain('Self-Improvement Memory') // 生成阶段拿到
+    expect(provider).toHaveBeenCalledTimes(1)
+    expect(provider.mock.calls[0]).toEqual([SKILL_FILES[0], 'OLD'])
+  })
+
+  it('阶段 1 选不到 skill ⇒ provider 一次都不调用（没有目标就没有设置）', async () => {
+    const llm = twoStageLlm('bad-path.md', 'x')
+    const provider = vi.fn(() => SIM_BLOCK)
+    expect(await produceProseProposal(SIGNAL, llm, SKILL_FILES, () => '', '', provider)).toBeNull()
+    expect(provider).not.toHaveBeenCalled()
   })
 
   it('produceProseProposal 把教训块一路带到生成阶段（不是只到选目标那一步）', async () => {
@@ -381,7 +402,14 @@ describe('生成提示词内联常驻教训', () => {
         return llm.chat(req)
       },
     }
-    await produceProseProposal(SIGNAL, wrapped, SKILL_FILES, () => 'OLD', BLOCK, '')
+    await produceProseProposal(
+      SIGNAL,
+      wrapped,
+      SKILL_FILES,
+      () => 'OLD',
+      BLOCK,
+      () => '',
+    )
     // 第二次调用才是生成阶段（第一次是选目标）
     expect(seen).toHaveLength(2)
     expect(seen[0]).not.toContain('CRSI Lessons') // 选目标只挑路径，教训在那里是噪声
