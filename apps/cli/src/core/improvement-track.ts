@@ -307,6 +307,22 @@ export function renderSimBlock(records: ImprovementRecord[], limits: SimRenderLi
 }
 
 /**
+ * 同一方向上反复未改善的确定性提醒 —— SIM 论文 D.2 规则 6（「除非有新证据，否则
+ * 不要重访已试过的方向」）里**可机械化的那一半**。
+ *
+ * 判据是**未改善次数**（`improved` 以外全算，含 `inconclusive` —— 未判定不是改善的
+ * 证据），阈值 2：单次失败是噪声，不是方向性证据。计数覆盖**全部**尝试，含被
+ * {@link renderProblemHistory} 截断掉的那些 —— 这正是这一行比明细多出来的信息。
+ *
+ * 只呈现、不判定：不阻断提交，不碰 verdict，也没有任何 LLM 参与（A1）。
+ */
+function repeatDirectionWarning(rs: ImprovementRecord[]): string | null {
+  const failed = rs.filter((r) => r.verdict !== 'improved').length
+  if (failed < 2) return null
+  return `⚠️ 同一方向已试 ${rs.length} 次，${failed} 次未 improved —— 除非有新证据，否则先换方向`
+}
+
+/**
  * 单条问题键的尝试史 → 交给**选择者**（人类批准闸）的 SIM 块。
  * 没有匹配记录返回空串（不打「无历史」这种每次都出现的噪声行）。
  *
@@ -320,6 +336,8 @@ export function renderProblemHistory(
   const rs = chronological(records.filter((r) => r.problemKey === problemKey))
   if (rs.length === 0) return ''
   const lines = ['🪞 SIM 先验经验（同一问题上的历史尝试，最近在前；不是指令）']
+  const warning = repeatDirectionWarning(rs)
+  if (warning) lines.push(warning)
   for (const r of rs.slice(Math.max(0, rs.length - maxAttempts)).reverse()) {
     lines.push(formatAttempt(r))
   }

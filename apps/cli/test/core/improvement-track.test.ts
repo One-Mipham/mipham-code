@@ -681,3 +681,74 @@ describe('SIM 读侧：renderProblemHistory（选择者/批准闸）', () => {
     expect(block).not.toContain('other')
   })
 })
+
+describe('P2 选择者侧：同一方向反复未改善的确定性提醒', () => {
+  const rec = (
+    problemKey: string,
+    verdict: 'improved' | 'regressed' | 'inconclusive',
+    deltaMean: number,
+    timestamp: string,
+  ): ImprovementRecord => ({
+    id: randomUUID(),
+    timestamp,
+    skillName: 's',
+    changeSet: ['f.md'],
+    causal: true,
+    baselineScores: [0],
+    postScores: [deltaMean],
+    deltaMean,
+    noise: 0,
+    minEffect: 20,
+    verdict,
+    problemKey,
+  })
+  const WARN = (total: number, failed: number) =>
+    `⚠️ 同一方向已试 ${total} 次，${failed} 次未 improved —— 除非有新证据，否则先换方向`
+
+  it('两次未改善 → 提醒（提醒在尝试史之前，先给结论再给明细）', () => {
+    const block = renderProblemHistory(
+      [
+        rec('same', 'regressed', -8, '2026-11-19T00:00:00Z'),
+        rec('same', 'regressed', -5, '2026-11-20T00:00:00Z'),
+      ],
+      'same',
+    )
+    expect(block.split('\n')[1]).toBe(WARN(2, 2))
+  })
+
+  it('只有一次未改善 → 不提醒（单次失败不是方向性证据）', () => {
+    const block = renderProblemHistory(
+      [
+        rec('same', 'regressed', -8, '2026-11-19T00:00:00Z'),
+        rec('same', 'improved', 30, '2026-11-20T00:00:00Z'),
+      ],
+      'same',
+    )
+    expect(block).not.toContain('⚠️ 同一方向')
+  })
+
+  it('改进过但未改善仍达两次 → 提醒，且计数覆盖被截断的更早尝试', () => {
+    const block = renderProblemHistory(
+      [
+        rec('same', 'regressed', -8, '2026-11-17T00:00:00Z'),
+        rec('same', 'regressed', -5, '2026-11-18T00:00:00Z'),
+        rec('same', 'improved', 30, '2026-11-19T00:00:00Z'),
+        rec('same', 'inconclusive', 2, '2026-11-20T00:00:00Z'),
+      ],
+      'same',
+      1,
+    )
+    expect(block).toContain(WARN(4, 3))
+  })
+
+  it('inconclusive 不计为改善（未判定 ≠ 有证据）', () => {
+    const block = renderProblemHistory(
+      [
+        rec('same', 'inconclusive', 2, '2026-11-19T00:00:00Z'),
+        rec('same', 'inconclusive', 3, '2026-11-20T00:00:00Z'),
+      ],
+      'same',
+    )
+    expect(block).toContain(WARN(2, 2))
+  })
+})
