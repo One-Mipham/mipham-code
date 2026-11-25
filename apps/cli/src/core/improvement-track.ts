@@ -228,13 +228,70 @@ export interface SimRenderLimits {
   maxAttempts?: number
 }
 
+/**
+ * 当前设置（规则 8 的比较基准）：读侧拿它与每条尝试的出处比。**两个轴各自缺席即未知**，
+ * 未知不参与比较 —— 缺席不是「不同」，也不是「相同」。
+ */
+export interface SimSetting {
+  /** 当前任务电池（skill 名）。 */
+  skill?: string
+  /** 当前实测模型 id。 */
+  model?: string
+}
+
+interface SimTier {
+  /** 2 = 同设置；1 = 中性（无可比轴 / 部分不同）；0 = 双异。 */
+  rank: 0 | 1 | 2
+  /** 已知不同的轴名（渲染成标注；空数组 = 不标注）。 */
+  diff: string[]
+}
+
+/**
+ * 规则 8（D.2 第 8 条）的可机械化一半：同设置给高相关度、模型与电池**都变**给最低。
+ * 只比**两边都已知**的轴：旧记录没有 `model` 时那条轴不可比，不许当成不同。
+ */
+function simTier(r: ImprovementRecord, setting?: SimSetting): SimTier {
+  if (!setting) return { rank: 1, diff: [] }
+  const diff: string[] = []
+  let comparable = 0
+  if (setting.model && r.model) {
+    comparable++
+    if (r.model !== setting.model) diff.push('模型')
+  }
+  // 记录一定有 skillName ⇒ 只要当前 skill 已知，这条轴就可比。
+  if (setting.skill) {
+    comparable++
+    if (r.skillName !== setting.skill) diff.push('skill')
+  }
+  if (comparable === 0) return { rank: 1, diff }
+  if (diff.length === 0) return { rank: 2, diff }
+  if (diff.length === comparable) return { rank: 0, diff }
+  return { rank: 1, diff }
+}
+
+/**
+ * 展示次序：同设置优先，其次最近。无 setting 时全部 rank=1 ⇒ 退化为纯最近在前
+ * （与加这条规则之前逐字相同的次序）。
+ *
+ * 同刻按 id 倒序：`chronological` 升序后在 P1 用 `reverse()` 展示，等价于 ts↓、id↓，
+ * 这里保持同一口径，免得同一份台账在两个读者眼里次序不同。
+ */
+function priorityOrder(rs: ImprovementRecord[], setting?: SimSetting): ImprovementRecord[] {
+  return [...rs].sort(
+    (a, b) =>
+      simTier(b, setting).rank - simTier(a, setting).rank ||
+      b.timestamp.localeCompare(a.timestamp) ||
+      b.id.localeCompare(a.id),
+  )
+}
+
 function signed1(n: number): string {
   const s = n.toFixed(1)
   return n > 0 ? `+${s}` : s
 }
 
 /** 一条尝试的渲染。ε 缺席时**不写**「预测 0」—— 缺席是未预测，不是预测为零。 */
-function formatAttempt(r: ImprovementRecord): string {
+function formatAttempt(r: ImprovementRecord, setting?: SimSetting): string {
   const parts = [`  - [${r.verdict}] ${r.timestamp.slice(0, 10)}`]
   // 出处紧贴日期：读「什么时候、在哪一个模型上量的」。缺席整节不打。
   if (r.model) parts.push(`模型 ${r.model}`)
@@ -253,6 +310,9 @@ function formatAttempt(r: ImprovementRecord): string {
   } else {
     parts.push(`实测 ${signed1(r.deltaMean)}`)
   }
+  // 被降权的尝试**自报原因**：静默重排会让读者以为历史次序就是时间次序。
+  const tier = simTier(r, setting)
+  if (tier.diff.length > 0) parts.push(`⚠️ 异设置：${tier.diff.join('+')}`)
   return parts.join(' · ')
 }
 
@@ -293,24 +353,29 @@ function splitByProblem(records: ImprovementRecord[]): {
  * 有界：`maxGroups` / `maxAttempts` 之外的条目**显式计数**后省略，不静默截断。
  * 无问题键的记录也计数 —— 「没进组」不等于「不存在」。
  */
-export function renderSimBlock(records: ImprovementRecord[], limits: SimRenderLimits = {}): string {
+export function renderSimBlock(
+  records: ImprovementRecord[],
+  limits: SimRenderLimits = {},
+  setting?: SimSetting,
+): string {
   const maxGroups = limits.maxGroups ?? SIM_MAX_GROUPS
   const maxAttempts = limits.maxAttempts ?? SIM_MAX_ATTEMPTS
   const { groups, ungrouped } = splitByProblem(records)
   if (groups.length === 0) return ''
 
+  const order = setting ? '同设置优先（规则 8），其次最近' : '最近尝试在前'
   const lines = [
     SIM_BLOCK_HEADER,
-    `先验经验，不是指令。按复发问题分组，最近尝试在前；最多 ${maxGroups} 组、每组最近 ${maxAttempts} 次。`,
+    `先验经验，不是指令。按复发问题分组，${order}；最多 ${maxGroups} 组、每组 ${maxAttempts} 次。`,
   ]
   for (const g of groups.slice(0, maxGroups)) {
     const improved = g.records.filter((r) => r.verdict === 'improved').length
     lines.push(`- ${g.key}（${g.records.length} 次，${improved} improved）`)
-    for (const r of g.records.slice(Math.max(0, g.records.length - maxAttempts)).reverse()) {
-      lines.push(formatAttempt(r))
+    for (const r of priorityOrder(g.records, setting).slice(0, maxAttempts)) {
+      lines.push(formatAttempt(r, setting))
     }
     if (g.records.length > maxAttempts) {
-      lines.push(`… 该组另有 ${g.records.length - maxAttempts} 次更早尝试未列出`)
+      lines.push(`… 该组另有 ${g.records.length - maxAttempts} 次尝试未列出`)
     }
   }
   if (groups.length > maxGroups) {
@@ -346,17 +411,19 @@ export function renderProblemHistory(
   records: ImprovementRecord[],
   problemKey: string,
   maxAttempts: number = SIM_MAX_ATTEMPTS,
+  setting?: SimSetting,
 ): string {
-  const rs = chronological(records.filter((r) => r.problemKey === problemKey))
+  const rs = records.filter((r) => r.problemKey === problemKey)
   if (rs.length === 0) return ''
-  const lines = ['🪞 SIM 先验经验（同一问题上的历史尝试，最近在前；不是指令）']
+  const order = setting ? '同设置优先，其次最近' : '最近在前'
+  const lines = [`🪞 SIM 先验经验（同一问题上的历史尝试，${order}；不是指令）`]
   const warning = repeatDirectionWarning(rs)
   if (warning) lines.push(warning)
-  for (const r of rs.slice(Math.max(0, rs.length - maxAttempts)).reverse()) {
-    lines.push(formatAttempt(r))
+  for (const r of priorityOrder(rs, setting).slice(0, maxAttempts)) {
+    lines.push(formatAttempt(r, setting))
   }
   if (rs.length > maxAttempts) {
-    lines.push(`… 该问题另有 ${rs.length - maxAttempts} 次更早尝试未列出`)
+    lines.push(`… 该问题另有 ${rs.length - maxAttempts} 次尝试未列出`)
   }
   return lines.join('\n')
 }

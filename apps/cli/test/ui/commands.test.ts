@@ -1586,6 +1586,60 @@ describe('P3 出处：真实模型 id', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════
+// 规则 8 读侧接线：把「当前设置」交给台账渲染
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * 判据是「降权必须看得见」：被排到后面却没说明，读者会以为次序就是时间次序。
+ * 两条路径各自能确定的轴不同 —— modify 两个轴都已知（filePath 可解出 skill、
+ * 注册表给 model），prose 只知道 model（目标 skill 由 `selectTargetSkill` 稍后才定）。
+ */
+describe('规则 8 读侧接线', () => {
+  const engineOf = (ctx: ReturnType<typeof mkProseCtx>) =>
+    (ctx as unknown as { engine: Record<string, unknown> }).engine
+
+  const withRegistry = () => {
+    const ctx = mkProseCtx()
+    engineOf(ctx).getLlm = () => undefined
+    engineOf(ctx).getRegistry = () => ({ getActiveModel: () => 'deepseek-flash' })
+    return ctx
+  }
+
+  const recAt = (model: string | undefined) => ({
+    ...SIM_RECORD,
+    ...(model ? { model } : {}),
+  })
+
+  it('modify：异模型的旧尝试被标注（不是静默重排）', async () => {
+    h.readImprovements.mockReturnValue([recAt('other-model')])
+    const { content } = await getCommand('/crsi modify')!(withRegistry(), [
+      'd',
+      PROSE_FILE,
+      '新正文',
+    ])
+    expect(content).toContain('⚠️ 异设置：模型')
+  })
+
+  it('modify：同模型不标注（常见情形应当无声）', async () => {
+    h.readImprovements.mockReturnValue([recAt('deepseek-flash')])
+    const { content } = await getCommand('/crsi modify')!(withRegistry(), [
+      'd',
+      PROSE_FILE,
+      '新正文',
+    ])
+    expect(content).not.toContain('异设置')
+  })
+
+  it('prose：当前模型进入 SIM 块的设置基准', async () => {
+    h.readImprovements.mockReturnValue([recAt('other-model')])
+    await getCommand('/crsi propose')!(withRegistry(), ['--prose'])
+    const simBlock = String(h.produceProseProposal.mock.calls[0]![5])
+    expect(simBlock).toContain('⚠️ 异设置：模型')
+    expect(simBlock).toContain('同设置优先')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
 // 事前声明风险（R）的展示接线 —— 它此前**零落点**
 // ═══════════════════════════════════════════════════════════════
 

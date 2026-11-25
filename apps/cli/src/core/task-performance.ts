@@ -298,6 +298,17 @@ function isSkillFile(filePath: string): boolean {
   )
 }
 
+/**
+ * 从 proposal 的路径与内容解出 skill 名（非 skill 文件 / 无 `name` → undefined）。
+ * 读侧用它标注「这条证据是不是同一个任务电池上量的」（规则 8）；不与
+ * `resolveSkillProposal` 合并：那个还要旧内容与任务集，这里只需一个标识。
+ */
+export function resolveSkillName(filePath: string, content: string): string | undefined {
+  if (!isSkillFile(filePath)) return undefined
+  const parsed = parseFrontmatter(content)
+  return typeof parsed.data.name === 'string' ? parsed.data.name : undefined
+}
+
 /** 解析改 skill 的 proposal → 名字 + 旧/新 body；非 skill / 无任务集 / 旧不可读 → null。 */
 function resolveSkillProposal(proposal: {
   filePath: string

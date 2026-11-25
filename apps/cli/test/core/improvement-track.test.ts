@@ -613,7 +613,7 @@ describe('SIM 读侧：renderSimBlock（注入给提议者）', () => {
       rec('same', 'improved', 30, `2026-11-${String(i + 10).padStart(2, '0')}T00:00:00Z`),
     )
     const block = renderSimBlock(records)
-    expect(block).toContain('… 该组另有 2 次更早尝试未列出')
+    expect(block).toContain('… 该组另有 2 次尝试未列出')
     // 最近的在前：5 号（11-14）必须出现，1 号（11-10）必须被省略
     expect(block).toContain('2026-11-14')
     expect(block).not.toContain('2026-11-10')
@@ -675,7 +675,7 @@ describe('SIM 读侧：renderProblemHistory（选择者/批准闸）', () => {
       [
         '🪞 SIM 先验经验（同一问题上的历史尝试，最近在前；不是指令）',
         '  - [improved] 2026-11-20 · 实测 +12.5',
-        '… 该问题另有 1 次更早尝试未列出',
+        '… 该问题另有 1 次尝试未列出',
       ].join('\n'),
     )
     expect(block).not.toContain('other')
@@ -810,5 +810,121 @@ describe('P3 出处：实测用的真实模型 id（只记录、不进判定）'
       'k',
     )
     expect(block).not.toContain('模型')
+  })
+})
+
+describe('规则 8 读侧：同设置证据加权、双异降权（纯算术）', () => {
+  const rec = (
+    id: string,
+    model: string | undefined,
+    skillName: string,
+    timestamp: string,
+    problemKey = 'k',
+  ): ImprovementRecord => ({
+    id,
+    timestamp,
+    skillName,
+    changeSet: ['f.md'],
+    causal: true,
+    baselineScores: [0],
+    postScores: [10],
+    deltaMean: 10,
+    noise: 0,
+    minEffect: 20,
+    verdict: 'improved',
+    problemKey,
+    ...(model ? { model } : {}),
+  })
+
+  const SETTING = { model: 'deepseek-flash', skill: 'research' }
+
+  it('同设置排在异设置之前（即使异设置更新）', () => {
+    const block = renderProblemHistory(
+      [
+        rec('a', 'deepseek-flash', 'research', '2026-11-10T00:00:00Z'),
+        rec('b', 'other-model', 'research', '2026-11-20T00:00:00Z'),
+      ],
+      'k',
+      3,
+      SETTING,
+    )
+    const lines = block.split('\n')
+    expect(lines[1]).toContain('2026-11-10') // 同设置在前
+    expect(lines[2]).toContain('2026-11-20')
+    expect(lines[2]).toContain('⚠️ 异设置：模型')
+  })
+
+  it('模型与电池都变 ⇒ 两个轴都点出来，排最后', () => {
+    const block = renderProblemHistory(
+      [
+        rec('a', 'other', 'elsewhere', '2026-11-20T00:00:00Z'),
+        rec('b', 'deepseek-flash', 'research', '2026-11-01T00:00:00Z'),
+      ],
+      'k',
+      3,
+      SETTING,
+    )
+    const lines = block.split('\n')
+    expect(lines[1]).toContain('2026-11-01')
+    expect(lines[2]).toContain('⚠️ 异设置：模型+skill')
+  })
+
+  it('旧记录没有模型 ⇒ 不当作「不同」（缺席 ≠ 不匹配）：按最近排，且不打标记', () => {
+    // 判据的选择：**降权需要证据**。旧记录缺 model 是「我们的出处没记」，不是
+    // 「它在别的模型上量的」—— 按「不同」处理会把自家缺字段的账算在证据头上。
+    const block = renderProblemHistory(
+      [
+        rec('a', undefined, 'research', '2026-11-05T00:00:00Z'),
+        rec('b', 'deepseek-flash', 'research', '2026-11-01T00:00:00Z'),
+      ],
+      'k',
+      3,
+      SETTING,
+    )
+    const lines = block.split('\n')
+    expect(lines[1]).toContain('2026-11-05')
+    expect(lines[2]).toContain('2026-11-01')
+    expect(block).not.toContain('异设置')
+  })
+
+  it('不给 setting ⇒ 与从前一致：纯最近在前、无标记', () => {
+    const block = renderProblemHistory(
+      [rec('a', 'x', 's', '2026-11-10T00:00:00Z'), rec('b', 'y', 's', '2026-11-20T00:00:00Z')],
+      'k',
+    )
+    const lines = block.split('\n')
+    expect(lines[1]).toContain('2026-11-20')
+    expect(block).not.toContain('异设置')
+  })
+
+  it('次数上限优先保留同设置的，省略计数用中性措辞（省略的不一定更早）', () => {
+    const block = renderProblemHistory(
+      [
+        rec('a', 'deepseek-flash', 'research', '2026-11-01T00:00:00Z'),
+        rec('b', 'other', 'research', '2026-11-20T00:00:00Z'),
+      ],
+      'k',
+      1,
+      SETTING,
+    )
+    expect(block).toContain('2026-11-01')
+    expect(block).not.toContain('2026-11-20')
+    expect(block).toContain('… 该问题另有 1 次尝试未列出')
+  })
+
+  it('renderSimBlock 的组内次序同样按设置加权，并说明排序口径', () => {
+    const block = renderSimBlock(
+      [
+        rec('a', 'deepseek-flash', 'research', '2026-11-01T00:00:00Z'),
+        rec('b', 'other', 'research', '2026-11-20T00:00:00Z'),
+      ],
+      undefined,
+      SETTING,
+    )
+    expect(block).toContain('同设置优先')
+    const lines = block.split('\n')
+    expect(lines[2]).toContain('2 次，2 improved') // 组头
+    expect(lines[3]).toContain('2026-11-01') // 同设置在前
+    expect(lines[4]).toContain('⚠️ 异设置：模型')
   })
 })

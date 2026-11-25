@@ -69,6 +69,7 @@ import {
   measureSkillDeltaRepeated,
   stripCodeFences,
   loadPerformanceTasks,
+  resolveSkillName,
 } from '../core/task-performance'
 import { measureCapture, measureSealed } from '../core/capture-measure'
 import { randomUUID } from 'node:crypto'
@@ -81,6 +82,7 @@ import {
   groupImprovementsByProblem,
   renderSimBlock,
   renderProblemHistory,
+  SIM_MAX_ATTEMPTS,
   measurementTaxSummary,
   appendImprovement,
   readImprovements,
@@ -1378,7 +1380,14 @@ const crsiModifyCmd: CommandHandler = async (ctx, args) => {
   // SIM 选择者侧：这个问题上此前试过什么、结果如何。必须在测量**之前**算 ——
   // 测量会把本次尝试追进台账，之后再算就把「刚做的这一次」当成了历史（自我包含）。
   // 纯算术，无 LLM 参与；无匹配记录时为空串 ⇒ 回执逐字不变。
-  const simNote = renderProblemHistory(readImprovements(), normalizeProblemKey(description))
+  // 规则 8：这里两个轴都已知（skill 由 filePath 解出、model 由注册表给出），
+  // 所以同设置的证据会被排在前面，被降权的那些自报「异设置」原因。
+  const simNote = renderProblemHistory(
+    readImprovements(),
+    normalizeProblemKey(description),
+    SIM_MAX_ATTEMPTS,
+    { skill: resolveSkillName(filePath, newContent), model: measurementModel(ctx) },
+  )
 
   const result = await runCrsiModification({
     description,
@@ -1466,7 +1475,9 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
       loadAlwaysOnLessonsBlock(join(root, LESSONS_FILE)),
       // SIM 读侧：把台账里的实测结果与预测命中一并交给生成算子。此前它只拿到教训散文
       // （= 只有根因的弱条件）。空台账渲染成空串 ⇒ 提示词逐字不变。
-      renderSimBlock(readImprovements()),
+      // 规则 8：目标 skill 由 `selectTargetSkill` 稍后才定，此刻只知道模型 —— 只传这一轴；
+      // 未知轴不参与比较（缺席 ≠ 不匹配）。
+      renderSimBlock(readImprovements(), undefined, { model: measurementModel(ctx) }),
     )
     if (!proposal) {
       return { content: '散文提议生成失败（LLM 未返回有效结果）。' }
