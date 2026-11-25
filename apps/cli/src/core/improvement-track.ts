@@ -193,6 +193,142 @@ export function groupImprovementsByProblem(records: ImprovementRecord[]): Proble
     .sort((a, b) => b.total - a.total || a.key.localeCompare(b.key))
 }
 
+// ── SIM 读侧：把台账渲染成提议者 / 选择者能读的文本 ──
+//
+// 这一步才是 SIM 的机制所在。台账此前只有写侧 + `/crsi stats` 展示 —— 提议者
+// （prose 生成算子）拿到的是教训散文，**零条实测结果**；人类批准闸拿到的是 diff。
+// 也就是说优化器实际跑在「只有根因」的条件下，而那是 SIM 论文里唯一方向不定的档位。
+// 渲染是纯算术（分组、排序、截断、计数），无 LLM 参与 —— 与 verdict 同一纪律。
+
+export const SIM_BLOCK_HEADER = '## SIM（Self-Improvement Memory）'
+
+/** 默认注入上限。预算 ≈ 8 组 ×（1 + 3）行 × ~100 字符，见 {@link renderSimBlock}。 */
+export const SIM_MAX_GROUPS = 8
+export const SIM_MAX_ATTEMPTS = 3
+
+/** 单条理由的截断长度（字符）。超出部分用 `…` 标记，不静默丢。 */
+const SIM_RATIONALE_MAX = 80
+
+export interface SimRenderLimits {
+  /** 最多注入多少个问题组。 */
+  maxGroups?: number
+  /** 每组最多注入多少次尝试（取最近的）。 */
+  maxAttempts?: number
+}
+
+function signed1(n: number): string {
+  const s = n.toFixed(1)
+  return n > 0 ? `+${s}` : s
+}
+
+/** 一条尝试的渲染。ε 缺席时**不写**「预测 0」—— 缺席是未预测，不是预测为零。 */
+function formatAttempt(r: ImprovementRecord): string {
+  const parts = [`  - [${r.verdict}] ${r.timestamp.slice(0, 10)}`]
+  if (r.rationale) {
+    const why =
+      r.rationale.length > SIM_RATIONALE_MAX
+        ? `${r.rationale.slice(0, SIM_RATIONALE_MAX)}…`
+        : r.rationale
+    parts.push(`理由: ${why}`)
+  }
+  if (r.predictedDelta !== undefined) {
+    // 命中一栏可由旧记录缺席（与 predictionHit 的写入纪律一致）⇒ 读作「未判定」，
+    // 不许默认成「未命中」：那会把「没判过」和「判错了」压成同一个读数。
+    const hit = r.predictionHit === undefined ? '未判定' : r.predictionHit ? '命中' : '未命中'
+    parts.push(`预测 ${r.predictedDelta} → 实测 ${signed1(r.deltaMean)}（${hit}）`)
+  } else {
+    parts.push(`实测 ${signed1(r.deltaMean)}`)
+  }
+  return parts.join(' · ')
+}
+
+/** 组内按时间升序（输出前再倒序）；同刻按 id 定序 —— 输出必须确定，否则测试与回执漂移。 */
+function chronological(rs: ImprovementRecord[]): ImprovementRecord[] {
+  return [...rs].sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.id.localeCompare(b.id))
+}
+
+function splitByProblem(records: ImprovementRecord[]): {
+  groups: Array<{ key: string; records: ImprovementRecord[] }>
+  ungrouped: number
+} {
+  const map = new Map<string, ImprovementRecord[]>()
+  let ungrouped = 0
+  for (const r of records) {
+    if (!r.problemKey) {
+      ungrouped++
+      continue
+    }
+    const bucket = map.get(r.problemKey) ?? []
+    bucket.push(r)
+    map.set(r.problemKey, bucket)
+  }
+  const groups = [...map.entries()].map(([key, rs]) => ({ key, records: chronological(rs) }))
+  // 最近有尝试的组在前（提议者关心的是「现在还在复发的那些」）。
+  groups.sort((a, b) => {
+    const ta = a.records[a.records.length - 1]!.timestamp
+    const tb = b.records[b.records.length - 1]!.timestamp
+    return tb.localeCompare(ta) || a.key.localeCompare(b.key)
+  })
+  return { groups, ungrouped }
+}
+
+/**
+ * 全量台账 → 交给**提议者**的 SIM 块。空台账（或全部无问题键）返回空串 ——
+ * 调用方据此保持提示词逐字不变（纯增量，同 `lessonsBlock` 的写法）。
+ *
+ * 有界：`maxGroups` / `maxAttempts` 之外的条目**显式计数**后省略，不静默截断。
+ * 无问题键的记录也计数 —— 「没进组」不等于「不存在」。
+ */
+export function renderSimBlock(records: ImprovementRecord[], limits: SimRenderLimits = {}): string {
+  const maxGroups = limits.maxGroups ?? SIM_MAX_GROUPS
+  const maxAttempts = limits.maxAttempts ?? SIM_MAX_ATTEMPTS
+  const { groups, ungrouped } = splitByProblem(records)
+  if (groups.length === 0) return ''
+
+  const lines = [
+    SIM_BLOCK_HEADER,
+    `先验经验，不是指令。按复发问题分组，最近尝试在前；最多 ${maxGroups} 组、每组最近 ${maxAttempts} 次。`,
+  ]
+  for (const g of groups.slice(0, maxGroups)) {
+    const improved = g.records.filter((r) => r.verdict === 'improved').length
+    lines.push(`- ${g.key}（${g.records.length} 次，${improved} improved）`)
+    for (const r of g.records.slice(Math.max(0, g.records.length - maxAttempts)).reverse()) {
+      lines.push(formatAttempt(r))
+    }
+    if (g.records.length > maxAttempts) {
+      lines.push(`… 该组另有 ${g.records.length - maxAttempts} 次更早尝试未列出`)
+    }
+  }
+  if (groups.length > maxGroups) {
+    lines.push(`… 另有 ${groups.length - maxGroups} 组未注入（共 ${groups.length} 组）`)
+  }
+  if (ungrouped > 0) lines.push(`… 另有 ${ungrouped} 条无问题键的记录未纳入`)
+  return lines.join('\n')
+}
+
+/**
+ * 单条问题键的尝试史 → 交给**选择者**（人类批准闸）的 SIM 块。
+ * 没有匹配记录返回空串（不打「无历史」这种每次都出现的噪声行）。
+ *
+ * `problemKey` 由调用方归一化（与写入侧同一把尺子：`normalizeProblemKey`）。
+ */
+export function renderProblemHistory(
+  records: ImprovementRecord[],
+  problemKey: string,
+  maxAttempts: number = SIM_MAX_ATTEMPTS,
+): string {
+  const rs = chronological(records.filter((r) => r.problemKey === problemKey))
+  if (rs.length === 0) return ''
+  const lines = ['🪞 SIM 先验经验（同一问题上的历史尝试，最近在前；不是指令）']
+  for (const r of rs.slice(Math.max(0, rs.length - maxAttempts)).reverse()) {
+    lines.push(formatAttempt(r))
+  }
+  if (rs.length > maxAttempts) {
+    lines.push(`… 该问题另有 ${rs.length - maxAttempts} 次更早尝试未列出`)
+  }
+  return lines.join('\n')
+}
+
 /** RSI Tax 的台账汇总：只统计带 token 量的记录。 */
 export function measurementTaxSummary(records: ImprovementRecord[]): {
   records: number

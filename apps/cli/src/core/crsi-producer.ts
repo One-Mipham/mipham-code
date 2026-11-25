@@ -741,19 +741,23 @@ export async function selectTargetSkill(
   return extractFilePath(response, skillFiles)
 }
 
-const PROSE_GENERATE_PROMPT_VERSION = '1.2.0'
+const PROSE_GENERATE_PROMPT_VERSION = '1.3.0'
 
 function buildGenerateProsePrompt(
   signal: CrsiSignal,
   filePath: string,
   originalContent: string,
   lessonsBlock: string,
+  simBlock: string,
 ): string {
   return [
     `你是 CRSI producer（producer-prose-generate v${PROSE_GENERATE_PROMPT_VERSION}）。基于失败信号，改进目标 skill 的内容。`,
     // 常驻教训**内联**（不是指针）：算子是无工具的 `llm.chat` 单条消息，给它指针等于零。
     // 缺席（空串）时不占行 —— 无教训的提示词与从前**逐字相同**（纯增量）。
     ...(lessonsBlock ? ['', lessonsBlock] : []),
+    // SIM 尝试史同样内联。两个通道**刻意分开**：教训是给策略的（根因），SIM 是给优化器的
+    // （实测结果 + 预测命中）。合进一个文件会让「诊断」与「证据」再次分家。
+    ...(simBlock ? ['', simBlock] : []),
     '',
     '失败信号：',
     `- category: ${signal.category}`,
@@ -884,8 +888,13 @@ export async function generateProseContent(
   filePath: string,
   originalContent: string,
   lessonsBlock: string,
+  /**
+   * SIM 尝试史（由 `renderSimBlock` 渲染）。**故意必填**：漏传或传 `''` 会让
+   * 「优化器读得到实测结果」这件事静默失效 —— 与本函数常驻教训块同一条纪律。
+   */
+  simBlock: string,
 ): Promise<ProsePrediction | null> {
-  const prompt = buildGenerateProsePrompt(signal, filePath, originalContent, lessonsBlock)
+  const prompt = buildGenerateProsePrompt(signal, filePath, originalContent, lessonsBlock, simBlock)
   const response = await collectLlmText(llm, prompt)
   if (!response) return null
   return parseProsePrediction(response)
@@ -913,6 +922,8 @@ export async function produceProseProposal(
    * 必填把「忘了」从静默行为变更变成编译错误。
    */
   lessonsBlock: string,
+  /** SIM 尝试史。**故意必填** —— 同 {@link generateProseContent}。 */
+  simBlock: string,
 ): Promise<ProseProposalResult | null> {
   const filePath = await selectTargetSkill(signal, llm, skillFiles)
   if (!filePath) return null
@@ -924,7 +935,14 @@ export async function produceProseProposal(
     return null
   }
 
-  const generated = await generateProseContent(signal, llm, filePath, originalContent, lessonsBlock)
+  const generated = await generateProseContent(
+    signal,
+    llm,
+    filePath,
+    originalContent,
+    lessonsBlock,
+    simBlock,
+  )
   if (!generated || !generated.body) return null
 
   return {

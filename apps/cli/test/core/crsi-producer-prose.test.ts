@@ -159,6 +159,7 @@ describe('generateProseContent', () => {
       'apps/cli/skills/standard/memory.SKILL.md',
       'old',
       '',
+      '',
     )
     expect(result!.body).toContain('name: memory')
     expect(result!.body).not.toContain('```')
@@ -166,7 +167,7 @@ describe('generateProseContent', () => {
 
   it('LLM 返回空响应 → null', async () => {
     const llm = textLlm('')
-    expect(await generateProseContent(SIGNAL, llm, 'f.md', 'old', '')).toBeNull()
+    expect(await generateProseContent(SIGNAL, llm, 'f.md', 'old', '', '')).toBeNull()
   })
 })
 
@@ -189,7 +190,7 @@ describe('produceProseProposal', () => {
       '---\nname: memory\ndescription: improved\n---\n\n# New body\n',
     )
     const readSkill = (p: string) => (p === SKILL_FILES[0] ? 'OLD-CONTENT' : '')
-    const result = await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill, '')
+    const result = await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill, '', '')
     expect(result).not.toBeNull()
     expect(result!.filePath).toBe(SKILL_FILES[0])
     expect(result!.originalContent).toBe('OLD-CONTENT')
@@ -204,7 +205,7 @@ describe('produceProseProposal', () => {
       '{"expectedDelta": 7, "risk": "可能与 memory 技能重叠"}\n---\nname: memory\ndescription: improved\n---\n\n# New body\n',
     )
     const readSkill = (p: string) => (p === SKILL_FILES[0] ? 'OLD-CONTENT' : '')
-    const result = await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill, '')
+    const result = await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill, '', '')
     expect(result).not.toBeNull()
     expect(result!.expectedEffect).toBe(7)
     expect(result!.risk).toBe('可能与 memory 技能重叠')
@@ -214,7 +215,7 @@ describe('produceProseProposal', () => {
 
   it('阶段 1 选不到 skill → null', async () => {
     const llm = twoStageLlm('bad-path.md', 'x')
-    expect(await produceProseProposal(SIGNAL, llm, SKILL_FILES, () => '', '')).toBeNull()
+    expect(await produceProseProposal(SIGNAL, llm, SKILL_FILES, () => '', '', '')).toBeNull()
   })
 
   it('读原文失败 → null', async () => {
@@ -222,7 +223,7 @@ describe('produceProseProposal', () => {
     const readSkill = () => {
       throw new Error('no file')
     }
-    expect(await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill, '')).toBeNull()
+    expect(await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill, '', '')).toBeNull()
   })
 })
 
@@ -313,18 +314,61 @@ describe('生成提示词内联常驻教训', () => {
 
   it('传入的教训块出现在生成提示词里', async () => {
     const seen: string[] = []
-    await generateProseContent(SIGNAL, capturingLlm(seen, '# New body\n'), 'f.md', 'old', BLOCK)
+    await generateProseContent(SIGNAL, capturingLlm(seen, '# New body\n'), 'f.md', 'old', BLOCK, '')
     expect(seen[0]).toContain('## CRSI Lessons')
     expect(seen[0]).toContain('只写解决问题所需的最小改动')
   })
 
   it('无教训（空串）→ 提示词里没有教训段；版本号随本笔前进', async () => {
     const seen: string[] = []
-    await generateProseContent(SIGNAL, capturingLlm(seen, '# New body\n'), 'f.md', 'old', '')
+    await generateProseContent(SIGNAL, capturingLlm(seen, '# New body\n'), 'f.md', 'old', '', '')
     expect(seen[0]).not.toContain('CRSI Lessons')
     // 提示词是版本化资源（CLAUDE.md §十）：改了提示词就必须动版本，否则「哪一版产出的」
     // 在外部读数上不可分。
-    expect(seen[0]).toContain('producer-prose-generate v1.2.0')
+    expect(seen[0]).toContain('producer-prose-generate v1.3.0')
+  })
+
+  const SIM_BLOCK = [
+    '## SIM（Self-Improvement Memory）',
+    '- 完成门（1 次，0 improved）',
+    '  - [regressed] 2026-11-20 · 理由: 再加一层检查 · 预测 20 → 实测 -12.0（未命中）',
+  ].join('\n')
+
+  // SIM 的价值=提议者读得到实测结果。只写台账不注入，优化器就只跑在「只有根因」的
+  // 弱条件下（SIM 论文里唯一方向不定的档位）。
+  it('传入的 SIM 块出现在生成提示词里', async () => {
+    const seen: string[] = []
+    await generateProseContent(
+      SIGNAL,
+      capturingLlm(seen, '# New body\n'),
+      'f.md',
+      'old',
+      '',
+      SIM_BLOCK,
+    )
+    expect(seen[0]).toContain('## SIM（Self-Improvement Memory）')
+    expect(seen[0]).toContain('实测 -12.0')
+  })
+
+  it('无 SIM（空串）→ 提示词里没有 SIM 段（纯增量，不留空行）', async () => {
+    const seen: string[] = []
+    await generateProseContent(SIGNAL, capturingLlm(seen, '# New body\n'), 'f.md', 'old', '', '')
+    expect(seen[0]).not.toContain('Self-Improvement Memory')
+  })
+
+  it('produceProseProposal 把 SIM 块一路带到生成阶段（不是只到选目标那一步）', async () => {
+    const seen: string[] = []
+    const llm = twoStageLlm(SKILL_FILES[0]!, '# New body\n')
+    const wrapped: Llm = {
+      chat: (req) => {
+        captureUserMessage(seen, req)
+        return llm.chat(req)
+      },
+    }
+    await produceProseProposal(SIGNAL, wrapped, SKILL_FILES, () => 'OLD', '', SIM_BLOCK)
+    expect(seen).toHaveLength(2)
+    expect(seen[0]).not.toContain('Self-Improvement Memory') // 选目标不需要尝试史
+    expect(seen[1]).toContain('Self-Improvement Memory')
   })
 
   it('produceProseProposal 把教训块一路带到生成阶段（不是只到选目标那一步）', async () => {
@@ -337,7 +381,7 @@ describe('生成提示词内联常驻教训', () => {
         return llm.chat(req)
       },
     }
-    await produceProseProposal(SIGNAL, wrapped, SKILL_FILES, () => 'OLD', BLOCK)
+    await produceProseProposal(SIGNAL, wrapped, SKILL_FILES, () => 'OLD', BLOCK, '')
     // 第二次调用才是生成阶段（第一次是选目标）
     expect(seen).toHaveLength(2)
     expect(seen[0]).not.toContain('CRSI Lessons') // 选目标只挑路径，教训在那里是噪声

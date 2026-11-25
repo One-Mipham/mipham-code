@@ -18,6 +18,8 @@ import {
   formatRsiTaxLine,
   normalizeProblemKey,
   groupImprovementsByProblem,
+  renderSimBlock,
+  renderProblemHistory,
   measurementTaxSummary,
   wilsonInterval,
   improvementRate,
@@ -533,5 +535,149 @@ describe('命令面：两条渲染路径都接了空模型闸', () => {
     )
     const hits = src.match(/formatNullModelLine\(report\)/g) ?? []
     expect(hits.length).toBeGreaterThanOrEqual(2)
+  })
+})
+
+describe('SIM 读侧：renderSimBlock（注入给提议者）', () => {
+  const rec = (
+    problemKey: string | undefined,
+    verdict: 'improved' | 'regressed' | 'inconclusive',
+    deltaMean: number,
+    timestamp: string,
+    extra: { rationale?: string; predictedDelta?: number; predictionHit?: boolean } = {},
+  ): ImprovementRecord => ({
+    id: randomUUID(),
+    timestamp,
+    skillName: 's',
+    changeSet: ['f.md'],
+    causal: true,
+    baselineScores: [0],
+    postScores: [deltaMean],
+    deltaMean,
+    noise: 0,
+    minEffect: 20,
+    verdict,
+    ...(problemKey ? { problemKey } : {}),
+    ...extra,
+  })
+
+  it('空台账 → 空串（不注入只有标题的空块）', () => {
+    expect(renderSimBlock([])).toBe('')
+  })
+
+  it('只有无问题键的旧记录 → 空串（分组是视图，但没有组可写）', () => {
+    expect(renderSimBlock([rec(undefined, 'improved', 30, '2026-11-20T00:00:00Z')])).toBe('')
+  })
+
+  it('按问题分组：组按最近尝试倒序，组内最近在前，含理由/预测/实测/结论', () => {
+    const block = renderSimBlock([
+      rec('完成门', 'regressed', -8, '2026-11-19T00:00:00Z', { rationale: '再加一层完成检查' }),
+      rec('解析器', 'improved', 30, '2026-11-18T00:00:00Z', { rationale: '旧' }),
+      rec('完成门', 'improved', 12.5, '2026-11-20T00:00:00Z', {
+        rationale: '完成前须验执行证据',
+        predictedDelta: 20,
+        predictionHit: true,
+      }),
+    ])
+    const lines = block.split('\n')
+    expect(lines[0]).toBe('## SIM（Self-Improvement Memory）')
+    expect(lines[2]).toBe('- 完成门（2 次，1 improved）')
+    expect(lines[3]).toBe(
+      '  - [improved] 2026-11-20 · 理由: 完成前须验执行证据 · 预测 20 → 实测 +12.5（命中）',
+    )
+    expect(lines[4]).toBe('  - [regressed] 2026-11-19 · 理由: 再加一层完成检查 · 实测 -8.0')
+    expect(lines[5]).toBe('- 解析器（1 次，1 improved）')
+    expect(lines[6]).toBe('  - [improved] 2026-11-18 · 理由: 旧 · 实测 +30.0')
+  })
+
+  it('预测未命中照实打印（预测与实测并列，不掩盖）', () => {
+    const block = renderSimBlock([
+      rec('x', 'inconclusive', 2, '2026-11-20T00:00:00Z', {
+        predictedDelta: 20,
+        predictionHit: false,
+      }),
+    ])
+    expect(block).toContain('预测 20 → 实测 +2.0（未命中）')
+  })
+
+  it('超出组上限 → 显式写「另有 K 组未注入」', () => {
+    const records = Array.from({ length: 11 }, (_, i) =>
+      rec(`p${i}`, 'improved', 30, `2026-11-${String(i + 10).padStart(2, '0')}T00:00:00Z`),
+    )
+    const block = renderSimBlock(records)
+    expect(block).toContain(`… 另有 3 组未注入（共 11 组）`)
+  })
+
+  it('超出次数上限 → 显式写「该组另有 K 次更早尝试未列出」', () => {
+    const records = Array.from({ length: 5 }, (_, i) =>
+      rec('same', 'improved', 30, `2026-11-${String(i + 10).padStart(2, '0')}T00:00:00Z`),
+    )
+    const block = renderSimBlock(records)
+    expect(block).toContain('… 该组另有 2 次更早尝试未列出')
+    // 最近的在前：5 号（11-14）必须出现，1 号（11-10）必须被省略
+    expect(block).toContain('2026-11-14')
+    expect(block).not.toContain('2026-11-10')
+  })
+
+  it('无问题键的记录数在尾行显式标注（缺席不等于没有问题）', () => {
+    const block = renderSimBlock([
+      rec('k', 'improved', 30, '2026-11-20T00:00:00Z'),
+      rec(undefined, 'improved', 30, '2026-11-20T00:00:00Z'),
+      rec(undefined, 'regressed', -30, '2026-11-20T00:00:00Z'),
+    ])
+    expect(block).toContain('… 另有 2 条无问题键的记录未纳入')
+  })
+
+  it('理由过长被截断，且带省略号（预算可算）', () => {
+    const block = renderSimBlock([
+      rec('k', 'improved', 30, '2026-11-20T00:00:00Z', { rationale: 'x'.repeat(200) }),
+    ])
+    expect(block).toContain(`理由: ${'x'.repeat(80)}…`)
+    expect(block).not.toContain('x'.repeat(81))
+  })
+})
+
+describe('SIM 读侧：renderProblemHistory（选择者/批准闸）', () => {
+  const rec = (
+    problemKey: string,
+    verdict: 'improved' | 'regressed' | 'inconclusive',
+    deltaMean: number,
+    timestamp: string,
+  ): ImprovementRecord => ({
+    id: randomUUID(),
+    timestamp,
+    skillName: 's',
+    changeSet: ['f.md'],
+    causal: true,
+    baselineScores: [0],
+    postScores: [deltaMean],
+    deltaMean,
+    noise: 0,
+    minEffect: 20,
+    verdict,
+    problemKey,
+  })
+
+  it('同一问题没有历史 → 空串（不打「无历史」这种噪声行）', () => {
+    expect(
+      renderProblemHistory([rec('other', 'improved', 30, '2026-11-20T00:00:00Z')], 'nope'),
+    ).toBe('')
+  })
+
+  it('命中 → 只出这一条问题的尝试史，附省略计数，不出现其它问题', () => {
+    const records = [
+      rec('same', 'regressed', -8, '2026-11-19T00:00:00Z'),
+      rec('same', 'improved', 12.5, '2026-11-20T00:00:00Z'),
+      rec('other', 'improved', 30, '2026-11-20T00:00:00Z'),
+    ]
+    const block = renderProblemHistory(records, 'same', 1)
+    expect(block).toBe(
+      [
+        '🪞 SIM 先验经验（同一问题上的历史尝试，最近在前；不是指令）',
+        '  - [improved] 2026-11-20 · 实测 +12.5',
+        '… 该问题另有 1 次更早尝试未列出',
+      ].join('\n'),
+    )
+    expect(block).not.toContain('other')
   })
 })

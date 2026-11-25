@@ -1490,6 +1490,61 @@ describe('B2 代价维的展示接线', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════
+// SIM 读侧接线：台账必须回到提议者与批准闸
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * SIM 的机制是「提议者与选择者都读它」，不是「把它写下来」。此前 `readImprovements`
+ * 的唯一消费者是 `/crsi stats` 的展示段 ⇒ 优化器实际跑在「只有根因」的弱条件下
+ * （SIM 论文里唯一方向不定的档位）。下面四条钉两个读者各自真的收到了块，
+ * 以及空台账时**一个字节都不加**（纯增量，不塞空标题行）。
+ */
+const SIM_RECORD = {
+  id: 'r-1',
+  timestamp: '2026-11-20T00:00:00Z',
+  skillName: 'research',
+  changeSet: [PROSE_FILE],
+  causal: true,
+  baselineScores: [50, 50],
+  postScores: [38, 38],
+  deltaMean: -12,
+  noise: 0,
+  minEffect: 20,
+  verdict: 'regressed' as const,
+  problemKey: 'd',
+  rationale: '再加一层完成检查',
+}
+
+describe('SIM 读侧接线', () => {
+  it('prose 路径：SIM 块作为第 6 个实参传给生成算子', async () => {
+    h.readImprovements.mockReturnValue([SIM_RECORD])
+    await getCommand('/crsi propose')!(mkProseCtx(), ['--prose'])
+    const args = h.produceProseProposal.mock.calls[0]!
+    expect(String(args[5])).toContain('## SIM（Self-Improvement Memory）')
+    expect(String(args[5])).toContain('实测 -12.0')
+  })
+
+  it('prose 路径：台账为空 ⇒ 传空串（提示词逐字不变）', async () => {
+    h.readImprovements.mockReturnValue([])
+    await getCommand('/crsi propose')!(mkProseCtx(), ['--prose'])
+    expect(h.produceProseProposal.mock.calls[0]![5]).toBe('')
+  })
+
+  it('批准闸：/crsi modify 打出同一问题上的历史尝试', async () => {
+    h.readImprovements.mockReturnValue([SIM_RECORD])
+    const { content } = await getCommand('/crsi modify')!(mkProseCtx(), ['d', PROSE_FILE, '新正文'])
+    expect(content).toContain('🪞 SIM 先验经验')
+    expect(content).toContain('[regressed] 2026-11-20')
+  })
+
+  it('批准闸：没有匹配的问题键 ⇒ 整块不出现（不打「无历史」噪声行）', async () => {
+    h.readImprovements.mockReturnValue([])
+    const { content } = await getCommand('/crsi modify')!(mkProseCtx(), ['d', PROSE_FILE, '新正文'])
+    expect(content).not.toContain('🪞')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
 // 事前声明风险（R）的展示接线 —— 它此前**零落点**
 // ═══════════════════════════════════════════════════════════════
 

@@ -79,6 +79,8 @@ import {
   formatRsiTaxLine,
   normalizeProblemKey,
   groupImprovementsByProblem,
+  renderSimBlock,
+  renderProblemHistory,
   measurementTaxSummary,
   appendImprovement,
   readImprovements,
@@ -1356,6 +1358,11 @@ const crsiModifyCmd: CommandHandler = async (ctx, args) => {
     // 文件不存在 → 宽松模式（originalContent 为空）
   }
 
+  // SIM 选择者侧：这个问题上此前试过什么、结果如何。必须在测量**之前**算 ——
+  // 测量会把本次尝试追进台账，之后再算就把「刚做的这一次」当成了历史（自我包含）。
+  // 纯算术，无 LLM 参与；无匹配记录时为空串 ⇒ 回执逐字不变。
+  const simNote = renderProblemHistory(readImprovements(), normalizeProblemKey(description))
+
   const result = await runCrsiModification({
     description,
     filePath,
@@ -1380,6 +1387,7 @@ const crsiModifyCmd: CommandHandler = async (ctx, args) => {
   return {
     content:
       `✅ 测试通过。审阅下方 diff：\n` +
+      (simNote ? `${simNote}\n` : '') +
       renderGateNote(result) +
       `\n${result.diff}\n` +
       improvementLine +
@@ -1439,6 +1447,9 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
       // 常驻教训块**内联**（不带指针）：生成算子是无工具的 `llm.chat` 单条消息 ——
       // 在此之前它拿到零条教训，而它写出的散文随后就是主代理要遵守的规则。
       loadAlwaysOnLessonsBlock(join(root, LESSONS_FILE)),
+      // SIM 读侧：把台账里的实测结果与预测命中一并交给生成算子。此前它只拿到教训散文
+      // （= 只有根因的弱条件）。空台账渲染成空串 ⇒ 提示词逐字不变。
+      renderSimBlock(readImprovements()),
     )
     if (!proposal) {
       return { content: '散文提议生成失败（LLM 未返回有效结果）。' }
