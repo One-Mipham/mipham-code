@@ -380,7 +380,10 @@ function chronological(rs: ImprovementRecord[]): ImprovementRecord[] {
   return [...rs].sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.id.localeCompare(b.id))
 }
 
-function splitByProblem(records: ImprovementRecord[]): {
+function splitByProblem(
+  records: ImprovementRecord[],
+  setting?: SimSetting,
+): {
   groups: Array<{ key: string; records: ImprovementRecord[] }>
   ungrouped: number
 } {
@@ -396,8 +399,17 @@ function splitByProblem(records: ImprovementRecord[]): {
     map.set(r.problemKey, bucket)
   }
   const groups = [...map.entries()].map(([key, rs]) => ({ key, records: chronological(rs) }))
-  // 最近有尝试的组在前（提议者关心的是「现在还在复发的那些」）。
+  // 组级排序（规则 8）：组里**最好**的那条证据与当前设置越相关，整组越靠前；同档再按最近活动。
+  //
+  // 取舍（有意的）：一个很久没动、但当时是同设置量出来的组，会压住一个正在复发、却在
+  // 别的模型上量过的组。被挤掉的组数在块尾显式计数（「另有 K 组未注入」），不静默丢。
+  // 无 setting ⇒ 所有组 rank=1 ⇒ 退化为纯最近活动，与加这条之前逐字相同。
+  const bestRank = (rs: ImprovementRecord[]): number =>
+    Math.max(...rs.map((r) => simTier(r, setting).rank))
   groups.sort((a, b) => {
+    const ra = bestRank(a.records)
+    const rb = bestRank(b.records)
+    if (ra !== rb) return rb - ra
     const ta = a.records[a.records.length - 1]!.timestamp
     const tb = b.records[b.records.length - 1]!.timestamp
     return tb.localeCompare(ta) || a.key.localeCompare(b.key)
@@ -419,7 +431,7 @@ export function renderSimBlock(
 ): string {
   const maxGroups = limits.maxGroups ?? SIM_MAX_GROUPS
   const maxAttempts = limits.maxAttempts ?? SIM_MAX_ATTEMPTS
-  const { groups, ungrouped } = splitByProblem(records)
+  const { groups, ungrouped } = splitByProblem(records, setting)
   if (groups.length === 0) return ''
 
   const order = setting ? '同设置优先（规则 8），其次最近' : '最近尝试在前'

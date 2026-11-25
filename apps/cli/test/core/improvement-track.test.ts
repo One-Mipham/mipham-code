@@ -1163,3 +1163,70 @@ describe('fixedSummary —— /crsi stats 的逐题修复汇总', () => {
     })
   })
 })
+
+describe('规则 8 组级排序：同设置证据的组整体靠前', () => {
+  const rec = (
+    id: string,
+    model: string | undefined,
+    skillName: string,
+    timestamp: string,
+    problemKey: string,
+  ): ImprovementRecord => ({
+    id,
+    timestamp,
+    skillName,
+    changeSet: ['f.md'],
+    causal: true,
+    baselineScores: [0],
+    postScores: [10],
+    deltaMean: 10,
+    noise: 0,
+    minEffect: 20,
+    verdict: 'improved',
+    problemKey,
+    ...(model ? { model } : {}),
+  })
+  const SETTING = { model: 'deepseek-flash', skill: 'research' }
+  const groupHeaders = (block: string) => block.split('\n').filter((l) => l.startsWith('- '))
+
+  it('同设置但更旧的组，排在新但异设置的组之前', () => {
+    // 残留风险（如实记下）：这条次序意味着一个很久没动、但当时是同设置量出来的组，
+    // 会压住一个正在复发、却在别的模型上量过的组。取「证据相关度优先」是有意的取舍 ——
+    // 被挤掉的组数在块尾显式计数，不静默丢。
+    const block = renderSimBlock(
+      [
+        rec('a', 'other', 'research', '2026-11-20T00:00:00Z', 'hot-problem'),
+        rec('b', 'deepseek-flash', 'research', '2026-11-01T00:00:00Z', 'old-problem'),
+      ],
+      undefined,
+      SETTING,
+    )
+    const headers = groupHeaders(block)
+    expect(headers[0]).toContain('old-problem')
+    expect(headers[1]).toContain('hot-problem')
+  })
+
+  it('都给不出同设置证据时，组间按最近活动排（次序不变）', () => {
+    const block = renderSimBlock(
+      [
+        rec('a', 'other', 'research', '2026-11-01T00:00:00Z', 'old'),
+        rec('b', 'other', 'research', '2026-11-20T00:00:00Z', 'hot'),
+      ],
+      undefined,
+      SETTING,
+    )
+    expect(groupHeaders(block)[0]).toContain('hot')
+  })
+
+  it('没有 setting ⇒ 纯按最近活动（与加组级排序之前逐字相同）', () => {
+    const block = renderSimBlock(
+      [
+        rec('a', 'deepseek-flash', 'research', '2026-11-01T00:00:00Z', 'old'),
+        rec('b', 'other', 'research', '2026-11-20T00:00:00Z', 'hot'),
+      ],
+      undefined,
+      undefined,
+    )
+    expect(groupHeaders(block)[0]).toContain('hot')
+  })
+})
