@@ -928,3 +928,85 @@ describe('规则 8 读侧：同设置证据加权、双异降权（纯算术）'
     expect(lines[4]).toContain('⚠️ 异设置：模型')
   })
 })
+
+describe('P4 任务级预测：预测修好哪些题 / 实际修好哪些 / 漏了哪些', () => {
+  const base = {
+    skillName: 's',
+    baselineScores: [50, 50],
+    postScores: [70, 70],
+    fixedTasks: ['perf-a', 'perf-b'],
+  }
+
+  it('三键同生：有预测 + 有实测 ⇒ 预测/实际/漏判都进记录', () => {
+    const r = buildImprovementReport(base, ['f.md'], undefined, {
+      expectedFixes: ['perf-a', 'perf-c'],
+    })
+    expect(r.predictedFixes).toEqual(['perf-a', 'perf-c'])
+    expect(r.fixedTasks).toEqual(['perf-a', 'perf-b'])
+    expect(r.missedFixes).toEqual(['perf-c'])
+  })
+
+  it('只有实测（没预测）⇒ 只记 fixedTasks；漏判缺席（不可判，不是空数组）', () => {
+    const r = buildImprovementReport(base, ['f.md'])
+    expect(r.fixedTasks).toEqual(['perf-a', 'perf-b'])
+    expect('predictedFixes' in r).toBe(false)
+    expect('missedFixes' in r).toBe(false)
+  })
+
+  it('只有预测（旧样本没有逐题读数）⇒ 只记预测；漏判缺席', () => {
+    const noFixed = { skillName: 's', baselineScores: [50], postScores: [70] }
+    const r = buildImprovementReport(noFixed, ['f.md'], undefined, { expectedFixes: ['perf-a'] })
+    expect(r.predictedFixes).toEqual(['perf-a'])
+    expect('fixedTasks' in r).toBe(false)
+    expect('missedFixes' in r).toBe(false)
+  })
+
+  it('预测空数组 ≠ 未预测：写 [] 且漏判为空', () => {
+    const r = buildImprovementReport(base, ['f.md'], undefined, { expectedFixes: [] })
+    expect(r.predictedFixes).toEqual([])
+    expect(r.missedFixes).toEqual([])
+  })
+
+  it('渲染：预测与实际的配对（漏判点名，最多两个）', () => {
+    const rec: ImprovementRecord = {
+      id: 'r-1',
+      timestamp: '2026-11-20T00:00:00Z',
+      skillName: 's',
+      changeSet: ['f.md'],
+      causal: true,
+      baselineScores: [0],
+      postScores: [10],
+      deltaMean: 10,
+      noise: 0,
+      minEffect: 20,
+      verdict: 'improved',
+      problemKey: 'k',
+      predictedFixes: ['perf-a', 'perf-c', 'perf-d'],
+      fixedTasks: ['perf-a'],
+      missedFixes: ['perf-c', 'perf-d'],
+    }
+    const line = renderProblemHistory([rec], 'k').split('\n')[1]!
+    expect(line).toContain('预测修好 3 题 → 实际 1 题（漏 perf-c、perf-d）')
+  })
+
+  it('渲染：没有预测时只报修好几题（不点 id，省预算）', () => {
+    const rec: ImprovementRecord = {
+      id: 'r-2',
+      timestamp: '2026-11-20T00:00:00Z',
+      skillName: 's',
+      changeSet: ['f.md'],
+      causal: true,
+      baselineScores: [0],
+      postScores: [10],
+      deltaMean: 10,
+      noise: 0,
+      minEffect: 20,
+      verdict: 'improved',
+      problemKey: 'k',
+      fixedTasks: ['perf-a', 'perf-b'],
+    }
+    const line = renderProblemHistory([rec], 'k').split('\n')[1]!
+    expect(line).toContain('修好 2 题')
+    expect(line).not.toContain('perf-a')
+  })
+})

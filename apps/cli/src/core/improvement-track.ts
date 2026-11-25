@@ -54,6 +54,20 @@ export interface ImprovementReport {
    */
   model?: string
   /**
+   * P4：提议者**事前**预测会被修好的题 id。缺席 = 未预测；空数组 = 预测「一题都不会修好」。
+   */
+  predictedFixes?: string[]
+  /**
+   * P4：实测中真的从「基线测到过且全败」变「改动后测到过且至少过一次」的题 id。
+   * 缺席 = 旧样本没有逐题读数；空数组 = 测得、一题都没修好。只记录、不进判定。
+   */
+  fixedTasks?: string[]
+  /**
+   * P4：预测了却没修好的题（= `predictedFixes` − `fixedTasks`）。
+   * **两者缺一即缺席** —— 没有预测就没有「漏判」，只有实测也不构成漏判。
+   */
+  missedFixes?: string[]
+  /**
    * RSI Tax：与分数数组逐项对齐的前/后测量 token。**只记录，不进任何门禁**
    * （与耗时维同一条纪律）。两个数组同生同灭；缺席 = 未测，不是免费。
    */
@@ -103,6 +117,8 @@ export interface ImprovementContext {
    * 缺席 = 无法确定（挂载的自定义 Llm 不暴露模型）——**不许**拿注册表当前模型冒充。
    */
   model?: string
+  /** P4：提议者事前预测会被修好的题 id。 */
+  expectedFixes?: string[]
 }
 
 export function buildImprovementReport(
@@ -164,6 +180,15 @@ export function buildImprovementReport(
     ...(context?.problemKey ? { problemKey: context.problemKey } : {}),
     ...(context?.rationale ? { rationale: context.rationale } : {}),
     ...(context?.model ? { model: context.model } : {}),
+    // P4：三键各自独立落地 —— 预测可以没有实测（旧样本），实测也可以没有预测（手工路径）；
+    // 只有**两者都在**时才谈得上「漏判」。空数组是合法读数（预测了「一题都不修好」）。
+    ...(context?.expectedFixes !== undefined ? { predictedFixes: context.expectedFixes } : {}),
+    ...(sample.fixedTasks !== undefined ? { fixedTasks: sample.fixedTasks } : {}),
+    ...(context?.expectedFixes !== undefined && sample.fixedTasks !== undefined
+      ? {
+          missedFixes: context.expectedFixes.filter((id) => !sample.fixedTasks!.includes(id)),
+        }
+      : {}),
     // RSI Tax 与耗时维同一纪律：两条同生同灭，缺席即未测。
     ...(sample.baselineTokens !== undefined && sample.postTokens !== undefined
       ? { baselineTokens: sample.baselineTokens, postTokens: sample.postTokens }
@@ -309,6 +334,18 @@ function formatAttempt(r: ImprovementRecord, setting?: SimSetting): string {
     parts.push(`预测 ${r.predictedDelta} → 实测 ${signed1(r.deltaMean)}（${hit}）`)
   } else {
     parts.push(`实测 ${signed1(r.deltaMean)}`)
+  }
+  // P4：任务级预测与实测的配对。漏判点名（最多两个），其余只报个数 —— 读侧有界。
+  if (r.predictedFixes !== undefined && r.fixedTasks !== undefined) {
+    const hit = r.predictedFixes.filter((id) => r.fixedTasks!.includes(id)).length
+    const missed = r.missedFixes ?? []
+    const tail =
+      missed.length > 0
+        ? `（漏 ${missed.slice(0, 2).join('、')}${missed.length > 2 ? ` 等 ${missed.length} 题` : ''}）`
+        : ''
+    parts.push(`预测修好 ${r.predictedFixes.length} 题 → 实际 ${hit} 题${tail}`)
+  } else if (r.fixedTasks !== undefined) {
+    parts.push(`修好 ${r.fixedTasks.length} 题`)
   }
   // 被降权的尝试**自报原因**：静默重排会让读者以为历史次序就是时间次序。
   const tier = simTier(r, setting)

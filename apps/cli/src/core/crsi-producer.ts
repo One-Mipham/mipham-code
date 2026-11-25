@@ -741,15 +741,16 @@ export async function selectTargetSkill(
   return extractFilePath(response, skillFiles)
 }
 
-const PROSE_GENERATE_PROMPT_VERSION = '1.3.0'
+const PROSE_GENERATE_PROMPT_VERSION = '1.4.0'
 
 function buildGenerateProsePrompt(
   signal: CrsiSignal,
   filePath: string,
   originalContent: string,
   lessonsBlock: string,
-  simBlock: string,
+  target: ProseTargetContext,
 ): string {
+  const { simBlock, taskIds } = target
   return [
     `你是 CRSI producer（producer-prose-generate v${PROSE_GENERATE_PROMPT_VERSION}）。基于失败信号，改进目标 skill 的内容。`,
     // 常驻教训**内联**（不是指针）：算子是无工具的 `llm.chat` 单条消息，给它指针等于零。
@@ -758,6 +759,14 @@ function buildGenerateProsePrompt(
     // SIM 尝试史同样内联。两个通道**刻意分开**：教训是给策略的（根因），SIM 是给优化器的
     // （实测结果 + 预测命中）。合进一个文件会让「诊断」与「证据」再次分家。
     ...(simBlock ? ['', simBlock] : []),
+    // P4：可预测的题清单。该 skill 没有可测任务时不占行 —— 提示词与加这条之前逐字相同。
+    ...(taskIds.length > 0
+      ? [
+          '',
+          '可预测会被修好的题 id（expectedFixes 只能取这些，不得编造）：',
+          ...taskIds.map((id) => `- ${id}`),
+        ]
+      : []),
     '',
     '失败信号：',
     `- category: ${signal.category}`,
@@ -772,9 +781,14 @@ function buildGenerateProsePrompt(
     '',
     '返回格式（严格遵守，两段）：',
     '第 1 行：一行 JSON，写下你对这次改动的**预期效果**与**风险**：',
-    '{"expectedDelta": <number 或 null>, "risk": "<字符串>"}',
+    taskIds.length > 0
+      ? '{"expectedDelta": <number 或 null>, "risk": "<字符串>", "expectedFixes": ["<题 id>"]}'
+      : '{"expectedDelta": <number 或 null>, "risk": "<字符串>"}',
     '- expectedDelta 是预期该 skill 的任务表现提升**点数**（可正可负；无法预测写 null）。',
     '- risk 是这次改动可能在哪方面变差（一句话）。',
+    ...(taskIds.length > 0
+      ? ['- expectedFixes 是你预测这次改动会**修好**的题 id 列表（从上面清单里选；没把握写 []）。']
+      : []),
     '第 2 行起：改进后的完整 markdown（保持 YAML frontmatter 的 name/description 字段，正文针对失败信号做针对性改进）。不要用代码围栏包住。',
   ].join('\n')
 }
@@ -784,12 +798,22 @@ function stripMarkdownFence(text: string): string {
   return match ? match[1]! : text
 }
 
-/** prose 提议的解析产物：正文 + 可选的事前预登记（ε 与风险声明）。 */
+/** prose 提议的解析产物：正文 + 可选的事前预登记（ε / 风险 / 任务级预测）。 */
 /**
- * SIM 块的延迟渲染器：目标文件 + 它的旧内容 → 块文本。
- * 延迟的理由见 {@link produceProseProposal} 的同名参数。
+ * 生成算子的**目标上下文** —— 它在选完目标 skill 之后才存在：目标决定 SIM 的 skill 轴，
+ * 也决定「可以预测哪些题」。延迟取的理由见 {@link produceProseProposal} 的同名参数。
  */
-export type SimBlockProvider = (filePath: string, originalContent: string) => string
+export interface ProseTargetContext {
+  /** SIM 块（台账读侧）。空串 = 无历史。 */
+  simBlock: string
+  /** 目标 skill 可测的题 id（供任务级预测）。空数组 = 该 skill 没有可测任务。 */
+  taskIds: string[]
+}
+
+export type ProseTargetContextProvider = (
+  filePath: string,
+  originalContent: string,
+) => ProseTargetContext
 
 export interface ProsePrediction {
   body: string
@@ -797,6 +821,11 @@ export interface ProsePrediction {
   expectedEffect?: number
   /** R：风险声明。缺席 = 未声明。 */
   risk?: string
+  /**
+   * P4：事前预测会被修好的题 id。缺席 = 没预测；空数组 = 预测「一题都不会修好」。
+   * 已按目标 skill 的已知 id **fail-closed 过滤**（编造的 id 进不来）。
+   */
+  expectedFixes?: string[]
 }
 
 /**
@@ -870,11 +899,16 @@ export function parseProsePrediction(raw: string): ProsePrediction {
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return { body: stripped }
   }
-  const rec = parsed as { expectedDelta?: unknown; risk?: unknown }
+  const rec = parsed as { expectedDelta?: unknown; risk?: unknown; expectedFixes?: unknown }
   if (!('expectedDelta' in rec)) return { body: stripped } // 不带 ε 的 JSON 不吃
 
   const expectedEffect = typeof rec.expectedDelta === 'number' ? rec.expectedDelta : undefined
   const risk = typeof rec.risk === 'string' ? rec.risk : undefined
+  // P4：只收字符串项。**不在这里校验 id 是否存在** —— 那是 generateProseContent 的事，
+  // 因为它才知道目标 skill 的题清单（解析器不该依赖调用方数据）。
+  const expectedFixes = Array.isArray(rec.expectedFixes)
+    ? rec.expectedFixes.filter((x): x is string => typeof x === 'string')
+    : undefined
   // 剥掉 JSON 行本身 + 紧随其后的空行
   const body = lines
     .slice(firstIdx + 1)
@@ -885,6 +919,7 @@ export function parseProsePrediction(raw: string): ProsePrediction {
     body,
     ...(expectedEffect !== undefined ? { expectedEffect } : {}),
     ...(risk !== undefined ? { risk } : {}),
+    ...(expectedFixes !== undefined ? { expectedFixes } : {}),
   }
 }
 
@@ -895,15 +930,26 @@ export async function generateProseContent(
   originalContent: string,
   lessonsBlock: string,
   /**
-   * SIM 尝试史（由 `renderSimBlock` 渲染）。**故意必填**：漏传或传 `''` 会让
-   * 「优化器读得到实测结果」这件事静默失效 —— 与本函数常驻教训块同一条纪律。
+   * 目标上下文（SIM 块 + 可预测的题清单）。**故意必填**：漏传会让「优化器读得到实测
+   * 结果」这件事静默失效 —— 与本函数常驻教训块同一条纪律。
    */
-  simBlock: string,
+  target: ProseTargetContext,
 ): Promise<ProsePrediction | null> {
-  const prompt = buildGenerateProsePrompt(signal, filePath, originalContent, lessonsBlock, simBlock)
+  const prompt = buildGenerateProsePrompt(signal, filePath, originalContent, lessonsBlock, target)
   const response = await collectLlmText(llm, prompt)
   if (!response) return null
-  return parseProsePrediction(response)
+  const parsed = parseProsePrediction(response)
+  // 没有题清单 ⇒ 无从判定，整键剥掉（模型即便猜了 id 也不进记录）。
+  if (target.taskIds.length === 0) {
+    const answer: ProsePrediction = { body: parsed.body }
+    if (parsed.expectedEffect !== undefined) answer.expectedEffect = parsed.expectedEffect
+    if (parsed.risk !== undefined) answer.risk = parsed.risk
+    return answer
+  }
+  if (parsed.expectedFixes === undefined) return parsed
+  // fail-closed：只认目标 skill 真的有的题 id，编造的丢弃。
+  const allowed = new Set(target.taskIds)
+  return { ...parsed, expectedFixes: parsed.expectedFixes.filter((id) => allowed.has(id)) }
 }
 
 export interface ProseProposalResult {
@@ -915,6 +961,8 @@ export interface ProseProposalResult {
   expectedEffect?: number
   /** R：风险声明。 */
   risk?: string
+  /** P4：事前预测会被修好的题 id（已按目标 skill 的题清单过滤）。 */
+  expectedFixes?: string[]
 }
 
 export async function produceProseProposal(
@@ -929,12 +977,12 @@ export async function produceProseProposal(
    */
   lessonsBlock: string,
   /**
-   * SIM 块的**延迟渲染器**。为什么是函数而不是字符串：规则 8 的 skill 轴要拿目标 skill
-   * 当比较基准，而目标在阶段 1（`selectTargetSkill`）之后才存在 —— 在调用方提前渲染，
-   * 就等于把一个「还不知道自己在给谁看」的块固化进 API。**故意必填**，同
-   * {@link generateProseContent}：漏传是编译错，不是静默降级。
+   * 目标上下文的**延迟提供者**。为什么是函数而不是值：规则 8 的 skill 轴与 P4 的可预测
+   * 题清单都要拿目标 skill 当基准，而目标在阶段 1（`selectTargetSkill`）之后才存在 ——
+   * 在调用方提前取，就等于把一份「还不知道自己在给谁看」的上下文固化进 API。
+   * **故意必填**，同 {@link generateProseContent}：漏传是编译错，不是静默降级。
    */
-  simBlockFor: SimBlockProvider,
+  targetOf: ProseTargetContextProvider,
 ): Promise<ProseProposalResult | null> {
   const filePath = await selectTargetSkill(signal, llm, skillFiles)
   if (!filePath) return null
@@ -952,7 +1000,7 @@ export async function produceProseProposal(
     filePath,
     originalContent,
     lessonsBlock,
-    simBlockFor(filePath, originalContent),
+    targetOf(filePath, originalContent),
   )
   if (!generated || !generated.body) return null
 
@@ -963,6 +1011,7 @@ export async function produceProseProposal(
     description: signal.title,
     ...(generated.expectedEffect !== undefined ? { expectedEffect: generated.expectedEffect } : {}),
     ...(generated.risk !== undefined ? { risk: generated.risk } : {}),
+    ...(generated.expectedFixes !== undefined ? { expectedFixes: generated.expectedFixes } : {}),
   }
 }
 

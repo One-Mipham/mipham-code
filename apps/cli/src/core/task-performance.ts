@@ -392,6 +392,14 @@ export interface SkillDeltaSample {
    */
   baselineTokens?: number[]
   postTokens?: number[]
+  /**
+   * P4 逐题修复集：基线**测到过且全败**、改动后**测到过且至少过一次**的题 id。
+   *
+   * 确定性算术，无 LLM 裁判（A1）。「测到过」排除 `truncated` / `uncertain` 的采样 ——
+   * 某一轮上游抽风不能算「基线失败」，否则一道根本没量到的题会被记成「被修好了」。
+   * k 次采样下这是方向性信号，不是统计结论。空数组 = 测得、一题都没修好（不是缺席）。
+   */
+  fixedTasks?: string[]
 }
 
 /**
@@ -413,6 +421,25 @@ export async function measureSkillDeltaRepeated(
   const postDurations: number[] = []
   const baselineTokens: number[] = []
   const postTokens: number[] = []
+  // 逐题累计：只累计**真的量到**的采样（截断 / 仪器故障不是答错）。
+  const perTask = new Map<
+    string,
+    { baseSeen: number; basePass: number; postSeen: number; postPass: number }
+  >()
+  const acc = (phase: 'base' | 'post', report: TaskPerformanceReport): void => {
+    for (const r of report.results) {
+      if (r.truncated || r.uncertain) continue
+      const s = perTask.get(r.id) ?? { baseSeen: 0, basePass: 0, postSeen: 0, postPass: 0 }
+      if (phase === 'base') {
+        s.baseSeen++
+        if (r.passed) s.basePass++
+      } else {
+        s.postSeen++
+        if (r.passed) s.postPass++
+      }
+      perTask.set(r.id, s)
+    }
+  }
   for (let i = 0; i < k; i++) {
     const r = await runTaskPerformance(llm, {
       skill: { name: resolved.skillName, text: resolved.baselineText },
@@ -420,6 +447,7 @@ export async function measureSkillDeltaRepeated(
     // 没测到的一轮不许折成 100 塞进样本：那会把「上游挂了」变成「基线满分」，
     // 进而产出假的 regressed（拦掉一次合法合并）或假的 improved。
     if (!r.measurable) return null
+    acc('base', r)
     baselineScores.push(r.score)
     baselineDurations.push(r.durationMs)
     if (r.tokensUsed !== undefined) baselineTokens.push(r.tokensUsed)
@@ -429,10 +457,14 @@ export async function measureSkillDeltaRepeated(
       skill: { name: resolved.skillName, text: resolved.postText },
     })
     if (!r.measurable) return null
+    acc('post', r)
     postScores.push(r.score)
     postDurations.push(r.durationMs)
     if (r.tokensUsed !== undefined) postTokens.push(r.tokensUsed)
   }
+  const fixedTasks = [...perTask.entries()]
+    .filter(([, s]) => s.baseSeen > 0 && s.postSeen > 0 && s.basePass === 0 && s.postPass > 0)
+    .map(([id]) => id)
 
   // 空模型闸在最后一次采样后算一次：与模型无关，重复跑只是重复同一组测试。
   const nullCheck = runNullModelCheck(resolved.skillName)
@@ -449,5 +481,6 @@ export async function measureSkillDeltaRepeated(
       : {}),
     nullModelPassed: nullCheck.passed,
     nullModelTotal: nullCheck.total,
+    fixedTasks,
   }
 }

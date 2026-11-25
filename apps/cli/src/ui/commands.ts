@@ -1477,11 +1477,22 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
       // （= 只有根因的弱条件）。空台账渲染成空串 ⇒ 提示词逐字不变。
       // 规则 8：块**延迟到选完目标之后**才渲染 —— 那时才拿得到目标 skill，两个轴
       // （skill + model）都齐；提前渲染就只能比模型一个轴。
-      (filePath, originalContent) =>
-        renderSimBlock(readImprovements(), undefined, {
-          model: measurementModel(ctx),
-          skill: resolveSkillName(filePath, originalContent),
-        }),
+      (filePath, originalContent) => {
+        const skill = resolveSkillName(filePath, originalContent)
+        return {
+          simBlock: renderSimBlock(readImprovements(), undefined, {
+            model: measurementModel(ctx),
+            skill,
+          }),
+          // P4：该 skill 绑定的可测任务 —— 提议者只能从这些 id 里预测会被修好的题。
+          // 非 skill 文件 / 未绑定任务 ⇒ 空数组（不是「没预测」，是「无从预测」）。
+          taskIds: skill
+            ? loadPerformanceTasks()
+                .filter((t) => t.skill === skill)
+                .map((t) => t.id)
+            : [],
+        }
+      },
     )
     if (!proposal) {
       return { content: '散文提议生成失败（LLM 未返回有效结果）。' }
@@ -1529,6 +1540,8 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
             problemKey: normalizeProblemKey(`${signal.category}: ${signal.title}`),
             rationale: proposal.description,
             model: measurementModel(ctx),
+            // P4：缺席（没预测）与空数组（预测「一题都不修好」）是两种读数，原样传。
+            expectedFixes: proposal.expectedFixes,
           },
         )
         setPendingVerdict(report.verdict)

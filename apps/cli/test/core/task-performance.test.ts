@@ -514,3 +514,114 @@ describe('measureSkillDeltaRepeated — 空模型读数', () => {
     expect(sample?.nullModelPassed).toBe(0)
   })
 })
+
+// ═══════════════════════════════════════════════════════════════
+// P4：逐题修复集 —— 「哪几道题真的从失败变通过」
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * 判据（确定性，无 LLM 裁判）：
+ *   fixed = 基线**测到过**且全败 ∧ 改动后**测到过**且至少过一次。
+ *
+ * 「测到过」排除 truncated / uncertain 的采样 —— 某轮上游抽风不能算「基线失败」，
+ * 否则一道根本没量到的题会被记成「被修好了」。k 次采样下这是方向性信号，不是统计结论。
+ */
+describe('measureSkillDeltaRepeated — 逐题修复集', () => {
+  const body = (text: string) => `---\nname: safe-coding\ndescription: x\n---\n${text}`
+  const safeTasks = loadPerformanceTasks().filter((t) => t.skill === 'safe-coding')
+
+  /**
+   * 只解 `solved` 里的题；其余返回空串（判定为答错）。总是报 usage，免得被读成
+   * 「仪器故障」（那是 uncertain，不是答错）。
+   */
+  function partialLlm(
+    solvedBase: (id: string) => boolean,
+    solvedPost: (id: string) => boolean,
+  ): Llm {
+    return {
+      chat: async function* (req) {
+        const prompt = String(req.messages[0]?.content ?? '')
+        const task = loadPerformanceTasks().find((t) => t.prompt === prompt)!
+        const system = (req as { systemPrompt?: string }).systemPrompt ?? ''
+        const solved = system.includes('POST') ? solvedPost : solvedBase
+        yield { type: 'usage', inputTokens: 10, outputTokens: 5 }
+        yield { type: 'text', content: solved(task.id) ? (task.oracleCode ?? '') : '' }
+      },
+    }
+  }
+
+  it('基線全败、改动后过 ⇒ 该题进入 fixedTasks', async () => {
+    const target = safeTasks[0]!.id
+    const s = await measureSkillDeltaRepeated(
+      partialLlm(
+        () => false,
+        (id) => id === target,
+      ),
+      {
+        filePath: 'apps/cli/skills/standard/safe-coding.SKILL.md',
+        originalContent: body('BASE'),
+        newContent: body('POST'),
+      },
+      { k: 1 },
+    )
+    expect(s!.fixedTasks).toEqual([target])
+  })
+
+  it('基线本来就过的题不算「修好」（它没坏过）', async () => {
+    const already = safeTasks[0]!.id
+    const newly = safeTasks[1]!.id
+    const s = await measureSkillDeltaRepeated(
+      partialLlm(
+        (id) => id === already,
+        (id) => id === already || id === newly,
+      ),
+      {
+        filePath: 'apps/cli/skills/standard/safe-coding.SKILL.md',
+        originalContent: body('BASE'),
+        newContent: body('POST'),
+      },
+      { k: 1 },
+    )
+    expect(s!.fixedTasks).toEqual([newly])
+  })
+
+  it('一题都没修好 ⇒ 空数组（「测得、没有」而不是缺席）', async () => {
+    const s = await measureSkillDeltaRepeated(
+      partialLlm(
+        () => false,
+        () => false,
+      ),
+      {
+        filePath: 'apps/cli/skills/standard/safe-coding.SKILL.md',
+        originalContent: body('BASE'),
+        newContent: body('POST'),
+      },
+      { k: 1 },
+    )
+    expect(s!.fixedTasks).toEqual([])
+  })
+
+  it('基线那一轮没测到的题不算「修好」（没量过 ≠ 失败过）', async () => {
+    const unmeasuredInBase = safeTasks[0]!.id
+    const llm: Llm = {
+      chat: async function* (req) {
+        const prompt = String(req.messages[0]?.content ?? '')
+        const task = loadPerformanceTasks().find((t) => t.prompt === prompt)!
+        const system = (req as { systemPrompt?: string }).systemPrompt ?? ''
+        if (!system.includes('POST') && task.id === unmeasuredInBase) {
+          // 零文本 + 零 usage ⇒ uncertain（仪器故障），不是答错
+          yield { type: 'text', content: '' }
+          return
+        }
+        yield { type: 'usage', inputTokens: 10, outputTokens: 5 }
+        yield { type: 'text', content: task.oracleCode ?? '' }
+      },
+    }
+    const s = await measureSkillDeltaRepeated(llm, {
+      filePath: 'apps/cli/skills/standard/safe-coding.SKILL.md',
+      originalContent: body('BASE'),
+      newContent: body('POST'),
+    })
+    expect(s!.fixedTasks).toEqual([])
+  })
+})

@@ -72,7 +72,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **试用期（probation）** — `core/probation.ts`：有任务表现测量的 skill 合并后开 3 次观察窗（同 skill、gate 池、k≥3），噪声自适应地板 `max(stdDev, 2×(100/poolSize))` 出 verdict；`regressed` **只打印** `git revert <sha>`，不执行；无随机仪器的合并登记 `noInstrument`，`/crsi stats` 明说「没有可用仪器」而不是静默跳过；结算前置 = 参考解可信 ∧ 正对照为 0 ∧ 每轮可测 ∧ 有率
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|bench [--capture|--sealed --skill <name>]|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：5,272 测试（5,270 passed + 2 skipped，393 文件）
+测试：5,292 测试（5,290 passed + 2 skipped，393 文件）
 
 ---
 
@@ -109,7 +109,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 393 个测试文件，5272 个测试
+│   │   ├── test/               # 393 个测试文件，5292 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -135,7 +135,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（5272 个测试）
+pnpm test         # vitest run（5292 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -325,10 +325,10 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 112     | 2010     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
+| core            | 112     | 2027     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
 | tools           | 35      | 675      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 38      | 276      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
-| ui              | 57      | 569      | commands / input / config-wizard / loop / skill-doctor / ctrl-c / command-reachability                                                                                      |
+| ui              | 57      | 572      | commands / input / config-wizard / loop / skill-doctor / ctrl-c / command-reachability                                                                                      |
 | agent           | 16      | 173      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
 | security        | 12      | 126      | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
 | providers       | 10      | 201      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
@@ -346,7 +346,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | integration     | 1       | 3        | 跨仓接线：`vscode-extension-telemetry`（VS Code 遥测关闭 ⇒ 终端拿到 `MIPHAM_TELEMETRY=off`）                                                                                |
 | integrity       | 20      | 138      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **393** | **5272** | 0 失败（5,270 passed + 2 skipped，393 文件）                                                                                                                                |
+| **合计**        | **393** | **5292** | 0 失败（5,290 passed + 2 skipped，393 文件）                                                                                                                                |
 
 ### 测试注意事项
 

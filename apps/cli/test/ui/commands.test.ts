@@ -1523,13 +1523,16 @@ describe('SIM 读侧接线', () => {
   const simProvider = () => {
     const arg = h.produceProseProposal.mock.calls[0]![5]
     expect(typeof arg).toBe('function')
-    return arg as (filePath: string, originalContent: string) => string
+    return arg as (
+      filePath: string,
+      originalContent: string,
+    ) => { simBlock: string; taskIds: string[] }
   }
 
   it('prose 路径：生成算子拿到 SIM 渲染器，调用后得到块', async () => {
     h.readImprovements.mockReturnValue([SIM_RECORD])
     await getCommand('/crsi propose')!(mkProseCtx(), ['--prose'])
-    const block = simProvider()(PROSE_FILE, PROSE_PROPOSAL.originalContent)
+    const block = simProvider()(PROSE_FILE, PROSE_PROPOSAL.originalContent).simBlock
     expect(block).toContain('## SIM（Self-Improvement Memory）')
     expect(block).toContain('实测 -12.0')
   })
@@ -1537,7 +1540,7 @@ describe('SIM 读侧接线', () => {
   it('prose 路径：台账为空 ⇒ 渲染器返回空串（提示词逐字不变）', async () => {
     h.readImprovements.mockReturnValue([])
     await getCommand('/crsi propose')!(mkProseCtx(), ['--prose'])
-    expect(simProvider()(PROSE_FILE, PROSE_PROPOSAL.originalContent)).toBe('')
+    expect(simProvider()(PROSE_FILE, PROSE_PROPOSAL.originalContent).simBlock).toBe('')
   })
 
   it('批准闸：/crsi modify 打出同一问题上的历史尝试', async () => {
@@ -1642,15 +1645,17 @@ describe('规则 8 读侧接线', () => {
 
   /** prose 的第 6 个实参是延迟渲染器：用「选中的目标」调它才得到块。 */
   const renderFor = (filePath: string, originalContent: string) =>
-    (h.produceProseProposal.mock.calls[0]![5] as (f: string, c: string) => string)(
-      filePath,
-      originalContent,
-    )
+    (
+      h.produceProseProposal.mock.calls[0]![5] as (
+        f: string,
+        c: string,
+      ) => { simBlock: string; taskIds: string[] }
+    )(filePath, originalContent)
 
   it('prose：当前模型进入 SIM 块的设置基准', async () => {
     h.readImprovements.mockReturnValue([recAt('other-model')])
     await getCommand('/crsi propose')!(withRegistry(), ['--prose'])
-    const simBlock = renderFor(PROSE_FILE, PROSE_PROPOSAL.originalContent)
+    const simBlock = renderFor(PROSE_FILE, PROSE_PROPOSAL.originalContent).simBlock
     expect(simBlock).toContain('⚠️ 异设置：模型')
     expect(simBlock).toContain('同设置优先')
   })
@@ -1667,13 +1672,13 @@ describe('规则 8 读侧接线', () => {
     // 台账里这条是别的 skill 上量的 ⇒ 对当前目标（research）只是「邻设置」证据。
     h.readImprovements.mockReturnValue([{ ...SIM_RECORD, skillName: 'other-skill' }])
     await getCommand('/crsi propose')!(withRegistry(), ['--prose'])
-    expect(renderFor(SKILL_PATH, SKILL_BODY)).toContain('⚠️ 异设置：skill')
+    expect(renderFor(SKILL_PATH, SKILL_BODY).simBlock).toContain('⚠️ 异设置：skill')
   })
 
   it('prose：同一 skill 不标注（常见情形应当无声）', async () => {
     h.readImprovements.mockReturnValue([{ ...SIM_RECORD, skillName: 'research' }])
     await getCommand('/crsi propose')!(withRegistry(), ['--prose'])
-    expect(renderFor(SKILL_PATH, SKILL_BODY)).not.toContain('异设置')
+    expect(renderFor(SKILL_PATH, SKILL_BODY).simBlock).not.toContain('异设置')
   })
 })
 
@@ -2632,5 +2637,64 @@ describe('/resume and /cd session-directory state', () => {
       process.chdir(before)
       rmSync(dir, { recursive: true, force: true })
     }
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// P4 接线：可预测题清单 + 任务级预测进记录
+// ═══════════════════════════════════════════════════════════════
+
+describe('P4 任务级预测接线', () => {
+  const engineOf = (ctx: ReturnType<typeof mkProseCtx>) =>
+    (ctx as unknown as { engine: Record<string, unknown> }).engine
+  const withRegistry = () => {
+    const ctx = mkProseCtx()
+    engineOf(ctx).getLlm = () => undefined
+    engineOf(ctx).getRegistry = () => ({ getActiveModel: () => 'deepseek-flash' })
+    return ctx
+  }
+  const targetProvider = () =>
+    h.produceProseProposal.mock.calls[0]![5] as (
+      f: string,
+      c: string,
+    ) => { simBlock: string; taskIds: string[] }
+
+  it('目标上下文带上该 skill 的可测题 id（按真实任务表）', async () => {
+    await getCommand('/crsi propose')!(withRegistry(), ['--prose'])
+    const target = targetProvider()(
+      'apps/cli/skills/standard/safe-coding.SKILL.md',
+      '---\nname: safe-coding\ndescription: x\n---\n正文',
+    )
+    // 动态 import：本文件对 node:child_process 的 mock 依赖 `mockExecSync` 已初始化，
+    // 静态 import task-performance 会赶在那之前读到 execSync（Cannot access before initialization）。
+    const { loadPerformanceTasks } = await import('../../src/core/task-performance')
+    const expected = loadPerformanceTasks()
+      .filter((t) => t.skill === 'safe-coding')
+      .map((t) => t.id)
+    expect(expected.length).toBeGreaterThan(0) // 前提自证：这条 skill 真的绑了题
+    expect(target.taskIds).toEqual(expected)
+  })
+
+  it('非 skill 文件 ⇒ 题清单为空（无从预测）', async () => {
+    await getCommand('/crsi propose')!(withRegistry(), ['--prose'])
+    const target = targetProvider()('apps/cli/src/foo.ts', 'x')
+    expect(target.taskIds).toEqual([])
+  })
+
+  it('提案里的 expectedFixes 进记录，并与实测修好集配对出漏判', async () => {
+    h.measure.mockResolvedValue({ ...SAMPLE, fixedTasks: ['perf-a'] })
+    h.produceProseProposal.mockResolvedValue({
+      ...PROSE_PROPOSAL,
+      expectedFixes: ['perf-a', 'perf-b'],
+    })
+    await getCommand('/crsi propose')!(withRegistry(), ['--prose'])
+    const rec = h.appendImprovement.mock.calls[0]![0] as {
+      predictedFixes?: string[]
+      fixedTasks?: string[]
+      missedFixes?: string[]
+    }
+    expect(rec.predictedFixes).toEqual(['perf-a', 'perf-b'])
+    expect(rec.fixedTasks).toEqual(['perf-a'])
+    expect(rec.missedFixes).toEqual(['perf-b'])
   })
 })

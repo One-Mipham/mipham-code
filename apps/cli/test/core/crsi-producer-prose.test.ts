@@ -3,6 +3,9 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { Llm } from '../../src/providers/llm'
+
+/** 目标上下文的空值：无 SIM、无可测任务（既有用例的默认形状）。 */
+const EMPTY_TARGET = { simBlock: '', taskIds: [] as string[] }
 import {
   parseProsePrediction,
   selectTargetSkill,
@@ -159,7 +162,7 @@ describe('generateProseContent', () => {
       'apps/cli/skills/standard/memory.SKILL.md',
       'old',
       '',
-      '',
+      EMPTY_TARGET,
     )
     expect(result!.body).toContain('name: memory')
     expect(result!.body).not.toContain('```')
@@ -167,7 +170,7 @@ describe('generateProseContent', () => {
 
   it('LLM 返回空响应 → null', async () => {
     const llm = textLlm('')
-    expect(await generateProseContent(SIGNAL, llm, 'f.md', 'old', '', '')).toBeNull()
+    expect(await generateProseContent(SIGNAL, llm, 'f.md', 'old', '', EMPTY_TARGET)).toBeNull()
   })
 })
 
@@ -190,7 +193,14 @@ describe('produceProseProposal', () => {
       '---\nname: memory\ndescription: improved\n---\n\n# New body\n',
     )
     const readSkill = (p: string) => (p === SKILL_FILES[0] ? 'OLD-CONTENT' : '')
-    const result = await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill, '', () => '')
+    const result = await produceProseProposal(
+      SIGNAL,
+      llm,
+      SKILL_FILES,
+      readSkill,
+      '',
+      () => EMPTY_TARGET,
+    )
     expect(result).not.toBeNull()
     expect(result!.filePath).toBe(SKILL_FILES[0])
     expect(result!.originalContent).toBe('OLD-CONTENT')
@@ -205,7 +215,14 @@ describe('produceProseProposal', () => {
       '{"expectedDelta": 7, "risk": "可能与 memory 技能重叠"}\n---\nname: memory\ndescription: improved\n---\n\n# New body\n',
     )
     const readSkill = (p: string) => (p === SKILL_FILES[0] ? 'OLD-CONTENT' : '')
-    const result = await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill, '', () => '')
+    const result = await produceProseProposal(
+      SIGNAL,
+      llm,
+      SKILL_FILES,
+      readSkill,
+      '',
+      () => EMPTY_TARGET,
+    )
     expect(result).not.toBeNull()
     expect(result!.expectedEffect).toBe(7)
     expect(result!.risk).toBe('可能与 memory 技能重叠')
@@ -222,7 +239,7 @@ describe('produceProseProposal', () => {
         SKILL_FILES,
         () => '',
         '',
-        () => '',
+        () => EMPTY_TARGET,
       ),
     ).toBeNull()
   })
@@ -232,7 +249,9 @@ describe('produceProseProposal', () => {
     const readSkill = () => {
       throw new Error('no file')
     }
-    expect(await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill, '', () => '')).toBeNull()
+    expect(
+      await produceProseProposal(SIGNAL, llm, SKILL_FILES, readSkill, '', () => EMPTY_TARGET),
+    ).toBeNull()
   })
 })
 
@@ -292,49 +311,63 @@ describe('loadAlwaysOnLessonsBlock', () => {
   })
 })
 
+/**
+ * 记下每次调用真正发出去的那条 user 消息 —— 断言的是**发出去的**，不是我以为发了的。
+ *
+ * `content` 的类型是 `string | ContentBlock[]`：非字符串时**抛**而不是记空串 ——
+ * 记空串会让「探针取错了字段」与「提示词里真没有教训」在读数上同形（两侧都是空串，
+ * 断言恒真而整段是空的）。前提先自证，断言才有资格当证据。
+ */
+function captureUserMessage(seen: string[], req: Parameters<Llm['chat']>[0]): void {
+  const c = req.messages[0]?.content
+  if (typeof c !== 'string') {
+    throw new Error(`探针前提不成立：首条 user 消息的 content 不是 string（${typeof c}）`)
+  }
+  seen.push(c)
+}
+
+function capturingLlm(seen: string[], text: string): Llm {
+  return {
+    chat: async function* (req: Parameters<Llm['chat']>[0]) {
+      captureUserMessage(seen, req)
+      yield { type: 'text', content: text }
+      yield { type: 'stop' }
+    },
+  }
+}
+
 describe('生成提示词内联常驻教训', () => {
-  /**
-   * 记下每次调用真正发出去的那条 user 消息 —— 断言的是**发出去的**，不是我以为发了的。
-   *
-   * `content` 的类型是 `string | ContentBlock[]`：非字符串时**抛**而不是记空串 ——
-   * 记空串会让「探针取错了字段」与「提示词里真没有教训」在读数上同形（两侧都是空串，
-   * 断言恒真而整段是空的）。前提先自证，断言才有资格当证据。
-   */
-  function captureUserMessage(seen: string[], req: Parameters<Llm['chat']>[0]): void {
-    const c = req.messages[0]?.content
-    if (typeof c !== 'string') {
-      throw new Error(`探针前提不成立：首条 user 消息的 content 不是 string（${typeof c}）`)
-    }
-    seen.push(c)
-  }
-
-  function capturingLlm(seen: string[], text: string): Llm {
-    return {
-      chat: async function* (req: Parameters<Llm['chat']>[0]) {
-        captureUserMessage(seen, req)
-        yield { type: 'text', content: text }
-        yield { type: 'stop' }
-      },
-    }
-  }
-
   const BLOCK =
     '## CRSI Lessons (Self-Improvement Recall)\n\n1. **未要求的功能是负债**\n   只写解决问题所需的最小改动'
 
   it('传入的教训块出现在生成提示词里', async () => {
     const seen: string[] = []
-    await generateProseContent(SIGNAL, capturingLlm(seen, '# New body\n'), 'f.md', 'old', BLOCK, '')
+    await generateProseContent(
+      SIGNAL,
+      capturingLlm(seen, '# New body\n'),
+      'f.md',
+      'old',
+      BLOCK,
+      EMPTY_TARGET,
+    )
     expect(seen[0]).toContain('## CRSI Lessons')
     expect(seen[0]).toContain('只写解决问题所需的最小改动')
   })
 
   it('无教训（空串）→ 提示词里没有教训段；版本号随本笔前进', async () => {
     const seen: string[] = []
-    await generateProseContent(SIGNAL, capturingLlm(seen, '# New body\n'), 'f.md', 'old', '', '')
+    await generateProseContent(
+      SIGNAL,
+      capturingLlm(seen, '# New body\n'),
+      'f.md',
+      'old',
+      '',
+      EMPTY_TARGET,
+    )
     expect(seen[0]).not.toContain('CRSI Lessons')
     // 提示词是版本化资源（CLAUDE.md §十）：改了提示词就必须动版本，否则「哪一版产出的」
     // 在外部读数上不可分。
-    expect(seen[0]).toContain('producer-prose-generate v1.3.0')
+    expect(seen[0]).toContain('producer-prose-generate v1.4.0')
   })
 
   const SIM_BLOCK = [
@@ -347,21 +380,24 @@ describe('生成提示词内联常驻教训', () => {
   // 弱条件下（SIM 论文里唯一方向不定的档位）。
   it('传入的 SIM 块出现在生成提示词里', async () => {
     const seen: string[] = []
-    await generateProseContent(
-      SIGNAL,
-      capturingLlm(seen, '# New body\n'),
-      'f.md',
-      'old',
-      '',
-      SIM_BLOCK,
-    )
+    await generateProseContent(SIGNAL, capturingLlm(seen, '# New body\n'), 'f.md', 'old', '', {
+      simBlock: SIM_BLOCK,
+      taskIds: [],
+    })
     expect(seen[0]).toContain('## SIM（Self-Improvement Memory）')
     expect(seen[0]).toContain('实测 -12.0')
   })
 
   it('无 SIM（空串）→ 提示词里没有 SIM 段（纯增量，不留空行）', async () => {
     const seen: string[] = []
-    await generateProseContent(SIGNAL, capturingLlm(seen, '# New body\n'), 'f.md', 'old', '', '')
+    await generateProseContent(
+      SIGNAL,
+      capturingLlm(seen, '# New body\n'),
+      'f.md',
+      'old',
+      '',
+      EMPTY_TARGET,
+    )
     expect(seen[0]).not.toContain('Self-Improvement Memory')
   })
 
@@ -375,7 +411,10 @@ describe('生成提示词内联常驻教训', () => {
         return llm.chat(req)
       },
     }
-    const provider = vi.fn((_filePath: string, _original: string) => SIM_BLOCK)
+    const provider = vi.fn((_filePath: string, _original: string) => ({
+      simBlock: SIM_BLOCK,
+      taskIds: [],
+    }))
     await produceProseProposal(SIGNAL, wrapped, SKILL_FILES, () => 'OLD', '', provider)
 
     expect(seen).toHaveLength(2) // 前提自证：确实是两阶段
@@ -387,7 +426,7 @@ describe('生成提示词内联常驻教训', () => {
 
   it('阶段 1 选不到 skill ⇒ provider 一次都不调用（没有目标就没有设置）', async () => {
     const llm = twoStageLlm('bad-path.md', 'x')
-    const provider = vi.fn(() => SIM_BLOCK)
+    const provider = vi.fn(() => ({ simBlock: SIM_BLOCK, taskIds: [] }))
     expect(await produceProseProposal(SIGNAL, llm, SKILL_FILES, () => '', '', provider)).toBeNull()
     expect(provider).not.toHaveBeenCalled()
   })
@@ -408,7 +447,7 @@ describe('生成提示词内联常驻教训', () => {
       SKILL_FILES,
       () => 'OLD',
       BLOCK,
-      () => '',
+      () => EMPTY_TARGET,
     )
     // 第二次调用才是生成阶段（第一次是选目标）
     expect(seen).toHaveLength(2)
@@ -432,5 +471,101 @@ describe('formatNetChange —— #20「未要求的功能是负债」可机械�
 
   it('空串是零行', () => {
     expect(formatNetChange('', 'ab')).toBe('📐 净变化（未判定）: 字符 +2，行 +1')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// P4：任务级预测 —— 提示词给出可预测的题 id，解析按已知 id 过滤
+// ═══════════════════════════════════════════════════════════════
+
+describe('P4 任务级预测（expectedFixes）', () => {
+  const TASKS = ['perf-a', 'perf-b']
+  const CONTEXT = { simBlock: '', taskIds: TASKS }
+
+  it('解析：expectedFixes 只收字符串项（非字符串丢弃）', () => {
+    const r = parseProsePrediction(
+      '{"expectedDelta": 5, "expectedFixes": ["perf-a", 3, null, "perf-b"]}\n\n# Body\n',
+    )
+    expect(r.expectedFixes).toEqual(['perf-a', 'perf-b'])
+  })
+
+  it('解析：没有 expectedFixes 键 ⇒ 缺席（不是空数组）', () => {
+    const r = parseProsePrediction('{"expectedDelta": 5}\n\n# Body\n')
+    expect('expectedFixes' in r).toBe(false)
+  })
+
+  it('生成提示词列出可预测的题 id', async () => {
+    const seen: string[] = []
+    await generateProseContent(
+      SIGNAL,
+      capturingLlm(seen, '# New body\n'),
+      'f.md',
+      'old',
+      '',
+      CONTEXT,
+    )
+    expect(seen[0]).toContain('perf-a')
+    expect(seen[0]).toContain('perf-b')
+    expect(seen[0]).toContain('expectedFixes')
+  })
+
+  it('没有任务 ⇒ 提示词里没有任务清单（纯增量）', async () => {
+    const seen: string[] = []
+    await generateProseContent(SIGNAL, capturingLlm(seen, '# New body\n'), 'f.md', 'old', '', {
+      simBlock: '',
+      taskIds: [],
+    })
+    expect(seen[0]).not.toContain('expectedFixes')
+    expect(seen[0]).not.toContain('perf-a')
+  })
+
+  it('按已知 id 过滤：模型编造的题 id 不进结果（fail-closed）', async () => {
+    const seen: string[] = []
+    const r = await generateProseContent(
+      SIGNAL,
+      capturingLlm(
+        seen,
+        '{"expectedDelta": 5, "expectedFixes": ["perf-a", "perf-幻觉"]}\n# Body\n',
+      ),
+      'f.md',
+      'old',
+      '',
+      CONTEXT,
+    )
+    expect(r!.expectedFixes).toEqual(['perf-a'])
+  })
+
+  it('没有任务清单时，即使模型给了 expectedFixes 也不进结果（无从判定）', async () => {
+    const seen: string[] = []
+    const r = await generateProseContent(
+      SIGNAL,
+      capturingLlm(seen, '{"expectedDelta": 5, "expectedFixes": ["perf-a"]}\n# Body\n'),
+      'f.md',
+      'old',
+      '',
+      { simBlock: '', taskIds: [] },
+    )
+    expect('expectedFixes' in r!).toBe(false)
+  })
+
+  it('produceProseProposal 把目标上下文（SIM 块 + 任务清单）一路带到生成阶段', async () => {
+    const seen: string[] = []
+    const llm = twoStageLlm(SKILL_FILES[0]!, '# New body\n')
+    const wrapped: Llm = {
+      chat: (req) => {
+        captureUserMessage(seen, req)
+        return llm.chat(req)
+      },
+    }
+    const provider = vi.fn((_filePath: string, _original: string) => ({
+      simBlock: 'SIMBLOCK',
+      taskIds: TASKS,
+    }))
+    await produceProseProposal(SIGNAL, wrapped, SKILL_FILES, () => 'OLD', '', provider)
+
+    expect(provider).toHaveBeenCalledTimes(1)
+    expect(provider.mock.calls[0]).toEqual([SKILL_FILES[0], 'OLD'])
+    expect(seen[1]).toContain('SIMBLOCK')
+    expect(seen[1]).toContain('perf-a')
   })
 })
