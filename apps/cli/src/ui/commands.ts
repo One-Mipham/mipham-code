@@ -80,6 +80,7 @@ import {
   formatRsiTaxLine,
   normalizeProblemKey,
   groupImprovementsByProblem,
+  fixedSummary,
   renderSimBlock,
   renderProblemHistory,
   SIM_MAX_ATTEMPTS,
@@ -1119,6 +1120,23 @@ const crsiStatsCmd: CommandHandler = async (ctx) => {
       )
     }
     if (groups.length > 10) lines.push(`… 另有 ${groups.length - 10} 组未列出`)
+  }
+
+  // ── 逐题修复（区间支持度）：三个桶分开报，缺席与「零修复」不同形 ──
+  const fx = fixedSummary(records)
+  lines.push('')
+  lines.push('### 逐题修复（区间支持度）')
+  if (fx.recordsWithFixed === 0) {
+    lines.push(`暂无逐题修复读数（${fx.noFixed} 条记录都没有逐题计数 —— 缺席不是「零修复」）。`)
+  } else {
+    lines.push(
+      `修好 ${fx.fixed} 题次 · 其中区间分离 ${fx.separated} 题次（两臂 Wilson 95% 区间不相交才算）`,
+    )
+    lines.push(
+      `区间可判: ${fx.recordsWithInterval}/${fx.recordsWithFixed} 条有逐题计数` +
+        (fx.noInterval > 0 ? `（${fx.noInterval} 条只有修复集）` : ''),
+    )
+    if (fx.noFixed > 0) lines.push(`另有 ${fx.noFixed} 条旧记录没有逐题计数（缺席 ≠ 零修复）`)
   }
 
   // ── RSI Tax：验证成本（只记录、只展示，不进任何判定） ──

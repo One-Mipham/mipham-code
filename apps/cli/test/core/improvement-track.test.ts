@@ -20,6 +20,7 @@ import {
   groupImprovementsByProblem,
   renderSimBlock,
   renderProblemHistory,
+  fixedSummary,
   measurementTaxSummary,
   wilsonInterval,
   improvementRate,
@@ -1110,5 +1111,55 @@ describe('P4+ 区间：fixed 不是点断言，给两臂 Wilson 区间', () => {
     const line = renderProblemHistory([rec], 'k').split('\n')[1]!
     expect(line).toContain('修好 1 题')
     expect(line).not.toContain('区间分离')
+  })
+})
+
+describe('fixedSummary —— /crsi stats 的逐题修复汇总', () => {
+  const rec = (
+    id: string,
+    fixedTasks: string[] | undefined,
+    fixedSeparated: string[] | undefined,
+  ): ImprovementRecord => ({
+    id,
+    timestamp: '2026-11-20T00:00:00Z',
+    skillName: 's',
+    changeSet: ['f.md'],
+    causal: true,
+    baselineScores: [0],
+    postScores: [10],
+    deltaMean: 10,
+    noise: 0,
+    minEffect: 20,
+    verdict: 'improved',
+    ...(fixedTasks !== undefined ? { fixedTasks } : {}),
+    ...(fixedSeparated !== undefined ? { fixedSeparated } : {}),
+  })
+
+  it('三个桶各自计数：有区间 / 有修复集无区间 / 连修复集都没有', () => {
+    const s = fixedSummary([
+      rec('a', ['x', 'y'], ['x']),
+      rec('b', ['z'], []),
+      rec('c', ['w'], undefined),
+      rec('d', undefined, undefined),
+    ])
+    expect(s).toEqual({
+      recordsWithFixed: 3,
+      fixed: 4,
+      recordsWithInterval: 2,
+      separated: 1,
+      noInterval: 1,
+      noFixed: 1,
+    })
+  })
+
+  it('空台账 ⇒ 全零（不是 null、不是 NaN）', () => {
+    expect(fixedSummary([])).toEqual({
+      recordsWithFixed: 0,
+      fixed: 0,
+      recordsWithInterval: 0,
+      separated: 0,
+      noInterval: 0,
+      noFixed: 0,
+    })
   })
 })

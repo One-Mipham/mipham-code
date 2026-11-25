@@ -487,6 +487,49 @@ export function renderProblemHistory(
   return lines.join('\n')
 }
 
+/**
+ * `/crsi stats` 的逐题修复汇总。三个桶**刻意分开**：
+ *   有区间读数 / 有修复集但无区间（P4 时代记录）/ 连修复集都没有（旧样本）。
+ * 「没法判区间」与「判了、零题分离」不是同一件事 —— 合成一个数会让它们同形。
+ *
+ * `fixed` / `separated` 是**题次**（按记录累计，同一题在两次尝试里各算一次），
+ * 不是去重题数：读者问的是「这些改动累计修好了多少次」。
+ */
+export interface FixedSummary {
+  recordsWithFixed: number
+  fixed: number
+  recordsWithInterval: number
+  separated: number
+  noInterval: number
+  noFixed: number
+}
+
+export function fixedSummary(records: ImprovementRecord[]): FixedSummary {
+  const out: FixedSummary = {
+    recordsWithFixed: 0,
+    fixed: 0,
+    recordsWithInterval: 0,
+    separated: 0,
+    noInterval: 0,
+    noFixed: 0,
+  }
+  for (const r of records) {
+    if (r.fixedTasks === undefined) {
+      out.noFixed++
+      continue
+    }
+    out.recordsWithFixed++
+    out.fixed += r.fixedTasks.length
+    if (r.fixedSeparated === undefined) {
+      out.noInterval++
+      continue
+    }
+    out.recordsWithInterval++
+    out.separated += r.fixedSeparated.length
+  }
+  return out
+}
+
 /** RSI Tax 的台账汇总：只统计带 token 量的记录。 */
 export function measurementTaxSummary(records: ImprovementRecord[]): {
   records: number

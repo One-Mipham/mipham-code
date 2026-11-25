@@ -2698,3 +2698,46 @@ describe('P4 任务级预测接线', () => {
     expect(rec.missedFixes).toEqual(['perf-b'])
   })
 })
+
+// ═══════════════════════════════════════════════════════════════
+// /crsi stats —— 逐题修复（区间支持度）
+// ═══════════════════════════════════════════════════════════════
+
+describe('/crsi stats 的逐题修复段', () => {
+  const rec = (fixedTasks?: string[], fixedSeparated?: string[]): unknown => ({
+    id: `r-${Math.random()}`,
+    timestamp: '2026-01-01T00:00:00.000Z',
+    skillName: 's',
+    changeSet: [],
+    causal: true,
+    baselineScores: [],
+    postScores: [],
+    deltaMean: 30,
+    noise: 0,
+    minEffect: 20,
+    verdict: 'improved',
+    ...(fixedTasks !== undefined ? { fixedTasks } : {}),
+    ...(fixedSeparated !== undefined ? { fixedSeparated } : {}),
+  })
+
+  it('全都没有逐题计数 ⇒ 明说「缺席不是零修复」', async () => {
+    h.readImprovements.mockReturnValue([rec(), rec()])
+    const content = await runCrsiStats()
+    expect(content).toContain('### 逐题修复（区间支持度）')
+    expect(content).toContain('暂无逐题修复读数（2 条记录都没有逐题计数')
+    expect(content).toContain('缺席不是「零修复」')
+  })
+
+  it('三个桶分开报：修好/分离题次、可判区间条数、旧记录条数', async () => {
+    h.readImprovements.mockReturnValue([
+      rec(['a', 'b'], ['a']),
+      rec(['c'], []),
+      rec(['d'], undefined), // P4 时代：有修复集、无区间
+      rec(), // 旧样本
+    ])
+    const content = await runCrsiStats()
+    expect(content).toContain('修好 4 题次 · 其中区间分离 1 题次')
+    expect(content).toContain('区间可判: 2/3 条有逐题计数（1 条只有修复集）')
+    expect(content).toContain('另有 1 条旧记录没有逐题计数')
+  })
+})
