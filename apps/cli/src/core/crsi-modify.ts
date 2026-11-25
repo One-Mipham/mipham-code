@@ -165,6 +165,10 @@ export async function runCrsiModification(
   if (!testResult.passed) {
     sandbox.rollback()
     applied.phase = 'failed'
+    // 把沙箱的读数带出去：没有这一行，调用方只显示「❌ 修改未通过（phase: failed）。」
+    // 而没有任何原因 —— 真实运行（2026-11-25）里那条原因正是
+    // `sh: vitest: command not found`，被吞掉后修复无从下手。
+    applied.error = `Sandbox tests failed (${testResult.failedTests} failed):\n${testResult.output.slice(-1500)}`
     return applied
   }
 

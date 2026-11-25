@@ -523,6 +523,30 @@ export class CrsiSandbox {
     const result: CrsiTestResult = { passed: false, totalTests: 0, failedTests: 0, output: '' }
 
     try {
+      // 依赖供应：worktree 是 `git worktree add … HEAD` 的干净检出，**不含
+      // `node_modules`**。不先装，`pnpm test` 会以 `sh: vitest: command not found`
+      // 秒失败（2026-11-25 实测：整个 /crsi modify 停在这一步，1 秒即 phase failed）。
+      // 离线 + frozen + ignore-scripts：闸里不联网、不改锁文件、不跑 postinstall；
+      // 预热过的 pnpm store 下约 3.5s（实测）。装不上 ⇒ 进入 catch，**不跑套件** ——
+      // 否则一条凑巧全绿的输出会把「仪器没启动」读成「改动没问题」。
+      runIn(this.worktreePath, 'pnpm install --offline --frozen-lockfile --ignore-scripts', {
+        timeoutMs: TEST_TIMEOUT_MS,
+      })
+
+      // 派生状态：`src/skills/bundled-skills.ts` 是 skill 文件在磁盘上的快照，freshness
+      // 测试逐字比对。只改 skill 正文的 proposal 因此**必被整批打回**（2026-11-25 实测：
+      // `1 failed | 5305 passed`，唯一失败就是 snapshot freshness）——而只有 skill 改动
+      // 能量化任务表现，测量路径就死在闸前。闸里像构建步骤一样把派生状态对齐；
+      // `merge()` 用的是 `git add -A`，重生成结果会一起进 diff，由人类审阅。
+      const touchesSkill = this.sessionReport.modifications.some((m) =>
+        posix.normalize(m.modification.filePath).startsWith('apps/cli/skills/'),
+      )
+      if (touchesSkill) {
+        runIn(this.worktreePath, 'cd apps/cli && bun run scripts/generate-bundled-skills.ts', {
+          timeoutMs: TEST_TIMEOUT_MS,
+        })
+      }
+
       const output = runIn(this.worktreePath, 'pnpm test 2>&1', { timeoutMs: TEST_TIMEOUT_MS })
 
       result.output = output.slice(-5000) // Keep last 5000 chars
@@ -556,7 +580,12 @@ export class CrsiSandbox {
         }
       }
     } catch (err) {
-      result.output = String(err).slice(0, 5000)
+      // 诊断优先取子进程自己的 stderr/stdout：`String(err)` 只有
+      // "Command failed: …" 一行，真正的原因（`ERR_PNPM_…` / vitest 的断言输出）
+      // 全在错误对象的这两个缓冲区里，被吞掉后调用方只能看到一条空失败。
+      const e = err as { stderr?: Buffer | string; stdout?: Buffer | string }
+      const detail = [e.stderr?.toString(), e.stdout?.toString()].filter(Boolean).join('\n')
+      result.output = (detail || String(err)).slice(0, 5000)
       result.failedTests = 1
 
       // Mark all applied modifications as failed

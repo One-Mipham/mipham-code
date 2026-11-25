@@ -128,6 +128,31 @@ describe('runCrsiModification', () => {
     expect(hasPending()).toBe(false)
   })
 
+  it('tests fail → the sandbox output rides along in `error`', async () => {
+    // 此前这里返回的 error 是空串，用户只看到「❌ 修改未通过（phase: failed）。」
+    // 而没有一行原因 —— 真实运行（2026-11-25）里那条原因正是
+    // `sh: vitest: command not found`，被吞掉后无从修复。
+    const sandbox = new CrsiSandbox(sandboxRepo)
+    vi.spyOn(sandbox, 'runTests').mockReturnValue({
+      passed: false,
+      totalTests: 1,
+      failedTests: 1,
+      output: 'sh: vitest: command not found\nERR_PNPM_RECURSIVE_RUN_FIRST_FAIL',
+    })
+    const result = await runCrsiModification(
+      {
+        description: 'failing',
+        filePath: WORKTREE_FILE,
+        newContent: '{}',
+        blastRadius: [WORKTREE_FILE],
+      },
+      sandbox,
+    )
+    expect(result.phase).toBe('failed')
+    expect(result.error).toContain('vitest: command not found')
+    expect(hasPending()).toBe(false)
+  })
+
   it('rejects a proposal without declared blast radius (完整覆盖闸)', async () => {
     const sandbox = new CrsiSandbox(sandboxRepo)
     const result = await runCrsiModification(
