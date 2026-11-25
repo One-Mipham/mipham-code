@@ -113,6 +113,8 @@ API 侧 `versions[]` 91 → **92 条**、`versions[0].flags` = `validated`、
 
 0.85.46 实测（2026-11-24）：`.vsix` **86,400 B** / sha256 `5ee37694…` / 9 文件 / 包内 `0.85.46`（用户网页上传）。用户上传后首次探针即**形态③**（本次未观察到形态①/②；上传时刻未被本方探针捕获 ⇒ **不记校验窗口**）：公开页 `Version` = `0.85.46`、`LastUpdatedDateString` = `Tue, 24 Nov 2026 08:49:05 GMT`、`PublisherName` = `miphamai`；API 侧 `versions[]` 97 → **98 条**、`versions[0].version` = `0.85.46`、`flags` = `validated`、`lastUpdated` = `2026-11-24T08:49:05.49Z` —— 两个探针读的是同一时刻。
 
+0.85.48 实测（2026-11-25）：`.vsix` **87,185 B** / sha256 `d86fd4c2…` / 9 文件 / 包内 `0.85.48`（用户网页上传，上传时刻未被探针捕获）。`07:48:46Z` 首读仍是形态①（API `versions[]` **99 条**、首位 `0.85.47`；公开页 `0.85.48` 命中 0）；`07:55:50Z` 复读转形态③：API `versions[]` 99 → **100 条**、`versions[0].version` = `0.85.48`、`flags` = `validated`、`lastUpdated` = `2026-11-25T07:55:02.857Z`；同一时刻公开页（cache-bust）`0.85.48` 命中 **6** 次、内嵌 `"version":"0.85.48"` ⇒ 首个探针到生效 **≤ ≈7 分钟**（上传时刻未捕获，是上限不是实测时长）。
+
 ```bash
 # A. 公开页（必须 cache-bust，CDN 会给旧读数）
 curl -4 -sS -H 'Cache-Control: no-cache' \

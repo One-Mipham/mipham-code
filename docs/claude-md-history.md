@@ -644,3 +644,8 @@
 | --- 2.94.91 头部「前一条」行（2.94.93 挤出头部窗口时移入）--- |
 > **前一条（2.94.91）**: 2026-11-24 — **0.85.46 上架 VS Code Marketplace（2.94.91）** —— `.vsix` **86,400 B** / sha256 `5ee37694…` / 9 文件 / 包内 `0.85.46`（用户网页上传）。首读即**形态③**：公开页 `Version` = `0.85.46`、`LastUpdatedDateString` = `Tue, 24 Nov 2026 08:49:05 GMT`、`PublisherName` = `miphamai`；API `versions[]` 97 → **98 条**、`versions[0].version` = `0.85.46`、`flags` = `validated`、`lastUpdated` = `2026-11-24T08:49:05.49Z`（两个探针同一时刻）。上传时刻未被探针捕获 ⇒ 不记校验窗口。`doc-version-refs` 的 `LIVE_FILES` 增 **4** 枚 0.85.46 令牌。
 ```
+
+```text
+| --- 2.94.93 头部「前一条」行（2.94.95 挤出头部窗口时移入）--- |
+> **前一条（2.94.93）**: 2026-11-24 — **0.85.47 上架 VS Code Marketplace（2.94.93）** —— `.vsix` 86,680 B / sha256 `2f2e4b40…`；公开页 `Version` = 0.85.47 / `Last updated` 2026/11/24 18:19:48、API `versions[]` 98 → 99、`flags` = validated、`lastUpdated` 2026-11-24T10:19:48.487Z（校验窗口 ≤≈8 分钟）。
+```
