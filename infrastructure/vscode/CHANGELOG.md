@@ -3,6 +3,23 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.48 (2026-11-25)
+
+- Version sync with Mipham Code CLI 0.85.48
+- Added: the self-improvement ledger now feeds the optimizer — `/crsi propose --prose` and the
+  `/crsi modify` review panel show prior attempts on the same recurring problem (grouped, bounded,
+  with explicit omission counts), and a repeated direction is flagged after two unimproved tries.
+- Added: evidence is weighted by setting (skill + real model id) with down-rank reasons shown;
+  task-level predicted vs. fixed vs. missed fixes are recorded, with Wilson 95% intervals per task.
+- Added: `/crsi stats` reports separated fixes and distinguishes "no measurement" from "fixed nothing".
+- Changed: default measurement runs per arm 3 → 5, at the cost of 67% more model calls per measurement.
+- Changed: `safe-coding` skill hardened (strict full-string matching, trim first, finite checks,
+  inverted ranges throw, return shape per signature) and merged through the real `/crsi modify` loop.
+- Fixed: `/crsi modify` failed instantly in a clean worktree (`vitest: command not found`) with an
+  empty error; the sandbox now installs dependencies offline and surfaces the real failure output.
+- Fixed: skill-only modifications were always rejected by the bundled-skill snapshot freshness
+  test; the sandbox now regenerates the snapshot so it lands in the reviewed diff.
+
 ## 0.85.47 (2026-11-24)
 
 - Version sync with Mipham Code CLI 0.85.47
