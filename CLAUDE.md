@@ -28,9 +28,9 @@ prompt-exclude-header: true
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.93
-> **最后更新**: 2026-11-24 — **0.85.47 上架 VS Code Marketplace（2.94.93）** —— `.vsix` **86,680 B** / sha256 `2f2e4b40…` / 9 文件 / 包内 `0.85.47`（用户网页上传）。**两读同刻一致**：公开页（cache-bust）`Version` = `0.85.47`、`Last updated` = `2026/11/24 18:19:48`、`Publisher` = `One Mipham Corporation`；API `versions[]` 98 → **99 条**、`versions[0].version` = `0.85.47`、`flags` = `validated`、`lastUpdated` = `2026-11-24T10:19:48.487Z`（同一时刻）。**本轮捕获到校验窗口**：首次 API 读（≈`10:12Z`）仍 `0.85.47` 缺席、首位 `0.85.46`；`10:19:48Z` 翻到新值 ⇒ 从首个探针到生效 **≤ ≈8 分钟**（上传时刻未捕获）。CDP 页内同源 `fetch`（`flags` 191，含完整版本史；**不用** 0x200）。
-> **前一条（2.94.92）**: 2026-11-24 — **发布 0.85.47：启动横幅显示版本号与待升级版本（2.94.92）** —— tag **`v0.85.47`** → `c5cacef8`（GPG，GitHub `verified: true`，verified_at `10:08:32Z`）；主干 CI `45370082424` **9/9**；release `45370602074` **9/9**（GitHub Release **6 资产**、非 draft、`created_at 10:00:11Z` = tagger 时间）；JetBrains 真输出 `JetBrains plugin published.` @ `10:04:46Z`；`.vsix` **86,680 B** / sha256 `2f2e4b40…` / 9 文件 / 包内 `0.85.47`（待用户网页上传 Marketplace）。**npm**：发布日志 `+ @miphamai/cli@0.85.47` @ `10:02:46Z`；首读即 `latest` = 0.85.47（未观察到传播窗口）、tarball **200**（**3,242,175 B**）、`versions` 219 → **220**。测试 **5,232**（393 文件），命令 141。
+> **版本**: 2.94.94
+> **最后更新**: 2026-11-25 — **发布 0.85.48：CRSI 自我改进记忆闭环 + 沙箱闸修复（2.94.94）** —— 11 笔（SIM 台账接回提议者与批准闸 / 重复方向提醒 / 真实模型 id 出处 / 规则 8 加权 / prose 路径 skill 轴 / 任务级预测 / 逐题 Wilson 区间 / 默认 k=5 / `/crsi stats` 区间支持度 / 组级排序 / 沙箱依赖与派生状态修复）；真跑 `/crsi modify` 端到端通（worktree 394 文件全绿、k=5 判定 improved +46.6 / 噪声 7.6 / 阈值 20.0、两题区间分离、88,164 tokens），`safe-coding` 1.0.0 → 1.1.0 已合并（试用期 0/3 观察中）。测试 5,313（394 文件），命令 141。（发布读数待回填）
+> **前一条（2.94.93）**: 2026-11-24 — **0.85.47 上架 VS Code Marketplace（2.94.93）** —— `.vsix` 86,680 B / sha256 `2f2e4b40…`；公开页 `Version` = 0.85.47 / `Last updated` 2026/11/24 18:19:48、API `versions[]` 98 → 99、`flags` = validated、`lastUpdated` 2026-11-24T10:19:48.487Z（校验窗口 ≤≈8 分钟）。
 
 > **维护人**: One Mipham Corporation 技术委员会
 
