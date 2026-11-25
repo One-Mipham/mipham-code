@@ -1166,6 +1166,22 @@ function renderGateNote(result: { rewardNote?: string; regretNote?: string }): s
 }
 
 /**
+ * P3 出处：实测用的**真实模型 id**（不是档位标签 —— 档位在部分配置里映射到同一模型）。
+ *
+ * 判据是「量的是不是注册表本身」：只有那时模型才已知。挂载的自定义 `ctx.llm`
+ * 不暴露模型 ⇒ 返回 undefined，台账记成**缺席**。不许拿注册表当前模型冒充 ——
+ * 记错比不记更坏，读侧会把「别的模型上的证据」当成同设置证据。
+ *
+ * 只记录、不进任何判定（与 RSI Tax / 耗时维同一条纪律）。
+ */
+function measurementModel(ctx: Parameters<CommandHandler>[0]): string | undefined {
+  if (ctx.engine.getLlm()) return undefined
+  // 单测里注册表可能是桩 ⇒ 按能力探测，不按类型假设。
+  const registry = ctx.engine.getRegistry() as { getActiveModel?: () => string } | undefined
+  return typeof registry?.getActiveModel === 'function' ? registry.getActiveModel() : undefined
+}
+
+/**
  * 单提案与整合提案共用的「过闸后测量」段。
  *
  * 抽出来**只**为了不复制这段（它与闸本身无关）：手工路径与 ELITE 整合路径
@@ -1196,6 +1212,7 @@ async function measureModification(
         // 同一句话被反复修时，它们才聚得起来。
         problemKey: normalizeProblemKey(params.description),
         rationale: params.description,
+        model: measurementModel(ctx),
       })
       setPendingVerdict(report.verdict)
       appendImprovement({ ...report, id: randomUUID(), timestamp: new Date().toISOString() })
@@ -1496,6 +1513,7 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
             // 反复出现时才能看出这个环到底在修同一件事还是到处救火。
             problemKey: normalizeProblemKey(`${signal.category}: ${signal.title}`),
             rationale: proposal.description,
+            model: measurementModel(ctx),
           },
         )
         setPendingVerdict(report.verdict)

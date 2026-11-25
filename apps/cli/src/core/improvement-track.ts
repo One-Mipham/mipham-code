@@ -49,6 +49,11 @@ export interface ImprovementReport {
   /** SIM：为什么做这次编辑（人可读的一句）。缺席语义同 problemKey。 */
   rationale?: string
   /**
+   * P3 出处：实测用的真实模型 id。缺席 = 无法确定（不是「没有模型」）。
+   * 只记录、不进任何判定 —— 与 RSI Tax / 耗时维同一条纪律。
+   */
+  model?: string
+  /**
    * RSI Tax：与分数数组逐项对齐的前/后测量 token。**只记录，不进任何门禁**
    * （与耗时维同一条纪律）。两个数组同生同灭；缺席 = 未测，不是免费。
    */
@@ -92,6 +97,12 @@ function stdDev(xs: number[]): number {
 export interface ImprovementContext {
   problemKey?: string
   rationale?: string
+  /**
+   * P3 出处：实测用的**真实模型 id**（如 `deepseek-flash`），不是档位标签
+   * （`opus`/`sonnet` 之类在部分配置里会映射到同一模型，标签因此不是标识）。
+   * 缺席 = 无法确定（挂载的自定义 Llm 不暴露模型）——**不许**拿注册表当前模型冒充。
+   */
+  model?: string
 }
 
 export function buildImprovementReport(
@@ -152,6 +163,7 @@ export function buildImprovementReport(
     // 强行绑定只会让调用方为了写一个而编另一个。
     ...(context?.problemKey ? { problemKey: context.problemKey } : {}),
     ...(context?.rationale ? { rationale: context.rationale } : {}),
+    ...(context?.model ? { model: context.model } : {}),
     // RSI Tax 与耗时维同一纪律：两条同生同灭，缺席即未测。
     ...(sample.baselineTokens !== undefined && sample.postTokens !== undefined
       ? { baselineTokens: sample.baselineTokens, postTokens: sample.postTokens }
@@ -224,6 +236,8 @@ function signed1(n: number): string {
 /** 一条尝试的渲染。ε 缺席时**不写**「预测 0」—— 缺席是未预测，不是预测为零。 */
 function formatAttempt(r: ImprovementRecord): string {
   const parts = [`  - [${r.verdict}] ${r.timestamp.slice(0, 10)}`]
+  // 出处紧贴日期：读「什么时候、在哪一个模型上量的」。缺席整节不打。
+  if (r.model) parts.push(`模型 ${r.model}`)
   if (r.rationale) {
     const why =
       r.rationale.length > SIM_RATIONALE_MAX

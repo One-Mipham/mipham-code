@@ -752,3 +752,63 @@ describe('P2 选择者侧：同一方向反复未改善的确定性提醒', () =
     expect(block).toContain(WARN(2, 2))
   })
 })
+
+describe('P3 出处：实测用的真实模型 id（只记录、不进判定）', () => {
+  const base = { skillName: 's', baselineScores: [50, 50], postScores: [70, 70] }
+
+  it('给了就记（真实 id，不是档位标签）', () => {
+    const r = buildImprovementReport(base, ['f.md'], undefined, { model: 'deepseek-flash' })
+    expect(r.model).toBe('deepseek-flash')
+  })
+
+  it('不知道就不写（缺席，不是空串）—— 且与其它键各自独立', () => {
+    const r = buildImprovementReport(base, ['f.md'], undefined, { rationale: 'why' })
+    expect('model' in r).toBe(false)
+  })
+
+  it('渲染进尝试史：紧贴日期（表明「这条读数是在哪个模型上量的」）', () => {
+    const record: ImprovementRecord = {
+      id: 'r-1',
+      timestamp: '2026-11-20T00:00:00Z',
+      skillName: 's',
+      changeSet: ['f.md'],
+      causal: true,
+      baselineScores: [0],
+      postScores: [12.5],
+      deltaMean: 12.5,
+      noise: 0,
+      minEffect: 20,
+      verdict: 'improved',
+      problemKey: 'k',
+      rationale: 'why',
+      model: 'deepseek-flash',
+    }
+    const block = renderProblemHistory([record], 'k')
+    expect(block.split('\n')[1]).toBe(
+      '  - [improved] 2026-11-20 · 模型 deepseek-flash · 理由: why · 实测 +12.5',
+    )
+  })
+
+  it('没有模型时这一节不出现（不留空壳）', () => {
+    const block = renderProblemHistory(
+      [
+        {
+          id: 'r-2',
+          timestamp: '2026-11-20T00:00:00Z',
+          skillName: 's',
+          changeSet: ['f.md'],
+          causal: true,
+          baselineScores: [0],
+          postScores: [12.5],
+          deltaMean: 12.5,
+          noise: 0,
+          minEffect: 20,
+          verdict: 'improved',
+          problemKey: 'k',
+        },
+      ],
+      'k',
+    )
+    expect(block).not.toContain('模型')
+  })
+})

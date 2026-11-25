@@ -1545,6 +1545,47 @@ describe('SIM 读侧接线', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════
+// P3 出处接线：记录实测用的**真实模型 id**
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * 判据是「量的是不是注册表本身」：只有那时模型 id 才是已知的。挂载的自定义
+ * `ctx.llm` 不暴露模型 ⇒ **缺席**，不许拿注册表当前模型冒充 —— 记错比不记更坏，
+ * 因为读侧会把「别的模型上的证据」当成同设置证据。
+ */
+describe('P3 出处：真实模型 id', () => {
+  const engineOf = (ctx: ReturnType<typeof mkProseCtx>) =>
+    (ctx as unknown as { engine: Record<string, unknown> }).engine
+
+  const withRegistry = () => {
+    const ctx = mkProseCtx()
+    engineOf(ctx).getLlm = () => undefined
+    engineOf(ctx).getRegistry = () => ({ getActiveModel: () => 'deepseek-flash' })
+    return ctx
+  }
+
+  it('手工路径：量的是注册表 → 记下 getActiveModel()', async () => {
+    await getCommand('/crsi modify')!(withRegistry(), ['d', PROSE_FILE, '新正文'])
+    const rec = h.appendImprovement.mock.calls[0]![0] as { model?: string }
+    expect(rec.model).toBe('deepseek-flash')
+  })
+
+  it('手工路径：挂载了自定义 Llm → 模型未知，记为缺席（不拿注册表冒充）', async () => {
+    const ctx = mkProseCtx() // getLlm = () => ({})
+    engineOf(ctx).getRegistry = () => ({ getActiveModel: () => 'deepseek-flash' })
+    await getCommand('/crsi modify')!(ctx, ['d', PROSE_FILE, '新正文'])
+    const rec = h.appendImprovement.mock.calls[0]![0] as { model?: string }
+    expect('model' in rec).toBe(false)
+  })
+
+  it('prose 路径同样接上', async () => {
+    await getCommand('/crsi propose')!(withRegistry(), ['--prose'])
+    const rec = h.appendImprovement.mock.calls[0]![0] as { model?: string }
+    expect(rec.model).toBe('deepseek-flash')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
 // 事前声明风险（R）的展示接线 —— 它此前**零落点**
 // ═══════════════════════════════════════════════════════════════
 
