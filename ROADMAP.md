@@ -1528,6 +1528,7 @@ agents 真解析、provider 回退仍活着）。
 而那一条「待决策」理由本身是**错的**：`runTests()` 根本没有测试覆盖，它的变异体全落 `NoCoverage`
 （Stryker 对 no-coverage 变异体**什么都不跑**），所以既不存在「每次踩到跑一遍整套套件」，也不存在
 「成本与其余 6 个文件不同量级」—— 实测并进来后**总数 +423、总耗时反而略降**。详见上方「范围收窄」。
+（**「零覆盖」在写下时为真，2026-11-25 起不再成立** —— 见下方同日补记：`runTests()` 已有 4 条用例。）
 
 **2026-09-29 补记 → 2026-09-30 收口 —— T3c 的「下一件」换过两次：从「写测试」换成「修器材」，
 再换成「修 `merge()` 的 cwd」→「重测基线」**：
@@ -1542,6 +1543,25 @@ T3c 条目）。**但修好器材当天就发现它不能直接拿来重测**：
 
 **当前执行序（2026-09-15 定；2026-09-16 更新；2026-09-30 复核）**：`T3b` ✅ → `T1b` ✅ → `T3c` ⚠️（**9 文件全接；器材已于 2026-09-30 修好**（`pnpm patch`），**会往真仓库提交的那条也已修好并加守卫**，**基线已于同日重测（68.81%）**，见上方补记）→ `T5` ✅ → **`T4` ✅** → `T12` ✅ → **`T2`**（岔路口 #2 已关闭、Plan A 已落地，剩 Harbor 适配器）——
 与上方按步分组不同：`T1b`（接收端）提到 `T2` 之前（它让 T1 的数据真正有出口）。
+
+**2026-11-25 补记 —— `/crsi modify` 的闸此前在任何机器上都走不通，修好后完成第一次真实自修改闭环；
+由此新增一条待办：试用期结算。** 首次真实运行 **1 秒**停在 `phase: failed`、`error` 是**空串**；
+`~/.mipham/crsi-sandbox/` 里 320 份历史报告**全部是空 modifications**（此前从未有一次修改走到闸后）。
+三处缺口缺一不可：① 干净 worktree 无 `node_modules` ⇒ `sh: vitest: command not found`（该方法**零测试覆盖**、
+120s 超时从未触发）；② 只改 skill 的提案必被 bundled 快照 freshness 拒（实测 `1 failed | 5305 passed`），
+而**只有 skill 改动能量化任务表现**（`measureSkillDeltaRepeated` 对非 skill 文件返回 null）⇒ 测量路径
+**结构性地死在闸前**；③ 失败原因被 `String(err)` 吞成 `Command failed`、`applied.error` 又不写。
+修法：闸内先 `pnpm install --offline --frozen-lockfile --ignore-scripts`（预热 store 下 3.5s；**装不上就不跑套件**
+—— 不许一条凑巧全绿的输出把「仪器没启动」读成「改动没问题」）+ 触及 `apps/cli/skills/` 时先重生成
+`bundled-skills.ts`（`merge()` 是 `git add -A`，派生结果随 diff 交人审）+ 测试读数写进 `applied.error`。
+**首次闭环读数**：`safe-coding` 1.0.0 → 1.1.0（`e9930c3a`，主干套件 5,313 / 394 文件全绿），k=5
+`improved`（delta **+46.6** / 噪声 7.6 / 阈值 20.0），`perf-safe-parse-bool`、`perf-safe-parse-int`
+均 **0/5 → 5/5 且区间分离**（k=5 下只有这一对成立：0/5 上界 0.434、4/5 下界 0.376 仍相交），88,164 tokens。
+**待办两条**：① **试用期 `safe-coding: 0/3`（基线 100.0）** —— 下一次同 skill、gate 池、k≥3 的测量出
+verdict；`regressed` **只打印 `git revert <sha>`、不执行**。② 上一条「`runTests()` 零覆盖」**自本笔起作废**：
+`crsi-sandbox-deps.test.ts` 4 条经 mock `node:child_process` 断言 install → derive → test 顺序、装不上 fail-closed、
+非 skill 改动不重生成；`crsi-modify.test.ts` 断言沙箱读数进 `error` ⇒ 该段变异体下次重测时不再全落
+`NoCoverage`（`score` 的分母因此变大，**读数不可与 68.81% 直接比**）。
 
 ---
 
