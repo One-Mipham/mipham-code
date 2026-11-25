@@ -64,7 +64,8 @@ export interface ImprovementReport {
   fixedTasks?: string[]
   /**
    * P4+：`fixedTasks` 中两臂 Wilson 95% 区间**不相交**的题 —— 区间支持「真的变了」的那部分。
-   * k 小时通常为空（k=3 连 0/3→3/3 都相交），这是读数不是故障。缺席 = 没有逐题计数。
+   * k 小时通常为空（k=3 连 0/3→3/3 都相交；默认 k=5 起完美翻转可分离），
+   * 这是读数不是故障。缺席 = 没有逐题计数。
    */
   fixedSeparated?: string[]
   /**
@@ -190,7 +191,7 @@ export function buildImprovementReport(
     ...(context?.expectedFixes !== undefined ? { predictedFixes: context.expectedFixes } : {}),
     ...(sample.fixedTasks !== undefined ? { fixedTasks: sample.fixedTasks } : {}),
     // P4+：区间分离 = 两臂的 Wilson 区间不重叠。用 Wilson 而不是自助重采样，因为在
-    // k=3 这种小样本上自助会**退化**（0/3 与 3/3 各自重采样只会抽到同一个值 ⇒ 区间
+    // 小样本（如 k=3）上自助会**退化**（0/3 与 3/3 各自重采样只会抽到同一个值 ⇒ 区间
     // 塌成 [1,1]，把「三发三中」误报成「确定」）。Wilson 在 n=3 就给得出宽区间。
     ...(sample.fixedTasks !== undefined && sample.taskEvidence !== undefined
       ? {

@@ -1402,7 +1402,7 @@ const crsiModifyCmd: CommandHandler = async (ctx, args) => {
     }
   }
 
-  // 测量在 runCrsiModification 成功后进行（避免 failed proposal 白跑 6 次 LLM 调用）。
+  // 测量在 runCrsiModification 成功后进行（避免 failed proposal 白跑 10 次 LLM 调用（k=5 × 前/后两臂））。
   const improvementLine = await measureModification(ctx, {
     description,
     filePath,
@@ -1521,7 +1521,7 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
 
     // ε 预登记落地：prose 路径此前**不测量**（measureSkillDeltaRepeated 全仓库只有手工路径一个
     // 调用点）⇒ ε 曾在 A 流程登记、判定侧在 B 流程，两端永不相遇。这里补上测量。
-    // 成本：每次提案多 6 次 LLM 调用（同手工路径 :867 的注释）。
+    // 成本：每次提案多 10 次 LLM 调用（k=5 × 前/后两臂，同手工路径 :867 的注释）。
     let predictionLine = ''
     try {
       const sample = await measureSkillDeltaRepeated(llm, {

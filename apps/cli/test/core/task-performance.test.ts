@@ -643,11 +643,16 @@ describe('measureSkillDeltaRepeated — 逐题计数（供区间计算）', () =
         yield { type: 'text', content: pass ? (task.oracleCode ?? '') : '' }
       },
     }
-    const s = await measureSkillDeltaRepeated(llm, {
-      filePath: 'apps/cli/skills/standard/safe-coding.SKILL.md',
-      originalContent: body('BASE'),
-      newContent: body('POST'),
-    })
+    // 显式 k=3：本条测的是**计数语义**，与默认采样次数解耦（默认另有专条）。
+    const s = await measureSkillDeltaRepeated(
+      llm,
+      {
+        filePath: 'apps/cli/skills/standard/safe-coding.SKILL.md',
+        originalContent: body('BASE'),
+        newContent: body('POST'),
+      },
+      { k: 3 },
+    )
     expect(s!.taskEvidence).toEqual(
       expect.arrayContaining([
         { id: solved, basePass: 3, baseSeen: 3, postPass: 3, postSeen: 3 },
@@ -674,13 +679,40 @@ describe('measureSkillDeltaRepeated — 逐题计数（供区间计算）', () =
         yield { type: 'text', content: task.oracleCode ?? '' }
       },
     }
+    const s = await measureSkillDeltaRepeated(
+      llm,
+      {
+        filePath: 'apps/cli/skills/standard/safe-coding.SKILL.md',
+        originalContent: body('BASE'),
+        newContent: body('POST'),
+      },
+      { k: 3 },
+    )
+    const ev = s!.taskEvidence!.find((e) => e.id === flaky)!
+    expect(ev.baseSeen).toBe(2) // 3 轮里 1 轮是仪器故障，不计入
+    expect(ev.postSeen).toBe(3)
+  })
+})
+
+describe('measureSkillDeltaRepeated — 默认采样次数', () => {
+  const body = (text: string) => `---\nname: safe-coding\ndescription: x\n---\n${text}`
+
+  it('默认 k=5：区间要开口，样本量是前提（成本 = 每次测量 10 次 LLM 调用）', async () => {
+    const llm: Llm = {
+      chat: async function* (req) {
+        const prompt = String(req.messages[0]?.content ?? '')
+        const task = loadPerformanceTasks().find((t) => t.prompt === prompt)!
+        yield { type: 'usage', inputTokens: 1, outputTokens: 1 }
+        yield { type: 'text', content: task.oracleCode ?? '' }
+      },
+    }
     const s = await measureSkillDeltaRepeated(llm, {
       filePath: 'apps/cli/skills/standard/safe-coding.SKILL.md',
       originalContent: body('BASE'),
       newContent: body('POST'),
     })
-    const ev = s!.taskEvidence!.find((e) => e.id === flaky)!
-    expect(ev.baseSeen).toBe(2) // 3 轮里 1 轮是仪器故障，不计入
-    expect(ev.postSeen).toBe(3)
+    expect(s!.baselineScores).toHaveLength(5)
+    expect(s!.postScores).toHaveLength(5)
+    expect(s!.taskEvidence![0]!.baseSeen).toBe(5)
   })
 })

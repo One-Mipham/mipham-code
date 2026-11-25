@@ -390,7 +390,7 @@ export interface SkillDeltaSample {
   /**
    * B2 代价维：与分数数组**逐项对齐**的耗时（第 i 项就是产出第 i 个分数的那次采样）。
    * 缺席 = 该样本未记代价（旧记录 / 旧调用点），读侧须按「缺席」处理、不得当成 0。
-   * 只记录，不参与改进判定 —— 样本量 k=3 时再加一个维度只会让统计问题更糟。
+   * 只记录，不参与改进判定 —— 样本量这么小的时候，再加一个维度只会让统计问题更糟。
    */
   baselineDurations?: number[]
   postDurations?: number[]
@@ -418,7 +418,8 @@ export interface SkillDeltaSample {
 
 /**
  * 多次采样 before/after（每次都是「LLM 生成 → 冻结测试判定」），供改进轨估噪声。
- * 返回 null 门与 measureSkillDelta 相同。k 默认 3。
+ * 返回 null 门与 measureSkillDelta 相同。**k 默认 5**：逐题修复的 Wilson 区间要到
+ * 这个量级才可能分得开（k=3 时连 0/3→3/3 都相交）；成本是每次测量 2×k 次 LLM 调用。
  */
 export async function measureSkillDeltaRepeated(
   llm: Llm,
@@ -428,7 +429,7 @@ export async function measureSkillDeltaRepeated(
   const resolved = resolveSkillProposal(proposal)
   if (!resolved) return null
 
-  const k = opts?.k ?? 3
+  const k = opts?.k ?? 5
   const baselineScores: number[] = []
   const postScores: number[] = []
   const baselineDurations: number[] = []
