@@ -386,6 +386,8 @@ GitHub Actions 9 个 job 流水线：`typecheck → lint → format → build-cl
 
 触发: push/PR to master/main
 
+另有独立工作流 `mutation.yml`：**每周日 18:00 UTC** 全量跑 Stryker（`apps/cli/stryker.config.json`），报告进 artifact 与 job summary。监控性质 —— `thresholds.break` 为 null，分数不阻塞任何流程；它看的是「变异体还杀不杀得死」，覆盖率读数看不见这一层。手动可 `workflow_dispatch` 触发。
+
 ---
 
 ## 部署与分发
@@ -420,6 +422,7 @@ GitHub Actions 9 个 job 流水线：`typecheck → lint → format → build-cl
 - 代码风格：ESLint（flat config）+ Prettier，CI 强制执行
 - **ESLint 已开 type-checked**：`@typescript-eslint/no-floating-promises` 钉在 **`error`**（根 lint 脚本是裸 `eslint .`、**无 `--max-warnings`** ⇒ 写成 `warn` 等于零强制）；type-aware 规则依赖 `parserOptions.projectService`，`scripts/`、`vitest.config.ts` 等不在任何 tsconfig 里的入口须列进 `allowDefaultProject`（否则该文件抛解析错、**所有规则对它静默失效**）。仓库绿证明不了规则能触发（fixture 被 `eslint .` 忽略），生效证明在 `test/integrity/lint-rules.test.ts`
 - 提交信息遵循 Conventional Commits
+- **评审策略（solo 例外，经批准）**：本仓库当前只有一名常规贡献者，因此**不启用**集团 `CLAUDE.md` §三 的「PR + 至少一名资深工程师审批」门禁，变更直接提交 main。这是**显式例外**，不是遗忘。补偿控制：Conventional Commits + 本地门禁（typecheck / lint / 全量测试 / 覆盖率阈值 / integrity 守卫）+ pre-push 钩子 + CI 9 个 job 全跑。**例外失效条件**：第二位常规贡献者加入，或一次事故复盘指向「缺少评审」，即恢复 PR + 审批流程
 - **安全拒绝**: 拒绝编写恶意代码、恶意软件相关文件；授权安全测试（渗透测试、CTF）例外
 - **任务执行流程**: 搜索理解代码库 → 实现方案 → 验证测试 → lint/typecheck，每步有明确验证点
 - **高效调用**: 多个独立工具调用应在同一批次并行发出，减少往返延迟
