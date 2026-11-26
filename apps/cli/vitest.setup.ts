@@ -122,10 +122,15 @@ if (!(globalThis.Bun as Record<string, unknown>).serve) {
         pendingWebSockets: 0,
         _http: null as ReturnType<typeof createHttpServer> | null,
 
+        // Bun's real `Server.stop()` is `Promise<void>` (bun-types/serve.d.ts).
+        // This mock used to return `undefined`, which is *less capable* than the
+        // thing it stands in for: `daemon/index.ts` does `await server.stop().catch(…)`
+        // and crashed here while the real daemon never would. Mirror the contract,
+        // and resolve once the underlying Node server has actually closed.
         stop() {
-          if (mockServer._http) {
-            mockServer._http.close()
-          }
+          const http = mockServer._http as ReturnType<typeof createHttpServer> | null
+          if (!http) return Promise.resolve()
+          return new Promise<void>((resolve) => http.close(() => resolve()))
         },
         ref() {
           mockServer._http?.ref()
