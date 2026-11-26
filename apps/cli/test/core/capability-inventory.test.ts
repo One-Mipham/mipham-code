@@ -88,6 +88,41 @@ describe('buildCapabilityReport', () => {
     expect(report).toContain('平均成功率 | —')
   })
 
+  // A number in a "report" is worthless unless it says where it came from —
+  // the 2026-11-26 self-assessment put a doc quote in a "measured" table and
+  // then called it "测出".
+  it('stamps every live number with its in-process source', () => {
+    const report = buildCapabilityReport(stubEngine())
+    expect(report).toContain('| 活跃规则 | 3 (内置 1 · 自动 1 · 手动 1) | now（getRuleEngine） |')
+    expect(report).toContain('| 错误签名 | 3 条 (🟢2 · 🟡1 · ⚫0) | now（getErrorSignatureDB） |')
+    expect(report).toContain('| 版本 | 1.0.0 | now（getConstitutionLoader） |')
+    expect(report).toContain('| self-critique | ⚫ 未启用 (opt-in) | now（getSelfCritique） |')
+    expect(report).toContain('不引用文档数字')
+  })
+
+  it('reports ledger numbers with the ledger file and the entry timestamp', () => {
+    const report = buildCapabilityReport(stubEngine(), {
+      lastEval: { score: 100, passed: 40, total: 40, timestamp: '2026-11-25T07:12:14.923Z' },
+      improvements: {
+        count: 2,
+        verdicts: { improved: 1, inconclusive: 1 },
+        latestTimestamp: '2026-11-25T07:20:35.024Z',
+      },
+      probation: { count: 1, latestTimestamp: '2026-11-25T07:20:40.244Z' },
+    })
+    expect(report).toContain('| 最近机制 eval | 40/40（score 100） |')
+    expect(report).toContain('ledger:eval-scores.jsonl@2026-11-25T07:12:14.923Z')
+    expect(report).toContain('improved 1')
+    expect(report).toContain('ledger:improvements.jsonl@2026-11-25T07:20:35.024Z')
+    expect(report).toContain('ledger:probation.jsonl@2026-11-25T07:20:40.244Z')
+  })
+
+  it('says 无记录 instead of fabricating zero for an absent ledger', () => {
+    const report = buildCapabilityReport(stubEngine())
+    expect(report).toContain('| 最近机制 eval | 无记录 |')
+    expect(report).not.toContain('| 最近机制 eval | 0/0（score 0）')
+  })
+
   it('handles uninitialized subsystems gracefully without crashing', () => {
     const report = buildCapabilityReport({})
     expect(report).toContain('能力自报告')

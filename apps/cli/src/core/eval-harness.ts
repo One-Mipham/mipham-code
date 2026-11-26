@@ -177,19 +177,58 @@ export function appendEvalScore(
   }
 }
 
-/** 读取某奖励函数最近一次分数（无记录时返回 null）。旧无 name 记录自然跳过。 */
-export function getLastEvalScore(name: string): number | null {
+/** One eval ledger line. Old records may lack counts or a timestamp. */
+interface EvalLedgerLine {
+  name?: string
+  score?: number
+  passed?: number
+  total?: number
+  timestamp?: string
+}
+
+/** One eval ledger entry, with the timestamp that makes it citable. */
+export interface LastEvalEntry {
+  score: number
+  passed: number
+  total: number
+  /** ISO timestamp, or `unknown` for records written before timestamps were kept. */
+  timestamp: string
+}
+
+/**
+ * 读取某奖励函数最近一次分数**及其时间戳**。
+ *
+ * 分数单独一个数字无法回答「什么时候测的」—— 而不可追溯的数字正是 2026-11-26
+ * 那次自评里被文档值冒充实测值的缺口。报告层要的是带出处的数。
+ */
+export function getLastEvalEntry(name: string): LastEvalEntry | null {
   try {
     if (!existsSync(SCORES_FILE)) return null
     const lines = readFileSync(SCORES_FILE, 'utf-8').trim().split('\n').filter(Boolean)
     for (let i = lines.length - 1; i >= 0; i--) {
-      const rec = JSON.parse(lines[i]!) as { name?: string; score?: number }
-      if (rec.name === name && typeof rec.score === 'number') return rec.score
+      let rec: EvalLedgerLine
+      try {
+        rec = JSON.parse(lines[i]!) as EvalLedgerLine
+      } catch {
+        continue
+      }
+      if (rec.name !== name || typeof rec.score !== 'number') continue
+      return {
+        score: rec.score,
+        passed: typeof rec.passed === 'number' ? rec.passed : 0,
+        total: typeof rec.total === 'number' ? rec.total : 0,
+        timestamp: typeof rec.timestamp === 'string' ? rec.timestamp : 'unknown',
+      }
     }
     return null
   } catch {
     return null
   }
+}
+
+/** 读取某奖励函数最近一次分数（无记录时返回 null）。旧无 name 记录自然跳过。 */
+export function getLastEvalScore(name: string): number | null {
+  return getLastEvalEntry(name)?.score ?? null
 }
 
 /**

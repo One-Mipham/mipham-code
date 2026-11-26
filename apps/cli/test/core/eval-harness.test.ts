@@ -6,6 +6,7 @@ import {
   runEval,
   appendEvalScore,
   getLastEvalScore,
+  getLastEvalEntry,
   getContractHistory,
   diffContractHistory,
   renderContractDiff,
@@ -141,6 +142,23 @@ describe('rewards log', () => {
     appendEvalScore('a', { score: 80, passed: 8, total: 10 })
     appendEvalScore('a', { score: 40, passed: 4, total: 10 })
     expect(getLastEvalScore('a')).toBe(40)
+  })
+
+  // A number without a timestamp cannot be told apart from a doc quote —
+  // exactly the defect the inventory report exists to prevent (2026-11-26).
+  it('getLastEvalEntry carries the entry timestamp and counts', () => {
+    appendEvalScore('x', { score: 80, passed: 8, total: 10 })
+    appendEvalScore('x', { score: 40, passed: 4, total: 10 })
+    const entry = getLastEvalEntry('x')
+    expect(entry).not.toBeNull()
+    expect(entry!.score).toBe(40)
+    expect(entry!.passed).toBe(4)
+    expect(entry!.total).toBe(10)
+    expect(Number.isNaN(Date.parse(entry!.timestamp))).toBe(false)
+  })
+
+  it('getLastEvalEntry is null for a name never recorded', () => {
+    expect(getLastEvalEntry('never-recorded')).toBeNull()
   })
 })
 

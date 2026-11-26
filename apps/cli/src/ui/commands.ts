@@ -17,7 +17,7 @@ import type { CopyPickerItem } from './copy-picker'
 import type { InstallState, UpdateStatus } from '../shared/update'
 import { McpClient } from '../mcp/client'
 import { registerMcpServerTools, unregisterMcpServerTools } from '../mcp/registry'
-import { buildCapabilityReport } from '../core/capability-inventory'
+import { buildCapabilityReport, type CapabilityLedgers } from '../core/capability-inventory'
 import { formatFixRate, isAutoFixable } from '../core/error-signature-db'
 import { InstructionsLoader } from '../core/instructions'
 import { UNDISPATCHED_EVENTS } from '../core/hooks-config'
@@ -33,7 +33,12 @@ import {
   hasPending,
   setPendingProbation,
 } from '../core/crsi-modify'
-import { settleProbation, formatProbationLines, PROBATION_WINDOW } from '../core/probation'
+import {
+  settleProbation,
+  formatProbationLines,
+  PROBATION_WINDOW,
+  readProbations,
+} from '../core/probation'
 import {
   produceCrsiProposal,
   produceRuleProposal,
@@ -61,6 +66,7 @@ import {
   appendEvalScore,
   getContractHistory,
   getLastEvalScore,
+  getLastEvalEntry,
   diffContractHistory,
   renderContractDiff,
 } from '../core/eval-harness'
@@ -1167,7 +1173,34 @@ const crsiStatsCmd: CommandHandler = async (ctx) => {
 }
 
 const crsiInventoryCmd: CommandHandler = async (ctx) => {
-  return { content: buildCapabilityReport(ctx.engine) }
+  // Ledger numbers are loaded here, not in the builder: the report stays pure,
+  // and every ledger row can carry the timestamp of the record it came from.
+  const ledgers: CapabilityLedgers = {}
+
+  const evalEntry = getLastEvalEntry('mechanism-sentinel')
+  if (evalEntry) ledgers.lastEval = evalEntry
+
+  const improvements = readImprovements()
+  if (improvements.length > 0) {
+    const verdicts: Record<string, number> = {}
+    for (const record of improvements) {
+      verdicts[record.verdict] = (verdicts[record.verdict] ?? 0) + 1
+    }
+    const latest = improvements.reduce((a, b) => (a.timestamp >= b.timestamp ? a : b))
+    ledgers.improvements = {
+      count: improvements.length,
+      verdicts,
+      latestTimestamp: latest.timestamp,
+    }
+  }
+
+  const probations = readProbations()
+  if (probations.length > 0) {
+    const latest = probations.reduce((a, b) => (a.timestamp >= b.timestamp ? a : b))
+    ledgers.probation = { count: probations.length, latestTimestamp: latest.timestamp }
+  }
+
+  return { content: buildCapabilityReport(ctx.engine, ledgers) }
 }
 
 /**
