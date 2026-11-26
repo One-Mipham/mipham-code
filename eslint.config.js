@@ -52,8 +52,14 @@ export default [
           // Build/config entry points sit outside every tsconfig; without this
           // the parser aborts the whole file with
           // "was not found by the project service".
+          // Listed one by one, not `apps/cli/scripts/*.ts`: a script that a test
+          // imports is already in the project service, and being in BOTH is a
+          // parse error ("included by allowDefaultProject but also was found in
+          // the project service"). `test-report-audit.ts` is such a file.
           allowDefaultProject: [
-            'apps/cli/scripts/*.ts',
+            'apps/cli/scripts/generate-bundled-skills.ts',
+            'apps/cli/scripts/sync-counts.ts',
+            'apps/cli/scripts/sync-mipham-models.ts',
             'apps/cli/vitest.config.ts',
             'apps/cli/vitest.setup.ts',
             'apps/telemetry/vitest.config.ts',

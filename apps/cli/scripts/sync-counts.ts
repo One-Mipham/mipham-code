@@ -31,6 +31,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
+import { auditTestReport, formatTestReportAudit } from './test-report-audit.ts'
 
 const SCRIPT_DIR = dirname(new URL(import.meta.url).pathname)
 const REPO_DIR = resolve(SCRIPT_DIR, '../../..')
@@ -59,18 +60,21 @@ async function computeInProcessCounts(): Promise<Record<InProcessKey, number>> {
   }
 }
 
-/** 从 vitest 的 JSON 报告里取**总测试数**（含 skipped —— 本机与 CI 的 passed/skipped 切分不同）。 */
-function readTestTotal(reportPath: string): number {
-  let report: unknown
+/** 读并解析 vitest 的 JSON 报告。 */
+function readTestReport(reportPath: string): unknown {
   try {
-    report = JSON.parse(readFileSync(reportPath, 'utf-8'))
+    return JSON.parse(readFileSync(reportPath, 'utf-8'))
   } catch (err) {
     throw new Error(`读不了测试报告 ${reportPath}：${err}`)
   }
+}
+
+/** 从 vitest 的 JSON 报告里取**总测试数**（含 skipped —— 本机与 CI 的 passed/skipped 切分不同）。 */
+function readTestTotal(report: unknown): number {
   const total = (report as { numTotalTests?: unknown }).numTotalTests
   if (typeof total !== 'number' || !Number.isInteger(total) || total <= 0) {
     throw new Error(
-      `${reportPath} 里没有可用的 numTotalTests（读到 ${JSON.stringify(total)}）—— ` +
+      `测试报告里没有可用的 numTotalTests（读到 ${JSON.stringify(total)}）—— ` +
         `请确认是用 \`--reporter=json\` 产出的报告`,
     )
   }
@@ -117,7 +121,25 @@ async function main() {
 
   const computed = await computeInProcessCounts()
   const updates: Record<string, number> = { ...computed }
-  if (reportPath) updates.TEST_COUNT = readTestTotal(reportPath)
+  let testReport: unknown | undefined
+  if (reportPath) {
+    testReport = readTestReport(reportPath)
+    updates.TEST_COUNT = readTestTotal(testReport)
+  }
+
+  // ── Skip accounting — fail closed, before any write ──
+  // `numTotalTests` counts skipped tests too, so a run whose whole e2e suite was
+  // skipped still matches the registry. The audit makes that visible and refuses
+  // an unregistered skip (see scripts/test-report-audit.ts).
+  if (testReport) {
+    const audit = auditTestReport(testReport)
+    if (audit.problems.length > 0) {
+      console.error(formatTestReportAudit(audit))
+      console.error('❌ 跳过集合与登记不符 —— 拒绝放行/写入计数；先修好测试或登记跳过源')
+      process.exit(1)
+    }
+    console.log(formatTestReportAudit(audit))
+  }
 
   const jsonRaw = readFileSync(JSON_FILE, 'utf-8')
   const jsonData = JSON.parse(jsonRaw) as Record<string, unknown>

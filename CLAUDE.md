@@ -72,7 +72,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **试用期（probation）** — `core/probation.ts`：有任务表现测量的 skill 合并后开 3 次观察窗（同 skill、gate 池、k≥3），噪声自适应地板 `max(stdDev, 2×(100/poolSize))` 出 verdict；`regressed` **只打印** `git revert <sha>`，不执行；无随机仪器的合并登记 `noInstrument`，`/crsi stats` 明说「没有可用仪器」而不是静默跳过；结算前置 = 参考解可信 ∧ 正对照为 0 ∧ 每轮可测 ∧ 有率
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|bench [--capture|--sealed --skill <name>]|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：5,355 测试（5,353 passed + 2 skipped，395 文件）
+测试：5,364 测试（5,362 passed + 2 skipped，396 文件）
 
 ---
 
@@ -109,7 +109,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 395 个测试文件，5355 个测试
+│   │   ├── test/               # 396 个测试文件，5364 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -135,7 +135,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（5355 个测试）
+pnpm test         # vitest run（5364 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -323,36 +323,36 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 ### 测试目录一览
 
-| 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
-| --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 113     | 2069     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
-| tools           | 35      | 690      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
-| daemon          | 39      | 293      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
-| ui              | 57      | 580      | commands / input / config-wizard / loop / skill-doctor / ctrl-c / command-reachability                                                                                      |
-| agent           | 16      | 176      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
-| security        | 12      | 126      | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
-| providers       | 10      | 203      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
-| mcp             | 13      | 196      | client / transport / oauth / token-store / registry / instructions（含 2 skipped）                                                                                          |
-| workflow        | 8       | 73       | runtime / loop / parallel / sandbox / journal / verify                                                                                                                      |
-| vajra           | 6       | 53       | context / events / service / compose / leaf（自建内核）                                                                                                                     |
-| shared          | 12      | 152      | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                              |
-| commands        | 15      | 127      | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers / provider-model-flags                                                                  |
-| skills          | 8       | 79       | sanitizer / marketplace / fork-executor / skill-assets                                                                                                                      |
-| config          | 11      | 144      | credential-crypto / loader-encryption / defaults / settings-json / preferences / model-context-window                                                                       |
-| plugin          | 4       | 67       | claude-plugin / plugin-manager                                                                                                                                              |
-| artifacts       | 1       | 6        | manifest                                                                                                                                                                    |
-| agent-view      | 4       | 42       | agent-view-manager / dashboard-keys / session-view                                                                                                                          |
-| e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
-| integration     | 1       | 3        | 跨仓接线：`vscode-extension-telemetry`（VS Code 遥测关闭 ⇒ 终端拿到 `MIPHAM_TELEMETRY=off`）                                                                                |
-| integrity       | 20      | 138      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
-| telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **395** | **5355** | 0 失败（5,353 passed + 2 skipped，395 文件）                                                                                                                                |
+| 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                                                                             |
+| --------------- | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| core            | 113     | 2069     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                                                                                      |
+| tools           | 35      | 690      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                                                                               |
+| daemon          | 39      | 293      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                                                                                        |
+| ui              | 57      | 580      | commands / input / config-wizard / loop / skill-doctor / ctrl-c / command-reachability                                                                                                                                               |
+| agent           | 16      | 176      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                                                                           |
+| security        | 12      | 126      | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                                                                                   |
+| providers       | 10      | 203      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                                                                                        |
+| mcp             | 13      | 196      | client / transport / oauth / token-store / registry / instructions（含 2 skipped）                                                                                                                                                   |
+| workflow        | 8       | 73       | runtime / loop / parallel / sandbox / journal / verify                                                                                                                                                                               |
+| vajra           | 6       | 53       | context / events / service / compose / leaf（自建内核）                                                                                                                                                                              |
+| shared          | 12      | 152      | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                                                                                       |
+| commands        | 15      | 127      | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers / provider-model-flags                                                                                                                           |
+| skills          | 8       | 79       | sanitizer / marketplace / fork-executor / skill-assets                                                                                                                                                                               |
+| config          | 11      | 144      | credential-crypto / loader-encryption / defaults / settings-json / preferences / model-context-window                                                                                                                                |
+| plugin          | 4       | 67       | claude-plugin / plugin-manager                                                                                                                                                                                                       |
+| artifacts       | 1       | 6        | manifest                                                                                                                                                                                                                             |
+| agent-view      | 4       | 42       | agent-view-manager / dashboard-keys / session-view                                                                                                                                                                                   |
+| e2e             | 1       | 8        | full-pipeline                                                                                                                                                                                                                        |
+| integration     | 1       | 3        | 跨仓接线：`vscode-extension-telemetry`（VS Code 遥测关闭 ⇒ 终端拿到 `MIPHAM_TELEMETRY=off`）                                                                                                                                         |
+| integrity       | 21      | 147      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写）+ **跳过记账**（`test-report-audit`：未登记的 skip 即红） |
+| telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                                                                          |
+| **合计**        | **396** | **5364** | 0 失败（5,362 passed + 2 skipped，396 文件）                                                                                                                                                                                         |
 
 ### 测试注意事项
 
 > **本表只统计 `apps/cli/test/`。** `apps/telemetry` 是独立工作区（12 文件 / 179 测试，自带
 > `vitest.config.ts` 与阈值），**不在上表内**，全量跑用 `pnpm -r coverage`。
-> `integrity` 行的 19 个守卫文件含 **daemon 能力对等**（`daemon-capability-parity.test.ts`：14 个注入点
+> `integrity` 行的 20 个守卫文件含 **daemon 能力对等**（`daemon-capability-parity.test.ts`：14 个注入点
 > 全集 − 具名豁免表 = daemon 实接集，两向相等）与 **T4 未接线处置**（`unwired-disposition.test.ts`：
 > 删的必须不存在、留的必须仍零引用，陈旧豁免为红），外加 **状态写侧族守卫**（`state-write-integrity.test.ts`：
 > 裸写清单两向相等 —— 新成员不在清单里为红、清单陈旧也为红，且已收口模块必须仍见得到助手调用）
