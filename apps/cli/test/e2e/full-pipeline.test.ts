@@ -1,11 +1,21 @@
 /**
  * End-to-End Integration Test
  *
- * Validates the full pipeline: Config → Providers → Context → Engine → Real API.
- * Requires a valid API key in the environment (ANTHROPIC_API_KEY, OPENAI_API_KEY, or DEEPSEEK_API_KEY).
+ * Validates the full pipeline: Config → Providers → Context → Engine → Tools.
  *
- * Run: ANTHROPIC_API_KEY=sk-ant-... npx vitest run test/e2e/
- *   or: DEEPSEEK_API_KEY=sk-... npx vitest run test/e2e/
+ * Two modes, same assertions where the engine (not the model) is the thing
+ * under test:
+ *
+ *   - **Keyless (CI default)** — a scripted `Llm` (`replayChunks`) is injected
+ *     through `engine.setLlm()`, so the run is deterministic and needs no
+ *     network. This is the mode CI runs; it fails on a plumbing break.
+ *   - **Live (opt-in)** — `MIPHAM_E2E_LIVE=1` plus one of ANTHROPIC_API_KEY /
+ *     DEEPSEEK_API_KEY / OPENAI_API_KEY drives a real provider, which
+ *     additionally exercises model behaviour. Opt-in rather than "a key is
+ *     present": otherwise CI's secret environment would silently decide which
+ *     mode the build ran in. Run it when touching provider code:
+ *
+ *       MIPHAM_E2E_LIVE=1 DEEPSEEK_API_KEY=sk-... npx vitest run test/e2e/
  */
 import { describe, it, expect, beforeAll, vi } from 'vitest'
 
@@ -25,7 +35,11 @@ import { InstructionsLoader } from '../../src/core/instructions'
 import { ContextManager } from '../../src/core/context'
 import { QueryEngine } from '../../src/core/engine'
 import { createToolRegistry } from '../../src/tools/index'
+import { replayChunks } from '../../src/providers/llm-replay'
+import type { Llm } from '../../src/providers/llm'
+import type { ChatRequest } from '../../src/providers/registry'
 import type { StreamChunk } from '@mipham/shared'
+import { REPLAY_STREAMS, readToolStream, READ_RESULT_TEXT } from './fixtures/replay-streams'
 
 // ── Detect available provider ──
 
@@ -46,12 +60,49 @@ function getAvailableProvider(): { provider: string; model: string; envVar: stri
   return null
 }
 
-const active = getAvailableProvider()
+/** Non-null in live mode; `null` means "keyless — the model is scripted". */
+const live = process.env.MIPHAM_E2E_LIVE === '1' ? getAvailableProvider() : null
 
-// Skip all E2E tests if no API key available
-const describeIf = active ? describe : describe.skip
+// Keyless runs still need a registered active provider: the engine reads
+// `registry.getActive()` for tool context and metrics even when the chat
+// stream itself comes from the injected seam. These are the built-in defaults.
+const provider = live?.provider ?? 'deepseek'
+const model = live?.model ?? 'deepseek-v4-flash'
 
-// ── Helper ──
+// ── Helpers ──
+
+function makeEngine(providerId = provider, modelId = model): QueryEngine {
+  const config = loadConfig()
+  const registry = bootstrapProviders(config.providers, providerId, modelId)
+
+  const instructions = new InstructionsLoader()
+  instructions.loadAll(process.cwd())
+
+  const context = new ContextManager({ maxTokens: 200_000, compactionThreshold: 0.9 })
+  context.setSystemPrompt(instructions.buildSystemPrompt())
+
+  return new QueryEngine(registry, context, createToolRegistry())
+}
+
+/**
+ * Keyless only: drive the engine with scripted streams and record what it sent.
+ *
+ * The recorded requests are the point — replay ignores them, so asserting on
+ * the model's text alone would only prove the fixture was loaded. Asserting
+ * that the *second* request carries the tool result / the prior turn proves the
+ * engine wired them into the conversation.
+ */
+function script(engine: QueryEngine, sequences: StreamChunk[][], seen: ChatRequest[] = []): void {
+  if (live) return
+  const replay = replayChunks(sequences)
+  const spy: Llm = {
+    async *chat(req: ChatRequest) {
+      seen.push(req)
+      yield* replay.chat(req)
+    },
+  }
+  engine.setLlm(spy)
+}
 
 async function collectStream(chunks: AsyncGenerator<StreamChunk>): Promise<{
   text: string
@@ -83,34 +134,15 @@ async function collectStream(chunks: AsyncGenerator<StreamChunk>): Promise<{
 // E2E: Basic Conversation
 // ============================================================
 
-describeIf('E2E: Basic Conversation', () => {
+describe('E2E: Basic Conversation', () => {
   let engine: QueryEngine
 
   beforeAll(() => {
-    if (!active) throw new Error('No API key available')
-
-    // 1. Load config
-    const config = loadConfig()
-
-    // 2. Bootstrap providers
-    const registry = bootstrapProviders(config.providers, active.provider, active.model)
-
-    // 3. Load instructions
-    const instructions = new InstructionsLoader()
-    instructions.loadAll(process.cwd())
-
-    // 4. Initialize context
-    const context = new ContextManager({ maxTokens: 200_000, compactionThreshold: 0.9 })
-    context.setSystemPrompt(instructions.buildSystemPrompt())
-
-    // 5. Create tools registry
-    const tools = createToolRegistry()
-
-    // 6. Create engine
-    engine = new QueryEngine(registry, context, tools)
+    engine = makeEngine()
   })
 
   it('responds to a simple greeting', async () => {
+    script(engine, REPLAY_STREAMS.greeting)
     const result = await collectStream(
       engine.process('Hello! Just say "Hi there" and nothing else.'),
     )
@@ -121,6 +153,7 @@ describeIf('E2E: Basic Conversation', () => {
   }, 30_000)
 
   it('responds to a factual question', async () => {
+    script(engine, REPLAY_STREAMS.math)
     const result = await collectStream(
       engine.process('What is 2 + 2? Answer with just the number.'),
     )
@@ -130,6 +163,7 @@ describeIf('E2E: Basic Conversation', () => {
   }, 30_000)
 
   it('responds to a code question', async () => {
+    script(engine, REPLAY_STREAMS.code)
     const result = await collectStream(
       engine.process(
         'Write a one-line TypeScript function that adds two numbers. Output ONLY the code, no explanation.',
@@ -145,47 +179,49 @@ describeIf('E2E: Basic Conversation', () => {
 // E2E: Tool Usage
 // ============================================================
 
-describeIf('E2E: Tool Usage', () => {
+describe('E2E: Tool Usage', () => {
   let engine: QueryEngine
 
   beforeAll(() => {
-    if (!active) throw new Error('No API key available')
-
-    const config = loadConfig()
-    const registry = bootstrapProviders(config.providers, active.provider, active.model)
-
-    const instructions = new InstructionsLoader()
-    instructions.loadAll(process.cwd())
-
-    const context = new ContextManager({ maxTokens: 200_000, compactionThreshold: 0.9 })
-    context.setSystemPrompt(instructions.buildSystemPrompt())
-
-    const tools = createToolRegistry()
-    engine = new QueryEngine(registry, context, tools)
+    engine = makeEngine()
   })
 
   it('uses Read tool to read a file when asked', async () => {
-    // First, write a test file
-    const { writeFileSync, mkdirSync } = await import('node:fs')
+    // The file must live inside the engine's workspace: Read resolves paths
+    // against `ctx.cwd` and rejects anything outside it (a real guard, not a
+    // test artefact), so a tmpdir outside the repo would fail the tool.
+    const { writeFileSync, mkdirSync, rmSync } = await import('node:fs')
     const { join } = await import('node:path')
-    const { tmpdir } = await import('node:os')
 
-    const tmpDir = join(tmpdir(), 'mipham-e2e-' + Date.now())
+    const tmpDir = join(process.cwd(), `.e2e-tmp-${process.pid}-${Date.now()}`)
     mkdirSync(tmpDir, { recursive: true })
     const testFile = join(tmpDir, 'greeting.txt')
-    writeFileSync(testFile, 'Hello from Mipham E2E test!')
+    writeFileSync(testFile, READ_RESULT_TEXT)
 
-    const result = await collectStream(
-      engine.process(`Read the file at "${testFile}" and tell me what it says. Use the Read tool.`),
-    )
+    try {
+      const seen: ChatRequest[] = []
+      script(engine, readToolStream(testFile), seen)
 
-    expect(result.errors).toHaveLength(0)
-    // Should either use the tool or attempt to answer
-    expect(result.text.length > 0 || result.toolCalls.length > 0).toBe(true)
+      const result = await collectStream(
+        engine.process(
+          `Read the file at "${testFile}" and tell me what it says. Use the Read tool.`,
+        ),
+      )
 
-    // Clean up
-    const { rmSync } = await import('node:fs')
-    rmSync(tmpDir, { recursive: true, force: true })
+      expect(result.errors).toHaveLength(0)
+      if (!live) {
+        // Keyless: the scripted model did call Read, the tool ran, and the next
+        // request carried the file's contents back to the model.
+        expect(result.toolCalls).toContain('Read')
+        expect(seen.length).toBeGreaterThanOrEqual(2)
+        expect(JSON.stringify(seen[1]!.messages)).toContain(READ_RESULT_TEXT)
+      } else {
+        // Live: a model may decline the tool and answer directly.
+        expect(result.text.length > 0 || result.toolCalls.length > 0).toBe(true)
+      }
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true })
+    }
   }, 30_000)
 
   it('model is aware of available tools', async () => {
@@ -215,6 +251,9 @@ describeIf('E2E: Tool Usage', () => {
   })
 
   it('responds to a multi-turn conversation', async () => {
+    const seen: ChatRequest[] = []
+    script(engine, REPLAY_STREAMS.multiTurn, seen)
+
     // First turn
     const r1 = await collectStream(
       engine.process('My name is Alice. Remember that. Reply "OK Alice" and nothing else.'),
@@ -226,6 +265,13 @@ describeIf('E2E: Tool Usage', () => {
     const r2 = await collectStream(engine.process('What is my name? Reply with just my name.'))
     expect(r2.errors).toHaveLength(0)
     expect(r2.text.toLowerCase()).toContain('alice')
+
+    if (!live) {
+      // The replay answers "Alice" no matter what; the proof that context was
+      // preserved is the second request carrying the first turn.
+      expect(seen.length).toBe(2)
+      expect(JSON.stringify(seen[1]!.messages)).toContain('Alice')
+    }
   }, 60_000)
 })
 
@@ -233,46 +279,31 @@ describeIf('E2E: Tool Usage', () => {
 // E2E: Error Handling
 // ============================================================
 
-describeIf('E2E: Error Handling', () => {
-  it('handles invalid provider gracefully', async () => {
-    const config = loadConfig()
-    // Use a provider that has no API key
-    const registry = bootstrapProviders(config.providers, 'anthropic', 'claude-sonnet-4-6')
+describe('E2E: Error Handling', () => {
+  it('surfaces a provider failure instead of crashing', async () => {
+    if (!live) {
+      const engine = makeEngine()
+      script(engine, REPLAY_STREAMS.providerFailure)
 
-    const instructions = new InstructionsLoader()
-    instructions.loadAll(process.cwd())
-
-    const context = new ContextManager({ maxTokens: 200_000, compactionThreshold: 0.9 })
-    context.setSystemPrompt(instructions.buildSystemPrompt())
-
-    const tools = createToolRegistry()
-    const engine = new QueryEngine(registry, context, tools)
-
-    // If ANTHROPIC_API_KEY is not set, this should produce an error
-    if (!process.env.ANTHROPIC_API_KEY) {
       const result = await collectStream(engine.process('Hello'))
-      // Should get an error about missing API key or auth failure
-      expect(result.errors.length > 0 || result.text.length > 0).toBe(true)
+
+      expect(result.errors.join(' ')).toContain('simulated provider failure')
+      return
     }
+
+    // Live mode: a provider with no API key must answer with an error, not hang.
+    if (process.env.ANTHROPIC_API_KEY) return
+    const engine = makeEngine('anthropic', 'claude-sonnet-4-6')
+    const result = await collectStream(engine.process('Hello'))
+    expect(result.errors.length > 0 || result.text.length > 0).toBe(true)
   }, 15_000)
 
   it('engine does not crash on minimal input', async () => {
-    if (!active) return
-
-    const config = loadConfig()
-    const registry = bootstrapProviders(config.providers, active.provider, active.model)
-
-    const instructions = new InstructionsLoader()
-    instructions.loadAll(process.cwd())
-
-    const context = new ContextManager({ maxTokens: 200_000, compactionThreshold: 0.9 })
-    context.setSystemPrompt(instructions.buildSystemPrompt())
-
-    const tools = createToolRegistry()
-    const engine = new QueryEngine(registry, context, tools)
+    const engine = makeEngine()
+    script(engine, REPLAY_STREAMS.minimal)
 
     // Send minimal input (single character) — should not hang or crash
     const result = await collectStream(engine.process('.'))
-    expect(result.errors.length >= 0).toBe(true)
+    expect(result.errors).toHaveLength(0)
   }, 30_000)
 })

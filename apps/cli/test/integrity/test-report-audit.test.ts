@@ -14,8 +14,8 @@ import { auditTestReport, formatTestReportAudit } from '../../scripts/test-repor
 // so the count gate passed and the only trace was a skip number nobody read.
 // 2026-11-26: a self-assessment reported that run as "全量测试实跑…数字对上了".
 //
-// The audit's job: name every skipped file with a known reason, refuse an
-// unknown one, and say out loud when the only end-to-end suite did not run.
+// The audit's job: name every skipped file with a known reason and refuse an
+// unknown one (and any count the source has not pinned).
 // ============================================================
 
 /** Build a vitest-JSON-shaped report. Paths are absolute, as vitest writes them. */
@@ -50,23 +50,21 @@ function report(entries: Array<{ file: string; skipped?: number; passed?: number
 }
 
 describe('auditTestReport — skip sources are pinned', () => {
-  it('counts executed vs skipped and warns when the whole e2e suite was skipped', () => {
+  it('counts executed vs skipped and pins every known skip source', () => {
     const audit = auditTestReport(
       report([
         { file: 'test/mcp/oauth.test.ts', skipped: 2, passed: 10 },
-        { file: 'test/e2e/full-pipeline.test.ts', skipped: 8 },
+        { file: 'test/e2e/full-pipeline.test.ts', passed: 8 },
         { file: 'test/tools/bash.test.ts', passed: 190 },
       ]),
     )
 
     // Positive control: the fixture must actually contain skips, otherwise the
     // assertions below pass without the audit ever seeing one.
-    expect(audit.skipped).toBe(10)
-    expect(audit.executed).toBe(200)
+    expect(audit.skipped).toBe(2)
+    expect(audit.executed).toBe(208)
     expect(audit.total).toBe(210)
     expect(audit.problems).toEqual([])
-    expect(audit.warnings.join('\n')).toContain('E2E')
-    expect(audit.warnings.join('\n')).toContain('未执行')
   })
 
   it('rejects a skip in a file no known source accounts for', () => {
@@ -77,8 +75,10 @@ describe('auditTestReport — skip sources are pinned', () => {
     expect(audit.problems.join('\n')).toContain('1')
   })
 
-  it('rejects a partial skip of the all-or-nothing e2e describe', () => {
-    const audit = auditTestReport(report([{ file: 'test/e2e/full-pipeline.test.ts', skipped: 5 }]))
+  // Keyless replay removed the only reason the e2e describe ever skipped. If it
+  // is skipped again, the end-to-end suite silently stopped running.
+  it('rejects any skipped e2e test', () => {
+    const audit = auditTestReport(report([{ file: 'test/e2e/full-pipeline.test.ts', skipped: 8 }]))
     expect(audit.problems.join('\n')).toContain('test/e2e/full-pipeline.test.ts')
   })
 
@@ -92,7 +92,6 @@ describe('auditTestReport — skip sources are pinned', () => {
     expect(audit.executed).toBe(190)
     expect(audit.skipped).toBe(0)
     expect(audit.problems).toEqual([])
-    expect(audit.warnings).toEqual([])
   })
 
   it('throws a readable error when the report has no testResults', () => {

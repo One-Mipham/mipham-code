@@ -8,8 +8,7 @@
  * exactly such a run as "全量测试实跑…数字对上了".
  *
  * This module makes the run falsifiable: every skipped file must be registered
- * below with an allowed count, and a registered warning is printed when the only
- * end-to-end suite did not execute. An unregistered skip is a hard failure — the
+ * below with an allowed count, and an unregistered skip is a hard failure — the
  * alternative (silently counting it) is how "5,339 executed" got reported as
  * "5,349 对上了".
  *
@@ -21,12 +20,10 @@
  */
 
 interface SkipRule {
-  /** Allowed skipped-test counts. An all-or-nothing describe is `[0, N]`. */
+  /** Allowed skipped-test counts. A platform-conditional skip is `[0, N]`. */
   allowed: readonly number[]
   /** Why this file is allowed to skip. */
   reason: string
-  /** Printed as a warning whenever this file actually skipped. */
-  warning?: string
 }
 
 export const KNOWN_SKIP_SOURCES: Readonly<Record<string, SkipRule>> = {
@@ -35,11 +32,8 @@ export const KNOWN_SKIP_SOURCES: Readonly<Record<string, SkipRule>> = {
     reason: 'it.skip ×2 —— PKCE / token-store 用例需要真实 provider 往返',
   },
   'test/e2e/full-pipeline.test.ts': {
-    allowed: [0, 8],
-    reason: '无 provider API key 时 describe.skip（全有或全无）',
-    warning:
-      'E2E 全链路 8 条未执行（无 provider key）—— CI 从不提供 key，' +
-      '所以「全绿」不含任何端到端执行',
+    allowed: [0],
+    reason: '无 key 时注入 replayChunks 脚本流 —— describe 不再整体 skip',
   },
   'test/tools/file.test.ts': {
     allowed: [0, 3],
@@ -61,8 +55,6 @@ export interface TestReportAudit {
   byFile: Array<{ file: string; skipped: number; reason: string }>
   /** Any deviation from `KNOWN_SKIP_SOURCES` — a hard failure for the caller. */
   problems: string[]
-  /** Registered conditions worth saying out loud (e.g. e2e did not run). */
-  warnings: string[]
 }
 
 interface AssertionResult {
@@ -111,7 +103,6 @@ export function auditTestReport(report: unknown): TestReportAudit {
 
   const byFile: TestReportAudit['byFile'] = []
   const problems: string[] = []
-  const warnings: string[] = []
 
   for (const [file, count] of perFile) {
     const rule = KNOWN_SKIP_SOURCES[file]
@@ -130,7 +121,6 @@ export function auditTestReport(report: unknown): TestReportAudit {
           `跳过集合变了（${rule.reason}）`,
       )
     }
-    if (rule.warning) warnings.push(rule.warning)
   }
 
   const total =
@@ -143,7 +133,7 @@ export function auditTestReport(report: unknown): TestReportAudit {
     )
   }
 
-  return { executed, skipped, total, byFile, problems, warnings }
+  return { executed, skipped, total, byFile, problems }
 }
 
 export function formatTestReportAudit(audit: TestReportAudit): string {
@@ -153,7 +143,6 @@ export function formatTestReportAudit(audit: TestReportAudit): string {
   for (const f of audit.byFile) {
     lines.push(`   • ${f.file}: skipped=${f.skipped}（${f.reason}）`)
   }
-  for (const w of audit.warnings) lines.push(`   ⚠️  ${w}`)
   for (const p of audit.problems) lines.push(`   ❌ ${p}`)
   return lines.join('\n')
 }
