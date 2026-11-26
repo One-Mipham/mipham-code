@@ -3,6 +3,32 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.49 (2026-11-26)
+
+- Version sync with Mipham Code CLI 0.85.49
+- Fixed: instruction files (CLAUDE.md / AGENTS.md / rules) are read only when they are regular
+  files — a named pipe, socket or device node no longer hangs startup or the post-compaction
+  re-read forever.
+- Fixed: hook stdout/stderr are capped at 1 MiB per stream, with a visible truncation marker
+  (a hook printing without end used to grow memory until the 60s timeout).
+- Fixed: PreToolUse / PostToolUse `additionalContext` and Stop-hook block text now share the same
+  10,000-character cap as compaction context.
+- Fixed: a caller abort (Esc) is no longer wrapped into a retryable "Stream stalled" error, so
+  interrupting a turn no longer costs a spurious retry.
+- Fixed: a failed local plugin copy removes its half-written directory — retrying no longer
+  reports "already installed" forever.
+- Fixed: a 413 / "payload too large" from a proxy or gateway now triggers compact-and-retry
+  instead of ending the turn.
+- Fixed: a compressed response cut or damaged by a proxy is reported in plain words, with the
+  original error kept in parentheses.
+- Fixed: `computer-use` is a reserved skill name, so a same-named skill is no longer loaded
+  silently.
+- Fixed: the compacted-conversation summary is rendered under its own "Summary" label instead of
+  posing as a user prompt after a resume.
+- Fixed: after recalling a history entry and editing it, Down restores the unsent draft; Escape
+  while browsing no longer overwrites the draft with the recalled prompt.
+- Fixed: the model picker's cursor starts on the model the session is currently using.
+
 ## 0.85.48 (2026-11-25)
 
 - Version sync with Mipham Code CLI 0.85.48
