@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.85.50] — 2026-11-26
+
+### Added
+
+- **CRSI 信号收件箱** —— 学习不再依赖「失败发生后、进程退出前有人想起敲 `/crsi propose`」。
+  每轮复盘把可自动修复的失败信号同步落盘到 `~/.mipham/crsi/signal-inbox.jsonl`（0600，
+  按 `category|title` 跨调用幂等去重）；CLI 启动时从「收件箱 − 已并入」派生待办教训
+  （单次上限 10 条）并在终端提示。`/crsi propose --pending` 把它们送进同一道沙箱与批准闸门 ——
+  自动化的只是产出，不是合并；合并后派生视图自动收缩，非 mipham-code 仓库里零产出。
+- **`/crsi inventory` 每个数字带出处** —— 新增「真值评估（台账）」一节：eval / improvements /
+  probation 的最新读数加记录自身的时间戳。每个数据行标注 `now`（本次调用实时读取）或
+  `ledger:<文件>@<时间>`（该台账最后一条记录）；空台账显示「无记录」而不是 0。
+
+### Fixed
+
+- **Bash 安全拦截说明命中哪条规则** —— 静态黑名单拒绝时，消息从固定串改为
+  `Command rejected by security policy (pattern: …)`，与 dangerous-git 分支对齐；不可归因的拒绝
+  曾让一次自评把静态黑名单误认成 SIS 免疫。另新增本地拦截计数
+  `mipham_code_policy_block_interceptions_total{reason}` —— 只做本地归因，不上传遥测。
+- **SIS 修复结果接上反馈环** —— 工具门应用修复时返回签名，主引擎与子代理两条工具漏斗在工具
+  执行后记录成功/失败。平均成功率的分母改为尝试次数，至少 3 次尝试才降级；`warn`/`block`
+  策略不评分，也不会因零成功率被退役（此前会把命中最多的一条提醒误删）。`/sis`、
+  `/crsi inventory`、`/bug-report` 在没有可评分读数时显示 `—`。
+
 ## [0.85.49] — 2026-11-26
 
 ### Fixed

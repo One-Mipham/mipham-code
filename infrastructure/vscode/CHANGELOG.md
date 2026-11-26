@@ -3,6 +3,22 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.50 (2026-11-26)
+
+- Version sync with Mipham Code CLI 0.85.50
+- Added: CRSI signal inbox — auto-applicable failure insights are persisted per turn to
+  `~/.mipham/crsi/signal-inbox.jsonl` (0600, idempotent across turns); startup derives up to 10
+  not-yet-merged lessons as a prompt, and `/crsi propose --pending` sends them through the same
+  sandbox and approval gate. Only production is automated, never the merge.
+- Added: `/crsi inventory` cites a source for every number — `now` for a live getter, or
+  `ledger:<file>@<time>` for the ledger's last record; an empty ledger reads "no records", not 0.
+- Fixed: a Bash command blocked by the static security policy now names the matched rule in the
+  rejection message; a local `mipham_code_policy_block_interceptions_total{reason}` counter records
+  the interception (local attribution only — not uploaded).
+- Fixed: SIS repairs now report their outcome back; success rate is measured over attempts (at least
+  3 before downgrading), warn/block strategies are never retired for a zero success rate, and UIs
+  show a dash when there is nothing to compute.
+
 ## 0.85.49 (2026-11-26)
 
 - Version sync with Mipham Code CLI 0.85.49
