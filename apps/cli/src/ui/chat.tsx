@@ -9,6 +9,7 @@ import {
   stripControlCharsForDisplay,
 } from '../shared/sanitize'
 import { homedir } from 'node:os'
+import { isCompactionSummary } from '../core/session-log'
 import type { UpdateStatus } from '../shared/update'
 
 interface ChatPanelProps {
@@ -164,7 +165,14 @@ const MessageRow = React.memo(
           </Box>
         ) : (
           <>
-            {msg.role === 'user' ? (
+            {isCompactionSummary(msg) ? (
+              // The summary is stored as a user message (that is the role the
+              // model reads it in), but showing it under the user label made a
+              // resumed session claim the user had typed the whole thing.
+              <Text bold color="yellow">
+                ⚑ {t('ui.compaction.role_label')}:
+              </Text>
+            ) : msg.role === 'user' ? (
               <Text bold color="green">
                 ▸ {displayCwd()}:
               </Text>

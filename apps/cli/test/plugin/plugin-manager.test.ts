@@ -7,6 +7,7 @@ import {
   existsSync,
   statSync,
   readFileSync,
+  symlinkSync,
 } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -91,6 +92,22 @@ describe('PluginManager', () => {
 
       expect(result.success).toBe(false)
       expect(result.message).toContain('already installed')
+    })
+
+    it('a copy that dies halfway leaves nothing behind, so the retry works', () => {
+      // A dangling symlink makes `copyDir` throw mid-copy. The partial directory
+      // used to stay, and the "already installed" check then blocked every retry.
+      const source = createTempPlugin('half-copied')
+      symlinkSync(join(source, 'missing-target'), join(source, 'dangling'))
+
+      const first = manager.install(source)
+      expect(first.success).toBe(false)
+      expect(first.message).toContain('Failed to copy plugin')
+      expect(existsSync(join(testPluginDir, 'half-copied'))).toBe(false)
+
+      rmSync(join(source, 'dangling'))
+      const second = manager.install(source)
+      expect(second.success).toBe(true)
     })
 
     it('should reject a plugin with invalid name', () => {

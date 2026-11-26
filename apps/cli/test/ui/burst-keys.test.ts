@@ -94,6 +94,28 @@ describe('模型选择器（Ctrl+P）', () => {
     expect(onSelect).toHaveBeenCalledWith('deepseek', 'deepseek-v4-flash')
   })
 
+  it('打开即确认：模型光标停在当前模型上，不是第一行', async () => {
+    // 光标曾写死 0：Tab 进模型面板后方向键不在当前模型上，直接 Enter 会切到一个
+    // 用户没选的模型。
+    const onSelect = vi.fn()
+    const { stdin } = render(
+      React.createElement(ModelPicker, {
+        config,
+        currentProvider: 'google',
+        currentModel: 'gemini-3.0-pro',
+        onSelect,
+        onClose: vi.fn(),
+      }),
+    )
+
+    stdin.write(ENTER) // provider → model 面板（光标应已在 gemini-3.0-pro）
+    await settle()
+    stdin.write(ENTER)
+    await settle()
+
+    expect(onSelect).toHaveBeenCalledWith('google', 'gemini-3.0-pro')
+  })
+
   it('model 面板上「↓ Enter」选中的是光标停下的那个模型', async () => {
     const { onSelect, stdin } = renderPicker()
 

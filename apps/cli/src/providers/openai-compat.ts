@@ -5,6 +5,7 @@ import {
   fetchWithRetry,
   streamIdleTimeoutMs,
   isRetryableFailure,
+  isAbortError,
   createAwakeTimer,
   readErrorBody,
 } from './fetch-utils'
@@ -142,6 +143,9 @@ export class OpenAICompatProvider implements ProviderInstance {
             }),
           ])
         } catch (err) {
+          // See anthropic.ts: an abort must stay an abort, not become a
+          // retryable "stream stalled" error chunk.
+          if (isAbortError(err)) throw err
           yield { type: 'error', error: `Stream stalled: ${String(err)}` }
           return
         } finally {

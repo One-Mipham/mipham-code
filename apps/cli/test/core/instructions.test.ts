@@ -1,8 +1,16 @@
 import { describe, it, expect } from 'vitest'
 import { join, resolve, basename } from 'node:path'
 import { tmpdir } from 'node:os'
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync, realpathSync, symlinkSync } from 'node:fs'
-import { execSync } from 'node:child_process'
+import {
+  mkdtempSync,
+  writeFileSync,
+  mkdirSync,
+  rmSync,
+  realpathSync,
+  symlinkSync,
+  statSync,
+} from 'node:fs'
+import { execSync, execFileSync, spawnSync } from 'node:child_process'
 import {
   InstructionsLoader,
   stripSections,
@@ -567,4 +575,61 @@ describe('InstructionsLoader.refresh', () => {
       rmSync(outside, { recursive: true, force: true })
     }
   })
+})
+
+/**
+ * 指令文件的类型闸。
+ *
+ * `existsSync` 对 FIFO 为真，而 `readFileSync` 读一个没有写者的 FIFO 会**同步**
+ * 阻塞到底 —— 启动或压缩后的 `refresh()` 就此永久挂住，没有输出也没有报错。
+ * 判据不能写成「读得快」，因为修前的形状是**永远不返回**；故探针跑在子进程里，
+ * 由看门狗把「挂住」变成一条会红的用例。
+ */
+describe('InstructionsLoader — 非普通文件不当作指令', () => {
+  const WATCHDOG_MS = 20_000
+
+  it('FIFO 的 CLAUDE.md 不会挂住 loadAll 与 refresh', () => {
+    if (process.platform === 'win32') return
+    const site = realpathSync(mkdtempSync(join(tmpdir(), 'mipham-instr-fifo-')))
+    const home = join(site, 'home')
+    const work = join(site, 'work')
+    mkdirSync(home, { recursive: true })
+    mkdirSync(work, { recursive: true })
+    const fifo = join(work, 'CLAUDE.md')
+    execFileSync('mkfifo', [fifo])
+
+    const script = join(site, 'probe.ts')
+    writeFileSync(
+      script,
+      [
+        `import { InstructionsLoader } from ${JSON.stringify(resolve(import.meta.dirname, '../../src/core/instructions.ts'))}`,
+        `const dir = process.argv[2]`,
+        `process.chdir(dir)`,
+        `const loader = new InstructionsLoader()`,
+        `loader.loadAll(dir)`,
+        `loader.refresh()`,
+        `console.log('RESULT done')`,
+      ].join('\n'),
+    )
+
+    const env: NodeJS.ProcessEnv = { ...process.env, HOME: home }
+    for (const key of Object.keys(env)) if (key.startsWith('MIPHAM_')) delete env[key]
+
+    try {
+      const r = spawnSync('bun', [script, work], {
+        cwd: site,
+        env,
+        encoding: 'utf-8',
+        timeout: WATCHDOG_MS,
+        killSignal: 'SIGTERM',
+      })
+      expect(r.error?.message).toBeUndefined()
+      expect(`${r.signal ?? 'no-signal'} status=${r.status}`).toBe('no-signal status=0')
+      expect(r.stdout).toContain('RESULT done')
+      // 闸门是「跳过」，不是「替它重建」：FIFO 仍在原地。
+      expect(statSync(fifo).isFIFO()).toBe(true)
+    } finally {
+      rmSync(site, { recursive: true, force: true })
+    }
+  }, 30_000)
 })

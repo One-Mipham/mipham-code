@@ -89,9 +89,18 @@ export class PluginManager {
       }
     }
 
-    // Copy plugin directory
-    mkdirSync(destDir, { recursive: true })
-    this.copyDir(sourcePath, destDir)
+    // Copy plugin directory. A copy that dies halfway used to leave a partial
+    // directory behind, and the `already installed` check above then made every
+    // retry fail — a plugin that could never be installed until the user found
+    // and deleted the wreckage by hand.
+    try {
+      mkdirSync(destDir, { recursive: true })
+      this.copyDir(sourcePath, destDir)
+    } catch (err) {
+      rmSync(destDir, { recursive: true, force: true })
+      const detail = err instanceof Error ? err.message : String(err)
+      return { success: false, message: `Failed to copy plugin: ${detail}` }
+    }
 
     const similarWarning = this.findSimilarWarning(validation.manifest.name)
     this.plugins.push({

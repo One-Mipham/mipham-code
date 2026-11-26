@@ -108,8 +108,23 @@ function tlsCertCode(err: unknown): string | undefined {
   return undefined
 }
 
+/**
+ * Was this failure the caller walking away?
+ *
+ * Providers used to wrap every stream-read rejection — aborts included — into a
+ * retryable `Stream stalled:` error chunk, which turned "the user pressed Esc"
+ * into "the request failed once, retrying". Abort has to stay an abort all the
+ * way out so the engine's own handler (and the UI) can tell the two apart.
+ */
+export function isAbortError(err: unknown): boolean {
+  if (err instanceof Error && err.name === 'AbortError') return true
+  return (
+    typeof DOMException !== 'undefined' && err instanceof DOMException && err.name === 'AbortError'
+  )
+}
+
 function isRetryableError(err: unknown): boolean {
-  if (err instanceof DOMException && err.name === 'AbortError') return false
+  if (isAbortError(err)) return false
   if (tlsCertCode(err) !== undefined) return false
   return true
 }

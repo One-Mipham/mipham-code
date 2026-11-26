@@ -29,11 +29,18 @@ export interface ShadowCheck {
   shadowed: boolean
   /** Name of the conflicting command/tool */
   conflictsWith: string
-  /** Type of conflict: 'command' | 'mcp-tool' */
-  conflictType: 'command' | 'mcp-tool'
+  /** Type of conflict: 'command' | 'mcp-tool' | 'reserved-name' */
+  conflictType: 'command' | 'mcp-tool' | 'reserved-name'
 }
 
 // ── Constants ──
+
+/**
+ * Tool names the CLI gives a native capability. A skill with one of these names
+ * is not shadowing a slash command or an MCP tool, so it used to pass every
+ * check — and the model then had two different things called `computer-use`.
+ */
+const RESERVED_SKILL_NAMES = new Set(['computer-use'])
 
 /** Known local command names that skills should not shadow */
 const BUILTIN_COMMANDS = new Set([
@@ -191,6 +198,13 @@ export function checkSkillShadow(
   // Check against builtin commands
   if (BUILTIN_COMMANDS.has('/' + skillName)) {
     return { shadowed: true, conflictsWith: skillName, conflictType: 'command' }
+  }
+
+  // Names the CLI itself gives a native capability. These are tools, not slash
+  // commands, so the command check above does not see them — a same-named skill
+  // loaded silently and left the model with two different `computer-use`s.
+  if (RESERVED_SKILL_NAMES.has(skillName)) {
+    return { shadowed: true, conflictsWith: skillName, conflictType: 'reserved-name' }
   }
 
   // Check description for embedded command names

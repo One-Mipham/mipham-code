@@ -16,6 +16,15 @@ describe('checkSkillShadow', () => {
     // 'triage' 是真实 skill（user-invocable），/triage 已从 BUILTIN_COMMANDS 移除
     expect(checkSkillShadow('triage', '').shadowed).toBe(false)
   })
+
+  it('reserves the native computer-use name (a tool, not a slash command)', () => {
+    // `computer-use` 是工具名，不在 BUILTIN_COMMANDS 里，所以旧检查放行了它 ——
+    // 同名 skill 静默加载后，模型会同时看到两个不同的 computer-use。
+    expect(checkSkillShadow('computer-use', '').shadowed).toBe(true)
+    expect(checkSkillShadow('computer-use', '').conflictType).toBe('reserved-name')
+    // 近名不误伤
+    expect(checkSkillShadow('computer', '').shadowed).toBe(false)
+  })
 })
 
 /**

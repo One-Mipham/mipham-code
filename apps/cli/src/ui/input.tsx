@@ -530,7 +530,16 @@ export function InputBar({
       }
       // Idle → clear the draft (the intuitive "cancel"), keeping it recoverable:
       // Up from the now-empty input restores it (see the arrow-key branch).
-      if (valueRef.current) clearedDraftRef.current = valueRef.current
+      // While browsing history, the text on screen is a recalled entry, not the
+      // user's draft — save the *draft* slot instead, or Escape overwrites the
+      // only copy of what they were typing with an old prompt.
+      if (historyIndexRef.current === -1) {
+        if (valueRef.current) clearedDraftRef.current = valueRef.current
+      } else if (savedDraftRef.current) {
+        clearedDraftRef.current = savedDraftRef.current
+      }
+      historyIndexRef.current = -1
+      savedDraftRef.current = ''
       setValue('')
       valueRef.current = ''
       clearSuggestion()
@@ -601,6 +610,16 @@ export function InputBar({
       ) {
         const restored = clearedDraftRef.current
         clearedDraftRef.current = ''
+        setValue(restored)
+        return
+      }
+
+      // Editing a recalled entry ends browsing but must not destroy the text
+      // that was there before the recall. Down brings that draft back instead of
+      // being a no-op (the entry used to blank `savedDraft` on the first edit).
+      if (key.downArrow && historyIndexRef.current === -1 && savedDraftRef.current) {
+        const restored = savedDraftRef.current
+        savedDraftRef.current = ''
         setValue(restored)
         return
       }
@@ -698,10 +717,11 @@ export function InputBar({
         <MiphamTextInput
           value={value}
           onChange={(val) => {
-            // Reset history browsing when user starts typing
+            // Reset history browsing when user starts typing. `savedDraft` is
+            // deliberately kept: it is the only copy of what they were writing
+            // before the recall, and Down restores it (see the arrow branch).
             if (historyIndexRef.current !== -1) {
               historyIndexRef.current = -1
-              savedDraftRef.current = ''
             }
             // ── Ghost-text 自动补全：每次输入清 suggestion + 重排防抖 ──
             setSuggestion(null)

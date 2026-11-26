@@ -758,6 +758,9 @@
     "user": {
       "role_label": "User"
     },
+    "compaction": {
+      "role_label": "Summary"
+    },
     "input": {
       "placeholder": "Type a message (Esc to clear)..."
     },

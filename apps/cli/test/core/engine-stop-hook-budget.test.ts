@@ -98,6 +98,32 @@ describe('a Stop hook that keeps asking for more', () => {
     expect(counter.chats).toBe(2)
     expect(chunks.filter((c) => c.type === 'warning')).toHaveLength(0)
   })
+
+  it('caps a huge block reason fed back into the conversation', async () => {
+    // "Do not stop yet" + a whole log attached used to be injected verbatim —
+    // the very context the turn is trying to keep under its limit.
+    const hooks = new HookEngine()
+    let n = 0
+    hooks.register({
+      event: 'Stop',
+      handler: async () => {
+        n++
+        return n === 1 ? { allowed: false, reason: 'R'.repeat(50_000) } : { allowed: true }
+      },
+    })
+    const context = new ContextManager({ maxTokens: 100_000, compactionThreshold: 0.9 })
+    const engine = new QueryEngine(registryCounting({ chats: 0 }), context, new Map())
+    engine.setHookEngine(hooks)
+
+    await collect(engine.process('go'))
+
+    const injected = context
+      .getMessages()
+      .map((m) => (typeof m.content === 'string' ? m.content : ''))
+      .find((t) => t.includes('truncated'))
+    expect(injected, '截断标记应出现在回灌的 block 文本里').toBeDefined()
+    expect(injected!.length).toBeLessThan(11_000)
+  })
 })
 
 // A hook's `systemMessage` is addressed to the operator, not the model. It was

@@ -11,6 +11,7 @@ import {
   fetchWithRetry,
   streamIdleTimeoutMs,
   isRetryableFailure,
+  isAbortError,
   createAwakeTimer,
   readErrorBody,
 } from './fetch-utils'
@@ -263,6 +264,10 @@ export class AnthropicProvider implements ProviderInstance {
             }),
           ])
         } catch (err) {
+          // An abort is the caller leaving, not the stream stalling: wrapping it
+          // into a retryable error chunk made the engine retry a request the user
+          // had just cancelled.
+          if (isAbortError(err)) throw err
           yield { type: 'error', error: `Stream stalled: ${String(err)}` }
           return
         } finally {

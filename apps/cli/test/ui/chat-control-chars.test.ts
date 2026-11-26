@@ -25,6 +25,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ChatPanel, summarizeToolGroup } from '../../src/ui/chat'
 import type { ChatMessage } from '../../src/ui/app'
+import { I18nProvider } from '../../src/i18n-context'
+import { createT } from '../../src/i18n-core/t'
 import enUS from '../../src/i18n-core/locales/en-US.json'
 
 const cp = (...cps: number[]) => String.fromCodePoint(...cps)
@@ -331,5 +333,31 @@ describe('ChatPanel — 无输出的调用要有「未记录结果」行（323-0
       process.chdir(prev)
       rmSync(dir, { recursive: true, force: true })
     }
+  })
+
+  it('压缩摘要不冒充用户输入（恢复后渲染成自己的标签）', () => {
+    // 摘要以 role:'user' 存储（模型就是在这个角色里读它），但按用户标签渲染
+    // 会让恢复后的会话声称那段话是用户打的。
+    const t = createT(enUS as never, enUS as never)
+    const { lastFrame, unmount } = render(
+      React.createElement(I18nProvider, {
+        locale: 'en-US',
+        t,
+        children: React.createElement(ChatPanel, {
+          messages: [
+            {
+              role: 'user',
+              content: '[Earlier conversation summary]: earlier messages condensed',
+            },
+          ],
+          focusMode: false,
+        }),
+      }),
+    )
+    const frame = lastFrame() ?? ''
+    unmount()
+    expect(frame).toContain('Summary:')
+    expect(frame).not.toContain('▸')
+    expect(frame).toContain('earlier messages condensed')
   })
 })

@@ -758,6 +758,9 @@
     "user": {
       "role_label": "用户"
     },
+    "compaction": {
+      "role_label": "摘要"
+    },
     "input": {
       "placeholder": "输入消息（Esc 清空）..."
     },

@@ -2288,6 +2288,63 @@ describe('QueryEngine', () => {
       expect(result?.content).toContain('lint ran clean, 0 warnings')
     })
 
+    it("caps a PreToolUse hook's additionalContext like compaction context", async () => {
+      // A hook is a shell script this CLI did not write; it can print a whole file.
+      // Only Pre/PostCompact context was capped, so a PreToolUse hook could prepend
+      // megabytes to every matching tool result.
+      const tool = mockTool('read')
+      const registry = mockProviderRegistry(async function* () {
+        yield {
+          type: 'tool_use',
+          toolUse: { type: 'tool_use', id: 'call_1', name: 'read', input: {} },
+        }
+        yield { type: 'stop' }
+      })
+
+      const hooks = new HookEngine()
+      hooks.register({
+        event: 'PreToolUse',
+        handler: async () => ({ allowed: true, additionalContext: 'P'.repeat(50_000) }),
+      })
+
+      const engine = new QueryEngine(registry, mockContext(), makeToolMap([tool]))
+      engine.setHookEngine(hooks)
+
+      const chunks: StreamChunk[] = []
+      for await (const chunk of engine.process('read')) chunks.push(chunk)
+
+      const result = chunks.find((c) => c.type === 'tool_result')
+      expect(result?.content).toContain('truncated')
+      expect(result!.content!.length).toBeLessThan(11_000)
+    })
+
+    it("caps a PostToolUse hook's additionalContext too", async () => {
+      const tool = mockTool('read')
+      const registry = mockProviderRegistry(async function* () {
+        yield {
+          type: 'tool_use',
+          toolUse: { type: 'tool_use', id: 'call_1', name: 'read', input: {} },
+        }
+        yield { type: 'stop' }
+      })
+
+      const hooks = new HookEngine()
+      hooks.register({
+        event: 'PostToolUse',
+        handler: async () => ({ allowed: true, additionalContext: 'Q'.repeat(50_000) }),
+      })
+
+      const engine = new QueryEngine(registry, mockContext(), makeToolMap([tool]))
+      engine.setHookEngine(hooks)
+
+      const chunks: StreamChunk[] = []
+      for await (const chunk of engine.process('read')) chunks.push(chunk)
+
+      const result = chunks.find((c) => c.type === 'tool_result')
+      expect(result?.content).toContain('truncated')
+      expect(result!.content!.length).toBeLessThan(11_000)
+    })
+
     it('keeps the PreToolUse warning when the tool then fails', async () => {
       // The warning used to ride only on success, so a hook that warned "this
       // will fail because X" lost its warning exactly when the command failed

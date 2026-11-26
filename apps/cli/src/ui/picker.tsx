@@ -45,7 +45,14 @@ export function ModelPicker({
     const idx = providers.findIndex((p) => p.id === currentProvider)
     return idx >= 0 ? idx : 0
   })
-  const modelIdx = useKeyState(0)
+  // Seed the model cursor on the model the session is actually using, so Tab
+  // into the model panel lands on it (it used to start at row 0).
+  const modelIdx = useKeyState(() => {
+    const provider = providers.find((p) => p.id === currentProvider)
+    const models = provider ? activeModels(provider) : []
+    const idx = models.findIndex((m) => m.id === currentModel)
+    return idx >= 0 ? idx : 0
+  })
 
   const selectedProvider = providers[providerIdx.value]
   const models = selectedProvider ? activeModels(selectedProvider) : []
@@ -54,10 +61,15 @@ export function ModelPicker({
   const goToProvider = useCallback(
     (idx: number) => {
       providerIdx.set(wrap(idx, providers.length))
-      modelIdx.set(0)
+      // Land on the session's current model when this is its provider; any
+      // other provider stays at row 0.
+      const provider = providers[wrap(idx, providers.length)]
+      const models = provider ? activeModels(provider) : []
+      const current = models.findIndex((m) => m.id === currentModel)
+      modelIdx.set(current >= 0 ? current : 0)
       activePanel.set('model') // auto-switch to model panel
     },
-    [providers.length, providerIdx, modelIdx],
+    [providers, providerIdx, modelIdx, currentModel],
   )
 
   /** 相对移动 —— 按 `read()` 叠加，同一拍里的两次 ↓ 就是两步。 */

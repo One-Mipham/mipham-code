@@ -225,3 +225,52 @@ describe('InputBar 历史导航 —— 斜杠命令不再死路', () => {
     expect(lastFrame()).toContain('hi')
   })
 })
+
+/**
+ * 召回历史不能吃掉未发送的草稿。
+ *
+ * 旧实现：↑ 召回时把草稿存进 `savedDraft`，但只要用户**改动**召回的那条，onChange
+ * 立即把 `savedDraft` 清空 ⇒ 草稿永久丢失，↓ 变成空操作。浏览中按 Esc 更糟：它把
+ * 「召回的那条」写进 `clearedDraft`，用户自己的草稿被旧提示覆盖。
+ */
+describe('InputBar 历史导航 —— 未发送草稿的存活', () => {
+  it('召回后编辑，再按 ↓ 能拿回召回前的草稿', async () => {
+    const { stdin, lastFrame } = renderBar()
+    stdin.write('hello')
+    await settle()
+    stdin.write(ENTER)
+    await settle()
+
+    stdin.write('my draft')
+    await settle()
+    stdin.write(UP) // 召回 hello，草稿进 savedDraft
+    await settle()
+    expect(lastFrame()).toContain('hello')
+
+    stdin.write('X') // 编辑召回的那条 ⇒ 浏览结束，但草稿必须还在
+    await settle()
+    stdin.write(DOWN)
+    await settle()
+    expect(lastFrame()).toContain('my draft')
+  })
+
+  it('浏览中按 Esc 不会把召回的那条当成草稿；↑ 拿回的是自己的草稿', async () => {
+    const { stdin, lastFrame } = renderBar()
+    stdin.write('hello')
+    await settle()
+    stdin.write(ENTER)
+    await settle()
+
+    stdin.write('my draft')
+    await settle()
+    stdin.write(UP) // 召回 hello
+    await settle()
+    stdin.write('\x1b') // Esc 清空
+    await settle()
+    stdin.write(UP) // 空输入下 ↑ 恢复草稿
+    await settle()
+
+    expect(lastFrame()).toContain('my draft')
+    expect(lastFrame()).not.toContain('hello')
+  })
+})

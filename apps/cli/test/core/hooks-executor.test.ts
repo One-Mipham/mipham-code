@@ -31,7 +31,7 @@ const { spawnMock } = vi.hoisted(() => ({ spawnMock: vi.fn() }))
 
 vi.mock('node:child_process', () => ({ spawn: spawnMock }))
 
-import { executeHook } from '../../src/core/hooks-executor'
+import { appendHookStreamChunk, executeHook } from '../../src/core/hooks-executor'
 import { CREDENTIAL_SENTINEL } from '../../src/core/credential-masker'
 import type { HookContext } from '../../src/shared/index.ts'
 import {
@@ -63,6 +63,36 @@ beforeEach(() => {
   outcome = { status: 1, stdout: '', stderr: OVERSIZED_STDERR }
   spawnMock.mockReset()
   spawnMock.mockImplementation(() => makeFakeHookChild(outcome))
+})
+
+describe('hook stream accumulation is bounded', () => {
+  it('keeps the cap and marks the truncation once', () => {
+    let buffered = ''
+    for (let i = 0; i < 200; i++) {
+      buffered = appendHookStreamChunk(buffered, 'x'.repeat(10_000), 100_000)
+    }
+    expect(buffered.length).toBeLessThan(100_200)
+    expect(buffered.match(/truncated/g)).toHaveLength(1)
+  })
+
+  it('leaves ordinary output byte-identical', () => {
+    expect(appendHookStreamChunk('', 'hello')).toBe('hello')
+    expect(appendHookStreamChunk('hel', 'lo')).toBe('hello')
+  })
+
+  it('a hook that prints over 1 MiB no longer hands it back whole', async () => {
+    // The freeze fix made the wait async; the buffer was still unbounded, so a
+    // `yes`-style hook grew the heap for the whole 60s window. The JSON is valid
+    // only if the whole thing survives — the cap makes it unparseable, which is
+    // the observable proof that the executor went through the bound.
+    outcome = {
+      status: 0,
+      stdout: '{"hookSpecificOutput":{"additionalContext":"' + 'A'.repeat(1_200_000) + '"}}',
+      stderr: '',
+    }
+    const result = await executeHook({ type: 'command', command: 'chatty-hook', args: [] }, ctx)
+    expect(result.additionalContext).toBeUndefined()
+  })
 })
 
 describe('executeHook (command)', () => {

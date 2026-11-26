@@ -276,6 +276,29 @@ interface HookProcessResult {
 }
 
 /**
+ * How much of each hook stream is buffered before the rest is dropped.
+ *
+ * A hook printing without end used to grow this process's heap for the whole
+ * timeout window (60s by default) — the event loop stayed live, but a `yes`-style
+ * hook still turned into gigabytes. Keep the first 1 MiB of each stream, which is
+ * far more than any structured hook payload, and leave a marker so the truncation
+ * is visible rather than silently changing the answer.
+ */
+const MAX_HOOK_STREAM_CHARS = 1_000_000
+
+/** Append one chunk to a capped stream buffer. Pure so the bound is testable. */
+export function appendHookStreamChunk(
+  previous: string,
+  chunk: string,
+  cap: number = MAX_HOOK_STREAM_CHARS,
+): string {
+  if (previous.length > cap) return previous
+  const next = previous + chunk
+  if (next.length <= cap) return next
+  return `${next.slice(0, cap)}\n[hook output truncated: exceeded ${cap.toLocaleString('en-US')} characters]\n`
+}
+
+/**
  * Run a hook command to completion, bounding **both** halves of the wait.
  *
  * `spawnSync` was the wrong tool here. It returns only when the child's stdout and
@@ -368,10 +391,10 @@ async function runHookCommand(
     }
 
     child.stdout.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString()
+      stdout = appendHookStreamChunk(stdout, chunk.toString())
     })
     child.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString()
+      stderr = appendHookStreamChunk(stderr, chunk.toString())
     })
 
     child.on('error', (err: NodeJS.ErrnoException) => {

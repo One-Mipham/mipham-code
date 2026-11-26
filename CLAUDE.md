@@ -28,9 +28,9 @@ prompt-exclude-header: true
 > **仓库**: One-Mipham/mipham-code
 > **公司**: One Mipham Corporation | 品牌: MiphamAI
 > **产品**: 多模型开源智能编程终端
-> **版本**: 2.94.95
-> **最后更新**: 2026-11-25 — **0.85.48 上架 VS Code Marketplace（2.94.95）** —— `.vsix` **87,185 B** / sha256 `d86fd4c2…` / 9 文件 / 包内 `0.85.48`（用户网页上传）。**两读同刻一致**：API `versions[]` 99 → **100 条**、`versions[0].version` = `0.85.48`、`flags` = `validated`、`lastUpdated` = `2026-11-25T07:55:02.857Z`、`publisher` = `miphamai`；公开页（cache-bust）`0.85.48` 命中 **6** 次、内嵌 `"version":"0.85.48"`。`07:48:46Z` 首读仍 99 条 / 首位 `0.85.47` ⇒ 首个探针到生效 **≤ ≈7 分钟**（上传时刻未捕获）。
-> **前一条（2.94.94）**: 2026-11-25 — **发布 0.85.48：CRSI 自我改进记忆闭环 + 沙箱闸修复（2.94.94）** —— 11 笔（SIM 台账读侧 / 规则 8 加权 / 任务级预测与逐题 Wilson 区间 / 默认 k=5 / 组级排序 / 沙箱依赖与派生状态修复）+ `safe-coding` 1.1.0 合并；tag **`v0.85.48`** → `14a655ce`（GPG，GitHub `verified`）、CI `45568297731` **9/9**、release `45568744662` **9/9**、npm `latest` = 0.85.48（221 versions）、JetBrains published；两站各 **3×0.85.48 / 0×0.85.47、2×5313**；套件 5,313（394 文件）。
+> **版本**: 2.94.96
+> **最后更新**: 2026-11-26 — **CC 2.1.332 考古（第 42 档）：11 个修复单元（2.94.96）** —— **2.1.333 未发布**（npm `latest`/`next` = **2.1.332** @ 2026-11-24T22:06:38Z、`stable` 2.1.326、CHANGELOG 无 333 节；331→332 包内仅 `package.json` 变、`sdk-tools.d.ts` 逐字相同）。语料 **150 条**裁决 **150/150**（ABSENT 87 / ALREADY 27 / SEMI 23 / GAP 6 / DEFECT 4 / UNVERIFIED 3），归档 `~/.mipham/cc-archaeology/332/`。落地：指令文件按**类型**闸（FIFO 不再挂住 `loadAll`/`refresh`）· 钩子每流 **1 MiB** 上限 · `Pre/PostToolUse` 与 Stop block 回灌同走 10k 截断 · provider 把 AbortError **原样抛出**（不再变可重试 `Stream stalled`）· 插件半拷贝**回滚** · **413/payload too large 进压缩重试** · 代理损坏压缩响应的白话文案 · `computer-use` 保留技能名 · 压缩摘要**自己的渲染标签** · 历史召回后编辑 ↓ 恢复草稿 / Esc 不再吞草稿 · 模型选择器光标落在当前模型。套件 **5,313 → 5,332**（394 文件），命令 141。
+> **前一条（2.94.95）**: 2026-11-25 — **0.85.48 上架 VS Code Marketplace（2.94.95）** —— `.vsix` **87,185 B** / sha256 `d86fd4c2…` / 9 文件 / 包内 `0.85.48`（用户网页上传）。**两读同刻一致**：API `versions[]` 99 → **100 条**、`versions[0].version` = `0.85.48`、`flags` = `validated`、`lastUpdated` = `2026-11-25T07:55:02.857Z`、`publisher` = `miphamai`；公开页（cache-bust）`0.85.48` 命中 **6** 次、内嵌 `"version":"0.85.48"`。`07:48:46Z` 首读仍 99 条 / 首位 `0.85.47` ⇒ 首个探针到生效 **≤ ≈7 分钟**（上传时刻未捕获）。
 
 > **维护人**: One Mipham Corporation 技术委员会
 
@@ -72,7 +72,7 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **试用期（probation）** — `core/probation.ts`：有任务表现测量的 skill 合并后开 3 次观察窗（同 skill、gate 池、k≥3），噪声自适应地板 `max(stdDev, 2×(100/poolSize))` 出 verdict；`regressed` **只打印** `git revert <sha>`，不执行；无随机仪器的合并登记 `noInstrument`，`/crsi stats` 明说「没有可用仪器」而不是静默跳过；结算前置 = 参考解可信 ∧ 正对照为 0 ∧ 每轮可测 ∧ 有率
 
 CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|bench [--capture|--sealed --skill <name>]|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：5,313 测试（5,311 passed + 2 skipped，394 文件）
+测试：5,332 测试（5,330 passed + 2 skipped，394 文件）
 
 ---
 
@@ -109,7 +109,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 394 个测试文件，5313 个测试
+│   │   ├── test/               # 394 个测试文件，5332 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -135,7 +135,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（5313 个测试）
+pnpm test         # vitest run（5332 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -325,28 +325,28 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                    |
 | --------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| core            | 113     | 2046     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
-| tools           | 35      | 675      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
+| core            | 113     | 2069     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                             |
+| tools           | 35      | 684      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                      |
 | daemon          | 38      | 276      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                               |
-| ui              | 57      | 572      | commands / input / config-wizard / loop / skill-doctor / ctrl-c / command-reachability                                                                                      |
-| agent           | 16      | 173      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
+| ui              | 57      | 580      | commands / input / config-wizard / loop / skill-doctor / ctrl-c / command-reachability                                                                                      |
+| agent           | 16      | 176      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                  |
 | security        | 12      | 126      | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                          |
-| providers       | 10      | 201      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
-| mcp             | 13      | 193      | client / transport / oauth / token-store / registry / instructions（含 2 skipped）                                                                                          |
+| providers       | 10      | 203      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                               |
+| mcp             | 13      | 196      | client / transport / oauth / token-store / registry / instructions（含 2 skipped）                                                                                          |
 | workflow        | 8       | 73       | runtime / loop / parallel / sandbox / journal / verify                                                                                                                      |
 | vajra           | 6       | 53       | context / events / service / compose / leaf（自建内核）                                                                                                                     |
 | shared          | 12      | 152      | arg-validation / deleted-cwd / sanitize / graft / update-async                                                                                                              |
 | commands        | 15      | 127      | keys / cd-suggest / loop-scaffold / autoloop-journal / permissions / init-providers / provider-model-flags                                                                  |
-| skills          | 7       | 74       | sanitizer / marketplace / fork-executor / skill-assets                                                                                                                      |
+| skills          | 8       | 79       | sanitizer / marketplace / fork-executor / skill-assets                                                                                                                      |
 | config          | 11      | 144      | credential-crypto / loader-encryption / defaults / settings-json / preferences / model-context-window                                                                       |
-| plugin          | 4       | 66       | claude-plugin / plugin-manager                                                                                                                                              |
+| plugin          | 4       | 67       | claude-plugin / plugin-manager                                                                                                                                              |
 | artifacts       | 1       | 6        | manifest                                                                                                                                                                    |
 | agent-view      | 4       | 42       | agent-view-manager / dashboard-keys / session-view                                                                                                                          |
 | e2e             | 1       | 8        | full-pipeline                                                                                                                                                               |
 | integration     | 1       | 3        | 跨仓接线：`vscode-extension-telemetry`（VS Code 遥测关闭 ⇒ 终端拿到 `MIPHAM_TELEMETRY=off`）                                                                                |
 | integrity       | 20      | 138      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                 |
-| **合计**        | **394** | **5313** | 0 失败（5,311 passed + 2 skipped，394 文件）                                                                                                                                |
+| **合计**        | **394** | **5332** | 0 失败（5,330 passed + 2 skipped，394 文件）                                                                                                                                |
 
 ### 测试注意事项
 

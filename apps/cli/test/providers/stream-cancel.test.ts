@@ -329,6 +329,59 @@ async function collect(gen: AsyncGenerator<StreamChunk>): Promise<StreamChunk[]>
   return out
 }
 
+/**
+ * A read that rejects with AbortError is the caller leaving, not a stalled
+ * stream. Both providers used to wrap it into a retryable `Stream stalled:`
+ * error chunk, so pressing Esc cost a bogus retry and the turn ended with
+ * "The operation was aborted." instead of an interruption.
+ */
+function abortingSSE(): Response {
+  const body = new ReadableStream<Uint8Array>({
+    pull() {
+      throw new DOMException('Aborted', 'AbortError')
+    },
+  })
+  return new Response(body, { status: 200 })
+}
+
+describe('a read aborted by the caller stays an abort', () => {
+  it('openai-compat rethrows instead of yielding a retryable error chunk', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(abortingSSE()) as unknown as typeof fetch
+    const chunks: StreamChunk[] = []
+    await expect(
+      (async () => {
+        for await (const c of new OpenAICompatProvider(openaiConfig()).chat({
+          model: 'gpt-5',
+          messages: [{ role: 'user', content: 'hi' }],
+        })) {
+          chunks.push(c)
+        }
+      })(),
+    ).rejects.toMatchObject({ name: 'AbortError' })
+    expect(chunks.some((c) => c.type === 'error' && /Stream stalled/.test(c.error ?? ''))).toBe(
+      false,
+    )
+  })
+
+  it('anthropic rethrows instead of yielding a retryable error chunk', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(abortingSSE()) as unknown as typeof fetch
+    const chunks: StreamChunk[] = []
+    await expect(
+      (async () => {
+        for await (const c of new AnthropicProvider(anthropicConfig()).chat({
+          model: 'claude-sonnet-4-6',
+          messages: [{ role: 'user', content: 'hi' }],
+        })) {
+          chunks.push(c)
+        }
+      })(),
+    ).rejects.toMatchObject({ name: 'AbortError' })
+    expect(chunks.some((c) => c.type === 'error' && /Stream stalled/.test(c.error ?? ''))).toBe(
+      false,
+    )
+  })
+})
+
 describe('调用方撤销时这条流真的会断（signal 送达传输层，D17）', () => {
   it('openai-compat：撤销 ⇒ 流当场断掉，而不是照常读完', async () => {
     const probe = signalProbe(openaiFive)
@@ -342,10 +395,18 @@ describe('调用方撤销时这条流真的会断（signal 送达传输层，D17
     })
 
     const seen: StreamChunk[] = []
-    for await (const c of gen) {
-      seen.push(c)
-      if (c.type === 'text') ac.abort() // 用户在第 1 块之后走人
+    let abortErr: unknown
+    try {
+      for await (const c of gen) {
+        seen.push(c)
+        if (c.type === 'text') ac.abort() // 用户在第 1 块之后走人
+      }
+    } catch (err) {
+      abortErr = err
     }
+    // 撤销必须以 AbortError 的身份离开 provider（它曾被包成可重试的
+    // `Stream stalled:` 错误块 ⇒ 用户按 Esc 换来一次假重试）。
+    expect((abortErr as Error | undefined)?.name).toBe('AbortError')
 
     // 「调用方的撤销到达了传输层」——单看「fetch 收到了某个 signal」没有分辨力：
     // `fetch-utils` 无论 `init.signal` 在不在都会塞一个自己的超时 signal 进去。
@@ -366,10 +427,16 @@ describe('调用方撤销时这条流真的会断（signal 送达传输层，D17
     })
 
     const seen: StreamChunk[] = []
-    for await (const c of gen) {
-      seen.push(c)
-      if (c.type === 'text') ac.abort()
+    let abortErr: unknown
+    try {
+      for await (const c of gen) {
+        seen.push(c)
+        if (c.type === 'text') ac.abort()
+      }
+    } catch (err) {
+      abortErr = err
     }
+    expect((abortErr as Error | undefined)?.name).toBe('AbortError')
 
     expect(probe.signal()?.aborted).toBe(true)
     expect(seen.filter((c) => c.type === 'text').length).toBeLessThan(5)

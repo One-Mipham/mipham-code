@@ -15,6 +15,7 @@ import {
 } from './crsi-producer'
 import { miphamHome } from './paths.ts'
 import { safeSlice } from '../shared/sanitize'
+import { readRegularFileSync } from '../shared/regular-file'
 
 export interface FrontmatterResult {
   data: Record<string, unknown>
@@ -765,9 +766,13 @@ Never omit it or present the work as purely human-authored.`)
     const changed: string[] = []
     for (const inst of this.instructions) {
       if (this.isUnsafePath(inst.path, inst.level)) continue
-      if (!existsSync(inst.path)) continue
+      // Type, not existence: `existsSync` is true for a FIFO, and reading one
+      // with no writer blocks forever inside a synchronous call (the same gate
+      // `rules-loader.ts` already uses for rule files).
+      const raw = readRegularFileSync(inst.path)
+      if (raw === null) continue
       try {
-        const { data, content } = parseFrontmatter(readFileSync(inst.path, 'utf-8'))
+        const { data, content } = parseFrontmatter(raw)
         const next = capInstructionContent(content, inst.path)
         if (next !== inst.content) {
           inst.content = next
@@ -788,8 +793,12 @@ Never omit it or present the work as purely human-authored.`)
 
     if (this.isUnsafePath(path, level)) return
 
+    // A FIFO/socket/device here would block the startup read forever; treat it
+    // as "nothing to load" instead of waiting on a writer that may never come.
+    const raw = readRegularFileSync(path)
+    if (raw === null) return
+
     try {
-      const raw = readFileSync(path, 'utf-8')
       const { data, content } = parseFrontmatter(raw)
       this.instructions.push({
         path,

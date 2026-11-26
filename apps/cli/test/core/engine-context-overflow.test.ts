@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { QueryEngine, isContextOverflowError } from '../../src/core/engine'
+import { QueryEngine, explainTransportFailure, isContextOverflowError } from '../../src/core/engine'
 import { ContextManager } from '../../src/core/context'
 import { ProviderRegistry, type ChatRequest } from '../../src/providers/registry'
 import type { StreamChunk } from '../../src/shared/index.ts'
@@ -81,6 +81,26 @@ describe('请求超窗 ⇒ 压缩后重问', () => {
     expect(chunks.some((c) => c.type === 'error')).toBe(false)
   })
 
+  it('代理/网关的 413 也走「压缩后重问」，不是当场结束回合', async () => {
+    const requests: ChatRequest[] = []
+    const registry = registryWith(async function* (req) {
+      requests.push(req)
+      if (requests.length === 1) {
+        yield { type: 'error', error: 'HTTP 413: Payload Too Large', retryable: false }
+        return
+      }
+      yield { type: 'text', content: 'recovered' }
+      yield { type: 'stop' }
+    })
+    const context = longContext()
+    const engine = new QueryEngine(registry, context, new Map())
+
+    const chunks = await collect(engine, 'next question')
+
+    expect(requests).toHaveLength(2)
+    expect(chunks.some((c) => c.type === 'text' && c.content === 'recovered')).toBe(true)
+  })
+
   it('负控：非超窗的确定性失败不压缩，也不多发请求', async () => {
     const requests: ChatRequest[] = []
     const registry = registryWith(async function* (req) {
@@ -147,6 +167,10 @@ describe('isContextOverflowError', () => {
       'The request exceeds the model context window',
       // Bedrock 的原话（317-033）：不含 "context" 也不含 "prompt"。
       'Input is too long.',
+      // 代理/网关的 413 家族：请求本身装不下，原样重发必然再得 413。
+      'HTTP 413: Payload Too Large',
+      'Request entity too large',
+      'Request body too large',
     ]) {
       expect(isContextOverflowError(msg), msg).toBe(true)
     }
@@ -158,10 +182,31 @@ describe('isContextOverflowError', () => {
       'ECONNREFUSED',
       'max_tokens: 9000 > 8192',
       'Rate limit exceeded',
+      'HTTP 404 not found',
+      '4130 requests served',
       '',
       null,
     ]) {
       expect(isContextOverflowError(msg), String(msg)).toBe(false)
     }
+  })
+})
+
+describe('explainTransportFailure', () => {
+  it('代理损坏压缩响应 ⇒ 先说人话，原文留在括号里', () => {
+    const out = explainTransportFailure(
+      'TypeError: terminated (cause: ZlibError: incorrect header check)',
+    )
+    expect(out).toContain('cut or damaged in transit')
+    expect(out).toContain('ZlibError')
+  })
+
+  it('坏 JSON 同样转成人话', () => {
+    const out = explainTransportFailure('JSON Parse error: Unexpected token < in JSON')
+    expect(out).toContain('could not be read')
+  })
+
+  it('负控：与传输无关的错误原样返回', () => {
+    expect(explainTransportFailure('invalid api key')).toBe('invalid api key')
   })
 })

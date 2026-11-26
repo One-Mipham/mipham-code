@@ -1663,7 +1663,9 @@ export class QueryEngine {
       // command failed (CC 2.1.110-027). A failed result is projected as
       // `error || content`, so the warning goes where it is actually read.
       if (hookWarnings.length > 0) {
-        const warning = hookWarnings.join('\n')
+        // Same bound as compaction context: a hook (or a rule) can print a whole
+        // file, and this text is prepended to every matching tool result.
+        const warning = this.capHookContext(hookWarnings.join('\n'))
         if (result.success) {
           result.content = warning + '\n' + (result.content || '')
         } else if (result.error) {
@@ -1686,9 +1688,8 @@ export class QueryEngine {
           result.content = postResult.updatedOutput
         }
         if (postResult.additionalContext) {
-          result.content = result.content
-            ? result.content + '\n' + postResult.additionalContext
-            : postResult.additionalContext
+          const context = this.capHookContext(postResult.additionalContext)
+          result.content = result.content ? result.content + '\n' + context : context
         }
       }
 
@@ -2034,11 +2035,11 @@ export class QueryEngine {
         type: 'warning',
         content: reasoningOnly
           ? `${activeId} returned only reasoning and no answer — retrying once`
-          : `${activeId} failed (${failure}) — retrying once`,
+          : `${activeId} failed (${explainTransportFailure(failure ?? 'Unknown error')}) — retrying once`,
         restart: true,
       }
     }
-    const detail = failure ?? 'Unknown error'
+    const detail = explainTransportFailure(failure ?? 'Unknown error')
 
     // Deterministic failure: re-sending it to another provider cannot change the
     // answer, so surface it once rather than burning the fallback on it.
@@ -2472,8 +2473,9 @@ export class QueryEngine {
       return
     }
 
-    // Feed the block reason back to the AI and continue
-    this.context.injectContext(block.source, block.text)
+    // Feed the block reason back to the AI and continue. A hook that blocks with
+    // a whole log attached must not overflow the context it just refused to end.
+    this.context.injectContext(block.source, this.capHookContext(block.text))
     yield* this.continueWithTools(signal, roundsLeft)
   }
 
@@ -2572,14 +2574,45 @@ function toolResultText(content: ContentBlock[]): string {
  * Kept narrow on purpose: a false positive costs one wasted compaction (the turn
  * retries either way), while a false negative ends the turn with a raw upstream
  * error the user cannot act on. All of these phrasings are ones the providers
- * actually send — the last is the one a 1M-context model returns while the
- * account has not enabled the charge.
+ * actually send — the 413 family is what a proxy or gateway in front of the
+ * provider returns when the *request* is over its limit (retrying it verbatim
+ * fails identically; compacting is what changes the size), and the last is the
+ * one a 1M-context model returns while the account has not enabled the charge.
  */
 export function isContextOverflowError(message: string | null | undefined): boolean {
   if (!message) return false
-  return /context[_ ]length|context window|prompt is too long|input is too long|too many tokens|maximum context length|exceeds? the (?:model'?s )?(?:maximum )?context|usage credits required for 1m context/i.test(
+  return /context[_ ]length|context window|prompt is too long|input is too long|too many tokens|maximum context length|exceeds? the (?:model'?s )?(?:maximum )?context|usage credits required for 1m context|\b413\b|payload too large|request entity too large|request (?:body |size )?too large/i.test(
     message,
   )
+}
+
+/**
+ * Turn a transport-level failure into words the user can act on.
+ *
+ * A proxy or gateway that cuts or rewrites a compressed response surfaces as
+ * `ZlibError: incorrect header check` or a bare JSON parse failure. Those are
+ * diagnoses for us, not for the person reading the turn — but dropping them
+ * entirely would take away the only clue, so the plain sentence comes first and
+ * the original follows in parentheses.
+ */
+export function explainTransportFailure(message: string): string {
+  if (
+    /zlib|decompress|incorrect header check|invalid (?:stored )?block type|unexpected end of (?:file|stream)/i.test(
+      message,
+    )
+  ) {
+    return (
+      'The reply was cut or damaged in transit — a proxy or gateway is the usual cause. ' +
+      `Try again; if it keeps happening, check the proxy. (${message})`
+    )
+  }
+  if (/JSON parse error|unexpected token|unexpected end of JSON input/i.test(message)) {
+    return (
+      "The provider's reply could not be read (malformed JSON — often a proxy or gateway " +
+      `rewriting the response). (${message})`
+    )
+  }
+  return message
 }
 
 function isAbortError(err: unknown): boolean {
