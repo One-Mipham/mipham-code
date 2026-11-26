@@ -1,4 +1,4 @@
-# Mipham Code v0.85.48
+# Mipham Code v0.85.49
 
 **Multi-model open-core intelligent coding terminal** — 12 AI providers, 141 commands, 31 tools, 28 skills + marketplace, self-update. AI-assisted code generation, security auditing, MCP protocol, and extensible skills — in a single CLI.
 
