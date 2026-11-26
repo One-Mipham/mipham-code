@@ -302,6 +302,14 @@ export class MetricsRegistry {
   /** SIS immune system interceptions (block/fix of known error patterns). */
   readonly sisInterceptions: Counter
 
+  /**
+   * Bash commands blocked by the **static** security policy, labelled by rule
+   * class. Deliberately *not* in `COUNTER_WHITELIST`: it exists so the caller can
+   * tell a static-policy block from an SIS / permission block, which is local
+   * diagnosis, not a telemetry dimension.
+   */
+  readonly policyBlockInterceptions: Counter
+
   constructor() {
     // Pre-register standard metrics
     this.cliInvocations = this.counter(
@@ -347,6 +355,11 @@ export class MetricsRegistry {
     this.sisInterceptions = this.counter(
       'mipham_code_sis_interceptions_total',
       'Number of SIS immune system interceptions',
+    )
+
+    this.policyBlockInterceptions = this.counter(
+      'mipham_code_policy_block_interceptions_total',
+      'Number of Bash commands blocked by the static security policy',
     )
   }
 

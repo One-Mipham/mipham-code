@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { spawnSync } from 'node:child_process'
+import { getMetrics, resetMetrics } from '../../src/core/metrics'
 import type { ToolContext } from '../../src/shared'
 import { Context } from '../../src/vajra'
 import { collectTools } from '../../src/tools/seam'
@@ -476,6 +477,67 @@ describe('bash UNC / device-namespace blocking', () => {
     mockSafeSpawn()
     const result = await bashTool.execute({ command: 'echo \\\\n', description: 'test' }, ctx)
     expect(result.success).toBe(true)
+  })
+})
+
+// ============================================================
+// Rejection attribution — a block must say *which* rule fired.
+//
+// A refused command used to read `Command rejected by security policy.` whether
+// a static regex, a blocked command word, a dangerous git subcommand or a UNC
+// path fired. That is indistinguishable from the SIS / permission gates, and a
+// report that guesses the source names the wrong subsystem (2026-11-26).
+// ============================================================
+
+describe('bash security policy — rejection reasons are attributable', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    resetMetrics()
+  })
+
+  it('names the pattern that matched', () => {
+    expect(isBlocked('rm -rf /')).toContain('pattern:')
+  })
+
+  it('counts a blocked pattern under reason=blocked-pattern', async () => {
+    mockSafeSpawn()
+    const result = await bashTool.execute({ command: 'rm -rf /', description: 'test' }, ctx)
+    expect(result.success).toBe(false)
+    expect(getMetrics().policyBlockInterceptions?.value({ reason: 'blocked-pattern' })).toBe(1)
+  })
+
+  it('counts a blocked command word under reason=blocked-command', async () => {
+    mockSafeSpawn()
+    const result = await bashTool.execute({ command: 'shutdown -h now', description: 'test' }, ctx)
+    expect(result.success).toBe(false)
+    expect(getMetrics().policyBlockInterceptions?.value({ reason: 'blocked-command' })).toBe(1)
+  })
+
+  it('counts a dangerous git subcommand under reason=dangerous-git', async () => {
+    mockSafeSpawn()
+    const result = await bashTool.execute(
+      { command: 'git push --force origin main', description: 'test' },
+      ctx,
+    )
+    expect(result.success).toBe(false)
+    expect(getMetrics().policyBlockInterceptions?.value({ reason: 'dangerous-git' })).toBe(1)
+  })
+
+  it('counts a UNC path under reason=unc-path', async () => {
+    mockSafeSpawn()
+    const result = await bashTool.execute(
+      { command: 'type \\\\evil.com\\share\\x', description: 'test' },
+      ctx,
+    )
+    expect(result.success).toBe(false)
+    expect(getMetrics().policyBlockInterceptions?.value({ reason: 'unc-path' })).toBe(1)
+  })
+
+  it('does not count an allowed command', async () => {
+    mockSafeSpawn()
+    const result = await bashTool.execute({ command: 'ls -la', description: 'test' }, ctx)
+    expect(result.success).toBe(true)
+    expect(getMetrics().policyBlockInterceptions?.value({ reason: 'blocked-pattern' })).toBe(0)
   })
 })
 

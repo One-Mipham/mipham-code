@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs'
 import type { ToolDefinition, CredentialMaskingConfig } from '../../shared/index.ts'
 import { sanitizeCommand } from '../../shared/sanitize.ts'
 import { DANGEROUS_GIT_PATTERNS } from './git.ts'
+import { getMetrics } from '../../core/metrics'
 import { isUncOrDevicePath, isWithin } from '../../security/path.ts'
 import { findWorktreeMarker } from '../../core/paths.ts'
 import { splitShellSegments, expandKnownPathVars } from '../../core/permission-rules'
@@ -156,7 +157,21 @@ function normalizeEscapes(command: string): string {
   )
 }
 
-export function isBlocked(command: string): string | null {
+type BlockReason = 'blocked-command' | 'dangerous-git' | 'unc-path' | 'blocked-pattern'
+
+interface BlockVerdict {
+  reason: BlockReason
+  message: string
+}
+
+/**
+ * Classify a command against the static policy, keeping *which* rule fired.
+ *
+ * The reason is the point: a bare "rejected by security policy" is
+ * indistinguishable from the SIS / permission gates, so whoever reports on the
+ * rejection has to guess — and named the wrong subsystem on 2026-11-26.
+ */
+function classifyBlocked(command: string): BlockVerdict | null {
   // Normalize ANSI-C escape sequences for defense-in-depth
   const normalized = normalizeEscapes(command)
   // P0-1: Also sanitize for permission check (strips invisible chars, normalizes homoglyphs)
@@ -172,7 +187,10 @@ export function isBlocked(command: string): string | null {
     ...commandWords(sanitized),
   ]) {
     if (BLOCKED_COMMANDS.includes(word)) {
-      return `Command "${word}" rejected by security policy.`
+      return {
+        reason: 'blocked-command',
+        message: `Command "${word}" rejected by security policy.`,
+      }
     }
   }
 
@@ -184,7 +202,10 @@ export function isBlocked(command: string): string | null {
   if (/(?:^|[\s;&|])(?:sudo\s+)?git\s+/.test(normalized)) {
     for (const { pattern, description } of DANGEROUS_GIT_PATTERNS) {
       if (pattern.test(normalized)) {
-        return `Dangerous git command blocked: "${description}". Run manually if intended.`
+        return {
+          reason: 'dangerous-git',
+          message: `Dangerous git command blocked: "${description}". Run manually if intended.`,
+        }
       }
     }
   }
@@ -192,17 +213,28 @@ export function isBlocked(command: string): string | null {
   // Reject UNC / device-namespace paths — accessing one triggers SMB negotiation
   // on Windows and silently leaks NTLM credentials (Claude Code 2.1.233 CVE-class fix).
   if (isUncOrDevicePath(command) || isUncOrDevicePath(normalized) || isUncOrDevicePath(sanitized)) {
-    return `Command rejected: references a UNC or device-namespace path (blocked to prevent NTLM credential leakage).`
+    return {
+      reason: 'unc-path',
+      message: `Command rejected: references a UNC or device-namespace path (blocked to prevent NTLM credential leakage).`,
+    }
   }
 
   // Check dangerous patterns (on original, normalized, and sanitized)
   for (const pattern of BLOCKED_PATTERNS) {
     if (pattern.test(command) || pattern.test(normalized) || pattern.test(sanitized)) {
-      return 'Command rejected by security policy.'
+      return {
+        reason: 'blocked-pattern',
+        message: `Command rejected by security policy (pattern: ${pattern.source}).`,
+      }
     }
   }
 
   return null // safe
+}
+
+/** The user-facing rejection message, or null when the command may run. */
+export function isBlocked(command: string): string | null {
+  return classifyBlocked(command)?.message ?? null
 }
 
 /**
@@ -890,9 +922,12 @@ export function createBashTool(credentialConfig?: CredentialMaskingConfig): Tool
       }
 
       // Security: check command against deny list
-      const blockedReason = isBlocked(command)
-      if (blockedReason) {
-        return { success: false, content: '', error: blockedReason }
+      // Counted at the enforcement point, not inside `isBlocked`: the red team and
+      // tests call `isBlocked` for diagnosis, and those are not real blocks.
+      const blocked = classifyBlocked(command)
+      if (blocked) {
+        getMetrics().policyBlockInterceptions.inc({ reason: blocked.reason })
+        return { success: false, content: '', error: blocked.message }
       }
 
       try {
