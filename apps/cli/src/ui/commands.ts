@@ -59,6 +59,13 @@ import {
   LESSONS_FILE,
   MANAGED_RULES_FILE,
 } from '../core/crsi-producer'
+import {
+  findLessonsFile,
+  readPendingLessons,
+  readSignals,
+  splitLessonBlocks,
+  pendingToInsights,
+} from '../core/crsi-inbox'
 import { prefilterProposal } from '../core/proposal-guard'
 import { integrateProposals, formatIntegrationSummary } from '../core/proposal-integration'
 import {
@@ -1478,7 +1485,12 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
     return { content: '⚠️ 已有待批准的修改。先 /crsi modify --approve 或 --reject。' }
   }
 
-  const insights = ctx.engine.getAutoMemory?.()?.accumulatedInsights ?? []
+  // 本次会话的洞察 + 收件箱里的历史信号：重启后 `accumulatedInsights` 为空，
+  // 但收件箱不会 —— 否则「学习」仍然要求失败与 propose 发生在同一个进程里。
+  const insights = [
+    ...(ctx.engine.getAutoMemory?.()?.accumulatedInsights ?? []),
+    ...pendingToInsights(readSignals()),
+  ]
   let metaRules: Parameters<typeof produceCrsiProposal>[1] = []
   try {
     metaRules = ctx.engine.getMetaRuleEngine?.()?.analyze().metaRules ?? []
@@ -1495,6 +1507,53 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
     }).trim()
   } catch {
     // 非 git 目录 → 回退 cwd
+  }
+
+  // ── 收件箱路径：/crsi propose --pending ──
+  // 启动时 `refreshPendingLessons` 已把收件箱里尚未并入的信号渲染成 pending 文件
+  // （不需要人在场）。这里只负责把它送进沙箱 gate 与人类审阅 —— 合并仍要批准。
+  if (args[0] === '--pending') {
+    const pendingContent = readPendingLessons()
+    if (!pendingContent.trim()) {
+      return { content: '没有待并入的教训 —— 收件箱为空，或它们都已并入 crsi-lessons.md。' }
+    }
+
+    const { existsSync, readFileSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    // `root` 来自 `git rev-parse`；那条命令在测试里被 mock、也可能在非 git 目录失败。
+    // 读侧允许从 cwd 向上找 —— 而提案里的 `filePath` 仍是仓库根相对路径。
+    const fromRoot = join(root, LESSONS_FILE)
+    const lessonsPath = existsSync(fromRoot) ? fromRoot : findLessonsFile(process.cwd())
+    if (!lessonsPath) {
+      return { content: `❌ 找不到 ${LESSONS_FILE}（当前目录不是 mipham-code 仓库？）。` }
+    }
+    const current = readFileSync(lessonsPath, 'utf-8')
+
+    // 按标题逐块去重：pending 是派生视图，可能比 lessons 慢一拍（刚合并完还没重新渲染）。
+    const fresh = splitLessonBlocks(pendingContent).filter(
+      (block) => !current.includes(block.split('\n', 1)[0]!),
+    )
+    if (fresh.length === 0) {
+      return { content: 'pending 里的教训都已并入 crsi-lessons.md。' }
+    }
+
+    const result = await runCrsiModification({
+      description: `CRSI inbox: ${fresh.length} 条收件箱教训`,
+      filePath: LESSONS_FILE,
+      originalContent: current,
+      newContent: `${current.trimEnd()}\n\n${fresh.join('\n')}\n`,
+      blastRadius: [LESSONS_FILE],
+    })
+    if (!result.applied || result.phase === 'failed') {
+      return { content: `❌ 生成失败（phase: ${result.phase}）。\n${result.error ?? ''}` }
+    }
+    return {
+      content:
+        `✅ 已把 ${fresh.length} 条收件箱教训送进沙箱并跑过测试。审阅 diff：\n` +
+        renderGateNote(result) +
+        `\n${result.diff}\n\n` +
+        '/crsi modify --approve 合并 | /crsi modify --reject 丢弃',
+    }
   }
 
   // ── 散文提议路径：/crsi propose --prose 用 LLM 生成改 skill 散文提议 ──
@@ -1742,7 +1801,12 @@ const crsiProposeCmd: CommandHandler = async (ctx, args) => {
     current = ''
   }
 
-  const proposal = produceCrsiProposal(insights, metaRules, current, new Date().toISOString())
+  // 已并入的教训不参与「选最佳信号」。否则最好那条（critical 优先）刚好已并入时，
+  // `produceCrsiProposal` 的幂等判断会让它返回 null —— 排在后面的可学信号一起被挡。
+  const freshInsights = insights.filter(
+    (i) => !current.includes(`## ${i.category}: ${i.description}`),
+  )
+  const proposal = produceCrsiProposal(freshInsights, metaRules, current, new Date().toISOString())
 
   if (!proposal) {
     return { content: '没有足够的失败信号（autoApplicable insight 或高置信元规则）来生成教训。' }
@@ -7564,7 +7628,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/crsi inventory': 'Live capability self-report — CRSI/SIS/constitution state',
   '/crsi modify': 'Run a code self-modification through the sandbox (worktree → tests → approve)',
   '/crsi propose':
-    '固化 CRSI 失败信号（默认教训 / --rule 受管理规则 / --prose 改 skill 散文），沙箱 + 人批准门控',
+    '固化 CRSI 失败信号（默认教训 / --pending 收件箱自动产出的教训 / --rule 受管理规则 / --prose 改 skill 散文），沙箱 + 人批准门控',
   '/crsi prose-clear': '清空散文提议去重 ledger（~/.mipham/crsi/prose-proposals.jsonl）',
   '/crsi eval': 'Run the ground-truth CRSI eval harness and record the score',
   '/crsi bench':

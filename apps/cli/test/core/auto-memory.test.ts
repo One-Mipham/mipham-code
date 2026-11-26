@@ -8,6 +8,7 @@ import { EffectivenessTracker } from '../../src/agent/effectiveness-tracker.js'
 import type { PatternAnalyzer } from '../../src/agent/pattern-analyzer.js'
 import type { ExperienceRuleEngine } from '../../src/core/rule-engine.js'
 import type { CrsiProvenanceBridge } from '../../src/agent/crsi-provenance-bridge.js'
+import { readSignals } from '../../src/core/crsi-inbox'
 
 function createTestDir(): string {
   const dir = join(tmpdir(), `mipham-test-auto-memory-${randomUUID().slice(0, 8)}`)
@@ -188,6 +189,46 @@ describe('AutoMemoryEngine', () => {
       expect(content).toContain('失败项')
       expect(content).toContain('关键决策')
       expect(content).toContain('待办项')
+    })
+
+    // P2：学习不能依赖「进程还活着时有人敲 /crsi propose」。
+    it('persist 把 autoApplicable 的 insight 落进信号收件箱（进程退出也不丢）', () => {
+      const tag = randomUUID().slice(0, 8)
+      const reflection = {
+        id: `signal-${tag}`,
+        sessionId: 'test-session-inbox',
+        timestamp: new Date().toISOString(),
+        summary: 's',
+        successes: [],
+        failures: [],
+        crsiInsights: [
+          {
+            category: 'timeout',
+            description: `收件箱测试-采集-${tag}`,
+            severity: 'warning' as const,
+            suggestion: '加 timeout',
+            evidence: ['e'],
+            autoApplicable: true,
+          },
+          {
+            category: 'semantic',
+            description: `收件箱测试-跳过-${tag}`,
+            severity: 'info' as const,
+            suggestion: '仅记录',
+            evidence: ['e'],
+            autoApplicable: false,
+          },
+        ],
+        decisions: [],
+        actionItems: [],
+      }
+
+      engine.persist(reflection)
+
+      const titles = readSignals().map((s) => s.title)
+      expect(titles).toContain(`收件箱测试-采集-${tag}`)
+      // 不可自动应用的 insight 只是会话洞察，不该进「待转教训」的队列。
+      expect(titles).not.toContain(`收件箱测试-跳过-${tag}`)
     })
 
     it('should update MEMORY.md index', () => {

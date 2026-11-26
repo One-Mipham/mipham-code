@@ -905,6 +905,21 @@ export async function runApp(options: RunOptions): Promise<void> {
     process.stderr.write(`⚠ Mipham Code: ${msg}\n`)
   }
 
+  // CRSI 收件箱：上个会话（或更早）攒下的失败信号 → 自动渲染成待并入教训。
+  // 这一段不需要人在场 —— 信号在每轮 persist 时已同步落盘，这里只负责产出。
+  // 合并仍走 `/crsi propose --pending` → 沙箱 → 批准，自动化的是「产出」不是「合并」。
+  try {
+    const { refreshPendingLessons } = await import('./core/crsi-inbox')
+    const pending = refreshPendingLessons(process.cwd())
+    if (pending.total > 0) {
+      process.stderr.write(
+        `📚 CRSI: ${pending.total} 条教训已自动生成（/crsi propose --pending 并入）\n`,
+      )
+    }
+  } catch {
+    // 非关键路径：收件箱坏了不该影响启动
+  }
+
   // Initialize agent registry and load plugin agents/skills/MCP/hooks
   const agentRegistry = new AgentRegistry()
   if (!safeMode) {

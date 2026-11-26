@@ -19,6 +19,7 @@ import type { ErrorSignatureDB } from './error-signature-db.js'
 import type { CrsiProvenanceBridge } from '../agent/crsi-provenance-bridge.js'
 import { getMetrics } from './metrics'
 import { miphamHome } from './paths.ts'
+import { appendSignals, insightsToSignals } from './crsi-inbox'
 
 // ── Types ──
 
@@ -210,6 +211,18 @@ export class AutoMemoryEngine {
       why: `CRSI Phase 2 自动复盘 — 会话 ${reflection.sessionId}`,
       howToApply: '下次会话开始时回顾此文件，检查是否有可操作的改进项',
     })
+
+    // CRSI 信号收件箱：进程退出后信号仍在。
+    //
+    // 不写的话，「学习」隐含一个前提 —— 失败发生后、进程退出前，有人想起来
+    // 敲 `/crsi propose`；人不在，insight 随进程消失。收件箱把这一段变成
+    // 每轮同步落盘，下次启动由 `refreshPendingLessons` 自动渲染成待并入教训。
+    // 失败不能让一轮对话失败：收件箱是非关键路径。
+    try {
+      appendSignals(insightsToSignals(reflection.crsiInsights.filter((i) => i.autoApplicable)))
+    } catch {
+      // ignore — 收件箱写失败不影响本轮
+    }
 
     // Feed CRSI insights into the rule engine
     this.feedCrsiPipeline(reflection)

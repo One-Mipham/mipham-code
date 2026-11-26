@@ -6,6 +6,7 @@
   "coverageAnalysis": "perTest",
   "reporters": ["clear-text", "progress", "json"],
   "mutate": [
+    "src/core/crsi-inbox.ts",
     "src/core/crsi-managed-rules.ts",
     "src/core/crsi-modify.ts",
     "src/core/crsi-sandbox.ts",

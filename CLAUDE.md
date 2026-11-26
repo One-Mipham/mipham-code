@@ -65,14 +65,14 @@ Mipham Code 的终极目标是达到 **CRSI（Continuous Recursive Self-Improvem
 - **自我认知** `/crsi inventory` — 能力自报告，聚合 CRSI/SIS/宪法实时状态；系统提示注入「回答能力边界先查状态」规则
 - **沙箱入口** `/crsi modify` — `core/crsi-modify.ts` 两阶段闸门（worktree → 测试 → diff → `--approve`/`--reject`）；`--integrate` 多提案按 3-way merge 收兼容子集（ELITE），冲突默认拒绝、`--drop-conflicts` 显式丢弃
 - **完整覆盖闸** `/crsi modify` 入口 — `crsi-sandbox.ts` `validateBlastRadius`：自修改 proposal 必须声明非空 `blastRadius`（触及的**全部**代码路径），否则 fail-closed 拒绝（今日「两条渲染路径只接一条 = 局部正确全局遗漏」教训固化）
-- **producer** `/crsi propose` — `core/crsi-producer.ts` 把失败信号转成四类候选：默认教训文件 `crsi-lessons.md`（模板化无 LLM）、`--rule` 固化受管理规则 `crsi-managed-rules.ts`（确定性行为，source='managed'）、`--prose` 两阶段 LLM 改 skill 散文（A1 边界首演：LLM 只生成不判定）、`--crossover` LLM 选两条重叠教训合并（精确行匹配 guard 防幻觉，删二增一）；三信号路径同信号幂等
+- **producer** `/crsi propose` — `core/crsi-producer.ts` 把失败信号转成四类候选：默认教训文件 `crsi-lessons.md`（模板化无 LLM）、`--rule` 固化受管理规则 `crsi-managed-rules.ts`（确定性行为，source='managed'）、`--prose` 两阶段 LLM 改 skill 散文（A1 边界首演：LLM 只生成不判定）、`--crossover` LLM 选两条重叠教训合并（精确行匹配 guard 防幻觉，删二增一）；三信号路径同信号幂等。**收件箱**（`core/crsi-inbox.ts`）：每轮 `persist()` 把 autoApplicable 信号落盘 `~/.mipham/crsi/signal-inbox.jsonl`（0600、按 category|title 幂等），启动时从「收件箱 − 已并入」派生 `pending-lessons.md` 并提示 —— 人不在场也不丢信号；`/crsi propose --pending` 把派生教训送进同一道沙箱 + 批准闸门（自动化的只是**产出**，不是合并）
 - **eval harness** `/crsi eval` — `core/eval-harness.ts` 冻结 40 条 ground-truth 契约（规则/宪法/沙箱边界/完整覆盖闸/语义边界/红队/producer/行为缺口/行为任务）+ rewards 日志 `~/.mipham/crsi/eval-scores.jsonl`，`runCrsiModification` 的第二道闸是**方向性 regret**（GUARD）：anchor 零回退 + 新破坏必须少于新修复；契约集合变动时退回标量分数闸。8 行为缺口（rm -rf/管道投毒/git reset --hard/chmod 777/mkfs/dd→/dev//关停主机/crontab -r）已由固化 managed tool-params 规则覆盖 → 全翻转 PASS → 满分 100 =「证明更好」
 - **任务表现评估 + 改进轨** `/crsi bench` — `core/task-performance.ts`（LLM 生成代码 → 冻结测试判定 → 分数；skill 注入）+ `core/improvement-track.ts`（多次采样 → 噪声自适应 `minEffect = max(20, 2×噪声)` → verdict improved/regressed/inconclusive + Wilson 改进率 + 台账 `~/.mipham/crsi/improvements.jsonl`）；`/crsi modify` 只拦 regressed（倒退才拦，因果归因/最小效应量/误提升预算/改进率四项）；空模型闸（空程序也能通过的题不计入改进，`improved` 降级为 `inconclusive`）；SIM（`problemKey`/`rationale` 按复发问题分组，`/crsi stats` 出视图）+ RSI Tax（逐采样 token 成本，`/crsi stats` 给合计与 0-token eval 基线；只记录不进裁决）。**量具三态**：`uncertain`（无文本且无 usage ⇒ 仪器故障）与 `fail` 分开计数，`measurable === false` 时分数是「未测得」而不是 100，`measureSkillDeltaRepeated` 返回 `null`、任务表现奖励源抛错
 - **捕获率 + 留出集** `/crsi bench --capture|--sealed` — `core/capture-rate.ts`（纯算术：`Σ(on−off)/Σ(100−off)`，headroom 与配对剔除、题级重采样区间；无题可计 ⇒ `null`，不是 0 也不是 1）+ `core/capture-measure.ts`（off/on 两臂编排 + 参考解臂零 LLM 本地判上界 + 正对照取 **off 臂**：真率非 null 时对照必然可算）。任务电池 15 题分 `gate`(12)/`sealed`(3)，**sealed 永不进裁定**（`--capture` 并排作过拟合旁证，`--sealed` 独立读面）
 - **试用期（probation）** — `core/probation.ts`：有任务表现测量的 skill 合并后开 3 次观察窗（同 skill、gate 池、k≥3），噪声自适应地板 `max(stdDev, 2×(100/poolSize))` 出 verdict；`regressed` **只打印** `git revert <sha>`，不执行；无随机仪器的合并登记 `noInstrument`，`/crsi stats` 明说「没有可用仪器」而不是静默跳过；结算前置 = 参考解可信 ∧ 正对照为 0 ∧ 每轮可测 ∧ 有率
 
-CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--prose|--crossover]|prose-clear|lessons|eval|bench [--capture|--sealed --skill <name>]|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
-测试：5,397 测试（5,395 passed + 2 skipped，399 文件）
+CLI 命令：`/crsi rules|disable|analyze|restore|stats|health|inventory|modify|propose [--rule|--pending|--prose|--crossover]|prose-clear|lessons|eval|bench [--capture|--sealed --skill <name>]|meta|interpret|critique|red-team` + `/sis errors|stats|clear|cleanup`
+测试：5,416 测试（5,414 passed + 2 skipped，400 文件）
 
 ---
 
@@ -109,7 +109,7 @@ mipham-code/
 │   │   │   ├── config/         # loader + defaults
 │   │   │   └── ui/             # app, chat, input, commands, picker
 │   │   ├── skills/             # 28 个内置技能（22 standard + 6 mipham）
-│   │   ├── test/               # 399 个测试文件，5397 个测试
+│   │   ├── test/               # 400 个测试文件，5416 个测试
 │   │   └── assets/             # icon.jpg, icon.icns
 │   ├── telemetry/              # 遥测接收端（T1b，Node 22 + systemd 部署，本仓库唯一对外服务）
 │   │   ├── src/                # config schema validate request dedup aggregate store crypto ratelimit server report
@@ -135,7 +135,7 @@ mipham-code/
 cd apps/cli
 pnpm dev          # bun run bin/mipham.ts（开发模式）
 pnpm build        # bun build --compile（生产二进制）
-pnpm test         # vitest run（5397 个测试）
+pnpm test         # vitest run（5416 个测试）
 pnpm typecheck    # tsc --noEmit
 pnpm mutate       # stryker run（变异测试；~31 分钟，**必须在本目录下跑**，见 ROADMAP T3c）
 
@@ -325,10 +325,10 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 
 | 目录（`test/`） | 文件数  | 测试数   | 覆盖范围                                                                                                                                                                                                                             |
 | --------------- | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| core            | 115     | 2089     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                                                                                      |
+| core            | 116     | 2105     | engine / context / permission / hooks / crsi / memory / instructions / paths 等                                                                                                                                                      |
 | tools           | 35      | 690      | bash / file / exec / skill / agent / scheduling / seam                                                                                                                                                                               |
 | daemon          | 39      | 293      | feishu / telegram / 钉钉 / 企业微信渠道 + session / auth / auth-rotate / workspace-guard / logger + **引擎接线行为**（`engine-capabilities`）                                                                                        |
-| ui              | 57      | 580      | commands / input / config-wizard / loop / skill-doctor / ctrl-c / command-reachability                                                                                                                                               |
+| ui              | 57      | 583      | commands / input / config-wizard / loop / skill-doctor / ctrl-c / command-reachability                                                                                                                                               |
 | agent           | 16      | 176      | sub-agent / background-registry / pattern-analyzer / effectiveness-tracker                                                                                                                                                           |
 | security        | 12      | 126      | fd / path / url 净化 + permission-gate + penetration（6 个攻击面）                                                                                                                                                                   |
 | providers       | 10      | 205      | anthropic / openai-compat / registry / llm-replay / bootstrap                                                                                                                                                                        |
@@ -346,7 +346,7 @@ v2.0.0，定义 AI 交互人格：和平、友好、友善、友爱、包容、�
 | integration     | 1       | 3        | 跨仓接线：`vscode-extension-telemetry`（VS Code 遥测关闭 ⇒ 终端拿到 `MIPHAM_TELEMETRY=off`）                                                                                                                                         |
 | integrity       | 22      | 158      | 引用完整性守卫 + ESLint 规则生效证明 + **遥测契约**（CLI ↔ `apps/telemetry` 逐字段，含 endpoint ↔ vhost 目的地）+ **变异测试范围**（`mutate` 清单 vs 磁盘枚举，延后表明写）+ **跳过记账**（`test-report-audit`：未登记的 skip 即红） |
 | telemetry       | 9       | 130      | redact / consent / queue / payload / crash / transport / endpoint / 门面 / 双路径计数一致性                                                                                                                                          |
-| **合计**        | **399** | **5397** | 0 失败（5,395 passed + 2 skipped，399 文件）                                                                                                                                                                                         |
+| **合计**        | **400** | **5416** | 0 失败（5,414 passed + 2 skipped，400 文件）                                                                                                                                                                                         |
 
 ### 测试注意事项
 

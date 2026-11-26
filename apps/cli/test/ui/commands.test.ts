@@ -2741,3 +2741,65 @@ describe('/crsi stats 的逐题修复段', () => {
     expect(content).toContain('另有 1 条旧记录没有逐题计数')
   })
 })
+
+// ═══════════════════════════════════════════════════════════════
+// /crsi propose --pending —— 启动时自动产出的收件箱教训必须真的进闸门
+// ═══════════════════════════════════════════════════════════════
+
+describe('/crsi propose --pending', () => {
+  async function seedPending(content: string): Promise<() => void> {
+    const { pendingLessonsPath } = await import('../../src/core/crsi-inbox')
+    const { dirname } = await import('node:path')
+    const path = pendingLessonsPath()
+    mkdirSync(dirname(path), { recursive: true })
+    writeFileSync(path, content)
+    return () => rmSync(path, { force: true })
+  }
+
+  it('把 pending 里的新块作为一次修改提案送进沙箱（追加而非覆盖）', async () => {
+    const { LESSONS_FILE } = await import('../../src/core/crsi-producer')
+    const tag = `t${Date.now().toString(36)}`
+    const cleanup = await seedPending(`## timeout: 收件箱-${tag}\n\n- 建议: 加 timeout\n`)
+    try {
+      h.runCrsiModification.mockClear()
+      const result = await getCommand('/crsi propose')!(mkCtx(), ['--pending'])
+
+      expect(result.content).toContain('✅ 已把 1 条收件箱教训送进沙箱')
+      const proposal = h.runCrsiModification.mock.calls[0]![0] as {
+        filePath: string
+        newContent: string
+        blastRadius: string[]
+      }
+      expect(proposal.filePath).toBe(LESSONS_FILE)
+      expect(proposal.blastRadius).toEqual([LESSONS_FILE])
+      expect(proposal.newContent).toContain(`## timeout: 收件箱-${tag}`)
+      // 现存教训仍在 —— 这是追加，不是覆盖。
+      expect(proposal.newContent).toContain('## simplicity:')
+    } finally {
+      cleanup()
+    }
+  })
+
+  it('已并入的块逐块剔除；全被剔除时不进闸门', async () => {
+    const cleanup = await seedPending(
+      '## simplicity: 未要求的功能是负债（违反简洁优先）\n\n- 建议: 旧\n',
+    )
+    try {
+      h.runCrsiModification.mockClear()
+      const result = await getCommand('/crsi propose')!(mkCtx(), ['--pending'])
+      expect(result.content).toContain('都已并入')
+      expect(h.runCrsiModification).not.toHaveBeenCalled()
+    } finally {
+      cleanup()
+    }
+  })
+
+  it('没有 pending 文件时明确回执，且不进闸门', async () => {
+    const { pendingLessonsPath } = await import('../../src/core/crsi-inbox')
+    rmSync(pendingLessonsPath(), { force: true })
+    h.runCrsiModification.mockClear()
+    const result = await getCommand('/crsi propose')!(mkCtx(), ['--pending'])
+    expect(result.content).toContain('没有待并入的教训')
+    expect(h.runCrsiModification).not.toHaveBeenCalled()
+  })
+})
