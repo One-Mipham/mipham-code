@@ -18,6 +18,7 @@ export interface CapabilitySources {
       active: number
       degraded: number
       retired: number
+      fixable: number
       avgSuccessRate: number
       totalInterceptions: number
     }
@@ -65,7 +66,11 @@ export function buildCapabilityReport(engine: CapabilitySources): string {
     lines.push(
       `| 错误签名 | ${sis.total} 条 (🟢${sis.active} · 🟡${sis.degraded} · ⚫${sis.retired}) |`,
     )
-    lines.push(`| 平均成功率 | ${Math.round(sis.avgSuccessRate * 100)}% |`)
+    lines.push(
+      `| 平均成功率 | ${
+        sis.fixable > 0 ? `${Math.round(sis.avgSuccessRate * 100)}%` : '—（无可自动修复签名）'
+      } |`,
+    )
     lines.push(`| 总拦截 | ${sis.totalInterceptions} 次 |`)
   } else {
     lines.push('_未初始化_')

@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { ErrorSignatureDB } from '../../src/core/error-signature-db'
+import { ErrorSignatureDB, formatFixRate } from '../../src/core/error-signature-db'
 import { mkdirSync, rmSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -124,16 +124,57 @@ describe('ErrorSignatureDB', () => {
 
     it('degrads signature when success rate drops below 50%', () => {
       const sig = db.insert(makeSig())
-      // Insert many more to bump occurrences high so individual successes don't matter
-      for (let i = 0; i < 100; i++) {
-        db.insert(makeSig())
-      }
-      // Record 0 successes — success rate stays at 0
+      // A single failure is noise, not a verdict — the degrade gate waits for a
+      // real attempt history (3).
+      db.recordResult(sig.id, false)
+      expect(db.get(sig.id)!.status).toBe('active')
+      db.recordResult(sig.id, false)
       db.recordResult(sig.id, false)
       const updated = db.get(sig.id)
-      // With 101 occurrences and 0 successes, successRate should be 0, well below 50%
       expect(updated!.successRate).toBeLessThan(0.5)
       expect(updated!.status).toBe('degraded')
+    })
+  })
+
+  // ============================================================
+  // Fix effectiveness — only strategies that actually apply a fix are rated.
+  //
+  // `warn` and `block` never apply anything, so "success" is undefined for
+  // them. Counting it drove every advisory to 0% and let GC retire the
+  // signatures that fire most (2026-11-26: 10 signatures, 202 occurrences,
+  // 0 successes, while `recordResult` had no production caller at all).
+  // ============================================================
+
+  describe('fix effectiveness is scoped to actionable strategies', () => {
+    it('ignores recordResult for a warn-only signature', () => {
+      const sig = db.insert(makeSig({ pattern: 'advice-only', fixStrategy: 'warn', fixAction: '' }))
+      db.recordResult(sig.id, true)
+      db.recordResult(sig.id, false)
+      const updated = db.get(sig.id)!
+      expect(updated.successCount).toBe(0)
+      expect(updated.failureCount).toBe(0)
+      expect(updated.successRate).toBe(0)
+      expect(updated.status).toBe('active')
+    })
+
+    it('uses attempts (success + failure) as the rate denominator', () => {
+      const sig = db.insert(makeSig({ pattern: 'attempts-denominator' }))
+      db.recordResult(sig.id, true)
+      db.recordResult(sig.id, true)
+      db.recordResult(sig.id, true)
+      db.recordResult(sig.id, false)
+      const updated = db.get(sig.id)!
+      expect(updated.successCount).toBe(3)
+      expect(updated.failureCount).toBe(1)
+      expect(updated.successRate).toBe(0.75)
+    })
+
+    it('formats a rate only for actionable strategies', () => {
+      const warn = db.insert(makeSig({ pattern: 'rate-warn', fixStrategy: 'warn', fixAction: '' }))
+      const fix = db.insert(makeSig({ pattern: 'rate-fix' }))
+      db.recordResult(fix.id, true)
+      expect(formatFixRate(db.get(warn.id)!)).toBe('—')
+      expect(formatFixRate(db.get(fix.id)!)).toBe('100%')
     })
   })
 

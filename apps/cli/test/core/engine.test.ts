@@ -2743,3 +2743,73 @@ describe('QueryEngine — deny 点名的工具不进模型工具表', () => {
     expect(names).toEqual(['Read'])
   })
 })
+
+// ============================================================
+// SIS fix feedback loop — an applied fix gets scored.
+//
+// The pre-flight gate applies `replace`/`prepend`/`append` signatures and then
+// nobody recorded whether the fixed call worked, so `successRate` was frozen at
+// 0 and the confidence gate could never open (2026-11-26).
+// ============================================================
+
+describe('SIS fix feedback loop', () => {
+  let seq = 0
+
+  async function runWithSisFix(outcome: { success: boolean }) {
+    // Run-unique *and* non-overlapping with earlier runs: the engine's DB lives
+    // under the mocked home, which persists across test runs. A fixed trigger
+    // either dedups into yesterday's signature (successCount is history) or, if
+    // it embeds an old pattern as a substring, loses the match to that older,
+    // higher-scored signature. A random token avoids both.
+    const trigger = `sis-loop-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}${++seq}`
+    let turn = 0
+    const registry = mockProviderRegistry(async function* () {
+      if (turn++ === 0) {
+        yield {
+          type: 'tool_use',
+          toolUse: { type: 'tool_use', id: 's1', name: 'Bash', input: { command: trigger } },
+        }
+      }
+      yield { type: 'stop' }
+    })
+    let executions = 0
+    const tool = mockTool('Bash', async () => {
+      executions++
+      return outcome.success
+        ? { success: true, content: 'ok' }
+        : { success: false, content: '', error: 'boom' }
+    })
+    const engine = new QueryEngine(
+      registry,
+      mockContext(),
+      makeToolMap([tool]),
+      new PermissionSystem('bypassPermissions'),
+    )
+    const db = engine.getErrorSignatureDB()
+    const sig = db.insert({
+      pattern: trigger,
+      category: 'semantic',
+      toolName: 'Bash',
+      fixStrategy: 'replace',
+      fixAction: `fixed-${trigger}`,
+      explanation: 'probe',
+    })
+
+    for await (const _ of engine.process('go')) void _
+
+    return { db, sig, executions }
+  }
+
+  it('records success when the applied SIS fix leads to a successful call', async () => {
+    const { db, sig, executions } = await runWithSisFix({ success: true })
+    expect(executions, 'the tool should run exactly once').toBe(1)
+    expect(db.get(sig.id)!.successCount).toBe(1)
+    expect(db.get(sig.id)!.failureCount).toBe(0)
+  })
+
+  it('records failure when the applied SIS fix still fails', async () => {
+    const { db, sig } = await runWithSisFix({ success: false })
+    expect(db.get(sig.id)!.failureCount).toBe(1)
+    expect(db.get(sig.id)!.successCount).toBe(0)
+  })
+})

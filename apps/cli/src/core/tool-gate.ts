@@ -39,7 +39,17 @@ export interface ToolGateDeps {
 
 export type ToolGateOutcome =
   | { ok: false; content: string; error: string; notRun?: boolean }
-  | { ok: true; params: Record<string, unknown>; warnings: string[] }
+  | {
+      ok: true
+      params: Record<string, unknown>
+      warnings: string[]
+      /**
+       * Set when the SIS pre-flight applied a signature's fix. The caller scores
+       * the outcome against this id after the tool runs — without it, `successRate`
+       * can never move and the confidence gate never opens (2026-11-26).
+       */
+      sisFixSignature?: string
+    }
 
 /**
  * The text a principle's `audit_pattern` is matched against.
@@ -73,6 +83,8 @@ export async function runPreToolGate(
 ): Promise<ToolGateOutcome> {
   let effectiveParams = params
   const warnings: string[] = []
+  /** The SIS signature whose fix was applied, if any — scored by the caller. */
+  let sisFixSignature: string | undefined
 
   // ── PreToolUse hook ──
   if (deps.hookEngine) {
@@ -155,6 +167,7 @@ export async function runPreToolGate(
     if (preflight.action === 'fix' && preflight.modifiedParams) {
       getMetrics().sisInterceptions.inc()
       effectiveParams = preflight.modifiedParams
+      sisFixSignature = preflight.matchedSignature
       if (preflight.warning) {
         warnings.push(preflight.warning)
       }
@@ -224,5 +237,10 @@ export async function runPreToolGate(
     }
   }
 
-  return { ok: true, params: effectiveParams, warnings }
+  return {
+    ok: true,
+    params: effectiveParams,
+    warnings,
+    ...(sisFixSignature ? { sisFixSignature } : {}),
+  }
 }

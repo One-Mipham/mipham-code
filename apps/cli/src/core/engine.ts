@@ -1587,6 +1587,10 @@ export class QueryEngine {
     }
     const effectiveParams = gateOutcome.params
     const hookWarnings = gateOutcome.warnings
+    // The SIS pre-flight scored the signature by applying its fix; score the
+    // outcome here, once the call actually runs (or throws).
+    const sisFixSignature = gateOutcome.sisFixSignature
+    let sisOutcomeRecorded = false
 
     // The gate at the top of this method ruled on `params`. Everything since —
     // the PreToolUse hook's `modifiedInput`, the CRSI RuleEngine's `modified`, the
@@ -1656,6 +1660,14 @@ export class QueryEngine {
       // Merge gate: only a review that actually ran (and succeeded) may later
       // permit a merge. Recorded on the one funnel every tool call passes.
       noteToolOutcome(reviewLedger, this.sessionId, name, effectiveParams, result.success)
+
+      // SIS feedback: the pre-flight applied a signature's fix, so this result is
+      // that fix's outcome. Without this line `successRate` never moves and the
+      // confidence gate can never open (2026-11-26).
+      if (sisFixSignature) {
+        this.getPreFlightChecker().recordOutcome(sisFixSignature, result.success)
+        sisOutcomeRecorded = true
+      }
 
       // Prepend PreToolUse `additionalContext` to the result — on failure too.
       // It used to ride only on success, so a hook that warned "this command is
@@ -1737,6 +1749,14 @@ export class QueryEngine {
           .catch(() => {
             // Hook failures never block error handling
           })
+      }
+
+      // The applied SIS fix was followed by a thrown error — score the failure.
+      // Guarded by the flag so a throw *after* a completed run (a hook, the
+      // post-flight checker) cannot retroactively fail a fix that worked.
+      if (sisFixSignature && !sisOutcomeRecorded) {
+        this.getPreFlightChecker().recordOutcome(sisFixSignature, false)
+        sisOutcomeRecorded = true
       }
 
       // Sanitize error: strip stack traces and internal paths to prevent

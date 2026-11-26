@@ -41,6 +41,8 @@ export interface ErrorSignature {
   occurrences: number
   /** Number of times the fix was applied successfully */
   successCount: number
+  /** Number of times the fix was applied and the call still failed */
+  failureCount: number
   /** ISO timestamp of first encounter */
   firstSeen: string
   /** ISO timestamp of most recent encounter */
@@ -56,6 +58,12 @@ export interface ErrorSignatureStats {
   active: number
   degraded: number
   retired: number
+  /**
+   * Active signatures whose strategy applies a fix (`replace`/`prepend`/`append`).
+   * `avgSuccessRate` is averaged over these only — `warn`/`block` have no fix to
+   * succeed, and counting their 0es made every advisory look like a failed fix.
+   */
+  fixable: number
   avgSuccessRate: number
   totalInterceptions: number
 }
@@ -66,6 +74,24 @@ const DEFAULT_STORE_DIR = miphamHome('sis')
 const STORE_FILE = 'error-signatures.json'
 const MIN_SUCCESS_RATE = 0.5 // below this → degraded
 const RETIREMENT_RATE = 0.2 // below this and > 90 days old → retired
+/**
+ * Attempts needed before an outcome can degrade a signature. One failed call is
+ * noise, not a verdict — degrading on it would retire a fix the first time it
+ * met a flaky command.
+ */
+const MIN_ATTEMPTS_FOR_DEGRADE = 3
+
+/** Strategies that actually apply a fix. `warn`/`block` never do. */
+export function isAutoFixable(sig: Pick<ErrorSignature, 'fixStrategy'>): boolean {
+  return (
+    sig.fixStrategy === 'replace' || sig.fixStrategy === 'prepend' || sig.fixStrategy === 'append'
+  )
+}
+
+/** The fix-success rate, or `—` when the strategy does not apply a fix. */
+export function formatFixRate(sig: ErrorSignature): string {
+  return isAutoFixable(sig) ? `${Math.round(sig.successRate * 100)}%` : '—'
+}
 const RETENTION_DAYS = 90 // auto-clean retired signatures older than this
 
 // ── Database ──
@@ -94,6 +120,9 @@ export class ErrorSignatureDB {
       if (!Array.isArray(parsed)) return
       for (const sig of parsed) {
         if (!sig || typeof sig !== 'object' || typeof sig.id !== 'string') continue
+        // Stores written before 2026-11-26 have no `failureCount`; without this,
+        // the first `failureCount + 1` is NaN and the rate silently becomes NaN.
+        if (typeof sig.failureCount !== 'number') sig.failureCount = 0
         this.signatures.set(sig.id, sig)
       }
     } catch {
@@ -123,7 +152,14 @@ export class ErrorSignatureDB {
   insert(
     sig: Omit<
       ErrorSignature,
-      'id' | 'occurrences' | 'successCount' | 'successRate' | 'firstSeen' | 'lastSeen' | 'status'
+      | 'id'
+      | 'occurrences'
+      | 'successCount'
+      | 'failureCount'
+      | 'successRate'
+      | 'firstSeen'
+      | 'lastSeen'
+      | 'status'
     >,
   ): ErrorSignature {
     // Dedup: same pattern + toolName + category → update existing
@@ -145,7 +181,8 @@ export class ErrorSignatureDB {
       id,
       occurrences: 1,
       successCount: 0,
-      successRate: 0, // starts at 0 — must prove itself before auto-apply
+      failureCount: 0,
+      successRate: 0,
       firstSeen: now,
       lastSeen: now,
       status: 'active',
@@ -195,24 +232,40 @@ export class ErrorSignatureDB {
 
   /**
    * Record the result of applying a fix for a given signature.
-   * Updates success rate and may auto-degrade/retire low-performing signatures.
+   *
+   * Only signatures whose strategy actually applies a fix are scored — `warn`
+   * and `block` have no outcome, and counting one drove every advisory to 0%
+   * (2026-11-26: 10 signatures, 202 occurrences, 0 successes, while this method
+   * had no production caller). The denominator is **attempts**, not occurrences:
+   * a signature seen ten times but tried once has a rate of one trial.
    */
   recordResult(id: string, success: boolean): void {
     const sig = this.signatures.get(id)
     if (!sig) return
+    if (!isAutoFixable(sig)) return
 
-    if (success) {
-      sig.successCount++
-    }
-    sig.successRate = sig.occurrences > 0 ? sig.successCount / sig.occurrences : 1.0
+    if (success) sig.successCount++
+    else sig.failureCount++
 
-    // Auto-degrade
-    if (sig.successRate < MIN_SUCCESS_RATE && sig.status === 'active') {
+    const attempts = sig.successCount + sig.failureCount
+    sig.successRate = attempts > 0 ? sig.successCount / attempts : 0
+
+    // Auto-degrade — only after a real attempt history; one failure is noise.
+    if (
+      attempts >= MIN_ATTEMPTS_FOR_DEGRADE &&
+      sig.successRate < MIN_SUCCESS_RATE &&
+      sig.status === 'active'
+    ) {
       sig.status = 'degraded'
     }
     // Auto-retire
     const ageDays = (Date.now() - new Date(sig.firstSeen).getTime()) / (1000 * 60 * 60 * 24)
-    if (sig.successRate < RETIREMENT_RATE && ageDays > 90 && sig.status === 'degraded') {
+    if (
+      attempts >= MIN_ATTEMPTS_FOR_DEGRADE &&
+      sig.successRate < RETIREMENT_RATE &&
+      ageDays > 90 &&
+      sig.status === 'degraded'
+    ) {
       sig.status = 'retired'
     }
 
@@ -251,14 +304,18 @@ export class ErrorSignatureDB {
     const degraded = all.filter((s) => s.status === 'degraded')
     const retired = all.filter((s) => s.status === 'retired')
 
+    const fixableActive = active.filter(isAutoFixable)
     const avgSuccessRate =
-      active.length > 0 ? active.reduce((sum, s) => sum + s.successRate, 0) / active.length : 0
+      fixableActive.length > 0
+        ? fixableActive.reduce((sum, s) => sum + s.successRate, 0) / fixableActive.length
+        : 0
 
     return {
       total: all.length,
       active: active.length,
       degraded: degraded.length,
       retired: retired.length,
+      fixable: fixableActive.length,
       avgSuccessRate: Math.round(avgSuccessRate * 100) / 100,
       totalInterceptions: all.reduce((sum, s) => sum + s.occurrences, 0),
     }

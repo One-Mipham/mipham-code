@@ -758,6 +758,10 @@ export class SubAgent {
           // credential executed verbatim one level down.
           let effectiveInput = tu.input
           let gateWarnings: string[] = []
+          // SIS pre-flight may have applied a signature's fix; score the outcome
+          // on this funnel too (the engine's recording never sees this loop).
+          let sisFixSignature: string | undefined
+          let sisOutcomeRecorded = false
           if (this.services) {
             const outcome = await runPreToolGate(tu.name, tu.input, this.services.gate, 'sub-agent')
             if (!outcome.ok) {
@@ -769,6 +773,7 @@ export class SubAgent {
             }
             effectiveInput = outcome.params
             gateWarnings = outcome.warnings
+            sisFixSignature = outcome.sisFixSignature
           } else if (this.hooks) {
             // Legacy path: a caller that built a SubAgent by hand with only a
             // hook engine still gets its PreToolUse hook. The other four gates
@@ -828,6 +833,11 @@ export class SubAgent {
 
           try {
             const result = await tool.execute(effectiveInput, toolContext)
+
+            if (sisFixSignature) {
+              this.services?.gate.preflight?.()?.recordOutcome(sisFixSignature, result.success)
+              sisOutcomeRecorded = true
+            }
 
             // Merge gate: a review delegated here still counts for the session
             // that will merge. This loop bypasses `Engine.executeTool`, so the
@@ -899,6 +909,13 @@ export class SubAgent {
               ],
             })
           } catch (err) {
+            // The applied SIS fix was followed by a thrown error — score it. The
+            // flag keeps a later hook throw from failing a fix that worked.
+            if (sisFixSignature && !sisOutcomeRecorded) {
+              this.services?.gate.preflight?.()?.recordOutcome(sisFixSignature, false)
+              sisOutcomeRecorded = true
+            }
+
             // ── P0-5: Run PostToolUseFailure hooks ──
             if (this.hooks) {
               this.hooks

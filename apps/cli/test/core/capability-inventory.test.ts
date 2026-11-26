@@ -20,6 +20,7 @@ function stubEngine(overrides: Partial<CapabilitySources> = {}): CapabilitySourc
         active: 2,
         degraded: 1,
         retired: 0,
+        fixable: 2,
         avgSuccessRate: 0.82,
         totalInterceptions: 10,
       }),
@@ -65,6 +66,26 @@ describe('buildCapabilityReport', () => {
 
     // ⚠️ 未接线 — self-critique 状态
     expect(report).toContain('未启用 (opt-in)')
+  })
+
+  it('shows — for the average fix rate when no signature has an actionable fix', () => {
+    const report = buildCapabilityReport(
+      stubEngine({
+        getErrorSignatureDB: () => ({
+          getStats: () => ({
+            total: 10,
+            active: 10,
+            degraded: 0,
+            retired: 0,
+            fixable: 0,
+            avgSuccessRate: 0,
+            totalInterceptions: 202,
+          }),
+        }),
+      }),
+    )
+    // A warn-only store has no fix to rate; `0%` would read as "the fix fails".
+    expect(report).toContain('平均成功率 | —')
   })
 
   it('handles uninitialized subsystems gracefully without crashing', () => {

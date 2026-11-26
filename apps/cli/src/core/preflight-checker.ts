@@ -95,6 +95,18 @@ export class PreFlightChecker {
     this.ruleEngine = ruleEngine
   }
 
+  /**
+   * Score an outcome against a signature this checker matched and fixed.
+   *
+   * The pre-flight applies `replace`/`prepend`/`append` fixes before the tool
+   * runs; only the caller sees whether that call succeeded, so the outcome comes
+   * back through here. Both tool funnels (engine and sub-agent) call it — one
+   * path alone would leave half the fixes unrated.
+   */
+  recordOutcome(signatureId: string, success: boolean): void {
+    this.errorDB.recordResult(signatureId, success)
+  }
+
   // ── Private: Signature Conversion ──
 
   /**

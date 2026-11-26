@@ -53,16 +53,15 @@ describe('ImmuneMemoryGC', () => {
       expect(report.after).toBeLessThanOrEqual(report.before)
     })
 
-    it('auto-retires zero-success signatures', () => {
+    it('does not retire a signature that recurs but was never tried', () => {
       db.insert(makeSig({ pattern: 'bad-fix' }))
-      // Simulate many occurrences with zero successes
+      // 11 encounters, 0 attempts — recurrence alone is not evidence the fix failed.
       for (let i = 0; i < 10; i++) {
         db.insert(makeSig({ pattern: 'bad-fix' }))
       }
-      // All recordResults are failures (never called with true)
       const report = gc.collect()
-      // With 11 occurrences and 0 successes, should auto-retire
-      expect(report.zeroSuccessRetired).toBeGreaterThanOrEqual(0)
+      expect(report.zeroSuccessRetired).toBe(0)
+      expect(db.getActive().some((s) => s.pattern === 'bad-fix')).toBe(true)
     })
 
     it('does not retire signatures with some successes', () => {
@@ -75,6 +74,30 @@ describe('ImmuneMemoryGC', () => {
       const active = db.getActive()
       // Should still be active since it has successes
       expect(active.some((s) => s.pattern === 'good-fix')).toBe(true)
+    })
+
+    // A warn-only signature has no fix, so "zero success" is not a failure —
+    // retiring it would delete exactly the advisories that fire most.
+    it('never retires a warn-only signature for zero fix success', () => {
+      const sig = db.insert(makeSig({ pattern: 'advisory', fixStrategy: 'warn', fixAction: '' }))
+      for (let i = 0; i < 20; i++) {
+        db.insert(makeSig({ pattern: 'advisory', fixStrategy: 'warn', fixAction: '' }))
+      }
+      const report = gc.collect()
+      expect(report.zeroSuccessRetired).toBe(0)
+      expect(db.getActive().some((s) => s.id === sig.id)).toBe(true)
+    })
+
+    // The other direction: a real fix that was actually tried and always failed
+    // is a bad fix, and should go.
+    it('retires an actionable signature attempted repeatedly without success', () => {
+      const sig = db.insert(makeSig({ pattern: 'broken-fix' }))
+      for (let i = 0; i < 10; i++) {
+        db.recordResult(sig.id, false)
+      }
+      const report = gc.collect()
+      expect(report.zeroSuccessRetired).toBeGreaterThanOrEqual(1)
+      expect(db.get(sig.id)!.status).toBe('retired')
     })
   })
 

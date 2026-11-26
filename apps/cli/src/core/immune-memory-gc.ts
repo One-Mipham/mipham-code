@@ -89,11 +89,11 @@ export class ImmuneMemoryGC {
     const active = this.errorDB.getActive()
 
     for (const sig of active) {
-      if (
-        sig.occurrences >= ZERO_SUCCESS_THRESHOLD &&
-        sig.successCount === 0 &&
-        sig.status === 'active'
-      ) {
+      // "Never succeeded" only means something if the fix was ever *tried*.
+      // `warn`/`block` signatures have no fix (attempts stay 0), so retiring
+      // them here would delete exactly the advisories that fire most.
+      const attempts = sig.successCount + sig.failureCount
+      if (attempts >= ZERO_SUCCESS_THRESHOLD && sig.successCount === 0) {
         this.errorDB.retire(sig.id)
         count++
       }

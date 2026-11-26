@@ -18,6 +18,7 @@ import type { InstallState, UpdateStatus } from '../shared/update'
 import { McpClient } from '../mcp/client'
 import { registerMcpServerTools, unregisterMcpServerTools } from '../mcp/registry'
 import { buildCapabilityReport } from '../core/capability-inventory'
+import { formatFixRate, isAutoFixable } from '../core/error-signature-db'
 import { InstructionsLoader } from '../core/instructions'
 import { UNDISPATCHED_EVENTS } from '../core/hooks-config'
 import { findDerivableSections, DERIVABLE_HINTS } from '../core/claude-md-audit'
@@ -2244,7 +2245,7 @@ const sisErrorsCmd: CommandHandler = (ctx) => {
     lines.push(`- ${statusIcon} \`${sig.id}\` [${sig.category}] ${sig.toolName}`)
     lines.push(`  模式: \`${sig.pattern.slice(0, 80)}${sig.pattern.length > 80 ? '...' : ''}\``)
     lines.push(
-      `  修复: ${sig.fixStrategy} → ${sig.fixAction.slice(0, 60)} | 发生 ${sig.occurrences} 次 | 成功率 ${Math.round(sig.successRate * 100)}%`,
+      `  修复: ${sig.fixStrategy} → ${sig.fixAction.slice(0, 60)} | 发生 ${sig.occurrences} 次 | 成功率 ${formatFixRate(sig)}`,
     )
     lines.push('')
   }
@@ -2264,7 +2265,9 @@ const sisStatsCmd: CommandHandler = (ctx) => {
   lines.push(
     `🟢 活跃: ${stats.active}  |  🟡 降级: ${stats.degraded}  |  ⚫ 已退役: ${stats.retired}`,
   )
-  lines.push(`平均成功率: ${Math.round(stats.avgSuccessRate * 100)}%`)
+  lines.push(
+    `平均成功率: ${stats.fixable > 0 ? `${Math.round(stats.avgSuccessRate * 100)}%` : '—（无可自动修复签名）'}`,
+  )
   lines.push(`总拦截次数: ${stats.totalInterceptions}`)
 
   const active = db.getActive()
@@ -2275,9 +2278,7 @@ const sisStatsCmd: CommandHandler = (ctx) => {
     lines.push('|------|------|------|--------|')
     for (const s of active) {
       const icon = s.status === 'active' ? '🟢' : '🟡'
-      lines.push(
-        `| ${s.id} | ${icon} ${s.status} | ${s.occurrences} | ${Math.round(s.successRate * 100)}% |`,
-      )
+      lines.push(`| ${s.id} | ${icon} ${s.status} | ${s.occurrences} | ${formatFixRate(s)} |`)
     }
   }
 
@@ -2421,14 +2422,16 @@ const crsiInterpretCmd: CommandHandler = (ctx, args) => {
         '',
       )
       for (const sig of sigs.slice(0, 15)) {
-        const bar =
-          '█'.repeat(Math.round(sig.successRate * 10)) +
-          '░'.repeat(10 - Math.round(sig.successRate * 10))
+        const fixable = isAutoFixable(sig)
+        const bar = fixable
+          ? '█'.repeat(Math.round(sig.successRate * 10)) +
+            '░'.repeat(10 - Math.round(sig.successRate * 10))
+          : ''
         lines.push(`- **${sig.toolName}**: \`${sig.pattern.slice(0, 60)}\``)
         lines.push(
           t('commands.crsi_interpret.sig_success', {
             bar,
-            pct: String(Math.round(sig.successRate * 100)),
+            pct: formatFixRate(sig),
             occurrences: String(sig.occurrences),
             strategy: sig.fixStrategy,
           }),
@@ -2808,7 +2811,7 @@ const bugReportCmd: CommandHandler = async (ctx) => {
               pattern: sig.pattern,
               category: sig.category,
               occurrences: String(sig.occurrences),
-              pct: (sig.successRate * 100).toFixed(0),
+              pct: formatFixRate(sig),
             }),
           )
         }

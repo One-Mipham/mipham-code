@@ -86,14 +86,6 @@ export class AutoCorrector {
     return this.handleUnknownError(toolName, params, error)
   }
 
-  /**
-   * Record a manual correction (user fixed it themselves).
-   * Updates the signature's success rate.
-   */
-  recordManualFix(signatureId: string, success: boolean): void {
-    this.errorDB.recordResult(signatureId, success)
-  }
-
   // ── Private ──
 
   /** Handle a known error pattern with an existing signature. */

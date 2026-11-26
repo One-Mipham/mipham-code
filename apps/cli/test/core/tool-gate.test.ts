@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { runPreToolGate, toolAuditSurface, type ToolGateDeps } from '../../src/core/tool-gate'
+import { ErrorSignatureDB } from '../../src/core/error-signature-db'
+import { PreFlightChecker } from '../../src/core/preflight-checker'
 import type { ProviderRegistry } from '../../src/providers/registry'
 import type { HookEngine } from '../../src/core/hooks'
 import type { ExperienceRuleEngine } from '../../src/core/rule-engine'
@@ -246,6 +251,78 @@ describe('runPreToolGate', () => {
         'from-rules',
         expect.stringContaining('minimal-change'),
       ])
+    }
+  })
+})
+
+// ============================================================
+// SIS fix attribution — the gate says whose fix it applied.
+//
+// The gate applied `fixStrategy: replace` params and incremented
+// `sisInterceptions`, but never told the caller *which* signature it acted on,
+// so nobody could record whether the fixed call worked. `recordResult` had no
+// production caller at all (2026-11-26).
+// ============================================================
+
+describe('runPreToolGate — SIS fix attribution', () => {
+  it('returns the signature id whose fix it applied', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sis-gate-'))
+    try {
+      const db = new ErrorSignatureDB(dir)
+      const sig = db.insert({
+        pattern: 'npm install probe',
+        category: 'timeout',
+        toolName: 'Bash',
+        fixStrategy: 'replace',
+        fixAction: 'pnpm install probe',
+        explanation: 'use pnpm',
+      })
+      const preflight = new PreFlightChecker(db)
+
+      const outcome = await runPreToolGate(
+        'Bash',
+        { command: 'npm install probe' },
+        deps({ preflight: () => preflight }),
+        's1',
+      )
+
+      expect(outcome.ok).toBe(true)
+      if (outcome.ok) {
+        expect(outcome.params).toEqual({ command: 'pnpm install probe' })
+        expect(outcome.sisFixSignature).toBe(sig.id)
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('does not attribute a fix when the SIS only warned', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sis-gate-'))
+    try {
+      const db = new ErrorSignatureDB(dir)
+      db.insert({
+        pattern: 'warn-only probe',
+        category: 'semantic',
+        toolName: 'Bash',
+        fixStrategy: 'warn',
+        fixAction: '',
+        explanation: 'advisory',
+      })
+      const preflight = new PreFlightChecker(db)
+
+      const outcome = await runPreToolGate(
+        'Bash',
+        { command: 'warn-only probe' },
+        deps({ preflight: () => preflight }),
+        's1',
+      )
+
+      expect(outcome.ok).toBe(true)
+      if (outcome.ok) {
+        expect(outcome.sisFixSignature).toBeUndefined()
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
     }
   })
 })
