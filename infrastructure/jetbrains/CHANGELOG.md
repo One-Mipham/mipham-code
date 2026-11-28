@@ -4,6 +4,18 @@
 > (tag dates) and use the same wording as the VS Code extension's changelog — the plugin is a
 > thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.51 (2026-11-28)
+
+- Version sync with Mipham Code CLI 0.85.51
+- Added: the session's four billing token buckets are visible end to end — the composer
+  footer shows a live total (`12.3k tok`) and `/usage` lists cache reads/writes separately.
+- Added: `/cost` shows the four buckets and an estimated cost from your own
+  `~/.mipham/pricing.json` (no prices are built in — unconfigured reads "no prices
+  configured", a missing cache rate is reported instead of substituted).
+- Fixed: provider-reported cache read/write tokens no longer vanish before the session
+  ledger; `inputTokens` is normalized to uncached input, retries discard the failed
+  attempt's cache buckets, and the daemon forwards them over the attach protocol.
+
 ## 0.85.50 (2026-11-26)
 
 - Version sync with Mipham Code CLI 0.85.50
