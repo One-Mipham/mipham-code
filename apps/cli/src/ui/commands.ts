@@ -20,6 +20,7 @@ import { registerMcpServerTools, unregisterMcpServerTools } from '../mcp/registr
 import { buildCapabilityReport, type CapabilityLedgers } from '../core/capability-inventory'
 import { formatFixRate, isAutoFixable } from '../core/error-signature-db'
 import { InstructionsLoader } from '../core/instructions'
+import { formatInsightsReport, loadSessionLogs, summarizeSessions } from '../core/session-insights'
 import { UNDISPATCHED_EVENTS } from '../core/hooks-config'
 import { findDerivableSections, DERIVABLE_HINTS } from '../core/claude-md-audit'
 import { miphamHome, workflowScriptDir, workflowScriptDirs, worktreeRoot } from '../core/paths.ts'
@@ -171,6 +172,26 @@ import { clearTasks, formatTaskList } from '../tools/exec/task'
 import { estimateCost, loadPriceBook } from '../providers/pricing'
 import type { UsageSummary } from '../core/usage-tracker'
 
+export type StatuslineMode = 'full' | 'compact' | 'off'
+
+export const STATUSLINE_MODES: readonly StatuslineMode[] = ['full', 'compact', 'off']
+
+/**
+ * Which footer segments a mode shows. The permission label is deliberately
+ * absent: it is safety information and stays visible in every mode.
+ */
+export function statuslineVisibility(mode: StatuslineMode): {
+  graft: boolean
+  hints: boolean
+  git: boolean
+} {
+  return {
+    graft: mode === 'full',
+    hints: mode === 'full',
+    git: mode !== 'off',
+  }
+}
+
 export interface CommandContext {
   engine: QueryEngine
   config: MiphamConfig
@@ -189,6 +210,10 @@ export interface CommandContext {
   setGoal: (text: string) => void
   setUltracodeMode: (on: boolean) => void
   setUpdateStatus: (s: UpdateStatus) => void
+  /** Live footer-mode change; absent on surfaces that cannot repaint the App. */
+  setStatuslineMode?: (mode: StatuslineMode) => void
+  /** Re-run plugin loading; absent under `--safe-mode` / `disableAllHooks`. */
+  reloadPlugins?: () => { plugins: number; skills: number }
   /** Request a permission-mode change and let the App read back the mode that
    *  actually took effect (org limits can clamp it). Absent on surfaces that
    *  cannot switch modes (e.g. a remote attach stub). */
@@ -3686,6 +3711,22 @@ const browseMarketplaceCmd: CommandHandler = async (_ctx) => {
 // Plugins — Community plugin marketplace + local management
 // ═══════════════════════════════════════════════════════════════
 
+const reloadPluginsCmd: CommandHandler = (ctx) => {
+  if (!ctx.reloadPlugins) {
+    return { content: 'Plugin reload is not available in this session.' }
+  }
+  try {
+    const r = ctx.reloadPlugins()
+    return {
+      content:
+        `✓ Reloaded ${r.plugins} enabled plugin(s); ${r.skills} skills loaded.\n\n` +
+        'Boundaries: already-connected MCP servers stay connected; skills/agents loaded from plugins that are now disabled remain until restart.',
+    }
+  } catch (err) {
+    return { content: `Plugin reload failed: ${String(err)}` }
+  }
+}
+
 const pluginsCmd: CommandHandler = (ctx) => {
   const t = resolveT(ctx)
   const manager = ctx.pluginManager
@@ -4872,6 +4913,21 @@ function resolveMaxFindings(
   }
 }
 
+export const SECURITY_REVIEW_PROMPT =
+  'Use the security-review skill to review all uncommitted changes for security vulnerabilities only: ' +
+  'injection, auth/permission bypass, secret exposure, unsafe deserialization, path traversal, and dependency risk. ' +
+  'Do not report general style or simplification issues — /simplify owns those. ' +
+  'For each finding give file:line, severity, and a concrete fix. ' +
+  'If there is nothing to report, write exactly: "Security review found no issues."'
+
+const securityReviewCmd = gitDiffBridgeCmd({
+  label: 'Security Review',
+  noChangesKey: 'commands.code_review.no_changes',
+  runningKey: 'commands.code_review.running',
+  errorKey: 'commands.code_review.error',
+  forwardToAI: SECURITY_REVIEW_PROMPT,
+})
+
 const codeReviewCmd = gitDiffBridgeCmd({
   label: 'Code Review',
   noChangesKey: 'commands.code_review.no_changes',
@@ -5019,6 +5075,75 @@ const filesCmd: CommandHandler = async (ctx) => {
   } catch {
     return { content: t('commands.files.error') }
   }
+}
+
+const autocompactCmd: CommandHandler = (ctx, args) => {
+  if ((ctx.engine as { isRemote?: boolean }).isRemote === true) {
+    return {
+      content:
+        'Attached to a daemon: the daemon owns context compaction; this session cannot change its threshold.',
+    }
+  }
+  const cm = ctx.engine.getContext()
+  const arg = (args[0] ?? '').toLowerCase()
+  const current = cm.getCompactionThreshold()
+  if (!arg) {
+    return {
+      content:
+        `Auto-compaction (hard) threshold: ${(current * 100).toFixed(0)}% of context ` +
+        `(window ${cm.getMaxTokens().toLocaleString()} tokens). ` +
+        `Microcompaction still fires earlier on its own window-derived schedule.\n\n` +
+        'Usage: /autocompact <50-95%> | default',
+    }
+  }
+  if (arg === 'default' || arg === 'off') {
+    cm.setCompactionThresholdOverride(null)
+    setPreference('autocompactThreshold', '')
+    return {
+      content: `Auto-compaction threshold cleared; using the window-derived value (${(cm.getCompactionThreshold() * 100).toFixed(0)}%).`,
+    }
+  }
+  const pct = arg.endsWith('%') ? Number.parseFloat(arg) / 100 : Number.parseFloat(arg)
+  if (!Number.isFinite(pct) || pct < 0.5 || pct > 0.95) {
+    return {
+      content: `Invalid threshold "${arg}". Use a value between 0.50 and 0.95 (or "default").`,
+    }
+  }
+  cm.setCompactionThresholdOverride(pct)
+  setPreference('autocompactThreshold', String(pct))
+  return { content: `Auto-compaction threshold set to ${(pct * 100).toFixed(0)}%.` }
+}
+
+const statuslineCmd: CommandHandler = (ctx, args) => {
+  const requested = (args[0] ?? '').toLowerCase()
+  const current = getPreference('statuslineMode', 'full')
+  if (!requested) {
+    return {
+      content:
+        `Statusline mode: ${current}\n\n` +
+        'Usage: /statusline <full|compact|off>\n' +
+        '  full    graft line + hints + git branch\n' +
+        '  compact permission + git branch only\n' +
+        '  off     permission line only (never hides the permission mode)',
+    }
+  }
+  if (!STATUSLINE_MODES.includes(requested as StatuslineMode)) {
+    return { content: `Unknown statusline mode "${requested}". Choose full, compact, or off.` }
+  }
+  const mode = requested as StatuslineMode
+  setPreference('statuslineMode', mode)
+  ctx.setStatuslineMode?.(mode)
+  return { content: `Statusline mode set to ${mode}.` }
+}
+
+const insightsCmd: CommandHandler = (ctx) => {
+  const dir = miphamHome('sessions')
+  const loaded = loadSessionLogs(dir)
+  const note =
+    (ctx.engine as { isRemote?: boolean }).isRemote === true
+      ? "Attached to a daemon: this covers local CLI sessions only; the attached session's audit log is not included.\n\n"
+      : ''
+  return { content: note + formatInsightsReport(summarizeSessions(loaded.inputs), dir, loaded) }
 }
 
 const statsCmd: CommandHandler = (ctx) => {
@@ -6777,6 +6902,24 @@ Or use the Agent tool in a conversation to launch a sub-agent.`,
   return { content: lines.join('\n') }
 }
 
+const subtaskCmd: CommandHandler = (_ctx, args) => {
+  const prompt = args.join(' ').trim()
+  if (!prompt) {
+    return {
+      content:
+        'Usage: /subtask <task>\n\n' +
+        "Sends a fork subagent with this conversation's full context; its result returns to this chat.",
+    }
+  }
+  return {
+    content: "Dispatching a fork subagent with this conversation's context…",
+    forwardToAI:
+      'Use the Agent tool with subagent_type "fork", run_in_background: false, and description "subtask" ' +
+      'to complete this task with the full conversation context, then report its result in this conversation:\n\n' +
+      prompt,
+  }
+}
+
 const bgCmd: CommandHandler = async (ctx, args) => {
   const prompt = args.join(' ')
   if (!prompt.trim()) {
@@ -7220,6 +7363,7 @@ const commandsListCmd: CommandHandler = () => {
     '/dream': 'Session & Identity',
     '/constitution': 'Session & Identity',
     '/bug-report': 'Session & Identity',
+    '/bug': 'Session & Identity',
     '/changelog': 'Session & Identity',
     '/resume': 'Session & Identity',
     '/resume last': 'Session & Identity',
@@ -7251,6 +7395,8 @@ const commandsListCmd: CommandHandler = () => {
     '/remove-skill': 'Tools & Skills',
     '/mcp': 'Tools & Skills',
     '/plugins': 'Plugins',
+    '/plugin': 'Plugins',
+    '/reload-plugins': 'Plugins',
     '/browse-plugins': 'Plugins',
     '/install-plugin': 'Plugins',
     '/remove-plugin': 'Plugins',
@@ -7302,6 +7448,7 @@ const commandsListCmd: CommandHandler = () => {
     '/prompt-audit': 'Code Quality',
     '/ide': 'Environment',
     '/terminal-setup': 'Environment',
+    '/statusline': 'Environment',
     '/memory': 'Environment',
     '/release-notes': 'Environment',
     '/login': 'Account',
@@ -7313,6 +7460,8 @@ const commandsListCmd: CommandHandler = () => {
     '/feedback': 'Account',
     '/telemetry': 'Account',
     '/agents': 'Agents',
+    '/list-agents': 'Agents',
+    '/subtask': 'Agents',
     '/bg': 'Agents',
     '/fork': 'Agents',
     '/artifact': 'Artifacts',
@@ -7323,12 +7472,15 @@ const commandsListCmd: CommandHandler = () => {
     '/ship': 'Workflow',
     '/issue': 'Workflow',
     '/code-review': 'Code Quality',
+    '/security-review': 'Code Quality',
     '/simplify': 'Code Quality',
     '/verify': 'Code Quality',
     '/design': 'Code Quality',
     '/lint': 'Code Quality',
     '/files': 'Session & Identity',
     '/stats': 'Session & Identity',
+    '/insights': 'Session & Identity',
+    '/autocompact': 'Session & Identity',
     '/summary': 'Session & Identity',
     '/cd': 'Session & Identity',
     '/hooks': 'Workflow',
@@ -7464,6 +7616,8 @@ registry.set('/marketplace', marketplaceCmd)
 registry.set('/browse-marketplace', browseMarketplaceCmd)
 registry.set('/remove-skill', removeSkillCmd)
 registry.set('/plugins', pluginsCmd)
+registry.set('/plugin', pluginsCmd)
+registry.set('/reload-plugins', reloadPluginsCmd)
 registry.set('/browse-plugins', browsePluginsCmd)
 registry.set('/install-plugin', installPluginCmd)
 registry.set('/remove-plugin', removePluginCmd)
@@ -7496,6 +7650,7 @@ registry.set('/sis cleanup', sisCleanupCmd)
 registry.set('/dream', dreamCmd)
 registry.set('/constitution', constitutionCmd)
 registry.set('/bug-report', bugReportCmd)
+registry.set('/bug', bugReportCmd)
 registry.set('/changelog', changelogCmd)
 
 // Workflow
@@ -7554,8 +7709,10 @@ registry.set('/keys audit', keysCmd)
 registry.set('/keys view', keysCmd)
 registry.set('/feedback', feedbackCmd)
 registry.set('/agents', agentsCmd)
+registry.set('/list-agents', agentsCmd)
 registry.set('/bg', bgCmd)
 registry.set('/fork', forkCmd)
+registry.set('/subtask', subtaskCmd)
 
 // Artifacts
 registry.set('/artifact', artifactBaseCmd)
@@ -7573,6 +7730,7 @@ registry.set('/issue', issueCmd)
 
 // Code Quality (Claude Code parity)
 registry.set('/code-review', codeReviewCmd)
+registry.set('/security-review', securityReviewCmd)
 registry.set('/simplify', simplifyCmd)
 registry.set('/verify', verifyCmd)
 registry.set('/design', designCmd)
@@ -7580,6 +7738,9 @@ registry.set('/lint', lintCmd)
 
 // Session Enhancement (Claude Code parity)
 registry.set('/files', filesCmd)
+registry.set('/insights', insightsCmd)
+registry.set('/autocompact', autocompactCmd)
+registry.set('/statusline', statuslineCmd)
 registry.set('/stats', statsCmd)
 registry.set('/summary', summaryCmd)
 registry.set('/cd', cdCmd)
@@ -7681,6 +7842,7 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/dream': 'Background memory consolidation',
   '/constitution': 'View or reload constitutional principles',
   '/bug-report': 'Generate diagnostic report for GitHub Issues',
+  '/bug': 'Report a bug (alias of /bug-report)',
   '/changelog': 'Recent version history',
   '/resume': 'List saved sessions',
   '/resume last': 'Restore the most recent saved session',
@@ -7711,6 +7873,9 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/remove-skill': 'Remove an installed skill',
   '/mcp': 'MCP server status',
   '/plugins': 'List installed plugins',
+  '/plugin':
+    'List plugins (alias of /plugins; use /install-plugin, /remove-plugin, /plugin-enable, /plugin-disable to manage)',
+  '/reload-plugins': 'Reload enabled plugins in this session',
   '/browse-plugins': 'Browse community plugin marketplace',
   '/install-plugin': 'Install a plugin from npm or local path',
   '/remove-plugin': 'Remove an installed plugin',
@@ -7776,6 +7941,8 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/keys view': 'View a provider plaintext API key',
   '/feedback': 'Send feedback',
   '/agents': 'Agent view dashboard',
+  '/list-agents': 'List background agent sessions (alias of /agents)',
+  '/subtask': 'Send a fork subagent with full context; its result returns here',
   '/bg': 'Run a background agent task',
   '/fork': 'Fork task into isolated worktree',
   '/artifact': 'Manage artifacts',
@@ -7786,11 +7953,15 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   '/ship': 'Commit, push, open a PR, review and fix it — never merges',
   '/issue': 'Draft a GitHub issue from your description',
   '/code-review': 'Review code for bugs, security, performance (7 dimensions)',
+  '/security-review': 'Review pending changes for security issues (security-review skill)',
   '/simplify': 'Cleanup-only review: reuse, simplification, efficiency, abstraction',
   '/verify': 'Runtime verification — observe actual execution, not tests',
   '/design': 'Start architectural design session — explore approaches and trade-offs',
   '/lint': 'Run linting on the project',
   '/files': 'List files in current working directory',
+  '/insights': 'Analyze local session history (counts only, no message text)',
+  '/autocompact': 'Show or set the hard context-compaction threshold',
+  '/statusline': 'Configure the footer status line (full|compact|off)',
   '/stats': 'Show session usage statistics',
   '/summary': 'Generate session summary',
   '/cd': 'Change session working directory',

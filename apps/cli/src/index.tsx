@@ -12,6 +12,7 @@ import {
   loadSettingsJson,
   settingsPathFor,
 } from './config/loader'
+import { getPreference } from './config/preferences'
 import {
   registerActiveSession,
   heartbeatSession,
@@ -253,6 +254,7 @@ interface SetupGateProps {
   version?: string
   sessionId: string
   agentViewManager?: AgentViewManager
+  reloadPlugins?: () => { plugins: number; skills: number }
   locale: string
   t: (key: string) => string
 }
@@ -300,6 +302,7 @@ function SetupGate(props: SetupGateProps) {
     version: props.version,
     sessionId: props.sessionId,
     agentViewManager: props.agentViewManager,
+    reloadPlugins: props.reloadPlugins,
   })
 }
 
@@ -837,6 +840,13 @@ export async function runApp(options: RunOptions): Promise<void> {
   // Create query engine
   const ruleEngine = new ExperienceRuleEngine()
   const engine = new QueryEngine(registry, context, tools, permission, ruleEngine)
+
+  // `/autocompact` persists a user override; apply it before the first turn.
+  const savedAutocompact = Number.parseFloat(getPreference('autocompactThreshold', ''))
+  if (Number.isFinite(savedAutocompact) && savedAutocompact >= 0.5 && savedAutocompact <= 0.95) {
+    engine.getContext().setCompactionThresholdOverride(savedAutocompact)
+  }
+
   engine.setHookEngine(hookEngine)
   engine.setArtifactServer(artifactServer)
   engine.setAgentViewManager(agentViewManager)
@@ -938,6 +948,31 @@ export async function runApp(options: RunOptions): Promise<void> {
       tools,
     )
   }
+
+  // `/reload-plugins` re-runs the same load path. `loadPlugins` has no internal
+  // gate, so it must stay unreachable under `--safe-mode` (which skips plugin
+  // loading entirely) and under `disableAllHooks` (which exists to keep plugin
+  // hooks out): re-running it there would register what the operator turned off.
+  const reloadPlugins =
+    safeMode || settingsJson.disableAllHooks
+      ? undefined
+      : () => {
+          for (const plugin of pluginManager.list()) {
+            hookEngine.unregisterSource(plugin.name)
+          }
+          loadPlugins(
+            pluginManager,
+            agentRegistry,
+            skillsLoader,
+            hookEngine,
+            McpClient.getInstance(),
+            tools,
+          )
+          return {
+            plugins: pluginManager.getEnabled().length,
+            skills: skillsLoader.countByType().total,
+          }
+        }
 
   engine.setupContextSummarizer()
 
@@ -1125,6 +1160,7 @@ export async function runApp(options: RunOptions): Promise<void> {
         version: options.version,
         sessionId: sessionName,
         agentViewManager,
+        reloadPlugins,
         locale,
         t,
       }),

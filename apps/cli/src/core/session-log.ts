@@ -177,7 +177,7 @@ function endsWithNewline(path: string): boolean {
 }
 
 /** 补上的那条结果的正文：说明事情本身，并给出下一步，而不是只报一个状态。 */
-function interruptedCallNotice(): string {
+export function interruptedCallNotice(): string {
   return (
     `This tool call was in flight when the session ended, so its outcome is unknown — ` +
     `the result was never recorded.\n` +
@@ -424,7 +424,7 @@ export function isValidMessage(m: unknown): boolean {
  * 不校验 `session/start`、`assistant/chunk`、`checker/decision`：投影对它们无分支；
  * 未知类型一律放行（前向兼容 —— 认不出来不等于要销毁它）。
  */
-function isValidEvent(e: unknown): e is SessionEvent {
+export function isValidEvent(e: unknown): e is SessionEvent {
   if (!e || typeof e !== 'object') return false
   const ev = e as Record<string, unknown>
   if (typeof ev.type !== 'string') return false

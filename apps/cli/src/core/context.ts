@@ -174,6 +174,9 @@ export class ContextManager {
     this.calculateThresholds()
   }
 
+  /** User-chosen hard-compaction threshold; `null` = derive from the window. */
+  private compactionThresholdOverride: number | null = null
+
   private log?: SessionLog
 
   /**
@@ -222,6 +225,15 @@ export class ContextManager {
    * microcompact: 200K→0.70(→clamped 0.70), 500K→0.80, 1M→0.85
    */
   calculateThresholds(): void {
+    // An explicit user override wins over the window formula — including on
+    // model switches, which re-enter here through `updateMaxTokens()`. It must
+    // be applied before the `!w` early return: a session with adaptive
+    // thresholds off still has a context window value of undefined.
+    if (this.compactionThresholdOverride !== null) {
+      this.config.compactionThreshold = this.compactionThresholdOverride
+      return
+    }
+
     const w = this.config.contextWindow
     if (!w) return
 
@@ -234,6 +246,15 @@ export class ContextManager {
 
   getCompactionThreshold(): number {
     return this.config.compactionThreshold
+  }
+
+  /**
+   * Set (or clear, with `null`) a user-chosen hard-compaction threshold.
+   * Microcompaction keeps its own earlier window-derived schedule.
+   */
+  setCompactionThresholdOverride(threshold: number | null): void {
+    this.compactionThresholdOverride = threshold
+    this.calculateThresholds()
   }
 
   /** Dynamically update the max token limit (e.g., when switching models). */

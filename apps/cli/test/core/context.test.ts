@@ -886,3 +886,27 @@ describe('ContextManager.refreshSystemPrompt', () => {
     expect(ctx.getSystemPrompt()).toBe('ORIGINAL')
   })
 })
+
+describe('compaction threshold override', () => {
+  it('survives calculateThresholds and model changes until cleared', () => {
+    const cm = new ContextManager({
+      maxTokens: 100000,
+      compactionThreshold: 0.9,
+      contextWindow: 200000,
+    })
+    cm.setCompactionThresholdOverride(0.6)
+    expect(cm.getCompactionThreshold()).toBe(0.6)
+
+    cm.updateMaxTokens(120000, 500000)
+    expect(cm.getCompactionThreshold()).toBe(0.6)
+
+    cm.setCompactionThresholdOverride(null)
+    expect(cm.getCompactionThreshold()).toBeCloseTo(0.9)
+  })
+
+  it('applies even when no context window is set (the early-return path)', () => {
+    const cm = new ContextManager({ maxTokens: 100000, compactionThreshold: 0.9 })
+    cm.setCompactionThresholdOverride(0.75)
+    expect(cm.getCompactionThreshold()).toBe(0.75)
+  })
+})

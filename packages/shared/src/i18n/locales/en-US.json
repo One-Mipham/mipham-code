@@ -15,8 +15,8 @@
         "desc": "Connect to Claude, GPT, DeepSeek, Qwen, Kimi, and more through a unified interface. Switch models on the fly with Ctrl+P."
       },
       "slash_commands": {
-        "title": "141 Slash Commands",
-        "desc": "Full Claude Code parity: /commit, /pr, /simplify, /lint, /loop init, /browse-plugins — all 141 commands with zero learning curve."
+        "title": "150 Slash Commands",
+        "desc": "Full Claude Code parity: /commit, /pr, /simplify, /lint, /loop init, /browse-plugins — all 150 commands with zero learning curve."
       },
       "plugins": {
         "title": "Plugin Marketplace",

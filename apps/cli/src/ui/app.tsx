@@ -13,7 +13,7 @@ import { MODE_CYCLE } from '../core/permission-config'
 import { readGitBranch, resolveGitPr, prColor, type GitPr } from '../core/git-pr'
 import type { SkillsLoader } from '../skills/loader'
 import type { PluginManager } from '../plugin/plugin-manager'
-import { setPreference } from '../config/preferences'
+import { getPreference, setPreference } from '../config/preferences'
 import { saveProviderApiKey } from '../config/loader'
 import { recordCommand } from '../telemetry/index'
 import { recordCrash } from '../telemetry/crash'
@@ -71,7 +71,9 @@ import {
   unknownCommandMessage,
   handleSwitch,
   runCommandHandler,
+  statuslineVisibility,
   type CommandContext,
+  type StatuslineMode,
 } from './commands'
 import { useI18n } from '../i18n-context'
 import type { PermissionMode } from '../shared/index.ts'
@@ -93,6 +95,7 @@ interface AppProps {
   version?: string
   sessionId?: string
   agentViewManager?: AgentViewManager
+  reloadPlugins?: () => { plugins: number; skills: number }
 }
 
 export interface ToolMeta {
@@ -354,6 +357,7 @@ export function App({
   version,
   sessionId,
   agentViewManager,
+  reloadPlugins,
 }: AppProps) {
   const { t, locale } = useI18n()
   const PERMISSION_LABELS = useMemo<Record<PermissionMode, string>>(
@@ -452,6 +456,10 @@ export function App({
   const [_sessionTitle, setSessionTitle] = useState('')
   const [_effort, setEffort] = useState('high')
   const [focusMode, setFocusMode] = useState(false)
+  const [statuslineMode, setStatuslineMode] = useState<StatuslineMode>(() => {
+    const saved = getPreference('statuslineMode', 'full')
+    return saved === 'compact' || saved === 'off' ? saved : 'full'
+  })
   const [_ultracodeMode, setUltracodeMode] = useState(false)
   const [goalText, setGoalText] = useState('')
   // 初始值取自 live 权限系统 —— 启动时 config 的模式可能已被组织级限制钳到别处
@@ -617,6 +625,7 @@ export function App({
         if ('setUltracodeMode' in engine) engine.setUltracodeMode(on)
       },
       setUpdateStatus: (s: UpdateStatus) => setUpdateStatus(s),
+      setStatuslineMode: (mode: StatuslineMode) => setStatuslineMode(mode),
       // Same read-back as Shift+Tab: `setMode` may clamp the request (org
       // `maxAllowedMode` / `forbiddenModes`), so the footer and the gate must
       // both read the mode that took effect, not the one we asked for.
@@ -627,6 +636,7 @@ export function App({
       },
       skillsLoader,
       pluginManager,
+      reloadPlugins,
       t,
       locale,
     }),
@@ -637,6 +647,7 @@ export function App({
       modelId,
       skillsLoader,
       pluginManager,
+      reloadPlugins,
       sessionId,
       t,
       locale,
@@ -1490,6 +1501,8 @@ export function App({
     )
   }
 
+  const statuslineSegments = statuslineVisibility(statuslineMode)
+
   return (
     <ErrorBoundary
       onError={(error) => {
@@ -1686,11 +1699,13 @@ export function App({
             />
 
             {/* graft status line — mirrors graft's own "◤ graft · …" bar */}
-            <GraftStatusLine
-              cwd={process.cwd()}
-              ctxPct={contextUsagePct(engine)}
-              tokens={sessionTokens(engine)}
-            />
+            {statuslineSegments.graft && (
+              <GraftStatusLine
+                cwd={process.cwd()}
+                ctxPct={contextUsagePct(engine)}
+                tokens={sessionTokens(engine)}
+              />
+            )}
 
             {/* Update notification — green, right-aligned, mirrors Claude Code's "Update installed · Restart to apply".
                 While the startup banner is showing it already carries this line, so the footer copy is suppressed to avoid a duplicate. */}
@@ -1710,20 +1725,22 @@ export function App({
                 <Text color={PERMISSION_COLORS[permissionMode]}>
                   {permissionGlyphPrefix(permissionMode) + PERMISSION_LABELS[permissionMode]}
                 </Text>
-                <Text dimColor>
-                  {' '}
-                  ({t('ui.status.shift_tab_cycle')}:{' '}
-                  {MODE_CYCLE.map((m) => PERMISSION_LABELS[m]).join(' · ')}){' · '}
-                  {t('ui.status.esc_to_interrupt')}
-                  {' · '}
-                  {t('ui.status.left_for_agents')}
-                </Text>
+                {statuslineSegments.hints && (
+                  <Text dimColor>
+                    {' '}
+                    ({t('ui.status.shift_tab_cycle')}:{' '}
+                    {MODE_CYCLE.map((m) => PERMISSION_LABELS[m]).join(' · ')}){' · '}
+                    {t('ui.status.esc_to_interrupt')}
+                    {' · '}
+                    {t('ui.status.left_for_agents')}
+                  </Text>
+                )}
                 {ctrlC.armed && <Text color="yellow"> {t('ui.status.ctrl_c_again')}</Text>}
               </Box>
             </Box>
 
             {/* Git branch — dim, bottom-most, mirrors Claude Code's "⏺ main" */}
-            {gitBranch && (
+            {statuslineSegments.git && gitBranch && (
               <Box>
                 <Text dimColor>⏺ {gitBranch}</Text>
                 {gitPr && <Text color={prColor(gitPr)}> · PR #{gitPr.number}</Text>}
