@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.85.52] — 2026-11-28
+
+### Changed
+
+- **`deepseek-flash` 成为 DeepSeek 的正式模型 id 与默认模型** —— 官方价页已把正式名改为
+  `deepseek-flash`；旧名 `deepseek-v4-flash` 仍可调用，但对应模型已下线，请求由
+  V4.1-Flash-1017 服务并按 Flash 价计费。目录新增正式名条目（1M 上下文 / 384K 输出），
+  旧名保留为 `deprecated`：老配置里的 `defaultModel` 照样解析得到 1M 窗口（不再落到
+  「未知模型 ⇒ 128K 上下文」那条分支），但不再出现在 Ctrl+P 模型选择器里。
+  `DEFAULT_CONFIG.defaultModel` 随之改为 `deepseek-flash`。
+
 ## [0.85.51] — 2026-11-28
 
 ### Added

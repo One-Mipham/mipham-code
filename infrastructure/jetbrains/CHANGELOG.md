@@ -4,6 +4,13 @@
 > (tag dates) and use the same wording as the VS Code extension's changelog — the plugin is a
 > thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.52 (2026-11-28)
+
+- Version sync with Mipham Code CLI 0.85.52
+- Changed: `deepseek-flash` is now DeepSeek's canonical model id and the default model.
+  The legacy id `deepseek-v4-flash` still resolves (old configs keep the 1M window) but
+  no longer appears in the model picker.
+
 ## 0.85.51 (2026-11-28)
 
 - Version sync with Mipham Code CLI 0.85.51
