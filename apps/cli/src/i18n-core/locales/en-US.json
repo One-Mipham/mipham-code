@@ -122,6 +122,17 @@
       "prompt_cache": "Prompt cache: ~{cached} cached ({ratio}% hit) · ~{uncached} uncached",
       "footer": "Token counting is approximate (chars/4).\nActual API usage depends on provider and model."
     },
+    "cost": {
+      "session_title": "── Session billing (API-reported) ──",
+      "buckets": "Input {input} · Cache read {cache_read} · Cache write {cache_write} · Output {output}",
+      "cache_hit": "Prompt cache hit: {ratio}%",
+      "estimate": "Cost estimate: ≈ {symbol}{amount} ({provider}/{model}, prices as of {asOf})",
+      "estimate_no_date": "Cost estimate: ≈ {symbol}{amount} ({provider}/{model} prices)",
+      "no_price": "Cost estimate: no prices configured — add per-1M-token rates for {provider}/{model} in ~/.mipham/pricing.json.",
+      "incomplete": "Cost estimate: cannot estimate — the price book is missing {missing}.",
+      "file_error": "Cost estimate: cannot read the price file — {error}",
+      "caveat": "(estimated at the current model's rates for the whole session; switching models mid-session skews it)"
+    },
     "model": {
       "current": "Current model: {model}\nProvider: {provider}\n\nUse /model <model> or /switch <provider> <model> to change.",
       "unknown": "Unknown model: {model}. Use /models to list the available models.",

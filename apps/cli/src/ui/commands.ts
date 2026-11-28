@@ -168,6 +168,8 @@ import { execSync } from 'node:child_process'
 import { MIPHAM_DIR, OLLAMA_PRESET_MODELS } from '../shared/constants'
 import { renameActiveSession } from '../agent/cross-session/discovery'
 import { clearTasks, formatTaskList } from '../tools/exec/task'
+import { estimateCost, loadPriceBook } from '../providers/pricing'
+import type { UsageSummary } from '../core/usage-tracker'
 
 export interface CommandContext {
   engine: QueryEngine
@@ -596,6 +598,87 @@ const statusCmd: CommandHandler = async (ctx) => {
   }
 }
 
+const CURRENCY_SYMBOLS: Record<string, string> = { USD: '$', CNY: '¥' }
+
+/**
+ * 金额显示：估算值，不是账单。太小的数不四舍五入成 0 —— 「<$0.0001」与「0」
+ * 对用户是两件事（前者说明有花费，只是很小）。
+ */
+function formatCostAmount(amount: number): string {
+  if (amount === 0) return '0'
+  if (amount < 0.0001) return '<0.0001'
+  return String(Number(amount.toFixed(6)))
+}
+
+/** `/cost` 的会话计费段：四桶实报用量 + 按用户价格表估算的费用。 */
+function sessionBillingLines(
+  ctx: Parameters<CommandHandler>[0],
+  t: (key: string, params?: Record<string, string>) => string,
+): string[] {
+  const tracker = ctx.engine.getUsageTracker() as { getSummary?: () => UsageSummary } | undefined
+  // 远端 attach 的 tracker 只有 getStats —— 那类会话没有本地计费账，整段省略，
+  // 不能因此把 `/cost` 打死。
+  if (typeof tracker?.getSummary !== 'function') return []
+  const summary = tracker.getSummary()
+
+  const input = summary.apiInputTokens ?? 0
+  const output = summary.apiOutputTokens ?? 0
+  const cacheRead = summary.apiCacheReadTokens ?? 0
+  const cacheWrite = summary.apiCacheWriteTokens ?? 0
+  const billedInput = input + cacheRead + cacheWrite
+  const hitRatio = billedInput > 0 ? Math.min(1, cacheRead / billedInput) * 100 : 0
+
+  const lines = [
+    '',
+    t('commands.cost.session_title'),
+    t('commands.cost.buckets', {
+      input: input.toLocaleString(),
+      cache_read: cacheRead.toLocaleString(),
+      cache_write: cacheWrite.toLocaleString(),
+      output: output.toLocaleString(),
+    }),
+  ]
+  if (billedInput > 0) {
+    lines.push(t('commands.cost.cache_hit', { ratio: hitRatio.toFixed(1) }))
+  }
+
+  const loaded = loadPriceBook()
+  if (loaded.error !== undefined) {
+    lines.push(t('commands.cost.file_error', { error: loaded.error }))
+    return lines
+  }
+
+  const result = estimateCost(loaded.book, ctx.providerId, ctx.modelId, {
+    inputTokens: input,
+    outputTokens: output,
+    cacheReadTokens: cacheRead,
+    cacheWriteTokens: cacheWrite,
+  })
+  const route = { provider: ctx.providerId, model: ctx.modelId }
+  switch (result.kind) {
+    case 'ok':
+      lines.push(
+        t(result.asOf === undefined ? 'commands.cost.estimate_no_date' : 'commands.cost.estimate', {
+          symbol: CURRENCY_SYMBOLS[result.currency] ?? '',
+          amount: formatCostAmount(result.amount),
+          ...route,
+          ...(result.asOf !== undefined ? { asOf: result.asOf } : {}),
+        }),
+        // 账是「整段会话的桶 × 当前模型单价」，中途换过模型就不再是精确认账 ——
+        // 说在显示上，而不是留给用户自己发现。
+        t('commands.cost.caveat'),
+      )
+      break
+    case 'incomplete':
+      lines.push(t('commands.cost.incomplete', { missing: result.missing.join(', ') }))
+      break
+    case 'no-price':
+      lines.push(t('commands.cost.no_price', route))
+      break
+  }
+  return lines
+}
+
 const costCmd: CommandHandler = (ctx) => {
   const t = resolveT(ctx)
   const c = ctx.engine.getContext()
@@ -605,6 +688,7 @@ const costCmd: CommandHandler = (ctx) => {
   const hitRatio = tokens > 0 ? Math.min(1, cachedTokens / tokens) : 0
   const uncachedTokens = Math.max(0, tokens - cachedTokens)
   const maxTokens = c.getMaxTokens()
+  const billing = sessionBillingLines(ctx, t).join('\n')
   return {
     content: stripIndent`
       ${t('commands.context_tokens.title')}
@@ -615,6 +699,7 @@ const costCmd: CommandHandler = (ctx) => {
         ratio: (hitRatio * 100).toFixed(1),
         uncached: uncachedTokens.toLocaleString(),
       })}
+      ${billing}
 
       ${t('commands.context_tokens.footer')}
     `,

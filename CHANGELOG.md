@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`/cost` 显示会话计费四桶与估算费用** —— 新增 `providers/pricing.ts`：读用户自己的
+  `~/.mipham/pricing.json`（provider → model → 每 1M token 单价，可选缓存读/写单价、
+  `asOf`、`source`），按未缓存输入 / 输出 / 缓存读 / 缓存写四个桶分别计价求和。
+  **仓库不内置任何单价** —— 价格随套餐与网关漂移，写死就会静默说谎；未配置时显示
+  「no prices configured」与配置路径，用了缓存却没配缓存单价时显式报缺项（不拿输入价顶替），
+  价格文件损坏与「未配置」分开报告。`/cost` 原有上下文估算段保持不变。
+
 ### Fixed
 
 - **计费 token 的四桶不再蒸发** —— provider 层此前只取 `input_tokens` / `prompt_tokens`，

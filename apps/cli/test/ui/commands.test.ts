@@ -36,6 +36,19 @@ vi.mock('../../src/config/preferences', () => ({
   setPreference: (k: string, v: string) => void mockPrefStore.set(k, v),
 }))
 
+// ── 价格表：/cost 的估价读用户文件；测试用 mock 钉住，既不受别的测试文件
+// 写盘影响，也不去读真正跑着的那个 home ──
+const { mockLoadPriceBook } = vi.hoisted(() => ({ mockLoadPriceBook: vi.fn() }))
+vi.mock('../../src/providers/pricing', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/providers/pricing')>()
+  return { ...actual, loadPriceBook: mockLoadPriceBook }
+})
+// 每个用例复位成「没配价格」。留着上一个用例的返回值会让 /cost 的断言依赖
+// 测试执行顺序 —— 那种绿是假的。
+beforeEach(() => {
+  mockLoadPriceBook.mockReturnValue({ book: { providers: {} } })
+})
+
 // ── Mock SessionStore to avoid real on-disk sessions leaking into tests ──
 vi.mock('../../src/core/session-store', () => ({
   SessionStore: {
@@ -124,6 +137,101 @@ describe('/cost prompt-cache', () => {
     expect(result.content).toContain('Prompt cache')
     expect(result.content).toContain('400')
     expect(result.content).toContain('40.0')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════
+// /cost —— 会话计费四桶与估算费用
+// ═══════════════════════════════════════════════════════════════
+
+describe('/cost session billing', () => {
+  const summary = (overrides: Record<string, number> = {}) => ({
+    apiInputTokens: 1000,
+    apiOutputTokens: 500,
+    apiCacheReadTokens: 2000,
+    apiCacheWriteTokens: 100,
+    estimatedTokens: 0,
+    tools: {},
+    ...overrides,
+  })
+
+  const ctxWith = (s: ReturnType<typeof summary>) => {
+    const ctx = mkCtx() as unknown as {
+      engine: { getContext: () => unknown; getUsageTracker: () => unknown }
+      providerId: string
+      modelId: string
+    }
+    ctx.engine.getContext = () => ({
+      getMessages: () => [],
+      getEstimatedTokens: () => 1000,
+      getCacheStatus: () => ({ cachedTokens: 0 }),
+      getCheckpoints: () => [],
+      getMaxTokens: () => 200_000,
+    })
+    ctx.engine.getUsageTracker = () => ({ getSummary: () => s, totalApiTokens: 0 })
+    return ctx as unknown as Parameters<NonNullable<ReturnType<typeof getCommand>>>[0]
+  }
+
+  const BOOK = {
+    providers: {
+      test: {
+        'test-model': {
+          currency: 'USD' as const,
+          inputPerM: 1,
+          outputPerM: 2,
+          cacheReadPerM: 0.1,
+          cacheWritePerM: 1.25,
+          asOf: '2026-11-01',
+        },
+      },
+    },
+  }
+
+  it('按四桶显示会话用量，未配置价格时明说去哪里配', async () => {
+    // 会让这条失败的改动：只显示 input/output，或把「没配价格」显示成 0 / 空白。
+    mockLoadPriceBook.mockReturnValue({ book: { providers: {} } })
+    const result = await getCommand('/cost')!(ctxWith(summary()), [])
+
+    expect(result.content).toContain('2,000') // 缓存读
+    expect(result.content).toContain('100') // 缓存写
+    expect(result.content).toContain('no prices configured')
+    expect(result.content).toContain('pricing.json')
+  })
+
+  it('配置了单价 → 四桶各自计价求和，并带出价格日期', async () => {
+    // 1000×1 + 500×2 + 2000×0.1 + 100×1.25，全部 /1e6 = 0.002325
+    mockLoadPriceBook.mockReturnValue({ book: BOOK })
+    const result = await getCommand('/cost')!(ctxWith(summary()), [])
+
+    expect(result.content).toContain('≈ $0.002325')
+    expect(result.content).toContain('2026-11-01')
+    // 整段会话按当前模型单价估算 —— 中途换模型的偏差必须写在显示上。
+    expect(result.content).toContain('switching models mid-session')
+  })
+
+  it('用了缓存但价格表缺缓存单价 → 无法估算并点名缺哪项', async () => {
+    // 拿输入价顶替缓存价就是编数字；缺项必须显式报出。
+    mockLoadPriceBook.mockReturnValue({
+      book: {
+        providers: { test: { 'test-model': { currency: 'USD', inputPerM: 1, outputPerM: 2 } } },
+      },
+    })
+    const result = await getCommand('/cost')!(ctxWith(summary()), [])
+
+    expect(result.content).toContain('cannot estimate')
+    expect(result.content).toContain('cacheReadPerM')
+    expect(result.content).toContain('cacheWritePerM')
+  })
+
+  it('价格文件坏了 → 报文件错误，不伪装成「未配置」', async () => {
+    mockLoadPriceBook.mockReturnValue({
+      book: { providers: {} },
+      error: '/x/.mipham/pricing.json: Unexpected token',
+    })
+    const result = await getCommand('/cost')!(ctxWith(summary()), [])
+
+    expect(result.content).toContain('cannot read the price file')
+    expect(result.content).toContain('Unexpected token')
   })
 })
 

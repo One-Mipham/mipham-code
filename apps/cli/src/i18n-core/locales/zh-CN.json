@@ -122,6 +122,17 @@
       "prompt_cache": "Prompt 缓存: ~{cached} 命中 ({ratio}% hit) · ~{uncached} 未命中",
       "footer": "Token 计数为近似值（字符数/4）。\n实际 API 用量取决于提供商和模型。"
     },
+    "cost": {
+      "session_title": "── 会话计费（API 实报）──",
+      "buckets": "输入 {input} · 缓存读 {cache_read} · 缓存写 {cache_write} · 输出 {output}",
+      "cache_hit": "Prompt 缓存命中: {ratio}%",
+      "estimate": "估算费用: ≈ {symbol}{amount}（{provider}/{model}，单价日期 {asOf}）",
+      "estimate_no_date": "估算费用: ≈ {symbol}{amount}（{provider}/{model} 单价）",
+      "no_price": "估算费用: 价格未配置 —— 在 ~/.mipham/pricing.json 写入 {provider}/{model} 的每 1M token 单价。",
+      "incomplete": "估算费用: 无法估算 —— 价格表缺少 {missing}。",
+      "file_error": "估算费用: 价格文件无法读取 —— {error}",
+      "caveat": "（按当前模型单价估算整段会话；中途换过模型会有偏差）"
+    },
     "model": {
       "current": "当前模型: {model}\n提供商: {provider}\n\n使用 /model <model> 或 /switch <provider> <model> 切换。",
       "unknown": "未知模型: {model}。用 /models 查看可用模型。",
