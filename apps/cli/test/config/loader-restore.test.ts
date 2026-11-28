@@ -49,7 +49,7 @@ describe('loadConfig — restore config.yml from backup when missing', () => {
 
     // No config.yml, no backup → defaults (deepseek), not the backup values
     expect(config.defaultProvider).toBe('deepseek')
-    expect(config.defaultModel).toBe('deepseek-v4-flash')
+    expect(config.defaultModel).toBe('deepseek-flash')
   })
 
   it('an empty config.yml is treated as missing, not as corruption (318-044)', () => {

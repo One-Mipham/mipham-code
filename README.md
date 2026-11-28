@@ -151,7 +151,7 @@ Or project-level `.mipham/config.yml` in your repository.
 | MiphamAI        | OM V5 Flash/Visual/Pro/Apex                                               | 16K–200K   | Active |
 | Ollama (本地)   | 本机已装模型（`ollama list` 动态发现）                                    | —          | Active |
 
-**共 12 家提供商，51 个模型。** 设置 API Key 即可使用：
+**共 12 家提供商，52 个模型。** 设置 API Key 即可使用：
 
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."      # Anthropic Claude

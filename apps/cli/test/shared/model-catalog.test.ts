@@ -25,3 +25,35 @@ describe('Anthropic 模型目录', () => {
     expect(ids).toContain('claude-fable-5-2')
   })
 })
+
+/**
+ * DeepSeek 官方价页（2026-11-27 版）把正式模型名改为 `deepseek-flash`：
+ * `deepseek-v4-flash` 是「仍可调用、但对应模型已下线、请求由 V4.1-Flash-1017
+ * 服务并按 Flash 价计费」的旧名。目录若只留旧名，用户按官方文档写
+ * `defaultModel: deepseek-flash` 就会落到「未知模型 ⇒ 128K 上下文」分支
+ * （`index.tsx` 的 `MIPHAM_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT` 那条），
+ * 从 1M 掉到 128K —— 这两条测试钉的就是这件事。
+ */
+describe('DeepSeek 模型目录', () => {
+  const deepseek = DEFAULT_PROVIDERS.find((p) => p.id === 'deepseek')!
+
+  it('正式名 deepseek-flash 在目录里，且带 1M 上下文', () => {
+    const m = deepseek.models.find((x) => x.id === 'deepseek-flash')
+    expect(m).toBeDefined()
+    expect(m!.status).toBe('active')
+    expect(m!.contextWindow).toBe(1_000_000)
+    expect(m!.maxOutput).toBe(384_000)
+  })
+
+  it('旧名 deepseek-v4-flash 仍留在目录里（老配置照样解析得到窗口），但不进选择器', () => {
+    const legacy = deepseek.models.find((x) => x.id === 'deepseek-v4-flash')
+    expect(legacy).toBeDefined()
+    expect(legacy!.status).toBe('deprecated')
+    expect(legacy!.contextWindow).toBe(1_000_000)
+  })
+
+  it('默认模型指向正式名', async () => {
+    const { DEFAULT_CONFIG } = await import('../../src/config/defaults')
+    expect(DEFAULT_CONFIG.defaultModel).toBe('deepseek-flash')
+  })
+})

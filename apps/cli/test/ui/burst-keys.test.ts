@@ -91,7 +91,7 @@ describe('模型选择器（Ctrl+P）', () => {
     stdin.write(ENTER) // 第二级：确认模型
     await settle()
 
-    expect(onSelect).toHaveBeenCalledWith('deepseek', 'deepseek-v4-flash')
+    expect(onSelect).toHaveBeenCalledWith('deepseek', 'deepseek-flash')
   })
 
   it('打开即确认：模型光标停在当前模型上，不是第一行', async () => {

@@ -11,7 +11,7 @@ import { PACKAGE_VERSION } from '../shared/index.ts'
 export const DEFAULT_CONFIG: MiphamConfig = {
   version: PACKAGE_VERSION,
   defaultProvider: 'deepseek',
-  defaultModel: 'deepseek-v4-flash',
+  defaultModel: 'deepseek-flash',
   permission: 'default',
   showThinking: 'off',
   showSchedulingNotices: false,

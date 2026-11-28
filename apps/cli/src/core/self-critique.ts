@@ -62,8 +62,8 @@ export const DEFAULT_SELF_CRITIQUE_CONFIG: SelfCritiqueConfig = {
   threshold: 0.6,
   targetTools: ['Bash', 'Write', 'Edit', 'Agent'],
   // Measured, not chosen: 30 real critiques against the configured provider
-  // (`pickFastestModel` → `deepseek-v4-flash`; default model is the slower
-  // `-pro`) took min 1.85s / median 3.95s / max 17.9s, and **28 of 30 exceeded
+  // (`pickFastestModel` → `deepseek-v4-flash`，该 id 现由 `deepseek-flash` 承接、
+  // 同一后端模型；默认模型是更慢的 `-pro`) took min 1.85s / median 3.95s / max 17.9s, and **28 of 30 exceeded
   // 2s** — the value this replaced. At 2s the budget would have skipped 93% of
   // critiques, and since `critique()` fails *open* (null ⇒ the tool runs
   // unreviewed) that failure is silent: `/crsi critique` would look enabled and

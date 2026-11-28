@@ -12,7 +12,7 @@
  * {
  *   "providers": {
  *     "deepseek": {
- *       "deepseek-v4-flash": {
+ *       "deepseek-flash": {
  *         "currency": "USD",
  *         "inputPerM": 0.28,
  *         "outputPerM": 0.42,

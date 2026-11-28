@@ -143,13 +143,26 @@ export const DEFAULT_PROVIDERS: ProviderConfig[] = [
     apiKey: '${DEEPSEEK_API_KEY}',
     models: [
       {
-        id: 'deepseek-v4-flash',
-        name: 'DeepSeek V4 Flash',
+        // 官方正式名（2026-11 价页）。旧名 deepseek-v4-flash 仍可调用但对应模型
+        // 已下线（请求由 V4.1-Flash-1017 服务、按 Flash 价计费），故保留为
+        // deprecated 条目：老配置里的 defaultModel 照样解析得到 1M 窗口，
+        // 只是不再进模型选择器。
+        id: 'deepseek-flash',
+        name: 'DeepSeek Flash',
         providerId: 'deepseek',
         contextWindow: 1_000_000,
         maxOutput: 384_000,
         vision: false,
         status: 'active',
+      },
+      {
+        id: 'deepseek-v4-flash',
+        name: 'DeepSeek V4 Flash (legacy)',
+        providerId: 'deepseek',
+        contextWindow: 1_000_000,
+        maxOutput: 384_000,
+        vision: false,
+        status: 'deprecated',
       },
       {
         id: 'deepseek-v4-pro',

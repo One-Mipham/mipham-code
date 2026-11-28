@@ -67,7 +67,7 @@ const live = process.env.MIPHAM_E2E_LIVE === '1' ? getAvailableProvider() : null
 // `registry.getActive()` for tool context and metrics even when the chat
 // stream itself comes from the injected seam. These are the built-in defaults.
 const provider = live?.provider ?? 'deepseek'
-const model = live?.model ?? 'deepseek-v4-flash'
+const model = live?.model ?? 'deepseek-flash'
 
 // ── Helpers ──
 
