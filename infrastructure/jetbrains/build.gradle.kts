@@ -13,7 +13,10 @@ repositories {
 
 intellij {
     version.set(project.property("platformVersion").toString())
-    plugins.set(listOf("org.jetbrains.plugins.terminal"))
+    plugins.set(
+        project.property("platformPlugins").toString()
+            .split(",").map { it.trim() }.filter { it.isNotEmpty() }
+    )
 }
 
 kotlin {
