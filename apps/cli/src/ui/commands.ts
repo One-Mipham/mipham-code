@@ -3445,6 +3445,19 @@ const usageCmd: CommandHandler = (ctx) => {
   }
 
   const apiTotal = summary.apiInputTokens + summary.apiOutputTokens
+  // 缓存读/写单独一行：它们不在 inputTokens 里（四桶不相交），不列出来就等于
+  // 告诉用户这次会话没走缓存。
+  const cacheRead = summary.apiCacheReadTokens ?? 0
+  const cacheWrite = summary.apiCacheWriteTokens ?? 0
+  const billedInput = summary.apiInputTokens + cacheRead + cacheWrite
+  const cacheLine =
+    cacheRead > 0 || cacheWrite > 0
+      ? `\n${t('commands.usage.cache_tokens', {
+          read: cacheRead.toLocaleString(),
+          write: cacheWrite.toLocaleString(),
+          ratio: billedInput > 0 ? ((cacheRead / billedInput) * 100).toFixed(1) : '0.0',
+        })}`
+      : ''
   const apiLine =
     summary.apiInputTokens > 0 || summary.apiOutputTokens > 0
       ? t('commands.usage.api_tokens', {
@@ -3466,7 +3479,7 @@ const usageCmd: CommandHandler = (ctx) => {
   return {
     content: stripIndent`
       ${t('commands.usage.title')}
-      ${apiLine}
+      ${apiLine}${cacheLine}
       ${t('commands.usage.context_line', { est: estTokens.toLocaleString(), max: maxTokensShown.toLocaleString(), pct })}
       ${t('commands.usage.messages_line', { count: String(msgs.length) })}
       ${t('commands.usage.provider_line', { provider: ctx.providerId })}

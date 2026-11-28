@@ -28,6 +28,17 @@ function sameStats(a: GraftStats | null, b: GraftStats | null): boolean {
 const STATS_REFRESH_MS = 1000
 
 /**
+ * 会话计费 token 的紧凑写法：`999 tok` / `12.3k tok` / `1.2M tok`。
+ * 页脚是单行，四位以上的原数会把 `ctx` 与 `last:` 挤出去。
+ */
+export function formatCompactTokens(tokens: number): string {
+  const trim = (v: number): string => v.toFixed(1).replace(/\.0$/, '')
+  if (tokens < 1_000) return `${tokens} tok`
+  if (tokens < 1_000_000) return `${trim(tokens / 1_000)}k tok`
+  return `${trim(tokens / 1_000_000)}M tok`
+}
+
+/**
  * Bottom-of-screen graft status line — mirrors graft's own "◤ graft · …" bar:
  *   ◤ graft · N nodes / E edges · ✓ synced · ~T tok saved
  *   ▸ ctx X% · last: file
@@ -43,7 +54,16 @@ const STATS_REFRESH_MS = 1000
  * 其余同前：tok-saved 每次渲染实时读；只在有 graft 图或有已知 ctx% 时渲染 —— ctx% 行
  * 在本目录没建过 graft 时也照常显示。
  */
-export function GraftStatusLine({ cwd, ctxPct }: { cwd: string; ctxPct?: number }) {
+export function GraftStatusLine({
+  cwd,
+  ctxPct,
+  tokens,
+}: {
+  cwd: string
+  ctxPct?: number
+  /** 本会话的计费 token 合计（四桶）。0/undefined ⇒ 不显示，不以 0 tok 冒充。 */
+  tokens?: number
+}) {
   const [stats, setStats] = useState(() => findGraftStats(cwd))
 
   useEffect(() => {
@@ -54,13 +74,15 @@ export function GraftStatusLine({ cwd, ctxPct }: { cwd: string; ctxPct?: number 
     return () => clearInterval(timer)
   }, [cwd])
   const showCtx = typeof ctxPct === 'number'
-  if (!stats && !showCtx) return null
+  const showTokens = typeof tokens === 'number' && tokens > 0
+  if (!stats && !showCtx && !showTokens) return null
   const fresh = stats ? freshnessSegment(stats) : null
   const saved = getGraftSavings()
   const lastFile = stats?.lastFile ? basename(stats.lastFile) : null
 
   const bottom: string[] = []
   if (typeof ctxPct === 'number') bottom.push(`ctx ${ctxPct}%`)
+  if (showTokens) bottom.push(formatCompactTokens(tokens))
   if (lastFile) bottom.push(`last: ${lastFile}`)
 
   return (

@@ -20,6 +20,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { render } from 'ink-testing-library'
 import { GraftStatusLine } from '../../src/ui/graft-status'
+import { sessionTokens } from '../../src/ui/app'
 
 let dir: string
 
@@ -67,5 +68,44 @@ describe('页脚的 graft 新鲜度：磁盘变了它就得变', () => {
     const { lastFrame, unmount } = render(React.createElement(GraftStatusLine, { cwd: dir }))
     expect(lastFrame() ?? '').not.toContain('graft')
     unmount()
+  })
+})
+
+describe('页脚的会话计费读数', () => {
+  it('有会话 token 时排在 ctx 百分比之后', () => {
+    // 会让这条失败的改动：不给 footer 传 tokens / 传了不渲染 —— 读数只活在
+    // `/cost` 里，用户不敲命令就看不见这次会话烧了多少。
+    const { lastFrame, unmount } = render(
+      React.createElement(GraftStatusLine, { cwd: dir, ctxPct: 42, tokens: 12_345 }),
+    )
+    const frame = lastFrame() ?? ''
+    expect(frame).toContain('ctx 42%')
+    expect(frame).toContain('12.3k tok')
+    expect(frame.indexOf('ctx 42%')).toBeLessThan(frame.indexOf('12.3k tok'))
+    unmount()
+  })
+
+  it('没有会话 token 时不显示这一段（不以 0 tok 冒充）', () => {
+    const { lastFrame, unmount } = render(
+      React.createElement(GraftStatusLine, { cwd: dir, ctxPct: 42 }),
+    )
+    expect(lastFrame() ?? '').not.toContain('0 tok')
+    unmount()
+  })
+})
+
+describe('sessionTokens', () => {
+  it('本地引擎取 totalApiTokens（四桶之和）', () => {
+    const engine = {
+      getUsageTracker: () => ({ totalApiTokens: 1234 }),
+    } as unknown as Parameters<typeof sessionTokens>[0]
+    expect(sessionTokens(engine)).toBe(1234)
+  })
+
+  it('远端 attach 的 tracker 没有本地账 → undefined，不编一个 0', () => {
+    const engine = {
+      getUsageTracker: () => ({ getStats: () => ({}) }),
+    } as unknown as Parameters<typeof sessionTokens>[0]
+    expect(sessionTokens(engine)).toBeUndefined()
   })
 })

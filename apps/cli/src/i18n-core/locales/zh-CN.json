@@ -260,6 +260,7 @@
       "title": "── 用量面板 ──",
       "api_tokens": "API Token:      {in} in / {out} out ({total} total)",
       "no_api": "API Token:      （暂无 API 用量数据）",
+      "cache_tokens": "API 缓存:       {read} 读命中 / {write} 写入（命中率 {ratio}%）",
       "context_line": "上下文 Token:  ~{est} / {max}  ({pct}%)",
       "messages_line": "消息数:         {count}",
       "provider_line": "提供商:         {provider}",

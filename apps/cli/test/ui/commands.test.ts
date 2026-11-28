@@ -400,6 +400,50 @@ describe('/usage percentage guards', () => {
   })
 })
 
+describe('/usage cache buckets', () => {
+  const withSummary = (summary: Record<string, unknown>) => {
+    const ctx = mkCtx() as unknown as {
+      engine: { getUsageTracker: () => unknown }
+    }
+    ctx.engine.getUsageTracker = () => ({ getSummary: () => summary, totalApiTokens: 0 })
+    return ctx as unknown as Parameters<NonNullable<ReturnType<typeof getCommand>>>[0]
+  }
+
+  it('把缓存读/写与命中率单独列出', async () => {
+    // 会让这条失败的改动：`/usage` 只报 API 的 in/out，缓存桶不露面 ——
+    // 用户看着 `/usage` 却不知道这次会话的 prompt 大半走了缓存。
+    const { content } = await getCommand('/usage')!(
+      withSummary({
+        apiInputTokens: 1000,
+        apiOutputTokens: 500,
+        apiCacheReadTokens: 2000,
+        apiCacheWriteTokens: 100,
+        estimatedTokens: 0,
+        tools: {},
+      }),
+      [],
+    )
+    expect(content).toContain('API cache')
+    expect(content).toContain('2,000')
+    expect(content).toContain('100')
+    // (1000 + 2000 + 100) 分母，2000 命中 ⇒ 64.5%
+    expect(content).toContain('64.5')
+  })
+
+  it('没有缓存数据时不显示这一段', async () => {
+    const { content } = await getCommand('/usage')!(
+      withSummary({
+        apiInputTokens: 1000,
+        apiOutputTokens: 500,
+        estimatedTokens: 0,
+        tools: {},
+      }),
+      [],
+    )
+    expect(content).not.toContain('API cache')
+  })
+})
+
 // ═══════════════════════════════════════════════════════════════
 // /mcp connect — HTTP disclosure
 // ═══════════════════════════════════════════════════════════════

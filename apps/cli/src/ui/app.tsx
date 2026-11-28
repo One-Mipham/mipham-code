@@ -46,6 +46,18 @@ function contextUsagePct(engine: QueryEngine | RemoteEngine): number | undefined
   if (!max || max <= 0) return undefined
   return Math.round((ctx.getEstimatedTokens() / max) * 100)
 }
+
+/**
+ * 本会话的计费 token 合计（四桶），给页脚用。
+ *
+ * 远端 attach 的 tracker 只有 `getStats()`、没有本地账 —— 那类会话返回 undefined，
+ * 让页脚省略这一段，而不是编一个 0 出来。
+ */
+export function sessionTokens(engine: QueryEngine | RemoteEngine): number | undefined {
+  const tracker = engine.getUsageTracker?.() as { totalApiTokens?: unknown } | undefined
+  const total = tracker?.totalApiTokens
+  return typeof total === 'number' && total > 0 ? total : undefined
+}
 import { AgentViewDashboard } from '../agent-view/dashboard'
 import { AgentSessionView } from '../agent-view/session-view'
 import type { AgentViewManager } from '../agent-view/agent-view-manager'
@@ -1674,7 +1686,11 @@ export function App({
             />
 
             {/* graft status line — mirrors graft's own "◤ graft · …" bar */}
-            <GraftStatusLine cwd={process.cwd()} ctxPct={contextUsagePct(engine)} />
+            <GraftStatusLine
+              cwd={process.cwd()}
+              ctxPct={contextUsagePct(engine)}
+              tokens={sessionTokens(engine)}
+            />
 
             {/* Update notification — green, right-aligned, mirrors Claude Code's "Update installed · Restart to apply".
                 While the startup banner is showing it already carries this line, so the footer copy is suppressed to avoid a duplicate. */}

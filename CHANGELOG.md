@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **页脚的会话计费读数** —— 底部状态行在 `ctx N%` 之后显示本会话四个计费桶的合计
+  （`12.3k tok`）；远端 attach 没有本地账时省略这一段，不显示 `0 tok`。
+- **`/usage` 列出缓存读/写** —— 在 API 用量行之后单独一行 `API cache: … read / … written
+(…% hit)`；缓存桶不在 `inputTokens` 里，不列出来等于告诉用户这次会话没走缓存。
 - **`/cost` 显示会话计费四桶与估算费用** —— 新增 `providers/pricing.ts`：读用户自己的
   `~/.mipham/pricing.json`（provider → model → 每 1M token 单价，可选缓存读/写单价、
   `asOf`、`source`），按未缓存输入 / 输出 / 缓存读 / 缓存写四个桶分别计价求和。

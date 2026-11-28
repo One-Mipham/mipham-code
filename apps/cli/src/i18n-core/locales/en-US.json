@@ -260,6 +260,7 @@
       "title": "── Usage Dashboard ──",
       "api_tokens": "API tokens:      {in} in / {out} out ({total} total)",
       "no_api": "API tokens:      (no API usage data yet)",
+      "cache_tokens": "API cache:       {read} read / {write} written ({ratio}% hit)",
       "context_line": "Context tokens:  ~{est} / {max}  ({pct}%)",
       "messages_line": "Messages:         {count}",
       "provider_line": "Provider:         {provider}",
