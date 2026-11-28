@@ -65,7 +65,7 @@ brew install mipham
 
 ```bash
 mipham --version
-# → @miphamai/cli v0.85.52
+# → @miphamai/cli v0.85.53
 ```
 
 ### Run
@@ -122,7 +122,7 @@ pnpm monorepo
 Create `~/.mipham/config.yml`:
 
 ```yaml
-version: '0.85.52'
+version: '0.85.53'
 defaultProvider: anthropic
 defaultModel: claude-sonnet-4-6
 permission: default

@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [0.85.53] — 2026-11-28
+
+### Added
+
+- **`/insights` — 跨会话使用报告** —— 扫描 `~/.mipham/sessions/*.jsonl`（按 mtime 取最近
+  200 个文件，单文件 20 MiB、总量 64 MiB 上限），汇总会话/事件/user 与 assistant 消息数、
+  工具调用总数与 Top 10、失败数、压缩次数、provider/model 分布和时间范围。只输出计数与
+  工具名，不输出消息正文、工具输入或工具输出。多块回合里的工具调用与失败同样计入；
+  进程中断留在日志里的「结果未知」单列为 `unknown`，不算失败。没有日志时如实打印路径，
+  不显示空表。
+- **`/statusline [full|compact|off]` — 页脚状态区密度** —— `full` 为默认（graft 行、
+  提示句、git 分支）；`compact` 隐藏 graft 行与提示长句，保留权限档位和 git 分支；
+  `off` 再隐藏 git 分支。**权限档位与 Ctrl+C 警告在任何档位都会保留**（安全信息不随
+  显示偏好消失）。选择写入用户偏好，下次启动沿用。
+- **`/autocompact [<percent>|default]` — 自动压缩阈值** —— 在 50%–95% 之间设置硬压缩阈值
+  （`85%` 或 `0.85`），越界拒绝并说明范围；`default` 清除覆盖，回到按上下文窗口自算。
+  覆盖值在切换模型后仍然生效。attached（daemon）会话拒绝并说明该阈值由 daemon 拥有；
+  本命令只改硬压缩，微压缩仍按自己的窗口公式更早触发。
+- **`/reload-plugins` — 会话内重载插件** —— 先按 source 注销已登记的 hooks，再重新加载
+  已启用插件，报告插件数与技能总数，重复执行不会累积重复 hooks。输出同时写明边界：
+  已连接的 MCP server 不会断开重连；已禁用/已移除插件此前载入内存的 skills 与 agents
+  需要重启会话才会卸载。safe-mode 或 `disableAllHooks` 下不可用，且失败时如实报错，
+  不假装成功。
+- **`/subtask <prompt>` — 带完整上下文派子代理** —— 让模型用 `Agent` 的 `fork` 子代理
+  （`subagent_type: "fork"`）在前台执行任务并带回当前对话，省去手动复制上下文。
+  无参数时打印用法。
+- **`/security-review` — 安全专项审查** —— 读取当前未提交改动，把安全焦点指令（注入、
+  鉴权绕过、密钥泄露、反序列化、路径穿越、依赖风险）转给现有 `security-review` 技能。
+  它与只承诺 bugs 与 CLAUDE.md 违规的 `/code-review` 不是同一件事，因此**不是**其别名；
+  没有可审查的改动时沿用既有的「没有改动」分支，不假装跑过。
+- **Claude Code 兼容别名** —— `/bug` → `/bug-report`、`/plugin` → `/plugins`、
+  `/list-agents` → `/agents`，目标 handler 与原命令相同。
+
+### Changed
+
+- **Slash 命令总数 141 → 150**（6 个真实能力命令 + 3 个别名）。
+
 ## [0.85.52] — 2026-11-28
 
 ### Changed

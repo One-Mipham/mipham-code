@@ -3,6 +3,23 @@
 > Entries for 0.75.0–0.81.2 were backfilled on 2026-09-14 from the root `CHANGELOG.md`
 > (tag dates). The extension is a thin launcher, so CLI-facing changes are listed here too.
 
+## 0.85.53 (2026-11-28)
+
+- Version sync with Mipham Code CLI 0.85.53
+- Added: `/insights` — a cross-session usage report (sessions, tool calls and failures,
+  compactions, provider/model mix) read from local session logs; counts only, no message text.
+- Added: `/statusline [full|compact|off]` — choose how much of the footer is shown; the
+  permission tier and Ctrl+C warning always stay visible.
+- Added: `/autocompact [<percent>|default]` — set the hard compaction threshold (50–95%);
+  `default` clears the override. Attached daemon sessions refuse and explain why.
+- Added: `/reload-plugins` — reload enabled plugins in-session, with the boundaries spelled
+  out (MCP servers are not reconnected; disabled plugins' skills need a restart).
+- Added: `/subtask <prompt>` — dispatch a foreground `Agent(fork)` with the current context.
+- Added: `/security-review` — security-focused review of uncommitted changes; a dedicated
+  command, not an alias of `/code-review`.
+- Added: Claude Code-compatible aliases `/bug`, `/plugin`, `/list-agents`.
+- Changed: slash command count 141 → 150.
+
 ## 0.85.52 (2026-11-28)
 
 - Version sync with Mipham Code CLI 0.85.52
