@@ -666,7 +666,13 @@ export class SubAgent {
             break
           }
           if (chunk.type === 'usage') {
-            totalTokens += (chunk.inputTokens ?? 0) + (chunk.outputTokens ?? 0)
+            // All four billed buckets, not just the uncached ones: a cache read is
+            // still this call's usage, and it is usually the largest bucket.
+            totalTokens +=
+              (chunk.inputTokens ?? 0) +
+              (chunk.outputTokens ?? 0) +
+              (chunk.cacheReadTokens ?? 0) +
+              (chunk.cacheWriteTokens ?? 0)
             if (options.onTokenUsage) options.onTokenUsage(totalTokens)
           }
         }

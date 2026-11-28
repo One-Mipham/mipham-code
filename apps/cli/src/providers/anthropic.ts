@@ -49,7 +49,14 @@ interface AnthropicSSEEvent {
     stop_details?: { category?: string; explanation?: string }
   }
   error?: { type: string; message: string }
-  usage?: { input_tokens: number; output_tokens: number }
+  usage?: {
+    input_tokens: number
+    output_tokens: number
+    /** Prompt-cache write billed separately from `input_tokens`. */
+    cache_creation_input_tokens?: number
+    /** Prompt-cache read billed separately from `input_tokens`. */
+    cache_read_input_tokens?: number
+  }
 }
 
 /**
@@ -376,12 +383,20 @@ export class AnthropicProvider implements ProviderInstance {
               }
 
               case 'message_delta': {
-                // Capture token usage for accurate cost tracking
+                // Capture token usage for accurate cost tracking. Cache buckets are
+                // emitted only when the provider reports them, so "not reported" stays
+                // distinguishable from a reported zero.
                 if (event.usage) {
                   yield {
                     type: 'usage',
                     inputTokens: event.usage.input_tokens,
                     outputTokens: event.usage.output_tokens,
+                    ...(event.usage.cache_read_input_tokens !== undefined
+                      ? { cacheReadTokens: event.usage.cache_read_input_tokens }
+                      : {}),
+                    ...(event.usage.cache_creation_input_tokens !== undefined
+                      ? { cacheWriteTokens: event.usage.cache_creation_input_tokens }
+                      : {}),
                   }
                 }
                 // Contains stop_reason; also handles late input_json_delta

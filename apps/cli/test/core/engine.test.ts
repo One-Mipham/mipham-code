@@ -1522,6 +1522,67 @@ describe('QueryEngine', () => {
   })
 
   // ═══════════════════════════════════════════
+  // usage 的缓存计费桶 — 会话账要把「缓存读/写」与未缓存输入分开记
+  // ═══════════════════════════════════════════
+
+  describe('usage 缓存桶', () => {
+    it('把 usage 块里的缓存读写桶记进 UsageTracker', async () => {
+      // 会让这条失败的改动：引擎只累加 input/output（缓存桶落在 provider 与
+      // UsageTracker 之间蒸发）—— 会话账里缓存恒为 0，看起来像缓存不要钱。
+      const registry = mockProviderRegistry(async function* () {
+        yield {
+          type: 'usage',
+          inputTokens: 10,
+          outputTokens: 5,
+          cacheReadTokens: 900,
+          cacheWriteTokens: 200,
+        }
+        yield { type: 'text', content: 'done' }
+        yield { type: 'stop' }
+      })
+      const engine = new QueryEngine(registry, mockContext(), makeToolMap([]))
+
+      for await (const _ of engine.process('hi')) {
+        // drain
+      }
+
+      const tracker = engine.getUsageTracker()
+      const summary = tracker.getSummary()
+      expect(summary.apiInputTokens).toBe(10)
+      expect(summary.apiOutputTokens).toBe(5)
+      expect(summary.apiCacheReadTokens).toBe(900)
+      expect(summary.apiCacheWriteTokens).toBe(200)
+      expect(tracker.totalApiTokens).toBe(1115)
+    })
+
+    it('重试时上一尝试的缓存桶同样作废，不会double-charge', async () => {
+      // 会让这条失败的改动：restart 只清 input/output，不清缓存桶 ——
+      // 失败尝试的缓存读会被加在成功尝试之上，计费翻倍。
+      let calls = 0
+      const registry = mockProviderRegistry(async function* () {
+        calls++
+        if (calls === 1) {
+          yield { type: 'usage', inputTokens: 100, outputTokens: 50, cacheReadTokens: 500 }
+          yield { type: 'error', error: 'stream stalled' }
+          return
+        }
+        yield { type: 'usage', inputTokens: 120, outputTokens: 60, cacheReadTokens: 700 }
+        yield { type: 'text', content: 'done' }
+        yield { type: 'stop' }
+      })
+      const engine = new QueryEngine(registry, mockContext(), makeToolMap([]))
+
+      for await (const _ of engine.process('hi')) {
+        // drain
+      }
+
+      // 120 + 60 + 700 — the failed attempt's 650 is superseded, not added.
+      expect(engine.getUsageTracker().totalApiTokens).toBe(880)
+      expect(engine.getUsageTracker().getSummary().apiCacheReadTokens).toBe(700)
+    })
+  })
+
+  // ═══════════════════════════════════════════
   // 只有思考、没有回答的一轮 —— 要重试，且那一轮不许进上下文
   //
   // 上游 2.1.288 的修法：thinking-only 的响应要重试。触发条件是推理模型把整个输出预算

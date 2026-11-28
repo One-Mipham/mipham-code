@@ -118,6 +118,26 @@ describe('RSI Tax：测量 token 的捕获', () => {
     expect(report.tokensUsed).toBe(report.total * 15)
   })
 
+  it('缓存读写也是 Tax：四个桶一起求和', async () => {
+    // 会让这条失败的改动：只加 input+output。缓存命中往往占一次请求的绝大多数
+    // prompt token，漏掉就等于把 RSI Tax 报成零头。
+    const mockLlm: Llm = {
+      chat: async function* () {
+        yield {
+          type: 'usage',
+          inputTokens: 10,
+          outputTokens: 5,
+          cacheReadTokens: 100,
+          cacheWriteTokens: 20,
+        }
+        yield { type: 'text', content: code }
+        yield { type: 'stop' }
+      },
+    }
+    const report = await runTaskPerformance(mockLlm)
+    expect(report.tokensUsed).toBe(report.total * 135)
+  })
+
   it('provider 没报 usage → 键缺席，不是 0（0 会被读成免费）', async () => {
     const mockLlm: Llm = {
       chat: async function* () {

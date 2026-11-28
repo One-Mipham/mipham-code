@@ -37,6 +37,30 @@ describe('UsageTracker', () => {
     expect(summary.tools['mcp__github_search']!.calls).toBe(1)
   })
 
+  it('keeps cache read and write buckets disjoint from uncached input', () => {
+    const tracker = new UsageTracker()
+    // Anthropic reports input_tokens exclusive of cache; the four buckets are disjoint.
+    tracker.recordApiUsage(100, 50, 'chat')
+    tracker.recordCacheUsage(900, 200)
+
+    const summary = tracker.getSummary()
+    expect(summary.apiInputTokens).toBe(100)
+    expect(summary.apiCacheReadTokens).toBe(900)
+    expect(summary.apiCacheWriteTokens).toBe(200)
+    // Billed total is the sum of all four buckets — cache is usage, not free.
+    expect(tracker.totalApiTokens).toBe(1250)
+  })
+
+  it('reports zero cache buckets when the provider reports none', () => {
+    const tracker = new UsageTracker()
+    tracker.recordApiUsage(100, 50, 'chat')
+
+    const summary = tracker.getSummary()
+    expect(summary.apiCacheReadTokens).toBe(0)
+    expect(summary.apiCacheWriteTokens).toBe(0)
+    expect(tracker.totalApiTokens).toBe(150)
+  })
+
   it('records estimated usage as fallback', () => {
     const tracker = new UsageTracker()
     tracker.recordEstimatedUsage(200, 'Bash')

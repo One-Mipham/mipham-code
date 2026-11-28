@@ -142,6 +142,8 @@ export class SessionWorker {
     let assistantContent = ''
     let totalInputTokens = 0
     let totalOutputTokens = 0
+    let totalCacheReadTokens = 0
+    let totalCacheWriteTokens = 0
     let stopReason: string = 'end_turn'
     // The provider hit its output ceiling at least once in this turn. Reported only
     // when nothing worse happened — the three original values keep their precedence.
@@ -170,6 +172,8 @@ export class SessionWorker {
         if (chunk.type === 'usage') {
           if (chunk.inputTokens) totalInputTokens += chunk.inputTokens
           if (chunk.outputTokens) totalOutputTokens += chunk.outputTokens
+          if (chunk.cacheReadTokens) totalCacheReadTokens += chunk.cacheReadTokens
+          if (chunk.cacheWriteTokens) totalCacheWriteTokens += chunk.cacheWriteTokens
         }
 
         // A turn cut off at the provider's output ceiling must not be reported as a
@@ -211,8 +215,15 @@ export class SessionWorker {
       )
     }
 
-    // Increment turn count with accumulated token usage
-    this.db.incrementTurn(this.session.id, totalInputTokens, totalOutputTokens)
+    // Increment turn count with accumulated token usage. The sessions table has
+    // only tokenIn/tokenOut, so the three prompt-side buckets fold into tokenIn —
+    // dropping cache reads here would under-report a daemon session's cost by
+    // roughly the cache-hit share of every prompt.
+    this.db.incrementTurn(
+      this.session.id,
+      totalInputTokens + totalCacheReadTokens + totalCacheWriteTokens,
+      totalOutputTokens,
+    )
 
     // Refresh session metadata from DB so turnCount/tokenIn/tokenOut are up to date
     const refreshed = this.db.getSession(this.session.id)
@@ -404,6 +415,12 @@ export class SessionWorker {
           sessionId: this.session.id,
           inputTokens: chunk.inputTokens ?? 0,
           outputTokens: chunk.outputTokens ?? 0,
+          ...(chunk.cacheReadTokens !== undefined
+            ? { cacheReadTokens: chunk.cacheReadTokens }
+            : {}),
+          ...(chunk.cacheWriteTokens !== undefined
+            ? { cacheWriteTokens: chunk.cacheWriteTokens }
+            : {}),
         }
         return msg
       }

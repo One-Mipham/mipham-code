@@ -838,6 +838,8 @@ export class QueryEngine {
     let truncationCause: 'max_tokens' | 'connection' | undefined
     let turnApiInputTokens = 0
     let turnApiOutputTokens = 0
+    let turnApiCacheReadTokens = 0
+    let turnApiCacheWriteTokens = 0
     const turnStart = Date.now()
     const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
 
@@ -870,6 +872,8 @@ export class QueryEngine {
           // reply twice in `/usage` and in every per-tool attribution.
           turnApiInputTokens = 0
           turnApiOutputTokens = 0
+          turnApiCacheReadTokens = 0
+          turnApiCacheWriteTokens = 0
         }
 
         if (chunk.type === 'error') {
@@ -908,6 +912,8 @@ export class QueryEngine {
           // Accumulate API-reported token counts for this turn
           turnApiInputTokens += chunk.inputTokens
           turnApiOutputTokens += chunk.outputTokens || 0
+          turnApiCacheReadTokens += chunk.cacheReadTokens ?? 0
+          turnApiCacheWriteTokens += chunk.cacheWriteTokens ?? 0
         }
 
         if (chunk.type === 'stop' && chunk.truncated) {
@@ -1065,7 +1071,12 @@ export class QueryEngine {
     }
 
     // Record API token usage for this turn, attributed to executed tools
-    if (turnApiInputTokens > 0 || turnApiOutputTokens > 0) {
+    if (
+      turnApiInputTokens > 0 ||
+      turnApiOutputTokens > 0 ||
+      turnApiCacheReadTokens > 0 ||
+      turnApiCacheWriteTokens > 0
+    ) {
       if (toolUses.length > 0) {
         // Attribute tokens equally across all tools invoked this turn
         const perTool = toolUses.length
@@ -1078,6 +1089,11 @@ export class QueryEngine {
         }
       } else {
         this.usageTracker.recordApiUsage(turnApiInputTokens, turnApiOutputTokens, 'chat')
+      }
+      // Cache buckets are session-level: a cached prefix is shared context, not
+      // a cost any single tool in this turn caused.
+      if (turnApiCacheReadTokens > 0 || turnApiCacheWriteTokens > 0) {
+        this.usageTracker.recordCacheUsage(turnApiCacheReadTokens, turnApiCacheWriteTokens)
       }
     } else {
       // Fallback: API doesn't report usage — use char-based estimate

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > 0.68.0 之后的条目于 2026-09-14 依据 git 提交记录回溯补全（标签日期为准）。
 
+## [Unreleased]
+
+### Fixed
+
+- **计费 token 的四桶不再蒸发** —— provider 层此前只取 `input_tokens` / `prompt_tokens`，
+  缓存读（Anthropic `cache_read_input_tokens`、OpenAI 兼容 `prompt_tokens_details.cached_tokens`）
+  与缓存写（`cache_creation_input_tokens`）在进入会话账之前就丢了 —— 用缓存的会话看起来像「缓存不要钱」。
+  `StreamChunk.usage` 新增 `cacheReadTokens` / `cacheWriteTokens`（未报则缺席，不是 0），
+  `UsageTracker` 新增会话级缓存桶与 `recordCacheUsage()`；`inputTokens` 归一为**未缓存**输入
+  （OpenAI 兼容的 `prompt_tokens` 含缓存命中，现在先减去再上报）。daemon 的 `tokenIn` 把 prompt 侧
+  三桶相加后落库（表只有两列），`usage` 帧把缓存桶透传给远端。子代理累计、RSI Tax 与重试作废范围
+  也一并计入了缓存桶。
+
 ## [0.85.50] — 2026-11-26
 
 ### Added

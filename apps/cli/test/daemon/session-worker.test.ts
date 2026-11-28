@@ -187,6 +187,33 @@ describe('SessionWorker.processPrompt — 一次回合的真实 chunk 序列', (
     expect(db.turns).toEqual([[300, 30]])
   })
 
+  it('缓存桶不蒸发：usage 帧带缓存读写，DB 的 tokenIn 合并 prompt 侧三桶', async () => {
+    // 会让这条失败的改动：session-worker 只累加 input/output。它的 DB 只有
+    // tokenIn/tokenOut 两列 —— 缓存读写在 WS 边界上丢掉后，daemon 会话的成本
+    // 会被少报一个数量级（缓存命中正是大多数 prompt token 的来源）。
+    const { db, ws } = await run([
+      {
+        type: 'usage',
+        inputTokens: 100,
+        outputTokens: 10,
+        cacheReadTokens: 900,
+        cacheWriteTokens: 200,
+      },
+      { type: 'text', content: 'ok' },
+      { type: 'stop' },
+    ])
+
+    // tokenIn 是 prompt 侧三桶之和：未缓存输入 + 缓存读 + 缓存写。
+    expect(db.turns).toEqual([[1200, 10]])
+    const usage = ws.sent.find((m) => m.type === 'usage')
+    expect(usage).toMatchObject({
+      inputTokens: 100,
+      outputTokens: 10,
+      cacheReadTokens: 900,
+      cacheWriteTokens: 200,
+    })
+  })
+
   it('done 恰好一次 —— 去掉 break 后的新终止路径不得重复收尾', async () => {
     const { ws } = await run()
     expect(ws.sent.filter((m) => m.type === 'done')).toHaveLength(1)

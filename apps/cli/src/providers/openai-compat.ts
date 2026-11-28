@@ -187,12 +187,21 @@ export class OpenAICompatProvider implements ProviderInstance {
             const parsed = JSON.parse(data)
             const choice = parsed.choices?.[0]
 
-            // Capture token usage when available (final chunk with stream_options.include_usage)
+            // Capture token usage when available (final chunk with stream_options.include_usage).
+            // `prompt_tokens` is inclusive of cache hits here, unlike Anthropic's
+            // `input_tokens`; subtract them so the emitted buckets never overlap.
             if (parsed.usage) {
+              const promptTokens: number = parsed.usage.prompt_tokens
+              const cachedTokens: number | undefined =
+                parsed.usage.prompt_tokens_details?.cached_tokens
               yield {
                 type: 'usage',
-                inputTokens: parsed.usage.prompt_tokens,
+                inputTokens:
+                  cachedTokens === undefined
+                    ? promptTokens
+                    : Math.max(0, promptTokens - cachedTokens),
                 outputTokens: parsed.usage.completion_tokens,
+                ...(cachedTokens !== undefined ? { cacheReadTokens: cachedTokens } : {}),
               }
             }
 

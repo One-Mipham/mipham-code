@@ -166,10 +166,26 @@ export interface StreamChunk {
   thinking?: string
   /** Background task notification payload (type: 'task_notification'). */
   taskNotification?: TaskNotification
-  /** API-reported input token count (type: 'usage'). */
+  /**
+   * API-reported **uncached** input token count (type: 'usage').
+   *
+   * Cached prompt tokens are normalized out of this field into the two buckets
+   * below, so the four buckets never overlap: OpenAI-compatible providers report
+   * `prompt_tokens` inclusive of cache hits, and the adapter subtracts them.
+   */
   inputTokens?: number
   /** API-reported output token count (type: 'usage'). */
   outputTokens?: number
+  /**
+   * API-reported input tokens served from the prompt cache (type: 'usage').
+   * Absent — not 0 — when the provider reports no cache figures.
+   */
+  cacheReadTokens?: number
+  /**
+   * API-reported input tokens written into the prompt cache (type: 'usage').
+   * Absent — not 0 — when the provider reports no cache figures.
+   */
+  cacheWriteTokens?: number
   /**
    * The provider stopped because it hit the output token ceiling
    * (OpenAI `finish_reason: 'length'` / Anthropic `stop_reason: 'max_tokens'`).

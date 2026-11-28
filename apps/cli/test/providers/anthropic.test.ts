@@ -945,6 +945,64 @@ describe('AnthropicProvider', () => {
 })
 
 // ═══════════════════════════════════════════
+// chat — usage 的缓存计费桶
+// ═══════════════════════════════════════════
+
+describe('AnthropicProvider — usage 缓存桶', () => {
+  it('message_delta 的缓存读写 token 透传到 usage 块', async () => {
+    // 会让这条失败的改动：usage 块只挑 input/output，丢掉
+    // cache_creation_input_tokens / cache_read_input_tokens —— 会话账里缓存部分恒为 0。
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        makeSSEResponse([
+          'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}',
+          'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":12,"output_tokens":3,"cache_creation_input_tokens":500,"cache_read_input_tokens":2000}}',
+          'data: {"type":"message_stop"}',
+        ]),
+      )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new AnthropicProvider(makeConfig())
+    const chunks = await collectChunks(
+      provider.chat({ model: 'claude-sonnet-4-6', messages: [{ role: 'user', content: 'hi' }] }),
+    )
+
+    const usage = chunks.find((c) => c.type === 'usage')
+    expect(usage).toMatchObject({
+      inputTokens: 12,
+      outputTokens: 3,
+      cacheReadTokens: 2000,
+      cacheWriteTokens: 500,
+    })
+  })
+
+  it('没有缓存字段时两个桶缺席，而不是 0', async () => {
+    // 「没报」与「报了 0」不同形：缺席让 UsageTracker 落默认 0，
+    // 但不会被读成 provider 明说的「这次缓存没花钱」。
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        makeSSEResponse([
+          'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":12,"output_tokens":3}}',
+          'data: {"type":"message_stop"}',
+        ]),
+      )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new AnthropicProvider(makeConfig())
+    const chunks = await collectChunks(
+      provider.chat({ model: 'claude-sonnet-4-6', messages: [{ role: 'user', content: 'hi' }] }),
+    )
+
+    const usage = chunks.find((c) => c.type === 'usage')
+    expect(usage).toBeDefined()
+    expect(usage).not.toHaveProperty('cacheReadTokens')
+    expect(usage).not.toHaveProperty('cacheWriteTokens')
+  })
+})
+
+// ═══════════════════════════════════════════
 // convertMessages — 出网载荷的空块
 //
 // Anthropic 对空 text 块与空 tool_result.content 是**整条请求 400**，

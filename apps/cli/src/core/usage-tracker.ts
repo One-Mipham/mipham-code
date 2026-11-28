@@ -17,10 +17,14 @@ export interface ToolUsage {
 }
 
 export interface UsageSummary {
-  /** Total input tokens from API (0 if API data unavailable). */
+  /** Uncached input tokens from API (0 if API data unavailable). */
   apiInputTokens: number
   /** Total output tokens from API (0 if API data unavailable). */
   apiOutputTokens: number
+  /** Input tokens served from the provider's prompt cache (billed separately). */
+  apiCacheReadTokens: number
+  /** Input tokens written into the provider's prompt cache (billed separately). */
+  apiCacheWriteTokens: number
   /** Estimated total tokens (chars/4 heuristic, always available). */
   estimatedTokens: number
   /** Per-tool breakdown, keyed by tool name. "chat" = text-only turns. */
@@ -30,14 +34,34 @@ export interface UsageSummary {
 export class UsageTracker {
   private _apiInputTokens = 0
   private _apiOutputTokens = 0
+  private _apiCacheReadTokens = 0
+  private _apiCacheWriteTokens = 0
   private _estimatedTokens = 0
   private _toolUsage = new Map<string, ToolUsage>()
 
-  /** Record API-reported token usage for a turn, attributed to the given tool. */
+  /**
+   * Record API-reported token usage for a turn, attributed to the given tool.
+   *
+   * The four buckets are disjoint: `inputTokens` is uncached prompt input only
+   * (providers normalize cached tokens out of it). Per-tool attribution stays
+   * on uncached input + output.
+   */
   recordApiUsage(inputTokens: number, outputTokens: number, toolName?: string): void {
     this._apiInputTokens += inputTokens
     this._apiOutputTokens += outputTokens
     this._recordTool(toolName || 'chat', inputTokens, outputTokens)
+  }
+
+  /**
+   * Record API-reported prompt-cache tokens for a turn.
+   *
+   * Session-level by design: a cached prefix is shared context, so attributing
+   * it to whichever tool happened to run in that turn would invent a cost that
+   * tool did not cause.
+   */
+  recordCacheUsage(cacheReadTokens: number, cacheWriteTokens: number): void {
+    this._apiCacheReadTokens += cacheReadTokens
+    this._apiCacheWriteTokens += cacheWriteTokens
   }
 
   /** Record character-estimated token usage for a turn. */
@@ -55,6 +79,8 @@ export class UsageTracker {
     return {
       apiInputTokens: this._apiInputTokens,
       apiOutputTokens: this._apiOutputTokens,
+      apiCacheReadTokens: this._apiCacheReadTokens,
+      apiCacheWriteTokens: this._apiCacheWriteTokens,
       estimatedTokens: this._estimatedTokens,
       tools,
     }
@@ -64,18 +90,25 @@ export class UsageTracker {
   reset(): void {
     this._apiInputTokens = 0
     this._apiOutputTokens = 0
+    this._apiCacheReadTokens = 0
+    this._apiCacheWriteTokens = 0
     this._estimatedTokens = 0
     this._toolUsage.clear()
   }
 
-  /** Total API tokens (input + output). */
+  /** Total billed API tokens (uncached input + output + cache reads + cache writes). */
   get totalApiTokens(): number {
-    return this._apiInputTokens + this._apiOutputTokens
+    return (
+      this._apiInputTokens +
+      this._apiOutputTokens +
+      this._apiCacheReadTokens +
+      this._apiCacheWriteTokens
+    )
   }
 
   /** Whether any real API usage data has been recorded. */
   get hasApiData(): boolean {
-    return this._apiInputTokens > 0 || this._apiOutputTokens > 0
+    return this.totalApiTokens > 0
   }
 
   // ── Private helpers ──

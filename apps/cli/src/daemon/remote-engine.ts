@@ -722,6 +722,8 @@ export class RemoteEngine {
           type: 'usage',
           inputTokens: msg.inputTokens,
           outputTokens: msg.outputTokens,
+          ...(msg.cacheReadTokens !== undefined ? { cacheReadTokens: msg.cacheReadTokens } : {}),
+          ...(msg.cacheWriteTokens !== undefined ? { cacheWriteTokens: msg.cacheWriteTokens } : {}),
         }
       }
 

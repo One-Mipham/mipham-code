@@ -49,8 +49,13 @@ export interface ServerToolResultMessage {
 export interface ServerUsageMessage {
   type: 'usage'
   sessionId: string
+  /** Uncached prompt input only — cached tokens ride the two buckets below. */
   inputTokens: number
   outputTokens: number
+  /** Prompt-cache reads, billed separately. Absent when the provider reported none. */
+  cacheReadTokens?: number
+  /** Prompt-cache writes, billed separately. Absent when the provider reported none. */
+  cacheWriteTokens?: number
 }
 export interface ServerTaskNotificationMessage {
   type: 'task_notification'

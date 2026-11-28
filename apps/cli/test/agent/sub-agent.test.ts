@@ -103,6 +103,32 @@ describe('SubAgent', () => {
     expect(totals).toEqual([150, 200])
   })
 
+  it('counts the cache buckets in the cumulative total', async () => {
+    // 会让这条失败的改动：只累加 input/output。缓存读/写同样是这次调用的用量，
+    // 漏掉就等于对子代理的消耗少报一半（缓存读往往比未缓存输入大一个数量级）。
+    const provider = createMockProvider([
+      {
+        type: 'usage',
+        inputTokens: 100,
+        outputTokens: 50,
+        cacheReadTokens: 900,
+        cacheWriteTokens: 200,
+      },
+      { type: 'text', content: 'done' },
+      { type: 'stop' },
+    ])
+    const registry = createMockRegistry(provider)
+
+    const totals: number[] = []
+    const sub = new SubAgent(registry, TOOLS)
+    await sub.execute('test', 'task', {
+      type: 'general',
+      onTokenUsage: (total) => totals.push(total),
+    })
+
+    expect(totals).toEqual([1250])
+  })
+
   it('routes chat through injected Llm seam instead of registry active provider', async () => {
     // registry active provider 会产出 "from-registry"——必须被绕过
     const registryProvider = createMockProvider([

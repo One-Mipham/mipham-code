@@ -242,6 +242,57 @@ describe('OpenAICompatProvider', () => {
     expect(capturedBody.stream_options).toEqual({ include_usage: true })
   })
 
+  it('splits cached prompt tokens out of inputTokens into cacheReadTokens', async () => {
+    // 会让这条失败的改动：usage 块直接透传 prompt_tokens。OpenAI 兼容的
+    // `prompt_tokens` **含**缓存命中，不拆开的话"未缓存输入"会被算大，
+    // 而缓存命中为 0（≡ 缓存不要钱）。
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        makeSSEResponse([
+          'data: {"choices":[],"usage":{"prompt_tokens":1000,"completion_tokens":50,"prompt_tokens_details":{"cached_tokens":800}}}',
+          'data: [DONE]',
+        ]),
+      )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new OpenAICompatProvider(makeConfig())
+    const chunks = await collectChunks(
+      provider.chat({ model: 'gpt-5', messages: [{ role: 'user', content: 'hi' }] }),
+    )
+
+    const usage = chunks.find((c) => c.type === 'usage')
+    expect(usage).toMatchObject({
+      inputTokens: 200, // 1000 prompt - 800 cached
+      outputTokens: 50,
+      cacheReadTokens: 800,
+    })
+    // OpenAI reports no cache-write bucket — absent, not 0.
+    expect(usage).not.toHaveProperty('cacheWriteTokens')
+  })
+
+  it('keeps inputTokens whole when the provider reports no cache details', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        makeSSEResponse([
+          'data: {"choices":[],"usage":{"prompt_tokens":1000,"completion_tokens":50}}',
+          'data: [DONE]',
+        ]),
+      )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const provider = new OpenAICompatProvider(makeConfig())
+    const chunks = await collectChunks(
+      provider.chat({ model: 'gpt-5', messages: [{ role: 'user', content: 'hi' }] }),
+    )
+
+    const usage = chunks.find((c) => c.type === 'usage')
+    expect(usage).toMatchObject({ inputTokens: 1000, outputTokens: 50 })
+    expect(usage).not.toHaveProperty('cacheReadTokens')
+    expect(usage).not.toHaveProperty('cacheWriteTokens')
+  })
+
   it('should include tools with function wrapper', async () => {
     let capturedBody: Record<string, unknown> = {}
     const fetchMock = vi.fn().mockImplementation(async (_url, opts) => {

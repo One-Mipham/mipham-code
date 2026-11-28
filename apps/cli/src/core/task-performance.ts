@@ -187,7 +187,12 @@ async function collectGeneratedCode(
     // `usageReported` 与数值分开：报 0 和「没报」不是同一件事，0 会被读成免费。
     if (chunk.type === 'usage') {
       usageReported = true
-      tokens += (chunk.inputTokens ?? 0) + (chunk.outputTokens ?? 0)
+      // All four billed buckets — cache reads are usually the bulk of the prompt.
+      tokens +=
+        (chunk.inputTokens ?? 0) +
+        (chunk.outputTokens ?? 0) +
+        (chunk.cacheReadTokens ?? 0) +
+        (chunk.cacheWriteTokens ?? 0)
     }
     // Both providers already emit `truncated` on the stop chunk; reading it here is
     // what turns the signal into something the score can act on.
