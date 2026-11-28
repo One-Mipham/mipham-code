@@ -118,6 +118,8 @@ API 侧 `versions[]` 91 → **92 条**、`versions[0].flags` = `validated`、
 0.85.50 实测（2026-11-26）：`.vsix` **88,535 B** / sha256 `fa18c3ec…` / 9 文件 / 包内 `0.85.50`（20:56 +0800 本地 `npx @vscode/vsce package` 打包，9 文件 198,190 B 解包清单；用户网页上传，上传时刻未被探针捕获）。`13:04:07Z` **首个探针即形态③（两读同刻一致）**：公开页（cache-bust）`Version` = `0.85.50`、`LastUpdatedDateString` = `Thu, 26 Nov 2026 13:00:53 GMT`、`0.85.50` 命中 **6** 次、内嵌 `"version":"0.85.50"`、`PublisherName` = `miphamai`（`verified`）；同刻 API `versions[]` 101 → **102 条**、`versions[0].version` = `0.85.50`、`flags` = `validated`、`lastUpdated` = `2026-11-26T13:00:53.197Z`。上传时刻未捕获 ⇒ **不记校验窗口**（首个探针到生效的时长不可测，不写成上限冒充实测）。
 0.85.51 实测（2026-11-28）：`.vsix` **88,989 B** / sha256 `ef82e78b…` / 9 文件 / 包内 `0.85.51`（本地 `npx --no-install @vscode/vsce package` 打包，9 文件解包清单 199,745 B；内层 `changelog.md` 与 `infrastructure/vscode/CHANGELOG.md` 逐字节相同）。`05:32Z` 探针仍**形态①**（API `versions[]` **102 条**、首位 `0.85.50`）；用户网页上传后 `05:43:33Z` 双探针**形态③（同刻一致）**：API `versions[]` 102 → **103 条**、`versions[0].version` = `0.85.51`、`flags` = `validated`、`lastUpdated` = `2026-11-28T05:36:01.653Z`、`publisher` = `miphamai`（`verified`）；公开页（cache-bust）`Version` = `0.85.51`、`LastUpdatedDateString` = `Sat, 28 Nov 2026 05:36:01 GMT`、`0.85.51` 命中 **6** 次、内嵌 `"version":"0.85.51"`。上传时刻未被探针捕获 ⇒ **不记校验窗口**；`05:32Z` → 翻页 **≤ ≈4 分钟**（`05:36:01Z` 起算的上限，不是实测时长）。
 
+0.85.52 实测（2026-11-28）：`.vsix` **89,317 B** / sha256 `994659ff…` / 9 文件 / 包内 `0.85.52`（本地 `npx --no-install @vscode/vsce package` 打包，9 文件解包清单 200,073 B）。本轮为**DeepSeek 正式模型名对齐**（`deepseek-flash` 成为正式 id 与默认模型），扩展本体是薄启动器、包内只随版本号变化；`.vsix` 生成后**待用户网页上传**，上传时刻与校验窗口均未捕获 ⇒ 不记窗口。
+
 ```bash
 # A. 公开页（必须 cache-bust，CDN 会给旧读数）
 curl -4 -sS -H 'Cache-Control: no-cache' \
